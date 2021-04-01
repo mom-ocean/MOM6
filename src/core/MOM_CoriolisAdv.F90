@@ -170,6 +170,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS)
                 ! discretization [H-1 s-1 ~> m-1 s-1 or m2 kg-1 s-1].
   real, dimension(SZIB_(G),SZJB_(G)) :: &
     dvdx, dudy, & ! Contributions to the circulation around q-points [L2 T-1 ~> m2 s-1]
+    rel_vort, & ! Relative vorticity at q-points [T-1 ~> s-1].
     abs_vort, & ! Absolute vorticity at q-points [T-1 ~> s-1].
     q2, &       ! Relative vorticity over thickness [H-1 T-1 ~> m-1 s-1 or m2 kg-1 s-1].
     max_fvq, &  ! The maximum of the adjacent values of (-u) times absolute vorticity [L T-2 ~> m s-2].
@@ -179,7 +180,8 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS)
   real, dimension(SZIB_(G),SZJB_(G),SZK_(GV)) :: &
     PV, &       ! A diagnostic array of the potential vorticities [H-1 T-1 ~> m-1 s-1 or m2 kg-1 s-1].
     RV          ! A diagnostic array of the relative vorticities [T-1 ~> s-1].
-  real :: fv1, fv2, fu1, fu2   ! (f+rv)*v or (f+rv)*u [L T-2 ~> m s-2].
+  real :: fv1, fv2, fv3, fv4   ! (f+rv)*v [L T-2 ~> m s-2].
+  real :: fu1, fu2, fu3, fu4   ! -(f+rv)*u [L T-2 ~> m s-2].
   real :: max_fv, max_fu       ! The maximum or minimum of the neighboring Coriolis
   real :: min_fv, min_fu       ! accelerations [L T-2 ~> m s-2], i.e. max(min)_fu(v)q.
 
@@ -191,8 +193,8 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS)
   real :: max_Ihq, min_Ihq       ! The maximum and minimum of the nearby Ihq [H-1 ~> m-1 or m2 kg-1].
   real :: hArea_q                ! The sum of area times thickness of the cells
                                  ! surrounding a q point [H L2 ~> m3 or kg].
-  real :: h_neglect              ! A thickness that is so small it is usually
-                                 ! lost in roundoff and can be neglected [H ~> m or kg m-2].
+  real :: vol_neglect            ! A volume so small that is expected to be
+                                 ! lost in roundoff [H L2 ~> m3 or kg].
   real :: temp1, temp2           ! Temporary variables [L2 T-2 ~> m2 s-2].
   real :: eps_vel                ! A tiny, positive velocity [L T-1 ~> m s-1].
 
@@ -241,7 +243,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS)
          "MOM_CoriolisAdv: Module must be initialized before it is used.")
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB ; nz = GV%ke
-  h_neglect = GV%H_subroundoff
+  vol_neglect = GV%H_subroundoff * (1e-4 * US%m_to_L)**2
   eps_vel = 1.0e-10*US%m_s_to_L_T
   h_tiny = GV%Angstrom_H  ! Perhaps this should be set to h_neglect instead.
 
@@ -277,7 +279,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS)
   enddo ; enddo
 
   !$OMP parallel do default(private) shared(u,v,h,uh,vh,CAu,CAv,G,GV,CS,AD,Area_h,Area_q,&
-  !$OMP                        RV,PV,is,ie,js,je,Isq,Ieq,Jsq,Jeq,nz,h_neglect,h_tiny,OBC,eps_vel)
+  !$OMP                        RV,PV,is,ie,js,je,Isq,Ieq,Jsq,Jeq,nz,vol_neglect,h_tiny,OBC,eps_vel)
   do k=1,nz
 
     ! Here the second order accurate layer potential vorticities, q,
@@ -295,6 +297,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS)
     do j=Jsq-1,Jeq+2 ; do I=Isq-1,Ieq+1
       hArea_u(I,j) = 0.5*(Area_h(i,j) * h(i,j,k) + Area_h(i+1,j) * h(i+1,j,k))
     enddo ; enddo
+
     if (CS%Coriolis_En_Dis) then
       do j=Jsq,Jeq+1 ; do I=is-1,ie
         uh_center(I,j) = 0.5 * (G%dy_Cu(I,j) * u(I,j,k)) * (h(i,j,k) + h(i+1,j,k))
@@ -428,44 +431,43 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS)
       endif
     enddo ; endif
 
+    if (CS%no_slip) then
+      do J=Jsq-1,Jeq+1 ; do I=Isq-1,Ieq+1
+        rel_vort(I,J) = (2.0 - G%mask2dBu(I,J)) * (dvdx(I,J) - dudy(I,J)) * G%IareaBu(I,J)
+      enddo ; enddo
+    else
+      do J=Jsq-1,Jeq+1 ; do I=Isq-1,Ieq+1
+        rel_vort(I,J) = G%mask2dBu(I,J) * (dvdx(I,J) - dudy(I,J)) * G%IareaBu(I,J)
+      enddo ; enddo
+    endif
+
     do J=Jsq-1,Jeq+1 ; do I=Isq-1,Ieq+1
-      if (CS%no_slip ) then
-        relative_vorticity = (2.0-G%mask2dBu(I,J)) * (dvdx(I,J) - dudy(I,J)) * G%IareaBu(I,J)
-      else
-        relative_vorticity = G%mask2dBu(I,J) * (dvdx(I,J) - dudy(I,J)) * G%IareaBu(I,J)
-      endif
-      absolute_vorticity = G%CoriolisBu(I,J) + relative_vorticity
-      Ih = 0.0
-      if (Area_q(i,j) > 0.0) then
-        hArea_q = (hArea_u(I,j) + hArea_u(I,j+1)) + (hArea_v(i,J) + hArea_v(i+1,J))
-        Ih = Area_q(i,j) / (hArea_q + h_neglect*Area_q(i,j))
-      endif
-      q(I,J) = absolute_vorticity * Ih
-      abs_vort(I,J) = absolute_vorticity
-      Ih_q(I,J) = Ih
-
-      if (CS%bound_Coriolis) then
-        fv1 = absolute_vorticity * v(i+1,J,k)
-        fv2 = absolute_vorticity * v(i,J,k)
-        fu1 = -absolute_vorticity * u(I,j+1,k)
-        fu2 = -absolute_vorticity * u(I,j,k)
-        if (fv1 > fv2) then
-          max_fvq(I,J) = fv1 ; min_fvq(I,J) = fv2
-        else
-          max_fvq(I,J) = fv2 ; min_fvq(I,J) = fv1
-        endif
-        if (fu1 > fu2) then
-          max_fuq(I,J) = fu1 ; min_fuq(I,J) = fu2
-        else
-          max_fuq(I,J) = fu2 ; min_fuq(I,J) = fu1
-        endif
-      endif
-
-      if (CS%id_rv > 0) RV(I,J,k) = relative_vorticity
-      if (CS%id_PV > 0) PV(I,J,k) = q(I,J)
-      if (associated(AD%rv_x_v) .or. associated(AD%rv_x_u)) &
-        q2(I,J) = relative_vorticity * Ih
+      abs_vort(I,J) = G%CoriolisBu(I,J) + rel_vort(I,J)
     enddo ; enddo
+
+    do J=Jsq-1,Jeq+1 ; do I=Isq-1,Ieq+1
+      hArea_q = (hArea_u(I,j) + hArea_u(I,j+1)) + (hArea_v(i,J) + hArea_v(i+1,J))
+      Ih_q(I,J) = Area_q(I,J) / (hArea_q + vol_neglect)
+      q(I,J) = abs_vort(I,J) * Ih_q(I,J)
+    enddo ; enddo
+
+    if (CS%id_rv > 0) then
+      do J=Jsq-1,Jeq+1 ; do I=Isq-1,Ieq+1
+        RV(I,J,k) = rel_vort(I,J)
+      enddo ; enddo
+    endif
+
+    if (CS%id_PV > 0) then
+      do J=Jsq-1,Jeq+1 ; do I=Isq-1,Ieq+1
+        PV(I,J,k) = q(I,J)
+      enddo ; enddo
+    endif
+
+    if (associated(AD%rv_x_v) .or. associated(AD%rv_x_u)) then
+      do J=Jsq-1,Jeq+1 ; do I=Isq-1,Ieq+1
+        q2(I,J) = rel_vort(I,J) * Ih_q(I,J)
+      enddo ; enddo
+    endif
 
     !   a, b, c, and d are combinations of neighboring potential
     ! vorticities which form the Arakawa and Hsu vorticity advection
@@ -671,27 +673,31 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS)
             (ep_u(i,j)*uh(I-1,j,k) - ep_u(i+1,j)*uh(I+1,j,k)) * G%IdxCu(I,j)
     enddo ; enddo ; endif
 
-
     if (CS%bound_Coriolis) then
       do j=js,je ; do I=Isq,Ieq
-        max_fv = MAX(max_fvq(I,J), max_fvq(I,J-1))
-        min_fv = MIN(min_fvq(I,J), min_fvq(I,J-1))
-       ! CAu(I,j,k) = min( CAu(I,j,k), max_fv )
-       ! CAu(I,j,k) = max( CAu(I,j,k), min_fv )
-        if (CAu(I,j,k) > max_fv) then
-            CAu(I,j,k) = max_fv
-        else
-          if (CAu(I,j,k) < min_fv) CAu(I,j,k) = min_fv
-        endif
+        fv1 = abs_vort(I,J) * v(i+1,J,k)
+        fv2 = abs_vort(I,J) * v(i,J,k)
+        fv3 = abs_vort(I,J-1) * v(i+1,J-1,k)
+        fv4 = abs_vort(I,J-1) * v(i,J-1,k)
+
+        max_fv = max(fv1, fv2, fv3, fv4)
+        min_fv = min(fv1, fv2, fv3, fv4)
+
+        CAu(I,j,k) = min(CAu(I,j,k), max_fv)
+        CAu(I,j,k) = max(CAu(I,j,k), min_fv)
       enddo ; enddo
     endif
 
     ! Term - d(KE)/dx.
     do j=js,je ; do I=Isq,Ieq
       CAu(I,j,k) = CAu(I,j,k) - KEx(I,j)
-      if (associated(AD%gradKEu)) AD%gradKEu(I,j,k) = -KEx(I,j)
     enddo ; enddo
 
+    if (associated(AD%gradKEu)) then
+      do j=js,je ; do I=Isq,Ieq
+        AD%gradKEu(I,j,k) = -KEx(I,j)
+      enddo ; enddo
+    endif
 
     ! Calculate the tendencies of meridional velocity due to the Coriolis
     ! force and momentum advection.  On a Cartesian grid, this is
@@ -782,21 +788,28 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS)
 
     if (CS%bound_Coriolis) then
       do J=Jsq,Jeq ; do i=is,ie
-        max_fu = MAX(max_fuq(I,J),max_fuq(I-1,J))
-        min_fu = MIN(min_fuq(I,J),min_fuq(I-1,J))
-        if (CAv(i,J,k) > max_fu) then
-            CAv(i,J,k) = max_fu
-        else
-          if (CAv(i,J,k) < min_fu) CAv(i,J,k) = min_fu
-        endif
+        fu1 = -abs_vort(I,J) * u(I,j+1,k)
+        fu2 = -abs_vort(I,J) * u(I,j,k)
+        fu3 = -abs_vort(I-1,J) * u(I-1,j+1,k)
+        fu4 = -abs_vort(I-1,J) * u(I-1,j,k)
+
+        max_fu = max(fu1, fu2, fu3, fu4)
+        min_fu = min(fu1, fu2, fu3, fu4)
+
+        CAv(I,j,k) = min(CAv(I,j,k), max_fu)
+        CAv(I,j,k) = max(CAv(I,j,k), min_fu)
       enddo ; enddo
     endif
 
     ! Term - d(KE)/dy.
     do J=Jsq,Jeq ; do i=is,ie
       CAv(i,J,k) = CAv(i,J,k) - KEy(i,J)
-      if (associated(AD%gradKEv)) AD%gradKEv(i,J,k) = -KEy(i,J)
     enddo ; enddo
+    if (associated(AD%gradKEv)) then
+      do J=Jsq,Jeq ; do i=is,ie
+        AD%gradKEv(i,J,k) = -KEy(i,J)
+      enddo ; enddo
+    endif
 
     if (associated(AD%rv_x_u) .or. associated(AD%rv_x_v)) then
       ! Calculate the Coriolis-like acceleration due to relative vorticity.
