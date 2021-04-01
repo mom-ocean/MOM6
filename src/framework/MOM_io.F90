@@ -254,11 +254,11 @@ subroutine create_file(IO_handle, filename, vars, novars, fields, threading, tim
 
   if (use_latq) &
     call write_metadata(IO_handle, axis_latq, name="latq", units=y_axis_units, longname="Latitude", &
-                        cartesian='Y', domain=y_domain, data=gridLatB(JsgB:JegB))
+                        cartesian='Y', domain=y_domain, data=gridLatB(JsgB:JegB), edge_axis=.true.)
 
   if (use_lonq) &
     call write_metadata(IO_handle, axis_lonq, name="lonq", units=x_axis_units, longname="Longitude", &
-                        cartesian='X', domain=x_domain, data=gridLonB(IsgB:IegB))
+                        cartesian='X', domain=x_domain, data=gridLonB(IsgB:IegB), edge_axis=.true.)
 
   if (use_layer) &
     call write_metadata(IO_handle, axis_layer, name="Layer", units=trim(GV%zAxisUnits), &
@@ -383,7 +383,7 @@ subroutine reopen_file(IO_handle, filename, vars, novars, fields, threading, tim
 
   type(MOM_domain_type), pointer :: Domain => NULL()
   character(len=200) :: check_name, mesg
-  integer :: length, ndim, nvar, natt, ntime, thread
+  integer :: length, nvar, thread
   logical :: exists, one_file, domain_set
 
   thread = SINGLE_FILE
@@ -418,7 +418,7 @@ subroutine reopen_file(IO_handle, filename, vars, novars, fields, threading, tim
     endif
     if (.not.file_is_open(IO_handle)) return
 
-    call get_file_info(IO_handle, ndim, nvar, natt, ntime)
+    call get_file_info(IO_handle, nvar=nvar)
 
     if (nvar == -1) then
       write (mesg,*) "Reopening file ",trim(filename)," apparently had ",nvar,&
@@ -1343,7 +1343,7 @@ end subroutine query_vardesc
 !> Write a 4d field to an output file, potentially with rotation
 subroutine MOM_write_field_4d(IO_handle, field_md, MOM_domain, field, tstamp, tile_count, &
                               fill_value, turns, scale)
-  type(file_type),          intent(in)    :: IO_handle  !< Handle for a file that is open for writing
+  type(file_type),          intent(inout) :: IO_handle  !< Handle for a file that is open for writing
   type(fieldtype),          intent(in)    :: field_md   !< Field type with metadata
   type(MOM_domain_type),    intent(in)    :: MOM_domain !< The MOM_Domain that describes the decomposition
   real, dimension(:,:,:,:), intent(inout) :: field      !< Unrotated field to write
@@ -1378,7 +1378,7 @@ end subroutine MOM_write_field_4d
 !> Write a 3d field to an output file, potentially with rotation
 subroutine MOM_write_field_3d(IO_handle, field_md, MOM_domain, field, tstamp, tile_count, &
                               fill_value, turns, scale)
-  type(file_type),        intent(in)    :: IO_handle  !< Handle for a file that is open for writing
+  type(file_type),        intent(inout) :: IO_handle  !< Handle for a file that is open for writing
   type(fieldtype),        intent(in)    :: field_md   !< Field type with metadata
   type(MOM_domain_type),  intent(in)    :: MOM_domain !< The MOM_Domain that describes the decomposition
   real, dimension(:,:,:), intent(inout) :: field      !< Unrotated field to write
@@ -1413,7 +1413,7 @@ end subroutine MOM_write_field_3d
 !> Write a 2d field to an output file, potentially with rotation
 subroutine MOM_write_field_2d(IO_handle, field_md, MOM_domain, field, tstamp, tile_count, &
                               fill_value, turns, scale)
-  type(file_type),        intent(in)    :: IO_handle  !< Handle for a file that is open for writing
+  type(file_type),        intent(inout) :: IO_handle  !< Handle for a file that is open for writing
   type(fieldtype),        intent(in)    :: field_md   !< Field type with metadata
   type(MOM_domain_type),  intent(in)    :: MOM_domain !< The MOM_Domain that describes the decomposition
   real, dimension(:,:),   intent(inout) :: field      !< Unrotated field to write
@@ -1447,7 +1447,7 @@ end subroutine MOM_write_field_2d
 
 !> Write a 1d field to an output file
 subroutine MOM_write_field_1d(IO_handle, field_md, field, tstamp, fill_value, scale)
-  type(file_type),        intent(in)    :: IO_handle  !< Handle for a file that is open for writing
+  type(file_type),        intent(inout) :: IO_handle  !< Handle for a file that is open for writing
   type(fieldtype),        intent(in)    :: field_md   !< Field type with metadata
   real, dimension(:),     intent(in)    :: field      !< Field to write
   real,         optional, intent(in)    :: tstamp     !< Model timestamp
@@ -1476,7 +1476,7 @@ end subroutine MOM_write_field_1d
 
 !> Write a 0d field to an output file
 subroutine MOM_write_field_0d(IO_handle, field_md, field, tstamp, fill_value, scale)
-  type(file_type),        intent(in)    :: IO_handle  !< Handle for a file that is open for writing
+  type(file_type),        intent(inout) :: IO_handle  !< Handle for a file that is open for writing
   type(fieldtype),        intent(in)    :: field_md   !< Field type with metadata
   real,                   intent(in)    :: field      !< Field to write
   real,         optional, intent(in)    :: tstamp     !< Model timestamp
