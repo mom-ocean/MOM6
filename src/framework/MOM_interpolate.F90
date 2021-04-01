@@ -9,7 +9,6 @@ use MOM_interp_infra,    only : time_interp_extern, init_external_field=>init_ex
 use MOM_interp_infra,    only : time_interp_external_init, get_external_field_info
 use MOM_interp_infra,    only : horiz_interp_type, horiz_interp_init
 use MOM_interp_infra,    only : run_horiz_interp, build_horiz_interp_weights
-use MOM_io_infra,        only : axistype
 use MOM_time_manager,    only : time_type
 
 implicit none ; private
