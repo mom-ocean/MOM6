@@ -486,17 +486,18 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
 
     ! latent heat flux (W/m^2)
     fluxes%latent(i,j) = 0.0
-    ! contribution from frozen ppt
+    ! contribution from frozen ppt (notice minus sign since fprec is positive into the ocean)
     if (associated(IOB%fprec)) then
-      fluxes%latent(i,j)              = fluxes%latent(i,j) + &
+      fluxes%latent(i,j)              = fluxes%latent(i,j) - &
           IOB%fprec(i-i0,j-j0)*US%W_m2_to_QRZ_T*CS%latent_heat_fusion
-      fluxes%latent_fprec_diag(i,j)   = G%mask2dT(i,j) * IOB%fprec(i-i0,j-j0)*US%W_m2_to_QRZ_T*CS%latent_heat_fusion
+      fluxes%latent_fprec_diag(i,j)   = - G%mask2dT(i,j) * IOB%fprec(i-i0,j-j0)*US%W_m2_to_QRZ_T*CS%latent_heat_fusion
     endif
-    ! contribution from frozen runoff
+    ! contribution from frozen runoff (notice minus sign since rofi_flux is positive into the ocean)
     if (associated(fluxes%frunoff)) then
-      fluxes%latent(i,j)              = fluxes%latent(i,j) + &
+      fluxes%latent(i,j)              = fluxes%latent(i,j) - &
           IOB%rofi_flux(i-i0,j-j0)*US%W_m2_to_QRZ_T*CS%latent_heat_fusion
-      fluxes%latent_frunoff_diag(i,j) = G%mask2dT(i,j) * IOB%rofi_flux(i-i0,j-j0)*US%W_m2_to_QRZ_T*CS%latent_heat_fusion
+      fluxes%latent_frunoff_diag(i,j) = -G%mask2dT(i,j) &
+          * IOB%rofi_flux(i-i0,j-j0)*US%W_m2_to_QRZ_T*CS%latent_heat_fusion
     endif
     ! contribution from evaporation
     if (associated(IOB%q_flux)) then
