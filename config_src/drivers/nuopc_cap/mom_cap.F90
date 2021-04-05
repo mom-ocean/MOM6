@@ -426,7 +426,7 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
   call ESMF_VMGetCurrent(vm, rc=rc)
   if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
-  call ESMF_VMGet(VM, mpiCommunicator=mpi_comm_mom, rc=rc)
+  call ESMF_VMGet(VM, mpiCommunicator=mpi_comm_mom, localPet=localPet, rc=rc)
   if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
   call ESMF_ClockGet(CLOCK, currTIME=MyTime, TimeStep=TINT,  RC=rc)
