@@ -41,8 +41,9 @@ interface CT_destructor
   module procedure CT_destructor_1d, CT_destructor_2d
 end interface CT_destructor
 
-!> Copy all elements of the data in of one coupler_2d_bc_type or coupler_3d_bc_type
-!! into another.  Both must have the same array sizes in common dimensions.
+!> Copy all elements of the data in either a coupler_2d_bc_type or a coupler_3d_bc_type into
+!! another structure of the same or the other type.  Both must have the same array sizes in common
+!! dimensions, while the details of any expansion from 2d to 3d are controlled by arguments.
 interface CT_copy_data
   module procedure CT_copy_data_2d, CT_copy_data_3d, CT_copy_data_2d_3d
 end interface CT_copy_data
@@ -201,7 +202,7 @@ subroutine CT_spawn_3d_3d(var_in, var, idim, jdim, kdim, suffix, as_needed)
 
 end subroutine  CT_spawn_3d_3d
 
-!> Copy all elements of the data in of one coupler_2d_bc_type into another.  Both must have the same array sizes.
+!> Copy all elements of the data in a coupler_2d_bc_type into another.  Both must have the same array sizes.
 subroutine CT_copy_data_2d(var_in, var, halo_size, bc_index, field_index, &
                   exclude_flux_type, only_flux_type, pass_through_ice)
   type(coupler_2d_bc_type),   intent(in)    :: var_in  !< BC_type structure with the data to copy
@@ -222,7 +223,7 @@ subroutine CT_copy_data_2d(var_in, var, halo_size, bc_index, field_index, &
                     exclude_flux_type, only_flux_type, pass_through_ice)
 end subroutine CT_copy_data_2d
 
-!> Copy all elements of the data in of one coupler_3d_bc_type into another.  Both must have the same array sizes.
+!> Copy all elements of the data in a coupler_3d_bc_type into another.  Both must have the same array sizes.
 subroutine CT_copy_data_3d(var_in, var, halo_size, bc_index, field_index, &
                   exclude_flux_type, only_flux_type, pass_through_ice)
   type(coupler_3d_bc_type),   intent(in)    :: var_in  !< BC_type structure with the data to copy
