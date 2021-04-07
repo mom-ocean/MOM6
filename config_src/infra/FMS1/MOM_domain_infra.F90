@@ -9,7 +9,7 @@ use MOM_error_infra, only : MOM_error=>MOM_err, NOTE, WARNING, FATAL
 
 use mpp_domains_mod, only : domain2D, domain1D
 use mpp_domains_mod, only : mpp_define_io_domain, mpp_define_domains, mpp_deallocate_domain
-use mpp_domains_mod, only : mpp_get_domain_components, mpp_get_domain_extents
+use mpp_domains_mod, only : mpp_get_domain_components, mpp_get_domain_extents, mpp_get_layout
 use mpp_domains_mod, only : mpp_get_compute_domain, mpp_get_data_domain, mpp_get_global_domain
 use mpp_domains_mod, only : mpp_get_boundary, mpp_update_domains
 use mpp_domains_mod, only : mpp_start_update_domains, mpp_complete_update_domains
@@ -42,7 +42,7 @@ public :: deallocate_MOM_domain, get_global_shape, compute_block_extent
 public :: pass_var, pass_vector, fill_symmetric_edges, rescale_comp_data
 public :: pass_var_start, pass_var_complete, pass_vector_start, pass_vector_complete
 public :: create_group_pass, do_group_pass, start_group_pass, complete_group_pass
-public :: redistribute_array, broadcast_domain, global_field
+public :: redistribute_array, broadcast_domain, same_domain, global_field
 public :: get_simple_array_i_ind, get_simple_array_j_ind
 public :: MOM_thread_affinity_set, set_MOM_thread_affinity
 ! These are encoding constant parmeters.
@@ -105,7 +105,7 @@ end interface rescale_comp_data
 
 !> Pass an array from one MOM domain to another
 interface redistribute_array
-  module procedure redistribute_array_3d, redistribute_array_2d
+  module procedure redistribute_array_2d, redistribute_array_3d, redistribute_array_4d
 end interface redistribute_array
 
 !> Copy one MOM_domain_type into another
@@ -1232,6 +1232,25 @@ subroutine redistribute_array_3d(Domain1, array1, Domain2, array2, complete)
 
 end subroutine redistribute_array_3d
 
+!> Pass a 4-D array from one MOM domain to another
+subroutine redistribute_array_4d(Domain1, array1, Domain2, array2, complete)
+  type(domain2d), &
+           intent(in)  :: Domain1 !< The MOM domain from which to extract information.
+  real, dimension(:,:,:,:), intent(in) :: array1 !< The array from which to extract information.
+  type(domain2d), &
+           intent(in)  :: Domain2 !< The MOM domain receiving information.
+  real, dimension(:,:,:,:), intent(out) :: array2 !< The array receiving information.
+  logical, optional, intent(in) :: complete  !< If true, finish communication before proceeding.
+
+  ! Local variables
+  logical :: do_complete
+
+  do_complete=.true.;if (PRESENT(complete)) do_complete = complete
+
+  call mpp_redistribute(Domain1, array1, Domain2, array2, do_complete)
+
+end subroutine redistribute_array_4d
+
 
 !> Rescale the values of a 4-D array in its computational domain by a constant factor
 subroutine rescale_comp_data_4d(domain, array, scale)
@@ -1922,6 +1941,29 @@ subroutine global_field(domain, local, global)
 
   call mpp_global_field(domain, local, global)
 end subroutine global_field
+
+!> same_domain returns true if two domains use the same list of PEs and layouts and have the same
+!! size computational domains, and false if the domains do not conform with each other.
+!! Different halo sizes or indexing conventions do not alter the results.
+logical function same_domain(domain_a, domain_b)
+  type(domain2D), intent(in) :: domain_a !< The first domain in the comparison
+  type(domain2D), intent(in) :: domain_b !< The second domain in the comparison
+
+  ! Local variables
+  integer :: isc_a, iec_a, jsc_a, jec_a, isc_b, iec_b, jsc_b, jec_b
+  integer :: layout_a(2), layout_b(2)
+
+  ! This routine currently does a few checks for consistent domains; more could be added.
+  call mpp_get_layout(domain_a, layout_a)
+  call mpp_get_layout(domain_b, layout_b)
+
+  call get_domain_extent(domain_a, isc_a, iec_a, jsc_a, jec_a)
+  call get_domain_extent(domain_b, isc_b, iec_b, jsc_b, jec_b)
+
+  same_domain = (layout_a(1) == layout_b(1)) .and. (layout_a(2) == layout_b(2)) .and. &
+                (iec_a - isc_a == iec_b - isc_b) .and. (jec_a - jsc_a == jec_b - jsc_b)
+
+end function same_domain
 
 !> Returns arrays of the i- and j- sizes of the h-point computational domains for each
 !! element of the grid layout.  Any input values in the extent arrays are discarded, so
