@@ -94,6 +94,8 @@ use MOM_regridding, only : regridding_main
 use MOM_remapping, only : remapping_CS, initialize_remapping
 use MOM_remapping, only : remapping_core_h
 use MOM_horizontal_regridding, only : horiz_interp_and_extrap_tracer
+use MOM_oda_incupd, only: oda_incupd_CS, initialize_oda_incupd
+use MOM_oda_incupd, only: set_up_oda_incupd_field, set_up_oda_incupd_vel_field
 
 implicit none ; private
 
@@ -114,7 +116,7 @@ contains
 !! conditions or by reading them from a restart (or saves) file.
 subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
                                 restart_CS, ALE_CSp, tracer_Reg, sponge_CSp, &
-                                ALE_sponge_CSp, OBC, Time_in, frac_shelf_h)
+                                ALE_sponge_CSp, oda_incupd_CSp, OBC, Time_in, frac_shelf_h)
   type(ocean_grid_type),      intent(inout) :: G    !< The ocean's grid structure.
   type(verticalGrid_type),    intent(in)    :: GV   !< The ocean's vertical grid structure.
   type(unit_scale_type),      intent(in)    :: US   !< A dimensional unit scaling type
@@ -140,6 +142,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
   type(sponge_CS),            pointer       :: sponge_CSp !< The layerwise sponge control structure.
   type(ALE_sponge_CS),        pointer       :: ALE_sponge_CSp !< The ALE sponge control structure.
   type(ocean_OBC_type),       pointer       :: OBC   !< The open boundary condition control structure.
+  type(oda_incupd_CS),        pointer       :: oda_incupd_CSp !< The oda_incupd control structure.
   type(time_type), optional,  intent(in)    :: Time_in !< Time at the start of the run segment.
   real, dimension(SZI_(G),SZJ_(G)), &
                      optional, intent(in)   :: frac_shelf_h    !< The fraction of the grid cell covered
@@ -157,7 +160,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
   logical :: from_Z_file, useALE
   logical :: new_sim
   integer :: write_geom
-  logical :: use_temperature, use_sponge, use_OBC
+  logical :: use_temperature, use_sponge, use_OBC, use_oda_incupd
   logical :: use_EOS     ! If true, density is calculated from T & S using an equation of state.
   logical :: depress_sfc ! If true, remove the mass that would be displaced
                          ! by a large surface pressure by squeezing the column.
@@ -614,6 +617,16 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
 
   if (debug_OBC) call open_boundary_test_extern_h(G, GV, OBC, h)
   call callTree_leave('MOM_initialize_state()')
+
+  ! Data Assimilation with incremental update
+  call get_param(PF, mdl, "ODA_INCUPD", use_oda_incupd, &
+                 "If true, oda incremental updates will be applied "//&
+                 "everywhere in the domain.", default=.false.)
+  if (use_oda_incupd) then
+    call initialize_oda_incupd_file(G, GV, US, use_temperature, tv, u, v, &
+                                    PF, oda_incupd_CSp)
+  endif
+ 
 
 end subroutine MOM_initialize_state
 
@@ -2021,6 +2034,112 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, u, v, param_f
   end function separate_idamp_for_uv
 
 end subroutine initialize_sponges_file
+
+subroutine initialize_oda_incupd_file(G, GV, US, use_temperature, tv, u, v, param_file, oda_incupd_CSp)
+  type(ocean_grid_type),   intent(in) :: G    !< The ocean's grid structure.
+  type(verticalGrid_type), intent(in) :: GV   !< The ocean's vertical grid structure.
+  type(unit_scale_type),   intent(in) :: US  !< A dimensional unit scaling type
+  logical,                 intent(in) :: use_temperature !< If true, T & S are state variables.
+  type(thermo_var_ptrs),   intent(in) :: tv   !< A structure pointing to various thermodynamic
+                                              !! variables.
+  real, target, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
+                           intent(in)   :: u    !< The zonal velocity that is being
+                                                    !! initialized [L T-1 ~> m s-1]
+  real, target, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
+                           intent(in)    :: v    !< The meridional velocity that is being
+                                                    !! initialized [L T-1 ~> m s-1]
+  type(param_file_type),   intent(in) :: param_file !< A structure to parse for run-time parameters.
+  type(oda_incupd_CS),     pointer    :: oda_incupd_CSp  !< A pointer that is set to point to the control
+                                                  !! structure for this module.
+  ! Local variables
+  real, allocatable, dimension(:,:,:) :: p   ! The interface depth inc. [H ~> m or kg m-2].
+  real, allocatable, dimension(:,:,:) :: tmp_tr ! A temporary array for reading oda fields
+  real, allocatable, dimension(:,:,:) :: tmp_u,tmp_v ! A temporary array for reading oda fields
+
+
+  integer :: i, j, k, is, ie, js, je, nz
+  integer :: isd, ied, jsd, jed
+  integer, dimension(4) :: siz
+  integer :: nz_data  ! The size of the sponge source grid
+  character(len=40)  :: tempinc_var, salinc_var, uinc_var, vinc_var, pinc_var
+  character(len=40)  :: mdl = "initialize_oda_incupd_file"
+  character(len=200) :: inc_file, uv_inc_file  ! Strings for filenames
+  character(len=200) :: filename, inputdir ! Strings for file/path and path.
+
+  logical :: use_ALE ! True if ALE is being used, False if in layered mode
+
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
+  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
+
+
+  call get_param(param_file, mdl, "INPUTDIR", inputdir, default=".")
+  inputdir = slasher(inputdir)
+
+  call get_param(param_file, mdl, "ODA_INCUPD_FILE", inc_file, &
+                 "The name of the file with the T,S,h increments.", &
+                 fail_if_missing=.true.)
+  call get_param(param_file, mdl, "ODA_TEMPINC_VAR", tempinc_var, &
+                 "The name of the potential temperature inc. variable in "//&
+                 "ODA_INCUPD_FILE.", default="ptemp_inc")
+  call get_param(param_file, mdl, "ODA_SALTINC_VAR", salinc_var, &
+                 "The name of the salinity inc. variable in "//&
+                 "ODA_INCUPD_FILE.", default="sal_inc")
+  call get_param(param_file, mdl, "ODA_INTDINC_VAR", pinc_var, &
+                 "The name of the interface depth inc. variable in "//&
+                 "ODA_INCUPD_FILE.", default="p_inc")
+  call get_param(param_file, mdl, "ODA_INCUPD_UV_FILE", uv_inc_file, &
+                 "The name of the file with the U,V increments.", &
+                 default=inc_file)
+  call get_param(param_file, mdl, "ODA_UINC_VAR", uinc_var, &
+                 "The name of the zonal vel. inc. variable in "//&
+                 "ODA_INCUPD_FILE.", default="u_inc")
+  call get_param(param_file, mdl, "ODA_VINC_VAR", vinc_var, &
+                 "The name of the meridional vel. inc. variable in "//&
+                 "ODA_INCUPD_FILE.", default="v_inc")
+
+  call get_param(param_file, mdl, "USE_REGRIDDING", use_ALE, do_not_log = .true.)
+
+  ! Read in incremental update for tracers
+  filename = trim(inputdir)//trim(inc_file)
+  call log_param(param_file, mdl, "INPUTDIR/ODA_INCUPD_FILE", filename)
+  if (.not.file_exists(filename, G%Domain)) &
+    call MOM_error(FATAL, " initialize_oda_incupd: Unable to open "//trim(filename))
+
+  call field_size(filename,pinc_var,siz,no_domain=.true.)
+  if (siz(1) /= G%ieg-G%isg+1 .or. siz(2) /= G%jeg-G%jsg+1) &
+         call MOM_error(FATAL,"initialize_oda_incupd_file: Array size mismatch for oda data.")
+  nz_data = siz(3)
+  ! get h increments
+  allocate(p(isd:ied,jsd:jed,nz))
+  call MOM_read_data(filename, pinc_var, p(:,:,:), G%Domain, scale=US%m_to_Z)
+  call initialize_oda_incupd( G, GV, param_file, oda_incupd_CSp, p, nz_data)
+  deallocate(p)
+
+  ! get T and S increments
+  if (use_temperature) then
+    allocate(tmp_tr(isd:ied,jsd:jed,nz_data))
+    call MOM_read_data(filename, tempinc_var, tmp_tr(:,:,:), G%Domain)
+    call set_up_oda_incupd_field(tmp_tr, G, GV, tv%T, oda_incupd_CSp)
+    call MOM_read_data(filename, salinc_var, tmp_tr(:,:,:), G%Domain)
+    call set_up_oda_incupd_field(tmp_tr, G, GV, tv%S, oda_incupd_CSp)
+    deallocate(tmp_tr)
+  endif
+    
+  ! get U and V increments
+  filename = trim(inputdir)//trim(uv_inc_file)
+  call log_param(param_file, mdl, "INPUTDIR/ODA_INCUPD_UV_FILE", filename)
+  if (.not.file_exists(filename, G%Domain)) &
+          call MOM_error(FATAL, " initialize_oda_incupd_uv: Unable to open "//trim(filename))
+  allocate(tmp_u(G%IsdB:G%IedB,jsd:jed,nz_data))
+  allocate(tmp_v(isd:ied,G%JsdB:G%JedB,nz_data))
+  tmp_u(:,:,:) = 0.0 ; tmp_v(:,:,:) = 0.0
+  call MOM_read_vector(filename, uinc_var, vinc_var, tmp_u, tmp_v, G%Domain,scale=US%m_s_to_L_T)
+  call set_up_oda_incupd_vel_field(tmp_u, tmp_v, G, GV, u, v, oda_incupd_CSp)
+  deallocate(tmp_u,tmp_v)
+  
+
+
+end subroutine initialize_oda_incupd_file
 
 !> This subroutine sets the 4 bottom depths at velocity points to be the
 !! maximum of the adjacent depths.
