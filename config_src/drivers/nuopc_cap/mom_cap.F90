@@ -145,7 +145,7 @@ integer              :: scalar_field_count = 0
 integer              :: scalar_field_idx_grid_nx = 0
 integer              :: scalar_field_idx_grid_ny = 0
 integer              :: nthrds  !< number of openmp threads per task
-character(len=*),parameter :: u_file_u = &
+character(len=*),parameter :: u_FILE_u = &
      __FILE__
 
 #ifdef CESMCOUPLED
@@ -461,7 +461,6 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
   endif
 
 !$  call omp_set_num_threads(nthrds)
-    print *,__FILE__,__LINE__,nthrds
 
   call fms_init(mpi_comm_mom)
   call constants_init
@@ -898,8 +897,6 @@ subroutine InitializeRealize(gcomp, importState, exportState, clock, rc)
   endif
 
 !$  call omp_set_num_threads(nthrds)
-    print *,__FILE__,__LINE__,nthrds
-
 
   !---------------------------------
   ! global mom grid size
