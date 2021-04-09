@@ -27,7 +27,7 @@ contains
 !> Calculate isopycnal slopes, and optionally return other stratification dependent functions such as N^2
 !! and dz*S^2*g-prime used, or calculable from factors used, during the calculation.
 subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, &
-                                  slope_x, slope_y, N2_u, N2_v, dzu, dzv, dzSx2N2, dzSy2N2, halo, OBC) !, eta_to_m)
+                                  slope_x, slope_y, N2_u, N2_v, dzu, dzv, dzSxN, dzSyN, halo, OBC) !, eta_to_m)
   type(ocean_grid_type),                       intent(in)    :: G    !< The ocean's grid structure
   type(verticalGrid_type),                     intent(in)    :: GV   !< The ocean's vertical grid structure
   type(unit_scale_type),                       intent(in)    :: US   !< A dimensional unit scaling type
@@ -51,13 +51,11 @@ subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, &
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)+1), &
                                      optional, intent(inout) :: dzv  !< Z-thickness at v-points [Z ~> m]
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)+1), &
-                                     optional, intent(inout) :: dzSx2N2 !< Z-thickness times zonal slope contribution
-                                                                     !! to the square of Eady growth rate at u-points.
-                                                                     !! Equivalent to dz*S^2*g-prime.  [Z T-2 -> m s-2]
+                                     optional, intent(inout) :: dzSxN !< Z-thickness times zonal slope contribution
+                                                                     !! to Eady growth rate at u-pints. [Z T-1 -> m s-1]
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)+1), &
-                                     optional, intent(inout) :: dzSy2N2 !< Z-thickness times meridional slope contrib.
-                                                                     !! to the square of Eady growth rate at v-points.
-                                                                     !! Equivalent to dz*S^2*g-prime.  [Z T-2 -> m s-2]
+                                     optional, intent(inout) :: dzSyN !< Z-thickness times meridional slope contrib.
+                                                                     !! to Eady growth rate at v-pints. [Z T-1 -> m s-1]
   integer,                           optional, intent(in)    :: halo !< Halo width over which to compute
   type(ocean_OBC_type),              optional, pointer       :: OBC  !< Open boundaries control structure.
 
@@ -172,16 +170,16 @@ subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, &
       dzv(i,J,nz+1) = 0.
     enddo ; enddo
   endif
-  if (present(dzSx2N2)) then
+  if (present(dzSxN)) then
     do j=js,je ; do I=is-1,ie
-      dzSx2N2(I,j,1) = 0.
-      dzSx2N2(I,j,nz+1) = 0.
+      dzSxN(I,j,1) = 0.
+      dzSxN(I,j,nz+1) = 0.
     enddo ; enddo
   endif
-  if (present(dzSy2N2)) then
+  if (present(dzSyN)) then
     do J=js-1,je ; do i=is,ie
-      dzSy2N2(i,J,1) = 0.
-      dzSy2N2(i,J,nz+1) = 0.
+      dzSyN(i,J,1) = 0.
+      dzSyN(i,J,nz+1) = 0.
     enddo ; enddo
   endif
 
@@ -216,7 +214,7 @@ subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, &
 
   !$OMP parallel do default(none) shared(nz,is,ie,js,je,IsdB,use_EOS,G,GV,US,pres,T,S,tv,h,e, &
   !$OMP                                  h_neglect,dz_neglect,Z_to_L,L_to_Z,H_to_Z,h_neglect2, &
-  !$OMP                                  present_N2_u,G_Rho0,N2_u,slope_x,dzSx2N2,EOSdom_u,local_open_u_BC, &
+  !$OMP                                  present_N2_u,G_Rho0,N2_u,slope_x,dzSxN,EOSdom_u,local_open_u_BC, &
   !$OMP                                  dzu,OBC) &
   !$OMP                          private(drdiA,drdiB,drdkL,drdkR,pres_u,T_u,S_u,      &
   !$OMP                                  drho_dT_u,drho_dS_u,hg2A,hg2B,hg2L,hg2R,haA, &
@@ -314,8 +312,9 @@ subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, &
         slope = slope * max(g%mask2dT(i,j),g%mask2dT(i+1,j))
       endif
       slope_x(I,j,K) = slope
-      if (present(dzSx2N2)) dzSx2N2(I,j,K) = ( G_Rho0 * (wtL * drdkL + wtR * drdkR) / (wtL + wtR) ) & ! dz * N^2
-                                             * ( slope**2 ) * G%mask2dCu(I,j) ! x-direction contribution to S^2
+      if (present(dzSxN)) dzSxN(I,j,K) = sqrt( G_Rho0 * max(0., wtL * ( dzaL * drdkL ) &
+                                                              + wtR * ( dzaR * drdkR )) / (wtL + wtR) ) & ! dz * N
+                                         * abs(slope) * G%mask2dCu(I,j) ! x-direction contribution to S^2
 
     enddo ! I
   enddo ; enddo ! end of j-loop
@@ -325,7 +324,7 @@ subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, &
   ! Calculate the meridional isopycnal slope.
   !$OMP parallel do default(none) shared(nz,is,ie,js,je,IsdB,use_EOS,G,GV,US,pres,T,S,tv, &
   !$OMP                                  h,h_neglect,e,dz_neglect,Z_to_L,L_to_Z,H_to_Z, &
-  !$OMP                                  h_neglect2,present_N2_v,G_Rho0,N2_v,slope_y,dzSy2N2,EOSdom_v, &
+  !$OMP                                  h_neglect2,present_N2_v,G_Rho0,N2_v,slope_y,dzSyN,EOSdom_v, &
   !$OMP                                  dzv,local_open_v_BC,OBC) &
   !$OMP                          private(drdjA,drdjB,drdkL,drdkR,pres_v,T_v,S_v,      &
   !$OMP                                  drho_dT_v,drho_dS_v,hg2A,hg2B,hg2L,hg2R,haA, &
@@ -422,8 +421,9 @@ subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, &
         slope = slope * max(g%mask2dT(i,j),g%mask2dT(i,j+1))
       endif
       slope_y(i,J,K) = slope
-      if (present(dzsy2N2)) dzSy2N2(i,J,K) = ( G_Rho0 * (wtL * drdkL + wtR * drdkR) / (wtL + wtR) ) & ! dz * N^2
-                                             * ( slope**2 ) * G%mask2dCv(i,J) ! y-direction contribution to S^2
+      if (present(dzSyN)) dzSyN(i,J,K) = sqrt( G_Rho0 * max(0., wtL * ( dzaL * drdkL ) &
+                                                              + wtR * ( dzaR * drdkR )) / (wtL + wtR) ) & ! dz * N
+                                         * abs(slope) * G%mask2dCv(i,J) ! x-direction contribution to S^2
 
     enddo ! i
   enddo ; enddo ! end of j-loop
