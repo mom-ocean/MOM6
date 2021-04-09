@@ -47,7 +47,7 @@ use time_utils_mod,           only: esmf2fms_time
 
 use, intrinsic :: iso_fortran_env, only: output_unit
 
-use ESMF,  only: ESMF_ClockAdvance, ESMF_ClockGet, ESMF_ClockPrint
+use ESMF,  only: ESMF_ClockAdvance, ESMF_ClockGet, ESMF_ClockPrint, ESMF_VMget
 use ESMF,  only: ESMF_ClockGetAlarm, ESMF_ClockGetNextTime, ESMF_ClockAdvance
 use ESMF,  only: ESMF_ClockSet, ESMF_Clock, ESMF_GeomType_Flag, ESMF_LOGMSG_INFO
 use ESMF,  only: ESMF_Grid, ESMF_GridCreate, ESMF_GridAddCoord
@@ -96,6 +96,7 @@ use NUOPC_Model, only: model_label_DataInitialize => label_DataInitialize
 use NUOPC_Model, only: model_label_SetRunClock    => label_SetRunClock
 use NUOPC_Model, only: model_label_Finalize       => label_Finalize
 use NUOPC_Model, only: SetVM
+!$use omp_lib             , only : omp_set_num_threads
 
 implicit none; private
 
@@ -143,6 +144,7 @@ character(len=128)   :: scalar_field_name = ''
 integer              :: scalar_field_count = 0
 integer              :: scalar_field_idx_grid_nx = 0
 integer              :: scalar_field_idx_grid_ny = 0
+integer              :: nthrds  !< number of openmp threads per task
 character(len=*),parameter :: u_FILE_u = &
      __FILE__
 
@@ -399,6 +401,7 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
   logical                                :: existflag
   integer                                :: userRc
   integer                                :: localPet
+  integer                                :: localPeCount
   integer                                :: iostat
   integer                                :: readunit
   character(len=512)                     :: restartfile          ! Path/Name of restart file
@@ -423,7 +426,7 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
   call ESMF_VMGetCurrent(vm, rc=rc)
   if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
-  call ESMF_VMGet(VM, mpiCommunicator=mpi_comm_mom, rc=rc)
+  call ESMF_VMGet(VM, mpiCommunicator=mpi_comm_mom, localPet=localPet, rc=rc)
   if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
   call ESMF_ClockGet(CLOCK, currTIME=MyTime, TimeStep=TINT,  RC=rc)
@@ -435,7 +438,30 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
   CALL ESMF_TimeIntervalGet(TINT, S=DT_OCEAN, RC=rc)
   if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
-  !TODO: next two lines not present in NCAR
+  !---------------------------------
+  ! openmp threads
+  !---------------------------------
+
+  call ESMF_VMGet(vm, pet=localPet, peCount=localPeCount, rc=rc)
+  if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+    line=__LINE__, &
+    file=__FILE__)) &
+    return  ! bail out
+
+
+  if(localPeCount == 1) then
+     call NUOPC_CompAttributeGet(gcomp, "nthreads", value=cvalue, rc=rc)
+     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+          line=__LINE__, &
+          file=__FILE__)) &
+          return  ! bail out
+     read(cvalue,*) nthrds
+  else
+     nthrds = localPeCount
+  endif
+
+!$  call omp_set_num_threads(nthrds)
+
   call fms_init(mpi_comm_mom)
   call constants_init
   call field_manager_init
@@ -790,6 +816,7 @@ subroutine InitializeRealize(gcomp, importState, exportState, clock, rc)
   real(ESMF_KIND_R8), pointer                :: dataPtr_ycor(:,:)
   integer                                    :: mpicom
   integer                                    :: localPet
+  integer                                    :: localPeCount
   integer                                    :: lsize
   integer                                    :: ig,jg, ni,nj,k
   integer, allocatable                       :: gindex(:) ! global index space
@@ -846,6 +873,30 @@ subroutine InitializeRealize(gcomp, importState, exportState, clock, rc)
 
   call ESMF_VMGet(vm, petCount=npet, mpiCommunicator=mpicom, localPet=localPet, rc=rc)
   if (ChkErr(rc,__LINE__,u_FILE_u)) return
+
+  !---------------------------------
+  ! openmp threads
+  !---------------------------------
+
+  call ESMF_VMGet(vm, pet=localPet, peCount=localPeCount, rc=rc)
+  if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+    line=__LINE__, &
+    file=__FILE__)) &
+    return  ! bail out
+
+
+  if(localPeCount == 1) then
+     call NUOPC_CompAttributeGet(gcomp, "nthreads", value=cvalue, rc=rc)
+     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+          line=__LINE__, &
+          file=__FILE__)) &
+          return  ! bail out
+     read(cvalue,*) nthrds
+  else
+     nthrds = localPeCount
+  endif
+
+!$  call omp_set_num_threads(nthrds)
 
   !---------------------------------
   ! global mom grid size
@@ -1458,6 +1509,8 @@ subroutine ModelAdvance(gcomp, rc)
   if(profile_memory) call ESMF_VMLogMemInfo("Entering MOM Model_ADVANCE: ")
 
   call shr_file_setLogUnit (logunit)
+
+!$  call omp_set_num_threads(nthrds)
 
   ! query the Component for its clock, importState and exportState
   call ESMF_GridCompGet(gcomp, clock=clock, importState=importState, &
