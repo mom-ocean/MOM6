@@ -35,7 +35,7 @@ implicit none ; private
 
 ! These interfaces are actually implemented in this file.
 public :: create_file, reopen_file, cmor_long_std, ensembler, MOM_io_init
-public :: MOM_write_field, var_desc, modify_vardesc, query_vardesc
+public :: MOM_write_field, var_desc, modify_vardesc, query_vardesc, position_from_horgrid
 public :: open_namelist_file, check_namelist_error, check_nml_error
 public :: get_var_sizes, verify_variable_units, num_timelevels, read_variable, read_attribute
 public :: open_file_to_read, close_file_to_read
@@ -47,6 +47,10 @@ public :: axistype, get_axis_data
 public :: MOM_read_data, MOM_read_vector, read_field_chksum
 public :: slasher, write_field, write_version_number
 public :: io_infra_init, io_infra_end
+! This is used to set up information descibing non-domain-decomposed axes.
+public :: axis_info, set_axis_info, delete_axis_info
+! This is used to set up global file attributes
+public :: attribute_info, set_attribute_info, delete_attribute_info
 ! This API is here just to support potential use by non-FMS drivers, and should not persist.
 public :: read_data
 !> These encoding constants are used to indicate the file format
@@ -94,7 +98,31 @@ type, public :: vardesc
   character(len=240) :: cmor_longname      !< CMOR long name of the variable
   real               :: conversion         !< for unit conversions, such as needed to
                                            !! convert from intensive to extensive
+  character(len=32)  :: dim_names(5)       !< The names in the file of the axes for this variable
+  integer            :: position = -1      !< An integer encoding the horizontal position, it may
+                                           !! CENTER, CORNER, EAST_FACE, NORTH_FACE, or 0.
 end type vardesc
+
+!> Type that stores information that can be used to create a non-decomposed axis.
+type :: axis_info ; private
+  character(len=32)  :: name = ""       !< The name of this axis for use in files
+  character(len=256) :: longname = ""   !< A longer name describing this axis
+  character(len=48)  :: units = ""      !< The units of the axis labels
+  character(len=8)   :: cartesian = "N" !< A variable indicating which direction
+                                        !! this axis corresponds with. Valid values
+                                        !! include 'X', 'Y', 'Z', 'T', and 'N' for none.
+  integer            :: sense = 0       !< This is 1 for axes whose values increase upward, or -1
+                                        !! if they increase downward.  The default, 0, is ignored.
+  integer            :: ax_size = 0     !< The number of elements in this axis
+  real, allocatable, dimension(:) :: ax_data !< The values of the data on the axis.
+end type axis_info
+
+!> Type that stores for a global file attribute
+type :: attribute_info ; private
+  character(len=:), allocatable :: name    !< The name of this attribute
+  character(len=:), allocatable :: att_val !< The values of this attribute
+end type attribute_info
+
 
 integer, public :: stdout = stdout_iso  !< standard output unit
 integer, public :: stderr = stderr_iso  !< standard output unit
@@ -104,8 +132,9 @@ contains
 !> Routine creates a new NetCDF file.  It also sets up fieldtype
 !! structures that describe this file and variables that will
 !! later be written to this file.
-subroutine create_file(IO_handle, filename, vars, novars, fields, threading, timeunit, G, dG, GV, checksums)
-  type(file_type),       intent(inout) :: IO_handle  !< Handle for a file or fileset that is to be
+subroutine create_file(IO_handle, filename, vars, novars, fields, threading, timeunit, &
+                       G, dG, GV, checksums, extra_axes, global_atts)
+  type(file_type),       intent(inout) :: IO_handle  !< Handle for a files or fileset that is to be
                                                      !! opened or reopened for writing
   character(len=*),      intent(in)    :: filename   !< full path to the file to create
   type(vardesc),         intent(in)    :: vars(:)    !< structures describing fields written to filename
@@ -123,31 +152,47 @@ subroutine create_file(IO_handle, filename, vars, novars, fields, threading, tim
   type(verticalGrid_type), optional, intent(in) :: GV !< ocean vertical grid structure, which is
                                                      !! required if the new file uses any
                                                      !! vertical grid axes.
-  integer(kind=int64),     optional, intent(in) :: checksums(:,:)  !< checksums of vars
+  integer(kind=int64),     optional, intent(in) :: checksums(:,:) !< checksums of vars
+  type(axis_info),         optional, intent(in) :: extra_axes(:)  !< Types with information about
+                                                     !! some axes that might be used in this file
+  type(attribute_info),    optional, intent(in) :: global_atts(:) !< Global attributes to
+                                                     !! write to this file
 
   logical        :: use_lath, use_lonh, use_latq, use_lonq, use_time
   logical        :: use_layer, use_int, use_periodic
-  logical        :: one_file, domain_set
+  logical        :: one_file, domain_set, dim_found
+  logical, dimension(:), allocatable :: use_extra_axis
   type(axistype) :: axis_lath, axis_latq, axis_lonh, axis_lonq
   type(axistype) :: axis_layer, axis_int, axis_time, axis_periodic
-  type(axistype) :: axes(4)
+  type(axistype),  dimension(:), allocatable :: more_axes ! Axes generated from extra_axes
+  type(axistype) :: axes(5)     ! The axes of a variable
   type(MOM_domain_type), pointer :: Domain => NULL()
   type(domain1d) :: x_domain, y_domain
-  integer        :: numaxes, pack, thread, k
+  integer        :: position, numaxes, pack, thread, k, n, m
+  integer        :: num_extra_dims ! The number of extra possible dimensions from extra_axes
   integer        :: isg, ieg, jsg, jeg, IsgB, IegB, JsgB, JegB
   integer        :: var_periods, num_periods=0
-  real, dimension(:), allocatable :: period_val
+  real, dimension(:), allocatable :: axis_val
   real, pointer, dimension(:) :: &
     gridLatT => NULL(), & ! The latitude or longitude of T or B points for
     gridLatB => NULL(), & ! the purpose of labeling the output axes.
     gridLonT => NULL(), gridLonB => NULL()
   character(len=40) :: time_units, x_axis_units, y_axis_units
   character(len=8)  :: t_grid, t_grid_read
+  character(len=64) :: ax_name(5)  ! The axis names of a variable
 
   use_lath  = .false. ; use_lonh     = .false.
   use_latq  = .false. ; use_lonq     = .false.
   use_time  = .false. ; use_periodic = .false.
   use_layer = .false. ; use_int      = .false.
+  num_extra_dims = 0
+  if (present(extra_axes)) then
+    num_extra_dims = size(extra_axes)
+    if (num_extra_dims > 0) then
+      allocate(use_extra_axis(num_extra_dims)) ; use_extra_axis = .false.
+      allocate(more_axes(num_extra_dims))
+    endif
+  endif
 
   thread = SINGLE_FILE
   if (PRESENT(threading)) thread = threading
@@ -180,19 +225,16 @@ subroutine create_file(IO_handle, filename, vars, novars, fields, threading, tim
 
 ! Define the coordinates.
   do k=1,novars
-    select case (vars(k)%hor_grid)
-      case ('h') ; use_lath = .true. ; use_lonh = .true.
-      case ('q') ; use_latq = .true. ; use_lonq = .true.
-      case ('u') ; use_lath = .true. ; use_lonq = .true.
-      case ('v') ; use_latq = .true. ; use_lonh = .true.
-      case ('T')  ; use_lath = .true. ; use_lonh = .true.
-      case ('Bu') ; use_latq = .true. ; use_lonq = .true.
-      case ('Cu') ; use_lath = .true. ; use_lonq = .true.
-      case ('Cv') ; use_latq = .true. ; use_lonh = .true.
-      case ('1') ! Do nothing.
+    position = vars(k)%position
+    if (position == -1) position = position_from_horgrid(vars(k)%hor_grid)
+    select case (position)
+      case (CENTER) ; use_lath = .true. ; use_lonh = .true.
+      case (CORNER) ; use_latq = .true. ; use_lonq = .true.
+      case (EAST_FACE) ; use_lath = .true. ; use_lonq = .true.
+      case (NORTH_FACE) ; use_latq = .true. ; use_lonh = .true.
+      case (0) ! Do nothing.
       case default
-        call MOM_error(WARNING, "MOM_io create_file: "//trim(vars(k)%name)//&
-                        " has unrecognized hor_grid "//trim(vars(k)%hor_grid))
+        call MOM_error(WARNING, "MOM_io create_file: "//trim(vars(k)%name)//" has an unrecognized value of postion")
     end select
     select case (vars(k)%z_grid)
       case ('L') ; use_layer = .true.
@@ -233,6 +275,19 @@ subroutine create_file(IO_handle, filename, vars, novars, fields, threading, tim
         call MOM_error(WARNING, "MOM_io create_file: "//trim(vars(k)%name)//&
                         " has unrecognized t_grid "//trim(vars(k)%t_grid))
     end select
+
+    do n=1,5 ; if (len_trim(vars(k)%dim_names(n)) > 0) then
+      dim_found = .false.
+      do m=1,num_extra_dims
+        if (lowercase(trim(vars(k)%dim_names(n))) == lowercase(trim(extra_axes(m)%name))) then
+          use_extra_axis(m) = .true.
+          dim_found = .true.
+          exit
+        endif
+      enddo
+      if (.not.dim_found) call MOM_error(FATAL, "Unable to find a match for dimension "//&
+          trim(vars(k)%dim_names(n))//" for variable "//trim(vars(k)%name)//" in file "//trim(filename))
+    endif ; enddo
   enddo
 
   if ((use_lath .or. use_lonh .or. use_latq .or. use_lonq)) then
@@ -288,44 +343,82 @@ subroutine create_file(IO_handle, filename, vars, novars, fields, threading, tim
 
     call write_metadata(IO_handle, axis_time, name="Time", units=time_units, longname="Time", cartesian='T')
   else
-    call write_metadata(IO_handle, axis_time, name="Time", units="days", longname="Time", cartesian= 'T')
+    call write_metadata(IO_handle, axis_time, name="Time", units="days", longname="Time", cartesian='T')
   endif ; endif
 
   if (use_periodic) then
     if (num_periods <= 1) call MOM_error(FATAL, "MOM_io create_file: "//&
       "num_periods for file "//trim(filename)//" must be at least 1.")
     ! Define a periodic axis with unit labels.
-    allocate(period_val(num_periods))
-    do k=1,num_periods ; period_val(k) = real(k) ; enddo
+    allocate(axis_val(num_periods))
+    do k=1,num_periods ; axis_val(k) = real(k) ; enddo
     call write_metadata(IO_handle, axis_periodic, name="Period", units="nondimensional", &
-                        longname="Periods for cyclical varaiables", cartesian='T', data=period_val)
-    deallocate(period_val)
+                        longname="Periods for cyclical variables", cartesian='T', data=axis_val)
+    deallocate(axis_val)
   endif
+
+  do m=1,num_extra_dims ; if (use_extra_axis(m)) then
+    if (allocated(extra_axes(m)%ax_data)) then
+      call write_metadata(IO_handle, more_axes(m), name=extra_axes(m)%name, units=extra_axes(m)%units, &
+                          longname=extra_axes(m)%longname, cartesian=extra_axes(m)%cartesian, &
+                          sense=extra_axes(m)%sense, data=extra_axes(m)%ax_data)
+    elseif (trim(extra_axes(m)%cartesian) == "T") then
+      call write_metadata(IO_handle, more_axes(m), name=extra_axes(m)%name, units=extra_axes(m)%units, &
+                          longname=extra_axes(m)%longname, cartesian=extra_axes(m)%cartesian)
+    else
+      ! FMS requires that non-time axes have variables that label their values, even if they are trivial.
+      allocate (axis_val(extra_axes(m)%ax_size))
+      do k=1,extra_axes(m)%ax_size ; axis_val(k) = real(k) ; enddo
+      call write_metadata(IO_handle, more_axes(m), name=extra_axes(m)%name, units=extra_axes(m)%units, &
+                          longname=extra_axes(m)%longname, cartesian=extra_axes(m)%cartesian, &
+                          sense=extra_axes(m)%sense, data=axis_val)
+      deallocate(axis_val)
+    endif
+  endif ; enddo
 
   do k=1,novars
     numaxes = 0
-    select case (vars(k)%hor_grid)
-      case ('h')  ; numaxes = 2 ; axes(1) = axis_lonh ; axes(2) = axis_lath
-      case ('q')  ; numaxes = 2 ; axes(1) = axis_lonq ; axes(2) = axis_latq
-      case ('u')  ; numaxes = 2 ; axes(1) = axis_lonq ; axes(2) = axis_lath
-      case ('v')  ; numaxes = 2 ; axes(1) = axis_lonh ; axes(2) = axis_latq
-      case ('T')  ; numaxes = 2 ; axes(1) = axis_lonh ; axes(2) = axis_lath
-      case ('Bu') ; numaxes = 2 ; axes(1) = axis_lonq ; axes(2) = axis_latq
-      case ('Cu') ; numaxes = 2 ; axes(1) = axis_lonq ; axes(2) = axis_lath
-      case ('Cv') ; numaxes = 2 ; axes(1) = axis_lonh ; axes(2) = axis_latq
-      case ('1') ! Do nothing.
+    position = vars(k)%position
+    if (position == -1) position = position_from_horgrid(vars(k)%hor_grid)
+    select case (position)
+      case (CENTER)
+        numaxes = 2 ; axes(1) = axis_lonh ; axes(2) = axis_lath ; ax_name(1) = "lonh" ; ax_name(2) = "lath"
+      case (CORNER)
+        numaxes = 2 ; axes(1) = axis_lonq ; axes(2) = axis_latq ; ax_name(1) = "lonq" ; ax_name(2) = "latq"
+      case (EAST_FACE)
+        numaxes = 2 ; axes(1) = axis_lonq ; axes(2) = axis_lath ; ax_name(1) = "lonq" ; ax_name(2) = "lath"
+      case (NORTH_FACE)
+        numaxes = 2 ; axes(1) = axis_lonh ; axes(2) = axis_latq ; ax_name(1) = "lonh" ; ax_name(2) = "latq"
+      case (0) ! Do nothing.
       case default
         call MOM_error(WARNING, "MOM_io create_file: "//trim(vars(k)%name)//&
-                        " has unrecognized hor_grid "//trim(vars(k)%hor_grid))
+                        " has unrecognized position, hor_grid = "//trim(vars(k)%hor_grid))
     end select
     select case (vars(k)%z_grid)
-      case ('L') ; numaxes = numaxes+1 ; axes(numaxes) = axis_layer
-      case ('i') ; numaxes = numaxes+1 ; axes(numaxes) = axis_int
+      case ('L') ; numaxes = numaxes+1 ; axes(numaxes) = axis_layer ; ax_name(numaxes) = "Layer"
+      case ('i') ; numaxes = numaxes+1 ; axes(numaxes) = axis_int ; ax_name(numaxes) = "Interface"
       case ('1') ! Do nothing.
       case default
         call MOM_error(FATAL, "MOM_io create_file: "//trim(vars(k)%name)//&
                         " has unrecognized z_grid "//trim(vars(k)%z_grid))
     end select
+
+    do n=1,numaxes
+      if ( (len_trim(vars(k)%dim_names(n)) > 0) .and. (trim(ax_name(n)) /= trim(vars(k)%dim_names(n))) ) &
+        call MOM_error(WARNING, "MOM_io create_file: dimension "//trim(ax_name(n))//&
+               " of variable "//trim(vars(k)%name)//" in "//trim(filename)//&
+               " is being set inconsistently as "//trim(vars(k)%dim_names(n)))
+    enddo
+    do n=numaxes+1,5 ; if (len_trim(vars(k)%dim_names(n)) > 0) then
+      dim_found = .false.
+      do m=1,num_extra_dims
+        if (lowercase(trim(vars(k)%dim_names(n))) == lowercase(trim(extra_axes(m)%name))) then
+          numaxes = numaxes+1 ; axes(numaxes) = more_axes(m)
+          exit
+        endif
+      enddo
+    endif ; enddo
+
     t_grid = adjustl(vars(k)%t_grid)
     select case (t_grid(1:1))
       case ('s', 'a', 'm') ; numaxes = numaxes+1 ; axes(numaxes) = axis_time
@@ -346,6 +439,14 @@ subroutine create_file(IO_handle, filename, vars, novars, fields, threading, tim
     endif
   enddo
 
+  if (present(global_atts)) then
+    do n=1,size(global_atts)
+      if (allocated(global_atts(n)%name) .and. allocated(global_atts(n)%att_val)) &
+        call write_metadata(IO_handle, global_atts(n)%name, global_atts(n)%att_val)
+    enddo
+  endif
+
+  ! Now actualy write the variables with the axis label values
   if (use_lath) call write_field(IO_handle, axis_lath)
   if (use_latq) call write_field(IO_handle, axis_latq)
   if (use_lonh) call write_field(IO_handle, axis_lonh)
@@ -353,6 +454,13 @@ subroutine create_file(IO_handle, filename, vars, novars, fields, threading, tim
   if (use_layer) call write_field(IO_handle, axis_layer)
   if (use_int) call write_field(IO_handle, axis_int)
   if (use_periodic) call write_field(IO_handle, axis_periodic)
+  do m=1,num_extra_dims ; if (use_extra_axis(m)) then
+    call write_field(IO_handle, more_axes(m))
+  endif ; enddo
+
+  if (num_extra_dims > 0) then
+    deallocate(use_extra_axis, more_axes)
+  endif
 
 end subroutine create_file
 
@@ -361,7 +469,8 @@ end subroutine create_file
 !! does not find the file, a new file is created.  It also sets up
 !! structures that describe this file and the variables that will
 !! later be written to this file.
-subroutine reopen_file(IO_handle, filename, vars, novars, fields, threading, timeunit, G, dG, GV)
+subroutine reopen_file(IO_handle, filename, vars, novars, fields, threading, timeunit, &
+                       G, dG, GV, extra_axes, global_atts)
   type(file_type),       intent(inout) :: IO_handle  !< Handle for a file or fileset that is to be
                                                      !! opened or reopened for writing
   character(len=*),      intent(in)    :: filename   !< full path to the file to create
@@ -380,6 +489,10 @@ subroutine reopen_file(IO_handle, filename, vars, novars, fields, threading, tim
   type(verticalGrid_type), optional, intent(in) :: GV !< ocean vertical grid structure, which is
                                                      !! required if a new file uses any
                                                      !! vertical grid axes.
+  type(axis_info),         optional, intent(in) :: extra_axes(:)  !< Types with information about
+                                                     !! some axes that might be used in this file
+  type(attribute_info),    optional, intent(in) :: global_atts(:) !< Global attributes to
+                                                     !! write to this file
 
   type(MOM_domain_type), pointer :: Domain => NULL()
   character(len=200) :: check_name, mesg
@@ -398,7 +511,7 @@ subroutine reopen_file(IO_handle, filename, vars, novars, fields, threading, tim
 
   if (.not.exists) then
     call create_file(IO_handle, filename, vars, novars, fields, threading, timeunit, &
-                     G=G, dG=dG, GV=GV)
+                     G=G, dG=dG, GV=GV, extra_axes=extra_axes, global_atts=global_atts)
   else
 
     domain_set = .false.
@@ -424,7 +537,8 @@ subroutine reopen_file(IO_handle, filename, vars, novars, fields, threading, tim
       write (mesg,*) "Reopening file ",trim(filename)," apparently had ",nvar,&
                      " variables. Clobbering and creating file with ",novars," instead."
       call MOM_error(WARNING,"MOM_io: "//mesg)
-      call create_file(IO_handle, filename, vars, novars, fields, threading, timeunit, G=G, GV=GV)
+      call create_file(IO_handle, filename, vars, novars, fields, threading, timeunit, &
+                       G=G, dG=dG, GV=GV, extra_axes=extra_axes, global_atts=global_atts)
     elseif (nvar /= novars) then
       write (mesg,*) "Reopening file ",trim(filename)," with ",novars,&
                      " variables instead of ",nvar,"."
@@ -1197,21 +1311,29 @@ end subroutine verify_variable_units
 !! fields.  The argument name is required, while the others are optional and
 !! have default values that are empty strings or are appropriate for a 3-d
 !! tracer field at the tracer cell centers.
-function var_desc(name, units, longname, hor_grid, z_grid, t_grid, &
-                  cmor_field_name, cmor_units, cmor_longname, conversion, caller) result(vd)
-  character(len=*),           intent(in) :: name               !< variable name
-  character(len=*), optional, intent(in) :: units              !< variable units
-  character(len=*), optional, intent(in) :: longname           !< variable long name
-  character(len=*), optional, intent(in) :: hor_grid           !< variable horizontal staggering
-  character(len=*), optional, intent(in) :: z_grid             !< variable vertical staggering
-  character(len=*), optional, intent(in) :: t_grid             !< time description: s, p, or 1
-  character(len=*), optional, intent(in) :: cmor_field_name    !< CMOR name
-  character(len=*), optional, intent(in) :: cmor_units         !< CMOR physical dimensions of variable
-  character(len=*), optional, intent(in) :: cmor_longname      !< CMOR long name
-  real            , optional, intent(in) :: conversion         !< for unit conversions, such as needed to
-                                                               !! convert from intensive to extensive
-  character(len=*), optional, intent(in) :: caller             !< calling routine?
-  type(vardesc)                          :: vd                 !< vardesc type that is created
+function var_desc(name, units, longname, hor_grid, z_grid, t_grid, cmor_field_name, &
+                  cmor_units, cmor_longname, conversion, caller, position, dim_names, fixed) result(vd)
+  character(len=*),           intent(in) :: name            !< variable name
+  character(len=*), optional, intent(in) :: units           !< variable units
+  character(len=*), optional, intent(in) :: longname        !< variable long name
+  character(len=*), optional, intent(in) :: hor_grid        !< A character string indicating the horizontal
+                                                            !! position of this variable
+  character(len=*), optional, intent(in) :: z_grid          !< variable vertical staggering
+  character(len=*), optional, intent(in) :: t_grid          !< time description: s, p, or 1
+  character(len=*), optional, intent(in) :: cmor_field_name !< CMOR name
+  character(len=*), optional, intent(in) :: cmor_units      !< CMOR physical dimensions of variable
+  character(len=*), optional, intent(in) :: cmor_longname   !< CMOR long name
+  real            , optional, intent(in) :: conversion      !< for unit conversions, such as needed to
+                                                            !! convert from intensive to extensive
+  character(len=*), optional, intent(in) :: caller          !< The calling routine for error messages
+  integer,          optional, intent(in) :: position        !< A coded integer indicating the horizontal position
+                                                            !! of this variable if it has such dimensions.
+                                                            !! Valid values include CORNER, CENTER, EAST_FACE
+                                                            !! NORTH_FACE, and 0 for no horizontal dimensions.
+  character(len=*), dimension(:), &
+                    optional, intent(in) :: dim_names       !< The names of the dimensions of this variable
+  logical,          optional, intent(in) :: fixed           !< If true, this does not evolve with time
+  type(vardesc)                          :: vd              !< vardesc type that is created
 
   character(len=120) :: cllr
   cllr = "var_desc"
@@ -1220,15 +1342,18 @@ function var_desc(name, units, longname, hor_grid, z_grid, t_grid, &
   call safe_string_copy(name, vd%name, "vd%name", cllr)
 
   vd%longname = "" ; vd%units = ""
-  vd%hor_grid = 'h' ; vd%z_grid = 'L' ; vd%t_grid = 's'
+  vd%hor_grid = 'h' ; vd%position = CENTER ; vd%z_grid = 'L' ; vd%t_grid = 's'
+  if (present(dim_names)) vd%z_grid = '1' ! In this case the names are used to set the non-horizontal axes
+  if (present(fixed)) then ; if (fixed) vd%t_grid = '1' ; endif
 
   vd%cmor_field_name  =  ""
   vd%cmor_units       =  ""
   vd%cmor_longname    =  ""
   vd%conversion       =  1.0
+  vd%dim_names(:)     =  ""
 
   call modify_vardesc(vd, units=units, longname=longname, hor_grid=hor_grid, &
-                      z_grid=z_grid, t_grid=t_grid,                          &
+                      z_grid=z_grid, t_grid=t_grid, position=position, dim_names=dim_names, &
                       cmor_field_name=cmor_field_name, cmor_units=cmor_units, &
                       cmor_longname=cmor_longname, conversion=conversion, caller=cllr)
 
@@ -1238,7 +1363,7 @@ end function var_desc
 !> This routine modifies the named elements of a vardesc type.
 !! All arguments are optional, except the vardesc type to be modified.
 subroutine modify_vardesc(vd, name, units, longname, hor_grid, z_grid, t_grid, &
-                 cmor_field_name, cmor_units, cmor_longname, conversion, caller)
+                 cmor_field_name, cmor_units, cmor_longname, conversion, caller, position, dim_names)
   type(vardesc),              intent(inout) :: vd              !< vardesc type that is modified
   character(len=*), optional, intent(in)    :: name            !< name of variable
   character(len=*), optional, intent(in)    :: units           !< units of variable
@@ -1249,13 +1374,21 @@ subroutine modify_vardesc(vd, name, units, longname, hor_grid, z_grid, t_grid, &
   character(len=*), optional, intent(in)    :: cmor_field_name !< CMOR name
   character(len=*), optional, intent(in)    :: cmor_units      !< CMOR physical dimensions of variable
   character(len=*), optional, intent(in)    :: cmor_longname   !< CMOR long name
-  real            , optional, intent(in)    :: conversion      !< for unit conversions, such as needed
-                                                               !! to convert from intensive to extensive
-  character(len=*), optional, intent(in)    :: caller          !< calling routine?
+  real            , optional, intent(in)    :: conversion      !< A multiplicative factor for unit conversions,
+                                                               !! such as needed to convert from intensive to
+                                                               !! extensive or dimensional consistency testing
+  character(len=*), optional, intent(in)    :: caller          !< The calling routine for error messages
+  integer,          optional, intent(in)    :: position        !< A coded integer indicating the horizontal position
+                                                               !! of this variable if it has such dimensions.
+                                                               !! Valid values include CORNER, CENTER, EAST_FACE
+                                                               !! NORTH_FACE, and 0 for no horizontal dimensions.
+  character(len=*), dimension(:), &
+                    optional, intent(in)    :: dim_names       !< The names of the dimensions of this variable
 
   character(len=120) :: cllr
-  cllr = "mod_vardesc"
-  if (present(caller)) cllr = trim(caller)
+  integer :: n
+
+  cllr = "mod_vardesc" ; if (present(caller)) cllr = trim(caller)
 
   if (present(name))      call safe_string_copy(name, vd%name, "vd%name", cllr)
 
@@ -1263,8 +1396,28 @@ subroutine modify_vardesc(vd, name, units, longname, hor_grid, z_grid, t_grid, &
                                "vd%longname of "//trim(vd%name), cllr)
   if (present(units))     call safe_string_copy(units, vd%units,       &
                                "vd%units of "//trim(vd%name), cllr)
-  if (present(hor_grid))  call safe_string_copy(hor_grid, vd%hor_grid, &
-                               "vd%hor_grid of "//trim(vd%name), cllr)
+  if (present(position)) then
+    vd%position = position
+    select case (position)
+      case (CENTER)     ; vd%hor_grid = 'T'
+      case (CORNER)     ; vd%hor_grid = 'Bu'
+      case (EAST_FACE)  ; vd%hor_grid = 'Cu'
+      case (NORTH_FACE) ; vd%hor_grid = 'Cv'
+      case (0)          ; vd%hor_grid = '1'
+      case default
+        call MOM_error(FATAL, "modify_vardesc: "//trim(vd%name)//" has unrecognized position argument")
+    end select
+  endif
+  if (present(hor_grid)) then
+    call safe_string_copy(hor_grid, vd%hor_grid, "vd%hor_grid of "//trim(vd%name), cllr)
+    vd%position = position_from_horgrid(vd%hor_grid)
+    if (present(caller) .and. (vd%position == -1)) then
+      call MOM_error(FATAL, "modify_vardesc called by "//trim(caller)//": "//trim(vd%name)//&
+                   " has an unrecognized hor_grid argument "//trim(vd%hor_grid))
+    elseif (vd%position == -1) then
+      call MOM_error(FATAL, "modify_vardesc called with bad hor_grid argument "//trim(vd%hor_grid))
+    endif
+  endif
   if (present(z_grid))    call safe_string_copy(z_grid, vd%z_grid,     &
                                "vd%z_grid of "//trim(vd%name), cllr)
   if (present(t_grid))    call safe_string_copy(t_grid, vd%t_grid,     &
@@ -1277,7 +1430,109 @@ subroutine modify_vardesc(vd, name, units, longname, hor_grid, z_grid, t_grid, &
   if (present(cmor_longname))   call safe_string_copy(cmor_longname, vd%cmor_longname, &
                                      "vd%cmor_longname of "//trim(vd%name), cllr)
 
+  if (present(dim_names)) then
+    do n=1,min(5,size(dim_names)) ; if (len_trim(dim_names(n)) > 0) then
+      call safe_string_copy(dim_names(n), vd%dim_names(n), "vd%dim_names of "//trim(vd%name), cllr)
+    endif ; enddo
+  endif
+
 end subroutine modify_vardesc
+
+integer function position_from_horgrid(hor_grid)
+  character(len=*), intent(in)    :: hor_grid        !< horizontal staggering of variable
+
+  select case (trim(hor_grid))
+    case ('h')   ; position_from_horgrid = CENTER
+    case ('q')   ; position_from_horgrid = CORNER
+    case ('u')   ; position_from_horgrid = EAST_FACE
+    case ('v')   ; position_from_horgrid = NORTH_FACE
+    case ('T')   ; position_from_horgrid = CENTER
+    case ('Bu')  ; position_from_horgrid = CORNER
+    case ('Cu')  ; position_from_horgrid = EAST_FACE
+    case ('Cv')  ; position_from_horgrid = NORTH_FACE
+    case ('1')   ; position_from_horgrid = 0
+    case default ; position_from_horgrid = -1 ! This is a bad-value flag.
+  end select
+end function position_from_horgrid
+
+!> Store information that can be used to create an axis in a subsequent call to create_file.
+subroutine set_axis_info(axis, name, units, longname, ax_size, ax_data, cartesian, sense)
+  type(axis_info),              intent(inout) :: axis  !< A type with information about a named axis
+  character(len=*),             intent(in)    :: name  !< The name of this axis for use in files
+  character(len=*),   optional, intent(in)    :: units !< The units of the axis labels
+  character(len=*),   optional, intent(in)    :: longname  !< Long name of the axis variable
+  integer,            optional, intent(in)    :: ax_size !< The number of elements in this axis
+  real, dimension(:), optional, intent(in)    :: ax_data !< The values of the data on the axis
+  character(len=*),   optional, intent(in)    :: cartesian !< A variable indicating which direction this axis
+                                                       !! axis corresponds with. Valid values
+                                                       !! include 'X', 'Y', 'Z', 'T', and 'N' (the default) for none.
+  integer,            optional, intent(in)    :: sense !< This is 1 for axes whose values increase upward, or -1
+                                                       !! if they increase downward.  The default, 0, is ignored.
+
+  call safe_string_copy(name, axis%name, "axis%name of "//trim(name), "set_axis_info")
+  ! Set the default values.
+  axis%longname = trim(axis%name) ; axis%units = "" ; axis%cartesian = "N" ; axis%sense = 0
+
+  if (present(longname))  call safe_string_copy(longname, axis%longname, &
+                                                "axis%longname of "//trim(name), "set_axis_info")
+  if (present(units))     call safe_string_copy(units, axis%units, &
+                                                "axis%units of "//trim(name), "set_axis_info")
+  if (present(cartesian)) call safe_string_copy(cartesian, axis%cartesian, &
+                                                "axis%cartesian of "//trim(name), "set_axis_info")
+  if (present(sense)) axis%sense = sense
+
+  if (.not.(present(ax_size) .or. present(ax_data)) ) then
+    call MOM_error(FATAL, "set_axis_info called for "//trim(name)//&
+      "without either an ax_size or an ax_data argument.")
+  elseif (present(ax_size) .and. present(ax_data)) then
+    if (size(ax_data) /= ax_size) call MOM_error(FATAL, "set_axis_info called for "//trim(name)//&
+      "with an inconsistent value of ax_size and size of ax_data.")
+  endif
+
+  if (present(ax_size)) then
+    axis%ax_size = ax_size
+  else
+    axis%ax_size = size(ax_data)
+  endif
+  if (present(ax_data)) then
+    allocate(axis%ax_data(axis%ax_size)) ; axis%ax_data(:) = ax_data(:)
+  endif
+
+end subroutine set_axis_info
+
+!> Delete the information in an array of axis_info types and deallocate memory in them.
+subroutine delete_axis_info(axes)
+  type(axis_info), dimension(:), intent(inout) :: axes  !< An array with information about named axes
+
+  integer :: n
+  do n=1,size(axes)
+    axes(n)%name = "" ; axes(n)%longname = "" ; axes(n)%units = "" ; axes(n)%cartesian = "N"
+    axes(n)%sense = 0 ; axes(n)%ax_size = 0
+    if (allocated(axes(n)%ax_data)) deallocate(axes(n)%ax_data)
+  enddo
+end subroutine delete_axis_info
+
+!> Store information that can be used to create an attribute in a subsequent call to create_file.
+subroutine set_attribute_info(attribute, name, str_value)
+  type(attribute_info), intent(inout) :: attribute !< A type with information about a named attribute
+  character(len=*),     intent(in)    :: name      !< The name of this attribute for use in files
+  character(len=*),     intent(in)    :: str_value !< The value of this attribute
+
+  attribute%name = trim(name)
+  attribute%att_val = trim(str_value)
+end subroutine set_attribute_info
+
+!> Delete the information in an array of attribute_info types and deallocate memory in them.
+subroutine delete_attribute_info(atts)
+  type(attribute_info), dimension(:), intent(inout) :: atts  !< An array of global attributes
+
+  integer :: n
+  do n=1,size(atts)
+    if (allocated(atts(n)%name)) deallocate(atts(n)%name)
+    if (allocated(atts(n)%att_val)) deallocate(atts(n)%att_val)
+  enddo
+end subroutine delete_attribute_info
+
 
 !> This function returns the CMOR standard name given a CMOR longname, based on
 !! the standard pattern of character conversions.
@@ -1297,7 +1552,8 @@ end function cmor_long_std
 
 !> This routine queries vardesc
 subroutine query_vardesc(vd, name, units, longname, hor_grid, z_grid, t_grid, &
-                         cmor_field_name, cmor_units, cmor_longname, conversion, caller)
+                         cmor_field_name, cmor_units, cmor_longname, conversion, caller, &
+                         position, dim_names)
   type(vardesc),              intent(in)  :: vd                 !< vardesc type that is queried
   character(len=*), optional, intent(out) :: name               !< name of variable
   character(len=*), optional, intent(out) :: units              !< units of variable
@@ -1311,8 +1567,14 @@ subroutine query_vardesc(vd, name, units, longname, hor_grid, z_grid, t_grid, &
   real            , optional, intent(out) :: conversion         !< for unit conversions, such as needed to
                                                                 !! convert from intensive to extensive
   character(len=*), optional, intent(in)  :: caller             !< calling routine?
+  integer,          optional, intent(out) :: position        !< A coded integer indicating the horizontal position
+                                                            !! of this variable if it has such dimensions.
+                                                            !! Valid values include CORNER, CENTER, EAST_FACE
+                                                            !! NORTH_FACE, and 0 for no horizontal dimensions.
+  character(len=*), dimension(:), &
+                    optional, intent(out) :: dim_names       !< The names of the dimensions of this variable
 
-
+  integer :: n
   character(len=120) :: cllr
   cllr = "mod_vardesc"
   if (present(caller)) cllr = trim(caller)
@@ -1336,6 +1598,15 @@ subroutine query_vardesc(vd, name, units, longname, hor_grid, z_grid, t_grid, &
                                      "vd%cmor_units of "//trim(vd%name), cllr)
   if (present(cmor_longname))   call safe_string_copy(vd%cmor_longname, cmor_longname, &
                                      "vd%cmor_longname of "//trim(vd%name), cllr)
+  if (present(position)) then
+    position = vd%position
+    if (position == -1) position = position_from_horgrid(vd%hor_grid)
+  endif
+  if (present(dim_names)) then
+    do n=1,min(5,size(dim_names))
+      call safe_string_copy(vd%dim_names(n), dim_names(n), "vd%dim_names of "//trim(vd%name), cllr)
+    enddo
+  endif
 
 end subroutine query_vardesc
 
@@ -1671,7 +1942,5 @@ end subroutine MOM_io_init
 !!       MOM and named by name_output_file and open it for reading.
 !!
 !!   * handle_error: write an error code and quit.
-
-
 
 end module MOM_io
