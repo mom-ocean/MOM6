@@ -84,6 +84,9 @@ FCFLAGS_COVERAGE ?=
 # - FMS cannot be built with the same aggressive initialization flags as MOM6,
 #   so FCFLAGS_INIT is used to provide additional MOM6 configuration.
 
+# User-defined LDFLAGS (applied to all builds and FMS)
+LDFLAGS_USER ?=
+
 # Set to `true` to require identical results from DEBUG and REPRO builds
 # NOTE: Many compilers (Intel, GCC on ARM64) do not yet produce identical
 #   results across DEBUG and REPRO builds (as defined below), so we disable on
@@ -217,8 +220,8 @@ REPRO_FCFLAGS := FCFLAGS="$(FCFLAGS_REPRO) $(FCFLAGS_FMS)"
 OPENMP_FCFLAGS := FCFLAGS="$(FCFLAGS_DEBUG) $(FCFLAGS_INIT) $(FCFLAGS_FMS)"
 TARGET_FCFLAGS := FCFLAGS="$(FCFLAGS_DEBUG) $(FCFLAGS_INIT) $(FCFLAGS_FMS)"
 
-MOM_LDFLAGS := LDFLAGS="$(LDFLAGS_FMS)"
-SYMMETRIC_LDFLAGS := LDFLAGS="$(COVERAGE) $(LDFLAGS_FMS)"
+MOM_LDFLAGS := LDFLAGS="$(LDFLAGS_FMS) $(LDFLAGS_USER)"
+SYMMETRIC_LDFLAGS := LDFLAGS="$(COVERAGE) $(LDFLAGS_FMS) $(LDFLAGS_USER)"
 
 
 # Environment variable configuration
@@ -286,7 +289,7 @@ $(TARGET_CODEBASE)/ac/configure: $(TARGET_CODEBASE)
 
 $(TARGET_CODEBASE):
 	git clone --recursive $(MOM_TARGET_URL) $@
-	cd $@ && git checkout $(MOM_TARGET_BRANCH)
+	cd $@ && git checkout --recurse-submodules $(MOM_TARGET_BRANCH)
 
 
 #---
