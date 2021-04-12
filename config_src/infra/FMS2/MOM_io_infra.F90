@@ -12,7 +12,7 @@ use fms2_io_mod,          only : fms2_open_file => open_file, check_if_open, fms
 use fms2_io_mod,          only : FmsNetcdfDomainFile_t, FmsNetcdfFile_t, fms2_read_data => read_data
 use fms2_io_mod,          only : get_unlimited_dimension_name, get_num_dimensions, get_num_variables
 use fms2_io_mod,          only : get_variable_names, variable_exists, get_variable_size, get_variable_units
-use fms2_io_mod,          only : register_field, write_data, register_variable_attribute
+use fms2_io_mod,          only : register_field, write_data, register_variable_attribute, register_global_attribute
 use fms2_io_mod,          only : variable_att_exists, get_variable_attribute, get_variable_num_dimensions
 use fms2_io_mod,          only : get_variable_dimension_names, is_dimension_registered, get_dimension_size
 use fms2_io_mod,          only : is_dimension_unlimited, register_axis, unlimited
@@ -90,7 +90,7 @@ end interface MOM_read_vector
 
 !> Write metadata about a variable or axis to a file and store it for later reuse
 interface write_metadata
-  module procedure write_metadata_axis, write_metadata_field
+  module procedure write_metadata_axis, write_metadata_field, write_metadata_global
 end interface write_metadata
 
 !> Close a file (or fileset).  If the file handle does not point to an open file,
@@ -1779,7 +1779,7 @@ subroutine write_metadata_axis(IO_handle, axis, name, units, longname, cartesian
   endif
 
   axis%name = trim(name)
- if (present(data) .and. allocated(axis%ax_data)) call MOM_error(FATAL, &
+  if (present(data) .and. allocated(axis%ax_data)) call MOM_error(FATAL, &
         "Data is already allocated in a call to write_metadata_axis for axis "//&
         trim(name)//" in file "//trim(IO_handle%filename))
 
@@ -1919,5 +1919,19 @@ subroutine write_metadata_field(IO_handle, field, axes, name, units, longname, &
   field%valid_chksum = .false.
 
 end subroutine write_metadata_field
+
+!> Write a global text attribute to a file.
+subroutine write_metadata_global(IO_handle, name, attribute)
+  type(file_type),            intent(in)    :: IO_handle !< Handle for a file that is open for writing
+  character(len=*),           intent(in)    :: name      !< The name in the file of this global attribute
+  character(len=*),           intent(in)    :: attribute !< The value of this attribute
+
+  if (IO_handle%FMS2_file) then
+    call register_global_attribute(IO_handle%fileobj, name, attribute, len_trim(attribute))
+  else
+    call mpp_write_meta(IO_handle%unit, name, cval=attribute)
+  endif
+
+end subroutine write_metadata_global
 
 end module MOM_io_infra
