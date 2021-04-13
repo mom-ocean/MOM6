@@ -277,7 +277,7 @@ subroutine init_oda(Time, G, GV, diag_CS, CS)
   call MOM_initialize_coord(CS%GV, CS%US, PF, .false., &
            dirs%output_directory, tv_dummy, dG%max_depth)
   call ALE_init(PF, CS%GV, CS%US, dG%max_depth, CS%ALE_CS)
-  call MOM_grid_init(CS%Grid, PF, global_indexing=.true.)
+  call MOM_grid_init(CS%Grid, PF)
   call ALE_updateVerticalGridType(CS%ALE_CS, CS%GV)
   call copy_dyngrid_to_MOM_grid(dG, CS%Grid, CS%US)
   CS%mpp_domain => CS%Grid%Domain%mpp_domain
