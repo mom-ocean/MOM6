@@ -655,7 +655,7 @@ end subroutine get_axis_data
 
 !> This routine uses the fms_io subroutine read_data to read a scalar named
 !! "fieldname" from a single or domain-decomposed file "filename".
-subroutine MOM_read_data_0d(filename, fieldname, data, timelevel, scale, MOM_Domain)
+subroutine MOM_read_data_0d(filename, fieldname, data, timelevel, scale, MOM_Domain, file_may_be_4d)
   character(len=*),       intent(in)    :: filename  !< The name of the file to read
   character(len=*),       intent(in)    :: fieldname !< The variable name of the data in the file
   real,                   intent(inout) :: data      !< The 1-dimensional array into which the data
@@ -664,6 +664,8 @@ subroutine MOM_read_data_0d(filename, fieldname, data, timelevel, scale, MOM_Dom
                                                      !! by before it is returned.
   type(MOM_domain_type), &
                 optional, intent(in)    :: MOM_Domain !< The MOM_Domain that describes the decomposition
+  logical,      optional, intent(in)    :: file_may_be_4d !< If true, this file may have 4-d arrays, but
+                                                     !! with the FMS2 I/O interfaces this does not matter.
 
   ! Local variables
   type(FmsNetcdfFile_t)       :: fileObj ! A handle to a non-domain-decomposed file
@@ -723,7 +725,7 @@ end subroutine MOM_read_data_0d
 
 !> This routine uses the fms_io subroutine read_data to read a 1-D data field named
 !! "fieldname" from a single or domain-decomposed file "filename".
-subroutine MOM_read_data_1d(filename, fieldname, data, timelevel, scale, MOM_Domain)
+subroutine MOM_read_data_1d(filename, fieldname, data, timelevel, scale, MOM_Domain, file_may_be_4d)
   character(len=*),       intent(in)    :: filename  !< The name of the file to read
   character(len=*),       intent(in)    :: fieldname !< The variable name of the data in the file
   real, dimension(:),     intent(inout) :: data      !< The 1-dimensional array into which the data
@@ -732,6 +734,8 @@ subroutine MOM_read_data_1d(filename, fieldname, data, timelevel, scale, MOM_Dom
                                                      !! by before they are returned.
   type(MOM_domain_type), &
                 optional, intent(in)    :: MOM_Domain !< The MOM_Domain that describes the decomposition
+  logical,      optional, intent(in)    :: file_may_be_4d !< If true, this file may have 4-d arrays, but
+                                                     !! with the FMS2 I/O interfaces this does not matter.
 
   ! Local variables
   type(FmsNetcdfFile_t)       :: fileObj ! A handle to a non-domain-decomposed file
@@ -793,7 +797,7 @@ end subroutine MOM_read_data_1d
 !! 2-D data field named "fieldname" from file "filename".  Valid values for
 !! "position" include CORNER, CENTER, EAST_FACE and NORTH_FACE.
 subroutine MOM_read_data_2d(filename, fieldname, data, MOM_Domain, &
-                            timelevel, position, scale)
+                            timelevel, position, scale, file_may_be_4d)
   character(len=*),       intent(in)    :: filename  !< The name of the file to read
   character(len=*),       intent(in)    :: fieldname !< The variable name of the data in the file
   real, dimension(:,:),   intent(inout) :: data      !< The 2-dimensional array into which the data
@@ -803,6 +807,8 @@ subroutine MOM_read_data_2d(filename, fieldname, data, MOM_Domain, &
   integer,      optional, intent(in)    :: position  !< A flag indicating where this data is located
   real,         optional, intent(in)    :: scale     !< A scaling factor that the field is multiplied
                                                      !! by before it is returned.
+  logical,      optional, intent(in)    :: file_may_be_4d !< If true, this file may have 4-d arrays, but
+                                                     !! with the FMS2 I/O interfaces this does not matter.
 
   ! Local variables
   type(FmsNetcdfDomainFile_t) :: fileobj ! A handle to a domain-decomposed file object
@@ -916,7 +922,7 @@ end subroutine MOM_read_data_2d_region
 !! 3-D data field named "fieldname" from file "filename".  Valid values for
 !! "position" include CORNER, CENTER, EAST_FACE and NORTH_FACE.
 subroutine MOM_read_data_3d(filename, fieldname, data, MOM_Domain, &
-                            timelevel, position, scale)
+                            timelevel, position, scale, file_may_be_4d)
   character(len=*),       intent(in)    :: filename  !< The name of the file to read
   character(len=*),       intent(in)    :: fieldname !< The variable name of the data in the file
   real, dimension(:,:,:), intent(inout) :: data      !< The 3-dimensional array into which the data
@@ -926,6 +932,8 @@ subroutine MOM_read_data_3d(filename, fieldname, data, MOM_Domain, &
   integer,      optional, intent(in)    :: position  !< A flag indicating where this data is located
   real,         optional, intent(in)    :: scale     !< A scaling factor that the field is multiplied
                                                      !! by before it is returned.
+  logical,      optional, intent(in)    :: file_may_be_4d !< If true, this file may have 4-d arrays, but
+                                                     !! with the FMS2 I/O interfaces this does not matter.
 
   ! Local variables
   type(FmsNetcdfDomainFile_t) :: fileobj ! A handle to a domain-decomposed file object
