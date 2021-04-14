@@ -41,7 +41,7 @@ use MOM_io,                   only : slasher, file_exists, MOM_read_data
 use MOM_obsolete_params,      only : find_obsolete_params
 use MOM_restart,              only : register_restart_field, register_restart_pair
 use MOM_restart,              only : query_initialized, save_restart
-use MOM_restart,              only : restart_init, is_new_run, MOM_restart_CS
+use MOM_restart,              only : restart_init, is_new_run, determine_is_new_run, MOM_restart_CS
 use MOM_spatial_means,        only : global_mass_integral
 use MOM_time_manager,         only : time_type, real_to_time, time_type_to_real, operator(+)
 use MOM_time_manager,         only : operator(-), operator(>), operator(*), operator(/)
@@ -97,6 +97,7 @@ use MOM_open_boundary,         only : update_segment_tracer_reservoirs
 use MOM_open_boundary,         only : rotate_OBC_config, rotate_OBC_init
 use MOM_set_visc,              only : set_viscous_BBL, set_viscous_ML, set_visc_init
 use MOM_set_visc,              only : set_visc_register_restarts, set_visc_CS
+use MOM_shared_initialization, only : write_ocean_geometry_file
 use MOM_sponge,                only : init_sponge_diags, sponge_CS
 use MOM_state_initialization,  only : MOM_initialize_state
 use MOM_sum_output,            only : write_energy, accumulate_net_input
@@ -1677,7 +1678,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   real    :: default_val       ! default value for a parameter
   logical :: write_geom_files  ! If true, write out the grid geometry files.
   logical :: ensemble_ocean    ! If true, perform an ensemble gather at the end of step_MOM
-  logical :: new_sim
+  logical :: new_sim           ! If true, this has been determined to be a new simulation
   logical :: use_geothermal    ! If true, apply geothermal heating.
   logical :: use_EOS           ! If true, density calculated from T & S using an equation of state.
   logical :: symmetric         ! If true, use symmetric memory allocation.
@@ -2034,11 +2035,6 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
                  "vertical grid files. Other values are invalid.", default=1)
   if (write_geom<0 .or. write_geom>2) call MOM_error(FATAL,"MOM: "//&
          "WRITE_GEOM must be equal to 0, 1 or 2.")
-  write_geom_files = ((write_geom==2) .or. ((write_geom==1) .and. &
-     ((dirs%input_filename(1:1)=='n') .and. (LEN_TRIM(dirs%input_filename)==1))))
-! If the restart file type had been initialized, this could become:
-!  write_geom_files = ((write_geom==2) .or. &
-!                      ((write_geom==1) .and. is_new_run(restart_CSp)))
 
   ! Check for inconsistent parameter settings.
   if (CS%use_ALE_algorithm .and. bulkmixedlayer) call MOM_error(FATAL, &
@@ -2136,8 +2132,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   call clone_MOM_domain(G_in%Domain, dG_in%Domain)
 
   ! Allocate initialize time-invariant MOM variables.
-  call MOM_initialize_fixed(dG_in, US, OBC_in, param_file, write_geom_files, &
-                            dirs%output_directory)
+  call MOM_initialize_fixed(dG_in, US, OBC_in, param_file, .false., dirs%output_directory)
 
   call callTree_waypoint("returned from MOM_initialize_fixed() (initialize_MOM)")
 
@@ -2341,17 +2336,6 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
 
   call callTree_waypoint("restart registration complete (initialize_MOM)")
 
-  ! Initialize dynamically evolving fields, perhaps from restart files.
-  call cpu_clock_begin(id_clock_MOM_init)
-  call MOM_initialize_coord(GV, US, param_file, write_geom_files, &
-                            dirs%output_directory, CS%tv, dG%max_depth)
-  call callTree_waypoint("returned from MOM_initialize_coord() (initialize_MOM)")
-
-  if (CS%use_ALE_algorithm) then
-    call ALE_init(param_file, GV, US, dG%max_depth, CS%ALE_CSp)
-    call callTree_waypoint("returned from ALE_init() (initialize_MOM)")
-  endif
-
   !   Shift from using the temporary dynamic grid type to using the final
   ! (potentially static) ocean-specific grid type.
   !   The next line would be needed if G%Domain had not already been init'd above:
@@ -2366,10 +2350,26 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   endif
   call MOM_grid_init(G_in, param_file, US, HI_in, bathymetry_at_vel=bathy_at_vel)
   call copy_dyngrid_to_MOM_grid(dG_in, G_in, US)
+  if (.not. CS%rotate_index) G => G_in
+
+  new_sim = determine_is_new_run(dirs%input_filename, dirs%restart_input_dir, G_in, restart_CSp)
+  write_geom_files = ((write_geom==2) .or. ((write_geom==1) .and. new_sim))
+
+  ! Write out all of the grid data used by this run.
+  if (write_geom_files) call write_ocean_geometry_file(dG_in, param_file, dirs%output_directory, US=US)
+
   call destroy_dyn_horgrid(dG_in)
 
-  if (.not. CS%rotate_index) &
-    G => G_in
+  ! Initialize dynamically evolving fields, perhaps from restart files.
+  call cpu_clock_begin(id_clock_MOM_init)
+  call MOM_initialize_coord(GV, US, param_file, write_geom_files, &
+                            dirs%output_directory, CS%tv, G%max_depth)
+  call callTree_waypoint("returned from MOM_initialize_coord() (initialize_MOM)")
+
+  if (CS%use_ALE_algorithm) then
+    call ALE_init(param_file, GV, US, G%max_depth, CS%ALE_CSp)
+    call callTree_waypoint("returned from ALE_init() (initialize_MOM)")
+  endif
 
   ! Set a few remaining fields that are specific to the ocean grid type.
   call set_first_direction(G, first_direction)

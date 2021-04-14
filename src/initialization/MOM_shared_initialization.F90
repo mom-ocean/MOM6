@@ -1194,17 +1194,18 @@ subroutine write_ocean_geometry_file(G, param_file, directory, geom_file, US)
   type(unit_scale_type), optional, intent(in) :: US        !< A dimensional unit scaling type
 
   ! Local variables.
-  character(len=240) :: filepath
+  character(len=240) :: filepath  ! The full path to the file to write
   character(len=40)  :: mdl = "write_ocean_geometry_file"
-  integer, parameter :: nFlds=23
-  type(vardesc) :: vars(nFlds)
-  type(fieldtype) :: fields(nFlds)
+  type(vardesc),   dimension(:), allocatable :: &
+    vars     ! Types with metadata about the variables and their staggering
+  type(fieldtype), dimension(:), allocatable :: &
+    fields   ! Opaque types used by MOM_io to store variable metadata information
   real :: Z_to_m_scale ! A unit conversion factor from Z to m
   real :: s_to_T_scale ! A unit conversion factor from T-1 to s-1
   real :: L_to_m_scale ! A unit conversion factor from L to m
   type(file_type) :: IO_handle ! The I/O handle of the fileset
+  integer :: nFlds ! The number of variables in this file
   integer :: file_threading
-  integer :: nFlds_used
   logical :: multiple_files
 
   call callTree_enter('write_ocean_geometry_file()')
@@ -1212,6 +1213,12 @@ subroutine write_ocean_geometry_file(G, param_file, directory, geom_file, US)
   Z_to_m_scale = 1.0 ; if (present(US)) Z_to_m_scale = US%Z_to_m
   s_to_T_scale = 1.0 ; if (present(US)) s_to_T_scale = US%s_to_T
   L_to_m_scale = 1.0 ; if (present(US)) L_to_m_scale = US%L_to_m
+
+
+  nFlds = 19 ; if (G%bathymetry_at_vel) nFlds = 23
+
+  allocate(vars(nFlds))
+  allocate(fields(nFlds))
 
   !   var_desc populates a type defined in MOM_io.F90.  The arguments, in order, are:
   ! (1) the variable name for the NetCDF file
@@ -1244,13 +1251,12 @@ subroutine write_ocean_geometry_file(G, param_file, directory, geom_file, US)
   vars(18)= var_desc("dyCuo","m","Open meridional grid spacing at u points",'u','1','1')
   vars(19)= var_desc("wet", "nondim", "land or ocean?", 'h','1','1')
 
-  vars(20) = var_desc("Dblock_u","m","Blocked depth at u points",'u','1','1')
-  vars(21) = var_desc("Dopen_u","m","Open depth at u points",'u','1','1')
-  vars(22) = var_desc("Dblock_v","m","Blocked depth at v points",'v','1','1')
-  vars(23) = var_desc("Dopen_v","m","Open depth at v points",'v','1','1')
-
-
-  nFlds_used = 19 ; if (G%bathymetry_at_vel) nFlds_used = 23
+  if (G%bathymetry_at_vel) then
+    vars(20) = var_desc("Dblock_u","m","Blocked depth at u points",'u','1','1')
+    vars(21) = var_desc("Dopen_u","m","Open depth at u points",'u','1','1')
+    vars(22) = var_desc("Dblock_v","m","Blocked depth at v points",'v','1','1')
+    vars(23) = var_desc("Dopen_v","m","Open depth at v points",'v','1','1')
+  endif
 
   if (present(geom_file)) then
     filepath = trim(directory) // trim(geom_file)
@@ -1265,7 +1271,7 @@ subroutine write_ocean_geometry_file(G, param_file, directory, geom_file, US)
   file_threading = SINGLE_FILE
   if (multiple_files) file_threading = MULTIPLE
 
-  call create_file(IO_handle, trim(filepath), vars, nFlds_used, fields, file_threading, dG=G)
+  call create_file(IO_handle, trim(filepath), vars, nFlds, fields, file_threading, dG=G)
 
   call MOM_write_field(IO_handle, fields(1), G%Domain, G%geoLatBu)
   call MOM_write_field(IO_handle, fields(2), G%Domain, G%geoLonBu)
@@ -1299,6 +1305,8 @@ subroutine write_ocean_geometry_file(G, param_file, directory, geom_file, US)
   endif
 
   call close_file(IO_handle)
+
+  deallocate(vars, fields)
 
   call callTree_leave('write_ocean_geometry_file()')
 end subroutine write_ocean_geometry_file
