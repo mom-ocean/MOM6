@@ -1265,7 +1265,13 @@ subroutine step_MOM_thermo(CS, G, GV, US, u, v, h, tv, fluxes, dtdia, &
   call enable_averages(dtdia, Time_end_thermo, CS%diag)
 
   if (associated(CS%odaCS)) then
+    if (CS%debug) then
+      call MOM_thermo_chksum("Pre-oda ", tv, G, US, haloshift=0)
+    endif
     call apply_oda_tracer_increments(US%T_to_s*dtdia, Time_end_thermo, G, GV, tv, h, CS%odaCS)
+    if (CS%debug) then
+      call MOM_thermo_chksum("Post-oda ", tv, G, US, haloshift=0)
+    endif
   endif
 
   if (associated(fluxes%p_surf) .or. associated(fluxes%p_surf_full)) then
