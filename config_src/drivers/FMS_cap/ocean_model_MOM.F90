@@ -56,6 +56,7 @@ use MOM_ice_shelf, only : initialize_ice_shelf, shelf_calc_flux, ice_shelf_CS
 use MOM_ice_shelf, only : add_shelf_forces, ice_shelf_end, ice_shelf_save_restart
 use MOM_wave_interface, only: wave_parameters_CS, MOM_wave_interface_init
 use MOM_wave_interface, only: MOM_wave_interface_init_lite, Update_Surface_Waves
+use iso_fortran_env, only : int64
 
 #include <MOM_memory.h>
 
@@ -1094,25 +1095,29 @@ subroutine ocean_model_data1D_get(OS, Ocean, name, value)
 
 end subroutine ocean_model_data1D_get
 
-!> Write out FMS-format checsums on fields from the ocean surface state
+!> Write out checksums for fields from the ocean surface state
 subroutine ocean_public_type_chksum(id, timestep, ocn)
 
   character(len=*),        intent(in) :: id  !< An identifying string for this call
   integer,                 intent(in) :: timestep !< The number of elapsed timesteps
   type(ocean_public_type), intent(in) :: ocn !< A structure containing various publicly
                                              !! visible ocean surface fields.
-  integer :: n, m, outunit
+  ! Local variables
+  integer(kind=int64) :: chks ! A checksum for the field
+  logical :: root    ! True only on the root PE
+  integer :: outunit ! The output unit to write to
 
   outunit = stdout
+  root = is_root_pe()
 
-  write(outunit,*) "BEGIN CHECKSUM(ocean_type):: ", id, timestep
-  write(outunit,100) 'ocean%t_surf   ', field_chksum(ocn%t_surf )
-  write(outunit,100) 'ocean%s_surf   ', field_chksum(ocn%s_surf )
-  write(outunit,100) 'ocean%u_surf   ', field_chksum(ocn%u_surf )
-  write(outunit,100) 'ocean%v_surf   ', field_chksum(ocn%v_surf )
-  write(outunit,100) 'ocean%sea_lev  ', field_chksum(ocn%sea_lev)
-  write(outunit,100) 'ocean%frazil   ', field_chksum(ocn%frazil )
-  write(outunit,100) 'ocean%melt_potential  ', field_chksum(ocn%melt_potential)
+  if (root) write(outunit,*) "BEGIN CHECKSUM(ocean_type):: ", id, timestep
+  chks = field_chksum(ocn%t_surf ) ; if (root) write(outunit,100) 'ocean%t_surf   ', chks
+  chks = field_chksum(ocn%s_surf ) ; if (root) write(outunit,100) 'ocean%s_surf   ', chks
+  chks = field_chksum(ocn%u_surf ) ; if (root) write(outunit,100) 'ocean%u_surf   ', chks
+  chks = field_chksum(ocn%v_surf ) ; if (root) write(outunit,100) 'ocean%v_surf   ', chks
+  chks = field_chksum(ocn%sea_lev) ; if (root) write(outunit,100) 'ocean%sea_lev  ', chks
+  chks = field_chksum(ocn%frazil ) ; if (root) write(outunit,100) 'ocean%frazil   ', chks
+  chks = field_chksum(ocn%melt_potential) ; if (root) write(outunit,100) 'ocean%melt_potential   ', chks
   call coupler_type_write_chksums(ocn%fields, outunit, 'ocean%')
 100 FORMAT("   CHECKSUM::",A20," = ",Z20)
 
@@ -1161,6 +1166,8 @@ subroutine ocean_model_get_UV_surf(OS, Ocean, name, array2D, isc, jsc)
   i0 = is - isc_bnd ; j0 = js - jsc_bnd
 
   sfc_state => OS%sfc_state
+
+  call pass_vector(sfc_state%u, sfc_state%v, G%Domain)
 
   select case(name)
   case('ua')

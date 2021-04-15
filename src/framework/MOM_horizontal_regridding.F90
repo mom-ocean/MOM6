@@ -11,9 +11,9 @@ use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, WARNING, is_root_pe
 use MOM_error_handler, only : callTree_enter, callTree_leave, callTree_waypoint
 use MOM_file_parser,   only : get_param, log_param, log_version, param_file_type
 use MOM_grid,          only : ocean_grid_type
-use MOM_interpolate,   only : time_interp_external, get_external_field_info, horiz_interp_init
+use MOM_interpolate,   only : time_interp_external, horiz_interp_init
 use MOM_interpolate,   only : build_horiz_interp_weights, run_horiz_interp, horiz_interp_type
-use MOM_io_infra,      only : axistype, get_axis_data
+use MOM_interp_infra,  only : axistype, get_external_field_info, get_axis_data
 use MOM_time_manager,  only : time_type
 
 use netcdf, only : NF90_OPEN, NF90_NOWRITE, NF90_GET_ATT, NF90_GET_VAR
