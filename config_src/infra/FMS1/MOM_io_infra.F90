@@ -78,7 +78,7 @@ end interface MOM_read_vector
 
 !> Write metadata about a variable or axis to a file and store it for later reuse
 interface write_metadata
-  module procedure write_metadata_axis, write_metadata_field
+  module procedure write_metadata_axis, write_metadata_field, write_metadata_global
 end interface write_metadata
 
 !> Close a file (or fileset).  If the file handle does not point to an open file,
@@ -792,5 +792,14 @@ subroutine write_metadata_field(IO_handle, field, axes, name, units, longname, &
   ! unused opt. args: min=min, max=max, fill=fill, scale=scale, add=add, &
 
 end subroutine write_metadata_field
+
+!> Write a global text attribute to a file.
+subroutine write_metadata_global(IO_handle, name, attribute)
+  type(file_type),            intent(in)    :: IO_handle !< Handle for a file that is open for writing
+  character(len=*),           intent(in)    :: name      !< The name in the file of this global attribute
+  character(len=*),           intent(in)    :: attribute !< The value of this attribute
+
+  call mpp_write_meta(IO_handle%unit, name, cval=attribute)
+end subroutine write_metadata_global
 
 end module MOM_io_infra
