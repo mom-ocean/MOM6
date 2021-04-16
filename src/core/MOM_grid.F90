@@ -5,7 +5,7 @@ module MOM_grid
 
 use MOM_hor_index, only : hor_index_type, hor_index_init
 use MOM_domains, only : MOM_domain_type, get_domain_extent, compute_block_extent
-use MOM_domains, only : get_global_shape, get_domain_extent_dsamp2
+use MOM_domains, only : get_global_shape, deallocate_MOM_domain
 use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_unit_scaling, only : unit_scale_type
@@ -138,7 +138,8 @@ type, public :: ocean_grid_type
     y_axis_units        !< The units that are used in labeling the y coordinate axes.
 
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: &
-    bathyT        !< Ocean bottom depth at tracer points, in depth units [Z ~> m].
+    bathyT           !< Ocean bottom depth at tracer points, in depth units [Z ~> m].
+  real    :: Z_ref   !< A reference value for all geometric height fields, such as bathyT [Z ~> m].
 
   logical :: bathymetry_at_vel  !< If true, there are separate values for the
                   !! basin depths at velocity points.  Otherwise the effects of
@@ -154,7 +155,6 @@ type, public :: ocean_grid_type
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: &
     df_dx, &      !< Derivative d/dx f (Coriolis parameter) at h-points [T-1 L-1 ~> s-1 m-1].
     df_dy         !< Derivative d/dy f (Coriolis parameter) at h-points [T-1 L-1 ~> s-1 m-1].
-  real :: g_Earth !< The gravitational acceleration [m2 Z-1 s-2 ~> m s-2].
 
   ! These variables are global sums that are useful for 1-d diagnostics and should not be rescaled.
   real :: areaT_global  !< Global sum of h-cell area [m2]
@@ -194,23 +194,26 @@ subroutine MOM_grid_init(G, param_file, US, HI, global_indexing, bathymetry_at_v
                              !! velocity points.  Otherwise the effects of topography
                              !! are entirely determined from thickness points.
 
-! This include declares and sets the variable "version".
-#include "version_variable.h"
+  ! Local variables
+  real :: mean_SeaLev_scale
   integer :: isd, ied, jsd, jed, nk
   integer :: IsdB, IedB, JsdB, JedB
   integer :: ied_max, jed_max
   integer :: niblock, njblock, nihalo, njhalo, nblocks, n, i, j
   logical :: local_indexing  ! If false use global index values instead of having
                              ! the data domain on each processor start at 1.
+  ! This include declares and sets the variable "version".
+# include "version_variable.h"
 
   integer, allocatable, dimension(:) :: ibegin, iend, jbegin, jend
   character(len=40)  :: mod_nm  = "MOM_grid" ! This module's name.
 
 
   ! Read all relevant parameters and write them to the model log.
+  call get_param(param_file, mod_nm, "REFERENCE_HEIGHT", G%Z_ref, default=0.0, do_not_log=.true.)
   call log_version(param_file, mod_nm, version, &
-                   "Parameters providing information about the lateral grid.")
-
+                   "Parameters providing information about the lateral grid.", &
+                   log_to_all=.true., layout=.true., all_default=(G%Z_ref==0.0))
 
   call get_param(param_file, mod_nm, "NIBLOCK", niblock, "The number of blocks "// &
                  "in the x-direction on each processor (for openmp).", default=1, &
@@ -218,8 +221,12 @@ subroutine MOM_grid_init(G, param_file, US, HI, global_indexing, bathymetry_at_v
   call get_param(param_file, mod_nm, "NJBLOCK", njblock, "The number of blocks "// &
                  "in the y-direction on each processor (for openmp).", default=1, &
                  layoutParam=.true.)
-
   if (present(US)) then ; if (associated(US)) G%US => US ; endif
+
+  mean_SeaLev_scale = 1.0 ;  if (associated(G%US)) mean_SeaLev_scale = G%US%m_to_Z
+  call get_param(param_file, mod_nm, "REFERENCE_HEIGHT", G%Z_ref, &
+                 "A reference value for geometric height fields, such as bathyT.", &
+                 units="m", default=0.0, scale=mean_SeaLev_scale)
 
   if (present(HI)) then
     G%HI = HI
@@ -356,9 +363,9 @@ subroutine MOM_grid_init(G, param_file, US, HI, global_indexing, bathymetry_at_v
   if ( G%block(nblocks)%jed+G%block(nblocks)%jdg_offset > G%HI%jed + G%HI%jdg_offset ) &
         call MOM_error(FATAL, "MOM_grid_init: G%jed_bk > G%jed")
 
-  call get_domain_extent_dsamp2(G%Domain, G%HId2%isc, G%HId2%iec, G%HId2%jsc, G%HId2%jec,&
-                                          G%HId2%isd, G%HId2%ied, G%HId2%jsd, G%HId2%jed,&
-                                          G%HId2%isg, G%HId2%ieg, G%HId2%jsg, G%HId2%jeg)
+  call get_domain_extent(G%Domain, G%HId2%isc, G%HId2%iec, G%HId2%jsc, G%HId2%jec, &
+                         G%HId2%isd, G%HId2%ied, G%HId2%jsd, G%HId2%jed, &
+                         G%HId2%isg, G%HId2%ieg, G%HId2%jsg, G%HId2%jeg, coarsen=2)
 
   ! Set array sizes for fields that are discretized at tracer cell boundaries.
   G%HId2%IscB = G%HId2%isc ; G%HId2%JscB = G%HId2%jsc
@@ -623,8 +630,9 @@ subroutine MOM_grid_end(G)
   deallocate(G%gridLonT) ; deallocate(G%gridLatT)
   deallocate(G%gridLonB) ; deallocate(G%gridLatB)
 
-  deallocate(G%Domain%mpp_domain)
-  deallocate(G%Domain)
+  ! The cursory flag avoids doing any deallocation of memory in the underlying
+  ! infrastructure to avoid problems due to shared pointers.
+  call deallocate_MOM_domain(G%Domain, cursory=.true.)
 
 end subroutine MOM_grid_end
 

@@ -10,7 +10,6 @@ use MOM_error_handler, only : MOM_error, FATAL, WARNING, is_root_pe
 use MOM_file_parser, only : get_param, param_file_type, log_version
 use MOM_forcing_type, only : forcing, allocate_forcing_type
 use MOM_grid, only : ocean_grid_type
-use MOM_io, only : file_exists, read_data
 use MOM_safe_alloc, only : safe_alloc_ptr
 use MOM_time_manager, only : time_type, operator(+), operator(/)
 use MOM_tracer_flow_control, only : call_tracer_set_forcing
@@ -27,16 +26,16 @@ type, public :: BFB_surface_forcing_CS ; private
 
   logical :: use_temperature !< If true, temperature and salinity are used as state variables.
   logical :: restorebuoy     !< If true, use restoring surface buoyancy forcing.
-  real :: Rho0               !< The density used in the Boussinesq approximation [kg m-3].
+  real :: Rho0               !< The density used in the Boussinesq approximation [R ~> kg m-3].
   real :: G_Earth            !< The gravitational acceleration [L2 Z-1 T-2 ~> m s-2]
-  real :: Flux_const         !< The restoring rate at the surface [m s-1].
+  real :: Flux_const         !< The restoring rate at the surface [Z T-1 ~> m s-1].
   real :: gust_const         !< A constant unresolved background gustiness
                              !! that contributes to ustar [Pa].
   real :: SST_s              !< SST at the southern edge of the linear forcing ramp [degC]
   real :: SST_n              !< SST at the northern edge of the linear forcing ramp [degC]
   real :: lfrslat            !< Southern latitude where the linear forcing ramp begins [degLat]
   real :: lfrnlat            !< Northern latitude where the linear forcing ramp ends [degLat]
-  real :: drho_dt            !< Rate of change of density with temperature [kg m-3 degC-1].
+  real :: drho_dt            !< Rate of change of density with temperature [R degC-1 ~> kg m-3 degC-1].
                              !!   Note that temperature is being used as a dummy variable here.
                              !! All temperatures are converted into density.
 
@@ -47,8 +46,8 @@ end type BFB_surface_forcing_CS
 contains
 
 !> Bouyancy forcing for the boundary-forced-basin (BFB) configuration
-subroutine BFB_buoyancy_forcing(state, fluxes, day, dt, G, US, CS)
-  type(surface),                intent(inout) :: state  !< A structure containing fields that
+subroutine BFB_buoyancy_forcing(sfc_state, fluxes, day, dt, G, US, CS)
+  type(surface),                intent(inout) :: sfc_state  !< A structure containing fields that
                                                       !! describe the surface state of the ocean.
   type(forcing),                intent(inout) :: fluxes !< A structure containing pointers to any
                                                       !! possible forcing fields. Unused fields
@@ -65,10 +64,11 @@ subroutine BFB_buoyancy_forcing(state, fluxes, day, dt, G, US, CS)
   real :: Temp_restore   ! The temperature that is being restored toward [degC].
   real :: Salin_restore  ! The salinity that is being restored toward [ppt].
   real :: density_restore  ! The potential density that is being restored
-                         ! toward [kg m-3].
-  real :: rhoXcp ! The mean density times the heat capacity [J m-3 degC-1].
+                         ! toward [R ~> kg m-3].
+  real :: rhoXcp           ! Reference density times heat capacity times unit scaling
+                           ! factors [Q R degC-1 ~> J m-3 degC-1]
   real :: buoy_rest_const  ! A constant relating density anomalies to the
-                           ! restoring buoyancy flux [L2 m3 T-3 kg-1 ~> m5 s-3 kg-1].
+                           ! restoring buoyancy flux [L2 T-3 R-1 ~> m5 s-3 kg-1].
   integer :: i, j, is, ie, js, je
   integer :: isd, ied, jsd, jed
 
@@ -97,7 +97,7 @@ subroutine BFB_buoyancy_forcing(state, fluxes, day, dt, G, US, CS)
     ! Set whichever fluxes are to be used here.  Any fluxes that
     ! are always zero do not need to be changed here.
     do j=js,je ; do i=is,ie
-      ! Fluxes of fresh water through the surface are in units of [kg m-2 s-1]
+      ! Fluxes of fresh water through the surface are in units of [R Z T-1 ~> kg m-2 s-1]
       ! and are positive downward - i.e. evaporation should be negative.
       fluxes%evap(i,j) = -0.0 * G%mask2dT(i,j)
       fluxes%lprec(i,j) = 0.0 * G%mask2dT(i,j)
@@ -105,7 +105,7 @@ subroutine BFB_buoyancy_forcing(state, fluxes, day, dt, G, US, CS)
       ! vprec will be set later, if it is needed for salinity restoring.
       fluxes%vprec(i,j) = 0.0
 
-      ! Heat fluxes are in units of [W m-2] and are positive into the ocean.
+      ! Heat fluxes are in units of [Q R Z T-1 ~> W m-2] and are positive into the ocean.
       fluxes%lw(i,j) = 0.0 * G%mask2dT(i,j)
       fluxes%latent(i,j) = 0.0 * G%mask2dT(i,j)
       fluxes%sens(i,j) = 0.0 * G%mask2dT(i,j)
@@ -135,10 +135,9 @@ subroutine BFB_buoyancy_forcing(state, fluxes, day, dt, G, US, CS)
         Salin_restore = 0.0
 
         fluxes%heat_added(i,j) = (G%mask2dT(i,j) * (rhoXcp * CS%Flux_const)) * &
-            (Temp_restore - state%SST(i,j))
+            (Temp_restore - sfc_state%SST(i,j))
         fluxes%vprec(i,j) = - (G%mask2dT(i,j) * (CS%Rho0*CS%Flux_const)) * &
-            ((Salin_restore - state%SSS(i,j)) / &
-             (0.5 * (Salin_restore + state%SSS(i,j))))
+            ((Salin_restore - sfc_state%SSS(i,j)) / (0.5 * (Salin_restore + sfc_state%SSS(i,j))))
       enddo ; enddo
     else
       !   When modifying the code, comment out this error message.  It is here
@@ -147,11 +146,11 @@ subroutine BFB_buoyancy_forcing(state, fluxes, day, dt, G, US, CS)
       !   "Buoyancy restoring used without modification." )
 
       ! The -1 is because density has the opposite sign to buoyancy.
-      buoy_rest_const = -1.0 * (CS%G_Earth * US%m_to_Z*US%T_to_s*CS%Flux_const) / CS%Rho0
+      buoy_rest_const = -1.0 * (CS%G_Earth * CS%Flux_const) / CS%Rho0
       Temp_restore = 0.0
       do j=js,je ; do i=is,ie
        !   Set density_restore to an expression for the surface potential
-       ! density [kg m-3] that is being restored toward.
+       ! density [R ~> kg m-3] that is being restored toward.
         if (G%geoLatT(i,j) < CS%lfrslat) then
             Temp_restore = CS%SST_s
         elseif (G%geoLatT(i,j) > CS%lfrnlat) then
@@ -164,7 +163,7 @@ subroutine BFB_buoyancy_forcing(state, fluxes, day, dt, G, US, CS)
         density_restore = Temp_restore*CS%drho_dt + CS%Rho0
 
         fluxes%buoy(i,j) = G%mask2dT(i,j) * buoy_rest_const * &
-                          (density_restore - state%sfc_density(i,j))
+                          (density_restore - sfc_state%sfc_density(i,j))
       enddo ; enddo
     endif
   endif                                             ! end RESTOREBUOY
@@ -195,8 +194,7 @@ subroutine BFB_surface_forcing_init(Time, G, US, param_file, diag, CS)
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mdl, version, "")
   call get_param(param_file, mdl, "ENABLE_THERMODYNAMICS", CS%use_temperature, &
-                 "If true, Temperature and salinity are used as state "//&
-                 "variables.", default=.true.)
+                 "If true, Temperature and salinity are used as state variables.", default=.true.)
 
   call get_param(param_file, mdl, "G_EARTH", CS%G_Earth, &
                  "The gravitational acceleration of the Earth.", &
@@ -206,25 +204,24 @@ subroutine BFB_surface_forcing_init(Time, G, US, param_file, diag, CS)
                  "calculate accelerations and the mass for conservation "//&
                  "properties, or with BOUSSINSEQ false to convert some "//&
                  "parameters from vertical units of m to kg m-2.", &
-                 units="kg m-3", default=1035.0)
+                 units="kg m-3", default=1035.0, scale=US%kg_m3_to_R)
   call get_param(param_file, mdl, "LFR_SLAT", CS%lfrslat, &
                  "Southern latitude where the linear forcing ramp begins.", &
-                 units="degrees", default = 20.0)
+                 units="degrees", default=20.0)
   call get_param(param_file, mdl, "LFR_NLAT", CS%lfrnlat, &
                  "Northern latitude where the linear forcing ramp ends.", &
-                 units="degrees", default = 40.0)
+                 units="degrees", default=40.0)
   call get_param(param_file, mdl, "SST_S", CS%SST_s, &
                  "SST at the southern edge of the linear forcing ramp.", &
-                 units="C", default = 20.0)
+                 units="C", default=20.0)
   call get_param(param_file, mdl, "SST_N", CS%SST_n, &
                  "SST at the northern edge of the linear forcing ramp.", &
-                 units="C", default = 10.0)
+                 units="C", default=10.0)
   call get_param(param_file, mdl, "DRHO_DT", CS%drho_dt, &
                  "The rate of change of density with temperature.", &
-                 units="kg m-3 K-1", default = -0.2)
+                 units="kg m-3 K-1", default=-0.2, scale=US%kg_m3_to_R)
   call get_param(param_file, mdl, "GUST_CONST", CS%gust_const, &
-                 "The background gustiness in the winds.", units="Pa", &
-                 default=0.02)
+                 "The background gustiness in the winds.", units="Pa", default=0.0)
 
   call get_param(param_file, mdl, "RESTOREBUOY", CS%restorebuoy, &
                  "If true, the buoyancy fluxes drive the model back "//&
@@ -232,10 +229,9 @@ subroutine BFB_surface_forcing_init(Time, G, US, param_file, diag, CS)
                  "given by FLUXCONST.", default= .false.)
   if (CS%restorebuoy) then
     call get_param(param_file, mdl, "FLUXCONST", CS%Flux_const, &
-                 "The constant that relates the restoring surface fluxes "//&
-                 "to the relative surface anomalies (akin to a piston "//&
-                 "velocity).  Note the non-MKS units.", units="m day-1", &
-                 fail_if_missing=.true.)
+                 "The constant that relates the restoring surface fluxes to the relative "//&
+                 "surface anomalies (akin to a piston velocity).  Note the non-MKS units.", &
+                 default=0.0, units="m day-1", scale=US%m_to_Z*US%T_to_s)
     ! Convert CS%Flux_const from m day-1 to m s-1.
     CS%Flux_const = CS%Flux_const / 86400.0
   endif

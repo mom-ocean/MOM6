@@ -38,10 +38,10 @@ type SCM_CVMix_tests_CS ; private
   logical :: UseDiurnalSW   !< True to use diurnal sw radiation
   real :: tau_x !< (Constant) Wind stress, X [Pa]
   real :: tau_y !< (Constant) Wind stress, Y [Pa]
-  real :: surf_HF !< (Constant) Heat flux [m degC s-1]
-  real :: surf_evap !< (Constant) Evaporation rate [m s-1]
-  real :: Max_sw !< maximum of diurnal sw radiation [m degC s-1]
-  real,public :: Rho0 !< reference density copied for easy passing [kg m-3]
+  real :: surf_HF !< (Constant) Heat flux [degC Z T-1 ~> m degC s-1]
+  real :: surf_evap !< (Constant) Evaporation rate [Z T-1 ~> m s-1]
+  real :: Max_sw !< maximum of diurnal sw radiation [degC Z T-1 ~> degC m s-1]
+  real :: Rho0 !< reference density [R ~> kg m-3]
 end type
 
 ! This include declares and sets the variable "version".
@@ -53,15 +53,15 @@ contains
 
 !> Initializes temperature and salinity for the SCM CVMix test example
 subroutine SCM_CVMix_tests_TS_init(T, S, h, G, GV, US, param_file, just_read_params)
-  real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(out) :: T  !< Potential temperature [degC]
-  real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(out) :: S  !< Salinity [psu]
-  real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(in)  :: h  !< Layer thickness [H ~> m or kg m-2]
-  type(ocean_grid_type),                  intent(in)  :: G  !< Grid structure
-  type(verticalGrid_type),                intent(in)  :: GV !< Vertical grid structure
-  type(unit_scale_type),                  intent(in)  :: US !< A dimensional unit scaling type
-  type(param_file_type),                  intent(in)  :: param_file !< Input parameter structure
-  logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
-                                                      !! only read parameters without changing h.
+  type(ocean_grid_type),                     intent(in)  :: G  !< Grid structure
+  type(verticalGrid_type),                   intent(in)  :: GV !< Vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: T  !< Potential temperature [degC]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: S  !< Salinity [psu]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)  :: h  !< Layer thickness [H ~> m or kg m-2]
+  type(unit_scale_type),                     intent(in)  :: US !< A dimensional unit scaling type
+  type(param_file_type),                     intent(in)  :: param_file !< Input parameter structure
+  logical,                         optional, intent(in)  :: just_read_params !< If present and true, this call
+                                                               !! will only read parameters without changing h.
   ! Local variables
   real :: UpperLayerTempMLD !< Upper layer Temp MLD thickness [Z ~> m].
   real :: UpperLayerSaltMLD !< Upper layer Salt MLD thickness [Z ~> m].
@@ -76,7 +76,7 @@ subroutine SCM_CVMix_tests_TS_init(T, S, h, G, GV, US, param_file, just_read_par
   logical :: just_read    ! If true, just read parameters but set nothing.
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
 
@@ -131,8 +131,12 @@ subroutine SCM_CVMix_tests_surface_forcing_init(Time, G, param_file, CS)
   type(param_file_type),    intent(in) :: param_file !< Input parameter structure
   type(SCM_CVMix_tests_CS), pointer    :: CS         !< Parameter container
 
-! This include declares and sets the variable "version".
-#include "version_variable.h"
+
+  ! This include declares and sets the variable "version".
+# include "version_variable.h"
+  type(unit_scale_type), pointer :: US => NULL() !< A dimensional unit scaling type
+
+  US => G%US
 
   if (associated(CS)) then
     call MOM_error(FATAL, "SCM_CVMix_tests_surface_forcing_init called with an associated "// &
@@ -163,35 +167,41 @@ subroutine SCM_CVMix_tests_surface_forcing_init(Time, G, param_file, CS)
     call get_param(param_file, mdl, "SCM_TAU_X",                      &
                  CS%tau_x, "Constant X-dir wind stress "//            &
                  "used in the SCM CVMix test surface forcing.",       &
-                 units='N/m2', fail_if_missing=.true.)
+                 units='N/m2', scale=US%kg_m2s_to_RZ_T*US%m_s_to_L_T, fail_if_missing=.true.)
     call get_param(param_file, mdl, "SCM_TAU_Y",                      &
                  CS%tau_y, "Constant y-dir wind stress "//            &
                  "used in the SCM CVMix test surface forcing.",       &
-                 units='N/m2', fail_if_missing=.true.)
+                 units='N/m2', scale=US%kg_m2s_to_RZ_T*US%m_s_to_L_T, fail_if_missing=.true.)
   endif
   if (CS%UseHeatFlux) then
     call get_param(param_file, mdl, "SCM_HEAT_FLUX",                  &
                  CS%surf_HF, "Constant surface heat flux "//          &
                  "used in the SCM CVMix test surface forcing.",       &
-                 units='m K/s', fail_if_missing=.true.)
+                 units='m K/s', scale=US%m_to_Z*US%T_to_s, fail_if_missing=.true.)
   endif
   if (CS%UseEvaporation) then
     call get_param(param_file, mdl, "SCM_EVAPORATION",                &
                  CS%surf_evap, "Constant surface evaporation "//      &
                  "used in the SCM CVMix test surface forcing.",       &
-                 units='m/s', fail_if_missing=.true.)
+                 units='m/s', scale=US%m_to_Z*US%T_to_s, fail_if_missing=.true.)
   endif
   if (CS%UseDiurnalSW) then
     call get_param(param_file, mdl, "SCM_DIURNAL_SW_MAX",             &
                  CS%Max_sw, "Maximum diurnal sw radiation "//         &
                  "used in the SCM CVMix test surface forcing.",       &
-                 units='m K/s', fail_if_missing=.true.)
+                 units='m K/s', scale=US%m_to_Z*US%T_to_s, fail_if_missing=.true.)
   endif
+  call get_param(param_file, mdl, "RHO_0", CS%Rho0, &
+                 "The mean ocean density used with BOUSSINESQ true to "//&
+                 "calculate accelerations and the mass for conservation "//&
+                 "properties, or with BOUSSINSEQ false to convert some "//&
+                 "parameters from vertical units of m to kg m-2.", &
+                 units="kg m-3", default=1035.0, scale=US%kg_m3_to_R)
 
 end subroutine SCM_CVMix_tests_surface_forcing_init
 
-subroutine SCM_CVMix_tests_wind_forcing(state, forces, day, G, US, CS)
-  type(surface),            intent(in)    :: state  !< Surface state structure
+subroutine SCM_CVMix_tests_wind_forcing(sfc_state, forces, day, G, US, CS)
+  type(surface),            intent(in)    :: sfc_state  !< Surface state structure
   type(mech_forcing),       intent(inout) :: forces !< A structure with the driving mechanical forces
   type(time_type),          intent(in)    :: day    !< Time in days
   type(ocean_grid_type),    intent(inout) :: G      !< Grid structure
@@ -215,20 +225,20 @@ subroutine SCM_CVMix_tests_wind_forcing(state, forces, day, G, US, CS)
   enddo ; enddo
   call pass_vector(forces%taux, forces%tauy, G%Domain, To_All)
 
-
   mag_tau = sqrt(CS%tau_x*CS%tau_x + CS%tau_y*CS%tau_y)
   if (associated(forces%ustar)) then ; do j=js,je ; do i=is,ie
-    forces%ustar(i,j) = US%m_to_Z*US%T_to_s * sqrt(  mag_tau / CS%Rho0 )
+    forces%ustar(i,j) = sqrt( US%L_to_Z * mag_tau / (CS%Rho0) )
   enddo ; enddo ; endif
 
 end subroutine SCM_CVMix_tests_wind_forcing
 
 
-subroutine SCM_CVMix_tests_buoyancy_forcing(state, fluxes, day, G, CS)
-  type(surface),            intent(in)    :: state  !< Surface state structure
+subroutine SCM_CVMix_tests_buoyancy_forcing(sfc_state, fluxes, day, G, US, CS)
+  type(surface),            intent(in)    :: sfc_state  !< Surface state structure
   type(forcing),            intent(inout) :: fluxes !< Surface fluxes structure
   type(time_type),          intent(in)    :: day    !< Current model time
   type(ocean_grid_type),    intent(inout) :: G      !< Grid structure
+  type(unit_scale_type),    intent(in)    :: US     !< A dimensional unit scaling type
   type(SCM_CVMix_tests_CS), pointer       :: CS     !< Container for SCM parameters
 
   ! Local variables
@@ -256,20 +266,18 @@ subroutine SCM_CVMix_tests_buoyancy_forcing(state, fluxes, day, G, CS)
   if (CS%UseEvaporation) then
     do J=Jsq,Jeq ; do i=is,ie
     ! Note CVMix test inputs give evaporation in [m s-1]
-    ! This therefore must be converted to mass flux
-    ! by multiplying by density
+    ! This therefore must be converted to mass flux in [R Z T-1 ~> kg m-2 s-1]
+    ! by multiplying by density and some unit conversion factors.
       fluxes%evap(i,J) = CS%surf_evap * CS%Rho0
     enddo ; enddo
   endif
 
   if (CS%UseDiurnalSW) then
     do J=Jsq,Jeq ; do i=is,ie
-    ! Note CVMix test inputs give max sw rad in [m K/s]
-    ! therefore must convert to W/m2 by multiplying
-    ! by Rho0*Cp
+    ! Note CVMix test inputs give max sw rad in [m degC/s]
+    ! therefore must convert to W/m2 by multiplying by Rho0*Cp
     ! Note diurnal cycle peaks at Noon.
-      fluxes%sw(i,J) = CS%Max_sw * max(0.0,cos(2*PI*     &
-           (time_type_to_real(DAY)/86400.-0.5))) * CS%RHO0 * fluxes%C_p
+      fluxes%sw(i,J) = CS%Max_sw *  max(0.0, cos(2*PI*(time_type_to_real(DAY)/86400.0 - 0.5))) * CS%RHO0 * fluxes%C_p
     enddo ; enddo
   endif
 

@@ -17,7 +17,6 @@ use MOM_open_boundary, only : ocean_OBC_type
 use MOM_open_boundary, only : open_boundary_config, open_boundary_query
 use MOM_open_boundary, only : open_boundary_impose_normal_slope
 use MOM_open_boundary, only : open_boundary_impose_land_mask
-! use MOM_shared_initialization, only : MOM_shared_init_init
 use MOM_shared_initialization, only : MOM_initialize_rotation, MOM_calculate_grad_Coriolis
 use MOM_shared_initialization, only : initialize_topography_from_file, apply_topography_edits_from_file
 use MOM_shared_initialization, only : initialize_topography_named, limit_topography, diagnoseMaximumDepth
@@ -30,8 +29,9 @@ use MOM_unit_scaling, only : unit_scale_type
 use user_initialization, only : user_initialize_topography
 use DOME_initialization, only : DOME_initialize_topography
 use ISOMIP_initialization, only : ISOMIP_initialize_topography
+use basin_builder, only : basin_builder_topography
 use benchmark_initialization, only : benchmark_initialize_topography
-use Neverland_initialization, only : Neverland_initialize_topography
+use Neverworld_initialization, only : Neverworld_initialize_topography
 use DOME2d_initialization, only : DOME2d_initialize_topography
 use Kelvin_initialization, only : Kelvin_initialize_topography
 use sloshing_initialization, only : sloshing_initialize_topography
@@ -40,8 +40,6 @@ use dumbbell_initialization, only : dumbbell_initialize_topography
 use shelfwave_initialization, only : shelfwave_initialize_topography
 use Phillips_initialization, only : Phillips_initialize_topography
 use dense_water_initialization, only : dense_water_initialize_topography
-
-use netcdf
 
 implicit none ; private
 
@@ -159,7 +157,7 @@ subroutine MOM_initialize_fixed(G, US, OBC, PF, write_geom, output_dir)
   call initialize_grid_rotation_angle(G, PF)
 
 ! Compute global integrals of grid values for later use in scalar diagnostics !
-  call compute_global_grid_integrals(G)
+  call compute_global_grid_integrals(G, US=US)
 
 ! Write out all of the grid data used by this run.
   if (write_geom) call write_ocean_geometry_file(G, PF, output_dir, US=US)
@@ -201,8 +199,9 @@ subroutine MOM_initialize_topography(D, max_depth, G, PF, US)
                  " \t\t wall at the southern face. \n"//&
                  " \t halfpipe - a zonally uniform channel with a half-sine \n"//&
                  " \t\t profile in the meridional direction. \n"//&
+                 " \t bbuilder - build topography from list of functions. \n"//&
                  " \t benchmark - use the benchmark test case topography. \n"//&
-                 " \t Neverland - use the Neverland test case topography. \n"//&
+                 " \t Neverworld - use the Neverworld test case topography. \n"//&
                  " \t DOME - use a slope and channel configuration for the \n"//&
                  " \t\t DOME sill-overflow test case. \n"//&
                  " \t ISOMIP - use a slope and channel configuration for the \n"//&
@@ -226,8 +225,9 @@ subroutine MOM_initialize_topography(D, max_depth, G, PF, US)
     case ("halfpipe");  call initialize_topography_named(D, G, PF, config, max_depth, US)
     case ("DOME");      call DOME_initialize_topography(D, G, PF, max_depth, US)
     case ("ISOMIP");    call ISOMIP_initialize_topography(D, G, PF, max_depth, US)
+    case ("bbuilder");  call basin_builder_topography(D, G, PF, max_depth)
     case ("benchmark"); call benchmark_initialize_topography(D, G, PF, max_depth, US)
-    case ("Neverland"); call Neverland_initialize_topography(D, G, PF, max_depth)
+    case ("Neverworld","Neverland"); call Neverworld_initialize_topography(D, G, PF, max_depth)
     case ("DOME2D");    call DOME2d_initialize_topography(D, G, PF, max_depth)
     case ("Kelvin");    call Kelvin_initialize_topography(D, G, PF, max_depth, US)
     case ("sloshing");  call sloshing_initialize_topography(D, G, PF, max_depth)
@@ -246,7 +246,7 @@ subroutine MOM_initialize_topography(D, max_depth, G, PF, US)
   else
     max_depth = diagnoseMaximumDepth(D,G)
     call log_param(PF, mdl, "!MAXIMUM_DEPTH", max_depth*Z_to_m, &
-                   "The (diagnosed) maximum depth of the ocean.", units="m")
+                   "The (diagnosed) maximum depth of the ocean.", units="m", like_default=.true.)
   endif
   if (trim(config) /= "DOME") then
     call limit_topography(D, G, PF, max_depth, US)

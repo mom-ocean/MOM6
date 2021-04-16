@@ -42,9 +42,6 @@ type, public :: Kelvin_OBC_CS ; private
   real    :: F_0               !< Coriolis parameter
   real    :: rho_range         !< Density range
   real    :: rho_0             !< Mean density
-  logical :: answers_2018    !< If true, use the order of arithmetic and expressions that recover the
-                             !! answers from the end of 2018.  Otherwise, use expressions that give
-                             !! rotational symmetry and eliminate apparent bugs.
 end type Kelvin_OBC_CS
 
 ! This include declares and sets the variable "version".
@@ -60,7 +57,6 @@ function register_Kelvin_OBC(param_file, CS, OBC_Reg)
 
   ! Local variables
   logical :: register_Kelvin_OBC
-  logical :: default_2018_answers
   character(len=40)  :: mdl = "register_Kelvin_OBC"  !< This subroutine's name.
   character(len=32)  :: casename = "Kelvin wave"     !< This case's name.
   character(len=200) :: config
@@ -95,13 +91,6 @@ function register_Kelvin_OBC(param_file, CS, OBC_Reg)
     CS%coast_offset1 = CS%coast_offset1 * 1.e3          ! Convert to m
     CS%coast_offset2 = CS%coast_offset2 * 1.e3          ! Convert to m
   endif
-  call get_param(param_file, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
-                 "This sets the default value for the various _2018_ANSWERS parameters.", &
-                 default=.true.)
-  call get_param(param_file, mdl, "KELVIN_WAVE_2018_ANSWERS", CS%answers_2018, &
-                 "If true, use the order of arithmetic and expressions that recover the "//&
-                 "answers from the end of 2018.  Otherwise, use expressions that give rotational "//&
-                 "symmetry and eliminate apparent bugs.", default=default_2018_answers)
   if (CS%mode /= 0) then
     call get_param(param_file, mdl, "DENSITY_RANGE", CS%rho_range, &
                    default=2.0, do_not_log=.true.)
@@ -188,7 +177,7 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, GV, US, h, Time)
   type(ocean_grid_type),   intent(in) :: G    !< The ocean's grid structure.
   type(verticalGrid_type), intent(in) :: GV   !< The ocean's vertical grid structure.
   type(unit_scale_type),   intent(in) :: US    !< A dimensional unit scaling type
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h !< layer thickness [H ~> m or kg m-2].
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in) :: h !< layer thickness [H ~> m or kg m-2].
   type(time_type),         intent(in) :: Time !< model time.
 
   ! The following variables are used to set up the transport in the Kelvin example.
@@ -205,7 +194,7 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, GV, US, h, Time)
   real    :: val1, val2, sina, cosa
   type(OBC_segment_type), pointer :: segment => NULL()
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
@@ -253,11 +242,24 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, GV, US, h, Time)
         x = (x1 - CS%coast_offset1) * cosa + y1 * sina
         y = - (x1 - CS%coast_offset1) * sina + y1 * cosa
         if (CS%mode == 0) then
-          cff = sqrt(GV%g_Earth * 0.5 * (G%bathyT(i+1,j) + G%bathyT(i,j)))
+          ! Use inside bathymetry
+          cff = sqrt(GV%g_Earth * G%bathyT(i+1,j) )
           val2 = fac * exp(- US%T_to_s*CS%F_0 * US%m_to_L*y / cff)
           segment%eta(I,j) = val2 * cos(omega * time_sec)
           segment%normal_vel_bt(I,j) = (val2 * (val1 * cff * cosa / &
-                 (0.5 * (G%bathyT(i+1,j) + G%bathyT(i,j)))) )
+                 (G%bathyT(i+1,j) )) )
+          if (segment%nudged) then
+            do k=1,nz
+              segment%nudged_normal_vel(I,j,k) = (val2 * (val1 * cff * cosa / &
+                     (G%bathyT(i+1,j))) )
+            enddo
+          elseif (segment%specified) then
+            do k=1,nz
+              segment%normal_vel(I,j,k) = (val2 * (val1 * cff * cosa / &
+                     (G%bathyT(i+1,j) )) )
+              segment%normal_trans(I,j,k) = segment%normal_vel(I,j,k) * h(i+1,j,k) * G%dyCu(I,j)
+            enddo
+          endif
         else
           ! Not rotated yet
           segment%eta(I,j) = 0.0
@@ -284,24 +286,16 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, GV, US, h, Time)
           y1 = 1000. * G%geoLatBu(I,J)
           x = (x1 - CS%coast_offset1) * cosa + y1 * sina
           y = - (x1 - CS%coast_offset1) * sina + y1 * cosa
-          if (CS%answers_2018) then
-            ! Problem: val2 & cff could be functions of space, but are not set in this loop.
-            if (CS%mode == 0) then ; do k=1,nz
-              segment%tangential_vel(I,J,k) = (val2 * (val1 * cff * sina / &
-                 (0.25 * (G%bathyT(i+1,j) + G%bathyT(i,j) + G%bathyT(i+1,j+1) + G%bathyT(i,j+1))) ))
-            enddo ; endif
-          else
-            cff =sqrt(GV%g_Earth * 0.5 * (G%bathyT(i+1,j) + G%bathyT(i,j)))
-            val2 = fac * exp(- US%T_to_s*CS%F_0 * US%m_to_L*y / cff)
-            if (CS%mode == 0) then ; do k=1,nz
-              segment%tangential_vel(I,J,k) = (val1 * val2 * cff * sina) / &
-                 ( 0.25*((G%bathyT(i,j) + G%bathyT(i+1,j+1)) +  (G%bathyT(i+1,j) + G%bathyT(i,j+1))) )
+          cff =sqrt(GV%g_Earth * G%bathyT(i+1,j) )
+          val2 = fac * exp(- US%T_to_s*CS%F_0 * US%m_to_L*y / cff)
+          if (CS%mode == 0) then ; do k=1,nz
+            segment%tangential_vel(I,J,k) = (val1 * val2 * cff * sina) / &
+               ( 0.5*(G%bathyT(i+1,j+1) +  G%bathyT(i+1,j) ) )
 
-            enddo ; endif
-          endif
+          enddo ; endif
         enddo ; enddo
       endif
-    else
+    else ! Must be south
       isd = segment%HI%isd ; ied = segment%HI%ied
       JsdB = segment%HI%JsdB ; JedB = segment%HI%JedB
       do J=JsdB,JedB ; do i=isd,ied
@@ -310,11 +304,23 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, GV, US, h, Time)
         x = (x1 - CS%coast_offset1) * cosa + y1 * sina
         y = - (x1 - CS%coast_offset1) * sina + y1 * cosa
         if (CS%mode == 0) then
-          cff = sqrt(GV%g_Earth * 0.5 * (G%bathyT(i,j+1) + G%bathyT(i,j)))
+          cff = sqrt(GV%g_Earth * G%bathyT(i,j+1) )
           val2 = fac * exp(- 0.5 * (G%CoriolisBu(I,J) + G%CoriolisBu(I-1,J)) * US%m_to_L*y / cff)
           segment%eta(I,j) = val2 * cos(omega * time_sec)
           segment%normal_vel_bt(I,j) = US%L_T_to_m_s * (val1 * cff * sina / &
-                 (0.5*(G%bathyT(i+1,j) + G%bathyT(i,j)))) * val2
+                 (G%bathyT(i,j+1) )) * val2
+          if (segment%nudged) then
+            do k=1,nz
+              segment%nudged_normal_vel(I,j,k) = US%L_T_to_m_s * (val1 * cff * sina / &
+                     (G%bathyT(i,j+1) )) * val2
+            enddo
+          elseif (segment%specified) then
+            do k=1,nz
+              segment%normal_vel(I,j,k) = US%L_T_to_m_s * (val1 * cff * sina / &
+                     (G%bathyT(i,j+1) )) * val2
+              segment%normal_trans(i,J,k) = segment%normal_vel(i,J,k) * h(i,j+1,k) * G%dxCv(i,J)
+            enddo
+          endif
         else
           ! Not rotated yet
           segment%eta(i,J) = 0.0
@@ -339,20 +345,12 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, GV, US, h, Time)
           y1 = 1000. * G%geoLatBu(I,J)
           x = (x1 - CS%coast_offset1) * cosa + y1 * sina
           y = - (x1 - CS%coast_offset1) * sina + y1 * cosa
-          if (CS%answers_2018) then
-            ! Problem: val2 & cff could be functions of space, but are not set in this loop.
-            if (CS%mode == 0) then ; do k=1,nz
-              segment%tangential_vel(I,J,k) = (val2 * (val1 * cff * sina / &
-                 (0.25*(G%bathyT(i+1,j) + G%bathyT(i,j) +  G%bathyT(i+1,j+1) + G%bathyT(i,j+1)))))
-            enddo ; endif
-          else
-            cff = sqrt(GV%g_Earth * 0.5 * (G%bathyT(i,j+1) + G%bathyT(i,j)))
-            val2 = fac * exp(- 0.5 * (G%CoriolisBu(I,J) + G%CoriolisBu(I-1,J)) * US%m_to_L*y / cff)
-            if (CS%mode == 0) then ; do k=1,nz
-              segment%tangential_vel(I,J,k) = ((val1 * val2 * cff * sina) / &
-                  ( 0.25*((G%bathyT(i,j) + G%bathyT(i+1,j+1)) + (G%bathyT(i+1,j) +  G%bathyT(i,j+1))) ))
-            enddo ; endif
-          endif
+          cff = sqrt(GV%g_Earth * G%bathyT(i,j+1) )
+          val2 = fac * exp(- 0.5 * (G%CoriolisBu(I,J) + G%CoriolisBu(I-1,J)) * US%m_to_L*y / cff)
+          if (CS%mode == 0) then ; do k=1,nz
+            segment%tangential_vel(I,J,k) = ((val1 * val2 * cff * sina) / &
+                ( 0.5*((G%bathyT(i+1,j+1)) + G%bathyT(i,j+1))) )
+          enddo ; endif
         enddo ; enddo
       endif
     endif

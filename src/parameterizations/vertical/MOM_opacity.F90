@@ -28,8 +28,8 @@ type, public :: optics_type
   real, pointer, dimension(:,:,:,:) :: opacity_band => NULL() !< SW optical depth per unit thickness [m-1]
                         !! The number of radiation bands is most rapidly varying (first) index.
 
-  real, pointer, dimension(:,:,:) :: SW_pen_band  => NULL()  !< shortwave radiation [W m-2] at the surface
-                        !! in each of the nbands bands that penetrates beyond the surface.
+  real, pointer, dimension(:,:,:) :: sw_pen_band  => NULL()  !< shortwave radiation [Q R Z T-1 ~> W m-2]
+                        !! at the surface in each of the nbands bands that penetrates beyond the surface.
                         !! The most rapidly varying dimension is the band.
 
   real, pointer, dimension(:) :: &
@@ -70,12 +70,12 @@ type, public :: opacity_CS ; private
   !>@{ Diagnostic IDs
   integer :: id_sw_pen = -1, id_sw_vis_pen = -1
   integer, pointer :: id_opacity(:) => NULL()
-  !!@}
+  !>@}
 end type opacity_CS
 
 !>@{ Coded integers to specify the opacity scheme
 integer, parameter :: NO_SCHEME = 0, MANIZZA_05 = 1, MOREL_88 = 2, SINGLE_EXP = 3, DOUBLE_EXP = 4
-!!@}
+!>@}
 
 character*(10), parameter :: MANIZZA_05_STRING = "MANIZZA_05" !< String to specify the opacity scheme
 character*(10), parameter :: MOREL_88_STRING   = "MOREL_88"   !< String to specify the opacity scheme
@@ -89,20 +89,20 @@ contains
 
 !> This sets the opacity of sea water based based on one of several different schemes.
 subroutine set_opacity(optics, sw_total, sw_vis_dir, sw_vis_dif, sw_nir_dir, sw_nir_dif, &
-                       G, GV, CS, chl_2d, chl_3d)
+                       G, GV, US, CS, chl_2d, chl_3d)
   type(optics_type),       intent(inout) :: optics !< An optics structure that has values
                                                    !! set based on the opacities.
-  real, dimension(:,:),    pointer       :: sw_total !< Total shortwave flux into the ocean [W m-2]
-  real, dimension(:,:),    pointer       :: sw_vis_dir !< Visible, direct shortwave into the ocean [W m-2]
-  real, dimension(:,:),    pointer       :: sw_vis_dif !< Visible, diffuse shortwave into the ocean [W m-2]
-  real, dimension(:,:),    pointer       :: sw_nir_dir !< Near-IR, direct shortwave into the ocean [W m-2]
-  real, dimension(:,:),    pointer       :: sw_nir_dif !< Near-IR, diffuse shortwave into the ocean [W m-2]
+  real, dimension(:,:),    pointer       :: sw_total !< Total shortwave flux into the ocean [Q R Z T-1 ~> W m-2]
+  real, dimension(:,:),    pointer       :: sw_vis_dir !< Visible, direct shortwave into the ocean [Q R Z T-1 ~> W m-2]
+  real, dimension(:,:),    pointer       :: sw_vis_dif !< Visible, diffuse shortwave into the ocean [Q R Z T-1 ~> W m-2]
+  real, dimension(:,:),    pointer       :: sw_nir_dir !< Near-IR, direct shortwave into the ocean [Q R Z T-1 ~> W m-2]
+  real, dimension(:,:),    pointer       :: sw_nir_dif !< Near-IR, diffuse shortwave into the ocean [Q R Z T-1 ~> W m-2]
   type(ocean_grid_type),   intent(in)    :: G      !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)    :: GV     !< The ocean's vertical grid structure.
-  type(opacity_CS),        pointer       :: CS     !< The control structure earlier set up by
-                                                   !! opacity_init.
+  type(unit_scale_type),   intent(in)    :: US     !< A dimensional unit scaling type
+  type(opacity_CS),        pointer       :: CS     !< The control structure earlier set up by opacity_init.
   real, dimension(SZI_(G),SZJ_(G)), &
-                 optional, intent(in)    :: chl_2d !< Vertically uniform chlorophyll-A concentractions[mg m-3]
+                 optional, intent(in)    :: chl_2d !< Vertically uniform chlorophyll-A concentractions [mg m-3]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                  optional, intent(in)    :: chl_3d !< The chlorophyll-A concentractions of each layer [mg m-3]
 
@@ -115,7 +115,7 @@ subroutine set_opacity(optics, sw_total, sw_vis_dir, sw_vis_dif, sw_nir_dir, sw_
   real :: tmp(SZI_(G),SZJ_(G),SZK_(GV)) ! A 3-d temporary array.
   real :: chl(SZI_(G),SZJ_(G),SZK_(GV)) ! The concentration of chlorophyll-A [mg m-3].
   real :: Pen_SW_tot(SZI_(G),SZJ_(G))   ! The penetrating shortwave radiation
-                                        ! summed across all bands [W m-2].
+                                        ! summed across all bands [Q R Z T-1 ~> W m-2].
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
   if (.not. associated(CS)) call MOM_error(FATAL, "set_opacity: "// &
@@ -124,7 +124,7 @@ subroutine set_opacity(optics, sw_total, sw_vis_dir, sw_vis_dif, sw_nir_dir, sw_
   if (present(chl_2d) .or. present(chl_3d)) then
     ! The optical properties are based on cholophyll concentrations.
     call opacity_from_chl(optics, sw_total, sw_vis_dir, sw_vis_dif, sw_nir_dir, sw_nir_dif, &
-                          G, GV, CS, chl_2d, chl_3d)
+                          G, GV, US, CS, chl_2d, chl_3d)
   else ! Use sw e-folding scale set by MOM_input
     if (optics%nbands <= 1) then ; Inv_nbands = 1.0
     else ; Inv_nbands = 1.0 / real(optics%nbands) ; endif
@@ -218,16 +218,17 @@ end subroutine set_opacity
 !> This sets the "blue" band opacity based on chloophyll A concencentrations
 !! The red portion is lumped into the net heating at the surface.
 subroutine opacity_from_chl(optics, sw_total, sw_vis_dir, sw_vis_dif, sw_nir_dir, sw_nir_dif, &
-                            G, GV, CS, chl_2d, chl_3d)
+                            G, GV, US, CS, chl_2d, chl_3d)
   type(optics_type),       intent(inout) :: optics !< An optics structure that has values
                                                  !! set based on the opacities.
-  real, dimension(:,:),    pointer       :: sw_total !< Total shortwave flux into the ocean [W m-2]
-  real, dimension(:,:),    pointer       :: sw_vis_dir !< Visible, direct shortwave into the ocean [W m-2]
-  real, dimension(:,:),    pointer       :: sw_vis_dif !< Visible, diffuse shortwave into the ocean [W m-2]
-  real, dimension(:,:),    pointer       :: sw_nir_dir !< Near-IR, direct shortwave into the ocean [W m-2]
-  real, dimension(:,:),    pointer       :: sw_nir_dif !< Near-IR, diffuse shortwave into the ocean [W m-2]
+  real, dimension(:,:),    pointer       :: sw_total !< Total shortwave flux into the ocean [Q R Z T-1 ~> W m-2]
+  real, dimension(:,:),    pointer       :: sw_vis_dir !< Visible, direct shortwave into the ocean [Q R Z T-1 ~> W m-2]
+  real, dimension(:,:),    pointer       :: sw_vis_dif !< Visible, diffuse shortwave into the ocean [Q R Z T-1 ~> W m-2]
+  real, dimension(:,:),    pointer       :: sw_nir_dir !< Near-IR, direct shortwave into the ocean [Q R Z T-1 ~> W m-2]
+  real, dimension(:,:),    pointer       :: sw_nir_dif !< Near-IR, diffuse shortwave into the ocean [Q R Z T-1 ~> W m-2]
   type(ocean_grid_type),   intent(in)    :: G      !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)    :: GV     !< The ocean's vertical grid structure.
+  type(unit_scale_type),   intent(in)    :: US     !< A dimensional unit scaling type
   type(opacity_CS),        pointer       :: CS     !< The control structure.
   real, dimension(SZI_(G),SZJ_(G)), &
                  optional, intent(in)    :: chl_2d !< Vertically uniform chlorophyll-A concentractions [mg m-3]
@@ -240,11 +241,11 @@ subroutine opacity_from_chl(optics, sw_total, sw_vis_dir, sw_vis_dif, sw_nir_dir
   real :: Inv_nbands_nir    ! The inverse of the number of bands of penetrating
                             ! near-infrafed radiation.
   real :: SW_pen_tot        ! The sum across the bands of the penetrating
-                            ! shortwave radiation [W m-2].
+                            ! shortwave radiation [Q R Z T-1 ~> W m-2].
   real :: SW_vis_tot        ! The sum across the visible bands of shortwave
-                            ! radiation [W m-2].
+                            ! radiation [Q R Z T-1 ~> W m-2].
   real :: SW_nir_tot        ! The sum across the near infrared bands of shortwave
-                            ! radiation [W m-2].
+                            ! radiation [Q R Z T-1 ~> W m-2].
   type(time_type) :: day
   character(len=128) :: mesg
   integer :: i, j, k, n, is, ie, js, je, nz, nbands
@@ -280,7 +281,7 @@ subroutine opacity_from_chl(optics, sw_total, sw_vis_dir, sw_vis_dif, sw_nir_dir
   chl_data(:,:) = 0.0
   if (present(chl_3d)) then
     do j=js,je ; do i=is,ie ; chl_data(i,j) = chl_3d(i,j,1) ; enddo ; enddo
-    do k=1,nz; do j=js,je ; do i=is,ie
+    do k=1,nz ; do j=js,je ; do i=is,ie
       if ((G%mask2dT(i,j) > 0.5) .and. (chl_3d(i,j,k) < 0.0)) then
         write(mesg,'(" Negative chl_3d of ",(1pe12.4)," found at i,j,k = ", &
                   & 3(1x,i3), " lon/lat = ",(1pe12.4)," E ", (1pe12.4), " N.")') &
@@ -321,13 +322,13 @@ subroutine opacity_from_chl(optics, sw_total, sw_vis_dir, sw_vis_dif, sw_nir_dir
         endif
 
         ! Band 1 is Manizza blue.
-        optics%sw_pen_band(1,i,j) = CS%blue_frac*SW_vis_tot
+        optics%sw_pen_band(1,i,j) = CS%blue_frac*sw_vis_tot
         ! Band 2 (if used) is Manizza red.
         if (nbands > 1) &
-          optics%sw_pen_band(2,i,j) = (1.0-CS%blue_frac)*SW_vis_tot
+          optics%sw_pen_band(2,i,j) = (1.0-CS%blue_frac)*sw_vis_tot
         ! All remaining bands are NIR, for lack of something better to do.
         do n=3,nbands
-          optics%sw_pen_band(n,i,j) = Inv_nbands_nir * SW_nir_tot
+          optics%sw_pen_band(n,i,j) = Inv_nbands_nir * sw_nir_tot
         enddo
       enddo ; enddo
     case (MOREL_88)
@@ -335,15 +336,13 @@ subroutine opacity_from_chl(optics, sw_total, sw_vis_dir, sw_vis_dif, sw_nir_dir
       do j=js,je ; do i=is,ie
         SW_pen_tot = 0.0
         if (G%mask2dT(i,j) > 0.5) then ; if (multiband_vis_input) then
-            SW_pen_tot = SW_pen_frac_morel(chl_data(i,j)) * &
-                (sw_vis_dir(i,j) + sw_vis_dif(i,j))
+            SW_pen_tot = SW_pen_frac_morel(chl_data(i,j)) * (sw_vis_dir(i,j) + sw_vis_dif(i,j))
           else
-            SW_pen_tot = SW_pen_frac_morel(chl_data(i,j)) * &
-                0.5*sw_total(i,j)
+            SW_pen_tot = SW_pen_frac_morel(chl_data(i,j)) * 0.5*sw_total(i,j)
         endif ; endif
 
         do n=1,nbands
-          optics%sw_pen_band(n,i,j) = Inv_nbands*SW_pen_tot
+          optics%sw_pen_band(n,i,j) = Inv_nbands*sw_pen_tot
         enddo
       enddo ; enddo
     case default
@@ -403,7 +402,7 @@ function opacity_morel(chl_data)
   ! appropriate when using an interactive ecosystem model that predicts
   ! three-dimensional chl-a values.
   real, dimension(6), parameter :: &
-       Z2_coef=(/7.925, -6.644, 3.662, -1.815, -0.218,  0.502/)
+    Z2_coef = (/7.925, -6.644, 3.662, -1.815, -0.218,  0.502/)
   real :: Chl, Chl2 ! The log10 of chl_data (in mg m-3), and Chl^2.
 
   Chl = log10(min(max(chl_data,0.02),60.0)) ; Chl2 = Chl*Chl
@@ -424,7 +423,7 @@ function SW_pen_frac_morel(chl_data)
   ! three-dimensional chl-a values.
   real :: Chl, Chl2         ! The log10 of chl_data in mg m-3, and Chl^2.
   real, dimension(6), parameter :: &
-       V1_coef=(/0.321,  0.008, 0.132,  0.038, -0.017, -0.007/)
+    V1_coef = (/0.321,  0.008, 0.132,  0.038, -0.017, -0.007/)
 
   Chl = log10(min(max(chl_data,0.02),60.0)) ; Chl2 = Chl*Chl
   SW_pen_frac_morel = 1.0 - ( (V1_coef(1) + V1_coef(2)*Chl) + Chl2 * &
@@ -444,24 +443,24 @@ end function
 !> This subroutine returns a 2-d slice at constant j of fields from an optics_type, with the potential
 !! for rescaling these fields.
 subroutine extract_optics_slice(optics, j, G, GV, opacity, opacity_scale, penSW_top, penSW_scale)
-  type(optics_type),       intent(in)  :: optics   !< An optics structure that has values of opacities
-                                                   !! and shortwave fluxes.
-  integer,                 intent(in)    :: j      !< j-index to extract
-  type(ocean_grid_type),   intent(in)    :: G      !< The ocean's grid structure.
-  type(verticalGrid_type), intent(in)    :: GV     !< The ocean's vertical grid structure.
+  type(optics_type),       intent(in)  :: optics !< An optics structure that has values of opacities
+                                                 !! and shortwave fluxes.
+  integer,                 intent(in)  :: j      !< j-index to extract
+  type(ocean_grid_type),   intent(in)  :: G      !< The ocean's grid structure.
+  type(verticalGrid_type), intent(in)  :: GV     !< The ocean's vertical grid structure.
   real, dimension(max(optics%nbands,1),SZI_(G),SZK_(GV)), &
-                optional, intent(out) :: opacity   !< The opacity in each band, i-point, and layer
-  real, optional,         intent(in)  :: opacity_scale !< A factor by which to rescale the opacity.
+                 optional, intent(out) :: opacity   !< The opacity in each band, i-point, and layer
+  real,          optional, intent(in)  :: opacity_scale !< A factor by which to rescale the opacity.
   real, dimension(max(optics%nbands,1),SZI_(G)), &
-                optional, intent(out) :: penSW_top !< The shortwave radiation [W m-2] at the surface
-                                                   !! in each of the nbands bands that penetrates
-                                                   !! beyond the surface skin layer.
-  real, optional,         intent(in)  :: penSW_scale !< A factor by which to rescale the shortwave flux.
+                 optional, intent(out) :: penSW_top !< The shortwave radiation [Q R Z T-1 ~> W m-2]
+                                                    !! at the surface in each of the nbands bands
+                                                    !! that penetrates beyond the surface skin layer.
+  real,          optional, intent(in)  :: penSW_scale !< A factor by which to rescale the shortwave flux.
 
   ! Local variables
   real :: scale_opacity, scale_penSW ! Rescaling factors
   integer :: i, is, ie, k, nz, n
-  is = G%isc ; ie = G%iec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; nz = GV%ke
 
   scale_opacity = 1.0 ; if (present(opacity_scale)) scale_opacity = opacity_scale
   scale_penSW = 1.0 ; if (present(penSW_scale)) scale_penSW = penSW_scale
@@ -474,7 +473,7 @@ subroutine extract_optics_slice(optics, j, G, GV, opacity, opacity_scale, penSW_
 
   if (present(penSW_top)) then ; do k=1,nz ; do i=is,ie
     do n=1,optics%nbands
-      penSW_top(n,i) = scale_penSW * optics%SW_pen_band(n,i,j)
+      penSW_top(n,i) = scale_penSW * optics%sw_pen_band(n,i,j)
     enddo
   enddo ; enddo ; endif
 
@@ -556,9 +555,9 @@ subroutine absorbRemainingSW(G, GV, US, h, opacity_band, nsw, optics, j, dt, H_l
   real, dimension(SZI_(G)), optional, intent(inout) :: Ttot !< Depth integrated mixed layer
                                                            !! temperature [degC H ~> degC m or degC kg m-2]
   real, dimension(SZI_(G),SZK_(GV)), optional, intent(in) :: dSV_dT !< The partial derivative of specific
-                                                           !! volume with temperature [m3 kg-1 degC-1].
+                                                           !! volume with temperature [R-1 degC-1].
   real, dimension(SZI_(G),SZK_(GV)), optional, intent(inout) :: TKE !< The TKE sink from mixing the heating
-                                                           !! throughout a layer [kg m-3 Z3 T-2 ~> J m-2].
+                                                           !! throughout a layer [R Z3 T-2 ~> J m-2].
 
   ! Local variables
   real, dimension(SZI_(G),SZK_(GV)) :: &
@@ -599,7 +598,7 @@ subroutine absorbRemainingSW(G, GV, US, h, opacity_band, nsw, optics, j, dt, H_l
   real :: epsilon           ! A small thickness that must remain in each
                             ! layer, and which will not be subject to heating [H ~> m or kg m-2]
   real :: g_Hconv2          ! A conversion factor for use in the TKE calculation
-                            ! in units of [Z3 kg2 m-6 T-2 H-2 ~> kg2 m-5 s-2 or m s-2].
+                            ! in units of [Z3 R2 T-2 H-2 ~> kg2 m-5 s-2 or m s-2].
   logical :: SW_Remains     ! If true, some column has shortwave radiation that
                             ! was not entirely absorbed.
   logical :: TKE_calc       ! If true, calculate the implications to the
@@ -612,15 +611,15 @@ subroutine absorbRemainingSW(G, GV, US, h, opacity_band, nsw, optics, j, dt, H_l
   I_Habs = optics%PenSW_absorb_Invlen
 
   h_min_heat = 2.0*GV%Angstrom_H + GV%H_subroundoff
-  is = G%isc ; ie = G%iec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; nz = GV%ke
   C1_6 = 1.0 / 6.0 ; C1_60 = 1.0 / 60.0
 
   TKE_calc = (present(TKE) .and. present(dSV_dT))
 
   if (optics%answers_2018) then
-    g_Hconv2 = (US%m_to_Z**2 * US%L_to_Z**2*GV%g_Earth * GV%H_to_kg_m2) * GV%H_to_kg_m2
+    g_Hconv2 = (US%L_to_Z**2*GV%g_Earth * GV%H_to_RZ) * GV%H_to_RZ
   else
-    g_Hconv2 = US%m_to_Z**2 * US%L_to_Z**2*GV%g_Earth * GV%H_to_kg_m2**2
+    g_Hconv2 = US%L_to_Z**2*GV%g_Earth * GV%H_to_RZ**2
   endif
 
   h_heat(:) = 0.0
@@ -720,7 +719,6 @@ subroutine absorbRemainingSW(G, GV, US, h, opacity_band, nsw, optics, j, dt, H_l
       h_heat(i) = h_heat(i) + (2.0*h(i,k) - 2.0*h_min_heat)
     endif
   enddo ; enddo ! i & k loops
-
 
 ! if (.not.absorbAllSW .and. .not.adjustAbsorptionProfile) return
 
@@ -837,11 +835,16 @@ subroutine sumSWoverBands(G, GV, US, h, nsw, optics, j, dt, &
   I_Habs = 1e3*GV%H_to_m ! optics%PenSW_absorb_Invlen
 
   h_min_heat = 2.0*GV%Angstrom_H + GV%H_subroundoff
-  is = G%isc ; ie = G%iec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; nz = GV%ke
 
   pen_SW_bnd(:,:) = iPen_SW_bnd(:,:)
   do i=is,ie ; h_heat(i) = 0.0 ; enddo
-  netPen(:,1) = sum( pen_SW_bnd(:,:), dim=1 ) ! Surface interface
+  do i=is,ie
+    netPen(i,1) = 0.
+    do n=1,max(nsw,1)
+      netPen(i,1) = netPen(i,1) + pen_SW_bnd(n,i)   ! Surface interface
+    enddo
+  enddo
 
   ! Apply penetrating SW radiation to remaining parts of layers.
   ! Excessively thin layers are not heated to avoid runaway temps.
@@ -940,7 +943,7 @@ subroutine opacity_init(Time, G, GV, US, param_file, diag, CS, optics)
   logical :: default_2018_answers
   logical :: use_scheme
   integer :: isd, ied, jsd, jed, nz, n
-  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nz = G%ke
+  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nz = GV%ke
 
   if (associated(CS)) then
     call MOM_error(WARNING, "opacity_init called with an associated"// &
@@ -1045,7 +1048,7 @@ subroutine opacity_init(Time, G, GV, US, param_file, diag, CS, optics)
 
   call get_param(param_file, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
                  "This sets the default value for the various _2018_ANSWERS parameters.", &
-                 default=.true.)
+                 default=.false.)
   call get_param(param_file, mdl, "OPTICS_2018_ANSWERS", optics%answers_2018, &
                  "If true, use the order of arithmetic and expressions that recover the "//&
                  "answers from the end of 2018.  Otherwise, use updated expressions for "//&
@@ -1097,9 +1100,9 @@ subroutine opacity_init(Time, G, GV, US, param_file, diag, CS, optics)
   allocate(CS%id_opacity(optics%nbands)) ; CS%id_opacity(:) = -1
 
   CS%id_sw_pen = register_diag_field('ocean_model', 'SW_pen', diag%axesT1, Time, &
-      'Penetrating shortwave radiation flux into ocean', 'W m-2')
+      'Penetrating shortwave radiation flux into ocean', 'W m-2', conversion=US%QRZ_T_to_W_m2)
   CS%id_sw_vis_pen = register_diag_field('ocean_model', 'SW_vis_pen', diag%axesT1, Time, &
-      'Visible penetrating shortwave radiation flux into ocean', 'W m-2')
+      'Visible penetrating shortwave radiation flux into ocean', 'W m-2', conversion=US%QRZ_T_to_W_m2)
   do n=1,optics%nbands
     write(bandnum,'(i3)') n
     shortname = 'opac_'//trim(adjustl(bandnum))

@@ -40,8 +40,8 @@ subroutine bcz_params(G, GV, US, param_file, S_ref, dSdz, delta_S, dSdx, T_ref, 
   real,                    intent(out) :: T_ref      !< Reference temperature [degC]
   real,                    intent(out) :: dTdz       !< Temperature stratification [degC Z-1 ~> degC m-1]
   real,                    intent(out) :: delta_T    !< Temperature difference across baroclinic zone [degC]
-  real,                    intent(out) :: dTdx       !< Linear temperature gradient [degC m-1]
-  real,                    intent(out) :: L_zone     !< Width of baroclinic zone [m]
+  real,                    intent(out) :: dTdx       !< Linear temperature gradient in [degC G%x_axis_units-1]
+  real,                    intent(out) :: L_zone     !< Width of baroclinic zone in [G%x_axis_units]
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
                                                      !! only read parameters without changing h.
 
@@ -80,9 +80,9 @@ subroutine baroclinic_zone_init_temperature_salinity(T, S, h, G, GV, US, param_f
   type(ocean_grid_type),                     intent(in)  :: G  !< Grid structure
   type(verticalGrid_type),                   intent(in)  :: GV !< The ocean's vertical grid structure.
   type(unit_scale_type),                     intent(in)  :: US !< A dimensional unit scaling type
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: T  !< Potential temperature [degC]
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: S  !< Salinity [ppt]
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(in)  :: h  !< The model thicknesses [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: T  !< Potential temperature [degC]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: S  !< Salinity [ppt]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)  :: h  !< The model thicknesses [H ~> m or kg m-2]
   type(param_file_type),                     intent(in)  :: param_file  !< Parameter file handle
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
                                                       !! only read parameters without changing T & S.
@@ -90,13 +90,13 @@ subroutine baroclinic_zone_init_temperature_salinity(T, S, h, G, GV, US, param_f
   integer   :: i, j, k, is, ie, js, je, nz
   real      :: T_ref, dTdz, dTdx, delta_T ! Parameters describing temperature distribution
   real      :: S_ref, dSdz, dSdx, delta_S ! Parameters describing salinity distribution
-  real      :: L_zone ! Width of baroclinic zone
+  real      :: L_zone ! Width of baroclinic zone in [G%axis_units]
   real      :: zc, zi ! Depths in depth units [Z ~> m]
   real      :: x, xd, xs, y, yd, fn
   real      :: PI                   ! 3.1415926... calculated as 4*atan(1)
   logical :: just_read    ! If true, just read parameters but set nothing.
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
 
   call bcz_params(G, GV, US, param_file, S_ref, dSdz, delta_S, dSdx, T_ref, dTdz, &

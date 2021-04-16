@@ -21,7 +21,8 @@ type, public :: directories
   character(len=240) :: &
     restart_input_dir = ' ',& !< The directory to read restart and input files.
     restart_output_dir = ' ',&!< The directory into which to write restart files.
-    output_directory = ' ', & !< The directory to use to write the model output.
+    output_directory = ' '    !< The directory to use to write the model output.
+  character(len=2048) :: &
     input_filename  = ' '     !< A string that indicates the input files or how
                               !! the run segment should be started.
 end type directories
@@ -41,11 +42,13 @@ subroutine get_MOM_input(param_file, dirs, check_params, default_input_filename,
   integer, optional, intent(in) :: ensemble_num !< The ensemble id of the current member
   ! Local variables
   integer, parameter :: npf = 5 ! Maximum number of parameter files
+
   character(len=240) :: &
     parameter_filename(npf), & ! List of files containing parameters.
     output_directory,        & ! Directory to use to write the model output.
     restart_input_dir,       & ! Directory for reading restart and input files.
-    restart_output_dir,      & ! Directory into which to write restart files.
+    restart_output_dir         ! Directory into which to write restart files.
+  character(len=2048) :: &
     input_filename             ! A string that indicates the input files or how
                                ! the run segment should be started.
   character(len=240) :: output_dir

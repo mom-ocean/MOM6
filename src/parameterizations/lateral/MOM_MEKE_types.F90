@@ -9,9 +9,9 @@ type, public :: MEKE_type
   ! Variables
   real, dimension(:,:), pointer :: &
     MEKE => NULL(), &   !< Vertically averaged eddy kinetic energy [L2 T-2 ~> m2 s-2].
-    GM_src => NULL(), & !< MEKE source due to thickness mixing (GM) [kg m-2 L2 T-3 ~> W m-2].
-    mom_src => NULL(),& !< MEKE source from lateral friction in the momentum equations [kg m-2 L2 T-3 ~> W m-2].
-    GME_snk => NULL(),& !< MEKE sink from GME backscatter in the momentum equations [kg m-2 L2 T-3 ~> W m-2].
+    GM_src => NULL(), & !< MEKE source due to thickness mixing (GM) [R Z L2 T-3 ~> W m-2].
+    mom_src => NULL(),& !< MEKE source from lateral friction in the momentum equations [R Z L2 T-3 ~> W m-2].
+    GME_snk => NULL(),& !< MEKE sink from GME backscatter in the momentum equations [R Z L2 T-3 ~> W m-2].
     Kh => NULL(), &     !< The MEKE-derived lateral mixing coefficient [L2 T-1 ~> m2 s-1].
     Kh_diff => NULL(), & !< Uses the non-MEKE-derived thickness diffusion coefficient to diffuse
                         !! MEKE [L2 T-1 ~> m2 s-1].

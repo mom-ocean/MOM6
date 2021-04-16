@@ -19,13 +19,14 @@ use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_forcing_type, only : forcing
 use MOM_hor_index, only : hor_index_type
 use MOM_grid, only : ocean_grid_type
-use MOM_io, only : file_exists, read_data, slasher, vardesc, var_desc, query_vardesc
+use MOM_io, only : file_exists, MOM_read_data, slasher, vardesc, var_desc, query_vardesc
 use MOM_restart, only :  MOM_restart_CS
 use MOM_ALE_sponge, only : set_up_ALE_sponge_field, ALE_sponge_CS, get_ALE_sponge_nz_data
 use MOM_sponge, only : set_up_sponge_field, sponge_CS
 use MOM_time_manager, only : time_type
 use MOM_tracer_registry, only : register_tracer, tracer_registry_type
 use MOM_tracer_diabatic, only : tracer_vertdiff, applyTracerBoundaryFluxesInOut
+use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : surface
 use MOM_open_boundary, only : ocean_OBC_type
 use MOM_verticalGrid, only : verticalGrid_type
@@ -158,7 +159,7 @@ subroutine initialize_RGC_tracer(restart, day, G, GV, h, diag, OBC, CS, &
   logical,                 intent(in) :: restart !< .true. if the fields have already
                                              !! been read from a restart file.
   type(time_type), target, intent(in) :: day !< Time of the start of the run.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(in) :: h !< Layer thickness, in m or kg m-2.
   type(diag_ctrl), target, intent(in) :: diag !< Structure used to regulate diagnostic output.
   type(ocean_OBC_type),    pointer    :: OBC !< This open boundary condition type specifies
@@ -182,18 +183,14 @@ subroutine initialize_RGC_tracer(restart, day, G, GV, h, diag, OBC, CS, &
   character(len=48) :: flux_units ! The units for tracer fluxes, usually
                             ! kg(tracer) kg(water)-1 m3 s-1 or kg(tracer) s-1.
   real, pointer :: tr_ptr(:,:,:) => NULL()
-  real :: PI     ! 3.1415926... calculated as 4*atan(1)
-  real :: tr_y   ! Initial zonally uniform tracer concentrations.
-  real :: dist2  ! The distance squared from a line, in m2.
   real :: h_neglect         ! A thickness that is so small it is usually lost
-                            ! in roundoff and can be neglected, in m.
-  real :: e(SZK_(G)+1), e_top, e_bot, d_tr ! Heights [Z ~> m].
+                            ! in roundoff and can be neglected [H ~> m or kg-2].
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz, m
   integer :: IsdB, IedB, JsdB, JedB
   integer :: nzdata
 
   if (.not.associated(CS)) return
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
   h_neglect = GV%H_subroundoff
@@ -209,8 +206,7 @@ subroutine initialize_RGC_tracer(restart, day, G, GV, h, diag, OBC, CS, &
                         CS%tracer_IC_file)
       do m=1,NTR
         call query_vardesc(CS%tr_desc(m), name, caller="initialize_RGC_tracer")
-        call read_data(CS%tracer_IC_file, trim(name), &
-                       CS%tr(:,:,:,m), domain=G%Domain%mpp_domain)
+        call MOM_read_data(CS%tracer_IC_file, trim(name), CS%tr(:,:,:,m), G%Domain)
       enddo
     else
       do m=1,NTR
@@ -241,11 +237,11 @@ subroutine initialize_RGC_tracer(restart, day, G, GV, h, diag, OBC, CS, &
           if (G%geoLonT(i,j) >= (CS%lenlon - CS%lensponge) .AND. G%geoLonT(i,j) <= CS%lenlon) then
             temp(i,j,k) = 0.0
           endif
-        enddo ; enddo; enddo
+        enddo ; enddo ; enddo
         do m=1,1
         ! This is needed to force the compiler not to do a copy in the sponge calls.
           tr_ptr => CS%tr(:,:,:,m)
-          call set_up_ALE_sponge_field(temp, G, tr_ptr, sponge_CSp)
+          call set_up_ALE_sponge_field(temp, G, GV, tr_ptr, sponge_CSp)
         enddo
         deallocate(temp)
       endif
@@ -257,10 +253,10 @@ subroutine initialize_RGC_tracer(restart, day, G, GV, h, diag, OBC, CS, &
           if (G%geoLonT(i,j) >= (CS%lenlon - CS%lensponge) .AND. G%geoLonT(i,j) <= CS%lenlon) then
             temp(i,j,k) = 0.0
           endif
-        enddo ; enddo; enddo
+        enddo ; enddo ; enddo
         do m=1,1
           tr_ptr => CS%tr(:,:,:,m)
-          call set_up_sponge_field(temp, tr_ptr, G, nz, layer_CSp)
+          call set_up_sponge_field(temp, tr_ptr, G, GV, nz, layer_CSp)
         enddo
         deallocate(temp)
       endif
@@ -275,60 +271,59 @@ end subroutine initialize_RGC_tracer
 !> This subroutine applies diapycnal diffusion and any other column
 !! tracer physics or chemistry to the tracers from this file.
 !! This is a simple example of a set of advected passive tracers.
-subroutine RGC_tracer_column_physics(h_old, h_new,  ea,  eb, fluxes, dt, G, GV, CS, &
+subroutine RGC_tracer_column_physics(h_old, h_new,  ea,  eb, fluxes, dt, G, GV, US, CS, &
                               evap_CFL_limit, minimum_forcing_depth)
   type(ocean_grid_type),                 intent(in) :: G !< The ocean's grid structure.
   type(verticalGrid_type),               intent(in) :: GV !< The ocean's vertical grid structure.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(in) :: h_old !< Layer thickness before entrainment [H ~> m or kg m-2].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(in) :: h_new !< Layer thickness after entrainment [H ~> m or kg m-2].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(in) :: ea   !< an array to which the amount of fluid entrained
                                               !! from the layer above during this call will be
                                               !! added [H ~> m or kg m-2].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(in) :: eb   !< an array to which the amount of fluid entrained
                                               !! from the layer below during this call will be
                                               !! added [H ~> m or kg m-2].
   type(forcing),           intent(in) :: fluxes !< A structure containing pointers to any possible
                                               !! forcing fields.  Unused fields have NULL ptrs.
-  real,                    intent(in) :: dt !< The amount of time covered by this call [s].
-  type(RGC_tracer_CS),     pointer    :: CS !< The control structure returned by a previous call.
+  real,                    intent(in) :: dt   !< The amount of time covered by this call [T ~> s].
+  type(unit_scale_type),   intent(in) :: US   !< A dimensional unit scaling type
+  type(RGC_tracer_CS),     pointer    :: CS   !< The control structure returned by a previous call.
   real,          optional, intent(in) :: evap_CFL_limit !< Limit on the fraction of the water that can be
                                                !! fluxed out of the top layer in a timestep [nondim].
   real,          optional, intent(in) :: minimum_forcing_depth !< The smallest depth over which fluxes
-                                               !! can be applied [m].
+                                               !! can be applied [H ~> m or kg m-2].
 
 ! The arguments to this subroutine are redundant in that
 !     h_new[k] = h_old[k] + ea[k] - eb[k-1] + eb[k] - ea[k+1]
 
-  real :: b1(SZI_(G))          ! b1 and c1 are variables used by the
-  real :: c1(SZI_(G),SZK_(G))  ! tridiagonal solver.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: h_work ! Used so that h can be modified
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: h_work ! Used so that h can be modified [H ~> m or kg m-2]
   real :: in_flux(SZI_(G),SZJ_(G),2)  ! total amount of tracer to be injected
 
   integer :: i, j, k, is, ie, js, je, nz, m
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
   if (.not.associated(CS)) return
 
   in_flux(:,:,:) = 0.0
   m=1
   do j=js,je ; do i=is,ie
-     !set tracer to 1.0 in the surface of the continental shelf
-     if (G%geoLonT(i,j) <= (CS%CSL)) then
-        CS%tr(i,j,1,m) = 1.0 !first layer
-     endif
+    ! set tracer to 1.0 in the surface of the continental shelf
+    if (G%geoLonT(i,j) <= (CS%CSL)) then
+      CS%tr(i,j,1,m) = 1.0 !first layer
+    endif
   enddo ; enddo
 
   if (present(evap_CFL_limit) .and. present(minimum_forcing_depth)) then
     do m=1,NTR
       do k=1,nz ;do j=js,je ; do i=is,ie
-             h_work(i,j,k) = h_old(i,j,k)
+        h_work(i,j,k) = h_old(i,j,k)
       enddo ; enddo ; enddo;
       call applyTracerBoundaryFluxesInOut(G, GV, CS%tr(:,:,:,m) , dt, fluxes, h_work, &
-                                       evap_CFL_limit, minimum_forcing_depth, in_flux(:,:,m))
+                                          evap_CFL_limit, minimum_forcing_depth, in_flux(:,:,m))
 
       call tracer_vertdiff(h_work, ea, eb, dt, CS%tr(:,:,:,m), G, GV)
     enddo

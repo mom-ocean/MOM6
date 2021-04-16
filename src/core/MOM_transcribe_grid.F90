@@ -4,6 +4,7 @@ module MOM_transcribe_grid
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
+use MOM_array_transform, only: rotate_array, rotate_array_pair
 use MOM_domains, only : pass_var, pass_vector
 use MOM_domains, only : To_All, SCALAR_PAIR, CGRID_NE, AGRID, BGRID_NE, CORNER
 use MOM_dyn_horgrid, only : dyn_horgrid_type, set_derived_dyn_horgrid
@@ -11,9 +12,10 @@ use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, WARNING
 use MOM_grid, only : ocean_grid_type, set_derived_metrics
 use MOM_unit_scaling, only : unit_scale_type
 
+
 implicit none ; private
 
-public copy_dyngrid_to_MOM_grid, copy_MOM_grid_to_dyngrid
+public copy_dyngrid_to_MOM_grid, copy_MOM_grid_to_dyngrid, rotate_dyngrid
 
 contains
 
@@ -304,5 +306,93 @@ subroutine copy_MOM_grid_to_dyngrid(oG, dG, US)
   call  set_derived_dyn_horgrid(dG, US)
 
 end subroutine copy_MOM_grid_to_dyngrid
+
+subroutine rotate_dyngrid(G_in, G, US, turns)
+  type(dyn_horgrid_type), intent(in)    :: G_in   !< Common horizontal grid type
+  type(dyn_horgrid_type), intent(inout) :: G      !< Ocean grid type
+  type(unit_scale_type),  intent(in)    :: US     !< A dimensional unit scaling type
+  integer, intent(in) :: turns                    !< Number of quarter turns
+
+  integer :: jsc, jec, jscB, jecB
+  integer :: qturn
+
+  ! Center point
+  call rotate_array(G_in%geoLonT, turns, G%geoLonT)
+  call rotate_array(G_in%geoLatT, turns, G%geoLatT)
+  call rotate_array_pair(G_in%dxT, G_in%dyT, turns, G%dxT, G%dyT)
+  call rotate_array(G_in%areaT, turns, G%areaT)
+  call rotate_array(G_in%bathyT, turns, G%bathyT)
+
+  call rotate_array_pair(G_in%df_dx, G_in%df_dy, turns, G%df_dx, G%df_dy)
+  call rotate_array(G_in%sin_rot, turns, G%sin_rot)
+  call rotate_array(G_in%cos_rot, turns, G%cos_rot)
+  call rotate_array(G_in%mask2dT, turns, G%mask2dT)
+
+  ! Face point
+  call rotate_array_pair(G_in%geoLonCu, G_in%geoLonCv, turns, &
+      G%geoLonCu, G%geoLonCv)
+  call rotate_array_pair(G_in%geoLatCu, G_in%geoLatCv, turns, &
+      G%geoLatCu, G%geoLatCv)
+  call rotate_array_pair(G_in%dxCu, G_in%dyCv, turns, G%dxCu, G%dyCv)
+  call rotate_array_pair(G_in%dxCv, G_in%dyCu, turns, G%dxCv, G%dyCu)
+  call rotate_array_pair(G_in%dx_Cv, G_in%dy_Cu, turns, G%dx_Cv, G%dy_Cu)
+
+  call rotate_array_pair(G_in%mask2dCu, G_in%mask2dCv, turns, &
+      G%mask2dCu, G%mask2dCv)
+  call rotate_array_pair(G_in%areaCu, G_in%areaCv, turns, &
+      G%areaCu, G%areaCv)
+  call rotate_array_pair(G_in%IareaCu, G_in%IareaCv, turns, &
+      G%IareaCu, G%IareaCv)
+
+  ! Vertex point
+  call rotate_array(G_in%geoLonBu, turns, G%geoLonBu)
+  call rotate_array(G_in%geoLatBu, turns, G%geoLatBu)
+  call rotate_array_pair(G_in%dxBu, G_in%dyBu, turns, G%dxBu, G%dyBu)
+  call rotate_array(G_in%areaBu, turns, G%areaBu)
+  call rotate_array(G_in%CoriolisBu, turns, G%CoriolisBu)
+  call rotate_array(G_in%mask2dBu, turns, G%mask2dBu)
+
+  ! Topographic
+  G%bathymetry_at_vel = G_in%bathymetry_at_vel
+  if (G%bathymetry_at_vel) then
+    call rotate_array_pair(G_in%Dblock_u, G_in%Dblock_v, turns, &
+        G%Dblock_u, G%Dblock_v)
+    call rotate_array_pair(G_in%Dopen_u, G_in%Dopen_v, turns, &
+        G%Dopen_u, G%Dopen_v)
+  endif
+
+  ! Nominal grid axes
+  ! TODO: We should not assign lat values to the lon axis, and vice versa.
+  !   We temporarily copy lat <-> lon since several components still expect
+  !   lat and lon sizes to match the first and second dimension sizes.
+  !   But we ought to instead leave them unchanged and adjust the references to
+  !   these axes.
+  if (modulo(turns, 2) /= 0) then
+    G%gridLonT(:) = G_in%gridLatT(G_in%jeg:G_in%jsg:-1)
+    G%gridLatT(:) = G_in%gridLonT(:)
+    G%gridLonB(:) = G_in%gridLatB(G_in%jeg:(G_in%jsg-1):-1)
+    G%gridLatB(:) = G_in%gridLonB(:)
+  else
+    G%gridLonT(:) = G_in%gridLonT(:)
+    G%gridLatT(:) = G_in%gridLatT(:)
+    G%gridLonB(:) = G_in%gridLonB(:)
+    G%gridLatB(:) = G_in%gridLatB(:)
+  endif
+
+  G%x_axis_units = G_in%y_axis_units
+  G%y_axis_units = G_in%x_axis_units
+  G%south_lat = G_in%south_lat
+  G%west_lon = G_in%west_lon
+  G%len_lat = G_in%len_lat
+  G%len_lon = G_in%len_lon
+
+  ! Rotation-invariant fields
+  G%areaT_global = G_in%areaT_global
+  G%IareaT_global = G_in%IareaT_global
+  G%Rad_Earth = G_in%Rad_Earth
+  G%max_depth = G_in%max_depth
+
+  call set_derived_dyn_horgrid(G, US)
+end subroutine rotate_dyngrid
 
 end module MOM_transcribe_grid

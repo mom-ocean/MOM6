@@ -19,7 +19,7 @@ use MOM_restart,       only : register_restart_field, query_initialized, MOM_res
 use MOM_unit_scaling,  only : unit_scale_type
 use MOM_variables,     only : thermo_var_ptrs
 use MOM_verticalGrid,  only : verticalGrid_type
-use MOM_EOS,           only : calculate_density
+use MOM_EOS,           only : calculate_density, EOS_domain
 
 implicit none ; private
 
@@ -50,13 +50,12 @@ type, public :: mixedlayer_restrat_CS ; private
                                    !! based on the parameter MLE_DENSITY_DIFF.
   real    :: MLE_MLD_decay_time    !< Time-scale to use in a running-mean when MLD is retreating [T ~> s].
   real    :: MLE_MLD_decay_time2   !< Time-scale to use in a running-mean when filtered MLD is retreating [T ~> s].
-  real    :: MLE_density_diff      !< Density difference used in detecting mixed-layer depth [kg m-3].
+  real    :: MLE_density_diff      !< Density difference used in detecting mixed-layer depth [R ~> kg m-3].
   real    :: MLE_tail_dh           !< Fraction by which to extend the mixed-layer restratification
                                    !! depth used for a smoother stream function at the base of
                                    !! the mixed-layer [nondim].
   real    :: MLE_MLD_stretch       !< A scaling coefficient for stretching/shrinking the MLD used in
                                    !! the MLE scheme [nondim]. This simply multiplies MLD wherever used.
-  logical :: MLE_use_MLD_ave_bug   !< If true, do not account for MLD mismatch to interface positions.
   logical :: debug = .false.       !< If true, calculate checksums of fields for debugging.
   type(diag_ctrl), pointer :: diag !< A structure that is used to regulate the
                                    !! timing of diagnostic output.
@@ -89,55 +88,55 @@ contains
 !! The code branches between two different implementations depending
 !! on whether the bulk-mixed layer or a general coordinate are in use.
 subroutine mixedlayer_restrat(h, uhtr, vhtr, tv, forces, dt, MLD, VarMix, G, GV, US, CS)
-  type(ocean_grid_type),                     intent(inout) :: G      !< Ocean grid structure
-  type(verticalGrid_type),                   intent(in)    :: GV     !< Ocean vertical grid structure
-  type(unit_scale_type),                     intent(in)    :: US     !< A dimensional unit scaling type
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: h      !< Layer thickness [H ~> m or kg m-2]
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: uhtr   !< Accumulated zonal mass flux
-                                                                     !! [H L2 ~> m3 or kg]
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: vhtr   !< Accumulated meridional mass flux
-                                                                     !! [H L2 ~> m3 or kg]
-  type(thermo_var_ptrs),                     intent(in)    :: tv     !< Thermodynamic variables structure
-  type(mech_forcing),                        intent(in)    :: forces !< A structure with the driving mechanical forces
-  real,                                      intent(in)    :: dt     !< Time increment [s]
-  real, dimension(:,:),                      pointer       :: MLD    !< Mixed layer depth provided by the
-                                                                     !! PBL scheme [H ~> m or kg m-2]
-  type(VarMix_CS),                           pointer       :: VarMix !< Container for derived fields
-  type(mixedlayer_restrat_CS),               pointer       :: CS     !< Module control structure
+  type(ocean_grid_type),                      intent(inout) :: G      !< Ocean grid structure
+  type(verticalGrid_type),                    intent(in)    :: GV     !< Ocean vertical grid structure
+  type(unit_scale_type),                      intent(in)    :: US     !< A dimensional unit scaling type
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(inout) :: h      !< Layer thickness [H ~> m or kg m-2]
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), intent(inout) :: uhtr   !< Accumulated zonal mass flux
+                                                                      !! [H L2 ~> m3 or kg]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), intent(inout) :: vhtr   !< Accumulated meridional mass flux
+                                                                      !! [H L2 ~> m3 or kg]
+  type(thermo_var_ptrs),                      intent(in)    :: tv     !< Thermodynamic variables structure
+  type(mech_forcing),                         intent(in)    :: forces !< A structure with the driving mechanical forces
+  real,                                       intent(in)    :: dt     !< Time increment [T ~> s]
+  real, dimension(:,:),                       pointer       :: MLD    !< Mixed layer depth provided by the
+                                                                      !! PBL scheme [Z ~> m]
+  type(VarMix_CS),                            pointer       :: VarMix !< Container for derived fields
+  type(mixedlayer_restrat_CS),                pointer       :: CS     !< Module control structure
 
   if (.not. associated(CS)) call MOM_error(FATAL, "MOM_mixedlayer_restrat: "// &
          "Module must be initialized before it is used.")
 
   if (GV%nkml>0) then
-    call mixedlayer_restrat_BML(h, uhtr, vhtr, tv, forces, US%s_to_T*dt, G, GV, US, CS)
+    call mixedlayer_restrat_BML(h, uhtr, vhtr, tv, forces, dt, G, GV, US, CS)
   else
-    call mixedlayer_restrat_general(h, uhtr, vhtr, tv, forces, US%s_to_T*dt, MLD, VarMix, G, GV, US, CS)
+    call mixedlayer_restrat_general(h, uhtr, vhtr, tv, forces, dt, MLD, VarMix, G, GV, US, CS)
   endif
 
 end subroutine mixedlayer_restrat
 
 !> Calculates a restratifying flow in the mixed layer.
-subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, forces, dt_in_T, MLD_in, VarMix, G, GV, US, CS)
+subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, forces, dt, MLD_in, VarMix, G, GV, US, CS)
   ! Arguments
-  type(ocean_grid_type),                     intent(inout) :: G      !< Ocean grid structure
-  type(verticalGrid_type),                   intent(in)    :: GV     !< Ocean vertical grid structure
-  type(unit_scale_type),                     intent(in)    :: US     !< A dimensional unit scaling type
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: h      !< Layer thickness [H ~> m or kg m-2]
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: uhtr   !< Accumulated zonal mass flux
-                                                                     !!   [H L2 ~> m3 or kg]
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: vhtr   !< Accumulated meridional mass flux
-                                                                     !!   [H L2 ~> m3 or kg]
-  type(thermo_var_ptrs),                     intent(in)    :: tv     !< Thermodynamic variables structure
-  type(mech_forcing),                        intent(in)    :: forces !< A structure with the driving mechanical forces
-  real,                                      intent(in)    :: dt_in_T  !< Time increment [T ~> s]
-  real, dimension(:,:),                      pointer       :: MLD_in !< Mixed layer depth provided by the
-                                                                     !! PBL scheme [m] (not H)
-  type(VarMix_CS),                           pointer       :: VarMix !< Container for derived fields
-  type(mixedlayer_restrat_CS),               pointer       :: CS     !< Module control structure
+  type(ocean_grid_type),                      intent(inout) :: G      !< Ocean grid structure
+  type(verticalGrid_type),                    intent(in)    :: GV     !< Ocean vertical grid structure
+  type(unit_scale_type),                      intent(in)    :: US     !< A dimensional unit scaling type
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(inout) :: h      !< Layer thickness [H ~> m or kg m-2]
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), intent(inout) :: uhtr   !< Accumulated zonal mass flux
+                                                                      !!   [H L2 ~> m3 or kg]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), intent(inout) :: vhtr   !< Accumulated meridional mass flux
+                                                                      !!   [H L2 ~> m3 or kg]
+  type(thermo_var_ptrs),                      intent(in)    :: tv     !< Thermodynamic variables structure
+  type(mech_forcing),                         intent(in)    :: forces !< A structure with the driving mechanical forces
+  real,                                       intent(in)    :: dt     !< Time increment [T ~> s]
+  real, dimension(:,:),                       pointer       :: MLD_in !< Mixed layer depth provided by the
+                                                                      !! PBL scheme [Z ~> m] (not H)
+  type(VarMix_CS),                            pointer       :: VarMix !< Container for derived fields
+  type(mixedlayer_restrat_CS),                pointer       :: CS     !< Module control structure
   ! Local variables
-  real :: uhml(SZIB_(G),SZJ_(G),SZK_(G)) ! zonal mixed layer transport [H L2 T-1 ~> m3 s-1 or kg s-1]
-  real :: vhml(SZI_(G),SZJB_(G),SZK_(G)) ! merid mixed layer transport [H L2 T-1 ~> m3 s-1 or kg s-1]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
+  real :: uhml(SZIB_(G),SZJ_(G),SZK_(GV)) ! zonal mixed layer transport [H L2 T-1 ~> m3 s-1 or kg s-1]
+  real :: vhml(SZI_(G),SZJB_(G),SZK_(GV)) ! merid mixed layer transport [H L2 T-1 ~> m3 s-1 or kg s-1]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: &
     h_avail               ! The volume available for diffusion out of each face of each
                           ! sublayer of the mixed layer, divided by dt [H L2 T-1 ~> m3 s-1 or kg s-1].
   real, dimension(SZI_(G),SZJ_(G)) :: &
@@ -147,9 +146,9 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, forces, dt_in_T, MLD_in
     MLD_slow, &           ! Mixed layer depth actually used in MLE restratification parameterization [H ~> m or kg m-2]
     htot_slow, &          ! The sum of the thicknesses of layers in the mixed layer [H ~> m or kg m-2]
     Rml_av_slow           ! g_Rho0 times the average mixed layer density [L2 Z-1 T-2 ~> m s-2]
-  real :: g_Rho0          ! G_Earth/Rho0 [m3 L2 Z-1 T-2 kg-1 ~> m4 s-2 kg-1]
-  real :: rho_ml(SZI_(G)) ! Potential density relative to the surface [kg m-3]
-  real :: p0(SZI_(G))     ! A pressure of 0 [Pa]
+  real :: g_Rho0          ! G_Earth/Rho0 [L2 Z-1 T-2 R-1 ~> m4 s-2 kg-1]
+  real :: rho_ml(SZI_(G)) ! Potential density relative to the surface [R ~> kg m-3]
+  real :: p0(SZI_(G))     ! A pressure of 0 [R L2 T-2 ~> Pa]
 
   real :: h_vel           ! htot interpolated onto velocity points [Z ~> m] (not H).
   real :: absf            ! absolute value of f, interpolated to velocity points [T-1 ~> s-1]
@@ -160,11 +159,11 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, forces, dt_in_T, MLD_in
   real :: dz_neglect      ! A tiny thickness that is usually lost in roundoff so can be neglected [Z ~> m]
   real :: I4dt            ! 1/(4 dt) [T-1 ~> s-1]
   real :: Ihtot,Ihtot_slow! Inverses of the total mixed layer thickness [H-1 ~> m-1 or m2 kg-1]
-  real :: a(SZK_(G))      ! A non-dimensional value relating the overall flux
+  real :: a(SZK_(GV))     ! A non-dimensional value relating the overall flux
                           ! magnitudes (uDml & vDml) to the realized flux in a
                           ! layer.  The vertical sum of a() through the pieces of
                           ! the mixed layer must be 0.
-  real :: b(SZK_(G))      ! As for a(k) but for the slow-filtered MLD
+  real :: b(SZK_(GV))     ! As for a(k) but for the slow-filtered MLD
   real :: uDml(SZIB_(G))  ! The zonal and meridional volume fluxes in the upper
   real :: vDml(SZI_(G))   ! half of the mixed layer [H L2 T-1 ~> m3 s-1 or kg s-1].
   real :: uDml_slow(SZIB_(G))  ! The zonal and meridional volume fluxes in the upper
@@ -173,15 +172,18 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, forces, dt_in_T, MLD_in
   real :: vtimescale_diag(SZI_(G),SZJB_(G)) ! meridional directions [T ~> s], stored in 2-D arrays
                                             ! for diagnostic purposes.
   real :: uDml_diag(SZIB_(G),SZJ_(G)), vDml_diag(SZI_(G),SZJB_(G))
-  integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
-  real, dimension(SZI_(G)) :: rhoSurf, deltaRhoAtKm1, deltaRhoAtK
+  real, dimension(SZI_(G)) :: rhoSurf, deltaRhoAtKm1, deltaRhoAtK ! Densities [R ~> kg m-3]
   real, dimension(SZI_(G)) :: dK, dKm1 ! Depths of layer centers [H ~> m or kg m-2].
-  real, dimension(SZI_(G)) :: pRef_MLD ! A reference pressure for calculating the mixed layer densities [Pa].
+  real, dimension(SZI_(G)) :: pRef_MLD ! A reference pressure for calculating the mixed layer
+                                       ! densities [R L2 T-2 ~> Pa].
   real, dimension(SZI_(G)) :: rhoAtK, rho1, d1, pRef_N2 ! Used for N2
-  real :: aFac, bFac, ddRho
+  real :: aFac, bFac ! Nondimensional ratios [nondim]
+  real :: ddRho    ! A density difference [R ~> kg m-3]
   real :: hAtVel, zpa, zpb, dh, res_scaling_fac
   real :: I_LFront ! The inverse of the frontal length scale [L-1 ~> m-1]
-  logical :: proper_averaging, line_is_empty, keep_going, res_upscale
+  logical :: line_is_empty, keep_going, res_upscale
+  integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state
+  integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
 
   real :: PSI, PSI1, z, BOTTOP, XP, DD ! For the following statement functions
   ! Stream function as a function of non-dimensional position within mixed-layer (F77 statement function)
@@ -192,7 +194,7 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, forces, dt_in_T, MLD_in
   DD(z) = (1.-3.*(XP(z)**2)+2.*(XP(z)**3))**(1.+2.*CS%MLE_tail_dh)
   PSI(z) = max( PSI1(z), DD(z)*BOTTOP(z) ) ! Combines original PSI1 with tail
 
-  is  = G%isc  ; ie  = G%iec  ; js  = G%jsc  ; je  = G%jec ; nz = G%ke
+  is  = G%isc  ; ie  = G%iec  ; js  = G%jsc  ; je  = G%jec ; nz = GV%ke
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
 
   if (.not.associated(tv%eqn_of_state)) call MOM_error(FATAL, "MOM_mixedlayer_restrat: "// &
@@ -203,9 +205,10 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, forces, dt_in_T, MLD_in
   if (CS%MLE_density_diff > 0.) then ! We need to calculate a mixed layer depth, MLD.
     !! TODO: use derivatives and mid-MLD pressure. Currently this is sigma-0. -AJA
     pRef_MLD(:) = 0.
+    EOSdom(:) = EOS_domain(G%HI, halo=1)
     do j = js-1, je+1
       dK(:) = 0.5 * h(:,j,1) ! Depth of center of surface layer
-      call calculate_density(tv%T(:,j,1), tv%S(:,j,1), pRef_MLD, rhoSurf, is-1, ie-is+3, tv%eqn_of_state)
+      call calculate_density(tv%T(:,j,1), tv%S(:,j,1), pRef_MLD, rhoSurf, tv%eqn_of_state, EOSdom)
       deltaRhoAtK(:) = 0.
       MLD_fast(:,j) = 0.
       do k = 2, nz
@@ -213,8 +216,10 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, forces, dt_in_T, MLD_in
         dK(:) = dK(:) + 0.5 * ( h(:,j,k) + h(:,j,k-1) ) ! Depth of center of layer K
         ! Mixed-layer depth, using sigma-0 (surface reference pressure)
         deltaRhoAtKm1(:) = deltaRhoAtK(:) ! Store value from previous iteration of K
-        call calculate_density(tv%T(:,j,k), tv%S(:,j,k), pRef_MLD, deltaRhoAtK, is-1, ie-is+3, tv%eqn_of_state)
-        deltaRhoAtK(:) = deltaRhoAtK(:) - rhoSurf(:) ! Density difference between layer K and surface
+        call calculate_density(tv%T(:,j,k), tv%S(:,j,k), pRef_MLD, deltaRhoAtK, tv%eqn_of_state, EOSdom)
+        do i = is-1,ie+1
+          deltaRhoAtK(i) = deltaRhoAtK(i) - rhoSurf(i) ! Density difference between layer K and surface
+        enddo
         do i = is-1, ie+1
           ddRho = deltaRhoAtK(i) - deltaRhoAtKm1(i)
           if ((MLD_fast(i,j)==0.) .and. (ddRho>0.) .and. &
@@ -234,7 +239,7 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, forces, dt_in_T, MLD_in
     if (.not. associated(MLD_in)) call MOM_error(FATAL, "MOM_mixedlayer_restrat: "// &
          "Argument MLD_in was not associated!")
     do j = js-1, je+1 ; do i = is-1, ie+1
-      MLD_fast(i,j) = (CS%MLE_MLD_stretch * GV%m_to_H) * MLD_in(i,j)
+      MLD_fast(i,j) = (CS%MLE_MLD_stretch * GV%Z_to_H) * MLD_in(i,j)
     enddo ; enddo
   else
     call MOM_error(FATAL, "MOM_mixedlayer_restrat: "// &
@@ -244,11 +249,11 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, forces, dt_in_T, MLD_in
   ! Apply time filter (to remove diurnal cycle)
   if (CS%MLE_MLD_decay_time>0.) then
     if (CS%debug) then
-      call hchksum(CS%MLD_filtered,'mixed_layer_restrat: MLD_filtered',G%HI,haloshift=1,scale=GV%H_to_m)
-      call hchksum(MLD_in,'mixed_layer_restrat: MLD in',G%HI,haloshift=1)
+      call hchksum(CS%MLD_filtered, 'mixed_layer_restrat: MLD_filtered', G%HI, haloshift=1, scale=GV%H_to_m)
+      call hchksum(MLD_in, 'mixed_layer_restrat: MLD in', G%HI, haloshift=1, scale=US%Z_to_m)
     endif
-    aFac = CS%MLE_MLD_decay_time / ( dt_in_T + CS%MLE_MLD_decay_time )
-    bFac = dt_in_T / ( dt_in_T + CS%MLE_MLD_decay_time )
+    aFac = CS%MLE_MLD_decay_time / ( dt + CS%MLE_MLD_decay_time )
+    bFac = dt / ( dt + CS%MLE_MLD_decay_time )
     do j = js-1, je+1 ; do i = is-1, ie+1
       ! Expression bFac*MLD_fast(i,j) + aFac*CS%MLD_filtered(i,j) is the time-filtered
       ! (running mean) of MLD. The max() allows the "running mean" to be reset
@@ -264,8 +269,8 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, forces, dt_in_T, MLD_in
       call hchksum(CS%MLD_filtered_slow,'mixed_layer_restrat: MLD_filtered_slow',G%HI,haloshift=1,scale=GV%H_to_m)
       call hchksum(MLD_fast,'mixed_layer_restrat: MLD fast',G%HI,haloshift=1,scale=GV%H_to_m)
     endif
-    aFac = CS%MLE_MLD_decay_time2 / ( dt_in_T + CS%MLE_MLD_decay_time2 )
-    bFac = dt_in_T / ( dt_in_T + CS%MLE_MLD_decay_time2 )
+    aFac = CS%MLE_MLD_decay_time2 / ( dt + CS%MLE_MLD_decay_time2 )
+    bFac = dt / ( dt + CS%MLE_MLD_decay_time2 )
     do j = js-1, je+1 ; do i = is-1, ie+1
       ! Expression bFac*MLD_fast(i,j) + aFac*CS%MLD_filtered(i,j) is the time-filtered
       ! (running mean) of MLD. The max() allows the "running mean" to be reset
@@ -281,11 +286,10 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, forces, dt_in_T, MLD_in
 
   uDml(:) = 0.0 ; vDml(:) = 0.0
   uDml_slow(:) = 0.0 ; vDml_slow(:) = 0.0
-  I4dt = 0.25 / (dt_in_T)
+  I4dt = 0.25 / dt
   g_Rho0 = GV%g_Earth / GV%Rho0
   h_neglect = GV%H_subroundoff
   dz_neglect = GV%H_subroundoff*GV%H_to_Z
-  proper_averaging = .not. CS%MLE_use_MLD_ave_bug
   if (CS%front_length>0.) then
     res_upscale = .true.
     I_LFront = 1. / CS%front_length
@@ -294,12 +298,12 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, forces, dt_in_T, MLD_in
   endif
 
   p0(:) = 0.0
+  EOSdom(:) = EOS_domain(G%HI, halo=1)
 !$OMP parallel default(none) shared(is,ie,js,je,G,GV,US,htot_fast,Rml_av_fast,tv,p0,h,h_avail,&
-!$OMP                               h_neglect,g_Rho0,I4dt,CS,uhml,uhtr,dt,vhml,vhtr,   &
+!$OMP                               h_neglect,g_Rho0,I4dt,CS,uhml,uhtr,dt,vhml,vhtr,EOSdom,   &
 !$OMP                               utimescale_diag,vtimescale_diag,forces,dz_neglect, &
 !$OMP                               htot_slow,MLD_slow,Rml_av_slow,VarMix,I_LFront,    &
-!$OMP                               res_upscale,                                       &
-!$OMP                               nz,MLD_fast,uDml_diag,vDml_diag,proper_averaging)  &
+!$OMP                               res_upscale, nz,MLD_fast,uDml_diag,vDml_diag)      &
 !$OMP                       private(rho_ml,h_vel,u_star,absf,mom_mixrate,timescale,    &
 !$OMP                               line_is_empty, keep_going,res_scaling_fac,         &
 !$OMP                               a,IhTot,b,Ihtot_slow,zpb,hAtVel,zpa,dh)            &
@@ -316,12 +320,11 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, forces, dt_in_T, MLD_in
         h_avail(i,j,k) = max(I4dt*G%areaT(i,j)*(h(i,j,k)-GV%Angstrom_H),0.0)
       enddo
       if (keep_going) then
-        call calculate_density(tv%T(:,j,k),tv%S(:,j,k),p0,rho_ml(:),is-1,ie-is+3,tv%eqn_of_state)
+        call calculate_density(tv%T(:,j,k), tv%S(:,j,k), p0, rho_ml(:), tv%eqn_of_state, EOSdom)
         line_is_empty = .true.
         do i=is-1,ie+1
           if (htot_fast(i,j) < MLD_fast(i,j)) then
-            dh = h(i,j,k)
-            if (proper_averaging) dh = min( h(i,j,k), MLD_fast(i,j)-htot_fast(i,j) )
+            dh = min( h(i,j,k), MLD_fast(i,j)-htot_fast(i,j) )
             Rml_av_fast(i,j) = Rml_av_fast(i,j) + dh*rho_ml(i)
             htot_fast(i,j) = htot_fast(i,j) + dh
             line_is_empty = .false.
@@ -348,7 +351,7 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, forces, dt_in_T, MLD_in
     call hchksum(forces%ustar,'mixed_layer_restrat: u*', G%HI, haloshift=1, scale=US%Z_to_m*US%s_to_T)
     call hchksum(MLD_fast,'mixed_layer_restrat: MLD', G%HI, haloshift=1, scale=GV%H_to_m)
     call hchksum(Rml_av_fast,'mixed_layer_restrat: rml', G%HI, haloshift=1, &
-                 scale=US%m_to_Z*US%L_to_m**2*US%s_to_T**2)
+                 scale=US%m_to_Z*US%L_T_to_m_s**2)
   endif
 
 ! TO DO:
@@ -423,7 +426,7 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, forces, dt_in_T, MLD_in
       enddo
       do k=1,nz
         uhml(I,j,k) = a(k)*uDml(I) + b(k)*uDml_slow(I)
-        uhtr(I,j,k) = uhtr(I,j,k) + uhml(I,j,k)*dt_in_T
+        uhtr(I,j,k) = uhtr(I,j,k) + uhml(I,j,k)*dt
       enddo
     endif
 
@@ -499,7 +502,7 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, forces, dt_in_T, MLD_in
       enddo
       do k=1,nz
         vhml(i,J,k) = a(k)*vDml(i) + b(k)*vDml_slow(i)
-        vhtr(i,J,k) = vhtr(i,J,k) + vhml(i,J,k)*dt_in_T
+        vhtr(i,J,k) = vhtr(i,J,k) + vhml(i,J,k)*dt
       enddo
     endif
 
@@ -509,7 +512,7 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, forces, dt_in_T, MLD_in
 
 !$OMP do
   do j=js,je ; do k=1,nz ; do i=is,ie
-    h(i,j,k) = h(i,j,k) - dt_in_T*G%IareaT(i,j) * &
+    h(i,j,k) = h(i,j,k) - dt*G%IareaT(i,j) * &
         ((uhml(I,j,k) - uhml(I-1,j,k)) + (vhml(i,J,k) - vhml(i,J-1,k)))
   enddo ; enddo ; enddo
 !$OMP end parallel
@@ -556,31 +559,31 @@ end subroutine mixedlayer_restrat_general
 
 
 !> Calculates a restratifying flow assuming a 2-layer bulk mixed layer.
-subroutine mixedlayer_restrat_BML(h, uhtr, vhtr, tv, forces, dt_in_T, G, GV, US, CS)
-  type(ocean_grid_type),                     intent(in)    :: G      !< Ocean grid structure
-  type(verticalGrid_type),                   intent(in)    :: GV     !< Ocean vertical grid structure
-  type(unit_scale_type),                     intent(in)    :: US     !< A dimensional unit scaling type
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: h      !< Layer thickness [H ~> m or kg m-2]
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: uhtr   !< Accumulated zonal mass flux
-                                                                     !!   [H L2 ~> m3 or kg]
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: vhtr   !< Accumulated meridional mass flux
-                                                                     !!   [H L2 ~> m3 or kg]
-  type(thermo_var_ptrs),                     intent(in)    :: tv     !< Thermodynamic variables structure
-  type(mech_forcing),                        intent(in)    :: forces !< A structure with the driving mechanical forces
-  real,                                      intent(in)    :: dt_in_T  !< Time increment [T ~> s]
-  type(mixedlayer_restrat_CS),               pointer       :: CS     !< Module control structure
+subroutine mixedlayer_restrat_BML(h, uhtr, vhtr, tv, forces, dt, G, GV, US, CS)
+  type(ocean_grid_type),                      intent(in)    :: G      !< Ocean grid structure
+  type(verticalGrid_type),                    intent(in)    :: GV     !< Ocean vertical grid structure
+  type(unit_scale_type),                      intent(in)    :: US     !< A dimensional unit scaling type
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(inout) :: h      !< Layer thickness [H ~> m or kg m-2]
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), intent(inout) :: uhtr   !< Accumulated zonal mass flux
+                                                                      !!   [H L2 ~> m3 or kg]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), intent(inout) :: vhtr   !< Accumulated meridional mass flux
+                                                                      !!   [H L2 ~> m3 or kg]
+  type(thermo_var_ptrs),                      intent(in)    :: tv     !< Thermodynamic variables structure
+  type(mech_forcing),                         intent(in)    :: forces !< A structure with the driving mechanical forces
+  real,                                       intent(in)    :: dt     !< Time increment [T ~> s]
+  type(mixedlayer_restrat_CS),                pointer       :: CS     !< Module control structure
   ! Local variables
-  real :: uhml(SZIB_(G),SZJ_(G),SZK_(G)) ! zonal mixed layer transport [H L2 T-1 ~> m3 s-1 or kg s-1]
-  real :: vhml(SZI_(G),SZJB_(G),SZK_(G)) ! merid mixed layer transport [H L2 T-1 ~> m3 s-1 or kg s-1]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
+  real :: uhml(SZIB_(G),SZJ_(G),SZK_(GV)) ! zonal mixed layer transport [H L2 T-1 ~> m3 s-1 or kg s-1]
+  real :: vhml(SZI_(G),SZJB_(G),SZK_(GV)) ! merid mixed layer transport [H L2 T-1 ~> m3 s-1 or kg s-1]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: &
     h_avail               ! The volume available for diffusion out of each face of each
                           ! sublayer of the mixed layer, divided by dt [H L2 T-1 ~> m3 s-1 or kg s-1].
   real, dimension(SZI_(G),SZJ_(G)) :: &
     htot, &               ! The sum of the thicknesses of layers in the mixed layer [H ~> m or kg m-2]
     Rml_av                ! g_Rho0 times the average mixed layer density [L2 Z-1 T-2 ~> m s-2]
-  real :: g_Rho0          ! G_Earth/Rho0 [m3 L2 Z-1 T-2 kg-1 ~> m4 s-2 kg-1]
-  real :: Rho0(SZI_(G))   ! Potential density relative to the surface [kg m-3]
-  real :: p0(SZI_(G))     ! A pressure of 0 [Pa]
+  real :: g_Rho0          ! G_Earth/Rho0 [L2 Z-1 T-2 R-1 ~> m4 s-2 kg-1]
+  real :: Rho0(SZI_(G))   ! Potential density relative to the surface [R ~> kg m-3]
+  real :: p0(SZI_(G))     ! A pressure of 0 [R L2 T-2 ~> Pa]
 
   real :: h_vel           ! htot interpolated onto velocity points [Z ~> m]. (The units are not H.)
   real :: absf            ! absolute value of f, interpolated to velocity points [T-1 ~> s-1]
@@ -593,7 +596,7 @@ subroutine mixedlayer_restrat_BML(h, uhtr, vhtr, tv, forces, dt_in_T, G, GV, US,
   real :: I2htot          ! Twice the total mixed layer thickness at velocity points [H ~> m or kg m-2]
   real :: z_topx2         ! depth of the top of a layer at velocity points [H ~> m or kg m-2]
   real :: hx2             ! layer thickness at velocity points [H ~> m or kg m-2]
-  real :: a(SZK_(G))      ! A non-dimensional value relating the overall flux
+  real :: a(SZK_(GV))     ! A non-dimensional value relating the overall flux
                           ! magnitudes (uDml & vDml) to the realized flux in a
                           ! layer.  The vertical sum of a() through the pieces of
                           ! the mixed layer must be 0.
@@ -606,8 +609,9 @@ subroutine mixedlayer_restrat_BML(h, uhtr, vhtr, tv, forces, dt_in_T, G, GV, US,
   real :: uDml_diag(SZIB_(G),SZJ_(G)), vDml_diag(SZI_(G),SZJB_(G))
   logical :: use_EOS    ! If true, density is calculated from T & S using an equation of state.
 
+  integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, nkml
-  is  = G%isc  ; ie  = G%iec  ; js  = G%jsc  ; je  = G%jec ; nz = G%ke
+  is  = G%isc  ; ie  = G%iec  ; js  = G%jsc  ; je  = G%jec ; nz = GV%ke
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB ; nkml = GV%nkml
 
   if (.not. associated(CS)) call MOM_error(FATAL, "MOM_mixedlayer_restrat: "// &
@@ -615,7 +619,7 @@ subroutine mixedlayer_restrat_BML(h, uhtr, vhtr, tv, forces, dt_in_T, G, GV, US,
   if ((nkml<2) .or. (CS%ml_restrat_coef<=0.0)) return
 
   uDml(:)    = 0.0 ; vDml(:) = 0.0
-  I4dt       = 0.25 / (dt_in_T)
+  I4dt       = 0.25 / dt
   g_Rho0     = GV%g_Earth / GV%Rho0
   use_EOS    = associated(tv%eqn_of_state)
   h_neglect  = GV%H_subroundoff
@@ -627,7 +631,8 @@ subroutine mixedlayer_restrat_BML(h, uhtr, vhtr, tv, forces, dt_in_T, G, GV, US,
   ! Fix this later for nkml >= 3.
 
   p0(:) = 0.0
-!$OMP parallel default(none) shared(is,ie,js,je,G,GV,US,htot,Rml_av,tv,p0,h,h_avail,   &
+  EOSdom(:) = EOS_domain(G%HI, halo=1)
+!$OMP parallel default(none) shared(is,ie,js,je,G,GV,US,htot,Rml_av,tv,p0,h,h_avail,EOSdom, &
 !$OMP                               h_neglect,g_Rho0,I4dt,CS,uhml,uhtr,dt,vhml,vhtr,   &
 !$OMP                               utimescale_diag,vtimescale_diag,forces,dz_neglect, &
 !$OMP                               uDml_diag,vDml_diag,nkml)                          &
@@ -640,7 +645,7 @@ subroutine mixedlayer_restrat_BML(h, uhtr, vhtr, tv, forces, dt_in_T, G, GV, US,
       htot(i,j) = 0.0 ; Rml_av(i,j) = 0.0
     enddo
     do k=1,nkml
-      call calculate_density(tv%T(:,j,k),tv%S(:,j,k),p0,Rho0(:),is-1,ie-is+3,tv%eqn_of_state)
+      call calculate_density(tv%T(:,j,k), tv%S(:,j,k), p0, Rho0(:), tv%eqn_of_state, EOSdom)
       do i=is-1,ie+1
         Rml_av(i,j) = Rml_av(i,j) + h(i,j,k)*Rho0(i)
         htot(i,j) = htot(i,j) + h(i,j,k)
@@ -659,7 +664,7 @@ subroutine mixedlayer_restrat_BML(h, uhtr, vhtr, tv, forces, dt_in_T, G, GV, US,
 
 !   U - Component
 !$OMP do
-  do j=js,je; do I=is-1,ie
+  do j=js,je ; do I=is-1,ie
     h_vel = 0.5*(htot(i,j) + htot(i+1,j)) * GV%H_to_Z
 
     u_star = 0.5*(forces%ustar(i,j) + forces%ustar(i+1,j))
@@ -696,13 +701,13 @@ subroutine mixedlayer_restrat_BML(h, uhtr, vhtr, tv, forces, dt_in_T, G, GV, US,
       enddo
       do k=1,nkml
         uhml(I,j,k) = a(k)*uDml(I)
-        uhtr(I,j,k) = uhtr(I,j,k) + uhml(I,j,k)*dt_in_T
+        uhtr(I,j,k) = uhtr(I,j,k) + uhml(I,j,k)*dt
       enddo
     endif
 
     uDml_diag(I,j) = uDml(I)
     utimescale_diag(I,j) = timescale
-  enddo; enddo
+  enddo ; enddo
 
 !  V- component
 !$OMP do
@@ -742,17 +747,17 @@ subroutine mixedlayer_restrat_BML(h, uhtr, vhtr, tv, forces, dt_in_T, G, GV, US,
       enddo
       do k=1,nkml
         vhml(i,J,k) = a(k)*vDml(i)
-        vhtr(i,J,k) = vhtr(i,J,k) + vhml(i,J,k)*dt_in_T
+        vhtr(i,J,k) = vhtr(i,J,k) + vhml(i,J,k)*dt
       enddo
     endif
 
     vtimescale_diag(i,J) = timescale
     vDml_diag(i,J) = vDml(i)
-  enddo; enddo
+  enddo ; enddo
 
 !$OMP do
   do j=js,je ; do k=1,nkml ; do i=is,ie
-    h(i,j,k) = h(i,j,k) - dt_in_T*G%IareaT(i,j) * &
+    h(i,j,k) = h(i,j,k) - dt*G%IareaT(i,j) * &
         ((uhml(I,j,k) - uhml(I-1,j,k)) + (vhml(i,J,k) - vhml(i,J-1,k)))
   enddo ; enddo ; enddo
 !$OMP end parallel
@@ -807,7 +812,9 @@ logical function mixedlayer_restrat_init(Time, G, GV, US, param_file, diag, CS, 
   integer :: i, j
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mdl, version, "")
+  call get_param(param_file, mdl, "MIXEDLAYER_RESTRAT", mixedlayer_restrat_init, &
+             default=.false., do_not_log=.true.)
+  call log_version(param_file, mdl, version, "", all_default=.not.mixedlayer_restrat_init)
   call get_param(param_file, mdl, "MIXEDLAYER_RESTRAT", mixedlayer_restrat_init, &
              "If true, a density-gradient dependent re-stratifying "//&
              "flow is imposed in the mixed layer. Can be used in ALE mode "//&
@@ -821,7 +828,7 @@ logical function mixedlayer_restrat_init(Time, G, GV, US, param_file, diag, CS, 
 
   ! Nonsense values to cause problems when these parameters are not used
   CS%MLE_MLD_decay_time = -9.e9*US%s_to_T
-  CS%MLE_density_diff = -9.e9
+  CS%MLE_density_diff = -9.e9*US%kg_m3_to_R
   CS%MLE_tail_dh = -9.e9
   CS%MLE_use_PBL_MLD = .false.
   CS%MLE_MLD_stretch = -9.e9
@@ -867,7 +874,7 @@ logical function mixedlayer_restrat_init(Time, G, GV, US, param_file, diag, CS, 
       call get_param(param_file, mdl, "MLE_DENSITY_DIFF", CS%MLE_density_diff, &
              "Density difference used to detect the mixed-layer "//&
              "depth used for the mixed-layer eddy parameterization "//&
-             "by Fox-Kemper et al. (2010)", units="kg/m3", default=0.03)
+             "by Fox-Kemper et al. (2010)", units="kg/m3", default=0.03, scale=US%kg_m3_to_R)
     endif
     call get_param(param_file, mdl, "MLE_TAIL_DH", CS%MLE_tail_dh, &
              "Fraction by which to extend the mixed-layer restratification "//&
@@ -877,37 +884,34 @@ logical function mixedlayer_restrat_init(Time, G, GV, US, param_file, diag, CS, 
              "A scaling coefficient for stretching/shrinking the MLD "//&
              "used in the MLE scheme. This simply multiplies MLD wherever used.",&
              units="nondim", default=1.0)
-    call get_param(param_file, mdl, "MLE_USE_MLD_AVE_BUG", CS%MLE_use_MLD_ave_bug, &
-             "If true, do not account for MLD mismatch to interface positions.",&
-             default=.false.)
   endif
 
   CS%diag => diag
 
-  if (GV%Boussinesq) then ; flux_to_kg_per_s = GV%Rho0*US%L_to_m**2*US%s_to_T
-  else ; flux_to_kg_per_s = US%L_to_m**2*US%s_to_T ; endif
+  flux_to_kg_per_s = GV%H_to_kg_m2 * US%L_to_m**2 * US%s_to_T
 
   CS%id_uhml = register_diag_field('ocean_model', 'uhml', diag%axesCuL, Time, &
-      'Zonal Thickness Flux to Restratify Mixed Layer', 'kg s-1', conversion=flux_to_kg_per_s, &
-      y_cell_method='sum', v_extensive=.true.)
+      'Zonal Thickness Flux to Restratify Mixed Layer', 'kg s-1', &
+      conversion=flux_to_kg_per_s, y_cell_method='sum', v_extensive=.true.)
   CS%id_vhml = register_diag_field('ocean_model', 'vhml', diag%axesCvL, Time, &
-      'Meridional Thickness Flux to Restratify Mixed Layer', 'kg s-1', conversion=flux_to_kg_per_s, &
-      x_cell_method='sum', v_extensive=.true.)
+      'Meridional Thickness Flux to Restratify Mixed Layer', 'kg s-1', &
+      conversion=flux_to_kg_per_s, x_cell_method='sum', v_extensive=.true.)
   CS%id_urestrat_time = register_diag_field('ocean_model', 'MLu_restrat_time', diag%axesCu1, Time, &
       'Mixed Layer Zonal Restratification Timescale', 's', conversion=US%T_to_s)
   CS%id_vrestrat_time = register_diag_field('ocean_model', 'MLv_restrat_time', diag%axesCv1, Time, &
       'Mixed Layer Meridional Restratification Timescale', 's', conversion=US%T_to_s)
   CS%id_MLD = register_diag_field('ocean_model', 'MLD_restrat', diag%axesT1, Time, &
-      'Mixed Layer Depth as used in the mixed-layer restratification parameterization', 'm')
+      'Mixed Layer Depth as used in the mixed-layer restratification parameterization', 'm', &
+      conversion=GV%H_to_m)
   CS%id_Rml = register_diag_field('ocean_model', 'ML_buoy_restrat', diag%axesT1, Time, &
       'Mixed Layer Buoyancy as used in the mixed-layer restratification parameterization', &
-      'm s2', conversion=US%m_to_Z*US%L_to_m**2*US%s_to_T**2)
+      'm s2', conversion=US%m_to_Z*(US%L_to_m**2)*(US%s_to_T**2))
   CS%id_uDml = register_diag_field('ocean_model', 'udml_restrat', diag%axesCu1, Time, &
       'Transport stream function amplitude for zonal restratification of mixed layer', &
-      'm3 s-1', conversion=GV%H_to_m*US%L_to_m**2*US%s_to_T)
+      'm3 s-1', conversion=GV%H_to_m*(US%L_to_m**2)*US%s_to_T)
   CS%id_vDml = register_diag_field('ocean_model', 'vdml_restrat', diag%axesCv1, Time, &
       'Transport stream function amplitude for meridional restratification of mixed layer', &
-      'm3 s-1', conversion=GV%H_to_m*US%L_to_m**2*US%s_to_T)
+      'm3 s-1', conversion=GV%H_to_m*(US%L_to_m**2)*US%s_to_T)
   CS%id_uml = register_diag_field('ocean_model', 'uml_restrat', diag%axesCu1, Time, &
       'Surface zonal velocity component of mixed layer restratification', &
       'm s-1', conversion=US%L_T_to_m_s)

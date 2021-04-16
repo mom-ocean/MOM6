@@ -63,17 +63,21 @@ end subroutine set_zlike_params
 subroutine build_zstar_column(CS, depth, total_thickness, zInterface, &
                               z_rigid_top, eta_orig, zScale)
   type(zlike_CS),           intent(in)    :: CS !< Coordinate control structure
-  real,                     intent(in)    :: depth !< Depth of ocean bottom (positive in the output units)
-  real,                     intent(in)    :: total_thickness !< Column thickness (positive in the same units as depth)
+  real,                     intent(in)    :: depth !< Depth of ocean bottom (positive downward in the
+                                                   !! output units), units may be [Z ~> m] or [H ~> m or kg m-2]
+  real,                     intent(in)    :: total_thickness !< Column thickness (positive definite in the same
+                                                   !! units as depth) [Z ~> m] or [H ~> m or kg m-2]
   real, dimension(CS%nk+1), intent(inout) :: zInterface !< Absolute positions of interfaces
-  real, optional,           intent(in)    :: z_rigid_top !< The height of a rigid top (negative in the
-                                                         !! same units as depth)
-  real, optional,           intent(in)    :: eta_orig !< The actual original height of the top in the
-                                                      !! same units as depth
+  real, optional,           intent(in)    :: z_rigid_top !< The height of a rigid top (positive upward in the same
+                                                   !! units as depth) [Z ~> m] or [H ~> m or kg m-2]
+  real, optional,           intent(in)    :: eta_orig !< The actual original height of the top in the same
+                                                   !! units as depth) [Z ~> m] or [H ~> m or kg m-2]
   real, optional,           intent(in)    :: zScale !< Scaling factor from the target coordinate resolution
                                                     !! in Z to desired units for zInterface, perhaps Z_to_H
   ! Local variables
-  real :: eta, stretching, dh, min_thickness, z0_top, z_star, z_scale
+  real :: eta   ! Free surface height [Z ~> m] or [H ~> m or kg m-2]
+  real :: stretching ! A stretching factor for the coordinate [nondim]
+  real :: dh, min_thickness, z0_top, z_star, z_scale ! Thicknesses or heights [Z ~> m] or [H ~> m or kg m-2]
   integer :: k
   logical :: new_zstar_def
 

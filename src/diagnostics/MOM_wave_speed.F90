@@ -30,6 +30,8 @@ type, public :: wave_speed_CS ; private
                                        !! of the first baroclinic wave speed.
                                        !! This parameter controls the default behavior of wave_speed() which
                                        !! can be overridden by optional arguments.
+  logical :: better_cg1_est = .false.  !< If true, use an improved estimate of the first mode
+                                       !! internal wave speed.
   real :: mono_N2_column_fraction = 0. !< The lower fraction of water column over which N2 is limited as
                                        !! monotonic for the purposes of calculating the equivalent barotropic
                                        !! wave speed. This parameter controls the default behavior of
@@ -38,76 +40,118 @@ type, public :: wave_speed_CS ; private
                                        !! calculating the equivalent barotropic wave speed [Z ~> m].
                                        !! This parameter controls the default behavior of wave_speed() which
                                        !! can be overridden by optional arguments.
+  real :: min_speed2 = 0.              !< The minimum mode 1 internal wave speed squared [L2 T-2 ~> m2 s-2]
+  real :: wave_speed_tol = 0.001       !< The fractional tolerance with which to solve for the wave
+                                       !! speeds [nondim]
   type(remapping_CS) :: remapping_CS   !< Used for vertical remapping when calculating equivalent barotropic
                                        !! mode structure.
+  logical :: remap_answers_2018 = .true.  !< If true, use the order of arithmetic and expressions that
+                                       !! recover the remapping answers from 2018.  If false, use more
+                                       !! robust forms of the same remapping expressions.
   type(diag_ctrl), pointer :: diag     !< Diagnostics control structure
 end type wave_speed_CS
 
 contains
 
 !> Calculates the wave speed of the first baroclinic mode.
-subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, &
-                      mono_N2_column_fraction, mono_N2_depth, modal_structure)
+subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, mono_N2_column_fraction, &
+                      mono_N2_depth, modal_structure, better_speed_est, min_speed, wave_speed_tol)
   type(ocean_grid_type),            intent(in)  :: G  !< Ocean grid structure
   type(verticalGrid_type),          intent(in)  :: GV !< Vertical grid structure
   type(unit_scale_type),            intent(in)  :: US !< A dimensional unit scaling type
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                                     intent(in)  :: h  !< Layer thickness [H ~> m or kg m-2]
   type(thermo_var_ptrs),            intent(in)  :: tv !< Thermodynamic variables
-  real, dimension(SZI_(G),SZJ_(G)), intent(out) :: cg1 !< First mode internal wave speed [m s-1]
+  real, dimension(SZI_(G),SZJ_(G)), intent(out) :: cg1 !< First mode internal wave speed [L T-1 ~> m s-1]
   type(wave_speed_CS),              pointer     :: CS !< Control structure for MOM_wave_speed
-  logical, optional,                intent(in)  :: full_halos !< If true, do the calculation
+  logical,                optional, intent(in)  :: full_halos !< If true, do the calculation
                                           !! over the entire computational domain.
-  logical, optional,                intent(in)  :: use_ebt_mode !< If true, use the equivalent
+  logical,                optional, intent(in)  :: use_ebt_mode !< If true, use the equivalent
                                           !! barotropic mode instead of the first baroclinic mode.
-  real, optional,                   intent(in)  :: mono_N2_column_fraction !< The lower fraction
+  real,                   optional, intent(in)  :: mono_N2_column_fraction !< The lower fraction
                                           !! of water column over which N2 is limited as monotonic
                                           !! for the purposes of calculating vertical modal structure.
-  real, optional,                   intent(in)  :: mono_N2_depth !< A depth below which N2 is limited as
+  real,                   optional, intent(in)  :: mono_N2_depth !< A depth below which N2 is limited as
                                           !! monotonic for the purposes of calculating vertical
-                                          !! modal structure [m].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-        optional,                   intent(out) :: modal_structure !< Normalized model structure [nondim]
+                                          !! modal structure [Z ~> m].
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
+                          optional, intent(out) :: modal_structure !< Normalized model structure [nondim]
+  logical, optional, intent(in) :: better_speed_est !< If true, use a more robust estimate of the first
+                                     !! mode speed as the starting point for iterations.
+  real,    optional, intent(in) :: min_speed !< If present, set a floor in the first mode speed
+                                     !! below which 0 is returned [L T-1 ~> m s-1].
+  real,    optional, intent(in) :: wave_speed_tol !< The fractional tolerance for finding the
+                                     !! wave speeds [nondim]
 
   ! Local variables
-  real, dimension(SZK_(G)+1) :: &
-    dRho_dT, dRho_dS, &
-    pres, T_int, S_int, &
-    gprime        ! The reduced gravity across each interface [m2 Z-1 s-2 ~> m s-2].
-  real, dimension(SZK_(G)) :: &
+  real, dimension(SZK_(GV)+1) :: &
+    dRho_dT, &    ! Partial derivative of density with temperature [R degC-1 ~> kg m-3 degC-1]
+    dRho_dS, &    ! Partial derivative of density with salinity [R ppt-1 ~> kg m-3 ppt-1]
+    pres, &       ! Interface pressure [R L2 T-2 ~> Pa]
+    T_int, &      ! Temperature interpolated to interfaces [degC]
+    S_int, &      ! Salinity interpolated to interfaces [ppt]
+    H_top, &      ! The distance of each filtered interface from the ocean surface [Z ~> m]
+    H_bot, &      ! The distance of each filtered interface from the bottom [Z ~> m]
+    gprime        ! The reduced gravity across each interface [L2 Z-1 T-2 ~> m s-2].
+  real, dimension(SZK_(GV)) :: &
     Igl, Igu      ! The inverse of the reduced gravity across an interface times
-                  ! the thickness of the layer below (Igl) or above (Igu) it [s2 m-2].
-  real, dimension(SZK_(G),SZI_(G)) :: &
-    Hf, Tf, Sf, Rf
-  real, dimension(SZK_(G)) :: &
-    Hc, Tc, Sc, Rc
-  real det, ddet, detKm1, detKm2, ddetKm1, ddetKm2
-  real :: lam, dlam, lam0
-  real :: min_h_frac
-  real :: Z_to_Pa  ! A conversion factor from thicknesses (in Z) to pressure (in Pa)
+                  ! the thickness of the layer below (Igl) or above (Igu) it, in [T2 L-2 ~> s2 m-2].
+  real, dimension(SZK_(GV),SZI_(G)) :: &
+    Hf, &         ! Layer thicknesses after very thin layers are combined [Z ~> m]
+    Tf, &         ! Layer temperatures after very thin layers are combined [degC]
+    Sf, &         ! Layer salinities after very thin layers are combined [ppt]
+    Rf            ! Layer densities after very thin layers are combined [R ~> kg m-3]
+  real, dimension(SZK_(GV)) :: &
+    Hc, &         ! A column of layer thicknesses after convective istabilities are removed [Z ~> m]
+    Tc, &         ! A column of layer temperatures after convective istabilities are removed [degC]
+    Sc, &         ! A column of layer salinites after convective istabilities are removed [ppt]
+    Rc, &         ! A column of layer densities after convective istabilities are removed [R ~> kg m-3]
+    Hc_H          ! Hc(:) rescaled from Z to thickness units [H ~> m or kg m-2]
+  real :: I_Htot  ! The inverse of the total filtered thicknesses [Z ~> m]
+  real :: det, ddet, detKm1, detKm2, ddetKm1, ddetKm2
+  real :: lam     ! The eigenvalue [T2 L-2 ~> s m-1]
+  real :: dlam    ! The change in estimates of the eigenvalue [T2 L-2 ~> s m-1]
+  real :: lam0    ! The first guess of the eigenvalue [T2 L-2 ~> s m-1]
+  real :: min_h_frac ! [nondim]
+  real :: Z_to_pres  ! A conversion factor from thicknesses to pressure [R L2 T-2 Z-1 ~> Pa m-1]
   real, dimension(SZI_(G)) :: &
-    htot, hmin, &  ! Thicknesses [Z ~> m].
-    H_here, HxT_here, HxS_here, HxR_here
-  real :: speed2_tot
-  real :: I_Hnew, drxh_sum
-  real :: L2_to_Z2 ! A scaling factor squared from units of lateral distances to depths [Z2 m-2 ~> 1].
-  real, parameter :: tol1  = 0.0001, tol2 = 0.001
+    htot, hmin, &  ! Thicknesses [Z ~> m]
+    H_here, &      ! A thickness [Z ~> m]
+    HxT_here, &    ! A layer integrated temperature [degC Z ~> degC m]
+    HxS_here, &    ! A layer integrated salinity [ppt Z ~> ppt m]
+    HxR_here       ! A layer integrated density [R Z ~> kg m-2]
+  real :: speed2_tot ! overestimate of the mode-1 speed squared [L2 T-2 ~> m2 s-2]
+  real :: cg1_min2 ! A floor in the squared first mode speed below which 0 is returned [L2 T-2 ~> m2 s-2]
+  real :: I_Hnew   ! The inverse of a new layer thickness [Z-1 ~> m-1]
+  real :: drxh_sum ! The sum of density differences across interfaces times thicknesses [R Z ~> kg m-2]
+  real :: L2_to_Z2 ! A scaling factor squared from units of lateral distances to depths [Z2 L-2 ~> 1].
   real, pointer, dimension(:,:,:) :: T => NULL(), S => NULL()
-  real :: g_Rho0  ! G_Earth/Rho0 [m5 Z-1 s-2 kg-1 ~> m4 s-2 kg-1].
+  real :: g_Rho0   ! G_Earth/Rho0 [L2 T-2 Z-1 R-1 ~> m4 s-2 kg-1].
+  real :: c2_scale ! A scaling factor for wave speeds to help control the growth of the determinant
+                   ! and its derivative with lam between rows of the Thomas algorithm solver.  The
+                   ! exact value should not matter for the final result if it is an even power of 2.
+  real :: tol_Hfrac ! Layers that together are smaller than this fraction of
+                    ! the total water column can be merged for efficiency.
+  real :: tol_solve ! The fractional tolerance with which to solve for the wave speeds [nondim]
+  real :: tol_merge ! The fractional change in estimated wave speed that is allowed
+                    ! when deciding to merge layers in the calculation [nondim]
   real :: rescale, I_rescale
-  integer :: kf(SZI_(G))
+  integer :: kf(SZI_(G)) ! The number of active layers after filtering.
   integer, parameter :: max_itt = 10
   real :: lam_it(max_itt), det_it(max_itt), ddet_it(max_itt)
-  logical :: use_EOS    ! If true, density is calculated from T & S using an
-                        ! equation of state.
-  integer :: kc
+  logical :: use_EOS    ! If true, density is calculated from T & S using an equation of state.
+  logical :: better_est ! If true, use an improved estimate of the first mode internal wave speed.
+  logical :: merge      ! If true, merge the current layer with the one above.
+  integer :: kc         ! The number of layers in the column after merging
   integer :: i, j, k, k2, itt, is, ie, js, je, nz
-  real :: hw, gp, sum_hc, N2min
+  real :: hw, sum_hc
+  real :: gp      ! A limited local copy of gprime [L2 Z-1 T-2 ~> m s-2]
+  real :: N2min   ! A minimum buoyancy frequency [T-2 ~> s-2]
   logical :: l_use_ebt_mode, calc_modal_structure
   real :: l_mono_N2_column_fraction, l_mono_N2_depth
-  real :: mode_struct(SZK_(G)), ms_min, ms_max, ms_sq
+  real :: mode_struct(SZK_(GV)), ms_min, ms_max, ms_sq
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
   if (.not. associated(CS)) call MOM_error(FATAL, "MOM_wave_speed: "// &
            "Module must be initialized before it is used.")
@@ -115,40 +159,60 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, &
     is = G%isd ; ie = G%ied ; js = G%jsd ; je = G%jed
   endif ; endif
 
-  L2_to_Z2 = US%m_to_Z**2
+  L2_to_Z2 = US%L_to_Z**2
 
   l_use_ebt_mode = CS%use_ebt_mode
   if (present(use_ebt_mode)) l_use_ebt_mode = use_ebt_mode
   l_mono_N2_column_fraction = CS%mono_N2_column_fraction
   if (present(mono_N2_column_fraction)) l_mono_N2_column_fraction = mono_N2_column_fraction
-  l_mono_N2_depth = US%m_to_Z*CS%mono_N2_depth
-  if (present(mono_N2_depth)) l_mono_N2_depth = US%m_to_Z*mono_N2_depth
+  l_mono_N2_depth = CS%mono_N2_depth
+  if (present(mono_N2_depth)) l_mono_N2_depth = mono_N2_depth
   calc_modal_structure = l_use_ebt_mode
   if (present(modal_structure)) calc_modal_structure = .true.
   if (calc_modal_structure) then
-    do k=1,nz; do j=js,je; do i=is,ie
+    do k=1,nz ; do j=js,je ; do i=is,ie
       modal_structure(i,j,k) = 0.0
     enddo ; enddo ; enddo
   endif
 
   S => tv%S ; T => tv%T
-  g_Rho0 = US%L_T_to_m_s**2 * GV%g_Earth / GV%Rho0
-  Z_to_Pa = GV%Z_to_H * GV%H_to_Pa
+  g_Rho0 = GV%g_Earth / GV%Rho0
+  ! Simplifying the following could change answers at roundoff.
+  Z_to_pres = GV%Z_to_H * (GV%H_to_RZ * GV%g_Earth)
   use_EOS = associated(tv%eqn_of_state)
 
-  rescale = 1024.0**4 ; I_rescale = 1.0/rescale
+  better_est = CS%better_cg1_est ; if (present(better_speed_est)) better_est = better_speed_est
 
-  min_h_frac = tol1 / real(nz)
+  if (better_est) then
+    tol_solve = CS%wave_speed_tol ; if (present(wave_speed_tol)) tol_solve = wave_speed_tol
+    tol_Hfrac  = 0.1*tol_solve ; tol_merge = tol_solve / real(nz)
+  else
+    tol_solve = 0.001 ; tol_Hfrac  = 0.0001 ; tol_merge = 0.001
+  endif
+
+  ! The rescaling below can control the growth of the determinant provided that
+  ! (tol_merge*cg1_min2/c2_scale > I_rescale).  For default values, this suggests a stable lower
+  ! bound on min_speed of sqrt(nz/(tol_solve*rescale)) or 3e2/1024**2 = 2.9e-4 m/s for 90 layers.
+  ! The upper bound on the rate of increase in the determinant is g'H/c2_scale < rescale or in the
+  ! worst possible oceanic case of g'H < 0.5*10m/s2*1e4m = 5.e4 m2/s2 < 1024**2*c2_scale, suggesting
+  ! that c2_scale can safely be set to 1/(16*1024**2), which would decrease the stable floor on
+  ! min_speed to ~6.9e-8 m/s for 90 layers or 2.33e-7 m/s for 1000 layers.
+  cg1_min2 = CS%min_speed2 ; if (present(min_speed)) cg1_min2 = min_speed**2
+  rescale = 1024.0**4 ; I_rescale = 1.0/rescale
+  c2_scale = US%m_s_to_L_T**2 / 4096.0**2 ! Other powers of 2 give identical results.
+
+  min_h_frac = tol_Hfrac / real(nz)
 !$OMP parallel do default(none) shared(is,ie,js,je,nz,h,G,GV,US,min_h_frac,use_EOS,T,S,tv,&
 !$OMP                                  calc_modal_structure,l_use_ebt_mode,modal_structure, &
 !$OMP                                  l_mono_N2_column_fraction,l_mono_N2_depth,CS,   &
-!$OMP                                  Z_to_Pa,cg1,g_Rho0,rescale,I_rescale,L2_to_Z2)  &
+!$OMP                                  Z_to_pres,cg1,g_Rho0,rescale,I_rescale,L2_to_Z2, &
+!$OMP                                  better_est,cg1_min2,tol_merge,tol_solve,c2_scale) &
 !$OMP                          private(htot,hmin,kf,H_here,HxT_here,HxS_here,HxR_here, &
-!$OMP                                  Hf,Tf,Sf,Rf,pres,T_int,S_int,drho_dT,           &
-!$OMP                                  drho_dS,drxh_sum,kc,Hc,Tc,Sc,I_Hnew,gprime,     &
-!$OMP                                  Rc,speed2_tot,Igl,Igu,lam0,lam,lam_it,dlam,     &
+!$OMP                                  Hf,Tf,Sf,Rf,pres,T_int,S_int,drho_dT,drho_dS,   &
+!$OMP                                  drxh_sum,kc,Hc,Hc_H,tC,sc,I_Hnew,gprime,&
+!$OMP                                  Rc,speed2_tot,Igl,Igu,lam0,lam,lam_it,dlam, &
 !$OMP                                  mode_struct,sum_hc,N2min,gp,hw,                 &
-!$OMP                                  ms_min,ms_max,ms_sq,                            &
+!$OMP                                  ms_min,ms_max,ms_sq,H_top,H_bot,I_Htot,merge,   &
 !$OMP                                  det,ddet,detKm1,ddetKm1,detKm2,ddetKm2,det_it,ddet_it)
   do j=js,je
     !   First merge very thin layers with the one above (or below if they are
@@ -203,52 +267,85 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, &
       endif ; enddo
     endif
 
-    ! From this point, we can work on individual columns without causing memory
-    ! to have page faults.
+    ! From this point, we can work on individual columns without causing memory to have page faults.
     do i=is,ie ; if (G%mask2dT(i,j) > 0.5) then
       if (use_EOS) then
-        pres(1) = 0.0
-        do k=2,kf(i)
-          pres(k) = pres(k-1) + Z_to_Pa*Hf(k-1,i)
-          T_int(k) = 0.5*(Tf(k,i)+Tf(k-1,i))
-          S_int(k) = 0.5*(Sf(k,i)+Sf(k-1,i))
+        pres(1) = 0.0 ; H_top(1) = 0.0
+        do K=2,kf(i)
+          pres(K) = pres(K-1) + Z_to_pres*Hf(k-1,i)
+          T_int(K) = 0.5*(Tf(k,i)+Tf(k-1,i))
+          S_int(K) = 0.5*(Sf(k,i)+Sf(k-1,i))
+          H_top(K) = H_top(K-1) + Hf(k-1,i)
         enddo
-        call calculate_density_derivs(T_int, S_int, pres, drho_dT, drho_dS, 2, &
-                                      kf(i)-1, tv%eqn_of_state)
+        call calculate_density_derivs(T_int, S_int, pres, drho_dT, drho_dS, &
+                                      tv%eqn_of_state, (/2,kf(i)/) )
 
-        ! Sum the reduced gravities to find out how small a density difference
-        ! is negligibly small.
+        ! Sum the reduced gravities to find out how small a density difference is negligibly small.
         drxh_sum = 0.0
-        do k=2,kf(i)
-          drxh_sum = drxh_sum + 0.5*(Hf(k-1,i)+Hf(k,i)) * &
-              max(0.0,drho_dT(k)*(Tf(k,i)-Tf(k-1,i)) + &
-                      drho_dS(k)*(Sf(k,i)-Sf(k-1,i)))
-        enddo
+        if (better_est) then
+          ! This is an estimate that is correct for the non-EBT mode for 2 or 3 layers, or for
+          ! clusters of massless layers at interfaces that can be grouped into 2 or 3 layers.
+          ! For a uniform stratification and a huge number of layers uniformly distributed in
+          ! density, this estimate is too large (as is desired) by a factor of pi^2/6 ~= 1.64.
+          if (H_top(kf(i)) > 0.0) then
+            I_Htot = 1.0 / (H_top(kf(i)) + Hf(kf(i),i))  ! = 1.0 / (H_top(K) + H_bot(K)) for all K.
+            H_bot(kf(i)+1) = 0.0
+            do K=kf(i),2,-1
+              H_bot(K) = H_bot(K+1) + Hf(k,i)
+              drxh_sum = drxh_sum + ((H_top(K) * H_bot(K)) * I_Htot) * &
+                  max(0.0, drho_dT(K)*(Tf(k,i)-Tf(k-1,i)) + drho_dS(K)*(Sf(k,i)-Sf(k-1,i)))
+            enddo
+          endif
+        else
+          ! This estimate is problematic in that it goes like 1/nz for a large number of layers,
+          ! but it is an overestimate (as desired) for a small number of layers, by at a factor
+          ! of (H1+H2)**2/(H1*H2) >= 4 for two thick layers.
+          do K=2,kf(i)
+            drxh_sum = drxh_sum + 0.5*(Hf(k-1,i)+Hf(k,i)) * &
+                max(0.0, drho_dT(K)*(Tf(k,i)-Tf(k-1,i)) + drho_dS(K)*(Sf(k,i)-Sf(k-1,i)))
+          enddo
+        endif
       else
         drxh_sum = 0.0
-        do k=2,kf(i)
-          drxh_sum = drxh_sum + 0.5*(Hf(k-1,i)+Hf(k,i)) * &
-                            max(0.0,Rf(k,i)-Rf(k-1,i))
-        enddo
+        if (better_est) then
+          H_top(1) = 0.0
+          do K=2,kf(i) ; H_top(K) = H_top(K-1) + Hf(k-1,i) ; enddo
+          if (H_top(kf(i)) > 0.0) then
+            I_Htot = 1.0 / (H_top(kf(i)) + Hf(kf(i),i))  ! = 1.0 / (H_top(K) + H_bot(K)) for all K.
+            H_bot(kf(i)+1) = 0.0
+            do K=kf(i),2,-1
+              H_bot(K) = H_bot(K+1) + Hf(k,i)
+              drxh_sum = drxh_sum + ((H_top(K) * H_bot(K)) * I_Htot) * max(0.0,Rf(k,i)-Rf(k-1,i))
+            enddo
+          endif
+        else
+          do K=2,kf(i)
+            drxh_sum = drxh_sum + 0.5*(Hf(k-1,i)+Hf(k,i)) * max(0.0,Rf(k,i)-Rf(k-1,i))
+          enddo
+        endif
       endif
 
-      if (calc_modal_structure) then
-        mode_struct(:) = 0.
-      endif
-
-  !   Find gprime across each internal interface, taking care of convective
-  ! instabilities by merging layers.
-      if (drxh_sum <= 0.0) then
+      !   Find gprime across each internal interface, taking care of convective instabilities by
+      ! merging layers.  If the estimated wave speed is too small, simply return zero.
+      if (g_Rho0 * drxh_sum <= cg1_min2) then
         cg1(i,j) = 0.0
+        if (present(modal_structure)) modal_structure(i,j,:) = 0.
       else
         ! Merge layers to eliminate convective instabilities or exceedingly
-        ! small reduced gravities.
+        ! small reduced gravities.  Merging layers reduces the estimated wave speed by
+        ! (rho(2)-rho(1))*h(1)*h(2) / H_tot.
         if (use_EOS) then
           kc = 1
           Hc(1) = Hf(1,i) ; Tc(1) = Tf(1,i) ; Sc(1) = Sf(1,i)
           do k=2,kf(i)
-            if ((drho_dT(k)*(Tf(k,i)-Tc(kc)) + drho_dS(k)*(Sf(k,i)-Sc(kc))) * &
-                (Hc(kc) + Hf(k,i)) < 2.0 * tol2*drxh_sum) then
+            if (better_est) then
+              merge = ((drho_dT(K)*(Tf(k,i)-Tc(kc)) + drho_dS(K)*(Sf(k,i)-Sc(kc))) * &
+                       ((Hc(kc) * Hf(k,i))*I_Htot) < 2.0 * tol_merge*drxh_sum)
+            else
+              merge = ((drho_dT(K)*(Tf(k,i)-Tc(kc)) + drho_dS(K)*(Sf(k,i)-Sc(kc))) * &
+                       (Hc(kc) + Hf(k,i)) < 2.0 * tol_merge*drxh_sum)
+            endif
+            if (merge) then
               ! Merge this layer with the one above and backtrack.
               I_Hnew = 1.0 / (Hc(kc) + Hf(k,i))
               Tc(kc) = (Hc(kc)*Tc(kc) + Hf(k,i)*Tf(k,i)) * I_Hnew
@@ -257,9 +354,15 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, &
               ! Backtrack to remove any convective instabilities above...  Note
               ! that the tolerance is a factor of two larger, to avoid limit how
               ! far back we go.
-              do k2=kc,2,-1
-                if ((drho_dT(k2)*(Tc(k2)-Tc(k2-1)) + drho_dS(k2)*(Sc(k2)-Sc(k2-1))) * &
-                    (Hc(k2) + Hc(k2-1)) < tol2*drxh_sum) then
+              do K2=kc,2,-1
+                if (better_est) then
+                  merge = ((drho_dT(K2)*(Tc(k2)-Tc(k2-1)) + drho_dS(K2)*(Sc(k2)-Sc(k2-1))) * &
+                           ((Hc(k2) * Hc(k2-1))*I_Htot) < tol_merge*drxh_sum)
+                else
+                  merge = ((drho_dT(K2)*(Tc(k2)-Tc(k2-1)) + drho_dS(K2)*(Sc(k2)-Sc(k2-1))) * &
+                           (Hc(k2) + Hc(k2-1)) < tol_merge*drxh_sum)
+                endif
+                if (merge) then
                   ! Merge the two bottommost layers.  At this point kc = k2.
                   I_Hnew = 1.0 / (Hc(kc) + Hc(kc-1))
                   Tc(kc-1) = (Hc(kc)*Tc(kc) + Hc(kc-1)*Tc(kc-1)) * I_Hnew
@@ -271,21 +374,25 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, &
             else
               ! Add a new layer to the column.
               kc = kc + 1
-              drho_dS(kc) = drho_dS(k) ; drho_dT(kc) = drho_dT(k)
+              drho_dS(Kc) = drho_dS(K) ; drho_dT(Kc) = drho_dT(K)
               Tc(kc) = Tf(k,i) ; Sc(kc) = Sf(k,i) ; Hc(kc) = Hf(k,i)
             endif
           enddo
           ! At this point there are kc layers and the gprimes should be positive.
-          do k=2,kc ! Revisit this if non-Boussinesq.
-            gprime(k) = g_Rho0 * (drho_dT(k)*(Tc(k)-Tc(k-1)) + &
-                                  drho_dS(k)*(Sc(k)-Sc(k-1)))
+          do K=2,kc ! Revisit this if non-Boussinesq.
+            gprime(K) = g_Rho0 * (drho_dT(K)*(Tc(k)-Tc(k-1)) + drho_dS(K)*(Sc(k)-Sc(k-1)))
           enddo
         else  ! .not.use_EOS
           ! Do the same with density directly...
           kc = 1
           Hc(1) = Hf(1,i) ; Rc(1) = Rf(1,i)
           do k=2,kf(i)
-            if ((Rf(k,i) - Rc(kc)) * (Hc(kc) + Hf(k,i)) < 2.0*tol2*drxh_sum) then
+            if (better_est) then
+              merge = ((Rf(k,i) - Rc(kc)) * ((Hc(kc) * Hf(k,i))*I_Htot) < 2.0*tol_merge*drxh_sum)
+            else
+              merge = ((Rf(k,i) - Rc(kc)) * (Hc(kc) + Hf(k,i)) < 2.0*tol_merge*drxh_sum)
+            endif
+            if (merge) then
               ! Merge this layer with the one above and backtrack.
               Rc(kc) = (Hc(kc)*Rc(kc) + Hf(k,i)*Rf(k,i)) / (Hc(kc) + Hf(k,i))
               Hc(kc) = (Hc(kc) + Hf(k,i))
@@ -293,7 +400,12 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, &
               ! that the tolerance is a factor of two larger, to avoid limit how
               ! far back we go.
               do k2=kc,2,-1
-                if ((Rc(k2)-Rc(k2-1)) * (Hc(k2)+Hc(k2-1)) < tol2*drxh_sum) then
+                if (better_est) then
+                  merge = ((Rc(k2)-Rc(k2-1)) * ((Hc(k2) * Hc(k2-1))*I_Htot) < tol_merge*drxh_sum)
+                else
+                  merge = ((Rc(k2)-Rc(k2-1)) * (Hc(k2)+Hc(k2-1)) < tol_merge*drxh_sum)
+                endif
+                if (merge) then
                   ! Merge the two bottommost layers.  At this point kc = k2.
                   Rc(kc-1) = (Hc(kc)*Rc(kc) + Hc(kc-1)*Rc(kc-1)) / (Hc(kc) + Hc(kc-1))
                   Hc(kc-1) = (Hc(kc) + Hc(kc-1))
@@ -307,8 +419,8 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, &
             endif
           enddo
           ! At this point there are kc layers and the gprimes should be positive.
-          do k=2,kc ! Revisit this if non-Boussinesq.
-            gprime(k) = g_Rho0 * (Rc(k)-Rc(k-1))
+          do K=2,kc ! Revisit this if non-Boussinesq.
+            gprime(K) = g_Rho0 * (Rc(k)-Rc(k-1))
           enddo
         endif  ! use_EOS
 
@@ -317,6 +429,13 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, &
         ! non-leading diagonals of the tridiagonal matrix.
         if (kc >= 2) then
           speed2_tot = 0.0
+          if (better_est) then
+            H_top(1) = 0.0 ; H_bot(kc+1) = 0.0
+            do K=2,kc+1 ; H_top(K) = H_top(K-1) + Hc(k-1) ; enddo
+            do K=kc,2,-1 ; H_bot(K) = H_bot(K+1) + Hc(k) ; enddo
+            I_Htot = 0.0 ; if (H_top(kc+1) > 0.0) I_Htot = 1.0 / H_top(kc+1)
+          endif
+
           if (l_use_ebt_mode) then
             Igu(1) = 0. ! Neumann condition for pressure modes
             sum_hc = Hc(1)
@@ -330,30 +449,40 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, &
                      (L2_to_Z2*gp > N2min*hw) ) then
                   ! Filters out regions where N2 increases with depth but only in a lower fraction
                   ! of the water column or below a certain depth.
-                  gp = US%Z_to_m**2 * (N2min*hw)
+                  gp = US%Z_to_L**2 * (N2min*hw)
                 else
                   N2min = L2_to_Z2 * gp/hw
                 endif
               endif
               Igu(k) = 1.0/(gp*Hc(k))
               Igl(k-1) = 1.0/(gp*Hc(k-1))
-              speed2_tot = speed2_tot + gprime(k)*(Hc(k-1)+Hc(k))*0.707
               sum_hc = sum_hc + Hc(k)
+              if (better_est) then
+                ! Estimate that the ebt_mode is sqrt(2) times the speed of the flat bottom modes.
+                speed2_tot = speed2_tot + 2.0 * gprime(K)*((H_top(K) * H_bot(K)) * I_Htot)
+              else ! The ebt_mode wave should be faster than the flat-bottom mode, so 0.707 should be > 1?
+                speed2_tot = speed2_tot + gprime(K)*(Hc(k-1)+Hc(k))*0.707
+              endif
             enddo
            !Igl(kc) = 0. ! Neumann condition for pressure modes
             Igl(kc) = 2.*Igu(kc) ! Dirichlet condition for pressure modes
           else ! .not. l_use_ebt_mode
             do K=2,kc
               Igl(K) = 1.0/(gprime(K)*Hc(k)) ; Igu(K) = 1.0/(gprime(K)*Hc(k-1))
-              speed2_tot = speed2_tot + gprime(k)*(Hc(k-1)+Hc(k))
+              if (better_est) then
+                speed2_tot = speed2_tot + gprime(K)*((H_top(K) * H_bot(K)) * I_Htot)
+              else
+                speed2_tot = speed2_tot + gprime(K)*(Hc(k-1)+Hc(k))
+              endif
             enddo
           endif
 
           if (calc_modal_structure) then
+            mode_struct(:) = 0.
             mode_struct(1:kc) = 1. ! Uniform flow, first guess
           endif
 
-          ! Overestimate the speed to start with.
+          ! Under estimate the first eigenvalue (overestimate the speed) to start with.
           if (calc_modal_structure) then
             lam0 = 0.5 / speed2_tot ; lam = lam0
           else
@@ -363,52 +492,27 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, &
           do itt=1,max_itt
             lam_it(itt) = lam
             if (l_use_ebt_mode) then
-              ! This initialization of det,ddet imply Neumann boundary conditions so that first 3 rows
-              ! of the matrix are
+              ! This initialization of det,ddet imply Neumann boundary conditions for horizontal
+              ! velocity or pressure modes, so that first 3 rows of the matrix are
               !    /   b(1)-lam  igl(1)      0        0     0  ...  \
               !    |  igu(2)    b(2)-lam   igl(2)     0     0  ...  |
               !    |    0        igu(3)   b(3)-lam  igl(3)  0  ...  |
-              ! which is consistent if the eigenvalue problem is for horizontal velocity or pressure modes.
-             !detKm1 = (       Igl(1)-lam) ; ddetKm1 = -1.0
-             !det = (Igu(2)+Igl(2)-lam)*detKm1 - (Igu(2)*Igl(1)) ; ddet = (Igu(2)+Igl(2)-lam)*ddetKm1 - detKm1
-              detKm1 = 1.0 ; ddetKm1 = 0.0
-              det = (       Igl(1)-lam) ; ddet = -1.0
-              if (kc>1) then
-                detKm2 = detKm1; ddetKm2 = ddetKm1
-                detKm1 = det; ddetKm1 = ddet
-                det = (Igu(2)+Igl(2)-lam)*detKm1 - (Igu(2)*Igl(1))*detKm2
-                ddet = (Igu(2)+Igl(2)-lam)*ddetKm1 - (Igu(2)*Igl(1))*ddetKm2 - detKm1
-              endif
               ! The last two rows of the pressure equation matrix are
               !    |    ...  0  igu(kc-1)  b(kc-1)-lam  igl(kc-1)  |
               !    \    ...  0     0        igu(kc)     b(kc)-lam  /
+              call tridiag_det(Igu, Igl, 1, kc, lam, det, ddet, row_scale=c2_scale)
             else
-              ! This initialization of det,ddet imply Dirichlet boundary conditions so that first 3 rows
-              ! of the matrix are
+              ! This initialization of det,ddet imply Dirichlet boundary conditions for vertical
+              ! velocity modes, so that first 3 rows of the matrix are
               !    /  b(2)-lam  igl(2)      0       0     0  ...  |
               !    |  igu(3)  b(3)-lam   igl(3)     0     0  ...  |
-              !    |    0       igu43)  b(4)-lam  igl(4)  0  ...  |
-              ! which is consistent if the eigenvalue problem is for vertical velocity modes.
-              detKm1 = 1.0 ; ddetKm1 = 0.0
-              det = (Igu(2)+Igl(2)-lam) ; ddet = -1.0
+              !    |    0       igu(4)  b(4)-lam  igl(4)  0  ...  |
               ! The last three rows of the w equation matrix are
-              !    |    ...   0  igu(kc-1)  b(kc-1)-lam  igl(kc-1)     0       |
+              !    |    ...   0  igu(kc-2)  b(kc-2)-lam  igl(kc-2)     0       |
               !    |    ...   0     0        igu(kc-1)  b(kc-1)-lam  igl(kc-1) |
               !    \    ...   0     0           0        igu(kc)    b(kc)-lam  /
+              call tridiag_det(Igu, Igl, 2, kc, lam, det, ddet, row_scale=c2_scale)
             endif
-            do k=3,kc
-              detKm2 = detKm1; ddetKm2 = ddetKm1
-              detKm1 = det; ddetKm1 = ddet
-
-              det = (Igu(k)+Igl(k)-lam)*detKm1 - (Igu(k)*Igl(k-1))*detKm2
-              ddet = (Igu(k)+Igl(k)-lam)*ddetKm1 - (Igu(k)*Igl(k-1))*ddetKm2 - detKm1
-
-              ! Rescale det & ddet if det is getting too large.
-              if (abs(det) > rescale) then
-                det = I_rescale*det ; detKm1 = I_rescale*detKm1
-                ddet = I_rescale*ddet ; ddetKm1 = I_rescale*ddetKm1
-              endif
-            enddo
             ! Use Newton's method iteration to find a new estimate of lam.
             det_it(itt) = det ; ddet_it(itt) = ddet
 
@@ -424,7 +528,7 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, &
             endif
 
             if (calc_modal_structure) then
-              call tdma6(kc, -igu, igu+igl, -igl, lam, mode_struct)
+              call tdma6(kc, Igu, Igl, lam, mode_struct)
               ms_min = mode_struct(1)
               ms_max = mode_struct(1)
               ms_sq = mode_struct(1)**2
@@ -442,7 +546,7 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, &
               endif
             endif
 
-            if (abs(dlam) < tol2*lam) exit
+            if (abs(dlam) < tol_solve*lam) exit
           enddo
 
           cg1(i,j) = 0.0
@@ -456,8 +560,18 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, &
             endif
             ! Note that remapping_core_h requires that the same units be used
             ! for both the source and target grid thicknesses, here [H ~> m or kg m-2].
-            call remapping_core_h(CS%remapping_CS, kc, GV%Z_to_H*Hc(:), mode_struct, &
-                                  nz, h(i,j,:), modal_structure(i,j,:), 1.0e-30*GV%m_to_H, 1.0e-10*GV%m_to_H)
+            do k = 1,kc
+              Hc_H(k) = GV%Z_to_H * Hc(k)
+            enddo
+            if (CS%remap_answers_2018) then
+              call remapping_core_h(CS%remapping_CS, kc, Hc_H(:), mode_struct, &
+                                    nz, h(i,j,:), modal_structure(i,j,:), &
+                                    1.0e-30*GV%m_to_H, 1.0e-10*GV%m_to_H)
+            else
+              call remapping_core_h(CS%remapping_CS, kc, Hc_H(:), mode_struct, &
+                                    nz, h(i,j,:), modal_structure(i,j,:), &
+                                    GV%H_subroundoff, GV%H_subroundoff)
+            endif
           endif
         else
           cg1(i,j) = 0.0
@@ -472,123 +586,157 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, &
 
 end subroutine wave_speed
 
-!> Solve a non-symmetric tridiagonal problem with a scalar contribution to the leading diagonal.
+!> Solve a non-symmetric tridiagonal problem with the sum of the upper and lower diagnonals minus a
+!! scalar contribution as the leading diagonal.
 !! This uses the Thomas algorithm rather than the Hallberg algorithm since the matrix is not symmetric.
-subroutine tdma6(n, a, b, c, lam, y)
+subroutine tdma6(n, a, c, lam, y)
   integer,            intent(in)    :: n !< Number of rows of matrix
-  real, dimension(n), intent(in)    :: a !< Lower diagonal
-  real, dimension(n), intent(in)    :: b !< Leading diagonal
-  real, dimension(n), intent(in)    :: c !< Upper diagonal
-  real,               intent(in)    :: lam !< Scalar subtracted from leading diagonal
-  real, dimension(n), intent(inout) :: y !< RHS on entry, result on exit
+  real, dimension(:), intent(in)    :: a !< Lower diagonal   [T2 L-2 ~> s2 m-2]
+  real, dimension(:), intent(in)    :: c !< Upper diagonal   [T2 L-2 ~> s2 m-2]
+  real,               intent(in)    :: lam !< Scalar subtracted from leading diagonal [T2 L-2 ~> s2 m-2]
+  real, dimension(:), intent(inout) :: y !< RHS on entry, result on exit
+
   ! Local variables
-  integer :: k, l
-  real :: beta(n), yy(n), lambda
+  real :: lambda     ! A temporary variable in [T2 L-2 ~> s2 m-2]
+  real :: beta(n)    ! A temporary variable in [T2 L-2 ~> s2 m-2]
+  real :: I_beta(n)  ! A temporary variable in [L2 T-2 ~> m2 s-2]
+  real :: yy(n)      ! A temporary variable with the same units as y on entry.
+  integer :: k, m
+
   lambda = lam
-  beta(1) = b(1) - lambda
+  beta(1) = (a(1)+c(1)) - lambda
   if (beta(1)==0.) then ! lam was chosen too perfectly
     ! Change lambda and redo this first row
     lambda = (1. + 1.e-5) * lambda
-    beta(1) = b(1) - lambda
+    beta(1) = (a(1)+c(1)) - lambda
   endif
-  beta(1) = 1. / beta(1)
+  I_beta(1) = 1. / beta(1)
   yy(1) = y(1)
   do k = 2, n
-    beta(k) = ( b(k) - lambda ) - a(k) * c(k-1) * beta(k-1)
+    beta(k) = ( (a(k)+c(k)) - lambda ) - a(k) * c(k-1) * I_beta(k-1)
+    ! Perhaps the following 0 needs to become a tolerance to handle underflow?
     if (beta(k)==0.) then ! lam was chosen too perfectly
       ! Change lambda and redo everything up to row k
       lambda = (1. + 1.e-5) * lambda
-      beta(1) = 1. / ( b(1) - lambda )
-      do l = 2, k
-        beta(l) = 1. / ( ( b(l) - lambda ) - a(l) * c(l-1) * beta(l-1) )
-        yy(l) = y(l) - a(l) * yy(l-1) * beta(l-1)
+      I_beta(1) = 1. / ( (a(1)+c(1)) - lambda )
+      do m = 2, k
+        I_beta(m) = 1. / ( ( (a(m)+c(m)) - lambda ) - a(m) * c(m-1) * I_beta(m-1) )
+        yy(m) = y(m) + a(m) * yy(m-1) * I_beta(m-1)
       enddo
     else
-      beta(k) = 1. / beta(k)
+      I_beta(k) = 1. / beta(k)
     endif
-    yy(k) = y(k) - a(k) * yy(k-1) * beta(k-1)
+    yy(k) = y(k) + a(k) * yy(k-1) * I_beta(k-1)
   enddo
-  y(n) = yy(n) * beta(n)
+  ! The units of y change by a factor of [L2 T-2] in the following lines.
+  y(n) = yy(n) * I_beta(n)
   do k = n-1, 1, -1
-    y(k) = ( yy(k) - c(k) * y(k+1) ) * beta(k)
+    y(k) = ( yy(k) + c(k) * y(k+1) ) * I_beta(k)
   enddo
+
 end subroutine tdma6
 
 !> Calculates the wave speeds for the first few barolinic modes.
-subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, full_halos)
+subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, full_halos, better_speed_est, &
+                       min_speed, wave_speed_tol)
   type(ocean_grid_type),                    intent(in)  :: G !< Ocean grid structure
   type(verticalGrid_type),                  intent(in)  :: GV !< Vertical grid structure
   type(unit_scale_type),                    intent(in)  :: US !< A dimensional unit scaling type
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: h !< Layer thickness [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)  :: h !< Layer thickness [H ~> m or kg m-2]
   type(thermo_var_ptrs),                    intent(in)  :: tv !< Thermodynamic variables
   integer,                                  intent(in)  :: nmodes !< Number of modes
   real, dimension(G%isd:G%ied,G%jsd:G%jed,nmodes), intent(out) :: cn !< Waves speeds [L T-1 ~> m s-1]
   type(wave_speed_CS), optional,            pointer     :: CS !< Control structure for MOM_wave_speed
   logical,             optional,            intent(in)  :: full_halos !< If true, do the calculation
                                                                       !! over the entire computational domain.
+  logical, optional, intent(in) :: better_speed_est !< If true, use a more robust estimate of the first
+                                     !! mode speed as the starting point for iterations.
+  real,    optional, intent(in) :: min_speed !< If present, set a floor in the first mode speed
+                                     !! below which 0 is returned [L T-1 ~> m s-1].
+  real,    optional, intent(in) :: wave_speed_tol !< The fractional tolerance for finding the
+                                     !! wave speeds [nondim]
+
   ! Local variables
-  real, dimension(SZK_(G)+1) :: &
-    dRho_dT, dRho_dS, &
-    pres, T_int, S_int, &
-    gprime        ! The reduced gravity across each interface [m s-2]
-  real, dimension(SZK_(G)) :: &
-    Igl, Igu      ! The inverse of the reduced gravity across an interface times
-                  ! the thickness of the layer below (Igl) or above (Igu) it [s2 m-2].
-  real, dimension(SZK_(G)-1) :: &
-    a_diag, b_diag, c_diag
-                  ! diagonals of tridiagonal matrix; one value for each
-                  ! interface (excluding surface and bottom)
-  real, dimension(SZK_(G),SZI_(G)) :: &
-    Hf, Tf, Sf, Rf
-  real, dimension(SZK_(G)) :: &
-    Hc, Tc, Sc, Rc
-  real, parameter :: c1_thresh = 0.01
-                          ! if c1 is below this value, don't bother calculating
-                          ! cn values for higher modes
+  real, dimension(SZK_(GV)+1) :: &
+    dRho_dT, &    ! Partial derivative of density with temperature [R degC-1 ~> kg m-3 degC-1]
+    dRho_dS, &    ! Partial derivative of density with salinity [R ppt-1 ~> kg m-3 ppt-1]
+    pres, &       ! Interface pressure [R L2 T-2 ~> Pa]
+    T_int, &      ! Temperature interpolated to interfaces [degC]
+    S_int, &      ! Salinity interpolated to interfaces [ppt]
+    H_top, &      ! The distance of each filtered interface from the ocean surface [Z ~> m]
+    H_bot, &      ! The distance of each filtered interface from the bottom [Z ~> m]
+    gprime        ! The reduced gravity across each interface [L2 Z-1 T-2 ~> m s-2].
+  real, dimension(SZK_(GV),SZI_(G)) :: &
+    Hf, &         ! Layer thicknesses after very thin layers are combined [Z ~> m]
+    Tf, &         ! Layer temperatures after very thin layers are combined [degC]
+    Sf, &         ! Layer salinities after very thin layers are combined [ppt]
+    Rf            ! Layer densities after very thin layers are combined [R ~> kg m-3]
+  real, dimension(SZK_(GV)) :: &
+    Igl, Igu, &   ! The inverse of the reduced gravity across an interface times
+                  ! the thickness of the layer below (Igl) or above (Igu) it, in [T2 L-2 ~> s2 m-2].
+    Hc, &         ! A column of layer thicknesses after convective istabilities are removed [Z ~> m]
+    Tc, &         ! A column of layer temperatures after convective istabilities are removed [degC]
+    Sc, &         ! A column of layer salinites after convective istabilities are removed [ppt]
+    Rc            ! A column of layer densities after convective istabilities are removed [R ~> kg m-3]
+  real :: I_Htot  ! The inverse of the total filtered thicknesses [Z ~> m]
+  real :: c1_thresh  ! if c1 is below this value, don't bother calculating
+                     ! cn values for higher modes [L T-1 ~> m s-1]
+  real :: c2_scale ! A scaling factor for wave speeds to help control the growth of the determinant
+                   ! and its derivative with lam between rows of the Thomas algorithm solver.  The
+                   ! exact value should not matter for the final result if it is an even power of 2.
   real :: det, ddet       ! determinant & its derivative of eigen system
-  real :: lam_1           ! approximate mode-1 eigen value
-  real :: lam_n           ! approximate mode-n eigen value
-  real :: dlam            ! increment in lam for Newton's method
-  real :: lamMin          ! minimum lam value for root searching range
-  real :: lamMax          ! maximum lam value for root searching range
-  real :: lamInc          ! width of moving window for root searching
+  real :: lam_1           ! approximate mode-1 eigenvalue [T2 L-2 ~> s2 m-2]
+  real :: lam_n           ! approximate mode-n eigenvalue [T2 L-2 ~> s2 m-2]
+  real :: dlam            ! The change in estimates of the eigenvalue [T2 L-2 ~> s m-1]
+  real :: lamMin          ! minimum lam value for root searching range [T2 L-2 ~> s2 m-2]
+  real :: lamMax          ! maximum lam value for root searching range [T2 L-2 ~> s2 m-2]
+  real :: lamInc          ! width of moving window for root searching [T2 L-2 ~> s2 m-2]
   real :: det_l,det_r     ! determinant value at left and right of window
   real :: ddet_l,ddet_r   ! derivative of determinant at left and right of window
   real :: det_sub,ddet_sub! derivative of determinant at subinterval endpoint
-  real :: xl,xr           ! lam guesses at left and right of window
-  real :: xl_sub          ! lam guess at left of subinterval window
+  real :: xl,xr           ! lam guesses at left and right of window [T2 L-2 ~> s2 m-2]
+  real :: xl_sub          ! lam guess at left of subinterval window [T2 L-2 ~> s2 m-2]
   real,dimension(nmodes) :: &
-          xbl,xbr         ! lam guesses bracketing a zero-crossing (root)
+          xbl,xbr         ! lam guesses bracketing a zero-crossing (root) [T2 L-2 ~> s2 m-2]
   integer :: numint       ! number of widows (intervals) in root searching range
   integer :: nrootsfound  ! number of extra roots found (not including 1st root)
-  real :: min_h_frac
-  real :: Z_to_Pa  ! A conversion factor from thicknesses (in Z) to pressure (in Pa)
+  real :: Z_to_pres ! A conversion factor from thicknesses to pressure [R L2 T-2 Z-1 ~> Pa m-1]
   real, dimension(SZI_(G)) :: &
-    htot, hmin, &    ! Thicknesses [Z ~> m].
-    H_here, HxT_here, HxS_here, HxR_here
-  real :: speed2_tot ! overestimate of the mode-1 speed squared [m2 s-2]
-  real :: speed2_min ! minimum mode speed (squared) to consider in root searching
+    htot, hmin, &  ! Thicknesses [Z ~> m]
+    H_here, &      ! A thickness [Z ~> m]
+    HxT_here, &    ! A layer integrated temperature [degC Z ~> degC m]
+    HxS_here, &    ! A layer integrated salinity [ppt Z ~> ppt m]
+    HxR_here       ! A layer integrated density [R Z ~> kg m-2]
+  real :: speed2_tot ! overestimate of the mode-1 speed squared [L2 T-2 ~> m2 s-2]
+  real :: speed2_min ! minimum mode speed (squared) to consider in root searching [L2 T-2 ~> m2 s-2]
+  real :: cg1_min2 ! A floor in the squared first mode speed below which 0 is returned [L2 T-2 ~> m2 s-2]
   real, parameter :: reduct_factor = 0.5
-                     ! factor used in setting speed2_min
-  real :: I_Hnew, drxh_sum
-  real, parameter :: tol1  = 0.0001, tol2 = 0.001
+                     ! A factor used in setting speed2_min [nondim]
+  real :: I_Hnew   ! The inverse of a new layer thickness [Z-1 ~> m-1]
+  real :: drxh_sum ! The sum of density differences across interfaces times thicknesses [R Z ~> kg m-2]
   real, pointer, dimension(:,:,:) :: T => NULL(), S => NULL()
-  real :: g_Rho0  ! G_Earth/Rho0 [m5 Z-1 s-2 kg-1 ~> m4 s-2 kg-1].
-  integer :: kf(SZI_(G))
+  real :: g_Rho0   ! G_Earth/Rho0 [L2 T-2 Z-1 R-1 ~> m4 s-2 kg-1].
+  real :: tol_Hfrac  ! Layers that together are smaller than this fraction of
+                     ! the total water column can be merged for efficiency.
+  real :: min_h_frac ! tol_Hfrac divided by the total number of layers [nondim].
+  real :: tol_solve  ! The fractional tolerance with which to solve for the wave speeds [nondim].
+  real :: tol_merge  ! The fractional change in estimated wave speed that is allowed
+                     ! when deciding to merge layers in the calculation [nondim]
+  integer :: kf(SZI_(G)) ! The number of active layers after filtering.
   integer, parameter :: max_itt = 10
   logical :: use_EOS    ! If true, density is calculated from T & S using the equation of state.
-  real, dimension(SZK_(G)+1) :: z_int
-  ! real, dimension(SZK_(G)+1) :: N2
+  logical :: better_est ! If true, use an improved estimate of the first mode internal wave speed.
+  logical :: merge      ! If true, merge the current layer with the one above.
   integer :: nsub       ! number of subintervals used for root finding
   integer, parameter :: sub_it_max = 4
                         ! maximum number of times to subdivide interval
                         ! for root finding (# intervals = 2**sub_it_max)
   logical :: sub_rootfound ! if true, subdivision has located root
-  integer :: kc, nrows
+  integer :: kc         ! The number of layers in the column after merging
   integer :: sub, sub_it
   integer :: i, j, k, k2, itt, is, ie, js, je, nz, row, iint, m, ig, jg
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
   if (present(CS)) then
     if (.not. associated(CS)) call MOM_error(FATAL, "MOM_wave_speed: "// &
@@ -600,13 +748,33 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, full_halos)
   endif ; endif
 
   S => tv%S ; T => tv%T
-  g_Rho0 = US%L_T_to_m_s**2 * GV%g_Earth / GV%Rho0
+  g_Rho0 = GV%g_Earth / GV%Rho0
+  ! Simplifying the following could change answers at roundoff.
+  Z_to_pres = GV%Z_to_H * (GV%H_to_RZ * GV%g_Earth)
   use_EOS = associated(tv%eqn_of_state)
-  Z_to_Pa = GV%Z_to_H * GV%H_to_Pa
+  c1_thresh = 0.01*US%m_s_to_L_T
+  c2_scale = US%m_s_to_L_T**2 / 4096.0**2 ! Other powers of 2 give identical results.
 
-  min_h_frac = tol1 / real(nz)
+  better_est = .false. ; if (present(CS)) better_est = CS%better_cg1_est
+  if (present(better_speed_est)) better_est = better_speed_est
+  if (better_est) then
+    tol_solve = 0.001 ; if (present(CS)) tol_solve = CS%wave_speed_tol
+    if (present(wave_speed_tol)) tol_solve = wave_speed_tol
+    tol_Hfrac  = 0.1*tol_solve ; tol_merge = tol_solve / real(nz)
+  else
+    tol_solve = 0.001 ; tol_Hfrac  = 0.0001 ; tol_merge = 0.001
+  endif
+  cg1_min2 = 0.0 ; if (present(CS)) cg1_min2 = CS%min_speed2
+  if (present(min_speed)) cg1_min2 = min_speed**2
+
+  ! Zero out all wave speeds.  Values over land or for columns that are too weakly stratified
+  ! are not changed from this zero value.
+  cn(:,:,:) = 0.0
+
+  min_h_frac = tol_Hfrac / real(nz)
   !$OMP parallel do default(private) shared(is,ie,js,je,nz,h,G,GV,US,min_h_frac,use_EOS,T,S, &
-  !$OMP                                     Z_to_Pa,tv,cn,g_Rho0,nmodes)
+  !$OMP                                     Z_to_pres,tv,cn,g_Rho0,nmodes,cg1_min2,better_est, &
+  !$OMP                                     c1_thresh,tol_solve,tol_merge)
   do j=js,je
     !   First merge very thin layers with the one above (or below if they are
     ! at the top).  This also transposes the row order so that columns can
@@ -660,48 +828,83 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, full_halos)
       endif ; enddo
     endif
 
-    ! From this point, we can work on individual columns without causing memory
-    ! to have page faults.
+    ! From this point, we can work on individual columns without causing memory to have page faults.
     do i=is,ie
       if (G%mask2dT(i,j) > 0.5) then
         if (use_EOS) then
-          pres(1) = 0.0
-          do k=2,kf(i)
-            pres(k) = pres(k-1) + Z_to_Pa*Hf(k-1,i)
-            T_int(k) = 0.5*(Tf(k,i)+Tf(k-1,i))
-            S_int(k) = 0.5*(Sf(k,i)+Sf(k-1,i))
+          pres(1) = 0.0 ; H_top(1) = 0.0
+          do K=2,kf(i)
+            pres(K) = pres(K-1) + Z_to_pres*Hf(k-1,i)
+            T_int(K) = 0.5*(Tf(k,i)+Tf(k-1,i))
+            S_int(K) = 0.5*(Sf(k,i)+Sf(k-1,i))
+            H_top(K) = H_top(K-1) + Hf(k-1,i)
           enddo
-          call calculate_density_derivs(T_int, S_int, pres, drho_dT, drho_dS, 2, &
-                                        kf(i)-1, tv%eqn_of_state)
+          call calculate_density_derivs(T_int, S_int, pres, drho_dT, drho_dS, &
+                                        tv%eqn_of_state, (/2,kf(i)/) )
 
-          ! Sum the reduced gravities to find out how small a density difference
-          ! is negligibly small.
+          ! Sum the reduced gravities to find out how small a density difference is negligibly small.
           drxh_sum = 0.0
-          do k=2,kf(i)
-            drxh_sum = drxh_sum + 0.5*(Hf(k-1,i)+Hf(k,i)) * &
-                max(0.0,drho_dT(k)*(Tf(k,i)-Tf(k-1,i)) + &
-                        drho_dS(k)*(Sf(k,i)-Sf(k-1,i)))
-          enddo
+          if (better_est) then
+            ! This is an estimate that is correct for the non-EBT mode for 2 or 3 layers, or for
+            ! clusters of massless layers at interfaces that can be grouped into 2 or 3 layers.
+            ! For a uniform stratification and a huge number of layers uniformly distributed in
+            ! density, this estimate is too large (as is desired) by a factor of pi^2/6 ~= 1.64.
+            if (H_top(kf(i)) > 0.0) then
+              I_Htot = 1.0 / (H_top(kf(i)) + Hf(kf(i),i))  ! = 1.0 / (H_top(K) + H_bot(K)) for all K.
+              H_bot(kf(i)+1) = 0.0
+              do K=kf(i),2,-1
+                H_bot(K) = H_bot(K+1) + Hf(k,i)
+                drxh_sum = drxh_sum + ((H_top(K) * H_bot(K)) * I_Htot) * &
+                    max(0.0, drho_dT(K)*(Tf(k,i)-Tf(k-1,i)) + drho_dS(K)*(Sf(k,i)-Sf(k-1,i)))
+              enddo
+            endif
+          else
+            ! This estimate is problematic in that it goes like 1/nz for a large number of layers,
+            ! but it is an overestimate (as desired) for a small number of layers, by at a factor
+            ! of (H1+H2)**2/(H1*H2) >= 4 for two thick layers.
+            do K=2,kf(i)
+              drxh_sum = drxh_sum + 0.5*(Hf(k-1,i)+Hf(k,i)) * &
+                  max(0.0, drho_dT(K)*(Tf(k,i)-Tf(k-1,i)) + drho_dS(K)*(Sf(k,i)-Sf(k-1,i)))
+            enddo
+          endif
         else
           drxh_sum = 0.0
-          do k=2,kf(i)
-            drxh_sum = drxh_sum + 0.5*(Hf(k-1,i)+Hf(k,i)) * &
-                              max(0.0,Rf(k,i)-Rf(k-1,i))
-          enddo
+          if (better_est) then
+            H_top(1) = 0.0
+            do K=2,kf(i) ; H_top(K) = H_top(K-1) + Hf(k-1,i) ; enddo
+              if (H_top(kf(i)) > 0.0) then
+              I_Htot = 1.0 / (H_top(kf(i)) + Hf(kf(i),i))  ! = 1.0 / (H_top(K) + H_bot(K)) for all K.
+              H_bot(kf(i)+1) = 0.0
+              do K=kf(i),2,-1
+                H_bot(K) = H_bot(K+1) + Hf(k,i)
+                drxh_sum = drxh_sum + ((H_top(K) * H_bot(K)) * I_Htot) * max(0.0,Rf(k,i)-Rf(k-1,i))
+              enddo
+            endif
+          else
+            do K=2,kf(i)
+              drxh_sum = drxh_sum + 0.5*(Hf(k-1,i)+Hf(k,i)) * max(0.0,Rf(k,i)-Rf(k-1,i))
+            enddo
+          endif
         endif
-    !   Find gprime across each internal interface, taking care of convective
-    ! instabilities by merging layers.
-        if (drxh_sum <= 0.0) then
-          cn(i,j,:) = 0.0
-        else
+
+        !   Find gprime across each internal interface, taking care of convective
+        ! instabilities by merging layers.
+        if (g_Rho0 * drxh_sum > cg1_min2) then
           ! Merge layers to eliminate convective instabilities or exceedingly
-          ! small reduced gravities.
+          ! small reduced gravities.  Merging layers reduces the estimated wave speed by
+          ! (rho(2)-rho(1))*h(1)*h(2) / H_tot.
           if (use_EOS) then
             kc = 1
             Hc(1) = Hf(1,i) ; Tc(1) = Tf(1,i) ; Sc(1) = Sf(1,i)
             do k=2,kf(i)
-              if ((drho_dT(k)*(Tf(k,i)-Tc(kc)) + drho_dS(k)*(Sf(k,i)-Sc(kc))) * &
-                  (Hc(kc) + Hf(k,i)) < 2.0 * tol2*drxh_sum) then
+              if (better_est) then
+                merge = ((drho_dT(K)*(Tf(k,i)-Tc(kc)) + drho_dS(K)*(Sf(k,i)-Sc(kc))) * &
+                         ((Hc(kc) * Hf(k,i))*I_Htot) < 2.0 * tol_merge*drxh_sum)
+              else
+                merge = ((drho_dT(K)*(Tf(k,i)-Tc(kc)) + drho_dS(K)*(Sf(k,i)-Sc(kc))) * &
+                         (Hc(kc) + Hf(k,i)) < 2.0 * tol_merge*drxh_sum)
+              endif
+              if (merge) then
                 ! Merge this layer with the one above and backtrack.
                 I_Hnew = 1.0 / (Hc(kc) + Hf(k,i))
                 Tc(kc) = (Hc(kc)*Tc(kc) + Hf(k,i)*Tf(k,i)) * I_Hnew
@@ -710,9 +913,15 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, full_halos)
                 ! Backtrack to remove any convective instabilities above...  Note
                 ! that the tolerance is a factor of two larger, to avoid limit how
                 ! far back we go.
-                do k2=kc,2,-1
-                  if ((drho_dT(k2)*(Tc(k2)-Tc(k2-1)) + drho_dS(k2)*(Sc(k2)-Sc(k2-1))) * &
-                      (Hc(k2) + Hc(k2-1)) < tol2*drxh_sum) then
+                do K2=kc,2,-1
+                  if (better_est) then
+                    merge = ((drho_dT(K2)*(Tc(k2)-Tc(k2-1)) + drho_dS(K2)*(Sc(k2)-Sc(k2-1))) * &
+                             ((Hc(k2) * Hc(k2-1))*I_Htot) < tol_merge*drxh_sum)
+                  else
+                    merge = ((drho_dT(K2)*(Tc(k2)-Tc(k2-1)) + drho_dS(K2)*(Sc(k2)-Sc(k2-1))) * &
+                             (Hc(k2) + Hc(k2-1)) < tol_merge*drxh_sum)
+                  endif
+                  if (merge) then
                     ! Merge the two bottommost layers.  At this point kc = k2.
                     I_Hnew = 1.0 / (Hc(kc) + Hc(kc-1))
                     Tc(kc-1) = (Hc(kc)*Tc(kc) + Hc(kc-1)*Tc(kc-1)) * I_Hnew
@@ -724,21 +933,25 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, full_halos)
               else
                 ! Add a new layer to the column.
                 kc = kc + 1
-                drho_dS(kc) = drho_dS(k) ; drho_dT(kc) = drho_dT(k)
+                drho_dS(Kc) = drho_dS(K) ; drho_dT(Kc) = drho_dT(K)
                 Tc(kc) = Tf(k,i) ; Sc(kc) = Sf(k,i) ; Hc(kc) = Hf(k,i)
               endif
             enddo
             ! At this point there are kc layers and the gprimes should be positive.
-            do k=2,kc ! Revisit this if non-Boussinesq.
-              gprime(k) = g_Rho0 * (drho_dT(k)*(Tc(k)-Tc(k-1)) + &
-                                    drho_dS(k)*(Sc(k)-Sc(k-1)))
+            do K=2,kc ! Revisit this if non-Boussinesq.
+              gprime(K) = g_Rho0 * (drho_dT(K)*(Tc(k)-Tc(k-1)) + drho_dS(K)*(Sc(k)-Sc(k-1)))
             enddo
           else  ! .not.use_EOS
             ! Do the same with density directly...
             kc = 1
             Hc(1) = Hf(1,i) ; Rc(1) = Rf(1,i)
             do k=2,kf(i)
-              if ((Rf(k,i) - Rc(kc)) * (Hc(kc) + Hf(k,i)) < 2.0*tol2*drxh_sum) then
+              if (better_est) then
+                merge = ((Rf(k,i) - Rc(kc)) * ((Hc(kc) * Hf(k,i))*I_Htot) < 2.0 * tol_merge*drxh_sum)
+              else
+                merge = ((Rf(k,i) - Rc(kc)) * (Hc(kc) + Hf(k,i)) < 2.0*tol_merge*drxh_sum)
+              endif
+              if (merge) then
                 ! Merge this layer with the one above and backtrack.
                 Rc(kc) = (Hc(kc)*Rc(kc) + Hf(k,i)*Rf(k,i)) / (Hc(kc) + Hf(k,i))
                 Hc(kc) = (Hc(kc) + Hf(k,i))
@@ -746,7 +959,12 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, full_halos)
                 ! that the tolerance is a factor of two larger, to avoid limit how
                 ! far back we go.
                 do k2=kc,2,-1
-                  if ((Rc(k2)-Rc(k2-1)) * (Hc(k2)+Hc(k2-1)) < tol2*drxh_sum) then
+                  if (better_est) then
+                    merge = ((Rc(k2)-Rc(k2-1)) * ((Hc(k2) * Hc(k2-1))*I_Htot) < tol_merge*drxh_sum)
+                  else
+                    merge = ((Rc(k2)-Rc(k2-1)) * (Hc(k2)+Hc(k2-1)) < tol_merge*drxh_sum)
+                  endif
+                  if (merge) then
                     ! Merge the two bottommost layers.  At this point kc = k2.
                     Rc(kc-1) = (Hc(kc)*Rc(kc) + Hc(kc-1)*Rc(kc-1)) / (Hc(kc) + Hc(kc-1))
                     Hc(kc-1) = (Hc(kc) + Hc(kc-1))
@@ -760,90 +978,68 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, full_halos)
               endif
             enddo
             ! At this point there are kc layers and the gprimes should be positive.
-            do k=2,kc ! Revisit this if non-Boussinesq.
-              gprime(k) = g_Rho0 * (Rc(k)-Rc(k-1))
+            do K=2,kc ! Revisit this if non-Boussinesq.
+              gprime(K) = g_Rho0 * (Rc(k)-Rc(k-1))
             enddo
           endif  ! use_EOS
 
           !-----------------NOW FIND WAVE SPEEDS---------------------------------------
-          ig = i + G%idg_offset ; jg = j + G%jdg_offset
+          ! ig = i + G%idg_offset ; jg = j + G%jdg_offset
           !   Sum the contributions from all of the interfaces to give an over-estimate
-          ! of the first-mode wave speed.
+          ! of the first-mode wave speed.  Also populate Igl and Igu which are the
+          ! non-leading diagonals of the tridiagonal matrix.
           if (kc >= 2) then
-            ! Set depth at surface
-            z_int(1) = 0.0
             ! initialize speed2_tot
             speed2_tot = 0.0
+            if (better_est) then
+              H_top(1) = 0.0 ; H_bot(kc+1) = 0.0
+              do K=2,kc+1 ; H_top(K) = H_top(K-1) + Hc(k-1) ; enddo
+              do K=kc,2,-1 ; H_bot(K) = H_bot(K+1) + Hc(k) ; enddo
+              I_Htot = 0.0 ; if (H_top(kc+1) > 0.0) I_Htot = 1.0 / H_top(kc+1)
+            endif
+
             ! Calculate Igu, Igl, depth, and N2 at each interior interface
             ! [excludes surface (K=1) and bottom (K=kc+1)]
             do K=2,kc
               Igl(K) = 1.0/(gprime(K)*Hc(k)) ; Igu(K) = 1.0/(gprime(K)*Hc(k-1))
-              z_int(K) = z_int(K-1) + Hc(k-1)
-              ! N2(K) = US%m_to_Z**2*gprime(K)/(0.5*(Hc(k)+Hc(k-1)))
-              speed2_tot = speed2_tot + gprime(K)*(Hc(k-1)+Hc(k))
+              if (better_est) then
+                speed2_tot = speed2_tot + gprime(K)*((H_top(K) * H_bot(K)) * I_Htot)
+              else
+                speed2_tot = speed2_tot + gprime(K)*(Hc(k-1)+Hc(k))
+              endif
             enddo
-            ! Set stratification for surface and bottom (setting equal to nearest interface for now)
-            ! N2(1) = N2(2) ; N2(kc+1) = N2(kc)
-            ! Calculate depth at bottom
-            z_int(kc+1) = z_int(kc)+Hc(kc)
-            ! check that thicknesses sum to total depth
-            if (abs(z_int(kc+1)-htot(i)) > 1.e-12*htot(i)) then
-              call MOM_error(FATAL, "wave_structure: mismatch in total depths")
-            endif
 
-            ! Define the diagonals of the tridiagonal matrix
-            ! First, populate interior rows
-            do K=3,kc-1
-              row = K-1 ! indexing for TD matrix rows
-              a_diag(row) = (-Igu(K))
-              b_diag(row) = (Igu(K)+Igl(K))
-              c_diag(row) = (-Igl(K))
-            enddo
-            ! Populate top row of tridiagonal matrix
-            K=2 ; row = K-1
-            a_diag(row) = 0.0
-            b_diag(row) = (Igu(K)+Igl(K))
-            c_diag(row) = (-Igl(K))
-            ! Populate bottom row of tridiagonal matrix
-            K=kc ; row = K-1
-            a_diag(row) = (-Igu(K))
-            b_diag(row) = (Igu(K)+Igl(K))
-            c_diag(row) = 0.0
-            ! Total number of rows in the matrix = number of interior interfaces
-            nrows = kc-1
-
-            ! Under estimate the first eigen value to start with.
+            ! Under estimate the first eigenvalue (overestimate the speed) to start with.
             lam_1 = 1.0 / speed2_tot
 
             ! Find the first eigen value
             do itt=1,max_itt
               ! calculate the determinant of (A-lam_1*I)
-              call tridiag_det(a_diag(1:nrows),b_diag(1:nrows),c_diag(1:nrows), &
-                                      nrows,lam_1,det,ddet)
-              ! Use Newton's method iteration to find a new estimate of lam_1
+              call tridiag_det(Igu, Igl, 2, kc, lam_1, det, ddet, row_scale=c2_scale)
+
+              ! If possible, use Newton's method iteration to find a new estimate of lam_1
               !det = det_it(itt) ; ddet = ddet_it(itt)
               if ((ddet >= 0.0) .or. (-det > -0.5*lam_1*ddet)) then
                 ! lam_1 was not an under-estimate, as intended, so Newton's method
-                ! may not be reliable; lam_1 must be reduced, but not by more
-                ! than half.
+                ! may not be reliable; lam_1 must be reduced, but not by more than half.
                 lam_1 = 0.5 * lam_1
+                dlam = -lam_1
               else  ! Newton's method is OK.
                 dlam = - det / ddet
                 lam_1 = lam_1 + dlam
-                if (abs(dlam) < tol2*lam_1) then
-                  ! calculate 1st mode speed
-                  if (lam_1 > 0.0) cn(i,j,1) = 1.0 / sqrt(lam_1)
-                  exit
-                endif
               endif
+
+              if (abs(dlam) < tol_solve*lam_1) exit
             enddo
+
+            if (lam_1 > 0.0) cn(i,j,1) = 1.0 / sqrt(lam_1)
 
             ! Find other eigen values if c1 is of significant magnitude, > cn_thresh
             nrootsfound = 0    ! number of extra roots found (not including 1st root)
             if (nmodes>1 .and. kc>=nmodes+1 .and. cn(i,j,1)>c1_thresh) then
               ! Set the the range to look for the other desired eigen values
               ! set min value just greater than the 1st root (found above)
-              lamMin = lam_1*(1.0 + tol2)
+              lamMin = lam_1*(1.0 + tol_solve)
               ! set max value based on a low guess at wavespeed for highest mode
               speed2_min = (reduct_factor*cn(i,j,1)/real(nmodes))**2
               lamMax = 1.0 / speed2_min
@@ -856,14 +1052,12 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, full_halos)
               ! that are beyond the first root
 
               ! find det_l of first interval (det at left endpoint)
-              call tridiag_det(a_diag(1:nrows),b_diag(1:nrows),c_diag(1:nrows), &
-                               nrows,lamMin,det_l,ddet_l)
+              call tridiag_det(Igu, Igl, 2, kc, lamMin, det_l, ddet_l, row_scale=c2_scale)
               ! move interval window looking for zero-crossings************************
               do iint=1,numint
                 xr = lamMin + lamInc * iint
                 xl = xr - lamInc
-                call tridiag_det(a_diag(1:nrows),b_diag(1:nrows),c_diag(1:nrows), &
-                                 nrows,xr,det_r,ddet_r)
+                call tridiag_det(Igu, Igl, 2, kc, xr, det_r, ddet_r, row_scale=c2_scale)
                 if (det_l*det_r < 0.0) then  ! if function changes sign
                   if (det_l*ddet_l < 0.0) then ! if function at left is headed to zero
                     nrootsfound = nrootsfound + 1
@@ -883,8 +1077,8 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, full_halos)
                       ! loop over each subinterval:
                       do sub=1,nsub-1,2 ! only check odds; sub = 1; 1,3; 1,3,5,7;...
                         xl_sub = xl + lamInc/(nsub)*sub
-                        call tridiag_det(a_diag(1:nrows),b_diag(1:nrows),c_diag(1:nrows), &
-                                 nrows,xl_sub,det_sub,ddet_sub)
+                        call tridiag_det(Igu, Igl, 2, kc, xl_sub, det_sub, ddet_sub, &
+                                         row_scale=c2_scale)
                         if (det_sub*det_r < 0.0) then  ! if function changes sign
                           if (det_sub*ddet_sub < 0.0) then ! if function at left is headed to zero
                             sub_rootfound = .true.
@@ -913,7 +1107,7 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, full_halos)
                 elseif (iint == numint) then
                   ! oops, lamMax not large enough - could add code to increase (BDM)
                   ! set unfound modes to zero for now (BDM)
-                  cn(i,j,nrootsfound+2:nmodes) = 0.0
+                  !   cn(i,j,nrootsfound+2:nmodes) = 0.0
                 else
                   ! else shift interval and keep looking until nmodes or numint is reached
                   det_l = det_r
@@ -926,74 +1120,74 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, full_halos)
                 lam_n = xbl(m) ! first guess is left edge of window
                 do itt=1,max_itt
                   ! calculate the determinant of (A-lam_n*I)
-                  call tridiag_det(a_diag(1:nrows),b_diag(1:nrows),c_diag(1:nrows), &
-                                   nrows,lam_n,det,ddet)
+                  call tridiag_det(Igu, Igl, 2, kc, lam_n, det, ddet, row_scale=c2_scale)
                   ! Use Newton's method to find a new estimate of lam_n
                   dlam = - det / ddet
                   lam_n = lam_n + dlam
-                  if (abs(dlam) < tol2*lam_1) then
-                    ! calculate nth mode speed
-                    if (lam_n > 0.0) cn(i,j,m+1) = 1.0 / sqrt(lam_n)
-                    exit
-                  endif ! within tol
+                  if (abs(dlam) < tol_solve*lam_1)  exit
                 enddo ! itt-loop
+                ! calculate nth mode speed
+                if (lam_n > 0.0) cn(i,j,m+1) = 1.0 / sqrt(lam_n)
               enddo ! n-loop
-            else
-              cn(i,j,2:nmodes) = 0.0 ! else too small to worry about
             endif ! if nmodes>1 .and. kc>nmodes .and. c1>c1_thresh
-            do m=1,nmodes ; cn(i,j,m) = US%m_s_to_L_T*cn(i,j,m) ; enddo
-          else
-            cn(i,j,:) = 0.0
           endif ! if more than 2 layers
         endif ! if drxh_sum < 0
-      else
-        cn(i,j,:) = 0.0 ! This is a land point.
       endif ! if not land
     enddo ! i-loop
   enddo ! j-loop
 
 end subroutine wave_speeds
 
-!> Calculate the determinant of a tridiagonal matrix with diagonals a,b-lam,c where lam is constant across rows.
-subroutine tridiag_det(a,b,c,nrows,lam,det_out,ddet_out)
-  real, dimension(:), intent(in) :: a !< Lower diagonal of matrix (first entry = 0)
-  real, dimension(:), intent(in) :: b !< Leading diagonal of matrix (excluding lam)
-  real, dimension(:), intent(in) :: c !< Upper diagonal of matrix (last entry = 0)
-  integer,            intent(in) :: nrows !< Size of matrix
-  real,               intent(in) :: lam !< Value subtracted from b
-  real,               intent(out):: det_out !< Determinant
-  real,               intent(out):: ddet_out !< Derivative of determinant w.r.t. lam
+!> Calculate the determinant of a tridiagonal matrix with diagonals a,b-lam,c and its derivative
+!! with lam, where lam is constant across rows.  Only the ratio of det to its derivative and their
+!! signs are typically used, so internal rescaling by consistent factors are used to avoid
+!! over- or underflow.
+subroutine tridiag_det(a, c, ks, ke, lam, det, ddet, row_scale)
+  real, dimension(:), intent(in) :: a     !< Lower diagonal of matrix (first entry unused)
+  real, dimension(:), intent(in) :: c     !< Upper diagonal of matrix (last entry unused)
+  integer,            intent(in) :: ks    !< Starting index to use in determinant
+  integer,            intent(in) :: ke    !< Ending index to use in determinant
+  real,               intent(in) :: lam   !< Value subtracted from b
+  real,               intent(out):: det   !< Determinant
+  real,               intent(out):: ddet  !< Derivative of determinant with lam
+  real,     optional, intent(in) :: row_scale !< A scaling factor of the rows of the
+                                      !! matrix to limit the growth of the determinant
   ! Local variables
-  real, dimension(nrows) :: det ! value of recursion function
-  real, dimension(nrows) :: ddet ! value of recursion function for derivative
-  real, parameter:: rescale = 1024.0**4 ! max value of determinant allowed before rescaling
+  real :: detKm1, detKm2   ! Cumulative value of the determinant for the previous two layers.
+  real :: ddetKm1, ddetKm2 ! Derivative of the cumulative determinant with lam for the previous two layers.
+  real, parameter :: rescale = 1024.0**4 ! max value of determinant allowed before rescaling
+  real :: rscl      ! A rescaling factor that is applied succesively to each row.
   real :: I_rescale ! inverse of rescale
-  integer :: n      ! row (layer interface) index
+  integer :: k      ! row (layer interface) index
 
-  if (size(b) /= nrows) call MOM_error(WARNING, "Diagonal b must be same length as nrows.")
-  if (size(a) /= nrows) call MOM_error(WARNING, "Diagonal a must be same length as nrows.")
-  if (size(c) /= nrows) call MOM_error(WARNING, "Diagonal c must be same length as nrows.")
+  I_rescale = 1.0 / rescale
+  rscl = 1.0 ; if (present(row_scale)) rscl = row_scale
 
-  I_rescale = 1.0/rescale
+  detKm1 = 1.0 ; ddetKm1 = 0.0
+  det = (a(ks)+c(ks)) - lam ; ddet = -1.0
+  do k=ks+1,ke
+    ! Shift variables and rescale rows to avoid over- or underflow.
+    detKm2 = row_scale*detKm1 ; ddetKm2 = row_scale*ddetKm1
+    detKm1 = row_scale*det    ; ddetKm1 = row_scale*ddet
 
-  det(1) = 1.0      ; ddet(1) = 0.0
-  det(2) = b(2)-lam ; ddet(2) = -1.0
-  do n=3,nrows
-    det(n)  = (b(n)-lam)*det(n-1)  - (a(n)*c(n-1))*det(n-2)
-    ddet(n) = (b(n)-lam)*ddet(n-1) - (a(n)*c(n-1))*ddet(n-2) - det(n-1)
-    ! Rescale det & ddet if det is getting too large.
-    if (abs(det(n)) > rescale) then
-      det(n)  = I_rescale*det(n)  ; det(n-1)  = I_rescale*det(n-1)
-      ddet(n) = I_rescale*ddet(n) ; ddet(n-1) = I_rescale*ddet(n-1)
+    det =  ((a(k)+c(k))-lam)*detKm1  - (a(k)*c(k-1))*detKm2
+    ddet = ((a(k)+c(k))-lam)*ddetKm1 - (a(k)*c(k-1))*ddetKm2 - detKm1
+
+    ! Rescale det & ddet if det is getting too large or too small.
+    if (abs(det) > rescale) then
+      det = I_rescale*det ; detKm1 = I_rescale*detKm1
+      ddet = I_rescale*ddet ; ddetKm1 = I_rescale*ddetKm1
+    elseif (abs(det) < I_rescale) then
+      det = rescale*det ; detKm1 = rescale*detKm1
+      ddet = rescale*ddet ; ddetKm1 = rescale*ddetKm1
     endif
   enddo
-  det_out = det(nrows)
-  ddet_out = ddet(nrows)
 
 end subroutine tridiag_det
 
 !> Initialize control structure for MOM_wave_speed
-subroutine wave_speed_init(CS, use_ebt_mode, mono_N2_column_fraction, mono_N2_depth)
+subroutine wave_speed_init(CS, use_ebt_mode, mono_N2_column_fraction, mono_N2_depth, remap_answers_2018, &
+                           better_speed_est, min_speed, wave_speed_tol)
   type(wave_speed_CS), pointer :: CS !< Control structure for MOM_wave_speed
   logical, optional, intent(in) :: use_ebt_mode  !< If true, use the equivalent
                                      !! barotropic mode instead of the first baroclinic mode.
@@ -1002,9 +1196,19 @@ subroutine wave_speed_init(CS, use_ebt_mode, mono_N2_column_fraction, mono_N2_de
                                      !! calculating the vertical modal structure.
   real,    optional, intent(in) :: mono_N2_depth !< The depth below which N2 is limited
                                      !! as monotonic for the purposes of calculating the
-                                     !! vertical modal structure.
-! This include declares and sets the variable "version".
-#include "version_variable.h"
+                                     !! vertical modal structure [Z ~> m].
+  logical, optional, intent(in) :: remap_answers_2018 !< If true, use the order of arithmetic and expressions
+                                     !! that recover the remapping answers from 2018.  Otherwise
+                                     !! use more robust but mathematically equivalent expressions.
+  logical, optional, intent(in) :: better_speed_est !< If true, use a more robust estimate of the first
+                                     !! mode speed as the starting point for iterations.
+  real,    optional, intent(in) :: min_speed !< If present, set a floor in the first mode speed
+                                     !! below which 0 is returned [L T-1 ~> m s-1].
+  real,    optional, intent(in) :: wave_speed_tol !< The fractional tolerance for finding the
+                                     !! wave speeds [nondim]
+
+  ! This include declares and sets the variable "version".
+# include "version_variable.h"
   character(len=40)  :: mdl = "MOM_wave_speed"  ! This module's name.
 
   if (associated(CS)) then
@@ -1016,14 +1220,17 @@ subroutine wave_speed_init(CS, use_ebt_mode, mono_N2_column_fraction, mono_N2_de
   ! Write all relevant parameters to the model log.
   call log_version(mdl, version)
 
-  call wave_speed_set_param(CS, use_ebt_mode=use_ebt_mode, mono_N2_column_fraction=mono_N2_column_fraction)
+  call wave_speed_set_param(CS, use_ebt_mode=use_ebt_mode, mono_N2_column_fraction=mono_N2_column_fraction, &
+                            better_speed_est=better_speed_est, min_speed=min_speed, wave_speed_tol=wave_speed_tol)
 
-  call initialize_remapping(CS%remapping_CS, 'PLM', boundary_extrapolation=.false.)
+  call initialize_remapping(CS%remapping_CS, 'PLM', boundary_extrapolation=.false., &
+                            answers_2018=CS%remap_answers_2018)
 
 end subroutine wave_speed_init
 
 !> Sets internal parameters for MOM_wave_speed
-subroutine wave_speed_set_param(CS, use_ebt_mode, mono_N2_column_fraction, mono_N2_depth)
+subroutine wave_speed_set_param(CS, use_ebt_mode, mono_N2_column_fraction, mono_N2_depth, remap_answers_2018, &
+                                better_speed_est, min_speed, wave_speed_tol)
   type(wave_speed_CS), pointer  :: CS !< Control structure for MOM_wave_speed
   logical, optional, intent(in) :: use_ebt_mode  !< If true, use the equivalent
                                       !! barotropic mode instead of the first baroclinic mode.
@@ -1032,7 +1239,16 @@ subroutine wave_speed_set_param(CS, use_ebt_mode, mono_N2_column_fraction, mono_
                                       !! calculating the vertical modal structure.
   real,    optional, intent(in) :: mono_N2_depth !< The depth below which N2 is limited
                                       !! as monotonic for the purposes of calculating the
-                                      !! vertical modal structure.
+                                      !! vertical modal structure [Z ~> m].
+  logical, optional, intent(in) :: remap_answers_2018 !< If true, use the order of arithmetic and expressions
+                                      !! that recover the remapping answers from 2018.  Otherwise
+                                      !! use more robust but mathematically equivalent expressions.
+  logical, optional, intent(in) :: better_speed_est !< If true, use a more robust estimate of the first
+                                     !! mode speed as the starting point for iterations.
+  real,    optional, intent(in) :: min_speed !< If present, set a floor in the first mode speed
+                                     !! below which 0 is returned [L T-1 ~> m s-1].
+  real,    optional, intent(in) :: wave_speed_tol !< The fractional tolerance for finding the
+                                     !! wave speeds [nondim]
 
   if (.not.associated(CS)) call MOM_error(FATAL, &
      "wave_speed_set_param called with an associated control structure.")
@@ -1040,10 +1256,15 @@ subroutine wave_speed_set_param(CS, use_ebt_mode, mono_N2_column_fraction, mono_
   if (present(use_ebt_mode)) CS%use_ebt_mode = use_ebt_mode
   if (present(mono_N2_column_fraction)) CS%mono_N2_column_fraction = mono_N2_column_fraction
   if (present(mono_N2_depth)) CS%mono_N2_depth = mono_N2_depth
+  if (present(remap_answers_2018)) CS%remap_answers_2018 = remap_answers_2018
+  if (present(better_speed_est)) CS%better_cg1_est = better_speed_est
+  if (present(min_speed)) CS%min_speed2 = min_speed**2
+  if (present(wave_speed_tol)) CS%wave_speed_tol = wave_speed_tol
 
 end subroutine wave_speed_set_param
 
 !> \namespace mom_wave_speed
+
 !!
 !! Subroutine wave_speed() solves for the first baroclinic mode wave speed.  (It could
 !! solve for all the wave speeds, but the iterative approach taken here means
@@ -1065,7 +1286,7 @@ end subroutine wave_speed_set_param
 !!
 !! Here
 !! \verbatim
-!!   Igl(k) = 1.0/(gprime(k)*h(k)) ; Igu(k) = 1.0/(gprime(k)*h(k-1))
+!!   Igl(k) = 1.0/(gprime(K)*h(k)) ; Igu(k) = 1.0/(gprime(K)*h(k-1))
 !! \endverbatim
 !!
 !! Alternately, these same eigenvalues can be found from the second smallest

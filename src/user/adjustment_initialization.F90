@@ -43,21 +43,25 @@ subroutine adjustment_initialize_thickness ( h, G, GV, US, param_file, just_read
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
                                                       !! only read parameters without changing h.
   ! Local variables
-  real :: e0(SZK_(G)+1)   ! The resting interface heights, in depth units [Z ~> m], usually
-                          ! negative because it is positive upward.
-  real :: eta1D(SZK_(G)+1)! Interface height relative to the sea surface
-                          ! positive upward, in depth units [Z ~> m].
-  real    :: x, y, yy, delta_S_strat, dSdz, delta_S, S_ref
-  real    :: min_thickness, adjustment_width, adjustment_delta, adjustment_deltaS
+  real :: e0(SZK_(GV)+1)    ! The resting interface heights, in depth units [Z ~> m], usually
+                            ! negative because it is positive upward.
+  real :: eta1D(SZK_(GV)+1) ! Interface height relative to the sea surface
+                            ! positive upward, in depth units [Z ~> m].
+  real    :: dRho_dS      ! The partial derivative of density with salinity [R ppt-1 ~> kg m-3 ppt-1].
+                          ! In this subroutine it is hard coded at 1.0 kg m-3 ppt-1.
+  real    :: x, y, yy
+  real    :: delta_S_strat, dSdz, delta_S, S_ref
+  real    :: min_thickness, adjustment_width, adjustment_delta
+  real    :: adjustment_deltaS
   real    :: front_wave_amp, front_wave_length, front_wave_asym
-  real    :: target_values(SZK_(G)+1)
+  real    :: target_values(SZK_(GV)+1)  ! Target densities or density anomalies [R ~> kg m-3]
   logical :: just_read    ! If true, just read parameters but set nothing.
   character(len=20) :: verticalCoordinate
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
   integer :: i, j, k, is, ie, js, je, nz
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
   just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
 
@@ -66,9 +70,10 @@ subroutine adjustment_initialize_thickness ( h, G, GV, US, param_file, just_read
 
   ! Parameters used by main model initialization
   if (.not.just_read) call log_version(param_file, mdl, version, "")
-  call get_param(param_file, mdl,"S_REF",S_ref,fail_if_missing=.true.,do_not_log=.true.)
+  call get_param(param_file, mdl, "S_REF", S_ref, 'Reference salinity', &
+                 default=35.0, units='1e-3', do_not_log=just_read)
   call get_param(param_file, mdl,"MIN_THICKNESS",min_thickness,'Minimum layer thickness', &
-         units='m', default=1.0e-3, do_not_log=just_read, scale=US%m_to_Z)
+                 default=1.0e-3, units='m', scale=US%m_to_Z, do_not_log=just_read)
 
   ! Parameters specific to this experiment configuration
   call get_param(param_file, mdl,"REGRIDDING_COORDINATE_MODE",verticalCoordinate, &
@@ -84,13 +89,13 @@ subroutine adjustment_initialize_thickness ( h, G, GV, US, param_file, just_read
                  units="1e-3", fail_if_missing=.not.just_read, do_not_log=just_read)
   call get_param(param_file, mdl,"FRONT_WAVE_AMP",front_wave_amp,         &
                  "Amplitude of trans-frontal wave perturbation",         &
-                 units="same as x,y",default=0., do_not_log=just_read)
+                 units="same as x,y", default=0., do_not_log=just_read)
   call get_param(param_file, mdl,"FRONT_WAVE_LENGTH",front_wave_length,   &
                  "Wave-length of trans-frontal wave perturbation",       &
-                 units="same as x,y",default=0., do_not_log=just_read)
+                 units="same as x,y", default=0., do_not_log=just_read)
   call get_param(param_file, mdl,"FRONT_WAVE_ASYM",front_wave_asym,       &
                  "Amplitude of frontal asymmetric perturbation",         &
-                 default=0., do_not_log=just_read)
+                 units="same as x,y", default=0., do_not_log=just_read)
 
   if (just_read) return ! All run-time parameters have been read, so return.
 
@@ -107,6 +112,7 @@ subroutine adjustment_initialize_thickness ( h, G, GV, US, param_file, just_read
   select case ( coordinateMode(verticalCoordinate) )
 
     case ( REGRIDDING_LAYER, REGRIDDING_RHO )
+      dRho_dS = 1.0 * US%kg_m3_to_R
       if (delta_S_strat /= 0.) then
         ! This was previously coded ambiguously.
         adjustment_delta = (adjustment_deltaS / delta_S_strat) * G%max_depth
@@ -119,12 +125,17 @@ subroutine adjustment_initialize_thickness ( h, G, GV, US, param_file, just_read
           e0(k) = -G%max_depth * (real(k-1) / real(nz))
         enddo
       endif
-      target_values(1)    = GV%Rlay(1) + 0.5*(GV%Rlay(1)-GV%Rlay(2))
-      target_values(nz+1) = GV%Rlay(nz) + 0.5*(GV%Rlay(nz)-GV%Rlay(nz-1))
+      if (nz > 1) then
+        target_values(1)    = ( GV%Rlay(1) + 0.5*(GV%Rlay(1)-GV%Rlay(2)) )
+        target_values(nz+1) = ( GV%Rlay(nz) + 0.5*(GV%Rlay(nz)-GV%Rlay(nz-1)) )
+      else ! This might not be needed, but it avoids segmentation faults if nz=1.
+        target_values(1)    = 0.0
+        target_values(nz+1) = 2.0 * GV%Rlay(1)
+      endif
       do k = 2,nz
         target_values(k) = target_values(k-1) + ( GV%Rlay(nz) - GV%Rlay(1) ) / (nz-1)
       enddo
-      target_values(:) = target_values(:) - 1000.
+      target_values(:) = target_values(:) - 1000.*US%kg_m3_to_R
       do j=js,je ; do i=is,ie
         if (front_wave_length /= 0.) then
           y = ( 0.125 + G%geoLatT(i,j) / front_wave_length ) * ( 4. * acos(0.) )
@@ -140,8 +151,8 @@ subroutine adjustment_initialize_thickness ( h, G, GV, US, param_file, just_read
         x = x * acos( 0. )
         delta_S = adjustment_deltaS * 0.5 * (1. - sin( x ) )
         do k=2,nz
-          if (dSdz /= 0.) then
-            eta1D(k) = ( target_values(k) - ( S_ref + delta_S ) ) / dSdz
+          if (dRho_dS*dSdz /= 0.) then
+            eta1D(k) = ( target_values(k) - dRho_dS*( S_ref + delta_S ) ) / (dRho_dS*dSdz)
           else
             eta1D(k) = e0(k) - (0.5*adjustment_delta) * sin( x )
           endif
@@ -186,9 +197,9 @@ subroutine adjustment_initialize_temperature_salinity(T, S, h, G, GV, param_file
                                                       eqn_of_state, just_read_params)
   type(ocean_grid_type),   intent(in)  :: G           !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)  :: GV          !< The ocean's vertical grid structure.
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: T !< The temperature that is being initialized.
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: S !< The salinity that is being initialized.
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(in)  :: h !< The model thicknesses [H ~> m or kg m-2].
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: T !< The temperature that is being initialized.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: S !< The salinity that is being initialized.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)  :: h !< The model thicknesses [H ~> m or kg m-2].
   type(param_file_type),   intent(in) :: param_file   !< A structure indicating the open file to
                                                       !! parse for model parameter values.
   type(EOS_type),                 pointer     :: eqn_of_state !< Equation of state.
@@ -205,17 +216,17 @@ subroutine adjustment_initialize_temperature_salinity(T, S, h, G, GV, param_file
   real      :: xi0, xi1, dSdz, delta_S, delta_S_strat
   real      :: adjustment_width, adjustment_deltaS
   real       :: front_wave_amp, front_wave_length, front_wave_asym
-  real      :: eta1d(SZK_(G)+1)
+  real      :: eta1d(SZK_(GV)+1)
   logical :: just_read    ! If true, just read parameters but set nothing.
   character(len=20) :: verticalCoordinate
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
   just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
 
   ! Parameters used by main model initialization
-  call get_param(param_file, mdl,"S_REF",S_ref,'Reference salinity', units='1e-3', &
-                 fail_if_missing=.not.just_read, do_not_log=just_read)
+  call get_param(param_file, mdl, "S_REF", S_ref, 'Reference salinity', &
+                 default=35.0, units='1e-3', do_not_log=just_read)
   call get_param(param_file, mdl,"T_REF",T_ref,'Reference temperature', units='C', &
                  fail_if_missing=.not.just_read, do_not_log=just_read)
   call get_param(param_file, mdl,"S_RANGE",S_range,'Initial salinity range', units='1e-3', &

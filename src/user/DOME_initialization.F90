@@ -105,7 +105,7 @@ subroutine DOME_initialize_thickness(h, G, GV, param_file, just_read_params)
   character(len=40)  :: mdl = "DOME_initialize_thickness" ! This subroutine's name.
   integer :: i, j, k, is, ie, js, je, nz
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
   just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
 
@@ -157,17 +157,18 @@ subroutine DOME_initialize_sponges(G, GV, US, tv, PF, CSp)
   type(sponge_CS),       pointer    :: CSp  !< A pointer that is set to point to the control
                                             !! structure for this module.
 
-  real :: eta(SZI_(G),SZJ_(G),SZK_(G)+1) ! A temporary array for eta.
-  real :: temp(SZI_(G),SZJ_(G),SZK_(G))  ! A temporary array for other variables. !
-  real :: Idamp(SZI_(G),SZJ_(G))    ! The inverse damping rate [s-1].
+  real :: eta(SZI_(G),SZJ_(G),SZK_(GV)+1) ! A temporary array for interface heights [Z ~> m].
+  real :: temp(SZI_(G),SZJ_(G),SZK_(GV)) ! A temporary array for other variables. !
+  real :: Idamp(SZI_(G),SZJ_(G))    ! The inverse damping rate [T-1 ~> s-1].
 
-  real :: H0(SZK_(G))  ! Interface heights [Z ~> m].
-  real :: min_depth
-  real :: damp, e_dense, damp_new
+  real :: H0(SZK_(GV)) ! Interface heights [Z ~> m].
+  real :: min_depth    ! The minimum depth at which to apply damping [Z ~> m]
+  real :: damp, damp_new ! Damping rates in the sponge [days]
+  real :: e_dense      ! The depth of the densest interfaces [Z ~> m]
   character(len=40)  :: mdl = "DOME_initialize_sponges" ! This subroutine's name.
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
   eta(:,:,:) = 0.0 ; temp(:,:,:) = 0.0 ; Idamp(:,:) = 0.0
@@ -183,20 +184,21 @@ subroutine DOME_initialize_sponges(G, GV, US, tv, PF, CSp)
 
   H0(1) = 0.0
   do k=2,nz ; H0(k) = -(real(k-1)-0.5)*G%max_depth / real(nz-1) ; enddo
-  do i=is,ie; do j=js,je
+  do j=js,je ; do i=is,ie
     if (G%geoLonT(i,j) < 100.0) then ; damp = 10.0
     elseif (G%geoLonT(i,j) < 200.0) then
-      damp = 10.0*(200.0-G%geoLonT(i,j))/100.0
+      damp = 10.0 * (200.0-G%geoLonT(i,j))/100.0
     else ; damp=0.0
     endif
 
     if (G%geoLonT(i,j) > 1400.0) then ; damp_new = 10.0
     elseif (G%geoLonT(i,j) > 1300.0) then
-       damp_new = 10.0*(G%geoLonT(i,j)-1300.0)/100.0
+      damp_new = 10.0 * (G%geoLonT(i,j)-1300.0)/100.0
     else ; damp_new = 0.0
     endif
 
-    if (damp <= damp_new) damp=damp_new
+    if (damp <= damp_new) damp = damp_new
+    damp = US%T_to_s*damp
 
     ! These will be stretched inside of apply_sponge, so they can be in
     ! depth space for Boussinesq or non-Boussinesq models.
@@ -212,7 +214,7 @@ subroutine DOME_initialize_sponges(G, GV, US, tv, PF, CSp)
     eta(i,j,nz+1) = -G%bathyT(i,j)
 
     if (G%bathyT(i,j) > min_depth) then
-      Idamp(i,j) = damp/86400.0
+      Idamp(i,j) = damp / 86400.0
     else ; Idamp(i,j) = 0.0 ; endif
   enddo ; enddo
 
@@ -232,9 +234,9 @@ subroutine DOME_initialize_sponges(G, GV, US, tv, PF, CSp)
     call MOM_error(FATAL,"DOME_initialize_sponges is not set up for use with"//&
                          " a temperatures defined.")
     ! This should use the target values of T in temp.
-    call set_up_sponge_field(temp, tv%T, G, nz, CSp)
+    call set_up_sponge_field(temp, tv%T, G, GV, nz, CSp)
     ! This should use the target values of S in temp.
-    call set_up_sponge_field(temp, tv%S, G, nz, CSp)
+    call set_up_sponge_field(temp, tv%S, G, GV, nz, CSp)
   endif
 
 end subroutine DOME_initialize_sponges
@@ -258,11 +260,12 @@ subroutine DOME_set_OBC_data(OBC, tv, G, GV, US, param_file, tr_Reg)
 
 ! Local variables
   ! The following variables are used to set the target temperature and salinity.
-  real :: T0(SZK_(G)), S0(SZK_(G))
-  real :: pres(SZK_(G))      ! An array of the reference pressure [Pa].
-  real :: drho_dT(SZK_(G))   ! Derivative of density with temperature [kg m-3 degC-1].
-  real :: drho_dS(SZK_(G))   ! Derivative of density with salinity [kg m-3 ppt-1].
-  real :: rho_guess(SZK_(G)) ! Potential density at T0 & S0 [kg m-3].
+  real :: T0(SZK_(GV))       ! A profile of temperatures [degC]
+  real :: S0(SZK_(GV))       ! A profile of salinities [ppt]
+  real :: pres(SZK_(GV))     ! An array of the reference pressure [R L2 T-2 ~> Pa].
+  real :: drho_dT(SZK_(GV))  ! Derivative of density with temperature [R degC-1 ~> kg m-3 degC-1].
+  real :: drho_dS(SZK_(GV))  ! Derivative of density with salinity [R ppt-1 ~> kg m-3 ppt-1].
+  real :: rho_guess(SZK_(GV)) ! Potential density at T0 & S0 [R ~> kg m-3].
   ! The following variables are used to set up the transport in the DOME example.
   real :: tr_0, y1, y2, tr_k, rst, rsb, rc, v_k, lon_im1
   real :: D_edge            ! The thickness [Z ~> m], of the dense fluid at the
@@ -279,7 +282,7 @@ subroutine DOME_set_OBC_data(OBC, tv, G, GV, US, param_file, tr_Reg)
   type(OBC_segment_type), pointer :: segment => NULL()
   type(tracer_type), pointer      :: tr_ptr => NULL()
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
@@ -290,7 +293,7 @@ subroutine DOME_set_OBC_data(OBC, tv, G, GV, US, param_file, tr_Reg)
 
   if (.not.associated(OBC)) return
 
-  g_prime_tot = (GV%g_Earth / GV%Rho0)*2.0
+  g_prime_tot = (GV%g_Earth / GV%Rho0) * 2.0*US%kg_m3_to_R
   Def_Rad = US%L_to_m*sqrt(D_edge*g_prime_tot) / (1.0e-4*US%T_to_s * 1000.0)
   tr_0 = (-D_edge*sqrt(D_edge*g_prime_tot)*0.5e3*US%m_to_L*Def_Rad) * GV%Z_to_H
 
@@ -298,10 +301,22 @@ subroutine DOME_set_OBC_data(OBC, tv, G, GV, US, param_file, tr_Reg)
     call MOM_error(WARNING, 'Error in DOME OBC segment setup', .true.)
     return   !!! Need a better error message here
   endif
+
+  NTR = tr_Reg%NTR
+
+  ! Stash this information away for the messy tracer restarts.
+  OBC%ntr = NTR
+  if (.not. associated(OBC%tracer_x_reservoirs_used)) then
+    allocate(OBC%tracer_x_reservoirs_used(NTR))
+    allocate(OBC%tracer_y_reservoirs_used(NTR))
+    OBC%tracer_x_reservoirs_used(:) = .false.
+    OBC%tracer_y_reservoirs_used(:) = .false.
+    OBC%tracer_y_reservoirs_used(1) = .true.
+  endif
+
   segment => OBC%segment(1)
   if (.not. segment%on_pe) return
 
-  NTR = tr_Reg%NTR
   allocate(segment%field(NTR))
 
   do k=1,nz
@@ -345,13 +360,13 @@ subroutine DOME_set_OBC_data(OBC, tv, G, GV, US, param_file, tr_Reg)
     ! target density and a salinity of 35 psu.  This code is taken from
     ! USER_initialize_temp_sal.
     pres(:) = tv%P_Ref ; S0(:) = 35.0 ; T0(1) = 25.0
-    call calculate_density(T0(1),S0(1),pres(1),rho_guess(1),tv%eqn_of_state)
-    call calculate_density_derivs(T0,S0,pres,drho_dT,drho_dS,1,1,tv%eqn_of_state)
+    call calculate_density(T0(1), S0(1), pres(1), rho_guess(1), tv%eqn_of_state)
+    call calculate_density_derivs(T0, S0, pres, drho_dT, drho_dS, tv%eqn_of_state, (/1,1/) )
 
     do k=1,nz ; T0(k) = T0(1) + (GV%Rlay(k)-rho_guess(1)) / drho_dT(1) ; enddo
     do itt=1,6
-      call calculate_density(T0,S0,pres,rho_guess,1,nz,tv%eqn_of_state)
-      call calculate_density_derivs(T0,S0,pres,drho_dT,drho_dS,1,nz,tv%eqn_of_state)
+      call calculate_density(T0, S0, pres, rho_guess, tv%eqn_of_state)
+      call calculate_density_derivs(T0, S0, pres, drho_dT, drho_dS, tv%eqn_of_state)
       do k=1,nz ; T0(k) = T0(k) + (GV%Rlay(k)-rho_guess(k)) / drho_dT(k) ; enddo
     enddo
 

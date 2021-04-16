@@ -46,9 +46,9 @@ subroutine Phillips_initialize_thickness(h, G, GV, US, param_file, just_read_par
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
                                                      !! only read parameters without changing h.
 
-  real :: eta0(SZK_(G)+1)   ! The 1-d nominal positions of the interfaces [Z ~> m]
-  real :: eta_im(SZJ_(G),SZK_(G)+1) ! A temporary array for zonal-mean eta [Z ~> m]
-  real :: eta1D(SZK_(G)+1)  ! Interface height relative to the sea surface, positive upward [Z ~> m]
+  real :: eta0(SZK_(GV)+1)  ! The 1-d nominal positions of the interfaces [Z ~> m]
+  real :: eta_im(SZJ_(G),SZK_(GV)+1) ! A temporary array for zonal-mean eta [Z ~> m]
+  real :: eta1D(SZK_(GV)+1) ! Interface height relative to the sea surface, positive upward [Z ~> m]
   real :: jet_width         ! The width of the zonal-mean jet [km]
   real :: jet_height        ! The interface height scale associated with the zonal-mean jet [Z ~> m]
   real :: y_2             ! The y-position relative to the center of the domain [km]
@@ -58,7 +58,7 @@ subroutine Phillips_initialize_thickness(h, G, GV, US, param_file, just_read_par
   character(len=40)  :: mdl = "Phillips_initialize_thickness" ! This subroutine's name.
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
   eta_im(:,:) = 0.0
@@ -139,7 +139,7 @@ subroutine Phillips_initialize_velocity(u, v, G, GV, US, param_file, just_read_p
   integer :: i, j, k, is, ie, js, je, nz, m
   logical :: just_read    ! If true, just read parameters but set nothing.
   character(len=40)  :: mdl = "Phillips_initialize_velocity" ! This subroutine's name.
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
   just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
 
@@ -166,8 +166,8 @@ subroutine Phillips_initialize_velocity(u, v, G, GV, US, param_file, just_read_p
   do k=nz-1,1 ; do j=js,je ; do I=is-1,ie
     y_2 = G%geoLatCu(I,j) - G%south_lat - 0.5*G%len_lat
 ! This uses d/d y_2 atan(y_2 / jet_width)
-!    u(I,j,k) = u(I,j,k+1) + (1e-3 * jet_height / &
-!           (US%m_to_L*jet_width * (1.0 + (y_2 / jet_width)**2))) * &
+!    u(I,j,k) = u(I,j,k+1) + ( jet_height / &
+!           (1.0e3*US%m_to_L*jet_width * (1.0 + (y_2 / jet_width)**2))) * &
 !           (2.0 * GV%g_prime(K+1) / (G%CoriolisBu(I,J) + G%CoriolisBu(I,J-1)))
 ! This uses d/d y_2 tanh(y_2 / jet_width)
     u(I,j,k) = u(I,j,k+1) + (1e-3 * (jet_height / (US%m_to_L*jet_width)) * &
@@ -216,13 +216,13 @@ subroutine Phillips_initialize_sponges(G, GV, US, tv, param_file, CSp, h)
   real, intent(in), dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: h !< Thickness field [H ~> m or kg m-2].
 
   ! Local variables
-  real :: eta0(SZK_(G)+1)   ! The 1-d nominal positions of the interfaces.
-  real :: eta(SZI_(G),SZJ_(G),SZK_(G)+1) ! A temporary array for eta [Z ~> m].
-  real :: temp(SZI_(G),SZJ_(G),SZK_(G))  ! A temporary array for other variables.
-  real :: Idamp(SZI_(G),SZJ_(G))    ! The inverse damping rate [s-1].
-  real :: eta_im(SZJ_(G),SZK_(G)+1) ! A temporary array for zonal-mean eta [Z ~> m].
-  real :: Idamp_im(SZJ_(G))         ! The inverse zonal-mean damping rate [s-1].
-  real :: damp_rate    ! The inverse zonal-mean damping rate [s-1].
+  real :: eta0(SZK_(GV)+1)  ! The 1-d nominal positions of the interfaces.
+  real :: eta(SZI_(G),SZJ_(G),SZK_(GV)+1) ! A temporary array for interface heights [Z ~> m].
+  real :: temp(SZI_(G),SZJ_(G),SZK_(GV)) ! A temporary array for other variables.
+  real :: Idamp(SZI_(G),SZJ_(G))    ! The inverse damping rate [T-1 ~> s-1].
+  real :: eta_im(SZJ_(G),SZK_(GV)+1) ! A temporary array for zonal-mean eta [Z ~> m].
+  real :: Idamp_im(SZJ_(G))         ! The inverse zonal-mean damping rate [T-1 ~> s-1].
+  real :: damp_rate    ! The inverse zonal-mean damping rate [T-1 ~> s-1].
   real :: jet_width    ! The width of the zonal mean jet, in km.
   real :: jet_height   ! The interface height scale associated with the zonal-mean jet [Z ~> m].
   real :: y_2          ! The y-position relative to the channel center, in km.
@@ -233,7 +233,7 @@ subroutine Phillips_initialize_sponges(G, GV, US, tv, param_file, CSp, h)
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz
   logical, save :: first_call = .true.
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
   eta(:,:,:) = 0.0 ; temp(:,:,:) = 0.0 ; Idamp(:,:) = 0.0
@@ -246,7 +246,7 @@ subroutine Phillips_initialize_sponges(G, GV, US, tv, param_file, CSp, h)
                  units="nondim", default = 0.5)
   call get_param(param_file, mdl, "SPONGE_RATE", damp_rate, &
                  "The rate at which the zonal-mean sponges damp.", units="s-1", &
-                 default = 1.0/(10.0*86400.0))
+                 default = 1.0/(10.0*86400.0), scale=US%T_to_s)
 
   call get_param(param_file, mdl, "JET_WIDTH", jet_width, &
                  "The width of the zonal-mean jet.", units="km", &
@@ -351,13 +351,11 @@ end subroutine Phillips_initialize_topography
 !!  The one argument passed to initialize, Time, is set to the
 !!  current time of the simulation.  The fields which are initialized
 !!  here are:
-!!    u - Zonal velocity [m s-1].
-!!    v - Meridional velocity [m s-1].
-!!    h - Layer thickness in m.  (Must be positive.)
-!!    D - Basin depth in m.  (Must be positive.)
-!!    f - The Coriolis parameter [s-1].
-!!    g - The reduced gravity at each interface [m s-2]
-!!    Rlay - Layer potential density (coordinate variable) [kg m-3].
+!!    u - Zonal velocity [L T-1 ~> m s-1].
+!!    v - Meridional velocity [L T-1 ~> m s-1].
+!!    h - Layer thickness [H ~> m or kg m-2] (must be positive)
+!!    D - Basin depth [Z ~> m] (positive downward)
+!!    f - The Coriolis parameter [T-1 ~> s-1].
 !!  If ENABLE_THERMODYNAMICS is defined:
 !!    T - Temperature [degC].
 !!    S - Salinity [ppt].

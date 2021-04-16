@@ -173,7 +173,7 @@ contains
 !---------------------------------------------------------------------
 !> Allocate memory used by the dyn_horgrid_type and related structures.
 subroutine create_dyn_horgrid(G, HI, bathymetry_at_vel)
-  type(dyn_horgrid_type), pointer    :: G  !< A pointer to the dynamic horizontal grid type
+  type(dyn_horgrid_type), pointer, intent(inout) :: G  !< A pointer to the dynamic horizontal grid type
   type(hor_index_type),   intent(in) :: HI !< A hor_index_type for array extents
   logical,        optional, intent(in) :: bathymetry_at_vel !< If true, there are
                              !! separate values for the basin depths at velocity

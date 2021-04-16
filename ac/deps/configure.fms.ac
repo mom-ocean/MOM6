@@ -1,0 +1,205 @@
+# Autoconf configuration
+AC_PREREQ([2.63])
+
+AC_INIT(
+    [FMS],
+    [ ],
+    [https://github.com/NOAA-GFDL/FMS/issues])
+
+# Validate srdcir and configure input
+AC_CONFIG_SRCDIR([fms/fms.F90])
+AC_CONFIG_MACRO_DIR([m4])
+
+# C configuration
+AC_PROG_CC
+AX_MPI
+CC=$MPICC
+
+
+# FMS configuration
+
+# Linux and macOS have a gettid system call, but it is not implemented in older
+# glibc implementations.  When unavailable, a native syscall is used.
+#
+# On Linux, this is defined in unistd.h as __NR_gettid, and FMS is hard-coded
+# to use this value.  In macOS, this is defined in sys/syscall.h as SYS_gettid,
+# so we override this macro if __NR_gettid is unavailable.
+AC_CHECK_FUNCS([gettid], [], [
+  AC_MSG_CHECKING([if __NR_gettid must be redefined])
+  AC_CACHE_VAL([ac_cv_cc_nr_gettid], [
+    ac_cv_cc_nr_gettid='unknown'
+    for nr_gettid in __NR_gettid SYS_gettid; do
+      AC_COMPILE_IFELSE([
+        AC_LANG_PROGRAM([
+#include <unistd.h>
+#include <sys/syscall.h>
+          ], [syscall($nr_gettid)]
+        )], [ac_cv_cc_nr_gettid=$nr_gettid]
+      )
+      AS_IF([test "$ac_cv_cc_nr_gettid" != unknown], [break])
+    done
+  ])
+  AS_CASE([ac_cv_cc_nr_gettid],
+    [__NR_gettid], [AC_MSG_RESULT([none needed])],
+    [AC_MSG_RESULT([$ac_cv_cc_nr_gettid])]
+  )
+  AS_IF([test "$ac_cv_cc_nr_gettid" != unknown], [
+    AS_IF([test "$ac_cv_cc_nr_gettid" != __NR_gettid],
+      [AC_DEFINE_UNQUOTED([__NR_gettid], [$ac_cv_cc_nr_gettid])]
+    )], [
+    AC_MSG_ERROR(["Could not find the gettid syscall ID"])
+  ])
+])
+
+
+# FMS 2019.01.03 uses __APPLE__ to disable Linux CPU affinity calls.
+AC_CHECK_FUNCS([sched_getaffinity], [], [AC_DEFINE([__APPLE__])])
+
+
+# Standard Fortran configuration
+AC_LANG(Fortran)
+AC_FC_SRCEXT(f90)
+AC_PROG_FC
+
+
+# Determine MPI compiler wrappers and override compilers
+AX_MPI
+AC_SUBST(FC, $MPIFC)
+AC_SUBST(LD, $MPIFC)
+
+
+# Module tests
+AX_FC_CHECK_MODULE([mpi])
+AC_DEFINE([use_libMPI])
+
+
+# netCDF configuration
+
+# Check for netcdf.h header function declarations.
+# If unavailable, then try to invoke nc-create.
+AC_LANG_PUSH([C])
+AC_CHECK_HEADERS([netcdf.h], [], [
+  AS_UNSET([ac_cv_header_netcdf_h])
+  AC_PATH_PROG([NC_CONFIG], [nc-config])
+  AS_IF([test -n "$NC_CONFIG"], [
+      AC_SUBST([CPPFLAGS], ["$CPPFLAGS -I$($NC_CONFIG --includedir)"])
+    ],
+    [AC_MSG_ERROR([Could not find nc-config.])]
+  )
+  AC_CHECK_HEADERS([netcdf.h], [], [
+    AC_MSG_ERROR([Could not find netcdf.h])
+  ])
+])
+AC_LANG_POP([C])
+
+# Search for the Fortran netCDF module, fallback to nf-config.
+AX_FC_CHECK_MODULE([netcdf], [], [
+  AS_UNSET([ax_fc_cv_mod_netcdf])
+  AC_PATH_PROG([NF_CONFIG], [nf-config])
+  AS_IF([test -n "$NF_CONFIG"], [
+      AC_SUBST([FCFLAGS], ["$FCFLAGS -I$($NF_CONFIG --includedir)"])
+    ],
+    [AC_MSG_ERROR([Could not find nf-config.])]
+  )
+  AX_FC_CHECK_MODULE([netcdf], [], [
+    AC_MSG_ERROR([Could not find netcdf module.])
+  ])
+])
+
+# FMS requires this macro to signal netCDF support.
+AC_DEFINE([use_netCDF])
+
+
+# Enable Cray pointers
+AX_FC_CRAY_POINTER
+
+
+# Force 8-byte reals
+AX_FC_REAL8
+AS_IF(
+  [test "$enable_real8" != no],
+  [FCFLAGS="$FCFLAGS $REAL8_FCFLAGS"])
+
+
+# OpenMP configuration
+
+# NOTE: AC_OPENMP fails in  Autoconf <2.69 when LANG is Fortran or Fortran 77.
+#   For older versions, we test against CC and use the result for FC.
+m4_version_prereq([2.69], [AC_OPENMP], [
+  AC_LANG_PUSH([C])
+  AC_OPENMP
+  AC_LANG_POP([C])
+  OPENMP_FCFLAGS="$OPENMP_CFLAGS"
+])
+
+# NOTE: Only apply OpenMP flags if explicitly enabled.
+AS_IF(
+  [test "$enable_openmp" = yes], [
+  FCFLAGS="$FCFLAGS $OPENMP_FCFLAGS"
+  LDFLAGS="$LDFLAGS $OPENMP_FCFLAGS"
+])
+
+
+# Unlimited line length (2.67)
+# AC_FC_LINE_LENGTH was added in 2.67.
+m4_version_prereq([2.67],
+  [AC_FC_LINE_LENGTH([unlimited])],
+  [AX_FC_LINE_LENGTH([unlimited])]
+)
+
+
+# Allow invaliz BOZ assignment
+AX_FC_ALLOW_INVALID_BOZ
+FCFLAGS="$FCFLAGS $ALLOW_INVALID_BOZ_FCFLAGS"
+
+
+# Allow argument mismatch (for functions lacking interfaces)
+AX_FC_ALLOW_ARG_MISMATCH
+FCFLAGS="$FCFLAGS $ALLOW_ARG_MISMATCH_FCFLAGS"
+
+
+# Search for mkmf build tools
+AC_PATH_PROG([LIST_PATHS], [list_paths])
+AS_IF([test -z "$LIST_PATHS"], [
+  AC_PATH_PROG([LIST_PATHS], [list_paths], [], ["$PATH:${srcdir}/../../bin"])
+  AS_IF([test -z "$LIST_PATHS"],
+    [AC_MSG_ERROR([Could not find list_paths.])],
+    [AC_SUBST(PATH, ["$PATH:${srcdir}/../../bin"])])
+  ]
+)
+
+AC_PATH_PROG([MKMF], [mkmf])
+AS_IF([test -z "$MKMF"], [
+  AC_PATH_PROG([MKMF], [mkmf], [], ["$PATH:${srcdir}/../../bin"])
+  AS_IF([test -z "$MKMF"],
+    [AC_MSG_ERROR([Could not find mkmf.])],
+    [AC_SUBST(PATH, ["$PATH:${srcdir}/../../bin"])])
+  ]
+)
+
+
+# MKMF commands
+AC_CONFIG_COMMANDS([path_names],
+  [${LIST_PATHS} -l ${srcdir}],
+  [LIST_PATHS=${LIST_PATHS}]
+)
+
+
+AC_CONFIG_COMMANDS([mkmf],
+  [${MKMF} -p libFMS.a -m Makefile.mkmf path_names],
+  [MKMF=${MKMF}]
+)
+
+
+# Autoconf does not configure the archiver (ar), as it is handled by Automake.
+# TODO: Properly configure this tool.  For now, we hard-set this to `ar`.
+AR=ar
+ARFLAGS=rv
+AC_SUBST(AR)
+AC_SUBST(ARFLAGS)
+
+
+# Prepare output
+AC_SUBST(CPPFLAGS)
+AC_CONFIG_FILES(Makefile)
+AC_OUTPUT

@@ -1,0 +1,62 @@
+/*! \page Equation_of_State Equation of State
+
+Within MOM6, there is a wrapper for the equation of state, so that all calls look
+the same from the rest of the model. The equation of state code has to calculate
+not just in situ density, but also the compressibility and various derivatives of
+the density. There is also code for computing specific volume and the
+freezing temperature.
+
+\section Linear_EOS Linear Equation of State
+
+Compute the required quantities with uniform values for \f$\alpha = \frac{\partial
+\rho}{\partial T}\f$ and \f$\beta = \frac{\partial \rho}{\partial S}\f$, (DRHO_DT,
+DRHO_DS in MOM_input, also uses RHO_T0_S0).
+
+\section Wright_EOS Wright Equation of State
+
+Compute the required quantities using the equation of state from \cite wright1997.
+This equation of state is in the form:
+\f[
+   \alpha(s, \theta, p) = A(s, \theta) + \frac{\lambda(s, \theta)}{P(s, \theta) + p}
+\f]
+where \f$A, \lambda\f$ and \f$P\f$ are functions only of \f$s\f$ and \f$\theta\f$
+and \f$\alpha = 1/ \rho\f$ is the specific volume. This form is useful for the
+pressure gradient computation as discussed in \ref section_PG.
+
+\section NEMO_EOS NEMO Equation of State
+
+Compute the required quantities using the equation of state from \cite roquet2015.
+
+\section UNESCO_EOS UNESCO Equation of State
+
+Compute the required quantities using the equation of state from \cite jackett1995.
+
+\section TEOS-10_EOS TEOS-10 Equation of State
+
+Compute the required quantities using the equation of state from
+[TEOS-10](http://www.teos-10.org/).
+
+\section TFREEZE Freezing Temperature of Sea Water
+
+There are three choices for computing the freezing point of sea water:
+
+\li Linear The freezing temperature is a linear function of the salinity and
+pressure:
+\f[
+   T_{Fr} = (T_{Fr0} + a\,S) + b\,P
+\f]
+where \f$T_{Fr0},a,b\f$ are contants which can be set in MOM_input (TFREEZE_S0_P0,
+DTFREEZE_DS, DTFREEZE_DP).
+
+\li Millero The \cite millero1978 equation is used, but modified so that it is a function
+of potential temperature rather than <em>in situ</em> temperature:
+\f[
+   T_{Fr} = S(a + (b \sqrt{\max(S,0.0)} + c\, S)) + d\,P
+\f]
+where \f$a,b, c, d\f$ are fixed contants.
+
+\li TEOS-10 The TEOS-10 package is used to compute the freezing conservative temperature
+[degC] from absolute salinity [g/kg], and pressure [Pa]. This one must be used
+if you are using the NEMO or TEOS-10 equation of state.
+
+*/
