@@ -4,9 +4,9 @@ module MOM_interp_infra
 ! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_domain_infra,    only : MOM_domain_type, domain2d
-use MOM_io_infra,        only : axistype
 use MOM_time_manager,    only : time_type
 use horiz_interp_mod,    only : horiz_interp_new, horiz_interp, horiz_interp_init, horiz_interp_type
+use mpp_io_mod,          only : axistype, mpp_get_axis_data
 use time_interp_external_mod, only : time_interp_external
 use time_interp_external_mod, only : init_external_field, time_interp_external_init
 use time_interp_external_mod, only : get_external_field_size
@@ -16,7 +16,7 @@ implicit none ; private
 
 public :: horiz_interp_type, horiz_interp_init
 public :: time_interp_extern, init_extern_field, time_interp_external_init
-public :: get_external_field_info
+public :: get_external_field_info, axistype, get_axis_data
 public :: run_horiz_interp, build_horiz_interp_weights
 
 !> Read a field based on model time, and rotate to the model domain.
@@ -112,6 +112,15 @@ subroutine build_horiz_interp_weights_2d_to_2d(Interp, lon_in, lat_in, lon_out, 
                         is_latlon_in, is_latlon_out)
 
 end subroutine build_horiz_interp_weights_2d_to_2d
+
+
+!> Extracts and returns the axis data stored in an axistype.
+subroutine get_axis_data( axis, dat )
+  type(axistype),     intent(in)  :: axis !< An axis type
+  real, dimension(:), intent(out) :: dat  !< The data in the axis variable
+
+  call mpp_get_axis_data( axis, dat )
+end subroutine get_axis_data
 
 
 !> get size of an external field from field index
@@ -222,7 +231,7 @@ end subroutine time_interp_extern_3d
 
 !> initialize an external field
 integer function init_extern_field(file, fieldname, MOM_domain, domain, verbose, &
-                                   threading, ierr, ignore_axis_atts, correct_leap_year_inconsistency )
+                                   threading, ierr, ignore_axis_atts )
 
   character(len=*),         intent(in)  :: file  !< The name of the file to read
   character(len=*),         intent(in)  :: fieldname !< The name of the field in the file
@@ -237,18 +246,13 @@ integer function init_extern_field(file, fieldname, MOM_domain, domain, verbose,
   logical,        optional, intent(in)  :: ignore_axis_atts !< If present and true, do not issue a
                                                  !! fatal error if the axis Cartesian attribute is
                                                  !! not set to a recognized value.
-  logical,        optional, intent(in)  :: correct_leap_year_inconsistency !< If present and true,
-                                                 !! then allow for leap year inconsistency
-
 
   if (present(MOM_Domain)) then
     init_extern_field = init_external_field(file, fieldname, domain=MOM_domain%mpp_domain, &
-             verbose=verbose, threading=threading, ierr=ierr, ignore_axis_atts=ignore_axis_atts, &
-             correct_leap_year_inconsistency=correct_leap_year_inconsistency)
+             verbose=verbose, threading=threading, ierr=ierr, ignore_axis_atts=ignore_axis_atts)
   else
     init_extern_field = init_external_field(file, fieldname, domain=domain, &
-             verbose=verbose, threading=threading, ierr=ierr, ignore_axis_atts=ignore_axis_atts, &
-             correct_leap_year_inconsistency=correct_leap_year_inconsistency)
+             verbose=verbose, threading=threading, ierr=ierr, ignore_axis_atts=ignore_axis_atts)
   endif
 
 end function init_extern_field

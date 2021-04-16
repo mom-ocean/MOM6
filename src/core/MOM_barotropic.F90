@@ -1916,7 +1916,8 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
       do J=jsv-1,jev ; do i=isv-1,iev+1
         vel_prev = vbt(i,J)
         vbt(i,J) = bt_rem_v(i,J) * (vbt(i,J) + &
-                    dtbt * ((BT_force_v(i,J) + Cor_v(i,J)) + PFv(i,J)))
+             dtbt * ((BT_force_v(i,J) + Cor_v(i,J)) + PFv(i,J)))
+        if (abs(vbt(i,J)) < CS%vel_underflow) vbt(i,J) = 0.0
         vbt_trans(i,J) = trans_wt1*vbt(i,J) + trans_wt2*vel_prev
       enddo ; enddo
 
@@ -2671,6 +2672,17 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   if ((present(ADp)) .and. (associated(ADp%diag_hfrac_v))) then
     do k=1,nz ; do J=js-1,je ; do i=is,ie
       ADp%diag_hfrac_v(i,J,k) = CS%frhatv(i,J,k)
+    enddo ; enddo ; enddo
+  endif
+
+  if ((present(ADp)) .and. (present(BT_cont)) .and. (associated(ADp%diag_hu))) then
+    do k=1,nz ; do j=js,je ; do I=is-1,ie
+      ADp%diag_hu(I,j,k) = BT_cont%h_u(I,j,k)
+    enddo ; enddo ; enddo
+  endif
+  if ((present(ADp)) .and. (present(BT_cont)) .and. (associated(ADp%diag_hv))) then
+    do k=1,nz ; do J=js-1,je ; do i=is,ie
+      ADp%diag_hv(i,J,k) = BT_cont%h_v(i,J,k)
     enddo ; enddo ; enddo
   endif
 

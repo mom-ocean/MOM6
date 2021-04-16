@@ -1125,16 +1125,18 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
   if (CS%calculate_Eady_growth_rate .and. CS%use_stored_slopes) then
     CS%id_N2_u = register_diag_field('ocean_model', 'N2_u', diag%axesCui, Time, &
          'Square of Brunt-Vaisala frequency, N^2, at u-points, as used in Visbeck et al.', &
-         's-2', conversion=US%s_to_T**2)
+         's-2', conversion=(US%L_to_Z*US%s_to_T)**2)
     CS%id_N2_v = register_diag_field('ocean_model', 'N2_v', diag%axesCvi, Time, &
          'Square of Brunt-Vaisala frequency, N^2, at v-points, as used in Visbeck et al.', &
-         's-2', conversion=US%s_to_T**2)
+         's-2', conversion=(US%L_to_Z*US%s_to_T)**2)
   endif
   if (CS%use_stored_slopes) then
     CS%id_S2_u = register_diag_field('ocean_model', 'S2_u', diag%axesCu1, Time, &
-         'Depth average square of slope magnitude, S^2, at u-points, as used in Visbeck et al.', 'nondim')
+         'Depth average square of slope magnitude, S^2, at u-points, as used in Visbeck et al.', &
+         'nondim', conversion=US%Z_to_L**2)
     CS%id_S2_v = register_diag_field('ocean_model', 'S2_v', diag%axesCv1, Time, &
-         'Depth average square of slope magnitude, S^2, at v-points, as used in Visbeck et al.', 'nondim')
+         'Depth average square of slope magnitude, S^2, at v-points, as used in Visbeck et al.', &
+         'nondim', conversion=US%Z_to_L**2)
   endif
 
   oneOrTwo = 1.0

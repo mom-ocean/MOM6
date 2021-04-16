@@ -34,17 +34,19 @@ The directory tree is::
 
   MOM6
   ├── config_src
-  │   ├── coupled_driver
-  │   ├── dynamic
-  │   ├── dynamic_symmetric
+  │   ├── drivers
+  │   │   ├── FMS_cap
+  │   │   ├── ice_solo_driver
+  │   │   ├── mct_cap
+  │   │   ├── nuopc_cap
+  │   │   ├── solo_driver
+  │   │   └── unit_drivers
   │   ├── external
   │   │   ├── GFDL_ocean_BGC
   │   │   └── ODA_hooks
-  │   ├── ice_solo_driver
-  │   ├── mct_driver
-  │   ├── nuopc_driver
-  │   ├── solo_driver
-  │   └── unit_drivers
+  │   ├── memory
+  │   │   ├── dynamic_nonsymmetric
+  │   │   ├── dynamic_symmetric
   ├── docs
   │   └── images
   ├── pkg
@@ -84,11 +86,11 @@ The directory tree is::
 `config_src/`
 -------------
 
-`dynamic/`, `dynamic_symmetric/`
-  One or none of `config_src/dynamic/` or `config_src/dynamic_symmetric/` can
-  be included at compile time. If neither is used then a `MOM_memory.h` file
-  specific to the model configuration must be present - this is known as a
-  "static" compile with fixed layout and domain shape.
+`memory/dynamic_nonsymmetric/`, `memory/dynamic_symmetric/`
+  One or none of `config_src/memory/dynamic_nonsymmetric/` or
+  `config_src/dynamic_symmetric/` can be included at compile time. If neither
+  is used then a `MOM_memory.h` file specific to the model configuration must be
+  present - this is known as a"static" compile with fixed layout and domain shape.
 
 `external/`
   Contains "null" modules providing the API to optional components to use
@@ -98,12 +100,17 @@ The directory tree is::
   To use the actual ODA or BGC, add the appropriate source to the search
   paths .
 
-`solo_driver/`
+`infra/FMS1`
+  Contains MOM6-specific thin wrappers to all of the FMS types and routines that
+  are used by MOM6.  The code in this directory should only be called by the
+  infrastructure-agnostic code in src/framework.
+
+`drivers/solo_driver/`
   This driver produces an ocean-only executable with no other coupled
   components (no sea-ice, no atmosphere, etc.). It is the simplest
   configuration and fastest to compile and thus used for a lot of testing.
 
-`coupled_driver/`
+`drivers/FMS_cap/`
   This driver provides an interface for the GFDL coupler to call. It requires
   compiling MOM6 along with at least a sea-ice model and possibly all other
   components in a coupled model.
