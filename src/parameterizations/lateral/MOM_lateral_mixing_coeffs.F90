@@ -55,7 +55,7 @@ type, public :: VarMix_CS
                                   !! This parameter is set depending on other parameters.
   logical :: calculate_Eady_growth_rate !< If true, calculate all the Eady growth rate.
                                   !! This parameter is set depending on other parameters.
-  logical :: use_new_Eady_growth_rate !< If true, use a simpler method to calculate the
+  logical :: use_simpler_Eady_growth_rate !< If true, use a simpler method to calculate the
                                   !! Eady growth rate that avoids division by layer thickness.
                                   !! This parameter is set depending on other parameters.
   real :: cropping_distance       !< Distance from surface or bottom to filter out outcropped or
@@ -463,7 +463,7 @@ subroutine calc_slope_functions(h, tv, dt, G, GV, US, CS, OBC)
          "Module must be initialized before it is used.")
 
   if (CS%calculate_Eady_growth_rate) then
-    if (CS%use_new_Eady_growth_rate) then
+    if (CS%use_simpler_Eady_growth_rate) then
       call find_eta(h, tv, G, GV, US, e, halo_size=2)
       call calc_isoneutral_slopes(G, GV, US, h, e, tv, dt*CS%kappa_smooth, &
                                   CS%slope_x, CS%slope_y, N2_u=N2_u, N2_v=N2_v, dzu=dzu, dzv=dzv, &
@@ -1183,7 +1183,7 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
   CS%calculate_cg1 = .false.
   CS%calculate_Rd_dx = .false.
   CS%calculate_res_fns = .false.
-  CS%use_new_Eady_growth_rate = .false.
+  CS%use_simpler_Eady_growth_rate = .false.
   CS%calculate_depth_fns = .false.
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mdl, version, "")
@@ -1294,13 +1294,13 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
        'Inverse eddy time-scale, S*N, at u-points', 's-1', conversion=US%s_to_T)
     CS%id_SN_v = register_diag_field('ocean_model', 'SN_v', diag%axesCv1, Time, &
        'Inverse eddy time-scale, S*N, at v-points', 's-1', conversion=US%s_to_T)
-    call get_param(param_file, mdl, "USE_NEW_EADY_GROWTH_RATE", CS%use_new_Eady_growth_rate, &
+    call get_param(param_file, mdl, "USE_SIMPLER_EADY_GROWTH_RATE", CS%use_simpler_Eady_growth_rate, &
                    "If true, use a simpler method to calculate the Eady growth rate "//&
                    "that avoids division by layer thickness. Recommended.", default=.false.)
-    if (CS%use_new_Eady_growth_rate) then
+    if (CS%use_simpler_Eady_growth_rate) then
       if (.not. CS%use_stored_slopes) call MOM_error(FATAL, &
            "MOM_lateral_mixing_coeffs.F90, VarMix_init:"//&
-           "When USE_NEW_EADY_GROWTH_RATE=True, USE_STORED_SLOPES must also be True.")
+           "When USE_SIMPLER_EADY_GROWTH_RATE=True, USE_STORED_SLOPES must also be True.")
       call get_param(param_file, mdl, "EADY_GROWTH_RATE_D_SCALE", CS%Eady_GR_D_scale, &
                      "The depth from surface over which to average SN when calculating "//&
                      "a 2D Eady growth rate. Zero mean use full depth.", &
@@ -1352,7 +1352,7 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
          'Square of Brunt-Vaisala frequency, N^2, at v-points, as used in Visbeck et al.', &
          's-2', conversion=(US%L_to_Z*US%s_to_T)**2)
   endif
-  if (CS%use_new_Eady_growth_rate) then
+  if (CS%use_simpler_Eady_growth_rate) then
     CS%id_dzu = register_diag_field('ocean_model', 'dzu_Visbeck', diag%axesCui, Time, &
          'dz at u-points, used in calculating Eady growth rate in Visbeck et al..', &
          'm', conversion=US%Z_to_m)
