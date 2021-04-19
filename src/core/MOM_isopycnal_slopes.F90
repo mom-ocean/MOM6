@@ -51,11 +51,11 @@ subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, &
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)+1), &
                                      optional, intent(inout) :: dzv  !< Z-thickness at v-points [Z ~> m]
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)+1), &
-                                     optional, intent(inout) :: dzSxN !< Z-thickness times zonal slope contribution
-                                                                     !! to Eady growth rate at u-pints. [Z T-1 -> m s-1]
+                                     optional, intent(inout) :: dzSxN !< Z-thickness times zonal slope contribution to
+                                                                     !! Eady growth rate at u-points. [Z T-1 ~> m s-1]
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)+1), &
-                                     optional, intent(inout) :: dzSyN !< Z-thickness times meridional slope contrib.
-                                                                     !! to Eady growth rate at v-pints. [Z T-1 -> m s-1]
+                                     optional, intent(inout) :: dzSyN !< Z-thickness times meridional slope contrib. to
+                                                                     !! Eady growth rate at v-points. [Z T-1 ~> m s-1]
   integer,                           optional, intent(in)    :: halo !< Halo width over which to compute
   type(ocean_OBC_type),              optional, pointer       :: OBC  !< Open boundaries control structure.
 
