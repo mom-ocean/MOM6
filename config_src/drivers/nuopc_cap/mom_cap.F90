@@ -53,7 +53,7 @@ use ESMF,  only: ESMF_ClockSet, ESMF_Clock, ESMF_GeomType_Flag, ESMF_LOGMSG_INFO
 use ESMF,  only: ESMF_Grid, ESMF_GridCreate, ESMF_GridAddCoord
 use ESMF,  only: ESMF_GridGetCoord, ESMF_GridAddItem, ESMF_GridGetItem
 use ESMF,  only: ESMF_GridComp, ESMF_GridCompSetEntryPoint, ESMF_GridCompGet
-use ESMF,  only: ESMF_LogFoundError, ESMF_LogWrite, ESMF_LogSetError
+use ESMF,  only: ESMF_LogWrite, ESMF_LogSetError
 use ESMF,  only: ESMF_LOGERR_PASSTHRU, ESMF_KIND_R8, ESMF_RC_VAL_WRONG
 use ESMF,  only: ESMF_GEOMTYPE_MESH, ESMF_GEOMTYPE_GRID, ESMF_SUCCESS
 use ESMF,  only: ESMF_METHOD_INITIALIZE, ESMF_MethodRemove, ESMF_State
@@ -464,18 +464,11 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
   !---------------------------------
 
   call ESMF_VMGet(vm, pet=localPet, peCount=localPeCount, rc=rc)
-  if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-    line=__LINE__, &
-    file=__FILE__)) &
-    return  ! bail out
-
+  if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
   if(localPeCount == 1) then
      call NUOPC_CompAttributeGet(gcomp, "nthreads", value=cvalue, rc=rc)
-     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-          line=__LINE__, &
-          file=__FILE__)) &
-          return  ! bail out
+     if (ChkErr(rc,__LINE__,u_FILE_u)) return
      read(cvalue,*) nthrds
   else
      nthrds = localPeCount
@@ -900,18 +893,11 @@ subroutine InitializeRealize(gcomp, importState, exportState, clock, rc)
   !---------------------------------
 
   call ESMF_VMGet(vm, pet=localPet, peCount=localPeCount, rc=rc)
-  if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-    line=__LINE__, &
-    file=__FILE__)) &
-    return  ! bail out
-
+  if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
   if(localPeCount == 1) then
      call NUOPC_CompAttributeGet(gcomp, "nthreads", value=cvalue, rc=rc)
-     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-          line=__LINE__, &
-          file=__FILE__)) &
-          return  ! bail out
+     if (ChkErr(rc,__LINE__,u_FILE_u)) return
      read(cvalue,*) nthrds
   else
      nthrds = localPeCount
@@ -1075,7 +1061,7 @@ subroutine InitializeRealize(gcomp, importState, exportState, clock, rc)
 
      ! Determine mesh areas for regridding
      call ESMF_MeshGet(Emesh, numOwnedElements=numOwnedElements, spatialDim=spatialDim, rc=rc)
-     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, line=__LINE__, file=__FILE__)) return
+     if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
      allocate (mod2med_areacor(numOwnedElements))
      allocate (med2mod_areacor(numOwnedElements))
@@ -1085,11 +1071,11 @@ subroutine InitializeRealize(gcomp, importState, exportState, clock, rc)
 #ifdef CESMCOUPLED
      ! Determine model areas and flux correction factors (module variables in mom_)
      call ESMF_StateGet(exportState, itemName=trim(fldsFrOcn(2)%stdname), field=lfield, rc=rc)
-     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, line=__LINE__, file=__FILE__)) return
+     if (ChkErr(rc,__LINE__,u_FILE_u)) return
      call ESMF_FieldRegridGetArea(lfield, rc=rc)
-     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, line=__LINE__, file=__FILE__)) return
+     if (ChkErr(rc,__LINE__,u_FILE_u)) return
      call ESMF_FieldGet(lfield, farrayPtr=dataPtr_mesh_areas, rc=rc)
-     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, line=__LINE__, file=__FILE__)) return
+     if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
      allocate(mesh_areas(numOwnedElements))
      allocate(model_areas(numOwnedElements))
