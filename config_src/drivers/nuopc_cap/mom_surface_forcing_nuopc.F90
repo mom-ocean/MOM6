@@ -796,7 +796,7 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, US, CS)
       endif
       forces%ustar(i,j) = sqrt(gustiness*Irho0 + Irho0*tau_mag)
     enddo ; enddo
-
+    call pass_vector(forces%taux, forces%tauy, G%Domain, halo=1)
   elseif (wind_stagger == AGRID) then
     call pass_vector(taux_at_h, tauy_at_h, G%Domain, To_All+Omit_Corners, stagger=AGRID, halo=1)
 
@@ -822,7 +822,7 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, US, CS)
       forces%ustar(i,j) = sqrt(gustiness*Irho0 + Irho0 * G%mask2dT(i,j) * &
                                sqrt(taux_at_h(i,j)**2 + tauy_at_h(i,j)**2))
     enddo ; enddo
-
+    call pass_vector(forces%taux, forces%tauy, G%Domain, halo=1)
   else ! C-grid wind stresses.
     if (G%symmetric) &
       call fill_symmetric_edges(forces%taux, forces%tauy, G%Domain)

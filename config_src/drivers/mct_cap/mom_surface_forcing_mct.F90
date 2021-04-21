@@ -496,8 +496,8 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
     if (associated(fluxes%frunoff)) then
       fluxes%latent(i,j)              = fluxes%latent(i,j) - &
           IOB%rofi_flux(i-i0,j-j0)*US%W_m2_to_QRZ_T*CS%latent_heat_fusion
-      fluxes%latent_frunoff_diag(i,j) = - G%mask2dT(i,j) * &
-          IOB%rofi_flux(i-i0,j-j0)*US%W_m2_to_QRZ_T*CS%latent_heat_fusion
+      fluxes%latent_frunoff_diag(i,j) = -G%mask2dT(i,j) &
+          * IOB%rofi_flux(i-i0,j-j0)*US%W_m2_to_QRZ_T*CS%latent_heat_fusion
     endif
     ! contribution from evaporation
     if (associated(IOB%q_flux)) then

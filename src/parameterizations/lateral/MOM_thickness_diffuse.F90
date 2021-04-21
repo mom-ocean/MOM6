@@ -40,7 +40,7 @@ type, public :: thickness_diffuse_CS ; private
   real    :: max_Khth_CFL        !< Maximum value of the diffusive CFL for thickness diffusion
   real    :: Khth_Min            !< Minimum value of Khth [L2 T-1 ~> m2 s-1]
   real    :: Khth_Max            !< Maximum value of Khth [L2 T-1 ~> m2 s-1], or 0 for no max
-  real    :: slope_max           !< Slopes steeper than slope_max are limited in some way [nondim].
+  real    :: slope_max           !< Slopes steeper than slope_max are limited in some way [Z L-1 ~> nondim].
   real    :: kappa_smooth        !< Vertical diffusivity used to interpolate more
                                  !! sensible values of T & S into thin layers [Z2 T-1 ~> m2 s-1].
   logical :: thickness_diffuse   !< If true, interfaces heights are diffused.
@@ -83,8 +83,8 @@ type, public :: thickness_diffuse_CS ; private
 
   type(diag_ctrl), pointer :: diag => NULL() !< structure used to regulate timing of diagnostics
   real, pointer :: GMwork(:,:)       => NULL()  !< Work by thickness diffusivity [R Z L2 T-3 ~> W m-2]
-  real, pointer :: diagSlopeX(:,:,:) => NULL()  !< Diagnostic: zonal neutral slope [nondim]
-  real, pointer :: diagSlopeY(:,:,:) => NULL()  !< Diagnostic: zonal neutral slope [nondim]
+  real, pointer :: diagSlopeX(:,:,:) => NULL()  !< Diagnostic: zonal neutral slope [Z L-1 ~> nondim]
+  real, pointer :: diagSlopeY(:,:,:) => NULL()  !< Diagnostic: zonal neutral slope [Z L-1 ~> nondim]
 
   real, dimension(:,:,:), pointer :: &
     KH_u_GME => NULL(), &        !< interface height diffusivities in u-columns [L2 T-1 ~> m2 s-1]
@@ -578,8 +578,8 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
                                                                      !! the isopycnal slopes are taken directly from
                                                                      !! the interface slopes without consideration of
                                                                      !! density gradients [nondim].
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)+1), optional, intent(in)  :: slope_x !< Isopycnal slope at u-points
-  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)+1), optional, intent(in)  :: slope_y !< Isopycnal slope at v-points
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)+1), optional, intent(in)  :: slope_x !< Isopyc. slope at u [Z L-1 ~> nondim]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)+1), optional, intent(in)  :: slope_y !< Isopyc. slope at v [Z L-1 ~> nondim]
   ! Local variables
   real, dimension(SZI_(G), SZJ_(G), SZK_(GV)) :: &
     T, &          ! The temperature (or density) [degC], with the values in
@@ -660,7 +660,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
   real :: Slope         ! The slope of density surfaces, calculated in a way
                         ! that is always between -1 and 1, nondimensional.
   real :: mag_grad2     ! The squared magnitude of the 3-d density gradient [R2 L-2 ~> kg2 m-8].
-  real :: I_slope_max2  ! The inverse of slope_max squared, nondimensional.
+  real :: I_slope_max2  ! The inverse of slope_max squared [L2 Z-2 ~> nondim].
   real :: h_neglect     ! A thickness that is so small it is usually lost
                         ! in roundoff and can be neglected [H ~> m or kg m-2].
   real :: h_neglect2    ! h_neglect^2 [H2 ~> m2 or kg2 m-4].
@@ -919,7 +919,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
 
               ! This estimate of slope is accurate for small slopes, but bounded
               ! to be between -1 and 1.
-              mag_grad2 = drdx**2 + (US%L_to_Z*drdz)**2
+              mag_grad2 = (US%Z_to_L*drdx)**2 + drdz**2
               if (mag_grad2 > 0.0) then
                 Slope = drdx / sqrt(mag_grad2)
                 slope2_Ratio_u(I,K) = Slope**2 * I_slope_max2
@@ -933,7 +933,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
             ! that ignore density gradients along layers.
             if (present_int_slope_u) then
               Slope = (1.0 - int_slope_u(I,j,K)) * Slope + &
-                      int_slope_u(I,j,K) * US%Z_to_L*((e(i+1,j,K)-e(i,j,K)) * G%IdxCu(I,j))
+                      int_slope_u(I,j,K) * ((e(i+1,j,K)-e(i,j,K)) * G%IdxCu(I,j))
               slope2_Ratio_u(I,K) = (1.0 - int_slope_u(I,j,K)) * slope2_Ratio_u(I,K)
             endif
 
@@ -942,7 +942,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
             if (CS%id_slope_x > 0) CS%diagSlopeX(I,j,k) = Slope
 
             ! Estimate the streamfunction at each interface [Z L2 T-1 ~> m3 s-1].
-            Sfn_unlim_u(I,K) = -((KH_u(I,j,K)*G%dy_Cu(I,j))*US%L_to_Z*Slope)
+            Sfn_unlim_u(I,K) = -((KH_u(I,j,K)*G%dy_Cu(I,j))*Slope)
 
             ! Avoid moving dense water upslope from below the level of
             ! the bottom on the receiving side.
@@ -968,10 +968,10 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
             if (present_slope_x) then
               Slope = slope_x(I,j,k)
             else
-              Slope = US%Z_to_L*((e(i,j,K)-e(i+1,j,K))*G%IdxCu(I,j)) * G%mask2dCu(I,j)
+              Slope = ((e(i,j,K)-e(i+1,j,K))*G%IdxCu(I,j)) * G%mask2dCu(I,j)
             endif
             if (CS%id_slope_x > 0) CS%diagSlopeX(I,j,k) = Slope
-            Sfn_unlim_u(I,K) = ((KH_u(I,j,K)*G%dy_Cu(I,j))*US%L_to_Z*Slope)
+            Sfn_unlim_u(I,K) = ((KH_u(I,j,K)*G%dy_Cu(I,j))*Slope)
             hN2_u(I,K) = GV%g_prime(K)
           endif ! if (use_EOS)
         else ! if (k > nk_linear)
@@ -993,10 +993,14 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
       ! Solve an elliptic equation for the streamfunction following Ferrari et al., 2010.
       do I=is-1,ie
         if (G%mask2dCu(I,j)>0.) then
-          Sfn_unlim_u(I,:) = ( 1. + CS%FGNV_scale ) * Sfn_unlim_u(I,:)
+          do K=2,nz
+            Sfn_unlim_u(I,K) = (1. + CS%FGNV_scale) * Sfn_unlim_u(I,K)
+          enddo
           call streamfn_solver(nz, c2_h_u(I,:), hN2_u(I,:), Sfn_unlim_u(I,:))
         else
-          Sfn_unlim_u(I,:) = 0.
+          do K=2,nz
+            Sfn_unlim_u(I,K) = 0.
+          enddo
         endif
       enddo
     endif
@@ -1185,7 +1189,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
 
               ! This estimate of slope is accurate for small slopes, but bounded
               ! to be between -1 and 1.
-              mag_grad2 = drdy**2 + (US%L_to_Z*drdz)**2
+              mag_grad2 = (US%Z_to_L*drdy)**2 + drdz**2
               if (mag_grad2 > 0.0) then
                 Slope = drdy / sqrt(mag_grad2)
                 slope2_Ratio_v(i,K) = Slope**2 * I_slope_max2
@@ -1199,7 +1203,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
             ! that ignore density gradients along layers.
             if (present_int_slope_v) then
               Slope = (1.0 - int_slope_v(i,J,K)) * Slope + &
-                      int_slope_v(i,J,K) * US%Z_to_L*((e(i,j+1,K)-e(i,j,K)) * G%IdyCv(i,J))
+                      int_slope_v(i,J,K) * ((e(i,j+1,K)-e(i,j,K)) * G%IdyCv(i,J))
               slope2_Ratio_v(i,K) = (1.0 - int_slope_v(i,J,K)) * slope2_Ratio_v(i,K)
             endif
 
@@ -1208,7 +1212,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
             if (CS%id_slope_y > 0) CS%diagSlopeY(I,j,k) = Slope
 
             ! Estimate the streamfunction at each interface [Z L2 T-1 ~> m3 s-1].
-            Sfn_unlim_v(i,K) = -((KH_v(i,J,K)*G%dx_Cv(i,J))*US%L_to_Z*Slope)
+            Sfn_unlim_v(i,K) = -((KH_v(i,J,K)*G%dx_Cv(i,J))*Slope)
 
             ! Avoid moving dense water upslope from below the level of
             ! the bottom on the receiving side.
@@ -1234,10 +1238,10 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
             if (present_slope_y) then
               Slope = slope_y(i,J,k)
             else
-              Slope = US%Z_to_L*((e(i,j,K)-e(i,j+1,K))*G%IdyCv(i,J)) * G%mask2dCv(i,J)
+              Slope = ((e(i,j,K)-e(i,j+1,K))*G%IdyCv(i,J)) * G%mask2dCv(i,J)
             endif
             if (CS%id_slope_y > 0) CS%diagSlopeY(I,j,k) = Slope
-            Sfn_unlim_v(i,K) = ((KH_v(i,J,K)*G%dx_Cv(i,J))*US%L_to_Z*Slope)
+            Sfn_unlim_v(i,K) = ((KH_v(i,J,K)*G%dx_Cv(i,J))*Slope)
             hN2_v(i,K) = GV%g_prime(K)
           endif ! if (use_EOS)
         else ! if (k > nk_linear)
@@ -1259,10 +1263,14 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
       ! Solve an elliptic equation for the streamfunction following Ferrari et al., 2010.
       do i=is,ie
         if (G%mask2dCv(i,J)>0.) then
-          Sfn_unlim_v(i,:) = ( 1. + CS%FGNV_scale ) * Sfn_unlim_v(i,:)
+          do K=2,nz
+            Sfn_unlim_v(i,K) = (1. + CS%FGNV_scale) * Sfn_unlim_v(i,K)
+          enddo
           call streamfn_solver(nz, c2_h_v(i,:), hN2_v(i,:), Sfn_unlim_v(i,:))
         else
-          Sfn_unlim_v(i,:) = 0.
+          do K=2,nz
+            Sfn_unlim_v(i,K) = 0.
+          enddo
         endif
       enddo
     endif
@@ -1947,7 +1955,7 @@ subroutine thickness_diffuse_init(Time, G, GV, US, param_file, diag, CDp, CS)
                  "longer than DT, or 0 to use DT.", units="s", default=0.0, scale=US%s_to_T)
   call get_param(param_file, mdl, "KHTH_SLOPE_MAX", CS%slope_max, &
                  "A slope beyond which the calculated isopycnal slope is "//&
-                 "not reliable and is scaled away.", units="nondim", default=0.01)
+                 "not reliable and is scaled away.", units="nondim", default=0.01, scale=US%L_to_Z)
   call get_param(param_file, mdl, "KD_SMOOTH", CS%kappa_smooth, &
                  "A diapycnal diffusivity that is used to interpolate "//&
                  "more sensible values of T & S into thin layers.", &
@@ -2065,10 +2073,10 @@ subroutine thickness_diffuse_init(Time, G, GV, US, param_file, diag, CDp, CS)
            'm2 s-1', conversion=US%L_to_m**2*US%s_to_T)
 
   CS%id_slope_x =  register_diag_field('ocean_model', 'neutral_slope_x', diag%axesCui, Time, &
-           'Zonal slope of neutral surface', 'nondim')
+           'Zonal slope of neutral surface', 'nondim', conversion=US%Z_to_L)
   if (CS%id_slope_x > 0) call safe_alloc_ptr(CS%diagSlopeX,G%IsdB,G%IedB,G%jsd,G%jed,GV%ke+1)
   CS%id_slope_y =  register_diag_field('ocean_model', 'neutral_slope_y', diag%axesCvi, Time, &
-           'Meridional slope of neutral surface', 'nondim')
+           'Meridional slope of neutral surface', 'nondim', conversion=US%Z_to_L)
   if (CS%id_slope_y > 0) call safe_alloc_ptr(CS%diagSlopeY,G%isd,G%ied,G%JsdB,G%JedB,GV%ke+1)
   CS%id_sfn_x =  register_diag_field('ocean_model', 'GM_sfn_x', diag%axesCui, Time, &
            'Parameterized Zonal Overturning Streamfunction', &
