@@ -553,8 +553,8 @@ subroutine initialize_ice_shelf_dyn(param_file, Time, ISS, CS, G, US, diag, new_
     call pass_var(CS%umask, G%domain)
     call pass_var(CS%vmask, G%domain)
     !call init_boundary_values(CS, G, time, ISS%hmask, CS%input_flux, CS%input_thickness, new_sim)
-    call initialize_ice_flow_from_file(CS%bed_elev,CS%u_shelf, CS%v_shelf,CS%ice_visc,CS%ground_frac, ISS%hmask,ISS%h_shelf, &
-            G, US, param_file)   !spacially variable viscosity from a file for debugging
+    call initialize_ice_flow_from_file(CS%bed_elev,CS%u_shelf, CS%v_shelf,CS%ice_visc,&
+                  CS%ground_frac, ISS%hmask,ISS%h_shelf, G, US, param_file)
     call pass_var(CS%ice_visc, G%domain)
     call pass_var(CS%u_shelf, G%domain)
     call pass_var(CS%v_shelf, G%domain)
@@ -869,7 +869,8 @@ end subroutine ice_shelf_advect
 !  real, dimension(SZDIB_(G),SZDJB_(G)) :: err_u, err_v
 !  real, dimension(SZDIB_(G),SZDJB_(G)) :: u_last, v_last ! Previous velocities [L T-1 ~> m s-1]
 !  real, dimension(SZDIB_(G),SZDJB_(G)) :: H_node ! Ice shelf thick)), &
-!                         intent(out)   :: taudy !< Driving y-stress at q-points [R L3 Z T-2 ~> kg m s-2]ness at corners [Z ~> m].
+!                         intent(out)   :: taudy !< Driving y-stress at q-points
+                                           ![R L3 Z T-2 ~> kg m s-2]ness at corners [Z ~> m].
   real, dimension(SZDI_(G),SZDJ_(G)) :: u_bdry_cont ! Boundary u-stress contribution [R L3 Z T-2 ~> kg m s-2]
   real, dimension(SZDI_(G),SZDJ_(G)) :: v_bdry_cont ! Boundary v-stress contribution [R L3 Z T-2 ~> kg m s-2]
   real, dimension(SZDI_(G),SZDJ_(G)) :: Au, Av ! The retarding lateral stress contributions [R L3 Z T-2 ~> kg m s-2]
@@ -1127,7 +1128,8 @@ subroutine ice_shelf_solve_inner(CS, ISS, G, US, u_shlf, v_shlf, taudx, taudy, H
                           intent(in)    :: taudy  !< The y-direction driving stress [R L3 Z T-2 ~> kg m s-2]
   real, dimension(SZDI_(G),SZDJ_(G)), &
                           intent(in)    :: H_node !< The ice shelf thickness at nodal (corner)
-                                             !! points [Z ~> m].                                             !! points [Z ~> m].
+                                             !! points [Z ~> m].
+
   real, dimension(SZDI_(G),SZDJ_(G)), &
                           intent(in)    :: float_cond !< An array indicating where the ice
                                                 !! shelf is floating: 0 if floating, 1 if not.
@@ -2183,7 +2185,8 @@ subroutine CG_action(uret, vret, u_shlf, v_shlf, Phi, Phisub, umask, vmask, hmas
   real, dimension(SZDI_(G),SZDJ_(G)), &
                          intent(in)    :: u_shlf  !< The zonal ice shelf velocity at vertices [L T-1 ~> m s-1]
   real, dimension(SZDI_(G),SZDJ_(G)), &
-                         intent(in)    :: v_shlf  !< The meridional ice shelf velocity at vertices [L T-1 ~> m s-1]
+                         intent(in)    :: v_shlf  !< The meridional ice shelf velocity
+                                                  !at vertices [L T-1 ~> m s-1]
   real, dimension(SZDI_(G),SZDJ_(G)), &
                          intent(in)    :: umask !< A coded mask indicating the nature of the
                                              !! zonal flow at the corner point
@@ -2192,7 +2195,8 @@ subroutine CG_action(uret, vret, u_shlf, v_shlf, Phi, Phisub, umask, vmask, hmas
                                              !! meridional flow at the corner point
   real, dimension(SZDI_(G),SZDJ_(G)), &
                          intent(in)    :: H_node !< The ice shelf thickness at nodal (corner)
-                                             !! points [Z ~> m].                                             !! partly or fully covered by an ice-shelf
+                                             !! points [Z ~> m].
+                                            !! partly or fully covered by an ice-shelf
 !  real, dimension(SZDIB_(G),SZDJB_(G)), &
   real, dimension(SZDI_(G),SZDJ_(G)), &
                          intent(in)    :: ice_visc !< A field related to the ice viscosity from Glen's
