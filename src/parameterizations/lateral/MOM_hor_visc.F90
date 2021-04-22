@@ -188,6 +188,7 @@ type, public :: hor_visc_CS ; private
   integer :: id_diffu     = -1, id_diffv         = -1
   ! integer :: id_hf_diffu  = -1, id_hf_diffv      = -1
   integer :: id_hf_diffu_2d = -1, id_hf_diffv_2d = -1
+  integer :: id_intz_diffu_2d = -1, id_intz_diffv_2d = -1
   integer :: id_Ah_h      = -1, id_Ah_q          = -1
   integer :: id_Kh_h      = -1, id_Kh_q          = -1
   integer :: id_GME_coeff_h = -1, id_GME_coeff_q = -1
@@ -276,8 +277,9 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
     grad_d2vel_mag_h, & ! Magnitude of the Laplacian of the velocity vector, squared [L-2 T-2 ~> m-2 s-2]
     boundary_mask_h ! A mask that zeroes out cells with at least one land edge [nondim]
 
-  real, allocatable, dimension(:,:) :: hf_diffu_2d ! Depth sum of hf_diffu [L T-2 ~> m s-2]
-  real, allocatable, dimension(:,:) :: hf_diffv_2d ! Depth sum of hf_diffv [L T-2 ~> m s-2]
+  real, allocatable, dimension(:,:) :: hf_diffu_2d, hf_diffv_2d ! Depth sum of hf_diffu, hf_diffv [L T-2 ~> m s-2]
+  real, dimension(SZIB_(G),SZJ_(G)) :: intz_diffu_2d ! Depth-integral of diffu [L2 T-2 ~> m2 s-2]
+  real, dimension(SZI_(G),SZJB_(G)) :: intz_diffv_2d ! Depth-integral of diffv [L2 T-2 ~> m2 s-2]
 
   real, dimension(SZIB_(G),SZJB_(G)) :: &
     dvdx, dudy, & ! components in the shearing strain [T-1 ~> s-1]
@@ -1662,6 +1664,21 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
     deallocate(hf_diffv_2d)
   endif
 
+  if (present(ADp) .and. (CS%id_intz_diffu_2d > 0)) then
+    intz_diffu_2d(:,:) = 0.0
+    do k=1,nz ; do j=js,je ; do I=Isq,Ieq
+      intz_diffu_2d(I,j) = intz_diffu_2d(I,j) + diffu(I,j,k) * ADp%diag_hu(I,j,k)
+    enddo ; enddo ; enddo
+    call post_data(CS%id_intz_diffu_2d, intz_diffu_2d, CS%diag)
+  endif
+  if (present(ADp) .and. (CS%id_intz_diffv_2d > 0)) then
+    intz_diffv_2d(:,:) = 0.0
+    do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
+      intz_diffv_2d(i,J) = intz_diffv_2d(i,J) + diffv(i,J,k) * ADp%diag_hv(i,J,k)
+    enddo ; enddo ; enddo
+    call post_data(CS%id_intz_diffv_2d, intz_diffv_2d, CS%diag)
+  endif
+
 end subroutine horizontal_viscosity
 
 !> Allocates space for and calculates static variables used by horizontal_viscosity().
@@ -2376,6 +2393,20 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, MEKE, ADp)
       conversion=US%L_T2_to_m_s2)
   if ((CS%id_hf_diffv_2d > 0) .and. (present(ADp))) then
     call safe_alloc_ptr(ADp%diag_hfrac_v,G%isd,G%ied,G%JsdB,G%JedB,GV%ke)
+  endif
+
+  CS%id_intz_diffu_2d = register_diag_field('ocean_model', 'intz_diffu_2d', diag%axesCu1, Time, &
+      'Depth-integral of Zonal Acceleration from Horizontal Viscosity', 'm2 s-2', &
+      conversion=GV%H_to_m*US%L_T2_to_m_s2)
+  if ((CS%id_intz_diffu_2d > 0) .and. (present(ADp))) then
+    call safe_alloc_ptr(ADp%diag_hu,G%IsdB,G%IedB,G%jsd,G%jed,GV%ke)
+  endif
+
+  CS%id_intz_diffv_2d = register_diag_field('ocean_model', 'intz_diffv_2d', diag%axesCv1, Time, &
+      'Depth-integral of Meridional Acceleration from Horizontal Viscosity', 'm2 s-2', &
+      conversion=GV%H_to_m*US%L_T2_to_m_s2)
+  if ((CS%id_intz_diffv_2d > 0) .and. (present(ADp))) then
+    call safe_alloc_ptr(ADp%diag_hv,G%isd,G%ied,G%JsdB,G%JedB,GV%ke)
   endif
 
   if (CS%biharmonic) then

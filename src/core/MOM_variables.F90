@@ -188,6 +188,9 @@ type, public :: accel_diag_ptrs
 
   real, pointer :: diag_hfrac_u(:,:,:) => NULL() !< Fractional layer thickness at u points
   real, pointer :: diag_hfrac_v(:,:,:) => NULL() !< Fractional layer thickness at v points
+  real, pointer :: diag_hu(:,:,:) => NULL() !< layer thickness at u points
+  real, pointer :: diag_hv(:,:,:) => NULL() !< layer thickness at v points
+
 end type accel_diag_ptrs
 
 !> Pointers to arrays with transports, which can later be used for derived diagnostics, like energy balances.
