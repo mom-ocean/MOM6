@@ -19,6 +19,7 @@ implicit none ; private
 public initialize_ice_thickness
 public initialize_ice_shelf_boundary_channel
 public initialize_ice_flow_from_file
+public initialize_ice_shelf_boundary_from_file
 
 ! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
 ! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
@@ -261,24 +262,24 @@ subroutine initialize_ice_shelf_boundary_channel(u_face_mask_bdry, v_face_mask_b
                 US, PF )
 
    type(ocean_grid_type), intent(in)    :: G    !< The ocean's grid structure
-   real, dimension(SZIB_(G),SZJ_(G)), &
+   real, dimension(SZDI_(G),SZDJ_(G)), &
                           intent(inout) :: u_face_mask_bdry !< A boundary-type mask at C-grid u faces
-   real, dimension(SZIB_(G),SZJ_(G)), &
+   real, dimension(SZDI_(G),SZDJ_(G)), &
                           intent(inout) :: u_flux_bdry_val  !< The boundary thickness flux through
                                                       !! C-grid u faces [L Z T-1 ~> m2 s-1].
-   real, dimension(SZI_(G),SZJB_(G)), &
+   real, dimension(SZDI_(G),SZDJ_(G)), &
                           intent(inout) :: v_face_mask_bdry !< A boundary-type mask at C-grid v faces
-   real, dimension(SZI_(G),SZJB_(G)), &
+   real, dimension(SZDI_(G),SZDJ_(G)), &
                           intent(inout) :: v_flux_bdry_val  !< The boundary thickness flux through
                                                       !! C-grid v faces [L Z T-1 ~> m2 s-1].
-   real, dimension(SZIB_(G),SZJB_(G)), &
+   real, dimension(SZDI_(G),SZDJ_(G)), &
                           intent(inout) :: u_bdry_val !< The zonal ice shelf velocity at open
                                                        !! boundary vertices [L T-1 ~> m s-1].
-   real, dimension(SZIB_(G),SZJB_(G)), &
+   real, dimension(SZDI_(G),SZDJ_(G)), &
                           intent(inout) :: v_bdry_val !< The meridional ice shelf velocity at open
-   real, dimension(SZIB_(G),SZJB_(G)), &
+   real, dimension(SZDI_(G),SZDJ_(G)), &
                           intent(inout) :: u_shelf !< The zonal ice shelf velocity  [L T-1 ~> m s-1].
-   real, dimension(SZIB_(G),SZJB_(G)), &
+   real, dimension(SZDI_(G),SZDJ_(G)), &
                           intent(inout) :: v_shelf !< The meridional ice shelf velocity  [L T-1 ~> m s-1].
    real, dimension(SZDI_(G),SZDJ_(G)), &
                           intent(inout) :: thickness_bdry_val !< The ice shelf thickness at open boundaries [Z ~> m]
@@ -458,4 +459,110 @@ subroutine initialize_ice_flow_from_file(bed_elev,u_shelf, v_shelf,ice_visc,floa
   enddo
 
 end subroutine initialize_ice_flow_from_file
+
+subroutine initialize_ice_shelf_boundary_from_file(u_face_mask_bdry, v_face_mask_bdry, &
+                u_bdry_val, v_bdry_val, umask, vmask, h_bdry_val, thickness_bdry_val, &
+                hmask,  h_shelf, G, US, PF )
+
+   type(ocean_grid_type), intent(in)    :: G    !< The ocean's grid structure
+   real, dimension(SZDI_(G),SZDJ_(G)), &
+                          intent(inout) :: u_face_mask_bdry !< A boundary-type mask at C-grid u faces
+   real, dimension(SZDI_(G),SZDJ_(G)), &
+                          intent(inout) :: v_face_mask_bdry !< A boundary-type mask at C-grid v faces
+   real, dimension(SZDI_(G),SZDJ_(G)), &
+                          intent(inout) :: u_bdry_val !< The zonal ice shelf velocity at open
+                                                       !! boundary vertices [L T-1 ~> m s-1].
+   real, dimension(SZDI_(G),SZDJ_(G)), &
+                          intent(inout) :: v_bdry_val !< The meridional ice shelf velocity at open
+   real, dimension(SZDI_(G),SZDJ_(G)), &
+                          intent(inout) :: umask !< A mask foor ice shelf velocity
+   real, dimension(SZDI_(G),SZDJ_(G)), &
+                          intent(inout) :: vmask !< A mask foor ice shelf velocity
+   real, dimension(SZDI_(G),SZDJ_(G)), &
+                          intent(inout) :: thickness_bdry_val !< The ice shelf thickness at open boundaries [Z ~> m]
+                                                          !! boundary vertices [L T-1 ~> m s-1].
+   real, dimension(SZDI_(G),SZDJ_(G)), &
+                          intent(inout) :: h_bdry_val !< The ice shelf thickness at open boundaries [Z ~> m]
+   real, dimension(SZDI_(G),SZDJ_(G)), &
+                          intent(inout) :: hmask !< A mask indicating which tracer points are
+                                              !! partly or fully covered by an ice-shelf
+   real, dimension(SZDI_(G),SZDJ_(G)), &
+                          intent(inout) :: h_shelf !< Ice-shelf thickness
+   type(unit_scale_type), intent(in)    :: US !< A structure containing unit conversion factors
+   type(param_file_type), intent(in)    :: PF !< A structure to parse for run-time parameters
+
+  character(len=200) :: filename, bc_file, inputdir, icethick_file ! Strings for file/path
+  character(len=200) :: ufcmskbdry_varname, vfcmskbdry_varname, &
+                        ubdryv_varname, vbdryv_varname, umask_varname, vmask_varname, &
+                        h_varname,hmsk_varname  ! Variable name in file
+  character(len=40)  :: mdl = "initialize_ice_shelf_boundary_from_file" ! This subroutine's name.
+
+  integer :: i, j, isc, jsc, iec, jec
+
+  h_bdry_val(:,:) = 0.
+  thickness_bdry_val(:,:) = 0.
+
+  call MOM_mesg("  MOM_ice_shelf_init_profile.F90, initialize_velocity_from_file: reading velocity")
+
+  call get_param(PF, mdl, "INPUTDIR", inputdir, default=".")
+  inputdir = slasher(inputdir)
+  call get_param(PF, mdl, "ICE_SHELF_BC_FILE", bc_file, &
+                 "The file from which the boundary condiions are read.", &
+                 default="ice_shelf_bc.nc")
+  call get_param(PF, mdl, "ICE_THICKNESS_FILE", icethick_file, &
+                 "The file from which the ice-shelf thickness is read.", &
+                 default="ice_shelf_thick.nc")
+  call get_param(PF, mdl, "ICE_THICKNESS_VARNAME", h_varname, &
+                 "The name of the thickness variable in ICE_THICKNESS_FILE.", &
+                 default="h_shelf")
+  call get_param(PF, mdl, "ICE_THICKNESS_MASK_VARNAME", hmsk_varname, &
+                 "The name of the icethickness mask variable in ICE_THICKNESS_FILE.", &
+                 default="h_mask")
+
+  filename = trim(inputdir)//trim(bc_file)
+  call log_param(PF, mdl, "INPUTDIR/ICE_SHELF_BC_FILE", filename)
+  call get_param(PF, mdl, "ICE_UBDRYMSK_VARNAME", ufcmskbdry_varname, &
+                 "The name of the ice-shelf ubdrymask variable in ICE_SHELF_BC_FILE.", &
+                 default="ufacemask")
+  call get_param(PF, mdl, "ICE_VBDRYMSK_VARNAME", vfcmskbdry_varname, &
+                 "The name of the ice-shelf vbdrymask variable in ICE_SHELF_BC_FILE.", &
+                 default="vfacemask")
+  call get_param(PF, mdl, "ICE_UMASK_VARNAME", umask_varname, &
+                 "The name of the ice-shelf ubdrymask variable in ICE_SHELF_BC_FILE.", &
+                 default="umask")
+  call get_param(PF, mdl, "ICE_VMASK_VARNAME", vmask_varname, &
+                 "The name of the ice-shelf vbdrymask variable in ICE_SHELF_BC_FILE.", &
+                 default="vmask")
+  call get_param(PF, mdl, "ICE_UBDRYVAL_VARNAME", ubdryv_varname, &
+                 "The name of the ice-shelf ice_shelf ubdry variable in ICE_SHELF_BC_FILE.", &
+                 default="ubdry_val")
+  call get_param(PF, mdl, "ICE_VBDRYVAL_VARNAME", vbdryv_varname, &
+                 "The name of the ice-shelf ice_shelf vbdry variable in ICE_SHELF_BC_FILE.", &
+                 default="vbdry_val")
+  if (.not.file_exists(filename, G%Domain)) call MOM_error(FATAL, &
+       " initialize_ice_shelf_velocity_from_file: Unable to open "//trim(filename))
+
+
+ call MOM_read_data(filename, trim(ufcmskbdry_varname),u_face_mask_bdry, G%Domain, scale=1.0)
+ call MOM_read_data(filename,trim(vfcmskbdry_varname), v_face_mask_bdry, G%Domain, scale=1.0)
+ call MOM_read_data(filename,trim(ubdryv_varname), u_bdry_val, G%Domain, scale=1.0)
+ call MOM_read_data(filename,trim(vbdryv_varname), v_bdry_val, G%Domain, scale=1.)
+ call MOM_read_data(filename,trim(umask_varname), umask, G%Domain, scale=1.)
+ call MOM_read_data(filename,trim(vmask_varname), vmask, G%Domain, scale=1.)
+ filename = trim(inputdir)//trim(icethick_file)
+
+ call MOM_read_data(filename, trim(h_varname), h_shelf, G%Domain, scale=US%m_to_Z)
+ call MOM_read_data(filename,trim(hmsk_varname), hmask, G%Domain, scale=1.)
+  isc = G%isc ; jsc = G%jsc ; iec = G%iec ; jec = G%jec
+
+  do j=jsc,jec
+    do i=isc,iec
+       if  (hmask(i,j) == 3.) then
+               thickness_bdry_val(i,j) =  h_shelf(i,j)
+               h_bdry_val(i,j) =  h_shelf(i,j)
+       endif
+    enddo
+  enddo
+
+end subroutine initialize_ice_shelf_boundary_from_file
 end module MOM_ice_shelf_initialize
