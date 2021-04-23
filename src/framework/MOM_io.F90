@@ -906,18 +906,20 @@ subroutine read_attribute_str(filename, attname, att_val, varname, found, all_re
     endif
     if ((varid > 0) .or. (varid == NF90_GLOBAL)) then ! The named variable does exist, and found would be true.
       rc = NF90_inquire_attribute(ncid, varid, attname, xtype=att_type, len=att_len)
-      if ((rc /= NF90_NOERR) .and. (rc /= NF90_ENOTATT)) &
-        call MOM_error(FATAL, trim(hdr) // trim(NF90_STRERROR(rc)) //" Error getting info for "//trim(att_str))
-      if (att_type /= NF90_CHAR) &
-        call MOM_error(FATAL, trim(hdr)//": Attribute data type is not a char for "//trim(att_str))
-!      if (att_len > len(att_val)) &
-!        call MOM_error(FATAL, trim(hdr)//": Insufficiently long string passed in to read "//trim(att_str))
-      allocate(character(att_len) :: att_val)
-
-      if (rc == NF90_NOERR) then
-        rc = NF90_get_att(ncid, varid, attname, att_val)
+      if ((.not. present(found)) .or. (rc /= NF90_ENOTATT)) then
         if ((rc /= NF90_NOERR) .and. (rc /= NF90_ENOTATT)) &
-          call MOM_error(FATAL, trim(hdr) // trim(NF90_STRERROR(rc)) //" Difficulties reading "//trim(att_str))
+          call MOM_error(FATAL, trim(hdr) // trim(NF90_STRERROR(rc)) //" Error getting info for "//trim(att_str))
+        if (att_type /= NF90_CHAR) &
+          call MOM_error(FATAL, trim(hdr)//": Attribute data type is not a char for "//trim(att_str))
+  !      if (att_len > len(att_val)) &
+  !        call MOM_error(FATAL, trim(hdr)//": Insufficiently long string passed in to read "//trim(att_str))
+        allocate(character(att_len) :: att_val)
+
+        if (rc == NF90_NOERR) then
+          rc = NF90_get_att(ncid, varid, attname, att_val)
+          if ((rc /= NF90_NOERR) .and. (rc /= NF90_ENOTATT)) &
+            call MOM_error(FATAL, trim(hdr) // trim(NF90_STRERROR(rc)) //" Difficulties reading "//trim(att_str))
+        endif
       endif
     endif
     if (present(found)) found = (rc == NF90_NOERR)
@@ -929,6 +931,10 @@ subroutine read_attribute_str(filename, attname, att_val, varname, found, all_re
     ! Communicate the string length
     info(1) = att_len ; info(2) = 0 ; if (do_read .and. found) info(2) = 1
     call broadcast(info, 2, blocking=.true.)
+    if (present(found)) then
+      found = (info(2) /= 0)
+      if (.not. found) return
+    endif
     att_len = info(1)
 
     if (att_len > 0) then
@@ -938,7 +944,6 @@ subroutine read_attribute_str(filename, attname, att_val, varname, found, all_re
       if (do_read) tmp_str(1) = att_val
       call broadcast(tmp_str, att_len, blocking=.true.)
       att_val = tmp_str(1)
-      if (present(found)) found = (info(2) /= 0)
     elseif (.not.allocated(att_val)) then
       allocate(character(4) :: att_val) ; att_val = ''
     endif
