@@ -11,7 +11,7 @@ use fms_mod,              only : write_version_number, open_namelist_file, check
 use fms_io_mod,           only : file_exist, field_exist, field_size, read_data
 use fms_io_mod,           only : fms_io_exit, get_filename_appendix
 use mpp_io_mod,           only : mpp_open, mpp_close, mpp_flush
-use mpp_io_mod,           only : mpp_write_meta, mpp_write
+use mpp_io_mod,           only : mpp_write_meta, mpp_write, mpp_read
 use mpp_io_mod,           only : mpp_get_atts, mpp_attribute_exist
 use mpp_io_mod,           only : mpp_get_axes, axistype, mpp_get_axis_data
 use mpp_io_mod,           only : mpp_get_fields, fieldtype
@@ -22,6 +22,7 @@ use mpp_io_mod,           only : APPEND_FILE=>MPP_APPEND, WRITEONLY_FILE=>MPP_WR
 use mpp_io_mod,           only : OVERWRITE_FILE=>MPP_OVERWR, READONLY_FILE=>MPP_RDONLY
 use mpp_io_mod,           only : NETCDF_FILE=>MPP_NETCDF, ASCII_FILE=>MPP_ASCII
 use mpp_io_mod,           only : MULTIPLE=>MPP_MULTI, SINGLE_FILE=>MPP_SINGLE
+use mpp_mod,              only : lowercase
 use iso_fortran_env,      only : int64
 
 implicit none ; private
@@ -413,7 +414,8 @@ end subroutine get_axis_data
 
 !> This routine uses the fms_io subroutine read_data to read a scalar named
 !! "fieldname" from a single or domain-decomposed file "filename".
-subroutine MOM_read_data_0d(filename, fieldname, data, timelevel, scale, MOM_Domain)
+subroutine MOM_read_data_0d(filename, fieldname, data, timelevel, scale, MOM_Domain, &
+                            global_file, file_may_be_4d)
   character(len=*),       intent(in)    :: filename  !< The name of the file to read
   character(len=*),       intent(in)    :: fieldname !< The variable name of the data in the file
   real,                   intent(inout) :: data      !< The 1-dimensional array into which the data
@@ -422,8 +424,43 @@ subroutine MOM_read_data_0d(filename, fieldname, data, timelevel, scale, MOM_Dom
                                                      !! by before it is returned.
   type(MOM_domain_type), &
                 optional, intent(in)    :: MOM_Domain !< The MOM_Domain that describes the decomposition
+  logical,      optional, intent(in)    :: global_file !< If true, read from a single global file
+  logical,      optional, intent(in)    :: file_may_be_4d !< If true, this file may have 4-d arrays,
+                                                     !! in which case a more elaborate set of calls
+                                                     !! is needed to read it due to FMS limitations.
 
-  if (present(MOM_Domain)) then
+  ! Local variables
+  character(len=80)  :: varname             ! The name of a variable in the file
+  type(fieldtype), allocatable :: fields(:) ! An array of types describing all the variables in the file
+  logical :: use_fms_read_data, file_is_global
+  integer :: n, unit, ndim, nvar, natt, ntime
+
+  use_fms_read_data = .true. ; if (present(file_may_be_4d)) use_fms_read_data = .not.file_may_be_4d
+  file_is_global = .true. ; if (present(global_file)) file_is_global = global_file
+
+  if (.not.use_fms_read_data) then
+    if (file_is_global) then
+      call mpp_open(unit, trim(filename), form=NETCDF_FILE, action=READONLY_FILE, &
+                    threading=MULTIPLE, fileset=SINGLE_FILE) !, domain=MOM_Domain%mpp_domain )
+    else
+      call mpp_open(unit, trim(filename), form=NETCDF_FILE, action=READONLY_FILE, &
+                    threading=MULTIPLE, fileset=MULTIPLE, domain=MOM_Domain%mpp_domain )
+    endif
+    call mpp_get_info(unit, ndim, nvar, natt, ntime)
+    allocate(fields(nvar))
+    call mpp_get_fields(unit, fields(1:nvar))
+    do n=1, nvar
+      call mpp_get_atts(fields(n), name=varname)
+      if (lowercase(trim(varname)) == lowercase(trim(fieldname))) then
+        ! Maybe something should be done depending on the value of ntime.
+        call mpp_read(unit, fields(n), data, timelevel)
+        exit
+      endif
+    enddo
+
+    deallocate(fields)
+    call mpp_close(unit)
+  elseif (present(MOM_Domain)) then
     call read_data(filename, fieldname, data, MOM_Domain%mpp_domain, timelevel=timelevel)
   else
     call read_data(filename, fieldname, data, timelevel=timelevel, no_domain=.true.)
@@ -437,7 +474,8 @@ end subroutine MOM_read_data_0d
 
 !> This routine uses the fms_io subroutine read_data to read a 1-D data field named
 !! "fieldname" from a single or domain-decomposed file "filename".
-subroutine MOM_read_data_1d(filename, fieldname, data, timelevel, scale, MOM_Domain)
+subroutine MOM_read_data_1d(filename, fieldname, data, timelevel, scale, MOM_Domain, &
+                            global_file, file_may_be_4d)
   character(len=*),       intent(in)    :: filename  !< The name of the file to read
   character(len=*),       intent(in)    :: fieldname !< The variable name of the data in the file
   real, dimension(:),     intent(inout) :: data      !< The 1-dimensional array into which the data
@@ -446,8 +484,46 @@ subroutine MOM_read_data_1d(filename, fieldname, data, timelevel, scale, MOM_Dom
                                                      !! by before they are returned.
   type(MOM_domain_type), &
                 optional, intent(in)    :: MOM_Domain !< The MOM_Domain that describes the decomposition
+  logical,      optional, intent(in)    :: global_file !< If true, read from a single global file
+  logical,      optional, intent(in)    :: file_may_be_4d !< If true, this file may have 4-d arrays,
+                                                     !! in which case a more elaborate set of calls
+                                                     !! is needed to read it due to FMS limitations.
 
-  if (present(MOM_Domain)) then
+  ! Local variables
+  character(len=80)  :: varname             ! The name of a variable in the file
+  type(fieldtype), allocatable :: fields(:) ! An array of types describing all the variables in the file
+  logical :: use_fms_read_data, file_is_global
+  integer :: n, unit, ndim, nvar, natt, ntime
+
+  use_fms_read_data = .true. ; if (present(file_may_be_4d)) use_fms_read_data = .not.file_may_be_4d
+  file_is_global = .true. ; if (present(global_file)) file_is_global = global_file
+
+  if (.not.use_fms_read_data) then
+    if (file_is_global) then
+      call mpp_open(unit, trim(filename), form=NETCDF_FILE, action=READONLY_FILE, &
+                    threading=MULTIPLE, fileset=SINGLE_FILE) !, domain=MOM_Domain%mpp_domain )
+    else
+      call mpp_open(unit, trim(filename), form=NETCDF_FILE, action=READONLY_FILE, &
+                    threading=MULTIPLE, fileset=MULTIPLE, domain=MOM_Domain%mpp_domain )
+    endif
+    call mpp_get_info(unit, ndim, nvar, natt, ntime)
+    allocate(fields(nvar))
+    call mpp_get_fields(unit, fields(1:nvar))
+    do n=1, nvar
+      call mpp_get_atts(fields(n), name=varname)
+      if (lowercase(trim(varname)) == lowercase(trim(fieldname))) then
+        call MOM_error(NOTE, "Reading 1-d variable "//trim(fieldname)//" from file "//trim(filename))
+        ! Maybe something should be done depending on the value of ntime.
+        call mpp_read(unit, fields(n), data, timelevel)
+        exit
+      endif
+    enddo
+    if ((n == nvar+1) .or. (nvar < 1)) call MOM_error(WARNING, &
+      "MOM_read_data apparently did not find 1-d variable "//trim(fieldname)//" in file "//trim(filename))
+
+    deallocate(fields)
+    call mpp_close(unit)
+  elseif (present(MOM_Domain)) then
     call read_data(filename, fieldname, data, MOM_Domain%mpp_domain, timelevel=timelevel)
   else
     call read_data(filename, fieldname, data, timelevel=timelevel, no_domain=.true.)
@@ -463,7 +539,7 @@ end subroutine MOM_read_data_1d
 !! 2-D data field named "fieldname" from file "filename".  Valid values for
 !! "position" include CORNER, CENTER, EAST_FACE and NORTH_FACE.
 subroutine MOM_read_data_2d(filename, fieldname, data, MOM_Domain, &
-                            timelevel, position, scale)
+                            timelevel, position, scale, global_file, file_may_be_4d)
   character(len=*),       intent(in)    :: filename  !< The name of the file to read
   character(len=*),       intent(in)    :: fieldname !< The variable name of the data in the file
   real, dimension(:,:),   intent(inout) :: data      !< The 2-dimensional array into which the data
@@ -473,9 +549,49 @@ subroutine MOM_read_data_2d(filename, fieldname, data, MOM_Domain, &
   integer,      optional, intent(in)    :: position  !< A flag indicating where this data is located
   real,         optional, intent(in)    :: scale     !< A scaling factor that the field is multiplied
                                                      !! by before it is returned.
+  logical,      optional, intent(in)    :: global_file !< If true, read from a single global file
+  logical,      optional, intent(in)    :: file_may_be_4d !< If true, this file may have 4-d arrays,
+                                                     !! in which case a more elaborate set of calls
+                                                     !! is needed to read it due to FMS limitations.
 
-  call read_data(filename, fieldname, data, MOM_Domain%mpp_domain, &
-                 timelevel=timelevel, position=position)
+  ! Local variables
+  character(len=80)  :: varname             ! The name of a variable in the file
+  type(fieldtype), allocatable :: fields(:) ! An array of types describing all the variables in the file
+  logical :: use_fms_read_data, file_is_global
+  integer :: n, unit, ndim, nvar, natt, ntime
+
+  use_fms_read_data = .true. ; if (present(file_may_be_4d)) use_fms_read_data = .not.file_may_be_4d
+  file_is_global = .true. ; if (present(global_file)) file_is_global = global_file
+
+  if (use_fms_read_data) then
+    call read_data(filename, fieldname, data, MOM_Domain%mpp_domain, &
+                   timelevel=timelevel, position=position)
+  else
+    if (file_is_global) then
+      call mpp_open(unit, trim(filename), form=NETCDF_FILE, action=READONLY_FILE, &
+                    threading=MULTIPLE, fileset=SINGLE_FILE) !, domain=MOM_Domain%mpp_domain )
+    else
+      call mpp_open(unit, trim(filename), form=NETCDF_FILE, action=READONLY_FILE, &
+                    threading=MULTIPLE, fileset=MULTIPLE, domain=MOM_Domain%mpp_domain )
+    endif
+    call mpp_get_info(unit, ndim, nvar, natt, ntime)
+    allocate(fields(nvar))
+    call mpp_get_fields(unit, fields(1:nvar))
+    do n=1, nvar
+      call mpp_get_atts(fields(n), name=varname)
+      if (lowercase(trim(varname)) == lowercase(trim(fieldname))) then
+        call MOM_error(NOTE, "Reading 2-d variable "//trim(fieldname)//" from file "//trim(filename))
+        ! Maybe something should be done depending on the value of ntime.
+        call mpp_read(unit, fields(n), MOM_Domain%mpp_domain, data, timelevel)
+        exit
+      endif
+    enddo
+    if ((n == nvar+1) .or. (nvar < 1)) call MOM_error(WARNING, &
+      "MOM_read_data apparently did not find 2-d variable "//trim(fieldname)//" in file "//trim(filename))
+
+    deallocate(fields)
+    call mpp_close(unit)
+  endif
 
   if (present(scale)) then ; if (scale /= 1.0) then
     call rescale_comp_data(MOM_Domain, data, scale)
@@ -526,7 +642,7 @@ end subroutine MOM_read_data_2d_region
 !! 3-D data field named "fieldname" from file "filename".  Valid values for
 !! "position" include CORNER, CENTER, EAST_FACE and NORTH_FACE.
 subroutine MOM_read_data_3d(filename, fieldname, data, MOM_Domain, &
-                            timelevel, position, scale)
+                            timelevel, position, scale, global_file, file_may_be_4d)
   character(len=*),       intent(in)    :: filename  !< The name of the file to read
   character(len=*),       intent(in)    :: fieldname !< The variable name of the data in the file
   real, dimension(:,:,:), intent(inout) :: data      !< The 3-dimensional array into which the data
@@ -536,9 +652,49 @@ subroutine MOM_read_data_3d(filename, fieldname, data, MOM_Domain, &
   integer,      optional, intent(in)    :: position  !< A flag indicating where this data is located
   real,         optional, intent(in)    :: scale     !< A scaling factor that the field is multiplied
                                                      !! by before it is returned.
+  logical,      optional, intent(in)    :: global_file !< If true, read from a single global file
+  logical,      optional, intent(in)    :: file_may_be_4d !< If true, this file may have 4-d arrays,
+                                                     !! in which case a more elaborate set of calls
+                                                     !! is needed to read it due to FMS limitations.
 
-  call read_data(filename, fieldname, data, MOM_Domain%mpp_domain, &
-                 timelevel=timelevel, position=position)
+  ! Local variables
+  character(len=80)  :: varname             ! The name of a variable in the file
+  type(fieldtype), allocatable :: fields(:) ! An array of types describing all the variables in the file
+  logical :: use_fms_read_data, file_is_global
+  integer :: n, unit, ndim, nvar, natt, ntime
+
+  use_fms_read_data = .true. ; if (present(file_may_be_4d)) use_fms_read_data = .not.file_may_be_4d
+  file_is_global = .true. ; if (present(global_file)) file_is_global = global_file
+
+  if (use_fms_read_data) then
+    call read_data(filename, fieldname, data, MOM_Domain%mpp_domain, &
+                   timelevel=timelevel, position=position)
+  else
+    if (file_is_global) then
+      call mpp_open(unit, trim(filename), form=NETCDF_FILE, action=READONLY_FILE, &
+                    threading=MULTIPLE, fileset=SINGLE_FILE) !, domain=MOM_Domain%mpp_domain )
+    else
+      call mpp_open(unit, trim(filename), form=NETCDF_FILE, action=READONLY_FILE, &
+                    threading=MULTIPLE, fileset=MULTIPLE, domain=MOM_Domain%mpp_domain )
+    endif
+    call mpp_get_info(unit, ndim, nvar, natt, ntime)
+    allocate(fields(nvar))
+    call mpp_get_fields(unit, fields(1:nvar))
+    do n=1, nvar
+      call mpp_get_atts(fields(n), name=varname)
+      if (lowercase(trim(varname)) == lowercase(trim(fieldname))) then
+        call MOM_error(NOTE, "Reading 3-d variable "//trim(fieldname)//" from file "//trim(filename))
+        ! Maybe something should be done depending on the value of ntime.
+        call mpp_read(unit, fields(n), MOM_Domain%mpp_domain, data, timelevel)
+        exit
+      endif
+    enddo
+    if ((n == nvar+1) .or. (nvar < 1)) call MOM_error(WARNING, &
+      "MOM_read_data apparently did not find 3-d variable "//trim(fieldname)//" in file "//trim(filename))
+
+    deallocate(fields)
+    call mpp_close(unit)
+  endif
 
   if (present(scale)) then ; if (scale /= 1.0) then
     call rescale_comp_data(MOM_Domain, data, scale)
@@ -550,7 +706,7 @@ end subroutine MOM_read_data_3d
 !! 4-D data field named "fieldname" from file "filename".  Valid values for
 !! "position" include CORNER, CENTER, EAST_FACE and NORTH_FACE.
 subroutine MOM_read_data_4d(filename, fieldname, data, MOM_Domain, &
-                            timelevel, position, scale)
+                            timelevel, position, scale, global_file)
   character(len=*),       intent(in)    :: filename  !< The name of the file to read
   character(len=*),       intent(in)    :: fieldname !< The variable name of the data in the file
   real, dimension(:,:,:,:), intent(inout) :: data    !< The 4-dimensional array into which the data
@@ -560,9 +716,46 @@ subroutine MOM_read_data_4d(filename, fieldname, data, MOM_Domain, &
   integer,      optional, intent(in)    :: position  !< A flag indicating where this data is located
   real,         optional, intent(in)    :: scale     !< A scaling factor that the field is multiplied
                                                      !! by before it is returned.
+  logical,      optional, intent(in)    :: global_file !< If true, read from a single global file
 
-  call read_data(filename, fieldname, data, MOM_Domain%mpp_domain, &
-                 timelevel=timelevel, position=position)
+  ! Local variables
+  character(len=80)  :: varname             ! The name of a variable in the file
+  type(fieldtype), allocatable :: fields(:) ! An array of types describing all the variables in the file
+  logical :: use_fms_read_data, file_is_global
+  integer :: n, unit, ndim, nvar, natt, ntime
+  integer :: is, ie, js, je
+
+  ! This single call does not work for a 4-d array due to FMS limitations, so multiple calls are
+  ! needed.
+  ! call read_data(filename, fieldname, data, MOM_Domain%mpp_domain, &
+  !                timelevel=timelevel, position=position)
+
+  file_is_global = .true. ; if (present(global_file)) file_is_global = global_file
+
+  if (file_is_global) then
+    call mpp_open(unit, trim(filename), form=NETCDF_FILE, action=READONLY_FILE, &
+                  threading=MULTIPLE, fileset=SINGLE_FILE) !, domain=MOM_Domain%mpp_domain )
+  else
+    call mpp_open(unit, trim(filename), form=NETCDF_FILE, action=READONLY_FILE, &
+                  threading=MULTIPLE, fileset=MULTIPLE, domain=MOM_Domain%mpp_domain )
+  endif
+  call mpp_get_info(unit, ndim, nvar, natt, ntime)
+  allocate(fields(nvar))
+  call mpp_get_fields(unit, fields(1:nvar))
+  do n=1, nvar
+    call mpp_get_atts(fields(n), name=varname)
+    if (lowercase(trim(varname)) == lowercase(trim(fieldname))) then
+        call MOM_error(NOTE, "Reading 4-d variable "//trim(fieldname)//" from file "//trim(filename))
+      ! Maybe something should be done depending on the value of ntime.
+      call mpp_read(unit, fields(n), MOM_Domain%mpp_domain, data, timelevel)
+      exit
+    endif
+  enddo
+  if ((n == nvar+1) .or. (nvar < 1)) call MOM_error(WARNING, &
+    "MOM_read_data apparently did not find 4-d variable "//trim(fieldname)//" in file "//trim(filename))
+
+  deallocate(fields)
+  call mpp_close(unit)
 
   if (present(scale)) then ; if (scale /= 1.0) then
     call rescale_comp_data(MOM_Domain, data, scale)
