@@ -278,8 +278,6 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
     grad_d2vel_mag_h, & ! Magnitude of the Laplacian of the velocity vector, squared [L-2 T-2 ~> m-2 s-2]
     boundary_mask_h ! A mask that zeroes out cells with at least one land edge [nondim]
 
-  real, allocatable, dimension(:,:) :: hf_diffu_2d ! Depth sum of hf_diffu [L T-2 ~> m s-2]
-  real, allocatable, dimension(:,:) :: hf_diffv_2d ! Depth sum of hf_diffv [L T-2 ~> m s-2]
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)) :: h_diffu ! h x diffu [L2 T-2 ~> m2 s-2]
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)) :: h_diffv ! h x diffv [L2 T-2 ~> m2 s-2]
 
