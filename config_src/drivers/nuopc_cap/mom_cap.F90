@@ -418,6 +418,7 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
   character(len=512)                     :: diro
   character(len=512)                     :: logfile
   character(ESMF_MAXSTR)                 :: cvalue
+  character(len=64)                      :: logmsg
   logical                                :: isPresent, isPresentDiro, isPresentLogfile, isSet
   logical                                :: existflag
   integer                                :: userRc
@@ -467,12 +468,19 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
   if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
   if(localPeCount == 1) then
-     call NUOPC_CompAttributeGet(gcomp, "nthreads", value=cvalue, rc=rc)
+     call NUOPC_CompAttributeGet(gcomp, name="nthreads", value=cvalue, &
+          isPresent=isPresent, isSet=isSet, rc=rc)
      if (ChkErr(rc,__LINE__,u_FILE_u)) return
-     read(cvalue,*) nthrds
+     if (isPresent .and. isSet) then
+       read(cvalue,*) nthrds
+     else
+       nthrds = localPeCount
+     endif
   else
      nthrds = localPeCount
   endif
+  write(logmsg,*) nthrds
+  call ESMF_LogWrite(trim(subname)//': nthreads = '//trim(logmsg), ESMF_LOGMSG_INFO)
 
 !$  call omp_set_num_threads(nthrds)
 
@@ -822,6 +830,7 @@ subroutine InitializeRealize(gcomp, importState, exportState, clock, rc)
   integer                                    :: lbnd3,ubnd3,lbnd4,ubnd4
   integer                                    :: nblocks_tot
   logical                                    :: found
+  logical                                    :: isPresent, isSet
   integer(ESMF_KIND_I4), pointer             :: dataPtr_mask(:,:)
   real(ESMF_KIND_R8), pointer                :: dataPtr_area(:,:)
   real(ESMF_KIND_R8), pointer                :: dataPtr_xcen(:,:)
@@ -896,9 +905,14 @@ subroutine InitializeRealize(gcomp, importState, exportState, clock, rc)
   if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
   if(localPeCount == 1) then
-     call NUOPC_CompAttributeGet(gcomp, "nthreads", value=cvalue, rc=rc)
+     call NUOPC_CompAttributeGet(gcomp, name="nthreads", value=cvalue, &
+          isPresent=isPresent, isSet=isSet, rc=rc)
      if (ChkErr(rc,__LINE__,u_FILE_u)) return
-     read(cvalue,*) nthrds
+     if (isPresent .and. isSet) then
+       read(cvalue,*) nthrds
+     else
+       nthrds = localPeCount
+     endif
   else
      nthrds = localPeCount
   endif
