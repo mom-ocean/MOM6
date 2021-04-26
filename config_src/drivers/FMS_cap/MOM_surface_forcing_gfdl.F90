@@ -36,6 +36,7 @@ use MOM_unit_scaling,     only : unit_scale_type
 use MOM_variables,        only : surface
 use user_revise_forcing,  only : user_alter_forcing, user_revise_forcing_init
 use user_revise_forcing,  only : user_revise_forcing_CS
+use iso_fortran_env, only : int64
 
 implicit none ; private
 
@@ -1622,32 +1623,39 @@ subroutine ice_ocn_bnd_type_chksum(id, timestep, iobt)
   type(ice_ocean_boundary_type), &
                     intent(in) :: iobt   !< An ice-ocean boundary type with fluxes to drive the
                                          !! ocean in a coupled model whose checksums are reported
-  integer ::   n,m, outunit
+  ! Local variables
+  integer(kind=int64) :: chks ! A checksum for the field
+  logical :: root    ! True only on the root PE
+  integer :: outunit ! The output unit to write to
 
   outunit = stdout
+  root = is_root_pe()
 
-  write(outunit,*) "BEGIN CHECKSUM(ice_ocean_boundary_type):: ", id, timestep
-  write(outunit,100) 'iobt%u_flux         ', field_chksum( iobt%u_flux         )
-  write(outunit,100) 'iobt%v_flux         ', field_chksum( iobt%v_flux         )
-  write(outunit,100) 'iobt%t_flux         ', field_chksum( iobt%t_flux         )
-  write(outunit,100) 'iobt%q_flux         ', field_chksum( iobt%q_flux         )
-  write(outunit,100) 'iobt%salt_flux      ', field_chksum( iobt%salt_flux      )
-  write(outunit,100) 'iobt%lw_flux        ', field_chksum( iobt%lw_flux        )
-  write(outunit,100) 'iobt%sw_flux_vis_dir', field_chksum( iobt%sw_flux_vis_dir)
-  write(outunit,100) 'iobt%sw_flux_vis_dif', field_chksum( iobt%sw_flux_vis_dif)
-  write(outunit,100) 'iobt%sw_flux_nir_dir', field_chksum( iobt%sw_flux_nir_dir)
-  write(outunit,100) 'iobt%sw_flux_nir_dif', field_chksum( iobt%sw_flux_nir_dif)
-  write(outunit,100) 'iobt%lprec          ', field_chksum( iobt%lprec          )
-  write(outunit,100) 'iobt%fprec          ', field_chksum( iobt%fprec          )
-  write(outunit,100) 'iobt%runoff         ', field_chksum( iobt%runoff         )
-  write(outunit,100) 'iobt%calving        ', field_chksum( iobt%calving        )
-  write(outunit,100) 'iobt%p              ', field_chksum( iobt%p              )
-  if (associated(iobt%ustar_berg)) &
-    write(outunit,100) 'iobt%ustar_berg     ', field_chksum( iobt%ustar_berg )
-  if (associated(iobt%area_berg)) &
-    write(outunit,100) 'iobt%area_berg      ', field_chksum( iobt%area_berg  )
-  if (associated(iobt%mass_berg)) &
-    write(outunit,100) 'iobt%mass_berg      ', field_chksum( iobt%mass_berg  )
+  if (root) write(outunit,*) "BEGIN CHECKSUM(ice_ocean_boundary_type):: ", id, timestep
+  chks = field_chksum( iobt%u_flux         ) ; if (root) write(outunit,100) 'iobt%u_flux         ', chks
+  chks = field_chksum( iobt%v_flux         ) ; if (root) write(outunit,100) 'iobt%v_flux         ', chks
+  chks = field_chksum( iobt%t_flux         ) ; if (root) write(outunit,100) 'iobt%t_flux         ', chks
+  chks = field_chksum( iobt%q_flux         ) ; if (root) write(outunit,100) 'iobt%q_flux         ', chks
+  chks = field_chksum( iobt%salt_flux      ) ; if (root) write(outunit,100) 'iobt%salt_flux      ', chks
+  chks = field_chksum( iobt%lw_flux        ) ; if (root) write(outunit,100) 'iobt%lw_flux        ', chks
+  chks = field_chksum( iobt%sw_flux_vis_dir) ; if (root) write(outunit,100) 'iobt%sw_flux_vis_dir', chks
+  chks = field_chksum( iobt%sw_flux_vis_dif) ; if (root) write(outunit,100) 'iobt%sw_flux_vis_dif', chks
+  chks = field_chksum( iobt%sw_flux_nir_dir) ; if (root) write(outunit,100) 'iobt%sw_flux_nir_dir', chks
+  chks = field_chksum( iobt%sw_flux_nir_dif) ; if (root) write(outunit,100) 'iobt%sw_flux_nir_dif', chks
+  chks = field_chksum( iobt%lprec          ) ; if (root) write(outunit,100) 'iobt%lprec          ', chks
+  chks = field_chksum( iobt%fprec          ) ; if (root) write(outunit,100) 'iobt%fprec          ', chks
+  chks = field_chksum( iobt%runoff         ) ; if (root) write(outunit,100) 'iobt%runoff         ', chks
+  chks = field_chksum( iobt%calving        ) ; if (root) write(outunit,100) 'iobt%calving        ', chks
+  chks = field_chksum( iobt%p              ) ; if (root) write(outunit,100) 'iobt%p              ', chks
+  if (associated(iobt%ustar_berg)) then
+    chks = field_chksum( iobt%ustar_berg ) ; if (root) write(outunit,100) 'iobt%ustar_berg     ', chks
+  endif
+  if (associated(iobt%area_berg)) then
+    chks = field_chksum( iobt%area_berg  ) ; if (root) write(outunit,100) 'iobt%area_berg      ', chks
+  endif
+  if (associated(iobt%mass_berg)) then
+    chks = field_chksum( iobt%mass_berg  ) ; if (root) write(outunit,100) 'iobt%mass_berg      ', chks
+  endif
 100 FORMAT("   CHECKSUM::",A20," = ",Z20)
 
   call coupler_type_write_chksums(iobt%fluxes, outunit, 'iobt%')

@@ -4146,42 +4146,36 @@ subroutine downsample_field_2d(field_in, field_out, dl, method, mask, diag_cs, d
       i0 = isv_o+dl*(i-isv_d)
       j0 = jsv_o+dl*(j-jsv_d)
       ave = 0.0
-      total_weight = 0.0
       do jj=j0,j0+dl-1 ; do ii=i0,i0+dl-1
 !      do ii=i0,i0+dl-1 ; do jj=j0,j0+dl-1
         weight = mask(ii,jj)
-        total_weight = total_weight + weight
         ave = ave+field_in(ii,jj)*weight
       enddo ; enddo
-      field_out(i,j) = ave/(total_weight+epsilon)  !Avoid zero mask at all aggregating cells where ave=0.0
+      field_out(i,j) = ave  !Masked Sum (total_weight=1)
     enddo ; enddo
   elseif (method == PSP) then   ! e.g., umo_2d
     do j=jsv_d,jev_d ; do i=isv_d,iev_d
       i0 = isv_o+dl*(i-isv_d)
       j0 = jsv_o+dl*(j-jsv_d)
       ave = 0.0
-      total_weight = 0.0
       ii=i0
       do jj=j0,j0+dl-1
         weight = mask(ii,jj)
-        total_weight = total_weight +weight
         ave = ave+field_in(ii,jj)*weight
       enddo
-      field_out(i,j) = ave/(total_weight+epsilon)  !Avoid zero mask at all aggregating cells where ave=0.0
+      field_out(i,j) = ave  !Masked Sum (total_weight=1)
     enddo ; enddo
   elseif (method == SPP) then   ! e.g., vmo_2d
     do j=jsv_d,jev_d ; do i=isv_d,iev_d
       i0 = isv_o+dl*(i-isv_d)
       j0 = jsv_o+dl*(j-jsv_d)
       ave = 0.0
-      total_weight = 0.0
       jj=j0
       do ii=i0,i0+dl-1
         weight = mask(ii,jj)
-        total_weight = total_weight +weight
         ave = ave+field_in(ii,jj)*weight
       enddo
-      field_out(i,j) = ave/(total_weight+epsilon)  !Avoid zero mask at all aggregating cells where ave=0.0
+      field_out(i,j) = ave  !Masked Sum (total_weight=1)
     enddo ; enddo
   elseif (method == PMP) then
     do j=jsv_d,jev_d ; do i=isv_d,iev_d

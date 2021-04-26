@@ -955,6 +955,17 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
     Datv(i,J) = 0.0 ; bt_rem_v(i,J) = 0.0 ; vhbt0(i,J) = 0.0
   enddo ; enddo
 
+  if (CS%linear_wave_drag) then
+    !$OMP parallel do default(shared)
+    do j=CS%jsdw,CS%jedw ; do I=CS%isdw-1,CS%iedw
+      Rayleigh_u(I,j) = 0.0
+    enddo ; enddo
+    !$OMP parallel do default(shared)
+    do J=CS%jsdw-1,CS%jedw ; do i=CS%isdw,CS%iedw
+      Rayleigh_v(i,J) = 0.0
+    enddo ; enddo
+  endif
+
   ! Copy input arrays into their wide-halo counterparts.
   if (interp_eta_PF) then
     !$OMP parallel do default(shared)
@@ -1900,20 +1911,28 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
         endif ; enddo ; enddo
         !$OMP end do nowait
       endif
+
       !$OMP do schedule(static)
       do J=jsv-1,jev ; do i=isv-1,iev+1
         vel_prev = vbt(i,J)
         vbt(i,J) = bt_rem_v(i,J) * (vbt(i,J) + &
-                    dtbt * ((BT_force_v(i,J) + Cor_v(i,J)) + PFv(i,J)))
+             dtbt * ((BT_force_v(i,J) + Cor_v(i,J)) + PFv(i,J)))
+        if (abs(vbt(i,J)) < CS%vel_underflow) vbt(i,J) = 0.0
         vbt_trans(i,J) = trans_wt1*vbt(i,J) + trans_wt2*vel_prev
+      enddo ; enddo
 
-        if (CS%linear_wave_drag) then
+      if (CS%linear_wave_drag) then
+        !$OMP do schedule(static)
+        do J=jsv-1,jev ; do i=isv-1,iev+1
           v_accel_bt(i,J) = v_accel_bt(i,J) + wt_accel(n) * &
               ((Cor_v(i,J) + PFv(i,J)) - vbt(i,J)*Rayleigh_v(i,J))
-        else
+        enddo ; enddo
+      else
+        !$OMP do schedule(static)
+        do J=jsv-1,jev ; do i=isv-1,iev+1
           v_accel_bt(i,J) = v_accel_bt(i,J) + wt_accel(n) * (Cor_v(i,J) + PFv(i,J))
-        endif
-      enddo ; enddo
+        enddo ; enddo
+      endif
 
       if (integral_BT_cont) then
         !$OMP do schedule(static)
@@ -1969,6 +1988,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
         endif ; enddo ; enddo
         !$OMP end do nowait
       endif
+
       !$OMP do schedule(static)
       do j=jsv,jev ; do I=isv-1,iev
         vel_prev = ubt(I,j)
@@ -1976,15 +1996,23 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
              dtbt * ((BT_force_u(I,j) + Cor_u(I,j)) + PFu(I,j)))
         if (abs(ubt(I,j)) < CS%vel_underflow) ubt(I,j) = 0.0
         ubt_trans(I,j) = trans_wt1*ubt(I,j) + trans_wt2*vel_prev
-
-        if (CS%linear_wave_drag) then
-          u_accel_bt(I,j) = u_accel_bt(I,j) + wt_accel(n) * &
-              ((Cor_u(I,j) + PFu(I,j)) - ubt(I,j)*Rayleigh_u(I,j))
-        else
-          u_accel_bt(I,j) = u_accel_bt(I,j) + wt_accel(n) * (Cor_u(I,j) + PFu(I,j))
-        endif
       enddo ; enddo
       !$OMP end do nowait
+
+      if (CS%linear_wave_drag) then
+        !$OMP do schedule(static)
+        do j=jsv,jev ; do I=isv-1,iev
+          u_accel_bt(I,j) = u_accel_bt(I,j) + wt_accel(n) * &
+             ((Cor_u(I,j) + PFu(I,j)) - ubt(I,j)*Rayleigh_u(I,j))
+        enddo ; enddo
+        !$OMP end do nowait
+      else
+        !$OMP do schedule(static)
+        do j=jsv,jev ; do I=isv-1,iev
+          u_accel_bt(I,j) = u_accel_bt(I,j) + wt_accel(n) * (Cor_u(I,j) + PFu(I,j))
+        enddo ; enddo
+        !$OMP end do nowait
+      endif
 
       if (integral_BT_cont) then
         !$OMP do schedule(static)
@@ -2046,14 +2074,20 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
              dtbt * ((BT_force_u(I,j) + Cor_u(I,j)) + PFu(I,j)))
         if (abs(ubt(I,j)) < CS%vel_underflow) ubt(I,j) = 0.0
         ubt_trans(I,j) = trans_wt1*ubt(I,j) + trans_wt2*vel_prev
+      enddo ; enddo
 
-        if (CS%linear_wave_drag) then
+      if (CS%linear_wave_drag) then
+        !$OMP do schedule(static)
+        do j=jsv-1,jev+1 ; do I=isv-1,iev
           u_accel_bt(I,j) = u_accel_bt(I,j) + wt_accel(n) * &
               ((Cor_u(I,j) + PFu(I,j)) - ubt(I,j)*Rayleigh_u(I,j))
-        else
+        enddo ; enddo
+      else
+        !$OMP do schedule(static)
+        do j=jsv-1,jev+1 ; do I=isv-1,iev
           u_accel_bt(I,j) = u_accel_bt(I,j) + wt_accel(n) * (Cor_u(I,j) + PFu(I,j))
-        endif
-      enddo ; enddo
+        enddo ; enddo
+      endif
 
       if (integral_BT_cont) then
         !$OMP do schedule(static)
@@ -2128,15 +2162,24 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
              dtbt * ((BT_force_v(i,J) + Cor_v(i,J)) + PFv(i,J)))
         if (abs(vbt(i,J)) < CS%vel_underflow) vbt(i,J) = 0.0
         vbt_trans(i,J) = trans_wt1*vbt(i,J) + trans_wt2*vel_prev
-
-        if (CS%linear_wave_drag) then
-          v_accel_bt(i,J) = v_accel_bt(i,J) + wt_accel(n) * &
-              ((Cor_v(i,J) + PFv(i,J)) - vbt(i,J)*Rayleigh_v(i,J))
-        else
-          v_accel_bt(i,J) = v_accel_bt(i,J) + wt_accel(n) * (Cor_v(i,J) + PFv(i,J))
-        endif
       enddo ; enddo
       !$OMP end do nowait
+
+      if (CS%linear_wave_drag) then
+        !$OMP do schedule(static)
+        do J=jsv-1,jev ; do i=isv,iev
+          v_accel_bt(i,J) = v_accel_bt(i,J) + wt_accel(n) * &
+             ((Cor_v(i,J) + PFv(i,J)) - vbt(i,J)*Rayleigh_v(i,J))
+        enddo ; enddo
+        !$OMP end do nowait
+      else
+        !$OMP do schedule(static)
+        do J=jsv-1,jev ; do i=isv,iev
+          v_accel_bt(i,J) = v_accel_bt(i,J) + wt_accel(n) * (Cor_v(i,J) + PFv(i,J))
+        enddo ; enddo
+        !$OMP end do nowait
+      endif
+
       if (integral_BT_cont) then
         !$OMP do schedule(static)
         do J=jsv-1,jev ; do i=isv,iev

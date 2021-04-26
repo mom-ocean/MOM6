@@ -2246,7 +2246,7 @@ subroutine set_visc_init(Time, G, GV, US, param_file, diag, visc, CS, restart_CS
       allocate(CS%tideamp(isd:ied,jsd:jed)) ; CS%tideamp(:,:) = 0.0
       filename = trim(CS%inputdir) // trim(tideamp_file)
       call log_param(param_file, mdl, "INPUTDIR/TIDEAMP_FILE", filename)
-      call MOM_read_data(filename, 'tideamp', CS%tideamp, G%domain, timelevel=1, scale=US%m_to_Z*US%T_to_s)
+      call MOM_read_data(filename, 'tideamp', CS%tideamp, G%domain, scale=US%m_to_Z*US%T_to_s)
       call pass_var(CS%tideamp,G%domain)
     endif
   endif
