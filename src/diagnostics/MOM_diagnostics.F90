@@ -1182,8 +1182,7 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, GV, US, CS
         KE_v(i,J) = vh(i,J,k) * G%dyCv(i,J) * ADp%dv_dt_dia(i,J,k)
       enddo ; enddo
       do j=js,je ; do i=is,ie
-        KE_h(i,j) = CS%KE(i,j,k) &
-            * (US%T_to_s * (CDp%diapyc_vel(i,j,k) - CDp%diapyc_vel(i,j,k+1)))
+        KE_h(i,j) = CS%KE(i,j,k) * (CDp%diapyc_vel(i,j,k) - CDp%diapyc_vel(i,j,k+1))
       enddo ; enddo
       if (.not.G%symmetric) &
          call do_group_pass(CS%pass_KE_uv, G%domain)
@@ -2000,8 +1999,8 @@ subroutine register_surface_diags(Time, G, US, IDs, diag, tv)
   endif
 
   IDs%id_salt_deficit = register_diag_field('ocean_model', 'salt_deficit', diag%axesT1, Time, &
-         'Salt sink in ocean due to ice flux', &
-         'psu m-2 s-1', conversion=US%RZ_T_to_kg_m2s)
+         'Salt source in ocean required to supply excessive ice salt fluxes', &
+         'ppt kg m-2 s-1', conversion=US%RZ_T_to_kg_m2s)
   IDs%id_Heat_PmE = register_diag_field('ocean_model', 'Heat_PmE', diag%axesT1, Time, &
          'Heat flux into ocean from mass flux into ocean', &
          'W m-2', conversion=US%QRZ_T_to_W_m2)
@@ -2021,22 +2020,22 @@ subroutine register_transport_diags(Time, G, GV, US, IDs, diag)
   type(diag_ctrl),          intent(inout) :: diag  !< regulates diagnostic output
 
   real :: H_convert
-  character(len=48) :: thickness_units
+  character(len=48) :: thickness_units, accum_flux_units
 
   thickness_units = get_thickness_units(GV)
   if (GV%Boussinesq) then
-    H_convert = GV%H_to_m
+    H_convert = GV%H_to_m ; accum_flux_units = "m3"
   else
-    H_convert = GV%H_to_kg_m2
+    H_convert = GV%H_to_kg_m2 ; accum_flux_units = "kg"
   endif
 
   ! Diagnostics related to tracer and mass transport
   IDs%id_uhtr = register_diag_field('ocean_model', 'uhtr', diag%axesCuL, Time, &
-      'Accumulated zonal thickness fluxes to advect tracers', 'kg', &
-      y_cell_method='sum', v_extensive=.true., conversion=H_convert*US%L_to_m**2)
+      'Accumulated zonal thickness fluxes to advect tracers', &
+      accum_flux_units, y_cell_method='sum', v_extensive=.true., conversion=H_convert*US%L_to_m**2)
   IDs%id_vhtr = register_diag_field('ocean_model', 'vhtr', diag%axesCvL, Time, &
-      'Accumulated meridional thickness fluxes to advect tracers', 'kg', &
-      x_cell_method='sum', v_extensive=.true., conversion=H_convert*US%L_to_m**2)
+      'Accumulated meridional thickness fluxes to advect tracers', &
+      accum_flux_units, x_cell_method='sum', v_extensive=.true., conversion=H_convert*US%L_to_m**2)
   IDs%id_umo = register_diag_field('ocean_model', 'umo', &
       diag%axesCuL, Time, 'Ocean Mass X Transport', &
       'kg s-1', conversion=US%RZ_T_to_kg_m2s*US%L_to_m**2, &
@@ -2054,8 +2053,8 @@ subroutine register_transport_diags(Time, G, GV, US, IDs, diag)
       'kg s-1', conversion=US%RZ_T_to_kg_m2s*US%L_to_m**2, &
       standard_name='ocean_mass_y_transport_vertical_sum', x_cell_method='sum')
   IDs%id_dynamics_h = register_diag_field('ocean_model','dynamics_h',  &
-      diag%axesTl, Time, 'Change in layer thicknesses due to horizontal dynamics', &
-      'm s-1', v_extensive=.true., conversion=GV%H_to_m)
+      diag%axesTl, Time, 'Layer thicknesses prior to horizontal dynamics', &
+      'm', v_extensive=.true., conversion=GV%H_to_m)
   IDs%id_dynamics_h_tendency = register_diag_field('ocean_model','dynamics_h_tendency',  &
       diag%axesTl, Time, 'Change in layer thicknesses due to horizontal dynamics', &
       'm s-1', v_extensive=.true., conversion=GV%H_to_m*US%s_to_T)
