@@ -132,7 +132,7 @@ use MOM_wave_interface,        only : Update_Stokes_Drift
 ! ODA modules
 use MOM_oda_driver_mod,        only : ODA_CS, oda, init_oda, oda_end
 use MOM_oda_driver_mod,        only : set_prior_tracer, set_analysis_time, apply_oda_tracer_increments
-use MOM_oda_incupd,            only : oda_incupd_CS
+use MOM_oda_incupd,            only : oda_incupd_CS, init_oda_incupd_diags
 
 ! Offline modules
 use MOM_offline_main,          only : offline_transport_CS, offline_transport_init, update_offline_fields
@@ -2672,6 +2672,10 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
 
   if (associated(CS%ALE_sponge_CSp)) &
     call init_ALE_sponge_diags(Time, G, diag, CS%ALE_sponge_CSp, US)
+
+  if (associated(CS%oda_incupd_CSp)) &
+    call init_oda_incupd_diags(Time, G, GV, diag, CS%oda_incupd_CSp, US)
+
 
   call tracer_advect_init(Time, G, US, param_file, diag, CS%tracer_adv_CSp)
   call tracer_hor_diff_init(Time, G, GV, US, param_file, diag, CS%tv%eqn_of_state, CS%diabatic_CSp, &

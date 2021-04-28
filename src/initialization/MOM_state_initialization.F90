@@ -2051,8 +2051,9 @@ subroutine initialize_oda_incupd_file(G, GV, US, use_temperature, tv, u, v, para
   type(param_file_type),   intent(in) :: param_file !< A structure to parse for run-time parameters.
   type(oda_incupd_CS),     pointer    :: oda_incupd_CSp  !< A pointer that is set to point to the control
                                                   !! structure for this module.
+  
   ! Local variables
-  real, allocatable, dimension(:,:,:) :: p   ! The interface depth inc. [H ~> m or kg m-2].
+  real, allocatable, dimension(:,:,:) :: hoda ! The layer thk inc. and oda layer thk [H ~> m or kg m-2].
   real, allocatable, dimension(:,:,:) :: tmp_tr ! A temporary array for reading oda fields
   real, allocatable, dimension(:,:,:) :: tmp_u,tmp_v ! A temporary array for reading oda fields
 
@@ -2061,7 +2062,7 @@ subroutine initialize_oda_incupd_file(G, GV, US, use_temperature, tv, u, v, para
   integer :: isd, ied, jsd, jed
   integer, dimension(4) :: siz
   integer :: nz_data  ! The size of the sponge source grid
-  character(len=40)  :: tempinc_var, salinc_var, uinc_var, vinc_var, pinc_var
+  character(len=40)  :: tempinc_var, salinc_var, uinc_var, vinc_var, h_var
   character(len=40)  :: mdl = "initialize_oda_incupd_file"
   character(len=200) :: inc_file, uv_inc_file  ! Strings for filenames
   character(len=200) :: filename, inputdir ! Strings for file/path and path.
@@ -2084,9 +2085,9 @@ subroutine initialize_oda_incupd_file(G, GV, US, use_temperature, tv, u, v, para
   call get_param(param_file, mdl, "ODA_SALTINC_VAR", salinc_var, &
                  "The name of the salinity inc. variable in "//&
                  "ODA_INCUPD_FILE.", default="sal_inc")
-  call get_param(param_file, mdl, "ODA_INTDINC_VAR", pinc_var, &
-                 "The name of the interface depth inc. variable in "//&
-                 "ODA_INCUPD_FILE.", default="p_inc")
+  call get_param(param_file, mdl, "ODA_THK_VAR", h_var, &
+                 "The name of the layer thickness variable in "//&
+                 "ODA_INCUPD_FILE.", default="h")
   call get_param(param_file, mdl, "ODA_INCUPD_UV_FILE", uv_inc_file, &
                  "The name of the file with the U,V increments.", &
                  default=inc_file)
@@ -2105,15 +2106,15 @@ subroutine initialize_oda_incupd_file(G, GV, US, use_temperature, tv, u, v, para
   if (.not.file_exists(filename, G%Domain)) &
     call MOM_error(FATAL, " initialize_oda_incupd: Unable to open "//trim(filename))
 
-  call field_size(filename,pinc_var,siz,no_domain=.true.)
+  call field_size(filename,h_var,siz,no_domain=.true.)
   if (siz(1) /= G%ieg-G%isg+1 .or. siz(2) /= G%jeg-G%jsg+1) &
          call MOM_error(FATAL,"initialize_oda_incupd_file: Array size mismatch for oda data.")
   nz_data = siz(3)
   ! get h increments
-  allocate(p(isd:ied,jsd:jed,nz))
-  call MOM_read_data(filename, pinc_var, p(:,:,:), G%Domain, scale=US%m_to_Z)
-  call initialize_oda_incupd( G, GV, param_file, oda_incupd_CSp, p, nz_data)
-  deallocate(p)
+  allocate(hoda(isd:ied,jsd:jed,nz))
+  call MOM_read_data(filename, h_var   , hoda(:,:,:), G%Domain, scale=US%m_to_Z)
+  call initialize_oda_incupd( G, GV, US, param_file, oda_incupd_CSp, hoda, nz_data)
+  deallocate(hoda)
 
   ! get T and S increments
   if (use_temperature) then
