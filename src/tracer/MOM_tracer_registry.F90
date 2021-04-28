@@ -104,12 +104,14 @@ type, public :: tracer_type
                                                               !! names of flux diagnostics.
   character(len=64)               :: flux_longname = ""       !< A word or phrase used construct the long
                                                               !! names of flux diagnostics.
-  real                            :: flux_scale= 1.0          !< A scaling factor used to convert the fluxes
-                                                              !! of this tracer to its desired units.
+  real                            :: flux_scale = 1.0         !< A scaling factor used to convert the fluxes
+                                                              !! of this tracer to its desired units,
+                                                              !! including a factor compensating for H scaling.
   character(len=48)               :: flux_units = ""          !< The units for fluxes of this variable.
   character(len=48)               :: conv_units = ""          !< The units for the flux convergence of this tracer.
   real                            :: conv_scale = 1.0         !< A scaling factor used to convert the flux
-                                                              !! convergence of this tracer to its desired units.
+                                                              !! convergence of this tracer to its desired units,
+                                                              !! including a factor compensating for H scaling.
   character(len=48)               :: cmor_tendprefix = ""     !< The CMOR variable prefix for tendencies of this
                                                               !! tracer, required because CMOR does not follow any
                                                               !! discernable pattern for these names.
@@ -279,7 +281,7 @@ subroutine register_tracer(tr_ptr, Reg, param_file, HI, GV, name, longname, unit
   Tr%flux_units = ""
   if (present(flux_units)) Tr%flux_units = flux_units
 
-  Tr%flux_scale = 1.0
+  Tr%flux_scale = GV%H_to_MKS
   if (present(flux_scale)) Tr%flux_scale = flux_scale
 
   Tr%conv_units = ""
@@ -288,7 +290,7 @@ subroutine register_tracer(tr_ptr, Reg, param_file, HI, GV, name, longname, unit
   Tr%cmor_tendprefix = ""
   if (present(cmor_tendprefix)) Tr%cmor_tendprefix = cmor_tendprefix
 
-  Tr%conv_scale = 1.0
+  Tr%conv_scale = GV%H_to_MKS
   if (present(convergence_scale)) then
     Tr%conv_scale = convergence_scale
   elseif (present(flux_scale)) then

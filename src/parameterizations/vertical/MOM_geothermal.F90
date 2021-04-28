@@ -592,7 +592,7 @@ subroutine geothermal_init(Time, G, GV, US, param_file, diag, CS, useALEalgorith
     CS%id_internal_heat_h_tendency=register_diag_field('ocean_model',    &
         'internal_heat_h_tendency', diag%axesTL, Time,                &
         'Thickness tendency (in 3D) due to internal (geothermal) sources', &
-        trim(thickness_units), conversion=GV%H_to_MKS*US%s_to_T, v_extensive=.true.)
+        trim(thickness_units)//' s-1', conversion=GV%H_to_MKS*US%s_to_T, v_extensive=.true.)
   endif ; endif
 
 end subroutine geothermal_init
