@@ -460,6 +460,7 @@ subroutine initialize_ice_flow_from_file(bed_elev,u_shelf, v_shelf,ice_visc,floa
 
 end subroutine initialize_ice_flow_from_file
 
+!> Initialize ice shelf b.c.s from file
 subroutine initialize_ice_shelf_boundary_from_file(u_face_mask_bdry, v_face_mask_bdry, &
                 u_bdry_val, v_bdry_val, umask, vmask, h_bdry_val, thickness_bdry_val, &
                 hmask,  h_shelf, G, US, PF )
