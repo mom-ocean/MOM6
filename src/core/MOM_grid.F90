@@ -597,6 +597,13 @@ end subroutine allocate_metrics
 subroutine MOM_grid_end(G)
   type(ocean_grid_type), intent(inout) :: G !< The horizontal grid type
 
+  deallocate(G%Block)
+
+  if (G%bathymetry_at_vel) then
+    DEALLOC_(G%Dblock_u) ; DEALLOC_(G%Dopen_u)
+    DEALLOC_(G%Dblock_v) ; DEALLOC_(G%Dopen_v)
+  endif
+
   DEALLOC_(G%dxT)  ; DEALLOC_(G%dxCu)  ; DEALLOC_(G%dxCv)  ; DEALLOC_(G%dxBu)
   DEALLOC_(G%IdxT) ; DEALLOC_(G%IdxCu) ; DEALLOC_(G%IdxCv) ; DEALLOC_(G%IdxBu)
 
@@ -621,11 +628,6 @@ subroutine MOM_grid_end(G)
   DEALLOC_(G%bathyT)  ; DEALLOC_(G%CoriolisBu)
   DEALLOC_(G%dF_dx)  ; DEALLOC_(G%dF_dy)
   DEALLOC_(G%sin_rot) ; DEALLOC_(G%cos_rot)
-
-  if (G%bathymetry_at_vel) then
-    DEALLOC_(G%Dblock_u) ; DEALLOC_(G%Dopen_u)
-    DEALLOC_(G%Dblock_v) ; DEALLOC_(G%Dopen_v)
-  endif
 
   deallocate(G%gridLonT) ; deallocate(G%gridLatT)
   deallocate(G%gridLonB) ; deallocate(G%gridLatB)

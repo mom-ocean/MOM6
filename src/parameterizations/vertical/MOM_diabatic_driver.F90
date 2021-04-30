@@ -231,7 +231,7 @@ type, public:: diabatic_CS; private
   type(tracer_flow_control_CS), pointer :: tracer_flow_CSp       => NULL() !< Control structure for a child module
   type(optics_type),            pointer :: optics                => NULL() !< Control structure for a child module
   type(KPP_CS),                 pointer :: KPP_CSp               => NULL() !< Control structure for a child module
-  type(CVMix_conv_cs),          pointer :: CVMix_conv_csp        => NULL() !< Control structure for a child module
+  type(CVMix_conv_cs),          pointer :: CVMix_conv_CSp        => NULL() !< Control structure for a child module
   type(diapyc_energy_req_CS),   pointer :: diapyc_en_rec_CSp     => NULL() !< Control structure for a child module
 
   type(group_pass_type) :: pass_hold_eb_ea !< For group halo pass
@@ -706,7 +706,7 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
   ! Calculate vertical mixing due to convection (computed via CVMix)
   if (CS%use_CVMix_conv) then
     ! Increment vertical diffusion and viscosity due to convection
-    call calculate_CVMix_conv(h, tv, G, GV, US, CS%CVMix_conv_csp, Hml, Kd=Kd_int, Kv=visc%Kv_slow)
+    call calculate_CVMix_conv(h, tv, G, GV, US, CS%CVMix_conv_CSp, Hml, Kd=Kd_int, Kv=visc%Kv_slow)
   endif
 
   ! This block sets ent_t and ent_s from h and Kd_int.
@@ -1236,9 +1236,9 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
   if (CS%use_CVMix_conv) then
     ! Increment vertical diffusion and viscosity due to convection
     if (CS%useKPP) then
-      call calculate_CVMix_conv(h, tv, G, GV, US, CS%CVMix_conv_csp, Hml, Kd=Kd_heat, Kv=visc%Kv_shear, Kd_aux=Kd_salt)
+      call calculate_CVMix_conv(h, tv, G, GV, US, CS%CVMix_conv_CSp, Hml, Kd=Kd_heat, Kv=visc%Kv_shear, Kd_aux=Kd_salt)
     else
-      call calculate_CVMix_conv(h, tv, G, GV, US, CS%CVMix_conv_csp, Hml, Kd=Kd_heat, Kv=visc%Kv_slow, Kd_aux=Kd_salt)
+      call calculate_CVMix_conv(h, tv, G, GV, US, CS%CVMix_conv_CSp, Hml, Kd=Kd_heat, Kv=visc%Kv_slow, Kd_aux=Kd_salt)
     endif
   endif
 
@@ -1804,7 +1804,7 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
 
   ! Add vertical diff./visc. due to convection (computed via CVMix)
   if (CS%use_CVMix_conv) then
-    call calculate_CVMix_conv(h, tv, G, GV, US, CS%CVMix_conv_csp, Hml, Kd=Kd_int, Kv=visc%Kv_slow)
+    call calculate_CVMix_conv(h, tv, G, GV, US, CS%CVMix_conv_CSp, Hml, Kd=Kd_int, Kv=visc%Kv_slow)
   endif
 
   if (CS%useKPP) then
@@ -3286,7 +3286,7 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
   endif
 
   ! CS%use_CVMix_conv is set to True if CVMix convection will be used, otherwise it is False.
-  CS%use_CVMix_conv = CVMix_conv_init(Time, G, GV, US, param_file, diag, CS%CVMix_conv_csp)
+  CS%use_CVMix_conv = CVMix_conv_init(Time, G, GV, US, param_file, diag, CS%CVMix_conv_CSp)
 
   call entrain_diffusive_init(Time, G, GV, US, param_file, diag, CS%entrain_diffusive_CSp, &
                               just_read_params=CS%useALEalgorithm)
@@ -3359,14 +3359,35 @@ end subroutine diabatic_driver_init
 
 !> Routine to close the diabatic driver module
 subroutine diabatic_driver_end(CS)
-  type(diabatic_CS), pointer :: CS    !< module control structure
+  type(diabatic_CS), intent(inout) :: CS  !< module control structure
 
-  if (.not.associated(CS)) return
+  if (associated(CS%optics)) then
+    call opacity_end(CS%opacity_CSp, CS%optics)
+    deallocate(CS%optics)
+  endif
+
+  if (CS%debug_energy_req) &
+    call diapyc_energy_req_end(CS%diapyc_en_rec_CSp)
+
+  deallocate(CS%regularize_layers_CSp)
+
+  if (CS%use_energetic_PBL) &
+    call energetic_PBL_end(CS%energetic_PBL_CSp)
 
   call diabatic_aux_end(CS%diabatic_aux_CSp)
 
-  call entrain_diffusive_end(CS%entrain_diffusive_CSp)
   call set_diffusivity_end(CS%set_diff_CSp)
+
+  deallocate(CS%set_diff_CSp)
+
+  if (CS%use_geothermal) then
+    call geothermal_end(CS%geothermal_CSp)
+    deallocate(CS%geothermal_CSp)
+  endif
+
+  call entrain_diffusive_end(CS%entrain_diffusive_CSp)
+
+  if (CS%use_CVMix_conv) deallocate(CS%CVMix_conv_CSp)
 
   if (CS%useKPP) then
     deallocate( CS%KPP_buoy_flux )
@@ -3377,26 +3398,11 @@ subroutine diabatic_driver_end(CS)
     call KPP_end(CS%KPP_CSp)
   endif
 
-  if (CS%use_CVMix_conv) call CVMix_conv_end(CS%CVMix_conv_csp)
-
-  if (CS%use_energetic_PBL) &
-    call energetic_PBL_end(CS%energetic_PBL_CSp)
-  if (CS%debug_energy_req) &
-    call diapyc_energy_req_end(CS%diapyc_en_rec_CSp)
-
-  if (associated(CS%optics)) then
-    call opacity_end(CS%opacity_CSp, CS%optics)
-    deallocate(CS%optics)
-  endif
-
   ! GMM, the following is commented out because arrays in
   ! CS%diag_grids_prev are neither pointers or allocatables
   ! and, therefore, cannot be deallocated.
 
   !call diag_grid_storage_end(CS%diag_grids_prev)
-
-  deallocate(CS)
-
 end subroutine diabatic_driver_end
 
 

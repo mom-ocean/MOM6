@@ -1885,14 +1885,16 @@ end subroutine updateCFLtruncationValue
 
 !> Clean up and deallocate the vertical friction module
 subroutine vertvisc_end(CS)
-  type(vertvisc_CS), pointer :: CS !< Vertical viscosity control structure that
-                                   !! will be deallocated in this subroutine.
+  type(vertvisc_CS), intent(inout) :: CS  !< Vertical viscosity control structure that
+                                          !! will be deallocated in this subroutine.
+
+  if ((len_trim(CS%u_trunc_file) > 0) .or. (len_trim(CS%v_trunc_file) > 0)) &
+    deallocate(CS%PointAccel_CSp)
 
   DEALLOC_(CS%a_u) ; DEALLOC_(CS%h_u)
   DEALLOC_(CS%a_v) ; DEALLOC_(CS%h_v)
   if (associated(CS%a1_shelf_u)) deallocate(CS%a1_shelf_u)
   if (associated(CS%a1_shelf_v)) deallocate(CS%a1_shelf_v)
-  deallocate(CS)
 end subroutine vertvisc_end
 
 !> \namespace mom_vert_friction

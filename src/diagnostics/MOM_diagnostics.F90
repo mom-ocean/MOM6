@@ -2297,11 +2297,13 @@ subroutine set_dependent_diagnostics(MIS, ADp, CDp, G, GV, CS)
 end subroutine set_dependent_diagnostics
 
 !> Deallocate memory associated with the diagnostics module
-subroutine MOM_diagnostics_end(CS, ADp)
-  type(diagnostics_CS),   pointer       :: CS  !< Control structure returned by a
-                                               !! previous call to diagnostics_init.
-  type(accel_diag_ptrs),  intent(inout) :: ADp !< structure with pointers to
-                                               !! accelerations in momentum equation.
+subroutine MOM_diagnostics_end(CS, ADp, CDp)
+  type(diagnostics_CS),  intent(inout) :: CS  !< Control structure returned by a
+                                              !! previous call to diagnostics_init.
+  type(accel_diag_ptrs), intent(inout) :: ADp !< structure with pointers to
+                                              !! accelerations in momentum equation.
+  type(cont_diag_ptrs),  intent(inout) :: CDp !< Structure pointing to terms in continuity
+                                              !! equation.
   integer :: m
 
   if (associated(CS%e))          deallocate(CS%e)
@@ -2336,10 +2338,12 @@ subroutine MOM_diagnostics_end(CS, ADp)
   if (associated(ADp%diag_hfrac_u)) deallocate(ADp%diag_hfrac_u)
   if (associated(ADp%diag_hfrac_v)) deallocate(ADp%diag_hfrac_v)
 
+  ! NOTE: [uv]hGM may be allocated either here or the thickness diffuse module
+  if (associated(CDp%uhGM)) deallocate(CDp%uhGM)
+  if (associated(CDp%vhGM)) deallocate(CDp%vhGM)
+  if (associated(CDp%diapyc_vel)) deallocate(CDp%diapyc_vel)
+
   do m=1,CS%num_time_deriv ; deallocate(CS%prev_val(m)%p) ; enddo
-
-  deallocate(CS)
-
 end subroutine MOM_diagnostics_end
 
 end module MOM_diagnostics

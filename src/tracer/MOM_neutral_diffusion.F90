@@ -332,12 +332,16 @@ subroutine neutral_diffusion_calc_coeffs(G, GV, US, h, T, S, CS, p_surf)
     ! TODO: add similar code for BOTTOM boundary layer
   endif
 
-  if (.not.CS%remap_answers_2018) then
-    h_neglect = GV%H_subroundoff ; h_neglect_edge = GV%H_subroundoff
-  elseif (GV%Boussinesq) then
-    h_neglect = GV%m_to_H*1.0e-30 ; h_neglect_edge = GV%m_to_H*1.0e-10
-  else
-    h_neglect = GV%kg_m2_to_H*1.0e-30 ; h_neglect_edge = GV%kg_m2_to_H*1.0e-10
+  h_neglect = GV%H_subroundoff ; h_neglect_edge = GV%H_subroundoff
+
+  if (.not. CS%continuous_reconstruction) then
+    if (CS%remap_answers_2018) then
+      if (GV%Boussinesq) then
+        h_neglect = GV%m_to_H*1.0e-30 ; h_neglect_edge = GV%m_to_H*1.0e-10
+      else
+        h_neglect = GV%kg_m2_to_H*1.0e-30 ; h_neglect_edge = GV%kg_m2_to_H*1.0e-10
+      endif
+    endif
   endif
 
   ! If doing along isopycnal diffusion (as opposed to neutral diffusion, set the reference pressure)
@@ -572,10 +576,12 @@ subroutine neutral_diffusion(G, GV, h, Coef_x, Coef_y, dt, Reg, US, CS)
   real :: Idt  ! The inverse of the time step [T-1 ~> s-1]
   real :: h_neglect, h_neglect_edge
 
-  if (.not.CS%remap_answers_2018) then
-    h_neglect = GV%H_subroundoff ; h_neglect_edge = GV%H_subroundoff
-  else
-    h_neglect = GV%m_to_H*1.0e-30 ; h_neglect_edge = GV%m_to_H*1.0e-10
+  h_neglect = GV%H_subroundoff ; h_neglect_edge = GV%H_subroundoff
+
+  if (.not. CS%continuous_reconstruction) then
+    if (CS%remap_answers_2018) then
+      h_neglect = GV%m_to_H*1.0e-30 ; h_neglect_edge = GV%m_to_H*1.0e-10
+    endif
   endif
 
   nk = GV%ke

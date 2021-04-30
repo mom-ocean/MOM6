@@ -3375,13 +3375,22 @@ subroutine diag_mediator_close_registration(diag_CS)
 
 end subroutine diag_mediator_close_registration
 
+subroutine axes_grp_end(axes)
+  type(axes_grp), intent(inout) :: axes   !< Axes group to be destroyed
+
+  deallocate(axes%handles)
+  if (associated(axes%mask2d)) deallocate(axes%mask2d)
+  if (associated(axes%mask3d)) deallocate(axes%mask3d)
+end subroutine axes_grp_end
+
 subroutine diag_mediator_end(time, diag_CS, end_diag_manager)
   type(time_type),   intent(in)  :: time !< The current model time
   type(diag_ctrl), intent(inout) :: diag_CS !< Structure used to regulate diagnostic output
   logical, optional, intent(in)  :: end_diag_manager !< If true, call diag_manager_end()
 
   ! Local variables
-  integer :: i
+  type(diag_type), pointer :: diag, next_diag
+  integer :: i, dl
 
   if (diag_CS%available_diag_doc_unit > -1) then
     close(diag_CS%available_diag_doc_unit) ; diag_CS%available_diag_doc_unit = -3
@@ -3389,6 +3398,17 @@ subroutine diag_mediator_end(time, diag_CS, end_diag_manager)
   if (diag_CS%chksum_iounit > -1) then
     close(diag_CS%chksum_iounit) ; diag_CS%chksum_iounit = -3
   endif
+
+  do i=1, diag_cs%next_free_diag_id - 1
+    if (associated(diag_cs%diags(i)%next)) then
+      next_diag => diag_cs%diags(i)%next
+      do while (associated(next_diag))
+        diag => next_diag
+        next_diag => diag%next
+        deallocate(diag)
+      enddo
+    endif
+  enddo
 
   deallocate(diag_cs%diags)
 
@@ -3405,20 +3425,76 @@ subroutine diag_mediator_end(time, diag_CS, end_diag_manager)
   deallocate(diag_cs%mask3dBi)
   deallocate(diag_cs%mask3dCui)
   deallocate(diag_cs%mask3dCvi)
-  do i=2,MAX_DSAMP_LEV
-    deallocate(diag_cs%dsamp(i)%mask2dT)
-    deallocate(diag_cs%dsamp(i)%mask2dBu)
-    deallocate(diag_cs%dsamp(i)%mask2dCu)
-    deallocate(diag_cs%dsamp(i)%mask2dCv)
-    deallocate(diag_cs%dsamp(i)%mask3dTL)
-    deallocate(diag_cs%dsamp(i)%mask3dBL)
-    deallocate(diag_cs%dsamp(i)%mask3dCuL)
-    deallocate(diag_cs%dsamp(i)%mask3dCvL)
-    deallocate(diag_cs%dsamp(i)%mask3dTi)
-    deallocate(diag_cs%dsamp(i)%mask3dBi)
-    deallocate(diag_cs%dsamp(i)%mask3dCui)
-    deallocate(diag_cs%dsamp(i)%mask3dCvi)
+  do dl=2,MAX_DSAMP_LEV
+    deallocate(diag_cs%dsamp(dl)%mask2dT)
+    deallocate(diag_cs%dsamp(dl)%mask2dBu)
+    deallocate(diag_cs%dsamp(dl)%mask2dCu)
+    deallocate(diag_cs%dsamp(dl)%mask2dCv)
+    deallocate(diag_cs%dsamp(dl)%mask3dTL)
+    deallocate(diag_cs%dsamp(dl)%mask3dBL)
+    deallocate(diag_cs%dsamp(dl)%mask3dCuL)
+    deallocate(diag_cs%dsamp(dl)%mask3dCvL)
+    deallocate(diag_cs%dsamp(dl)%mask3dTi)
+    deallocate(diag_cs%dsamp(dl)%mask3dBi)
+    deallocate(diag_cs%dsamp(dl)%mask3dCui)
+    deallocate(diag_cs%dsamp(dl)%mask3dCvi)
+
+    do i=1,diag_cs%num_diag_coords
+      deallocate(diag_cs%dsamp(dl)%remap_axesTL(i)%dsamp(dl)%mask3d)
+      deallocate(diag_cs%dsamp(dl)%remap_axesCuL(i)%dsamp(dl)%mask3d)
+      deallocate(diag_cs%dsamp(dl)%remap_axesCvL(i)%dsamp(dl)%mask3d)
+      deallocate(diag_cs%dsamp(dl)%remap_axesBL(i)%dsamp(dl)%mask3d)
+      deallocate(diag_cs%dsamp(dl)%remap_axesTi(i)%dsamp(dl)%mask3d)
+      deallocate(diag_cs%dsamp(dl)%remap_axesCui(i)%dsamp(dl)%mask3d)
+      deallocate(diag_cs%dsamp(dl)%remap_axesCvi(i)%dsamp(dl)%mask3d)
+      deallocate(diag_cs%dsamp(dl)%remap_axesBi(i)%dsamp(dl)%mask3d)
+    enddo
   enddo
+
+  ! axes_grp masks may point to diag_cs masks, so do these after mask dealloc
+  do i=1, diag_cs%num_diag_coords
+    call axes_grp_end(diag_cs%remap_axesZL(i))
+    call axes_grp_end(diag_cs%remap_axesZi(i))
+    call axes_grp_end(diag_cs%remap_axesTL(i))
+    call axes_grp_end(diag_cs%remap_axesTi(i))
+    call axes_grp_end(diag_cs%remap_axesBL(i))
+    call axes_grp_end(diag_cs%remap_axesBi(i))
+    call axes_grp_end(diag_cs%remap_axesCuL(i))
+    call axes_grp_end(diag_cs%remap_axesCui(i))
+    call axes_grp_end(diag_cs%remap_axesCvL(i))
+    call axes_grp_end(diag_cs%remap_axesCvi(i))
+  enddo
+
+  deallocate(diag_cs%remap_axesZL)
+  deallocate(diag_cs%remap_axesZi)
+  deallocate(diag_cs%remap_axesTL)
+  deallocate(diag_cs%remap_axesTi)
+  deallocate(diag_cs%remap_axesBL)
+  deallocate(diag_cs%remap_axesBi)
+  deallocate(diag_cs%remap_axesCuL)
+  deallocate(diag_cs%remap_axesCui)
+  deallocate(diag_cs%remap_axesCvL)
+  deallocate(diag_cs%remap_axesCvi)
+
+  do dl=2,MAX_DSAMP_LEV
+    if (allocated(diag_cs%dsamp(dl)%remap_axesTL)) &
+      deallocate(diag_cs%dsamp(dl)%remap_axesTL)
+    if (allocated(diag_cs%dsamp(dl)%remap_axesTi)) &
+      deallocate(diag_cs%dsamp(dl)%remap_axesTi)
+    if (allocated(diag_cs%dsamp(dl)%remap_axesBL)) &
+      deallocate(diag_cs%dsamp(dl)%remap_axesBL)
+    if (allocated(diag_cs%dsamp(dl)%remap_axesBi)) &
+      deallocate(diag_cs%dsamp(dl)%remap_axesBi)
+    if (allocated(diag_cs%dsamp(dl)%remap_axesCuL)) &
+      deallocate(diag_cs%dsamp(dl)%remap_axesCuL)
+    if (allocated(diag_cs%dsamp(dl)%remap_axesCui)) &
+      deallocate(diag_cs%dsamp(dl)%remap_axesCui)
+    if (allocated(diag_cs%dsamp(dl)%remap_axesCvL)) &
+      deallocate(diag_cs%dsamp(dl)%remap_axesCvL)
+    if (allocated(diag_cs%dsamp(dl)%remap_axesCvi)) &
+      deallocate(diag_cs%dsamp(dl)%remap_axesCvi)
+  enddo
+
 
 #if defined(DEBUG) || defined(__DO_SAFETY_CHECKS__)
   deallocate(diag_cs%h_old)

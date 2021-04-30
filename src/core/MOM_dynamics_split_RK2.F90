@@ -36,27 +36,33 @@ use MOM_time_manager,      only : operator(-), operator(>), operator(*), operato
 use MOM_ALE,                   only : ALE_CS
 use MOM_barotropic,            only : barotropic_init, btstep, btcalc, bt_mass_source
 use MOM_barotropic,            only : register_barotropic_restarts, set_dtbt, barotropic_CS
+use MOM_barotropic,            only : barotropic_end
 use MOM_boundary_update,       only : update_OBC_data, update_OBC_CS
-use MOM_continuity,            only : continuity, continuity_init, continuity_CS
+use MOM_continuity,            only : continuity, continuity_CS
+use MOM_continuity,            only : continuity_init, continuity_end
 use MOM_continuity,            only : continuity_stencil
-use MOM_CoriolisAdv,           only : CorAdCalc, CoriolisAdv_init, CoriolisAdv_CS
+use MOM_CoriolisAdv,           only : CorAdCalc, CoriolisAdv_CS
+use MOM_CoriolisAdv,           only : CoriolisAdv_init, CoriolisAdv_end
 use MOM_debugging,             only : check_redundant
 use MOM_grid,                  only : ocean_grid_type
 use MOM_hor_index,             only : hor_index_type
-use MOM_hor_visc,              only : horizontal_viscosity, hor_visc_init, hor_visc_CS
+use MOM_hor_visc,              only : horizontal_viscosity, hor_visc_CS
+use MOM_hor_visc,              only : hor_visc_init, hor_visc_end
 use MOM_interface_heights,     only : find_eta
 use MOM_lateral_mixing_coeffs, only : VarMix_CS
 use MOM_MEKE_types,            only : MEKE_type
 use MOM_open_boundary,         only : ocean_OBC_type, radiation_open_bdry_conds
 use MOM_open_boundary,         only : open_boundary_zero_normal_flow
 use MOM_open_boundary,         only : open_boundary_test_extern_h, update_OBC_ramp
-use MOM_PressureForce,         only : PressureForce, PressureForce_init, PressureForce_CS
+use MOM_PressureForce,         only : PressureForce, PressureForce_CS
+use MOM_PressureForce,         only : PressureForce_init, PressureForce_end
 use MOM_set_visc,              only : set_viscous_ML, set_visc_CS
 use MOM_thickness_diffuse,     only : thickness_diffuse_CS
-use MOM_tidal_forcing,         only : tidal_forcing_init, tidal_forcing_CS
+use MOM_tidal_forcing,         only : tidal_forcing_CS
+use MOM_tidal_forcing,         only : tidal_forcing_init, tidal_forcing_end
 use MOM_unit_scaling,          only : unit_scale_type
 use MOM_vert_friction,         only : vertvisc, vertvisc_coef, vertvisc_remnant
-use MOM_vert_friction,         only : vertvisc_init, vertvisc_CS
+use MOM_vert_friction,         only : vertvisc_init, vertvisc_end, vertvisc_CS
 use MOM_vert_friction,         only : updateCFLtruncationValue
 use MOM_verticalGrid,          only : verticalGrid_type, get_thickness_units
 use MOM_verticalGrid,          only : get_flux_units, get_tr_flux_units
@@ -1529,6 +1535,28 @@ end subroutine initialize_dyn_split_RK2
 !> Close the dyn_split_RK2 module
 subroutine end_dyn_split_RK2(CS)
   type(MOM_dyn_split_RK2_CS), pointer :: CS  !< module control structure
+
+  call barotropic_end(CS%barotropic_CSp)
+  deallocate(CS%barotropic_CSp)
+
+  call vertvisc_end(CS%vertvisc_CSp)
+  deallocate(CS%vertvisc_CSp)
+
+  call hor_visc_end(CS%hor_visc_CSp)
+
+  call PressureForce_end(CS%PressureForce_CSp)
+  deallocate(CS%PressureForce_CSp)
+
+  if (associated(CS%tides_CSp)) then
+    call tidal_forcing_end(CS%tides_CSp)
+    deallocate(CS%tides_CSp)
+  endif
+
+  call CoriolisAdv_end(CS%CoriolisAdv_Csp)
+  deallocate(CS%CoriolisAdv_CSp)
+
+  call continuity_end(CS%continuity_CSp)
+  deallocate(CS%continuity_CSp)
 
   DEALLOC_(CS%diffu) ; DEALLOC_(CS%diffv)
   DEALLOC_(CS%CAu)   ; DEALLOC_(CS%CAv)

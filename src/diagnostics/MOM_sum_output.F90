@@ -34,7 +34,8 @@ implicit none ; private
 
 #include <MOM_memory.h>
 
-public write_energy, accumulate_net_input, MOM_sum_output_init
+public write_energy, accumulate_net_input
+public MOM_sum_output_init, MOM_sum_output_end
 
 ! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
 ! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
