@@ -1798,15 +1798,15 @@ subroutine vertvisc_init(MIS, Time, G, GV, US, param_file, diag, ADp, dirs, &
   if (CS%id_dv_dt_visc > 0) call safe_alloc_ptr(ADp%dv_dt_visc,isd,ied,JsdB,JedB,nz)
 
   CS%id_taux_bot = register_diag_field('ocean_model', 'taux_bot', diag%axesCu1, &
-      Time, 'Zonal Bottom Stress from Ocean to Earth', 'Pa', &
-      conversion=US%RZ_to_kg_m2*US%L_T2_to_m_s2)
+      Time, 'Zonal Bottom Stress from Ocean to Earth', &
+      'Pa', conversion=US%RZ_to_kg_m2*US%L_T2_to_m_s2)
   CS%id_tauy_bot = register_diag_field('ocean_model', 'tauy_bot', diag%axesCv1, &
-      Time, 'Meridional Bottom Stress from Ocean to Earth', 'Pa', &
-      conversion=US%RZ_to_kg_m2*US%L_T2_to_m_s2)
+      Time, 'Meridional Bottom Stress from Ocean to Earth', &
+      'Pa', conversion=US%RZ_to_kg_m2*US%L_T2_to_m_s2)
 
   !CS%id_hf_du_dt_visc = register_diag_field('ocean_model', 'hf_du_dt_visc', diag%axesCuL, Time, &
-  !    'Fractional Thickness-weighted Zonal Acceleration from Vertical Viscosity', 'm s-2', &
-  !    v_extensive=.true., conversion=US%L_T2_to_m_s2)
+  !    'Fractional Thickness-weighted Zonal Acceleration from Vertical Viscosity', &
+  !    'm s-2', v_extensive=.true., conversion=US%L_T2_to_m_s2)
   !if (CS%id_hf_du_dt_visc > 0) then
   !  call safe_alloc_ptr(CS%hf_du_dt_visc,IsdB,IedB,jsd,jed,nz)
   !  call safe_alloc_ptr(ADp%du_dt_visc,IsdB,IedB,jsd,jed,nz)
@@ -1814,8 +1814,8 @@ subroutine vertvisc_init(MIS, Time, G, GV, US, param_file, diag, ADp, dirs, &
   !endif
 
   !CS%id_hf_dv_dt_visc = register_diag_field('ocean_model', 'hf_dv_dt_visc', diag%axesCvL, Time, &
-  !    'Fractional Thickness-weighted Meridional Acceleration from Vertical Viscosity', 'm s-2', &
-  !    v_extensive=.true., conversion=US%L_T2_to_m_s2)
+  !    'Fractional Thickness-weighted Meridional Acceleration from Vertical Viscosity', &
+  !    'm s-2', v_extensive=.true., conversion=US%L_T2_to_m_s2)
   !if (CS%id_hf_dv_dt_visc > 0) then
   !  call safe_alloc_ptr(CS%hf_dv_dt_visc,isd,ied,JsdB,JedB,nz)
   !  call safe_alloc_ptr(ADp%dv_dt_visc,isd,ied,JsdB,JedB,nz)
@@ -1823,16 +1823,16 @@ subroutine vertvisc_init(MIS, Time, G, GV, US, param_file, diag, ADp, dirs, &
   !endif
 
   CS%id_hf_du_dt_visc_2d = register_diag_field('ocean_model', 'hf_du_dt_visc_2d', diag%axesCu1, Time, &
-      'Depth-sum Fractional Thickness-weighted Zonal Acceleration from Vertical Viscosity', 'm s-2', &
-      conversion=US%L_T2_to_m_s2)
+      'Depth-sum Fractional Thickness-weighted Zonal Acceleration from Vertical Viscosity', &
+      'm s-2', conversion=US%L_T2_to_m_s2)
   if (CS%id_hf_du_dt_visc_2d > 0) then
     call safe_alloc_ptr(ADp%du_dt_visc,IsdB,IedB,jsd,jed,nz)
     call safe_alloc_ptr(ADp%diag_hfrac_u,IsdB,IedB,jsd,jed,nz)
   endif
 
   CS%id_hf_dv_dt_visc_2d = register_diag_field('ocean_model', 'hf_dv_dt_visc_2d', diag%axesCv1, Time, &
-      'Depth-sum Fractional Thickness-weighted Meridional Acceleration from Vertical Viscosity', 'm s-2', &
-      conversion=US%L_T2_to_m_s2)
+      'Depth-sum Fractional Thickness-weighted Meridional Acceleration from Vertical Viscosity', &
+      'm s-2', conversion=US%L_T2_to_m_s2)
   if (CS%id_hf_dv_dt_visc_2d > 0) then
     call safe_alloc_ptr(ADp%dv_dt_visc,isd,ied,JsdB,JedB,nz)
     call safe_alloc_ptr(ADp%diag_hfrac_v,isd,ied,JsdB,JedB,nz)
