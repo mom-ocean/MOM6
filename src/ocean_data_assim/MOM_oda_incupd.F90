@@ -37,7 +37,7 @@ implicit none ; private
 !  Publicly available functions
 public set_up_oda_incupd_field, set_up_oda_incupd_vel_field
 public initialize_oda_incupd, apply_oda_incupd, oda_incupd_end
-public init_oda_incupd_diags
+public init_oda_incupd_diags,get_oda_increments
 !public rotate_oda_incupd, update_oda_incupd_field
 
 ! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
@@ -101,7 +101,6 @@ type, public :: oda_incupd_CS ; private
   integer :: nstep_incupd          !< number of time step for full update
   integer :: ncount                !< increment time step counter
   type(remapping_cs) :: remap_cs   !< Remapping parameters and work arrays
-  logical :: oda_inc               !< using increments or full fields
   logical :: remap_answers_2018    !< If true, use the order of arithmetic and expressions that
                                    !! recover the answers for remapping from the end of 2018.
                                    !! Otherwise, use more robust forms of the same expressions.
@@ -172,9 +171,6 @@ subroutine initialize_oda_incupd( G, GV, US, param_file, CS, data_h,nz_data)
   call get_param(param_file, mdl, "ODA_INCUPD_NHOURS", nhours_incupd, &
                  "Number of hours for full update (0=direct insertion).", &
                  default=3.0)
-  call get_param(param_file, mdl, "ODA_INCUPD_INC", CS%oda_inc, &
-                 "INCUPD files are increments and not full fields.", &
-                 default=.true.)
 
   call get_param(param_file, mdl, "DT_THERM", dt_baclin, &
                  "The thermodynamic and tracer advection time step."// &
@@ -234,11 +230,7 @@ subroutine initialize_oda_incupd( G, GV, US, param_file, CS, data_h,nz_data)
                        trim(mesg))
 
   ! initialize time counter
-  if (nhours_incupd == 0) then
-    CS%ncount=1   !! to assure putting the increment only once
-  else
-    CS%ncount=0
-  endif
+  CS%ncount=0
 
   ! get layer pressure increment p
   CS%nz_data = nz_data
@@ -248,7 +240,7 @@ subroutine initialize_oda_incupd( G, GV, US, param_file, CS, data_h,nz_data)
       CS%Ref_h%p(i,j,k) = data_h(i,j,k) 
   enddo;  enddo ; enddo
 
-! Call the constructor for remapping control structure
+  ! Call the constructor for remapping control structure
   call initialize_remapping(CS%remap_cs, remapScheme, boundary_extrapolation=bndExtrapolation, &
                             answers_2018=CS%remap_answers_2018)
 
@@ -338,6 +330,92 @@ subroutine set_up_oda_incupd_vel_field(u_val, v_val, G, GV, u_ptr, v_ptr, CS)
 
 end subroutine set_up_oda_incupd_vel_field
 
+subroutine get_oda_increments(h, G, GV, US, CS)
+
+  type(ocean_grid_type),     intent(in)    :: G  !< The ocean's grid structure (in).
+  type(verticalGrid_type),   intent(in)    :: GV !< ocean vertical grid structure
+  type(unit_scale_type),     intent(in)    :: US !< A dimensional unit scaling type
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
+                             intent(in)    :: h  !< Layer thickness [H ~> m or kg m-2] (in)
+  type(oda_incupd_CS),       pointer       :: CS !< A pointer to the control structure for this module
+                                                 !! that is set by a previous call to initialize_oda_incupd (in).
+
+
+  real, allocatable, dimension(:) :: tmp_val2   ! data values on the original grid
+  real, dimension(SZK_(GV)) :: tmp_val1         ! data values remapped to model grid
+  real, allocatable, dimension(:,:,:) :: h_obs     !< h of increments
+  real, allocatable, dimension(:) :: hu_obs,hv_obs  ! A column of thicknesses at h points [H ~> m or kg m-2]
+  real, dimension(SZK_(GV)) :: hu, hv           ! A column of thicknesses at h, u or v points [H ~> m or kg m-2]
+
+
+  integer ::  m, i, j, k, is, ie, js, je, nz, nz_data
+  integer :: isB, ieB, jsB, jeB
+  real :: h_neglect, h_neglect_edge
+  character(len=256) :: mesg
+
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
+  isB = G%iscB ; ieB = G%iecB ; jsB = G%jscB ; jeB = G%jecB
+  if (.not.associated(CS)) return
+
+  if (.not.CS%remap_answers_2018) then
+    h_neglect = GV%H_subroundoff ; h_neglect_edge = GV%H_subroundoff
+  elseif (GV%Boussinesq) then
+    h_neglect = GV%m_to_H*1.0e-30 ; h_neglect_edge = GV%m_to_H*1.0e-10
+  else
+    h_neglect = GV%kg_m2_to_H*1.0e-30 ; h_neglect_edge = GV%kg_m2_to_H*1.0e-10
+  endif
+
+  ! get h_obs
+  nz_data = CS%Ref_val(1)%nz_data
+  allocate(h_obs(G%isd:G%ied,G%jsd:G%jed,nz_data)) ; h_obs(:,:,:)=0.0
+  do k=1,nz_data  ; do j=js,je ; do i=is,ie
+    h_obs(i,j,k) = CS%Ref_h%p(i,j,k)
+  enddo ; enddo ; enddo
+  call pass_var(h_obs,G%Domain)
+
+  ! remap t,s (on h_init) to h_obs to get increment
+  tmp_val1(:)=0.0
+  do m=1,CS%fldno
+    allocate(tmp_val2(nz))
+    do j=js,je ; do i=is,ie
+       tmp_val2(1:nz) = CS%var(m)%p(i,j,1:nz)
+       call remapping_core_h(CS%remap_cs, nz     ,     h(i,j,1:nz     ), tmp_val2, &
+                                          nz_data, h_obs(i,j,1:nz_data), tmp_val1, &
+                             h_neglect, h_neglect_edge)
+       CS%Ref_val(m)%p(i,j,1:nz_data) = CS%Ref_val(m)%p(i,j,1:nz_data) - tmp_val1(1:nz_data)
+    enddo; enddo
+    deallocate(tmp_val2)
+   enddo
+
+  ! remap u to h_obs to get increment
+  allocate(hu_obs(nz_data)) ; hu_obs(:)=0.0 ; hu(:) = 0.0;
+  allocate(tmp_val2(nz));tmp_val2(:)=0.0
+  do j=js,je ; do i=isB,ieB
+    tmp_val2(1:nz) = CS%var_u%p(i  ,j,1:nz)
+    hu(1:nz)          = 0.5*(    h(i,j,1:nz     )+    h(i+1,j,1:nz     ))
+    hu_obs(1:nz_data) = 0.5*(h_obs(i,j,1:nz_data)+h_obs(i+1,j,1:nz_data))
+    call remapping_core_h(CS%remap_cs, nz     ,     hu(1:nz     ), tmp_val2, &
+                                       nz_data, hu_obs(1:nz_data), tmp_val1, &
+                          h_neglect, h_neglect_edge)
+    CS%Ref_oda_u%p(i,j,1:nz_data) = CS%Ref_oda_u%p(i,j,1:nz_data) - tmp_val1(1:nz_data)
+  enddo; enddo
+  deallocate(tmp_val2,hu_obs)
+
+  ! remap v to h_obs to get increment
+  allocate(hv_obs(nz_data)) ; hv_obs(:)=0.0 ; hv(:) = 0.0;
+  allocate(tmp_val2(nz));tmp_val2(:)=0.0
+  do j=jsB,jeB ; do i=is,ie
+    tmp_val2(1:nz) = CS%var_v%p(i  ,j,1:nz)
+    hv(1:nz)          = 0.5*(    h(i,j,1:nz     )+    h(i,j+1,1:nz     ))
+    hv_obs(1:nz_data) = 0.5*(h_obs(i,j,1:nz_data)+h_obs(i,j+1,1:nz_data))
+    call remapping_core_h(CS%remap_cs, nz     ,     hv(1:nz     ), tmp_val2, &
+                                       nz_data, hv_obs(1:nz_data), tmp_val1, &
+                          h_neglect, h_neglect_edge)
+    CS%Ref_oda_v%p(i,j,1:nz_data) = CS%Ref_oda_v%p(i,j,1:nz_data) - tmp_val1(1:nz_data)
+  enddo; enddo
+  deallocate(tmp_val2,hv_obs)
+
+end subroutine 
 
 !> This subroutine applies oda increments to layers thicknesses, temp, salt, U
 !!  and V everywhere .
@@ -357,17 +435,13 @@ subroutine apply_oda_incupd(h, dt, G, GV, US, CS)
   real, dimension(SZK_(GV)) :: h_col            ! A column of thicknesses at h, u or v points [H ~> m or kg m-2]
   real, dimension(SZK_(GV)) :: hu, hv           ! A column of thicknesses at h, u or v points [H ~> m or kg m-2]
 
-  !real, allocatable, dimension(:,:,:) :: tmp_p  ! A temporary array for int. depth field
-  !real, allocatable, dimension(:,:,:) :: tmp_h  ! A temporary array for thickness field
-  real, allocatable, dimension(:,:,:) :: tmp_u  !< A temporary array for u inc. 
-  real, allocatable, dimension(:,:,:) :: tmp_v  !< A temporary array for v inc.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: tmp_t  !< A temporary array for t inc. 
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: tmp_s  !< A temporary array for s inc.
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)) :: tmp_u  !< A temporary array for u inc. 
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)) :: tmp_v  !< A temporary array for v inc.
 
-!  real, allocatable, dimension(:,:,:,:) :: var_inc  !< increment fields if input is full fields
-!  real, allocatable, dimension(:,:,:) :: varu_inc  !< increment U field if input is full fields
-!  real, allocatable, dimension(:,:,:) :: varv_inc  !< increment V field if input is full fields
   real, allocatable, dimension(:,:,:) :: h_obs     !< h of increments
   real, allocatable, dimension(:) :: hu_obs,hv_obs  ! A column of thicknesses at h points [H ~> m or kg m-2]
-
 
   integer ::  m, i, j, k, is, ie, js, je, nz, nz_data
   integer :: isB, ieB, jsB, jeB
@@ -381,34 +455,14 @@ subroutine apply_oda_incupd(h, dt, G, GV, US, CS)
   if (.not.associated(CS)) return
 
   ! update counter
-  if (CS%nstep_incupd /= 1) then 
-    CS%ncount = CS%ncount+1
-    if (CS%ncount == 1 .or. CS%ncount == CS%nstep_incupd+1) then
-       q = 0.5/CS%nstep_incupd  !half increment on 1st and CS%step_incupd+1th step
-    else
-       q = 1.0/CS%nstep_incupd
-    endif !ncount
-  else
-    CS%ncount = CS%ncount+1
-    q = 1.0/CS%nstep_incupd
-  endif
+  CS%ncount = CS%ncount+1
+  q = 1.0/CS%nstep_incupd
 
-  ! Diagnostics of increments, mostly used for debugging.
-  if (CS%id_u_oda_inc > 0) call post_data(CS%id_u_oda_inc, CS%Ref_oda_u%p, CS%diag)
-  if (CS%id_v_oda_inc > 0) call post_data(CS%id_v_oda_inc, CS%Ref_oda_v%p, CS%diag)
-  if (CS%id_h_oda_inc > 0) call post_data(CS%id_h_oda_inc, CS%Ref_h%p,     CS%diag)
-  if (CS%id_T_oda_inc > 0) call post_data(CS%id_T_oda_inc, CS%Ref_val(1)%p,CS%diag)
-  if (CS%id_S_oda_inc > 0) call post_data(CS%id_S_oda_inc, CS%Ref_val(2)%p,CS%diag)
-
-
-
-  ! no assimilation after CS%step_incupd+1
-  if (CS%ncount > CS%nstep_incupd+1) then
-    if (CS%ncount == CS%nstep_incupd+2) then
-      if (is_root_pe()) call MOM_error(NOTE,"ended updating fields with increments. ")
-    endif !ncount==CS%nstep_incupd+2
+  ! no assimilation after CS%step_incupd
+  if (CS%ncount > CS%nstep_incupd) then
+    if (is_root_pe()) call MOM_error(NOTE,"ended updating fields with increments. ")
     return
-  endif !ncount>CS%nstep_incupd+1
+  endif !ncount>CS%nstep_incupd
 
   ! get h_obs
   nz_data = CS%Ref_val(1)%nz_data
@@ -417,60 +471,6 @@ subroutine apply_oda_incupd(h, dt, G, GV, US, CS)
     h_obs(i,j,k) = CS%Ref_h%p(i,j,k)
   enddo ; enddo ; enddo
   call pass_var(h_obs,G%Domain)
-
-
-  if (CS%oda_inc) then ! input are increments
-    if (is_root_pe()) call MOM_error(NOTE,"incupd using increments fields ")
-
-  else  ! inputs are full fields
-    if (q ==  1.0 .or. CS%ncount == 1) then
-      if (is_root_pe()) call MOM_error(NOTE,"incupd using full fields ")
-
-      ! remap t,s (on h_init) to h_obs to get increment
-      tmp_val1(:)=0.0 
-      do m=1,CS%fldno
-        allocate(tmp_val2(nz))
-        do j=js,je ; do i=is,ie
-           tmp_val2(1:nz) = CS%var(m)%p(i,j,1:nz)
-           call remapping_core_h(CS%remap_cs, nz     ,     h(i,j,1:nz     ), tmp_val2, &
-                                              nz_data, h_obs(i,j,1:nz_data), tmp_val1, &
-                                 h_neglect, h_neglect_edge)
-           CS%Ref_val(m)%p(i,j,1:nz_data) = CS%Ref_val(m)%p(i,j,1:nz_data) - tmp_val1(1:nz_data)
-        enddo; enddo
-        deallocate(tmp_val2)
-       enddo
-    
-      ! remap u to h_obs to get increment
-      allocate(hu_obs(nz_data)) ; hu_obs(:)=0.0 ; hu(:) = 0.0; 
-      allocate(tmp_val2(nz));tmp_val2(:)=0.0
-      do j=js,je ; do i=isB,ieB
-        tmp_val2(1:nz) = CS%var_u%p(i  ,j,1:nz) 
-        hu(1:nz)          = 0.5*(    h(i,j,1:nz     )+    h(i+1,j,1:nz     ))
-        hu_obs(1:nz_data) = 0.5*(h_obs(i,j,1:nz_data)+h_obs(i+1,j,1:nz_data))
-        call remapping_core_h(CS%remap_cs, nz     ,     hu(1:nz     ), tmp_val2, &
-                                           nz_data, hu_obs(1:nz_data), tmp_val1, &
-                              h_neglect, h_neglect_edge)
-        CS%Ref_oda_u%p(i,j,1:nz_data) = CS%Ref_oda_u%p(i,j,1:nz_data) - tmp_val1(1:nz_data)
-      enddo; enddo
-      deallocate(tmp_val2,hu_obs)
-
-      ! remap v to h_obs to get increment
-      allocate(hv_obs(nz_data)) ; hv_obs(:)=0.0 ; hv(:) = 0.0;
-      allocate(tmp_val2(nz));tmp_val2(:)=0.0
-      do j=jsB,jeB ; do i=is,ie
-        tmp_val2(1:nz) = CS%var_v%p(i  ,j,1:nz)
-        hv(1:nz)          = 0.5*(    h(i,j,1:nz     )+    h(i,j+1,1:nz     ))
-        hv_obs(1:nz_data) = 0.5*(h_obs(i,j,1:nz_data)+h_obs(i,j+1,1:nz_data))
-        call remapping_core_h(CS%remap_cs, nz     ,     hv(1:nz     ), tmp_val2, &
-                                           nz_data, hv_obs(1:nz_data), tmp_val1, &
-                              h_neglect, h_neglect_edge)
-        CS%Ref_oda_v%p(i,j,1:nz_data) = CS%Ref_oda_v%p(i,j,1:nz_data) - tmp_val1(1:nz_data)
-      enddo; enddo
-      deallocate(tmp_val2,hv_obs)
-
-     endif ! not q == 1
-     
-   endif  ! not oda_inc
 
 
   ! print out increments
@@ -492,6 +492,7 @@ subroutine apply_oda_incupd(h, dt, G, GV, US, CS)
 
   ! add increments to tracers
   tmp_val1(:)=0.0 
+  tmp_t(:,:,:) = 0.0 ; tmp_s(:,:,:) = 0.0 ! diagnostics
   do m=1,CS%fldno
     allocate(tmp_val2(CS%Ref_val(m)%nz_data))
     do j=js,je ; do i=is,ie
@@ -500,6 +501,11 @@ subroutine apply_oda_incupd(h, dt, G, GV, US, CS)
                                          nz     ,     h(i,j,1:nz     ), tmp_val1, &
                             h_neglect, h_neglect_edge)
       CS%var(m)%p(i,j,1:nz) = CS%var(m)%p(i,j,1:nz) + q*tmp_val1(1:nz)
+      if (m == 1) then
+        tmp_t(i,j,1:nz) = tmp_val1(1:nz)
+      else
+        tmp_s(i,j,1:nz) = tmp_val1(1:nz)
+      endif
     enddo; enddo
     deallocate(tmp_val2)
   enddo
@@ -511,9 +517,10 @@ subroutine apply_oda_incupd(h, dt, G, GV, US, CS)
     enddo
   enddo ; enddo
 
-! add increments to u
+  ! add increments to u
   allocate(hu_obs(nz_data)) ; hu_obs(:)=0.0 ; hu(:) = 0.0;
   allocate(tmp_val2(nz_data));tmp_val2(:)=0.0
+  tmp_u(:,:,:) = 0.0 ! diagnostics
   do j=js,je ; do i=isB,ieB
     tmp_val2(1:nz_data) = CS%Ref_oda_u%p(i,j,1:nz_data)
     hu_obs(1:nz_data) = 0.5*(h_obs(i,j,1:nz_data)+h_obs(i+1,j,1:nz_data))
@@ -522,12 +529,14 @@ subroutine apply_oda_incupd(h, dt, G, GV, US, CS)
                                        nz     ,     hu(1:nz     ), tmp_val1, &
                           h_neglect, h_neglect_edge)
     CS%var_u%p(i,j,1:nz) = CS%var_u%p(i,j,1:nz) + q*tmp_val1(1:nz)
+    tmp_u(i,j,1:nz) = tmp_val1(1:nz)
   enddo; enddo
   deallocate(tmp_val2,hu_obs)
 
-! add increments to v
+  ! add increments to v
   allocate(hv_obs(nz_data)) ; hv_obs(:)=0.0 ; hv(:) = 0.0;
   allocate(tmp_val2(nz_data));tmp_val2(:)=0.0
+  tmp_v(:,:,:) = 0.0 ! diagnostics
   do j=jsB,jeB ; do i=is,ie
     tmp_val2(1:nz_data) = CS%Ref_oda_v%p(i,j,1:nz_data)
     hv_obs(1:nz_data) = 0.5 * (h_obs(i,j,1:nz_data)+h_obs(i,j+1,1:nz_data))
@@ -536,8 +545,16 @@ subroutine apply_oda_incupd(h, dt, G, GV, US, CS)
                                        nz     ,     hv(1:nz     ), tmp_val1, &
                           h_neglect, h_neglect_edge)
     CS%var_v%p(i,j,1:nz) = CS%var_v%p(i,j,1:nz) + q*tmp_val1(1:nz)
+    tmp_v(i,j,1:nz) = tmp_val1(1:nz)
   enddo; enddo
   deallocate(tmp_val2,hv_obs)
+
+  ! Diagnostics of increments, mostly used for debugging.
+  if (CS%id_u_oda_inc > 0) call post_data(CS%id_u_oda_inc, tmp_u, CS%diag)
+  if (CS%id_v_oda_inc > 0) call post_data(CS%id_v_oda_inc, tmp_v, CS%diag)
+  if (CS%id_h_oda_inc > 0) call post_data(CS%id_h_oda_inc, h    , CS%diag)
+  if (CS%id_T_oda_inc > 0) call post_data(CS%id_T_oda_inc, tmp_t, CS%diag)
+  if (CS%id_S_oda_inc > 0) call post_data(CS%id_S_oda_inc, tmp_s, CS%diag)
 
 
 end subroutine apply_oda_incupd

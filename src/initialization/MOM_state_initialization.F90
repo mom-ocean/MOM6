@@ -11,7 +11,7 @@ use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock, only :  CLOCK_ROUTINE, CLOCK_LOOP
 use MOM_domains, only : pass_var, pass_vector, sum_across_PEs, broadcast
 use MOM_domains, only : root_PE, To_All, SCALAR_PAIR, CGRID_NE, AGRID
-use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, WARNING, is_root_pe
+use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, NOTE, WARNING, is_root_pe
 use MOM_error_handler, only : callTree_enter, callTree_leave, callTree_waypoint
 use MOM_file_parser, only : get_param, read_param, log_param, param_file_type
 use MOM_file_parser, only : log_version
@@ -96,6 +96,7 @@ use MOM_remapping, only : remapping_core_h
 use MOM_horizontal_regridding, only : horiz_interp_and_extrap_tracer
 use MOM_oda_incupd, only: oda_incupd_CS, initialize_oda_incupd
 use MOM_oda_incupd, only: set_up_oda_incupd_field, set_up_oda_incupd_vel_field
+use MOM_oda_incupd, only: get_oda_increments
 
 implicit none ; private
 
@@ -623,7 +624,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
                  "If true, oda incremental updates will be applied "//&
                  "everywhere in the domain.", default=.false.)
   if (use_oda_incupd) then
-    call initialize_oda_incupd_file(G, GV, US, use_temperature, tv, u, v, &
+    call initialize_oda_incupd_file(G, GV, US, use_temperature, tv, h, u, v, &
                                     PF, oda_incupd_CSp)
   endif
  
@@ -2035,13 +2036,16 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, u, v, param_f
 
 end subroutine initialize_sponges_file
 
-subroutine initialize_oda_incupd_file(G, GV, US, use_temperature, tv, u, v, param_file, oda_incupd_CSp)
+subroutine initialize_oda_incupd_file(G, GV, US, use_temperature, tv, h, u, v, param_file, oda_incupd_CSp)
   type(ocean_grid_type),   intent(in) :: G    !< The ocean's grid structure.
   type(verticalGrid_type), intent(in) :: GV   !< The ocean's vertical grid structure.
   type(unit_scale_type),   intent(in) :: US  !< A dimensional unit scaling type
   logical,                 intent(in) :: use_temperature !< If true, T & S are state variables.
   type(thermo_var_ptrs),   intent(in) :: tv   !< A structure pointing to various thermodynamic
                                               !! variables.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
+                             intent(in) :: h  !< Layer thickness [H ~> m or kg m-2] (in)
+
   real, target, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
                            intent(in)   :: u    !< The zonal velocity that is being
                                                     !! initialized [L T-1 ~> m s-1]
@@ -2057,11 +2061,13 @@ subroutine initialize_oda_incupd_file(G, GV, US, use_temperature, tv, u, v, para
   real, allocatable, dimension(:,:,:) :: tmp_tr ! A temporary array for reading oda fields
   real, allocatable, dimension(:,:,:) :: tmp_u,tmp_v ! A temporary array for reading oda fields
 
-
   integer :: i, j, k, is, ie, js, je, nz
   integer :: isd, ied, jsd, jed
+
   integer, dimension(4) :: siz
   integer :: nz_data  ! The size of the sponge source grid
+  logical :: oda_inc ! input files are increments (true) or full fields (false)
+
   character(len=40)  :: tempinc_var, salinc_var, uinc_var, vinc_var, h_var
   character(len=40)  :: mdl = "initialize_oda_incupd_file"
   character(len=200) :: inc_file, uv_inc_file  ! Strings for filenames
@@ -2072,13 +2078,15 @@ subroutine initialize_oda_incupd_file(G, GV, US, use_temperature, tv, u, v, para
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
-
   call get_param(param_file, mdl, "INPUTDIR", inputdir, default=".")
   inputdir = slasher(inputdir)
 
   call get_param(param_file, mdl, "ODA_INCUPD_FILE", inc_file, &
                  "The name of the file with the T,S,h increments.", &
                  fail_if_missing=.true.)
+  call get_param(param_file, mdl, "ODA_INCUPD_INC", oda_inc, &
+                 "INCUPD files are increments and not full fields.", &
+                 default=.true.)
   call get_param(param_file, mdl, "ODA_TEMPINC_VAR", tempinc_var, &
                  "The name of the potential temperature inc. variable in "//&
                  "ODA_INCUPD_FILE.", default="ptemp_inc")
@@ -2138,7 +2146,13 @@ subroutine initialize_oda_incupd_file(G, GV, US, use_temperature, tv, u, v, para
   call set_up_oda_incupd_vel_field(tmp_u, tmp_v, G, GV, u, v, oda_incupd_CSp)
   deallocate(tmp_u,tmp_v)
   
-
+  ! calculate increments if full fields
+  if (oda_inc) then ! input are increments
+    if (is_root_pe()) call MOM_error(NOTE,"incupd using increments fields ")
+  else  ! inputs are full fields
+    if (is_root_pe()) call MOM_error(NOTE,"incupd using full fields ")
+    call get_oda_increments(h, G, GV, US, oda_incupd_CSp) 
+  endif  ! not oda_inc
 
 end subroutine initialize_oda_incupd_file
 
