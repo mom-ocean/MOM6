@@ -19,6 +19,7 @@ use MOM_io_infra,         only : get_field_size, fieldtype, field_exists, get_fi
 use MOM_io_infra,         only : get_file_times, axistype, get_axis_data, get_filename_suffix
 use MOM_io_infra,         only : write_field, write_metadata, write_version
 use MOM_io_infra,         only : MOM_namelist_file, check_namelist_error, io_infra_init, io_infra_end
+use MOM_io_infra,         only : stdout_if_root
 use MOM_io_infra,         only : APPEND_FILE, ASCII_FILE, MULTIPLE, NETCDF_FILE, OVERWRITE_FILE
 use MOM_io_infra,         only : READONLY_FILE, SINGLE_FILE, WRITEONLY_FILE
 use MOM_io_infra,         only : CENTER, CORNER, NORTH_FACE, EAST_FACE
@@ -47,6 +48,7 @@ public :: axistype, get_axis_data
 public :: MOM_read_data, MOM_read_vector, read_field_chksum
 public :: slasher, write_field, write_version_number
 public :: io_infra_init, io_infra_end
+public :: stdout_if_root
 ! This is used to set up information descibing non-domain-decomposed axes.
 public :: axis_info, set_axis_info, delete_axis_info
 ! This is used to set up global file attributes
