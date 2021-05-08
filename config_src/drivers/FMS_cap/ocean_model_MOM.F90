@@ -55,7 +55,7 @@ use MOM_verticalGrid, only : verticalGrid_type
 use MOM_ice_shelf, only : initialize_ice_shelf, shelf_calc_flux, ice_shelf_CS
 use MOM_ice_shelf, only : add_shelf_forces, ice_shelf_end, ice_shelf_save_restart
 use MOM_wave_interface, only: wave_parameters_CS, MOM_wave_interface_init
-use MOM_wave_interface, only: MOM_wave_interface_init_lite, Update_Surface_Waves
+use MOM_wave_interface, only: Update_Surface_Waves
 use iso_fortran_env, only : int64
 
 #include <MOM_memory.h>
@@ -205,7 +205,7 @@ type, public :: ocean_state_type ; private
     marine_ice_CSp => NULL()  !< A pointer to the control structure for the
                               !! marine ice effects module.
   type(wave_parameters_cs), pointer :: &
-    Waves !< A structure containing pointers to the surface wave fields
+    Waves => NULL()           !< A pointer to the surface wave control structure
   type(surface_forcing_CS), pointer :: &
     forcing_CSp => NULL()     !< A pointer to the MOM forcing control structure
   type(MOM_restart_CS), pointer :: &
@@ -382,11 +382,9 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, wind_stagger, gas
 
   call get_param(param_file, mdl, "USE_WAVES", OS%Use_Waves, &
        "If true, enables surface wave modules.", default=.false.)
-  if (OS%use_waves) then
-    call MOM_wave_interface_init(OS%Time, OS%grid, OS%GV, OS%US, param_file, OS%Waves, OS%diag)
-  else
-    call MOM_wave_interface_init_lite(param_file)
-  endif
+  ! MOM_wave_interface_init is called regardless of the value of USE_WAVES because
+  ! it also initCSializes statistical waves.
+  call MOM_wave_interface_init(OS%Time, OS%grid, OS%GV, OS%US, param_file, OS%Waves, OS%diag)
 
   call initialize_ocean_public_type(OS%grid%Domain, Ocean_sfc, OS%diag, &
                                     gas_fields_ocn=gas_fields_ocn)
