@@ -226,10 +226,10 @@ subroutine lateral_boundary_diffusion(G, GV, US, h, Coef_x, Coef_y, dt, Reg, CS)
       if (G%mask2dT(i,j)>0.) then
         tracer%t(i,j,k) = tracer%t(i,j,k) + (( (uFlx(I-1,j,k)-uFlx(I,j,k)) ) + ( (vFlx(i,J-1,k)-vFlx(i,J,k) ) ))* &
                           G%IareaT(i,j) / ( h(i,j,k) + GV%H_subroundoff )
+
         if (tracer%id_lbdxy_conc > 0  .or. tracer%id_lbdxy_cont > 0 .or. tracer%id_lbdxy_cont_2d > 0 ) then
-          !### Probably this needs to be multiplied by (h(i,j,k) + GV%H_subroundoff) for consistency
-          !    the way it is used later in this routine.
-          tendency(i,j,k) = (tracer%t(i,j,k)-tracer_old(i,j,k)) * Idt
+          tendency(i,j,k) = ((uFlx(I-1,j,k)-uFlx(I,j,k)) + (vFlx(i,J-1,k)-vFlx(i,J,k)))  * &
+                            G%IareaT(i,j) * Idt
         endif
       endif
     enddo ; enddo ; enddo
@@ -274,7 +274,6 @@ subroutine lateral_boundary_diffusion(G, GV, US, h, Coef_x, Coef_y, dt, Reg, CS)
     endif
 
     ! post tendency of tracer content
-    !### This seems to be dimensionally inconsistent with the calculation of tendency above.
     if (tracer%id_lbdxy_cont > 0) then
       call post_data(tracer%id_lbdxy_cont, tendency, CS%diag)
     endif
@@ -293,7 +292,6 @@ subroutine lateral_boundary_diffusion(G, GV, US, h, Coef_x, Coef_y, dt, Reg, CS)
     ! post tendency of tracer concentration; this step must be
     ! done after posting tracer content tendency, since we alter
     ! the tendency array and its units.
-    !### This seems to be dimensionally inconsistent with the calculation of tendency above.
     if (tracer%id_lbdxy_conc > 0) then
       do k=1,GV%ke ; do j=G%jsc,G%jec ; do i=G%isc,G%iec
         tendency(i,j,k) =  tendency(i,j,k) / ( h(i,j,k) + CS%H_subroundoff )
