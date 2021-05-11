@@ -1971,6 +1971,7 @@ integer function register_diag_field(module_name, field_name, axes_in, init_time
   type(diag_ctrl), pointer :: diag_cs => NULL()
   type(axes_grp), pointer :: remap_axes => null()
   type(axes_grp), pointer :: axes => null()
+  type(axes_grp), pointer :: paxes => null()
   integer :: dm_id, i, dl
   character(len=256) :: msg, cm_string
   character(len=256) :: new_module_name
@@ -2002,6 +2003,7 @@ integer function register_diag_field(module_name, field_name, axes_in, init_time
   elseif (axes_in%id == diag_cs%axesCvi%id) then
     axes => diag_cs%axesCvi
   endif
+  paxes => axes
 
   module_list = "{"//trim(module_name)
   num_modnm = 1
@@ -2191,12 +2193,12 @@ integer function register_diag_field(module_name, field_name, axes_in, init_time
   if (is_root_pe() .and. (diag_CS%available_diag_doc_unit > 0)) then
     msg = ''
     if (present(cmor_field_name)) msg = 'CMOR equivalent is "'//trim(cmor_field_name)//'"'
-    call attach_cell_methods(-1, axes, cm_string, cell_methods, &
+    call attach_cell_methods(-1, paxes, cm_string, cell_methods, &
                              x_cell_method, y_cell_method, v_cell_method, &
                              v_extensive=v_extensive)
     module_list = trim(module_list)//"}"
     if (num_modnm <= 1) module_list = module_name
-    if (num_varnm <= 1) var_list = ""
+    if (num_varnm <= 1) var_list = ''
 
     call log_available_diag(dm_id>0, module_list, field_name, cm_string, msg, diag_CS, &
                             long_name, units, standard_name, variants=var_list)
