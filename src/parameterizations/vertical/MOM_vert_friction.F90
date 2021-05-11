@@ -1773,20 +1773,22 @@ subroutine vertvisc_init(MIS, Time, G, GV, US, param_file, diag, ADp, dirs, &
       'Meridional Viscous Vertical Coupling Coefficient', 'm s-1', conversion=US%Z_to_m*US%s_to_T)
 
   CS%id_h_u = register_diag_field('ocean_model', 'Hu_visc', diag%axesCuL, Time, &
-      'Thickness at Zonal Velocity Points for Viscosity', thickness_units, &
-      conversion=GV%H_to_m)
+      'Thickness at Zonal Velocity Points for Viscosity', &
+      thickness_units, conversion=GV%H_to_MKS)
+      ! Alternately, to always give this variable in 'm' use the following line instead:
+      ! 'm', conversion=GV%H_to_m)
 
   CS%id_h_v = register_diag_field('ocean_model', 'Hv_visc', diag%axesCvL, Time, &
-      'Thickness at Meridional Velocity Points for Viscosity', thickness_units, &
-      conversion=GV%H_to_m)
+      'Thickness at Meridional Velocity Points for Viscosity', &
+      thickness_units, conversion=GV%H_to_MKS)
 
   CS%id_hML_u = register_diag_field('ocean_model', 'HMLu_visc', diag%axesCu1, Time, &
-      'Mixed Layer Thickness at Zonal Velocity Points for Viscosity', thickness_units, &
-      conversion=GV%H_to_m)
+      'Mixed Layer Thickness at Zonal Velocity Points for Viscosity', &
+      thickness_units, conversion=GV%H_to_MKS)
 
   CS%id_hML_v = register_diag_field('ocean_model', 'HMLv_visc', diag%axesCv1, Time, &
-      'Mixed Layer Thickness at Meridional Velocity Points for Viscosity', thickness_units, &
-      conversion=GV%H_to_m)
+      'Mixed Layer Thickness at Meridional Velocity Points for Viscosity', &
+      thickness_units, conversion=GV%H_to_MKS)
 
   CS%id_du_dt_visc = register_diag_field('ocean_model', 'du_dt_visc', diag%axesCuL, &
       Time, 'Zonal Acceleration from Vertical Viscosity', 'm s-2', conversion=US%L_T2_to_m_s2)
