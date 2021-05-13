@@ -2285,7 +2285,7 @@ subroutine matrix_diagonal(CS, G, US, float_cond, H_node, ice_visc, basal_trac, 
 
         u_diagonal(Itgt,Jtgt) = u_diagonal(Itgt,Jtgt) + &
               0.25 * ice_visc(i,j) * ((4*ux+2*vy) * Phi(2*(2*(jphi-1)+iphi)-1,2*(jq-1)+iq) + &
-                                      (uy+vy) * Phi(2*(2*(jphi-1)+iphi),2*(jq-1)+iq))
+                                      (uy+vx) * Phi(2*(2*(jphi-1)+iphi),2*(jq-1)+iq))
 
         if (float_cond(i,j) == 0) then
           uq = xquad(ilq) * xquad(jlq)
