@@ -7,7 +7,7 @@ use MOM_grid, only : ocean_grid_type
 use MOM_array_transform,      only : rotate_array
 use MOM_hor_index,  only : hor_index_type
 use MOM_file_parser, only : get_param, read_param, log_param, param_file_type
-use MOM_io, only: MOM_read_data, file_exists, slasher
+use MOM_io, only: MOM_read_data, file_exists, slasher, CORNER
 use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, WARNING, is_root_pe
 use MOM_unit_scaling, only : unit_scale_type
 use user_shelf_init, only: USER_init_ice_thickness
@@ -262,28 +262,31 @@ subroutine initialize_ice_shelf_boundary_channel(u_face_mask_bdry, v_face_mask_b
                 US, PF )
 
    type(ocean_grid_type), intent(in)    :: G    !< The ocean's grid structure
-   real, dimension(SZDI_(G),SZDJ_(G)), &
+   real, dimension(SZIB_(G),SZJB_(G)), &
                           intent(inout) :: u_face_mask_bdry !< A boundary-type mask at C-grid u faces
-   real, dimension(SZDI_(G),SZDJ_(G)), &
+
+   real, dimension(SZIB_(G),SZJ_(G)), &
                           intent(inout) :: u_flux_bdry_val  !< The boundary thickness flux through
                                                       !! C-grid u faces [L Z T-1 ~> m2 s-1].
-   real, dimension(SZDI_(G),SZDJ_(G)), &
+   real, dimension(SZIB_(G),SZJB_(G)), &
                           intent(inout) :: v_face_mask_bdry !< A boundary-type mask at C-grid v faces
-   real, dimension(SZDI_(G),SZDJ_(G)), &
+
+   real, dimension(SZI_(G),SZJB_(G)), &
                           intent(inout) :: v_flux_bdry_val  !< The boundary thickness flux through
                                                       !! C-grid v faces [L Z T-1 ~> m2 s-1].
-   real, dimension(SZDI_(G),SZDJ_(G)), &
+   real, dimension(SZIB_(G),SZJB_(G)), &
                           intent(inout) :: u_bdry_val !< The zonal ice shelf velocity at open
                                                        !! boundary vertices [L T-1 ~> m s-1].
-   real, dimension(SZDI_(G),SZDJ_(G)), &
+   real, dimension(SZIB_(G),SZJB_(G)), &
                           intent(inout) :: v_bdry_val !< The meridional ice shelf velocity at open
-   real, dimension(SZDI_(G),SZDJ_(G)), &
+   real, dimension(SZIB_(G),SZJB_(G)), &
                           intent(inout) :: u_shelf !< The zonal ice shelf velocity  [L T-1 ~> m s-1].
-   real, dimension(SZDI_(G),SZDJ_(G)), &
+   real, dimension(SZIB_(G),SZJB_(G)), &
                           intent(inout) :: v_shelf !< The meridional ice shelf velocity  [L T-1 ~> m s-1].
    real, dimension(SZDI_(G),SZDJ_(G)), &
                           intent(inout) :: thickness_bdry_val !< The ice shelf thickness at open boundaries [Z ~> m]
                                                           !! boundary vertices [L T-1 ~> m s-1].
+
    real, dimension(SZDI_(G),SZDJ_(G)), &
                           intent(inout) :: h_bdry_val !< The ice shelf thickness at open boundaries [Z ~> m]
    real, dimension(SZDI_(G),SZDJ_(G)), &
@@ -376,17 +379,18 @@ end subroutine initialize_ice_shelf_boundary_channel
 
 
 !> Initialize ice shelf flow from file
-subroutine initialize_ice_flow_from_file(bed_elev,u_shelf, v_shelf,ice_visc,float_cond,&
+subroutine initialize_ice_flow_from_file(bed_elev,u_shelf, v_shelf,float_cond,&
                                          hmask,h_shelf, G, US, PF)
+!subroutine initialize_ice_flow_from_file(bed_elev,u_shelf, v_shelf,ice_visc,float_cond,&
+!                                         hmask,h_shelf, G, US, PF)
   type(ocean_grid_type), intent(in)    :: G    !< The ocean's grid structure
   real, dimension(SZDI_(G),SZDJ_(G)), &
                          intent(inout) :: bed_elev !< The ice shelf u velocity  [Z ~> m].
-  real, dimension(SZDI_(G),SZDJ_(G)), &
-                         intent(inout) :: u_shelf !< The ice shelf u velocity  [Z ~> m T ~>s].
-  real, dimension(SZDI_(G),SZDJ_(G)), &
-                         intent(inout) :: v_shelf !< The ice shelf v velocity [Z ~> m T ~> s].
-  real, dimension(SZDI_(G),SZDJ_(G)), &
-                         intent(inout) :: ice_visc !< The ice shelf viscosity [Pa ~> m T ~> s].
+   real, dimension(SZIB_(G),SZJB_(G)), &
+                          intent(inout) :: u_shelf !< The zonal ice shelf velocity  [L T-1 ~> m s-1].
+   real, dimension(SZIB_(G),SZJB_(G)), &
+                          intent(inout) :: v_shelf !< The meridional ice shelf velocity  [L T-1 ~> m s-1].
+
   real, dimension(SZDI_(G),SZDJ_(G)), &
                          intent(inout)    :: float_cond !< An array indicating where the ice
                                                 !! shelf is floating: 0 if floating, 1 if not.
@@ -441,22 +445,22 @@ subroutine initialize_ice_flow_from_file(bed_elev,u_shelf, v_shelf,ice_visc,floa
 
   floatfr_varname = "float_frac"
 
- call MOM_read_data(filename, trim(ushelf_varname), u_shelf, G%Domain, scale=1.0)
- call MOM_read_data(filename,trim(vshelf_varname), v_shelf, G%Domain, scale=1.0)
- call MOM_read_data(filename,trim(ice_visc_varname), ice_visc, G%Domain, scale=1.0)
+ call MOM_read_data(filename, trim(ushelf_varname), u_shelf, G%Domain, position=CORNER,scale=1.0)
+ call MOM_read_data(filename,trim(vshelf_varname), v_shelf, G%Domain, position=CORNER,scale=1.0)
+! call MOM_read_data(filename,trim(ice_visc_varname), ice_visc, G%Domain,position=CORNER,scale=1.0)
  call MOM_read_data(filename,trim(floatfr_varname), float_cond, G%Domain, scale=1.)
 
  filename = trim(inputdir)//trim(bed_topo_file)
  call MOM_read_data(filename,trim(bed_varname), bed_elev, G%Domain, scale=1.)
   isc = G%isc ; jsc = G%jsc ; iec = G%iec ; jec = G%jec
 
-  do j=jsc,jec
-    do i=isc,iec
-       if  (hmask(i,j) == 1.) then
-               ice_visc(i,j) = ice_visc(i,j) * (G%areaT(i,j) * h_shelf(i,j))
-       endif
-    enddo
-  enddo
+!  do j=jsc,jec
+!    do i=isc,iec
+!       if  (hmask(i,j) == 1.) then
+!               ice_visc(i,j) = ice_visc(i,j) * (G%areaT(i,j) * h_shelf(i,j))
+!       endif
+!    enddo
+!  enddo
 
 end subroutine initialize_ice_flow_from_file
 
@@ -466,18 +470,18 @@ subroutine initialize_ice_shelf_boundary_from_file(u_face_mask_bdry, v_face_mask
                 hmask,  h_shelf, G, US, PF )
 
    type(ocean_grid_type), intent(in)    :: G    !< The ocean's grid structure
-   real, dimension(SZDI_(G),SZDJ_(G)), &
-                          intent(inout) :: u_face_mask_bdry !< A boundary-type mask at C-grid u faces
-   real, dimension(SZDI_(G),SZDJ_(G)), &
-                          intent(inout) :: v_face_mask_bdry !< A boundary-type mask at C-grid v faces
-   real, dimension(SZDI_(G),SZDJ_(G)), &
+   real, dimension(SZIB_(G),SZJB_(G)), &
+                          intent(inout) :: u_face_mask_bdry !< A boundary-type mask at B-grid u faces
+   real, dimension(SZIB_(G),SZJB_(G)), &
+                          intent(inout) :: v_face_mask_bdry !< A boundary-type mask at B-grid v faces
+   real, dimension(SZIB_(G),SZJB_(G)), &
                           intent(inout) :: u_bdry_val !< The zonal ice shelf velocity at open
                                                        !! boundary vertices [L T-1 ~> m s-1].
-   real, dimension(SZDI_(G),SZDJ_(G)), &
+   real, dimension(SZIB_(G),SZJB_(G)), &
                           intent(inout) :: v_bdry_val !< The meridional ice shelf velocity at open
-   real, dimension(SZDI_(G),SZDJ_(G)), &
+   real, dimension(SZDIB_(G),SZDJB_(G)), &
                           intent(inout) :: umask !< A mask foor ice shelf velocity
-   real, dimension(SZDI_(G),SZDJ_(G)), &
+   real, dimension(SZDIB_(G),SZDJB_(G)), &
                           intent(inout) :: vmask !< A mask foor ice shelf velocity
    real, dimension(SZDI_(G),SZDJ_(G)), &
                           intent(inout) :: thickness_bdry_val !< The ice shelf thickness at open boundaries [Z ~> m]
@@ -503,7 +507,7 @@ subroutine initialize_ice_shelf_boundary_from_file(u_face_mask_bdry, v_face_mask
   h_bdry_val(:,:) = 0.
   thickness_bdry_val(:,:) = 0.
 
-  call MOM_mesg("  MOM_ice_shelf_init_profile.F90, initialize_velocity_from_file: reading velocity")
+  call MOM_mesg("  MOM_ice_shelf_init_profile.F90, initialize_b_c_s_from_file: reading b.c.s")
 
   call get_param(PF, mdl, "INPUTDIR", inputdir, default=".")
   inputdir = slasher(inputdir)
@@ -544,12 +548,12 @@ subroutine initialize_ice_shelf_boundary_from_file(u_face_mask_bdry, v_face_mask
        " initialize_ice_shelf_velocity_from_file: Unable to open "//trim(filename))
 
 
- call MOM_read_data(filename, trim(ufcmskbdry_varname),u_face_mask_bdry, G%Domain, scale=1.0)
- call MOM_read_data(filename,trim(vfcmskbdry_varname), v_face_mask_bdry, G%Domain, scale=1.0)
- call MOM_read_data(filename,trim(ubdryv_varname), u_bdry_val, G%Domain, scale=1.0)
- call MOM_read_data(filename,trim(vbdryv_varname), v_bdry_val, G%Domain, scale=1.)
- call MOM_read_data(filename,trim(umask_varname), umask, G%Domain, scale=1.)
- call MOM_read_data(filename,trim(vmask_varname), vmask, G%Domain, scale=1.)
+ call MOM_read_data(filename, trim(ufcmskbdry_varname),u_face_mask_bdry, G%Domain,position=CORNER,scale=1.0)
+ call MOM_read_data(filename,trim(vfcmskbdry_varname), v_face_mask_bdry, G%Domain, position=CORNER,scale=1.0)
+ call MOM_read_data(filename,trim(ubdryv_varname), u_bdry_val, G%Domain, position=CORNER,scale=1.0)
+ call MOM_read_data(filename,trim(vbdryv_varname), v_bdry_val, G%Domain, position=CORNER,scale=1.)
+ call MOM_read_data(filename,trim(umask_varname), umask, G%Domain, position=CORNER,scale=1.)
+ call MOM_read_data(filename,trim(vmask_varname), vmask, G%Domain, position=CORNER,scale=1.)
  filename = trim(inputdir)//trim(icethick_file)
 
  call MOM_read_data(filename, trim(h_varname), h_shelf, G%Domain, scale=US%m_to_Z)
