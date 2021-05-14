@@ -12,7 +12,7 @@ use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser,   only : get_param, log_version, param_file_type
 use MOM_forcing_type,  only : mech_forcing
 use MOM_grid,          only : ocean_grid_type
-use MOM_io,            only : file_exists, field_exists, get_var_sizes, read_variable
+use MOM_io,            only : file_exists, get_var_sizes, read_variable
 use MOM_safe_alloc,    only : safe_alloc_ptr
 use MOM_time_manager,  only : time_type, operator(+), operator(/)
 use MOM_unit_scaling,  only : unit_scale_type
@@ -403,13 +403,13 @@ subroutine MOM_wave_interface_init(time, G, GV, US, param_file, CS, diag )
 
   ! Initialize Wave related outputs
   CS%id_surfacestokes_y = register_diag_field('ocean_model','surface_stokes_y', &
-       CS%diag%axesCu1,Time,'Surface Stokes drift (y)','m s-1')
+       CS%diag%axesCv1,Time,'Surface Stokes drift (y)','m s-1')
   CS%id_surfacestokes_x = register_diag_field('ocean_model','surface_stokes_x', &
-       CS%diag%axesCv1,Time,'Surface Stokes drift (x)','m s-1')
+       CS%diag%axesCu1,Time,'Surface Stokes drift (x)','m s-1')
   CS%id_3dstokes_y = register_diag_field('ocean_model','3d_stokes_y', &
        CS%diag%axesCvL,Time,'3d Stokes drift (y)','m s-1')
   CS%id_3dstokes_x = register_diag_field('ocean_model','3d_stokes_x', &
-       CS%diag%axesCuL,Time,'3d Stokes drift (y)','m s-1')
+       CS%diag%axesCuL,Time,'3d Stokes drift (x)','m s-1')
   CS%id_La_turb = register_diag_field('ocean_model','La_turbulent',&
        CS%diag%axesT1,Time,'Surface (turbulent) Langmuir number','nondim')
 
@@ -786,6 +786,7 @@ subroutine Surface_Bands_by_data_override(day_center, G, GV, US, CS)
   integer, dimension(4) :: sizes    ! The sizes of the various dimensions of the variable.
   character(len=48) :: dim_name(4)  ! The names of the dimensions of the variable.
   character(len=20) :: varname      ! The name of an input variable for data override.
+  logical :: wavenumber_exists
   integer :: ndims, b, i, j
 
   if (.not.dataOverrideIsInitialized) then
@@ -796,30 +797,36 @@ subroutine Surface_Bands_by_data_override(day_center, G, GV, US, CS)
       call MOM_error(FATAL, "MOM_wave_interface is unable to find file "//trim(SurfBandFileName))
 
     ! Check if input has wavenumber or frequency variables.
-    if (field_exists(SurfBandFileName, 'wavenumber')) then
+
+    ! Read the number of wavenumber bands in the file, if the variable 'wavenumber' exists.
+    call get_var_sizes(SurfBandFileName, 'wavenumber', ndims, sizes, dim_names=dim_name)
+    wavenumber_exists = (ndims > -1)
+
+    if (.not.wavenumber_exists) then
+      ! Read the number of frequency bands in the file, if the variable 'frequency' exists.
+      call get_var_sizes(SurfBandFileName, 'frequency', ndims, sizes, dim_names=dim_name)
+      if (ndims < 0) &
+        call MOM_error(FATAL, "error finding variable 'wavenumber' or 'frequency' in file "//&
+                              trim(SurfBandFileName)//" in MOM_wave_interface.")
+    endif
+
+    CS%NUMBANDS = sizes(1)
+    ! Allocate the wavenumber bins
+    allocate( CS%WaveNum_Cen(CS%NUMBANDS) ) ; CS%WaveNum_Cen(:) = 0.0
+
+    if (wavenumber_exists) then
       ! Wavenumbers found, so this file uses the old method:
       PartitionMode = 0
-      ! Read in number of wavenumber bands in file to set number to be read in
-      call get_var_sizes(SurfBandFileName, 'wavenumber', ndims, sizes, dim_names=dim_name)
-
-      ! Allocating size of wavenumber bins
-      CS%NUMBANDS = sizes(1)
-      allocate( CS%WaveNum_Cen(CS%NUMBANDS) ) ; CS%WaveNum_Cen(:) = 0.0
 
       ! Reading wavenumber bins
       call read_variable(SurfBandFileName, dim_name(1), CS%WaveNum_Cen, scale=US%Z_to_m)
 
-    elseif (field_exists(SurfBandFileName, 'frequency')) then
+    else
       ! Frequencies found, so this file uses the newer method:
       PartitionMode = 1
-      ! Read in number of frequency bands in file to set number to be read in
-      call get_var_sizes(SurfBandFileName, 'frequency', ndims, sizes, dim_names=dim_name)
 
-      ! Allocating size of frequency bins
-      CS%NUMBANDS = sizes(1)
+      ! Allocate the frequency bins
       allocate( CS%Freq_Cen(CS%NUMBANDS) ) ; CS%Freq_Cen(:) = 0.0
-      ! Allocating size of wavenumber bins
-      allocate( CS%WaveNum_Cen(CS%NUMBANDS) ) ; CS%WaveNum_Cen(:) = 0.0
 
       ! Reading frequencies
       call read_variable(SurfBandFileName, dim_name(1), CS%Freq_Cen) !, scale=US%T_to_s)
@@ -827,16 +834,12 @@ subroutine Surface_Bands_by_data_override(day_center, G, GV, US, CS)
       do B = 1,CS%NumBands
         CS%WaveNum_Cen(b) = (2.*PI*CS%Freq_Cen(b)*US%T_to_s)**2 / (US%L_to_Z**2*GV%g_Earth)
       enddo
-
-    else
-      call MOM_error(FATAL, "error finding variable 'wavenumber' or 'frequency' in file "//&
-                            trim(SurfBandFileName)//" in MOM_wave_interface.")
     endif
 
     if (.not.allocated(CS%STKx0)) then
       allocate( CS%STKx0(G%isdB:G%iedB,G%jsd:G%jed,CS%NUMBANDS) ) ; CS%STKx0(:,:,:) = 0.0
     endif
-    if (.not.allocated(CS%STKx0)) then
+    if (.not.allocated(CS%STKy0)) then
       allocate( CS%STKy0(G%isd:G%ied,G%jsdB:G%jedB,CS%NUMBANDS) ) ; CS%STKy0(:,:,:) = 0.0
     endif
   endif
