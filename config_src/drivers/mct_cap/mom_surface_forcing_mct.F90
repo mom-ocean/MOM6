@@ -2,7 +2,7 @@ module MOM_surface_forcing_mct
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-use MOM_coms,             only : reproducing_sum
+use MOM_coms,             only : reproducing_sum, field_chksum
 use MOM_constants,        only : hlv, hlf
 use MOM_cpu_clock,        only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock,        only : CLOCK_SUBCOMPONENT
@@ -37,7 +37,8 @@ use data_override_mod,    only : data_override_init, data_override
 use mpp_mod,              only : mpp_chksum
 use time_interp_external_mod, only : init_external_field, time_interp_external
 use time_interp_external_mod, only : time_interp_external_init
-use MOM_io,               only: stdout
+use MOM_io,               only : stdout
+use iso_fortran_env,      only : int64
 
 implicit none ; private
 
@@ -486,17 +487,18 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
 
     ! latent heat flux (W/m^2)
     fluxes%latent(i,j) = 0.0
-    ! contribution from frozen ppt
+    ! contribution from frozen ppt (notice minus sign since fprec is positive into the ocean)
     if (associated(IOB%fprec)) then
-      fluxes%latent(i,j)              = fluxes%latent(i,j) + &
+      fluxes%latent(i,j)              = fluxes%latent(i,j) - &
           IOB%fprec(i-i0,j-j0)*US%W_m2_to_QRZ_T*CS%latent_heat_fusion
-      fluxes%latent_fprec_diag(i,j)   = G%mask2dT(i,j) * IOB%fprec(i-i0,j-j0)*US%W_m2_to_QRZ_T*CS%latent_heat_fusion
+      fluxes%latent_fprec_diag(i,j)   = - G%mask2dT(i,j) * IOB%fprec(i-i0,j-j0)*US%W_m2_to_QRZ_T*CS%latent_heat_fusion
     endif
-    ! contribution from frozen runoff
+    ! contribution from frozen runoff (notice minus sign since rofi_flux is positive into the ocean)
     if (associated(fluxes%frunoff)) then
-      fluxes%latent(i,j)              = fluxes%latent(i,j) + &
+      fluxes%latent(i,j)              = fluxes%latent(i,j) - &
           IOB%rofi_flux(i-i0,j-j0)*US%W_m2_to_QRZ_T*CS%latent_heat_fusion
-      fluxes%latent_frunoff_diag(i,j) = G%mask2dT(i,j) * IOB%rofi_flux(i-i0,j-j0)*US%W_m2_to_QRZ_T*CS%latent_heat_fusion
+      fluxes%latent_frunoff_diag(i,j) = -G%mask2dT(i,j) &
+          * IOB%rofi_flux(i-i0,j-j0)*US%W_m2_to_QRZ_T*CS%latent_heat_fusion
     endif
     ! contribution from evaporation
     if (associated(IOB%q_flux)) then
@@ -1361,32 +1363,40 @@ subroutine ice_ocn_bnd_type_chksum(id, timestep, iobt)
                                          !! ocean in a coupled model whose checksums are reported
 
   ! local variables
-  integer ::   n,m
+  integer(kind=int64) :: chks ! A checksum for the field
+  logical :: root    ! True only on the root PE
+  integer :: outunit ! The output unit to write to
 
-  write(stdout,*) "BEGIN CHECKSUM(ice_ocean_boundary_type):: ", id, timestep
-  write(stdout,100) 'iobt%u_flux         '   , mpp_chksum( iobt%u_flux         )
-  write(stdout,100) 'iobt%v_flux         '   , mpp_chksum( iobt%v_flux         )
-  write(stdout,100) 'iobt%t_flux         '   , mpp_chksum( iobt%t_flux         )
-  write(stdout,100) 'iobt%q_flux         '   , mpp_chksum( iobt%q_flux         )
-  write(stdout,100) 'iobt%salt_flux      '   , mpp_chksum( iobt%salt_flux      )
-  write(stdout,100) 'iobt%seaice_melt_heat'  , mpp_chksum( iobt%seaice_melt_heat)
-  write(stdout,100) 'iobt%seaice_melt    '   , mpp_chksum( iobt%seaice_melt    )
-  write(stdout,100) 'iobt%lw_flux        '   , mpp_chksum( iobt%lw_flux        )
-  write(stdout,100) 'iobt%sw_flux_vis_dir'   , mpp_chksum( iobt%sw_flux_vis_dir)
-  write(stdout,100) 'iobt%sw_flux_vis_dif'   , mpp_chksum( iobt%sw_flux_vis_dif)
-  write(stdout,100) 'iobt%sw_flux_nir_dir'   , mpp_chksum( iobt%sw_flux_nir_dir)
-  write(stdout,100) 'iobt%sw_flux_nir_dif'   , mpp_chksum( iobt%sw_flux_nir_dif)
-  write(stdout,100) 'iobt%lprec          '   , mpp_chksum( iobt%lprec          )
-  write(stdout,100) 'iobt%fprec          '   , mpp_chksum( iobt%fprec          )
-  write(stdout,100) 'iobt%runoff         '   , mpp_chksum( iobt%runoff         )
-  write(stdout,100) 'iobt%calving        '   , mpp_chksum( iobt%calving        )
-  write(stdout,100) 'iobt%p              '   , mpp_chksum( iobt%p              )
-  if (associated(iobt%ustar_berg)) &
-    write(stdout,100) 'iobt%ustar_berg     ' , mpp_chksum( iobt%ustar_berg )
-  if (associated(iobt%area_berg)) &
-    write(stdout,100) 'iobt%area_berg      ' , mpp_chksum( iobt%area_berg  )
-  if (associated(iobt%mass_berg)) &
-    write(stdout,100) 'iobt%mass_berg      ' , mpp_chksum( iobt%mass_berg  )
+  outunit = stdout
+  root = is_root_pe()
+
+  if (root) write(outunit,*) "BEGIN CHECKSUM(ice_ocean_boundary_type):: ", id, timestep
+  chks = field_chksum( iobt%u_flux         ) ; if (root) write(outunit,100) 'iobt%u_flux          ', chks
+  chks = field_chksum( iobt%v_flux         ) ; if (root) write(outunit,100) 'iobt%v_flux          ', chks
+  chks = field_chksum( iobt%t_flux         ) ; if (root) write(outunit,100) 'iobt%t_flux          ', chks
+  chks = field_chksum( iobt%q_flux         ) ; if (root) write(outunit,100) 'iobt%q_flux          ', chks
+  chks = field_chksum( iobt%seaice_melt_heat); if (root) write(outunit,100) 'iobt%seaice_melt_heat', chks
+  chks = field_chksum( iobt%seaice_melt)     ; if (root) write(outunit,100) 'iobt%seaice_melt    ', chks
+  chks = field_chksum( iobt%salt_flux      ) ; if (root) write(outunit,100) 'iobt%salt_flux      ', chks
+  chks = field_chksum( iobt%lw_flux        ) ; if (root) write(outunit,100) 'iobt%lw_flux        ', chks
+  chks = field_chksum( iobt%sw_flux_vis_dir) ; if (root) write(outunit,100) 'iobt%sw_flux_vis_dir', chks
+  chks = field_chksum( iobt%sw_flux_vis_dif) ; if (root) write(outunit,100) 'iobt%sw_flux_vis_dif', chks
+  chks = field_chksum( iobt%sw_flux_nir_dir) ; if (root) write(outunit,100) 'iobt%sw_flux_nir_dir', chks
+  chks = field_chksum( iobt%sw_flux_nir_dif) ; if (root) write(outunit,100) 'iobt%sw_flux_nir_dif', chks
+  chks = field_chksum( iobt%lprec          ) ; if (root) write(outunit,100) 'iobt%lprec          ', chks
+  chks = field_chksum( iobt%fprec          ) ; if (root) write(outunit,100) 'iobt%fprec          ', chks
+  chks = field_chksum( iobt%rofl_flux      ) ; if (root) write(outunit,100) 'rofl_flux           ', chks
+  chks = field_chksum( iobt%rofi_flux      ) ; if (root) write(outunit,100) 'rofi_flux           ', chks
+  chks = field_chksum( iobt%p              ) ; if (root) write(outunit,100) 'iobt%p              ', chks
+  if (associated(iobt%ustar_berg)) then
+    chks = field_chksum( iobt%ustar_berg ) ; if (root) write(outunit,100) 'iobt%ustar_berg     ', chks
+  endif
+  if (associated(iobt%area_berg)) then
+    chks = field_chksum( iobt%area_berg  ) ; if (root) write(outunit,100) 'iobt%area_berg      ', chks
+  endif
+  if (associated(iobt%mass_berg)) then
+    chks = field_chksum( iobt%mass_berg  ) ; if (root) write(outunit,100) 'iobt%mass_berg      ', chks
+  endif
 100 FORMAT("   CHECKSUM::",A20," = ",Z20)
 
   call coupler_type_write_chksums(iobt%fluxes, stdout, 'iobt%')

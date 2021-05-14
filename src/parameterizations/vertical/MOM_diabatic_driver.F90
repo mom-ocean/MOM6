@@ -2272,7 +2272,7 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
     !$OMP parallel do default(shared)
     do j=js,je
       do K=2,nz ; do i=is,ie
-        CDp%diapyc_vel(i,j,K) = US%s_to_T*Idt * (ea(i,j,k) - eb(i,j,k-1))
+        CDp%diapyc_vel(i,j,K) = Idt * (ea(i,j,k) - eb(i,j,k-1))
       enddo ; enddo
       do i=is,ie
         CDp%diapyc_vel(i,j,1) = 0.0
@@ -2966,7 +2966,7 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
       'Layer entrainment from below per timestep', 'm', conversion=GV%H_to_m)
   if (.not.CS%useALEalgorithm) then
     CS%id_wd = register_diag_field('ocean_model', 'wd', diag%axesTi, Time, &
-      'Diapycnal velocity', 'm s-1', conversion=GV%H_to_m)
+      'Diapycnal velocity', 'm s-1', conversion=GV%H_to_m*US%s_to_T)
     if (CS%id_wd > 0) call safe_alloc_ptr(CDp%diapyc_vel,isd,ied,jsd,jed,nz+1)
 
     CS%id_dudt_dia = register_diag_field('ocean_model', 'dudt_dia', diag%axesCuL, Time, &
