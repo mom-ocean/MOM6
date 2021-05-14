@@ -647,7 +647,7 @@ subroutine get_var_sizes(filename, varname, ndims, sizes, match_case, caller, al
     do n=2,nval ;  sizes(n-1) = size_msg(n) ; enddo
     deallocate(size_msg)
 
-    if (present(dim_names)) then
+    if (present(dim_names) .and. (ndims > 0)) then
       nval = min(ndims, size(dim_names))
       call broadcast(dim_names(1:nval), len(dim_names(1)), blocking=.true.)
     endif
@@ -655,7 +655,8 @@ subroutine get_var_sizes(filename, varname, ndims, sizes, match_case, caller, al
 
 end subroutine get_var_sizes
 
-!> read_var_sizes returns the number and size of dimensions associate with a variable in a file.
+!> read_var_sizes returns the number and size of dimensions associated with a variable in a file.
+!! If the variable is not in the file the returned sizes are all 0 and ndims is -1.
 !! Every processor for which this is called does the reading.
 subroutine read_var_sizes(filename, varname, ndims, sizes, match_case, caller, dim_names, ncid_in)
   character(len=*),      intent(in)  :: filename   !< Name of the file to read, used here in messages
@@ -675,7 +676,7 @@ subroutine read_var_sizes(filename, varname, ndims, sizes, match_case, caller, d
   character(len=256) :: hdr, dimname
   integer, allocatable :: dimids(:)
   integer :: varid, ncid, n, status
-  logical :: success
+  logical :: success, found
   hdr = "get_var_size: " ; if (present(caller)) hdr = trim(hdr)//": "
   sizes(:) = 0 ; ndims = -1
 
@@ -687,8 +688,8 @@ subroutine read_var_sizes(filename, varname, ndims, sizes, match_case, caller, d
   endif
 
   ! Get the dimension sizes of the variable varname.
-  call get_varid(varname, ncid, filename, varid, match_case=match_case)
-  if (varid < 0) return
+  call get_varid(varname, ncid, filename, varid, match_case=match_case, found=found)
+  if (.not.found) return
 
   status = NF90_inquire_variable(ncid, varid, ndims=ndims)
   if (status /= NF90_NOERR) then
