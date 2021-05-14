@@ -12,14 +12,12 @@ use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser,   only : get_param, log_version, param_file_type
 use MOM_forcing_type,  only : mech_forcing
 use MOM_grid,          only : ocean_grid_type
+use MOM_io,            only : file_exists, get_var_sizes, read_variable
 use MOM_safe_alloc,    only : safe_alloc_ptr
 use MOM_time_manager,  only : time_type, operator(+), operator(/)
 use MOM_unit_scaling,  only : unit_scale_type
 use MOM_variables,     only : thermo_var_ptrs, surface
 use MOM_verticalgrid,  only : verticalGrid_type
-
-use netcdf, only : NF90_open, NF90_inq_varid, NF90_inquire_variable, NF90_get_var
-use netcdf, only : NF90_inquire_dimension, NF90_close, NF90_NOWRITE, NF90_NOERR
 
 implicit none ; private
 
@@ -405,13 +403,13 @@ subroutine MOM_wave_interface_init(time, G, GV, US, param_file, CS, diag )
 
   ! Initialize Wave related outputs
   CS%id_surfacestokes_y = register_diag_field('ocean_model','surface_stokes_y', &
-       CS%diag%axesCu1,Time,'Surface Stokes drift (y)','m s-1')
+       CS%diag%axesCv1,Time,'Surface Stokes drift (y)','m s-1')
   CS%id_surfacestokes_x = register_diag_field('ocean_model','surface_stokes_x', &
-       CS%diag%axesCv1,Time,'Surface Stokes drift (x)','m s-1')
+       CS%diag%axesCu1,Time,'Surface Stokes drift (x)','m s-1')
   CS%id_3dstokes_y = register_diag_field('ocean_model','3d_stokes_y', &
        CS%diag%axesCvL,Time,'3d Stokes drift (y)','m s-1')
   CS%id_3dstokes_x = register_diag_field('ocean_model','3d_stokes_x', &
-       CS%diag%axesCuL,Time,'3d Stokes drift (y)','m s-1')
+       CS%diag%axesCuL,Time,'3d Stokes drift (x)','m s-1')
   CS%id_La_turb = register_diag_field('ocean_model','La_turbulent',&
        CS%diag%axesT1,Time,'Surface (turbulent) Langmuir number','nondim')
 
@@ -785,123 +783,65 @@ subroutine Surface_Bands_by_data_override(day_center, G, GV, US, CS)
   ! Local variables
   real    :: temp_x(SZI_(G),SZJ_(G)) ! Pseudo-zonal Stokes drift of band at h-points [m s-1]
   real    :: temp_y(SZI_(G),SZJ_(G)) ! Psuedo-meridional Stokes drift of band at h-points [m s-1]
-  real    :: Top, MidPoint
-  integer :: b
-  integer :: i, j
-  integer, dimension(4) :: start, counter, dims, dim_id
-  character(len=12)  :: dim_name(4)
-  character(20) :: varname, varread1, varread2
-  integer :: rcode_fr, rcode_wn, ncid, varid_fr, varid_wn, id, ndims
+  integer, dimension(4) :: sizes    ! The sizes of the various dimensions of the variable.
+  character(len=48) :: dim_name(4)  ! The names of the dimensions of the variable.
+  character(len=20) :: varname      ! The name of an input variable for data override.
+  logical :: wavenumber_exists
+  integer :: ndims, b, i, j
 
   if (.not.dataOverrideIsInitialized) then
     call data_override_init(G%Domain)
     dataOverrideIsInitialized = .true.
 
-    ! Read in number of wavenumber bands in file to set number to be read in
-    ! Hardcoded filename/variables
-    varread1 = 'wavenumber' !Old method gives wavenumber
-    varread2 = 'frequency'  !New method gives frequency
-    rcode_wn = NF90_OPEN(trim(SurfBandFileName), NF90_NOWRITE, ncid)
-    if (rcode_wn /= 0) then
-      call MOM_error(FATAL,"error opening file "//trim(SurfBandFileName)//&
-            " in MOM_wave_interface.")
+    if (.not.file_exists(SurfBandFileName)) &
+      call MOM_error(FATAL, "MOM_wave_interface is unable to find file "//trim(SurfBandFileName))
+
+    ! Check if input has wavenumber or frequency variables.
+
+    ! Read the number of wavenumber bands in the file, if the variable 'wavenumber' exists.
+    call get_var_sizes(SurfBandFileName, 'wavenumber', ndims, sizes, dim_names=dim_name)
+    wavenumber_exists = (ndims > -1)
+
+    if (.not.wavenumber_exists) then
+      ! Read the number of frequency bands in the file, if the variable 'frequency' exists.
+      call get_var_sizes(SurfBandFileName, 'frequency', ndims, sizes, dim_names=dim_name)
+      if (ndims < 0) &
+        call MOM_error(FATAL, "error finding variable 'wavenumber' or 'frequency' in file "//&
+                              trim(SurfBandFileName)//" in MOM_wave_interface.")
     endif
 
-    ! Check if rcode_wn or rcode_fr is 0 (checks if input has wavenumber or frequency)
-    rcode_wn = NF90_INQ_VARID(ncid, varread1, varid_wn)
-    rcode_fr = NF90_INQ_VARID(ncid, varread2, varid_fr)
+    CS%NUMBANDS = sizes(1)
+    ! Allocate the wavenumber bins
+    allocate( CS%WaveNum_Cen(CS%NUMBANDS) ) ; CS%WaveNum_Cen(:) = 0.0
 
-    if (rcode_wn /= 0 .and. rcode_fr /= 0) then
-      call MOM_error(FATAL,"error finding variable "//trim(varread1)//&
-         " or "//trim(varread2)//" in file "//trim(SurfBandFileName)//" in MOM_wave_interface.")
-
-    elseif (rcode_wn == 0) then
-      ! wavenumbers found:
+    if (wavenumber_exists) then
+      ! Wavenumbers found, so this file uses the old method:
       PartitionMode = 0
-      rcode_wn = NF90_INQUIRE_VARIABLE(ncid, varid_wn, ndims=ndims, &
-           dimids=dims)
-      if (rcode_wn /= 0) then
-        call MOM_error(FATAL, &
-             'error inquiring dimensions MOM_wave_interface.')
-      endif
-      rcode_wn = NF90_INQUIRE_DIMENSION(ncid, dims(1), dim_name(1), len=id)
-      if (rcode_wn /= 0) then
-        call MOM_error(FATAL,"error reading dimension 1 data for "// &
-             trim(varread1)//" in file "// trim(SurfBandFileName)//          &
-             " in MOM_wave_interface.")
-      endif
-      rcode_wn = NF90_INQ_VARID(ncid, dim_name(1), dim_id(1))
-      if (rcode_wn /= 0) then
-        call MOM_error(FATAL,"error finding variable "//trim(dim_name(1))//&
-          " in file "//trim(SurfBandFileName)//" in MOM_wave_interace.")
-      endif
-      ! Allocating size of wavenumber bins
-      allocate( CS%WaveNum_Cen(1:id) )
-      CS%WaveNum_Cen(:) = 0.0
-    elseif (rcode_fr == 0) then
-      ! frequencies found:
-      PartitionMode = 1
-      rcode_fr = NF90_INQUIRE_VARIABLE(ncid, varid_fr, ndims=ndims, &
-           dimids=dims)
-      if (rcode_fr /= 0) then
-        call MOM_error(FATAL,&
-             'error inquiring dimensions MOM_wave_interface.')
-      endif
-      rcode_fr = NF90_INQUIRE_DIMENSION(ncid, dims(1), dim_name(1), len=id)
-      if (rcode_fr /= 0) then
-        call MOM_error(FATAL,"error reading dimension 1 data for "// &
-             trim(varread2)//" in file "// trim(SurfBandFileName)// &
-             " in MOM_wave_interface.")
-      endif
-      rcode_fr = NF90_INQ_VARID(ncid, dim_name(1), dim_id(1))
-      if (rcode_fr /= 0) then
-        call MOM_error(FATAL,"error finding variable "//trim(dim_name(1))//&
-             " in file "//trim(SurfBandFileName)//" in MOM_wave_interace.")
-      endif
-      ! Allocating size of frequency bins
-      allocate( CS%Freq_Cen(1:id) )
-      CS%Freq_Cen(:) = 0.0
-      ! Allocating size of wavenumber bins
-      allocate( CS%WaveNum_Cen(1:id) )
-      CS%WaveNum_Cen(:) = 0.0
-      allocate( CS%STKx0(G%isdB:G%iedB,G%jsd:G%jed,1:id))
-      CS%STKx0(:,:,:) = 0.0
-      allocate( CS%STKy0(G%isd:G%ied,G%jsdB:G%jedB,1:id))
-      CS%STKy0(:,:,:) = 0.0
-    endif
 
-    ! Reading wavenumber bins/Frequencies
-    start(:) = 1 ! Set all start to 1
-    counter(:) = 1 ! Set all counter to 1
-    counter(1) = id ! Set counter(1) to id (number of frequency bins)
-    if (PartitionMode==0) then
-      rcode_wn = NF90_GET_VAR(ncid, dim_id(1), CS%WaveNum_Cen, start, counter)
-      if (rcode_wn /= 0) then
-        call MOM_error(FATAL,&
-             "error reading dimension 1 values for var_name "// &
-             trim(varread1)//",dim_name "//trim(dim_name(1))//  &
-             " in file "// trim(SurfBandFileName)//" in MOM_wave_interface")
-      endif
-      CS%NUMBANDS = ID
-      do B = 1,CS%NumBands ; CS%WaveNum_Cen(b) = US%Z_to_m*CS%WaveNum_Cen(b) ; enddo
-    elseif (PartitionMode==1) then
-      rcode_fr = NF90_GET_VAR(ncid, dim_id(1), CS%Freq_Cen, start, counter)
-      if (rcode_fr /= 0) then
-        call MOM_error(FATAL,&
-             "error reading dimension 1 values for var_name "// &
-             trim(varread2)//",dim_name "//trim(dim_name(1))//  &
-             " in file "// trim(SurfBandFileName)//" in MOM_wave_interface")
-      endif
-      CS%NUMBANDS = ID
+      ! Reading wavenumber bins
+      call read_variable(SurfBandFileName, dim_name(1), CS%WaveNum_Cen, scale=US%Z_to_m)
+
+    else
+      ! Frequencies found, so this file uses the newer method:
+      PartitionMode = 1
+
+      ! Allocate the frequency bins
+      allocate( CS%Freq_Cen(CS%NUMBANDS) ) ; CS%Freq_Cen(:) = 0.0
+
+      ! Reading frequencies
+      call read_variable(SurfBandFileName, dim_name(1), CS%Freq_Cen) !, scale=US%T_to_s)
+
       do B = 1,CS%NumBands
         CS%WaveNum_Cen(b) = (2.*PI*CS%Freq_Cen(b)*US%T_to_s)**2 / (US%L_to_Z**2*GV%g_Earth)
       enddo
     endif
 
-    rcode_wn = NF90_close(ncid)
-    if (rcode_wn /= 0) call MOM_error(WARNING, &
-            "Error closing file "//trim(SurfBandFileName)//" in MOM_wave_interface.")
-
+    if (.not.allocated(CS%STKx0)) then
+      allocate( CS%STKx0(G%isdB:G%iedB,G%jsd:G%jed,CS%NUMBANDS) ) ; CS%STKx0(:,:,:) = 0.0
+    endif
+    if (.not.allocated(CS%STKy0)) then
+      allocate( CS%STKy0(G%isd:G%ied,G%jsdB:G%jedB,CS%NUMBANDS) ) ; CS%STKy0(:,:,:) = 0.0
+    endif
   endif
 
   do b = 1,CS%NumBands
@@ -909,10 +849,10 @@ subroutine Surface_Bands_by_data_override(day_center, G, GV, US, CS)
     temp_y(:,:) = 0.0
     varname = '                    '
     write(varname,"(A3,I0)")'Usx',b
-    call data_override('OCN',trim(varname), temp_x, day_center)
+    call data_override('OCN', trim(varname), temp_x, day_center)
     varname = '                    '
     write(varname,'(A3,I0)')'Usy',b
-    call data_override('OCN',trim(varname), temp_y, day_center)
+    call data_override('OCN', trim(varname), temp_y, day_center)
     ! Disperse into halo on h-grid
     call pass_vector(temp_x, temp_y, G%Domain, To_All, AGRID)
     !Filter land values
@@ -937,8 +877,8 @@ subroutine Surface_Bands_by_data_override(day_center, G, GV, US, CS)
         CS%STKy0(i,J,b) = 0.5 * (temp_y(i,j) + temp_y(i,j+1))
       enddo
     enddo
-    ! Disperse into halo on u/v grids
-    call pass_vector(CS%STKx0(:,:,b),CS%STKy0(:,:,b), G%Domain, To_ALL)
+    ! Disperse into halo on u/v grids  (This would be faster if it were moved out of the b-loop.)
+    call pass_vector(CS%STKx0(:,:,b), CS%STKy0(:,:,b), G%Domain, To_ALL)
   enddo !Closes b-loop
 
 end subroutine Surface_Bands_by_data_override
