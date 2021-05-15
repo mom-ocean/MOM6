@@ -35,7 +35,7 @@ use MOM_forcing_type, only : copy_back_forcing_fields
 use MOM_forcing_type, only : forcing_diagnostics, mech_forcing_diags
 use MOM_get_input, only : Get_MOM_Input, directories
 use MOM_grid, only : ocean_grid_type
-use MOM_io, only : write_version_number, stdout
+use MOM_io, only : write_version_number, stdout_if_root
 use MOM_marine_ice, only : iceberg_forces, iceberg_fluxes, marine_ice_init, marine_ice_CS
 use MOM_restart, only : MOM_restart_CS, save_restart
 use MOM_string_functions, only : uppercase
@@ -1105,8 +1105,8 @@ subroutine ocean_public_type_chksum(id, timestep, ocn)
   logical :: root    ! True only on the root PE
   integer :: outunit ! The output unit to write to
 
-  outunit = stdout
   root = is_root_pe()
+  outunit = stdout_if_root()
 
   if (root) write(outunit,*) "BEGIN CHECKSUM(ocean_type):: ", id, timestep
   chks = field_chksum(ocn%t_surf ) ; if (root) write(outunit,100) 'ocean%t_surf   ', chks

@@ -27,7 +27,8 @@ use MOM_get_input,        only : Get_MOM_Input, directories
 use MOM_grid,             only : ocean_grid_type
 use MOM_interpolate,      only : init_external_field, time_interp_external
 use MOM_interpolate,      only : time_interp_external_init
-use MOM_io,               only : slasher, write_version_number, MOM_read_data, stdout
+use MOM_io,               only : slasher, write_version_number, MOM_read_data
+use MOM_io,               only : stdout_if_root
 use MOM_restart,          only : register_restart_field, restart_init, MOM_restart_CS
 use MOM_restart,          only : restart_init_end, save_restart, restore_state
 use MOM_string_functions, only : uppercase
@@ -1628,8 +1629,8 @@ subroutine ice_ocn_bnd_type_chksum(id, timestep, iobt)
   logical :: root    ! True only on the root PE
   integer :: outunit ! The output unit to write to
 
-  outunit = stdout
   root = is_root_pe()
+  outunit = stdout_if_root()
 
   if (root) write(outunit,*) "BEGIN CHECKSUM(ice_ocean_boundary_type):: ", id, timestep
   chks = field_chksum( iobt%u_flux         ) ; if (root) write(outunit,100) 'iobt%u_flux         ', chks
