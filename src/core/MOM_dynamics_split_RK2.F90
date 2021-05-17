@@ -342,14 +342,17 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
     hf_CAu_2d, hf_CAv_2d, & ! Depth integeral of hf_CAu, hf_CAv [L T-2 ~> m s-2].
     hf_u_BT_accel_2d, hf_v_BT_accel_2d ! Depth integeral of hf_u_BT_accel, hf_v_BT_accel
 
-  real, allocatable, dimension(:,:,:) :: h_PFu, h_CAu, h_u_BT_accel ! [L2 T-2 ~> m2 s-2].
-  real, allocatable, dimension(:,:,:) :: h_PFv, h_CAv, h_v_BT_accel ! [L2 T-2 ~> m2 s-2].
+  ! Diagnostics for thickness x momentum budget terms
+  real, allocatable, dimension(:,:,:) :: &
+    h_PFu, h_PFv, & ! Pressure force accel. x thickness [H L T-2 ~> m2 s-2].
+    h_CAu, h_CAv, & ! Coriolis force accel. x thickness [H L T-2 ~> m2 s-2].
+    h_u_BT_accel, h_v_BT_accel ! barotropic correction accel. x thickness [H L T-2 ~> m2 s-2].
 
+  ! Dignostics for layer-sum of thickness x momentum budget terms
   real, dimension(SZIB_(G),SZJ_(G)) :: &
-    intz_PFu_2d, intz_CAu_2d, intz_u_BT_accel_2d ! [L2 T-2 ~> m2 s-2].
+    intz_PFu_2d, intz_CAu_2d, intz_u_BT_accel_2d ! [H L T-2 ~> m2 s-2].
   real, dimension(SZI_(G),SZJB_(G)) :: &
-    intz_PFv_2d, intz_CAv_2d, intz_v_BT_accel_2d ! [L2 T-2 ~> m2 s-2].
-
+    intz_PFv_2d, intz_CAv_2d, intz_v_BT_accel_2d ! [H L T-2 ~> m2 s-2].
 
   real :: dt_pred   ! The time step for the predictor part of the baroclinic time stepping [T ~> s].
 

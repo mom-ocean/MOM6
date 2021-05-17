@@ -214,8 +214,8 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
   real, allocatable, dimension(:,:) :: hf_du_dt_visc_2d ! Depth sum of hf_du_dt_visc [L T-2 ~> m s-2]
   real, allocatable, dimension(:,:) :: hf_dv_dt_visc_2d ! Depth sum of hf_dv_dt_visc [L T-2 ~> m s-2]
 
-  real, allocatable, dimension(:,:,:) :: h_du_dt_visc ! h x du_dt_visc [L2 T-2 ~> m2 s-2]
-  real, allocatable, dimension(:,:,:) :: h_dv_dt_visc ! h x h_dv_dt_visc [L2 T-2 ~> m2 s-2]
+  real, allocatable, dimension(:,:,:) :: h_du_dt_visc ! h x du_dt_visc [H L T-2 ~> m2 s-2]
+  real, allocatable, dimension(:,:,:) :: h_dv_dt_visc ! h x dv_dt_visc [H L T-2 ~> m2 s-2]
 
   logical :: do_i(SZIB_(G))
   logical :: DoStokesMixing

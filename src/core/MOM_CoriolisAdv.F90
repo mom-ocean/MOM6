@@ -233,8 +233,8 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS)
   ! The code is retained for degugging purposes in the future.
 
 ! Diagnostics for thickness multiplied momentum budget terms
-  real, allocatable, dimension(:,:,:) :: h_gKEu, h_rvxv ! [L2 T-2 ~> m2 s-2].
-  real, allocatable, dimension(:,:,:) :: h_gKEv, h_rvxu ! [L2 T-2 ~> m2 s-2].
+  real, allocatable, dimension(:,:,:) :: h_gKEu, h_rvxv ! [H L T-2 ~> m2 s-2].
+  real, allocatable, dimension(:,:,:) :: h_gKEv, h_rvxu ! [H L T-2 ~> m2 s-2].
 
 ! Diagnostics for depth-integrated momentum budget terms
   real, dimension(SZIB_(G),SZJ_(G)) :: intz_gKEu_2d, intz_rvxv_2d ! [L2 T-2 ~> m2 s-2].

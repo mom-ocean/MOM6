@@ -278,8 +278,8 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
     grad_d2vel_mag_h, & ! Magnitude of the Laplacian of the velocity vector, squared [L-2 T-2 ~> m-2 s-2]
     boundary_mask_h ! A mask that zeroes out cells with at least one land edge [nondim]
 
-  real, allocatable, dimension(:,:,:) :: h_diffu ! h x diffu [L2 T-2 ~> m2 s-2]
-  real, allocatable, dimension(:,:,:) :: h_diffv ! h x diffv [L2 T-2 ~> m2 s-2]
+  real, allocatable, dimension(:,:,:) :: h_diffu ! h x diffu [H L T-2 ~> m2 s-2]
+  real, allocatable, dimension(:,:,:) :: h_diffv ! h x diffv [H L T-2 ~> m2 s-2]
 
   real, dimension(SZIB_(G),SZJB_(G)) :: &
     dvdx, dudy, & ! components in the shearing strain [T-1 ~> s-1]
@@ -389,11 +389,11 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
 
   real, dimension(SZIB_(G),SZJ_(G)) :: &
     hf_diffu_2d, &    ! Depth sum of hf_diffu, hf_diffv [L T-2 ~> m s-2]
-    intz_diffu_2d     ! Depth-integral of diffu [L2 T-2 ~> m2 s-2]
+    intz_diffu_2d     ! Depth-integral of diffu [H L T-2 ~> m2 s-2]
 
   real, dimension(SZI_(G),SZJB_(G)) :: &
     hf_diffv_2d, &    ! Depth sum of hf_diffu, hf_diffv [L T-2 ~> m s-2]
-    intz_diffv_2d     ! Depth-integral of diffv [L2 T-2 ~> m2 s-2]
+    intz_diffv_2d     ! Depth-integral of diffv [H L T-2 ~> m2 s-2]
 
   is  = G%isc  ; ie  = G%iec  ; js  = G%jsc  ; je  = G%jec ; nz = GV%ke
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB

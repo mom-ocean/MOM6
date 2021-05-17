@@ -249,8 +249,8 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
   real, allocatable, dimension(:,:) :: &
     hf_du_dt_2d, hf_dv_dt_2d ! z integeral of hf_du_dt, hf_dv_dt [L T-2 ~> m s-2].
 
-  real, allocatable, dimension(:,:,:) :: h_du_dt ! h x dudt  [L2 T-2 ~> m2 s-2]
-  real, allocatable, dimension(:,:,:) :: h_dv_dt ! h x dvdt [L2 T-2 ~> m2 s-2]
+  real, allocatable, dimension(:,:,:) :: h_du_dt ! h x dudt [H L T-2 ~> m2 s-2]
+  real, allocatable, dimension(:,:,:) :: h_dv_dt ! h x dvdt [H L T-2 ~> m2 s-2]
 
   ! tmp array for surface properties
   real :: surface_field(SZI_(G),SZJ_(G))
