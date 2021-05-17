@@ -233,12 +233,12 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS)
   ! The code is retained for degugging purposes in the future.
 
 ! Diagnostics for thickness multiplied momentum budget terms
-  real, allocatable, dimension(:,:,:) :: h_gKEu, h_rvxv ! [H L T-2 ~> m2 s-2].
-  real, allocatable, dimension(:,:,:) :: h_gKEv, h_rvxu ! [H L T-2 ~> m2 s-2].
+  real, allocatable, dimension(:,:,:) :: h_gKEu, h_gKEv ! h x gKEu, h x gKEv [H L T-2 ~> m2 s-2].
+  real, allocatable, dimension(:,:,:) :: h_rvxv, h_rvxu ! h x rvxv, h x rvxu [H L T-2 ~> m2 s-2].
 
 ! Diagnostics for depth-integrated momentum budget terms
-  real, dimension(SZIB_(G),SZJ_(G)) :: intz_gKEu_2d, intz_rvxv_2d ! [L2 T-2 ~> m2 s-2].
-  real, dimension(SZI_(G),SZJB_(G)) :: intz_gKEv_2d, intz_rvxu_2d ! [L2 T-2 ~> m2 s-2].
+  real, dimension(SZIB_(G),SZJ_(G)) :: intz_gKEu_2d, intz_rvxv_2d ! [H L T-2 ~> m2 s-2].
+  real, dimension(SZI_(G),SZJB_(G)) :: intz_gKEv_2d, intz_rvxu_2d ! [H L T-2 ~> m2 s-2].
 
 ! To work, the following fields must be set outside of the usual
 ! is to ie range before this subroutine is called:
