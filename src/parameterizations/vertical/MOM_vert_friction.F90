@@ -125,6 +125,7 @@ type, public :: vertvisc_CS ; private
   integer :: id_taux_bot = -1, id_tauy_bot = -1
   integer :: id_Kv_slow = -1, id_Kv_u = -1, id_Kv_v = -1
   ! integer :: id_hf_du_dt_visc    = -1, id_hf_dv_dt_visc    = -1
+  integer :: id_h_du_dt_visc    = -1, id_h_dv_dt_visc    = -1
   integer :: id_hf_du_dt_visc_2d = -1, id_hf_dv_dt_visc_2d = -1
   !>@}
 
@@ -212,6 +213,9 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
 
   real, allocatable, dimension(:,:) :: hf_du_dt_visc_2d ! Depth sum of hf_du_dt_visc [L T-2 ~> m s-2]
   real, allocatable, dimension(:,:) :: hf_dv_dt_visc_2d ! Depth sum of hf_dv_dt_visc [L T-2 ~> m s-2]
+
+  real, allocatable, dimension(:,:,:) :: h_du_dt_visc ! h x du_dt_visc [H L T-2 ~> m2 s-2]
+  real, allocatable, dimension(:,:,:) :: h_dv_dt_visc ! h x dv_dt_visc [H L T-2 ~> m2 s-2]
 
   logical :: do_i(SZIB_(G))
   logical :: DoStokesMixing
@@ -497,6 +501,25 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
     enddo ; enddo ; enddo
     call post_data(CS%id_hf_dv_dt_visc_2d, hf_dv_dt_visc_2d, CS%diag)
     deallocate(hf_dv_dt_visc_2d)
+  endif
+
+  if (CS%id_h_du_dt_visc > 0) then
+    allocate(h_du_dt_visc(G%IsdB:G%IedB,G%jsd:G%jed,GV%ke))
+    h_du_dt_visc(:,:,:) = 0.0
+    do k=1,nz ; do j=js,je ; do I=Isq,Ieq
+      h_du_dt_visc(I,j,k) = ADp%du_dt_visc(I,j,k) * ADp%diag_hu(I,j,k)
+    enddo ; enddo ; enddo
+    call post_data(CS%id_h_du_dt_visc, h_du_dt_visc, CS%diag)
+    deallocate(h_du_dt_visc)
+  endif
+  if (CS%id_h_dv_dt_visc > 0) then
+    allocate(h_dv_dt_visc(G%isd:G%ied,G%JsdB:G%JedB,GV%ke))
+    h_dv_dt_visc(:,:,:) = 0.0
+    do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
+      h_dv_dt_visc(i,J,k) = ADp%dv_dt_visc(i,J,k) * ADp%diag_hv(i,J,k)
+    enddo ; enddo ; enddo
+    call post_data(CS%id_h_dv_dt_visc, h_dv_dt_visc, CS%diag)
+    deallocate(h_dv_dt_visc)
   endif
 
 end subroutine vertvisc
@@ -1836,6 +1859,22 @@ subroutine vertvisc_init(MIS, Time, G, GV, US, param_file, diag, ADp, dirs, &
   if (CS%id_hf_dv_dt_visc_2d > 0) then
     call safe_alloc_ptr(ADp%dv_dt_visc,isd,ied,JsdB,JedB,nz)
     call safe_alloc_ptr(ADp%diag_hfrac_v,isd,ied,JsdB,JedB,nz)
+  endif
+
+  CS%id_h_du_dt_visc = register_diag_field('ocean_model', 'h_du_dt_visc', diag%axesCuL, Time, &
+      'Thickness Multiplied Zonal Acceleration from Horizontal Viscosity', 'm2 s-2', &
+      conversion=GV%H_to_m*US%L_T2_to_m_s2)
+  if (CS%id_h_du_dt_visc > 0) then
+    call safe_alloc_ptr(ADp%du_dt_visc,IsdB,IedB,jsd,jed,nz)
+    call safe_alloc_ptr(ADp%diag_hu,IsdB,IedB,jsd,jed,nz)
+  endif
+
+  CS%id_h_dv_dt_visc = register_diag_field('ocean_model', 'h_dv_dt_visc', diag%axesCvL, Time, &
+      'Thickness Multiplied Meridional Acceleration from Horizontal Viscosity', 'm2 s-2', &
+      conversion=GV%H_to_m*US%L_T2_to_m_s2)
+  if (CS%id_h_dv_dt_visc > 0) then
+    call safe_alloc_ptr(ADp%dv_dt_visc,isd,ied,JsdB,JedB,nz)
+    call safe_alloc_ptr(ADp%diag_hv,isd,ied,JsdB,JedB,nz)
   endif
 
   if ((len_trim(CS%u_trunc_file) > 0) .or. (len_trim(CS%v_trunc_file) > 0)) &
