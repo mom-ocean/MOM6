@@ -258,7 +258,7 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
 
     ! When mixing down Eulerian current + Stokes drift add before calling solver
     if (DoStokesMixing) then ; do k=1,nz ; do I=Isq,Ieq
-      if (do_i(I)) u(I,j,k) = u(I,j,k) + US%m_s_to_L_T*Waves%Us_x(I,j,k)
+      if (do_i(I)) u(I,j,k) = u(I,j,k) + Waves%Us_x(I,j,k)
     enddo ; enddo ; endif
 
     if (associated(ADp%du_dt_visc)) then ; do k=1,nz ; do I=Isq,Ieq
@@ -351,7 +351,7 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
 
     ! When mixing down Eulerian current + Stokes drift subtract after calling solver
     if (DoStokesMixing) then ; do k=1,nz ; do I=Isq,Ieq
-      if (do_i(I)) u(I,j,k) = u(I,j,k) - US%m_s_to_L_T*Waves%Us_x(I,j,k)
+      if (do_i(I)) u(I,j,k) = u(I,j,k) - Waves%Us_x(I,j,k)
     enddo ; enddo ; endif
 
   enddo ! end u-component j loop
@@ -366,7 +366,7 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
 
     ! When mixing down Eulerian current + Stokes drift add before calling solver
     if (DoStokesMixing) then ; do k=1,nz ; do i=is,ie
-      if (do_i(i)) v(i,j,k) = v(i,j,k) + US%m_s_to_L_T*Waves%Us_y(i,j,k)
+      if (do_i(i)) v(i,j,k) = v(i,j,k) + Waves%Us_y(i,j,k)
     enddo ; enddo ; endif
 
     if (associated(ADp%dv_dt_visc)) then ; do k=1,nz ; do i=is,ie
@@ -432,7 +432,7 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
 
     ! When mixing down Eulerian current + Stokes drift subtract after calling solver
     if (DoStokesMixing) then ; do k=1,nz ; do i=is,ie
-      if (do_i(i)) v(i,J,k) = v(i,J,k) - US%m_s_to_L_T*Waves%Us_y(i,J,k)
+      if (do_i(i)) v(i,J,k) = v(i,J,k) - Waves%Us_y(i,J,k)
     enddo ; enddo ; endif
 
   enddo ! end of v-component J loop
