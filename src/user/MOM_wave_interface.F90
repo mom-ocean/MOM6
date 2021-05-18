@@ -48,72 +48,77 @@ public Waves_end ! public interface to deallocate and free wave related memory.
 !> Container for all surface wave related parameters
 type, public :: wave_parameters_CS ; private
 
-  !Main surface wave options
-  logical, public :: UseWaves         !< Flag to enable surface gravity wave feature
-  logical, public :: LagrangianMixing !< This feature is in development and not ready
+  ! Main surface wave options and publicly visible variables
+  logical, public :: UseWaves = .false. !< Flag to enable surface gravity wave feature
+  real, allocatable, dimension(:,:,:), public :: &
+    Us_x               !< 3d zonal Stokes drift profile [L T-1 ~> m s-1]
+                       !! Horizontal -> U points
+                       !! Vertical -> Mid-points
+  real, allocatable, dimension(:,:,:), public :: &
+    Us_y               !< 3d meridional Stokes drift profile [L T-1 ~> m s-1]
+                       !! Horizontal -> V points
+                       !! Vertical -> Mid-points
+  real, allocatable, dimension(:,:,:), public :: &
+    KvS                !< Viscosity for Stokes Drift shear [Z2 T-1 ~> m2 s-1]
+
+  ! The remainder of this control structure is private
+  logical         :: LagrangianMixing !< This feature is in development and not ready
                                       !! True if Stokes drift is present and mixing
                                       !! should be applied to Lagrangian current
                                       !! (mean current + Stokes drift).
                                       !! See Reichl et al., 2016 KPP-LT approach
-  logical, public :: StokesMixing     !< This feature is in development and not ready.
+  logical         :: StokesMixing     !< This feature is in development and not ready.
                                       !! True if vertical mixing of momentum
                                       !! should be applied directly to Stokes current
                                       !! (with separate mixing parameter for Eulerian
                                       !! mixing contribution).
                                       !! See Harcourt 2013, 2015 Second-Moment approach
-  logical, public :: CoriolisStokes   !< This feature is in development and not ready.
+  logical         :: CoriolisStokes   !< This feature is in development and not ready.
                                       ! True if Coriolis-Stokes acceleration should be applied.
-  integer, public :: StkLevelMode=1   !< Sets if Stokes drift is defined at mid-points
+  integer         :: StkLevelMode=1   !< Sets if Stokes drift is defined at mid-points
                                       !! or layer averaged.  Set to 0 if mid-point and set to
                                       !! 1 if average value of Stokes drift over level.
                                       !! If advecting with Stokes transport, 1 is the correct
                                       !! approach.
 
   ! Surface Wave Dependent 1d/2d/3d vars
-  integer, public :: NumBands =0 !< Number of wavenumber/frequency partitions to receive
+  integer :: NumBands = 0      !< Number of wavenumber/frequency partitions to receive
                                !! This needs to match the number of bands provided
                                !! via either coupling or file.
-  real, allocatable, dimension(:), public :: &
-    WaveNum_Cen        !< Wavenumber bands for read/coupled [m-1]
-  real, allocatable, dimension(:), public :: &
-    Freq_Cen           !< Frequency bands for read/coupled [s-1]
-  real, allocatable, dimension(:), public :: &
-    PrescribedSurfStkX !< Surface Stokes drift if prescribed [m s-1]
-  real, allocatable, dimension(:), public :: &
-    PrescribedSurfStkY !< Surface Stokes drift if prescribed [m s-1]
-  real, allocatable, dimension(:,:,:), public :: &
-    Us_x               !< 3d zonal Stokes drift profile [m s-1]
-                       !! Horizontal -> U points
-                       !! Vertical -> Mid-points
-  real, allocatable, dimension(:,:,:), public :: &
-    Us_y               !< 3d meridional Stokes drift profile [m s-1]
-                       !! Horizontal -> V points
-                       !! Vertical -> Mid-points
-  real, allocatable, dimension(:,:), public :: &
+  real :: g_Earth      !< The gravitational acceleration, equivalent to GV%g_Earth but with
+                       !! different dimensional rescaling appropriate for deep-water gravity
+                       !! waves [Z T-2 ~> m s-2]
+  real, allocatable, dimension(:) :: &
+    WaveNum_Cen        !< Wavenumber bands for read/coupled [Z-1 ~> m-1]
+  real, allocatable, dimension(:) :: &
+    Freq_Cen           !< Frequency bands for read/coupled [T-1 ~> s-1]
+  real, allocatable, dimension(:) :: &
+    PrescribedSurfStkX !< Surface Stokes drift if prescribed [L T-1 ~> m s-1]
+  real, allocatable, dimension(:) :: &
+    PrescribedSurfStkY !< Surface Stokes drift if prescribed [L T-1 ~> m s-1]
+  real, allocatable, dimension(:,:) :: &
     La_SL,&            !< SL Langmuir number (directionality factored later)
                        !! Horizontal -> H points
-    La_Turb            !< Aligned Turbulent Langmuir number
+    La_Turb            !< Aligned Turbulent Langmuir number [nondim]
                        !! Horizontal -> H points
-  real, allocatable, dimension(:,:), public :: &
-    US0_x              !< Surface Stokes Drift (zonal, m/s)
+  real, allocatable, dimension(:,:) :: &
+    US0_x              !< Surface Stokes Drift (zonal) [L T-1 ~> m s-1]
                        !! Horizontal -> U points
-  real, allocatable, dimension(:,:), public :: &
-    US0_y              !< Surface Stokes Drift (meridional, m/s)
+  real, allocatable, dimension(:,:) :: &
+    US0_y              !< Surface Stokes Drift (meridional) [L T-1 ~> m s-1]
                        !! Horizontal -> V points
-  real, allocatable, dimension(:,:,:), public :: &
-    STKx0              !< Stokes Drift spectrum (zonal, m/s)
+  real, allocatable, dimension(:,:,:) :: &
+    STKx0              !< Stokes Drift spectrum (zonal) [L T-1 ~> m s-1]
                        !! Horizontal -> U points
                        !! 3rd dimension -> Freq/Wavenumber
-  real, allocatable, dimension(:,:,:), public :: &
-    STKy0              !< Stokes Drift spectrum (meridional, m/s)
+  real, allocatable, dimension(:,:,:) :: &
+    STKy0              !< Stokes Drift spectrum (meridional) [L T-1 ~> m s-1]
                        !! Horizontal -> V points
                        !! 3rd dimension -> Freq/Wavenumber
-  real, allocatable, dimension(:,:,:), public :: &
-    KvS                !< Viscosity for Stokes Drift shear [Z2 T-1 ~> m2 s-1]
 
   ! Pointers to auxiliary fields
-  type(time_type), pointer, public :: Time !< A pointer to the ocean model's clock.
-  type(diag_ctrl), pointer, public :: diag !< A structure that is used to regulate the
+  type(time_type), pointer :: Time !< A pointer to the ocean model's clock.
+  type(diag_ctrl), pointer :: diag !< A structure that is used to regulate the
                                            !! timing of diagnostic output.
 
   !> An arbitrary lower-bound on the Langmuir number.  Run-time parameter.
@@ -124,9 +129,9 @@ type, public :: wave_parameters_CS ; private
   real :: La_min = 0.05
 
   !>@{ Diagnostic handles
-  integer, public :: id_surfacestokes_x = -1 , id_surfacestokes_y = -1
-  integer, public :: id_3dstokes_x = -1 , id_3dstokes_y = -1
-  integer, public :: id_La_turb = -1
+  integer :: id_surfacestokes_x = -1 , id_surfacestokes_y = -1
+  integer :: id_3dstokes_x = -1 , id_3dstokes_y = -1
+  integer :: id_La_turb = -1
   !>@}
 
 end type wave_parameters_CS
@@ -143,7 +148,7 @@ integer :: WaveMethod=-99 !< Options for including wave information
                           !! \todo Module variable! Move into a control structure.
 
 ! Options if WaveMethod is Surface Stokes Drift Bands (1)
-integer, public :: PartitionMode !< Method for partition mode (meant to check input)
+integer :: PartitionMode  !< Method for partition mode (meant to check input)
                                  !! 0 - wavenumbers
                                  !! 1 - frequencies
                                  !! \todo Module variable! Move into a control structure.
@@ -180,10 +185,13 @@ integer, parameter :: TESTPROF = 0, SURFBANDS = 1, &
                       DATAOVR = 1, COUPLER = 2, INPUT = 3
 
 ! Options For Test Prof
-Real    :: TP_STKX0, TP_STKY0, TP_WVL
+real    :: TP_STKX0   ! Test profile x-stokes drift amplitude [L T-1 ~> m s-1]
+real    :: TP_STKY0   ! Test profile y-stokes drift amplitude [L T-1 ~> m s-1]
+real    :: TP_WVL     ! Test profile wavelength [Z ~> m]
 logical :: WaveAgePeakFreq ! Flag to use W
 logical :: StaticWaves, DHH85_Is_Set
-real    :: WaveAge, WaveWind
+real    :: WaveAge
+real    :: WaveWind  ! Wind speed for the test profile [L T-1 ~> m s-1]
 real    :: PI
 !>@}
 
@@ -228,7 +236,7 @@ subroutine MOM_wave_interface_init(time, G, GV, US, param_file, CS, diag )
   dataOverrideIsInitialized = .false.
 
   ! The only way to get here is with UseWaves enabled.
-  CS%UseWaves=.true.
+  CS%UseWaves = .true.
 
   call log_version(param_file, mdl, version)
 
@@ -255,6 +263,7 @@ subroutine MOM_wave_interface_init(time, G, GV, US, param_file, CS, diag )
     ! Force Code Intervention
     call MOM_error(FATAL,"Should you be enabling Coriolis-Stokes? Code not ready.")
   endif
+  CS%g_Earth = US%L_to_Z**2*GV%g_Earth
 
   ! Get Wave Method and write to integer WaveMethod
   call get_param(param_file,mdl,"WAVE_METHOD",TMPSTRING1,             &
@@ -274,13 +283,14 @@ subroutine MOM_wave_interface_init(time, G, GV, US, param_file, CS, diag )
                            "WAVE_METHOD.")
   case (TESTPROF_STRING)! Test Profile
     WaveMethod = TESTPROF
-    call get_param(param_file,mdl,"TP_STKX_SURF",TP_STKX0,&
+    call get_param(param_file, mdl, "TP_STKX_SURF", TP_STKX0,&
          'Surface Stokes (x) for test profile',&
-         units='m/s',default=0.1)
-    call get_param(param_file,mdl,"TP_STKY_SURF",TP_STKY0,&
+         units='m/s', default=0.1, scale=US%m_s_to_L_T)
+    call get_param(param_file, mdl, "TP_STKY_SURF", TP_STKY0,&
          'Surface Stokes (y) for test profile',&
-         units='m/s',default=0.0)
-    call get_param(param_file,mdl,"TP_WVL",TP_WVL,&
+         units='m/s', default=0.0, scale=US%m_s_to_L_T)
+    call get_param(param_file,mdl, "TP_WVL", TP_WVL, &
+         'Wavelength for test profile', &
          units='m', default=50.0, scale=US%m_to_Z)
   case (SURFBANDS_STRING)! Surface Stokes Drift Bands
     WaveMethod = SURFBANDS
@@ -330,15 +340,15 @@ subroutine MOM_wave_interface_init(time, G, GV, US, param_file, CS, diag )
       allocate( CS%STKy0(G%isd:G%ied,G%jsdB:G%jedB,1:CS%NumBands))
       CS%STKy0(:,:,:) = 0.0
       partitionmode=0
-      call get_param(param_file,mdl,"SURFBAND_WAVENUMBERS",CS%WaveNum_Cen,      &
-           "Central wavenumbers for surface Stokes drift bands.",units='rad/m', &
-           default=0.12566)
-      call get_param(param_file,mdl,"SURFBAND_STOKES_X",CS%PrescribedSurfStkX,      &
-           "X-direction surface Stokes drift for bands.",units='m/s', &
-           default=0.15)
-      call get_param(param_file,mdl,"SURFBAND_STOKES_Y",CS%PrescribedSurfStkY,      &
-           "Y-direction surface Stokes drift for bands.",units='m/s', &
-           default=0.0)
+      call get_param(param_file, mdl, "SURFBAND_WAVENUMBERS", CS%WaveNum_Cen, &
+           "Central wavenumbers for surface Stokes drift bands.", &
+           units='rad/m', default=0.12566, scale=US%Z_to_m)
+      call get_param(param_file, mdl, "SURFBAND_STOKES_X", CS%PrescribedSurfStkX, &
+           "X-direction surface Stokes drift for bands.", &
+           units='m/s', default=0.15, scale=US%m_s_to_L_T)
+      call get_param(param_file, mdl, "SURFBAND_STOKES_Y", CS%PrescribedSurfStkY, &
+           "Y-direction surface Stokes drift for bands.", &
+           units='m/s', default=0.0, scale=US%m_s_to_L_T)
     case default! No method provided
       call MOM_error(FATAL,'Check WAVE_METHOD.')
     end select
@@ -353,9 +363,9 @@ subroutine MOM_wave_interface_init(time, G, GV, US, param_file, CS, diag )
     call get_param(param_file,mdl,"DHH85_AGE",WaveAge,   &
          "Wave Age for DHH85 spectrum.", &
          units='', default=1.2)
-    call get_param(param_file,mdl,"DHH85_WIND",WaveWind,   &
+    call get_param(param_file,mdl,"DHH85_WIND", WaveWind, &
          "Wind speed for DHH85 spectrum.", &
-         units='', default=10.0)
+         units='m s-1', default=10.0, scale=US%m_s_to_L_T)
     call get_param(param_file,mdl,"STATIC_DHH85",StaticWaves,   &
          "Flag to disable updating DHH85 Stokes drift.", &
           default=.false.)
@@ -403,13 +413,13 @@ subroutine MOM_wave_interface_init(time, G, GV, US, param_file, CS, diag )
 
   ! Initialize Wave related outputs
   CS%id_surfacestokes_y = register_diag_field('ocean_model','surface_stokes_y', &
-       CS%diag%axesCv1,Time,'Surface Stokes drift (y)','m s-1')
+       CS%diag%axesCv1,Time,'Surface Stokes drift (y)', 'm s-1', conversion=US%L_T_to_m_s)
   CS%id_surfacestokes_x = register_diag_field('ocean_model','surface_stokes_x', &
-       CS%diag%axesCu1,Time,'Surface Stokes drift (x)','m s-1')
+       CS%diag%axesCu1,Time,'Surface Stokes drift (x)', 'm s-1', conversion=US%L_T_to_m_s)
   CS%id_3dstokes_y = register_diag_field('ocean_model','3d_stokes_y', &
-       CS%diag%axesCvL,Time,'3d Stokes drift (y)','m s-1')
+       CS%diag%axesCvL,Time,'3d Stokes drift (y)', 'm s-1', conversion=US%L_T_to_m_s)
   CS%id_3dstokes_x = register_diag_field('ocean_model','3d_stokes_x', &
-       CS%diag%axesCuL,Time,'3d Stokes drift (x)','m s-1')
+       CS%diag%axesCuL,Time,'3d Stokes drift (x)', 'm s-1', conversion=US%L_T_to_m_s)
   CS%id_La_turb = register_diag_field('ocean_model','La_turbulent',&
        CS%diag%axesT1,Time,'Surface (turbulent) Langmuir number','nondim')
 
@@ -472,23 +482,23 @@ subroutine Update_Surface_Waves(G, GV, US, Day, dt, CS, forces)
              "check the arguments in the subroutine call to Update_Surface_Waves, "//&
              "otherwise select another option for SURFBAND_SOURCE.")
       endif
-      if (size(CS%WaveNum_Cen).ne.size(forces%stk_wavenumbers)) then
+      if (size(CS%WaveNum_Cen) /= size(forces%stk_wavenumbers)) then
         call MOM_error(FATAL, "Number of wavenumber bands in WW3 does not match that in MOM6. "//&
              "Make sure that STK_BAND_COUPLER in MOM6 input is equal to the number of bands in "//&
              "ww3_grid.inp, and that your mod_def.ww3 is up to date.")
       endif
 
       do b=1,CS%NumBands
-        CS%WaveNum_Cen(b) = forces%stk_wavenumbers(b)
+        CS%WaveNum_Cen(b) = US%Z_to_m * forces%stk_wavenumbers(b)
         !Interpolate from a grid to c grid
         do jj=G%jsc,G%jec
           do II=G%iscB,G%iecB
-            CS%STKx0(II,jj,b) = 0.5*(forces%UStkb(ii,jj,b)+forces%UStkb(ii+1,jj,b))
+            CS%STKx0(II,jj,b) = US%m_s_to_L_T*0.5*(forces%UStkb(ii,jj,b)+forces%UStkb(ii+1,jj,b))
           enddo
         enddo
         do JJ=G%jscB, G%jecB
           do ii=G%isc,G%iec
-            CS%STKY0(ii,JJ,b) = 0.5*(forces%VStkb(ii,jj,b)+forces%VStkb(ii,jj+1,b))
+            CS%STKY0(ii,JJ,b) = US%m_s_to_L_T*0.5*(forces%VStkb(ii,jj,b)+forces%VStkb(ii,jj+1,b))
           enddo
         enddo
         call pass_vector(CS%STKx0(:,:,b),CS%STKy0(:,:,b), G%Domain)
@@ -524,10 +534,15 @@ subroutine Update_Stokes_Drift(G, GV, US, CS, h, ustar)
   real, dimension(SZI_(G),SZJ_(G)), &
                             intent(in)    :: ustar !< Wind friction velocity [Z T-1 ~> m s-1].
   ! Local Variables
-  real    :: Top, MidPoint, Bottom, one_cm, level_thick, min_level_thick_avg
-  real    :: DecayScale
-  real    :: CMN_FAC, WN, UStokes
-  real    :: La
+  real    :: Top, MidPoint, Bottom ! Positions within the layer [Z ~> m]
+  real    :: one_cm     ! One centimeter in the units of wavelengths [Z ~> m]
+  real    :: level_thick ! The thickness of each layer [Z ~> m]
+  real    :: min_level_thick_avg ! A minimum layer thickness for inclusion in the average [Z ~> m]
+  real    :: DecayScale ! A vertical decay scale in the test profile [Z ~> m]
+  real    :: CMN_FAC  ! A nondimensional factor [nondim]
+  real    :: WN       ! Model wavenumber [Z-1 ~> m-1]
+  real    :: UStokes  ! A Stokes drift velocity [L T-1 ~> m s-1]
+  real    :: La       ! The local Langmuir number [nondim]
   integer :: ii, jj, kk, b, iim1, jjm1
 
   one_cm = 0.01*US%m_to_Z
@@ -605,11 +620,11 @@ subroutine Update_Stokes_Drift(G, GV, US, CS, h, ustar)
               elseif (PartitionMode==1) then
                 if (CS%StkLevelMode==0) then
                   ! Take the value at the midpoint
-                  CMN_FAC = exp(MidPoint*2.*(2.*PI*CS%Freq_Cen(b)*US%T_to_s)**2/(US%L_to_Z**2*GV%g_Earth))
+                  CMN_FAC = exp(MidPoint*2.*(2.*PI*CS%Freq_Cen(b))**2 / CS%g_Earth)
                 elseif (CS%StkLevelMode==1) then
                   ! Use a numerical integration and then
                   ! divide by layer thickness
-                  WN = (2.*PI*CS%Freq_Cen(b)*US%T_to_s)**2 / (US%L_to_Z**2*GV%g_Earth) !bgr bug-fix missing g
+                  WN = (2.*PI*CS%Freq_Cen(b))**2 / CS%g_Earth !bgr bug-fix missing g
                   CMN_FAC = (exp(2.*WN*Top)-exp(2.*WN*Bottom)) / (2.*WN*(Top-Bottom))
                 endif
               endif
@@ -621,7 +636,7 @@ subroutine Update_Stokes_Drift(G, GV, US, CS, h, ustar)
               if (PartitionMode==0) then
                 CMN_FAC = exp(MidPoint*2.*CS%WaveNum_Cen(b))
               elseif (PartitionMode==1) then
-                 CMN_FAC = exp(MidPoint*2.*(2.*PI*CS%Freq_Cen(b)*US%T_to_s)**2/(US%L_to_Z**2*GV%g_Earth))
+                CMN_FAC = exp(MidPoint*2.*(2.*PI*CS%Freq_Cen(b))**2 / CS%g_Earth)
               endif
               CS%US_x(II,jj,kk) = CS%US_x(II,jj,kk) + CS%STKx0(II,jj,b)*CMN_FAC
             enddo
@@ -662,11 +677,11 @@ subroutine Update_Stokes_Drift(G, GV, US, CS, h, ustar)
               elseif (PartitionMode==1) then
                 if (CS%StkLevelMode==0) then
                   ! Take the value at the midpoint
-                  CMN_FAC = exp(MidPoint*2.*(2.*PI*CS%Freq_Cen(b)*US%T_to_s)**2/(US%L_to_Z**2*GV%g_Earth))
+                  CMN_FAC = exp(MidPoint*2.*(2.*PI*CS%Freq_Cen(b))**2 / CS%g_Earth)
                 elseif (CS%StkLevelMode==1) then
                   ! Use a numerical integration and then
                   ! divide by layer thickness
-                  WN = (2.*PI*CS%Freq_Cen(b)*US%T_to_s)**2 / (US%L_to_Z**2*GV%g_Earth) !bgr bug-fix missing g
+                  WN = (2.*PI*CS%Freq_Cen(b))**2 / CS%g_Earth !bgr bug-fix missing g
                   CMN_FAC = (exp(2.*WN*Top)-exp(2.*WN*Bottom)) / (2.*WN*(Top-Bottom))
                 endif
               endif
@@ -678,7 +693,7 @@ subroutine Update_Stokes_Drift(G, GV, US, CS, h, ustar)
               if (PartitionMode==0) then
                 CMN_FAC = exp(MidPoint*2.*CS%WaveNum_Cen(b))
               elseif (PartitionMode==1) then
-                 CMN_FAC = exp(MidPoint*2.*(2.*PI*CS%Freq_Cen(b)*US%T_to_s)**2/(US%L_to_Z**2*GV%g_Earth))
+                 CMN_FAC = exp(MidPoint*2.*(2.*PI*CS%Freq_Cen(b))**2 / CS%g_Earth)
               endif
               CS%US_y(ii,JJ,kk) = CS%US_y(ii,JJ,kk) + CS%STKy0(ii,JJ,b)*CMN_FAC
             enddo
@@ -700,7 +715,7 @@ subroutine Update_Stokes_Drift(G, GV, US, CS, h, ustar)
             !    this code has only been previous used for uniform
             !    grid cases.  This needs fixed if DHH85 is used for non
             !    uniform cases.
-            call DHH85_mid(GV, US, MidPoint, UStokes)
+            call DHH85_mid(GV, US, CS, MidPoint, UStokes)
             ! Putting into x-direction (no option for direction
             CS%US_x(II,jj,kk) = UStokes
           enddo
@@ -718,7 +733,7 @@ subroutine Update_Stokes_Drift(G, GV, US, CS, h, ustar)
             !    this code has only been previous used for uniform
             !    grid cases.  This needs fixed if DHH85 is used for non
             !    uniform cases.
-            ! call DHH85_mid(GV, US, Midpoint, UStokes)
+            ! call DHH85_mid(GV, US, CS, Midpoint, UStokes)
             ! Putting into x-direction, so setting y direction to 0
             CS%US_y(ii,JJ,kk) = 0.0
             ! For rotational symmetry there should be the option for this to become = UStokes
@@ -829,10 +844,10 @@ subroutine Surface_Bands_by_data_override(day_center, G, GV, US, CS)
       allocate( CS%Freq_Cen(CS%NUMBANDS) ) ; CS%Freq_Cen(:) = 0.0
 
       ! Reading frequencies
-      call read_variable(SurfBandFileName, dim_name(1), CS%Freq_Cen) !, scale=US%T_to_s)
+      call read_variable(SurfBandFileName, dim_name(1), CS%Freq_Cen, scale=US%T_to_s)
 
       do B = 1,CS%NumBands
-        CS%WaveNum_Cen(b) = (2.*PI*CS%Freq_Cen(b)*US%T_to_s)**2 / (US%L_to_Z**2*GV%g_Earth)
+        CS%WaveNum_Cen(b) = (2.*PI*CS%Freq_Cen(b))**2 / CS%g_Earth
       enddo
     endif
 
@@ -848,14 +863,14 @@ subroutine Surface_Bands_by_data_override(day_center, G, GV, US, CS)
     temp_x(:,:) = 0.0
     temp_y(:,:) = 0.0
     varname = '                    '
-    write(varname,"(A3,I0)")'Usx',b
+    write(varname, "(A3,I0)") 'Usx', b
     call data_override('OCN', trim(varname), temp_x, day_center)
     varname = '                    '
-    write(varname,'(A3,I0)')'Usy',b
+    write(varname, "(A3,I0)") 'Usy', b
     call data_override('OCN', trim(varname), temp_y, day_center)
-    ! Disperse into halo on h-grid
+    ! Update halo on h-grid
     call pass_vector(temp_x, temp_y, G%Domain, To_All, AGRID)
-    !Filter land values
+    ! Filter land values
     do j = G%jsd,G%jed
       do i = G%Isd,G%Ied
         if (abs(temp_x(i,j)) > 10. .or. abs(temp_y(i,j)) > 10.) then
@@ -869,17 +884,18 @@ subroutine Surface_Bands_by_data_override(day_center, G, GV, US, CS)
     ! Interpolate to u/v grids
     do j = G%jsc,G%jec
       do I = G%IscB,G%IecB
-        CS%STKx0(I,j,b) = 0.5 * (temp_x(i,j) + temp_x(i+1,j))
+        CS%STKx0(I,j,b) = 0.5 * US%m_s_to_L_T*(temp_x(i,j) + temp_x(i+1,j))
       enddo
     enddo
     do J = G%JscB,G%JecB
       do i = G%isc,G%iec
-        CS%STKy0(i,J,b) = 0.5 * (temp_y(i,j) + temp_y(i,j+1))
+        CS%STKy0(i,J,b) = 0.5 * US%m_s_to_L_T*(temp_y(i,j) + temp_y(i,j+1))
       enddo
     enddo
-    ! Disperse into halo on u/v grids  (This would be faster if it were moved out of the b-loop.)
-    call pass_vector(CS%STKx0(:,:,b), CS%STKy0(:,:,b), G%Domain, To_ALL)
   enddo !Closes b-loop
+
+  ! Update halo on u/v grids
+  call pass_vector(CS%STKx0(:,:,:), CS%STKy0(:,:,:), G%Domain, To_ALL)
 
 end subroutine Surface_Bands_by_data_override
 
@@ -904,21 +920,23 @@ subroutine get_Langmuir_Number( LA, G, GV, US, HBL, ustar, i, j, &
   real, dimension(SZK_(GV)), optional, &
        intent(in)      :: H     !< Grid layer thickness [H ~> m or kg m-2]
   real, dimension(SZK_(GV)), optional, &
-       intent(in)      :: U_H   !< Zonal velocity at H point [m s-1]
+       intent(in)      :: U_H   !< Zonal velocity at H point [L T-1 ~> m s-1] or [m s-1]
   real, dimension(SZK_(GV)), optional, &
-       intent(in)      :: V_H   !< Meridional velocity at H point [m s-1]
+       intent(in)      :: V_H   !< Meridional velocity at H point [L T-1 ~> m s-1] or [m s-1]
   type(Wave_parameters_CS), &
        pointer         :: Waves !< Surface wave control structure.
 
-  real, intent(out)    :: LA    !< Langmuir number
+  real, intent(out)    :: LA    !< Langmuir number [nondim]
 
 !Local Variables
-  real :: Top, bottom, midpoint
-  real :: Dpt_LASL, ShearDirection, WaveDirection
-  real :: LA_STKx, LA_STKy, LA_STK ! Stokes velocities in [m s-1]
+  real :: Top, bottom, midpoint  ! Positions within each layer [Z ~> m]
+  real :: Dpt_LASL         ! Averaging depth for Stokes drift [Z ~> m]
+  real :: ShearDirection   ! Shear angular direction from atan2 [radians]
+  real :: WaveDirection    ! Wave angular direction from atan2 [radians]
+  real :: LA_STKx, LA_STKy, LA_STK ! Stokes velocities in [L T-1 ~> m s-1]
   logical :: ContinueLoop, USE_MA
-  real, dimension(SZK_(GV)) :: US_H, VS_H
-  real, allocatable :: StkBand_X(:), StkBand_Y(:)
+  real, dimension(SZK_(GV)) :: US_H, VS_H ! Profiles of Stokes velocities [L T-1 ~> m s-1]
+  real, allocatable :: StkBand_X(:), StkBand_Y(:) ! Stokes drifts by band [L T-1 ~> m s-1]
   integer :: KK, BB
 
 
@@ -974,7 +992,7 @@ subroutine get_Langmuir_Number( LA, G, GV, US, HBL, ustar, i, j, &
     call Get_SL_Average_Prof( GV, Dpt_LASL, H, VS_H, LA_STKy)
     LA_STK = sqrt(LA_STKX**2 + LA_STKY**2)
   elseif (WaveMethod==LF17) then
-    call get_StokesSL_LiFoxKemper(ustar, hbl*LA_FracHBL, GV, US, LA_STK, LA)
+    call get_StokesSL_LiFoxKemper(ustar, hbl*LA_FracHBL, GV, US, Waves, LA_STK, LA)
   elseif (WaveMethod==Null_WaveMethod) then
     call MOM_error(FATAL, "Get_Langmuir_number called without defining a WaveMethod. "//&
                           "Suggest to make sure USE_LT is set/overridden to False or "//&
@@ -989,7 +1007,7 @@ subroutine get_Langmuir_Number( LA, G, GV, US, HBL, ustar, i, j, &
     ! to prevent large enhancements in unconstrained parts of
     ! the curve fit parameterizations.
     ! Note the dimensional constant background Stokes velocity of 10^-10 m s-1.
-    LA = max(WAVES%La_min, sqrt(US%Z_to_m*US%s_to_T*ustar / (LA_STK+1.e-10)))
+    LA = max(WAVES%La_min, sqrt(US%Z_to_L*ustar / (LA_STK + 1.e-10*US%m_s_to_L_T)))
   endif
 
   if (Use_MA) then
@@ -1016,44 +1034,51 @@ end subroutine get_Langmuir_Number
 !! - BGR change output to LA from Efactor
 !! - BGR remove u10 input
 !! - BGR note: fixed parameter values should be changed to "get_params"
-subroutine get_StokesSL_LiFoxKemper(ustar, hbl, GV, US, UStokes_SL, LA)
+subroutine get_StokesSL_LiFoxKemper(ustar, hbl, GV, US, CS, UStokes_SL, LA)
   real, intent(in)  :: ustar !< water-side surface friction velocity [Z T-1 ~> m s-1].
   real, intent(in)  :: hbl   !< boundary layer depth [Z ~> m].
   type(verticalGrid_type), intent(in) :: GV !< Ocean vertical grid structure
   type(unit_scale_type),   intent(in) :: US !< A dimensional unit scaling type
-  real, intent(out) :: UStokes_SL !< Surface layer averaged Stokes drift [m s-1]
+  type(wave_parameters_CS), pointer   :: CS  !< Wave parameter Control structure
+  real, intent(out) :: UStokes_SL !< Surface layer averaged Stokes drift [L T-1 ~> m s-1]
   real, intent(out) :: LA    !< Langmuir number
   ! Local variables
   ! parameters
   real, parameter :: &
-       ! ratio of U19.5 to U10 (Holthuijsen, 2007)
+       ! ratio of U19.5 to U10 (Holthuijsen, 2007) [nondim]
        u19p5_to_u10 = 1.075, &
        ! ratio of mean frequency to peak frequency for
-       ! Pierson-Moskowitz spectrum (Webb, 2011)
+       ! Pierson-Moskowitz spectrum (Webb, 2011) [nondim]
        fm_into_fp = 1.296, &
-       ! ratio of surface Stokes drift to U10
+       ! ratio of surface Stokes drift to U10 [nondim]
        us_to_u10 = 0.0162, &
-       ! loss ratio of Stokes transport
+       ! loss ratio of Stokes transport [nondim]
        r_loss = 0.667
-  real :: UStokes, hm0, fm, fp, vstokes, kphil, kstar
-  real :: z0, z0i, r1, r2, r3, r4, tmp, lasl_sqr_i
-  real :: u10
+  real :: UStokes  ! The surface Stokes drift [L T-1 ~> m s-1]
+  real :: hm0      ! The significant wave height [Z ~> m]
+  real :: fm       ! The mean wave frequency [T-1 ~> s-1]
+  real :: fp       ! The peak wave frequency [T-1 ~> s-1]
+  real :: kphil    ! A peak wavenumber in the Phillips spectrum [Z-1 ~> m-1]
+  real :: kstar    ! A rescaled wavenumber? [Z-1 ~> m-1]
+  real :: vstokes  ! The total Stokes transport [Z L T-1 ~> m2 s-1]
+  real :: z0       ! The boundary layer depth [Z ~> m]
+  real :: z0i      ! The inverse of theboundary layer depth [Z-1 ~> m-1]
+  real :: r1, r2, r3, r4  ! Nondimensional ratios [nondim]
+  real :: u10      ! The 10 m wind speed [L T-1 ~> m s-1]
 
   UStokes_sl = 0.0
-  LA=1.e8
+  LA = 1.e8
   if (ustar > 0.0) then
     ! Computing u10 based on u_star and COARE 3.5 relationships
-    call ust_2_u10_coare3p5(US%Z_to_m*US%s_to_T*ustar*sqrt(US%R_to_kg_m3*GV%Rho0/1.225), u10, GV, US)
+    call ust_2_u10_coare3p5(ustar*sqrt(GV%Rho0/(1.225*US%kg_m3_to_R)), u10, GV, US, CS)
     ! surface Stokes drift
     UStokes = us_to_u10*u10
     !
-    ! significant wave height from Pierson-Moskowitz
-    ! spectrum (Bouws, 1998)
-    hm0 = 0.0246 *u10**2
+    ! significant wave height from Pierson-Moskowitz spectrum (Bouws, 1998)
+    hm0 = 0.0246*US%m_to_Z*US%L_T_to_m_s**2 * u10**2
     !
     ! peak frequency (PM, Bouws, 1998)
-    tmp = 2.0 * PI * u19p5_to_u10 * u10
-    fp = 0.877 * US%L_T_to_m_s**2*US%m_to_Z * GV%g_Earth / tmp
+    fp = 0.877 * (US%L_to_Z*GV%g_Earth) / (2.0 * PI * u19p5_to_u10 * u10)
     !
     ! mean frequency
     fm = fm_into_fp * fp
@@ -1062,19 +1087,19 @@ subroutine get_StokesSL_LiFoxKemper(ustar, hbl, GV, US, UStokes_SL, LA)
     !  for the effect of directional spreading, multidirectional waves
     !  and the use of PM peak frequency and PM significant wave height
     !  on estimating the Stokes transport)
-    vstokes = 0.125 * PI * r_loss * fm * hm0**2
+    vstokes = 0.125 * PI * r_loss * US%Z_to_L * fm * hm0**2
     !
     ! the general peak wavenumber for Phillips' spectrum
     ! (Breivik et al., 2016) with correction of directional spreading
     kphil = 0.176 * UStokes / vstokes
     !
-    ! surface layer averaged Stokes dirft with Stokes drift profile
+    ! surface layer averaged Stokes drift with Stokes drift profile
     ! estimated from Phillips' spectrum (Breivik et al., 2016)
     ! the directional spreading effect from Webb and Fox-Kemper, 2015
     ! is also included
     kstar = kphil * 2.56
     ! surface layer
-    z0 = abs(US%Z_to_m*hbl)
+    z0 = abs(hbl)
     z0i = 1.0 / z0
     ! term 1 to 4
     r1 = ( 0.151 / kphil * z0i -0.84 ) * &
@@ -1085,10 +1110,10 @@ subroutine get_StokesSL_LiFoxKemper(ustar, hbl, GV, US, UStokes_SL, LA)
     r3 = ( 0.0632 / kstar * z0i + 0.125 ) * &
          (1.0 - exp(-2.0 * kstar * z0) )
     r4 = ( 0.125 + 0.0946 / kstar * z0i ) * &
-         sqrt( 2.0 * PI *kstar * z0) * &
+         sqrt( 2.0 * PI * kstar * z0) * &
          erfc( sqrt( 2.0 * kstar * z0 ) )
     UStokes_sl = UStokes * (0.715 + r1 + r2 + r3 + r4)
-    if(UStokes_sl .ne. 0.0)LA = sqrt(US%Z_to_m*US%s_to_T*ustar / UStokes_sl)
+    if (UStokes_sl /= 0.0) LA = sqrt(US%Z_to_L*ustar / UStokes_sl)
   endif
 
 end subroutine Get_StokesSL_LiFoxKemper
@@ -1149,8 +1174,8 @@ subroutine Get_SL_Average_Band( GV, AvgDepth, NB, WaveNumbers, SurfStokes, Avera
   real, dimension(NB), &
        intent(in)     :: WaveNumbers !< Wavenumber corresponding to each band [Z-1 ~> m-1]
   real, dimension(NB), &
-       intent(in)     :: SurfStokes  !< Surface Stokes drift for each band [m s-1]
-  real, intent(out)   :: Average     !< Output average Stokes drift over depth AvgDepth [m s-1]
+       intent(in)     :: SurfStokes  !< Surface Stokes drift for each band [L T-1 ~> m s-1]
+  real, intent(out)   :: Average     !< Output average Stokes drift over depth AvgDepth [L T-1 ~> m s-1]
 
   ! Local variables
   integer :: bb
@@ -1174,42 +1199,47 @@ end subroutine Get_SL_Average_Band
 !! use for comparing MOM6 simulation to his LES
 !! computed at z mid point (I think) and not depth averaged.
 !! Should be fine to integrate in frequency from 0.1 to sqrt(-0.2*grav*2pi/dz
-subroutine DHH85_mid(GV, US, zpt, UStokes)
+subroutine DHH85_mid(GV, US, CS, zpt, UStokes)
   type(verticalGrid_type), intent(in)  :: GV  !< Ocean vertical grid
   type(unit_scale_type),   intent(in)  :: US  !< A dimensional unit scaling type
+  type(wave_parameters_CS), pointer    :: CS  !< Wave parameter Control structure
   real, intent(in)  :: zpt   !< Depth to get Stokes drift [Z ~> m].
-  real, intent(out) :: UStokes !< Stokes drift [m s-1]
+  real, intent(out) :: UStokes !< Stokes drift [L T-1 ~> m s-1]
   !
-  real :: ann, Bnn, Snn, Cnn, Dnn
-  real :: omega_peak, omega, u10, WA, domega
-  real :: omega_min, omega_max, wavespec, Stokes
-  real :: g_Earth ! Gravitational acceleration [m s-2]
-  integer :: Nomega, OI
+  real :: ann, Bnn, Snn, Cnn, Dnn ! Nondimensional factors [nondim]
+  real :: omega_peak ! The peak wave frequency [T-1 ~> s-1]
+  real :: omega      ! The average frequency in the band [T-1 ~> s-1]
+  real :: domega     ! The width in frequency of the band [T-1 ~> s-1]
+  real :: omega_min  ! The minimum wave frequency [T-1 ~> s-1]
+  real :: omega_max  ! The maximum wave frequency [T-1 ~> s-1]
+  real :: u10        ! The wind speed for this spectrum [Z T-1 ~> m s-1]
+  real :: wavespec   ! The wave spectrum [L Z T ~> m2 s]
+  real :: Stokes     ! The Stokes displacement per cycle [L ~> m]
+  integer :: Nomega  ! The number of wavenumber bands
+  integer :: OI
 
-  WA = WaveAge
-  u10 = WaveWind
-  g_Earth = US%L_T_to_m_s**2*US%m_to_Z * GV%g_Earth
+  u10 = WaveWind*US%L_to_Z
 
   !/
-  omega_min = 0.1 ! Hz
+  omega_min = 0.1*US%T_to_s ! Hz
   ! Cut off at 30cm for now...
-  omega_max = 10. ! ~sqrt(0.2*g_Earth*2*pi/0.3)
+  omega_max = 10.*US%T_to_s ! ~sqrt(0.2*g_Earth*2*pi/0.3)
   NOmega = 1000
   domega = (omega_max-omega_min)/real(NOmega)
 
   !
   if (WaveAgePeakFreq) then
-    omega_peak = g_Earth / (WA * u10)
+    omega_peak = CS%g_Earth / (WaveAge * u10)
   else
-    omega_peak = 2. * pi * 0.13 * g_Earth / U10
+    omega_peak = 2. * pi * 0.13 * CS%g_Earth / u10
   endif
   !/
   Ann = 0.006 * WaveAge**(-0.55)
   Bnn = 1.0
   Snn = 0.08 * (1.0 + 4.0 * WaveAge**3)
   Cnn = 1.7
-  if (WA < 1.) then
-    Cnn = Cnn - 6.0*log10(WA)
+  if (WaveAge < 1.) then
+    Cnn = Cnn - 6.0*log10(WaveAge)
   endif
   !/
   UStokes = 0.0
@@ -1217,11 +1247,11 @@ subroutine DHH85_mid(GV, US, zpt, UStokes)
   do oi = 1,nomega-1
     Dnn = exp ( -0.5 * (omega-omega_peak)**2 / (Snn**2 * omega_peak**2) )
     ! wavespec units = m2s
-    wavespec = (Ann * g_Earth**2 / (omega_peak*omega**4 ) ) * &
+    wavespec = US%Z_to_L * (Ann * CS%g_Earth**2 / (omega_peak*omega**4 ) ) * &
                exp(-bnn*(omega_peak/omega)**4)*Cnn**Dnn
     ! Stokes units m  (multiply by frequency range for units of m/s)
     Stokes = 2.0 * wavespec * omega**3 * &
-         exp( 2.0 * omega**2 * US%Z_to_m*zpt / g_Earth) / g_Earth
+         exp( 2.0 * omega**2 * zpt / CS%g_Earth) / CS%g_Earth
     UStokes = UStokes + Stokes*domega
     omega = omega + domega
   enddo
@@ -1240,13 +1270,13 @@ subroutine StokesMixing(G, GV, dt, h, u, v, Waves )
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
        intent(in)    :: h     !< Layer thicknesses [H ~> m or kg m-2]
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
-       intent(inout) :: u     !< Velocity i-component [m s-1]
+       intent(inout) :: u     !< Velocity i-component [L T-1 ~> m s-1]
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
-       intent(inout) :: v     !< Velocity j-component [m s-1]
+       intent(inout) :: v     !< Velocity j-component [L T-1 ~> m s-1]
   type(Wave_parameters_CS), &
        pointer       :: Waves !< Surface wave related control structure.
   ! Local variables
-  real :: dTauUp, dTauDn ! Vertical momentum fluxes [Z T-1 m s-1]
+  real :: dTauUp, dTauDn ! Vertical momentum fluxes [Z L T-2 ~> m2 s-2]
   real :: h_Lay  ! The layer thickness at a velocity point [Z ~> m].
   integer :: i,j,k
 
@@ -1299,23 +1329,23 @@ end subroutine StokesMixing
 !! CHECK THAT RIGHT TIMESTEP IS PASSED IF YOU USE THIS**
 !!
 !! Not accessed in the standard code.
-subroutine CoriolisStokes(G, GV, DT, h, u, v, WAVES, US)
+subroutine CoriolisStokes(G, GV, dt, h, u, v, WAVES, US)
   type(ocean_grid_type), &
        intent(in)    :: G     !< Ocean grid
   type(verticalGrid_type), &
        intent(in)   :: GV     !< Ocean vertical grid
-  real, intent(in)  :: Dt     !< Time step of MOM6 [s] CHECK IF PASSING RIGHT TIMESTEP
+  real, intent(in)  :: dt     !< Time step of MOM6 [T ~> s]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
        intent(in)    :: h     !< Layer thicknesses [H ~> m or kg m-2]
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
-       intent(inout) :: u     !< Velocity i-component [m s-1]
+       intent(inout) :: u     !< Velocity i-component [L T-1 ~> m s-1]
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
-       intent(inout) :: v     !< Velocity j-component [m s-1]
+       intent(inout) :: v     !< Velocity j-component [L T-1 ~> m s-1]
   type(Wave_parameters_CS), &
        pointer       :: Waves !< Surface wave related control structure.
   type(unit_scale_type),   intent(in) :: US     !< A dimensional unit scaling type
   ! Local variables
-  real :: DVel ! A rescaled velocity change [m s-1 T-1 ~> m s-2]
+  real :: DVel ! A rescaled velocity change [L T-2 ~> m s-2]
   integer :: i,j,k
 
   do k = 1, GV%ke
@@ -1323,7 +1353,7 @@ subroutine CoriolisStokes(G, GV, DT, h, u, v, WAVES, US)
       do I = G%iscB, G%iecB
         DVel = 0.25*(WAVES%us_y(i,j+1,k)+WAVES%us_y(i-1,j+1,k))*G%CoriolisBu(i,j+1) + &
                0.25*(WAVES%us_y(i,j,k)+WAVES%us_y(i-1,j,k))*G%CoriolisBu(i,j)
-        u(I,j,k) = u(I,j,k) + DVEL*US%s_to_T*DT
+        u(I,j,k) = u(I,j,k) + DVEL*dt
       enddo
     enddo
   enddo
@@ -1333,7 +1363,7 @@ subroutine CoriolisStokes(G, GV, DT, h, u, v, WAVES, US)
       do i = G%isc, G%iec
         DVel = 0.25*(WAVES%us_x(i+1,j,k)+WAVES%us_x(i+1,j-1,k))*G%CoriolisBu(i+1,j) + &
                0.25*(WAVES%us_x(i,j,k)+WAVES%us_x(i,j-1,k))*G%CoriolisBu(i,j)
-        v(i,J,k) = v(i,j,k) - DVEL*US%s_to_T*DT
+        v(i,J,k) = v(i,j,k) - DVEL*dt
       enddo
     enddo
   enddo
@@ -1343,16 +1373,20 @@ end subroutine CoriolisStokes
 !! Probably doesn't belong in this module, but it is used here to estimate
 !! wind speed for wind-wave relationships.  Should be a fine way to estimate
 !! the neutral wind-speed as written here.
-subroutine ust_2_u10_coare3p5(USTair, U10, GV, US)
-  real, intent(in)                    :: USTair !< Wind friction velocity [m s-1]
-  real, intent(out)                   :: U10    !< 10-m neutral wind speed [m s-1]
+subroutine ust_2_u10_coare3p5(USTair, U10, GV, US, CS)
+  real, intent(in)                    :: USTair !< Wind friction velocity [Z T-1 ~> m s-1]
+  real, intent(out)                   :: U10    !< 10-m neutral wind speed [L T-1 ~> m s-1]
   type(verticalGrid_type), intent(in) :: GV     !< vertical grid type
   type(unit_scale_type),   intent(in) :: US     !< A dimensional unit scaling type
+  type(wave_parameters_CS), pointer   :: CS     !< Wave parameter Control structure
 
   ! Local variables
   real, parameter :: vonkar = 0.4 ! Should access a get_param von karman
-  real, parameter :: nu=1e-6 ! Should access a get_param air-viscosity
-  real :: z0sm, z0, z0rough, u10a, alpha, CD
+  real :: nu    ! The viscosity of air [Z2 T-1 ~> m2 s-1]
+  real :: z0sm, z0, z0rough  ! Roughness lengths [Z ~> m]
+  real :: u10a  ! The previous guess for u10 [L T-1 ~> m s-1]
+  real :: alpha ! A nondimensional factor in a parameterization [nondim]
+  real :: CD    ! The drag coefficient [nondim]
   integer :: CT
 
   ! Uses empirical formula for z0 to convert ustar_air to u10 based on the
@@ -1361,26 +1395,29 @@ subroutine ust_2_u10_coare3p5(USTair, U10, GV, US)
   ! Note in Edson et al. 2013, eq. 13 m is given as 0.017.  However,
   ! m=0.0017 reproduces the curve in their figure 6.
 
-  z0sm = 0.11 * nu * US%m_to_Z / USTair !Compute z0smooth from ustar guess
-  u10 = USTair/sqrt(0.001)  !Guess for u10
-  u10a = 1000
+  nu = 1.0e-6*US%m2_s_to_Z2_T ! Should access a get_param for air-viscosity
+
+  z0sm = 0.11 * nu / USTair ! Compute z0smooth from ustar guess
+  u10 = US%Z_to_L*USTair / sqrt(0.001)  ! Guess for u10
+  ! For efficiency change the line above to USTair * sqrt(1000.0) or USTair * 31.6227766 .
+  u10a = 1000.0*US%m_s_to_L_T ! An insanely large upper bound for u10.
 
   CT=0
-  do while (abs(u10a/u10-1.) > 0.001)
+  do while (abs(u10a/u10 - 1.) > 0.001)  ! Change this to (abs(u10a - u10) > 0.001*u10) for efficiency.
     CT=CT+1
     u10a = u10
-    alpha = min(0.028, 0.0017 * u10 - 0.005)
-    z0rough = alpha * (US%m_s_to_L_T*USTair)**2 / GV%g_Earth ! Compute z0rough from ustar guess
+    alpha = min(0.028, 0.0017*US%L_T_to_m_s * u10 - 0.005)
+    z0rough = alpha * (US%Z_to_L*USTair)**2 / GV%g_Earth ! Compute z0rough from ustar guess
     z0 = z0sm + z0rough
     CD = ( vonkar / log(10.*US%m_to_Z / z0) )**2 ! Compute CD from derived roughness
-    u10 = USTair/sqrt(CD)  ! Compute new u10 from derived CD, while loop
+    u10 = US%Z_to_L*USTair/sqrt(CD)  ! Compute new u10 from derived CD, while loop
                            ! ends and checks for convergence...CT counter
                            ! makes sure loop doesn't run away if function
                            ! doesn't converge.  This code was produced offline
                            ! and converged rapidly (e.g. 2 cycles)
                            ! for ustar=0.0001:0.0001:10.
     if (CT>20) then
-      u10 = USTair/sqrt(0.0015) ! I don't expect to get here, but just
+      u10 = US%Z_to_L*USTair/sqrt(0.0015) ! I don't expect to get here, but just
                               !  in case it will output a reasonable value.
       exit
     endif
