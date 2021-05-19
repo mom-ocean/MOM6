@@ -152,7 +152,7 @@ type, public :: wave_parameters_CS ; private
   real    :: TP_WVL       !< Test profile wavelength [Z ~> m]
 
   ! Options for use with the Donelan et al., 1985 (DHH85) spectrum
-  logical :: WaveAgePeakFreq ! Flag to use wave age to determine the peak frequency with DHH85
+  logical :: WaveAgePeakFreq !< Flag to use wave age to determine the peak frequency with DHH85
   logical :: StaticWaves  !< Flag to disable updating DHH85 Stokes drift
   logical :: DHH85_is_set !< The if the wave properties have been set when WaveMethod = DHH85.
   real    :: WaveAge      !< The fixed wave age used with the DHH85 spectrum [nondim]
