@@ -2195,11 +2195,11 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
                       conversion=US%Q_to_J_kg*CS%tv%C_p)
     endif
     if (CS%tv%S_is_absS) then
-      vd_S = var_desc(name="abssalt",units="g kg-1",longname="Absolute Salinity", &
+      vd_S = var_desc(name="abssalt", units="g kg-1", longname="Absolute Salinity", &
                       cmor_field_name="so", cmor_longname="Sea Water Salinity", &
                       conversion=0.001)
     else
-      vd_S = var_desc(name="salt",units="psu",longname="Salinity", &
+      vd_S = var_desc(name="salt", units="psu", longname="Salinity", &
                       cmor_field_name="so", cmor_longname="Sea Water Salinity", &
                       conversion=0.001)
     endif
@@ -2867,15 +2867,9 @@ subroutine register_diags(Time, G, GV, US, IDs, diag)
   type(MOM_diag_IDs),      intent(inout) :: IDs   !< A structure with the diagnostic IDs.
   type(diag_ctrl),         intent(inout) :: diag  !< regulates diagnostic output
 
-  real :: H_convert
   character(len=48) :: thickness_units
 
   thickness_units = get_thickness_units(GV)
-  if (GV%Boussinesq) then
-    H_convert = GV%H_to_m
-  else
-    H_convert = GV%H_to_kg_m2
-  endif
 
   ! Diagnostics of the rapidly varying dynamic state
   IDs%id_u = register_diag_field('ocean_model', 'u_dyn', diag%axesCuL, Time, &
@@ -2883,8 +2877,8 @@ subroutine register_diags(Time, G, GV, US, IDs, diag)
   IDs%id_v = register_diag_field('ocean_model', 'v_dyn', diag%axesCvL, Time, &
       'Meridional velocity after the dynamics update', 'm s-1', conversion=US%L_T_to_m_s)
   IDs%id_h = register_diag_field('ocean_model', 'h_dyn', diag%axesTL, Time, &
-      'Layer Thickness after the dynamics update', thickness_units, &
-      v_extensive=.true., conversion=H_convert)
+      'Layer Thickness after the dynamics update', thickness_units, conversion=GV%H_to_MKS, &
+      v_extensive=.true.)
   IDs%id_ssh_inst = register_diag_field('ocean_model', 'SSH_inst', diag%axesT1, &
       Time, 'Instantaneous Sea Surface Height', 'm')
 end subroutine register_diags
