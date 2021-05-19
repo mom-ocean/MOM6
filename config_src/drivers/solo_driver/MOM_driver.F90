@@ -250,6 +250,10 @@ program MOM_main
   ! This call sets the number and affinity of threads with openMP.
   !$  call set_MOM_thread_affinity(ocean_nthreads, use_hyper_thread)
 
+  ! This call is required to initiate dirs%restart_input_dir for ocean_solo.res
+  ! The contents of dirs will be reread in initialize_MOM.
+  call get_MOM_input(dirs=dirs)
+
   ! Read ocean_solo restart, which can override settings from the namelist.
   if (file_exists(trim(dirs%restart_input_dir)//'ocean_solo.res')) then
     call open_ASCII_file(unit, trim(dirs%restart_input_dir)//'ocean_solo.res', action=READONLY_FILE)

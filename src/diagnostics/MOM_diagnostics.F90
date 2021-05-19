@@ -116,6 +116,7 @@ type, public :: diagnostics_CS ; private
   integer :: id_e              = -1, id_e_D            = -1
   integer :: id_du_dt          = -1, id_dv_dt          = -1
   ! integer :: id_hf_du_dt       = -1, id_hf_dv_dt       = -1
+  integer :: id_h_du_dt       = -1, id_h_dv_dt       = -1
   integer :: id_hf_du_dt_2d    = -1, id_hf_dv_dt_2d    = -1
   integer :: id_col_ht         = -1, id_dh_dt          = -1
   integer :: id_KE             = -1, id_dKEdt          = -1
@@ -248,6 +249,9 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
   real, allocatable, dimension(:,:) :: &
     hf_du_dt_2d, hf_dv_dt_2d ! z integeral of hf_du_dt, hf_dv_dt [L T-2 ~> m s-2].
 
+  real, allocatable, dimension(:,:,:) :: h_du_dt ! h x dudt [H L T-2 ~> m2 s-2]
+  real, allocatable, dimension(:,:,:) :: h_dv_dt ! h x dvdt [H L T-2 ~> m2 s-2]
+
   ! tmp array for surface properties
   real :: surface_field(SZI_(G),SZJ_(G))
   real :: pressure_1d(SZI_(G)) ! Temporary array for pressure when calling EOS [R L2 T-2 ~> Pa]
@@ -323,6 +327,25 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
       enddo ; enddo ; enddo
       call post_data(CS%id_hf_dv_dt_2d, hf_dv_dt_2d, CS%diag)
       deallocate(hf_dv_dt_2d)
+    endif
+
+    if (CS%id_h_du_dt > 0) then
+      allocate(h_du_dt(G%IsdB:G%IedB,G%jsd:G%jed,GV%ke))
+      h_du_dt(:,:,:) = 0.0
+      do k=1,nz ; do j=js,je ; do I=Isq,Ieq
+        h_du_dt(I,j,k) = CS%du_dt(I,j,k) * ADp%diag_hu(I,j,k)
+      enddo ; enddo ; enddo
+      call post_data(CS%id_h_du_dt, h_du_dt, CS%diag)
+      deallocate(h_du_dt)
+    endif
+    if (CS%id_h_dv_dt > 0) then
+      allocate(h_dv_dt(G%isd:G%ied,G%JsdB:G%JedB,GV%ke))
+      h_dv_dt(:,:,:) = 0.0
+      do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
+        h_dv_dt(i,J,k) = CS%dv_dt(i,J,k) * ADp%diag_hv(i,J,k)
+      enddo ; enddo ; enddo
+      call post_data(CS%id_h_dv_dt, h_dv_dt, CS%diag)
+      deallocate(h_dv_dt)
     endif
 
     call diag_restore_grids(CS%diag)
@@ -1182,8 +1205,7 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, GV, US, CS
         KE_v(i,J) = vh(i,J,k) * G%dyCv(i,J) * ADp%dv_dt_dia(i,J,k)
       enddo ; enddo
       do j=js,je ; do i=is,ie
-        KE_h(i,j) = CS%KE(i,j,k) &
-            * (US%T_to_s * (CDp%diapyc_vel(i,j,k) - CDp%diapyc_vel(i,j,k+1)))
+        KE_h(i,j) = CS%KE(i,j,k) * (CDp%diapyc_vel(i,j,k) - CDp%diapyc_vel(i,j,k+1))
       enddo ; enddo
       if (.not.G%symmetric) &
          call do_group_pass(CS%pass_KE_uv, G%domain)
@@ -1498,7 +1520,7 @@ subroutine post_transport_diagnostics(G, GV, US, uhtr, vhtr, h, IDs, diag_pre_dy
     do k=1,nz ; do j=js,je ; do I=is-1,ie
       umo(I,j,k) = uhtr(I,j,k) * H_to_RZ_dt
     enddo ; enddo ; enddo
-    call post_data(IDs%id_umo, umo, diag, alt_h = diag_pre_dyn%h_state)
+    call post_data(IDs%id_umo, umo, diag, alt_h=diag_pre_dyn%h_state)
   endif
   if (IDs%id_vmo_2d > 0) then
     vmo2d(:,:) = 0.0
@@ -1512,20 +1534,20 @@ subroutine post_transport_diagnostics(G, GV, US, uhtr, vhtr, h, IDs, diag_pre_dy
     do k=1,nz ; do J=js-1,je ; do i=is,ie
       vmo(i,J,k) = vhtr(i,J,k) * H_to_RZ_dt
     enddo ; enddo ; enddo
-    call post_data(IDs%id_vmo, vmo, diag, alt_h = diag_pre_dyn%h_state)
+    call post_data(IDs%id_vmo, vmo, diag, alt_h=diag_pre_dyn%h_state)
   endif
 
-  if (IDs%id_uhtr > 0) call post_data(IDs%id_uhtr, uhtr, diag, alt_h = diag_pre_dyn%h_state)
-  if (IDs%id_vhtr > 0) call post_data(IDs%id_vhtr, vhtr, diag, alt_h = diag_pre_dyn%h_state)
+  if (IDs%id_uhtr > 0) call post_data(IDs%id_uhtr, uhtr, diag, alt_h=diag_pre_dyn%h_state)
+  if (IDs%id_vhtr > 0) call post_data(IDs%id_vhtr, vhtr, diag, alt_h=diag_pre_dyn%h_state)
   if (IDs%id_dynamics_h > 0) call post_data(IDs%id_dynamics_h, diag_pre_dyn%h_state, diag, &
-                                            alt_h = diag_pre_dyn%h_state)
+                                            alt_h=diag_pre_dyn%h_state)
   ! Post the change in thicknesses
   if (IDs%id_dynamics_h_tendency > 0) then
     h_tend(:,:,:) = 0.
     do k=1,nz ; do j=js,je ; do i=is,ie
       h_tend(i,j,k) = (h(i,j,k) - diag_pre_dyn%h_state(i,j,k))*Idt
     enddo ; enddo ; enddo
-    call post_data(IDs%id_dynamics_h_tendency, h_tend, diag, alt_h = diag_pre_dyn%h_state)
+    call post_data(IDs%id_dynamics_h_tendency, h_tend, diag, alt_h=diag_pre_dyn%h_state)
   endif
 
   call post_tracer_transport_diagnostics(G, GV, Reg, diag_pre_dyn%h_state, diag)
@@ -1695,8 +1717,8 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, US, param_file, diag
   CS%id_vsq = register_diag_field('ocean_model', 'vsq', diag%axesCvL, Time,                  &
       'Meridional velocity squared', 'm2 s-2', conversion=US%L_T_to_m_s**2)
   CS%id_uv = register_diag_field('ocean_model', 'uv', diag%axesTL, Time, &
-      'Product between zonal and meridional velocities at h-points', 'm2 s-2', &
-       conversion=US%L_T_to_m_s**2)
+      'Product between zonal and meridional velocities at h-points', &
+      'm2 s-2', conversion=US%L_T_to_m_s**2)
   CS%id_h = register_diag_field('ocean_model', 'h', diag%axesTL, Time, &
       'Layer Thickness', thickness_units, v_extensive=.true., conversion=convert_H)
 
@@ -1747,8 +1769,8 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, US, param_file, diag
   endif
 
   !CS%id_hf_du_dt = register_diag_field('ocean_model', 'hf_dudt', diag%axesCuL, Time, &
-  !    'Fractional Thickness-weighted Zonal Acceleration', 'm s-2', v_extensive=.true., &
-  !    conversion=US%L_T2_to_m_s2)
+  !    'Fractional Thickness-weighted Zonal Acceleration', 'm s-2', conversion=US%L_T2_to_m_s2, &
+  !    v_extensive=.true.)
   !if (CS%id_hf_du_dt > 0) then
   !  call safe_alloc_ptr(CS%hf_du_dt,IsdB,IedB,jsd,jed,nz)
   !  if (.not.associated(CS%du_dt)) then
@@ -1759,15 +1781,15 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, US, param_file, diag
   !endif
 
   !CS%id_hf_dv_dt = register_diag_field('ocean_model', 'hf_dvdt', diag%axesCvL, Time, &
-  !    'Fractional Thickness-weighted Meridional Acceleration', 'm s-2', v_extensive=.true., &
-  !    conversion=US%L_T2_to_m_s2)
+  !    'Fractional Thickness-weighted Meridional Acceleration', 'm s-2', conversion=US%L_T2_to_m_s2, &
+  !    v_extensive=.true.)
   !if (CS%id_hf_dv_dt > 0) then
   !  call safe_alloc_ptr(CS%hf_dv_dt,isd,ied,JsdB,JedB,nz)
   !  if (.not.associated(CS%dv_dt)) then
   !    call safe_alloc_ptr(CS%dv_dt,isd,ied,JsdB,JedB,nz)
   !    call register_time_deriv(lbound(MIS%v), MIS%v, CS%dv_dt, CS)
   !  endif
-  !  call safe_alloc_ptr(ADp%diag_hfrac_v,isd,ied,Jsd,JedB,nz)
+  !  call safe_alloc_ptr(ADp%diag_hfrac_v,isd,ied,JsdB,JedB,nz)
   !endif
 
   CS%id_hf_du_dt_2d = register_diag_field('ocean_model', 'hf_dudt_2d', diag%axesCu1, Time, &
@@ -1787,7 +1809,27 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, US, param_file, diag
       call safe_alloc_ptr(CS%dv_dt,isd,ied,JsdB,JedB,nz)
       call register_time_deriv(lbound(MIS%v), MIS%v, CS%dv_dt, CS)
     endif
-    call safe_alloc_ptr(ADp%diag_hfrac_v,isd,ied,Jsd,JedB,nz)
+    call safe_alloc_ptr(ADp%diag_hfrac_v,isd,ied,JsdB,JedB,nz)
+  endif
+
+  CS%id_h_du_dt = register_diag_field('ocean_model', 'h_du_dt', diag%axesCuL, Time, &
+      'Thickness Multiplied Zonal Acceleration', 'm2 s-2', conversion=GV%H_to_m*US%L_T2_to_m_s2)
+  if (CS%id_h_du_dt > 0) then
+    if (.not.associated(CS%du_dt)) then
+      call safe_alloc_ptr(CS%du_dt,IsdB,IedB,jsd,jed,nz)
+      call register_time_deriv(lbound(MIS%u), MIS%u, CS%du_dt, CS)
+    endif
+    call safe_alloc_ptr(ADp%diag_hu,IsdB,IedB,jsd,jed,nz)
+  endif
+
+  CS%id_h_dv_dt = register_diag_field('ocean_model', 'h_dv_dt', diag%axesCvL, Time, &
+      'Thickness Multiplied Meridional Acceleration', 'm2 s-2', conversion=GV%H_to_m*US%L_T2_to_m_s2)
+  if (CS%id_h_dv_dt > 0) then
+    if (.not.associated(CS%dv_dt)) then
+      call safe_alloc_ptr(CS%dv_dt,isd,ied,JsdB,JedB,nz)
+      call register_time_deriv(lbound(MIS%v), MIS%v, CS%dv_dt, CS)
+    endif
+    call safe_alloc_ptr(ADp%diag_hv,isd,ied,JsdB,JedB,nz)
   endif
 
   ! layer thickness variables
@@ -2000,8 +2042,8 @@ subroutine register_surface_diags(Time, G, US, IDs, diag, tv)
   endif
 
   IDs%id_salt_deficit = register_diag_field('ocean_model', 'salt_deficit', diag%axesT1, Time, &
-         'Salt sink in ocean due to ice flux', &
-         'psu m-2 s-1', conversion=US%RZ_T_to_kg_m2s)
+         'Salt source in ocean required to supply excessive ice salt fluxes', &
+         'ppt kg m-2 s-1', conversion=US%RZ_T_to_kg_m2s)
   IDs%id_Heat_PmE = register_diag_field('ocean_model', 'Heat_PmE', diag%axesT1, Time, &
          'Heat flux into ocean from mass flux into ocean', &
          'W m-2', conversion=US%QRZ_T_to_W_m2)
@@ -2021,22 +2063,22 @@ subroutine register_transport_diags(Time, G, GV, US, IDs, diag)
   type(diag_ctrl),          intent(inout) :: diag  !< regulates diagnostic output
 
   real :: H_convert
-  character(len=48) :: thickness_units
+  character(len=48) :: thickness_units, accum_flux_units
 
   thickness_units = get_thickness_units(GV)
   if (GV%Boussinesq) then
-    H_convert = GV%H_to_m
+    H_convert = GV%H_to_m ; accum_flux_units = "m3"
   else
-    H_convert = GV%H_to_kg_m2
+    H_convert = GV%H_to_kg_m2 ; accum_flux_units = "kg"
   endif
 
   ! Diagnostics related to tracer and mass transport
   IDs%id_uhtr = register_diag_field('ocean_model', 'uhtr', diag%axesCuL, Time, &
-      'Accumulated zonal thickness fluxes to advect tracers', 'kg', &
-      y_cell_method='sum', v_extensive=.true., conversion=H_convert*US%L_to_m**2)
+      'Accumulated zonal thickness fluxes to advect tracers', &
+      accum_flux_units, y_cell_method='sum', v_extensive=.true., conversion=H_convert*US%L_to_m**2)
   IDs%id_vhtr = register_diag_field('ocean_model', 'vhtr', diag%axesCvL, Time, &
-      'Accumulated meridional thickness fluxes to advect tracers', 'kg', &
-      x_cell_method='sum', v_extensive=.true., conversion=H_convert*US%L_to_m**2)
+      'Accumulated meridional thickness fluxes to advect tracers', &
+      accum_flux_units, x_cell_method='sum', v_extensive=.true., conversion=H_convert*US%L_to_m**2)
   IDs%id_umo = register_diag_field('ocean_model', 'umo', &
       diag%axesCuL, Time, 'Ocean Mass X Transport', &
       'kg s-1', conversion=US%RZ_T_to_kg_m2s*US%L_to_m**2, &
@@ -2054,8 +2096,8 @@ subroutine register_transport_diags(Time, G, GV, US, IDs, diag)
       'kg s-1', conversion=US%RZ_T_to_kg_m2s*US%L_to_m**2, &
       standard_name='ocean_mass_y_transport_vertical_sum', x_cell_method='sum')
   IDs%id_dynamics_h = register_diag_field('ocean_model','dynamics_h',  &
-      diag%axesTl, Time, 'Change in layer thicknesses due to horizontal dynamics', &
-      'm s-1', v_extensive=.true., conversion=GV%H_to_m)
+      diag%axesTl, Time, 'Layer thicknesses prior to horizontal dynamics', &
+      'm', v_extensive=.true., conversion=GV%H_to_m)
   IDs%id_dynamics_h_tendency = register_diag_field('ocean_model','dynamics_h_tendency',  &
       diag%axesTl, Time, 'Change in layer thicknesses due to horizontal dynamics', &
       'm s-1', v_extensive=.true., conversion=GV%H_to_m*US%s_to_T)

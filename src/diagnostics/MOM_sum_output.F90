@@ -4,31 +4,30 @@ module MOM_sum_output
 ! This file is part of MOM6. See LICENSE.md for the license.
 
 use iso_fortran_env, only : int64
-use MOM_coms, only : sum_across_PEs, PE_here, root_PE, num_PEs, max_across_PEs, field_chksum
-use MOM_coms, only : reproducing_sum, reproducing_sum_EFP, EFP_to_real, real_to_EFP
-use MOM_coms, only : EFP_type, operator(+), operator(-), assignment(=), EFP_sum_across_PEs
+use MOM_coms,          only : sum_across_PEs, PE_here, root_PE, num_PEs, max_across_PEs, field_chksum
+use MOM_coms,          only : reproducing_sum, reproducing_sum_EFP, EFP_to_real, real_to_EFP
+use MOM_coms,          only : EFP_type, operator(+), operator(-), assignment(=), EFP_sum_across_PEs
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, is_root_pe, MOM_mesg
-use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
-use MOM_forcing_type, only : forcing
-use MOM_grid, only : ocean_grid_type
+use MOM_file_parser,   only : get_param, log_param, log_version, param_file_type
+use MOM_forcing_type,  only : forcing
+use MOM_grid,          only : ocean_grid_type
 use MOM_interface_heights, only : find_eta
-use MOM_io, only : create_file, file_type, fieldtype, flush_file, reopen_file
-use MOM_io, only : file_exists, slasher, vardesc, var_desc, write_field, get_filename_appendix
-use MOM_io, only : field_size, read_variable, read_attribute, open_ASCII_file, stdout
-use MOM_io, only : APPEND_FILE, SINGLE_FILE, WRITEONLY_FILE
+use MOM_io,            only : create_file, file_type, fieldtype, flush_file, reopen_file, close_file
+use MOM_io,            only : file_exists, slasher, vardesc, var_desc, write_field, MOM_write_field
+use MOM_io,            only : field_size, read_variable, read_attribute, open_ASCII_file, stdout
+use MOM_io,            only : axis_info, set_axis_info, delete_axis_info, get_filename_appendix
+use MOM_io,            only : attribute_info, set_attribute_info, delete_attribute_info
+use MOM_io,            only : APPEND_FILE, SINGLE_FILE, WRITEONLY_FILE
 use MOM_open_boundary, only : ocean_OBC_type, OBC_segment_type
 use MOM_open_boundary, only : OBC_DIRECTION_E, OBC_DIRECTION_W, OBC_DIRECTION_N, OBC_DIRECTION_S
-use MOM_time_manager, only : time_type, get_time, get_date, set_time, operator(>)
-use MOM_time_manager, only : operator(+), operator(-), operator(*), operator(/)
-use MOM_time_manager, only : operator(/=), operator(<=), operator(>=), operator(<)
-use MOM_time_manager, only : get_calendar_type, time_type_to_real, NO_CALENDAR
+use MOM_time_manager,  only : time_type, get_time, get_date, set_time, operator(>)
+use MOM_time_manager,  only : operator(+), operator(-), operator(*), operator(/)
+use MOM_time_manager,  only : operator(/=), operator(<=), operator(>=), operator(<)
+use MOM_time_manager,  only : get_calendar_type, time_type_to_real, NO_CALENDAR
 use MOM_tracer_flow_control, only : tracer_flow_control_CS, call_tracer_stocks
-use MOM_unit_scaling, only : unit_scale_type
-use MOM_variables, only : surface, thermo_var_ptrs
-use MOM_verticalGrid, only : verticalGrid_type
-
-use netcdf, only : NF90_create, NF90_def_dim, NF90_def_var, NF90_enddef, NF90_put_att, NF90_put_var
-use netcdf, only : NF90_close, NF90_strerror, NF90_DOUBLE, NF90_NOERR, NF90_GLOBAL
+use MOM_unit_scaling,  only : unit_scale_type
+use MOM_variables,     only : surface, thermo_var_ptrs
+use MOM_verticalGrid,  only : verticalGrid_type
 
 implicit none ; private
 
@@ -1265,8 +1264,15 @@ subroutine write_depth_list(G, US, DL, filename)
   character(len=*),      intent(in) :: filename !< The path to the depth list file to write.
 
   ! Local variables
-  real, allocatable :: tmp(:)
-  integer :: ncid, dimid(1), Did, Aid, Vid, status, k
+  type(vardesc), dimension(:), allocatable :: &
+    vars          ! Types that described the staggering and metadata for the fields
+  type(fieldtype), dimension(:), allocatable :: &
+    fields        ! Types with metadata about the variables that will be written
+  type(axis_info), dimension(:), allocatable :: &
+    extra_axes    ! Descriptors for extra axes that might be used
+  type(attribute_info), dimension(:), allocatable :: &
+    global_atts   ! Global attributes and their values
+  type(file_type)   :: IO_handle     ! The I/O handle of the fileset
   character(len=16) :: depth_chksum, area_chksum
 
   ! All ranks are required to compute the global checksum
@@ -1274,79 +1280,28 @@ subroutine write_depth_list(G, US, DL, filename)
 
   if (.not.is_root_pe()) return
 
-  allocate(tmp(DL%listsize)) ; tmp(:) = 0.0
+  allocate(vars(3))
+  allocate(fields(3))
+  allocate(extra_axes(1))
+  allocate(global_atts(2))
 
-  status = NF90_CREATE(filename, 0, ncid)
-  if (status /= NF90_NOERR) then
-    call MOM_error(WARNING, trim(filename)//trim(NF90_STRERROR(status)))
-    return
-  endif
+  call set_axis_info(extra_axes(1), "list", ax_size=DL%listsize)
+  vars(1) = var_desc("depth", "m", "Sorted depth", '1', dim_names=(/"list"/), fixed=.true.)
+  vars(2) = var_desc("area", "m2", "Open area at depth", '1', dim_names=(/"list"/), fixed=.true.)
+  vars(3) = var_desc("vol_below", "m3", "Open volume below depth", '1', dim_names=(/"list"/), fixed=.true.)
+  call set_attribute_info(global_atts(1), depth_chksum_attr, depth_chksum)
+  call set_attribute_info(global_atts(2), area_chksum_attr, area_chksum)
 
-  status = NF90_DEF_DIM(ncid, "list", DL%listsize, dimid(1))
-  if (status /= NF90_NOERR) call MOM_error(WARNING, &
-      trim(filename)//trim(NF90_STRERROR(status)))
+  call create_file(IO_handle, filename, vars, 3, fields, SINGLE_FILE, extra_axes=extra_axes, &
+                   global_atts=global_atts)
+  call MOM_write_field(IO_handle, fields(1), DL%depth, scale=US%Z_to_m)
+  call MOM_write_field(IO_handle, fields(2), DL%area, scale=US%L_to_m**2)
+  call MOM_write_field(IO_handle, fields(3), DL%vol_below, scale=US%Z_to_m*US%L_to_m**2)
 
-  status = NF90_DEF_VAR(ncid, "depth", NF90_DOUBLE, dimid, Did)
-  if (status /= NF90_NOERR) call MOM_error(WARNING, &
-      trim(filename)//" depth "//trim(NF90_STRERROR(status)))
-  status = NF90_PUT_ATT(ncid, Did, "long_name", "Sorted depth")
-  if (status /= NF90_NOERR) call MOM_error(WARNING, &
-      trim(filename)//" depth "//trim(NF90_STRERROR(status)))
-  status = NF90_PUT_ATT(ncid, Did, "units", "m")
-  if (status /= NF90_NOERR) call MOM_error(WARNING, &
-      trim(filename)//" depth "//trim(NF90_STRERROR(status)))
-
-  status = NF90_DEF_VAR(ncid, "area", NF90_DOUBLE, dimid, Aid)
-  if (status /= NF90_NOERR) call MOM_error(WARNING, &
-      trim(filename)//" area "//trim(NF90_STRERROR(status)))
-  status = NF90_PUT_ATT(ncid, Aid, "long_name", "Open area at depth")
-  if (status /= NF90_NOERR) call MOM_error(WARNING, &
-      trim(filename)//" area "//trim(NF90_STRERROR(status)))
-  status = NF90_PUT_ATT(ncid, Aid, "units", "m2")
-  if (status /= NF90_NOERR) call MOM_error(WARNING, &
-      trim(filename)//" area "//trim(NF90_STRERROR(status)))
-
-  status = NF90_DEF_VAR(ncid, "vol_below", NF90_DOUBLE, dimid, Vid)
-  if (status /= NF90_NOERR) call MOM_error(WARNING, &
-      trim(filename)//" vol_below "//trim(NF90_STRERROR(status)))
-  status = NF90_PUT_ATT(ncid, Vid, "long_name", "Open volume below depth")
-  if (status /= NF90_NOERR) call MOM_error(WARNING, &
-      trim(filename)//" vol_below "//trim(NF90_STRERROR(status)))
-  status = NF90_PUT_ATT(ncid, Vid, "units", "m3")
-  if (status /= NF90_NOERR) call MOM_error(WARNING, &
-      trim(filename)//" vol_below "//trim(NF90_STRERROR(status)))
-
-  ! Dependency checksums
-  status = NF90_PUT_ATT(ncid, NF90_GLOBAL, depth_chksum_attr, depth_chksum)
-  if (status /= NF90_NOERR) call MOM_error(WARNING, &
-      trim(filename)//" "//depth_chksum_attr//" "//trim(NF90_STRERROR(status)))
-
-  status = NF90_PUT_ATT(ncid, NF90_GLOBAL, area_chksum_attr, area_chksum)
-  if (status /= NF90_NOERR) call MOM_error(WARNING, &
-      trim(filename)//" "//area_chksum_attr//" "//trim(NF90_STRERROR(status)))
-
-  status = NF90_ENDDEF(ncid)
-  if (status /= NF90_NOERR) call MOM_error(WARNING, &
-      trim(filename)//trim(NF90_STRERROR(status)))
-
-  do k=1,DL%listsize ; tmp(k) = US%Z_to_m*DL%depth(k) ; enddo
-  status = NF90_PUT_VAR(ncid, Did, tmp)
-  if (status /= NF90_NOERR) call MOM_error(WARNING, &
-      trim(filename)//" depth "//trim(NF90_STRERROR(status)))
-
-  do k=1,DL%listsize ; tmp(k) = US%L_to_m**2*DL%area(k) ; enddo
-  status = NF90_PUT_VAR(ncid, Aid, tmp)
-  if (status /= NF90_NOERR) call MOM_error(WARNING, &
-      trim(filename)//" area "//trim(NF90_STRERROR(status)))
-
-  do k=1,DL%listsize ; tmp(k) = US%Z_to_m*US%L_to_m**2*DL%vol_below(k) ; enddo
-  status = NF90_PUT_VAR(ncid, Vid, tmp)
-  if (status /= NF90_NOERR) call MOM_error(WARNING, &
-      trim(filename)//" vol_below "//trim(NF90_STRERROR(status)))
-
-  status = NF90_CLOSE(ncid)
-  if (status /= NF90_NOERR) call MOM_error(WARNING, &
-      trim(filename)//trim(NF90_STRERROR(status)))
+  call delete_axis_info(extra_axes)
+  call delete_attribute_info(global_atts)
+  deallocate(vars, extra_axes, fields, global_atts)
+  call close_file(IO_handle)
 
 end subroutine write_depth_list
 

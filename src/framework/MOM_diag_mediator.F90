@@ -1051,6 +1051,7 @@ subroutine define_axes_group(diag_cs, handles, axes, nz, vertical_coordinate_num
   else
     axes%v_cell_method = ''
   endif
+
   if (present(nz)) axes%nz = nz
   if (present(vertical_coordinate_number)) axes%vertical_coordinate_number = vertical_coordinate_number
   if (present(is_h_point)) axes%is_h_point = is_h_point
@@ -1971,6 +1972,7 @@ integer function register_diag_field(module_name, field_name, axes_in, init_time
   type(diag_ctrl), pointer :: diag_cs => NULL()
   type(axes_grp), pointer :: remap_axes => null()
   type(axes_grp), pointer :: axes => null()
+  type(axes_grp), pointer :: axes_d2 => null()
   integer :: dm_id, i, dl
   character(len=256) :: msg, cm_string
   character(len=256) :: new_module_name
@@ -1978,18 +1980,15 @@ integer function register_diag_field(module_name, field_name, axes_in, init_time
   integer :: num_modnm, num_varnm
   logical :: active
 
-  axes => axes_in
-  MOM_missing_value = axes%diag_cs%missing_value
-  if (present(missing_value)) MOM_missing_value = missing_value
+  diag_cs => axes_in%diag_cs
 
-  diag_cs => axes%diag_cs
-  dm_id = -1
-
+  ! Check if the axes match a standard grid axis.
+  ! If not, allocate the new axis and copy the contents.
   if (axes_in%id == diag_cs%axesTL%id) then
     axes => diag_cs%axesTL
   elseif (axes_in%id == diag_cs%axesBL%id) then
     axes => diag_cs%axesBL
-  elseif (axes_in%id == diag_cs%axesCuL%id ) then
+  elseif (axes_in%id == diag_cs%axesCuL%id) then
     axes => diag_cs%axesCuL
   elseif (axes_in%id == diag_cs%axesCvL%id) then
     axes => diag_cs%axesCvL
@@ -1997,11 +1996,20 @@ integer function register_diag_field(module_name, field_name, axes_in, init_time
     axes => diag_cs%axesTi
   elseif (axes_in%id == diag_cs%axesBi%id) then
     axes => diag_cs%axesBi
-  elseif (axes_in%id == diag_cs%axesCui%id ) then
+  elseif (axes_in%id == diag_cs%axesCui%id) then
     axes => diag_cs%axesCui
   elseif (axes_in%id == diag_cs%axesCvi%id) then
     axes => diag_cs%axesCvi
+  else
+    allocate(axes)
+    axes = axes_in
   endif
+
+  MOM_missing_value = axes%diag_cs%missing_value
+  if (present(missing_value)) MOM_missing_value = missing_value
+
+  diag_cs => axes%diag_cs
+  dm_id = -1
 
   module_list = "{"//trim(module_name)
   num_modnm = 1
@@ -2090,31 +2098,31 @@ integer function register_diag_field(module_name, field_name, axes_in, init_time
     new_module_name = trim(module_name)//'_d2'
 
     if (axes_in%rank == 3 .or. axes_in%rank == 2 ) then
-      axes => null()
+      axes_d2 => null()
       if (axes_in%id == diag_cs%axesTL%id) then
-        axes => diag_cs%dsamp(dl)%axesTL
+        axes_d2 => diag_cs%dsamp(dl)%axesTL
       elseif (axes_in%id == diag_cs%axesBL%id) then
-        axes => diag_cs%dsamp(dl)%axesBL
+        axes_d2 => diag_cs%dsamp(dl)%axesBL
       elseif (axes_in%id == diag_cs%axesCuL%id ) then
-        axes => diag_cs%dsamp(dl)%axesCuL
+        axes_d2 => diag_cs%dsamp(dl)%axesCuL
       elseif (axes_in%id == diag_cs%axesCvL%id) then
-        axes => diag_cs%dsamp(dl)%axesCvL
+        axes_d2 => diag_cs%dsamp(dl)%axesCvL
       elseif (axes_in%id == diag_cs%axesTi%id) then
-        axes => diag_cs%dsamp(dl)%axesTi
+        axes_d2 => diag_cs%dsamp(dl)%axesTi
       elseif (axes_in%id == diag_cs%axesBi%id) then
-        axes => diag_cs%dsamp(dl)%axesBi
+        axes_d2 => diag_cs%dsamp(dl)%axesBi
       elseif (axes_in%id == diag_cs%axesCui%id ) then
-        axes => diag_cs%dsamp(dl)%axesCui
+        axes_d2 => diag_cs%dsamp(dl)%axesCui
       elseif (axes_in%id == diag_cs%axesCvi%id) then
-        axes => diag_cs%dsamp(dl)%axesCvi
+        axes_d2 => diag_cs%dsamp(dl)%axesCvi
       elseif (axes_in%id == diag_cs%axesT1%id) then
-        axes => diag_cs%dsamp(dl)%axesT1
+        axes_d2 => diag_cs%dsamp(dl)%axesT1
       elseif (axes_in%id == diag_cs%axesB1%id) then
-        axes => diag_cs%dsamp(dl)%axesB1
+        axes_d2 => diag_cs%dsamp(dl)%axesB1
       elseif (axes_in%id == diag_cs%axesCu1%id ) then
-        axes => diag_cs%dsamp(dl)%axesCu1
+        axes_d2 => diag_cs%dsamp(dl)%axesCu1
       elseif (axes_in%id == diag_cs%axesCv1%id) then
-        axes => diag_cs%dsamp(dl)%axesCv1
+        axes_d2 => diag_cs%dsamp(dl)%axesCv1
       else
         !Niki: Should we worry about these, e.g., diag_to_Z_CS?
         call MOM_error(WARNING,"register_diag_field: Could not find a proper axes for " &
@@ -2122,8 +2130,8 @@ integer function register_diag_field(module_name, field_name, axes_in, init_time
       endif
     endif
     ! Register the native diagnostic
-    if (associated(axes)) then
-       active = register_diag_field_expand_cmor(dm_id, new_module_name, field_name, axes, &
+    if (associated(axes_d2)) then
+       active = register_diag_field_expand_cmor(dm_id, new_module_name, field_name, axes_d2, &
                 init_time, long_name=long_name, units=units, missing_value=MOM_missing_value, &
                 range=range, mask_variant=mask_variant, standard_name=standard_name, &
                 verbose=verbose, do_not_log=do_not_log, err_msg=err_msg, &
@@ -2196,7 +2204,7 @@ integer function register_diag_field(module_name, field_name, axes_in, init_time
                              v_extensive=v_extensive)
     module_list = trim(module_list)//"}"
     if (num_modnm <= 1) module_list = module_name
-    if (num_varnm <= 1) var_list = ""
+    if (num_varnm <= 1) var_list = ''
 
     call log_available_diag(dm_id>0, module_list, field_name, cm_string, msg, diag_CS, &
                             long_name, units, standard_name, variants=var_list)
@@ -2216,7 +2224,7 @@ logical function register_diag_field_expand_cmor(dm_id, module_name, field_name,
   integer,          intent(inout) :: dm_id !< The diag_mediator ID for this diagnostic group
   character(len=*), intent(in) :: module_name !< Name of this module, usually "ocean_model" or "ice_shelf_model"
   character(len=*), intent(in) :: field_name !< Name of the diagnostic field
-  type(axes_grp), target, intent(in) :: axes !< Container w/ up to 3 integer handles that indicates axes
+  type(axes_grp),   intent(in) :: axes !< Container w/ up to 3 integer handles that indicates axes
                                              !! for this field
   type(time_type),  intent(in) :: init_time !< Time at which a field is first available?
   character(len=*), optional, intent(in) :: long_name !< Long name of a field.
@@ -4146,42 +4154,36 @@ subroutine downsample_field_2d(field_in, field_out, dl, method, mask, diag_cs, d
       i0 = isv_o+dl*(i-isv_d)
       j0 = jsv_o+dl*(j-jsv_d)
       ave = 0.0
-      total_weight = 0.0
       do jj=j0,j0+dl-1 ; do ii=i0,i0+dl-1
 !      do ii=i0,i0+dl-1 ; do jj=j0,j0+dl-1
         weight = mask(ii,jj)
-        total_weight = total_weight + weight
         ave = ave+field_in(ii,jj)*weight
       enddo ; enddo
-      field_out(i,j) = ave/(total_weight+epsilon)  !Avoid zero mask at all aggregating cells where ave=0.0
+      field_out(i,j) = ave  !Masked Sum (total_weight=1)
     enddo ; enddo
   elseif (method == PSP) then   ! e.g., umo_2d
     do j=jsv_d,jev_d ; do i=isv_d,iev_d
       i0 = isv_o+dl*(i-isv_d)
       j0 = jsv_o+dl*(j-jsv_d)
       ave = 0.0
-      total_weight = 0.0
       ii=i0
       do jj=j0,j0+dl-1
         weight = mask(ii,jj)
-        total_weight = total_weight +weight
         ave = ave+field_in(ii,jj)*weight
       enddo
-      field_out(i,j) = ave/(total_weight+epsilon)  !Avoid zero mask at all aggregating cells where ave=0.0
+      field_out(i,j) = ave  !Masked Sum (total_weight=1)
     enddo ; enddo
   elseif (method == SPP) then   ! e.g., vmo_2d
     do j=jsv_d,jev_d ; do i=isv_d,iev_d
       i0 = isv_o+dl*(i-isv_d)
       j0 = jsv_o+dl*(j-jsv_d)
       ave = 0.0
-      total_weight = 0.0
       jj=j0
       do ii=i0,i0+dl-1
         weight = mask(ii,jj)
-        total_weight = total_weight +weight
         ave = ave+field_in(ii,jj)*weight
       enddo
-      field_out(i,j) = ave/(total_weight+epsilon)  !Avoid zero mask at all aggregating cells where ave=0.0
+      field_out(i,j) = ave  !Masked Sum (total_weight=1)
     enddo ; enddo
   elseif (method == PMP) then
     do j=jsv_d,jev_d ; do i=isv_d,iev_d

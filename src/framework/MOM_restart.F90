@@ -131,7 +131,8 @@ interface query_initialized
 end interface
 
 contains
-!!> Register a restart field as obsolete
+
+!> Register a restart field as obsolete
 subroutine register_restart_field_as_obsolete(field_name, replacement_name, CS)
   character(*), intent(in) :: field_name       !< Name of restart field that is no longer in use
   character(*), intent(in) :: replacement_name !< Name of replacement restart field, if applicable
@@ -499,8 +500,6 @@ function query_initialized_name(name, CS) result(query_initialized)
   character(len=*),     intent(in) :: name !< The name of the field that is being queried
   type(MOM_restart_CS), pointer    :: CS !< A pointer to a MOM_restart_CS object (intent in)
   logical :: query_initialized
-!   This subroutine returns .true. if the field referred to by name has
-! initialized from a restart file, and .false. otherwise.
 
   integer :: m, n
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
@@ -515,8 +514,7 @@ function query_initialized_name(name, CS) result(query_initialized)
       n = m ; exit
     endif
   enddo
-! Assume that you are going to initialize it now, so set flag to initialized if
-! queried again.
+  ! Assume that you are going to initialize it now, so set flag to initialized if queried again.
   if (n<=CS%novars) CS%restart_field(n)%initialized = .true.
   if ((n==CS%novars+1) .and. (is_root_pe())) &
     call MOM_error(NOTE,"MOM_restart: Unknown restart variable "//name// &
@@ -533,8 +531,6 @@ function query_initialized_0d(f_ptr, CS) result(query_initialized)
   real,         target, intent(in) :: f_ptr !< A pointer to the field that is being queried
   type(MOM_restart_CS), pointer    :: CS !< A pointer to a MOM_restart_CS object (intent in)
   logical :: query_initialized
-!   This subroutine tests whether the field pointed to by f_ptr has
-! been initialized from a restart file.
 
   integer :: m, n
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
@@ -549,8 +545,7 @@ function query_initialized_0d(f_ptr, CS) result(query_initialized)
       n = m ; exit
     endif
   enddo
-! Assume that you are going to initialize it now, so set flag to initialized if
-! queried again.
+  ! Assume that you are going to initialize it now, so set flag to initialized if queried again.
   if (n<=CS%novars) CS%restart_field(n)%initialized = .true.
 
 end function query_initialized_0d
@@ -560,8 +555,6 @@ function query_initialized_1d(f_ptr, CS) result(query_initialized)
   real, dimension(:), target, intent(in) :: f_ptr !< A pointer to the field that is being queried
   type(MOM_restart_CS),       pointer    :: CS !< A pointer to a MOM_restart_CS object (intent in)
   logical :: query_initialized
-!   This subroutine tests whether the field pointed to by f_ptr has
-! been initialized from a restart file.
 
   integer :: m, n
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
@@ -576,8 +569,7 @@ function query_initialized_1d(f_ptr, CS) result(query_initialized)
       n = m ; exit
     endif
   enddo
-! Assume that you are going to initialize it now, so set flag to initialized if
-! queried again.
+  ! Assume that you are going to initialize it now, so set flag to initialized if queried again.
   if (n<=CS%novars) CS%restart_field(n)%initialized = .true.
 
 end function query_initialized_1d
@@ -588,8 +580,6 @@ function query_initialized_2d(f_ptr, CS) result(query_initialized)
                 target, intent(in) :: f_ptr !< A pointer to the field that is being queried
   type(MOM_restart_CS), pointer    :: CS !< A pointer to a MOM_restart_CS object (intent in)
   logical :: query_initialized
-!   This subroutine tests whether the field pointed to by f_ptr has
-! been initialized from a restart file.
 
   integer :: m, n
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
@@ -604,8 +594,7 @@ function query_initialized_2d(f_ptr, CS) result(query_initialized)
       n = m ; exit
     endif
   enddo
-! Assume that you are going to initialize it now, so set flag to initialized if
-! queried again.
+  ! Assume that you are going to initialize it now, so set flag to initialized if queried again.
   if (n<=CS%novars) CS%restart_field(n)%initialized = .true.
 
 end function query_initialized_2d
@@ -616,8 +605,6 @@ function query_initialized_3d(f_ptr, CS) result(query_initialized)
                 target, intent(in) :: f_ptr !< A pointer to the field that is being queried
   type(MOM_restart_CS), pointer    :: CS !< A pointer to a MOM_restart_CS object (intent in)
   logical :: query_initialized
-!   This subroutine tests whether the field pointed to by f_ptr has
-! been initialized from a restart file.
 
   integer :: m, n
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
@@ -632,8 +619,7 @@ function query_initialized_3d(f_ptr, CS) result(query_initialized)
       n = m ; exit
     endif
   enddo
-! Assume that you are going to initialize it now, so set flag to initialized if
-! queried again.
+  ! Assume that you are going to initialize it now, so set flag to initialized if queried again.
   if (n<=CS%novars) CS%restart_field(n)%initialized = .true.
 
 end function query_initialized_3d
@@ -644,8 +630,6 @@ function query_initialized_4d(f_ptr, CS) result(query_initialized)
                 target, intent(in) :: f_ptr !< A pointer to the field that is being queried
   type(MOM_restart_CS), pointer    :: CS !< A pointer to a MOM_restart_CS object (intent in)
   logical :: query_initialized
-!   This subroutine tests whether the field pointed to by f_ptr has
-! been initialized from a restart file.
 
   integer :: m, n
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
@@ -660,8 +644,7 @@ function query_initialized_4d(f_ptr, CS) result(query_initialized)
       n = m ; exit
     endif
   enddo
-! Assume that you are going to initialize it now, so set flag to initialized if
-! queried again.
+  ! Assume that you are going to initialize it now, so set flag to initialized if queried again.
   if (n<=CS%novars) CS%restart_field(n)%initialized = .true.
 
 end function query_initialized_4d
@@ -673,8 +656,6 @@ function query_initialized_0d_name(f_ptr, name, CS) result(query_initialized)
   character(len=*),     intent(in) :: name !< The name of the field that is being queried
   type(MOM_restart_CS), pointer    :: CS !< A pointer to a MOM_restart_CS object (intent in)
   logical :: query_initialized
-!   This subroutine tests whether the field pointed to by f_ptr or with the
-! specified variable name has been initialized from a restart file.
 
   integer :: m, n
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
@@ -689,8 +670,7 @@ function query_initialized_0d_name(f_ptr, name, CS) result(query_initialized)
       n = m ; exit
     endif
   enddo
-! Assume that you are going to initialize it now, so set flag to initialized if
-! queried again.
+  ! Assume that you are going to initialize it now, so set flag to initialized if queried again.
   if (n<=CS%novars) CS%restart_field(n)%initialized = .true.
   if (n==CS%novars+1) then
     if (is_root_pe()) &
@@ -709,8 +689,6 @@ function query_initialized_1d_name(f_ptr, name, CS) result(query_initialized)
   character(len=*),     intent(in) :: name !< The name of the field that is being queried
   type(MOM_restart_CS), pointer    :: CS !< A pointer to a MOM_restart_CS object (intent in)
   logical :: query_initialized
-!   This subroutine tests whether the field pointed to by f_ptr or with the
-! specified variable name has been initialized from a restart file.
 
   integer :: m, n
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
@@ -725,8 +703,7 @@ function query_initialized_1d_name(f_ptr, name, CS) result(query_initialized)
       n = m ; exit
     endif
   enddo
-! Assume that you are going to initialize it now, so set flag to initialized if
-! queried again.
+  ! Assume that you are going to initialize it now, so set flag to initialized if queried again.
   if (n<=CS%novars) CS%restart_field(n)%initialized = .true.
   if (n==CS%novars+1) then
     if (is_root_pe()) &
@@ -745,8 +722,6 @@ function query_initialized_2d_name(f_ptr, name, CS) result(query_initialized)
   character(len=*),     intent(in) :: name !< The name of the field that is being queried
   type(MOM_restart_CS), pointer    :: CS !< A pointer to a MOM_restart_CS object (intent in)
   logical :: query_initialized
-!   This subroutine tests whether the field pointed to by f_ptr or with the
-! specified variable name has been initialized from a restart file.
 
   integer :: m, n
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
@@ -761,8 +736,7 @@ function query_initialized_2d_name(f_ptr, name, CS) result(query_initialized)
       n = m ; exit
     endif
   enddo
-! Assume that you are going to initialize it now, so set flag to initialized if
-! queried again.
+  ! Assume that you are going to initialize it now, so set flag to initialized if queried again.
   if (n<=CS%novars) CS%restart_field(n)%initialized = .true.
   if (n==CS%novars+1) then
     if (is_root_pe()) &
@@ -781,8 +755,6 @@ function query_initialized_3d_name(f_ptr, name, CS) result(query_initialized)
   character(len=*),     intent(in) :: name !< The name of the field that is being queried
   type(MOM_restart_CS), pointer    :: CS !< A pointer to a MOM_restart_CS object (intent in)
   logical :: query_initialized
-!   This subroutine tests whether the field pointed to by f_ptr or with the
-! specified variable name has been initialized from a restart file.
 
   integer :: m, n
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
@@ -797,8 +769,7 @@ function query_initialized_3d_name(f_ptr, name, CS) result(query_initialized)
       n = m ; exit
     endif
   enddo
-! Assume that you are going to initialize it now, so set flag to initialized if
-! queried again.
+  ! Assume that you are going to initialize it now, so set flag to initialized if queried again.
   if (n<=CS%novars) CS%restart_field(n)%initialized = .true.
   if (n==CS%novars+1) then
     if (is_root_pe()) &
@@ -817,8 +788,6 @@ function query_initialized_4d_name(f_ptr, name, CS) result(query_initialized)
   character(len=*),     intent(in) :: name !< The name of the field that is being queried
   type(MOM_restart_CS), pointer    :: CS !< A pointer to a MOM_restart_CS object (intent in)
   logical :: query_initialized
-!   This subroutine tests whether the field pointed to by f_ptr or with the
-! specified variable name has been initialized from a restart file.
 
   integer :: m, n
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
@@ -833,8 +802,7 @@ function query_initialized_4d_name(f_ptr, name, CS) result(query_initialized)
       n = m ; exit
     endif
   enddo
-! Assume that you are going to initialize it now, so set flag to initialized if
-! queried again.
+  ! Assume that you are going to initialize it now, so set flag to initialized if queried again.
   if (n<=CS%novars) CS%restart_field(n)%initialized = .true.
   if (n==CS%novars+1) then
     if (is_root_pe()) &
@@ -846,23 +814,27 @@ function query_initialized_4d_name(f_ptr, name, CS) result(query_initialized)
 end function query_initialized_4d_name
 
 !> save_restart saves all registered variables to restart files.
-subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV, num_rest_files)
+subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV, num_rest_files, write_IC)
   character(len=*),        intent(in)    :: directory !< The directory where the restart files
                                                   !! are to be written
   type(time_type),         intent(in)    :: time  !< The current model time
   type(ocean_grid_type),   intent(inout) :: G     !< The ocean's grid structure
   type(MOM_restart_CS),    pointer       :: CS    !< The control structure returned by a previous
-                                                  !! call to restart_init.
-  logical,          optional, intent(in) :: time_stamped !< If present and true, add time-stamp
-                                                  !! to the restart file names.
-  character(len=*), optional, intent(in) :: filename !< A filename that overrides the name in CS%restartfile.
-  type(verticalGrid_type), optional, intent(in) :: GV   !< The ocean's vertical grid structure
-  integer, optional, intent(out) :: num_rest_files      !< number of restart files written
+                                                  !! call to restart_init
+  logical,       optional, intent(in)    :: time_stamped !< If present and true, add time-stamp
+                                                  !! to the restart file names
+  character(len=*), optional, intent(in) :: filename !< A filename that overrides the name in CS%restartfile
+  type(verticalGrid_type), &
+                 optional, intent(in)    :: GV    !< The ocean's vertical grid structure
+  integer,       optional, intent(out)   :: num_rest_files !< number of restart files written
+  logical,       optional, intent(in)    :: write_IC !< If present and true, initial conditions
+                                                  !! are being written
 
   ! Local variables
   type(vardesc) :: vars(CS%max_fields)  ! Descriptions of the fields that
                                         ! are to be read from the restart file.
-  type(fieldtype) :: fields(CS%max_fields) !
+  type(fieldtype) :: fields(CS%max_fields) ! Opaque types containing metadata describing
+                                        ! each variable that will be written.
   character(len=512) :: restartpath     ! The restart file path (dir/file).
   character(len=256) :: restartname     ! The restart file name (no dir).
   character(len=8)   :: suffix          ! A suffix (like _2) that is appended
@@ -875,13 +847,12 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV, num_
   integer :: start_var, next_var        ! The starting variables of the
                                         ! current and next files.
   type(file_type) :: IO_handle          ! The I/O handle of the open fileset
-  integer :: m, nz, num_files, var_periods
+  integer :: m, nz, num_files
   integer :: seconds, days, year, month, hour, minute
   character(len=8) :: hor_grid, z_grid, t_grid ! Variable grid info.
-  character(len=8) :: t_grid_read
   character(len=64) :: var_name         ! A variable's name.
   real :: restart_time
-  character(len=32) :: filename_appendix = '' !fms appendix to filename for ensemble runs
+  character(len=32) :: filename_appendix = '' ! Appendix to filename for ensemble runs
   integer :: length
   integer(kind=8) :: check_val(CS%max_fields,1)
   integer :: isL, ieL, jsL, jeL, pos
@@ -931,24 +902,7 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV, num_
     do m=start_var,CS%novars
       call query_vardesc(CS%restart_field(m)%vars, hor_grid=hor_grid, &
                          z_grid=z_grid, t_grid=t_grid, caller="save_restart")
-      if (hor_grid == '1') then
-        var_sz = 8
-      else
-        var_sz = 8*(G%Domain%niglobal+1)*(G%Domain%njglobal+1)
-      endif
-      select case (z_grid)
-        case ('L') ; var_sz = var_sz * nz
-        case ('i') ; var_sz = var_sz * (nz+1)
-      end select
-      t_grid = adjustl(t_grid)
-      if (t_grid(1:1) == 'p') then
-        if (len_trim(t_grid(2:8)) > 0) then
-          var_periods = -1
-          t_grid_read = adjustl(t_grid(2:8))
-          read(t_grid_read,*) var_periods
-          if (var_periods > 1) var_sz = var_sz * var_periods
-        endif
-      endif
+      var_sz = get_variable_byte_size(hor_grid, z_grid, t_grid, G, nz)
 
       if ((m==start_var) .OR. (size_in_file < max_file_size-var_sz)) then
         size_in_file = size_in_file + var_sz
@@ -958,7 +912,7 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV, num_
     enddo
     next_var = m
 
-    !query fms_io if there is a filename_appendix (for ensemble runs)
+    ! Determine if there is a filename_appendix (used for ensemble runs).
     call get_filename_appendix(filename_appendix)
     if (len_trim(filename_appendix) > 0) then
       length = len_trim(restartname)
@@ -1059,20 +1013,16 @@ end subroutine save_restart
 !! in which they are found.
 subroutine restore_state(filename, directory, day, G, CS)
   character(len=*),      intent(in)  :: filename  !< The list of restart file names or a single
-                                                  !! character 'r' to read automatically named files.
+                                                  !! character 'r' to read automatically named files
   character(len=*),      intent(in)  :: directory !< The directory in which to find restart files
   type(time_type),       intent(out) :: day       !< The time of the restarted run
   type(ocean_grid_type), intent(in)  :: G         !< The ocean's grid structure
   type(MOM_restart_CS),  pointer     :: CS        !< The control structure returned by a previous
-                                                  !! call to restart_init.
-
-!    This subroutine reads the model state from previously
-!  generated files.  All restart variables are read from the first
-!  file in the input filename list in which they are found.
+                                                  !! call to restart_init
 
   ! Local variables
   character(len=200) :: filepath  ! The path (dir/file) to the file being opened.
-  character(len=80) :: fname     ! The name of the current file.
+  character(len=80) :: fname      ! The name of the current file.
   character(len=8)  :: suffix     ! A suffix (like "_2") that is added to any
                                   ! additional restart files.
   character(len=512) :: mesg      ! A message for warnings.
@@ -1100,7 +1050,7 @@ subroutine restore_state(filename, directory, day, G, CS)
       "restore_state: Module must be initialized before it is used.")
   if (CS%novars > CS%max_fields) call restart_error(CS)
 
-! Get NetCDF ids for all of the restart files.
+  ! Get NetCDF ids for all of the restart files.
   if ((LEN_TRIM(filename) == 1) .and. (filename(1:1) == 'F')) then
     num_file = open_restart_units('r', directory, G, CS, IO_handles=IO_handles, &
                      file_paths=unit_path, global_files=unit_is_global)
@@ -1115,7 +1065,7 @@ subroutine restore_state(filename, directory, day, G, CS)
     call MOM_error(FATAL,"MOM_restart: "//mesg)
   endif
 
-! Get the time from the first file in the list that has one.
+  ! Get the time from the first file in the list that has one.
   do n=1,num_file
     call get_file_times(IO_handles(n), time_vals, ntime)
     if (ntime < 1) cycle
@@ -1130,8 +1080,8 @@ subroutine restore_state(filename, directory, day, G, CS)
   if (n>num_file) call MOM_error(WARNING,"MOM_restart: " // &
                                  "No times found in restart files.")
 
-! Check the remaining files for different times and issue a warning
-! if they differ from the first time.
+  ! Check the remaining files for different times and issue a warning
+  ! if they differ from the first time.
   if (is_root_pe()) then
     do m = n+1,num_file
       call get_file_times(IO_handles(n), time_vals, ntime)
@@ -1149,7 +1099,7 @@ subroutine restore_state(filename, directory, day, G, CS)
     enddo
   endif
 
-! Read each variable from the first file in which it is found.
+  ! Read each variable from the first file in which it is found.
   do n=1,num_file
     call get_file_info(IO_handles(n), nvar=nvar)
 
@@ -1263,7 +1213,7 @@ subroutine restore_state(filename, directory, day, G, CS)
     call close_file(IO_handles(n))
   enddo
 
-! Check whether any mandatory fields have not been found.
+  ! Check whether any mandatory fields have not been found.
   CS%restart = .true.
   do m=1,CS%novars
     if (.not.(CS%restart_field(m)%initialized)) then
@@ -1280,23 +1230,23 @@ end subroutine restore_state
 !> restart_files_exist determines whether any restart files exist.
 function restart_files_exist(filename, directory, G, CS)
   character(len=*),      intent(in)  :: filename  !< The list of restart file names or a single
-                                                  !! character 'r' to read automatically named files.
+                                                  !! character 'r' to read automatically named files
   character(len=*),      intent(in)  :: directory !< The directory in which to find restart files
   type(ocean_grid_type), intent(in)  :: G         !< The ocean's grid structure
   type(MOM_restart_CS),  pointer     :: CS        !< The control structure returned by a previous
-                                                  !! call to restart_init.
+                                                  !! call to restart_init
   logical :: restart_files_exist                  !< The function result, which indicates whether
                                                   !! any of the explicitly or automatically named
-                                                  !! restart files exist in directory.
+                                                  !! restart files exist in directory
   integer :: num_files
 
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
       "restart_files_exist: Module must be initialized before it is used.")
 
   if ((LEN_TRIM(filename) == 1) .and. (filename(1:1) == 'F')) then
-    num_files = open_restart_units('r', directory, G, CS)
+    num_files = get_num_restart_files('r', directory, G, CS)
   else
-    num_files = open_restart_units(filename, directory, G, CS)
+    num_files = get_num_restart_files(filename, directory, G, CS)
   endif
   restart_files_exist = (num_files > 0)
 
@@ -1307,14 +1257,14 @@ end function restart_files_exist
 !! and as a side effect stores this information in CS.
 function determine_is_new_run(filename, directory, G, CS) result(is_new_run)
   character(len=*),      intent(in)  :: filename  !< The list of restart file names or a single
-                                                  !! character 'r' to read automatically named files.
+                                                  !! character 'r' to read automatically named files
   character(len=*),      intent(in)  :: directory !< The directory in which to find restart files
   type(ocean_grid_type), intent(in)  :: G         !< The ocean's grid structure
   type(MOM_restart_CS),  pointer     :: CS        !< The control structure returned by a previous
-                                                  !! call to restart_init.
+                                                  !! call to restart_init
   logical :: is_new_run                           !< The function result, which indicates whether
                                                   !! this is a new run, based on the value of
-                                                  !! filename and whether restart files exist.
+                                                  !! filename and whether restart files exist
 
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
       "determine_is_new_run: Module must be initialized before it is used.")
@@ -1325,7 +1275,7 @@ function determine_is_new_run(filename, directory, G, CS) result(is_new_run)
   elseif (filename(1:1) == 'n') then
     CS%new_run = .true.
   elseif (filename(1:1) == 'F') then
-    CS%new_run = (open_restart_units('r', directory, G, CS) == 0)
+    CS%new_run = (get_num_restart_files('r', directory, G, CS) == 0)
   else
     CS%new_run = .false.
   endif
@@ -1338,10 +1288,9 @@ end function determine_is_new_run
 !! information stored in CS by a previous call to determine_is_new_run.
 function is_new_run(CS)
   type(MOM_restart_CS),  pointer :: CS !< The control structure returned by a previous
-                                       !! call to restart_init.
-  logical :: is_new_run                !< The function result, which indicates whether
-                                       !! this is a new run, based on the value of
-                                       !! filename and whether restart files exist.
+                                       !! call to restart_init
+  logical :: is_new_run                !< The function result, which had been stored in CS during
+                                       !! a previous call to determine_is_new_run
 
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
       "is_new_run: Module must be initialized before it is used.")
@@ -1356,47 +1305,42 @@ end function is_new_run
 function open_restart_units(filename, directory, G, CS, IO_handles, file_paths, &
                             global_files) result(num_files)
   character(len=*),      intent(in)  :: filename  !< The list of restart file names or a single
-                                                  !! character 'r' to read automatically named files.
+                                                  !! character 'r' to read automatically named files
   character(len=*),      intent(in)  :: directory !< The directory in which to find restart files
   type(ocean_grid_type), intent(in)  :: G         !< The ocean's grid structure
   type(MOM_restart_CS),  pointer     :: CS        !< The control structure returned by a previous
-                                                  !! call to restart_init.
+                                                  !! call to restart_init
   type(file_type), dimension(:), &
-               optional, intent(out) :: IO_handles !< The I/O handles of all opened files.
+               optional, intent(out) :: IO_handles !< The I/O handles of all opened files
   character(len=*), dimension(:), &
-               optional, intent(out) :: file_paths   !< The full paths to open files.
+               optional, intent(out) :: file_paths   !< The full paths to open files
   logical, dimension(:), &
-               optional, intent(out) :: global_files !< True if a file is global.
+               optional, intent(out) :: global_files !< True if a file is global
 
   integer :: num_files  !< The number of files (both automatically named restart
                         !! files and others explicitly in filename) that have been opened.
-
-!    This subroutine reads the model state from previously
-!  generated files.  All restart variables are read from the first
-!  file in the input filename list in which they are found.
 
   ! Local variables
   character(len=256) :: filepath  ! The path (dir/file) to the file being opened.
   character(len=256) :: fname     ! The name of the current file.
   character(len=8)   :: suffix    ! A suffix (like "_2") that is added to any
                                   ! additional restart files.
-! character(len=256) :: mesg      ! A message for warnings.
   integer :: num_restart     ! The number of restart files that have already
-                             ! been opened.
+                             ! been opened using their numbered suffix.
   integer :: start_char      ! The location of the starting character in the
                              ! current file name.
-  integer :: n, m, err, length
-
-
-  logical :: fexists
-  character(len=32) :: filename_appendix = '' !fms appendix to filename for ensemble runs
+  integer :: nf              ! The number of files that have been found so far
+  integer :: m, length
+  logical :: still_looking   ! If true, the code is still looking for automatically named files
+  logical :: fexists         ! True if a file has been found
+  character(len=32) :: filename_appendix = '' ! Filename appendix for ensemble runs
   character(len=80) :: restartname
 
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
       "open_restart_units: Module must be initialized before it is used.")
 
-! Get NetCDF ids for all of the restart files.
-  num_restart = 0 ; n = 1 ; start_char = 1
+  ! Get NetCDF ids for all of the restart files.
+  num_restart = 0 ; nf = 0 ; start_char = 1
   do while (start_char <= len_trim(filename) )
     do m=start_char,len_trim(filename)
       if (filename(m:m) == ' ') exit
@@ -1412,12 +1356,11 @@ function open_restart_units(filename, directory, G, CS, IO_handles, file_paths, 
     enddo
 
     if ((fname(1:1)=='r') .and. ( len_trim(fname) == 1)) then
-      err = 0
-      if (num_restart > 0) err = 1 ! Avoid going through the file list twice.
-      do while (err == 0)
+      still_looking = (num_restart <= 0) ! Avoid going through the file list twice.
+      do while (still_looking)
         restartname = trim(CS%restartfile)
 
-        ! query fms_io if there is a filename_appendix (for ensemble runs)
+        ! Determine if there is a filename_appendix (used for ensemble runs).
         call get_filename_appendix(filename_appendix)
         if (len_trim(filename_appendix) > 0) then
           length = len_trim(restartname)
@@ -1436,33 +1379,37 @@ function open_restart_units(filename, directory, G, CS, IO_handles, file_paths, 
         endif
         if (num_restart > 0) filepath = trim(filepath) // suffix
 
-        ! if (.not.file_exists(filepath)) &
-          filepath = trim(filepath)//".nc"
+        filepath = trim(filepath)//".nc"
 
         num_restart = num_restart + 1
+        ! Look for a global netCDF file.
         inquire(file=filepath, exist=fexists)
         if (fexists) then
+          nf = nf + 1
           if (present(IO_handles)) &
-            call open_file(IO_handles(n), trim(filepath), READONLY_FILE, &
+            call open_file(IO_handles(nf), trim(filepath), READONLY_FILE, &
                            threading=MULTIPLE, fileset=SINGLE_FILE)
-          if (present(global_files)) global_files(n) = .true.
+          if (present(global_files)) global_files(nf) = .true.
+          if (present(file_paths)) file_paths(nf) = filepath
         elseif (CS%parallel_restartfiles) then
           ! Look for decomposed files using the I/O Layout.
           fexists = file_exists(filepath, G%Domain)
-          if (fexists .and. (present(IO_handles))) &
-            call open_file(IO_handles(n), trim(filepath), READONLY_FILE, MOM_domain=G%Domain)
-          if (fexists .and. present(global_files)) global_files(n) = .false.
+          if (fexists) then
+            nf = nf + 1
+            if (present(IO_handles)) &
+              call open_file(IO_handles(nf), trim(filepath), READONLY_FILE, MOM_domain=G%Domain)
+            if (present(global_files)) global_files(nf) = .false.
+            if (present(file_paths)) file_paths(nf) = filepath
+          endif
         endif
 
         if (fexists) then
-          if (present(file_paths)) file_paths(n) = filepath
-          n = n + 1
           if (is_root_pe() .and. (present(IO_handles))) &
             call MOM_error(NOTE, "MOM_restart: MOM run restarted using : "//trim(filepath))
         else
-          err = 1 ; exit
+          still_looking = .false. ; exit
         endif
-      enddo ! while (err == 0) loop
+      enddo ! while (still_looking) loop
     else
       filepath = trim(directory)//trim(fname)
       inquire(file=filepath, exist=fexists)
@@ -1470,12 +1417,12 @@ function open_restart_units(filename, directory, G, CS, IO_handles, file_paths, 
 
       inquire(file=filepath, exist=fexists)
       if (fexists) then
+        nf = nf + 1
         if (present(IO_handles)) &
-          call open_file(IO_handles(n), trim(filepath), READONLY_FILE, &
+          call open_file(IO_handles(nf), trim(filepath), READONLY_FILE, &
                        threading=MULTIPLE, fileset=SINGLE_FILE)
-        if (present(global_files)) global_files(n) = .true.
-        if (present(file_paths)) file_paths(n) = filepath
-        n = n + 1
+        if (present(global_files)) global_files(nf) = .true.
+        if (present(file_paths)) file_paths(nf) = filepath
         if (is_root_pe() .and. (present(IO_handles))) &
           call MOM_error(NOTE,"MOM_restart: MOM run restarted using : "//trim(filepath))
       else
@@ -1484,10 +1431,35 @@ function open_restart_units(filename, directory, G, CS, IO_handles, file_paths, 
       endif
 
     endif
-  enddo ! while (start_char < strlen(filename)) loop
-  num_files = n-1
+  enddo ! while (start_char < len_trim(filename)) loop
+  num_files = nf
 
 end function open_restart_units
+
+!> get_num_restart_files returns the number of existing restart files that match the provided
+!! directory structure and other information stored in the control structure and optionally
+!! also provides the full paths to these files.
+function get_num_restart_files(filenames, directory, G, CS, file_paths) result(num_files)
+  character(len=*),      intent(in)  :: filenames !< The list of restart file names or a single
+                                                  !! character 'r' to read automatically named files
+  character(len=*),      intent(in)  :: directory !< The directory in which to find restart files
+  type(ocean_grid_type), intent(in)  :: G         !< The ocean's grid structure
+  type(MOM_restart_CS),  pointer     :: CS        !< The control structure returned by a previous
+                                                  !! call to restart_init
+  character(len=*), dimension(:), &
+               optional, intent(out) :: file_paths !< The full paths to the restart files.
+  integer :: num_files  !< The function result, the number of files (both automatically named
+                        !! restart files and others explicitly in filename) that have been opened
+
+  if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
+      "get_num_restart_files: Module must be initialized before it is used.")
+
+  ! This call uses open_restart_units without the optional arguments needed to actually
+  ! open the files to determine the number of restart files.
+  num_files = open_restart_units(filenames, directory, G, CS, file_paths=file_paths)
+
+end function get_num_restart_files
+
 
 !> Initialize this module and set up a restart control structure.
 subroutine restart_init(param_file, CS, restart_root)
@@ -1641,5 +1613,41 @@ subroutine get_checksum_loop_ranges(G, pos, isL, ieL, jsL, jeL)
   endif
 
 end subroutine get_checksum_loop_ranges
+
+!> get the size of a variable in bytes
+function get_variable_byte_size(hor_grid, z_grid, t_grid, G, num_z) result(var_sz)
+  character(len=8),      intent(in) :: hor_grid !< The horizontal grid string to interpret
+  character(len=8),      intent(in) :: z_grid   !< The vertical grid string to interpret
+  character(len=8),      intent(in) :: t_grid   !< A time string to interpret
+  type(ocean_grid_type), intent(in) :: G        !< The ocean's grid structure
+  integer,               intent(in) :: num_z    !< The number of vertical layers in the grid
+  integer(kind=8) :: var_sz !< The function result, the size in bytes of a variable
+
+  ! Local variables
+  integer :: var_periods  ! The number of entries in a time-periodic axis
+  character(len=8) :: t_grid_read, t_grid_tmp ! Modified versions of t_grid
+
+  if (trim(hor_grid) == '1') then
+    var_sz = 8
+  else ! This may be an overestimate, as it is based on symmetric-memory corner points.
+    var_sz = 8*(G%Domain%niglobal+1)*(G%Domain%njglobal+1)
+  endif
+
+  select case (trim(z_grid))
+    case ('L') ; var_sz = var_sz * num_z
+    case ('i') ; var_sz = var_sz * (num_z+1)
+  end select
+
+  t_grid_tmp = adjustl(t_grid)
+  if (t_grid_tmp(1:1) == 'p') then
+    if (len_trim(t_grid_tmp(2:8)) > 0) then
+      var_periods = -1
+      t_grid_read = adjustl(t_grid_tmp(2:8))
+      read(t_grid_read,*) var_periods
+      if (var_periods > 1) var_sz = var_sz * var_periods
+    endif
+  endif
+
+end function get_variable_byte_size
 
 end module MOM_restart
