@@ -120,7 +120,7 @@ type, public :: wave_parameters_CS ; private
   real, allocatable, dimension(:) :: &
     PrescribedSurfStkY !< Surface Stokes drift if prescribed [L T-1 ~> m s-1]
   real, allocatable, dimension(:,:) :: &
-    La_SL,&            !< SL Langmuir number (directionality factored later)
+    La_SL, &           !< SL Langmuir number (directionality factored later)
                        !! Horizontal -> H points
     La_Turb            !< Aligned Turbulent Langmuir number [nondim]
                        !! Horizontal -> H points
@@ -382,13 +382,9 @@ subroutine MOM_wave_interface_init(time, G, GV, US, param_file, CS, diag )
     call MOM_error(FATAL,'Check WAVE_METHOD.')
   end select
 
-  ! Langmuir number Options
-!  call get_param(param_file, mdl, "LA_DEPTH_RATIO", CS%LA_FracHBL,              &
-!         "The depth (normalized by BLD) to average Stokes drift over in "//&
-!         "Langmuir number calculation, where La = sqrt(ust/Stokes).",       &
-!         units="nondim",default=0.04)
-  call get_param(param_file, mdl, "LA_MISALIGNMENT", CS%LA_Misalignment,    &
-         "Flag (logical) if using misalignment bt shear and waves in LA",&
+  ! Langmuir number Options  (Note that CS%LA_FracHBL is set above.)
+  call get_param(param_file, mdl, "LA_MISALIGNMENT", CS%LA_Misalignment, &
+         "Flag (logical) if using misalignment bt shear and waves in LA", &
          default=.false.)
   call get_param(param_file, mdl, "MIN_LANGMUIR", CS%La_min,    &
          "A minimum value for all Langmuir numbers that is not physical, "//&
@@ -427,7 +423,7 @@ subroutine MOM_wave_interface_init(time, G, GV, US, param_file, CS, diag )
        CS%diag%axesCvL,Time,'3d Stokes drift (y)', 'm s-1', conversion=US%L_T_to_m_s)
   CS%id_3dstokes_x = register_diag_field('ocean_model','3d_stokes_x', &
        CS%diag%axesCuL,Time,'3d Stokes drift (x)', 'm s-1', conversion=US%L_T_to_m_s)
-  CS%id_La_turb = register_diag_field('ocean_model','La_turbulent',&
+  CS%id_La_turb = register_diag_field('ocean_model','La_turbulent', &
        CS%diag%axesT1,Time,'Surface (turbulent) Langmuir number','nondim')
 
 end subroutine MOM_wave_interface_init
@@ -437,7 +433,7 @@ subroutine Update_Surface_Waves(G, GV, US, Day, dt, CS, forces)
   type(wave_parameters_CS), pointer    :: CS  !< Wave parameter Control structure
   type(ocean_grid_type), intent(inout) :: G   !< Grid structure
   type(verticalGrid_type), intent(in)  :: GV  !< Vertical grid structure
-  type(unit_scale_type),   intent(in)  :: US   !< A dimensional unit scaling type
+  type(unit_scale_type),   intent(in)  :: US  !< A dimensional unit scaling type
   type(time_type),         intent(in)  :: Day !< Current model time
   type(time_type),         intent(in)  :: dt  !< Timestep as a time-type
   type(mech_forcing),      intent(in), optional  :: forces !< MOM_forcing_type

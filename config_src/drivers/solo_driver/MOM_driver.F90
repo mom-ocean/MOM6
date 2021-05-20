@@ -332,7 +332,7 @@ program MOM_main
   call get_param(param_file,mod_name, "USE_WAVES", Use_Waves, &
        "If true, enables surface wave modules.",default=.false.)
   ! MOM_wave_interface_init is called regardless of the value of USE_WAVES because
-  ! it also initCSializes statistical waves.
+  ! it also initializes statistical waves.
   call MOM_wave_interface_init(Time, grid, GV, US, param_file, Waves_CSp, diag)
 
   segment_start_time = Time
