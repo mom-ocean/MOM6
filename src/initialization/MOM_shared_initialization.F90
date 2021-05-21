@@ -478,6 +478,7 @@ subroutine set_rotation_beta_plane(f, G, param_file, US)
   integer :: I, J
   real    :: f_0    ! The reference value of the Coriolis parameter [T-1 ~> s-1]
   real    :: beta   ! The meridional gradient of the Coriolis parameter [T-1 m-1 ~> s-1 m-1]
+  real    :: lat_0  ! The reference latitude for the beta plane [degrees]
   real    :: y_scl, Rad_Earth
   real    :: T_to_s ! A time unit conversion factor
   real    :: PI
@@ -494,6 +495,9 @@ subroutine set_rotation_beta_plane(f, G, param_file, US)
   call get_param(param_file, mdl, "BETA", beta, &
                  "The northward gradient of the Coriolis parameter with "//&
                  "the betaplane option.", units="m-1 s-1", default=0.0, scale=T_to_s)
+  call get_param(param_file, mdl, "LAT_0", lat_0, &
+                 "The reference latitude (origin) of the beta-plane", &
+                 units="degrees", default=0.0)
   call get_param(param_file, mdl, "AXIS_UNITS", axis_units, default="degrees")
 
   PI = 4.0*atan(1.0)
@@ -501,7 +505,7 @@ subroutine set_rotation_beta_plane(f, G, param_file, US)
     case ("d")
       call get_param(param_file, mdl, "RAD_EARTH", Rad_Earth, &
                    "The radius of the Earth.", units="m", default=6.378e6)
-      y_scl = Rad_Earth/PI
+      y_scl = PI * Rad_Earth/ 180.
     case ("k"); y_scl = 1.E3
     case ("m"); y_scl = 1.
     case ("c"); y_scl = 1.E-2
@@ -510,7 +514,7 @@ subroutine set_rotation_beta_plane(f, G, param_file, US)
   end select
 
   do I=G%IsdB,G%IedB ; do J=G%JsdB,G%JedB
-    f(I,J) = f_0 + beta * ( G%geoLatBu(I,J) * y_scl )
+    f(I,J) = f_0 + beta * ( (G%geoLatBu(I,J) - lat_0) * y_scl )
   enddo ; enddo
 
   call callTree_leave(trim(mdl)//'()')
