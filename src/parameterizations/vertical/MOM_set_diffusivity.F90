@@ -694,6 +694,8 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
   if (associated(dd%KS_extra)) deallocate(dd%KS_extra)
   if (associated(dd%drho_rat)) deallocate(dd%drho_rat)
   if (associated(dd%Kd_BBL)) deallocate(dd%Kd_BBL)
+  if (associated(dd%Kd_bkgnd)) deallocate(dd%Kd_bkgnd)
+  if (associated(dd%Kv_bkgnd)) deallocate(dd%Kv_bkgnd)
 
   if (showCallTree) call callTree_leave("set_diffusivity()")
 
