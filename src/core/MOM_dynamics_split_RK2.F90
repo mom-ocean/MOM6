@@ -160,9 +160,11 @@ type, public :: MOM_dyn_split_RK2_CS ; private
   integer :: id_PFu    = -1, id_PFv    = -1
   integer :: id_CAu    = -1, id_CAv    = -1
   ! integer :: id_hf_PFu    = -1, id_hf_PFv    = -1
+  integer :: id_h_PFu    = -1, id_h_PFv    = -1
   integer :: id_hf_PFu_2d = -1, id_hf_PFv_2d = -1
   integer :: id_intz_PFu_2d = -1, id_intz_PFv_2d = -1
   ! integer :: id_hf_CAu    = -1, id_hf_CAv    = -1
+  integer :: id_h_CAu    = -1, id_h_CAv    = -1
   integer :: id_hf_CAu_2d = -1, id_hf_CAv_2d = -1
   integer :: id_intz_CAu_2d = -1, id_intz_CAv_2d = -1
 
@@ -170,6 +172,7 @@ type, public :: MOM_dyn_split_RK2_CS ; private
   integer :: id_uav        = -1, id_vav        = -1
   integer :: id_u_BT_accel = -1, id_v_BT_accel = -1
   ! integer :: id_hf_u_BT_accel    = -1, id_hf_v_BT_accel    = -1
+  integer :: id_h_u_BT_accel    = -1, id_h_v_BT_accel    = -1
   integer :: id_hf_u_BT_accel_2d = -1, id_hf_v_BT_accel_2d = -1
   integer :: id_intz_u_BT_accel_2d = -1, id_intz_v_BT_accel_2d = -1
   !>@}
@@ -339,11 +342,17 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
     hf_CAu_2d, hf_CAv_2d, & ! Depth integeral of hf_CAu, hf_CAv [L T-2 ~> m s-2].
     hf_u_BT_accel_2d, hf_v_BT_accel_2d ! Depth integeral of hf_u_BT_accel, hf_v_BT_accel
 
-  real, dimension(SZIB_(G),SZJ_(G)) :: &
-    intz_PFu_2d, intz_CAu_2d, intz_u_BT_accel_2d ! [L2 T-2 ~> m2 s-2].
+  ! Diagnostics for thickness x momentum budget terms
+  real, allocatable, dimension(:,:,:) :: &
+    h_PFu, h_PFv, & ! Pressure force accel. x thickness [H L T-2 ~> m2 s-2].
+    h_CAu, h_CAv, & ! Coriolis force accel. x thickness [H L T-2 ~> m2 s-2].
+    h_u_BT_accel, h_v_BT_accel ! barotropic correction accel. x thickness [H L T-2 ~> m2 s-2].
 
+  ! Dignostics for layer-sum of thickness x momentum budget terms
+  real, dimension(SZIB_(G),SZJ_(G)) :: &
+    intz_PFu_2d, intz_CAu_2d, intz_u_BT_accel_2d ! [H L T-2 ~> m2 s-2].
   real, dimension(SZI_(G),SZJB_(G)) :: &
-    intz_PFv_2d, intz_CAv_2d, intz_v_BT_accel_2d ! [L2 T-2 ~> m2 s-2].
+    intz_PFv_2d, intz_CAv_2d, intz_v_BT_accel_2d ! [H L T-2 ~> m2 s-2].
 
   real :: dt_pred   ! The time step for the predictor part of the baroclinic time stepping [T ~> s].
 
@@ -940,6 +949,25 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
     deallocate(hf_PFv_2d)
   endif
 
+  if (CS%id_h_PFu > 0) then
+    allocate(h_PFu(G%IsdB:G%IedB,G%jsd:G%jed,GV%ke))
+    h_PFu(:,:,:) = 0.0
+    do k=1,nz ; do j=js,je ; do I=Isq,Ieq
+      h_PFu(I,j,k) = CS%PFu(I,j,k) * CS%ADp%diag_hu(I,j,k)
+    enddo ; enddo ; enddo
+    call post_data(CS%id_h_PFu, h_PFu, CS%diag)
+    deallocate(h_PFu)
+  endif
+  if (CS%id_h_PFv > 0) then
+    allocate(h_PFv(G%isd:G%ied,G%JsdB:G%JedB,GV%ke))
+    h_PFv(:,:,:) = 0.0
+    do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
+      h_PFv(i,J,k) = CS%PFv(i,J,k) * CS%ADp%diag_hv(i,J,k)
+    enddo ; enddo ; enddo
+    call post_data(CS%id_h_PFv, h_PFv, CS%diag)
+    deallocate(h_PFv)
+  endif
+
   !if (CS%id_hf_CAu > 0) then
   !  allocate(hf_CAu(G%IsdB:G%IedB,G%jsd:G%jed,GV%ke))
   !  do k=1,nz ; do j=js,je ; do I=Isq,Ieq
@@ -988,6 +1016,25 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
     deallocate(hf_CAv_2d)
   endif
 
+  if (CS%id_h_CAu > 0) then
+    allocate(h_CAu(G%IsdB:G%IedB,G%jsd:G%jed,GV%ke))
+    h_CAu(:,:,:) = 0.0
+    do k=1,nz ; do j=js,je ; do I=Isq,Ieq
+      h_CAu(I,j,k) = CS%CAu(I,j,k) * CS%ADp%diag_hu(I,j,k)
+    enddo ; enddo ; enddo
+    call post_data(CS%id_h_CAu, h_CAu, CS%diag)
+    deallocate(h_CAu)
+  endif
+  if (CS%id_h_CAv > 0) then
+    allocate(h_CAv(G%isd:G%ied,G%JsdB:G%JedB,GV%ke))
+    h_CAv(:,:,:) = 0.0
+    do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
+      h_CAv(i,J,k) = CS%CAv(i,J,k) * CS%ADp%diag_hv(i,J,k)
+    enddo ; enddo ; enddo
+    call post_data(CS%id_h_CAv, h_CAv, CS%diag)
+    deallocate(h_CAv)
+  endif
+
   !if (CS%id_hf_u_BT_accel > 0) then
   !  allocate(hf_u_BT_accel(G%IsdB:G%IedB,G%jsd:G%jed,GV%ke))
   !  do k=1,nz ; do j=js,je ; do I=Isq,Ieq
@@ -1034,6 +1081,25 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
     enddo ; enddo ; enddo
     call post_data(CS%id_hf_v_BT_accel_2d, hf_v_BT_accel_2d, CS%diag)
     deallocate(hf_v_BT_accel_2d)
+  endif
+
+  if (CS%id_h_u_BT_accel > 0) then
+    allocate(h_u_BT_accel(G%IsdB:G%IedB,G%jsd:G%jed,GV%ke))
+    h_u_BT_accel(:,:,:) = 0.0
+    do k=1,nz ; do j=js,je ; do I=Isq,Ieq
+      h_u_BT_accel(I,j,k) = CS%u_accel_bt(I,j,k) * CS%ADp%diag_hu(I,j,k)
+    enddo ; enddo ; enddo
+    call post_data(CS%id_h_u_BT_accel, h_u_BT_accel, CS%diag)
+    deallocate(h_u_BT_accel)
+  endif
+  if (CS%id_h_v_BT_accel > 0) then
+    allocate(h_v_BT_accel(G%isd:G%ied,G%JsdB:G%JedB,GV%ke))
+    h_v_BT_accel(:,:,:) = 0.0
+    do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
+      h_v_BT_accel(i,J,k) = CS%v_accel_bt(i,J,k) * CS%ADp%diag_hv(i,J,k)
+    enddo ; enddo ; enddo
+    call post_data(CS%id_h_v_BT_accel, h_v_BT_accel, CS%diag)
+    deallocate(h_v_BT_accel)
   endif
 
   if (CS%debug) then
@@ -1185,7 +1251,6 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, US, param
                      ! a restart file to the internal representation in this run.
   real :: accel_rescale ! A rescaling factor for accelerations from the representation in
                      ! a restart file to the internal representation in this run.
-  real :: H_convert
   type(group_pass_type) :: pass_av_h_uvh
   logical :: use_tides, debug_truncations
 
@@ -1395,13 +1460,12 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, US, param
   call cpu_clock_end(id_clock_pass_init)
 
   flux_units = get_flux_units(GV)
-  H_convert = GV%H_to_m ; if (.not.GV%Boussinesq) H_convert = GV%H_to_kg_m2
   CS%id_uh = register_diag_field('ocean_model', 'uh', diag%axesCuL, Time, &
-      'Zonal Thickness Flux', flux_units, y_cell_method='sum', v_extensive=.true., &
-      conversion=H_convert*US%L_to_m**2*US%s_to_T)
+      'Zonal Thickness Flux', flux_units, conversion=GV%H_to_MKS*US%L_to_m**2*US%s_to_T, &
+      y_cell_method='sum', v_extensive=.true.)
   CS%id_vh = register_diag_field('ocean_model', 'vh', diag%axesCvL, Time, &
-      'Meridional Thickness Flux', flux_units, x_cell_method='sum', v_extensive=.true., &
-      conversion=H_convert*US%L_to_m**2*US%s_to_T)
+      'Meridional Thickness Flux', flux_units, conversion=GV%H_to_MKS*US%L_to_m**2*US%s_to_T, &
+      x_cell_method='sum', v_extensive=.true.)
 
   CS%id_CAu = register_diag_field('ocean_model', 'CAu', diag%axesCuL, Time, &
       'Zonal Coriolis and Advective Acceleration', 'm s-2', conversion=US%L_T2_to_m_s2)
@@ -1413,64 +1477,84 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, US, param
       'Meridional Pressure Force Acceleration', 'm s-2', conversion=US%L_T2_to_m_s2)
 
   !CS%id_hf_PFu = register_diag_field('ocean_model', 'hf_PFu', diag%axesCuL, Time, &
-  !    'Fractional Thickness-weighted Zonal Pressure Force Acceleration', 'm s-2', &
-  !    v_extensive=.true., conversion=US%L_T2_to_m_s2)
-  !if(CS%id_hf_PFu > 0) call safe_alloc_ptr(CS%ADp%diag_hfrac_u,IsdB,IedB,jsd,jed,nz)
+  !    'Fractional Thickness-weighted Zonal Pressure Force Acceleration', &
+  !    'm s-2', v_extensive=.true., conversion=US%L_T2_to_m_s2)
+  !if (CS%id_hf_PFu > 0) call safe_alloc_ptr(CS%ADp%diag_hfrac_u,IsdB,IedB,jsd,jed,nz)
 
   !CS%id_hf_PFv = register_diag_field('ocean_model', 'hf_PFv', diag%axesCvL, Time, &
-  !    'Fractional Thickness-weighted Meridional Pressure Force Acceleration', 'm s-2', &
-  !    v_extensive=.true., conversion=US%L_T2_to_m_s2)
-  !if(CS%id_hf_PFv > 0) call safe_alloc_ptr(CS%ADp%diag_hfrac_v,isd,ied,JsdB,JedB,nz)
+  !    'Fractional Thickness-weighted Meridional Pressure Force Acceleration', &
+  !    'm s-2', v_extensive=.true., conversion=US%L_T2_to_m_s2)
+  !if (CS%id_hf_PFv > 0) call safe_alloc_ptr(CS%ADp%diag_hfrac_v,isd,ied,JsdB,JedB,nz)
 
   !CS%id_hf_CAu = register_diag_field('ocean_model', 'hf_CAu', diag%axesCuL, Time, &
-  !    'Fractional Thickness-weighted Zonal Coriolis and Advective Acceleration', 'm s-2', &
-  !    v_extensive=.true., conversion=US%L_T2_to_m_s2)
-  !if(CS%id_hf_CAu > 0) call safe_alloc_ptr(CS%ADp%diag_hfrac_u,IsdB,IedB,jsd,jed,nz)
+  !    'Fractional Thickness-weighted Zonal Coriolis and Advective Acceleration', &
+  !    'm s-2', v_extensive=.true., conversion=US%L_T2_to_m_s2)
+  !if (CS%id_hf_CAu > 0) call safe_alloc_ptr(CS%ADp%diag_hfrac_u,IsdB,IedB,jsd,jed,nz)
 
   !CS%id_hf_CAv = register_diag_field('ocean_model', 'hf_CAv', diag%axesCvL, Time, &
-  !    'Fractional Thickness-weighted Meridional Coriolis and Advective Acceleration', 'm s-2', &
-  !    v_extensive=.true., conversion=US%L_T2_to_m_s2)
-  !if(CS%id_hf_CAv > 0) call safe_alloc_ptr(CS%ADp%diag_hfrac_v,isd,ied,JsdB,JedB,nz)
+  !    'Fractional Thickness-weighted Meridional Coriolis and Advective Acceleration', &
+  !    'm s-2', v_extensive=.true., conversion=US%L_T2_to_m_s2)
+  !if (CS%id_hf_CAv > 0) call safe_alloc_ptr(CS%ADp%diag_hfrac_v,isd,ied,JsdB,JedB,nz)
 
   CS%id_hf_PFu_2d = register_diag_field('ocean_model', 'hf_PFu_2d', diag%axesCu1, Time, &
-      'Depth-sum Fractional Thickness-weighted Zonal Pressure Force Acceleration', 'm s-2', &
-      conversion=US%L_T2_to_m_s2)
-  if(CS%id_hf_PFu_2d > 0) call safe_alloc_ptr(CS%ADp%diag_hfrac_u,IsdB,IedB,jsd,jed,nz)
+      'Depth-sum Fractional Thickness-weighted Zonal Pressure Force Acceleration', &
+      'm s-2', conversion=US%L_T2_to_m_s2)
+  if (CS%id_hf_PFu_2d > 0) call safe_alloc_ptr(CS%ADp%diag_hfrac_u,IsdB,IedB,jsd,jed,nz)
 
   CS%id_hf_PFv_2d = register_diag_field('ocean_model', 'hf_PFv_2d', diag%axesCv1, Time, &
-      'Depth-sum Fractional Thickness-weighted Meridional Pressure Force Acceleration', 'm s-2', &
-      conversion=US%L_T2_to_m_s2)
-  if(CS%id_hf_PFv_2d > 0) call safe_alloc_ptr(CS%ADp%diag_hfrac_v,isd,ied,JsdB,JedB,nz)
+      'Depth-sum Fractional Thickness-weighted Meridional Pressure Force Acceleration', &
+      'm s-2', conversion=US%L_T2_to_m_s2)
+  if (CS%id_hf_PFv_2d > 0) call safe_alloc_ptr(CS%ADp%diag_hfrac_v,isd,ied,JsdB,JedB,nz)
+
+  CS%id_h_PFu = register_diag_field('ocean_model', 'h_PFu', diag%axesCuL, Time, &
+      'Thickness Multiplied Zonal Pressure Force Acceleration', 'm2 s-2', &
+      conversion=GV%H_to_m*US%L_T2_to_m_s2)
+  if(CS%id_h_PFu > 0) call safe_alloc_ptr(CS%ADp%diag_hu,IsdB,IedB,jsd,jed,nz)
+
+  CS%id_h_PFv = register_diag_field('ocean_model', 'h_PFv', diag%axesCvL, Time, &
+      'Thickness Multiplied Meridional Pressure Force Acceleration', 'm2 s-2', &
+      conversion=GV%H_to_m*US%L_T2_to_m_s2)
+  if(CS%id_h_PFv > 0) call safe_alloc_ptr(CS%ADp%diag_hv,isd,ied,JsdB,JedB,nz)
 
   CS%id_intz_PFu_2d = register_diag_field('ocean_model', 'intz_PFu_2d', diag%axesCu1, Time, &
-      'Depth-integral of Zonal Pressure Force Acceleration', 'm2 s-2', &
-      conversion=GV%H_to_m*US%L_T2_to_m_s2)
-  if(CS%id_intz_PFu_2d > 0) call safe_alloc_ptr(CS%ADp%diag_hu,IsdB,IedB,jsd,jed,nz)
+      'Depth-integral of Zonal Pressure Force Acceleration', &
+      'm2 s-2', conversion=GV%H_to_m*US%L_T2_to_m_s2)
+  if (CS%id_intz_PFu_2d > 0) call safe_alloc_ptr(CS%ADp%diag_hu,IsdB,IedB,jsd,jed,nz)
 
   CS%id_intz_PFv_2d = register_diag_field('ocean_model', 'intz_PFv_2d', diag%axesCv1, Time, &
-      'Depth-integral of Meridional Pressure Force Acceleration', 'm2 s-2', &
-      conversion=GV%H_to_m*US%L_T2_to_m_s2)
-  if(CS%id_intz_PFv_2d > 0) call safe_alloc_ptr(CS%ADp%diag_hv,isd,ied,JsdB,JedB,nz)
+      'Depth-integral of Meridional Pressure Force Acceleration', &
+      'm2 s-2', conversion=GV%H_to_m*US%L_T2_to_m_s2)
+  if (CS%id_intz_PFv_2d > 0) call safe_alloc_ptr(CS%ADp%diag_hv,isd,ied,JsdB,JedB,nz)
 
   CS%id_hf_CAu_2d = register_diag_field('ocean_model', 'hf_CAu_2d', diag%axesCu1, Time, &
-      'Depth-sum Fractional Thickness-weighted Zonal Coriolis and Advective Acceleration', 'm s-2', &
-      conversion=US%L_T2_to_m_s2)
-  if(CS%id_hf_CAu_2d > 0) call safe_alloc_ptr(CS%ADp%diag_hfrac_u,IsdB,IedB,jsd,jed,nz)
+      'Depth-sum Fractional Thickness-weighted Zonal Coriolis and Advective Acceleration', &
+      'm s-2', conversion=US%L_T2_to_m_s2)
+  if (CS%id_hf_CAu_2d > 0) call safe_alloc_ptr(CS%ADp%diag_hfrac_u,IsdB,IedB,jsd,jed,nz)
 
   CS%id_hf_CAv_2d = register_diag_field('ocean_model', 'hf_CAv_2d', diag%axesCv1, Time, &
-      'Depth-sum Fractional Thickness-weighted Meridional Coriolis and Advective Acceleration', 'm s-2', &
-      conversion=US%L_T2_to_m_s2)
-  if(CS%id_hf_CAv_2d > 0) call safe_alloc_ptr(CS%ADp%diag_hfrac_v,isd,ied,JsdB,JedB,nz)
+      'Depth-sum Fractional Thickness-weighted Meridional Coriolis and Advective Acceleration', &
+      'm s-2', conversion=US%L_T2_to_m_s2)
+  if (CS%id_hf_CAv_2d > 0) call safe_alloc_ptr(CS%ADp%diag_hfrac_v,isd,ied,JsdB,JedB,nz)
+
+  CS%id_h_CAu = register_diag_field('ocean_model', 'h_CAu', diag%axesCuL, Time, &
+      'Thickness Multiplied Zonal Coriolis and Advective Acceleration', 'm2 s-2', &
+      conversion=GV%H_to_m*US%L_T2_to_m_s2)
+  if(CS%id_h_CAu > 0) call safe_alloc_ptr(CS%ADp%diag_hu,IsdB,IedB,jsd,jed,nz)
+
+  CS%id_h_CAv = register_diag_field('ocean_model', 'h_CAv', diag%axesCvL, Time, &
+      'Thickness Multiplied Meridional Coriolis and Advective Acceleration', 'm2 s-2', &
+      conversion=GV%H_to_m*US%L_T2_to_m_s2)
+  if(CS%id_h_CAv > 0) call safe_alloc_ptr(CS%ADp%diag_hv,isd,ied,JsdB,JedB,nz)
 
   CS%id_intz_CAu_2d = register_diag_field('ocean_model', 'intz_CAu_2d', diag%axesCu1, Time, &
-      'Depth-integral of Zonal Coriolis and Advective Acceleration', 'm2 s-2', &
-      conversion=GV%H_to_m*US%L_T2_to_m_s2)
-  if(CS%id_intz_CAu_2d > 0) call safe_alloc_ptr(CS%ADp%diag_hu,IsdB,IedB,jsd,jed,nz)
+      'Depth-integral of Zonal Coriolis and Advective Acceleration', &
+      'm2 s-2', conversion=GV%H_to_m*US%L_T2_to_m_s2)
+  if (CS%id_intz_CAu_2d > 0) call safe_alloc_ptr(CS%ADp%diag_hu,IsdB,IedB,jsd,jed,nz)
 
   CS%id_intz_CAv_2d = register_diag_field('ocean_model', 'intz_CAv_2d', diag%axesCv1, Time, &
-      'Depth-integral of Meridional Coriolis and Advective Acceleration', 'm2 s-2', &
-      conversion=GV%H_to_m*US%L_T2_to_m_s2)
-  if(CS%id_intz_CAv_2d > 0) call safe_alloc_ptr(CS%ADp%diag_hv,isd,ied,JsdB,JedB,nz)
+      'Depth-integral of Meridional Coriolis and Advective Acceleration', &
+      'm2 s-2', conversion=GV%H_to_m*US%L_T2_to_m_s2)
+  if (CS%id_intz_CAv_2d > 0) call safe_alloc_ptr(CS%ADp%diag_hv,isd,ied,JsdB,JedB,nz)
 
   CS%id_uav = register_diag_field('ocean_model', 'uav', diag%axesCuL, Time, &
       'Barotropic-step Averaged Zonal Velocity', 'm s-1', conversion=US%L_T_to_m_s)
@@ -1483,34 +1567,44 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, US, param
     'Barotropic Anomaly Meridional Acceleration', 'm s-2', conversion=US%L_T2_to_m_s2)
 
   !CS%id_hf_u_BT_accel = register_diag_field('ocean_model', 'hf_u_BT_accel', diag%axesCuL, Time, &
-  !    'Fractional Thickness-weighted Barotropic Anomaly Zonal Acceleration', 'm s-2', &
-  !    v_extensive=.true., conversion=US%L_T2_to_m_s2)
-  !if(CS%id_hf_u_BT_accel > 0) call safe_alloc_ptr(CS%ADp%diag_hfrac_u,IsdB,IedB,jsd,jed,nz)
+  !    'Fractional Thickness-weighted Barotropic Anomaly Zonal Acceleration', &
+  !    'm s-2', v_extensive=.true., conversion=US%L_T2_to_m_s2)
+  !if (CS%id_hf_u_BT_accel > 0) call safe_alloc_ptr(CS%ADp%diag_hfrac_u,IsdB,IedB,jsd,jed,nz)
 
   !CS%id_hf_v_BT_accel = register_diag_field('ocean_model', 'hf_v_BT_accel', diag%axesCvL, Time, &
-  !    'Fractional Thickness-weighted Barotropic Anomaly Meridional Acceleration', 'm s-2', &
-  !    v_extensive=.true., conversion=US%L_T2_to_m_s2)
-  !if(CS%id_hf_v_BT_accel > 0) call safe_alloc_ptr(CS%ADp%diag_hfrac_v,isd,ied,JsdB,JedB,nz)
+  !    'Fractional Thickness-weighted Barotropic Anomaly Meridional Acceleration', &
+  !    'm s-2', v_extensive=.true., conversion=US%L_T2_to_m_s2)
+  !if (CS%id_hf_v_BT_accel > 0) call safe_alloc_ptr(CS%ADp%diag_hfrac_v,isd,ied,JsdB,JedB,nz)
 
   CS%id_hf_u_BT_accel_2d = register_diag_field('ocean_model', 'hf_u_BT_accel_2d', diag%axesCu1, Time, &
-      'Depth-sum Fractional Thickness-weighted Barotropic Anomaly Zonal Acceleration', 'm s-2', &
-      conversion=US%L_T2_to_m_s2)
-  if(CS%id_hf_u_BT_accel_2d > 0) call safe_alloc_ptr(CS%ADp%diag_hfrac_u,IsdB,IedB,jsd,jed,nz)
+      'Depth-sum Fractional Thickness-weighted Barotropic Anomaly Zonal Acceleration', &
+      'm s-2', conversion=US%L_T2_to_m_s2)
+  if (CS%id_hf_u_BT_accel_2d > 0) call safe_alloc_ptr(CS%ADp%diag_hfrac_u,IsdB,IedB,jsd,jed,nz)
 
   CS%id_hf_v_BT_accel_2d = register_diag_field('ocean_model', 'hf_v_BT_accel_2d', diag%axesCv1, Time, &
-      'Depth-sum Fractional Thickness-weighted Barotropic Anomaly Meridional Acceleration', 'm s-2', &
-      conversion=US%L_T2_to_m_s2)
-  if(CS%id_hf_v_BT_accel_2d > 0) call safe_alloc_ptr(CS%ADp%diag_hfrac_v,isd,ied,JsdB,JedB,nz)
+      'Depth-sum Fractional Thickness-weighted Barotropic Anomaly Meridional Acceleration', &
+      'm s-2', conversion=US%L_T2_to_m_s2)
+  if (CS%id_hf_v_BT_accel_2d > 0) call safe_alloc_ptr(CS%ADp%diag_hfrac_v,isd,ied,JsdB,JedB,nz)
+
+  CS%id_h_u_BT_accel = register_diag_field('ocean_model', 'h_u_BT_accel', diag%axesCuL, Time, &
+      'Thickness Multiplied Barotropic Anomaly Zonal Acceleration', 'm2 s-2', &
+      conversion=GV%H_to_m*US%L_T2_to_m_s2)
+  if(CS%id_h_u_BT_accel > 0) call safe_alloc_ptr(CS%ADp%diag_hu,IsdB,IedB,jsd,jed,nz)
+
+  CS%id_h_v_BT_accel = register_diag_field('ocean_model', 'h_v_BT_accel', diag%axesCvL, Time, &
+      'Thickness Multiplied Barotropic Anomaly Meridional Acceleration', 'm2 s-2', &
+      conversion=GV%H_to_m*US%L_T2_to_m_s2)
+  if(CS%id_h_v_BT_accel > 0) call safe_alloc_ptr(CS%ADp%diag_hv,isd,ied,JsdB,JedB,nz)
 
   CS%id_intz_u_BT_accel_2d = register_diag_field('ocean_model', 'intz_u_BT_accel_2d', diag%axesCu1, Time, &
-      'Depth-integral of Barotropic Anomaly Zonal Acceleration', 'm2 s-2', &
-      conversion=GV%H_to_m*US%L_T2_to_m_s2)
-  if(CS%id_intz_u_BT_accel_2d > 0) call safe_alloc_ptr(CS%ADp%diag_hu,IsdB,IedB,jsd,jed,nz)
+      'Depth-integral of Barotropic Anomaly Zonal Acceleration', &
+      'm2 s-2', conversion=GV%H_to_m*US%L_T2_to_m_s2)
+  if (CS%id_intz_u_BT_accel_2d > 0) call safe_alloc_ptr(CS%ADp%diag_hu,IsdB,IedB,jsd,jed,nz)
 
   CS%id_intz_v_BT_accel_2d = register_diag_field('ocean_model', 'intz_v_BT_accel_2d', diag%axesCv1, Time, &
-      'Depth-integral of Barotropic Anomaly Meridional Acceleration', 'm2 s-2', &
-      conversion=GV%H_to_m*US%L_T2_to_m_s2)
-  if(CS%id_intz_v_BT_accel_2d > 0) call safe_alloc_ptr(CS%ADp%diag_hv,isd,ied,JsdB,JedB,nz)
+      'Depth-integral of Barotropic Anomaly Meridional Acceleration', &
+      'm2 s-2', conversion=GV%H_to_m*US%L_T2_to_m_s2)
+  if (CS%id_intz_v_BT_accel_2d > 0) call safe_alloc_ptr(CS%ADp%diag_hv,isd,ied,JsdB,JedB,nz)
 
   id_clock_Cor        = cpu_clock_id('(Ocean Coriolis & mom advection)', grain=CLOCK_MODULE)
   id_clock_continuity = cpu_clock_id('(Ocean continuity equation)',      grain=CLOCK_MODULE)

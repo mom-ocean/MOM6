@@ -29,6 +29,7 @@ use mpp_io_mod,           only : mpp_get_axes, mpp_axistype=>axistype, mpp_get_a
 use mpp_io_mod,           only : mpp_get_fields, mpp_fieldtype=>fieldtype
 use mpp_io_mod,           only : mpp_get_info, mpp_get_times
 use mpp_io_mod,           only : mpp_io_init
+use mpp_mod,              only : stdout_if_root=>stdout
 ! These are encoding constants.
 use mpp_io_mod,           only : APPEND_FILE=>MPP_APPEND, WRITEONLY_FILE=>MPP_WRONLY
 use mpp_io_mod,           only : OVERWRITE_FILE=>MPP_OVERWR, READONLY_FILE=>MPP_RDONLY
@@ -44,6 +45,7 @@ public :: get_file_info, get_file_fields, get_file_times, get_filename_suffix
 public :: MOM_read_data, MOM_read_vector, write_metadata, write_field
 public :: field_exists, get_field_atts, get_field_size, get_axis_data, read_field_chksum
 public :: io_infra_init, io_infra_end, MOM_namelist_file, check_namelist_error, write_version
+public :: stdout_if_root
 ! These types act as containers for information about files, fields and axes, respectively,
 ! and may also wrap opaque types from the underlying infrastructure.
 public :: file_type, fieldtype, axistype
@@ -496,10 +498,12 @@ subroutine get_file_fields(IO_handle, fields)
     do i=1,nvar
       fields(i)%name = trim(var_names(i))
       longname = ""
-      call get_variable_attribute(IO_handle%fileobj, var_names(i), 'long_name', longname)
+      if (variable_att_exists(IO_handle%fileobj, var_names(i), "long_name")) &
+        call get_variable_attribute(IO_handle%fileobj, var_names(i), "long_name", longname)
       fields(i)%longname = trim(longname)
       units = ""
-      call get_variable_attribute(IO_handle%fileobj, var_names(i), 'units', units)
+      if (variable_att_exists(IO_handle%fileobj, var_names(i), "units")) &
+        call get_variable_attribute(IO_handle%fileobj, var_names(i), "units", units)
       fields(i)%units = trim(units)
 
       fields(i)%valid_chksum = variable_att_exists(IO_handle%fileobj, var_names(i), "checksum")
