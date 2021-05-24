@@ -498,10 +498,12 @@ subroutine get_file_fields(IO_handle, fields)
     do i=1,nvar
       fields(i)%name = trim(var_names(i))
       longname = ""
-      call get_variable_attribute(IO_handle%fileobj, var_names(i), 'long_name', longname)
+      if (variable_att_exists(IO_handle%fileobj, var_names(i), "long_name")) &
+        call get_variable_attribute(IO_handle%fileobj, var_names(i), "long_name", longname)
       fields(i)%longname = trim(longname)
       units = ""
-      call get_variable_attribute(IO_handle%fileobj, var_names(i), 'units', units)
+      if (variable_att_exists(IO_handle%fileobj, var_names(i), "units")) &
+        call get_variable_attribute(IO_handle%fileobj, var_names(i), "units", units)
       fields(i)%units = trim(units)
 
       fields(i)%valid_chksum = variable_att_exists(IO_handle%fileobj, var_names(i), "checksum")
