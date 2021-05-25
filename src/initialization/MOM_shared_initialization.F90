@@ -511,9 +511,6 @@ subroutine set_rotation_beta_plane(f, G, param_file, US)
     case ("m")
       beta_lat_ref_units = "meters"
       y_scl = 1.
-    case ("c")
-      beta_lat_ref_units = "centimeters"
-      y_scl = 1.E-2
     case default ; call MOM_error(FATAL, &
       " set_rotation_beta_plane: unknown AXIS_UNITS = "//trim(axis_units))
   end select
