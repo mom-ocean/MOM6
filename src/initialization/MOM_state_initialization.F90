@@ -96,7 +96,7 @@ use MOM_remapping, only : remapping_core_h
 use MOM_horizontal_regridding, only : horiz_interp_and_extrap_tracer
 use MOM_oda_incupd, only: oda_incupd_CS, initialize_oda_incupd
 use MOM_oda_incupd, only: set_up_oda_incupd_field, set_up_oda_incupd_vel_field
-use MOM_oda_incupd, only: get_oda_increments
+use MOM_oda_incupd, only: get_oda_increments, apply_oda_incupd
 
 implicit none ; private
 
@@ -2067,6 +2067,7 @@ subroutine initialize_oda_incupd_file(G, GV, US, use_temperature, tv, h, u, v, p
   integer, dimension(4) :: siz
   integer :: nz_data  ! The size of the sponge source grid
   logical :: oda_inc ! input files are increments (true) or full fields (false)
+  logical :: uv_inc  ! use u and v increments
 
   character(len=40)  :: tempinc_var, salinc_var, uinc_var, vinc_var, h_var
   character(len=40)  :: mdl = "initialize_oda_incupd_file"
@@ -2096,6 +2097,9 @@ subroutine initialize_oda_incupd_file(G, GV, US, use_temperature, tv, h, u, v, p
   call get_param(param_file, mdl, "ODA_THK_VAR", h_var, &
                  "The name of the layer thickness variable in "//&
                  "ODA_INCUPD_FILE.", default="h")
+  call get_param(param_file, mdl, "ODA_INCUPD_UV", uv_inc, &
+                 "use U,V increments.", &
+                 default=.true.)
   call get_param(param_file, mdl, "ODA_INCUPD_UV_FILE", uv_inc_file, &
                  "The name of the file with the U,V increments.", &
                  default=inc_file)
@@ -2135,16 +2139,18 @@ subroutine initialize_oda_incupd_file(G, GV, US, use_temperature, tv, h, u, v, p
   endif
     
   ! get U and V increments
-  filename = trim(inputdir)//trim(uv_inc_file)
-  call log_param(param_file, mdl, "INPUTDIR/ODA_INCUPD_UV_FILE", filename)
-  if (.not.file_exists(filename, G%Domain)) &
-          call MOM_error(FATAL, " initialize_oda_incupd_uv: Unable to open "//trim(filename))
-  allocate(tmp_u(G%IsdB:G%IedB,jsd:jed,nz_data))
-  allocate(tmp_v(isd:ied,G%JsdB:G%JedB,nz_data))
-  tmp_u(:,:,:) = 0.0 ; tmp_v(:,:,:) = 0.0
-  call MOM_read_vector(filename, uinc_var, vinc_var, tmp_u, tmp_v, G%Domain,scale=US%m_s_to_L_T)
-  call set_up_oda_incupd_vel_field(tmp_u, tmp_v, G, GV, u, v, oda_incupd_CSp)
-  deallocate(tmp_u,tmp_v)
+  if (uv_inc) then
+    filename = trim(inputdir)//trim(uv_inc_file)
+    call log_param(param_file, mdl, "INPUTDIR/ODA_INCUPD_UV_FILE", filename)
+    if (.not.file_exists(filename, G%Domain)) &
+            call MOM_error(FATAL, " initialize_oda_incupd_uv: Unable to open "//trim(filename))
+    allocate(tmp_u(G%IsdB:G%IedB,jsd:jed,nz_data))
+    allocate(tmp_v(isd:ied,G%JsdB:G%JedB,nz_data))
+    tmp_u(:,:,:) = 0.0 ; tmp_v(:,:,:) = 0.0
+    call MOM_read_vector(filename, uinc_var, vinc_var, tmp_u, tmp_v, G%Domain,scale=US%m_s_to_L_T)
+    call set_up_oda_incupd_vel_field(tmp_u, tmp_v, G, GV, u, v, oda_incupd_CSp)
+    deallocate(tmp_u,tmp_v)
+  endif
   
   ! calculate increments if full fields
   if (oda_inc) then ! input are increments
@@ -2152,6 +2158,7 @@ subroutine initialize_oda_incupd_file(G, GV, US, use_temperature, tv, h, u, v, p
   else  ! inputs are full fields
     if (is_root_pe()) call MOM_error(NOTE,"incupd using full fields ")
     call get_oda_increments(h, G, GV, US, oda_incupd_CSp) 
+  !  call apply_oda_incupd(h, 0.0, G, GV, US, oda_incupd_CSp)
   endif  ! not oda_inc
 
 end subroutine initialize_oda_incupd_file
