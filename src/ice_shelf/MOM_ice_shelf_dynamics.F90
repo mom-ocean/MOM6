@@ -25,7 +25,7 @@ use MOM_ice_shelf_state, only : ice_shelf_state
 use MOM_coms, only : reproducing_sum, sum_across_PEs, max_across_PEs, min_across_PEs
 use MOM_checksums, only : hchksum, qchksum
 use MOM_ice_shelf_initialize, only : initialize_ice_shelf_boundary_channel,initialize_ice_flow_from_file
-use MOM_ice_shelf_initialize, only : initialize_ice_shelf_boundary_from_file
+use MOM_ice_shelf_initialize, only : initialize_ice_shelf_boundary_from_file,initialize_ice_C_basal_friction
 implicit none ; private
 
 #include <MOM_memory.h>
@@ -93,7 +93,8 @@ type, public :: ice_shelf_dyn_CS ; private
   real, pointer, dimension(:,:) :: basal_traction => NULL() !< The area integrated nonlinear part of "linearized"
                                                             !! basal stress [R Z L2 T-1 ~> kg s-1].
                 !!  The exact form depends on basal law exponent and/or whether flow is "hybridized" a la Goldberg 2011
-
+  real, pointer, dimension(:,:) :: C_basal_friction => NULL()!< Coefficient in sliding law tau_b = C u^(n_basal_fric),
+                                                            !!  units= Pa (m yr-1)-(n_basal_fric)
   real, pointer, dimension(:,:) :: OD_rt => NULL()         !< A running total for calculating OD_av.
   real, pointer, dimension(:,:) :: ground_frac_rt => NULL() !< A running total for calculating ground_frac.
   real, pointer, dimension(:,:) :: OD_av => NULL()         !< The time average open ocean depth [Z ~> m].
@@ -131,8 +132,8 @@ type, public :: ice_shelf_dyn_CS ; private
   real :: A_glen_isothermal !< Ice viscosity parameter in Glen's Law, [Pa-3 s-1].
   real :: n_glen            !< Nonlinearity exponent in Glen's Law
   real :: eps_glen_min      !< Min. strain rate to avoid infinite Glen's law viscosity, [year-1].
-  real :: C_basal_friction  !< Coefficient in sliding law tau_b = C u^(n_basal_fric), in
-                            !!  units= Pa (m yr-1)-(n_basal_fric)
+!  real :: C_basal_friction  !< Coefficient in sliding law tau_b = C u^(n_basal_fric), in
+!                            !!  units= Pa (m yr-1)-(n_basal_fric)
   real :: n_basal_fric      !< Exponent in sliding law tau_b = C u^(m_slide)
   real :: density_ocean_avg !< A typical ocean density [R ~> kg m-3].  This does not affect ocean
                             !! circulation or thermodynamics.  It is used to estimate the
@@ -259,6 +260,7 @@ subroutine register_ice_shelf_dyn_restarts(G, param_file, CS, restart_CS)
     allocate( CS%t_shelf(isd:ied,jsd:jed) )   ; CS%t_shelf(:,:) = -10.0
     allocate( CS%ice_visc(isd:ied,jsd:jed) )    ; CS%ice_visc(:,:) = 0.0
     allocate( CS%basal_traction(isd:ied,jsd:jed) ) ; CS%basal_traction(:,:) = 0.0
+    allocate( CS%C_basal_friction(isd:ied,jsd:jed) ) ; CS%C_basal_friction(:,:) = 5.0e10
     allocate( CS%OD_av(isd:ied,jsd:jed) )       ; CS%OD_av(:,:) = 0.0
     allocate( CS%ground_frac(isd:ied,jsd:jed) )  ; CS%ground_frac(:,:) = 0.0
     allocate( CS%taudx_shelf(IsdB:IedB,JsdB:JedB) ) ; CS%taudx_shelf(:,:) = 0.0
@@ -385,10 +387,10 @@ subroutine initialize_ice_shelf_dyn(param_file, Time, ISS, CS, G, US, diag, new_
     call get_param(param_file, mdl, "BASAL_FRICTION_EXP", CS%n_basal_fric, &
                  "Exponent in sliding law \tau_b = C u^(n_basal_fric)", &
                  units="none", fail_if_missing=.true.)
-    call get_param(param_file, mdl, "BASAL_FRICTION_COEFF", CS%C_basal_friction, &
-                 "Coefficient in sliding law \tau_b = C u^(n_basal_fric)", &
-                 units="Pa (m s-1)^(n_basal_fric)", scale=US%kg_m2s_to_RZ_T**CS%n_basal_fric, &
-                 fail_if_missing=.true.)
+!    call get_param(param_file, mdl, "BASAL_FRICTION_COEFF", CS%C_basal_friction, &
+!                 "Coefficient in sliding law \tau_b = C u^(n_basal_fric)", &
+!                 units="Pa (m s-1)^(n_basal_fric)", scale=US%kg_m2s_to_RZ_T**CS%n_basal_fric, &
+!                 fail_if_missing=.true.)
     call get_param(param_file, mdl, "DENSITY_ICE", CS%density_ice, &
                  "A typical density of ice.", units="kg m-3", default=917.0, scale=US%kg_m3_to_R)
     call get_param(param_file, mdl, "CONJUGATE_GRADIENT_TOLERANCE", CS%cg_tolerance, &
@@ -521,6 +523,12 @@ subroutine initialize_ice_shelf_dyn(param_file, Time, ISS, CS, G, US, diag, new_
       enddo ; enddo
       call pass_var(CS%calve_mask,G%domain)
     endif
+
+    ! initialize basal friction coefficients
+    call initialize_ice_C_basal_friction(CS%C_basal_friction, G, US, param_file)
+    call pass_var(CS%C_basal_friction, G%domain)
+
+    !initialize boundary conditions
     call initialize_ice_shelf_boundary_from_file(CS%u_face_mask_bdry, CS%v_face_mask_bdry, &
                 CS%u_bdry_val, CS%v_bdry_val, CS%umask, CS%vmask, CS%h_bdry_val, &
                  CS%thickness_bdry_val, ISS%hmask,  ISS%h_shelf, G, US, param_file )
@@ -529,6 +537,8 @@ subroutine initialize_ice_shelf_dyn(param_file, Time, ISS, CS, G, US, diag, new_
     call pass_var(CS%thickness_bdry_val, G%domain)
     call pass_vector(CS%u_bdry_val, CS%v_bdry_val, G%domain, TO_ALL, BGRID_NE)
     call pass_vector(CS%u_face_mask_bdry, CS%v_face_mask_bdry, G%domain, TO_ALL, BGRID_NE)
+
+    !initialize ice flow velocities from file
     call initialize_ice_flow_from_file(CS%bed_elev,CS%u_shelf, CS%v_shelf,CS%ground_frac, ISS%hmask,ISS%h_shelf, &
             G, US, param_file)
     call pass_vector(CS%u_shelf, CS%v_shelf, G%domain, TO_ALL, BGRID_NE)
@@ -2606,7 +2616,8 @@ subroutine calc_shelf_taub(CS, ISS, G, US, u_shlf, v_shlf)
         umid = ((u_shlf(I,J) + u_shlf(I-1,J-1)) + (u_shlf(I,J-1) + u_shlf(I-1,J))) * 0.25
         vmid = ((v_shlf(I,J) + v_shlf(I-1,J-1)) + (v_shlf(I,J-1) + v_shlf(I-1,J))) * 0.25
         unorm = sqrt(umid**2 + vmid**2 + eps_min**2*(G%dxT(i,j)**2 + G%dyT(i,j)**2))
-        CS%basal_traction(i,j) = G%areaT(i,j) * CS%C_basal_friction * (US%L_T_to_m_s*unorm)**(CS%n_basal_fric-1)
+!        CS%basal_traction(i,j) = G%areaT(i,j) * CS%C_basal_friction * (US%L_T_to_m_s*unorm)**(CS%n_basal_fric-1)
+        CS%basal_traction(i,j) = G%areaT(i,j) * CS%C_basal_friction(i,j) * (US%L_T_to_m_s*unorm)**(CS%n_basal_fric-1)
       endif
     enddo
   enddo
@@ -3068,7 +3079,7 @@ subroutine ice_shelf_dyn_end(CS)
   deallocate(CS%u_face_mask, CS%v_face_mask)
   deallocate(CS%umask, CS%vmask)
 
-  deallocate(CS%ice_visc, CS%basal_traction)
+  deallocate(CS%ice_visc, CS%basal_traction,CS%C_basal_friction)
   deallocate(CS%OD_rt, CS%OD_av)
   deallocate(CS%t_bdry_val, CS%bed_elev)
   deallocate(CS%ground_frac, CS%ground_frac_rt)

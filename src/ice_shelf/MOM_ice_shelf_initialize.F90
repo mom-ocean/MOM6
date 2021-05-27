@@ -20,7 +20,7 @@ public initialize_ice_thickness
 public initialize_ice_shelf_boundary_channel
 public initialize_ice_flow_from_file
 public initialize_ice_shelf_boundary_from_file
-
+public initialize_ice_C_basal_friction
 ! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
 ! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
 ! their mks counterparts with notation like "a velocity [Z T-1 ~> m s-1]".  If the units
@@ -570,4 +570,54 @@ subroutine initialize_ice_shelf_boundary_from_file(u_face_mask_bdry, v_face_mask
   enddo
 
 end subroutine initialize_ice_shelf_boundary_from_file
+
+!> Initialize ice basal friction
+subroutine initialize_ice_C_basal_friction(C_basal_friction, G, US, PF)
+  type(ocean_grid_type), intent(in)    :: G    !< The ocean's grid structure
+   real, dimension(SZDI_(G),SZDJ_(G)), &
+                          intent(inout) :: C_basal_friction !< Ice-shelf thickness
+  type(unit_scale_type), intent(in)    :: US !< A structure containing unit conversion factors
+  type(param_file_type), intent(in)    :: PF !< A structure to parse for run-time parameters
+
+!  integer :: i, j
+  real :: C_friction
+  character(len=40)  :: mdl = "initialize_ice_basal_friction" ! This subroutine's name.
+  character(len=200) :: config
+  character(len=200) :: varname
+  character(len=200) :: inputdir, filename, C_friction_file
+
+  call get_param(PF, mdl, "ICE_BASAL_FRICTION_CONFIG", config, &
+                 "This specifies how the initial ice profile is specified. "//&
+                 "Valid values are: CONSTANT and FILE.", &
+                 fail_if_missing=.true.)
+
+  if (trim(config)=="CONSTANT") then
+    call get_param(PF, mdl, "BASAL_FRICTION_COEFF", C_friction, &
+                 "Coefficient in sliding law.", units="Pa (m s-1)^(n_basal_fric)", default=5.e10)
+
+     C_basal_friction(:,:) = C_friction
+  elseif (trim(config)=="FILE") then
+     call MOM_mesg("  MOM_ice_shelf.F90, initialize_ice_shelf: reading friction coefficients")
+     call get_param(PF, mdl, "INPUTDIR", inputdir, default=".")
+     inputdir = slasher(inputdir)
+
+     call get_param(PF, mdl, "BASAL_FRICTION_FILE", C_friction_file, &
+                 "The file from which the boundary condiions are read.", &
+                 default="ice_basal_friction.nc")
+     filename = trim(inputdir)//trim(C_friction_file)
+     call log_param(PF, mdl, "INPUTDIR/BASAL_FRICTIOM_FILE", filename)
+
+     call get_param(PF, mdl, "BASAL_FRICTION_VARNAME", varname, &
+                   "The variable to use in basal traction.", &
+                   default="tau_b_beta")
+
+    if (.not.file_exists(filename, G%Domain)) call MOM_error(FATAL, &
+       " initialize_ice_basal_friction_from_file: Unable to open "//trim(filename))
+
+    call MOM_read_data(filename,trim(varname),C_basal_friction,G%Domain)
+
+  endif
+end subroutine
+
+
 end module MOM_ice_shelf_initialize
