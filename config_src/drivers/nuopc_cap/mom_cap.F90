@@ -35,22 +35,25 @@ use MOM_ocean_model_nuopc,    only: ocean_model_init_sfc
 use MOM_ocean_model_nuopc,    only: ocean_model_init, update_ocean_model, ocean_model_end
 use MOM_ocean_model_nuopc,    only: get_ocean_grid, get_eps_omesh
 use MOM_cap_time,             only: AlarmInit
-use MOM_cap_methods,          only: mom_import, mom_export, mom_set_geomtype, state_diagnose
+use MOM_cap_methods,          only: mom_import, mom_export, mom_set_geomtype, mod2med_areacor
+use MOM_cap_methods,          only: med2mod_areacor, state_diagnose
 use MOM_cap_methods,          only: ChkErr
+
 #ifdef CESMCOUPLED
 use shr_file_mod,             only: shr_file_setLogUnit, shr_file_getLogUnit
+use shr_mpi_mod,              only : shr_mpi_min, shr_mpi_max
 #endif
 use time_utils_mod,           only: esmf2fms_time
 
 use, intrinsic :: iso_fortran_env, only: output_unit
 
-use ESMF,  only: ESMF_ClockAdvance, ESMF_ClockGet, ESMF_ClockPrint
+use ESMF,  only: ESMF_ClockAdvance, ESMF_ClockGet, ESMF_ClockPrint, ESMF_VMget
 use ESMF,  only: ESMF_ClockGetAlarm, ESMF_ClockGetNextTime, ESMF_ClockAdvance
 use ESMF,  only: ESMF_ClockSet, ESMF_Clock, ESMF_GeomType_Flag, ESMF_LOGMSG_INFO
 use ESMF,  only: ESMF_Grid, ESMF_GridCreate, ESMF_GridAddCoord
 use ESMF,  only: ESMF_GridGetCoord, ESMF_GridAddItem, ESMF_GridGetItem
 use ESMF,  only: ESMF_GridComp, ESMF_GridCompSetEntryPoint, ESMF_GridCompGet
-use ESMF,  only: ESMF_LogFoundError, ESMF_LogWrite, ESMF_LogSetError
+use ESMF,  only: ESMF_LogWrite, ESMF_LogSetError
 use ESMF,  only: ESMF_LOGERR_PASSTHRU, ESMF_KIND_R8, ESMF_RC_VAL_WRONG
 use ESMF,  only: ESMF_GEOMTYPE_MESH, ESMF_GEOMTYPE_GRID, ESMF_SUCCESS
 use ESMF,  only: ESMF_METHOD_INITIALIZE, ESMF_MethodRemove, ESMF_State
@@ -69,12 +72,14 @@ use ESMF,  only: ESMF_FieldCreate, ESMF_LOGMSG_ERROR, ESMF_LOGMSG_WARNING
 use ESMF,  only: ESMF_COORDSYS_SPH_DEG, ESMF_GridCreate, ESMF_INDEX_DELOCAL
 use ESMF,  only: ESMF_MESHLOC_ELEMENT, ESMF_RC_VAL_OUTOFRANGE, ESMF_StateGet
 use ESMF,  only: ESMF_TimePrint, ESMF_AlarmSet, ESMF_FieldGet, ESMF_Array
+use ESMF,  only: ESMF_FieldRegridGetArea
 use ESMF,  only: ESMF_ArrayCreate
 use ESMF,  only: ESMF_RC_FILE_OPEN, ESMF_RC_FILE_READ, ESMF_RC_FILE_WRITE
-use ESMF,  only: ESMF_VMBroadcast
+use ESMF,  only: ESMF_VMBroadcast, ESMF_VMReduce, ESMF_REDUCE_MAX, ESMF_REDUCE_MIN
 use ESMF,  only: ESMF_AlarmCreate, ESMF_ClockGetAlarmList, ESMF_AlarmList_Flag
 use ESMF,  only: ESMF_AlarmGet, ESMF_AlarmIsCreated, ESMF_ALARMLIST_ALL, ESMF_AlarmIsEnabled
 use ESMF,  only: ESMF_STATEITEM_NOTFOUND, ESMF_FieldWrite
+use ESMF,  only: ESMF_END_ABORT, ESMF_Finalize
 use ESMF,  only: operator(==), operator(/=), operator(+), operator(-)
 
 ! TODO ESMF_GridCompGetInternalState does not have an explicit Fortran interface.
@@ -92,6 +97,7 @@ use NUOPC_Model, only: model_label_DataInitialize => label_DataInitialize
 use NUOPC_Model, only: model_label_SetRunClock    => label_SetRunClock
 use NUOPC_Model, only: model_label_Finalize       => label_Finalize
 use NUOPC_Model, only: SetVM
+!$use omp_lib             , only : omp_set_num_threads
 
 implicit none; private
 
@@ -135,10 +141,12 @@ integer              :: logunit  !< stdout logging unit number
 logical              :: profile_memory = .true.
 logical              :: grid_attach_area = .false.
 logical              :: use_coldstart = .true.
+logical              :: use_mommesh = .true.
 character(len=128)   :: scalar_field_name = ''
 integer              :: scalar_field_count = 0
 integer              :: scalar_field_idx_grid_nx = 0
 integer              :: scalar_field_idx_grid_ny = 0
+integer              :: nthrds  !< number of openmp threads per task
 character(len=*),parameter :: u_FILE_u = &
      __FILE__
 
@@ -147,7 +155,7 @@ logical :: cesm_coupled = .true.
 type(ESMF_GeomType_Flag) :: geomtype = ESMF_GEOMTYPE_MESH
 #else
 logical :: cesm_coupled = .false.
-type(ESMF_GeomType_Flag) :: geomtype = ESMF_GEOMTYPE_GRID
+type(ESMF_GeomType_Flag) :: geomtype
 #endif
 character(len=8) :: restart_mode = 'alarms'
 
@@ -347,6 +355,25 @@ subroutine InitializeP0(gcomp, importState, exportState, clock, rc)
   write(logmsg,*) use_coldstart
   call ESMF_LogWrite('MOM_cap:use_coldstart = '//trim(logmsg), ESMF_LOGMSG_INFO)
 
+  use_mommesh = .true.
+  call NUOPC_CompAttributeGet(gcomp, name="use_mommesh", value=value, &
+       isPresent=isPresent, isSet=isSet, rc=rc)
+  if (ChkErr(rc,__LINE__,u_FILE_u)) return
+  if (isPresent .and. isSet) use_mommesh=(trim(value)=="true")
+  write(logmsg,*) use_mommesh
+  call ESMF_LogWrite('MOM_cap:use_mommesh = '//trim(logmsg), ESMF_LOGMSG_INFO)
+
+  if(use_mommesh)then
+    geomtype = ESMF_GEOMTYPE_MESH
+    call NUOPC_CompAttributeGet(gcomp, name='mesh_ocn', isPresent=isPresent, isSet=isSet, rc=rc)
+      if (.not. isPresent .and. .not. isSet) then
+        call ESMF_LogWrite('geomtype set to mesh but mesh_ocn is not specified', ESMF_LOGMSG_INFO)
+        call ESMF_Finalize(endflag=ESMF_END_ABORT)
+     endif
+  else
+    geomtype = ESMF_GEOMTYPE_GRID
+  endif
+
 end subroutine
 
 !> Called by NUOPC to advertise import and export fields.  "Advertise"
@@ -391,10 +418,12 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
   character(len=512)                     :: diro
   character(len=512)                     :: logfile
   character(ESMF_MAXSTR)                 :: cvalue
+  character(len=64)                      :: logmsg
   logical                                :: isPresent, isPresentDiro, isPresentLogfile, isSet
   logical                                :: existflag
   integer                                :: userRc
   integer                                :: localPet
+  integer                                :: localPeCount
   integer                                :: iostat
   integer                                :: readunit
   character(len=512)                     :: restartfile          ! Path/Name of restart file
@@ -419,7 +448,7 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
   call ESMF_VMGetCurrent(vm, rc=rc)
   if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
-  call ESMF_VMGet(VM, mpiCommunicator=mpi_comm_mom, rc=rc)
+  call ESMF_VMGet(VM, mpiCommunicator=mpi_comm_mom, localPet=localPet, rc=rc)
   if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
   call ESMF_ClockGet(CLOCK, currTIME=MyTime, TimeStep=TINT,  RC=rc)
@@ -431,7 +460,30 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
   CALL ESMF_TimeIntervalGet(TINT, S=DT_OCEAN, RC=rc)
   if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
-  !TODO: next two lines not present in NCAR
+  !---------------------------------
+  ! openmp threads
+  !---------------------------------
+
+  call ESMF_VMGet(vm, pet=localPet, peCount=localPeCount, rc=rc)
+  if (ChkErr(rc,__LINE__,u_FILE_u)) return
+
+  if(localPeCount == 1) then
+     call NUOPC_CompAttributeGet(gcomp, name="nthreads", value=cvalue, &
+          isPresent=isPresent, isSet=isSet, rc=rc)
+     if (ChkErr(rc,__LINE__,u_FILE_u)) return
+     if (isPresent .and. isSet) then
+       read(cvalue,*) nthrds
+     else
+       nthrds = localPeCount
+     endif
+  else
+     nthrds = localPeCount
+  endif
+  write(logmsg,*) nthrds
+  call ESMF_LogWrite(trim(subname)//': nthreads = '//trim(logmsg), ESMF_LOGMSG_INFO)
+
+!$  call omp_set_num_threads(nthrds)
+
   call fms_init(mpi_comm_mom)
   call constants_init
   call field_manager_init
@@ -778,6 +830,7 @@ subroutine InitializeRealize(gcomp, importState, exportState, clock, rc)
   integer                                    :: lbnd3,ubnd3,lbnd4,ubnd4
   integer                                    :: nblocks_tot
   logical                                    :: found
+  logical                                    :: isPresent, isSet
   integer(ESMF_KIND_I4), pointer             :: dataPtr_mask(:,:)
   real(ESMF_KIND_R8), pointer                :: dataPtr_area(:,:)
   real(ESMF_KIND_R8), pointer                :: dataPtr_xcen(:,:)
@@ -786,6 +839,7 @@ subroutine InitializeRealize(gcomp, importState, exportState, clock, rc)
   real(ESMF_KIND_R8), pointer                :: dataPtr_ycor(:,:)
   integer                                    :: mpicom
   integer                                    :: localPet
+  integer                                    :: localPeCount
   integer                                    :: lsize
   integer                                    :: ig,jg, ni,nj,k
   integer, allocatable                       :: gindex(:) ! global index space
@@ -793,16 +847,29 @@ subroutine InitializeRealize(gcomp, importState, exportState, clock, rc)
   character(len=256)                         :: cvalue
   character(len=256)                         :: frmt    ! format specifier for several error msgs
   character(len=512)                         :: err_msg ! error messages
+  integer                                    :: spatialDim
+  integer                                    :: numOwnedElements
+  type(ESMF_Array)                           :: elemMaskArray
+  real(ESMF_KIND_R8)    , pointer            :: ownedElemCoords(:)
+  real(ESMF_KIND_R8)    , pointer            :: lat(:), latMesh(:)
+  real(ESMF_KIND_R8)    , pointer            :: lon(:), lonMesh(:)
+  integer(ESMF_KIND_I4) , pointer            :: mask(:), maskMesh(:)
+  real(ESMF_KIND_R8)                         :: diff_lon, diff_lat
+  real                                       :: eps_omesh
+  real(ESMF_KIND_R8)                         :: L2_to_rad2
+  type(ESMF_Field)                           :: lfield
+  real(ESMF_KIND_R8), allocatable            :: mesh_areas(:)
+  real(ESMF_KIND_R8), allocatable            :: model_areas(:)
+  real(ESMF_KIND_R8), pointer                :: dataPtr_mesh_areas(:)
+  real(ESMF_KIND_R8)                         :: max_mod2med_areacor
+  real(ESMF_KIND_R8)                         :: max_med2mod_areacor
+  real(ESMF_KIND_R8)                         :: min_mod2med_areacor
+  real(ESMF_KIND_R8)                         :: min_med2mod_areacor
+  real(ESMF_KIND_R8)                         :: max_mod2med_areacor_glob
+  real(ESMF_KIND_R8)                         :: max_med2mod_areacor_glob
+  real(ESMF_KIND_R8)                         :: min_mod2med_areacor_glob
+  real(ESMF_KIND_R8)                         :: min_med2mod_areacor_glob
   character(len=*), parameter                :: subname='(MOM_cap:InitializeRealize)'
-  integer                         :: spatialDim
-  integer                         :: numOwnedElements
-  type(ESMF_Array)                :: elemMaskArray
-  real(ESMF_KIND_R8)    , pointer :: ownedElemCoords(:)
-  real(ESMF_KIND_R8)    , pointer :: lat(:), latMesh(:)
-  real(ESMF_KIND_R8)    , pointer :: lon(:), lonMesh(:)
-  integer(ESMF_KIND_I4) , pointer :: mask(:), maskMesh(:)
-  real(ESMF_KIND_R8)              :: diff_lon, diff_lat
-  real                            :: eps_omesh
   !--------------------------------
 
   rc = ESMF_SUCCESS
@@ -829,6 +896,28 @@ subroutine InitializeRealize(gcomp, importState, exportState, clock, rc)
 
   call ESMF_VMGet(vm, petCount=npet, mpiCommunicator=mpicom, localPet=localPet, rc=rc)
   if (ChkErr(rc,__LINE__,u_FILE_u)) return
+
+  !---------------------------------
+  ! openmp threads
+  !---------------------------------
+
+  call ESMF_VMGet(vm, pet=localPet, peCount=localPeCount, rc=rc)
+  if (ChkErr(rc,__LINE__,u_FILE_u)) return
+
+  if(localPeCount == 1) then
+     call NUOPC_CompAttributeGet(gcomp, name="nthreads", value=cvalue, &
+          isPresent=isPresent, isSet=isSet, rc=rc)
+     if (ChkErr(rc,__LINE__,u_FILE_u)) return
+     if (isPresent .and. isSet) then
+       read(cvalue,*) nthrds
+     else
+       nthrds = localPeCount
+     endif
+  else
+     nthrds = localPeCount
+  endif
+
+!$  call omp_set_num_threads(nthrds)
 
   !---------------------------------
   ! global mom grid size
@@ -971,16 +1060,75 @@ subroutine InitializeRealize(gcomp, importState, exportState, clock, rc)
         end if
      end do
 
-     deallocate(ownedElemCoords)
-     deallocate(lonMesh , lon )
-     deallocate(latMesh , lat )
-     deallocate(maskMesh, mask)
      ! realize the import and export fields using the mesh
      call MOM_RealizeFields(importState, fldsToOcn_num, fldsToOcn, "Ocn import", mesh=Emesh, rc=rc)
      if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
      call MOM_RealizeFields(exportState, fldsFrOcn_num, fldsFrOcn, "Ocn export", mesh=Emesh, rc=rc)
      if (ChkErr(rc,__LINE__,u_FILE_u)) return
+
+     !---------------------------------
+     ! determine flux area correction factors - module variables in mom_cap_methods
+     !---------------------------------
+     ! Area correction factors are ONLY valid for meshes that are read in - so do not need them for
+     ! grids that are calculated internally
+
+     ! Determine mesh areas for regridding
+     call ESMF_MeshGet(Emesh, numOwnedElements=numOwnedElements, spatialDim=spatialDim, rc=rc)
+     if (ChkErr(rc,__LINE__,u_FILE_u)) return
+
+     allocate (mod2med_areacor(numOwnedElements))
+     allocate (med2mod_areacor(numOwnedElements))
+     mod2med_areacor(:) = 1._ESMF_KIND_R8
+     med2mod_areacor(:) = 1._ESMF_KIND_R8
+
+#ifdef CESMCOUPLED
+     ! Determine model areas and flux correction factors (module variables in mom_)
+     call ESMF_StateGet(exportState, itemName=trim(fldsFrOcn(2)%stdname), field=lfield, rc=rc)
+     if (ChkErr(rc,__LINE__,u_FILE_u)) return
+     call ESMF_FieldRegridGetArea(lfield, rc=rc)
+     if (ChkErr(rc,__LINE__,u_FILE_u)) return
+     call ESMF_FieldGet(lfield, farrayPtr=dataPtr_mesh_areas, rc=rc)
+     if (ChkErr(rc,__LINE__,u_FILE_u)) return
+
+     allocate(mesh_areas(numOwnedElements))
+     allocate(model_areas(numOwnedElements))
+     k = 0
+     do j = ocean_grid%jsc, ocean_grid%jec
+        do i = ocean_grid%isc, ocean_grid%iec
+           k = k + 1 ! Increment position within gindex
+           if (mask(k) /= 0) then
+              mesh_areas(k) = dataPtr_mesh_areas(k)
+              model_areas(k) = ocean_grid%AreaT(i,j) / ocean_grid%Rad_Earth**2
+              mod2med_areacor(k) = model_areas(k) / mesh_areas(k)
+              med2mod_areacor(k) = mesh_areas(k) / model_areas(k)
+           end if
+        end do
+     end do
+     deallocate(mesh_areas)
+     deallocate(model_areas)
+
+     ! Write diagnostic output for correction factors
+     min_mod2med_areacor = minval(mod2med_areacor)
+     max_mod2med_areacor = maxval(mod2med_areacor)
+     min_med2mod_areacor = minval(med2mod_areacor)
+     max_med2mod_areacor = maxval(med2mod_areacor)
+     call shr_mpi_max(max_mod2med_areacor, max_mod2med_areacor_glob, mpicom)
+     call shr_mpi_min(min_mod2med_areacor, min_mod2med_areacor_glob, mpicom)
+     call shr_mpi_max(max_med2mod_areacor, max_med2mod_areacor_glob, mpicom)
+     call shr_mpi_min(min_med2mod_areacor, min_med2mod_areacor_glob, mpicom)
+     if (localPet == 0) then
+        write(logunit,'(2A,2g23.15,A )') trim(subname),' :  min_mod2med_areacor, max_mod2med_areacor ',&
+             min_mod2med_areacor_glob, max_mod2med_areacor_glob, 'MOM6'
+        write(logunit,'(2A,2g23.15,A )') trim(subname),' :  min_med2mod_areacor, max_med2mod_areacor ',&
+             min_med2mod_areacor_glob, max_med2mod_areacor_glob, 'MOM6'
+     end if
+#endif
+
+     deallocate(ownedElemCoords)
+     deallocate(lonMesh , lon )
+     deallocate(latMesh , lat )
+     deallocate(maskMesh, mask)
 
   else if (geomtype == ESMF_GEOMTYPE_GRID) then
 
@@ -1208,7 +1356,6 @@ subroutine InitializeRealize(gcomp, importState, exportState, clock, rc)
 
      call MOM_RealizeFields(exportState, fldsFrOcn_num, fldsFrOcn, "Ocn export", grid=gridOut, rc=rc)
      if (ChkErr(rc,__LINE__,u_FILE_u)) return
-
   endif
 
   !---------------------------------
@@ -1383,6 +1530,8 @@ subroutine ModelAdvance(gcomp, rc)
   if(profile_memory) call ESMF_VMLogMemInfo("Entering MOM Model_ADVANCE: ")
 
   call shr_file_setLogUnit (logunit)
+
+!$  call omp_set_num_threads(nthrds)
 
   ! query the Component for its clock, importState and exportState
   call ESMF_GridCompGet(gcomp, clock=clock, importState=importState, &

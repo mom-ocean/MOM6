@@ -722,6 +722,17 @@ subroutine shelf_calc_flux(sfc_state_in, fluxes_in, Time, time_step, CS)
     endif
   endif
 
+  ! Melting has been computed, now is time to update thickness and mass with dynamic ice shelf
+  if (CS%active_shelf_dynamics) then
+    call change_thickness_using_melt(ISS, G, US, US%s_to_T*time_step, fluxes, CS%density_ice, CS%debug)
+
+    if (CS%debug) then
+      call hchksum(ISS%h_shelf, "h_shelf after change thickness using melt", G%HI, haloshift=0, scale=US%Z_to_m)
+      call hchksum(ISS%mass_shelf, "mass_shelf after change thickness using melt", G%HI, haloshift=0, &
+                   scale=US%RZ_to_kg_m2)
+    endif
+  endif
+
   if (CS%debug) call MOM_forcing_chksum("Before add shelf flux", fluxes, G, CS%US, haloshift=0)
 
   call add_shelf_flux(G, US, CS, sfc_state, fluxes)
@@ -1641,8 +1652,7 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces_in,
   elseif (.not.new_sim) then
     ! This line calls a subroutine that reads the initial conditions from a restart file.
     call MOM_mesg("MOM_ice_shelf.F90, initialize_ice_shelf: Restoring ice shelf from file.")
-    call restore_state(dirs%input_filename, dirs%restart_input_dir, Time, &
-                       G, CS%restart_CSp)
+    call restore_state(dirs%input_filename, dirs%restart_input_dir, Time, G, CS%restart_CSp)
 
     if ((US%m_to_Z_restart /= 0.0) .and. (US%m_to_Z_restart /= US%m_to_Z)) then
       Z_rescale = US%m_to_Z / US%m_to_Z_restart
@@ -1752,16 +1762,15 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces_in,
   call fix_restart_unit_scaling(US)
 
   call get_param(param_file, mdl, "SAVE_INITIAL_CONDS", save_IC, &
-                 "If true, save the ice shelf initial conditions.", &
-                 default=.false.)
+                 "If true, save the ice shelf initial conditions.", default=.false.)
   if (save_IC) call get_param(param_file, mdl, "SHELF_IC_OUTPUT_FILE", IC_file,&
-                 "The name-root of the output file for the ice shelf "//&
-                 "initial conditions.", default="MOM_Shelf_IC")
+                 "The name-root of the output file for the ice shelf initial conditions.", &
+                 default="MOM_Shelf_IC")
 
   if (save_IC .and. .not.((dirs%input_filename(1:1) == 'r') .and. &
                           (LEN_TRIM(dirs%input_filename) == 1))) then
-    call save_restart(dirs%output_directory, CS%Time, CS%Grid_in, &
-                      CS%restart_CSp, filename=IC_file)
+    call save_restart(dirs%output_directory, CS%Time, CS%Grid_in, CS%restart_CSp, &
+                      filename=IC_file, write_ic=.true.)
   endif
 
 
@@ -1781,7 +1790,7 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces_in,
     meltrate_conversion = 86400.0*365.0*US%Z_to_m*US%s_to_T / CS%density_ice
   endif
   CS%id_melt = register_diag_field('ice_shelf_model', 'melt', CS%diag%axesT1, CS%Time, &
-      'Ice Shelf Melt Rate', 'm yr-1', conversion= meltrate_conversion)
+      'Ice Shelf Melt Rate', 'm yr-1', conversion=meltrate_conversion)
   CS%id_thermal_driving = register_diag_field('ice_shelf_model', 'thermal_driving', CS%diag%axesT1, CS%Time, &
       'pot. temp. in the boundary layer minus freezing pot. temp. at the ice-ocean interface.', 'Celsius')
   CS%id_haline_driving = register_diag_field('ice_shelf_model', 'haline_driving', CS%diag%axesT1, CS%Time, &
