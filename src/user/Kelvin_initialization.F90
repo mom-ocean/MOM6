@@ -38,7 +38,7 @@ type, public :: Kelvin_OBC_CS ; private
   real    :: coast_angle = 0   !< Angle of coastline [rad]
   real    :: coast_offset1 = 0 !< Longshore distance to coastal angle [L ~> m]
   real    :: coast_offset2 = 0 !< Longshore distance to coastal angle [L ~> m]
-  real    :: H0 = 0            !< Bottom depth [Z ~> m]f
+  real    :: H0 = 0            !< Bottom depth [Z ~> m]
   real    :: F_0               !< Coriolis parameter [T-1 ~> s-1]
   real    :: rho_range         !< Density range [R ~> kg m-3]
   real    :: rho_0             !< Mean density [R ~> kg m-3]
@@ -121,7 +121,8 @@ subroutine Kelvin_initialize_topography(D, G, param_file, max_depth, US)
   real, dimension(G%isd:G%ied,G%jsd:G%jed), &
                                    intent(out) :: D !< Ocean bottom depth in m or Z if US is present
   type(param_file_type),           intent(in)  :: param_file !< Parameter file structure
-  real,                            intent(in)  :: max_depth !< Maximum model depth in the units of D [Z ~> m or m]
+  real,                            intent(in)  :: max_depth  !< Maximum model depth in the units of D
+                                                             ! [Z ~> m or m]
   type(unit_scale_type), optional, intent(in)  :: US !< A dimensional unit scaling type
 
   ! Local variables
