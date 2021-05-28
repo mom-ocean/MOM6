@@ -65,7 +65,7 @@ program MOM_main
   use MOM_variables,       only : surface
   use MOM_verticalGrid,    only : verticalGrid_type
   use MOM_wave_interface,  only : wave_parameters_CS, MOM_wave_interface_init
-  use MOM_wave_interface,  only : MOM_wave_interface_init_lite, Update_Surface_Waves
+  use MOM_wave_interface,  only : Update_Surface_Waves
   use MOM_write_cputime,   only : write_cputime, MOM_write_cputime_init
   use MOM_write_cputime,   only : write_cputime_start_clock, write_cputime_CS
 
@@ -331,11 +331,9 @@ program MOM_main
 
   call get_param(param_file,mod_name, "USE_WAVES", Use_Waves, &
        "If true, enables surface wave modules.",default=.false.)
-  if (use_waves) then
-    call MOM_wave_interface_init(Time, grid, GV, US, param_file, Waves_CSp, diag)
-  else
-    call MOM_wave_interface_init_lite(param_file)
-  endif
+  ! MOM_wave_interface_init is called regardless of the value of USE_WAVES because
+  ! it also initializes statistical waves.
+  call MOM_wave_interface_init(Time, grid, GV, US, param_file, Waves_CSp, diag)
 
   segment_start_time = Time
   elapsed_time = 0.0

@@ -3199,8 +3199,8 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
         units='m', conversion=GV%H_to_m, v_extensive=.true.)
     CS%id_boundary_forcing_h_tendency = register_diag_field('ocean_model',   &
         'boundary_forcing_h_tendency', diag%axesTL, Time,                &
-        'Cell thickness tendency due to boundary forcing', 'm s-1', &
-        conversion=GV%H_to_m*US%s_to_T, v_extensive=.true.)
+        'Cell thickness tendency due to boundary forcing', &
+        'm s-1', conversion=GV%H_to_m*US%s_to_T, v_extensive=.true.)
     if (CS%id_boundary_forcing_h_tendency > 0) then
       CS%boundary_forcing_tendency_diag = .true.
     endif

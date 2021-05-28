@@ -19,6 +19,7 @@ use MOM_io_infra,         only : get_field_size, fieldtype, field_exists, get_fi
 use MOM_io_infra,         only : get_file_times, axistype, get_axis_data, get_filename_suffix
 use MOM_io_infra,         only : write_field, write_metadata, write_version
 use MOM_io_infra,         only : MOM_namelist_file, check_namelist_error, io_infra_init, io_infra_end
+use MOM_io_infra,         only : stdout_if_root
 use MOM_io_infra,         only : APPEND_FILE, ASCII_FILE, MULTIPLE, NETCDF_FILE, OVERWRITE_FILE
 use MOM_io_infra,         only : READONLY_FILE, SINGLE_FILE, WRITEONLY_FILE
 use MOM_io_infra,         only : CENTER, CORNER, NORTH_FACE, EAST_FACE
@@ -47,6 +48,7 @@ public :: axistype, get_axis_data
 public :: MOM_read_data, MOM_read_vector, read_field_chksum
 public :: slasher, write_field, write_version_number
 public :: io_infra_init, io_infra_end
+public :: stdout_if_root
 ! This is used to set up information descibing non-domain-decomposed axes.
 public :: axis_info, set_axis_info, delete_axis_info
 ! This is used to set up global file attributes
@@ -647,7 +649,7 @@ subroutine get_var_sizes(filename, varname, ndims, sizes, match_case, caller, al
     do n=2,nval ;  sizes(n-1) = size_msg(n) ; enddo
     deallocate(size_msg)
 
-    if (present(dim_names)) then
+    if (present(dim_names) .and. (ndims > 0)) then
       nval = min(ndims, size(dim_names))
       call broadcast(dim_names(1:nval), len(dim_names(1)), blocking=.true.)
     endif
@@ -655,7 +657,8 @@ subroutine get_var_sizes(filename, varname, ndims, sizes, match_case, caller, al
 
 end subroutine get_var_sizes
 
-!> read_var_sizes returns the number and size of dimensions associate with a variable in a file.
+!> read_var_sizes returns the number and size of dimensions associated with a variable in a file.
+!! If the variable is not in the file the returned sizes are all 0 and ndims is -1.
 !! Every processor for which this is called does the reading.
 subroutine read_var_sizes(filename, varname, ndims, sizes, match_case, caller, dim_names, ncid_in)
   character(len=*),      intent(in)  :: filename   !< Name of the file to read, used here in messages
@@ -675,7 +678,7 @@ subroutine read_var_sizes(filename, varname, ndims, sizes, match_case, caller, d
   character(len=256) :: hdr, dimname
   integer, allocatable :: dimids(:)
   integer :: varid, ncid, n, status
-  logical :: success
+  logical :: success, found
   hdr = "get_var_size: " ; if (present(caller)) hdr = trim(hdr)//": "
   sizes(:) = 0 ; ndims = -1
 
@@ -687,8 +690,8 @@ subroutine read_var_sizes(filename, varname, ndims, sizes, match_case, caller, d
   endif
 
   ! Get the dimension sizes of the variable varname.
-  call get_varid(varname, ncid, filename, varid, match_case=match_case)
-  if (varid < 0) return
+  call get_varid(varname, ncid, filename, varid, match_case=match_case, found=found)
+  if (.not.found) return
 
   status = NF90_inquire_variable(ncid, varid, ndims=ndims)
   if (status /= NF90_NOERR) then

@@ -57,8 +57,8 @@ use mpp_domains_mod,         only : mpp_define_domains, mpp_get_compute_domain, 
 use fms_mod,                 only : stdout
 use mpp_mod,                 only : mpp_chksum
 use MOM_EOS,                 only : gsw_sp_from_sr, gsw_pt_from_ct
-use MOM_wave_interface,      only: wave_parameters_CS, MOM_wave_interface_init
-use MOM_wave_interface,      only: MOM_wave_interface_init_lite, Update_Surface_Waves
+use MOM_wave_interface,      only : wave_parameters_CS, MOM_wave_interface_init
+use MOM_wave_interface,      only : Update_Surface_Waves
 use MOM_surface_forcing_nuopc, only : surface_forcing_init, convert_IOB_to_fluxes
 use MOM_surface_forcing_nuopc, only : convert_IOB_to_forces, ice_ocn_bnd_type_chksum
 use MOM_surface_forcing_nuopc, only : ice_ocean_boundary_type, surface_forcing_CS
@@ -206,8 +206,8 @@ type, public :: ocean_state_type ; private
   type(marine_ice_CS), pointer :: &
     marine_ice_CSp => NULL()  !< A pointer to the control structure for the
                               !! marine ice effects module.
-  type(wave_parameters_cs), pointer, public :: &
-    Waves !< A structure containing pointers to the surface wave fields
+  type(wave_parameters_CS), pointer, public :: &
+    Waves => NULL()           !< A pointer to the surface wave control structure
   type(surface_forcing_CS), pointer :: &
     forcing_CSp => NULL()     !< A pointer to the MOM forcing control structure
   type(MOM_restart_CS), pointer :: &
@@ -388,13 +388,14 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn, i
 
   call get_param(param_file, mdl, "USE_WAVES", OS%Use_Waves, &
        "If true, enables surface wave modules.", default=.false.)
+  ! MOM_wave_interface_init is called regardless of the value of USE_WAVES because
+  ! it also initializes statistical waves.
+  call MOM_wave_interface_init(OS%Time, OS%grid, OS%GV, OS%US, param_file, OS%Waves, OS%diag)
   if (OS%use_waves) then
-    call MOM_wave_interface_init(OS%Time, OS%grid, OS%GV, OS%US, param_file, OS%Waves, OS%diag)
-    call get_param(param_file,mdl,"SURFBAND_WAVENUMBERS",OS%Waves%WaveNum_Cen, &
-           "Central wavenumbers for surface Stokes drift bands.",units='rad/m', &
-           default=0.12566)
-  else
-    call MOM_wave_interface_init_lite(param_file)
+    ! I do not know why this is being set here.  It seems out of place. -RWH
+    call get_param(param_file,mdl,"SURFBAND_WAVENUMBERS", OS%Waves%WaveNum_Cen, &
+           "Central wavenumbers for surface Stokes drift bands.", &
+           units='rad/m', default=0.12566, scale=OS%US%Z_to_m)
   endif
 
   if (associated(OS%grid%Domain%maskmap)) then
