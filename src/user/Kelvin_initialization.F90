@@ -215,7 +215,7 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, GV, US, h, Time)
     val1 = sin(omega * time_sec)
   else
     mag_int = 1.0*US%m_s_to_L_T**2
-    N0 = sqrt((CS%rho_range / CS%rho_0) * GV%g_Earth / CS%H0)
+    N0 = sqrt((CS%rho_range / CS%rho_0) * (GV%g_Earth / CS%H0))
     lambda = PI * CS%mode * CS%F_0 / (CS%H0 * N0)
     ! Two wavelengths in domain
     omega = (4.0 * CS%H0 * N0)  / (CS%mode * US%m_to_L*G%len_lon)
@@ -263,7 +263,7 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, GV, US, h, Time)
             enddo
           endif
         else
-          ! Not rotated yet
+          ! Baroclinic, not rotated yet
           segment%eta(I,j) = 0.0
           segment%normal_vel_bt(I,j) = 0.0
           if (segment%nudged) then

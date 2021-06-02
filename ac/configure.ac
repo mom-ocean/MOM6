@@ -59,6 +59,18 @@ AS_IF([test "x$with_driver" != "x"],
 # used to configure a header based on a template.
 #AC_CONFIG_HEADERS(["$MEM_LAYOUT/MOM_memory.h"])
 
+# Select the model framework (default: FMS1)
+# NOTE: We can phase this out after the FMS1 I/O has been removed from FMS and
+#   replace with a detection test.  For now, it is a user-defined switch.
+MODEL_FRAMEWORK=${srcdir}/config_src/infra/FMS1
+AC_ARG_WITH([framework],
+  AS_HELP_STRING([--with-framework=fms1|fms2], [Select the model framework]))
+AS_CASE([with_framework],
+  [fms1], [MODEL_FRAMEWORK=${srcdir}/config_src/infra/FMS1],
+  [fms2], [MODEL_FRAMEWORK=${srcdir}/config_src/infra/FMS2],
+  [MODEL_FRAMEWORK=${srcdir}/config_src/infra/FMS1]
+)
+
 
 # Explicitly assume free-form Fortran
 AC_LANG(Fortran)
@@ -192,6 +204,22 @@ AX_FC_CHECK_LIB([FMS], [fms_init], [fms_mod],
 )
 
 
+# Verify that FMS is at least 2019.01.02
+# NOTE: 2019.01.02 introduced two changes:
+#   - diag_axis_init supports an optional domain_position argument
+#   - position values NORTH, EAST, CENTER were added to diag_axis_mod
+# For our versioning test, we check the second feature.
+AC_MSG_CHECKING([if diag_axis_mod supports domain positions])
+AC_COMPILE_IFELSE(
+  [AC_LANG_PROGRAM([], [use diag_axis_mod, only: NORTH, EAST, CENTER])],
+  [AC_MSG_RESULT([yes])],
+  [
+    AC_MSG_RESULT([no])
+    AC_MSG_ERROR([diag_axis_mod in MOM6 requires FMS 2019.01.02 or newer.])
+  ]
+)
+
+
 # Search for mkmf build tools
 AC_PATH_PROG([LIST_PATHS], [list_paths])
 AS_IF([test -z "$LIST_PATHS"], [
@@ -216,11 +244,14 @@ AS_IF([test -z "$MKMF"], [
 AC_CONFIG_COMMANDS([path_names],
   [list_paths -l \
     ${srcdir}/src \
-    ${srcdir}/config_src/infra/FMS1 \
+    ${MODEL_FRAMEWORK} \
     ${srcdir}/config_src/ext* \
     ${DRIVER_DIR} \
-    ${MEM_LAYOUT}
-], [MEM_LAYOUT=$MEM_LAYOUT DRIVER_DIR=$DRIVER_DIR])
+    ${MEM_LAYOUT}],
+  [MODEL_FRAMEWORK=$MODEL_FRAMEWORK
+    MEM_LAYOUT=$MEM_LAYOUT
+    DRIVER_DIR=$DRIVER_DIR]
+)
 
 
 AC_CONFIG_COMMANDS([Makefile.mkmf],
