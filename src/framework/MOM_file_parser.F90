@@ -268,6 +268,8 @@ subroutine close_param_file(CS, quiet_close, component)
     enddo
     CS%log_open = .false.
     call doc_end(CS%doc)
+    deallocate(CS%doc)
+    deallocate(CS%blockName)
     return
   endif ; endif
 
@@ -334,14 +336,15 @@ subroutine close_param_file(CS, quiet_close, component)
     deallocate (CS%param_data(i)%line)
     deallocate (CS%param_data(i)%line_used)
   enddo
-  deallocate(CS%blockName)
 
   if (is_root_pe() .and. (num_unused>0) .and. CS%unused_params_fatal) &
     call MOM_error(FATAL, "Run stopped because of unused parameter lines.")
 
   CS%log_open = .false.
   call doc_end(CS%doc)
+  deallocate(CS%doc)
 
+  deallocate(CS%blockName)
 end subroutine close_param_file
 
 !> Read the contents of a parameter input file, and store the contents in a

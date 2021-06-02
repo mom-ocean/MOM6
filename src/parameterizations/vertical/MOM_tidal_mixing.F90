@@ -1730,10 +1730,16 @@ subroutine tidal_mixing_end(CS)
   type(tidal_mixing_cs), intent(inout) :: CS !< This module's control structure, which
                                              !! will be deallocated in this routine.
 
-  ! TODO: deallocate all the dynamically allocated members here ...
   if (allocated(CS%tidal_qe_2d))    deallocate(CS%tidal_qe_2d)
   if (allocated(CS%tidal_qe_3d_in)) deallocate(CS%tidal_qe_3d_in)
   if (allocated(CS%h_src))          deallocate(CS%h_src)
+
+  if (associated(CS%tideamp)) deallocate(CS%tideamp)
+  if (associated(CS%mask_itidal)) deallocate(CS%mask_itidal)
+  if (associated(CS%TKE_itidal)) deallocate(CS%TKE_itidal)
+  if (associated(CS%h2)) deallocate(CS%h2)
+  if (associated(CS%Nb)) deallocate(CS%Nb)
+
   deallocate(CS%dd)
 end subroutine tidal_mixing_end
 

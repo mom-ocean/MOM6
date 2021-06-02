@@ -19,6 +19,9 @@ use MOM_time_manager,  only : time_type
 use netcdf, only : NF90_OPEN, NF90_NOWRITE, NF90_GET_ATT, NF90_GET_VAR
 use netcdf, only : NF90_INQ_VARID, NF90_INQUIRE_VARIABLE, NF90_INQUIRE_DIMENSION
 
+! Temporarily pull from FMS
+use horiz_interp_mod, only : horiz_interp_del
+
 implicit none ; private
 
 #include <MOM_memory.h>
@@ -607,6 +610,7 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
     endif
 
   enddo ! kd
+  call horiz_interp_del(Interp)
 
 end subroutine horiz_interp_and_extrap_tracer_record
 
