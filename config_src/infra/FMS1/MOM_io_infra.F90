@@ -17,6 +17,7 @@ use mpp_io_mod,           only : mpp_get_axes, axistype, mpp_get_axis_data
 use mpp_io_mod,           only : mpp_get_fields, fieldtype
 use mpp_io_mod,           only : mpp_get_info, mpp_get_times
 use mpp_io_mod,           only : mpp_io_init
+use mpp_mod,              only : stdout_if_root=>stdout
 ! These are encoding constants.
 use mpp_io_mod,           only : APPEND_FILE=>MPP_APPEND, WRITEONLY_FILE=>MPP_WRONLY
 use mpp_io_mod,           only : OVERWRITE_FILE=>MPP_OVERWR, READONLY_FILE=>MPP_RDONLY
@@ -33,6 +34,7 @@ public :: get_file_info, get_file_fields, get_file_times, get_filename_suffix
 public :: MOM_read_data, MOM_read_vector, write_metadata, write_field
 public :: field_exists, get_field_atts, get_field_size, get_axis_data, read_field_chksum
 public :: io_infra_init, io_infra_end, MOM_namelist_file, check_namelist_error, write_version
+public :: stdout_if_root
 ! These types are inherited from underlying infrastructure code, to act as containers for
 ! information about fields and axes, respectively, and are opaque to this module.
 public :: fieldtype, axistype
