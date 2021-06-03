@@ -209,15 +209,10 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, GV, US, h, Time)
     omega = 2.0 * PI / (12.42 * 3600.0)      ! M2 Tide period
     val1 = US%m_to_Z * sin(omega * time_sec)
   else
-    N0 = US%L_to_m*US%s_to_T * sqrt((CS%rho_range / CS%rho_0) * GV%g_Earth * (US%m_to_Z * CS%H0))
+    N0 = US%L_to_m*US%s_to_T * sqrt((CS%rho_range / CS%rho_0) * (GV%g_Earth / CS%H0))
+    lambda = PI * CS%mode * CS%F_0 / (CS%H0 * N0)
     ! Two wavelengths in domain
-    plx = 4.0 * PI / G%len_lon
-    pmz = PI * CS%mode / CS%H0
-    lambda = pmz * CS%F_0 / N0
-    omega = CS%F_0 * plx / lambda
-
-    ! lambda = PI * CS%mode * CS%F_0 / (CS%H0 * N0)
-    ! omega = (4.0 * CS%H0 * N0)  / (CS%mode * G%len_lon)
+    omega = (4.0 * CS%H0 * N0)  / (CS%mode * G%len_lon)
   endif
 
   sina = sin(CS%coast_angle)
@@ -261,7 +256,7 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, GV, US, h, Time)
             enddo
           endif
         else
-          ! Not rotated yet
+          ! Baroclinic, not rotated yet
           segment%eta(I,j) = 0.0
           segment%normal_vel_bt(I,j) = 0.0
           if (segment%nudged) then
