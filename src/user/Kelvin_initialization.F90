@@ -35,13 +35,13 @@ public register_Kelvin_OBC, Kelvin_OBC_end
 !> Control structure for Kelvin wave open boundaries.
 type, public :: Kelvin_OBC_CS ; private
   integer :: mode = 0          !< Vertical mode
-  real    :: coast_angle = 0   !< Angle of coastline
-  real    :: coast_offset1 = 0 !< Longshore distance to coastal angle
-  real    :: coast_offset2 = 0 !< Longshore distance to coastal angle
-  real    :: H0 = 0            !< Bottom depth
-  real    :: F_0               !< Coriolis parameter
-  real    :: rho_range         !< Density range
-  real    :: rho_0             !< Mean density
+  real    :: coast_angle = 0   !< Angle of coastline [rad]
+  real    :: coast_offset1 = 0 !< Longshore distance to coastal angle [L ~> m]
+  real    :: coast_offset2 = 0 !< Longshore distance to coastal angle [L ~> m]
+  real    :: H0 = 0            !< Bottom depth [Z ~> m]f
+  real    :: F_0               !< Coriolis parameter [T-1 ~> s-1]
+  real    :: rho_range         !< Density range [R ~> kg m-3]
+  real    :: rho_0             !< Mean density [R ~> kg m-3]
 end type Kelvin_OBC_CS
 
 ! This include declares and sets the variable "version".
@@ -50,9 +50,10 @@ end type Kelvin_OBC_CS
 contains
 
 !> Add Kelvin wave to OBC registry.
-function register_Kelvin_OBC(param_file, CS, OBC_Reg)
+function register_Kelvin_OBC(param_file, CS, US, OBC_Reg)
   type(param_file_type),    intent(in) :: param_file !< parameter file.
   type(Kelvin_OBC_CS),      pointer    :: CS         !< Kelvin wave control structure.
+  type(unit_scale_type),    intent(in) :: US         !< A dimensional unit scaling type
   type(OBC_registry_type),  pointer    :: OBC_Reg    !< OBC registry.
 
   ! Local variables
@@ -73,31 +74,29 @@ function register_Kelvin_OBC(param_file, CS, OBC_Reg)
                  "Vertical Kelvin wave mode imposed at upstream open boundary.", &
                  default=0)
   call get_param(param_file, mdl, "F_0", CS%F_0, &
-                 default=0.0, do_not_log=.true.)
+                 default=0.0, units="s-1", scale=US%T_to_s, do_not_log=.true.)
   call get_param(param_file, mdl, "TOPO_CONFIG", config, do_not_log=.true.)
   if (trim(config) == "Kelvin") then
     call get_param(param_file, mdl, "ROTATED_COAST_OFFSET_1", CS%coast_offset1, &
                    "The distance along the southern and northern boundaries "//&
                    "at which the coasts angle in.", &
-                   units="km", default=100.0)
+                   units="km", default=100.0, scale=1.0e3*US%m_to_L)
     call get_param(param_file, mdl, "ROTATED_COAST_OFFSET_2", CS%coast_offset2, &
                    "The distance from the southern and northern boundaries "//&
                    "at which the coasts angle in.", &
-                   units="km", default=10.0)
+                   units="km", default=10.0, scale=1.0e3*US%m_to_L)
     call get_param(param_file, mdl, "ROTATED_COAST_ANGLE", CS%coast_angle, &
                    "The angle of the southern bondary beyond X=ROTATED_COAST_OFFSET.", &
                    units="degrees", default=11.3)
     CS%coast_angle = CS%coast_angle * (atan(1.0)/45.) ! Convert to radians
-    CS%coast_offset1 = CS%coast_offset1 * 1.e3          ! Convert to m
-    CS%coast_offset2 = CS%coast_offset2 * 1.e3          ! Convert to m
   endif
   if (CS%mode /= 0) then
     call get_param(param_file, mdl, "DENSITY_RANGE", CS%rho_range, &
-                   default=2.0, do_not_log=.true.)
+                   default=2.0, do_not_log=.true., scale=US%kg_m3_to_R)
     call get_param(param_file, mdl, "RHO_0", CS%rho_0, &
-                   default=1035.0, do_not_log=.true.)
+                   default=1035.0, do_not_log=.true., scale=US%kg_m3_to_R)
     call get_param(param_file, mdl, "MAXIMUM_DEPTH", CS%H0, &
-                   default=1000.0, do_not_log=.true.)
+                   default=1000.0, do_not_log=.true., scale=US%m_to_Z)
   endif
 
   ! Register the Kelvin open boundary.
@@ -122,7 +121,7 @@ subroutine Kelvin_initialize_topography(D, G, param_file, max_depth, US)
   real, dimension(G%isd:G%ied,G%jsd:G%jed), &
                                    intent(out) :: D !< Ocean bottom depth in m or Z if US is present
   type(param_file_type),           intent(in)  :: param_file !< Parameter file structure
-  real,                            intent(in)  :: max_depth !< Maximum model depth in the units of D
+  real,                            intent(in)  :: max_depth !< Maximum model depth in the units of D [Z ~> m or m]
   type(unit_scale_type), optional, intent(in)  :: US !< A dimensional unit scaling type
 
   ! Local variables
@@ -176,22 +175,27 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, GV, US, h, Time)
   type(Kelvin_OBC_CS),     pointer    :: CS   !< Kelvin wave control structure.
   type(ocean_grid_type),   intent(in) :: G    !< The ocean's grid structure.
   type(verticalGrid_type), intent(in) :: GV   !< The ocean's vertical grid structure.
-  type(unit_scale_type),   intent(in) :: US    !< A dimensional unit scaling type
+  type(unit_scale_type),   intent(in) :: US   !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in) :: h !< layer thickness [H ~> m or kg m-2].
   type(time_type),         intent(in) :: Time !< model time.
 
   ! The following variables are used to set up the transport in the Kelvin example.
-  real :: time_sec, cff
-  real :: N0           ! Brunt-Vaisala frequency [s-1]
-  real :: plx          !< Longshore wave parameter
-  real :: pmz          !< Vertical wave parameter
-  real :: lambda       !< Offshore decay scale
-  real :: omega        !< Wave frequency [s-1]
+  real :: time_sec     ! The time in the run [T ~> s]
+  real :: cff          ! The wave speed [L T-1 ~> m s-1]
+  real :: N0           ! Brunt-Vaisala frequency times a rescaling of slopes [L Z-1 T-1 ~> s-1]
+  real :: lambda       ! Offshore decay scale [L-1 ~> m-1]
+  real :: omega        ! Wave frequency [T-1 ~> s-1]
   real :: PI
   integer :: i, j, k, n, is, ie, js, je, isd, ied, jsd, jed, nz
   integer :: IsdB, IedB, JsdB, JedB
-  real    :: fac, x, y, x1, y1
-  real    :: val1, val2, sina, cosa
+  real    :: mag_SSH ! An overall magnitude of the external wave sea surface height at the coastline [Z ~> m]
+  real    :: mag_int ! An overall magnitude of the internal wave at the coastline [L2 T-2 ~> m2 s-2]
+  real    :: x1, y1  ! Various positions [L ~> m]
+  real    :: x, y    ! Various positions [L ~> m]
+  real    :: val1    ! The periodicity factor [nondim]
+  real    :: val2    ! The local wave amplitude [Z ~> m]
+  real    :: km_to_L_scale  ! A scaling factor from longitudes in km to L [L km-1 ~> 1e3]
+  real    :: sina, cosa  ! The sine and cosine of the coast angle [nondim]
   type(OBC_segment_type), pointer :: segment => NULL()
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
@@ -201,18 +205,20 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, GV, US, h, Time)
   if (.not.associated(OBC)) call MOM_error(FATAL, 'Kelvin_initialization.F90: '// &
         'Kelvin_set_OBC_data() was called but OBC type was not initialized!')
 
-  time_sec = time_type_to_real(Time)
+  time_sec = US%s_to_T*time_type_to_real(Time)
   PI = 4.0*atan(1.0)
-  fac = 1.0
+  km_to_L_scale = 1000.0*US%m_to_L
 
   if (CS%mode == 0) then
-    omega = 2.0 * PI / (12.42 * 3600.0)      ! M2 Tide period
-    val1 = US%m_to_Z * sin(omega * time_sec)
+    mag_SSH = 1.0*US%m_to_Z
+    omega = 2.0 * PI / (12.42 * 3600.0*US%s_to_T)      ! M2 Tide period
+    val1 = sin(omega * time_sec)
   else
-    N0 = US%L_to_m*US%s_to_T * sqrt((CS%rho_range / CS%rho_0) * (GV%g_Earth / CS%H0))
+    mag_int = 1.0*US%m_s_to_L_T**2
+    N0 = sqrt((CS%rho_range / CS%rho_0) * (GV%g_Earth / CS%H0))
     lambda = PI * CS%mode * CS%F_0 / (CS%H0 * N0)
     ! Two wavelengths in domain
-    omega = (4.0 * CS%H0 * N0)  / (CS%mode * G%len_lon)
+    omega = (4.0 * CS%H0 * N0)  / (CS%mode * US%m_to_L*G%len_lon)
   endif
 
   sina = sin(CS%coast_angle)
@@ -225,22 +231,23 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, GV, US, h, Time)
     if (segment%direction == OBC_DIRECTION_N) cycle
 
     ! This should be somewhere else...
-    segment%Velocity_nudging_timescale_in = 1.0/(0.3*86400)
+    !### This is supposed to be a timescale [T ~> s] but appears to be a rate in [s-1].
+    segment%Velocity_nudging_timescale_in = US%s_to_T * 1.0/(0.3*86400)
 
     if (segment%direction == OBC_DIRECTION_W) then
       IsdB = segment%HI%IsdB ; IedB = segment%HI%IedB
       jsd = segment%HI%jsd ; jed = segment%HI%jed
       JsdB = segment%HI%JsdB ; JedB = segment%HI%JedB
       do j=jsd,jed ; do I=IsdB,IedB
-        x1 = 1000. * G%geoLonCu(I,j)
-        y1 = 1000. * G%geoLatCu(I,j)
+        x1 = km_to_L_scale * G%geoLonCu(I,j)
+        y1 = km_to_L_scale * G%geoLatCu(I,j)
         x = (x1 - CS%coast_offset1) * cosa + y1 * sina
-        y = - (x1 - CS%coast_offset1) * sina + y1 * cosa
+        y = -(x1 - CS%coast_offset1) * sina + y1 * cosa
         if (CS%mode == 0) then
           ! Use inside bathymetry
           cff = sqrt(GV%g_Earth * G%bathyT(i+1,j) )
-          val2 = fac * exp(- US%T_to_s*CS%F_0 * US%m_to_L*y / cff)
-          segment%eta(I,j) = val2 * cos(omega * time_sec)
+          val2 = mag_SSH * exp(- CS%F_0 * y / cff)
+          segment%eta(I,j) = GV%Z_to_H*val2 * cos(omega * time_sec)
           segment%normal_vel_bt(I,j) = (val2 * (val1 * cff * cosa / &
                  (G%bathyT(i+1,j) )) )
           if (segment%nudged) then
@@ -261,14 +268,14 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, GV, US, h, Time)
           segment%normal_vel_bt(I,j) = 0.0
           if (segment%nudged) then
             do k=1,nz
-              segment%nudged_normal_vel(I,j,k) = US%m_s_to_L_T * fac * lambda / CS%F_0 * &
-                   exp(- lambda * y) * cos(PI * CS%mode * (k - 0.5) / nz) * &
+              segment%nudged_normal_vel(I,j,k) = mag_int * lambda / CS%F_0 * &
+                   exp(-lambda * y) * cos(PI * CS%mode * (k - 0.5) / nz) * &
                    cos(omega * time_sec)
             enddo
           elseif (segment%specified) then
             do k=1,nz
-              segment%normal_vel(I,j,k) = US%m_s_to_L_T * fac * lambda / CS%F_0 * &
-                   exp(- lambda * y) * cos(PI * CS%mode * (k - 0.5) / nz) * &
+              segment%normal_vel(I,j,k) = mag_int * lambda / CS%F_0 * &
+                   exp(-lambda * y) * cos(PI * CS%mode * (k - 0.5) / nz) * &
                    cos(omega * time_sec)
               segment%normal_trans(I,j,k) = segment%normal_vel(I,j,k) * h(i+1,j,k) * G%dyCu(I,j)
             enddo
@@ -277,12 +284,12 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, GV, US, h, Time)
       enddo ; enddo
       if (associated(segment%tangential_vel)) then
         do J=JsdB+1,JedB-1 ; do I=IsdB,IedB
-          x1 = 1000. * G%geoLonBu(I,J)
-          y1 = 1000. * G%geoLatBu(I,J)
+          x1 = km_to_L_scale * G%geoLonBu(I,J)
+          y1 = km_to_L_scale * G%geoLatBu(I,J)
           x = (x1 - CS%coast_offset1) * cosa + y1 * sina
           y = - (x1 - CS%coast_offset1) * sina + y1 * cosa
-          cff =sqrt(GV%g_Earth * G%bathyT(i+1,j) )
-          val2 = fac * exp(- US%T_to_s*CS%F_0 * US%m_to_L*y / cff)
+          cff = sqrt(GV%g_Earth * G%bathyT(i+1,j) )
+          val2 = mag_SSH * exp(- CS%F_0 * y / cff)
           if (CS%mode == 0) then ; do k=1,nz
             segment%tangential_vel(I,J,k) = (val1 * val2 * cff * sina) / &
                ( 0.5*(G%bathyT(i+1,j+1) +  G%bathyT(i+1,j) ) )
@@ -294,24 +301,24 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, GV, US, h, Time)
       isd = segment%HI%isd ; ied = segment%HI%ied
       JsdB = segment%HI%JsdB ; JedB = segment%HI%JedB
       do J=JsdB,JedB ; do i=isd,ied
-        x1 = 1000. * G%geoLonCv(i,J)
-        y1 = 1000. * G%geoLatCv(i,J)
+        x1 = km_to_L_scale * G%geoLonCv(i,J)
+        y1 = km_to_L_scale * G%geoLatCv(i,J)
         x = (x1 - CS%coast_offset1) * cosa + y1 * sina
         y = - (x1 - CS%coast_offset1) * sina + y1 * cosa
         if (CS%mode == 0) then
           cff = sqrt(GV%g_Earth * G%bathyT(i,j+1) )
-          val2 = fac * exp(- 0.5 * (G%CoriolisBu(I,J) + G%CoriolisBu(I-1,J)) * US%m_to_L*y / cff)
-          segment%eta(I,j) = val2 * cos(omega * time_sec)
-          segment%normal_vel_bt(I,j) = US%L_T_to_m_s * (val1 * cff * sina / &
+          val2 = mag_SSH * exp(- 0.5 * (G%CoriolisBu(I,J) + G%CoriolisBu(I-1,J)) * y / cff)
+          segment%eta(I,j) = GV%Z_to_H*val2 * cos(omega * time_sec)
+          segment%normal_vel_bt(I,j) = (val1 * cff * sina / &
                  (G%bathyT(i,j+1) )) * val2
           if (segment%nudged) then
             do k=1,nz
-              segment%nudged_normal_vel(I,j,k) = US%L_T_to_m_s * (val1 * cff * sina / &
+              segment%nudged_normal_vel(I,j,k) = (val1 * cff * sina / &
                      (G%bathyT(i,j+1) )) * val2
             enddo
           elseif (segment%specified) then
             do k=1,nz
-              segment%normal_vel(I,j,k) = US%L_T_to_m_s * (val1 * cff * sina / &
+              segment%normal_vel(I,j,k) = (val1 * cff * sina / &
                      (G%bathyT(i,j+1) )) * val2
               segment%normal_trans(i,J,k) = segment%normal_vel(i,J,k) * h(i,j+1,k) * G%dxCv(i,J)
             enddo
@@ -322,12 +329,12 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, GV, US, h, Time)
           segment%normal_vel_bt(i,J) = 0.0
           if (segment%nudged) then
             do k=1,nz
-              segment%nudged_normal_vel(i,J,k) = US%m_s_to_L_T*fac * lambda / CS%F_0 * &
+              segment%nudged_normal_vel(i,J,k) = mag_int * lambda / CS%F_0 * &
                    exp(- lambda * y) * cos(PI * CS%mode * (k - 0.5) / nz) * cosa
             enddo
           elseif (segment%specified) then
             do k=1,nz
-              segment%normal_vel(i,J,k) = US%m_s_to_L_T*fac * lambda / CS%F_0 * &
+              segment%normal_vel(i,J,k) = mag_int * lambda / CS%F_0 * &
                    exp(- lambda * y) * cos(PI * CS%mode * (k - 0.5) / nz) * cosa
               segment%normal_trans(i,J,k) = segment%normal_vel(i,J,k) * h(i,j+1,k) * G%dxCv(i,J)
             enddo
@@ -336,12 +343,12 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, GV, US, h, Time)
       enddo ; enddo
       if (associated(segment%tangential_vel)) then
         do J=JsdB,JedB ; do I=IsdB+1,IedB-1
-          x1 = 1000. * G%geoLonBu(I,J)
-          y1 = 1000. * G%geoLatBu(I,J)
+          x1 = km_to_L_scale * G%geoLonBu(I,J)
+          y1 = km_to_L_scale * G%geoLatBu(I,J)
           x = (x1 - CS%coast_offset1) * cosa + y1 * sina
           y = - (x1 - CS%coast_offset1) * sina + y1 * cosa
           cff = sqrt(GV%g_Earth * G%bathyT(i,j+1) )
-          val2 = fac * exp(- 0.5 * (G%CoriolisBu(I,J) + G%CoriolisBu(I-1,J)) * US%m_to_L*y / cff)
+          val2 = mag_SSH * exp(- 0.5 * (G%CoriolisBu(I,J) + G%CoriolisBu(I-1,J)) * y / cff)
           if (CS%mode == 0) then ; do k=1,nz
             segment%tangential_vel(I,J,k) = ((val1 * val2 * cff * sina) / &
                 ( 0.5*((G%bathyT(i+1,j+1)) + G%bathyT(i,j+1))) )
