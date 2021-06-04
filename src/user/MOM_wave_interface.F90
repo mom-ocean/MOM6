@@ -460,19 +460,15 @@ subroutine MOM_wave_interface_init(time, G, GV, US, param_file, CS, diag )
        CS%diag%axesCvL,Time,'3d Stokes drift (y)', 'm s-1', conversion=US%L_T_to_m_s)
   CS%id_3dstokes_x = register_diag_field('ocean_model','3d_stokes_x', &
        CS%diag%axesCuL,Time,'3d Stokes drift (x)', 'm s-1', conversion=US%L_T_to_m_s)
-<<<<<<< HEAD
   CS%id_ddt_3dstokes_y = register_diag_field('ocean_model','dvdt_Stokes', &
-       CS%diag%axesCvL,Time,'d/dt Stokes drift (meridional)','m s-2')
+       CS%diag%axesCvL,Time,'d/dt Stokes drift (meridional)','m s-2')!Needs conversion
   CS%id_ddt_3dstokes_x = register_diag_field('ocean_model','dudt_Stokes', &
-       CS%diag%axesCuL,Time,'d/dt Stokes drift (zonal)','m s-2')
+       CS%diag%axesCuL,Time,'d/dt Stokes drift (zonal)','m s-2')!Needs conversion
   CS%id_PFv_Stokes = register_diag_field('ocean_model','PFv_Stokes', &
        CS%diag%axesCvL,Time,'PF from Stokes drift (meridional)','m s-2')!Needs conversion
   CS%id_PFu_Stokes = register_diag_field('ocean_model','PFu_Stokes', &
        CS%diag%axesCuL,Time,'PF from Stokes drift (zonal)','m s-2')!Needs conversion
-  CS%id_La_turb = register_diag_field('ocean_model','La_turbulent',&
-=======
   CS%id_La_turb = register_diag_field('ocean_model','La_turbulent', &
->>>>>>> dev/gfdl
        CS%diag%axesT1,Time,'Surface (turbulent) Langmuir number','nondim')
 
 end subroutine MOM_wave_interface_init
