@@ -38,7 +38,7 @@ type, public :: Kelvin_OBC_CS ; private
   real    :: coast_angle = 0   !< Angle of coastline [rad]
   real    :: coast_offset1 = 0 !< Longshore distance to coastal angle [L ~> m]
   real    :: coast_offset2 = 0 !< Longshore distance to coastal angle [L ~> m]
-  real    :: H0 = 0            !< Bottom depth [Z ~> m]f
+  real    :: H0 = 0            !< Bottom depth [Z ~> m]
   real    :: F_0               !< Coriolis parameter [T-1 ~> s-1]
   real    :: rho_range         !< Density range [R ~> kg m-3]
   real    :: rho_0             !< Mean density [R ~> kg m-3]
