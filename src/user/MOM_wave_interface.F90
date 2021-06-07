@@ -30,7 +30,8 @@ public Update_Stokes_Drift ! Public interface to update the Stokes drift profile
                            ! called in step_mom.
 public get_Langmuir_Number ! Public interface to compute Langmuir number called from
                            ! ePBL or KPP routines.
-public Stokes_PGF ! Public interface to compute Stokes-shear modifications to pressure gradient force
+public Stokes_PGF_Add_FD ! Public interface to compute Stokes-shear modifications to pressure gradient force
+                         ! using an additive, finite difference method
 public StokesMixing ! NOT READY - Public interface to add down-Stokes gradient
                     ! momentum mixing (e.g. the approach of Harcourt 2013/2015)
 public CoriolisStokes ! NOT READY - Public interface to add Coriolis-Stokes acceleration
@@ -54,7 +55,7 @@ type, public :: wave_parameters_CS ; private
                                    !! True if Stokes vortex force is used
   logical, public :: Stokes_PGF    !< Developmental:
                                    !! True if Stokes shear pressure Gradient force is used
-  logical, public :: Passive_Stokes_PGF !< Keeps Stokes_PGF on, but doesn't affect dynamics 
+  logical, public :: Passive_Stokes_PGF !< Keeps Stokes_PGF on, but doesn't affect dynamics
   logical, public :: Stokes_DDT    !< Developmental:
                                    !! True if Stokes d/dt is used
   real, allocatable, dimension(:,:,:), public :: &
@@ -461,9 +462,9 @@ subroutine MOM_wave_interface_init(time, G, GV, US, param_file, CS, diag )
   CS%id_3dstokes_x = register_diag_field('ocean_model','3d_stokes_x', &
        CS%diag%axesCuL,Time,'3d Stokes drift (x)', 'm s-1', conversion=US%L_T_to_m_s)
   CS%id_ddt_3dstokes_y = register_diag_field('ocean_model','dvdt_Stokes', &
-       CS%diag%axesCvL,Time,'d/dt Stokes drift (meridional)','m s-2')!Needs conversion
+       CS%diag%axesCvL,Time,'d/dt Stokes drift (meridional)','m s-2')
   CS%id_ddt_3dstokes_x = register_diag_field('ocean_model','dudt_Stokes', &
-       CS%diag%axesCuL,Time,'d/dt Stokes drift (zonal)','m s-2')!Needs conversion
+       CS%diag%axesCuL,Time,'d/dt Stokes drift (zonal)','m s-2')
   CS%id_PFv_Stokes = register_diag_field('ocean_model','PFv_Stokes', &
        CS%diag%axesCvL,Time,'PF from Stokes drift (meridional)','m s-2')!Needs conversion
   CS%id_PFu_Stokes = register_diag_field('ocean_model','PFu_Stokes', &
@@ -565,14 +566,15 @@ subroutine Update_Stokes_Drift(G, GV, US, CS, h, ustar, dt)
   real    :: La       ! The local Langmuir number [nondim]
   integer :: ii, jj, kk, b, iim1, jjm1
   real    :: idt ! 1 divided by the time step
-  
+
   one_cm = 0.01*US%m_to_Z
   min_level_thick_avg = 1.e-3*US%m_to_Z
   idt = 1.0/dt
 
+  ! Getting Stokes drift profile from previous step
   CS%ddt_us_x(:,:,:) = CS%US_x(:,:,:)
   CS%ddt_us_y(:,:,:) = CS%US_y(:,:,:)
-  
+
   ! 1. If Test Profile Option is chosen
   !    Computing mid-point value from surface value and decay wavelength
   if (CS%WaveMethod==TESTPROF) then
@@ -810,9 +812,11 @@ subroutine Update_Stokes_Drift(G, GV, US, CS, h, ustar, dt)
     enddo
   enddo
 
+  ! Finding tendency of Stokes drift over the time step to apply
+  !  as an acceleration to the models current.
   CS%ddt_us_x(:,:,:) = (CS%US_x(:,:,:) - CS%ddt_us_x(:,:,:)) * idt
   CS%ddt_us_y(:,:,:) = (CS%US_y(:,:,:) - CS%ddt_us_y(:,:,:)) * idt
-  
+
   ! Output any desired quantities
   if (CS%id_surfacestokes_y>0) &
     call post_data(CS%id_surfacestokes_y, CS%us0_y, CS%diag)
@@ -1422,144 +1426,6 @@ subroutine StokesMixing(G, GV, dt, h, u, v, Waves )
 
 end subroutine StokesMixing
 
-!> Computes tendency due to Stokes pressure gradient force
-subroutine Stokes_PGF(G, GV, h, u, v, PFu_Stokes, PFv_Stokes, CS )
-  type(ocean_grid_type), &
-       intent(in)    :: G     !< Ocean grid
-  type(verticalGrid_type), &
-       intent(in)    :: GV    !< Ocean vertical grid
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),&
-       intent(in)    :: h       !< Layer thicknesses [H ~> m or kg m-2]
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
-       intent(in) :: u          !< Velocity i-component [m s-1]
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
-       intent(in) :: v          !< Velocity j-component [m s-1]
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
-       intent(out) :: PFu_Stokes !< PGF Stokes-shear i-component [L T-2]
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
-       intent(out) :: PFv_Stokes !< PGF Stokes-shear j-component [m s-1]
-  type(Wave_parameters_CS), &
-       pointer       :: CS !< Surface wave related control structure.
-
-  ! Local variables
-  real :: P_Stokes_l, P_Stokes_r ! Contribution of Stokes shear to pressure (left/right index) [L2 T-2 ~> m2 s-2]
-  real :: u_l, u_r, v_l, v_r ! Velocity components
-  real :: dUs_dz_l, dUs_dz_r ! Vertical derivative of zonal Stokes drift (left/right index) [T-1 ~> s-1]
-  real :: dVs_dz_l, dVs_dz_r ! Vertical derivative of meridional Stokes drift (left/right index) [T-1 ~> s-1]
-  real :: z_top_l, z_top_r   ! The height of the top of the cell (left/right index) [Z ~> m].
-  real :: z_mid_l, z_mid_r   ! The height of the middle of the cell (left/right index) [Z ~> m].
-  real :: h_l, h_r   ! The thickness of the cell (left/right index) [Z ~> m].
-  real :: wavenum,TwoKexpL, TwoKexpR !TMP DELETE THIS
-  integer :: i,j,k
-
-  ! Comput the Stokes contribution to the pressure gradient force
-
-  PFu_Stokes(:,:,:) = 0.0
-  PFv_Stokes(:,:,:) = 0.0
-
-  wavenum = (2.*3.14)/50.
-  do j = G%jsc, G%jec ; do I = G%iscB, G%iecB
-    if (G%mask2dCu(I,j)>0.5) then
-      z_top_l = 0.0
-      z_top_r = 0.0
-      P_Stokes_l = 0.0
-      P_Stokes_r = 0.0
-      do k = 1, G%ke
-        h_l = h(i,j,k)
-        h_r = h(i+1,j,k)
-        z_mid_l = z_top_l - 0.5*h_l
-        z_mid_r = z_top_r - 0.5*h_r
-        TwoKexpL = (2.*wavenum)*exp(2*wavenum*z_mid_l)
-        TwoKexpR = (2.*wavenum)*exp(2*wavenum*z_mid_r)
-        !UL -> I-1 & I, j
-        !UR -> I & I+1, j 
-        !VL -> i, J-1 & J
-        !VR -> i+1, J-1 & J
-        dUs_dz_l = TwoKexpL*0.5 * &
-                   (CS%Us0_x(I-1,j)*G%mask2dCu(I-1,j) + &
-                   CS%Us0_x(I,j)*G%mask2dCu(I,j))
-        dUs_dz_r = TwoKexpR*0.5 * &
-                   (CS%Us0_x(I,j)*G%mask2dCu(I,j) + &
-                   CS%Us0_x(I+1,j)*G%mask2dCu(I+1,j))
-        dVs_dz_l = TwoKexpL*0.5 * &
-                   (CS%Us0_y(i,J-1)*G%mask2dCv(i,J-1) + &
-                   CS%Us0_y(i,J)*G%mask2dCv(i,J))
-        dVs_dz_r = TwoKexpR*0.5 * &
-                   (CS%Us0_y(i+1,J-1)*G%mask2dCv(i+1,J-1) + &
-                    CS%Us0_y(i+1,J)*G%mask2dCv(i+1,J))
-        u_l = 0.5*(u(I-1,j,k)*G%mask2dCu(I-1,j) + &
-                   u(I,j,k)*G%mask2dCu(I,j))
-        u_r = 0.5*(u(I,j,k)*G%mask2dCu(I,j) + &
-                   u(I+1,j,k)*G%mask2dCu(I+1,j))
-        v_l = 0.5*(v(i,J-1,k)*G%mask2dCv(i,J-1) + &
-                   v(i,J,k)*G%mask2dCv(i,J))
-        v_r = 0.5*(v(i+1,J-1,k)*G%mask2dCv(i+1,J-1) + &
-                   v(i+1,J,k)*G%mask2dCv(i+1,J))
-        if (G%mask2dT(i,j)>0.5) &
-             P_Stokes_l = P_Stokes_l + h_l*(dUs_dz_l*u_l+dVs_dz_l*v_l)
-        if (G%mask2dT(i+1,j)>0.5) &
-             P_Stokes_r = P_Stokes_r + h_r*(dUs_dz_r*u_r+dVs_dz_r*v_r)
-        PFu_Stokes(I,j,k) = (P_Stokes_r - P_Stokes_l)*G%IdxCu(I,j)
-        z_top_l = z_top_l - h_l
-        z_top_r = z_top_r - h_r
-      enddo
-    endif
-  enddo ;  enddo
-  do J = G%jscB, G%jecB ; do i = G%isc, G%iec
-    if (G%mask2dCv(i,J)>0.5) then
-      z_top_l = 0.0
-      z_top_r = 0.0
-      P_Stokes_l = 0.0
-      P_Stokes_r = 0.0
-      do k = 1, G%ke
-        h_l = h(i,j,k)
-        h_r = h(i,j+1,k)
-        z_mid_l = z_top_l - 0.5*h_l
-        z_mid_r = z_top_r - 0.5*h_r
-        TwoKexpL = (2.*wavenum)*exp(2*wavenum*z_mid_l)
-        TwoKexpR = (2.*wavenum)*exp(2*wavenum*z_mid_r)
-        !UL -> I-1 & I, j
-        !UR -> I-1 & I, j+1
-        !VL -> i, J & J-1
-        !VR -> i, J & J+1
-        dUs_dz_l = TwoKexpL*0.5 * &
-                   (CS%Us0_x(I-1,j)*G%mask2dCu(I-1,j) + &
-                   CS%Us0_x(I,j)*G%mask2dCu(I,j))
-        dUs_dz_r = TwoKexpR*0.5 * &
-                   (CS%Us0_x(I-1,j+1)*G%mask2dCu(I-1,j+1) + &
-                   CS%Us0_x(I,j+1)*G%mask2dCu(I,j+1))
-        dVs_dz_l = TwoKexpL*0.5 * &
-                   (CS%Us0_y(i,J-1)*G%mask2dCv(i,J-1) + &
-                   CS%Us0_y(i,J)*G%mask2dCv(i,J))
-        dVs_dz_r = TwoKexpR*0.5 * &
-                   (CS%Us0_y(i,J)*G%mask2dCv(i,J) + &
-                    CS%Us0_y(i,J+1)*G%mask2dCv(i,J+1))
-        u_l = 0.5*(u(I-1,j,k)*G%mask2dCu(I-1,j) + &
-                   u(I,j,k)*G%mask2dCu(I,j))
-        u_r = 0.5*(u(I-1,j+1,k)*G%mask2dCu(I-1,j+1) + &
-                   u(I,j+1,k)*G%mask2dCu(I,j+1))
-        v_l = 0.5*(v(i,J-1,k)*G%mask2dCv(i,J-1) + &
-                   v(i,J,k)*G%mask2dCv(i,J))
-        v_r = 0.5*(v(i,J,k)*G%mask2dCv(i,J) + &
-                   v(i,J+1,k)*G%mask2dCv(i,J+1))
-        if (G%mask2dT(i,j)>0.5) &
-             P_Stokes_l = P_Stokes_l + h_l*(dUs_dz_l*u_l+dVs_dz_l*v_l)
-        if (G%mask2dT(i,j+1)>0.5) &
-             P_Stokes_r = P_Stokes_r + h_r*(dUs_dz_r*u_r+dVs_dz_r*v_r)
-        PFv_Stokes(i,J,k) = (P_Stokes_r - P_Stokes_l)*G%IdyCv(i,J)
-        z_top_l = z_top_l - h_l
-        z_top_r = z_top_r - h_r
-      enddo
-    endif
-  enddo ; enddo
-
-  if (CS%id_PFv_Stokes>0) &
-    call post_data(CS%id_PFv_Stokes, PFv_Stokes, CS%diag)
-  if (CS%id_PFu_Stokes>0) &
-    call post_data(CS%id_PFu_Stokes, PFu_Stokes, CS%diag)
-
-end subroutine Stokes_PGF
-
 !> Solver to add Coriolis-Stokes to model
 !! Still in development and not meant for general use.
 !! Can be activated (with code intervention) for LES comparison
@@ -1586,7 +1452,7 @@ subroutine CoriolisStokes(G, GV, dt, h, u, v, WAVES, US)
   integer :: i,j,k
 
   do k = 1, GV%ke
-    do j = G%jsc, G%jec
+do j = G%jsc, G%jec
       do I = G%iscB, G%iecB
         DVel = 0.25*(WAVES%us_y(i,j+1,k)+WAVES%us_y(i-1,j+1,k))*G%CoriolisBu(i,j+1) + &
                0.25*(WAVES%us_y(i,j,k)+WAVES%us_y(i-1,j,k))*G%CoriolisBu(i,j)
@@ -1605,6 +1471,149 @@ subroutine CoriolisStokes(G, GV, dt, h, u, v, WAVES, US)
     enddo
   enddo
 end subroutine CoriolisStokes
+
+
+!> Computes tendency due to Stokes pressure gradient force using an
+!!  additive finite difference method
+subroutine Stokes_PGF_Add_FD(G, GV, h, u, v, PFu_Stokes, PFv_Stokes, CS )
+  type(ocean_grid_type), &
+       intent(in)    :: G     !< Ocean grid
+  type(verticalGrid_type), &
+       intent(in)    :: GV    !< Ocean vertical grid
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),&
+       intent(in)    :: h       !< Layer thicknesses [H ~> m or kg m-2]
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
+       intent(in) :: u          !< Velocity i-component [m s-1]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
+       intent(in) :: v          !< Velocity j-component [m s-1]
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
+       intent(out) :: PFu_Stokes !< PGF Stokes-shear i-component [L T-2]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
+       intent(out) :: PFv_Stokes !< PGF Stokes-shear j-component [m s-1]
+  type(Wave_parameters_CS), &
+       pointer       :: CS !< Surface wave related control structure.
+
+  ! Local variables
+  real :: P_Stokes_l, P_Stokes_r ! Contribution of Stokes shear to pressure (left/right index) [L2 T-2 ~> m2 s-2]
+  real :: u_l, u_r, v_l, v_r ! Velocity components
+  real :: dUs_dz_l, dUs_dz_r ! Vertical derivative of zonal Stokes drift (left/right index) [T-1 ~> s-1]
+  real :: dVs_dz_l, dVs_dz_r ! Vertical derivative of meridional Stokes drift (left/right index) [T-1 ~> s-1]
+  real :: z_top_l, z_top_r   ! The height of the top of the cell (left/right index) [Z ~> m].
+  real :: z_mid_l, z_mid_r   ! The height of the middle of the cell (left/right index) [Z ~> m].
+  real :: h_l, h_r   ! The thickness of the cell (left/right index) [Z ~> m].
+  real :: TwoKexpL, TwoKexpR
+  integer :: i,j,k,l
+
+  ! Compute the Stokes contribution to the pressure gradient force
+  PFu_Stokes(:,:,:) = 0.0
+  PFv_Stokes(:,:,:) = 0.0
+
+  do j = G%jsc, G%jec ; do I = G%iscB, G%iecB
+    if (G%mask2dCu(I,j)>0.5) then
+
+      z_top_l = 0.0
+      z_top_r = 0.0
+      P_Stokes_l = 0.0
+      P_Stokes_r = 0.0
+      do k = 1, G%ke
+        h_l = h(i,j,k)
+        h_r = h(i+1,j,k)
+        z_mid_l = z_top_l - 0.5*h_l
+        z_mid_r = z_top_r - 0.5*h_r
+        do l = 1, CS%numbands
+          TwoKexpL = (2.*CS%WaveNum_Cen(l))*exp(2*CS%WaveNum_Cen(l)*z_mid_l)
+          TwoKexpR = (2.*CS%WaveNum_Cen(l))*exp(2*CS%WaveNum_Cen(l)*z_mid_r)
+          !UL -> I-1 & I, j
+          !UR -> I & I+1, j
+          !VL -> i, J-1 & J
+          !VR -> i+1, J-1 & J
+          dUs_dz_l = TwoKexpL*0.5 * &
+                     (CS%Stkx0(I-1,j,l)*G%mask2dCu(I-1,j) + &
+                      CS%Stkx0(I,j,l)*G%mask2dCu(I,j))
+          dUs_dz_r = TwoKexpR*0.5 * &
+                     (CS%Stkx0(I,j,l)*G%mask2dCu(I,j) + &
+                      CS%Stkx0(I+1,j,l)*G%mask2dCu(I+1,j))
+          dVs_dz_l = TwoKexpL*0.5 * &
+                     (CS%Stky0(i,J-1,l)*G%mask2dCv(i,J-1) + &
+                      CS%Stky0(i,J,l)*G%mask2dCv(i,J))
+          dVs_dz_r = TwoKexpR*0.5 * &
+                     (CS%Stky0(i+1,J-1,l)*G%mask2dCv(i+1,J-1) + &
+                      CS%Stky0(i+1,J,l)*G%mask2dCv(i+1,J))
+          u_l = 0.5*(u(I-1,j,k)*G%mask2dCu(I-1,j) + &
+                     u(I,j,k)*G%mask2dCu(I,j))
+          u_r = 0.5*(u(I,j,k)*G%mask2dCu(I,j) + &
+                     u(I+1,j,k)*G%mask2dCu(I+1,j))
+          v_l = 0.5*(v(i,J-1,k)*G%mask2dCv(i,J-1) + &
+                     v(i,J,k)*G%mask2dCv(i,J))
+          v_r = 0.5*(v(i+1,J-1,k)*G%mask2dCv(i+1,J-1) + &
+                     v(i+1,J,k)*G%mask2dCv(i+1,J))
+          if (G%mask2dT(i,j)>0.5) &
+               P_Stokes_l = P_Stokes_l + h_l*(dUs_dz_l*u_l+dVs_dz_l*v_l)
+          if (G%mask2dT(i+1,j)>0.5) &
+               P_Stokes_r = P_Stokes_r + h_r*(dUs_dz_r*u_r+dVs_dz_r*v_r)
+          PFu_Stokes(I,j,k) = PFu_Stokes(I,j,k) + (P_Stokes_r - P_Stokes_l)*G%IdxCu(I,j)
+        enddo
+        z_top_l = z_top_l - h_l
+        z_top_r = z_top_r - h_r
+      enddo
+    endif
+  enddo ;  enddo
+  do J = G%jscB, G%jecB ; do i = G%isc, G%iec
+    if (G%mask2dCv(i,J)>0.5) then
+      z_top_l = 0.0
+      z_top_r = 0.0
+      P_Stokes_l = 0.0
+      P_Stokes_r = 0.0
+      do k = 1, G%ke
+        h_l = h(i,j,k)
+        h_r = h(i,j+1,k)
+        z_mid_l = z_top_l - 0.5*h_l
+        z_mid_r = z_top_r - 0.5*h_r
+        do l = 1, CS%numbands
+          TwoKexpL = (2.*CS%WaveNum_Cen(l))*exp(2*CS%WaveNum_Cen(l)*z_mid_l)
+          TwoKexpR = (2.*CS%WaveNum_Cen(l))*exp(2*CS%WaveNum_Cen(l)*z_mid_r)
+          !UL -> I-1 & I, j
+          !UR -> I-1 & I, j+1
+          !VL -> i, J & J-1
+          !VR -> i, J & J+1
+          dUs_dz_l = TwoKexpL*0.5 * &
+                     (CS%Stkx0(I-1,j,l)*G%mask2dCu(I-1,j) + &
+                     CS%Stkx0(I,j,l)*G%mask2dCu(I,j))
+          dUs_dz_r = TwoKexpR*0.5 * &
+                     (CS%Stkx0(I-1,j+1,l)*G%mask2dCu(I-1,j+1) + &
+                     CS%Stkx0(I,j+1,l)*G%mask2dCu(I,j+1))
+          dVs_dz_l = TwoKexpL*0.5 * &
+                     (CS%Stky0(i,J-1,l)*G%mask2dCv(i,J-1) + &
+                     CS%Stky0(i,J,l)*G%mask2dCv(i,J))
+          dVs_dz_r = TwoKexpR*0.5 * &
+                     (CS%Stky0(i,J,l)*G%mask2dCv(i,J) + &
+                      CS%Stky0(i,J+1,l)*G%mask2dCv(i,J+1))
+          u_l = 0.5*(u(I-1,j,k)*G%mask2dCu(I-1,j) + &
+                     u(I,j,k)*G%mask2dCu(I,j))
+          u_r = 0.5*(u(I-1,j+1,k)*G%mask2dCu(I-1,j+1) + &
+                     u(I,j+1,k)*G%mask2dCu(I,j+1))
+          v_l = 0.5*(v(i,J-1,k)*G%mask2dCv(i,J-1) + &
+                     v(i,J,k)*G%mask2dCv(i,J))
+          v_r = 0.5*(v(i,J,k)*G%mask2dCv(i,J) + &
+                     v(i,J+1,k)*G%mask2dCv(i,J+1))
+          if (G%mask2dT(i,j)>0.5) &
+               P_Stokes_l = P_Stokes_l + h_l*(dUs_dz_l*u_l+dVs_dz_l*v_l)
+          if (G%mask2dT(i,j+1)>0.5) &
+               P_Stokes_r = P_Stokes_r + h_r*(dUs_dz_r*u_r+dVs_dz_r*v_r)
+          PFv_Stokes(i,J,k) = PFv_Stokes(i,J,k) + (P_Stokes_r - P_Stokes_l)*G%IdyCv(i,J)
+        enddo
+        z_top_l = z_top_l - h_l
+        z_top_r = z_top_r - h_r
+      enddo
+    endif
+  enddo ; enddo
+
+  if (CS%id_PFv_Stokes>0) &
+    call post_data(CS%id_PFv_Stokes, PFv_Stokes, CS%diag)
+  if (CS%id_PFu_Stokes>0) &
+    call post_data(CS%id_PFu_Stokes, PFu_Stokes, CS%diag)
+
+end subroutine Stokes_PGF_Add_FD
 
 !> Computes wind speed from ustar_air based on COARE 3.5 Cd relationship
 !! Probably doesn't belong in this module, but it is used here to estimate
