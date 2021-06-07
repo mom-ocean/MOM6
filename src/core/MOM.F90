@@ -656,10 +656,10 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
   else ! not do_dyn.
     if (CS%UseWaves) then ! Diagnostics are not enabled in this call.
       call Update_Stokes_Drift(G, GV, US, Waves, h, fluxes%ustar, dt)
-      if (Waves%Stokes_DDT) then
-        u(:,:,:) = u(:,:,:) + Waves%ddt_us_x(:,:,:)*dt
-        v(:,:,:) = v(:,:,:) + Waves%ddt_us_y(:,:,:)*dt
-      endif
+      !if (Waves%Stokes_DDT) then
+      !  u(:,:,:) = u(:,:,:) + Waves%ddt_us_x(:,:,:)*dt
+      !  v(:,:,:) = v(:,:,:) + Waves%ddt_us_y(:,:,:)*dt
+      !endif
     endif
   endif
 
