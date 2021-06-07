@@ -1632,6 +1632,52 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces_in,
 
   endif
 
+  ! Set up the restarts.
+
+  call restart_init(param_file, CS%restart_CSp, "Shelf.res")
+  call register_restart_field(ISS%mass_shelf, "shelf_mass", .true., CS%restart_CSp, &
+                              "Ice shelf mass", "kg m-2")
+  call register_restart_field(ISS%area_shelf_h, "shelf_area", .true., CS%restart_CSp, &
+                              "Ice shelf area in cell", "m2")
+  call register_restart_field(ISS%h_shelf, "h_shelf", .true., CS%restart_CSp, &
+                              "ice sheet/shelf thickness", "m")
+  if (PRESENT(sfc_state_in)) then
+    if (allocated(sfc_state%taux_shelf) .and. allocated(sfc_state%tauy_shelf)) then
+      u_desc = var_desc("taux_shelf", "Pa", "the zonal stress on the ocean under ice shelves", &
+            hor_grid='Cu',z_grid='1')
+      v_desc = var_desc("tauy_shelf", "Pa", "the meridional stress on the ocean under ice shelves", &
+            hor_grid='Cv',z_grid='1')
+      call register_restart_pair(sfc_state%taux_shelf, sfc_state%tauy_shelf, u_desc, v_desc, &
+            .false., CS%restart_CSp)
+    endif
+  endif
+
+  call register_restart_field(US%m_to_Z_restart, "m_to_Z", .false., CS%restart_CSp, &
+                              "Height unit conversion factor", "Z meter-1")
+  call register_restart_field(US%m_to_L_restart, "m_to_L", .false., CS%restart_CSp, &
+                              "Length unit conversion factor", "L meter-1")
+  call register_restart_field(US%kg_m3_to_R_restart, "kg_m3_to_R", .false., CS%restart_CSp, &
+                              "Density unit conversion factor", "R m3 kg-1")
+  if (CS%active_shelf_dynamics) then
+    call register_restart_field(ISS%hmask, "h_mask", .true., CS%restart_CSp, &
+                                "ice sheet/shelf thickness mask" ,"none")
+  endif
+
+  if (CS%active_shelf_dynamics) then
+    ! Allocate CS%dCS and specify additional restarts for ice shelf dynamics
+    call register_ice_shelf_dyn_restarts(CS%Grid_in, param_file, CS%dCS, CS%restart_CSp)
+  endif
+
+  !GMM - I think we do not need to save ustar_shelf and iceshelf_melt in the restart file
+  !if (.not. CS%solo_ice_sheet) then
+  !  call register_restart_field(fluxes%ustar_shelf, "ustar_shelf", .false., CS%restart_CSp, &
+  !                              "Friction velocity under ice shelves", "m s-1")
+  !endif
+
+  CS%restart_output_dir = dirs%restart_output_dir
+
+
+
   if (new_sim .and. (.not. (CS%override_shelf_movement .and. CS%mass_from_file))) then
     ! This model is initialized internally or from a file.
     call initialize_ice_thickness(ISS%h_shelf, ISS%area_shelf_h, ISS%hmask, CS%Grid, CS%Grid_in, US, param_file,&
@@ -1705,49 +1751,6 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces_in,
   endif
 
 
-  ! Set up the restarts.
-
-  call restart_init(param_file, CS%restart_CSp, "Shelf.res")
-  call register_restart_field(ISS%mass_shelf, "shelf_mass", .true., CS%restart_CSp, &
-                              "Ice shelf mass", "kg m-2")
-  call register_restart_field(ISS%area_shelf_h, "shelf_area", .true., CS%restart_CSp, &
-                              "Ice shelf area in cell", "m2")
-  call register_restart_field(ISS%h_shelf, "h_shelf", .true., CS%restart_CSp, &
-                              "ice sheet/shelf thickness", "m")
-  if (PRESENT(sfc_state_in)) then
-    if (allocated(sfc_state%taux_shelf) .and. allocated(sfc_state%tauy_shelf)) then
-      u_desc = var_desc("taux_shelf", "Pa", "the zonal stress on the ocean under ice shelves", &
-            hor_grid='Cu',z_grid='1')
-      v_desc = var_desc("tauy_shelf", "Pa", "the meridional stress on the ocean under ice shelves", &
-            hor_grid='Cv',z_grid='1')
-      call register_restart_pair(sfc_state%taux_shelf, sfc_state%tauy_shelf, u_desc, v_desc, &
-            .false., CS%restart_CSp)
-    endif
-  endif
-
-  call register_restart_field(US%m_to_Z_restart, "m_to_Z", .false., CS%restart_CSp, &
-                              "Height unit conversion factor", "Z meter-1")
-  call register_restart_field(US%m_to_L_restart, "m_to_L", .false., CS%restart_CSp, &
-                              "Length unit conversion factor", "L meter-1")
-  call register_restart_field(US%kg_m3_to_R_restart, "kg_m3_to_R", .false., CS%restart_CSp, &
-                              "Density unit conversion factor", "R m3 kg-1")
-  if (CS%active_shelf_dynamics) then
-    call register_restart_field(ISS%hmask, "h_mask", .true., CS%restart_CSp, &
-                                "ice sheet/shelf thickness mask" ,"none")
-  endif
-
-  if (CS%active_shelf_dynamics) then
-    ! Allocate CS%dCS and specify additional restarts for ice shelf dynamics
-    call register_ice_shelf_dyn_restarts(CS%Grid_in, param_file, CS%dCS, CS%restart_CSp)
-  endif
-
-  !GMM - I think we do not need to save ustar_shelf and iceshelf_melt in the restart file
-  !if (.not. CS%solo_ice_sheet) then
-  !  call register_restart_field(fluxes%ustar_shelf, "ustar_shelf", .false., CS%restart_CSp, &
-  !                              "Friction velocity under ice shelves", "m s-1")
-  !endif
-
-  CS%restart_output_dir = dirs%restart_output_dir
 
   CS%Time = Time
 
