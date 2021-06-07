@@ -2177,7 +2177,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
 
   call MOM_timing_init(CS)
 
-  if (associated(CS%OBC)) call call_OBC_register(param_file, CS%update_OBC_CSp, CS%OBC)
+  if (associated(CS%OBC)) call call_OBC_register(param_file, CS%update_OBC_CSp, US, CS%OBC)
 
   call tracer_registry_init(param_file, CS%tracer_Reg)
 
