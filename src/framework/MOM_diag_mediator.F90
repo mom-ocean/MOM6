@@ -129,6 +129,12 @@ type, public :: axes_grp
   type(diag_dsamp), dimension(2:MAX_DSAMP_LEV) :: dsamp !< Downsample container
 end type axes_grp
 
+!> Linked list node for an axes group
+type, public :: axes_grp_node
+  type(axes_grp), pointer :: axes                 !< Axes group of the node
+  type(axes_grp_node), pointer :: next => null()  !< Pointer to next element
+end type axes_grp_node
+
 !> Contains an array to store a diagnostic target grid
 type, private :: diag_grids_type
   real, dimension(:,:,:), allocatable :: h  !< Target grid for remapped coordinate
@@ -261,6 +267,8 @@ type, public :: diag_ctrl
   type(axes_grp) :: axesZi !< A 1-D z-space axis at interfaces
   type(axes_grp) :: axesZL !< A 1-D z-space axis at layer centers
   type(axes_grp) :: axesNull !< An axis group for scalars
+
+  type(axes_grp_node), pointer :: axes_aux => null()   !< Head of auxiliary axis linked list
 
   real, dimension(:,:),   pointer :: mask2dT   => null() !< 2D mask array for cell-center points
   real, dimension(:,:),   pointer :: mask2dBu  => null() !< 2D mask array for cell-corner points
@@ -1973,6 +1981,7 @@ integer function register_diag_field(module_name, field_name, axes_in, init_time
   type(axes_grp), pointer :: remap_axes => null()
   type(axes_grp), pointer :: axes => null()
   type(axes_grp), pointer :: axes_d2 => null()
+  type(axes_grp_node), pointer :: prev_node, axes_node  ! Linked list traversal
   integer :: dm_id, i, dl
   character(len=256) :: msg, cm_string
   character(len=256) :: new_module_name
@@ -2001,8 +2010,37 @@ integer function register_diag_field(module_name, field_name, axes_in, init_time
   elseif (axes_in%id == diag_cs%axesCvi%id) then
     axes => diag_cs%axesCvi
   else
-    allocate(axes)
-    axes = axes_in
+    ! NOTE: We could probably integrate the above if-blocks into this list
+
+    ! Search the auxiliary axes group list
+    prev_node => null()
+    axes_node => diag_cs%axes_aux
+    do while (associated(axes_node))
+      if (axes_node%axes%id == axes_in%id) exit
+      prev_node => axes_node
+      axes_node => axes_node%next
+    enddo
+
+    ! If not found, create a new auxiliary axes_grp and copy contents
+    if (.not. associated(axes_node)) then
+      ! Create a new record in the list and copy axes_in contents to it
+      ! NOTE: This copies the pointers of axes_in to axes, not the data.
+      allocate(axes_node)
+      allocate(axes_node%axes)
+      axes_node%axes = axes_in
+      axes_node%next => null()
+
+      if (.not. associated(prev_node)) then
+        ! Initilize the auxilary axis group list
+        diag_cs%axes_aux => axes_node
+      else
+        ! Append to the list
+        prev_node%next => axes_node
+      endif
+    endif
+
+    ! Point to the active axes_node
+    axes => axes_node%axes
   endif
 
   MOM_missing_value = axes%diag_cs%missing_value
@@ -3398,6 +3436,7 @@ subroutine diag_mediator_end(time, diag_CS, end_diag_manager)
 
   ! Local variables
   type(diag_type), pointer :: diag, next_diag
+  type(axes_grp_node), pointer :: axes_aux, next_aux
   integer :: i, dl
 
   if (diag_CS%available_diag_doc_unit > -1) then
@@ -3503,6 +3542,19 @@ subroutine diag_mediator_end(time, diag_CS, end_diag_manager)
       deallocate(diag_cs%dsamp(dl)%remap_axesCvi)
   enddo
 
+  ! Deallocate auxiliary axes
+  next_aux => null()
+  axes_aux => diag_cs%axes_aux
+  do while (associated(axes_aux))
+    next_aux => axes_aux%next
+
+    ! NOTE: Auxiliary axes copy the references to its masks, so we do not need
+    !   to call axes_grp_end().  But this could change in the future.
+    deallocate(axes_aux%axes)
+    deallocate(axes_aux)
+
+    axes_aux => next_aux
+  enddo
 
 #if defined(DEBUG) || defined(__DO_SAFETY_CHECKS__)
   deallocate(diag_cs%h_old)
