@@ -65,7 +65,6 @@ logical function CVMix_ddiff_init(Time, G, GV, US, param_file, diag, CS)
                             "control structure.")
     return
   endif
-  allocate(CS)
 
   ! Read parameters
   call get_param(param_file, mdl, "USE_CVMIX_DDIFF", CVMix_ddiff_init, default=.false., do_not_log=.true.)
@@ -79,6 +78,7 @@ logical function CVMix_ddiff_init(Time, G, GV, US, param_file, diag, CS)
                  default=.false.)
 
   if (.not. CVMix_ddiff_init) return
+  allocate(CS)
 
   call get_param(param_file, mdl, 'DEBUG', CS%debug, default=.False., do_not_log=.True.)
 
@@ -279,12 +279,10 @@ logical function CVMix_ddiff_is_used(param_file)
 end function CVMix_ddiff_is_used
 
 !> Clear pointers and dealocate memory
+! NOTE: Placeholder destructor
 subroutine CVMix_ddiff_end(CS)
   type(CVMix_ddiff_cs), pointer :: CS !< Control structure for this module that
                                       !! will be deallocated in this subroutine
-
-  deallocate(CS)
-
 end subroutine CVMix_ddiff_end
 
 end module MOM_CVMix_ddiff
