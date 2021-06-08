@@ -72,6 +72,7 @@ use MOM_EOS,              only : EOS_type
 use MOM_remapping,        only : remapping_CS, initialize_remapping
 use MOM_remapping,        only : remapping_core_h
 use MOM_regridding,       only : regridding_CS, initialize_regridding
+use MOM_regridding,       only : end_regridding
 use MOM_regridding,       only : set_regrid_params, get_regrid_size
 use MOM_regridding,       only : getCoordinateInterfaces
 use MOM_regridding,       only : get_zlike_CS, get_sigma_CS, get_rho_CS
@@ -148,6 +149,7 @@ subroutine diag_remap_end(remap_cs)
   type(diag_remap_ctrl), intent(inout) :: remap_cs !< Diag remapping control structure
 
   if (allocated(remap_cs%h)) deallocate(remap_cs%h)
+
   remap_cs%configured = .false.
   remap_cs%initialized = .false.
   remap_cs%used = .false.
@@ -165,6 +167,7 @@ subroutine diag_remap_diag_registration_closed(remap_cs)
 
   if (.not. remap_cs%used) then
     call diag_remap_end(remap_cs)
+    call end_regridding(remap_cs%regrid_cs)
   endif
 
 end subroutine diag_remap_diag_registration_closed

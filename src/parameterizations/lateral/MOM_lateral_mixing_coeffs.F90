@@ -154,7 +154,7 @@ type, public :: VarMix_CS
   logical :: debug      !< If true, write out checksums of data for debugging
 end type VarMix_CS
 
-public VarMix_init, calc_slope_functions, calc_resoln_function
+public VarMix_init, VarMix_end, calc_slope_functions, calc_resoln_function
 public calc_QG_Leith_viscosity, calc_depth_function
 
 contains
@@ -1268,12 +1268,16 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
     allocate(CS%ebt_struct(isd:ied,jsd:jed,GV%ke)) ; CS%ebt_struct(:,:,:) = 0.0
   endif
 
-  if (KhTr_Slope_Cff>0. .or. KhTh_Slope_Cff>0.) then
-    call get_param(param_file, mdl, "VISBECK_MAX_SLOPE", CS%Visbeck_S_max, &
-          "If non-zero, is an upper bound on slopes used in the "//&
-          "Visbeck formula for diffusivity. This does not affect the "//&
-          "isopycnal slope calculation used within thickness diffusion.",  &
-          units="nondim", default=0.0)
+  if (CS%use_stored_slopes) then
+    if (KhTr_Slope_Cff>0. .or. KhTh_Slope_Cff>0.) then
+      call get_param(param_file, mdl, "VISBECK_MAX_SLOPE", CS%Visbeck_S_max, &
+            "If non-zero, is an upper bound on slopes used in the "//&
+            "Visbeck formula for diffusivity. This does not affect the "//&
+            "isopycnal slope calculation used within thickness diffusion.",  &
+            units="nondim", default=0.0)
+    else
+      CS%Visbeck_S_max = 0.
+    endif
   endif
 
   if (CS%use_stored_slopes) then
@@ -1587,6 +1591,65 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
   endif
 
 end subroutine VarMix_init
+
+!> Destructor for VarMix control structure
+subroutine VarMix_end(CS)
+  type(VarMix_CS), intent(inout) :: CS
+
+  if (CS%Resoln_use_ebt .or. CS%khth_use_ebt_struct) &
+    deallocate(CS%ebt_struct)
+
+  if (CS%use_stored_slopes) then
+    deallocate(CS%slope_x)
+    deallocate(CS%slope_y)
+  endif
+
+  if (CS%calculate_Eady_growth_rate) then
+    deallocate(CS%SN_u)
+    deallocate(CS%SN_v)
+  endif
+
+  if (associated(CS%L2u)) deallocate(CS%L2u)
+  if (associated(CS%L2v)) deallocate(CS%L2v)
+
+  if (CS%Resoln_scaled_Kh .or. CS%Resoln_scaled_KhTh .or. CS%Resoln_scaled_KhTr) then
+    deallocate(CS%Res_fn_h)
+    deallocate(CS%Res_fn_q)
+    deallocate(CS%Res_fn_u)
+    deallocate(CS%Res_fn_v)
+    deallocate(CS%beta_dx2_q)
+    deallocate(CS%beta_dx2_u)
+    deallocate(CS%beta_dx2_v)
+    deallocate(CS%f2_dx2_q)
+    deallocate(CS%f2_dx2_u)
+    deallocate(CS%f2_dx2_v)
+  endif
+
+  if (CS%Depth_scaled_KhTh) then
+    deallocate(CS%Depth_fn_u)
+    deallocate(CS%Depth_fn_v)
+  endif
+
+  if (CS%calculate_Rd_dx) then
+    deallocate(CS%Rd_dx_h)
+    deallocate(CS%beta_dx2_h)
+    deallocate(CS%f2_dx2_h)
+  endif
+
+  if (CS%calculate_cg1) then
+    deallocate(CS%cg1)
+  endif
+
+  if (CS%Use_QG_Leith_GM) then
+    DEALLOC_(CS%Laplac3_const_u)
+    DEALLOC_(CS%Laplac3_const_v)
+    DEALLOC_(CS%KH_u_QG)
+    DEALLOC_(CS%KH_v_QG)
+  endif
+
+  if (CS%calculate_cg1) deallocate(CS%wave_speed_CSp)
+
+end subroutine VarMix_end
 
 !> \namespace mom_lateral_mixing_coeffs
 !!
