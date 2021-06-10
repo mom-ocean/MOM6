@@ -1112,7 +1112,7 @@ subroutine apply_flux_adjustments(G, US, CS, Time, fluxes)
   type(forcing),            intent(inout) :: fluxes !< Surface fluxes structure
 
   ! Local variables
-  real, dimension(SZI_(G),SZJ_(G)) :: temp_at_h ! Various fluxes at h points [W m-2] or [kg m-2 s-1]
+  real, dimension(G%isc:G%iec,G%jsc:G%jec) :: temp_at_h ! Various fluxes at h points [W m-2] or [kg m-2 s-1]
 
   integer :: isc, iec, jsc, jec, i, j
   logical :: overrode_h
@@ -1550,8 +1550,6 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, wind_stagger)
                  "If true, checks that values from IOB fluxes are zero "//&
                  "above land points (i.e. G%mask2dT = 0).", default=.false., &
                  debuggingParam=.true.)
-
-  call data_override_init(G%Domain)
 
   if (CS%restore_salt) then
     salt_file = trim(CS%inputdir) // trim(CS%salt_restore_file)
