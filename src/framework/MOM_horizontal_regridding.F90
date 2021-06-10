@@ -259,7 +259,7 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
 
   character(len=*),      intent(in)    :: filename   !< Path to file containing tracer to be
                                                      !! interpolated.
-  character(len=*),      intent(in)    :: varnam     !< Name of tracer in filee.
+  character(len=*),      intent(in)    :: varnam     !< Name of tracer in file.
   real,                  intent(in)    :: conversion !< Conversion factor for tracer.
   integer,               intent(in)    :: recnum     !< Record number of tracer to be read.
   type(ocean_grid_type), intent(inout) :: G          !< Grid object
@@ -348,9 +348,10 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
                                  " in file "//trim(filename)//" in hinterp_extrap")
 
   rcode = NF90_INQUIRE_VARIABLE(ncid, varid, ndims=ndims, dimids=dims)
-  if (rcode /= 0) call MOM_error(FATAL,'error inquiring dimensions hinterp_extrap')
-  if (ndims < 3) call MOM_error(FATAL,"Variable "//trim(varnam)//" in file "// &
-              trim(filename)//" has too few dimensions.")
+  if (rcode /= 0) call MOM_error(FATAL, "Error inquiring about the dimensions of "//trim(varnam)//&
+                                 " in file "//trim(filename)//" in hinterp_extrap")
+  if (ndims < 3) call MOM_error(FATAL,"Variable "//trim(varnam)//" in file "//trim(filename)// &
+                                " has too few dimensions to be read as a 3-d array.")
 
   rcode = NF90_INQUIRE_DIMENSION(ncid, dims(1), dim_name(1), len=id)
   if (rcode /= 0) call MOM_error(FATAL,"error reading dimension 1 data for "// &
@@ -373,8 +374,8 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
 
   missing_value=0.0
   rcode = NF90_GET_ATT(ncid, varid, "_FillValue", missing_value)
-  if (rcode /= 0) call MOM_error(FATAL,"error finding missing value for "//&
-       trim(varnam)//" in file "// trim(filename)//" in hinterp_extrap")
+  if (rcode /= 0) call MOM_error(FATAL,"error finding missing value for "//trim(varnam)//&
+                                 " in file "// trim(filename)//" in hinterp_extrap")
 
   rcode = NF90_GET_ATT(ncid, varid, "add_offset", add_offset)
   if (rcode /= 0) add_offset = 0.0
@@ -465,7 +466,7 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
       start(1) = is+G%HI%idg_offset ; start(2) = js+G%HI%jdg_offset ; start(3) = k
       count(1) = ie-is+1 ; count(2) = je-js+1; count(3) = 1
       rcode = NF90_GET_VAR(ncid,varid, tr_in, start, count)
-      if (rcode /= 0) call MOM_error(FATAL,"hinterp_and_extract_from_Fie: "//&
+      if (rcode /= 0) call MOM_error(FATAL,"horiz_interp_and_extrap_tracer_record: "//&
            "error reading level "//trim(laynum)//" of variable "//&
            trim(varnam)//" in file "// trim(filename))
 
@@ -484,7 +485,7 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
       if (is_root_pe()) then
         start = 1 ; start(3) = k ; count(:) = 1 ; count(1) = id ; count(2) = jd
         rcode = NF90_GET_VAR(ncid,varid, tr_in, start, count)
-        if (rcode /= 0) call MOM_error(FATAL,"hinterp_and_extract_from_Fie: "//&
+        if (rcode /= 0) call MOM_error(FATAL,"horiz_interp_and_extrap_tracer_record: "//&
              "error reading level "//trim(laynum)//" of variable "//&
              trim(varnam)//" in file "// trim(filename))
 
