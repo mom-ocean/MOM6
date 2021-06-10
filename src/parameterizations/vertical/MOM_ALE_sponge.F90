@@ -1096,6 +1096,7 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
     if (CS%id_sp_u_tendency > 0) then
       allocate(tmp_u(G%isdB:G%iedB,G%jsd:G%jed,nz));tmp_u(:,:,:)=0.0
     endif
+    call pass_var(h(:,:,1),G%Domain)
     ! u points
     do c=1,CS%num_col_u
       I = CS%col_i_u(c) ; j = CS%col_j_u(c)
