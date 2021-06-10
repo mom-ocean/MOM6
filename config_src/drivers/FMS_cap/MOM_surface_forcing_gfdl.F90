@@ -407,6 +407,10 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
   if (CS%restore_temp) then
     call time_interp_external(CS%id_trestore, Time, data_restore)
     do j=js,je ; do i=is,ie
+      !! x1y added from Yongfei for considering ice freezing point with SSS
+      if (abs(data_restore(i,j)+1.8)<0.0001) then
+          data_restore(i,j) = -0.0539*sfc_state%SSS(i,j)
+      endif
       delta_sst = data_restore(i,j)- sfc_state%SST(i,j)
       delta_sst = sign(1.0,delta_sst)*min(abs(delta_sst),CS%max_delta_trestore)
       fluxes%heat_added(i,j) = G%mask2dT(i,j) * CS%trestore_mask(i,j) * &
