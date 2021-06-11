@@ -1610,7 +1610,7 @@ subroutine reflect(En, NAngle, CS, G, LB)
   type(ocean_grid_type),  intent(in)    :: G  !< The ocean's grid structure
   integer,                intent(in)    :: NAngle !< The number of wave orientations in the
                                               !! discretized wave energy spectrum.
-  real, dimension(G%isd:G%ied,G%jsd:G%jed,NAngle), &
+  real, dimension(SZI_(G),SZJB_(G),Nangle), &
                           intent(inout) :: En !< The internal gravity wave energy density as a
                                               !! function of space and angular resolution
                                               !! [R Z3 T-2 ~> J m-2].
