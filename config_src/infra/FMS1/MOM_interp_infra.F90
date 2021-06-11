@@ -5,7 +5,8 @@ module MOM_interp_infra
 
 use MOM_domain_infra,    only : MOM_domain_type, domain2d
 use MOM_time_manager,    only : time_type
-use horiz_interp_mod,    only : horiz_interp_new, horiz_interp, horiz_interp_init, horiz_interp_type
+use horiz_interp_mod,    only : horiz_interp_new, horiz_interp, horiz_interp_type
+use horiz_interp_mod,    only : horiz_interp_init, horiz_interp_del
 use mpp_io_mod,          only : axistype, mpp_get_axis_data
 use time_interp_external_mod, only : time_interp_external
 use time_interp_external_mod, only : init_external_field, time_interp_external_init
@@ -14,7 +15,7 @@ use time_interp_external_mod, only : get_external_field_axes, get_external_field
 
 implicit none ; private
 
-public :: horiz_interp_type, horiz_interp_init
+public :: horiz_interp_type, horiz_interp_init, horiz_interp_del
 public :: time_interp_extern, init_extern_field, time_interp_external_init
 public :: get_external_field_info, axistype, get_axis_data
 public :: run_horiz_interp, build_horiz_interp_weights
