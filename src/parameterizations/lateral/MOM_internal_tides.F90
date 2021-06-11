@@ -1610,7 +1610,7 @@ subroutine reflect(En, NAngle, CS, G, LB)
   type(ocean_grid_type),  intent(in)    :: G  !< The ocean's grid structure
   integer,                intent(in)    :: NAngle !< The number of wave orientations in the
                                               !! discretized wave energy spectrum.
-  real, dimension(G%isd:G%ied,G%jsd:G%jed,NAngle), &
+  real, dimension(SZI_(G),SZJB_(G),Nangle), &
                           intent(inout) :: En !< The internal gravity wave energy density as a
                                               !! function of space and angular resolution
                                               !! [R Z3 T-2 ~> J m-2].
@@ -1653,9 +1653,16 @@ subroutine reflect(En, NAngle, CS, G, LB)
     angle_i(a) = Angle_size * real(a - 1) ! for a=1 aligned with x-axis
   enddo
 
-  angle_c   = CS%refl_angle
-  part_refl = CS%refl_pref
-  ridge     = CS%refl_dbl
+  ! init local arrays
+  angle_c(:,:) = CS%nullangle
+  part_refl(:,:) = 0.
+  ridge(:,:) = .false.
+
+  do j=jsh,jeh ; do i=ish,ieh
+    angle_c(i,j)   = CS%refl_angle(i,j)
+    part_refl(i,j) = CS%refl_pref(i,j)
+    ridge(i,j)     = CS%refl_dbl(i,j)
+  enddo ; enddo
   En_reflected(:) = 0.0
 
   do j=jsh,jeh ; do i=ish,ieh
