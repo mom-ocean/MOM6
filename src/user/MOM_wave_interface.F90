@@ -141,6 +141,7 @@ integer :: WaveMethod=-99 !< Options for including wave information
                           !!   1 - Surface Stokes Drift Bands
                           !!   2 - DHH85
                           !!   3 - LF17
+                          !!   4 - VR12MA
                           !! -99 - No waves computed, but empirical Langmuir number used.
                           !! \todo Module variable! Move into a control structure.
 
@@ -178,7 +179,7 @@ character(len=40)  :: mdl = "MOM_wave_interface" !< This module's name.
 !! into a control structure.
 ! Switches needed in import_stokes_drift
 integer, parameter :: TESTPROF = 0, SURFBANDS = 1, &
-                      DHH85 = 2, LF17 = 3, NULL_WaveMethod=-99, &
+                      DHH85 = 2, LF17 = 3, VR12MA = 4, NULL_WaveMethod=-99, &
                       DATAOVR = 1, COUPLER = 2, INPUT = 3
 
 ! Options For Test Prof
@@ -208,6 +209,7 @@ subroutine MOM_wave_interface_init(time, G, GV, US, param_file, CS, diag )
   character*(13), parameter :: SURFBANDS_STRING = "SURFACE_BANDS"
   character*(5), parameter  :: DHH85_STRING     = "DHH85"
   character*(4), parameter  :: LF17_STRING      = "LF17"
+  character*(7), parameter  :: VR12MA_STRING    = "VR12-MA"
   character*(12), parameter :: DATAOVR_STRING   = "DATAOVERRIDE"
   character*(7), parameter  :: COUPLER_STRING   = "COUPLER"
   character*(5), parameter  :: INPUT_STRING     = "INPUT"
@@ -268,7 +270,11 @@ subroutine MOM_wave_interface_init(time, G, GV, US, param_file, CS, diag )
        " DHH85         - Uses Donelan et al. 1985 empirical \n"//     &
        "                 wave spectrum with prescribed values. \n"//  &
        " LF17          - Infers Stokes drift profile from wind \n"//  &
-       "                 speed following Li and Fox-Kemper 2017.\n",  &
+       "                 speed following Li and Fox-Kemper 2017.\n"// &
+       " VR12-MA       - Applies an enhancement factor to the KPP\n"//&
+       "                 turbulent velocity scale received from \n"// &
+       "                 WW3 and is based on the surface layer \n"//  &
+       "                 and projected Langmuir number. (Li 2016)\n", &
        units='', default=NULL_STRING)
   select case (TRIM(TMPSTRING1))
   case (NULL_STRING)! No Waves
@@ -363,6 +369,8 @@ subroutine MOM_wave_interface_init(time, G, GV, US, param_file, CS, diag )
           default=.false.)
   case (LF17_STRING)!Li and Fox-Kemper 17 wind-sea Langmuir number
     WaveMethod = LF17
+  case (VR12MA_STRING)!Li and Fox-Kemper 16
+    WaveMethod = VR12MA
   case default
     call MOM_error(FATAL,'Check WAVE_METHOD.')
   end select
@@ -732,6 +740,8 @@ subroutine Update_Stokes_Drift(G, GV, US, CS, h, ustar)
       enddo
       DHH85_is_set = .true.
     endif
+  elseif (WaveMethod==VR12MA) then
+    return ! todo
   else! Keep this else, fallback to 0 Stokes drift
     do kk= 1,GV%ke
       do jj = G%jsd,G%jed
