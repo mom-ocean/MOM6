@@ -293,17 +293,20 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
 
     call safe_alloc_ptr(fluxes%salt_flux,isd,ied,jsd,jed)
     call safe_alloc_ptr(fluxes%salt_flux_in,isd,ied,jsd,jed)
-    call safe_alloc_ptr(fluxes%salt_flux_added,isd,ied,jsd,jed)
 
     call safe_alloc_ptr(fluxes%TKE_tidal,isd,ied,jsd,jed)
     call safe_alloc_ptr(fluxes%ustar_tidal,isd,ied,jsd,jed)
+
+    if (CS%allow_flux_adjustments .or. CS%restore_temp) then
+      call safe_alloc_ptr(fluxes%heat_added,isd,ied,jsd,jed)
+      call safe_alloc_ptr(fluxes%salt_flux_added,isd,ied,jsd,jed)
+    endif
 
     do j=js-2,je+2 ; do i=is-2,ie+2
       fluxes%TKE_tidal(i,j)   = CS%TKE_tidal(i,j)
       fluxes%ustar_tidal(i,j) = CS%ustar_tidal(i,j)
     enddo ; enddo
 
-    call safe_alloc_ptr(fluxes%heat_added,isd,ied,jsd,jed)
 
   endif   ! endif for allocation and initialization
 
@@ -333,8 +336,10 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
   fluxes%fluxes_used = .false.
   fluxes%dt_buoy_accum = US%s_to_T*valid_time
 
-  fluxes%heat_added(:,:) = 0.0
-  fluxes%salt_flux_added(:,:) = 0.0
+  if (CS%allow_flux_adjustments .or. CS%restore_temp) then
+    fluxes%heat_added(:,:) = 0.0
+    fluxes%salt_flux_added(:,:) = 0.0
+  endif
 
   do j=js,je ; do i=is,ie
     fluxes%salt_flux(i,j) = 0.0
