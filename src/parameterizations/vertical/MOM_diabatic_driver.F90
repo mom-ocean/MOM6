@@ -231,7 +231,7 @@ type, public:: diabatic_CS; private
   type(tracer_flow_control_CS), pointer :: tracer_flow_CSp       => NULL() !< Control structure for a child module
   type(optics_type),            pointer :: optics                => NULL() !< Control structure for a child module
   type(KPP_CS),                 pointer :: KPP_CSp               => NULL() !< Control structure for a child module
-  type(CVMix_conv_cs),          pointer :: CVMix_conv_csp        => NULL() !< Control structure for a child module
+  type(CVMix_conv_cs),          pointer :: CVMix_conv_CSp        => NULL() !< Control structure for a child module
   type(diapyc_energy_req_CS),   pointer :: diapyc_en_rec_CSp     => NULL() !< Control structure for a child module
 
   type(group_pass_type) :: pass_hold_eb_ea !< For group halo pass
@@ -706,7 +706,7 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
   ! Calculate vertical mixing due to convection (computed via CVMix)
   if (CS%use_CVMix_conv) then
     ! Increment vertical diffusion and viscosity due to convection
-    call calculate_CVMix_conv(h, tv, G, GV, US, CS%CVMix_conv_csp, Hml, Kd=Kd_int, Kv=visc%Kv_slow)
+    call calculate_CVMix_conv(h, tv, G, GV, US, CS%CVMix_conv_CSp, Hml, Kd=Kd_int, Kv=visc%Kv_slow)
   endif
 
   ! This block sets ent_t and ent_s from h and Kd_int.
@@ -1236,9 +1236,9 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
   if (CS%use_CVMix_conv) then
     ! Increment vertical diffusion and viscosity due to convection
     if (CS%useKPP) then
-      call calculate_CVMix_conv(h, tv, G, GV, US, CS%CVMix_conv_csp, Hml, Kd=Kd_heat, Kv=visc%Kv_shear, Kd_aux=Kd_salt)
+      call calculate_CVMix_conv(h, tv, G, GV, US, CS%CVMix_conv_CSp, Hml, Kd=Kd_heat, Kv=visc%Kv_shear, Kd_aux=Kd_salt)
     else
-      call calculate_CVMix_conv(h, tv, G, GV, US, CS%CVMix_conv_csp, Hml, Kd=Kd_heat, Kv=visc%Kv_slow, Kd_aux=Kd_salt)
+      call calculate_CVMix_conv(h, tv, G, GV, US, CS%CVMix_conv_CSp, Hml, Kd=Kd_heat, Kv=visc%Kv_slow, Kd_aux=Kd_salt)
     endif
   endif
 
@@ -1804,7 +1804,7 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
 
   ! Add vertical diff./visc. due to convection (computed via CVMix)
   if (CS%use_CVMix_conv) then
-    call calculate_CVMix_conv(h, tv, G, GV, US, CS%CVMix_conv_csp, Hml, Kd=Kd_int, Kv=visc%Kv_slow)
+    call calculate_CVMix_conv(h, tv, G, GV, US, CS%CVMix_conv_CSp, Hml, Kd=Kd_int, Kv=visc%Kv_slow)
   endif
 
   if (CS%useKPP) then
@@ -2272,7 +2272,7 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
     !$OMP parallel do default(shared)
     do j=js,je
       do K=2,nz ; do i=is,ie
-        CDp%diapyc_vel(i,j,K) = US%s_to_T*Idt * (ea(i,j,k) - eb(i,j,k-1))
+        CDp%diapyc_vel(i,j,K) = Idt * (ea(i,j,k) - eb(i,j,k-1))
       enddo ; enddo
       do i=is,ie
         CDp%diapyc_vel(i,j,1) = 0.0
@@ -2966,7 +2966,7 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
       'Layer entrainment from below per timestep', 'm', conversion=GV%H_to_m)
   if (.not.CS%useALEalgorithm) then
     CS%id_wd = register_diag_field('ocean_model', 'wd', diag%axesTi, Time, &
-      'Diapycnal velocity', 'm s-1', conversion=GV%H_to_m)
+      'Diapycnal velocity', 'm s-1', conversion=GV%H_to_m*US%s_to_T)
     if (CS%id_wd > 0) call safe_alloc_ptr(CDp%diapyc_vel,isd,ied,jsd,jed,nz+1)
 
     CS%id_dudt_dia = register_diag_field('ocean_model', 'dudt_dia', diag%axesCuL, Time, &
@@ -2982,7 +2982,7 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
     CS%id_hf_dvdt_dia_2d = register_diag_field('ocean_model', 'hf_dvdt_dia_2d', diag%axesCv1, Time, &
         'Depth-sum Fractional Thickness-weighted Meridional Acceleration from Diapycnal Mixing', &
         'm s-2', conversion=US%L_T2_to_m_s2)
-    if (CS%id_hf_dvdt_dia_2d > 0)  call safe_alloc_ptr(ADp%diag_hfrac_v,isd,ied,Jsd,JedB,nz)
+    if (CS%id_hf_dvdt_dia_2d > 0)  call safe_alloc_ptr(ADp%diag_hfrac_v,isd,ied,JsdB,JedB,nz)
 
     if ((CS%id_dudt_dia > 0) .or. (CS%id_hf_dudt_dia_2d > 0)) &
       call safe_alloc_ptr(ADp%du_dt_dia,IsdB,IedB,jsd,jed,nz)
@@ -3199,8 +3199,8 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
         units='m', conversion=GV%H_to_m, v_extensive=.true.)
     CS%id_boundary_forcing_h_tendency = register_diag_field('ocean_model',   &
         'boundary_forcing_h_tendency', diag%axesTL, Time,                &
-        'Cell thickness tendency due to boundary forcing', 'm s-1', &
-        conversion=GV%H_to_m*US%s_to_T, v_extensive=.true.)
+        'Cell thickness tendency due to boundary forcing', &
+        'm s-1', conversion=GV%H_to_m*US%s_to_T, v_extensive=.true.)
     if (CS%id_boundary_forcing_h_tendency > 0) then
       CS%boundary_forcing_tendency_diag = .true.
     endif
@@ -3286,7 +3286,7 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
   endif
 
   ! CS%use_CVMix_conv is set to True if CVMix convection will be used, otherwise it is False.
-  CS%use_CVMix_conv = CVMix_conv_init(Time, G, GV, US, param_file, diag, CS%CVMix_conv_csp)
+  CS%use_CVMix_conv = CVMix_conv_init(Time, G, GV, US, param_file, diag, CS%CVMix_conv_CSp)
 
   call entrain_diffusive_init(Time, G, GV, US, param_file, diag, CS%entrain_diffusive_CSp, &
                               just_read_params=CS%useALEalgorithm)
@@ -3359,14 +3359,35 @@ end subroutine diabatic_driver_init
 
 !> Routine to close the diabatic driver module
 subroutine diabatic_driver_end(CS)
-  type(diabatic_CS), pointer :: CS    !< module control structure
+  type(diabatic_CS), intent(inout) :: CS  !< module control structure
 
-  if (.not.associated(CS)) return
+  if (associated(CS%optics)) then
+    call opacity_end(CS%opacity_CSp, CS%optics)
+    deallocate(CS%optics)
+  endif
+
+  if (CS%debug_energy_req) &
+    call diapyc_energy_req_end(CS%diapyc_en_rec_CSp)
+
+  deallocate(CS%regularize_layers_CSp)
+
+  if (CS%use_energetic_PBL) &
+    call energetic_PBL_end(CS%energetic_PBL_CSp)
 
   call diabatic_aux_end(CS%diabatic_aux_CSp)
 
-  call entrain_diffusive_end(CS%entrain_diffusive_CSp)
   call set_diffusivity_end(CS%set_diff_CSp)
+
+  deallocate(CS%set_diff_CSp)
+
+  if (CS%use_geothermal) then
+    call geothermal_end(CS%geothermal_CSp)
+    deallocate(CS%geothermal_CSp)
+  endif
+
+  call entrain_diffusive_end(CS%entrain_diffusive_CSp)
+
+  if (CS%use_CVMix_conv) deallocate(CS%CVMix_conv_CSp)
 
   if (CS%useKPP) then
     deallocate( CS%KPP_buoy_flux )
@@ -3377,26 +3398,11 @@ subroutine diabatic_driver_end(CS)
     call KPP_end(CS%KPP_CSp)
   endif
 
-  if (CS%use_CVMix_conv) call CVMix_conv_end(CS%CVMix_conv_csp)
-
-  if (CS%use_energetic_PBL) &
-    call energetic_PBL_end(CS%energetic_PBL_CSp)
-  if (CS%debug_energy_req) &
-    call diapyc_energy_req_end(CS%diapyc_en_rec_CSp)
-
-  if (associated(CS%optics)) then
-    call opacity_end(CS%opacity_CSp, CS%optics)
-    deallocate(CS%optics)
-  endif
-
   ! GMM, the following is commented out because arrays in
   ! CS%diag_grids_prev are neither pointers or allocatables
   ! and, therefore, cannot be deallocated.
 
   !call diag_grid_storage_end(CS%diag_grids_prev)
-
-  deallocate(CS)
-
 end subroutine diabatic_driver_end
 
 

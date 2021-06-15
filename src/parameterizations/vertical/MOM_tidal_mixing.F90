@@ -219,6 +219,8 @@ logical function tidal_mixing_init(Time, G, GV, US, param_file, diag, CS)
   type(tidal_mixing_cs),    pointer       :: CS         !< This module's control structure.
 
   ! Local variables
+  logical :: use_CVMix_tidal
+  logical :: int_tide_dissipation
   logical :: read_tideamp
   logical :: default_2018_answers
   character(len=20)  :: tmpstr, int_tide_profile_str
@@ -229,6 +231,7 @@ logical function tidal_mixing_init(Time, G, GV, US, param_file, diag, CS)
   real :: Niku_scale ! local variable for scaling the Nikurashin TKE flux data
   integer :: i, j, is, ie, js, je
   integer :: isd, ied, jsd, jed
+
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
   character(len=40)  :: mdl = "MOM_tidal_mixing"     !< This module's name.
@@ -238,38 +241,42 @@ logical function tidal_mixing_init(Time, G, GV, US, param_file, diag, CS)
                             "is already associated.")
     return
   endif
-  allocate(CS)
-  allocate(CS%dd)
-
-  CS%debug = CS%debug.and.is_root_pe()
 
   is  = G%isc ; ie  = G%iec ; js  = G%jsc ; je  = G%jec
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
-  CS%diag => diag
-
   ! Read parameters
-  call get_param(param_file, mdl, "USE_CVMix_TIDAL", CS%use_CVMix_tidal, &
+  ! NOTE: These are read twice because logfile output is streamed and we want
+  !   to preserve the ordering of module header before parameters.
+  call get_param(param_file, mdl, "USE_CVMix_TIDAL", use_CVMix_tidal, &
                  default=.false., do_not_log=.true.)
-  call get_param(param_file, mdl, "INT_TIDE_DISSIPATION", CS%int_tide_dissipation, &
-                 default=CS%use_CVMix_tidal, do_not_log=.true.)
+  call get_param(param_file, mdl, "INT_TIDE_DISSIPATION", int_tide_dissipation, &
+                 default=use_CVMix_tidal, do_not_log=.true.)
   call log_version(param_file, mdl, version, &
                  "Vertical Tidal Mixing Parameterization", &
-                 all_default=.not.(CS%use_CVMix_tidal .or. CS%int_tide_dissipation))
-  call get_param(param_file, mdl, "USE_CVMix_TIDAL", CS%use_CVMix_tidal, &
+                 all_default=.not.(use_CVMix_tidal .or. int_tide_dissipation))
+
+  call get_param(param_file, mdl, "USE_CVMix_TIDAL", use_CVMix_tidal, &
                  "If true, turns on tidal mixing via CVMix", &
                  default=.false.)
+  call get_param(param_file, mdl, "INT_TIDE_DISSIPATION", int_tide_dissipation, &
+                 "If true, use an internal tidal dissipation scheme to "//&
+                 "drive diapycnal mixing, along the lines of St. Laurent "//&
+                 "et al. (2002) and Simmons et al. (2004).", default=use_CVMix_tidal)
+
+  ! return if tidal mixing is inactive
+  tidal_mixing_init = int_tide_dissipation
+  if (.not. tidal_mixing_init) return
+
+  allocate(CS)
+  allocate(CS%dd)
+  CS%debug = CS%debug.and.is_root_pe()
+  CS%diag => diag
+  CS%use_CVmix_tidal = use_CVmix_tidal
+  CS%int_tide_dissipation = int_tide_dissipation
 
   call get_param(param_file, mdl, "INPUTDIR", CS%inputdir, default=".",do_not_log=.true.)
   CS%inputdir = slasher(CS%inputdir)
-  call get_param(param_file, mdl, "INT_TIDE_DISSIPATION", CS%int_tide_dissipation, &
-                 "If true, use an internal tidal dissipation scheme to "//&
-                 "drive diapycnal mixing, along the lines of St. Laurent "//&
-                 "et al. (2002) and Simmons et al. (2004).", default=CS%use_CVMix_tidal)
-
-  ! return if tidal mixing is inactive
-  tidal_mixing_init = CS%int_tide_dissipation
-  if (.not. tidal_mixing_init) return
 
   call get_param(param_file, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
                  "This sets the default value for the various _2018_ANSWERS parameters.", &
@@ -460,7 +467,7 @@ logical function tidal_mixing_init(Time, G, GV, US, param_file, diag, CS)
                  "tidal amplitudes with INT_TIDE_DISSIPATION.", default="tideamp.nc")
       filename = trim(CS%inputdir) // trim(tideamp_file)
       call log_param(param_file, mdl, "INPUTDIR/TIDEAMP_FILE", filename)
-      call MOM_read_data(filename, 'tideamp', CS%tideamp, G%domain, timelevel=1, scale=US%m_to_Z*US%T_to_s)
+      call MOM_read_data(filename, 'tideamp', CS%tideamp, G%domain, scale=US%m_to_Z*US%T_to_s)
     endif
 
     call get_param(param_file, mdl, "H2_FILE", h2_file, &
@@ -469,7 +476,7 @@ logical function tidal_mixing_init(Time, G, GV, US, param_file, diag, CS)
                  fail_if_missing=(.not.CS%use_CVMix_tidal))
     filename = trim(CS%inputdir) // trim(h2_file)
     call log_param(param_file, mdl, "INPUTDIR/H2_FILE", filename)
-    call MOM_read_data(filename, 'h2', CS%h2, G%domain, timelevel=1, scale=US%m_to_Z**2)
+    call MOM_read_data(filename, 'h2', CS%h2, G%domain, scale=US%m_to_Z**2)
 
     call get_param(param_file, mdl, "FRACTIONAL_ROUGHNESS_MAX", max_frac_rough, &
                  "The maximum topographic roughness amplitude as a fraction of the mean depth, "//&
@@ -882,7 +889,6 @@ subroutine calculate_CVMix_tidal(h, j, G, GV, US, CS, N2_int, Kd_lay, Kd_int, Kv
       ! summing q_i*TidalConstituent_i over the number of constituents.
       call CVMix_compute_SchmittnerCoeff( nlev                    = GV%ke,              &
                                           energy_flux             = tidal_qe_md(:),     &
-                                          rho                     = rho_fw,             &
                                           SchmittnerCoeff         = Schmittner_coeff,   &
                                           exp_hab_zetar           = exp_hab_zetar,      &
                                           CVmix_tidal_params_user = CS%CVMix_tidal_params)
@@ -896,7 +902,6 @@ subroutine calculate_CVMix_tidal(h, j, G, GV, US, CS, N2_int, Kd_lay, Kd_int, Kv
                                           Tdiff_out               = Kd_tidal,             &
                                           Nsqr                    = N2_int_i,             &
                                           OceanDepth              = -iFaceHeight(GV%ke+1), &
-                                          vert_dep                = vert_dep,             &
                                           nlev                    = GV%ke,                &
                                           max_nlev                = GV%ke,                &
                                           SchmittnerCoeff         = Schmittner_coeff,     &
@@ -1722,18 +1727,14 @@ end subroutine read_tidal_constituents
 
 !> Clear pointers and deallocate memory
 subroutine tidal_mixing_end(CS)
-  type(tidal_mixing_cs), pointer :: CS !< This module's control structure, which
-                                       !! will be deallocated in this routine.
+  type(tidal_mixing_cs), intent(inout) :: CS !< This module's control structure, which
+                                             !! will be deallocated in this routine.
 
-  if (.not.associated(CS)) return
-
-  !TODO deallocate all the dynamically allocated members here ...
+  ! TODO: deallocate all the dynamically allocated members here ...
   if (allocated(CS%tidal_qe_2d))    deallocate(CS%tidal_qe_2d)
   if (allocated(CS%tidal_qe_3d_in)) deallocate(CS%tidal_qe_3d_in)
   if (allocated(CS%h_src))          deallocate(CS%h_src)
   deallocate(CS%dd)
-  deallocate(CS)
-
 end subroutine tidal_mixing_end
 
 end module MOM_tidal_mixing

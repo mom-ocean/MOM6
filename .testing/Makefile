@@ -32,7 +32,6 @@
 #   MPIFC   MPI Fortran compiler
 #
 # Build configuration:
-#
 #   FCFLAGS_DEBUG       Testing ("debug") compiler flags
 #   FCFLAGS_REPRO       Production ("repro") compiler flags
 #   FCFLAGS_INIT        Variable initialization flags
@@ -76,7 +75,6 @@ FCFLAGS_REPRO ?= -g -O2
 FCFLAGS_INIT ?=
 FCFLAGS_COVERAGE ?=
 # Additional notes:
-#
 # - The default values are simple, minimalist flags, supported by nearly all
 #   compilers which are comparable to GFDL's canonical DEBUG and REPRO builds.
 #
@@ -86,13 +84,17 @@ FCFLAGS_COVERAGE ?=
 # - FMS cannot be built with the same aggressive initialization flags as MOM6,
 #   so FCFLAGS_INIT is used to provide additional MOM6 configuration.
 
+# User-defined LDFLAGS (applied to all builds and FMS)
+LDFLAGS_USER ?=
+
 # Set to `true` to require identical results from DEBUG and REPRO builds
+# NOTE: Many compilers (Intel, GCC on ARM64) do not yet produce identical
+#   results across DEBUG and REPRO builds (as defined below), so we disable on
+#   default.
 DO_REPRO_TESTS ?=
 
+# Time measurement (configurable by the CI)
 TIME ?= time
-
-# Many compilers (Intel, GCC on ARM64) do not yet produce identical results
-# across DEBUG and REPRO builds (as defined below), so we disable on default.
 
 #---
 # Dependencies
@@ -154,10 +156,12 @@ SOURCE = \
   $(foreach ext,F90 inc c h,$(wildcard $(1)/*/*.$(ext) $(1)/*/*/*.$(ext)))
 
 MOM_SOURCE = $(call SOURCE,../src) \
-  $(wildcard ../config_src/solo_driver/*.F90) \
+  $(wildcard ../config_src/infra/FMS1/*.F90) \
+  $(wildcard ../config_src/drivers/solo_driver/*.F90) \
   $(wildcard ../config_src/ext*/*/*.F90)
 TARGET_SOURCE = $(call SOURCE,build/target_codebase/src) \
-  $(wildcard build/target_codebase/config_src/solo_driver/*.F90) \
+  $(wildcard build/target_codebase/config_src/infra/FMS1/*.F90) \
+  $(wildcard build/target_codebase/config_src/drivers/solo_driver/*.F90) \
   $(wildcard build/target_codebase/config_src/ext*/*.F90)
 FMS_SOURCE = $(call SOURCE,$(DEPS)/fms/src)
 
@@ -189,7 +193,7 @@ endif
 # Rules
 
 .PHONY: all build.regressions
-all: $(foreach b,$(BUILDS),build/$(b)/MOM6)
+all: $(foreach b,$(BUILDS),build/$(b)/MOM6) $(VENV_PATH)
 build.regressions: $(foreach b,symmetric target,build/$(b)/MOM6)
 
 # Executable
@@ -216,8 +220,8 @@ REPRO_FCFLAGS := FCFLAGS="$(FCFLAGS_REPRO) $(FCFLAGS_FMS)"
 OPENMP_FCFLAGS := FCFLAGS="$(FCFLAGS_DEBUG) $(FCFLAGS_INIT) $(FCFLAGS_FMS)"
 TARGET_FCFLAGS := FCFLAGS="$(FCFLAGS_DEBUG) $(FCFLAGS_INIT) $(FCFLAGS_FMS)"
 
-MOM_LDFLAGS := LDFLAGS="$(LDFLAGS_FMS)"
-SYMMETRIC_LDFLAGS := LDFLAGS="$(COVERAGE) $(LDFLAGS_FMS)"
+MOM_LDFLAGS := LDFLAGS="$(LDFLAGS_FMS) $(LDFLAGS_USER)"
+SYMMETRIC_LDFLAGS := LDFLAGS="$(COVERAGE) $(LDFLAGS_FMS) $(LDFLAGS_USER)"
 
 
 # Environment variable configuration
@@ -249,7 +253,7 @@ build/target/Makefile: | $(TARGET_CODEBASE)
 #   Ideally we would want to re-run both Makefile and mkmf, but our mkmf call
 #   is inside ./configure, so we must re-run ./configure as well.
 $(foreach b,$(filter-out target,$(BUILDS)),build/$(b)/Makefile): $(MOM_SOURCE)
-build/target/configure: $(TARGET_SOURCE)
+build/target_codebase/configure: $(TARGET_SOURCE)
 
 
 # Build MOM6
@@ -285,10 +289,7 @@ $(TARGET_CODEBASE)/ac/configure: $(TARGET_CODEBASE)
 
 $(TARGET_CODEBASE):
 	git clone --recursive $(MOM_TARGET_URL) $@
-	cd $@ && git checkout $(MOM_TARGET_BRANCH)
-	# Copy modern autoconf files to target?
-	mkdir -p $(TARGET_CODEBASE)/ac
-	cp -r ../ac/{configure.ac,Makefile.in,m4} $(TARGET_CODEBASE)/ac
+	cd $@ && git checkout --recurse-submodules $(MOM_TARGET_BRANCH)
 
 
 #---
@@ -360,6 +361,7 @@ check_mom6_api_mct: build/mct/mom_ocean_model_mct.o
 work/local-env:
 	python3 -m venv $@
 	. $@/bin/activate \
+	  && python3 -m pip install --upgrade pip \
 	  && pip3 install wheel \
 	  && pip3 install cython \
 	  && pip3 install numpy \

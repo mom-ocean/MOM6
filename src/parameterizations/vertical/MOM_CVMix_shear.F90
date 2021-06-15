@@ -211,6 +211,9 @@ logical function CVMix_shear_init(Time, G, GV, US, param_file, diag, CS)
   ! Local variables
   integer :: NumberTrue=0
   logical :: use_JHL
+  logical :: use_LMD94
+  logical :: use_PP81
+
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
 
@@ -219,28 +222,23 @@ logical function CVMix_shear_init(Time, G, GV, US, param_file, diag, CS)
                             "control structure.")
     return
   endif
-  allocate(CS)
 
 ! Set default, read and log parameters
-  call get_param(param_file, mdl, "USE_LMD94", CS%use_LMD94, default=.false., do_not_log=.true.)
-  call get_param(param_file, mdl, "USE_PP81", CS%use_PP81, default=.false., do_not_log=.true.)
+  call get_param(param_file, mdl, "USE_LMD94", use_LMD94, default=.false., do_not_log=.true.)
+  call get_param(param_file, mdl, "USE_PP81", use_PP81, default=.false., do_not_log=.true.)
   call log_version(param_file, mdl, version, &
            "Parameterization of shear-driven turbulence via CVMix (various options)", &
-            all_default=.not.(CS%use_PP81.or.CS%use_LMD94))
-  call get_param(param_file, mdl, "USE_LMD94", CS%use_LMD94, &
+            all_default=.not.(use_PP81.or.use_LMD94))
+  call get_param(param_file, mdl, "USE_LMD94", use_LMD94, &
                  "If true, use the Large-McWilliams-Doney (JGR 1994) "//&
                  "shear mixing parameterization.", default=.false.)
-  if (CS%use_LMD94) then
+  if (use_LMD94) &
     NumberTrue=NumberTrue + 1
-    CS%Mix_Scheme='KPP'
-  endif
-  call get_param(param_file, mdl, "USE_PP81", CS%use_PP81, &
+  call get_param(param_file, mdl, "USE_PP81", use_PP81, &
                  "If true, use the Pacanowski and Philander (JPO 1981) "//&
                  "shear mixing parameterization.", default=.false.)
-  if (CS%use_PP81) then
+  if (use_PP81) &
     NumberTrue = NumberTrue + 1
-    CS%Mix_Scheme='PP'
-  endif
   use_JHL=kappa_shear_is_used(param_file)
   if (use_JHL) NumberTrue = NumberTrue + 1
   ! After testing for interior schemes, make sure only 0 or 1 are enabled.
@@ -250,10 +248,20 @@ logical function CVMix_shear_init(Time, G, GV, US, param_file, diag, CS)
            'Multiple shear driven internal mixing schemes selected,'//&
            ' please disable all but one scheme to proceed.')
   endif
-  CVMix_shear_init=(CS%use_PP81.or.CS%use_LMD94)
 
-! Forego remainder of initialization if not using this scheme
+  CVMix_shear_init = use_PP81 .or. use_LMD94
+
+  ! Forego remainder of initialization if not using this scheme
   if (.not. CVMix_shear_init) return
+
+  allocate(CS)
+  CS%use_LMD94 = use_LMD94
+  CS%use_PP81 = use_PP81
+  if (use_LMD94) &
+    CS%Mix_Scheme = 'KPP'
+  if (use_PP81) &
+    CS%Mix_Scheme = 'PP'
+
   call get_param(param_file, mdl, "NU_ZERO", CS%Nu_Zero, &
                  "Leading coefficient in KPP shear mixing.", &
                  units="nondim", default=5.e-3)
@@ -326,16 +334,11 @@ end function CVMix_shear_is_used
 
 !> Clear pointers and dealocate memory
 subroutine CVMix_shear_end(CS)
-  type(CVMix_shear_cs), pointer :: CS !< Control structure for this module that
-                                      !! will be deallocated in this subroutine
-
-  if (.not. associated(CS)) return
-
+  type(CVMix_shear_cs), intent(inout) :: CS !< Control structure for this module that
+                                            !! will be deallocated in this subroutine
   if (CS%id_N2 > 0) deallocate(CS%N2)
   if (CS%id_S2 > 0) deallocate(CS%S2)
   if (CS%id_ri_grad > 0) deallocate(CS%ri_grad)
-  deallocate(CS)
-
 end subroutine CVMix_shear_end
 
 end module MOM_CVMix_shear

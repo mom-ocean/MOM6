@@ -188,6 +188,9 @@ type, public :: accel_diag_ptrs
 
   real, pointer :: diag_hfrac_u(:,:,:) => NULL() !< Fractional layer thickness at u points
   real, pointer :: diag_hfrac_v(:,:,:) => NULL() !< Fractional layer thickness at v points
+  real, pointer :: diag_hu(:,:,:) => NULL() !< layer thickness at u points
+  real, pointer :: diag_hv(:,:,:) => NULL() !< layer thickness at v points
+
 end type accel_diag_ptrs
 
 !> Pointers to arrays with transports, which can later be used for derived diagnostics, like energy balances.
@@ -201,7 +204,7 @@ type, public :: cont_diag_ptrs
     vhGM => NULL()    !< Isopycnal height diffusion induced meridional volume fluxes [H L2 T-1 ~> m3 s-1 or kg s-1]
 
 ! Each of the following fields is found at nz+1 interfaces.
-  real, pointer :: diapyc_vel(:,:,:) => NULL() !< The net diapycnal velocity [H s-1 ~> m s-1 or kg m-2 s-1]
+  real, pointer :: diapyc_vel(:,:,:) => NULL() !< The net diapycnal velocity [H T-1 ~> m s-1 or kg m-2 s-1]
 
 end type cont_diag_ptrs
 
