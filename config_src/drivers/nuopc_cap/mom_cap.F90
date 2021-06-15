@@ -697,7 +697,8 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
 
   if (ocean_state%use_waves) then
     if (ocean_state%wave_method == "VR12-MA") then
-      continue
+      allocate( Ice_ocean_boundary%lamult(isc:iec,jsc:jec) )
+      Ice_ocean_boundary%lamult          = 0.0
     else
       Ice_ocean_boundary%num_stk_bands=ocean_state%Waves%NumBands
       allocate ( Ice_ocean_boundary% ustk0 (isc:iec,jsc:jec),         &
@@ -722,15 +723,6 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
    call fld_list_add(fldsFrOcn_num, fldsFrOcn, trim(scalar_field_name), "will_provide")
   end if
 
-  if (cesm_coupled) then
-    !call fld_list_add(fldsToOcn_num, fldsToOcn, "Sw_lamult"                 , "will provide")
-    !call fld_list_add(fldsToOcn_num, fldsToOcn, "Sw_ustokes"                , "will provide")
-    !call fld_list_add(fldsToOcn_num, fldsToOcn, "Sw_vstokes"                , "will provide")
-    !call fld_list_add(fldsToOcn_num, fldsToOcn, "Sw_hstokes"                , "will provide")
-  else
-    !call fld_list_add(fldsToOcn_num, fldsToOcn, "mass_of_overlying_sea_ice" , "will provide")
-    !call fld_list_add(fldsFrOcn_num, fldsFrOcn, "sea_lev"                   , "will provide")
-  endif
 
   !--------- import fields -------------
   call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_salt_rate"             , "will provide") ! from ice
@@ -755,7 +747,10 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
   !call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_calving_heat_flx"       , "will provide")
   if (ocean_state%use_waves) then
     if (ocean_state%wave_method == "VR12-MA") then
-      continue
+      call fld_list_add(fldsToOcn_num, fldsToOcn, "Sw_lamult"                 , "will provide")
+      !call fld_list_add(fldsToOcn_num, fldsToOcn, "Sw_ustokes"                , "will provide")
+      !call fld_list_add(fldsToOcn_num, fldsToOcn, "Sw_vstokes"                , "will provide")
+      !call fld_list_add(fldsToOcn_num, fldsToOcn, "Sw_hstokes"                , "will provide")
     else
       if (Ice_ocean_boundary%num_stk_bands > 3) then
         call MOM_error(FATAL, "Number of Stokes Bands > 3, NUOPC cap not set up for this")

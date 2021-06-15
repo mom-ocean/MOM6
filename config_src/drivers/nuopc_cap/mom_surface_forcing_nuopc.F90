@@ -183,6 +183,7 @@ type, public :: ice_ocean_boundary_type
                                                               !! ice-shelves, expressed as a coefficient
                                                               !! for divergence damping, as determined
                                                               !! outside of the ocean model in [m3/s]
+  real, pointer, dimension(:,:)   :: lamult          => NULL() !< Langmuir enhancement factor [nondim]
   real, pointer, dimension(:,:)   :: ustk0           => NULL() !< Surface Stokes drift, zonal [m/s]
   real, pointer, dimension(:,:)   :: vstk0           => NULL() !< Surface Stokes drift, meridional [m/s]
   real, pointer, dimension(:)     :: stk_wavenumbers => NULL() !< The central wave number of Stokes bands [rad/m]
@@ -688,8 +689,11 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, US, CS)
   if (associated(forces%rigidity_ice_u)) forces%rigidity_ice_u(:,:) = 0.0
   if (associated(forces%rigidity_ice_v)) forces%rigidity_ice_v(:,:) = 0.0
 
-  if ( associated(IOB%ustkb) ) &
+  if ( associated(IOB%lamult) ) then
+    call allocate_mech_forcing(G, forces, waves=.true., num_stk_bands=0)
+  elseif ( associated(IOB%ustkb) ) then
     call allocate_mech_forcing(G, forces, waves=.true., num_stk_bands=IOB%num_stk_bands)
+  endif
 
   ! applied surface pressure from atmosphere and cryosphere
   if (CS%use_limited_P_SSH) then
@@ -849,6 +853,13 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, US, CS)
   endif   ! endif for wind related fields
 
   ! wave to ocean coupling
+  if ( associated(IOB%lamult)) then
+    do j=js,je; do i=is,ie
+      forces%lamult(i,j) = IOB%lamult(i-i0,j-j0)
+    enddo ; enddo
+    call pass_var(forces%lamult, G%domain, halo=1 )
+  endif
+
   if ( associated(IOB%ustkb) ) then
 
     forces%stk_wavenumbers(:) = IOB%stk_wavenumbers
@@ -1041,7 +1052,7 @@ subroutine forcing_save_restart(CS, G, Time, directory, time_stamped, &
 end subroutine forcing_save_restart
 
 !> Initialize the surface forcing, including setting parameters and allocating permanent memory.
-subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, restore_salt, restore_temp)
+subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, restore_salt, restore_temp, use_waves)
   type(time_type),          intent(in)    :: Time !< The current model time
   type(ocean_grid_type),    intent(in)    :: G    !< The ocean's grid structure
   type(unit_scale_type),    intent(in)    :: US   !< A dimensional unit scaling type
@@ -1054,6 +1065,8 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, restore_salt,
                                                   !! restoring will be applied in this model.
   logical, optional,        intent(in)    :: restore_temp !< If present and true surface temperature
                                                   !! restoring will be applied in this model.
+  logical, optional,        intent(in)    :: use_waves !< If present and true, use waves and activate
+                                                  !! the corresponding wave forcing diagnostics
 
   ! Local variables
   real :: utide  ! The RMS tidal velocity [Z T-1 ~> m s-1].
@@ -1321,7 +1334,7 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, restore_salt,
                  "If true, makes available diagnostics of fluxes from icebergs "//&
                  "as seen by MOM6.", default=.false.)
   call register_forcing_type_diags(Time, diag, US, CS%use_temperature, CS%handles, &
-                                   use_berg_fluxes=iceberg_flux_diags)
+                                   use_berg_fluxes=iceberg_flux_diags, use_waves=use_waves)
 
   call get_param(param_file, mdl, "ALLOW_FLUX_ADJUSTMENTS", CS%allow_flux_adjustments, &
                  "If true, allows flux adjustments to specified via the "//&

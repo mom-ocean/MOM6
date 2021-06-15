@@ -367,13 +367,16 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn, i
     use_melt_pot=.false.
   endif
 
+  call get_param(param_file, mdl, "USE_WAVES", OS%use_waves, &
+       "If true, enables surface wave modules.", default=.false.)
+
   !   Consider using a run-time flag to determine whether to do the diagnostic
   ! vertical integrals, since the related 3-d sums are not negligible in cost.
   call allocate_surface_state(OS%sfc_state, OS%grid, use_temperature, &
                               do_integrals=.true., gas_fields_ocn=gas_fields_ocn, use_meltpot=use_melt_pot)
 
   call surface_forcing_init(Time_in, OS%grid, OS%US, param_file, OS%diag, &
-                            OS%forcing_CSp, OS%restore_salinity, OS%restore_temp)
+                            OS%forcing_CSp, OS%restore_salinity, OS%restore_temp, OS%use_waves)
 
   if (OS%use_ice_shelf)  then
     call initialize_ice_shelf(param_file, OS%grid, OS%Time, OS%ice_shelf_CSp, &
@@ -385,8 +388,6 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn, i
       call allocate_forcing_type(OS%grid, OS%fluxes, shelf=.true.)
   endif
 
-  call get_param(param_file, mdl, "USE_WAVES", OS%Use_Waves, &
-       "If true, enables surface wave modules.", default=.false.)
   if (OS%use_waves) then
     call get_param(param_file, mdl, "WAVE_METHOD", OS%wave_method, default="EMPTY", do_not_log=.true.)
     call MOM_wave_interface_init(OS%Time, OS%grid, OS%GV, OS%US, param_file, OS%Waves, OS%diag)
