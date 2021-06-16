@@ -121,8 +121,7 @@ subroutine Kelvin_initialize_topography(D, G, param_file, max_depth, US)
   real, dimension(G%isd:G%ied,G%jsd:G%jed), &
                                    intent(out) :: D !< Ocean bottom depth in m or Z if US is present
   type(param_file_type),           intent(in)  :: param_file !< Parameter file structure
-  real,                            intent(in)  :: max_depth  !< Maximum model depth in the units of D
-                                                             ! [Z ~> m or m]
+  real,                            intent(in)  :: max_depth !< Maximum model depth in the units of D [Z ~> m or m]
   type(unit_scale_type), optional, intent(in)  :: US !< A dimensional unit scaling type
 
   ! Local variables
@@ -216,7 +215,7 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, GV, US, h, Time)
     val1 = sin(omega * time_sec)
   else
     mag_int = 1.0*US%m_s_to_L_T**2
-    N0 = sqrt((CS%rho_range / CS%rho_0) * GV%g_Earth / CS%H0)
+    N0 = sqrt((CS%rho_range / CS%rho_0) * (GV%g_Earth / CS%H0))
     lambda = PI * CS%mode * CS%F_0 / (CS%H0 * N0)
     ! Two wavelengths in domain
     omega = (4.0 * CS%H0 * N0)  / (CS%mode * US%m_to_L*G%len_lon)

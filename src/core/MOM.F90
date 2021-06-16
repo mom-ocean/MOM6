@@ -24,7 +24,8 @@ use MOM_diag_mediator,        only : diag_grid_storage, diag_grid_storage_init
 use MOM_diag_mediator,        only : diag_save_grids, diag_restore_grids
 use MOM_diag_mediator,        only : diag_copy_storage_to_diag, diag_copy_diag_to_storage
 use MOM_domains,              only : MOM_domains_init
-use MOM_domains,              only : sum_across_PEs, pass_var, pass_vector, clone_MOM_domain
+use MOM_domains,              only : sum_across_PEs, pass_var, pass_vector
+use MOM_domains,              only : clone_MOM_domain, deallocate_MOM_domain
 use MOM_domains,              only : To_North, To_East, To_South, To_West
 use MOM_domains,              only : To_All, Omit_corners, CGRID_NE, SCALAR_PAIR
 use MOM_domains,              only : create_group_pass, do_group_pass, group_pass_type
@@ -63,6 +64,7 @@ use MOM_diagnostics,           only : register_transport_diags, post_transport_d
 use MOM_diagnostics,           only : register_surface_diags, write_static_fields
 use MOM_diagnostics,           only : post_surface_dyn_diags, post_surface_thermo_diags
 use MOM_diagnostics,           only : diagnostics_CS, surface_diag_IDs, transport_diag_IDs
+use MOM_diagnostics,           only : MOM_diagnostics_end
 use MOM_dynamics_unsplit,      only : step_MOM_dyn_unsplit, register_restarts_dyn_unsplit
 use MOM_dynamics_unsplit,      only : initialize_dyn_unsplit, end_dyn_unsplit
 use MOM_dynamics_unsplit,      only : MOM_dyn_unsplit_CS
@@ -83,9 +85,10 @@ use MOM_grid,                  only : set_first_direction, rescale_grid_bathymet
 use MOM_hor_index,             only : hor_index_type, hor_index_init
 use MOM_hor_index,             only : rotate_hor_index
 use MOM_interface_heights,     only : find_eta
-use MOM_lateral_mixing_coeffs, only : calc_slope_functions, VarMix_init
+use MOM_lateral_mixing_coeffs, only : calc_slope_functions, VarMix_init, VarMix_end
 use MOM_lateral_mixing_coeffs, only : calc_resoln_function, calc_depth_function, VarMix_CS
-use MOM_MEKE,                  only : MEKE_init, MEKE_alloc_register_restart, step_forward_MEKE, MEKE_CS
+use MOM_MEKE,                  only : MEKE_alloc_register_restart, step_forward_MEKE
+use MOM_MEKE,                  only : MEKE_CS, MEKE_init, MEKE_end
 use MOM_MEKE_types,            only : MEKE_type
 use MOM_mixed_layer_restrat,   only : mixedlayer_restrat, mixedlayer_restrat_init, mixedlayer_restrat_CS
 use MOM_mixed_layer_restrat,   only : mixedlayer_restrat_register_restarts
@@ -95,15 +98,18 @@ use MOM_open_boundary,         only : register_temp_salt_segments
 use MOM_open_boundary,         only : open_boundary_register_restarts
 use MOM_open_boundary,         only : update_segment_tracer_reservoirs
 use MOM_open_boundary,         only : rotate_OBC_config, rotate_OBC_init
-use MOM_set_visc,              only : set_viscous_BBL, set_viscous_ML, set_visc_init
+use MOM_set_visc,              only : set_viscous_BBL, set_viscous_ML
 use MOM_set_visc,              only : set_visc_register_restarts, set_visc_CS
+use MOM_set_visc,              only : set_visc_init, set_visc_end
 use MOM_shared_initialization, only : write_ocean_geometry_file
 use MOM_sponge,                only : init_sponge_diags, sponge_CS
 use MOM_state_initialization,  only : MOM_initialize_state
 use MOM_sum_output,            only : write_energy, accumulate_net_input
-use MOM_sum_output,            only : MOM_sum_output_init, sum_output_CS
+use MOM_sum_output,            only : MOM_sum_output_init, MOM_sum_output_end
+use MOM_sum_output,            only : sum_output_CS
 use MOM_ALE_sponge,            only : init_ALE_sponge_diags, ALE_sponge_CS
-use MOM_thickness_diffuse,     only : thickness_diffuse, thickness_diffuse_init, thickness_diffuse_CS
+use MOM_thickness_diffuse,     only : thickness_diffuse, thickness_diffuse_init
+use MOM_thickness_diffuse,     only : thickness_diffuse_end, thickness_diffuse_CS
 use MOM_tracer_advect,         only : advect_tracer, tracer_advect_init
 use MOM_tracer_advect,         only : tracer_advect_end, tracer_advect_CS
 use MOM_tracer_hor_diff,       only : tracer_hordiff, tracer_hor_diff_init
@@ -428,7 +434,7 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
   type(surface), target, intent(inout) :: sfc_state  !< surface ocean state
   type(time_type),    intent(in)    :: Time_start    !< starting time of a segment, as a time type
   real,               intent(in)    :: time_int_in   !< time interval covered by this run segment [s].
-  type(MOM_control_struct), pointer :: CS            !< control structure from initialize_MOM
+  type(MOM_control_struct), intent(inout), target :: CS   !< control structure from initialize_MOM
   type(Wave_parameters_CS), &
             optional, pointer       :: Waves         !< An optional pointer to a wave property CS
   logical,  optional, intent(in)    :: do_dynamics   !< Present and false, do not do updates due
@@ -975,7 +981,7 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_thermo, &
   real,               intent(in)    :: bbl_time_int !< time interval over which updates to the
                                                   !! bottom boundary layer properties will apply [T ~> s],
                                                   !! or zero not to update the properties.
-  type(MOM_control_struct), pointer :: CS         !< control structure from initialize_MOM
+  type(MOM_control_struct), intent(inout), target :: CS   !< control structure from initialize_MOM
   type(time_type),    intent(in)    :: Time_local !< End time of a segment, as a time type
   type(wave_parameters_CS), &
             optional, pointer       :: Waves      !< Container for wave related parameters; the
@@ -1426,7 +1432,7 @@ subroutine step_offline(forces, fluxes, sfc_state, Time_start, time_interval, CS
   type(surface),      intent(inout) :: sfc_state     !< surface ocean state
   type(time_type),    intent(in)    :: Time_start    !< starting time of a segment, as a time type
   real,               intent(in)    :: time_interval !< time interval
-  type(MOM_control_struct), pointer :: CS            !< control structure from initialize_MOM
+  type(MOM_control_struct), intent(inout) :: CS      !< control structure from initialize_MOM
 
   ! Local pointers
   type(ocean_grid_type),      pointer :: G  => NULL() ! Pointer to a structure containing
@@ -1624,7 +1630,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   type(time_type),           intent(in)    :: Time_init   !< The start time for the coupled model's calendar
   type(param_file_type),     intent(out)   :: param_file  !< structure indicating parameter file to parse
   type(directories),         intent(out)   :: dirs        !< structure with directory paths
-  type(MOM_control_struct),  pointer       :: CS          !< pointer set in this routine to MOM control structure
+  type(MOM_control_struct),  intent(inout), target :: CS  !< pointer set in this routine to MOM control structure
   type(MOM_restart_CS),      pointer       :: restart_CSp !< pointer set in this routine to the
                                                           !! restart control structure that will
                                                           !! be used for MOM.
@@ -1723,13 +1729,6 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   type(time_type)                 :: Start_time
   type(ocean_internal_state)      :: MOM_internal_state
   character(len=200) :: area_varname, ice_shelf_file, inputdir, filename
-
-  if (associated(CS)) then
-    call MOM_error(WARNING, "initialize_MOM called with an associated "// &
-                            "control structure.")
-    return
-  endif
-  allocate(CS)
 
   CS%Time => Time
 
@@ -2812,7 +2811,7 @@ end subroutine initialize_MOM
 subroutine finish_MOM_initialization(Time, dirs, CS, restart_CSp)
   type(time_type),          intent(in)    :: Time        !< model time, used in this routine
   type(directories),        intent(in)    :: dirs        !< structure with directory paths
-  type(MOM_control_struct), pointer       :: CS          !< pointer to MOM control structure
+  type(MOM_control_struct), intent(inout) :: CS          !< MOM control structure
   type(MOM_restart_CS),     pointer       :: restart_CSp !< pointer to the restart control
                                                          !! structure that will be used for MOM.
   ! Local variables
@@ -3038,7 +3037,7 @@ end subroutine adjust_ssh_for_p_atm
 !! setting the appropriate fields in sfc_state.  Unused fields
 !! are set to NULL or are unallocated.
 subroutine extract_surface_state(CS, sfc_state_in)
-  type(MOM_control_struct), pointer    :: CS !< Master MOM control structure
+  type(MOM_control_struct), intent(inout), target :: CS   !< Master MOM control structure
   type(surface), target, intent(inout) :: sfc_state_in !< transparent ocean surface state
                                              !! structure shared with the calling routine
                                              !! data in this structure is intent out.
@@ -3465,7 +3464,7 @@ end subroutine rotate_initial_state
 
 !> Return true if all phases of step_MOM are at the same point in time.
 function MOM_state_is_synchronized(CS, adv_dyn) result(in_synch)
-  type(MOM_control_struct), pointer :: CS !< MOM control structure
+  type(MOM_control_struct), intent(inout) :: CS !< MOM control structure
   logical,        optional, intent(in) :: adv_dyn  !< If present and true, only check
                                           !! whether the advection is up-to-date with
                                           !! the dynamics.
@@ -3486,7 +3485,7 @@ end function MOM_state_is_synchronized
 !> This subroutine offers access to values or pointers to other types from within
 !! the MOM_control_struct, allowing the MOM_control_struct to be opaque.
 subroutine get_MOM_state_elements(CS, G, GV, US, C_p, C_p_scaled, use_temp)
-  type(MOM_control_struct),          pointer     :: CS !< MOM control structure
+  type(MOM_control_struct), intent(inout), target :: CS  !< MOM control structure
   type(ocean_grid_type),   optional, pointer     :: G    !< structure containing metrics and grid info
   type(verticalGrid_type), optional, pointer     :: GV   !< structure containing vertical grid info
   type(unit_scale_type),   optional, pointer     :: US   !< A dimensional unit scaling type
@@ -3505,7 +3504,7 @@ end subroutine get_MOM_state_elements
 
 !> Find the global integrals of various quantities.
 subroutine get_ocean_stocks(CS, mass, heat, salt, on_PE_only)
-  type(MOM_control_struct), pointer :: CS !< MOM control structure
+  type(MOM_control_struct), intent(inout) :: CS !< MOM control structure
   real,    optional, intent(out) :: heat  !< The globally integrated integrated ocean heat [J].
   real,    optional, intent(out) :: salt  !< The globally integrated integrated ocean salt [kg].
   real,    optional, intent(out) :: mass  !< The globally integrated integrated ocean mass [kg].
@@ -3522,30 +3521,30 @@ end subroutine get_ocean_stocks
 
 !> End of ocean model, including memory deallocation
 subroutine MOM_end(CS)
-  type(MOM_control_struct), pointer :: CS   !< MOM control structure
+  type(MOM_control_struct), intent(inout) :: CS   !< MOM control structure
+
+  call MOM_sum_output_end(CS%sum_output_CSp)
 
   if (CS%use_ALE_algorithm) call ALE_end(CS%ALE_CSp)
 
-  DEALLOC_(CS%u) ; DEALLOC_(CS%v) ; DEALLOC_(CS%h)
-  DEALLOC_(CS%uh) ; DEALLOC_(CS%vh)
-
-  if (associated(CS%tv%T)) then
-    DEALLOC_(CS%T) ; CS%tv%T => NULL() ; DEALLOC_(CS%S) ; CS%tv%S => NULL()
-  endif
-  if (associated(CS%tv%frazil)) deallocate(CS%tv%frazil)
-  if (associated(CS%tv%salt_deficit)) deallocate(CS%tv%salt_deficit)
-  if (associated(CS%Hml)) deallocate(CS%Hml)
+  ! NOTE: Allocated in PressureForce_FV_Bouss
+  if (associated(CS%tv%varT)) deallocate(CS%tv%varT)
 
   call tracer_advect_end(CS%tracer_adv_CSp)
   call tracer_hor_diff_end(CS%tracer_diff_CSp)
   call tracer_registry_end(CS%tracer_Reg)
   call tracer_flow_control_end(CS%tracer_flow_CSp)
 
-  call diabatic_driver_end(CS%diabatic_CSp)
+  if (.not. CS%adiabatic) then
+    call diabatic_driver_end(CS%diabatic_CSp)
+    deallocate(CS%diabatic_CSp)
+  endif
+
+  call MOM_diagnostics_end(CS%diagnostics_CSp, CS%ADp, CS%CDp)
+  deallocate(CS%diagnostics_CSp)
 
   if (CS%offline_tracer_mode) call offline_transport_end(CS%offline_CSp)
 
-  DEALLOC_(CS%uhtr) ; DEALLOC_(CS%vhtr)
   if (CS%split) then
     call end_dyn_split_RK2(CS%dyn_split_RK2_CSp)
   elseif (CS%use_RK2) then
@@ -3553,15 +3552,64 @@ subroutine MOM_end(CS)
   else
     call end_dyn_unsplit(CS%dyn_unsplit_CSp)
   endif
+
+  call thickness_diffuse_end(CS%thickness_diffuse_CSp, CS%CDp)
+  deallocate(CS%thickness_diffuse_CSp)
+
+  if (associated(CS%VarMix)) then
+    call VarMix_end(CS%VarMix)
+    deallocate(CS%VarMix)
+  endif
+
+  if (associated(CS%mixedlayer_restrat_CSp)) &
+    deallocate(CS%mixedlayer_restrat_CSp)
+
+  if (associated(CS%set_visc_CSp)) &
+    call set_visc_end(CS%visc, CS%set_visc_CSp)
+
+  if (associated(CS%MEKE_CSp)) deallocate(CS%MEKE_CSp)
+
+  if (associated(CS%MEKE)) then
+    call MEKE_end(CS%MEKE)
+    deallocate(CS%MEKE)
+  endif
+
+  if (associated(CS%tv%internal_heat)) deallocate(CS%tv%internal_heat)
+  if (associated(CS%tv%TempxPmE)) deallocate(CS%tv%TempxPmE)
+
   DEALLOC_(CS%ave_ssh_ibc) ; DEALLOC_(CS%ssh_rint)
+
+  ! TODO: debug_truncations deallocation
+
+  DEALLOC_(CS%uhtr) ; DEALLOC_(CS%vhtr)
+
+  if (associated(CS%Hml)) deallocate(CS%Hml)
+  if (associated(CS%tv%salt_deficit)) deallocate(CS%tv%salt_deficit)
+  if (associated(CS%tv%frazil)) deallocate(CS%tv%frazil)
+
+  if (associated(CS%tv%T)) then
+    DEALLOC_(CS%T) ; CS%tv%T => NULL() ; DEALLOC_(CS%S) ; CS%tv%S => NULL()
+  endif
+
+  DEALLOC_(CS%u) ; DEALLOC_(CS%v) ; DEALLOC_(CS%h)
+  DEALLOC_(CS%uh) ; DEALLOC_(CS%vh)
+
   if (associated(CS%update_OBC_CSp)) call OBC_register_end(CS%update_OBC_CSp)
 
   call verticalGridEnd(CS%GV)
-  call unit_scaling_end(CS%US)
   call MOM_grid_end(CS%G)
 
-  deallocate(CS)
+  if (CS%debug .or. CS%G%symmetric) &
+    call deallocate_MOM_domain(CS%G%Domain_aux)
 
+  if (CS%rotate_index) &
+    call deallocate_MOM_domain(CS%G%Domain)
+
+  ! The MPP domains may be needed by an external coupler, so use `cursory`.
+  ! TODO: This may create a domain memory leak, and needs investigation.
+  call deallocate_MOM_domain(CS%G_in%domain, cursory=.true.)
+
+  call unit_scaling_end(CS%US)
 end subroutine MOM_end
 
 !> \namespace mom
