@@ -434,7 +434,7 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
   type(surface), target, intent(inout) :: sfc_state  !< surface ocean state
   type(time_type),    intent(in)    :: Time_start    !< starting time of a segment, as a time type
   real,               intent(in)    :: time_int_in   !< time interval covered by this run segment [s].
-  type(MOM_control_struct), pointer :: CS            !< control structure from initialize_MOM
+  type(MOM_control_struct), intent(inout), target :: CS   !< control structure from initialize_MOM
   type(Wave_parameters_CS), &
             optional, pointer       :: Waves         !< An optional pointer to a wave property CS
   logical,  optional, intent(in)    :: do_dynamics   !< Present and false, do not do updates due
@@ -981,7 +981,7 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_thermo, &
   real,               intent(in)    :: bbl_time_int !< time interval over which updates to the
                                                   !! bottom boundary layer properties will apply [T ~> s],
                                                   !! or zero not to update the properties.
-  type(MOM_control_struct), pointer :: CS         !< control structure from initialize_MOM
+  type(MOM_control_struct), intent(inout), target :: CS   !< control structure from initialize_MOM
   type(time_type),    intent(in)    :: Time_local !< End time of a segment, as a time type
   type(wave_parameters_CS), &
             optional, pointer       :: Waves      !< Container for wave related parameters; the
@@ -1432,7 +1432,7 @@ subroutine step_offline(forces, fluxes, sfc_state, Time_start, time_interval, CS
   type(surface),      intent(inout) :: sfc_state     !< surface ocean state
   type(time_type),    intent(in)    :: Time_start    !< starting time of a segment, as a time type
   real,               intent(in)    :: time_interval !< time interval
-  type(MOM_control_struct), pointer :: CS            !< control structure from initialize_MOM
+  type(MOM_control_struct), intent(inout) :: CS      !< control structure from initialize_MOM
 
   ! Local pointers
   type(ocean_grid_type),      pointer :: G  => NULL() ! Pointer to a structure containing
@@ -1630,7 +1630,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   type(time_type),           intent(in)    :: Time_init   !< The start time for the coupled model's calendar
   type(param_file_type),     intent(out)   :: param_file  !< structure indicating parameter file to parse
   type(directories),         intent(out)   :: dirs        !< structure with directory paths
-  type(MOM_control_struct),  pointer       :: CS          !< pointer set in this routine to MOM control structure
+  type(MOM_control_struct),  intent(inout), target :: CS  !< pointer set in this routine to MOM control structure
   type(MOM_restart_CS),      pointer       :: restart_CSp !< pointer set in this routine to the
                                                           !! restart control structure that will
                                                           !! be used for MOM.
@@ -1729,13 +1729,6 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   type(time_type)                 :: Start_time
   type(ocean_internal_state)      :: MOM_internal_state
   character(len=200) :: area_varname, ice_shelf_file, inputdir, filename
-
-  if (associated(CS)) then
-    call MOM_error(WARNING, "initialize_MOM called with an associated "// &
-                            "control structure.")
-    return
-  endif
-  allocate(CS)
 
   CS%Time => Time
 
@@ -2818,7 +2811,7 @@ end subroutine initialize_MOM
 subroutine finish_MOM_initialization(Time, dirs, CS, restart_CSp)
   type(time_type),          intent(in)    :: Time        !< model time, used in this routine
   type(directories),        intent(in)    :: dirs        !< structure with directory paths
-  type(MOM_control_struct), pointer       :: CS          !< pointer to MOM control structure
+  type(MOM_control_struct), intent(inout) :: CS          !< MOM control structure
   type(MOM_restart_CS),     pointer       :: restart_CSp !< pointer to the restart control
                                                          !! structure that will be used for MOM.
   ! Local variables
@@ -3044,7 +3037,7 @@ end subroutine adjust_ssh_for_p_atm
 !! setting the appropriate fields in sfc_state.  Unused fields
 !! are set to NULL or are unallocated.
 subroutine extract_surface_state(CS, sfc_state_in)
-  type(MOM_control_struct), pointer    :: CS !< Master MOM control structure
+  type(MOM_control_struct), intent(inout), target :: CS   !< Master MOM control structure
   type(surface), target, intent(inout) :: sfc_state_in !< transparent ocean surface state
                                              !! structure shared with the calling routine
                                              !! data in this structure is intent out.
@@ -3471,7 +3464,7 @@ end subroutine rotate_initial_state
 
 !> Return true if all phases of step_MOM are at the same point in time.
 function MOM_state_is_synchronized(CS, adv_dyn) result(in_synch)
-  type(MOM_control_struct), pointer :: CS !< MOM control structure
+  type(MOM_control_struct), intent(inout) :: CS !< MOM control structure
   logical,        optional, intent(in) :: adv_dyn  !< If present and true, only check
                                           !! whether the advection is up-to-date with
                                           !! the dynamics.
@@ -3492,7 +3485,7 @@ end function MOM_state_is_synchronized
 !> This subroutine offers access to values or pointers to other types from within
 !! the MOM_control_struct, allowing the MOM_control_struct to be opaque.
 subroutine get_MOM_state_elements(CS, G, GV, US, C_p, C_p_scaled, use_temp)
-  type(MOM_control_struct),          pointer     :: CS !< MOM control structure
+  type(MOM_control_struct), intent(inout), target :: CS  !< MOM control structure
   type(ocean_grid_type),   optional, pointer     :: G    !< structure containing metrics and grid info
   type(verticalGrid_type), optional, pointer     :: GV   !< structure containing vertical grid info
   type(unit_scale_type),   optional, pointer     :: US   !< A dimensional unit scaling type
@@ -3511,7 +3504,7 @@ end subroutine get_MOM_state_elements
 
 !> Find the global integrals of various quantities.
 subroutine get_ocean_stocks(CS, mass, heat, salt, on_PE_only)
-  type(MOM_control_struct), pointer :: CS !< MOM control structure
+  type(MOM_control_struct), intent(inout) :: CS !< MOM control structure
   real,    optional, intent(out) :: heat  !< The globally integrated integrated ocean heat [J].
   real,    optional, intent(out) :: salt  !< The globally integrated integrated ocean salt [kg].
   real,    optional, intent(out) :: mass  !< The globally integrated integrated ocean mass [kg].
@@ -3528,7 +3521,7 @@ end subroutine get_ocean_stocks
 
 !> End of ocean model, including memory deallocation
 subroutine MOM_end(CS)
-  type(MOM_control_struct), pointer :: CS   !< MOM control structure
+  type(MOM_control_struct), intent(inout) :: CS   !< MOM control structure
 
   call MOM_sum_output_end(CS%sum_output_CSp)
 
@@ -3604,7 +3597,6 @@ subroutine MOM_end(CS)
   if (associated(CS%update_OBC_CSp)) call OBC_register_end(CS%update_OBC_CSp)
 
   call verticalGridEnd(CS%GV)
-  call unit_scaling_end(CS%US)
   call MOM_grid_end(CS%G)
 
   if (CS%debug .or. CS%G%symmetric) &
@@ -3613,9 +3605,11 @@ subroutine MOM_end(CS)
   if (CS%rotate_index) &
     call deallocate_MOM_domain(CS%G%Domain)
 
-  call deallocate_MOM_domain(CS%G_in%domain)
+  ! The MPP domains may be needed by an external coupler, so use `cursory`.
+  ! TODO: This may create a domain memory leak, and needs investigation.
+  call deallocate_MOM_domain(CS%G_in%domain, cursory=.true.)
 
-  deallocate(CS)
+  call unit_scaling_end(CS%US)
 end subroutine MOM_end
 
 !> \namespace mom
