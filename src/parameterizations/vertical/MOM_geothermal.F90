@@ -599,11 +599,9 @@ end subroutine geothermal_init
 
 !> Clean up and deallocate memory associated with the geothermal heating module.
 subroutine geothermal_end(CS)
-  type(geothermal_CS), pointer :: CS !< Geothermal heating control structure that
-                                     !! will be deallocated in this subroutine.
-
-  if (associated(CS%geo_heat)) deallocate(CS%geo_heat)
-  if (associated(CS)) deallocate(CS)
+  type(geothermal_CS), intent(inout) :: CS !< Geothermal heating control structure that
+                                           !! will be deallocated in this subroutine.
+  deallocate(CS%geo_heat)
 end subroutine geothermal_end
 
 !> \namespace mom_geothermal
