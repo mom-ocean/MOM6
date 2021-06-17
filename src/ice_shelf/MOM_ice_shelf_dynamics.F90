@@ -959,7 +959,7 @@ end subroutine ice_shelf_advect
 
   !! begin loop
 
-  do iter=1,100
+  do iter=1,400
 
     call ice_shelf_solve_inner(CS, ISS, G, US, u_shlf, v_shlf, taudx, taudy, H_node, float_cond, &
                                ISS%hmask, conv_flag, iters, time, Phi, Phisub)
