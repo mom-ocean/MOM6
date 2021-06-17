@@ -1056,8 +1056,8 @@ subroutine KPP_compute_BLD(CS, G, GV, US, h, Temp, Salt, u, v, tv, uStar, buoyFl
           surfHu    = surfHu + 0.5*US%L_T_to_m_s*(u(i,j,ktmp)+u(i-1,j,ktmp)) * delH
           surfHv    = surfHv + 0.5*US%L_T_to_m_s*(v(i,j,ktmp)+v(i,j-1,ktmp)) * delH
           if (CS%Stokes_Mixing) then
-            surfHus = surfHus + 0.5*(WAVES%US_x(i,j,ktmp)+WAVES%US_x(i-1,j,ktmp)) * delH
-            surfHvs = surfHvs + 0.5*(WAVES%US_y(i,j,ktmp)+WAVES%US_y(i,j-1,ktmp)) * delH
+            surfHus = surfHus + 0.5*US%L_T_to_m_s*(WAVES%US_x(i,j,ktmp)+WAVES%US_x(i-1,j,ktmp)) * delH
+            surfHvs = surfHvs + 0.5*US%L_T_to_m_s*(WAVES%US_y(i,j,ktmp)+WAVES%US_y(i,j-1,ktmp)) * delH
           endif
 
         enddo
@@ -1078,8 +1078,8 @@ subroutine KPP_compute_BLD(CS, G, GV, US, h, Temp, Salt, u, v, tv, uStar, buoyFl
           ! If momentum is mixed down the Stokes drift gradient, then
           !  the Stokes drift must be included in the bulk Richardson number
           !  calculation.
-          Uk =  Uk + (0.5*(Waves%Us_x(i,j,k)+Waves%US_x(i-1,j,k)) -surfUs )
-          Vk =  Vk + (0.5*(Waves%Us_y(i,j,k)+Waves%Us_y(i,j-1,k)) -surfVs )
+          Uk =  Uk + (0.5*US%L_T_to_m_s*(Waves%Us_x(i,j,k)+Waves%US_x(i-1,j,k)) - surfUs )
+          Vk =  Vk + (0.5*US%L_T_to_m_s*(Waves%Us_y(i,j,k)+Waves%Us_y(i,j-1,k)) - surfVs )
         endif
 
         deltaU2(k) = Uk**2 + Vk**2

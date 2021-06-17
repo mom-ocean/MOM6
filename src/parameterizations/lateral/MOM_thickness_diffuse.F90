@@ -2116,10 +2116,23 @@ subroutine thickness_diffuse_get_KH(CS, KH_u_GME, KH_v_GME, G, GV)
 end subroutine thickness_diffuse_get_KH
 
 !> Deallocate the thickness diffusion control structure
-subroutine thickness_diffuse_end(CS)
-  type(thickness_diffuse_CS), pointer :: CS !< Control structure for thickness diffusion
+subroutine thickness_diffuse_end(CS, CDp)
+  type(thickness_diffuse_CS), intent(inout) :: CS !< Control structure for thickness diffusion
+  type(cont_diag_ptrs), intent(inout) :: CDp      !< Continuity diagnostic control structure
 
-  if (associated(CS)) deallocate(CS)
+  if (CS%id_slope_x > 0) deallocate(CS%diagSlopeX)
+  if (CS%id_slope_y > 0) deallocate(CS%diagSlopeY)
+
+  if (CS%id_GMwork > 0) deallocate(CS%GMwork)
+
+  ! NOTE: [uv]hGM may be allocated either here or the diagnostic module
+  if (associated(CDp%uhGM)) deallocate(CDp%uhGM)
+  if (associated(CDp%vhGM)) deallocate(CDp%vhGM)
+
+  if (CS%use_GME_thickness_diffuse) then
+    deallocate(CS%KH_u_GME)
+    deallocate(CS%KH_v_GME)
+  endif
 end subroutine thickness_diffuse_end
 
 !> \namespace mom_thickness_diffuse

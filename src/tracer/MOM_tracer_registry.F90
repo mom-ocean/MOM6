@@ -348,7 +348,7 @@ subroutine register_tracer_diagnostics(Reg, h, Time, diag, G, GV, US, use_ALE)
   type(unit_scale_type),      intent(in) :: US   !< A dimensional unit scaling type
   type(tracer_registry_type), pointer    :: Reg  !< pointer to the tracer registry
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
-                              intent(in) :: h    !< Layer thicknesses
+                              intent(in) :: h    !< Layer thicknesses [H ~> m or kg m-2]
   type(time_type),            intent(in) :: Time !< current model time
   type(diag_ctrl),            intent(in) :: diag !< structure to regulate diagnostic output
   logical,                    intent(in) :: use_ALE !< If true active diagnostics that only
@@ -518,9 +518,8 @@ subroutine register_tracer_diagnostics(Reg, h, Time, diag, G, GV, US, use_ALE)
 
     Tr%id_adv_xy = register_diag_field('ocean_model', trim(shortnm)//"_advection_xy", &
         diag%axesTL, Time, &
-        'Horizontal convergence of residual mean advective fluxes of '//&
-        trim(lowercase(flux_longname)), conv_units, v_extensive=.true., &
-        conversion=Tr%conv_scale*US%s_to_T)
+        'Horizontal convergence of residual mean advective fluxes of '//trim(lowercase(flux_longname)), &
+        conv_units, v_extensive=.true., conversion=Tr%conv_scale*US%s_to_T)
     Tr%id_adv_xy_2d = register_diag_field('ocean_model', trim(shortnm)//"_advection_xy_2d", &
         diag%axesT1, Time, &
         'Vertical sum of horizontal convergence of residual mean advective fluxes of '//&
@@ -571,8 +570,8 @@ subroutine register_tracer_diagnostics(Reg, h, Time, diag, G, GV, US, use_ALE)
                        trim(lowercase(flux_longname))//' content due to parameterized mesoscale neutral diffusion'
       Tr%id_dfxy_cont_2d = register_diag_field("ocean_model", trim(shortnm)//'_dfxy_cont_tendency_2d', &
           diag%axesT1, Time, "Depth integrated neutral diffusion tracer "//&
-          "content tendency for "//trim(shortnm), conv_units, &
-          conversion=Tr%conv_scale*US%s_to_T, cmor_field_name=trim(Tr%cmor_tendprefix)//'pmdiff_2d', &
+          "content tendency for "//trim(shortnm), conv_units, conversion=Tr%conv_scale*US%s_to_T, &
+          cmor_field_name=trim(Tr%cmor_tendprefix)//'pmdiff_2d', &
           cmor_long_name=trim(cmor_var_lname), cmor_standard_name=trim(cmor_long_std(cmor_var_lname)), &
           x_cell_method='sum', y_cell_method='sum')
 
@@ -583,8 +582,8 @@ subroutine register_tracer_diagnostics(Reg, h, Time, diag, G, GV, US, use_ALE)
 
       Tr%id_lbdxy_cont_2d = register_diag_field("ocean_model", trim(shortnm)//'_lbdxy_cont_tendency_2d', &
           diag%axesT1, Time, "Depth integrated lateral diffusion tracer "//&
-          "content tendency for "//trim(shortnm), conv_units, &
-          conversion=Tr%conv_scale*US%s_to_T, x_cell_method='sum', y_cell_method='sum')
+          "content tendency for "//trim(shortnm), conv_units, conversion=Tr%conv_scale*US%s_to_T, &
+          x_cell_method='sum', y_cell_method='sum')
     endif
     Tr%id_dfxy_conc = register_diag_field("ocean_model", trim(shortnm)//'_dfxy_conc_tendency', &
         diag%axesTL, Time, "Neutral diffusion tracer concentration tendency for "//trim(shortnm), &
@@ -597,25 +596,25 @@ subroutine register_tracer_diagnostics(Reg, h, Time, diag, G, GV, US, use_ALE)
     var_lname = "Net time tendency for "//lowercase(flux_longname)
     if (len_trim(Tr%cmor_tendprefix) == 0) then
       Tr%id_trxh_tendency = register_diag_field('ocean_model', trim(shortnm)//'h_tendency', &
-          diag%axesTL, Time, var_lname, conv_units, v_extensive=.true., &
-          conversion=Tr%conv_scale*US%s_to_T)
+          diag%axesTL, Time, var_lname, conv_units, conversion=Tr%conv_scale*US%s_to_T, &
+          v_extensive=.true.)
       Tr%id_trxh_tendency_2d = register_diag_field('ocean_model', trim(shortnm)//'h_tendency_2d', &
-          diag%axesT1, Time, "Vertical sum of "//trim(lowercase(var_lname)), conv_units, &
-          conversion=Tr%conv_scale*US%s_to_T)
+          diag%axesT1, Time, "Vertical sum of "//trim(lowercase(var_lname)), &
+          conv_units, conversion=Tr%conv_scale*US%s_to_T)
     else
       cmor_var_lname = "Tendency of "//trim(cmor_longname)//" Expressed as "//&
                         trim(flux_longname)//" Content"
       Tr%id_trxh_tendency = register_diag_field('ocean_model', trim(shortnm)//'h_tendency', &
-          diag%axesTL, Time, var_lname, conv_units, &
+          diag%axesTL, Time, var_lname, conv_units, conversion=Tr%conv_scale*US%s_to_T, &
           cmor_field_name=trim(Tr%cmor_tendprefix)//"tend", &
           cmor_standard_name=cmor_long_std(cmor_var_lname), cmor_long_name=cmor_var_lname, &
-          v_extensive=.true., conversion=Tr%conv_scale*US%s_to_T)
+          v_extensive=.true.)
       cmor_var_lname = trim(cmor_var_lname)//" Vertical Sum"
       Tr%id_trxh_tendency_2d = register_diag_field('ocean_model', trim(shortnm)//'h_tendency_2d', &
-          diag%axesT1, Time, "Vertical sum of "//trim(lowercase(var_lname)), conv_units, &
+          diag%axesT1, Time, "Vertical sum of "//trim(lowercase(var_lname)), &
+          conv_units, conversion=Tr%conv_scale*US%s_to_T, &
           cmor_field_name=trim(Tr%cmor_tendprefix)//"tend_2d", &
-          cmor_standard_name=cmor_long_std(cmor_var_lname), cmor_long_name=cmor_var_lname, &
-          conversion=Tr%conv_scale*US%s_to_T)
+          cmor_standard_name=cmor_long_std(cmor_var_lname), cmor_long_name=cmor_var_lname)
     endif
     if ((Tr%id_trxh_tendency > 0) .or. (Tr%id_trxh_tendency_2d > 0)) then
       call safe_alloc_ptr(Tr%Trxh_prev,isd,ied,jsd,jed,nz)
@@ -720,7 +719,7 @@ subroutine post_tracer_diagnostics_at_sync(Reg, h, diag_prev, diag, G, GV, dt)
   type(verticalGrid_type),    intent(in) :: GV   !< The ocean's vertical grid structure
   type(tracer_registry_type), pointer    :: Reg  !< pointer to the tracer registry
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
-                              intent(in) :: h    !< Layer thicknesses
+                              intent(in) :: h    !< Layer thicknesses [H ~> m or kg m-2]
   type(diag_grid_storage),    intent(in) :: diag_prev !< Contains diagnostic grids from previous timestep
   type(diag_ctrl),            intent(inout) :: diag !< structure to regulate diagnostic output
   real,                       intent(in) :: dt   !< total time step for tracer updates [T ~> s]
@@ -773,7 +772,7 @@ subroutine post_tracer_transport_diagnostics(G, GV, Reg, h_diag, diag)
   type(verticalGrid_type),    intent(in) :: GV   !< The ocean's vertical grid structure
   type(tracer_registry_type), pointer    :: Reg  !< pointer to the tracer registry
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
-                              intent(in) :: h_diag !< Layer thicknesses on which to post fields
+                              intent(in) :: h_diag !< Layer thicknesses on which to post fields [H ~> m or kg m-2]
   type(diag_ctrl),            intent(in) :: diag !< structure to regulate diagnostic output
 
   integer :: i, j, k, is, ie, js, je, nz, m
@@ -826,18 +825,21 @@ subroutine MOM_tracer_chkinv(mesg, G, GV, h, Tr, ntr)
   type(ocean_grid_type),                     intent(in) :: G    !< ocean grid structure
   type(verticalGrid_type),                   intent(in) :: GV   !< The ocean's vertical grid structure
   type(tracer_type), dimension(:),           intent(in) :: Tr   !< array of all of registered tracers
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in) :: h    !< Layer thicknesses
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in) :: h    !< Layer thicknesses [H ~> m or kg m-2]
   integer,                                   intent(in) :: ntr  !< number of registered tracers
 
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: tr_inv !< Tracer inventory
-  real :: total_inv
+  ! Local variables
+  real :: vol_scale ! The dimensional scaling factor to convert volumes to m3 [m3 H-1 L-2 ~> nondim or m3 kg-1]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: tr_inv ! Volumetric tracer inventory in each cell [conc m3]
+  real :: total_inv ! The total amount of tracer [conc m3]
   integer :: is, ie, js, je, nz
   integer :: i, j, k, m
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
+  vol_scale = GV%H_to_m*G%US%L_to_m**2
   do m=1,ntr
     do k=1,nz ; do j=js,je ; do i=is,ie
-      tr_inv(i,j,k) = Tr(m)%t(i,j,k)*h(i,j,k)*G%US%L_to_m**2*G%areaT(i,j)*G%mask2dT(i,j)
+      tr_inv(i,j,k) = Tr(m)%t(i,j,k) * (vol_scale * h(i,j,k) * G%areaT(i,j)*G%mask2dT(i,j))
     enddo ; enddo ; enddo
     total_inv = reproducing_sum(tr_inv, is+(1-G%isd), ie+(1-G%isd), js+(1-G%jsd), je+(1-G%jsd))
     if (is_root_pe()) write(0,'(A,1X,A5,1X,ES25.16,1X,A)') "h-point: inventory", Tr(m)%name, total_inv, mesg
