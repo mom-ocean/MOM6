@@ -167,14 +167,11 @@ end function continuity_stencil
 
 !> Destructor for continuity_cs.
 subroutine continuity_end(CS)
-  type(continuity_CS), pointer :: CS !< Control structure for mom_continuity.
+  type(continuity_CS), intent(inout) :: CS !< Control structure for mom_continuity.
 
   if (CS%continuity_scheme == PPM_SCHEME) then
     call continuity_PPM_end(CS%PPM_CSp)
   endif
-
-  deallocate(CS)
-
 end subroutine continuity_end
 
 end module MOM_continuity
