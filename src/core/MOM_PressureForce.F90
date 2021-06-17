@@ -120,15 +120,13 @@ end subroutine PressureForce_init
 
 !> Deallocate the pressure force control structure
 subroutine PressureForce_end(CS)
-  type(PressureForce_CS), pointer :: CS !< Pressure force control structure
+  type(PressureForce_CS), intent(inout) :: CS  !< Pressure force control structure
 
   if (CS%Analytic_FV_PGF) then
     call PressureForce_FV_end(CS%PressureForce_FV_CSp)
   else
     call PressureForce_Mont_end(CS%PressureForce_Mont_CSp)
   endif
-
-  if (associated(CS)) deallocate(CS)
 end subroutine PressureForce_end
 
 !> \namespace mom_pressureforce

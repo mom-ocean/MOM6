@@ -872,6 +872,8 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
   real, allocatable, dimension(:,:,:) :: sp_val_u ! A temporary array for fields
   real, allocatable, dimension(:,:,:) :: sp_val_v ! A temporary array for fields
   real, allocatable, dimension(:,:,:) :: mask_z ! A temporary array for field mask at h pts
+  real, allocatable, dimension(:,:,:) :: mask_u ! A temporary array for field mask at u pts
+  real, allocatable, dimension(:,:,:) :: mask_v ! A temporary array for field mask at v pts
   real, allocatable, dimension(:,:,:) :: tmp    !< A temporary array for thermodynamic sponge tendency diagnostics,
   real, allocatable, dimension(:,:,:) :: tmp_u  !< A temporary array for u sponge acceleration diagnostics
   real, allocatable, dimension(:,:,:) :: tmp_v  !< A temporary array for v sponge acceleration diagnostics
@@ -994,9 +996,11 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
       nz_data = CS%Ref_val_u%nz_data
       allocate(sp_val(G%isd:G%ied,G%jsd:G%jed,1:nz_data))
       allocate(sp_val_u(G%isdB:G%iedB,G%jsd:G%jed,1:nz_data))
-      allocate(mask_z(G%isdB:G%iedB,G%jsd:G%jed,1:nz_data))
+      allocate(mask_u(G%isdB:G%iedB,G%jsd:G%jed,1:nz_data))
+      allocate(mask_z(G%isd:G%ied,G%jsd:G%jed,1:nz_data))
       sp_val(:,:,:) = 0.0
       sp_val_u(:,:,:) = 0.0
+      mask_u(:,:,:) = 0.0
       mask_z(:,:,:) = 0.0
       ! Interpolate from the external horizontal grid and in time
       call horiz_interp_and_extrap_tracer(CS%Ref_val_u%id, Time, 1.0, G, sp_val, mask_z, z_in, &
@@ -1006,7 +1010,8 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
 
       call pass_var(sp_val,G%Domain)
       do j=CS%jsc,CS%jec; do I=CS%iscB,CS%iecB
-       sp_val_u(I,j,1:nz_data) = 0.5*(sp_val(i,j,1:nz_data)+sp_val(i+1,j,1:nz_data))
+        sp_val_u(I,j,1:nz_data) = 0.5*(sp_val(i,j,1:nz_data)+sp_val(i+1,j,1:nz_data))
+        mask_u(I,j,1:nz_data) = max(mask_z(i,j,1:nz_data),mask_z(i+1,j,1:nz_data))
       enddo ; enddo
 
       allocate( hsrc(nz_data) )
@@ -1019,7 +1024,7 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
         ! Build the source grid
         zTopOfCell = 0. ; zBottomOfCell = 0. ; nPoints = 0; hsrc(:) = 0.0; tmpT1d(:) = -99.9
         do k=1,nz_data
-          if (mask_z(i,j,k) == 1.0) then
+          if (mask_u(i,j,k) == 1.0) then
             zBottomOfCell = -min( z_edges_in(k+1), G%bathyT(i,j) )
             tmpT1d(k) = sp_val_u(i,j,k)
           elseif (k>1) then
@@ -1030,17 +1035,18 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
           endif
           hsrc(k) = zTopOfCell - zBottomOfCell
           if (hsrc(k)>0.) nPoints = nPoints + 1
-            zTopOfCell = zBottomOfCell ! Bottom becomes top for next value of k
+          zTopOfCell = zBottomOfCell ! Bottom becomes top for next value of k
         enddo
         ! In case data is deeper than model
         hsrc(nz_data) = hsrc(nz_data) + ( zTopOfCell + G%bathyT(i,j) )
         CS%Ref_val_u%h(1:nz_data,c) = GV%Z_to_H*hsrc(1:nz_data)
       enddo
-      deallocate(sp_val, sp_val_u, mask_z, hsrc, tmpT1d)
+      deallocate(sp_val, sp_val_u, mask_u, mask_z, hsrc, tmpT1d)
       nz_data = CS%Ref_val_v%nz_data
       allocate(sp_val( G%isd:G%ied,G%jsd:G%jed,1:nz_data))
       allocate(sp_val_v(G%isd:G%ied,G%jsdB:G%jedB,1:nz_data))
-      allocate(mask_z(G%isd:G%ied,G%jsdB:G%jedB,1:nz_data))
+      allocate(mask_v(G%isd:G%ied,G%jsdB:G%jedB,1:nz_data))
+      allocate(mask_z(G%isd:G%ied,G%jsd:G%jed,1:nz_data))
       sp_val(:,:,:) = 0.0
       sp_val_v(:,:,:) = 0.0
       mask_z(:,:,:) = 0.0
@@ -1052,6 +1058,7 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
       call pass_var(sp_val,G%Domain)
       do J=CS%jscB,CS%jecB; do i=CS%isc,CS%iec
         sp_val_v(i,J,1:nz_data) = 0.5*(sp_val(i,j,1:nz_data)+sp_val(i,j+1,1:nz_data))
+        mask_v(i,J,1:nz_data) = max(mask_z(i,j,1:nz_data),mask_z(i,j+1,1:nz_data))
       enddo ; enddo
       !call pass_var(mask_z,G%Domain)
       allocate( hsrc(nz_data) )
@@ -1064,7 +1071,7 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
         ! Build the source grid
         zTopOfCell = 0. ; zBottomOfCell = 0. ; nPoints = 0; hsrc(:) = 0.0; tmpT1d(:) = -99.9
         do k=1,nz_data
-          if (mask_z(i,j,k) == 1.0) then
+          if (mask_v(i,j,k) == 1.0) then
             zBottomOfCell = -min( z_edges_in(k+1), G%bathyT(i,j) )
             tmpT1d(k) = sp_val_v(i,j,k)
           elseif (k>1) then
@@ -1081,7 +1088,7 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
         hsrc(nz_data) = hsrc(nz_data) + ( zTopOfCell + G%bathyT(i,j) )
         CS%Ref_val_v%h(1:nz_data,c) = GV%Z_to_H*hsrc(1:nz_data)
       enddo
-      deallocate(sp_val, sp_val_v, mask_z, hsrc, tmpT1d)
+      deallocate(sp_val, sp_val_v, mask_v, mask_z, hsrc, tmpT1d)
     endif
 
     nz_data = CS%Ref_val_u%nz_data
@@ -1282,7 +1289,7 @@ subroutine rotate_ALE_sponge(sponge_in, G_in, sponge, G, GV, turns, param_file)
     endif
   enddo
 
-  ! TODO: var_u and var_v sponge dampling is not yet supported.
+  ! TODO: var_u and var_v sponge damping is not yet supported.
   if (associated(sponge_in%var_u%p) .or. associated(sponge_in%var_v%p)) &
     call MOM_error(FATAL, "Rotation of ALE sponge velocities is not yet " &
       // "implemented.")

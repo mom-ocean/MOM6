@@ -155,6 +155,11 @@ subroutine linear_solver( N, A, R, X )
 
   enddo ! end loop on i
 
+  if (A(N,N) == 0.0) then
+    ! no pivot could be found, and the sytem is singular
+    call MOM_error(FATAL, 'The final pivot in linear_solver is zero.')
+  end if
+
   ! Solve the system by back substituting into what is now an upper-right matrix.
   X(N) = R(N) / A(N,N)  ! The last row is now trivially solved.
   do i=N-1,1,-1 ! loop on rows, starting from second to last row

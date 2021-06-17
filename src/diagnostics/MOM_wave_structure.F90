@@ -21,7 +21,7 @@ use MOM_grid,          only : ocean_grid_type
 use MOM_unit_scaling,  only : unit_scale_type
 use MOM_variables,     only : thermo_var_ptrs
 use MOM_verticalGrid,  only : verticalGrid_type
-use regrid_edge_values, only : solve_diag_dominant_tridiag
+use regrid_solvers, only : solve_diag_dominant_tridiag
 
 implicit none ; private
 
