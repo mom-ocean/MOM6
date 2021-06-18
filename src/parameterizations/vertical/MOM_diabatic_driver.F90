@@ -1009,7 +1009,7 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
   if (CS%use_oda_incupd .and. associated(CS%oda_incupd_CSp)) then
     call MOM_mesg("Starting ODA_INCUPD legacy ", 5)
     call cpu_clock_begin(id_clock_oda_incupd)
-    call apply_oda_incupd(h, dt, G, GV, US, CS%oda_incupd_CSp)
+    call apply_oda_incupd(h, tv, u, v, dt, G, GV, US, CS%oda_incupd_CSp)
     call cpu_clock_end(id_clock_oda_incupd)
     if (CS%debug) then
       call MOM_state_chksum("apply_oda_incupd ", u, v, h, G, GV, US, haloshift=0)
@@ -1506,7 +1506,7 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
   if (CS%use_oda_incupd .and. associated(CS%oda_incupd_CSp)) then
     call MOM_mesg("Starting ODA_INCUPD ", 5)
     call cpu_clock_begin(id_clock_oda_incupd)
-    call apply_oda_incupd(h, dt, G, GV, US, CS%oda_incupd_CSp)
+    call apply_oda_incupd(h, tv, u, v, dt, G, GV, US, CS%oda_incupd_CSp)
     call cpu_clock_end(id_clock_oda_incupd)
     if (CS%debug) then
       call MOM_state_chksum("apply_oda_incupd ", u, v, h, G, GV, US, haloshift=0)
@@ -2301,7 +2301,7 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
   ! Apply data assimilation incremental update -oda_incupd-
   if (CS%use_oda_incupd .and. associated(CS%oda_incupd_CSp)) then
     call cpu_clock_begin(id_clock_oda_incupd)
-    call apply_oda_incupd(h, dt, G, GV, US, CS%oda_incupd_CSp)
+    call apply_oda_incupd(h, tv, u, v, dt, G, GV, US, CS%oda_incupd_CSp)
     call cpu_clock_end(id_clock_oda_incupd)
     if (CS%debug) then
       call MOM_state_chksum("apply_oda_incupd ", u, v, h, G, GV, US, haloshift=0)
@@ -2828,7 +2828,7 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
                                                              !! tracer flow control module
   type(sponge_CS),         pointer       :: sponge_CSp       !< pointer to the sponge module control structure
   type(ALE_sponge_CS),     pointer       :: ALE_sponge_CSp   !< pointer to the ALE sponge module control structure
-  type(oda_incupd_CS),     pointer       :: oda_incupd_CSp   !< pointer to the oda incupd module control structure  
+  type(oda_incupd_CS),     pointer       :: oda_incupd_CSp   !< pointer to the oda incupd module control structure
 
   real    :: Kd  ! A diffusivity used in the default for other tracer diffusivities, in MKS units [m2 s-1]
   integer :: num_mode
