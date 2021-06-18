@@ -1389,7 +1389,7 @@ subroutine propagate_x(En, speed_x, Cgx_av, dCgx, dt, G, US, Nangle, CS, LB)
   real, dimension(SZIB_(G)) :: &
     cg_p, cg_m, flux1, flux2
   !real, dimension(SZI_(G),SZJB_(G),Nangle) :: En_m, En_p
-  real, dimension(SZI_(G),SZJB_(G),Nangle) :: &
+  real, dimension(G%isd:G%ied,G%jsd:G%jed,Nangle) :: &
     Fdt_m, Fdt_p! Left and right energy fluxes [J]
   integer :: i, j, k, ish, ieh, jsh, jeh, a
 
@@ -1464,7 +1464,7 @@ subroutine propagate_y(En, speed_y, Cgy_av, dCgy, dt, G, US, Nangle, CS, LB)
   real, dimension(SZI_(G)) :: &
     cg_p, cg_m, flux1, flux2
   !real, dimension(SZI_(G),SZJB_(G),Nangle) :: En_m, En_p
-  real, dimension(SZI_(G),SZJB_(G),Nangle) :: &
+  real, dimension(G%isd:G%ied,G%jsd:G%jed,Nangle) :: &
     Fdt_m, Fdt_p! South and north energy fluxes [J]
   character(len=160) :: mesg  ! The text of an error message
   integer :: i, j, k, ish, ieh, jsh, jeh, a
@@ -1610,7 +1610,7 @@ subroutine reflect(En, NAngle, CS, G, LB)
   type(ocean_grid_type),  intent(in)    :: G  !< The ocean's grid structure
   integer,                intent(in)    :: NAngle !< The number of wave orientations in the
                                               !! discretized wave energy spectrum.
-  real, dimension(SZI_(G),SZJB_(G),Nangle), &
+  real, dimension(G%isd:G%ied,G%jsd:G%jed,NAngle), &
                           intent(inout) :: En !< The internal gravity wave energy density as a
                                               !! function of space and angular resolution
                                               !! [R Z3 T-2 ~> J m-2].
