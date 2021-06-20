@@ -582,7 +582,8 @@ contains
     integer                                           :: MOM_generic_tracer_stock !< Return value, the
                                                                      !! number of stocks calculated here.
 
-! Local variables
+    ! Local variables
+    real :: stock_scale ! The dimensional scaling factor to convert stocks to kg [kg H-1 L-2 ~> kg m-3 or nondim]
     type(g_tracer_type), pointer  :: g_tracer, g_tracer_next
     real, dimension(:,:,:,:), pointer   :: tr_field
     real, dimension(:,:,:), pointer     :: tr_ptr
@@ -603,6 +604,7 @@ contains
 
     if (.NOT. associated(CS%g_tracer_list)) return ! No stocks.
 
+    stock_scale = G%US%L_to_m**2 * GV%H_to_kg_m2
     m=1 ; g_tracer=>CS%g_tracer_list
     do
       call g_tracer_get_alias(g_tracer,names(m))
@@ -613,10 +615,9 @@ contains
       stocks(m) = 0.0
       tr_ptr => tr_field(:,:,:,1)
       do k=1,nz ; do j=js,je ; do i=is,ie
-        stocks(m) = stocks(m) + tr_ptr(i,j,k) * &
-                               (G%mask2dT(i,j) * G%US%L_to_m**2*G%areaT(i,j) * h(i,j,k))
+        stocks(m) = stocks(m) + tr_ptr(i,j,k) * (G%mask2dT(i,j) * G%areaT(i,j) * h(i,j,k))
       enddo ; enddo ; enddo
-      stocks(m) = GV%H_to_kg_m2 * stocks(m)
+      stocks(m) = stock_scale * stocks(m)
 
       !traverse the linked list till hit NULL
       call g_tracer_get_next(g_tracer, g_tracer_next)

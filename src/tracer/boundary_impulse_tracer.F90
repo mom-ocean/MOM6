@@ -280,6 +280,9 @@ subroutine boundary_impulse_tracer_column_physics(h_old, h_new, ea, eb, fluxes, 
 end subroutine boundary_impulse_tracer_column_physics
 
 !> Calculate total inventory of tracer
+!> This function calculates the mass-weighted integral of the boundary impulse,
+!! tracer stocks returning the number of stocks it has calculated.  If the stock_index
+!! is present, only the stock corresponding to that coded index is returned.
 function boundary_impulse_stock(h, stocks, G, GV, CS, names, units, stock_index)
   type(ocean_grid_type),                    intent(in   ) :: G    !< The ocean's grid structure
   type(verticalGrid_type),                  intent(in   ) :: GV   !< The ocean's vertical grid structure
@@ -299,6 +302,7 @@ function boundary_impulse_stock(h, stocks, G, GV, CS, names, units, stock_index)
 ! is present, only the stock corresponding to that coded index is returned.
 
   ! Local variables
+  real :: stock_scale ! The dimensional scaling factor to convert stocks to kg [kg H-1 L-2 ~> kg m-3 or nondim]
   integer :: i, j, k, is, ie, js, je, nz, m
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
@@ -313,15 +317,15 @@ function boundary_impulse_stock(h, stocks, G, GV, CS, names, units, stock_index)
     return
   endif ; endif
 
+  stock_scale = G%US%L_to_m**2 * GV%H_to_kg_m2
   do m=1,1
     call query_vardesc(CS%tr_desc(m), name=names(m), units=units(m), caller="boundary_impulse_stock")
     units(m) = trim(units(m))//" kg"
     stocks(m) = 0.0
     do k=1,nz ; do j=js,je ; do i=is,ie
-      stocks(m) = stocks(m) + CS%tr(i,j,k,m) * &
-                           (G%mask2dT(i,j) * G%US%L_to_m**2*G%areaT(i,j) * h(i,j,k))
+      stocks(m) = stocks(m) + CS%tr(i,j,k,m) * (G%mask2dT(i,j) * G%areaT(i,j) * h(i,j,k))
     enddo ; enddo ; enddo
-    stocks(m) = GV%H_to_kg_m2 * stocks(m)
+    stocks(m) = stock_scale * stocks(m)
   enddo
 
   boundary_impulse_stock = CS%ntr

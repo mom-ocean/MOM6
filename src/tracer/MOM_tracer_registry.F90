@@ -348,7 +348,7 @@ subroutine register_tracer_diagnostics(Reg, h, Time, diag, G, GV, US, use_ALE)
   type(unit_scale_type),      intent(in) :: US   !< A dimensional unit scaling type
   type(tracer_registry_type), pointer    :: Reg  !< pointer to the tracer registry
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
-                              intent(in) :: h    !< Layer thicknesses
+                              intent(in) :: h    !< Layer thicknesses [H ~> m or kg m-2]
   type(time_type),            intent(in) :: Time !< current model time
   type(diag_ctrl),            intent(in) :: diag !< structure to regulate diagnostic output
   logical,                    intent(in) :: use_ALE !< If true active diagnostics that only
@@ -719,7 +719,7 @@ subroutine post_tracer_diagnostics_at_sync(Reg, h, diag_prev, diag, G, GV, dt)
   type(verticalGrid_type),    intent(in) :: GV   !< The ocean's vertical grid structure
   type(tracer_registry_type), pointer    :: Reg  !< pointer to the tracer registry
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
-                              intent(in) :: h    !< Layer thicknesses
+                              intent(in) :: h    !< Layer thicknesses [H ~> m or kg m-2]
   type(diag_grid_storage),    intent(in) :: diag_prev !< Contains diagnostic grids from previous timestep
   type(diag_ctrl),            intent(inout) :: diag !< structure to regulate diagnostic output
   real,                       intent(in) :: dt   !< total time step for tracer updates [T ~> s]
@@ -772,7 +772,7 @@ subroutine post_tracer_transport_diagnostics(G, GV, Reg, h_diag, diag)
   type(verticalGrid_type),    intent(in) :: GV   !< The ocean's vertical grid structure
   type(tracer_registry_type), pointer    :: Reg  !< pointer to the tracer registry
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
-                              intent(in) :: h_diag !< Layer thicknesses on which to post fields
+                              intent(in) :: h_diag !< Layer thicknesses on which to post fields [H ~> m or kg m-2]
   type(diag_ctrl),            intent(in) :: diag !< structure to regulate diagnostic output
 
   integer :: i, j, k, is, ie, js, je, nz, m
@@ -825,18 +825,21 @@ subroutine MOM_tracer_chkinv(mesg, G, GV, h, Tr, ntr)
   type(ocean_grid_type),                     intent(in) :: G    !< ocean grid structure
   type(verticalGrid_type),                   intent(in) :: GV   !< The ocean's vertical grid structure
   type(tracer_type), dimension(:),           intent(in) :: Tr   !< array of all of registered tracers
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in) :: h    !< Layer thicknesses
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in) :: h    !< Layer thicknesses [H ~> m or kg m-2]
   integer,                                   intent(in) :: ntr  !< number of registered tracers
 
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: tr_inv !< Tracer inventory
-  real :: total_inv
+  ! Local variables
+  real :: vol_scale ! The dimensional scaling factor to convert volumes to m3 [m3 H-1 L-2 ~> nondim or m3 kg-1]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: tr_inv ! Volumetric tracer inventory in each cell [conc m3]
+  real :: total_inv ! The total amount of tracer [conc m3]
   integer :: is, ie, js, je, nz
   integer :: i, j, k, m
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
+  vol_scale = GV%H_to_m*G%US%L_to_m**2
   do m=1,ntr
     do k=1,nz ; do j=js,je ; do i=is,ie
-      tr_inv(i,j,k) = Tr(m)%t(i,j,k)*h(i,j,k)*G%US%L_to_m**2*G%areaT(i,j)*G%mask2dT(i,j)
+      tr_inv(i,j,k) = Tr(m)%t(i,j,k) * (vol_scale * h(i,j,k) * G%areaT(i,j)*G%mask2dT(i,j))
     enddo ; enddo ; enddo
     total_inv = reproducing_sum(tr_inv, is+(1-G%isd), ie+(1-G%isd), js+(1-G%jsd), je+(1-G%jsd))
     if (is_root_pe()) write(0,'(A,1X,A5,1X,ES25.16,1X,A)') "h-point: inventory", Tr(m)%name, total_inv, mesg
