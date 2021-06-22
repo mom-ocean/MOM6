@@ -16,7 +16,7 @@ use MOM_array_transform, only: rotate_array
 use MOM_coms,          only : sum_across_PEs
 use MOM_diag_mediator, only : post_data, query_averaging_enabled, register_diag_field
 use MOM_diag_mediator, only : diag_ctrl
-use MOM_domains, only : pass_var
+use MOM_domains,       only : pass_var
 use MOM_error_handler, only : MOM_error, FATAL, NOTE, WARNING, is_root_pe
 use MOM_file_parser,   only : get_param, log_param, log_version, param_file_type
 use MOM_grid,          only : ocean_grid_type
@@ -1008,10 +1008,11 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
                                           spongeOnGrid=CS%SpongeDataOngrid, m_to_Z=US%m_to_Z,&
                                           answers_2018=CS%hor_regrid_answers_2018)
 
-      call pass_var(sp_val,G%Domain)
+      call pass_var(sp_val, G%Domain)
+      call pass_var(mask_z, G%Domain)
       do j=CS%jsc,CS%jec; do I=CS%iscB,CS%iecB
         sp_val_u(I,j,1:nz_data) = 0.5*(sp_val(i,j,1:nz_data)+sp_val(i+1,j,1:nz_data))
-        mask_u(I,j,1:nz_data) = max(mask_z(i,j,1:nz_data),mask_z(i+1,j,1:nz_data))
+        mask_u(I,j,1:nz_data) = min(mask_z(i,j,1:nz_data),mask_z(i+1,j,1:nz_data))
       enddo ; enddo
 
       allocate( hsrc(nz_data) )
@@ -1055,10 +1056,11 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
                                           z_edges_in, missing_value, CS%reentrant_x, CS%tripolar_N, .false., &
                                           spongeOnGrid=CS%SpongeDataOngrid, m_to_Z=US%m_to_Z,&
                                           answers_2018=CS%hor_regrid_answers_2018)
-      call pass_var(sp_val,G%Domain)
+      call pass_var(sp_val, G%Domain)
+      call pass_var(mask_z, G%Domain)
       do J=CS%jscB,CS%jecB; do i=CS%isc,CS%iec
         sp_val_v(i,J,1:nz_data) = 0.5*(sp_val(i,j,1:nz_data)+sp_val(i,j+1,1:nz_data))
-        mask_v(i,J,1:nz_data) = max(mask_z(i,j,1:nz_data),mask_z(i,j+1,1:nz_data))
+        mask_v(i,J,1:nz_data) = min(mask_z(i,j,1:nz_data),mask_z(i,j+1,1:nz_data))
       enddo ; enddo
       !call pass_var(mask_z,G%Domain)
       allocate( hsrc(nz_data) )
