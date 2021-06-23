@@ -421,9 +421,15 @@ subroutine limit_topography(D, G, param_file, max_depth, US)
 
   ! Make sure that min_depth < D(x,y) < max_depth for ocean points
   if (abs(mask_depth - (-9999.*m_to_Z)) < 1.0e-10) then
-    do j=G%jsd,G%jed ; do i=G%isd,G%ied
-      D(i,j) = min( max( D(i,j), min_depth ), max_depth )
-    enddo ; enddo
+    if (min_depth > 0.0) then  ! This is retained to avoid answer changes (over the land points) in the test cases.
+      do j=G%jsd,G%jed ; do i=G%isd,G%ied
+        D(i,j) = min( max( D(i,j), 0.5*min_depth ), max_depth )
+      enddo ; enddo
+    else
+      do j=G%jsd,G%jed ; do i=G%isd,G%ied
+        D(i,j) = min( max( D(i,j), min_depth ), max_depth )
+      enddo ; enddo
+    endif
   else
     do j=G%jsd,G%jed ; do i=G%isd,G%ied
       if (D(i,j) > mask_depth) then
