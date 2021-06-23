@@ -841,7 +841,7 @@ subroutine set_up_ALE_sponge_vel_field_varying(filename_u, fieldname_u, filename
   else
     CS%Ref_val_v%id = init_external_field(filename_v, fieldname_v)
   endif
-  fld_sz(1:4)=-1  fld_sz(1:4)=-1
+  fld_sz(1:4)=-1
   call get_external_field_info(CS%Ref_val_v%id, size=fld_sz)
   CS%Ref_val_v%nz_data = fld_sz(3)
   CS%Ref_val_v%num_tlevs = fld_sz(4)
