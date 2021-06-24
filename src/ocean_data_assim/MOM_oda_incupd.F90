@@ -789,7 +789,7 @@ subroutine output_oda_incupd_inc(Time, G, GV, param_file, CS, US)
 
   ! write the increments file
   call save_restart(dirs%output_directory, Time, G, restart_CSp_tmp, &
-                      filename=inc_file, GV=GV, write_ic=.true.)
+                      filename=inc_file, GV=GV) !, write_ic=.true.)
 
 end subroutine output_oda_incupd_inc
 
