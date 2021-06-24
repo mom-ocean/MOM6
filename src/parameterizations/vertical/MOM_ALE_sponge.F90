@@ -709,7 +709,6 @@ subroutine set_up_ALE_sponge_field_varying(filename, fieldname, Time, G, GV, US,
   integer :: nz_data !< the number of vertical levels in this input field
   character(len=256) :: mesg ! String for error messages
   ! Local variables for ALE remapping
-  real, dimension(:), allocatable :: tmpT1d
   real :: zTopOfCell, zBottomOfCell ! Heights [Z ~> m].
   type(remapping_CS) :: remapCS ! Remapping parameters and work arrays
 
@@ -841,7 +840,7 @@ subroutine set_up_ALE_sponge_vel_field_varying(filename_u, fieldname_u, filename
   else
     CS%Ref_val_v%id = init_external_field(filename_v, fieldname_v)
   endif
-  fld_sz(1:4)=-1  fld_sz(1:4)=-1
+  fld_sz(1:4)=-1
   call get_external_field_info(CS%Ref_val_v%id, size=fld_sz)
   CS%Ref_val_v%nz_data = fld_sz(3)
   CS%Ref_val_v%num_tlevs = fld_sz(4)
@@ -1027,23 +1026,23 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
       enddo ; enddo
 
       allocate( hsrc(nz_data) )
-      allocate( tmpT1d(nz_data) )
       do c=1,CS%num_col_u
         ! c is an index for the next 3 lines but a multiplier for the rest of the loop
         ! Therefore we use c as per C code and increment the index where necessary.
         i = CS%col_i_u(c) ; j = CS%col_j_u(c)
-        CS%Ref_val_u%p(1:nz_data,c) = sp_val_u(i,j,1:nz_data)
+        if (mask_u(i,j,1) == 1.0) then
+          CS%Ref_val_u%p(1:nz_data,c) = sp_val_u(i,j,1:nz_data)
+        else
+          CS%Ref_val_u%p(1:nz_data,c) = 0.0
+        endif
         ! Build the source grid
-        zTopOfCell = 0. ; zBottomOfCell = 0. ; nPoints = 0; hsrc(:) = 0.0; tmpT1d(:) = -99.9
+        zTopOfCell = 0. ; zBottomOfCell = 0. ; nPoints = 0; hsrc(:) = 0.0
         do k=1,nz_data
           if (mask_u(i,j,k) == 1.0) then
             zBottomOfCell = -min( z_edges_in(k+1), G%bathyT(i,j) )
-            tmpT1d(k) = sp_val_u(i,j,k)
           elseif (k>1) then
             zBottomOfCell = -G%bathyT(i,j)
-            tmpT1d(k) = tmpT1d(k-1)
           else ! This next block should only ever be reached over land
-            tmpT1d(k) = -99.9
           endif
           hsrc(k) = zTopOfCell - zBottomOfCell
           if (hsrc(k)>0.) nPoints = nPoints + 1
@@ -1053,7 +1052,7 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
         hsrc(nz_data) = hsrc(nz_data) + ( zTopOfCell + G%bathyT(i,j) )
         CS%Ref_val_u%h(1:nz_data,c) = GV%Z_to_H*hsrc(1:nz_data)
       enddo
-      deallocate(sp_val, sp_val_u, mask_u, mask_z, hsrc, tmpT1d)
+      deallocate(sp_val, sp_val_u, mask_u, mask_z, hsrc)
       nz_data = CS%Ref_val_v%nz_data
       allocate(sp_val( G%isd:G%ied,G%jsd:G%jed,1:nz_data))
       allocate(sp_val_v(G%isd:G%ied,G%jsdB:G%jedB,1:nz_data))
@@ -1075,23 +1074,23 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
       enddo ; enddo
       !call pass_var(mask_z,G%Domain)
       allocate( hsrc(nz_data) )
-      allocate( tmpT1d(nz_data) )
       do c=1,CS%num_col_v
         ! c is an index for the next 3 lines but a multiplier for the rest of the loop
         ! Therefore we use c as per C code and increment the index where necessary.
         i = CS%col_i_v(c) ; j = CS%col_j_v(c)
-        CS%Ref_val_v%p(1:nz_data,c) = sp_val_v(i,j,1:nz_data)
+        if (mask_v(i,j,1) == 1.0) then
+          CS%Ref_val_v%p(1:nz_data,c) = sp_val_v(i,j,1:nz_data)
+        else
+          CS%Ref_val_v%p(1:nz_data,c) = 0.0
+        endif
         ! Build the source grid
-        zTopOfCell = 0. ; zBottomOfCell = 0. ; nPoints = 0; hsrc(:) = 0.0; tmpT1d(:) = -99.9
+        zTopOfCell = 0. ; zBottomOfCell = 0. ; nPoints = 0; hsrc(:) = 0.0
         do k=1,nz_data
           if (mask_v(i,j,k) == 1.0) then
             zBottomOfCell = -min( z_edges_in(k+1), G%bathyT(i,j) )
-            tmpT1d(k) = sp_val_v(i,j,k)
           elseif (k>1) then
             zBottomOfCell = -G%bathyT(i,j)
-            tmpT1d(k) = tmpT1d(k-1)
           else ! This next block should only ever be reached over land
-            tmpT1d(k) = -99.9
           endif
           hsrc(k) = zTopOfCell - zBottomOfCell
           if (hsrc(k)>0.) nPoints = nPoints + 1
@@ -1101,7 +1100,7 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
         hsrc(nz_data) = hsrc(nz_data) + ( zTopOfCell + G%bathyT(i,j) )
         CS%Ref_val_v%h(1:nz_data,c) = GV%Z_to_H*hsrc(1:nz_data)
       enddo
-      deallocate(sp_val, sp_val_v, mask_v, mask_z, hsrc, tmpT1d)
+      deallocate(sp_val, sp_val_v, mask_v, mask_z, hsrc)
     endif
 
     call pass_var(h,G%Domain)
@@ -1110,7 +1109,6 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
     if (CS%id_sp_u_tendency > 0) then
       allocate(tmp_u(G%isdB:G%iedB,G%jsd:G%jed,nz));tmp_u(:,:,:)=0.0
     endif
-    call pass_var(h(:,:,1),G%Domain)
     ! u points
     do c=1,CS%num_col_u
       I = CS%col_i_u(c) ; j = CS%col_j_u(c)
