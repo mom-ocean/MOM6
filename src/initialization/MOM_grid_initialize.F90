@@ -1217,7 +1217,7 @@ subroutine initialize_masks(G, PF, US)
                  units="m", default=0.0, scale=m_to_Z_scale)
   call get_param(PF, mdl, "MASKING_DEPTH", mask_depth, &
                  "The depth below which to mask points as land points, for which all "//&
-                 "fluxes are zeroed out. MASKING_DEPTH needs to be smaller than MINIMUM_DEPTH", &
+                 "fluxes are zeroed out. MASKING_DEPTH needs to be smaller than MINIMUM_DEPTH.", &
                  units="m", default=-9999.0, scale=m_to_Z_scale)
 
   if (mask_depth > min_depth) then
@@ -1227,7 +1227,7 @@ subroutine initialize_masks(G, PF, US)
   endif
 
   Dmin = min_depth
-  if (abs(mask_depth - (-9999.*m_to_Z_scale)) > 1.0e-10) Dmin = mask_depth
+  if (mask_depth == -9999.0*m_to_Z_scale) Dmin = mask_depth
 
   G%mask2dCu(:,:) = 0.0 ; G%mask2dCv(:,:) = 0.0 ; G%mask2dBu(:,:) = 0.0
 
