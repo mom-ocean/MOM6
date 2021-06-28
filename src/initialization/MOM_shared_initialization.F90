@@ -478,11 +478,13 @@ subroutine set_rotation_beta_plane(f, G, param_file, US)
   integer :: I, J
   real    :: f_0    ! The reference value of the Coriolis parameter [T-1 ~> s-1]
   real    :: beta   ! The meridional gradient of the Coriolis parameter [T-1 m-1 ~> s-1 m-1]
+  real    :: beta_lat_ref  ! The reference latitude for the beta plane [degrees/km/m/cm]
   real    :: y_scl, Rad_Earth
   real    :: T_to_s ! A time unit conversion factor
   real    :: PI
   character(len=40)  :: mdl = "set_rotation_beta_plane" ! This subroutine's name.
   character(len=200) :: axis_units
+  character(len=40) :: beta_lat_ref_units
 
   call callTree_enter(trim(mdl)//"(), MOM_shared_initialization.F90")
 
@@ -501,16 +503,24 @@ subroutine set_rotation_beta_plane(f, G, param_file, US)
     case ("d")
       call get_param(param_file, mdl, "RAD_EARTH", Rad_Earth, &
                    "The radius of the Earth.", units="m", default=6.378e6)
-      y_scl = Rad_Earth/PI
-    case ("k"); y_scl = 1.E3
-    case ("m"); y_scl = 1.
-    case ("c"); y_scl = 1.E-2
+      beta_lat_ref_units = "degrees"
+      y_scl = PI * Rad_Earth/ 180.
+    case ("k")
+      beta_lat_ref_units = "kilometers"
+      y_scl = 1.E3
+    case ("m")
+      beta_lat_ref_units = "meters"
+      y_scl = 1.
     case default ; call MOM_error(FATAL, &
       " set_rotation_beta_plane: unknown AXIS_UNITS = "//trim(axis_units))
   end select
 
+  call get_param(param_file, mdl, "BETA_LAT_REF", beta_lat_ref, &
+                 "The reference latitude (origin) of the beta-plane", &
+                 units=trim(beta_lat_ref_units), default=0.0)
+
   do I=G%IsdB,G%IedB ; do J=G%JsdB,G%JedB
-    f(I,J) = f_0 + beta * ( G%geoLatBu(I,J) * y_scl )
+    f(I,J) = f_0 + beta * ( (G%geoLatBu(I,J) - beta_lat_ref) * y_scl )
   enddo ; enddo
 
   call callTree_leave(trim(mdl)//'()')

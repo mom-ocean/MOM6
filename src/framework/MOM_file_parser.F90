@@ -196,6 +196,8 @@ subroutine open_param_file(filename, CS, checkable, component, doc_file_dir)
   CS%iounit(i) = iounit
   CS%filename(i) = filename
   CS%NetCDF_file(i) = Netcdf_file
+
+  if (associated(CS%blockName)) deallocate(CS%blockName)
   allocate(block) ; block%name = '' ; CS%blockName => block
 
   call MOM_mesg("open_param_file: "// trim(filename)// &
@@ -332,6 +334,7 @@ subroutine close_param_file(CS, quiet_close, component)
     deallocate (CS%param_data(i)%line)
     deallocate (CS%param_data(i)%line_used)
   enddo
+  deallocate(CS%blockName)
 
   if (is_root_pe() .and. (num_unused>0) .and. CS%unused_params_fatal) &
     call MOM_error(FATAL, "Run stopped because of unused parameter lines.")

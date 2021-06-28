@@ -177,7 +177,8 @@ type, public :: OBC_segment_type
                                                             !! segment [H L2 T-1 ~> m3 s-1].
   real, pointer, dimension(:,:)   :: normal_vel_bt=>NULL()  !< The barotropic velocity normal to
                                                             !! the OB segment [L T-1 ~> m s-1].
-  real, pointer, dimension(:,:)   :: eta=>NULL()            !< The sea-surface elevation along the segment [m].
+  real, pointer, dimension(:,:)   :: eta=>NULL()            !< The sea-surface elevation along the
+                                                            !! segment [H ~> m or kg m-2].
   real, pointer, dimension(:,:,:) :: grad_normal=>NULL()    !< The gradient of the normal flow along the
                                                             !! segment times the grid spacing [L T-1 ~> m s-1]
   real, pointer, dimension(:,:,:) :: grad_tan=>NULL()       !< The gradient of the tangential flow along the
@@ -4464,9 +4465,10 @@ subroutine OBC_registry_init(param_file, Reg)
 end subroutine OBC_registry_init
 
 !> Add file to OBC registry.
-function register_file_OBC(param_file, CS, OBC_Reg)
+function register_file_OBC(param_file, CS, US, OBC_Reg)
   type(param_file_type),    intent(in) :: param_file !< parameter file.
   type(file_OBC_CS),        pointer    :: CS         !< file control structure.
+  type(unit_scale_type),    intent(in) :: US         !< A dimensional unit scaling type
   type(OBC_registry_type),  pointer    :: OBC_Reg    !< OBC registry.
   logical                              :: register_file_OBC
   character(len=32)  :: casename = "OBC file"        !< This case's name.

@@ -38,6 +38,10 @@ setup:
     - test -d MOM6-examples/src/LM3 || make -f MRS/Makefile.clone clone_gfdl -s
     - make -f MRS/Makefile.clone MOM6-examples/.datasets -s
     - env > gitlab_session.log
+    # Show hashes for final setup
+    - git show --oneline
+    - git submodule status
+    - (cd MOM6-examples && git submodule status --recursive src)
     # Cache everything under tests to unpack for each subsequent stage
     - cd ../ ; time tar zcf $CACHE_DIR/tests_$CI_PIPELINE_ID.tgz tests
 
