@@ -1227,7 +1227,7 @@ subroutine initialize_masks(G, PF, US)
   endif
 
   Dmin = min_depth
-  if (abs(mask_depth - (-9999.*m_to_Z_scale)) > 1.0e-20*m_to_Z_scale) Dmin = mask_depth
+  if (mask_depth /= -9999.*m_to_Z_scale) Dmin = mask_depth
 
   G%mask2dCu(:,:) = 0.0 ; G%mask2dCv(:,:) = 0.0 ; G%mask2dBu(:,:) = 0.0
 
