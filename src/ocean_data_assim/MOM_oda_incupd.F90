@@ -186,7 +186,7 @@ subroutine initialize_oda_incupd( G, GV, US, param_file, CS, data_h,nz_data, res
 
   call get_param(param_file, mdl, "ODA_INCUPD_NHOURS", nhours_incupd, &
                  "Number of hours for full update (0=direct insertion).", &
-                 default=3.0)
+                 default=3.0,units="h", scale=US%s_to_T)
   call get_param(param_file, mdl, "ODA_INCUPD_RESET_NCOUNT", reset_ncount, &
                  "If True, reinitialize number of updates already done, ncount.", &
                  default=.true.)
@@ -236,7 +236,7 @@ subroutine initialize_oda_incupd( G, GV, US, param_file, CS, data_h,nz_data, res
   if (nhours_incupd == 0) then
      CS%nstep_incupd = 1 !! direct insertion
   else
-     CS%nstep_incupd = floor(nhours_incupd*3600./dt_therm + 0.001 ) - 1
+     CS%nstep_incupd = floor( nhours_incupd * 3600. / dt_therm + 0.001 ) - 1
   endif
   write(mesg,'(i12)') CS%nstep_incupd
   if (is_root_pe()) &
@@ -298,11 +298,9 @@ subroutine set_up_oda_incupd_field(sp_val, G, GV, CS)
   CS%Inc(CS%fldno)%nz_data = CS%nz_data
   allocate(CS%Inc(CS%fldno)%p(G%isd:G%ied,G%jsd:G%jed,CS%nz_data))
   CS%Inc(CS%fldno)%p(:,:,:) = 0.0
-  do j=G%jsc,G%jec ; do i=G%isc,G%iec
-    do k=1,CS%nz_data
-      CS%Inc(CS%fldno)%p(i,j,k) = sp_val(i,j,k)
-    enddo
-  enddo ; enddo
+  do k=1,CS%nz_data ; do j=G%jsc,G%jec ; do i=G%isc,G%iec
+     CS%Inc(CS%fldno)%p(i,j,k) = sp_val(i,j,k)
+  enddo ; enddo ; enddo
 
 end subroutine set_up_oda_incupd_field
 
@@ -316,10 +314,10 @@ subroutine set_up_oda_incupd_vel_field(u_val, v_val, G, GV, CS)
 
   real, dimension(SZIB_(G),SZJ_(G),CS%nz_data), &
                           intent(in) :: u_val !< u increment, it has arbritary number of layers but
-                                              !! not to exceed the total number of model layers
+                                              !! not to exceed the total number of model layers [L T-1 ~> m s-1]
   real, dimension(SZI_(G),SZJB_(G),CS%nz_data), &
                           intent(in) :: v_val !< v increment, it has arbritary number of layers but
-                                              !! not to exceed the number of model layers
+                                              !! not to exceed the number of model layers [L T-1 ~> m s-1]
   integer :: i, j, k
 
   if (.not.associated(CS)) return
@@ -397,7 +395,7 @@ subroutine calc_oda_increments(h, tv, u, v, G, GV, US, CS)
 
   ! get h_obs
   nz_data = CS%Inc(1)%nz_data
-  allocate(h_obs(G%isd:G%ied,G%jsd:G%jed,nz_data)) ; h_obs(:,:,:)=0.0
+  allocate(h_obs(G%isd:G%ied,G%jsd:G%jed,nz_data)) ; h_obs(:,:,:) = 0.0
   do k=1,nz_data  ; do j=js,je ; do i=is,ie
     h_obs(i,j,k) = CS%Ref_h%p(i,j,k)
   enddo ; enddo ; enddo
@@ -405,109 +403,128 @@ subroutine calc_oda_increments(h, tv, u, v, G, GV, US, CS)
 
 
   ! allocate 1-d arrays
-  allocate(tmp_h(nz_data)); tmp_h(:)=0.0
+  allocate(tmp_h(nz_data)); tmp_h(:) = 0.0
   allocate(tmp_val2(nz_data)) ; tmp_val2(:) = 0.0
-  allocate(hu_obs(nz_data)) ; hu_obs(:)=0.0
-  allocate(hv_obs(nz_data)) ; hv_obs(:)=0.0
+  allocate(hu_obs(nz_data)) ; hu_obs(:) = 0.0
+  allocate(hv_obs(nz_data)) ; hv_obs(:) = 0.0
 
   ! remap t,s (on h_init) to h_obs to get increment
-  tmp_val1(:)=0.0
+  tmp_val1(:) = 0.0
   do j=js,je ; do i=is,ie
-     ! account for the different SSH
-     sum_h1=0.0
-     do k=1,nz
-       sum_h1 = sum_h1+h(i,j,k)
-     enddo
-     sum_h2=0.0
-     do k=1,nz_data
-       sum_h2 = sum_h2+h_obs(i,j,k)
-     enddo
-     do k=1,nz_data
-       tmp_h(k)=(sum_h1/sum_h2)*h_obs(i,j,k)
-     enddo
      if (G%mask2dT(i,j) == 1) then
-     ! get temperature
-     tmp_val1(1:nz) = tv%T(i,j,1:nz)
-     ! remap tracer on h_obs
-     call remapping_core_h(CS%remap_cs, nz     ,     h(i,j,1:nz     ), tmp_val1, &
-                                        nz_data, tmp_h(    1:nz_data), tmp_val2, &
-                           h_neglect, h_neglect_edge)
-     ! get increment from full field on h_obs
-     CS%Inc(1)%p(i,j,1:nz_data) = CS%Inc(1)%p(i,j,1:nz_data) - tmp_val2(1:nz_data)
+        ! account for the different SSH
+        sum_h1 = 0.0
+        sum_h2 = 0.0
+        do k=1,nz
+          sum_h1 = sum_h1+h(i,j,k)
+        enddo
 
-     ! get salinity
-     tmp_val1(1:nz) = tv%S(i,j,1:nz)
-     ! remap tracer on h_obs
-     call remapping_core_h(CS%remap_cs, nz     ,     h(i,j,1:nz     ), tmp_val1, &
-                                        nz_data, tmp_h(    1:nz_data), tmp_val2, &
-                           h_neglect, h_neglect_edge)
-     ! get increment from full field on h_obs
-     CS%Inc(2)%p(i,j,1:nz_data) = CS%Inc(2)%p(i,j,1:nz_data) - tmp_val2(1:nz_data)
+        do k=1,nz_data
+          sum_h2 = sum_h2+h_obs(i,j,k)
+          tmp_h(k)=(sum_h1/sum_h2)*h_obs(i,j,k)
+        enddo
+        ! get temperature
+        do k=1,nz
+           tmp_val1(k) = tv%T(i,j,k)
+        enddo
+        ! remap tracer on h_obs
+        call remapping_core_h(CS%remap_cs, nz, h(i,j,1:nz), tmp_val1, &
+                              nz_data, tmp_h(1:nz_data), tmp_val2, &
+                              h_neglect, h_neglect_edge)
+        ! get increment from full field on h_obs
+        do k=1,nz_data
+           CS%Inc(1)%p(i,j,k) = CS%Inc(1)%p(i,j,k) - tmp_val2(k)
+        enddo
+
+        ! get salinity
+        do k=1,nz
+           tmp_val1(k) = tv%S(i,j,k)
+        enddo
+        ! remap tracer on h_obs
+        call remapping_core_h(CS%remap_cs, nz, h(i,j,1:nz), tmp_val1, &
+                              nz_data, tmp_h(1:nz_data), tmp_val2, &
+                              h_neglect, h_neglect_edge)
+        ! get increment from full field on h_obs
+        do k=1,nz_data
+           CS%Inc(2)%p(i,j,k) = CS%Inc(2)%p(i,j,k) - tmp_val2(k)
+        enddo
      endif
   enddo; enddo
-
+   
   ! remap u to h_obs to get increment
   if (CS%uv_inc) then
-    call pass_var(h, G%Domain)
+     call pass_var(h, G%Domain)
 
-    hu(:)=0.0
-    do j=js,je ; do i=isB,ieB
-      if (G%mask2dCu(i,j) == 1) then
-      ! get u-velocity
-      tmp_val1(1:nz) = u(i,j,1:nz)
-      ! get the h and h_obs at u points
-      hu(1:nz)          = 0.5*(    h(i,j,1:nz     )+    h(i+1,j,1:nz     ))
-      hu_obs(1:nz_data) = 0.5*(h_obs(i,j,1:nz_data)+h_obs(i+1,j,1:nz_data))
-      ! account for the different SSH
-      sum_h1=0.0
-      do k=1,nz
-        sum_h1 = sum_h1+hu(k)
-      enddo
-      sum_h2=0.0
-      do k=1,nz_data
-        sum_h2 = sum_h2+hu_obs(k)
-      enddo
-      do k=1,nz_data
-        hu_obs(k)=(sum_h1/sum_h2)*hu_obs(k)
-      enddo
-      ! remap model u on hu_obs
-      call remapping_core_h(CS%remap_cs, nz     ,     hu(1:nz     ), tmp_val1, &
-                                         nz_data, hu_obs(1:nz_data), tmp_val2, &
-                            h_neglect, h_neglect_edge)
-      ! get increment from full field on h_obs
-      CS%Inc_u%p(i,j,1:nz_data) = CS%Inc_u%p(i,j,1:nz_data) - tmp_val2(1:nz_data)
-      endif
-    enddo; enddo
+     hu(:) = 0.0
+     do j=js,je ; do i=isB,ieB
+        if (G%mask2dCu(i,j) == 1) then
+           ! get u-velocity
+           do k=1,nz
+              tmp_val1(k) = u(i,j,k)
+              ! get the h and h_obs at u points
+              hu(k) = 0.5*( h(i,j,k)+ h(i+1,j,k))
+           enddo
+           do k=1,nz_data
+              hu_obs(k) = 0.5*(h_obs(i,j,k)+h_obs(i+1,j,k))
+           enddo
+           ! account for the different SSH
+           sum_h1 = 0.0
+           do k=1,nz
+             sum_h1 = sum_h1+hu(k)
+           enddo
+           sum_h2 = 0.0
+           do k=1,nz_data
+             sum_h2 = sum_h2+hu_obs(k)
+           enddo
+           do k=1,nz_data
+             hu_obs(k)=(sum_h1/sum_h2)*hu_obs(k)
+           enddo
+           ! remap model u on hu_obs
+           call remapping_core_h(CS%remap_cs, nz, hu(1:nz), tmp_val1, &
+                                 nz_data, hu_obs(1:nz_data), tmp_val2, &
+                                 h_neglect, h_neglect_edge)
+           ! get increment from full field on h_obs
+           do k=1,nz_data
+              CS%Inc_u%p(i,j,k) = CS%Inc_u%p(i,j,k) - tmp_val2(k)
+           enddo
+        endif
+     enddo; enddo
 
-    ! remap v to h_obs to get increment
-    hv(:) = 0.0;
-    do j=jsB,jeB ; do i=is,ie
-      if (G%mask2dCv(i,j) == 1) then
-      ! get v-velocity
-      tmp_val1(1:nz) = v(i,j,1:nz)
-      ! get the h and h_obs at v points
-      hv(1:nz)          = 0.5*(    h(i,j,1:nz     )+    h(i,j+1,1:nz     ))
-      hv_obs(1:nz_data) = 0.5*(h_obs(i,j,1:nz_data)+h_obs(i,j+1,1:nz_data))
-      ! account for the different SSH
-      sum_h1=0.0
-      do k=1,nz
-        sum_h1 = sum_h1+hv(k)
-      enddo
-      sum_h2=0.0
-      do k=1,nz_data
-        sum_h2 = sum_h2+hv_obs(k)
-      enddo
-      do k=1,nz_data
-        hv_obs(k)=(sum_h1/sum_h2)*hv_obs(k)
-      enddo
-      ! remap model v on hv_obs
-      call remapping_core_h(CS%remap_cs, nz     ,     hv(1:nz     ), tmp_val1, &
-                                         nz_data, hv_obs(1:nz_data), tmp_val2, &
-                            h_neglect, h_neglect_edge)
-      ! get increment from full field on h_obs
-      CS%Inc_v%p(i,j,1:nz_data) = CS%Inc_v%p(i,j,1:nz_data) - tmp_val2(1:nz_data)
-      endif
-    enddo; enddo
+     ! remap v to h_obs to get increment
+     hv(:) = 0.0;
+     do j=jsB,jeB ; do i=is,ie
+        if (G%mask2dCv(i,j) == 1) then
+           ! get v-velocity
+           do k=1,nz
+              tmp_val1(k) = v(i,j,k)
+              ! get the h and h_obs at v points
+              hv(k) = 0.5*(h(i,j,k)+h(i,j+1,k))
+           enddo
+           do k=1,nz_data
+              hv_obs(k) = 0.5*(h_obs(i,j,k)+h_obs(i,j+1,k))
+           enddo
+           ! account for the different SSH
+           sum_h1 = 0.0
+           do k=1,nz
+             sum_h1 = sum_h1+hv(k)
+           enddo
+           sum_h2 = 0.0
+           do k=1,nz_data
+             sum_h2 = sum_h2+hv_obs(k)
+           enddo
+           do k=1,nz_data
+             hv_obs(k)=(sum_h1/sum_h2)*hv_obs(k)
+           enddo
+           ! remap model v on hv_obs
+           call remapping_core_h(CS%remap_cs, nz, hv(1:nz), tmp_val1, &
+                                 nz_data, hv_obs(1:nz_data), tmp_val2, &
+                                 h_neglect, h_neglect_edge)
+           ! get increment from full field on h_obs
+           do k=1,nz_data
+              CS%Inc_v%p(i,j,k) = CS%Inc_v%p(i,j,k) - tmp_val2(k)
+           enddo
+        endif
+     enddo; enddo
   endif ! uv_inc
 
   call pass_var(CS%Inc(1)%p, G%Domain)
@@ -558,7 +575,7 @@ subroutine apply_oda_incupd(h, tv, u, v, dt, G, GV, US, CS)
   integer ::  i, j, k, is, ie, js, je, nz, nz_data
   integer :: isB, ieB, jsB, jeB
 !  integer :: ncount      ! time step counter
-  real :: q              ! weight of the update
+  real :: inc_wt           ! weight of the update for this time-step
   real :: h_neglect, h_neglect_edge
   real :: sum_h1, sum_h2 !vertical sums of h's
   character(len=256) :: mesg
@@ -575,13 +592,13 @@ subroutine apply_oda_incupd(h, tv, u, v, dt, G, GV, US, CS)
 
   ! update counter
   CS%ncount = CS%ncount+1.0
-  q = 1.0/CS%nstep_incupd
+  inc_wt = 1.0/CS%nstep_incupd
 
   ! print out increments
   write(mesg,'(f10.0)') CS%ncount
   if (is_root_pe()) call MOM_error(NOTE,"updating fields with increments ncount:"//trim(mesg))
-  write(mesg,'(f10.8)') q
-  if (is_root_pe()) call MOM_error(NOTE,"updating fields with weight q:"//trim(mesg))
+  write(mesg,'(f10.8)') inc_wt
+  if (is_root_pe()) call MOM_error(NOTE,"updating fields with weight inc_wt:"//trim(mesg))
 
   if (GV%Boussinesq) then
     h_neglect = GV%m_to_H*1.0e-30 ; h_neglect_edge = GV%m_to_H*1.0e-10
@@ -591,57 +608,61 @@ subroutine apply_oda_incupd(h, tv, u, v, dt, G, GV, US, CS)
 
   ! get h_obs
   nz_data = CS%Inc(1)%nz_data
-  allocate(h_obs(G%isd:G%ied,G%jsd:G%jed,nz_data)) ; h_obs(:,:,:)=0.0
+  allocate(h_obs(G%isd:G%ied,G%jsd:G%jed,nz_data)) ; h_obs(:,:,:) = 0.0
   do k=1,nz_data  ; do j=js,je ; do i=is,ie
     h_obs(i,j,k) = CS%Ref_h%p(i,j,k)
   enddo ; enddo ; enddo
   call pass_var(h_obs,G%Domain)
 
   ! allocate 1-d array
-  allocate(tmp_h(nz_data)); tmp_h(:)=0.0
+  allocate(tmp_h(nz_data)); tmp_h(:) = 0.0
   allocate(tmp_val2(nz_data))
-  allocate(hu_obs(nz_data)) ; hu_obs(:)=0.0
-  allocate(hv_obs(nz_data)) ; hv_obs(:)=0.0
+  allocate(hu_obs(nz_data)) ; hu_obs(:) = 0.0
+  allocate(hv_obs(nz_data)) ; hv_obs(:) = 0.0
 
   ! add increments to tracers
-  tmp_val1(:)=0.0
+  tmp_val1(:) = 0.0
   tmp_t(:,:,:) = 0.0 ; tmp_s(:,:,:) = 0.0 ! diagnostics
   do j=js,je ; do i=is,ie
     ! account for the different SSH
-    sum_h1=0.0
+    sum_h1 = 0.0
     do k=1,nz
       sum_h1 = sum_h1+h(i,j,k)
     enddo
-    sum_h2=0.0
+    sum_h2 = 0.0
     do k=1,nz_data
       sum_h2 = sum_h2+h_obs(i,j,k)
     enddo
     do k=1,nz_data
-      tmp_h(k)=(sum_h1/sum_h2)*h_obs(i,j,k)
+      tmp_h(k) = ( sum_h1 / sum_h2 ) * h_obs(i,j,k)
     enddo
     if (G%mask2dT(i,j) == 1) then
     ! get temperature increment
-    tmp_val2(1:nz_data) = CS%Inc(1)%p(i,j,1:nz_data)
+    do k=1,nz_data
+       tmp_val2(k) = CS%Inc(1)%p(i,j,k)
+    enddo
     ! remap increment profile on model h
-    call remapping_core_h(CS%remap_cs, nz_data, tmp_h(    1:nz_data),tmp_val2, &
-                                       nz     ,     h(i,j,1:nz     ),tmp_val1, &
-                          h_neglect, h_neglect_edge)
+    call remapping_core_h(CS%remap_cs, nz_data, tmp_h(1:nz_data), tmp_val2, &
+                          nz, h(i,j,1:nz),tmp_val1, h_neglect, h_neglect_edge)
+    do k=1,nz
     ! add increment to tracer on model h
-    tv%T(i,j,1:nz) = tv%T(i,j,1:nz) + q*tmp_val1(1:nz)
-    tmp_t(i,j,1:nz) = tmp_val1(1:nz) ! store T increment for diagnostics
+       tv%T(i,j,k) = tv%T(i,j,k) + inc_wt * tmp_val1(k)
+       tmp_t(i,j,k) = tmp_val1(k) ! store T increment for diagnostics
+    enddo
 
     ! get salinity increment
-    tmp_val2(1:nz_data) = CS%Inc(2)%p(i,j,1:nz_data)
+    do k=1,nz_data
+       tmp_val2(k) = CS%Inc(2)%p(i,j,k)
+    enddo
     ! remap increment profile on model h
-    call remapping_core_h(CS%remap_cs, nz_data, tmp_h(    1:nz_data),tmp_val2,&
-                                       nz     ,     h(i,j,1:nz     ),tmp_val1,&
-                          h_neglect, h_neglect_edge)
+    call remapping_core_h(CS%remap_cs, nz_data, tmp_h(1:nz_data),tmp_val2,&
+                          nz, h(i,j,1:nz),tmp_val1, h_neglect, h_neglect_edge)
     ! add increment to tracer on model h
-    tv%S(i,j,1:nz) = tv%S(i,j,1:nz) + q*tmp_val1(1:nz)
-    tmp_s(i,j,1:nz) = tmp_val1(1:nz) ! store S increment for diagnostics
+    do k=1,nz
+       tv%S(i,j,k) = tv%S(i,j,k) + inc_wt * tmp_val1(k)
+       tmp_s(i,j,k) = tmp_val1(k) ! store S increment for diagnostics
     ! bound salinity values ! check if it is correct to do that or if it hides
     ! other problems ...
-    do k=1,nz
       tv%S(i,j,k) = max(0.0 , tv%S(i,j,k))
     enddo
     endif
@@ -651,73 +672,83 @@ subroutine apply_oda_incupd(h, tv, u, v, dt, G, GV, US, CS)
   ! add u and v increments
   if (CS%uv_inc) then
 
-    call pass_var(h,G%Domain) ! to ensure reproducibility
+     call pass_var(h,G%Domain) ! to ensure reproducibility
 
-    ! add increments to u
-    hu(:) = 0.0
-    tmp_u(:,:,:) = 0.0 ! diagnostics
-    do j=js,je ; do i=isB,ieB
-      if (G%mask2dCu(i,j) == 1) then
-      ! get u increment
-      tmp_val2(1:nz_data) = CS%Inc_u%p(i,j,1:nz_data)
-      ! get the h and h_obs at u points
-      hu_obs(1:nz_data) = 0.5*(h_obs(i,j,1:nz_data)+h_obs(i+1,j,1:nz_data))
-      hu(1:nz)          = 0.5*(    h(i,j,1:nz     )+    h(i+1,j,1:nz     ))
-      ! account for different SSH
-      sum_h1=0.0
-      do k=1,nz
-        sum_h1 = sum_h1+hu(k)
-      enddo
-      sum_h2=0.0
-      do k=1,nz_data
-        sum_h2 = sum_h2+hu_obs(k)
-      enddo
-      do k=1,nz_data
-        hu_obs(k)=(sum_h1/sum_h2)*hu_obs(k)
-      enddo
-      ! remap increment profile on hu
-      call remapping_core_h(CS%remap_cs, nz_data, hu_obs(1:nz_data), tmp_val2, &
-                                         nz     ,     hu(1:nz     ), tmp_val1, &
-                            h_neglect, h_neglect_edge)
-      ! add increment to u-velocity on hu
-      u(i,j,1:nz) = u(i,j,1:nz) + q*tmp_val1(1:nz)
-      ! store increment for diagnostics
-      tmp_u(i,j,1:nz) = tmp_val1(1:nz)
-      endif
-    enddo; enddo
+     ! add increments to u
+     hu(:) = 0.0
+     tmp_u(:,:,:) = 0.0 ! diagnostics
+     do j=js,je ; do i=isB,ieB
+        if (G%mask2dCu(i,j) == 1) then
+           do k=1,nz_data
+              ! get u increment
+              tmp_val2(k) = CS%Inc_u%p(i,j,k)
+              ! get the h and h_obs at u points
+              hu_obs(k) = 0.5 * ( h_obs(i,j,k) + h_obs(i+1,j,k) )
+           enddo
+           do k=1,nz
+              hu(k) = 0.5 * ( h(i,j,k) + h(i+1,j,k) )
+           enddo
+           ! account for different SSH
+           sum_h1 = 0.0
+           do k=1,nz
+             sum_h1 = sum_h1 + hu(k)
+           enddo
+           sum_h2 = 0.0
+           do k=1,nz_data
+             sum_h2 = sum_h2 + hu_obs(k)
+           enddo
+           do k=1,nz_data
+             hu_obs(k)=( sum_h1 / sum_h2 ) * hu_obs(k)
+           enddo
+           ! remap increment profile on hu
+           call remapping_core_h(CS%remap_cs, nz_data, hu_obs(1:nz_data), tmp_val2, &
+                                 nz, hu(1:nz), tmp_val1, h_neglect, h_neglect_edge)
+           ! add increment to u-velocity on hu
+           do k=1,nz
+              u(i,j,k) = u(i,j,k) + inc_wt * tmp_val1(k)
+              ! store increment for diagnostics
+              tmp_u(i,j,k) = tmp_val1(k)
+           enddo
+        endif
+     enddo; enddo
 
-    ! add increments to v
-    hv(:) = 0.0
-    tmp_v(:,:,:) = 0.0 ! diagnostics
-    do j=jsB,jeB ; do i=is,ie
-      if (G%mask2dCv(i,j) == 1) then
-      ! get v increment
-      tmp_val2(1:nz_data) = CS%Inc_v%p(i,j,1:nz_data)
-      ! get the h and h_obs at v points
-      hv_obs(1:nz_data) = 0.5 * (h_obs(i,j,1:nz_data)+h_obs(i,j+1,1:nz_data))
-      hv(1:nz)          = 0.5 * (    h(i,j,1:nz     )+    h(i,j+1,1:nz     ))
-      ! account for different SSH
-      sum_h1=0.0
-      do k=1,nz
-        sum_h1 = sum_h1+hv(k)
-      enddo
-      sum_h2=0.0
-      do k=1,nz_data
-        sum_h2 = sum_h2+hv_obs(k)
-      enddo
-      do k=1,nz_data
-        hv_obs(k)=(sum_h1/sum_h2)*hv_obs(k)
-      enddo
-      ! remap increment profile on hv
-      call remapping_core_h(CS%remap_cs, nz_data, hv_obs(1:nz_data), tmp_val2, &
-                                         nz     ,     hv(1:nz     ), tmp_val1, &
-                            h_neglect, h_neglect_edge)
-      ! add increment to v-velocity on hv
-      v(i,j,1:nz) = v(i,j,1:nz) + q*tmp_val1(1:nz)
-      ! store increment for diagnostics
-      tmp_v(i,j,1:nz) = tmp_val1(1:nz)
-      endif
-    enddo; enddo
+     ! add increments to v
+     hv(:) = 0.0
+     tmp_v(:,:,:) = 0.0 ! diagnostics
+     do j=jsB,jeB ; do i=is,ie
+        if (G%mask2dCv(i,j) == 1) then
+           ! get v increment
+           do k=1,nz_data
+              tmp_val2(k) = CS%Inc_v%p(i,j,k)
+              ! get the h and h_obs at v points
+              hv_obs(k) = 0.5 * ( h_obs(i,j,k) + h_obs(i,j+1,k) )
+           enddo
+           do k=1,nz
+              hv(k) = 0.5 * (h(i,j,k) + h(i,j+1,k) )
+           enddo
+           ! account for different SSH
+           sum_h1 = 0.0
+           do k=1,nz
+             sum_h1 = sum_h1 + hv(k)
+           enddo
+           sum_h2 = 0.0
+           do k=1,nz_data
+             sum_h2 = sum_h2 + hv_obs(k)
+           enddo
+           do k=1,nz_data
+             hv_obs(k)=( sum_h1 / sum_h2 ) * hv_obs(k)
+           enddo
+           ! remap increment profile on hv
+           call remapping_core_h(CS%remap_cs, nz_data, hv_obs(1:nz_data), tmp_val2, &
+                                 nz, hv(1:nz), tmp_val1, h_neglect, h_neglect_edge)
+           ! add increment to v-velocity on hv
+           do k=1,nz
+              v(i,j,k) = v(i,j,k) + inc_wt * tmp_val1(k)
+              ! store increment for diagnostics
+              tmp_v(i,j,k) = tmp_val1(k)
+           enddo
+        endif
+     enddo; enddo
 
   endif ! uv_inc
 
