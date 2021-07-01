@@ -15,13 +15,13 @@ module write_ocean_obs_mod
 contains
 
 !> Open a profile file
-integer function open_profile_file(name, nvar, grid_lon, grid_lat,thread,fset)
+integer function open_profile_file(name, nvar, grid_lon, grid_lat, thread, fset)
   character(len=*), intent(in) :: name !< File name
   integer, intent(in), optional :: nvar !< Number of variables
   real, dimension(:), optional, intent(in) :: grid_lon !< Longitude [degreeE]
   real, dimension(:), optional, intent(in) :: grid_lat !< Latitude [degreeN]
-  integer, intent(in), optional :: thread !< Thread
-  integer, intent(in), optional :: fset !< File set
+  integer, optional, intent(in) :: thread !< Thread number
+  integer, optional, intent(in) :: fset !< File set
 
   open_profile_file=-1
 end function open_profile_file
@@ -29,7 +29,7 @@ end function open_profile_file
 !> Write a profile
 subroutine write_profile(unit,profile)
   integer, intent(in) :: unit !< File unit
-  type(ocean_profile_type), intent(in) :: profile !< Profile
+  type(ocean_profile_type), intent(in) :: profile !< Profile to write
 
   return
 end subroutine write_profile

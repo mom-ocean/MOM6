@@ -837,8 +837,8 @@ subroutine read_param_time(CS, varname, value, timeunit, fail_if_missing, date_f
     elseif (INDEX(value_string(1),',') > 0) then
       ! Initialize vals with an invalid date.
       vals(:) = (/ -999, -999, -999, 0, 0, 0, 0 /)
-      read(value_string(1),*,end=995,err=1005) vals
-     995 continue
+      read(value_string(1), *, end=995, err=1005) vals
+      995 continue
       if ((vals(1) < 0) .or. (vals(2) < 0) .or. (vals(3) < 0)) &
         call MOM_error(FATAL,'read_param_time: integer list read error for time-type variable '//&
                        trim(varname)// ' parsing "'//trim(value_string(1))//'"')
@@ -865,8 +865,9 @@ subroutine read_param_time(CS, varname, value, timeunit, fail_if_missing, date_f
     endif ; endif
   endif
   return
- 1005 call MOM_error(FATAL,'read_param_time: read error for time-type variable '//&
-                           trim(varname)// ' parsing "'//trim(value_string(1))//'"')
+
+  1005 call MOM_error(FATAL, 'read_param_time: read error for time-type variable '//&
+                             trim(varname)// ' parsing "'//trim(value_string(1))//'"')
 end subroutine read_param_time
 
 !> This function removes single and double quotes from a character string
@@ -1482,7 +1483,7 @@ subroutine log_param_char(CS, modulename, varname, value, desc, units, &
   logical,          optional, intent(in) :: like_default !< If present and true, log this parameter as
                                          !! though it has the default value, even if there is no default.
 
-  character(len=240) :: mesg, myunits
+  character(len=1024) :: mesg, myunits
 
   write(mesg, '("  ",a," ",a,": ",a)') &
     trim(modulename), trim(varname), trim(value)
@@ -1491,7 +1492,7 @@ subroutine log_param_char(CS, modulename, varname, value, desc, units, &
     if (CS%log_to_stdout) write(CS%stdout,'(a)') trim(mesg)
   endif
 
-  myunits=" "; if (present(units)) write(myunits(1:240),'(A)') trim(units)
+  myunits=" "; if (present(units)) write(myunits(1:1024),'(A)') trim(units)
   if (present(desc)) &
     call doc_param(CS%doc, varname, desc, myunits, value, default, &
                    layoutParam=layoutParam, debuggingParam=debuggingParam, like_default=like_default)
@@ -1892,7 +1893,7 @@ subroutine get_param_char_array(CS, modulename, varname, value, desc, units, &
   ! Local variables
   logical :: do_read, do_log
   integer :: i, len_tot, len_val
-  character(len=240) :: cat_val
+  character(len=1024) :: cat_val
 
   do_read = .true. ; if (present(do_not_read)) do_read = .not.do_not_read
   do_log  = .true. ; if (present(do_not_log))  do_log  = .not.do_not_log

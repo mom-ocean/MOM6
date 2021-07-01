@@ -1,0 +1,71 @@
+/*! \page Governing_Equations Governing Equations
+
+The Boussinesq hydrostatic equations of motion in height coordinates are
+
+\f{eqnarray}  D_t \boldsymbol{u} + f \widehat{\boldsymbol{k}} \times \boldsymbol{u} + \frac{\rho}{\rho_o} \boldsymbol{\nabla}_z \Phi + \frac{1}{\rho_o} \boldsymbol{\nabla}_z p &= \boldsymbol{\mathcal{F}} &\mbox{ momentum} \\
+  \rho \, \frac{\partial \Phi}{\partial z} + \frac{\partial p}{\partial z} &= 0 &\mbox{ hydrostatic} \\
+  \boldsymbol{\nabla}_z \cdotp \boldsymbol{u} + \frac{\partial w}{\partial z} &= 0 &\mbox{ thickness} \\
+  D_t \theta &= \boldsymbol{\mathcal{N}}_\theta^\gamma - \frac{\partial J_\theta^{(z)}}{\partial z} &\mbox{ potential temp} \\
+  D_t S &= \boldsymbol{\mathcal{N}}_S^\gamma - \frac{\partial J_S^{(z)}}{\partial z} &\mbox{ salinity} \\
+  \rho &= \rho(S, \theta, z) &\mbox{ equation of state.}
+\f}
+
+where notation is described in \ref Notation, \f$\boldsymbol{\mathcal{F}}\f$ represents the accelerations due to
+the divergence of stresses including those provided through boundary interactions.
+
+The prognostic thermodynamic variables are potential temperature,
+\f$\theta\f$, and salinity \f$S\f$, which are related to <em>in situ</em> density
+\f$\rho\f$ through the \cite wright1997 equation of state. In the potential
+temperature and salinity equations, fluxes due to diabatic, vertically
+oriented processes are indicated by \f$J^{(z)}\f$. The tendency due to the
+convergence of fluxes oriented along neutral directions is indicated by
+\f$\boldsymbol{\mathcal{N}}^\gamma\f$. Our implementation of this <em>neutral
+diffusion</em> parameterization is detailed in Shao et al. (personal comm.)
+
+The total derivative is
+
+\f{eqnarray}  D_t & \equiv \frac{\partial}{\partial t} + \boldsymbol{v} \cdotp \boldsymbol{\nabla} \\
+      &= \frac{\partial}{\partial t} + \boldsymbol{u} \cdotp \boldsymbol{\nabla}_z + w \frac{\partial}{\partial z}.
+\f}
+
+The non-divergence of flow allows a total derivative to be re-written in flux form:
+
+\f{eqnarray}  D_t \theta &= \frac{\partial}{\partial t} + \boldsymbol{\nabla} \cdotp ( \boldsymbol{v} \theta ) \\
+             &= \frac{\partial}{\partial t} + \boldsymbol{\nabla}_z \cdotp ( \boldsymbol{u} \theta ) + \frac{\partial ( w \theta )}{\partial z}.
+\f}
+
+The above equations of motion can thus be written as:
+
+\f{eqnarray}  D_t \boldsymbol{u} + f \widehat{\boldsymbol{k}} \times \boldsymbol{u} + \frac{\rho}{\rho_o}\boldsymbol{\nabla}_z \Phi + \frac{1}{\rho_o} \boldsymbol{\nabla}_z p &= \boldsymbol{\mathcal{F}} &\mbox{ momentum}\\
+  \rho \, \frac{\partial \Phi}{\partial z} + \frac{\partial p}{\partial z} &= 0 &\mbox{ hydrostatic} \\
+  \boldsymbol{\nabla}_z \cdotp \boldsymbol{u} + \frac{\partial w}{\partial z} &= 0 &\mbox{ thickness} \\
+  \frac{\partial \theta}{\partial t} + \boldsymbol{\nabla}_z \cdotp ( \boldsymbol{u} \theta ) + \frac{\partial ( w \theta )}{\partial z} &= \boldsymbol{\mathcal{N}}_\theta^\gamma - \frac{\partial J_\theta^{(z)}}{\partial z} &\mbox{ potential temp} \\
+  \frac{\partial S}{\partial t} + \boldsymbol{\nabla}_z \cdotp ( \boldsymbol{u} S ) + \frac{\partial ( w S )}{\partial z} &= \boldsymbol{\mathcal{N}}_S^\gamma - \frac{\partial J_S^{(z)}}{\partial z} &\mbox{ salinity} \\
+  \rho &= \rho(S, \theta, z) &\mbox{ equation of state.}
+\f}
+
+\section vector_invariant_eqns Vector Invariant Equations
+
+MOM6 solves the momentum equations written in vector-invariant form.
+
+A vector identity allows the total derivative of velocity to be written in the vector-invariant form:
+
+\f{eqnarray}  D_t \boldsymbol{u} &= \partial_t \boldsymbol{u} + \boldsymbol{v} \cdotp \boldsymbol{\nabla} \boldsymbol{u} \\
+              &= \partial_t \boldsymbol{u} + \boldsymbol{u} \cdotp \boldsymbol{\nabla}_z \boldsymbol{u} + w \partial_z \boldsymbol{u} \\
+              &= \partial_t \boldsymbol{u} + \left( \boldsymbol{\nabla}
+	      \times \boldsymbol{u} \right) \times \boldsymbol{v} + \boldsymbol{\nabla} \underbrace{\frac{1}{2} \left|\boldsymbol{u}\right|^2}_{\equiv K} .
+\f}
+
+The flux-form equations of motion in height coordinates can thus be written succinctly as:
+
+\f{eqnarray} \partial_t \boldsymbol{u} + \left( f \widehat{\boldsymbol{k}} +
+ \boldsymbol{\nabla} \times \boldsymbol{u} \right) \times \boldsymbol{v} + \boldsymbol{\nabla} K
+  + \frac{\rho}{\rho_o} \boldsymbol{\nabla} \Phi + \frac{1}{\rho_o} \boldsymbol{\nabla} p &= \boldsymbol{\mathcal{F}} &\mbox{ momentum} \\
+  \boldsymbol{\nabla}_z \cdotp \boldsymbol{u} + \partial_z w &= 0 &\mbox{ thickness} \\
+  \partial_t \theta + \boldsymbol{\nabla}_z \cdotp ( \boldsymbol{u} \theta ) + \partial_z ( w \theta ) &= \boldsymbol{\mathcal{N}}_\theta^\gamma - \frac{\partial J_\theta^{(z)}}{\partial z} &\mbox{ potential temp} \\
+  \partial_t S + \boldsymbol{\nabla}_z \cdotp ( \boldsymbol{u} S ) + \partial_z ( w S ) &= \boldsymbol{\mathcal{N}}_S^\gamma - \frac{\partial J_S^{(z)}}{\partial z} &\mbox{ salinity} \\
+  \rho &= \rho(S, \theta, z) &\mbox{ equation of state}
+\f}
+
+where the horizontal momentum equations and vertical hydrostatic balance equation have been written as a single three-dimensional equation.
+*/

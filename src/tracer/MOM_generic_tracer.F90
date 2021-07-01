@@ -28,6 +28,8 @@ module MOM_generic_tracer
   use g_tracer_utils,   only: g_tracer_send_diag,g_tracer_get_values
   use g_tracer_utils,   only: g_tracer_get_pointer,g_tracer_get_alias,g_tracer_set_csdiag
 
+  use MOM_ALE_sponge, only : set_up_ALE_sponge_field, ALE_sponge_CS
+  use MOM_coms, only : max_across_PEs, min_across_PEs, PE_here
   use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_ptr
   use MOM_diag_mediator, only : diag_ctrl, get_diag_time_end
   use MOM_error_handler, only : MOM_error, FATAL, WARNING, NOTE, is_root_pe
@@ -36,10 +38,10 @@ module MOM_generic_tracer
   use MOM_grid, only : ocean_grid_type
   use MOM_hor_index, only : hor_index_type
   use MOM_io, only : file_exists, MOM_read_data, slasher
+  use MOM_open_boundary, only : ocean_OBC_type
   use MOM_restart, only : register_restart_field, query_initialized, MOM_restart_CS
   use MOM_spatial_means, only : global_area_mean
   use MOM_sponge, only : set_up_sponge_field, sponge_CS
-  use MOM_ALE_sponge, only : set_up_ALE_sponge_field, ALE_sponge_CS
   use MOM_time_manager, only : time_type, set_time
   use MOM_tracer_diabatic, only : tracer_vertdiff, applyTracerBoundaryFluxesInOut
   use MOM_tracer_registry, only : register_tracer, tracer_registry_type
@@ -47,7 +49,6 @@ module MOM_generic_tracer
   use MOM_tracer_initialization_from_Z, only : MOM_initialize_tracer_from_Z
   use MOM_unit_scaling, only : unit_scale_type
   use MOM_variables, only : surface, thermo_var_ptrs
-  use MOM_open_boundary, only : ocean_OBC_type
   use MOM_verticalGrid, only : verticalGrid_type
 
 
@@ -67,22 +68,22 @@ module MOM_generic_tracer
 
   !> Control structure for generic tracers
   type, public :: MOM_generic_tracer_CS ; private
-     character(len = 200) :: IC_file !< The file in which the generic tracer initial values can
-                                     !! be found, or an empty string for internal initialization.
-     logical :: Z_IC_file !< If true, the generic_tracer IC_file is in Z-space.  The default is false.
-     real :: tracer_IC_val = 0.0    !< The initial value assigned to tracers.
-     real :: tracer_land_val = -1.0 !< The values of tracers used where  land is masked out.
-     logical :: tracers_may_reinit  !< If true, tracers may go through the
-                                    !! initialization code if they are not found in the restart files.
+    character(len = 200) :: IC_file !< The file in which the generic tracer initial values can
+                                    !! be found, or an empty string for internal initialization.
+    logical :: Z_IC_file !< If true, the generic_tracer IC_file is in Z-space.  The default is false.
+    real :: tracer_IC_val = 0.0    !< The initial value assigned to tracers.
+    real :: tracer_land_val = -1.0 !< The values of tracers used where  land is masked out.
+    logical :: tracers_may_reinit  !< If true, tracers may go through the
+                                   !! initialization code if they are not found in the restart files.
 
-     type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to
-                                                !! regulate the timing of diagnostic output.
-     type(MOM_restart_CS), pointer :: restart_CSp => NULL() !< Restart control structure
+    type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to
+                                               !! regulate the timing of diagnostic output.
+    type(MOM_restart_CS), pointer :: restart_CSp => NULL() !< Restart control structure
 
-     !> Pointer to the first element of the linked list of generic tracers.
-     type(g_tracer_type), pointer :: g_tracer_list => NULL()
+    !> Pointer to the first element of the linked list of generic tracers.
+    type(g_tracer_type), pointer :: g_tracer_list => NULL()
 
-     integer :: H_to_m !< Auxiliary to access GV%H_to_m in routines that do not have access to GV
+    integer :: H_to_m !< Auxiliary to access GV%H_to_m in routines that do not have access to GV
 
   end type MOM_generic_tracer_CS
 
@@ -120,9 +121,9 @@ contains
 
     register_MOM_generic_tracer = .false.
     if (associated(CS)) then
-       call MOM_error(WARNING, "register_MOM_generic_tracer called with an "// &
+      call MOM_error(WARNING, "register_MOM_generic_tracer called with an "// &
             "associated control structure.")
-       return
+      return
     endif
     allocate(CS)
 
@@ -130,7 +131,7 @@ contains
     !Register all the generic tracers used and create the list of them.
     !This can be called by ALL PE's. No array fields allocated.
     if (.not. g_registered) then
-       call generic_tracer_register
+       call generic_tracer_register()
        g_registered = .true.
     endif
 
@@ -235,7 +236,7 @@ contains
     type(ocean_grid_type),                 intent(inout) :: G    !< The ocean's grid structure
     type(verticalGrid_type),               intent(in)    :: GV   !< The ocean's vertical grid structure
     type(unit_scale_type),                 intent(in)    :: US   !< A dimensional unit scaling type
-    real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h    !< Layer thicknesses [H ~> m or kg m-2]
+    real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in) :: h    !< Layer thicknesses [H ~> m or kg m-2]
     type(param_file_type),                 intent(in) :: param_file !< A structure to parse for run-time parameters
     type(diag_ctrl),               target, intent(in) :: diag    !< Regulates diagnostic output.
     type(ocean_OBC_type),                  pointer    :: OBC     !< This open boundary condition type specifies whether,
@@ -252,14 +253,14 @@ contains
     character(len=fm_string_len)      :: g_tracer_name
     real, dimension(:,:,:,:), pointer   :: tr_field
     real, dimension(:,:,:), pointer     :: tr_ptr
-    real,    dimension(G%isd:G%ied, G%jsd:G%jed,1:G%ke) :: grid_tmask
-    integer, dimension(G%isd:G%ied, G%jsd:G%jed)        :: grid_kmt
+    real,    dimension(G%isd:G%ied, G%jsd:G%jed, 1:GV%ke) :: grid_tmask
+    integer, dimension(G%isd:G%ied, G%jsd:G%jed)          :: grid_kmt
 
     !! 2010/02/04  Add code to re-initialize Generic Tracers if needed during a model simulation
     !! By default, restart cpio should not contain a Generic Tracer IC file and step below will be skipped.
     !! Ideally, the generic tracer IC file should have the tracers on Z levels.
 
-    isc = G%isc ; iec = G%iec ; jsc = G%jsc ; jec = G%jec ; nk = G%ke
+    isc = G%isc ; iec = G%iec ; jsc = G%jsc ; jec = G%jec ; nk = GV%ke
 
     CS%diag=>diag
     !Get the tracer list
@@ -270,10 +271,10 @@ contains
 
     do
       if (INDEX(CS%IC_file, '_NULL_') /= 0) then
-         call MOM_error(WARNING,"The name of the IC_file "//trim(CS%IC_file)//&
+        call MOM_error(WARNING, "The name of the IC_file "//trim(CS%IC_file)//&
                               " indicates no MOM initialization was asked for the generic tracers."//&
                               "Bypassing the MOM initialization of ALL generic tracers!")
-         exit
+        exit
       endif
       call g_tracer_get_alias(g_tracer,g_tracer_name)
       call g_tracer_get_pointer(g_tracer,g_tracer_name,'field',tr_field)
@@ -296,20 +297,20 @@ contains
 
          !Check/apply the bounds for each g_tracer
          do k=1,nk ; do j=jsc,jec ; do i=isc,iec
-            if (tr_ptr(i,j,k) /= CS%tracer_land_val) then
-              if (tr_ptr(i,j,k) < g_tracer%src_var_valid_min) tr_ptr(i,j,k) = g_tracer%src_var_valid_min
-              !Jasmin does not want to apply the maximum for now
-              !if (tr_ptr(i,j,k) > g_tracer%src_var_valid_max) tr_ptr(i,j,k) = g_tracer%src_var_valid_max
-            endif
+           if (tr_ptr(i,j,k) /= CS%tracer_land_val) then
+             if (tr_ptr(i,j,k) < g_tracer%src_var_valid_min) tr_ptr(i,j,k) = g_tracer%src_var_valid_min
+             !Jasmin does not want to apply the maximum for now
+             !if (tr_ptr(i,j,k) > g_tracer%src_var_valid_max) tr_ptr(i,j,k) = g_tracer%src_var_valid_max
+           endif
          enddo ; enddo ; enddo
 
          !jgj: Reset CASED to 0 below K=1
          if ( (trim(g_tracer_name) == 'cased') .or. (trim(g_tracer_name) == 'ca13csed') ) then
-            do k=2,nk ; do j=jsc,jec ; do i=isc,iec
-               if (tr_ptr(i,j,k) /= CS%tracer_land_val) then
-                 tr_ptr(i,j,k) = 0.0
-               endif
-            enddo ; enddo ; enddo
+           do k=2,nk ; do j=jsc,jec ; do i=isc,iec
+             if (tr_ptr(i,j,k) /= CS%tracer_land_val) then
+               tr_ptr(i,j,k) = 0.0
+             endif
+           enddo ; enddo ; enddo
          endif
        elseif(.not. g_tracer%requires_restart) then
          !Do nothing for this tracer, it is initialized by the tracer package
@@ -322,9 +323,9 @@ contains
           if (.not.file_exists(CS%IC_file)) call MOM_error(FATAL, &
                   "initialize_MOM_Generic_tracer: Unable to open "//CS%IC_file)
           if (CS%Z_IC_file) then
-            OK = tracer_Z_init(tr_ptr, h, CS%IC_file, g_tracer_name, G, US)
+            OK = tracer_Z_init(tr_ptr, h, CS%IC_file, g_tracer_name, G, GV, US)
             if (.not.OK) then
-              OK = tracer_Z_init(tr_ptr, h, CS%IC_file, trim(g_tracer_name), G, US)
+              OK = tracer_Z_init(tr_ptr, h, CS%IC_file, trim(g_tracer_name), G, GV, US)
               if (.not.OK) call MOM_error(FATAL,"initialize_MOM_Generic_tracer: "//&
                       "Unable to read "//trim(g_tracer_name)//" from "//&
                       trim(CS%IC_file)//".")
@@ -362,10 +363,10 @@ contains
     grid_tmask(:,:,:) = 0.0
     grid_kmt(:,:) = 0
     do j = G%jsd, G%jed ; do i = G%isd, G%ied
-       if (G%mask2dT(i,j) > 0) then
-          grid_tmask(i,j,:) = 1.0
-          grid_kmt(i,j) = G%ke ! Tell the code that a layer thicker than 1m is the bottom layer.
-       endif
+      if (G%mask2dT(i,j) > 0) then
+        grid_tmask(i,j,:) = 1.0
+        grid_kmt(i,j) = GV%ke ! Tell the code that a layer thicker than 1m is the bottom layer.
+      endif
     enddo ; enddo
     call g_tracer_set_common(G%isc,G%iec,G%jsc,G%jec,G%isd,G%ied,G%jsd,G%jed,&
                              GV%ke,1,CS%diag%axesTL%handles,grid_tmask,grid_kmt,day)
@@ -398,14 +399,14 @@ contains
         evap_CFL_limit, minimum_forcing_depth)
     type(ocean_grid_type),   intent(in) :: G     !< The ocean's grid structure
     type(verticalGrid_type), intent(in) :: GV    !< The ocean's vertical grid structure
-    real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+    real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                              intent(in) :: h_old !< Layer thickness before entrainment [H ~> m or kg m-2].
-    real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+    real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                              intent(in) :: h_new !< Layer thickness after entrainment [H ~> m or kg m-2].
-    real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+    real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                              intent(in) :: ea    !< The amount of fluid entrained from the layer
                                                  !! above during this call [H ~> m or kg m-2].
-    real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+    real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                              intent(in) :: eb    !< The amount of fluid entrained from the layer
                                                  !! below during this call [H ~> m or kg m-2].
     type(forcing),           intent(in) :: fluxes !< A structure containing pointers to thermodynamic
@@ -434,11 +435,11 @@ contains
     real :: dz_ml(SZI_(G),SZJ_(G))  ! The mixed layer depth in the MKS units used for generic tracers [m]
     real :: sosga
 
-    real, dimension(G%isd:G%ied,G%jsd:G%jed,G%ke) :: rho_dzt, dzt
-    real, dimension(SZI_(G),SZJ_(G),SZK_(G))      :: h_work
+    real, dimension(G%isd:G%ied,G%jsd:G%jed,GV%ke) :: rho_dzt, dzt
+    real, dimension(SZI_(G),SZJ_(G),SZK_(GV))      :: h_work
     integer :: i, j, k, isc, iec, jsc, jec, nk
 
-    isc = G%isc ; iec = G%iec ; jsc = G%jsc ; jec = G%jec ; nk = G%ke
+    isc = G%isc ; iec = G%iec ; jsc = G%jsc ; jec = G%jec ; nk = GV%ke
 
     !Get the tracer list
     if (.NOT. associated(CS%g_tracer_list)) call MOM_error(FATAL,&
@@ -570,7 +571,7 @@ contains
   function MOM_generic_tracer_stock(h, stocks, G, GV, CS, names, units, stock_index)
     type(ocean_grid_type),              intent(in)    :: G    !< The ocean's grid structure
     type(verticalGrid_type),            intent(in)    :: GV   !< The ocean's vertical grid structure
-    real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h !< Layer thicknesses [H ~> m or kg m-2]
+    real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in) :: h !< Layer thicknesses [H ~> m or kg m-2]
     real, dimension(:),                 intent(out)   :: stocks !< The mass-weighted integrated amount of each
                                                                 !! tracer, in kg times concentration units [kg conc].
     type(MOM_generic_tracer_CS),        pointer       :: CS     !< Pointer to the control structure for this module.
@@ -588,7 +589,7 @@ contains
     character(len=128), parameter :: sub_name = 'MOM_generic_tracer_stock'
 
     integer :: i, j, k, is, ie, js, je, nz, m
-    is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+    is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
     MOM_generic_tracer_stock = 0
     if (.not.associated(CS)) return
@@ -633,7 +634,6 @@ contains
   !! requested specifically, returning the number of tracers it has gone through.
   function MOM_generic_tracer_min_max(ind_start, got_minmax, gmin, gmax, xgmin, ygmin, zgmin, &
                                       xgmax, ygmax, zgmax , G, CS, names, units)
-    use mpp_utilities_mod, only: mpp_array_global_min_max
     integer,                        intent(in)    :: ind_start !< The index of the tracer to start with
     logical, dimension(:),          intent(out)   :: got_minmax !< Indicates whether the global min and
                                                             !! max are found for each tracer
@@ -663,10 +663,10 @@ contains
     real, dimension(:,:,:),pointer :: grid_tmask
     integer :: isc,iec,jsc,jec,isd,ied,jsd,jed,nk,ntau
 
-    integer :: i, j, k, is, ie, js, je, nz, m
+    integer :: i, j, k, is, ie, js, je, m
     real, allocatable, dimension(:) :: geo_z
 
-    is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+    is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
 
     MOM_generic_tracer_min_max = 0
     if (.not.associated(CS)) return
@@ -693,8 +693,8 @@ contains
 
       tr_ptr => tr_field(:,:,:,1)
 
-      call mpp_array_global_min_max(tr_ptr, grid_tmask,isd,jsd,isc,iec,jsc,jec,nk , gmin(m), gmax(m), &
-                                    G%geoLonT,G%geoLatT,geo_z,xgmin(m), ygmin(m), zgmin(m), &
+      call array_global_min_max(tr_ptr, grid_tmask, isd, jsd, isc, iec, jsc, jec, nk, gmin(m), gmax(m), &
+                                    G%geoLonT, G%geoLatT, geo_z, xgmin(m), ygmin(m), zgmin(m), &
                                     xgmax(m), ygmax(m), zgmax(m))
 
       got_minmax(m) = .true.
@@ -710,25 +710,153 @@ contains
 
   end function MOM_generic_tracer_min_max
 
+  !> Find the global maximum and minimum of a tracer array and return the locations of the extrema.
+  subroutine array_global_min_max(tr_array, tmask, isd, jsd, isc, iec, jsc, jec, nk, g_min, g_max, &
+                                  geo_x, geo_y, geo_z, xgmin, ygmin, zgmin, xgmax, ygmax, zgmax)
+    integer,                      intent(in)  :: isd   !< The starting data domain i-index
+    integer,                      intent(in)  :: jsd   !< The starting data domain j-index
+    real, dimension(isd:,jsd:,:), intent(in)  :: tr_array !< The tracer array to search for extrema
+    real, dimension(isd:,jsd:,:), intent(in)  :: tmask !< A mask that is 0 for points to exclude
+    integer,                      intent(in)  :: isc   !< The starting compute domain i-index
+    integer,                      intent(in)  :: iec   !< The ending compute domain i-index
+    integer,                      intent(in)  :: jsc   !< The starting compute domain j-index
+    integer,                      intent(in)  :: jec   !< The ending compute domain j-index
+    integer,                      intent(in)  :: nk    !< The number of vertical levels
+    real,                         intent(out) :: g_min !< The global minimum of tr_array
+    real,                         intent(out) :: g_max !< The global maximum of tr_array
+    real, dimension(isd:,jsd:),   intent(in)  :: geo_x !< The geographic x-positions of points
+    real, dimension(isd:,jsd:),   intent(in)  :: geo_y !< The geographic y-positions of points
+    real, dimension(:),           intent(in)  :: geo_z !< The vertical pseudo-positions of points
+    real,                         intent(out) :: xgmin !< The x-position of the global minimum
+    real,                         intent(out) :: ygmin !< The y-position of the global minimum
+    real,                         intent(out) :: zgmin !< The z-position of the global minimum
+    real,                         intent(out) :: xgmax !< The x-position of the global maximum
+    real,                         intent(out) :: ygmax !< The y-position of the global maximum
+    real,                         intent(out) :: zgmax !< The z-position of the global maximum
+
+    ! This subroutine is an exact transcription (bugs and all) of mpp_array_global_min_max()
+    ! from the version in FMS/mpp/mpp_utilities.F90, but with some whitespace changes to match
+    ! MOM6 code styles and to use infrastructure routines via the MOM6 framework code, and with
+    ! added comments to document its arguments.i
+
+    !### The obvious problems with this routine as currently written include:
+    !  1. It does not return exactly the maximum and minimum values.
+    !  2. The reported maximum and minimum are dependent on PE count and layout.
+    !  3. For all-zero arrays, the reported maxima scale with the PE_count
+    !  4. For arrays with a large enough offset or scaling, so that the magnitude of values exceed
+    !     1e10, the values it returns are simply wrong.
+    !  5. The results do not scale appropriately if the argument is rescaled.
+    !  6. The extrema and locations are not rotationally invariant.
+    !  7. It is inefficient because it uses 8 blocking global reduction calls when it could use just 2 or 3.
+
+    ! Local variables
+    real    :: tmax, tmin   ! Maximum and minimum tracer values, in the same units as tr_array
+    real    :: tmax0, tmin0 ! First-guest values of tmax and tmin.
+    integer :: itmax, jtmax, ktmax, itmin, jtmin, ktmin
+    integer :: igmax, jgmax, kgmax, igmin, jgmin, kgmin
+    real    :: fudge ! A factor that is close to 1 that is used to find the location of the extrema.
+
+     ! arrays to enable vectorization
+    integer :: iminarr(3), imaxarr(3)
+
+    !### These dimensional constant values mean that the results can not be guaranteed to be rescalable.
+    g_min = -88888888888.0 ; g_max = -999999999.0
+    tmax = -1.e10 ; tmin = 1.e10
+    itmax = 0 ; jtmax = 0 ; ktmax = 0
+    itmin = 0 ; jtmin = 0 ; ktmin = 0
+
+    if (ANY(tmask(isc:iec,jsc:jec,:) > 0.)) then
+      ! Vectorized using maxloc() and minloc() intrinsic functions by Russell.Fiedler@csiro.au.
+      iminarr = minloc(tr_array(isc:iec,jsc:jec,:), (tmask(isc:iec,jsc:jec,:) > 0.))
+      imaxarr = maxloc(tr_array(isc:iec,jsc:jec,:), (tmask(isc:iec,jsc:jec,:) > 0.))
+      itmin = iminarr(1)+isc-1
+      jtmin = iminarr(2)+jsc-1
+      ktmin = iminarr(3)
+      itmax = imaxarr(1)+isc-1
+      jtmax = imaxarr(2)+jsc-1
+      ktmax = imaxarr(3)
+      tmin = tr_array(itmin,jtmin,ktmin)
+      tmax = tr_array(itmax,jtmax,ktmax)
+    end if
+
+    ! use "fudge" to distinguish processors when tracer extreme is independent of processor
+    !### This fudge factor is not independent of PE layout, and while it mostly works for finding
+    !    a positive maximum or a negative minimum, it could miss the true extrema in the opposite
+    !    cases, for which the fudge factor should be slightly reduced.  The fudge factor should
+    !    be based on global index-space conventions, which are decomposition invariant, and
+    !    not the PE-number!
+    fudge = 1.0 + 1.e-12*real(PE_here() )
+    tmax = tmax*fudge
+    tmin = tmin*fudge
+    if (tmax == 0.0) then
+      tmax = tmax + 1.e-12*real(PE_here() )
+    endif
+    if (tmin == 0.0) then
+      tmin = tmin + 1.e-12*real(PE_here() )
+    endif
+
+    tmax0 = tmax ; tmin0 = tmin
+
+    call max_across_PEs(tmax)
+    call min_across_PEs(tmin)
+
+    g_max = tmax
+    g_min = tmin
+
+    ! Now find the location of the global extrema.
+    !
+    ! Note that the fudge factor above guarantees that the location of max (min) is uinque,
+    ! since tmax0 (tmin0) has slightly different values on each processor.
+    ! Otherwise, the function tr_array(i,j,k) could be equal to global max (min) at more
+    ! than one point in space and this would be a much more difficult problem to solve.
+    !
+    !-999 on all current PE's
+    xgmax = -999. ; ygmax = -999. ; zgmax = -999.
+    xgmin = -999. ; ygmin = -999. ; zgmin = -999.
+
+    if (tmax0 == tmax) then !This happens ONLY on ONE processor because of fudge factor above.
+      xgmax = geo_x(itmax,jtmax)
+      ygmax = geo_y(itmax,jtmax)
+      zgmax = geo_z(ktmax)
+    endif
+
+    !### These three calls and the three calls that follow in about 10 lines should be combined
+    !    into a single call for efficiency.
+    call max_across_PEs(xgmax)
+    call max_across_PEs(ygmax)
+    call max_across_PEs(zgmax)
+
+    if (tmin0 == tmin) then !This happens ONLY on ONE processor because of fudge factor above.
+      xgmin = geo_x(itmin,jtmin)
+      ygmin = geo_y(itmin,jtmin)
+      zgmin = geo_z(ktmin)
+    endif
+
+    call max_across_PEs(xgmin)
+    call max_across_PEs(ygmin)
+    call max_across_PEs(zgmin)
+
+  end subroutine array_global_min_max
 
   !> This subroutine calculates the surface state and sets coupler values for
   !! those generic tracers that have flux exchange with atmosphere.
   !!
   !! This subroutine sets up the fields that the coupler needs to calculate the
   !! CFC fluxes between the ocean and atmosphere.
-  subroutine MOM_generic_tracer_surface_state(sfc_state, h, G, CS)
+  subroutine MOM_generic_tracer_surface_state(sfc_state, h, G, GV, CS)
     type(ocean_grid_type),                 intent(in)    :: G    !< The ocean's grid structure
+    type(verticalGrid_type),               intent(in)    :: GV   !< The ocean's vertical grid structure
     type(surface),                         intent(inout) :: sfc_state !< A structure containing fields that
                                                                  !! describe the surface state of the ocean.
-    real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h    !< Layer thicknesses [H ~> m or kg m-2]
+    real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in) :: h    !< Layer thicknesses [H ~> m or kg m-2]
     type(MOM_generic_tracer_CS),           pointer       :: CS   !< Pointer to the control structure for this module.
 
 ! Local variables
     real :: sosga
 
     character(len=128), parameter :: sub_name = 'MOM_generic_tracer_surface_state'
-    real, dimension(G%isd:G%ied,G%jsd:G%jed,1:G%ke,1) :: rho0
-    real, dimension(G%isd:G%ied,G%jsd:G%jed,1:G%ke) ::  dzt
+    real, dimension(G%isd:G%ied,G%jsd:G%jed,1:GV%ke,1) :: rho0
+    real, dimension(G%isd:G%ied,G%jsd:G%jed,1:GV%ke) ::  dzt
     type(g_tracer_type), pointer :: g_tracer
 
     !Set coupler values
@@ -769,25 +897,25 @@ contains
     type(g_tracer_type), pointer :: g_tracer_list,g_tracer,g_tracer_next
 
     if (.not. g_registered) then
-       call generic_tracer_register
-       g_registered = .true.
+      call generic_tracer_register()
+      g_registered = .true.
     endif
 
     call generic_tracer_get_list(g_tracer_list)
     if (.NOT. associated(g_tracer_list)) then
-       call MOM_error(WARNING, trim(sub_name)// ": No generic tracer in the list.")
-       return
+      call MOM_error(WARNING, trim(sub_name)// ": No generic tracer in the list.")
+      return
     endif
 
     g_tracer=>g_tracer_list
     do
 
-       call g_tracer_flux_init(g_tracer) !, verbosity=verbosity) !### Add this after ocean shared is updated.
+      call g_tracer_flux_init(g_tracer) !, verbosity=verbosity) !### Add this after ocean shared is updated.
 
-       !traverse the linked list till hit NULL
-       call g_tracer_get_next(g_tracer, g_tracer_next)
-       if (.NOT. associated(g_tracer_next)) exit
-       g_tracer=>g_tracer_next
+      ! traverse the linked list till hit NULL
+      call g_tracer_get_next(g_tracer, g_tracer_next)
+      if (.NOT. associated(g_tracer_next)) exit
+      g_tracer=>g_tracer_next
 
     enddo
 
@@ -798,7 +926,7 @@ contains
                                               !! thermodynamic and tracer forcing fields.
     real,          intent(in)    :: weight    !< A weight for accumulating this flux
 
-   call generic_tracer_coupler_accumulate(flux_tmp%tr_fluxes, weight)
+    call generic_tracer_coupler_accumulate(flux_tmp%tr_fluxes, weight)
 
   end subroutine MOM_generic_tracer_fluxes_accumulate
 
@@ -821,10 +949,10 @@ contains
   subroutine end_MOM_generic_tracer(CS)
     type(MOM_generic_tracer_CS), pointer :: CS   !< Pointer to the control structure for this module.
 
-    call generic_tracer_end
+    call generic_tracer_end()
 
     if (associated(CS)) then
-       deallocate(CS)
+      deallocate(CS)
     endif
   end subroutine end_MOM_generic_tracer
 

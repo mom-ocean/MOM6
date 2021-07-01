@@ -571,7 +571,7 @@ subroutine int_density_dz_wright(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
       intz(m) = Pa_to_RL2_T2 * ( g_Earth*dz*((p0 + p_ave)*(I_Lzz*I_al0) - rho_ref_mks) - 2.0*eps * &
                 I_Rho * (lambda * I_al0**2) * eps2 * (C1_3 + eps2*(0.2 + eps2*(C1_7 + C1_9*eps2))) )
     enddo
-    ! Use Bode's rule to integrate the values.
+    ! Use Boole's rule to integrate the values.
     intx_dpa(i,j) = C1_90*(7.0*(intz(1)+intz(5)) + 32.0*(intz(2)+intz(4)) + 12.0*intz(3))
   enddo ; enddo ; endif
 
@@ -613,7 +613,7 @@ subroutine int_density_dz_wright(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
       intz(m) = Pa_to_RL2_T2 * ( g_Earth*dz*((p0 + p_ave)*(I_Lzz*I_al0) - rho_ref_mks) - 2.0*eps * &
                 I_Rho * (lambda * I_al0**2) * eps2 * (C1_3 + eps2*(0.2 + eps2*(C1_7 + C1_9*eps2))) )
     enddo
-    ! Use Bode's rule to integrate the values.
+    ! Use Boole's rule to integrate the values.
     inty_dpa(i,j) = C1_90*(7.0*(intz(1)+intz(5)) + 32.0*(intz(2)+intz(4)) + 12.0*intz(3))
   enddo ; enddo ; endif
 
@@ -623,7 +623,7 @@ end subroutine int_density_dz_wright
 !! pressure across layers of geopotential anomalies, which are required for
 !! calculating the finite-volume form pressure accelerations in a non-Boussinesq
 !! model.  There are essentially no free assumptions, apart from the use of
-!! Bode's rule to do the horizontal integrals, and from a truncation in the
+!! Boole's rule to do the horizontal integrals, and from a truncation in the
 !! series for log(1-eps/1+eps) that assumes that |eps| < 0.34.
 subroutine int_spec_vol_dp_wright(T, S, p_t, p_b, spv_ref, HI, dza, &
                                   intp_dza, intx_dza, inty_dza, halo_size, &
@@ -777,7 +777,7 @@ subroutine int_spec_vol_dp_wright(T, S, p_t, p_b, spv_ref, HI, dza, &
       intp(m) = (al0 + lambda / (p0 + p_ave) - spv_ref)*dp + 2.0*eps* &
                lambda * eps2 * (C1_3 + eps2*(0.2 + eps2*(C1_7 + C1_9*eps2)))
     enddo
-    ! Use Bode's rule to integrate the values.
+    ! Use Boole's rule to integrate the values.
     intx_dza(i,j) = C1_90*(7.0*(intp(1)+intp(5)) + 32.0*(intp(2)+intp(4)) + &
                            12.0*intp(3))
   enddo ; enddo ; endif
@@ -818,7 +818,7 @@ subroutine int_spec_vol_dp_wright(T, S, p_t, p_b, spv_ref, HI, dza, &
       intp(m) = (al0 + lambda / (p0 + p_ave) - spv_ref)*dp + 2.0*eps* &
                lambda * eps2 * (C1_3 + eps2*(0.2 + eps2*(C1_7 + C1_9*eps2)))
     enddo
-    ! Use Bode's rule to integrate the values.
+    ! Use Boole's rule to integrate the values.
     inty_dza(i,j) = C1_90*(7.0*(intp(1)+intp(5)) + 32.0*(intp(2)+intp(4)) + &
                            12.0*intp(3))
   enddo ; enddo ; endif

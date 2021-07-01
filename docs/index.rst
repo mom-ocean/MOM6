@@ -12,15 +12,22 @@ Contents:
   :maxdepth: 2
 
   about
-  equations/overview
+  equations
+  discrete_space
+  discrete_time
+  tracers
+  grids
   parameterizations
+  other_physics
   working_with_MOM6
+  forcing
+  parallel
+  testing
   apiref
-
+  zzbibliography
 
 Indices and tables
 ==================
 
 * :ref:`genindex`
 * :ref:`search`
-

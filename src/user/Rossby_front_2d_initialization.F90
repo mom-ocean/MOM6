@@ -54,7 +54,7 @@ subroutine Rossby_front_initialize_thickness(h, G, GV, US, param_file, just_read
   logical :: just_read    ! If true, just read parameters but set nothing.
   character(len=40) :: verticalCoordinate
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
   just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
 
@@ -113,9 +113,9 @@ subroutine Rossby_front_initialize_temperature_salinity(T, S, h, G, GV, &
                    param_file, eqn_of_state, just_read_params)
   type(ocean_grid_type),                     intent(in)  :: G  !< Grid structure
   type(verticalGrid_type),                   intent(in)  :: GV !< The ocean's vertical grid structure.
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: T  !< Potential temperature [degC]
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: S  !< Salinity [ppt]
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(in)  :: h  !< Thickness [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: T  !< Potential temperature [degC]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: S  !< Salinity [ppt]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)  :: h  !< Thickness [H ~> m or kg m-2]
   type(param_file_type),                     intent(in)  :: param_file   !< Parameter file handle
   type(EOS_type),                            pointer     :: eqn_of_state !< Equation of state structure
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
@@ -129,7 +129,7 @@ subroutine Rossby_front_initialize_temperature_salinity(T, S, h, G, GV, &
   character(len=40) :: verticalCoordinate
   real      :: PI                   ! 3.1415926... calculated as 4*atan(1)
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
   just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
 
@@ -165,11 +165,11 @@ end subroutine Rossby_front_initialize_temperature_salinity
 subroutine Rossby_front_initialize_velocity(u, v, h, G, GV, US, param_file, just_read_params)
   type(ocean_grid_type),      intent(in)  :: G  !< Grid structure
   type(verticalGrid_type),    intent(in)  :: GV !< Vertical grid structure
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
                               intent(out) :: u  !< i-component of velocity [L T-1 ~> m s-1]
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
                               intent(out) :: v  !< j-component of velocity [L T-1 ~> m s-1]
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G), SZK_(GV)), &
                               intent(in)  :: h  !< Thickness [H ~> m or kg m-2]
   type(unit_scale_type),      intent(in)  :: US !< A dimensional unit scaling type
   type(param_file_type),      intent(in)  :: param_file !< A structure indicating the open file
@@ -189,7 +189,7 @@ subroutine Rossby_front_initialize_velocity(u, v, h, G, GV, US, param_file, just
   logical :: just_read    ! If true, just read parameters but set nothing.
   character(len=40) :: verticalCoordinate
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
   just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
 
@@ -285,8 +285,8 @@ end function dTdy
 !! \f[ h_{ML}(y) = h_{min} + \left( h_{max} - h_{min} \right) \cos{\pi y/L} \f].
 !! The temperature in mixed layer is given by the reference temperature at \f$z=h_{ML}\f$
 !! so that
-!! \f[ \theta(y,z) =
+!! \f{eqnarray} \theta(y,z) =
 !!     \theta_0 - \Delta \theta \left( z + h_{ML} \right) & \forall & z < h_{ML}(y) T.B.D.
-!! \f]
+!! \f}
 
 end module Rossby_front_2d_initialization
