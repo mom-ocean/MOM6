@@ -184,7 +184,7 @@ type, public :: ice_ocean_boundary_type
   real, pointer, dimension(:,:) :: frunoff_hflx      =>NULL() !< heat content of frozen runoff [W/m2]
   real, pointer, dimension(:,:) :: p                 =>NULL() !< pressure of overlying ice and atmosphere
                                                               !< on ocean surface [Pa]
-  real, pointer, dimension(:,:) :: ice_fraction      =>NULL() !< mass of ice [nondim]
+  real, pointer, dimension(:,:) :: ice_fraction      =>NULL() !< fractional ice area [nondim]
   real, pointer, dimension(:,:) :: u10_sqr           =>NULL() !< wind speed squared at 10m [m2/s2]
   real, pointer, dimension(:,:) :: mi                =>NULL() !< mass of ice [kg/m2]
   real, pointer, dimension(:,:) :: ice_rigidity      =>NULL() !< rigidity of the sea ice, sea-ice and
@@ -508,14 +508,6 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
     if (associated(IOB%seaice_melt)) &
          fluxes%seaice_melt(i,j) = kg_m2_s_conversion * G%mask2dT(i,j) * IOB%seaice_melt(i-i0,j-j0)
 
-    ! sea ice fraction [nondim]
-    if (associated(IOB%ice_fraction)) &
-         fluxes%ice_fraction(i,j) = G%mask2dT(i,j) * IOB%ice_fraction(i-i0,j-j0)
-
-    ! 10-m wind speed squared [m2/s2]
-    if (associated(IOB%u10_sqr)) &
-         fluxes%u10_sqr(i,j) = US%m_to_L**2 * US%T_to_s**2 * G%mask2dT(i,j) * IOB%u10_sqr(i-i0,j-j0)
-
     fluxes%latent(i,j) = 0.0
     ! notice minus sign since fprec is positive into the ocean
     if (associated(IOB%fprec)) then
@@ -553,6 +545,17 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
                      fluxes%sw_nir_dir(i,j) + fluxes%sw_nir_dif(i,j)
 
   enddo ; enddo
+
+  if (CS%use_CFC) then
+    do j=js,je ; do i=is,ie
+      ! sea ice fraction [nondim]
+      if (associated(IOB%ice_fraction)) &
+           fluxes%ice_fraction(i,j) = G%mask2dT(i,j) * IOB%ice_fraction(i-i0,j-j0)
+      ! 10-m wind speed squared [m2/s2]
+      if (associated(IOB%u10_sqr)) &
+           fluxes%u10_sqr(i,j) = US%m_to_L**2 * US%T_to_s**2 * G%mask2dT(i,j) * IOB%u10_sqr(i-i0,j-j0)
+    enddo ; enddo
+  endif
 
   ! applied surface pressure from atmosphere and cryosphere
   if (associated(IOB%p)) then
@@ -1474,8 +1477,10 @@ subroutine ice_ocn_bnd_type_chksum(id, timestep, iobt)
   write(outunit,100) 'iobt%lrunoff        '   , mpp_chksum( iobt%lrunoff        )
   write(outunit,100) 'iobt%frunoff        '   , mpp_chksum( iobt%frunoff        )
   write(outunit,100) 'iobt%p              '   , mpp_chksum( iobt%p              )
-  write(outunit,100) 'iobt%ice_fraction   '   , mpp_chksum( iobt%ice_fraction   )
-  write(outunit,100) 'iobt%u10_sqr        '   , mpp_chksum( iobt%u10_sqr        )
+  if (associated(iobt%ice_fraction)) &
+    write(outunit,100) 'iobt%ice_fraction   '   , mpp_chksum( iobt%ice_fraction   )
+  if (associated(iobt%u10_sqr)) &
+    write(outunit,100) 'iobt%u10_sqr        '   , mpp_chksum( iobt%u10_sqr        )
   if (associated(iobt%ustar_berg)) &
     write(outunit,100) 'iobt%ustar_berg     ' , mpp_chksum( iobt%ustar_berg )
   if (associated(iobt%area_berg)) &
