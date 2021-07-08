@@ -31,7 +31,7 @@ use MOM_error_handler,        only: MOM_error, FATAL, is_root_pe
 use MOM_ocean_model_nuopc,    only: ice_ocean_boundary_type
 use MOM_grid,                 only: ocean_grid_type, get_global_grid_size
 use MOM_ocean_model_nuopc,    only: ocean_model_restart, ocean_public_type, ocean_state_type
-use MOM_ocean_model_nuopc,    only: ocean_model_init_sfc
+use MOM_ocean_model_nuopc,    only: ocean_model_init_sfc, ocean_model_flux_init
 use MOM_ocean_model_nuopc,    only: ocean_model_init, update_ocean_model, ocean_model_end
 use MOM_ocean_model_nuopc,    only: get_ocean_grid, get_eps_omesh
 use MOM_cap_time,             only: AlarmInit
@@ -649,6 +649,10 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
   ocean_public%is_ocean_pe = .true.
   call ocean_model_init(ocean_public, ocean_state, time0, time_start, input_restart_file=trim(restartfiles))
 
+  ! GMM, this call is not needed for NCAR. Check with EMC.
+  ! If this can be deleted, perhaps we should also delete ocean_model_flux_init
+  call ocean_model_flux_init(ocean_state)
+
   call ocean_model_init_sfc(ocean_state, ocean_public)
 
   call mpp_get_compute_domain(ocean_public%domain, isc, iec, jsc, jec)
@@ -668,6 +672,8 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
              Ice_ocean_boundary% seaice_melt_heat (isc:iec,jsc:jec),&
              Ice_ocean_boundary% seaice_melt (isc:iec,jsc:jec),     &
              Ice_ocean_boundary% mi (isc:iec,jsc:jec),              &
+             Ice_ocean_boundary% ice_fraction (isc:iec,jsc:jec),    &
+             Ice_ocean_boundary% u10_sqr (isc:iec,jsc:jec),         &
              Ice_ocean_boundary% p (isc:iec,jsc:jec),               &
              Ice_ocean_boundary% lrunoff_hflx (isc:iec,jsc:jec),    &
              Ice_ocean_boundary% frunoff_hflx (isc:iec,jsc:jec),    &
@@ -689,6 +695,8 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
   Ice_ocean_boundary%seaice_melt     = 0.0
   Ice_ocean_boundary%seaice_melt_heat= 0.0
   Ice_ocean_boundary%mi              = 0.0
+  Ice_ocean_boundary%ice_fraction    = 0.0
+  Ice_ocean_boundary%u10_sqr         = 0.0
   Ice_ocean_boundary%p               = 0.0
   Ice_ocean_boundary%lrunoff_hflx    = 0.0
   Ice_ocean_boundary%frunoff_hflx    = 0.0
@@ -740,6 +748,8 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
   call fld_list_add(fldsToOcn_num, fldsToOcn, "inst_pres_height_surface"   , "will provide")
   call fld_list_add(fldsToOcn_num, fldsToOcn, "Foxx_rofl"                  , "will provide") !-> liquid runoff
   call fld_list_add(fldsToOcn_num, fldsToOcn, "Foxx_rofi"                  , "will provide") !-> ice runoff
+  call fld_list_add(fldsToOcn_num, fldsToOcn, "Si_ifrac"                   , "will provide") !-> ice fraction
+  call fld_list_add(fldsToOcn_num, fldsToOcn, "So_duu10n"                  , "will provide") !-> wind^2 at 10m
   call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_fresh_water_to_ocean_rate", "will provide")
   call fld_list_add(fldsToOcn_num, fldsToOcn, "net_heat_flx_to_ocn"        , "will provide")
   !These are not currently used and changing requires a nuopc dictionary change
