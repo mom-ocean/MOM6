@@ -197,7 +197,7 @@ end type transport_diag_IDs
 contains
 !> Diagnostics not more naturally calculated elsewhere are computed here.
 subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
-                                       dt, diag_pre_sync, G, GV, US, CS, eta_bt)
+                                       dt, diag_pre_sync, G, GV, US, CS)
   type(ocean_grid_type),   intent(inout) :: G    !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure.
   type(unit_scale_type),   intent(in)    :: US   !< A dimensional unit scaling type
@@ -227,11 +227,6 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
   type(diag_grid_storage), intent(in)    :: diag_pre_sync !< Target grids from previous timestep
   type(diagnostics_CS),    intent(inout) :: CS   !< Control structure returned by a
                                                  !! previous call to diagnostics_init.
-  real, dimension(SZI_(G),SZJ_(G)), &
-                  optional, intent(in)   :: eta_bt !< An optional barotropic
-    !! variable that gives the "correct" free surface height (Boussinesq) or total water column
-    !! mass per unit area (non-Boussinesq).  This is used to dilate the layer thicknesses when
-    !! calculating interface heights [H ~> m or kg m-2].
 
   ! Local variables
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: usq ! squared eastward velocity  [L2 T-2 ~> m2 s-2]
@@ -390,7 +385,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
   endif
 
   if (associated(CS%e)) then
-    call find_eta(h, tv, G, GV, US, CS%e, eta_bt)
+    call find_eta(h, tv, G, GV, US, CS%e)
     if (CS%id_e > 0) call post_data(CS%id_e, CS%e, CS%diag)
   endif
 
@@ -400,7 +395,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
         CS%e_D(i,j,k) = CS%e(i,j,k) + G%bathyT(i,j)
       enddo ; enddo ; enddo
     else
-      call find_eta(h, tv, G, GV, US, CS%e_D, eta_bt)
+      call find_eta(h, tv, G, GV, US, CS%e_D)
       do k=1,nz+1 ; do j=js,je ; do i=is,ie
         CS%e_D(i,j,k) = CS%e_D(i,j,k) + G%bathyT(i,j)
       enddo ; enddo ; enddo
@@ -1935,7 +1930,7 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, US, param_file, diag
     call wave_speed_init(CS%wave_speed_CSp, remap_answers_2018=remap_answers_2018, &
                          better_speed_est=better_speed_est, min_speed=wave_speed_min, &
                          wave_speed_tol=wave_speed_tol)
-    call wave_speed_init(CS%wave_speed_CSp, remap_answers_2018=remap_answers_2018)
+!###    call wave_speed_init(CS%wave_speed_CSp, remap_answers_2018=remap_answers_2018)
     call safe_alloc_ptr(CS%cg1,isd,ied,jsd,jed)
     if (CS%id_Rd1>0)       call safe_alloc_ptr(CS%Rd1,isd,ied,jsd,jed)
     if (CS%id_Rd_ebt>0)    call safe_alloc_ptr(CS%Rd1,isd,ied,jsd,jed)
