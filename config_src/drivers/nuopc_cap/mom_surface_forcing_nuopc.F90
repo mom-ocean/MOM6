@@ -879,7 +879,11 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, US, CS)
   ! wave to ocean coupling
   if ( associated(IOB%lamult)) then
     do j=js,je; do i=is,ie
-      forces%lamult(i,j) = IOB%lamult(i-i0,j-j0)
+      if (IOB%ice_fraction(i-i0,j-j0) <= 0.05 ) then
+        forces%lamult(i,j) = IOB%lamult(i-i0,j-j0)
+      else
+        forces%lamult(i,j) = 1.0
+      endif
     enddo ; enddo
     call pass_var(forces%lamult, G%domain, halo=1 )
   endif
