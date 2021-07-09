@@ -395,6 +395,7 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn, i
   endif
 
   if (OS%use_waves) then
+    call allocate_forcing_type(OS%grid, OS%fluxes, waves=.true.)
     call get_param(param_file, mdl, "WAVE_METHOD", OS%wave_method, default="EMPTY", do_not_log=.true.)
     call MOM_wave_interface_init(OS%Time, OS%grid, OS%GV, OS%US, param_file, OS%Waves, OS%diag)
     if (OS%wave_method == "VR12-MA") then

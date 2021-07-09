@@ -2948,7 +2948,7 @@ end subroutine forcing_diagnostics
 
 !> Conditionally allocate fields within the forcing type
 subroutine allocate_forcing_by_group(G, fluxes, water, heat, ustar, press, &
-                                     shelf, iceberg, salt, fix_accum_bug, cfc)
+                                     shelf, iceberg, salt, fix_accum_bug, cfc, waves)
   type(ocean_grid_type), intent(in) :: G       !< Ocean grid structure
   type(forcing),      intent(inout) :: fluxes  !< A structure containing thermodynamic forcing fields
   logical, optional,     intent(in) :: water   !< If present and true, allocate water fluxes
@@ -2961,6 +2961,7 @@ subroutine allocate_forcing_by_group(G, fluxes, water, heat, ustar, press, &
   logical, optional,     intent(in) :: fix_accum_bug !< If present and true, avoid using a bug in
                                                !! accumulation of ustar_gustless
   logical, optional,     intent(in) :: cfc     !< If present and true, allocate cfc fluxes
+  logical, optional,     intent(in) :: waves   !< If present and true, allocate wave fields
 
   ! Local variables
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
@@ -3021,6 +3022,9 @@ subroutine allocate_forcing_by_group(G, fluxes, water, heat, ustar, press, &
   call myAlloc(fluxes%cfc12_flux,isd,ied,jsd,jed, cfc)
   call myAlloc(fluxes%ice_fraction,isd,ied,jsd,jed, cfc)
   call myAlloc(fluxes%u10_sqr,isd,ied,jsd,jed, cfc)
+
+  !These fields should only on allocated when wave coupling is activated.
+  call myAlloc(fluxes%ice_fraction,isd,ied,jsd,jed, waves)
 
   if (present(fix_accum_bug)) fluxes%gustless_accum_bug = .not.fix_accum_bug
 end subroutine allocate_forcing_by_group

@@ -545,18 +545,14 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
     fluxes%sw(i,j) = fluxes%sw_vis_dir(i,j) + fluxes%sw_vis_dif(i,j) + &
                      fluxes%sw_nir_dir(i,j) + fluxes%sw_nir_dif(i,j)
 
-  enddo ; enddo
+    ! sea ice fraction [nondim]
+    if (associated(IOB%ice_fraction) .and. associated(fluxes%ice_fraction)) &
+         fluxes%ice_fraction(i,j) = G%mask2dT(i,j) * IOB%ice_fraction(i-i0,j-j0)
+    ! 10-m wind speed squared [m2/s2]
+    if (associated(IOB%u10_sqr) .and. associated(fluxes%u10_sqr)) &
+         fluxes%u10_sqr(i,j) = US%m_to_L**2 * US%T_to_s**2 * G%mask2dT(i,j) * IOB%u10_sqr(i-i0,j-j0)
 
-  if (CS%use_CFC) then
-    do j=js,je ; do i=is,ie
-      ! sea ice fraction [nondim]
-      if (associated(IOB%ice_fraction)) &
-           fluxes%ice_fraction(i,j) = G%mask2dT(i,j) * IOB%ice_fraction(i-i0,j-j0)
-      ! 10-m wind speed squared [m2/s2]
-      if (associated(IOB%u10_sqr)) &
-           fluxes%u10_sqr(i,j) = US%m_to_L**2 * US%T_to_s**2 * G%mask2dT(i,j) * IOB%u10_sqr(i-i0,j-j0)
-    enddo ; enddo
-  endif
+  enddo ; enddo
 
   ! applied surface pressure from atmosphere and cryosphere
   if (associated(IOB%p)) then
