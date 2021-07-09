@@ -391,12 +391,6 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn, i
   ! MOM_wave_interface_init is called regardless of the value of USE_WAVES because
   ! it also initializes statistical waves.
   call MOM_wave_interface_init(OS%Time, OS%grid, OS%GV, OS%US, param_file, OS%Waves, OS%diag)
-  if (OS%use_waves) then
-    ! I do not know why this is being set here.  It seems out of place. -RWH
-    call get_param(param_file,mdl,"SURFBAND_WAVENUMBERS", OS%Waves%WaveNum_Cen, &
-           "Central wavenumbers for surface Stokes drift bands.", &
-           units='rad/m', default=0.12566, scale=OS%US%Z_to_m)
-  endif
 
   if (associated(OS%grid%Domain%maskmap)) then
     call initialize_ocean_public_type(OS%grid%Domain%mpp_domain, Ocean_sfc, &

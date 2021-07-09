@@ -28,8 +28,9 @@ use MOM_file_parser,          only: get_param, log_version, param_file_type, clo
 use MOM_get_input,            only: get_MOM_input, directories
 use MOM_domains,              only: pass_var
 use MOM_error_handler,        only: MOM_error, FATAL, is_root_pe
-use MOM_ocean_model_nuopc,    only: ice_ocean_boundary_type
 use MOM_grid,                 only: ocean_grid_type, get_global_grid_size
+use MOM_wave_interface,       only: query_wave_properties
+use MOM_ocean_model_nuopc,    only: ice_ocean_boundary_type
 use MOM_ocean_model_nuopc,    only: ocean_model_restart, ocean_public_type, ocean_state_type
 use MOM_ocean_model_nuopc,    only: ocean_model_init_sfc
 use MOM_ocean_model_nuopc,    only: ocean_model_init, update_ocean_model, ocean_model_end
@@ -696,7 +697,7 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
   Ice_ocean_boundary%frunoff         = 0.0
 
   if (ocean_state%use_waves) then
-    Ice_ocean_boundary%num_stk_bands=ocean_state%Waves%NumBands
+    call query_wave_properties(ocean_state%Waves, NumBands=Ice_ocean_boundary%num_stk_bands)
     allocate ( Ice_ocean_boundary% ustk0 (isc:iec,jsc:jec),         &
                Ice_ocean_boundary% vstk0 (isc:iec,jsc:jec),         &
                Ice_ocean_boundary% ustkb (isc:iec,jsc:jec,Ice_ocean_boundary%num_stk_bands), &
@@ -704,7 +705,8 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
                Ice_ocean_boundary%stk_wavenumbers (Ice_ocean_boundary%num_stk_bands))
     Ice_ocean_boundary%ustk0           = 0.0
     Ice_ocean_boundary%vstk0           = 0.0
-    Ice_ocean_boundary%stk_wavenumbers = ocean_state%Waves%WaveNum_Cen
+    call query_wave_properties(ocean_state%Waves, WaveNumbers=Ice_ocean_boundary%stk_wavenumbers, &
+                               US=ocean_state%US)
     Ice_ocean_boundary%ustkb           = 0.0
     Ice_ocean_boundary%vstkb           = 0.0
   endif
