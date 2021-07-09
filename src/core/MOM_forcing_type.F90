@@ -190,6 +190,9 @@ type, public :: forcing
     ice_fraction  => NULL(), &  !< fraction of sea ice coverage at h-cells, from 0 to 1 [nondim].
     u10_sqr       => NULL()     !< wind magnitude at 10 m squared [L2 T-2 ~> m2 s-2]
 
+  real, pointer, dimension(:,:) :: &
+    lamult => NULL()            !< Langmuir enhancement factor [nondim]
+
   ! passive tracer surface fluxes
   type(coupler_2d_bc_type) :: tr_fluxes !< This structure contains arrays of
      !! of named fields used for passive tracer fluxes.
@@ -253,8 +256,6 @@ type, public :: mech_forcing
   logical :: accumulate_rigidity = .false. !< If true, the rigidity due to various types of
                                 !! ice needs to be accumulated, and the rigidity explicitly
                                 !! reset to zero at the driver level when appropriate.
-  real, pointer, dimension(:,:) :: &
-    lamult => NULL()            !< Langmuir enhancement factor [nondim]
   real, pointer, dimension(:,:) :: &
        ustk0 => NULL(), &       !< Surface Stokes drift, zonal [m/s]
        vstk0 => NULL()          !< Surface Stokes drift, meridional [m/s]
@@ -2325,10 +2326,6 @@ subroutine mech_forcing_diags(forces_in, dt, G, time_end, diag, handles)
 
   ! endif
 
-  ! wave forcing ===============================================================
-  if (handles%id_lamult > 0)                                            &
-    call post_data(handles%id_lamult, forces%lamult, diag)
-
   call disable_averaging(diag)
 
   if (turns /= 0) then
@@ -2934,6 +2931,10 @@ subroutine forcing_diagnostics(fluxes_in, sfc_state, G_in, US, time_end, diag, h
     if ((handles%id_ustar_ice_cover > 0) .and. associated(fluxes%ustar_shelf)) &
       call post_data(handles%id_ustar_ice_cover, fluxes%ustar_shelf, diag)
 
+    ! wave forcing ===============================================================
+    if (handles%id_lamult > 0)                                            &
+      call post_data(handles%id_lamult, fluxes%lamult, diag)
+
   ! endif  ! query_averaging_enabled
   call disable_averaging(diag)
 
@@ -3025,6 +3026,7 @@ subroutine allocate_forcing_by_group(G, fluxes, water, heat, ustar, press, &
 
   !These fields should only on allocated when wave coupling is activated.
   call myAlloc(fluxes%ice_fraction,isd,ied,jsd,jed, waves)
+  call myAlloc(fluxes%lamult,isd,ied,jsd,jed, waves)
 
   if (present(fix_accum_bug)) fluxes%gustless_accum_bug = .not.fix_accum_bug
 end subroutine allocate_forcing_by_group
@@ -3126,11 +3128,7 @@ subroutine allocate_mech_forcing_by_group(G, forces, stress, ustar, shelf, &
       call MOM_error(FATAL,"Requested to &
       initialize with waves, but no waves are present.")
     endif
-    if (num_stk_bands==0) then
-      if (.not.associated(forces%lamult)) then
-        allocate(forces%lamult(isd:ied,jsd:jed))
-      endif
-    else !num_stk_bands > 0
+    if (num_stk_bands > 0) then
       if (.not.associated(forces%ustkb)) then
         allocate(forces%stk_wavenumbers(num_stk_bands))
         forces%stk_wavenumbers(:) = 0.0

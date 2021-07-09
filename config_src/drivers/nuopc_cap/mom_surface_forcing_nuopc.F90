@@ -554,6 +554,18 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
 
   enddo ; enddo
 
+  ! wave to ocean coupling
+  if ( associated(IOB%lamult)) then
+    do j=js,je; do i=is,ie
+      if (IOB%ice_fraction(i-i0,j-j0) <= 0.05 ) then
+        fluxes%lamult(i,j) = IOB%lamult(i-i0,j-j0)
+      else
+        fluxes%lamult(i,j) = 1.0
+      endif
+    enddo ; enddo
+    call pass_var(fluxes%lamult, G%domain, halo=1 )
+  endif
+
   ! applied surface pressure from atmosphere and cryosphere
   if (associated(IOB%p)) then
      if (CS%max_p_surf >= 0.0) then
@@ -875,18 +887,6 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, US, CS)
     enddo ; enddo
 
   endif   ! endif for wind related fields
-
-  ! wave to ocean coupling
-  if ( associated(IOB%lamult)) then
-    do j=js,je; do i=is,ie
-      if (IOB%ice_fraction(i-i0,j-j0) <= 0.05 ) then
-        forces%lamult(i,j) = IOB%lamult(i-i0,j-j0)
-      else
-        forces%lamult(i,j) = 1.0
-      endif
-    enddo ; enddo
-    call pass_var(forces%lamult, G%domain, halo=1 )
-  endif
 
   if ( associated(IOB%ustkb) ) then
 
