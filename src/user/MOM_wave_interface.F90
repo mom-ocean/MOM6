@@ -323,10 +323,10 @@ subroutine MOM_wave_interface_init(time, G, GV, US, param_file, CS, diag )
          "STK_BAND_COUPLER is the number of Stokes drift bands in the coupler. "// &
          "This has to be consistent with the number of Stokes drift bands in WW3, "//&
          "or the model will fail.",units='', default=1)
+      allocate( CS%WaveNum_Cen(CS%NumBands) )
       call get_param(param_file, mdl, "SURFBAND_WAVENUMBERS", CS%WaveNum_Cen, &
            "Central wavenumbers for surface Stokes drift bands.", &
            units='rad/m', default=0.12566, scale=US%Z_to_m)
-      allocate( CS%WaveNum_Cen(CS%NumBands) )
       allocate( CS%STKx0(G%isdB:G%iedB,G%jsd:G%jed,CS%NumBands))
       allocate( CS%STKy0(G%isdB:G%iedB,G%jsd:G%jed,CS%NumBands))
       CS%WaveNum_Cen(:) = 0.0
