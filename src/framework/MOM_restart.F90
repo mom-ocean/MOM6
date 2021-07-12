@@ -1092,7 +1092,6 @@ subroutine restore_state(filename, directory, day, G, CS)
 
   ! Check the remaining files for different times and issue a warning
   ! if they differ from the first time.
-  if (is_root_pe()) then
     do m = n+1,num_file
       call get_file_times(IO_handles(n), time_vals, ntime)
       if (ntime < 1) cycle
@@ -1107,7 +1106,6 @@ subroutine restore_state(filename, directory, day, G, CS)
         call MOM_error(WARNING, "MOM_restart: "//mesg)
       endif
     enddo
-  endif
 
   ! Read each variable from the first file in which it is found.
   do n=1,num_file
