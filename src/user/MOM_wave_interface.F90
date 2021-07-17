@@ -24,6 +24,7 @@ implicit none ; private
 #include <MOM_memory.h>
 
 public MOM_wave_interface_init ! Public interface to fully initialize the wave routines.
+public query_wave_properties ! Public interface to obtain information from the waves control structure.
 public Update_Surface_Waves ! Public interface to update wave information at the
                             ! coupler/driver level.
 public Update_Stokes_Drift ! Public interface to update the Stokes drift profiles
@@ -323,6 +324,9 @@ subroutine MOM_wave_interface_init(time, G, GV, US, param_file, CS, diag )
          "This has to be consistent with the number of Stokes drift bands in WW3, "//&
          "or the model will fail.",units='', default=1)
       allocate( CS%WaveNum_Cen(CS%NumBands) )
+      call get_param(param_file, mdl, "SURFBAND_WAVENUMBERS", CS%WaveNum_Cen, &
+           "Central wavenumbers for surface Stokes drift bands.", &
+           units='rad/m', default=0.12566, scale=US%Z_to_m)
       allocate( CS%STKx0(G%isdB:G%iedB,G%jsd:G%jed,CS%NumBands))
       allocate( CS%STKy0(G%isdB:G%iedB,G%jsd:G%jed,CS%NumBands))
       CS%WaveNum_Cen(:) = 0.0
@@ -427,6 +431,30 @@ subroutine MOM_wave_interface_init(time, G, GV, US, param_file, CS, diag )
        CS%diag%axesT1,Time,'Surface (turbulent) Langmuir number','nondim')
 
 end subroutine MOM_wave_interface_init
+
+!> This interface provides the caller with information from the waves control structure.
+subroutine query_wave_properties(CS, NumBands, WaveNumbers, US)
+  type(wave_parameters_CS),        pointer     :: CS   !< Wave parameter Control structure
+  integer,               optional, intent(out) :: NumBands    !< If present, this returns the number of
+                                                       !!< wavenumber partitions in the wave discretization
+  real, dimension(:),    optional, intent(out) :: Wavenumbers !< If present this returns the characteristic
+                                                       !! wavenumbers of the wave discretization [m-1 or Z-1 ~> m-1]
+  type(unit_scale_type), optional, intent(in)  :: US   !< A dimensional unit scaling type that is used to undo
+                                                       !! the dimensional scaling of the output variables, if present
+  integer :: n
+
+  if (present(NumBands)) NumBands = CS%NumBands
+  if (present(Wavenumbers)) then
+    if (size(Wavenumbers) < CS%NumBands) call MOM_error(FATAL, "query_wave_properties called "//&
+                                "with a Wavenumbers array that is smaller than the number of bands.")
+    if (present(US)) then
+      do n=1,CS%NumBands ; Wavenumbers(n) = US%m_to_Z * CS%WaveNum_Cen(n) ; enddo
+    else
+      do n=1,CS%NumBands ; Wavenumbers(n) = CS%WaveNum_Cen(n) ; enddo
+    endif
+  endif
+
+end subroutine query_wave_properties
 
 !> Subroutine that handles updating of surface wave/Stokes drift related properties
 subroutine Update_Surface_Waves(G, GV, US, Day, dt, CS, forces)
