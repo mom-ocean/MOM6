@@ -55,8 +55,10 @@ subroutine Phillips_initialize_thickness(h, G, GV, US, param_file, just_read_par
   real :: half_strat      ! The fractional depth where the stratification is centered [nondim]
   real :: half_depth      ! The depth where the stratification is centered [Z ~> m]
   logical :: just_read    ! If true, just read parameters but set nothing.
+  logical :: reentrant_y  ! If true, model is re-entrant in the y direction
   character(len=40)  :: mdl = "Phillips_initialize_thickness" ! This subroutine's name.
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz
+  real :: pi              ! The ratio of the circumference of a circle to its diameter [nondim]
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
@@ -76,6 +78,10 @@ subroutine Phillips_initialize_thickness(h, G, GV, US, param_file, just_read_par
                  "The interface height scale associated with the "//&
                  "zonal-mean jet.", units="m", scale=US%m_to_Z, &
                  fail_if_missing=.not.just_read, do_not_log=just_read)
+  ! If re-entrant in the Y direction, we use a sine function instead of a
+  ! tanh. The ratio len_lat/jet_width should be an integer in this case.
+  call get_param(param_file, mdl, "REENTRANT_Y", reentrant_y, &
+                 default=.false., do_not_log=.true.)
 
   if (just_read) return ! All run-time parameters have been read, so return.
 
@@ -85,6 +91,7 @@ subroutine Phillips_initialize_thickness(h, G, GV, US, param_file, just_read_par
   do k=2+nz/2,nz+1
     eta0(k) = -G%max_depth - 2.0*(G%max_depth-half_depth) * ((k-(nz+1))/real(nz))
   enddo
+  pi = 4.0*atan(1.0)
 
   do j=js,je
     eta_im(j,1) = 0.0 ; eta_im(j,nz+1) = -G%max_depth
@@ -93,6 +100,10 @@ subroutine Phillips_initialize_thickness(h, G, GV, US, param_file, just_read_par
     y_2 = G%geoLatT(is,j) - G%south_lat - 0.5*G%len_lat
     eta_im(j,K) = eta0(k) + jet_height * tanh(y_2 / jet_width)
                 ! or  ... + jet_height * atan(y_2 / jet_width)
+    if (reentrant_y) then
+      y_2 = 2.*pi*y_2
+      eta_im(j,K) = eta0(k) + jet_height * sin(y_2 / jet_width)
+    endif
     if (eta_im(j,K) > 0.0) eta_im(j,K) = 0.0
     if (eta_im(j,K) < -G%max_depth) eta_im(j,K) = -G%max_depth
   enddo ; enddo
@@ -138,6 +149,7 @@ subroutine Phillips_initialize_velocity(u, v, G, GV, US, param_file, just_read_p
   real :: pi              ! The ratio of the circumference of a circle to its diameter [nondim]
   integer :: i, j, k, is, ie, js, je, nz, m
   logical :: just_read    ! If true, just read parameters but set nothing.
+  logical :: reentrant_y  ! If true, model is re-entrant in the y direction
   character(len=40)  :: mdl = "Phillips_initialize_velocity" ! This subroutine's name.
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
@@ -154,6 +166,10 @@ subroutine Phillips_initialize_velocity(u, v, G, GV, US, param_file, just_read_p
                  "The interface height scale associated with the "//&
                  "zonal-mean jet.", units="m", scale=US%m_to_Z, &
                  fail_if_missing=.not.just_read, do_not_log=just_read)
+  ! If re-entrant in the Y direction, we use a sine function instead of a
+  ! tanh. The ratio len_lat/jet_width should be an integer in this case.
+  call get_param(param_file, mdl, "REENTRANT_Y", reentrant_y, &
+                 default=.false., do_not_log=.true.)
 
   if (just_read) return ! All run-time parameters have been read, so return.
 
@@ -165,14 +181,20 @@ subroutine Phillips_initialize_velocity(u, v, G, GV, US, param_file, just_read_p
   ! Use thermal wind shear to give a geostrophically balanced flow.
   do k=nz-1,1 ; do j=js,je ; do I=is-1,ie
     y_2 = G%geoLatCu(I,j) - G%south_lat - 0.5*G%len_lat
+    if (reentrant_y) then
+      y_2 = 2.*pi*y_2
+      u(I,j,k) = u(I,j,k+1) + (1.e-3 * (jet_height / (US%m_to_L*jet_width)) * &
+                    cos(y_2/jet_width) )
+    else
 ! This uses d/d y_2 atan(y_2 / jet_width)
 !    u(I,j,k) = u(I,j,k+1) + ( jet_height / &
 !           (1.0e3*US%m_to_L*jet_width * (1.0 + (y_2 / jet_width)**2))) * &
 !           (2.0 * GV%g_prime(K+1) / (G%CoriolisBu(I,J) + G%CoriolisBu(I,J-1)))
 ! This uses d/d y_2 tanh(y_2 / jet_width)
-    u(I,j,k) = u(I,j,k+1) + (1e-3 * (jet_height / (US%m_to_L*jet_width)) * &
+      u(I,j,k) = u(I,j,k+1) + (1e-3 * (jet_height / (US%m_to_L*jet_width)) * &
            (sech(y_2 / jet_width))**2 ) * &
            (2.0 * GV%g_prime(K+1) / (G%CoriolisBu(I,J) + G%CoriolisBu(I,J-1)))
+    endif
   enddo ; enddo ; enddo
 
   do k=1,nz ; do j=js,je ; do I=is-1,ie
@@ -228,6 +250,8 @@ subroutine Phillips_initialize_sponges(G, GV, US, tv, param_file, CSp, h)
   real :: y_2          ! The y-position relative to the channel center, in km.
   real :: half_strat   ! The fractional depth where the straficiation is centered [nondim].
   real :: half_depth   ! The depth where the stratification is centered [Z ~> m].
+  real :: pi              ! The ratio of the circumference of a circle to its diameter [nondim]
+  logical :: reentrant_y  ! If true, model is re-entrant in the y direction
   character(len=40)  :: mdl = "Phillips_initialize_sponges" ! This subroutine's name.
 
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz
@@ -255,6 +279,10 @@ subroutine Phillips_initialize_sponges(G, GV, US, tv, param_file, CSp, h)
                  "The interface height scale associated with the "//&
                  "zonal-mean jet.", units="m", scale=US%m_to_Z, &
                  fail_if_missing=.true.)
+  ! If re-entrant in the Y direction, we use a sine function instead of a
+  ! tanh. The ratio len_lat/jet_width should be an integer in this case.
+  call get_param(param_file, mdl, "REENTRANT_Y", reentrant_y, &
+                 default=.false., do_not_log=.true.)
 
   half_depth = G%max_depth*half_strat
   eta0(1) = 0.0 ; eta0(nz+1) = -G%max_depth
@@ -262,6 +290,7 @@ subroutine Phillips_initialize_sponges(G, GV, US, tv, param_file, CSp, h)
   do k=2+nz/2,nz+1
     eta0(k) = -G%max_depth - 2.0*(G%max_depth-half_depth) * ((k-(nz+1))/real(nz))
   enddo
+  pi = 4.0*atan(1.0)
 
   do j=js,je
     Idamp_im(j) = damp_rate
@@ -271,6 +300,10 @@ subroutine Phillips_initialize_sponges(G, GV, US, tv, param_file, CSp, h)
     y_2 = G%geoLatT(is,j) - G%south_lat - 0.5*G%len_lat
     eta_im(j,K) = eta0(k) + jet_height * tanh(y_2 / jet_width)
 !         jet_height * atan(y_2 / jet_width)
+    if (reentrant_y) then
+      y_2 = 2.*pi*y_2
+      eta_im(j,K) = eta0(k) + jet_height * sin(y_2 / jet_width)
+    endif
     if (eta_im(j,K) > 0.0) eta_im(j,K) = 0.0
     if (eta_im(j,K) < -G%max_depth) eta_im(j,K) = -G%max_depth
   enddo ; enddo

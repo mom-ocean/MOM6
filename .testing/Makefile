@@ -193,7 +193,7 @@ endif
 # Rules
 
 .PHONY: all build.regressions
-all: $(foreach b,$(BUILDS),build/$(b)/MOM6)
+all: $(foreach b,$(BUILDS),build/$(b)/MOM6) $(VENV_PATH)
 build.regressions: $(foreach b,symmetric target,build/$(b)/MOM6)
 
 # Executable
@@ -361,6 +361,7 @@ check_mom6_api_mct: build/mct/mom_ocean_model_mct.o
 work/local-env:
 	python3 -m venv $@
 	. $@/bin/activate \
+	  && python3 -m pip install --upgrade pip \
 	  && pip3 install wheel \
 	  && pip3 install cython \
 	  && pip3 install numpy \

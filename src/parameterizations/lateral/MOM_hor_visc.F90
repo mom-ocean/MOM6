@@ -187,6 +187,7 @@ type, public :: hor_visc_CS ; private
   integer :: id_grid_Re_Ah = -1, id_grid_Re_Kh   = -1
   integer :: id_diffu     = -1, id_diffv         = -1
   ! integer :: id_hf_diffu  = -1, id_hf_diffv      = -1
+  integer :: id_h_diffu  = -1, id_h_diffv      = -1
   integer :: id_hf_diffu_2d = -1, id_hf_diffv_2d = -1
   integer :: id_intz_diffu_2d = -1, id_intz_diffv_2d = -1
   integer :: id_Ah_h      = -1, id_Ah_q          = -1
@@ -277,9 +278,8 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
     grad_d2vel_mag_h, & ! Magnitude of the Laplacian of the velocity vector, squared [L-2 T-2 ~> m-2 s-2]
     boundary_mask_h ! A mask that zeroes out cells with at least one land edge [nondim]
 
-  real, allocatable, dimension(:,:) :: hf_diffu_2d, hf_diffv_2d ! Depth sum of hf_diffu, hf_diffv [L T-2 ~> m s-2]
-  real, dimension(SZIB_(G),SZJ_(G)) :: intz_diffu_2d ! Depth-integral of diffu [L2 T-2 ~> m2 s-2]
-  real, dimension(SZI_(G),SZJB_(G)) :: intz_diffv_2d ! Depth-integral of diffv [L2 T-2 ~> m2 s-2]
+  real, allocatable, dimension(:,:,:) :: h_diffu ! h x diffu [H L T-2 ~> m2 s-2]
+  real, allocatable, dimension(:,:,:) :: h_diffv ! h x diffv [H L T-2 ~> m2 s-2]
 
   real, dimension(SZIB_(G),SZJB_(G)) :: &
     dvdx, dudy, & ! components in the shearing strain [T-1 ~> s-1]
@@ -309,7 +309,6 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
     vort_xy_q, & ! vertical vorticity at corner points [T-1 ~> s-1]
     sh_xy_q,   & ! horizontal shearing strain at corner points [T-1 ~> s-1]
     GME_coeff_q, &  !< GME coeff. at q-points [L2 T-1 ~> m2 s-1]
-    max_diss_rate_q, & ! maximum possible energy dissipated by lateral friction [L2 T-3 ~> m2 s-3]
     ShSt         ! A diagnostic array of shear stress [T-1 ~> s-1].
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)+1) :: &
     KH_u_GME  !< interface height diffusivities in u-columns [L2 T-1 ~> m2 s-1]
@@ -318,7 +317,6 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: &
     Ah_h, &          ! biharmonic viscosity at thickness points [L4 T-1 ~> m4 s-1]
     Kh_h, &          ! Laplacian viscosity at thickness points [L2 T-1 ~> m2 s-1]
-    max_diss_rate_h, & ! maximum possible energy dissipated by lateral friction [L2 T-3 ~> m2 s-3]
     FrictWork, &     ! work done by MKE dissipation mechanisms [R L2 T-3 ~> W m-2]
     FrictWork_GME, & ! work done by GME [R L2 T-3 ~> W m-2]
     div_xx_h,      & ! horizontal divergence [T-1 ~> s-1]
@@ -388,6 +386,14 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
     vert_vort_mag, &  ! magnitude of the vertical vorticity gradient [L-1 T-1 ~> m-1 s-1]
     hrat_min, &     ! h_min divided by the thickness at the stress point (h or q) [nondim]
     visc_bound_rem  ! fraction of overall viscous bounds that remain to be applied [nondim]
+
+  real, dimension(SZIB_(G),SZJ_(G)) :: &
+    hf_diffu_2d, &    ! Depth sum of hf_diffu, hf_diffv [L T-2 ~> m s-2]
+    intz_diffu_2d     ! Depth-integral of diffu [H L T-2 ~> m2 s-2]
+
+  real, dimension(SZI_(G),SZJB_(G)) :: &
+    hf_diffv_2d, &    ! Depth sum of hf_diffu, hf_diffv [L T-2 ~> m s-2]
+    intz_diffv_2d     ! Depth-integral of diffv [H L T-2 ~> m2 s-2]
 
   is  = G%isc  ; ie  = G%iec  ; js  = G%jsc  ; je  = G%jec ; nz = GV%ke
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
@@ -505,8 +511,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
   !$OMP   use_MEKE_Ku, use_MEKE_Au, boundary_mask_h, boundary_mask_q, &
   !$OMP   backscat_subround, GME_coeff_limiter, &
   !$OMP   h_neglect, h_neglect3, FWfrac, inv_PI3, inv_PI6, H0_GME, &
-  !$OMP   diffu, diffv, max_diss_rate_h, max_diss_rate_q, &
-  !$OMP   Kh_h, Kh_q, Ah_h, Ah_q, FrictWork, FrictWork_GME, &
+  !$OMP   diffu, diffv, Kh_h, Kh_q, Ah_h, Ah_q, FrictWork, FrictWork_GME, &
   !$OMP   div_xx_h, sh_xx_h, vort_xy_q, sh_xy_q, GME_coeff_h, GME_coeff_q, &
   !$OMP   TD, KH_u_GME, KH_v_GME, grid_Re_Kh, grid_Re_Ah, NoSt, ShSt &
   !$OMP ) &
@@ -1645,38 +1650,58 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
   !  enddo ; enddo ; enddo
   !  call post_data(CS%id_hf_diffv, CS%hf_diffv, CS%diag)
   !endif
-  if (present(ADp) .and. (CS%id_hf_diffu_2d > 0)) then
-    allocate(hf_diffu_2d(G%IsdB:G%IedB,G%jsd:G%jed))
-    hf_diffu_2d(:,:) = 0.0
-    do k=1,nz ; do j=js,je ; do I=Isq,Ieq
-      hf_diffu_2d(I,j) = hf_diffu_2d(I,j) + diffu(I,j,k) * ADp%diag_hfrac_u(I,j,k)
-    enddo ; enddo ; enddo
-    call post_data(CS%id_hf_diffu_2d, hf_diffu_2d, CS%diag)
-    deallocate(hf_diffu_2d)
-  endif
-  if (present(ADp) .and. (CS%id_hf_diffv_2d > 0)) then
-    allocate(hf_diffv_2d(G%isd:G%ied,G%JsdB:G%JedB))
-    hf_diffv_2d(:,:) = 0.0
-    do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
-      hf_diffv_2d(i,J) = hf_diffv_2d(i,J) + diffv(i,J,k) * ADp%diag_hfrac_v(i,J,k)
-    enddo ; enddo ; enddo
-    call post_data(CS%id_hf_diffv_2d, hf_diffv_2d, CS%diag)
-    deallocate(hf_diffv_2d)
+
+  if (present(ADp)) then
+    if (CS%id_hf_diffu_2d > 0) then
+      hf_diffu_2d(:,:) = 0.0
+      do k=1,nz ; do j=js,je ; do I=Isq,Ieq
+        hf_diffu_2d(I,j) = hf_diffu_2d(I,j) + diffu(I,j,k) * ADp%diag_hfrac_u(I,j,k)
+      enddo ; enddo ; enddo
+      call post_data(CS%id_hf_diffu_2d, hf_diffu_2d, CS%diag)
+    endif
+
+    if (CS%id_hf_diffv_2d > 0) then
+      hf_diffv_2d(:,:) = 0.0
+      do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
+        hf_diffv_2d(i,J) = hf_diffv_2d(i,J) + diffv(i,J,k) * ADp%diag_hfrac_v(i,J,k)
+      enddo ; enddo ; enddo
+      call post_data(CS%id_hf_diffv_2d, hf_diffv_2d, CS%diag)
+    endif
+
+    if (CS%id_intz_diffu_2d > 0) then
+      intz_diffu_2d(:,:) = 0.0
+      do k=1,nz ; do j=js,je ; do I=Isq,Ieq
+        intz_diffu_2d(I,j) = intz_diffu_2d(I,j) + diffu(I,j,k) * ADp%diag_hu(I,j,k)
+      enddo ; enddo ; enddo
+      call post_data(CS%id_intz_diffu_2d, intz_diffu_2d, CS%diag)
+    endif
+
+    if (CS%id_intz_diffv_2d > 0) then
+      intz_diffv_2d(:,:) = 0.0
+      do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
+        intz_diffv_2d(i,J) = intz_diffv_2d(i,J) + diffv(i,J,k) * ADp%diag_hv(i,J,k)
+      enddo ; enddo ; enddo
+      call post_data(CS%id_intz_diffv_2d, intz_diffv_2d, CS%diag)
+    endif
   endif
 
-  if (present(ADp) .and. (CS%id_intz_diffu_2d > 0)) then
-    intz_diffu_2d(:,:) = 0.0
+  if (present(ADp) .and. (CS%id_h_diffu > 0)) then
+    allocate(h_diffu(G%IsdB:G%IedB,G%jsd:G%jed,GV%ke))
+    h_diffu(:,:,:) = 0.0
     do k=1,nz ; do j=js,je ; do I=Isq,Ieq
-      intz_diffu_2d(I,j) = intz_diffu_2d(I,j) + diffu(I,j,k) * ADp%diag_hu(I,j,k)
+      h_diffu(I,j,k) = diffu(I,j,k) * ADp%diag_hu(I,j,k)
     enddo ; enddo ; enddo
-    call post_data(CS%id_intz_diffu_2d, intz_diffu_2d, CS%diag)
+    call post_data(CS%id_h_diffu, h_diffu, CS%diag)
+    deallocate(h_diffu)
   endif
-  if (present(ADp) .and. (CS%id_intz_diffv_2d > 0)) then
-    intz_diffv_2d(:,:) = 0.0
+  if (present(ADp) .and. (CS%id_h_diffv > 0)) then
+    allocate(h_diffv(G%isd:G%ied,G%JsdB:G%JedB,GV%ke))
+    h_diffv(:,:,:) = 0.0
     do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
-      intz_diffv_2d(i,J) = intz_diffv_2d(i,J) + diffv(i,J,k) * ADp%diag_hv(i,J,k)
+      h_diffv(i,J,k) = diffv(i,J,k) * ADp%diag_hv(i,J,k)
     enddo ; enddo ; enddo
-    call post_data(CS%id_intz_diffv_2d, intz_diffv_2d, CS%diag)
+    call post_data(CS%id_h_diffv, h_diffv, CS%diag)
+    deallocate(h_diffv)
   endif
 
 end subroutine horizontal_viscosity
@@ -2366,45 +2391,59 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, MEKE, ADp)
       'Meridional Acceleration from Horizontal Viscosity', 'm s-2', conversion=US%L_T2_to_m_s2)
 
   !CS%id_hf_diffu = register_diag_field('ocean_model', 'hf_diffu', diag%axesCuL, Time, &
-  !    'Fractional Thickness-weighted Zonal Acceleration from Horizontal Viscosity', 'm s-2', &
-  !    v_extensive=.true., conversion=US%L_T2_to_m_s2)
+  !    'Fractional Thickness-weighted Zonal Acceleration from Horizontal Viscosity', &
+  !    'm s-2', v_extensive=.true., conversion=US%L_T2_to_m_s2)
   !if ((CS%id_hf_diffu > 0) .and. (present(ADp))) then
   !  call safe_alloc_ptr(CS%hf_diffu,G%IsdB,G%IedB,G%jsd,G%jed,GV%ke)
   !  call safe_alloc_ptr(ADp%diag_hfrac_u,G%IsdB,G%IedB,G%jsd,G%jed,GV%ke)
   !endif
 
   !CS%id_hf_diffv = register_diag_field('ocean_model', 'hf_diffv', diag%axesCvL, Time, &
-  !    'Fractional Thickness-weighted Meridional Acceleration from Horizontal Viscosity', 'm s-2', &
-  !    v_extensive=.true., conversion=US%L_T2_to_m_s2)
+  !    'Fractional Thickness-weighted Meridional Acceleration from Horizontal Viscosity', &
+  !    'm s-2', v_extensive=.true., conversion=US%L_T2_to_m_s2)
   !if ((CS%id_hf_diffv > 0) .and. (present(ADp))) then
   !  call safe_alloc_ptr(CS%hf_diffv,G%isd,G%ied,G%JsdB,G%JedB,GV%ke)
   !  call safe_alloc_ptr(ADp%diag_hfrac_v,G%isd,G%ied,G%JsdB,G%JedB,GV%ke)
   !endif
 
   CS%id_hf_diffu_2d = register_diag_field('ocean_model', 'hf_diffu_2d', diag%axesCu1, Time, &
-      'Depth-sum Fractional Thickness-weighted Zonal Acceleration from Horizontal Viscosity', 'm s-2', &
-      conversion=US%L_T2_to_m_s2)
+      'Depth-sum Fractional Thickness-weighted Zonal Acceleration from Horizontal Viscosity', &
+      'm s-2', conversion=US%L_T2_to_m_s2)
   if ((CS%id_hf_diffu_2d > 0) .and. (present(ADp))) then
     call safe_alloc_ptr(ADp%diag_hfrac_u,G%IsdB,G%IedB,G%jsd,G%jed,GV%ke)
   endif
 
   CS%id_hf_diffv_2d = register_diag_field('ocean_model', 'hf_diffv_2d', diag%axesCv1, Time, &
-      'Depth-sum Fractional Thickness-weighted Meridional Acceleration from Horizontal Viscosity', 'm s-2', &
-      conversion=US%L_T2_to_m_s2)
+      'Depth-sum Fractional Thickness-weighted Meridional Acceleration from Horizontal Viscosity', &
+      'm s-2', conversion=US%L_T2_to_m_s2)
   if ((CS%id_hf_diffv_2d > 0) .and. (present(ADp))) then
     call safe_alloc_ptr(ADp%diag_hfrac_v,G%isd,G%ied,G%JsdB,G%JedB,GV%ke)
   endif
 
-  CS%id_intz_diffu_2d = register_diag_field('ocean_model', 'intz_diffu_2d', diag%axesCu1, Time, &
-      'Depth-integral of Zonal Acceleration from Horizontal Viscosity', 'm2 s-2', &
+  CS%id_h_diffu = register_diag_field('ocean_model', 'h_diffu', diag%axesCuL, Time, &
+      'Thickness Multiplied Zonal Acceleration from Horizontal Viscosity', 'm2 s-2', &
       conversion=GV%H_to_m*US%L_T2_to_m_s2)
+  if ((CS%id_h_diffu > 0) .and. (present(ADp))) then
+    call safe_alloc_ptr(ADp%diag_hu,G%IsdB,G%IedB,G%jsd,G%jed,GV%ke)
+  endif
+
+  CS%id_h_diffv = register_diag_field('ocean_model', 'h_diffv', diag%axesCvL, Time, &
+      'Thickness Multiplied Meridional Acceleration from Horizontal Viscosity', 'm2 s-2', &
+      conversion=GV%H_to_m*US%L_T2_to_m_s2)
+  if ((CS%id_h_diffv > 0) .and. (present(ADp))) then
+    call safe_alloc_ptr(ADp%diag_hv,G%isd,G%ied,G%JsdB,G%JedB,GV%ke)
+  endif
+
+  CS%id_intz_diffu_2d = register_diag_field('ocean_model', 'intz_diffu_2d', diag%axesCu1, Time, &
+      'Depth-integral of Zonal Acceleration from Horizontal Viscosity', &
+      'm2 s-2', conversion=GV%H_to_m*US%L_T2_to_m_s2)
   if ((CS%id_intz_diffu_2d > 0) .and. (present(ADp))) then
     call safe_alloc_ptr(ADp%diag_hu,G%IsdB,G%IedB,G%jsd,G%jed,GV%ke)
   endif
 
   CS%id_intz_diffv_2d = register_diag_field('ocean_model', 'intz_diffv_2d', diag%axesCv1, Time, &
-      'Depth-integral of Meridional Acceleration from Horizontal Viscosity', 'm2 s-2', &
-      conversion=GV%H_to_m*US%L_T2_to_m_s2)
+      'Depth-integral of Meridional Acceleration from Horizontal Viscosity', &
+      'm2 s-2', conversion=GV%H_to_m*US%L_T2_to_m_s2)
   if ((CS%id_intz_diffv_2d > 0) .and. (present(ADp))) then
     call safe_alloc_ptr(ADp%diag_hv,G%isd,G%ied,G%JsdB,G%JedB,GV%ke)
   endif
@@ -2470,6 +2509,7 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, MEKE, ADp)
   if (CS%Laplacian .or. get_all) then
   endif
 end subroutine hor_visc_init
+
 !> Calculates factors in the anisotropic orientation tensor to be align with the grid.
 !! With n1=1 and n2=0, this recovers the approach of Large et al, 2001.
 subroutine align_aniso_tensor_to_grid(CS, n1, n2)
@@ -2486,6 +2526,7 @@ subroutine align_aniso_tensor_to_grid(CS, n1, n2)
   CS%n1n1_m_n2n2_h(:,:) = ( n1 * n1 - n2 * n2 ) * recip_n2_norm
   CS%n1n1_m_n2n2_q(:,:) = ( n1 * n1 - n2 * n2 ) * recip_n2_norm
 end subroutine align_aniso_tensor_to_grid
+
 !> Apply a 1-1-4-1-1 Laplacian filter one time on GME diffusive flux to reduce any
 !! horizontal two-grid-point noise
 subroutine smooth_GME(CS,G,GME_flux_h,GME_flux_q)
@@ -2550,6 +2591,7 @@ subroutine smooth_GME(CS,G,GME_flux_h,GME_flux_q)
     endif
   enddo ! s-loop
 end subroutine smooth_GME
+
 !> Deallocates any variables allocated in hor_visc_init.
 subroutine hor_visc_end(CS)
   type(hor_visc_CS), pointer :: CS !< The control structure returned by a
@@ -2581,10 +2623,10 @@ subroutine hor_visc_end(CS)
       DEALLOC_(CS%Ah_Max_xx) ; DEALLOC_(CS%Ah_Max_xy)
     endif
     if (CS%Smagorinsky_Ah) then
-      DEALLOC_(CS%Biharm6_const_xx) ; DEALLOC_(CS%Biharm6_const_xy)
+      DEALLOC_(CS%Biharm_const_xx) ; DEALLOC_(CS%Biharm_const_xy)
     endif
     if (CS%Leith_Ah) then
-      DEALLOC_(CS%Biharm_const_xx) ; DEALLOC_(CS%Biharm_const_xy)
+      DEALLOC_(CS%Biharm6_const_xx) ; DEALLOC_(CS%Biharm6_const_xy)
     endif
     if (CS%Re_Ah > 0.0) then
       DEALLOC_(CS%Re_Ah_const_xx) ; DEALLOC_(CS%Re_Ah_const_xy)
