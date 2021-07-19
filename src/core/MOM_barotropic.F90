@@ -2356,8 +2356,13 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
 
     if (GV%Boussinesq) then
       do j=js,je ; do i=is,ie
-        if (eta(i,j) < -GV%Z_to_H*G%bathyT(i,j)) &
-          call MOM_error(WARNING, "btstep: eta has dropped below bathyT.")
+        if (eta(i,j) < -GV%Z_to_H*G%bathyT(i,j)) then
+          ioff = G%idg_offset + i
+          joff = G%jdg_offset + j
+          write(mesg,"('btstep: eta has dropped below bathyT at ', i5, i5)") ioff, joff
+          call MOM_error(WARNING, trim(mesg))
+!         call MOM_error(WARNING, "btstep: eta has dropped below bathyT.")
+        endif
       enddo ; enddo
     else
       do j=js,je ; do i=is,ie
