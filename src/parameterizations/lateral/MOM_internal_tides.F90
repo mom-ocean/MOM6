@@ -1652,33 +1652,29 @@ subroutine reflect(En, NAngle, CS, G, LB)
                                            ! values should collocate with angle_c [nondim]
   logical, dimension(G%isd:G%ied,G%jsd:G%jed) :: ridge
                                            ! tags of cells with double reflection
+  real, dimension(1:Nangle) :: En_reflected ! Energy reflected [R Z3 T-2 ~> J m-2].
 
   real    :: TwoPi                         ! 2*pi = 6.2831853... [nondim]
   real    :: Angle_size                    ! size of beam wedge [rad]
-  real    :: angle_wall                    ! angle of coast/ridge/shelf wrt equator [rad]
-  real, dimension(1:NAngle) :: angle_i     ! angle of incident ray wrt equator [rad]
-  real    :: angle_r                       ! angle of reflected ray wrt equator [rad]
-  real, dimension(1:Nangle) :: En_reflected
-  integer :: i, j, a, a_r, na
-  !integer :: isd, ied, jsd, jed   ! start and end local indices on data domain
-  !                                ! (values include halos)
+  integer :: angle_wall                    ! angle of coast/ridge/shelf wrt equator [rad]
+  integer :: angle_wall0                   ! angle of coast/ridge/shelf wrt equator [nondim]
+  integer :: angle_r                       ! angle of reflected ray wrt equator [rad]
+  integer :: angle_r0                      ! angle of reflected ray wrt equator [nondim]
+  integer :: angle_to_wall                 ! angle relative to wall [nondim]
+  integer :: a, a0                         ! loop index for angles
+  integer :: i, j, i_global
+  integer :: Nangle_d2            ! Nangle / 2
   integer :: isc, iec, jsc, jec   ! start and end local indices on PE
                                   ! (values exclude halos)
   integer :: ish, ieh, jsh, jeh   ! start and end local indices on data domain
                                   ! leaving out outdated halo points (march in)
 
-  !isd = G%isd  ; ied = G%ied  ; jsd = G%jsd  ; jed = G%jed
   isc = G%isc  ; iec = G%iec  ; jsc = G%jsc  ; jec = G%jec
   ish = LB%ish ; ieh = LB%ieh ; jsh = LB%jsh ; jeh = LB%jeh
 
   TwoPi = 8.0*atan(1.0)
   Angle_size = TwoPi / (real(NAngle))
-
-  do a=1,NAngle
-    ! These are the angles at the cell centers
-    ! (should do this elsewhere since doesn't change with time)
-    angle_i(a) = Angle_size * real(a - 1) ! for a=1 aligned with x-axis
-  enddo
+  Nangle_d2 = (Nangle / 2)
 
   ! init local arrays
   angle_c(:,:) = CS%nullangle
@@ -1686,7 +1682,9 @@ subroutine reflect(En, NAngle, CS, G, LB)
   ridge(:,:) = .false.
 
   do j=jsh,jeh ; do i=ish,ieh
-    angle_c(i,j)   = CS%refl_angle(i,j)
+    if (CS%refl_angle(i,j) /= CS%nullangle) then
+      angle_c(i,j) = mod(CS%refl_angle(i,j) + TwoPi, TwoPi)
+    endif
     part_refl(i,j) = CS%refl_pref(i,j)
     ridge(i,j)     = CS%refl_dbl(i,j)
   enddo ; enddo
@@ -1696,42 +1694,36 @@ subroutine reflect(En, NAngle, CS, G, LB)
     ! redistribute energy in angular space if ray will hit boundary
     ! i.e., if energy is in a reflecting cell
     if (angle_c(i,j) /= CS%nullangle) then
+      ! refection angle is given in rad, convert to the discrete angle
+      angle_wall = nint(angle_c(i,j)/Angle_size) + 1
       do a=1,NAngle ; if (En(i,j,a) > 0.0) then
-        if (sin(angle_i(a) - angle_c(i,j)) >= 0.0) then
-          ! if ray is incident, keep specified boundary angle
-          angle_wall = angle_c(i,j)
-        elseif (ridge(i,j)) then
-         ! if ray is not incident but in ridge cell, use complementary angle
-         angle_wall = angle_c(i,j) + 0.5*TwoPi
-          if (angle_wall > TwoPi) then
-            angle_wall = angle_wall - TwoPi*floor(abs(angle_wall)/TwoPi)
-          elseif (angle_wall < 0.0) then
-            angle_wall = angle_wall + TwoPi*ceiling(abs(angle_wall)/TwoPi)
+        ! reindex to 0 -> Nangle-1 for trig
+        a0 = a - 1
+        angle_wall0 = angle_wall - 1
+        ! compute relative angle from wall and use cyclic properties
+        ! to ensure it is bounded by 0 -> Nangle-1
+        angle_to_wall = mod(a0 - angle_wall0 + Nangle, Nangle)
+
+        if (ridge(i,j)) then
+          ! if ray is not incident but in ridge cell, use complementary angle
+          if ((Nangle_d2 .lt. angle_to_wall) .and. (angle_to_wall .lt. Nangle)) then
+            angle_wall0 = mod(angle_wall0 + Nangle_d2 + Nangle, Nangle)
           endif
-        else
-          ! if ray is not incident and not in a ridge cell, keep specified angle
-          angle_wall = angle_c(i,j)
         endif
 
         ! do reflection
-        if (sin(angle_i(a) - angle_wall) >= 0.0) then
-          angle_r = 2.0*angle_wall - angle_i(a)
-          if (angle_r > TwoPi) then
-            angle_r = angle_r - TwoPi*floor(abs(angle_r)/TwoPi)
-          elseif (angle_r < 0.0) then
-            angle_r = angle_r + TwoPi*ceiling(abs(angle_r)/TwoPi)
-          endif
-          a_r = nint(angle_r/Angle_size) + 1
-          do while (a_r > Nangle) ; a_r = a_r - Nangle ; enddo
-          if (a /= a_r) then
-            En_reflected(a_r) = part_refl(i,j)*En(i,j,a)
-            En(i,j,a)   = (1.0-part_refl(i,j))*En(i,j,a)
+        if ((0 .lt. angle_to_wall) .and. (angle_to_wall .lt. Nangle_d2)) then
+          angle_r0 = mod(2*angle_wall0 - a0 + Nangle, Nangle)
+          angle_r = angle_r0 + 1 !re-index to 1 -> Nangle
+          if (a /= angle_r) then
+            En_reflected(angle_r) = part_refl(i,j)*En(i,j,a)
+            En(i,j,a) = (1.0-part_refl(i,j))*En(i,j,a)
           endif
         endif
       endif ; enddo ! a-loop
       do a=1,NAngle
         En(i,j,a) = En(i,j,a) + En_reflected(a)
-        En_reflected(a) = 0.0
+        En_reflected(a) = 0.0  ! reset values
       enddo ! a-loop
     endif
   enddo ; enddo ! i- and j-loops
