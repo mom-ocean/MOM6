@@ -20,8 +20,8 @@ use MOM_io,            only : get_file_fieldnames, file_type, open_file, close_f
 use MOM_io,            only : get_file_info, file_exists, get_field_atts, get_file_fields
 use MOM_io,            only : get_field_atts, read_data, field_size
 
-use netcdf, only : NF90_OPEN, NF90_NOWRITE, NF90_GET_ATT, NF90_GET_VAR
-use netcdf, only : NF90_INQ_VARID, NF90_INQUIRE_VARIABLE, NF90_INQUIRE_DIMENSION
+!use netcdf, only : NF90_OPEN, NF90_NOWRITE, NF90_GET_ATT, NF90_GET_VAR
+!use netcdf, only : NF90_INQ_VARID, NF90_INQUIRE_VARIABLE, NF90_INQUIRE_DIMENSION
 
 implicit none ; private
 
@@ -392,6 +392,11 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
   call get_axis_data(axes(2), lat_in)
   allocate(z_in(kd))
   call get_axis_data(axes(3), z_in)
+  if (allocated(z_edges_in)) deallocate(z_edges_in)
+  if (allocated(tr_z)) deallocate(tr_z)
+  if (allocated(mask_z)) deallocate(mask_z)
+  allocate(z_edges_in(kd+1))
+  allocate(tr_z(isd:ied,jsd:jed,kd), mask_z(isd:ied,jsd:jed,kd))
 
 
 
@@ -439,25 +444,19 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
   ! rcode = NF90_GET_ATT(ncid, varid, "scale_factor", scale_factor)
   ! if (rcode /= 0) scale_factor = 1.0
 
-  if (allocated(z_edges_in)) deallocate(z_edges_in)
-  if (allocated(tr_z)) deallocate(tr_z)
-  if (allocated(mask_z)) deallocate(mask_z)
 
-  allocate(lon_in(id), lat_in(jd), z_in(kd), z_edges_in(kd+1))
-  allocate(tr_z(isd:ied,jsd:jed,kd), mask_z(isd:ied,jsd:jed,kd))
-
-  start = 1 ; count = 1 ; count(1) = id
-  rcode = NF90_GET_VAR(ncid, dim_id(1), lon_in, start, count)
-  if (rcode /= 0) call MOM_error(FATAL,"error reading dimension 1 values for var_name "// &
-                trim(varnam)//",dim_name "//trim(dim_name(1))//" in file "// trim(filename)//" in hinterp_extrap")
-  start = 1 ; count = 1 ; count(1) = jd
-  rcode = NF90_GET_VAR(ncid, dim_id(2), lat_in, start, count)
-  if (rcode /= 0) call MOM_error(FATAL,"error reading dimension 2 values for var_name "// &
-                trim(varnam)//",dim_name "//trim(dim_name(2))//" in file "// trim(filename)//" in  hinterp_extrap")
-  start = 1 ; count = 1 ; count(1) = kd
-  rcode = NF90_GET_VAR(ncid, dim_id(3), z_in, start, count)
-  if (rcode /= 0) call MOM_error(FATAL,"error reading dimension 3 values for var_name "// &
-                trim(varnam//",dim_name "//trim(dim_name(3)))//" in file "// trim(filename)//" in  hinterp_extrap")
+  ! start = 1 ; count = 1 ; count(1) = id
+  ! rcode = NF90_GET_VAR(ncid, dim_id(1), lon_in, start, count)
+  ! if (rcode /= 0) call MOM_error(FATAL,"error reading dimension 1 values for var_name "// &
+  !               trim(varnam)//",dim_name "//trim(dim_name(1))//" in file "// trim(filename)//" in hinterp_extrap")
+  ! start = 1 ; count = 1 ; count(1) = jd
+  ! rcode = NF90_GET_VAR(ncid, dim_id(2), lat_in, start, count)
+  ! if (rcode /= 0) call MOM_error(FATAL,"error reading dimension 2 values for var_name "// &
+  !               trim(varnam)//",dim_name "//trim(dim_name(2))//" in file "// trim(filename)//" in  hinterp_extrap")
+  ! start = 1 ; count = 1 ; count(1) = kd
+  ! rcode = NF90_GET_VAR(ncid, dim_id(3), z_in, start, count)
+  ! if (rcode /= 0) call MOM_error(FATAL,"error reading dimension 3 values for var_name "// &
+  !               trim(varnam//",dim_name "//trim(dim_name(3)))//" in file "// trim(filename)//" in  hinterp_extrap")
 
   call cpu_clock_end(id_clock_read)
 
@@ -520,9 +519,9 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
       count(1) = ie-is+1 ; count(2) = je-js+1; count(3) = 1
       call read_data(filename, varnam, tr_in, start, count)
       !rcode = NF90_GET_VAR(ncid,varid, tr_in, start, count)
-      if (rcode /= 0) call MOM_error(FATAL,"horiz_interp_and_extrap_tracer_record: "//&
-           "error reading level "//trim(laynum)//" of variable "//&
-           trim(varnam)//" in file "// trim(filename))
+      !if (rcode /= 0) call MOM_error(FATAL,"horiz_interp_and_extrap_tracer_record: "//&
+      !     "error reading level "//trim(laynum)//" of variable "//&
+      !     trim(varnam)//" in file "// trim(filename))
 
       do j=js,je
         do i=is,ie
@@ -540,9 +539,9 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
         start = 1 ; start(3) = k ; count(:) = 1 ; count(1) = id ; count(2) = jd
         call read_data(filename, varnam, tr_in, start, count)
         !rcode = NF90_GET_VAR(ncid,varid, tr_in, start, count)
-        if (rcode /= 0) call MOM_error(FATAL,"horiz_interp_and_extrap_tracer_record: "//&
-             "error reading level "//trim(laynum)//" of variable "//&
-             trim(varnam)//" in file "// trim(filename))
+        !if (rcode /= 0) call MOM_error(FATAL,"horiz_interp_and_extrap_tracer_record: "//&
+        !     "error reading level "//trim(laynum)//" of variable "//&
+        !     trim(varnam)//" in file "// trim(filename))
 
         if (add_np) then
           pole = 0.0 ; npole = 0.0
@@ -701,7 +700,7 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, t
   real, dimension(:,:),  allocatable   :: mask_in    !< A 2-d mask for extended input grid.
 
   real :: PI_180
-  integer :: rcode, ncid, varid, ndims, id, jd, kd, jdp
+  integer :: ncid, varid, ndims, id, jd, kd, jdp
   integer :: i,j,k
   integer, dimension(4) :: start, count, dims, dim_id
   real, dimension(:,:), allocatable :: x_in, y_in
