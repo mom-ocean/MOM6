@@ -43,6 +43,7 @@ public :: open_file_to_read, close_file_to_read
 ! The following are simple pass throughs of routines from MOM_io_infra or other modules.
 public :: file_exists, open_file, open_ASCII_file, close_file, flush_file, file_type
 public :: get_file_info, field_exists, get_file_fields, get_file_times, get_filename_appendix
+public :: get_file_fieldnames
 public :: fieldtype, field_size, get_field_atts
 public :: axistype, get_axis_data
 public :: MOM_read_data, MOM_read_vector, read_field_chksum
@@ -1924,6 +1925,31 @@ subroutine MOM_io_init(param_file)
   call log_version(param_file, mdl, version)
 
 end subroutine MOM_io_init
+
+!> Retrieve a list of variable names associated with an opened file
+subroutine get_file_fieldnames(IO_handle,fieldnames)
+  type(file_type) , intent(in) :: IO_handle !< An integer file handle
+  character(len=*), dimension(:), intent(inout) :: fieldnames !< List of fieldnames returned by this routine.
+  ! local variables
+  integer :: ndim, nvar, ntime, i
+  type(fieldtype), allocatable, dimension(:) :: fields
+
+  call get_file_info(IO_handle, ndim=ndim, nvar=nvar, ntime=ntime)
+  if (nvar > size(fieldnames,1)) call MOM_error(FATAL,'get_file_fieldnames: fieldnames array too small')
+
+  if ( nvar> 0) then
+     allocate(fields(nvar))
+     call get_file_fields(IO_handle, fields(1:nvar))
+     do i=1,nvar
+       call get_field_atts(fields(i),fieldnames(i))
+     enddo
+  endif
+
+  return
+end subroutine get_file_fieldnames
+
+
+
 
 !> \namespace mom_io
 !!

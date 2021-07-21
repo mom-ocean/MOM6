@@ -363,15 +363,23 @@ subroutine get_file_fields(IO_handle, fields)
 end subroutine get_file_fields
 
 !> Extract information from a field type, as stored or as found in a file
-subroutine get_field_atts(field, name, units, longname, checksum)
+subroutine get_field_atts(field, name, units, longname, checksum, axes, missing, scale, add)
   type(fieldtype),            intent(in)  :: field !< The field to extract information from
   character(len=*), optional, intent(out) :: name  !< The variable name
   character(len=*), optional, intent(out) :: units !< The units of the variable
   character(len=*), optional, intent(out) :: longname  !< The long name of the variable
   integer(kind=int64),  dimension(:), &
                     optional, intent(out) :: checksum !< The checksums of the variable in a file
-  call mpp_get_atts(field, name=name, units=units, longname=longname, checksum=checksum)
+  type(axistype), optional, dimension(:), intent(out) :: axes !< A list of axes associated with
+                                                              !! the variable.
+  real, optional, intent(out)             :: missing !< The missing of Fill value
+  real, optional, intent(out)             :: scale !< A scaling factor
+  real, optional, intent(out)             :: add !< A scalar offset
+
+  call mpp_get_atts(field, name=name, units=units, longname=longname, checksum=checksum, &
+                   axes=axes, missing=missing, scale=scale, add=add)
 end subroutine get_field_atts
+
 
 !> Field_exists returns true if the field indicated by field_name is present in the
 !! file file_name.  If file_name does not exist, it returns false.
