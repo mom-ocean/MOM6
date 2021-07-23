@@ -27,7 +27,8 @@ use MOM_get_input,        only : Get_MOM_Input, directories
 use MOM_grid,             only : ocean_grid_type
 use MOM_interpolate,      only : init_external_field, time_interp_external
 use MOM_interpolate,      only : time_interp_external_init
-use MOM_io,               only : slasher, write_version_number, MOM_read_data, stdout
+use MOM_io,               only : slasher, write_version_number, MOM_read_data
+use MOM_io,               only : stdout_if_root
 use MOM_restart,          only : register_restart_field, restart_init, MOM_restart_CS
 use MOM_restart,          only : restart_init_end, save_restart, restore_state
 use MOM_string_functions, only : uppercase
@@ -36,6 +37,7 @@ use MOM_unit_scaling,     only : unit_scale_type
 use MOM_variables,        only : surface
 use user_revise_forcing,  only : user_alter_forcing, user_revise_forcing_init
 use user_revise_forcing,  only : user_revise_forcing_CS
+use iso_fortran_env, only : int64
 
 implicit none ; private
 
@@ -109,6 +111,8 @@ type, public :: surface_forcing_CS ; private
   logical :: restore_temp       !< If true, the coupled MOM driver adds a term to restore sea
                                 !! surface temperature to a specified value.
   real    :: Flux_const                     !< Piston velocity for surface restoring [Z T-1 ~> m s-1]
+  real    :: Flux_const_salt                !< Piston velocity for surface salt restoring [Z T-1 ~> m s-1]
+  real    :: Flux_const_temp                !< Piston velocity for surface temp restoring [Z T-1 ~> m s-1]
   logical :: salt_restore_as_sflux          !< If true, SSS restore as salt flux instead of water flux
   logical :: adjust_net_srestore_to_zero    !< Adjust srestore to zero (for both salt_flux or vprec)
   logical :: adjust_net_srestore_by_scaling !< Adjust srestore w/o moving zero contour
@@ -289,22 +293,18 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
 
     call safe_alloc_ptr(fluxes%salt_flux,isd,ied,jsd,jed)
     call safe_alloc_ptr(fluxes%salt_flux_in,isd,ied,jsd,jed)
-    call safe_alloc_ptr(fluxes%salt_flux_added,isd,ied,jsd,jed)
 
     call safe_alloc_ptr(fluxes%TKE_tidal,isd,ied,jsd,jed)
     call safe_alloc_ptr(fluxes%ustar_tidal,isd,ied,jsd,jed)
 
-    if (CS%allow_flux_adjustments) then
-      call safe_alloc_ptr(fluxes%heat_added,isd,ied,jsd,jed)
-      call safe_alloc_ptr(fluxes%salt_flux_added,isd,ied,jsd,jed)
-    endif
+    call safe_alloc_ptr(fluxes%heat_added,isd,ied,jsd,jed)
+    call safe_alloc_ptr(fluxes%salt_flux_added,isd,ied,jsd,jed)
 
     do j=js-2,je+2 ; do i=is-2,ie+2
       fluxes%TKE_tidal(i,j)   = CS%TKE_tidal(i,j)
       fluxes%ustar_tidal(i,j) = CS%ustar_tidal(i,j)
     enddo ; enddo
 
-    if (CS%restore_temp) call safe_alloc_ptr(fluxes%heat_added,isd,ied,jsd,jed)
 
   endif   ! endif for allocation and initialization
 
@@ -334,10 +334,8 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
   fluxes%fluxes_used = .false.
   fluxes%dt_buoy_accum = US%s_to_T*valid_time
 
-  if (CS%allow_flux_adjustments) then
-    fluxes%heat_added(:,:) = 0.0
-    fluxes%salt_flux_added(:,:) = 0.0
-  endif
+  fluxes%heat_added(:,:) = 0.0
+  fluxes%salt_flux_added(:,:) = 0.0
 
   do j=js,je ; do i=is,ie
     fluxes%salt_flux(i,j) = 0.0
@@ -358,7 +356,7 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
       do j=js,je ; do i=is,ie
         delta_sss = data_restore(i,j)- sfc_state%SSS(i,j)
         delta_sss = sign(1.0,delta_sss)*min(abs(delta_sss),CS%max_delta_srestore)
-        fluxes%salt_flux(i,j) = 1.e-3*G%mask2dT(i,j) * (CS%Rho0*CS%Flux_const)* &
+        fluxes%salt_flux(i,j) = 1.e-3*G%mask2dT(i,j) * (CS%Rho0*CS%Flux_const_salt)* &
              (CS%basin_mask(i,j)*open_ocn_mask(i,j)*CS%srestore_mask(i,j)) *delta_sss  ! R Z T-1 ~> kg Salt m-2 s-1
       enddo ; enddo
       if (CS%adjust_net_srestore_to_zero) then
@@ -368,9 +366,10 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
           fluxes%saltFluxGlobalAdj = 0.
         else
           work_sum(is:ie,js:je) = US%L_to_m**2*US%RZ_T_to_kg_m2s * &
-                  G%areaT(is:ie,js:je)*fluxes%salt_flux(is:ie,js:je)
+                  G%areaT(is:ie,js:je)*fluxes%salt_flux(is:ie,js:je) * G%mask2dT(is:ie,js:je)
           fluxes%saltFluxGlobalAdj = reproducing_sum(work_sum(:,:), isr,ier, jsr,jer)/CS%area_surf
-          fluxes%salt_flux(is:ie,js:je) = fluxes%salt_flux(is:ie,js:je) - kg_m2_s_conversion * fluxes%saltFluxGlobalAdj
+          fluxes%salt_flux(is:ie,js:je) = fluxes%salt_flux(is:ie,js:je) - &
+                                          kg_m2_s_conversion * fluxes%saltFluxGlobalAdj * G%mask2dT(is:ie,js:je)
         endif
       endif
       fluxes%salt_flux_added(is:ie,js:je) = fluxes%salt_flux(is:ie,js:je) ! Diagnostic
@@ -380,7 +379,7 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
           delta_sss = sfc_state%SSS(i,j) - data_restore(i,j)
           delta_sss = sign(1.0,delta_sss)*min(abs(delta_sss),CS%max_delta_srestore)
           fluxes%vprec(i,j) = (CS%basin_mask(i,j)*open_ocn_mask(i,j)*CS%srestore_mask(i,j))* &
-                      (CS%Rho0*CS%Flux_const) * &
+                      (CS%Rho0*CS%Flux_const_salt) * &
                       delta_sss / (0.5*(sfc_state%SSS(i,j) + data_restore(i,j)))
         endif
       enddo ; enddo
@@ -408,7 +407,7 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
       delta_sst = data_restore(i,j)- sfc_state%SST(i,j)
       delta_sst = sign(1.0,delta_sst)*min(abs(delta_sst),CS%max_delta_trestore)
       fluxes%heat_added(i,j) = G%mask2dT(i,j) * CS%trestore_mask(i,j) * &
-                               rhoXcp * delta_sst * CS%Flux_const  ! W m-2
+                               rhoXcp * delta_sst * CS%Flux_const_temp  ! W m-2
     enddo ; enddo
   endif
 
@@ -1110,7 +1109,7 @@ subroutine apply_flux_adjustments(G, US, CS, Time, fluxes)
   type(forcing),            intent(inout) :: fluxes !< Surface fluxes structure
 
   ! Local variables
-  real, dimension(SZI_(G),SZJ_(G)) :: temp_at_h ! Various fluxes at h points [W m-2] or [kg m-2 s-1]
+  real, dimension(G%isc:G%iec,G%jsc:G%jec) :: temp_at_h ! Various fluxes at h points [W m-2] or [kg m-2 s-1]
 
   integer :: isc, iec, jsc, jec, i, j
   logical :: overrode_h
@@ -1250,6 +1249,7 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, wind_stagger)
   character(len=48)  :: flnam
   character(len=240) :: basin_file
   integer :: i, j, isd, ied, jsd, jed
+  real :: unscaled_fluxconst
 
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
@@ -1373,9 +1373,14 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, wind_stagger)
     call get_param(param_file, mdl, "FLUXCONST", CS%Flux_const, &
                  "The constant that relates the restoring surface fluxes to the relative "//&
                  "surface anomalies (akin to a piston velocity).  Note the non-MKS units.", &
-                 default=0.0, units="m day-1", scale=US%m_to_Z*US%T_to_s)
+                 default=0.0, units="m day-1", scale=US%m_to_Z*US%T_to_s,unscaled=unscaled_fluxconst)
+    call get_param(param_file, mdl, "FLUXCONST_SALT", CS%Flux_const_salt, &
+                 "The constant that relates the restoring surface salt fluxes to the relative "//&
+                 "surface anomalies (akin to a piston velocity).  Note the non-MKS units.", &
+                 fail_if_missing=.false.,default=unscaled_fluxconst, units="m day-1", scale=US%m_to_Z*US%T_to_s)
     ! Convert CS%Flux_const from m day-1 to m s-1.
     CS%Flux_const = CS%Flux_const / 86400.0
+    CS%Flux_const_salt = CS%Flux_const_salt / 86400.0
     call get_param(param_file, mdl, "SALT_RESTORE_FILE", CS%salt_restore_file, &
                  "A file in which to find the surface salinity to use for restoring.", &
                  default="salt_restore.nc")
@@ -1420,9 +1425,14 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, wind_stagger)
     call get_param(param_file, mdl, "FLUXCONST", CS%Flux_const, &
                  "The constant that relates the restoring surface fluxes to the relative "//&
                  "surface anomalies (akin to a piston velocity).  Note the non-MKS units.", &
-                 default=0.0, units="m day-1", scale=US%m_to_Z*US%T_to_s)
+                 default=0.0, units="m day-1", scale=US%m_to_Z*US%T_to_s,unscaled=unscaled_fluxconst)
+    call get_param(param_file, mdl, "FLUXCONST_TEMP", CS%Flux_const_temp, &
+                 "The constant that relates the restoring surface temperature fluxes to the relative "//&
+                 "surface anomalies (akin to a piston velocity).  Note the non-MKS units.", &
+                 fail_if_missing=.false.,default=unscaled_fluxconst, units="m day-1", scale=US%m_to_Z*US%T_to_s)
     ! Convert CS%Flux_const from m day-1 to m s-1.
     CS%Flux_const = CS%Flux_const / 86400.0
+    CS%Flux_const_temp = CS%Flux_const_temp / 86400.0
     call get_param(param_file, mdl, "SST_RESTORE_FILE", CS%temp_restore_file, &
                  "A file in which to find the surface temperature to use for restoring.", &
                  default="temp_restore.nc")
@@ -1622,32 +1632,39 @@ subroutine ice_ocn_bnd_type_chksum(id, timestep, iobt)
   type(ice_ocean_boundary_type), &
                     intent(in) :: iobt   !< An ice-ocean boundary type with fluxes to drive the
                                          !! ocean in a coupled model whose checksums are reported
-  integer ::   n,m, outunit
+  ! Local variables
+  integer(kind=int64) :: chks ! A checksum for the field
+  logical :: root    ! True only on the root PE
+  integer :: outunit ! The output unit to write to
 
-  outunit = stdout
+  root = is_root_pe()
+  outunit = stdout_if_root()
 
-  write(outunit,*) "BEGIN CHECKSUM(ice_ocean_boundary_type):: ", id, timestep
-  write(outunit,100) 'iobt%u_flux         ', field_chksum( iobt%u_flux         )
-  write(outunit,100) 'iobt%v_flux         ', field_chksum( iobt%v_flux         )
-  write(outunit,100) 'iobt%t_flux         ', field_chksum( iobt%t_flux         )
-  write(outunit,100) 'iobt%q_flux         ', field_chksum( iobt%q_flux         )
-  write(outunit,100) 'iobt%salt_flux      ', field_chksum( iobt%salt_flux      )
-  write(outunit,100) 'iobt%lw_flux        ', field_chksum( iobt%lw_flux        )
-  write(outunit,100) 'iobt%sw_flux_vis_dir', field_chksum( iobt%sw_flux_vis_dir)
-  write(outunit,100) 'iobt%sw_flux_vis_dif', field_chksum( iobt%sw_flux_vis_dif)
-  write(outunit,100) 'iobt%sw_flux_nir_dir', field_chksum( iobt%sw_flux_nir_dir)
-  write(outunit,100) 'iobt%sw_flux_nir_dif', field_chksum( iobt%sw_flux_nir_dif)
-  write(outunit,100) 'iobt%lprec          ', field_chksum( iobt%lprec          )
-  write(outunit,100) 'iobt%fprec          ', field_chksum( iobt%fprec          )
-  write(outunit,100) 'iobt%runoff         ', field_chksum( iobt%runoff         )
-  write(outunit,100) 'iobt%calving        ', field_chksum( iobt%calving        )
-  write(outunit,100) 'iobt%p              ', field_chksum( iobt%p              )
-  if (associated(iobt%ustar_berg)) &
-    write(outunit,100) 'iobt%ustar_berg     ', field_chksum( iobt%ustar_berg )
-  if (associated(iobt%area_berg)) &
-    write(outunit,100) 'iobt%area_berg      ', field_chksum( iobt%area_berg  )
-  if (associated(iobt%mass_berg)) &
-    write(outunit,100) 'iobt%mass_berg      ', field_chksum( iobt%mass_berg  )
+  if (root) write(outunit,*) "BEGIN CHECKSUM(ice_ocean_boundary_type):: ", id, timestep
+  chks = field_chksum( iobt%u_flux         ) ; if (root) write(outunit,100) 'iobt%u_flux         ', chks
+  chks = field_chksum( iobt%v_flux         ) ; if (root) write(outunit,100) 'iobt%v_flux         ', chks
+  chks = field_chksum( iobt%t_flux         ) ; if (root) write(outunit,100) 'iobt%t_flux         ', chks
+  chks = field_chksum( iobt%q_flux         ) ; if (root) write(outunit,100) 'iobt%q_flux         ', chks
+  chks = field_chksum( iobt%salt_flux      ) ; if (root) write(outunit,100) 'iobt%salt_flux      ', chks
+  chks = field_chksum( iobt%lw_flux        ) ; if (root) write(outunit,100) 'iobt%lw_flux        ', chks
+  chks = field_chksum( iobt%sw_flux_vis_dir) ; if (root) write(outunit,100) 'iobt%sw_flux_vis_dir', chks
+  chks = field_chksum( iobt%sw_flux_vis_dif) ; if (root) write(outunit,100) 'iobt%sw_flux_vis_dif', chks
+  chks = field_chksum( iobt%sw_flux_nir_dir) ; if (root) write(outunit,100) 'iobt%sw_flux_nir_dir', chks
+  chks = field_chksum( iobt%sw_flux_nir_dif) ; if (root) write(outunit,100) 'iobt%sw_flux_nir_dif', chks
+  chks = field_chksum( iobt%lprec          ) ; if (root) write(outunit,100) 'iobt%lprec          ', chks
+  chks = field_chksum( iobt%fprec          ) ; if (root) write(outunit,100) 'iobt%fprec          ', chks
+  chks = field_chksum( iobt%runoff         ) ; if (root) write(outunit,100) 'iobt%runoff         ', chks
+  chks = field_chksum( iobt%calving        ) ; if (root) write(outunit,100) 'iobt%calving        ', chks
+  chks = field_chksum( iobt%p              ) ; if (root) write(outunit,100) 'iobt%p              ', chks
+  if (associated(iobt%ustar_berg)) then
+    chks = field_chksum( iobt%ustar_berg ) ; if (root) write(outunit,100) 'iobt%ustar_berg     ', chks
+  endif
+  if (associated(iobt%area_berg)) then
+    chks = field_chksum( iobt%area_berg  ) ; if (root) write(outunit,100) 'iobt%area_berg      ', chks
+  endif
+  if (associated(iobt%mass_berg)) then
+    chks = field_chksum( iobt%mass_berg  ) ; if (root) write(outunit,100) 'iobt%mass_berg      ', chks
+  endif
 100 FORMAT("   CHECKSUM::",A20," = ",Z20)
 
   call coupler_type_write_chksums(iobt%fluxes, outunit, 'iobt%')

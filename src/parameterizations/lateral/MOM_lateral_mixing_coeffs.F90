@@ -55,6 +55,11 @@ type, public :: VarMix_CS
                                   !! This parameter is set depending on other parameters.
   logical :: calculate_Eady_growth_rate !< If true, calculate all the Eady growth rate.
                                   !! This parameter is set depending on other parameters.
+  logical :: use_simpler_Eady_growth_rate !< If true, use a simpler method to calculate the
+                                  !! Eady growth rate that avoids division by layer thickness.
+                                  !! This parameter is set depending on other parameters.
+  real :: cropping_distance       !< Distance from surface or bottom to filter out outcropped or
+                                  !! incropped interfaces for the Eady growth rate calc [Z ~> m]
   real, dimension(:,:), pointer :: &
     SN_u => NULL(), &     !< S*N at u-points [T-1 ~> s-1]
     SN_v => NULL(), &     !< S*N at v-points [T-1 ~> s-1]
@@ -111,6 +116,7 @@ type, public :: VarMix_CS
   logical :: use_Visbeck  !< Use Visbeck formulation for thickness diffusivity
   integer :: VarMix_Ktop  !< Top layer to start downward integrals
   real :: Visbeck_L_scale !< Fixed length scale in Visbeck formula
+  real :: Eady_GR_D_scale !< Depth over which to average SN [Z ~> m]
   real :: Res_coef_khth   !< A non-dimensional number that determines the function
                           !! of resolution, used for thickness and tracer mixing, as:
                           !!  F = 1 / (1 + (Res_coef_khth*Ld/dx)^Res_fn_power)
@@ -137,6 +143,7 @@ type, public :: VarMix_CS
   !! Diagnostic identifier
   integer :: id_SN_u=-1, id_SN_v=-1, id_L2u=-1, id_L2v=-1, id_Res_fn = -1
   integer :: id_N2_u=-1, id_N2_v=-1, id_S2_u=-1, id_S2_v=-1
+  integer :: id_dzu=-1, id_dzv=-1, id_dzSxN=-1, id_dzSyN=-1
   integer :: id_Rd_dx=-1, id_KH_u_QG = -1, id_KH_v_QG = -1
   type(diag_ctrl), pointer :: diag !< A structure that is used to regulate the
                                    !! timing of diagnostic output.
@@ -147,7 +154,7 @@ type, public :: VarMix_CS
   logical :: debug      !< If true, write out checksums of data for debugging
 end type VarMix_CS
 
-public VarMix_init, calc_slope_functions, calc_resoln_function
+public VarMix_init, VarMix_end, calc_slope_functions, calc_resoln_function
 public calc_QG_Leith_viscosity, calc_depth_function
 
 contains
@@ -445,40 +452,55 @@ subroutine calc_slope_functions(h, tv, dt, G, GV, US, CS, OBC)
   ! Local variables
   real, dimension(SZI_(G), SZJ_(G),SZK_(GV)+1) :: &
     e             ! The interface heights relative to mean sea level [Z ~> m].
-  real, dimension(SZIB_(G), SZJ_(G),SZK_(GV)+1) :: N2_u ! Square of Brunt-Vaisala freq at u-points [T-2 ~> s-2]
-  real, dimension(SZI_(G), SZJB_(G),SZK_(GV)+1) :: N2_v ! Square of Brunt-Vaisala freq at v-points [T-2 ~> s-2]
+  real, dimension(SZIB_(G), SZJ_(G),SZK_(GV)+1) :: N2_u ! Square of Brunt-Vaisala freq at u-points [L2 Z-2 T-2 ~> s-2]
+  real, dimension(SZI_(G), SZJB_(G),SZK_(GV)+1) :: N2_v ! Square of Brunt-Vaisala freq at v-points [L2 Z-2 T-2 ~> s-2]
+  real, dimension(SZIB_(G), SZJ_(G),SZK_(GV)+1) :: dzu ! Z-thickness at u-points [Z ~> m]
+  real, dimension(SZI_(G), SZJB_(G),SZK_(GV)+1) :: dzv ! Z-thickness at v-points [Z ~> m]
+  real, dimension(SZIB_(G), SZJ_(G),SZK_(GV)+1) :: dzSxN ! |Sx| N times dz at u-points [Z T-1 ~> m s-1]
+  real, dimension(SZI_(G), SZJB_(G),SZK_(GV)+1) :: dzSyN ! |Sy| N times dz at v-points [Z T-1 ~> m s-1]
 
   if (.not. associated(CS)) call MOM_error(FATAL, "MOM_lateral_mixing_coeffs.F90, calc_slope_functions:"//&
          "Module must be initialized before it is used.")
 
   if (CS%calculate_Eady_growth_rate) then
-    call find_eta(h, tv, G, GV, US, e, halo_size=2)
-    if (CS%use_stored_slopes) then
+    if (CS%use_simpler_Eady_growth_rate) then
+      call find_eta(h, tv, G, GV, US, e, halo_size=2)
       call calc_isoneutral_slopes(G, GV, US, h, e, tv, dt*CS%kappa_smooth, &
-                                  CS%slope_x, CS%slope_y, N2_u, N2_v, 1, OBC=OBC)
-      call calc_Visbeck_coeffs(h, CS%slope_x, CS%slope_y, N2_u, N2_v, G, GV, US, CS, OBC=OBC)
-!     call calc_slope_functions_using_just_e(h, G, CS, e, .false.)
+                                  CS%slope_x, CS%slope_y, N2_u=N2_u, N2_v=N2_v, dzu=dzu, dzv=dzv, &
+                                  dzSxN=dzSxN, dzSyN=dzSyN, halo=1, OBC=OBC)
+      call calc_Eady_growth_rate_2D(CS, G, GV, US, OBC, h, e, dzu, dzv, dzSxN, dzSyN, CS%SN_u, CS%SN_v)
     else
-      !call calc_isoneutral_slopes(G, GV, h, e, tv, dt*CS%kappa_smooth, CS%slope_x, CS%slope_y)
-      call calc_slope_functions_using_just_e(h, G, GV, US, CS, e, .true., OBC=OBC)
+      call find_eta(h, tv, G, GV, US, e, halo_size=2)
+      if (CS%use_stored_slopes) then
+        call calc_isoneutral_slopes(G, GV, US, h, e, tv, dt*CS%kappa_smooth, &
+                                    CS%slope_x, CS%slope_y, N2_u=N2_u, N2_v=N2_v, halo=1, OBC=OBC)
+        call calc_Visbeck_coeffs_old(h, CS%slope_x, CS%slope_y, N2_u, N2_v, G, GV, US, CS, OBC=OBC)
+      else
+        !call calc_isoneutral_slopes(G, GV, h, e, tv, dt*CS%kappa_smooth, CS%slope_x, CS%slope_y)
+        call calc_slope_functions_using_just_e(h, G, GV, US, CS, e, .true., OBC=OBC)
+      endif
     endif
   endif
 
   if (query_averaging_enabled(CS%diag)) then
+    if (CS%id_dzu > 0) call post_data(CS%id_dzu, dzu, CS%diag)
+    if (CS%id_dzv > 0) call post_data(CS%id_dzv, dzv, CS%diag)
+    if (CS%id_dzSxN > 0) call post_data(CS%id_dzSxN, dzSxN, CS%diag)
+    if (CS%id_dzSyN > 0) call post_data(CS%id_dzSyN, dzSyN, CS%diag)
     if (CS%id_SN_u > 0) call post_data(CS%id_SN_u, CS%SN_u, CS%diag)
     if (CS%id_SN_v > 0) call post_data(CS%id_SN_v, CS%SN_v, CS%diag)
     if (CS%id_L2u > 0)  call post_data(CS%id_L2u, CS%L2u, CS%diag)
     if (CS%id_L2v > 0)  call post_data(CS%id_L2v, CS%L2v, CS%diag)
-    if (CS%calculate_Eady_growth_rate .and. CS%use_stored_slopes) then
-      if (CS%id_N2_u > 0) call post_data(CS%id_N2_u, N2_u, CS%diag)
-      if (CS%id_N2_v > 0) call post_data(CS%id_N2_v, N2_v, CS%diag)
-    endif
+    if (CS%id_N2_u > 0) call post_data(CS%id_N2_u, N2_u, CS%diag)
+    if (CS%id_N2_v > 0) call post_data(CS%id_N2_v, N2_v, CS%diag)
   endif
 
 end subroutine calc_slope_functions
 
-!> Calculates factors used when setting diffusivity coefficients similar to Visbeck et al.
-subroutine calc_Visbeck_coeffs(h, slope_x, slope_y, N2_u, N2_v, G, GV, US, CS, OBC)
+!> Calculates factors used when setting diffusivity coefficients similar to Visbeck et al., 1997.
+!! This is on older implementation that is susceptible to large values of Eady growth rate
+!! for incropping layers.
+subroutine calc_Visbeck_coeffs_old(h, slope_x, slope_y, N2_u, N2_v, G, GV, US, CS, OBC)
   type(ocean_grid_type),                        intent(inout) :: G  !< Ocean grid structure
   type(verticalGrid_type),                      intent(in)    :: GV !< Vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),    intent(in)    :: h  !< Layer thickness [H ~> m or kg m-2]
@@ -632,14 +654,195 @@ subroutine calc_Visbeck_coeffs(h, slope_x, slope_y, N2_u, N2_v, G, GV, US, CS, O
   endif
 
   if (CS%debug) then
-    call uvchksum("calc_Visbeck_coeffs slope_[xy]", slope_x, slope_y, G%HI, haloshift=1)
-    call uvchksum("calc_Visbeck_coeffs N2_u, N2_v", N2_u, N2_v, G%HI, &
+    call uvchksum("calc_Visbeck_coeffs_old slope_[xy]", slope_x, slope_y, G%HI, haloshift=1)
+    call uvchksum("calc_Visbeck_coeffs_old N2_u, N2_v", N2_u, N2_v, G%HI, &
                   scale=US%s_to_T**2, scalar_pair=.true.)
-    call uvchksum("calc_Visbeck_coeffs SN_[uv]", CS%SN_u, CS%SN_v, G%HI, &
+    call uvchksum("calc_Visbeck_coeffs_old SN_[uv]", CS%SN_u, CS%SN_v, G%HI, &
                   scale=US%s_to_T, scalar_pair=.true.)
   endif
 
-end subroutine calc_Visbeck_coeffs
+end subroutine calc_Visbeck_coeffs_old
+
+!> Calculates the Eady growth rate (2D fields) for use in MEKE and the Visbeck schemes
+subroutine calc_Eady_growth_rate_2D(CS, G, GV, US, OBC, h, e, dzu, dzv, dzSxN, dzSyN, SN_u, SN_v)
+  type(VarMix_CS),                              intent(in) :: CS  !< Variable mixing coefficients
+  type(ocean_grid_type),                        intent(in) :: G   !< Ocean grid structure
+  type(verticalGrid_type),                      intent(in) :: GV  !< Vertical grid structure
+  type(unit_scale_type),                        intent(in) :: US  !< A dimensional unit scaling type
+  type(ocean_OBC_type),                pointer, intent(in) :: OBC !< Open boundaries control structure.
+real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),    intent(in) :: h   !< Interface height [Z ~> m]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1),  intent(in) :: e   !< Interface height [Z ~> m]
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)+1), intent(in) :: dzu !< dz at u-points [Z ~> m]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)+1), intent(in) :: dzv !< dz at v-points [Z ~> m]
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)+1), intent(in) :: dzSxN !< dz Sx N at u-points [Z T-1 ~> m s-1]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)+1), intent(in) :: dzSyN !< dz Sy N at v-points [Z T-1 ~> m s-1]
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)+1), intent(inout) :: SN_u !< SN at u-points [T-1 ~> s-1]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)+1), intent(inout) :: SN_v !< SN at v-points [T-1 ~> s-1]
+  ! Local variables
+  real :: D_scale ! The depth over which to average SN [Z ~> m]
+  real :: dnew ! Depth of bottom of layer [Z ~> m]
+  real :: dz ! Limited thickness of this layer [Z ~> m]
+  real :: weight ! Fraction of this layer that contributes to integral [nondim]
+  real :: sum_dz(SZI_(G)) ! Cumulative sum of z-thicknesses [Z ~> m]
+  real :: vint_SN(SZIB_(G)) ! Cumulative integral of SN [Z T-1 ~> m s-1]
+  real, dimension(SZIB_(G),SZJ_(G)) :: SN_cpy !< SN at u-points [T-1 ~> s-1]
+  real :: dz_neglect ! An incy wincy distance to avoid division by  zero [Z ~> m]
+  real :: r_crp_dist ! The inverse of the distance over which to scale the cropping [Z-1 ~. m-1]
+  real :: dB, dT ! Elevation variables used when cropping [Z ~> m]
+  integer :: i, j, k, l_seg
+  logical :: local_open_u_BC, local_open_v_BC, crop
+
+  dz_neglect = GV%H_subroundoff * GV%H_to_Z
+  D_scale = CS%Eady_GR_D_scale
+  if (D_scale<=0.) D_scale = 64.*GV%max_depth ! 0 means use full depth so choose something big
+  r_crp_dist = 1. / max( dz_neglect, CS%cropping_distance )
+  crop = CS%cropping_distance>=0. ! Only filter out in-/out-cropped interface is parameter if non-negative
+
+  local_open_u_BC = .false.
+  local_open_v_BC = .false.
+  if (associated(OBC)) then
+    local_open_u_BC = OBC%open_u_BCs_exist_globally
+    local_open_v_BC = OBC%open_v_BCs_exist_globally
+  endif
+
+  if (CS%debug) then
+    call uvchksum("calc_Eady_growth_rate_2D dz[uv]", dzu, dzv, G%HI, scale=US%Z_to_m, scalar_pair=.true.)
+    call uvchksum("calc_Eady_growth_rate_2D dzS2N2[uv]", dzSxN, dzSyN, G%HI, &
+                  scale=US%Z_to_m*US%s_to_T, scalar_pair=.true.)
+  endif
+
+  !$OMP parallel do default(shared)
+  do j=G%jsc-1,G%jec+1 ; do i=G%isc-1,G%iec+1
+    CS%SN_u(i,j) = 0.0
+    CS%SN_v(i,j) = 0.0
+  enddo ; enddo
+
+  !$OMP parallel do default(shared) private(dnew,dz,weight,l_seg,vint_SN,sum_dz)
+  do j = G%jsc-1,G%jec+1
+    do I=G%isc-1,G%iec
+      vint_SN(I) = 0.
+      sum_dz(I) = dz_neglect
+    enddo
+    if (crop) then
+      do K=2,GV%ke ; do I=G%isc-1,G%iec
+        dnew = sum_dz(I) + dzu(I,j,K) ! This is where the bottom of the layer is
+        dnew = min(dnew, D_scale) ! This limits the depth to D_scale
+        dz = max(0., dnew - sum_dz(I)) ! This is the part of the layer to be included in the integral.
+                                       ! When D_scale>dnew, dz=dzu (+roundoff error).
+                                       ! When sum_dz<D_scale<dnew, 0<dz<dzu.
+                                       ! When D_scale<sum_dz, dz=0.
+        weight = dz / ( dzu(I,j,K) + dz_neglect ) ! Fraction of this layer to include
+        dT = min( e(i,j,1), e(i+1,j,1) ) ! Deepest sea surface
+        dB = max( e(i,j,K), e(i+1,j,K) ) ! Shallowest interface
+        weight = weight * min( max( 0., (dT-dB)*r_crp_dist ), 1. )
+        dT = min( e(i,j,K), e(i+1,j,K) ) ! Deepest interface
+        dB = max( e(i,j,GV%ke+1), e(i+1,j,GV%ke+1) ) ! Shallowest topography
+        weight = weight * min( max( 0., (dT-dB)*r_crp_dist ), 1. )
+        vint_SN(I) = vint_SN(I) + weight * dzSxN(I,j,K)
+        sum_dz(I) = sum_dz(I) + weight * dzu(I,j,K)
+      enddo ; enddo
+    else
+      do K=2,GV%ke ; do I=G%isc-1,G%iec
+        dnew = sum_dz(I) + dzu(I,j,K) ! This is where the bottom of the layer is
+        dnew = min(dnew, D_scale) ! This limits the depth to D_scale
+        dz = max(0., dnew - sum_dz(I)) ! This is the part of the layer to be included in the integral.
+                                       ! When D_scale>dnew, dz=dzu (+roundoff error).
+                                       ! When sum_dz<D_scale<dnew, 0<dz<dzu.
+                                       ! When D_scale<sum_dz, dz=0.
+        weight = dz / ( dzu(I,j,K) + dz_neglect ) ! Fraction of this layer to include
+        vint_SN(I) = vint_SN(I) + weight * dzSxN(I,j,K)
+        sum_dz(I) = sum_dz(I) + weight * dzu(I,j,K)
+      enddo ; enddo
+    endif
+    do I=G%isc-1,G%iec
+      CS%SN_u(I,j) = G%mask2dCu(I,j) * ( vint_SN(I) / sum_dz(I) )
+      SN_cpy(I,j) = G%mask2dCu(I,j) * ( vint_SN(I) / sum_dz(I) )
+    enddo
+    if (local_open_u_BC) then
+      do I=G%isc-1,G%iec
+        l_seg = OBC%segnum_u(I,j)
+        if (l_seg /= OBC_NONE) then
+          if (OBC%segment(l_seg)%open) then
+            CS%SN_u(i,J) = 0.
+          endif
+        endif
+      enddo
+    endif
+  enddo
+
+  !$OMP parallel do default(shared) private(dnew,dz,weight,l_seg)
+  do J = G%jsc-1,G%jec
+    do i=G%isc-1,G%iec+1
+      vint_SN(i) = 0.
+      sum_dz(i) = dz_neglect
+    enddo
+    if (crop) then
+      do K=2,GV%ke ; do i=G%isc-1,G%iec+1
+        dnew = sum_dz(i) + dzv(i,J,K) ! This is where the bottom of the layer is
+        dnew = min(dnew, D_scale) ! This limits the depth to D_scale
+        dz = max(0., dnew - sum_dz(i)) ! This is the part of the layer to be included in the integral.
+                                       ! When D_scale>dnew, dz=dzu (+roundoff error).
+                                       ! When sum_dz<D_scale<dnew, 0<dz<dzu.
+                                       ! When D_scale<sum_dz, dz=0.
+        weight = dz / ( dzv(i,J,K) + dz_neglect ) ! Fraction of this layer to include
+        dT = min( e(i,j,1), e(i,j+1,1) ) ! Deepest sea surface
+        dB = max( e(i,j,K), e(i,j+1,K) ) ! Shallowest interface
+        weight = weight * min( max( 0., (dT-dB)*r_crp_dist ), 1. )
+        dT = min( e(i,j,K), e(i,j+1,K) )! Deepest interface
+        dB = max( e(i,j,GV%ke+1), e(i,j+1,GV%ke+1) ) ! Shallowest topography
+        weight = weight * min( max( 0., (dT-dB)*r_crp_dist ), 1. )
+        vint_SN(I) = vint_SN(I) + weight**2 * dzSyN(i,J,K)
+        sum_dz(i) = sum_dz(i) + weight * dzv(i,J,K)
+      enddo ; enddo
+    else
+      do K=2,GV%ke ; do i=G%isc-1,G%iec+1
+        dnew = sum_dz(i) + dzv(i,J,K) ! This is where the bottom of the layer is
+        dnew = min(dnew, D_scale) ! This limits the depth to D_scale
+        dz = max(0., dnew - sum_dz(i)) ! This is the part of the layer to be included in the integral.
+                                       ! When D_scale>dnew, dz=dzu (+roundoff error).
+                                       ! When sum_dz<D_scale<dnew, 0<dz<dzu.
+                                       ! When D_scale<sum_dz, dz=0.
+        weight = dz / ( dzv(i,J,K) + dz_neglect ) ! Fraction of this layer to include
+        vint_SN(I) = vint_SN(I) + weight**2 * dzSyN(i,J,K)
+        sum_dz(i) = sum_dz(i) + weight * dzv(i,J,K)
+      enddo ; enddo
+    endif
+    do i=G%isc-1,G%iec+1
+      CS%SN_v(i,J) = G%mask2dCv(i,J) * ( vint_SN(i) / sum_dz(i) )
+    enddo
+    if (local_open_v_BC) then
+      do i=G%isc-1,G%iec+1
+        l_seg = OBC%segnum_v(i,J)
+        if (l_seg /= OBC_NONE) then
+          if (OBC%segment(l_seg)%open) then
+            CS%SN_v(i,J) = 0.
+          endif
+        endif
+      enddo
+    endif
+  enddo
+
+  do j = G%jsc,G%jec
+    do I=G%isc-1,G%iec
+      CS%SN_u(I,j) = sqrt( SN_cpy(I,j)**2 &
+                         + 0.25*( (CS%SN_v(i,J)**2 + CS%SN_v(i+1,J-1)**2) &
+                                + (CS%SN_v(i+1,J)**2 + CS%SN_v(i,J-1)**2) ) )
+    enddo
+  enddo
+  do J = G%jsc-1,G%jec
+    do i=G%isc,G%iec
+      CS%SN_v(i,J) = sqrt( CS%SN_v(i,J)**2 &
+                         + 0.25*( (SN_cpy(I,j)**2 + SN_cpy(I-1,j+1)**2) &
+                                + (SN_cpy(I,j+1)**2 + SN_cpy(I-1,j)**2) ) )
+    enddo
+  enddo
+
+  if (CS%debug) then
+    call uvchksum("calc_Eady_growth_rate_2D SN_[uv]", CS%SN_u, CS%SN_v, G%HI, &
+                  scale=US%s_to_T, scalar_pair=.true.)
+  endif
+
+end subroutine calc_Eady_growth_rate_2D
 
 !> The original calc_slope_function() that calculated slopes using
 !! interface positions only, not accounting for density variations.
@@ -980,7 +1183,7 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
   CS%calculate_cg1 = .false.
   CS%calculate_Rd_dx = .false.
   CS%calculate_res_fns = .false.
-  CS%calculate_Eady_growth_rate = .false.
+  CS%use_simpler_Eady_growth_rate = .false.
   CS%calculate_depth_fns = .false.
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mdl, version, "")
@@ -1042,7 +1245,10 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
   call get_param(param_file, mdl, "USE_MEKE", use_MEKE, &
                  default=.false., do_not_log=.true.)
   CS%calculate_Rd_dx = CS%calculate_Rd_dx .or. use_MEKE
-  CS%calculate_Eady_growth_rate = CS%calculate_Eady_growth_rate .or. use_MEKE
+  ! Indicate whether to calculate the Eady growth rate
+  CS%calculate_Eady_growth_rate = use_MEKE &
+                                  .or. (KhTr_Slope_Cff>0.) &
+                                  .or. (KhTh_Slope_Cff>0.)
   call get_param(param_file, mdl, "KHTR_PASSIVITY_COEFF", KhTr_passivity_coeff, &
                  default=0., do_not_log=.true.)
   CS%calculate_Rd_dx = CS%calculate_Rd_dx .or. (KhTr_passivity_coeff>0.)
@@ -1062,13 +1268,16 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
     allocate(CS%ebt_struct(isd:ied,jsd:jed,GV%ke)) ; CS%ebt_struct(:,:,:) = 0.0
   endif
 
-  if (KhTr_Slope_Cff>0. .or. KhTh_Slope_Cff>0.) then
-    CS%calculate_Eady_growth_rate = .true.
-    call get_param(param_file, mdl, "VISBECK_MAX_SLOPE", CS%Visbeck_S_max, &
-          "If non-zero, is an upper bound on slopes used in the "//&
-          "Visbeck formula for diffusivity. This does not affect the "//&
-          "isopycnal slope calculation used within thickness diffusion.",  &
-          units="nondim", default=0.0)
+  if (CS%use_stored_slopes) then
+    if (KhTr_Slope_Cff>0. .or. KhTh_Slope_Cff>0.) then
+      call get_param(param_file, mdl, "VISBECK_MAX_SLOPE", CS%Visbeck_S_max, &
+            "If non-zero, is an upper bound on slopes used in the "//&
+            "Visbeck formula for diffusivity. This does not affect the "//&
+            "isopycnal slope calculation used within thickness diffusion.",  &
+            units="nondim", default=0.0)
+    else
+      CS%Visbeck_S_max = 0.
+    endif
   endif
 
   if (CS%use_stored_slopes) then
@@ -1089,10 +1298,27 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
        'Inverse eddy time-scale, S*N, at u-points', 's-1', conversion=US%s_to_T)
     CS%id_SN_v = register_diag_field('ocean_model', 'SN_v', diag%axesCv1, Time, &
        'Inverse eddy time-scale, S*N, at v-points', 's-1', conversion=US%s_to_T)
-    call get_param(param_file, mdl, "VARMIX_KTOP", CS%VarMix_Ktop, &
-                 "The layer number at which to start vertical integration "//&
-                 "of S*N for purposes of finding the Eady growth rate.", &
-                 units="nondim", default=2)
+    call get_param(param_file, mdl, "USE_SIMPLER_EADY_GROWTH_RATE", CS%use_simpler_Eady_growth_rate, &
+                   "If true, use a simpler method to calculate the Eady growth rate "//&
+                   "that avoids division by layer thickness. Recommended.", default=.false.)
+    if (CS%use_simpler_Eady_growth_rate) then
+      if (.not. CS%use_stored_slopes) call MOM_error(FATAL, &
+           "MOM_lateral_mixing_coeffs.F90, VarMix_init:"//&
+           "When USE_SIMPLER_EADY_GROWTH_RATE=True, USE_STORED_SLOPES must also be True.")
+      call get_param(param_file, mdl, "EADY_GROWTH_RATE_D_SCALE", CS%Eady_GR_D_scale, &
+                     "The depth from surface over which to average SN when calculating "//&
+                     "a 2D Eady growth rate. Zero mean use full depth.", &
+                      units="m", default=0., scale=US%m_to_Z)
+      call get_param(param_file, mdl, "EADY_GROWTH_RATE_CROPPING_DISTANCE", CS%cropping_distance, &
+                     "Distance from surface or bottom to filter out outcropped or "//&
+                     "incropped interfaces for the Eady growth rate calc. "//&
+                     "Negative values disables cropping.", units="m", default=0., scale=US%m_to_Z)
+    else
+      call get_param(param_file, mdl, "VARMIX_KTOP", CS%VarMix_Ktop, &
+                     "The layer number at which to start vertical integration "//&
+                     "of S*N for purposes of finding the Eady growth rate.", &
+                     units="nondim", default=2)
+    endif
   endif
 
   if (KhTr_Slope_Cff>0. .or. KhTh_Slope_Cff>0.) then
@@ -1129,6 +1355,20 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
     CS%id_N2_v = register_diag_field('ocean_model', 'N2_v', diag%axesCvi, Time, &
          'Square of Brunt-Vaisala frequency, N^2, at v-points, as used in Visbeck et al.', &
          's-2', conversion=(US%L_to_Z*US%s_to_T)**2)
+  endif
+  if (CS%use_simpler_Eady_growth_rate) then
+    CS%id_dzu = register_diag_field('ocean_model', 'dzu_Visbeck', diag%axesCui, Time, &
+         'dz at u-points, used in calculating Eady growth rate in Visbeck et al..', &
+         'm', conversion=US%Z_to_m)
+    CS%id_dzv = register_diag_field('ocean_model', 'dzv_Visbeck', diag%axesCvi, Time, &
+         'dz at v-points, used in calculating Eady growth rate in Visbeck et al..', &
+         'm', conversion=US%Z_to_m)
+    CS%id_dzSxN = register_diag_field('ocean_model', 'dzSxN', diag%axesCui, Time, &
+         'dz * |slope_x| * N, used in calculating Eady growth rate in '//&
+         'Visbeck et al..', 'm s-1', conversion=US%Z_to_m*US%s_to_T)
+    CS%id_dzSyN = register_diag_field('ocean_model', 'dzSyN', diag%axesCvi, Time, &
+         'dz * |slope_y| * N, used in calculating Eady growth rate in '//&
+         'Visbeck et al..', 'm s-1', conversion=US%Z_to_m*US%s_to_T)
   endif
   if (CS%use_stored_slopes) then
     CS%id_S2_u = register_diag_field('ocean_model', 'S2_u', diag%axesCu1, Time, &
@@ -1351,6 +1591,65 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
   endif
 
 end subroutine VarMix_init
+
+!> Destructor for VarMix control structure
+subroutine VarMix_end(CS)
+  type(VarMix_CS), intent(inout) :: CS
+
+  if (CS%Resoln_use_ebt .or. CS%khth_use_ebt_struct) &
+    deallocate(CS%ebt_struct)
+
+  if (CS%use_stored_slopes) then
+    deallocate(CS%slope_x)
+    deallocate(CS%slope_y)
+  endif
+
+  if (CS%calculate_Eady_growth_rate) then
+    deallocate(CS%SN_u)
+    deallocate(CS%SN_v)
+  endif
+
+  if (associated(CS%L2u)) deallocate(CS%L2u)
+  if (associated(CS%L2v)) deallocate(CS%L2v)
+
+  if (CS%Resoln_scaled_Kh .or. CS%Resoln_scaled_KhTh .or. CS%Resoln_scaled_KhTr) then
+    deallocate(CS%Res_fn_h)
+    deallocate(CS%Res_fn_q)
+    deallocate(CS%Res_fn_u)
+    deallocate(CS%Res_fn_v)
+    deallocate(CS%beta_dx2_q)
+    deallocate(CS%beta_dx2_u)
+    deallocate(CS%beta_dx2_v)
+    deallocate(CS%f2_dx2_q)
+    deallocate(CS%f2_dx2_u)
+    deallocate(CS%f2_dx2_v)
+  endif
+
+  if (CS%Depth_scaled_KhTh) then
+    deallocate(CS%Depth_fn_u)
+    deallocate(CS%Depth_fn_v)
+  endif
+
+  if (CS%calculate_Rd_dx) then
+    deallocate(CS%Rd_dx_h)
+    deallocate(CS%beta_dx2_h)
+    deallocate(CS%f2_dx2_h)
+  endif
+
+  if (CS%calculate_cg1) then
+    deallocate(CS%cg1)
+  endif
+
+  if (CS%Use_QG_Leith_GM) then
+    DEALLOC_(CS%Laplac3_const_u)
+    DEALLOC_(CS%Laplac3_const_v)
+    DEALLOC_(CS%KH_u_QG)
+    DEALLOC_(CS%KH_v_QG)
+  endif
+
+  if (CS%calculate_cg1) deallocate(CS%wave_speed_CSp)
+
+end subroutine VarMix_end
 
 !> \namespace mom_lateral_mixing_coeffs
 !!
