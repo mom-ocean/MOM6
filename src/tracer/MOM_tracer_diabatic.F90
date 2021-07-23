@@ -152,7 +152,7 @@ subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, GV, &
         b1(i) = 1.0 / (b_denom_1 + eb(i,j,1))
         d1(i) = b_denom_1 * b1(i)
         h_tr = h_old(i,j,1) + h_neglect
-        tr(i,j,1) = b1(i)*(h_tr*tr(i,j,1) + sfc_src(i,j))
+        tr(i,j,1) = (b1(i)*h_tr)*tr(i,j,1) + b1(i)*sfc_src(i,j)
       endif ; enddo
       do k=2,nz-1 ; do i=is,ie ; if (G%mask2dT(i,j) > 0.5) then
         c1(i,k) = eb(i,j,k-1) * b1(i)
@@ -190,7 +190,7 @@ subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, GV, &
         b_denom_1 = h_tr + ea(i,j,1)
         b1(i) = 1.0 / (b_denom_1 + eb(i,j,1))
         d1(i) = h_tr * b1(i)
-        tr(i,j,1) = b1(i)*(h_tr*tr(i,j,1) + sfc_src(i,j))
+        tr(i,j,1) = (b1(i)*h_tr)*tr(i,j,1) + b1(i)*sfc_src(i,j)
       endif ; enddo
       do k=2,nz-1 ; do i=is,ie ; if (G%mask2dT(i,j) > 0.5) then
         c1(i,k) = eb(i,j,k-1) * b1(i)
@@ -351,7 +351,7 @@ subroutine tracer_vertdiff_Eulerian(h_old, ent, dt, tr, G, GV, &
         b1(i) = 1.0 / (b_denom_1 + ent(i,j,2))
         d1(i) = b_denom_1 * b1(i)
         h_tr = h_old(i,j,1) + h_neglect
-        tr(i,j,1) = b1(i)*(h_tr*tr(i,j,1) + sfc_src(i,j))
+        tr(i,j,1) = (b1(i)*h_tr)*tr(i,j,1) + b1(i)*sfc_src(i,j)
       endif ; enddo
       do k=2,nz-1 ; do i=is,ie ; if (G%mask2dT(i,j) > 0.5) then
         c1(i,k) = ent(i,j,K) * b1(i)
@@ -389,7 +389,7 @@ subroutine tracer_vertdiff_Eulerian(h_old, ent, dt, tr, G, GV, &
         b_denom_1 = h_tr + ent(i,j,1)
         b1(i) = 1.0 / (b_denom_1 + ent(i,j,2))
         d1(i) = h_tr * b1(i)
-        tr(i,j,1) = b1(i)*(h_tr*tr(i,j,1) + sfc_src(i,j))
+        tr(i,j,1) = (b1(i)*h_tr)*tr(i,j,1) + b1(i)*sfc_src(i,j)
       endif ; enddo
       do k=2,nz-1 ; do i=is,ie ; if (G%mask2dT(i,j) > 0.5) then
         c1(i,k) = ent(i,j,K) * b1(i)
