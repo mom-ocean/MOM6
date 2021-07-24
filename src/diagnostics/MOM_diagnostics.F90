@@ -290,6 +290,13 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
     if (CS%id_dv_dt>0) call post_data(CS%id_dv_dt, CS%dv_dt, CS%diag, alt_h = diag_pre_sync%h_state)
 
     if (CS%id_dh_dt>0) call post_data(CS%id_dh_dt, CS%dh_dt, CS%diag, alt_h = diag_pre_sync%h_state)
+    
+    do k=1,nz ; do j=js,je ; do I=is-1,ie
+        ADp%du_dt(I,j,k) = CS%du_dt(I,j,k)
+    enddo ; enddo ; enddo
+    do k=1,nz ; do J=js-1,je ; do i=is,ie
+        ADp%dv_dt(i,J,k) = CS%dv_dt(i,J,k)
+    enddo ; enddo ; enddo
 
     !! Diagnostics for terms multiplied by fractional thicknesses
 

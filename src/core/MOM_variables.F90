@@ -161,6 +161,8 @@ type, public :: accel_diag_ptrs
 
   ! Each of the following fields has nz layers.
   real, pointer, dimension(:,:,:) :: &
+    du_dt => NULL(), &     !< Zonal acceleration [L T-2 ~> m s-2]
+    dv_dt => NULL(), &     !< Meridional acceleration [L T-2 ~> m s-2]
     diffu => NULL(), &     !< Zonal acceleration due to along isopycnal viscosity [L T-2 ~> m s-2]
     diffv => NULL(), &     !< Meridional acceleration due to along isopycnal viscosity [L T-2 ~> m s-2]
     diffu_visc_rem => NULL(), &     !< Zonal acceleration due to along isopycnal viscosity multiplied by viscous remnant fraction [L T-2 ~> m s-2]
@@ -175,6 +177,8 @@ type, public :: accel_diag_ptrs
     PFv_visc_rem => NULL(), &       !< Meridional acceleration due to pressure forces multiplied by viscous remnant fraction [L T-2 ~> m s-2]
     du_dt_visc => NULL(), &!< Zonal acceleration due to vertical viscosity [L T-2 ~> m s-2]
     dv_dt_visc => NULL(), &!< Meridional acceleration due to vertical viscosity [L T-2 ~> m s-2]
+    du_dt_visc_rem => NULL(), &!< Zonal acceleration due to vertical viscosity multiplied by viscous remnant fraction [L T-2 ~> m s-2]
+    dv_dt_visc_rem => NULL(), &!< Meridional acceleration due to vertical viscosity multiplied by viscous remnant fraction [L T-2 ~> m s-2]
     du_dt_dia => NULL(), & !< Zonal acceleration due to diapycnal  mixing [L T-2 ~> m s-2]
     dv_dt_dia => NULL(), & !< Meridional acceleration due to diapycnal  mixing [L T-2 ~> m s-2]
     u_accel_bt => NULL(), &!< Pointer to the zonal barotropic-solver acceleration [L T-2 ~> m s-2]
