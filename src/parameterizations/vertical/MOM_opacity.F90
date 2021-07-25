@@ -1123,8 +1123,12 @@ subroutine opacity_end(CS, optics)
   if (associated(CS)) deallocate(CS)
 
   if (present(optics)) then ; if (associated(optics)) then
-    if (associated(optics%opacity_band)) deallocate(optics%opacity_band)
     if (associated(optics%sw_pen_band)) deallocate(optics%sw_pen_band)
+    if (associated(optics%opacity_band)) deallocate(optics%opacity_band)
+    if (associated(optics%max_wavelength_band)) &
+      deallocate(optics%max_wavelength_band)
+    if (associated(optics%min_wavelength_band)) &
+      deallocate(optics%min_wavelength_band)
   endif ; endif
 
 end subroutine opacity_end

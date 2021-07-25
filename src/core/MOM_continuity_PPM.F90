@@ -430,7 +430,7 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, GV, US, CS, LB, uhbt, OBC, &
       if (present(uhbt)) then
         call zonal_flux_adjust(u, h_in, h_L, h_R, uhbt(:,j), uh_tot_0, duhdu_tot_0, du, &
                                du_max_CFL, du_min_CFL, dt, G, GV, US, CS, visc_rem, &
-                               j, ish, ieh, do_I, .true., uh, OBC=OBC)
+                               j, ish, ieh, do_I, uh, OBC=OBC)
 
         if (present(u_cor)) then ; do k=1,nz
           do I=ish-1,ieh ; u_cor(I,j,k) = u(I,j,k) + du(I) * visc_rem(I,k) ; enddo
@@ -710,7 +710,7 @@ end subroutine zonal_face_thickness
 !! desired barotropic (layer-summed) transport.
 subroutine zonal_flux_adjust(u, h_in, h_L, h_R, uhbt, uh_tot_0, duhdu_tot_0, &
                              du, du_max_CFL, du_min_CFL, dt, G, GV, US, CS, visc_rem, &
-                             j, ish, ieh, do_I_in, full_precision, uh_3d, OBC)
+                             j, ish, ieh, do_I_in, uh_3d, OBC)
   type(ocean_grid_type),                     intent(inout) :: G    !< Ocean's grid structure.
   type(verticalGrid_type),                   intent(in)    :: GV   !< Ocean's vertical grid structure.
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), intent(in)   :: u    !< Zonal velocity [L T-1 ~> m s-1].
@@ -746,9 +746,6 @@ subroutine zonal_flux_adjust(u, h_in, h_L, h_R, uhbt, uh_tot_0, duhdu_tot_0, &
   integer,                                   intent(in)    :: ieh  !< End of index range.
   logical, dimension(SZIB_(G)),              intent(in)    :: do_I_in     !<
                        !! A logical flag indicating which I values to work on.
-  logical,                         optional, intent(in)    :: full_precision !<
-                       !! A flag indicating how carefully to iterate.  The
-                       !! default is .true. (more accurate).
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), optional, intent(inout) :: uh_3d !<
                        !! Volume flux through zonal faces = u*h*dy [H L2 T-1 ~> m3 s-1 or kg s-1].
   type(ocean_OBC_type),            optional, pointer       :: OBC !< Open boundaries control structure.
@@ -768,10 +765,9 @@ subroutine zonal_flux_adjust(u, h_in, h_L, h_R, uhbt, uh_tot_0, duhdu_tot_0, &
   real :: tol_eta ! The tolerance for the current iteration [H ~> m or kg m-2].
   real :: tol_vel ! The tolerance for velocity in the current iteration [L T-1 ~> m s-1].
   integer :: i, k, nz, itt, max_itts = 20
-  logical :: full_prec, domore, do_I(SZIB_(G))
+  logical :: domore, do_I(SZIB_(G))
 
   nz = GV%ke
-  full_prec = .true. ; if (present(full_precision)) full_prec = full_precision
 
   uh_aux(:,:) = 0.0 ; duhdu(:,:) = 0.0
 
@@ -787,16 +783,12 @@ subroutine zonal_flux_adjust(u, h_in, h_L, h_R, uhbt, uh_tot_0, duhdu_tot_0, &
   enddo
 
   do itt=1,max_itts
-    if (full_prec) then
-      select case (itt)
-        case (:1) ; tol_eta = 1e-6 * CS%tol_eta
-        case (2)  ; tol_eta = 1e-4 * CS%tol_eta
-        case (3)  ; tol_eta = 1e-2 * CS%tol_eta
-        case default ; tol_eta = CS%tol_eta
-      end select
-    else
-      tol_eta = CS%tol_eta_aux ; if (itt<=1) tol_eta = 1e-6 * CS%tol_eta_aux
-    endif
+    select case (itt)
+      case (:1) ; tol_eta = 1e-6 * CS%tol_eta
+      case (2)  ; tol_eta = 1e-4 * CS%tol_eta
+      case (3)  ; tol_eta = 1e-2 * CS%tol_eta
+      case default ; tol_eta = CS%tol_eta
+    end select
     tol_vel = CS%tol_vel
 
     do I=ish-1,ieh
@@ -809,30 +801,23 @@ subroutine zonal_flux_adjust(u, h_in, h_L, h_R, uhbt, uh_tot_0, duhdu_tot_0, &
       if ((dt * min(G%IareaT(i,j),G%IareaT(i+1,j))*abs(uh_err(I)) > tol_eta) .or. &
           (CS%better_iter .and. ((abs(uh_err(I)) > tol_vel * duhdu_tot(I)) .or. &
                                  (abs(uh_err(I)) > uh_err_best(I))) )) then
-        !   Use Newton's method, provided it stays bounded.  Otherwise bisect
-        ! the value with the appropriate bound.
-        if (full_prec) then
-          ddu = -uh_err(I) / duhdu_tot(I)
-          du_prev = du(I)
-          du(I) = du(I) + ddu
-          if (abs(ddu) < 1.0e-15*abs(du(I))) then
-            do_I(I) = .false. ! ddu is small enough to quit.
-          elseif (ddu > 0.0) then
-            if (du(I) >= du_max(I)) then
-              du(I) = 0.5*(du_prev + du_max(I))
-              if (du_max(I) - du_prev < 1.0e-15*abs(du(I))) do_I(I) = .false.
-            endif
-          else ! ddu < 0.0
-            if (du(I) <= du_min(I)) then
-              du(I) = 0.5*(du_prev + du_min(I))
-              if (du_prev - du_min(I) < 1.0e-15*abs(du(I))) do_I(I) = .false.
-            endif
+      !   Use Newton's method, provided it stays bounded.  Otherwise bisect
+      ! the value with the appropriate bound.
+        ddu = -uh_err(I) / duhdu_tot(I)
+        du_prev = du(I)
+        du(I) = du(I) + ddu
+        if (abs(ddu) < 1.0e-15*abs(du(I))) then
+          do_I(I) = .false. ! ddu is small enough to quit.
+        elseif (ddu > 0.0) then
+          if (du(I) >= du_max(I)) then
+            du(I) = 0.5*(du_prev + du_max(I))
+            if (du_max(I) - du_prev < 1.0e-15*abs(du(I))) do_I(I) = .false.
           endif
-        else
-          !   Use Newton's method, provided it stays bounded, just like above.
-          du(I) = du(I) - uh_err(I) / duhdu_tot(I)
-          if ((du(I) >= du_max(I)) .or. (du(I) <= du_min(I))) &
-            du(I) = 0.5*(du_max(I) + du_min(I))
+        else ! ddu < 0.0
+          if (du(I) <= du_min(I)) then
+            du(I) = 0.5*(du_prev + du_min(I))
+            if (du_prev - du_min(I) < 1.0e-15*abs(du(I))) do_I(I) = .false.
+          endif
         endif
         if (do_I(I)) domore = .true.
       else
@@ -950,7 +935,7 @@ subroutine set_zonal_BT_cont(u, h_in, h_L, h_R, BT_cont, uh_tot_0, duhdu_tot_0, 
   do I=ish-1,ieh ; zeros(I) = 0.0 ; enddo
   call zonal_flux_adjust(u, h_in, h_L, h_R, zeros, uh_tot_0, duhdu_tot_0, du0, &
                          du_max_CFL, du_min_CFL, dt, G, GV, US, CS, visc_rem, &
-                         j, ish, ieh, do_I, .true.)
+                         j, ish, ieh, do_I)
 
   ! Determine the westerly- and easterly- fluxes.  Choose a sufficiently
   ! negative velocity correction for the easterly-flux, and a sufficiently
@@ -1253,7 +1238,7 @@ subroutine meridional_mass_flux(v, h_in, vh, dt, G, GV, US, CS, LB, vhbt, OBC, &
       if (present(vhbt)) then
         call meridional_flux_adjust(v, h_in, h_L, h_R, vhbt(:,J), vh_tot_0, dvhdv_tot_0, dv, &
                                dv_max_CFL, dv_min_CFL, dt, G, GV, US, CS, visc_rem, &
-                               j, ish, ieh, do_I, .true., vh, OBC=OBC)
+                               j, ish, ieh, do_I, vh, OBC=OBC)
 
         if (present(v_cor)) then ; do k=1,nz
           do i=ish,ieh ; v_cor(i,J,k) = v(i,J,k) + dv(i) * visc_rem(i,k) ; enddo
@@ -1537,7 +1522,7 @@ end subroutine merid_face_thickness
 !> Returns the barotropic velocity adjustment that gives the desired barotropic (layer-summed) transport.
 subroutine meridional_flux_adjust(v, h_in, h_L, h_R, vhbt, vh_tot_0, dvhdv_tot_0, &
                              dv, dv_max_CFL, dv_min_CFL, dt, G, GV, US, CS, visc_rem, &
-                             j, ish, ieh, do_I_in, full_precision, vh_3d, OBC)
+                             j, ish, ieh, do_I_in, vh_3d, OBC)
   type(ocean_grid_type),   intent(inout) :: G    !< Ocean's grid structure.
   type(verticalGrid_type), intent(in)    :: GV   !< Ocean's vertical grid structure.
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
@@ -1572,8 +1557,6 @@ subroutine meridional_flux_adjust(v, h_in, h_L, h_R, vhbt, vh_tot_0, dvhdv_tot_0
   integer,                  intent(in)    :: ieh  !< End of index range.
   logical, dimension(SZI_(G)), &
                             intent(in)    :: do_I_in  !< A flag indicating which I values to work on.
-  logical,        optional, intent(in)    :: full_precision !< A flag indicating how carefully to
-                             !! iterate.  The default is .true. (more accurate).
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
                   optional, intent(inout) :: vh_3d !< Volume flux through meridional
                              !! faces = v*h*dx [H L2 T-1 ~> m3 s-1 or kg s-1].
@@ -1594,10 +1577,9 @@ subroutine meridional_flux_adjust(v, h_in, h_L, h_R, vhbt, vh_tot_0, dvhdv_tot_0
   real :: tol_eta ! The tolerance for the current iteration [H ~> m or kg m-2].
   real :: tol_vel ! The tolerance for velocity in the current iteration [L T-1 ~> m s-1].
   integer :: i, k, nz, itt, max_itts = 20
-  logical :: full_prec, domore, do_I(SZI_(G))
+  logical :: domore, do_I(SZI_(G))
 
   nz = GV%ke
-  full_prec = .true. ; if (present(full_precision)) full_prec = full_precision
 
   vh_aux(:,:) = 0.0 ; dvhdv(:,:) = 0.0
 
@@ -1613,16 +1595,12 @@ subroutine meridional_flux_adjust(v, h_in, h_L, h_R, vhbt, vh_tot_0, dvhdv_tot_0
   enddo
 
   do itt=1,max_itts
-    if (full_prec) then
-      select case (itt)
-        case (:1) ; tol_eta = 1e-6 * CS%tol_eta
-        case (2)  ; tol_eta = 1e-4 * CS%tol_eta
-        case (3)  ; tol_eta = 1e-2 * CS%tol_eta
-        case default ; tol_eta = CS%tol_eta
-      end select
-    else
-      tol_eta = CS%tol_eta_aux ; if (itt<=1) tol_eta = 1e-6 * CS%tol_eta_aux
-    endif
+    select case (itt)
+      case (:1) ; tol_eta = 1e-6 * CS%tol_eta
+      case (2)  ; tol_eta = 1e-4 * CS%tol_eta
+      case (3)  ; tol_eta = 1e-2 * CS%tol_eta
+      case default ; tol_eta = CS%tol_eta
+    end select
     tol_vel = CS%tol_vel
 
     do i=ish,ieh
@@ -1637,28 +1615,21 @@ subroutine meridional_flux_adjust(v, h_in, h_L, h_R, vhbt, vh_tot_0, dvhdv_tot_0
                                  (abs(vh_err(i)) > vh_err_best(i))) )) then
         !   Use Newton's method, provided it stays bounded.  Otherwise bisect
         ! the value with the appropriate bound.
-        if (full_prec) then
-          ddv = -vh_err(i) / dvhdv_tot(i)
-          dv_prev = dv(i)
-          dv(i) = dv(i) + ddv
-          if (abs(ddv) < 1.0e-15*abs(dv(i))) then
-            do_I(i) = .false. ! ddv is small enough to quit.
-          elseif (ddv > 0.0) then
-            if (dv(i) >= dv_max(i)) then
-              dv(i) = 0.5*(dv_prev + dv_max(i))
-              if (dv_max(i) - dv_prev < 1.0e-15*abs(dv(i))) do_I(i) = .false.
-            endif
-          else ! dvv(i) < 0.0
-            if (dv(i) <= dv_min(i)) then
-              dv(i) = 0.5*(dv_prev + dv_min(i))
-              if (dv_prev - dv_min(i) < 1.0e-15*abs(dv(i))) do_I(i) = .false.
-            endif
+        ddv = -vh_err(i) / dvhdv_tot(i)
+        dv_prev = dv(i)
+        dv(i) = dv(i) + ddv
+        if (abs(ddv) < 1.0e-15*abs(dv(i))) then
+          do_I(i) = .false. ! ddv is small enough to quit.
+        elseif (ddv > 0.0) then
+          if (dv(i) >= dv_max(i)) then
+            dv(i) = 0.5*(dv_prev + dv_max(i))
+            if (dv_max(i) - dv_prev < 1.0e-15*abs(dv(i))) do_I(i) = .false.
           endif
-        else
-          !   Use Newton's method, provided it stays bounded, just like above.
-          dv(i) = dv(i) - vh_err(i) / dvhdv_tot(i)
-          if ((dv(i) >= dv_max(i)) .or. (dv(i) <= dv_min(i))) &
-            dv(i) = 0.5*(dv_max(i) + dv_min(i))
+        else ! dvv(i) < 0.0
+          if (dv(i) <= dv_min(i)) then
+            dv(i) = 0.5*(dv_prev + dv_min(i))
+            if (dv_prev - dv_min(i) < 1.0e-15*abs(dv(i))) do_I(i) = .false.
+          endif
         endif
         if (do_I(i)) domore = .true.
       else
@@ -1776,7 +1747,7 @@ subroutine set_merid_BT_cont(v, h_in, h_L, h_R, BT_cont, vh_tot_0, dvhdv_tot_0, 
   do i=ish,ieh ; zeros(i) = 0.0 ; enddo
   call meridional_flux_adjust(v, h_in, h_L, h_R, zeros, vh_tot_0, dvhdv_tot_0, dv0, &
                          dv_max_CFL, dv_min_CFL, dt, G, GV, US, CS, visc_rem, &
-                         j, ish, ieh, do_I, .true.)
+                         j, ish, ieh, do_I)
 
   !   Determine the southerly- and northerly- fluxes.  Choose a sufficiently
   ! negative velocity correction for the northerly-flux, and a sufficiently
@@ -1871,10 +1842,10 @@ subroutine PPM_reconstruction_x(h_in, h_L, h_R, G, LB, h_min, monotonic, simple_
   type(loop_bounds_type),            intent(in)  :: LB   !< Active loop bounds structure.
   real,                              intent(in)  :: h_min !< The minimum thickness
                     !! that can be obtained by a concave parabolic fit.
-  logical, optional,                 intent(in)  :: monotonic !< If true, use the
+  logical,                           intent(in)  :: monotonic !< If true, use the
                     !! Colella & Woodward monotonic limiter.
                     !! Otherwise use a simple positive-definite limiter.
-  logical, optional,                 intent(in)  :: simple_2nd !< If true, use the
+  logical,                           intent(in)  :: simple_2nd !< If true, use the
                     !! arithmetic mean thicknesses as the default edge values
                     !! for a simple 2nd order scheme.
   type(ocean_OBC_type),    optional, pointer     :: OBC !< Open boundaries control structure.
@@ -1884,14 +1855,10 @@ subroutine PPM_reconstruction_x(h_in, h_L, h_R, G, LB, h_min, monotonic, simple_
   real, parameter :: oneSixth = 1./6.
   real :: h_ip1, h_im1
   real :: dMx, dMn
-  logical :: use_CW84, use_2nd
   character(len=256) :: mesg
   integer :: i, j, isl, iel, jsl, jel, n, stencil
   logical :: local_open_BC
   type(OBC_segment_type), pointer :: segment => NULL()
-
-  use_CW84 = .false. ; if (present(monotonic)) use_CW84 = monotonic
-  use_2nd = .false. ; if (present(simple_2nd)) use_2nd = simple_2nd
 
   local_open_BC = .false.
   if (present(OBC)) then ; if (associated(OBC)) then
@@ -1901,7 +1868,7 @@ subroutine PPM_reconstruction_x(h_in, h_L, h_R, G, LB, h_min, monotonic, simple_
   isl = LB%ish-1 ; iel = LB%ieh+1 ; jsl = LB%jsh ; jel = LB%jeh
 
   ! This is the stencil of the reconstruction, not the scheme overall.
-  stencil = 2 ; if (use_2nd) stencil = 1
+  stencil = 2 ; if (simple_2nd) stencil = 1
 
   if ((isl-stencil < G%isd) .or. (iel+stencil > G%ied)) then
     write(mesg,'("In MOM_continuity_PPM, PPM_reconstruction_x called with a ", &
@@ -1916,7 +1883,7 @@ subroutine PPM_reconstruction_x(h_in, h_L, h_R, G, LB, h_min, monotonic, simple_
     call MOM_error(FATAL,mesg)
   endif
 
-  if (use_2nd) then
+  if (simple_2nd) then
     do j=jsl,jel ; do i=isl,iel
       h_im1 = G%mask2dT(i-1,j) * h_in(i-1,j) + (1.0-G%mask2dT(i-1,j)) * h_in(i,j)
       h_ip1 = G%mask2dT(i+1,j) * h_in(i+1,j) + (1.0-G%mask2dT(i+1,j)) * h_in(i,j)
@@ -1990,7 +1957,7 @@ subroutine PPM_reconstruction_x(h_in, h_L, h_R, G, LB, h_min, monotonic, simple_
     enddo
   endif
 
-  if (use_CW84) then
+  if (monotonic) then
     call PPM_limit_CW84(h_in, h_L, h_R, G, isl, iel, jsl, jel)
   else
     call PPM_limit_pos(h_in, h_L, h_R, h_min, G, isl, iel, jsl, jel)
@@ -2010,10 +1977,10 @@ subroutine PPM_reconstruction_y(h_in, h_L, h_R, G, LB, h_min, monotonic, simple_
   type(loop_bounds_type),            intent(in)  :: LB   !< Active loop bounds structure.
   real,                              intent(in)  :: h_min !< The minimum thickness
                     !! that can be obtained by a concave parabolic fit.
-  logical, optional,                 intent(in)  :: monotonic !< If true, use the
+  logical,                           intent(in)  :: monotonic !< If true, use the
                     !! Colella & Woodward monotonic limiter.
                     !! Otherwise use a simple positive-definite limiter.
-  logical, optional,                 intent(in)  :: simple_2nd !< If true, use the
+  logical,                           intent(in)  :: simple_2nd !< If true, use the
                     !! arithmetic mean thicknesses as the default edge values
                     !! for a simple 2nd order scheme.
   type(ocean_OBC_type),    optional, pointer     :: OBC !< Open boundaries control structure.
@@ -2023,14 +1990,10 @@ subroutine PPM_reconstruction_y(h_in, h_L, h_R, G, LB, h_min, monotonic, simple_
   real, parameter :: oneSixth = 1./6.
   real :: h_jp1, h_jm1
   real :: dMx, dMn
-  logical :: use_CW84, use_2nd
   character(len=256) :: mesg
   integer :: i, j, isl, iel, jsl, jel, n, stencil
   logical :: local_open_BC
   type(OBC_segment_type), pointer :: segment => NULL()
-
-  use_CW84 = .false. ; if (present(monotonic)) use_CW84 = monotonic
-  use_2nd = .false. ; if (present(simple_2nd)) use_2nd = simple_2nd
 
   local_open_BC = .false.
   if (present(OBC)) then ; if (associated(OBC)) then
@@ -2040,7 +2003,7 @@ subroutine PPM_reconstruction_y(h_in, h_L, h_R, G, LB, h_min, monotonic, simple_
   isl = LB%ish ; iel = LB%ieh ; jsl = LB%jsh-1 ; jel = LB%jeh+1
 
   ! This is the stencil of the reconstruction, not the scheme overall.
-  stencil = 2 ; if (use_2nd) stencil = 1
+  stencil = 2 ; if (simple_2nd) stencil = 1
 
   if ((isl < G%isd) .or. (iel > G%ied)) then
     write(mesg,'("In MOM_continuity_PPM, PPM_reconstruction_y called with a ", &
@@ -2055,7 +2018,7 @@ subroutine PPM_reconstruction_y(h_in, h_L, h_R, G, LB, h_min, monotonic, simple_
     call MOM_error(FATAL,mesg)
   endif
 
-  if (use_2nd) then
+  if (simple_2nd) then
     do j=jsl,jel ; do i=isl,iel
       h_jm1 = G%mask2dT(i,j-1) * h_in(i,j-1) + (1.0-G%mask2dT(i,j-1)) * h_in(i,j)
       h_jp1 = G%mask2dT(i,j+1) * h_in(i,j+1) + (1.0-G%mask2dT(i,j+1)) * h_in(i,j)
@@ -2127,7 +2090,7 @@ subroutine PPM_reconstruction_y(h_in, h_L, h_R, G, LB, h_min, monotonic, simple_
     enddo
   endif
 
-  if (use_CW84) then
+  if (monotonic) then
     call PPM_limit_CW84(h_in, h_L, h_R, G, isl, iel, jsl, jel)
   else
     call PPM_limit_pos(h_in, h_L, h_R, h_min, G, isl, iel, jsl, jel)

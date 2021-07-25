@@ -38,23 +38,19 @@ type, public :: oil_tracer_CS ; private
   logical :: coupled_tracers = .false. !< These tracers are not offered to the coupler.
   character(len=200) :: IC_file !< The file in which the age-tracer initial values
                                 !! can be found, or an empty string for internal initialization.
-  logical :: Z_IC_file !< If true, the IC_file is in Z-space.  The default is false.
+  logical :: Z_IC_file         !< If true, the IC_file is in Z-space.  The default is false.
   real :: oil_source_longitude !< Latitude of source location (geographic)
   real :: oil_source_latitude  !< Longitude of source location (geographic)
   integer :: oil_source_i=-999 !< Local i of source location (computational)
   integer :: oil_source_j=-999 !< Local j of source location (computational)
   real :: oil_source_rate     !< Rate of oil injection [kg T-1 ~> kg s-1]
-  real :: oil_start_year      !< The year in which tracers start aging, or at which the
-                              !! surface value equals young_val, in years.
-  real :: oil_end_year        !< The year in which tracers start aging, or at which the
-                              !! surface value equals young_val, in years.
+  real :: oil_start_year      !< The time at which the oil source starts [years]
+  real :: oil_end_year        !< The time at which the oil source ends [years]
   type(time_type), pointer :: Time => NULL() !< A pointer to the ocean model's clock.
   type(tracer_registry_type), pointer :: tr_Reg => NULL() !< A pointer to the MOM tracer registry
   real, pointer :: tr(:,:,:,:) => NULL() !< The array of tracers used in this subroutine, in g m-3?
   real, dimension(NTR_MAX) :: IC_val = 0.0    !< The (uniform) initial condition value.
-  real, dimension(NTR_MAX) :: young_val = 0.0 !< The value assigned to tr at the surface.
   real, dimension(NTR_MAX) :: land_val = -1.0 !< The value of tr used where land is masked out.
-  real, dimension(NTR_MAX) :: sfc_growth_rate !< The exponential growth rate for the surface value [year-1].
   real, dimension(NTR_MAX) :: oil_decay_days  !< Decay time scale of oil [days]
   real, dimension(NTR_MAX) :: oil_decay_rate  !< Decay rate of oil [T-1 ~> s-1] calculated from oil_decay_days
   integer, dimension(NTR_MAX) :: oil_source_k !< Layer of source
@@ -138,7 +134,8 @@ function register_oil_tracer(HI, GV, US, param_file, CS, tr_Reg, restart_CS)
                  "negative number for a vertically uniform source, "//&
                  "or 0 not to use this tracer.", units="Layer", default=0)
   call get_param(param_file, mdl, "OIL_SOURCE_RATE", CS%oil_source_rate, &
-                 "The rate of oil injection.", units="kg s-1", scale=US%T_to_s, default=1.0)
+                 "The rate of oil injection.", &
+                 units="kg s-1", scale=US%T_to_s, default=1.0)
   call get_param(param_file, mdl, "OIL_DECAY_DAYS", CS%oil_decay_days, &
                  "The decay timescale in days (if positive), or no decay "//&
                  "if 0, or use the temperature dependent decay rate of "//&
@@ -258,8 +255,7 @@ subroutine initialize_oil_tracer(restart, day, G, GV, US, h, diag, OBC, CS, &
       if (len_trim(CS%IC_file) > 0) then
   !  Read the tracer concentrations from a netcdf file.
         if (.not.file_exists(CS%IC_file, G%Domain)) &
-          call MOM_error(FATAL, "initialize_oil_tracer: "// &
-                                 "Unable to open "//CS%IC_file)
+          call MOM_error(FATAL, "initialize_oil_tracer: Unable to open "//CS%IC_file)
 
         if (CS%Z_IC_file) then
           OK = tracer_Z_init(CS%tr(:,:,:,m), h, CS%IC_file, name, &
@@ -331,6 +327,7 @@ subroutine oil_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, US
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: h_work ! Used so that h can be modified [H ~> m or kg m-2]
   real :: Isecs_per_year = 1.0 / (365.0*86400.0)
+  real :: vol_scale ! A conversion factor for volumes into m3 [m3 H-1 L-2 ~> nondim or m3 kg-1]
   real :: year, h_total, ldecay
   integer :: i, j, k, is, ie, js, je, nz, m, k_max
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
@@ -375,6 +372,7 @@ subroutine oil_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, US
       CS%oil_source_i>-999 .and. CS%oil_source_j>-999) then
     i=CS%oil_source_i ; j=CS%oil_source_j
     k_max=nz ; h_total=0.
+    vol_scale = GV%H_to_m * US%L_to_m**2
     do k=nz, 2, -1
       h_total = h_total + h_new(i,j,k)
       if (h_total<10.) k_max=k-1 ! Find bottom most interface that is 10 m above bottom
@@ -384,15 +382,14 @@ subroutine oil_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, US
       if (k>0) then
         k=min(k,k_max) ! Only insert k or first layer with interface 10 m above bottom
         CS%tr(i,j,k,m) = CS%tr(i,j,k,m) + CS%oil_source_rate*dt / &
-                ((h_new(i,j,k)+GV%H_subroundoff) * G%US%L_to_m**2*G%areaT(i,j) )
+                (vol_scale * (h_new(i,j,k)+GV%H_subroundoff) * G%areaT(i,j) )
       elseif (k<0) then
         h_total=GV%H_subroundoff
         do k=1, nz
           h_total = h_total + h_new(i,j,k)
         enddo
         do k=1, nz
-          CS%tr(i,j,k,m) = CS%tr(i,j,k,m) + CS%oil_source_rate*dt/(h_total &
-                                           * G%US%L_to_m**2*G%areaT(i,j) )
+          CS%tr(i,j,k,m) = CS%tr(i,j,k,m) + CS%oil_source_rate*dt / (vol_scale * h_total * G%areaT(i,j) )
         enddo
       endif
     enddo
@@ -416,11 +413,8 @@ function oil_stock(h, stocks, G, GV, CS, names, units, stock_index)
                                                                    !! being sought.
   integer                                           :: oil_stock !< The number of stocks calculated here.
 
-! This function calculates the mass-weighted integral of all tracer stocks,
-! returning the number of stocks it has calculated.  If the stock_index
-! is present, only the stock corresponding to that coded index is returned.
-
   ! Local variables
+  real :: stock_scale ! The dimensional scaling factor to convert stocks to kg [kg H-1 L-2 ~> kg m-3 or nondim]
   integer :: i, j, k, is, ie, js, je, nz, m
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
@@ -435,15 +429,15 @@ function oil_stock(h, stocks, G, GV, CS, names, units, stock_index)
     return
   endif ; endif
 
+  stock_scale = G%US%L_to_m**2 * GV%H_to_kg_m2
   do m=1,CS%ntr
     call query_vardesc(CS%tr_desc(m), name=names(m), units=units(m), caller="oil_stock")
     units(m) = trim(units(m))//" kg"
     stocks(m) = 0.0
     do k=1,nz ; do j=js,je ; do i=is,ie
-      stocks(m) = stocks(m) + CS%tr(i,j,k,m) * &
-                             (G%mask2dT(i,j) * G%US%L_to_m**2*G%areaT(i,j) * h(i,j,k))
+      stocks(m) = stocks(m) + CS%tr(i,j,k,m) * (G%mask2dT(i,j) * G%areaT(i,j) * h(i,j,k))
     enddo ; enddo ; enddo
-    stocks(m) = GV%H_to_kg_m2 * stocks(m)
+    stocks(m) = stock_scale * stocks(m)
   enddo
   oil_stock = CS%ntr
 

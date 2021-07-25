@@ -5,14 +5,14 @@ module MOM_checksums
 
 use MOM_array_transform, only : rotate_array, rotate_array_pair, rotate_vector
 use MOM_array_transform, only : allocate_rotated_array
-use MOM_coms, only : PE_here, root_PE, num_PEs, sum_across_PEs
-use MOM_coms, only : min_across_PEs, max_across_PEs
-use MOM_coms, only : reproducing_sum, field_chksum
-use MOM_error_handler, only : MOM_error, FATAL, is_root_pe
-use MOM_file_parser, only : log_version, param_file_type
-use MOM_hor_index, only : hor_index_type, rotate_hor_index
+use MOM_coms,            only : PE_here, root_PE, num_PEs, sum_across_PEs
+use MOM_coms,            only : min_across_PEs, max_across_PEs
+use MOM_coms,            only : reproducing_sum, field_chksum
+use MOM_error_handler,   only : MOM_error, FATAL, is_root_pe
+use MOM_file_parser,     only : log_version, param_file_type
+use MOM_hor_index,       only : hor_index_type, rotate_hor_index
 
-use iso_fortran_env, only: error_unit
+use iso_fortran_env,     only : error_unit, int32, int64
 
 implicit none ; private
 
@@ -2092,7 +2092,7 @@ function rotated_field_chksum_real_0d(field, pelist, mask_val, turns) &
   integer, optional, intent(in) :: pelist(:)  !< PE list of ranks to checksum
   real,    optional, intent(in) :: mask_val   !< FMS mask value
   integer, optional, intent(in) :: turns      !< Number of quarter turns
-  integer :: chksum                           !< checksum of scalar
+  integer(kind=int64) :: chksum               !< checksum of scalar
 
   if (present(turns)) call MOM_error(FATAL, "Rotation not supported for 0d fields.")
 
@@ -2107,7 +2107,7 @@ function rotated_field_chksum_real_1d(field, pelist, mask_val, turns) &
   integer,  optional, intent(in) :: pelist(:) !< PE list of ranks to checksum
   real,     optional, intent(in) :: mask_val  !< FMS mask value
   integer,  optional, intent(in) :: turns     !< Number of quarter turns
-  integer :: chksum                           !< checksum of array
+  integer(kind=int64) :: chksum               !< checksum of array
 
   if (present(turns)) call MOM_error(FATAL, "Rotation not supported for 1d fields.")
 
@@ -2122,7 +2122,7 @@ function rotated_field_chksum_real_2d(field, pelist, mask_val, turns) &
   integer,        optional, intent(in) :: pelist(:) !< PE list of ranks to checksum
   real,           optional, intent(in) :: mask_val  !< FMS mask value
   integer,        optional, intent(in) :: turns     !< Number of quarter turns
-  integer :: chksum                                 !< checksum of array
+  integer(kind=int64) :: chksum                     !< checksum of array
 
   ! Local variables
   real, allocatable :: field_rot(:,:)  ! A rotated version of field, with the same units
@@ -2149,7 +2149,7 @@ function rotated_field_chksum_real_3d(field, pelist, mask_val, turns) &
   integer,        optional, intent(in) :: pelist(:) !< PE list of ranks to checksum
   real,           optional, intent(in) :: mask_val  !< FMS mask value
   integer,        optional, intent(in) :: turns     !< Number of quarter turns
-  integer :: chksum                                 !< checksum of array
+  integer(kind=int64) :: chksum                     !< checksum of array
 
   ! Local variables
   real, allocatable :: field_rot(:,:,:)  ! A rotated version of field, with the same units
@@ -2176,7 +2176,7 @@ function rotated_field_chksum_real_4d(field, pelist, mask_val, turns) &
   integer,        optional, intent(in) :: pelist(:) !< PE list of ranks to checksum
   real,           optional, intent(in) :: mask_val  !< FMS mask value
   integer,        optional, intent(in) :: turns     !< Number of quarter turns
-  integer :: chksum                                 !< checksum of array
+  integer(kind=int64) :: chksum                     !< checksum of array
 
   ! Local variables
   real, allocatable :: field_rot(:,:,:,:)  ! A rotated version of field, with the same units
