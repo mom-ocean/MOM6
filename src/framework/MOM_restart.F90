@@ -847,13 +847,14 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV, num_
   integer :: start_var, next_var        ! The starting variables of the
                                         ! current and next files.
   type(file_type) :: IO_handle          ! The I/O handle of the open fileset
-  integer :: m, nz, num_files
+  integer :: m, nz
+  integer :: num_files                  ! The number of restart files that will be used.
   integer :: seconds, days, year, month, hour, minute
   character(len=8) :: hor_grid, z_grid, t_grid ! Variable grid info.
   character(len=64) :: var_name         ! A variable's name.
   real :: restart_time
   character(len=32) :: filename_appendix = '' ! Appendix to filename for ensemble runs
-  integer :: length
+  integer :: length                     ! The length of a text string.
   integer(kind=8) :: check_val(CS%max_fields,1)
   integer :: isL, ieL, jsL, jeL, pos
   integer :: turns
@@ -923,7 +924,7 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV, num_
       endif
     endif
 
-    restartpath = trim(directory)// trim(restartname)
+    restartpath = trim(directory) // trim(restartname)
 
     if (num_files < 10) then
       write(suffix,'("_",I1)') num_files
@@ -931,7 +932,16 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV, num_
       write(suffix,'("_",I2)') num_files
     endif
 
-    if (num_files > 0) restartpath = trim(restartpath) // trim(suffix)
+    length = len_trim(restartpath)
+    if (length < 3) then  ! This case is very uncommon but this test avoids segmentation-faults.
+      if (num_files > 0) restartpath = trim(restartpath) // suffix
+      restartpath = trim(restartpath)//".nc"
+    elseif (restartpath(length-2:length) == ".nc") then
+      if (num_files > 0) restartpath = restartpath(1:length-3)//trim(suffix)//".nc"
+    else
+      if (num_files > 0) restartpath = trim(restartpath) // suffix
+      restartpath = trim(restartpath)//".nc"
+    endif
 
     do m=start_var,next_var-1
       vars(m-start_var+1) = CS%restart_field(m)%vars
