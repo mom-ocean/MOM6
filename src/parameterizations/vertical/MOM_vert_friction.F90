@@ -1888,7 +1888,7 @@ end subroutine vertvisc_init
 subroutine updateCFLtruncationValue(Time, CS, activate)
   type(time_type), target, intent(in)    :: Time     !< Current model time
   type(vertvisc_CS),       pointer       :: CS       !< Vertical viscosity control structure
-  logical, optional,       intent(in)    :: activate !< Specifiy whether to record the value of
+  logical, optional,       intent(in)    :: activate !< Specify whether to record the value of
                                                      !! Time as the beginning of the ramp period
 
   ! Local variables

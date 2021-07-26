@@ -28,12 +28,12 @@ use MOM_file_parser,          only: get_param, log_version, param_file_type, clo
 use MOM_get_input,            only: get_MOM_input, directories
 use MOM_domains,              only: pass_var
 use MOM_error_handler,        only: MOM_error, FATAL, is_root_pe
-use MOM_ocean_model_nuopc,    only: ice_ocean_boundary_type
 use MOM_grid,                 only: ocean_grid_type, get_global_grid_size
+use MOM_ocean_model_nuopc,    only: ice_ocean_boundary_type
 use MOM_ocean_model_nuopc,    only: ocean_model_restart, ocean_public_type, ocean_state_type
 use MOM_ocean_model_nuopc,    only: ocean_model_init_sfc
 use MOM_ocean_model_nuopc,    only: ocean_model_init, update_ocean_model, ocean_model_end
-use MOM_ocean_model_nuopc,    only: get_ocean_grid, get_eps_omesh
+use MOM_ocean_model_nuopc,    only: get_ocean_grid, get_eps_omesh, query_ocean_state
 use MOM_cap_time,             only: AlarmInit
 use MOM_cap_methods,          only: mom_import, mom_export, mom_set_geomtype, mod2med_areacor
 use MOM_cap_methods,          only: med2mod_areacor, state_diagnose
@@ -421,6 +421,7 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
   character(len=64)                      :: logmsg
   logical                                :: isPresent, isPresentDiro, isPresentLogfile, isSet
   logical                                :: existflag
+  logical                                :: use_waves  ! If true, the wave modules are active.
   integer                                :: userRc
   integer                                :: localPet
   integer                                :: localPeCount
@@ -695,8 +696,9 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
   Ice_ocean_boundary%lrunoff         = 0.0
   Ice_ocean_boundary%frunoff         = 0.0
 
-  if (ocean_state%use_waves) then
-    Ice_ocean_boundary%num_stk_bands=ocean_state%Waves%NumBands
+  call query_ocean_state(ocean_state, use_waves=use_waves)
+  if (use_waves) then
+    call query_ocean_state(ocean_state, NumWaveBands=Ice_ocean_boundary%num_stk_bands)
     allocate ( Ice_ocean_boundary% ustk0 (isc:iec,jsc:jec),         &
                Ice_ocean_boundary% vstk0 (isc:iec,jsc:jec),         &
                Ice_ocean_boundary% ustkb (isc:iec,jsc:jec,Ice_ocean_boundary%num_stk_bands), &
@@ -704,10 +706,12 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
                Ice_ocean_boundary%stk_wavenumbers (Ice_ocean_boundary%num_stk_bands))
     Ice_ocean_boundary%ustk0           = 0.0
     Ice_ocean_boundary%vstk0           = 0.0
-    Ice_ocean_boundary%stk_wavenumbers = ocean_state%Waves%WaveNum_Cen
+    call query_ocean_state(ocean_state, WaveNumbers=Ice_ocean_boundary%stk_wavenumbers, unscale=.true.)
     Ice_ocean_boundary%ustkb           = 0.0
     Ice_ocean_boundary%vstkb           = 0.0
   endif
+  ! Consider adding this:
+  ! if (.not.use_waves) Ice_ocean_boundary%num_stk_bands = 0
 
   ocean_internalstate%ptr%ocean_state_type_ptr => ocean_state
   call ESMF_GridCompSetInternalState(gcomp, ocean_internalstate, rc)
@@ -752,7 +756,7 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
   !These are not currently used and changing requires a nuopc dictionary change
   !call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_runoff_heat_flx"        , "will provide")
   !call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_calving_heat_flx"       , "will provide")
-  if (ocean_state%use_waves) then
+  if (use_waves) then
     if (Ice_ocean_boundary%num_stk_bands > 3) then
       call MOM_error(FATAL, "Number of Stokes Bands > 3, NUOPC cap not set up for this")
     endif
