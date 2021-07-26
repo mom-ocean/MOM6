@@ -22,12 +22,13 @@ use mpp_domains_mod,         only : mpp_define_domains, mpp_get_compute_domain, 
 use MOM_domains,             only : root_PE,num_PEs
 use MOM_coms,                only : Get_PElist
 use stochastic_physics,      only : init_stochastic_physics_ocn, run_stochastic_physics_ocn
+use get_stochy_pattern_mod, only: write_stoch_restart_ocn
 
 #include <MOM_memory.h>
 
 implicit none ; private
 
-public stochastics_init, update_stochastics
+public stochastics_init, update_stochastics, write_mom_restart_stoch
 
 !> This control structure holds parameters for the MOM_stochastics module
 type, public:: stochastic_CS
@@ -146,10 +147,21 @@ subroutine update_stochastics(CS)
   call callTree_enter("update_stochastics(), MOM_stochastics.F90")
 
 ! update stochastic physics patterns before running next time-step
-   call run_stochastic_physics_ocn(CS%sppt_wts,CS%epbl1_wts,CS%epbl2_wts)
-   print*,'in update_stoch',minval(CS%sppt_wts),maxval(CS%sppt_wts),minval(CS%epbl1_wts),maxval(CS%epbl1_wts)
+  call run_stochastic_physics_ocn(CS%sppt_wts,CS%epbl1_wts,CS%epbl2_wts)
 
+  return
 end subroutine update_stochastics
+
+!< wrapper to write ocean stochastic restarts
+subroutine write_mom_restart_stoch(filename)
+  character(len=*) :: filename
+
+  call callTree_enter("write_mom_restart_stoch(), MOM_stochastics.F90")
+
+  call write_stoch_restart_ocn(filename)
+
+  return
+end subroutine write_mom_restart_stoch
 
 end module MOM_stochastics
 

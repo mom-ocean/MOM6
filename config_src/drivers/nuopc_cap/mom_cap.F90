@@ -98,7 +98,7 @@ use NUOPC_Model, only: model_label_SetRunClock    => label_SetRunClock
 use NUOPC_Model, only: model_label_Finalize       => label_Finalize
 use NUOPC_Model, only: SetVM
 
-use get_stochy_pattern_mod, only: write_stoch_restart_ocn
+use MOM_stochastics,         only : write_mom_restart_stoch
 !$use omp_lib             , only : omp_set_num_threads
 
 implicit none; private
@@ -1746,7 +1746,7 @@ subroutine ModelAdvance(gcomp, rc)
           endif
           call ESMF_LogWrite("MOM_cap: Writing stoch restart :  "//trim(restartname), &
                              ESMF_LOGMSG_INFO)
-          call write_stoch_restart_ocn('RESTART/'//trim(restartname))
+          call write_mom_restart_stoch('RESTART/'//trim(restartname))
         endif
      endif
 
