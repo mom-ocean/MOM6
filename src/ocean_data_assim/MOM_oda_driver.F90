@@ -25,12 +25,16 @@ use MOM_horizontal_regridding, only : horiz_interp_and_extrap_tracer
 ! ODA Modules
 use ocean_da_types_mod, only : grid_type, ocean_profile_type, ocean_control_struct
 use ocean_da_core_mod, only : ocean_da_core_init, get_profiles
+!This preprocessing directive enables the SPEAR online ensemble data assimilation
+!configuration. Existing community based APIs for data assimilation are currently
+!called offline for forecast applications using information read from a MOM6 state file.
+!The SPEAR configuration (https://doi.org/10.1029/2020MS002149) calculated increments
+!efficiently online. A community-based set of APIs should be implemented in place
+!of the CPP directive when this is available.
 #ifdef ENABLE_ECDA
 use eakf_oda_mod, only : ensemble_filter
 #endif
-use write_ocean_obs_mod, only : open_profile_file
-use write_ocean_obs_mod, only : write_profile,close_profile_file
-use kdtree, only : kd_root !# JEDI
+use kdtree, only : kd_root !# A kd-tree object using JEDI APIs
 ! MOM Modules
 use MOM_io, only : slasher, MOM_read_data
 use MOM_diag_mediator, only : diag_ctrl, set_axes_info
@@ -57,7 +61,7 @@ use MOM_verticalGrid, only : verticalGrid_type, verticalGridInit
 implicit none ; private
 
 public :: init_oda, oda_end, set_prior_tracer, get_posterior_tracer
-public :: set_analysis_time, oda, save_obs_diff, apply_oda_tracer_increments
+public :: set_analysis_time, oda, apply_oda_tracer_increments
 
 !>@{ CPU time clock ID
 integer :: id_clock_oda_init
@@ -632,30 +636,30 @@ subroutine set_analysis_time(Time,CS)
 end subroutine set_analysis_time
 
 !> Write observation differences to a file
-subroutine save_obs_diff(filename,CS)
-  character(len=*), intent(in) :: filename !< name of output file
-  type(ODA_CS), pointer, intent(in) :: CS  !< pointer to DA control structure
+! subroutine save_obs_diff(filename,CS)
+!   character(len=*), intent(in) :: filename !< name of output file
+!   type(ODA_CS), pointer, intent(in) :: CS  !< pointer to DA control structure
 
-  integer :: fid ! profile file handle
-  type(ocean_profile_type), pointer :: Prof=>NULL()
+!   integer :: fid ! profile file handle
+!   type(ocean_profile_type), pointer :: Prof=>NULL()
 
-  fid = open_profile_file(trim(filename), nvar=2, thread=SINGLE_FILE, fset=SINGLE_FILE)
-  Prof=>CS%CProfiles
+!   fid = open_profile_file(trim(filename), nvar=2, thread=SINGLE_FILE, fset=SINGLE_FILE)
+!   Prof=>CS%CProfiles
 
-  !! switch to global pelist
-  !call set_PElist(CS%filter_pelist)
+!   !! switch to global pelist
+!   !call set_PElist(CS%filter_pelist)
 
-  do while (associated(Prof))
-    call write_profile(fid,Prof)
-    Prof=>Prof%cnext
-  enddo
-  call close_profile_file(fid)
+!   do while (associated(Prof))
+!     call write_profile(fid,Prof)
+!     Prof=>Prof%cnext
+!   enddo
+!   call close_profile_file(fid)
 
-  !! switch back to ensemble member pelist
-  !call set_PElist(CS%ensemble_pelist(CS%ensemble_id,:))
+!   !! switch back to ensemble member pelist
+!   !call set_PElist(CS%ensemble_pelist(CS%ensemble_id,:))
 
-  return
-end subroutine save_obs_diff
+!   return
+! end subroutine save_obs_diff
 
 
 !> Apply increments to tracers
