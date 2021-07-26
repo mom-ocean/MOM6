@@ -311,7 +311,7 @@ subroutine init_oda(Time, G, GV, diag_CS, CS)
   !jsd=jsd+jdg_offset; jed=jed+jdg_offset ! TODO:  switch to local indexing? (mjh)
 
   if (.not. associated(CS%h)) then
-    allocate(CS%h(isd:ied,jsd:jed,CS%GV%ke)); CS%h(:,:,:)=CS%GV%Angstrom_m
+    allocate(CS%h(isd:ied,jsd:jed,CS%GV%ke)); CS%h(:,:,:)=CS%GV%Angstrom_m*CS%GV%H_to_m
     ! assign thicknesses
     call ALE_initThicknessToCoord(CS%ALE_CS,G,CS%GV,CS%h)
   endif
