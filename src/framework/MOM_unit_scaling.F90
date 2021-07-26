@@ -54,8 +54,8 @@ contains
 
 !> Allocates and initializes the ocean model unit scaling type
 subroutine unit_scaling_init( param_file, US )
-  type(param_file_type), optional, intent(in) :: param_file !< Parameter file handle/type
-  type(unit_scale_type), optional, pointer    :: US         !< A dimensional unit scaling type
+  type(param_file_type), intent(in) :: param_file !< Parameter file handle/type
+  type(unit_scale_type), pointer    :: US         !< A dimensional unit scaling type
 
   ! This routine initializes a unit_scale_type structure (US).
 
@@ -66,39 +66,33 @@ subroutine unit_scaling_init( param_file, US )
 # include "version_variable.h"
   character(len=16) :: mdl = "MOM_unit_scaling"
 
-  if (.not.present(US)) return
-
   if (associated(US)) call MOM_error(FATAL, &
      'unit_scaling_init: called with an associated US pointer.')
   allocate(US)
 
-  if (present(param_file)) then
-    ! Read all relevant parameters and write them to the model log.
-    call log_version(param_file, mdl, version, &
-                 "Parameters for doing unit scaling of variables.", debugging=.true.)
-    call get_param(param_file, mdl, "Z_RESCALE_POWER", Z_power, &
-                 "An integer power of 2 that is used to rescale the model's "//&
-                 "internal units of depths and heights.  Valid values range from -300 to 300.", &
+  ! Read all relevant parameters and write them to the model log.
+  call log_version(param_file, mdl, version, &
+               "Parameters for doing unit scaling of variables.", debugging=.true.)
+  call get_param(param_file, mdl, "Z_RESCALE_POWER", Z_power, &
+               "An integer power of 2 that is used to rescale the model's "//&
+               "internal units of depths and heights.  Valid values range from -300 to 300.", &
+               units="nondim", default=0, debuggingParam=.true.)
+  call get_param(param_file, mdl, "L_RESCALE_POWER", L_power, &
+               "An integer power of 2 that is used to rescale the model's "//&
+               "internal units of lateral distances.  Valid values range from -300 to 300.", &
+               units="nondim", default=0, debuggingParam=.true.)
+  call get_param(param_file, mdl, "T_RESCALE_POWER", T_power, &
+               "An integer power of 2 that is used to rescale the model's "//&
+               "internal units of time.  Valid values range from -300 to 300.", &
+               units="nondim", default=0, debuggingParam=.true.)
+  call get_param(param_file, mdl, "R_RESCALE_POWER", R_power, &
+               "An integer power of 2 that is used to rescale the model's "//&
+               "internal units of density.  Valid values range from -300 to 300.", &
+               units="nondim", default=0, debuggingParam=.true.)
+  call get_param(param_file, mdl, "Q_RESCALE_POWER", Q_power, &
+               "An integer power of 2 that is used to rescale the model's "//&
+                 "internal units of heat content.  Valid values range from -300 to 300.", &
                  units="nondim", default=0, debuggingParam=.true.)
-    call get_param(param_file, mdl, "L_RESCALE_POWER", L_power, &
-                 "An integer power of 2 that is used to rescale the model's "//&
-                 "internal units of lateral distances.  Valid values range from -300 to 300.", &
-                 units="nondim", default=0, debuggingParam=.true.)
-    call get_param(param_file, mdl, "T_RESCALE_POWER", T_power, &
-                 "An integer power of 2 that is used to rescale the model's "//&
-                 "internal units of time.  Valid values range from -300 to 300.", &
-                 units="nondim", default=0, debuggingParam=.true.)
-    call get_param(param_file, mdl, "R_RESCALE_POWER", R_power, &
-                 "An integer power of 2 that is used to rescale the model's "//&
-                 "internal units of density.  Valid values range from -300 to 300.", &
-                 units="nondim", default=0, debuggingParam=.true.)
-    call get_param(param_file, mdl, "Q_RESCALE_POWER", Q_power, &
-                 "An integer power of 2 that is used to rescale the model's "//&
-                   "internal units of heat content.  Valid values range from -300 to 300.", &
-                   units="nondim", default=0, debuggingParam=.true.)
-  else
-    Z_power = 0 ; L_power = 0 ; T_power = 0 ; R_power = 0 ; Q_power = 0
-  endif
 
   if (abs(Z_power) > 300) call MOM_error(FATAL, "unit_scaling_init: "//&
                  "Z_RESCALE_POWER is outside of the valid range of -300 to 300.")

@@ -413,17 +413,27 @@ subroutine limit_topography(D, G, param_file, max_depth, US)
                  "The depth below which to mask the ocean as land.", &
                  units="m", default=-9999.0, scale=m_to_Z, do_not_log=.true.)
 
-! Make sure that min_depth < D(x,y) < max_depth
-  if (mask_depth < -9990.*m_to_Z) then
-    do j=G%jsd,G%jed ; do i=G%isd,G%ied
-      D(i,j) = min( max( D(i,j), 0.5*min_depth ), max_depth )
-    enddo ; enddo
+  if (mask_depth > min_depth) then
+    mask_depth = -9999.0*m_to_Z
+    call MOM_error(WARNING, "MOM_shared_initialization: limit_topography "//&
+                  'MASKING_DEPTH is larger than MINIMUM_DEPTH and therefore ignored.')
+  endif
+
+  ! Make sure that min_depth < D(x,y) < max_depth for ocean points
+  if (mask_depth == -9999.*m_to_Z) then
+    if (min_depth > 0.0) then  ! This is retained to avoid answer changes (over the land points) in the test cases.
+      do j=G%jsd,G%jed ; do i=G%isd,G%ied
+        D(i,j) = min( max( D(i,j), 0.5*min_depth ), max_depth )
+      enddo ; enddo
+    else
+      do j=G%jsd,G%jed ; do i=G%isd,G%ied
+        D(i,j) = min( max( D(i,j), min_depth ), max_depth )
+      enddo ; enddo
+    endif
   else
     do j=G%jsd,G%jed ; do i=G%isd,G%ied
-      if (D(i,j)>0.) then
+      if (D(i,j) > mask_depth) then
         D(i,j) = min( max( D(i,j), min_depth ), max_depth )
-      else
-        D(i,j) = 0.
       endif
     enddo ; enddo
   endif
