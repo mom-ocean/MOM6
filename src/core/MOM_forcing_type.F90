@@ -170,10 +170,6 @@ type, public :: forcing
                                  !! exactly 0 away from shelves or on land.
   real, pointer, dimension(:,:) :: iceshelf_melt => NULL() !< Ice shelf melt rate (positive)
                                  !! or freezing (negative) [R Z T-1 ~> kg m-2 s-1]
-  ! stochastic patterns
-  real, allocatable :: sppt_wts(:,:) !< Random pattern for ocean SPPT
-  real, allocatable :: epbl1_wts(:,:) !< Random pattern for K.E. generation
-  real, allocatable :: epbl2_wts(:,:) !< Random pattern for K.E. dissipation
 
   ! Scalars set by surface forcing modules
   real :: vPrecGlobalAdj = 0.     !< adjustment to restoring vprec to zero out global net [kg m-2 s-1]
