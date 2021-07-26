@@ -714,7 +714,7 @@ subroutine read_var_sizes(filename, varname, ndims, sizes, match_case, caller, d
     if (status /= NF90_NOERR) call MOM_error(WARNING, trim(hdr) // trim(NF90_STRERROR(status)) //&
         " Getting dimension length for "//trim(varname)//" in "//trim(filename))
     if (present(dim_names)) then
-      if (n <= size(dim_names)) dim_names = trim(dimname)
+      if (n <= size(dim_names)) dim_names(n) = trim(dimname)
     endif
   enddo
   deallocate(dimids)
