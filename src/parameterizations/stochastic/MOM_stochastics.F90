@@ -4,10 +4,13 @@ module MOM_stochastics
 ! This file is part of MOM6. See LICENSE.md for the license.
 
 ! This is the top level module for the MOM6 ocean model.  It contains routines
-! for initialization, update, and writing restart of stochastic physics. This
+! for initialization, termination and update of ocean model state.  This
 ! particular version wraps all of the calls for MOM6 in the calls that had
 ! been used for MOM4.
 !
+! This code is a stop-gap wrapper of the MOM6 code to enable it to be called
+! in the same way as MOM4.
+
 use MOM_diag_mediator,       only : register_diag_field, diag_ctrl, time_type
 use MOM_grid,                only : ocean_grid_type
 use MOM_verticalGrid,        only : verticalGrid_type
@@ -26,13 +29,11 @@ implicit none ; private
 
 public stochastics_init, update_stochastics
 
-!> This control structure holds parameters for the MOM_stochastics module
 type, public:: stochastic_CS
-  logical :: do_sppt         !< If true, stochastically perturb the diabatic
-  logical :: pert_epbl       !< If true, then randomly perturb the KE dissipation and genration terms
-  integer :: id_sppt_wts  = -1 !< Diagnostic id for SPPT
-  integer :: id_epbl1_wts=-1 !< Diagnostic id for epbl generation perturbation
-  integer :: id_epbl2_wts=-1 !< Diagnostic id for epbl dissipation perturbation
+  logical :: do_sppt                 !< If true, stochastically perturb the diabatic
+  logical :: pert_epbl       !! If true, then randomly perturb the KE dissipation and genration terms
+  integer :: id_sppt_wts  = -1
+  integer :: id_epbl1_wts=-1,id_epbl2_wts=-1
   ! stochastic patterns
   real, allocatable :: sppt_wts(:,:)  !< Random pattern for ocean SPPT
                                      !! tendencies with a number between 0 and 2
@@ -42,14 +43,22 @@ type, public:: stochastic_CS
   type(time_type), pointer :: Time !< Pointer to model time (needed for sponges)
 end type stochastic_CS
 
+!> This type is used for communication with other components via the FMS coupler.
+!! The element names and types can be changed only with great deliberation, hence
+!! the persistnce of things like the cutsy element name "avg_kount".
 contains
 
-!!   This subroutine initializes the stochastics physics control structure.
+!> ocean_model_init initializes the ocean model, including registering fields
+!! for restarts and reading restart files if appropriate.
+!!
+!!   This subroutine initializes both the ocean state and the ocean surface type.
+!! Because of the way that indicies and domains are handled, Ocean_sfc must have
+!! been used in a previous call to cean_type.
 subroutine stochastics_init(dt, grid, GV, CS, param_file, diag, Time)
   real, intent(in)                     :: dt       !< time step [T ~> s]
-  type(ocean_grid_type),   intent(in)  :: grid     !< horizontal grid information
-  type(verticalGrid_type), intent(in)  :: GV       !< vertical grid structure
-  type(stochastic_CS), pointer,     intent(inout):: CS !< stochastic control structure
+  type(ocean_grid_type),   intent(in)  :: grid     ! horizontal grid information
+  type(verticalGrid_type), intent(in)  :: GV       ! vertical grid structure
+  type(stochastic_CS), pointer,     intent(inout):: CS
   type(param_file_type),   intent(in)    :: param_file !< A structure to parse for run-time parameters
   type(diag_ctrl), target, intent(inout) :: diag             !< structure to regulate diagnostic output
   type(time_type), target                :: Time             !< model time
@@ -59,7 +68,7 @@ subroutine stochastics_init(dt, grid, GV, CS, param_file, diag, Time)
   integer :: num_procs         ! number of processors to pass to stochastic physics
   integer :: iret              ! return code from stochastic physics
   integer :: me                !  my pe
-  integer :: pe_zero           !  root pe
+  integer :: master            !  root pe
   integer :: nx                ! number of x-points including halo
   integer :: ny                ! number of x-points including halo
 
@@ -95,13 +104,15 @@ subroutine stochastics_init(dt, grid, GV, CS, param_file, diag, Time)
      num_procs=num_PEs()
      allocate(pelist(num_procs))
      call Get_PElist(pelist,commID = mom_comm)
-     pe_zero=root_PE()
-     nx = grid%ied - grid%isd + 1
-     ny = grid%jed - grid%jsd + 1
+     master=root_PE()
+     nx=grid%ied-grid%isd+1
+     ny=grid%jed-grid%jsd+1
      call init_stochastic_physics_ocn(dt,grid%geoLonT,grid%geoLatT,nx,ny,GV%ke, &
-                                      CS%pert_epbl,CS%do_sppt,pe_zero,mom_comm,iret)
+                                      CS%pert_epbl,CS%do_sppt,master,mom_comm,iret)
      if (iret/=0)  then
-         call MOM_error(FATAL, "call to init_stochastic_physics_ocn failed")
+         write(6,*) 'call to init_stochastic_physics_ocn failed'
+         call MOM_error(FATAL, "stochastic physics in enambled in MOM6 but "// &
+                    "not activated in stochastic_physics namelist ")
          return
      endif
 
@@ -122,7 +133,6 @@ subroutine stochastics_init(dt, grid, GV, CS, param_file, diag, Time)
     write(*,'(/12x,a/)') '=== COMPLETED MOM STOCHASTIC INITIALIZATION ====='
 
   call callTree_leave("ocean_model_init(")
-  return
 end subroutine stochastics_init
 
 !> update_ocean_model uses the forcing in Ice_ocean_boundary to advance the
@@ -135,9 +145,9 @@ subroutine update_stochastics(CS)
   call callTree_enter("update_stochastics(), MOM_stochastics.F90")
 
 ! update stochastic physics patterns before running next time-step
-  call run_stochastic_physics_ocn(CS%sppt_wts,CS%epbl1_wts,CS%epbl2_wts)
+   call run_stochastic_physics_ocn(CS%sppt_wts,CS%epbl1_wts,CS%epbl2_wts)
+   print*,'in update_stoch',minval(CS%sppt_wts),maxval(CS%sppt_wts),minval(CS%epbl1_wts),maxval(CS%epbl1_wts)
 
-  return
 end subroutine update_stochastics
 
 end module MOM_stochastics
