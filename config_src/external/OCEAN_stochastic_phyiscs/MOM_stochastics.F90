@@ -29,6 +29,7 @@ implicit none ; private
 
 public stochastics_init, update_stochastics
 
+!> This control structure holds parameters for the MOM_stochastics module
 type, public:: stochastic_CS
   logical :: do_sppt                 !< If true, stochastically perturb the diabatic
   logical :: pert_epbl       !! If true, then randomly perturb the KE dissipation and genration terms
@@ -105,8 +106,8 @@ subroutine stochastics_init(dt, grid, GV, CS, param_file, diag, Time)
      allocate(pelist(num_procs))
      call Get_PElist(pelist,commID = mom_comm)
      master=root_PE()
-     nx=grid%ied-grid%isd+1 
-     ny=grid%jed-grid%jsd+1 
+     nx = grid%ied - grid%isd + 1
+     ny = grid%jed - grid%jsd + 1
      call init_stochastic_physics_ocn(dt,grid%geoLonT,grid%geoLatT,nx,ny,GV%ke, &
                                       CS%pert_epbl,CS%do_sppt,master,mom_comm,iret)
      if (iret/=0)  then
@@ -115,7 +116,7 @@ subroutine stochastics_init(dt, grid, GV, CS, param_file, diag, Time)
                     "not activated in stochastic_physics namelist ")
          return
      endif
-   
+
      if (CS%do_sppt) allocate(CS%sppt_wts(grid%isd:grid%ied,grid%jsd:grid%jed))
      if (CS%pert_epbl) then
        allocate(CS%epbl1_wts(grid%isd:grid%ied,grid%jsd:grid%jed))

@@ -301,7 +301,6 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
   type(wave_parameters_CS), &
                  optional, pointer       :: Waves  !< Wave CS
   type(stochastic_CS),  pointer       :: stoch_CS  !< The control structure returned by a previous
-                                         
 
 !    This subroutine determines the diffusivities from the integrated energetics
 !  mixed layer model.  It assumes that heating, cooling and freshwater fluxes

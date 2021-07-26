@@ -630,7 +630,7 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
       call disable_averaging(CS%diag)
     endif
   endif
-  
+
   if (CS%stoch_CS%do_sppt .OR. CS%stoch_CS%pert_epbl) call update_stochastics(CS%stoch_CS)
 
   if (do_dyn) then
