@@ -64,7 +64,6 @@ use MOM_surface_forcing_nuopc, only : ice_ocean_boundary_type, surface_forcing_C
 use MOM_surface_forcing_nuopc, only : forcing_save_restart
 use MOM_domains,               only : root_PE,num_PEs
 use MOM_coms,                  only : Get_PElist
-use stochastic_physics,        only : init_stochastic_physics_ocn, run_stochastic_physics_ocn
 
 #include <MOM_memory.h>
 
@@ -177,8 +176,8 @@ type, public :: ocean_state_type ; private
                               !! steps can span multiple coupled time steps.
   logical :: diabatic_first   !< If true, apply diabatic and thermodynamic
                               !! processes before time stepping the dynamics.
-  logical,public :: do_sppt   !< If true, allocate array for SPPT
-  logical,public :: pert_epbl !< If true, allocate arrays for energetic PBL perturbations
+  logical,public :: do_sppt   !< If true, write stochastic physics restarts
+  logical,public :: pert_epbl !< If true, write stochastic physics restarts
 
   real :: eps_omesh           !< Max allowable difference between ESMF mesh and MOM6
                               !! domain coordinates
@@ -253,13 +252,6 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn, i
                       !! min(HFrz, OBLD), where OBLD is the boundary layer depth.
                       !! If HFrz <= 0 (default), melt potential will not be computed.
   logical :: use_melt_pot!< If true, allocate melt_potential array
-! stochastic physics
-  integer,allocatable :: pelist(:) ! list of pes for this instance of the ocean
-  integer :: mom_comm          ! list of pes for this instance of the ocean
-  integer :: num_procs         ! number of processors to pass to stochastic physics
-  integer :: iret              ! return code from stochastic physics
-  integer :: me                !  my pe
-  integer :: master            !  root pe
 
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
@@ -428,7 +420,7 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn, i
 
   endif
 
-! get number of processors and PE list for stocasthci physics initialization
+  ! check to see if stochastic physics is active
   call get_param(param_file, mdl, "DO_SPPT", OS%do_sppt, &
                  "If true, then stochastically perturb the thermodynamic "//&
                  "tendemcies of T,S, amd h.  Amplitude and correlations are "//&
@@ -439,27 +431,7 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn, i
                  "production and dissipation terms.  Amplitude and correlations are "//&
                  "controlled by the nam_stoch namelist in the UFS model only.", &
                  default=.false.)
-  if (OS%do_sppt .OR. OS%pert_epbl) then
-     num_procs=num_PEs()
-     allocate(pelist(num_procs))
-     call Get_PElist(pelist,commID = mom_comm)
-     master=root_PE()
-   
-     call init_stochastic_physics_ocn(OS%dt_therm,OS%grid%geoLonT,OS%grid%geoLatT,OS%grid%ied-OS%grid%isd+1,OS%grid%jed-OS%grid%jsd+1,OS%grid%ke,&
-                                      OS%pert_epbl,OS%do_sppt,master,mom_comm,iret)
-     if (iret/=0)  then
-         write(6,*) 'call to init_stochastic_physics_ocn failed'
-         call MOM_error(FATAL, "stochastic physics in enambled in MOM6 but "// &
-                    "not activated in stochastic_physics namelist ")
-         return
-     endif
-   
-     if (OS%do_sppt) allocate(OS%fluxes%sppt_wts(OS%grid%isd:OS%grid%ied,OS%grid%jsd:OS%grid%jed))
-     if (OS%pert_epbl) then
-       allocate(OS%fluxes%epbl1_wts(OS%grid%isd:OS%grid%ied,OS%grid%jsd:OS%grid%jed))
-       allocate(OS%fluxes%epbl2_wts(OS%grid%isd:OS%grid%ied,OS%grid%jsd:OS%grid%jed))
-     endif
-  endif
+
   call close_param_file(param_file)
   call diag_mediator_close_registration(OS%diag)
 
@@ -628,11 +600,6 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
 
   call disable_averaging(OS%diag)
   Master_time = OS%Time ; Time1 = OS%Time
-
-! update stochastic physics patterns before running next time-step
-  if (OS%do_sppt .OR. OS%pert_epbl ) then
-   call run_stochastic_physics_ocn(OS%fluxes%sppt_wts,OS%fluxes%epbl1_wts,OS%fluxes%epbl2_wts)
-  endif
 
   if (OS%offline_tracer_mode) then
     call step_offline(OS%forces, OS%fluxes, OS%sfc_state, Time1, dt_coupling, OS%MOM_CSp)

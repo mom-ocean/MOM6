@@ -67,6 +67,7 @@ use MOM_variables,           only : cont_diag_ptrs, MOM_thermovar_chksum, p3d
 use MOM_verticalGrid,        only : verticalGrid_type, get_thickness_units
 use MOM_wave_speed,          only : wave_speeds
 use MOM_wave_interface,      only : wave_parameters_CS
+use MOM_stochastics,         only : stochastic_CS
 
 implicit none ; private
 
@@ -142,8 +143,6 @@ type, public:: diabatic_CS; private
   logical :: mix_boundary_tracer_ALE !< If true, in ALE mode mix the passive tracers in massless
                                      !! layers at the bottom into the interior as though a
                                      !! diffusivity of Kd_min_tr (see below) were operating.
-  logical :: do_sppt                 !< If true, stochastically perturb the diabatic
-                                     !! tendencies with a number between 0 and 2
   real    :: Kd_BBL_tr               !< A bottom boundary layer tracer diffusivity that
                                      !! will allow for explicitly specified bottom fluxes
                                      !! [Z2 T-1 ~> m2 s-1].  The entrainment at the bottom is at
@@ -180,7 +179,6 @@ type, public:: diabatic_CS; private
   ! These are handles to diagnostics related to the mixed layer properties.
   integer :: id_MLD_003 = -1, id_MLD_0125 = -1, id_MLD_user = -1, id_mlotstsq = -1
   integer :: id_MLD_EN1 = -1, id_MLD_EN2  = -1, id_MLD_EN3  = -1, id_subMLN2  = -1
-  integer :: id_sppt_wts  = -1
 
   ! These are handles to diatgnostics that are only available in non-ALE layered mode.
   integer :: id_wd       = -1
@@ -262,7 +260,7 @@ contains
 !>  This subroutine imposes the diapycnal mass fluxes and the
 !!  accompanying diapycnal advection of momentum and tracers.
 subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
-                    G, GV, US, CS, OBC, Waves)
+                    G, GV, US, CS, stoch_CS, OBC, Waves)
   type(ocean_grid_type),                      intent(inout) :: G        !< ocean grid structure
   type(verticalGrid_type),                    intent(in)    :: GV       !< ocean vertical grid structure
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), intent(inout) :: u        !< zonal velocity [L T-1 ~> m s-1]
@@ -282,6 +280,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
   type(time_type),                            intent(in)    :: Time_end !< Time at the end of the interval
   type(unit_scale_type),                      intent(in)    :: US       !< A dimensional unit scaling type
   type(diabatic_CS),                          pointer       :: CS       !< module control structure
+  type(stochastic_CS),                        pointer       :: stoch_CS !< stochastic control structure
   type(ocean_OBC_type),             optional, pointer       :: OBC      !< Open boundaries control structure.
   type(Wave_parameters_CS),         optional, pointer       :: Waves    !< Surface gravity waves
 
@@ -303,7 +302,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
   if (G%ke == 1) return
 
    ! save  copy of the date for SPPT
-  if (CS%do_sppt) then
+  if (stoch_CS%do_sppt) then
     allocate(h_in(G%isd:G%ied, G%jsd:G%jed,G%ke))
     allocate(t_in(G%isd:G%ied, G%jsd:G%jed,G%ke))
     allocate(s_in(G%isd:G%ied, G%jsd:G%jed,G%ke))
@@ -311,8 +310,8 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
     t_in(:,:,:)=tv%T(:,:,:)
     s_in(:,:,:)=tv%S(:,:,:)
    
-    if (CS%id_sppt_wts > 0) then
-      call post_data(CS%id_sppt_wts, fluxes%sppt_wts, CS%diag)
+    if (stoch_CS%id_sppt_wts > 0) then
+      call post_data(stoch_CS%id_sppt_wts, stoch_CS%sppt_wts, CS%diag)
     endif
   endif
 
@@ -399,10 +398,10 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
 
   if (CS%useALEalgorithm .and. CS%use_legacy_diabatic) then
     call diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
-                      G, GV, US, CS, Waves)
+                      G, GV, US, CS, stoch_CS, Waves)
   elseif (CS%useALEalgorithm) then
     call diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
-                      G, GV, US, CS, Waves)
+                      G, GV, US, CS, stoch_CS, Waves)
   else
     call layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
                           G, GV, US, CS, Waves)
@@ -468,14 +467,14 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
 
   if (CS%debugConservation) call MOM_state_stats('leaving diabatic', u, v, h, tv%T, tv%S, G, GV, US)
 
-  if (CS%do_sppt) then
+  if (stoch_CS%do_sppt) then
   ! perturb diabatic tendecies
     do k=1,nz
       do j=js,je
         do i=is,ie
-          h_tend = (h(i,j,k)-h_in(i,j,k))*fluxes%sppt_wts(i,j)
-          t_tend = (tv%T(i,j,k)-t_in(i,j,k))*fluxes%sppt_wts(i,j)
-          s_tend = (tv%S(i,j,k)-s_in(i,j,k))*fluxes%sppt_wts(i,j)
+          h_tend = (h(i,j,k)-h_in(i,j,k))*stoch_CS%sppt_wts(i,j)
+          t_tend = (tv%T(i,j,k)-t_in(i,j,k))*stoch_CS%sppt_wts(i,j)
+          s_tend = (tv%S(i,j,k)-s_in(i,j,k))*stoch_CS%sppt_wts(i,j)
           h_pert=h_tend+h_in(i,j,k)
           t_pert=t_tend+t_in(i,j,k)
           s_pert=s_tend+s_in(i,j,k)
@@ -502,7 +501,7 @@ end subroutine diabatic
 !> Applies diabatic forcing and diapycnal mixing of temperature, salinity and other tracers for use
 !! with an ALE algorithm.  This version uses an older set of algorithms compared with diabatic_ALE.
 subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
-                           G, GV, US, CS, Waves)
+                           G, GV, US, CS, stoch_CS, Waves)
   type(ocean_grid_type),                      intent(inout) :: G        !< ocean grid structure
   type(verticalGrid_type),                    intent(in)    :: GV       !< ocean vertical grid structure
   type(unit_scale_type),                      intent(in)    :: US       !< A dimensional unit scaling type
@@ -522,6 +521,7 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
   real,                                       intent(in)    :: dt       !< time increment [T ~> s]
   type(time_type),                            intent(in)    :: Time_end !< Time at the end of the interval
   type(diabatic_CS),                          pointer       :: CS       !< module control structure
+  type(stochastic_CS),                        pointer       :: stoch_CS !< stochastic control structure
   type(Wave_parameters_CS),         optional, pointer       :: Waves    !< Surface gravity waves
 
   ! local variables
@@ -815,7 +815,7 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
 
     call find_uv_at_h(u, v, h, u_h, v_h, G, GV, US)
     call energetic_PBL(h, u_h, v_h, tv, fluxes, dt, Kd_ePBL, G, GV, US, &
-                      CS%energetic_PBL_CSp, dSV_dT, dSV_dS, cTKE, SkinBuoyFlux, &
+                      CS%energetic_PBL_CSp, stoch_CS, dSV_dT, dSV_dS, cTKE, SkinBuoyFlux, &
                       waves=waves)
 
     if (associated(Hml)) then
@@ -1065,7 +1065,7 @@ end subroutine diabatic_ALE_legacy
 !>  This subroutine imposes the diapycnal mass fluxes and the
 !!  accompanying diapycnal advection of momentum and tracers.
 subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
-                        G, GV, US, CS, Waves)
+                        G, GV, US, CS, stoch_CS, Waves)
   type(ocean_grid_type),                      intent(inout) :: G        !< ocean grid structure
   type(verticalGrid_type),                    intent(in)    :: GV       !< ocean vertical grid structure
   type(unit_scale_type),                      intent(in)    :: US       !< A dimensional unit scaling type
@@ -1085,6 +1085,7 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
   real,                                       intent(in)    :: dt       !< time increment [T ~> s]
   type(time_type),                            intent(in)    :: Time_end !< Time at the end of the interval
   type(diabatic_CS),                          pointer       :: CS       !< module control structure
+  type(stochastic_CS),                        pointer       :: stoch_CS !< stochastic control structure
   type(Wave_parameters_CS),         optional, pointer       :: Waves    !< Surface gravity waves
 
   ! local variables
@@ -1329,7 +1330,7 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
 
     call find_uv_at_h(u, v, h, u_h, v_h, G, GV, US)
     call energetic_PBL(h, u_h, v_h, tv, fluxes, dt, Kd_ePBL, G, GV, US, &
-                       CS%energetic_PBL_CSp, dSV_dT, dSV_dS, cTKE, SkinBuoyFlux, &
+                       CS%energetic_PBL_CSp, stoch_CS, dSV_dT, dSV_dS, cTKE, SkinBuoyFlux, &
                        waves=waves)
 
     if (associated(Hml)) then
@@ -2999,11 +3000,6 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
                  "mass loss is passed down through the column.", &
                  units="nondim", default=0.8)
 
-  call get_param(param_file, mdl, "DO_SPPT", CS%do_sppt, &
-                 "If true, then stochastically perturb the thermodynamic "//&
-                 "tendemcies of T,S, amd h.  Amplitude and correlations are "//&
-                 "controlled by the nam_stoch namelist in the UFS model only.", &
-                 default=.false.)
   if (CS%use_energetic_PBL .and. .not.CS%useALEalgorithm) &
     call MOM_error(FATAL, "diabatic_driver_init: "//&
                    "ENERGETICS_SFC_PBL = True is only coded to work when USE_REGRIDDING = True.")
@@ -3033,8 +3029,6 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
         'Zonal Acceleration from Diapycnal Mixing', 'm s-2', conversion=US%L_T2_to_m_s2)
     CS%id_dvdt_dia = register_diag_field('ocean_model', 'dvdt_dia', diag%axesCvL, Time, &
         'Meridional Acceleration from Diapycnal Mixing', 'm s-2', conversion=US%L_T2_to_m_s2)
-    CS%id_sppt_wts = register_diag_field('ocean_model', 'sppt_pattern', diag%axesT1, Time, &
-       'random pattern for sppt', 'None')
 
     CS%id_hf_dudt_dia_2d = register_diag_field('ocean_model', 'hf_dudt_dia_2d', diag%axesCu1, Time, &
         'Depth-sum Fractional Thickness-weighted Zonal Acceleration from Diapycnal Mixing', &

@@ -1527,8 +1527,6 @@ subroutine ModelAdvance(gcomp, rc)
   character(len=*),parameter             :: subname='(MOM_cap:ModelAdvance)'
   character(len=8)                       :: suffix
   integer                                :: num_rest_files
-  logical                                :: do_sppt = .false.
-  logical                                :: pert_epbl = .false.
 
   rc = ESMF_SUCCESS
   if(profile_memory) call ESMF_VMLogMemInfo("Entering MOM Model_ADVANCE: ")
