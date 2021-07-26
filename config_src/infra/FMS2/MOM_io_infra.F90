@@ -128,6 +128,10 @@ type :: fieldtype ; private
   integer(kind=int64) :: chksum_read !< A checksum that has been read from a file
   logical :: valid_chksum !< If true, this field has a valid checksum value.
   logical :: FMS2_field  !< If true, this field-type should be used with FMS2 interfaces.
+  type(axistype), allocatable, dimension(:) :: axes !< A List of coordinate axes
+  real :: missing !< A missing value flag
+  real :: scale !< A scaling factor
+  real :: add !< A scalar offset
 end type fieldtype
 
 !> This type is a container for information about an axis in a file.
@@ -490,6 +494,8 @@ subroutine get_file_fields(IO_handle, fields)
   integer(kind=int64), dimension(3) :: checksum_file ! The checksums for a variable in the file
   integer :: nvar  ! The number of variables in the file
   integer :: i
+  type(axistype), allocatable, dimension(:) :: axes !< A list of axes
+  real :: missing, scale, add !< Compression scaling factors and offset value
 
   nvar = size(fields)
   ! Local variables
@@ -518,29 +524,45 @@ subroutine get_file_fields(IO_handle, fields)
     do i=1,nvar
       fields(i)%FT = mpp_fields(i)
       call mpp_get_atts(fields(i)%FT, name=fields(i)%name, units=units, longname=longname, &
-                        checksum=checksum_file)
+           checksum=checksum_file, axes=axes, missing=missing, scale=scale, &
+           add=add)
       fields(i)%longname = trim(longname)
       fields(i)%units = trim(units)
       fields(i)%valid_chksum = mpp_attribute_exist(fields(i)%FT, "checksum")
       if (fields(i)%valid_chksum) fields(i)%chksum_read = checksum_file(1)
+      fields(i)%axes = axes
+      fields(i)%missing = missing
+      fields(i)%scale = scale
+      fields(i)%add = add
     enddo
   endif
 
 end subroutine get_file_fields
 
 !> Extract information from a field type, as stored or as found in a file
-subroutine get_field_atts(field, name, units, longname, checksum)
+subroutine get_field_atts(field, name, units, longname, checksum, axes, missing, scale, add)
   type(fieldtype),            intent(in)  :: field !< The field to extract information from
   character(len=*), optional, intent(out) :: name  !< The variable name
   character(len=*), optional, intent(out) :: units !< The units of the variable
   character(len=*), optional, intent(out) :: longname  !< The long name of the variable
   integer(kind=int64),  dimension(:), &
                     optional, intent(out) :: checksum !< The checksums of the variable in a file
+  type(axistype), optional, dimension(:), intent(out) :: axes !< A list of axes associated with
+                                                              !! the variable.
+  real, optional, intent(out)             :: missing !< The missing of Fill value
+  real, optional, intent(out)             :: scale !< A scaling factor
+  real, optional, intent(out)             :: add !< A scalar offset
 
   if (present(name)) name = trim(field%name)
   if (present(units)) units = trim(field%units)
   if (present(longname)) longname = trim(field%longname)
   if (present(checksum)) checksum = field%chksum_read
+  if (present(axes)) axes = field%axes
+  if (present(missing)) missing = field%missing
+  if (present(scale)) scale = field%scale
+  if (present(add)) add = field%add
+
+
 
 end subroutine get_field_atts
 
