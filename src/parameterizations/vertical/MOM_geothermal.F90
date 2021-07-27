@@ -592,18 +592,16 @@ subroutine geothermal_init(Time, G, GV, US, param_file, diag, CS, useALEalgorith
     CS%id_internal_heat_h_tendency=register_diag_field('ocean_model',    &
         'internal_heat_h_tendency', diag%axesTL, Time,                &
         'Thickness tendency (in 3D) due to internal (geothermal) sources', &
-        trim(thickness_units), conversion=GV%H_to_MKS*US%s_to_T, v_extensive=.true.)
+        trim(thickness_units)//' s-1', conversion=GV%H_to_MKS*US%s_to_T, v_extensive=.true.)
   endif ; endif
 
 end subroutine geothermal_init
 
 !> Clean up and deallocate memory associated with the geothermal heating module.
 subroutine geothermal_end(CS)
-  type(geothermal_CS), pointer :: CS !< Geothermal heating control structure that
-                                     !! will be deallocated in this subroutine.
-
-  if (associated(CS%geo_heat)) deallocate(CS%geo_heat)
-  if (associated(CS)) deallocate(CS)
+  type(geothermal_CS), intent(inout) :: CS !< Geothermal heating control structure that
+                                           !! will be deallocated in this subroutine.
+  deallocate(CS%geo_heat)
 end subroutine geothermal_end
 
 !> \namespace mom_geothermal

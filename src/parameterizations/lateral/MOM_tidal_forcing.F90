@@ -667,8 +667,8 @@ end subroutine calc_tidal_forcing
 
 !> This subroutine deallocates memory associated with the tidal forcing module.
 subroutine tidal_forcing_end(CS)
-  type(tidal_forcing_CS), pointer :: CS !< The control structure returned by a previous call
-                                        !! to tidal_forcing_init; it is deallocated here.
+  type(tidal_forcing_CS), intent(inout) :: CS !< The control structure returned by a previous call
+                                              !! to tidal_forcing_init; it is deallocated here.
 
   if (associated(CS%sin_struct)) deallocate(CS%sin_struct)
   if (associated(CS%cos_struct)) deallocate(CS%cos_struct)
@@ -680,9 +680,6 @@ subroutine tidal_forcing_end(CS)
   if (associated(CS%cosphase_prev)) deallocate(CS%cosphase_prev)
   if (associated(CS%sinphase_prev)) deallocate(CS%sinphase_prev)
   if (associated(CS%amp_prev))      deallocate(CS%amp_prev)
-
-  if (associated(CS)) deallocate(CS)
-
 end subroutine tidal_forcing_end
 
 !> \namespace tidal_forcing
