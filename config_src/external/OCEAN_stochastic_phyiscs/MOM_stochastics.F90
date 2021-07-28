@@ -4,13 +4,10 @@ module MOM_stochastics
 ! This file is part of MOM6. See LICENSE.md for the license.
 
 ! This is the top level module for the MOM6 ocean model.  It contains routines
-! for initialization, termination and update of ocean model state.  This
+! for initialization, update, and writing restart of stochastic physics. This
 ! particular version wraps all of the calls for MOM6 in the calls that had
 ! been used for MOM4.
 !
-! This code is a stop-gap wrapper of the MOM6 code to enable it to be called
-! in the same way as MOM4.
-
 use MOM_diag_mediator,       only : register_diag_field, diag_ctrl, time_type
 use MOM_grid,                only : ocean_grid_type
 use MOM_verticalGrid,        only : verticalGrid_type
@@ -45,17 +42,9 @@ type, public:: stochastic_CS
   type(time_type), pointer :: Time !< Pointer to model time (needed for sponges)
 end type stochastic_CS
 
-!> This type is used for communication with other components via the FMS coupler.
-!! The element names and types can be changed only with great deliberation, hence
-!! the persistnce of things like the cutsy element name "avg_kount".
 contains
 
-!> ocean_model_init initializes the ocean model, including registering fields
-!! for restarts and reading restart files if appropriate.
-!!
-!!   This subroutine initializes both the ocean state and the ocean surface type.
-!! Because of the way that indicies and domains are handled, Ocean_sfc must have
-!! been used in a previous call to cean_type.
+!!   This subroutine initializes the stochastics physics control structure.
 subroutine stochastics_init(dt, grid, GV, CS, param_file, diag, Time)
   real, intent(in)                     :: dt       !< time step [T ~> s]
   type(ocean_grid_type),   intent(in)  :: grid     ! horizontal grid information
@@ -135,6 +124,7 @@ subroutine stochastics_init(dt, grid, GV, CS, param_file, diag, Time)
     write(*,'(/12x,a/)') '=== COMPLETED MOM STOCHASTIC INITIALIZATION ====='
 
   call callTree_leave("ocean_model_init(")
+  return
 end subroutine stochastics_init
 
 !> update_ocean_model uses the forcing in Ice_ocean_boundary to advance the
