@@ -662,7 +662,7 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
       call disable_averaging(CS%diag)
     endif
   endif
-
+  ! advance the random pattern if stochastic physics is active
   if (CS%stoch_CS%do_sppt .OR. CS%stoch_CS%pert_epbl) call update_stochastics(CS%stoch_CS)
 
   if (do_dyn) then
@@ -2495,8 +2495,6 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
 
   if (.not. CS%rotate_index) &
     G => G_in
-  ! initialize stochastic physics
-  !call stochastics_init(CS%dt_therm, CS%G, CS%GV, CS%stoch_CS, param_file, diag, Time)
   ! Set a few remaining fields that are specific to the ocean grid type.
   call set_first_direction(G, first_direction)
   ! Allocate the auxiliary non-symmetric domain for debugging or I/O purposes.
