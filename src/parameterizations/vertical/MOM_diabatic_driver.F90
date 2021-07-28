@@ -2745,8 +2745,8 @@ subroutine adiabatic_driver_init(Time, G, param_file, diag, CS, &
   type(tracer_flow_control_CS), pointer  :: tracer_flow_CSp  !< pointer to control structure of the
                                                              !! tracer flow control module
 
-! This "include" declares and sets the variable "version".
-#include "version_variable.h"
+  ! This "include" declares and sets the variable "version".
+# include "version_variable.h"
   character(len=40)  :: mdl = "MOM_diabatic_driver" ! This module's name.
 
   if (associated(CS)) then
@@ -2758,9 +2758,34 @@ subroutine adiabatic_driver_init(Time, G, param_file, diag, CS, &
   CS%diag => diag
   if (associated(tracer_flow_CSp)) CS%tracer_flow_CSp => tracer_flow_CSp
 
-! Set default, read and log parameters
+  ! Set default, read and log parameters
   call log_version(param_file, mdl, version, &
                    "The following parameters are used for diabatic processes.")
+
+  ! Check for any subsidiary parameters that are inconsistent with the adiabatic mode.
+  call get_param(param_file, mdl, "SPONGE", CS%use_sponge, &
+                 "If true, sponges may be applied anywhere in the domain. "//&
+                 "The exact location and properties of those sponges are "//&
+                 "specified via calls to initialize_sponge and possibly "//&
+                 "set_up_sponge_field.", default=.false., do_not_log=.true.)
+  call get_param(param_file, mdl, "ENERGETICS_SFC_PBL", CS%use_energetic_PBL, &
+                 "If true, use an implied energetics planetary boundary "//&
+                 "layer scheme to determine the diffusivity and viscosity "//&
+                 "in the surface boundary layer.", default=.false., do_not_log=.true.)
+  call get_param(param_file, mdl, "USE_KPP", CS%use_KPP, &
+                 "If true, turns on the [CVMix] KPP scheme of Large et al., 1994, "//&
+                 "to calculate diffusivities and non-local transport in the OBL.", &
+                 default=.false., do_not_log=.true.)
+
+  if (CS%use_sponge) call MOM_error(WARNING, &
+    "When ADIABATIC = True, it is inconsistent to set SPONGE = True.")
+  if (CS%use_energetic_PBL) call MOM_error(WARNING, &
+    "When ADIABATIC = True, it is inconsistent to set ENERGETICS_SFC_PBL = True.")
+  if (CS%use_KPP) call MOM_error(WARNING, &
+    "When ADIABATIC = True, it is inconsistent to set USE_KPP = True.")
+
+  if (CS%use_sponge .or. CS%use_energetic_PBL .or. CS%use_KPP) &
+    call MOM_error(FATAL, "adiabatic_driver_init is aborting due to inconsistent parameter settings.")
 
 end subroutine adiabatic_driver_init
 
@@ -2785,13 +2810,14 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
   type(sponge_CS),         pointer       :: sponge_CSp       !< pointer to the sponge module control structure
   type(ALE_sponge_CS),     pointer       :: ALE_sponge_CSp   !< pointer to the ALE sponge module control structure
 
+  ! Local variables
   real    :: Kd  ! A diffusivity used in the default for other tracer diffusivities, in MKS units [m2 s-1]
   integer :: num_mode
   logical :: use_temperature
   character(len=20) :: EN1, EN2, EN3
 
-! This "include" declares and sets the variable "version".
-#include "version_variable.h"
+  ! This "include" declares and sets the variable "version".
+# include "version_variable.h"
   character(len=40)  :: mdl = "MOM_diabatic_driver" ! This module's name.
   character(len=48)  :: thickness_units
   character(len=40)  :: var_name
