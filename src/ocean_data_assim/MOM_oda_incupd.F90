@@ -415,7 +415,7 @@ subroutine calc_oda_increments(h, tv, u, v, G, GV, US, CS)
         enddo
      endif
   enddo; enddo
-
+   
   ! remap u to h_obs to get increment
   if (CS%uv_inc) then
      call pass_var(h, G%Domain)
@@ -554,16 +554,6 @@ subroutine apply_oda_incupd(h, tv, u, v, dt, G, GV, US, CS)
   if (CS%ncount >= CS%nstep_incupd) then
     if (is_root_pe()) call MOM_error(NOTE,"ended updating fields with increments. ")
     return
-    if (CS%ncount == CS%nstep_incupd) then
-       call register_restart_field_as_obsolete("oda_incupd_ncount", "none", CS)
-       call register_restart_field_as_obsolete("T_inc", "none", CS)
-       call register_restart_field_as_obsolete("S_inc", "none", CS)
-       call register_restart_field_as_obsolete("h_obs", "none", CS)
-       if (CS%uv_inc) then
-          call register_restart_field_as_obsolete("u_inc", "none", CS)
-          call register_restart_field_as_obsolete("v_inc", "none", CS)
-       endif
-     endif
   endif !ncount>CS%nstep_incupd
 
   ! update counter
