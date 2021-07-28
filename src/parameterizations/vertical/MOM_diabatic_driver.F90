@@ -313,7 +313,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
 
   if (G%ke == 1) return
 
-   ! save  copy of the date for SPPT
+   ! save  copy of the date for SPPT if active
   if (stoch_CS%do_sppt) then
     allocate(h_in(G%isd:G%ied, G%jsd:G%jed,G%ke))
     allocate(t_in(G%isd:G%ied, G%jsd:G%jed,G%ke))

@@ -3,13 +3,11 @@ module MOM_stochastics
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-! This is the top level module for the MOM6 ocean model.  It contains routines
-! for initialization, termination and update of ocean model state.  This
-! particular version wraps all of the calls for MOM6 in the calls that had
-! been used for MOM4.
-!
-! This code is a stop-gap wrapper of the MOM6 code to enable it to be called
-! in the same way as MOM4.
+! This is the top level module for the MOM6 ocean model.  It contains
+! placeholder for initialization, update, and writing restarts of ocean stochastic physics.
+! The actualy stochastic physics is available at
+! https://github.com/ufs-community/ufs-weather-model
+! 
 
 use MOM_diag_mediator,       only : register_diag_field, diag_ctrl, time_type
 use MOM_grid,                only : ocean_grid_type
@@ -62,6 +60,9 @@ subroutine update_stochastics(CS)
   type(stochastic_CS),      intent(inout) :: CS        !< diabatic control structure
   return
 end subroutine update_stochastics
-
+subroutine write_mom_restart_stoch(filename)
+  character(len=*) :: filename
+  return
+end subroutine write_mom_restart_stoch
 end module MOM_stochastics
 
