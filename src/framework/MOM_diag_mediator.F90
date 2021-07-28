@@ -1969,10 +1969,10 @@ integer function register_diag_field(module_name, field_name, axes_in, init_time
                                                          !! integrated). Default/absent for intensive.
   ! Local variables
   real :: MOM_missing_value
-  type(diag_ctrl), pointer :: diag_cs => NULL()
-  type(axes_grp), pointer :: remap_axes => null()
-  type(axes_grp), pointer :: axes => null()
-  type(axes_grp), pointer :: axes_d2 => null()
+  type(diag_ctrl), pointer :: diag_cs
+  type(axes_grp), pointer :: remap_axes
+  type(axes_grp), pointer :: axes
+  type(axes_grp), pointer :: axes_d2
   integer :: dm_id, i, dl
   character(len=256) :: msg, cm_string
   character(len=256) :: new_module_name
@@ -2097,8 +2097,8 @@ integer function register_diag_field(module_name, field_name, axes_in, init_time
 
     new_module_name = trim(module_name)//'_d2'
 
+    axes_d2 => null()
     if (axes_in%rank == 3 .or. axes_in%rank == 2 ) then
-      axes_d2 => null()
       if (axes_in%id == diag_cs%axesTL%id) then
         axes_d2 => diag_cs%dsamp(dl)%axesTL
       elseif (axes_in%id == diag_cs%axesBL%id) then
@@ -2129,6 +2129,7 @@ integer function register_diag_field(module_name, field_name, axes_in, init_time
               //trim(new_module_name)//"-"//trim(field_name))
       endif
     endif
+
     ! Register the native diagnostic
     if (associated(axes_d2)) then
        active = register_diag_field_expand_cmor(dm_id, new_module_name, field_name, axes_d2, &
