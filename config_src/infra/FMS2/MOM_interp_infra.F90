@@ -6,7 +6,8 @@ module MOM_interp_infra
 use MOM_domain_infra,    only : MOM_domain_type, domain2d
 use MOM_time_manager,    only : time_type
 use horiz_interp_mod,    only : horiz_interp_new, horiz_interp, horiz_interp_init, horiz_interp_type
-use mpp_io_mod,          only : axistype, mpp_get_axis_data
+use mpp_io_mod,          only : mpp_axistype=>axistype, mpp_get_axis_data
+use MOM_io_infra,        only : axistype, get_axis_data, set_axis_data
 use time_interp_external_mod, only : time_interp_external
 use time_interp_external_mod, only : init_external_field, time_interp_external_init
 use time_interp_external_mod, only : get_external_field_size
@@ -16,8 +17,8 @@ implicit none ; private
 
 public :: horiz_interp_type, horiz_interp_init
 public :: time_interp_extern, init_extern_field, time_interp_external_init
-public :: get_external_field_info, axistype, get_axis_data
-public :: run_horiz_interp, build_horiz_interp_weights
+public :: get_external_field_info
+public :: run_horiz_interp, build_horiz_interp_weights, get_extern_field_axes
 
 !> Read a field based on model time, and rotate to the model domain.
 interface time_interp_extern
@@ -31,6 +32,8 @@ interface run_horiz_interp
   module procedure horiz_interp_from_weights_field2d
   module procedure horiz_interp_from_weights_field3d
 end interface
+
+
 
 !> build weights for horizontal interpolation of field
 interface build_horiz_interp_weights
@@ -114,33 +117,40 @@ subroutine build_horiz_interp_weights_2d_to_2d(Interp, lon_in, lat_in, lon_out, 
 end subroutine build_horiz_interp_weights_2d_to_2d
 
 
-!> Extracts and returns the axis data stored in an axistype.
-subroutine get_axis_data( axis, dat )
-  type(axistype),     intent(in)  :: axis !< An axis type
-  real, dimension(:), intent(out) :: dat  !< The data in the axis variable
-
-  call mpp_get_axis_data( axis, dat )
-end subroutine get_axis_data
 
 
 !> get size of an external field from field index
 function get_extern_field_size(index)
 
   integer, intent(in) :: index         !< field index
-  integer :: get_extern_field_size(4)  !< field size
+  integer, dimension(4) :: get_extern_field_size  !< field size
 
   get_extern_field_size = get_external_field_size(index)
 
 end function get_extern_field_size
 
 
-!> get axes of an external field from field index
+!> get MOM axes of an external field from field index
+!! NOTE that the axis data are defined, but additional
+!! axis attributes (e.g. axis%name) are not being set
+!! here.
 function get_extern_field_axes(index)
 
   integer, intent(in) :: index          !< field index
   type(axistype), dimension(4) :: get_extern_field_axes !< field axes
+  type(mpp_axistype), dimension(4) :: axes_FMS !< field axes
+  integer, dimension(4) :: fld_siz
+  integer :: i
+  real, dimension(:), allocatable :: ax_data
 
-  get_extern_field_axes = get_external_field_axes(index)
+  axes_FMS = get_external_field_axes(index)
+  fld_siz=get_external_field_size(index)
+  do i=1,4
+    allocate(ax_data(fld_siz(i)));ax_data(:)=0.0
+    call mpp_get_axis_data(axes_FMS(i),ax_data)
+    call set_axis_data(get_extern_field_axes(i),ax_data)
+    deallocate(ax_data)
+  enddo
 
 end function get_extern_field_axes
 

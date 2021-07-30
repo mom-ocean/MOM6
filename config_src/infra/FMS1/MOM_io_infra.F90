@@ -420,6 +420,7 @@ subroutine get_axis_data( axis, dat )
   real, dimension(:), intent(out) :: dat  !< The data in the axis variable
 
   call mpp_get_axis_data( axis, dat )
+
 end subroutine get_axis_data
 
 !> This routine uses the fms_io subroutine read_data to read a scalar named

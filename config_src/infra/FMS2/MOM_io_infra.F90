@@ -43,9 +43,9 @@ implicit none ; private
 public :: open_file, open_ASCII_file, file_is_open, close_file, flush_file, file_exists
 public :: get_file_info, get_file_fields, get_file_times, get_filename_suffix
 public :: MOM_read_data, MOM_read_vector, write_metadata, write_field
-public :: field_exists, get_field_atts, get_field_size, get_axis_data, read_field_chksum
+public :: field_exists, get_field_atts, get_field_size, read_field_chksum
 public :: io_infra_init, io_infra_end, MOM_namelist_file, check_namelist_error, write_version
-public :: stdout_if_root
+public :: stdout_if_root, get_axis_data, set_axis_data
 ! These types act as containers for information about files, fields and axes, respectively,
 ! and may also wrap opaque types from the underlying infrastructure.
 public :: file_type, fieldtype, axistype
@@ -64,6 +64,7 @@ end interface
 interface open_file
   module procedure open_file_type, open_file_unit
 end interface open_file
+
 
 !> Read a data field from a file
 interface MOM_read_data
@@ -119,6 +120,14 @@ type :: file_type ; private
   logical :: FMS2_file !< If true, this file-type is to be used with FMS2 interfaces.
 end type file_type
 
+!> This type is a container for information about an axis in a file.
+type :: axistype ; private
+  character(len=256) :: name !< The name of this axis in the files.
+  type(mpp_axistype) :: AT   !< The FMS1 axis-type that this type wraps
+  real, allocatable, dimension(:) :: ax_data !< The values of the data on the axis.
+  logical :: domain_decomposed = .false.  !< True if axis is domain-decomposed
+end type axistype
+
 !> This type is a container for information about a variable in a file.
 type :: fieldtype ; private
   character(len=256)  :: name !< The name of this field in the files.
@@ -134,13 +143,6 @@ type :: fieldtype ; private
   real :: add !< A scalar offset
 end type fieldtype
 
-!> This type is a container for information about an axis in a file.
-type :: axistype ; private
-  character(len=256) :: name !< The name of this axis in the files.
-  type(mpp_axistype) :: AT   !< The FMS1 axis-type that this type wraps
-  real, allocatable, dimension(:) :: ax_data !< The values of the data on the axis.
-  logical :: domain_decomposed = .false.  !< True if axis is domain-decomposed
-end type axistype
 
 !> For now, these module-variables are hard-coded to exercise the new FMS2 interfaces.
 logical :: FMS2_reads  = .true.
@@ -493,8 +495,9 @@ subroutine get_file_fields(IO_handle, fields)
   character(len=64)   :: checksum_char ! The hexadecimal checksum read from the file
   integer(kind=int64), dimension(3) :: checksum_file ! The checksums for a variable in the file
   integer :: nvar  ! The number of variables in the file
-  integer :: i
-  type(axistype), allocatable, dimension(:) :: axes !< A list of axes
+  integer :: i, j
+  type(axistype), dimension(4) :: axes !< A list of axes
+  type(mpp_axistype), dimension(4) :: mpp_axes !< A list of mpp axist objecta
   real :: missing, scale, add !< Compression scaling factors and offset value
 
   nvar = size(fields)
@@ -524,13 +527,18 @@ subroutine get_file_fields(IO_handle, fields)
     do i=1,nvar
       fields(i)%FT = mpp_fields(i)
       call mpp_get_atts(fields(i)%FT, name=fields(i)%name, units=units, longname=longname, &
-           checksum=checksum_file, axes=axes, missing=missing, scale=scale, &
-           add=add)
+            checksum=checksum_file, axes=mpp_axes, missing=missing, scale=scale, &
+            add=add)
+      !call get_field_atts(fields(i), name=fields(i)%name, units=units,longname=longname, &
+      !     checksum=checksum_file, axes=axes,missing=missing,scale=scale,add=add)
       fields(i)%longname = trim(longname)
       fields(i)%units = trim(units)
       fields(i)%valid_chksum = mpp_attribute_exist(fields(i)%FT, "checksum")
       if (fields(i)%valid_chksum) fields(i)%chksum_read = checksum_file(1)
-      fields(i)%axes = axes
+      allocate(fields(i)%axes(4))
+      do j=1,4
+        fields(i)%axes(j)%AT = mpp_axes(j)
+      enddo
       fields(i)%missing = missing
       fields(i)%scale = scale
       fields(i)%add = add
@@ -666,18 +674,21 @@ subroutine get_axis_data( axis, dat )
   type(axistype),     intent(in)  :: axis !< An axis type
   real, dimension(:), intent(out) :: dat  !< The data in the axis variable
 
-  integer :: i
-
-  ! This routine might not be needed for MOM6.
-  if (allocated(axis%ax_data)) then
-    if (size(axis%ax_data) > size(dat)) call MOM_error(FATAL, &
-      "get_axis_data called with too small of an output data array for "//trim(axis%name))
-    do i=1,size(axis%ax_data) ; dat(i) = axis%ax_data(i) ; enddo
-  elseif (.not.FMS2_writes) then
-    call mpp_get_axis_data( axis%AT, dat )
-  endif
+  call mpp_get_axis_data( axis%AT, dat )
 
 end subroutine get_axis_data
+
+
+!> Extracts and returns the axis data stored in an axistype.
+subroutine set_axis_data( axis, dat )
+  type(axistype),     intent(inout)  :: axis !< An axis type
+  real, dimension(:), intent(in) :: dat  !< The data in the axis variable
+
+  if (allocated(axis%ax_data)) deallocate(axis%ax_data)
+  allocate(axis%ax_data(size(dat,1)))
+  axis%ax_data(:) = dat(:)
+end subroutine set_axis_data
+
 
 !> This routine uses the fms_io subroutine read_data to read a scalar named
 !! "fieldname" from a single or domain-decomposed file "filename".

@@ -13,15 +13,13 @@ use MOM_file_parser,   only : get_param, log_param, log_version, param_file_type
 use MOM_grid,          only : ocean_grid_type
 use MOM_interpolate,   only : time_interp_external, horiz_interp_init
 use MOM_interpolate,   only : build_horiz_interp_weights, run_horiz_interp, horiz_interp_type
-use MOM_interp_infra,  only : axistype, get_external_field_info, get_axis_data
+use MOM_interp_infra,  only : get_external_field_info
 use MOM_time_manager,  only : time_type
-use MOM_io,            only : fieldtype, axistype
+use MOM_io,            only : fieldtype, axistype, get_axis_data
 use MOM_io,            only : get_file_fieldnames, file_type, open_file, close_file
 use MOM_io,            only : get_file_info, file_exists, get_field_atts, get_file_fields
 use MOM_io,            only : get_field_atts, read_data, field_size
 use MOM_io,            only : NETCDF_FILE, SINGLE_FILE, READONLY_FILE
-!use netcdf, only : NF90_OPEN, NF90_NOWRITE, NF90_GET_ATT, NF90_GET_VAR
-!use netcdf, only : NF90_INQ_VARID, NF90_INQUIRE_VARIABLE, NF90_INQUIRE_DIMENSION
 
 implicit none ; private
 
@@ -643,7 +641,7 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, t
   logical :: add_np
   character(len=8)  :: laynum
   type(horiz_interp_type) :: Interp
-  type(axistype), dimension(4) :: axes_data
+  type(axistype), dimension(4) :: axes
   integer :: is, ie, js, je     ! compute domain indices
   integer :: isc,iec,jsc,jec    ! global compute domain indices
   integer :: isg, ieg, jsg, jeg ! global extent
@@ -682,7 +680,7 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, t
 
   call cpu_clock_begin(id_clock_read)
 
-  call get_external_field_info(fms_id, size=fld_sz, axes=axes_data, missing=missing_value)
+  call get_external_field_info(fms_id, size=fld_sz, axes=axes, missing=missing_value)
   if (allocated(lon_in)) deallocate(lon_in)
   if (allocated(lat_in)) deallocate(lat_in)
   if (allocated(z_in)) deallocate(z_in)
@@ -696,15 +694,15 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, t
   if (PRESENT(spongeOngrid)) spongeDataOngrid = spongeOngrid
   if (.not. spongeDataOngrid) then
     allocate(lon_in(id), lat_in(jd))
-    call get_axis_data(axes_data(1), lon_in)
-    call get_axis_data(axes_data(2), lat_in)
+    call get_axis_data(axes(1), lon_in)
+    call get_axis_data(axes(2), lat_in)
   endif
 
   allocate(z_in(kd), z_edges_in(kd+1))
 
   allocate(tr_z(isd:ied,jsd:jed,kd), mask_z(isd:ied,jsd:jed,kd))
 
-  call get_axis_data(axes_data(3), z_in)
+  call get_axis_data(axes(3), z_in)
 
   if (present(m_to_Z)) then ; do k=1,kd ; z_in(k) = m_to_Z * z_in(k) ; enddo ; endif
 
