@@ -679,7 +679,7 @@ subroutine get_axis_data( axis, dat )
 end subroutine get_axis_data
 
 
-!> Extracts and returns the axis data stored in an axistype.
+!> Allocates and stores axis data into an existing axistype.
 subroutine set_axis_data( axis, dat )
   type(axistype),     intent(inout)  :: axis !< An axis type
   real, dimension(:), intent(in) :: dat  !< The data in the axis variable

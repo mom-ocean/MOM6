@@ -34,7 +34,7 @@ public :: get_file_info, get_file_fields, get_file_times, get_filename_suffix
 public :: MOM_read_data, MOM_read_vector, write_metadata, write_field
 public :: field_exists, get_field_atts, get_field_size, get_axis_data, read_field_chksum
 public :: io_infra_init, io_infra_end, MOM_namelist_file, check_namelist_error, write_version
-public :: stdout_if_root
+public :: stdout_if_root, set_axis_data
 ! These types are inherited from underlying infrastructure code, to act as containers for
 ! information about fields and axes, respectively, and are opaque to this module.
 public :: fieldtype, axistype
@@ -422,6 +422,17 @@ subroutine get_axis_data( axis, dat )
   call mpp_get_axis_data( axis, dat )
 
 end subroutine get_axis_data
+
+!> Allocates and stores axis data into an existing axistype.
+subroutine set_axis_data( axis, dat )
+  type(axistype),     intent(inout)  :: axis !< An axis type
+  real, dimension(:), intent(in) :: dat  !< The data in the axis variable
+
+  call MOM_error(WARNING,'This feature is not available in FMS')
+
+  return
+
+end subroutine set_axis_data
 
 !> This routine uses the fms_io subroutine read_data to read a scalar named
 !! "fieldname" from a single or domain-decomposed file "filename".
