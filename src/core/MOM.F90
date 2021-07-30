@@ -41,7 +41,7 @@ use MOM_io,                   only : MOM_io_init, vardesc, var_desc
 use MOM_io,                   only : slasher, file_exists, MOM_read_data
 use MOM_obsolete_params,      only : find_obsolete_params
 use MOM_restart,              only : register_restart_field, register_restart_pair
-use MOM_restart,              only : query_initialized, save_restart
+use MOM_restart,              only : query_initialized, save_restart, restart_registry_lock
 use MOM_restart,              only : restart_init, is_new_run, determine_is_new_run, MOM_restart_CS
 use MOM_spatial_means,        only : global_mass_integral
 use MOM_time_manager,         only : time_type, real_to_time, time_type_to_real, operator(+)
@@ -2145,8 +2145,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
     if (associated(OBC_in)) then
       ! TODO: General OBC index rotations is not yet supported.
       if (modulo(turns, 4) /= 1) &
-        call MOM_error(FATAL, "OBC index rotation of 180 and 270 degrees is " &
-          // "not yet unsupported.")
+        call MOM_error(FATAL, "OBC index rotation of 180 and 270 degrees is not yet supported.")
       allocate(CS%OBC)
       call rotate_OBC_config(OBC_in, dG_in, CS%OBC, dG, turns)
     endif
@@ -2166,8 +2165,6 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   call callTree_waypoint("grids initialized (initialize_MOM)")
 
   call MOM_timing_init(CS)
-
-  if (associated(CS%OBC)) call call_OBC_register(param_file, CS%update_OBC_CSp, US, CS%OBC)
 
   call tracer_registry_init(param_file, CS%tracer_Reg)
 
@@ -2222,21 +2219,8 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
                            flux_scale=conv2salt, convergence_units='kg m-2 s-1', &
                            convergence_scale=0.001*GV%H_to_kg_m2, CMOR_tendprefix="osalt", diag_form=2)
     endif
-    ! NOTE: register_temp_salt_segments includes allocation of tracer fields
-    !   along segments.  Bit reproducibility requires that MOM_initialize_state
-    !   be called on the input index map, so we must setup both OBC and OBC_in.
-    !
-    ! XXX: This call on OBC_in allocates the tracer fields on the unrotated
-    !   grid, but also incorrectly stores a pointer to a tracer_type for the
-    !   rotated registry (e.g. segment%tr_reg%Tr(n)%Tr) from CS%tracer_reg.
-    !
-    !   While incorrect and potentially dangerous, it does not seem that this
-    !   pointer is used during initialization, so we leave it for now.
-    if (CS%rotate_index .and. associated(OBC_in)) &
-      call register_temp_salt_segments(GV, OBC_in, CS%tracer_Reg, param_file)
-    if (associated(CS%OBC)) &
-      call register_temp_salt_segments(GV, CS%OBC, CS%tracer_Reg, param_file)
   endif
+
   if (use_frazil) then
     allocate(CS%tv%frazil(isd:ied,jsd:jed)) ; CS%tv%frazil(:,:) = 0.0
   endif
@@ -2329,11 +2313,38 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   call mixedlayer_restrat_register_restarts(dG%HI, param_file, &
            CS%mixedlayer_restrat_CSp, restart_CSp)
 
-  if (associated(CS%OBC)) &
+  if (CS%rotate_index .and. associated(OBC_in) .and. use_temperature) then
+    ! NOTE: register_temp_salt_segments includes allocation of tracer fields
+    !   along segments.  Bit reproducibility requires that MOM_initialize_state
+    !   be called on the input index map, so we must setup both OBC and OBC_in.
+    !
+    ! XXX: This call on OBC_in allocates the tracer fields on the unrotated
+    !   grid, but also incorrectly stores a pointer to a tracer_type for the
+    !   rotated registry (e.g. segment%tr_reg%Tr(n)%Tr) from CS%tracer_reg.
+    !
+    !   While incorrect and potentially dangerous, it does not seem that this
+    !   pointer is used during initialization, so we leave it for now.
+    call register_temp_salt_segments(GV, OBC_in, CS%tracer_Reg, param_file)
+  endif
+
+  if (associated(CS%OBC)) then
+    ! Set up remaining information about open boundary conditions that is needed for OBCs.
+    call call_OBC_register(param_file, CS%update_OBC_CSp, US, CS%OBC, CS%tracer_Reg)
+  !### Package specific changes to OBCs need to go here?
+
+    ! This is the equivalent to 2 calls to register_segment_tracer (per segment), which
+    ! could occur with the call to update_OBC_data or after the main initialization.
+    if (use_temperature) &
+      call register_temp_salt_segments(GV, CS%OBC, CS%tracer_Reg, param_file)
+
+    ! This needs the number of tracers and to have called any code that sets whether
+    ! reservoirs are used.
     call open_boundary_register_restarts(dg%HI, GV, CS%OBC, CS%tracer_Reg, &
                           param_file, restart_CSp, use_temperature)
+  endif
 
   call callTree_waypoint("restart registration complete (initialize_MOM)")
+  call restart_registry_lock(restart_CSp)
 
   !   Shift from using the temporary dynamic grid type to using the final
   ! (potentially static) ocean-specific grid type.
@@ -2431,7 +2442,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
         turns, CS%u, CS%v, CS%h, CS%T, CS%S)
 
     if (associated(sponge_in_CSp)) then
-      ! TODO: Implementation and testing of non-ALE spong rotation
+      ! TODO: Implementation and testing of non-ALE sponge rotation
       call MOM_error(FATAL, "Index rotation of non-ALE sponge is not yet implemented.")
     endif
 
@@ -2471,18 +2482,10 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   endif
 
   if (use_ice_shelf .and. CS%debug) &
-    call hchksum(CS%frac_shelf_h, "MOM:frac_shelf_h", G%HI, &
-        haloshift=0)
+    call hchksum(CS%frac_shelf_h, "MOM:frac_shelf_h", G%HI, haloshift=0)
 
   call cpu_clock_end(id_clock_MOM_init)
   call callTree_waypoint("returned from MOM_initialize_state() (initialize_MOM)")
-
-! ! Need this after MOM_initialize_state for DOME OBC stuff.
-! if (associated(CS%OBC)) &
-!   call open_boundary_register_restarts(G%HI, GV, CS%OBC, CS%tracer_Reg, &
-!                         param_file, restart_CSp, use_temperature)
-
-! call callTree_waypoint("restart registration complete (initialize_MOM)")
 
   ! From this point, there may be pointers being set, so the final grid type
   ! that will persist throughout the run has to be used.
@@ -2838,6 +2841,7 @@ subroutine finish_MOM_initialization(Time, dirs, CS, restart_CSp)
   if (CS%write_IC) then
     allocate(restart_CSp_tmp)
     restart_CSp_tmp = restart_CSp
+    call restart_registry_lock(restart_CSp_tmp, unlocked=.true.)
     allocate(z_interface(SZI_(G),SZJ_(G),SZK_(GV)+1))
     call find_eta(CS%h, CS%tv, G, GV, US, z_interface, eta_to_m=1.0)
     call register_restart_field(z_interface, "eta", .true., restart_CSp_tmp, &
