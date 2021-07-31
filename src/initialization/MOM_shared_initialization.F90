@@ -434,6 +434,10 @@ subroutine limit_topography(D, G, param_file, max_depth, US)
     do j=G%jsd,G%jed ; do i=G%isd,G%ied
       if (D(i,j) > mask_depth) then
         D(i,j) = min( max( D(i,j), min_depth ), max_depth )
+      else
+        ! This statement is required for cases with masked-out PEs over the land,
+        ! to remove the large initialized values (-9e30) from the halos.
+        D(i,j) = mask_depth
       endif
     enddo ; enddo
   endif
