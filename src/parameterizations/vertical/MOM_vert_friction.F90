@@ -527,7 +527,7 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
     call post_data(CS%id_h_dv_dt_visc, h_dv_dt_visc, CS%diag)
     deallocate(h_dv_dt_visc)
   endif
-  
+
   if (CS%id_du_dt_visc_rem > 0) then
     allocate(du_dt_visc_rem(G%IsdB:G%IedB,G%jsd:G%jed,GV%ke))
     du_dt_visc_rem(:,:,:) = 0.0
@@ -1903,7 +1903,7 @@ subroutine vertvisc_init(MIS, Time, G, GV, US, param_file, diag, ADp, dirs, &
     call safe_alloc_ptr(ADp%dv_dt_visc,isd,ied,JsdB,JedB,nz)
     call safe_alloc_ptr(ADp%diag_hv,isd,ied,JsdB,JedB,nz)
   endif
-  
+
   CS%id_du_dt_visc_rem = register_diag_field('ocean_model', 'du_dt_visc_rem', diag%axesCuL, Time, &
       'Zonal Acceleration from Horizontal Viscosity multiplied by viscous remnant fraction', 'm2 s-2', &
       conversion=GV%H_to_m*US%L_T2_to_m_s2)

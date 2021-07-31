@@ -1991,7 +1991,7 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, US, param_file, diag
       'Potential to Kinetic Energy Conversion of Layer', &
       'm3 s-3', conversion=GV%H_to_m*(US%L_T_to_m_s**2)*US%s_to_T)
   if (CS%id_PE_to_KE>0) call safe_alloc_ptr(CS%PE_to_KE,isd,ied,jsd,jed,nz)
-  
+
  CS%id_PE_to_KE_visc_rem = register_diag_field('ocean_model', 'PE_to_KE_visc_rem', diag%axesTL, Time, &
       'Potential to Kinetic Energy Conversion multiplied by viscous remnant fraction', &
       'm3 s-3', conversion=GV%H_to_m*(US%L_T_to_m_s**2)*US%s_to_T)

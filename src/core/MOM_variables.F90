@@ -195,25 +195,25 @@ type, public :: accel_diag_ptrs
 
   real, pointer :: visc_rem_u(:,:,:) => NULL() !< viscous remnant at u points
   real, pointer :: visc_rem_v(:,:,:) => NULL() !< viscous remnant at v points
-  real, pointer :: diffu_visc_rem(:,:,:) => NULL() !< Zonal acceleration due to along isopycnal viscosity 
+  real, pointer :: diffu_visc_rem(:,:,:) => NULL() !< Zonal acceleration due to along isopycnal viscosity
                                                    ! multiplied by viscous remnant fraction [L T-2 ~> m s-2]
-  real, pointer :: diffv_visc_rem(:,:,:) => NULL() !< Meridional acceleration due to along isopycnal viscosity 
+  real, pointer :: diffv_visc_rem(:,:,:) => NULL() !< Meridional acceleration due to along isopycnal viscosity
                                                    ! multiplied by viscous remnant fraction [L T-2 ~> m s-2]
-  real, pointer :: CAu_visc_rem(:,:,:) => NULL() !< Zonal Coriolis and momentum advection accelerations 
+  real, pointer :: CAu_visc_rem(:,:,:) => NULL() !< Zonal Coriolis and momentum advection accelerations
                                                  ! multiplied by viscous remnant fraction [L T-2 ~> m s-2]
-  real, pointer :: CAv_visc_rem(:,:,:) => NULL() !< Meridional Coriolis and momentum advection accelerations 
+  real, pointer :: CAv_visc_rem(:,:,:) => NULL() !< Meridional Coriolis and momentum advection accelerations
                                                  ! multiplied by viscous remnant fraction [L T-2 ~> m s-2]
-  real, pointer :: PFu_visc_rem(:,:,:) => NULL() !< Zonal acceleration due to pressure forces multiplied 
+  real, pointer :: PFu_visc_rem(:,:,:) => NULL() !< Zonal acceleration due to pressure forces multiplied
                                                  ! by viscous remnant fraction [L T-2 ~> m s-2]
-  real, pointer :: PFv_visc_rem(:,:,:) => NULL() !< Meridional acceleration due to pressure forces 
+  real, pointer :: PFv_visc_rem(:,:,:) => NULL() !< Meridional acceleration due to pressure forces
                                                  ! multiplied by viscous remnant fraction [L T-2 ~> m s-2]
   real, pointer :: du_dt_visc_rem(:,:,:) => NULL() !< Zonal acceleration due to vertical viscosity multiplied
                                                    ! by viscous remnant fraction [L T-2 ~> m s-2]
-  real, pointer :: dv_dt_visc_rem(:,:,:) => NULL() !< Meridional acceleration due to vertical viscosity multiplied 
+  real, pointer :: dv_dt_visc_rem(:,:,:) => NULL() !< Meridional acceleration due to vertical viscosity multiplied
                                                    ! by viscous remnant fraction [L T-2 ~> m s-2]
-  real, pointer :: u_accel_bt_visc_rem(:,:,:) => NULL() !< Zonal barotropic-solver acceleration multiplied 
+  real, pointer :: u_accel_bt_visc_rem(:,:,:) => NULL() !< Zonal barotropic-solver acceleration multiplied
                                                         ! by viscous remnant fraction [L T-2 ~> m s-2]
-  real, pointer :: v_accel_bt_visc_rem(:,:,:) => NULL() !< Meridional barotropic-solver acceleration multiplied 
+  real, pointer :: v_accel_bt_visc_rem(:,:,:) => NULL() !< Meridional barotropic-solver acceleration multiplied
                                                         ! by viscous remnant fraction [L T-2 ~> m s-2]
 
 end type accel_diag_ptrs
