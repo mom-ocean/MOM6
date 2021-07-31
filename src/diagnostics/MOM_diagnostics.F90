@@ -109,7 +109,6 @@ type, public :: diagnostics_CS ; private
     KE_visc    => NULL(), & !< KE source from vertical viscosity [H L2 T-3 ~> m3 s-3]
     KE_horvisc => NULL(), & !< KE source from horizontal viscosity [H L2 T-3 ~> m3 s-3]
     KE_dia     => NULL(), & !< KE source from diapycnal diffusion [H L2 T-3 ~> m3 s-3]
-  
   ! The following arrays hold diagnostics in the modified layer-integrated energy budget.
   ! Modification is through using the visc_rem_[uv]-filtered momentum equation
     PE_to_KE_visc_rem  => NULL(), &  !< potential energy to KE term [m3 s-3]
@@ -303,7 +302,6 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
     if (CS%id_dv_dt>0) call post_data(CS%id_dv_dt, CS%dv_dt, CS%diag, alt_h = diag_pre_sync%h_state)
 
     if (CS%id_dh_dt>0) call post_data(CS%id_dh_dt, CS%dh_dt, CS%diag, alt_h = diag_pre_sync%h_state)
-    
     do k=1,nz ; do j=js,je ; do I=is-1,ie
         ADp%du_dt(I,j,k) = CS%du_dt(I,j,k)
     enddo ; enddo ; enddo
@@ -1239,7 +1237,7 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, GV, US, CS
     enddo
     if (CS%id_KE_dia > 0) call post_data(CS%id_KE_dia, CS%KE_dia, CS%diag)
   endif
-  
+
   if (associated(CS%PE_to_KE_visc_rem)) then
     do k=1,nz
       do j=js,je ; do I=Isq,Ieq
@@ -2439,8 +2437,8 @@ subroutine set_dependent_diagnostics(MIS, ADp, CDp, G, GV, CS)
       associated(CS%KE_BT) .or. associated(CS%KE_CorAdv) .or. &
       associated(CS%KE_adv) .or. associated(CS%KE_visc) .or. &
       associated(CS%KE_horvisc) .or. &
-      associated(CS%KE_dia) .or. & 
-      associated(CS%PE_to_KE_visc_rem) .or. & 
+      associated(CS%KE_dia) .or. &
+      associated(CS%PE_to_KE_visc_rem) .or. &
       associated(CS%KE_BT_visc_rem) .or. &
       associated(CS%KE_CorAdv_visc_rem) .or. &
       associated(CS%KE_horvisc_rem)) then

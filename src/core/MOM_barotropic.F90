@@ -2695,7 +2695,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
       ADp%visc_rem_v(i,J,k) = visc_rem_v(i,J,k)
     enddo ; enddo ; enddo
   endif
-  
+
   if (G%nonblocking_updates) then
     if (find_etaav) call complete_group_pass(CS%pass_etaav, G%Domain)
     call complete_group_pass(CS%pass_ubta_uhbta, G%Domain)

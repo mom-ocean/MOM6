@@ -356,7 +356,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
     intz_PFu_2d, intz_CAu_2d, intz_u_BT_accel_2d ! [H L T-2 ~> m2 s-2].
   real, dimension(SZI_(G),SZJB_(G)) :: &
     intz_PFv_2d, intz_CAv_2d, intz_v_BT_accel_2d ! [H L T-2 ~> m2 s-2].
-  
+
   ! Diagnostics for momentum budget terms multiplied by visc_rem_[uv],
   real, allocatable, dimension(:,:,:) :: &
     PFu_visc_rem, PFv_visc_rem, & ! Pressure force accel. x visc_rem_[uv] [L T-2 ~> m s-2].
@@ -1669,21 +1669,21 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, US, param
       'Depth-integral of Barotropic Anomaly Meridional Acceleration', &
       'm2 s-2', conversion=GV%H_to_m*US%L_T2_to_m_s2)
   if (CS%id_intz_v_BT_accel_2d > 0) call safe_alloc_ptr(CS%ADp%diag_hv,isd,ied,JsdB,JedB,nz)
-  
+
   CS%id_PFu_visc_rem = register_diag_field('ocean_model', 'PFu_visc_rem', diag%axesCuL, Time, &
       'Zonal Pressure Force Acceleration multiplied by the viscous remnant', 'm2 s-2', &
       conversion=GV%H_to_m*US%L_T2_to_m_s2)
   CS%id_PFv_visc_rem = register_diag_field('ocean_model', 'PFv_visc_rem', diag%axesCvL, Time, &
       'Meridional Pressure Force Acceleration multiplied by the viscous remnant', 'm2 s-2', &
       conversion=GV%H_to_m*US%L_T2_to_m_s2)
-  
+
   CS%id_CAu_visc_rem = register_diag_field('ocean_model', 'CAu_visc_rem', diag%axesCuL, Time, &
       'Zonal Coriolis and Advective Acceleration multiplied by the viscous remnant', 'm2 s-2', &
       conversion=GV%H_to_m*US%L_T2_to_m_s2)
   CS%id_CAv_visc_rem = register_diag_field('ocean_model', 'CAv_visc_rem', diag%axesCvL, Time, &
       'Meridional Coriolis and Advective Acceleration multiplied by the viscous remnant', 'm2 s-2', &
       conversion=GV%H_to_m*US%L_T2_to_m_s2)
-  
+
   CS%id_u_BT_accel_visc_rem = register_diag_field('ocean_model', 'u_BT_accel_visc_rem', diag%axesCuL, Time, &
       'Barotropic Anomaly Zonal Acceleration multiplied by the viscous remnant', 'm2 s-2', &
       conversion=GV%H_to_m*US%L_T2_to_m_s2)

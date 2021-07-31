@@ -217,9 +217,11 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
 
   real, allocatable, dimension(:,:,:) :: h_du_dt_visc ! h x du_dt_visc [H L T-2 ~> m2 s-2]
   real, allocatable, dimension(:,:,:) :: h_dv_dt_visc ! h x dv_dt_visc [H L T-2 ~> m2 s-2]
-  
-  real, allocatable, dimension(:,:,:) :: du_dt_visc_rem ! du_dt_visc x visc_rem_u + du_dt x (1-visc_rem_u) [L T-2 ~> m2 s-2]
-  real, allocatable, dimension(:,:,:) :: dv_dt_visc_rem ! dv_dt_visc x visc_rem_v + dv_dt x (1-visc_rem_v) [L T-2 ~> m2 s-2]
+
+  real, allocatable, dimension(:,:,:) :: du_dt_visc_rem ! du_dt_visc x visc_rem_u + du_dt x (1-visc_rem_u)
+                                                        ! [L T-2 ~> m2 s-2]
+  real, allocatable, dimension(:,:,:) :: dv_dt_visc_rem ! dv_dt_visc x visc_rem_v + dv_dt x (1-visc_rem_v)
+                                                        ! [L T-2 ~> m2 s-2]
 
   logical :: do_i(SZIB_(G))
   logical :: DoStokesMixing
@@ -339,11 +341,6 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
     if (associated(ADp%du_dt_visc)) then ; do k=1,nz ; do I=Isq,Ieq
       ADp%du_dt_visc(I,j,k) = (u(I,j,k) - ADp%du_dt_visc(I,j,k))*Idt
     enddo ; enddo ; endif
-    
-    !if (associated(ADp%du_dt_visc_rem)) then ; do k=1,nz ; do I=Isq,Ieq
-    !  ADp%du_dt_visc_rem(I,j,k) = ADp%du_dt_visc(I,j,k) * ADp%visc_rem_u(I,j,k) + &
-    !                            (1-ADp%visc_rem_u(I,j,k)) * ADp%du_dt(I,j,k)
-    !enddo ; enddo ; endif
 
     if (associated(visc%taux_shelf)) then ; do I=Isq,Ieq
       visc%taux_shelf(I,j) = -GV%Rho0*CS%a1_shelf_u(I,j)*u(I,j,1) ! - u_shelf?
@@ -425,11 +422,6 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
     if (associated(ADp%dv_dt_visc)) then ; do k=1,nz ; do i=is,ie
       ADp%dv_dt_visc(i,J,k) = (v(i,J,k) - ADp%dv_dt_visc(i,J,k))*Idt
     enddo ; enddo ; endif
-    
-    !if (associated(ADp%dv_dt_visc_rem)) then ; do k=1,nz ; do I=Isq,Ieq
-    !    ADp%dv_dt_visc_rem(i,J,k) = ADp%dv_dt_visc(i,J,k) * ADp%visc_rem_v(i,J,k) + &
-    !                            (1-ADp%visc_rem_v(i,J,k)) * ADp%dv_dt(i,J,k)
-    !enddo ; enddo ; endif
 
     if (associated(visc%tauy_shelf)) then ; do i=is,ie
       visc%tauy_shelf(i,J) = -GV%Rho0*CS%a1_shelf_v(i,J)*v(i,J,1) ! - v_shelf?
@@ -1920,7 +1912,6 @@ subroutine vertvisc_init(MIS, Time, G, GV, US, param_file, diag, ADp, dirs, &
     call safe_alloc_ptr(ADp%du_dt_visc,IsdB,IedB,jsd,jed,nz)
     call safe_alloc_ptr(ADp%visc_rem_u,IsdB,IedB,jsd,jed,nz)
   endif
-
   CS%id_dv_dt_visc_rem = register_diag_field('ocean_model', 'dv_dt_visc_rem', diag%axesCvL, Time, &
       'Meridional Acceleration from Horizontal Viscosity multiplied by viscous remnant fraction', 'm2 s-2', &
       conversion=GV%H_to_m*US%L_T2_to_m_s2)

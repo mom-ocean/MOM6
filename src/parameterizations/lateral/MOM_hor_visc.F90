@@ -1706,7 +1706,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
     call post_data(CS%id_h_diffv, h_diffv, CS%diag)
     deallocate(h_diffv)
   endif
-  
+
   if (present(ADp) .and. (CS%id_diffu_visc_rem > 0)) then
     allocate(diffu_visc_rem(G%IsdB:G%IedB,G%jsd:G%jed,GV%ke))
     diffu_visc_rem(:,:,:) = 0.0
@@ -2469,7 +2469,7 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, MEKE, ADp)
   if ((CS%id_intz_diffv_2d > 0) .and. (present(ADp))) then
     call safe_alloc_ptr(ADp%diag_hv,G%isd,G%ied,G%JsdB,G%JedB,GV%ke)
   endif
-  
+
   CS%id_diffu_visc_rem = register_diag_field('ocean_model', 'diffu_visc_rem', diag%axesCuL, Time, &
       'Zonal Acceleration from Horizontal Viscosity multiplied by viscous remnant', 'm2 s-2', &
       conversion=GV%H_to_m*US%L_T2_to_m_s2)
