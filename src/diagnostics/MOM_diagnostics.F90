@@ -2438,9 +2438,12 @@ subroutine set_dependent_diagnostics(MIS, ADp, CDp, G, GV, CS)
   if (associated(CS%dKE_dt) .or. associated(CS%PE_to_KE) .or. &
       associated(CS%KE_BT) .or. associated(CS%KE_CorAdv) .or. &
       associated(CS%KE_adv) .or. associated(CS%KE_visc) .or. &
-      associated(CS%KE_horvisc) .or. associated(CS%KE_dia) .or. & 
-      associated(CS%PE_to_KE_visc_rem) .or. & associated(CS%KE_BT_visc_rem) .or. &
-      associated(CS%KE_CorAdv_visc_rem) .or. associated(CS%KE_horvisc_rem)) then
+      associated(CS%KE_horvisc) .or. &
+      associated(CS%KE_dia) .or. & 
+      associated(CS%PE_to_KE_visc_rem) .or. & 
+      associated(CS%KE_BT_visc_rem) .or. &
+      associated(CS%KE_CorAdv_visc_rem) .or. &
+      associated(CS%KE_horvisc_rem)) then
     call safe_alloc_ptr(CS%KE,isd,ied,jsd,jed,nz)
   endif
 
