@@ -68,7 +68,6 @@ logical function CVMix_conv_init(Time, G, GV, US, param_file, diag, CS)
                             "control structure.")
     return
   endif
-  allocate(CS)
 
   ! Read parameters
   call get_param(param_file, mdl, "USE_CVMix_CONVECTION", CVMix_conv_init, default=.false., do_not_log=.true.)
@@ -83,6 +82,7 @@ logical function CVMix_conv_init(Time, G, GV, US, param_file, diag, CS)
                  default=.false.)
 
   if (.not. CVMix_conv_init) return
+  allocate(CS)
 
   call get_param(param_file, mdl, "ENERGETICS_SFC_PBL", useEPBL, default=.false., &
                 do_not_log=.true.)
@@ -310,14 +310,10 @@ logical function CVMix_conv_is_used(param_file)
 end function CVMix_conv_is_used
 
 !> Clear pointers and dealocate memory
+! NOTE: Placeholder destructor
 subroutine CVMix_conv_end(CS)
   type(CVMix_conv_cs), pointer :: CS !< Control structure for this module that
                                      !! will be deallocated in this subroutine
-
-  if (.not. associated(CS)) return
-
-  deallocate(CS)
-
 end subroutine CVMix_conv_end
 
 end module MOM_CVMix_conv
