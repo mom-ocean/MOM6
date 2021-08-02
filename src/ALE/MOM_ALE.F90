@@ -263,8 +263,8 @@ subroutine ALE_register_diags(Time, G, GV, US, diag, CS)
   CS%id_v_preale = register_diag_field('ocean_model', 'v_preale', diag%axesCvL, Time, &
       'Meridional velocity before remapping', 'm s-1', conversion=US%L_T_to_m_s)
   CS%id_h_preale = register_diag_field('ocean_model', 'h_preale', diag%axesTL, Time, &
-      'Layer Thickness before remapping', get_thickness_units(GV), &
-      conversion=GV%H_to_MKS, v_extensive=.true.)
+      'Layer Thickness before remapping', get_thickness_units(GV), conversion=GV%H_to_MKS, &
+      v_extensive=.true.)
   CS%id_T_preale = register_diag_field('ocean_model', 'T_preale', diag%axesTL, Time, &
       'Temperature before remapping', 'degC')
   CS%id_S_preale = register_diag_field('ocean_model', 'S_preale', diag%axesTL, Time, &
@@ -273,14 +273,13 @@ subroutine ALE_register_diags(Time, G, GV, US, diag, CS)
       'Interface Heights before remapping', 'm', conversion=US%Z_to_m)
 
   CS%id_dzRegrid = register_diag_field('ocean_model','dzRegrid',diag%axesTi,Time, &
-      'Change in interface height due to ALE regridding', 'm', &
-      conversion=GV%H_to_m)
+      'Change in interface height due to ALE regridding', 'm', conversion=GV%H_to_m)
   cs%id_vert_remap_h = register_diag_field('ocean_model', 'vert_remap_h', &
-      diag%axestl, time, 'layer thicknesses after ALE regridding and remapping', 'm', &
-      conversion=GV%H_to_m, v_extensive=.true.)
+      diag%axestl, time, 'layer thicknesses after ALE regridding and remapping', &
+      'm', conversion=GV%H_to_m, v_extensive=.true.)
   cs%id_vert_remap_h_tendency = register_diag_field('ocean_model','vert_remap_h_tendency',diag%axestl,time, &
-      'Layer thicknesses tendency due to ALE regridding and remapping', 'm', &
-      conversion=GV%H_to_m*US%s_to_T, v_extensive = .true.)
+      'Layer thicknesses tendency due to ALE regridding and remapping', &
+      'm s-1', conversion=GV%H_to_m*US%s_to_T, v_extensive = .true.)
 
 end subroutine ALE_register_diags
 

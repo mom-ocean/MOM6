@@ -355,7 +355,8 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
   endif
 
   ! set up arrays for tidal mixing diagnostics
-  call setup_tidal_diagnostics(G, GV, CS%tidal_mixing_CSp)
+  if (CS%use_tidal_mixing) &
+    call setup_tidal_diagnostics(G, GV, CS%tidal_mixing_CSp)
 
   if (CS%useKappaShear) then
     if (CS%debug) then
@@ -666,7 +667,9 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
   if (CS%id_Kv_bkgnd > 0) call post_data(CS%id_Kv_bkgnd, dd%Kv_bkgnd, CS%diag)
 
   ! tidal mixing
-  call post_tidal_diagnostics(G, GV, h, CS%tidal_mixing_CSp)
+  if (CS%use_tidal_mixing) &
+    call post_tidal_diagnostics(G, GV, h, CS%tidal_mixing_CSp)
+
   if (CS%id_N2 > 0)         call post_data(CS%id_N2,        dd%N2_3d,     CS%diag)
   if (CS%id_Kd_Work > 0)    call post_data(CS%id_Kd_Work,   dd%Kd_Work,   CS%diag)
   if (CS%id_maxTKE > 0)     call post_data(CS%id_maxTKE,    dd%maxTKE,    CS%diag)
@@ -2347,22 +2350,26 @@ end subroutine set_diffusivity_init
 
 !> Clear pointers and dealocate memory
 subroutine set_diffusivity_end(CS)
-  type(set_diffusivity_CS), pointer :: CS !< Control structure for this module
-
-  if (.not.associated(CS)) return
+  type(set_diffusivity_CS), intent(inout) :: CS !< Control structure for this module
 
   call bkgnd_mixing_end(CS%bkgnd_mixing_csp)
 
-  if (CS%use_tidal_mixing) call tidal_mixing_end(CS%tidal_mixing_CSp)
+  if (CS%use_tidal_mixing) then
+    call tidal_mixing_end(CS%tidal_mixing_CSp)
+    deallocate(CS%tidal_mixing_CSp)
+  endif
 
   if (CS%user_change_diff) call user_change_diff_end(CS%user_change_diff_CSp)
 
-  if (CS%use_CVMix_shear)  call CVMix_shear_end(CS%CVMix_shear_csp)
+  if (associated(CS%CVMix_ddiff_CSp)) deallocate(CS%CVMix_ddiff_CSp)
 
-  if (CS%use_CVMix_ddiff)  call CVMix_ddiff_end(CS%CVMix_ddiff_csp)
+  if (CS%use_CVMix_shear) then
+    call CVMix_shear_end(CS%CVMix_shear_CSp)
+    deallocate(CS%CVMix_shear_CSp)
+  endif
 
-  if (associated(CS)) deallocate(CS)
-
+  ! NOTE: CS%kappaShear_CSp is always allocated, even if unused
+  deallocate(CS%kappaShear_CSp)
 end subroutine set_diffusivity_end
 
 end module MOM_set_diffusivity
