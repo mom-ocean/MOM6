@@ -1160,7 +1160,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
     allocate(v_BT_accel_visc_rem(G%isd:G%ied,G%JsdB:G%JedB,GV%ke))
     v_BT_accel_visc_rem(:,:,:) = 0.0
     do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
-      v_BT_accel_visc_rem(i,J,k) = CS%v_accel_bt(i,J,k) * CS%visc_rem_v(i,J,k)
+      v_BT_accel_visc_rem(i,J,k) = CS%v_accel_bt(i,J,k) * CS%ADp%visc_rem_v(i,J,k)
     enddo ; enddo ; enddo
     call post_data(CS%id_v_BT_accel_visc_rem, v_BT_accel_visc_rem, CS%diag)
     deallocate(v_BT_accel_visc_rem)
