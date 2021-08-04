@@ -108,7 +108,7 @@ type, public :: diagnostics_CS ; private
     KE_adv     => NULL(), & !< KE source from along-layer advection [H L2 T-3 ~> m3 s-3]
     KE_visc    => NULL(), & !< KE source from vertical viscosity [H L2 T-3 ~> m3 s-3]
     KE_horvisc => NULL(), & !< KE source from horizontal viscosity [H L2 T-3 ~> m3 s-3]
-    KE_dia     => NULL(),   !< KE source from diapycnal diffusion [H L2 T-3 ~> m3 s-3]
+    KE_dia     => NULL()    !< KE source from diapycnal diffusion [H L2 T-3 ~> m3 s-3]
 
   !>@{ Diagnostic IDs
   integer :: id_u   = -1,   id_v   = -1, id_h = -1
