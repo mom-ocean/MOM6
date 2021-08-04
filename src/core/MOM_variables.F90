@@ -161,8 +161,6 @@ type, public :: accel_diag_ptrs
 
   ! Each of the following fields has nz layers.
   real, pointer, dimension(:,:,:) :: &
-    du_dt => NULL(), &     !< Zonal acceleration [L T-2 ~> m s-2]
-    dv_dt => NULL(), &     !< Meridional acceleration [L T-2 ~> m s-2]
     diffu => NULL(), &     !< Zonal acceleration due to along isopycnal viscosity [L T-2 ~> m s-2]
     diffv => NULL(), &     !< Meridional acceleration due to along isopycnal viscosity [L T-2 ~> m s-2]
     CAu => NULL(), &       !< Zonal Coriolis and momentum advection accelerations [L T-2 ~> m s-2]
@@ -174,7 +172,7 @@ type, public :: accel_diag_ptrs
     du_dt_dia => NULL(), & !< Zonal acceleration due to diapycnal  mixing [L T-2 ~> m s-2]
     dv_dt_dia => NULL(), & !< Meridional acceleration due to diapycnal  mixing [L T-2 ~> m s-2]
     u_accel_bt => NULL(), &!< Pointer to the zonal barotropic-solver acceleration [L T-2 ~> m s-2]
-    v_accel_bt => NULL()  !< Pointer to the meridional barotropic-solver acceleration [L T-2 ~> m s-2]
+    v_accel_bt => NULL()   !< Pointer to the meridional barotropic-solver acceleration [L T-2 ~> m s-2]
   real, pointer, dimension(:,:,:) :: du_other => NULL()
                            !< Zonal velocity changes due to any other processes that are
                            !! not due to any explicit accelerations [L T-1 ~> m s-1].
@@ -195,8 +193,6 @@ type, public :: accel_diag_ptrs
 
   real, pointer :: visc_rem_u(:,:,:) => NULL() !< viscous remnant at u points
   real, pointer :: visc_rem_v(:,:,:) => NULL() !< viscous remnant at v points
- 
-  integer :: id_du_dt_visc_rem = -1, id_dv_dt_visc_rem = -1
 
 end type accel_diag_ptrs
 
