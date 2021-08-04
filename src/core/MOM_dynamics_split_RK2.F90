@@ -1115,7 +1115,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
     allocate(PFu_visc_rem(G%IsdB:G%IedB,G%jsd:G%jed,GV%ke))
     PFu_visc_rem(:,:,:) = 0.0
     do k=1,nz ; do j=js,je ; do I=Isq,Ieq
-      PFu_visc_rem(I,j,k) = CS%PFu(I,j,k) * CS%visc_rem_u(I,j,k)
+      PFu_visc_rem(I,j,k) = CS%PFu(I,j,k) * CS%ADp%visc_rem_u(I,j,k)
     enddo ; enddo ; enddo
     call post_data(CS%id_PFu_visc_rem, PFu_visc_rem, CS%diag)
     deallocate(PFu_visc_rem)
@@ -1124,7 +1124,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
     allocate(PFv_visc_rem(G%isd:G%ied,G%JsdB:G%JedB,GV%ke))
     PFv_visc_rem(:,:,:) = 0.0
     do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
-      PFv_visc_rem(i,J,k) = CS%PFv(i,J,k) * CS%visc_rem_v(i,J,k)
+      PFv_visc_rem(i,J,k) = CS%PFv(i,J,k) * CS%ADp%visc_rem_v(i,J,k)
     enddo ; enddo ; enddo
     call post_data(CS%id_PFv_visc_rem, PFv_visc_rem, CS%diag)
     deallocate(PFv_visc_rem)
@@ -1133,7 +1133,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
     allocate(CAu_visc_rem(G%IsdB:G%IedB,G%jsd:G%jed,GV%ke))
     CAu_visc_rem(:,:,:) = 0.0
     do k=1,nz ; do j=js,je ; do I=Isq,Ieq
-      CAu_visc_rem(I,j,k) = CS%CAu(I,j,k) * CS%visc_rem_u(I,j,k)
+      CAu_visc_rem(I,j,k) = CS%CAu(I,j,k) * CS%ADp%visc_rem_u(I,j,k)
     enddo ; enddo ; enddo
     call post_data(CS%id_CAu_visc_rem, CAu_visc_rem, CS%diag)
     deallocate(CAu_visc_rem)
@@ -1142,7 +1142,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
     allocate(CAv_visc_rem(G%isd:G%ied,G%JsdB:G%JedB,GV%ke))
     CAv_visc_rem(:,:,:) = 0.0
     do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
-      CAv_visc_rem(i,J,k) = CS%CAv(i,J,k) * CS%visc_rem_v(i,J,k)
+      CAv_visc_rem(i,J,k) = CS%CAv(i,J,k) * CS%ADp%visc_rem_v(i,J,k)
     enddo ; enddo ; enddo
     call post_data(CS%id_CAv_visc_rem, CAv_visc_rem, CS%diag)
     deallocate(CAv_visc_rem)
@@ -1151,7 +1151,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
     allocate(u_BT_accel_visc_rem(G%IsdB:G%IedB,G%jsd:G%jed,GV%ke))
     u_BT_accel_visc_rem(:,:,:) = 0.0
     do k=1,nz ; do j=js,je ; do I=Isq,Ieq
-      u_BT_accel_visc_rem(I,j,k) = CS%u_accel_bt(I,j,k) * CS%visc_rem_u(I,j,k)
+      u_BT_accel_visc_rem(I,j,k) = CS%u_accel_bt(I,j,k) * CS%ADp%visc_rem_u(I,j,k)
     enddo ; enddo ; enddo
     call post_data(CS%id_u_BT_accel_visc_rem, u_BT_accel_visc_rem, CS%diag)
     deallocate(u_BT_accel_visc_rem)
@@ -1673,23 +1673,29 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, US, param
   CS%id_PFu_visc_rem = register_diag_field('ocean_model', 'PFu_visc_rem', diag%axesCuL, Time, &
       'Zonal Pressure Force Acceleration multiplied by the viscous remnant', 'm2 s-2', &
       conversion=GV%H_to_m*US%L_T2_to_m_s2)
+  if (CS%id_PFu_visc_rem > 0) call safe_alloc_ptr(CS%ADp%visc_rem_u,IsdB,IedB,jsd,jed,nz)
   CS%id_PFv_visc_rem = register_diag_field('ocean_model', 'PFv_visc_rem', diag%axesCvL, Time, &
       'Meridional Pressure Force Acceleration multiplied by the viscous remnant', 'm2 s-2', &
       conversion=GV%H_to_m*US%L_T2_to_m_s2)
+  if(CS%id_PFv_visc_rem > 0) call safe_alloc_ptr(CS%ADp%visc_rem_v,isd,ied,JsdB,JedB,nz)
 
   CS%id_CAu_visc_rem = register_diag_field('ocean_model', 'CAu_visc_rem', diag%axesCuL, Time, &
       'Zonal Coriolis and Advective Acceleration multiplied by the viscous remnant', 'm2 s-2', &
       conversion=GV%H_to_m*US%L_T2_to_m_s2)
+  if (CS%id_CAu_visc_rem > 0) call safe_alloc_ptr(CS%ADp%visc_rem_u,IsdB,IedB,jsd,jed,nz)
   CS%id_CAv_visc_rem = register_diag_field('ocean_model', 'CAv_visc_rem', diag%axesCvL, Time, &
       'Meridional Coriolis and Advective Acceleration multiplied by the viscous remnant', 'm2 s-2', &
       conversion=GV%H_to_m*US%L_T2_to_m_s2)
+  if(CS%id_CAv_visc_rem > 0) call safe_alloc_ptr(CS%ADp%visc_rem_v,isd,ied,JsdB,JedB,nz)
 
   CS%id_u_BT_accel_visc_rem = register_diag_field('ocean_model', 'u_BT_accel_visc_rem', diag%axesCuL, Time, &
       'Barotropic Anomaly Zonal Acceleration multiplied by the viscous remnant', 'm2 s-2', &
       conversion=GV%H_to_m*US%L_T2_to_m_s2)
+  if (CS%id_u_BT_accel_visc_rem > 0) call safe_alloc_ptr(CS%ADp%visc_rem_u,IsdB,IedB,jsd,jed,nz)
   CS%id_v_BT_accel_visc_rem = register_diag_field('ocean_model', 'v_BT_accel_visc_rem', diag%axesCvL, Time, &
       'Barotropic Anomaly Meridional Acceleration multiplied by the viscous remnant', 'm2 s-2', &
       conversion=GV%H_to_m*US%L_T2_to_m_s2)
+  if(CS%id_v_BT_accel_visc_rem > 0) call safe_alloc_ptr(CS%ADp%visc_rem_v,isd,ied,JsdB,JedB,nz)
 
   id_clock_Cor        = cpu_clock_id('(Ocean Coriolis & mom advection)', grain=CLOCK_MODULE)
   id_clock_continuity = cpu_clock_id('(Ocean continuity equation)',      grain=CLOCK_MODULE)

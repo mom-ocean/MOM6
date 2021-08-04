@@ -215,7 +215,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
                                                  !! [H L2 T-1 ~> m3 s-1 or kg s-1].
   type(thermo_var_ptrs),   intent(in)    :: tv   !< A structure pointing to various
                                                  !! thermodynamic variables.
-  type(accel_diag_ptrs),   intent(in)    :: ADp  !< structure with pointers to
+  type(accel_diag_ptrs),   intent(inout)    :: ADp  !< structure with pointers to
                                                  !! accelerations in momentum equation.
   type(cont_diag_ptrs),    intent(in)    :: CDp  !< structure with pointers to
                                                  !! terms in continuity equation.

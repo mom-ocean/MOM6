@@ -195,6 +195,8 @@ type, public :: accel_diag_ptrs
 
   real, pointer :: visc_rem_u(:,:,:) => NULL() !< viscous remnant at u points
   real, pointer :: visc_rem_v(:,:,:) => NULL() !< viscous remnant at v points
+ 
+  integer :: id_du_dt_visc_rem = -1, id_dv_dt_visc_rem = -1
 
 end type accel_diag_ptrs
 
