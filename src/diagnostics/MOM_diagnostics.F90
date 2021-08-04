@@ -1054,7 +1054,7 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, GV, US, CS
   if (.not.G%symmetric) then
     if (associated(CS%dKE_dt) .OR. associated(CS%PE_to_KE) .OR. associated(CS%KE_BT) .OR. &
         associated(CS%KE_CorAdv) .OR. associated(CS%KE_adv) .OR. associated(CS%KE_visc) .OR. &
-        associated(CS%KE_horvisc) .OR. associated(CS%KE_dia)) then
+        associated(CS%KE_horvisc) .OR. associated(CS%KE_dia) ) then
       call create_group_pass(CS%pass_KE_uv, KE_u, KE_v, G%Domain, To_North+To_East)
     endif
   endif
@@ -2306,10 +2306,8 @@ subroutine set_dependent_diagnostics(MIS, ADp, CDp, G, GV, CS)
   if (associated(CS%dKE_dt) .or. associated(CS%PE_to_KE) .or. &
       associated(CS%KE_BT) .or. associated(CS%KE_CorAdv) .or. &
       associated(CS%KE_adv) .or. associated(CS%KE_visc) .or. &
-      associated(CS%KE_horvisc) .or. &
-      associated(CS%KE_dia)) then
+      associated(CS%KE_horvisc) .or. associated(CS%KE_dia)) &
     call safe_alloc_ptr(CS%KE,isd,ied,jsd,jed,nz)
-  endif
 
   if (associated(CS%dKE_dt)) then
     if (.not.associated(CS%du_dt)) then
