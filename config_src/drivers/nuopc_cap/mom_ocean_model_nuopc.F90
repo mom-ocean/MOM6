@@ -146,6 +146,7 @@ type, public :: ocean_state_type ; private
   integer :: nstep = 0        !< The number of calls to update_ocean.
   logical :: use_ice_shelf    !< If true, the ice shelf model is enabled.
   logical,public :: use_waves !< If true use wave coupling.
+  character(len=40) :: wave_method !< Wave coupling method.
 
   logical :: icebergs_alter_ocean !< If true, the icebergs can change ocean the
                               !! ocean dynamics and forcing fluxes.
@@ -380,7 +381,7 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn, i
                               use_meltpot=use_melt_pot, use_cfcs=use_CFC)
 
   call surface_forcing_init(Time_in, OS%grid, OS%US, param_file, OS%diag, &
-                            OS%forcing_CSp, OS%restore_salinity, OS%restore_temp)
+                            OS%forcing_CSp, OS%restore_salinity, OS%restore_temp, OS%use_waves)
 
   if (OS%use_ice_shelf)  then
     call initialize_ice_shelf(param_file, OS%grid, OS%Time, OS%ice_shelf_CSp, &
@@ -392,6 +393,7 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn, i
       call allocate_forcing_type(OS%grid, OS%fluxes, shelf=.true.)
   endif
 
+  call allocate_forcing_type(OS%grid, OS%fluxes, waves=.true.)
   call get_param(param_file, mdl, "USE_WAVES", OS%Use_Waves, &
        "If true, enables surface wave modules.", default=.false.)
   ! MOM_wave_interface_init is called regardless of the value of USE_WAVES because
@@ -580,7 +582,9 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
   call set_net_mass_forcing(OS%fluxes, OS%forces, OS%grid, OS%US)
 
   if (OS%use_waves) then
-    call Update_Surface_Waves(OS%grid, OS%GV, OS%US, OS%time, ocean_coupling_time_step, OS%waves, OS%forces)
+    if (OS%wave_method /= "VR12-MA") then
+      call Update_Surface_Waves(OS%grid, OS%GV, OS%US, OS%time, ocean_coupling_time_step, OS%waves, OS%forces)
+    endif
   endif
 
   if (OS%nstep==0) then
@@ -1010,15 +1014,16 @@ end subroutine ocean_model_flux_init
 
 !> This interface allows certain properties that are stored in the ocean_state_type to be
 !! obtained.
-subroutine query_ocean_state(OS, use_waves, NumWaveBands, Wavenumbers, unscale)
+subroutine query_ocean_state(OS, use_waves, NumWaveBands, Wavenumbers, unscale, wave_method)
   type(ocean_state_type),       intent(in)  :: OS      !< The structure with the complete ocean state
   logical,            optional, intent(out) :: use_waves !< Indicates whether surface waves are in use
   integer,            optional, intent(out) :: NumWaveBands !< If present, this gives the number of
                                                        !! wavenumber partitions in the wave discretization
   real, dimension(:), optional, intent(out) :: Wavenumbers !< If present, this gives the characteristic
                                                        !! wavenumbers of the wave discretization [m-1 or Z-1 ~> m-1]
-    logical,          optional, intent(in)  :: unscale !< If present and true, undo any dimensional
+  logical,            optional, intent(in)  :: unscale !< If present and true, undo any dimensional
                                                        !! rescaling and return dimensional values in MKS units
+  character(len=40),  optional, intent(out) :: wave_method !< Wave coupling method.
 
   logical :: undo_scaling
   undo_scaling = .false. ; if (present(unscale)) undo_scaling = unscale
@@ -1030,6 +1035,7 @@ subroutine query_ocean_state(OS, use_waves, NumWaveBands, Wavenumbers, unscale)
   elseif (present(Wavenumbers)) then
     call query_wave_properties(OS%Waves, WaveNumbers=WaveNumbers)
   endif
+  if (present(wave_method)) wave_method = OS%wave_method
 
 end subroutine query_ocean_state
 

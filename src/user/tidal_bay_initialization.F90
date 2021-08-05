@@ -49,7 +49,7 @@ function register_tidal_bay_OBC(param_file, CS, US, OBC_Reg)
 
   call get_param(param_file, mdl, "TIDAL_BAY_FLOW", CS%tide_flow, &
                  "Maximum total tidal volume flux.", &
-                 units="m3 s-1", default=3.0d6, scale=US%m_s_to_L_T*US%m_to_L*US%m_to_Z)
+                 units="m3 s-1", default=3.0e6, scale=US%m_s_to_L_T*US%m_to_L*US%m_to_Z)
 
   ! Register the open boundaries.
   call register_OBC(casename, param_file, OBC_Reg)
