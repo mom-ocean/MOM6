@@ -181,12 +181,12 @@ integer, parameter :: DATAOVR = 1, COUPLER = 2, INPUT = 3
 !>@}
 
 ! Strings for the wave method
-character*(5), parameter  :: NULL_STRING      = "EMPTY"
-character*(12), parameter :: TESTPROF_STRING  = "TEST_PROFILE"
-character*(13), parameter :: SURFBANDS_STRING = "SURFACE_BANDS"
-character*(5), parameter  :: DHH85_STRING     = "DHH85"
-character*(4), parameter  :: LF17_STRING      = "LF17"
-character*(7), parameter  :: VR12MA_STRING    = "VR12-MA"
+character*(5), parameter  :: NULL_STRING      = "EMPTY"         !< null wave method string
+character*(12), parameter :: TESTPROF_STRING  = "TEST_PROFILE"  !< test profile string
+character*(13), parameter :: SURFBANDS_STRING = "SURFACE_BANDS" !< surface bands string
+character*(5), parameter  :: DHH85_STRING     = "DHH85"         !< DHH85 wave method string
+character*(4), parameter  :: LF17_STRING      = "LF17"          !< LF17 wave method string
+character*(7), parameter  :: VR12MA_STRING    = "VR12-MA"       !< VR12-MA wave method string
 
 contains
 
