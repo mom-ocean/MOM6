@@ -39,6 +39,7 @@ public CoriolisStokes ! NOT READY - Public interface to add Coriolis-Stokes acce
                       ! serious consideration of the full 3d wave-averaged Navier-Stokes
                       ! CL2 effects.
 public Waves_end ! public interface to deallocate and free wave related memory.
+public get_wave_method ! public interface to obtain the wave method string
 
 ! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
 ! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
@@ -179,6 +180,14 @@ integer, parameter :: TESTPROF = 0, SURFBANDS = 1, DHH85 = 2, LF17 = 3, VR12MA =
 integer, parameter :: DATAOVR = 1, COUPLER = 2, INPUT = 3
 !>@}
 
+! Strings for the wave method
+character*(5), parameter  :: NULL_STRING      = "EMPTY"
+character*(12), parameter :: TESTPROF_STRING  = "TEST_PROFILE"
+character*(13), parameter :: SURFBANDS_STRING = "SURFACE_BANDS"
+character*(5), parameter  :: DHH85_STRING     = "DHH85"
+character*(4), parameter  :: LF17_STRING      = "LF17"
+character*(7), parameter  :: VR12MA_STRING    = "VR12-MA"
+
 contains
 
 !> Initializes parameters related to MOM_wave_interface
@@ -196,12 +205,6 @@ subroutine MOM_wave_interface_init(time, G, GV, US, param_file, CS, diag )
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
   character*(13) :: TMPSTRING1, TMPSTRING2
-  character*(5), parameter  :: NULL_STRING      = "EMPTY"
-  character*(12), parameter :: TESTPROF_STRING  = "TEST_PROFILE"
-  character*(13), parameter :: SURFBANDS_STRING = "SURFACE_BANDS"
-  character*(5), parameter  :: DHH85_STRING     = "DHH85"
-  character*(4), parameter  :: LF17_STRING      = "LF17"
-  character*(7), parameter  :: VR12MA_STRING    = "VR12-MA"
   character*(12), parameter :: DATAOVR_STRING   = "DATAOVERRIDE"
   character*(7), parameter  :: COUPLER_STRING   = "COUPLER"
   character*(5), parameter  :: INPUT_STRING     = "INPUT"
@@ -1054,6 +1057,31 @@ subroutine get_Langmuir_Number( LA, G, GV, US, HBL, ustar, i, j, &
   endif
 
 end subroutine get_Langmuir_Number
+
+!> function to return the wave method string set in the param file
+function get_wave_method(CS)
+  character(:), allocatable :: get_wave_method
+  type(wave_parameters_CS), pointer :: CS !< Control structure
+
+  if (associated(CS)) then
+    select case(CS%WaveMethod)
+      case (Null_WaveMethod)
+        get_wave_method = NULL_STRING
+      case (TESTPROF)
+        get_wave_method = TESTPROF_STRING
+      case (SURFBANDS)
+        get_wave_method = SURFBANDS_STRING
+      case (DHH85)
+        get_wave_method = DHH85_STRING
+      case (LF17)
+        get_wave_method = LF17_STRING
+      case (VR12MA)
+        get_wave_method = VR12MA_STRING
+    end select
+  else
+    get_wave_method = NULL_STRING
+  endif
+end function get_wave_method
 
 !> Get SL averaged Stokes drift from Li/FK 17 method
 !!
