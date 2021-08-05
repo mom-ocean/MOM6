@@ -2545,6 +2545,7 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, MEKE, ADp)
   if (CS%Laplacian .or. get_all) then
   endif
 end subroutine hor_visc_init
+
 !> Calculates factors in the anisotropic orientation tensor to be align with the grid.
 !! With n1=1 and n2=0, this recovers the approach of Large et al, 2001.
 subroutine align_aniso_tensor_to_grid(CS, n1, n2)
@@ -2561,6 +2562,7 @@ subroutine align_aniso_tensor_to_grid(CS, n1, n2)
   CS%n1n1_m_n2n2_h(:,:) = ( n1 * n1 - n2 * n2 ) * recip_n2_norm
   CS%n1n1_m_n2n2_q(:,:) = ( n1 * n1 - n2 * n2 ) * recip_n2_norm
 end subroutine align_aniso_tensor_to_grid
+
 !> Apply a 1-1-4-1-1 Laplacian filter one time on GME diffusive flux to reduce any
 !! horizontal two-grid-point noise
 subroutine smooth_GME(CS,G,GME_flux_h,GME_flux_q)
@@ -2625,6 +2627,7 @@ subroutine smooth_GME(CS,G,GME_flux_h,GME_flux_q)
     endif
   enddo ! s-loop
 end subroutine smooth_GME
+
 !> Deallocates any variables allocated in hor_visc_init.
 subroutine hor_visc_end(CS)
   type(hor_visc_CS), pointer :: CS !< The control structure returned by a
@@ -2656,10 +2659,10 @@ subroutine hor_visc_end(CS)
       DEALLOC_(CS%Ah_Max_xx) ; DEALLOC_(CS%Ah_Max_xy)
     endif
     if (CS%Smagorinsky_Ah) then
-      DEALLOC_(CS%Biharm6_const_xx) ; DEALLOC_(CS%Biharm6_const_xy)
+      DEALLOC_(CS%Biharm_const_xx) ; DEALLOC_(CS%Biharm_const_xy)
     endif
     if (CS%Leith_Ah) then
-      DEALLOC_(CS%Biharm_const_xx) ; DEALLOC_(CS%Biharm_const_xy)
+      DEALLOC_(CS%Biharm6_const_xx) ; DEALLOC_(CS%Biharm6_const_xy)
     endif
     if (CS%Re_Ah > 0.0) then
       DEALLOC_(CS%Re_Ah_const_xx) ; DEALLOC_(CS%Re_Ah_const_xy)

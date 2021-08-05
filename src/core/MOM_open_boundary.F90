@@ -177,7 +177,8 @@ type, public :: OBC_segment_type
                                                             !! segment [H L2 T-1 ~> m3 s-1].
   real, pointer, dimension(:,:)   :: normal_vel_bt=>NULL()  !< The barotropic velocity normal to
                                                             !! the OB segment [L T-1 ~> m s-1].
-  real, pointer, dimension(:,:)   :: eta=>NULL()            !< The sea-surface elevation along the segment [m].
+  real, pointer, dimension(:,:)   :: eta=>NULL()            !< The sea-surface elevation along the
+                                                            !! segment [H ~> m or kg m-2].
   real, pointer, dimension(:,:,:) :: grad_normal=>NULL()    !< The gradient of the normal flow along the
                                                             !! segment times the grid spacing [L T-1 ~> m s-1]
   real, pointer, dimension(:,:,:) :: grad_tan=>NULL()       !< The gradient of the tangential flow along the
@@ -341,8 +342,6 @@ end type OBC_registry_type
 integer :: id_clock_pass !< A CPU time clock
 
 character(len=40)  :: mdl = "MOM_open_boundary" !< This module's name.
-! This include declares and sets the variable "version".
-#include "version_variable.h"
 
 contains
 
@@ -358,6 +357,7 @@ subroutine open_boundary_config(G, US, param_file, OBC)
   type(unit_scale_type),   intent(in)    :: US  !< A dimensional unit scaling type
   type(param_file_type),   intent(in)    :: param_file !< Parameter file handle
   type(ocean_OBC_type),    pointer       :: OBC !< Open boundary control structure
+
   ! Local variables
   integer :: l ! For looping over segments
   logical :: debug_OBC, debug, mask_outside, reentrant_x, reentrant_y
@@ -369,6 +369,9 @@ subroutine open_boundary_config(G, US, param_file, OBC)
   logical :: answers_2018, default_2018_answers
   logical :: check_reconstruction, check_remapping, force_bounds_in_subcell
   character(len=32)  :: remappingScheme
+! This include declares and sets the variable "version".
+# include "version_variable.h"
+
   allocate(OBC)
 
   call get_param(param_file, mdl, "OBC_NUMBER_OF_SEGMENTS", OBC%number_of_segments, &
@@ -4432,8 +4435,8 @@ subroutine register_OBC(name, param_file, Reg)
   Reg%OB(nobc)%name = name
 
   if (Reg%locked) call MOM_error(FATAL, &
-      "MOM register_tracer was called for variable "//trim(Reg%OB(nobc)%name)//&
-      " with a locked tracer registry.")
+      "MOM register_OBC was called for OBC "//trim(Reg%OB(nobc)%name)//&
+      " with a locked OBC registry.")
 
 end subroutine register_OBC
 
@@ -4444,7 +4447,7 @@ subroutine OBC_registry_init(param_file, Reg)
 
   integer, save :: init_calls = 0
 
-#include "version_variable.h"
+# include "version_variable.h"
   character(len=40)  :: mdl = "MOM_open_boundary" ! This module's name.
   character(len=256) :: mesg    ! Message for error messages.
 
@@ -4452,7 +4455,7 @@ subroutine OBC_registry_init(param_file, Reg)
   else ; return ; endif
 
   ! Read all relevant parameters and write them to the model log.
-! call log_version(param_file, mdl,s version, "")
+! call log_version(param_file, mdl, version, "")
 
   init_calls = init_calls + 1
   if (init_calls > 1) then
@@ -4464,9 +4467,10 @@ subroutine OBC_registry_init(param_file, Reg)
 end subroutine OBC_registry_init
 
 !> Add file to OBC registry.
-function register_file_OBC(param_file, CS, OBC_Reg)
+function register_file_OBC(param_file, CS, US, OBC_Reg)
   type(param_file_type),    intent(in) :: param_file !< parameter file.
   type(file_OBC_CS),        pointer    :: CS         !< file control structure.
+  type(unit_scale_type),    intent(in) :: US         !< A dimensional unit scaling type
   type(OBC_registry_type),  pointer    :: OBC_Reg    !< OBC registry.
   logical                              :: register_file_OBC
   character(len=32)  :: casename = "OBC file"        !< This case's name.
@@ -4501,7 +4505,7 @@ subroutine segment_tracer_registry_init(param_file, segment)
   integer, save :: init_calls = 0
 
 ! This include declares and sets the variable "version".
-#include "version_variable.h"
+# include "version_variable.h"
   character(len=40)  :: mdl = "segment_tracer_registry_init" ! This routine's name.
   character(len=256) :: mesg    ! Message for error messages.
 
@@ -4525,6 +4529,8 @@ subroutine segment_tracer_registry_init(param_file, segment)
 
 end subroutine segment_tracer_registry_init
 
+!> Register a tracer array that is active on an OBC segment, potentially also specifing how the
+!! tracer inflow values are specified.
 subroutine register_segment_tracer(tr_ptr, param_file, GV, segment, &
                                    OBC_scalar, OBC_array)
   type(verticalGrid_type), intent(in)   :: GV         !< ocean vertical grid structure
@@ -4535,7 +4541,7 @@ subroutine register_segment_tracer(tr_ptr, param_file, GV, segment, &
                                                       !! but it also means that any updates to this
                                                       !! structure in the calling module will be
                                                       !! available subsequently to the tracer registry.
-  type(param_file_type), intent(in)     :: param_file !< file to parse for  model parameter values
+  type(param_file_type), intent(in)     :: param_file !< file to parse for model parameter values
   type(OBC_segment_type), intent(inout) :: segment    !< current segment data structure
   real, optional, intent(in)            :: OBC_scalar !< If present, use scalar value for segment tracer
                                                       !! inflow concentration.
@@ -4553,8 +4559,8 @@ subroutine register_segment_tracer(tr_ptr, param_file, GV, segment, &
 
   if (segment%tr_Reg%ntseg>=MAX_FIELDS_) then
     write(mesg,'("Increase MAX_FIELDS_ in MOM_memory.h to at least ",I3," to allow for &
-        &all the tracers being registered via register_tracer.")') segment%tr_Reg%ntseg+1
-    call MOM_error(FATAL,"MOM register_tracer: "//mesg)
+        &all the tracers being registered via register_segment_tracer.")') segment%tr_Reg%ntseg+1
+    call MOM_error(FATAL,"MOM register_segment_tracer: "//mesg)
   endif
   segment%tr_Reg%ntseg = segment%tr_Reg%ntseg + 1
   ntseg     = segment%tr_Reg%ntseg
@@ -4568,7 +4574,7 @@ subroutine register_segment_tracer(tr_ptr, param_file, GV, segment, &
   segment%tr_Reg%Tr(ntseg)%name = tr_ptr%name
 
   if (segment%tr_Reg%locked) call MOM_error(FATAL, &
-      "MOM register_tracer was called for variable "//trim(segment%tr_Reg%Tr(ntseg)%name)//&
+      "MOM register_segment_tracer was called for variable "//trim(segment%tr_Reg%Tr(ntseg)%name)//&
       " with a locked tracer registry.")
 
   if (present(OBC_scalar)) segment%tr_Reg%Tr(ntseg)%OBC_inflow_conc = OBC_scalar ! initialize tracer value later

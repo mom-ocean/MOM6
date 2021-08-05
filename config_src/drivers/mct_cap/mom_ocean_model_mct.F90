@@ -61,7 +61,7 @@ use MOM_io,                   only : stdout
 use mpp_mod,                  only : mpp_chksum
 use MOM_EOS,                  only : gsw_sp_from_sr, gsw_pt_from_ct
 use MOM_wave_interface,       only : wave_parameters_CS, MOM_wave_interface_init
-use MOM_wave_interface,       only : MOM_wave_interface_init_lite, Update_Surface_Waves
+use MOM_wave_interface,       only : Update_Surface_Waves
 use time_interp_external_mod, only : time_interp_external_init
 
 ! MCT specfic routines
@@ -195,8 +195,8 @@ type, public :: ocean_state_type ;
                               !! about the vertical grid.
   type(unit_scale_type), pointer :: US => NULL() !< A pointer to a structure containing
                               !! dimensional unit scaling factors.
-  type(MOM_control_struct), pointer :: &
-    MOM_CSp => NULL()         !< A pointer to the MOM control structure
+  type(MOM_control_struct)    :: MOM_CSp
+                              !< MOM control structure
   type(ice_shelf_CS), pointer :: &
     Ice_shelf_CSp => NULL()   !< A pointer to the control structure for the
                               !! ice shelf model that couples with MOM6.  This
@@ -205,7 +205,7 @@ type, public :: ocean_state_type ;
     marine_ice_CSp => NULL()  !< A pointer to the control structure for the
                               !! marine ice effects module.
   type(wave_parameters_cs), pointer :: &
-    Waves !< A structure containing pointers to the surface wave fields
+    Waves => NULL()           !< A pointer to the surface wave control structure
   type(surface_forcing_CS), pointer :: &
     forcing_CSp => NULL()     !< A pointer to the MOM forcing control structure
   type(MOM_restart_CS), pointer :: &
@@ -383,11 +383,9 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn, i
 
   call get_param(param_file, mdl, "USE_WAVES", OS%Use_Waves, &
        "If true, enables surface wave modules.", default=.false.)
-  if (OS%use_waves) then
-    call MOM_wave_interface_init(OS%Time, OS%grid, OS%GV, OS%US, param_file, OS%Waves, OS%diag)
-  else
-    call MOM_wave_interface_init_lite(param_file)
-  endif
+  ! MOM_wave_interface_init is called regardless of the value of USE_WAVES because
+  ! it also initializes statistical waves.
+  call MOM_wave_interface_init(OS%Time, OS%grid, OS%GV, OS%US, param_file, OS%Waves, OS%diag)
 
   if (associated(OS%grid%Domain%maskmap)) then
     call initialize_ocean_public_type(OS%grid%Domain%mpp_domain, Ocean_sfc, &

@@ -261,10 +261,8 @@ function pseudo_salt_stock(h, stocks, G, GV, CS, names, units, stock_index)
   integer                                           :: pseudo_salt_stock !< Return value: the number of
                                                               !! stocks calculated here.
 
-! This function calculates the mass-weighted integral of all tracer stocks,
-! returning the number of stocks it has calculated.  If the stock_index
-! is present, only the stock corresponding to that coded index is returned.
-
+  ! Local variables
+  real :: stock_scale ! The dimensional scaling factor to convert stocks to kg [kg H-1 L-2 ~> kg m-3 or nondim]
   integer :: i, j, k, is, ie, js, je, nz
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
@@ -279,14 +277,14 @@ function pseudo_salt_stock(h, stocks, G, GV, CS, names, units, stock_index)
     return
   endif ; endif
 
+  stock_scale = G%US%L_to_m**2 * GV%H_to_kg_m2
   call query_vardesc(CS%tr_desc, name=names(1), units=units(1), caller="pseudo_salt_stock")
   units(1) = trim(units(1))//" kg"
   stocks(1) = 0.0
   do k=1,nz ; do j=js,je ; do i=is,ie
-    stocks(1) = stocks(1) + CS%diff(i,j,k) * &
-                         (G%mask2dT(i,j) * G%US%L_to_m**2*G%areaT(i,j) * h(i,j,k))
+    stocks(1) = stocks(1) + CS%diff(i,j,k) * (G%mask2dT(i,j) * G%areaT(i,j) * h(i,j,k))
   enddo ; enddo ; enddo
-  stocks(1) = GV%H_to_kg_m2 * stocks(1)
+  stocks(1) = stock_scale * stocks(1)
 
   pseudo_salt_stock = 1
 
