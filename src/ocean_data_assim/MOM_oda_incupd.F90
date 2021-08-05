@@ -65,22 +65,6 @@ end type p3d
 type, public :: oda_incupd_CS ; private
   integer :: nz        !< The total number of layers.
   integer :: nz_data   !< The total number of arbritary layers (used by older code).
-  integer :: isc       !< The starting i-index of the computational domain at h.
-  integer :: iec       !< The ending i-index of the computational domain at h.
-  integer :: jsc       !< The starting j-index of the computational domain at h.
-  integer :: jec       !< The ending j-index of the computational domain at h.
-  integer :: IscB      !< The starting I-index of the computational domain at u/v.
-  integer :: IecB      !< The ending I-index of the computational domain at u/v.
-  integer :: JscB      !< The starting J-index of the computational domain at u/v.
-  integer :: JecB      !< The ending J-index of the computational domain at h.
-  integer :: isd       !< The starting i-index of the data domain at h.
-  integer :: ied       !< The ending i-index of the data domain at h.
-  integer :: jsd       !< The starting j-index of the data domain at h.
-  integer :: jed       !< The ending j-index of the data domain at h.
-  integer :: IsdB      !< The starting I-index of the data domain at u/v.
-  integer :: IedB      !< The ending I-index of the data domain at u/v.
-  integer :: JsdB      !< The starting J-index of the data domain at u/v.
-  integer :: JedB      !< The ending J-index of the data domain at h.
   integer :: fldno = 0 !< The number of fields which have already been
                        !! registered by calls to set_up_oda_incupd_field
 
@@ -224,9 +208,6 @@ subroutine initialize_oda_incupd( G, GV, US, param_file, CS, data_h,nz_data, res
                  default=.true.)
 
   CS%nz = GV%ke
-  CS%isc = G%isc ; CS%iec = G%iec ; CS%jsc = G%jsc ; CS%jec = G%jec
-  CS%isd = G%isd ; CS%ied = G%ied ; CS%jsd = G%jsd ; CS%jed = G%jed
-  CS%isdB = G%isdB ; CS%iedB = G%iedB; CS%jsdB = G%jsdB ; CS%jedB = G%jedB
 
   ! increments on horizontal grid
   if (.not. CS%incupdDataOngrid) call MOM_error(FATAL,'initialize_oda_incupd: '// &
@@ -421,6 +402,8 @@ subroutine calc_oda_increments(h, tv, u, v, G, GV, US, CS)
 
         do k=1,nz_data
           sum_h2 = sum_h2+h_obs(i,j,k)
+        enddo
+        do k=1,nz_data
           tmp_h(k)=(sum_h1/sum_h2)*h_obs(i,j,k)
         enddo
         ! get temperature
