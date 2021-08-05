@@ -190,6 +190,7 @@ type, public :: hor_visc_CS ; private
   integer :: id_h_diffu  = -1, id_h_diffv      = -1
   integer :: id_hf_diffu_2d = -1, id_hf_diffv_2d = -1
   integer :: id_intz_diffu_2d = -1, id_intz_diffv_2d = -1
+  integer :: id_diffu_visc_rem = -1, id_diffv_visc_rem = -1
   integer :: id_Ah_h      = -1, id_Ah_q          = -1
   integer :: id_Kh_h      = -1, id_Kh_q          = -1
   integer :: id_GME_coeff_h = -1, id_GME_coeff_q = -1
@@ -280,6 +281,8 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
 
   real, allocatable, dimension(:,:,:) :: h_diffu ! h x diffu [H L T-2 ~> m2 s-2]
   real, allocatable, dimension(:,:,:) :: h_diffv ! h x diffv [H L T-2 ~> m2 s-2]
+  real, allocatable, dimension(:,:,:) :: diffu_visc_rem ! diffu x visc_rem_u [L T-2 ~> m2 s-2]
+  real, allocatable, dimension(:,:,:) :: diffv_visc_rem ! diffv x visc_rem_v [L T-2 ~> m2 s-2]
 
   real, dimension(SZIB_(G),SZJB_(G)) :: &
     dvdx, dudy, & ! components in the shearing strain [T-1 ~> s-1]
@@ -1704,6 +1707,25 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
     deallocate(h_diffv)
   endif
 
+  if (present(ADp) .and. (CS%id_diffu_visc_rem > 0)) then
+    allocate(diffu_visc_rem(G%IsdB:G%IedB,G%jsd:G%jed,GV%ke))
+    diffu_visc_rem(:,:,:) = 0.0
+    do k=1,nz ; do j=js,je ; do I=Isq,Ieq
+      diffu_visc_rem(I,j,k) = diffu(I,j,k) * ADp%visc_rem_u(I,j,k)
+    enddo ; enddo ; enddo
+    call post_data(CS%id_diffu_visc_rem, diffu_visc_rem, CS%diag)
+    deallocate(diffu_visc_rem)
+  endif
+  if (present(ADp) .and. (CS%id_diffv_visc_rem > 0)) then
+    allocate(diffv_visc_rem(G%isd:G%ied,G%JsdB:G%JedB,GV%ke))
+    diffv_visc_rem(:,:,:) = 0.0
+    do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
+      diffv_visc_rem(i,J,k) = diffv(i,J,k) * ADp%visc_rem_v(i,J,k)
+    enddo ; enddo ; enddo
+    call post_data(CS%id_diffv_visc_rem, diffv_visc_rem, CS%diag)
+    deallocate(diffv_visc_rem)
+  endif
+
 end subroutine horizontal_viscosity
 
 !> Allocates space for and calculates static variables used by horizontal_viscosity().
@@ -2446,6 +2468,20 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, MEKE, ADp)
       'm2 s-2', conversion=GV%H_to_m*US%L_T2_to_m_s2)
   if ((CS%id_intz_diffv_2d > 0) .and. (present(ADp))) then
     call safe_alloc_ptr(ADp%diag_hv,G%isd,G%ied,G%JsdB,G%JedB,GV%ke)
+  endif
+
+  CS%id_diffu_visc_rem = register_diag_field('ocean_model', 'diffu_visc_rem', diag%axesCuL, Time, &
+      'Zonal Acceleration from Horizontal Viscosity multiplied by viscous remnant', 'm2 s-2', &
+      conversion=GV%H_to_m*US%L_T2_to_m_s2)
+  if ((CS%id_diffu_visc_rem > 0) .and. (present(ADp))) then
+    call safe_alloc_ptr(ADp%visc_rem_u,G%IsdB,G%IedB,G%jsd,G%jed,GV%ke)
+  endif
+
+  CS%id_diffv_visc_rem = register_diag_field('ocean_model', 'diffv_visc_rem', diag%axesCvL, Time, &
+      'Meridional Acceleration from Horizontal Viscosity multiplied by viscous remnant', 'm2 s-2', &
+      conversion=GV%H_to_m*US%L_T2_to_m_s2)
+  if ((CS%id_diffv_visc_rem > 0) .and. (present(ADp))) then
+    call safe_alloc_ptr(ADp%visc_rem_v,G%isd,G%ied,G%JsdB,G%JedB,GV%ke)
   endif
 
   if (CS%biharmonic) then
