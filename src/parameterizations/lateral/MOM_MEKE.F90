@@ -1420,26 +1420,23 @@ subroutine MEKE_alloc_register_restart(HI, param_file, MEKE, restart_CS)
 
 end subroutine MEKE_alloc_register_restart
 
-!> Deallocates any variables allocated in MEKE_init or
-!! MEKE_alloc_register_restart.
-subroutine MEKE_end(MEKE, CS)
-  type(MEKE_type), pointer :: MEKE !< A structure with MEKE-related fields.
-  type(MEKE_CS),   pointer :: CS   !< The control structure for MOM_MEKE.
+!> Deallocates any variables allocated in MEKE_alloc_register_restart.
+subroutine MEKE_end(MEKE)
+  type(MEKE_type), intent(inout) :: MEKE !< A structure with MEKE-related fields.
 
-  if (associated(CS)) deallocate(CS)
+  ! NOTE: MEKE will always be allocated by MEKE_init, even if MEKE is disabled.
+  !  So these must all be conditional, even though MEKE%MEKE and MEKE%Rd_dx_h
+  !  are always allocated (when MEKE is enabled)
 
-  if (.not.associated(MEKE)) return
-
-  if (associated(MEKE%MEKE)) deallocate(MEKE%MEKE)
-  if (associated(MEKE%GM_src)) deallocate(MEKE%GM_src)
-  if (associated(MEKE%mom_src)) deallocate(MEKE%mom_src)
-  if (associated(MEKE%GME_snk)) deallocate(MEKE%GME_snk)
-  if (associated(MEKE%Kh)) deallocate(MEKE%Kh)
+  if (associated(MEKE%Au)) deallocate(MEKE%Au)
   if (associated(MEKE%Kh_diff)) deallocate(MEKE%Kh_diff)
   if (associated(MEKE%Ku)) deallocate(MEKE%Ku)
-  if (associated(MEKE%Au)) deallocate(MEKE%Au)
-  deallocate(MEKE)
-
+  if (associated(MEKE%Rd_dx_h)) deallocate(MEKE%Rd_dx_h)
+  if (associated(MEKE%Kh)) deallocate(MEKE%Kh)
+  if (associated(MEKE%GME_snk)) deallocate(MEKE%GME_snk)
+  if (associated(MEKE%mom_src)) deallocate(MEKE%mom_src)
+  if (associated(MEKE%GM_src)) deallocate(MEKE%GM_src)
+  if (associated(MEKE%MEKE)) deallocate(MEKE%MEKE)
 end subroutine MEKE_end
 
 !> \namespace mom_meke

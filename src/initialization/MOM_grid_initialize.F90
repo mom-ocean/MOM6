@@ -9,7 +9,7 @@ use MOM_domains,       only : AGRID, BGRID_NE, CGRID_NE, To_All, Scalar_Pair
 use MOM_domains,       only : To_North, To_South, To_East, To_West
 use MOM_domains,       only : MOM_domain_type, clone_MOM_domain, deallocate_MOM_domain
 use MOM_dyn_horgrid,   only : dyn_horgrid_type, set_derived_dyn_horgrid
-use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, is_root_pe
+use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, WARNING, is_root_pe
 use MOM_error_handler, only : callTree_enter, callTree_leave
 use MOM_file_parser,   only : get_param, log_param, log_version, param_file_type
 use MOM_io,            only : MOM_read_data, slasher, file_exists, stdout
@@ -1187,7 +1187,7 @@ end function Adcroft_reciprocal
 !> Initializes the grid masks and any metrics that come with masks already applied.
 !!
 !!    Initialize_masks sets mask2dT, mask2dCu, mask2dCv, and mask2dBu to mask out
-!! flow over any points which are shallower than Dmin and permit an
+!! flow over any points which are shallower than Dmask and permit an
 !! appropriate treatment of the boundary conditions.  mask2dCu and mask2dCv
 !! are 0.0 at any points adjacent to a land point.  mask2dBu is 0.0 at
 !! any land or boundary point.  For points in the interior, mask2dCu,
@@ -1199,7 +1199,7 @@ subroutine initialize_masks(G, PF, US)
   ! Local variables
   real :: m_to_Z_scale ! A unit conversion factor from m to Z.
   real :: m_to_L  ! A unit conversion factor [L m-1 ~> nondim]
-  real :: Dmin       ! The depth for masking in the same units as G%bathyT [Z ~> m].
+  real :: Dmask      ! The depth for masking in the same units as G%bathyT [Z ~> m].
   real :: min_depth  ! The minimum ocean depth in the same units as G%bathyT [Z ~> m].
   real :: mask_depth ! The depth shallower than which to mask a point as land [Z ~> m].
   character(len=40)  :: mdl = "MOM_grid_init initialize_masks"
@@ -1217,17 +1217,23 @@ subroutine initialize_masks(G, PF, US)
                  units="m", default=0.0, scale=m_to_Z_scale)
   call get_param(PF, mdl, "MASKING_DEPTH", mask_depth, &
                  "The depth below which to mask points as land points, for which all "//&
-                 "fluxes are zeroed out. MASKING_DEPTH is ignored if negative.", &
+                 "fluxes are zeroed out. MASKING_DEPTH needs to be smaller than MINIMUM_DEPTH", &
                  units="m", default=-9999.0, scale=m_to_Z_scale)
 
-  Dmin = min_depth
-  if (mask_depth>=0.) Dmin = mask_depth
+  if (mask_depth > min_depth) then
+    mask_depth = -9999.0*m_to_Z_scale
+    call MOM_error(WARNING, "MOM_grid_init: initialize_masks "//&
+                  'MASKING_DEPTH is larger than MINIMUM_DEPTH and therefore ignored.')
+  endif
+
+  Dmask = mask_depth
+  if (mask_depth == -9999.*m_to_Z_scale) Dmask = min_depth
 
   G%mask2dCu(:,:) = 0.0 ; G%mask2dCv(:,:) = 0.0 ; G%mask2dBu(:,:) = 0.0
 
   ! Construct the h-point or T-point mask
   do j=G%jsd,G%jed ; do i=G%isd,G%ied
-    if (G%bathyT(i,j) <= Dmin) then
+    if (G%bathyT(i,j) <= Dmask) then
       G%mask2dT(i,j) = 0.0
     else
       G%mask2dT(i,j) = 1.0
@@ -1235,7 +1241,7 @@ subroutine initialize_masks(G, PF, US)
   enddo ; enddo
 
   do j=G%jsd,G%jed ; do I=G%isd,G%ied-1
-    if ((G%bathyT(i,j) <= Dmin) .or. (G%bathyT(i+1,j) <= Dmin)) then
+    if ((G%bathyT(i,j) <= Dmask) .or. (G%bathyT(i+1,j) <= Dmask)) then
       G%mask2dCu(I,j) = 0.0
     else
       G%mask2dCu(I,j) = 1.0
@@ -1243,7 +1249,7 @@ subroutine initialize_masks(G, PF, US)
   enddo ; enddo
 
   do J=G%jsd,G%jed-1 ; do i=G%isd,G%ied
-    if ((G%bathyT(i,j) <= Dmin) .or. (G%bathyT(i,j+1) <= Dmin)) then
+    if ((G%bathyT(i,j) <= Dmask) .or. (G%bathyT(i,j+1) <= Dmask)) then
       G%mask2dCv(i,J) = 0.0
     else
       G%mask2dCv(i,J) = 1.0
@@ -1251,8 +1257,8 @@ subroutine initialize_masks(G, PF, US)
   enddo ; enddo
 
   do J=G%jsd,G%jed-1 ; do I=G%isd,G%ied-1
-    if ((G%bathyT(i+1,j) <= Dmin) .or. (G%bathyT(i+1,j+1) <= Dmin) .or. &
-        (G%bathyT(i,j) <= Dmin) .or. (G%bathyT(i,j+1) <= Dmin)) then
+    if ((G%bathyT(i+1,j) <= Dmask) .or. (G%bathyT(i+1,j+1) <= Dmask) .or. &
+        (G%bathyT(i,j) <= Dmask) .or. (G%bathyT(i,j+1) <= Dmask)) then
       G%mask2dBu(I,J) = 0.0
     else
       G%mask2dBu(I,J) = 1.0

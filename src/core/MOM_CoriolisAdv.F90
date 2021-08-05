@@ -1406,8 +1406,7 @@ end subroutine CoriolisAdv_init
 
 !> Destructor for coriolisadv_cs
 subroutine CoriolisAdv_end(CS)
-  type(CoriolisAdv_CS), pointer :: CS !< Control structure fro MOM_CoriolisAdv
-  deallocate(CS)
+  type(CoriolisAdv_CS), intent(inout) :: CS !< Control structure fro MOM_CoriolisAdv
 end subroutine CoriolisAdv_end
 
 !> \namespace mom_coriolisadv

@@ -352,7 +352,7 @@ subroutine entrainment_diffusive(h, tv, fluxes, dt, G, GV, US, CS, ea, eb, &
       ! what maxF(kb+1) should be.
       do i=is,ie ; min_eakb(i) = MIN(htot(i), max_eakb(i)) ; enddo
       call find_maxF_kb(h_bl, Sref, Ent_bl, I_dSkbp1, min_eakb, max_eakb, &
-                        kmb, is, ie, G, GV, CS, F_kb_maxEnt, do_i_in = do_i)
+                        kmb, is, ie, G, GV, CS, F_kb_maxEnt, do_i_in=do_i)
 
       do i=is,ie
         do_entrain_eakb = .false.
@@ -891,7 +891,7 @@ end subroutine entrainment_diffusive
 !>   This subroutine calculates the actual entrainments (ea and eb) and the
 !! amount of surface forcing that is applied to each layer if there is no bulk
 !! mixed layer.
-subroutine F_to_ent(F, h, kb, kmb, j, G, GV, CS, dsp1_ds, eakb, Ent_bl, ea, eb, do_i_in)
+subroutine F_to_ent(F, h, kb, kmb, j, G, GV, CS, dsp1_ds, eakb, Ent_bl, ea, eb)
   type(ocean_grid_type),            intent(in)    :: G    !< The ocean's grid structure
   type(verticalGrid_type),          intent(in)    :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZK_(GV)), intent(in)   :: F    !< The density flux through a layer within
@@ -920,30 +920,12 @@ subroutine F_to_ent(F, h, kb, kmb, j, G, GV, CS, dsp1_ds, eakb, Ent_bl, ea, eb, 
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                                     intent(inout) :: eb   !< The amount of fluid entrained from the layer
                                                           !! below within this time step [H ~> m or kg m-2].
-  logical, dimension(SZI_(G)), &
-                          optional, intent(in)    :: do_i_in !< Indicates which i-points to work on.
-!   This subroutine calculates the actual entrainments (ea and eb) and the
-! amount of surface forcing that is applied to each layer if there is no bulk
-! mixed layer.
 
   real :: h1        ! The thickness in excess of the minimum that will remain
                     ! after exchange with the layer below [H ~> m or kg m-2].
-  logical :: do_i(SZI_(G))
   integer :: i, k, is, ie, nz
 
   is = G%isc ; ie = G%iec ; nz = GV%ke
-
-  if (present(do_i_in)) then
-    do i=is,ie ; do_i(i) = do_i_in(i) ; enddo
-    do i=G%isc,G%iec ; if (do_i(i)) then
-      is = i ; exit
-    endif ; enddo
-    do i=G%iec,G%isc,-1 ; if (do_i(i)) then
-      ie = i ; exit
-    endif ; enddo
-  else
-    do i=is,ie ; do_i(i) = .true. ; enddo
-  endif
 
   do i=is,ie
     ea(i,j,nz) = 0.0 ; eb(i,j,nz) = 0.0
@@ -952,7 +934,7 @@ subroutine F_to_ent(F, h, kb, kmb, j, G, GV, CS, dsp1_ds, eakb, Ent_bl, ea, eb, 
     do i=is,ie
       eb(i,j,kmb) = max(2.0*Ent_bl(i,Kmb+1) - eakb(i), 0.0)
     enddo
-    do k=nz-1,kmb+1,-1 ; do i=is,ie ; if (do_i(i)) then
+    do k=nz-1,kmb+1,-1 ; do i=is,ie
       if (k > kb(i)) then
         ! With a bulk mixed layer, surface buoyancy fluxes are applied
         ! elsewhere, so F should always be nonnegative.
@@ -970,9 +952,9 @@ subroutine F_to_ent(F, h, kb, kmb, j, G, GV, CS, dsp1_ds, eakb, Ent_bl, ea, eb, 
         ! up into the buffer layer.
         eb(i,j,k) = eb(i,j,k+1) + max(0.0, h(i,j,k+1) - GV%Angstrom_H)
       endif
-    endif ; enddo ; enddo
+    enddo ; enddo
     k = kmb
-    do i=is,ie ; if (do_i(i)) then
+    do i=is,ie
       ! Adjust the previously calculated entrainment from below by the deepest
       ! buffer layer to account for entrainment of thin interior layers .
       if (kb(i) > kmb+1) &
@@ -981,8 +963,8 @@ subroutine F_to_ent(F, h, kb, kmb, j, G, GV, CS, dsp1_ds, eakb, Ent_bl, ea, eb, 
       ! Determine the entrainment from above for each buffer layer.
       h1 = (h(i,j,k) - GV%Angstrom_H) + (eb(i,j,k) - ea(i,j,k+1))
       ea(i,j,k) = MAX(Ent_bl(i,K), Ent_bl(i,K)-0.5*h1, -h1)
-    endif ; enddo
-    do k=kmb-1,2,-1 ; do i=is,ie ; if (do_i(i)) then
+    enddo
+    do k=kmb-1,2,-1 ; do i=is,ie
       ! Determine the entrainment from below for each buffer layer.
       eb(i,j,k) = max(2.0*Ent_bl(i,K+1) - ea(i,j,k+1), 0.0)
 
@@ -992,11 +974,11 @@ subroutine F_to_ent(F, h, kb, kmb, j, G, GV, CS, dsp1_ds, eakb, Ent_bl, ea, eb, 
 !       if (h1 >= 0.0) then ;                     ea(i,j,k) = Ent_bl(i,K)
 !       elseif (Ent_bl(i,K)+0.5*h1 >= 0.0) then ; ea(i,j,k) = Ent_bl(i,K)-0.5*h1
 !       else ;                                    ea(i,j,k) = -h1 ; endif
-    endif ; enddo ; enddo
-    do i=is,ie ; if (do_i(i)) then
+    enddo ; enddo
+    do i=is,ie
       eb(i,j,1) = max(2.0*Ent_bl(i,2) - ea(i,j,2), 0.0)
       ea(i,j,1) = 0.0
-    endif ; enddo
+    enddo
   else                                          ! not BULKMIXEDLAYER
     ! Calculate the entrainment by each layer from above and below.
     ! Entrainment is always positive, but F may be negative due to
@@ -1511,7 +1493,7 @@ subroutine F_kb_to_ea_kb(h_bl, Sref, Ent_bl, I_dSkbp1, F_kb, kmb, i, &
     ! the maximum.
     zeros(i) = 0.0
     call find_maxF_kb(h_bl, Sref, Ent_bl, I_dSkbp1, zeros, ea_kb, &
-                      kmb, i, i, G, GV, CS, maxF, ent_maxF, F_thresh = F_kb)
+                      kmb, i, i, G, GV, CS, maxF, ent_maxF, F_thresh=F_kb)
     err_max = dS_kbp1 * maxF(i) - val
     ! If err_max is negative, there is no good solution, so use the maximum
     ! value of F in the valid range.
@@ -1693,7 +1675,7 @@ subroutine determine_Ea_kb(h_bl, dtKd_kb, Sref, I_dSkbp1, Ent_bl, ea_kbp1, &
     do_any = .false. ; do i=is,ie ; if (redo_i(i)) do_any = .true. ; enddo
     if (.not.do_any) exit
     call determine_dSkb(h_bl, Sref, Ent_bl, Ent, is, ie, kmb, G, GV, .true., dS_kb, &
-                        ddSkb_dE, dS_lay, ddSlay_dE, do_i_in = redo_i)
+                        ddSkb_dE, dS_lay, ddSlay_dE, do_i_in=redo_i)
     do i=is,ie ; if (redo_i(i)) then
       !  The correct root is bracketed between E_min and E_max.
       ! Note the following limits:  Ent >= 0 ; fa > 1 ; fk > 0
@@ -1757,7 +1739,7 @@ subroutine determine_Ea_kb(h_bl, dtKd_kb, Sref, I_dSkbp1, Ent_bl, ea_kbp1, &
   ! Update the value of dS_kb for consistency with Ent.
   if (present(F_kb) .or. present(dFdfm_kb)) &
     call determine_dSkb(h_bl, Sref, Ent_bl, Ent, is, ie, kmb, G, GV, .true., &
-                        dS_kb, do_i_in = do_i)
+                        dS_kb, do_i_in=do_i)
 
   if (present(F_kb)) then ; do i=is,ie ; if (do_i(i)) then
     F_kb(i) = Ent(i) * (dS_kb(i) * I_dSkbp1(i))
@@ -1878,7 +1860,7 @@ subroutine find_maxF_kb(h_bl, Sref, Ent_bl, I_dSkbp1, min_ent_in, max_ent_in, &
     do i=ie1,is,-1 ; if (do_i(i)) is1 = i ; enddo
     ! Find the value of F and its derivative at min_ent.
     call determine_dSkb(h_bl, Sref, Ent_bl, minent, is1, ie1, kmb, G, GV, .false., &
-                        dS_kb, ddSkb_dE, do_i_in = do_i)
+                        dS_kb, ddSkb_dE, do_i_in=do_i)
     do i=is1,ie1 ; if (do_i(i)) then
       F_minent(i) = minent(i) * dS_kb(i) * I_dSkbp1(i)
       dF_dE_min(i) = (dS_kb(i) + minent(i)*ddSkb_dE(i)) * I_dSkbp1(i)
@@ -1958,7 +1940,7 @@ subroutine find_maxF_kb(h_bl, Sref, Ent_bl, I_dSkbp1, min_ent_in, max_ent_in, &
       endif
 
       call determine_dSkb(h_bl, Sref, Ent_bl, ent, is1, ie1, kmb, G, GV, .false., &
-                          dS_kb, ddSkb_dE, do_i_in = do_i)
+                          dS_kb, ddSkb_dE, do_i_in=do_i)
       do i=is1,ie1 ; if (do_i(i)) then
         F(i) = ent(i)*dS_kb(i)*I_dSkbp1(i)
         dF_dent(i) = (dS_kb(i) + ent(i)*ddSkb_dE(i)) * I_dSkbp1(i)
@@ -2050,8 +2032,7 @@ subroutine find_maxF_kb(h_bl, Sref, Ent_bl, I_dSkbp1, min_ent_in, max_ent_in, &
     enddo
     if (doany) then
       ! For efficiency, could save previous value of dS_anom_lim_best?
-      call determine_dSkb(h_bl, Sref, Ent_bl, ent_best, is, ie, kmb, G, GV, .true., &
-                          dS_kb_lim)
+      call determine_dSkb(h_bl, Sref, Ent_bl, ent_best, is, ie, kmb, G, GV, .true., dS_kb_lim)
       do i=is,ie
         F_best(i) = ent_best(i)*dS_kb_lim(i)*I_dSkbp1(i)
         ! The second test seems necessary because of roundoff differences that
@@ -2088,14 +2069,13 @@ subroutine entrain_diffusive_init(Time, G, GV, US, param_file, diag, CS, just_re
                                                  !! output.
   type(entrain_diffusive_CS), pointer    :: CS   !< A pointer that is set to point to the control
                                                  !! structure.
-  logical,       optional, intent(in)    :: just_read_params !< If present and true, this call will
-                                                 !! only read parameters logging them or registering
+  logical,                 intent(in)    :: just_read_params !< If true, this call will only read
+                                                 !! and log parameters without registering
                                                  !! any diagnostics
 
   ! Local variables
   real :: dt  ! The dynamics timestep, used here in the default for TOLERANCE_ENT, in MKS units [s]
   real :: Kd  ! A diffusivity used in the default for TOLERANCE_ENT, in MKS units [m2 s-1]
-  logical :: just_read    ! If true, just read parameters but do nothing else.
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
   character(len=40)  :: mdl = "MOM_entrain_diffusive" ! This module's name.
@@ -2107,30 +2087,28 @@ subroutine entrain_diffusive_init(Time, G, GV, US, param_file, diag, CS, just_re
   endif
   allocate(CS)
 
-  just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
-
   CS%diag => diag
 
   CS%bulkmixedlayer = (GV%nkml > 0)
 
-! Set default, read and log parameters
-  if (.not.just_read) call log_version(param_file, mdl, version, "")
+  ! Set default, read and log parameters
+  if (.not.just_read_params) call log_version(param_file, mdl, version, "")
   call get_param(param_file, mdl, "MAX_ENT_IT", CS%max_ent_it, &
                  "The maximum number of iterations that may be used to "//&
-                 "calculate the interior diapycnal entrainment.", default=5, do_not_log=just_read)
+                 "calculate the interior diapycnal entrainment.", default=5, do_not_log=just_read_params)
   ! In this module, KD is only used to set the default for TOLERANCE_ENT. [m2 s-1]
   call get_param(param_file, mdl, "KD", Kd, default=0.0)
   call get_param(param_file, mdl, "DT", dt, &
                  "The (baroclinic) dynamics time step.", units = "s", &
-                 fail_if_missing=.true., do_not_log=just_read)
+                 fail_if_missing=.true., do_not_log=just_read_params)
   call get_param(param_file, mdl, "TOLERANCE_ENT", CS%Tolerance_Ent, &
                  "The tolerance with which to solve for entrainment values.", &
                  units="m", default=MAX(100.0*GV%Angstrom_m,1.0e-4*sqrt(dt*Kd)), scale=GV%m_to_H, &
-                 do_not_log=just_read)
+                 do_not_log=just_read_params)
 
   CS%Rho_sig_off = 1000.0*US%kg_m3_to_R
 
-  if (.not.just_read) then
+  if (.not.just_read_params) then
     CS%id_Kd = register_diag_field('ocean_model', 'Kd_effective', diag%axesTL, Time, &
         'Diapycnal diffusivity as applied', 'm2 s-1', conversion=US%Z2_T_to_m2_s)
     CS%id_diff_work = register_diag_field('ocean_model', 'diff_work', diag%axesTi, Time, &
@@ -2138,7 +2116,7 @@ subroutine entrain_diffusive_init(Time, G, GV, US, param_file, diag, CS, just_re
         'W m-2', conversion=US%RZ3_T3_to_W_m2)
   endif
 
-  if (just_read) deallocate(CS)
+  if (just_read_params) deallocate(CS)
 
 end subroutine entrain_diffusive_init
 

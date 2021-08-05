@@ -352,7 +352,7 @@ subroutine int_tide_input_init(Time, G, GV, US, param_file, diag, CS, itide)
                units="m-1", default=8.e-4*atan(1.0), scale=US%L_to_m)
 
   call get_param(param_file, mdl, "KAPPA_H2_FACTOR", kappa_h2_factor, &
-               "A scaling factor for the roughness amplitude with n"//&
+               "A scaling factor for the roughness amplitude with "//&
                "INT_TIDE_DISSIPATION.",  units="nondim", default=1.0)
   call get_param(param_file, mdl, "TKE_ITIDE_MAX", CS%TKE_itide_max, &
                "The maximum internal tide energy source available to mix "//&

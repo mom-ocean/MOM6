@@ -1389,7 +1389,7 @@ subroutine propagate_x(En, speed_x, Cgx_av, dCgx, dt, G, US, Nangle, CS, LB)
   real, dimension(SZIB_(G)) :: &
     cg_p, cg_m, flux1, flux2
   !real, dimension(SZI_(G),SZJB_(G),Nangle) :: En_m, En_p
-  real, dimension(SZI_(G),SZJB_(G),Nangle) :: &
+  real, dimension(G%isd:G%ied,G%jsd:G%jed,Nangle) :: &
     Fdt_m, Fdt_p! Left and right energy fluxes [J]
   integer :: i, j, k, ish, ieh, jsh, jeh, a
 
@@ -1464,7 +1464,7 @@ subroutine propagate_y(En, speed_y, Cgy_av, dCgy, dt, G, US, Nangle, CS, LB)
   real, dimension(SZI_(G)) :: &
     cg_p, cg_m, flux1, flux2
   !real, dimension(SZI_(G),SZJB_(G),Nangle) :: En_m, En_p
-  real, dimension(SZI_(G),SZJB_(G),Nangle) :: &
+  real, dimension(G%isd:G%ied,G%jsd:G%jed,Nangle) :: &
     Fdt_m, Fdt_p! South and north energy fluxes [J]
   character(len=160) :: mesg  ! The text of an error message
   integer :: i, j, k, ish, ieh, jsh, jeh, a
@@ -1653,9 +1653,16 @@ subroutine reflect(En, NAngle, CS, G, LB)
     angle_i(a) = Angle_size * real(a - 1) ! for a=1 aligned with x-axis
   enddo
 
-  angle_c   = CS%refl_angle
-  part_refl = CS%refl_pref
-  ridge     = CS%refl_dbl
+  ! init local arrays
+  angle_c(:,:) = CS%nullangle
+  part_refl(:,:) = 0.
+  ridge(:,:) = .false.
+
+  do j=jsh,jeh ; do i=ish,ieh
+    angle_c(i,j)   = CS%refl_angle(i,j)
+    part_refl(i,j) = CS%refl_pref(i,j)
+    ridge(i,j)     = CS%refl_dbl(i,j)
+  enddo ; enddo
   En_reflected(:) = 0.0
 
   do j=jsh,jeh ; do i=ish,ieh

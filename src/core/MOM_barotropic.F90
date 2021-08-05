@@ -7,10 +7,10 @@ use MOM_debugging, only : hchksum, uvchksum
 use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end, CLOCK_ROUTINE
 use MOM_diag_mediator, only : post_data, query_averaging_enabled, register_diag_field
 use MOM_diag_mediator, only : safe_alloc_ptr, diag_ctrl, enable_averaging
-use MOM_domains, only : min_across_PEs, clone_MOM_domain, pass_vector
+use MOM_domains, only : min_across_PEs, clone_MOM_domain, deallocate_MOM_domain
 use MOM_domains, only : To_All, Scalar_Pair, AGRID, CORNER, MOM_domain_type
 use MOM_domains, only : create_group_pass, do_group_pass, group_pass_type
-use MOM_domains, only : start_group_pass, complete_group_pass, pass_var
+use MOM_domains, only : start_group_pass, complete_group_pass, pass_var, pass_vector
 use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, WARNING, is_root_pe
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_forcing_type, only : mech_forcing
@@ -5008,19 +5008,25 @@ end subroutine barotropic_get_tav
 
 !> Clean up the barotropic control structure.
 subroutine barotropic_end(CS)
-  type(barotropic_CS), pointer :: CS  !< Control structure to clear out.
-  DEALLOC_(CS%frhatu)   ; DEALLOC_(CS%frhatv)
-  DEALLOC_(CS%IDatu)    ; DEALLOC_(CS%IDatv)
-  DEALLOC_(CS%ubtav)    ; DEALLOC_(CS%vbtav)
-  DEALLOC_(CS%eta_cor)
-  DEALLOC_(CS%ua_polarity) ; DEALLOC_(CS%va_polarity)
-  if (CS%bound_BT_corr) then
-    DEALLOC_(CS%eta_cor_bound)
-  endif
+  type(barotropic_CS), intent(inout) :: CS  !< Control structure to clear out.
 
   call destroy_BT_OBC(CS%BT_OBC)
 
-  deallocate(CS)
+  ! Allocated in barotropic_init, called in timestep initialization
+  DEALLOC_(CS%ua_polarity) ; DEALLOC_(CS%va_polarity)
+  DEALLOC_(CS%IDatu)    ; DEALLOC_(CS%IDatv)
+  if (CS%bound_BT_corr) then
+    DEALLOC_(CS%eta_cor_bound)
+  endif
+  DEALLOC_(CS%eta_cor)
+  DEALLOC_(CS%frhatu)   ; DEALLOC_(CS%frhatv)
+
+  if (associated(CS%frhatu1)) deallocate(CS%frhatu1)
+  if (associated(CS%frhatv1)) deallocate(CS%frhatv1)
+  call deallocate_MOM_domain(CS%BT_domain)
+
+  ! Allocated in restart registration, prior to timestep initialization
+  DEALLOC_(CS%ubtav)    ; DEALLOC_(CS%vbtav)
 end subroutine barotropic_end
 
 !> This subroutine is used to register any fields from MOM_barotropic.F90
