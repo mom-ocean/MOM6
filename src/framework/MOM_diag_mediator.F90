@@ -3474,16 +3474,18 @@ subroutine diag_mediator_end(time, diag_CS, end_diag_manager)
     call axes_grp_end(diag_cs%remap_axesCvi(i))
   enddo
 
-  deallocate(diag_cs%remap_axesZL)
-  deallocate(diag_cs%remap_axesZi)
-  deallocate(diag_cs%remap_axesTL)
-  deallocate(diag_cs%remap_axesTi)
-  deallocate(diag_cs%remap_axesBL)
-  deallocate(diag_cs%remap_axesBi)
-  deallocate(diag_cs%remap_axesCuL)
-  deallocate(diag_cs%remap_axesCui)
-  deallocate(diag_cs%remap_axesCvL)
-  deallocate(diag_cs%remap_axesCvi)
+  if (diag_cs%num_diag_coords > 0) then
+    deallocate(diag_cs%remap_axesZL)
+    deallocate(diag_cs%remap_axesZi)
+    deallocate(diag_cs%remap_axesTL)
+    deallocate(diag_cs%remap_axesTi)
+    deallocate(diag_cs%remap_axesBL)
+    deallocate(diag_cs%remap_axesBi)
+    deallocate(diag_cs%remap_axesCuL)
+    deallocate(diag_cs%remap_axesCui)
+    deallocate(diag_cs%remap_axesCvL)
+    deallocate(diag_cs%remap_axesCvi)
+  endif
 
   do dl=2,MAX_DSAMP_LEV
     if (allocated(diag_cs%dsamp(dl)%remap_axesTL)) &
