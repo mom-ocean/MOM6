@@ -139,6 +139,8 @@ use MOM_wave_interface,        only : Update_Stokes_Drift
 ! ODA modules
 use MOM_oda_driver_mod,        only : ODA_CS, oda, init_oda, oda_end
 use MOM_oda_driver_mod,        only : set_prior_tracer, set_analysis_time, apply_oda_tracer_increments
+use MOM_oda_incupd,            only : oda_incupd_CS, init_oda_incupd_diags
+
 ! Offline modules
 use MOM_offline_main,          only : offline_transport_CS, offline_transport_init, update_offline_fields
 use MOM_offline_main,          only : insert_offline_main, extract_offline_main, post_offline_convergence_diags
@@ -369,6 +371,8 @@ type, public :: MOM_control_struct ; private
   type(sponge_CS),               pointer :: sponge_CSp => NULL()
     !< Pointer to the layered-mode sponge control structure
   type(ALE_sponge_CS),           pointer :: ALE_sponge_CSp => NULL()
+    !< Pointer to the oda incremental update control structure
+  type(oda_incupd_CS),           pointer :: oda_incupd_CSp => NULL()
     !< Pointer to the ALE-mode sponge control structure
   type(ALE_CS),                  pointer :: ALE_CSp => NULL()
     !< Pointer to the Arbitrary Lagrangian Eulerian (ALE) vertical coordinate control structure
@@ -1667,6 +1671,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   type(ocean_OBC_type), pointer :: OBC_in => NULL()
   type(sponge_CS), pointer :: sponge_in_CSp => NULL()
   type(ALE_sponge_CS), pointer :: ALE_sponge_in_CSp => NULL()
+  type(oda_incupd_CS),pointer :: oda_incupd_in_CSp => NULL()
 
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
@@ -2425,12 +2430,12 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
       call rotate_array(CS%frac_shelf_h, -turns, frac_shelf_in)
       call MOM_initialize_state(u_in, v_in, h_in, CS%tv, Time, G_in, GV, US, &
           param_file, dirs, restart_CSp, CS%ALE_CSp, CS%tracer_Reg, &
-          sponge_in_CSp, ALE_sponge_in_CSp, OBC_in, Time_in, &
+          sponge_in_CSp, ALE_sponge_in_CSp, oda_incupd_in_CSp, OBC_in, Time_in, &
           frac_shelf_h=frac_shelf_in)
     else
       call MOM_initialize_state(u_in, v_in, h_in, CS%tv, Time, G_in, GV, US, &
           param_file, dirs, restart_CSp, CS%ALE_CSp, CS%tracer_Reg, &
-          sponge_in_CSp, ALE_sponge_in_CSp, OBC_in, Time_in)
+          sponge_in_CSp, ALE_sponge_in_CSp, oda_incupd_in_CSp, OBC_in, Time_in)
     endif
 
     if (use_temperature) then
@@ -2472,12 +2477,12 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
       call ice_shelf_query(ice_shelf_CSp,G,CS%frac_shelf_h)
       call MOM_initialize_state(CS%u, CS%v, CS%h, CS%tv, Time, G, GV, US, &
           param_file, dirs, restart_CSp, CS%ALE_CSp, CS%tracer_Reg, &
-          CS%sponge_CSp, CS%ALE_sponge_CSp, CS%OBC, Time_in, &
+          CS%sponge_CSp, CS%ALE_sponge_CSp,CS%oda_incupd_CSp, CS%OBC, Time_in, &
           frac_shelf_h=CS%frac_shelf_h)
     else
       call MOM_initialize_state(CS%u, CS%v, CS%h, CS%tv, Time, G, GV, US, &
           param_file, dirs, restart_CSp, CS%ALE_CSp, CS%tracer_Reg, &
-          CS%sponge_CSp, CS%ALE_sponge_CSp, CS%OBC, Time_in)
+          CS%sponge_CSp, CS%ALE_sponge_CSp, CS%oda_incupd_CSp, CS%OBC, Time_in)
     endif
   endif
 
@@ -2661,7 +2666,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   else
     call diabatic_driver_init(Time, G, GV, US, param_file, CS%use_ALE_algorithm, diag, &
                               CS%ADp, CS%CDp, CS%diabatic_CSp, CS%tracer_flow_CSp, &
-                              CS%sponge_CSp, CS%ALE_sponge_CSp)
+                              CS%sponge_CSp, CS%ALE_sponge_CSp, CS%oda_incupd_CSp)
   endif
 
   if (associated(CS%sponge_CSp)) &
@@ -2669,6 +2674,10 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
 
   if (associated(CS%ALE_sponge_CSp)) &
     call init_ALE_sponge_diags(Time, G, diag, CS%ALE_sponge_CSp, US)
+
+  if (associated(CS%oda_incupd_CSp)) &
+    call init_oda_incupd_diags(Time, G, GV, diag, CS%oda_incupd_CSp, US)
+
 
   call tracer_advect_init(Time, G, US, param_file, diag, CS%tracer_adv_CSp)
   call tracer_hor_diff_init(Time, G, GV, US, param_file, diag, CS%tv%eqn_of_state, CS%diabatic_CSp, &
