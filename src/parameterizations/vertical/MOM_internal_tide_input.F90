@@ -407,18 +407,26 @@ subroutine int_tide_input_init(Time, G, GV, US, param_file, diag, CS, itide)
     call get_param(param_file, mdl, "INTERNAL_TIDE_USE_GLOB_IJ", CS%int_tide_use_glob_ij, &
                  "Use global IJ for interal tide generation source test", default=.false.)
     call get_param(param_file, mdl, "INTERNAL_TIDE_SOURCE_X", CS%int_tide_source_x, &
-                 "X Location of generation site for internal tide", default=1.)
+                 "X Location of generation site for internal tide", default=1., &
+                 do_not_log=CS%int_tide_use_glob_ij)
     call get_param(param_file, mdl, "INTERNAL_TIDE_SOURCE_Y", CS%int_tide_source_y, &
-                 "Y Location of generation site for internal tide", default=1.)
+                 "Y Location of generation site for internal tide", default=1., &
+                 do_not_log=CS%int_tide_use_glob_ij)
     call get_param(param_file, mdl, "INTERNAL_TIDE_SOURCE_I", CS%int_tide_source_i, &
-                 "I Location of generation site for internal tide", default=0)
+                 "I Location of generation site for internal tide", default=0, &
+                 do_not_log=.not.CS%int_tide_use_glob_ij)
     call get_param(param_file, mdl, "INTERNAL_TIDE_SOURCE_J", CS%int_tide_source_j, &
-                 "J Location of generation site for internal tide", default=0)
-
+                 "J Location of generation site for internal tide", default=0, &
+                 do_not_log=.not.CS%int_tide_use_glob_ij)
     call get_param(param_file, mdl, "INTERNAL_TIDE_SOURCE_TLEN_DAYS", tlen_days, &
                  "Time interval from start of experiment for adding wave source", &
                  units="days", default=0)
     CS%time_max_source = Time + set_time(0, days=tlen_days)
+
+    if ((CS%int_tide_use_glob_ij) .and. ((CS%int_tide_source_x /= 1.) .or. (CS%int_tide_source_y /= 1.))) then
+      call MOM_error(FATAL, "MOM_internal_tide_input: "//&
+                     "Internal tide source set to use (i,j) indices hence (x,y) geographical coords are meaningless.")
+    endif
   endif
 
   do j=js,je ; do i=is,ie
