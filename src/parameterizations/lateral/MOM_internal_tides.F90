@@ -788,7 +788,7 @@ subroutine refract(En, cn, freq, dt, G, US, NAngle, use_PPMang)
   asd = 1-stencil ; aed = NAngle+stencil
   eps=1.0e-20 * US%m_s_to_L_T
 
-  do i=is-1,ie ; do j=js-1,je
+  do i=is-1,ie ; do j=js,je
      wgt1 = 1.
      wgt2 = 1.
      if (cn(i,j) < eps)  wgt1 = 0.
@@ -800,7 +800,7 @@ subroutine refract(En, cn, freq, dt, G, US, NAngle, use_PPMang)
      endif
   enddo ; enddo
 
-  do i=is-1,ie ; do j=js-1,je
+  do i=is,ie ; do j=js-1,je
      wgt1 = 1.
      wgt2 = 1.
      if (cn(i,j) < eps)  wgt1 = 0.
@@ -842,12 +842,16 @@ subroutine refract(En, cn, freq, dt, G, US, NAngle, use_PPMang)
                    (G%CoriolisBu(I,J-1) + G%CoriolisBu(I-1,J)))
       df_dx = 0.5*((G%CoriolisBu(I,J) + G%CoriolisBu(I,J-1)) - &
                     (G%CoriolisBu(I-1,J) + G%CoriolisBu(I-1,J-1))) * G%IdxT(i,j)
-      dlnCn_dx = G%IdxT(i,j) * (cn_u(I,j) - cn_u(I-1,j)) / (cn(i,j) + cn_subRO)
-
-
       df_dy = 0.5*((G%CoriolisBu(I,J) + G%CoriolisBu(I-1,J)) - &
                    (G%CoriolisBu(I,J-1) + G%CoriolisBu(I-1,J-1))) * G%IdyT(i,j)
-      dlnCn_dy = G%IdyT(i,j) * (cn_v(i,J) - cn_v(i,J-1)) / (cn(i,j) + cn_subRO)
+
+      if (cn(i,j) < eps) then
+        dlnCn_dx = 0.
+        dlnCn_dy = 0.
+      else
+        dlnCn_dx = G%IdxT(i,j) * (cn_u(I,j) - cn_u(I-1,j)) / cn(i,j)
+        dlnCn_dy = G%IdyT(i,j) * (cn_v(i,J) - cn_v(i,J-1)) / cn(i,j)
+      endif
 
       Kmag2 = (freq**2 - f2) / (cn(i,j)**2 + cn_subRO**2)
       if (Kmag2 > 0.0) then
