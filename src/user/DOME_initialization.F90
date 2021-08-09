@@ -26,7 +26,7 @@ implicit none ; private
 public DOME_initialize_topography
 public DOME_initialize_thickness
 public DOME_initialize_sponges
-public DOME_set_OBC_data
+public DOME_set_OBC_data, register_DOME_OBC
 
 ! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
 ! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
@@ -241,6 +241,30 @@ subroutine DOME_initialize_sponges(G, GV, US, tv, PF, CSp)
 
 end subroutine DOME_initialize_sponges
 
+!> Add DOME to the OBC registry and set up some variables that will be used to guide
+!! code setting up the restart fieldss related to the OBCs.
+subroutine register_DOME_OBC(param_file, US, OBC, tr_Reg)
+  type(param_file_type),      intent(in) :: param_file !< parameter file.
+  type(unit_scale_type),      intent(in) :: US       !< A dimensional unit scaling type
+  type(ocean_OBC_type),       pointer    :: OBC  !< OBC registry.
+  type(tracer_registry_type), pointer    :: tr_Reg   !< Tracer registry.
+
+  if (OBC%number_of_segments /= 1) then
+    call MOM_error(FATAL, 'Error in register_DOME_OBC - DOME should have 1 OBC segment', .true.)
+  endif
+
+  ! Store this information for use in setting up the OBC restarts for tracer reservoirs.
+  OBC%ntr = tr_Reg%ntr
+  if (.not. associated(OBC%tracer_x_reservoirs_used)) then
+    allocate(OBC%tracer_x_reservoirs_used(OBC%ntr))
+    allocate(OBC%tracer_y_reservoirs_used(OBC%ntr))
+    OBC%tracer_x_reservoirs_used(:) = .false.
+    OBC%tracer_y_reservoirs_used(:) = .false.
+    OBC%tracer_y_reservoirs_used(1) = .true.
+  endif
+
+end subroutine register_DOME_OBC
+
 !> This subroutine sets the properties of flow at open boundary conditions.
 !! This particular example is for the DOME inflow describe in Legg et al. 2006.
 subroutine DOME_set_OBC_data(OBC, tv, G, GV, US, param_file, tr_Reg)
@@ -276,8 +300,8 @@ subroutine DOME_set_OBC_data(OBC, tv, G, GV, US, param_file, tr_Reg)
   real :: Ri_trans          ! The shear Richardson number in the transition
                             ! region of the specified shear profile.
   character(len=40)  :: mdl = "DOME_set_OBC_data" ! This subroutine's name.
-  character(len=32)  :: name
-  integer :: i, j, k, itt, is, ie, js, je, isd, ied, jsd, jed, m, nz, NTR
+  character(len=32)  :: name ! The name of a tracer field.
+  integer :: i, j, k, itt, is, ie, js, je, isd, ied, jsd, jed, m, nz
   integer :: IsdB, IedB, JsdB, JedB
   type(OBC_segment_type), pointer :: segment => NULL()
   type(tracer_type), pointer      :: tr_ptr => NULL()
@@ -302,22 +326,10 @@ subroutine DOME_set_OBC_data(OBC, tv, G, GV, US, param_file, tr_Reg)
     return   !!! Need a better error message here
   endif
 
-  NTR = tr_Reg%NTR
-
-  ! Stash this information away for the messy tracer restarts.
-  OBC%ntr = NTR
-  if (.not. associated(OBC%tracer_x_reservoirs_used)) then
-    allocate(OBC%tracer_x_reservoirs_used(NTR))
-    allocate(OBC%tracer_y_reservoirs_used(NTR))
-    OBC%tracer_x_reservoirs_used(:) = .false.
-    OBC%tracer_y_reservoirs_used(:) = .false.
-    OBC%tracer_y_reservoirs_used(1) = .true.
-  endif
-
   segment => OBC%segment(1)
   if (.not. segment%on_pe) return
 
-  allocate(segment%field(NTR))
+  allocate(segment%field(tr_Reg%ntr))
 
   do k=1,nz
     rst = -1.0
@@ -393,9 +405,9 @@ subroutine DOME_set_OBC_data(OBC, tv, G, GV, US, param_file, tr_Reg)
   call register_segment_tracer(tr_ptr, param_file, GV, &
                                OBC%segment(1), OBC_array=.true.)
 
-  ! All tracers but the first have 0 concentration in their inflows. As this
-  ! is the default value, the following calls are unnecessary.
-  do m=2,NTR
+  ! All tracers but the first have 0 concentration in their inflows. As 0 is the
+  ! default value for the inflow concentrations, the following calls are unnecessary.
+  do m=2,tr_Reg%ntr
     if (m < 10) then ; write(name,'("tr_D",I1.1)') m
     else ; write(name,'("tr_D",I2.2)') m ; endif
     call tracer_name_lookup(tr_Reg, tr_ptr, name)
