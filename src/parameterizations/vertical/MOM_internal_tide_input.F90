@@ -427,6 +427,10 @@ subroutine int_tide_input_init(Time, G, GV, US, param_file, diag, CS, itide)
       call MOM_error(FATAL, "MOM_internal_tide_input: "//&
                      "Internal tide source set to use (i,j) indices hence (x,y) geographical coords are meaningless.")
     endif
+    if ((.not.CS%int_tide_use_glob_ij) .and. ((CS%int_tide_source_i /= 0) .or. (CS%int_tide_source_j /= 0))) then
+      call MOM_error(FATAL, "MOM_internal_tide_input: "//&
+                     "Internal tide source set to use (x,y) geographical coords hence (i,j) indices are meaningless.")
+    endif
   endif
 
   do j=js,je ; do i=is,ie
