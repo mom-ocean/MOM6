@@ -813,7 +813,7 @@ subroutine refract(En, cn, freq, dt, G, US, NAngle, use_PPMang)
   enddo ; enddo
 
   Ifreq = 1.0 / freq
-  cn_subRO = 1e-100*US%m_s_to_L_T  ! The hard-coded value here might need to increase.
+  cn_subRO = 1e-30*US%m_s_to_L_T  ! The hard-coded value here might need to increase.
   Angle_size = (8.0*atan(1.0)) / (real(NAngle))
   dt_Angle_size = dt / Angle_size
 
@@ -845,13 +845,8 @@ subroutine refract(En, cn, freq, dt, G, US, NAngle, use_PPMang)
       df_dy = 0.5*((G%CoriolisBu(I,J) + G%CoriolisBu(I-1,J)) - &
                    (G%CoriolisBu(I,J-1) + G%CoriolisBu(I-1,J-1))) * G%IdyT(i,j)
 
-      if (cn(i,j) < eps) then
-        dlnCn_dx = 0.
-        dlnCn_dy = 0.
-      else
-        dlnCn_dx = G%IdxT(i,j) * (cn_u(I,j) - cn_u(I-1,j)) / cn(i,j)
-        dlnCn_dy = G%IdyT(i,j) * (cn_v(i,J) - cn_v(i,J-1)) / cn(i,j)
-      endif
+      dlnCn_dx = G%IdxT(i,j) * (cn_u(I,j) - cn_u(I-1,j)) / (0.5 * (cn_u(I,j) + cn_u(I-1,j)) + cn_subRO)
+      dlnCn_dy = G%IdyT(i,j) * (cn_v(i,J) - cn_v(i,J-1)) / (0.5 * (cn_v(i,J) + cn_v(i,J-1)) + cn_subRO)
 
       Kmag2 = (freq**2 - f2) / (cn(i,j)**2 + cn_subRO**2)
       if (Kmag2 > 0.0) then
