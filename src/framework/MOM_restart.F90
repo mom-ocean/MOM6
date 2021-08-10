@@ -1099,7 +1099,7 @@ subroutine restore_state(filename, directory, day, G, CS)
       t2 = time_vals(1)
       deallocate(time_vals)
 
-      if (t1 /= t2) then
+      if (t1 /= t2 .and. is_root_PE()) then
         write(mesg,'("WARNING: Restart file ",I2," has time ",F10.4,"whereas &
          &simulation is restarted at ",F10.4," (differing by ",F10.4,").")')&
                m,t1,t2,t1-t2
