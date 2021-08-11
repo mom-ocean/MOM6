@@ -256,7 +256,7 @@ ALIASES += footnote{1}="\latexonly\footnote\{\1\}\endlatexonly\htmlonly<sup titl
 # what it does and just passes through the string uninterpreted.
 # The image also needs to be added to LATEX_EXTRA_FILES.
 # Default 3rd argument: \includegraphics[width=\textwidth\,height=\textheight/2\,keepaspectratio=true]
-ALIASES += imagelatex{3}="\latexonly\begin{DoxyImage}\n\3{\1}\n\doxyfigcaption{\2}\n\end{DoxyImage}\endlatexonly\xmlonly<image type=\"latex\" name=\"\1\">\2</image>\endxmlonly"
+ALIASES += imagelatex{3}="\latexonly\begin{DoxyImage}\3{\1}\doxyfigcaption{\2}\end{DoxyImage}\endlatexonly\xmlonly<image type=\"latex\" name=\"\1\">\2</image>\endxmlonly"
 
 # This tag can be used to specify a number of word-keyword mappings (TCL only).
 # A mapping has the form "name=value". For example adding "class=itcl::class"
@@ -810,26 +810,38 @@ WARN_LOGFILE           = _build/doxygen_rtd_dox_debug.txt
 # Note: If this tag is empty the current directory is searched.
 
 INPUT                  = ../src \
-                         ../config_src/solo_driver \
-                         ../config_src/dynamic_symmetric \
+                         ../config_src/drivers/solo_driver \
+                         ../config_src/memory/dynamic_symmetric \
                          ../config_src/external \
-                         ../config_src/coupled_driver \
-                         ../src/core/MOM.F90 \
+                         ../config_src/drivers/FMS_cap \
                          ../src/ALE/MOM_ALE.F90 \
+                         ../src/ALE/PCM_functions.F90 \
+                         ../src/core/MOM.F90 \
+                         ../src/core/MOM_density_integrals.F90 \
+                         ../src/diagnostics/MOM_wave_structure.F90 \
                          ../src/equation_of_state/MOM_EOS.F90 \
+                         ../src/framework/MOM_diag_mediator.F90 \
+                         ../src/framework/MOM_domains.F90 \
+                         ../src/framework/MOM_dyn_horgrid.F90 \
+                         ../src/framework/MOM_file_parser.F90 \
                          ../src/framework/MOM_unit_scaling.F90 \
                          ../src/ice_shelf/MOM_ice_shelf.F90 \
-                         ../src/parameterizations/lateral/MOM_MEKE.F90
+                         ../src/parameterizations/lateral/MOM_MEKE.F90 \
+                         ../src/parameterizations/vertical/MOM_bkgnd_mixing.F90 \
+                         ../src/parameterizations/vertical/MOM_energetic_PBL.F90 \
+                         ../src/parameterizations/vertical/MOM_set_viscosity.F90 \
+                         ../src/tracer/oil_tracer.F90 \
+                         ../src/user/user_initialization.F90
 
 # Basic testing units below
 
 #INPUT                  = ../src/equation_of_state
 
 #INPUT                  = ../src/ALE \
-#                         ../config_src/solo_driver \
-#                         ../config_src/dynamic_symmetric \
+#                         ../config_src/drivers/solo_driver \
+#                         ../config_src/memory/dynamic_symmetric \
 #                         ../config_src/external \
-#                         ../config_src/coupled_driver
+#                         ../config_src/drivers/FMS_cap
 
 #INPUT                  = \
 #        ../src/ALE/_ALE.dox \
@@ -2100,7 +2112,7 @@ SEARCH_INCLUDES        = YES
 # preprocessor.
 # This tag requires that the tag SEARCH_INCLUDES is set to YES.
 
-INCLUDE_PATH           = ../src/framework ../config_src/dynamic_symmetric
+INCLUDE_PATH           = ../src/framework ../config_src/memory/dynamic_symmetric
 
 # You can use the INCLUDE_FILE_PATTERNS tag to specify one or more wildcard
 # patterns (like *.h and *.hpp) to filter out the header-files in the

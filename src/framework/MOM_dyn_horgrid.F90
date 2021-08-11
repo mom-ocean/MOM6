@@ -5,7 +5,7 @@ module MOM_dyn_horgrid
 ! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_hor_index, only : hor_index_type
-use MOM_domains, only : MOM_domain_type
+use MOM_domains, only : MOM_domain_type, deallocate_MOM_domain
 use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, WARNING
 use MOM_unit_scaling, only : unit_scale_type
 
@@ -413,8 +413,10 @@ subroutine destroy_dyn_horgrid(G)
   deallocate(G%gridLonT) ; deallocate(G%gridLatT)
   deallocate(G%gridLonB) ; deallocate(G%gridLatB)
 
-  deallocate(G%Domain%mpp_domain)
-  deallocate(G%Domain)
+  ! CS%debug is required to validate Domain_aux, so use allocation test
+  if (associated(G%Domain_aux)) call deallocate_MOM_domain(G%Domain_aux)
+
+  call deallocate_MOM_domain(G%Domain)
 
   deallocate(G)
 

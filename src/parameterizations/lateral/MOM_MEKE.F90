@@ -113,14 +113,14 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
   type(ocean_grid_type),                    intent(inout) :: G    !< Ocean grid.
   type(verticalGrid_type),                  intent(in)    :: GV   !< Ocean vertical grid structure.
   type(unit_scale_type),                    intent(in)    :: US   !< A dimensional unit scaling type
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h    !< Layer thickness [H ~> m or kg m-2].
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)   :: h    !< Layer thickness [H ~> m or kg m-2].
   real, dimension(SZIB_(G),SZJ_(G)),        intent(in)    :: SN_u !< Eady growth rate at u-points [T-1 ~> s-1].
   real, dimension(SZI_(G),SZJB_(G)),        intent(in)    :: SN_v !< Eady growth rate at v-points [T-1 ~> s-1].
   type(vertvisc_type),                      intent(in)    :: visc !< The vertical viscosity type.
   real,                                     intent(in)    :: dt   !< Model(baroclinic) time-step [T ~> s].
   type(MEKE_CS),                            pointer       :: CS   !< MEKE control structure.
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)   :: hu   !< Accumlated zonal mass flux [H L2 ~> m3 or kg].
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)   :: hv   !< Accumlated meridional mass flux [H L2 ~> m3 or kg]
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), intent(in)  :: hu   !< Accumlated zonal mass flux [H L2 ~> m3 or kg]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), intent(in)  :: hv   !< Accumlated meridional mass flux [H L2 ~> m3 or kg]
 
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G)) :: &
@@ -167,7 +167,7 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
   logical :: use_drag_rate ! Flag to indicate drag_rate is finite
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
 
   if (.not.associated(CS)) call MOM_error(FATAL, &
@@ -912,7 +912,7 @@ subroutine MEKE_lengthScales_0d(CS, US, area, beta, depth, Rd_dx, SN, EKE, & ! Z
   type(MEKE_CS), pointer       :: CS         !< MEKE control structure.
   type(unit_scale_type), intent(in) :: US    !< A dimensional unit scaling type
   real,          intent(in)    :: area       !< Grid cell area [L2 ~> m2]
-  real,          intent(in)    :: beta       !< Planetary beta = |grad F| [T-1 L-1 ~> s-1 m-1]
+  real,          intent(in)    :: beta       !< Planetary beta = \f$ \nabla f\f$  [T-1 L-1 ~> s-1 m-1]
   real,          intent(in)    :: depth      !< Ocean depth [Z ~> m]
   real,          intent(in)    :: Rd_dx      !< Resolution Ld/dx [nondim].
   real,          intent(in)    :: SN         !< Eady growth rate [T-1 ~> s-1].
@@ -1421,26 +1421,23 @@ subroutine MEKE_alloc_register_restart(HI, param_file, MEKE, restart_CS)
 
 end subroutine MEKE_alloc_register_restart
 
-!> Deallocates any variables allocated in MEKE_init or
-!! MEKE_alloc_register_restart.
-subroutine MEKE_end(MEKE, CS)
-  type(MEKE_type), pointer :: MEKE !< A structure with MEKE-related fields.
-  type(MEKE_CS),   pointer :: CS   !< The control structure for MOM_MEKE.
+!> Deallocates any variables allocated in MEKE_alloc_register_restart.
+subroutine MEKE_end(MEKE)
+  type(MEKE_type), intent(inout) :: MEKE !< A structure with MEKE-related fields.
 
-  if (associated(CS)) deallocate(CS)
+  ! NOTE: MEKE will always be allocated by MEKE_init, even if MEKE is disabled.
+  !  So these must all be conditional, even though MEKE%MEKE and MEKE%Rd_dx_h
+  !  are always allocated (when MEKE is enabled)
 
-  if (.not.associated(MEKE)) return
-
-  if (associated(MEKE%MEKE)) deallocate(MEKE%MEKE)
-  if (associated(MEKE%GM_src)) deallocate(MEKE%GM_src)
-  if (associated(MEKE%mom_src)) deallocate(MEKE%mom_src)
-  if (associated(MEKE%GME_snk)) deallocate(MEKE%GME_snk)
-  if (associated(MEKE%Kh)) deallocate(MEKE%Kh)
+  if (associated(MEKE%Au)) deallocate(MEKE%Au)
   if (associated(MEKE%Kh_diff)) deallocate(MEKE%Kh_diff)
   if (associated(MEKE%Ku)) deallocate(MEKE%Ku)
-  if (associated(MEKE%Au)) deallocate(MEKE%Au)
-  deallocate(MEKE)
-
+  if (associated(MEKE%Rd_dx_h)) deallocate(MEKE%Rd_dx_h)
+  if (associated(MEKE%Kh)) deallocate(MEKE%Kh)
+  if (associated(MEKE%GME_snk)) deallocate(MEKE%GME_snk)
+  if (associated(MEKE%mom_src)) deallocate(MEKE%mom_src)
+  if (associated(MEKE%GM_src)) deallocate(MEKE%GM_src)
+  if (associated(MEKE%MEKE)) deallocate(MEKE%MEKE)
 end subroutine MEKE_end
 
 !> \namespace mom_meke

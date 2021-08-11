@@ -52,7 +52,7 @@ subroutine entrainment_diffusive(h, tv, fluxes, dt, G, GV, US, CS, ea, eb, &
   type(ocean_grid_type),      intent(in)  :: G  !< The ocean's grid structure.
   type(verticalGrid_type),    intent(in)  :: GV !< The ocean's vertical grid structure.
   type(unit_scale_type),      intent(in)  :: US !< A dimensional unit scaling type
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  &
                               intent(in)  :: h  !< Layer thicknesses [H ~> m or kg m-2].
   type(thermo_var_ptrs),      intent(in)  :: tv !< A structure containing pointers to any available
                                                 !! thermodynamic fields. Absent fields have NULL
@@ -62,20 +62,20 @@ subroutine entrainment_diffusive(h, tv, fluxes, dt, G, GV, US, CS, ea, eb, &
   real,                       intent(in)  :: dt !< The time increment [T ~> s].
   type(entrain_diffusive_CS), pointer     :: CS !< The control structure returned by a previous
                                                 !! call to entrain_diffusive_init.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  &
                               intent(out) :: ea !< The amount of fluid entrained from the layer
                                                 !! above within this time step [H ~> m or kg m-2].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  &
                               intent(out) :: eb !< The amount of fluid entrained from the layer
                                                 !! below within this time step [H ~> m or kg m-2].
   integer, dimension(SZI_(G),SZJ_(G)),        &
                   optional, intent(inout) :: kb_out !< The index of the lightest layer denser than
                                                 !! the buffer layer.
   ! At least one of the two following arguments must be present.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  &
                   optional, intent(in)    :: Kd_Lay !< The diapycnal diffusivity of layers
                                                 !! [Z2 T-1 ~> m2 s-1].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), &
                   optional, intent(in)    :: Kd_int !< The diapycnal diffusivity of interfaces
                                                 !! [Z2 T-1 ~> m2 s-1].
 
@@ -85,11 +85,11 @@ subroutine entrainment_diffusive(h, tv, fluxes, dt, G, GV, US, CS, ea, eb, &
 ! differences between layers.  The scheme that is used here is described in
 ! detail in Hallberg, Mon. Wea. Rev. 2000.
 
-  real, dimension(SZI_(G),SZK_(G)) :: &
+  real, dimension(SZI_(G),SZK_(GV)) :: &
     dtKd    ! The layer diapycnal diffusivity times the time step [H2 ~> m2 or kg2 m-4].
-  real, dimension(SZI_(G),SZK_(G)+1) :: &
+  real, dimension(SZI_(G),SZK_(GV)+1) :: &
     dtKd_int ! The diapycnal diffusivity at the interfaces times the time step [H2 ~> m2 or kg2 m-4]
-  real, dimension(SZI_(G),SZK_(G)) :: &
+  real, dimension(SZI_(G),SZK_(GV)) :: &
     F, &    ! The density flux through a layer within a time step divided by the
             ! density difference across the interface below the layer [H ~> m or kg m-2].
     maxF, & ! maxF is the maximum value of F that will not deplete all of the
@@ -102,7 +102,7 @@ subroutine entrainment_diffusive(h, tv, fluxes, dt, G, GV, US, CS, ea, eb, &
     h_guess ! An estimate of the layer thicknesses after entrainment, but
             ! before the entrainments are adjusted to drive the layer
             ! densities toward their target values [H ~> m or kg m-2].
-  real, dimension(SZI_(G),SZK_(G)+1) :: &
+  real, dimension(SZI_(G),SZK_(GV)+1) :: &
     Ent_bl  ! The average entrainment upward and downward across
             ! each interface around the buffer layers [H ~> m or kg m-2].
   real, allocatable, dimension(:,:,:) :: &
@@ -114,8 +114,8 @@ subroutine entrainment_diffusive(h, tv, fluxes, dt, G, GV, US, CS, ea, eb, &
 
   real :: hm, fm, fr, fk  ! Work variables with units of H, H, H, and H2.
 
-  real :: b1(SZI_(G))         ! b1 and c1 are variables used by the
-  real :: c1(SZI_(G),SZK_(G)) ! tridiagonal solver.
+  real :: b1(SZI_(G))          ! A variable used by the tridiagonal solver [H ~> m or kg m-2]
+  real :: c1(SZI_(G),SZK_(GV)) ! A variable used by the tridiagonal solver [nondim]
 
   real, dimension(SZI_(G)) :: &
     htot, &       ! The total thickness above or below a layer [H ~> m or kg m-2].
@@ -148,7 +148,7 @@ subroutine entrainment_diffusive(h, tv, fluxes, dt, G, GV, US, CS, ea, eb, &
     maxF_kb, &    ! The maximum value of F_kb that might be realized [H ~> m or kg m-2].
     eakb_maxF, &  ! The value of eakb that gives F_kb=maxF_kb [H ~> m or kg m-2].
     F_kb_maxEnt   ! The value of F_kb when eakb = max_eakb [H ~> m or kg m-2].
-  real, dimension(SZI_(G),SZK_(G)) :: &
+  real, dimension(SZI_(G),SZK_(GV)) :: &
     Sref, &  ! The reference potential density of the mixed and buffer layers,
              ! and of the two lightest interior layers (kb and kb+1) copied
              ! into layers kmb+1 and kmb+2 [R ~> kg m-3].
@@ -156,7 +156,7 @@ subroutine entrainment_diffusive(h, tv, fluxes, dt, G, GV, US, CS, ea, eb, &
              ! lightest interior layers (kb and kb+1) copied into layers kmb+1
              ! and kmb+2 [H ~> m or kg m-2].
 
-  real, dimension(SZI_(G),SZK_(G)) :: &
+  real, dimension(SZI_(G),SZK_(GV)) :: &
     ds_dsp1, &      ! The coordinate variable (sigma-2) difference across an
                     ! interface divided by the difference across the interface
                     ! below it. [nondim]
@@ -203,7 +203,7 @@ subroutine entrainment_diffusive(h, tv, fluxes, dt, G, GV, US, CS, ea, eb, &
   integer :: kb_min       ! The minimum value of kb in the current j-row.
   integer :: kb_min_act   ! The minimum active value of kb in the current j-row.
   integer :: is1, ie1     ! The minimum and maximum active values of i in the current j-row.
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   Angstrom = GV%Angstrom_H
   h_neglect = GV%H_subroundoff
 
@@ -352,7 +352,7 @@ subroutine entrainment_diffusive(h, tv, fluxes, dt, G, GV, US, CS, ea, eb, &
       ! what maxF(kb+1) should be.
       do i=is,ie ; min_eakb(i) = MIN(htot(i), max_eakb(i)) ; enddo
       call find_maxF_kb(h_bl, Sref, Ent_bl, I_dSkbp1, min_eakb, max_eakb, &
-                        kmb, is, ie, G, GV, CS, F_kb_maxEnt, do_i_in = do_i)
+                        kmb, is, ie, G, GV, CS, F_kb_maxEnt, do_i_in=do_i)
 
       do i=is,ie
         do_entrain_eakb = .false.
@@ -781,7 +781,7 @@ subroutine entrainment_diffusive(h, tv, fluxes, dt, G, GV, US, CS, ea, eb, &
         enddo
 
       else ! not bulkmixedlayer
-        do k=K2,nz-1;
+        do k=K2,nz-1
           call calculate_density(tv%T(:,j,k), tv%S(:,j,k), pres, Rcv, tv%eqn_of_state, EOSdom)
           do i=is,ie ; if (F(i,k) > 0.0) then
             ! Within a time step, a layer may entrain no more than
@@ -891,59 +891,41 @@ end subroutine entrainment_diffusive
 !>   This subroutine calculates the actual entrainments (ea and eb) and the
 !! amount of surface forcing that is applied to each layer if there is no bulk
 !! mixed layer.
-subroutine F_to_ent(F, h, kb, kmb, j, G, GV, CS, dsp1_ds, eakb, Ent_bl, ea, eb, do_i_in)
+subroutine F_to_ent(F, h, kb, kmb, j, G, GV, CS, dsp1_ds, eakb, Ent_bl, ea, eb)
   type(ocean_grid_type),            intent(in)    :: G    !< The ocean's grid structure
   type(verticalGrid_type),          intent(in)    :: GV   !< The ocean's vertical grid structure
-  real, dimension(SZI_(G),SZK_(G)), intent(in)    :: F    !< The density flux through a layer within
+  real, dimension(SZI_(G),SZK_(GV)), intent(in)   :: F    !< The density flux through a layer within
                                                           !! a time step divided by the density
                                                           !! difference across the interface below
                                                           !! the layer [H ~> m or kg m-2].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                                     intent(in)    :: h    !< Layer thicknesses [H ~> m or kg m-2]
   integer, dimension(SZI_(G)),      intent(in)    :: kb   !< The index of the lightest layer denser than
                                                           !! the deepest buffer layer.
   integer,                          intent(in)    :: kmb  !< The number of mixed and buffer layers.
   integer,                          intent(in)    :: j    !< The meridional index upon which to work.
   type(entrain_diffusive_CS),       intent(in)    :: CS   !< This module's control structure.
-  real, dimension(SZI_(G),SZK_(G)), intent(in)    :: dsp1_ds !< The ratio of coordinate variable
+  real, dimension(SZI_(G),SZK_(GV)), intent(in)   :: dsp1_ds !< The ratio of coordinate variable
                                                           !! differences across the interfaces below
                                                           !! a layer over the difference across the
                                                           !! interface above the layer.
   real, dimension(SZI_(G)),         intent(in)    :: eakb !< The entrainment from above by the layer
                                                           !! below the buffer layer [H ~> m or kg m-2].
-  real, dimension(SZI_(G),SZK_(G)), intent(in)    :: Ent_bl !< The average entrainment upward and
+  real, dimension(SZI_(G),SZK_(GV)), intent(in)   :: Ent_bl !< The average entrainment upward and
                                                           !! downward across each interface around
                                                           !! the buffer layers [H ~> m or kg m-2].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                                     intent(inout) :: ea   !< The amount of fluid entrained from the layer
                                                           !! above within this time step [H ~> m or kg m-2].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                                     intent(inout) :: eb   !< The amount of fluid entrained from the layer
                                                           !! below within this time step [H ~> m or kg m-2].
-  logical, dimension(SZI_(G)), &
-                          optional, intent(in)    :: do_i_in !< Indicates which i-points to work on.
-!   This subroutine calculates the actual entrainments (ea and eb) and the
-! amount of surface forcing that is applied to each layer if there is no bulk
-! mixed layer.
 
   real :: h1        ! The thickness in excess of the minimum that will remain
                     ! after exchange with the layer below [H ~> m or kg m-2].
-  logical :: do_i(SZI_(G))
   integer :: i, k, is, ie, nz
 
-  is = G%isc ; ie = G%iec ; nz = G%ke
-
-  if (present(do_i_in)) then
-    do i=is,ie ; do_i(i) = do_i_in(i) ; enddo
-    do i=G%isc,G%iec ; if (do_i(i)) then
-      is = i ; exit
-    endif ; enddo
-    do i=G%iec,G%isc,-1 ; if (do_i(i)) then
-      ie = i ; exit
-    endif ; enddo
-  else
-    do i=is,ie ; do_i(i) = .true. ; enddo
-  endif
+  is = G%isc ; ie = G%iec ; nz = GV%ke
 
   do i=is,ie
     ea(i,j,nz) = 0.0 ; eb(i,j,nz) = 0.0
@@ -952,7 +934,7 @@ subroutine F_to_ent(F, h, kb, kmb, j, G, GV, CS, dsp1_ds, eakb, Ent_bl, ea, eb, 
     do i=is,ie
       eb(i,j,kmb) = max(2.0*Ent_bl(i,Kmb+1) - eakb(i), 0.0)
     enddo
-    do k=nz-1,kmb+1,-1 ; do i=is,ie ; if (do_i(i)) then
+    do k=nz-1,kmb+1,-1 ; do i=is,ie
       if (k > kb(i)) then
         ! With a bulk mixed layer, surface buoyancy fluxes are applied
         ! elsewhere, so F should always be nonnegative.
@@ -970,9 +952,9 @@ subroutine F_to_ent(F, h, kb, kmb, j, G, GV, CS, dsp1_ds, eakb, Ent_bl, ea, eb, 
         ! up into the buffer layer.
         eb(i,j,k) = eb(i,j,k+1) + max(0.0, h(i,j,k+1) - GV%Angstrom_H)
       endif
-    endif ; enddo ; enddo
+    enddo ; enddo
     k = kmb
-    do i=is,ie ; if (do_i(i)) then
+    do i=is,ie
       ! Adjust the previously calculated entrainment from below by the deepest
       ! buffer layer to account for entrainment of thin interior layers .
       if (kb(i) > kmb+1) &
@@ -981,8 +963,8 @@ subroutine F_to_ent(F, h, kb, kmb, j, G, GV, CS, dsp1_ds, eakb, Ent_bl, ea, eb, 
       ! Determine the entrainment from above for each buffer layer.
       h1 = (h(i,j,k) - GV%Angstrom_H) + (eb(i,j,k) - ea(i,j,k+1))
       ea(i,j,k) = MAX(Ent_bl(i,K), Ent_bl(i,K)-0.5*h1, -h1)
-    endif ; enddo
-    do k=kmb-1,2,-1 ; do i=is,ie ; if (do_i(i)) then
+    enddo
+    do k=kmb-1,2,-1 ; do i=is,ie
       ! Determine the entrainment from below for each buffer layer.
       eb(i,j,k) = max(2.0*Ent_bl(i,K+1) - ea(i,j,k+1), 0.0)
 
@@ -992,11 +974,11 @@ subroutine F_to_ent(F, h, kb, kmb, j, G, GV, CS, dsp1_ds, eakb, Ent_bl, ea, eb, 
 !       if (h1 >= 0.0) then ;                     ea(i,j,k) = Ent_bl(i,K)
 !       elseif (Ent_bl(i,K)+0.5*h1 >= 0.0) then ; ea(i,j,k) = Ent_bl(i,K)-0.5*h1
 !       else ;                                    ea(i,j,k) = -h1 ; endif
-    endif ; enddo ; enddo
-    do i=is,ie ; if (do_i(i)) then
+    enddo ; enddo
+    do i=is,ie
       eb(i,j,1) = max(2.0*Ent_bl(i,2) - ea(i,j,2), 0.0)
       ea(i,j,1) = 0.0
-    endif ; enddo
+    enddo
   else                                          ! not BULKMIXEDLAYER
     ! Calculate the entrainment by each layer from above and below.
     ! Entrainment is always positive, but F may be negative due to
@@ -1024,9 +1006,9 @@ end subroutine F_to_ent
 subroutine set_Ent_bl(h, dtKd_int, tv, kb, kmb, do_i, G, GV, US, CS, j, Ent_bl, Sref, h_bl)
   type(ocean_grid_type),            intent(in)    :: G    !< The ocean's grid structure.
   type(verticalGrid_type),          intent(in)    :: GV   !< The ocean's vertical grid structure.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                                     intent(in)    :: h    !< Layer thicknesses [H ~> m or kg m-2]
-  real, dimension(SZI_(G),SZK_(G)+1),       &
+  real, dimension(SZI_(G),SZK_(GV)+1), &
                                     intent(in)    :: dtKd_int !< The diapycnal diffusivity across
                                                           !! each interface times the time step
                                                           !! [H2 ~> m2 or kg2 m-4].
@@ -1042,13 +1024,13 @@ subroutine set_Ent_bl(h, dtKd_int, tv, kb, kmb, do_i, G, GV, US, CS, j, Ent_bl, 
   type(unit_scale_type),            intent(in)    :: US   !< A dimensional unit scaling type
   type(entrain_diffusive_CS),       pointer       :: CS   !< This module's control structure.
   integer,                          intent(in)    :: j    !< The meridional index upon which to work.
-  real, dimension(SZI_(G),SZK_(G)+1),       &
+  real, dimension(SZI_(G),SZK_(GV)+1), &
                                     intent(out)   :: Ent_bl !< The average entrainment upward and
                                                           !! downward across each interface around
                                                           !! the buffer layers [H ~> m or kg m-2].
-  real, dimension(SZI_(G),SZK_(G)), intent(out)   :: Sref !< The coordinate potential density minus
+  real, dimension(SZI_(G),SZK_(GV)), intent(out)  :: Sref !< The coordinate potential density minus
                                                           !! 1000 for each layer [R ~> kg m-3].
-  real, dimension(SZI_(G),SZK_(G)), intent(out)   :: h_bl !< The thickness of each layer [H ~> m or kg m-2].
+  real, dimension(SZI_(G),SZK_(GV)), intent(out)  :: h_bl !< The thickness of each layer [H ~> m or kg m-2].
 
 !   This subroutine sets the average entrainment across each of the interfaces
 ! between buffer layers within a timestep. It also causes thin and relatively
@@ -1064,7 +1046,7 @@ subroutine set_Ent_bl(h, dtKd_int, tv, kb, kmb, do_i, G, GV, US, CS, j, Ent_bl, 
     pres, &     ! Reference pressure (P_Ref) [R L2 T-2 ~> Pa].
     frac_rem, & ! The fraction of the diffusion remaining [nondim].
     h_interior  ! The interior thickness available for entrainment [H ~> m or kg m-2].
-  real, dimension(SZI_(G), SZK_(G)) :: &
+  real, dimension(SZI_(G), SZK_(GV)) :: &
     S_est ! An estimate of the coordinate potential density - 1000 after
           ! entrainment for each layer [R ~> kg m-3].
   real :: max_ent  ! The maximum possible entrainment [H ~> m or kg m-2].
@@ -1075,7 +1057,7 @@ subroutine set_Ent_bl(h, dtKd_int, tv, kb, kmb, do_i, G, GV, US, CS, j, Ent_bl, 
                     ! in roundoff and can be neglected [H ~> m or kg m-2].
   integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state
   integer :: i, k, is, ie, nz
-  is = G%isc ; ie = G%iec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; nz = GV%ke
 
 !  max_ent = 1.0e14*GV%Angstrom_H ! This is set to avoid roundoff problems.
   max_ent = 1.0e4*GV%m_to_H
@@ -1201,9 +1183,9 @@ subroutine determine_dSkb(h_bl, Sref, Ent_bl, E_kb, is, ie, kmb, G, GV, limit, &
   type(ocean_grid_type),              intent(in)    :: G      !< The ocean's grid structure.
   type(verticalGrid_type),            intent(in)    :: GV     !< The ocean's vertical grid
                                                               !! structure.
-  real, dimension(SZI_(G),SZK_(G)),   intent(in)    :: h_bl   !< Layer thickness [H ~> m or kg m-2]
-  real, dimension(SZI_(G),SZK_(G)),   intent(in)    :: Sref   !< Reference potential density [R ~> kg m-3]
-  real, dimension(SZI_(G),SZK_(G)),   intent(in)    :: Ent_bl !< The average entrainment upward and
+  real, dimension(SZI_(G),SZK_(GV)),  intent(in)    :: h_bl   !< Layer thickness [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZK_(GV)),  intent(in)    :: Sref   !< Reference potential density [R ~> kg m-3]
+  real, dimension(SZI_(G),SZK_(GV)),  intent(in)    :: Ent_bl !< The average entrainment upward and
                                                               !! downward across each interface
                                                               !! around the buffer layers [H ~> m or kg m-2].
   real, dimension(SZI_(G)),           intent(in)    :: E_kb   !< The entrainment by the top interior
@@ -1248,7 +1230,7 @@ subroutine determine_dSkb(h_bl, Sref, Ent_bl, E_kb, is, ie, kmb, G, GV, limit, &
 ! also be returned.
 
   ! Local variables
-  real, dimension(SZI_(G),SZK_(G)) :: &
+  real, dimension(SZI_(G),SZK_(GV)) :: &
     b1, c1, &       ! b1 and c1 are variables used by the tridiagonal solver.
     S, dS_dE, &     ! The coordinate density [R ~> kg m-3] and its derivative with E.
     ea, dea_dE, &   ! The entrainment from above and its derivative with E.
@@ -1440,14 +1422,14 @@ subroutine F_kb_to_ea_kb(h_bl, Sref, Ent_bl, I_dSkbp1, F_kb, kmb, i, &
                          G, GV, CS, ea_kb, tol_in)
   type(ocean_grid_type),    intent(in)    :: G    !< The ocean's grid structure
   type(verticalGrid_type),  intent(in)    :: GV   !< The ocean's vertical grid structure
-  real, dimension(SZI_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZK_(GV)), &
                             intent(in)    :: h_bl !< Layer thickness, with the top interior
                                                   !! layer at k-index kmb+1 [H ~> m or kg m-2].
-  real, dimension(SZI_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZK_(GV)), &
                             intent(in)    :: Sref !< The coordinate reference potential density,
                                                   !! with the value of the topmost interior layer
                                                   !! at index kmb+1 [R ~> kg m-3].
-  real, dimension(SZI_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZK_(GV)), &
                             intent(in)    :: Ent_bl !< The average entrainment upward and downward
                                                   !! across each interface around the buffer layers,
                                                   !! [H ~> m or kg m-2].
@@ -1511,7 +1493,7 @@ subroutine F_kb_to_ea_kb(h_bl, Sref, Ent_bl, I_dSkbp1, F_kb, kmb, i, &
     ! the maximum.
     zeros(i) = 0.0
     call find_maxF_kb(h_bl, Sref, Ent_bl, I_dSkbp1, zeros, ea_kb, &
-                      kmb, i, i, G, GV, CS, maxF, ent_maxF, F_thresh = F_kb)
+                      kmb, i, i, G, GV, CS, maxF, ent_maxF, F_thresh=F_kb)
     err_max = dS_kbp1 * maxF(i) - val
     ! If err_max is negative, there is no good solution, so use the maximum
     ! value of F in the valid range.
@@ -1573,13 +1555,13 @@ subroutine determine_Ea_kb(h_bl, dtKd_kb, Sref, I_dSkbp1, Ent_bl, ea_kbp1, &
                            error, err_min_eakb0, err_max_eakb0, F_kb, dFdfm_kb)
   type(ocean_grid_type),            intent(in)  :: G        !< The ocean's grid structure.
   type(verticalGrid_type),          intent(in)  :: GV       !< The ocean's vertical grid structure.
-  real, dimension(SZI_(G),SZK_(G)), intent(in)  :: h_bl     !< Layer thickness, with the top interior
+  real, dimension(SZI_(G),SZK_(GV)), intent(in) :: h_bl     !< Layer thickness, with the top interior
                                                             !! layer at k-index kmb+1 [H ~> m or kg m-2].
-  real, dimension(SZI_(G),SZK_(G)), intent(in)  :: Sref     !< The coordinate reference potential
+  real, dimension(SZI_(G),SZK_(GV)), intent(in) :: Sref     !< The coordinate reference potential
                                                             !! density, with the value of the
                                                             !! topmost interior layer at layer
                                                             !! kmb+1 [R ~> kg m-3].
-  real, dimension(SZI_(G),SZK_(G)), intent(in)  :: Ent_bl   !< The average entrainment upward and
+  real, dimension(SZI_(G),SZK_(GV)), intent(in) :: Ent_bl   !< The average entrainment upward and
                                                             !! downward across each interface around
                                                             !! the buffer layers [H ~> m or kg m-2].
   real, dimension(SZI_(G)),         intent(in)  :: I_dSkbp1 !< The inverse of the difference in
@@ -1693,7 +1675,7 @@ subroutine determine_Ea_kb(h_bl, dtKd_kb, Sref, I_dSkbp1, Ent_bl, ea_kbp1, &
     do_any = .false. ; do i=is,ie ; if (redo_i(i)) do_any = .true. ; enddo
     if (.not.do_any) exit
     call determine_dSkb(h_bl, Sref, Ent_bl, Ent, is, ie, kmb, G, GV, .true., dS_kb, &
-                        ddSkb_dE, dS_lay, ddSlay_dE, do_i_in = redo_i)
+                        ddSkb_dE, dS_lay, ddSlay_dE, do_i_in=redo_i)
     do i=is,ie ; if (redo_i(i)) then
       !  The correct root is bracketed between E_min and E_max.
       ! Note the following limits:  Ent >= 0 ; fa > 1 ; fk > 0
@@ -1757,7 +1739,7 @@ subroutine determine_Ea_kb(h_bl, dtKd_kb, Sref, I_dSkbp1, Ent_bl, ea_kbp1, &
   ! Update the value of dS_kb for consistency with Ent.
   if (present(F_kb) .or. present(dFdfm_kb)) &
     call determine_dSkb(h_bl, Sref, Ent_bl, Ent, is, ie, kmb, G, GV, .true., &
-                        dS_kb, do_i_in = do_i)
+                        dS_kb, do_i_in=do_i)
 
   if (present(F_kb)) then ; do i=is,ie ; if (do_i(i)) then
     F_kb(i) = Ent(i) * (dS_kb(i) * I_dSkbp1(i))
@@ -1785,11 +1767,11 @@ subroutine find_maxF_kb(h_bl, Sref, Ent_bl, I_dSkbp1, min_ent_in, max_ent_in, &
                         F_lim_maxent, F_thresh)
   type(ocean_grid_type),      intent(in)  :: G        !< The ocean's grid structure.
   type(verticalGrid_type),    intent(in)  :: GV       !< The ocean's vertical grid structure.
-  real, dimension(SZI_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZK_(GV)), &
                               intent(in)  :: h_bl     !< Layer thickness [H ~> m or kg m-2]
-  real, dimension(SZI_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZK_(GV)), &
                               intent(in)  :: Sref     !< Reference potential density [R ~> kg m-3].
-  real, dimension(SZI_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZK_(GV)), &
                               intent(in)  :: Ent_bl   !< The average entrainment upward and
                                                       !! downward across each interface around
                                                       !! the buffer layers [H ~> m or kg m-2].
@@ -1878,7 +1860,7 @@ subroutine find_maxF_kb(h_bl, Sref, Ent_bl, I_dSkbp1, min_ent_in, max_ent_in, &
     do i=ie1,is,-1 ; if (do_i(i)) is1 = i ; enddo
     ! Find the value of F and its derivative at min_ent.
     call determine_dSkb(h_bl, Sref, Ent_bl, minent, is1, ie1, kmb, G, GV, .false., &
-                        dS_kb, ddSkb_dE, do_i_in = do_i)
+                        dS_kb, ddSkb_dE, do_i_in=do_i)
     do i=is1,ie1 ; if (do_i(i)) then
       F_minent(i) = minent(i) * dS_kb(i) * I_dSkbp1(i)
       dF_dE_min(i) = (dS_kb(i) + minent(i)*ddSkb_dE(i)) * I_dSkbp1(i)
@@ -1958,7 +1940,7 @@ subroutine find_maxF_kb(h_bl, Sref, Ent_bl, I_dSkbp1, min_ent_in, max_ent_in, &
       endif
 
       call determine_dSkb(h_bl, Sref, Ent_bl, ent, is1, ie1, kmb, G, GV, .false., &
-                          dS_kb, ddSkb_dE, do_i_in = do_i)
+                          dS_kb, ddSkb_dE, do_i_in=do_i)
       do i=is1,ie1 ; if (do_i(i)) then
         F(i) = ent(i)*dS_kb(i)*I_dSkbp1(i)
         dF_dent(i) = (dS_kb(i) + ent(i)*ddSkb_dE(i)) * I_dSkbp1(i)
@@ -2050,8 +2032,7 @@ subroutine find_maxF_kb(h_bl, Sref, Ent_bl, I_dSkbp1, min_ent_in, max_ent_in, &
     enddo
     if (doany) then
       ! For efficiency, could save previous value of dS_anom_lim_best?
-      call determine_dSkb(h_bl, Sref, Ent_bl, ent_best, is, ie, kmb, G, GV, .true., &
-                          dS_kb_lim)
+      call determine_dSkb(h_bl, Sref, Ent_bl, ent_best, is, ie, kmb, G, GV, .true., dS_kb_lim)
       do i=is,ie
         F_best(i) = ent_best(i)*dS_kb_lim(i)*I_dSkbp1(i)
         ! The second test seems necessary because of roundoff differences that
@@ -2088,14 +2069,13 @@ subroutine entrain_diffusive_init(Time, G, GV, US, param_file, diag, CS, just_re
                                                  !! output.
   type(entrain_diffusive_CS), pointer    :: CS   !< A pointer that is set to point to the control
                                                  !! structure.
-  logical,       optional, intent(in)    :: just_read_params !< If present and true, this call will
-                                                 !! only read parameters logging them or registering
+  logical,                 intent(in)    :: just_read_params !< If true, this call will only read
+                                                 !! and log parameters without registering
                                                  !! any diagnostics
 
   ! Local variables
   real :: dt  ! The dynamics timestep, used here in the default for TOLERANCE_ENT, in MKS units [s]
   real :: Kd  ! A diffusivity used in the default for TOLERANCE_ENT, in MKS units [m2 s-1]
-  logical :: just_read    ! If true, just read parameters but do nothing else.
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
   character(len=40)  :: mdl = "MOM_entrain_diffusive" ! This module's name.
@@ -2107,30 +2087,28 @@ subroutine entrain_diffusive_init(Time, G, GV, US, param_file, diag, CS, just_re
   endif
   allocate(CS)
 
-  just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
-
   CS%diag => diag
 
   CS%bulkmixedlayer = (GV%nkml > 0)
 
-! Set default, read and log parameters
-  if (.not.just_read) call log_version(param_file, mdl, version, "")
+  ! Set default, read and log parameters
+  if (.not.just_read_params) call log_version(param_file, mdl, version, "")
   call get_param(param_file, mdl, "MAX_ENT_IT", CS%max_ent_it, &
                  "The maximum number of iterations that may be used to "//&
-                 "calculate the interior diapycnal entrainment.", default=5, do_not_log=just_read)
+                 "calculate the interior diapycnal entrainment.", default=5, do_not_log=just_read_params)
   ! In this module, KD is only used to set the default for TOLERANCE_ENT. [m2 s-1]
   call get_param(param_file, mdl, "KD", Kd, default=0.0)
   call get_param(param_file, mdl, "DT", dt, &
                  "The (baroclinic) dynamics time step.", units = "s", &
-                 fail_if_missing=.true., do_not_log=just_read)
+                 fail_if_missing=.true., do_not_log=just_read_params)
   call get_param(param_file, mdl, "TOLERANCE_ENT", CS%Tolerance_Ent, &
                  "The tolerance with which to solve for entrainment values.", &
                  units="m", default=MAX(100.0*GV%Angstrom_m,1.0e-4*sqrt(dt*Kd)), scale=GV%m_to_H, &
-                 do_not_log=just_read)
+                 do_not_log=just_read_params)
 
   CS%Rho_sig_off = 1000.0*US%kg_m3_to_R
 
-  if (.not.just_read) then
+  if (.not.just_read_params) then
     CS%id_Kd = register_diag_field('ocean_model', 'Kd_effective', diag%axesTL, Time, &
         'Diapycnal diffusivity as applied', 'm2 s-1', conversion=US%Z2_T_to_m2_s)
     CS%id_diff_work = register_diag_field('ocean_model', 'diff_work', diag%axesTi, Time, &
@@ -2138,7 +2116,7 @@ subroutine entrain_diffusive_init(Time, G, GV, US, param_file, diag, CS, just_re
         'W m-2', conversion=US%RZ3_T3_to_W_m2)
   endif
 
-  if (just_read) deallocate(CS)
+  if (just_read_params) deallocate(CS)
 
 end subroutine entrain_diffusive_init
 

@@ -256,7 +256,7 @@ ALIASES += footnote{1}="\latexonly\footnote\{\1\}\endlatexonly\htmlonly<sup titl
 # what it does and just passes through the string uninterpreted.
 # The image also needs to be added to LATEX_EXTRA_FILES.
 # Default 3rd argument: \includegraphics[width=\textwidth\,height=\textheight/2\,keepaspectratio=true]
-ALIASES += imagelatex{3}="\latexonly\begin{DoxyImage}\n\3{\1}\n\doxyfigcaption{\2}\n\end{DoxyImage}\endlatexonly\xmlonly<image type=\"latex\" name=\"\1\">\2</image>\endxmlonly"
+ALIASES += imagelatex{3}="\latexonly\begin{DoxyImage}\3{\1}\doxyfigcaption{\2}\end{DoxyImage}\endlatexonly\xmlonly<image type=\"latex\" name=\"\1\">\2</image>\endxmlonly"
 
 # This tag can be used to specify a number of word-keyword mappings (TCL only).
 # A mapping has the form "name=value". For example adding "class=itcl::class"
@@ -810,10 +810,10 @@ WARN_LOGFILE           = _build/doxygen_warn_rtd_log.txt
 # Note: If this tag is empty the current directory is searched.
 
 INPUT                  = ../src \
-                         ../config_src/solo_driver \
-                         ../config_src/dynamic_symmetric \
+                         ../config_src/drivers/solo_driver \
+                         ../config_src/memory/dynamic_symmetric \
                          ../config_src/external \
-                         ../config_src/coupled_driver
+                         ../config_src/drivers/FMS_cap
 
 # This tag can be used to specify the character encoding of the source files
 # that doxygen parses. Internally doxygen uses the UTF-8 encoding. Doxygen uses
@@ -2072,7 +2072,7 @@ SEARCH_INCLUDES        = YES
 # preprocessor.
 # This tag requires that the tag SEARCH_INCLUDES is set to YES.
 
-INCLUDE_PATH           = ../src/framework ../config_src/dynamic_symmetric
+INCLUDE_PATH           = ../src/framework ../config_src/memory/dynamic_symmetric
 
 # You can use the INCLUDE_FILE_PATTERNS tag to specify one or more wildcard
 # patterns (like *.h and *.hpp) to filter out the header-files in the

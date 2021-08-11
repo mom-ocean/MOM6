@@ -168,8 +168,8 @@ real elemental pure function PLM_extrapolate_slope(h_l, h_c, h_neglect, u_l, u_c
   real :: hl, hc ! Left and central cell thicknesses [units of grid thickness]
 
   ! Avoid division by zero for vanished cells
-   hl = h_l + h_neglect
-   hc = h_c + h_neglect
+  hl = h_l + h_neglect
+  hc = h_c + h_neglect
 
   ! The h2 scheme is used to compute the left edge value
   left_edge = (u_l*hc + u_c*hl) / (hl + hc)

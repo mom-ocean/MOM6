@@ -22,7 +22,7 @@ use MOM_error_handler,    only : callTree_showQuery
 use MOM_error_handler,    only : callTree_enter, callTree_leave, callTree_waypoint
 use MOM_file_parser,      only : get_param, param_file_type, log_param
 use MOM_io,               only : vardesc, var_desc, fieldtype, SINGLE_FILE
-use MOM_io,               only : create_file, write_field, close_file
+use MOM_io,               only : create_file, write_field, close_file, file_type
 use MOM_interface_heights,only : find_eta
 use MOM_open_boundary,    only : ocean_OBC_type, OBC_DIRECTION_E, OBC_DIRECTION_W
 use MOM_open_boundary,    only : OBC_DIRECTION_N, OBC_DIRECTION_S
@@ -263,8 +263,8 @@ subroutine ALE_register_diags(Time, G, GV, US, diag, CS)
   CS%id_v_preale = register_diag_field('ocean_model', 'v_preale', diag%axesCvL, Time, &
       'Meridional velocity before remapping', 'm s-1', conversion=US%L_T_to_m_s)
   CS%id_h_preale = register_diag_field('ocean_model', 'h_preale', diag%axesTL, Time, &
-      'Layer Thickness before remapping', get_thickness_units(GV), &
-      conversion=GV%H_to_MKS, v_extensive=.true.)
+      'Layer Thickness before remapping', get_thickness_units(GV), conversion=GV%H_to_MKS, &
+      v_extensive=.true.)
   CS%id_T_preale = register_diag_field('ocean_model', 'T_preale', diag%axesTL, Time, &
       'Temperature before remapping', 'degC')
   CS%id_S_preale = register_diag_field('ocean_model', 'S_preale', diag%axesTL, Time, &
@@ -273,14 +273,13 @@ subroutine ALE_register_diags(Time, G, GV, US, diag, CS)
       'Interface Heights before remapping', 'm', conversion=US%Z_to_m)
 
   CS%id_dzRegrid = register_diag_field('ocean_model','dzRegrid',diag%axesTi,Time, &
-      'Change in interface height due to ALE regridding', 'm', &
-      conversion=GV%H_to_m)
+      'Change in interface height due to ALE regridding', 'm', conversion=GV%H_to_m)
   cs%id_vert_remap_h = register_diag_field('ocean_model', 'vert_remap_h', &
-      diag%axestl, time, 'layer thicknesses after ALE regridding and remapping', 'm', &
-      conversion=GV%H_to_m, v_extensive=.true.)
+      diag%axestl, time, 'layer thicknesses after ALE regridding and remapping', &
+      'm', conversion=GV%H_to_m, v_extensive=.true.)
   cs%id_vert_remap_h_tendency = register_diag_field('ocean_model','vert_remap_h_tendency',diag%axestl,time, &
-      'Layer thicknesses tendency due to ALE regridding and remapping', 'm', &
-      conversion=GV%H_to_m*US%s_to_T, v_extensive = .true.)
+      'Layer thicknesses tendency due to ALE regridding and remapping', &
+      'm s-1', conversion=GV%H_to_m*US%s_to_T, v_extensive = .true.)
 
 end subroutine ALE_register_diags
 
@@ -331,7 +330,7 @@ subroutine ALE_main( G, GV, US, h, u, v, tv, Reg, CS, OBC, dt, frac_shelf_h)
   type(ALE_CS),                               pointer       :: CS  !< Regridding parameters and options
   type(ocean_OBC_type),                       pointer       :: OBC !< Open boundary structure
   real,                             optional, intent(in)    :: dt  !< Time step between calls to ALE_main [T ~> s]
-  real, dimension(:,:),             optional, pointer       :: frac_shelf_h !< Fractional ice shelf coverage
+  real, dimension(SZI_(G),SZJ_(G)), optional, intent(in)       :: frac_shelf_h !< Fractional ice shelf coverage [nondim]
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1) :: dzRegrid ! The change in grid interface positions
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1) :: eta_preale
@@ -341,10 +340,7 @@ subroutine ALE_main( G, GV, US, h, u, v, tv, Reg, CS, OBC, dt, frac_shelf_h)
 
   nk = GV%ke; isc = G%isc; iec = G%iec; jsc = G%jsc; jec = G%jec
 
-  ice_shelf = .false.
-  if (present(frac_shelf_h)) then
-    if (associated(frac_shelf_h)) ice_shelf = .true.
-  endif
+  ice_shelf = present(frac_shelf_h)
 
   if (CS%show_call_tree) call callTree_enter("ALE_main(), MOM_ALE.F90")
 
@@ -367,9 +363,9 @@ subroutine ALE_main( G, GV, US, h, u, v, tv, Reg, CS, OBC, dt, frac_shelf_h)
   ! Build new grid. The new grid is stored in h_new. The old grid is h.
   ! Both are needed for the subsequent remapping of variables.
   if (ice_shelf) then
-     call regridding_main( CS%remapCS, CS%regridCS, G, GV, h, tv, h_new, dzRegrid, frac_shelf_h)
+    call regridding_main( CS%remapCS, CS%regridCS, G, GV, h, tv, h_new, dzRegrid, frac_shelf_h)
   else
-     call regridding_main( CS%remapCS, CS%regridCS, G, GV, h, tv, h_new, dzRegrid)
+    call regridding_main( CS%remapCS, CS%regridCS, G, GV, h, tv, h_new, dzRegrid)
   endif
 
   call check_grid( G, GV, h, 0. )
@@ -483,7 +479,7 @@ subroutine ALE_offline_inputs(CS, G, GV, h, tv, Reg, uhtr, vhtr, Kd, debug, OBC)
   dzRegrid(:,:,:) = 0.0
   h_new(:,:,:) = 0.0
 
-  if (debug) call MOM_tracer_chkinv("Before ALE_offline_inputs", G, h, Reg%Tr, Reg%ntr)
+  if (debug) call MOM_tracer_chkinv("Before ALE_offline_inputs", G, GV, h, Reg%Tr, Reg%ntr)
 
   ! Build new grid from the Zstar state onto the requested vertical coordinate. The new grid is stored
   ! in h_new. The old grid is h. Both are needed for the subsequent remapping of variables. Convective
@@ -526,7 +522,7 @@ subroutine ALE_offline_inputs(CS, G, GV, h, tv, Reg, uhtr, vhtr, Kd, debug, OBC)
   call ALE_remap_scalar(CS%remapCS, G, GV, nk, h, tv%T, h_new, tv%T, answers_2018=CS%answers_2018)
   call ALE_remap_scalar(CS%remapCS, G, GV, nk, h, tv%S, h_new, tv%S, answers_2018=CS%answers_2018)
 
-  if (debug) call MOM_tracer_chkinv("After ALE_offline_inputs", G, h_new, Reg%Tr, Reg%ntr)
+  if (debug) call MOM_tracer_chkinv("After ALE_offline_inputs", G, GV, h_new, Reg%Tr, Reg%ntr)
 
   ! Copy over the new layer thicknesses
   do k = 1,nk  ; do j = jsc-1,jec+1 ; do i = isc-1,iec+1
@@ -621,7 +617,7 @@ subroutine ALE_build_grid( G, GV, regridCS, remapCS, h, tv, debug, frac_shelf_h 
   real, dimension(SZI_(G),SZJ_(G), SZK_(GV)), intent(inout) :: h     !< Current 3D grid obtained after the
                                                                      !! last time step [H ~> m or kg-2]
   logical,                       optional, intent(in)    :: debug    !< If true, show the call tree
-  real, dimension(:,:),          optional, pointer       :: frac_shelf_h !< Fractional ice shelf coverage
+  real, dimension(SZI_(G),SZJ_(G)),  optional, intent(in):: frac_shelf_h !< Fractional ice shelf coverage [nondim]
   ! Local variables
   integer :: nk, i, j, k
   real, dimension(SZI_(G), SZJ_(G), SZK_(GV)+1) :: dzRegrid ! The change in grid interface positions
@@ -631,17 +627,14 @@ subroutine ALE_build_grid( G, GV, regridCS, remapCS, h, tv, debug, frac_shelf_h 
   show_call_tree = .false.
   if (present(debug)) show_call_tree = debug
   if (show_call_tree) call callTree_enter("ALE_build_grid(), MOM_ALE.F90")
-  use_ice_shelf = .false.
-  if (present(frac_shelf_h)) then
-    if (associated(frac_shelf_h)) use_ice_shelf = .true.
-  endif
+  use_ice_shelf = present(frac_shelf_h)
 
   ! Build new grid. The new grid is stored in h_new. The old grid is h.
   ! Both are needed for the subsequent remapping of variables.
   if (use_ice_shelf) then
-     call regridding_main( remapCS, regridCS, G, GV, h, tv, h_new, dzRegrid, frac_shelf_h )
+    call regridding_main( remapCS, regridCS, G, GV, h, tv, h_new, dzRegrid, frac_shelf_h )
   else
-     call regridding_main( remapCS, regridCS, G, GV, h, tv, h_new, dzRegrid )
+    call regridding_main( remapCS, regridCS, G, GV, h, tv, h_new, dzRegrid )
   endif
 
   ! Override old grid with new one. The new grid 'h_new' is built in
@@ -1279,7 +1272,7 @@ subroutine ALE_writeCoordinateFile( CS, GV, directory )
   character(len=240) :: filepath
   type(vardesc)      :: vars(2)
   type(fieldtype)    :: fields(2)
-  integer            :: unit
+  type(file_type)    :: IO_handle ! The I/O handle of the fileset
   real               :: ds(GV%ke), dsi(GV%ke+1)
 
   filepath    = trim(directory) // trim("Vertical_coordinate")
@@ -1293,13 +1286,12 @@ subroutine ALE_writeCoordinateFile( CS, GV, directory )
   vars(2) = var_desc('ds_interface', getCoordinateUnits( CS%regridCS ), &
                     'Layer Center Coordinate Separation','1','i','1')
 
-  call create_file(unit, trim(filepath), vars, 2, fields, SINGLE_FILE, GV=GV)
-  call write_field(unit, fields(1), ds)
-  call write_field(unit, fields(2), dsi)
-  call close_file(unit)
+  call create_file(IO_handle, trim(filepath), vars, 2, fields, SINGLE_FILE, GV=GV)
+  call write_field(IO_handle, fields(1), ds)
+  call write_field(IO_handle, fields(2), dsi)
+  call close_file(IO_handle)
 
 end subroutine ALE_writeCoordinateFile
-
 
 !> Set h to coordinate values for fixed coordinate systems
 subroutine ALE_initThicknessToCoord( CS, G, GV, h )

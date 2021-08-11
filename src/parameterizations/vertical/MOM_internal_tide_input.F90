@@ -6,6 +6,7 @@ module MOM_int_tide_input
 use MOM_cpu_clock,        only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock,        only : CLOCK_MODULE_DRIVER, CLOCK_MODULE, CLOCK_ROUTINE
 use MOM_diag_mediator,    only : diag_ctrl, query_averaging_enabled
+use MOM_diag_mediator,    only : disable_averaging, enable_averages
 use MOM_diag_mediator,    only : safe_alloc_ptr, post_data, register_diag_field
 use MOM_debugging,        only : hchksum
 use MOM_error_handler,    only : MOM_error, is_root_pe, FATAL, WARNING, NOTE
@@ -50,12 +51,16 @@ type, public :: int_tide_input_CS ; private
   type(time_type) :: time_max_source !< A time for use in testing internal tides
   real    :: int_tide_source_x       !< X Location of generation site
                                      !! for internal tide for testing (BDM)
+                                     !! for internal tide for testing (BDM)
   real    :: int_tide_source_y       !< Y Location of generation site
                                      !! for internal tide for testing (BDM)
+  integer :: int_tide_source_i       !< I Location of generation site
+  integer :: int_tide_source_j       !< J Location of generation site
+  logical :: int_tide_use_glob_ij    !< Use global indices for generation site
 
 
   !>@{ Diagnostic IDs
-  integer :: id_TKE_itidal = -1, id_Nb = -1, id_N2_bot = -1
+  integer :: id_TKE_itidal_itide = -1, id_Nb = -1, id_N2_bot = -1
   !>@}
 end type int_tide_input_CS
 
@@ -72,24 +77,24 @@ contains
 
 !> Sets the model-state dependent internal tide energy sources.
 subroutine set_int_tide_input(u, v, h, tv, fluxes, itide, dt, G, GV, US, CS)
-  type(ocean_grid_type),                     intent(in)    :: G  !< The ocean's grid structure
-  type(verticalGrid_type),                   intent(in)    :: GV !< The ocean's vertical grid structure
-  type(unit_scale_type),                     intent(in)    :: US !< A dimensional unit scaling type
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: u  !< The zonal velocity [L T-1 ~> m s-1]
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: v  !< The meridional velocity [L T-1 ~> m s-1]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h  !< Layer thicknesses [H ~> m or kg m-2]
-  type(thermo_var_ptrs),                     intent(in)    :: tv !< A structure containing pointers to the
-                                                                 !! thermodynamic fields
-  type(forcing),                             intent(in)    :: fluxes !< A structure of thermodynamic surface fluxes
-  type(int_tide_input_type),                 intent(inout) :: itide !< A structure containing fields related
-                                                                 !! to the internal tide sources.
-  real,                                      intent(in)    :: dt !< The time increment [T ~> s].
-  type(int_tide_input_CS),                   pointer       :: CS !< This module's control structure.
+  type(ocean_grid_type),                      intent(in)    :: G  !< The ocean's grid structure
+  type(verticalGrid_type),                    intent(in)    :: GV !< The ocean's vertical grid structure
+  type(unit_scale_type),                      intent(in)    :: US !< A dimensional unit scaling type
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), intent(in)    :: u  !< The zonal velocity [L T-1 ~> m s-1]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), intent(in)    :: v  !< The meridional velocity [L T-1 ~> m s-1]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(in)    :: h  !< Layer thicknesses [H ~> m or kg m-2]
+  type(thermo_var_ptrs),                      intent(in)    :: tv !< A structure containing pointers to the
+                                                                  !! thermodynamic fields
+  type(forcing),                              intent(in)    :: fluxes !< A structure of thermodynamic surface fluxes
+  type(int_tide_input_type),                  intent(inout) :: itide !< A structure containing fields related
+                                                                  !! to the internal tide sources.
+  real,                                       intent(in)    :: dt !< The time increment [T ~> s].
+  type(int_tide_input_CS),                    pointer       :: CS !< This module's control structure.
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G)) :: &
     N2_bot        ! The bottom squared buoyancy frequency [T-2 ~> s-2].
 
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: &
     T_f, S_f      ! The temperature and salinity in [degC] and [ppt] with the values in
                   ! the massless layers filled vertically by diffusion.
   logical :: use_EOS    ! If true, density is calculated from T & S using an
@@ -98,8 +103,9 @@ subroutine set_int_tide_input(u, v, h, tv, fluxes, itide, dt, G, GV, US, CS)
   type(time_type) :: time_end        !< For use in testing internal tides (BDM)
 
   integer :: i, j, k, is, ie, js, je, nz, isd, ied, jsd, jed
+  integer :: i_global, j_global
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
   if (.not.associated(CS)) call MOM_error(FATAL,"set_diffusivity: "//&
@@ -114,6 +120,8 @@ subroutine set_int_tide_input(u, v, h, tv, fluxes, itide, dt, G, GV, US, CS)
 
   call find_N2_bottom(h, tv, T_f, S_f, itide%h2, fluxes, G, GV, US, N2_bot)
 
+  avg_enabled = query_averaging_enabled(CS%diag, time_end=time_end)
+
   !$OMP parallel do default(shared)
   do j=js,je ; do i=is,ie
     itide%Nb(i,j) = G%mask2dT(i,j) * sqrt(N2_bot(i,j))
@@ -122,15 +130,24 @@ subroutine set_int_tide_input(u, v, h, tv, fluxes, itide, dt, G, GV, US, CS)
 
   if (CS%int_tide_source_test) then
     itide%TKE_itidal_input(:,:) = 0.0
-    avg_enabled = query_averaging_enabled(CS%diag, time_end=time_end)
     if (time_end <= CS%time_max_source) then
-      do j=js,je ; do i=is,ie
-        ! Input  an arbitrary energy point source.id_
-        if (((G%geoLonCu(I-1,j)-CS%int_tide_source_x) * (G%geoLonBu(I,j)-CS%int_tide_source_x) <= 0.0) .and. &
-            ((G%geoLatCv(i,J-1)-CS%int_tide_source_y) * (G%geoLatCv(i,j)-CS%int_tide_source_y) <= 0.0)) then
-          itide%TKE_itidal_input(i,j) = 1.0*US%kg_m3_to_R*US%m_to_Z**3*US%T_to_s**3
-        endif
-      enddo ; enddo
+      if (CS%int_tide_use_glob_ij) then
+        do j=js,je ; do i=is,ie
+          i_global = i + G%idg_offset
+          j_global = j + G%jdg_offset
+          if ((i_global == CS%int_tide_source_i) .and. (j_global == CS%int_tide_source_j)) then
+            itide%TKE_itidal_input(i,j) = 1.0*US%kg_m3_to_R*US%m_to_Z**3*US%T_to_s**3
+          endif
+        enddo ; enddo
+      else
+        do j=js,je ; do i=is,ie
+          ! Input  an arbitrary energy point source.id_
+          if (((G%geoLonCu(I-1,j)-CS%int_tide_source_x) * (G%geoLonBu(I,j)-CS%int_tide_source_x) <= 0.0) .and. &
+              ((G%geoLatCv(i,J-1)-CS%int_tide_source_y) * (G%geoLatCv(i,j)-CS%int_tide_source_y) <= 0.0)) then
+            itide%TKE_itidal_input(i,j) = 1.0*US%kg_m3_to_R*US%m_to_Z**3*US%T_to_s**3
+          endif
+        enddo ; enddo
+      endif
     endif
   endif
 
@@ -140,31 +157,35 @@ subroutine set_int_tide_input(u, v, h, tv, fluxes, itide, dt, G, GV, US, CS)
                  scale=US%RZ3_T3_to_W_m2)
   endif
 
-  if (CS%id_TKE_itidal > 0) call post_data(CS%id_TKE_itidal, itide%TKE_itidal_input, CS%diag)
+  call enable_averages(dt, time_end, CS%diag)
+
+  if (CS%id_TKE_itidal_itide > 0) call post_data(CS%id_TKE_itidal_itide, itide%TKE_itidal_input, CS%diag)
   if (CS%id_Nb > 0) call post_data(CS%id_Nb, itide%Nb, CS%diag)
   if (CS%id_N2_bot > 0 ) call post_data(CS%id_N2_bot, N2_bot, CS%diag)
+
+  call disable_averaging(CS%diag)
 
 end subroutine set_int_tide_input
 
 !> Estimates the near-bottom buoyancy frequency (N^2).
 subroutine find_N2_bottom(h, tv, T_f, S_f, h2, fluxes, G, GV, US, N2_bot)
-  type(ocean_grid_type),                    intent(in)  :: G    !< The ocean's grid structure
-  type(verticalGrid_type),                  intent(in)  :: GV   !< The ocean's vertical grid structure
-  type(unit_scale_type),                    intent(in)  :: US   !< A dimensional unit scaling type
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: h    !< Layer thicknesses [H ~> m or kg m-2]
-  type(thermo_var_ptrs),                    intent(in)  :: tv   !< A structure containing pointers to the
-                                                                !! thermodynamic fields
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: T_f  !< Temperature after vertical filtering to
-                                                                !! smooth out the values in thin layers [degC].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: S_f  !< Salinity after vertical filtering to
-                                                                !! smooth out the values in thin layers [ppt].
-  real, dimension(SZI_(G),SZJ_(G)),         intent(in)  :: h2   !< Bottom topographic roughness [Z2 ~> m2].
-  type(forcing),                            intent(in)  :: fluxes !< A structure of thermodynamic surface fluxes
-  type(int_tide_input_CS),                  pointer     :: CS    !<  This module's control structure.
-  real, dimension(SZI_(G),SZJ_(G)),         intent(out) :: N2_bot !< The squared buoyancy freqency at the
+  type(ocean_grid_type),                     intent(in)  :: G    !< The ocean's grid structure
+  type(verticalGrid_type),                   intent(in)  :: GV   !< The ocean's vertical grid structure
+  type(unit_scale_type),                     intent(in)  :: US   !< A dimensional unit scaling type
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)  :: h    !< Layer thicknesses [H ~> m or kg m-2]
+  type(thermo_var_ptrs),                     intent(in)  :: tv   !< A structure containing pointers to the
+                                                                 !! thermodynamic fields
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)  :: T_f  !< Temperature after vertical filtering to
+                                                                 !! smooth out the values in thin layers [degC].
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)  :: S_f  !< Salinity after vertical filtering to
+                                                                 !! smooth out the values in thin layers [ppt].
+  real, dimension(SZI_(G),SZJ_(G)),          intent(in)  :: h2   !< Bottom topographic roughness [Z2 ~> m2].
+  type(forcing),                             intent(in)  :: fluxes !< A structure of thermodynamic surface fluxes
+  type(int_tide_input_CS),                   pointer     :: CS   !<  This module's control structure.
+  real, dimension(SZI_(G),SZJ_(G)),          intent(out) :: N2_bot !< The squared buoyancy freqency at the
                                                                  !! ocean bottom [T-2 ~> s-2].
   ! Local variables
-  real, dimension(SZI_(G),SZK_(G)+1) :: &
+  real, dimension(SZI_(G),SZK_(GV)+1) :: &
     dRho_int      ! The unfiltered density differences across interfaces [R ~> kg m-3].
   real, dimension(SZI_(G)) :: &
     pres, &       ! The pressure at each interface [R L2 T-2 ~> Pa].
@@ -184,7 +205,7 @@ subroutine find_N2_bottom(h, tv, T_f, S_f, h2, fluxes, G, GV, US, N2_bot)
   integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state
   integer :: i, j, k, is, ie, js, je, nz
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   G_Rho0 = (US%L_to_Z**2*GV%g_Earth) / GV%Rho0
   EOSdom(:) = EOS_domain(G%HI)
 
@@ -346,7 +367,7 @@ subroutine int_tide_input_init(Time, G, GV, US, param_file, diag, CS, itide)
                units="m-1", default=8.e-4*atan(1.0), scale=US%L_to_m)
 
   call get_param(param_file, mdl, "KAPPA_H2_FACTOR", kappa_h2_factor, &
-               "A scaling factor for the roughness amplitude with n"//&
+               "A scaling factor for the roughness amplitude with "//&
                "INT_TIDE_DISSIPATION.",  units="nondim", default=1.0)
   call get_param(param_file, mdl, "TKE_ITIDE_MAX", CS%TKE_itide_max, &
                "The maximum internal tide energy source available to mix "//&
@@ -362,7 +383,7 @@ subroutine int_tide_input_init(Time, G, GV, US, param_file, diag, CS, itide)
                "tidal amplitudes with INT_TIDE_DISSIPATION.", default="tideamp.nc")
     filename = trim(CS%inputdir) // trim(tideamp_file)
     call log_param(param_file, mdl, "INPUTDIR/TIDEAMP_FILE", filename)
-    call MOM_read_data(filename, 'tideamp', itide%tideamp, G%domain, timelevel=1, scale=US%m_s_to_L_T)
+    call MOM_read_data(filename, 'tideamp', itide%tideamp, G%domain, scale=US%m_s_to_L_T)
   endif
 
   call get_param(param_file, mdl, "H2_FILE", h2_file, &
@@ -371,7 +392,7 @@ subroutine int_tide_input_init(Time, G, GV, US, param_file, diag, CS, itide)
                fail_if_missing=.true.)
   filename = trim(CS%inputdir) // trim(h2_file)
   call log_param(param_file, mdl, "INPUTDIR/H2_FILE", filename)
-  call MOM_read_data(filename, 'h2', itide%h2, G%domain, timelevel=1, scale=US%m_to_Z**2)
+  call MOM_read_data(filename, 'h2', itide%h2, G%domain, scale=US%m_to_Z**2)
 
   call get_param(param_file, mdl, "FRACTIONAL_ROUGHNESS_MAX", max_frac_rough, &
                  "The maximum topographic roughness amplitude as a fraction of the mean depth, "//&
@@ -383,14 +404,33 @@ subroutine int_tide_input_init(Time, G, GV, US, param_file, diag, CS, itide)
                  "If true, apply an arbitrary generation site for internal tide testing", &
                  default=.false.)
   if (CS%int_tide_source_test)then
+    call get_param(param_file, mdl, "INTERNAL_TIDE_USE_GLOB_IJ", CS%int_tide_use_glob_ij, &
+                 "Use global IJ for interal tide generation source test", default=.false.)
     call get_param(param_file, mdl, "INTERNAL_TIDE_SOURCE_X", CS%int_tide_source_x, &
-                 "X Location of generation site for internal tide", default=1.)
+                 "X Location of generation site for internal tide", default=1., &
+                 do_not_log=CS%int_tide_use_glob_ij)
     call get_param(param_file, mdl, "INTERNAL_TIDE_SOURCE_Y", CS%int_tide_source_y, &
-                 "Y Location of generation site for internal tide", default=1.)
+                 "Y Location of generation site for internal tide", default=1., &
+                 do_not_log=CS%int_tide_use_glob_ij)
+    call get_param(param_file, mdl, "INTERNAL_TIDE_SOURCE_I", CS%int_tide_source_i, &
+                 "I Location of generation site for internal tide", default=0, &
+                 do_not_log=.not.CS%int_tide_use_glob_ij)
+    call get_param(param_file, mdl, "INTERNAL_TIDE_SOURCE_J", CS%int_tide_source_j, &
+                 "J Location of generation site for internal tide", default=0, &
+                 do_not_log=.not.CS%int_tide_use_glob_ij)
     call get_param(param_file, mdl, "INTERNAL_TIDE_SOURCE_TLEN_DAYS", tlen_days, &
                  "Time interval from start of experiment for adding wave source", &
                  units="days", default=0)
     CS%time_max_source = Time + set_time(0, days=tlen_days)
+
+    if ((CS%int_tide_use_glob_ij) .and. ((CS%int_tide_source_x /= 1.) .or. (CS%int_tide_source_y /= 1.))) then
+      call MOM_error(FATAL, "MOM_internal_tide_input: "//&
+                     "Internal tide source set to use (i,j) indices hence (x,y) geographical coords are meaningless.")
+    endif
+    if ((.not.CS%int_tide_use_glob_ij) .and. ((CS%int_tide_source_i /= 0) .or. (CS%int_tide_source_j /= 0))) then
+      call MOM_error(FATAL, "MOM_internal_tide_input: "//&
+                     "Internal tide source set to use (x,y) geographical coords hence (i,j) indices are meaningless.")
+    endif
   endif
 
   do j=js,je ; do i=is,ie
@@ -409,7 +449,7 @@ subroutine int_tide_input_init(Time, G, GV, US, param_file, diag, CS, itide)
   enddo ; enddo
 
 
-  CS%id_TKE_itidal = register_diag_field('ocean_model','TKE_itidal_itide',diag%axesT1,Time, &
+  CS%id_TKE_itidal_itide = register_diag_field('ocean_model','TKE_itidal_itide',diag%axesT1,Time, &
       'Internal Tide Driven Turbulent Kinetic Energy', &
       'W m-2', conversion=US%RZ3_T3_to_W_m2)
 

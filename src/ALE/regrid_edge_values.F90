@@ -4,7 +4,8 @@ module regrid_edge_values
 ! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_error_handler, only : MOM_error, FATAL
-use regrid_solvers, only : solve_linear_system, solve_tridiagonal_system
+use regrid_solvers, only : solve_linear_system, linear_solver
+use regrid_solvers, only : solve_tridiagonal_system, solve_diag_dominant_tridiag
 use polynomial_functions, only : evaluation_polynomial
 
 implicit none ; private
@@ -16,7 +17,6 @@ public bound_edge_values, average_discontinuous_edge_values, check_discontinuous
 public edge_values_explicit_h2, edge_values_explicit_h4
 public edge_values_implicit_h4, edge_values_implicit_h6
 public edge_slopes_implicit_h3, edge_slopes_implicit_h5
-! public solve_diag_dominant_tridiag, linear_solver
 
 ! The following parameters are used to avoid singular matrices for boundary
 ! extrapolation. The are needed only in the case where thicknesses vanish
@@ -1329,115 +1329,6 @@ subroutine edge_values_implicit_h6( N, h, u, edge_val, h_neglect, answers_2018 )
   edge_val(N,2) = tri_x(N+1)
 
 end subroutine edge_values_implicit_h6
-
-
-!> Solve the tridiagonal system AX = R
-!!
-!! This routine uses a variant of Thomas's algorithm to solve the tridiagonal system AX = R, in
-!! a form that is guaranteed to avoid dividing by a zero pivot.  The matrix A is made up of
-!! lower (Al) and upper diagonals (Au) and a central diagonal Ad = Ac+Al+Au, where
-!! Al, Au, and Ac are all positive (or negative) definite.  However when Ac is smaller than
-!! roundoff compared with (Al+Au), the answers are prone to inaccuracy.
-subroutine solve_diag_dominant_tridiag( Al, Ac, Au, R, X, N )
-  integer,            intent(in)  :: N   !< The size of the system
-  real, dimension(N), intent(in)  :: Ac  !< Matrix center diagonal offset from Al + Au
-  real, dimension(N), intent(in)  :: Al  !< Matrix lower diagonal
-  real, dimension(N), intent(in)  :: Au  !< Matrix upper diagonal
-  real, dimension(N), intent(in)  :: R   !< system right-hand side
-  real, dimension(N), intent(out) :: X   !< solution vector
-  ! Local variables
-  real, dimension(N) :: c1       ! Au / pivot for the backward sweep
-  real               :: d1       ! The next value of 1.0 - c1
-  real               :: I_pivot  ! The inverse of the most recent pivot
-  real               :: denom_t1 ! The first term in the denominator of the inverse of the pivot.
-  integer            :: k        ! Loop index
-
-  ! Factorization and forward sweep, in a form that will never give a division by a
-  ! zero pivot for positive definite Ac, Al, and Au.
-  I_pivot = 1.0 / (Ac(1) + Au(1))
-  d1 = Ac(1) * I_pivot
-  c1(1) = Au(1) * I_pivot
-  X(1) = R(1) * I_pivot
-  do k=2,N-1
-    denom_t1 = Ac(k) + d1 * Al(k)
-    I_pivot = 1.0 / (denom_t1 + Au(k))
-    d1 = denom_t1 * I_pivot
-    c1(k) = Au(k) * I_pivot
-    X(k) = (R(k) - Al(k) * X(k-1)) * I_pivot
-  enddo
-  I_pivot = 1.0 / (Ac(N) + d1 * Al(N))
-  X(N) = (R(N) - Al(N) * X(N-1)) * I_pivot
-  ! Backward sweep
-  do k=N-1,1,-1
-    X(k) = X(k) - c1(k) * X(k+1)
-  enddo
-
-end subroutine solve_diag_dominant_tridiag
-
-
-!> Solve the linear system AX = R by Gaussian elimination
-!!
-!! This routine uses Gauss's algorithm to transform the system's original
-!! matrix into an upper triangular matrix. Back substitution then yields the answer.
-!! The matrix A must be square, with the first index varing along the row.
-subroutine linear_solver( N, A, R, X )
-  integer,              intent(in)    :: N  !< The size of the system
-  real, dimension(N,N), intent(inout) :: A  !< The matrix being inverted [nondim]
-  real, dimension(N),   intent(inout) :: R  !< system right-hand side [A]
-  real, dimension(N),   intent(inout) :: X  !< solution vector [A]
-
-  ! Local variables
-  real    :: factor       ! The factor that eliminates the leading nonzero element in a row.
-  real    :: I_pivot      ! The reciprocal of the pivot value [inverse of the input units of a row of A]
-  real    :: swap
-  integer :: i, j, k
-
-  ! Loop on rows to transform the problem into multiplication by an upper-right matrix.
-  do i=1,N-1
-    ! Seek a pivot for column i starting in row i, and continuing into the remaining rows.  If the
-    ! pivot is in a row other than i, swap them.  If no valid pivot is found, i = N+1 after this loop.
-    do k=i,N ; if ( abs(A(i,k)) > 0.0 ) exit ; enddo ! end loop to find pivot
-    if ( k > N ) then  ! No pivot could be found and the system is singular.
-      write(0,*) ' A=',A
-      call MOM_error( FATAL, 'The linear system sent to linear_solver is singular.' )
-    endif
-
-    ! If the pivot is in a row that is different than row i, swap those two rows, noting that both
-    ! rows start with i-1 zero values.
-    if ( k /= i ) then
-      do j=i,N ; swap = A(j,i) ; A(j,i) = A(j,k) ; A(j,k) = swap ; enddo
-      swap = R(i) ; R(i) = R(k) ; R(k) = swap
-    endif
-
-    ! Transform the pivot to 1 by dividing the entire row (right-hand side included) by the pivot
-    I_pivot = 1.0 / A(i,i)
-    A(i,i) = 1.0
-    do j=i+1,N ; A(j,i) = A(j,i) * I_pivot ; enddo
-    R(i) = R(i) * I_pivot
-
-    ! Put zeros in column for all rows below that contain the pivot (which is row i)
-    do k=i+1,N    ! k is the row index
-      factor = A(i,k)
-      ! A(i,k) = 0.0  ! These elements are not used again, so this line can be skipped for speed.
-      do j=i+1,N ; A(j,k) = A(j,k) - factor * A(j,i) ; enddo
-      R(k) = R(k) - factor * R(i)
-    enddo
-
-  enddo ! end loop on i
-
-  ! Solve the system by back substituting into what is now an upper-right matrix.
-  if (A(N,N) == 0.0) then  ! No pivot could be found and the system is singular.
-    ! write(0,*) ' A=',A
-    call MOM_error( FATAL, 'The final pivot in linear_solver is zero.' )
-  endif
-  X(N) = R(N) / A(N,N)  ! The last row can now be solved trivially.
-  do i=N-1,1,-1 ! loop on rows, starting from second to last row
-    X(i) = R(i)
-    do j=i+1,N ; X(i) = X(i) - A(j,i) * X(j) ; enddo
-  enddo
-
-end subroutine linear_solver
-
 
 
 !> Test that A*C = R to within a tolerance, issuing a fatal error with an explanatory message if they do not.

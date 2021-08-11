@@ -121,10 +121,12 @@ type, public :: vertvisc_CS ; private
 
   !>@{ Diagnostic identifiers
   integer :: id_du_dt_visc = -1, id_dv_dt_visc = -1, id_au_vv = -1, id_av_vv = -1
+  integer :: id_du_dt_str = -1, id_dv_dt_str = -1
   integer :: id_h_u = -1, id_h_v = -1, id_hML_u = -1 , id_hML_v = -1
   integer :: id_taux_bot = -1, id_tauy_bot = -1
   integer :: id_Kv_slow = -1, id_Kv_u = -1, id_Kv_v = -1
   ! integer :: id_hf_du_dt_visc    = -1, id_hf_dv_dt_visc    = -1
+  integer :: id_h_du_dt_visc    = -1, id_h_dv_dt_visc    = -1
   integer :: id_hf_du_dt_visc_2d = -1, id_hf_dv_dt_visc_2d = -1
   !>@}
 
@@ -188,11 +190,11 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
 
   ! Local variables
 
-  real :: b1(SZIB_(G))          ! A variable used by the tridiagonal solver [H-1 ~> m-1 or m2 kg-1].
-  real :: c1(SZIB_(G),SZK_(G))  ! A variable used by the tridiagonal solver [nondim].
-  real :: d1(SZIB_(G))          ! d1=1-c1 is used by the tridiagonal solver [nondim].
-  real :: Ray(SZIB_(G),SZK_(G)) ! Ray is the Rayleigh-drag velocity [Z T-1 ~> m s-1].
-  real :: b_denom_1             ! The first term in the denominator of b1 [H ~> m or kg m-2].
+  real :: b1(SZIB_(G))           ! A variable used by the tridiagonal solver [H-1 ~> m-1 or m2 kg-1].
+  real :: c1(SZIB_(G),SZK_(GV))  ! A variable used by the tridiagonal solver [nondim].
+  real :: d1(SZIB_(G))           ! d1=1-c1 is used by the tridiagonal solver [nondim].
+  real :: Ray(SZIB_(G),SZK_(GV)) ! Ray is the Rayleigh-drag velocity [Z T-1 ~> m s-1].
+  real :: b_denom_1              ! The first term in the denominator of b1 [H ~> m or kg m-2].
 
   real :: Hmix             ! The mixed layer thickness over which stress
                            ! is applied with direct_stress [H ~> m or kg m-2].
@@ -206,6 +208,8 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
 
   real :: stress           !   The surface stress times the time step, divided
                            ! by the density [H L T-1 ~> m2 s-1 or kg m-1 s-1].
+  real :: accel_underflow  ! An acceleration magnitude that is so small that values that are less
+                           ! than this are diagnosed as 0 [L T-2 ~> m s-2].
   real :: zDS, hfr, h_a    ! Temporary variables used with direct_stress.
   real :: surface_stress(SZIB_(G))! The same as stress, unless the wind stress
                            ! stress is applied as a body force [H L T-1 ~> m2 s-1 or kg m-1 s-1].
@@ -213,12 +217,15 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
   real, allocatable, dimension(:,:) :: hf_du_dt_visc_2d ! Depth sum of hf_du_dt_visc [L T-2 ~> m s-2]
   real, allocatable, dimension(:,:) :: hf_dv_dt_visc_2d ! Depth sum of hf_dv_dt_visc [L T-2 ~> m s-2]
 
+  real, allocatable, dimension(:,:,:) :: h_du_dt_visc ! h x du_dt_visc [H L T-2 ~> m2 s-2]
+  real, allocatable, dimension(:,:,:) :: h_dv_dt_visc ! h x dv_dt_visc [H L T-2 ~> m2 s-2]
+
   logical :: do_i(SZIB_(G))
   logical :: DoStokesMixing
 
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, n
   is = G%isc ; ie = G%iec; js = G%jsc; je = G%jec
-  Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB ; nz = G%ke
+  Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB ; nz = GV%ke
 
   if (.not.associated(CS)) call MOM_error(FATAL,"MOM_vert_friction(visc): "// &
          "Module must be initialized before it is used.")
@@ -231,6 +238,8 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
   dt_Z_to_H = dt*GV%Z_to_H
   h_neglect = GV%H_subroundoff
   Idt = 1.0 / dt
+
+  accel_underflow = CS%vel_underflow * Idt
 
   !Check if Stokes mixing allowed if requested (present and associated)
   DoStokesMixing=.false.
@@ -254,16 +263,20 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
 
     ! When mixing down Eulerian current + Stokes drift add before calling solver
     if (DoStokesMixing) then ; do k=1,nz ; do I=Isq,Ieq
-      if (do_i(I)) u(I,j,k) = u(I,j,k) + US%m_s_to_L_T*Waves%Us_x(I,j,k)
+      if (do_i(I)) u(I,j,k) = u(I,j,k) + Waves%Us_x(I,j,k)
     enddo ; enddo ; endif
 
     if (associated(ADp%du_dt_visc)) then ; do k=1,nz ; do I=Isq,Ieq
       ADp%du_dt_visc(I,j,k) = u(I,j,k)
     enddo ; enddo ; endif
 
-!   One option is to have the wind stress applied as a body force
-! over the topmost Hmix fluid.  If DIRECT_STRESS is not defined,
-! the wind stress is applied as a stress boundary condition.
+    if (associated(ADp%du_dt_str)) then ; do k=1,nz ; do I=Isq,Ieq
+      ADp%du_dt_str(I,j,k) = 0.0
+    enddo ; enddo ; endif
+
+    !   One option is to have the wind stress applied as a body force
+    ! over the topmost Hmix fluid.  If DIRECT_STRESS is not defined,
+    ! the wind stress is applied as a stress boundary condition.
     if (CS%direct_stress) then
       do I=Isq,Ieq ; if (do_i(I)) then
         surface_stress(I) = 0.0
@@ -273,6 +286,7 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
           h_a = 0.5 * (h(I,j,k) + h(I+1,j,k)) + h_neglect
           hfr = 1.0 ; if ((zDS+h_a) > Hmix) hfr = (Hmix - zDS) / h_a
           u(I,j,k) = u(I,j,k) + I_Hmix * hfr * stress
+          if (associated(ADp%du_dt_str)) ADp%du_dt_str(i,J,k) = (I_Hmix * hfr * stress) * Idt
           zDS = zDS + h_a ; if (zDS >= Hmix) exit
         enddo
       endif ; enddo ! end of i loop
@@ -312,6 +326,8 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
       b1(I) = 1.0 / (b_denom_1 + dt_Z_to_H*CS%a_u(I,j,2))
       d1(I) = b_denom_1 * b1(I)
       u(I,j,1) = b1(I) * (CS%h_u(I,j,1) * u(I,j,1) + surface_stress(I))
+      if (associated(ADp%du_dt_str)) &
+        ADp%du_dt_str(I,j,1) = b1(I) * (CS%h_u(I,j,1) * ADp%du_dt_str(I,j,1) + surface_stress(I)*Idt)
     endif ; enddo
     do k=2,nz ; do I=Isq,Ieq ; if (do_i(I)) then
       c1(I,k) = dt_Z_to_H * CS%a_u(I,j,K) * b1(I)
@@ -320,6 +336,9 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
       d1(I) = b_denom_1 * b1(I)
       u(I,j,k) = (CS%h_u(I,j,k) * u(I,j,k) + &
                   dt_Z_to_H * CS%a_u(I,j,K) * u(I,j,k-1)) * b1(I)
+      if (associated(ADp%du_dt_str)) &
+        ADp%du_dt_str(I,j,k) = (CS%h_u(I,j,k) * ADp%du_dt_str(I,j,k) + &
+                                dt_Z_to_H * CS%a_u(I,j,K) * ADp%du_dt_str(I,j,k-1)) * b1(I)
     endif ; enddo ; enddo
 
     ! back substitute to solve for the new velocities
@@ -328,8 +347,17 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
       u(I,j,k) = u(I,j,k) + c1(I,k+1) * u(I,j,k+1)
     endif ; enddo ; enddo ! i and k loops
 
+    if (associated(ADp%du_dt_str)) then
+      do i=is,ie ; if (abs(ADp%du_dt_str(I,j,nz)) < accel_underflow) ADp%du_dt_str(I,j,nz) = 0.0 ; enddo
+      do k=nz-1,1,-1 ; do I=Isq,Ieq ; if (do_i(I)) then
+        ADp%du_dt_str(I,j,k) = ADp%du_dt_str(I,j,k) + c1(I,k+1) * ADp%du_dt_str(I,j,k+1)
+        if (abs(ADp%du_dt_str(I,j,k)) < accel_underflow) ADp%du_dt_str(I,j,k) = 0.0
+      endif ; enddo ; enddo
+    endif
+
     if (associated(ADp%du_dt_visc)) then ; do k=1,nz ; do I=Isq,Ieq
       ADp%du_dt_visc(I,j,k) = (u(I,j,k) - ADp%du_dt_visc(I,j,k))*Idt
+      if (abs(ADp%du_dt_visc(I,j,k)) < accel_underflow) ADp%du_dt_visc(I,j,k) = 0.0
     enddo ; enddo ; endif
 
     if (associated(visc%taux_shelf)) then ; do I=Isq,Ieq
@@ -347,7 +375,7 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
 
     ! When mixing down Eulerian current + Stokes drift subtract after calling solver
     if (DoStokesMixing) then ; do k=1,nz ; do I=Isq,Ieq
-      if (do_i(I)) u(I,j,k) = u(I,j,k) - US%m_s_to_L_T*Waves%Us_x(I,j,k)
+      if (do_i(I)) u(I,j,k) = u(I,j,k) - Waves%Us_x(I,j,k)
     enddo ; enddo ; endif
 
   enddo ! end u-component j loop
@@ -362,16 +390,20 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
 
     ! When mixing down Eulerian current + Stokes drift add before calling solver
     if (DoStokesMixing) then ; do k=1,nz ; do i=is,ie
-      if (do_i(i)) v(i,j,k) = v(i,j,k) + US%m_s_to_L_T*Waves%Us_y(i,j,k)
+      if (do_i(i)) v(i,j,k) = v(i,j,k) + Waves%Us_y(i,j,k)
     enddo ; enddo ; endif
 
     if (associated(ADp%dv_dt_visc)) then ; do k=1,nz ; do i=is,ie
       ADp%dv_dt_visc(i,J,k) = v(i,J,k)
     enddo ; enddo ; endif
 
-!   One option is to have the wind stress applied as a body force
-! over the topmost Hmix fluid.  If DIRECT_STRESS is not defined,
-! the wind stress is applied as a stress boundary condition.
+    if (associated(ADp%dv_dt_str)) then ; do k=1,nz ; do i=is,ie
+      ADp%dv_dt_str(i,J,k) = 0.0
+    enddo ; enddo ; endif
+
+    !   One option is to have the wind stress applied as a body force
+    ! over the topmost Hmix fluid.  If DIRECT_STRESS is not defined,
+    ! the wind stress is applied as a stress boundary condition.
     if (CS%direct_stress) then
       do i=is,ie ; if (do_i(i)) then
         surface_stress(i) = 0.0
@@ -381,6 +413,7 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
           h_a = 0.5 * (h(i,J,k) + h(i,J+1,k)) + h_neglect
           hfr = 1.0 ; if ((zDS+h_a) > Hmix) hfr = (Hmix - zDS) / h_a
           v(i,J,k) = v(i,J,k) + I_Hmix * hfr * stress
+          if (associated(ADp%dv_dt_str)) ADp%dv_dt_str(i,J,k) = (I_Hmix * hfr * stress) * Idt
           zDS = zDS + h_a ; if (zDS >= Hmix) exit
         enddo
       endif ; enddo ! end of i loop
@@ -397,6 +430,8 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
       b1(i) = 1.0 / (b_denom_1 + dt_Z_to_H*CS%a_v(i,J,2))
       d1(i) = b_denom_1 * b1(i)
       v(i,J,1) = b1(i) * (CS%h_v(i,J,1) * v(i,J,1) + surface_stress(i))
+      if (associated(ADp%dv_dt_str)) &
+        ADp%dv_dt_str(i,J,1) = b1(i) * (CS%h_v(i,J,1) * ADp%dv_dt_str(i,J,1) + surface_stress(i)*Idt)
     endif ; enddo
     do k=2,nz ; do i=is,ie ; if (do_i(i)) then
       c1(i,k) = dt_Z_to_H * CS%a_v(i,J,K) * b1(i)
@@ -404,13 +439,25 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
       b1(i) = 1.0 / (b_denom_1 + dt_Z_to_H * CS%a_v(i,J,K+1))
       d1(i) = b_denom_1 * b1(i)
       v(i,J,k) = (CS%h_v(i,J,k) * v(i,J,k) + dt_Z_to_H * CS%a_v(i,J,K) * v(i,J,k-1)) * b1(i)
+      if (associated(ADp%dv_dt_str)) &
+        ADp%dv_dt_str(i,J,k) = (CS%h_v(i,J,k) * ADp%dv_dt_str(i,J,k) + &
+                                dt_Z_to_H * CS%a_v(i,J,K) * ADp%dv_dt_str(i,J,k-1)) * b1(i)
     endif ; enddo ; enddo
     do k=nz-1,1,-1 ; do i=is,ie ; if (do_i(i)) then
       v(i,J,k) = v(i,J,k) + c1(i,k+1) * v(i,J,k+1)
     endif ; enddo ; enddo ! i and k loops
 
+    if (associated(ADp%dv_dt_str)) then
+      do i=is,ie ; if (abs(ADp%dv_dt_str(i,J,nz)) < accel_underflow) ADp%dv_dt_str(i,J,nz) = 0.0 ; enddo
+      do k=nz-1,1,-1 ; do i=is,ie ; if (do_i(i)) then
+        ADp%dv_dt_str(i,J,k) = ADp%dv_dt_str(i,J,k) + c1(i,k+1) * ADp%dv_dt_str(i,J,k+1)
+        if (abs(ADp%dv_dt_str(i,J,k)) < accel_underflow) ADp%dv_dt_str(i,J,k) = 0.0
+      endif ; enddo ; enddo
+    endif
+
     if (associated(ADp%dv_dt_visc)) then ; do k=1,nz ; do i=is,ie
       ADp%dv_dt_visc(i,J,k) = (v(i,J,k) - ADp%dv_dt_visc(i,J,k))*Idt
+      if (abs(ADp%dv_dt_visc(i,J,k)) < accel_underflow) ADp%dv_dt_visc(i,J,k) = 0.0
     enddo ; enddo ; endif
 
     if (associated(visc%tauy_shelf)) then ; do i=is,ie
@@ -428,7 +475,7 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
 
     ! When mixing down Eulerian current + Stokes drift subtract after calling solver
     if (DoStokesMixing) then ; do k=1,nz ; do i=is,ie
-      if (do_i(i)) v(i,J,k) = v(i,J,k) - US%m_s_to_L_T*Waves%Us_y(i,J,k)
+      if (do_i(i)) v(i,J,k) = v(i,J,k) - Waves%Us_y(i,J,k)
     enddo ; enddo ; endif
 
   enddo ! end of v-component J loop
@@ -454,7 +501,7 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
     enddo
   endif
 
-! Offer diagnostic fields for averaging.
+  ! Offer diagnostic fields for averaging.
   if (CS%id_du_dt_visc > 0) &
     call post_data(CS%id_du_dt_visc, ADp%du_dt_visc, CS%diag)
   if (CS%id_dv_dt_visc > 0) &
@@ -463,6 +510,10 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
     call post_data(CS%id_taux_bot, taux_bot, CS%diag)
   if (present(tauy_bot) .and. (CS%id_tauy_bot > 0)) &
     call post_data(CS%id_tauy_bot, tauy_bot, CS%diag)
+  if (CS%id_du_dt_str > 0) &
+    call post_data(CS%id_du_dt_str, ADp%du_dt_str, CS%diag)
+  if (CS%id_dv_dt_str > 0) &
+    call post_data(CS%id_dv_dt_str, ADp%dv_dt_str, CS%diag)
 
   ! Diagnostics for terms multiplied by fractional thicknesses
 
@@ -499,12 +550,30 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
     deallocate(hf_dv_dt_visc_2d)
   endif
 
+  if (CS%id_h_du_dt_visc > 0) then
+    allocate(h_du_dt_visc(G%IsdB:G%IedB,G%jsd:G%jed,GV%ke))
+    h_du_dt_visc(:,:,:) = 0.0
+    do k=1,nz ; do j=js,je ; do I=Isq,Ieq
+      h_du_dt_visc(I,j,k) = ADp%du_dt_visc(I,j,k) * ADp%diag_hu(I,j,k)
+    enddo ; enddo ; enddo
+    call post_data(CS%id_h_du_dt_visc, h_du_dt_visc, CS%diag)
+    deallocate(h_du_dt_visc)
+  endif
+  if (CS%id_h_dv_dt_visc > 0) then
+    allocate(h_dv_dt_visc(G%isd:G%ied,G%JsdB:G%JedB,GV%ke))
+    h_dv_dt_visc(:,:,:) = 0.0
+    do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
+      h_dv_dt_visc(i,J,k) = ADp%dv_dt_visc(i,J,k) * ADp%diag_hv(i,J,k)
+    enddo ; enddo ; enddo
+    call post_data(CS%id_h_dv_dt_visc, h_dv_dt_visc, CS%diag)
+    deallocate(h_dv_dt_visc)
+  endif
+
 end subroutine vertvisc
 
-!> Calculate the fraction of momentum originally in a layer that remains
-!! after a time-step of viscosity, and the fraction of a time-step's
-!! worth of barotropic acceleration that a layer experiences after
-!! viscosity is applied.
+!> Calculate the fraction of momentum originally in a layer that remains in the water column
+!! after a time-step of viscosity, equivalently the fraction of a time-step's worth of
+!! barotropic acceleration that a layer experiences after viscosity is applied.
 subroutine vertvisc_remnant(visc, visc_rem_u, visc_rem_v, dt, G, GV, US, CS)
   type(ocean_grid_type), intent(in)   :: G    !< Ocean grid structure
   type(verticalGrid_type), intent(in) :: GV   !< Ocean vertical grid structure
@@ -523,10 +592,10 @@ subroutine vertvisc_remnant(visc, visc_rem_u, visc_rem_v, dt, G, GV, US, CS)
 
   ! Local variables
 
-  real :: b1(SZIB_(G))          ! A variable used by the tridiagonal solver [H-1 ~> m-1 or m2 kg-1].
-  real :: c1(SZIB_(G),SZK_(G))  ! A variable used by the tridiagonal solver [nondim].
-  real :: d1(SZIB_(G))          ! d1=1-c1 is used by the tridiagonal solver [nondim].
-  real :: Ray(SZIB_(G),SZK_(G)) ! Ray is the Rayleigh-drag velocity [Z T-1 ~> m s-1].
+  real :: b1(SZIB_(G))           ! A variable used by the tridiagonal solver [H-1 ~> m-1 or m2 kg-1].
+  real :: c1(SZIB_(G),SZK_(GV))  ! A variable used by the tridiagonal solver [nondim].
+  real :: d1(SZIB_(G))           ! d1=1-c1 is used by the tridiagonal solver [nondim].
+  real :: Ray(SZIB_(G),SZK_(GV)) ! Ray is the Rayleigh-drag velocity [Z T-1 ~> m s-1].
   real :: b_denom_1   ! The first term in the denominator of b1 [H ~> m or kg m-2].
   real :: dt_Z_to_H        ! The time step times the conversion from Z to the
                            ! units of thickness [T H Z-1 ~> s or s kg m-3].
@@ -534,7 +603,7 @@ subroutine vertvisc_remnant(visc, visc_rem_u, visc_rem_v, dt, G, GV, US, CS)
 
   integer :: i, j, k, is, ie, Isq, Ieq, Jsq, Jeq, nz
   is = G%isc ; ie = G%iec
-  Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB ; nz = G%ke
+  Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB ; nz = GV%ke
 
   if (.not.associated(CS)) call MOM_error(FATAL,"MOM_vert_friction(visc): "// &
          "Module must be initialized before it is used.")
@@ -543,10 +612,8 @@ subroutine vertvisc_remnant(visc, visc_rem_u, visc_rem_v, dt, G, GV, US, CS)
 
   do k=1,nz ; do i=Isq,Ieq ; Ray(i,k) = 0.0 ; enddo ; enddo
 
-  ! Find the zonal viscous using a modification of a standard tridagonal solver.
-!$OMP parallel do default(none) shared(G,Isq,Ieq,CS,nz,visc,dt_Z_to_H,visc_rem_u) &
-!$OMP                     firstprivate(Ray)                                       &
-!$OMP                          private(do_i,b_denom_1,b1,d1,c1)
+  ! Find the zonal viscous remnant using a modification of a standard tridagonal solver.
+  !$OMP parallel do default(shared) firstprivate(Ray) private(do_i,b_denom_1,b1,d1,c1)
   do j=G%jsc,G%jec
     do I=Isq,Ieq ; do_i(I) = (G%mask2dCu(I,j) > 0) ; enddo
 
@@ -574,10 +641,8 @@ subroutine vertvisc_remnant(visc, visc_rem_u, visc_rem_v, dt, G, GV, US, CS)
 
   enddo ! end u-component j loop
 
-  ! Now find the meridional viscous using a modification.
-!$OMP parallel do default(none) shared(Jsq,Jeq,is,ie,G,CS,visc,dt_Z_to_H,visc_rem_v,nz) &
-!$OMP                     firstprivate(Ray)                                             &
-!$OMP                          private(do_i,b_denom_1,b1,d1,c1)
+  ! Now find the meridional viscous remnant using the robust tridiagonal solver.
+  !$OMP parallel do default(shared) firstprivate(Ray) private(do_i,b_denom_1,b1,d1,c1)
   do J=Jsq,Jeq
     do i=is,ie ; do_i(i) = (G%mask2dCv(i,J) > 0) ; enddo
 
@@ -636,14 +701,14 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, US, CS, OBC)
 
   ! Local variables
 
-  real, dimension(SZIB_(G),SZK_(G)) :: &
+  real, dimension(SZIB_(G),SZK_(GV)) :: &
     h_harm, &   ! Harmonic mean of the thicknesses around a velocity grid point,
                 ! given by 2*(h+ * h-)/(h+ + h-) [H ~> m or kg m-2].
     h_arith, &  ! The arithmetic mean thickness [H ~> m or kg m-2].
     h_delta, &  ! The lateral difference of thickness [H ~> m or kg m-2].
     hvel, &     ! hvel is the thickness used at a velocity grid point [H ~> m or kg m-2].
     hvel_shelf  ! The equivalent of hvel under shelves [H ~> m or kg m-2].
-  real, dimension(SZIB_(G),SZK_(G)+1) :: &
+  real, dimension(SZIB_(G),SZK_(GV)+1) :: &
     a_cpl, &    ! The drag coefficients across interfaces [Z T-1 ~> m s-1].  a_cpl times
                 ! the velocity difference gives the stress across an interface.
     a_shelf, &  ! The drag coefficients across interfaces in water columns under
@@ -690,7 +755,7 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, US, CS, OBC)
              !  finding z_clear.
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
-  Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB ; nz = G%ke
+  Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB ; nz = GV%ke
 
   if (.not.associated(CS)) call MOM_error(FATAL,"MOM_vert_friction(coef): "// &
          "Module must be initialized before it is used.")
@@ -701,11 +766,11 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, US, CS, OBC)
   I_valBL = 0.0 ; if (CS%harm_BL_val > 0.0) I_valBL = 1.0 / CS%harm_BL_val
 
   if (CS%id_Kv_u > 0) then
-    allocate(Kv_u(G%IsdB:G%IedB,G%jsd:G%jed,G%ke)) ; Kv_u(:,:,:) = 0.0
+    allocate(Kv_u(G%IsdB:G%IedB,G%jsd:G%jed,GV%ke)) ; Kv_u(:,:,:) = 0.0
   endif
 
   if (CS%id_Kv_v > 0) then
-    allocate(Kv_v(G%isd:G%ied,G%JsdB:G%JedB,G%ke)) ; Kv_v(:,:,:) = 0.0
+    allocate(Kv_v(G%isd:G%ied,G%JsdB:G%JedB,GV%ke)) ; Kv_v(:,:,:) = 0.0
   endif
 
   if (CS%debug .or. (CS%id_hML_u > 0)) then
@@ -822,9 +887,7 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, US, CS, OBC)
       enddo
       if (do_any_shelf) then
         if (CS%harmonic_visc) then
-          call find_coupling_coef(a_shelf, hvel, do_i_shelf, h_harm, bbl_thick, &
-                                  kv_bbl, z_i, h_ml, dt, j, G, GV, US, CS, &
-                                  visc, forces, work_on_u=.true., OBC=OBC, shelf=.true.)
+          do k=1,nz ; do I=Isq,Ieq ; hvel_shelf(I,k) = hvel(I,k) ; enddo ; enddo
         else  ! Find upwind-biased thickness near the surface.
           ! Perhaps this needs to be done more carefully, via find_eta.
           do I=Isq,Ieq ; if (do_i_shelf(I)) then
@@ -850,10 +913,10 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, US, CS, OBC)
               endif
             endif ; enddo
           enddo
-          call find_coupling_coef(a_shelf, hvel_shelf, do_i_shelf, h_harm, &
-                                  bbl_thick, kv_bbl, z_i, h_ml, dt, j, G, GV, US, CS, &
-                                  visc, forces, work_on_u=.true., OBC=OBC, shelf=.true.)
         endif
+        call find_coupling_coef(a_shelf, hvel_shelf, do_i_shelf, h_harm, bbl_thick, &
+                                kv_bbl, z_i, h_ml, dt, j, G, GV, US, CS, visc, forces, &
+                                work_on_u=.true., OBC=OBC, shelf=.true.)
         do I=Isq,Ieq ; if (do_i_shelf(I)) CS%a1_shelf_u(I,j) = a_shelf(I,1) ; enddo
       endif
     endif
@@ -971,7 +1034,7 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, US, CS, OBC)
             botfn = 1.0 / (1.0 + 0.09*z2*z2*z2*z2*z2*z2)
             hvel(i,k) = (1.0-botfn)*h_arith(i,k) + botfn*h_harm(i,k)
           endif
-       endif
+        endif
 
       endif ; enddo ; enddo ! i & k loops
     endif
@@ -979,7 +1042,7 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, US, CS, OBC)
     call find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i, h_ml, &
                             dt, j, G, GV, US, CS, visc, forces, work_on_u=.false., OBC=OBC)
     if ( allocated(hML_v)) then
-       do i=is,ie ; if (do_i(i)) then ; hML_v(i,J) = h_ml(i) ; endif ; enddo
+      do i=is,ie ; if (do_i(i)) then ; hML_v(i,J) = h_ml(i) ; endif ; enddo
     endif
     do_any_shelf = .false.
     if (associated(forces%frac_shelf_v)) then
@@ -990,9 +1053,7 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, US, CS, OBC)
       enddo
       if (do_any_shelf) then
         if (CS%harmonic_visc) then
-          call find_coupling_coef(a_shelf, hvel, do_i_shelf, h_harm, bbl_thick, &
-                                  kv_bbl, z_i, h_ml, dt, j, G, GV, US, CS, visc, &
-                                  forces, work_on_u=.false., OBC=OBC, shelf=.true.)
+          do k=1,nz ; do i=is,ie ; hvel_shelf(i,k) = hvel(i,k) ; enddo ; enddo
         else  ! Find upwind-biased thickness near the surface.
           ! Perhaps this needs to be done more carefully, via find_eta.
           do i=is,ie ; if (do_i_shelf(i)) then
@@ -1018,10 +1079,10 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, US, CS, OBC)
              endif
             endif ; enddo
           enddo
-          call find_coupling_coef(a_shelf, hvel_shelf, do_i_shelf, h_harm, &
-                                  bbl_thick, kv_bbl, z_i, h_ml, dt, j, G, GV, US, CS, &
-                                  visc, forces, work_on_u=.false., OBC=OBC, shelf=.true.)
         endif
+        call find_coupling_coef(a_shelf, hvel_shelf, do_i_shelf, h_harm, bbl_thick, &
+                                kv_bbl, z_i, h_ml, dt, j, G, GV, US, CS, visc, forces, &
+                                work_on_u=.false., OBC=OBC, shelf=.true.)
         do i=is,ie ; if (do_i_shelf(i)) CS%a1_shelf_v(i,J) = a_shelf(i,1) ; enddo
       endif
     endif
@@ -1155,7 +1216,7 @@ subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i,
 
   if (work_on_u) then ; is = G%IscB ; ie = G%IecB
   else ; is = G%isc ; ie = G%iec ; endif
-  nz = G%ke
+  nz = GV%ke
   h_neglect = GV%H_subroundoff
 
   if (CS%answers_2018) then
@@ -1390,11 +1451,11 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, forces, visc, dt, G, GV, US, CS
   real :: H_report         ! A thickness below which not to report truncations.
   real :: dt_Rho0          ! The timestep divided by the Boussinesq density [m2 T2 s-1 L-1 Z-1 R-1 ~> s m3 kg-1].
   real :: vel_report(SZIB_(G),SZJB_(G))   ! The velocity to report [L T-1 ~> m s-1]
-  real :: u_old(SZIB_(G),SZJ_(G),SZK_(G)) ! The previous u-velocity [L T-1 ~> m s-1]
-  real :: v_old(SZI_(G),SZJB_(G),SZK_(G)) ! The previous v-velocity [L T-1 ~> m s-1]
+  real :: u_old(SZIB_(G),SZJ_(G),SZK_(GV)) ! The previous u-velocity [L T-1 ~> m s-1]
+  real :: v_old(SZI_(G),SZJB_(G),SZK_(GV)) ! The previous v-velocity [L T-1 ~> m s-1]
   logical :: trunc_any, dowrite(SZIB_(G),SZJB_(G))
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
 
   maxvel = CS%maxvel
@@ -1479,7 +1540,7 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, forces, visc, dt, G, GV, US, CS
   endif
 
   if (len_trim(CS%u_trunc_file) > 0) then
-    do j=js,je; do I=Isq,Ieq ; if (dowrite(I,j)) then
+    do j=js,je ; do I=Isq,Ieq ; if (dowrite(I,j)) then
 !   Here the diagnostic reporting subroutines are called if
 ! unphysically large values were found.
       call write_u_accel(I, j, u_old, h, ADp, CDp, dt, G, GV, US, CS%PointAccel_CSp, &
@@ -1522,7 +1583,7 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, forces, visc, dt, G, GV, US, CS
       endif ; enddo
 
       if (trunc_any) then ; if (CS%CFL_based_trunc) then
-        do k=1,nz; do i=is,ie
+        do k=1,nz ; do i=is,ie
           if ((v(i,J,k) * (dt * G%dx_Cv(i,J))) * G%IareaT(i,j+1) < -CS%CFL_trunc) then
             v(i,J,k) = (-0.9*CS%CFL_trunc) * (G%areaT(i,j+1) / (dt * G%dx_Cv(i,J)))
             if (h(i,j,k) + h(i,j+1,k) > H_report) CS%ntrunc = CS%ntrunc + 1
@@ -1564,7 +1625,7 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, forces, visc, dt, G, GV, US, CS
   endif
 
   if (len_trim(CS%v_trunc_file) > 0) then
-    do J=Jsq,Jeq; do i=is,ie ; if (dowrite(i,J)) then
+    do J=Jsq,Jeq ; do i=is,ie ; if (dowrite(i,J)) then
 !   Here the diagnostic reporting subroutines are called if
 ! unphysically large values were found.
       call write_v_accel(i, J, v_old, h, ADp, CDp, dt, G, GV, US, CS%PointAccel_CSp, &
@@ -1614,7 +1675,7 @@ subroutine vertvisc_init(MIS, Time, G, GV, US, param_file, diag, ADp, dirs, &
   if (GV%Boussinesq) then; thickness_units = "m"
   else; thickness_units = "kg m-2"; endif
 
-  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nz = G%ke
+  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nz = GV%ke
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
   CS%diag => diag ; CS%ntrunc => ntrunc ; ntrunc = 0
@@ -1762,53 +1823,62 @@ subroutine vertvisc_init(MIS, Time, G, GV, US, param_file, diag, ADp, dirs, &
   ALLOC_(CS%h_v(isd:ied,JsdB:JedB,nz))   ; CS%h_v(:,:,:) = 0.0
 
   CS%id_Kv_slow = register_diag_field('ocean_model', 'Kv_slow', diag%axesTi, Time, &
-     'Slow varying vertical viscosity', 'm2 s-1', conversion=US%Z2_T_to_m2_s)
+      'Slow varying vertical viscosity', 'm2 s-1', conversion=US%Z2_T_to_m2_s)
 
   CS%id_Kv_u = register_diag_field('ocean_model', 'Kv_u', diag%axesCuL, Time, &
-     'Total vertical viscosity at u-points', 'm2 s-1', conversion=US%Z2_T_to_m2_s)
+      'Total vertical viscosity at u-points', 'm2 s-1', conversion=US%Z2_T_to_m2_s)
 
   CS%id_Kv_v = register_diag_field('ocean_model', 'Kv_v', diag%axesCvL, Time, &
-     'Total vertical viscosity at v-points', 'm2 s-1', conversion=US%Z2_T_to_m2_s)
+      'Total vertical viscosity at v-points', 'm2 s-1', conversion=US%Z2_T_to_m2_s)
 
   CS%id_au_vv = register_diag_field('ocean_model', 'au_visc', diag%axesCui, Time, &
-     'Zonal Viscous Vertical Coupling Coefficient', 'm s-1', conversion=US%Z_to_m*US%s_to_T)
+      'Zonal Viscous Vertical Coupling Coefficient', 'm s-1', conversion=US%Z_to_m*US%s_to_T)
 
   CS%id_av_vv = register_diag_field('ocean_model', 'av_visc', diag%axesCvi, Time, &
-     'Meridional Viscous Vertical Coupling Coefficient', 'm s-1', conversion=US%Z_to_m*US%s_to_T)
+      'Meridional Viscous Vertical Coupling Coefficient', 'm s-1', conversion=US%Z_to_m*US%s_to_T)
 
   CS%id_h_u = register_diag_field('ocean_model', 'Hu_visc', diag%axesCuL, Time, &
-     'Thickness at Zonal Velocity Points for Viscosity', thickness_units, &
-     conversion=GV%H_to_m)
+      'Thickness at Zonal Velocity Points for Viscosity', &
+      thickness_units, conversion=GV%H_to_MKS)
+      ! Alternately, to always give this variable in 'm' use the following line instead:
+      ! 'm', conversion=GV%H_to_m)
 
   CS%id_h_v = register_diag_field('ocean_model', 'Hv_visc', diag%axesCvL, Time, &
-     'Thickness at Meridional Velocity Points for Viscosity', thickness_units, &
-     conversion=GV%H_to_m)
+      'Thickness at Meridional Velocity Points for Viscosity', &
+      thickness_units, conversion=GV%H_to_MKS)
 
   CS%id_hML_u = register_diag_field('ocean_model', 'HMLu_visc', diag%axesCu1, Time, &
-     'Mixed Layer Thickness at Zonal Velocity Points for Viscosity', thickness_units, &
-     conversion=GV%H_to_m)
+      'Mixed Layer Thickness at Zonal Velocity Points for Viscosity', &
+      thickness_units, conversion=GV%H_to_MKS)
 
   CS%id_hML_v = register_diag_field('ocean_model', 'HMLv_visc', diag%axesCv1, Time, &
-     'Mixed Layer Thickness at Meridional Velocity Points for Viscosity', thickness_units, &
-     conversion=GV%H_to_m)
+      'Mixed Layer Thickness at Meridional Velocity Points for Viscosity', &
+      thickness_units, conversion=GV%H_to_MKS)
 
-  CS%id_du_dt_visc = register_diag_field('ocean_model', 'du_dt_visc', diag%axesCuL, &
-     Time, 'Zonal Acceleration from Vertical Viscosity', 'm s-2', conversion=US%L_T2_to_m_s2)
+  CS%id_du_dt_visc = register_diag_field('ocean_model', 'du_dt_visc', diag%axesCuL, Time, &
+      'Zonal Acceleration from Vertical Viscosity', 'm s-2', conversion=US%L_T2_to_m_s2)
   if (CS%id_du_dt_visc > 0) call safe_alloc_ptr(ADp%du_dt_visc,IsdB,IedB,jsd,jed,nz)
-  CS%id_dv_dt_visc = register_diag_field('ocean_model', 'dv_dt_visc', diag%axesCvL, &
-     Time, 'Meridional Acceleration from Vertical Viscosity', 'm s-2', conversion=US%L_T2_to_m_s2)
+  CS%id_dv_dt_visc = register_diag_field('ocean_model', 'dv_dt_visc', diag%axesCvL, Time, &
+      'Meridional Acceleration from Vertical Viscosity', 'm s-2', conversion=US%L_T2_to_m_s2)
   if (CS%id_dv_dt_visc > 0) call safe_alloc_ptr(ADp%dv_dt_visc,isd,ied,JsdB,JedB,nz)
 
+  CS%id_du_dt_str = register_diag_field('ocean_model', 'du_dt_str', diag%axesCuL, Time, &
+      'Zonal Acceleration from Surface Wind Stresses', 'm s-2', conversion=US%L_T2_to_m_s2)
+  if (CS%id_du_dt_str > 0) call safe_alloc_ptr(ADp%du_dt_str,IsdB,IedB,jsd,jed,nz)
+  CS%id_dv_dt_str = register_diag_field('ocean_model', 'dv_dt_str', diag%axesCvL, Time, &
+      'Meridional Acceleration from Surface Wind Stresses', 'm s-2', conversion=US%L_T2_to_m_s2)
+  if (CS%id_dv_dt_str > 0) call safe_alloc_ptr(ADp%dv_dt_str,isd,ied,JsdB,JedB,nz)
+
   CS%id_taux_bot = register_diag_field('ocean_model', 'taux_bot', diag%axesCu1, &
-     Time, 'Zonal Bottom Stress from Ocean to Earth', 'Pa', &
-     conversion=US%RZ_to_kg_m2*US%L_T2_to_m_s2)
+      Time, 'Zonal Bottom Stress from Ocean to Earth', &
+      'Pa', conversion=US%RZ_to_kg_m2*US%L_T2_to_m_s2)
   CS%id_tauy_bot = register_diag_field('ocean_model', 'tauy_bot', diag%axesCv1, &
-     Time, 'Meridional Bottom Stress from Ocean to Earth', 'Pa', &
-     conversion=US%RZ_to_kg_m2*US%L_T2_to_m_s2)
+      Time, 'Meridional Bottom Stress from Ocean to Earth', &
+      'Pa', conversion=US%RZ_to_kg_m2*US%L_T2_to_m_s2)
 
   !CS%id_hf_du_dt_visc = register_diag_field('ocean_model', 'hf_du_dt_visc', diag%axesCuL, Time, &
-  !    'Fractional Thickness-weighted Zonal Acceleration from Vertical Viscosity', 'm s-2', &
-  !    v_extensive=.true., conversion=US%L_T2_to_m_s2)
+  !    'Fractional Thickness-weighted Zonal Acceleration from Vertical Viscosity', &
+  !    'm s-2', v_extensive=.true., conversion=US%L_T2_to_m_s2)
   !if (CS%id_hf_du_dt_visc > 0) then
   !  call safe_alloc_ptr(CS%hf_du_dt_visc,IsdB,IedB,jsd,jed,nz)
   !  call safe_alloc_ptr(ADp%du_dt_visc,IsdB,IedB,jsd,jed,nz)
@@ -1816,28 +1886,44 @@ subroutine vertvisc_init(MIS, Time, G, GV, US, param_file, diag, ADp, dirs, &
   !endif
 
   !CS%id_hf_dv_dt_visc = register_diag_field('ocean_model', 'hf_dv_dt_visc', diag%axesCvL, Time, &
-  !    'Fractional Thickness-weighted Meridional Acceleration from Vertical Viscosity', 'm s-2', &
-  !    v_extensive=.true., conversion=US%L_T2_to_m_s2)
+  !    'Fractional Thickness-weighted Meridional Acceleration from Vertical Viscosity', &
+  !    'm s-2', v_extensive=.true., conversion=US%L_T2_to_m_s2)
   !if (CS%id_hf_dv_dt_visc > 0) then
   !  call safe_alloc_ptr(CS%hf_dv_dt_visc,isd,ied,JsdB,JedB,nz)
   !  call safe_alloc_ptr(ADp%dv_dt_visc,isd,ied,JsdB,JedB,nz)
-  !  call safe_alloc_ptr(ADp%diag_hfrac_v,isd,ied,Jsd,JedB,nz)
+  !  call safe_alloc_ptr(ADp%diag_hfrac_v,isd,ied,JsdB,JedB,nz)
   !endif
 
   CS%id_hf_du_dt_visc_2d = register_diag_field('ocean_model', 'hf_du_dt_visc_2d', diag%axesCu1, Time, &
-      'Depth-sum Fractional Thickness-weighted Zonal Acceleration from Vertical Viscosity', 'm s-2', &
-      conversion=US%L_T2_to_m_s2)
+      'Depth-sum Fractional Thickness-weighted Zonal Acceleration from Vertical Viscosity', &
+      'm s-2', conversion=US%L_T2_to_m_s2)
   if (CS%id_hf_du_dt_visc_2d > 0) then
     call safe_alloc_ptr(ADp%du_dt_visc,IsdB,IedB,jsd,jed,nz)
     call safe_alloc_ptr(ADp%diag_hfrac_u,IsdB,IedB,jsd,jed,nz)
   endif
 
   CS%id_hf_dv_dt_visc_2d = register_diag_field('ocean_model', 'hf_dv_dt_visc_2d', diag%axesCv1, Time, &
-      'Depth-sum Fractional Thickness-weighted Meridional Acceleration from Vertical Viscosity', 'm s-2', &
-      conversion=US%L_T2_to_m_s2)
+      'Depth-sum Fractional Thickness-weighted Meridional Acceleration from Vertical Viscosity', &
+      'm s-2', conversion=US%L_T2_to_m_s2)
   if (CS%id_hf_dv_dt_visc_2d > 0) then
     call safe_alloc_ptr(ADp%dv_dt_visc,isd,ied,JsdB,JedB,nz)
-    call safe_alloc_ptr(ADp%diag_hfrac_v,isd,ied,Jsd,JedB,nz)
+    call safe_alloc_ptr(ADp%diag_hfrac_v,isd,ied,JsdB,JedB,nz)
+  endif
+
+  CS%id_h_du_dt_visc = register_diag_field('ocean_model', 'h_du_dt_visc', diag%axesCuL, Time, &
+      'Thickness Multiplied Zonal Acceleration from Horizontal Viscosity', 'm2 s-2', &
+      conversion=GV%H_to_m*US%L_T2_to_m_s2)
+  if (CS%id_h_du_dt_visc > 0) then
+    call safe_alloc_ptr(ADp%du_dt_visc,IsdB,IedB,jsd,jed,nz)
+    call safe_alloc_ptr(ADp%diag_hu,IsdB,IedB,jsd,jed,nz)
+  endif
+
+  CS%id_h_dv_dt_visc = register_diag_field('ocean_model', 'h_dv_dt_visc', diag%axesCvL, Time, &
+      'Thickness Multiplied Meridional Acceleration from Horizontal Viscosity', 'm2 s-2', &
+      conversion=GV%H_to_m*US%L_T2_to_m_s2)
+  if (CS%id_h_dv_dt_visc > 0) then
+    call safe_alloc_ptr(ADp%dv_dt_visc,isd,ied,JsdB,JedB,nz)
+    call safe_alloc_ptr(ADp%diag_hv,isd,ied,JsdB,JedB,nz)
   endif
 
   if ((len_trim(CS%u_trunc_file) > 0) .or. (len_trim(CS%v_trunc_file) > 0)) &
@@ -1851,7 +1937,7 @@ end subroutine vertvisc_init
 subroutine updateCFLtruncationValue(Time, CS, activate)
   type(time_type), target, intent(in)    :: Time     !< Current model time
   type(vertvisc_CS),       pointer       :: CS       !< Vertical viscosity control structure
-  logical, optional,       intent(in)    :: activate !< Specifiy whether to record the value of
+  logical, optional,       intent(in)    :: activate !< Specify whether to record the value of
                                                      !! Time as the beginning of the ramp period
 
   ! Local variables
@@ -1887,14 +1973,16 @@ end subroutine updateCFLtruncationValue
 
 !> Clean up and deallocate the vertical friction module
 subroutine vertvisc_end(CS)
-  type(vertvisc_CS), pointer :: CS !< Vertical viscosity control structure that
-                                   !! will be deallocated in this subroutine.
+  type(vertvisc_CS), intent(inout) :: CS  !< Vertical viscosity control structure that
+                                          !! will be deallocated in this subroutine.
+
+  if ((len_trim(CS%u_trunc_file) > 0) .or. (len_trim(CS%v_trunc_file) > 0)) &
+    deallocate(CS%PointAccel_CSp)
 
   DEALLOC_(CS%a_u) ; DEALLOC_(CS%h_u)
   DEALLOC_(CS%a_v) ; DEALLOC_(CS%h_v)
   if (associated(CS%a1_shelf_u)) deallocate(CS%a1_shelf_u)
   if (associated(CS%a1_shelf_v)) deallocate(CS%a1_shelf_v)
-  deallocate(CS)
 end subroutine vertvisc_end
 
 !> \namespace mom_vert_friction

@@ -1,5 +1,14 @@
 name: 'Build-.testing-prerequisites'
 description: 'Build pre-requisites for .testing including FMS and a symmetric MOM6 executable'
+inputs:
+  build_symmetric:
+    description: 'If true, will build the symmetric MOM6 executable'
+    required: false
+    default: 'true'
+  install_python:
+    description: 'If true, will install the local python env needed for .testing'
+    required: false
+    default: 'true'
 runs:
   using: 'composite'
   steps:
@@ -22,6 +31,7 @@ runs:
       shell: bash
       run: |
         echo "::group::Install linux packages"
+        sudo apt-get update
         sudo apt-get install netcdf-bin libnetcdf-dev libnetcdff-dev mpich libmpich-dev
         echo "::endgroup::"
 
@@ -50,7 +60,7 @@ runs:
       run: |
         echo "::group::Compile MOM6 in symmetric memory mode"
         cd .testing
-        make build/symmetric/MOM6 -j
+        test ${{ inputs.build_symmetric }} == true && make build/symmetric/MOM6 -j
         echo "::endgroup::"
 
     - name: Install local python venv for generating input data
@@ -58,7 +68,7 @@ runs:
       run: |
         echo "::group::Create local python env for input data generation"
         cd .testing
-        make work/local-env
+        test ${{ inputs.install_python }} == true && make work/local-env
         echo "::endgroup::"
 
     - name: Set flags

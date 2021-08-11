@@ -72,7 +72,7 @@ subroutine diapyc_energy_req_test(h_3d, dt, tv, G, GV, US, CS, Kd_int)
   real :: tmp1  ! A temporary array.
   integer :: i, j, k, is, ie, js, je, nz, itt
   logical :: may_print
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
   if (.not. associated(CS)) call MOM_error(FATAL, "diapyc_energy_req_test: "// &
          "Module must be initialized before it is used.")
@@ -260,7 +260,7 @@ subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, &
   integer :: k, nz, itt, max_itt, k_cent
   logical :: surface_BL, bottom_BL, central, halves, debug
   logical :: old_PE_calc
-  nz = G%ke
+  nz = GV%ke
   h_neglect = GV%H_subroundoff
 
   debug = .true.
@@ -1315,7 +1315,7 @@ subroutine diapyc_energy_req_init(Time, G, GV, US, param_file, diag, CS)
   CS%id_Kddt = register_diag_field('ocean_model', 'EnReqTest_Kddt', diag%axesZi, Time, &
                  "Implicit diffusive coupling coefficient", "m", conversion=GV%H_to_m)
   CS%id_Kd = register_diag_field('ocean_model', 'EnReqTest_Kd', diag%axesZi, Time, &
-                 "Diffusivity in test", "m2 s-1", conversion=US%Z_to_m**2)
+                 "Diffusivity in test", "m2 s-1", conversion=US%Z2_T_to_m2_s)
   CS%id_h   = register_diag_field('ocean_model', 'EnReqTest_h_lay', diag%axesZL, Time, &
                  "Test column layer thicknesses", "m", conversion=GV%H_to_m)
   CS%id_zInt = register_diag_field('ocean_model', 'EnReqTest_z_int', diag%axesZi, Time, &

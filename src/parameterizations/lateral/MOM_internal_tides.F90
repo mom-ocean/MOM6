@@ -7,6 +7,7 @@ module MOM_internal_tides
 
 use MOM_debugging,     only : is_NaN
 use MOM_diag_mediator, only : post_data, query_averaging_enabled, diag_axis_init
+use MOM_diag_mediator, only : disable_averaging, enable_averages
 use MOM_diag_mediator, only : register_diag_field, diag_ctrl, safe_alloc_ptr
 use MOM_diag_mediator, only : axes_grp, define_axes_group
 use MOM_domains, only       : AGRID, To_South, To_West, To_All
@@ -154,7 +155,7 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
   type(ocean_grid_type),            intent(inout) :: G  !< The ocean's grid structure.
   type(verticalGrid_type),          intent(in)    :: GV !< The ocean's vertical grid structure.
   type(unit_scale_type),            intent(in)    :: US !< A dimensional unit scaling type
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                                     intent(in)    :: h  !< Layer thicknesses [H ~> m or kg m-2]
   type(thermo_var_ptrs),            intent(in)    :: tv !< Pointer to thermodynamic variables
                                                         !! (needed for wave structure).
@@ -202,6 +203,8 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
   integer :: a, m, fr, i, j, is, ie, js, je, isd, ied, jsd, jed, nAngle, nzm
   integer :: id_g, jd_g         ! global (decomp-invar) indices (for debugging)
   type(group_pass_type), save :: pass_test, pass_En
+  type(time_type) :: time_end
+  logical:: avg_enabled
 
   if (.not.associated(CS)) return
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
@@ -497,6 +500,9 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
   enddo ; enddo
 
   ! Output diagnostics.************************************************************
+  avg_enabled = query_averaging_enabled(CS%diag, time_end=time_end)
+  call enable_averages(dt, time_end, CS%diag)
+
   if (query_averaging_enabled(CS%diag)) then
     ! Output two-dimensional diagnostistics
     if (CS%id_tot_En > 0)     call post_data(CS%id_tot_En, tot_En, CS%diag)
@@ -586,6 +592,8 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
     endif ; enddo ; enddo
 
   endif
+
+  call disable_averaging(CS%diag)
 
 end subroutine propagate_int_tide
 
@@ -1406,7 +1414,7 @@ subroutine propagate_x(En, speed_x, Cgx_av, dCgx, dt, G, US, Nangle, CS, LB)
   real, dimension(SZIB_(G)) :: &
     cg_p, cg_m, flux1, flux2
   !real, dimension(SZI_(G),SZJB_(G),Nangle) :: En_m, En_p
-  real, dimension(SZI_(G),SZJB_(G),Nangle) :: &
+  real, dimension(G%isd:G%ied,G%jsd:G%jed,Nangle) :: &
     Fdt_m, Fdt_p! Left and right energy fluxes [J]
   integer :: i, j, k, ish, ieh, jsh, jeh, a
 
@@ -1481,7 +1489,7 @@ subroutine propagate_y(En, speed_y, Cgy_av, dCgy, dt, G, US, Nangle, CS, LB)
   real, dimension(SZI_(G)) :: &
     cg_p, cg_m, flux1, flux2
   !real, dimension(SZI_(G),SZJB_(G),Nangle) :: En_m, En_p
-  real, dimension(SZI_(G),SZJB_(G),Nangle) :: &
+  real, dimension(G%isd:G%ied,G%jsd:G%jed,Nangle) :: &
     Fdt_m, Fdt_p! South and north energy fluxes [J]
   character(len=160) :: mesg  ! The text of an error message
   integer :: i, j, k, ish, ieh, jsh, jeh, a
@@ -1670,9 +1678,16 @@ subroutine reflect(En, NAngle, CS, G, LB)
     angle_i(a) = Angle_size * real(a - 1) ! for a=1 aligned with x-axis
   enddo
 
-  angle_c   = CS%refl_angle
-  part_refl = CS%refl_pref
-  ridge     = CS%refl_dbl
+  ! init local arrays
+  angle_c(:,:) = CS%nullangle
+  part_refl(:,:) = 0.
+  ridge(:,:) = .false.
+
+  do j=jsh,jeh ; do i=ish,ieh
+    angle_c(i,j)   = CS%refl_angle(i,j)
+    part_refl(i,j) = CS%refl_pref(i,j)
+    ridge(i,j)     = CS%refl_dbl(i,j)
+  enddo ; enddo
   En_reflected(:) = 0.0
 
   do j=jsh,jeh ; do i=ish,ieh
@@ -2334,7 +2349,7 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
           fail_if_missing=.true.)
   filename = trim(CS%inputdir) // trim(h2_file)
   call log_param(param_file, mdl, "INPUTDIR/H2_FILE", filename)
-  call MOM_read_data(filename, 'h2', h2, G%domain, timelevel=1, scale=US%m_to_Z)
+  call MOM_read_data(filename, 'h2', h2, G%domain, scale=US%m_to_Z)
   do j=G%jsc,G%jec ; do i=G%isc,G%iec
     ! Restrict rms topo to 10 percent of column depth.
     h2(i,j) = min(0.01*(G%bathyT(i,j))**2, h2(i,j))
@@ -2354,8 +2369,7 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
   allocate(CS%refl_angle(isd:ied,jsd:jed)) ; CS%refl_angle(:,:) = CS%nullangle
   if (file_exists(filename, G%domain)) then
     call log_param(param_file, mdl, "INPUTDIR/REFL_ANGLE_FILE", filename)
-    call MOM_read_data(filename, 'refl_angle', CS%refl_angle, &
-                       G%domain, timelevel=1)
+    call MOM_read_data(filename, 'refl_angle', CS%refl_angle, G%domain)
   else
     if (trim(refl_angle_file) /= '' ) call MOM_error(FATAL, &
                                                      "REFL_ANGLE_FILE: "//trim(filename)//" not found")
@@ -2374,7 +2388,7 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
   allocate(CS%refl_pref(isd:ied,jsd:jed)) ; CS%refl_pref(:,:) = 1.0
   if (file_exists(filename, G%domain)) then
     call log_param(param_file, mdl, "INPUTDIR/REFL_PREF_FILE", filename)
-    call MOM_read_data(filename, 'refl_pref', CS%refl_pref, G%domain, timelevel=1)
+    call MOM_read_data(filename, 'refl_pref', CS%refl_pref, G%domain)
   else
     if (trim(refl_pref_file) /= '' ) call MOM_error(FATAL, &
                                                     "REFL_PREF_FILE: "//trim(filename)//" not found")
@@ -2402,14 +2416,14 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
   allocate(ridge_temp(isd:ied,jsd:jed)) ; ridge_temp(:,:) = 0.0
   if (file_exists(filename, G%domain)) then
     call log_param(param_file, mdl, "INPUTDIR/REFL_DBL_FILE", filename)
-    call MOM_read_data(filename, 'refl_dbl', ridge_temp, G%domain, timelevel=1)
+    call MOM_read_data(filename, 'refl_dbl', ridge_temp, G%domain)
   else
     if (trim(refl_dbl_file) /= '' ) call MOM_error(FATAL, &
                                                    "REFL_DBL_FILE: "//trim(filename)//" not found")
   endif
   call pass_var(ridge_temp,G%domain)
   allocate(CS%refl_dbl(isd:ied,jsd:jed)) ; CS%refl_dbl(:,:) = .false.
-  do i=isd,ied; do j=jsd,jed
+  do i=isd,ied ; do j=jsd,jed
     if (ridge_temp(i,j) == 1) then; CS%refl_dbl(i,j) = .true.
     else ; CS%refl_dbl(i,j) = .false. ; endif
   enddo ; enddo
@@ -2423,9 +2437,9 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
   !filename = trim(CS%inputdir) // trim(land_mask_file)
   !call log_param(param_file, mdl, "INPUTDIR/LAND_MASK_FILE", filename)
   !G%mask2dCu(:,:) = 1 ; G%mask2dCv(:,:) = 1 ; G%mask2dT(:,:)  = 1
-  !call MOM_read_data(filename, 'land_mask', G%mask2dCu, G%domain, timelevel=1)
-  !call MOM_read_data(filename, 'land_mask', G%mask2dCv, G%domain, timelevel=1)
-  !call MOM_read_data(filename, 'land_mask', G%mask2dT, G%domain, timelevel=1)
+  !call MOM_read_data(filename, 'land_mask', G%mask2dCu, G%domain)
+  !call MOM_read_data(filename, 'land_mask', G%mask2dCv, G%domain)
+  !call MOM_read_data(filename, 'land_mask', G%mask2dT, G%domain)
   !call pass_vector(G%mask2dCu, G%mask2dCv, G%domain, To_All+Scalar_Pair, CGRID_NE)
   !call pass_var(G%mask2dT,G%domain)
 
@@ -2436,7 +2450,7 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
   !filename = trim(CS%inputdir) // trim(dy_Cu_file)
   !call log_param(param_file, mdl, "INPUTDIR/dy_Cu_FILE", filename)
   !G%dy_Cu(:,:) = 0.0
-  !call MOM_read_data(filename, 'dy_Cu', G%dy_Cu, G%domain, timelevel=1, scale=US%m_to_L)
+  !call MOM_read_data(filename, 'dy_Cu', G%dy_Cu, G%domain, scale=US%m_to_L)
 
   ! Read in prescribed partial north face blockages from file (if overwriting -BDM)
   !call get_param(param_file, mdl, "dx_Cv_FILE", dx_Cv_file, &
@@ -2445,7 +2459,7 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
   !filename = trim(CS%inputdir) // trim(dx_Cv_file)
   !call log_param(param_file, mdl, "INPUTDIR/dx_Cv_FILE", filename)
   !G%dx_Cv(:,:) = 0.0
-  !call MOM_read_data(filename, 'dx_Cv', G%dx_Cv, G%domain, timelevel=1, scale=US%m_to_L)
+  !call MOM_read_data(filename, 'dx_Cv', G%dx_Cv, G%domain, scale=US%m_to_L)
   !call pass_vector(G%dy_Cu, G%dx_Cv, G%domain, To_All+Scalar_Pair, CGRID_NE)
 
   ! Register maps of reflection parameters
@@ -2565,7 +2579,7 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
   enddo ; enddo
 
   ! Initialize wave_structure (not sure if this should be here - BDM)
-  call wave_structure_init(Time, G, param_file, diag, CS%wave_structure_CSp)
+  call wave_structure_init(Time, G, GV, param_file, diag, CS%wave_structure_CSp)
 
 end subroutine internal_tides_init
 

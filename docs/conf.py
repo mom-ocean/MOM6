@@ -140,6 +140,7 @@ extensions = [
         'sphinxcontrib.autodoc_doxygen',
         'sphinxfortran.fortran_domain',
 ]
+bibtex_bibfiles = ['ocean.bib', 'references.bib', 'zotero.bib']
 
 autosummary_generate = ['api/modules.rst', 'api/pages.rst']
 doxygen_xml = 'xml'
@@ -181,7 +182,7 @@ release = '0.2a3'
 
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
-exclude_patterns = ['_build', 'src', 'Thumbs.db', '.DS_Store']
+exclude_patterns = ['_build', 'details', 'src', 'Thumbs.db', '.DS_Store']
 
 # The reST default role (used for this markup: `text`) to use for all
 # documents.

@@ -13,6 +13,7 @@ use MOM_open_boundary,  only : OBC_segment_type, register_OBC
 use MOM_open_boundary,  only : OBC_registry_type
 use MOM_time_manager,   only : time_type, time_type_to_real
 use MOM_unit_scaling,   only : unit_scale_type
+use MOM_verticalGrid,   only : verticalGrid_type
 
 implicit none ; private
 
@@ -29,20 +30,21 @@ public register_shelfwave_OBC, shelfwave_OBC_end
 type, public :: shelfwave_OBC_CS ; private
   real :: Lx = 100.0        !< Long-shore length scale of bathymetry.
   real :: Ly = 50.0         !< Cross-shore length scale.
-  real :: f0 = 1.e-4        !< Coriolis parameter.
+  real :: f0 = 1.e-4        !< Coriolis parameter [T-1 ~> s-1]
   real :: jj = 1            !< Cross-shore wave mode.
   real :: kk                !< Parameter.
   real :: ll                !< Longshore wavenumber.
   real :: alpha             !< 1/Ly.
-  real :: omega             !< Frequency.
+  real :: omega             !< Frequency of the shelf wave [T-1 ~> s-1]
 end type shelfwave_OBC_CS
 
 contains
 
 !> Add shelfwave to OBC registry.
-function register_shelfwave_OBC(param_file, CS, OBC_Reg)
+function register_shelfwave_OBC(param_file, CS, US, OBC_Reg)
   type(param_file_type),    intent(in) :: param_file !< parameter file.
   type(shelfwave_OBC_CS),   pointer    :: CS         !< shelfwave control structure.
+  type(unit_scale_type),    intent(in) :: US         !< A dimensional unit scaling type
   type(OBC_registry_type),  pointer    :: OBC_Reg    !< OBC registry.
   logical                              :: register_shelfwave_OBC
   ! Local variables
@@ -61,18 +63,20 @@ function register_shelfwave_OBC(param_file, CS, OBC_Reg)
 
   ! Register the tracer for horizontal advection & diffusion.
   call register_OBC(casename, param_file, OBC_Reg)
-  call get_param(param_file, mdl,"F_0",CS%f0, &
-                 do_not_log=.true.)
-  call get_param(param_file, mdl,"LENLAT",len_lat, &
+  call get_param(param_file, mdl, "F_0", CS%f0, &
+                 default=0.0, units="s-1", scale=US%T_to_s, do_not_log=.true.)
+  call get_param(param_file, mdl, "LENLAT", len_lat, &
                  do_not_log=.true.)
   call get_param(param_file, mdl,"SHELFWAVE_X_WAVELENGTH",CS%Lx, &
                  "Length scale of shelfwave in x-direction.",&
                  units="Same as x,y", default=100.)
-  call get_param(param_file, mdl,"SHELFWAVE_Y_LENGTH_SCALE",CS%Ly, &
+!                 units="km", default=100.0, scale=1.0e3*US%m_to_L)
+  call get_param(param_file, mdl, "SHELFWAVE_Y_LENGTH_SCALE", CS%Ly, &
                  "Length scale of exponential dropoff of topography "//&
                  "in the y-direction.", &
                  units="Same as x,y", default=50.)
-  call get_param(param_file, mdl,"SHELFWAVE_Y_MODE",CS%jj, &
+!                 units="km", default=50.0, scale=1.0e3*US%m_to_L)
+  call get_param(param_file, mdl, "SHELFWAVE_Y_MODE", CS%jj, &
                  "Cross-shore wave mode.",               &
                  units="nondim", default=1.)
   CS%alpha = 1. / CS%Ly
@@ -125,18 +129,23 @@ subroutine shelfwave_initialize_topography( D, G, param_file, max_depth, US )
 end subroutine shelfwave_initialize_topography
 
 !> This subroutine sets the properties of flow at open boundary conditions.
-subroutine shelfwave_set_OBC_data(OBC, CS, G, h, Time)
-  type(ocean_OBC_type),   pointer    :: OBC  !< This open boundary condition type specifies
-                                             !! whether, where, and what open boundary
-                                             !! conditions are used.
-  type(shelfwave_OBC_CS), pointer    :: CS   !< tidal bay control structure.
-  type(ocean_grid_type),  intent(in) :: G    !< The ocean's grid structure.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in) :: h !< layer thickness.
-  type(time_type),        intent(in) :: Time !< model time.
+subroutine shelfwave_set_OBC_data(OBC, CS, G, GV, US, h, Time)
+  type(ocean_OBC_type),    pointer    :: OBC  !< This open boundary condition type specifies
+                                              !! whether, where, and what open boundary
+                                              !! conditions are used.
+  type(shelfwave_OBC_CS),  pointer    :: CS   !< tidal bay control structure.
+  type(ocean_grid_type),   intent(in) :: G    !< The ocean's grid structure.
+  type(verticalGrid_type), intent(in) :: GV   !< The ocean's vertical grid structure
+  type(unit_scale_type),   intent(in) :: US   !< A dimensional unit scaling type
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in) :: h !< layer thickness.
+  type(time_type),         intent(in) :: Time !< model time.
 
   ! The following variables are used to set up the transport in the shelfwave example.
-  real :: my_amp, time_sec
-  real :: cos_wt, cos_ky, sin_wt, sin_ky, omega, alpha
+  real :: my_amp ! Amplitude of the open boundary current inflows [L T-1 ~> m s-1]
+  real :: time_sec ! The time in the run [T ~> s]
+  real :: cos_wt, cos_ky, sin_wt, sin_ky
+  real :: omega  ! Frequency of the shelf wave [T-1 ~> s-1]
+  real :: alpha
   real :: x, y, jj, kk, ll
   character(len=40)  :: mdl = "shelfwave_set_OBC_data" ! This subroutine's name.
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, n
@@ -149,10 +158,10 @@ subroutine shelfwave_set_OBC_data(OBC, CS, G, h, Time)
 
   if (.not.associated(OBC)) return
 
-  time_sec = time_type_to_real(Time)
+  time_sec = US%s_to_T*time_type_to_real(Time)
   omega = CS%omega
   alpha = CS%alpha
-  my_amp = 1.0
+  my_amp = 1.0*G%US%m_s_to_L_T
   jj = CS%jj
   kk = CS%kk
   ll = CS%ll
@@ -170,9 +179,9 @@ subroutine shelfwave_set_OBC_data(OBC, CS, G, h, Time)
       cos_wt = cos(ll*x - omega*time_sec)
       sin_ky = sin(kk * y)
       cos_ky = cos(kk * y)
-      segment%normal_vel_bt(I,j) = G%US%m_s_to_L_T*my_amp * exp(- alpha * y) * cos_wt * &
+      segment%normal_vel_bt(I,j) = my_amp * exp(- alpha * y) * cos_wt * &
            (alpha * sin_ky + kk * cos_ky)
-!     segment%tangential_vel_bt(I,j) = G%US%m_s_to_L_T*my_amp * ll * exp(- alpha * y) * sin_wt * sin_ky
+!     segment%tangential_vel_bt(I,j) = my_amp * ll * exp(- alpha * y) * sin_wt * sin_ky
 !     segment%vorticity_bt(I,j) = my_amp * exp(- alpha * y) * cos_wt * sin_ky&
 !           (ll*ll + kk*kk + alpha*alpha)
     enddo ; enddo

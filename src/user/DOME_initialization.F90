@@ -26,7 +26,7 @@ implicit none ; private
 public DOME_initialize_topography
 public DOME_initialize_thickness
 public DOME_initialize_sponges
-public DOME_set_OBC_data
+public DOME_set_OBC_data, register_DOME_OBC
 
 ! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
 ! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
@@ -105,7 +105,7 @@ subroutine DOME_initialize_thickness(h, G, GV, param_file, just_read_params)
   character(len=40)  :: mdl = "DOME_initialize_thickness" ! This subroutine's name.
   integer :: i, j, k, is, ie, js, je, nz
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
   just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
 
@@ -157,18 +157,18 @@ subroutine DOME_initialize_sponges(G, GV, US, tv, PF, CSp)
   type(sponge_CS),       pointer    :: CSp  !< A pointer that is set to point to the control
                                             !! structure for this module.
 
-  real :: eta(SZI_(G),SZJ_(G),SZK_(G)+1) ! A temporary array for eta [Z ~> m].
-  real :: temp(SZI_(G),SZJ_(G),SZK_(G))  ! A temporary array for other variables. !
+  real :: eta(SZI_(G),SZJ_(G),SZK_(GV)+1) ! A temporary array for interface heights [Z ~> m].
+  real :: temp(SZI_(G),SZJ_(G),SZK_(GV)) ! A temporary array for other variables. !
   real :: Idamp(SZI_(G),SZJ_(G))    ! The inverse damping rate [T-1 ~> s-1].
 
-  real :: H0(SZK_(G))  ! Interface heights [Z ~> m].
+  real :: H0(SZK_(GV)) ! Interface heights [Z ~> m].
   real :: min_depth    ! The minimum depth at which to apply damping [Z ~> m]
   real :: damp, damp_new ! Damping rates in the sponge [days]
   real :: e_dense      ! The depth of the densest interfaces [Z ~> m]
   character(len=40)  :: mdl = "DOME_initialize_sponges" ! This subroutine's name.
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
   eta(:,:,:) = 0.0 ; temp(:,:,:) = 0.0 ; Idamp(:,:) = 0.0
@@ -184,7 +184,7 @@ subroutine DOME_initialize_sponges(G, GV, US, tv, PF, CSp)
 
   H0(1) = 0.0
   do k=2,nz ; H0(k) = -(real(k-1)-0.5)*G%max_depth / real(nz-1) ; enddo
-  do i=is,ie; do j=js,je
+  do j=js,je ; do i=is,ie
     if (G%geoLonT(i,j) < 100.0) then ; damp = 10.0
     elseif (G%geoLonT(i,j) < 200.0) then
       damp = 10.0 * (200.0-G%geoLonT(i,j))/100.0
@@ -193,7 +193,7 @@ subroutine DOME_initialize_sponges(G, GV, US, tv, PF, CSp)
 
     if (G%geoLonT(i,j) > 1400.0) then ; damp_new = 10.0
     elseif (G%geoLonT(i,j) > 1300.0) then
-       damp_new = 10.0 * (G%geoLonT(i,j)-1300.0)/100.0
+      damp_new = 10.0 * (G%geoLonT(i,j)-1300.0)/100.0
     else ; damp_new = 0.0
     endif
 
@@ -234,12 +234,36 @@ subroutine DOME_initialize_sponges(G, GV, US, tv, PF, CSp)
     call MOM_error(FATAL,"DOME_initialize_sponges is not set up for use with"//&
                          " a temperatures defined.")
     ! This should use the target values of T in temp.
-    call set_up_sponge_field(temp, tv%T, G, nz, CSp)
+    call set_up_sponge_field(temp, tv%T, G, GV, nz, CSp)
     ! This should use the target values of S in temp.
-    call set_up_sponge_field(temp, tv%S, G, nz, CSp)
+    call set_up_sponge_field(temp, tv%S, G, GV, nz, CSp)
   endif
 
 end subroutine DOME_initialize_sponges
+
+!> Add DOME to the OBC registry and set up some variables that will be used to guide
+!! code setting up the restart fieldss related to the OBCs.
+subroutine register_DOME_OBC(param_file, US, OBC, tr_Reg)
+  type(param_file_type),      intent(in) :: param_file !< parameter file.
+  type(unit_scale_type),      intent(in) :: US       !< A dimensional unit scaling type
+  type(ocean_OBC_type),       pointer    :: OBC  !< OBC registry.
+  type(tracer_registry_type), pointer    :: tr_Reg   !< Tracer registry.
+
+  if (OBC%number_of_segments /= 1) then
+    call MOM_error(FATAL, 'Error in register_DOME_OBC - DOME should have 1 OBC segment', .true.)
+  endif
+
+  ! Store this information for use in setting up the OBC restarts for tracer reservoirs.
+  OBC%ntr = tr_Reg%ntr
+  if (.not. associated(OBC%tracer_x_reservoirs_used)) then
+    allocate(OBC%tracer_x_reservoirs_used(OBC%ntr))
+    allocate(OBC%tracer_y_reservoirs_used(OBC%ntr))
+    OBC%tracer_x_reservoirs_used(:) = .false.
+    OBC%tracer_y_reservoirs_used(:) = .false.
+    OBC%tracer_y_reservoirs_used(1) = .true.
+  endif
+
+end subroutine register_DOME_OBC
 
 !> This subroutine sets the properties of flow at open boundary conditions.
 !! This particular example is for the DOME inflow describe in Legg et al. 2006.
@@ -260,11 +284,12 @@ subroutine DOME_set_OBC_data(OBC, tv, G, GV, US, param_file, tr_Reg)
 
 ! Local variables
   ! The following variables are used to set the target temperature and salinity.
-  real :: T0(SZK_(G)), S0(SZK_(G))
-  real :: pres(SZK_(G))      ! An array of the reference pressure [R L2 T-2 ~> Pa].
-  real :: drho_dT(SZK_(G))   ! Derivative of density with temperature [R degC-1 ~> kg m-3 degC-1].
-  real :: drho_dS(SZK_(G))   ! Derivative of density with salinity [R ppt-1 ~> kg m-3 ppt-1].
-  real :: rho_guess(SZK_(G)) ! Potential density at T0 & S0 [R ~> kg m-3].
+  real :: T0(SZK_(GV))       ! A profile of temperatures [degC]
+  real :: S0(SZK_(GV))       ! A profile of salinities [ppt]
+  real :: pres(SZK_(GV))     ! An array of the reference pressure [R L2 T-2 ~> Pa].
+  real :: drho_dT(SZK_(GV))  ! Derivative of density with temperature [R degC-1 ~> kg m-3 degC-1].
+  real :: drho_dS(SZK_(GV))  ! Derivative of density with salinity [R ppt-1 ~> kg m-3 ppt-1].
+  real :: rho_guess(SZK_(GV)) ! Potential density at T0 & S0 [R ~> kg m-3].
   ! The following variables are used to set up the transport in the DOME example.
   real :: tr_0, y1, y2, tr_k, rst, rsb, rc, v_k, lon_im1
   real :: D_edge            ! The thickness [Z ~> m], of the dense fluid at the
@@ -275,13 +300,13 @@ subroutine DOME_set_OBC_data(OBC, tv, G, GV, US, param_file, tr_Reg)
   real :: Ri_trans          ! The shear Richardson number in the transition
                             ! region of the specified shear profile.
   character(len=40)  :: mdl = "DOME_set_OBC_data" ! This subroutine's name.
-  character(len=32)  :: name
-  integer :: i, j, k, itt, is, ie, js, je, isd, ied, jsd, jed, m, nz, NTR
+  character(len=32)  :: name ! The name of a tracer field.
+  integer :: i, j, k, itt, is, ie, js, je, isd, ied, jsd, jed, m, nz
   integer :: IsdB, IedB, JsdB, JedB
   type(OBC_segment_type), pointer :: segment => NULL()
   type(tracer_type), pointer      :: tr_ptr => NULL()
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
@@ -301,22 +326,10 @@ subroutine DOME_set_OBC_data(OBC, tv, G, GV, US, param_file, tr_Reg)
     return   !!! Need a better error message here
   endif
 
-  NTR = tr_Reg%NTR
-
-  ! Stash this information away for the messy tracer restarts.
-  OBC%ntr = NTR
-  if (.not. associated(OBC%tracer_x_reservoirs_used)) then
-    allocate(OBC%tracer_x_reservoirs_used(NTR))
-    allocate(OBC%tracer_y_reservoirs_used(NTR))
-    OBC%tracer_x_reservoirs_used(:) = .false.
-    OBC%tracer_y_reservoirs_used(:) = .false.
-    OBC%tracer_y_reservoirs_used(1) = .true.
-  endif
-
   segment => OBC%segment(1)
   if (.not. segment%on_pe) return
 
-  allocate(segment%field(NTR))
+  allocate(segment%field(tr_Reg%ntr))
 
   do k=1,nz
     rst = -1.0
@@ -392,9 +405,9 @@ subroutine DOME_set_OBC_data(OBC, tv, G, GV, US, param_file, tr_Reg)
   call register_segment_tracer(tr_ptr, param_file, GV, &
                                OBC%segment(1), OBC_array=.true.)
 
-  ! All tracers but the first have 0 concentration in their inflows. As this
-  ! is the default value, the following calls are unnecessary.
-  do m=2,NTR
+  ! All tracers but the first have 0 concentration in their inflows. As 0 is the
+  ! default value for the inflow concentrations, the following calls are unnecessary.
+  do m=2,tr_Reg%ntr
     if (m < 10) then ; write(name,'("tr_D",I1.1)') m
     else ; write(name,'("tr_D",I2.2)') m ; endif
     call tracer_name_lookup(tr_Reg, tr_ptr, name)

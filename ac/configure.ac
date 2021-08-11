@@ -42,16 +42,34 @@ srcdir=$srcdir/..
 # Default to symmetric grid
 # NOTE: --enable is more properly used to add a feature, rather than to select
 #   a compile-time mode, so this is not exactly being used as intended.
-MEM_LAYOUT=${srcdir}/config_src/dynamic_symmetric
+MEM_LAYOUT=${srcdir}/config_src/memory/dynamic_symmetric
 AC_ARG_ENABLE([asymmetric],
   AS_HELP_STRING([--enable-asymmetric], [Use the asymmetric grid]))
 AS_IF([test "$enable_asymmetric" = yes],
-  [MEM_LAYOUT=${srcdir}/config_src/dynamic])
+  [MEM_LAYOUT=${srcdir}/config_src/memory/dynamic_nonsymmetric])
 
+# Default to solo_driver
+DRIVER_DIR=${srcdir}/config_src/drivers/solo_driver
+AC_ARG_WITH([driver],
+  AS_HELP_STRING([--with-driver=coupled_driver|solo_driver], [Select directory for driver source code]))
+AS_IF([test "x$with_driver" != "x"],
+  [DRIVER_DIR=${srcdir}/config_src/drivers/${with_driver}])
 
 # TODO: Rather than point to a pre-configured header file, autoconf could be
 # used to configure a header based on a template.
 #AC_CONFIG_HEADERS(["$MEM_LAYOUT/MOM_memory.h"])
+
+# Select the model framework (default: FMS1)
+# NOTE: We can phase this out after the FMS1 I/O has been removed from FMS and
+#   replace with a detection test.  For now, it is a user-defined switch.
+MODEL_FRAMEWORK=${srcdir}/config_src/infra/FMS1
+AC_ARG_WITH([framework],
+  AS_HELP_STRING([--with-framework=fms1|fms2], [Select the model framework]))
+AS_CASE([with_framework],
+  [fms1], [MODEL_FRAMEWORK=${srcdir}/config_src/infra/FMS1],
+  [fms2], [MODEL_FRAMEWORK=${srcdir}/config_src/infra/FMS2],
+  [MODEL_FRAMEWORK=${srcdir}/config_src/infra/FMS1]
+)
 
 
 # Explicitly assume free-form Fortran
@@ -82,18 +100,57 @@ AX_FC_CHECK_MODULE([mpi],
 
 
 # netCDF configuration
-AC_PATH_PROG([NC_CONFIG], [nc-config])
-AS_IF([test -n "$NC_CONFIG"],
-  [CPPFLAGS="$CPPFLAGS -I$($NC_CONFIG --includedir)"
-  FCFLAGS="$FCFLAGS -I$($NC_CONFIG --includedir)"
-  LDFLAGS="$LDFLAGS -L$($NC_CONFIG --libdir)"],
-  [AC_MSG_ERROR([Could not find nc-config.])])
 
-AX_FC_CHECK_MODULE([netcdf],
-  [], [AC_MSG_ERROR([Could not find netcdf module.])])
-AX_FC_CHECK_LIB([netcdff], [nf_create], [netcdf],
-  [], [AC_MSG_ERROR([Could not link netcdff library.])]
-)
+# Search for the Fortran netCDF module, fallback to nf-config.
+AX_FC_CHECK_MODULE([netcdf], [], [
+  AS_UNSET([ax_fc_cv_mod_netcdf])
+  AC_PATH_PROG([NF_CONFIG], [nf-config])
+  AS_IF([test -n "$NF_CONFIG"], [
+    AC_SUBST([FCFLAGS], ["$FCFLAGS -I$($NF_CONFIG --includedir)"])
+    ], [AC_MSG_ERROR([Could not find nf-config.])]
+  )
+  AX_FC_CHECK_MODULE([netcdf], [], [
+    AC_MSG_ERROR([Could not find netcdf module.])
+  ])
+])
+
+# FMS may invoke netCDF C calls, so we link to libnetcdf.
+AC_LANG_PUSH([C])
+AC_CHECK_LIB([netcdf], [nc_create], [], [
+  AS_UNSET([ac_cv_lib_netcdf_nc_create])
+  AC_PATH_PROG([NC_CONFIG], [nc-config])
+  AS_IF([test -n "$NC_CONFIG"], [
+    AC_SUBST([LDFLAGS],
+      ["$LDFLAGS -L$($NC_CONFIG --libdir)"]
+    )
+    ], [AC_MSG_ERROR([Could not find nc-config.])]
+  )
+  AC_CHECK_LIB([netcdf], [nc_create], [], [
+    AC_MSG_ERROR([Could not find libnetcdf.])
+  ])
+])
+AC_LANG_POP([C])
+
+# NOTE: We test for nf_create, rather than nf90_create, because AX_FC_CHECK_LIB
+#   is currently not yet able to properly probe inside modules.
+#   Testing of the nf90_* functions will require a macro update.
+# NOTE: nf-config does not have a --libdir flag, so we use --prefix and assume
+#   that libraries are in the $prefix/lib directory.
+
+# Link to Fortran netCDF library, netcdff
+AX_FC_CHECK_LIB([netcdff], [nf_create], [], [], [
+  AS_UNSET([ax_fc_cv_lib_netcdff_nf_create])
+  AC_PATH_PROG([NF_CONFIG], [nf-config])
+  AS_IF([test -n "$NF_CONFIG"], [
+    AC_SUBST([LDFLAGS],
+      ["$LDFLAGS -L$($NF_CONFIG --prefix)/lib"]
+    )
+    ], [AC_MSG_ERROR([Could not find nf-config.])]
+  )
+  AX_FC_CHECK_LIB([netcdff], [nf_create], [], [], [
+    AC_MSG_ERROR([Could not find libnetcdff.])
+  ])
+])
 
 
 # Force 8-byte reals
@@ -147,6 +204,22 @@ AX_FC_CHECK_LIB([FMS], [fms_init], [fms_mod],
 )
 
 
+# Verify that FMS is at least 2019.01.02
+# NOTE: 2019.01.02 introduced two changes:
+#   - diag_axis_init supports an optional domain_position argument
+#   - position values NORTH, EAST, CENTER were added to diag_axis_mod
+# For our versioning test, we check the second feature.
+AC_MSG_CHECKING([if diag_axis_mod supports domain positions])
+AC_COMPILE_IFELSE(
+  [AC_LANG_PROGRAM([], [use diag_axis_mod, only: NORTH, EAST, CENTER])],
+  [AC_MSG_RESULT([yes])],
+  [
+    AC_MSG_RESULT([no])
+    AC_MSG_ERROR([diag_axis_mod in MOM6 requires FMS 2019.01.02 or newer.])
+  ]
+)
+
+
 # Search for mkmf build tools
 AC_PATH_PROG([LIST_PATHS], [list_paths])
 AS_IF([test -z "$LIST_PATHS"], [
@@ -171,10 +244,14 @@ AS_IF([test -z "$MKMF"], [
 AC_CONFIG_COMMANDS([path_names],
   [list_paths -l \
     ${srcdir}/src \
-    ${srcdir}/config_src/solo_driver \
+    ${MODEL_FRAMEWORK} \
     ${srcdir}/config_src/ext* \
-    ${MEM_LAYOUT}
-], [MEM_LAYOUT=$MEM_LAYOUT])
+    ${DRIVER_DIR} \
+    ${MEM_LAYOUT}],
+  [MODEL_FRAMEWORK=$MODEL_FRAMEWORK
+    MEM_LAYOUT=$MEM_LAYOUT
+    DRIVER_DIR=$DRIVER_DIR]
+)
 
 
 AC_CONFIG_COMMANDS([Makefile.mkmf],

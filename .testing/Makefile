@@ -32,7 +32,6 @@
 #   MPIFC   MPI Fortran compiler
 #
 # Build configuration:
-#
 #   FCFLAGS_DEBUG       Testing ("debug") compiler flags
 #   FCFLAGS_REPRO       Production ("repro") compiler flags
 #   FCFLAGS_INIT        Variable initialization flags
@@ -76,7 +75,6 @@ FCFLAGS_REPRO ?= -g -O2
 FCFLAGS_INIT ?=
 FCFLAGS_COVERAGE ?=
 # Additional notes:
-#
 # - The default values are simple, minimalist flags, supported by nearly all
 #   compilers which are comparable to GFDL's canonical DEBUG and REPRO builds.
 #
@@ -86,13 +84,17 @@ FCFLAGS_COVERAGE ?=
 # - FMS cannot be built with the same aggressive initialization flags as MOM6,
 #   so FCFLAGS_INIT is used to provide additional MOM6 configuration.
 
+# User-defined LDFLAGS (applied to all builds and FMS)
+LDFLAGS_USER ?=
+
 # Set to `true` to require identical results from DEBUG and REPRO builds
+# NOTE: Many compilers (Intel, GCC on ARM64) do not yet produce identical
+#   results across DEBUG and REPRO builds (as defined below), so we disable on
+#   default.
 DO_REPRO_TESTS ?=
 
+# Time measurement (configurable by the CI)
 TIME ?= time
-
-# Many compilers (Intel, GCC on ARM64) do not yet produce identical results
-# across DEBUG and REPRO builds (as defined below), so we disable on default.
 
 #---
 # Dependencies
@@ -154,10 +156,12 @@ SOURCE = \
   $(foreach ext,F90 inc c h,$(wildcard $(1)/*/*.$(ext) $(1)/*/*/*.$(ext)))
 
 MOM_SOURCE = $(call SOURCE,../src) \
-  $(wildcard ../config_src/solo_driver/*.F90) \
+  $(wildcard ../config_src/infra/FMS1/*.F90) \
+  $(wildcard ../config_src/drivers/solo_driver/*.F90) \
   $(wildcard ../config_src/ext*/*/*.F90)
 TARGET_SOURCE = $(call SOURCE,build/target_codebase/src) \
-  $(wildcard build/target_codebase/config_src/solo_driver/*.F90) \
+  $(wildcard build/target_codebase/config_src/infra/FMS1/*.F90) \
+  $(wildcard build/target_codebase/config_src/drivers/solo_driver/*.F90) \
   $(wildcard build/target_codebase/config_src/ext*/*.F90)
 FMS_SOURCE = $(call SOURCE,$(DEPS)/fms/src)
 
@@ -189,7 +193,7 @@ endif
 # Rules
 
 .PHONY: all build.regressions
-all: $(foreach b,$(BUILDS),build/$(b)/MOM6)
+all: $(foreach b,$(BUILDS),build/$(b)/MOM6) $(VENV_PATH)
 build.regressions: $(foreach b,symmetric target,build/$(b)/MOM6)
 
 # Executable
@@ -216,8 +220,8 @@ REPRO_FCFLAGS := FCFLAGS="$(FCFLAGS_REPRO) $(FCFLAGS_FMS)"
 OPENMP_FCFLAGS := FCFLAGS="$(FCFLAGS_DEBUG) $(FCFLAGS_INIT) $(FCFLAGS_FMS)"
 TARGET_FCFLAGS := FCFLAGS="$(FCFLAGS_DEBUG) $(FCFLAGS_INIT) $(FCFLAGS_FMS)"
 
-MOM_LDFLAGS := LDFLAGS="$(LDFLAGS_FMS)"
-SYMMETRIC_LDFLAGS := LDFLAGS="$(COVERAGE) $(LDFLAGS_FMS)"
+MOM_LDFLAGS := LDFLAGS="$(LDFLAGS_FMS) $(LDFLAGS_USER)"
+SYMMETRIC_LDFLAGS := LDFLAGS="$(COVERAGE) $(LDFLAGS_FMS) $(LDFLAGS_USER)"
 
 
 # Environment variable configuration
@@ -226,7 +230,9 @@ build/asymmetric/Makefile: MOM_ENV=$(PATH_FMS) $(ASYMMETRIC_FCFLAGS) $(MOM_LDFLA
 build/repro/Makefile: MOM_ENV=$(PATH_FMS) $(REPRO_FCFLAGS) $(MOM_LDFLAGS)
 build/openmp/Makefile: MOM_ENV=$(PATH_FMS) $(OPENMP_FCFLAGS) $(MOM_LDFLAGS)
 build/target/Makefile: MOM_ENV=$(PATH_FMS) $(TARGET_FCFLAGS) $(MOM_LDFLAGS)
-
+build/coupled/Makefile: MOM_ENV=$(PATH_FMS) $(SYMMETRIC_FCFLAGS) $(SYMMETRIC_LDFLAGS)
+build/nuopc/Makefile: MOM_ENV=$(PATH_FMS) $(SYMMETRIC_FCFLAGS) $(SYMMETRIC_LDFLAGS)
+build/mct/Makefile: MOM_ENV=$(PATH_FMS) $(SYMMETRIC_FCFLAGS) $(SYMMETRIC_LDFLAGS)
 
 # Configure script flags
 build/symmetric/Makefile: MOM_ACFLAGS=
@@ -234,7 +240,9 @@ build/asymmetric/Makefile: MOM_ACFLAGS=--enable-asymmetric
 build/repro/Makefile: MOM_ACFLAGS=
 build/openmp/Makefile: MOM_ACFLAGS=--enable-openmp
 build/target/Makefile: MOM_ACFLAGS=
-
+build/coupled/Makefile: MOM_ACFLAGS=--with-driver=coupled_driver
+build/nuopc/Makefile: MOM_ACFLAGS=--with-driver=nuopc_driver
+build/mct/Makefile: MOM_ACFLAGS=--with-driver=mct_driver
 
 # Fetch regression target source code
 build/target/Makefile: | $(TARGET_CODEBASE)
@@ -245,7 +253,7 @@ build/target/Makefile: | $(TARGET_CODEBASE)
 #   Ideally we would want to re-run both Makefile and mkmf, but our mkmf call
 #   is inside ./configure, so we must re-run ./configure as well.
 $(foreach b,$(filter-out target,$(BUILDS)),build/$(b)/Makefile): $(MOM_SOURCE)
-build/target/configure: $(TARGET_SOURCE)
+build/target_codebase/configure: $(TARGET_SOURCE)
 
 
 # Build MOM6
@@ -281,10 +289,7 @@ $(TARGET_CODEBASE)/ac/configure: $(TARGET_CODEBASE)
 
 $(TARGET_CODEBASE):
 	git clone --recursive $(MOM_TARGET_URL) $@
-	cd $@ && git checkout $(MOM_TARGET_BRANCH)
-	# Copy modern autoconf files to target?
-	mkdir -p $(TARGET_CODEBASE)/ac
-	cp -r ../ac/{configure.ac,Makefile.in,m4} $(TARGET_CODEBASE)/ac
+	cd $@ && git checkout --recurse-submodules $(MOM_TARGET_BRANCH)
 
 
 #---
@@ -328,6 +333,25 @@ $(DEPS)/Makefile: ../ac/deps/Makefile
 	mkdir -p $(@D)
 	cp $< $@
 
+#---
+# The following block does a non-library build of a coupled driver interface to MOM, along with everything below it.
+# This simply checks that we have not broken the ability to compile. This is not a means to build a complete coupled executable.
+# Todo: 
+# - avoid re-building FMS and MOM6 src by re-using existing object/mod files
+# - use autoconf rather than mkmf templates
+MK_TEMPLATE ?= ../../$(DEPS)/mkmf/templates/ncrc-gnu.mk
+# NUOPC driver
+build/nuopc/mom_ocean_model_nuopc.o: build/nuopc/Makefile
+	cd $(@D) && make $(@F)
+check_mom6_api_nuopc: build/nuopc/mom_ocean_model_nuopc.o
+# GFDL coupled driver
+build/coupled/ocean_model_MOM.o: build/coupled/Makefile
+	cd $(@D) && make $(@F)
+check_mom6_api_coupled: build/coupled/ocean_model_MOM.o
+# MCT driver
+build/mct/mom_ocean_model_mct.o: build/mct/Makefile
+	cd $(@D) && make $(@F)
+check_mom6_api_mct: build/mct/mom_ocean_model_mct.o
 
 #---
 # Python preprocessing
@@ -337,6 +361,7 @@ $(DEPS)/Makefile: ../ac/deps/Makefile
 work/local-env:
 	python3 -m venv $@
 	. $@/bin/activate \
+	  && python3 -m pip install --upgrade pip \
 	  && pip3 install wheel \
 	  && pip3 install cython \
 	  && pip3 install numpy \
@@ -496,9 +521,10 @@ work/%/$(1)/ocean.stats work/%/$(1)/chksum_diag: build/$(2)/MOM6 $(VENV_PATH)
 	@echo -e "$(DONE): $$*.$(1); no runtime errors."
 	if [ $(3) ]; then \
 	  mkdir -p results/$$* ; \
-	  bash <(curl -s https://codecov.io/bash) -n $$@ \
-	    > work/$$*/codecov.$(1).out \
-	    2> work/$$*/codecov.$(1).err \
+	  cd build/symmetric \
+	    && bash <(curl -s https://codecov.io/bash) -Z -n $$@ \
+	      > codecov.$$*.$(1).out \
+	      2> codecov.$$*.$(1).err \
 	    && echo -e "${MAGENTA}Report uploaded to codecov.${RESET}"; \
 	fi
 endef
