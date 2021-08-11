@@ -161,7 +161,7 @@ subroutine init_oda(Time, G, GV, diag_CS, CS)
   type(hor_index_type), pointer :: HI=> NULL()
   type(directories) :: dirs
 
-  type(grid_type), pointer :: T_grid => NULL() !< global tracer grid
+  type(grid_type), pointer :: T_grid !< global tracer grid
   real, dimension(:,:), allocatable :: global2D, global2D_old
   real, dimension(:), allocatable :: lon1D, lat1D, glon1D, glat1D
   type(param_file_type) :: PF
@@ -342,6 +342,7 @@ subroutine init_oda(Time, G, GV, diag_CS, CS)
        Time,'ocean salinity increments','psu')
 
   !!  get global grid information from ocean model needed for ODA initialization
+  T_grid=>NULL()
   call set_up_global_tgrid(T_grid, CS, G)
 
   call ocean_da_core_init(CS%mpp_domain, T_grid, CS%Profiles, Time)
@@ -524,7 +525,6 @@ subroutine oda(Time, CS)
     call ensemble_filter(CS%Ocean_prior, CS%Ocean_posterior, CS%CProfiles, CS%kdroot, CS%mpp_domain, CS%oda_grid)
 #endif
     call cpu_clock_end(id_clock_oda_filter)
-    !if (CS%write_obs) call save_obs_diff(CS%CProfiles) ! not fully implemented
     !! switch back to ensemble member pelist
     call set_PElist(CS%ensemble_pelist(CS%ensemble_id,:))
     call get_posterior_tracer(Time, CS, increment=.true.)
@@ -635,32 +635,6 @@ subroutine set_analysis_time(Time,CS)
 
 end subroutine set_analysis_time
 
-!> Write observation differences to a file
-! subroutine save_obs_diff(filename,CS)
-!   character(len=*), intent(in) :: filename !< name of output file
-!   type(ODA_CS), pointer, intent(in) :: CS  !< pointer to DA control structure
-
-!   integer :: fid ! profile file handle
-!   type(ocean_profile_type), pointer :: Prof=>NULL()
-
-!   fid = open_profile_file(trim(filename), nvar=2, thread=SINGLE_FILE, fset=SINGLE_FILE)
-!   Prof=>CS%CProfiles
-
-!   !! switch to global pelist
-!   !call set_PElist(CS%filter_pelist)
-
-!   do while (associated(Prof))
-!     call write_profile(fid,Prof)
-!     Prof=>Prof%cnext
-!   enddo
-!   call close_profile_file(fid)
-
-!   !! switch back to ensemble member pelist
-!   !call set_PElist(CS%ensemble_pelist(CS%ensemble_id,:))
-
-!   return
-! end subroutine save_obs_diff
-
 
 !> Apply increments to tracers
 subroutine apply_oda_tracer_increments(dt, Time_end, G, GV, tv, h, CS)
@@ -726,7 +700,6 @@ subroutine apply_oda_tracer_increments(dt, Time_end, G, GV, tv, h, CS)
   call diag_update_remap_grids(CS%diag_CS)
   call cpu_clock_end(id_clock_apply_increments)
 
-  return
 
 end subroutine apply_oda_tracer_increments
 
@@ -740,7 +713,8 @@ end subroutine apply_oda_tracer_increments
     integer :: i, j, k
 
     !    get global grid information from ocean_model
-    if (associated(T_grid)) call MOM_error(FATAL,'MOM_oda_driver:set_up_global_tgrid called with associated T_grid')
+    T_grid=>NULL()
+    !if (associated(T_grid)) call MOM_error(FATAL,'MOM_oda_driver:set_up_global_tgrid called with associated T_grid')
 
     allocate(T_grid)
     T_grid%ni = CS%ni
