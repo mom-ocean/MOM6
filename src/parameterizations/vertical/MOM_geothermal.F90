@@ -3,7 +3,7 @@ module MOM_geothermal
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_ptr
+use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_alloc
 use MOM_diag_mediator, only : register_static_field, time_type, diag_ctrl
 use MOM_domains,       only : pass_var
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
@@ -23,22 +23,21 @@ public geothermal_entraining, geothermal_in_place, geothermal_init, geothermal_e
 
 !> Control structure for geothermal heating
 type, public :: geothermal_CS ; private
-  real    :: dRcv_dT_inplace !<   The value of dRcv_dT above which (dRcv_dT is
-                             !! negative) the water is heated in place instead
-                             !! of moving upward between layers [R degC-1 ~> kg m-3 degC-1].
-  real, pointer :: geo_heat(:,:) => NULL() !< The geothermal heat flux [J m-2 T-1 ~> W m-2].
+  real    :: dRcv_dT_inplace  !< The value of dRcv_dT above which (dRcv_dT is negative) the
+                              !! water is heated in place instead of moving upward between
+                              !! layers in non-ALE layered mode [R degC-1 ~> kg m-3 degC-1]
+  real, allocatable, dimension(:,:) :: geo_heat !< The geothermal heat flux [J m-2 T-1 ~> W m-2]
   real    :: geothermal_thick !< The thickness over which geothermal heating is
-                             !! applied [H ~> m or kg m-2].
-  logical :: apply_geothermal !< If true, geothermal heating will be applied
-                             !! otherwise GEOTHERMAL_SCALE has been set to 0 and
-                             !! there is no heat to apply.
+                              !! applied [H ~> m or kg m-2]
+  logical :: apply_geothermal !< If true, geothermal heating will be applied.  This is false if
+                              !! GEOTHERMAL_SCALE is 0 and there is no heat to apply.
 
-  type(time_type), pointer :: Time => NULL() !< A pointer to the ocean model's clock.
-  type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to
-                                             !! regulate the timing of diagnostic output.
-  integer :: id_internal_heat_heat_tendency = -1   !< ID for diagnostic of heat tendency
-  integer :: id_internal_heat_temp_tendency = -1   !< ID for diagnostic of temperature tendency
-  integer :: id_internal_heat_h_tendency = -1      !< ID for diagnostic of thickness tendency
+  type(time_type), pointer :: Time => NULL() !< A pointer to the ocean model's clock
+  type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to regulate the timing
+                                             !! timing of diagnostic output
+  integer :: id_internal_heat_heat_tendency = -1  !< ID for diagnostic of heat tendency
+  integer :: id_internal_heat_temp_tendency = -1  !< ID for diagnostic of temperature tendency
+  integer :: id_internal_heat_h_tendency = -1     !< ID for diagnostic of thickness tendency
 
 end type geothermal_CS
 
@@ -532,7 +531,7 @@ subroutine geothermal_init(Time, G, GV, US, param_file, diag, CS, useALEalgorith
   CS%apply_geothermal = .not.(geo_scale == 0.0)
   if (.not.CS%apply_geothermal) return
 
-  call safe_alloc_ptr(CS%geo_heat, isd, ied, jsd, jed) ; CS%geo_heat(:,:) = 0.0
+  call safe_alloc_alloc(CS%geo_heat, isd, ied, jsd, jed) ; CS%geo_heat(:,:) = 0.0
 
   call get_param(param_file, mdl, "GEOTHERMAL_FILE", geo_file, &
                  "The file from which the geothermal heating is to be "//&
@@ -544,7 +543,8 @@ subroutine geothermal_init(Time, G, GV, US, param_file, diag, CS, useALEalgorith
                  "The value of drho_dT above which geothermal heating "//&
                  "simply heats water in place instead of moving it between "//&
                  "isopycnal layers.  This must be negative.", &
-                 units="kg m-3 K-1", scale=US%kg_m3_to_R, default=-0.01)
+                 units="kg m-3 K-1", scale=US%kg_m3_to_R, default=-0.01, &
+                 do_not_log=((GV%nk_rho_varies<=0).or.(GV%nk_rho_varies>=GV%ke)) )
   if (CS%dRcv_dT_inplace >= 0.0) call MOM_error(FATAL, "geothermal_init: "//&
          "GEOTHERMAL_DRHO_DT_INPLACE must be negative.")
 
@@ -554,8 +554,8 @@ subroutine geothermal_init(Time, G, GV, US, param_file, diag, CS, useALEalgorith
     filename = trim(inputdir)//trim(geo_file)
     call log_param(param_file, mdl, "INPUTDIR/GEOTHERMAL_FILE", filename)
     call get_param(param_file, mdl, "GEOTHERMAL_VARNAME", geotherm_var, &
-                 "The name of the geothermal heating variable in "//&
-                 "GEOTHERMAL_FILE.", default="geo_heat")
+                 "The name of the geothermal heating variable in GEOTHERMAL_FILE.", &
+                 default="geo_heat")
     call MOM_read_data(filename, trim(geotherm_var), CS%geo_heat, G%Domain)
     do j=jsd,jed ; do i=isd,ied
       CS%geo_heat(i,j) = (G%mask2dT(i,j) * geo_scale) * CS%geo_heat(i,j)
@@ -601,7 +601,7 @@ end subroutine geothermal_init
 subroutine geothermal_end(CS)
   type(geothermal_CS), intent(inout) :: CS !< Geothermal heating control structure that
                                            !! will be deallocated in this subroutine.
-  deallocate(CS%geo_heat)
+  if (allocated(CS%geo_heat)) deallocate(CS%geo_heat)
 end subroutine geothermal_end
 
 !> \namespace mom_geothermal
