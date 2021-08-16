@@ -416,7 +416,7 @@ subroutine calc_oda_increments(h, tv, u, v, G, GV, US, CS)
         enddo
      endif
   enddo; enddo
-   
+
   ! remap u to h_obs to get increment
   if (CS%uv_inc) then
      call pass_var(h, G%Domain)
