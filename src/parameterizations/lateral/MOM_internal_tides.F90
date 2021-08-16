@@ -791,13 +791,11 @@ subroutine refract(En, cn, freq, dt, G, US, NAngle, use_PPMang)
   integer :: is, ie, js, je, asd, aed, na
   integer :: i, j, a
   real :: wgt1, wgt2
-  real :: eps
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; na = size(En,3)
   asd = 1-stencil ; aed = NAngle+stencil
-  eps=1.0e-20 * US%m_s_to_L_T
 
-  cnmask = merge(1.,0.,cn(:,:) > eps)
+  cnmask(:,:) = merge(0.,1.,cn(:,:) == 0.)
 
   do j=js,je ; do i=is-1,ie
     ! wgt = 0 if local cn == 0, wgt = 0.5 if both contiguous values != 0
