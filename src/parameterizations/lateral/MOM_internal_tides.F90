@@ -779,6 +779,7 @@ subroutine refract(En, cn, freq, dt, G, US, NAngle, use_PPMang)
     CFL_ang
   real, dimension(G%IsdB:G%IedB,G%jsd:G%jed) :: cn_u !< Internal wave group velocity at U-point
   real, dimension(G%isd:G%ied,G%JsdB:G%JedB) :: cn_v !< Internal wave group velocity at V-point
+  real, dimension(G%isd:G%ied,G%jsd:G%jed) :: cnmask !< Local mask for group velocity
   real :: f2              ! The squared Coriolis parameter [T-2 ~> s-2].
   real :: favg            ! The average Coriolis parameter at a point [T-1 ~> s-1].
   real :: df_dy, df_dx    ! The x- and y- gradients of the Coriolis parameter [T-1 L-1 ~> s-1 m-1].
@@ -796,32 +797,24 @@ subroutine refract(En, cn, freq, dt, G, US, NAngle, use_PPMang)
   asd = 1-stencil ; aed = NAngle+stencil
   eps=1.0e-20 * US%m_s_to_L_T
 
-  do i=is-1,ie ; do j=js,je
-     wgt1 = 1.
-     wgt2 = 1.
-     if (cn(i,j) < eps)  wgt1 = 0.
-     if (cn(i+1,j) < eps)  wgt2 = 0.
-     if (wgt1 + wgt2 >= 1.) then
-       cn_u(I,j) = (cn(i,j) + cn(i+1,j)) / (wgt1 + wgt2)
-     else
-       cn_u(I,j) = 0.
-     endif
+  cnmask = merge(1.,0.,cn(:,:) > eps)
+
+  do j=js,je ; do i=is-1,ie
+    ! wgt = 0 if local cn == 0, wgt = 0.5 if both contiguous values != 0
+    ! and wgt = 1 if neighbour cn == 0
+    wgt1 = cnmask(i,j)*(1-0.5*cnmask(i+1,j))
+    wgt2 = cnmask(i+1,j)*(1-0.5*cnmask(i,j))
+    cn_u(I,j) = wgt1 * cn(i,j) + wgt2 * cn(i+1,j)
   enddo ; enddo
 
-  do i=is,ie ; do j=js-1,je
-     wgt1 = 1.
-     wgt2 = 1.
-     if (cn(i,j) < eps)  wgt1 = 0.
-     if (cn(i,j+1) < eps)  wgt2 = 0.
-     if (wgt1 + wgt2 >= 1.) then
-       cn_v(i,J) = (cn(i,j) + cn(i,j+1)) / (wgt1 + wgt2)
-     else
-       cn_v(i,J) = 0.
-     endif
+  do j=js-1,je ; do i=is,ie
+    wgt1 = cnmask(i,j)*(1-0.5*cnmask(i,j+1))
+    wgt2 = cnmask(i,j+1)*(1-0.5*cnmask(i,j))
+    cn_v(i,J) = wgt1 * cn(i,j) + wgt2 * cn(i,j+1)
   enddo ; enddo
 
   Ifreq = 1.0 / freq
-  cn_subRO = 1e-30*US%m_s_to_L_T  ! The hard-coded value here might need to increase.
+  cn_subRO = 1e-30*US%m_s_to_L_T
   Angle_size = (8.0*atan(1.0)) / (real(NAngle))
   dt_Angle_size = dt / Angle_size
 
