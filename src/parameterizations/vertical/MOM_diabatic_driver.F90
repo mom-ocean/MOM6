@@ -111,7 +111,7 @@ type, public:: diabatic_CS; private
                                      !! domain.  The exact location and properties of
                                      !! those sponges are set by calls to
                                      !! initialize_sponge and set_up_sponge_field.
-  logical :: use_oda_incupd          !!< If True, DA incremental update is
+  logical :: use_oda_incupd          !< If True, DA incremental update is
                                      !! applied everywhere
   logical :: use_geothermal          !< If true, apply geothermal heating.
   logical :: use_int_tides           !< If true, use the code that advances a separate set
