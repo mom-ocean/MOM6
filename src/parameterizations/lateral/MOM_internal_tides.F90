@@ -795,20 +795,20 @@ subroutine refract(En, cn, freq, dt, G, US, NAngle, use_PPMang)
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; na = size(En,3)
   asd = 1-stencil ; aed = NAngle+stencil
 
-  cnmask(:,:) = merge(0.,1.,cn(:,:) == 0.)
+  cnmask(:,:) = merge(0., 1., cn(:,:) == 0.)
 
   do j=js,je ; do i=is-1,ie
     ! wgt = 0 if local cn == 0, wgt = 0.5 if both contiguous values != 0
     ! and wgt = 1 if neighbour cn == 0
-    wgt1 = cnmask(i,j)*(1-0.5*cnmask(i+1,j))
-    wgt2 = cnmask(i+1,j)*(1-0.5*cnmask(i,j))
-    cn_u(I,j) = wgt1 * cn(i,j) + wgt2 * cn(i+1,j)
+    wgt1 = cnmask(i,j) - 0.5 * cnmask(i,j) * cnmask(i+1,j)
+    wgt2 = cnmask(i+1,j) - 0.5 * cnmask(i,j) * cnmask(i+1,j)
+    cn_u(I,j) = wgt1*cn(i,j) + wgt2*cn(i+1,j)
   enddo ; enddo
 
   do j=js-1,je ; do i=is,ie
-    wgt1 = cnmask(i,j)*(1-0.5*cnmask(i,j+1))
-    wgt2 = cnmask(i,j+1)*(1-0.5*cnmask(i,j))
-    cn_v(i,J) = wgt1 * cn(i,j) + wgt2 * cn(i,j+1)
+    wgt1 = cnmask(i,j) - 0.5 * cnmask(i,j) * cnmask(i,j+1)
+    wgt2 = cnmask(i,j+1) - 0.5 * cnmask(i,j) * cnmask(i,j+1)
+    cn_v(i,J) = wgt1*cn(i,j) + wgt2*cn(i,j+1)
   enddo ; enddo
 
   Ifreq = 1.0 / freq
