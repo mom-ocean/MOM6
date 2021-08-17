@@ -35,12 +35,14 @@ public Phillips_initialize_topography
 contains
 
 !> Initialize the thickness field for the Phillips model test case.
-subroutine Phillips_initialize_thickness(h, G, GV, US, param_file, just_read_params)
+subroutine Phillips_initialize_thickness(h, depth_tot, G, GV, US, param_file, just_read_params)
   type(ocean_grid_type),   intent(in)  :: G          !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)  :: GV         !< The ocean's vertical grid structure.
   type(unit_scale_type),   intent(in)  :: US         !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(out) :: h          !< The thickness that is being initialized [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJ_(G)), &
+                           intent(in)  :: depth_tot  !< The nominal total depth of the ocean [Z ~> m]
   type(param_file_type),   intent(in)  :: param_file !< A structure indicating the open file
                                                      !! to parse for model parameter values.
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
@@ -113,7 +115,7 @@ subroutine Phillips_initialize_thickness(h, G, GV, US, param_file, just_read_par
     ! thicknesses are set to insure that: 1. each layer is at least an Angstrom thick, and
     ! 2. the interfaces are where they should be based on the resting depths and interface
     !    height perturbations, as long at this doesn't interfere with 1.
-    eta1D(nz+1) = -G%bathyT(i,j)
+    eta1D(nz+1) = -depth_tot(i,j)
     do k=nz,1,-1
       eta1D(K) = eta_im(j,K)
       if (eta1D(K) < (eta1D(K+1) + GV%Angstrom_Z)) then

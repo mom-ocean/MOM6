@@ -90,12 +90,14 @@ subroutine dumbbell_initialize_topography( D, G, param_file, max_depth )
 end subroutine dumbbell_initialize_topography
 
 !> Initializes the layer thicknesses to be uniform in the dumbbell test case
-subroutine dumbbell_initialize_thickness ( h, G, GV, US, param_file, just_read_params)
+subroutine dumbbell_initialize_thickness ( h, depth_tot, G, GV, US, param_file, just_read_params)
   type(ocean_grid_type),   intent(in)  :: G           !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)  :: GV          !< The ocean's vertical grid structure.
   type(unit_scale_type),   intent(in)  :: US          !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(out) :: h           !< The thickness that is being initialized [H ~> m or kg m-2].
+  real, dimension(SZI_(G),SZJ_(G)), &
+                           intent(in)  :: depth_tot  !< The nominal total depth of the ocean [Z ~> m]
   type(param_file_type),   intent(in)  :: param_file  !< A structure indicating the open file
                                                       !! to parse for model parameter values.
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
@@ -169,7 +171,7 @@ subroutine dumbbell_initialize_thickness ( h, G, GV, US, param_file, just_read_p
       e0(K) = max(-G%max_depth, e0(K)) ! Bound by bottom
     enddo
     do j=js,je ; do i=is,ie
-      eta1D(nz+1) = -G%bathyT(i,j)
+      eta1D(nz+1) = -depth_tot(i,j)
       do k=nz,1,-1
         eta1D(k) = e0(k)
         if (eta1D(k) < (eta1D(k+1) + GV%Angstrom_Z)) then
@@ -184,7 +186,7 @@ subroutine dumbbell_initialize_thickness ( h, G, GV, US, param_file, just_read_p
   case ( REGRIDDING_ZSTAR )                       ! Initial thicknesses for z coordinates
     if (just_read) return ! All run-time parameters have been read, so return.
     do j=js,je ; do i=is,ie
-      eta1D(nz+1) = -G%bathyT(i,j)
+      eta1D(nz+1) = -depth_tot(i,j)
       do k=nz,1,-1
         eta1D(k) = -G%max_depth * real(k-1) / real(nz)
         if (eta1D(k) < (eta1D(k+1) + min_thickness)) then
@@ -199,7 +201,7 @@ subroutine dumbbell_initialize_thickness ( h, G, GV, US, param_file, just_read_p
   case ( REGRIDDING_SIGMA )             ! Initial thicknesses for sigma coordinates
     if (just_read) return ! All run-time parameters have been read, so return.
     do j=js,je ; do i=is,ie
-      h(i,j,:) = GV%Z_to_H * G%bathyT(i,j) / dfloat(nz)
+      h(i,j,:) = GV%Z_to_H * depth_tot(i,j) / dfloat(nz)
     enddo ; enddo
 
 end select
@@ -284,11 +286,13 @@ subroutine dumbbell_initialize_temperature_salinity ( T, S, h, G, GV, param_file
 end subroutine dumbbell_initialize_temperature_salinity
 
 !> Initialize the restoring sponges for the dumbbell test case
-subroutine dumbbell_initialize_sponges(G, GV, US, tv, param_file, use_ALE, CSp, ACSp)
+subroutine dumbbell_initialize_sponges(G, GV, US, tv, depth_tot, param_file, use_ALE, CSp, ACSp)
   type(ocean_grid_type),   intent(in) :: G !< Horizontal grid control structure
   type(verticalGrid_type), intent(in) :: GV !< Vertical grid control structure
   type(unit_scale_type),   intent(in) :: US !< A dimensional unit scaling type
   type(thermo_var_ptrs),   intent(in) :: tv !< Thermodynamic variables
+  real, dimension(SZI_(G),SZJ_(G)), &
+                           intent(in) :: depth_tot  !< The nominal total depth of the ocean [Z ~> m]
   type(param_file_type),   intent(in) :: param_file !< Parameter file structure
   logical,                 intent(in) :: use_ALE !< ALE flag
   type(sponge_CS),         pointer    :: CSp !< Layered sponge control structure pointer
@@ -354,7 +358,7 @@ subroutine dumbbell_initialize_sponges(G, GV, US, tv, param_file, use_ALE, CSp, 
   if (use_ALE) then
     ! construct a uniform grid for the sponge
     do j=G%jsc,G%jec ; do i=G%isc,G%iec
-      eta1D(nz+1) = -G%bathyT(i,j)
+      eta1D(nz+1) =  depth_tot(i,j)
       do k=nz,1,-1
         eta1D(k) = -G%max_depth * real(k-1) / real(nz)
         if (eta1D(k) < (eta1D(k+1) + min_thickness)) then
