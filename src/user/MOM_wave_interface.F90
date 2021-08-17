@@ -174,7 +174,7 @@ end type wave_parameters_CS
 
 ! Switches needed in import_stokes_drift
 !>@{ Enumeration values for the wave method
-integer, parameter :: TESTPROF = 0, SURFBANDS = 1, DHH85 = 2, LF17 = 3, VR12MA = 4, NULL_WaveMethod = -99
+integer, parameter :: TESTPROF = 0, SURFBANDS = 1, DHH85 = 2, LF17 = 3, EFACTOR = 4, NULL_WaveMethod = -99
 !>@}
 !>@{ Enumeration values for the wave data source
 integer, parameter :: DATAOVR = 1, COUPLER = 2, INPUT = 3
@@ -186,7 +186,7 @@ character*(12), parameter :: TESTPROF_STRING  = "TEST_PROFILE"  !< test profile 
 character*(13), parameter :: SURFBANDS_STRING = "SURFACE_BANDS" !< surface bands string
 character*(5), parameter  :: DHH85_STRING     = "DHH85"         !< DHH85 wave method string
 character*(4), parameter  :: LF17_STRING      = "LF17"          !< LF17 wave method string
-character*(7), parameter  :: VR12MA_STRING    = "VR12-MA"       !< VR12-MA wave method string
+character*(7), parameter  :: EFACTOR_STRING   = "EFACTOR"       !< EFACTOR (based on vr12-ma) wave method string
 
 contains
 
@@ -288,10 +288,11 @@ subroutine MOM_wave_interface_init(time, G, GV, US, param_file, CS, diag )
        "                 wave spectrum with prescribed values. \n"//  &
        " LF17          - Infers Stokes drift profile from wind \n"//  &
        "                 speed following Li and Fox-Kemper 2017.\n"// &
-       " VR12-MA       - Applies an enhancement factor to the KPP\n"//&
-       "                 turbulent velocity scale received from \n"// &
-       "                 WW3 and is based on the surface layer \n"//  &
-       "                 and projected Langmuir number. (Li 2016)\n", &
+       " EFACTOR       - Applies an enhancement factor to the KPP\n"//&
+       "                 turbulent velocity scale received \n"//      &
+       "                 directly from WW3 and is based on the \n"//  &
+       "                 surface layer and projected Langmuir \n"//   &
+       "                 number (Li 2016)\n", &
        units='', default=NULL_STRING)
   select case (TRIM(TMPSTRING1))
   case (NULL_STRING)! No Waves
@@ -390,8 +391,8 @@ subroutine MOM_wave_interface_init(time, G, GV, US, param_file, CS, diag )
           default=.false.)
   case (LF17_STRING)!Li and Fox-Kemper 17 wind-sea Langmuir number
     CS%WaveMethod = LF17
-  case (VR12MA_STRING)!Li and Fox-Kemper 16
-    CS%WaveMethod = VR12MA
+  case (EFACTOR_STRING)!Li and Fox-Kemper 16
+    CS%WaveMethod = EFACTOR
   case default
     call MOM_error(FATAL,'Check WAVE_METHOD.')
   end select
@@ -770,8 +771,8 @@ subroutine Update_Stokes_Drift(G, GV, US, CS, h, ustar)
       enddo
       CS%DHH85_is_set = .true.
     endif
-  elseif (CS%WaveMethod==VR12MA) then
-    return ! todo
+  elseif (CS%WaveMethod==EFACTOR) then
+    return ! pass
   else! Keep this else, fallback to 0 Stokes drift
     do kk= 1,GV%ke
       do jj = G%jsd,G%jed
@@ -1075,8 +1076,8 @@ function get_wave_method(CS)
         get_wave_method = DHH85_STRING
       case (LF17)
         get_wave_method = LF17_STRING
-      case (VR12MA)
-        get_wave_method = VR12MA_STRING
+      case (EFACTOR)
+        get_wave_method = EFACTOR_STRING
     end select
   else
     get_wave_method = NULL_STRING

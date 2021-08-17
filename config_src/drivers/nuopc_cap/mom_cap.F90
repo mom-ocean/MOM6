@@ -708,7 +708,7 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
   call query_ocean_state(ocean_state, use_waves=use_waves, wave_method=wave_method)
   if (use_waves) then
     call query_ocean_state(ocean_state, NumWaveBands=Ice_ocean_boundary%num_stk_bands)
-    if (wave_method == "VR12-MA") then
+    if (wave_method == "EFACTOR") then
       allocate( Ice_ocean_boundary%lamult(isc:iec,jsc:jec) )
       Ice_ocean_boundary%lamult          = 0.0
     else
@@ -761,7 +761,7 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
   !call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_runoff_heat_flx"        , "will provide")
   !call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_calving_heat_flx"       , "will provide")
   if (use_waves) then
-    if (wave_method == "VR12-MA") then
+    if (wave_method == "EFACTOR") then
       call fld_list_add(fldsToOcn_num, fldsToOcn, "Sw_lamult"                 , "will provide")
     else
       if (Ice_ocean_boundary%num_stk_bands > 3) then
