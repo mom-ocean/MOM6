@@ -777,6 +777,9 @@ subroutine refract(En, cn, freq, dt, G, US, NAngle, use_PPMang)
     Flux_E
   real, dimension(SZI_(G),SZJ_(G),1-stencil:NAngle+stencil) :: &
     CFL_ang
+  real, dimension(G%IsdB:G%IedB,G%jsd:G%jed) :: cn_u !< Internal wave group velocity at U-point
+  real, dimension(G%isd:G%ied,G%JsdB:G%JedB) :: cn_v !< Internal wave group velocity at V-point
+  real, dimension(G%isd:G%ied,G%jsd:G%jed) :: cnmask !< Local mask for group velocity
   real :: f2              ! The squared Coriolis parameter [T-2 ~> s-2].
   real :: favg            ! The average Coriolis parameter at a point [T-1 ~> s-1].
   real :: df_dy, df_dx    ! The x- and y- gradients of the Coriolis parameter [T-1 L-1 ~> s-1 m-1].
@@ -787,12 +790,29 @@ subroutine refract(En, cn, freq, dt, G, US, NAngle, use_PPMang)
   real :: cn_subRO        ! A tiny wave speed to prevent division by zero [L T-1 ~> m s-1]
   integer :: is, ie, js, je, asd, aed, na
   integer :: i, j, a
+  real :: wgt1, wgt2
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; na = size(En,3)
   asd = 1-stencil ; aed = NAngle+stencil
 
+  cnmask(:,:) = merge(0., 1., cn(:,:) == 0.)
+
+  do j=js,je ; do i=is-1,ie
+    ! wgt = 0 if local cn == 0, wgt = 0.5 if both contiguous values != 0
+    ! and wgt = 1 if neighbour cn == 0
+    wgt1 = cnmask(i,j) - 0.5 * cnmask(i,j) * cnmask(i+1,j)
+    wgt2 = cnmask(i+1,j) - 0.5 * cnmask(i,j) * cnmask(i+1,j)
+    cn_u(I,j) = wgt1*cn(i,j) + wgt2*cn(i+1,j)
+  enddo ; enddo
+
+  do j=js-1,je ; do i=is,ie
+    wgt1 = cnmask(i,j) - 0.5 * cnmask(i,j) * cnmask(i,j+1)
+    wgt2 = cnmask(i,j+1) - 0.5 * cnmask(i,j) * cnmask(i,j+1)
+    cn_v(i,J) = wgt1*cn(i,j) + wgt2*cn(i,j+1)
+  enddo ; enddo
+
   Ifreq = 1.0 / freq
-  cn_subRO = 1e-100*US%m_s_to_L_T  ! The hard-coded value here might need to increase.
+  cn_subRO = 1e-30*US%m_s_to_L_T
   Angle_size = (8.0*atan(1.0)) / (real(NAngle))
   dt_Angle_size = dt / Angle_size
 
@@ -821,16 +841,12 @@ subroutine refract(En, cn, freq, dt, G, US, NAngle, use_PPMang)
                    (G%CoriolisBu(I,J-1) + G%CoriolisBu(I-1,J)))
       df_dx = 0.5*((G%CoriolisBu(I,J) + G%CoriolisBu(I,J-1)) - &
                     (G%CoriolisBu(I-1,J) + G%CoriolisBu(I-1,J-1))) * G%IdxT(i,j)
-      dlnCn_dx = 0.5*( G%IdxCu(I,j) * (cn(i+1,j) - cn(i,j)) / &
-                       (0.5*(cn(i+1,j) + cn(i,j)) + cn_subRO) + &
-                       G%IdxCu(I-1,j) * (cn(i,j) - cn(i-1,j)) / &
-                       (0.5*(cn(i,j) + cn(i-1,j)) + cn_subRO) )
       df_dy = 0.5*((G%CoriolisBu(I,J) + G%CoriolisBu(I-1,J)) - &
                    (G%CoriolisBu(I,J-1) + G%CoriolisBu(I-1,J-1))) * G%IdyT(i,j)
-      dlnCn_dy = 0.5*( G%IdyCv(i,J) * (cn(i,j+1) - cn(i,j)) / &
-                       (0.5*(cn(i,j+1) + cn(i,j)) + cn_subRO) + &
-                       G%IdyCv(i,J-1) * (cn(i,j) - cn(i,j-1)) / &
-                       (0.5*(cn(i,j) + cn(i,j-1)) + cn_subRO) )
+
+      dlnCn_dx = G%IdxT(i,j) * (cn_u(I,j) - cn_u(I-1,j)) / (0.5 * (cn_u(I,j) + cn_u(I-1,j)) + cn_subRO)
+      dlnCn_dy = G%IdyT(i,j) * (cn_v(i,J) - cn_v(i,J-1)) / (0.5 * (cn_v(i,J) + cn_v(i,J-1)) + cn_subRO)
+
       Kmag2 = (freq**2 - f2) / (cn(i,j)**2 + cn_subRO**2)
       if (Kmag2 > 0.0) then
         I_Kmag = 1.0 / sqrt(Kmag2)
