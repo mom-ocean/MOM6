@@ -75,7 +75,7 @@ subroutine bcz_params(G, GV, US, param_file, S_ref, dSdz, delta_S, dSdx, T_ref, 
 end subroutine bcz_params
 
 !> Initialization of temperature and salinity with the baroclinic zone initial conditions
-subroutine baroclinic_zone_init_temperature_salinity(T, S, h, G, GV, US, param_file, &
+subroutine baroclinic_zone_init_temperature_salinity(T, S, h, depth_tot, G, GV, US, param_file, &
                                                      just_read_params)
   type(ocean_grid_type),                     intent(in)  :: G  !< Grid structure
   type(verticalGrid_type),                   intent(in)  :: GV !< The ocean's vertical grid structure.
@@ -83,6 +83,8 @@ subroutine baroclinic_zone_init_temperature_salinity(T, S, h, G, GV, US, param_f
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: T  !< Potential temperature [degC]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: S  !< Salinity [ppt]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)  :: h  !< The model thicknesses [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJ_(G)), &
+                           intent(in)  :: depth_tot !< The nominal total depth of the ocean [Z ~> m]
   type(param_file_type),                     intent(in)  :: param_file  !< Parameter file handle
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
                                                       !! only read parameters without changing T & S.
@@ -109,7 +111,7 @@ subroutine baroclinic_zone_init_temperature_salinity(T, S, h, G, GV, US, param_f
   PI = 4.*atan(1.)
 
   do j = G%jsc,G%jec ; do i = G%isc,G%iec
-    zi = -G%bathyT(i,j)
+    zi = -depth_tot(i,j)
     x = G%geoLonT(i,j) - (G%west_lon + 0.5*G%len_lon) ! Relative to center of domain
     xd = x / G%len_lon ! -1/2 < xd 1/2
     y = G%geoLatT(i,j) - (G%south_lat + 0.5*G%len_lat) ! Relative to center of domain
