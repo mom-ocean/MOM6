@@ -3802,29 +3802,31 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
     ishift=0;jshift=0
     if (segment%is_E_or_W) then
       allocate(normal_trans_bt(segment%HI%IsdB:segment%HI%IedB,segment%HI%jsd:segment%HI%jed))
-      normal_trans_bt(:,:)=0.0
+      normal_trans_bt(:,:) = 0.0
       if (segment%direction == OBC_DIRECTION_W) ishift=1
       I=segment%HI%IsdB
       do j=segment%HI%jsd,segment%HI%jed
-        segment%Cg(I,j) = sqrt(GV%g_prime(1)*G%bathyT(i+ishift,j))
-        segment%Htot(I,j)=0.0
+        segment%Htot(I,j) = 0.0
         do k=1,GV%ke
           segment%h(I,j,k) = h(i+ishift,j,k)
-          segment%Htot(I,j)=segment%Htot(I,j)+segment%h(I,j,k)
+          segment%Htot(I,j) = segment%Htot(I,j) + segment%h(I,j,k)
         enddo
+        segment%Cg(I,j) = sqrt(GV%g_prime(1)*G%bathyT(i+ishift,j))
+        !### This should be: segment%Cg(I,j) = sqrt(GV%g_prime(1)*segment%Htot(I,j)*GV%H_to_Z)
       enddo
     else! (segment%direction == OBC_DIRECTION_N .or. segment%direction == OBC_DIRECTION_S)
       allocate(normal_trans_bt(segment%HI%isd:segment%HI%ied,segment%HI%JsdB:segment%HI%JedB))
-      normal_trans_bt(:,:)=0.0
+      normal_trans_bt(:,:) = 0.0
       if (segment%direction == OBC_DIRECTION_S) jshift=1
       J=segment%HI%JsdB
       do i=segment%HI%isd,segment%HI%ied
-        segment%Cg(i,J) = sqrt(GV%g_prime(1)*G%bathyT(i,j+jshift))
-        segment%Htot(i,J)=0.0
+        segment%Htot(i,J) = 0.0
         do k=1,GV%ke
           segment%h(i,J,k) = h(i,j+jshift,k)
-          segment%Htot(i,J)=segment%Htot(i,J)+segment%h(i,J,k)
+          segment%Htot(i,J) = segment%Htot(i,J) + segment%h(i,J,k)
         enddo
+        segment%Cg(i,J) = sqrt(GV%g_prime(1)*G%bathyT(i,j+jshift))
+        !### This should be: segment%Cg(i,J) = sqrt(GV%g_prime(1)*segment%Htot(i,J)*GV%H_to_Z)
       enddo
     endif
 
@@ -4715,7 +4717,7 @@ subroutine mask_outside_OBCs(G, US, param_file, OBC)
   integer :: i, j
   integer :: l_seg
   logical :: fatal_error = .False.
-  real    :: min_depth
+  real    :: min_depth ! The minimum depth for ocean points [Z ~> m]
   integer, parameter :: cin = 3, cout = 4, cland = -1, cedge = -2
   character(len=256) :: mesg    ! Message for error messages.
   type(OBC_segment_type), pointer :: segment => NULL() ! pointer to segment type list
@@ -4729,7 +4731,6 @@ subroutine mask_outside_OBCs(G, US, param_file, OBC)
 
   allocate(color(G%isd:G%ied, G%jsd:G%jed)) ; color = 0
   allocate(color2(G%isd:G%ied, G%jsd:G%jed)) ; color2 = 0
-
 
   ! Paint a frame around the outside.
   do j=G%jsd,G%jed

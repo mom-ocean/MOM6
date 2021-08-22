@@ -11,7 +11,7 @@ use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock, only :  CLOCK_ROUTINE, CLOCK_LOOP
 use MOM_domains, only : pass_var, pass_vector, sum_across_PEs, broadcast
 use MOM_domains, only : root_PE, To_All, SCALAR_PAIR, CGRID_NE, AGRID
-use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, NOTE, WARNING, is_root_pe
+use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, WARNING, is_root_pe
 use MOM_error_handler, only : callTree_enter, callTree_leave, callTree_waypoint
 use MOM_file_parser, only : get_param, read_param, log_param, param_file_type
 use MOM_file_parser, only : log_version
@@ -655,7 +655,7 @@ subroutine initialize_thickness_from_file(h, G, GV, US, param_file, file_has_thi
                                                !! only read parameters without changing h.
 
   ! Local variables
-  real :: eta(SZI_(G),SZJ_(G),SZK_(GV)+1) ! Interface heights, in depth units.
+  real :: eta(SZI_(G),SZJ_(G),SZK_(GV)+1) ! Interface heights, in depth units [Z ~> m].
   integer :: inconsistent = 0
   logical :: correct_thickness
   logical :: just_read    ! If true, just read parameters but set nothing.
@@ -696,7 +696,7 @@ subroutine initialize_thickness_from_file(h, G, GV, US, param_file, file_has_thi
     call MOM_read_data(filename, "eta", eta(:,:,:), G%Domain, scale=US%m_to_Z)
 
     if (correct_thickness) then
-      call adjustEtaToFitBathymetry(G, GV, US, eta, h)
+      call adjustEtaToFitBathymetry(G, GV, US, eta, h,  dZ_ref_eta=0.0)
     else
       do k=nz,1,-1 ; do j=js,je ; do i=is,ie
         if (eta(i,j,K) < (eta(i,j,K+1) + GV%Angstrom_Z)) then
@@ -732,25 +732,30 @@ end subroutine initialize_thickness_from_file
 !! is dilated (expanded) to fill the void.
 !!   @remark{There is a (hard-wired) "tolerance" parameter such that the
 !! criteria for adjustment must equal or exceed 10cm.}
-subroutine adjustEtaToFitBathymetry(G, GV, US, eta, h)
+subroutine adjustEtaToFitBathymetry(G, GV, US, eta, h, dZ_ref_eta)
   type(ocean_grid_type),                       intent(in)    :: G   !< The ocean's grid structure
   type(verticalGrid_type),                     intent(in)    :: GV  !< The ocean's vertical grid structure
   type(unit_scale_type),                       intent(in)    :: US  !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), intent(inout) :: eta !< Interface heights [Z ~> m].
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),   intent(inout) :: h   !< Layer thicknesses [H ~> m or kg m-2]
+  real,                              optional, intent(in)    :: dZ_ref_eta !< The difference between the
+                                                                    !! reference heights for bathyT and
+                                                                    !! eta [Z ~> m], 0 by default.
   ! Local variables
   integer :: i, j, k, is, ie, js, je, nz, contractions, dilations
   real :: hTolerance = 0.1 !<  Tolerance to exceed adjustment criteria [Z ~> m]
-  real :: hTmp, eTmp, dilate
+  real :: dilate ! A factor by which the column is dilated [nondim]
+  real :: dZ_ref ! The difference in the reference heights for G%bathyT and eta [Z ~> m]
   character(len=100) :: mesg
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   hTolerance = 0.1*US%m_to_Z
+  dZ_ref = 0.0 ; if (present(dZ_ref_eta)) dZ_ref = dZ_ref_eta
 
   contractions = 0
   do j=js,je ; do i=is,ie
-    if (-eta(i,j,nz+1) > G%bathyT(i,j) + hTolerance) then
-      eta(i,j,nz+1) = -G%bathyT(i,j)
+    if (-eta(i,j,nz+1) > (G%bathyT(i,j) + dZ_ref) + hTolerance) then
+      eta(i,j,nz+1) = -(G%bathyT(i,j) + dZ_ref)
       contractions = contractions + 1
     endif
   enddo ; enddo
@@ -779,12 +784,12 @@ subroutine adjustEtaToFitBathymetry(G, GV, US, eta, h)
     !   The whole column is dilated to accommodate deeper topography than
     ! the bathymetry would indicate.
     ! This should be...  if ((G%mask2dt(i,j)*(eta(i,j,1)-eta(i,j,nz+1)) > 0.0) .and. &
-    if (-eta(i,j,nz+1) < G%bathyT(i,j) - hTolerance) then
+    if (-eta(i,j,nz+1) < (G%bathyT(i,j) + dZ_ref) - hTolerance) then
       dilations = dilations + 1
       if (eta(i,j,1) <= eta(i,j,nz+1)) then
-        do k=1,nz ; h(i,j,k) = (eta(i,j,1) + G%bathyT(i,j)) / real(nz) ; enddo
+        do k=1,nz ; h(i,j,k) = (eta(i,j,1) + (G%bathyT(i,j) + dZ_ref)) / real(nz) ; enddo
       else
-        dilate = (eta(i,j,1) + G%bathyT(i,j)) / (eta(i,j,1) - eta(i,j,nz+1))
+        dilate = (eta(i,j,1) + (G%bathyT(i,j) + dZ_ref)) / (eta(i,j,1) - eta(i,j,nz+1))
         do k=1,nz ; h(i,j,k) = h(i,j,k) * dilate ; enddo
       endif
       do k=nz,2,-1 ; eta(i,j,K) = eta(i,j,K+1) + h(i,j,k) ; enddo
@@ -1746,11 +1751,11 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, u, v, param_f
   type(thermo_var_ptrs),   intent(in) :: tv   !< A structure pointing to various thermodynamic
                                               !! variables.
   real, target, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
-                              intent(in)   :: u    !< The zonal velocity that is being
-                                                    !! initialized [L T-1 ~> m s-1]
+                           intent(in) :: u    !< The zonal velocity that is being
+                                              !! initialized [L T-1 ~> m s-1]
   real, target, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
-                              intent(in)    :: v    !< The meridional velocity that is being
-                                                    !! initialized [L T-1 ~> m s-1]
+                           intent(in) :: v    !< The meridional velocity that is being
+                                              !! initialized [L T-1 ~> m s-1]
   type(param_file_type),   intent(in) :: param_file !< A structure to parse for run-time parameters.
   type(sponge_CS),         pointer    :: Layer_CSp  !< A pointer that is set to point to the control
                                               !! structure for this module (in layered mode).
@@ -2182,9 +2187,9 @@ subroutine initialize_oda_incupd_file(G, GV, US, use_temperature, tv, h, u, v, p
 
   ! calculate increments if input are full fields
   if (oda_inc) then ! input are increments
-    if (is_root_pe()) call MOM_error(NOTE,"incupd using increments fields ")
+    if (is_root_pe()) call MOM_mesg("incupd using increments fields ")
   else ! inputs are full fields
-    if (is_root_pe()) call MOM_error(NOTE,"incupd using full fields ")
+    if (is_root_pe()) call MOM_mesg("incupd using full fields ")
     call calc_oda_increments(h, tv, u, v, G, GV, US, oda_incupd_CSp)
     if (save_inc) then
       call output_oda_incupd_inc(Time, G, GV, param_file, oda_incupd_CSp, US)
@@ -2319,6 +2324,8 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, US, PF, just_read_param
   real, dimension(:,:,:), allocatable, target :: temp_z, salt_z, mask_z
   real, dimension(:,:,:), allocatable :: rho_z ! Densities in Z-space [R ~> kg m-3]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1) :: zi   ! Interface heights [Z ~> m].
+  real, dimension(SZI_(G),SZJ_(G)) :: Z_bottom   ! The (usually negative) height of the seafloor
+                                                 ! relative to the surface [Z ~> m].
   integer, dimension(SZI_(G),SZJ_(G))  :: nlevs
   real, dimension(SZI_(G))   :: press  ! Pressures [R L2 T-2 ~> Pa].
 
@@ -2513,6 +2520,10 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, US, PF, just_read_param
   call pass_var(mask_z,G%Domain)
   call pass_var(rho_z,G%Domain)
 
+  do j=js,je ; do i=is,ie
+    Z_bottom(i,j) = -G%bathyT(i,j)
+  enddo ; enddo
+
   ! Done with horizontal interpolation.
   ! Now remap to model coordinates
   if (useALEremapping) then
@@ -2530,11 +2541,11 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, US, PF, just_read_param
         tmp_mask_in(i,j,1:kd) = mask_z(i,j,:)
         do k = 1, nkd
           if (tmp_mask_in(i,j,k)>0. .and. k<=kd) then
-            zBottomOfCell = max( z_edges_in(k+1), -G%bathyT(i,j) )
+            zBottomOfCell = max( z_edges_in(k+1), Z_bottom(i,j))
             tmpT1dIn(i,j,k) = temp_z(i,j,k)
             tmpS1dIn(i,j,k) = salt_z(i,j,k)
           elseif (k>1) then
-            zBottomOfCell = -G%bathyT(i,j)
+            zBottomOfCell = Z_bottom(i,j)
             tmpT1dIn(i,j,k) = tmpT1dIn(i,j,k-1)
             tmpS1dIn(i,j,k) = tmpS1dIn(i,j,k-1)
           else ! This next block should only ever be reached over land
@@ -2544,7 +2555,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, US, PF, just_read_param
           h1(i,j,k) = GV%Z_to_H * (zTopOfCell - zBottomOfCell)
           zTopOfCell = zBottomOfCell ! Bottom becomes top for next value of k
         enddo
-        h1(i,j,kd) = h1(i,j,kd) + GV%Z_to_H * max(0., zTopOfCell + G%bathyT(i,j) )
+        h1(i,j,kd) = h1(i,j,kd) + GV%Z_to_H * max(0., zTopOfCell - Z_bottom(i,j) )
         ! The max here is in case the data data is shallower than model
       endif ! mask2dT
     enddo ; enddo
@@ -2567,7 +2578,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, US, PF, just_read_param
           ! Build the target grid combining hTarget and topography
           zTopOfCell = 0. ; zBottomOfCell = 0.
           do k = 1, nz
-            zBottomOfCell = max( zTopOfCell - hTarget(k), -G%bathyT(i,j) )
+            zBottomOfCell = max( zTopOfCell - hTarget(k), Z_bottom(i,j))
             h(i,j,k) = GV%Z_to_H * (zTopOfCell - zBottomOfCell)
             zTopOfCell = zBottomOfCell ! Bottom becomes top for next value of k
           enddo
@@ -2624,11 +2635,11 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, US, PF, just_read_param
 
     nkml = 0 ; if (separate_mixed_layer) nkml = GV%nkml
 
-    call find_interfaces(rho_z, z_in, kd, Rb, G%bathyT, zi, G, GV, US, nlevs, nkml, &
+    call find_interfaces(rho_z, z_in, kd, Rb, Z_bottom, zi, G, GV, US, nlevs, nkml, &
                          Hmix_depth, eps_z, eps_rho, density_extrap_bug)
 
     if (correct_thickness) then
-      call adjustEtaToFitBathymetry(G, GV, US, zi, h)
+      call adjustEtaToFitBathymetry(G, GV, US, zi, h, dZ_ref_eta=0.0)
     else
       do k=nz,1,-1 ; do j=js,je ; do i=is,ie
         if (zi(i,j,K) < (zi(i,j,K+1) + GV%Angstrom_Z)) then
@@ -2640,7 +2651,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, US, PF, just_read_param
       enddo ; enddo ; enddo
       inconsistent=0
       do j=js,je ; do i=is,ie
-        if (abs(zi(i,j,nz+1) + G%bathyT(i,j)) > 1.0*US%m_to_Z) &
+        if (abs(zi(i,j,nz+1) - Z_bottom(i,j)) > 1.0*US%m_to_Z) &
           inconsistent = inconsistent + 1
       enddo ; enddo
       call sum_across_PEs(inconsistent)
@@ -2710,7 +2721,7 @@ end subroutine MOM_temp_salt_initialize_from_Z
 
 
 !> Find interface positions corresponding to interpolated depths in a density profile
-subroutine find_interfaces(rho, zin, nk_data, Rb, depth, zi, G, GV, US, nlevs, nkml, hml, &
+subroutine find_interfaces(rho, zin, nk_data, Rb, Z_bot, zi, G, GV, US, nlevs, nkml, hml, &
                            eps_z, eps_rho, density_extrap_bug)
   type(ocean_grid_type),      intent(in)  :: G     !< The ocean's grid structure
   type(verticalGrid_type),    intent(in)  :: GV    !< The ocean's vertical grid structure
@@ -2720,7 +2731,8 @@ subroutine find_interfaces(rho, zin, nk_data, Rb, depth, zi, G, GV, US, nlevs, n
   real, dimension(nk_data),   intent(in)  :: zin   !< Input data levels [Z ~> m].
   real, dimension(SZK_(GV)+1), intent(in) :: Rb    !< target interface densities [R ~> kg m-3]
   real, dimension(SZI_(G),SZJ_(G)), &
-                              intent(in)  :: depth !< ocean depth [Z ~> m].
+                              intent(in)  :: Z_bot !< The (usually negative) height of the seafloor
+                                                   !! relative to the surface [Z ~> m].
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), &
                               intent(out) :: zi    !< The returned interface heights [Z ~> m]
   type(unit_scale_type),      intent(in)  :: US    !< A dimensional unit scaling type
@@ -2808,15 +2820,15 @@ subroutine find_interfaces(rho, zin, nk_data, Rb, depth, zi, G, GV, US, nlevs, n
       ! Linearly interpolate to find the depth, zi_, where Rb would be found.
       slope = (zin(k_int+1) - zin(k_int)) / max(rho_(k_int+1) - rho_(k_int), eps_rho)
       zi_(K) = -1.0*(zin(k_int) + slope*(Rb(K)-rho_(k_int)))
-      zi_(K) = min(max(zi_(K), -depth(i,j)), -1.0*hml)
+      zi_(K) = min(max(zi_(K), Z_bot(i,j)), -1.0*hml)
     enddo
-    zi_(nz+1) = -depth(i,j)
+    zi_(nz+1) = Z_bot(i,j)
     if (nkml > 0) then ; do K=2,nkml+1
-      zi_(K) = max(hml*((1.0-real(K))/real(nkml)), -depth(i,j))
+      zi_(K) = max(hml*((1.0-real(K))/real(nkml)), Z_bot(i,j))
     enddo ; endif
     do K=nz,max(nkml+2,2),-1
       if (zi_(K) < zi_(K+1) + eps_Z) zi_(K) = zi_(K+1) + eps_Z
-      if (zi_(K) > -1.0*hml)  zi_(K) = max(-1.0*hml, -depth(i,j))
+      if (zi_(K) > -1.0*hml)  zi_(K) = max(-1.0*hml, Z_bot(i,j))
     enddo
 
     do K=1,nz+1
@@ -2864,7 +2876,7 @@ subroutine MOM_state_init_tests(G, GV, US, tv)
     S_t(k) = 35. - (0. * I_z_scale)*e(k)
     S(k)   = 35. + (0. * I_z_scale)*z(k)
     S_b(k) = 35. - (0. * I_z_scale)*e(k+1)
-    call calculate_density(0.5*(T_t(k)+T_b(k)), 0.5*(S_t(k)+S_b(k)), -GV%Rho0*GV%g_Earth*US%m_to_Z*z(k), &
+    call calculate_density(0.5*(T_t(k)+T_b(k)), 0.5*(S_t(k)+S_b(k)), -GV%Rho0*GV%g_Earth*z(k), &
                            rho(k), tv%eqn_of_state)
     P_tot = P_tot + GV%g_Earth * rho(k) * GV%H_to_Z*h(k)
   enddo

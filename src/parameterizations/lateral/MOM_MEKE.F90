@@ -637,7 +637,7 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
 
 end subroutine step_forward_MEKE
 
-!> Calculates the equilibrium solutino where the source depends only on MEKE diffusivity
+!> Calculates the equilibrium solution where the source depends only on MEKE diffusivity
 !! and there is no lateral diffusion of MEKE.
 !! Results is in MEKE%MEKE.
 subroutine MEKE_equilibrium(CS, MEKE, G, GV, US, SN_u, SN_v, drag_rate_visc, I_mass)
@@ -667,6 +667,7 @@ subroutine MEKE_equilibrium(CS, MEKE, G, GV, US, SN_u, SN_v, drag_rate_visc, I_m
   real :: resid, ResMin, ResMax ! Residuals [L2 T-3 ~> W kg-1]
   real :: FatH    ! Coriolis parameter at h points; to compute topographic beta [T-1 ~> s-1]
   real :: beta_topo_x, beta_topo_y    ! Topographic PV gradients in x and y [T-1 L-1 ~> s-1 m-1]
+  real :: dZ_neglect ! A negligible change in height [Z ~> m]
   integer :: i, j, is, ie, js, je, n1, n2
   real :: tolerance ! Width of EKE bracket [L2 T-2 ~> m2 s-2].
   logical :: useSecant, debugIteration
@@ -680,6 +681,7 @@ subroutine MEKE_equilibrium(CS, MEKE, G, GV, US, SN_u, SN_v, drag_rate_visc, I_m
   Ubg2 = CS%MEKE_Uscale**2
   cd2 = CS%cdrag**2
   tolerance = 1.0e-12*US%m_s_to_L_T**2
+  dZ_neglect = GV%H_to_Z*GV%H_subroundoff
 
 !$OMP do
   do j=js,je ; do i=is,ie
@@ -701,14 +703,14 @@ subroutine MEKE_equilibrium(CS, MEKE, G, GV, US, SN_u, SN_v, drag_rate_visc, I_m
         !    of the water column thickness instead of the bathymetric depth.
         beta_topo_x = -CS%MEKE_topographic_beta * FatH * 0.5 * ( &
                       (G%bathyT(i+1,j)-G%bathyT(i,j)) * G%IdxCu(I,j)  &
-                  / max(G%bathyT(i+1,j),G%bathyT(i,j), GV%H_subroundoff) &
+                  / max(G%bathyT(i+1,j),G%bathyT(i,j), dZ_neglect) &
               +       (G%bathyT(i,j)-G%bathyT(i-1,j)) * G%IdxCu(I-1,j) &
-                  / max(G%bathyT(i,j),G%bathyT(i-1,j), GV%H_subroundoff) )
+                  / max(G%bathyT(i,j),G%bathyT(i-1,j), dZ_neglect) )
         beta_topo_y = -CS%MEKE_topographic_beta * FatH * 0.5 * ( &
                       (G%bathyT(i,j+1)-G%bathyT(i,j)) * G%IdyCv(i,J)  &
-                  / max(G%bathyT(i,j+1),G%bathyT(i,j), GV%H_subroundoff) + &
+                  / max(G%bathyT(i,j+1),G%bathyT(i,j), dZ_neglect) + &
                       (G%bathyT(i,j)-G%bathyT(i,j-1)) * G%IdyCv(i,J-1) &
-                  / max(G%bathyT(i,j),G%bathyT(i,j-1), GV%H_subroundoff) )
+                  / max(G%bathyT(i,j),G%bathyT(i,j-1), dZ_neglect) )
       endif
       beta =  sqrt((G%dF_dx(i,j) + beta_topo_x)**2 + &
                    (G%dF_dy(i,j) + beta_topo_y)**2 )
@@ -853,9 +855,11 @@ subroutine MEKE_lengthScales(CS, MEKE, G, GV, US, SN_u, SN_v, &
   real :: SN   ! The local Eady growth rate [T-1 ~> s-1]
   real :: FatH ! Coriolis parameter at h points [T-1 ~> s-1]
   real :: beta_topo_x, beta_topo_y  ! Topographic PV gradients in x and y [T-1 L-1 ~> s-1 m-1]
+  real :: dZ_neglect ! A negligible change in height [Z ~> m]
   integer :: i, j, is, ie, js, je
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
+  dZ_neglect = GV%H_to_Z*GV%H_subroundoff
 
 !$OMP do
   do j=js,je ; do i=is,ie
@@ -878,14 +882,14 @@ subroutine MEKE_lengthScales(CS, MEKE, G, GV, US, SN_u, SN_v, &
         !    of the water column thickness instead of the bathymetric depth.
         beta_topo_x = -CS%MEKE_topographic_beta * FatH * 0.5 * ( &
                       (G%bathyT(i+1,j)-G%bathyT(i,j)) * G%IdxCu(I,j)  &
-                 / max(G%bathyT(i+1,j),G%bathyT(i,j), GV%H_subroundoff) &
+                 / max(G%bathyT(i+1,j),G%bathyT(i,j), dZ_neglect) &
               +       (G%bathyT(i,j)-G%bathyT(i-1,j)) * G%IdxCu(I-1,j) &
-                 / max(G%bathyT(i,j),G%bathyT(i-1,j), GV%H_subroundoff) )
+                 / max(G%bathyT(i,j),G%bathyT(i-1,j), dZ_neglect) )
         beta_topo_y = -CS%MEKE_topographic_beta * FatH * 0.5 * ( &
                       (G%bathyT(i,j+1)-G%bathyT(i,j)) * G%IdyCv(i,J)  &
-                 / max(G%bathyT(i,j+1),G%bathyT(i,j), GV%H_subroundoff) + &
+                 / max(G%bathyT(i,j+1),G%bathyT(i,j), dZ_neglect) + &
                       (G%bathyT(i,j)-G%bathyT(i,j-1)) * G%IdyCv(i,J-1) &
-                 / max(G%bathyT(i,j),G%bathyT(i,j-1), GV%H_subroundoff) )
+                 / max(G%bathyT(i,j),G%bathyT(i,j-1), dZ_neglect) )
       endif
       beta =  sqrt((G%dF_dx(i,j) + beta_topo_x)**2 + &
                    (G%dF_dy(i,j) + beta_topo_y)**2 )
