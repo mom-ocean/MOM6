@@ -576,7 +576,7 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
 
   ! CFCs
   if (CS%use_CFC) then
-    call CFC_cap_fluxes(fluxes, sfc_state, G, CS%Rho0, Time, CS%id_cfc11_atm, CS%id_cfc11_atm)
+    call CFC_cap_fluxes(fluxes, sfc_state, G, US, CS%Rho0, Time, CS%id_cfc11_atm, CS%id_cfc11_atm)
   endif
 
   if (associated(IOB%salt_flux)) then

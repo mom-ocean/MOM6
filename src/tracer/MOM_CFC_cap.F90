@@ -302,19 +302,17 @@ subroutine CFC_cap_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, US, C
   ! Local variables
   real, pointer, dimension(:,:,:) :: CFC11 => NULL(), CFC12 => NULL()
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: h_work ! Used so that h can be modified [H ~> m or kg m-2]
-  real :: scale_factor ! convert from [Conc. m s-1] to [Conc. kg m-2 T-1]
+  real :: scale_factor ! convert from cfc1[12]_flux to units of sfc_flux in tracer_vertdiff
   integer :: i, j, k, m, is, ie, js, je, nz
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
-  ! CFC_flux **unscaled** units are [mol m-2 s-1] which is the same as [CU kg m-2 s-1],
-  ! where CU = mol kg-1. However, CFC_flux has been scaled already.
-  ! CFC_flux **scaled** units are [CU L T-1 R]. We want [CU kg m-2 T-1] because
-  ! these units are what tracer_vertdiff needs.
-  ! Therefore, we need to convert [L R] to [kg m-2] using scale_factor.
-  scale_factor = US%L_to_Z * US%RZ_to_kg_m2 ! this will give [CU kg m-2 T-1], which is what verdiff wants
-
   if (.not.associated(CS)) return
+
+  ! set factor to convert from cfc1[12]_flux units to tracer_vertdiff argument sfc_flux units
+  ! cfc1[12]_flux units are CU Z T-1 kg m-3
+  ! tracer_vertdiff argument sfc_flux units are CU kg m-2 T-1
+  scale_factor = US%Z_to_m
 
   CFC11 => CS%CFC11 ; CFC12 => CS%CFC12
 
@@ -340,8 +338,8 @@ subroutine CFC_cap_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, US, C
   endif
 
   ! If needed, write out any desired diagnostics from tracer sources & sinks here.
-  if (CS%id_cfc11_cmor > 0) call post_data(CS%id_cfc11_cmor, CFC11*GV%Rho0, CS%diag)
-  if (CS%id_cfc12_cmor > 0) call post_data(CS%id_cfc12_cmor, CFC12*GV%Rho0, CS%diag)
+  if (CS%id_cfc11_cmor > 0) call post_data(CS%id_cfc11_cmor, (GV%Rho0*US%R_to_kg_m3)*CFC11, CS%diag)
+  if (CS%id_cfc12_cmor > 0) call post_data(CS%id_cfc12_cmor, (GV%Rho0*US%R_to_kg_m3)*CFC12, CS%diag)
 
 end subroutine CFC_cap_column_physics
 
@@ -421,14 +419,15 @@ end subroutine CFC_cap_surface_state
 
 !> Orchestrates the calculation of the CFC fluxes [mol m-2 s-1], including getting the ATM
 !! concentration, and calculating the solubility, Schmidt number, and gas exchange.
-subroutine CFC_cap_fluxes(fluxes, sfc_state, G, Rho0, Time, id_cfc11_atm, id_cfc12_atm)
+subroutine CFC_cap_fluxes(fluxes, sfc_state, G, US, Rho0, Time, id_cfc11_atm, id_cfc12_atm)
   type(ocean_grid_type),        intent(in   ) :: G  !< The ocean's grid structure.
+  type(unit_scale_type),        intent(in  )  :: US !< A dimensional unit scaling type
   type(surface),                intent(in   ) :: sfc_state !< A structure containing fields
                                               !! that describe the surface state of the ocean.
   type(forcing),                intent(inout) :: fluxes !< A structure containing pointers
                                               !! to thermodynamic and tracer forcing fields. Unused fields
                                               !! have NULL ptrs.
-  real,                         intent(in   ) :: Rho0 !< The mean ocean density [kg m-3]
+  real,                         intent(in   ) :: Rho0 !< The mean ocean density [R ~> kg m-3]
   type(time_type),              intent(in   ) :: Time !< The time of the fluxes, used for interpolating the
                                               !! CFC's concentration in the atmosphere.
   integer,           optional,  intent(inout):: id_cfc11_atm !< id number for time_interp_external.
@@ -440,7 +439,7 @@ subroutine CFC_cap_fluxes(fluxes, sfc_state, G, Rho0, Time, id_cfc11_atm, id_cfc
     CFC12_Csurf, &  ! The CFC-12 surface concentrations times the Schmidt number term [mol kg-1].
     CFC11_alpha, &  ! The CFC-11 solubility [mol kg-1 atm-1].
     CFC12_alpha, &  ! The CFC-12 solubility [mol kg-1 atm-1].
-    kw_wo_sc_no_term, &  ! gas transfer velocity, without the Schmidt number term [m s-1].
+    kw_wo_sc_no_term, &  ! gas transfer velocity, without the Schmidt number term [Z T-1 ~> m s-1].
     cair, &         ! The surface gas concentration in equilibrium with the atmosphere (saturation concentration)
                     ! [mol kg-1].
     cfc11_atm,     & !< CFC11 concentration in the atmopshere [pico mol/mol]
@@ -451,7 +450,8 @@ subroutine CFC_cap_fluxes(fluxes, sfc_state, G, Rho0, Time, id_cfc11_atm, id_cfc
   real :: alpha_12  ! The solubility of CFC 12 [mol kg-1 atm-1].
   real :: sc_11, sc_12 ! The Schmidt numbers of CFC 11 and CFC 12.
   real :: sc_no_term   ! A term related to the Schmidt number.
-  real :: kw_coeff     ! A coefficient used to scale the piston velocity [L T-1 ~> m s-1]
+  real :: kw_coeff     ! A coefficient used to scale the piston velocity [Z T-1 T2 L-2 = Z T L-2 ~> s / m]
+  real :: Rho0_kg_m3   ! Rho0 in non-scaled units [kg m-3]
   real, parameter :: pa_to_atm = 9.8692316931427e-6 ! factor for converting from Pa to atm.
   integer :: i, j, m, is, ie, js, je
 
@@ -479,6 +479,15 @@ subroutine CFC_cap_fluxes(fluxes, sfc_state, G, Rho0, Time, id_cfc11_atm, id_cfc
                           "has not been implemented yet.")
   endif
 
+  !---------------------------------------------------------------------
+  !     Gas exchange/piston velocity parameter
+  !---------------------------------------------------------------------
+  ! From a = 0.251 cm/hr s^2/m^2 in Wannikhof 2014
+  !        = 6.97e-7 m/s s^2/m^2 [Z T-1 T2 L-2 = Z T L-2 ~> s / m]
+  kw_coeff = (US%m_to_Z*US%s_to_T*US%L_to_m**2) * 6.97e-7
+
+  Rho0_kg_m3 = Rho0 * US%R_to_kg_m3
+
   do j=js,je ; do i=is,ie
     ! ta in hectoKelvin
     ta = max(0.01, (sfc_state%SST(i,j) + 273.15) * 0.01)
@@ -498,21 +507,14 @@ subroutine CFC_cap_fluxes(fluxes, sfc_state, G, Rho0, Time, id_cfc11_atm, id_cfc
     CFC12_alpha(i,j) = alpha_12 * sc_no_term
     CFC12_Csurf(i,j) = sfc_state%sfc_CFC12(i,j) * sc_no_term
 
-    !---------------------------------------------------------------------
-    !     Gas exchange/piston velocity parameter
-    !---------------------------------------------------------------------
-    ! From a = 0.251 cm/hr s^2/m^2 in Wannikhof 2014
-    ! 6.97e-07 is used to convert from cm/hr to m/s, kw = m/s [L/T]
-    kw_coeff = 6.97e-07 * G%US%m_to_L * G%US%T_to_s
-
     kw_wo_sc_no_term(i,j) = kw_coeff *  ((1.0 - fluxes%ice_fraction(i,j))*fluxes%u10_sqr(i,j))
 
     ! air concentrations and cfcs BC's fluxes
     ! CFC flux units: mol kg-1 s-1 kg m-2
-    cair(i,j) = pa_to_atm * CFC11_alpha(i,j) * cfc11_atm(i,j) * fluxes%p_surf_full(i,j)
-    fluxes%cfc11_flux(i,j) = kw_wo_sc_no_term(i,j) * (cair(i,j) - CFC11_Csurf(i,j)) * Rho0
-    cair(i,j) = pa_to_atm * CFC12_alpha(i,j) * cfc12_atm(i,j) * fluxes%p_surf_full(i,j)
-    fluxes%cfc12_flux(i,j) = kw_wo_sc_no_term(i,j) * (cair(i,j) - CFC12_Csurf(i,j)) * Rho0
+    cair(i,j) = US%R_to_kg_m3*US%L_T_to_m_s**2*pa_to_atm * CFC11_alpha(i,j) * cfc11_atm(i,j) * fluxes%p_surf_full(i,j)
+    fluxes%cfc11_flux(i,j) = kw_wo_sc_no_term(i,j) * (cair(i,j) - CFC11_Csurf(i,j)) * Rho0_kg_m3
+    cair(i,j) = US%R_to_kg_m3*US%L_T_to_m_s**2*pa_to_atm * CFC12_alpha(i,j) * cfc12_atm(i,j) * fluxes%p_surf_full(i,j)
+    fluxes%cfc12_flux(i,j) = kw_wo_sc_no_term(i,j) * (cair(i,j) - CFC12_Csurf(i,j)) * Rho0_kg_m3
   enddo ; enddo
 
 end subroutine CFC_cap_fluxes
