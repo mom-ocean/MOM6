@@ -87,7 +87,6 @@ function register_CFC_cap(HI, GV, param_file, CS, tr_Reg, restart_CS)
   real :: a11_dflt(4), a12_dflt(4) ! Default values of the various coefficients
   real :: d11_dflt(4), d12_dflt(4) ! In the expressions for the solubility and
   real :: e11_dflt(3), e12_dflt(3) ! Schmidt numbers.
-  character(len=48) :: flux_units  ! The units for tracer fluxes.
   character(len=48) :: dummy       ! Dummy variable to store params that need to be logged here.
   logical :: register_CFC_cap
   integer :: isd, ied, jsd, jed, nz, m
@@ -142,8 +141,6 @@ function register_CFC_cap(HI, GV, param_file, CS, tr_Reg, restart_CS)
   CS%CFC11_name = "CFC_11" ; CS%CFC12_name = "CFC_12"
   CS%CFC11_desc = var_desc(CS%CFC11_name,"mol kg-1","Moles Per Unit Mass of CFC-11 in sea water", caller=mdl)
   CS%CFC12_desc = var_desc(CS%CFC12_name,"mol kg-1","Moles Per Unit Mass of CFC-12 in sea water", caller=mdl)
-  if (GV%Boussinesq) then ; flux_units = "mol s-1"
-  else ; flux_units = "mol m-3 kg s-1" ; endif
 
   allocate(CS%CFC11(isd:ied,jsd:jed,nz)) ; CS%CFC11(:,:,:) = 0.0
   allocate(CS%CFC12(isd:ied,jsd:jed,nz)) ; CS%CFC12(:,:,:) = 0.0
@@ -154,13 +151,11 @@ function register_CFC_cap(HI, GV, param_file, CS, tr_Reg, restart_CS)
   ! Register CFC11 for horizontal advection, diffusion, and restarts.
   call register_tracer(tr_ptr, tr_Reg, param_file, HI, GV, &
                        tr_desc=CS%CFC11_desc, registry_diags=.true., &
-                       flux_units=flux_units, &
                        restart_CS=restart_CS, mandatory=.not.CS%tracers_may_reinit)
   ! Do the same for CFC12
   tr_ptr => CS%CFC12
   call register_tracer(tr_ptr, Tr_Reg, param_file, HI, GV, &
                        tr_desc=CS%CFC12_desc, registry_diags=.true., &
-                       flux_units=flux_units, &
                        restart_CS=restart_CS, mandatory=.not.CS%tracers_may_reinit)
 
   CS%tr_Reg => tr_Reg
