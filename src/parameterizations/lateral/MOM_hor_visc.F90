@@ -281,8 +281,8 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
 
   real, allocatable, dimension(:,:,:) :: h_diffu ! h x diffu [H L T-2 ~> m2 s-2]
   real, allocatable, dimension(:,:,:) :: h_diffv ! h x diffv [H L T-2 ~> m2 s-2]
-  real, allocatable, dimension(:,:,:) :: diffu_visc_rem ! diffu x visc_rem_u [L T-2 ~> m2 s-2]
-  real, allocatable, dimension(:,:,:) :: diffv_visc_rem ! diffv x visc_rem_v [L T-2 ~> m2 s-2]
+  real, allocatable, dimension(:,:,:) :: diffu_visc_rem ! diffu x visc_rem_u [L T-2 ~> m s-2]
+  real, allocatable, dimension(:,:,:) :: diffv_visc_rem ! diffv x visc_rem_v [L T-2 ~> m s-2]
 
   real, dimension(SZIB_(G),SZJB_(G)) :: &
     dvdx, dudy, & ! components in the shearing strain [T-1 ~> s-1]
@@ -2471,15 +2471,15 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, MEKE, ADp)
   endif
 
   CS%id_diffu_visc_rem = register_diag_field('ocean_model', 'diffu_visc_rem', diag%axesCuL, Time, &
-      'Zonal Acceleration from Horizontal Viscosity multiplied by viscous remnant', 'm2 s-2', &
-      conversion=GV%H_to_m*US%L_T2_to_m_s2)
+      'Zonal Acceleration from Horizontal Viscosity multiplied by viscous remnant', 'm s-2', &
+      conversion=US%L_T2_to_m_s2)
   if ((CS%id_diffu_visc_rem > 0) .and. (present(ADp))) then
     call safe_alloc_ptr(ADp%visc_rem_u,G%IsdB,G%IedB,G%jsd,G%jed,GV%ke)
   endif
 
   CS%id_diffv_visc_rem = register_diag_field('ocean_model', 'diffv_visc_rem', diag%axesCvL, Time, &
-      'Meridional Acceleration from Horizontal Viscosity multiplied by viscous remnant', 'm2 s-2', &
-      conversion=GV%H_to_m*US%L_T2_to_m_s2)
+      'Meridional Acceleration from Horizontal Viscosity multiplied by viscous remnant', 'm s-2', &
+      conversion=US%L_T2_to_m_s2)
   if ((CS%id_diffv_visc_rem > 0) .and. (present(ADp))) then
     call safe_alloc_ptr(ADp%visc_rem_v,G%isd,G%ied,G%JsdB,G%JedB,GV%ke)
   endif
