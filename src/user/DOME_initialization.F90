@@ -87,11 +87,13 @@ end subroutine DOME_initialize_topography
 
 ! -----------------------------------------------------------------------------
 !> This subroutine initializes layer thicknesses for the DOME experiment
-subroutine DOME_initialize_thickness(h, G, GV, param_file, just_read_params)
+subroutine DOME_initialize_thickness(h, depth_tot, G, GV, param_file, just_read_params)
   type(ocean_grid_type),   intent(in)  :: G           !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)  :: GV          !< The ocean's vertical grid structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(out) :: h           !< The thickness that is being initialized [H ~> m or kg m-2].
+  real, dimension(SZI_(G),SZJ_(G)), &
+                           intent(in)  :: depth_tot   !< The nominal total depth of the ocean [Z ~> m]
   type(param_file_type),   intent(in)  :: param_file  !< A structure indicating the open file
                                                       !! to parse for model parameter values.
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
@@ -124,7 +126,7 @@ subroutine DOME_initialize_thickness(h, G, GV, param_file, just_read_params)
 !  Angstrom thick, and 2.  the interfaces are where they should be   !
 !  based on the resting depths and interface height perturbations,   !
 !  as long at this doesn't interfere with 1.                         !
-    eta1D(nz+1) = -G%bathyT(i,j)
+    eta1D(nz+1) = -depth_tot(i,j)
     do k=nz,1,-1
       eta1D(K) = e0(K)
       if (eta1D(K) < (eta1D(K+1) + GV%Angstrom_Z)) then
@@ -145,17 +147,19 @@ end subroutine DOME_initialize_thickness
 !! number of tracers should be restored within each sponge. The       !
 !! interface height is always subject to damping, and must always be  !
 !! the first registered field.                                        !
-subroutine DOME_initialize_sponges(G, GV, US, tv, PF, CSp)
-  type(ocean_grid_type), intent(in) :: G    !< The ocean's grid structure.
+subroutine DOME_initialize_sponges(G, GV, US, tv, depth_tot, PF, CSp)
+  type(ocean_grid_type),   intent(in) :: G    !< The ocean's grid structure.
   type(verticalGrid_type), intent(in) :: GV !< The ocean's vertical grid structure.
   type(unit_scale_type),   intent(in) :: US !< A dimensional unit scaling type
-  type(thermo_var_ptrs), intent(in) :: tv   !< A structure containing pointers to any available
-                               !! thermodynamic fields, including potential temperature and
-                               !! salinity or mixed layer density. Absent fields have NULL ptrs.
-  type(param_file_type), intent(in) :: PF   !< A structure indicating the open file to
-                                            !! parse for model parameter values.
-  type(sponge_CS),       pointer    :: CSp  !< A pointer that is set to point to the control
-                                            !! structure for this module.
+  type(thermo_var_ptrs),   intent(in) :: tv   !< A structure containing pointers to any available
+                                !! thermodynamic fields, including potential temperature and
+                                !! salinity or mixed layer density. Absent fields have NULL ptrs.
+  real, dimension(SZI_(G),SZJ_(G)), &
+                           intent(in) :: depth_tot  !< The nominal total depth of the ocean [Z ~> m]
+  type(param_file_type),   intent(in) :: PF   !< A structure indicating the open file to
+                                              !! parse for model parameter values.
+  type(sponge_CS),         pointer    :: CSp  !< A pointer that is set to point to the control
+                                              !! structure for this module.
 
   real :: eta(SZI_(G),SZJ_(G),SZK_(GV)+1) ! A temporary array for interface heights [Z ~> m].
   real :: temp(SZI_(G),SZJ_(G),SZK_(GV)) ! A temporary array for other variables. !
@@ -204,16 +208,16 @@ subroutine DOME_initialize_sponges(G, GV, US, tv, PF, CSp)
     ! depth space for Boussinesq or non-Boussinesq models.
     eta(i,j,1) = 0.0
     do k=2,nz
-!     eta(i,j,K)=max(H0(k), -G%bathyT(i,j), GV%Angstrom_Z*(nz-k+1) - G%bathyT(i,j))
-      e_dense = -G%bathyT(i,j)
+!     eta(i,j,K) = max(H0(k), -depth_tot(i,j), GV%Angstrom_Z*(nz-k+1) - depth_tot(i,j))
+      e_dense = -depth_tot(i,j)
       if (e_dense >= H0(k)) then ; eta(i,j,K) = e_dense
       else ; eta(i,j,K) = H0(k) ; endif
-      if (eta(i,j,K) < GV%Angstrom_Z*(nz-k+1) - G%bathyT(i,j)) &
-          eta(i,j,K) = GV%Angstrom_Z*(nz-k+1) - G%bathyT(i,j)
+      if (eta(i,j,K) < GV%Angstrom_Z*(nz-k+1) - depth_tot(i,j)) &
+          eta(i,j,K) = GV%Angstrom_Z*(nz-k+1) - depth_tot(i,j)
     enddo
-    eta(i,j,nz+1) = -G%bathyT(i,j)
+    eta(i,j,nz+1) = -depth_tot(i,j)
 
-    if (G%bathyT(i,j) > min_depth) then
+    if (depth_tot(i,j) > min_depth) then
       Idamp(i,j) = damp / 86400.0
     else ; Idamp(i,j) = 0.0 ; endif
   enddo ; enddo

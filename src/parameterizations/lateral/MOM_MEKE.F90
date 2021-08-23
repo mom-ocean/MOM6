@@ -126,6 +126,7 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
   real, dimension(SZI_(G),SZJ_(G)) :: &
     mass, &         ! The total mass of the water column [R Z ~> kg m-2].
     I_mass, &       ! The inverse of mass [R-1 Z-1 ~> m2 kg-1].
+    depth_tot, &    ! The depth of the water column [Z ~> m].
     src, &          ! The sum of all MEKE sources [L2 T-3 ~> W kg-1] (= m2 s-3).
     MEKE_decay, &   ! A diagnostic of the MEKE decay timescale [T-1 ~> s-1].
     drag_rate_visc, & ! Near-bottom velocity contribution to bottom dratg [L T-1 ~> m s-1]
@@ -161,7 +162,8 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
   real :: advFac    ! The product of the advection scaling factor and 1/dt [T-1 ~> s-1]
   real :: mass_neglect ! A negligible mass [R Z ~> kg m-2].
   real :: ldamping  ! The MEKE damping rate [T-1 ~> s-1].
-  real :: Rho0      ! A density used to convert mass to distance [R ~> kg m-3].
+  real :: Rho0      ! A density used to convert mass to distance [R ~> kg m-3]
+  real :: I_Rho0    ! The inverse of the density used to convert mass to distance [R-1 ~> m3 kg-1]
   real :: sdt       ! dt to use locally [T ~> s] (could be scaled to accelerate)
   real :: sdt_damp  ! dt for damping [T ~> s] (sdt could be split).
   logical :: use_drag_rate ! Flag to indicate drag_rate is finite
@@ -204,6 +206,7 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
 
     sdt = dt*CS%MEKE_dtScale ! Scaled dt to use for time-stepping
     Rho0 = GV%Rho0
+    I_Rho0 = 1.0 / GV%Rho0
     mass_neglect = GV%H_to_RZ * GV%H_subroundoff
     cdrag2 = CS%cdrag**2
 
@@ -280,13 +283,20 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
       enddo
     enddo
 
+    !$OMP parallel do default(shared)
+    do j=js-1,je+1 ; do i=is-1,ie+1
+      depth_tot(i,j) = G%bathyT(i,j)
+      !### Try changing this to:
+      ! depth_tot(i,j) = mass(i,j) * I_Rho0
+    enddo ; enddo
+
     if (CS%initialize) then
-      call MEKE_equilibrium(CS, MEKE, G, GV, US, SN_u, SN_v, drag_rate_visc, I_mass)
+      call MEKE_equilibrium(CS, MEKE, G, GV, US, SN_u, SN_v, drag_rate_visc, I_mass, depth_tot)
       CS%initialize = .false.
     endif
 
     ! Calculates bottomFac2, barotrFac2 and LmixScale
-    call MEKE_lengthScales(CS, MEKE, G, GV, US, SN_u, SN_v, MEKE%MEKE, bottomFac2, barotrFac2, LmixScale)
+    call MEKE_lengthScales(CS, MEKE, G, GV, US, SN_u, SN_v, MEKE%MEKE, depth_tot, bottomFac2, barotrFac2, LmixScale)
     if (CS%debug) then
       if (CS%visc_drag) &
         call uvchksum("MEKE drag_vel_[uv]", drag_vel_u, drag_vel_v, G%HI, &
@@ -323,7 +333,7 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
         !$OMP parallel do default(shared)
         do j=js,je ; do i=is,ie
           src(i,j) = src(i,j) - CS%MEKE_GMcoeff*MEKE%GM_src(i,j) / &
-                     (GV%Rho0 * MAX(1.0*US%m_to_Z, G%bathyT(i,j)))
+                     (GV%Rho0 * MAX(1.0*US%m_to_Z, depth_tot(i,j)))
         enddo ; enddo
       else
         !$OMP parallel do default(shared)
@@ -334,7 +344,7 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
     endif
 
     if (CS%MEKE_equilibrium_restoring) then
-      call MEKE_equilibrium_restoring(CS, G, US, SN_u, SN_v)
+      call MEKE_equilibrium_restoring(CS, G, US, SN_u, SN_v, depth_tot)
       do j=js,je ; do i=is,ie
         src(i,j) = src(i,j) - CS%MEKE_restoring_rate*(MEKE%MEKE(i,j) - CS%equilibrium_value(i,j))
       enddo ; enddo
@@ -640,7 +650,7 @@ end subroutine step_forward_MEKE
 !> Calculates the equilibrium solution where the source depends only on MEKE diffusivity
 !! and there is no lateral diffusion of MEKE.
 !! Results is in MEKE%MEKE.
-subroutine MEKE_equilibrium(CS, MEKE, G, GV, US, SN_u, SN_v, drag_rate_visc, I_mass)
+subroutine MEKE_equilibrium(CS, MEKE, G, GV, US, SN_u, SN_v, drag_rate_visc, I_mass, depth_tot)
   type(ocean_grid_type),             intent(inout) :: G    !< Ocean grid.
   type(verticalGrid_type),           intent(in)    :: GV   !< Ocean vertical grid structure.
   type(unit_scale_type),             intent(in)    :: US   !< A dimensional unit scaling type
@@ -651,6 +661,8 @@ subroutine MEKE_equilibrium(CS, MEKE, G, GV, US, SN_u, SN_v, drag_rate_visc, I_m
   real, dimension(SZI_(G),SZJ_(G)),  intent(in)    :: drag_rate_visc !< Mean flow velocity contribution
                                                            !! to the MEKE drag rate [L T-1 ~> m s-1]
   real, dimension(SZI_(G),SZJ_(G)),  intent(in)    :: I_mass  !< Inverse of column mass [R-1 Z-1 ~> m2 kg-1].
+  real, dimension(SZI_(G),SZJ_(G)),  intent(in)    :: depth_tot !< The depth of the water column [Z ~> m].
+
   ! Local variables
   real :: beta ! Combined topograpic and planetary vorticity gradient [T-1 L-1 ~> s-1 m-1]
   real :: SN   ! The local Eady growth rate [T-1 ~> s-1]
@@ -690,27 +702,27 @@ subroutine MEKE_equilibrium(CS, MEKE, G, GV, US, SN_u, SN_v, drag_rate_visc, I_m
     SN = min(SN_u(I,j), SN_u(I-1,j), SN_v(i,J), SN_v(i,J-1))
 
     if (CS%MEKE_equilibrium_alt) then
-      MEKE%MEKE(i,j) = (CS%MEKE_GEOMETRIC_alpha * SN * US%Z_to_m*G%bathyT(i,j))**2 / cd2
+      MEKE%MEKE(i,j) = (CS%MEKE_GEOMETRIC_alpha * SN * US%Z_to_m*depth_tot(i,j))**2 / cd2
     else
       FatH = 0.25*((G%CoriolisBu(I,J) + G%CoriolisBu(I-1,J-1)) + &
                    (G%CoriolisBu(I-1,J) + G%CoriolisBu(I,J-1))) ! Coriolis parameter at h points
 
       ! Since zero-bathymetry cells are masked, this avoids calculations on land
-      if (CS%MEKE_topographic_beta == 0. .or. G%bathyT(i,j) == 0.) then
+      if (CS%MEKE_topographic_beta == 0. .or. (depth_tot(i,j) == 0.0)) then
         beta_topo_x = 0. ; beta_topo_y = 0.
       else
         !### Consider different combinations of these estimates of topographic beta, and the use
         !    of the water column thickness instead of the bathymetric depth.
         beta_topo_x = -CS%MEKE_topographic_beta * FatH * 0.5 * ( &
-                      (G%bathyT(i+1,j)-G%bathyT(i,j)) * G%IdxCu(I,j)  &
-                  / max(G%bathyT(i+1,j),G%bathyT(i,j), dZ_neglect) &
-              +       (G%bathyT(i,j)-G%bathyT(i-1,j)) * G%IdxCu(I-1,j) &
-                  / max(G%bathyT(i,j),G%bathyT(i-1,j), dZ_neglect) )
+                      (depth_tot(i+1,j)-depth_tot(i,j)) * G%IdxCu(I,j)  &
+                  / max(depth_tot(i+1,j), depth_tot(i,j), dZ_neglect) &
+              +       (depth_tot(i,j)-depth_tot(i-1,j)) * G%IdxCu(I-1,j) &
+                  / max(depth_tot(i,j), depth_tot(i-1,j), dZ_neglect) )
         beta_topo_y = -CS%MEKE_topographic_beta * FatH * 0.5 * ( &
-                      (G%bathyT(i,j+1)-G%bathyT(i,j)) * G%IdyCv(i,J)  &
-                  / max(G%bathyT(i,j+1),G%bathyT(i,j), dZ_neglect) + &
-                      (G%bathyT(i,j)-G%bathyT(i,j-1)) * G%IdyCv(i,J-1) &
-                  / max(G%bathyT(i,j),G%bathyT(i,j-1), dZ_neglect) )
+                      (depth_tot(i,j+1)-depth_tot(i,j)) * G%IdyCv(i,J)  &
+                  / max(depth_tot(i,j+1), depth_tot(i,j), dZ_neglect) + &
+                      (depth_tot(i,j)-depth_tot(i,j-1)) * G%IdyCv(i,J-1) &
+                  / max(depth_tot(i,j), depth_tot(i,j-1), dZ_neglect) )
       endif
       beta =  sqrt((G%dF_dx(i,j) + beta_topo_x)**2 + &
                    (G%dF_dy(i,j) + beta_topo_y)**2 )
@@ -729,7 +741,7 @@ subroutine MEKE_equilibrium(CS, MEKE, G, GV, US, SN_u, SN_v, drag_rate_visc, I_m
         do while (resid>0.)
           n1 = n1 + 1
           EKE = EKEmax
-          call MEKE_lengthScales_0d(CS, US, G%areaT(i,j), beta, G%bathyT(i,j), &
+          call MEKE_lengthScales_0d(CS, US, G%areaT(i,j), beta, depth_tot(i,j), &
                                     MEKE%Rd_dx_h(i,j), SN, EKE, &
                                     bottomFac2, barotrFac2, LmixScale, LRhines, LEady)
           ! TODO: Should include resolution function in Kh
@@ -804,12 +816,14 @@ end subroutine MEKE_equilibrium
 
 !< This subroutine calculates a new equilibrium value for MEKE at each time step. This is not copied into
 !! MEKE%MEKE; rather, it is used as a restoring term to nudge MEKE%MEKE back to an equilibrium value
-subroutine MEKE_equilibrium_restoring(CS, G, US, SN_u, SN_v)
+subroutine MEKE_equilibrium_restoring(CS, G, US, SN_u, SN_v, depth_tot)
   type(ocean_grid_type),             intent(inout) :: G    !< Ocean grid.
   type(unit_scale_type),             intent(in)    :: US   !< A dimensional unit scaling type.
   type(MEKE_CS),                     pointer       :: CS   !< MEKE control structure.
   real, dimension(SZIB_(G),SZJ_(G)), intent(in)    :: SN_u !< Eady growth rate at u-points [T-1 ~> s-1].
   real, dimension(SZI_(G),SZJB_(G)), intent(in)    :: SN_v !< Eady growth rate at v-points [T-1 ~> s-1].
+  real, dimension(SZI_(G),SZJ_(G)),  intent(in)    :: depth_tot !< The depth of the water column [Z ~> m].
+
   ! Local variables
   real :: SN                      ! The local Eady growth rate [T-1 ~> s-1]
   integer :: i, j, is, ie, js, je ! local indices
@@ -826,7 +840,7 @@ subroutine MEKE_equilibrium_restoring(CS, G, US, SN_u, SN_v)
     ! SN = 0.25*max( (SN_u(I,j) + SN_u(I-1,j)) + (SN_v(i,J) + SN_v(i,J-1)), 0.)
     ! This avoids extremes values in equilibrium solution due to bad values in SN_u, SN_v
     SN = min(SN_u(I,j), SN_u(I-1,j), SN_v(i,J), SN_v(i,J-1))
-    CS%equilibrium_value(i,j) = (CS%MEKE_GEOMETRIC_alpha * SN * US%Z_to_m*G%bathyT(i,j))**2 / cd2
+    CS%equilibrium_value(i,j) = (CS%MEKE_GEOMETRIC_alpha * SN * US%Z_to_L*depth_tot(i,j))**2 / cd2
   enddo ; enddo
 
   if (CS%id_MEKE_equilibrium>0) call post_data(CS%id_MEKE_equilibrium, CS%equilibrium_value, CS%diag)
@@ -836,8 +850,8 @@ end subroutine MEKE_equilibrium_restoring
 !> Calculates the eddy mixing length scale and \f$\gamma_b\f$ and \f$\gamma_t\f$
 !! functions that are ratios of either bottom or barotropic eddy energy to the
 !! column eddy energy, respectively.  See \ref section_MEKE_equations.
-subroutine MEKE_lengthScales(CS, MEKE, G, GV, US, SN_u, SN_v, &
-            EKE, bottomFac2, barotrFac2, LmixScale)
+subroutine MEKE_lengthScales(CS, MEKE, G, GV, US, SN_u, SN_v, EKE, depth_tot, &
+                             bottomFac2, barotrFac2, LmixScale)
   type(MEKE_CS),                     pointer       :: CS   !< MEKE control structure.
   type(MEKE_type),                   pointer       :: MEKE !< MEKE data.
   type(ocean_grid_type),             intent(inout) :: G    !< Ocean grid.
@@ -846,8 +860,9 @@ subroutine MEKE_lengthScales(CS, MEKE, G, GV, US, SN_u, SN_v, &
   real, dimension(SZIB_(G),SZJ_(G)), intent(in)    :: SN_u !< Eady growth rate at u-points [T-1 ~> s-1].
   real, dimension(SZI_(G),SZJB_(G)), intent(in)    :: SN_v !< Eady growth rate at v-points [T-1 ~> s-1].
   real, dimension(SZI_(G),SZJ_(G)),  intent(in)    :: EKE  !< Eddy kinetic energy [L2 T-2 ~> m2 s-2].
-  real, dimension(SZI_(G),SZJ_(G)),  intent(out)   :: bottomFac2 !< gamma_b^2
-  real, dimension(SZI_(G),SZJ_(G)),  intent(out)   :: barotrFac2 !< gamma_t^2
+  real, dimension(SZI_(G),SZJ_(G)),  intent(in)    :: depth_tot !< The depth of the water column [Z ~> m].
+  real, dimension(SZI_(G),SZJ_(G)),  intent(out)   :: bottomFac2 !< gamma_b^2 [nondim]
+  real, dimension(SZI_(G),SZJ_(G)),  intent(out)   :: barotrFac2 !< gamma_t^2 [nondim]
   real, dimension(SZI_(G),SZJ_(G)),  intent(out)   :: LmixScale !< Eddy mixing length [L ~> m].
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G)) :: LRhines, LEady  ! Possible mixing length scales [L ~> m]
@@ -875,21 +890,21 @@ subroutine MEKE_lengthScales(CS, MEKE, G, GV, US, SN_u, SN_v, &
       ! If bathyT is zero, then a division by zero FPE will be raised.  In this
       ! case, we apply Adcroft's rule of reciprocals and set the term to zero.
       ! Since zero-bathymetry cells are masked, this should not affect values.
-      if (CS%MEKE_topographic_beta == 0. .or. G%bathyT(i,j) == 0.0) then
+      if (CS%MEKE_topographic_beta == 0. .or. (depth_tot(i,j) == 0.0)) then
         beta_topo_x = 0. ; beta_topo_y = 0.
       else
         !### Consider different combinations of these estimates of topographic beta, and the use
         !    of the water column thickness instead of the bathymetric depth.
         beta_topo_x = -CS%MEKE_topographic_beta * FatH * 0.5 * ( &
-                      (G%bathyT(i+1,j)-G%bathyT(i,j)) * G%IdxCu(I,j)  &
-                 / max(G%bathyT(i+1,j),G%bathyT(i,j), dZ_neglect) &
-              +       (G%bathyT(i,j)-G%bathyT(i-1,j)) * G%IdxCu(I-1,j) &
-                 / max(G%bathyT(i,j),G%bathyT(i-1,j), dZ_neglect) )
+                      (depth_tot(i+1,j)-depth_tot(i,j)) * G%IdxCu(I,j)  &
+                 / max(depth_tot(i+1,j), depth_tot(i,j), dZ_neglect) &
+              +       (depth_tot(i,j)-depth_tot(i-1,j)) * G%IdxCu(I-1,j) &
+                 / max(depth_tot(i,j), depth_tot(i-1,j), dZ_neglect) )
         beta_topo_y = -CS%MEKE_topographic_beta * FatH * 0.5 * ( &
-                      (G%bathyT(i,j+1)-G%bathyT(i,j)) * G%IdyCv(i,J)  &
-                 / max(G%bathyT(i,j+1),G%bathyT(i,j), dZ_neglect) + &
-                      (G%bathyT(i,j)-G%bathyT(i,j-1)) * G%IdyCv(i,J-1) &
-                 / max(G%bathyT(i,j),G%bathyT(i,j-1), dZ_neglect) )
+                      (depth_tot(i,j+1)-depth_tot(i,j)) * G%IdyCv(i,J)  &
+                 / max(depth_tot(i,j+1), depth_tot(i,j), dZ_neglect) + &
+                      (depth_tot(i,j)-depth_tot(i,j-1)) * G%IdyCv(i,J-1) &
+                 / max(depth_tot(i,j), depth_tot(i,j-1), dZ_neglect) )
       endif
       beta =  sqrt((G%dF_dx(i,j) + beta_topo_x)**2 + &
                    (G%dF_dy(i,j) + beta_topo_y)**2 )
@@ -898,7 +913,7 @@ subroutine MEKE_lengthScales(CS, MEKE, G, GV, US, SN_u, SN_v, &
       beta = 0.
     endif
     ! Returns bottomFac2, barotrFac2 and LmixScale
-    call MEKE_lengthScales_0d(CS, US, G%areaT(i,j), beta, G%bathyT(i,j),  &
+    call MEKE_lengthScales_0d(CS, US, G%areaT(i,j), beta, depth_tot(i,j),  &
                               MEKE%Rd_dx_h(i,j), SN, MEKE%MEKE(i,j), &
                               bottomFac2(i,j), barotrFac2(i,j), LmixScale(i,j), &
                               LRhines(i,j), LEady(i,j))
