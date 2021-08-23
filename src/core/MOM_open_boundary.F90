@@ -3811,8 +3811,7 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
           segment%h(I,j,k) = h(i+ishift,j,k)
           segment%Htot(I,j) = segment%Htot(I,j) + segment%h(I,j,k)
         enddo
-        segment%Cg(I,j) = sqrt(GV%g_prime(1)*G%bathyT(i+ishift,j))
-        !### This should be: segment%Cg(I,j) = sqrt(GV%g_prime(1)*segment%Htot(I,j)*GV%H_to_Z)
+        segment%Cg(I,j) = sqrt(GV%g_prime(1)*segment%Htot(I,j)*GV%H_to_Z)
       enddo
     else! (segment%direction == OBC_DIRECTION_N .or. segment%direction == OBC_DIRECTION_S)
       allocate(normal_trans_bt(segment%HI%isd:segment%HI%ied,segment%HI%JsdB:segment%HI%JedB))
@@ -3825,8 +3824,7 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
           segment%h(i,J,k) = h(i,j+jshift,k)
           segment%Htot(i,J) = segment%Htot(i,J) + segment%h(i,J,k)
         enddo
-        segment%Cg(i,J) = sqrt(GV%g_prime(1)*G%bathyT(i,j+jshift))
-        !### This should be: segment%Cg(i,J) = sqrt(GV%g_prime(1)*segment%Htot(i,J)*GV%H_to_Z)
+        segment%Cg(i,J) = sqrt(GV%g_prime(1)*segment%Htot(i,J)*GV%H_to_Z)
       enddo
     endif
 

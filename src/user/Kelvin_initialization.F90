@@ -211,15 +211,11 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, GV, US, h, Time)
   km_to_L_scale = 1000.0*US%m_to_L
 
   do j=jsd,jed ; do i=isd,ied
-    depth_tot(i,j) = G%bathyT(i,j)
+    depth_tot(i,j) = 0.0
   enddo ; enddo
-  !### Instead this should be:
-  ! do j=jsd,jed ; do i=isd,ied
-  !   depth_tot(i,j) = 0.0
-  ! enddo ; enddo
-  ! do j=jsd,jed ; do i=isd,ied
-  !   depth_tot(i,j) = depth_tot(i,j) + GV%H_to_Z * h(i,j,k)
-  ! enddo ; enddo
+  do k=1,nz ; do j=jsd,jed ; do i=isd,ied
+    depth_tot(i,j) = depth_tot(i,j) + GV%H_to_Z * h(i,j,k)
+  enddo ; enddo ; enddo
 
   if (CS%mode == 0) then
     mag_SSH = 1.0*US%m_to_Z
