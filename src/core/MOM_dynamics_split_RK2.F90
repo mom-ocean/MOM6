@@ -1677,30 +1677,30 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, US, param
   if (CS%id_intz_v_BT_accel_2d > 0) call safe_alloc_ptr(CS%ADp%diag_hv,isd,ied,JsdB,JedB,nz)
 
   CS%id_PFu_visc_rem = register_diag_field('ocean_model', 'PFu_visc_rem', diag%axesCuL, Time, &
-      'Zonal Pressure Force Acceleration multiplied by the viscous remnant', 'm2 s-2', &
-      conversion=GV%H_to_m*US%L_T2_to_m_s2)
+      'Zonal Pressure Force Acceleration multiplied by the viscous remnant', 'm s-2', &
+      conversion=US%L_T2_to_m_s2)
   if (CS%id_PFu_visc_rem > 0) call safe_alloc_ptr(CS%ADp%visc_rem_u,IsdB,IedB,jsd,jed,nz)
   CS%id_PFv_visc_rem = register_diag_field('ocean_model', 'PFv_visc_rem', diag%axesCvL, Time, &
-      'Meridional Pressure Force Acceleration multiplied by the viscous remnant', 'm2 s-2', &
-      conversion=GV%H_to_m*US%L_T2_to_m_s2)
+      'Meridional Pressure Force Acceleration multiplied by the viscous remnant', 'm s-2', &
+      conversion=US%L_T2_to_m_s2)
   if(CS%id_PFv_visc_rem > 0) call safe_alloc_ptr(CS%ADp%visc_rem_v,isd,ied,JsdB,JedB,nz)
 
   CS%id_CAu_visc_rem = register_diag_field('ocean_model', 'CAu_visc_rem', diag%axesCuL, Time, &
-      'Zonal Coriolis and Advective Acceleration multiplied by the viscous remnant', 'm2 s-2', &
-      conversion=GV%H_to_m*US%L_T2_to_m_s2)
+      'Zonal Coriolis and Advective Acceleration multiplied by the viscous remnant', 'm s-2', &
+      conversion=US%L_T2_to_m_s2)
   if (CS%id_CAu_visc_rem > 0) call safe_alloc_ptr(CS%ADp%visc_rem_u,IsdB,IedB,jsd,jed,nz)
   CS%id_CAv_visc_rem = register_diag_field('ocean_model', 'CAv_visc_rem', diag%axesCvL, Time, &
-      'Meridional Coriolis and Advective Acceleration multiplied by the viscous remnant', 'm2 s-2', &
-      conversion=GV%H_to_m*US%L_T2_to_m_s2)
+      'Meridional Coriolis and Advective Acceleration multiplied by the viscous remnant', 'm s-2', &
+      conversion=US%L_T2_to_m_s2)
   if(CS%id_CAv_visc_rem > 0) call safe_alloc_ptr(CS%ADp%visc_rem_v,isd,ied,JsdB,JedB,nz)
 
   CS%id_u_BT_accel_visc_rem = register_diag_field('ocean_model', 'u_BT_accel_visc_rem', diag%axesCuL, Time, &
-      'Barotropic Anomaly Zonal Acceleration multiplied by the viscous remnant', 'm2 s-2', &
-      conversion=GV%H_to_m*US%L_T2_to_m_s2)
+      'Barotropic Anomaly Zonal Acceleration multiplied by the viscous remnant', 'm s-2', &
+      conversion=US%L_T2_to_m_s2)
   if (CS%id_u_BT_accel_visc_rem > 0) call safe_alloc_ptr(CS%ADp%visc_rem_u,IsdB,IedB,jsd,jed,nz)
   CS%id_v_BT_accel_visc_rem = register_diag_field('ocean_model', 'v_BT_accel_visc_rem', diag%axesCvL, Time, &
-      'Barotropic Anomaly Meridional Acceleration multiplied by the viscous remnant', 'm2 s-2', &
-      conversion=GV%H_to_m*US%L_T2_to_m_s2)
+      'Barotropic Anomaly Meridional Acceleration multiplied by the viscous remnant', 'm s-2', &
+      conversion=US%L_T2_to_m_s2)
   if(CS%id_v_BT_accel_visc_rem > 0) call safe_alloc_ptr(CS%ADp%visc_rem_v,isd,ied,JsdB,JedB,nz)
 
   id_clock_Cor        = cpu_clock_id('(Ocean Coriolis & mom advection)', grain=CLOCK_MODULE)
