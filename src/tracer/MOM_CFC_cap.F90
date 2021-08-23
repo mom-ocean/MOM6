@@ -87,7 +87,7 @@ function register_CFC_cap(HI, GV, param_file, CS, tr_Reg, restart_CS)
   real :: a11_dflt(4), a12_dflt(4) ! Default values of the various coefficients
   real :: d11_dflt(4), d12_dflt(4) ! In the expressions for the solubility and
   real :: e11_dflt(3), e12_dflt(3) ! Schmidt numbers.
-  character(len=48) :: dummy       ! Dummy variable to store params that need to be logged here.
+  character(len=200) :: dummy      ! Dummy variable to store params that need to be logged here.
   logical :: register_CFC_cap
   integer :: isd, ied, jsd, jed, nz, m
 
@@ -128,6 +128,12 @@ function register_CFC_cap(HI, GV, param_file, CS, tr_Reg, restart_CS)
                 "found (units must be parts per trillion), or an empty string for "//&
                 "internal BC generation (TODO).", default=" ")
   if ((len_trim(dummy) > 0) .and. (scan(dummy,'/') == 0)) then
+    ! Add the directory if dummy is not already a complete path.
+    call get_param(param_file, mdl, "INPUTDIR", inputdir, default=".")
+    dummy = trim(slasher(inputdir))//trim(dummy)
+    call log_param(param_file, mdl, "INPUTDIR/CFC_IC_FILE", dummy)
+  endif
+  if (len_trim(dummy) > 0) then
     call get_param(param_file, mdl, "CFC11_VARIABLE", dummy, &
                  "The name of the variable representing CFC-11 in  "//&
                  "CFC_BC_FILE.", default="CFC_11")
