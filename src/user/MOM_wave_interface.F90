@@ -324,15 +324,15 @@ subroutine MOM_wave_interface_init(time, G, GV, US, param_file, CS, diag )
          "This has to be consistent with the number of Stokes drift bands in WW3, "//&
          "or the model will fail.",units='', default=1)
       allocate( CS%WaveNum_Cen(CS%NumBands) )
-      call get_param(param_file, mdl, "SURFBAND_WAVENUMBERS", CS%WaveNum_Cen, &
-           "Central wavenumbers for surface Stokes drift bands.", &
-           units='rad/m', default=0.12566, scale=US%Z_to_m)
       allocate( CS%STKx0(G%isdB:G%iedB,G%jsd:G%jed,CS%NumBands))
       allocate( CS%STKy0(G%isdB:G%iedB,G%jsd:G%jed,CS%NumBands))
       CS%WaveNum_Cen(:) = 0.0
       CS%STKx0(:,:,:) = 0.0
       CS%STKy0(:,:,:) = 0.0
       CS%PartitionMode = 0
+      call get_param(param_file, mdl, "SURFBAND_WAVENUMBERS", CS%WaveNum_Cen, &
+           "Central wavenumbers for surface Stokes drift bands.", &
+           units='rad/m', default=0.12566, scale=US%Z_to_m)
     case (INPUT_STRING)! A method to input the Stokes band (globally uniform)
       CS%DataSource = INPUT
       call get_param(param_file,mdl,"SURFBAND_NB",CS%NumBands,              &

@@ -342,8 +342,6 @@ end type OBC_registry_type
 integer :: id_clock_pass !< A CPU time clock
 
 character(len=40)  :: mdl = "MOM_open_boundary" !< This module's name.
-! This include declares and sets the variable "version".
-#include "version_variable.h"
 
 contains
 
@@ -359,6 +357,7 @@ subroutine open_boundary_config(G, US, param_file, OBC)
   type(unit_scale_type),   intent(in)    :: US  !< A dimensional unit scaling type
   type(param_file_type),   intent(in)    :: param_file !< Parameter file handle
   type(ocean_OBC_type),    pointer       :: OBC !< Open boundary control structure
+
   ! Local variables
   integer :: l ! For looping over segments
   logical :: debug_OBC, debug, mask_outside, reentrant_x, reentrant_y
@@ -370,6 +369,9 @@ subroutine open_boundary_config(G, US, param_file, OBC)
   logical :: answers_2018, default_2018_answers
   logical :: check_reconstruction, check_remapping, force_bounds_in_subcell
   character(len=32)  :: remappingScheme
+! This include declares and sets the variable "version".
+# include "version_variable.h"
+
   allocate(OBC)
 
   call get_param(param_file, mdl, "OBC_NUMBER_OF_SEGMENTS", OBC%number_of_segments, &
@@ -3800,29 +3802,31 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
     ishift=0;jshift=0
     if (segment%is_E_or_W) then
       allocate(normal_trans_bt(segment%HI%IsdB:segment%HI%IedB,segment%HI%jsd:segment%HI%jed))
-      normal_trans_bt(:,:)=0.0
+      normal_trans_bt(:,:) = 0.0
       if (segment%direction == OBC_DIRECTION_W) ishift=1
       I=segment%HI%IsdB
       do j=segment%HI%jsd,segment%HI%jed
-        segment%Cg(I,j) = sqrt(GV%g_prime(1)*G%bathyT(i+ishift,j))
-        segment%Htot(I,j)=0.0
+        segment%Htot(I,j) = 0.0
         do k=1,GV%ke
           segment%h(I,j,k) = h(i+ishift,j,k)
-          segment%Htot(I,j)=segment%Htot(I,j)+segment%h(I,j,k)
+          segment%Htot(I,j) = segment%Htot(I,j) + segment%h(I,j,k)
         enddo
+        segment%Cg(I,j) = sqrt(GV%g_prime(1)*G%bathyT(i+ishift,j))
+        !### This should be: segment%Cg(I,j) = sqrt(GV%g_prime(1)*segment%Htot(I,j)*GV%H_to_Z)
       enddo
     else! (segment%direction == OBC_DIRECTION_N .or. segment%direction == OBC_DIRECTION_S)
       allocate(normal_trans_bt(segment%HI%isd:segment%HI%ied,segment%HI%JsdB:segment%HI%JedB))
-      normal_trans_bt(:,:)=0.0
+      normal_trans_bt(:,:) = 0.0
       if (segment%direction == OBC_DIRECTION_S) jshift=1
       J=segment%HI%JsdB
       do i=segment%HI%isd,segment%HI%ied
-        segment%Cg(i,J) = sqrt(GV%g_prime(1)*G%bathyT(i,j+jshift))
-        segment%Htot(i,J)=0.0
+        segment%Htot(i,J) = 0.0
         do k=1,GV%ke
           segment%h(i,J,k) = h(i,j+jshift,k)
-          segment%Htot(i,J)=segment%Htot(i,J)+segment%h(i,J,k)
+          segment%Htot(i,J) = segment%Htot(i,J) + segment%h(i,J,k)
         enddo
+        segment%Cg(i,J) = sqrt(GV%g_prime(1)*G%bathyT(i,j+jshift))
+        !### This should be: segment%Cg(i,J) = sqrt(GV%g_prime(1)*segment%Htot(i,J)*GV%H_to_Z)
       enddo
     endif
 
@@ -4433,8 +4437,8 @@ subroutine register_OBC(name, param_file, Reg)
   Reg%OB(nobc)%name = name
 
   if (Reg%locked) call MOM_error(FATAL, &
-      "MOM register_tracer was called for variable "//trim(Reg%OB(nobc)%name)//&
-      " with a locked tracer registry.")
+      "MOM register_OBC was called for OBC "//trim(Reg%OB(nobc)%name)//&
+      " with a locked OBC registry.")
 
 end subroutine register_OBC
 
@@ -4445,7 +4449,7 @@ subroutine OBC_registry_init(param_file, Reg)
 
   integer, save :: init_calls = 0
 
-#include "version_variable.h"
+# include "version_variable.h"
   character(len=40)  :: mdl = "MOM_open_boundary" ! This module's name.
   character(len=256) :: mesg    ! Message for error messages.
 
@@ -4453,7 +4457,7 @@ subroutine OBC_registry_init(param_file, Reg)
   else ; return ; endif
 
   ! Read all relevant parameters and write them to the model log.
-! call log_version(param_file, mdl,s version, "")
+! call log_version(param_file, mdl, version, "")
 
   init_calls = init_calls + 1
   if (init_calls > 1) then
@@ -4503,7 +4507,7 @@ subroutine segment_tracer_registry_init(param_file, segment)
   integer, save :: init_calls = 0
 
 ! This include declares and sets the variable "version".
-#include "version_variable.h"
+# include "version_variable.h"
   character(len=40)  :: mdl = "segment_tracer_registry_init" ! This routine's name.
   character(len=256) :: mesg    ! Message for error messages.
 
@@ -4527,6 +4531,8 @@ subroutine segment_tracer_registry_init(param_file, segment)
 
 end subroutine segment_tracer_registry_init
 
+!> Register a tracer array that is active on an OBC segment, potentially also specifing how the
+!! tracer inflow values are specified.
 subroutine register_segment_tracer(tr_ptr, param_file, GV, segment, &
                                    OBC_scalar, OBC_array)
   type(verticalGrid_type), intent(in)   :: GV         !< ocean vertical grid structure
@@ -4537,7 +4543,7 @@ subroutine register_segment_tracer(tr_ptr, param_file, GV, segment, &
                                                       !! but it also means that any updates to this
                                                       !! structure in the calling module will be
                                                       !! available subsequently to the tracer registry.
-  type(param_file_type), intent(in)     :: param_file !< file to parse for  model parameter values
+  type(param_file_type), intent(in)     :: param_file !< file to parse for model parameter values
   type(OBC_segment_type), intent(inout) :: segment    !< current segment data structure
   real, optional, intent(in)            :: OBC_scalar !< If present, use scalar value for segment tracer
                                                       !! inflow concentration.
@@ -4555,8 +4561,8 @@ subroutine register_segment_tracer(tr_ptr, param_file, GV, segment, &
 
   if (segment%tr_Reg%ntseg>=MAX_FIELDS_) then
     write(mesg,'("Increase MAX_FIELDS_ in MOM_memory.h to at least ",I3," to allow for &
-        &all the tracers being registered via register_tracer.")') segment%tr_Reg%ntseg+1
-    call MOM_error(FATAL,"MOM register_tracer: "//mesg)
+        &all the tracers being registered via register_segment_tracer.")') segment%tr_Reg%ntseg+1
+    call MOM_error(FATAL,"MOM register_segment_tracer: "//mesg)
   endif
   segment%tr_Reg%ntseg = segment%tr_Reg%ntseg + 1
   ntseg     = segment%tr_Reg%ntseg
@@ -4570,7 +4576,7 @@ subroutine register_segment_tracer(tr_ptr, param_file, GV, segment, &
   segment%tr_Reg%Tr(ntseg)%name = tr_ptr%name
 
   if (segment%tr_Reg%locked) call MOM_error(FATAL, &
-      "MOM register_tracer was called for variable "//trim(segment%tr_Reg%Tr(ntseg)%name)//&
+      "MOM register_segment_tracer was called for variable "//trim(segment%tr_Reg%Tr(ntseg)%name)//&
       " with a locked tracer registry.")
 
   if (present(OBC_scalar)) segment%tr_Reg%Tr(ntseg)%OBC_inflow_conc = OBC_scalar ! initialize tracer value later
@@ -4711,7 +4717,7 @@ subroutine mask_outside_OBCs(G, US, param_file, OBC)
   integer :: i, j
   integer :: l_seg
   logical :: fatal_error = .False.
-  real    :: min_depth
+  real    :: min_depth ! The minimum depth for ocean points [Z ~> m]
   integer, parameter :: cin = 3, cout = 4, cland = -1, cedge = -2
   character(len=256) :: mesg    ! Message for error messages.
   type(OBC_segment_type), pointer :: segment => NULL() ! pointer to segment type list
@@ -4725,7 +4731,6 @@ subroutine mask_outside_OBCs(G, US, param_file, OBC)
 
   allocate(color(G%isd:G%ied, G%jsd:G%jed)) ; color = 0
   allocate(color2(G%isd:G%ied, G%jsd:G%jed)) ; color2 = 0
-
 
   ! Paint a frame around the outside.
   do j=G%jsd,G%jed
