@@ -84,9 +84,6 @@ function register_CFC_cap(HI, GV, param_file, CS, tr_Reg, restart_CS)
   ! This include declares and sets the variable "version".
 #include "version_variable.h"
   real, dimension(:,:,:), pointer :: tr_ptr => NULL()
-  real :: a11_dflt(4), a12_dflt(4) ! Default values of the various coefficients
-  real :: d11_dflt(4), d12_dflt(4) ! In the expressions for the solubility and
-  real :: e11_dflt(3), e12_dflt(3) ! Schmidt numbers.
   character(len=200) :: dummy      ! Dummy variable to store params that need to be logged here.
   logical :: register_CFC_cap
   integer :: isd, ied, jsd, jed, nz, m
@@ -442,11 +439,8 @@ subroutine CFC_cap_fluxes(fluxes, sfc_state, G, US, Rho0, Time, id_cfc11_atm, id
 
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G)) :: &
-    CFC11_Csurf, &  ! The CFC-11 surface concentrations times the Schmidt number term [mol kg-1].
-    CFC12_Csurf, &  ! The CFC-12 surface concentrations times the Schmidt number term [mol kg-1].
-    CFC11_alpha, &  ! The CFC-11 solubility [mol kg-1 atm-1].
-    CFC12_alpha, &  ! The CFC-12 solubility [mol kg-1 atm-1].
     kw_wo_sc_no_term, &  ! gas transfer velocity, without the Schmidt number term [Z T-1 ~> m s-1].
+    kw, &           ! gas transfer velocity [Z T-1 ~> m s-1].
     cair, &         ! The surface gas concentration in equilibrium with the atmosphere (saturation concentration)
                     ! [mol kg-1].
     cfc11_atm,     & !< CFC11 concentration in the atmopshere [pico mol/mol]
@@ -456,10 +450,10 @@ subroutine CFC_cap_fluxes(fluxes, sfc_state, G, US, Rho0, Time, id_cfc11_atm, id
   real :: alpha_11  ! The solubility of CFC 11 [mol kg-1 atm-1].
   real :: alpha_12  ! The solubility of CFC 12 [mol kg-1 atm-1].
   real :: sc_11, sc_12 ! The Schmidt numbers of CFC 11 and CFC 12.
-  real :: sc_no_term   ! A term related to the Schmidt number.
-  real :: kw_coeff     ! A coefficient used to scale the piston velocity [Z T-1 T2 L-2 = Z T L-2 ~> s / m]
+  real :: kw_coeff     ! A coefficient used to compute the piston velocity [Z T-1 T2 L-2 = Z T L-2 ~> s / m]
   real :: Rho0_kg_m3   ! Rho0 in non-scaled units [kg m-3]
   real, parameter :: pa_to_atm = 9.8692316931427e-6 ! factor for converting from Pa to atm.
+  real :: press_to_atm ! converts from model pressure units to atm
   integer :: i, j, m, is, ie, js, je
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
@@ -493,7 +487,9 @@ subroutine CFC_cap_fluxes(fluxes, sfc_state, G, US, Rho0, Time, id_cfc11_atm, id
   !        = 6.97e-7 m/s s^2/m^2 [Z T-1 T2 L-2 = Z T L-2 ~> s / m]
   kw_coeff = (US%m_to_Z*US%s_to_T*US%L_to_m**2) * 6.97e-7
 
+  ! set unit conversion factors
   Rho0_kg_m3 = Rho0 * US%R_to_kg_m3
+  press_to_atm = US%R_to_kg_m3*US%L_T_to_m_s**2 * pa_to_atm
 
   do j=js,je ; do i=is,ie
     ! ta in hectoKelvin
@@ -506,77 +502,59 @@ subroutine CFC_cap_fluxes(fluxes, sfc_state, G, US, Rho0, Time, id_cfc11_atm, id
     ! Calculate Schmidt numbers using coefficients given by
     ! Wanninkhof (2014); doi:10.4319/lom.2014.12.351.
     call comp_CFC_schmidt(sfc_state%SST(i,j), sc_11, sc_12)
-    sc_no_term = sqrt(660.0 / sc_11)
 
-    CFC11_alpha(i,j) = alpha_11 * sc_no_term
-    CFC11_Csurf(i,j) = sfc_state%sfc_CFC11(i,j) * sc_no_term
-    sc_no_term = sqrt(660.0 / sc_12)
-    CFC12_alpha(i,j) = alpha_12 * sc_no_term
-    CFC12_Csurf(i,j) = sfc_state%sfc_CFC12(i,j) * sc_no_term
-
-    kw_wo_sc_no_term(i,j) = kw_coeff *  ((1.0 - fluxes%ice_fraction(i,j))*fluxes%u10_sqr(i,j))
+    kw_wo_sc_no_term(i,j) = kw_coeff * ((1.0 - fluxes%ice_fraction(i,j))*fluxes%u10_sqr(i,j))
 
     ! air concentrations and cfcs BC's fluxes
-    ! CFC flux units: mol kg-1 s-1 kg m-2
-    cair(i,j) = US%R_to_kg_m3*US%L_T_to_m_s**2*pa_to_atm * CFC11_alpha(i,j) * cfc11_atm(i,j) * fluxes%p_surf_full(i,j)
-    fluxes%cfc11_flux(i,j) = kw_wo_sc_no_term(i,j) * (cair(i,j) - CFC11_Csurf(i,j)) * Rho0_kg_m3
-    cair(i,j) = US%R_to_kg_m3*US%L_T_to_m_s**2*pa_to_atm * CFC12_alpha(i,j) * cfc12_atm(i,j) * fluxes%p_surf_full(i,j)
-    fluxes%cfc12_flux(i,j) = kw_wo_sc_no_term(i,j) * (cair(i,j) - CFC12_Csurf(i,j)) * Rho0_kg_m3
+    ! CFC flux units: CU Z T-1 kg m-3 = mol kg-1 Z T-1 kg m-3 ~> mol m-2 s-1
+    kw(i,j) = kw_wo_sc_no_term(i,j) * sqrt(660.0 / sc_11)
+    cair(i,j) = press_to_atm * alpha_11 * cfc11_atm(i,j) * fluxes%p_surf_full(i,j)
+    fluxes%cfc11_flux(i,j) = kw(i,j) * (cair(i,j) - sfc_state%sfc_CFC11(i,j)) * Rho0_kg_m3
+
+    kw(i,j) = kw_wo_sc_no_term(i,j) * sqrt(660.0 / sc_12)
+    cair(i,j) = press_to_atm * alpha_12 * cfc12_atm(i,j) * fluxes%p_surf_full(i,j)
+    fluxes%cfc12_flux(i,j) = kw(i,j) * (cair(i,j) - sfc_state%sfc_CFC12(i,j)) * Rho0_kg_m3
   enddo ; enddo
 
 end subroutine CFC_cap_fluxes
 
 !> Calculates the CFC's solubility function following Warner and Weiss (1985) DSR, vol 32.
 subroutine get_solubility(alpha_11, alpha_12, ta, sal , mask)
-  real,                  intent(inout) :: alpha_11 !< The solubility of CFC 11 [mol kg-1 atm-1]
-  real,                  intent(inout) :: alpha_12 !< The solubility of CFC 12 [mol kg-1 atm-1]
-  real,                  intent(in   ) :: ta       !< Absolute sea surface temperature [hectoKelvin]
-  real,                  intent(in   ) :: sal      !< Surface salinity [PSU].
-  real,                  intent(in   ) :: mask     !< ocean mask
+  real, intent(inout) :: alpha_11 !< The solubility of CFC 11 [mol kg-1 atm-1]
+  real, intent(inout) :: alpha_12 !< The solubility of CFC 12 [mol kg-1 atm-1]
+  real, intent(in   ) :: ta       !< Absolute sea surface temperature [hectoKelvin]
+  real, intent(in   ) :: sal      !< Surface salinity [PSU].
+  real, intent(in   ) :: mask     !< ocean mask
 
   ! Local variables
-  real :: d11_dflt(4), d12_dflt(4) ! values of the various coefficients
-  real :: e11_dflt(3), e12_dflt(3) ! in the expressions for the solubility
-  real :: d1_11, d1_12 ! Coefficients for calculating CFC11 and CFC12 solubilities [nondim]
-  real :: d2_11, d2_12 ! Coefficients for calculating CFC11 and CFC12 solubilities [hectoKelvin-1]
-  real :: d3_11, d3_12 ! Coefficients for calculating CFC11 and CFC12 solubilities [log(hectoKelvin)-1]
-  real :: d4_11, d4_12 ! Coefficients for calculating CFC11 and CFC12 solubilities [hectoKelvin-2]
-  real :: e1_11, e1_12 ! Coefficients for calculating CFC11 and CFC12 solubilities [PSU-1]
-  real :: e2_11, e2_12 ! Coefficients for calculating CFC11 and CFC12 solubilities [PSU-1 hectoKelvin-1]
-  real :: e3_11, e3_12 ! Coefficients for calculating CFC11 and CFC12 solubilities [PSU-2 hectoKelvin-2]
-  real :: factor       ! factor to use in the solubility conversion
 
-  !-----------------------------------------------------------------------
-  ! Solubility coefficients for alpha in mol/(kg atm) for CFC11 (_11) and CFC12 (_12)
+  ! Coefficients for calculating CFC11 solubilities
   ! from Table 5 in Warner and Weiss (1985) DSR, vol 32.
-  !-----------------------------------------------------------------------
-  d11_dflt(:) = (/ -232.0411, 322.5546, 120.4956, -1.39165 /)
-  e11_dflt(:) = (/ -0.146531, 0.093621, -0.0160693 /)
-  d12_dflt(:) = (/ -220.2120, 301.8695, 114.8533, -1.39165 /)
-  e12_dflt(:) = (/ -0.147718, 0.093175, -0.0157340 /)
 
-  d1_11 = d11_dflt(1)
-  d2_11 = d11_dflt(2)
-  d3_11 = d11_dflt(3)
-  d4_11 = d11_dflt(4)
+  real, parameter :: d1_11 = -232.0411    ! [nondim]
+  real, parameter :: d2_11 =  322.5546    ! [hectoKelvin-1]
+  real, parameter :: d3_11 =  120.4956    ! [log(hectoKelvin)-1]
+  real, parameter :: d4_11 =   -1.39165   ! [hectoKelvin-2]
 
-  e1_11 = e11_dflt(1)
-  e2_11 = e11_dflt(2)
-  e3_11 = e11_dflt(3)
+  real, parameter :: e1_11 =   -0.146531  ! [PSU-1]
+  real, parameter :: e2_11 =    0.093621  ! [PSU-1 hectoKelvin-1]
+  real, parameter :: e3_11 =   -0.0160693 ! [PSU-2 hectoKelvin-2]
 
-  d1_12 = d12_dflt(1)
-  d2_12 = d12_dflt(2)
-  d3_12 = d12_dflt(3)
-  d4_12 = d12_dflt(4)
+  ! Coefficients for calculating CFC12 solubilities
+  ! from Table 5 in Warner and Weiss (1985) DSR, vol 32.
 
-  e1_12 = e12_dflt(1)
-  e2_12 = e12_dflt(2)
-  e3_12 = e12_dflt(3)
+  real, parameter :: d1_12 = -220.2120    ! [nondim]
+  real, parameter :: d2_12 =  301.8695    ! [hectoKelvin-1]
+  real, parameter :: d3_12 =  114.8533    ! [log(hectoKelvin)-1]
+  real, parameter :: d4_12 =   -1.39165   ! [hectoKelvin-2]
 
-  ! Calculate solubilities using Warner and Weiss (1985) DSR, vol 32.
-  ! The following is from Eq. 9 in Warner and Weiss (1985)
-  ! The factor 1.0e+03 is for the conversion from mol/(l * atm) to mol/(m3 * atm)
-  ! The factor 1.e-09 converts from mol/(l * atm) to mol/(m3 * pptv)
+  real, parameter :: e1_12 =   -0.147718  ! [PSU-1]
+  real, parameter :: e2_12 =    0.093175  ! [PSU-1 hectoKelvin-1]
+  real, parameter :: e3_12 =   -0.0157340 ! [PSU-2 hectoKelvin-2]
+
+  real :: factor ! introduce units to result [mol kg-1 atm-1]
+
+  ! Eq. 9 from Warner and Weiss (1985) DSR, vol 32.
   factor = 1.0
   alpha_11 = exp(d1_11 + d2_11/ta + d3_11*log(ta) + d4_11*ta**2 +&
                  sal * ((e3_11 * ta + e2_11) * ta + e1_11)) * &
