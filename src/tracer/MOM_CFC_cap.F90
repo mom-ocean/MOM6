@@ -120,6 +120,12 @@ function register_CFC_cap(HI, GV, param_file, CS, tr_Reg, restart_CS)
                  "if they are not found in the restart files.  Otherwise "//&
                  "it is a fatal error if tracers are not found in the "//&
                  "restart files of a restarted run.", default=.false.)
+  call get_param(param_file, mdl, "CFC11_IC_VAL", CS%CFC11_IC_val, &
+                 "Value that CFC_11 is set to when it is not read from a file.", &
+                 units="mol kg-1", default=0.0)
+  call get_param(param_file, mdl, "CFC12_IC_VAL", CS%CFC12_IC_val, &
+                 "Value that CFC_12 is set to when it is not read from a file.", &
+                 units="mol kg-1", default=0.0)
 
   ! the following params are not used in this module. Instead, they are used in
   ! the cap but are logged here to keep all the CFC cap params together.
