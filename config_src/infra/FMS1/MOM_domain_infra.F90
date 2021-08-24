@@ -156,6 +156,7 @@ type, public :: MOM_domain_type
                                 !! would be contain only land points and are not
                                 !! assigned to actual processors. This need not be
                                 !! assigned if all logical processors are used.
+  integer :: turns              !< Number of quarter-turns from input to this grid.
 end type MOM_domain_type
 
 integer, parameter :: To_All = To_East + To_West + To_North + To_South !< A flag for passing in all directions
@@ -1396,6 +1397,9 @@ subroutine create_MOM_domain(MOM_dom, n_global, n_halo, reentrant, tripolar_N, l
     mask_table_exists = .false.
   endif
 
+  ! Initialize as an unrotated domain
+  MOM_dom%turns = 0
+
   call clone_MD_to_d2D(MOM_dom, MOM_dom%mpp_domain)
 
   !For downsampled domain, recommend a halo of 1 (or 0?) since we're not doing wide-stencil computations.
@@ -1531,6 +1535,7 @@ subroutine clone_MD_to_MD(MD_in, MOM_dom, min_halo, halo_size, symmetric, domain
   MOM_dom%symmetric = MD_in%symmetric
   MOM_dom%nonblocking_updates = MD_in%nonblocking_updates
   MOM_dom%thin_halo_updates = MD_in%thin_halo_updates
+  MOM_dom%turns = qturns
 
   if (modulo(qturns, 2) /= 0) then
     MOM_dom%niglobal = MD_in%njglobal ; MOM_dom%njglobal = MD_in%niglobal
@@ -1620,7 +1625,6 @@ subroutine clone_MD_to_MD(MD_in, MOM_dom, min_halo, halo_size, symmetric, domain
   endif
 
   call clone_MD_to_d2D(MOM_dom, MOM_dom%mpp_domain, xextent=exni, yextent=exnj)
-
   call clone_MD_to_d2D(MOM_dom, MOM_dom%mpp_domain_d2, domain_name=MOM_dom%name, coarsen=2)
 
 end subroutine clone_MD_to_MD
