@@ -481,14 +481,19 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
         do j=js,je ; do I=is-1,ie
           hu(I,j)       = 2.0*h(i,j,k)*h(i+1,j,k)/(h(i,j,k)+h(i+1,j,k)+h_neglect)
           if (hu(I,j) /= 0.0) hu(I,j) = 1.0
+          !### The same result would be accomplished with the following without a division:
+          ! hu(I,j) = 0.0 ; if (h(i,j,k)*h(i+1,j,k) /= 0.0) hu(I,j) = 1.0
           KH_u_lay(I,j) = 0.5*(KH_u(I,j,k)+KH_u(I,j,k+1))
         enddo ; enddo
         do J=js-1,je ; do i=is,ie
           hv(i,J)       = 2.0*h(i,j,k)*h(i,j+1,k)/(h(i,j,k)+h(i,j+1,k)+h_neglect)
           if (hv(i,J) /= 0.0) hv(i,J) = 1.0
+          !### The same result would be accomplished with the following without a division:
+          ! hv(i,J) = 0.0 ; if (h(i,j,k)*h(i,j+1,k) /= 0.0) hv(i,J) = 1.0
           KH_v_lay(i,J) = 0.5*(KH_v(i,J,k)+KH_v(i,J,k+1))
         enddo ; enddo
         ! diagnose diffusivity at T-point
+        !### Because hu and hv are nondimensional here, the denominator is dimensionally inconsistent.
         do j=js,je ; do i=is,ie
           Kh_t(i,j,k) = ((hu(I-1,j)*KH_u_lay(i-1,j)+hu(I,j)*KH_u_lay(I,j))  &
                         +(hv(i,J-1)*KH_v_lay(i,J-1)+hv(i,J)*KH_v_lay(i,J))) &
@@ -505,7 +510,7 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
         enddo
 
         do j=js,je ; do i=is,ie
-          MEKE%Kh_diff(i,j) = MEKE%Kh_diff(i,j) / MAX(1.0,G%bathyT(i,j))
+          MEKE%Kh_diff(i,j) = GV%H_to_Z * MEKE%Kh_diff(i,j) / MAX(1.0*US%m_to_Z, G%bathyT(i,j))
         enddo ; enddo
       endif
 
