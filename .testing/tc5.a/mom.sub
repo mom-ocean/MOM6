@@ -1,0 +1,28 @@
+#!/bin/bash
+#SBATCH -n 1
+#SBATCH --time=1:00:00
+#SBATCH --job-name="narrow_chan"
+#SBATCH --output=slurm.%J.out
+#SBATCH --error=slurm.%J.err
+#SBATCH --qos=normal
+#SBATCH --partition=batch
+#SBATCH --clusters=c4
+#SBATCH --account=gfdl_o
+
+# build directory structure
+if [ ! -d INPUT ] ; then mkdir INPUT ; fi
+if [ ! -d RESTART ] ; then mkdir RESTART ; fi
+
+# get input files
+#if [ ! -f INPUT/coordinates_NPAC_profile.nc ] ; then ln -s ../../docs/coordinates_NPAC_profile.nc ./INPUT/. ; fi
+#if [ ! -f INPUT/h2_narrow_chan.nc ] ; then ln -s ../../docs/h2_narrow_chan.nc ./INPUT/. ; fi
+#if [ ! -f INPUT/IWcoefs_narrow_channel.nc ] ; then ln -s ../../docs/IWcoefs_narrow_channel.nc ./INPUT/. ; fi
+#
+# get executable
+#if [ ! -f MOM6 ] ; then ln -s ../build/MOM6 . ; fi
+
+# source env
+. ../scripts/gaea-intel-env
+
+# run model
+srun -n $SLURM_NTASKS ./MOM6
