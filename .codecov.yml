@@ -1,3 +1,4 @@
+# Report all tests as passing, regardless of the coverage
 coverage:
     status:
         project:
@@ -8,6 +9,16 @@ coverage:
             default:
                 threshold: 100%
                 base: parent
-comment:
-    # This must be set to the number of test cases (TCs)
-    after_n_builds: 8
+
+# Disable PR comments
+comment: false
+
+# Disable annotations
+github_checks:
+    annotations: false
+
+# Once the coverage has been restored, re-enable the comments and use the
+# following flag to report after all tests have been completed (currently 8).
+#comment:
+#    # This must be set to the number of test cases (TCs)
+#    after_n_builds: 8
