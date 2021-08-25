@@ -154,7 +154,7 @@ subroutine initialize_ice_thickness_from_file(h_shelf, area_shelf_h, hmask, G, U
 
       if (area_shelf_h (i,j) >= G%areaT(i,j)) then
         hmask(i,j) = 1.
-	area_shelf_h(i,j)=G%areaT(i,j)
+        area_shelf_h(i,j)=G%areaT(i,j)
       elseif (area_shelf_h (i,j) == 0.0) then
         hmask(i,j) = 0.
       elseif ((area_shelf_h(i,j) > 0) .and. (area_shelf_h(i,j) <= G%areaT(i,j))) then
