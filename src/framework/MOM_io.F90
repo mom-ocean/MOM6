@@ -4,6 +4,7 @@ module MOM_io
 ! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_array_transform,  only : allocate_rotated_array, rotate_array
+use MOM_array_transform,  only : rotate_array_pair, rotate_vector
 use MOM_domains,          only : MOM_domain_type, domain1D, broadcast, get_domain_components
 use MOM_domains,          only : rescale_comp_data, AGRID, BGRID_NE, CGRID_NE
 use MOM_dyn_horgrid,      only : dyn_horgrid_type
@@ -11,8 +12,10 @@ use MOM_ensemble_manager, only : get_ensemble_id
 use MOM_error_handler,    only : MOM_error, NOTE, FATAL, WARNING, is_root_PE
 use MOM_file_parser,      only : log_version, param_file_type
 use MOM_grid,             only : ocean_grid_type
-use MOM_io_infra,         only : MOM_read_data, MOM_read_vector, read_field_chksum
-use MOM_io_infra,         only : read_data=>MOM_read_data ! read_data will be removed soon.
+use MOM_io_infra,         only : read_data_infra => MOM_read_data
+use MOM_io_infra,         only : read_vector_infra => MOM_read_vector
+use MOM_io_infra,         only : read_data => MOM_read_data ! Deprecated
+use MOM_io_infra,         only : read_field_chksum
 use MOM_io_infra,         only : file_type, file_exists, get_file_info, get_file_fields
 use MOM_io_infra,         only : open_file, open_ASCII_file, close_file, flush_file, file_is_open
 use MOM_io_infra,         only : get_field_size, fieldtype, field_exists, get_field_atts
@@ -63,6 +66,24 @@ public :: MULTIPLE, SINGLE_FILE
 public :: APPEND_FILE, OVERWRITE_FILE, READONLY_FILE, WRITEONLY_FILE
 !> These encoding constants are used to indicate the discretization position of a variable
 public :: CENTER, CORNER, NORTH_FACE, EAST_FACE
+
+!> Read a field from file using the infrastructure I/O.
+interface MOM_read_data
+  module procedure MOM_read_data_0d
+  module procedure MOM_read_data_0d_int
+  module procedure MOM_read_data_1d
+  module procedure MOM_read_data_1d_int
+  module procedure MOM_read_data_2d
+  module procedure MOM_read_data_2d_region
+  module procedure MOM_read_data_3d
+  module procedure MOM_read_data_4d
+end interface MOM_read_data
+
+!> Read a vector from file using the infrastructure I/O.
+interface MOM_read_vector
+  module procedure MOM_read_vector_2d
+  module procedure MOM_read_vector_3d
+end interface MOM_read_vector
 
 !> Write a registered field to an output file, potentially with rotation
 interface MOM_write_field
@@ -1617,6 +1638,293 @@ subroutine query_vardesc(vd, name, units, longname, hor_grid, z_grid, t_grid, &
   endif
 
 end subroutine query_vardesc
+
+
+!> Read a scalar from file using infrastructure I/O.
+subroutine MOM_read_data_0d(filename, fieldname, data, timelevel, scale, MOM_Domain, &
+                            global_file, file_may_be_4d)
+  character(len=*), intent(in)  :: filename     !< Input filename
+  character(len=*), intent(in)  :: fieldname    !< Field variable name
+  real, intent(inout)           :: data         !< Field value
+  integer, optional, intent(in) :: timelevel    !< Time level to read in file
+  real, optional, intent(in)    :: scale        !< Rescale factor
+  type(MOM_domain_type), optional, intent(in) :: MOM_Domain !< Model domain decomposition
+  logical, optional, intent(in) :: global_file    !< If true, read from a single file
+  logical, optional, intent(in) :: file_may_be_4d !< If true, fields may be stored
+                                                  !! as 4d arrays in the file.
+
+  call read_data_infra(filename, fieldname, data, &
+    timelevel=timelevel, scale=scale, MOM_Domain=MOM_Domain, &
+    global_file=global_file, file_may_be_4d=file_may_be_4d &
+  )
+end subroutine MOM_read_data_0d
+
+
+!> Read a scalar integer from file using infrastructure I/O.
+subroutine MOM_read_data_0d_int(filename, fieldname, data, timelevel)
+  character(len=*), intent(in) :: filename    !< Input filename
+  character(len=*), intent(in) :: fieldname   !< Field variable name
+  integer, intent(inout) :: data              !< Field value
+  integer, optional, intent(in) :: timelevel  !< Time level to read in file
+
+  call read_data_infra(filename, fieldname, data, timelevel=timelevel)
+end subroutine MOM_read_data_0d_int
+
+
+!> Read a 1d array from file using infrastructure I/O.
+subroutine MOM_read_data_1d(filename, fieldname, data, timelevel, scale, MOM_Domain, &
+                            global_file, file_may_be_4d)
+  character(len=*), intent(in)  :: filename   !< Input filename
+  character(len=*), intent(in)  :: fieldname  !< Field variable name
+  real, intent(inout)           :: data(:)    !< Field value
+  integer, optional, intent(in) :: timelevel  !< Time level to read in file
+  real, optional, intent(in)    :: scale      !< Rescale factor
+  type(MOM_domain_type), optional, intent(in) :: MOM_Domain !< Model domain decomposition
+  logical, optional, intent(in) :: global_file    !< If true, read from a single file
+  logical, optional, intent(in) :: file_may_be_4d !< If true, fields may be stored
+                                                  !! as 4d arrays in the file.
+
+  call read_data_infra(filename, fieldname, data, &
+    timelevel=timelevel, scale=scale, MOM_Domain=MOM_Domain, &
+    global_file=global_file, file_may_be_4d=file_may_be_4d &
+  )
+end subroutine MOM_read_data_1d
+
+
+!> Read a 1d integer array from file using infrastructure I/O.
+subroutine MOM_read_data_1d_int(filename, fieldname, data, timelevel)
+  character(len=*), intent(in) :: filename    !< Input filename
+  character(len=*), intent(in) :: fieldname   !< Field variable name
+  integer, intent(inout) :: data(:)           !< Field value
+  integer, optional, intent(in) :: timelevel  !< Time level to read in file
+
+  call read_data_infra(filename, fieldname, data, timelevel=timelevel)
+end subroutine MOM_read_data_1d_int
+
+
+!> Read a 2d array from file using infrastructure I/O.
+subroutine MOM_read_data_2d(filename, fieldname, data, MOM_Domain, &
+                            timelevel, position, scale, global_file, file_may_be_4d)
+  character(len=*), intent(in)  :: filename  !< Input filename
+  character(len=*), intent(in)  :: fieldname !< Field variable name
+  real, intent(inout)           :: data(:,:) !< Field value
+  type(MOM_domain_type), intent(in) :: MOM_Domain !< Model domain decomposition
+  integer, optional, intent(in) :: timelevel !< Time level to read in file
+  integer, optional, intent(in) :: position  !< Grid positioning flag
+  real, optional, intent(in)    :: scale     !< Rescale factor
+  logical, optional, intent(in) :: global_file    !< If true, read from a single file
+  logical, optional, intent(in) :: file_may_be_4d !< If true, fields may be stored
+                                                  !! as 4d arrays in the file.
+
+  integer :: turns    ! Number of quarter-turns from input to model grid
+  real, allocatable :: data_in(:,:)  ! Field array on the input grid
+
+  turns = MOM_domain%turns
+  if (turns == 0) then
+    call read_data_infra(filename, fieldname, data, MOM_Domain, &
+      timelevel=timelevel, position=position, scale=scale, &
+      global_file=global_file, file_may_be_4d=file_may_be_4d &
+    )
+  else
+    call allocate_rotated_array(data, [1,1], -turns, data_in)
+    call read_data_infra(filename, fieldname, data_in, MOM_Domain, &
+      timelevel=timelevel, position=position, scale=scale, &
+      global_file=global_file, file_may_be_4d=file_may_be_4d &
+    )
+    call rotate_array(data_in, turns, data)
+    deallocate(data_in)
+  endif
+end subroutine MOM_read_data_2d
+
+
+!> Read a 2d region array from file using infrastructure I/O.
+subroutine MOM_read_data_2d_region(filename, fieldname, data, start, nread, MOM_domain, &
+                                   no_domain, scale, turns)
+  character(len=*), intent(in)  :: filename   !< Input filename
+  character(len=*), intent(in)  :: fieldname  !< Field variable name
+  real, intent(inout)           :: data(:,:)  !< Field value
+  integer, intent(in)           :: start(:)   !< Starting index for each axis.
+                                              !! In 2d, start(3:4) must be 1.
+  integer, intent(in)           :: nread(:)   !< Number of values to read along each axis.
+                                              !! In 2d, nread(3:4) must be 1.
+  type(MOM_domain_type), optional, intent(in) :: MOM_Domain !< Model domain decomposition
+  logical, optional, intent(in) :: no_domain  !< If true, field does not use
+                                              !! domain decomposion.
+  real, optional, intent(in)    :: scale      !< Rescale factor
+  integer, optional, intent(in) :: turns      !< Number of quarter turns from
+                                              !! input to model grid
+
+  integer :: qturns                   ! Number of quarter turns
+  real, allocatable :: data_in(:,:)   ! Field array on the input grid
+
+  qturns = 0
+  if (present(turns)) qturns = modulo(turns, 4)
+
+  if (qturns == 0) then
+    call read_data_infra(filename, fieldname, data, start, nread, &
+      MOM_Domain=MOM_Domain, no_domain=no_domain, scale=scale &
+    )
+  else
+    call allocate_rotated_array(data, [1,1], -qturns, data_in)
+    call read_data_infra(filename, fieldname, data_in, start, nread, &
+      MOM_Domain=MOM_Domain, no_domain=no_domain, scale=scale &
+    )
+    call rotate_array(data_in, qturns, data)
+    deallocate(data_in)
+  endif
+end subroutine MOM_read_data_2d_region
+
+
+!> Read a 3d array from file using infrastructure I/O.
+subroutine MOM_read_data_3d(filename, fieldname, data, MOM_Domain, &
+                            timelevel, position, scale, global_file, file_may_be_4d)
+  character(len=*), intent(in)  :: filename     !< Input filename
+  character(len=*), intent(in)  :: fieldname    !< Field variable name
+  real, intent(inout)           :: data(:,:,:)  !< Field value
+  type(MOM_domain_type), intent(in) :: MOM_Domain !< Model domain decomposition
+  integer, optional, intent(in) :: timelevel    !< Time level to read in file
+  integer, optional, intent(in) :: position     !< Grid positioning flag
+  real, optional, intent(in)    :: scale        !< Rescale factor
+  logical, optional, intent(in) :: global_file  !< If true, read from a single file
+  logical, optional, intent(in) :: file_may_be_4d !< If true, fields may be stored
+                                                  !! as 4d arrays in the file.
+
+  integer :: turns    ! Number of quarter-turns from input to model grid
+  real, allocatable :: data_in(:,:,:)  ! Field array on the input grid
+
+  turns = MOM_domain%turns
+  if (turns == 0) then
+    call read_data_infra(filename, fieldname, data, MOM_Domain, &
+      timelevel=timelevel, position=position, scale=scale, &
+      global_file=global_file, file_may_be_4d=file_may_be_4d &
+    )
+  else
+    call allocate_rotated_array(data, [1,1,1], -turns, data_in)
+    call read_data_infra(filename, fieldname, data_in, MOM_Domain, &
+      timelevel=timelevel, position=position, scale=scale, &
+      global_file=global_file, file_may_be_4d=file_may_be_4d &
+    )
+    call rotate_array(data_in, turns, data)
+    deallocate(data_in)
+  endif
+end subroutine MOM_read_data_3d
+
+
+!> Read a 4d array from file using infrastructure I/O.
+subroutine MOM_read_data_4d(filename, fieldname, data, MOM_Domain, &
+                            timelevel, position, scale, global_file)
+  character(len=*), intent(in) :: filename      !< Input filename
+  character(len=*), intent(in) :: fieldname     !< Field variable name
+  real, intent(inout) :: data(:,:,:,:)          !< Field value
+  type(MOM_domain_type), intent(in) :: MOM_Domain !< Model domain decomposition
+  integer, optional, intent(in) :: timelevel    !< Time level to read in file
+  integer, optional, intent(in) :: position     !< Grid positioning flag
+  real, optional, intent(in)    :: scale        !< Rescale factor
+  logical, optional, intent(in) :: global_file  !< If true, read from a single file
+
+  integer :: turns    ! Number of quarter-turns from input to model grid
+  real, allocatable :: data_in(:,:,:,:)  ! Field array on the input grid
+
+  turns = MOM_domain%turns
+
+  if (turns == 0) then
+    call read_data_infra(filename, fieldname, data, MOM_Domain, &
+      timelevel=timelevel, position=position, scale=scale, &
+      global_file=global_file &
+    )
+  else
+    ! Read field along the input grid and rotate to the model grid
+    call allocate_rotated_array(data, [1,1,1,1], -turns, data_in)
+    call read_data_infra(filename, fieldname, data_in, MOM_Domain, &
+      timelevel=timelevel, position=position, scale=scale, &
+      global_file=global_file &
+    )
+    call rotate_array(data_in, turns, data)
+    deallocate(data_in)
+  endif
+end subroutine MOM_read_data_4d
+
+
+!> Read a 2d vector tuple from file using infrastructure I/O.
+subroutine MOM_read_vector_2d(filename, u_fieldname, v_fieldname, u_data, v_data, MOM_Domain, &
+                              timelevel, stagger, scalar_pair, scale)
+  character(len=*), intent(in) :: filename      !< Input filename
+  character(len=*), intent(in) :: u_fieldname   !< Field variable name in u
+  character(len=*), intent(in) :: v_fieldname   !< Field variable name in v
+  real, intent(inout) :: u_data(:,:)            !< Field value in u
+  real, intent(inout) :: v_data(:,:)            !< Field value in v
+  type(MOM_domain_type), intent(in) :: MOM_Domain !< Model domain decomposition
+  integer, optional, intent(in) :: timelevel    !< Time level to read in file
+  integer, optional, intent(in) :: stagger      !< Grid staggering flag
+  logical, optional, intent(in) :: scalar_pair  !< True if tuple is not a vector
+  real, optional, intent(in) :: scale           !< Rescale factor
+
+  integer :: turns  ! Number of quarter-turns from input to model grid
+  real, allocatable :: u_data_in(:,:), v_data_in(:,:)   ! [uv] on the input grid
+
+  turns = MOM_Domain%turns
+  if (turns == 0) then
+    call read_vector_infra(filename, u_fieldname, v_fieldname, &
+        u_data, v_data, MOM_domain, timelevel=timelevel, stagger=stagger, &
+        scalar_pair=scalar_pair, scale=scale &
+    )
+  else
+    call allocate_rotated_array(u_data, [1,1], -turns, u_data_in)
+    call allocate_rotated_array(v_data, [1,1], -turns, v_data_in)
+    call read_vector_infra(filename, u_fieldname, v_fieldname, &
+        u_data_in, v_data_in, MOM_domain, timelevel=timelevel, &
+        stagger=stagger, scalar_pair=scalar_pair, scale=scale &
+    )
+    if (scalar_pair) then
+      call rotate_array_pair(u_data_in, v_data_in, turns, u_data, v_data)
+    else
+      call rotate_vector(u_data_in, v_data_in, turns, u_data, v_data)
+    endif
+    deallocate(v_data_in)
+    deallocate(u_data_in)
+  endif
+end subroutine MOM_read_vector_2d
+
+
+!> Read a 3d vector tuple from file using infrastructure I/O.
+subroutine MOM_read_vector_3d(filename, u_fieldname, v_fieldname, u_data, v_data, MOM_Domain, &
+                              timelevel, stagger, scalar_pair, scale)
+  character(len=*), intent(in) :: filename      !< Input filename
+  character(len=*), intent(in) :: u_fieldname   !< Field variable name in u
+  character(len=*), intent(in) :: v_fieldname   !< Field variable name in v
+  real, intent(inout) :: u_data(:,:,:)          !< Field value in u
+  real, intent(inout) :: v_data(:,:,:)          !< Field value in v
+  type(MOM_domain_type), intent(in) :: MOM_Domain !< Model domain decomposition
+  integer, optional, intent(in) :: timelevel    !< Time level to read in file
+  integer, optional, intent(in) :: stagger      !< Grid staggering flag
+  logical, optional, intent(in) :: scalar_pair  !< True if tuple is not a vector
+  real, optional, intent(in) :: scale           !< Rescale factor
+
+  integer :: turns  ! Number of quarter-turns from input to model grid
+  real, allocatable :: u_data_in(:,:,:), v_data_in(:,:,:) ! [uv] on the input grid
+
+  turns = MOM_Domain%turns
+  if (turns == 0) then
+    call read_vector_infra(filename, u_fieldname, v_fieldname, &
+        u_data, v_data, MOM_domain, timelevel=timelevel, stagger=stagger, &
+        scalar_pair=scalar_pair, scale=scale &
+    )
+  else
+    call allocate_rotated_array(u_data, [1,1,1], -turns, u_data_in)
+    call allocate_rotated_array(v_data, [1,1,1], -turns, v_data_in)
+    call read_vector_infra(filename, u_fieldname, v_fieldname, &
+        u_data_in, v_data_in, MOM_domain, timelevel=timelevel, &
+        stagger=stagger, scalar_pair=scalar_pair, scale=scale &
+    )
+    if (scalar_pair) then
+      call rotate_array_pair(u_data_in, v_data_in, turns, u_data, v_data)
+    else
+      call rotate_vector(u_data_in, v_data_in, turns, u_data, v_data)
+    endif
+    deallocate(v_data_in)
+    deallocate(u_data_in)
+  endif
+end subroutine MOM_read_vector_3d
 
 
 !> Write a 4d field to an output file, potentially with rotation
