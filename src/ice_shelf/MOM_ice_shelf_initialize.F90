@@ -101,7 +101,7 @@ subroutine initialize_ice_thickness_from_file(h_shelf, area_shelf_h, hmask, G, U
   !  This subroutine reads ice thickness and area from a file and puts it into
   !  h_shelf [Z ~> m] and area_shelf_h [L2 ~> m2] (and dimensionless) and updates hmask
   character(len=200) :: filename,thickness_file,inputdir ! Strings for file/path
-  character(len=200) :: thickness_varname, area_varname  ! Variable name in file
+  character(len=200) :: thickness_varname, area_varname, hmask_varname  ! Variable name in file
   character(len=40)  :: mdl = "initialize_ice_thickness_from_file" ! This subroutine's name.
   integer :: i, j, isc, jsc, iec, jec
   real :: len_sidestress, mask, udh
@@ -125,22 +125,22 @@ subroutine initialize_ice_thickness_from_file(h_shelf, area_shelf_h, hmask, G, U
   call get_param(PF, mdl, "ICE_AREA_VARNAME", area_varname, &
                  "The name of the area variable in ICE_THICKNESS_FILE.", &
                  default="area_shelf_h")
-
+  hmask_varname="h_mask"
   if (.not.file_exists(filename, G%Domain)) call MOM_error(FATAL, &
        " initialize_topography_from_file: Unable to open "//trim(filename))
   call MOM_read_data(filename, trim(thickness_varname), h_shelf, G%Domain, scale=US%m_to_Z)
   call MOM_read_data(filename,trim(area_varname), area_shelf_h, G%Domain, scale=US%m_to_L**2)
-
+  call MOM_read_data(filename, trim(hmask_varname), hmask, G%Domain)
   isc = G%isc ; jsc = G%jsc ; iec = G%iec ; jec = G%jec
 
+  if (len_sidestress > 0.) then
   do j=jsc,jec
     do i=isc,iec
 
       ! taper ice shelf in area where there is no sidestress -
       ! but do not interfere with hmask
 
-      if ((G%geoLonCv(i,j) > len_sidestress).and. &
-          (len_sidestress > 0.)) then
+      if (G%geoLonCv(i,j) > len_sidestress) then
         udh = exp(-(G%geoLonCv(i,j)-len_sidestress)/5.0) * h_shelf(i,j)
         if (udh <= 25.0) then
           h_shelf(i,j) = 0.0
@@ -154,6 +154,7 @@ subroutine initialize_ice_thickness_from_file(h_shelf, area_shelf_h, hmask, G, U
 
       if (area_shelf_h (i,j) >= G%areaT(i,j)) then
         hmask(i,j) = 1.
+	area_shelf_h(i,j)=G%areaT(i,j)
       elseif (area_shelf_h (i,j) == 0.0) then
         hmask(i,j) = 0.
       elseif ((area_shelf_h(i,j) > 0) .and. (area_shelf_h(i,j) <= G%areaT(i,j))) then
@@ -163,7 +164,7 @@ subroutine initialize_ice_thickness_from_file(h_shelf, area_shelf_h, hmask, G, U
       endif
     enddo
   enddo
-
+  endif
 end subroutine initialize_ice_thickness_from_file
 
 !> Initialize ice shelf thickness for a channel configuration
