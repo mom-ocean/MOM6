@@ -58,7 +58,7 @@ use fms_mod,                 only : stdout
 use mpp_mod,                 only : mpp_chksum
 use MOM_EOS,                 only : gsw_sp_from_sr, gsw_pt_from_ct
 use MOM_wave_interface,      only : wave_parameters_CS, MOM_wave_interface_init
-use MOM_wave_interface,      only : Update_Surface_Waves
+use MOM_wave_interface,      only : Update_Surface_Waves, query_wave_properties
 use MOM_surface_forcing_nuopc, only : surface_forcing_init, convert_IOB_to_fluxes
 use MOM_surface_forcing_nuopc, only : convert_IOB_to_forces, ice_ocn_bnd_type_chksum
 use MOM_surface_forcing_nuopc, only : ice_ocean_boundary_type, surface_forcing_CS
@@ -80,7 +80,7 @@ public ocean_model_init_sfc, ocean_model_flux_init
 public ocean_model_restart
 public ice_ocn_bnd_type_chksum
 public ocean_public_type_chksum
-public get_ocean_grid
+public get_ocean_grid, query_ocean_state
 public get_eps_omesh
 
 !> This type is used for communication with other components via the FMS coupler.
@@ -197,8 +197,8 @@ type, public :: ocean_state_type ; private
                               !! about the vertical grid.
   type(unit_scale_type), pointer :: US => NULL() !< A pointer to a structure containing
                               !! dimensional unit scaling factors.
-  type(MOM_control_struct), pointer :: &
-    MOM_CSp => NULL()         !< A pointer to the MOM control structure
+  type(MOM_control_struct)    :: MOM_CSp
+                              !< MOM control structure
   type(ice_shelf_CS), pointer :: &
     Ice_shelf_CSp => NULL()   !< A pointer to the control structure for the
                               !! ice shelf model that couples with MOM6.  This
@@ -391,12 +391,6 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn, i
   ! MOM_wave_interface_init is called regardless of the value of USE_WAVES because
   ! it also initializes statistical waves.
   call MOM_wave_interface_init(OS%Time, OS%grid, OS%GV, OS%US, param_file, OS%Waves, OS%diag)
-  if (OS%use_waves) then
-    ! I do not know why this is being set here.  It seems out of place. -RWH
-    call get_param(param_file,mdl,"SURFBAND_WAVENUMBERS", OS%Waves%WaveNum_Cen, &
-           "Central wavenumbers for surface Stokes drift bands.", &
-           units='rad/m', default=0.12566, scale=OS%US%Z_to_m)
-  endif
 
   if (associated(OS%grid%Domain%maskmap)) then
     call initialize_ocean_public_type(OS%grid%Domain%mpp_domain, Ocean_sfc, &
@@ -1005,6 +999,31 @@ subroutine ocean_model_flux_init(OS, verbosity)
   call call_tracer_flux_init(verbosity=verbose)
 
 end subroutine ocean_model_flux_init
+
+!> This interface allows certain properties that are stored in the ocean_state_type to be
+!! obtained.
+subroutine query_ocean_state(OS, use_waves, NumWaveBands, Wavenumbers, unscale)
+  type(ocean_state_type),       intent(in)  :: OS      !< The structure with the complete ocean state
+  logical,            optional, intent(out) :: use_waves !< Indicates whether surface waves are in use
+  integer,            optional, intent(out) :: NumWaveBands !< If present, this gives the number of
+                                                       !! wavenumber partitions in the wave discretization
+  real, dimension(:), optional, intent(out) :: Wavenumbers !< If present, this gives the characteristic
+                                                       !! wavenumbers of the wave discretization [m-1 or Z-1 ~> m-1]
+    logical,          optional, intent(in)  :: unscale !< If present and true, undo any dimensional
+                                                       !! rescaling and return dimensional values in MKS units
+
+  logical :: undo_scaling
+  undo_scaling = .false. ; if (present(unscale)) undo_scaling = unscale
+
+  if (present(use_waves)) use_waves = OS%use_waves
+  if (present(NumWaveBands)) call query_wave_properties(OS%Waves, NumBands=NumWaveBands)
+  if (present(Wavenumbers) .and. undo_scaling) then
+    call query_wave_properties(OS%Waves, WaveNumbers=WaveNumbers, US=OS%US)
+  elseif (present(Wavenumbers)) then
+    call query_wave_properties(OS%Waves, WaveNumbers=WaveNumbers)
+  endif
+
+end subroutine query_ocean_state
 
 !> Ocean_stock_pe - returns the integrated stocks of heat, water, etc. for conservation checks.
 !!   Because of the way FMS is coded, only the root PE has the integrated amount,

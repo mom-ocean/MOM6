@@ -197,8 +197,8 @@ type, public :: ocean_state_type ; private
   type(unit_scale_type), pointer :: &
     US => NULL()              !< A pointer to a structure containing dimensional
                               !! unit scaling factors.
-  type(MOM_control_struct), pointer :: &
-    MOM_CSp => NULL()         !< A pointer to the MOM control structure
+  type(MOM_control_struct) :: MOM_CSp
+                              !< MOM control structure
   type(ice_shelf_CS), pointer :: &
     Ice_shelf_CSp => NULL()   !< A pointer to the control structure for the
                               !! ice shelf model that couples with MOM6.  This

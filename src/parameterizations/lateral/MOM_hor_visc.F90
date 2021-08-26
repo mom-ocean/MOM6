@@ -496,7 +496,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
     enddo ; enddo
 
     do J=js-2,Jeq+1 ; do I=is-2,Ieq+1
-      grad_vel_mag_bt_q(I,J) = boundary_mask_q(I,J) * (dvdx_bt(i,j)**2 + dudy_bt(i,j)**2 + &
+      grad_vel_mag_bt_q(I,J) = boundary_mask_q(I,J) * (dvdx_bt(I,J)**2 + dudy_bt(I,J)**2 + &
             (0.25*((dudx_bt(i,j)+dudx_bt(i+1,j+1))+(dudx_bt(i,j+1)+dudx_bt(i+1,j))))**2 + &
             (0.25*((dvdy_bt(i,j)+dvdy_bt(i+1,j+1))+(dvdy_bt(i,j+1)+dvdy_bt(i+1,j))))**2)
     enddo ; enddo
@@ -1389,7 +1389,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
 
       do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
         if (grad_vel_mag_bt_h(i,j)>0) then
-          GME_coeff = CS%GME_efficiency * (MIN(G%bathyT(i,j)/CS%GME_h0,1.0)**2) * &
+          GME_coeff = CS%GME_efficiency * (MIN(G%bathyT(i,j) / CS%GME_h0, 1.0)**2) * &
             (0.25*(KH_u_GME(I,j,k)+KH_u_GME(I-1,j,k)+KH_v_GME(i,J,k)+KH_v_GME(i,J-1,k)))
         else
           GME_coeff = 0.0
@@ -1405,8 +1405,10 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
       enddo ; enddo
 
       do J=js-1,Jeq ; do I=is-1,Ieq
-        if (grad_vel_mag_bt_q(i,j)>0) then
-          GME_coeff = CS%GME_efficiency * (MIN(G%bathyT(i,j)/CS%GME_h0,1.0)**2) * &
+        if (grad_vel_mag_bt_q(I,J)>0) then
+          !### This expression is not rotationally invariant - bathyT is to the SW of q points,
+          !    and it needs parentheses in the sum of the 4 diffusivities.
+          GME_coeff = CS%GME_efficiency * (MIN(G%bathyT(i,j) / CS%GME_h0, 1.0)**2) * &
               (0.25*(KH_u_GME(I,j,k)+KH_u_GME(I,j+1,k)+KH_v_GME(i,J,k)+KH_v_GME(i+1,J,k)))
         else
           GME_coeff = 0.0
@@ -2509,6 +2511,7 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, MEKE, ADp)
   if (CS%Laplacian .or. get_all) then
   endif
 end subroutine hor_visc_init
+
 !> Calculates factors in the anisotropic orientation tensor to be align with the grid.
 !! With n1=1 and n2=0, this recovers the approach of Large et al, 2001.
 subroutine align_aniso_tensor_to_grid(CS, n1, n2)
@@ -2525,6 +2528,7 @@ subroutine align_aniso_tensor_to_grid(CS, n1, n2)
   CS%n1n1_m_n2n2_h(:,:) = ( n1 * n1 - n2 * n2 ) * recip_n2_norm
   CS%n1n1_m_n2n2_q(:,:) = ( n1 * n1 - n2 * n2 ) * recip_n2_norm
 end subroutine align_aniso_tensor_to_grid
+
 !> Apply a 1-1-4-1-1 Laplacian filter one time on GME diffusive flux to reduce any
 !! horizontal two-grid-point noise
 subroutine smooth_GME(CS,G,GME_flux_h,GME_flux_q)
@@ -2589,6 +2593,7 @@ subroutine smooth_GME(CS,G,GME_flux_h,GME_flux_q)
     endif
   enddo ! s-loop
 end subroutine smooth_GME
+
 !> Deallocates any variables allocated in hor_visc_init.
 subroutine hor_visc_end(CS)
   type(hor_visc_CS), pointer :: CS !< The control structure returned by a

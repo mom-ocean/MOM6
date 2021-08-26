@@ -521,9 +521,10 @@ work/%/$(1)/ocean.stats work/%/$(1)/chksum_diag: build/$(2)/MOM6 $(VENV_PATH)
 	@echo -e "$(DONE): $$*.$(1); no runtime errors."
 	if [ $(3) ]; then \
 	  mkdir -p results/$$* ; \
-	  bash <(curl -s https://codecov.io/bash) -n $$@ \
-	    > work/$$*/codecov.$(1).out \
-	    2> work/$$*/codecov.$(1).err \
+	  cd build/symmetric \
+	    && bash <(curl -s https://codecov.io/bash) -Z -n $$@ \
+	      > codecov.$$*.$(1).out \
+	      2> codecov.$$*.$(1).err \
 	    && echo -e "${MAGENTA}Report uploaded to codecov.${RESET}"; \
 	fi
 endef
