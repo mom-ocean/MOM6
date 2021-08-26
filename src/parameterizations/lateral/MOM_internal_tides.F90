@@ -2206,7 +2206,11 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
 
   ! Allocate and populate frequency array (each a multiple of first for now)
   allocate(CS%frequency(num_freq))
-  call get_param(param_file, mdl, "FIRST_MODE_PERIOD", period_1, units="s", scale=US%s_to_T)
+  call get_param(param_file, mdl, "FIRST_MODE_PERIOD", period_1, &
+                 "The period of the first mode for internal tides", default=44567, &
+                 units="s", scale=US%s_to_T)
+  call log_param(param_file, mdl, "FIRST_MODE_PERIOD", period_1)
+                 
   do fr=1,num_freq
     CS%frequency(fr) = (8.0*atan(1.0) * (real(fr)) / period_1) ! ADDED BDM
   enddo
