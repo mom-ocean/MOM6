@@ -26,6 +26,8 @@ Kappa-shear
 Internal-tide driven mixing
   The schemes of :cite:`st_laurent2002`, :cite:`polzin2009`, and :cite:`melet2012`, are all implemented through MOM_set_diffusivity and MOM_diabatic_driver.
 
+   :ref:`Internal_Tidal_Mixing`
+
 Vertical friction
 -----------------
 
