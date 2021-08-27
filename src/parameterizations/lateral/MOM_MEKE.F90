@@ -82,7 +82,9 @@ type, public :: MEKE_CS ; private
   real :: MEKE_topographic_beta !< Weight for how much topographic beta is considered
                                 !! when computing beta in Rhines scale [nondim]
   real :: MEKE_restoring_rate !< Inverse of the timescale used to nudge MEKE toward its equilibrium value [s-1].
-
+  logical :: fixed_total_depth  !< If true, use the nominal bathymetric depth as the estimate of
+                        !! the time-varying ocean depth.  Otherwise base the depth on the total
+                        !! ocean mass per unit area.
   logical :: kh_flux_enabled !< If true, lateral diffusive MEKE flux is enabled.
   logical :: initialize !< If True, invokes a steady state solver to calculate MEKE.
   logical :: debug      !< If true, write out checksums of data for debugging
@@ -283,12 +285,17 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
       enddo
     enddo
 
-    !$OMP parallel do default(shared)
-    do j=js-1,je+1 ; do i=is-1,ie+1
-      depth_tot(i,j) = G%bathyT(i,j)
-      !### Try changing this to:
-      ! depth_tot(i,j) = mass(i,j) * I_Rho0
-    enddo ; enddo
+    if (CS%fixed_total_depth) then
+      !$OMP parallel do default(shared)
+      do j=js-1,je+1 ; do i=is-1,ie+1
+        depth_tot(i,j) = G%bathyT(i,j)
+      enddo ; enddo
+    else
+      !$OMP parallel do default(shared)
+      do j=js-1,je+1 ; do i=is-1,ie+1
+        depth_tot(i,j) = mass(i,j) * I_Rho0
+      enddo ; enddo
+    endif
 
     if (CS%initialize) then
       call MEKE_equilibrium(CS, MEKE, G, GV, US, SN_u, SN_v, drag_rate_visc, I_mass, depth_tot)
@@ -711,8 +718,7 @@ subroutine MEKE_equilibrium(CS, MEKE, G, GV, US, SN_u, SN_v, drag_rate_visc, I_m
       if (CS%MEKE_topographic_beta == 0. .or. (depth_tot(i,j) == 0.0)) then
         beta_topo_x = 0. ; beta_topo_y = 0.
       else
-        !### Consider different combinations of these estimates of topographic beta, and the use
-        !    of the water column thickness instead of the bathymetric depth.
+        !### Consider different combinations of these estimates of topographic beta.
         beta_topo_x = -CS%MEKE_topographic_beta * FatH * 0.5 * ( &
                       (depth_tot(i+1,j)-depth_tot(i,j)) * G%IdxCu(I,j)  &
                   / max(depth_tot(i+1,j), depth_tot(i,j), dZ_neglect) &
@@ -887,14 +893,13 @@ subroutine MEKE_lengthScales(CS, MEKE, G, GV, US, SN_u, SN_v, EKE, depth_tot, &
       FatH = 0.25* ( ( G%CoriolisBu(I,J) + G%CoriolisBu(I-1,J-1) ) + &
                      ( G%CoriolisBu(I-1,J) + G%CoriolisBu(I,J-1) ) )  ! Coriolis parameter at h points
 
-      ! If bathyT is zero, then a division by zero FPE will be raised.  In this
+      ! If depth_tot is zero, then a division by zero FPE will be raised.  In this
       ! case, we apply Adcroft's rule of reciprocals and set the term to zero.
       ! Since zero-bathymetry cells are masked, this should not affect values.
       if (CS%MEKE_topographic_beta == 0. .or. (depth_tot(i,j) == 0.0)) then
         beta_topo_x = 0. ; beta_topo_y = 0.
       else
-        !### Consider different combinations of these estimates of topographic beta, and the use
-        !    of the water column thickness instead of the bathymetric depth.
+        !### Consider different combinations of these estimates of topographic beta.
         beta_topo_x = -CS%MEKE_topographic_beta * FatH * 0.5 * ( &
                       (depth_tot(i+1,j)-depth_tot(i,j)) * G%IdxCu(I,j)  &
                  / max(depth_tot(i+1,j), depth_tot(i,j), dZ_neglect) &
@@ -1167,6 +1172,11 @@ logical function MEKE_init(Time, G, US, param_file, diag, CS, MEKE, restart_CS)
                  "If positive, is a fixed length contribution to the expression "//&
                  "for mixing length used in MEKE-derived diffusivity.", &
                  units="m", default=0.0, scale=US%m_to_L)
+  call get_param(param_file, mdl, "MEKE_FIXED_TOTAL_DEPTH", CS%fixed_total_depth, &
+                 "If true, use the nominal bathymetric depth as the estimate of the "//&
+                 "time-varying ocean depth.  Otherwise base the depth on the total ocean mass"//&
+                 "per unit area.", default=.true.)
+
   call get_param(param_file, mdl, "MEKE_ALPHA_DEFORM", CS%aDeform, &
                  "If positive, is a coefficient weighting the deformation scale "//&
                  "in the expression for mixing length used in MEKE-derived diffusivity.", &
