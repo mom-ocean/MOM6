@@ -1253,7 +1253,7 @@ end subroutine analytic_int_specific_vol_dp
 !! pressure anomalies across layers, which are required for calculating the
 !! finite-volume form pressure accelerations in a Boussinesq model.
 subroutine analytic_int_density_dz(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, EOS, dpa, &
-                          intz_dpa, intx_dpa, inty_dpa, bathyT, dz_neglect, useMassWghtInterp)
+                          intz_dpa, intx_dpa, inty_dpa, bathyT, dz_neglect, useMassWghtInterp, Z_0p)
   type(hor_index_type), intent(in)  :: HI !< Ocean horizontal index structure
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
                         intent(in)  :: T   !< Potential temperature referenced to the surface [degC]
@@ -1292,6 +1292,8 @@ subroutine analytic_int_density_dz(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, EOS,
   real,       optional, intent(in)  :: dz_neglect !< A miniscule thickness change [Z ~> m]
   logical,    optional, intent(in)  :: useMassWghtInterp !< If true, uses mass weighting to
                                            !! interpolate T/S for top and bottom integrals.
+  real,       optional, intent(in)  :: Z_0p !< The height at which the pressure is 0 [Z ~> m]
+
   ! Local variables
   real :: rho_scale  ! A multiplicative factor by which to scale density from kg m-3 to the
                      ! desired units [R m3 kg-1 ~> 1]
@@ -1322,11 +1324,11 @@ subroutine analytic_int_density_dz(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, EOS,
       if ((rho_scale /= 1.0) .or. (pres_scale /= 1.0)) then
         call int_density_dz_wright(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
                                    dpa, intz_dpa, intx_dpa, inty_dpa, bathyT, &
-                                   dz_neglect, useMassWghtInterp, rho_scale, pres_scale)
+                                   dz_neglect, useMassWghtInterp, rho_scale, pres_scale, Z_0p=Z_0p)
       else
         call int_density_dz_wright(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
                                    dpa, intz_dpa, intx_dpa, inty_dpa, bathyT, &
-                                   dz_neglect, useMassWghtInterp)
+                                   dz_neglect, useMassWghtInterp, Z_0p=Z_0p)
       endif
     case default
       call MOM_error(FATAL, "No analytic integration option is available with this EOS!")
