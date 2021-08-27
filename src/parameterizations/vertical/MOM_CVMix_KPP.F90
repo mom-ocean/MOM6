@@ -420,6 +420,7 @@ logical function KPP_init(paramFile, G, GV, US, diag, Time, CS, passive, Waves)
     select case ( trim(string))
       case ("CONSTANT")
         CS%LT_K_METHOD = LT_K_MODE_CONSTANT
+        langmuir_mixing_opt = 'LWF16'
       case ("VR12")
         CS%LT_K_METHOD = LT_K_MODE_VR12
         langmuir_mixing_opt = 'LWF16'
@@ -452,6 +453,7 @@ logical function KPP_init(paramFile, G, GV, US, diag, Time, CS, passive, Waves)
     select case ( trim(string))
       case ("CONSTANT")
         CS%LT_VT2_METHOD = LT_VT2_MODE_CONSTANT
+        langmuir_entrainment_opt = 'LWF16'
       case ("VR12")
         CS%LT_VT2_METHOD = LT_VT2_MODE_VR12
         langmuir_entrainment_opt = 'LWF16'
@@ -856,18 +858,6 @@ subroutine KPP_calculate(CS, G, GV, US, h, uStar, &
          Kviscosity(:)     = 0.0
       endif
 
-
-      ! compute unresolved squared velocity for diagnostics
-      if (CS%id_Vt2 > 0) then
-!BGR Now computing VT2 above so can modify for LT
-!    therefore, don't repeat this operation here
-!        CS%Vt2(i,j,:) = CVmix_kpp_compute_unresolved_shear( &
-!                    cellHeight(1:GV%ke),                & ! Depth of cell center [m]
-!                    ws_cntr=Ws_1d,                      & ! Turbulent velocity scale profile, at centers [m s-1]
-!                    N_iface=CS%N(i,j,:),                & ! Buoyancy frequency at interface [s-1]
-!                    CVmix_kpp_params_user=CS%KPP_params ) ! KPP parameters
-      endif
-
       ! Copy 1d data into 3d diagnostic arrays
       !/ grabbing obldepth_0d for next time step.
       CS%OBLdepthprev(i,j)=CS%OBLdepth(i,j)
@@ -915,7 +905,6 @@ subroutine KPP_calculate(CS, G, GV, US, h, uStar, &
   if (CS%id_OBLdepth_original > 0) call post_data(CS%id_OBLdepth_original,CS%OBLdepth_original,CS%diag)
   if (CS%id_sigma    > 0) call post_data(CS%id_sigma,    CS%sigma,           CS%diag)
   if (CS%id_Ws       > 0) call post_data(CS%id_Ws,       CS%Ws,              CS%diag)
-  if (CS%id_Vt2      > 0) call post_data(CS%id_Vt2,      CS%Vt2,             CS%diag)
   if (CS%id_uStar    > 0) call post_data(CS%id_uStar,    uStar,              CS%diag)
   if (CS%id_buoyFlux > 0) call post_data(CS%id_buoyFlux, buoyFlux,           CS%diag)
   if (CS%id_Kt_KPP   > 0) call post_data(CS%id_Kt_KPP,   CS%Kt_KPP,          CS%diag)
@@ -1236,6 +1225,18 @@ subroutine KPP_compute_BLD(CS, G, GV, US, h, Temp, Salt, u, v, tv, uStar, buoyFl
       CS%OBLdepth(i,j) = min( CS%OBLdepth(i,j), -iFaceHeight(GV%ke+1) ) ! no deeper than bottom
       CS%kOBL(i,j)     = CVMix_kpp_compute_kOBL_depth( iFaceHeight, cellHeight, CS%OBLdepth(i,j) )
 
+      ! compute unresolved squared velocity for diagnostics
+      if (CS%id_Vt2 > 0) then
+        CS%Vt2(i,j,:) = CVmix_kpp_compute_unresolved_shear( &
+                    cellHeight(1:GV%ke),                & ! Depth of cell center [m]
+                    ws_cntr=Ws_1d,                      & ! Turbulent velocity scale profile, at centers [m s-1]
+                    N_iface=CS%N(i,j,:),                & ! Buoyancy frequency at interface [s-1]
+                    EFactor=LangEnhVT2, & ! Langmuir enhancement factor [nondim]
+                    LaSL=CS%La_SL(i,j), & ! surface layer averaged Langmuir number [nondim]
+                    bfsfc=surfBuoyFlux, & ! surface buoyancy flux [m2 s-3]
+                    uStar=uStar(i,j), & ! surface friction velocity [m s-1]
+                    CVmix_kpp_params_user=CS%KPP_params ) ! KPP parameters
+      endif
 
       ! recompute wscale for diagnostics, now that we in fact know boundary layer depth
       !BGR consider if LTEnhancement is wanted for diagnostics
@@ -1278,6 +1279,7 @@ subroutine KPP_compute_BLD(CS, G, GV, US, h, Temp, Salt, u, v, tv, uStar, buoyFl
   if (CS%id_EnhK     > 0) call post_data(CS%id_EnhK,     CS%EnhK,            CS%diag)
   if (CS%id_EnhVt2   > 0) call post_data(CS%id_EnhVt2,   CS%EnhVt2,          CS%diag)
   if (CS%id_La_SL    > 0) call post_data(CS%id_La_SL,    CS%La_SL,           CS%diag)
+  if (CS%id_Vt2      > 0) call post_data(CS%id_Vt2,      CS%Vt2,             CS%diag)
 
   ! BLD smoothing:
   if (CS%n_smooth > 0) call KPP_smooth_BLD(CS,G,GV,h)
