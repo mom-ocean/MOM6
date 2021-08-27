@@ -294,9 +294,9 @@ subroutine rescale_dyn_horgrid_bathymetry(G, m_in_new_units)
 
   if (m_in_new_units == 1.0) return
   if (m_in_new_units < 0.0) &
-    call MOM_error(FATAL, "rescale_grid_bathymetry: Negative depth units are not permitted.")
+    call MOM_error(FATAL, "rescale_dyn_horgrid_bathymetry: Negative depth units are not permitted.")
   if (m_in_new_units == 0.0) &
-    call MOM_error(FATAL, "rescale_grid_bathymetry: Zero depth units are not permitted.")
+    call MOM_error(FATAL, "rescale_dyn_horgrid_bathymetry: Zero depth units are not permitted.")
 
   rescale = 1.0 / m_in_new_units
   do j=jsd,jed ; do i=isd,ied
