@@ -84,11 +84,7 @@ function register_CFC_cap(HI, GV, param_file, CS, tr_Reg, restart_CS)
   ! This include declares and sets the variable "version".
 #include "version_variable.h"
   real, dimension(:,:,:), pointer :: tr_ptr => NULL()
-  real :: a11_dflt(4), a12_dflt(4) ! Default values of the various coefficients
-  real :: d11_dflt(4), d12_dflt(4) ! In the expressions for the solubility and
-  real :: e11_dflt(3), e12_dflt(3) ! Schmidt numbers.
-  character(len=48) :: flux_units  ! The units for tracer fluxes.
-  character(len=48) :: dummy       ! Dummy variable to store params that need to be logged here.
+  character(len=200) :: dummy      ! Dummy variable to store params that need to be logged here.
   logical :: register_CFC_cap
   integer :: isd, ied, jsd, jed, nz, m
 
@@ -121,6 +117,12 @@ function register_CFC_cap(HI, GV, param_file, CS, tr_Reg, restart_CS)
                  "if they are not found in the restart files.  Otherwise "//&
                  "it is a fatal error if tracers are not found in the "//&
                  "restart files of a restarted run.", default=.false.)
+  call get_param(param_file, mdl, "CFC11_IC_VAL", CS%CFC11_IC_val, &
+                 "Value that CFC_11 is set to when it is not read from a file.", &
+                 units="mol kg-1", default=0.0)
+  call get_param(param_file, mdl, "CFC12_IC_VAL", CS%CFC12_IC_val, &
+                 "Value that CFC_12 is set to when it is not read from a file.", &
+                 units="mol kg-1", default=0.0)
 
   ! the following params are not used in this module. Instead, they are used in
   ! the cap but are logged here to keep all the CFC cap params together.
@@ -129,6 +131,12 @@ function register_CFC_cap(HI, GV, param_file, CS, tr_Reg, restart_CS)
                 "found (units must be parts per trillion), or an empty string for "//&
                 "internal BC generation (TODO).", default=" ")
   if ((len_trim(dummy) > 0) .and. (scan(dummy,'/') == 0)) then
+    ! Add the directory if dummy is not already a complete path.
+    call get_param(param_file, mdl, "INPUTDIR", inputdir, default=".")
+    dummy = trim(slasher(inputdir))//trim(dummy)
+    call log_param(param_file, mdl, "INPUTDIR/CFC_IC_FILE", dummy)
+  endif
+  if (len_trim(dummy) > 0) then
     call get_param(param_file, mdl, "CFC11_VARIABLE", dummy, &
                  "The name of the variable representing CFC-11 in  "//&
                  "CFC_BC_FILE.", default="CFC_11")
@@ -142,8 +150,6 @@ function register_CFC_cap(HI, GV, param_file, CS, tr_Reg, restart_CS)
   CS%CFC11_name = "CFC_11" ; CS%CFC12_name = "CFC_12"
   CS%CFC11_desc = var_desc(CS%CFC11_name,"mol kg-1","Moles Per Unit Mass of CFC-11 in sea water", caller=mdl)
   CS%CFC12_desc = var_desc(CS%CFC12_name,"mol kg-1","Moles Per Unit Mass of CFC-12 in sea water", caller=mdl)
-  if (GV%Boussinesq) then ; flux_units = "mol s-1"
-  else ; flux_units = "mol m-3 kg s-1" ; endif
 
   allocate(CS%CFC11(isd:ied,jsd:jed,nz)) ; CS%CFC11(:,:,:) = 0.0
   allocate(CS%CFC12(isd:ied,jsd:jed,nz)) ; CS%CFC12(:,:,:) = 0.0
@@ -154,13 +160,11 @@ function register_CFC_cap(HI, GV, param_file, CS, tr_Reg, restart_CS)
   ! Register CFC11 for horizontal advection, diffusion, and restarts.
   call register_tracer(tr_ptr, tr_Reg, param_file, HI, GV, &
                        tr_desc=CS%CFC11_desc, registry_diags=.true., &
-                       flux_units=flux_units, &
                        restart_CS=restart_CS, mandatory=.not.CS%tracers_may_reinit)
   ! Do the same for CFC12
   tr_ptr => CS%CFC12
   call register_tracer(tr_ptr, Tr_Reg, param_file, HI, GV, &
                        tr_desc=CS%CFC12_desc, registry_diags=.true., &
-                       flux_units=flux_units, &
                        restart_CS=restart_CS, mandatory=.not.CS%tracers_may_reinit)
 
   CS%tr_Reg => tr_Reg
@@ -302,19 +306,17 @@ subroutine CFC_cap_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, US, C
   ! Local variables
   real, pointer, dimension(:,:,:) :: CFC11 => NULL(), CFC12 => NULL()
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: h_work ! Used so that h can be modified [H ~> m or kg m-2]
-  real :: scale_factor ! convert from [Conc. m s-1] to [Conc. kg m-2 T-1]
+  real :: scale_factor ! convert from cfc1[12]_flux to units of sfc_flux in tracer_vertdiff
   integer :: i, j, k, m, is, ie, js, je, nz
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
-  ! CFC_flux **unscaled** units are [mol m-2 s-1] which is the same as [CU kg m-2 s-1],
-  ! where CU = mol kg-1. However, CFC_flux has been scaled already.
-  ! CFC_flux **scaled** units are [CU L T-1 R]. We want [CU kg m-2 T-1] because
-  ! these units are what tracer_vertdiff needs.
-  ! Therefore, we need to convert [L R] to [kg m-2] using scale_factor.
-  scale_factor = US%L_to_Z * US%RZ_to_kg_m2 ! this will give [CU kg m-2 T-1], which is what verdiff wants
-
   if (.not.associated(CS)) return
+
+  ! set factor to convert from cfc1[12]_flux units to tracer_vertdiff argument sfc_flux units
+  ! cfc1[12]_flux units are CU Z T-1 kg m-3
+  ! tracer_vertdiff argument sfc_flux units are CU kg m-2 T-1
+  scale_factor = US%Z_to_m
 
   CFC11 => CS%CFC11 ; CFC12 => CS%CFC12
 
@@ -340,8 +342,8 @@ subroutine CFC_cap_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, US, C
   endif
 
   ! If needed, write out any desired diagnostics from tracer sources & sinks here.
-  if (CS%id_cfc11_cmor > 0) call post_data(CS%id_cfc11_cmor, CFC11*GV%Rho0, CS%diag)
-  if (CS%id_cfc12_cmor > 0) call post_data(CS%id_cfc12_cmor, CFC12*GV%Rho0, CS%diag)
+  if (CS%id_cfc11_cmor > 0) call post_data(CS%id_cfc11_cmor, (GV%Rho0*US%R_to_kg_m3)*CFC11, CS%diag)
+  if (CS%id_cfc12_cmor > 0) call post_data(CS%id_cfc12_cmor, (GV%Rho0*US%R_to_kg_m3)*CFC12, CS%diag)
 
 end subroutine CFC_cap_column_physics
 
@@ -421,14 +423,15 @@ end subroutine CFC_cap_surface_state
 
 !> Orchestrates the calculation of the CFC fluxes [mol m-2 s-1], including getting the ATM
 !! concentration, and calculating the solubility, Schmidt number, and gas exchange.
-subroutine CFC_cap_fluxes(fluxes, sfc_state, G, Rho0, Time, id_cfc11_atm, id_cfc12_atm)
+subroutine CFC_cap_fluxes(fluxes, sfc_state, G, US, Rho0, Time, id_cfc11_atm, id_cfc12_atm)
   type(ocean_grid_type),        intent(in   ) :: G  !< The ocean's grid structure.
+  type(unit_scale_type),        intent(in  )  :: US !< A dimensional unit scaling type
   type(surface),                intent(in   ) :: sfc_state !< A structure containing fields
                                               !! that describe the surface state of the ocean.
   type(forcing),                intent(inout) :: fluxes !< A structure containing pointers
                                               !! to thermodynamic and tracer forcing fields. Unused fields
                                               !! have NULL ptrs.
-  real,                         intent(in   ) :: Rho0 !< The mean ocean density [kg m-3]
+  real,                         intent(in   ) :: Rho0 !< The mean ocean density [R ~> kg m-3]
   type(time_type),              intent(in   ) :: Time !< The time of the fluxes, used for interpolating the
                                               !! CFC's concentration in the atmosphere.
   integer,           optional,  intent(inout):: id_cfc11_atm !< id number for time_interp_external.
@@ -436,11 +439,8 @@ subroutine CFC_cap_fluxes(fluxes, sfc_state, G, Rho0, Time, id_cfc11_atm, id_cfc
 
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G)) :: &
-    CFC11_Csurf, &  ! The CFC-11 surface concentrations times the Schmidt number term [mol kg-1].
-    CFC12_Csurf, &  ! The CFC-12 surface concentrations times the Schmidt number term [mol kg-1].
-    CFC11_alpha, &  ! The CFC-11 solubility [mol kg-1 atm-1].
-    CFC12_alpha, &  ! The CFC-12 solubility [mol kg-1 atm-1].
-    kw_wo_sc_no_term, &  ! gas transfer velocity, without the Schmidt number term [m s-1].
+    kw_wo_sc_no_term, &  ! gas transfer velocity, without the Schmidt number term [Z T-1 ~> m s-1].
+    kw, &           ! gas transfer velocity [Z T-1 ~> m s-1].
     cair, &         ! The surface gas concentration in equilibrium with the atmosphere (saturation concentration)
                     ! [mol kg-1].
     cfc11_atm,     & !< CFC11 concentration in the atmopshere [pico mol/mol]
@@ -450,9 +450,10 @@ subroutine CFC_cap_fluxes(fluxes, sfc_state, G, Rho0, Time, id_cfc11_atm, id_cfc
   real :: alpha_11  ! The solubility of CFC 11 [mol kg-1 atm-1].
   real :: alpha_12  ! The solubility of CFC 12 [mol kg-1 atm-1].
   real :: sc_11, sc_12 ! The Schmidt numbers of CFC 11 and CFC 12.
-  real :: sc_no_term   ! A term related to the Schmidt number.
-  real :: kw_coeff     ! A coefficient used to scale the piston velocity [L T-1 ~> m s-1]
+  real :: kw_coeff     ! A coefficient used to compute the piston velocity [Z T-1 T2 L-2 = Z T L-2 ~> s / m]
+  real :: Rho0_kg_m3   ! Rho0 in non-scaled units [kg m-3]
   real, parameter :: pa_to_atm = 9.8692316931427e-6 ! factor for converting from Pa to atm.
+  real :: press_to_atm ! converts from model pressure units to atm
   integer :: i, j, m, is, ie, js, je
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
@@ -479,6 +480,17 @@ subroutine CFC_cap_fluxes(fluxes, sfc_state, G, Rho0, Time, id_cfc11_atm, id_cfc
                           "has not been implemented yet.")
   endif
 
+  !---------------------------------------------------------------------
+  !     Gas exchange/piston velocity parameter
+  !---------------------------------------------------------------------
+  ! From a = 0.251 cm/hr s^2/m^2 in Wannikhof 2014
+  !        = 6.97e-7 m/s s^2/m^2 [Z T-1 T2 L-2 = Z T L-2 ~> s / m]
+  kw_coeff = (US%m_to_Z*US%s_to_T*US%L_to_m**2) * 6.97e-7
+
+  ! set unit conversion factors
+  Rho0_kg_m3 = Rho0 * US%R_to_kg_m3
+  press_to_atm = US%R_to_kg_m3*US%L_T_to_m_s**2 * pa_to_atm
+
   do j=js,je ; do i=is,ie
     ! ta in hectoKelvin
     ta = max(0.01, (sfc_state%SST(i,j) + 273.15) * 0.01)
@@ -490,84 +502,59 @@ subroutine CFC_cap_fluxes(fluxes, sfc_state, G, Rho0, Time, id_cfc11_atm, id_cfc
     ! Calculate Schmidt numbers using coefficients given by
     ! Wanninkhof (2014); doi:10.4319/lom.2014.12.351.
     call comp_CFC_schmidt(sfc_state%SST(i,j), sc_11, sc_12)
-    sc_no_term = sqrt(660.0 / sc_11)
 
-    CFC11_alpha(i,j) = alpha_11 * sc_no_term
-    CFC11_Csurf(i,j) = sfc_state%sfc_CFC11(i,j) * sc_no_term
-    sc_no_term = sqrt(660.0 / sc_12)
-    CFC12_alpha(i,j) = alpha_12 * sc_no_term
-    CFC12_Csurf(i,j) = sfc_state%sfc_CFC12(i,j) * sc_no_term
-
-    !---------------------------------------------------------------------
-    !     Gas exchange/piston velocity parameter
-    !---------------------------------------------------------------------
-    ! From a = 0.251 cm/hr s^2/m^2 in Wannikhof 2014
-    ! 6.97e-07 is used to convert from cm/hr to m/s, kw = m/s [L/T]
-    kw_coeff = 6.97e-07 * G%US%m_to_L * G%US%T_to_s
-
-    kw_wo_sc_no_term(i,j) = kw_coeff *  ((1.0 - fluxes%ice_fraction(i,j))*fluxes%u10_sqr(i,j))
+    kw_wo_sc_no_term(i,j) = kw_coeff * ((1.0 - fluxes%ice_fraction(i,j))*fluxes%u10_sqr(i,j))
 
     ! air concentrations and cfcs BC's fluxes
-    ! CFC flux units: mol kg-1 s-1 kg m-2
-    cair(i,j) = pa_to_atm * CFC11_alpha(i,j) * cfc11_atm(i,j) * fluxes%p_surf_full(i,j)
-    fluxes%cfc11_flux(i,j) = kw_wo_sc_no_term(i,j) * (cair(i,j) - CFC11_Csurf(i,j)) * Rho0
-    cair(i,j) = pa_to_atm * CFC12_alpha(i,j) * cfc12_atm(i,j) * fluxes%p_surf_full(i,j)
-    fluxes%cfc12_flux(i,j) = kw_wo_sc_no_term(i,j) * (cair(i,j) - CFC12_Csurf(i,j)) * Rho0
+    ! CFC flux units: CU Z T-1 kg m-3 = mol kg-1 Z T-1 kg m-3 ~> mol m-2 s-1
+    kw(i,j) = kw_wo_sc_no_term(i,j) * sqrt(660.0 / sc_11)
+    cair(i,j) = press_to_atm * alpha_11 * cfc11_atm(i,j) * fluxes%p_surf_full(i,j)
+    fluxes%cfc11_flux(i,j) = kw(i,j) * (cair(i,j) - sfc_state%sfc_CFC11(i,j)) * Rho0_kg_m3
+
+    kw(i,j) = kw_wo_sc_no_term(i,j) * sqrt(660.0 / sc_12)
+    cair(i,j) = press_to_atm * alpha_12 * cfc12_atm(i,j) * fluxes%p_surf_full(i,j)
+    fluxes%cfc12_flux(i,j) = kw(i,j) * (cair(i,j) - sfc_state%sfc_CFC12(i,j)) * Rho0_kg_m3
   enddo ; enddo
 
 end subroutine CFC_cap_fluxes
 
 !> Calculates the CFC's solubility function following Warner and Weiss (1985) DSR, vol 32.
 subroutine get_solubility(alpha_11, alpha_12, ta, sal , mask)
-  real,                  intent(inout) :: alpha_11 !< The solubility of CFC 11 [mol kg-1 atm-1]
-  real,                  intent(inout) :: alpha_12 !< The solubility of CFC 12 [mol kg-1 atm-1]
-  real,                  intent(in   ) :: ta       !< Absolute sea surface temperature [hectoKelvin]
-  real,                  intent(in   ) :: sal      !< Surface salinity [PSU].
-  real,                  intent(in   ) :: mask     !< ocean mask
+  real, intent(inout) :: alpha_11 !< The solubility of CFC 11 [mol kg-1 atm-1]
+  real, intent(inout) :: alpha_12 !< The solubility of CFC 12 [mol kg-1 atm-1]
+  real, intent(in   ) :: ta       !< Absolute sea surface temperature [hectoKelvin]
+  real, intent(in   ) :: sal      !< Surface salinity [PSU].
+  real, intent(in   ) :: mask     !< ocean mask
 
   ! Local variables
-  real :: d11_dflt(4), d12_dflt(4) ! values of the various coefficients
-  real :: e11_dflt(3), e12_dflt(3) ! in the expressions for the solubility
-  real :: d1_11, d1_12 ! Coefficients for calculating CFC11 and CFC12 solubilities [nondim]
-  real :: d2_11, d2_12 ! Coefficients for calculating CFC11 and CFC12 solubilities [hectoKelvin-1]
-  real :: d3_11, d3_12 ! Coefficients for calculating CFC11 and CFC12 solubilities [log(hectoKelvin)-1]
-  real :: d4_11, d4_12 ! Coefficients for calculating CFC11 and CFC12 solubilities [hectoKelvin-2]
-  real :: e1_11, e1_12 ! Coefficients for calculating CFC11 and CFC12 solubilities [PSU-1]
-  real :: e2_11, e2_12 ! Coefficients for calculating CFC11 and CFC12 solubilities [PSU-1 hectoKelvin-1]
-  real :: e3_11, e3_12 ! Coefficients for calculating CFC11 and CFC12 solubilities [PSU-2 hectoKelvin-2]
-  real :: factor       ! factor to use in the solubility conversion
 
-  !-----------------------------------------------------------------------
-  ! Solubility coefficients for alpha in mol/(kg atm) for CFC11 (_11) and CFC12 (_12)
+  ! Coefficients for calculating CFC11 solubilities
   ! from Table 5 in Warner and Weiss (1985) DSR, vol 32.
-  !-----------------------------------------------------------------------
-  d11_dflt(:) = (/ -232.0411, 322.5546, 120.4956, -1.39165 /)
-  e11_dflt(:) = (/ -0.146531, 0.093621, -0.0160693 /)
-  d12_dflt(:) = (/ -220.2120, 301.8695, 114.8533, -1.39165 /)
-  e12_dflt(:) = (/ -0.147718, 0.093175, -0.0157340 /)
 
-  d1_11 = d11_dflt(1)
-  d2_11 = d11_dflt(2)
-  d3_11 = d11_dflt(3)
-  d4_11 = d11_dflt(4)
+  real, parameter :: d1_11 = -232.0411    ! [nondim]
+  real, parameter :: d2_11 =  322.5546    ! [hectoKelvin-1]
+  real, parameter :: d3_11 =  120.4956    ! [log(hectoKelvin)-1]
+  real, parameter :: d4_11 =   -1.39165   ! [hectoKelvin-2]
 
-  e1_11 = e11_dflt(1)
-  e2_11 = e11_dflt(2)
-  e3_11 = e11_dflt(3)
+  real, parameter :: e1_11 =   -0.146531  ! [PSU-1]
+  real, parameter :: e2_11 =    0.093621  ! [PSU-1 hectoKelvin-1]
+  real, parameter :: e3_11 =   -0.0160693 ! [PSU-2 hectoKelvin-2]
 
-  d1_12 = d12_dflt(1)
-  d2_12 = d12_dflt(2)
-  d3_12 = d12_dflt(3)
-  d4_12 = d12_dflt(4)
+  ! Coefficients for calculating CFC12 solubilities
+  ! from Table 5 in Warner and Weiss (1985) DSR, vol 32.
 
-  e1_12 = e12_dflt(1)
-  e2_12 = e12_dflt(2)
-  e3_12 = e12_dflt(3)
+  real, parameter :: d1_12 = -220.2120    ! [nondim]
+  real, parameter :: d2_12 =  301.8695    ! [hectoKelvin-1]
+  real, parameter :: d3_12 =  114.8533    ! [log(hectoKelvin)-1]
+  real, parameter :: d4_12 =   -1.39165   ! [hectoKelvin-2]
 
-  ! Calculate solubilities using Warner and Weiss (1985) DSR, vol 32.
-  ! The following is from Eq. 9 in Warner and Weiss (1985)
-  ! The factor 1.0e+03 is for the conversion from mol/(l * atm) to mol/(m3 * atm)
-  ! The factor 1.e-09 converts from mol/(l * atm) to mol/(m3 * pptv)
+  real, parameter :: e1_12 =   -0.147718  ! [PSU-1]
+  real, parameter :: e2_12 =    0.093175  ! [PSU-1 hectoKelvin-1]
+  real, parameter :: e3_12 =   -0.0157340 ! [PSU-2 hectoKelvin-2]
+
+  real :: factor ! introduce units to result [mol kg-1 atm-1]
+
+  ! Eq. 9 from Warner and Weiss (1985) DSR, vol 32.
   factor = 1.0
   alpha_11 = exp(d1_11 + d2_11/ta + d3_11*log(ta) + d4_11*ta**2 +&
                  sal * ((e3_11 * ta + e2_11) * ta + e1_11)) * &
