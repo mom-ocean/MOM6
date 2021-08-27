@@ -212,6 +212,9 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
   I_rho0 = 1.0 / GV%Rho0
   cn_subRO = 1e-100*US%m_s_to_L_T  ! The hard-coded value here might need to increase.
 
+  ! init local arrays
+  drag_scale(:,:) = 0.
+
   ! Set the wave speeds for the modes, using cg(n) ~ cg(1)/n.**********************
   ! This is wrong, of course, but it works reasonably in some cases.
   ! Uncomment if wave_speed is not used to calculate the true values (BDM).
@@ -2207,7 +2210,7 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
   ! Allocate and populate frequency array (each a multiple of first for now)
   allocate(CS%frequency(num_freq))
   call get_param(param_file, mdl, "FIRST_MODE_PERIOD", period_1, &
-                 "The period of the first mode for internal tides", default=44567, &
+                 "The period of the first mode for internal tides", default=44567., &
                  units="s", scale=US%s_to_T)
   call log_param(param_file, mdl, "FIRST_MODE_PERIOD", period_1)
                  
