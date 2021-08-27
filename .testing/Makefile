@@ -114,6 +114,9 @@ CONFIGS := $(wildcard tc*)
 TESTS = grids layouts restarts nans dims openmps rotations
 DIMS = t l h z q r
 
+# Set the framework
+FRAMEWORK ?= fms1
+
 # REPRO tests enable reproducibility with optimization, and often do not match
 # the DEBUG results in older GCCs and vendor compilers, so we can optionally
 # disable them.
@@ -267,7 +270,7 @@ build/%/MOM6: build/%/Makefile
 build/%/Makefile: ../ac/configure ../ac/Makefile.in $(DEPS)/lib/libFMS.a $(MKMF) $(LIST_PATHS)
 	mkdir -p $(@D)
 	cd $(@D) \
-	  && $(MOM_ENV) ../../../ac/configure $(MOM_ACFLAGS) \
+	  && $(MOM_ENV) ../../../ac/configure $(MOM_ACFLAGS) --with-framework=$(FRAMEWORK) \
 	  || (cat config.log && false)
 
 
@@ -549,7 +552,11 @@ $(eval $(call STAT_RULE,dim.q,symmetric,,Q_RESCALE_POWER=11,,1))
 $(eval $(call STAT_RULE,dim.r,symmetric,,R_RESCALE_POWER=11,,1))
 
 
-# Restart tests require significant preprocessing, and are handled separately.
+# Generate the half-period input namelist as follows:
+#  1. Fetch DAYMAX and TIMEUNIT from MOM_input
+#  2. Convert DAYMAX from TIMEUNIT to seconds
+#  3. Apply seconds to `ocean_solo_nml` inside input.nml.
+# NOTE: Assumes that runtime set by DAYMAX, will fail if set by input.nml
 work/%/restart/ocean.stats: build/symmetric/MOM6 $(VENV_PATH)
 	rm -rf $(@D)
 	mkdir -p $(@D)
@@ -562,14 +569,13 @@ work/%/restart/ocean.stats: build/symmetric/MOM6 $(VENV_PATH)
 	  cd work/$*/restart; \
 	fi
 	mkdir -p $(@D)/RESTART
-	# Generate the half-period input namelist
-	# TODO: Assumes that runtime set by DAYMAX, will fail if set by input.nml
+	# Set the half-period
 	cd $(@D) \
 	  && daymax=$$(grep DAYMAX MOM_input | cut -d '!' -f 1 | cut -d '=' -f 2 | xargs) \
 	  && timeunit=$$(grep TIMEUNIT MOM_input | cut -d '!' -f 1 | cut -d '=' -f 2 | xargs) \
 	  && if [ -z "$${timeunit}" ]; then timeunit="8.64e4"; fi \
 	  && printf -v timeunit_int "%.f" "$${timeunit}" \
-	  && halfperiod=$$(printf "%.f" $$(bc <<< "scale=10; 0.5 * $${daymax} * $${timeunit_int}")) \
+	  && halfperiod=$$(awk -v t=$${daymax} -v dt=$${timeunit} 'BEGIN {printf "%.f", 0.5*t*dt}') \
 	  && printf "\n&ocean_solo_nml\n    seconds = $${halfperiod}\n/\n" >> input.nml
 	# Remove any previous archived output
 	rm -f results/$*/std.restart{1,2}.{out,err}
