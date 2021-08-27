@@ -422,6 +422,7 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
   logical                                :: isPresent, isPresentDiro, isPresentLogfile, isSet
   logical                                :: existflag
   logical                                :: use_waves  ! If true, the wave modules are active.
+  character(len=40)                      :: wave_method ! Wave coupling method.
   integer                                :: userRc
   integer                                :: localPet
   integer                                :: localPeCount
@@ -704,19 +705,24 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
   Ice_ocean_boundary%lrunoff         = 0.0
   Ice_ocean_boundary%frunoff         = 0.0
 
-  call query_ocean_state(ocean_state, use_waves=use_waves)
+  call query_ocean_state(ocean_state, use_waves=use_waves, wave_method=wave_method)
   if (use_waves) then
     call query_ocean_state(ocean_state, NumWaveBands=Ice_ocean_boundary%num_stk_bands)
-    allocate ( Ice_ocean_boundary% ustk0 (isc:iec,jsc:jec),         &
-               Ice_ocean_boundary% vstk0 (isc:iec,jsc:jec),         &
-               Ice_ocean_boundary% ustkb (isc:iec,jsc:jec,Ice_ocean_boundary%num_stk_bands), &
-               Ice_ocean_boundary% vstkb (isc:iec,jsc:jec,Ice_ocean_boundary%num_stk_bands), &
-               Ice_ocean_boundary%stk_wavenumbers (Ice_ocean_boundary%num_stk_bands))
-    Ice_ocean_boundary%ustk0           = 0.0
-    Ice_ocean_boundary%vstk0           = 0.0
-    call query_ocean_state(ocean_state, WaveNumbers=Ice_ocean_boundary%stk_wavenumbers, unscale=.true.)
-    Ice_ocean_boundary%ustkb           = 0.0
-    Ice_ocean_boundary%vstkb           = 0.0
+    if (wave_method == "EFACTOR") then
+      allocate( Ice_ocean_boundary%lamult(isc:iec,jsc:jec) )
+      Ice_ocean_boundary%lamult          = 0.0
+    else
+      allocate ( Ice_ocean_boundary% ustk0 (isc:iec,jsc:jec),         &
+                 Ice_ocean_boundary% vstk0 (isc:iec,jsc:jec),         &
+                 Ice_ocean_boundary% ustkb (isc:iec,jsc:jec,Ice_ocean_boundary%num_stk_bands), &
+                 Ice_ocean_boundary% vstkb (isc:iec,jsc:jec,Ice_ocean_boundary%num_stk_bands), &
+                 Ice_ocean_boundary%stk_wavenumbers (Ice_ocean_boundary%num_stk_bands))
+      Ice_ocean_boundary%ustk0           = 0.0
+      Ice_ocean_boundary%vstk0           = 0.0
+      call query_ocean_state(ocean_state, WaveNumbers=Ice_ocean_boundary%stk_wavenumbers, unscale=.true.)
+      Ice_ocean_boundary%ustkb           = 0.0
+      Ice_ocean_boundary%vstkb           = 0.0
+    endif
   endif
   ! Consider adding this:
   ! if (.not.use_waves) Ice_ocean_boundary%num_stk_bands = 0
@@ -730,18 +736,6 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
    call fld_list_add(fldsFrOcn_num, fldsFrOcn, trim(scalar_field_name), "will_provide")
   end if
 
-  if (cesm_coupled) then
-    !call fld_list_add(fldsToOcn_num, fldsToOcn, "Sw_lamult"                 , "will provide")
-    !call fld_list_add(fldsToOcn_num, fldsToOcn, "Sw_ustokes"                , "will provide")
-    !call fld_list_add(fldsToOcn_num, fldsToOcn, "Sw_vstokes"                , "will provide")
-    !call fld_list_add(fldsToOcn_num, fldsToOcn, "Sw_hstokes"                , "will provide")
-    !call fld_list_add(fldsToOcn_num, fldsToOcn, "Fioi_melth"                , "will provide")
-    !call fld_list_add(fldsToOcn_num, fldsToOcn, "Fioi_meltw"                , "will provide")
-    !call fld_list_add(fldsFrOcn_num, fldsFrOcn, "So_fswpen"                 , "will provide")
-  else
-    !call fld_list_add(fldsToOcn_num, fldsToOcn, "mass_of_overlying_sea_ice" , "will provide")
-    !call fld_list_add(fldsFrOcn_num, fldsFrOcn, "sea_lev"                   , "will provide")
-  endif
 
   !--------- import fields -------------
   call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_salt_rate"             , "will provide") ! from ice
@@ -767,15 +761,19 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
   !call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_runoff_heat_flx"        , "will provide")
   !call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_calving_heat_flx"       , "will provide")
   if (use_waves) then
-    if (Ice_ocean_boundary%num_stk_bands > 3) then
-      call MOM_error(FATAL, "Number of Stokes Bands > 3, NUOPC cap not set up for this")
+    if (wave_method == "EFACTOR") then
+      call fld_list_add(fldsToOcn_num, fldsToOcn, "Sw_lamult"                 , "will provide")
+    else
+      if (Ice_ocean_boundary%num_stk_bands > 3) then
+        call MOM_error(FATAL, "Number of Stokes Bands > 3, NUOPC cap not set up for this")
+      endif
+      call fld_list_add(fldsToOcn_num, fldsToOcn, "eastward_partitioned_stokes_drift_1" , "will provide")
+      call fld_list_add(fldsToOcn_num, fldsToOcn, "northward_partitioned_stokes_drift_1", "will provide")
+      call fld_list_add(fldsToOcn_num, fldsToOcn, "eastward_partitioned_stokes_drift_2" , "will provide")
+      call fld_list_add(fldsToOcn_num, fldsToOcn, "northward_partitioned_stokes_drift_2", "will provide")
+      call fld_list_add(fldsToOcn_num, fldsToOcn, "eastward_partitioned_stokes_drift_3" , "will provide")
+      call fld_list_add(fldsToOcn_num, fldsToOcn, "northward_partitioned_stokes_drift_3", "will provide")
     endif
-    call fld_list_add(fldsToOcn_num, fldsToOcn, "eastward_partitioned_stokes_drift_1" , "will provide")
-    call fld_list_add(fldsToOcn_num, fldsToOcn, "northward_partitioned_stokes_drift_1", "will provide")
-    call fld_list_add(fldsToOcn_num, fldsToOcn, "eastward_partitioned_stokes_drift_2" , "will provide")
-    call fld_list_add(fldsToOcn_num, fldsToOcn, "northward_partitioned_stokes_drift_2", "will provide")
-    call fld_list_add(fldsToOcn_num, fldsToOcn, "eastward_partitioned_stokes_drift_3" , "will provide")
-    call fld_list_add(fldsToOcn_num, fldsToOcn, "northward_partitioned_stokes_drift_3", "will provide")
   endif
 
   !--------- export fields -------------

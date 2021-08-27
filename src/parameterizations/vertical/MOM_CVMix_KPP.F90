@@ -15,7 +15,7 @@ use MOM_grid,           only : ocean_grid_type, isPointInCell
 use MOM_unit_scaling,   only : unit_scale_type
 use MOM_variables,      only : thermo_var_ptrs
 use MOM_verticalGrid,   only : verticalGrid_type
-use MOM_wave_interface, only : wave_parameters_CS, Get_Langmuir_Number
+use MOM_wave_interface, only : wave_parameters_CS, Get_Langmuir_Number, get_wave_method
 use MOM_domains,        only : pass_var
 use MOM_cpu_clock,      only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock,      only : CLOCK_MODULE, CLOCK_ROUTINE
@@ -198,6 +198,9 @@ logical function KPP_init(paramFile, G, GV, US, diag, Time, CS, passive, Waves)
 # include "version_variable.h"
   character(len=40) :: mdl = 'MOM_CVMix_KPP' !< name of this module
   character(len=20) :: string          !< local temporary string
+  character(len=20) :: langmuir_mixing_opt = 'NONE' !< langmuir mixing opt to be passed to CVMix, e.g., LWF16
+  character(len=20) :: langmuir_entrainment_opt = 'NONE' !< langmuir entrainment opt to be passed to CVMix, e.g., LWF16
+  character(len=20) :: wave_method
   logical :: CS_IS_ONE=.false.         !< Logical for setting Cs based on Non-local
   logical :: lnoDGat1=.false.          !< True => G'(1) = 0 (shape function)
                                        !! False => compute G'(1) as in LMD94
@@ -415,10 +418,17 @@ logical function KPP_init(paramFile, G, GV, US, diag, Time, CS, passive, Waves)
                    '\t RW16     = Function of Langmuir number based on RW16',    &
                    default='CONSTANT')
     select case ( trim(string))
-      case ("CONSTANT") ; CS%LT_K_METHOD = LT_K_MODE_CONSTANT
-      case ("VR12")     ; CS%LT_K_METHOD = LT_K_MODE_VR12
-      case ("RW16")     ; CS%LT_K_METHOD = LT_K_MODE_RW16
-      case default      ; call MOM_error(FATAL,"KPP_init: "//&
+      case ("CONSTANT")
+        CS%LT_K_METHOD = LT_K_MODE_CONSTANT
+        langmuir_mixing_opt = 'LWF16'
+      case ("VR12")
+        CS%LT_K_METHOD = LT_K_MODE_VR12
+        langmuir_mixing_opt = 'LWF16'
+      case ("RW16")
+        CS%LT_K_METHOD = LT_K_MODE_RW16
+        langmuir_mixing_opt = 'RWHGK16'
+      case default
+        call MOM_error(FATAL,"KPP_init: "//&
                     "Unrecognized KPP_LT_K_METHOD option: "//trim(string))
     end select
     if (CS%LT_K_METHOD==LT_K_MODE_CONSTANT) then
@@ -441,12 +451,21 @@ logical function KPP_init(paramFile, G, GV, US, diag, Time, CS, passive, Waves)
                    '\t LF17     = Function of Langmuir number based on LF17',    &
                    default='CONSTANT')
     select case ( trim(string))
-      case ("CONSTANT") ; CS%LT_VT2_METHOD = LT_VT2_MODE_CONSTANT
-      case ("VR12")     ; CS%LT_VT2_METHOD = LT_VT2_MODE_VR12
-      case ("RW16")     ; CS%LT_VT2_METHOD = LT_VT2_MODE_RW16
-      case ("LF17")     ; CS%LT_VT2_METHOD = LT_VT2_MODE_LF17
-      case default      ; call MOM_error(FATAL,"KPP_init: "//&
-                    "Unrecognized KPP_LT_VT2_METHOD option: "//trim(string))
+      case ("CONSTANT")
+        CS%LT_VT2_METHOD = LT_VT2_MODE_CONSTANT
+        langmuir_entrainment_opt = 'LWF16'
+      case ("VR12")
+        CS%LT_VT2_METHOD = LT_VT2_MODE_VR12
+        langmuir_entrainment_opt = 'LWF16'
+      case ("RW16")
+        CS%LT_VT2_METHOD = LT_VT2_MODE_RW16
+        langmuir_entrainment_opt = 'RWHGK16'
+      case ("LF17")
+        CS%LT_VT2_METHOD = LT_VT2_MODE_LF17
+        langmuir_entrainment_opt = 'LF17'
+      case default
+        call MOM_error(FATAL,"KPP_init: "//&
+          "Unrecognized KPP_LT_VT2_METHOD option: "//trim(string))
     end select
     if (CS%LT_VT2_METHOD==LT_VT2_MODE_CONSTANT) then
       call get_param(paramFile, mdl, "KPP_VT2_ENH_FAC",CS%KPP_VT2_ENH_FAC ,     &
@@ -456,6 +475,7 @@ logical function KPP_init(paramFile, G, GV, US, diag, Time, CS, passive, Waves)
   endif
 
   call closeParameterBlock(paramFile)
+
   call get_param(paramFile, mdl, 'DEBUG', CS%debug, default=.False., do_not_log=.True.)
 
   call CVMix_init_kpp( Ri_crit=CS%Ri_crit,                 &
@@ -471,6 +491,8 @@ logical function KPP_init(paramFile, G, GV, US, diag, Time, CS, passive, Waves)
                        lenhanced_diff=CS%enhance_diffusion,&
                        lnonzero_surf_nonlocal=Cs_is_one   ,&
                        lnoDGat1=lnoDGat1                  ,&
+                       langmuir_mixing_str=langmuir_mixing_opt,&
+                       langmuir_entrainment_str=langmuir_entrainment_opt,&
                        CVMix_kpp_params_user=CS%KPP_params )
 
   ! Register diagnostics
@@ -600,7 +622,7 @@ end function KPP_init
 !> KPP vertical diffusivity/viscosity and non-local tracer transport
 subroutine KPP_calculate(CS, G, GV, US, h, uStar, &
                          buoyFlux, Kt, Ks, Kv, nonLocalTransHeat,&
-                         nonLocalTransScalar, waves)
+                         nonLocalTransScalar, waves, lamult)
 
   ! Arguments
   type(KPP_CS),                                pointer       :: CS    !< Control structure
@@ -621,7 +643,8 @@ subroutine KPP_calculate(CS, G, GV, US, h, uStar, &
                                                                     !!       [Z2 T-1 ~> m2 s-1]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), intent(inout) :: nonLocalTransHeat   !< Temp non-local transport [m s-1]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), intent(inout) :: nonLocalTransScalar !< scalar non-local trans. [m s-1]
-  type(wave_parameters_CS),          optional, pointer       :: Waves !< Wave CS
+  type(wave_parameters_CS),          optional, pointer       :: Waves   !< Wave CS
+  real, dimension(SZI_(G),SZJ_(G)), optional, intent(in)     :: lamult  !< Langmuir enhancement multiplier
 
 ! Local variables
   integer :: i, j, k                             ! Loop indices
@@ -661,7 +684,7 @@ subroutine KPP_calculate(CS, G, GV, US, h, uStar, &
   !$OMP                           surfBuoyFlux, Kdiffusivity, Kviscosity, LangEnhK, sigma,  &
   !$OMP                           sigmaRatio)                                               &
   !$OMP                           shared(G, GV, CS, US, uStar, h, buoy_scale, buoyFlux, Kt, &
-  !$OMP                           Ks, Kv, nonLocalTransHeat, nonLocalTransScalar, waves)
+  !$OMP                           Ks, Kv, nonLocalTransHeat, nonLocalTransScalar, waves, lamult)
   ! loop over horizontal points on processor
   do j = G%jsc, G%jec
     do i = G%isc, G%iec
@@ -714,6 +737,48 @@ subroutine KPP_calculate(CS, G, GV, US, h, uStar, &
          Kviscosity(:) = US%Z2_T_to_m2_s * Kv(i,j,:)
       endif
 
+      IF (CS%LT_K_ENHANCEMENT) then
+        if (CS%LT_K_METHOD==LT_K_MODE_CONSTANT) then
+           LangEnhK = CS%KPP_K_ENH_FAC
+        elseif (CS%LT_K_METHOD==LT_K_MODE_VR12) then
+          if (present(lamult)) then
+            LangEnhK = lamult(i,j)
+          else
+            LangEnhK = sqrt(1.+(1.5*CS%La_SL(i,j))**(-2) + &
+                (5.4*CS%La_SL(i,j))**(-4))
+          endif
+        elseif (CS%LT_K_METHOD==LT_K_MODE_RW16) then
+          !This maximum value is proposed in Reichl et al., 2016 JPO formula
+          LangEnhK = min(2.25, 1. + 1./CS%La_SL(i,j))
+        else
+           !This shouldn't be reached.
+           !call MOM_error(WARNING,"Unexpected behavior in MOM_CVMix_KPP, see error in LT_K_ENHANCEMENT")
+           LangEnhK = 1.0
+        endif
+
+        ! diffusivities don't need to be enhanced below anymore since LangEnhK is applied within CVMix.
+        ! todo: need to double check if the distinction between the two different options of LT_K_SHAPE may need to be
+        ! treated specially.
+        do k=1,GV%ke
+          if (CS%LT_K_SHAPE== LT_K_CONSTANT) then
+            if (CS%id_EnhK > 0) CS%EnhK(i,j,:) = LangEnhK
+            !Kdiffusivity(k,1) = Kdiffusivity(k,1) * LangEnhK
+            !Kdiffusivity(k,2) = Kdiffusivity(k,2) * LangEnhK
+            !Kviscosity(k)     = Kviscosity(k)   * LangEnhK
+          elseif (CS%LT_K_SHAPE == LT_K_SCALED) then
+            sigma = min(1.0,-iFaceHeight(k)/CS%OBLdepth(i,j))
+            SigmaRatio = sigma * (1. - sigma)**2 / 0.148148037
+            if (CS%id_EnhK > 0) CS%EnhK(i,j,k) = (1.0 + (LangEnhK - 1.)*sigmaRatio)
+            !Kdiffusivity(k,1) = Kdiffusivity(k,1) * ( 1. + &
+            !                    ( LangEnhK - 1.)*sigmaRatio)
+            !Kdiffusivity(k,2) = Kdiffusivity(k,2) * ( 1. + &
+            !                    ( LangEnhK - 1.)*sigmaRatio)
+            !Kviscosity(k) = Kviscosity(k) * ( 1. + &
+            !                    ( LangEnhK - 1.)*sigmaRatio)
+          endif
+        enddo
+      endif
+
       call CVMix_coeffs_kpp(Kviscosity(:),     & ! (inout) Total viscosity [m2 s-1]
                             Kdiffusivity(:,1), & ! (inout) Total heat diffusivity [m2 s-1]
                             Kdiffusivity(:,2), & ! (inout) Total salt diffusivity [m2 s-1]
@@ -730,6 +795,7 @@ subroutine KPP_calculate(CS, G, GV, US, h, uStar, &
                             surfBuoyFlux,      & ! (in) Buoyancy flux at surface [m2 s-3]
                             GV%ke,             & ! (in) Number of levels to compute coeffs for
                             GV%ke,             & ! (in) Number of levels in array shape
+                            Langmuir_EFactor=LangEnhK,& ! Langmuir enhancement multiplier
                             CVMix_kpp_params_user=CS%KPP_params )
 
       ! safety check, Kviscosity and Kdiffusivity must be >= 0
@@ -741,41 +807,6 @@ subroutine KPP_calculate(CS, G, GV, US, h, uStar, &
                    "You might consider using the default options for these parameters." )
         endif
       enddo
-
-      IF (CS%LT_K_ENHANCEMENT) then
-        if (CS%LT_K_METHOD==LT_K_MODE_CONSTANT) then
-           LangEnhK = CS%KPP_K_ENH_FAC
-        elseif (CS%LT_K_METHOD==LT_K_MODE_VR12) then
-           ! Added minimum value for La_SL, so removed maximum value for LangEnhK.
-           LangEnhK = sqrt(1.+(1.5*CS%La_SL(i,j))**(-2) + &
-                (5.4*CS%La_SL(i,j))**(-4))
-        elseif (CS%LT_K_METHOD==LT_K_MODE_RW16) then
-          !This maximum value is proposed in Reichl et al., 2016 JPO formula
-          LangEnhK = min(2.25, 1. + 1./CS%La_SL(i,j))
-        else
-           !This shouldn't be reached.
-           !call MOM_error(WARNING,"Unexpected behavior in MOM_CVMix_KPP, see error in LT_K_ENHANCEMENT")
-           LangEnhK = 1.0
-        endif
-        do k=1,GV%ke
-          if (CS%LT_K_SHAPE== LT_K_CONSTANT) then
-            if (CS%id_EnhK > 0) CS%EnhK(i,j,:) = LangEnhK
-            Kdiffusivity(k,1) = Kdiffusivity(k,1) * LangEnhK
-            Kdiffusivity(k,2) = Kdiffusivity(k,2) * LangEnhK
-            Kviscosity(k)     = Kviscosity(k)   * LangEnhK
-          elseif (CS%LT_K_SHAPE == LT_K_SCALED) then
-            sigma = min(1.0,-iFaceHeight(k)/CS%OBLdepth(i,j))
-            SigmaRatio = sigma * (1. - sigma)**2 / 0.148148037
-            if (CS%id_EnhK > 0) CS%EnhK(i,j,k) = (1.0 + (LangEnhK - 1.)*sigmaRatio)
-            Kdiffusivity(k,1) = Kdiffusivity(k,1) * ( 1. + &
-                                ( LangEnhK - 1.)*sigmaRatio)
-            Kdiffusivity(k,2) = Kdiffusivity(k,2) * ( 1. + &
-                                ( LangEnhK - 1.)*sigmaRatio)
-            Kviscosity(k) = Kviscosity(k) * ( 1. + &
-                                ( LangEnhK - 1.)*sigmaRatio)
-          endif
-        enddo
-      endif
 
       ! Over-write CVMix NLT shape function with one of the following choices.
       ! The CVMix code has yet to update for thse options, so we compute in MOM6.
@@ -827,18 +858,6 @@ subroutine KPP_calculate(CS, G, GV, US, h, uStar, &
          Kviscosity(:)     = 0.0
       endif
 
-
-      ! compute unresolved squared velocity for diagnostics
-      if (CS%id_Vt2 > 0) then
-!BGR Now computing VT2 above so can modify for LT
-!    therefore, don't repeat this operation here
-!        CS%Vt2(i,j,:) = CVmix_kpp_compute_unresolved_shear( &
-!                    cellHeight(1:GV%ke),                & ! Depth of cell center [m]
-!                    ws_cntr=Ws_1d,                      & ! Turbulent velocity scale profile, at centers [m s-1]
-!                    N_iface=CS%N(i,j,:),                & ! Buoyancy frequency at interface [s-1]
-!                    CVmix_kpp_params_user=CS%KPP_params ) ! KPP parameters
-      endif
-
       ! Copy 1d data into 3d diagnostic arrays
       !/ grabbing obldepth_0d for next time step.
       CS%OBLdepthprev(i,j)=CS%OBLdepth(i,j)
@@ -886,7 +905,6 @@ subroutine KPP_calculate(CS, G, GV, US, h, uStar, &
   if (CS%id_OBLdepth_original > 0) call post_data(CS%id_OBLdepth_original,CS%OBLdepth_original,CS%diag)
   if (CS%id_sigma    > 0) call post_data(CS%id_sigma,    CS%sigma,           CS%diag)
   if (CS%id_Ws       > 0) call post_data(CS%id_Ws,       CS%Ws,              CS%diag)
-  if (CS%id_Vt2      > 0) call post_data(CS%id_Vt2,      CS%Vt2,             CS%diag)
   if (CS%id_uStar    > 0) call post_data(CS%id_uStar,    uStar,              CS%diag)
   if (CS%id_buoyFlux > 0) call post_data(CS%id_buoyFlux, buoyFlux,           CS%diag)
   if (CS%id_Kt_KPP   > 0) call post_data(CS%id_Kt_KPP,   CS%Kt_KPP,          CS%diag)
@@ -900,7 +918,7 @@ end subroutine KPP_calculate
 
 
 !> Compute OBL depth
-subroutine KPP_compute_BLD(CS, G, GV, US, h, Temp, Salt, u, v, tv, uStar, buoyFlux, Waves)
+subroutine KPP_compute_BLD(CS, G, GV, US, h, Temp, Salt, u, v, tv, uStar, buoyFlux, Waves, lamult)
 
   ! Arguments
   type(KPP_CS),                               pointer       :: CS    !< Control structure
@@ -914,8 +932,9 @@ subroutine KPP_compute_BLD(CS, G, GV, US, h, Temp, Salt, u, v, tv, uStar, buoyFl
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), intent(in)    :: v     !< Velocity j-component [L T-1 ~> m s-1]
   type(thermo_var_ptrs),                      intent(in)    :: tv    !< Thermodynamics structure.
   real, dimension(SZI_(G),SZJ_(G)),           intent(in)    :: uStar !< Surface friction velocity [Z T-1 ~> m s-1]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), intent(in)    :: buoyFlux !< Surface buoyancy flux [L2 T-3 ~> m2 s-3]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), intent(in)   :: buoyFlux !< Surface buoyancy flux [L2 T-3 ~> m2 s-3]
   type(wave_parameters_CS),         optional, pointer       :: Waves !< Wave CS
+  real, dimension(SZI_(G),SZJ_(G)), optional, intent(in)    :: lamult!< Langmuir enhancement factor
 
   ! Local variables
   integer :: i, j, k, km1                        ! Loop indices
@@ -953,8 +972,7 @@ subroutine KPP_compute_BLD(CS, G, GV, US, h, Temp, Salt, u, v, tv, uStar, buoyFl
   integer :: kk, ksfc, ktmp
 
   ! For Langmuir Calculations
-  real :: LangEnhW     ! Langmuir enhancement for turbulent velocity scale
-  real, dimension(GV%ke) :: LangEnhVt2   ! Langmuir enhancement for unresolved shear
+  real :: LangEnhVt2   ! Langmuir enhancement for unresolved shear
   real, dimension(GV%ke) :: U_H, V_H
   real :: MLD_GUESS, LA
   real :: surfHuS, surfHvS, surfUs, surfVs, wavedir, currentdir
@@ -987,7 +1005,7 @@ subroutine KPP_compute_BLD(CS, G, GV, US, h, Temp, Salt, u, v, tv, uStar, buoyFl
   !$OMP                           deltarho, N2_1d, ws_1d, LangEnhVT2, enhvt2, wst,          &
   !$OMP                           BulkRi_1d, zBottomMinusOffset) &
   !$OMP                           shared(G, GV, CS, US, uStar, h, buoy_scale, buoyFlux,     &
-  !$OMP                           Temp, Salt, waves, tv, GoRho, u, v)
+  !$OMP                           Temp, Salt, waves, tv, GoRho, u, v, lamult)
   do j = G%jsc, G%jec
     do i = G%isc, G%iec
 
@@ -1146,66 +1164,42 @@ subroutine KPP_compute_BLD(CS, G, GV, US, h, Temp, Salt, u, v, tv, uStar, buoyFl
         w_s=Ws_1d,         & ! (out) Turbulent velocity scale profile [m s-1]
         CVMix_kpp_params_user=CS%KPP_params )
 
-      !Compute CVMix VT2
-      CS%Vt2(i,j,:) = CVmix_kpp_compute_unresolved_shear( &
-                      zt_cntr=cellHeight(1:GV%ke),        & ! Depth of cell center [m]
-                      ws_cntr=Ws_1d,                      & ! Turbulent velocity scale profile, at centers [m s-1]
-                      N_iface=CS%N(i,j,:),                & ! Buoyancy frequency at interface [s-1]
-                    CVmix_kpp_params_user=CS%KPP_params ) ! KPP parameters
-
-      !Modify CVMix VT2
+      ! Determine the enhancement factor for unresolved shear
       IF (CS%LT_VT2_ENHANCEMENT) then
         IF (CS%LT_VT2_METHOD==LT_VT2_MODE_CONSTANT) then
-          do k=1,GV%ke
-            LangEnhVT2(k) = CS%KPP_VT2_ENH_FAC
-          enddo
+          LangEnhVT2 = CS%KPP_VT2_ENH_FAC
         elseif (CS%LT_VT2_METHOD==LT_VT2_MODE_VR12) then
           !Introduced minimum value for La_SL, so maximum value for enhvt2 is removed.
-          enhvt2 = sqrt(1.+(1.5*CS%La_SL(i,j))**(-2) + &
-                   (5.4*CS%La_SL(i,j))**(-4))
-          do k=1,GV%ke
-             LangEnhVT2(k) = enhvt2
-          enddo
-        elseif (CS%LT_VT2_METHOD==LT_VT2_MODE_RW16) then
-          !Introduced minimum value for La_SL, so maximum value for enhvt2 is removed.
-          enhvt2 = 1. + 2.3*CS%La_SL(i,j)**(-0.5)
-          do k=1,GV%ke
-            LangEnhVT2(k) = enhvt2
-          enddo
-        elseif (CS%LT_VT2_METHOD==LT_VT2_MODE_LF17) then
-          CS%CS=cvmix_get_kpp_real('c_s',CS%KPP_params)
-          do k=1,GV%ke
-            WST = (max(0.,-buoy_scale*buoyflux(i,j,1))*(-cellHeight(k)))**(1./3.)
-            LangEnhVT2(k) = sqrt((0.15*WST**3. + 0.17*surfFricVel**3.* &
-                 (1.+0.49*CS%La_SL(i,j)**(-2.)))  / &
-                 (0.2*ws_1d(k)**3/(CS%cs*CS%surf_layer_ext*CS%vonKarman**4.)))
-          enddo
+          if (present(lamult)) then
+            LangEnhVT2 = lamult(i,j)
+          else
+            LangEnhVT2 = sqrt(1.+(1.5*CS%La_SL(i,j))**(-2) + &
+                      (5.4*CS%La_SL(i,j))**(-4))
+          endif
         else
-           !This shouldn't be reached.
-           !call MOM_error(WARNING,"Unexpected behavior in MOM_CVMix_KPP, see error in Vt2")
-           LangEnhVT2(:) = 1.0
+          ! for other methods (e.g., LT_VT2_MODE_RW16, LT_VT2_MODE_LF17), the enhancement factor is
+          ! computed internally within CVMix using LaSL, bfsfc, and ustar to be passed to CVMix.
+          LangEnhVT2 = 1.0
         endif
       else
-        LangEnhVT2(:) = 1.0
+        LangEnhVT2 = 1.0
       endif
 
-      do k=1,GV%ke
-        CS%Vt2(i,j,k)=CS%Vt2(i,j,k)*LangEnhVT2(k)
-        if (CS%id_EnhVt2 > 0) CS%EnhVt2(i,j,k)=LangEnhVT2(k)
-      enddo
+      surfBuoyFlux = buoy_scale * buoyFlux(i,j,1)
 
       ! Calculate Bulk Richardson number from eq (21) of LMD94
       BulkRi_1d = CVmix_kpp_compute_bulk_Richardson( &
                   zt_cntr = cellHeight(1:GV%ke),     & ! Depth of cell center [m]
                   delta_buoy_cntr=GoRho*deltaRho,    & ! Bulk buoyancy difference, Br-B(z) [s-1]
                   delta_Vsqr_cntr=deltaU2,           & ! Square of resolved velocity difference [m2 s-2]
-                  Vt_sqr_cntr=CS%Vt2(i,j,:),         &
                   ws_cntr=Ws_1d,                     & ! Turbulent velocity scale profile [m s-1]
-                  N_iface=CS%N(i,j,:))               ! Buoyancy frequency [s-1]
+                  N_iface=CS%N(i,j,:),               & ! Buoyancy frequency [s-1]
+                  EFactor=LangEnhVT2,                & ! Langmuir enhancement factor [nondim]
+                  LaSL = CS%La_SL(i,j),              & ! surface layer averaged Langmuir number [nondim]
+                  bfsfc = surfBuoyFlux,              & ! surface buoyancy flux [m2 s-3]
+                  uStar = uStar(i,j),                & ! surface friction velocity [m s-1]
+                  CVMix_kpp_params_user=CS%KPP_params ) ! KPP parameters
 
-
-      surfBuoyFlux = buoy_scale * buoyFlux(i,j,1) ! This is only used in kpp_compute_OBL_depth to limit
-                                     ! h to Monin-Obukov (default is false, ie. not used)
 
       call CVMix_kpp_compute_OBL_depth( &
         BulkRi_1d,              & ! (in) Bulk Richardson number
@@ -1231,6 +1225,18 @@ subroutine KPP_compute_BLD(CS, G, GV, US, h, Temp, Salt, u, v, tv, uStar, buoyFl
       CS%OBLdepth(i,j) = min( CS%OBLdepth(i,j), -iFaceHeight(GV%ke+1) ) ! no deeper than bottom
       CS%kOBL(i,j)     = CVMix_kpp_compute_kOBL_depth( iFaceHeight, cellHeight, CS%OBLdepth(i,j) )
 
+      ! compute unresolved squared velocity for diagnostics
+      if (CS%id_Vt2 > 0) then
+        CS%Vt2(i,j,:) = CVmix_kpp_compute_unresolved_shear( &
+                    cellHeight(1:GV%ke),                & ! Depth of cell center [m]
+                    ws_cntr=Ws_1d,                      & ! Turbulent velocity scale profile, at centers [m s-1]
+                    N_iface=CS%N(i,j,:),                & ! Buoyancy frequency at interface [s-1]
+                    EFactor=LangEnhVT2, & ! Langmuir enhancement factor [nondim]
+                    LaSL=CS%La_SL(i,j), & ! surface layer averaged Langmuir number [nondim]
+                    bfsfc=surfBuoyFlux, & ! surface buoyancy flux [m2 s-3]
+                    uStar=uStar(i,j), & ! surface friction velocity [m s-1]
+                    CVmix_kpp_params_user=CS%KPP_params ) ! KPP parameters
+      endif
 
       ! recompute wscale for diagnostics, now that we in fact know boundary layer depth
       !BGR consider if LTEnhancement is wanted for diagnostics
@@ -1273,6 +1279,7 @@ subroutine KPP_compute_BLD(CS, G, GV, US, h, Temp, Salt, u, v, tv, uStar, buoyFl
   if (CS%id_EnhK     > 0) call post_data(CS%id_EnhK,     CS%EnhK,            CS%diag)
   if (CS%id_EnhVt2   > 0) call post_data(CS%id_EnhVt2,   CS%EnhVt2,          CS%diag)
   if (CS%id_La_SL    > 0) call post_data(CS%id_La_SL,    CS%La_SL,           CS%diag)
+  if (CS%id_Vt2      > 0) call post_data(CS%id_Vt2,      CS%Vt2,             CS%diag)
 
   ! BLD smoothing:
   if (CS%n_smooth > 0) call KPP_smooth_BLD(CS,G,GV,h)

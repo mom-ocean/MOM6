@@ -190,6 +190,9 @@ type, public :: forcing
     ice_fraction  => NULL(), &  !< fraction of sea ice coverage at h-cells, from 0 to 1 [nondim].
     u10_sqr       => NULL()     !< wind magnitude at 10 m squared [L2 T-2 ~> m2 s-2]
 
+  real, pointer, dimension(:,:) :: &
+    lamult => NULL()            !< Langmuir enhancement factor [nondim]
+
   ! passive tracer surface fluxes
   type(coupler_2d_bc_type) :: tr_fluxes !< This structure contains arrays of
      !! of named fields used for passive tracer fluxes.
@@ -253,7 +256,6 @@ type, public :: mech_forcing
   logical :: accumulate_rigidity = .false. !< If true, the rigidity due to various types of
                                 !! ice needs to be accumulated, and the rigidity explicitly
                                 !! reset to zero at the driver level when appropriate.
-
   real, pointer, dimension(:,:) :: &
        ustk0 => NULL(), &       !< Surface Stokes drift, zonal [m/s]
        vstk0 => NULL()          !< Surface Stokes drift, meridional [m/s]
@@ -369,6 +371,9 @@ type, public :: forcing_diags
   ! Iceberg + Ice shelf diagnostic handles
   integer :: id_ustar_ice_cover = -1
   integer :: id_frac_ice_cover = -1
+
+  ! wave forcing diagnostics handles.
+  integer :: id_lamult = -1
   !>@}
 
   integer :: id_clock_forcing = -1 !< CPU clock id
@@ -1256,13 +1261,14 @@ end subroutine forcing_SinglePointPrint
 
 
 !> Register members of the forcing type for diagnostics
-subroutine register_forcing_type_diags(Time, diag, US, use_temperature, handles, use_berg_fluxes, use_cfcs)
+subroutine register_forcing_type_diags(Time, diag, US, use_temperature, handles, use_berg_fluxes, use_waves, use_cfcs)
   type(time_type),     intent(in)    :: Time            !< time type
   type(diag_ctrl),     intent(inout) :: diag            !< diagnostic control type
   type(unit_scale_type), intent(in)  :: US              !< A dimensional unit scaling type
   logical,             intent(in)    :: use_temperature !< True if T/S are in use
   type(forcing_diags), intent(inout) :: handles         !< handles for diagnostics
   logical, optional,   intent(in)    :: use_berg_fluxes !< If true, allow iceberg flux diagnostics
+  logical, optional,   intent(in)    :: use_waves       !< If true, allow wave forcing diagnostics
   logical, optional,   intent(in)    :: use_cfcs        !< If true, allow cfc related diagnostics
 
   ! Clock for forcing diagnostics
@@ -1941,6 +1947,14 @@ subroutine register_forcing_type_diags(Time, diag, US, use_temperature, handles,
   handles%id_total_saltFluxAdded = register_scalar_field('ocean_model', 'total_salt_Flux_Added', &
       Time, diag, long_name='Area integrated surface salt flux due to restoring or flux adjustment', units='kg s-1')
 
+  !===============================================================
+  ! wave forcing diagnostics
+  if (present(use_waves)) then
+    if (use_waves) then
+      handles%id_lamult = register_diag_field('ocean_model', 'lamult', &
+        diag%axesT1, Time, long_name='Langmuir enhancement factor received from WW3', units="nondim")
+    endif
+  endif
 
 end subroutine register_forcing_type_diags
 
@@ -2917,6 +2931,10 @@ subroutine forcing_diagnostics(fluxes_in, sfc_state, G_in, US, time_end, diag, h
     if ((handles%id_ustar_ice_cover > 0) .and. associated(fluxes%ustar_shelf)) &
       call post_data(handles%id_ustar_ice_cover, fluxes%ustar_shelf, diag)
 
+    ! wave forcing ===============================================================
+    if (handles%id_lamult > 0)                                            &
+      call post_data(handles%id_lamult, fluxes%lamult, diag)
+
   ! endif  ! query_averaging_enabled
   call disable_averaging(diag)
 
@@ -2931,7 +2949,7 @@ end subroutine forcing_diagnostics
 
 !> Conditionally allocate fields within the forcing type
 subroutine allocate_forcing_by_group(G, fluxes, water, heat, ustar, press, &
-                                     shelf, iceberg, salt, fix_accum_bug, cfc)
+                                     shelf, iceberg, salt, fix_accum_bug, cfc, waves)
   type(ocean_grid_type), intent(in) :: G       !< Ocean grid structure
   type(forcing),      intent(inout) :: fluxes  !< A structure containing thermodynamic forcing fields
   logical, optional,     intent(in) :: water   !< If present and true, allocate water fluxes
@@ -2944,6 +2962,7 @@ subroutine allocate_forcing_by_group(G, fluxes, water, heat, ustar, press, &
   logical, optional,     intent(in) :: fix_accum_bug !< If present and true, avoid using a bug in
                                                !! accumulation of ustar_gustless
   logical, optional,     intent(in) :: cfc     !< If present and true, allocate cfc fluxes
+  logical, optional,     intent(in) :: waves   !< If present and true, allocate wave fields
 
   ! Local variables
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
@@ -3004,6 +3023,10 @@ subroutine allocate_forcing_by_group(G, fluxes, water, heat, ustar, press, &
   call myAlloc(fluxes%cfc12_flux,isd,ied,jsd,jed, cfc)
   call myAlloc(fluxes%ice_fraction,isd,ied,jsd,jed, cfc)
   call myAlloc(fluxes%u10_sqr,isd,ied,jsd,jed, cfc)
+
+  !These fields should only on allocated when wave coupling is activated.
+  call myAlloc(fluxes%ice_fraction,isd,ied,jsd,jed, waves)
+  call myAlloc(fluxes%lamult,isd,ied,jsd,jed, waves)
 
   if (present(fix_accum_bug)) fluxes%gustless_accum_bug = .not.fix_accum_bug
 end subroutine allocate_forcing_by_group
@@ -3100,14 +3123,21 @@ subroutine allocate_mech_forcing_by_group(G, forces, stress, ustar, shelf, &
   !These fields should only be allocated when waves
   call myAlloc(forces%ustk0,isd,ied,jsd,jed, waves)
   call myAlloc(forces%vstk0,isd,ied,jsd,jed, waves)
-  if (present(waves)) then; if (waves) then; if (.not.associated(forces%ustkb)) then
-    if (.not.(present(num_stk_bands))) call MOM_error(FATAL,"Requested to &
+  if (present(waves)) then; if (waves) then;
+    if (.not. present(num_stk_bands)) then
+      call MOM_error(FATAL,"Requested to &
       initialize with waves, but no waves are present.")
-    allocate(forces%stk_wavenumbers(num_stk_bands))
-    forces%stk_wavenumbers(:) = 0.0
-    allocate(forces%ustkb(isd:ied,jsd:jed,num_stk_bands))
-    forces%ustkb(isd:ied,jsd:jed,:) = 0.0
-  endif ; endif ; endif
+    endif
+    if (num_stk_bands > 0) then
+      if (.not.associated(forces%ustkb)) then
+        allocate(forces%stk_wavenumbers(num_stk_bands))
+        forces%stk_wavenumbers(:) = 0.0
+        allocate(forces%ustkb(isd:ied,jsd:jed,num_stk_bands))
+        forces%ustkb(isd:ied,jsd:jed,:) = 0.0
+      endif
+    endif
+  endif ; endif
+
 
   if (present(waves)) then; if (waves) then; if (.not.associated(forces%vstkb)) then
     allocate(forces%vstkb(isd:ied,jsd:jed,num_stk_bands))

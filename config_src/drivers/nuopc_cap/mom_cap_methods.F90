@@ -272,6 +272,16 @@ subroutine mom_import(ocean_public, ocean_grid, importState, ice_ocean_boundary,
   if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
   !----
+  ! Langmuir enhancement factor
+  !----
+  if ( associated(ice_ocean_boundary%lamult) ) then
+   ice_ocean_boundary%lamult (:,:) = 0._ESMF_KIND_R8
+   call state_getimport(importState, 'Sw_lamult',  &
+        isc, iec, jsc, jec, ice_ocean_boundary%lamult, rc=rc)
+   if (ChkErr(rc,__LINE__,u_FILE_u)) return
+   endif
+
+  !----
   ! Partitioned Stokes Drift Components
   !----
   if ( associated(ice_ocean_boundary%ustkb) ) then

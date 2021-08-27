@@ -39,6 +39,7 @@ public CoriolisStokes ! NOT READY - Public interface to add Coriolis-Stokes acce
                       ! serious consideration of the full 3d wave-averaged Navier-Stokes
                       ! CL2 effects.
 public Waves_end ! public interface to deallocate and free wave related memory.
+public get_wave_method ! public interface to obtain the wave method string
 
 ! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
 ! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
@@ -173,11 +174,19 @@ end type wave_parameters_CS
 
 ! Switches needed in import_stokes_drift
 !>@{ Enumeration values for the wave method
-integer, parameter :: TESTPROF = 0, SURFBANDS = 1, DHH85 = 2, LF17 = 3, NULL_WaveMethod = -99
+integer, parameter :: TESTPROF = 0, SURFBANDS = 1, DHH85 = 2, LF17 = 3, EFACTOR = 4, NULL_WaveMethod = -99
 !>@}
 !>@{ Enumeration values for the wave data source
 integer, parameter :: DATAOVR = 1, COUPLER = 2, INPUT = 3
 !>@}
+
+! Strings for the wave method
+character*(5), parameter  :: NULL_STRING      = "EMPTY"         !< null wave method string
+character*(12), parameter :: TESTPROF_STRING  = "TEST_PROFILE"  !< test profile string
+character*(13), parameter :: SURFBANDS_STRING = "SURFACE_BANDS" !< surface bands string
+character*(5), parameter  :: DHH85_STRING     = "DHH85"         !< DHH85 wave method string
+character*(4), parameter  :: LF17_STRING      = "LF17"          !< LF17 wave method string
+character*(7), parameter  :: EFACTOR_STRING   = "EFACTOR"       !< EFACTOR (based on vr12-ma) wave method string
 
 contains
 
@@ -196,11 +205,6 @@ subroutine MOM_wave_interface_init(time, G, GV, US, param_file, CS, diag )
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
   character*(13) :: TMPSTRING1, TMPSTRING2
-  character*(5), parameter  :: NULL_STRING      = "EMPTY"
-  character*(12), parameter :: TESTPROF_STRING  = "TEST_PROFILE"
-  character*(13), parameter :: SURFBANDS_STRING = "SURFACE_BANDS"
-  character*(5), parameter  :: DHH85_STRING     = "DHH85"
-  character*(4), parameter  :: LF17_STRING      = "LF17"
   character*(12), parameter :: DATAOVR_STRING   = "DATAOVERRIDE"
   character*(7), parameter  :: COUPLER_STRING   = "COUPLER"
   character*(5), parameter  :: INPUT_STRING     = "INPUT"
@@ -283,7 +287,12 @@ subroutine MOM_wave_interface_init(time, G, GV, US, param_file, CS, diag )
        " DHH85         - Uses Donelan et al. 1985 empirical \n"//     &
        "                 wave spectrum with prescribed values. \n"//  &
        " LF17          - Infers Stokes drift profile from wind \n"//  &
-       "                 speed following Li and Fox-Kemper 2017.\n",  &
+       "                 speed following Li and Fox-Kemper 2017.\n"// &
+       " EFACTOR       - Applies an enhancement factor to the KPP\n"//&
+       "                 turbulent velocity scale received \n"//      &
+       "                 directly from WW3 and is based on the \n"//  &
+       "                 surface layer and projected Langmuir \n"//   &
+       "                 number (Li 2016)\n", &
        units='', default=NULL_STRING)
   select case (TRIM(TMPSTRING1))
   case (NULL_STRING)! No Waves
@@ -382,6 +391,8 @@ subroutine MOM_wave_interface_init(time, G, GV, US, param_file, CS, diag )
           default=.false.)
   case (LF17_STRING)!Li and Fox-Kemper 17 wind-sea Langmuir number
     CS%WaveMethod = LF17
+  case (EFACTOR_STRING)!Li and Fox-Kemper 16
+    CS%WaveMethod = EFACTOR
   case default
     call MOM_error(FATAL,'Check WAVE_METHOD.')
   end select
@@ -760,6 +771,8 @@ subroutine Update_Stokes_Drift(G, GV, US, CS, h, ustar)
       enddo
       CS%DHH85_is_set = .true.
     endif
+  elseif (CS%WaveMethod==EFACTOR) then
+    return ! pass
   else! Keep this else, fallback to 0 Stokes drift
     do kk= 1,GV%ke
       do jj = G%jsd,G%jed
@@ -1045,6 +1058,31 @@ subroutine get_Langmuir_Number( LA, G, GV, US, HBL, ustar, i, j, &
   endif
 
 end subroutine get_Langmuir_Number
+
+!> function to return the wave method string set in the param file
+function get_wave_method(CS)
+  character(:), allocatable :: get_wave_method
+  type(wave_parameters_CS), pointer :: CS !< Control structure
+
+  if (associated(CS)) then
+    select case(CS%WaveMethod)
+      case (Null_WaveMethod)
+        get_wave_method = NULL_STRING
+      case (TESTPROF)
+        get_wave_method = TESTPROF_STRING
+      case (SURFBANDS)
+        get_wave_method = SURFBANDS_STRING
+      case (DHH85)
+        get_wave_method = DHH85_STRING
+      case (LF17)
+        get_wave_method = LF17_STRING
+      case (EFACTOR)
+        get_wave_method = EFACTOR_STRING
+    end select
+  else
+    get_wave_method = NULL_STRING
+  endif
+end function get_wave_method
 
 !> Get SL averaged Stokes drift from Li/FK 17 method
 !!
