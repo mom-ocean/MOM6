@@ -45,7 +45,7 @@ type, public :: diabatic_aux_CS ; private
   real    :: rivermix_depth = 0.0  !< The depth to which rivers are mixed if do_rivermix = T [Z ~> m].
   logical :: reclaim_frazil  !<   If true, try to use any frazil heat deficit to
                              !! to cool the topmost layer down to the freezing
-                             !! point.  The default is false.
+                             !! point.  The default is true.
   logical :: pressure_dependent_frazil  !< If true, use a pressure dependent
                              !! freezing temperature when making frazil.  The
                              !! default is false, which will be faster but is

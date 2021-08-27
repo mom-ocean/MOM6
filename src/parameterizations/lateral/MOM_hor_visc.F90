@@ -496,7 +496,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
     enddo ; enddo
 
     do J=js-2,Jeq+1 ; do I=is-2,Ieq+1
-      grad_vel_mag_bt_q(I,J) = boundary_mask_q(I,J) * (dvdx_bt(i,j)**2 + dudy_bt(i,j)**2 + &
+      grad_vel_mag_bt_q(I,J) = boundary_mask_q(I,J) * (dvdx_bt(I,J)**2 + dudy_bt(I,J)**2 + &
             (0.25*((dudx_bt(i,j)+dudx_bt(i+1,j+1))+(dudx_bt(i,j+1)+dudx_bt(i+1,j))))**2 + &
             (0.25*((dvdy_bt(i,j)+dvdy_bt(i+1,j+1))+(dvdy_bt(i,j+1)+dvdy_bt(i+1,j))))**2)
     enddo ; enddo
@@ -1389,7 +1389,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
 
       do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
         if (grad_vel_mag_bt_h(i,j)>0) then
-          GME_coeff = CS%GME_efficiency * (MIN(G%bathyT(i,j)/CS%GME_h0,1.0)**2) * &
+          GME_coeff = CS%GME_efficiency * (MIN(G%bathyT(i,j) / CS%GME_h0, 1.0)**2) * &
             (0.25*(KH_u_GME(I,j,k)+KH_u_GME(I-1,j,k)+KH_v_GME(i,J,k)+KH_v_GME(i,J-1,k)))
         else
           GME_coeff = 0.0
@@ -1405,8 +1405,10 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
       enddo ; enddo
 
       do J=js-1,Jeq ; do I=is-1,Ieq
-        if (grad_vel_mag_bt_q(i,j)>0) then
-          GME_coeff = CS%GME_efficiency * (MIN(G%bathyT(i,j)/CS%GME_h0,1.0)**2) * &
+        if (grad_vel_mag_bt_q(I,J)>0) then
+          !### This expression is not rotationally invariant - bathyT is to the SW of q points,
+          !    and it needs parentheses in the sum of the 4 diffusivities.
+          GME_coeff = CS%GME_efficiency * (MIN(G%bathyT(i,j) / CS%GME_h0, 1.0)**2) * &
               (0.25*(KH_u_GME(I,j,k)+KH_u_GME(I,j+1,k)+KH_v_GME(i,J,k)+KH_v_GME(i+1,J,k)))
         else
           GME_coeff = 0.0

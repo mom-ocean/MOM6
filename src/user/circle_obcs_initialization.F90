@@ -28,11 +28,13 @@ public circle_obcs_initialize_thickness
 contains
 
 !> This subroutine initializes layer thicknesses for the circle_obcs experiment.
-subroutine circle_obcs_initialize_thickness(h, G, GV, param_file, just_read_params)
+subroutine circle_obcs_initialize_thickness(h, depth_tot, G, GV, param_file, just_read_params)
   type(ocean_grid_type),   intent(in)  :: G   !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)  :: GV  !< The ocean's vertical grid structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(out) :: h           !< The thickness that is being initialized [H ~> m or kg m-2].
+  real, dimension(SZI_(G),SZJ_(G)), &
+                           intent(in)  :: depth_tot   !< The nominal total depth of the ocean [Z ~> m]
   type(param_file_type),   intent(in)  :: param_file  !< A structure indicating the open file
                                                       !! to parse for model parameter values.
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
@@ -79,8 +81,8 @@ subroutine circle_obcs_initialize_thickness(h, G, GV, param_file, just_read_para
   enddo
 
   ! Uniform thicknesses for base state
-  do j=js,je ; do i=is,ie                        !
-    eta1D(nz+1) = -G%bathyT(i,j)
+  do j=js,je ; do i=is,ie
+    eta1D(nz+1) = -depth_tot(i,j)
     do k=nz,1,-1
       eta1D(K) = e0(K)
       if (eta1D(K) < (eta1D(K+1) + GV%Angstrom_Z)) then

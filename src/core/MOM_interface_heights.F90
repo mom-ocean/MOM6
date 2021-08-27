@@ -28,7 +28,7 @@ contains
 !! form for consistency with the calculation of the pressure gradient forces.
 !! Additionally, these height may be dilated for consistency with the
 !! corresponding time-average quantity from the barotropic calculation.
-subroutine find_eta_3d(h, tv, G, GV, US, eta, eta_bt, halo_size, eta_to_m)
+subroutine find_eta_3d(h, tv, G, GV, US, eta, eta_bt, halo_size, eta_to_m, dZref)
   type(ocean_grid_type),                      intent(in)  :: G   !< The ocean's grid structure.
   type(verticalGrid_type),                    intent(in)  :: GV  !< The ocean's vertical grid structure.
   type(unit_scale_type),                      intent(in)  :: US  !< A dimensional unit scaling type
@@ -37,14 +37,17 @@ subroutine find_eta_3d(h, tv, G, GV, US, eta, eta_bt, halo_size, eta_to_m)
                                                                  !! thermodynamic variables.
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), intent(out) :: eta !< layer interface heights
                                                                  !! [Z ~> m] or [1/eta_to_m m].
-  real, dimension(SZI_(G),SZJ_(G)), optional, intent(in)  :: eta_bt !< optional barotropic
-             !! variable that gives the "correct" free surface height (Boussinesq) or total water
-             !! column mass per unit area (non-Boussinesq).  This is used to dilate the layer.
-             !! thicknesses when calculating interfaceheights [H ~> m or kg m-2].
+  real, dimension(SZI_(G),SZJ_(G)), optional, intent(in)  :: eta_bt !< optional barotropic variable
+                    !! that gives the "correct" free surface height (Boussinesq) or total water
+                    !! column mass per unit area (non-Boussinesq).  This is used to dilate the layer
+                    !! thicknesses when calculating interface heights [H ~> m or kg m-2].
+                    !! In Boussinesq mode, eta_bt and G%bathyT use the same reference height.
   integer,                          optional, intent(in)  :: halo_size !< width of halo points on
                                                                  !! which to calculate eta.
   real,                             optional, intent(in)  :: eta_to_m  !< The conversion factor from
-             !! the units of eta to m; by default this is US%Z_to_m.
+                    !! the units of eta to m; by default this is US%Z_to_m.
+  real,                             optional, intent(in)  :: dZref !< The difference in the
+                    !! reference height between G%bathyT and eta [Z ~> m]. The default is 0.
 
   ! Local variables
   real :: p(SZI_(G),SZJ_(G),SZK_(GV)+1)   ! Hydrostatic pressure at each interface [R L2 T-2 ~> Pa]
@@ -55,6 +58,8 @@ subroutine find_eta_3d(h, tv, G, GV, US, eta, eta_bt, halo_size, eta_to_m)
   real :: I_gEarth          ! The inverse of the gravitational acceleration times the
                             ! rescaling factor derived from eta_to_m [T2 Z L-2 ~> s2 m-1]
   real :: Z_to_eta, H_to_eta, H_to_rho_eta ! Unit conversion factors with obvious names.
+  real :: dZ_ref    ! The difference in the reference height between G%bathyT and eta [Z ~> m].
+                    ! dZ_ref is 0 unless the optional argument dZref is present.
   integer i, j, k, isv, iev, jsv, jev, nz, halo
 
   halo = 0 ; if (present(halo_size)) halo = max(0,halo_size)
@@ -69,33 +74,35 @@ subroutine find_eta_3d(h, tv, G, GV, US, eta, eta_bt, halo_size, eta_to_m)
   H_to_eta = GV%H_to_Z * Z_to_eta
   H_to_rho_eta =  GV%H_to_RZ * Z_to_eta
   I_gEarth = Z_to_eta / GV%g_Earth
+  dZ_ref = 0.0 ; if (present(dZref)) dZ_ref = dZref
 
-!$OMP parallel default(shared) private(dilate,htot)
-!$OMP do
-  do j=jsv,jev ; do i=isv,iev ; eta(i,j,nz+1) = -Z_to_eta*G%bathyT(i,j) ; enddo ; enddo
+  !$OMP parallel default(shared) private(dilate,htot)
+  !$OMP do
+  do j=jsv,jev ; do i=isv,iev ; eta(i,j,nz+1) = -Z_to_eta*(G%bathyT(i,j) + dZ_ref) ; enddo ; enddo
 
   if (GV%Boussinesq) then
-!$OMP do
+    !$OMP do
     do j=jsv,jev ; do k=nz,1,-1 ; do i=isv,iev
       eta(i,j,K) = eta(i,j,K+1) + h(i,j,k)*H_to_eta
     enddo ; enddo ; enddo
     if (present(eta_bt)) then
       ! Dilate the water column to agree with the free surface height
       ! that is used for the dynamics.
-!$OMP do
+      !$OMP do
       do j=jsv,jev
         do i=isv,iev
           dilate(i) = (eta_bt(i,j)*H_to_eta + Z_to_eta*G%bathyT(i,j)) / &
-                      (eta(i,j,1) + Z_to_eta*G%bathyT(i,j))
+                      (eta(i,j,1) + Z_to_eta*(G%bathyT(i,j) + dZ_ref))
         enddo
         do k=1,nz ; do i=isv,iev
-          eta(i,j,K) = dilate(i) * (eta(i,j,K) + Z_to_eta*G%bathyT(i,j)) - Z_to_eta*G%bathyT(i,j)
+          eta(i,j,K) = dilate(i) * (eta(i,j,K) + Z_to_eta*(G%bathyT(i,j) + dZ_ref)) - &
+                       Z_to_eta*(G%bathyT(i,j) + dZ_ref)
         enddo ; enddo
       enddo
     endif
   else
     if (associated(tv%eqn_of_state)) then
-!$OMP do
+      !$OMP do
       do j=jsv,jev
         if (associated(tv%p_surf)) then
           do i=isv,iev ; p(i,j,1) = tv%p_surf(i,j) ; enddo
@@ -106,19 +113,19 @@ subroutine find_eta_3d(h, tv, G, GV, US, eta, eta_bt, halo_size, eta_to_m)
           p(i,j,K+1) = p(i,j,K) + GV%g_Earth*GV%H_to_RZ*h(i,j,k)
         enddo ; enddo
       enddo
-!$OMP do
+      !$OMP do
       do k=1,nz
         call int_specific_vol_dp(tv%T(:,:,k), tv%S(:,:,k), p(:,:,K), p(:,:,K+1), &
                                  0.0, G%HI, tv%eqn_of_state, US, dz_geo(:,:,k), halo_size=halo)
       enddo
-!$OMP do
+      !$OMP do
       do j=jsv,jev
         do k=nz,1,-1 ; do i=isv,iev
           eta(i,j,K) = eta(i,j,K+1) + I_gEarth * dz_geo(i,j,k)
         enddo ; enddo
       enddo
     else
-!$OMP do
+      !$OMP do
       do j=jsv,jev ;  do k=nz,1,-1 ; do i=isv,iev
         eta(i,j,K) = eta(i,j,K+1) + H_to_rho_eta*h(i,j,k) / GV%Rlay(k)
       enddo ; enddo ; enddo
@@ -126,18 +133,19 @@ subroutine find_eta_3d(h, tv, G, GV, US, eta, eta_bt, halo_size, eta_to_m)
     if (present(eta_bt)) then
       ! Dilate the water column to agree with the free surface height
       ! from the time-averaged barotropic solution.
-!$OMP do
+      !$OMP do
       do j=jsv,jev
         do i=isv,iev ; htot(i) = GV%H_subroundoff ; enddo
         do k=1,nz ; do i=isv,iev ; htot(i) = htot(i) + h(i,j,k) ; enddo ; enddo
         do i=isv,iev ; dilate(i) = eta_bt(i,j) / htot(i) ; enddo
         do k=1,nz ; do i=isv,iev
-          eta(i,j,K) = dilate(i) * (eta(i,j,K) + Z_to_eta*G%bathyT(i,j)) - Z_to_eta*G%bathyT(i,j)
+          eta(i,j,K) = dilate(i) * (eta(i,j,K) + Z_to_eta*(G%bathyT(i,j) + dZ_ref)) - &
+                       Z_to_eta*(G%bathyT(i,j) + dZ_ref)
         enddo ; enddo
       enddo
     endif
   endif
-!$OMP end parallel
+  !$OMP end parallel
 
 end subroutine find_eta_3d
 
@@ -145,7 +153,7 @@ end subroutine find_eta_3d
 !! with the calculation of the pressure gradient forces.  Additionally, the sea
 !! surface height may be adjusted for consistency with the corresponding
 !! time-average quantity from the barotropic calculation.
-subroutine find_eta_2d(h, tv, G, GV, US, eta, eta_bt, halo_size, eta_to_m)
+subroutine find_eta_2d(h, tv, G, GV, US, eta, eta_bt, halo_size, eta_to_m, dZref)
   type(ocean_grid_type),                      intent(in)  :: G   !< The ocean's grid structure.
   type(verticalGrid_type),                    intent(in)  :: GV  !< The ocean's vertical grid structure.
   type(unit_scale_type),                      intent(in)  :: US  !< A dimensional unit scaling type
@@ -155,12 +163,16 @@ subroutine find_eta_2d(h, tv, G, GV, US, eta, eta_bt, halo_size, eta_to_m)
   real, dimension(SZI_(G),SZJ_(G)),           intent(out) :: eta !< free surface height relative to
                                                                  !! mean sea level (z=0) often [Z ~> m].
   real, dimension(SZI_(G),SZJ_(G)), optional, intent(in)  :: eta_bt !< optional barotropic
-                   !! variable that gives the "correct" free surface height (Boussinesq) or total
-                   !! water column mass per unit area (non-Boussinesq) [H ~> m or kg m-2].
+                    !! variable that gives the "correct" free surface height (Boussinesq) or total
+                    !! water column mass per unit area (non-Boussinesq) [H ~> m or kg m-2].
+                    !! In Boussinesq mode, eta_bt and G%bathyT use the same reference height.
   integer,                          optional, intent(in)  :: halo_size !< width of halo points on
                                                                  !! which to calculate eta.
   real,                             optional, intent(in)  :: eta_to_m  !< The conversion factor from
-             !! the units of eta to m; by default this is US%Z_to_m.
+                    !! the units of eta to m; by default this is US%Z_to_m.
+  real,                             optional, intent(in)  :: dZref !< The difference in the
+                    !! reference height between G%bathyT and eta [Z ~> m]. The default is 0.
+
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1) :: &
     p          ! Hydrostatic pressure at each interface [R L2 T-2 ~> Pa]
@@ -170,6 +182,8 @@ subroutine find_eta_2d(h, tv, G, GV, US, eta, eta_bt, halo_size, eta_to_m)
   real :: I_gEarth          ! The inverse of the gravitational acceleration times the
                             ! rescaling factor derived from eta_to_m [T2 Z L-2 ~> s2 m-1]
   real :: Z_to_eta, H_to_eta, H_to_rho_eta ! Unit conversion factors with obvious names.
+  real :: dZ_ref    ! The difference in the reference height between G%bathyT and eta [Z ~> m].
+                    ! dZ_ref is 0 unless the optional argument dZref is present.
   integer i, j, k, is, ie, js, je, nz, halo
 
   halo = 0 ; if (present(halo_size)) halo = max(0,halo_size)
@@ -180,26 +194,27 @@ subroutine find_eta_2d(h, tv, G, GV, US, eta, eta_bt, halo_size, eta_to_m)
   H_to_eta = GV%H_to_Z * Z_to_eta
   H_to_rho_eta =  GV%H_to_RZ * Z_to_eta
   I_gEarth = Z_to_eta / GV%g_Earth
+  dZ_ref = 0.0 ; if (present(dZref)) dZ_ref = dZref
 
-!$OMP parallel default(shared) private(htot)
-!$OMP do
-  do j=js,je ; do i=is,ie ; eta(i,j) = -Z_to_eta*G%bathyT(i,j) ; enddo ; enddo
+  !$OMP parallel default(shared) private(htot)
+  !$OMP do
+  do j=js,je ; do i=is,ie ; eta(i,j) = -Z_to_eta*(G%bathyT(i,j) + dZ_ref) ; enddo ; enddo
 
   if (GV%Boussinesq) then
     if (present(eta_bt)) then
-!$OMP do
+      !$OMP do
       do j=js,je ; do i=is,ie
-        eta(i,j) = H_to_eta*eta_bt(i,j)
+        eta(i,j) = H_to_eta*eta_bt(i,j) - Z_to_eta*dZ_ref
       enddo ; enddo
     else
-!$OMP do
+      !$OMP do
       do j=js,je ; do k=1,nz ; do i=is,ie
         eta(i,j) = eta(i,j) + h(i,j,k)*H_to_eta
       enddo ; enddo ; enddo
     endif
   else
     if (associated(tv%eqn_of_state)) then
-!$OMP do
+      !$OMP do
       do j=js,je
         if (associated(tv%p_surf)) then
           do i=is,ie ; p(i,j,1) = tv%p_surf(i,j) ; enddo
@@ -211,17 +226,17 @@ subroutine find_eta_2d(h, tv, G, GV, US, eta, eta_bt, halo_size, eta_to_m)
           p(i,j,k+1) = p(i,j,k) + GV%g_Earth*GV%H_to_RZ*h(i,j,k)
         enddo ; enddo
       enddo
-!$OMP do
+      !$OMP do
       do k = 1, nz
         call int_specific_vol_dp(tv%T(:,:,k), tv%S(:,:,k), p(:,:,k), p(:,:,k+1), 0.0, &
                                  G%HI, tv%eqn_of_state, US, dz_geo(:,:,k), halo_size=halo)
       enddo
-!$OMP do
+      !$OMP do
       do j=js,je ; do k=1,nz ; do i=is,ie
           eta(i,j) = eta(i,j) + I_gEarth * dz_geo(i,j,k)
       enddo ; enddo ; enddo
     else
-!$OMP do
+      !$OMP do
       do j=js,je ; do k=1,nz ; do i=is,ie
         eta(i,j) = eta(i,j) + H_to_rho_eta*h(i,j,k) / GV%Rlay(k)
       enddo ; enddo ; enddo
@@ -229,18 +244,18 @@ subroutine find_eta_2d(h, tv, G, GV, US, eta, eta_bt, halo_size, eta_to_m)
     if (present(eta_bt)) then
       !   Dilate the water column to agree with the time-averaged column
       ! mass from the barotropic solution.
-!$OMP do
+      !$OMP do
       do j=js,je
         do i=is,ie ; htot(i) = GV%H_subroundoff ; enddo
         do k=1,nz ; do i=is,ie ; htot(i) = htot(i) + h(i,j,k) ; enddo ; enddo
         do i=is,ie
-          eta(i,j) = (eta_bt(i,j) / htot(i)) * (eta(i,j) + Z_to_eta*G%bathyT(i,j)) - &
-                     Z_to_eta*G%bathyT(i,j)
+          eta(i,j) = (eta_bt(i,j) / htot(i)) * (eta(i,j) + Z_to_eta*(G%bathyT(i,j) + dZ_ref)) - &
+                     Z_to_eta*(G%bathyT(i,j) + dZ_ref)
         enddo
       enddo
     endif
   endif
-!$OMP end parallel
+  !$OMP end parallel
 
 end subroutine find_eta_2d
 
