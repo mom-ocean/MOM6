@@ -212,5 +212,16 @@ of the Earth. This allows the buoyancy fluxes to tend to zero in regions
 of very weak stratification, allowing a no-flux bottom boundary condition
 to be satisfied.
 
+\section Nikurashin Lee Wave Mixing
+
+If one has the INT_TIDE_DISSIPATION flag on, there is an option to also turn on
+LEE_WAVE_DISSIPATION. The theory is presented in \cite nikurashin2010a
+while the application of it is presented in \cite nikurashin2010b. For
+the implementation in MOM6, it is required that you provide an estimate
+of the TKE loss due to the Lee waves which is then applied with either
+the St. Laurent or the Polzin vertical profile.
+
+IS THERE A SCRIPT to produce this somewhere or what???
+
 */
 
