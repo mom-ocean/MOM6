@@ -34,6 +34,7 @@
 # Build configuration:
 #   FCFLAGS_DEBUG       Testing ("debug") compiler flags
 #   FCFLAGS_REPRO       Production ("repro") compiler flags
+#   FCFLAGS_OPT			Aggressive optimization compiler flags
 #   FCFLAGS_INIT        Variable initialization flags
 #   FCFLAGS_COVERAGE    Code coverage flags
 #
@@ -72,6 +73,7 @@ export MPIFC
 # NOTE: FMS will be built using FCFLAGS_DEBUG
 FCFLAGS_DEBUG ?= -g -O0
 FCFLAGS_REPRO ?= -g -O2
+FCFLAGS_OPT	?= -g -O3 -mavx -fno-omit-frame-pointer
 FCFLAGS_INIT ?=
 FCFLAGS_COVERAGE ?=
 # Additional notes:
@@ -96,6 +98,7 @@ DO_REPRO_TESTS ?=
 # Time measurement (configurable by the CI)
 TIME ?= time
 
+
 #---
 # Dependencies
 DEPS = deps
@@ -114,12 +117,20 @@ CONFIGS := $(wildcard tc*)
 TESTS = grids layouts restarts nans dims openmps rotations
 DIMS = t l h z q r
 
+# Set the framework
+FRAMEWORK ?= fms1
+
 # REPRO tests enable reproducibility with optimization, and often do not match
 # the DEBUG results in older GCCs and vendor compilers, so we can optionally
 # disable them.
 ifeq ($(DO_REPRO_TESTS), true)
   BUILDS += repro
   TESTS += repros
+endif
+
+# Profiling
+ifeq ($(DO_PROFILE), false)
+  BUILDS += opt opt_target
 endif
 
 # The following variables are configured by Travis:
@@ -195,6 +206,7 @@ endif
 .PHONY: all build.regressions
 all: $(foreach b,$(BUILDS),build/$(b)/MOM6) $(VENV_PATH)
 build.regressions: $(foreach b,symmetric target,build/$(b)/MOM6)
+build.prof: $(foreach b,opt opt_target,build/$(b)/MOM6)
 
 # Executable
 BUILD_TARGETS = MOM6 Makefile path_names
@@ -217,6 +229,7 @@ PATH_FMS = PATH="${PATH}:../../$(DEPS)/bin"
 SYMMETRIC_FCFLAGS := FCFLAGS="$(FCFLAGS_DEBUG) $(FCFLAGS_INIT) $(COVERAGE) $(FCFLAGS_FMS)"
 ASYMMETRIC_FCFLAGS := FCFLAGS="$(FCFLAGS_DEBUG) $(FCFLAGS_INIT) $(FCFLAGS_FMS)"
 REPRO_FCFLAGS := FCFLAGS="$(FCFLAGS_REPRO) $(FCFLAGS_FMS)"
+OPT_FCFLAGS := FCFLAGS="$(FCFLAGS_OPT) $(FCFLAGS_FMS)"
 OPENMP_FCFLAGS := FCFLAGS="$(FCFLAGS_DEBUG) $(FCFLAGS_INIT) $(FCFLAGS_FMS)"
 TARGET_FCFLAGS := FCFLAGS="$(FCFLAGS_DEBUG) $(FCFLAGS_INIT) $(FCFLAGS_FMS)"
 
@@ -230,6 +243,8 @@ build/asymmetric/Makefile: MOM_ENV=$(PATH_FMS) $(ASYMMETRIC_FCFLAGS) $(MOM_LDFLA
 build/repro/Makefile: MOM_ENV=$(PATH_FMS) $(REPRO_FCFLAGS) $(MOM_LDFLAGS)
 build/openmp/Makefile: MOM_ENV=$(PATH_FMS) $(OPENMP_FCFLAGS) $(MOM_LDFLAGS)
 build/target/Makefile: MOM_ENV=$(PATH_FMS) $(TARGET_FCFLAGS) $(MOM_LDFLAGS)
+build/opt/Makefile: MOM_ENV=$(PATH_FMS) $(OPT_FCFLAGS) $(MOM_LDFLAGS)
+build/opt_target/Makefile: MOM_ENV=$(PATH_FMS) $(OPT_FCFLAGS) $(MOM_LDFLAGS)
 build/coupled/Makefile: MOM_ENV=$(PATH_FMS) $(SYMMETRIC_FCFLAGS) $(SYMMETRIC_LDFLAGS)
 build/nuopc/Makefile: MOM_ENV=$(PATH_FMS) $(SYMMETRIC_FCFLAGS) $(SYMMETRIC_LDFLAGS)
 build/mct/Makefile: MOM_ENV=$(PATH_FMS) $(SYMMETRIC_FCFLAGS) $(SYMMETRIC_LDFLAGS)
@@ -240,12 +255,15 @@ build/asymmetric/Makefile: MOM_ACFLAGS=--enable-asymmetric
 build/repro/Makefile: MOM_ACFLAGS=
 build/openmp/Makefile: MOM_ACFLAGS=--enable-openmp
 build/target/Makefile: MOM_ACFLAGS=
+build/opt/Makefile: MOM_ACFLAGS=
+build/opt_target/Makefile: MOM_ACFLAGS=
 build/coupled/Makefile: MOM_ACFLAGS=--with-driver=coupled_driver
 build/nuopc/Makefile: MOM_ACFLAGS=--with-driver=nuopc_driver
 build/mct/Makefile: MOM_ACFLAGS=--with-driver=mct_driver
 
 # Fetch regression target source code
 build/target/Makefile: | $(TARGET_CODEBASE)
+build/opt_target/Makefile: | $(TARGET_CODEBASE)
 
 
 # Define source code dependencies
@@ -267,7 +285,7 @@ build/%/MOM6: build/%/Makefile
 build/%/Makefile: ../ac/configure ../ac/Makefile.in $(DEPS)/lib/libFMS.a $(MKMF) $(LIST_PATHS)
 	mkdir -p $(@D)
 	cd $(@D) \
-	  && $(MOM_ENV) ../../../ac/configure $(MOM_ACFLAGS) \
+	  && $(MOM_ENV) ../../../ac/configure $(MOM_ACFLAGS) --with-framework=$(FRAMEWORK) \
 	  || (cat config.log && false)
 
 
@@ -276,7 +294,8 @@ build/%/Makefile: ../ac/configure ../ac/Makefile.in $(DEPS)/lib/libFMS.a $(MKMF)
 
 
 # Fetch the regression target codebase
-build/target/Makefile: $(TARGET_CODEBASE)/ac/configure $(DEPS)/lib/libFMS.a $(MKMF) $(LIST_PATHS)
+build/target/Makefile build/opt_target/Makefile: \
+		$(TARGET_CODEBASE)/ac/configure $(DEPS)/lib/libFMS.a $(MKMF) $(LIST_PATHS)
 	mkdir -p $(@D)
 	cd $(@D) \
 	  && $(MOM_ENV) ../../$(TARGET_CODEBASE)/ac/configure $(MOM_ACFLAGS) \
@@ -549,7 +568,11 @@ $(eval $(call STAT_RULE,dim.q,symmetric,,Q_RESCALE_POWER=11,,1))
 $(eval $(call STAT_RULE,dim.r,symmetric,,R_RESCALE_POWER=11,,1))
 
 
-# Restart tests require significant preprocessing, and are handled separately.
+# Generate the half-period input namelist as follows:
+#  1. Fetch DAYMAX and TIMEUNIT from MOM_input
+#  2. Convert DAYMAX from TIMEUNIT to seconds
+#  3. Apply seconds to `ocean_solo_nml` inside input.nml.
+# NOTE: Assumes that runtime set by DAYMAX, will fail if set by input.nml
 work/%/restart/ocean.stats: build/symmetric/MOM6 $(VENV_PATH)
 	rm -rf $(@D)
 	mkdir -p $(@D)
@@ -562,14 +585,13 @@ work/%/restart/ocean.stats: build/symmetric/MOM6 $(VENV_PATH)
 	  cd work/$*/restart; \
 	fi
 	mkdir -p $(@D)/RESTART
-	# Generate the half-period input namelist
-	# TODO: Assumes that runtime set by DAYMAX, will fail if set by input.nml
+	# Set the half-period
 	cd $(@D) \
 	  && daymax=$$(grep DAYMAX MOM_input | cut -d '!' -f 1 | cut -d '=' -f 2 | xargs) \
 	  && timeunit=$$(grep TIMEUNIT MOM_input | cut -d '!' -f 1 | cut -d '=' -f 2 | xargs) \
 	  && if [ -z "$${timeunit}" ]; then timeunit="8.64e4"; fi \
 	  && printf -v timeunit_int "%.f" "$${timeunit}" \
-	  && halfperiod=$$(printf "%.f" $$(bc <<< "scale=10; 0.5 * $${daymax} * $${timeunit_int}")) \
+	  && halfperiod=$$(awk -v t=$${daymax} -v dt=$${timeunit} 'BEGIN {printf "%.f", 0.5*t*dt}') \
 	  && printf "\n&ocean_solo_nml\n    seconds = $${halfperiod}\n/\n" >> input.nml
 	# Remove any previous archived output
 	rm -f results/$*/std.restart{1,2}.{out,err}
@@ -619,6 +641,64 @@ test.summary:
 	else \
 	  echo -e "$(PASS): All tests passed!"; \
 	fi
+
+
+#---
+# Profiling
+# XXX: This is experimental work to track, log, and report changes in runtime
+PCONFIGS = p0
+
+.PHONY: profile
+profile: $(foreach p,$(PCONFIGS), prof.$(p))
+
+.PHONY: prof.p0
+prof.p0: work/p0/opt/clocks.json work/p0/opt_target/clocks.json
+	python tools/compare_clocks.py $^
+
+work/p0/%/clocks.json: work/p0/%/std.out
+	python tools/parse_fms_clocks.py -d $(@D) $^ > $@
+
+work/p0/opt/std.out: build/opt/MOM6
+work/p0/opt_target/std.out: build/opt_target/MOM6
+
+work/p0/%/std.out:
+	mkdir -p $(@D)
+	cp -RL p0/* $(@D)
+	mkdir -p $(@D)/RESTART
+	echo -e "" > $(@D)/MOM_override
+	cd $(@D) \
+	  && $(MPIRUN) -n 1 ../../../$< 2> std.err > std.out
+
+#---
+# Same but with perf
+
+# TODO: This expects the -e flag, can I handle it in the command?
+PERF_EVENTS ?=
+
+.PHONY: perf
+perf: $(foreach p,$(PCONFIGS), perf.$(p))
+
+.PHONY: prof.p0
+perf.p0: work/p0/opt/profile.json work/p0/opt_target/profile.json
+	python tools/compare_perf.py $^
+
+work/p0/%/profile.json: work/p0/%/perf.data
+	python tools/parse_perf.py -f $< > $@
+
+work/p0/opt/perf.data: build/opt/MOM6
+work/p0/opt_target/perf.data: build/opt_target/MOM6
+
+work/p0/%/perf.data:
+	mkdir -p $(@D)
+	cp -RL p0/* $(@D)
+	mkdir -p $(@D)/RESTART
+	echo -e "" > $(@D)/MOM_override
+	cd $(@D) \
+	  && perf record \
+	    -F 3999 \
+	    ${PERF_EVENTS} \
+	    ../../../$< 2> std.perf.err > std.perf.out \
+	  || cat std.perf.err
 
 
 #----
