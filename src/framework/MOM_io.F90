@@ -1525,7 +1525,7 @@ end subroutine delete_axis_info
 
 !> Retrieve the information from an axis_info type.
 subroutine get_axis_info(axis,name,longname,units,cartesian,ax_size,ax_data)
-  type(axis_info), intent(inout) :: axis  !< An array with information about named axes
+  type(axis_info), intent(in) :: axis  !< An array with information about named axes
   character(len=*), intent(out), optional    :: name !<  An associated name.
   character(len=*), intent(out), optional    :: longname !< An associated longname.
   character(len=*), intent(out), optional    :: units !< Units
@@ -1953,7 +1953,6 @@ subroutine MOM_io_init(param_file)
 end subroutine MOM_io_init
 !> Returns the dimension variable information for a netCDF variable
 subroutine get_var_axes_info(filename, fieldname, axes_info)
-
   character(len=*), intent(in) ::            filename  !< A filename from which to read
   character(len=*), intent(in) ::            fieldname !< The name of the field to read
   type(axis_info), dimension(4), intent(inout) :: axes_info !< A returned array of field axis information
@@ -2018,8 +2017,8 @@ subroutine get_var_axes_info(filename, fieldname, axes_info)
                 trim(fieldname//",dim_name "//trim(dim_name(3)))//" in file "// trim(filename)//" in  hinterp_extrap")
 
   call set_axis_info(axes_info(1), name=trim(dim_name(1)), ax_size=id, ax_data=x,cartesian='X')
-  call set_axis_info(axes_info(2), name=trim(dim_name(1)), ax_size=jd, ax_data=y,cartesian='Y')
-  call set_axis_info(axes_info(3), name=trim(dim_name(1)), ax_size=kd, ax_data=z,cartesian='Z')
+  call set_axis_info(axes_info(2), name=trim(dim_name(2)), ax_size=jd, ax_data=y,cartesian='Y')
+  call set_axis_info(axes_info(3), name=trim(dim_name(3)), ax_size=kd, ax_data=z,cartesian='Z')
 
   call close_file_to_read(ncid, filename)
 

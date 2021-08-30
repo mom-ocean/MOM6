@@ -332,7 +332,6 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
 
   if (allocated(tr_z)) deallocate(tr_z)
   if (allocated(mask_z)) deallocate(mask_z)
-  if (allocated(z_edges_in)) deallocate(z_edges_in)
 
   PI_180 = atan(1.0)/45.
 
@@ -342,6 +341,7 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
 
   call get_var_axes_info(trim(filename), trim(varnam), axes_info)
 
+  if (allocated(z_in)) deallocate(z_in)
   if (allocated(z_edges_in)) deallocate(z_edges_in)
   if (allocated(tr_z)) deallocate(tr_z)
   if (allocated(mask_z)) deallocate(mask_z)
@@ -415,7 +415,7 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
     mask_in = 0.0
     if (is_ongrid) then
       start(1) = is+G%HI%idg_offset ; start(2) = js+G%HI%jdg_offset ; start(3) = k
-      count(1) = ie-is+1 ; count(2) = je-js+1; count(3) = 1
+      count(1) = ie-is+1 ; count(2) = je-js+1; count(3) = 1; start(4) = 1; count(4) = 1
       call MOM_read_data(trim(filename), trim(varnam), tr_in, start, count, no_domain=.true.)
       do j=js,je
         do i=is,ie
@@ -431,6 +431,7 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
     else
       if (is_root_pe()) then
         start = 1 ; start(3) = k ; count(:) = 1 ; count(1) = id ; count(2) = jd
+        start(4) = 1; count(4) = 1
         call MOM_read_data(trim(filename), trim(varnam), tr_in, start, count, no_domain=.true.)
         if (add_np) then
           pole = 0.0 ; npole = 0.0
@@ -550,6 +551,8 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
     endif
 
   enddo ! kd
+
+  deallocate(lon_in, lat_in)
 
 end subroutine horiz_interp_and_extrap_tracer_record
 
