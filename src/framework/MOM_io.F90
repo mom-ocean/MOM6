@@ -49,6 +49,8 @@ public :: MOM_read_data, MOM_read_vector, read_field_chksum
 public :: slasher, write_field, write_version_number
 public :: io_infra_init, io_infra_end
 public :: stdout_if_root
+public :: get_var_axes_info
+public :: get_axis_info
 ! This is used to set up information descibing non-domain-decomposed axes.
 public :: axis_info, set_axis_info, delete_axis_info
 ! This is used to set up global file attributes
@@ -1520,6 +1522,31 @@ subroutine delete_axis_info(axes)
   enddo
 end subroutine delete_axis_info
 
+
+!> Retrieve the information from an axis_info type.
+subroutine get_axis_info(axis,name,longname,units,cartesian,ax_size,ax_data)
+  type(axis_info), intent(inout) :: axis  !< An array with information about named axes
+  character(len=*), intent(out), optional    :: name !<  An associated name.
+  character(len=*), intent(out), optional    :: longname !< An associated longname.
+  character(len=*), intent(out), optional    :: units !< Units
+  character(len=*), intent(out), optional    :: cartesian !< cartesian direction [X,Y,Z,T]
+  integer,          intent(out), optional   :: ax_size !< The size of the axis.
+  real, optional, allocatable, dimension(:), intent(out) :: ax_data !< axis label data.
+
+  if (present(ax_data)) then
+     if (allocated(ax_data)) deallocate(ax_data)
+     allocate(ax_data(axis%ax_size))
+     ax_data(:)=axis%ax_data
+  endif
+
+  if (present(name)) name=axis%name
+  if (present(longname)) longname=axis%longname
+  if (present(units)) units=axis%units
+  if (present(cartesian)) cartesian=axis%cartesian
+  if (present(ax_size)) ax_size=axis%ax_size
+
+end subroutine get_axis_info
+
 !> Store information that can be used to create an attribute in a subsequent call to create_file.
 subroutine set_attribute_info(attribute, name, str_value)
   type(attribute_info), intent(inout) :: attribute !< A type with information about a named attribute
@@ -1924,7 +1951,81 @@ subroutine MOM_io_init(param_file)
   call log_version(param_file, mdl, version)
 
 end subroutine MOM_io_init
+!> Returns the dimension variable information for a netCDF variable
+subroutine get_var_axes_info(filename, fieldname, axes_info)
 
+  character(len=*), intent(in) ::            filename  !< A filename from which to read
+  character(len=*), intent(in) ::            fieldname !< The name of the field to read
+  type(axis_info), dimension(4), intent(inout) :: axes_info !< A returned array of field axis information
+
+  !! local variables
+  real ::  rcode
+  logical :: success
+  integer ::  ncid, varid, ndims
+  integer :: id, jd, kd
+  integer, dimension(4) :: dims, dim_id
+  real :: missing_value
+  character(len=128)  :: dim_name(4)
+  integer, dimension(1) :: start, count
+  !! cartesian axis data
+  real, allocatable, dimension(:) :: x
+  real, allocatable, dimension(:) :: y
+  real, allocatable, dimension(:) :: z
+
+
+  call open_file_to_read(filename, ncid, success=success)
+
+  rcode = NF90_INQ_VARID(ncid, trim(fieldname), varid)
+  if (rcode /= 0) call MOM_error(FATAL,"error finding variable "//trim(fieldname)//&
+                                 " in file "//trim(filename)//" in hinterp_extrap")
+
+  rcode = NF90_INQUIRE_VARIABLE(ncid, varid, ndims=ndims, dimids=dims)
+  if (rcode /= 0) call MOM_error(FATAL, "Error inquiring about the dimensions of "//trim(fieldname)//&
+                                 " in file "//trim(filename)//" in hinterp_extrap")
+  if (ndims < 3) call MOM_error(FATAL,"Variable "//trim(fieldname)//" in file "//trim(filename)// &
+                                " has too few dimensions to be read as a 3-d array.")
+  rcode = NF90_INQUIRE_DIMENSION(ncid, dims(1), dim_name(1), len=id)
+  if (rcode /= 0) call MOM_error(FATAL,"error reading dimension 1 data for "// &
+                trim(fieldname)//" in file "// trim(filename)//" in hinterp_extrap")
+  rcode = NF90_INQ_VARID(ncid, dim_name(1), dim_id(1))
+  if (rcode /= 0) call MOM_error(FATAL,"error finding variable "//trim(dim_name(1))//&
+                                 " in file "//trim(filename)//" in hinterp_extrap")
+  rcode = NF90_INQUIRE_DIMENSION(ncid, dims(2), dim_name(2), len=jd)
+  if (rcode /= 0) call MOM_error(FATAL,"error reading dimension 2 data for "// &
+                trim(fieldname)//" in file "// trim(filename)//" in hinterp_extrap")
+  rcode = NF90_INQ_VARID(ncid, dim_name(2), dim_id(2))
+  if (rcode /= 0) call MOM_error(FATAL,"error finding variable "//trim(dim_name(2))//&
+                                 " in file "//trim(filename)//" in hinterp_extrap")
+  rcode = NF90_INQUIRE_DIMENSION(ncid, dims(3), dim_name(3), len=kd)
+  if (rcode /= 0) call MOM_error(FATAL,"error reading dimension 3 data for "// &
+                trim(fieldname)//" in file "// trim(filename)//" in hinterp_extrap")
+  rcode = NF90_INQ_VARID(ncid, dim_name(3), dim_id(3))
+  if (rcode /= 0) call MOM_error(FATAL,"error finding variable "//trim(dim_name(3))//&
+                                 " in file "//trim(filename)//" in hinterp_extrap")
+  allocate(x(id), y(jd), z(kd))
+
+  start = 1 ; count = 1 ; count(1) = id
+  rcode = NF90_GET_VAR(ncid, dim_id(1), x, start, count)
+  if (rcode /= 0) call MOM_error(FATAL,"error reading dimension 1 values for var_name "// &
+                trim(fieldname)//",dim_name "//trim(dim_name(1))//" in file "// trim(filename)//" in hinterp_extrap")
+  start = 1 ; count = 1 ; count(1) = jd
+  rcode = NF90_GET_VAR(ncid, dim_id(2), y, start, count)
+  if (rcode /= 0) call MOM_error(FATAL,"error reading dimension 2 values for var_name "// &
+                trim(fieldname)//",dim_name "//trim(dim_name(2))//" in file "// trim(filename)//" in  hinterp_extrap")
+  start = 1 ; count = 1 ; count(1) = kd
+  rcode = NF90_GET_VAR(ncid, dim_id(3), z, start, count)
+  if (rcode /= 0) call MOM_error(FATAL,"error reading dimension 3 values for var_name "// &
+                trim(fieldname//",dim_name "//trim(dim_name(3)))//" in file "// trim(filename)//" in  hinterp_extrap")
+
+  call set_axis_info(axes_info(1), name=trim(dim_name(1)), ax_size=id, ax_data=x,cartesian='X')
+  call set_axis_info(axes_info(2), name=trim(dim_name(1)), ax_size=jd, ax_data=y,cartesian='Y')
+  call set_axis_info(axes_info(3), name=trim(dim_name(1)), ax_size=kd, ax_data=z,cartesian='Z')
+
+  call close_file_to_read(ncid, filename)
+
+  deallocate(x,y,z)
+
+end subroutine get_var_axes_info
 !> \namespace mom_io
 !!
 !!   This file contains a number of subroutines that manipulate
