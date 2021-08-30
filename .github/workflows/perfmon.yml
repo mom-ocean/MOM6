@@ -1,0 +1,36 @@
+name: Performance Monitor
+
+on: [pull_request]
+
+jobs:
+  build-test-perfmon:
+
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: .testing
+
+    steps:
+    - uses: actions/checkout@v2
+      with:
+        submodules: recursive
+
+    - uses: ./.github/actions/testing-setup
+
+    - name: Compile optimized models
+      run: >-
+        make -j build.prof
+        MOM_TARGET_SLUG=$GITHUB_REPOSITORY
+        MOM_TARGET_LOCAL_BRANCH=$GITHUB_BASE_REF
+        DO_REGRESSION_TESTS=true
+
+    - name: Generate profile data
+      run: >-
+        pip install f90nml &&
+        make profile
+        DO_REGRESSION_TESTS=true
+
+    - name: Generate perf data
+      run: |
+        sudo sysctl -w kernel.perf_event_paranoid=2
+        make perf DO_REGRESSION_TESTS=true
