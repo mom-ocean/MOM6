@@ -32,7 +32,11 @@ public :: mom_export
 public :: state_diagnose
 public :: ChkErr
 
-private :: State_getImport
+interface State_getImport
+   module procedure State_getImport_2d
+   module procedure State_getImport_3d ! third dimension being an ungridded dimension
+end interface
+
 private :: State_setExport
 
 !> Get field pointer
@@ -648,8 +652,8 @@ subroutine State_GetFldPtr_2d(State, fldname, fldptr, rc)
 
 end subroutine State_GetFldPtr_2d
 
-!> Map import state field to output array
-subroutine State_GetImport(state, fldname, isc, iec, jsc, jec, output, do_sum, areacor, rc)
+!> Map 2d import state field to output array
+subroutine State_GetImport_2d(state, fldname, isc, iec, jsc, jec, output, do_sum, areacor, rc)
   type(ESMF_State)    , intent(in)    :: state   !< ESMF state
   character(len=*)    , intent(in)    :: fldname !< Field name
   integer             , intent(in)    :: isc     !< The start i-index of cell centers within
@@ -672,7 +676,7 @@ subroutine State_GetImport(state, fldname, isc, iec, jsc, jec, output, do_sum, a
   integer                       :: lbnd1,lbnd2
   real(ESMF_KIND_R8), pointer   :: dataPtr1d(:)
   real(ESMF_KIND_R8), pointer   :: dataPtr2d(:,:)
-  character(len=*)  , parameter :: subname='(MOM_cap_methods:state_getimport)'
+  character(len=*)  , parameter :: subname='(MOM_cap_methods:state_getimport_2d)'
   ! ----------------------------------------------
 
   rc = ESMF_SUCCESS
@@ -731,7 +735,80 @@ subroutine State_GetImport(state, fldname, isc, iec, jsc, jec, output, do_sum, a
 
   endif
 
-end subroutine State_GetImport
+end subroutine State_GetImport_2d
+
+!> Map 3d import state field to output array (where 3rd dim is an ungridded dimension)
+subroutine State_GetImport_3d(state, fldname, isc, iec, jsc, jec, lbd, ubd, output, do_sum, areacor, rc)
+  type(ESMF_State)    , intent(in)    :: state   !< ESMF state
+  character(len=*)    , intent(in)    :: fldname !< Field name
+  integer             , intent(in)    :: isc     !< The start i-index of cell centers within
+                                                 !! the computational domain
+  integer             , intent(in)    :: iec     !< The end i-index of cell centers within the
+                                                 !! computational domain
+  integer             , intent(in)    :: jsc     !< The start j-index of cell centers within
+                                                 !! the computational domain
+  integer             , intent(in)    :: jec     !< The end j-index of cell centers within
+                                                 !! the computational domain
+  integer             , intent(in)    :: lbd     !< lower bound of ungridded dimension
+  integer             , intent(in)    :: ubd     !< upper bound of ungridded dimension
+  real (ESMF_KIND_R8) , intent(inout) :: output(isc:iec,jsc:jec,lbd:ubd)!< Output 3D array
+  logical, optional   , intent(in)    :: do_sum  !< If true, sums the data
+  real (ESMF_KIND_R8), optional,  intent(in) :: areacor(:) !< flux area correction factors
+                                                           !! applicable to meshes
+  integer             , intent(out)   :: rc      !< Return code
+
+  ! local variables
+  type(ESMF_StateItem_Flag)     :: itemFlag
+  integer                       :: n, i, j, i1, j1, u
+  integer                       :: lbnd1,lbnd2
+  real(ESMF_KIND_R8), pointer   :: dataPtr2d(:,:)
+  character(len=*)  , parameter :: subname='(MOM_cap_methods:state_getimport_3d)'
+  ! ----------------------------------------------
+
+  rc = ESMF_SUCCESS
+
+  call ESMF_StateGet(State, trim(fldname), itemFlag, rc=rc)
+  if (itemFlag /= ESMF_STATEITEM_NOTFOUND) then
+
+     if (geomtype == ESMF_GEOMTYPE_MESH) then
+
+        ! get field pointer
+        call state_getfldptr(state, trim(fldname), dataptr2d, rc)
+        if (ChkErr(rc,__LINE__,u_FILE_u)) return
+
+        ! determine output array and apply area correction if present
+        do u = lbd, ubd ! ungridded dims
+           n = 0
+           do j = jsc,jec
+              do i = isc,iec
+                 n = n + 1
+                 if (present(do_sum)) then
+                    if (present(areacor)) then
+                       output(i,j,u)  = output(i,j,u) + dataPtr2d(u,n) * areacor(n)
+                    else
+                       output(i,j,u)  = output(i,j,u) + dataPtr2d(u,n)
+                    end if
+                 else
+                    if (present(areacor)) then
+                       output(i,j,u)  = dataPtr2d(u,n) * areacor(n)
+                    else
+                       output(i,j,u)  = dataPtr2d(u,n)
+                    end if
+                 endif
+              enddo
+           enddo
+         enddo
+
+     else if (geomtype == ESMF_GEOMTYPE_GRID) then
+        call ESMF_LogWrite(trim(subname)//": ERROR ungridded dimensions not supported in MOM6 nuopc cap when "// &
+         "ESMF_GEOMTYPE_GRID is used. Use ESMF_GEOMTYPE_MESH instead.", ESMF_LOGMSG_ERROR)
+        rc = ESMF_FAILURE
+        return
+     endif
+
+  endif
+
+end subroutine State_GetImport_3d
 
 !> Map input array to export state
 subroutine State_SetExport(state, fldname, isc, iec, jsc, jec, input, ocean_grid, areacor, rc)
