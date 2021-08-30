@@ -331,6 +331,12 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
       enddo ; enddo
     endif
 
+    ! Increase EKE by a full time-steps worth of source
+    !$OMP parallel do default(shared)
+    do j=js,je ; do i=is,ie
+      MEKE%MEKE(i,j) = (MEKE%MEKE(i,j) + sdt*src(i,j))*G%mask2dT(i,j)
+    enddo ; enddo
+
     if (use_drag_rate) then
       ! Calculate a viscous drag rate (includes BBL contributions from mean flow and eddies)
       !$OMP parallel do default(shared)
