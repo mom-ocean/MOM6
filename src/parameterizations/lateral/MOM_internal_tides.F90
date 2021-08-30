@@ -2324,7 +2324,7 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
                "The default is 2pi/10 km, as in St.Laurent et al. 2002.", &
                units="m-1", default=8.e-4*atan(1.0), scale=US%L_to_m)
   call get_param(param_file, mdl, "KAPPA_H2_FACTOR", kappa_h2_factor, &
-               "A scaling factor for the roughness amplitude with n"//&
+               "A scaling factor for the roughness amplitude with "//&
                "INT_TIDE_DISSIPATION.",  units="nondim", default=1.0)
 
   ! Allocate various arrays needed for loss rates
