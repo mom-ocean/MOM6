@@ -243,7 +243,8 @@ subroutine MESO_surface_forcing_init(Time, G, US, param_file, diag, CS)
                  "parameters from vertical units of m to kg m-2.", &
                  units="kg m-3", default=1035.0, scale=US%kg_m3_to_R)
   call get_param(param_file, mdl, "GUST_CONST", CS%gust_const, &
-                 "The background gustiness in the winds.", units="Pa", default=0.0)
+                 "The background gustiness in the winds.", units="Pa", default=0.0, &
+                 scale=US%kg_m3_to_R*US%m_s_to_L_T**2*US%L_to_Z)
 
   call get_param(param_file, mdl, "RESTOREBUOY", CS%restorebuoy, &
                  "If true, the buoyancy fluxes drive the model back "//&

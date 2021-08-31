@@ -81,7 +81,7 @@ type, public :: MEKE_CS ; private
   real :: MEKE_advection_factor !< A scaling in front of the advection of MEKE [nondim]
   real :: MEKE_topographic_beta !< Weight for how much topographic beta is considered
                                 !! when computing beta in Rhines scale [nondim]
-  real :: MEKE_restoring_rate !< Inverse of the timescale used to nudge MEKE toward its equilibrium value [s-1].
+  real :: MEKE_restoring_rate !< Inverse of the timescale used to nudge MEKE toward its equilibrium value [T-1 ~> s-1].
 
   logical :: kh_flux_enabled !< If true, lateral diffusive MEKE flux is enabled.
   logical :: initialize !< If True, invokes a steady state solver to calculate MEKE.
@@ -350,6 +350,10 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
       enddo ; enddo
     endif
 
+    if (CS%debug) then
+      call hchksum(src, "MEKE src", G%HI, haloshift=0, scale=US%L_to_m**2*US%s_to_T**3)
+    endif
+
     ! Increase EKE by a full time-steps worth of source
     !$OMP parallel do default(shared)
     do j=js,je ; do i=is,ie
@@ -543,6 +547,10 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
         endif
       endif
     endif ! MEKE_KH>=0
+
+    if (CS%debug) then
+      call hchksum(MEKE%MEKE, "MEKE post-update MEKE", G%HI, haloshift=0, scale=US%L_T_to_m_s**2)
+    endif
 
  !   do j=js,je ; do i=is,ie
  !     MEKE%MEKE(i,j) =  MAX(MEKE%MEKE(i,j),0.0)
@@ -976,7 +984,7 @@ subroutine MEKE_lengthScales_0d(CS, US, area, beta, depth, Rd_dx, SN, EKE, & ! Z
       Leady = 0.
     endif
     if (CS%use_min_lscale) then
-      LmixScale = 1.e7
+      LmixScale = 1.e7*US%m_to_L
       if (CS%aDeform*Ldeform > 0.) LmixScale = min(LmixScale,CS%aDeform*Ldeform)
       if (CS%aFrict *Lfrict  > 0.) LmixScale = min(LmixScale,CS%aFrict *Lfrict)
       if (CS%aRhines*Lrhines > 0.) LmixScale = min(LmixScale,CS%aRhines*Lrhines)
@@ -1088,7 +1096,7 @@ logical function MEKE_init(Time, G, US, param_file, diag, CS, MEKE, restart_CS)
   if (CS%MEKE_equilibrium_restoring) then
     call get_param(param_file, mdl, "MEKE_RESTORING_TIMESCALE", MEKE_restoring_timescale, &
                    "The timescale used to nudge MEKE toward its equilibrium value.", units="s", &
-                   default=1e6, scale=US%T_to_s)
+                   default=1e6, scale=US%s_to_T)
     CS%MEKE_restoring_rate = 1.0 / MEKE_restoring_timescale
   endif
 

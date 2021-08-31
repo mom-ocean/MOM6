@@ -506,10 +506,10 @@ subroutine calc_Visbeck_coeffs_old(h, slope_x, slope_y, N2_u, N2_v, G, GV, US, C
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),    intent(in)    :: h  !< Layer thickness [H ~> m or kg m-2]
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)+1), intent(in)    :: slope_x !< Zonal isoneutral slope
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)+1), intent(in)    :: N2_u    !< Buoyancy (Brunt-Vaisala) frequency
-                                                                         !! at u-points [T-2 ~> s-2]
+                                                                         !! at u-points [L2 Z-2 T-2 ~> s-2]
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)+1), intent(in)    :: slope_y !< Meridional isoneutral slope
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)+1), intent(in)    :: N2_v    !< Buoyancy (Brunt-Vaisala) frequency
-                                                                         !! at v-points [T-2 ~> s-2]
+                                                                         !! at v-points [L2 Z-2 T-2 ~> s-2]
   type(unit_scale_type),                        intent(in)    :: US !< A dimensional unit scaling type
   type(VarMix_CS),                              pointer       :: CS !< Variable mixing coefficients
   type(ocean_OBC_type),               optional, pointer       :: OBC !< Open boundaries control structure.
@@ -654,9 +654,10 @@ subroutine calc_Visbeck_coeffs_old(h, slope_x, slope_y, N2_u, N2_v, G, GV, US, C
   endif
 
   if (CS%debug) then
-    call uvchksum("calc_Visbeck_coeffs_old slope_[xy]", slope_x, slope_y, G%HI, haloshift=1)
+    call uvchksum("calc_Visbeck_coeffs_old slope_[xy]", slope_x, slope_y, G%HI, &
+                  scale=US%Z_to_L, haloshift=1)
     call uvchksum("calc_Visbeck_coeffs_old N2_u, N2_v", N2_u, N2_v, G%HI, &
-                  scale=US%s_to_T**2, scalar_pair=.true.)
+                  scale=US%L_to_Z**2 * US%s_to_T**2, scalar_pair=.true.)
     call uvchksum("calc_Visbeck_coeffs_old SN_[uv]", CS%SN_u, CS%SN_v, G%HI, &
                   scale=US%s_to_T, scalar_pair=.true.)
   endif
@@ -1484,7 +1485,7 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
     allocate(CS%Depth_fn_v(isd:ied,JsdB:JedB))     ; CS%Depth_fn_v(:,:) = 0.0
     call get_param(param_file, mdl, "DEPTH_SCALED_KHTH_H0", CS%depth_scaled_khth_h0, &
     "The depth above which KHTH is scaled away.",&
-    units="m", default=1000.)
+    units="m", scale=US%m_to_Z, default=1000.)
     call get_param(param_file, mdl, "DEPTH_SCALED_KHTH_EXP", CS%depth_scaled_khth_exp, &
     "The exponent used in the depth dependent scaling function for KHTH.",&
     units="nondim", default=3.0)

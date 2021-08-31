@@ -1208,11 +1208,19 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
                                  CS%KPP_buoy_flux, CS%KPP_temp_flux, CS%KPP_salt_flux)
 
     ! The KPP scheme calculates boundary layer diffusivities and non-local transport.
-    call KPP_compute_BLD(CS%KPP_CSp, G, GV, US, h, tv%T, tv%S, u, v, tv, &
-                         fluxes%ustar, CS%KPP_buoy_flux, Waves=Waves)
+    if ( associated(fluxes%lamult) ) then
+      call KPP_compute_BLD(CS%KPP_CSp, G, GV, US, h, tv%T, tv%S, u, v, tv, &
+                           fluxes%ustar, CS%KPP_buoy_flux, Waves=Waves, lamult=fluxes%lamult)
 
-    call KPP_calculate(CS%KPP_CSp, G, GV, US, h, fluxes%ustar, CS%KPP_buoy_flux, Kd_heat, &
+      call KPP_calculate(CS%KPP_CSp, G, GV, US, h, fluxes%ustar, CS%KPP_buoy_flux, Kd_heat, &
+                       Kd_salt, visc%Kv_shear, CS%KPP_NLTheat, CS%KPP_NLTscalar, Waves=Waves, lamult=fluxes%lamult)
+    else
+      call KPP_compute_BLD(CS%KPP_CSp, G, GV, US, h, tv%T, tv%S, u, v, tv, &
+                           fluxes%ustar, CS%KPP_buoy_flux, Waves=Waves)
+
+      call KPP_calculate(CS%KPP_CSp, G, GV, US, h, fluxes%ustar, CS%KPP_buoy_flux, Kd_heat, &
                        Kd_salt, visc%Kv_shear, CS%KPP_NLTheat, CS%KPP_NLTscalar, Waves=Waves)
+    endif
 
     if (associated(Hml)) then
       call KPP_get_BLD(CS%KPP_CSp, Hml(:,:), G, US)
