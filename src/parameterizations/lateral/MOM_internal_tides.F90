@@ -96,6 +96,9 @@ type, public :: int_tide_CS ; private
   real :: decay_rate    !< A constant rate at which internal tide energy is
                         !! lost to the interior ocean internal wave field.
   real :: cdrag         !< The bottom drag coefficient [nondim].
+  real :: drag_min_depth !< The minimum total ocean thickness that will be used in the denominator
+                        !! of the quadratic drag terms for internal tides when
+                        !! INTERNAL_TIDE_QUAD_DRAG is true [Z ~> m]
   logical :: apply_background_drag
                         !< If true, apply a drag due to background processes as a sink.
   logical :: apply_bottom_drag
@@ -185,6 +188,7 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
     tot_En, &      ! energy summed over angles, modes, frequencies [R Z3 T-2 ~> J m-2]
     tot_leak_loss, tot_quad_loss, tot_itidal_loss, tot_Froude_loss, tot_allprocesses_loss, &
                    ! energy loss rates summed over angle, freq, and mode [R Z3 T-3 ~> W m-2]
+    htot, &        ! The vertical sum of the layer thicknesses [H ~> m or kg m-2]
     drag_scale, &  ! bottom drag scale [T-1 ~> s-1]
     itidal_loss_mode, allprocesses_loss_mode
                    ! energy loss rates for a given mode and frequency (summed over angles) [R Z3 T-3 ~> W m-2]
@@ -200,7 +204,7 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
   real :: En_initial, Delta_E_check                  ! Energies for debugging [R Z3 T-2 ~> J m-2]
   real :: TKE_Froude_loss_check, TKE_Froude_loss_tot ! Energy losses for debugging [R Z3 T-3 ~> W m-2]
   character(len=160) :: mesg  ! The text of an error message
-  integer :: a, m, fr, i, j, is, ie, js, je, isd, ied, jsd, jed, nAngle, nzm
+  integer :: a, m, fr, i, j, k, is, ie, js, je, isd, ied, jsd, jed, nAngle, nzm
   integer :: id_g, jd_g         ! global (decomp-invar) indices (for debugging)
   type(group_pass_type), save :: pass_test, pass_En
   type(time_type) :: time_end
@@ -364,9 +368,12 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
 
   ! Extract the energy for mixing due to bottom drag-------------------------------
   if (CS%apply_bottom_drag) then
+    do j=jsd,jed ; do i=isd,ied ; htot(i,j) = 0.0 ; enddo ; enddo
+    do k=1,GV%ke ; do j=jsd,jed ; do i=isd,ied
+      htot(i,j) = htot(i,j) + h(i,j,k)
+    enddo ; enddo ; enddo
     do j=jsd,jed ; do i=isd,ied
-      ! Note the 1 m dimensional scale here.  Should this be a parameter?
-      I_D_here = 1.0 / (max(G%bathyT(i,j), 1.0*US%m_to_Z))
+      I_D_here = 1.0 / (max(GV%H_to_Z*htot(i,j), CS%drag_min_depth))
       drag_scale(i,j) = CS%cdrag * sqrt(max(0.0, US%L_to_Z**2*vel_btTide(i,j)**2 + &
                         tot_En(i,j) * I_rho0 * I_D_here)) * I_D_here
     enddo ; enddo
@@ -2147,20 +2154,20 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
   ! Local variables
   real                              :: Angle_size ! size of wedges, rad
   real, allocatable                 :: angles(:)  ! orientations of wedge centers, rad
-  real, allocatable, dimension(:,:) :: h2         ! topographic roughness scale, m^2
-  real                              :: kappa_itides, kappa_h2_factor
-                                                  ! characteristic topographic wave number
-                                                  ! and a scaling factor
-  real, allocatable                 :: ridge_temp(:,:)
-                                                  ! array for temporary storage of flags
+  real, dimension(:,:), allocatable :: h2         ! topographic roughness scale squared [Z2 ~> m2]
+  real                              :: kappa_itides ! characteristic topographic wave number [L-1 ~> m-1]
+  real, dimension(:,:), allocatable :: ridge_temp ! array for temporary storage of flags
                                                   ! of cells with double-reflecting ridges
-  logical                           :: use_int_tides, use_temperature
-  real    :: period_1  ! The period of the gravest modeled mode [T ~> s]
+  logical :: use_int_tides, use_temperature
+  real    :: kappa_h2_factor    ! A roughness scaling factor [nondim]
+  real    :: RMS_roughness_frac ! The maximum RMS topographic roughness as a fraction of the
+                                ! nominal ocean depth, or a negative value for no limit [nondim]
+  real    :: period_1           ! The period of the gravest modeled mode [T ~> s]
   integer :: num_angle, num_freq, num_mode, m, fr
   integer :: isd, ied, jsd, jed, a, id_ang, i, j
   type(axes_grp) :: axes_ang
   ! This include declares and sets the variable "version".
-#include "version_variable.h"
+# include "version_variable.h"
   character(len=40)  :: mdl = "MOM_internal_tides" ! This module's name.
   character(len=16), dimension(8) :: freq_name
   character(len=40)  :: var_name
@@ -2287,16 +2294,20 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
                  "1st-order upwind advection.  This scheme is highly "//&
                  "continuity solver.  This scheme is highly "//&
                  "diffusive but may be useful for debugging.", default=.false.)
-  call get_param(param_file, mdl, "INTERNAL_TIDE_BACKGROUND_DRAG", &
-                 CS%apply_background_drag, "If true, the internal tide "//&
-                 "ray-tracing advection uses a background drag term as a sink.",&
-                 default=.false.)
+  call get_param(param_file, mdl, "INTERNAL_TIDE_BACKGROUND_DRAG", CS%apply_background_drag, &
+                 "If true, the internal tide ray-tracing advection uses a background drag "//&
+                 "term as a sink.", default=.false.)
   call get_param(param_file, mdl, "INTERNAL_TIDE_QUAD_DRAG", CS%apply_bottom_drag, &
                  "If true, the internal tide ray-tracing advection uses "//&
                  "a quadratic bottom drag term as a sink.", default=.false.)
   call get_param(param_file, mdl, "INTERNAL_TIDE_WAVE_DRAG", CS%apply_wave_drag, &
                  "If true, apply scattering due to small-scale roughness as a sink.", &
                  default=.false.)
+  call get_param(param_file, mdl, "INTERNAL_TIDE_DRAG_MIN_DEPTH", CS%drag_min_depth, &
+                 "The minimum total ocean thickness that will be used in the denominator "//&
+                 "of the quadratic drag terms for internal tides.", &
+                 units="m", default=1.0, scale=US%m_to_Z, do_not_log=.not.CS%apply_bottom_drag)
+  CS%drag_min_depth = MAX(CS%drag_min_depth, GV%H_subroundoff * GV%H_to_Z)
   call get_param(param_file, mdl, "INTERNAL_TIDE_FROUDE_DRAG", CS%apply_Froude_drag, &
                  "If true, apply wave breaking as a sink.", &
                  default=.false.)
@@ -2320,7 +2331,7 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
                "The default is 2pi/10 km, as in St.Laurent et al. 2002.", &
                units="m-1", default=8.e-4*atan(1.0), scale=US%L_to_m)
   call get_param(param_file, mdl, "KAPPA_H2_FACTOR", kappa_h2_factor, &
-               "A scaling factor for the roughness amplitude with n"//&
+               "A scaling factor for the roughness amplitude with "//&
                "INT_TIDE_DISSIPATION.",  units="nondim", default=1.0)
 
   ! Allocate various arrays needed for loss rates
@@ -2347,10 +2358,18 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
           fail_if_missing=.true.)
   filename = trim(CS%inputdir) // trim(h2_file)
   call log_param(param_file, mdl, "INPUTDIR/H2_FILE", filename)
-  call MOM_read_data(filename, 'h2', h2, G%domain, scale=US%m_to_Z)
+  call get_param(param_file, mdl, "INTERNAL_TIDE_ROUGHNESS_FRAC", RMS_roughness_frac, &
+                 "The maximum RMS topographic roughness as a fraction of the nominal ocean depth, "//&
+                 "or a negative value for no limit.",  units="nondim", default=0.1)
+
+  call MOM_read_data(filename, 'h2', h2, G%domain, scale=US%m_to_Z**2)
   do j=G%jsc,G%jec ; do i=G%isc,G%iec
-    ! Restrict rms topo to 10 percent of column depth.
-    h2(i,j) = min(0.01*(G%bathyT(i,j))**2, h2(i,j))
+    ! Restrict RMS topographic roughness to a fraction (10 percent by default) of the column depth.
+    if (RMS_roughness_frac >= 0.0) then
+      h2(i,j) = max(min((RMS_roughness_frac*G%bathyT(i,j))**2, h2(i,j)), 0.0)
+    else
+      h2(i,j) = max(h2(i,j), 0.0)
+    endif
     ! Compute the fixed part; units are [R L-2 Z3 ~> kg m-2] here
     ! will be multiplied by N and the squared near-bottom velocity to get into [R Z3 T-3 ~> W m-2]
     CS%TKE_itidal_loss_fixed(i,j) = 0.5*kappa_h2_factor*GV%Rho0 * US%L_to_Z*kappa_itides * h2(i,j)
