@@ -450,10 +450,10 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
     allocate(mask_in(id,jdp)) ; mask_in(:,:) = 0.0
   endif
 
-  max_depth = maxval(G%bathyT)
+  max_depth = maxval(G%bathyT(:,:)) + G%Z_ref
   call max_across_PEs(max_depth)
 
-  if (z_edges_in(kd+1)<max_depth) z_edges_in(kd+1)=max_depth
+  if (z_edges_in(kd+1) < max_depth) z_edges_in(kd+1) = max_depth
   roundoff = 3.0*EPSILON(missing_value)
 
   ! loop through each data level and interpolate to model grid.
@@ -562,7 +562,8 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
           nPoints = nPoints + 1
           varAvg = varAvg + tr_out(i,j)
         endif
-        if (G%mask2dT(i,j) == 1.0 .and. z_edges_in(k) <= G%bathyT(i,j) .and. mask_out(i,j) < 1.0) &
+        if ((G%mask2dT(i,j) == 1.0) .and. (z_edges_in(k) <= G%bathyT(i,j) + G%Z_ref) .and. &
+            (mask_out(i,j) < 1.0)) &
           fill(i,j)=1.0
       enddo
     enddo
@@ -762,7 +763,7 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, t
   z_edges_in(kd+1) = 2.0*z_in(kd) - z_in(kd-1)
 
 
-  max_depth = maxval(G%bathyT)
+  max_depth = maxval(G%bathyT) + G%Z_ref
   call max_across_PEs(max_depth)
 
   if (z_edges_in(kd+1)<max_depth) z_edges_in(kd+1)=max_depth
@@ -842,7 +843,7 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, t
           nPoints = nPoints + 1
           varAvg = varAvg + tr_out(i,j)
         endif
-        if ((G%mask2dT(i,j) == 1.0) .and. (z_edges_in(k) <= G%bathyT(i,j)) .and. &
+        if ((G%mask2dT(i,j) == 1.0) .and. (z_edges_in(k) <= G%bathyT(i,j) + G%Z_ref) .and. &
             (mask_out(i,j) < 1.0)) &
           fill(i,j) = 1.0
       enddo ;  enddo
