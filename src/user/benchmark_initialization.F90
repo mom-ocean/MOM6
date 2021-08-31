@@ -82,13 +82,15 @@ end subroutine benchmark_initialize_topography
 !! by finding the depths of interfaces in a specified latitude-dependent
 !! temperature profile with an exponentially decaying thermocline on top of a
 !! linear stratification.
-subroutine benchmark_initialize_thickness(h, G, GV, US, param_file, eqn_of_state, &
+subroutine benchmark_initialize_thickness(h, depth_tot, G, GV, US, param_file, eqn_of_state, &
                                           P_Ref, just_read_params)
   type(ocean_grid_type),   intent(in)  :: G           !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)  :: GV          !< The ocean's vertical grid structure.
   type(unit_scale_type),   intent(in)  :: US !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(out) :: h           !< The thickness that is being initialized [H ~> m or kg m-2].
+  real, dimension(SZI_(G),SZJ_(G)), &
+                           intent(in)  :: depth_tot !< The nominal total depth of the ocean [Z ~> m]
   type(param_file_type),   intent(in)  :: param_file  !< A structure indicating the open file
                                                       !! to parse for model parameter values.
   type(EOS_type),          pointer     :: eqn_of_state !< Equation of state structure
@@ -181,7 +183,7 @@ subroutine benchmark_initialize_thickness(h, G, GV, US, param_file, eqn_of_state
     ! are set to insure that: 1. each layer is at least  Gv%Angstrom_m thick, and
     ! 2. the interfaces are where they should be based on the resting depths and interface
     ! height perturbations, as long at this doesn't interfere with 1.
-    eta1D(nz+1) = -G%bathyT(i,j)
+    eta1D(nz+1) = -depth_tot(i,j)
 
     do k=nz,2,-1
       T_int = 0.5*(T0(k) + T0(k-1))

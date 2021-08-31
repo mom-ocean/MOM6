@@ -1136,7 +1136,6 @@ subroutine restore_state(filename, directory, day, G, CS)
 
   ! Check the remaining files for different times and issue a warning
   ! if they differ from the first time.
-  if (is_root_pe()) then
     do m = n+1,num_file
       call get_file_times(IO_handles(n), time_vals, ntime)
       if (ntime < 1) cycle
@@ -1144,14 +1143,13 @@ subroutine restore_state(filename, directory, day, G, CS)
       t2 = time_vals(1)
       deallocate(time_vals)
 
-      if (t1 /= t2) then
+      if (t1 /= t2 .and. is_root_PE()) then
         write(mesg,'("WARNING: Restart file ",I2," has time ",F10.4,"whereas &
          &simulation is restarted at ",F10.4," (differing by ",F10.4,").")')&
                m,t1,t2,t1-t2
         call MOM_error(WARNING, "MOM_restart: "//mesg)
       endif
     enddo
-  endif
 
   ! Read each variable from the first file in which it is found.
   do n=1,num_file

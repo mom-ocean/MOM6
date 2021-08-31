@@ -65,7 +65,7 @@ AS_IF([test "x$with_driver" != "x"],
 MODEL_FRAMEWORK=${srcdir}/config_src/infra/FMS1
 AC_ARG_WITH([framework],
   AS_HELP_STRING([--with-framework=fms1|fms2], [Select the model framework]))
-AS_CASE([with_framework],
+AS_CASE(["$with_framework"],
   [fms1], [MODEL_FRAMEWORK=${srcdir}/config_src/infra/FMS1],
   [fms2], [MODEL_FRAMEWORK=${srcdir}/config_src/infra/FMS2],
   [MODEL_FRAMEWORK=${srcdir}/config_src/infra/FMS1]
