@@ -535,29 +535,29 @@ subroutine initialize_ice_shelf_dyn(param_file, Time, ISS, CS, G, US, diag, new_
 
     ! initialize basal friction coefficients
    if (new_sim) then
-    call initialize_ice_C_basal_friction(CS%C_basal_friction, G, US, param_file)
-    call pass_var(CS%C_basal_friction, G%domain)
+     call initialize_ice_C_basal_friction(CS%C_basal_friction, G, US, param_file)
+     call pass_var(CS%C_basal_friction, G%domain)
 
-    ! initialize ice-stiffness AGlen
-    call initialize_ice_AGlen(CS%AGlen_visc, G, US, param_file)
-    call pass_var(CS%AGlen_visc, G%domain)
+     ! initialize ice-stiffness AGlen
+     call initialize_ice_AGlen(CS%AGlen_visc, G, US, param_file)
+     call pass_var(CS%AGlen_visc, G%domain)
 
-    !initialize boundary conditions
-    call initialize_ice_shelf_boundary_from_file(CS%u_face_mask_bdry, CS%v_face_mask_bdry, &
+     !initialize boundary conditions
+     call initialize_ice_shelf_boundary_from_file(CS%u_face_mask_bdry, CS%v_face_mask_bdry, &
                 CS%u_bdry_val, CS%v_bdry_val, CS%umask, CS%vmask, CS%h_bdry_val, &
                  CS%thickness_bdry_val, ISS%hmask,  ISS%h_shelf, G, US, param_file )
-    call pass_var(ISS%hmask, G%domain)
-    call pass_var(CS%h_bdry_val, G%domain)
-    call pass_var(CS%thickness_bdry_val, G%domain)
-    call pass_vector(CS%u_bdry_val, CS%v_bdry_val, G%domain, TO_ALL, BGRID_NE)
-    call pass_vector(CS%u_face_mask_bdry, CS%v_face_mask_bdry, G%domain, TO_ALL, BGRID_NE)
+     call pass_var(ISS%hmask, G%domain)
+     call pass_var(CS%h_bdry_val, G%domain)
+     call pass_var(CS%thickness_bdry_val, G%domain)
+     call pass_vector(CS%u_bdry_val, CS%v_bdry_val, G%domain, TO_ALL, BGRID_NE)
+     call pass_vector(CS%u_face_mask_bdry, CS%v_face_mask_bdry, G%domain, TO_ALL, BGRID_NE)
 
-    !initialize ice flow velocities from file
-    call initialize_ice_flow_from_file(CS%bed_elev,CS%u_shelf, CS%v_shelf,CS%ground_frac, ISS%hmask,ISS%h_shelf, &
+     !initialize ice flow velocities from file
+     call initialize_ice_flow_from_file(CS%bed_elev,CS%u_shelf, CS%v_shelf,CS%ground_frac, ISS%hmask,ISS%h_shelf, &
             G, US, param_file)
-    call pass_vector(CS%u_shelf, CS%v_shelf, G%domain, TO_ALL, BGRID_NE)
-    call pass_var(CS%bed_elev, G%domain,CENTER)
-    call update_velocity_masks(CS, G, ISS%hmask, CS%umask, CS%vmask, CS%u_face_mask, CS%v_face_mask)
+     call pass_vector(CS%u_shelf, CS%v_shelf, G%domain, TO_ALL, BGRID_NE)
+     call pass_var(CS%bed_elev, G%domain,CENTER)
+     call update_velocity_masks(CS, G, ISS%hmask, CS%umask, CS%vmask, CS%u_face_mask, CS%v_face_mask)
    endif
   ! Register diagnostics.
     CS%id_u_shelf = register_diag_field('ice_shelf_model','u_shelf',CS%diag%axesB1, Time, &
@@ -682,46 +682,46 @@ subroutine update_ice_shelf(CS, ISS, G, US, time_step, Time, ocean_mass, coupled
   coupled_GL = .false.
   if (present(ocean_mass) .and. present(coupled_grounding)) coupled_GL = coupled_grounding
 !
-  call ice_shelf_advect(CS, ISS, G, time_step, Time)
-  CS%elapsed_velocity_time = CS%elapsed_velocity_time + time_step
-  if (CS%elapsed_velocity_time >= CS%velocity_update_time_step) update_ice_vel = .true.
+   call ice_shelf_advect(CS, ISS, G, time_step, Time)
+   CS%elapsed_velocity_time = CS%elapsed_velocity_time + time_step
+   if (CS%elapsed_velocity_time >= CS%velocity_update_time_step) update_ice_vel = .true.
 
-  if (coupled_GL) then
-    call update_OD_ffrac(CS, G, US, ocean_mass, update_ice_vel)
-  elseif (update_ice_vel) then
-    call update_OD_ffrac_uncoupled(CS, G, ISS%h_shelf(:,:))
-  endif
+   if (coupled_GL) then
+     call update_OD_ffrac(CS, G, US, ocean_mass, update_ice_vel)
+   elseif (update_ice_vel) then
+     call update_OD_ffrac_uncoupled(CS, G, ISS%h_shelf(:,:))
+   endif
 
 
-  if (update_ice_vel) then
-    call ice_shelf_solve_outer(CS, ISS, G, US, CS%u_shelf, CS%v_shelf,CS%taudx_shelf,CS%taudy_shelf, iters, Time)
-  endif
+   if (update_ice_vel) then
+     call ice_shelf_solve_outer(CS, ISS, G, US, CS%u_shelf, CS%v_shelf,CS%taudx_shelf,CS%taudy_shelf, iters, Time)
+   endif
 
 !  call ice_shelf_temp(CS, ISS, G, US, time_step, ISS%water_flux, Time)
 
-  if (update_ice_vel) then
-    call enable_averages(CS%elapsed_velocity_time, Time, CS%diag)
-    if (CS%id_col_thick > 0) call post_data(CS%id_col_thick, CS%OD_av, CS%diag)
-    if (CS%id_u_shelf > 0) call post_data(CS%id_u_shelf, CS%u_shelf, CS%diag)
-    if (CS%id_v_shelf > 0) call post_data(CS%id_v_shelf, CS%v_shelf, CS%diag)
+   if (update_ice_vel) then
+     call enable_averages(CS%elapsed_velocity_time, Time, CS%diag)
+     if (CS%id_col_thick > 0) call post_data(CS%id_col_thick, CS%OD_av, CS%diag)
+     if (CS%id_u_shelf > 0) call post_data(CS%id_u_shelf, CS%u_shelf, CS%diag)
+     if (CS%id_v_shelf > 0) call post_data(CS%id_v_shelf, CS%v_shelf, CS%diag)
 !    if (CS%id_t_shelf > 0) call post_data(CS%id_t_shelf,CS%t_shelf,CS%diag)
-    if (CS%id_taudx_shelf > 0) call post_data(CS%id_taudx_shelf, CS%taudx_shelf, CS%diag)
-    if (CS%id_taudy_shelf > 0) call post_data(CS%id_taudy_shelf, CS%taudy_shelf, CS%diag)
-    if (CS%id_ground_frac > 0) call post_data(CS%id_ground_frac, CS%ground_frac,CS%diag)
-    if (CS%id_OD_av >0) call post_data(CS%id_OD_av, CS%OD_av,CS%diag)
-    if (CS%id_visc_shelf > 0) call post_data(CS%id_visc_shelf, CS%ice_visc,CS%diag)
-    if (CS%id_taub > 0) call post_data(CS%id_taub, CS%basal_traction,CS%diag)
+     if (CS%id_taudx_shelf > 0) call post_data(CS%id_taudx_shelf, CS%taudx_shelf, CS%diag)
+     if (CS%id_taudy_shelf > 0) call post_data(CS%id_taudy_shelf, CS%taudy_shelf, CS%diag)
+     if (CS%id_ground_frac > 0) call post_data(CS%id_ground_frac, CS%ground_frac,CS%diag)
+     if (CS%id_OD_av >0) call post_data(CS%id_OD_av, CS%OD_av,CS%diag)
+     if (CS%id_visc_shelf > 0) call post_data(CS%id_visc_shelf, CS%ice_visc,CS%diag)
+     if (CS%id_taub > 0) call post_data(CS%id_taub, CS%basal_traction,CS%diag)
 !!
-    if (CS%id_u_mask > 0) call post_data(CS%id_u_mask,CS%umask,CS%diag)
-    if (CS%id_v_mask > 0) call post_data(CS%id_v_mask,CS%vmask,CS%diag)
-    if (CS%id_ufb_mask > 0) call post_data(CS%id_ufb_mask,CS%u_face_mask_bdry,CS%diag)
-    if (CS%id_vfb_mask > 0) call post_data(CS%id_vfb_mask,CS%v_face_mask_bdry,CS%diag)
+     if (CS%id_u_mask > 0) call post_data(CS%id_u_mask,CS%umask,CS%diag)
+     if (CS%id_v_mask > 0) call post_data(CS%id_v_mask,CS%vmask,CS%diag)
+     if (CS%id_ufb_mask > 0) call post_data(CS%id_ufb_mask,CS%u_face_mask_bdry,CS%diag)
+     if (CS%id_vfb_mask > 0) call post_data(CS%id_vfb_mask,CS%v_face_mask_bdry,CS%diag)
 !    if (CS%id_t_mask > 0) call post_data(CS%id_t_mask,CS%tmask,CS%diag)
 
-    call disable_averaging(CS%diag)
+     call disable_averaging(CS%diag)
 
-    CS%elapsed_velocity_time = 0.0
-  endif
+     CS%elapsed_velocity_time = 0.0
+   endif
 
 end subroutine update_ice_shelf
 
@@ -868,13 +868,13 @@ end subroutine ice_shelf_advect
   CS%ground_frac(:,:) = 0.0
   allocate(Phisub(nsub,nsub,2,2,2,2)) ; Phisub(:,:,:,:,:,:) = 0.0
 
-    do j=G%jsc,G%jec
-     do i=G%isc,G%iec
-        if (rhoi_rhow * ISS%h_shelf(i,j) - G%bathyT(i,j) > 0) then
+  do j=G%jsc,G%jec
+    do i=G%isc,G%iec
+      if (rhoi_rhow * ISS%h_shelf(i,j) - G%bathyT(i,j) > 0) then
            float_cond(i,j) = 1.0
            CS%ground_frac(i,j) = 1.0
-        endif
-     enddo
+      endif
+    enddo
   enddo
 
   call calc_shelf_driving_stress(CS, ISS, G, US, taudx, taudy, CS%OD_av)
