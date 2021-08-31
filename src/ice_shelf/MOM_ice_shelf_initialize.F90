@@ -134,21 +134,21 @@ subroutine initialize_ice_thickness_from_file(h_shelf, area_shelf_h, hmask, G, U
   isc = G%isc ; jsc = G%jsc ; iec = G%iec ; jec = G%jec
 
   if (len_sidestress > 0.) then
-  do j=jsc,jec
-    do i=isc,iec
+    do j=jsc,jec
+      do i=isc,iec
 
       ! taper ice shelf in area where there is no sidestress -
       ! but do not interfere with hmask
 
-      if (G%geoLonCv(i,j) > len_sidestress) then
-        udh = exp(-(G%geoLonCv(i,j)-len_sidestress)/5.0) * h_shelf(i,j)
-        if (udh <= 25.0) then
-          h_shelf(i,j) = 0.0
-          area_shelf_h(i,j) = 0.0
-        else
+        if (G%geoLonCv(i,j) > len_sidestress) then
+          udh = exp(-(G%geoLonCv(i,j)-len_sidestress)/5.0) * h_shelf(i,j)
+          if (udh <= 25.0) then
+            h_shelf(i,j) = 0.0
+            area_shelf_h(i,j) = 0.0
+          else
           h_shelf(i,j) = udh
+          endif
         endif
-      endif
 
       ! update thickness mask
 
@@ -162,8 +162,8 @@ subroutine initialize_ice_thickness_from_file(h_shelf, area_shelf_h, hmask, G, U
       else
         call MOM_error(FATAL,mdl// " AREA IN CELL OUT OF RANGE")
       endif
+      enddo
     enddo
-  enddo
   endif
 end subroutine initialize_ice_thickness_from_file
 
