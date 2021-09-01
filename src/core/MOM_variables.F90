@@ -195,6 +195,9 @@ type, public :: accel_diag_ptrs
   real, pointer :: diag_hu(:,:,:) => NULL() !< layer thickness at u points
   real, pointer :: diag_hv(:,:,:) => NULL() !< layer thickness at v points
 
+  real, pointer :: visc_rem_u(:,:,:) => NULL() !< viscous remnant at u points
+  real, pointer :: visc_rem_v(:,:,:) => NULL() !< viscous remnant at v points
+
 end type accel_diag_ptrs
 
 !> Pointers to arrays with transports, which can later be used for derived diagnostics, like energy balances.
