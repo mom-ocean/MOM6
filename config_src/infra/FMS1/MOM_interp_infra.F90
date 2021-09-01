@@ -247,7 +247,13 @@ integer function init_extern_field(file, fieldname, MOM_domain, domain, verbose,
                                                  !! fatal error if the axis Cartesian attribute is
                                                  !! not set to a recognized value.
   logical,        optional, intent(in)  :: correct_leap_year_inconsistency !< If present and true,
-                                                 !! then allow for leap year inconsistency
+                    !!       Turns on a kluge for an inconsistency which may occur in a special case.
+                    !!       When the modulo time period (i.e. Time_end - Time_beg) is a whole number of years
+                    !!       and is not a multiple of 4, and the calendar in use has leap years, then it is
+                    !!       likely that the interpolation will involve mapping a common year onto a leap year.
+                    !!       In this case it is often desirable, but not absolutely necessary, to use data for
+                    !!       Feb 28 of the leap year when it is mapped onto a common year.
+                    !!       To turn this on, set correct_leap_year_inconsistency=.true.
 
 
   if (present(MOM_Domain)) then
