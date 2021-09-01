@@ -186,6 +186,7 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, GV, US, h, Time)
   real :: lambda       ! Offshore decay scale [L-1 ~> m-1]
   real :: omega        ! Wave frequency [T-1 ~> s-1]
   real :: PI
+  real :: depth_tot(SZI_(G),SZJ_(G))  ! The total depth of the ocean [Z ~> m]
   integer :: i, j, k, n, is, ie, js, je, isd, ied, jsd, jed, nz
   integer :: IsdB, IedB, JsdB, JedB
   real    :: mag_SSH ! An overall magnitude of the external wave sea surface height at the coastline [Z ~> m]
@@ -208,6 +209,13 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, GV, US, h, Time)
   time_sec = US%s_to_T*time_type_to_real(Time)
   PI = 4.0*atan(1.0)
   km_to_L_scale = 1000.0*US%m_to_L
+
+  do j=jsd,jed ; do i=isd,ied
+    depth_tot(i,j) = 0.0
+  enddo ; enddo
+  do k=1,nz ; do j=jsd,jed ; do i=isd,ied
+    depth_tot(i,j) = depth_tot(i,j) + GV%H_to_Z * h(i,j,k)
+  enddo ; enddo ; enddo
 
   if (CS%mode == 0) then
     mag_SSH = 1.0*US%m_to_Z
@@ -245,20 +253,17 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, GV, US, h, Time)
         y = -(x1 - CS%coast_offset1) * sina + y1 * cosa
         if (CS%mode == 0) then
           ! Use inside bathymetry
-          cff = sqrt(GV%g_Earth * G%bathyT(i+1,j) )
+          cff = sqrt(GV%g_Earth * depth_tot(i+1,j) )
           val2 = mag_SSH * exp(- CS%F_0 * y / cff)
           segment%eta(I,j) = GV%Z_to_H*val2 * cos(omega * time_sec)
-          segment%normal_vel_bt(I,j) = (val2 * (val1 * cff * cosa / &
-                 (G%bathyT(i+1,j) )) )
+          segment%normal_vel_bt(I,j) = val2 * (val1 * cff * cosa / depth_tot(i+1,j) )
           if (segment%nudged) then
             do k=1,nz
-              segment%nudged_normal_vel(I,j,k) = (val2 * (val1 * cff * cosa / &
-                     (G%bathyT(i+1,j))) )
+              segment%nudged_normal_vel(I,j,k) = val2 * (val1 * cff * cosa / depth_tot(i+1,j) )
             enddo
           elseif (segment%specified) then
             do k=1,nz
-              segment%normal_vel(I,j,k) = (val2 * (val1 * cff * cosa / &
-                     (G%bathyT(i+1,j) )) )
+              segment%normal_vel(I,j,k) = val2 * (val1 * cff * cosa / depth_tot(i+1,j) )
               segment%normal_trans(I,j,k) = segment%normal_vel(I,j,k) * h(i+1,j,k) * G%dyCu(I,j)
             enddo
           endif
@@ -288,11 +293,11 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, GV, US, h, Time)
           y1 = km_to_L_scale * G%geoLatBu(I,J)
           x = (x1 - CS%coast_offset1) * cosa + y1 * sina
           y = - (x1 - CS%coast_offset1) * sina + y1 * cosa
-          cff = sqrt(GV%g_Earth * G%bathyT(i+1,j) )
+          cff = sqrt(GV%g_Earth * depth_tot(i+1,j) )
           val2 = mag_SSH * exp(- CS%F_0 * y / cff)
           if (CS%mode == 0) then ; do k=1,nz
             segment%tangential_vel(I,J,k) = (val1 * val2 * cff * sina) / &
-               ( 0.5*(G%bathyT(i+1,j+1) +  G%bathyT(i+1,j) ) )
+               ( 0.5*(depth_tot(i+1,j+1) +  depth_tot(i+1,j) ) )
 
           enddo ; endif
         enddo ; enddo
@@ -306,20 +311,17 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, GV, US, h, Time)
         x = (x1 - CS%coast_offset1) * cosa + y1 * sina
         y = - (x1 - CS%coast_offset1) * sina + y1 * cosa
         if (CS%mode == 0) then
-          cff = sqrt(GV%g_Earth * G%bathyT(i,j+1) )
+          cff = sqrt(GV%g_Earth * depth_tot(i,j+1) )
           val2 = mag_SSH * exp(- 0.5 * (G%CoriolisBu(I,J) + G%CoriolisBu(I-1,J)) * y / cff)
           segment%eta(I,j) = GV%Z_to_H*val2 * cos(omega * time_sec)
-          segment%normal_vel_bt(I,j) = (val1 * cff * sina / &
-                 (G%bathyT(i,j+1) )) * val2
+          segment%normal_vel_bt(I,j) = (val1 * cff * sina / depth_tot(i,j+1) ) * val2
           if (segment%nudged) then
             do k=1,nz
-              segment%nudged_normal_vel(I,j,k) = (val1 * cff * sina / &
-                     (G%bathyT(i,j+1) )) * val2
+              segment%nudged_normal_vel(I,j,k) = (val1 * cff * sina / depth_tot(i,j+1)) * val2
             enddo
           elseif (segment%specified) then
             do k=1,nz
-              segment%normal_vel(I,j,k) = (val1 * cff * sina / &
-                     (G%bathyT(i,j+1) )) * val2
+              segment%normal_vel(I,j,k) = (val1 * cff * sina / depth_tot(i,j+1) ) * val2
               segment%normal_trans(i,J,k) = segment%normal_vel(i,J,k) * h(i,j+1,k) * G%dxCv(i,J)
             enddo
           endif
@@ -347,11 +349,11 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, GV, US, h, Time)
           y1 = km_to_L_scale * G%geoLatBu(I,J)
           x = (x1 - CS%coast_offset1) * cosa + y1 * sina
           y = - (x1 - CS%coast_offset1) * sina + y1 * cosa
-          cff = sqrt(GV%g_Earth * G%bathyT(i,j+1) )
+          cff = sqrt(GV%g_Earth * depth_tot(i,j+1) )
           val2 = mag_SSH * exp(- 0.5 * (G%CoriolisBu(I,J) + G%CoriolisBu(I-1,J)) * y / cff)
           if (CS%mode == 0) then ; do k=1,nz
-            segment%tangential_vel(I,J,k) = ((val1 * val2 * cff * sina) / &
-                ( 0.5*((G%bathyT(i+1,j+1)) + G%bathyT(i,j+1))) )
+            segment%tangential_vel(I,J,k) = (val1 * val2 * cff * sina) / &
+                ( 0.5*(depth_tot(i+1,j+1) + depth_tot(i,j+1)) )
           enddo ; endif
         enddo ; enddo
       endif

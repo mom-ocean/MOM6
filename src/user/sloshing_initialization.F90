@@ -53,12 +53,14 @@ end subroutine sloshing_initialize_topography
 !! same thickness but all interfaces (except bottom and sea surface) are
 !! displaced according to a half-period cosine, with maximum value on the
 !! left and minimum value on the right. This sets off a regular sloshing motion.
-subroutine sloshing_initialize_thickness ( h, G, GV, US, param_file, just_read_params)
+subroutine sloshing_initialize_thickness ( h, depth_tot, G, GV, US, param_file, just_read_params)
   type(ocean_grid_type),   intent(in)  :: G           !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)  :: GV          !< The ocean's vertical grid structure.
   type(unit_scale_type),   intent(in)  :: US          !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(out) :: h           !< The thickness that is being initialized [H ~> m or kg m-2].
+  real, dimension(SZI_(G),SZJ_(G)), &
+                           intent(in)  :: depth_tot  !< The nominal total depth of the ocean [Z ~> m]
   type(param_file_type),   intent(in)  :: param_file  !< A structure indicating the open file
                                                       !! to parse for model parameter values.
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
@@ -152,7 +154,7 @@ subroutine sloshing_initialize_thickness ( h, G, GV, US, param_file, just_read_p
     enddo
 
     ! 3. The last interface must coincide with the seabed
-    z_inter(nz+1) = -G%bathyT(i,j)
+    z_inter(nz+1) = -depth_tot(i,j)
     ! Modify interface heights to make sure all thicknesses are strictly positive
     do k = nz,1,-1
       if ( z_inter(k) < (z_inter(k+1) + GV%Angstrom_Z) ) then
