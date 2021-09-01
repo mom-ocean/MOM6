@@ -76,8 +76,15 @@ length scale where \f$Q\f$ is the turbulent kinetic energy (TKE) per
 unit mass, and \f$\lambda\f$ is a nondimensional constant.  The function
 \f$F(\mbox{Ri})\f$ is a function of the Richardson number that remains
 to be determined. As in \cite turner1986, there must be a critical
-value of \f$\mbox{Ri}\f$ above which \f$F(\mbox{Ri}) = 0\f$. There
-are two length scales: the width of the low Richardson number region
+value of \f$\mbox{Ri}\f$ above which \f$F(\mbox{Ri}) = 0\f$.
+For better agreement with observations in a law-of-the-wall configuration,
+we modify \f$L_d\f$ to be \f$\min (\lambda L_b, L_z)\f$, where \f$L_z\f$
+is the distance to the nearest solid boundary. This can be understood by
+considering \f$L_d\f$ to be the size of the largest turbulent eddies,
+whether they are constrained by the stratification (through \f$L_b\f$)
+or through the geometry (through \f$L_z\f$).
+
+There are two length scales: the width of the low Richardson number region
 as in \cite turner1986, and the buoyancy length scale, which is the
 length scale over which the TKE is affected by the stratification (see
 \cite jackson2008 for more details). In particular, the inclusion of a
@@ -143,7 +150,103 @@ reflects shear-driven turbulent mixing only; the total diffusivity would
 be this value plus any diffusivities due to other turbulent processes
 or a background value.
 
+Based on \cite turner1986, we choose \f$F(\mbox{Ri})\f$ of the form
+
+\f[
+   F(\mbox{Ri}) = F_0 \left( \frac{1 - \mbox{Ri} / \mbox{Ri}_c}
+   {1 + \alpha \mbox{Ri} / \mbox{Ri}_c} \right) ,
+\f]
+
+where \f$\alpha\f$ is the curvature parameter. This table shows the default
+values of the relevant parameters:
+
+<table>
+<caption id="shear_params">Shear mixing parameters</caption>
+<tr><th>Parameter      <th>Default value <th>MOM6 parameter
+<tr><td>\f$\mbox{Ri}_c\f$   <td>0.25     <td>RINO_CRIT
+<tr><td>\f$\nu_0\f$         <td>\f$1.5 \times 10^{-5}\f$ <td>KD_KAPPA_SHEAR_0
+<tr><td>\f$F_0\f$           <td>0.089    <td>SHEARMIX_RATE
+<tr><td>\f$\alpha\f$        <td>-0.97    <td>FRI_CURVATURE
+<tr><td>\f$\lambda\f$       <td>0.82     <td>KAPPA_BUOY_SCALE_COEF
+<tr><td>\f$c_N\f$           <td>0.24     <td>TKE_N_DECAY_CONST
+<tr><td>\f$c_S\f$           <td>0.14     <td>TKE_SHEAR_DECAY_CONST
+</table>
+
+These can all be adjusted at run time, plus some other parameters such as the maximum number of iterations
+to perform.
+
 \section section_Background Background Mixing
+
+There are three choices for the vertical background mixing: that in
+CVMix (\cite bryan1979), that in \cite harrison2008, and that in
+\cite danabasoglu2012.
+
+\subsection subsection_bryan_lewis CVMix background mixing
+
+The background vertical mixing in \cite bryan1979 is of the form:
+
+\f[
+   \kappa = C_1 + C_2 \mbox{atan} [ C_3 ( |z| - C_4 )]
+\f]
+
+where the contants are runtime parameters as shown here:
+
+<table>
+<caption id="bryan_lewis_parms">Bryan Lewis parameters</caption>
+<tr><th>Parameter         <th>Units   <th>MOM6 parameter
+<tr><td>\f$C_1\f$         <td>m2 s-1  <td>BRYAN_LEWIS_C1
+<tr><td>\f$C_2\f$         <td>m2 s-1  <td>BRYAN_LEWIS_C2
+<tr><td>\f$C_3\f$         <td>m-1     <td>BRYAN_LEWIS_C3
+<tr><td>\f$C_4\f$         <td>m       <td>BRYAN_LEWIS_C4
+</table>
+
+\subsection subsection_henyey Henyey IGW background mixing
+
+\cite harrison2008 choose a vertical background mixing with a latitudinal
+dependence based on \cite henyey1986. Specifically, theory predicts
+a minimum in mixing due to wave-wave interactions at the equator and
+observations support that theory. In this option, the surface background
+diffusivity is
+
+\f[
+   \kappa_s (\phi) = \max \left[ 10^{-7}, \kappa_0 \left| \frac{f}{f_{30}} \right|
+   \frac{ \cosh^{-1} (1/f) }{ \cosh^{-1} (1/f_{30})} \right] ,
+\f]
+
+where \f$f_{30}\f$ is the Coriolis frequency at \f$30^\circ\f$ latitude. The two-dimensional equation for
+the diffusivity is
+
+\f[
+   \kappa(\phi, z) = \kappa_s + \Gamma \mbox{atan} \left( \frac{H_t}{\delta_t} \right) +
+   \Gamma \mbox{atan} \left( \frac{z - H_t}{\delta_t} \right) ,
+\f]
+\f[
+   \Gamma = \frac{(\kappa_d - \kappa_s) }{\left[ 0.5 \pi + \mbox{atan} \left( \frac{H_t}{\delta_t} \right)
+   \right] },
+\f]
+
+where \f$H_t = 2500\, \mbox{m}\f$, \f$\delta_t = 222\, \mbox{m}\f$, and
+\f$\kappa_d\f$ is the deep ocean diffusivity of \f$10^{-4}\, \mbox{m}^2
+\, \mbox{s}^{-1}\f$.
+
+There is also a "new" Henyey version, taking into account the effect of stratification on
+TKE dissipation,
+
+\f[
+   \epsilon = \epsilon_0 \frac{f}{f_0} \frac{\mbox{acosh} (N/f)}{\mbox{acosh} (N_0 / f_0)}
+\f]
+
+where \f$N_0\f$ and \f$f_0\f$ are the reference buoyancy frequency and inertial frequencies, respectively
+and \f$\epsilon_0\f$ is the reference dissipation at \f$(N_0, f_0)\f$. In the previous version, \f$N =
+N_0\f$. Additionally, the relationship between diapycnal diffusivities and stratification is included:
+
+\f[
+   \kappa = \frac{\epsilon}{N^2}
+\f]
+This approach assumes that work done against gravity is uniformly distributed throughout the water column.
+The original version concentrates buoyancy work in regions of strong stratification.
+
+\subsection subsection_danabasoglu_back Danabasoglu background mixing
 
 \section section_Double_Diff Double Diffusion
 
