@@ -3,8 +3,8 @@
 Sets the interior vertical diffusion of scalars due to the following processes:
 
 -# Shear-driven mixing: two options, \cite jackson2008 and KPP interior;
--# Background mixing via CVMix (Bryan-Lewis profile) or the scheme described by
-   \cite harrison2008.
+-# Background mixing via CVMix (Bryan-Lewis profile), the scheme described by
+   \cite harrison2008, or that in \cite danabasoglu2012.
 -# Double-diffusion, old method and new method via CVMix;
 -# Tidal mixing: many options available, see \ref Internal_Tidal_Mixing.
 
@@ -50,10 +50,30 @@ parameterization of \cite large1994 is as follows, where the diffusivity \f$\kap
 is given by
 
 \f[
-   \kappa = \kappa_0 \left[ 1 - \min \left( 1, \frac{\mbox{Ri}}{\mbox{Ri}_c} \right) ^2 \right] ^3 ,
+   \kappa = \kappa_0 \left[ 1 - \min \left( 1, \frac{\mbox{Ri}}{\mbox{Ri}_c} \right) ^2 \right] ^3 ,\
 \f]
 
 with \f$\kappa_0 = 5 \times 10^{-3}\, \mbox{m}^2 \,\mbox{s}^{-1}\f$ and \f$\mbox{Ri}_c = 0.7\f$.
+
+One can instead select the \cite pacanowski1981 scheme within CVMix. Unlike
+the \cite large1994 scheme, they propose that the\ vertical shear
+viscosity \f$\nu_{\mbox{shear}}\nf$ be different from the vertical shear
+diffusivity \f$\kappa_{\mbox{shear}}\f$. For gravitationally stable
+profiles (i.e., \f$N^2 > 0\f$), they chose
+
+\f[
+   \nu_{\mbox{shear}} = \frac{\nu_0}{(1 + a \mbox{Ri})^n}
+\f]
+
+\f[
+   \kappa_{\mbox{shear}} = \frac{\nu_0}{(1 + a \mbox{Ri})^{n+1}}
+\f]
+
+where \f$\nu_0\f$, \f$a\f$ and \f$n\f$ are adjustable parameters. Common settings are \f$a = 5\f$
+and \f$n = 2\f$.
+
+For both CVMix shear mixing schemes, the mixing coefficients are set to
+a large value for gravitationally unstable profiles.
 
 \subsection subsection_kappa_shear Shear-driven mixing in Jackson
 
@@ -117,10 +137,10 @@ that the TKE reaches a quasi-steady state faster than the flow is evolving
 and faster than it can be affected by mean-flow advection so that \f$DQ/Dt =
 0\f$. Since this parameterization is meant to be used in climate models
 with low horizontal resolution and large time steps compared to the
-mixing time scales, this is a reasonable assumtion. The most tenuous
+mixing time scales, this is a reasonable assumption. The most tenuous
 assumption is in the form of the dissipation \f$\epsilon = Q(C_N N +
 c_S S)\f$ (where \f$c_N\f$ and \f$c_S\f$ are to be determined),
-which is assumed to be dependent on the buoyancy frequeny (through loss
+which is assumed to be dependent on the buoyancy frequency (through loss
 of energy to internal waves) and the velocity shear (through the energy
 cascade to smaller scales).
 
@@ -138,7 +158,7 @@ diffusivity, the second term as a source, and the final two as sinks.
 This equation with \eqref{eq:Jackson_11} are simple enough to solve quickly
 using an iterative technique.
 
-We also need boundary contitions for \eqref{eq:Jackson_10}
+We also need boundary conditions for \eqref{eq:Jackson_10}
 and \eqref{eq:Jackson_11}. For the turbulent diffusivity we use
 \f$\kappa = 0\f$ since our diffusivity is numerically defined on
 layer interfaces. This ensures that there is no turbulent flux across
@@ -189,7 +209,7 @@ The background vertical mixing in \cite bryan1979 is of the form:
    \kappa = C_1 + C_2 \mbox{atan} [ C_3 ( |z| - C_4 )]
 \f]
 
-where the contants are runtime parameters as shown here:
+where the constants are runtime parameters as shown here:
 
 <table>
 <caption id="bryan_lewis_parms">Bryan Lewis parameters</caption>
@@ -227,7 +247,10 @@ the diffusivity is
 
 where \f$H_t = 2500\, \mbox{m}\f$, \f$\delta_t = 222\, \mbox{m}\f$, and
 \f$\kappa_d\f$ is the deep ocean diffusivity of \f$10^{-4}\, \mbox{m}^2
-\, \mbox{s}^{-1}\f$.
+\, \mbox{s}^{-1}\f$. Note that this is the vertical structure described
+in \cite harrison2008, but that isn't what is in the code. Instead, the surface
+value is propagated down, with the assumption that the tidal mixing parameterization
+will provide the deep mixing: \ref Internal_Tidal_Mixing.
 
 There is also a "new" Henyey version, taking into account the effect of stratification on
 TKE dissipation,
@@ -247,6 +270,14 @@ This approach assumes that work done against gravity is uniformly distributed th
 The original version concentrates buoyancy work in regions of strong stratification.
 
 \subsection subsection_danabasoglu_back Danabasoglu background mixing
+
+The shape of the \cite danabasoglu background mixing has a uniform background value, with a dip
+at the equator and a bump at \f$\pm 30^{\circ}$ degrees latitude. The form is shown in this figure
+
+\image html background_varying.png "Form of the vertically uniform background mixing in \cite danabasoglu2012. The values are symmetric about the equator."
+\imagelatex{background_varying.png,Form of the vertically uniform background mixing in \cite danabasoglu2012. The values are symmetric about the equator.,\includegraphics[width=\textwidth\,height=\textheight/2\,keepaspectratio=true]}
+
+Some parameters of this curve are set in the input file, some are hard-coded in calculate_bkgnd_mixing.
 
 \section section_Double_Diff Double Diffusion
 
