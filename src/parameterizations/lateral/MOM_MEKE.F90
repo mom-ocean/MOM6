@@ -82,7 +82,9 @@ type, public :: MEKE_CS ; private
   real :: MEKE_topographic_beta !< Weight for how much topographic beta is considered
                                 !! when computing beta in Rhines scale [nondim]
   real :: MEKE_restoring_rate !< Inverse of the timescale used to nudge MEKE toward its equilibrium value [s-1].
-
+  logical :: fixed_total_depth  !< If true, use the nominal bathymetric depth as the estimate of
+                        !! the time-varying ocean depth.  Otherwise base the depth on the total
+                        !! ocean mass per unit area.
   logical :: kh_flux_enabled !< If true, lateral diffusive MEKE flux is enabled.
   logical :: initialize !< If True, invokes a steady state solver to calculate MEKE.
   logical :: debug      !< If true, write out checksums of data for debugging
@@ -131,8 +133,6 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
     MEKE_decay, &   ! A diagnostic of the MEKE decay timescale [T-1 ~> s-1].
     drag_rate_visc, & ! Near-bottom velocity contribution to bottom dratg [L T-1 ~> m s-1]
     drag_rate, &    ! The MEKE spindown timescale due to bottom drag [T-1 ~> s-1].
-    drag_rate_J15, &  ! The MEKE spindown timescale due to bottom drag with the Jansen 2015 scheme.
-                    ! Unfortunately, as written the units seem inconsistent. [T-1 ~> s-1].
     del2MEKE, &     ! Laplacian of MEKE, used for bi-harmonic diffusion [T-2 ~> s-2].
     del4MEKE, &     ! Time-integrated MEKE tendency arising from the biharmonic of MEKE [L2 T-2 ~> m2 s-2].
     LmixScale, &    ! Eddy mixing length [L ~> m].
@@ -177,8 +177,7 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
   if (.not.associated(MEKE)) call MOM_error(FATAL, &
          "MOM_MEKE: MEKE must be initialized before it is used.")
 
-  if ((CS%MEKE_damping > 0.0) .or. (CS%MEKE_Cd_scale > 0.0) .or. (CS%MEKE_Cb>0.) &
-      .or. CS%visc_drag) then
+  if ((CS%MEKE_Cd_scale > 0.0) .or. (CS%MEKE_Cb>0.) .or. CS%visc_drag) then
     use_drag_rate = .true.
   else
     use_drag_rate = .false.
@@ -234,12 +233,6 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
       enddo
     endif
 
-    if (CS%MEKE_Cd_scale == 0.0 .and. .not. CS%visc_drag) then
-      !$OMP parallel do default(shared) private(ldamping)
-      do j=js,je ; do i=is,ie
-        drag_rate(i,j) = 0. ; drag_rate_J15(i,j) = 0.
-      enddo ; enddo
-    endif
 
     ! Calculate drag_rate_visc(i,j) which accounts for the model bottom mean flow
     if (CS%visc_drag) then
@@ -283,12 +276,17 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
       enddo
     enddo
 
-    !$OMP parallel do default(shared)
-    do j=js-1,je+1 ; do i=is-1,ie+1
-      depth_tot(i,j) = G%bathyT(i,j)
-      !### Try changing this to:
-      ! depth_tot(i,j) = mass(i,j) * I_Rho0
-    enddo ; enddo
+    if (CS%fixed_total_depth) then
+      !$OMP parallel do default(shared)
+      do j=js-1,je+1 ; do i=is-1,ie+1
+        depth_tot(i,j) = G%bathyT(i,j)
+      enddo ; enddo
+    else
+      !$OMP parallel do default(shared)
+      do j=js-1,je+1 ; do i=is-1,ie+1
+        depth_tot(i,j) = mass(i,j) * I_Rho0
+      enddo ; enddo
+    endif
 
     if (CS%initialize) then
       call MEKE_equilibrium(CS, MEKE, G, GV, US, SN_u, SN_v, drag_rate_visc, I_mass, depth_tot)
@@ -362,6 +360,11 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
       do j=js,je ; do i=is,ie
         drag_rate(i,j) = (US%L_to_Z*Rho0 * I_mass(i,j)) * sqrt( drag_rate_visc(i,j)**2 + &
                  cdrag2 * ( max(0.0, 2.0*bottomFac2(i,j)*MEKE%MEKE(i,j)) + CS%MEKE_Uscale**2 ) )
+      enddo ; enddo
+    else
+      !$OMP parallel do default(shared)
+      do j=js,je ; do i=is,ie
+        drag_rate(i,j) = 0.
       enddo ; enddo
     endif
 
@@ -531,22 +534,18 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
             drag_rate(i,j) = (US%L_to_Z*Rho0 * I_mass(i,j)) * sqrt( drag_rate_visc(i,j)**2 + &
                    cdrag2 * ( max(0.0, 2.0*bottomFac2(i,j)*MEKE%MEKE(i,j)) + CS%MEKE_Uscale**2 ) )
           enddo ; enddo
-          !$OMP parallel do default(shared)
-          do j=js,je ; do i=is,ie
-            ldamping = CS%MEKE_damping + drag_rate(i,j) * bottomFac2(i,j)
-            if (MEKE%MEKE(i,j) < 0.) ldamping = 0.
-            ! notice that the above line ensures a damping only if MEKE is positive,
-            ! while leaving MEKE unchanged if it is negative
-            MEKE%MEKE(i,j) =  MEKE%MEKE(i,j) / (1.0 + sdt_damp*ldamping)
-            MEKE_decay(i,j) = ldamping*G%mask2dT(i,j)
-          enddo ; enddo
         endif
+        !$OMP parallel do default(shared)
+        do j=js,je ; do i=is,ie
+          ldamping = CS%MEKE_damping + drag_rate(i,j) * bottomFac2(i,j)
+          if (MEKE%MEKE(i,j) < 0.) ldamping = 0.
+          ! notice that the above line ensures a damping only if MEKE is positive,
+          ! while leaving MEKE unchanged if it is negative
+          MEKE%MEKE(i,j) =  MEKE%MEKE(i,j) / (1.0 + sdt_damp*ldamping)
+          MEKE_decay(i,j) = ldamping*G%mask2dT(i,j)
+        enddo ; enddo
       endif
     endif ! MEKE_KH>=0
-
- !   do j=js,je ; do i=is,ie
- !     MEKE%MEKE(i,j) =  MAX(MEKE%MEKE(i,j),0.0)
- !   enddo ; enddo
 
     call cpu_clock_begin(CS%id_clock_pass)
     call do_group_pass(CS%pass_MEKE, G%Domain)
@@ -711,8 +710,7 @@ subroutine MEKE_equilibrium(CS, MEKE, G, GV, US, SN_u, SN_v, drag_rate_visc, I_m
       if (CS%MEKE_topographic_beta == 0. .or. (depth_tot(i,j) == 0.0)) then
         beta_topo_x = 0. ; beta_topo_y = 0.
       else
-        !### Consider different combinations of these estimates of topographic beta, and the use
-        !    of the water column thickness instead of the bathymetric depth.
+        !### Consider different combinations of these estimates of topographic beta.
         beta_topo_x = -CS%MEKE_topographic_beta * FatH * 0.5 * ( &
                       (depth_tot(i+1,j)-depth_tot(i,j)) * G%IdxCu(I,j)  &
                   / max(depth_tot(i+1,j), depth_tot(i,j), dZ_neglect) &
@@ -887,14 +885,13 @@ subroutine MEKE_lengthScales(CS, MEKE, G, GV, US, SN_u, SN_v, EKE, depth_tot, &
       FatH = 0.25* ( ( G%CoriolisBu(I,J) + G%CoriolisBu(I-1,J-1) ) + &
                      ( G%CoriolisBu(I-1,J) + G%CoriolisBu(I,J-1) ) )  ! Coriolis parameter at h points
 
-      ! If bathyT is zero, then a division by zero FPE will be raised.  In this
+      ! If depth_tot is zero, then a division by zero FPE will be raised.  In this
       ! case, we apply Adcroft's rule of reciprocals and set the term to zero.
       ! Since zero-bathymetry cells are masked, this should not affect values.
       if (CS%MEKE_topographic_beta == 0. .or. (depth_tot(i,j) == 0.0)) then
         beta_topo_x = 0. ; beta_topo_y = 0.
       else
-        !### Consider different combinations of these estimates of topographic beta, and the use
-        !    of the water column thickness instead of the bathymetric depth.
+        !### Consider different combinations of these estimates of topographic beta.
         beta_topo_x = -CS%MEKE_topographic_beta * FatH * 0.5 * ( &
                       (depth_tot(i+1,j)-depth_tot(i,j)) * G%IdxCu(I,j)  &
                  / max(depth_tot(i+1,j), depth_tot(i,j), dZ_neglect) &
@@ -1167,6 +1164,11 @@ logical function MEKE_init(Time, G, US, param_file, diag, CS, MEKE, restart_CS)
                  "If positive, is a fixed length contribution to the expression "//&
                  "for mixing length used in MEKE-derived diffusivity.", &
                  units="m", default=0.0, scale=US%m_to_L)
+  call get_param(param_file, mdl, "MEKE_FIXED_TOTAL_DEPTH", CS%fixed_total_depth, &
+                 "If true, use the nominal bathymetric depth as the estimate of the "//&
+                 "time-varying ocean depth.  Otherwise base the depth on the total ocean mass"//&
+                 "per unit area.", default=.true.)
+
   call get_param(param_file, mdl, "MEKE_ALPHA_DEFORM", CS%aDeform, &
                  "If positive, is a coefficient weighting the deformation scale "//&
                  "in the expression for mixing length used in MEKE-derived diffusivity.", &

@@ -469,7 +469,6 @@ ENERGYSAVEDAYS = 3.0            !   [hours] default = 1.44E+04
                                 ! energies of the run and other globally summed diagnostics.
 DIAG_AS_CHKSUM = True
 DEBUG = True
-DEFAULT_2018_ANSWERS = True     !   [Boolean] default = True
 OBC_RADIATION_MAX = 10.0        !   [nondim] default = 10.0
 GRID_ROTATION_ANGLE_BUGS = True !   [Boolean] default = True
 USE_GM_WORK_BUG = True          !   [Boolean] default = True
