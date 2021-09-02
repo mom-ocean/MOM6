@@ -271,7 +271,7 @@ The original version concentrates buoyancy work in regions of strong stratificat
 
 \subsection subsection_danabasoglu_back Danabasoglu background mixing
 
-The shape of the \cite danabasoglu background mixing has a uniform background value, with a dip
+The shape of the \cite danabasoglu2012 background mixing has a uniform background value, with a dip
 at the equator and a bump at \f$\pm 30^{\circ}\f$ degrees latitude. The form is shown in this figure
 
 \image html background_varying.png "Form of the vertically uniform background mixing in \cite danabasoglu2012. The values are symmetric about the equator."
