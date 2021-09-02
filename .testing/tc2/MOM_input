@@ -610,7 +610,6 @@ DIAG_AS_CHKSUM = True
 DEBUG = True
 USE_GM_WORK_BUG = False
 USE_PSURF_IN_EOS = False        !   [Boolean] default = False
-DEFAULT_2018_ANSWERS = True     !   [Boolean] default = True
 GRID_ROTATION_ANGLE_BUGS = True !   [Boolean] default = True
 REMAP_UV_USING_OLD_ALG = True   !   [Boolean] default = True
 USE_LAND_MASK_FOR_HVISC = False !   [Boolean] default = False
