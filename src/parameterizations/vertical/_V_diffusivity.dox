@@ -57,7 +57,7 @@ with \f$\kappa_0 = 5 \times 10^{-3}\, \mbox{m}^2 \,\mbox{s}^{-1}\f$ and \f$\mbox
 
 One can instead select the \cite pacanowski1981 scheme within CVMix. Unlike
 the \cite large1994 scheme, they propose that the\ vertical shear
-viscosity \f$\nu_{\mbox{shear}}\nf$ be different from the vertical shear
+viscosity \f$\nu_{\mbox{shear}}\f$ be different from the vertical shear
 diffusivity \f$\kappa_{\mbox{shear}}\f$. For gravitationally stable
 profiles (i.e., \f$N^2 > 0\f$), they chose
 
