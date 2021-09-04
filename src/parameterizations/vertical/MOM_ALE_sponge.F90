@@ -863,8 +863,6 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
   real, dimension(SZK_(GV)) :: tmp_val1         ! data values remapped to model grid
   real, dimension(SZK_(GV)) :: h_col            ! A column of thicknesses at h, u or v points [H ~> m or kg m-2]
   real, allocatable, dimension(:,:,:) :: sp_val ! A temporary array for fields
-  real, allocatable, dimension(:,:,:) :: sp_val_u ! A temporary array for fields
-  real, allocatable, dimension(:,:,:) :: sp_val_v ! A temporary array for fields
   real, allocatable, dimension(:,:,:) :: mask_z ! A temporary array for field mask at h pts
   real, allocatable, dimension(:,:,:) :: mask_u ! A temporary array for field mask at u pts
   real, allocatable, dimension(:,:,:) :: mask_v ! A temporary array for field mask at v pts
@@ -883,6 +881,8 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
   real :: Idt  ! The inverse of the timestep [T-1 ~> s-1]
   real :: h_neglect, h_neglect_edge ! Negligible thicknesses [H ~> m or kg m-2]
   real :: zTopOfCell, zBottomOfCell ! Interface heights (positive upward) in the input dataset [Z ~> m].
+  real :: sp_val_u ! Interpolation of sp_val to u-points
+  real :: sp_val_v ! Interpolation of sp_val to v-points
   integer :: nPoints
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
@@ -1001,10 +1001,8 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
       call pass_var(sp_val, G%Domain)
       call pass_var(mask_z, G%Domain)
 
-      allocate(sp_val_u(G%isdB:G%iedB,G%jsd:G%jed,1:nz_data))
       allocate(mask_u(G%isdB:G%iedB,G%jsd:G%jed,1:nz_data))
       do j=G%jsc,G%jec; do I=G%iscB,G%iecB
-        sp_val_u(I,j,1:nz_data) = 0.5*(sp_val(i,j,1:nz_data)+sp_val(i+1,j,1:nz_data))
         mask_u(I,j,1:nz_data) = min(mask_z(i,j,1:nz_data),mask_z(i+1,j,1:nz_data))
       enddo ; enddo
 
@@ -1014,7 +1012,10 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
         ! Therefore we use c as per C code and increment the index where necessary.
         i = CS%col_i_u(c) ; j = CS%col_j_u(c)
         if (mask_u(i,j,1) == 1.0) then
-          CS%Ref_val_u%p(1:nz_data,c) = sp_val_u(i,j,1:nz_data)
+          do k=1,nz_data
+            sp_val_u = 0.5 * (sp_val(i,j,k) + sp_val(i+1,j,k))
+            CS%Ref_val_u%p(k,c) = sp_val_u
+          enddo
         else
           CS%Ref_val_u%p(1:nz_data,c) = 0.0
         endif
@@ -1035,7 +1036,7 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
         hsrc(nz_data) = hsrc(nz_data) + ( zTopOfCell + G%bathyT(i,j) )
         CS%Ref_val_u%h(1:nz_data,c) = GV%Z_to_H*hsrc(1:nz_data)
       enddo
-      deallocate(sp_val, sp_val_u, mask_u, mask_z, hsrc)
+      deallocate(sp_val, mask_u, mask_z, hsrc)
       nz_data = CS%Ref_val_v%nz_data
       ! Interpolate from the external horizontal grid and in time
       call horiz_interp_and_extrap_tracer(CS%Ref_val_v%id, Time, 1.0, G, sp_val, mask_z, z_in, &
@@ -1048,10 +1049,8 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
       call pass_var(sp_val, G%Domain)
       call pass_var(mask_z, G%Domain)
 
-      allocate(sp_val_v(G%isd:G%ied,G%jsdB:G%jedB,1:nz_data))
       allocate(mask_v(G%isd:G%ied,G%jsdB:G%jedB,1:nz_data))
       do J=G%jscB,G%jecB; do i=G%isc,G%iec
-        sp_val_v(i,J,1:nz_data) = 0.5*(sp_val(i,j,1:nz_data)+sp_val(i,j+1,1:nz_data))
         mask_v(i,J,1:nz_data) = min(mask_z(i,j,1:nz_data),mask_z(i,j+1,1:nz_data))
       enddo ; enddo
       !call pass_var(mask_z,G%Domain)
@@ -1061,7 +1060,10 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
         ! Therefore we use c as per C code and increment the index where necessary.
         i = CS%col_i_v(c) ; j = CS%col_j_v(c)
         if (mask_v(i,j,1) == 1.0) then
-          CS%Ref_val_v%p(1:nz_data,c) = sp_val_v(i,j,1:nz_data)
+          do k=1,nz_data
+            sp_val_v = 0.5 * (sp_val(i,j,k) + sp_val(i,j+1,k))
+            CS%Ref_val_v%p(k,c) = sp_val_v
+          enddo
         else
           CS%Ref_val_v%p(1:nz_data,c) = 0.0
         endif
@@ -1082,7 +1084,7 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
         hsrc(nz_data) = hsrc(nz_data) + ( zTopOfCell + G%bathyT(i,j) )
         CS%Ref_val_v%h(1:nz_data,c) = GV%Z_to_H*hsrc(1:nz_data)
       enddo
-      deallocate(sp_val, sp_val_v, mask_v, mask_z, hsrc)
+      deallocate(sp_val, mask_v, mask_z, hsrc)
     endif
 
     call pass_var(h,G%Domain)
