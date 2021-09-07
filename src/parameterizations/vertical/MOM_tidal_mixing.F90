@@ -603,12 +603,15 @@ logical function tidal_mixing_init(Time, G, GV, US, param_file, diag, CS)
       CS%id_N2_int = register_diag_field('ocean_model','N2_int',diag%axesTi,Time, &
           'Bouyancy frequency squared, at interfaces', 's-2', conversion=US%s_to_T**2)
       !> TODO: add units
-      CS%id_Simmons_coeff = register_diag_field('ocean_model','Simmons_coeff',diag%axesT1,Time, &
-           'time-invariant portion of the tidal mixing coefficient using the Simmons', '')
-      CS%id_Schmittner_coeff = register_diag_field('ocean_model','Schmittner_coeff',diag%axesTL,Time, &
-           'time-invariant portion of the tidal mixing coefficient using the Schmittner', '')
-      CS%id_tidal_qe_md = register_diag_field('ocean_model','tidal_qe_md',diag%axesTL,Time, &
-           'input tidal energy dissipated locally interpolated to model vertical coordinates', '')
+      if (CS%CVMix_tidal_scheme .eq. SIMMONS) then
+        CS%id_Simmons_coeff = register_diag_field('ocean_model','Simmons_coeff',diag%axesT1,Time, &
+             'time-invariant portion of the tidal mixing coefficient using the Simmons', '')
+      else if (CS%CVMix_tidal_scheme .eq. SCHMITTNER) then
+        CS%id_Schmittner_coeff = register_diag_field('ocean_model','Schmittner_coeff',diag%axesTL,Time, &
+             'time-invariant portion of the tidal mixing coefficient using the Schmittner', '')
+        CS%id_tidal_qe_md = register_diag_field('ocean_model','tidal_qe_md',diag%axesTL,Time, &
+             'input tidal energy dissipated locally interpolated to model vertical coordinates', '')
+      endif
       CS%id_vert_dep = register_diag_field('ocean_model','vert_dep',diag%axesTi,Time, &
            'vertical deposition function needed for Simmons et al tidal  mixing', '')
 
@@ -1474,27 +1477,15 @@ subroutine setup_tidal_diagnostics(G, GV, CS)
     allocate(dd%N2_int(isd:ied,jsd:jed,nz+1)) ; dd%N2_int(:,:,:) = 0.0
   endif
   if (CS%id_Simmons_coeff > 0) then
-    if (CS%CVMix_tidal_scheme .ne. SIMMONS) then
-      call MOM_error(FATAL, "setup_tidal_diagnostics: Simmons_coeff diagnostics is available "//&
-                            "only when CVMix_tidal_scheme is Simmons")
-    endif
     allocate(dd%Simmons_coeff_2d(isd:ied,jsd:jed)) ; dd%Simmons_coeff_2d(:,:) = 0.0
   endif
   if (CS%id_vert_dep > 0) then
     allocate(dd%vert_dep_3d(isd:ied,jsd:jed,nz+1)) ; dd%vert_dep_3d(:,:,:) = 0.0
   endif
   if (CS%id_Schmittner_coeff > 0) then
-    if (CS%CVMix_tidal_scheme .ne. SCHMITTNER) then
-      call MOM_error(FATAL, "setup_tidal_diagnostics: Schmittner_coeff diagnostics is available "//&
-                            "only when CVMix_tidal_scheme is Schmittner.")
-    endif
     allocate(dd%Schmittner_coeff_3d(isd:ied,jsd:jed,nz)) ; dd%Schmittner_coeff_3d(:,:,:) = 0.0
   endif
   if (CS%id_tidal_qe_md > 0) then
-    if (CS%CVMix_tidal_scheme .ne. SCHMITTNER) then
-      call MOM_error(FATAL, "setup_tidal_diagnostics: tidal_qe_md diagnostics is available "//&
-                            "only when CVMix_tidal_scheme is Schmittner.")
-    endif
     allocate(dd%tidal_qe_md(isd:ied,jsd:jed,nz)) ; dd%tidal_qe_md(:,:,:) = 0.0
   endif
 end subroutine setup_tidal_diagnostics
