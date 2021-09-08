@@ -12,9 +12,8 @@ use MOM_ensemble_manager, only : get_ensemble_id
 use MOM_error_handler,    only : MOM_error, NOTE, FATAL, WARNING, is_root_PE
 use MOM_file_parser,      only : log_version, param_file_type
 use MOM_grid,             only : ocean_grid_type
-use MOM_io_infra,         only : read_data_infra => MOM_read_data
-use MOM_io_infra,         only : read_vector_infra => MOM_read_vector
-use MOM_io_infra,         only : read_data => MOM_read_data ! Deprecated
+use MOM_io_infra,         only : read_field, read_vector
+use MOM_io_infra,         only : read_data => read_field ! Deprecated
 use MOM_io_infra,         only : read_field_chksum
 use MOM_io_infra,         only : file_type, file_exists, get_file_info, get_file_fields
 use MOM_io_infra,         only : open_file, open_ASCII_file, close_file, flush_file, file_is_open
@@ -1653,7 +1652,7 @@ subroutine MOM_read_data_0d(filename, fieldname, data, timelevel, scale, MOM_Dom
   logical, optional, intent(in) :: file_may_be_4d !< If true, fields may be stored
                                                   !! as 4d arrays in the file.
 
-  call read_data_infra(filename, fieldname, data, &
+  call read_field(filename, fieldname, data, &
     timelevel=timelevel, scale=scale, MOM_Domain=MOM_Domain, &
     global_file=global_file, file_may_be_4d=file_may_be_4d &
   )
@@ -1667,7 +1666,7 @@ subroutine MOM_read_data_0d_int(filename, fieldname, data, timelevel)
   integer, intent(inout) :: data              !< Field value
   integer, optional, intent(in) :: timelevel  !< Time level to read in file
 
-  call read_data_infra(filename, fieldname, data, timelevel=timelevel)
+  call read_field(filename, fieldname, data, timelevel=timelevel)
 end subroutine MOM_read_data_0d_int
 
 
@@ -1676,7 +1675,7 @@ subroutine MOM_read_data_1d(filename, fieldname, data, timelevel, scale, MOM_Dom
                             global_file, file_may_be_4d)
   character(len=*), intent(in)  :: filename   !< Input filename
   character(len=*), intent(in)  :: fieldname  !< Field variable name
-  real, intent(inout)           :: data(:)    !< Field value
+  real, dimension(:), intent(inout) :: data   !< Field value
   integer, optional, intent(in) :: timelevel  !< Time level to read in file
   real, optional, intent(in)    :: scale      !< Rescale factor
   type(MOM_domain_type), optional, intent(in) :: MOM_Domain !< Model domain decomposition
@@ -1684,7 +1683,7 @@ subroutine MOM_read_data_1d(filename, fieldname, data, timelevel, scale, MOM_Dom
   logical, optional, intent(in) :: file_may_be_4d !< If true, fields may be stored
                                                   !! as 4d arrays in the file.
 
-  call read_data_infra(filename, fieldname, data, &
+  call read_field(filename, fieldname, data, &
     timelevel=timelevel, scale=scale, MOM_Domain=MOM_Domain, &
     global_file=global_file, file_may_be_4d=file_may_be_4d &
   )
@@ -1695,10 +1694,10 @@ end subroutine MOM_read_data_1d
 subroutine MOM_read_data_1d_int(filename, fieldname, data, timelevel)
   character(len=*), intent(in) :: filename    !< Input filename
   character(len=*), intent(in) :: fieldname   !< Field variable name
-  integer, intent(inout) :: data(:)           !< Field value
+  integer, dimension(:), intent(inout) :: data  !< Field value
   integer, optional, intent(in) :: timelevel  !< Time level to read in file
 
-  call read_data_infra(filename, fieldname, data, timelevel=timelevel)
+  call read_field(filename, fieldname, data, timelevel=timelevel)
 end subroutine MOM_read_data_1d_int
 
 
@@ -1707,7 +1706,7 @@ subroutine MOM_read_data_2d(filename, fieldname, data, MOM_Domain, &
                             timelevel, position, scale, global_file, file_may_be_4d)
   character(len=*), intent(in)  :: filename  !< Input filename
   character(len=*), intent(in)  :: fieldname !< Field variable name
-  real, intent(inout)           :: data(:,:) !< Field value
+  real, dimension(:,:), intent(inout) :: data   !< Field value
   type(MOM_domain_type), intent(in) :: MOM_Domain !< Model domain decomposition
   integer, optional, intent(in) :: timelevel !< Time level to read in file
   integer, optional, intent(in) :: position  !< Grid positioning flag
@@ -1721,13 +1720,13 @@ subroutine MOM_read_data_2d(filename, fieldname, data, MOM_Domain, &
 
   turns = MOM_domain%turns
   if (turns == 0) then
-    call read_data_infra(filename, fieldname, data, MOM_Domain, &
+    call read_field(filename, fieldname, data, MOM_Domain, &
       timelevel=timelevel, position=position, scale=scale, &
       global_file=global_file, file_may_be_4d=file_may_be_4d &
     )
   else
     call allocate_rotated_array(data, [1,1], -turns, data_in)
-    call read_data_infra(filename, fieldname, data_in, MOM_Domain%domain_in, &
+    call read_field(filename, fieldname, data_in, MOM_Domain%domain_in, &
       timelevel=timelevel, position=position, scale=scale, &
       global_file=global_file, file_may_be_4d=file_may_be_4d &
     )
@@ -1742,10 +1741,10 @@ subroutine MOM_read_data_2d_region(filename, fieldname, data, start, nread, MOM_
                                    no_domain, scale, turns)
   character(len=*), intent(in)  :: filename   !< Input filename
   character(len=*), intent(in)  :: fieldname  !< Field variable name
-  real, intent(inout)           :: data(:,:)  !< Field value
-  integer, intent(in)           :: start(:)   !< Starting index for each axis.
+  real, dimension(:,:), intent(inout) :: data !< Field value
+  integer, dimension(:), intent(in) :: start  !< Starting index for each axis.
                                               !! In 2d, start(3:4) must be 1.
-  integer, intent(in)           :: nread(:)   !< Number of values to read along each axis.
+  integer, dimension(:), intent(in) :: nread  !< Number of values to read along each axis.
                                               !! In 2d, nread(3:4) must be 1.
   type(MOM_domain_type), optional, intent(in) :: MOM_Domain !< Model domain decomposition
   logical, optional, intent(in) :: no_domain  !< If true, field does not use
@@ -1761,12 +1760,12 @@ subroutine MOM_read_data_2d_region(filename, fieldname, data, start, nread, MOM_
   if (present(turns)) qturns = modulo(turns, 4)
 
   if (qturns == 0) then
-    call read_data_infra(filename, fieldname, data, start, nread, &
+    call read_field(filename, fieldname, data, start, nread, &
       MOM_Domain=MOM_Domain, no_domain=no_domain, scale=scale &
     )
   else
     call allocate_rotated_array(data, [1,1], -qturns, data_in)
-    call read_data_infra(filename, fieldname, data_in, start, nread, &
+    call read_field(filename, fieldname, data_in, start, nread, &
       MOM_Domain=MOM_Domain%domain_in, no_domain=no_domain, scale=scale &
     )
     call rotate_array(data_in, qturns, data)
@@ -1780,7 +1779,7 @@ subroutine MOM_read_data_3d(filename, fieldname, data, MOM_Domain, &
                             timelevel, position, scale, global_file, file_may_be_4d)
   character(len=*), intent(in)  :: filename     !< Input filename
   character(len=*), intent(in)  :: fieldname    !< Field variable name
-  real, intent(inout)           :: data(:,:,:)  !< Field value
+  real, dimension(:,:,:), intent(inout) :: data !< Field value
   type(MOM_domain_type), intent(in) :: MOM_Domain !< Model domain decomposition
   integer, optional, intent(in) :: timelevel    !< Time level to read in file
   integer, optional, intent(in) :: position     !< Grid positioning flag
@@ -1794,13 +1793,13 @@ subroutine MOM_read_data_3d(filename, fieldname, data, MOM_Domain, &
 
   turns = MOM_domain%turns
   if (turns == 0) then
-    call read_data_infra(filename, fieldname, data, MOM_Domain, &
+    call read_field(filename, fieldname, data, MOM_Domain, &
       timelevel=timelevel, position=position, scale=scale, &
       global_file=global_file, file_may_be_4d=file_may_be_4d &
     )
   else
     call allocate_rotated_array(data, [1,1,1], -turns, data_in)
-    call read_data_infra(filename, fieldname, data_in, MOM_Domain%domain_in, &
+    call read_field(filename, fieldname, data_in, MOM_Domain%domain_in, &
       timelevel=timelevel, position=position, scale=scale, &
       global_file=global_file, file_may_be_4d=file_may_be_4d &
     )
@@ -1815,7 +1814,7 @@ subroutine MOM_read_data_4d(filename, fieldname, data, MOM_Domain, &
                             timelevel, position, scale, global_file)
   character(len=*), intent(in) :: filename      !< Input filename
   character(len=*), intent(in) :: fieldname     !< Field variable name
-  real, intent(inout) :: data(:,:,:,:)          !< Field value
+  real, dimension(:,:,:,:), intent(inout) :: data !< Field value
   type(MOM_domain_type), intent(in) :: MOM_Domain !< Model domain decomposition
   integer, optional, intent(in) :: timelevel    !< Time level to read in file
   integer, optional, intent(in) :: position     !< Grid positioning flag
@@ -1828,14 +1827,14 @@ subroutine MOM_read_data_4d(filename, fieldname, data, MOM_Domain, &
   turns = MOM_domain%turns
 
   if (turns == 0) then
-    call read_data_infra(filename, fieldname, data, MOM_Domain, &
+    call read_field(filename, fieldname, data, MOM_Domain, &
       timelevel=timelevel, position=position, scale=scale, &
       global_file=global_file &
     )
   else
     ! Read field along the input grid and rotate to the model grid
     call allocate_rotated_array(data, [1,1,1,1], -turns, data_in)
-    call read_data_infra(filename, fieldname, data_in, MOM_Domain%domain_in, &
+    call read_field(filename, fieldname, data_in, MOM_Domain%domain_in, &
       timelevel=timelevel, position=position, scale=scale, &
       global_file=global_file &
     )
@@ -1851,8 +1850,8 @@ subroutine MOM_read_vector_2d(filename, u_fieldname, v_fieldname, u_data, v_data
   character(len=*), intent(in) :: filename      !< Input filename
   character(len=*), intent(in) :: u_fieldname   !< Field variable name in u
   character(len=*), intent(in) :: v_fieldname   !< Field variable name in v
-  real, intent(inout) :: u_data(:,:)            !< Field value in u
-  real, intent(inout) :: v_data(:,:)            !< Field value in v
+  real, dimension(:,:), intent(inout) :: u_data !< Field value in u
+  real, dimension(:,:), intent(inout) :: v_data !< Field value in v
   type(MOM_domain_type), intent(in) :: MOM_Domain !< Model domain decomposition
   integer, optional, intent(in) :: timelevel    !< Time level to read in file
   integer, optional, intent(in) :: stagger      !< Grid staggering flag
@@ -1864,14 +1863,14 @@ subroutine MOM_read_vector_2d(filename, u_fieldname, v_fieldname, u_data, v_data
 
   turns = MOM_Domain%turns
   if (turns == 0) then
-    call read_vector_infra(filename, u_fieldname, v_fieldname, &
+    call read_vector(filename, u_fieldname, v_fieldname, &
         u_data, v_data, MOM_domain, timelevel=timelevel, stagger=stagger, &
         scalar_pair=scalar_pair, scale=scale &
     )
   else
     call allocate_rotated_array(u_data, [1,1], -turns, u_data_in)
     call allocate_rotated_array(v_data, [1,1], -turns, v_data_in)
-    call read_vector_infra(filename, u_fieldname, v_fieldname, &
+    call read_vector(filename, u_fieldname, v_fieldname, &
       u_data_in, v_data_in, MOM_domain%domain_in, timelevel=timelevel, &
         stagger=stagger, scalar_pair=scalar_pair, scale=scale &
     )
@@ -1892,8 +1891,8 @@ subroutine MOM_read_vector_3d(filename, u_fieldname, v_fieldname, u_data, v_data
   character(len=*), intent(in) :: filename      !< Input filename
   character(len=*), intent(in) :: u_fieldname   !< Field variable name in u
   character(len=*), intent(in) :: v_fieldname   !< Field variable name in v
-  real, intent(inout) :: u_data(:,:,:)          !< Field value in u
-  real, intent(inout) :: v_data(:,:,:)          !< Field value in v
+  real, dimension(:,:,:), intent(inout) :: u_data !< Field value in u
+  real, dimension(:,:,:), intent(inout) :: v_data !< Field value in v
   type(MOM_domain_type), intent(in) :: MOM_Domain !< Model domain decomposition
   integer, optional, intent(in) :: timelevel    !< Time level to read in file
   integer, optional, intent(in) :: stagger      !< Grid staggering flag
@@ -1905,14 +1904,14 @@ subroutine MOM_read_vector_3d(filename, u_fieldname, v_fieldname, u_data, v_data
 
   turns = MOM_Domain%turns
   if (turns == 0) then
-    call read_vector_infra(filename, u_fieldname, v_fieldname, &
+    call read_vector(filename, u_fieldname, v_fieldname, &
         u_data, v_data, MOM_domain, timelevel=timelevel, stagger=stagger, &
         scalar_pair=scalar_pair, scale=scale &
     )
   else
     call allocate_rotated_array(u_data, [1,1,1], -turns, u_data_in)
     call allocate_rotated_array(v_data, [1,1,1], -turns, v_data_in)
-    call read_vector_infra(filename, u_fieldname, v_fieldname, &
+    call read_vector(filename, u_fieldname, v_fieldname, &
         u_data_in, v_data_in, MOM_domain%domain_in, timelevel=timelevel, &
         stagger=stagger, scalar_pair=scalar_pair, scale=scale &
     )
