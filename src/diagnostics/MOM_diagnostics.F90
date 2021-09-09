@@ -2345,7 +2345,6 @@ subroutine set_dependent_diagnostics(MIS, ADp, CDp, G, GV, CS)
     call safe_alloc_ptr(ADp%gradKEu,IsdB,IedB,jsd,jed,nz)
     call safe_alloc_ptr(ADp%gradKEv,isd,ied,JsdB,JedB,nz)
   endif
-
   if (associated(CS%KE_visc)) then
     call safe_alloc_ptr(ADp%du_dt_visc,IsdB,IedB,jsd,jed,nz)
     call safe_alloc_ptr(ADp%dv_dt_visc,isd,ied,JsdB,JedB,nz)
@@ -2399,7 +2398,7 @@ subroutine MOM_diagnostics_end(CS, ADp, CDp)
   if (associated(CS%vhGM_Rlay))  deallocate(CS%vhGM_Rlay)
 
   if (associated(ADp%gradKEu))    deallocate(ADp%gradKEu)
-  if (associated(ADp%gradKEu))    deallocate(ADp%gradKEu)
+  if (associated(ADp%gradKEv))    deallocate(ADp%gradKEv)
   if (associated(ADp%du_dt_visc)) deallocate(ADp%du_dt_visc)
   if (associated(ADp%dv_dt_visc)) deallocate(ADp%dv_dt_visc)
   if (associated(ADp%du_dt_str))  deallocate(ADp%du_dt_str)

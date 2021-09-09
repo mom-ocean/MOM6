@@ -2824,23 +2824,35 @@ subroutine find_interfaces(rho, zin, nk_data, Rb, Z_bot, zi, G, GV, US, nlevs, n
 
     ! Find and store the interface depths.
     zi_(1) = 0.0
-    do K=2,nz
-      ! Find the value of k_int in the list of rho_ where rho_(k_int) <= Rb(K) < rho_(k_int+1).
-      ! This might be made a little faster by exploiting the fact that Rb is
-      ! monotonically increasing and not resetting lo_int back to 1 inside the K loop.
-      lo_int = 1 ; hi_int = nlevs_data
-      do while (lo_int < hi_int)
-        mid = (lo_int+hi_int) / 2
-        if (Rb(K) < rho_(mid)) then ; hi_int = mid
-        else ; lo_int = mid+1 ; endif
+    if (nlevs_data < 1) then
+      ! There is no data to use, so set the interfaces at the bottom.
+      do K=2,nz ; zi_(K) = Z_bot(i,j) ; enddo
+    elseif (nlevs_data == 1) then
+      ! There is data for only one input layer, so set the interfaces at the bottom or top,
+      ! depending on how their target densities compare with the one data point.
+      do K=2,nz
+        if (Rb(K) < rho_(1)) then ; zi_(K) = 0.0
+        else ; zi_(K) = Z_bot(i,j) ; endif
       enddo
-      k_int = max(1, lo_int-1)
+    else
+      do K=2,nz
+        ! Find the value of k_int in the list of rho_ where rho_(k_int) <= Rb(K) < rho_(k_int+1).
+        ! This might be made a little faster by exploiting the fact that Rb is
+        ! monotonically increasing and not resetting lo_int back to 1 inside the K loop.
+        lo_int = 1 ; hi_int = nlevs_data
+        do while (lo_int < hi_int)
+          mid = (lo_int+hi_int) / 2
+          if (Rb(K) < rho_(mid)) then ; hi_int = mid
+          else ; lo_int = mid+1 ; endif
+        enddo
+        k_int = max(1, lo_int-1)
 
-      ! Linearly interpolate to find the depth, zi_, where Rb would be found.
-      slope = (zin(k_int+1) - zin(k_int)) / max(rho_(k_int+1) - rho_(k_int), eps_rho)
-      zi_(K) = -1.0*(zin(k_int) + slope*(Rb(K)-rho_(k_int)))
-      zi_(K) = min(max(zi_(K), Z_bot(i,j)), -1.0*hml)
-    enddo
+        ! Linearly interpolate to find the depth, zi_, where Rb would be found.
+        slope = (zin(k_int+1) - zin(k_int)) / max(rho_(k_int+1) - rho_(k_int), eps_rho)
+        zi_(K) = -1.0*(zin(k_int) + slope*(Rb(K)-rho_(k_int)))
+        zi_(K) = min(max(zi_(K), Z_bot(i,j)), -1.0*hml)
+      enddo
+    endif
     zi_(nz+1) = Z_bot(i,j)
     if (nkml > 0) then ; do K=2,nkml+1
       zi_(K) = max(hml*((1.0-real(K))/real(nkml)), Z_bot(i,j))
