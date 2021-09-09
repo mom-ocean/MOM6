@@ -2115,7 +2115,8 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   ! Swap axes for quarter and 3-quarter turns
   if (CS%rotate_index) then
     allocate(CS%G)
-    call clone_MOM_domain(G_in%Domain, CS%G%Domain, turns=turns)
+    call clone_MOM_domain(G_in%Domain, CS%G%Domain, turns=turns, &
+        domain_name="MOM_rot")
     first_direction = modulo(first_direction + turns, 2)
   else
     CS%G => G_in
