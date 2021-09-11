@@ -484,16 +484,16 @@ logical function tidal_mixing_init(Time, G, GV, US, param_file, diag, CS)
                  units="nondim", default=0.1)
 
     do j=js,je ; do i=is,ie
-      if (G%bathyT(i,j) < CS%min_zbot_itides) CS%mask_itidal(i,j) = 0.0
+      if (G%bathyT(i,j)+G%Z_ref < CS%min_zbot_itides) CS%mask_itidal(i,j) = 0.0
       CS%tideamp(i,j) = CS%tideamp(i,j) * CS%mask_itidal(i,j) * G%mask2dT(i,j)
 
       ! Restrict rms topo to a fraction (often 10 percent) of the column depth.
       if (CS%answers_2018 .and. (max_frac_rough >= 0.0)) then
-        hamp = min(max_frac_rough*G%bathyT(i,j), sqrt(CS%h2(i,j)))
+        hamp = min(max_frac_rough*(G%bathyT(i,j)+G%Z_ref), sqrt(CS%h2(i,j)))
         CS%h2(i,j) = hamp*hamp
       else
         if (max_frac_rough >= 0.0) &
-          CS%h2(i,j) = min((max_frac_rough*G%bathyT(i,j))**2, CS%h2(i,j))
+          CS%h2(i,j) = min((max_frac_rough*(G%bathyT(i,j)+G%Z_ref))**2, CS%h2(i,j))
       endif
 
       utide = CS%tideamp(i,j)
@@ -1678,7 +1678,7 @@ subroutine read_tidal_constituents(G, US, tidal_energy_file, CS)
     CS%h_src(k) = US%Z_to_m*(z_t(k)-z_w(k))*2.0
     ! form tidal_qe_3d_in from weighted tidal constituents
     do j=js,je ; do i=is,ie
-      if ((z_t(k) <= G%bathyT(i,j)) .and. (z_w(k) > CS%tidal_diss_lim_tc)) &
+      if ((z_t(k) <= G%bathyT(i,j) + G%Z_ref) .and. (z_w(k) > CS%tidal_diss_lim_tc)) &
         CS%tidal_qe_3d_in(i,j,k) = C1_3*tc_m2(i,j,k) + C1_3*tc_s2(i,j,k) + &
                 tidal_qk1(i,j)*tc_k1(i,j,k) + tidal_qo1(i,j)*tc_o1(i,j,k)
     enddo ; enddo
@@ -1692,7 +1692,7 @@ subroutine read_tidal_constituents(G, US, tidal_energy_file, CS)
   !      do k=50,nz_in(1)
   !          write(1905,*) i,j,k
   !          write(1905,*) CS%tidal_qe_3d_in(i,j,k), tc_m2(i,j,k)
-  !          write(1905,*) z_t(k), G%bathyT(i,j), z_w(k),CS%tidal_diss_lim_tc
+  !          write(1905,*) z_t(k), G%bathyT(i,j)+G%Z_ref, z_w(k),CS%tidal_diss_lim_tc
   !      end do
   !    endif
   !  enddo
@@ -1707,7 +1707,7 @@ subroutine read_tidal_constituents(G, US, tidal_energy_file, CS)
   !! collapse 3D q*E to 2D q*E
   !CS%tidal_qe_2d(:,:) = 0.0
   !do k=1,nz_in(1) ; do j=js,je ; do i=is,ie
-  !  if (z_t(k) <= G%bathyT(i,j)) &
+  !  if (z_t(k) <= G%bathyT(i,j) + G%Z_ref) &
   !    CS%tidal_qe_2d(i,j) = CS%tidal_qe_2d(i,j) + CS%tidal_qe_3d_in(i,j,k)
   !enddo ; enddo ; enddo
 
