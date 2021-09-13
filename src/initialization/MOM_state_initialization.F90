@@ -232,7 +232,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
   ! geopotential height, for use by the various initialization routines.  G%bathyT has
   ! already been initialized in previous calls.
   do j=jsd,jed ; do i=isd,ied
-    depth_tot(i,j) = G%bathyT(i,j)
+    depth_tot(i,j) = G%bathyT(i,j) + G%Z_ref
   enddo ; enddo
 
   ! The remaining initialization calls are done, regardless of whether the
@@ -706,7 +706,7 @@ subroutine initialize_thickness_from_file(h, depth_tot, G, GV, US, param_file, f
     call MOM_read_data(filename, "eta", eta(:,:,:), G%Domain, scale=US%m_to_Z)
 
     if (correct_thickness) then
-      call adjustEtaToFitBathymetry(G, GV, US, eta, h, dZ_ref_eta=0.0)
+      call adjustEtaToFitBathymetry(G, GV, US, eta, h, dZ_ref_eta=G%Z_ref)
     else
       do k=nz,1,-1 ; do j=js,je ; do i=is,ie
         if (eta(i,j,K) < (eta(i,j,K+1) + GV%Angstrom_Z)) then
@@ -1086,7 +1086,7 @@ subroutine depress_surface(h, G, GV, US, param_file, tv, just_read_params)
   call MOM_read_data(filename, eta_srf_var, eta_sfc, G%Domain, scale=scale_factor)
 
   ! Convert thicknesses to interface heights.
-  call find_eta(h, tv, G, GV, US, eta)
+  call find_eta(h, tv, G, GV, US, eta, dZref=G%Z_ref)
 
   do j=js,je ; do i=is,ie ; if (G%mask2dT(i,j) > 0.0) then
 !    if (eta_sfc(i,j) < eta(i,j,nz+1)) then
@@ -1199,7 +1199,7 @@ subroutine trim_for_ice(PF, G, GV, US, ALE_CSp, tv, h, just_read_params)
   endif
 
   do j=G%jsc,G%jec ; do i=G%isc,G%iec
-    call cut_off_column_top(GV%ke, tv, GV, US, GV%g_Earth, G%bathyT(i,j), &
+    call cut_off_column_top(GV%ke, tv, GV, US, GV%g_Earth, G%bathyT(i,j)+G%Z_ref, &
                min_thickness, tv%T(i,j,:), T_t(i,j,:), T_b(i,j,:), &
                tv%S(i,j,:), S_t(i,j,:), S_b(i,j,:), p_surf(i,j), h(i,j,:), remap_CS, &
                z_tol=1.0e-5*US%m_to_Z, remap_answers_2018=remap_answers_2018)
@@ -2658,7 +2658,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, depth_tot, G, GV, US, PF, just
                          Hmix_depth, eps_z, eps_rho, density_extrap_bug)
 
     if (correct_thickness) then
-      call adjustEtaToFitBathymetry(G, GV, US, zi, h, dZ_ref_eta=0.0)
+      call adjustEtaToFitBathymetry(G, GV, US, zi, h, dZ_ref_eta=G%Z_ref)
     else
       do k=nz,1,-1 ; do j=js,je ; do i=is,ie
         if (zi(i,j,K) < (zi(i,j,K+1) + GV%Angstrom_Z)) then
@@ -2824,23 +2824,35 @@ subroutine find_interfaces(rho, zin, nk_data, Rb, Z_bot, zi, G, GV, US, nlevs, n
 
     ! Find and store the interface depths.
     zi_(1) = 0.0
-    do K=2,nz
-      ! Find the value of k_int in the list of rho_ where rho_(k_int) <= Rb(K) < rho_(k_int+1).
-      ! This might be made a little faster by exploiting the fact that Rb is
-      ! monotonically increasing and not resetting lo_int back to 1 inside the K loop.
-      lo_int = 1 ; hi_int = nlevs_data
-      do while (lo_int < hi_int)
-        mid = (lo_int+hi_int) / 2
-        if (Rb(K) < rho_(mid)) then ; hi_int = mid
-        else ; lo_int = mid+1 ; endif
+    if (nlevs_data < 1) then
+      ! There is no data to use, so set the interfaces at the bottom.
+      do K=2,nz ; zi_(K) = Z_bot(i,j) ; enddo
+    elseif (nlevs_data == 1) then
+      ! There is data for only one input layer, so set the interfaces at the bottom or top,
+      ! depending on how their target densities compare with the one data point.
+      do K=2,nz
+        if (Rb(K) < rho_(1)) then ; zi_(K) = 0.0
+        else ; zi_(K) = Z_bot(i,j) ; endif
       enddo
-      k_int = max(1, lo_int-1)
+    else
+      do K=2,nz
+        ! Find the value of k_int in the list of rho_ where rho_(k_int) <= Rb(K) < rho_(k_int+1).
+        ! This might be made a little faster by exploiting the fact that Rb is
+        ! monotonically increasing and not resetting lo_int back to 1 inside the K loop.
+        lo_int = 1 ; hi_int = nlevs_data
+        do while (lo_int < hi_int)
+          mid = (lo_int+hi_int) / 2
+          if (Rb(K) < rho_(mid)) then ; hi_int = mid
+          else ; lo_int = mid+1 ; endif
+        enddo
+        k_int = max(1, lo_int-1)
 
-      ! Linearly interpolate to find the depth, zi_, where Rb would be found.
-      slope = (zin(k_int+1) - zin(k_int)) / max(rho_(k_int+1) - rho_(k_int), eps_rho)
-      zi_(K) = -1.0*(zin(k_int) + slope*(Rb(K)-rho_(k_int)))
-      zi_(K) = min(max(zi_(K), Z_bot(i,j)), -1.0*hml)
-    enddo
+        ! Linearly interpolate to find the depth, zi_, where Rb would be found.
+        slope = (zin(k_int+1) - zin(k_int)) / max(rho_(k_int+1) - rho_(k_int), eps_rho)
+        zi_(K) = -1.0*(zin(k_int) + slope*(Rb(K)-rho_(k_int)))
+        zi_(K) = min(max(zi_(K), Z_bot(i,j)), -1.0*hml)
+      enddo
+    endif
     zi_(nz+1) = Z_bot(i,j)
     if (nkml > 0) then ; do K=2,nkml+1
       zi_(K) = max(hml*((1.0-real(K))/real(nkml)), Z_bot(i,j))

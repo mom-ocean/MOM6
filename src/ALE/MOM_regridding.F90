@@ -1113,7 +1113,7 @@ subroutine build_zstar_grid( CS, G, GV, h, dzInterface, frac_shelf_h)
       endif
 
       ! Local depth (G%bathyT is positive downward)
-      nominalDepth = G%bathyT(i,j)*GV%Z_to_H
+      nominalDepth = (G%bathyT(i,j)+G%Z_ref)*GV%Z_to_H
 
       ! Determine water column thickness
       totalThickness = 0.0
@@ -1203,7 +1203,7 @@ subroutine build_sigma_grid( CS, G, GV, h, dzInterface )
       endif
 
       ! The rest of the model defines grids integrating up from the bottom
-      nominalDepth = G%bathyT(i,j)*GV%Z_to_H
+      nominalDepth = (G%bathyT(i,j)+G%Z_ref)*GV%Z_to_H
 
       ! Determine water column height
       totalThickness = 0.0
@@ -1314,7 +1314,7 @@ subroutine build_rho_grid( G, GV, US, h, tv, dzInterface, remapCS, CS, frac_shel
 
 
       ! Local depth (G%bathyT is positive downward)
-      nominalDepth = G%bathyT(i,j)*GV%Z_to_H
+      nominalDepth = (G%bathyT(i,j)+G%Z_ref)*GV%Z_to_H
 
       ! Determine total water column thickness
       totalThickness = 0.0
@@ -1444,7 +1444,7 @@ subroutine build_grid_HyCOM1( G, GV, US, h, tv, h_new, dzInterface, CS, frac_she
   do j = G%jsc-1,G%jec+1 ; do i = G%isc-1,G%iec+1
     if (G%mask2dT(i,j)>0.) then
 
-      nominalDepth = G%bathyT(i,j) * GV%Z_to_H
+      nominalDepth = (G%bathyT(i,j)+G%Z_ref) * GV%Z_to_H
 
       if (ice_shelf) then
         totalThickness = 0.0
@@ -1592,7 +1592,7 @@ subroutine build_grid_SLight(G, GV, US, h, tv, dzInterface, CS)
   do j = G%jsc-1,G%jec+1 ; do i = G%isc-1,G%iec+1
     if (G%mask2dT(i,j)>0.) then
 
-      depth = G%bathyT(i,j) * GV%Z_to_H
+      depth = (G%bathyT(i,j)+G%Z_ref) * GV%Z_to_H
       z_col(1) = 0. ! Work downward rather than bottom up
       do K=1,nz
         z_col(K+1) = z_col(K) + h(i,j,k)
@@ -1718,7 +1718,7 @@ subroutine build_grid_arbitrary( G, GV, h, dzInterface, h_new, CS )
     do i = G%isc-1,G%iec+1
 
       ! Local depth
-      local_depth = G%bathyT(i,j)*GV%Z_to_H
+      local_depth = (G%bathyT(i,j)+G%Z_ref)*GV%Z_to_H
 
       ! Determine water column height
       total_height = 0.0

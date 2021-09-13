@@ -1309,7 +1309,7 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces_in,
   ! Set up the bottom depth, G%D either analytically or from file
   call MOM_initialize_topography(dG%bathyT, CS%Grid%max_depth, dG, param_file)
   call rescale_dyn_horgrid_bathymetry(dG, CS%US%Z_to_m)
-  call copy_dyngrid_to_MOM_grid(dG,CS%Grid,CS%US)
+  call copy_dyngrid_to_MOM_grid(dG, CS%Grid, CS%US)
   call destroy_dyn_horgrid(dG)
 !  endif
   G => CS%Grid ; CS%Grid_in => CS%Grid

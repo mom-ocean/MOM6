@@ -916,7 +916,7 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
         zTopOfCell = 0. ; zBottomOfCell = 0. ; nPoints = 0; hsrc(:) = 0.0; tmpT1d(:) = -99.9
         do k=1,nz_data
           if (mask_z(CS%col_i(c),CS%col_j(c),k) == 1.0) then
-            zBottomOfCell = -min( z_edges_in(k+1), G%bathyT(CS%col_i(c),CS%col_j(c)) )
+            zBottomOfCell = -min( z_edges_in(k+1) - G%Z_ref, G%bathyT(CS%col_i(c),CS%col_j(c)) )
             tmpT1d(k) = sp_val(CS%col_i(c),CS%col_j(c),k)
           elseif (k>1) then
             zBottomOfCell = -G%bathyT(CS%col_i(c),CS%col_j(c))
@@ -1023,7 +1023,7 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
         zTopOfCell = 0. ; zBottomOfCell = 0. ; nPoints = 0; hsrc(:) = 0.0
         do k=1,nz_data
           if (mask_u(i,j,k) == 1.0) then
-            zBottomOfCell = -min( z_edges_in(k+1), G%bathyT(i,j) )
+            zBottomOfCell = -min( z_edges_in(k+1) - G%Z_ref, G%bathyT(i,j) )
           elseif (k>1) then
             zBottomOfCell = -G%bathyT(i,j)
           else ! This next block should only ever be reached over land
@@ -1071,7 +1071,7 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
         zTopOfCell = 0. ; zBottomOfCell = 0. ; nPoints = 0; hsrc(:) = 0.0
         do k=1,nz_data
           if (mask_v(i,j,k) == 1.0) then
-            zBottomOfCell = -min( z_edges_in(k+1), G%bathyT(i,j) )
+            zBottomOfCell = -min( z_edges_in(k+1) - G%Z_ref, G%bathyT(i,j) )
           elseif (k>1) then
             zBottomOfCell = -G%bathyT(i,j)
           else ! This next block should only ever be reached over land

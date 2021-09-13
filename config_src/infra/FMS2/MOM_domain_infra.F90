@@ -156,6 +156,9 @@ type, public :: MOM_domain_type
                                 !! would be contain only land points and are not
                                 !! assigned to actual processors. This need not be
                                 !! assigned if all logical processors are used.
+  integer :: turns              !< Number of quarter-turns from input to this grid.
+  type(MOM_domain_type), pointer :: domain_in => NULL()
+                                !< Reference to unrotated domain (if turned)
 end type MOM_domain_type
 
 integer, parameter :: To_All = To_East + To_West + To_North + To_South !< A flag for passing in all directions
@@ -1396,6 +1399,9 @@ subroutine create_MOM_domain(MOM_dom, n_global, n_halo, reentrant, tripolar_N, l
     mask_table_exists = .false.
   endif
 
+  ! Initialize as an unrotated domain
+  MOM_dom%turns = 0
+
   call clone_MD_to_d2D(MOM_dom, MOM_dom%mpp_domain)
 
   !For downsampled domain, recommend a halo of 1 (or 0?) since we're not doing wide-stencil computations.
@@ -1403,7 +1409,6 @@ subroutine create_MOM_domain(MOM_dom, n_global, n_halo, reentrant, tripolar_N, l
   !error: downsample_diag_indices_get: peculiar size 28 in i-direction\ndoes not match one of 24 25 26 27
   ! call clone_MD_to_d2D(MOM_dom, MOM_dom%mpp_domain_d2, halo_size=(MOM_dom%nihalo/2), coarsen=2)
   call clone_MD_to_d2D(MOM_dom, MOM_dom%mpp_domain_d2, coarsen=2)
-
 end subroutine create_MOM_domain
 
 !> dealloc_MOM_domain deallocates memory associated with a pointer to a MOM_domain_type
@@ -1487,8 +1492,9 @@ end subroutine get_domain_components_d2D
 !! some properties of the new type to differ from the original one.
 subroutine clone_MD_to_MD(MD_in, MOM_dom, min_halo, halo_size, symmetric, domain_name, &
                           turns, refine, extra_halo)
-  type(MOM_domain_type), intent(in)    :: MD_in  !< An existing MOM_domain
-  type(MOM_domain_type), pointer       :: MOM_dom !< A pointer to a MOM_domain that will be
+  type(MOM_domain_type), target, intent(in) :: MD_in  !< An existing MOM_domain
+  type(MOM_domain_type), pointer :: MOM_dom
+                                  !< A pointer to a MOM_domain that will be
                                   !! allocated if it is unassociated, and will have data
                                   !! copied from MD_in
   integer, dimension(2), &
@@ -1619,8 +1625,12 @@ subroutine clone_MD_to_MD(MD_in, MOM_dom, min_halo, halo_size, symmetric, domain
     MOM_dom%name = MD_in%name
   endif
 
-  call clone_MD_to_d2D(MOM_dom, MOM_dom%mpp_domain, xextent=exni, yextent=exnj)
+  MOM_dom%turns = qturns
+  if (qturns /= 0) then
+    MOM_dom%domain_in => MD_in
+  endif
 
+  call clone_MD_to_d2D(MOM_dom, MOM_dom%mpp_domain, xextent=exni, yextent=exnj)
   call clone_MD_to_d2D(MOM_dom, MOM_dom%mpp_domain_d2, domain_name=MOM_dom%name, coarsen=2)
 
 end subroutine clone_MD_to_MD

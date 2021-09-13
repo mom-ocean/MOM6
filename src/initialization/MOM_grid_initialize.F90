@@ -333,7 +333,8 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
   start(2) = 2 ; nread(1) = ni+1 ; nread(2) = 2
   allocate( tmpGlbl(ni+1,2) )
   if (is_root_PE()) &
-    call MOM_read_data(filename, "x", tmpGlbl, start, nread, no_domain=.TRUE.)
+    call MOM_read_data(filename, "x", tmpGlbl, start, nread, &
+        no_domain=.TRUE., turns=G%HI%turns)
   call broadcast(tmpGlbl, 2*(ni+1), root_PE())
 
   ! I don't know why the second axis is 1 or 2 here. -RWH
@@ -351,7 +352,8 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
   start(:) = 1 ; nread(:) = 1
   start(1) = int(ni/4)+1 ; nread(2) = nj+1
   if (is_root_PE()) &
-    call MOM_read_data(filename, "y", tmpGlbl, start, nread, no_domain=.TRUE.)
+    call MOM_read_data(filename, "y", tmpGlbl, start, nread, &
+        no_domain=.TRUE., turns=G%HI%turns)
   call broadcast(tmpGlbl, nj+1, root_PE())
 
   do j=G%jsg,G%jeg
