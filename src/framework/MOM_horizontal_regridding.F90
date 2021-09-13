@@ -263,12 +263,16 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
   real,                  intent(in)    :: conversion !< Conversion factor for tracer.
   integer,               intent(in)    :: recnum     !< Record number of tracer to be read.
   type(ocean_grid_type), intent(inout) :: G          !< Grid object
-  real, allocatable, dimension(:,:,:)  :: tr_z       !< pointer to allocatable tracer array on local
+  real, allocatable, dimension(:,:,:), intent(out) :: tr_z
+                                                     !< pointer to allocatable tracer array on local
                                                      !! model grid and input-file vertical levels.
-  real, allocatable, dimension(:,:,:)  :: mask_z     !< pointer to allocatable tracer mask array on
+  real, allocatable, dimension(:,:,:), intent(out) :: mask_z
+                                                     !< pointer to allocatable tracer mask array on
                                                      !! local model grid and input-file vertical levels.
-  real, allocatable,     dimension(:)  :: z_in       !< Cell grid values for input data.
-  real, allocatable,     dimension(:)  :: z_edges_in !< Cell grid edge values for input data.
+  real, allocatable, dimension(:), intent(out) :: z_in
+                                                     !< Cell grid values for input data.
+  real, allocatable, dimension(:), intent(out) :: z_edges_in
+                                                     !< Cell grid edge values for input data.
   real,                  intent(out)   :: missing_value !< The missing value in the returned array.
   logical,               intent(in)    :: reentrant_x !< If true, this grid is reentrant in the x-direction
   logical,               intent(in)    :: tripolar_n !< If true, this is a northern tripolar grid
@@ -329,10 +333,6 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
   is_ongrid = .false.
   if (present(ongrid)) is_ongrid = ongrid
 
-  if (allocated(tr_z)) deallocate(tr_z)
-  if (allocated(mask_z)) deallocate(mask_z)
-  if (allocated(z_edges_in)) deallocate(z_edges_in)
-
   PI_180 = atan(1.0)/45.
 
   ! Open NetCDF file and if present, extract data and spatial coordinate information
@@ -382,13 +382,6 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
 
   rcode = NF90_GET_ATT(ncid, varid, "scale_factor", scale_factor)
   if (rcode /= 0) scale_factor = 1.0
-
-  if (allocated(lon_in)) deallocate(lon_in)
-  if (allocated(lat_in)) deallocate(lat_in)
-  if (allocated(z_in)) deallocate(z_in)
-  if (allocated(z_edges_in)) deallocate(z_edges_in)
-  if (allocated(tr_z)) deallocate(tr_z)
-  if (allocated(mask_z)) deallocate(mask_z)
 
   allocate(lon_in(id), lat_in(jd), z_in(kd), z_edges_in(kd+1))
   allocate(tr_z(isd:ied,jsd:jed,kd), mask_z(isd:ied,jsd:jed,kd))
@@ -620,12 +613,16 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, t
   type(time_type),       intent(in)    :: Time       !< A FMS time type
   real,                  intent(in)    :: conversion !< Conversion factor for tracer.
   type(ocean_grid_type), intent(inout) :: G          !< Grid object
-  real, allocatable, dimension(:,:,:)  :: tr_z       !< pointer to allocatable tracer array on local
+  real, allocatable, dimension(:,:,:), intent(out) :: tr_z
+                                                     !< pointer to allocatable tracer array on local
                                                      !! model grid and native vertical levels.
-  real, allocatable, dimension(:,:,:)  :: mask_z     !< pointer to allocatable tracer mask array on
+  real, allocatable, dimension(:,:,:), intent(out) :: mask_z
+                                                     !< pointer to allocatable tracer mask array on
                                                      !! local model grid and native vertical levels.
-  real, allocatable,     dimension(:)  :: z_in       !< Cell grid values for input data.
-  real, allocatable,     dimension(:)  :: z_edges_in !< Cell grid edge values for input data. (Intent out)
+  real, allocatable, dimension(:), intent(out) :: z_in
+                                                     !< Cell grid values for input data.
+  real, allocatable, dimension(:), intent(out) :: z_edges_in
+                                                     !< Cell grid edge values for input data.
   real,                  intent(out)   :: missing_value !< The missing value in the returned array.
   logical,               intent(in)    :: reentrant_x !< If true, this grid is reentrant in the x-direction
   logical,               intent(in)    :: tripolar_n !< If true, this is a northern tripolar grid
@@ -651,8 +648,8 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, t
   integer :: i,j,k
   integer, dimension(4) :: start, count, dims, dim_id
   real, dimension(:,:), allocatable :: x_in, y_in
-  real, dimension(:), allocatable  :: lon_in, lat_in ! The longitude and latitude in the input file
-  real, dimension(:), allocatable  :: lat_inp ! The input file latitudes expanded to the pole
+  real, dimension(:), allocatable :: lon_in, lat_in ! The longitude and latitude in the input file
+  real, dimension(:), allocatable :: lat_inp ! The input file latitudes expanded to the pole
   real :: max_lat, min_lat, pole, max_depth, npole
   real :: roundoff  ! The magnitude of roundoff, usually ~2e-16.
   logical :: add_np
@@ -698,12 +695,6 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, t
   call cpu_clock_begin(id_clock_read)
 
   call get_external_field_info(fms_id, size=fld_sz, axes=axes_data, missing=missing_value)
-  if (allocated(lon_in)) deallocate(lon_in)
-  if (allocated(lat_in)) deallocate(lat_in)
-  if (allocated(z_in)) deallocate(z_in)
-  if (allocated(z_edges_in)) deallocate(z_edges_in)
-  if (allocated(tr_z)) deallocate(tr_z)
-  if (allocated(mask_z)) deallocate(mask_z)
 
   id = fld_sz(1) ; jd  = fld_sz(2) ; kd = fld_sz(3)
 
@@ -900,7 +891,6 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, t
         enddo
       enddo
   endif
-
 end subroutine horiz_interp_and_extrap_tracer_fms_id
 
 !> Create a 2d-mesh of grid coordinates from 1-d arrays.
