@@ -850,7 +850,7 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
       ! Determining the time-average sea surface height is part of the algorithm.
       ! This may be eta_av if Boussinesq, or need to be diagnosed if not.
       CS%time_in_cycle = CS%time_in_cycle + dt
-      call find_eta(h, CS%tv, G, GV, US, ssh, CS%eta_av_bc, eta_to_m=1.0)
+      call find_eta(h, CS%tv, G, GV, US, ssh, CS%eta_av_bc, eta_to_m=1.0, dZref=G%Z_ref)
       do j=js,je ; do i=is,ie
         CS%ssh_rint(i,j) = CS%ssh_rint(i,j) + dt*ssh(i,j)
       enddo ; enddo
@@ -1276,7 +1276,13 @@ subroutine step_MOM_thermo(CS, G, GV, US, u, v, h, tv, fluxes, dtdia, &
   call enable_averages(dtdia, Time_end_thermo, CS%diag)
 
   if (associated(CS%odaCS)) then
-    call apply_oda_tracer_increments(US%T_to_s*dtdia, G, GV, tv, h, CS%odaCS)
+    if (CS%debug) then
+      call MOM_thermo_chksum("Pre-oda ", tv, G, US, haloshift=0)
+    endif
+    call apply_oda_tracer_increments(US%T_to_s*dtdia, Time_end_thermo, G, GV, tv, h, CS%odaCS)
+    if (CS%debug) then
+      call MOM_thermo_chksum("Post-oda ", tv, G, US, haloshift=0)
+    endif
   endif
 
   if (associated(fluxes%p_surf) .or. associated(fluxes%p_surf_full)) then
@@ -2109,7 +2115,8 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   ! Swap axes for quarter and 3-quarter turns
   if (CS%rotate_index) then
     allocate(CS%G)
-    call clone_MOM_domain(G_in%Domain, CS%G%Domain, turns=turns)
+    call clone_MOM_domain(G_in%Domain, CS%G%Domain, turns=turns, &
+        domain_name="MOM_rot")
     first_direction = modulo(first_direction + turns, 2)
   else
     CS%G => G_in
@@ -2278,7 +2285,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
 
   ALLOC_(CS%ssh_rint(isd:ied,jsd:jed)) ; CS%ssh_rint(:,:) = 0.0
   ALLOC_(CS%ave_ssh_ibc(isd:ied,jsd:jed)) ; CS%ave_ssh_ibc(:,:) = 0.0
-  ALLOC_(CS%eta_av_bc(isd:ied,jsd:jed)) ; CS%eta_av_bc(:,:) = 0.0
+  ALLOC_(CS%eta_av_bc(isd:ied,jsd:jed)) ; CS%eta_av_bc(:,:) = 0.0 ! -G%Z_ref
   CS%time_in_cycle = 0.0 ; CS%time_in_thermo_cycle = 0.0
 
   ! Use the Wright equation of state by default, unless otherwise specified
@@ -2789,9 +2796,9 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
 
   if (.not.query_initialized(CS%ave_ssh_ibc,"ave_ssh",restart_CSp)) then
     if (CS%split) then
-      call find_eta(CS%h, CS%tv, G, GV, US, CS%ave_ssh_ibc, eta, eta_to_m=1.0)
+      call find_eta(CS%h, CS%tv, G, GV, US, CS%ave_ssh_ibc, eta, eta_to_m=1.0, dZref=G%Z_ref)
     else
-      call find_eta(CS%h, CS%tv, G, GV, US, CS%ave_ssh_ibc, eta_to_m=1.0)
+      call find_eta(CS%h, CS%tv, G, GV, US, CS%ave_ssh_ibc, eta_to_m=1.0, dZref=G%Z_ref)
     endif
   endif
   if (CS%split) deallocate(eta)
@@ -2807,7 +2814,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
                       (LEN_TRIM(dirs%input_filename) == 1))
 
   if (CS%ensemble_ocean) then
-    call init_oda(Time, G, GV, CS%odaCS)
+    call init_oda(Time, G, GV, CS%diag, CS%odaCS)
   endif
 
   !### This could perhaps go here instead of in finish_MOM_initialization?
@@ -2852,7 +2859,7 @@ subroutine finish_MOM_initialization(Time, dirs, CS, restart_CSp)
     restart_CSp_tmp = restart_CSp
     call restart_registry_lock(restart_CSp_tmp, unlocked=.true.)
     allocate(z_interface(SZI_(G),SZJ_(G),SZK_(GV)+1))
-    call find_eta(CS%h, CS%tv, G, GV, US, z_interface, eta_to_m=1.0)
+    call find_eta(CS%h, CS%tv, G, GV, US, z_interface, eta_to_m=1.0, dZref=G%Z_ref)
     call register_restart_field(z_interface, "eta", .true., restart_CSp_tmp, &
                                 "Interface heights", "meter", z_grid='i')
     ! NOTE: write_ic=.true. routes routine to fms2 IO write_initial_conditions interface
@@ -3401,10 +3408,10 @@ subroutine extract_surface_state(CS, sfc_state_in)
     numberOfErrors=0 ! count number of errors
     do j=js,je ; do i=is,ie
       if (G%mask2dT(i,j)>0.) then
-        localError = sfc_state%sea_lev(i,j) <= -G%bathyT(i,j) &
+        localError = sfc_state%sea_lev(i,j) <= -G%bathyT(i,j) - G%Z_ref &
                 .or. sfc_state%sea_lev(i,j) >=  CS%bad_val_ssh_max  &
                 .or. sfc_state%sea_lev(i,j) <= -CS%bad_val_ssh_max  &
-                .or. sfc_state%sea_lev(i,j) + G%bathyT(i,j) < CS%bad_val_col_thick
+                .or. sfc_state%sea_lev(i,j) + G%bathyT(i,j) + G%Z_ref < CS%bad_val_col_thick
         if (use_temperature) localError = localError &
                 .or. sfc_state%SSS(i,j)<0.                        &
                 .or. sfc_state%SSS(i,j)>=CS%bad_val_sss_max       &
@@ -3420,7 +3427,7 @@ subroutine extract_surface_state(CS, sfc_state_in)
                 'Extreme surface sfc_state detected: i=',ig,'j=',jg, &
                 'lon=',G%geoLonT(i,j), 'lat=',G%geoLatT(i,j), &
                 'x=',G%gridLonT(ig), 'y=',G%gridLatT(jg), &
-                'D=',CS%US%Z_to_m*G%bathyT(i,j),  'SSH=',CS%US%Z_to_m*sfc_state%sea_lev(i,j), &
+                'D=',CS%US%Z_to_m*(G%bathyT(i,j)+G%Z_ref),  'SSH=',CS%US%Z_to_m*sfc_state%sea_lev(i,j), &
                 'SST=',sfc_state%SST(i,j), 'SSS=',sfc_state%SSS(i,j), &
                 'U-=',US%L_T_to_m_s*sfc_state%u(I-1,j), 'U+=',US%L_T_to_m_s*sfc_state%u(I,j), &
                 'V-=',US%L_T_to_m_s*sfc_state%v(i,J-1), 'V+=',US%L_T_to_m_s*sfc_state%v(i,J)
@@ -3429,7 +3436,7 @@ subroutine extract_surface_state(CS, sfc_state_in)
                 'Extreme surface sfc_state detected: i=',ig,'j=',jg, &
                 'lon=',G%geoLonT(i,j), 'lat=',G%geoLatT(i,j), &
                 'x=',G%gridLonT(i), 'y=',G%gridLatT(j), &
-                'D=',CS%US%Z_to_m*G%bathyT(i,j),  'SSH=',CS%US%Z_to_m*sfc_state%sea_lev(i,j), &
+                'D=',CS%US%Z_to_m*(G%bathyT(i,j)+G%Z_ref),  'SSH=',CS%US%Z_to_m*sfc_state%sea_lev(i,j), &
                 'U-=',US%L_T_to_m_s*sfc_state%u(I-1,j), 'U+=',US%L_T_to_m_s*sfc_state%u(I,j), &
                 'V-=',US%L_T_to_m_s*sfc_state%v(i,J-1), 'V+=',US%L_T_to_m_s*sfc_state%v(i,J)
             endif
