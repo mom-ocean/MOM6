@@ -250,11 +250,36 @@ subroutine mom_import(ocean_public, ocean_grid, importState, ice_ocean_boundary,
   !----
   ! Note - preset values to 0, if field does not exist in importState, then will simply return
   ! and preset value will be used
-
   ice_ocean_boundary%mi(:,:) = 0._ESMF_KIND_R8
   call state_getimport(importState, 'mass_of_overlying_ice',  &
        isc, iec, jsc, jec, ice_ocean_boundary%mi,rc=rc)
   if (ChkErr(rc,__LINE__,u_FILE_u)) return
+
+  !----
+  ! sea-ice fraction
+  !----
+  ice_ocean_boundary%ice_fraction(:,:) = 0._ESMF_KIND_R8
+  call state_getimport(importState, 'Si_ifrac',  &
+       isc, iec, jsc, jec, ice_ocean_boundary%ice_fraction, rc=rc)
+  if (ChkErr(rc,__LINE__,u_FILE_u)) return
+
+  !----
+  ! 10m wind squared
+  !----
+  ice_ocean_boundary%u10_sqr(:,:) = 0._ESMF_KIND_R8
+  call state_getimport(importState, 'So_duu10n',  &
+       isc, iec, jsc, jec, ice_ocean_boundary%u10_sqr, rc=rc)
+  if (ChkErr(rc,__LINE__,u_FILE_u)) return
+
+  !----
+  ! Langmuir enhancement factor
+  !----
+  if ( associated(ice_ocean_boundary%lamult) ) then
+   ice_ocean_boundary%lamult (:,:) = 0._ESMF_KIND_R8
+   call state_getimport(importState, 'Sw_lamult',  &
+        isc, iec, jsc, jec, ice_ocean_boundary%lamult, rc=rc)
+   if (ChkErr(rc,__LINE__,u_FILE_u)) return
+   endif
 
   !----
   ! Partitioned Stokes Drift Components
