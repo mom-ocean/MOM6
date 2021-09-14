@@ -4726,6 +4726,7 @@ subroutine mask_outside_OBCs(G, US, param_file, OBC)
 
   call get_param(param_file, mdl, "MINIMUM_DEPTH", min_depth, &
                  units="m", default=0.0, scale=US%m_to_Z, do_not_log=.true.)
+  ! The reference depth on a dyn_horgrid is 0, otherwise would need:  min_depth = min_depth - G%Z_ref
 
   allocate(color(G%isd:G%ied, G%jsd:G%jed)) ; color = 0
   allocate(color2(G%isd:G%ied, G%jsd:G%jed)) ; color2 = 0

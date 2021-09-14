@@ -216,6 +216,10 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
   I_rho0 = 1.0 / GV%Rho0
   cn_subRO = 1e-100*US%m_s_to_L_T  ! The hard-coded value here might need to increase.
 
+  ! init local arrays
+  drag_scale(:,:) = 0.
+  Ub(:,:,:,:) = 0.
+
   ! Set the wave speeds for the modes, using cg(n) ~ cg(1)/n.**********************
   ! This is wrong, of course, but it works reasonably in some cases.
   ! Uncomment if wave_speed is not used to calculate the true values (BDM).
@@ -2213,7 +2217,10 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
 
   ! Allocate and populate frequency array (each a multiple of first for now)
   allocate(CS%frequency(num_freq))
-  call get_param(param_file, mdl, "FIRST_MODE_PERIOD", period_1, units="s", scale=US%s_to_T)
+  call get_param(param_file, mdl, "FIRST_MODE_PERIOD", period_1, &
+                 "The period of the first mode for internal tides", default=44567., &
+                 units="s", scale=US%s_to_T)
+
   do fr=1,num_freq
     CS%frequency(fr) = (8.0*atan(1.0) * (real(fr)) / period_1) ! ADDED BDM
   enddo
@@ -2359,7 +2366,7 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
   do j=G%jsc,G%jec ; do i=G%isc,G%iec
     ! Restrict RMS topographic roughness to a fraction (10 percent by default) of the column depth.
     if (RMS_roughness_frac >= 0.0) then
-      h2(i,j) = max(min((RMS_roughness_frac*G%bathyT(i,j))**2, h2(i,j)), 0.0)
+      h2(i,j) = max(min((RMS_roughness_frac*(G%bathyT(i,j)+G%Z_ref))**2, h2(i,j)), 0.0)
     else
       h2(i,j) = max(h2(i,j), 0.0)
     endif
@@ -2532,8 +2539,8 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
   do a=1,num_angle ; angles(a) = (real(a) - 1) * Angle_size ; enddo
 
   id_ang = diag_axis_init("angle", angles, "Radians", "N", "Angular Orienation of Fluxes")
-  call define_axes_group(diag, (/ diag%axesT1%handles(1), diag%axesT1%handles(2), id_ang /), axes_ang)
-
+  call define_axes_group(diag, (/ diag%axesT1%handles(1), diag%axesT1%handles(2), id_ang /), &
+                         axes_ang, is_h_point=.true.)
   do fr=1,CS%nFreq ; write(freq_name(fr), '("freq",i1)') fr ; enddo
   do m=1,CS%nMode ; do fr=1,CS%nFreq
     ! Register 2-D energy density (summed over angles) for each freq and mode

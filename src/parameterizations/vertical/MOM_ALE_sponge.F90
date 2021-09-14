@@ -863,8 +863,6 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
   real, dimension(SZK_(GV)) :: tmp_val1         ! data values remapped to model grid
   real, dimension(SZK_(GV)) :: h_col            ! A column of thicknesses at h, u or v points [H ~> m or kg m-2]
   real, allocatable, dimension(:,:,:) :: sp_val ! A temporary array for fields
-  real, allocatable, dimension(:,:,:) :: sp_val_u ! A temporary array for fields
-  real, allocatable, dimension(:,:,:) :: sp_val_v ! A temporary array for fields
   real, allocatable, dimension(:,:,:) :: mask_z ! A temporary array for field mask at h pts
   real, allocatable, dimension(:,:,:) :: mask_u ! A temporary array for field mask at u pts
   real, allocatable, dimension(:,:,:) :: mask_v ! A temporary array for field mask at v pts
@@ -883,6 +881,8 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
   real :: Idt  ! The inverse of the timestep [T-1 ~> s-1]
   real :: h_neglect, h_neglect_edge ! Negligible thicknesses [H ~> m or kg m-2]
   real :: zTopOfCell, zBottomOfCell ! Interface heights (positive upward) in the input dataset [Z ~> m].
+  real :: sp_val_u ! Interpolation of sp_val to u-points
+  real :: sp_val_v ! Interpolation of sp_val to v-points
   integer :: nPoints
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
@@ -903,8 +903,6 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
       call MOM_error(FATAL,"apply_ALE_sponge: No time information provided")
     do m=1,CS%fldno
       nz_data = CS%Ref_val(m)%nz_data
-      allocate(sp_val(G%isd:G%ied,G%jsd:G%jed,1:nz_data)); sp_val(:,:,:) = 0.0
-      allocate(mask_z(G%isd:G%ied,G%jsd:G%jed,1:nz_data)); mask_z(:,:,:) = 0.0
       call horiz_interp_and_extrap_tracer(CS%Ref_val(m)%id, Time, 1.0, G, sp_val, mask_z, z_in, &
                      z_edges_in,  missing_value, CS%reentrant_x, CS%tripolar_N, .false., &
                      spongeOnGrid=CS%SpongeDataOngrid, m_to_Z=US%m_to_Z, &
@@ -918,7 +916,7 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
         zTopOfCell = 0. ; zBottomOfCell = 0. ; nPoints = 0; hsrc(:) = 0.0; tmpT1d(:) = -99.9
         do k=1,nz_data
           if (mask_z(CS%col_i(c),CS%col_j(c),k) == 1.0) then
-            zBottomOfCell = -min( z_edges_in(k+1), G%bathyT(CS%col_i(c),CS%col_j(c)) )
+            zBottomOfCell = -min( z_edges_in(k+1) - G%Z_ref, G%bathyT(CS%col_i(c),CS%col_j(c)) )
             tmpT1d(k) = sp_val(CS%col_i(c),CS%col_j(c),k)
           elseif (k>1) then
             zBottomOfCell = -G%bathyT(CS%col_i(c),CS%col_j(c))
@@ -991,24 +989,20 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
          call MOM_error(FATAL,"apply_ALE_sponge: No time information provided")
 
       nz_data = CS%Ref_val_u%nz_data
-      allocate(sp_val(G%isd:G%ied,G%jsd:G%jed,1:nz_data))
-      allocate(sp_val_u(G%isdB:G%iedB,G%jsd:G%jed,1:nz_data))
-      allocate(mask_u(G%isdB:G%iedB,G%jsd:G%jed,1:nz_data))
-      allocate(mask_z(G%isd:G%ied,G%jsd:G%jed,1:nz_data))
-      sp_val(:,:,:) = 0.0
-      sp_val_u(:,:,:) = 0.0
-      mask_u(:,:,:) = 0.0
-      mask_z(:,:,:) = 0.0
       ! Interpolate from the external horizontal grid and in time
       call horiz_interp_and_extrap_tracer(CS%Ref_val_u%id, Time, 1.0, G, sp_val, mask_z, z_in, &
                                           z_edges_in, missing_value, CS%reentrant_x, CS%tripolar_N, .false., &
                                           spongeOnGrid=CS%SpongeDataOngrid, m_to_Z=US%m_to_Z,&
                                           answers_2018=CS%hor_regrid_answers_2018)
 
+      ! Initialize mask_z halos to zero before pass_var, in case of no update
+      mask_z(G%isc-1, G%jsc:G%jec, :) = 0.
+      mask_z(G%iec+1, G%jsc:G%jec, :) = 0.
       call pass_var(sp_val, G%Domain)
       call pass_var(mask_z, G%Domain)
+
+      allocate(mask_u(G%isdB:G%iedB,G%jsd:G%jed,1:nz_data))
       do j=G%jsc,G%jec; do I=G%iscB,G%iecB
-        sp_val_u(I,j,1:nz_data) = 0.5*(sp_val(i,j,1:nz_data)+sp_val(i+1,j,1:nz_data))
         mask_u(I,j,1:nz_data) = min(mask_z(i,j,1:nz_data),mask_z(i+1,j,1:nz_data))
       enddo ; enddo
 
@@ -1018,7 +1012,10 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
         ! Therefore we use c as per C code and increment the index where necessary.
         i = CS%col_i_u(c) ; j = CS%col_j_u(c)
         if (mask_u(i,j,1) == 1.0) then
-          CS%Ref_val_u%p(1:nz_data,c) = sp_val_u(i,j,1:nz_data)
+          do k=1,nz_data
+            sp_val_u = 0.5 * (sp_val(i,j,k) + sp_val(i+1,j,k))
+            CS%Ref_val_u%p(k,c) = sp_val_u
+          enddo
         else
           CS%Ref_val_u%p(1:nz_data,c) = 0.0
         endif
@@ -1026,7 +1023,7 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
         zTopOfCell = 0. ; zBottomOfCell = 0. ; nPoints = 0; hsrc(:) = 0.0
         do k=1,nz_data
           if (mask_u(i,j,k) == 1.0) then
-            zBottomOfCell = -min( z_edges_in(k+1), G%bathyT(i,j) )
+            zBottomOfCell = -min( z_edges_in(k+1) - G%Z_ref, G%bathyT(i,j) )
           elseif (k>1) then
             zBottomOfCell = -G%bathyT(i,j)
           else ! This next block should only ever be reached over land
@@ -1039,24 +1036,21 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
         hsrc(nz_data) = hsrc(nz_data) + ( zTopOfCell + G%bathyT(i,j) )
         CS%Ref_val_u%h(1:nz_data,c) = GV%Z_to_H*hsrc(1:nz_data)
       enddo
-      deallocate(sp_val, sp_val_u, mask_u, mask_z, hsrc)
+      deallocate(sp_val, mask_u, mask_z, hsrc)
       nz_data = CS%Ref_val_v%nz_data
-      allocate(sp_val( G%isd:G%ied,G%jsd:G%jed,1:nz_data))
-      allocate(sp_val_v(G%isd:G%ied,G%jsdB:G%jedB,1:nz_data))
-      allocate(mask_v(G%isd:G%ied,G%jsdB:G%jedB,1:nz_data))
-      allocate(mask_z(G%isd:G%ied,G%jsd:G%jed,1:nz_data))
-      sp_val(:,:,:) = 0.0
-      sp_val_v(:,:,:) = 0.0
-      mask_z(:,:,:) = 0.0
       ! Interpolate from the external horizontal grid and in time
       call horiz_interp_and_extrap_tracer(CS%Ref_val_v%id, Time, 1.0, G, sp_val, mask_z, z_in, &
                                           z_edges_in, missing_value, CS%reentrant_x, CS%tripolar_N, .false., &
                                           spongeOnGrid=CS%SpongeDataOngrid, m_to_Z=US%m_to_Z,&
                                           answers_2018=CS%hor_regrid_answers_2018)
+      ! Initialize mask_z halos to zero before pass_var, in case of no update
+      mask_z(G%isc:G%iec, G%jsc-1, :) = 0.
+      mask_z(G%isc:G%iec, G%jec+1, :) = 0.
       call pass_var(sp_val, G%Domain)
       call pass_var(mask_z, G%Domain)
+
+      allocate(mask_v(G%isd:G%ied,G%jsdB:G%jedB,1:nz_data))
       do J=G%jscB,G%jecB; do i=G%isc,G%iec
-        sp_val_v(i,J,1:nz_data) = 0.5*(sp_val(i,j,1:nz_data)+sp_val(i,j+1,1:nz_data))
         mask_v(i,J,1:nz_data) = min(mask_z(i,j,1:nz_data),mask_z(i,j+1,1:nz_data))
       enddo ; enddo
       !call pass_var(mask_z,G%Domain)
@@ -1066,7 +1060,10 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
         ! Therefore we use c as per C code and increment the index where necessary.
         i = CS%col_i_v(c) ; j = CS%col_j_v(c)
         if (mask_v(i,j,1) == 1.0) then
-          CS%Ref_val_v%p(1:nz_data,c) = sp_val_v(i,j,1:nz_data)
+          do k=1,nz_data
+            sp_val_v = 0.5 * (sp_val(i,j,k) + sp_val(i,j+1,k))
+            CS%Ref_val_v%p(k,c) = sp_val_v
+          enddo
         else
           CS%Ref_val_v%p(1:nz_data,c) = 0.0
         endif
@@ -1074,7 +1071,7 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
         zTopOfCell = 0. ; zBottomOfCell = 0. ; nPoints = 0; hsrc(:) = 0.0
         do k=1,nz_data
           if (mask_v(i,j,k) == 1.0) then
-            zBottomOfCell = -min( z_edges_in(k+1), G%bathyT(i,j) )
+            zBottomOfCell = -min( z_edges_in(k+1) - G%Z_ref, G%bathyT(i,j) )
           elseif (k>1) then
             zBottomOfCell = -G%bathyT(i,j)
           else ! This next block should only ever be reached over land
@@ -1087,7 +1084,7 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
         hsrc(nz_data) = hsrc(nz_data) + ( zTopOfCell + G%bathyT(i,j) )
         CS%Ref_val_v%h(1:nz_data,c) = GV%Z_to_H*hsrc(1:nz_data)
       enddo
-      deallocate(sp_val, sp_val_v, mask_v, mask_z, hsrc)
+      deallocate(sp_val, mask_v, mask_z, hsrc)
     endif
 
     call pass_var(h,G%Domain)

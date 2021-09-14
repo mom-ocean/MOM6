@@ -248,13 +248,13 @@ subroutine write_u_accel(I, j, um, hin, ADp, CDp, dt_in_T, G, GV, US, CS, vel_rp
     do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') (h_scale*hin(i+1,j+1,k)); enddo
 
 
-    e(nz+1) = -US%Z_to_m*G%bathyT(i,j)
+    e(nz+1) = -US%Z_to_m*(G%bathyT(i,j) + G%Z_ref)
     do k=nz,1,-1 ; e(K) = e(K+1) + h_scale*hin(i,j,k) ; enddo
     write(file,'(/,"e-:    ",$)')
     write(file,'(ES10.3," ",$)') e(ks)
     do K=ks+1,ke+1 ; if (do_k(k-1)) write(file,'(ES10.3," ",$)') e(K); enddo
 
-    e(nz+1) = -US%Z_to_m*G%bathyT(i+1,j)
+    e(nz+1) = -US%Z_to_m*(G%bathyT(i+1,j) + G%Z_ref)
     do k=nz,1,-1 ; e(K) = e(K+1) + h_scale*hin(i+1,j,k) ; enddo
     write(file,'(/,"e+:    ",$)')
     write(file,'(ES10.3," ",$)') e(ks)
@@ -331,7 +331,7 @@ subroutine write_u_accel(I, j, um, hin, ADp, CDp, dt_in_T, G, GV, US, CS, vel_rp
                        (0.5*US%L_T_to_m_s*CS%v_av(i+1,J,k)*h_scale*(hin(i+1,j,k) + hin(i+1,j+1,k))); enddo
     endif
 
-    write(file,'(/,"D:     ",2(ES10.3))') US%Z_to_m*G%bathyT(i,j),US%Z_to_m*G%bathyT(i+1,j)
+    write(file,'(/,"D:     ",2(ES10.3))') US%Z_to_m*(G%bathyT(i,j) + G%Z_ref), US%Z_to_m*(G%bathyT(i+1,j) + G%Z_ref)
 
   !  From here on, the normalized accelerations are written.
     if (prev_avail) then
@@ -584,13 +584,13 @@ subroutine write_v_accel(i, J, vm, hin, ADp, CDp, dt_in_T, G, GV, US, CS, vel_rp
     write(file,'(/,"h++:   ",$)')
     do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') h_scale*hin(i+1,j+1,k); enddo
 
-    e(nz+1) = -US%Z_to_m*G%bathyT(i,j)
+    e(nz+1) = -US%Z_to_m*(G%bathyT(i,j) + G%Z_ref)
     do k=nz,1,-1 ; e(K) = e(K+1) + h_scale*hin(i,j,k); enddo
     write(file,'(/,"e-:    ",$)')
     write(file,'(ES10.3," ",$)') e(ks)
     do K=ks+1,ke+1 ; if (do_k(k-1)) write(file,'(ES10.3," ",$)') e(K); enddo
 
-    e(nz+1) = -US%Z_to_m*G%bathyT(i,j+1)
+    e(nz+1) = -US%Z_to_m*(G%bathyT(i,j+1) + G%Z_ref)
     do k=nz,1,-1 ; e(K) = e(K+1) + h_scale*hin(i,j+1,k) ; enddo
     write(file,'(/,"e+:    ",$)')
     write(file,'(ES10.3," ",$)') e(ks)
@@ -667,7 +667,7 @@ subroutine write_v_accel(i, J, vm, hin, ADp, CDp, dt_in_T, G, GV, US, CS, vel_rp
             (CS%u_prev(I,j+1,k) * h_scale*0.5*(hin(i,j+1,k) + hin(i+1,j+1,k))); enddo
     endif
 
-    write(file,'(/,"D:     ",2(ES10.3))') US%Z_to_m*G%bathyT(i,j),US%Z_to_m*G%bathyT(i,j+1)
+    write(file,'(/,"D:     ",2(ES10.3))') US%Z_to_m*(G%bathyT(i,j) + G%Z_ref), US%Z_to_m*(G%bathyT(i,j+1) + G%Z_ref)
 
   !  From here on, the normalized accelerations are written.
     if (prev_avail) then

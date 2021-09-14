@@ -4,7 +4,7 @@ Two parameterizations of vertical mixing due to internal tides are
 available with the option INT_TIDE_DISSIPATION. The first is that of
 \cite st_laurent2002 while the second is that of \cite polzin2009. Choose
 between them with the INT_TIDE_PROFILE option. There are other relevant
-paramters which can be seen in MOM_parameter_doc.all once the main tidal
+parameters which can be seen in MOM_parameter_doc.all once the main tidal
 dissipation switch is turned on.
 
 \section section_st_laurent St Laurent et al.
@@ -69,7 +69,7 @@ case the maximum of all the contributions is used.
 
 The vertical diffusion profile of \cite polzin2009 is a WKB-stretched
 algebraic decay profile. It is based on a radiation balance equation,
-which links the dissipation profile associtated with internal breaking to
+which links the dissipation profile associated with internal breaking to
 the finescale internal wave shear producing that dissipation. The vertical
 profile of internal-tide driven energy dissipation can then vary in time
 and space, and evolve in a changing climate (\cite melet2012). \cite melet2012
@@ -135,9 +135,9 @@ at the ocean floor, so that in both formulations:
    \int_{0}^{H} \epsilon (z) dz = \frac{qE}{\rho} .
 \f]
 
-Whereas \cite polzin2009 assumed tthat the total dissipation was locally in balance with the
+Whereas \cite polzin2009 assumed that the total dissipation was locally in balance with the
 barotropic to baroclinic energy conversion rate \f$(q=1)\f$, here we use the \cite simmons2004 value
-of \f$q=1/3\f$ to retain as much consistency as passible between both parameterizations.
+of \f$q=1/3\f$ to retain as much consistency as possible between both parameterizations.
 
 \subsection subsection_vertical_decay_scale Vertical decay-scale reformulation
 
@@ -221,7 +221,7 @@ the implementation in MOM6, it is required that you provide an estimate
 of the TKE loss due to the Lee waves which is then applied with either
 the St. Laurent or the Polzin vertical profile.
 
-IS THERE A SCRIPT to produce this somewhere or what???
+\todo Is there a script to produce this somewhere or what???
 
 */
 

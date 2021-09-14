@@ -445,7 +445,7 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, mono_
               gp = gprime(K)
               if (l_mono_N2_column_fraction>0. .or. l_mono_N2_depth>=0.) then
                 !### Change to: if ( ((htot(i) - sum_hc < l_mono_N2_column_fraction*htot(i)) .or. & ) )
-                if ( ((G%bathyT(i,j) - sum_hc < l_mono_N2_column_fraction*G%bathyT(i,j)) .or. &
+                if ( (((G%bathyT(i,j)+G%Z_ref) - sum_hc < l_mono_N2_column_fraction*(G%bathyT(i,j)+G%Z_ref)) .or. &
                       ((l_mono_N2_depth >= 0.) .and. (sum_hc > l_mono_N2_depth))) .and. &
                      (L2_to_Z2*gp > N2min*hw) ) then
                   ! Filters out regions where N2 increases with depth but only in a lower fraction

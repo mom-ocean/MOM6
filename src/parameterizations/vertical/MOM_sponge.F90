@@ -409,17 +409,17 @@ subroutine apply_sponge(h, dt, G, GV, US, ea, eb, CS, Rcv_ml)
     enddo ; enddo ; enddo
     do j=js,je
       do i=is,ie
-        dilate(i) = G%bathyT(i,j) / (e_D(i,j,1) + G%bathyT(i,j))
+        dilate(i) = (G%bathyT(i,j) + G%Z_ref) / (e_D(i,j,1) + G%bathyT(i,j))
       enddo
       do k=1,nz+1 ; do i=is,ie
-        e_D(i,j,K) = dilate(i) * (e_D(i,j,K) + G%bathyT(i,j)) - G%bathyT(i,j)
+        e_D(i,j,K) = dilate(i) * (e_D(i,j,K) + G%bathyT(i,j)) - (G%bathyT(i,j) + G%Z_ref)
       enddo ; enddo
     enddo
 
     do k=2,nz
       do j=js,je ; do i=is,ie
         eta_anom(i,j) = e_D(i,j,k) - CS%Ref_eta_im(j,k)
-        if (CS%Ref_eta_im(j,K) < -G%bathyT(i,j)) eta_anom(i,j) = 0.0
+        if (CS%Ref_eta_im(j,K) < -(G%bathyT(i,j) + G%Z_ref)) eta_anom(i,j) = 0.0
       enddo ; enddo
       call global_i_mean(eta_anom(:,:), eta_mean_anom(:,K), G, tmp_scale=US%Z_to_m)
     enddo

@@ -279,7 +279,7 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
     if (CS%fixed_total_depth) then
       !$OMP parallel do default(shared)
       do j=js-1,je+1 ; do i=is-1,ie+1
-        depth_tot(i,j) = G%bathyT(i,j)
+        depth_tot(i,j) = G%bathyT(i,j) + G%Z_ref
       enddo ; enddo
     else
       !$OMP parallel do default(shared)

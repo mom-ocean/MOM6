@@ -316,7 +316,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
   if (CS%id_T_predia > 0) call post_data(CS%id_T_predia, tv%T, CS%diag)
   if (CS%id_S_predia > 0) call post_data(CS%id_S_predia, tv%S, CS%diag)
   if (CS%id_e_predia > 0) then
-    call find_eta(h, tv, G, GV, US, eta, eta_to_m=1.0)
+    call find_eta(h, tv, G, GV, US, eta, eta_to_m=1.0, dZref=G%Z_ref)
     call post_data(CS%id_e_predia, eta, CS%diag)
   endif
 

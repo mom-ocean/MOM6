@@ -283,10 +283,10 @@ subroutine MOM_grid_init(G, param_file, US, HI, global_indexing, bathymetry_at_v
   G%bathymetry_at_vel = .false.
   if (present(bathymetry_at_vel)) G%bathymetry_at_vel = bathymetry_at_vel
   if (G%bathymetry_at_vel) then
-    ALLOC_(G%Dblock_u(IsdB:IedB, jsd:jed)) ; G%Dblock_u(:,:) = 0.0
-    ALLOC_(G%Dopen_u(IsdB:IedB, jsd:jed))  ; G%Dopen_u(:,:) = 0.0
-    ALLOC_(G%Dblock_v(isd:ied, JsdB:JedB)) ; G%Dblock_v(:,:) = 0.0
-    ALLOC_(G%Dopen_v(isd:ied, JsdB:JedB))  ; G%Dopen_v(:,:) = 0.0
+    ALLOC_(G%Dblock_u(IsdB:IedB, jsd:jed)) ; G%Dblock_u(:,:) = -G%Z_ref
+    ALLOC_(G%Dopen_u(IsdB:IedB, jsd:jed))  ; G%Dopen_u(:,:) = -G%Z_ref
+    ALLOC_(G%Dblock_v(isd:ied, JsdB:JedB)) ; G%Dblock_v(:,:) = -G%Z_ref
+    ALLOC_(G%Dopen_v(isd:ied, JsdB:JedB))  ; G%Dopen_v(:,:) = -G%Z_ref
   endif
 
 ! setup block indices.
@@ -387,6 +387,7 @@ end subroutine MOM_grid_init
 subroutine rescale_grid_bathymetry(G, m_in_new_units)
   type(ocean_grid_type), intent(inout) :: G    !< The horizontal grid structure
   real,                  intent(in)    :: m_in_new_units !< The new internal representation of 1 m depth.
+  ! It appears that this routine is never called.
 
   ! Local variables
   real :: rescale
@@ -578,7 +579,7 @@ subroutine allocate_metrics(G)
   ALLOC_(G%IareaCu(IsdB:IedB,jsd:jed)) ; G%IareaCu(:,:) = 0.0
   ALLOC_(G%IareaCv(isd:ied,JsdB:JedB)) ; G%IareaCv(:,:) = 0.0
 
-  ALLOC_(G%bathyT(isd:ied, jsd:jed)) ; G%bathyT(:,:) = 0.0
+  ALLOC_(G%bathyT(isd:ied, jsd:jed)) ; G%bathyT(:,:) = -G%Z_ref
   ALLOC_(G%CoriolisBu(IsdB:IedB, JsdB:JedB)) ; G%CoriolisBu(:,:) = 0.0
   ALLOC_(G%dF_dx(isd:ied, jsd:jed)) ; G%dF_dx(:,:) = 0.0
   ALLOC_(G%dF_dy(isd:ied, jsd:jed)) ; G%dF_dy(:,:) = 0.0
