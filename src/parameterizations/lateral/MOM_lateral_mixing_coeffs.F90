@@ -184,11 +184,11 @@ subroutine calc_depth_function(G, CS)
   expo = CS%depth_scaled_khth_exp
 !$OMP do
   do j=js,je ; do I=is-1,Ieq
-    CS%Depth_fn_u(I,j) = (MIN(1.0, 0.5*(G%bathyT(i,j) + G%bathyT(i+1,j))/H0))**expo
+    CS%Depth_fn_u(I,j) = (MIN(1.0, (0.5*(G%bathyT(i,j) + G%bathyT(i+1,j)) + G%Z_ref)/H0))**expo
   enddo ; enddo
 !$OMP do
   do J=js-1,Jeq ; do i=is,ie
-    CS%Depth_fn_v(i,J) = (MIN(1.0, 0.5*(G%bathyT(i,j) + G%bathyT(i,j+1))/H0))**expo
+    CS%Depth_fn_v(i,J) = (MIN(1.0, (0.5*(G%bathyT(i,j) + G%bathyT(i,j+1)) + G%Z_ref)/H0))**expo
   enddo ; enddo
 
 end subroutine calc_depth_function
@@ -959,11 +959,12 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, US, CS, e, calculate_slop
     enddo ; enddo
     ! SN above contains S^2*N^2*H, convert to vertical average of S*N
     do I=is-1,ie
-      !SN_u(I,j) = sqrt( SN_u(I,j) / ( max(G%bathyT(I,j), G%bathyT(I+1,j)) + GV%Angstrom_Z ) ))
+      !### Replace G%bathT+G%Z_ref here with (e(i,j,1) - e(i,j,nz+1)).
+      !SN_u(I,j) = sqrt( SN_u(I,j) / ( max(G%bathyT(i,j), G%bathyT(i+1,j)) + (G%Z_ref + GV%Angstrom_Z) ) )
       !The code below behaves better than the line above. Not sure why? AJA
-      if ( min(G%bathyT(I,j), G%bathyT(I+1,j)) > H_cutoff*GV%H_to_Z ) then
+      if ( min(G%bathyT(i,j), G%bathyT(i+1,j)) + G%Z_ref > H_cutoff*GV%H_to_Z ) then
         CS%SN_u(I,j) = G%mask2dCu(I,j) * sqrt( CS%SN_u(I,j) / &
-                                               (max(G%bathyT(I,j), G%bathyT(I+1,j))) )
+                                               (max(G%bathyT(i,j), G%bathyT(i+1,j)) + G%Z_ref) )
       else
         CS%SN_u(I,j) = 0.0
       endif
@@ -985,20 +986,21 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, US, CS, e, calculate_slop
       CS%SN_v(i,J) = CS%SN_v(i,J) + S2N2_v_local(i,J,k)
     enddo ; enddo
     do i=is,ie
-      !SN_v(i,J) = sqrt( SN_v(i,J) / ( max(G%bathyT(i,J), G%bathyT(i,J+1)) + GV%Angstrom_Z ) ))
+      !### Replace G%bathT+G%Z_ref here with (e(i,j,1) - e(i,j,nz+1)).
+      !SN_v(i,J) = sqrt( SN_v(i,J) / ( max(G%bathyT(i,J), G%bathyT(i,J+1)) + (G%Z_ref + GV%Angstrom_Z) ) )
       !The code below behaves better than the line above. Not sure why? AJA
-      if ( min(G%bathyT(I,j), G%bathyT(I+1,j)) > H_cutoff*GV%H_to_Z ) then
+      if ( min(G%bathyT(i,j), G%bathyT(i+1,j)) + G%Z_ref > H_cutoff*GV%H_to_Z ) then
         CS%SN_v(i,J) = G%mask2dCv(i,J) * sqrt( CS%SN_v(i,J) / &
-                                               (max(G%bathyT(i,J), G%bathyT(i,J+1))) )
+                                               (max(G%bathyT(i,j), G%bathyT(i,j+1)) + G%Z_ref) )
       else
-        CS%SN_v(I,j) = 0.0
+        CS%SN_v(i,J) = 0.0
       endif
       if (local_open_v_BC) then
-        l_seg = OBC%segnum_v(I,j)
+        l_seg = OBC%segnum_v(i,J)
 
         if (l_seg /= OBC_NONE) then
-          if (OBC%segment(OBC%segnum_v(I,j))%open) then
-            CS%SN_v(I,j) = 0.
+          if (OBC%segment(OBC%segnum_v(i,J))%open) then
+            CS%SN_v(i,J) = 0.
           endif
         endif
       endif

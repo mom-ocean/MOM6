@@ -198,16 +198,6 @@ integer :: id_clock_kappaShear, id_clock_CVMix_ddiff
 
 contains
 
-!> Sets the interior vertical diffusion of scalars due to the following processes:
-!! 1. Shear-driven mixing: two options, Jackson et at. and KPP interior;
-!! 2. Background mixing via CVMix (Bryan-Lewis profile) or the scheme described by
-!!    Harrison & Hallberg, JPO 2008;
-!! 3. Double-diffusion, old method and new method via CVMix;
-!! 4. Tidal mixing: many options available, see MOM_tidal_mixing.F90;
-!! In addition, this subroutine has the option to set the interior vertical
-!! viscosity associated with processes 1,2 and 4 listed above, which is stored in
-!! visc%Kv_slow. Vertical viscosity due to shear-driven mixing is passed via
-!! visc%Kv_shear
 subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
                            G, GV, US, CS, Kd_lay, Kd_int, Kd_extra_T, Kd_extra_S)
   type(ocean_grid_type),     intent(in)    :: G    !< The ocean's grid structure.

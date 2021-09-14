@@ -51,8 +51,12 @@ type, public :: int_tide_input_CS ; private
   type(time_type) :: time_max_source !< A time for use in testing internal tides
   real    :: int_tide_source_x       !< X Location of generation site
                                      !! for internal tide for testing (BDM)
+                                     !! for internal tide for testing (BDM)
   real    :: int_tide_source_y       !< Y Location of generation site
                                      !! for internal tide for testing (BDM)
+  integer :: int_tide_source_i       !< I Location of generation site
+  integer :: int_tide_source_j       !< J Location of generation site
+  logical :: int_tide_use_glob_ij    !< Use global indices for generation site
 
 
   !>@{ Diagnostic IDs
@@ -99,6 +103,7 @@ subroutine set_int_tide_input(u, v, h, tv, fluxes, itide, dt, G, GV, US, CS)
   type(time_type) :: time_end        !< For use in testing internal tides (BDM)
 
   integer :: i, j, k, is, ie, js, je, nz, isd, ied, jsd, jed
+  integer :: i_global, j_global
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
@@ -126,13 +131,23 @@ subroutine set_int_tide_input(u, v, h, tv, fluxes, itide, dt, G, GV, US, CS)
   if (CS%int_tide_source_test) then
     itide%TKE_itidal_input(:,:) = 0.0
     if (time_end <= CS%time_max_source) then
-      do j=js,je ; do i=is,ie
-        ! Input  an arbitrary energy point source.id_
-        if (((G%geoLonCu(I-1,j)-CS%int_tide_source_x) * (G%geoLonBu(I,j)-CS%int_tide_source_x) <= 0.0) .and. &
-            ((G%geoLatCv(i,J-1)-CS%int_tide_source_y) * (G%geoLatCv(i,j)-CS%int_tide_source_y) <= 0.0)) then
-          itide%TKE_itidal_input(i,j) = 1.0*US%kg_m3_to_R*US%m_to_Z**3*US%T_to_s**3
-        endif
-      enddo ; enddo
+      if (CS%int_tide_use_glob_ij) then
+        do j=js,je ; do i=is,ie
+          i_global = i + G%idg_offset
+          j_global = j + G%jdg_offset
+          if ((i_global == CS%int_tide_source_i) .and. (j_global == CS%int_tide_source_j)) then
+            itide%TKE_itidal_input(i,j) = 1.0*US%kg_m3_to_R*US%m_to_Z**3*US%T_to_s**3
+          endif
+        enddo ; enddo
+      else
+        do j=js,je ; do i=is,ie
+          ! Input  an arbitrary energy point source.id_
+          if (((G%geoLonCu(I-1,j)-CS%int_tide_source_x) * (G%geoLonBu(I,j)-CS%int_tide_source_x) <= 0.0) .and. &
+              ((G%geoLatCv(i,J-1)-CS%int_tide_source_y) * (G%geoLatCv(i,j)-CS%int_tide_source_y) <= 0.0)) then
+            itide%TKE_itidal_input(i,j) = 1.0*US%kg_m3_to_R*US%m_to_Z**3*US%T_to_s**3
+          endif
+        enddo ; enddo
+      endif
     endif
   endif
 
@@ -389,25 +404,44 @@ subroutine int_tide_input_init(Time, G, GV, US, param_file, diag, CS, itide)
                  "If true, apply an arbitrary generation site for internal tide testing", &
                  default=.false.)
   if (CS%int_tide_source_test)then
+    call get_param(param_file, mdl, "INTERNAL_TIDE_USE_GLOB_IJ", CS%int_tide_use_glob_ij, &
+                 "Use global IJ for interal tide generation source test", default=.false.)
     call get_param(param_file, mdl, "INTERNAL_TIDE_SOURCE_X", CS%int_tide_source_x, &
-                 "X Location of generation site for internal tide", default=1.)
+                 "X Location of generation site for internal tide", default=1., &
+                 do_not_log=CS%int_tide_use_glob_ij)
     call get_param(param_file, mdl, "INTERNAL_TIDE_SOURCE_Y", CS%int_tide_source_y, &
-                 "Y Location of generation site for internal tide", default=1.)
+                 "Y Location of generation site for internal tide", default=1., &
+                 do_not_log=CS%int_tide_use_glob_ij)
+    call get_param(param_file, mdl, "INTERNAL_TIDE_SOURCE_I", CS%int_tide_source_i, &
+                 "I Location of generation site for internal tide", default=0, &
+                 do_not_log=.not.CS%int_tide_use_glob_ij)
+    call get_param(param_file, mdl, "INTERNAL_TIDE_SOURCE_J", CS%int_tide_source_j, &
+                 "J Location of generation site for internal tide", default=0, &
+                 do_not_log=.not.CS%int_tide_use_glob_ij)
     call get_param(param_file, mdl, "INTERNAL_TIDE_SOURCE_TLEN_DAYS", tlen_days, &
                  "Time interval from start of experiment for adding wave source", &
                  units="days", default=0)
     CS%time_max_source = Time + set_time(0, days=tlen_days)
+
+    if ((CS%int_tide_use_glob_ij) .and. ((CS%int_tide_source_x /= 1.) .or. (CS%int_tide_source_y /= 1.))) then
+      call MOM_error(FATAL, "MOM_internal_tide_input: "//&
+                     "Internal tide source set to use (i,j) indices hence (x,y) geographical coords are meaningless.")
+    endif
+    if ((.not.CS%int_tide_use_glob_ij) .and. ((CS%int_tide_source_i /= 0) .or. (CS%int_tide_source_j /= 0))) then
+      call MOM_error(FATAL, "MOM_internal_tide_input: "//&
+                     "Internal tide source set to use (x,y) geographical coords hence (i,j) indices are meaningless.")
+    endif
   endif
 
   do j=js,je ; do i=is,ie
     mask_itidal = 1.0
-    if (G%bathyT(i,j) < min_zbot_itides) mask_itidal = 0.0
+    if (G%bathyT(i,j) + G%Z_ref < min_zbot_itides) mask_itidal = 0.0
 
     itide%tideamp(i,j) = itide%tideamp(i,j) * mask_itidal * G%mask2dT(i,j)
 
     ! Restrict rms topo to a fraction (often 10 percent) of the column depth.
     if (max_frac_rough >= 0.0) &
-      itide%h2(i,j) = min((max_frac_rough*G%bathyT(i,j))**2, itide%h2(i,j))
+      itide%h2(i,j) = min((max_frac_rough*(G%bathyT(i,j)+G%Z_ref))**2, itide%h2(i,j))
 
     ! Compute the fixed part of internal tidal forcing; units are [R Z3 T-2 ~> J m-2] here.
     CS%TKE_itidal_coef(i,j) = 0.5*US%L_to_Z*kappa_h2_factor*GV%Rho0*&

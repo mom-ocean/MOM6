@@ -685,6 +685,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   integer :: isv, iev, jsv, jev ! The valid array size at the end of a step.
   integer :: stencil  ! The stencil size of the algorithm, often 1 or 2.
   integer :: isvf, ievf, jsvf, jevf, num_cycles
+  integer :: err_count ! A counter to limit the volume of error messages written to stdout.
   integer :: i, j, k, n
   integer :: is, ie, js, je, nz, Isq, Ieq, Jsq, Jeq
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
@@ -700,6 +701,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
   MS%isdw = CS%isdw ; MS%iedw = CS%iedw ; MS%jsdw = CS%jsdw ; MS%jedw = CS%jedw
   h_neglect = GV%H_subroundoff
+  err_count = 0
 
   Idt = 1.0 / dt
   accel_underflow = CS%vel_underflow * Idt
@@ -2356,13 +2358,20 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
 
     if (GV%Boussinesq) then
       do j=js,je ; do i=is,ie
-        if (eta(i,j) < -GV%Z_to_H*G%bathyT(i,j)) &
-          call MOM_error(WARNING, "btstep: eta has dropped below bathyT.")
+        if ((eta(i,j) < -GV%Z_to_H*G%bathyT(i,j)) .and. (G%mask2dT(i,j) > 0.0)) then
+          write(mesg,'(ES24.16," vs. ",ES24.16)') GV%H_to_m*eta(i,j), -US%Z_to_m*G%bathyT(i,j)
+          if (err_count < 2) &
+            call MOM_error(WARNING, "btstep: eta has dropped below bathyT: "//trim(mesg), all_print=.true.)
+          err_count = err_count + 1
+        endif
       enddo ; enddo
     else
       do j=js,je ; do i=is,ie
-        if (eta(i,j) < 0.0) &
-          call MOM_error(WARNING, "btstep: negative eta in a non-Boussinesq barotropic solver.")
+        if (eta(i,j) < 0.0) then
+          if (err_count < 2) &
+            call MOM_error(WARNING, "btstep: negative eta in a non-Boussinesq barotropic solver.", all_print=.true.)
+          err_count = err_count + 1
+        endif
       enddo ; enddo
     endif
 
@@ -2566,7 +2575,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
     if (CS%id_vaccel > 0) call post_data(CS%id_vaccel, v_accel_bt(isd:ied,JsdB:JedB), CS%diag)
 
     if (CS%id_eta_cor > 0) call post_data(CS%id_eta_cor, CS%eta_cor, CS%diag)
-    if (CS%id_eta_bt > 0) call post_data(CS%id_eta_bt, eta_out, CS%diag)
+    if (CS%id_eta_bt > 0) call post_data(CS%id_eta_bt, eta_out, CS%diag) ! - G%Z_ref?
     if (CS%id_gtotn > 0) call post_data(CS%id_gtotn, gtot_N(isd:ied,jsd:jed), CS%diag)
     if (CS%id_gtots > 0) call post_data(CS%id_gtots, gtot_S(isd:ied,jsd:jed), CS%diag)
     if (CS%id_gtote > 0) call post_data(CS%id_gtote, gtot_E(isd:ied,jsd:jed), CS%diag)
@@ -2683,6 +2692,16 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   if ((present(ADp)) .and. (present(BT_cont)) .and. (associated(ADp%diag_hv))) then
     do k=1,nz ; do J=js-1,je ; do i=is,ie
       ADp%diag_hv(i,J,k) = BT_cont%h_v(i,J,k)
+    enddo ; enddo ; enddo
+  endif
+  if (present(ADp) .and. (associated(ADp%visc_rem_u))) then
+    do k=1,nz ; do j=js,je ; do I=is-1,ie
+      ADp%visc_rem_u(I,j,k) = visc_rem_u(I,j,k)
+    enddo ; enddo ; enddo
+  endif
+  if (present(ADp) .and. (associated(ADp%visc_rem_u))) then
+    do k=1,nz ; do J=js-1,je ; do i=is,ie
+      ADp%visc_rem_v(i,J,k) = visc_rem_v(i,J,k)
     enddo ; enddo ; enddo
   endif
 
@@ -3139,7 +3158,7 @@ subroutine set_up_BT_OBC(OBC, eta, BT_OBC, BT_Domain, G, GV, US, MS, halo, use_B
         if (segment%is_E_or_W .and. segment%Flather) then
           do j=segment%HI%jsd,segment%HI%jed ; do I=segment%HI%IsdB,segment%HI%IedB
             BT_OBC%ubt_outer(I,j) = segment%normal_vel_bt(I,j)
-            BT_OBC%eta_outer_u(I,j) = segment%eta(I,j)
+            BT_OBC%eta_outer_u(I,j) = segment%eta(I,j) + G%Z_ref*GV%Z_to_H
           enddo ; enddo
         endif
       enddo
@@ -3193,7 +3212,7 @@ subroutine set_up_BT_OBC(OBC, eta, BT_OBC, BT_Domain, G, GV, US, MS, halo, use_B
         if (segment%is_N_or_S .and. segment%Flather) then
           do J=segment%HI%JsdB,segment%HI%JedB ; do i=segment%HI%isd,segment%HI%ied
             BT_OBC%vbt_outer(i,J) = segment%normal_vel_bt(i,J)
-            BT_OBC%eta_outer_v(i,J) = segment%eta(i,J)
+            BT_OBC%eta_outer_v(i,J) = segment%eta(i,J) + G%Z_ref*GV%Z_to_H
           enddo ; enddo
         endif
       enddo
@@ -3268,8 +3287,10 @@ subroutine btcalc(h, G, GV, CS, h_u, h_v, may_use_default, OBC)
   real :: Rh                   ! A ratio of summed thicknesses, nondim.
   real :: e_u(SZIB_(G),SZK_(GV)+1) !   The interface heights at u-velocity and
   real :: e_v(SZI_(G),SZK_(GV)+1)  ! v-velocity points [H ~> m or kg m-2].
-  real :: D_shallow_u(SZI_(G)) ! The shallower of the adjacent depths [H ~> m or kg m-2].
-  real :: D_shallow_v(SZIB_(G))! The shallower of the adjacent depths [H ~> m or kg m-2].
+  real :: D_shallow_u(SZI_(G)) ! The height of the shallower of the adjacent bathymetric depths
+                               ! around a u-point (positive upward) [H ~> m or kg m-2]
+  real :: D_shallow_v(SZIB_(G))! The height of the shallower of the adjacent bathymetric depths
+                               ! around a v-point (positive upward) [H ~> m or kg m-2]
   real :: htot                 ! The sum of the layer thicknesses [H ~> m or kg m-2].
   real :: Ihtot                ! The inverse of htot [H-1 ~> m-1 or m2 kg-1].
 
@@ -4124,7 +4145,7 @@ subroutine find_face_areas(Datu, Datv, G, GV, US, CS, MS, eta, halo, add_max)
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   hs = 1 ; if (present(halo)) hs = max(halo,0)
 
-!$OMP parallel default(none) shared(is,ie,js,je,hs,eta,GV,CS,Datu,Datv,add_max) &
+!$OMP parallel default(none) shared(is,ie,js,je,hs,eta,GV,G,CS,Datu,Datv,add_max) &
 !$OMP                       private(H1,H2)
   if (present(eta)) then
     ! The use of harmonic mean thicknesses ensure positive definiteness.
@@ -4163,31 +4184,27 @@ subroutine find_face_areas(Datu, Datv, G, GV, US, CS, MS, eta, halo, add_max)
 !$OMP do
     do j=js-hs,je+hs ; do I=is-1-hs,ie+hs
       Datu(I,j) = CS%dy_Cu(I,j) * GV%Z_to_H * &
-                 (max(CS%bathyT(i+1,j), CS%bathyT(i,j)) + add_max)
+                 max(max(CS%bathyT(i+1,j), CS%bathyT(i,j)) + (G%Z_ref + add_max), 0.0)
     enddo ; enddo
 !$OMP do
     do J=js-1-hs,je+hs ; do i=is-hs,ie+hs
       Datv(i,J) = CS%dx_Cv(i,J) * GV%Z_to_H * &
-                 (max(CS%bathyT(i,j+1), CS%bathyT(i,j)) + add_max)
+                 max(max(CS%bathyT(i,j+1), CS%bathyT(i,j)) + (G%Z_ref + add_max), 0.0)
     enddo ; enddo
   else
 !$OMP do
     do j=js-hs,je+hs ; do I=is-1-hs,ie+hs
-      Datu(I, j) = 0.0
-      !Would be "if (G%mask2dCu(I,j)>0.) &" is G was valid on BT domain
-      if (CS%bathyT(i+1,j)+CS%bathyT(i,j)>0.) &
-        Datu(I,j) = 2.0*CS%dy_Cu(I,j) * GV%Z_to_H * &
-                  (CS%bathyT(i+1,j) * CS%bathyT(i,j)) / &
-                  (CS%bathyT(i+1,j) + CS%bathyT(i,j))
+      H1 = (CS%bathyT(i,j) + G%Z_ref) * GV%Z_to_H ; H2 = (CS%bathyT(i+1,j) + G%Z_ref) * GV%Z_to_H
+      Datu(I,j) = 0.0
+      if ((H1 > 0.0) .and. (H2 > 0.0)) &
+        Datu(I,j) = CS%dy_Cu(I,j) * (2.0 * H1 * H2) / (H1 + H2)
     enddo ; enddo
 !$OMP do
     do J=js-1-hs,je+hs ; do i=is-hs,ie+hs
-      Datv(i, J) = 0.0
-      !Would be "if (G%mask2dCv(i,J)>0.) &" is G was valid on BT domain
-      if (CS%bathyT(i,j+1)+CS%bathyT(i,j)>0.) &
-        Datv(i,J) = 2.0*CS%dx_Cv(i,J) * GV%Z_to_H * &
-                  (CS%bathyT(i,j+1) * CS%bathyT(i,j)) / &
-                  (CS%bathyT(i,j+1) + CS%bathyT(i,j))
+      H1 = (CS%bathyT(i,j) + G%Z_ref) * GV%Z_to_H ; H2 = (CS%bathyT(i,j+1) + G%Z_ref) * GV%Z_to_H
+      Datv(i,J) = 0.0
+      if ((H1 > 0.0) .and. (H2 > 0.0)) &
+        Datv(i,J) = CS%dx_Cv(i,J) * (2.0 * H1 * H2) / (H1 + H2)
     enddo ; enddo
   endif
 !$OMP end parallel
@@ -4660,7 +4677,7 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, US, param_file, diag, CS, 
 
   ! IareaT, IdxCu, and IdyCv need to be allocated with wide halos.
   ALLOC_(CS%IareaT(CS%isdw:CS%iedw,CS%jsdw:CS%jedw)) ; CS%IareaT(:,:) = 0.0
-  ALLOC_(CS%bathyT(CS%isdw:CS%iedw,CS%jsdw:CS%jedw)) ; CS%bathyT(:,:) = GV%Angstrom_m !### Change to 0.0?
+  ALLOC_(CS%bathyT(CS%isdw:CS%iedw,CS%jsdw:CS%jedw)) ; CS%bathyT(:,:) = 0.0
   ALLOC_(CS%IdxCu(CS%isdw-1:CS%iedw,CS%jsdw:CS%jedw)) ; CS%IdxCu(:,:) = 0.0
   ALLOC_(CS%IdyCv(CS%isdw:CS%iedw,CS%jsdw-1:CS%jedw)) ; CS%IdyCv(:,:) = 0.0
   ALLOC_(CS%dy_Cu(CS%isdw-1:CS%iedw,CS%jsdw:CS%jedw)) ; CS%dy_Cu(:,:) = 0.0

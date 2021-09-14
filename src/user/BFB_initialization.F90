@@ -76,13 +76,15 @@ end subroutine BFB_set_coord
 
 !> This subroutine sets up the sponges for the southern bouundary of the domain. Maximum damping occurs
 !! within 2 degrees lat of the boundary. The damping linearly decreases northward over the next 2 degrees.
-subroutine BFB_initialize_sponges_southonly(G, GV, US, use_temperature, tv, param_file, CSp, h)
+subroutine BFB_initialize_sponges_southonly(G, GV, US, use_temperature, tv, depth_tot, param_file, CSp, h)
   type(ocean_grid_type),   intent(in) :: G  !< The ocean's grid structure
   type(verticalGrid_type), intent(in) :: GV !< The ocean's vertical grid structure.
   type(unit_scale_type),   intent(in) :: US !< A dimensional unit scaling type
   logical,                 intent(in) :: use_temperature !< If true, temperature and salinity are used as
                                             !! state variables.
   type(thermo_var_ptrs),   intent(in) :: tv   !< A structure pointing to various thermodynamic variables
+  real, dimension(SZI_(G),SZJ_(G)), &
+                           intent(in) :: depth_tot !< The nominal total depth of the ocean [Z ~> m]
   type(param_file_type),   intent(in) :: param_file !< A structure to parse for run-time parameters
   type(sponge_CS),         pointer    :: CSp  !< A pointer to the sponge control structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
@@ -129,7 +131,7 @@ subroutine BFB_initialize_sponges_southonly(G, GV, US, use_temperature, tv, para
   max_damping = 1.0  / (86400.0*US%s_to_T)
 
   do j=js,je ; do i=is,ie
-    if (G%bathyT(i,j) <= min_depth) then ; Idamp(i,j) = 0.0
+    if (depth_tot(i,j) <= min_depth) then ; Idamp(i,j) = 0.0
     elseif (G%geoLatT(i,j) < slat+2.0) then ; Idamp(i,j) = max_damping
     elseif (G%geoLatT(i,j) < slat+4.0) then
       Idamp(i,j) = max_damping * (slat+4.0-G%geoLatT(i,j))/2.0

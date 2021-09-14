@@ -65,6 +65,8 @@ use boundary_impulse_tracer, only : register_boundary_impulse_tracer, initialize
 use boundary_impulse_tracer, only : boundary_impulse_tracer_column_physics, boundary_impulse_tracer_surface_state
 use boundary_impulse_tracer, only : boundary_impulse_stock, boundary_impulse_tracer_end
 use boundary_impulse_tracer, only : boundary_impulse_tracer_CS
+use nw2_tracers, only : nw2_tracers_CS, register_nw2_tracers, nw2_tracer_column_physics
+use nw2_tracers, only : initialize_nw2_tracers, nw2_tracers_end
 
 implicit none ; private
 
@@ -88,6 +90,7 @@ type, public :: tracer_flow_control_CS ; private
   logical :: use_pseudo_salt_tracer = .false.      !< If true, use the psuedo_salt tracer  package
   logical :: use_boundary_impulse_tracer = .false. !< If true, use the boundary impulse tracer package
   logical :: use_dyed_obc_tracer = .false.         !< If true, use the dyed OBC tracer package
+  logical :: use_nw2_tracers = .false.             !< If true, use the ideal age tracer package
   !>@{ Pointers to the control strucures for the tracer packages
   type(USER_tracer_example_CS), pointer :: USER_tracer_example_CSp => NULL()
   type(DOME_tracer_CS), pointer :: DOME_tracer_CSp => NULL()
@@ -103,6 +106,7 @@ type, public :: tracer_flow_control_CS ; private
   type(pseudo_salt_tracer_CS), pointer :: pseudo_salt_tracer_CSp => NULL()
   type(boundary_impulse_tracer_CS), pointer :: boundary_impulse_tracer_CSp => NULL()
   type(dyed_obc_tracer_CS), pointer :: dyed_obc_tracer_CSp => NULL()
+  type(nw2_tracers_CS), pointer :: nw2_tracers_CSp => NULL()
   !>@}
 end type tracer_flow_control_CS
 
@@ -214,6 +218,9 @@ subroutine call_tracer_register(HI, GV, US, param_file, CS, tr_Reg, restart_CS)
   call get_param(param_file, mdl, "USE_DYED_OBC_TRACER", CS%use_dyed_obc_tracer, &
                  "If true, use the dyed_obc_tracer tracer package.", &
                  default=.false.)
+  call get_param(param_file, mdl, "USE_NW2_TRACERS", CS%use_nw2_tracers, &
+                 "If true, use the NeverWorld2 tracers.", &
+                 default=.false.)
 
 !    Add other user-provided calls to register tracers for restarting here. Each
 !  tracer package registration call returns a logical false if it cannot be run
@@ -260,7 +267,8 @@ subroutine call_tracer_register(HI, GV, US, param_file, CS, tr_Reg, restart_CS)
   if (CS%use_dyed_obc_tracer) CS%use_dyed_obc_tracer = &
     register_dyed_obc_tracer(HI, GV, param_file, CS%dyed_obc_tracer_CSp, &
                              tr_Reg, restart_CS)
-
+  if (CS%use_nw2_tracers) CS%use_ideal_age = &
+    register_nw2_tracers(HI, GV, param_file,  CS%nw2_tracers_CSp, tr_Reg, restart_CS)
 
 end subroutine call_tracer_register
 
@@ -342,6 +350,8 @@ subroutine tracer_flow_control_init(restart, day, G, GV, US, h, param_file, diag
                                 sponge_CSp, tv)
   if (CS%use_dyed_obc_tracer) &
     call initialize_dyed_obc_tracer(restart, day, G, GV, h, diag, OBC, CS%dyed_obc_tracer_CSp)
+  if (CS%use_nw2_tracers) &
+    call initialize_nw2_tracers(restart, day, G, GV, US, h, tv, diag, CS%nw2_tracers_CSp)
 
 end subroutine tracer_flow_control_init
 
@@ -505,8 +515,11 @@ subroutine call_tracer_column_fns(h_old, h_new, ea, eb, fluxes, Hml, dt, G, GV, 
                                       G, GV, US, CS%dyed_obc_tracer_CSp, &
                                       evap_CFL_limit=evap_CFL_limit, &
                                       minimum_forcing_depth=minimum_forcing_depth)
-
-
+    if (CS%use_nw2_tracers) &
+      call nw2_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
+                                     G, GV, US, tv, CS%nw2_tracers_CSp, &
+                                     evap_CFL_limit=evap_CFL_limit, &
+                                     minimum_forcing_depth=minimum_forcing_depth)
   else ! Apply tracer surface fluxes using ea on the first layer
     if (CS%use_USER_tracer_example) &
       call tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
@@ -554,9 +567,9 @@ subroutine call_tracer_column_fns(h_old, h_new, ea, eb, fluxes, Hml, dt, G, GV, 
     if (CS%use_dyed_obc_tracer) &
       call dyed_obc_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
                                       G, GV, US, CS%dyed_obc_tracer_CSp)
-
+    if (CS%use_nw2_tracers) call nw2_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
+                                                           G, GV, US, tv, CS%nw2_tracers_CSp)
   endif
-
 
 end subroutine call_tracer_column_fns
 
@@ -807,6 +820,7 @@ subroutine tracer_flow_control_end(CS)
   if (CS%use_pseudo_salt_tracer) call pseudo_salt_tracer_end(CS%pseudo_salt_tracer_CSp)
   if (CS%use_boundary_impulse_tracer) call boundary_impulse_tracer_end(CS%boundary_impulse_tracer_CSp)
   if (CS%use_dyed_obc_tracer) call dyed_obc_tracer_end(CS%dyed_obc_tracer_CSp)
+  if (CS%use_nw2_tracers) call nw2_tracers_end(CS%nw2_tracers_CSp)
 
   if (associated(CS)) deallocate(CS)
 end subroutine tracer_flow_control_end

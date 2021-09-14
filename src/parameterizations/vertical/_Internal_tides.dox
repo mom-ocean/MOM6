@@ -1,0 +1,227 @@
+/*! \page Internal_Tidal_Mixing Internal Tidal Mixing
+
+Two parameterizations of vertical mixing due to internal tides are
+available with the option INT_TIDE_DISSIPATION. The first is that of
+\cite st_laurent2002 while the second is that of \cite polzin2009. Choose
+between them with the INT_TIDE_PROFILE option. There are other relevant
+parameters which can be seen in MOM_parameter_doc.all once the main tidal
+dissipation switch is turned on.
+
+\section section_st_laurent St Laurent et al.
+
+The estimated turbulent dissipation rate of
+internal tide energy \f$\epsilon\f$ is:
+
+\f[
+   \epsilon = \frac{q E(x,y)}{\rho} F(z).
+\f]
+
+where \f$\rho\f$ is the reference density of seawater, \f$E(x,y)\f$ is
+the energy flux per unit area transferred from barotropic to baroclinic
+tides, \f$q\f$ is the fraction of the internal-tide energy dissipated
+locally, and \f$F(z)\f$ is the vertical structure of the dissipation.
+This \f$q\f$ is estimated to be roughly 0.3 based on observations. The
+term \f$E(x,y)\f$ is given by \cite st_laurent2002 as:
+
+\f[
+   E(x,y) \simeq \frac{1}{2} \rho N_b \kappa h^2 \langle U^2 \rangle
+\f]
+
+where \f$\rho\f$ is the reference density of seawater, \f$N_b\f$ is
+the buoyancy frequency along the seafloor, and \f$(\kappa, h)\f$ are
+the wavenumber and amplitude scales for the topographic roughness, and
+\f$\langle U^2 \rangle\f$ is the barotropic tide variance. It is assumed
+that the model will read in topographic roughness squared \f$h^2\f$
+from a file (the variable must be named "h2").
+
+To convert from energy dissipation to vertical diffusion \f$K_d\f$,
+the simple estimate is:
+
+\f[
+   K_d \approx \frac{\Gamma q E(x,y) F(z)}{\rho N^2}
+\f]
+
+where \f$\Gamma\f$ is the mixing efficiency, generally set to 0.2
+and \f$F(z)\f$ is a vertical structure function with exponential decay
+from the bottom:
+
+\f[
+   F(z) = \frac{e^{-(H+z)/\zeta}}{\zeta (1 - e^{H/\zeta}}.
+\f]
+
+Here, \f$\zeta\f$ is a vertical decay scale with a default of 500 meters.
+One change in MOM6 from the St. Laurent scheme is to use this form of \f$\Gamma\f$:
+
+\f[
+   \Gamma = 0.2 \frac{N^2}{N^2 + \Omega^2}
+\f]
+
+instead of \f$\Gamma = 0.2\f$, where \f$\Omega\f$ is the angular velocity
+of the Earth. This allows the buoyancy fluxes to tend to zero in regions
+of very weak stratification, allowing a no-flux bottom boundary condition
+to be satisfied.
+
+This \f$K_d\f$ gets added to the diffusivity due to the background and
+other contributions unless you set BBL_MIXING_AS_MAX to True, in which
+case the maximum of all the contributions is used.
+
+\section section_polzin Polzin
+
+The vertical diffusion profile of \cite polzin2009 is a WKB-stretched
+algebraic decay profile. It is based on a radiation balance equation,
+which links the dissipation profile associated with internal breaking to
+the finescale internal wave shear producing that dissipation. The vertical
+profile of internal-tide driven energy dissipation can then vary in time
+and space, and evolve in a changing climate (\cite melet2012). \cite melet2012
+describes how the Polzin scheme is implemented in MOM6,
+copied here.
+
+The parameterization of \cite polzin2009 links the energy dissipation
+profile to the finescale internal wave shear producing that
+dissipation, using an idealized vertical wavenumber energy spectrum
+to identify analytic solutions to a radiation balance equation
+(\cite polzin2004). These solutions yield a dissipation profile
+\f$\epsilon(z)\f$:
+
+\f[
+   \epsilon = \frac{\epsilon_0}{[1 + (z/z_p)]^2},
+\f]
+
+where the magnitude \f$\epsilon_0\f$ and scale height \f$z_p\f$ can be expressed in terms of the
+spectral amplitude and bandwidth of the idealized vertical wavenumber energy spectrum in uniform
+stratification (\cite polzin2009).
+
+To take into account the nonuniform stratification, \cite polzin2009 applied a buoyancy scaling
+using the Wentzel-Kramers-Brillouin (WKB) approximation. As a result, the vertical wavenumber of a
+wave packet varies in proportion to the buoyancy frequency \f$N\f$, which in turn implies an
+additional transport of energy to smaller scales, and thus a possible enhanced mixing in regions of
+strong stratification. Such effects can be described by buoyancy scaling the vertical coordinate
+\f$z\f$ as
+
+\f[
+   z^{\ast}(z) = \int_{0}^{z} \left[ \frac{N^2 (z^\prime )}{N_b^2} \right] dz^{\prime} ,
+\f]
+
+with \f$z^\prime\f$ being positive upward relative to the bottom of the ocean. The turbulent
+dissipation rate then becomes
+
+\f[
+   \epsilon = \frac{\epsilon_0}{[1 + (z^{\ast} /z_p)]^2} \frac{N^2(z)}{N_b^2} .
+\f]
+
+The spectral amplitude and bandwidth of the idealized vertical wavenumber
+energy spectrum are identified after WKB scaling using a quasi-linear
+spectral model of internal-tide generation that incorporates horizontal
+advection of the barotropic tide into the momentum equation (\cite bell1975).
+As a result, Polzin's formulation leads to an expression for
+the spatially and temporally varying dissipation of internal tide energy
+at the bottom \f$\epsilon_0\f$, and the vertical scale of decay for the
+dissipation of internal tide energy \f$z_p\f$.
+
+\subsection subsection_energy_conserving Energy-conserving form
+
+To satisfy energy conservation (the integral of the vertical structure for the turbulent dissipation
+over depth should be unity), the dissipation is rewritten as
+
+\f[
+   \epsilon = \frac{\epsilon_0 z_p}{1 + (z^\ast/z_p)]^2} \frac{N^2(z)}{N^2_b} \left[
+   \frac{1}{z^{\ast(z=H)}} + \frac{1}{z_p} \right] .
+\f]
+
+In the MOM6 implementation, we use the \cite st_laurent2002 template for the vertical flux of energy
+at the ocean floor, so that in both formulations:
+
+\f[
+   \int_{0}^{H} \epsilon (z) dz = \frac{qE}{\rho} .
+\f]
+
+Whereas \cite polzin2009 assumed that the total dissipation was locally in balance with the
+barotropic to baroclinic energy conversion rate \f$(q=1)\f$, here we use the \cite simmons2004 value
+of \f$q=1/3\f$ to retain as much consistency as possible between both parameterizations.
+
+\subsection subsection_vertical_decay_scale Vertical decay-scale reformulation
+
+We follow the \cite polzin2009 prescription for the vertical scale of
+decay for the dissipation of internal-tide energy. However, we assume
+that the topographic power law, denoted as \f$\nu\f$ in \cite polzin2009,
+is equal to 1 (instead of 0.9) and we reformulated the expression of
+\f$z_p\f$ to put it in a more readable form:
+
+\f[
+   z_p = \frac{z_p^\mbox{ref} (\kappa^\mbox{ref})^2 (h^\mbox{ref})^2 (N_b^\mbox{ref})^3} {U^\mbox{ref}}
+   \frac{U}{h^2 \kappa^2 N_b^3} .
+\f]
+
+The superscript ref refers to reference values of the various parameters, as given by
+observations from the Brazil basin. Therefore, the above can be rewritten as
+
+\f[
+   z_p = \mu (N_b^\mbox{ref} )^2
+   \frac{U}{h^2 \kappa^2 N_b^3} .
+\f]
+
+where \f$\mu\f$ is a nondimensional constant \f$(\mu = 0.06970)\f$ and \f$N_b^\mbox{ref} = 9.6 \times
+10^{-4} s^{-1}\f$. Finally, a minimum decay scale of \f$z_p = 100 m\f$ is imposed in our
+implementation.
+
+\subsection subsection_reformulation_WKB Reformulation of the WKB scaling
+
+Since the dissipation is expressed as a function of the ratio \f$z^\ast / z_p\f$, a different WKB
+scaling can be used so long as we modify \f$z_p\f$ accordingly. In the implemented parameterization,
+we define the scaled height coordinate \f$z^\ast\f$ by
+
+\f[
+   z^\ast (z) = \frac{1}{\overline{N^2 (z)}^z} \int_{0}^{z} N^2(z^\prime ) dz ^\prime ,
+\f]
+
+with \f$z^\prime\f$ defined to be the height above the ocean bottom. By normalizing \f$N^2\f$ by its
+vertical mean \f$\overline{N^2}^z\f$, \f$z^\ast\f$ ranges from \f$0\f$ to \f$H\f$, the depth of the
+ocean.
+
+The WKB-scaled vertical decay scale for the Polzin formulation becomes
+
+\f[
+   z^\ast_p = \mu(N_b^\mbox{ref})^2 \frac{U}{h^2 \kappa^2 N_b \overline{N^2}^z} .
+\f]
+
+Unlike the \cite st_laurent2002 parameterization, the vertical decay scale now depends on physical
+variables and can evolve with a changing climate.
+
+Finally, the Polzin vertical profile of dissipation implemented in the model is given by
+
+\f[
+   \epsilon = \frac{qE(x,y)}{\rho [1 + (z^\ast/z_p^\ast)]^2} \frac{N^2(z)}{\overline{N^2}^z}
+   \left( \frac{1}{H} + \frac{1}{z_p^\ast} \right) .
+\f]
+
+In both parameterizations, turbulent diapycnal diffusivities are inferred from the dissipation
+\f$\epsilon\f$ by:
+
+\f[
+   K_d = \frac{\Gamma \epsilon}{N^2}
+\f]
+
+and using this form of \f$\Gamma\f$:
+
+\f[
+   \Gamma = 0.2 \frac{N^2}{N^2 + \Omega^2}
+\f]
+
+instead of \f$\Gamma = 0.2\f$, where \f$\Omega\f$ is the angular velocity
+of the Earth. This allows the buoyancy fluxes to tend to zero in regions
+of very weak stratification, allowing a no-flux bottom boundary condition
+to be satisfied.
+
+\section Nikurashin Lee Wave Mixing
+
+If one has the INT_TIDE_DISSIPATION flag on, there is an option to also turn on
+LEE_WAVE_DISSIPATION. The theory is presented in \cite nikurashin2010a
+while the application of it is presented in \cite nikurashin2010b. For
+the implementation in MOM6, it is required that you provide an estimate
+of the TKE loss due to the Lee waves which is then applied with either
+the St. Laurent or the Polzin vertical profile.
+
+\todo Is there a script to produce this somewhere or what???
+
+*/
+

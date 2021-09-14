@@ -41,7 +41,7 @@ use MOM_io,                   only : MOM_io_init, vardesc, var_desc
 use MOM_io,                   only : slasher, file_exists, MOM_read_data
 use MOM_obsolete_params,      only : find_obsolete_params
 use MOM_restart,              only : register_restart_field, register_restart_pair
-use MOM_restart,              only : query_initialized, save_restart
+use MOM_restart,              only : query_initialized, save_restart, restart_registry_lock
 use MOM_restart,              only : restart_init, is_new_run, determine_is_new_run, MOM_restart_CS
 use MOM_spatial_means,        only : global_mass_integral
 use MOM_time_manager,         only : time_type, real_to_time, time_type_to_real, operator(+)
@@ -438,7 +438,7 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
   type(surface), target, intent(inout) :: sfc_state  !< surface ocean state
   type(time_type),    intent(in)    :: Time_start    !< starting time of a segment, as a time type
   real,               intent(in)    :: time_int_in   !< time interval covered by this run segment [s].
-  type(MOM_control_struct), pointer :: CS            !< control structure from initialize_MOM
+  type(MOM_control_struct), intent(inout), target :: CS   !< control structure from initialize_MOM
   type(Wave_parameters_CS), &
             optional, pointer       :: Waves         !< An optional pointer to a wave property CS
   logical,  optional, intent(in)    :: do_dynamics   !< Present and false, do not do updates due
@@ -850,7 +850,7 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
       ! Determining the time-average sea surface height is part of the algorithm.
       ! This may be eta_av if Boussinesq, or need to be diagnosed if not.
       CS%time_in_cycle = CS%time_in_cycle + dt
-      call find_eta(h, CS%tv, G, GV, US, ssh, CS%eta_av_bc, eta_to_m=1.0)
+      call find_eta(h, CS%tv, G, GV, US, ssh, CS%eta_av_bc, eta_to_m=1.0, dZref=G%Z_ref)
       do j=js,je ; do i=is,ie
         CS%ssh_rint(i,j) = CS%ssh_rint(i,j) + dt*ssh(i,j)
       enddo ; enddo
@@ -985,7 +985,7 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_thermo, &
   real,               intent(in)    :: bbl_time_int !< time interval over which updates to the
                                                   !! bottom boundary layer properties will apply [T ~> s],
                                                   !! or zero not to update the properties.
-  type(MOM_control_struct), pointer :: CS         !< control structure from initialize_MOM
+  type(MOM_control_struct), intent(inout), target :: CS   !< control structure from initialize_MOM
   type(time_type),    intent(in)    :: Time_local !< End time of a segment, as a time type
   type(wave_parameters_CS), &
             optional, pointer       :: Waves      !< Container for wave related parameters; the
@@ -1276,7 +1276,13 @@ subroutine step_MOM_thermo(CS, G, GV, US, u, v, h, tv, fluxes, dtdia, &
   call enable_averages(dtdia, Time_end_thermo, CS%diag)
 
   if (associated(CS%odaCS)) then
-    call apply_oda_tracer_increments(US%T_to_s*dtdia, G, GV, tv, h, CS%odaCS)
+    if (CS%debug) then
+      call MOM_thermo_chksum("Pre-oda ", tv, G, US, haloshift=0)
+    endif
+    call apply_oda_tracer_increments(US%T_to_s*dtdia, Time_end_thermo, G, GV, tv, h, CS%odaCS)
+    if (CS%debug) then
+      call MOM_thermo_chksum("Post-oda ", tv, G, US, haloshift=0)
+    endif
   endif
 
   if (associated(fluxes%p_surf) .or. associated(fluxes%p_surf_full)) then
@@ -1436,7 +1442,7 @@ subroutine step_offline(forces, fluxes, sfc_state, Time_start, time_interval, CS
   type(surface),      intent(inout) :: sfc_state     !< surface ocean state
   type(time_type),    intent(in)    :: Time_start    !< starting time of a segment, as a time type
   real,               intent(in)    :: time_interval !< time interval
-  type(MOM_control_struct), pointer :: CS            !< control structure from initialize_MOM
+  type(MOM_control_struct), intent(inout) :: CS      !< control structure from initialize_MOM
 
   ! Local pointers
   type(ocean_grid_type),      pointer :: G  => NULL() ! Pointer to a structure containing
@@ -1634,7 +1640,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   type(time_type),           intent(in)    :: Time_init   !< The start time for the coupled model's calendar
   type(param_file_type),     intent(out)   :: param_file  !< structure indicating parameter file to parse
   type(directories),         intent(out)   :: dirs        !< structure with directory paths
-  type(MOM_control_struct),  pointer       :: CS          !< pointer set in this routine to MOM control structure
+  type(MOM_control_struct),  intent(inout), target :: CS  !< pointer set in this routine to MOM control structure
   type(MOM_restart_CS),      pointer       :: restart_CSp !< pointer set in this routine to the
                                                           !! restart control structure that will
                                                           !! be used for MOM.
@@ -1734,13 +1740,6 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   type(time_type)                 :: Start_time
   type(ocean_internal_state)      :: MOM_internal_state
   character(len=200) :: area_varname, ice_shelf_file, inputdir, filename
-
-  if (associated(CS)) then
-    call MOM_error(WARNING, "initialize_MOM called with an associated "// &
-                            "control structure.")
-    return
-  endif
-  allocate(CS)
 
   CS%Time => Time
 
@@ -2116,7 +2115,8 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   ! Swap axes for quarter and 3-quarter turns
   if (CS%rotate_index) then
     allocate(CS%G)
-    call clone_MOM_domain(G_in%Domain, CS%G%Domain, turns=turns)
+    call clone_MOM_domain(G_in%Domain, CS%G%Domain, turns=turns, &
+        domain_name="MOM_rot")
     first_direction = modulo(first_direction + turns, 2)
   else
     CS%G => G_in
@@ -2157,8 +2157,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
     if (associated(OBC_in)) then
       ! TODO: General OBC index rotations is not yet supported.
       if (modulo(turns, 4) /= 1) &
-        call MOM_error(FATAL, "OBC index rotation of 180 and 270 degrees is " &
-          // "not yet unsupported.")
+        call MOM_error(FATAL, "OBC index rotation of 180 and 270 degrees is not yet supported.")
       allocate(CS%OBC)
       call rotate_OBC_config(OBC_in, dG_in, CS%OBC, dG, turns)
     endif
@@ -2178,8 +2177,6 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   call callTree_waypoint("grids initialized (initialize_MOM)")
 
   call MOM_timing_init(CS)
-
-  if (associated(CS%OBC)) call call_OBC_register(param_file, CS%update_OBC_CSp, US, CS%OBC)
 
   call tracer_registry_init(param_file, CS%tracer_Reg)
 
@@ -2234,21 +2231,8 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
                            flux_scale=conv2salt, convergence_units='kg m-2 s-1', &
                            convergence_scale=0.001*GV%H_to_kg_m2, CMOR_tendprefix="osalt", diag_form=2)
     endif
-    ! NOTE: register_temp_salt_segments includes allocation of tracer fields
-    !   along segments.  Bit reproducibility requires that MOM_initialize_state
-    !   be called on the input index map, so we must setup both OBC and OBC_in.
-    !
-    ! XXX: This call on OBC_in allocates the tracer fields on the unrotated
-    !   grid, but also incorrectly stores a pointer to a tracer_type for the
-    !   rotated registry (e.g. segment%tr_reg%Tr(n)%Tr) from CS%tracer_reg.
-    !
-    !   While incorrect and potentially dangerous, it does not seem that this
-    !   pointer is used during initialization, so we leave it for now.
-    if (CS%rotate_index .and. associated(OBC_in)) &
-      call register_temp_salt_segments(GV, OBC_in, CS%tracer_Reg, param_file)
-    if (associated(CS%OBC)) &
-      call register_temp_salt_segments(GV, CS%OBC, CS%tracer_Reg, param_file)
   endif
+
   if (use_frazil) then
     allocate(CS%tv%frazil(isd:ied,jsd:jed)) ; CS%tv%frazil(:,:) = 0.0
   endif
@@ -2301,7 +2285,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
 
   ALLOC_(CS%ssh_rint(isd:ied,jsd:jed)) ; CS%ssh_rint(:,:) = 0.0
   ALLOC_(CS%ave_ssh_ibc(isd:ied,jsd:jed)) ; CS%ave_ssh_ibc(:,:) = 0.0
-  ALLOC_(CS%eta_av_bc(isd:ied,jsd:jed)) ; CS%eta_av_bc(:,:) = 0.0
+  ALLOC_(CS%eta_av_bc(isd:ied,jsd:jed)) ; CS%eta_av_bc(:,:) = 0.0 ! -G%Z_ref
   CS%time_in_cycle = 0.0 ; CS%time_in_thermo_cycle = 0.0
 
   ! Use the Wright equation of state by default, unless otherwise specified
@@ -2341,11 +2325,38 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   call mixedlayer_restrat_register_restarts(dG%HI, param_file, &
            CS%mixedlayer_restrat_CSp, restart_CSp)
 
-  if (associated(CS%OBC)) &
+  if (CS%rotate_index .and. associated(OBC_in) .and. use_temperature) then
+    ! NOTE: register_temp_salt_segments includes allocation of tracer fields
+    !   along segments.  Bit reproducibility requires that MOM_initialize_state
+    !   be called on the input index map, so we must setup both OBC and OBC_in.
+    !
+    ! XXX: This call on OBC_in allocates the tracer fields on the unrotated
+    !   grid, but also incorrectly stores a pointer to a tracer_type for the
+    !   rotated registry (e.g. segment%tr_reg%Tr(n)%Tr) from CS%tracer_reg.
+    !
+    !   While incorrect and potentially dangerous, it does not seem that this
+    !   pointer is used during initialization, so we leave it for now.
+    call register_temp_salt_segments(GV, OBC_in, CS%tracer_Reg, param_file)
+  endif
+
+  if (associated(CS%OBC)) then
+    ! Set up remaining information about open boundary conditions that is needed for OBCs.
+    call call_OBC_register(param_file, CS%update_OBC_CSp, US, CS%OBC, CS%tracer_Reg)
+  !### Package specific changes to OBCs need to go here?
+
+    ! This is the equivalent to 2 calls to register_segment_tracer (per segment), which
+    ! could occur with the call to update_OBC_data or after the main initialization.
+    if (use_temperature) &
+      call register_temp_salt_segments(GV, CS%OBC, CS%tracer_Reg, param_file)
+
+    ! This needs the number of tracers and to have called any code that sets whether
+    ! reservoirs are used.
     call open_boundary_register_restarts(dg%HI, GV, CS%OBC, CS%tracer_Reg, &
                           param_file, restart_CSp, use_temperature)
+  endif
 
   call callTree_waypoint("restart registration complete (initialize_MOM)")
+  call restart_registry_lock(restart_CSp)
 
   !   Shift from using the temporary dynamic grid type to using the final
   ! (potentially static) ocean-specific grid type.
@@ -2443,7 +2454,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
         turns, CS%u, CS%v, CS%h, CS%T, CS%S)
 
     if (associated(sponge_in_CSp)) then
-      ! TODO: Implementation and testing of non-ALE spong rotation
+      ! TODO: Implementation and testing of non-ALE sponge rotation
       call MOM_error(FATAL, "Index rotation of non-ALE sponge is not yet implemented.")
     endif
 
@@ -2483,18 +2494,10 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   endif
 
   if (use_ice_shelf .and. CS%debug) &
-    call hchksum(CS%frac_shelf_h, "MOM:frac_shelf_h", G%HI, &
-        haloshift=0)
+    call hchksum(CS%frac_shelf_h, "MOM:frac_shelf_h", G%HI, haloshift=0)
 
   call cpu_clock_end(id_clock_MOM_init)
   call callTree_waypoint("returned from MOM_initialize_state() (initialize_MOM)")
-
-! ! Need this after MOM_initialize_state for DOME OBC stuff.
-! if (associated(CS%OBC)) &
-!   call open_boundary_register_restarts(G%HI, GV, CS%OBC, CS%tracer_Reg, &
-!                         param_file, restart_CSp, use_temperature)
-
-! call callTree_waypoint("restart registration complete (initialize_MOM)")
 
   ! From this point, there may be pointers being set, so the final grid type
   ! that will persist throughout the run has to be used.
@@ -2793,9 +2796,9 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
 
   if (.not.query_initialized(CS%ave_ssh_ibc,"ave_ssh",restart_CSp)) then
     if (CS%split) then
-      call find_eta(CS%h, CS%tv, G, GV, US, CS%ave_ssh_ibc, eta, eta_to_m=1.0)
+      call find_eta(CS%h, CS%tv, G, GV, US, CS%ave_ssh_ibc, eta, eta_to_m=1.0, dZref=G%Z_ref)
     else
-      call find_eta(CS%h, CS%tv, G, GV, US, CS%ave_ssh_ibc, eta_to_m=1.0)
+      call find_eta(CS%h, CS%tv, G, GV, US, CS%ave_ssh_ibc, eta_to_m=1.0, dZref=G%Z_ref)
     endif
   endif
   if (CS%split) deallocate(eta)
@@ -2811,7 +2814,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
                       (LEN_TRIM(dirs%input_filename) == 1))
 
   if (CS%ensemble_ocean) then
-    call init_oda(Time, G, GV, CS%odaCS)
+    call init_oda(Time, G, GV, CS%diag, CS%odaCS)
   endif
 
   !### This could perhaps go here instead of in finish_MOM_initialization?
@@ -2827,7 +2830,7 @@ end subroutine initialize_MOM
 subroutine finish_MOM_initialization(Time, dirs, CS, restart_CSp)
   type(time_type),          intent(in)    :: Time        !< model time, used in this routine
   type(directories),        intent(in)    :: dirs        !< structure with directory paths
-  type(MOM_control_struct), pointer       :: CS          !< pointer to MOM control structure
+  type(MOM_control_struct), intent(inout) :: CS          !< MOM control structure
   type(MOM_restart_CS),     pointer       :: restart_CSp !< pointer to the restart control
                                                          !! structure that will be used for MOM.
   ! Local variables
@@ -2854,8 +2857,9 @@ subroutine finish_MOM_initialization(Time, dirs, CS, restart_CSp)
   if (CS%write_IC) then
     allocate(restart_CSp_tmp)
     restart_CSp_tmp = restart_CSp
+    call restart_registry_lock(restart_CSp_tmp, unlocked=.true.)
     allocate(z_interface(SZI_(G),SZJ_(G),SZK_(GV)+1))
-    call find_eta(CS%h, CS%tv, G, GV, US, z_interface, eta_to_m=1.0)
+    call find_eta(CS%h, CS%tv, G, GV, US, z_interface, eta_to_m=1.0, dZref=G%Z_ref)
     call register_restart_field(z_interface, "eta", .true., restart_CSp_tmp, &
                                 "Interface heights", "meter", z_grid='i')
     ! NOTE: write_ic=.true. routes routine to fms2 IO write_initial_conditions interface
@@ -3053,7 +3057,7 @@ end subroutine adjust_ssh_for_p_atm
 !! setting the appropriate fields in sfc_state.  Unused fields
 !! are set to NULL or are unallocated.
 subroutine extract_surface_state(CS, sfc_state_in)
-  type(MOM_control_struct), pointer    :: CS !< Master MOM control structure
+  type(MOM_control_struct), intent(inout), target :: CS   !< Master MOM control structure
   type(surface), target, intent(inout) :: sfc_state_in !< transparent ocean surface state
                                              !! structure shared with the calling routine
                                              !! data in this structure is intent out.
@@ -3404,10 +3408,10 @@ subroutine extract_surface_state(CS, sfc_state_in)
     numberOfErrors=0 ! count number of errors
     do j=js,je ; do i=is,ie
       if (G%mask2dT(i,j)>0.) then
-        localError = sfc_state%sea_lev(i,j) <= -G%bathyT(i,j) &
+        localError = sfc_state%sea_lev(i,j) <= -G%bathyT(i,j) - G%Z_ref &
                 .or. sfc_state%sea_lev(i,j) >=  CS%bad_val_ssh_max  &
                 .or. sfc_state%sea_lev(i,j) <= -CS%bad_val_ssh_max  &
-                .or. sfc_state%sea_lev(i,j) + G%bathyT(i,j) < CS%bad_val_col_thick
+                .or. sfc_state%sea_lev(i,j) + G%bathyT(i,j) + G%Z_ref < CS%bad_val_col_thick
         if (use_temperature) localError = localError &
                 .or. sfc_state%SSS(i,j)<0.                        &
                 .or. sfc_state%SSS(i,j)>=CS%bad_val_sss_max       &
@@ -3423,7 +3427,7 @@ subroutine extract_surface_state(CS, sfc_state_in)
                 'Extreme surface sfc_state detected: i=',ig,'j=',jg, &
                 'lon=',G%geoLonT(i,j), 'lat=',G%geoLatT(i,j), &
                 'x=',G%gridLonT(ig), 'y=',G%gridLatT(jg), &
-                'D=',CS%US%Z_to_m*G%bathyT(i,j),  'SSH=',CS%US%Z_to_m*sfc_state%sea_lev(i,j), &
+                'D=',CS%US%Z_to_m*(G%bathyT(i,j)+G%Z_ref),  'SSH=',CS%US%Z_to_m*sfc_state%sea_lev(i,j), &
                 'SST=',sfc_state%SST(i,j), 'SSS=',sfc_state%SSS(i,j), &
                 'U-=',US%L_T_to_m_s*sfc_state%u(I-1,j), 'U+=',US%L_T_to_m_s*sfc_state%u(I,j), &
                 'V-=',US%L_T_to_m_s*sfc_state%v(i,J-1), 'V+=',US%L_T_to_m_s*sfc_state%v(i,J)
@@ -3432,7 +3436,7 @@ subroutine extract_surface_state(CS, sfc_state_in)
                 'Extreme surface sfc_state detected: i=',ig,'j=',jg, &
                 'lon=',G%geoLonT(i,j), 'lat=',G%geoLatT(i,j), &
                 'x=',G%gridLonT(i), 'y=',G%gridLatT(j), &
-                'D=',CS%US%Z_to_m*G%bathyT(i,j),  'SSH=',CS%US%Z_to_m*sfc_state%sea_lev(i,j), &
+                'D=',CS%US%Z_to_m*(G%bathyT(i,j)+G%Z_ref),  'SSH=',CS%US%Z_to_m*sfc_state%sea_lev(i,j), &
                 'U-=',US%L_T_to_m_s*sfc_state%u(I-1,j), 'U+=',US%L_T_to_m_s*sfc_state%u(I,j), &
                 'V-=',US%L_T_to_m_s*sfc_state%v(i,J-1), 'V+=',US%L_T_to_m_s*sfc_state%v(i,J)
             endif
@@ -3480,7 +3484,7 @@ end subroutine rotate_initial_state
 
 !> Return true if all phases of step_MOM are at the same point in time.
 function MOM_state_is_synchronized(CS, adv_dyn) result(in_synch)
-  type(MOM_control_struct), pointer :: CS !< MOM control structure
+  type(MOM_control_struct), intent(inout) :: CS !< MOM control structure
   logical,        optional, intent(in) :: adv_dyn  !< If present and true, only check
                                           !! whether the advection is up-to-date with
                                           !! the dynamics.
@@ -3501,7 +3505,7 @@ end function MOM_state_is_synchronized
 !> This subroutine offers access to values or pointers to other types from within
 !! the MOM_control_struct, allowing the MOM_control_struct to be opaque.
 subroutine get_MOM_state_elements(CS, G, GV, US, C_p, C_p_scaled, use_temp)
-  type(MOM_control_struct),          pointer     :: CS !< MOM control structure
+  type(MOM_control_struct), intent(inout), target :: CS  !< MOM control structure
   type(ocean_grid_type),   optional, pointer     :: G    !< structure containing metrics and grid info
   type(verticalGrid_type), optional, pointer     :: GV   !< structure containing vertical grid info
   type(unit_scale_type),   optional, pointer     :: US   !< A dimensional unit scaling type
@@ -3520,7 +3524,7 @@ end subroutine get_MOM_state_elements
 
 !> Find the global integrals of various quantities.
 subroutine get_ocean_stocks(CS, mass, heat, salt, on_PE_only)
-  type(MOM_control_struct), pointer :: CS !< MOM control structure
+  type(MOM_control_struct), intent(inout) :: CS !< MOM control structure
   real,    optional, intent(out) :: heat  !< The globally integrated integrated ocean heat [J].
   real,    optional, intent(out) :: salt  !< The globally integrated integrated ocean salt [kg].
   real,    optional, intent(out) :: mass  !< The globally integrated integrated ocean mass [kg].
@@ -3537,7 +3541,7 @@ end subroutine get_ocean_stocks
 
 !> End of ocean model, including memory deallocation
 subroutine MOM_end(CS)
-  type(MOM_control_struct), pointer :: CS   !< MOM control structure
+  type(MOM_control_struct), intent(inout) :: CS   !< MOM control structure
 
   call MOM_sum_output_end(CS%sum_output_CSp)
 
@@ -3613,7 +3617,6 @@ subroutine MOM_end(CS)
   if (associated(CS%update_OBC_CSp)) call OBC_register_end(CS%update_OBC_CSp)
 
   call verticalGridEnd(CS%GV)
-  call unit_scaling_end(CS%US)
   call MOM_grid_end(CS%G)
 
   if (CS%debug .or. CS%G%symmetric) &
@@ -3622,9 +3625,11 @@ subroutine MOM_end(CS)
   if (CS%rotate_index) &
     call deallocate_MOM_domain(CS%G%Domain)
 
-  call deallocate_MOM_domain(CS%G_in%domain)
+  ! The MPP domains may be needed by an external coupler, so use `cursory`.
+  ! TODO: This may create a domain memory leak, and needs investigation.
+  call deallocate_MOM_domain(CS%G_in%domain, cursory=.true.)
 
-  deallocate(CS)
+  call unit_scaling_end(CS%US)
 end subroutine MOM_end
 
 !> \namespace mom

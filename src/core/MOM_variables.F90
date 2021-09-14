@@ -171,6 +171,10 @@ type, public :: accel_diag_ptrs
     PFv => NULL(), &       !< Meridional acceleration due to pressure forces [L T-2 ~> m s-2]
     du_dt_visc => NULL(), &!< Zonal acceleration due to vertical viscosity [L T-2 ~> m s-2]
     dv_dt_visc => NULL(), &!< Meridional acceleration due to vertical viscosity [L T-2 ~> m s-2]
+    du_dt_str => NULL(), & !< Zonal acceleration due to the surface stress (included
+                           !! in du_dt_visc) [L T-2 ~> m s-2]
+    dv_dt_str => NULL(), & !< Meridional acceleration due to the surface stress (included
+                           !! in dv_dt_visc) [L T-2 ~> m s-2]
     du_dt_dia => NULL(), & !< Zonal acceleration due to diapycnal  mixing [L T-2 ~> m s-2]
     dv_dt_dia => NULL(), & !< Meridional acceleration due to diapycnal  mixing [L T-2 ~> m s-2]
     u_accel_bt => NULL(), &!< Pointer to the zonal barotropic-solver acceleration [L T-2 ~> m s-2]
@@ -192,6 +196,9 @@ type, public :: accel_diag_ptrs
   real, pointer :: diag_hfrac_v(:,:,:) => NULL() !< Fractional layer thickness at v points
   real, pointer :: diag_hu(:,:,:) => NULL() !< layer thickness at u points
   real, pointer :: diag_hv(:,:,:) => NULL() !< layer thickness at v points
+
+  real, pointer :: visc_rem_u(:,:,:) => NULL() !< viscous remnant at u points
+  real, pointer :: visc_rem_v(:,:,:) => NULL() !< viscous remnant at v points
 
 end type accel_diag_ptrs
 
