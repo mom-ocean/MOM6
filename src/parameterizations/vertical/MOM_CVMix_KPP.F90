@@ -411,11 +411,14 @@ logical function KPP_init(paramFile, G, GV, US, diag, Time, CS, passive, Waves)
                     "Unrecognized KPP_LT_K_SHAPE option: "//trim(string))
     end select
     call get_param(paramFile, mdl, "KPP_LT_K_METHOD", string ,                   &
-                   'Method to enhance mixing coefficient in KPP. '//           &
+                   'Method to enhance mixing coefficient in KPP. '//             &
                    'Valid options are: \n'//                                     &
                    '\t CONSTANT = Constant value (KPP_K_ENH_FAC) \n'//           &
                    '\t VR12     = Function of Langmuir number based on VR12\n'// &
-                   '\t RW16     = Function of Langmuir number based on RW16',    &
+                   '\t            (Van Roekel et al. 2012)\n'//                  &
+                   '\t            (Li et al. 2016, OM) \n'//                     &
+                   '\t RW16     = Function of Langmuir number based on RW16\n'// &
+                   '\t            (Reichl et al., 2016, JPO)',    &
                    default='CONSTANT')
     select case ( trim(string))
       case ("CONSTANT")
@@ -443,12 +446,16 @@ logical function KPP_init(paramFile, G, GV, US, diag, Time, CS, passive, Waves)
        'in Bulk Richardson Number.', units="", Default=.false.)
   if (CS%LT_Vt2_Enhancement) then
     call get_param(paramFile, mdl, "KPP_LT_VT2_METHOD",string ,                  &
-                   'Method to enhance Vt2 in KPP. '//                          &
+                   'Method to enhance Vt2 in KPP. '//                            &
                    'Valid options are: \n'//                                     &
                    '\t CONSTANT = Constant value (KPP_VT2_ENH_FAC) \n'//         &
                    '\t VR12     = Function of Langmuir number based on VR12\n'// &
+                   '\t            (Van Roekel et al., 2012) \n'//                &
+                   '\t            (Li et al. 2016, OM) \n'//                     &
                    '\t RW16     = Function of Langmuir number based on RW16\n'// &
-                   '\t LF17     = Function of Langmuir number based on LF17',    &
+                   '\t            (Reichl et al., 2016, JPO) \n'//               &
+                   '\t LF17     = Function of Langmuir number based on LF17\n'// &
+                   '\t            (Li and Fox-Kemper, 2017, JPO)',    &
                    default='CONSTANT')
     select case ( trim(string))
       case ("CONSTANT")
