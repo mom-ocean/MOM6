@@ -152,7 +152,7 @@ subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, GV, &
         b1(i) = 1.0 / (b_denom_1 + eb(i,j,1))
         d1(i) = b_denom_1 * b1(i)
         h_tr = h_old(i,j,1) + h_neglect
-        tr(i,j,1) = (b1(i)*h_tr)*tr(i,j,1) + sfc_src(i,j)
+        tr(i,j,1) = (b1(i)*h_tr)*tr(i,j,1) + b1(i)*sfc_src(i,j)
       endif ; enddo
       do k=2,nz-1 ; do i=is,ie ; if (G%mask2dT(i,j) > 0.5) then
         c1(i,k) = eb(i,j,k-1) * b1(i)
@@ -185,14 +185,14 @@ subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, GV, &
   else
     !$OMP do
     do j=js,je
-      do i=is,ie ; if (G%mask2dT(i,j) > -0.5) then
+      do i=is,ie ; if (G%mask2dT(i,j) > 0.5) then
         h_tr = h_old(i,j,1) + h_neglect
         b_denom_1 = h_tr + ea(i,j,1)
         b1(i) = 1.0 / (b_denom_1 + eb(i,j,1))
         d1(i) = h_tr * b1(i)
-        tr(i,j,1) = (b1(i)*h_tr)*tr(i,j,1) + sfc_src(i,j)
+        tr(i,j,1) = (b1(i)*h_tr)*tr(i,j,1) + b1(i)*sfc_src(i,j)
       endif ; enddo
-      do k=2,nz-1 ; do i=is,ie ; if (G%mask2dT(i,j) > -0.5) then
+      do k=2,nz-1 ; do i=is,ie ; if (G%mask2dT(i,j) > 0.5) then
         c1(i,k) = eb(i,j,k-1) * b1(i)
         h_tr = h_old(i,j,k) + h_neglect
         b_denom_1 = h_tr + d1(i) * ea(i,j,k)
@@ -200,7 +200,7 @@ subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, GV, &
         d1(i) = b_denom_1 * b1(i)
         tr(i,j,k) = b1(i) * (h_tr * tr(i,j,k) + ea(i,j,k) * tr(i,j,k-1))
       endif ; enddo ; enddo
-      do i=is,ie ; if (G%mask2dT(i,j) > -0.5) then
+      do i=is,ie ; if (G%mask2dT(i,j) > 0.5) then
         c1(i,nz) = eb(i,j,nz-1) * b1(i)
         h_tr = h_old(i,j,nz) + h_neglect
         b_denom_1 = h_tr + d1(i)*ea(i,j,nz)
@@ -208,7 +208,7 @@ subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, GV, &
         tr(i,j,nz) = b1(i) * (( h_tr * tr(i,j,nz) + btm_src(i,j)) + &
                               ea(i,j,nz) * tr(i,j,nz-1))
       endif ; enddo
-      do k=nz-1,1,-1 ; do i=is,ie ; if (G%mask2dT(i,j) > -0.5) then
+      do k=nz-1,1,-1 ; do i=is,ie ; if (G%mask2dT(i,j) > 0.5) then
         tr(i,j,k) = tr(i,j,k) + c1(i,k+1)*tr(i,j,k+1)
       endif ; enddo ; enddo
     enddo
@@ -267,8 +267,7 @@ subroutine tracer_vertdiff_Eulerian(h_old, ent, dt, tr, G, GV, &
                     !! ensure positive definiteness [H ~> m or kg m-2].
   real :: h_neglect !< A thickness that is so small it is usually lost
                     !! in roundoff and can be neglected [H ~> m or kg m-2].
-  logical :: convert_flux = .true.
-
+  logical :: convert_flux
 
   integer :: i, j, k, is, ie, js, je, nz
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
@@ -279,6 +278,7 @@ subroutine tracer_vertdiff_Eulerian(h_old, ent, dt, tr, G, GV, &
     return
   endif
 
+  convert_flux = .true.
   if (present(convert_flux_in)) convert_flux = convert_flux_in
   h_neglect = GV%H_subroundoff
   sink_dist = 0.0
@@ -351,7 +351,7 @@ subroutine tracer_vertdiff_Eulerian(h_old, ent, dt, tr, G, GV, &
         b1(i) = 1.0 / (b_denom_1 + ent(i,j,2))
         d1(i) = b_denom_1 * b1(i)
         h_tr = h_old(i,j,1) + h_neglect
-        tr(i,j,1) = (b1(i)*h_tr)*tr(i,j,1) + sfc_src(i,j)
+        tr(i,j,1) = (b1(i)*h_tr)*tr(i,j,1) + b1(i)*sfc_src(i,j)
       endif ; enddo
       do k=2,nz-1 ; do i=is,ie ; if (G%mask2dT(i,j) > 0.5) then
         c1(i,k) = ent(i,j,K) * b1(i)
@@ -384,14 +384,14 @@ subroutine tracer_vertdiff_Eulerian(h_old, ent, dt, tr, G, GV, &
   else
     !$OMP do
     do j=js,je
-      do i=is,ie ; if (G%mask2dT(i,j) > -0.5) then
+      do i=is,ie ; if (G%mask2dT(i,j) > 0.5) then
         h_tr = h_old(i,j,1) + h_neglect
         b_denom_1 = h_tr + ent(i,j,1)
         b1(i) = 1.0 / (b_denom_1 + ent(i,j,2))
         d1(i) = h_tr * b1(i)
-        tr(i,j,1) = (b1(i)*h_tr)*tr(i,j,1) + sfc_src(i,j)
+        tr(i,j,1) = (b1(i)*h_tr)*tr(i,j,1) + b1(i)*sfc_src(i,j)
       endif ; enddo
-      do k=2,nz-1 ; do i=is,ie ; if (G%mask2dT(i,j) > -0.5) then
+      do k=2,nz-1 ; do i=is,ie ; if (G%mask2dT(i,j) > 0.5) then
         c1(i,k) = ent(i,j,K) * b1(i)
         h_tr = h_old(i,j,k) + h_neglect
         b_denom_1 = h_tr + d1(i) * ent(i,j,K)
@@ -399,7 +399,7 @@ subroutine tracer_vertdiff_Eulerian(h_old, ent, dt, tr, G, GV, &
         d1(i) = b_denom_1 * b1(i)
         tr(i,j,k) = b1(i) * (h_tr * tr(i,j,k) + ent(i,j,K) * tr(i,j,k-1))
       endif ; enddo ; enddo
-      do i=is,ie ; if (G%mask2dT(i,j) > -0.5) then
+      do i=is,ie ; if (G%mask2dT(i,j) > 0.5) then
         c1(i,nz) = ent(i,j,nz) * b1(i)
         h_tr = h_old(i,j,nz) + h_neglect
         b_denom_1 = h_tr + d1(i)*ent(i,j,nz)
@@ -407,7 +407,7 @@ subroutine tracer_vertdiff_Eulerian(h_old, ent, dt, tr, G, GV, &
         tr(i,j,nz) = b1(i) * (( h_tr * tr(i,j,nz) + btm_src(i,j)) + &
                               ent(i,j,nz) * tr(i,j,nz-1))
       endif ; enddo
-      do k=nz-1,1,-1 ; do i=is,ie ; if (G%mask2dT(i,j) > -0.5) then
+      do k=nz-1,1,-1 ; do i=is,ie ; if (G%mask2dT(i,j) > 0.5) then
         tr(i,j,k) = tr(i,j,k) + c1(i,k+1)*tr(i,j,k+1)
       endif ; enddo ; enddo
     enddo
