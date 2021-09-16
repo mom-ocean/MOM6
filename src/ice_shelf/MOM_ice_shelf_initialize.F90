@@ -7,7 +7,7 @@ use MOM_grid, only : ocean_grid_type
 use MOM_array_transform,      only : rotate_array
 use MOM_hor_index,  only : hor_index_type
 use MOM_file_parser, only : get_param, read_param, log_param, param_file_type
-use MOM_io, only: MOM_read_data, file_exists, slasher, CORNER
+use MOM_io, only: MOM_read_data, file_exists, field_exists, slasher, CORNER
 use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, WARNING, is_root_pe
 use MOM_unit_scaling, only : unit_scale_type
 use user_shelf_init, only: USER_init_ice_thickness
@@ -104,6 +104,7 @@ subroutine initialize_ice_thickness_from_file(h_shelf, area_shelf_h, hmask, G, U
   character(len=200) :: thickness_varname, area_varname, hmask_varname  ! Variable name in file
   character(len=40)  :: mdl = "initialize_ice_thickness_from_file" ! This subroutine's name.
   integer :: i, j, isc, jsc, iec, jec
+  logical :: hmask_set
   real :: len_sidestress, mask, udh
 
   call MOM_mesg("Initialize_ice_thickness_from_file: reading thickness")
@@ -130,8 +131,23 @@ subroutine initialize_ice_thickness_from_file(h_shelf, area_shelf_h, hmask, G, U
        " initialize_topography_from_file: Unable to open "//trim(filename))
   call MOM_read_data(filename, trim(thickness_varname), h_shelf, G%Domain, scale=US%m_to_Z)
   call MOM_read_data(filename,trim(area_varname), area_shelf_h, G%Domain, scale=US%m_to_L**2)
-  call MOM_read_data(filename, trim(hmask_varname), hmask, G%Domain)
+  if (field_exists(filename, trim(hmask_varname), MOM_domain=G%Domain)) then
+    call MOM_read_data(filename, trim(hmask_varname), hmask, G%Domain)
+    hmask_set = .true.
+  else
+    call MOM_error(WARNING, "Ice shelf thickness initialized without setting the shelf mask "//&
+              "from variable "//trim(hmask_varname)//", which does not exist in "//trim(filename))
+    hmask_set = .false.
+  endif
   isc = G%isc ; jsc = G%jsc ; iec = G%iec ; jec = G%jec
+
+  if (.not.hmask_set) then
+    ! Set hmask based on the values in h_shelf.
+    do j=jsc,jec ; do i=isc,iec
+      hmask(i,j) = 0.0
+      if (h_shelf(i,j) > 0.0) hmask(i,j) = 1.0
+    enddo ; enddo
+  endif
 
   if (len_sidestress > 0.) then
     do j=jsc,jec
@@ -146,16 +162,16 @@ subroutine initialize_ice_thickness_from_file(h_shelf, area_shelf_h, hmask, G, U
             h_shelf(i,j) = 0.0
             area_shelf_h(i,j) = 0.0
           else
-          h_shelf(i,j) = udh
+            h_shelf(i,j) = udh
           endif
         endif
 
       ! update thickness mask
 
-        if (area_shelf_h (i,j) >= G%areaT(i,j)) then
+        if (area_shelf_h(i,j) >= G%areaT(i,j)) then
           hmask(i,j) = 1.
           area_shelf_h(i,j)=G%areaT(i,j)
-        elseif (area_shelf_h (i,j) == 0.0) then
+        elseif (area_shelf_h(i,j) == 0.0) then
           hmask(i,j) = 0.
         elseif ((area_shelf_h(i,j) > 0) .and. (area_shelf_h(i,j) <= G%areaT(i,j))) then
           hmask(i,j) = 2.
