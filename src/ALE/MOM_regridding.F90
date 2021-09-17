@@ -477,10 +477,10 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
   CS%nk=ke
 
   ! Target resolution (for fixed coordinates)
-  allocate( CS%coordinateResolution(CS%nk) ); CS%coordinateResolution(:) = -1.E30
+  allocate( CS%coordinateResolution(CS%nk), source=-1.E30 )
   if (state_dependent(CS%regridding_scheme)) then
     ! Target values
-    allocate( CS%target_density(CS%nk+1) ); CS%target_density(:) = -1.E30*US%kg_m3_to_R
+    allocate( CS%target_density(CS%nk+1), source=-1.E30*US%kg_m3_to_R )
   endif
 
   if (allocated(dz)) then

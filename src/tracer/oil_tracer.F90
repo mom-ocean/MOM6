@@ -169,7 +169,7 @@ function register_oil_tracer(HI, GV, US, param_file, CS, tr_Reg, restart_CS)
   if (GV%Boussinesq) then ; flux_units = "kg s-1"
   else ; flux_units = "kg m-3 kg s-1" ; endif
 
-  allocate(CS%tr(isd:ied,jsd:jed,nz,CS%ntr)) ; CS%tr(:,:,:,:) = 0.0
+  allocate(CS%tr(isd:ied,jsd:jed,nz,CS%ntr), source=0.0)
 
   do m=1,CS%ntr
     ! This is needed to force the compiler not to do a copy in the registration

@@ -1097,7 +1097,7 @@ subroutine opacity_init(Time, G, GV, US, param_file, diag, CS, optics)
     allocate(optics%opacity_band(optics%nbands,isd:ied,jsd:jed,nz))
   if (.not.associated(optics%sw_pen_band)) &
     allocate(optics%sw_pen_band(optics%nbands,isd:ied,jsd:jed))
-  allocate(CS%id_opacity(optics%nbands)) ; CS%id_opacity(:) = -1
+  allocate(CS%id_opacity(optics%nbands), source=-1)
 
   CS%id_sw_pen = register_diag_field('ocean_model', 'SW_pen', diag%axesT1, Time, &
       'Penetrating shortwave radiation flux into ocean', 'W m-2', conversion=US%QRZ_T_to_W_m2)

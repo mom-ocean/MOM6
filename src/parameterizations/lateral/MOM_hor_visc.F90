@@ -1711,8 +1711,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
   endif
 
   if (present(ADp) .and. (CS%id_h_diffu > 0)) then
-    allocate(h_diffu(G%IsdB:G%IedB,G%jsd:G%jed,GV%ke))
-    h_diffu(:,:,:) = 0.0
+    allocate(h_diffu(G%IsdB:G%IedB,G%jsd:G%jed,GV%ke), source=0.0)
     do k=1,nz ; do j=js,je ; do I=Isq,Ieq
       h_diffu(I,j,k) = diffu(I,j,k) * ADp%diag_hu(I,j,k)
     enddo ; enddo ; enddo
@@ -1720,8 +1719,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
     deallocate(h_diffu)
   endif
   if (present(ADp) .and. (CS%id_h_diffv > 0)) then
-    allocate(h_diffv(G%isd:G%ied,G%JsdB:G%JedB,GV%ke))
-    h_diffv(:,:,:) = 0.0
+    allocate(h_diffv(G%isd:G%ied,G%JsdB:G%JedB,GV%ke), source=0.0)
     do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
       h_diffv(i,J,k) = diffv(i,J,k) * ADp%diag_hv(i,J,k)
     enddo ; enddo ; enddo
@@ -1730,8 +1728,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
   endif
 
   if (present(ADp) .and. (CS%id_diffu_visc_rem > 0)) then
-    allocate(diffu_visc_rem(G%IsdB:G%IedB,G%jsd:G%jed,GV%ke))
-    diffu_visc_rem(:,:,:) = 0.0
+    allocate(diffu_visc_rem(G%IsdB:G%IedB,G%jsd:G%jed,GV%ke), source=0.0)
     do k=1,nz ; do j=js,je ; do I=Isq,Ieq
       diffu_visc_rem(I,j,k) = diffu(I,j,k) * ADp%visc_rem_u(I,j,k)
     enddo ; enddo ; enddo
@@ -1739,8 +1736,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
     deallocate(diffu_visc_rem)
   endif
   if (present(ADp) .and. (CS%id_diffv_visc_rem > 0)) then
-    allocate(diffv_visc_rem(G%isd:G%ied,G%JsdB:G%JedB,GV%ke))
-    diffv_visc_rem(:,:,:) = 0.0
+    allocate(diffv_visc_rem(G%isd:G%ied,G%JsdB:G%JedB,GV%ke), source=0.0)
     do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
       diffv_visc_rem(i,J,k) = diffv(i,J,k) * ADp%visc_rem_v(i,J,k)
     enddo ; enddo ; enddo

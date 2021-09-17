@@ -2233,16 +2233,10 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
     endif
   endif
 
-  if (use_frazil) then
-    allocate(CS%tv%frazil(isd:ied,jsd:jed)) ; CS%tv%frazil(:,:) = 0.0
-  endif
-  if (bound_salinity) then
-    allocate(CS%tv%salt_deficit(isd:ied,jsd:jed)) ; CS%tv%salt_deficit(:,:) = 0.0
-  endif
+  if (use_frazil) allocate(CS%tv%frazil(isd:ied,jsd:jed), source=0.0)
+  if (bound_salinity) allocate(CS%tv%salt_deficit(isd:ied,jsd:jed), source=0.0)
 
-  if (bulkmixedlayer .or. use_temperature) then
-    allocate(CS%Hml(isd:ied,jsd:jed)) ; CS%Hml(:,:) = 0.0
-  endif
+  if (bulkmixedlayer .or. use_temperature) allocate(CS%Hml(isd:ied,jsd:jed), source=0.0)
 
   if (bulkmixedlayer) then
     GV%nkml = nkml ; GV%nk_rho_varies = nkml + nkbl
@@ -2258,8 +2252,8 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   CS%t_dyn_rel_adv = 0.0 ; CS%t_dyn_rel_thermo = 0.0 ; CS%t_dyn_rel_diag = 0.0
 
   if (debug_truncations) then
-    allocate(CS%u_prev(IsdB:IedB,jsd:jed,nz)) ; CS%u_prev(:,:,:) = 0.0
-    allocate(CS%v_prev(isd:ied,JsdB:JedB,nz)) ; CS%v_prev(:,:,:) = 0.0
+    allocate(CS%u_prev(IsdB:IedB,jsd:jed,nz), source=0.0)
+    allocate(CS%v_prev(isd:ied,JsdB:JedB,nz), source=0.0)
     MOM_internal_state%u_prev => CS%u_prev
     MOM_internal_state%v_prev => CS%v_prev
     call safe_alloc_ptr(CS%ADp%du_dt_visc,IsdB,IedB,jsd,jed,nz)
@@ -2279,9 +2273,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
 
   CS%CDp%uh => CS%uh ; CS%CDp%vh => CS%vh
 
-  if (CS%interp_p_surf) then
-    allocate(CS%p_surf_prev(isd:ied,jsd:jed)) ; CS%p_surf_prev(:,:) = 0.0
-  endif
+  if (CS%interp_p_surf) allocate(CS%p_surf_prev(isd:ied,jsd:jed), source=0.0)
 
   ALLOC_(CS%ssh_rint(isd:ied,jsd:jed)) ; CS%ssh_rint(:,:) = 0.0
   ALLOC_(CS%ave_ssh_ibc(isd:ied,jsd:jed)) ; CS%ave_ssh_ibc(:,:) = 0.0
@@ -2293,9 +2285,9 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   ! initialization routine for tv.
   if (use_EOS) call EOS_init(param_file, CS%tv%eqn_of_state, US)
   if (use_temperature) then
-    allocate(CS%tv%TempxPmE(isd:ied,jsd:jed)) ; CS%tv%TempxPmE(:,:) = 0.0
+    allocate(CS%tv%TempxPmE(isd:ied,jsd:jed), source=0.0)
     if (use_geothermal) then
-      allocate(CS%tv%internal_heat(isd:ied,jsd:jed)) ; CS%tv%internal_heat(:,:) = 0.0
+      allocate(CS%tv%internal_heat(isd:ied,jsd:jed), source=0.0)
     endif
   endif
   call callTree_waypoint("state variables allocated (initialize_MOM)")
@@ -2406,18 +2398,13 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   if (CS%rotate_index) then
     G_in%ke = GV%ke
 
-    allocate(u_in(G_in%IsdB:G_in%IedB, G_in%jsd:G_in%jed, nz))
-    allocate(v_in(G_in%isd:G_in%ied, G_in%JsdB:G_in%JedB, nz))
-    allocate(h_in(G_in%isd:G_in%ied, G_in%jsd:G_in%jed, nz))
-    u_in(:,:,:) = 0.0
-    v_in(:,:,:) = 0.0
-    h_in(:,:,:) = GV%Angstrom_H
+    allocate(u_in(G_in%IsdB:G_in%IedB, G_in%jsd:G_in%jed, nz), source=0.0)
+    allocate(v_in(G_in%isd:G_in%ied, G_in%JsdB:G_in%JedB, nz), source=0.0)
+    allocate(h_in(G_in%isd:G_in%ied, G_in%jsd:G_in%jed, nz), source=GV%Angstrom_H)
 
     if (use_temperature) then
-      allocate(T_in(G_in%isd:G_in%ied, G_in%jsd:G_in%jed, nz))
-      allocate(S_in(G_in%isd:G_in%ied, G_in%jsd:G_in%jed, nz))
-      T_in(:,:,:) = 0.0
-      S_in(:,:,:) = 0.0
+      allocate(T_in(G_in%isd:G_in%ied, G_in%jsd:G_in%jed, nz), source=0.0)
+      allocate(S_in(G_in%isd:G_in%ied, G_in%jsd:G_in%jed, nz), source=0.0)
 
       CS%tv%T => T_in
       CS%tv%S => S_in
@@ -2428,10 +2415,8 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
       ! when using an ice shelf. Passing the ice shelf diagnostics CS from MOM
       ! for legacy reasons. The actual ice shelf diag CS is internal to the ice shelf
       call initialize_ice_shelf(param_file, G_in, Time, ice_shelf_CSp, diag_ptr)
-      allocate(frac_shelf_in(G_in%isd:G_in%ied, G_in%jsd:G_in%jed))
-      frac_shelf_in(:,:) = 0.0
-      allocate(CS%frac_shelf_h(isd:ied, jsd:jed))
-      CS%frac_shelf_h(:,:) = 0.0
+      allocate(frac_shelf_in(G_in%isd:G_in%ied, G_in%jsd:G_in%jed), source=0.0)
+      allocate(CS%frac_shelf_h(isd:ied, jsd:jed), source=0.0)
       call ice_shelf_query(ice_shelf_CSp,G,CS%frac_shelf_h)
       ! MOM_initialize_state is using the  unrotated metric
       call rotate_array(CS%frac_shelf_h, -turns, frac_shelf_in)
@@ -2479,8 +2464,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   else
     if (use_ice_shelf) then
       call initialize_ice_shelf(param_file, G, Time, ice_shelf_CSp, diag_ptr)
-      allocate(CS%frac_shelf_h(isd:ied, jsd:jed))
-      CS%frac_shelf_h(:,:) = 0.0
+      allocate(CS%frac_shelf_h(isd:ied, jsd:jed), source=0.0)
       call ice_shelf_query(ice_shelf_CSp,G,CS%frac_shelf_h)
       call MOM_initialize_state(CS%u, CS%v, CS%h, CS%tv, Time, G, GV, US, &
           param_file, dirs, restart_CSp, CS%ALE_CSp, CS%tracer_Reg, &
@@ -2617,7 +2601,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   call thickness_diffuse_init(Time, G, GV, US, param_file, diag, CS%CDp, CS%thickness_diffuse_CSp)
 
   if (CS%split) then
-    allocate(eta(SZI_(G),SZJ_(G))) ; eta(:,:) = 0.0
+    allocate(eta(SZI_(G),SZJ_(G)), source=0.0)
     call initialize_dyn_split_RK2(CS%u, CS%v, CS%h, CS%uh, CS%vh, eta, Time, &
               G, GV, US, param_file, diag, CS%dyn_split_RK2_CSp, restart_CSp, &
               CS%dt, CS%ADp, CS%CDp, MOM_internal_state, CS%VarMix, CS%MEKE, &

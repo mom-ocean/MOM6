@@ -946,8 +946,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
   endif
 
   if (CS%id_hf_PFu_2d > 0) then
-    allocate(hf_PFu_2d(G%IsdB:G%IedB,G%jsd:G%jed))
-    hf_PFu_2d(:,:) = 0.0
+    allocate(hf_PFu_2d(G%IsdB:G%IedB,G%jsd:G%jed), source=0.0)
     do k=1,nz ; do j=js,je ; do I=Isq,Ieq
       hf_PFu_2d(I,j) = hf_PFu_2d(I,j) + CS%PFu(I,j,k) * CS%ADp%diag_hfrac_u(I,j,k)
     enddo ; enddo ; enddo
@@ -955,8 +954,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
     deallocate(hf_PFu_2d)
   endif
   if (CS%id_hf_PFv_2d > 0) then
-    allocate(hf_PFv_2d(G%isd:G%ied,G%JsdB:G%JedB))
-    hf_PFv_2d(:,:) = 0.0
+    allocate(hf_PFv_2d(G%isd:G%ied,G%JsdB:G%JedB), source=0.0)
     do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
       hf_PFv_2d(i,J) = hf_PFv_2d(i,J) + CS%PFv(i,J,k) * CS%ADp%diag_hfrac_v(i,J,k)
     enddo ; enddo ; enddo
@@ -965,8 +963,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
   endif
 
   if (CS%id_h_PFu > 0) then
-    allocate(h_PFu(G%IsdB:G%IedB,G%jsd:G%jed,GV%ke))
-    h_PFu(:,:,:) = 0.0
+    allocate(h_PFu(G%IsdB:G%IedB,G%jsd:G%jed,GV%ke), source=0.0)
     do k=1,nz ; do j=js,je ; do I=Isq,Ieq
       h_PFu(I,j,k) = CS%PFu(I,j,k) * CS%ADp%diag_hu(I,j,k)
     enddo ; enddo ; enddo
@@ -974,8 +971,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
     deallocate(h_PFu)
   endif
   if (CS%id_h_PFv > 0) then
-    allocate(h_PFv(G%isd:G%ied,G%JsdB:G%JedB,GV%ke))
-    h_PFv(:,:,:) = 0.0
+    allocate(h_PFv(G%isd:G%ied,G%JsdB:G%JedB,GV%ke), source=0.0)
     do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
       h_PFv(i,J,k) = CS%PFv(i,J,k) * CS%ADp%diag_hv(i,J,k)
     enddo ; enddo ; enddo
@@ -1013,8 +1009,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
   endif
 
   if (CS%id_hf_CAu_2d > 0) then
-    allocate(hf_CAu_2d(G%IsdB:G%IedB,G%jsd:G%jed))
-    hf_CAu_2d(:,:) = 0.0
+    allocate(hf_CAu_2d(G%IsdB:G%IedB,G%jsd:G%jed), source=0.0)
     do k=1,nz ; do j=js,je ; do I=Isq,Ieq
       hf_CAu_2d(I,j) = hf_CAu_2d(I,j) + CS%CAu(I,j,k) * CS%ADp%diag_hfrac_u(I,j,k)
     enddo ; enddo ; enddo
@@ -1022,8 +1017,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
     deallocate(hf_CAu_2d)
   endif
   if (CS%id_hf_CAv_2d > 0) then
-    allocate(hf_CAv_2d(G%isd:G%ied,G%JsdB:G%JedB))
-    hf_CAv_2d(:,:) = 0.0
+    allocate(hf_CAv_2d(G%isd:G%ied,G%JsdB:G%JedB), source=0.0)
     do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
       hf_CAv_2d(i,J) = hf_CAv_2d(i,J) + CS%CAv(i,J,k) * CS%ADp%diag_hfrac_v(i,J,k)
     enddo ; enddo ; enddo
@@ -1032,8 +1026,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
   endif
 
   if (CS%id_h_CAu > 0) then
-    allocate(h_CAu(G%IsdB:G%IedB,G%jsd:G%jed,GV%ke))
-    h_CAu(:,:,:) = 0.0
+    allocate(h_CAu(G%IsdB:G%IedB,G%jsd:G%jed,GV%ke), source=0.0)
     do k=1,nz ; do j=js,je ; do I=Isq,Ieq
       h_CAu(I,j,k) = CS%CAu(I,j,k) * CS%ADp%diag_hu(I,j,k)
     enddo ; enddo ; enddo
@@ -1041,8 +1034,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
     deallocate(h_CAu)
   endif
   if (CS%id_h_CAv > 0) then
-    allocate(h_CAv(G%isd:G%ied,G%JsdB:G%JedB,GV%ke))
-    h_CAv(:,:,:) = 0.0
+    allocate(h_CAv(G%isd:G%ied,G%JsdB:G%JedB,GV%ke), source=0.0)
     do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
       h_CAv(i,J,k) = CS%CAv(i,J,k) * CS%ADp%diag_hv(i,J,k)
     enddo ; enddo ; enddo
@@ -1080,8 +1072,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
   endif
 
   if (CS%id_hf_u_BT_accel_2d > 0) then
-    allocate(hf_u_BT_accel_2d(G%IsdB:G%IedB,G%jsd:G%jed))
-    hf_u_BT_accel_2d(:,:) = 0.0
+    allocate(hf_u_BT_accel_2d(G%IsdB:G%IedB,G%jsd:G%jed), source=0.0)
     do k=1,nz ; do j=js,je ; do I=Isq,Ieq
       hf_u_BT_accel_2d(I,j) = hf_u_BT_accel_2d(I,j) + CS%u_accel_bt(I,j,k) * CS%ADp%diag_hfrac_u(I,j,k)
     enddo ; enddo ; enddo
@@ -1089,8 +1080,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
     deallocate(hf_u_BT_accel_2d)
   endif
   if (CS%id_hf_v_BT_accel_2d > 0) then
-    allocate(hf_v_BT_accel_2d(G%isd:G%ied,G%JsdB:G%JedB))
-    hf_v_BT_accel_2d(:,:) = 0.0
+    allocate(hf_v_BT_accel_2d(G%isd:G%ied,G%JsdB:G%JedB), source=0.0)
     do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
       hf_v_BT_accel_2d(i,J) = hf_v_BT_accel_2d(i,J) + CS%v_accel_bt(i,J,k) * CS%ADp%diag_hfrac_v(i,J,k)
     enddo ; enddo ; enddo
@@ -1099,8 +1089,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
   endif
 
   if (CS%id_h_u_BT_accel > 0) then
-    allocate(h_u_BT_accel(G%IsdB:G%IedB,G%jsd:G%jed,GV%ke))
-    h_u_BT_accel(:,:,:) = 0.0
+    allocate(h_u_BT_accel(G%IsdB:G%IedB,G%jsd:G%jed,GV%ke), source=0.0)
     do k=1,nz ; do j=js,je ; do I=Isq,Ieq
       h_u_BT_accel(I,j,k) = CS%u_accel_bt(I,j,k) * CS%ADp%diag_hu(I,j,k)
     enddo ; enddo ; enddo
@@ -1108,8 +1097,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
     deallocate(h_u_BT_accel)
   endif
   if (CS%id_h_v_BT_accel > 0) then
-    allocate(h_v_BT_accel(G%isd:G%ied,G%JsdB:G%JedB,GV%ke))
-    h_v_BT_accel(:,:,:) = 0.0
+    allocate(h_v_BT_accel(G%isd:G%ied,G%JsdB:G%JedB,GV%ke), source=0.0)
     do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
       h_v_BT_accel(i,J,k) = CS%v_accel_bt(i,J,k) * CS%ADp%diag_hv(i,J,k)
     enddo ; enddo ; enddo
@@ -1118,8 +1106,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
   endif
 
   if (CS%id_PFu_visc_rem > 0) then
-    allocate(PFu_visc_rem(G%IsdB:G%IedB,G%jsd:G%jed,GV%ke))
-    PFu_visc_rem(:,:,:) = 0.0
+    allocate(PFu_visc_rem(G%IsdB:G%IedB,G%jsd:G%jed,GV%ke), source=0.0)
     do k=1,nz ; do j=js,je ; do I=Isq,Ieq
       PFu_visc_rem(I,j,k) = CS%PFu(I,j,k) * CS%ADp%visc_rem_u(I,j,k)
     enddo ; enddo ; enddo
@@ -1127,8 +1114,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
     deallocate(PFu_visc_rem)
   endif
   if (CS%id_PFv_visc_rem > 0) then
-    allocate(PFv_visc_rem(G%isd:G%ied,G%JsdB:G%JedB,GV%ke))
-    PFv_visc_rem(:,:,:) = 0.0
+    allocate(PFv_visc_rem(G%isd:G%ied,G%JsdB:G%JedB,GV%ke), source=0.0)
     do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
       PFv_visc_rem(i,J,k) = CS%PFv(i,J,k) * CS%ADp%visc_rem_v(i,J,k)
     enddo ; enddo ; enddo
@@ -1136,8 +1122,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
     deallocate(PFv_visc_rem)
   endif
   if (CS%id_CAu_visc_rem > 0) then
-    allocate(CAu_visc_rem(G%IsdB:G%IedB,G%jsd:G%jed,GV%ke))
-    CAu_visc_rem(:,:,:) = 0.0
+    allocate(CAu_visc_rem(G%IsdB:G%IedB,G%jsd:G%jed,GV%ke), source=0.0)
     do k=1,nz ; do j=js,je ; do I=Isq,Ieq
       CAu_visc_rem(I,j,k) = CS%CAu(I,j,k) * CS%ADp%visc_rem_u(I,j,k)
     enddo ; enddo ; enddo
@@ -1145,8 +1130,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
     deallocate(CAu_visc_rem)
   endif
   if (CS%id_CAv_visc_rem > 0) then
-    allocate(CAv_visc_rem(G%isd:G%ied,G%JsdB:G%JedB,GV%ke))
-    CAv_visc_rem(:,:,:) = 0.0
+    allocate(CAv_visc_rem(G%isd:G%ied,G%JsdB:G%JedB,GV%ke), source=0.0)
     do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
       CAv_visc_rem(i,J,k) = CS%CAv(i,J,k) * CS%ADp%visc_rem_v(i,J,k)
     enddo ; enddo ; enddo
@@ -1154,8 +1138,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
     deallocate(CAv_visc_rem)
   endif
   if (CS%id_u_BT_accel_visc_rem > 0) then
-    allocate(u_BT_accel_visc_rem(G%IsdB:G%IedB,G%jsd:G%jed,GV%ke))
-    u_BT_accel_visc_rem(:,:,:) = 0.0
+    allocate(u_BT_accel_visc_rem(G%IsdB:G%IedB,G%jsd:G%jed,GV%ke), source=0.0)
     do k=1,nz ; do j=js,je ; do I=Isq,Ieq
       u_BT_accel_visc_rem(I,j,k) = CS%u_accel_bt(I,j,k) * CS%ADp%visc_rem_u(I,j,k)
     enddo ; enddo ; enddo
@@ -1163,8 +1146,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
     deallocate(u_BT_accel_visc_rem)
   endif
   if (CS%id_v_BT_accel_visc_rem > 0) then
-    allocate(v_BT_accel_visc_rem(G%isd:G%ied,G%JsdB:G%JedB,GV%ke))
-    v_BT_accel_visc_rem(:,:,:) = 0.0
+    allocate(v_BT_accel_visc_rem(G%isd:G%ied,G%JsdB:G%JedB,GV%ke), source=0.0)
     do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
       v_BT_accel_visc_rem(i,J,k) = CS%v_accel_bt(i,J,k) * CS%ADp%visc_rem_v(i,J,k)
     enddo ; enddo ; enddo
@@ -1375,8 +1357,8 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, US, param
   call get_param(param_file, mdl, "DEBUG_TRUNCATIONS", debug_truncations, &
                  default=.false.)
 
-  allocate(CS%taux_bot(IsdB:IedB,jsd:jed)) ; CS%taux_bot(:,:) = 0.0
-  allocate(CS%tauy_bot(isd:ied,JsdB:JedB)) ; CS%tauy_bot(:,:) = 0.0
+  allocate(CS%taux_bot(IsdB:IedB,jsd:jed), source=0.0)
+  allocate(CS%tauy_bot(isd:ied,JsdB:JedB), source=0.0)
 
   ALLOC_(CS%uhbt(IsdB:IedB,jsd:jed))          ; CS%uhbt(:,:)         = 0.0
   ALLOC_(CS%vhbt(isd:ied,JsdB:JedB))          ; CS%vhbt(:,:)         = 0.0
