@@ -768,7 +768,7 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, t
 
   if (.not.spongeDataOngrid) then
     if (is_root_pe()) &
-      call time_interp_external(fms_id, Time, data_in, verbose=(verbosity>2), turns=turns)
+      call time_interp_external(fms_id, Time, data_in, verbose=(verbosity>5), turns=turns)
     ! Loop through each data level and interpolate to model grid.
     ! After interpolating, fill in points which will be needed to define the layers.
     do k=1,kd
@@ -884,7 +884,7 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, t
 
     enddo ! kd
   else
-      call time_interp_external(fms_id, Time, data_in, verbose=(verbosity>2), turns=turns)
+      call time_interp_external(fms_id, Time, data_in, verbose=(verbosity>5), turns=turns)
       do k=1,kd
         do j=js,je
           do i=is,ie
