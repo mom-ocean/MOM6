@@ -9,6 +9,7 @@ use MOM_cpu_clock,     only : cpu_clock_id, cpu_clock_begin, cpu_clock_end, CLOC
 use MOM_domains,       only : pass_var
 use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, WARNING, is_root_pe
 use MOM_error_handler, only : callTree_enter, callTree_leave, callTree_waypoint
+use MOM_error_handler, only : MOM_get_verbosity
 use MOM_file_parser,   only : get_param, log_param, log_version, param_file_type
 use MOM_grid,          only : ocean_grid_type
 use MOM_interpolate,   only : time_interp_external, horiz_interp_init
@@ -676,6 +677,7 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, t
   real, dimension(SZI_(G),SZJ_(G)) :: good2   ! 1 where the data is valid after Ice-9
   real, dimension(SZI_(G),SZJ_(G)) :: fill2   ! 1 for points that still need to be filled after Ice-9
   integer :: turns
+  integer :: verbosity
 
   turns = G%HI%turns
 
@@ -695,6 +697,8 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, t
   call cpu_clock_begin(id_clock_read)
 
   call get_external_field_info(fms_id, size=fld_sz, axes=axes_data, missing=missing_value)
+
+  verbosity = MOM_get_verbosity()
 
   id = fld_sz(1) ; jd  = fld_sz(2) ; kd = fld_sz(3)
 
@@ -764,7 +768,7 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, t
 
   if (.not.spongeDataOngrid) then
     if (is_root_pe()) &
-      call time_interp_external(fms_id, Time, data_in, verbose=.true., turns=turns)
+      call time_interp_external(fms_id, Time, data_in, verbose=(verbosity>2), turns=turns)
     ! Loop through each data level and interpolate to model grid.
     ! After interpolating, fill in points which will be needed to define the layers.
     do k=1,kd
@@ -864,6 +868,14 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, t
 
       call fill_miss_2d(tr_outf, good2, fill2, tr_prev, G, smooth=.true., answers_2018=answers_2018)
 
+      ! now fill in missing values using "ICE-nine" algorithm.
+      tr_outf(:,:) = tr_out(:,:)
+      if (k==1) tr_prev(:,:) = tr_outf(:,:)
+      good2(:,:) = good(:,:)
+      fill2(:,:) = fill(:,:)
+
+      call fill_miss_2d(tr_outf, good2, fill2, tr_prev, G, smooth=.true., answers_2018=answers_2018)
+
 !     if (debug) then
 !       call hchksum(tr_outf, 'field from fill_miss_2d ', G%HI)
 !     endif
@@ -880,7 +892,7 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, t
 
     enddo ! kd
   else
-      call time_interp_external(fms_id, Time, data_in, verbose=.true., turns=turns)
+      call time_interp_external(fms_id, Time, data_in, verbose=(verbosity>2), turns=turns)
       do k=1,kd
         do j=js,je
           do i=is,ie
@@ -891,6 +903,7 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, t
         enddo
       enddo
   endif
+
 end subroutine horiz_interp_and_extrap_tracer_fms_id
 
 !> Create a 2d-mesh of grid coordinates from 1-d arrays.
