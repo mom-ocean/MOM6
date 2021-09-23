@@ -895,6 +895,7 @@ subroutine offline_advection_layer(fluxes, Time_start, time_interval, CS, h_pre,
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
   dt_iter = CS%US%s_to_T * time_interval / real(max(1, CS%num_off_iter))
+  x_before_y = CS%x_before_y
 
   do iter=1,CS%num_off_iter
 
