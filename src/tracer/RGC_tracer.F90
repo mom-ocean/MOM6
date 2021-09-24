@@ -125,9 +125,9 @@ function register_RGC_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
                  "The length of the sponge layer (km).", &
                  default=10.0)
 
-  allocate(CS%tr(isd:ied,jsd:jed,nz,NTR)) ; CS%tr(:,:,:,:) = 0.0
+  allocate(CS%tr(isd:ied,jsd:jed,nz,NTR), source=0.0)
   if (CS%mask_tracers) then
-    allocate(CS%tr_aux(isd:ied,jsd:jed,nz,NTR)) ; CS%tr_aux(:,:,:,:) = 0.0
+    allocate(CS%tr_aux(isd:ied,jsd:jed,nz,NTR), source=0.0)
   endif
 
   do m=1,NTR

@@ -429,8 +429,8 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
   z_edges_in(kd+1) = 2.0*z_in(kd) - z_in(kd-1)
 
   if (is_ongrid) then
-    allocate(tr_in(is:ie,js:je)) ; tr_in(:,:)=0.0
-    allocate(mask_in(is:ie,js:je)) ; mask_in(:,:)=0.0
+    allocate(tr_in(is:ie,js:je), source=0.0)
+    allocate(mask_in(is:ie,js:je), source=0.0)
   else
     call horiz_interp_init()
     lon_in = lon_in*PI_180
@@ -439,9 +439,9 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
     call meshgrid(lon_in, lat_in, x_in, y_in)
     lon_out(:,:) = G%geoLonT(:,:)*PI_180
     lat_out(:,:) = G%geoLatT(:,:)*PI_180
-    allocate(tr_in(id,jd)) ; tr_in(:,:) = 0.0
-    allocate(tr_inp(id,jdp)) ; tr_inp(:,:) = 0.0
-    allocate(mask_in(id,jdp)) ; mask_in(:,:) = 0.0
+    allocate(tr_in(id,jd), source=0.0)
+    allocate(tr_inp(id,jdp), source=0.0)
+    allocate(mask_in(id,jdp), source=0.0)
   endif
 
   max_depth = maxval(G%bathyT(:,:)) + G%Z_ref
@@ -743,10 +743,10 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, t
     call meshgrid(lon_in, lat_in, x_in, y_in)
     lon_out(:,:) = G%geoLonT(:,:)*PI_180
     lat_out(:,:) = G%geoLatT(:,:)*PI_180
-    allocate(data_in(id,jd,kd)) ; data_in(:,:,:)=0.0
-    allocate(tr_in(id,jd)) ; tr_in(:,:)=0.0
-    allocate(tr_inp(id,jdp)) ; tr_inp(:,:)=0.0
-    allocate(mask_in(id,jdp)) ; mask_in(:,:)=0.0
+    allocate(data_in(id,jd,kd), source=0.0)
+    allocate(tr_in(id,jd), source=0.0)
+    allocate(tr_inp(id,jdp), source=0.0)
+    allocate(mask_in(id,jdp), source=0.0)
   else
     allocate(data_in(isd:ied,jsd:jed,kd))
   endif

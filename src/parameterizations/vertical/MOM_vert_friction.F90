@@ -532,8 +532,7 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
   !  call post_data(CS%id_hf_dv_dt_visc, CS%hf_dv_dt_visc, CS%diag)
   !endif
   if (CS%id_hf_du_dt_visc_2d > 0) then
-    allocate(hf_du_dt_visc_2d(G%IsdB:G%IedB,G%jsd:G%jed))
-    hf_du_dt_visc_2d(:,:) = 0.0
+    allocate(hf_du_dt_visc_2d(G%IsdB:G%IedB,G%jsd:G%jed), source=0.0)
     do k=1,nz ; do j=js,je ; do I=Isq,Ieq
       hf_du_dt_visc_2d(I,j) = hf_du_dt_visc_2d(I,j) + ADp%du_dt_visc(I,j,k) * ADp%diag_hfrac_u(I,j,k)
     enddo ; enddo ; enddo
@@ -541,8 +540,7 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
     deallocate(hf_du_dt_visc_2d)
   endif
   if (CS%id_hf_dv_dt_visc_2d > 0) then
-    allocate(hf_dv_dt_visc_2d(G%isd:G%ied,G%JsdB:G%JedB))
-    hf_dv_dt_visc_2d(:,:) = 0.0
+    allocate(hf_dv_dt_visc_2d(G%isd:G%ied,G%JsdB:G%JedB), source=0.0)
     do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
       hf_dv_dt_visc_2d(i,J) = hf_dv_dt_visc_2d(i,J) + ADp%dv_dt_visc(i,J,k) * ADp%diag_hfrac_v(i,J,k)
     enddo ; enddo ; enddo
@@ -551,8 +549,7 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
   endif
 
   if (CS%id_h_du_dt_visc > 0) then
-    allocate(h_du_dt_visc(G%IsdB:G%IedB,G%jsd:G%jed,GV%ke))
-    h_du_dt_visc(:,:,:) = 0.0
+    allocate(h_du_dt_visc(G%IsdB:G%IedB,G%jsd:G%jed,GV%ke), source=0.0)
     do k=1,nz ; do j=js,je ; do I=Isq,Ieq
       h_du_dt_visc(I,j,k) = ADp%du_dt_visc(I,j,k) * ADp%diag_hu(I,j,k)
     enddo ; enddo ; enddo
@@ -560,8 +557,7 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
     deallocate(h_du_dt_visc)
   endif
   if (CS%id_h_dv_dt_visc > 0) then
-    allocate(h_dv_dt_visc(G%isd:G%ied,G%JsdB:G%JedB,GV%ke))
-    h_dv_dt_visc(:,:,:) = 0.0
+    allocate(h_dv_dt_visc(G%isd:G%ied,G%JsdB:G%JedB,GV%ke), source=0.0)
     do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
       h_dv_dt_visc(i,J,k) = ADp%dv_dt_visc(i,J,k) * ADp%diag_hv(i,J,k)
     enddo ; enddo ; enddo
@@ -765,28 +761,20 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, US, CS, OBC)
   I_Hbbl(:) = 1.0 / (CS%Hbbl + h_neglect)
   I_valBL = 0.0 ; if (CS%harm_BL_val > 0.0) I_valBL = 1.0 / CS%harm_BL_val
 
-  if (CS%id_Kv_u > 0) then
-    allocate(Kv_u(G%IsdB:G%IedB,G%jsd:G%jed,GV%ke)) ; Kv_u(:,:,:) = 0.0
-  endif
+  if (CS%id_Kv_u > 0) allocate(Kv_u(G%IsdB:G%IedB,G%jsd:G%jed,GV%ke), source=0.0)
 
-  if (CS%id_Kv_v > 0) then
-    allocate(Kv_v(G%isd:G%ied,G%JsdB:G%JedB,GV%ke)) ; Kv_v(:,:,:) = 0.0
-  endif
+  if (CS%id_Kv_v > 0) allocate(Kv_v(G%isd:G%ied,G%JsdB:G%JedB,GV%ke), source=0.0)
 
-  if (CS%debug .or. (CS%id_hML_u > 0)) then
-    allocate(hML_u(G%IsdB:G%IedB,G%jsd:G%jed)) ; hML_u(:,:) = 0.0
-  endif
-  if (CS%debug .or. (CS%id_hML_v > 0)) then
-    allocate(hML_v(G%isd:G%ied,G%JsdB:G%JedB)) ; hML_v(:,:) = 0.0
-  endif
+  if (CS%debug .or. (CS%id_hML_u > 0)) allocate(hML_u(G%IsdB:G%IedB,G%jsd:G%jed), source=0.0)
+  if (CS%debug .or. (CS%id_hML_v > 0)) allocate(hML_v(G%isd:G%ied,G%JsdB:G%JedB), source=0.0)
 
   if ((associated(visc%taux_shelf) .or. associated(forces%frac_shelf_u)) .and. &
       .not.associated(CS%a1_shelf_u)) then
-    allocate(CS%a1_shelf_u(G%IsdB:G%IedB,G%jsd:G%jed)) ; CS%a1_shelf_u(:,:)=0.0
+    allocate(CS%a1_shelf_u(G%IsdB:G%IedB,G%jsd:G%jed), source=0.0)
   endif
   if ((associated(visc%tauy_shelf) .or. associated(forces%frac_shelf_v)) .and. &
       .not.associated(CS%a1_shelf_v)) then
-    allocate(CS%a1_shelf_v(G%isd:G%ied,G%JsdB:G%JedB)) ; CS%a1_shelf_v(:,:)=0.0
+    allocate(CS%a1_shelf_v(G%isd:G%ied,G%JsdB:G%JedB), source=0.0)
   endif
 
   !$OMP parallel do default(private) shared(G,GV,US,CS,visc,Isq,Ieq,nz,u,h,forces,hML_u, &

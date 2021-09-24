@@ -1929,7 +1929,7 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, u, v, depth_t
 
   if (.not. use_ALE) then
     ! The first call to set_up_sponge_field is for the interface heights if in layered mode.
-    allocate(eta(isd:ied,jsd:jed,nz+1)); eta(:,:,:) = 0.0
+    allocate(eta(isd:ied,jsd:jed,nz+1), source=0.0)
     call MOM_read_data(filename, eta_var, eta(:,:,:), G%Domain, scale=US%m_to_Z)
 
     do j=js,je ; do i=is,ie
@@ -2194,9 +2194,8 @@ subroutine initialize_oda_incupd_file(G, GV, US, use_temperature, tv, h, u, v, p
     call log_param(param_file, mdl, "INPUTDIR/ODA_INCUPD_UV_FILE", filename)
     if (.not.file_exists(filename, G%Domain)) &
             call MOM_error(FATAL, " initialize_oda_incupd_uv: Unable to open "//trim(filename))
-    allocate(tmp_u(G%IsdB:G%IedB,jsd:jed,nz_data))
-    allocate(tmp_v(isd:ied,G%JsdB:G%JedB,nz_data))
-    tmp_u(:,:,:) = 0.0 ; tmp_v(:,:,:) = 0.0
+    allocate(tmp_u(G%IsdB:G%IedB,jsd:jed,nz_data), source=0.0)
+    allocate(tmp_v(isd:ied,G%JsdB:G%JedB,nz_data), source=0.0)
     call MOM_read_vector(filename, uinc_var, vinc_var, tmp_u, tmp_v, G%Domain,scale=US%m_s_to_L_T)
     call set_up_oda_incupd_vel_field(tmp_u, tmp_v, G, GV, oda_incupd_CSp)
     deallocate(tmp_u,tmp_v)
@@ -2550,10 +2549,10 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, depth_tot, G, GV, US, PF, just
     nkd = max(GV%ke, kd)
 
     ! Build the source grid and copy data onto model-shaped arrays with vanished layers
-    allocate( tmp_mask_in(isd:ied,jsd:jed,nkd) ) ; tmp_mask_in(:,:,:) = 0.
-    allocate( h1(isd:ied,jsd:jed,nkd) ) ; h1(:,:,:) = 0.
-    allocate( tmpT1dIn(isd:ied,jsd:jed,nkd) ) ; tmpT1dIn(:,:,:) = 0.
-    allocate( tmpS1dIn(isd:ied,jsd:jed,nkd) ) ; tmpS1dIn(:,:,:) = 0.
+    allocate( tmp_mask_in(isd:ied,jsd:jed,nkd), source=0.0 )
+    allocate( h1(isd:ied,jsd:jed,nkd), source=0.0 )
+    allocate( tmpT1dIn(isd:ied,jsd:jed,nkd), source=0.0 )
+    allocate( tmpS1dIn(isd:ied,jsd:jed,nkd), source=0.0 )
     do j = js, je ; do i = is, ie
       if (G%mask2dT(i,j)>0.) then
         zTopOfCell = 0. ; zBottomOfCell = 0.

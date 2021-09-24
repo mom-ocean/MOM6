@@ -87,7 +87,7 @@ logical function register_nw2_tracers(HI, GV, param_file, CS, tr_Reg, restart_CS
                  units="days")
 
   CS%ntr = 3 * n_groups
-  allocate(CS%tr(isd:ied,jsd:jed,nz,CS%ntr)) ; CS%tr(:,:,:,:) = 0.0
+  allocate(CS%tr(isd:ied,jsd:jed,nz,CS%ntr), source=0.0)
   allocate(CS%restore_rate(CS%ntr))
 
   do m=1,CS%ntr

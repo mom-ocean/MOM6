@@ -909,17 +909,17 @@ subroutine reset_face_lengths_list(G, param_file, US)
   if (num_lines > 0) then
     allocate(lines(num_lines))
 
-    allocate(u_lat(2,num_lines)) ; u_lat(:,:) = -1e34
-    allocate(u_lon(2,num_lines)) ; u_lon(:,:) = -1e34
-    allocate(u_width(num_lines)) ; u_width(:) = -1e34
-    allocate(u_line_used(num_lines)) ; u_line_used(:) = 0
-    allocate(u_line_no(num_lines)) ; u_line_no(:) = 0
+    allocate(u_lat(2,num_lines), source=-1e34)
+    allocate(u_lon(2,num_lines), source=-1e34)
+    allocate(u_width(num_lines), source=-1e34)
+    allocate(u_line_used(num_lines), source=0)
+    allocate(u_line_no(num_lines), source=0)
 
-    allocate(v_lat(2,num_lines)) ; v_lat(:,:) = -1e34
-    allocate(v_lon(2,num_lines)) ; v_lon(:,:) = -1e34
-    allocate(v_width(num_lines)) ; v_width(:) = -1e34
-    allocate(v_line_used(num_lines)) ; v_line_used(:) = 0
-    allocate(v_line_no(num_lines)) ; v_line_no(:) = 0
+    allocate(v_lat(2,num_lines), source=-1e34)
+    allocate(v_lon(2,num_lines), source=-1e34)
+    allocate(v_width(num_lines), source=-1e34)
+    allocate(v_line_used(num_lines), source=0)
+    allocate(v_line_no(num_lines), source=0)
 
     ! Actually read the lines.
     if (is_root_pe()) then

@@ -696,14 +696,10 @@ subroutine update_offline_from_files(G, GV, nk_input, mean_file, sum_file, snap_
   ! This block makes sure that the fluxes control structure, which may not be used in the solo_driver,
   ! contains netMassIn and netMassOut which is necessary for the applyTracerBoundaryFluxesInOut routine
   if (do_ale) then
-    if (.not. associated(fluxes%netMassOut)) then
-      allocate(fluxes%netMassOut(G%isd:G%ied,G%jsd:G%jed))
-      fluxes%netMassOut(:,:) = 0.0
-    endif
-    if (.not. associated(fluxes%netMassIn)) then
-      allocate(fluxes%netMassIn(G%isd:G%ied,G%jsd:G%jed))
-      fluxes%netMassIn(:,:) = 0.0
-    endif
+    if (.not. associated(fluxes%netMassOut)) &
+      allocate(fluxes%netMassOut(G%isd:G%ied,G%jsd:G%jed), source=0.0)
+    if (.not. associated(fluxes%netMassIn)) &
+      allocate(fluxes%netMassIn(G%isd:G%ied,G%jsd:G%jed), source=0.0)
 
     fluxes%netMassOut(:,:) = 0.0
     fluxes%netMassIn(:,:) = 0.0

@@ -1426,76 +1426,46 @@ subroutine setup_tidal_diagnostics(G, GV, CS)
   isd = G%isd; ied = G%ied; jsd = G%jsd; jed = G%jed; nz = GV%ke
   dd => CS%dd
 
-  if ((CS%id_Kd_itidal > 0) .or. (CS%id_Kd_Itidal_work > 0)) then
-    allocate(dd%Kd_itidal(isd:ied,jsd:jed,nz+1)) ; dd%Kd_itidal(:,:,:) = 0.0
-  endif
-  if ((CS%id_Kd_lowmode > 0) .or. (CS%id_Kd_lowmode_work > 0)) then
-    allocate(dd%Kd_lowmode(isd:ied,jsd:jed,nz+1)) ; dd%Kd_lowmode(:,:,:) = 0.0
-  endif
-  if ( (CS%id_Fl_itidal > 0) ) then
-    allocate(dd%Fl_itidal(isd:ied,jsd:jed,nz+1)) ; dd%Fl_itidal(:,:,:) = 0.0
-  endif
-  if ( (CS%id_Fl_lowmode > 0) ) then
-    allocate(dd%Fl_lowmode(isd:ied,jsd:jed,nz+1)) ; dd%Fl_lowmode(:,:,:) = 0.0
-  endif
-  if ( (CS%id_Polzin_decay_scale > 0) ) then
-    allocate(dd%Polzin_decay_scale(isd:ied,jsd:jed))
-    dd%Polzin_decay_scale(:,:) = 0.0
-  endif
-  if ( (CS%id_N2_bot > 0) ) then
-    allocate(dd%N2_bot(isd:ied,jsd:jed)) ; dd%N2_bot(:,:) = 0.0
-  endif
-  if ( (CS%id_N2_meanz > 0) ) then
-    allocate(dd%N2_meanz(isd:ied,jsd:jed)) ; dd%N2_meanz(:,:) = 0.0
-  endif
-  if ( (CS%id_Polzin_decay_scale_scaled > 0) ) then
-    allocate(dd%Polzin_decay_scale_scaled(isd:ied,jsd:jed))
-    dd%Polzin_decay_scale_scaled(:,:) = 0.0
-  endif
-  if ((CS%id_Kd_Niku > 0) .or. (CS%id_Kd_Niku_work > 0)) then
-    allocate(dd%Kd_Niku(isd:ied,jsd:jed,nz+1)) ; dd%Kd_Niku(:,:,:) = 0.0
-  endif
-  if (CS%id_Kd_Niku_work > 0) then
-    allocate(dd%Kd_Niku_work(isd:ied,jsd:jed,nz)) ; dd%Kd_Niku_work(:,:,:) = 0.0
-  endif
-  if (CS%id_Kd_Itidal_work > 0) then
-    allocate(dd%Kd_Itidal_work(isd:ied,jsd:jed,nz))
-    dd%Kd_Itidal_work(:,:,:) = 0.0
-  endif
-  if (CS%id_Kd_Lowmode_Work > 0) then
-    allocate(dd%Kd_Lowmode_Work(isd:ied,jsd:jed,nz))
-    dd%Kd_Lowmode_Work(:,:,:) = 0.0
-  endif
-  if (CS%id_TKE_itidal > 0) then
-    allocate(dd%TKE_Itidal_used(isd:ied,jsd:jed)) ; dd%TKE_Itidal_used(:,:) = 0.
-  endif
+  if ((CS%id_Kd_itidal > 0) .or. (CS%id_Kd_Itidal_work > 0)) &
+    allocate(dd%Kd_itidal(isd:ied,jsd:jed,nz+1), source=0.0)
+  if ((CS%id_Kd_lowmode > 0) .or. (CS%id_Kd_lowmode_work > 0)) &
+    allocate(dd%Kd_lowmode(isd:ied,jsd:jed,nz+1), source=0.0)
+  if (CS%id_Fl_itidal > 0) allocate(dd%Fl_itidal(isd:ied,jsd:jed,nz+1), source=0.0)
+  if (CS%id_Fl_lowmode > 0) allocate(dd%Fl_lowmode(isd:ied,jsd:jed,nz+1), source=0.0)
+  if (CS%id_Polzin_decay_scale > 0) allocate(dd%Polzin_decay_scale(isd:ied,jsd:jed), source=0.0)
+  if (CS%id_N2_bot > 0) allocate(dd%N2_bot(isd:ied,jsd:jed), source=0.0)
+  if (CS%id_N2_meanz > 0) allocate(dd%N2_meanz(isd:ied,jsd:jed), source=0.0)
+  if (CS%id_Polzin_decay_scale_scaled > 0) &
+    allocate(dd%Polzin_decay_scale_scaled(isd:ied,jsd:jed), source=0.0)
+  if ((CS%id_Kd_Niku > 0) .or. (CS%id_Kd_Niku_work > 0)) &
+    allocate(dd%Kd_Niku(isd:ied,jsd:jed,nz+1), source=0.0)
+  if (CS%id_Kd_Niku_work > 0) allocate(dd%Kd_Niku_work(isd:ied,jsd:jed,nz), source=0.0)
+  if (CS%id_Kd_Itidal_work > 0) allocate(dd%Kd_Itidal_work(isd:ied,jsd:jed,nz), source=0.0)
+  if (CS%id_Kd_Lowmode_Work > 0) allocate(dd%Kd_Lowmode_Work(isd:ied,jsd:jed,nz), source=0.0)
+  if (CS%id_TKE_itidal > 0) allocate(dd%TKE_Itidal_used(isd:ied,jsd:jed), source=0.)
   ! additional diags for CVMix
-  if (CS%id_N2_int > 0) then
-    allocate(dd%N2_int(isd:ied,jsd:jed,nz+1)) ; dd%N2_int(:,:,:) = 0.0
-  endif
+  if (CS%id_N2_int > 0) allocate(dd%N2_int(isd:ied,jsd:jed,nz+1), source=0.0)
   if (CS%id_Simmons_coeff > 0) then
     if (CS%CVMix_tidal_scheme .ne. SIMMONS) then
       call MOM_error(FATAL, "setup_tidal_diagnostics: Simmons_coeff diagnostics is available "//&
                             "only when CVMix_tidal_scheme is Simmons")
     endif
-    allocate(dd%Simmons_coeff_2d(isd:ied,jsd:jed)) ; dd%Simmons_coeff_2d(:,:) = 0.0
+    allocate(dd%Simmons_coeff_2d(isd:ied,jsd:jed), source=0.0)
   endif
-  if (CS%id_vert_dep > 0) then
-    allocate(dd%vert_dep_3d(isd:ied,jsd:jed,nz+1)) ; dd%vert_dep_3d(:,:,:) = 0.0
-  endif
+  if (CS%id_vert_dep > 0) allocate(dd%vert_dep_3d(isd:ied,jsd:jed,nz+1), source=0.0)
   if (CS%id_Schmittner_coeff > 0) then
     if (CS%CVMix_tidal_scheme .ne. SCHMITTNER) then
       call MOM_error(FATAL, "setup_tidal_diagnostics: Schmittner_coeff diagnostics is available "//&
                             "only when CVMix_tidal_scheme is Schmittner.")
     endif
-    allocate(dd%Schmittner_coeff_3d(isd:ied,jsd:jed,nz)) ; dd%Schmittner_coeff_3d(:,:,:) = 0.0
+    allocate(dd%Schmittner_coeff_3d(isd:ied,jsd:jed,nz), source=0.0)
   endif
   if (CS%id_tidal_qe_md > 0) then
     if (CS%CVMix_tidal_scheme .ne. SCHMITTNER) then
       call MOM_error(FATAL, "setup_tidal_diagnostics: tidal_qe_md diagnostics is available "//&
                             "only when CVMix_tidal_scheme is Schmittner.")
     endif
-    allocate(dd%tidal_qe_md(isd:ied,jsd:jed,nz)) ; dd%tidal_qe_md(:,:,:) = 0.0
+    allocate(dd%tidal_qe_md(isd:ied,jsd:jed,nz), source=0.0)
   endif
 end subroutine setup_tidal_diagnostics
 
