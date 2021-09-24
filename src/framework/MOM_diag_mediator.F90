@@ -764,7 +764,7 @@ subroutine set_masks_for_axes(G, diag_cs)
       ! Level/layer h-points in diagnostic coordinate
       axes => diag_cs%remap_axesTL(c)
       nk = axes%nz
-      allocate( axes%mask3d(G%isd:G%ied,G%jsd:G%jed,nk) ) ; axes%mask3d(:,:,:) = 0.
+      allocate( axes%mask3d(G%isd:G%ied,G%jsd:G%jed,nk), source=0. )
       call diag_remap_calc_hmask(diag_cs%diag_remap_cs(c), G, axes%mask3d)
 
       h_axes => diag_cs%remap_axesTL(c) ! Use the h-point masks to generate the u-, v- and q- masks
@@ -773,7 +773,7 @@ subroutine set_masks_for_axes(G, diag_cs)
       axes => diag_cs%remap_axesCuL(c)
       call assert(axes%nz == nk, 'set_masks_for_axes: vertical size mismatch at u-layers')
       call assert(.not. associated(axes%mask3d), 'set_masks_for_axes: already associated')
-      allocate( axes%mask3d(G%IsdB:G%IedB,G%jsd:G%jed,nk) ) ; axes%mask3d(:,:,:) = 0.
+      allocate( axes%mask3d(G%IsdB:G%IedB,G%jsd:G%jed,nk), source=0. )
       do k = 1, nk ; do j=G%jsc,G%jec ; do I=G%isc-1,G%iec
         if (h_axes%mask3d(i,j,k) + h_axes%mask3d(i+1,j,k) > 0.) axes%mask3d(I,j,k) = 1.
       enddo ; enddo ; enddo
@@ -782,7 +782,7 @@ subroutine set_masks_for_axes(G, diag_cs)
       axes => diag_cs%remap_axesCvL(c)
       call assert(axes%nz == nk, 'set_masks_for_axes: vertical size mismatch at v-layers')
       call assert(.not. associated(axes%mask3d), 'set_masks_for_axes: already associated')
-      allocate( axes%mask3d(G%isd:G%ied,G%JsdB:G%JedB,nk) ) ; axes%mask3d(:,:,:) = 0.
+      allocate( axes%mask3d(G%isd:G%ied,G%JsdB:G%JedB,nk), source=0. )
       do k = 1, nk ; do J=G%jsc-1,G%jec ; do i=G%isc,G%iec
         if (h_axes%mask3d(i,j,k) + h_axes%mask3d(i,j+1,k) > 0.) axes%mask3d(i,J,k) = 1.
       enddo ; enddo ; enddo
@@ -791,7 +791,7 @@ subroutine set_masks_for_axes(G, diag_cs)
       axes => diag_cs%remap_axesBL(c)
       call assert(axes%nz == nk, 'set_masks_for_axes: vertical size mismatch at q-layers')
       call assert(.not. associated(axes%mask3d), 'set_masks_for_axes: already associated')
-      allocate( axes%mask3d(G%IsdB:G%IedB,G%JsdB:G%JedB,nk) ) ; axes%mask3d(:,:,:) = 0.
+      allocate( axes%mask3d(G%IsdB:G%IedB,G%JsdB:G%JedB,nk), source=0. )
       do k = 1, nk ; do J=G%jsc-1,G%jec ; do I=G%isc-1,G%iec
         if (h_axes%mask3d(i,j,k) + h_axes%mask3d(i+1,j+1,k) + &
             h_axes%mask3d(i+1,j,k) + h_axes%mask3d(i,j+1,k) > 0.) axes%mask3d(I,J,k) = 1.
@@ -801,7 +801,7 @@ subroutine set_masks_for_axes(G, diag_cs)
       axes => diag_cs%remap_axesTi(c)
       call assert(axes%nz == nk, 'set_masks_for_axes: vertical size mismatch at h-interfaces')
       call assert(.not. associated(axes%mask3d), 'set_masks_for_axes: already associated')
-      allocate( axes%mask3d(G%isd:G%ied,G%jsd:G%jed,nk+1) ) ; axes%mask3d(:,:,:) = 0.
+      allocate( axes%mask3d(G%isd:G%ied,G%jsd:G%jed,nk+1), source=0. )
       do J=G%jsc-1,G%jec+1 ; do i=G%isc-1,G%iec+1
         if (h_axes%mask3d(i,j,1) > 0.) axes%mask3d(i,J,1) = 1.
         do K = 2, nk
@@ -816,7 +816,7 @@ subroutine set_masks_for_axes(G, diag_cs)
       axes => diag_cs%remap_axesCui(c)
       call assert(axes%nz == nk, 'set_masks_for_axes: vertical size mismatch at u-interfaces')
       call assert(.not. associated(axes%mask3d), 'set_masks_for_axes: already associated')
-      allocate( axes%mask3d(G%IsdB:G%IedB,G%jsd:G%jed,nk+1) ) ; axes%mask3d(:,:,:) = 0.
+      allocate( axes%mask3d(G%IsdB:G%IedB,G%jsd:G%jed,nk+1), source=0. )
       do k = 1, nk+1 ; do j=G%jsc,G%jec ; do I=G%isc-1,G%iec
         if (h_axes%mask3d(i,j,k) + h_axes%mask3d(i+1,j,k) > 0.) axes%mask3d(I,j,k) = 1.
       enddo ; enddo ; enddo
@@ -825,7 +825,7 @@ subroutine set_masks_for_axes(G, diag_cs)
       axes => diag_cs%remap_axesCvi(c)
       call assert(axes%nz == nk, 'set_masks_for_axes: vertical size mismatch at v-interfaces')
       call assert(.not. associated(axes%mask3d), 'set_masks_for_axes: already associated')
-      allocate( axes%mask3d(G%isd:G%ied,G%JsdB:G%JedB,nk+1) ) ; axes%mask3d(:,:,:) = 0.
+      allocate( axes%mask3d(G%isd:G%ied,G%JsdB:G%JedB,nk+1), source=0. )
       do k = 1, nk+1 ; do J=G%jsc-1,G%jec ; do i=G%isc,G%iec
         if (h_axes%mask3d(i,j,k) + h_axes%mask3d(i,j+1,k) > 0.) axes%mask3d(i,J,k) = 1.
       enddo ; enddo ; enddo
@@ -834,7 +834,7 @@ subroutine set_masks_for_axes(G, diag_cs)
       axes => diag_cs%remap_axesBi(c)
       call assert(axes%nz == nk, 'set_masks_for_axes: vertical size mismatch at q-interfaces')
       call assert(.not. associated(axes%mask3d), 'set_masks_for_axes: already associated')
-      allocate( axes%mask3d(G%IsdB:G%IedB,G%JsdB:G%JedB,nk+1) ) ; axes%mask3d(:,:,:) = 0.
+      allocate( axes%mask3d(G%IsdB:G%IedB,G%JsdB:G%JedB,nk+1), source=0. )
       do k = 1, nk ; do J=G%jsc-1,G%jec ; do I=G%isc-1,G%iec
         if (h_axes%mask3d(i,j,k) + h_axes%mask3d(i+1,j+1,k) + &
             h_axes%mask3d(i+1,j,k) + h_axes%mask3d(i,j+1,k) > 0.) axes%mask3d(I,J,k) = 1.

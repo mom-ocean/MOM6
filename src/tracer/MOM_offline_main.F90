@@ -1435,17 +1435,15 @@ subroutine offline_transport_init(param_file, CS, diabatic_CSp, G, GV, US)
   CS%GV => GV
 
   ! Allocate arrays
-  allocate(CS%uhtr(IsdB:IedB,jsd:jed,nz))   ; CS%uhtr(:,:,:) = 0.0
-  allocate(CS%vhtr(isd:ied,JsdB:JedB,nz))   ; CS%vhtr(:,:,:) = 0.0
-  allocate(CS%eatr(isd:ied,jsd:jed,nz))          ; CS%eatr(:,:,:) = 0.0
-  allocate(CS%ebtr(isd:ied,jsd:jed,nz))          ; CS%ebtr(:,:,:) = 0.0
-  allocate(CS%h_end(isd:ied,jsd:jed,nz))         ; CS%h_end(:,:,:) = 0.0
-  allocate(CS%netMassOut(G%isd:G%ied,G%jsd:G%jed)) ; CS%netMassOut(:,:) = 0.0
-  allocate(CS%netMassIn(G%isd:G%ied,G%jsd:G%jed))  ; CS%netMassIn(:,:) = 0.0
-  allocate(CS%Kd(isd:ied,jsd:jed,nz+1)) ; CS%Kd = 0.
-  if (CS%read_mld) then
-    allocate(CS%mld(G%isd:G%ied,G%jsd:G%jed)) ; CS%mld(:,:) = 0.0
-  endif
+  allocate(CS%uhtr(IsdB:IedB,jsd:jed,nz), source=0.0)
+  allocate(CS%vhtr(isd:ied,JsdB:JedB,nz), source=0.0)
+  allocate(CS%eatr(isd:ied,jsd:jed,nz), source=0.0)
+  allocate(CS%ebtr(isd:ied,jsd:jed,nz), source=0.0)
+  allocate(CS%h_end(isd:ied,jsd:jed,nz), source=0.0)
+  allocate(CS%netMassOut(G%isd:G%ied,G%jsd:G%jed), source=0.0)
+  allocate(CS%netMassIn(G%isd:G%ied,G%jsd:G%jed), source=0.0)
+  allocate(CS%Kd(isd:ied,jsd:jed,nz+1), source=0.0)
+  if (CS%read_mld) allocate(CS%mld(G%isd:G%ied,G%jsd:G%jed), source=0.0)
 
   if (CS%read_all_ts_uvh) then
     call read_all_input(CS)
@@ -1481,11 +1479,11 @@ subroutine read_all_input(CS)
     if (allocated(CS%temp_all)) call MOM_error(FATAL, "temp_all is already allocated")
     if (allocated(CS%salt_all)) call MOM_error(FATAL, "salt_all is already allocated")
 
-    allocate(CS%uhtr_all(IsdB:IedB,jsd:jed,nz,ntime))     ; CS%uhtr_all(:,:,:,:) = 0.0
-    allocate(CS%vhtr_all(isd:ied,JsdB:JedB,nz,ntime))     ; CS%vhtr_all(:,:,:,:) = 0.0
-    allocate(CS%hend_all(isd:ied,jsd:jed,nz,ntime))       ; CS%hend_all(:,:,:,:) = 0.0
-    allocate(CS%temp_all(isd:ied,jsd:jed,nz,1:ntime))     ; CS%temp_all(:,:,:,:) = 0.0
-    allocate(CS%salt_all(isd:ied,jsd:jed,nz,1:ntime))     ; CS%salt_all(:,:,:,:) = 0.0
+    allocate(CS%uhtr_all(IsdB:IedB,jsd:jed,nz,ntime), source=0.0)
+    allocate(CS%vhtr_all(isd:ied,JsdB:JedB,nz,ntime), source=0.0)
+    allocate(CS%hend_all(isd:ied,jsd:jed,nz,ntime), source=0.0)
+    allocate(CS%temp_all(isd:ied,jsd:jed,nz,1:ntime), source=0.0)
+    allocate(CS%salt_all(isd:ied,jsd:jed,nz,1:ntime), source=0.0)
 
     call MOM_mesg("Reading in uhtr, vhtr, h_start, h_end, temp, salt")
     do t = 1,ntime

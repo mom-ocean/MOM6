@@ -211,71 +211,71 @@ subroutine create_dyn_horgrid(G, HI, bathymetry_at_vel)
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
   isg = G%isg ; ieg = G%ieg ; jsg = G%jsg ; jeg = G%jeg
 
-  allocate(G%dxT(isd:ied,jsd:jed))       ; G%dxT(:,:) = 0.0
-  allocate(G%dxCu(IsdB:IedB,jsd:jed))    ; G%dxCu(:,:) = 0.0
-  allocate(G%dxCv(isd:ied,JsdB:JedB))    ; G%dxCv(:,:) = 0.0
-  allocate(G%dxBu(IsdB:IedB,JsdB:JedB))  ; G%dxBu(:,:) = 0.0
-  allocate(G%IdxT(isd:ied,jsd:jed))      ; G%IdxT(:,:) = 0.0
-  allocate(G%IdxCu(IsdB:IedB,jsd:jed))   ; G%IdxCu(:,:) = 0.0
-  allocate(G%IdxCv(isd:ied,JsdB:JedB))   ; G%IdxCv(:,:) = 0.0
-  allocate(G%IdxBu(IsdB:IedB,JsdB:JedB)) ; G%IdxBu(:,:) = 0.0
+  allocate(G%dxT(isd:ied,jsd:jed), source=0.0)
+  allocate(G%dxCu(IsdB:IedB,jsd:jed), source=0.0)
+  allocate(G%dxCv(isd:ied,JsdB:JedB), source=0.0)
+  allocate(G%dxBu(IsdB:IedB,JsdB:JedB), source=0.0)
+  allocate(G%IdxT(isd:ied,jsd:jed), source=0.0)
+  allocate(G%IdxCu(IsdB:IedB,jsd:jed), source=0.0)
+  allocate(G%IdxCv(isd:ied,JsdB:JedB), source=0.0)
+  allocate(G%IdxBu(IsdB:IedB,JsdB:JedB), source=0.0)
 
-  allocate(G%dyT(isd:ied,jsd:jed))       ; G%dyT(:,:) = 0.0
-  allocate(G%dyCu(IsdB:IedB,jsd:jed))    ; G%dyCu(:,:) = 0.0
-  allocate(G%dyCv(isd:ied,JsdB:JedB))    ; G%dyCv(:,:) = 0.0
-  allocate(G%dyBu(IsdB:IedB,JsdB:JedB))  ; G%dyBu(:,:) = 0.0
-  allocate(G%IdyT(isd:ied,jsd:jed))      ; G%IdyT(:,:) = 0.0
-  allocate(G%IdyCu(IsdB:IedB,jsd:jed))   ; G%IdyCu(:,:) = 0.0
-  allocate(G%IdyCv(isd:ied,JsdB:JedB))   ; G%IdyCv(:,:) = 0.0
-  allocate(G%IdyBu(IsdB:IedB,JsdB:JedB)) ; G%IdyBu(:,:) = 0.0
+  allocate(G%dyT(isd:ied,jsd:jed), source=0.0)
+  allocate(G%dyCu(IsdB:IedB,jsd:jed), source=0.0)
+  allocate(G%dyCv(isd:ied,JsdB:JedB), source=0.0)
+  allocate(G%dyBu(IsdB:IedB,JsdB:JedB), source=0.0)
+  allocate(G%IdyT(isd:ied,jsd:jed), source=0.0)
+  allocate(G%IdyCu(IsdB:IedB,jsd:jed), source=0.0)
+  allocate(G%IdyCv(isd:ied,JsdB:JedB), source=0.0)
+  allocate(G%IdyBu(IsdB:IedB,JsdB:JedB), source=0.0)
 
-  allocate(G%areaT(isd:ied,jsd:jed))       ; G%areaT(:,:) = 0.0
-  allocate(G%IareaT(isd:ied,jsd:jed))      ; G%IareaT(:,:) = 0.0
-  allocate(G%areaBu(IsdB:IedB,JsdB:JedB))  ; G%areaBu(:,:) = 0.0
-  allocate(G%IareaBu(IsdB:IedB,JsdB:JedB)) ; G%IareaBu(:,:) = 0.0
+  allocate(G%areaT(isd:ied,jsd:jed), source=0.0)
+  allocate(G%IareaT(isd:ied,jsd:jed), source=0.0)
+  allocate(G%areaBu(IsdB:IedB,JsdB:JedB), source=0.0)
+  allocate(G%IareaBu(IsdB:IedB,JsdB:JedB), source=0.0)
 
-  allocate(G%mask2dT(isd:ied,jsd:jed))      ; G%mask2dT(:,:) = 0.0
-  allocate(G%mask2dCu(IsdB:IedB,jsd:jed))   ; G%mask2dCu(:,:) = 0.0
-  allocate(G%mask2dCv(isd:ied,JsdB:JedB))   ; G%mask2dCv(:,:) = 0.0
-  allocate(G%mask2dBu(IsdB:IedB,JsdB:JedB)) ; G%mask2dBu(:,:) = 0.0
-  allocate(G%geoLatT(isd:ied,jsd:jed))      ; G%geoLatT(:,:) = 0.0
-  allocate(G%geoLatCu(IsdB:IedB,jsd:jed))   ; G%geoLatCu(:,:) = 0.0
-  allocate(G%geoLatCv(isd:ied,JsdB:JedB))   ; G%geoLatCv(:,:) = 0.0
-  allocate(G%geoLatBu(IsdB:IedB,JsdB:JedB)) ; G%geoLatBu(:,:) = 0.0
-  allocate(G%geoLonT(isd:ied,jsd:jed))      ; G%geoLonT(:,:) = 0.0
-  allocate(G%geoLonCu(IsdB:IedB,jsd:jed))   ; G%geoLonCu(:,:) = 0.0
-  allocate(G%geoLonCv(isd:ied,JsdB:JedB))   ; G%geoLonCv(:,:) = 0.0
-  allocate(G%geoLonBu(IsdB:IedB,JsdB:JedB)) ; G%geoLonBu(:,:) = 0.0
+  allocate(G%mask2dT(isd:ied,jsd:jed), source=0.0)
+  allocate(G%mask2dCu(IsdB:IedB,jsd:jed), source=0.0)
+  allocate(G%mask2dCv(isd:ied,JsdB:JedB), source=0.0)
+  allocate(G%mask2dBu(IsdB:IedB,JsdB:JedB), source=0.0)
+  allocate(G%geoLatT(isd:ied,jsd:jed), source=0.0)
+  allocate(G%geoLatCu(IsdB:IedB,jsd:jed), source=0.0)
+  allocate(G%geoLatCv(isd:ied,JsdB:JedB), source=0.0)
+  allocate(G%geoLatBu(IsdB:IedB,JsdB:JedB), source=0.0)
+  allocate(G%geoLonT(isd:ied,jsd:jed), source=0.0)
+  allocate(G%geoLonCu(IsdB:IedB,jsd:jed), source=0.0)
+  allocate(G%geoLonCv(isd:ied,JsdB:JedB), source=0.0)
+  allocate(G%geoLonBu(IsdB:IedB,JsdB:JedB), source=0.0)
 
-  allocate(G%dx_Cv(isd:ied,JsdB:JedB))     ; G%dx_Cv(:,:) = 0.0
-  allocate(G%dy_Cu(IsdB:IedB,jsd:jed))     ; G%dy_Cu(:,:) = 0.0
+  allocate(G%dx_Cv(isd:ied,JsdB:JedB), source=0.0)
+  allocate(G%dy_Cu(IsdB:IedB,jsd:jed), source=0.0)
 
-  allocate(G%areaCu(IsdB:IedB,jsd:jed))  ; G%areaCu(:,:) = 0.0
-  allocate(G%areaCv(isd:ied,JsdB:JedB))  ; G%areaCv(:,:) = 0.0
-  allocate(G%IareaCu(IsdB:IedB,jsd:jed)) ; G%IareaCu(:,:) = 0.0
-  allocate(G%IareaCv(isd:ied,JsdB:JedB)) ; G%IareaCv(:,:) = 0.0
+  allocate(G%areaCu(IsdB:IedB,jsd:jed), source=0.0)
+  allocate(G%areaCv(isd:ied,JsdB:JedB), source=0.0)
+  allocate(G%IareaCu(IsdB:IedB,jsd:jed), source=0.0)
+  allocate(G%IareaCv(isd:ied,JsdB:JedB), source=0.0)
 
-  allocate(G%bathyT(isd:ied, jsd:jed)) ; G%bathyT(:,:) = 0.0
-  allocate(G%CoriolisBu(IsdB:IedB, JsdB:JedB)) ; G%CoriolisBu(:,:) = 0.0
-  allocate(G%dF_dx(isd:ied, jsd:jed)) ; G%dF_dx(:,:) = 0.0
-  allocate(G%dF_dy(isd:ied, jsd:jed)) ; G%dF_dy(:,:) = 0.0
+  allocate(G%bathyT(isd:ied, jsd:jed), source=0.0)
+  allocate(G%CoriolisBu(IsdB:IedB, JsdB:JedB), source=0.0)
+  allocate(G%dF_dx(isd:ied, jsd:jed), source=0.0)
+  allocate(G%dF_dy(isd:ied, jsd:jed), source=0.0)
 
-  allocate(G%sin_rot(isd:ied,jsd:jed)) ; G%sin_rot(:,:) = 0.0
-  allocate(G%cos_rot(isd:ied,jsd:jed)) ; G%cos_rot(:,:) = 1.0
+  allocate(G%sin_rot(isd:ied,jsd:jed), source=0.0)
+  allocate(G%cos_rot(isd:ied,jsd:jed), source=1.0)
 
   if (G%bathymetry_at_vel) then
-    allocate(G%Dblock_u(IsdB:IedB, jsd:jed)) ; G%Dblock_u(:,:) = 0.0
-    allocate(G%Dopen_u(IsdB:IedB, jsd:jed))  ; G%Dopen_u(:,:) = 0.0
-    allocate(G%Dblock_v(isd:ied, JsdB:JedB)) ; G%Dblock_v(:,:) = 0.0
-    allocate(G%Dopen_v(isd:ied, JsdB:JedB))  ; G%Dopen_v(:,:) = 0.0
+    allocate(G%Dblock_u(IsdB:IedB, jsd:jed), source=0.0)
+    allocate(G%Dopen_u(IsdB:IedB, jsd:jed), source=0.0)
+    allocate(G%Dblock_v(isd:ied, JsdB:JedB), source=0.0)
+    allocate(G%Dopen_v(isd:ied, JsdB:JedB), source=0.0)
   endif
 
   ! gridLonB and gridLatB are used as edge values in some cases, so they
   ! always need to use symmetric memory allcoations.
-  allocate(G%gridLonT(isg:ieg))   ; G%gridLonT(:) = 0.0
-  allocate(G%gridLonB(isg-1:ieg)) ; G%gridLonB(:) = 0.0
-  allocate(G%gridLatT(jsg:jeg))   ; G%gridLatT(:) = 0.0
-  allocate(G%gridLatB(jsg-1:jeg)) ; G%gridLatB(:) = 0.0
+  allocate(G%gridLonT(isg:ieg), source=0.0)
+  allocate(G%gridLonB(isg-1:ieg), source=0.0)
+  allocate(G%gridLatT(jsg:jeg), source=0.0)
+  allocate(G%gridLatB(jsg-1:jeg), source=0.0)
 
 end subroutine create_dyn_horgrid
 
