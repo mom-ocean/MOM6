@@ -199,7 +199,7 @@ type, public :: MOM_dyn_split_RK2_CS ; private
 
   ! The remainder of the structure points to child subroutines' control structures.
   !> A pointer to the horizontal viscosity control structure
-  type(hor_visc_CS),      pointer :: hor_visc_CSp      => NULL()
+  type(hor_visc_CS) :: hor_visc
   !> A pointer to the continuity control structure
   type(continuity_CS),    pointer :: continuity_CSp    => NULL()
   !> A pointer to the CoriolisAdv control structure
@@ -724,7 +724,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
 ! diffu = horizontal viscosity terms (u_av)
   call cpu_clock_begin(id_clock_horvisc)
   call horizontal_viscosity(u_av, v_av, h_av, CS%diffu, CS%diffv, &
-                            MEKE, Varmix, G, GV, US, CS%hor_visc_CSp, &
+                            MEKE, Varmix, G, GV, US, CS%hor_visc, &
                             OBC=CS%OBC, BT=CS%barotropic_CSp, TD=thickness_diffuse_CSp, &
                             ADp=CS%ADp)
   call cpu_clock_end(id_clock_horvisc)
@@ -1394,7 +1394,7 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, US, param
   if (use_tides) call tidal_forcing_init(Time, G, param_file, CS%tides_CSp)
   call PressureForce_init(Time, G, GV, US, param_file, diag, CS%PressureForce_CSp, &
                           CS%tides_CSp)
-  call hor_visc_init(Time, G, GV, US, param_file, diag, CS%hor_visc_CSp, MEKE, ADp=CS%ADp)
+  call hor_visc_init(Time, G, GV, US, param_file, diag, CS%hor_visc, ADp=CS%ADp)
   call vertvisc_init(MIS, Time, G, GV, US, param_file, diag, CS%ADp, dirs, &
                      ntrunc, CS%vertvisc_CSp)
   if (.not.associated(setVisc_CSp)) call MOM_error(FATAL, &
@@ -1438,7 +1438,7 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, US, param
   if (.not. query_initialized(CS%diffu,"diffu",restart_CS) .or. &
       .not. query_initialized(CS%diffv,"diffv",restart_CS)) then
     call horizontal_viscosity(u, v, h, CS%diffu, CS%diffv, MEKE, VarMix, &
-                              G, GV, US, CS%hor_visc_CSp, &
+                              G, GV, US, CS%hor_visc, &
                               OBC=CS%OBC, BT=CS%barotropic_CSp, &
                               TD=thickness_diffuse_CSp)
   else
@@ -1696,7 +1696,7 @@ subroutine end_dyn_split_RK2(CS)
   call vertvisc_end(CS%vertvisc_CSp)
   deallocate(CS%vertvisc_CSp)
 
-  call hor_visc_end(CS%hor_visc_CSp)
+  call hor_visc_end(CS%hor_visc)
 
   call PressureForce_end(CS%PressureForce_CSp)
   deallocate(CS%PressureForce_CSp)
