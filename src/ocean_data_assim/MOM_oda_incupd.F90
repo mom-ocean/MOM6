@@ -31,11 +31,7 @@ use MOM_spatial_means,   only : global_i_mean
 use MOM_time_manager,    only : time_type
 use MOM_unit_scaling,    only : unit_scale_type
 use MOM_variables,       only : thermo_var_ptrs
-use MOM_verticalGrid,    only : verticalGrid_type
-use MOM_verticalGrid,    only : get_thickness_units
-
-use mpp_io_mod, only : mpp_get_axis_length
-use mpp_io_mod, only : axistype
+use MOM_verticalGrid,    only : verticalGrid_type, get_thickness_units
 
 implicit none ; private
 
@@ -238,8 +234,7 @@ subroutine initialize_oda_incupd( G, GV, US, param_file, CS, data_h,nz_data, res
 
   ! get the vertical grid (h_obs) of the increments
   CS%nz_data = nz_data
-  allocate(CS%Ref_h%p(G%isd:G%ied,G%jsd:G%jed,CS%nz_data))
-  CS%Ref_h%p(:,:,:) = 0.0 ;
+  allocate(CS%Ref_h%p(G%isd:G%ied,G%jsd:G%jed,CS%nz_data), source=0.0)
   do j=G%jsc,G%jec; do i=G%isc,G%iec ; do k=1,CS%nz_data
       CS%Ref_h%p(i,j,k) = data_h(i,j,k)
   enddo;  enddo ; enddo
@@ -277,8 +272,7 @@ subroutine set_up_oda_incupd_field(sp_val, G, GV, CS)
 
   ! store the increment/full field tracer profiles
   CS%Inc(CS%fldno)%nz_data = CS%nz_data
-  allocate(CS%Inc(CS%fldno)%p(G%isd:G%ied,G%jsd:G%jed,CS%nz_data))
-  CS%Inc(CS%fldno)%p(:,:,:) = 0.0
+  allocate(CS%Inc(CS%fldno)%p(G%isd:G%ied,G%jsd:G%jed,CS%nz_data), source=0.0)
   do k=1,CS%nz_data ; do j=G%jsc,G%jec ; do i=G%isc,G%iec
      CS%Inc(CS%fldno)%p(i,j,k) = sp_val(i,j,k)
   enddo ; enddo ; enddo
@@ -305,8 +299,7 @@ subroutine set_up_oda_incupd_vel_field(u_val, v_val, G, GV, CS)
 
 
   ! store the increment/full field u profile
-  allocate(CS%Inc_u%p(G%isdB:G%iedB,G%jsd:G%jed,CS%nz_data))
-  CS%Inc_u%p(:,:,:) = 0.0
+  allocate(CS%Inc_u%p(G%isdB:G%iedB,G%jsd:G%jed,CS%nz_data), source=0.0)
   do j=G%jsc,G%jec ; do i=G%iscB,G%iecB
     do k=1,CS%nz_data
       CS%Inc_u%p(i,j,k) = u_val(i,j,k)
@@ -314,8 +307,7 @@ subroutine set_up_oda_incupd_vel_field(u_val, v_val, G, GV, CS)
   enddo ; enddo
 
   ! store the increment/full field v profile
-  allocate(CS%Inc_v%p(G%isd:G%ied,G%jsdB:G%jedB,CS%nz_data))
-  CS%Inc_v%p(:,:,:) = 0.0
+  allocate(CS%Inc_v%p(G%isd:G%ied,G%jsdB:G%jedB,CS%nz_data), source=0.0)
   do j=G%jscB,G%jecB ; do i=G%isc,G%iec
     do k=1,CS%nz_data
       CS%Inc_v%p(i,j,k) = v_val(i,j,k)
@@ -376,7 +368,7 @@ subroutine calc_oda_increments(h, tv, u, v, G, GV, US, CS)
 
   ! get h_obs
   nz_data = CS%Inc(1)%nz_data
-  allocate(h_obs(G%isd:G%ied,G%jsd:G%jed,nz_data)) ; h_obs(:,:,:) = 0.0
+  allocate(h_obs(G%isd:G%ied,G%jsd:G%jed,nz_data), source=0.0)
   do k=1,nz_data  ; do j=js,je ; do i=is,ie
     h_obs(i,j,k) = CS%Ref_h%p(i,j,k)
   enddo ; enddo ; enddo
@@ -384,10 +376,10 @@ subroutine calc_oda_increments(h, tv, u, v, G, GV, US, CS)
 
 
   ! allocate 1-d arrays
-  allocate(tmp_h(nz_data)); tmp_h(:) = 0.0
-  allocate(tmp_val2(nz_data)) ; tmp_val2(:) = 0.0
-  allocate(hu_obs(nz_data)) ; hu_obs(:) = 0.0
-  allocate(hv_obs(nz_data)) ; hv_obs(:) = 0.0
+  allocate(tmp_h(nz_data), source=0.0)
+  allocate(tmp_val2(nz_data), source=0.0)
+  allocate(hu_obs(nz_data), source=0.0)
+  allocate(hv_obs(nz_data), source=0.0)
 
   ! remap t,s (on h_init) to h_obs to get increment
   tmp_val1(:) = 0.0
@@ -591,17 +583,17 @@ subroutine apply_oda_incupd(h, tv, u, v, dt, G, GV, US, CS)
 
   ! get h_obs
   nz_data = CS%Inc(1)%nz_data
-  allocate(h_obs(G%isd:G%ied,G%jsd:G%jed,nz_data)) ; h_obs(:,:,:) = 0.0
+  allocate(h_obs(G%isd:G%ied,G%jsd:G%jed,nz_data), source=0.0)
   do k=1,nz_data  ; do j=js,je ; do i=is,ie
     h_obs(i,j,k) = CS%Ref_h%p(i,j,k)
   enddo ; enddo ; enddo
   call pass_var(h_obs,G%Domain)
 
   ! allocate 1-d array
-  allocate(tmp_h(nz_data)); tmp_h(:) = 0.0
+  allocate(tmp_h(nz_data), source=0.0)
   allocate(tmp_val2(nz_data))
-  allocate(hu_obs(nz_data)) ; hu_obs(:) = 0.0
-  allocate(hv_obs(nz_data)) ; hv_obs(:) = 0.0
+  allocate(hu_obs(nz_data), source=0.0)
+  allocate(hv_obs(nz_data), source=0.0)
 
   ! add increments to tracers
   tmp_val1(:) = 0.0

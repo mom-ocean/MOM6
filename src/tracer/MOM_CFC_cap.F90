@@ -151,8 +151,8 @@ function register_CFC_cap(HI, GV, param_file, CS, tr_Reg, restart_CS)
   CS%CFC11_desc = var_desc(CS%CFC11_name,"mol kg-1","Moles Per Unit Mass of CFC-11 in sea water", caller=mdl)
   CS%CFC12_desc = var_desc(CS%CFC12_name,"mol kg-1","Moles Per Unit Mass of CFC-12 in sea water", caller=mdl)
 
-  allocate(CS%CFC11(isd:ied,jsd:jed,nz)) ; CS%CFC11(:,:,:) = 0.0
-  allocate(CS%CFC12(isd:ied,jsd:jed,nz)) ; CS%CFC12(:,:,:) = 0.0
+  allocate(CS%CFC11(isd:ied,jsd:jed,nz), source=0.0)
+  allocate(CS%CFC12(isd:ied,jsd:jed,nz), source=0.0)
 
   ! This pointer assignment is needed to force the compiler not to do a copy in
   ! the registration calls.  Curses on the designers and implementers of F90.

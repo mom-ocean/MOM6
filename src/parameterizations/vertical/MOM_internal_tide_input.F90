@@ -355,11 +355,11 @@ subroutine int_tide_input_init(Time, G, GV, US, param_file, diag, CS, itide)
                "The constant tidal amplitude used with INT_TIDE_DISSIPATION.", &
                units="m s-1", default=0.0, scale=US%m_s_to_L_T)
 
-  allocate(itide%Nb(isd:ied,jsd:jed))  ; itide%Nb(:,:) = 0.0
-  allocate(itide%h2(isd:ied,jsd:jed))  ; itide%h2(:,:) = 0.0
-  allocate(itide%TKE_itidal_input(isd:ied,jsd:jed)) ; itide%TKE_itidal_input(:,:) = 0.0
-  allocate(itide%tideamp(isd:ied,jsd:jed)) ; itide%tideamp(:,:) = utide
-  allocate(CS%TKE_itidal_coef(isd:ied,jsd:jed)) ; CS%TKE_itidal_coef(:,:) = 0.0
+  allocate(itide%Nb(isd:ied,jsd:jed), source=0.0)
+  allocate(itide%h2(isd:ied,jsd:jed), source=0.0)
+  allocate(itide%TKE_itidal_input(isd:ied,jsd:jed), source=0.0)
+  allocate(itide%tideamp(isd:ied,jsd:jed), source=utide)
+  allocate(CS%TKE_itidal_coef(isd:ied,jsd:jed), source=0.0)
 
   call get_param(param_file, mdl, "KAPPA_ITIDES", kappa_itides, &
                "A topographic wavenumber used with INT_TIDE_DISSIPATION. "//&

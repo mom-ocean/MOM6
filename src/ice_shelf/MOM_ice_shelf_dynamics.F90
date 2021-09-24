@@ -256,23 +256,23 @@ subroutine register_ice_shelf_dyn_restarts(G, param_file, CS, restart_CS)
   endif
 
   if (active_shelf_dynamics) then
-    allocate( CS%u_shelf(IsdB:IedB,JsdB:JedB) ) ; CS%u_shelf(:,:) = 0.0
-    allocate( CS%v_shelf(IsdB:IedB,JsdB:JedB) ) ; CS%v_shelf(:,:) = 0.0
-    allocate( CS%t_shelf(isd:ied,jsd:jed) )   ; CS%t_shelf(:,:) = -10.0
-    allocate( CS%ice_visc(isd:ied,jsd:jed) )    ; CS%ice_visc(:,:) = 0.0
-    allocate( CS%AGlen_visc(isd:ied,jsd:jed) )    ; CS%AGlen_visc(:,:) = 2.261e-25
-    allocate( CS%basal_traction(isd:ied,jsd:jed) ) ; CS%basal_traction(:,:) = 0.0
-    allocate( CS%C_basal_friction(isd:ied,jsd:jed) ) ; CS%C_basal_friction(:,:) = 5.0e10
-    allocate( CS%OD_av(isd:ied,jsd:jed) )       ; CS%OD_av(:,:) = 0.0
-    allocate( CS%ground_frac(isd:ied,jsd:jed) )  ; CS%ground_frac(:,:) = 0.0
-    allocate( CS%taudx_shelf(IsdB:IedB,JsdB:JedB) ) ; CS%taudx_shelf(:,:) = 0.0
-    allocate( CS%taudy_shelf(IsdB:IedB,JsdB:JedB) ) ; CS%taudy_shelf(:,:) = 0.0
+    allocate( CS%u_shelf(IsdB:IedB,JsdB:JedB), source=0.0 )
+    allocate( CS%v_shelf(IsdB:IedB,JsdB:JedB), source=0.0 )
+    allocate( CS%t_shelf(isd:ied,jsd:jed), source=-10.0 ) ! [degC]
+    allocate( CS%ice_visc(isd:ied,jsd:jed), source=0.0 )
+    allocate( CS%AGlen_visc(isd:ied,jsd:jed), source=2.261e-25 ) ! [Units?]
+    allocate( CS%basal_traction(isd:ied,jsd:jed), source=0.0 )
+    allocate( CS%C_basal_friction(isd:ied,jsd:jed), source=5.0e10 ) ! [Units?]
+    allocate( CS%OD_av(isd:ied,jsd:jed), source=0.0 )
+    allocate( CS%ground_frac(isd:ied,jsd:jed), source=0.0 )
+    allocate( CS%taudx_shelf(IsdB:IedB,JsdB:JedB), source=0.0 )
+    allocate( CS%taudy_shelf(IsdB:IedB,JsdB:JedB), source=0.0 )
     allocate( CS%bed_elev(isd:ied,jsd:jed) ) ; CS%bed_elev(:,:) = G%bathyT(:,:) + G%Z_ref
-    allocate( CS%u_bdry_val(IsdB:IedB,JsdB:JedB) ) ; CS%u_bdry_val(:,:) = 0.0
-    allocate( CS%v_bdry_val(IsdB:IedB,JsdB:JedB) ) ; CS%v_bdry_val(:,:) = 0.0
-    allocate( CS%u_face_mask_bdry(IsdB:IedB,JsdB:JedB) ) ; CS%u_face_mask_bdry(:,:) = -2.0
-    allocate( CS%v_face_mask_bdry(IsdB:iedB,JsdB:JedB) ) ; CS%v_face_mask_bdry(:,:) = -2.0
-    allocate( CS%h_bdry_val(isd:ied,jsd:jed) ) ; CS%h_bdry_val(:,:) = 0.0
+    allocate( CS%u_bdry_val(IsdB:IedB,JsdB:JedB), source=0.0 )
+    allocate( CS%v_bdry_val(IsdB:IedB,JsdB:JedB), source=0.0 )
+    allocate( CS%u_face_mask_bdry(IsdB:IedB,JsdB:JedB), source=-2.0 )
+    allocate( CS%v_face_mask_bdry(IsdB:iedB,JsdB:JedB), source=-2.0 )
+    allocate( CS%h_bdry_val(isd:ied,jsd:jed), source=0.0 )
    ! additional restarts for ice shelf state
     call register_restart_field(CS%u_shelf, "u_shelf", .false., restart_CS, &
                                 "ice sheet/shelf u-velocity", "m s-1", hor_grid='Bu')
@@ -437,22 +437,22 @@ subroutine initialize_ice_shelf_dyn(param_file, Time, ISS, CS, G, US, diag, new_
   ! previously allocated for registration for restarts.
 
   if (active_shelf_dynamics) then
-    allocate( CS%t_bdry_val(isd:ied,jsd:jed) )   ; CS%t_bdry_val(:,:) = -15.0
-    allocate( CS%thickness_bdry_val(isd:ied,jsd:jed) ) ; CS%thickness_bdry_val(:,:) = 0.0
-    allocate( CS%u_face_mask(Isdq:Iedq,Jsdq:Jedq) ) ; CS%u_face_mask(:,:) = 0.0
-    allocate( CS%v_face_mask(Isdq:Iedq,Jsdq:Jedq) ) ; CS%v_face_mask(:,:) = 0.0
-    allocate( CS%u_flux_bdry_val(Isdq:Iedq,jsd:jed) ) ; CS%u_flux_bdry_val(:,:) = 0.0
-    allocate( CS%v_flux_bdry_val(isd:ied,Jsdq:Jedq) ) ; CS%v_flux_bdry_val(:,:) = 0.0
-    allocate( CS%umask(Isdq:Iedq,Jsdq:Jedq) ) ; CS%umask(:,:) = -1.0
-    allocate( CS%vmask(Isdq:Iedq,Jsdq:Jedq) ) ; CS%vmask(:,:) = -1.0
-    allocate( CS%tmask(Isdq:Iedq,Jsdq:Jedq) ) ; CS%tmask(:,:) = -1.0
+    allocate( CS%t_bdry_val(isd:ied,jsd:jed), source=-15.0) ! [degC]
+    allocate( CS%thickness_bdry_val(isd:ied,jsd:jed), source=0.0)
+    allocate( CS%u_face_mask(Isdq:Iedq,Jsdq:Jedq), source=0.0)
+    allocate( CS%v_face_mask(Isdq:Iedq,Jsdq:Jedq), source=0.0)
+    allocate( CS%u_flux_bdry_val(Isdq:Iedq,jsd:jed), source=0.0)
+    allocate( CS%v_flux_bdry_val(isd:ied,Jsdq:Jedq), source=0.0)
+    allocate( CS%umask(Isdq:Iedq,Jsdq:Jedq), source=-1.0)
+    allocate( CS%vmask(Isdq:Iedq,Jsdq:Jedq), source=-1.0)
+    allocate( CS%tmask(Isdq:Iedq,Jsdq:Jedq), source=-1.0)
 
     CS%OD_rt_counter = 0
-    allocate( CS%OD_rt(isd:ied,jsd:jed) ) ; CS%OD_rt(:,:) = 0.0
-    allocate( CS%ground_frac_rt(isd:ied,jsd:jed) ) ; CS%ground_frac_rt(:,:) = 0.0
+    allocate( CS%OD_rt(isd:ied,jsd:jed), source=0.0)
+    allocate( CS%ground_frac_rt(isd:ied,jsd:jed), source=0.0)
 
     if (CS%calve_to_mask) then
-      allocate( CS%calve_mask(isd:ied,jsd:jed) ) ; CS%calve_mask(:,:) = 0.0
+      allocate( CS%calve_mask(isd:ied,jsd:jed), source=0.0)
     endif
 
     CS%elapsed_velocity_time = 0.0
@@ -867,7 +867,7 @@ end subroutine ice_shelf_advect
   ! need to make these conditional on GL interpolation
   float_cond(:,:) = 0.0 ; H_node(:,:) = 0.0
   CS%ground_frac(:,:) = 0.0
-  allocate(Phisub(nsub,nsub,2,2,2,2)) ; Phisub(:,:,:,:,:,:) = 0.0
+  allocate(Phisub(nsub,nsub,2,2,2,2), source=0.0)
 
   do j=G%jsc,G%jec
     do i=G%isc,G%iec
@@ -913,7 +913,7 @@ end subroutine ice_shelf_advect
   endif
 
   ! must prepare Phi
-  allocate(Phi(1:8,1:4,isd:ied,jsd:jed)) ; Phi(:,:,:,:) = 0.0
+  allocate(Phi(1:8,1:4,isd:ied,jsd:jed), source=0.0)
 
   do j=jsd,jed ; do i=isd,ied
     call bilinear_shape_fn_grid(G, i, j, Phi(:,:,i,j))
