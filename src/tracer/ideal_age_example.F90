@@ -163,7 +163,7 @@ function register_ideal_age_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
                  units="years", default=0.0)
   endif
 
-  allocate(CS%tr(isd:ied,jsd:jed,nz,CS%ntr)) ; CS%tr(:,:,:,:) = 0.0
+  allocate(CS%tr(isd:ied,jsd:jed,nz,CS%ntr), source=0.0)
 
   do m=1,CS%ntr
     ! This is needed to force the compiler not to do a copy in the registration

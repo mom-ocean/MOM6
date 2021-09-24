@@ -1408,41 +1408,36 @@ subroutine MEKE_alloc_register_restart(HI, param_file, MEKE, restart_CS)
 ! Allocate memory
   call MOM_mesg("MEKE_alloc_register_restart: allocating and registering", 5)
   isd = HI%isd ; ied = HI%ied ; jsd = HI%jsd ; jed = HI%jed
-  allocate(MEKE%MEKE(isd:ied,jsd:jed)) ; MEKE%MEKE(:,:) = 0.0
+  allocate(MEKE%MEKE(isd:ied,jsd:jed), source=0.0)
   vd = var_desc("MEKE", "m2 s-2", hor_grid='h', z_grid='1', &
            longname="Mesoscale Eddy Kinetic Energy")
   call register_restart_field(MEKE%MEKE, vd, .false., restart_CS)
-  if (MEKE_GMcoeff>=0.) then
-    allocate(MEKE%GM_src(isd:ied,jsd:jed)) ; MEKE%GM_src(:,:) = 0.0
-  endif
-  if (MEKE_FrCoeff>=0. .or. MEKE_GMECoeff>=0.)  then
-    allocate(MEKE%mom_src(isd:ied,jsd:jed)) ; MEKE%mom_src(:,:) = 0.0
-  endif
-  if (MEKE_GMECoeff>=0.) then
-    allocate(MEKE%GME_snk(isd:ied,jsd:jed)) ; MEKE%GME_snk(:,:) = 0.0
-  endif
+  if (MEKE_GMcoeff>=0.) allocate(MEKE%GM_src(isd:ied,jsd:jed), source=0.0)
+  if (MEKE_FrCoeff>=0. .or. MEKE_GMECoeff>=0.) &
+    allocate(MEKE%mom_src(isd:ied,jsd:jed), source=0.0)
+  if (MEKE_GMECoeff>=0.) allocate(MEKE%GME_snk(isd:ied,jsd:jed), source=0.0)
   if (MEKE_KhCoeff>=0.) then
-    allocate(MEKE%Kh(isd:ied,jsd:jed)) ; MEKE%Kh(:,:) = 0.0
+    allocate(MEKE%Kh(isd:ied,jsd:jed), source=0.0)
     vd = var_desc("MEKE_Kh", "m2 s-1", hor_grid='h', z_grid='1', &
              longname="Lateral diffusivity from Mesoscale Eddy Kinetic Energy")
     call register_restart_field(MEKE%Kh, vd, .false., restart_CS)
   endif
-  allocate(MEKE%Rd_dx_h(isd:ied,jsd:jed)) ; MEKE%Rd_dx_h(:,:) = 0.0
+  allocate(MEKE%Rd_dx_h(isd:ied,jsd:jed), source=0.0)
   if (MEKE_viscCoeff_Ku/=0.) then
-    allocate(MEKE%Ku(isd:ied,jsd:jed)) ; MEKE%Ku(:,:) = 0.0
+    allocate(MEKE%Ku(isd:ied,jsd:jed), source=0.0)
     vd = var_desc("MEKE_Ku", "m2 s-1", hor_grid='h', z_grid='1', &
              longname="Lateral viscosity from Mesoscale Eddy Kinetic Energy")
     call register_restart_field(MEKE%Ku, vd, .false., restart_CS)
   endif
   if (Use_Kh_in_MEKE) then
-    allocate(MEKE%Kh_diff(isd:ied,jsd:jed)) ; MEKE%Kh_diff(:,:) = 0.0
+    allocate(MEKE%Kh_diff(isd:ied,jsd:jed), source=0.0)
     vd = var_desc("MEKE_Kh_diff", "m2 s-1",hor_grid='h',z_grid='1', &
              longname="Copy of thickness diffusivity for diffusing MEKE")
     call register_restart_field(MEKE%Kh_diff, vd, .false., restart_CS)
   endif
 
   if (MEKE_viscCoeff_Au/=0.) then
-    allocate(MEKE%Au(isd:ied,jsd:jed)) ; MEKE%Au(:,:) = 0.0
+    allocate(MEKE%Au(isd:ied,jsd:jed), source=0.0)
     vd = var_desc("MEKE_Au", "m4 s-1", hor_grid='h', z_grid='1', &
              longname="Lateral biharmonic viscosity from Mesoscale Eddy Kinetic Energy")
     call register_restart_field(MEKE%Au, vd, .false., restart_CS)
