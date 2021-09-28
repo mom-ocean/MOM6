@@ -110,8 +110,7 @@ TIME ?= time
 # Experiment configuration
 BUILDS ?= symmetric asymmetric openmp
 CONFIGS ?= $(wildcard tc*)
-TESTS ?= grids layouts restarts rotations openmps nans dims openmps
-TEST_TYPES ?= grid layout rotate restart openmp nan $(foreach d,$(DIMS),dim.$(d))
+TESTS ?= grid layout rotate restart openmp nan $(foreach d,$(DIMS),dim.$(d))
 DIMS ?= t l h z q r
 
 
@@ -132,8 +131,7 @@ MKMF := $(DEPS)/bin/mkmf
 # disable them.
 ifeq ($(DO_REPRO_TESTS), true)
   BUILDS += repro
-  TESTS += repros
-  TEST_TYPES += repro
+  TESTS += repro
 endif
 
 # Profiling
@@ -151,8 +149,7 @@ REPORT_COVERAGE ?=
 
 ifeq ($(DO_REGRESSION_TESTS), true)
   BUILDS += target
-  TESTS += regressions
-  TEST_TYPES += regression
+  TESTS += regression
 
   MOM_TARGET_SLUG ?= NOAA-GFDL/MOM6
   MOM_TARGET_URL ?= https://github.com/$(MOM_TARGET_SLUG)
@@ -212,7 +209,7 @@ endif
 #---
 # Rules
 
-.PHONY: all build.regressions
+.PHONY: all build.regressions build.prof
 all: $(foreach b,$(BUILDS),build/$(b)/MOM6) $(VENV_PATH)
 build.regressions: $(foreach b,symmetric target,build/$(b)/MOM6)
 build.prof: $(foreach b,opt opt_target,build/$(b)/MOM6)
@@ -412,34 +409,38 @@ test: $(foreach t,$(TESTS),test.$(t))
 # TODO: restart checksum comparison is not yet implemented
 
 .PHONY: $(foreach t,$(TESTS),test.$(t))
-test.grids: $(foreach c,$(filter-out tc3,$(CONFIGS)),$(c).grid $(c).grid.diag)
-test.layouts: $(foreach c,$(CONFIGS),$(c).layout $(c).layout.diag)
-test.rotations: $(foreach c,$(CONFIGS),$(c).rotate)
-test.restarts: $(foreach c,$(CONFIGS),$(c).restart)
-test.repros: $(foreach c,$(CONFIGS),$(c).repro $(c).repro.diag)
-test.openmps: $(foreach c,$(CONFIGS),$(c).openmp $(c).openmp.diag)
-test.nans: $(foreach c,$(CONFIGS),$(c).nan $(c).nan.diag)
-test.dims: $(foreach c,$(CONFIGS),$(foreach d,$(DIMS),$(c).dim.$(d) $(c).dim.$(d).diag))
-test.regressions: $(foreach c,$(CONFIGS),$(c).regression $(c).regression.diag)
+test.grid: $(foreach c,$(filter-out tc3,$(CONFIGS)),$(c).grid $(c).grid.diag)
+test.layout: $(foreach c,$(CONFIGS),$(c).layout $(c).layout.diag)
+test.rotate: $(foreach c,$(CONFIGS),$(c).rotate)
+test.restart: $(foreach c,$(CONFIGS),$(c).restart)
+test.repro: $(foreach c,$(CONFIGS),$(c).repro $(c).repro.diag)
+test.openmp: $(foreach c,$(CONFIGS),$(c).openmp $(c).openmp.diag)
+test.nan: $(foreach c,$(CONFIGS),$(c).nan $(c).nan.diag)
+test.regression: $(foreach c,$(CONFIGS),$(c).regression $(c).regression.diag)
+test.dim: $(foreach d,$(DIMS),test.dim.$(d))
+define TEST_DIM_RULE
+test.dim.$(1): $(foreach c,$(CONFIGS),$(c).dim.$(1) $(c).dim.$(1).diag)
+endef
+$(foreach d,$(DIMS),$(eval $(call TEST_DIM_RULE,$(d))))
 
 .PHONY: run.symmetric run.asymmetric run.nans run.openmp
 run.symmetric: $(foreach c,$(CONFIGS),work/$(c)/symmetric/ocean.stats)
 run.asymmetric: $(foreach c,$(filter-out tc3,$(CONFIGS)),$(CONFIGS),work/$(c)/asymmetric/ocean.stats)
-run.nans: $(foreach c,$(CONFIGS),work/$(c)/nan/ocean.stats)
+run.nan: $(foreach c,$(CONFIGS),work/$(c)/nan/ocean.stats)
 run.openmp: $(foreach c,$(CONFIGS),work/$(c)/openmp/ocean.stats)
 
-.PRECIOUS: $(foreach c,$(CONFIGS),$(c))
 # Configuration test rules
 # $(1): Configuration name (tc1, tc2, &c.)
 # $(2): Excluded tests
-define CONFIG_RULES
+.PRECIOUS: $(foreach c,$(CONFIGS),$(c))
+define CONFIG_RULE
 $(1): \
-  $(foreach t,$(filter-out $(2),$(TEST_TYPES)),$(1).$(t)) \
-  $(foreach t,$(filter-out $(2) rotate restart,$(TEST_TYPES)),$(1).$(t).diag)
+  $(foreach t,$(filter-out $(2),$(TESTS)),$(1).$(t)) \
+  $(foreach t,$(filter-out $(2) rotate restart,$(TESTS)),$(1).$(t).diag)
 endef
-$(foreach c,$(filter-out tc3,$(CONFIGS)),$(eval $(call CONFIG_RULES,$(c),)))
+$(foreach c,$(filter-out tc3,$(CONFIGS)),$(eval $(call CONFIG_RULE,$(c),)))
 # NOTE: tc3 uses OBCs and does not support asymmetric grid
-$(eval $(call CONFIG_RULES,tc3,grid))
+$(eval $(call CONFIG_RULE,tc3,grid))
 
 # Color highlights for test results
 RED = \033[0;31m
@@ -484,7 +485,11 @@ $(foreach c,$(CONFIGS),$(eval $(call CMP_RULE,$(c),rotate,symmetric rotate)))
 $(foreach c,$(CONFIGS),$(eval $(call CMP_RULE,$(c),repro,symmetric repro)))
 $(foreach c,$(CONFIGS),$(eval $(call CMP_RULE,$(c),openmp,symmetric openmp)))
 $(foreach c,$(CONFIGS),$(eval $(call CMP_RULE,$(c),nan,symmetric nan)))
-$(foreach c,$(CONFIGS),$(foreach d,$(DIMS),$(eval $(call CMP_RULE,$(c),dim.$(d),symmetric dim.$(d)))))
+define CONFIG_DIM_RULE
+$(1).dim: $(foreach d,$(DIMS),$(1).dim.$(d))
+$(foreach d,$(DIMS),$(eval $(call CMP_RULE,$(1),dim.$(d),symmetric dim.$(d))))
+endef
+$(foreach c,$(CONFIGS),$(eval $(call CONFIG_DIM_RULE,$(c))))
 
 # Custom comparison rules
 
