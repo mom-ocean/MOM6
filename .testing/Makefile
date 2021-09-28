@@ -16,38 +16,43 @@
 #   These settings can be provided as either command-line flags, or saved in a
 #   `config.mk` file.
 #
-# Test suite configuration:
+# Experiment Configuration:
+#   BUILDS  Executables to be built by `make` or `make all`
+#   CONFIGS Model configurations to test (default: `tc*`)
+#   TESTS   Tests to run
+#   DIMS    Dimensional scaling tests
+# (NOTE: Each test will build its required executables, regardless of BUILDS)
 #
+# General test configuration:
+#   FRAMEWORK               Model framework (fms1 or fms2)
 #   MPIRUN                  MPI job launcher (mpirun, srun, etc)
 #   DO_REPRO_TESTS          Enable production ("repro") testing equivalence
-#   DO_REGRESSION_TESTS:    Enable regression tests (usually dev/gfdl)
+#   DO_REGRESSION_TESTS     Enable regression tests (usually dev/gfdl)
 #   REPORT_COVERAGE         Enable code coverage and report to codecov
 #
 # Compiler configuration:
-#   (NOTE: These are environment variables and may be inherited from a shell.)
-#
 #   CC      C compiler
 #   MPICC   MPI C compiler
 #   FC      Fortran compiler
 #   MPIFC   MPI Fortran compiler
+# (NOTE: These are environment variables and may be inherited from a shell.)
 #
 # Build configuration:
 #   FCFLAGS_DEBUG       Testing ("debug") compiler flags
 #   FCFLAGS_REPRO       Production ("repro") compiler flags
-#   FCFLAGS_OPT			Aggressive optimization compiler flags
+#   FCFLAGS_OPT         Aggressive optimization compiler flags
 #   FCFLAGS_INIT        Variable initialization flags
 #   FCFLAGS_COVERAGE    Code coverage flags
 #
 # Regression repository ("target") configuration:
-#   (NOTE: These would typically be configured by a CI such as Travis.)
-#
 #   MOM_TARGET_SLUG             URL slug (minus domain) of the target repo
 #   MOM_TARGET_URL              Full URL of the target repo
 #   MOM_TARGET_LOCAL_BRANCH     Target branch name
+# (NOTE: These would typically be configured by a CI.)
 #
 #----
 
-# TODO: Bourne shell compatibility
+# TODO: POSIX shell compatibility
 SHELL = bash
 
 # No implicit rules
@@ -73,7 +78,7 @@ export MPIFC
 # NOTE: FMS will be built using FCFLAGS_DEBUG
 FCFLAGS_DEBUG ?= -g -O0
 FCFLAGS_REPRO ?= -g -O2
-FCFLAGS_OPT	?= -g -O3 -mavx -fno-omit-frame-pointer
+FCFLAGS_OPT ?= -g -O3 -mavx -fno-omit-frame-pointer
 FCFLAGS_INIT ?=
 FCFLAGS_COVERAGE ?=
 # Additional notes:
@@ -99,6 +104,13 @@ DO_REPRO_TESTS ?=
 TIME ?= time
 
 
+# Experiment configuration
+BUILDS ?= symmetric asymmetric openmp
+CONFIGS ?= $(wildcard tc*)
+TESTS ?= grids layouts restarts nans dims openmps rotations
+DIMS ?= t l h z q r
+
+
 #---
 # Dependencies
 DEPS = deps
@@ -112,10 +124,6 @@ MKMF := $(DEPS)/bin/mkmf
 # Test configuration
 
 # Executables
-BUILDS = symmetric asymmetric repro openmp
-CONFIGS := $(wildcard tc*)
-TESTS = grids layouts restarts nans dims openmps rotations
-DIMS = t l h z q r
 
 # Set the framework
 FRAMEWORK ?= fms1
@@ -295,7 +303,7 @@ build/%/Makefile: ../ac/configure ../ac/Makefile.in $(DEPS)/lib/libFMS.a $(MKMF)
 
 # Fetch the regression target codebase
 build/target/Makefile build/opt_target/Makefile: \
-		$(TARGET_CODEBASE)/ac/configure $(DEPS)/lib/libFMS.a $(MKMF) $(LIST_PATHS)
+  $(TARGET_CODEBASE)/ac/configure $(DEPS)/lib/libFMS.a $(MKMF) $(LIST_PATHS)
 	mkdir -p $(@D)
 	cd $(@D) \
 	  && $(MOM_ENV) ../../$(TARGET_CODEBASE)/ac/configure $(MOM_ACFLAGS) \
