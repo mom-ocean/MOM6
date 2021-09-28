@@ -64,6 +64,9 @@ MAKEFLAGS += -R
 # User-defined configuration
 -include config.mk
 
+# Set the infra framework
+FRAMEWORK ?= fms1
+
 # Set the MPI launcher here
 # TODO: This needs more automated configuration
 MPIRUN ?= mpirun
@@ -82,7 +85,7 @@ FCFLAGS_OPT ?= -g -O3 -mavx -fno-omit-frame-pointer
 FCFLAGS_INIT ?=
 FCFLAGS_COVERAGE ?=
 # Additional notes:
-# - The default values are simple, minimalist flags, supported by nearly all
+# - These default values are simple, minimalist flags, supported by nearly all
 #   compilers which are comparable to GFDL's canonical DEBUG and REPRO builds.
 #
 # - These flags should be configured outside of the Makefile, either with
@@ -107,7 +110,8 @@ TIME ?= time
 # Experiment configuration
 BUILDS ?= symmetric asymmetric openmp
 CONFIGS ?= $(wildcard tc*)
-TESTS ?= grids layouts restarts nans dims openmps rotations
+TESTS ?= grids layouts restarts rotations openmps nans dims openmps
+TEST_TYPES ?= grid layout rotate restart openmp nan $(foreach d,$(DIMS),dim.$(d))
 DIMS ?= t l h z q r
 
 
@@ -123,17 +127,13 @@ MKMF := $(DEPS)/bin/mkmf
 #---
 # Test configuration
 
-# Executables
-
-# Set the framework
-FRAMEWORK ?= fms1
-
 # REPRO tests enable reproducibility with optimization, and often do not match
 # the DEBUG results in older GCCs and vendor compilers, so we can optionally
 # disable them.
 ifeq ($(DO_REPRO_TESTS), true)
   BUILDS += repro
   TESTS += repros
+  TEST_TYPES += repro
 endif
 
 # Profiling
@@ -152,6 +152,7 @@ REPORT_COVERAGE ?=
 ifeq ($(DO_REGRESSION_TESTS), true)
   BUILDS += target
   TESTS += regressions
+  TEST_TYPES += regression
 
   MOM_TARGET_SLUG ?= NOAA-GFDL/MOM6
   MOM_TARGET_URL ?= https://github.com/$(MOM_TARGET_SLUG)
@@ -360,6 +361,7 @@ $(DEPS)/Makefile: ../ac/deps/Makefile
 	mkdir -p $(@D)
 	cp $< $@
 
+
 #---
 # The following block does a non-library build of a coupled driver interface to MOM, along with everything below it.
 # This simply checks that we have not broken the ability to compile. This is not a means to build a complete coupled executable.
@@ -379,6 +381,7 @@ check_mom6_api_coupled: build/coupled/ocean_model_MOM.o
 build/mct/mom_ocean_model_mct.o: build/mct/Makefile
 	cd $(@D) && make $(@F)
 check_mom6_api_mct: build/mct/mom_ocean_model_mct.o
+
 
 #---
 # Python preprocessing
@@ -425,6 +428,19 @@ run.asymmetric: $(foreach c,$(filter-out tc3,$(CONFIGS)),$(CONFIGS),work/$(c)/as
 run.nans: $(foreach c,$(CONFIGS),work/$(c)/nan/ocean.stats)
 run.openmp: $(foreach c,$(CONFIGS),work/$(c)/openmp/ocean.stats)
 
+.PRECIOUS: $(foreach c,$(CONFIGS),$(c))
+# Configuration test rules
+# $(1): Configuration name (tc1, tc2, &c.)
+# $(2): Excluded tests
+define CONFIG_RULES
+$(1): \
+  $(foreach t,$(filter-out $(2),$(TEST_TYPES)),$(1).$(t)) \
+  $(foreach t,$(filter-out $(2) rotate restart,$(TEST_TYPES)),$(1).$(t).diag)
+endef
+$(foreach c,$(filter-out tc3,$(CONFIGS)),$(eval $(call CONFIG_RULES,$(c),)))
+# NOTE: tc3 uses OBCs and does not support asymmetric grid
+$(eval $(call CONFIG_RULES,tc3,grid))
+
 # Color highlights for test results
 RED = \033[0;31m
 YELLOW = \033[0;33m
@@ -438,36 +454,37 @@ WARN = ${YELLOW}WARN${RESET}
 FAIL = ${RED}FAIL${RESET}
 
 # Comparison rules
-# $(1): Test type (grid, layout, &c.)
-# $(2): Comparison targets (symmetric asymmetric, symmetric layout, &c.)
+# $(1): Configuration (tc1, tc2, &c.)
+# $(2): Test type (grid, layout, &c.)
+# $(3): Comparison targets (symmetric asymmetric, symmetric layout, &c.)
 define CMP_RULE
-.PRECIOUS: $(foreach b,$(2),work/%/$(b)/ocean.stats)
-%.$(1): $(foreach b,$(2),work/%/$(b)/ocean.stats)
-	@test "$$(shell ls -A results/$$* 2>/dev/null)" || rm -rf results/$$*
+.PRECIOUS: $(foreach b,$(3),work/$(1)/$(b)/ocean.stats)
+$(1).$(2): $(foreach b,$(3),work/$(1)/$(b)/ocean.stats)
+	@test "$$(shell ls -A results/$(1) 2>/dev/null)" || rm -rf results/$(1)
 	@cmp $$^ || !( \
-	  mkdir -p results/$$*; \
-	  (diff $$^ | tee results/$$*/ocean.stats.$(1).diff | head -n 20) ; \
-	  echo -e "$(FAIL): Solutions $$*.$(1) have changed." \
+	  mkdir -p results/$(1); \
+	  (diff $$^ | tee results/$(1)/ocean.stats.$(2).diff | head -n 20) ; \
+	  echo -e "$(FAIL): Solutions $(1).$(2) have changed." \
 	)
-	@echo -e "$(PASS): Solutions $$*.$(1) agree."
+	@echo -e "$(PASS): Solutions $(1).$(2) agree."
 
-.PRECIOUS: $(foreach b,$(2),work/%/$(b)/chksum_diag)
-%.$(1).diag: $(foreach b,$(2),work/%/$(b)/chksum_diag)
+.PRECIOUS: $(foreach b,$(3),work/$(1)/$(b)/chksum_diag)
+$(1).$(2).diag: $(foreach b,$(3),work/$(1)/$(b)/chksum_diag)
 	@cmp $$^ || !( \
-	  mkdir -p results/$$*; \
-	  (diff $$^ | tee results/$$*/chksum_diag.$(1).diff | head -n 20) ; \
-	  echo -e "$(FAIL): Diagnostics $$*.$(1).diag have changed." \
+	  mkdir -p results/$(1); \
+	  (diff $$^ | tee results/$(1)/chksum_diag.$(2).diff | head -n 20) ; \
+	  echo -e "$(FAIL): Diagnostics $(1).$(2).diag have changed." \
 	)
-	@echo -e "$(PASS): Diagnostics $$*.$(1).diag agree."
+	@echo -e "$(PASS): Diagnostics $(1).$(2).diag agree."
 endef
 
-$(eval $(call CMP_RULE,grid,symmetric asymmetric))
-$(eval $(call CMP_RULE,layout,symmetric layout))
-$(eval $(call CMP_RULE,rotate,symmetric rotate))
-$(eval $(call CMP_RULE,repro,symmetric repro))
-$(eval $(call CMP_RULE,openmp,symmetric openmp))
-$(eval $(call CMP_RULE,nan,symmetric nan))
-$(foreach d,$(DIMS),$(eval $(call CMP_RULE,dim.$(d),symmetric dim.$(d))))
+$(foreach c,$(CONFIGS),$(eval $(call CMP_RULE,$(c),grid,symmetric asymmetric)))
+$(foreach c,$(CONFIGS),$(eval $(call CMP_RULE,$(c),layout,symmetric layout)))
+$(foreach c,$(CONFIGS),$(eval $(call CMP_RULE,$(c),rotate,symmetric rotate)))
+$(foreach c,$(CONFIGS),$(eval $(call CMP_RULE,$(c),repro,symmetric repro)))
+$(foreach c,$(CONFIGS),$(eval $(call CMP_RULE,$(c),openmp,symmetric openmp)))
+$(foreach c,$(CONFIGS),$(eval $(call CMP_RULE,$(c),nan,symmetric nan)))
+$(foreach c,$(CONFIGS),$(foreach d,$(DIMS),$(eval $(call CMP_RULE,$(c),dim.$(d),symmetric dim.$(d)))))
 
 # Custom comparison rules
 
@@ -713,7 +730,13 @@ work/p0/%/perf.data:
 # NOTE: These tests assert that we are in the .testing directory.
 
 .PHONY: clean
-clean: clean.stats
+clean: clean.build clean.stats
+	@[ $$(basename $$(pwd)) = .testing ]
+	rm -rf deps
+
+
+.PHONY: clean.build
+clean.build:
 	@[ $$(basename $$(pwd)) = .testing ]
 	rm -rf build
 
