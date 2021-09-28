@@ -101,9 +101,7 @@ subroutine stochastics_init(dt, grid, GV, CS, param_file, diag, Time)
      call init_stochastic_physics_ocn(dt,grid%geoLonT,grid%geoLatT,nx,ny,GV%ke, &
                                       CS%pert_epbl,CS%do_sppt,master,mom_comm,iret)
      if (iret/=0)  then
-         write(6,*) 'call to init_stochastic_physics_ocn failed'
-         call MOM_error(FATAL, "stochastic physics in enambled in MOM6 but "// &
-                    "not activated in stochastic_physics namelist ")
+         call MOM_error(FATAL, "call to init_stochastic_physics_ocn failed")
          return
      endif
 
