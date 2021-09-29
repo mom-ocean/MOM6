@@ -150,6 +150,7 @@ use MOM_offline_main,          only : offline_fw_fluxes_into_ocean, offline_fw_f
 use MOM_offline_main,          only : offline_advection_layer, offline_transport_end
 use MOM_ALE,                   only : ale_offline_tracer_final, ALE_main_offline
 use MOM_ice_shelf,             only : ice_shelf_CS, ice_shelf_query, initialize_ice_shelf
+use MOM_particles_mod,         only : particles, particles_init, particles_run, particles_save_restart, particles_end
 
 implicit none ; private
 
@@ -329,6 +330,8 @@ type, public :: MOM_control_struct ; private
   logical :: answers_2018       !< If true, use expressions for the surface properties that recover
                                 !! the answers from the end of 2018. Otherwise, use more appropriate
                                 !! expressions that differ at roundoff for non-Boussinsq cases.
+  logical :: use_particles      !< Turns on the particles package
+  character(len=10) :: particle_type !< Particle types include: surface(default), profiling and sail drone.
 
   type(MOM_diag_IDs)       :: IDs      !<  Handles used for diagnostics.
   type(transport_diag_IDs) :: transport_IDs  !< Handles used for transport diagnostics.
@@ -396,6 +399,7 @@ type, public :: MOM_control_struct ; private
   type(ODA_CS), pointer :: odaCS => NULL() !< a pointer to the control structure for handling
                                 !! ensemble model state vectors and data assimilation
                                 !! increments and priors
+  type(particles), pointer :: particles => NULL() !<Lagrangian particles
 end type MOM_control_struct
 
 public initialize_MOM, finish_MOM_initialization, MOM_end
@@ -1096,6 +1100,13 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_thermo, &
     if (showCallTree) call callTree_waypoint("finished step_MOM_dyn_unsplit (step_MOM)")
 
   endif ! -------------------------------------------------- end SPLIT
+
+   if (CS%do_dynamics) then!run particles whether or not stepping is split
+     if (CS%use_particles) then
+       call particles_run(CS%particles, Time_local, CS%u, CS%v, CS%h, CS%tv) ! Run the particles model
+     endif
+   endif
+
 
   if (CS%thickness_diffuse .and. .not.CS%thickness_diffuse_first) then
     call cpu_clock_begin(id_clock_thick_diff)
@@ -2092,6 +2103,9 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
        "If true, enables the ice shelf model.", default=.false.)
   endif
 
+  call get_param(param_file, "MOM", "USE_PARTICLES", CS%use_particles, &
+                 "If true, use the particles package.", default=.false.)
+
   CS%ensemble_ocean=.false.
   call get_param(param_file, "MOM", "ENSEMBLE_OCEAN", CS%ensemble_ocean, &
                  "If False, The model is being run in serial mode as a single realization. "//&
@@ -2870,6 +2884,11 @@ subroutine finish_MOM_initialization(Time, dirs, CS, restart_CSp)
   call fix_restart_scaling(GV)
   call fix_restart_unit_scaling(US)
 
+
+  if (CS%use_particles) then
+    call particles_init(CS%particles, G, CS%Time, CS%dt_therm, CS%u, CS%v)
+  endif
+
   ! Write initial conditions
   if (CS%write_IC) then
     allocate(restart_CSp_tmp)
@@ -3562,6 +3581,10 @@ end subroutine get_ocean_stocks
 subroutine MOM_end(CS)
   type(MOM_control_struct), intent(inout) :: CS   !< MOM control structure
 
+  if (CS%use_particles) then
+    call particles_save_restart(CS%particles)
+  endif
+
   call MOM_sum_output_end(CS%sum_output_CSp)
 
   if (CS%use_ALE_algorithm) call ALE_end(CS%ALE_CSp)
@@ -3590,6 +3613,11 @@ subroutine MOM_end(CS)
     call end_dyn_unsplit_RK2(CS%dyn_unsplit_RK2_CSp)
   else
     call end_dyn_unsplit(CS%dyn_unsplit_CSp)
+  endif
+
+  if (CS%use_particles) then
+     call particles_end(CS%particles)
+     deallocate(CS%particles)
   endif
 
   call thickness_diffuse_end(CS%thickness_diffuse_CSp, CS%CDp)
