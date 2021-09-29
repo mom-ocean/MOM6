@@ -96,6 +96,9 @@ type, public :: int_tide_CS ; private
   real :: decay_rate    !< A constant rate at which internal tide energy is
                         !! lost to the interior ocean internal wave field.
   real :: cdrag         !< The bottom drag coefficient [nondim].
+  real :: drag_min_depth !< The minimum total ocean thickness that will be used in the denominator
+                        !! of the quadratic drag terms for internal tides when
+                        !! INTERNAL_TIDE_QUAD_DRAG is true [Z ~> m]
   logical :: apply_background_drag
                         !< If true, apply a drag due to background processes as a sink.
   logical :: apply_bottom_drag
@@ -185,6 +188,7 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
     tot_En, &      ! energy summed over angles, modes, frequencies [R Z3 T-2 ~> J m-2]
     tot_leak_loss, tot_quad_loss, tot_itidal_loss, tot_Froude_loss, tot_allprocesses_loss, &
                    ! energy loss rates summed over angle, freq, and mode [R Z3 T-3 ~> W m-2]
+    htot, &        ! The vertical sum of the layer thicknesses [H ~> m or kg m-2]
     drag_scale, &  ! bottom drag scale [T-1 ~> s-1]
     itidal_loss_mode, allprocesses_loss_mode
                    ! energy loss rates for a given mode and frequency (summed over angles) [R Z3 T-3 ~> W m-2]
@@ -200,7 +204,7 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
   real :: En_initial, Delta_E_check                  ! Energies for debugging [R Z3 T-2 ~> J m-2]
   real :: TKE_Froude_loss_check, TKE_Froude_loss_tot ! Energy losses for debugging [R Z3 T-3 ~> W m-2]
   character(len=160) :: mesg  ! The text of an error message
-  integer :: a, m, fr, i, j, is, ie, js, je, isd, ied, jsd, jed, nAngle, nzm
+  integer :: a, m, fr, i, j, k, is, ie, js, je, isd, ied, jsd, jed, nAngle, nzm
   integer :: id_g, jd_g         ! global (decomp-invar) indices (for debugging)
   type(group_pass_type), save :: pass_test, pass_En
   type(time_type) :: time_end
@@ -211,6 +215,10 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nAngle = CS%NAngle
   I_rho0 = 1.0 / GV%Rho0
   cn_subRO = 1e-100*US%m_s_to_L_T  ! The hard-coded value here might need to increase.
+
+  ! init local arrays
+  drag_scale(:,:) = 0.
+  Ub(:,:,:,:) = 0.
 
   ! Set the wave speeds for the modes, using cg(n) ~ cg(1)/n.**********************
   ! This is wrong, of course, but it works reasonably in some cases.
@@ -360,9 +368,12 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
 
   ! Extract the energy for mixing due to bottom drag-------------------------------
   if (CS%apply_bottom_drag) then
+    do j=jsd,jed ; do i=isd,ied ; htot(i,j) = 0.0 ; enddo ; enddo
+    do k=1,GV%ke ; do j=jsd,jed ; do i=isd,ied
+      htot(i,j) = htot(i,j) + h(i,j,k)
+    enddo ; enddo ; enddo
     do j=jsd,jed ; do i=isd,ied
-      ! Note the 1 m dimensional scale here.  Should this be a parameter?
-      I_D_here = 1.0 / (max(G%bathyT(i,j), 1.0*US%m_to_Z))
+      I_D_here = 1.0 / (max(GV%H_to_Z*htot(i,j), CS%drag_min_depth))
       drag_scale(i,j) = CS%cdrag * sqrt(max(0.0, US%L_to_Z**2*vel_btTide(i,j)**2 + &
                         tot_En(i,j) * I_rho0 * I_D_here)) * I_D_here
     enddo ; enddo
@@ -777,6 +788,9 @@ subroutine refract(En, cn, freq, dt, G, US, NAngle, use_PPMang)
     Flux_E
   real, dimension(SZI_(G),SZJ_(G),1-stencil:NAngle+stencil) :: &
     CFL_ang
+  real, dimension(G%IsdB:G%IedB,G%jsd:G%jed) :: cn_u !< Internal wave group velocity at U-point
+  real, dimension(G%isd:G%ied,G%JsdB:G%JedB) :: cn_v !< Internal wave group velocity at V-point
+  real, dimension(G%isd:G%ied,G%jsd:G%jed) :: cnmask !< Local mask for group velocity
   real :: f2              ! The squared Coriolis parameter [T-2 ~> s-2].
   real :: favg            ! The average Coriolis parameter at a point [T-1 ~> s-1].
   real :: df_dy, df_dx    ! The x- and y- gradients of the Coriolis parameter [T-1 L-1 ~> s-1 m-1].
@@ -787,12 +801,29 @@ subroutine refract(En, cn, freq, dt, G, US, NAngle, use_PPMang)
   real :: cn_subRO        ! A tiny wave speed to prevent division by zero [L T-1 ~> m s-1]
   integer :: is, ie, js, je, asd, aed, na
   integer :: i, j, a
+  real :: wgt1, wgt2
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; na = size(En,3)
   asd = 1-stencil ; aed = NAngle+stencil
 
+  cnmask(:,:) = merge(0., 1., cn(:,:) == 0.)
+
+  do j=js,je ; do i=is-1,ie
+    ! wgt = 0 if local cn == 0, wgt = 0.5 if both contiguous values != 0
+    ! and wgt = 1 if neighbour cn == 0
+    wgt1 = cnmask(i,j) - 0.5 * cnmask(i,j) * cnmask(i+1,j)
+    wgt2 = cnmask(i+1,j) - 0.5 * cnmask(i,j) * cnmask(i+1,j)
+    cn_u(I,j) = wgt1*cn(i,j) + wgt2*cn(i+1,j)
+  enddo ; enddo
+
+  do j=js-1,je ; do i=is,ie
+    wgt1 = cnmask(i,j) - 0.5 * cnmask(i,j) * cnmask(i,j+1)
+    wgt2 = cnmask(i,j+1) - 0.5 * cnmask(i,j) * cnmask(i,j+1)
+    cn_v(i,J) = wgt1*cn(i,j) + wgt2*cn(i,j+1)
+  enddo ; enddo
+
   Ifreq = 1.0 / freq
-  cn_subRO = 1e-100*US%m_s_to_L_T  ! The hard-coded value here might need to increase.
+  cn_subRO = 1e-30*US%m_s_to_L_T
   Angle_size = (8.0*atan(1.0)) / (real(NAngle))
   dt_Angle_size = dt / Angle_size
 
@@ -821,16 +852,12 @@ subroutine refract(En, cn, freq, dt, G, US, NAngle, use_PPMang)
                    (G%CoriolisBu(I,J-1) + G%CoriolisBu(I-1,J)))
       df_dx = 0.5*((G%CoriolisBu(I,J) + G%CoriolisBu(I,J-1)) - &
                     (G%CoriolisBu(I-1,J) + G%CoriolisBu(I-1,J-1))) * G%IdxT(i,j)
-      dlnCn_dx = 0.5*( G%IdxCu(I,j) * (cn(i+1,j) - cn(i,j)) / &
-                       (0.5*(cn(i+1,j) + cn(i,j)) + cn_subRO) + &
-                       G%IdxCu(I-1,j) * (cn(i,j) - cn(i-1,j)) / &
-                       (0.5*(cn(i,j) + cn(i-1,j)) + cn_subRO) )
       df_dy = 0.5*((G%CoriolisBu(I,J) + G%CoriolisBu(I-1,J)) - &
                    (G%CoriolisBu(I,J-1) + G%CoriolisBu(I-1,J-1))) * G%IdyT(i,j)
-      dlnCn_dy = 0.5*( G%IdyCv(i,J) * (cn(i,j+1) - cn(i,j)) / &
-                       (0.5*(cn(i,j+1) + cn(i,j)) + cn_subRO) + &
-                       G%IdyCv(i,J-1) * (cn(i,j) - cn(i,j-1)) / &
-                       (0.5*(cn(i,j) + cn(i,j-1)) + cn_subRO) )
+
+      dlnCn_dx = G%IdxT(i,j) * (cn_u(I,j) - cn_u(I-1,j)) / (0.5 * (cn_u(I,j) + cn_u(I-1,j)) + cn_subRO)
+      dlnCn_dy = G%IdyT(i,j) * (cn_v(i,J) - cn_v(i,J-1)) / (0.5 * (cn_v(i,J) + cn_v(i,J-1)) + cn_subRO)
+
       Kmag2 = (freq**2 - f2) / (cn(i,j)**2 + cn_subRO**2)
       if (Kmag2 > 0.0) then
         I_Kmag = 1.0 / sqrt(Kmag2)
@@ -1389,7 +1416,7 @@ subroutine propagate_x(En, speed_x, Cgx_av, dCgx, dt, G, US, Nangle, CS, LB)
   real, dimension(SZIB_(G)) :: &
     cg_p, cg_m, flux1, flux2
   !real, dimension(SZI_(G),SZJB_(G),Nangle) :: En_m, En_p
-  real, dimension(SZI_(G),SZJB_(G),Nangle) :: &
+  real, dimension(G%isd:G%ied,G%jsd:G%jed,Nangle) :: &
     Fdt_m, Fdt_p! Left and right energy fluxes [J]
   integer :: i, j, k, ish, ieh, jsh, jeh, a
 
@@ -1464,7 +1491,7 @@ subroutine propagate_y(En, speed_y, Cgy_av, dCgy, dt, G, US, Nangle, CS, LB)
   real, dimension(SZI_(G)) :: &
     cg_p, cg_m, flux1, flux2
   !real, dimension(SZI_(G),SZJB_(G),Nangle) :: En_m, En_p
-  real, dimension(SZI_(G),SZJB_(G),Nangle) :: &
+  real, dimension(G%isd:G%ied,G%jsd:G%jed,Nangle) :: &
     Fdt_m, Fdt_p! South and north energy fluxes [J]
   character(len=160) :: mesg  ! The text of an error message
   integer :: i, j, k, ish, ieh, jsh, jeh, a
@@ -1653,9 +1680,16 @@ subroutine reflect(En, NAngle, CS, G, LB)
     angle_i(a) = Angle_size * real(a - 1) ! for a=1 aligned with x-axis
   enddo
 
-  angle_c   = CS%refl_angle
-  part_refl = CS%refl_pref
-  ridge     = CS%refl_dbl
+  ! init local arrays
+  angle_c(:,:) = CS%nullangle
+  part_refl(:,:) = 0.
+  ridge(:,:) = .false.
+
+  do j=jsh,jeh ; do i=ish,ieh
+    angle_c(i,j)   = CS%refl_angle(i,j)
+    part_refl(i,j) = CS%refl_pref(i,j)
+    ridge(i,j)     = CS%refl_dbl(i,j)
+  enddo ; enddo
   En_reflected(:) = 0.0
 
   do j=jsh,jeh ; do i=ish,ieh
@@ -2095,8 +2129,7 @@ end subroutine PPM_limit_pos
 
 !   num_angle = 24
 !   call read_param(param_file, "INTERNAL_TIDE_ANGLES", num_angle)
-!   allocate(CS%En_restart(isd:ied, jsd:jed, num_angle))
-!   CS%En_restart(:,:,:) = 0.0
+!   allocate(CS%En_restart(isd:ied, jsd:jed, num_angle), source=0.0)
 
 !   vd = vardesc("En_restart", &
 !     "The internal wave energy density as a function of (i,j,angle,frequency,mode)", &
@@ -2120,20 +2153,20 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
   ! Local variables
   real                              :: Angle_size ! size of wedges, rad
   real, allocatable                 :: angles(:)  ! orientations of wedge centers, rad
-  real, allocatable, dimension(:,:) :: h2         ! topographic roughness scale, m^2
-  real                              :: kappa_itides, kappa_h2_factor
-                                                  ! characteristic topographic wave number
-                                                  ! and a scaling factor
-  real, allocatable                 :: ridge_temp(:,:)
-                                                  ! array for temporary storage of flags
+  real, dimension(:,:), allocatable :: h2         ! topographic roughness scale squared [Z2 ~> m2]
+  real                              :: kappa_itides ! characteristic topographic wave number [L-1 ~> m-1]
+  real, dimension(:,:), allocatable :: ridge_temp ! array for temporary storage of flags
                                                   ! of cells with double-reflecting ridges
-  logical                           :: use_int_tides, use_temperature
-  real    :: period_1  ! The period of the gravest modeled mode [T ~> s]
+  logical :: use_int_tides, use_temperature
+  real    :: kappa_h2_factor    ! A roughness scaling factor [nondim]
+  real    :: RMS_roughness_frac ! The maximum RMS topographic roughness as a fraction of the
+                                ! nominal ocean depth, or a negative value for no limit [nondim]
+  real    :: period_1           ! The period of the gravest modeled mode [T ~> s]
   integer :: num_angle, num_freq, num_mode, m, fr
   integer :: isd, ied, jsd, jed, a, id_ang, i, j
   type(axes_grp) :: axes_ang
   ! This include declares and sets the variable "version".
-#include "version_variable.h"
+# include "version_variable.h"
   character(len=40)  :: mdl = "MOM_internal_tides" ! This module's name.
   character(len=16), dimension(8) :: freq_name
   character(len=40)  :: var_name
@@ -2174,16 +2207,17 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
   CS%nFreq = num_freq ; CS%nAngle = num_angle ; CS%nMode = num_mode
 
   ! Allocate energy density array
-  allocate(CS%En(isd:ied, jsd:jed, num_angle, num_freq, num_mode))
-  CS%En(:,:,:,:,:) = 0.0
+  allocate(CS%En(isd:ied, jsd:jed, num_angle, num_freq, num_mode), source=0.0)
 
   ! Allocate phase speed array
-  allocate(CS%cp(isd:ied, jsd:jed, num_freq, num_mode))
-  CS%cp(:,:,:,:) = 0.0
+  allocate(CS%cp(isd:ied, jsd:jed, num_freq, num_mode), source=0.0)
 
   ! Allocate and populate frequency array (each a multiple of first for now)
   allocate(CS%frequency(num_freq))
-  call get_param(param_file, mdl, "FIRST_MODE_PERIOD", period_1, units="s", scale=US%s_to_T)
+  call get_param(param_file, mdl, "FIRST_MODE_PERIOD", period_1, &
+                 "The period of the first mode for internal tides", default=44567., &
+                 units="s", scale=US%s_to_T)
+
   do fr=1,num_freq
     CS%frequency(fr) = (8.0*atan(1.0) * (real(fr)) / period_1) ! ADDED BDM
   enddo
@@ -2257,16 +2291,20 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
                  "1st-order upwind advection.  This scheme is highly "//&
                  "continuity solver.  This scheme is highly "//&
                  "diffusive but may be useful for debugging.", default=.false.)
-  call get_param(param_file, mdl, "INTERNAL_TIDE_BACKGROUND_DRAG", &
-                 CS%apply_background_drag, "If true, the internal tide "//&
-                 "ray-tracing advection uses a background drag term as a sink.",&
-                 default=.false.)
+  call get_param(param_file, mdl, "INTERNAL_TIDE_BACKGROUND_DRAG", CS%apply_background_drag, &
+                 "If true, the internal tide ray-tracing advection uses a background drag "//&
+                 "term as a sink.", default=.false.)
   call get_param(param_file, mdl, "INTERNAL_TIDE_QUAD_DRAG", CS%apply_bottom_drag, &
                  "If true, the internal tide ray-tracing advection uses "//&
                  "a quadratic bottom drag term as a sink.", default=.false.)
   call get_param(param_file, mdl, "INTERNAL_TIDE_WAVE_DRAG", CS%apply_wave_drag, &
                  "If true, apply scattering due to small-scale roughness as a sink.", &
                  default=.false.)
+  call get_param(param_file, mdl, "INTERNAL_TIDE_DRAG_MIN_DEPTH", CS%drag_min_depth, &
+                 "The minimum total ocean thickness that will be used in the denominator "//&
+                 "of the quadratic drag terms for internal tides.", &
+                 units="m", default=1.0, scale=US%m_to_Z, do_not_log=.not.CS%apply_bottom_drag)
+  CS%drag_min_depth = MAX(CS%drag_min_depth, GV%H_subroundoff * GV%H_to_Z)
   call get_param(param_file, mdl, "INTERNAL_TIDE_FROUDE_DRAG", CS%apply_Froude_drag, &
                  "If true, apply wave breaking as a sink.", &
                  default=.false.)
@@ -2290,25 +2328,20 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
                "The default is 2pi/10 km, as in St.Laurent et al. 2002.", &
                units="m-1", default=8.e-4*atan(1.0), scale=US%L_to_m)
   call get_param(param_file, mdl, "KAPPA_H2_FACTOR", kappa_h2_factor, &
-               "A scaling factor for the roughness amplitude with n"//&
+               "A scaling factor for the roughness amplitude with "//&
                "INT_TIDE_DISSIPATION.",  units="nondim", default=1.0)
 
   ! Allocate various arrays needed for loss rates
-  allocate(h2(isd:ied,jsd:jed)) ; h2(:,:) = 0.0
-  allocate(CS%TKE_itidal_loss_fixed(isd:ied,jsd:jed))
-    CS%TKE_itidal_loss_fixed = 0.0
-  allocate(CS%TKE_leak_loss(isd:ied,jsd:jed,num_angle,num_freq,num_mode))
-    CS%TKE_leak_loss(:,:,:,:,:) = 0.0
-  allocate(CS%TKE_quad_loss(isd:ied,jsd:jed,num_angle,num_freq,num_mode))
-    CS%TKE_quad_loss(:,:,:,:,:) = 0.0
-  allocate(CS%TKE_itidal_loss(isd:ied,jsd:jed,num_angle,num_freq,num_mode))
-    CS%TKE_itidal_loss(:,:,:,:,:) = 0.0
-  allocate(CS%TKE_Froude_loss(isd:ied,jsd:jed,num_angle,num_freq,num_mode))
-    CS%TKE_Froude_loss(:,:,:,:,:) = 0.0
-  allocate(CS%tot_leak_loss(isd:ied,jsd:jed))   ; CS%tot_leak_loss(:,:) = 0.0
-  allocate(CS%tot_quad_loss(isd:ied,jsd:jed) )  ; CS%tot_quad_loss(:,:) = 0.0
-  allocate(CS%tot_itidal_loss(isd:ied,jsd:jed)) ; CS%tot_itidal_loss(:,:) = 0.0
-  allocate(CS%tot_Froude_loss(isd:ied,jsd:jed)) ; CS%tot_Froude_loss(:,:) = 0.0
+  allocate(h2(isd:ied,jsd:jed), source=0.0)
+  allocate(CS%TKE_itidal_loss_fixed(isd:ied,jsd:jed), source=0.0)
+  allocate(CS%TKE_leak_loss(isd:ied,jsd:jed,num_angle,num_freq,num_mode), source=0.0)
+  allocate(CS%TKE_quad_loss(isd:ied,jsd:jed,num_angle,num_freq,num_mode), source=0.0)
+  allocate(CS%TKE_itidal_loss(isd:ied,jsd:jed,num_angle,num_freq,num_mode), source=0.0)
+  allocate(CS%TKE_Froude_loss(isd:ied,jsd:jed,num_angle,num_freq,num_mode), source=0.0)
+  allocate(CS%tot_leak_loss(isd:ied,jsd:jed), source=0.0)
+  allocate(CS%tot_quad_loss(isd:ied,jsd:jed), source=0.0)
+  allocate(CS%tot_itidal_loss(isd:ied,jsd:jed), source=0.0)
+  allocate(CS%tot_Froude_loss(isd:ied,jsd:jed), source=0.0)
 
   ! Compute the fixed part of the bottom drag loss from baroclinic modes
   call get_param(param_file, mdl, "H2_FILE", h2_file, &
@@ -2317,10 +2350,18 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
           fail_if_missing=.true.)
   filename = trim(CS%inputdir) // trim(h2_file)
   call log_param(param_file, mdl, "INPUTDIR/H2_FILE", filename)
-  call MOM_read_data(filename, 'h2', h2, G%domain, scale=US%m_to_Z)
+  call get_param(param_file, mdl, "INTERNAL_TIDE_ROUGHNESS_FRAC", RMS_roughness_frac, &
+                 "The maximum RMS topographic roughness as a fraction of the nominal ocean depth, "//&
+                 "or a negative value for no limit.",  units="nondim", default=0.1)
+
+  call MOM_read_data(filename, 'h2', h2, G%domain, scale=US%m_to_Z**2)
   do j=G%jsc,G%jec ; do i=G%isc,G%iec
-    ! Restrict rms topo to 10 percent of column depth.
-    h2(i,j) = min(0.01*(G%bathyT(i,j))**2, h2(i,j))
+    ! Restrict RMS topographic roughness to a fraction (10 percent by default) of the column depth.
+    if (RMS_roughness_frac >= 0.0) then
+      h2(i,j) = max(min((RMS_roughness_frac*(G%bathyT(i,j)+G%Z_ref))**2, h2(i,j)), 0.0)
+    else
+      h2(i,j) = max(h2(i,j), 0.0)
+    endif
     ! Compute the fixed part; units are [R L-2 Z3 ~> kg m-2] here
     ! will be multiplied by N and the squared near-bottom velocity to get into [R Z3 T-3 ~> W m-2]
     CS%TKE_itidal_loss_fixed(i,j) = 0.5*kappa_h2_factor*GV%Rho0 * US%L_to_Z*kappa_itides * h2(i,j)
@@ -2334,7 +2375,7 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
                "the coastline/ridge/shelf with respect to the equator.", &
                fail_if_missing=.false., default='')
   filename = trim(CS%inputdir) // trim(refl_angle_file)
-  allocate(CS%refl_angle(isd:ied,jsd:jed)) ; CS%refl_angle(:,:) = CS%nullangle
+  allocate(CS%refl_angle(isd:ied,jsd:jed), source=CS%nullangle)
   if (file_exists(filename, G%domain)) then
     call log_param(param_file, mdl, "INPUTDIR/REFL_ANGLE_FILE", filename)
     call MOM_read_data(filename, 'refl_angle', CS%refl_angle, G%domain)
@@ -2353,7 +2394,7 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
                "The path to the file containing the reflection coefficients.", &
                fail_if_missing=.false., default='')
   filename = trim(CS%inputdir) // trim(refl_pref_file)
-  allocate(CS%refl_pref(isd:ied,jsd:jed)) ; CS%refl_pref(:,:) = 1.0
+  allocate(CS%refl_pref(isd:ied,jsd:jed), source=1.0)
   if (file_exists(filename, G%domain)) then
     call log_param(param_file, mdl, "INPUTDIR/REFL_PREF_FILE", filename)
     call MOM_read_data(filename, 'refl_pref', CS%refl_pref, G%domain)
@@ -2365,7 +2406,7 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
   call pass_var(CS%refl_pref,G%domain)
 
   ! Tag reflection cells with partial reflection (done here for speed)
-  allocate(CS%refl_pref_logical(isd:ied,jsd:jed)) ; CS%refl_pref_logical(:,:) = .false.
+  allocate(CS%refl_pref_logical(isd:ied,jsd:jed), source=.false.)
   do j=jsd,jed
     do i=isd,ied
       ! flag cells with partial reflection
@@ -2381,7 +2422,7 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
                "The path to the file containing the double-reflective ridge tags.", &
                fail_if_missing=.false., default='')
   filename = trim(CS%inputdir) // trim(refl_dbl_file)
-  allocate(ridge_temp(isd:ied,jsd:jed)) ; ridge_temp(:,:) = 0.0
+  allocate(ridge_temp(isd:ied,jsd:jed), source=0.0)
   if (file_exists(filename, G%domain)) then
     call log_param(param_file, mdl, "INPUTDIR/REFL_DBL_FILE", filename)
     call MOM_read_data(filename, 'refl_dbl', ridge_temp, G%domain)
@@ -2390,7 +2431,7 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
                                                    "REFL_DBL_FILE: "//trim(filename)//" not found")
   endif
   call pass_var(ridge_temp,G%domain)
-  allocate(CS%refl_dbl(isd:ied,jsd:jed)) ; CS%refl_dbl(:,:) = .false.
+  allocate(CS%refl_dbl(isd:ied,jsd:jed), source=.false.)
   do i=isd,ied ; do j=jsd,jed
     if (ridge_temp(i,j) == 1) then; CS%refl_dbl(i,j) = .true.
     else ; CS%refl_dbl(i,j) = .false. ; endif
@@ -2477,21 +2518,21 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
                 Time, 'Internal tide energy loss summed over all processes', &
                 'W m-2', conversion=US%RZ3_T3_to_W_m2)
 
-  allocate(CS%id_En_mode(CS%nFreq,CS%nMode)) ; CS%id_En_mode(:,:) = -1
-  allocate(CS%id_En_ang_mode(CS%nFreq,CS%nMode)) ; CS%id_En_ang_mode(:,:) = -1
-  allocate(CS%id_itidal_loss_mode(CS%nFreq,CS%nMode)) ; CS%id_itidal_loss_mode(:,:) = -1
-  allocate(CS%id_allprocesses_loss_mode(CS%nFreq,CS%nMode)) ; CS%id_allprocesses_loss_mode(:,:) = -1
-  allocate(CS%id_itidal_loss_ang_mode(CS%nFreq,CS%nMode)) ; CS%id_itidal_loss_ang_mode(:,:) = -1
-  allocate(CS%id_Ub_mode(CS%nFreq,CS%nMode)) ; CS%id_Ub_mode(:,:) = -1
-  allocate(CS%id_cp_mode(CS%nFreq,CS%nMode)) ; CS%id_cp_mode(:,:) = -1
+  allocate(CS%id_En_mode(CS%nFreq,CS%nMode), source=-1)
+  allocate(CS%id_En_ang_mode(CS%nFreq,CS%nMode), source=-1)
+  allocate(CS%id_itidal_loss_mode(CS%nFreq,CS%nMode), source=-1)
+  allocate(CS%id_allprocesses_loss_mode(CS%nFreq,CS%nMode), source=-1)
+  allocate(CS%id_itidal_loss_ang_mode(CS%nFreq,CS%nMode), source=-1)
+  allocate(CS%id_Ub_mode(CS%nFreq,CS%nMode), source=-1)
+  allocate(CS%id_cp_mode(CS%nFreq,CS%nMode), source=-1)
 
-  allocate(angles(CS%NAngle)) ; angles(:) = 0.0
+  allocate(angles(CS%NAngle), source=0.0)
   Angle_size = (8.0*atan(1.0)) / (real(num_angle))
   do a=1,num_angle ; angles(a) = (real(a) - 1) * Angle_size ; enddo
 
   id_ang = diag_axis_init("angle", angles, "Radians", "N", "Angular Orienation of Fluxes")
-  call define_axes_group(diag, (/ diag%axesT1%handles(1), diag%axesT1%handles(2), id_ang /), axes_ang)
-
+  call define_axes_group(diag, (/ diag%axesT1%handles(1), diag%axesT1%handles(2), id_ang /), &
+                         axes_ang, is_h_point=.true.)
   do fr=1,CS%nFreq ; write(freq_name(fr), '("freq",i1)') fr ; enddo
   do m=1,CS%nMode ; do fr=1,CS%nFreq
     ! Register 2-D energy density (summed over angles) for each freq and mode

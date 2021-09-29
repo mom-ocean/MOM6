@@ -13,7 +13,6 @@ algorithm.
     :maxdepth: 2
 
     api/generated/pages/Discrete_Grids
-    api/generated/pages/Finite_Difference_Operators
     api/generated/pages/PPM
     api/generated/pages/Discrete_Coriolis
     api/generated/pages/Discrete_PG

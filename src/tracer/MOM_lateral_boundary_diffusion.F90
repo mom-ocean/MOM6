@@ -626,9 +626,9 @@ subroutine fluxes_layer_method(boundary, ke, hbl_L, hbl_R, h_L, h_R, phi_L, phi_
   nk = SIZE(dz_top)
 
   ! allocate arrays
-  allocate(phi_L_z(nk)); phi_L_z(:) = 0.0
-  allocate(phi_R_z(nk)); phi_R_z(:) = 0.0
-  allocate(F_layer_z(nk)); F_layer_z(:) = 0.0
+  allocate(phi_L_z(nk), source=0.0)
+  allocate(phi_R_z(nk), source=0.0)
+  allocate(F_layer_z(nk), source=0.0)
 
   ! remap tracer to dz_top
   call remapping_core_h(CS%remap_cs, ke, h_L(:), phi_L(:), nk, dz_top(:), phi_L_z(:))

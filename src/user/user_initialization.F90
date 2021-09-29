@@ -247,7 +247,7 @@ end subroutine write_user_log
 !!  - u - Zonal velocity [Z T-1 ~> m s-1].
 !!  - v - Meridional velocity [Z T-1 ~> m s-1].
 !!  - h - Layer thickness [H ~> m or kg m-2].  (Must be positive.)
-!!  - G%bathyT - Basin depth [Z ~> m].  (Must be positive.)
+!!  - G%bathyT - Basin depth [Z ~> m].
 !!  - G%CoriolisBu - The Coriolis parameter [T-1 ~> s-1].
 !!  - GV%g_prime - The reduced gravity at each interface [L2 Z-1 T-2 ~> m s-2].
 !!  - GV%Rlay - Layer potential density (coordinate variable) [R ~> kg m-3].

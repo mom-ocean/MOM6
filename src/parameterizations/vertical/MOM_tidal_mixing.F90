@@ -484,16 +484,16 @@ logical function tidal_mixing_init(Time, G, GV, US, param_file, diag, CS)
                  units="nondim", default=0.1)
 
     do j=js,je ; do i=is,ie
-      if (G%bathyT(i,j) < CS%min_zbot_itides) CS%mask_itidal(i,j) = 0.0
+      if (G%bathyT(i,j)+G%Z_ref < CS%min_zbot_itides) CS%mask_itidal(i,j) = 0.0
       CS%tideamp(i,j) = CS%tideamp(i,j) * CS%mask_itidal(i,j) * G%mask2dT(i,j)
 
       ! Restrict rms topo to a fraction (often 10 percent) of the column depth.
       if (CS%answers_2018 .and. (max_frac_rough >= 0.0)) then
-        hamp = min(max_frac_rough*G%bathyT(i,j), sqrt(CS%h2(i,j)))
+        hamp = min(max_frac_rough*(G%bathyT(i,j)+G%Z_ref), sqrt(CS%h2(i,j)))
         CS%h2(i,j) = hamp*hamp
       else
         if (max_frac_rough >= 0.0) &
-          CS%h2(i,j) = min((max_frac_rough*G%bathyT(i,j))**2, CS%h2(i,j))
+          CS%h2(i,j) = min((max_frac_rough*(G%bathyT(i,j)+G%Z_ref))**2, CS%h2(i,j))
       endif
 
       utide = CS%tideamp(i,j)
@@ -1426,76 +1426,46 @@ subroutine setup_tidal_diagnostics(G, GV, CS)
   isd = G%isd; ied = G%ied; jsd = G%jsd; jed = G%jed; nz = GV%ke
   dd => CS%dd
 
-  if ((CS%id_Kd_itidal > 0) .or. (CS%id_Kd_Itidal_work > 0)) then
-    allocate(dd%Kd_itidal(isd:ied,jsd:jed,nz+1)) ; dd%Kd_itidal(:,:,:) = 0.0
-  endif
-  if ((CS%id_Kd_lowmode > 0) .or. (CS%id_Kd_lowmode_work > 0)) then
-    allocate(dd%Kd_lowmode(isd:ied,jsd:jed,nz+1)) ; dd%Kd_lowmode(:,:,:) = 0.0
-  endif
-  if ( (CS%id_Fl_itidal > 0) ) then
-    allocate(dd%Fl_itidal(isd:ied,jsd:jed,nz+1)) ; dd%Fl_itidal(:,:,:) = 0.0
-  endif
-  if ( (CS%id_Fl_lowmode > 0) ) then
-    allocate(dd%Fl_lowmode(isd:ied,jsd:jed,nz+1)) ; dd%Fl_lowmode(:,:,:) = 0.0
-  endif
-  if ( (CS%id_Polzin_decay_scale > 0) ) then
-    allocate(dd%Polzin_decay_scale(isd:ied,jsd:jed))
-    dd%Polzin_decay_scale(:,:) = 0.0
-  endif
-  if ( (CS%id_N2_bot > 0) ) then
-    allocate(dd%N2_bot(isd:ied,jsd:jed)) ; dd%N2_bot(:,:) = 0.0
-  endif
-  if ( (CS%id_N2_meanz > 0) ) then
-    allocate(dd%N2_meanz(isd:ied,jsd:jed)) ; dd%N2_meanz(:,:) = 0.0
-  endif
-  if ( (CS%id_Polzin_decay_scale_scaled > 0) ) then
-    allocate(dd%Polzin_decay_scale_scaled(isd:ied,jsd:jed))
-    dd%Polzin_decay_scale_scaled(:,:) = 0.0
-  endif
-  if ((CS%id_Kd_Niku > 0) .or. (CS%id_Kd_Niku_work > 0)) then
-    allocate(dd%Kd_Niku(isd:ied,jsd:jed,nz+1)) ; dd%Kd_Niku(:,:,:) = 0.0
-  endif
-  if (CS%id_Kd_Niku_work > 0) then
-    allocate(dd%Kd_Niku_work(isd:ied,jsd:jed,nz)) ; dd%Kd_Niku_work(:,:,:) = 0.0
-  endif
-  if (CS%id_Kd_Itidal_work > 0) then
-    allocate(dd%Kd_Itidal_work(isd:ied,jsd:jed,nz))
-    dd%Kd_Itidal_work(:,:,:) = 0.0
-  endif
-  if (CS%id_Kd_Lowmode_Work > 0) then
-    allocate(dd%Kd_Lowmode_Work(isd:ied,jsd:jed,nz))
-    dd%Kd_Lowmode_Work(:,:,:) = 0.0
-  endif
-  if (CS%id_TKE_itidal > 0) then
-    allocate(dd%TKE_Itidal_used(isd:ied,jsd:jed)) ; dd%TKE_Itidal_used(:,:) = 0.
-  endif
+  if ((CS%id_Kd_itidal > 0) .or. (CS%id_Kd_Itidal_work > 0)) &
+    allocate(dd%Kd_itidal(isd:ied,jsd:jed,nz+1), source=0.0)
+  if ((CS%id_Kd_lowmode > 0) .or. (CS%id_Kd_lowmode_work > 0)) &
+    allocate(dd%Kd_lowmode(isd:ied,jsd:jed,nz+1), source=0.0)
+  if (CS%id_Fl_itidal > 0) allocate(dd%Fl_itidal(isd:ied,jsd:jed,nz+1), source=0.0)
+  if (CS%id_Fl_lowmode > 0) allocate(dd%Fl_lowmode(isd:ied,jsd:jed,nz+1), source=0.0)
+  if (CS%id_Polzin_decay_scale > 0) allocate(dd%Polzin_decay_scale(isd:ied,jsd:jed), source=0.0)
+  if (CS%id_N2_bot > 0) allocate(dd%N2_bot(isd:ied,jsd:jed), source=0.0)
+  if (CS%id_N2_meanz > 0) allocate(dd%N2_meanz(isd:ied,jsd:jed), source=0.0)
+  if (CS%id_Polzin_decay_scale_scaled > 0) &
+    allocate(dd%Polzin_decay_scale_scaled(isd:ied,jsd:jed), source=0.0)
+  if ((CS%id_Kd_Niku > 0) .or. (CS%id_Kd_Niku_work > 0)) &
+    allocate(dd%Kd_Niku(isd:ied,jsd:jed,nz+1), source=0.0)
+  if (CS%id_Kd_Niku_work > 0) allocate(dd%Kd_Niku_work(isd:ied,jsd:jed,nz), source=0.0)
+  if (CS%id_Kd_Itidal_work > 0) allocate(dd%Kd_Itidal_work(isd:ied,jsd:jed,nz), source=0.0)
+  if (CS%id_Kd_Lowmode_Work > 0) allocate(dd%Kd_Lowmode_Work(isd:ied,jsd:jed,nz), source=0.0)
+  if (CS%id_TKE_itidal > 0) allocate(dd%TKE_Itidal_used(isd:ied,jsd:jed), source=0.)
   ! additional diags for CVMix
-  if (CS%id_N2_int > 0) then
-    allocate(dd%N2_int(isd:ied,jsd:jed,nz+1)) ; dd%N2_int(:,:,:) = 0.0
-  endif
+  if (CS%id_N2_int > 0) allocate(dd%N2_int(isd:ied,jsd:jed,nz+1), source=0.0)
   if (CS%id_Simmons_coeff > 0) then
     if (CS%CVMix_tidal_scheme .ne. SIMMONS) then
       call MOM_error(FATAL, "setup_tidal_diagnostics: Simmons_coeff diagnostics is available "//&
                             "only when CVMix_tidal_scheme is Simmons")
     endif
-    allocate(dd%Simmons_coeff_2d(isd:ied,jsd:jed)) ; dd%Simmons_coeff_2d(:,:) = 0.0
+    allocate(dd%Simmons_coeff_2d(isd:ied,jsd:jed), source=0.0)
   endif
-  if (CS%id_vert_dep > 0) then
-    allocate(dd%vert_dep_3d(isd:ied,jsd:jed,nz+1)) ; dd%vert_dep_3d(:,:,:) = 0.0
-  endif
+  if (CS%id_vert_dep > 0) allocate(dd%vert_dep_3d(isd:ied,jsd:jed,nz+1), source=0.0)
   if (CS%id_Schmittner_coeff > 0) then
     if (CS%CVMix_tidal_scheme .ne. SCHMITTNER) then
       call MOM_error(FATAL, "setup_tidal_diagnostics: Schmittner_coeff diagnostics is available "//&
                             "only when CVMix_tidal_scheme is Schmittner.")
     endif
-    allocate(dd%Schmittner_coeff_3d(isd:ied,jsd:jed,nz)) ; dd%Schmittner_coeff_3d(:,:,:) = 0.0
+    allocate(dd%Schmittner_coeff_3d(isd:ied,jsd:jed,nz), source=0.0)
   endif
   if (CS%id_tidal_qe_md > 0) then
     if (CS%CVMix_tidal_scheme .ne. SCHMITTNER) then
       call MOM_error(FATAL, "setup_tidal_diagnostics: tidal_qe_md diagnostics is available "//&
                             "only when CVMix_tidal_scheme is Schmittner.")
     endif
-    allocate(dd%tidal_qe_md(isd:ied,jsd:jed,nz)) ; dd%tidal_qe_md(:,:,:) = 0.0
+    allocate(dd%tidal_qe_md(isd:ied,jsd:jed,nz), source=0.0)
   endif
 end subroutine setup_tidal_diagnostics
 
@@ -1678,7 +1648,7 @@ subroutine read_tidal_constituents(G, US, tidal_energy_file, CS)
     CS%h_src(k) = US%Z_to_m*(z_t(k)-z_w(k))*2.0
     ! form tidal_qe_3d_in from weighted tidal constituents
     do j=js,je ; do i=is,ie
-      if ((z_t(k) <= G%bathyT(i,j)) .and. (z_w(k) > CS%tidal_diss_lim_tc)) &
+      if ((z_t(k) <= G%bathyT(i,j) + G%Z_ref) .and. (z_w(k) > CS%tidal_diss_lim_tc)) &
         CS%tidal_qe_3d_in(i,j,k) = C1_3*tc_m2(i,j,k) + C1_3*tc_s2(i,j,k) + &
                 tidal_qk1(i,j)*tc_k1(i,j,k) + tidal_qo1(i,j)*tc_o1(i,j,k)
     enddo ; enddo
@@ -1692,7 +1662,7 @@ subroutine read_tidal_constituents(G, US, tidal_energy_file, CS)
   !      do k=50,nz_in(1)
   !          write(1905,*) i,j,k
   !          write(1905,*) CS%tidal_qe_3d_in(i,j,k), tc_m2(i,j,k)
-  !          write(1905,*) z_t(k), G%bathyT(i,j), z_w(k),CS%tidal_diss_lim_tc
+  !          write(1905,*) z_t(k), G%bathyT(i,j)+G%Z_ref, z_w(k),CS%tidal_diss_lim_tc
   !      end do
   !    endif
   !  enddo
@@ -1707,7 +1677,7 @@ subroutine read_tidal_constituents(G, US, tidal_energy_file, CS)
   !! collapse 3D q*E to 2D q*E
   !CS%tidal_qe_2d(:,:) = 0.0
   !do k=1,nz_in(1) ; do j=js,je ; do i=is,ie
-  !  if (z_t(k) <= G%bathyT(i,j)) &
+  !  if (z_t(k) <= G%bathyT(i,j) + G%Z_ref) &
   !    CS%tidal_qe_2d(i,j) = CS%tidal_qe_2d(i,j) + CS%tidal_qe_3d_in(i,j,k)
   !enddo ; enddo ; enddo
 

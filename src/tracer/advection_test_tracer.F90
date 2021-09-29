@@ -127,7 +127,7 @@ function register_advection_test_tracer(HI, GV, param_file, CS, tr_Reg, restart_
                  "restart files of a restarted run.", default=.false.)
 
 
-  allocate(CS%tr(isd:ied,jsd:jed,nz,NTR)) ; CS%tr(:,:,:,:) = 0.0
+  allocate(CS%tr(isd:ied,jsd:jed,nz,NTR), source=0.0)
 
   do m=1,NTR
     if (m < 10) then ; write(name,'("tr",I1.1)') m
@@ -357,6 +357,8 @@ function advection_test_stock(h, stocks, G, GV, CS, names, units, stock_index)
   integer, optional,                  intent(in)    :: stock_index !< the coded index of a specific stock being sought.
   integer                                           :: advection_test_stock !< the number of stocks calculated here.
 
+  ! Local variables
+  real :: stock_scale ! The dimensional scaling factor to convert stocks to kg [kg H-1 L-2 ~> kg m-3 or nondim]
   integer :: i, j, k, is, ie, js, je, nz, m
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
@@ -371,14 +373,14 @@ function advection_test_stock(h, stocks, G, GV, CS, names, units, stock_index)
     return
   endif ; endif
 
+  stock_scale = G%US%L_to_m**2 * GV%H_to_kg_m2
   do m=1,CS%ntr
     call query_vardesc(CS%tr_desc(m), name=names(m), units=units(m), caller="advection_test_stock")
     stocks(m) = 0.0
     do k=1,nz ; do j=js,je ; do i=is,ie
-      stocks(m) = stocks(m) + CS%tr(i,j,k,m) * &
-                             (G%mask2dT(i,j) * G%US%L_to_m**2*G%areaT(i,j) * h(i,j,k))
+      stocks(m) = stocks(m) + CS%tr(i,j,k,m) * (G%mask2dT(i,j) * G%areaT(i,j) * h(i,j,k))
     enddo ; enddo ; enddo
-    stocks(m) = GV%H_to_kg_m2 * stocks(m)
+    stocks(m) = stock_scale * stocks(m)
   enddo
   advection_test_stock = CS%ntr
 

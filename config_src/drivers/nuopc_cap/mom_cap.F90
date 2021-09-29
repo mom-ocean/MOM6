@@ -28,12 +28,12 @@ use MOM_file_parser,          only: get_param, log_version, param_file_type, clo
 use MOM_get_input,            only: get_MOM_input, directories
 use MOM_domains,              only: pass_var
 use MOM_error_handler,        only: MOM_error, FATAL, is_root_pe
-use MOM_ocean_model_nuopc,    only: ice_ocean_boundary_type
 use MOM_grid,                 only: ocean_grid_type, get_global_grid_size
+use MOM_ocean_model_nuopc,    only: ice_ocean_boundary_type
 use MOM_ocean_model_nuopc,    only: ocean_model_restart, ocean_public_type, ocean_state_type
-use MOM_ocean_model_nuopc,    only: ocean_model_init_sfc
+use MOM_ocean_model_nuopc,    only: ocean_model_init_sfc, ocean_model_flux_init
 use MOM_ocean_model_nuopc,    only: ocean_model_init, update_ocean_model, ocean_model_end
-use MOM_ocean_model_nuopc,    only: get_ocean_grid, get_eps_omesh
+use MOM_ocean_model_nuopc,    only: get_ocean_grid, get_eps_omesh, query_ocean_state
 use MOM_cap_time,             only: AlarmInit
 use MOM_cap_methods,          only: mom_import, mom_export, mom_set_geomtype, mod2med_areacor
 use MOM_cap_methods,          only: med2mod_areacor, state_diagnose
@@ -421,6 +421,8 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
   character(len=64)                      :: logmsg
   logical                                :: isPresent, isPresentDiro, isPresentLogfile, isSet
   logical                                :: existflag
+  logical                                :: use_waves  ! If true, the wave modules are active.
+  character(len=40)                      :: wave_method ! Wave coupling method.
   integer                                :: userRc
   integer                                :: localPet
   integer                                :: localPeCount
@@ -649,6 +651,10 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
   ocean_public%is_ocean_pe = .true.
   call ocean_model_init(ocean_public, ocean_state, time0, time_start, input_restart_file=trim(restartfiles))
 
+  ! GMM, this call is not needed for NCAR. Check with EMC.
+  ! If this can be deleted, perhaps we should also delete ocean_model_flux_init
+  call ocean_model_flux_init(ocean_state)
+
   call ocean_model_init_sfc(ocean_state, ocean_public)
 
   call mpp_get_compute_domain(ocean_public%domain, isc, iec, jsc, jec)
@@ -668,6 +674,8 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
              Ice_ocean_boundary% seaice_melt_heat (isc:iec,jsc:jec),&
              Ice_ocean_boundary% seaice_melt (isc:iec,jsc:jec),     &
              Ice_ocean_boundary% mi (isc:iec,jsc:jec),              &
+             Ice_ocean_boundary% ice_fraction (isc:iec,jsc:jec),    &
+             Ice_ocean_boundary% u10_sqr (isc:iec,jsc:jec),         &
              Ice_ocean_boundary% p (isc:iec,jsc:jec),               &
              Ice_ocean_boundary% lrunoff_hflx (isc:iec,jsc:jec),    &
              Ice_ocean_boundary% frunoff_hflx (isc:iec,jsc:jec),    &
@@ -689,25 +697,35 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
   Ice_ocean_boundary%seaice_melt     = 0.0
   Ice_ocean_boundary%seaice_melt_heat= 0.0
   Ice_ocean_boundary%mi              = 0.0
+  Ice_ocean_boundary%ice_fraction    = 0.0
+  Ice_ocean_boundary%u10_sqr         = 0.0
   Ice_ocean_boundary%p               = 0.0
   Ice_ocean_boundary%lrunoff_hflx    = 0.0
   Ice_ocean_boundary%frunoff_hflx    = 0.0
   Ice_ocean_boundary%lrunoff         = 0.0
   Ice_ocean_boundary%frunoff         = 0.0
 
-  if (ocean_state%use_waves) then
-    Ice_ocean_boundary%num_stk_bands=ocean_state%Waves%NumBands
-    allocate ( Ice_ocean_boundary% ustk0 (isc:iec,jsc:jec),         &
-               Ice_ocean_boundary% vstk0 (isc:iec,jsc:jec),         &
-               Ice_ocean_boundary% ustkb (isc:iec,jsc:jec,Ice_ocean_boundary%num_stk_bands), &
-               Ice_ocean_boundary% vstkb (isc:iec,jsc:jec,Ice_ocean_boundary%num_stk_bands), &
-               Ice_ocean_boundary%stk_wavenumbers (Ice_ocean_boundary%num_stk_bands))
-    Ice_ocean_boundary%ustk0           = 0.0
-    Ice_ocean_boundary%vstk0           = 0.0
-    Ice_ocean_boundary%stk_wavenumbers = ocean_state%Waves%WaveNum_Cen
-    Ice_ocean_boundary%ustkb           = 0.0
-    Ice_ocean_boundary%vstkb           = 0.0
+  call query_ocean_state(ocean_state, use_waves=use_waves, wave_method=wave_method)
+  if (use_waves) then
+    call query_ocean_state(ocean_state, NumWaveBands=Ice_ocean_boundary%num_stk_bands)
+    if (wave_method == "EFACTOR") then
+      allocate( Ice_ocean_boundary%lamult(isc:iec,jsc:jec) )
+      Ice_ocean_boundary%lamult          = 0.0
+    else
+      allocate ( Ice_ocean_boundary% ustk0 (isc:iec,jsc:jec),         &
+                 Ice_ocean_boundary% vstk0 (isc:iec,jsc:jec),         &
+                 Ice_ocean_boundary% ustkb (isc:iec,jsc:jec,Ice_ocean_boundary%num_stk_bands), &
+                 Ice_ocean_boundary% vstkb (isc:iec,jsc:jec,Ice_ocean_boundary%num_stk_bands), &
+                 Ice_ocean_boundary%stk_wavenumbers (Ice_ocean_boundary%num_stk_bands))
+      Ice_ocean_boundary%ustk0           = 0.0
+      Ice_ocean_boundary%vstk0           = 0.0
+      call query_ocean_state(ocean_state, WaveNumbers=Ice_ocean_boundary%stk_wavenumbers, unscale=.true.)
+      Ice_ocean_boundary%ustkb           = 0.0
+      Ice_ocean_boundary%vstkb           = 0.0
+    endif
   endif
+  ! Consider adding this:
+  ! if (.not.use_waves) Ice_ocean_boundary%num_stk_bands = 0
 
   ocean_internalstate%ptr%ocean_state_type_ptr => ocean_state
   call ESMF_GridCompSetInternalState(gcomp, ocean_internalstate, rc)
@@ -718,18 +736,6 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
    call fld_list_add(fldsFrOcn_num, fldsFrOcn, trim(scalar_field_name), "will_provide")
   end if
 
-  if (cesm_coupled) then
-    !call fld_list_add(fldsToOcn_num, fldsToOcn, "Sw_lamult"                 , "will provide")
-    !call fld_list_add(fldsToOcn_num, fldsToOcn, "Sw_ustokes"                , "will provide")
-    !call fld_list_add(fldsToOcn_num, fldsToOcn, "Sw_vstokes"                , "will provide")
-    !call fld_list_add(fldsToOcn_num, fldsToOcn, "Sw_hstokes"                , "will provide")
-    !call fld_list_add(fldsToOcn_num, fldsToOcn, "Fioi_melth"                , "will provide")
-    !call fld_list_add(fldsToOcn_num, fldsToOcn, "Fioi_meltw"                , "will provide")
-    !call fld_list_add(fldsFrOcn_num, fldsFrOcn, "So_fswpen"                 , "will provide")
-  else
-    !call fld_list_add(fldsToOcn_num, fldsToOcn, "mass_of_overlying_sea_ice" , "will provide")
-    !call fld_list_add(fldsFrOcn_num, fldsFrOcn, "sea_lev"                   , "will provide")
-  endif
 
   !--------- import fields -------------
   call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_salt_rate"             , "will provide") ! from ice
@@ -747,21 +753,27 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
   call fld_list_add(fldsToOcn_num, fldsToOcn, "inst_pres_height_surface"   , "will provide")
   call fld_list_add(fldsToOcn_num, fldsToOcn, "Foxx_rofl"                  , "will provide") !-> liquid runoff
   call fld_list_add(fldsToOcn_num, fldsToOcn, "Foxx_rofi"                  , "will provide") !-> ice runoff
+  call fld_list_add(fldsToOcn_num, fldsToOcn, "Si_ifrac"                   , "will provide") !-> ice fraction
+  call fld_list_add(fldsToOcn_num, fldsToOcn, "So_duu10n"                  , "will provide") !-> wind^2 at 10m
   call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_fresh_water_to_ocean_rate", "will provide")
   call fld_list_add(fldsToOcn_num, fldsToOcn, "net_heat_flx_to_ocn"        , "will provide")
   !These are not currently used and changing requires a nuopc dictionary change
   !call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_runoff_heat_flx"        , "will provide")
   !call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_calving_heat_flx"       , "will provide")
-  if (ocean_state%use_waves) then
-    if (Ice_ocean_boundary%num_stk_bands > 3) then
-      call MOM_error(FATAL, "Number of Stokes Bands > 3, NUOPC cap not set up for this")
+  if (use_waves) then
+    if (wave_method == "EFACTOR") then
+      call fld_list_add(fldsToOcn_num, fldsToOcn, "Sw_lamult"                 , "will provide")
+    else
+      if (Ice_ocean_boundary%num_stk_bands > 3) then
+        call MOM_error(FATAL, "Number of Stokes Bands > 3, NUOPC cap not set up for this")
+      endif
+      call fld_list_add(fldsToOcn_num, fldsToOcn, "eastward_partitioned_stokes_drift_1" , "will provide")
+      call fld_list_add(fldsToOcn_num, fldsToOcn, "northward_partitioned_stokes_drift_1", "will provide")
+      call fld_list_add(fldsToOcn_num, fldsToOcn, "eastward_partitioned_stokes_drift_2" , "will provide")
+      call fld_list_add(fldsToOcn_num, fldsToOcn, "northward_partitioned_stokes_drift_2", "will provide")
+      call fld_list_add(fldsToOcn_num, fldsToOcn, "eastward_partitioned_stokes_drift_3" , "will provide")
+      call fld_list_add(fldsToOcn_num, fldsToOcn, "northward_partitioned_stokes_drift_3", "will provide")
     endif
-    call fld_list_add(fldsToOcn_num, fldsToOcn, "eastward_partitioned_stokes_drift_1" , "will provide")
-    call fld_list_add(fldsToOcn_num, fldsToOcn, "northward_partitioned_stokes_drift_1", "will provide")
-    call fld_list_add(fldsToOcn_num, fldsToOcn, "eastward_partitioned_stokes_drift_2" , "will provide")
-    call fld_list_add(fldsToOcn_num, fldsToOcn, "northward_partitioned_stokes_drift_2", "will provide")
-    call fld_list_add(fldsToOcn_num, fldsToOcn, "eastward_partitioned_stokes_drift_3" , "will provide")
-    call fld_list_add(fldsToOcn_num, fldsToOcn, "northward_partitioned_stokes_drift_3", "will provide")
   endif
 
   !--------- export fields -------------
@@ -1099,7 +1111,7 @@ subroutine InitializeRealize(gcomp, importState, exportState, clock, rc)
            k = k + 1 ! Increment position within gindex
            if (mask(k) /= 0) then
               mesh_areas(k) = dataPtr_mesh_areas(k)
-              model_areas(k) = ocean_grid%AreaT(i,j) / ocean_grid%Rad_Earth**2
+              model_areas(k) = ocean_grid%US%L_to_m**2 * ocean_grid%AreaT(i,j) / ocean_grid%Rad_Earth**2
               mod2med_areacor(k) = model_areas(k) / mesh_areas(k)
               med2mod_areacor(k) = mesh_areas(k) / model_areas(k)
            end if

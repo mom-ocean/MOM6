@@ -764,7 +764,7 @@ subroutine set_masks_for_axes(G, diag_cs)
       ! Level/layer h-points in diagnostic coordinate
       axes => diag_cs%remap_axesTL(c)
       nk = axes%nz
-      allocate( axes%mask3d(G%isd:G%ied,G%jsd:G%jed,nk) ) ; axes%mask3d(:,:,:) = 0.
+      allocate( axes%mask3d(G%isd:G%ied,G%jsd:G%jed,nk), source=0. )
       call diag_remap_calc_hmask(diag_cs%diag_remap_cs(c), G, axes%mask3d)
 
       h_axes => diag_cs%remap_axesTL(c) ! Use the h-point masks to generate the u-, v- and q- masks
@@ -773,7 +773,7 @@ subroutine set_masks_for_axes(G, diag_cs)
       axes => diag_cs%remap_axesCuL(c)
       call assert(axes%nz == nk, 'set_masks_for_axes: vertical size mismatch at u-layers')
       call assert(.not. associated(axes%mask3d), 'set_masks_for_axes: already associated')
-      allocate( axes%mask3d(G%IsdB:G%IedB,G%jsd:G%jed,nk) ) ; axes%mask3d(:,:,:) = 0.
+      allocate( axes%mask3d(G%IsdB:G%IedB,G%jsd:G%jed,nk), source=0. )
       do k = 1, nk ; do j=G%jsc,G%jec ; do I=G%isc-1,G%iec
         if (h_axes%mask3d(i,j,k) + h_axes%mask3d(i+1,j,k) > 0.) axes%mask3d(I,j,k) = 1.
       enddo ; enddo ; enddo
@@ -782,7 +782,7 @@ subroutine set_masks_for_axes(G, diag_cs)
       axes => diag_cs%remap_axesCvL(c)
       call assert(axes%nz == nk, 'set_masks_for_axes: vertical size mismatch at v-layers')
       call assert(.not. associated(axes%mask3d), 'set_masks_for_axes: already associated')
-      allocate( axes%mask3d(G%isd:G%ied,G%JsdB:G%JedB,nk) ) ; axes%mask3d(:,:,:) = 0.
+      allocate( axes%mask3d(G%isd:G%ied,G%JsdB:G%JedB,nk), source=0. )
       do k = 1, nk ; do J=G%jsc-1,G%jec ; do i=G%isc,G%iec
         if (h_axes%mask3d(i,j,k) + h_axes%mask3d(i,j+1,k) > 0.) axes%mask3d(i,J,k) = 1.
       enddo ; enddo ; enddo
@@ -791,7 +791,7 @@ subroutine set_masks_for_axes(G, diag_cs)
       axes => diag_cs%remap_axesBL(c)
       call assert(axes%nz == nk, 'set_masks_for_axes: vertical size mismatch at q-layers')
       call assert(.not. associated(axes%mask3d), 'set_masks_for_axes: already associated')
-      allocate( axes%mask3d(G%IsdB:G%IedB,G%JsdB:G%JedB,nk) ) ; axes%mask3d(:,:,:) = 0.
+      allocate( axes%mask3d(G%IsdB:G%IedB,G%JsdB:G%JedB,nk), source=0. )
       do k = 1, nk ; do J=G%jsc-1,G%jec ; do I=G%isc-1,G%iec
         if (h_axes%mask3d(i,j,k) + h_axes%mask3d(i+1,j+1,k) + &
             h_axes%mask3d(i+1,j,k) + h_axes%mask3d(i,j+1,k) > 0.) axes%mask3d(I,J,k) = 1.
@@ -801,7 +801,7 @@ subroutine set_masks_for_axes(G, diag_cs)
       axes => diag_cs%remap_axesTi(c)
       call assert(axes%nz == nk, 'set_masks_for_axes: vertical size mismatch at h-interfaces')
       call assert(.not. associated(axes%mask3d), 'set_masks_for_axes: already associated')
-      allocate( axes%mask3d(G%isd:G%ied,G%jsd:G%jed,nk+1) ) ; axes%mask3d(:,:,:) = 0.
+      allocate( axes%mask3d(G%isd:G%ied,G%jsd:G%jed,nk+1), source=0. )
       do J=G%jsc-1,G%jec+1 ; do i=G%isc-1,G%iec+1
         if (h_axes%mask3d(i,j,1) > 0.) axes%mask3d(i,J,1) = 1.
         do K = 2, nk
@@ -816,7 +816,7 @@ subroutine set_masks_for_axes(G, diag_cs)
       axes => diag_cs%remap_axesCui(c)
       call assert(axes%nz == nk, 'set_masks_for_axes: vertical size mismatch at u-interfaces')
       call assert(.not. associated(axes%mask3d), 'set_masks_for_axes: already associated')
-      allocate( axes%mask3d(G%IsdB:G%IedB,G%jsd:G%jed,nk+1) ) ; axes%mask3d(:,:,:) = 0.
+      allocate( axes%mask3d(G%IsdB:G%IedB,G%jsd:G%jed,nk+1), source=0. )
       do k = 1, nk+1 ; do j=G%jsc,G%jec ; do I=G%isc-1,G%iec
         if (h_axes%mask3d(i,j,k) + h_axes%mask3d(i+1,j,k) > 0.) axes%mask3d(I,j,k) = 1.
       enddo ; enddo ; enddo
@@ -825,7 +825,7 @@ subroutine set_masks_for_axes(G, diag_cs)
       axes => diag_cs%remap_axesCvi(c)
       call assert(axes%nz == nk, 'set_masks_for_axes: vertical size mismatch at v-interfaces')
       call assert(.not. associated(axes%mask3d), 'set_masks_for_axes: already associated')
-      allocate( axes%mask3d(G%isd:G%ied,G%JsdB:G%JedB,nk+1) ) ; axes%mask3d(:,:,:) = 0.
+      allocate( axes%mask3d(G%isd:G%ied,G%JsdB:G%JedB,nk+1), source=0. )
       do k = 1, nk+1 ; do J=G%jsc-1,G%jec ; do i=G%isc,G%iec
         if (h_axes%mask3d(i,j,k) + h_axes%mask3d(i,j+1,k) > 0.) axes%mask3d(i,J,k) = 1.
       enddo ; enddo ; enddo
@@ -834,7 +834,7 @@ subroutine set_masks_for_axes(G, diag_cs)
       axes => diag_cs%remap_axesBi(c)
       call assert(axes%nz == nk, 'set_masks_for_axes: vertical size mismatch at q-interfaces')
       call assert(.not. associated(axes%mask3d), 'set_masks_for_axes: already associated')
-      allocate( axes%mask3d(G%IsdB:G%IedB,G%JsdB:G%JedB,nk+1) ) ; axes%mask3d(:,:,:) = 0.
+      allocate( axes%mask3d(G%IsdB:G%IedB,G%JsdB:G%JedB,nk+1), source=0. )
       do k = 1, nk ; do J=G%jsc-1,G%jec ; do I=G%isc-1,G%iec
         if (h_axes%mask3d(i,j,k) + h_axes%mask3d(i+1,j+1,k) + &
             h_axes%mask3d(i+1,j,k) + h_axes%mask3d(i,j+1,k) > 0.) axes%mask3d(I,J,k) = 1.
@@ -1969,10 +1969,10 @@ integer function register_diag_field(module_name, field_name, axes_in, init_time
                                                          !! integrated). Default/absent for intensive.
   ! Local variables
   real :: MOM_missing_value
-  type(diag_ctrl), pointer :: diag_cs => NULL()
-  type(axes_grp), pointer :: remap_axes => null()
-  type(axes_grp), pointer :: axes => null()
-  type(axes_grp), pointer :: axes_d2 => null()
+  type(diag_ctrl), pointer :: diag_cs
+  type(axes_grp), pointer :: remap_axes
+  type(axes_grp), pointer :: axes
+  type(axes_grp), pointer :: axes_d2
   integer :: dm_id, i, dl
   character(len=256) :: msg, cm_string
   character(len=256) :: new_module_name
@@ -2097,8 +2097,8 @@ integer function register_diag_field(module_name, field_name, axes_in, init_time
 
     new_module_name = trim(module_name)//'_d2'
 
+    axes_d2 => null()
     if (axes_in%rank == 3 .or. axes_in%rank == 2 ) then
-      axes_d2 => null()
       if (axes_in%id == diag_cs%axesTL%id) then
         axes_d2 => diag_cs%dsamp(dl)%axesTL
       elseif (axes_in%id == diag_cs%axesBL%id) then
@@ -2129,6 +2129,7 @@ integer function register_diag_field(module_name, field_name, axes_in, init_time
               //trim(new_module_name)//"-"//trim(field_name))
       endif
     endif
+
     ! Register the native diagnostic
     if (associated(axes_d2)) then
        active = register_diag_field_expand_cmor(dm_id, new_module_name, field_name, axes_d2, &
@@ -3473,16 +3474,18 @@ subroutine diag_mediator_end(time, diag_CS, end_diag_manager)
     call axes_grp_end(diag_cs%remap_axesCvi(i))
   enddo
 
-  deallocate(diag_cs%remap_axesZL)
-  deallocate(diag_cs%remap_axesZi)
-  deallocate(diag_cs%remap_axesTL)
-  deallocate(diag_cs%remap_axesTi)
-  deallocate(diag_cs%remap_axesBL)
-  deallocate(diag_cs%remap_axesBi)
-  deallocate(diag_cs%remap_axesCuL)
-  deallocate(diag_cs%remap_axesCui)
-  deallocate(diag_cs%remap_axesCvL)
-  deallocate(diag_cs%remap_axesCvi)
+  if (diag_cs%num_diag_coords > 0) then
+    deallocate(diag_cs%remap_axesZL)
+    deallocate(diag_cs%remap_axesZi)
+    deallocate(diag_cs%remap_axesTL)
+    deallocate(diag_cs%remap_axesTi)
+    deallocate(diag_cs%remap_axesBL)
+    deallocate(diag_cs%remap_axesBi)
+    deallocate(diag_cs%remap_axesCuL)
+    deallocate(diag_cs%remap_axesCui)
+    deallocate(diag_cs%remap_axesCvL)
+    deallocate(diag_cs%remap_axesCvi)
+  endif
 
   do dl=2,MAX_DSAMP_LEV
     if (allocated(diag_cs%dsamp(dl)%remap_axesTL)) &

@@ -163,8 +163,8 @@ function register_OCMIP2_CFC(HI, GV, param_file, CS, tr_Reg, restart_CS)
   if (GV%Boussinesq) then ; flux_units = "mol s-1"
   else ; flux_units = "mol m-3 kg s-1" ; endif
 
-  allocate(CS%CFC11(isd:ied,jsd:jed,nz)) ; CS%CFC11(:,:,:) = 0.0
-  allocate(CS%CFC12(isd:ied,jsd:jed,nz)) ; CS%CFC12(:,:,:) = 0.0
+  allocate(CS%CFC11(isd:ied,jsd:jed,nz), source=0.0)
+  allocate(CS%CFC12(isd:ied,jsd:jed,nz), source=0.0)
 
   ! This pointer assignment is needed to force the compiler not to do a copy in
   ! the registration calls.  Curses on the designers and implementers of F90.
@@ -458,9 +458,9 @@ subroutine OCMIP2_CFC_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, US
   !   The -GV%Rho0 changes the sign convention of the flux and changes the units
   ! of the flux from [Conc. m s-1] to [Conc. kg m-2 T-1].
   call extract_coupler_type_data(fluxes%tr_fluxes, CS%ind_cfc_11_flux, CFC11_flux, &
-                                 scale_factor=-G%US%R_to_kg_m3*GV%Rho0*US%T_to_s, idim=idim, jdim=jdim)
+                                 scale_factor=-GV%Rho0*US%R_to_kg_m3*US%T_to_s, idim=idim, jdim=jdim)
   call extract_coupler_type_data(fluxes%tr_fluxes, CS%ind_cfc_12_flux, CFC12_flux, &
-                                 scale_factor=-G%US%R_to_kg_m3*GV%Rho0*US%T_to_s, idim=idim, jdim=jdim)
+                                 scale_factor=-GV%Rho0*US%R_to_kg_m3*US%T_to_s, idim=idim, jdim=jdim)
 
   ! Use a tridiagonal solver to determine the concentrations after the
   ! surface source is applied and diapycnal advection and diffusion occurs.
@@ -506,7 +506,8 @@ function OCMIP2_CFC_stock(h, stocks, G, GV, CS, names, units, stock_index)
   integer                                        :: OCMIP2_CFC_stock !< The number of stocks calculated here.
 
   ! Local variables
-  real :: mass
+  real :: stock_scale ! The dimensional scaling factor to convert stocks to kg [kg H-1 L-2 ~> kg m-3 or nondim]
+  real :: mass        ! The cell volume or mass [H L2 ~> m3 or kg]
   integer :: i, j, k, is, ie, js, je, nz
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
@@ -524,14 +525,15 @@ function OCMIP2_CFC_stock(h, stocks, G, GV, CS, names, units, stock_index)
   call query_vardesc(CS%CFC12_desc, name=names(2), units=units(2), caller="OCMIP2_CFC_stock")
   units(1) = trim(units(1))//" kg" ; units(2) = trim(units(2))//" kg"
 
+  stock_scale = G%US%L_to_m**2 * GV%H_to_kg_m2
   stocks(1) = 0.0 ; stocks(2) = 0.0
   do k=1,nz ; do j=js,je ; do i=is,ie
-    mass = G%mask2dT(i,j) * G%US%L_to_m**2*G%areaT(i,j) * h(i,j,k)
+    mass = G%mask2dT(i,j) * G%areaT(i,j) * h(i,j,k)
     stocks(1) = stocks(1) + CS%CFC11(i,j,k) * mass
     stocks(2) = stocks(2) + CS%CFC12(i,j,k) * mass
   enddo ; enddo ; enddo
-  stocks(1) = GV%H_to_kg_m2 * stocks(1)
-  stocks(2) = GV%H_to_kg_m2 * stocks(2)
+  stocks(1) = stock_scale * stocks(1)
+  stocks(2) = stock_scale * stocks(2)
 
   OCMIP2_CFC_stock = 2
 

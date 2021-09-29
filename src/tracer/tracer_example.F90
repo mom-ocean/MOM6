@@ -99,7 +99,7 @@ function USER_register_tracer_example(HI, GV, param_file, CS, tr_Reg, restart_CS
                  "The exact location and properties of those sponges are "//&
                  "specified from MOM_initialization.F90.", default=.false.)
 
-  allocate(CS%tr(isd:ied,jsd:jed,nz,NTR)) ; CS%tr(:,:,:,:) = 0.0
+  allocate(CS%tr(isd:ied,jsd:jed,nz,NTR), source=0.0)
 
   do m=1,NTR
     if (m < 10) then ; write(name,'("tr",I1.1)') m
@@ -373,7 +373,8 @@ function USER_tracer_stock(h, stocks, G, GV, CS, names, units, stock_index)
   integer                                           :: USER_tracer_stock !< Return value: the number of
                                                               !! stocks calculated here.
 
-! Local variables
+  ! Local variables
+  real :: stock_scale ! The dimensional scaling factor to convert stocks to kg [kg H-1 L-2 ~> kg m-3 or nondim]
   integer :: i, j, k, is, ie, js, je, nz, m
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
@@ -387,15 +388,15 @@ function USER_tracer_stock(h, stocks, G, GV, CS, names, units, stock_index)
     return
   endif ; endif
 
+  stock_scale = G%US%L_to_m**2 * GV%H_to_kg_m2
   do m=1,NTR
     call query_vardesc(CS%tr_desc(m), name=names(m), units=units(m), caller="USER_tracer_stock")
     units(m) = trim(units(m))//" kg"
     stocks(m) = 0.0
     do k=1,nz ; do j=js,je ; do i=is,ie
-      stocks(m) = stocks(m) + CS%tr(i,j,k,m) * &
-                             (G%mask2dT(i,j) * G%US%L_to_m**2*G%areaT(i,j) * h(i,j,k))
+      stocks(m) = stocks(m) + CS%tr(i,j,k,m) * (G%mask2dT(i,j) * G%areaT(i,j) * h(i,j,k))
     enddo ; enddo ; enddo
-    stocks(m) = GV%H_to_kg_m2 * stocks(m)
+    stocks(m) = stock_scale * stocks(m)
   enddo
   USER_tracer_stock = NTR
 
