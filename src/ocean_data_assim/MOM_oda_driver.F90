@@ -178,6 +178,7 @@ subroutine init_oda(Time, G, GV, diag_CS, CS)
   character(len=30) :: coord_mode
   character(len=200) :: inputdir, basin_file
   logical :: reentrant_x, reentrant_y, tripolar_N, symmetric
+  character(len=80) :: remap_scheme
   character(len=80) :: bias_correction_file, inc_file
 
   if (associated(CS)) call MOM_error(FATAL, 'Calling oda_init with associated control structure')
@@ -233,6 +234,7 @@ subroutine init_oda(Time, G, GV, diag_CS, CS)
        "The total number of thickness grid points in the "//&
        "y-direction in the physical domain.")
   call get_param(PF, 'MOM', "INPUTDIR", inputdir)
+  call get_param(PF, "MOM", "REMAPPING_SCHEME", remap_scheme, default="PPM_H4")
   inputdir = slasher(inputdir)
 
   select case(lowercase(trim(assim_method)))
@@ -281,7 +283,7 @@ subroutine init_oda(Time, G, GV, diag_CS, CS)
   call MOM_initialize_coord(CS%GV, CS%US, PF, .false., &
            dirs%output_directory, tv_dummy, dG%max_depth)
   call ALE_init(PF, CS%GV, CS%US, dG%max_depth, CS%ALE_CS)
-  call MOM_grid_init(CS%Grid, PF)
+  call MOM_grid_init(CS%Grid, PF, global_indexing=.false.)
   call ALE_updateVerticalGridType(CS%ALE_CS, CS%GV)
   call copy_dyngrid_to_MOM_grid(dG, CS%Grid, CS%US)
   CS%mpp_domain => CS%Grid%Domain%mpp_domain
@@ -300,7 +302,7 @@ subroutine init_oda(Time, G, GV, diag_CS, CS)
        "Coordinate mode for vertical regridding.", &
        default="ZSTAR", fail_if_missing=.false.)
   call initialize_regridding(CS%regridCS, CS%GV, CS%US, dG%max_depth,PF,'oda_driver',coord_mode,'','')
-  call initialize_remapping(CS%remapCS,'PLM')
+  call initialize_remapping(CS%remapCS,remap_scheme)
   call set_regrid_params(CS%regridCS, min_thickness=0.)
   isd = G%isd; ied = G%ied; jsd = G%jsd; jed = G%jed
 
@@ -405,7 +407,7 @@ subroutine set_prior_tracer(Time, G, GV, h, tv, CS)
   !! switch to global pelist
   call set_PElist(CS%filter_pelist)
   !call MOM_mesg('Setting prior')
-  call cpu_clock_begin(id_clock_oda_prior)
+  !call cpu_clock_begin(id_clock_oda_prior)
 
   ! computational domain for the analysis grid
   isc=CS%Grid%isc;iec=CS%Grid%iec;jsc=CS%Grid%jsc;jec=CS%Grid%jec
@@ -432,7 +434,7 @@ subroutine set_prior_tracer(Time, G, GV, h, tv, CS)
     call pass_var(CS%Ocean_prior%S(:,:,:,m),CS%Grid%domain)
   enddo
 
-  call cpu_clock_end(id_clock_oda_prior)
+  !call cpu_clock_end(id_clock_oda_prior)
   !! switch back to ensemble member pelist
   call set_PElist(CS%ensemble_pelist(CS%ensemble_id,:))
 
@@ -461,7 +463,7 @@ subroutine get_posterior_tracer(Time, CS, h, tv, increment)
   !! switch to global pelist
   call set_PElist(CS%filter_pelist)
   call MOM_mesg('Getting posterior')
-  call cpu_clock_begin(id_clock_oda_posterior)
+  !call cpu_clock_begin(id_clock_oda_posterior)
   if (present(h)) h => CS%h ! get analysis thickness
   !! Calculate and redistribute increments to CS%tv right after assimilation
   !! Retain CS%tv to calculate increments for IAU updates CS%tv_inc otherwise
@@ -490,7 +492,7 @@ subroutine get_posterior_tracer(Time, CS, h, tv, increment)
   if (present(tv)) tv => CS%tv
   if (present(h)) h => CS%h
 
-  call cpu_clock_end(id_clock_oda_posterior)
+  !call cpu_clock_end(id_clock_oda_posterior)
 
   !! switch back to ensemble member pelist
   call set_PElist(CS%ensemble_pelist(CS%ensemble_id,:))
@@ -518,12 +520,12 @@ subroutine oda(Time, CS)
 
     !! switch to global pelist
     call set_PElist(CS%filter_pelist)
-    call cpu_clock_begin(id_clock_oda_filter)
+    !call cpu_clock_begin(id_clock_oda_filter)
     call get_profiles(Time, CS%Profiles, CS%CProfiles)
 #ifdef ENABLE_ECDA
     call ensemble_filter(CS%Ocean_prior, CS%Ocean_posterior, CS%CProfiles, CS%kdroot, CS%mpp_domain, CS%oda_grid)
 #endif
-    call cpu_clock_end(id_clock_oda_filter)
+    !call cpu_clock_end(id_clock_oda_filter)
     !! switch back to ensemble member pelist
     call set_PElist(CS%ensemble_pelist(CS%ensemble_id,:))
     call get_posterior_tracer(Time, CS, increment=.true.)
