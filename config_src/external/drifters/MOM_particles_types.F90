@@ -1,6 +1,62 @@
 !> Dummy data structures and methods for drifters package
 module particles_types_mod
 
+use MOM_grid, only : ocean_grid_type
+use mpp_domains_mod, only: domain2D
+
+
+!> Container for gridded fields
+type :: particles_gridded
+  type(domain2D), pointer :: domain !< MPP parallel domain
+  integer :: halo !< Nominal halo width
+  integer :: isc !< Start i-index of computational domain
+  integer :: iec !< End i-index of computational domain
+  integer :: jsc !< Start j-index of computational domain
+  integer :: jec !< End j-index of computational domain
+  integer :: isd !< Start i-index of data domain
+  integer :: ied !< End i-index of data domain
+  integer :: jsd !< Start j-index of data domain
+  integer :: jed !< End j-index of data domain
+  integer :: isg !< Start i-index of global domain
+  integer :: ieg !< End i-index of global domain
+  integer :: jsg !< Start j-index of global domain
+  integer :: jeg !< End j-index of global domain
+  integer :: is_offset=0 !< add to i to recover global i-index
+  integer :: js_offset=0 !< add to j to recover global j-index
+  integer :: my_pe !< MPI PE index
+  integer :: pe_N !< MPI PE index of PE to the north
+  integer :: pe_S !< MPI PE index of PE to the south
+  integer :: pe_E !< MPI PE index of PE to the east
+  integer :: pe_W !< MPI PE index of PE to the west
+  logical :: grid_is_latlon !< Flag to say whether the coordinate is in lat-lon degrees, or meters
+  logical :: grid_is_regular !< Flag to say whether point in cell can be found assuming regular Cartesian grid
+  real :: Lx !< Length of the domain in x direction
+  real, dimension(:,:), pointer :: lon=>null() !< Longitude of cell corners (degree E)
+  real, dimension(:,:), pointer :: lat=>null() !< Latitude of cell corners (degree N)
+  real, dimension(:,:), pointer :: lonc=>null() !< Longitude of cell centers (degree E)
+  real, dimension(:,:), pointer :: latc=>null() !< Latitude of cell centers (degree N)
+  real, dimension(:,:), pointer :: dx=>null() !< Length of cell edge (m)
+  real, dimension(:,:), pointer :: dy=>null() !< Length of cell edge (m)
+  real, dimension(:,:), pointer :: area=>null() !< Area of cell (m^2)
+  real, dimension(:,:), pointer :: msk=>null() !< Ocean-land mask (1=ocean)
+  real, dimension(:,:), pointer :: cos=>null() !< Cosine from rotation matrix to lat-lon coords
+  real, dimension(:,:), pointer :: sin=>null() !< Sine from rotation matrix to lat-lon coords
+  real, dimension(:,:), pointer :: ocean_depth=>NULL() !< Depth of ocean (m)
+  real, dimension(:,:), pointer :: uo=>null() !< Ocean zonal flow (m/s)
+  real, dimension(:,:), pointer :: vo=>null() !< Ocean meridional flow (m/s)
+  real, dimension(:,:), pointer :: tmp=>null() !< Temporary work space
+  real, dimension(:,:), pointer :: tmpc=>null() !< Temporary work space
+  real, dimension(:,:), pointer :: parity_x=>null() !< X component of vector point from i,j to i+1,j+1 (for detecting tri-polar fold)
+  real, dimension(:,:), pointer :: parity_y=>null() !< Y component of vector point from i,j to i+1,j+1 (for detecting tri-polar fold)
+  integer, dimension(:,:), pointer :: particle_counter_grd=>null() !< Counts particles created for naming purposes
+  !>@{
+  !! Diagnostic handle
+  integer :: id_uo=-1, id_vo=-1, id_unused=-1
+  integer :: id_count=-1, id_chksum=-1
+  !>@}
+
+end type particles_gridded
+
 
 !>xyt is a data structure containing particle position and velocity fields.
 type :: xyt
@@ -12,6 +68,25 @@ type :: xyt
   integer(kind=8) :: id = -1 !< Particle Identifier
   type(xyt), pointer :: next=>null()  !< Pointer to the next position in the list
 end type xyt
+
+!>particle types are data structures describing a tracked particle
+type :: particle
+  type(particle), pointer :: prev=>null(), next=>null()
+  ! State variables (specific to the particle, needed for restarts)
+  real :: lon, lat, depth, uvel, vvel !< position (degrees) and zonal and meridional velocities (m/s)
+  real :: lon_old, lat_old, uvel_old, vvel_old  !< previous position (degrees) and zonal
+                                                !< and meridional velocities (m/s)
+  real :: axn, ayn, bxn, byn                    !< explicit and implicit accelerations (currently disabled)
+  real :: start_lon, start_lat, start_day       !< origination position (degrees) and day
+  integer :: start_year                         !< origination year
+  real :: halo_part  !< equal to zero for particles on the computational domain, and 1 for particles on the halo
+  integer(kind=8) :: id,drifter_num             !< particle identifier
+  integer :: ine, jne                           !< nearest index in NE direction (for convenience)
+  real :: xi, yj                                !< non-dimensional coords within current cell (0..1)
+  real :: uo, vo                                !< zonal and meridional ocean velocities experienced
+                                                !< by the particle (m/s)
+  type(xyt), pointer :: trajectory=>null()
+end type particle
 
 
 !>A buffer structure for message passing

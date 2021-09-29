@@ -1,6 +1,7 @@
 !> A set of dummy interfaces for compiling the MOM6 drifters code
 module MOM_particles_mod
 
+use MOM_grid,         only : ocean_grid_type
 use MOM_time_manager, only : time_type, get_date, operator(-)
 use MOM_variables,    only : thermo_var_ptrs
 
