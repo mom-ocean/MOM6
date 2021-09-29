@@ -45,7 +45,7 @@ type, public :: diabatic_aux_CS ; private
   real    :: rivermix_depth = 0.0  !< The depth to which rivers are mixed if do_rivermix = T [Z ~> m].
   logical :: reclaim_frazil  !<   If true, try to use any frazil heat deficit to
                              !! to cool the topmost layer down to the freezing
-                             !! point.  The default is false.
+                             !! point.  The default is true.
   logical :: pressure_dependent_frazil  !< If true, use a pressure dependent
                              !! freezing temperature when making frazil.  The
                              !! default is false, which will be faster but is
@@ -1657,8 +1657,8 @@ subroutine diabatic_aux_init(Time, G, GV, US, param_file, diag, CS, useALEalgori
 
     ! need both arrays for the SW diagnostics (one for flux, one for convergence)
     if (CS%id_penSW_diag>0 .or. CS%id_penSWflux_diag>0) then
-      allocate(CS%penSW_diag(isd:ied,jsd:jed,nz)) ; CS%penSW_diag(:,:,:) = 0.0
-      allocate(CS%penSWflux_diag(isd:ied,jsd:jed,nz+1)) ; CS%penSWflux_diag(:,:,:) = 0.0
+      allocate(CS%penSW_diag(isd:ied,jsd:jed,nz), source=0.0)
+      allocate(CS%penSWflux_diag(isd:ied,jsd:jed,nz+1), source=0.0)
     endif
 
     ! diagnostic for non-downwelling SW radiation (i.e., SW absorbed at ocean surface)
@@ -1668,7 +1668,7 @@ subroutine diabatic_aux_init(Time, G, GV, US, param_file, diag, CS, useALEalgori
           'W m-2', conversion=US%QRZ_T_to_W_m2, &
           standard_name='nondownwelling_shortwave_flux_in_sea_water')
     if (CS%id_nonpenSW_diag > 0) then
-      allocate(CS%nonpenSW_diag(isd:ied,jsd:jed)) ; CS%nonpenSW_diag(:,:) = 0.0
+      allocate(CS%nonpenSW_diag(isd:ied,jsd:jed), source=0.0)
     endif
   endif
 

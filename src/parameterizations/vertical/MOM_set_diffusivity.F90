@@ -198,16 +198,6 @@ integer :: id_clock_kappaShear, id_clock_CVMix_ddiff
 
 contains
 
-!> Sets the interior vertical diffusion of scalars due to the following processes:
-!! 1. Shear-driven mixing: two options, Jackson et at. and KPP interior;
-!! 2. Background mixing via CVMix (Bryan-Lewis profile) or the scheme described by
-!!    Harrison & Hallberg, JPO 2008;
-!! 3. Double-diffusion, old method and new method via CVMix;
-!! 4. Tidal mixing: many options available, see MOM_tidal_mixing.F90;
-!! In addition, this subroutine has the option to set the interior vertical
-!! viscosity associated with processes 1,2 and 4 listed above, which is stored in
-!! visc%Kv_slow. Vertical viscosity due to shear-driven mixing is passed via
-!! visc%Kv_shear
 subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
                            G, GV, US, CS, Kd_lay, Kd_int, Kd_extra_T, Kd_extra_S)
   type(ocean_grid_type),     intent(in)    :: G    !< The ocean's grid structure.
@@ -319,40 +309,20 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
 
   ! Set up arrays for diagnostics.
 
-  if (CS%id_N2 > 0) then
-    allocate(dd%N2_3d(isd:ied,jsd:jed,nz+1)) ; dd%N2_3d(:,:,:) = 0.0
-  endif
-  if (CS%id_Kd_user > 0) then
-    allocate(dd%Kd_user(isd:ied,jsd:jed,nz+1)) ; dd%Kd_user(:,:,:) = 0.0
-  endif
-  if (CS%id_Kd_work > 0) then
-    allocate(dd%Kd_work(isd:ied,jsd:jed,nz)) ; dd%Kd_work(:,:,:) = 0.0
-  endif
-  if (CS%id_maxTKE > 0) then
-    allocate(dd%maxTKE(isd:ied,jsd:jed,nz)) ; dd%maxTKE(:,:,:) = 0.0
-  endif
-  if (CS%id_TKE_to_Kd > 0) then
-    allocate(dd%TKE_to_Kd(isd:ied,jsd:jed,nz)) ; dd%TKE_to_Kd(:,:,:) = 0.0
-  endif
-  if ((CS%double_diffusion) .and. (CS%id_KT_extra > 0)) then
-    allocate(dd%KT_extra(isd:ied,jsd:jed,nz+1)) ; dd%KT_extra(:,:,:) = 0.0
-  endif
-  if ((CS%double_diffusion) .and. (CS%id_KS_extra > 0)) then
-    allocate(dd%KS_extra(isd:ied,jsd:jed,nz+1)) ; dd%KS_extra(:,:,:) = 0.0
-  endif
-  if (CS%id_R_rho > 0) then
-    allocate(dd%drho_rat(isd:ied,jsd:jed,nz+1)) ; dd%drho_rat(:,:,:) = 0.0
-  endif
-  if (CS%id_Kd_BBL > 0) then
-    allocate(dd%Kd_BBL(isd:ied,jsd:jed,nz+1)) ; dd%Kd_BBL(:,:,:) = 0.0
-  endif
+  if (CS%id_N2 > 0) allocate(dd%N2_3d(isd:ied,jsd:jed,nz+1), source=0.0)
+  if (CS%id_Kd_user > 0) allocate(dd%Kd_user(isd:ied,jsd:jed,nz+1), source=0.0)
+  if (CS%id_Kd_work > 0) allocate(dd%Kd_work(isd:ied,jsd:jed,nz), source=0.0)
+  if (CS%id_maxTKE > 0) allocate(dd%maxTKE(isd:ied,jsd:jed,nz), source=0.0)
+  if (CS%id_TKE_to_Kd > 0) allocate(dd%TKE_to_Kd(isd:ied,jsd:jed,nz), source=0.0)
+  if ((CS%double_diffusion) .and. (CS%id_KT_extra > 0)) &
+    allocate(dd%KT_extra(isd:ied,jsd:jed,nz+1), source=0.0)
+  if ((CS%double_diffusion) .and. (CS%id_KS_extra > 0)) &
+    allocate(dd%KS_extra(isd:ied,jsd:jed,nz+1), source=0.0)
+  if (CS%id_R_rho > 0) allocate(dd%drho_rat(isd:ied,jsd:jed,nz+1), source=0.0)
+  if (CS%id_Kd_BBL > 0) allocate(dd%Kd_BBL(isd:ied,jsd:jed,nz+1), source=0.0)
 
-  if (CS%id_Kd_bkgnd > 0) then
-    allocate(dd%Kd_bkgnd(isd:ied,jsd:jed,nz+1)) ; dd%Kd_bkgnd(:,:,:) = 0.
-  endif
-  if (CS%id_Kv_bkgnd > 0) then
-    allocate(dd%Kv_bkgnd(isd:ied,jsd:jed,nz+1)) ; dd%Kv_bkgnd(:,:,:) = 0.
-  endif
+  if (CS%id_Kd_bkgnd > 0) allocate(dd%Kd_bkgnd(isd:ied,jsd:jed,nz+1), source=0.)
+  if (CS%id_Kv_bkgnd > 0) allocate(dd%Kv_bkgnd(isd:ied,jsd:jed,nz+1), source=0.)
 
   ! set up arrays for tidal mixing diagnostics
   if (CS%use_tidal_mixing) &

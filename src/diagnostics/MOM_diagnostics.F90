@@ -386,14 +386,14 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
   endif
 
   if (associated(CS%e)) then
-    call find_eta(h, tv, G, GV, US, CS%e)
+    call find_eta(h, tv, G, GV, US, CS%e, dZref=G%Z_ref)
     if (CS%id_e > 0) call post_data(CS%id_e, CS%e, CS%diag)
   endif
 
   if (associated(CS%e_D)) then
     if (associated(CS%e)) then
       do k=1,nz+1 ; do j=js,je ; do i=is,ie
-        CS%e_D(i,j,k) = CS%e(i,j,k) + G%bathyT(i,j)
+        CS%e_D(i,j,k) = CS%e(i,j,k) + (G%bathyT(i,j) + G%Z_ref)
       enddo ; enddo ; enddo
     else
       call find_eta(h, tv, G, GV, US, CS%e_D)
@@ -2132,7 +2132,8 @@ subroutine write_static_fields(G, GV, US, tv, diag)
   type(diag_ctrl), target, intent(inout) :: diag !< regulates diagnostic output
 
   ! Local variables
-  integer :: id
+  real :: work_2d(SZI_(G),SZJ_(G))         ! A 2-d temporary work array.
+  integer :: id, i, j
   logical :: use_temperature
 
   id = register_static_field('ocean_model', 'geolat', diag%axesT1, &
@@ -2204,7 +2205,10 @@ subroutine write_static_fields(G, GV, US, tv, diag)
         cmor_field_name='deptho', cmor_long_name='Sea Floor Depth',      &
         cmor_standard_name='sea_floor_depth_below_geoid', area=diag%axesT1%id_area, &
         x_cell_method='mean', y_cell_method='mean', area_cell_method='mean')
-  if (id > 0) call post_data(id, G%bathyT, diag, .true., mask=G%mask2dT)
+  if (id > 0) then
+    do j=G%jsc,G%jec ; do i=G%isc,G%iec ; work_2d(i,j) = G%bathyT(i,j)+G%Z_ref ; enddo ; enddo
+    call post_data(id, work_2d, diag, .true., mask=G%mask2dT)
+  endif
 
   id = register_static_field('ocean_model', 'wet', diag%axesT1, &
         '0 if land, 1 if ocean at tracer points', 'none', area=diag%axesT1%id_area)
@@ -2341,7 +2345,6 @@ subroutine set_dependent_diagnostics(MIS, ADp, CDp, G, GV, CS)
     call safe_alloc_ptr(ADp%gradKEu,IsdB,IedB,jsd,jed,nz)
     call safe_alloc_ptr(ADp%gradKEv,isd,ied,JsdB,JedB,nz)
   endif
-
   if (associated(CS%KE_visc)) then
     call safe_alloc_ptr(ADp%du_dt_visc,IsdB,IedB,jsd,jed,nz)
     call safe_alloc_ptr(ADp%dv_dt_visc,isd,ied,JsdB,JedB,nz)
@@ -2395,7 +2398,7 @@ subroutine MOM_diagnostics_end(CS, ADp, CDp)
   if (associated(CS%vhGM_Rlay))  deallocate(CS%vhGM_Rlay)
 
   if (associated(ADp%gradKEu))    deallocate(ADp%gradKEu)
-  if (associated(ADp%gradKEu))    deallocate(ADp%gradKEu)
+  if (associated(ADp%gradKEv))    deallocate(ADp%gradKEv)
   if (associated(ADp%du_dt_visc)) deallocate(ADp%du_dt_visc)
   if (associated(ADp%dv_dt_visc)) deallocate(ADp%dv_dt_visc)
   if (associated(ADp%du_dt_str))  deallocate(ADp%du_dt_str)

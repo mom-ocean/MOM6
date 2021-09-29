@@ -373,7 +373,7 @@ function get_polynomial_coordinate( N, h, x_g, edge_values, ppoly_coefs, &
   real                        :: grad        ! gradient during N-R iterations [A]
   integer :: i, k, iter  ! loop indices
   integer :: k_found     ! index of target cell
-  character(len=200) :: mesg
+  character(len=320) :: mesg
   logical :: use_2018_answers  ! If true use older, less acccurate expressions.
 
   eps = NR_OFFSET
