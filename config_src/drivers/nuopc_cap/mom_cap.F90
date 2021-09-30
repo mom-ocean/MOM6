@@ -97,6 +97,8 @@ use NUOPC_Model, only: model_label_DataInitialize => label_DataInitialize
 use NUOPC_Model, only: model_label_SetRunClock    => label_SetRunClock
 use NUOPC_Model, only: model_label_Finalize       => label_Finalize
 use NUOPC_Model, only: SetVM
+
+use MOM_stochastics,         only : write_mom_restart_stoch
 !$use omp_lib             , only : omp_set_num_threads
 
 implicit none; private
@@ -1746,6 +1748,18 @@ subroutine ModelAdvance(gcomp, rc)
 
         ! write restart file(s)
         call ocean_model_restart(ocean_state, restartname=restartname)
+
+        if (ocean_state%do_sppt .OR. ocean_state%pert_epbl) then
+          if (ESMF_AlarmIsRinging(stop_alarm, rc=rc)) then
+             write(restartname,'(A)')"ocn_stoch.res.nc"
+          else
+             write(restartname,'(A,I4.4,"-",I2.2,"-",I2.2,"-",I2.2,"-",I2.2,"-",I2.2,A)') &
+                  "ocn_stoch.res.", year, month, day, hour, minute, seconds,".nc"
+          endif
+          call ESMF_LogWrite("MOM_cap: Writing stoch restart :  "//trim(restartname), &
+                             ESMF_LOGMSG_INFO)
+          call write_mom_restart_stoch('RESTART/'//trim(restartname))
+        endif
      endif
 
      if (is_root_pe()) then
