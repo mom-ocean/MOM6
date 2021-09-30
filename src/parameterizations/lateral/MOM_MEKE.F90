@@ -30,8 +30,6 @@ public step_forward_MEKE, MEKE_init, MEKE_alloc_register_restart, MEKE_end
 !> Control structure that contains MEKE parameters and diagnostics handles
 type, public :: MEKE_CS ; private
   ! Parameters
-  real, dimension(:,:), pointer :: equilibrium_value => NULL() !< The equilbrium value
-                        !! of MEKE to be calculated at each time step [L2 T-2 ~> m2 s-2]
   real :: MEKE_FrCoeff  !< Efficiency of conversion of ME into MEKE [nondim]
   real :: MEKE_GMcoeff  !< Efficiency of conversion of PE into MEKE [nondim]
   real :: MEKE_GMECoeff !< Efficiency of conversion of MEKE into ME by GME [nondim]
@@ -123,7 +121,7 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
   real, dimension(SZI_(G),SZJB_(G)),        intent(in)    :: SN_v !< Eady growth rate at v-points [T-1 ~> s-1].
   type(vertvisc_type),                      intent(in)    :: visc !< The vertical viscosity type.
   real,                                     intent(in)    :: dt   !< Model(baroclinic) time-step [T ~> s].
-  type(MEKE_CS),                            pointer       :: CS   !< MEKE control structure.
+  type(MEKE_CS),                            intent(inout) :: CS   !< MEKE control structure.
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), intent(in)  :: hu   !< Accumlated zonal mass flux [H L2 ~> m3 or kg]
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), intent(in)  :: hv   !< Accumlated meridional mass flux [H L2 ~> m3 or kg]
 
@@ -141,7 +139,9 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
     LmixScale, &    ! Eddy mixing length [L ~> m].
     barotrFac2, &   ! Ratio of EKE_barotropic / EKE [nondim]
     bottomFac2, &   ! Ratio of EKE_bottom / EKE [nondim]
-    tmp             ! Temporary variable for diagnostic computation
+    tmp, &          ! Temporary variable for diagnostic computation
+    equilibrium_value ! The equilbrium value of MEKE to be calculated at each
+                    ! time step [L2 T-2 ~> m2 s-2]
 
   real, dimension(SZIB_(G),SZJ_(G)) :: &
     MEKE_uflux, &   ! The zonal advective and diffusive flux of MEKE with units of [R Z L4 T-3 ~> kg m2 s-3].
@@ -175,8 +175,6 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
 
-  if (.not.associated(CS)) call MOM_error(FATAL, &
-         "MOM_MEKE: Module must be initialized before it is used.")
   if (.not.associated(MEKE)) call MOM_error(FATAL, &
          "MOM_MEKE: MEKE must be initialized before it is used.")
 
@@ -355,9 +353,10 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
     endif
 
     if (CS%MEKE_equilibrium_restoring) then
-      call MEKE_equilibrium_restoring(CS, G, US, SN_u, SN_v, depth_tot)
+      call MEKE_equilibrium_restoring(CS, G, US, SN_u, SN_v, depth_tot, &
+                                      equilibrium_value)
       do j=js,je ; do i=is,ie
-        src(i,j) = src(i,j) - CS%MEKE_restoring_rate*(MEKE%MEKE(i,j) - CS%equilibrium_value(i,j))
+        src(i,j) = src(i,j) - CS%MEKE_restoring_rate*(MEKE%MEKE(i,j) - equilibrium_value(i,j))
       enddo ; enddo
     endif
 
@@ -674,7 +673,7 @@ subroutine MEKE_equilibrium(CS, MEKE, G, GV, US, SN_u, SN_v, drag_rate_visc, I_m
   type(ocean_grid_type),             intent(inout) :: G    !< Ocean grid.
   type(verticalGrid_type),           intent(in)    :: GV   !< Ocean vertical grid structure.
   type(unit_scale_type),             intent(in)    :: US   !< A dimensional unit scaling type
-  type(MEKE_CS),                     pointer       :: CS   !< MEKE control structure.
+  type(MEKE_CS),                     intent(in)    :: CS   !< MEKE control structure.
   type(MEKE_type),                   pointer       :: MEKE !< A structure with MEKE data.
   real, dimension(SZIB_(G),SZJ_(G)), intent(in)    :: SN_u !< Eady growth rate at u-points [T-1 ~> s-1].
   real, dimension(SZI_(G),SZJB_(G)), intent(in)    :: SN_v !< Eady growth rate at v-points [T-1 ~> s-1].
@@ -835,13 +834,16 @@ end subroutine MEKE_equilibrium
 
 !< This subroutine calculates a new equilibrium value for MEKE at each time step. This is not copied into
 !! MEKE%MEKE; rather, it is used as a restoring term to nudge MEKE%MEKE back to an equilibrium value
-subroutine MEKE_equilibrium_restoring(CS, G, US, SN_u, SN_v, depth_tot)
+subroutine MEKE_equilibrium_restoring(CS, G, US, SN_u, SN_v, depth_tot, &
+                                      equilibrium_value)
   type(ocean_grid_type),             intent(inout) :: G    !< Ocean grid.
   type(unit_scale_type),             intent(in)    :: US   !< A dimensional unit scaling type.
-  type(MEKE_CS),                     pointer       :: CS   !< MEKE control structure.
+  type(MEKE_CS),                     intent(in)    :: CS   !< MEKE control structure.
   real, dimension(SZIB_(G),SZJ_(G)), intent(in)    :: SN_u !< Eady growth rate at u-points [T-1 ~> s-1].
   real, dimension(SZI_(G),SZJB_(G)), intent(in)    :: SN_v !< Eady growth rate at v-points [T-1 ~> s-1].
   real, dimension(SZI_(G),SZJ_(G)),  intent(in)    :: depth_tot !< The depth of the water column [Z ~> m].
+  real, dimension(SZI_(G),SZJ_(G)),  intent(out)   :: equilibrium_value
+      !< Equilbrium value of MEKE to be calculated at each time step [L2 T-2 ~> m2 s-2]
 
   ! Local variables
   real :: SN                      ! The local Eady growth rate [T-1 ~> s-1]
@@ -850,20 +852,17 @@ subroutine MEKE_equilibrium_restoring(CS, G, US, SN_u, SN_v, depth_tot)
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   cd2 = CS%cdrag**2
-
-  if (.not. associated(CS%equilibrium_value)) allocate(CS%equilibrium_value(SZI_(G),SZJ_(G)))
-  CS%equilibrium_value(:,:) = 0.0
+  equilibrium_value(:,:) = 0.0
 
 !$OMP do
   do j=js,je ; do i=is,ie
     ! SN = 0.25*max( (SN_u(I,j) + SN_u(I-1,j)) + (SN_v(i,J) + SN_v(i,J-1)), 0.)
     ! This avoids extremes values in equilibrium solution due to bad values in SN_u, SN_v
     SN = min(SN_u(I,j), SN_u(I-1,j), SN_v(i,J), SN_v(i,J-1))
-    CS%equilibrium_value(i,j) = (CS%MEKE_GEOMETRIC_alpha * SN * US%Z_to_L*depth_tot(i,j))**2 / cd2
+    equilibrium_value(i,j) = (CS%MEKE_GEOMETRIC_alpha * SN * US%Z_to_L*depth_tot(i,j))**2 / cd2
   enddo ; enddo
 
-  if (CS%id_MEKE_equilibrium>0) call post_data(CS%id_MEKE_equilibrium, CS%equilibrium_value, CS%diag)
-
+  if (CS%id_MEKE_equilibrium>0) call post_data(CS%id_MEKE_equilibrium, equilibrium_value, CS%diag)
 end subroutine MEKE_equilibrium_restoring
 
 !> Calculates the eddy mixing length scale and \f$\gamma_b\f$ and \f$\gamma_t\f$
@@ -871,8 +870,8 @@ end subroutine MEKE_equilibrium_restoring
 !! column eddy energy, respectively.  See \ref section_MEKE_equations.
 subroutine MEKE_lengthScales(CS, MEKE, G, GV, US, SN_u, SN_v, EKE, depth_tot, &
                              bottomFac2, barotrFac2, LmixScale)
-  type(MEKE_CS),                     pointer       :: CS   !< MEKE control structure.
-  type(MEKE_type),                   pointer       :: MEKE !< MEKE data.
+  type(MEKE_CS),                     intent(in)    :: CS   !< MEKE control structure.
+  type(MEKE_type),                   intent(in)    :: MEKE !< MEKE data.
   type(ocean_grid_type),             intent(inout) :: G    !< Ocean grid.
   type(verticalGrid_type),           intent(in)    :: GV   !< Ocean vertical grid structure.
   type(unit_scale_type),             intent(in)    :: US   !< A dimensional unit scaling type
@@ -946,7 +945,7 @@ end subroutine MEKE_lengthScales
 !! column eddy energy, respectively.  See \ref section_MEKE_equations.
 subroutine MEKE_lengthScales_0d(CS, US, area, beta, depth, Rd_dx, SN, EKE, & ! Z_to_L, &
                                 bottomFac2, barotrFac2, LmixScale, Lrhines, Leady)
-  type(MEKE_CS), pointer       :: CS         !< MEKE control structure.
+  type(MEKE_CS), intent(in)    :: CS         !< MEKE control structure.
   type(unit_scale_type), intent(in) :: US    !< A dimensional unit scaling type
   real,          intent(in)    :: area       !< Grid cell area [L2 ~> m2]
   real,          intent(in)    :: beta       !< Planetary beta = \f$ \nabla f\f$  [T-1 L-1 ~> s-1 m-1]
@@ -1023,7 +1022,7 @@ logical function MEKE_init(Time, G, US, param_file, diag, CS, MEKE, restart_CS)
   type(unit_scale_type),   intent(in)    :: US         !< A dimensional unit scaling type
   type(param_file_type),   intent(in)    :: param_file !< Parameter file parser structure.
   type(diag_ctrl), target, intent(inout) :: diag       !< Diagnostics structure.
-  type(MEKE_CS),           pointer       :: CS         !< MEKE control structure.
+  type(MEKE_CS),           intent(inout) :: CS         !< MEKE control structure.
   type(MEKE_type),         pointer       :: MEKE       !< MEKE-related fields.
   type(MOM_restart_CS),    pointer       :: restart_CS !< Restart control structure for MOM_MEKE.
 
@@ -1058,11 +1057,6 @@ logical function MEKE_init(Time, G, US, param_file, diag, CS, MEKE, restart_CS)
                             "MEKE-type structure.")
     return
   endif
-  if (associated(CS)) then
-    call MOM_error(WARNING, &
-      "MEKE_init called with an associated control structure.")
-    return
-  else ; allocate(CS) ; endif
 
   call MOM_mesg("MEKE_init: reading parameters ", 5)
 

@@ -356,7 +356,7 @@ type, public :: MOM_control_struct ; private
     !< Pointer to the control structure used to set viscosities
   type(diabatic_CS),             pointer :: diabatic_CSp => NULL()
     !< Pointer to the control structure for the diabatic driver
-  type(MEKE_CS),                 pointer :: MEKE_CSp => NULL()
+  type(MEKE_CS) :: MEKE_CSp
     !< Pointer to the control structure for the MEKE updates
   type(VarMix_CS),               pointer :: VarMix => NULL()
     !< Pointer to the control structure for the variable mixing module
@@ -3625,8 +3625,6 @@ subroutine MOM_end(CS)
 
   if (associated(CS%set_visc_CSp)) &
     call set_visc_end(CS%visc, CS%set_visc_CSp)
-
-  if (associated(CS%MEKE_CSp)) deallocate(CS%MEKE_CSp)
 
   if (associated(CS%MEKE)) then
     call MEKE_end(CS%MEKE)
