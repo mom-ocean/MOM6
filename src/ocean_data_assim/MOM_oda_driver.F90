@@ -65,11 +65,8 @@ public :: set_analysis_time, oda, apply_oda_tracer_increments
 
 !>@{ CPU time clock ID
 integer :: id_clock_oda_init
-integer :: id_clock_oda_filter
 integer :: id_clock_bias_adjustment
 integer :: id_clock_apply_increments
-integer :: id_clock_oda_prior
-integer :: id_clock_oda_posterior
 !>@}
 
 #include <MOM_memory.h>
@@ -185,9 +182,6 @@ subroutine init_oda(Time, G, GV, diag_CS, CS)
   allocate(CS)
 
   id_clock_oda_init=cpu_clock_id('(ODA initialization)')
-  id_clock_oda_prior=cpu_clock_id('(ODA setting prior)')
-  id_clock_oda_filter=cpu_clock_id('(ODA filter computation)')
-  id_clock_oda_posterior=cpu_clock_id('(ODA getting posterior)')
   call cpu_clock_begin(id_clock_oda_init)
 
 ! Use ens1 parameters , this could be changed at a later time
@@ -234,7 +228,7 @@ subroutine init_oda(Time, G, GV, diag_CS, CS)
        "The total number of thickness grid points in the "//&
        "y-direction in the physical domain.")
   call get_param(PF, 'MOM', "INPUTDIR", inputdir)
-  call get_param(PF, "MOM", "REMAPPING_SCHEME", remap_scheme, default="PPM_H4")
+  call get_param(PF, "MOM", "ODA_REMAPPING_SCHEME", remap_scheme, default="PPM_H4")
   inputdir = slasher(inputdir)
 
   select case(lowercase(trim(assim_method)))
@@ -407,7 +401,6 @@ subroutine set_prior_tracer(Time, G, GV, h, tv, CS)
   !! switch to global pelist
   call set_PElist(CS%filter_pelist)
   !call MOM_mesg('Setting prior')
-  !call cpu_clock_begin(id_clock_oda_prior)
 
   ! computational domain for the analysis grid
   isc=CS%Grid%isc;iec=CS%Grid%iec;jsc=CS%Grid%jsc;jec=CS%Grid%jec
@@ -434,7 +427,6 @@ subroutine set_prior_tracer(Time, G, GV, h, tv, CS)
     call pass_var(CS%Ocean_prior%S(:,:,:,m),CS%Grid%domain)
   enddo
 
-  !call cpu_clock_end(id_clock_oda_prior)
   !! switch back to ensemble member pelist
   call set_PElist(CS%ensemble_pelist(CS%ensemble_id,:))
 
@@ -463,7 +455,6 @@ subroutine get_posterior_tracer(Time, CS, h, tv, increment)
   !! switch to global pelist
   call set_PElist(CS%filter_pelist)
   call MOM_mesg('Getting posterior')
-  !call cpu_clock_begin(id_clock_oda_posterior)
   if (present(h)) h => CS%h ! get analysis thickness
   !! Calculate and redistribute increments to CS%tv right after assimilation
   !! Retain CS%tv to calculate increments for IAU updates CS%tv_inc otherwise
@@ -492,7 +483,6 @@ subroutine get_posterior_tracer(Time, CS, h, tv, increment)
   if (present(tv)) tv => CS%tv
   if (present(h)) h => CS%h
 
-  !call cpu_clock_end(id_clock_oda_posterior)
 
   !! switch back to ensemble member pelist
   call set_PElist(CS%ensemble_pelist(CS%ensemble_id,:))
@@ -520,12 +510,10 @@ subroutine oda(Time, CS)
 
     !! switch to global pelist
     call set_PElist(CS%filter_pelist)
-    !call cpu_clock_begin(id_clock_oda_filter)
     call get_profiles(Time, CS%Profiles, CS%CProfiles)
 #ifdef ENABLE_ECDA
     call ensemble_filter(CS%Ocean_prior, CS%Ocean_posterior, CS%CProfiles, CS%kdroot, CS%mpp_domain, CS%oda_grid)
 #endif
-    !call cpu_clock_end(id_clock_oda_filter)
     !! switch back to ensemble member pelist
     call set_PElist(CS%ensemble_pelist(CS%ensemble_id,:))
     call get_posterior_tracer(Time, CS, increment=.true.)
