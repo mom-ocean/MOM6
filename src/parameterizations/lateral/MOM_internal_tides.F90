@@ -1656,9 +1656,9 @@ subroutine reflect(En, NAngle, CS, G, LB)
 
   real    :: TwoPi                         ! 2*pi = 6.2831853... [nondim]
   real    :: Angle_size                    ! size of beam wedge [rad]
-  integer :: angle_wall                    ! angle of coast/ridge/shelf wrt equator [rad]
+  integer :: angle_wall                    ! angle of coast/ridge/shelf wrt equator [nondim]
   integer :: angle_wall0                   ! angle of coast/ridge/shelf wrt equator [nondim]
-  integer :: angle_r                       ! angle of reflected ray wrt equator [rad]
+  integer :: angle_r                       ! angle of reflected ray wrt equator [nondim]
   integer :: angle_r0                      ! angle of reflected ray wrt equator [nondim]
   integer :: angle_to_wall                 ! angle relative to wall [nondim]
   integer :: a, a0                         ! loop index for angles
