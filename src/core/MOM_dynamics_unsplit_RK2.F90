@@ -602,8 +602,8 @@ subroutine initialize_dyn_unsplit_RK2(u, v, h, Time, G, GV, US, param_file, diag
   call get_param(param_file, mdl, "TIDES", use_tides, &
                  "If true, apply tidal momentum forcing.", default=.false.)
 
-  allocate(CS%taux_bot(IsdB:IedB,jsd:jed)) ; CS%taux_bot(:,:) = 0.0
-  allocate(CS%tauy_bot(isd:ied,JsdB:JedB)) ; CS%tauy_bot(:,:) = 0.0
+  allocate(CS%taux_bot(IsdB:IedB,jsd:jed), source=0.0)
+  allocate(CS%tauy_bot(isd:ied,JsdB:JedB), source=0.0)
 
   MIS%diffu => CS%diffu ; MIS%diffv => CS%diffv
   MIS%PFu => CS%PFu ; MIS%PFv => CS%PFv

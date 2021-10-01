@@ -279,7 +279,7 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
     if (CS%fixed_total_depth) then
       !$OMP parallel do default(shared)
       do j=js-1,je+1 ; do i=is-1,ie+1
-        depth_tot(i,j) = G%bathyT(i,j)
+        depth_tot(i,j) = G%bathyT(i,j) + G%Z_ref
       enddo ; enddo
     else
       !$OMP parallel do default(shared)
@@ -346,6 +346,10 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
       do j=js,je ; do i=is,ie
         src(i,j) = src(i,j) - CS%MEKE_restoring_rate*(MEKE%MEKE(i,j) - CS%equilibrium_value(i,j))
       enddo ; enddo
+    endif
+
+    if (CS%debug) then
+      call hchksum(src, "MEKE src", G%HI, haloshift=0, scale=US%L_to_m**2*US%s_to_T**3)
     endif
 
     ! Increase EKE by a full time-steps worth of source
@@ -546,6 +550,10 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
         enddo ; enddo
       endif
     endif ! MEKE_KH>=0
+
+    if (CS%debug) then
+      call hchksum(MEKE%MEKE, "MEKE post-update MEKE", G%HI, haloshift=0, scale=US%L_T_to_m_s**2)
+    endif
 
     call cpu_clock_begin(CS%id_clock_pass)
     call do_group_pass(CS%pass_MEKE, G%Domain)
@@ -973,7 +981,7 @@ subroutine MEKE_lengthScales_0d(CS, US, area, beta, depth, Rd_dx, SN, EKE, & ! Z
       Leady = 0.
     endif
     if (CS%use_min_lscale) then
-      LmixScale = 1.e7
+      LmixScale = 1.e7*US%m_to_L
       if (CS%aDeform*Ldeform > 0.) LmixScale = min(LmixScale,CS%aDeform*Ldeform)
       if (CS%aFrict *Lfrict  > 0.) LmixScale = min(LmixScale,CS%aFrict *Lfrict)
       if (CS%aRhines*Lrhines > 0.) LmixScale = min(LmixScale,CS%aRhines*Lrhines)
@@ -1085,7 +1093,7 @@ logical function MEKE_init(Time, G, US, param_file, diag, CS, MEKE, restart_CS)
   if (CS%MEKE_equilibrium_restoring) then
     call get_param(param_file, mdl, "MEKE_RESTORING_TIMESCALE", MEKE_restoring_timescale, &
                    "The timescale used to nudge MEKE toward its equilibrium value.", units="s", &
-                   default=1e6, scale=US%T_to_s)
+                   default=1e6, scale=US%s_to_T)
     CS%MEKE_restoring_rate = 1.0 / MEKE_restoring_timescale
   endif
 
@@ -1400,41 +1408,36 @@ subroutine MEKE_alloc_register_restart(HI, param_file, MEKE, restart_CS)
 ! Allocate memory
   call MOM_mesg("MEKE_alloc_register_restart: allocating and registering", 5)
   isd = HI%isd ; ied = HI%ied ; jsd = HI%jsd ; jed = HI%jed
-  allocate(MEKE%MEKE(isd:ied,jsd:jed)) ; MEKE%MEKE(:,:) = 0.0
+  allocate(MEKE%MEKE(isd:ied,jsd:jed), source=0.0)
   vd = var_desc("MEKE", "m2 s-2", hor_grid='h', z_grid='1', &
            longname="Mesoscale Eddy Kinetic Energy")
   call register_restart_field(MEKE%MEKE, vd, .false., restart_CS)
-  if (MEKE_GMcoeff>=0.) then
-    allocate(MEKE%GM_src(isd:ied,jsd:jed)) ; MEKE%GM_src(:,:) = 0.0
-  endif
-  if (MEKE_FrCoeff>=0. .or. MEKE_GMECoeff>=0.)  then
-    allocate(MEKE%mom_src(isd:ied,jsd:jed)) ; MEKE%mom_src(:,:) = 0.0
-  endif
-  if (MEKE_GMECoeff>=0.) then
-    allocate(MEKE%GME_snk(isd:ied,jsd:jed)) ; MEKE%GME_snk(:,:) = 0.0
-  endif
+  if (MEKE_GMcoeff>=0.) allocate(MEKE%GM_src(isd:ied,jsd:jed), source=0.0)
+  if (MEKE_FrCoeff>=0. .or. MEKE_GMECoeff>=0.) &
+    allocate(MEKE%mom_src(isd:ied,jsd:jed), source=0.0)
+  if (MEKE_GMECoeff>=0.) allocate(MEKE%GME_snk(isd:ied,jsd:jed), source=0.0)
   if (MEKE_KhCoeff>=0.) then
-    allocate(MEKE%Kh(isd:ied,jsd:jed)) ; MEKE%Kh(:,:) = 0.0
+    allocate(MEKE%Kh(isd:ied,jsd:jed), source=0.0)
     vd = var_desc("MEKE_Kh", "m2 s-1", hor_grid='h', z_grid='1', &
              longname="Lateral diffusivity from Mesoscale Eddy Kinetic Energy")
     call register_restart_field(MEKE%Kh, vd, .false., restart_CS)
   endif
-  allocate(MEKE%Rd_dx_h(isd:ied,jsd:jed)) ; MEKE%Rd_dx_h(:,:) = 0.0
+  allocate(MEKE%Rd_dx_h(isd:ied,jsd:jed), source=0.0)
   if (MEKE_viscCoeff_Ku/=0.) then
-    allocate(MEKE%Ku(isd:ied,jsd:jed)) ; MEKE%Ku(:,:) = 0.0
+    allocate(MEKE%Ku(isd:ied,jsd:jed), source=0.0)
     vd = var_desc("MEKE_Ku", "m2 s-1", hor_grid='h', z_grid='1', &
              longname="Lateral viscosity from Mesoscale Eddy Kinetic Energy")
     call register_restart_field(MEKE%Ku, vd, .false., restart_CS)
   endif
   if (Use_Kh_in_MEKE) then
-    allocate(MEKE%Kh_diff(isd:ied,jsd:jed)) ; MEKE%Kh_diff(:,:) = 0.0
+    allocate(MEKE%Kh_diff(isd:ied,jsd:jed), source=0.0)
     vd = var_desc("MEKE_Kh_diff", "m2 s-1",hor_grid='h',z_grid='1', &
              longname="Copy of thickness diffusivity for diffusing MEKE")
     call register_restart_field(MEKE%Kh_diff, vd, .false., restart_CS)
   endif
 
   if (MEKE_viscCoeff_Au/=0.) then
-    allocate(MEKE%Au(isd:ied,jsd:jed)) ; MEKE%Au(:,:) = 0.0
+    allocate(MEKE%Au(isd:ied,jsd:jed), source=0.0)
     vd = var_desc("MEKE_Au", "m4 s-1", hor_grid='h', z_grid='1', &
              longname="Lateral biharmonic viscosity from Mesoscale Eddy Kinetic Energy")
     call register_restart_field(MEKE%Au, vd, .false., restart_CS)

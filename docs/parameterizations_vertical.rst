@@ -23,13 +23,12 @@ Interior and bottom-driven mixing
 Kappa-shear
   MOM_kappa_shear implements the shear-driven mixing of :cite:`jackson2008`.
 
-   :ref:`Internal_Shear_Mixing`
-
 Internal-tide driven mixing
 
   The schemes of :cite:`st_laurent2002`, :cite:`polzin2009`, and :cite:`melet2012`, are all implemented through MOM_set_diffusivity and MOM_diabatic_driver.
 
-   :ref:`Internal_Tidal_Mixing`
+   :ref:`Internal_Vert_Mixing`
+
 
 Vertical friction
 -----------------

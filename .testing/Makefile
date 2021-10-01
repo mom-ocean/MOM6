@@ -16,38 +16,43 @@
 #   These settings can be provided as either command-line flags, or saved in a
 #   `config.mk` file.
 #
-# Test suite configuration:
+# Experiment Configuration:
+#   BUILDS  Executables to be built by `make` or `make all`
+#   CONFIGS Model configurations to test (default: `tc*`)
+#   TESTS   Tests to run
+#   DIMS    Dimensional scaling tests
+# (NOTE: Each test will build its required executables, regardless of BUILDS)
 #
+# General test configuration:
+#   FRAMEWORK               Model framework (fms1 or fms2)
 #   MPIRUN                  MPI job launcher (mpirun, srun, etc)
 #   DO_REPRO_TESTS          Enable production ("repro") testing equivalence
-#   DO_REGRESSION_TESTS:    Enable regression tests (usually dev/gfdl)
+#   DO_REGRESSION_TESTS     Enable regression tests (usually dev/gfdl)
 #   REPORT_COVERAGE         Enable code coverage and report to codecov
 #
 # Compiler configuration:
-#   (NOTE: These are environment variables and may be inherited from a shell.)
-#
 #   CC      C compiler
 #   MPICC   MPI C compiler
 #   FC      Fortran compiler
 #   MPIFC   MPI Fortran compiler
+# (NOTE: These are environment variables and may be inherited from a shell.)
 #
 # Build configuration:
 #   FCFLAGS_DEBUG       Testing ("debug") compiler flags
 #   FCFLAGS_REPRO       Production ("repro") compiler flags
-#   FCFLAGS_OPT			Aggressive optimization compiler flags
+#   FCFLAGS_OPT         Aggressive optimization compiler flags
 #   FCFLAGS_INIT        Variable initialization flags
 #   FCFLAGS_COVERAGE    Code coverage flags
 #
 # Regression repository ("target") configuration:
-#   (NOTE: These would typically be configured by a CI such as Travis.)
-#
 #   MOM_TARGET_SLUG             URL slug (minus domain) of the target repo
 #   MOM_TARGET_URL              Full URL of the target repo
 #   MOM_TARGET_LOCAL_BRANCH     Target branch name
+# (NOTE: These would typically be configured by a CI.)
 #
 #----
 
-# TODO: Bourne shell compatibility
+# TODO: POSIX shell compatibility
 SHELL = bash
 
 # No implicit rules
@@ -58,6 +63,9 @@ MAKEFLAGS += -R
 
 # User-defined configuration
 -include config.mk
+
+# Set the infra framework
+FRAMEWORK ?= fms1
 
 # Set the MPI launcher here
 # TODO: This needs more automated configuration
@@ -73,11 +81,11 @@ export MPIFC
 # NOTE: FMS will be built using FCFLAGS_DEBUG
 FCFLAGS_DEBUG ?= -g -O0
 FCFLAGS_REPRO ?= -g -O2
-FCFLAGS_OPT	?= -g -O3 -mavx -fno-omit-frame-pointer
+FCFLAGS_OPT ?= -g -O3 -mavx -fno-omit-frame-pointer
 FCFLAGS_INIT ?=
 FCFLAGS_COVERAGE ?=
 # Additional notes:
-# - The default values are simple, minimalist flags, supported by nearly all
+# - These default values are simple, minimalist flags, supported by nearly all
 #   compilers which are comparable to GFDL's canonical DEBUG and REPRO builds.
 #
 # - These flags should be configured outside of the Makefile, either with
@@ -99,6 +107,13 @@ DO_REPRO_TESTS ?=
 TIME ?= time
 
 
+# Experiment configuration
+BUILDS ?= symmetric asymmetric openmp
+CONFIGS ?= $(wildcard tc*)
+TESTS ?= grid layout rotate restart openmp nan $(foreach d,$(DIMS),dim.$(d))
+DIMS ?= t l h z q r
+
+
 #---
 # Dependencies
 DEPS = deps
@@ -111,21 +126,12 @@ MKMF := $(DEPS)/bin/mkmf
 #---
 # Test configuration
 
-# Executables
-BUILDS = symmetric asymmetric repro openmp
-CONFIGS := $(wildcard tc*)
-TESTS = grids layouts restarts nans dims openmps rotations
-DIMS = t l h z q r
-
-# Set the framework
-FRAMEWORK ?= fms1
-
 # REPRO tests enable reproducibility with optimization, and often do not match
 # the DEBUG results in older GCCs and vendor compilers, so we can optionally
 # disable them.
 ifeq ($(DO_REPRO_TESTS), true)
   BUILDS += repro
-  TESTS += repros
+  TESTS += repro
 endif
 
 # Profiling
@@ -143,7 +149,7 @@ REPORT_COVERAGE ?=
 
 ifeq ($(DO_REGRESSION_TESTS), true)
   BUILDS += target
-  TESTS += regressions
+  TESTS += regression
 
   MOM_TARGET_SLUG ?= NOAA-GFDL/MOM6
   MOM_TARGET_URL ?= https://github.com/$(MOM_TARGET_SLUG)
@@ -203,7 +209,7 @@ endif
 #---
 # Rules
 
-.PHONY: all build.regressions
+.PHONY: all build.regressions build.prof
 all: $(foreach b,$(BUILDS),build/$(b)/MOM6) $(VENV_PATH)
 build.regressions: $(foreach b,symmetric target,build/$(b)/MOM6)
 build.prof: $(foreach b,opt opt_target,build/$(b)/MOM6)
@@ -295,7 +301,7 @@ build/%/Makefile: ../ac/configure ../ac/Makefile.in $(DEPS)/lib/libFMS.a $(MKMF)
 
 # Fetch the regression target codebase
 build/target/Makefile build/opt_target/Makefile: \
-		$(TARGET_CODEBASE)/ac/configure $(DEPS)/lib/libFMS.a $(MKMF) $(LIST_PATHS)
+  $(TARGET_CODEBASE)/ac/configure $(DEPS)/lib/libFMS.a $(MKMF) $(LIST_PATHS)
 	mkdir -p $(@D)
 	cd $(@D) \
 	  && $(MOM_ENV) ../../$(TARGET_CODEBASE)/ac/configure $(MOM_ACFLAGS) \
@@ -352,6 +358,7 @@ $(DEPS)/Makefile: ../ac/deps/Makefile
 	mkdir -p $(@D)
 	cp $< $@
 
+
 #---
 # The following block does a non-library build of a coupled driver interface to MOM, along with everything below it.
 # This simply checks that we have not broken the ability to compile. This is not a means to build a complete coupled executable.
@@ -371,6 +378,7 @@ check_mom6_api_coupled: build/coupled/ocean_model_MOM.o
 build/mct/mom_ocean_model_mct.o: build/mct/Makefile
 	cd $(@D) && make $(@F)
 check_mom6_api_mct: build/mct/mom_ocean_model_mct.o
+
 
 #---
 # Python preprocessing
@@ -401,21 +409,38 @@ test: $(foreach t,$(TESTS),test.$(t))
 # TODO: restart checksum comparison is not yet implemented
 
 .PHONY: $(foreach t,$(TESTS),test.$(t))
-test.grids: $(foreach c,$(filter-out tc3,$(CONFIGS)),$(c).grid $(c).grid.diag)
-test.layouts: $(foreach c,$(CONFIGS),$(c).layout $(c).layout.diag)
-test.rotations: $(foreach c,$(CONFIGS),$(c).rotate)
-test.restarts: $(foreach c,$(CONFIGS),$(c).restart)
-test.repros: $(foreach c,$(CONFIGS),$(c).repro $(c).repro.diag)
-test.openmps: $(foreach c,$(CONFIGS),$(c).openmp $(c).openmp.diag)
-test.nans: $(foreach c,$(CONFIGS),$(c).nan $(c).nan.diag)
-test.dims: $(foreach c,$(CONFIGS),$(foreach d,$(DIMS),$(c).dim.$(d) $(c).dim.$(d).diag))
-test.regressions: $(foreach c,$(CONFIGS),$(c).regression $(c).regression.diag)
+test.grid: $(foreach c,$(filter-out tc3,$(CONFIGS)),$(c).grid $(c).grid.diag)
+test.layout: $(foreach c,$(CONFIGS),$(c).layout $(c).layout.diag)
+test.rotate: $(foreach c,$(CONFIGS),$(c).rotate)
+test.restart: $(foreach c,$(CONFIGS),$(c).restart)
+test.repro: $(foreach c,$(CONFIGS),$(c).repro $(c).repro.diag)
+test.openmp: $(foreach c,$(CONFIGS),$(c).openmp $(c).openmp.diag)
+test.nan: $(foreach c,$(CONFIGS),$(c).nan $(c).nan.diag)
+test.regression: $(foreach c,$(CONFIGS),$(c).regression $(c).regression.diag)
+test.dim: $(foreach d,$(DIMS),test.dim.$(d))
+define TEST_DIM_RULE
+test.dim.$(1): $(foreach c,$(CONFIGS),$(c).dim.$(1) $(c).dim.$(1).diag)
+endef
+$(foreach d,$(DIMS),$(eval $(call TEST_DIM_RULE,$(d))))
 
 .PHONY: run.symmetric run.asymmetric run.nans run.openmp
 run.symmetric: $(foreach c,$(CONFIGS),work/$(c)/symmetric/ocean.stats)
 run.asymmetric: $(foreach c,$(filter-out tc3,$(CONFIGS)),$(CONFIGS),work/$(c)/asymmetric/ocean.stats)
-run.nans: $(foreach c,$(CONFIGS),work/$(c)/nan/ocean.stats)
+run.nan: $(foreach c,$(CONFIGS),work/$(c)/nan/ocean.stats)
 run.openmp: $(foreach c,$(CONFIGS),work/$(c)/openmp/ocean.stats)
+
+# Configuration test rules
+# $(1): Configuration name (tc1, tc2, &c.)
+# $(2): Excluded tests
+.PRECIOUS: $(foreach c,$(CONFIGS),$(c))
+define CONFIG_RULE
+$(1): \
+  $(foreach t,$(filter-out $(2),$(TESTS)),$(1).$(t)) \
+  $(foreach t,$(filter-out $(2) rotate restart,$(TESTS)),$(1).$(t).diag)
+endef
+$(foreach c,$(filter-out tc3,$(CONFIGS)),$(eval $(call CONFIG_RULE,$(c),)))
+# NOTE: tc3 uses OBCs and does not support asymmetric grid
+$(eval $(call CONFIG_RULE,tc3,grid))
 
 # Color highlights for test results
 RED = \033[0;31m
@@ -430,36 +455,41 @@ WARN = ${YELLOW}WARN${RESET}
 FAIL = ${RED}FAIL${RESET}
 
 # Comparison rules
-# $(1): Test type (grid, layout, &c.)
-# $(2): Comparison targets (symmetric asymmetric, symmetric layout, &c.)
+# $(1): Configuration (tc1, tc2, &c.)
+# $(2): Test type (grid, layout, &c.)
+# $(3): Comparison targets (symmetric asymmetric, symmetric layout, &c.)
 define CMP_RULE
-.PRECIOUS: $(foreach b,$(2),work/%/$(b)/ocean.stats)
-%.$(1): $(foreach b,$(2),work/%/$(b)/ocean.stats)
-	@test "$$(shell ls -A results/$$* 2>/dev/null)" || rm -rf results/$$*
+.PRECIOUS: $(foreach b,$(3),work/$(1)/$(b)/ocean.stats)
+$(1).$(2): $(foreach b,$(3),work/$(1)/$(b)/ocean.stats)
+	@test "$$(shell ls -A results/$(1) 2>/dev/null)" || rm -rf results/$(1)
 	@cmp $$^ || !( \
-	  mkdir -p results/$$*; \
-	  (diff $$^ | tee results/$$*/ocean.stats.$(1).diff | head -n 20) ; \
-	  echo -e "$(FAIL): Solutions $$*.$(1) have changed." \
+	  mkdir -p results/$(1); \
+	  (diff $$^ | tee results/$(1)/ocean.stats.$(2).diff | head -n 20) ; \
+	  echo -e "$(FAIL): Solutions $(1).$(2) have changed." \
 	)
-	@echo -e "$(PASS): Solutions $$*.$(1) agree."
+	@echo -e "$(PASS): Solutions $(1).$(2) agree."
 
-.PRECIOUS: $(foreach b,$(2),work/%/$(b)/chksum_diag)
-%.$(1).diag: $(foreach b,$(2),work/%/$(b)/chksum_diag)
+.PRECIOUS: $(foreach b,$(3),work/$(1)/$(b)/chksum_diag)
+$(1).$(2).diag: $(foreach b,$(3),work/$(1)/$(b)/chksum_diag)
 	@cmp $$^ || !( \
-	  mkdir -p results/$$*; \
-	  (diff $$^ | tee results/$$*/chksum_diag.$(1).diff | head -n 20) ; \
-	  echo -e "$(FAIL): Diagnostics $$*.$(1).diag have changed." \
+	  mkdir -p results/$(1); \
+	  (diff $$^ | tee results/$(1)/chksum_diag.$(2).diff | head -n 20) ; \
+	  echo -e "$(FAIL): Diagnostics $(1).$(2).diag have changed." \
 	)
-	@echo -e "$(PASS): Diagnostics $$*.$(1).diag agree."
+	@echo -e "$(PASS): Diagnostics $(1).$(2).diag agree."
 endef
 
-$(eval $(call CMP_RULE,grid,symmetric asymmetric))
-$(eval $(call CMP_RULE,layout,symmetric layout))
-$(eval $(call CMP_RULE,rotate,symmetric rotate))
-$(eval $(call CMP_RULE,repro,symmetric repro))
-$(eval $(call CMP_RULE,openmp,symmetric openmp))
-$(eval $(call CMP_RULE,nan,symmetric nan))
-$(foreach d,$(DIMS),$(eval $(call CMP_RULE,dim.$(d),symmetric dim.$(d))))
+$(foreach c,$(CONFIGS),$(eval $(call CMP_RULE,$(c),grid,symmetric asymmetric)))
+$(foreach c,$(CONFIGS),$(eval $(call CMP_RULE,$(c),layout,symmetric layout)))
+$(foreach c,$(CONFIGS),$(eval $(call CMP_RULE,$(c),rotate,symmetric rotate)))
+$(foreach c,$(CONFIGS),$(eval $(call CMP_RULE,$(c),repro,symmetric repro)))
+$(foreach c,$(CONFIGS),$(eval $(call CMP_RULE,$(c),openmp,symmetric openmp)))
+$(foreach c,$(CONFIGS),$(eval $(call CMP_RULE,$(c),nan,symmetric nan)))
+define CONFIG_DIM_RULE
+$(1).dim: $(foreach d,$(DIMS),$(1).dim.$(d))
+$(foreach d,$(DIMS),$(eval $(call CMP_RULE,$(1),dim.$(d),symmetric dim.$(d))))
+endef
+$(foreach c,$(CONFIGS),$(eval $(call CONFIG_DIM_RULE,$(c))))
 
 # Custom comparison rules
 
@@ -559,7 +589,7 @@ $(eval $(call STAT_RULE,repro,repro,,,,1))
 $(eval $(call STAT_RULE,openmp,openmp,,,GOMP_CPU_AFFINITY=0,1))
 $(eval $(call STAT_RULE,layout,symmetric,,LAYOUT=2$(,)1,,2))
 $(eval $(call STAT_RULE,rotate,symmetric,,ROTATE_INDEX=True\nINDEX_TURNS=1,,1))
-$(eval $(call STAT_RULE,nan,symmetric,,,MALLOC_PERTURB_=256,1))
+$(eval $(call STAT_RULE,nan,symmetric,,,MALLOC_PERTURB_=1,1))
 $(eval $(call STAT_RULE,dim.t,symmetric,,T_RESCALE_POWER=11,,1))
 $(eval $(call STAT_RULE,dim.l,symmetric,,L_RESCALE_POWER=11,,1))
 $(eval $(call STAT_RULE,dim.h,symmetric,,H_RESCALE_POWER=11,,1))
@@ -705,7 +735,13 @@ work/p0/%/perf.data:
 # NOTE: These tests assert that we are in the .testing directory.
 
 .PHONY: clean
-clean: clean.stats
+clean: clean.build clean.stats
+	@[ $$(basename $$(pwd)) = .testing ]
+	rm -rf deps
+
+
+.PHONY: clean.build
+clean.build:
 	@[ $$(basename $$(pwd)) = .testing ]
 	rm -rf build
 

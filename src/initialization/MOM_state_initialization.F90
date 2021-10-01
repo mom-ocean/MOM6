@@ -232,7 +232,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
   ! geopotential height, for use by the various initialization routines.  G%bathyT has
   ! already been initialized in previous calls.
   do j=jsd,jed ; do i=isd,ied
-    depth_tot(i,j) = G%bathyT(i,j)
+    depth_tot(i,j) = G%bathyT(i,j) + G%Z_ref
   enddo ; enddo
 
   ! The remaining initialization calls are done, regardless of whether the
@@ -706,7 +706,7 @@ subroutine initialize_thickness_from_file(h, depth_tot, G, GV, US, param_file, f
     call MOM_read_data(filename, "eta", eta(:,:,:), G%Domain, scale=US%m_to_Z)
 
     if (correct_thickness) then
-      call adjustEtaToFitBathymetry(G, GV, US, eta, h, dZ_ref_eta=0.0)
+      call adjustEtaToFitBathymetry(G, GV, US, eta, h, dZ_ref_eta=G%Z_ref)
     else
       do k=nz,1,-1 ; do j=js,je ; do i=is,ie
         if (eta(i,j,K) < (eta(i,j,K+1) + GV%Angstrom_Z)) then
@@ -1086,7 +1086,7 @@ subroutine depress_surface(h, G, GV, US, param_file, tv, just_read_params)
   call MOM_read_data(filename, eta_srf_var, eta_sfc, G%Domain, scale=scale_factor)
 
   ! Convert thicknesses to interface heights.
-  call find_eta(h, tv, G, GV, US, eta)
+  call find_eta(h, tv, G, GV, US, eta, dZref=G%Z_ref)
 
   do j=js,je ; do i=is,ie ; if (G%mask2dT(i,j) > 0.0) then
 !    if (eta_sfc(i,j) < eta(i,j,nz+1)) then
@@ -1199,7 +1199,7 @@ subroutine trim_for_ice(PF, G, GV, US, ALE_CSp, tv, h, just_read_params)
   endif
 
   do j=G%jsc,G%jec ; do i=G%isc,G%iec
-    call cut_off_column_top(GV%ke, tv, GV, US, GV%g_Earth, G%bathyT(i,j), &
+    call cut_off_column_top(GV%ke, tv, GV, US, GV%g_Earth, G%bathyT(i,j)+G%Z_ref, &
                min_thickness, tv%T(i,j,:), T_t(i,j,:), T_b(i,j,:), &
                tv%S(i,j,:), S_t(i,j,:), S_b(i,j,:), p_surf(i,j), h(i,j,:), remap_CS, &
                z_tol=1.0e-5*US%m_to_Z, remap_answers_2018=remap_answers_2018)
@@ -1929,7 +1929,7 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, u, v, depth_t
 
   if (.not. use_ALE) then
     ! The first call to set_up_sponge_field is for the interface heights if in layered mode.
-    allocate(eta(isd:ied,jsd:jed,nz+1)); eta(:,:,:) = 0.0
+    allocate(eta(isd:ied,jsd:jed,nz+1), source=0.0)
     call MOM_read_data(filename, eta_var, eta(:,:,:), G%Domain, scale=US%m_to_Z)
 
     do j=js,je ; do i=is,ie
@@ -2194,9 +2194,8 @@ subroutine initialize_oda_incupd_file(G, GV, US, use_temperature, tv, h, u, v, p
     call log_param(param_file, mdl, "INPUTDIR/ODA_INCUPD_UV_FILE", filename)
     if (.not.file_exists(filename, G%Domain)) &
             call MOM_error(FATAL, " initialize_oda_incupd_uv: Unable to open "//trim(filename))
-    allocate(tmp_u(G%IsdB:G%IedB,jsd:jed,nz_data))
-    allocate(tmp_v(isd:ied,G%JsdB:G%JedB,nz_data))
-    tmp_u(:,:,:) = 0.0 ; tmp_v(:,:,:) = 0.0
+    allocate(tmp_u(G%IsdB:G%IedB,jsd:jed,nz_data), source=0.0)
+    allocate(tmp_v(isd:ied,G%JsdB:G%JedB,nz_data), source=0.0)
     call MOM_read_vector(filename, uinc_var, vinc_var, tmp_u, tmp_v, G%Domain,scale=US%m_s_to_L_T)
     call set_up_oda_incupd_vel_field(tmp_u, tmp_v, G, GV, oda_incupd_CSp)
     deallocate(tmp_u,tmp_v)
@@ -2550,10 +2549,10 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, depth_tot, G, GV, US, PF, just
     nkd = max(GV%ke, kd)
 
     ! Build the source grid and copy data onto model-shaped arrays with vanished layers
-    allocate( tmp_mask_in(isd:ied,jsd:jed,nkd) ) ; tmp_mask_in(:,:,:) = 0.
-    allocate( h1(isd:ied,jsd:jed,nkd) ) ; h1(:,:,:) = 0.
-    allocate( tmpT1dIn(isd:ied,jsd:jed,nkd) ) ; tmpT1dIn(:,:,:) = 0.
-    allocate( tmpS1dIn(isd:ied,jsd:jed,nkd) ) ; tmpS1dIn(:,:,:) = 0.
+    allocate( tmp_mask_in(isd:ied,jsd:jed,nkd), source=0.0 )
+    allocate( h1(isd:ied,jsd:jed,nkd), source=0.0 )
+    allocate( tmpT1dIn(isd:ied,jsd:jed,nkd), source=0.0 )
+    allocate( tmpS1dIn(isd:ied,jsd:jed,nkd), source=0.0 )
     do j = js, je ; do i = is, ie
       if (G%mask2dT(i,j)>0.) then
         zTopOfCell = 0. ; zBottomOfCell = 0.
@@ -2658,7 +2657,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, depth_tot, G, GV, US, PF, just
                          Hmix_depth, eps_z, eps_rho, density_extrap_bug)
 
     if (correct_thickness) then
-      call adjustEtaToFitBathymetry(G, GV, US, zi, h, dZ_ref_eta=0.0)
+      call adjustEtaToFitBathymetry(G, GV, US, zi, h, dZ_ref_eta=G%Z_ref)
     else
       do k=nz,1,-1 ; do j=js,je ; do i=is,ie
         if (zi(i,j,K) < (zi(i,j,K+1) + GV%Angstrom_Z)) then

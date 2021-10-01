@@ -184,11 +184,11 @@ subroutine calc_depth_function(G, CS)
   expo = CS%depth_scaled_khth_exp
 !$OMP do
   do j=js,je ; do I=is-1,Ieq
-    CS%Depth_fn_u(I,j) = (MIN(1.0, 0.5*(G%bathyT(i,j) + G%bathyT(i+1,j))/H0))**expo
+    CS%Depth_fn_u(I,j) = (MIN(1.0, (0.5*(G%bathyT(i,j) + G%bathyT(i+1,j)) + G%Z_ref)/H0))**expo
   enddo ; enddo
 !$OMP do
   do J=js-1,Jeq ; do i=is,ie
-    CS%Depth_fn_v(i,J) = (MIN(1.0, 0.5*(G%bathyT(i,j) + G%bathyT(i,j+1))/H0))**expo
+    CS%Depth_fn_v(i,J) = (MIN(1.0, (0.5*(G%bathyT(i,j) + G%bathyT(i,j+1)) + G%Z_ref)/H0))**expo
   enddo ; enddo
 
 end subroutine calc_depth_function
@@ -506,10 +506,10 @@ subroutine calc_Visbeck_coeffs_old(h, slope_x, slope_y, N2_u, N2_v, G, GV, US, C
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),    intent(in)    :: h  !< Layer thickness [H ~> m or kg m-2]
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)+1), intent(in)    :: slope_x !< Zonal isoneutral slope
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)+1), intent(in)    :: N2_u    !< Buoyancy (Brunt-Vaisala) frequency
-                                                                         !! at u-points [T-2 ~> s-2]
+                                                                         !! at u-points [L2 Z-2 T-2 ~> s-2]
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)+1), intent(in)    :: slope_y !< Meridional isoneutral slope
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)+1), intent(in)    :: N2_v    !< Buoyancy (Brunt-Vaisala) frequency
-                                                                         !! at v-points [T-2 ~> s-2]
+                                                                         !! at v-points [L2 Z-2 T-2 ~> s-2]
   type(unit_scale_type),                        intent(in)    :: US !< A dimensional unit scaling type
   type(VarMix_CS),                              pointer       :: CS !< Variable mixing coefficients
   type(ocean_OBC_type),               optional, pointer       :: OBC !< Open boundaries control structure.
@@ -654,9 +654,10 @@ subroutine calc_Visbeck_coeffs_old(h, slope_x, slope_y, N2_u, N2_v, G, GV, US, C
   endif
 
   if (CS%debug) then
-    call uvchksum("calc_Visbeck_coeffs_old slope_[xy]", slope_x, slope_y, G%HI, haloshift=1)
+    call uvchksum("calc_Visbeck_coeffs_old slope_[xy]", slope_x, slope_y, G%HI, &
+                  scale=US%Z_to_L, haloshift=1)
     call uvchksum("calc_Visbeck_coeffs_old N2_u, N2_v", N2_u, N2_v, G%HI, &
-                  scale=US%s_to_T**2, scalar_pair=.true.)
+                  scale=US%L_to_Z**2 * US%s_to_T**2, scalar_pair=.true.)
     call uvchksum("calc_Visbeck_coeffs_old SN_[uv]", CS%SN_u, CS%SN_v, G%HI, &
                   scale=US%s_to_T, scalar_pair=.true.)
   endif
@@ -958,11 +959,12 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, US, CS, e, calculate_slop
     enddo ; enddo
     ! SN above contains S^2*N^2*H, convert to vertical average of S*N
     do I=is-1,ie
-      !SN_u(I,j) = sqrt( SN_u(I,j) / ( max(G%bathyT(I,j), G%bathyT(I+1,j)) + GV%Angstrom_Z ) ))
+      !### Replace G%bathT+G%Z_ref here with (e(i,j,1) - e(i,j,nz+1)).
+      !SN_u(I,j) = sqrt( SN_u(I,j) / ( max(G%bathyT(i,j), G%bathyT(i+1,j)) + (G%Z_ref + GV%Angstrom_Z) ) )
       !The code below behaves better than the line above. Not sure why? AJA
-      if ( min(G%bathyT(I,j), G%bathyT(I+1,j)) > H_cutoff*GV%H_to_Z ) then
+      if ( min(G%bathyT(i,j), G%bathyT(i+1,j)) + G%Z_ref > H_cutoff*GV%H_to_Z ) then
         CS%SN_u(I,j) = G%mask2dCu(I,j) * sqrt( CS%SN_u(I,j) / &
-                                               (max(G%bathyT(I,j), G%bathyT(I+1,j))) )
+                                               (max(G%bathyT(i,j), G%bathyT(i+1,j)) + G%Z_ref) )
       else
         CS%SN_u(I,j) = 0.0
       endif
@@ -984,20 +986,21 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, US, CS, e, calculate_slop
       CS%SN_v(i,J) = CS%SN_v(i,J) + S2N2_v_local(i,J,k)
     enddo ; enddo
     do i=is,ie
-      !SN_v(i,J) = sqrt( SN_v(i,J) / ( max(G%bathyT(i,J), G%bathyT(i,J+1)) + GV%Angstrom_Z ) ))
+      !### Replace G%bathT+G%Z_ref here with (e(i,j,1) - e(i,j,nz+1)).
+      !SN_v(i,J) = sqrt( SN_v(i,J) / ( max(G%bathyT(i,J), G%bathyT(i,J+1)) + (G%Z_ref + GV%Angstrom_Z) ) )
       !The code below behaves better than the line above. Not sure why? AJA
-      if ( min(G%bathyT(I,j), G%bathyT(I+1,j)) > H_cutoff*GV%H_to_Z ) then
+      if ( min(G%bathyT(i,j), G%bathyT(i+1,j)) + G%Z_ref > H_cutoff*GV%H_to_Z ) then
         CS%SN_v(i,J) = G%mask2dCv(i,J) * sqrt( CS%SN_v(i,J) / &
-                                               (max(G%bathyT(i,J), G%bathyT(i,J+1))) )
+                                               (max(G%bathyT(i,j), G%bathyT(i,j+1)) + G%Z_ref) )
       else
-        CS%SN_v(I,j) = 0.0
+        CS%SN_v(i,J) = 0.0
       endif
       if (local_open_v_BC) then
-        l_seg = OBC%segnum_v(I,j)
+        l_seg = OBC%segnum_v(i,J)
 
         if (l_seg /= OBC_NONE) then
-          if (OBC%segment(OBC%segnum_v(I,j))%open) then
-            CS%SN_v(I,j) = 0.
+          if (OBC%segment(OBC%segnum_v(i,J))%open) then
+            CS%SN_v(i,J) = 0.
           endif
         endif
       endif
@@ -1265,7 +1268,7 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
                  "The depth below which N2 is monotonized to avoid stratification "//&
                  "artifacts from altering the equivalent barotropic mode structure.",&
                  units="m", default=2000., scale=US%m_to_Z)
-    allocate(CS%ebt_struct(isd:ied,jsd:jed,GV%ke)) ; CS%ebt_struct(:,:,:) = 0.0
+    allocate(CS%ebt_struct(isd:ied,jsd:jed,GV%ke), source=0.0)
   endif
 
   if (CS%use_stored_slopes) then
@@ -1282,8 +1285,8 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
 
   if (CS%use_stored_slopes) then
     in_use = .true.
-    allocate(CS%slope_x(IsdB:IedB,jsd:jed,GV%ke+1)) ; CS%slope_x(:,:,:) = 0.0
-    allocate(CS%slope_y(isd:ied,JsdB:JedB,GV%ke+1)) ; CS%slope_y(:,:,:) = 0.0
+    allocate(CS%slope_x(IsdB:IedB,jsd:jed,GV%ke+1), source=0.0)
+    allocate(CS%slope_y(isd:ied,JsdB:JedB,GV%ke+1), source=0.0)
     call get_param(param_file, mdl, "KD_SMOOTH", CS%kappa_smooth, &
                  "A diapycnal diffusivity that is used to interpolate "//&
                  "more sensible values of T & S into thin layers.", &
@@ -1292,8 +1295,8 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
 
   if (CS%calculate_Eady_growth_rate) then
     in_use = .true.
-    allocate(CS%SN_u(IsdB:IedB,jsd:jed)) ; CS%SN_u(:,:) = 0.0
-    allocate(CS%SN_v(isd:ied,JsdB:JedB)) ; CS%SN_v(:,:) = 0.0
+    allocate(CS%SN_u(IsdB:IedB,jsd:jed), source=0.0)
+    allocate(CS%SN_v(isd:ied,JsdB:JedB), source=0.0)
     CS%id_SN_u = register_diag_field('ocean_model', 'SN_u', diag%axesCu1, Time, &
        'Inverse eddy time-scale, S*N, at u-points', 's-1', conversion=US%s_to_T)
     CS%id_SN_v = register_diag_field('ocean_model', 'SN_v', diag%axesCv1, Time, &
@@ -1326,8 +1329,8 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
     call get_param(param_file, mdl, "VISBECK_L_SCALE", CS%Visbeck_L_scale, &
                  "The fixed length scale in the Visbeck formula.", units="m", &
                  default=0.0)
-    allocate(CS%L2u(IsdB:IedB,jsd:jed)) ; CS%L2u(:,:) = 0.0
-    allocate(CS%L2v(isd:ied,JsdB:JedB)) ; CS%L2v(:,:) = 0.0
+    allocate(CS%L2u(IsdB:IedB,jsd:jed), source=0.0)
+    allocate(CS%L2v(isd:ied,JsdB:JedB), source=0.0)
     if (CS%Visbeck_L_scale<0) then
       do j=js,je ; do I=is-1,Ieq
         CS%L2u(I,j) = CS%Visbeck_L_scale**2 * G%areaCu(I,j)
@@ -1383,16 +1386,16 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
   if (CS%Resoln_scaled_Kh .or. CS%Resoln_scaled_KhTh .or. CS%Resoln_scaled_KhTr) then
     CS%calculate_Rd_dx = .true.
     CS%calculate_res_fns = .true.
-    allocate(CS%Res_fn_h(isd:ied,jsd:jed))       ; CS%Res_fn_h(:,:) = 0.0
-    allocate(CS%Res_fn_q(IsdB:IedB,JsdB:JedB))   ; CS%Res_fn_q(:,:) = 0.0
-    allocate(CS%Res_fn_u(IsdB:IedB,jsd:jed))     ; CS%Res_fn_u(:,:) = 0.0
-    allocate(CS%Res_fn_v(isd:ied,JsdB:JedB))     ; CS%Res_fn_v(:,:) = 0.0
-    allocate(CS%beta_dx2_q(IsdB:IedB,JsdB:JedB)) ; CS%beta_dx2_q(:,:) = 0.0
-    allocate(CS%beta_dx2_u(IsdB:IedB,jsd:jed))   ; CS%beta_dx2_u(:,:) = 0.0
-    allocate(CS%beta_dx2_v(isd:ied,JsdB:JedB))   ; CS%beta_dx2_v(:,:) = 0.0
-    allocate(CS%f2_dx2_q(IsdB:IedB,JsdB:JedB))   ; CS%f2_dx2_q(:,:) = 0.0
-    allocate(CS%f2_dx2_u(IsdB:IedB,jsd:jed))     ; CS%f2_dx2_u(:,:) = 0.0
-    allocate(CS%f2_dx2_v(isd:ied,JsdB:JedB))     ; CS%f2_dx2_v(:,:) = 0.0
+    allocate(CS%Res_fn_h(isd:ied,jsd:jed), source=0.0)
+    allocate(CS%Res_fn_q(IsdB:IedB,JsdB:JedB), source=0.0)
+    allocate(CS%Res_fn_u(IsdB:IedB,jsd:jed), source=0.0)
+    allocate(CS%Res_fn_v(isd:ied,JsdB:JedB), source=0.0)
+    allocate(CS%beta_dx2_q(IsdB:IedB,JsdB:JedB), source=0.0)
+    allocate(CS%beta_dx2_u(IsdB:IedB,jsd:jed), source=0.0)
+    allocate(CS%beta_dx2_v(isd:ied,JsdB:JedB), source=0.0)
+    allocate(CS%f2_dx2_q(IsdB:IedB,JsdB:JedB), source=0.0)
+    allocate(CS%f2_dx2_u(IsdB:IedB,jsd:jed), source=0.0)
+    allocate(CS%f2_dx2_v(isd:ied,JsdB:JedB), source=0.0)
 
     CS%id_Res_fn = register_diag_field('ocean_model', 'Res_fn', diag%axesT1, Time, &
        'Resolution function for scaling diffusivities', 'nondim')
@@ -1480,14 +1483,14 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
 
   if (CS%Depth_scaled_KhTh) then
     CS%calculate_depth_fns = .true.
-    allocate(CS%Depth_fn_u(IsdB:IedB,jsd:jed))     ; CS%Depth_fn_u(:,:) = 0.0
-    allocate(CS%Depth_fn_v(isd:ied,JsdB:JedB))     ; CS%Depth_fn_v(:,:) = 0.0
+    allocate(CS%Depth_fn_u(IsdB:IedB,jsd:jed), source=0.0)
+    allocate(CS%Depth_fn_v(isd:ied,JsdB:JedB), source=0.0)
     call get_param(param_file, mdl, "DEPTH_SCALED_KHTH_H0", CS%depth_scaled_khth_h0, &
-    "The depth above which KHTH is scaled away.",&
-    units="m", default=1000.)
+                   "The depth above which KHTH is scaled away.", &
+                   units="m", scale=US%m_to_Z, default=1000.)
     call get_param(param_file, mdl, "DEPTH_SCALED_KHTH_EXP", CS%depth_scaled_khth_exp, &
-    "The exponent used in the depth dependent scaling function for KHTH.",&
-    units="nondim", default=3.0)
+                   "The exponent used in the depth dependent scaling function for KHTH.", &
+                   units="nondim", default=3.0)
   endif
 
   ! Resolution %Rd_dx_h
@@ -1497,9 +1500,9 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
 
   if (CS%calculate_Rd_dx) then
     CS%calculate_cg1 = .true. ! We will need %cg1
-    allocate(CS%Rd_dx_h(isd:ied,jsd:jed))   ; CS%Rd_dx_h(:,:) = 0.0
-    allocate(CS%beta_dx2_h(isd:ied,jsd:jed)); CS%beta_dx2_h(:,:) = 0.0
-    allocate(CS%f2_dx2_h(isd:ied,jsd:jed))  ; CS%f2_dx2_h(:,:) = 0.0
+    allocate(CS%Rd_dx_h(isd:ied,jsd:jed), source=0.0)
+    allocate(CS%beta_dx2_h(isd:ied,jsd:jed), source=0.0)
+    allocate(CS%f2_dx2_h(isd:ied,jsd:jed), source=0.0)
     do j=js-1,je+1 ; do i=is-1,ie+1
       CS%f2_dx2_h(i,j) = (G%dxT(i,j)**2 + G%dyT(i,j)**2) * &
           max(0.25 * ((G%CoriolisBu(I,J)**2 + G%CoriolisBu(I-1,J-1)**2) + &
@@ -1515,7 +1518,7 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
 
   if (CS%calculate_cg1) then
     in_use = .true.
-    allocate(CS%cg1(isd:ied,jsd:jed)) ; CS%cg1(:,:) = 0.0
+    allocate(CS%cg1(isd:ied,jsd:jed), source=0.0)
     call get_param(param_file, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
                  "This sets the default value for the various _2018_ANSWERS parameters.", &
                  default=.false.)

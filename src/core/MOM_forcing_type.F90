@@ -183,6 +183,16 @@ type, public :: forcing
   real :: C_p                !< heat capacity of seawater [Q degC-1 ~> J kg-1 degC-1].
                              !! C_p is is the same value as in thermovar_ptrs_type.
 
+  ! CFC-related arrays needed in the MOM_CFC_cap module
+  real, pointer, dimension(:,:) :: &
+    cfc11_flux    => NULL(), &  !< flux of cfc_11 into the ocean [CU Z T-1 kg m-3 = mol Z T-1 m-3 ~> mol m-2 s-1].
+    cfc12_flux    => NULL(), &  !< flux of cfc_12 into the ocean [CU Z T-1 kg m-3 = mol Z T-1 m-3 ~> mol m-2 s-1].
+    ice_fraction  => NULL(), &  !< fraction of sea ice coverage at h-cells, from 0 to 1 [nondim].
+    u10_sqr       => NULL()     !< wind magnitude at 10 m squared [L2 T-2 ~> m2 s-2]
+
+  real, pointer, dimension(:,:) :: &
+    lamult => NULL()            !< Langmuir enhancement factor [nondim]
+
   ! passive tracer surface fluxes
   type(coupler_2d_bc_type) :: tr_fluxes !< This structure contains arrays of
      !! of named fields used for passive tracer fluxes.
@@ -246,7 +256,6 @@ type, public :: mech_forcing
   logical :: accumulate_rigidity = .false. !< If true, the rigidity due to various types of
                                 !! ice needs to be accumulated, and the rigidity explicitly
                                 !! reset to zero at the driver level when appropriate.
-
   real, pointer, dimension(:,:) :: &
        ustk0 => NULL(), &       !< Surface Stokes drift, zonal [m/s]
        vstk0 => NULL()          !< Surface Stokes drift, meridional [m/s]
@@ -348,6 +357,12 @@ type, public :: forcing_diags
   integer :: id_TKE_tidal = -1
   integer :: id_buoy      = -1
 
+  ! cfc-related diagnostics handles
+  integer :: id_cfc11    = -1
+  integer :: id_cfc12    = -1
+  integer :: id_ice_fraction = -1
+  integer :: id_u10_sqr      = -1
+
   ! iceberg diagnostic handles
   integer :: id_ustar_berg = -1
   integer :: id_area_berg = -1
@@ -356,6 +371,9 @@ type, public :: forcing_diags
   ! Iceberg + Ice shelf diagnostic handles
   integer :: id_ustar_ice_cover = -1
   integer :: id_frac_ice_cover = -1
+
+  ! wave forcing diagnostics handles.
+  integer :: id_lamult = -1
   !>@}
 
   integer :: id_clock_forcing = -1 !< CPU clock id
@@ -1087,6 +1105,14 @@ subroutine MOM_forcing_chksum(mesg, fluxes, G, US, haloshift)
                  haloshift=hshift, scale=US%QRZ_T_to_W_m2)
   if (associated(fluxes%p_surf)) &
     call hchksum(fluxes%p_surf, mesg//" fluxes%p_surf", G%HI, haloshift=hshift , scale=US%RL2_T2_to_Pa)
+  if (associated(fluxes%u10_sqr)) &
+    call hchksum(fluxes%u10_sqr, mesg//" fluxes%u10_sqr", G%HI, haloshift=hshift , scale=US%L_to_m**2*US%s_to_T**2)
+  if (associated(fluxes%ice_fraction)) &
+    call hchksum(fluxes%ice_fraction, mesg//" fluxes%ice_fraction", G%HI, haloshift=hshift)
+  if (associated(fluxes%cfc11_flux)) &
+    call hchksum(fluxes%cfc11_flux, mesg//" fluxes%cfc11_flux", G%HI, haloshift=hshift, scale=US%Z_to_m*US%s_to_T)
+  if (associated(fluxes%cfc12_flux)) &
+    call hchksum(fluxes%cfc12_flux, mesg//" fluxes%cfc12_flux", G%HI, haloshift=hshift, scale=US%Z_to_m*US%s_to_T)
   if (associated(fluxes%salt_flux)) &
     call hchksum(fluxes%salt_flux, mesg//" fluxes%salt_flux", G%HI, haloshift=hshift, scale=US%RZ_T_to_kg_m2s)
   if (associated(fluxes%TKE_tidal)) &
@@ -1100,7 +1126,7 @@ subroutine MOM_forcing_chksum(mesg, fluxes, G, US, haloshift)
     call hchksum(fluxes%frunoff, mesg//" fluxes%frunoff", G%HI, haloshift=hshift, scale=US%RZ_T_to_kg_m2s)
   if (associated(fluxes%heat_content_lrunoff)) &
     call hchksum(fluxes%heat_content_lrunoff, mesg//" fluxes%heat_content_lrunoff", G%HI, &
-                 haloshift=hshift, scale=US%RZ_T_to_kg_m2s)
+                 haloshift=hshift, scale=US%QRZ_T_to_W_m2)
   if (associated(fluxes%heat_content_frunoff)) &
     call hchksum(fluxes%heat_content_frunoff, mesg//" fluxes%heat_content_frunoff", G%HI, &
                  haloshift=hshift, scale=US%QRZ_T_to_W_m2)
@@ -1239,13 +1265,15 @@ end subroutine forcing_SinglePointPrint
 
 
 !> Register members of the forcing type for diagnostics
-subroutine register_forcing_type_diags(Time, diag, US, use_temperature, handles, use_berg_fluxes)
+subroutine register_forcing_type_diags(Time, diag, US, use_temperature, handles, use_berg_fluxes, use_waves, use_cfcs)
   type(time_type),     intent(in)    :: Time            !< time type
   type(diag_ctrl),     intent(inout) :: diag            !< diagnostic control type
   type(unit_scale_type), intent(in)  :: US              !< A dimensional unit scaling type
   logical,             intent(in)    :: use_temperature !< True if T/S are in use
   type(forcing_diags), intent(inout) :: handles         !< handles for diagnostics
   logical, optional,   intent(in)    :: use_berg_fluxes !< If true, allow iceberg flux diagnostics
+  logical, optional,   intent(in)    :: use_waves       !< If true, allow wave forcing diagnostics
+  logical, optional,   intent(in)    :: use_cfcs        !< If true, allow cfc related diagnostics
 
   ! Clock for forcing diagnostics
   handles%id_clock_forcing=cpu_clock_id('(Ocean forcing diagnostics)', grain=CLOCK_ROUTINE)
@@ -1285,6 +1313,34 @@ subroutine register_forcing_type_diags(Time, diag, US, use_temperature, handles,
 
       handles%id_frac_ice_cover = register_diag_field('ocean_model', 'frac_ice_cover', diag%axesT1, Time, &
           'Area of grid cell below iceberg and ice shelf together ', 'm2 m-2')
+    endif
+  endif
+
+  ! units for cfc11_flux and cfc12_flux are mol m-2 s-1
+  ! See:
+  ! http://clipc-services.ceda.ac.uk/dreq/u/0940cbee6105037e4b7aa5579004f124.html
+  ! http://clipc-services.ceda.ac.uk/dreq/u/e9e21426e4810d0bb2d3dddb24dbf4dc.html
+  if (present(use_cfcs)) then
+    if (use_cfcs) then
+      handles%id_cfc11 = register_diag_field('ocean_model', 'cfc11_flux', diag%axesT1, Time, &
+          'Gas exchange flux of CFC11 into the ocean ', 'mol m-2 s-1', &
+          conversion= US%Z_to_m*US%s_to_T,&
+          cmor_field_name='fgcfc11', &
+          cmor_long_name='Surface Downward CFC11 Flux', &
+          cmor_standard_name='surface_downward_cfc11_flux')
+
+      handles%id_cfc12 = register_diag_field('ocean_model', 'cfc12_flux', diag%axesT1, Time, &
+          'Gas exchange flux of CFC12 into the ocean ', 'mol m-2 s-1', &
+          conversion= US%Z_to_m*US%s_to_T,&
+          cmor_field_name='fgcfc12', &
+          cmor_long_name='Surface Downward CFC12 Flux', &
+          cmor_standard_name='surface_downward_cfc12_flux')
+
+      handles%id_ice_fraction = register_diag_field('ocean_model', 'ice_fraction', diag%axesT1, Time, &
+          'Fraction of cell area covered by sea ice', 'm2 m-2')
+
+      handles%id_u10_sqr = register_diag_field('ocean_model', 'u10_sqr', diag%axesT1, Time, &
+          'Wind magnitude at 10m, squared', 'm2 s-2', conversion=US%Z_to_m**2*US%s_to_T**2)
     endif
   endif
 
@@ -1895,6 +1951,14 @@ subroutine register_forcing_type_diags(Time, diag, US, use_temperature, handles,
   handles%id_total_saltFluxAdded = register_scalar_field('ocean_model', 'total_salt_Flux_Added', &
       Time, diag, long_name='Area integrated surface salt flux due to restoring or flux adjustment', units='kg s-1')
 
+  !===============================================================
+  ! wave forcing diagnostics
+  if (present(use_waves)) then
+    if (use_waves) then
+      handles%id_lamult = register_diag_field('ocean_model', 'lamult', &
+        diag%axesT1, Time, long_name='Langmuir enhancement factor received from WW3', units="nondim")
+    endif
+  endif
 
 end subroutine register_forcing_type_diags
 
@@ -2834,6 +2898,19 @@ subroutine forcing_diagnostics(fluxes_in, sfc_state, G_in, US, time_end, diag, h
     if (handles%id_netFWGlobalScl > 0)                                               &
       call post_data(handles%id_netFWGlobalScl, fluxes%netFWGlobalScl, diag)
 
+    ! post diagnostics related to cfcs  ====================================
+
+    if ((handles%id_cfc11 > 0) .and. associated(fluxes%cfc11_flux)) &
+      call post_data(handles%id_cfc11, fluxes%cfc11_flux, diag)
+
+    if ((handles%id_cfc11 > 0) .and. associated(fluxes%cfc12_flux)) &
+      call post_data(handles%id_cfc12, fluxes%cfc12_flux, diag)
+
+    if ((handles%id_ice_fraction > 0) .and. associated(fluxes%ice_fraction)) &
+      call post_data(handles%id_ice_fraction, fluxes%ice_fraction, diag)
+
+    if ((handles%id_u10_sqr > 0) .and. associated(fluxes%u10_sqr)) &
+      call post_data(handles%id_u10_sqr, fluxes%u10_sqr, diag)
 
     ! remaining boundary terms ==================================================
 
@@ -2858,6 +2935,10 @@ subroutine forcing_diagnostics(fluxes_in, sfc_state, G_in, US, time_end, diag, h
     if ((handles%id_ustar_ice_cover > 0) .and. associated(fluxes%ustar_shelf)) &
       call post_data(handles%id_ustar_ice_cover, fluxes%ustar_shelf, diag)
 
+    ! wave forcing ===============================================================
+    if (handles%id_lamult > 0)                                            &
+      call post_data(handles%id_lamult, fluxes%lamult, diag)
+
   ! endif  ! query_averaging_enabled
   call disable_averaging(diag)
 
@@ -2872,7 +2953,7 @@ end subroutine forcing_diagnostics
 
 !> Conditionally allocate fields within the forcing type
 subroutine allocate_forcing_by_group(G, fluxes, water, heat, ustar, press, &
-                                     shelf, iceberg, salt, fix_accum_bug)
+                                     shelf, iceberg, salt, fix_accum_bug, cfc, waves)
   type(ocean_grid_type), intent(in) :: G       !< Ocean grid structure
   type(forcing),      intent(inout) :: fluxes  !< A structure containing thermodynamic forcing fields
   logical, optional,     intent(in) :: water   !< If present and true, allocate water fluxes
@@ -2884,6 +2965,8 @@ subroutine allocate_forcing_by_group(G, fluxes, water, heat, ustar, press, &
   logical, optional,     intent(in) :: salt    !< If present and true, allocate salt fluxes
   logical, optional,     intent(in) :: fix_accum_bug !< If present and true, avoid using a bug in
                                                !! accumulation of ustar_gustless
+  logical, optional,     intent(in) :: cfc     !< If present and true, allocate cfc fluxes
+  logical, optional,     intent(in) :: waves   !< If present and true, allocate wave fields
 
   ! Local variables
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
@@ -2938,6 +3021,16 @@ subroutine allocate_forcing_by_group(G, fluxes, water, heat, ustar, press, &
   call myAlloc(fluxes%ustar_berg,isd,ied,jsd,jed, iceberg)
   call myAlloc(fluxes%area_berg,isd,ied,jsd,jed, iceberg)
   call myAlloc(fluxes%mass_berg,isd,ied,jsd,jed, iceberg)
+
+  !These fields should only on allocated when USE_CFC_CAP is activated.
+  call myAlloc(fluxes%cfc11_flux,isd,ied,jsd,jed, cfc)
+  call myAlloc(fluxes%cfc12_flux,isd,ied,jsd,jed, cfc)
+  call myAlloc(fluxes%ice_fraction,isd,ied,jsd,jed, cfc)
+  call myAlloc(fluxes%u10_sqr,isd,ied,jsd,jed, cfc)
+
+  !These fields should only on allocated when wave coupling is activated.
+  call myAlloc(fluxes%ice_fraction,isd,ied,jsd,jed, waves)
+  call myAlloc(fluxes%lamult,isd,ied,jsd,jed, waves)
 
   if (present(fix_accum_bug)) fluxes%gustless_accum_bug = .not.fix_accum_bug
 end subroutine allocate_forcing_by_group
@@ -3034,14 +3127,21 @@ subroutine allocate_mech_forcing_by_group(G, forces, stress, ustar, shelf, &
   !These fields should only be allocated when waves
   call myAlloc(forces%ustk0,isd,ied,jsd,jed, waves)
   call myAlloc(forces%vstk0,isd,ied,jsd,jed, waves)
-  if (present(waves)) then; if (waves) then; if (.not.associated(forces%ustkb)) then
-    if (.not.(present(num_stk_bands))) call MOM_error(FATAL,"Requested to &
+  if (present(waves)) then; if (waves) then;
+    if (.not. present(num_stk_bands)) then
+      call MOM_error(FATAL,"Requested to &
       initialize with waves, but no waves are present.")
-    allocate(forces%stk_wavenumbers(num_stk_bands))
-    forces%stk_wavenumbers(:) = 0.0
-    allocate(forces%ustkb(isd:ied,jsd:jed,num_stk_bands))
-    forces%ustkb(isd:ied,jsd:jed,:) = 0.0
-  endif ; endif ; endif
+    endif
+    if (num_stk_bands > 0) then
+      if (.not.associated(forces%ustkb)) then
+        allocate(forces%stk_wavenumbers(num_stk_bands))
+        forces%stk_wavenumbers(:) = 0.0
+        allocate(forces%ustkb(isd:ied,jsd:jed,num_stk_bands))
+        forces%ustkb(isd:ied,jsd:jed,:) = 0.0
+      endif
+    endif
+  endif ; endif
+
 
   if (present(waves)) then; if (waves) then; if (.not.associated(forces%vstkb)) then
     allocate(forces%vstkb(isd:ied,jsd:jed,num_stk_bands))
@@ -3185,6 +3285,10 @@ subroutine deallocate_forcing_type(fluxes)
   if (associated(fluxes%ustar_berg))           deallocate(fluxes%ustar_berg)
   if (associated(fluxes%area_berg))            deallocate(fluxes%area_berg)
   if (associated(fluxes%mass_berg))            deallocate(fluxes%mass_berg)
+  if (associated(fluxes%ice_fraction))         deallocate(fluxes%ice_fraction)
+  if (associated(fluxes%u10_sqr))              deallocate(fluxes%u10_sqr)
+  if (associated(fluxes%cfc11_flux))           deallocate(fluxes%cfc11_flux)
+  if (associated(fluxes%cfc12_flux))           deallocate(fluxes%cfc12_flux)
 
   call coupler_type_destructor(fluxes%tr_fluxes)
 

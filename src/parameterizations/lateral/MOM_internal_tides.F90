@@ -2121,8 +2121,7 @@ end subroutine PPM_limit_pos
 
 !   num_angle = 24
 !   call read_param(param_file, "INTERNAL_TIDE_ANGLES", num_angle)
-!   allocate(CS%En_restart(isd:ied, jsd:jed, num_angle))
-!   CS%En_restart(:,:,:) = 0.0
+!   allocate(CS%En_restart(isd:ied, jsd:jed, num_angle), source=0.0)
 
 !   vd = vardesc("En_restart", &
 !     "The internal wave energy density as a function of (i,j,angle,frequency,mode)", &
@@ -2200,12 +2199,10 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
   CS%nFreq = num_freq ; CS%nAngle = num_angle ; CS%nMode = num_mode
 
   ! Allocate energy density array
-  allocate(CS%En(isd:ied, jsd:jed, num_angle, num_freq, num_mode))
-  CS%En(:,:,:,:,:) = 0.0
+  allocate(CS%En(isd:ied, jsd:jed, num_angle, num_freq, num_mode), source=0.0)
 
   ! Allocate phase speed array
-  allocate(CS%cp(isd:ied, jsd:jed, num_freq, num_mode))
-  CS%cp(:,:,:,:) = 0.0
+  allocate(CS%cp(isd:ied, jsd:jed, num_freq, num_mode), source=0.0)
 
   ! Allocate and populate frequency array (each a multiple of first for now)
   allocate(CS%frequency(num_freq))
@@ -2327,21 +2324,16 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
                "INT_TIDE_DISSIPATION.",  units="nondim", default=1.0)
 
   ! Allocate various arrays needed for loss rates
-  allocate(h2(isd:ied,jsd:jed)) ; h2(:,:) = 0.0
-  allocate(CS%TKE_itidal_loss_fixed(isd:ied,jsd:jed))
-    CS%TKE_itidal_loss_fixed = 0.0
-  allocate(CS%TKE_leak_loss(isd:ied,jsd:jed,num_angle,num_freq,num_mode))
-    CS%TKE_leak_loss(:,:,:,:,:) = 0.0
-  allocate(CS%TKE_quad_loss(isd:ied,jsd:jed,num_angle,num_freq,num_mode))
-    CS%TKE_quad_loss(:,:,:,:,:) = 0.0
-  allocate(CS%TKE_itidal_loss(isd:ied,jsd:jed,num_angle,num_freq,num_mode))
-    CS%TKE_itidal_loss(:,:,:,:,:) = 0.0
-  allocate(CS%TKE_Froude_loss(isd:ied,jsd:jed,num_angle,num_freq,num_mode))
-    CS%TKE_Froude_loss(:,:,:,:,:) = 0.0
-  allocate(CS%tot_leak_loss(isd:ied,jsd:jed))   ; CS%tot_leak_loss(:,:) = 0.0
-  allocate(CS%tot_quad_loss(isd:ied,jsd:jed) )  ; CS%tot_quad_loss(:,:) = 0.0
-  allocate(CS%tot_itidal_loss(isd:ied,jsd:jed)) ; CS%tot_itidal_loss(:,:) = 0.0
-  allocate(CS%tot_Froude_loss(isd:ied,jsd:jed)) ; CS%tot_Froude_loss(:,:) = 0.0
+  allocate(h2(isd:ied,jsd:jed), source=0.0)
+  allocate(CS%TKE_itidal_loss_fixed(isd:ied,jsd:jed), source=0.0)
+  allocate(CS%TKE_leak_loss(isd:ied,jsd:jed,num_angle,num_freq,num_mode), source=0.0)
+  allocate(CS%TKE_quad_loss(isd:ied,jsd:jed,num_angle,num_freq,num_mode), source=0.0)
+  allocate(CS%TKE_itidal_loss(isd:ied,jsd:jed,num_angle,num_freq,num_mode), source=0.0)
+  allocate(CS%TKE_Froude_loss(isd:ied,jsd:jed,num_angle,num_freq,num_mode), source=0.0)
+  allocate(CS%tot_leak_loss(isd:ied,jsd:jed), source=0.0)
+  allocate(CS%tot_quad_loss(isd:ied,jsd:jed), source=0.0)
+  allocate(CS%tot_itidal_loss(isd:ied,jsd:jed), source=0.0)
+  allocate(CS%tot_Froude_loss(isd:ied,jsd:jed), source=0.0)
 
   ! Compute the fixed part of the bottom drag loss from baroclinic modes
   call get_param(param_file, mdl, "H2_FILE", h2_file, &
@@ -2358,7 +2350,7 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
   do j=G%jsc,G%jec ; do i=G%isc,G%iec
     ! Restrict RMS topographic roughness to a fraction (10 percent by default) of the column depth.
     if (RMS_roughness_frac >= 0.0) then
-      h2(i,j) = max(min((RMS_roughness_frac*G%bathyT(i,j))**2, h2(i,j)), 0.0)
+      h2(i,j) = max(min((RMS_roughness_frac*(G%bathyT(i,j)+G%Z_ref))**2, h2(i,j)), 0.0)
     else
       h2(i,j) = max(h2(i,j), 0.0)
     endif
@@ -2375,7 +2367,7 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
                "the coastline/ridge/shelf with respect to the equator.", &
                fail_if_missing=.false., default='')
   filename = trim(CS%inputdir) // trim(refl_angle_file)
-  allocate(CS%refl_angle(isd:ied,jsd:jed)) ; CS%refl_angle(:,:) = CS%nullangle
+  allocate(CS%refl_angle(isd:ied,jsd:jed), source=CS%nullangle)
   if (file_exists(filename, G%domain)) then
     call log_param(param_file, mdl, "INPUTDIR/REFL_ANGLE_FILE", filename)
     call MOM_read_data(filename, 'refl_angle', CS%refl_angle, G%domain)
@@ -2394,7 +2386,7 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
                "The path to the file containing the reflection coefficients.", &
                fail_if_missing=.false., default='')
   filename = trim(CS%inputdir) // trim(refl_pref_file)
-  allocate(CS%refl_pref(isd:ied,jsd:jed)) ; CS%refl_pref(:,:) = 1.0
+  allocate(CS%refl_pref(isd:ied,jsd:jed), source=1.0)
   if (file_exists(filename, G%domain)) then
     call log_param(param_file, mdl, "INPUTDIR/REFL_PREF_FILE", filename)
     call MOM_read_data(filename, 'refl_pref', CS%refl_pref, G%domain)
@@ -2406,7 +2398,7 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
   call pass_var(CS%refl_pref,G%domain)
 
   ! Tag reflection cells with partial reflection (done here for speed)
-  allocate(CS%refl_pref_logical(isd:ied,jsd:jed)) ; CS%refl_pref_logical(:,:) = .false.
+  allocate(CS%refl_pref_logical(isd:ied,jsd:jed), source=.false.)
   do j=jsd,jed
     do i=isd,ied
       ! flag cells with partial reflection
@@ -2422,7 +2414,7 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
                "The path to the file containing the double-reflective ridge tags.", &
                fail_if_missing=.false., default='')
   filename = trim(CS%inputdir) // trim(refl_dbl_file)
-  allocate(ridge_temp(isd:ied,jsd:jed)) ; ridge_temp(:,:) = 0.0
+  allocate(ridge_temp(isd:ied,jsd:jed), source=0.0)
   if (file_exists(filename, G%domain)) then
     call log_param(param_file, mdl, "INPUTDIR/REFL_DBL_FILE", filename)
     call MOM_read_data(filename, 'refl_dbl', ridge_temp, G%domain)
@@ -2431,7 +2423,7 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
                                                    "REFL_DBL_FILE: "//trim(filename)//" not found")
   endif
   call pass_var(ridge_temp,G%domain)
-  allocate(CS%refl_dbl(isd:ied,jsd:jed)) ; CS%refl_dbl(:,:) = .false.
+  allocate(CS%refl_dbl(isd:ied,jsd:jed), source=.false.)
   do i=isd,ied ; do j=jsd,jed
     if (ridge_temp(i,j) == 1) then; CS%refl_dbl(i,j) = .true.
     else ; CS%refl_dbl(i,j) = .false. ; endif
@@ -2518,15 +2510,15 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
                 Time, 'Internal tide energy loss summed over all processes', &
                 'W m-2', conversion=US%RZ3_T3_to_W_m2)
 
-  allocate(CS%id_En_mode(CS%nFreq,CS%nMode)) ; CS%id_En_mode(:,:) = -1
-  allocate(CS%id_En_ang_mode(CS%nFreq,CS%nMode)) ; CS%id_En_ang_mode(:,:) = -1
-  allocate(CS%id_itidal_loss_mode(CS%nFreq,CS%nMode)) ; CS%id_itidal_loss_mode(:,:) = -1
-  allocate(CS%id_allprocesses_loss_mode(CS%nFreq,CS%nMode)) ; CS%id_allprocesses_loss_mode(:,:) = -1
-  allocate(CS%id_itidal_loss_ang_mode(CS%nFreq,CS%nMode)) ; CS%id_itidal_loss_ang_mode(:,:) = -1
-  allocate(CS%id_Ub_mode(CS%nFreq,CS%nMode)) ; CS%id_Ub_mode(:,:) = -1
-  allocate(CS%id_cp_mode(CS%nFreq,CS%nMode)) ; CS%id_cp_mode(:,:) = -1
+  allocate(CS%id_En_mode(CS%nFreq,CS%nMode), source=-1)
+  allocate(CS%id_En_ang_mode(CS%nFreq,CS%nMode), source=-1)
+  allocate(CS%id_itidal_loss_mode(CS%nFreq,CS%nMode), source=-1)
+  allocate(CS%id_allprocesses_loss_mode(CS%nFreq,CS%nMode), source=-1)
+  allocate(CS%id_itidal_loss_ang_mode(CS%nFreq,CS%nMode), source=-1)
+  allocate(CS%id_Ub_mode(CS%nFreq,CS%nMode), source=-1)
+  allocate(CS%id_cp_mode(CS%nFreq,CS%nMode), source=-1)
 
-  allocate(angles(CS%NAngle)) ; angles(:) = 0.0
+  allocate(angles(CS%NAngle), source=0.0)
   Angle_size = (8.0*atan(1.0)) / (real(num_angle))
   do a=1,num_angle ; angles(a) = (real(a) - 1) * Angle_size ; enddo
 

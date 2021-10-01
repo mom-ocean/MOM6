@@ -11,7 +11,7 @@ use MOM_neutral_diffusion,          only : neutral_diffusion_unit_tests
 use MOM_diag_vkernels,              only : diag_vkernels_unit_tests
 use MOM_random,                     only : random_unit_tests
 use MOM_lateral_boundary_diffusion, only : near_boundary_unit_tests
-
+use MOM_CFC_cap,                    only : CFC_cap_unit_tests
 implicit none ; private
 
 public unit_tests
@@ -41,6 +41,8 @@ subroutine unit_tests(verbosity)
        "MOM_unit_tests: random_unit_tests FAILED")
     if (near_boundary_unit_tests(verbose)) call MOM_error(FATAL, &
        "MOM_unit_tests: near_boundary_unit_tests FAILED")
+    if (CFC_cap_unit_tests(verbose)) call MOM_error(FATAL, &
+       "MOM_unit_tests: CFC_cap_unit_tests FAILED")
   endif
 
 end subroutine unit_tests

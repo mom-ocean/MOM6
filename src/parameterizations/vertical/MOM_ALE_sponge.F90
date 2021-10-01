@@ -28,9 +28,6 @@ use MOM_time_manager,  only : time_type
 use MOM_unit_scaling,  only : unit_scale_type
 use MOM_verticalGrid,  only : verticalGrid_type
 
-use mpp_io_mod, only : mpp_get_axis_length
-use mpp_io_mod, only : axistype
-
 implicit none ; private
 
 #include <MOM_memory.h>
@@ -238,9 +235,9 @@ subroutine initialize_ALE_sponge_fixed(Iresttime, G, GV, param_file, CS, data_h,
   enddo ; enddo
 
   if (CS%num_col > 0) then
-    allocate(CS%Iresttime_col(CS%num_col)) ; CS%Iresttime_col = 0.0
-    allocate(CS%col_i(CS%num_col))         ; CS%col_i = 0
-    allocate(CS%col_j(CS%num_col))         ; CS%col_j = 0
+    allocate(CS%Iresttime_col(CS%num_col), source=0.0)
+    allocate(CS%col_i(CS%num_col), source=0)
+    allocate(CS%col_j(CS%num_col), source=0)
     ! pass indices, restoring time to the CS structure
     col = 1
     do j=G%jsc,G%jec ; do i=G%isc,G%iec
@@ -269,8 +266,8 @@ subroutine initialize_ALE_sponge_fixed(Iresttime, G, GV, param_file, CS, data_h,
                  "The total number of columns where sponges are applied at h points.", like_default=.true.)
 
   if (CS%sponge_uv) then
-    allocate(Iresttime_u(G%isdB:G%iedB,G%jsd:G%jed)) ; Iresttime_u(:,:) = 0.0
-    allocate(Iresttime_v(G%isd:G%ied,G%jsdB:G%jedB)) ; Iresttime_v(:,:) = 0.0
+    allocate(Iresttime_u(G%isdB:G%iedB,G%jsd:G%jed), source=0.0)
+    allocate(Iresttime_v(G%isd:G%ied,G%jsdB:G%jedB), source=0.0)
 
     call pass_var(Iresttime,G%Domain)
     call pass_var(data_h,G%Domain)
@@ -291,9 +288,9 @@ subroutine initialize_ALE_sponge_fixed(Iresttime, G, GV, param_file, CS, data_h,
 
     if (CS%num_col_u > 0) then
 
-      allocate(CS%Iresttime_col_u(CS%num_col_u)) ; CS%Iresttime_col_u(:) = 0.0
-      allocate(CS%col_i_u(CS%num_col_u))         ; CS%col_i_u(:) = 0
-      allocate(CS%col_j_u(CS%num_col_u))         ; CS%col_j_u(:) = 0
+      allocate(CS%Iresttime_col_u(CS%num_col_u), source=0.0)
+      allocate(CS%col_i_u(CS%num_col_u), source=0)
+      allocate(CS%col_j_u(CS%num_col_u), source=0)
 
       ! Store the column indices and restoring rates in the CS structure
       col = 1
@@ -335,9 +332,9 @@ subroutine initialize_ALE_sponge_fixed(Iresttime, G, GV, param_file, CS, data_h,
 
     if (CS%num_col_v > 0) then
 
-      allocate(CS%Iresttime_col_v(CS%num_col_v)) ; CS%Iresttime_col_v = 0.0
-      allocate(CS%col_i_v(CS%num_col_v))         ; CS%col_i_v = 0
-      allocate(CS%col_j_v(CS%num_col_v))         ; CS%col_j_v = 0
+      allocate(CS%Iresttime_col_v(CS%num_col_v), source=0.0)
+      allocate(CS%col_i_v(CS%num_col_v), source=0)
+      allocate(CS%col_j_v(CS%num_col_v), source=0)
 
       ! pass indices, restoring time to the CS structure
       col = 1
@@ -397,12 +394,12 @@ subroutine get_ALE_sponge_thicknesses(G, data_h, sponge_mask, CS)
 
   if (.not.associated(CS)) then
     ! There are no sponge points on this PE.
-    allocate(data_h(G%isd:G%ied,G%jsd:G%jed,1)) ; data_h(:,:,:) = -1.0
+    allocate(data_h(G%isd:G%ied,G%jsd:G%jed,1), source=-1.0)
     sponge_mask(:,:) = .false.
     return
   endif
 
-  allocate(data_h(G%isd:G%ied,G%jsd:G%jed,CS%nz_data)) ; data_h(:,:,:) = -1.0
+  allocate(data_h(G%isd:G%ied,G%jsd:G%jed,CS%nz_data), source=-1.0)
   sponge_mask(:,:) = .false.
 
   do c=1,CS%num_col
@@ -503,9 +500,9 @@ subroutine initialize_ALE_sponge_varying(Iresttime, G, GV, param_file, CS, Irest
       CS%num_col = CS%num_col + 1
   enddo ; enddo
   if (CS%num_col > 0) then
-    allocate(CS%Iresttime_col(CS%num_col)) ; CS%Iresttime_col = 0.0
-    allocate(CS%col_i(CS%num_col))         ; CS%col_i = 0
-    allocate(CS%col_j(CS%num_col))         ; CS%col_j = 0
+    allocate(CS%Iresttime_col(CS%num_col), source=0.0)
+    allocate(CS%col_i(CS%num_col), source=0)
+    allocate(CS%col_j(CS%num_col), source=0)
     ! pass indices, restoring time to the CS structure
     col = 1
     do j=G%jsc,G%jec ; do i=G%isc,G%iec
@@ -525,8 +522,8 @@ subroutine initialize_ALE_sponge_varying(Iresttime, G, GV, param_file, CS, Irest
   call log_param(param_file, mdl, "!Total sponge columns at h points", total_sponge_cols, &
                  "The total number of columns where sponges are applied at h points.", like_default=.true.)
   if (CS%sponge_uv) then
-    allocate(Iresttime_u(G%isdB:G%iedB,G%jsd:G%jed)) ; Iresttime_u(:,:) = 0.0
-    allocate(Iresttime_v(G%isd:G%ied,G%jsdB:G%jedB)) ; Iresttime_v(:,:) = 0.0
+    allocate(Iresttime_u(G%isdB:G%iedB,G%jsd:G%jed), source=0.0)
+    allocate(Iresttime_v(G%isd:G%ied,G%jsdB:G%jedB), source=0.0)
 
     call pass_var(Iresttime,G%Domain)
     ! u points
@@ -543,9 +540,9 @@ subroutine initialize_ALE_sponge_varying(Iresttime, G, GV, param_file, CS, Irest
         CS%num_col_u = CS%num_col_u + 1
     enddo ; enddo
     if (CS%num_col_u > 0) then
-      allocate(CS%Iresttime_col_u(CS%num_col_u)) ; CS%Iresttime_col_u = 0.0
-      allocate(CS%col_i_u(CS%num_col_u))         ; CS%col_i_u = 0
-      allocate(CS%col_j_u(CS%num_col_u))         ; CS%col_j_u = 0
+      allocate(CS%Iresttime_col_u(CS%num_col_u), source=0.0)
+      allocate(CS%col_i_u(CS%num_col_u), source=0)
+      allocate(CS%col_j_u(CS%num_col_u), source=0)
       ! pass indices, restoring time to the CS structure
       col = 1
       do j=G%jsc,G%jec ; do I=G%iscB,G%iecB
@@ -575,9 +572,9 @@ subroutine initialize_ALE_sponge_varying(Iresttime, G, GV, param_file, CS, Irest
         CS%num_col_v = CS%num_col_v + 1
     enddo ; enddo
     if (CS%num_col_v > 0) then
-      allocate(CS%Iresttime_col_v(CS%num_col_v)) ; CS%Iresttime_col_v = 0.0
-      allocate(CS%col_i_v(CS%num_col_v))         ; CS%col_i_v = 0
-      allocate(CS%col_j_v(CS%num_col_v))         ; CS%col_j_v = 0
+      allocate(CS%Iresttime_col_v(CS%num_col_v), source=0.0)
+      allocate(CS%col_i_v(CS%num_col_v), source=0)
+      allocate(CS%col_j_v(CS%num_col_v), source=0)
       ! pass indices, restoring time to the CS structure
       col = 1
       do J=G%jscB,G%jecB ; do i=G%isc,G%iec
@@ -652,8 +649,7 @@ subroutine set_up_ALE_sponge_field_fixed(sp_val, G, GV, f_ptr, CS)
 
   ! stores the reference profile
   CS%Ref_val(CS%fldno)%nz_data = CS%nz_data
-  allocate(CS%Ref_val(CS%fldno)%p(CS%nz_data,CS%num_col))
-  CS%Ref_val(CS%fldno)%p(:,:) = 0.0
+  allocate(CS%Ref_val(CS%fldno)%p(CS%nz_data,CS%num_col), source=0.0)
   do col=1,CS%num_col
     do k=1,CS%nz_data
       CS%Ref_val(CS%fldno)%p(k,col) = sp_val(CS%col_i(col),CS%col_j(col),k)
@@ -718,10 +714,8 @@ subroutine set_up_ALE_sponge_field_varying(filename, fieldname, Time, G, GV, US,
   CS%Ref_val(CS%fldno)%num_tlevs = fld_sz(4)
   ! initializes the target profile array for this field
   ! for all columns which will be masked
-  allocate(CS%Ref_val(CS%fldno)%p(nz_data,CS%num_col))
-  CS%Ref_val(CS%fldno)%p(:,:) = 0.0
-  allocate( CS%Ref_val(CS%fldno)%h(nz_data,CS%num_col) )
-  CS%Ref_val(CS%fldno)%h(:,:) = 0.0
+  allocate(CS%Ref_val(CS%fldno)%p(nz_data,CS%num_col), source=0.0)
+  allocate(CS%Ref_val(CS%fldno)%h(nz_data,CS%num_col), source=0.0)
   CS%var(CS%fldno)%p => f_ptr
 
 end subroutine set_up_ALE_sponge_field_varying
@@ -749,16 +743,14 @@ subroutine set_up_ALE_sponge_vel_field_fixed(u_val, v_val, G, GV, u_ptr, v_ptr, 
   if (.not.associated(CS)) return
 
   ! stores the reference profile
-  allocate(CS%Ref_val_u%p(CS%nz_data,CS%num_col_u))
-  CS%Ref_val_u%p(:,:) = 0.0
+  allocate(CS%Ref_val_u%p(CS%nz_data,CS%num_col_u), source=0.0)
   do col=1,CS%num_col_u
     do k=1,CS%nz_data
       CS%Ref_val_u%p(k,col) = u_val(CS%col_i_u(col),CS%col_j_u(col),k)
     enddo
   enddo
   CS%var_u%p => u_ptr
-  allocate(CS%Ref_val_v%p(CS%nz_data,CS%num_col_v))
-  CS%Ref_val_v%p(:,:) = 0.0
+  allocate(CS%Ref_val_v%p(CS%nz_data,CS%num_col_v), source=0.0)
   do col=1,CS%num_col_v
     do k=1,CS%nz_data
       CS%Ref_val_v%p(k,col) = v_val(CS%col_i_v(col),CS%col_j_v(col),k)
@@ -797,9 +789,7 @@ subroutine set_up_ALE_sponge_vel_field_varying(filename_u, fieldname_u, filename
   integer :: isdB, iedB, jsdB, jedB
   integer, dimension(4) :: fld_sz
   character(len=256) :: mesg ! String for error messages
-  type(axistype), dimension(4) :: axes_data
   integer :: tmp
-  integer :: axis_sizes(4)
   if (.not.associated(CS)) return
 
   override =.true.
@@ -830,15 +820,11 @@ subroutine set_up_ALE_sponge_vel_field_varying(filename_u, fieldname_u, filename
   CS%Ref_val_v%num_tlevs = fld_sz(4)
 
   ! stores the reference profile
-  allocate(CS%Ref_val_u%p(fld_sz(3),CS%num_col_u))
-  CS%Ref_val_u%p(:,:) = 0.0
-  allocate(CS%Ref_val_u%h(fld_sz(3),CS%num_col_u) )
-  CS%Ref_val_u%h(:,:) = 0.0
+  allocate(CS%Ref_val_u%p(fld_sz(3),CS%num_col_u), source=0.0)
+  allocate(CS%Ref_val_u%h(fld_sz(3),CS%num_col_u), source=0.0)
   CS%var_u%p => u_ptr
-  allocate(CS%Ref_val_v%p(fld_sz(3),CS%num_col_v))
-  CS%Ref_val_v%p(:,:) = 0.0
-  allocate(CS%Ref_val_v%h(fld_sz(3),CS%num_col_v) )
-  CS%Ref_val_v%h(:,:) = 0.0
+  allocate(CS%Ref_val_v%p(fld_sz(3),CS%num_col_v), source=0.0)
+  allocate(CS%Ref_val_v%h(fld_sz(3),CS%num_col_v), source=0.0)
   CS%var_v%p => v_ptr
 
 end subroutine set_up_ALE_sponge_vel_field_varying
@@ -863,8 +849,6 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
   real, dimension(SZK_(GV)) :: tmp_val1         ! data values remapped to model grid
   real, dimension(SZK_(GV)) :: h_col            ! A column of thicknesses at h, u or v points [H ~> m or kg m-2]
   real, allocatable, dimension(:,:,:) :: sp_val ! A temporary array for fields
-  real, allocatable, dimension(:,:,:) :: sp_val_u ! A temporary array for fields
-  real, allocatable, dimension(:,:,:) :: sp_val_v ! A temporary array for fields
   real, allocatable, dimension(:,:,:) :: mask_z ! A temporary array for field mask at h pts
   real, allocatable, dimension(:,:,:) :: mask_u ! A temporary array for field mask at u pts
   real, allocatable, dimension(:,:,:) :: mask_v ! A temporary array for field mask at v pts
@@ -883,6 +867,8 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
   real :: Idt  ! The inverse of the timestep [T-1 ~> s-1]
   real :: h_neglect, h_neglect_edge ! Negligible thicknesses [H ~> m or kg m-2]
   real :: zTopOfCell, zBottomOfCell ! Interface heights (positive upward) in the input dataset [Z ~> m].
+  real :: sp_val_u ! Interpolation of sp_val to u-points
+  real :: sp_val_v ! Interpolation of sp_val to v-points
   integer :: nPoints
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
@@ -903,8 +889,6 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
       call MOM_error(FATAL,"apply_ALE_sponge: No time information provided")
     do m=1,CS%fldno
       nz_data = CS%Ref_val(m)%nz_data
-      allocate(sp_val(G%isd:G%ied,G%jsd:G%jed,1:nz_data)); sp_val(:,:,:) = 0.0
-      allocate(mask_z(G%isd:G%ied,G%jsd:G%jed,1:nz_data)); mask_z(:,:,:) = 0.0
       call horiz_interp_and_extrap_tracer(CS%Ref_val(m)%id, Time, 1.0, G, sp_val, mask_z, z_in, &
                      z_edges_in,  missing_value, CS%reentrant_x, CS%tripolar_N, .false., &
                      spongeOnGrid=CS%SpongeDataOngrid, m_to_Z=US%m_to_Z, &
@@ -918,7 +902,7 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
         zTopOfCell = 0. ; zBottomOfCell = 0. ; nPoints = 0; hsrc(:) = 0.0; tmpT1d(:) = -99.9
         do k=1,nz_data
           if (mask_z(CS%col_i(c),CS%col_j(c),k) == 1.0) then
-            zBottomOfCell = -min( z_edges_in(k+1), G%bathyT(CS%col_i(c),CS%col_j(c)) )
+            zBottomOfCell = -min( z_edges_in(k+1) - G%Z_ref, G%bathyT(CS%col_i(c),CS%col_j(c)) )
             tmpT1d(k) = sp_val(CS%col_i(c),CS%col_j(c),k)
           elseif (k>1) then
             zBottomOfCell = -G%bathyT(CS%col_i(c),CS%col_j(c))
@@ -950,7 +934,7 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
     nz_data = CS%Ref_val(m)%nz_data
     allocate(tmp_val2(CS%Ref_val(m)%nz_data))
     if (CS%id_sp_tendency(m) > 0) then
-      allocate(tmp(G%isd:G%ied,G%jsd:G%jed,nz));tmp(:,:,:) = 0.0
+      allocate(tmp(G%isd:G%ied,G%jsd:G%jed,nz), source=0.0)
     endif
     do c=1,CS%num_col
       ! c is an index for the next 3 lines but a multiplier for the rest of the loop
@@ -991,24 +975,20 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
          call MOM_error(FATAL,"apply_ALE_sponge: No time information provided")
 
       nz_data = CS%Ref_val_u%nz_data
-      allocate(sp_val(G%isd:G%ied,G%jsd:G%jed,1:nz_data))
-      allocate(sp_val_u(G%isdB:G%iedB,G%jsd:G%jed,1:nz_data))
-      allocate(mask_u(G%isdB:G%iedB,G%jsd:G%jed,1:nz_data))
-      allocate(mask_z(G%isd:G%ied,G%jsd:G%jed,1:nz_data))
-      sp_val(:,:,:) = 0.0
-      sp_val_u(:,:,:) = 0.0
-      mask_u(:,:,:) = 0.0
-      mask_z(:,:,:) = 0.0
       ! Interpolate from the external horizontal grid and in time
       call horiz_interp_and_extrap_tracer(CS%Ref_val_u%id, Time, 1.0, G, sp_val, mask_z, z_in, &
                                           z_edges_in, missing_value, CS%reentrant_x, CS%tripolar_N, .false., &
                                           spongeOnGrid=CS%SpongeDataOngrid, m_to_Z=US%m_to_Z,&
                                           answers_2018=CS%hor_regrid_answers_2018)
 
+      ! Initialize mask_z halos to zero before pass_var, in case of no update
+      mask_z(G%isc-1, G%jsc:G%jec, :) = 0.
+      mask_z(G%iec+1, G%jsc:G%jec, :) = 0.
       call pass_var(sp_val, G%Domain)
       call pass_var(mask_z, G%Domain)
+
+      allocate(mask_u(G%isdB:G%iedB,G%jsd:G%jed,1:nz_data))
       do j=G%jsc,G%jec; do I=G%iscB,G%iecB
-        sp_val_u(I,j,1:nz_data) = 0.5*(sp_val(i,j,1:nz_data)+sp_val(i+1,j,1:nz_data))
         mask_u(I,j,1:nz_data) = min(mask_z(i,j,1:nz_data),mask_z(i+1,j,1:nz_data))
       enddo ; enddo
 
@@ -1018,7 +998,10 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
         ! Therefore we use c as per C code and increment the index where necessary.
         i = CS%col_i_u(c) ; j = CS%col_j_u(c)
         if (mask_u(i,j,1) == 1.0) then
-          CS%Ref_val_u%p(1:nz_data,c) = sp_val_u(i,j,1:nz_data)
+          do k=1,nz_data
+            sp_val_u = 0.5 * (sp_val(i,j,k) + sp_val(i+1,j,k))
+            CS%Ref_val_u%p(k,c) = sp_val_u
+          enddo
         else
           CS%Ref_val_u%p(1:nz_data,c) = 0.0
         endif
@@ -1026,7 +1009,7 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
         zTopOfCell = 0. ; zBottomOfCell = 0. ; nPoints = 0; hsrc(:) = 0.0
         do k=1,nz_data
           if (mask_u(i,j,k) == 1.0) then
-            zBottomOfCell = -min( z_edges_in(k+1), G%bathyT(i,j) )
+            zBottomOfCell = -min( z_edges_in(k+1) - G%Z_ref, G%bathyT(i,j) )
           elseif (k>1) then
             zBottomOfCell = -G%bathyT(i,j)
           else ! This next block should only ever be reached over land
@@ -1039,24 +1022,21 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
         hsrc(nz_data) = hsrc(nz_data) + ( zTopOfCell + G%bathyT(i,j) )
         CS%Ref_val_u%h(1:nz_data,c) = GV%Z_to_H*hsrc(1:nz_data)
       enddo
-      deallocate(sp_val, sp_val_u, mask_u, mask_z, hsrc)
+      deallocate(sp_val, mask_u, mask_z, hsrc)
       nz_data = CS%Ref_val_v%nz_data
-      allocate(sp_val( G%isd:G%ied,G%jsd:G%jed,1:nz_data))
-      allocate(sp_val_v(G%isd:G%ied,G%jsdB:G%jedB,1:nz_data))
-      allocate(mask_v(G%isd:G%ied,G%jsdB:G%jedB,1:nz_data))
-      allocate(mask_z(G%isd:G%ied,G%jsd:G%jed,1:nz_data))
-      sp_val(:,:,:) = 0.0
-      sp_val_v(:,:,:) = 0.0
-      mask_z(:,:,:) = 0.0
       ! Interpolate from the external horizontal grid and in time
       call horiz_interp_and_extrap_tracer(CS%Ref_val_v%id, Time, 1.0, G, sp_val, mask_z, z_in, &
                                           z_edges_in, missing_value, CS%reentrant_x, CS%tripolar_N, .false., &
                                           spongeOnGrid=CS%SpongeDataOngrid, m_to_Z=US%m_to_Z,&
                                           answers_2018=CS%hor_regrid_answers_2018)
+      ! Initialize mask_z halos to zero before pass_var, in case of no update
+      mask_z(G%isc:G%iec, G%jsc-1, :) = 0.
+      mask_z(G%isc:G%iec, G%jec+1, :) = 0.
       call pass_var(sp_val, G%Domain)
       call pass_var(mask_z, G%Domain)
+
+      allocate(mask_v(G%isd:G%ied,G%jsdB:G%jedB,1:nz_data))
       do J=G%jscB,G%jecB; do i=G%isc,G%iec
-        sp_val_v(i,J,1:nz_data) = 0.5*(sp_val(i,j,1:nz_data)+sp_val(i,j+1,1:nz_data))
         mask_v(i,J,1:nz_data) = min(mask_z(i,j,1:nz_data),mask_z(i,j+1,1:nz_data))
       enddo ; enddo
       !call pass_var(mask_z,G%Domain)
@@ -1066,7 +1046,10 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
         ! Therefore we use c as per C code and increment the index where necessary.
         i = CS%col_i_v(c) ; j = CS%col_j_v(c)
         if (mask_v(i,j,1) == 1.0) then
-          CS%Ref_val_v%p(1:nz_data,c) = sp_val_v(i,j,1:nz_data)
+          do k=1,nz_data
+            sp_val_v = 0.5 * (sp_val(i,j,k) + sp_val(i,j+1,k))
+            CS%Ref_val_v%p(k,c) = sp_val_v
+          enddo
         else
           CS%Ref_val_v%p(1:nz_data,c) = 0.0
         endif
@@ -1074,7 +1057,7 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
         zTopOfCell = 0. ; zBottomOfCell = 0. ; nPoints = 0; hsrc(:) = 0.0
         do k=1,nz_data
           if (mask_v(i,j,k) == 1.0) then
-            zBottomOfCell = -min( z_edges_in(k+1), G%bathyT(i,j) )
+            zBottomOfCell = -min( z_edges_in(k+1) - G%Z_ref, G%bathyT(i,j) )
           elseif (k>1) then
             zBottomOfCell = -G%bathyT(i,j)
           else ! This next block should only ever be reached over land
@@ -1087,14 +1070,14 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
         hsrc(nz_data) = hsrc(nz_data) + ( zTopOfCell + G%bathyT(i,j) )
         CS%Ref_val_v%h(1:nz_data,c) = GV%Z_to_H*hsrc(1:nz_data)
       enddo
-      deallocate(sp_val, sp_val_v, mask_v, mask_z, hsrc)
+      deallocate(sp_val, mask_v, mask_z, hsrc)
     endif
 
     call pass_var(h,G%Domain)
     nz_data = CS%Ref_val_u%nz_data
     allocate(tmp_val2(nz_data))
     if (CS%id_sp_u_tendency > 0) then
-      allocate(tmp_u(G%isdB:G%iedB,G%jsd:G%jed,nz)) ; tmp_u(:,:,:)=0.0
+      allocate(tmp_u(G%isdB:G%iedB,G%jsd:G%jed,nz), source=0.0)
     endif
     ! u points
     do c=1,CS%num_col_u
@@ -1124,7 +1107,7 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
     endif
     ! v points
     if (CS%id_sp_v_tendency > 0) then
-      allocate(tmp_v(G%isd:G%ied,G%jsdB:G%jedB,nz)) ; tmp_v(:,:,:)=0.0
+      allocate(tmp_v(G%isd:G%ied,G%jsdB:G%jedB,nz), source=0.0)
     endif
     nz_data = CS%Ref_val_v%nz_data
     allocate(tmp_val2(nz_data))
@@ -1190,15 +1173,13 @@ subroutine rotate_ALE_sponge(sponge_in, G_in, sponge, G, GV, turns, param_file)
   fixed_sponge = .not. sponge_in%time_varying_sponges
   ! NOTE: nz_data is only conditionally set when fixed_sponge is true.
 
-  allocate(Iresttime_in(G_in%isd:G_in%ied, G_in%jsd:G_in%jed))
+  allocate(Iresttime_in(G_in%isd:G_in%ied, G_in%jsd:G_in%jed), source=0.0)
   allocate(Iresttime(G%isd:G%ied, G%jsd:G%jed))
-  Iresttime_in(:,:) = 0.0
 
   if (fixed_sponge) then
     nz_data = sponge_in%nz_data
-    allocate(data_h_in(G_in%isd:G_in%ied, G_in%jsd:G_in%jed, nz_data))
+    allocate(data_h_in(G_in%isd:G_in%ied, G_in%jsd:G_in%jed, nz_data), source=0.0)
     allocate(data_h(G%isd:G%ied, G%jsd:G%jed, nz_data))
-    data_h_in(:,:,:) = 0.
   endif
 
   ! Re-populate the 2D Iresttime and data_h arrays on the original grid
@@ -1267,10 +1248,8 @@ subroutine rotate_ALE_sponge(sponge_in, G_in, sponge, G, GV, turns, param_file)
       nz_data = sponge_in%Ref_val(n)%nz_data
       sponge%Ref_val(n)%nz_data = nz_data
 
-      allocate(sponge%Ref_val(n)%p(nz_data, sponge_in%num_col))
-      allocate(sponge%Ref_val(n)%h(nz_data, sponge_in%num_col))
-      sponge%Ref_val(n)%p(:,:) = 0.0
-      sponge%Ref_val(n)%h(:,:) = 0.0
+      allocate(sponge%Ref_val(n)%p(nz_data, sponge_in%num_col), source=0.0)
+      allocate(sponge%Ref_val(n)%h(nz_data, sponge_in%num_col), source=0.0)
 
       ! TODO: There is currently no way to associate a generic field pointer to
       !   its rotated equivalent without introducing a new data structure which
