@@ -47,6 +47,7 @@ use MOM_spatial_means,        only : global_mass_integral
 use MOM_time_manager,         only : time_type, real_to_time, time_type_to_real, operator(+)
 use MOM_time_manager,         only : operator(-), operator(>), operator(*), operator(/)
 use MOM_time_manager,         only : operator(>=), operator(==), increment_date
+use MOM_time_manager,         only : set_time
 use MOM_unit_tests,           only : unit_tests
 
 ! MOM core modules
@@ -150,6 +151,7 @@ use MOM_offline_main,          only : offline_fw_fluxes_into_ocean, offline_fw_f
 use MOM_offline_main,          only : offline_advection_layer, offline_transport_end
 use MOM_ALE,                   only : ale_offline_tracer_final, ALE_main_offline
 use MOM_ice_shelf,             only : ice_shelf_CS, ice_shelf_query, initialize_ice_shelf
+use MOM_particles_mod,         only : particles, particles_init, particles_run, particles_save_restart
 
 implicit none ; private
 
@@ -324,6 +326,8 @@ type, public :: MOM_control_struct ; private
   logical :: answers_2018       !< If true, use expressions for the surface properties that recover
                                 !! the answers from the end of 2018. Otherwise, use more appropriate
                                 !! expressions that differ at roundoff for non-Boussinsq cases.
+  logical :: use_particles      !< Turns on the particles package
+  character(len=10) :: particle_type !< Particle types include: surface(default), profiling and sail drone.
 
   type(MOM_diag_IDs)       :: IDs      !<  Handles used for diagnostics.
   type(transport_diag_IDs) :: transport_IDs  !< Handles used for transport diagnostics.
@@ -391,6 +395,7 @@ type, public :: MOM_control_struct ; private
   type(ODA_CS), pointer :: odaCS => NULL() !< a pointer to the control structure for handling
                                 !! ensemble model state vectors and data assimilation
                                 !! increments and priors
+  type(particles), pointer :: particles => NULL() !<Lagrangian particles
 end type MOM_control_struct
 
 public initialize_MOM, finish_MOM_initialization, MOM_end
@@ -1265,6 +1270,7 @@ subroutine step_MOM_thermo(CS, G, GV, US, u, v, h, tv, fluxes, dtdia, &
                                ! in the dynamic core.
   integer :: halo_sz ! The size of a halo where data must be valid.
   integer :: i, j, k, is, ie, js, je, nz
+  type(time_type) :: part_time
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   showCallTree = callTree_showQuery()
@@ -1428,6 +1434,10 @@ subroutine step_MOM_thermo(CS, G, GV, US, u, v, h, tv, fluxes, dtdia, &
   call disable_averaging(CS%diag)
 
   if (showCallTree) call callTree_leave("step_MOM_thermo(), MOM.F90")
+  if (CS%use_particles) then 
+    part_time = CS%Time + set_time(int(floor(0.5 + 0.5*dtdia)))
+    call particles_run(CS%particles, part_time, CS%u, CS%v, CS%h, CS%tv) ! Run the particles model
+  endif
 
 end subroutine step_MOM_thermo
 
@@ -2066,6 +2076,9 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
     call get_param(param_file, "MOM", "ICE_SHELF", use_ice_shelf, &
        "If true, enables the ice shelf model.", default=.false.)
   endif
+
+  call get_param(param_file, "MOM", "USE_PARTICLES", CS%use_particles, &
+                 "If true, use the particles package.", default=.false.)
 
   CS%ensemble_ocean=.false.
   call get_param(param_file, "MOM", "ENSEMBLE_OCEAN", CS%ensemble_ocean, &
@@ -2837,6 +2850,11 @@ subroutine finish_MOM_initialization(Time, dirs, CS, restart_CSp)
   call fix_restart_scaling(GV)
   call fix_restart_unit_scaling(US)
 
+
+  if (CS%use_particles) then
+    call particles_init(CS%particles, G, CS%Time, CS%dt_therm, CS%u, CS%v)
+  endif
+
   ! Write initial conditions
   if (CS%write_IC) then
     allocate(restart_CSp_tmp)
@@ -3526,6 +3544,10 @@ end subroutine get_ocean_stocks
 !> End of ocean model, including memory deallocation
 subroutine MOM_end(CS)
   type(MOM_control_struct), intent(inout) :: CS   !< MOM control structure
+
+  if (CS%use_particles) then
+    call particles_save_restart(CS%particles)
+  endif
 
   call MOM_sum_output_end(CS%sum_output_CSp)
 
