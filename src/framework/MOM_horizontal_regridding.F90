@@ -9,6 +9,7 @@ use MOM_cpu_clock,     only : cpu_clock_id, cpu_clock_begin, cpu_clock_end, CLOC
 use MOM_domains,       only : pass_var
 use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, WARNING, is_root_pe
 use MOM_error_handler, only : callTree_enter, callTree_leave, callTree_waypoint
+use MOM_error_handler, only : MOM_get_verbosity
 use MOM_file_parser,   only : get_param, log_param, log_version, param_file_type
 use MOM_grid,          only : ocean_grid_type
 use MOM_interpolate,   only : time_interp_external, horiz_interp_init
@@ -428,8 +429,8 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
   z_edges_in(kd+1) = 2.0*z_in(kd) - z_in(kd-1)
 
   if (is_ongrid) then
-    allocate(tr_in(is:ie,js:je)) ; tr_in(:,:)=0.0
-    allocate(mask_in(is:ie,js:je)) ; mask_in(:,:)=0.0
+    allocate(tr_in(is:ie,js:je), source=0.0)
+    allocate(mask_in(is:ie,js:je), source=0.0)
   else
     call horiz_interp_init()
     lon_in = lon_in*PI_180
@@ -438,9 +439,9 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
     call meshgrid(lon_in, lat_in, x_in, y_in)
     lon_out(:,:) = G%geoLonT(:,:)*PI_180
     lat_out(:,:) = G%geoLatT(:,:)*PI_180
-    allocate(tr_in(id,jd)) ; tr_in(:,:) = 0.0
-    allocate(tr_inp(id,jdp)) ; tr_inp(:,:) = 0.0
-    allocate(mask_in(id,jdp)) ; mask_in(:,:) = 0.0
+    allocate(tr_in(id,jd), source=0.0)
+    allocate(tr_inp(id,jdp), source=0.0)
+    allocate(mask_in(id,jdp), source=0.0)
   endif
 
   max_depth = maxval(G%bathyT(:,:)) + G%Z_ref
@@ -676,6 +677,7 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, t
   real, dimension(SZI_(G),SZJ_(G)) :: good2   ! 1 where the data is valid after Ice-9
   real, dimension(SZI_(G),SZJ_(G)) :: fill2   ! 1 for points that still need to be filled after Ice-9
   integer :: turns
+  integer :: verbosity
 
   turns = G%HI%turns
 
@@ -695,6 +697,8 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, t
   call cpu_clock_begin(id_clock_read)
 
   call get_external_field_info(fms_id, size=fld_sz, axes=axes_data, missing=missing_value)
+
+  verbosity = MOM_get_verbosity()
 
   id = fld_sz(1) ; jd  = fld_sz(2) ; kd = fld_sz(3)
 
@@ -739,10 +743,10 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, t
     call meshgrid(lon_in, lat_in, x_in, y_in)
     lon_out(:,:) = G%geoLonT(:,:)*PI_180
     lat_out(:,:) = G%geoLatT(:,:)*PI_180
-    allocate(data_in(id,jd,kd)) ; data_in(:,:,:)=0.0
-    allocate(tr_in(id,jd)) ; tr_in(:,:)=0.0
-    allocate(tr_inp(id,jdp)) ; tr_inp(:,:)=0.0
-    allocate(mask_in(id,jdp)) ; mask_in(:,:)=0.0
+    allocate(data_in(id,jd,kd), source=0.0)
+    allocate(tr_in(id,jd), source=0.0)
+    allocate(tr_inp(id,jdp), source=0.0)
+    allocate(mask_in(id,jdp), source=0.0)
   else
     allocate(data_in(isd:ied,jsd:jed,kd))
   endif
@@ -764,7 +768,7 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, t
 
   if (.not.spongeDataOngrid) then
     if (is_root_pe()) &
-      call time_interp_external(fms_id, Time, data_in, verbose=.true., turns=turns)
+      call time_interp_external(fms_id, Time, data_in, verbose=(verbosity>5), turns=turns)
     ! Loop through each data level and interpolate to model grid.
     ! After interpolating, fill in points which will be needed to define the layers.
     do k=1,kd
@@ -880,7 +884,7 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, t
 
     enddo ! kd
   else
-      call time_interp_external(fms_id, Time, data_in, verbose=.true., turns=turns)
+      call time_interp_external(fms_id, Time, data_in, verbose=(verbosity>5), turns=turns)
       do k=1,kd
         do j=js,je
           do i=is,ie

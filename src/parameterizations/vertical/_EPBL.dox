@@ -1,0 +1,76 @@
+/*! \page EPBL Energetically-constrained Planetary Boundary Layer
+
+We here describe a scheme for modeling the ocean surface boundary layer
+(OSBL) suitable for use in global climate models. It builds on the ideas in
+\ref BML, bringing in some of the ideas from \ref subsection_kappa_shear, to
+make an energetically consistent boundary layer suitable for use with
+a generalized vertical coordinate. Unlike in \ref BML, variables are
+allowed to have vertical structure within the boundary layer. The downward
+turbulent flux of buoyant water by OSBL turbulence converts mechanical
+energy into potential energy as it mixes with less buoyant water at the
+base of the OSBL. As described in \cite reichl2018, we focus on OSBL
+parameterizations that constrain this integrated potential energy
+conversion due to turbulent mixing.
+
+The leading-order mean OSBL equation for arbitrary scalar \f$\phi\f$ is:
+
+\f[
+   \frac{\partial \overline{\phi}}{\partial t} = - \frac{\partial}{\partial z}
+   \overline{w^\prime \phi^\prime} + \nu_\phi \frac{\partial^2 \overline{\phi}}{\partial z^2}
+\f]
+
+where the symbols are as follows:
+
+<table>
+<caption id="table_symbols_tke">Symbols used in TKE equation</caption>
+<tr><th>Symbol <th>Meaning
+<tr><td>\f$u_i\f$      <td> horizontal components of the velocity
+<tr><td>\f$\phi\f$     <td> arbitrary scalar (tracer) quantity
+<tr><td>\f$w\f$        <td> vertical component of the velocity
+<tr><td>\f$\overline{w}\f$ <td> ensemble average \f$w\f$
+<tr><td>\f$w^\prime\f$ <td> fluctuations from \f$\overline{w}\f$
+<tr><td>\f$k\f$        <td> turbulent kinetic energy (TKE)
+<tr><td>\f$K_M\f$      <td> turbulent mixing coefficient for momentum
+<tr><td>\f$K_\phi\f$   <td> turbulent mixing coefficient for \f$\phi\f$
+<tr><td>\f$\sigma_k\f$ <td> turbulent Schmidt number
+<tr><td>\f$b\f$        <td> buoyancy
+<tr><td>\f$\epsilon\f$ <td> buoyancy turbulent dissipation rate
+</table>
+
+This equation describes the evolution of mean quantity \f$\overline{\phi}\f$
+due to vertical processes, including the often negligible molecular
+mixing. We would like to parameterize the vertical mixing since we won't be
+resolving all the relevant time and space scales.
+
+We use the Boussinesq hypothesis for turbulence closure. This approximates
+the Reynolds stress terms using an eddy viscosity (eddy diffusivity for
+turbulent scalar fluxes):
+
+\f[
+   \overline{u_i^\prime w^\prime} = - K_M \frac{\partial \overline{u_i}}{\partial z} ,
+\f]
+
+Similarly, the eddy diffusivity is used to parameterize turbulent scalar fluxes as:
+
+\f[
+   \overline{\phi^\prime w^\prime} = - K_\phi \frac{\partial \overline{\phi}}{\partial z} ,
+\f]
+
+The parameters needed to close the system of equations are then reduced to the turbulent
+mixing coefficients, \f$K_\phi\f$ and \f$K_M\f$$.
+
+We start with an equation for the turbulent kinetic energy (TKE):
+
+\f[
+  \frac{\partial k}{\partial t} = \frac{\partial}{\partial z} \left( \frac{K_M}{\sigma_k}
+  \frac{\partial k}{\partial z} \right) - \overline{u_i^\prime w^\prime} \frac{\partial \overline{u_i}}
+  {\partial z} + \overline{w^\prime b^\prime} - \epsilon
+\f]
+
+
+Terms in this equation represent TKE storage (LHS), TKE flux convergence,
+shear production, buoyancy production, and dissipation.
+
+Following the lead of \cite jackson2008 (\ref subsection_kappa_shear).
+
+*/
