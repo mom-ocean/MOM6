@@ -2359,8 +2359,8 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
     if (GV%Boussinesq) then
       do j=js,je ; do i=is,ie
         if ((eta(i,j) < -GV%Z_to_H*G%bathyT(i,j)) .and. (G%mask2dT(i,j) > 0.0)) then
-          write(mesg,'(ES24.16," vs. ",ES24.16, " at ", i7, i7)') GV%H_to_m*eta(i,j), -US%Z_to_m*G%bathyT(i,j), &
-               i + G%isd_global, j + G%jsd_global
+          write(mesg,'(ES24.16," vs. ",ES24.16, " at ", ES12.4, ES12.4, i7, i7)') GV%H_to_m*eta(i,j), &
+               -US%Z_to_m*G%bathyT(i,j), G%geoLonT(i,j), G%geoLatT(i,j), i + G%isd_global, j + G%jsd_global
           if (err_count < 2) &
             call MOM_error(WARNING, "btstep: eta has dropped below bathyT: "//trim(mesg), all_print=.true.)
           err_count = err_count + 1
@@ -3093,17 +3093,17 @@ subroutine set_up_BT_OBC(OBC, eta, BT_OBC, BT_Domain, G, GV, US, MS, halo, use_B
   endif
 
   if (.not. BT_OBC%is_alloced) then
-    allocate(BT_OBC%Cg_u(isdw-1:iedw,jsdw:jedw))        ; BT_OBC%Cg_u(:,:) = 0.0
-    allocate(BT_OBC%H_u(isdw-1:iedw,jsdw:jedw))         ; BT_OBC%H_u(:,:) = 0.0
-    allocate(BT_OBC%uhbt(isdw-1:iedw,jsdw:jedw))        ; BT_OBC%uhbt(:,:) = 0.0
-    allocate(BT_OBC%ubt_outer(isdw-1:iedw,jsdw:jedw))   ; BT_OBC%ubt_outer(:,:) = 0.0
-    allocate(BT_OBC%eta_outer_u(isdw-1:iedw,jsdw:jedw)) ; BT_OBC%eta_outer_u(:,:) = 0.0
+    allocate(BT_OBC%Cg_u(isdw-1:iedw,jsdw:jedw), source=0.0)
+    allocate(BT_OBC%H_u(isdw-1:iedw,jsdw:jedw), source=0.0)
+    allocate(BT_OBC%uhbt(isdw-1:iedw,jsdw:jedw), source=0.0)
+    allocate(BT_OBC%ubt_outer(isdw-1:iedw,jsdw:jedw), source=0.0)
+    allocate(BT_OBC%eta_outer_u(isdw-1:iedw,jsdw:jedw), source=0.0)
 
-    allocate(BT_OBC%Cg_v(isdw:iedw,jsdw-1:jedw))        ; BT_OBC%Cg_v(:,:) = 0.0
-    allocate(BT_OBC%H_v(isdw:iedw,jsdw-1:jedw))         ; BT_OBC%H_v(:,:) = 0.0
-    allocate(BT_OBC%vhbt(isdw:iedw,jsdw-1:jedw))        ; BT_OBC%vhbt(:,:) = 0.0
-    allocate(BT_OBC%vbt_outer(isdw:iedw,jsdw-1:jedw))   ; BT_OBC%vbt_outer(:,:) = 0.0
-    allocate(BT_OBC%eta_outer_v(isdw:iedw,jsdw-1:jedw)) ; BT_OBC%eta_outer_v(:,:)=0.0
+    allocate(BT_OBC%Cg_v(isdw:iedw,jsdw-1:jedw), source=0.0)
+    allocate(BT_OBC%H_v(isdw:iedw,jsdw-1:jedw), source=0.0)
+    allocate(BT_OBC%vhbt(isdw:iedw,jsdw-1:jedw), source=0.0)
+    allocate(BT_OBC%vbt_outer(isdw:iedw,jsdw-1:jedw), source=0.0)
+    allocate(BT_OBC%eta_outer_v(isdw:iedw,jsdw-1:jedw), source=0.0)
     BT_OBC%is_alloced = .true.
     call create_group_pass(BT_OBC%pass_uv, BT_OBC%ubt_outer, BT_OBC%vbt_outer, BT_Domain)
     call create_group_pass(BT_OBC%pass_uhvh, BT_OBC%uhbt, BT_OBC%vhbt, BT_Domain)
@@ -4744,7 +4744,7 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, US, param_file, diag, CS, 
       wave_drag_file = trim(slasher(inputdir))//trim(wave_drag_file)
       call log_param(param_file, mdl, "INPUTDIR/BT_WAVE_DRAG_FILE", wave_drag_file)
 
-      allocate(lin_drag_h(isd:ied,jsd:jed)) ; lin_drag_h(:,:) = 0.0
+      allocate(lin_drag_h(isd:ied,jsd:jed), source=0.0)
 
       call MOM_read_data(wave_drag_file, wave_drag_var, lin_drag_h, G%Domain, scale=US%m_to_Z*US%T_to_s)
       call pass_var(lin_drag_h, G%Domain)

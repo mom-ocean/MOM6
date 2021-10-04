@@ -149,7 +149,7 @@ function register_dye_tracer(HI, GV, US, param_file, CS, tr_Reg, restart_CS)
   if (minval(CS%dye_source_maxdepth(:)) < -1.e29*US%m_to_Z) &
     call MOM_error(FATAL, "register_dye_tracer: Not enough values provided for DYE_SOURCE_MAXDEPTH ")
 
-  allocate(CS%tr(isd:ied,jsd:jed,nz,CS%ntr)) ; CS%tr(:,:,:,:) = 0.0
+  allocate(CS%tr(isd:ied,jsd:jed,nz,CS%ntr), source=0.0)
 
   do m = 1, CS%ntr
     write(var_name(:),'(A,I3.3)') "dye",m

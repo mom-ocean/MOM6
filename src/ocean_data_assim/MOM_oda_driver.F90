@@ -311,13 +311,13 @@ subroutine init_oda(Time, G, GV, diag_CS, CS)
   !jsd=jsd+jdg_offset; jed=jed+jdg_offset ! TODO:  switch to local indexing? (mjh)
 
   if (.not. associated(CS%h)) then
-    allocate(CS%h(isd:ied,jsd:jed,CS%GV%ke)); CS%h(:,:,:)=CS%GV%Angstrom_m*CS%GV%H_to_m
+    allocate(CS%h(isd:ied,jsd:jed,CS%GV%ke), source=CS%GV%Angstrom_m*CS%GV%H_to_m)
     ! assign thicknesses
     call ALE_initThicknessToCoord(CS%ALE_CS,G,CS%GV,CS%h)
   endif
   allocate(CS%tv)
-  allocate(CS%tv%T(isd:ied,jsd:jed,CS%GV%ke)); CS%tv%T(:,:,:)=0.0
-  allocate(CS%tv%S(isd:ied,jsd:jed,CS%GV%ke)); CS%tv%S(:,:,:)=0.0
+  allocate(CS%tv%T(isd:ied,jsd:jed,CS%GV%ke), source=0.0)
+  allocate(CS%tv%S(isd:ied,jsd:jed,CS%GV%ke), source=0.0)
 !  call set_axes_info(CS%Grid, CS%GV, CS%US, PF, CS%diag_cs, set_vertical=.true.) ! missing in Feiyu's fork
   allocate(CS%oda_grid)
   CS%oda_grid%x => CS%Grid%geolonT
@@ -329,8 +329,7 @@ subroutine init_oda(Time, G, GV, diag_CS, CS)
           "A file in which to find the basin masks, in variable 'basin'.", &
           default="basin.nc")
     basin_file = trim(inputdir) // trim(basin_file)
-    allocate(CS%oda_grid%basin_mask(isd:ied,jsd:jed))
-    CS%oda_grid%basin_mask(:,:) = 0.0
+    allocate(CS%oda_grid%basin_mask(isd:ied,jsd:jed), source=0.0)
     call MOM_read_data(basin_file,'basin',CS%oda_grid%basin_mask,CS%Grid%domain, timelevel=1)
   endif
 
@@ -365,8 +364,8 @@ subroutine init_oda(Time, G, GV, diag_CS, CS)
      CS%INC_CS%fldno = 2
      if (CS%nk .ne. fld_sz(3)) call MOM_error(FATAL,'Increment levels /= ODA levels')
      allocate(CS%tv_bc)     ! storage for increment
-     allocate(CS%tv_bc%T(G%isd:G%ied,G%jsd:G%jed,CS%GV%ke)); CS%tv_bc%T(:,:,:)=0.0
-     allocate(CS%tv_bc%S(G%isd:G%ied,G%jsd:G%jed,CS%GV%ke)); CS%tv_bc%S(:,:,:)=0.0
+     allocate(CS%tv_bc%T(G%isd:G%ied,G%jsd:G%jed,CS%GV%ke), source=0.0)
+     allocate(CS%tv_bc%S(G%isd:G%ied,G%jsd:G%jed,CS%GV%ke), source=0.0)
   endif
 
   call cpu_clock_end(id_clock_oda_init)
@@ -596,13 +595,13 @@ subroutine init_ocean_ensemble(CS,Grid,GV,ens_size)
   allocate(CS%T(is:ie,js:je,nk,ens_size))
   allocate(CS%S(is:ie,js:je,nk,ens_size))
   allocate(CS%SSH(is:ie,js:je,ens_size))
-!  allocate(CS%id_t(ens_size));CS%id_t(:)=-1
-!  allocate(CS%id_s(ens_size));CS%id_s(:)=-1
+!  allocate(CS%id_t(ens_size), source=-1)
+!  allocate(CS%id_s(ens_size), source=-1)
 !  allocate(CS%U(is:ie,js:je,nk,ens_size))
 !  allocate(CS%V(is:ie,js:je,nk,ens_size))
-!  allocate(CS%id_u(ens_size));CS%id_u(:)=-1
-!  allocate(CS%id_v(ens_size));CS%id_v(:)=-1
-!  allocate(CS%id_ssh(ens_size));CS%id_ssh(:)=-1
+!  allocate(CS%id_u(ens_size), source=-1)
+!  allocate(CS%id_v(ens_size), source=-1)
+!  allocate(CS%id_ssh(ens_size), source=-1)
 
   return
 end subroutine init_ocean_ensemble
@@ -730,12 +729,10 @@ end subroutine apply_oda_tracer_increments
       allocate(T_grid%basin_mask(CS%ni,CS%nj))
       call global_field(CS%mpp_domain, CS%oda_grid%basin_mask, T_grid%basin_mask)
     endif
-    allocate(T_grid%mask(CS%ni,CS%nj,CS%nk))
-    allocate(T_grid%z(CS%ni,CS%nj,CS%nk))
+    allocate(T_grid%mask(CS%ni,CS%nj,CS%nk), source=0.0)
+    allocate(T_grid%z(CS%ni,CS%nj,CS%nk), source=0.0)
     allocate(global2D(CS%ni,CS%nj))
     allocate(global2D_old(CS%ni,CS%nj))
-    T_grid%mask(:,:,:) = 0.0
-    T_grid%z(:,:,:) = 0.0
 
     do k = 1, CS%nk
       call global_field(G%Domain%mpp_domain, CS%h(:,:,k), global2D)
