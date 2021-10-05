@@ -1014,6 +1014,7 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_thermo, &
 
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
+  type(time_type) :: part_time
 
   G => CS%G ; GV => CS%GV ; US => CS%US ; IDs => CS%IDs
   is   = G%isc  ; ie   = G%iec  ; js   = G%jsc  ; je   = G%jec ; nz = GV%ke
@@ -1096,6 +1097,14 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_thermo, &
     if (showCallTree) call callTree_waypoint("finished step_MOM_dyn_unsplit (step_MOM)")
 
   endif ! -------------------------------------------------- end SPLIT
+
+   if (CS%do_dynamics) then!run particles whether or not stepping is split
+     if (CS%use_particles) then 
+       part_time = CS%Time + set_time(int(dt))
+       call particles_run(CS%particles, part_time, CS%u, CS%v, CS%h, CS%tv) ! Run the particles model
+     endif
+   endif
+
 
   if (CS%thickness_diffuse .and. .not.CS%thickness_diffuse_first) then
     call cpu_clock_begin(id_clock_thick_diff)
@@ -1270,7 +1279,6 @@ subroutine step_MOM_thermo(CS, G, GV, US, u, v, h, tv, fluxes, dtdia, &
                                ! in the dynamic core.
   integer :: halo_sz ! The size of a halo where data must be valid.
   integer :: i, j, k, is, ie, js, je, nz
-  type(time_type) :: part_time
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   showCallTree = callTree_showQuery()
@@ -1434,10 +1442,6 @@ subroutine step_MOM_thermo(CS, G, GV, US, u, v, h, tv, fluxes, dtdia, &
   call disable_averaging(CS%diag)
 
   if (showCallTree) call callTree_leave("step_MOM_thermo(), MOM.F90")
-  if (CS%use_particles) then 
-    part_time = CS%Time + set_time(int(floor(0.5 + 0.5*dtdia)))
-    call particles_run(CS%particles, part_time, CS%u, CS%v, CS%h, CS%tv) ! Run the particles model
-  endif
 
 end subroutine step_MOM_thermo
 
