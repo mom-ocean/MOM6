@@ -151,7 +151,7 @@ use MOM_offline_main,          only : offline_fw_fluxes_into_ocean, offline_fw_f
 use MOM_offline_main,          only : offline_advection_layer, offline_transport_end
 use MOM_ALE,                   only : ale_offline_tracer_final, ALE_main_offline
 use MOM_ice_shelf,             only : ice_shelf_CS, ice_shelf_query, initialize_ice_shelf
-use MOM_particles_mod,         only : particles, particles_init, particles_run, particles_save_restart
+use MOM_particles_mod,         only : particles, particles_init, particles_run, particles_save_restart, particles_end
 
 implicit none ; private
 
@@ -3581,6 +3581,11 @@ subroutine MOM_end(CS)
     call end_dyn_unsplit_RK2(CS%dyn_unsplit_RK2_CSp)
   else
     call end_dyn_unsplit(CS%dyn_unsplit_CSp)
+  endif
+
+  if (CS%use_particles) then
+     call particles_end(CS%particles)
+     deallocate(CS%particles)
   endif
 
   call thickness_diffuse_end(CS%thickness_diffuse_CSp, CS%CDp)

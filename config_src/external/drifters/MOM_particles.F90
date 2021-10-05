@@ -8,7 +8,7 @@ use MOM_variables,    only : thermo_var_ptrs
 
 use particles_types_mod, only: particles, particles_gridded
 
-public particles_run
+public particles_run, particles_init, particles_save_restart, particles_end
 
 contains
 
@@ -40,5 +40,12 @@ type(particles), pointer :: parts
 real,dimension(:,:,:),optional,intent(in) :: temp, salt
 
 end subroutine particles_save_restart
+
+subroutine particles_end(parts,temp,salt)
+! Arguments
+type(particles), pointer :: parts
+real,dimension(:,:,:),optional,intent(in) :: temp, salt
+
+end subroutine particles_end
 
 end module MOM_particles_mod
