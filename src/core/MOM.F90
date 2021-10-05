@@ -214,6 +214,8 @@ type, public :: MOM_control_struct ; private
   real :: t_dyn_rel_adv !< The time of the dynamics relative to tracer advection and lateral mixing
                     !! [T ~> s], or equivalently the elapsed time since advectively updating the
                     !! tracers.  t_dyn_rel_adv is invariably positive and may span multiple coupling timesteps.
+  integer :: n_dyn_steps_in_adv !< The number of dynamics time steps that contributed to uhtr
+                    !! and vhtr since the last time tracer advection occured.
   real :: t_dyn_rel_thermo  !< The time of the dynamics relative to diabatic  processes and remapping
                     !! [T ~> s].  t_dyn_rel_thermo can be negative or positive depending on whether
                     !! the diabatic processes are applied before or after the dynamics and may span
@@ -235,6 +237,9 @@ type, public :: MOM_control_struct ; private
   logical :: use_ALE_algorithm  !< If true, use the ALE algorithm rather than layered
                     !! isopycnal/stacked shallow water mode. This logical is set by calling the
                     !! function useRegridding() from the MOM_regridding module.
+  logical :: alternate_first_direction !< If true, alternate whether the x- or y-direction
+                    !! updates occur first in directionally split parts of the calculation.
+  real    :: first_dir_restart = -1.0 !< A real copy of G%first_direction for use in restart files
   logical :: offline_tracer_mode = .false.
                     !< If true, step_offline() is called instead of step_MOM().
                     !! This is intended for running MOM6 in offline tracer mode
@@ -1149,6 +1154,11 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_thermo, &
 
   ! Advance the dynamics time by dt.
   CS%t_dyn_rel_adv = CS%t_dyn_rel_adv + dt
+  CS%n_dyn_steps_in_adv = CS%n_dyn_steps_in_adv + 1
+  if (CS%alternate_first_direction) then
+    call set_first_direction(G, MODULO(G%first_direction+1,2))
+    CS%first_dir_restart = real(G%first_direction)
+  endif
   CS%t_dyn_rel_thermo = CS%t_dyn_rel_thermo + dt
   if (abs(CS%t_dyn_rel_thermo) < 1e-6*dt) CS%t_dyn_rel_thermo = 0.0
   CS%t_dyn_rel_diag = CS%t_dyn_rel_diag + dt
@@ -1180,6 +1190,7 @@ subroutine step_MOM_tracer_dyn(CS, G, GV, US, h, Time_local)
                                                     !! of the time step.
   type(group_pass_type) :: pass_T_S
   integer :: halo_sz ! The size of a halo where data must be valid.
+  logical :: x_first ! If true, advect tracers first in the x-direction, then y.
   logical :: showCallTree
   showCallTree = callTree_showQuery()
 
@@ -1201,8 +1212,16 @@ subroutine step_MOM_tracer_dyn(CS, G, GV, US, h, Time_local)
   call cpu_clock_begin(id_clock_thermo) ; call cpu_clock_begin(id_clock_tracer)
   call enable_averages(CS%t_dyn_rel_adv, Time_local, CS%diag)
 
+  if (CS%alternate_first_direction) then
+    ! This calculation of the value of G%first_direction from the start of the accumulation of
+    ! mass transports for use by the tracers is the equivalent to adding 2*n_dyn_steps before
+    ! subtracting n_dyn_steps so that the mod will be taken of a non-negative number.
+    x_first = (MODULO(G%first_direction+CS%n_dyn_steps_in_adv,2) == 0)
+  else
+    x_first = (MODULO(G%first_direction,2) == 0)
+  endif
   call advect_tracer(h, CS%uhtr, CS%vhtr, CS%OBC, CS%t_dyn_rel_adv, G, GV, US, &
-                     CS%tracer_adv_CSp, CS%tracer_Reg)
+                     CS%tracer_adv_CSp, CS%tracer_Reg, x_first_in=x_first)
   call tracer_hordiff(h, CS%t_dyn_rel_adv, CS%MEKE, CS%VarMix, G, GV, US, &
                       CS%tracer_diff_CSp, CS%tracer_Reg, CS%tv)
   if (showCallTree) call callTree_waypoint("finished tracer advection/diffusion (step_MOM)")
@@ -1225,6 +1244,7 @@ subroutine step_MOM_tracer_dyn(CS, G, GV, US, h, Time_local)
   call cpu_clock_begin(id_clock_thermo) ; call cpu_clock_begin(id_clock_tracer)
   CS%uhtr(:,:,:) = 0.0
   CS%vhtr(:,:,:) = 0.0
+  CS%n_dyn_steps_in_adv = 0
   CS%t_dyn_rel_adv = 0.0
   call cpu_clock_end(id_clock_tracer) ; call cpu_clock_end(id_clock_thermo)
 
@@ -2006,6 +2026,11 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
                  "in parts of the code that use directionally split "//&
                  "updates, with even numbers (or 0) used for x- first "//&
                  "and odd numbers used for y-first.", default=0)
+  call get_param(param_file, "MOM", "ALTERNATE_FIRST_DIRECTION", CS%alternate_first_direction, &
+                 "If true, after every dynamic timestep alternate whether the x- or y- "//&
+                 "direction updates occur first in directionally split parts of the calculation. "//&
+                 "If this is true, FIRST_DIRECTION applies at the start of a new run or if "//&
+                 "the next first direction can not be found in the restart file.", default=.false.)
 
   call get_param(param_file, "MOM", "CHECK_BAD_SURFACE_VALS", CS%check_bad_sfc_vals, &
                  "If true, check the surface state for ridiculous values.", &
@@ -2265,6 +2290,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   ALLOC_(CS%uhtr(IsdB:IedB,jsd:jed,nz)) ; CS%uhtr(:,:,:) = 0.0
   ALLOC_(CS%vhtr(isd:ied,JsdB:JedB,nz)) ; CS%vhtr(:,:,:) = 0.0
   CS%t_dyn_rel_adv = 0.0 ; CS%t_dyn_rel_thermo = 0.0 ; CS%t_dyn_rel_diag = 0.0
+  CS%n_dyn_steps_in_adv = 0
 
   if (debug_truncations) then
     allocate(CS%u_prev(IsdB:IedB,jsd:jed,nz), source=0.0)
@@ -2402,6 +2428,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
 
   ! Set a few remaining fields that are specific to the ocean grid type.
   call set_first_direction(G, first_direction)
+  CS%first_dir_restart = real(G%first_direction)
   ! Allocate the auxiliary non-symmetric domain for debugging or I/O purposes.
   if (CS%debug .or. G%symmetric) then
     call clone_MOM_domain(G%Domain, G%Domain_aux, symmetric=.false.)
@@ -2449,6 +2476,12 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
       CS%tv%T => CS%T
       CS%tv%S => CS%S
     endif
+
+    ! Reset the first direction if it was found in a restart file.
+    if (CS%first_dir_restart > -0.5) &
+      call set_first_direction(G, NINT(CS%first_dir_restart))
+    ! Store the first direction for the next time a restart file is written.
+    CS%first_dir_restart = real(G%first_direction)
 
     call rotate_initial_state(u_in, v_in, h_in, T_in, S_in, use_temperature, &
         turns, CS%u, CS%v, CS%h, CS%T, CS%S)
@@ -2719,7 +2752,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
     call insert_offline_main( CS=CS%offline_CSp, ALE_CSp=CS%ALE_CSp, diabatic_CSp=CS%diabatic_CSp, &
                               diag=CS%diag, OBC=CS%OBC, tracer_adv_CSp=CS%tracer_adv_CSp,              &
                               tracer_flow_CSp=CS%tracer_flow_CSp, tracer_Reg=CS%tracer_Reg,            &
-                              tv=CS%tv, x_before_y = (MOD(first_direction,2)==0), debug=CS%debug )
+                              tv=CS%tv, x_before_y=(MODULO(first_direction,2)==0), debug=CS%debug )
     call register_diags_offline_transport(Time, CS%diag, CS%offline_CSp)
   endif
 
@@ -3011,6 +3044,8 @@ subroutine set_restart_fields(GV, US, param_file, CS, restart_CSp)
                               "Density unit conversion factor", "R m3 kg-1")
   call register_restart_field(US%J_kg_to_Q_restart, "J_kg_to_Q", .false., restart_CSp, &
                               "Heat content unit conversion factor.", units="Q kg J-1")
+  call register_restart_field(CS%first_dir_restart, "First_direction", .false., restart_CSp, &
+                              "Indicator of the first direction in split calculations.", "nondim")
 
 end subroutine set_restart_fields
 
