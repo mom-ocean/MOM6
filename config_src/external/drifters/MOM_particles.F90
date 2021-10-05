@@ -12,8 +12,10 @@ public particles_run, particles_init, particles_save_restart, particles_end
 
 contains
 
+!> Initializes particles container "parts"
 subroutine particles_init(parts, Grid, Time, dt, u, v)
- type(particles), pointer, intent(out) :: parts
+  ! Arguments
+ type(particles), pointer, intent(out) :: parts !< Container for all types and memory
  type(ocean_grid_type), target, intent(in) :: Grid !< Grid type from parent model
  type(time_type), intent(in) :: Time !< Time type from parent model
  real, intent(in)            :: dt !< particle timestep in seconds
@@ -21,7 +23,7 @@ subroutine particles_init(parts, Grid, Time, dt, u, v)
 
 end subroutine particles_init
 
-
+!> The main driver the steps updates particles
 subroutine particles_run(parts, time, uo, vo, ho, tv, stagger)
   ! Arguments
   type(particles), pointer :: parts !< Container for all types and memory
@@ -34,6 +36,8 @@ subroutine particles_run(parts, time, uo, vo, ho, tv, stagger)
 
 end subroutine particles_run
 
+
+!>Save particle locations (and sometimes other vars) to restart file
 subroutine particles_save_restart(parts,temp,salt)
 ! Arguments
 type(particles), pointer :: parts
@@ -41,6 +45,7 @@ real,dimension(:,:,:),optional,intent(in) :: temp, salt
 
 end subroutine particles_save_restart
 
+!> Deallocate all memory and disassociated pointer
 subroutine particles_end(parts,temp,salt)
 ! Arguments
 type(particles), pointer :: parts

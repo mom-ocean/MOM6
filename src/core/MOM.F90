@@ -1098,7 +1098,7 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_thermo, &
   endif ! -------------------------------------------------- end SPLIT
 
    if (CS%do_dynamics) then!run particles whether or not stepping is split
-     if (CS%use_particles) then 
+     if (CS%use_particles) then
        call particles_run(CS%particles, Time_local, CS%u, CS%v, CS%h, CS%tv) ! Run the particles model
      endif
    endif

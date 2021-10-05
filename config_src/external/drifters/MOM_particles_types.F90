@@ -60,39 +60,57 @@ end type particles_gridded
 
 !>xyt is a data structure containing particle position and velocity fields.
 type :: xyt
-  real :: lon, lat, day      !< Current position (degrees) and day
-  real :: lat_old, lon_old   !< Previous position (degrees)
-  real :: uvel, vvel         !< Current velocity components (m/s)
-  real :: uvel_old, vvel_old !< Previous velocity components (m/s)
-  integer :: year, particle_num  !< Current year and particle number
+  real :: lon !< Longitude of particle (degree N or unit of grid coordinate)
+  real :: lat !< Latitude of particle (degree N or unit of grid coordinate)
+  real :: day      !< Day of this record (days)
+  real :: lat_old  !< Previous latitude
+  real :: lon_old   !< Previous longitude
+  real :: uvel       !< Zonal velocity of particle (m/s) 
+  real :: vvel       !< Meridional velocity of particle (m/s)
+  real :: uvel_old  !< Previous zonal velocity component (m/s)
+  real :: vvel_old !< Previous meridional velocity component (m/s)
+  integer :: year  !< Year of this record 
+  integer :: particle_num  !< Current particle number
   integer(kind=8) :: id = -1 !< Particle Identifier
   type(xyt), pointer :: next=>null()  !< Pointer to the next position in the list
 end type xyt
 
 !>particle types are data structures describing a tracked particle
 type :: particle
-  type(particle), pointer :: prev=>null(), next=>null()
-  ! State variables (specific to the particle, needed for restarts)
-  real :: lon, lat, depth, uvel, vvel !< position (degrees) and zonal and meridional velocities (m/s)
-  real :: lon_old, lat_old, uvel_old, vvel_old  !< previous position (degrees) and zonal
-                                                !< and meridional velocities (m/s)
-  real :: axn, ayn, bxn, byn                    !< explicit and implicit accelerations (currently disabled)
-  real :: start_lon, start_lat, start_day       !< origination position (degrees) and day
+  type(particle), pointer :: prev=>null() !< Previous link in list
+  type(particle), pointer :: next=>null()
+! State variables (specific to the particles, needed for restarts)
+  real :: lon !< Longitude of particle (degree N or unit of grid coordinate)
+  real :: lat !< Latitude of particle (degree E or unit of grid coordinate)
+  real :: depth !< Depth of particle
+  real :: uvel !< Zonal velocity of particle (m/s)
+  real :: vvel !< Meridional velocity of particle (m/s)
+  real :: lon_old !< previous lon (degrees) 
+  real :: lat_old !< previous lat (degrees)  
+  real :: uvel_old  !< previous uvel 
+  real :: vvel_old  !< previous vvel 
+  real :: start_lon !< starting longitude where particle was created
+  real :: start_lat !< starting latitude where particle was created
+  real :: start_day       !< origination position (degrees) and day
   integer :: start_year                         !< origination year
   real :: halo_part  !< equal to zero for particles on the computational domain, and 1 for particles on the halo
-  integer(kind=8) :: id,drifter_num             !< particle identifier
-  integer :: ine, jne                           !< nearest index in NE direction (for convenience)
-  real :: xi, yj                                !< non-dimensional coords within current cell (0..1)
-  real :: uo, vo                                !< zonal and meridional ocean velocities experienced
+  integer(kind=8) :: id                      !< particle identifier  
+  integer(kind=8) :: drifter_num             !< particle identifier
+  integer :: ine                           !< nearest i-index in NE direction (for convenience)  
+  integer :: jne                           !< nearest j-index in NE direction (for convenience)
+  real :: xi                               !< non-dimensional x-coordinate within current cell (0..1)
+  real :: yj                                !< non-dimensional y-coordinate within current cell (0..1)
+  real :: uo                                !< zonal ocean velocity 
+  real :: vo                                !< meridional ocean velocity
                                                 !< by the particle (m/s)
-  type(xyt), pointer :: trajectory=>null()
+  type(xyt), pointer :: trajectory=>null() !< Trajectory for this particle
 end type particle
 
 
 !>A buffer structure for message passing
 type :: buffer
-  integer :: size=0
-  real, dimension(:,:), pointer :: data
+  integer :: size=0 !< Size of buffer
+  real, dimension(:,:), pointer :: data !< Buffer memory
 end type buffer
 
 !> A wrapper for the particle linked list (since an array of pointers is not allowed)
@@ -101,6 +119,7 @@ type :: linked_list
 end type linked_list
 
 
+!> A grand data structure for the particles in the local MOM domain
 type :: particles !; private
   type(particles_gridded) :: grd !< Container with all gridded data
   type(linked_list), dimension(:,:), allocatable :: list !< Linked list of particles
