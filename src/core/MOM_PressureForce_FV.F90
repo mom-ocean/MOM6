@@ -808,7 +808,7 @@ subroutine PressureForce_FV_init(Time, G, GV, US, param_file, diag, CS, tides_CS
   type(param_file_type),      intent(in)    :: param_file !< Parameter file handles
   type(diag_ctrl), target,    intent(inout) :: diag !< Diagnostics control structure
   type(PressureForce_FV_CS),  pointer       :: CS !< Finite volume PGF control structure
-  type(tidal_forcing_CS),     pointer       :: tides_CSp !< Tides control structure
+  type(tidal_forcing_CS), intent(in), target, optional :: tides_CSp !< Tides control structure
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
   character(len=40)  :: mdl  ! This module's name.
@@ -821,7 +821,8 @@ subroutine PressureForce_FV_init(Time, G, GV, US, param_file, diag, CS, tides_CS
   else ; allocate(CS) ; endif
 
   CS%diag => diag ; CS%Time => Time
-  if (associated(tides_CSp)) CS%tides_CSp => tides_CSp
+  if (present(tides_CSp)) &
+    CS%tides_CSp => tides_CSp
 
   mdl = "MOM_PressureForce_FV"
   call log_version(param_file, mdl, version, "")

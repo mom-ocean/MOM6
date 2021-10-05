@@ -4259,7 +4259,7 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, US, param_file, diag, CS, 
   type(BT_cont_type),      pointer       :: BT_cont    !< A structure with elements that describe the
                                                  !! effective open face areas as a function of
                                                  !! barotropic flow.
-  type(tidal_forcing_CS),  pointer       :: tides_CSp  !< A pointer to the control structure of the
+  type(tidal_forcing_CS), target, optional :: tides_CSp  !< A pointer to the control structure of the
                                                  !! tide module.
 
 ! This include declares and sets the variable "version".
@@ -4316,7 +4316,9 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, US, param_file, diag, CS, 
   CS%module_is_initialized = .true.
 
   CS%diag => diag ; CS%Time => Time
-  if (associated(tides_CSp)) CS%tides_CSp => tides_CSp
+  if (present(tides_CSp)) then
+    CS%tides_CSp => tides_CSp
+  endif
 
   ! Read all relevant parameters and write them to the model log.
   call get_param(param_file, mdl, "SPLIT", CS%split, default=.true., do_not_log=.true.)

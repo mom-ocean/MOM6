@@ -824,8 +824,8 @@ subroutine PressureForce_Mont_init(Time, G, GV, US, param_file, diag, CS, tides_
   type(unit_scale_type),   intent(in)    :: US !< A dimensional unit scaling type
   type(param_file_type),   intent(in)    :: param_file !< Parameter file handles
   type(diag_ctrl), target, intent(inout) :: diag !< Diagnostics control structure
-  type(PressureForce_Mont_CS), pointer   :: CS !< Montgomery PGF control structure
-  type(tidal_forcing_CS),  pointer       :: tides_CSp !< Tides control structure
+  type(PressureForce_Mont_CS),  pointer  :: CS !< Montgomery PGF control structure
+  type(tidal_forcing_CS), intent(in), target, optional :: tides_CSp !< Tides control structure
 
   ! Local variables
   logical :: use_temperature, use_EOS
@@ -840,7 +840,8 @@ subroutine PressureForce_Mont_init(Time, G, GV, US, param_file, diag, CS, tides_
   else ; allocate(CS) ; endif
 
   CS%diag => diag ; CS%Time => Time
-  if (associated(tides_CSp)) CS%tides_CSp => tides_CSp
+  if (present(tides_CSp)) &
+    CS%tides_CSp => tides_CSp
 
   mdl = "MOM_PressureForce_Mont"
   call log_version(param_file, mdl, version, "")

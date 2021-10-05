@@ -213,7 +213,7 @@ type, public :: MOM_dyn_split_RK2_CS ; private
   !> A pointer to the set_visc control structure
   type(set_visc_CS),      pointer :: set_visc_CSp      => NULL()
   !> A pointer to the tidal forcing control structure
-  type(tidal_forcing_CS), pointer :: tides_CSp         => NULL()
+  type(tidal_forcing_CS) :: tides_CSp
   !> A pointer to the ALE control structure.
   type(ALE_CS), pointer :: ALE_CSp => NULL()
 
@@ -1699,10 +1699,7 @@ subroutine end_dyn_split_RK2(CS)
   call PressureForce_end(CS%PressureForce_CSp)
   deallocate(CS%PressureForce_CSp)
 
-  if (associated(CS%tides_CSp)) then
-    call tidal_forcing_end(CS%tides_CSp)
-    deallocate(CS%tides_CSp)
-  endif
+  call tidal_forcing_end(CS%tides_CSp)
 
   call CoriolisAdv_end(CS%CoriolisAdv_Csp)
   deallocate(CS%CoriolisAdv_CSp)

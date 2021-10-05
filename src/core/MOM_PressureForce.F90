@@ -88,7 +88,7 @@ subroutine PressureForce_init(Time, G, GV, US, param_file, diag, CS, tides_CSp)
   type(param_file_type),   intent(in)    :: param_file !< Parameter file handles
   type(diag_ctrl), target, intent(inout) :: diag !< Diagnostics control structure
   type(PressureForce_CS),  pointer       :: CS   !< Pressure force control structure
-  type(tidal_forcing_CS),  pointer       :: tides_CSp !< Tide control structure
+  type(tidal_forcing_CS), intent(inout), optional :: tides_CSp !< Tide control structure
 #include "version_variable.h"
   character(len=40)  :: mdl = "MOM_PressureForce" ! This module's name.
 
