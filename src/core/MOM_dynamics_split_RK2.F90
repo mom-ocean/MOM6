@@ -209,8 +209,6 @@ type, public :: MOM_dyn_split_RK2_CS ; private
   !> A pointer to the barotropic stepping control structure
   type(barotropic_CS),    pointer :: barotropic_CSp    => NULL()
   !> A pointer to a structure containing interface height diffusivities
-  type(thickness_diffuse_CS), pointer :: thickness_diffuse_CSp => NULL()
-  !> A pointer to the vertical viscosity control structure
   type(vertvisc_CS),      pointer :: vertvisc_CSp      => NULL()
   !> A pointer to the set_visc control structure
   type(set_visc_CS),      pointer :: set_visc_CSp      => NULL()
@@ -292,7 +290,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
   logical,                           intent(in)    :: calc_dtbt    !< if true, recalculate barotropic time step
   type(VarMix_CS),                   pointer       :: VarMix       !< specify the spatially varying viscosities
   type(MEKE_type),                   pointer       :: MEKE         !< related to mesoscale eddy kinetic energy param
-  type(thickness_diffuse_CS),        pointer       :: thickness_diffuse_CSp !< Pointer to a structure containing
+  type(thickness_diffuse_CS),        intent(inout) :: thickness_diffuse_CSp !< Pointer to a structure containing
                                                                    !! interface height diffusivities
   type(wave_parameters_CS), optional, pointer      :: Waves        !< A pointer to a structure containing
                                                                    !! fields related to the surface wave conditions
@@ -1261,7 +1259,7 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, US, param
                                                                 !! diagnostic pointers
   type(VarMix_CS),                  pointer       :: VarMix     !< points to spatially variable viscosities
   type(MEKE_type),                  pointer       :: MEKE       !< points to mesoscale eddy kinetic energy fields
-  type(thickness_diffuse_CS),       pointer       :: thickness_diffuse_CSp !< Pointer to the control structure
+  type(thickness_diffuse_CS),       intent(inout) :: thickness_diffuse_CSp !< Pointer to the control structure
                                                   !! used for the isopycnal height diffusive transport.
   type(ocean_OBC_type),             pointer       :: OBC        !< points to OBC related fields
   type(update_OBC_CS),              pointer       :: update_OBC_CSp !< points to OBC update related fields

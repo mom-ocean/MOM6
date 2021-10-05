@@ -347,7 +347,7 @@ type, public :: MOM_control_struct ; private
     !< Pointer to the control structure used for the unsplit RK2 dynamics
   type(MOM_dyn_split_RK2_CS),    pointer :: dyn_split_RK2_CSp => NULL()
     !< Pointer to the control structure used for the mode-split RK2 dynamics
-  type(thickness_diffuse_CS),    pointer :: thickness_diffuse_CSp => NULL()
+  type(thickness_diffuse_CS) :: thickness_diffuse_CSp
     !< Pointer to the control structure used for the isopycnal height diffusive transport.
     !! This is also common referred to as Gent-McWilliams diffusion
   type(mixedlayer_restrat_CS) :: mixedlayer_restrat_CSp
@@ -3613,7 +3613,6 @@ subroutine MOM_end(CS)
   endif
 
   call thickness_diffuse_end(CS%thickness_diffuse_CSp, CS%CDp)
-  deallocate(CS%thickness_diffuse_CSp)
 
   if (associated(CS%VarMix)) then
     call VarMix_end(CS%VarMix)
