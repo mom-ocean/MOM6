@@ -350,7 +350,7 @@ type, public :: MOM_control_struct ; private
   type(thickness_diffuse_CS),    pointer :: thickness_diffuse_CSp => NULL()
     !< Pointer to the control structure used for the isopycnal height diffusive transport.
     !! This is also common referred to as Gent-McWilliams diffusion
-  type(mixedlayer_restrat_CS),   pointer :: mixedlayer_restrat_CSp => NULL()
+  type(mixedlayer_restrat_CS) :: mixedlayer_restrat_CSp
     !< Pointer to the control structure used for the mixed layer restratification
   type(set_visc_CS),             pointer :: set_visc_CSp => NULL()
     !< Pointer to the control structure used to set viscosities
@@ -3619,9 +3619,6 @@ subroutine MOM_end(CS)
     call VarMix_end(CS%VarMix)
     deallocate(CS%VarMix)
   endif
-
-  if (associated(CS%mixedlayer_restrat_CSp)) &
-    deallocate(CS%mixedlayer_restrat_CSp)
 
   if (associated(CS%set_visc_CSp)) &
     call set_visc_end(CS%visc, CS%set_visc_CSp)
