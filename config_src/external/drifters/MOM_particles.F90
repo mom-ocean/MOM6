@@ -19,7 +19,8 @@ subroutine particles_init(parts, Grid, Time, dt, u, v)
  type(ocean_grid_type), target, intent(in) :: Grid !< Grid type from parent model
  type(time_type), intent(in) :: Time !< Time type from parent model
  real, intent(in)            :: dt !< particle timestep in seconds
- real, dimension(:,:,:),intent(in)      :: u, v !< Horizontal velocity fields
+ real, dimension(:,:,:),intent(in)      :: u !< Zonal velocity field
+ real, dimension(:,:,:),intent(in)      :: v !< Meridional velocity field
 
 end subroutine particles_init
 
@@ -32,7 +33,7 @@ subroutine particles_run(parts, time, uo, vo, ho, tv, stagger)
   real, dimension(:,:,:),intent(in) :: vo !< Ocean meridional velocity (m/s)
   real, dimension(:,:,:),intent(in) :: ho !< Ocean layer thickness [H ~> m or kg m-2]
   type(thermo_var_ptrs), intent(in) :: tv !< structure containing pointers to available thermodynamic fields
-  integer, optional, intent(in) :: stagger
+  integer, optional, intent(in) :: stagger !< Flag for whether velocities are staggered
 
 end subroutine particles_run
 
@@ -40,16 +41,18 @@ end subroutine particles_run
 !>Save particle locations (and sometimes other vars) to restart file
 subroutine particles_save_restart(parts,temp,salt)
 ! Arguments
-type(particles), pointer :: parts
-real,dimension(:,:,:),optional,intent(in) :: temp, salt
+type(particles), pointer :: parts !< Container for all types and memory
+real,dimension(:,:,:),optional,intent(in) :: temp !< Optional container for temperature
+real,dimension(:,:,:),optional,intent(in) ::  salt !< Optional container for salinity
 
 end subroutine particles_save_restart
 
 !> Deallocate all memory and disassociated pointer
 subroutine particles_end(parts,temp,salt)
 ! Arguments
-type(particles), pointer :: parts
-real,dimension(:,:,:),optional,intent(in) :: temp, salt
+type(particles), pointer :: parts !< Container for all types and memory 
+real,dimension(:,:,:),optional,intent(in) :: temp !< Optional container for temperature
+real,dimension(:,:,:),optional,intent(in) :: salt !< Optional container for salinity
 
 end subroutine particles_end
 
