@@ -2181,7 +2181,7 @@ subroutine energetic_PBL_init(Time, G, GV, US, param_file, diag, CS)
                  "If true, use bisection with the iterative determination of the self-consistent "//&
                  "mixed layer depth.  Otherwise use the false position after a maximum and minimum "//&
                  "bound have been evaluated and the returned value or bisection before this.", &
-                 default=.true., do_not_log=.not.CS%Use_MLD_iteration) !### The default should become false.
+                 default=.false., do_not_log=.not.CS%Use_MLD_iteration)
   call get_param(param_file, mdl, "EPBL_MLD_MAX_ITS", CS%max_MLD_its, &
                  "The maximum number of iterations that can be used to find a self-consistent "//&
                  "mixed layer depth.  If EPBL_MLD_BISECTION is true, the maximum number "//&
