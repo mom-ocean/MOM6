@@ -24,4 +24,4 @@ jobs:
       run: make run.symmetric -k -s
 
     - name: Run tests
-      run: make test.openmps test.nans test.restarts -k -s
+      run: make test.openmp test.nan test.restart -k -s
