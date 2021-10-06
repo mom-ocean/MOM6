@@ -224,7 +224,6 @@ type, public :: diabatic_CS ; private
   type(energetic_PBL_CS),       pointer :: energetic_PBL_CSp     => NULL() !< Control structure for a child module
   type(regularize_layers_CS),   pointer :: regularize_layers_CSp => NULL() !< Control structure for a child module
   type(geothermal_CS),          pointer :: geothermal_CSp        => NULL() !< Control structure for a child module
-  type(int_tide_CS),            pointer :: int_tide_CSp          => NULL() !< Control structure for a child module
   type(int_tide_input_CS),      pointer :: int_tide_input_CSp    => NULL() !< Control structure for a child module
   type(int_tide_input_type),    pointer :: int_tide_input        => NULL() !< Control structure for a child module
   type(opacity_CS),             pointer :: opacity_CSp           => NULL() !< Control structure for a child module
@@ -237,6 +236,7 @@ type, public :: diabatic_CS ; private
   type(CVMix_conv_cs),          pointer :: CVMix_conv_CSp        => NULL() !< Control structure for a child module
   type(diapyc_energy_req_CS),   pointer :: diapyc_en_rec_CSp     => NULL() !< Control structure for a child module
   type(oda_incupd_CS),          pointer :: oda_incupd_CSp        => NULL() !< Control structure for a child module
+  type(int_tide_CS) :: int_tide   !< Internal tide control struct
 
   type(group_pass_type) :: pass_hold_eb_ea !< For group halo pass
   type(group_pass_type) :: pass_Kv         !< For group halo pass
@@ -376,7 +376,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
     endif
 
     call propagate_int_tide(h, tv, cn_IGW, CS%int_tide_input%TKE_itidal_input, CS%int_tide_input%tideamp, &
-                            CS%int_tide_input%Nb, dt, G, GV, US, CS%int_tide_CSp)
+                            CS%int_tide_input%Nb, dt, G, GV, US, CS%int_tide)
     if (showCallTree) call callTree_waypoint("done with propagate_int_tide (diabatic)")
   endif ! end CS%use_int_tides
 
@@ -3399,11 +3399,11 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
   if (CS%use_int_tides) then
     call int_tide_input_init(Time, G, GV, US, param_file, diag, CS%int_tide_input_CSp, &
                              CS%int_tide_input)
-    call internal_tides_init(Time, G, GV, US, param_file, diag, CS%int_tide_CSp)
+    call internal_tides_init(Time, G, GV, US, param_file, diag, CS%int_tide)
   endif
 
   ! initialize module for setting diffusivities
-  call set_diffusivity_init(Time, G, GV, US, param_file, diag, CS%set_diff_CSp, CS%int_tide_CSp, &
+  call set_diffusivity_init(Time, G, GV, US, param_file, diag, CS%set_diff_CSp, CS%int_tide, &
                             halo_TS=CS%halo_TS_diff, double_diffuse=CS%double_diffuse)
 
   if (CS%useKPP .and. (CS%double_diffuse .and. .not.CS%use_CVMix_ddiff)) &
