@@ -245,6 +245,9 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
     T_f, S_f      ! Temperature and salinity [degC] and [ppt] with properties in massless layers
                   ! filled vertically by diffusion or the properties after full convective adjustment.
 
+  real, dimension(SZI_(G),SZJ_(G)) :: IW_quadloss2d
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: IW_quadloss3d, IW_KD_quadloss
+
   real, dimension(SZI_(G),SZK_(GV)) :: &
     N2_lay, &     !< Squared buoyancy frequency associated with layers [T-2 ~> s-2]
     Kd_lay_2d, &  !< The layer diffusivities [Z2 T-1 ~> m2 s-1]
@@ -386,6 +389,26 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
   !   Calculate the diffusivities, Kd_lay and Kd_int, for each layer and interface.  This would
   ! be an appropriate place to add a depth-dependent parameterization or another explicit
   ! parameterization of Kd.
+
+  do j=js,je ; do i=is,ie
+    call get_lowmode_loss(i, j, G, CS%int_tide_CSp, 'QuadDrag', IW_quadloss2d(i,j))
+  enddo ; enddo
+
+  call exp_profile(IW_quadloss2d, 1., h, G, GV, US, IW_quadloss3d)
+
+  do j=js,je
+    call find_N2(h, tv, T_f, S_f, fluxes, j, G, GV, US, CS, dRho_int, N2_lay, N2_int, N2_bot)
+    call find_TKE_to_Kd(h, tv, dRho_int, N2_lay, j, dt, G, GV, US, CS, TKE_to_Kd, maxTKE, kb)
+    IW_KD_quadloss(:,j,:) = TKE_to_Kd(:,:) * IW_quadloss3d(:,j,:)
+  enddo
+
+  do j=js,je ; do i=is,ie
+    Kd_lay(i,j,:) = Kd_lay(i,j,:) + IW_KD_quadloss(i,j,:)
+  enddo ; enddo
+
+  do k=2,nz ; do j=js,je ; do i=is,ie
+    Kd_int(i,j,k) = 0.5 * ( Kd_lay(i,j,k) + Kd_lay(i,j,k-1) )
+  enddo ; enddo ; enddo
 
   !$OMP parallel do default(shared) private(dRho_int,N2_lay,Kd_lay_2d,Kd_int_2d,Kv_bkgnd,N2_int,&
   !$OMP                                     N2_bot,KT_extra,KS_extra,TKE_to_Kd,maxTKE,dissip,kb)&
@@ -1981,6 +2004,34 @@ subroutine set_density_ratios(h, tv, kb, G, GV, US, CS, j, ds_dsp1, rho_0)
   endif ! bulkmixedlayer
 
 end subroutine set_density_ratios
+
+subroutine exp_profile(En2d, decay, h, G, GV, US, En3d)
+
+  type(ocean_grid_type),            intent(in)    :: G  !< The ocean's grid structure.
+  type(verticalGrid_type),          intent(in)    :: GV !< The ocean's vertical grid structure.
+  type(unit_scale_type),            intent(in)    :: US !< A dimensional unit scaling type
+  real, dimension(SZI_(G), SZJ_(G)), intent(in) :: En2d
+  real, intent(in) :: decay
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
+                                     intent(in)    :: h      !< Layer thicknesses [H ~> m or kg m-2]
+
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(out) :: En3d
+  real, dimension(SZI_(G)) :: z_from_bot
+  real :: Idecay
+
+  integer :: i,j,k
+  integer :: is,ie,js,je,nz
+
+  js = G%jsc ; je = G%jec ; is = G%isc ; ie = G%iec ; nz = GV%ke
+  Idecay = 1./decay
+  z_from_bot(:) = 0.
+
+  do j=js,je ; do k=nz,1,-1 ; do i=is,ie
+    z_from_bot(i) = z_from_bot(i) + GV%H_to_Z*h(i,j,k)
+    En3d(i,j,k) = En2d(i,j) * exp(-Idecay*z_from_bot(i))
+  enddo ; enddo ; enddo
+
+end subroutine exp_profile
 
 subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, int_tide_CSp, halo_TS, &
                                 double_diffuse)
