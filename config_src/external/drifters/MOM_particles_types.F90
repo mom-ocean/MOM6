@@ -31,25 +31,25 @@ type :: particles_gridded
   logical :: grid_is_latlon !< Flag to say whether the coordinate is in lat-lon degrees, or meters
   logical :: grid_is_regular !< Flag to say whether point in cell can be found assuming regular Cartesian grid
   real :: Lx !< Length of the domain in x direction
-  real, dimension(:,:), pointer :: lon=>null() !< Longitude of cell corners (degree E)
-  real, dimension(:,:), pointer :: lat=>null() !< Latitude of cell corners (degree N)
-  real, dimension(:,:), pointer :: lonc=>null() !< Longitude of cell centers (degree E)
-  real, dimension(:,:), pointer :: latc=>null() !< Latitude of cell centers (degree N)
-  real, dimension(:,:), pointer :: dx=>null() !< Length of cell edge (m)
-  real, dimension(:,:), pointer :: dy=>null() !< Length of cell edge (m)
-  real, dimension(:,:), pointer :: area=>null() !< Area of cell (m^2)
-  real, dimension(:,:), pointer :: msk=>null() !< Ocean-land mask (1=ocean)
-  real, dimension(:,:), pointer :: cos=>null() !< Cosine from rotation matrix to lat-lon coords
-  real, dimension(:,:), pointer :: sin=>null() !< Sine from rotation matrix to lat-lon coords
-  real, dimension(:,:), pointer :: ocean_depth=>NULL() !< Depth of ocean (m)
-  real, dimension(:,:), pointer :: uo=>null() !< Ocean zonal flow (m/s)
-  real, dimension(:,:), pointer :: vo=>null() !< Ocean meridional flow (m/s)
-  real, dimension(:,:), pointer :: tmp=>null() !< Temporary work space
-  real, dimension(:,:), pointer :: tmpc=>null() !< Temporary work space
-  real, dimension(:,:), pointer :: parity_x=>null() !< X component of vector point from i,j to i+1,j+1
-  real, dimension(:,:), pointer :: parity_y=>null() !< Y component of vector point from i,j to i+1,j+1
+  real, dimension(:,:), allocatable :: lon !< Longitude of cell corners (degree E)
+  real, dimension(:,:), allocatable :: lat !< Latitude of cell corners (degree N)
+  real, dimension(:,:), allocatable :: lonc !< Longitude of cell centers (degree E)
+  real, dimension(:,:), allocatable :: latc !< Latitude of cell centers (degree N)
+  real, dimension(:,:), allocatable :: dx !< Length of cell edge (m)
+  real, dimension(:,:), allocatable :: dy !< Length of cell edge (m)
+  real, dimension(:,:), allocatable :: area !< Area of cell (m^2)
+  real, dimension(:,:), allocatable :: msk !< Ocean-land mask (1=ocean)
+  real, dimension(:,:), allocatable :: cos !< Cosine from rotation matrix to lat-lon coords
+  real, dimension(:,:), allocatable :: sin !< Sine from rotation matrix to lat-lon coords
+  real, dimension(:,:), allocatable :: ocean_depth !< Depth of ocean (m)
+  real, dimension(:,:), allocatable :: uo !< Ocean zonal flow (m/s)
+  real, dimension(:,:), allocatable :: vo !< Ocean meridional flow (m/s)
+  real, dimension(:,:), allocatable :: tmp !< Temporary work space
+  real, dimension(:,:), allocatable :: tmpc !< Temporary work space
+  real, dimension(:,:), allocatable :: parity_x !< X component of vector point from i,j to i+1,j+1
+  real, dimension(:,:), allocatable :: parity_y !< Y component of vector point from i,j to i+1,j+1
   ! (For detecting tri-polar fold)
-  integer, dimension(:,:), pointer :: particle_counter_grd=>null() !< Counts particles created for naming purposes
+  integer, dimension(:,:), allocatable :: particle_counter_grd !< Counts particles created for naming purposes
   !>@{
   !! Diagnostic handle
   integer :: id_uo=-1, id_vo=-1, id_unused=-1
