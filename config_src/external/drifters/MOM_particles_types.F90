@@ -79,7 +79,7 @@ end type xyt
 !>particle types are data structures describing a tracked particle
 type :: particle
   type(particle), pointer :: prev=>null() !< Previous link in list
-  type(particle), pointer :: next=>null() !< Next link in list 
+  type(particle), pointer :: next=>null() !< Next link in list
 ! State variables (specific to the particles, needed for restarts)
   real :: lon !< Longitude of particle (degree N or unit of grid coordinate)
   real :: lat !< Latitude of particle (degree E or unit of grid coordinate)
