@@ -1030,7 +1030,7 @@ subroutine ePBL_column(h, u, v, T0, S0, dSV_dT, dSV_dS, TKE_forcing, B_flux, abs
         dt_h = (GV%Z_to_H**2*dt) / max(0.5*(h(k-1)+h(k)), 1e-15*h_sum)
 
         !   This tests whether the layers above and below this interface are in
-        ! a convetively stable configuration, without considering any effects of
+        ! a convectively stable configuration, without considering any effects of
         ! mixing at higher interfaces.  It is an approximation to the more
         ! complete test dPEc_dKd_Kd0 >= 0.0, that would include the effects of
         ! mixing across interface K-1.  The dT_to_dColHt here are effectively
@@ -2079,7 +2079,7 @@ subroutine energetic_PBL_init(Time, G, GV, US, param_file, diag, CS)
   call log_param(param_file, mdl, "EPBL_MSTAR_SCHEME", tmpstr, &
                  "EPBL_MSTAR_SCHEME selects the method for setting mstar.  Valid values are: \n"//&
                  "\t CONSTANT   - Use a fixed mstar given by MSTAR \n"//&
-                 "\t OM4        - Use L_Ekman/L_Obukhov in the sabilizing limit, as in OM4 \n"//&
+                 "\t OM4        - Use L_Ekman/L_Obukhov in the stabilizing limit, as in OM4 \n"//&
                  "\t REICHL_H18 - Use the scheme documented in Reichl & Hallberg, 2018.", &
                  default=CONSTANT_STRING)
   tmpstr = uppercase(tmpstr)
