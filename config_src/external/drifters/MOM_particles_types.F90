@@ -46,8 +46,9 @@ type :: particles_gridded
   real, dimension(:,:), pointer :: vo=>null() !< Ocean meridional flow (m/s)
   real, dimension(:,:), pointer :: tmp=>null() !< Temporary work space
   real, dimension(:,:), pointer :: tmpc=>null() !< Temporary work space
-  real, dimension(:,:), pointer :: parity_x=>null() !< X component of vector point from i,j to i+1,j+1 (for detecting tri-polar fold)
-  real, dimension(:,:), pointer :: parity_y=>null() !< Y component of vector point from i,j to i+1,j+1 (for detecting tri-polar fold)
+  real, dimension(:,:), pointer :: parity_x=>null() !< X component of vector point from i,j to i+1,j+1
+  real, dimension(:,:), pointer :: parity_y=>null() !< Y component of vector point from i,j to i+1,j+1
+  ! (For detecting tri-polar fold)
   integer, dimension(:,:), pointer :: particle_counter_grd=>null() !< Counts particles created for naming purposes
   !>@{
   !! Diagnostic handle
@@ -65,11 +66,11 @@ type :: xyt
   real :: day      !< Day of this record (days)
   real :: lat_old  !< Previous latitude
   real :: lon_old   !< Previous longitude
-  real :: uvel       !< Zonal velocity of particle (m/s) 
+  real :: uvel       !< Zonal velocity of particle (m/s)
   real :: vvel       !< Meridional velocity of particle (m/s)
   real :: uvel_old  !< Previous zonal velocity component (m/s)
   real :: vvel_old !< Previous meridional velocity component (m/s)
-  integer :: year  !< Year of this record 
+  integer :: year  !< Year of this record
   integer :: particle_num  !< Current particle number
   integer(kind=8) :: id = -1 !< Particle Identifier
   type(xyt), pointer :: next=>null()  !< Pointer to the next position in the list
@@ -78,29 +79,29 @@ end type xyt
 !>particle types are data structures describing a tracked particle
 type :: particle
   type(particle), pointer :: prev=>null() !< Previous link in list
-  type(particle), pointer :: next=>null()
+  type(particle), pointer :: next=>null() !< Next link in list 
 ! State variables (specific to the particles, needed for restarts)
   real :: lon !< Longitude of particle (degree N or unit of grid coordinate)
   real :: lat !< Latitude of particle (degree E or unit of grid coordinate)
   real :: depth !< Depth of particle
   real :: uvel !< Zonal velocity of particle (m/s)
   real :: vvel !< Meridional velocity of particle (m/s)
-  real :: lon_old !< previous lon (degrees) 
-  real :: lat_old !< previous lat (degrees)  
-  real :: uvel_old  !< previous uvel 
-  real :: vvel_old  !< previous vvel 
+  real :: lon_old !< previous lon (degrees)
+  real :: lat_old !< previous lat (degrees)
+  real :: uvel_old  !< previous uvel
+  real :: vvel_old  !< previous vvel
   real :: start_lon !< starting longitude where particle was created
   real :: start_lat !< starting latitude where particle was created
   real :: start_day       !< origination position (degrees) and day
   integer :: start_year                         !< origination year
   real :: halo_part  !< equal to zero for particles on the computational domain, and 1 for particles on the halo
-  integer(kind=8) :: id                      !< particle identifier  
+  integer(kind=8) :: id                      !< particle identifier
   integer(kind=8) :: drifter_num             !< particle identifier
-  integer :: ine                           !< nearest i-index in NE direction (for convenience)  
+  integer :: ine                           !< nearest i-index in NE direction (for convenience)
   integer :: jne                           !< nearest j-index in NE direction (for convenience)
   real :: xi                               !< non-dimensional x-coordinate within current cell (0..1)
   real :: yj                                !< non-dimensional y-coordinate within current cell (0..1)
-  real :: uo                                !< zonal ocean velocity 
+  real :: uo                                !< zonal ocean velocity
   real :: vo                                !< meridional ocean velocity
                                                 !< by the particle (m/s)
   type(xyt), pointer :: trajectory=>null() !< Trajectory for this particle
@@ -141,7 +142,8 @@ type :: particles !; private
   logical :: halo_debugging=.False. !< Use for debugging halos (remove when its working)
   logical :: save_short_traj=.false. !< True saves only lon,lat,time,id in particle_trajectory.nc
   logical :: ignore_traj=.False. !< If true, then model does not write trajectory data at all
-  logical :: use_new_predictive_corrective =.False. !< Flag to use Bob's predictive corrective particle scheme- Added by Alon
+  logical :: use_new_predictive_corrective =.False. !< Flag to use Bob's predictive corrective particle scheme
+  !Added by Alon
   integer(kind=8) :: debug_particle_with_id = -1 !< If positive, monitors a part with this id
   type(buffer), pointer :: obuffer_n=>null() !< Buffer for outgoing parts to the north
   type(buffer), pointer :: ibuffer_n=>null() !< Buffer for incoming parts from the north
