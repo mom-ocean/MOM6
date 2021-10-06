@@ -225,10 +225,7 @@ type, public :: barotropic_CS ; private
                              !! pressure [nondim].  Stable values are < ~1.0.
                              !! The default is 0.9.
   logical :: tides           !< If true, apply tidal momentum forcing.
-  logical :: tidal_sal_bug   !< If true, the tidal self-attraction and loading anomaly in the
-                             !! barotropic solver has the wrong sign, replicating a long-standing
-                             !! bug.
-  real    :: G_extra         !< A nondimensional factor by which gtot is enhanced [nondim].
+  real    :: G_extra         !< A nondimensional factor by which gtot is enhanced.
   integer :: hvel_scheme     !< An integer indicating how the thicknesses at
                              !! velocity points are calculated. Valid values are
                              !! given by the parameters defined below:
@@ -1057,11 +1054,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
 
   if (CS%tides) then
     call tidal_forcing_sensitivity(G, CS%tides_CSp, det_de)
-    if (CS%tidal_sal_bug) then
-      dgeo_de = 1.0 + det_de + CS%G_extra
-    else
-      dgeo_de = (1.0 - det_de) + CS%G_extra
-    endif
+    dgeo_de = 1.0 + det_de + CS%G_extra
   else
     dgeo_de = 1.0 + CS%G_extra
   endif
@@ -2804,11 +2797,7 @@ subroutine set_dtbt(G, GV, US, CS, eta, pbce, BT_cont, gtot_est, SSH_add)
 
   det_de = 0.0
   if (CS%tides) call tidal_forcing_sensitivity(G, CS%tides_CSp, det_de)
-  if (CS%tidal_sal_bug) then
-    dgeo_de = 1.0 + max(0.0, det_de + CS%G_extra)
-  else
-    dgeo_de = 1.0 + max(0.0, CS%G_extra - det_de)
-  endif
+  dgeo_de = 1.0 + max(0.0, det_de + CS%G_extra)
   if (present(pbce)) then
     do j=js,je ; do i=is,ie
       gtot_E(i,j) = 0.0 ; gtot_W(i,j) = 0.0
@@ -4299,12 +4288,7 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, US, param_file, diag, CS, 
                       ! a restart file to the internal representation in this run.
   real :: mean_SL     ! The mean sea level that is used along with the bathymetry to estimate the
                       ! geometry when LINEARIZED_BT_CORIOLIS is true or BT_NONLIN_STRESS is false [Z ~> m].
-  real :: det_de      ! The partial derivative due to self-attraction and loading of the reference
-                      ! geopotential with the sea surface height when tides are enabled.
-                      ! This is typically ~0.09 or less.
-  real, allocatable :: lin_drag_h(:,:)  ! A spatially varying linear drag coefficient at tracer points
-                                        ! that acts on the barotropic flow [Z T-1 ~> m s-1].
-
+  real, allocatable, dimension(:,:) :: lin_drag_h
   type(memory_size_type) :: MS
   type(group_pass_type) :: pass_static_data, pass_q_D_Cor
   type(group_pass_type) :: pass_bt_hbt_btav, pass_a_polarity
@@ -4458,14 +4442,6 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, US, param_file, diag, CS, 
 
   call get_param(param_file, mdl, "TIDES", CS%tides, &
                  "If true, apply tidal momentum forcing.", default=.false.)
-  det_de = 0.0
-  if (CS%tides .and. associated(CS%tides_CSp)) &
-    call tidal_forcing_sensitivity(G, CS%tides_CSp, det_de)
-  call get_param(param_file, mdl, "BAROTROPIC_TIDAL_SAL_BUG", CS%tidal_sal_bug, &
-                 "If true, the tidal self-attraction and loading anomaly in the barotropic "//&
-                 "solver has the wrong sign, replicating a long-standing bug with a scalar "//&
-                 "self-attraction and loading term or the SAL term from a previous simulation.", &
-                 default=.true., do_not_log=(det_de==0.0))
   call get_param(param_file, mdl, "SADOURNY", CS%Sadourny, &
                  "If true, the Coriolis terms are discretized with the "//&
                  "Sadourny (1975) energy conserving scheme, otherwise "//&

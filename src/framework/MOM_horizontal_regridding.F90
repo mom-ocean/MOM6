@@ -840,14 +840,6 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, t
 
       call fill_miss_2d(tr_outf, good2, fill2, tr_prev, G, smooth=.true., answers_2018=answers_2018)
 
-      ! now fill in missing values using "ICE-nine" algorithm.
-      tr_outf(:,:) = tr_out(:,:)
-      if (k==1) tr_prev(:,:) = tr_outf(:,:)
-      good2(:,:) = good(:,:)
-      fill2(:,:) = fill(:,:)
-
-      call fill_miss_2d(tr_outf, good2, fill2, tr_prev, G, smooth=.true., answers_2018=answers_2018)
-
 !     if (debug) then
 !       call hchksum(tr_outf, 'field from fill_miss_2d ', G%HI)
 !     endif
@@ -875,7 +867,6 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, t
         enddo
       enddo
   endif
-
 end subroutine horiz_interp_and_extrap_tracer_fms_id
 
 !> Create a 2d-mesh of grid coordinates from 1-d arrays.
