@@ -21,15 +21,21 @@ Interior and bottom-driven mixing
 ---------------------------------
 
 Kappa-shear
-  MOM_kappa_shear implement the shear-driven mixing of :cite:`jackson2008`.
+  MOM_kappa_shear implements the shear-driven mixing of :cite:`jackson2008`.
 
 Internal-tide driven mixing
+
   The schemes of :cite:`st_laurent2002`, :cite:`polzin2009`, and :cite:`melet2012`, are all implemented through MOM_set_diffusivity and MOM_diabatic_driver.
+
+   :ref:`Internal_Vert_Mixing`
+
 
 Vertical friction
 -----------------
 
 Vertical viscosity is implemented in MOM_vert_frict and coefficient computed in MOM_set_viscosity, although contributions to viscosity from other parameterizations are calculated in those respective modules (e.g. MOM_kappa_shear, MOM_KPP, MOM_energetic_PBL).
+
+   :ref:`Vertical_Viscosity`
 
 Vertical diffusion
 ------------------

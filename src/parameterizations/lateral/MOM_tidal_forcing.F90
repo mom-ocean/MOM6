@@ -270,8 +270,8 @@ subroutine tidal_forcing_init(Time, G, param_file, CS)
 
   ! Set up the spatial structure functions for the diurnal, semidiurnal, and
   ! low-frequency tidal components.
-  allocate(CS%sin_struct(isd:ied,jsd:jed,3)) ; CS%sin_struct(:,:,:) = 0.0
-  allocate(CS%cos_struct(isd:ied,jsd:jed,3)) ; CS%cos_struct(:,:,:) = 0.0
+  allocate(CS%sin_struct(isd:ied,jsd:jed,3), source=0.0)
+  allocate(CS%cos_struct(isd:ied,jsd:jed,3), source=0.0)
   deg_to_rad = 4.0*ATAN(1.0)/180.0
   do j=js-1,je+1 ; do i=is-1,ie+1
     lat_rad(i,j) = G%geoLatT(i,j)*deg_to_rad

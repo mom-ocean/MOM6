@@ -107,6 +107,7 @@ type, public :: diagnostics_CS ; private
                             !! of this spurious Coriolis source.
     KE_adv     => NULL(), & !< KE source from along-layer advection [H L2 T-3 ~> m3 s-3]
     KE_visc    => NULL(), & !< KE source from vertical viscosity [H L2 T-3 ~> m3 s-3]
+    KE_stress  => NULL(), & !< KE source from surface stress (included in KE_visc) [H L2 T-3 ~> m3 s-3]
     KE_horvisc => NULL(), & !< KE source from horizontal viscosity [H L2 T-3 ~> m3 s-3]
     KE_dia     => NULL()    !< KE source from diapycnal diffusion [H L2 T-3 ~> m3 s-3]
 
@@ -121,8 +122,8 @@ type, public :: diagnostics_CS ; private
   integer :: id_col_ht         = -1, id_dh_dt          = -1
   integer :: id_KE             = -1, id_dKEdt          = -1
   integer :: id_PE_to_KE       = -1, id_KE_BT          = -1
-  integer :: id_KE_Coradv      = -1
-  integer :: id_KE_adv         = -1, id_KE_visc        = -1
+  integer :: id_KE_Coradv      = -1, id_KE_adv         = -1
+  integer :: id_KE_visc        = -1, id_KE_stress      = -1
   integer :: id_KE_horvisc     = -1, id_KE_dia         = -1
   integer :: id_uh_Rlay        = -1, id_vh_Rlay        = -1
   integer :: id_uhGM_Rlay      = -1, id_vhGM_Rlay      = -1
@@ -385,14 +386,14 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
   endif
 
   if (associated(CS%e)) then
-    call find_eta(h, tv, G, GV, US, CS%e)
+    call find_eta(h, tv, G, GV, US, CS%e, dZref=G%Z_ref)
     if (CS%id_e > 0) call post_data(CS%id_e, CS%e, CS%diag)
   endif
 
   if (associated(CS%e_D)) then
     if (associated(CS%e)) then
       do k=1,nz+1 ; do j=js,je ; do i=is,ie
-        CS%e_D(i,j,k) = CS%e(i,j,k) + G%bathyT(i,j)
+        CS%e_D(i,j,k) = CS%e(i,j,k) + (G%bathyT(i,j) + G%Z_ref)
       enddo ; enddo ; enddo
     else
       call find_eta(h, tv, G, GV, US, CS%e_D)
@@ -1060,7 +1061,7 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, GV, US, CS
         KE_h(i,j) = CS%KE(i,j,k) * CS%dh_dt(i,j,k)
       enddo ; enddo
       if (.not.G%symmetric) &
-         call do_group_pass(CS%pass_KE_uv, G%domain)
+        call do_group_pass(CS%pass_KE_uv, G%domain)
       do j=js,je ; do i=is,ie
         CS%dKE_dt(i,j,k) = KE_h(i,j) + 0.5 * G%IareaT(i,j) &
             * (KE_u(I,j) + KE_u(I-1,j) + KE_v(i,J) + KE_v(i,J-1))
@@ -1078,7 +1079,7 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, GV, US, CS
         KE_v(i,J) = vh(i,J,k) * G%dyCv(i,J) * ADp%PFv(i,J,k)
       enddo ; enddo
       if (.not.G%symmetric) &
-         call do_group_pass(CS%pass_KE_uv, G%domain)
+        call do_group_pass(CS%pass_KE_uv, G%domain)
       do j=js,je ; do i=is,ie
         CS%PE_to_KE(i,j,k) = 0.5 * G%IareaT(i,j) &
             * (KE_u(I,j) + KE_u(I-1,j) + KE_v(i,J) + KE_v(i,J-1))
@@ -1096,7 +1097,7 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, GV, US, CS
         KE_v(i,J) = vh(i,J,k) * G%dyCv(i,J) * ADp%v_accel_bt(i,J,k)
       enddo ; enddo
       if (.not.G%symmetric) &
-         call do_group_pass(CS%pass_KE_uv, G%domain)
+        call do_group_pass(CS%pass_KE_uv, G%domain)
       do j=js,je ; do i=is,ie
         CS%KE_BT(i,j,k) = 0.5 * G%IareaT(i,j) &
             * (KE_u(I,j) + KE_u(I-1,j) + KE_v(i,J) + KE_v(i,J-1))
@@ -1118,7 +1119,7 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, GV, US, CS
             * (uh(I,j,k) - uh(I-1,j,k) + vh(i,J,k) - vh(i,J-1,k))
       enddo ; enddo
       if (.not.G%symmetric) &
-         call do_group_pass(CS%pass_KE_uv, G%domain)
+        call do_group_pass(CS%pass_KE_uv, G%domain)
       do j=js,je ; do i=is,ie
         CS%KE_CorAdv(i,j,k) = KE_h(i,j) + 0.5 * G%IareaT(i,j) &
             * (KE_u(I,j) + KE_u(I-1,j) + KE_v(i,J) + KE_v(i,J-1))
@@ -1146,7 +1147,7 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, GV, US, CS
             * (uh(I,j,k) - uh(I-1,j,k) + vh(i,J,k) - vh(i,J-1,k))
       enddo ; enddo
       if (.not.G%symmetric) &
-         call do_group_pass(CS%pass_KE_uv, G%domain)
+        call do_group_pass(CS%pass_KE_uv, G%domain)
       do j=js,je ; do i=is,ie
         CS%KE_adv(i,j,k) = KE_h(i,j) + 0.5 * G%IareaT(i,j) &
             * (KE_u(I,j) + KE_u(I-1,j) + KE_v(i,J) + KE_v(i,J-1))
@@ -1164,13 +1165,31 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, GV, US, CS
         KE_v(i,J) = vh(i,J,k) * G%dyCv(i,J) * ADp%dv_dt_visc(i,J,k)
       enddo ; enddo
       if (.not.G%symmetric) &
-         call do_group_pass(CS%pass_KE_uv, G%domain)
+        call do_group_pass(CS%pass_KE_uv, G%domain)
       do j=js,je ; do i=is,ie
         CS%KE_visc(i,j,k) = 0.5 * G%IareaT(i,j) &
             * (KE_u(I,j) + KE_u(I-1,j) + KE_v(i,J) + KE_v(i,J-1))
       enddo ; enddo
     enddo
     if (CS%id_KE_visc > 0) call post_data(CS%id_KE_visc, CS%KE_visc, CS%diag)
+  endif
+
+  if (associated(CS%KE_stress)) then
+    do k=1,nz
+      do j=js,je ; do I=Isq,Ieq
+        KE_u(I,j) = uh(I,j,k) * G%dxCu(I,j) * ADp%du_dt_str(I,j,k)
+      enddo ; enddo
+      do J=Jsq,Jeq ; do i=is,ie
+        KE_v(i,J) = vh(i,J,k) * G%dyCv(i,J) * ADp%dv_dt_str(i,J,k)
+      enddo ; enddo
+      if (.not.G%symmetric) &
+        call do_group_pass(CS%pass_KE_uv, G%domain)
+      do j=js,je ; do i=is,ie
+        CS%KE_stress(i,j,k) = 0.5 * G%IareaT(i,j) * &
+            ((KE_u(I,j) + KE_u(I-1,j)) + (KE_v(i,J) + KE_v(i,J-1)))
+      enddo ; enddo
+    enddo
+    if (CS%id_KE_stress > 0) call post_data(CS%id_KE_stress, CS%KE_stress, CS%diag)
   endif
 
   if (associated(CS%KE_horvisc)) then
@@ -1182,7 +1201,7 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, GV, US, CS
         KE_v(i,J) = vh(i,J,k) * G%dyCv(i,J) * ADp%diffv(i,J,k)
       enddo ; enddo
       if (.not.G%symmetric) &
-         call do_group_pass(CS%pass_KE_uv, G%domain)
+        call do_group_pass(CS%pass_KE_uv, G%domain)
       do j=js,je ; do i=is,ie
         CS%KE_horvisc(i,j,k) = 0.5 * G%IareaT(i,j) &
             * (KE_u(I,j) + KE_u(I-1,j) + KE_v(i,J) + KE_v(i,J-1))
@@ -1203,7 +1222,7 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, GV, US, CS
         KE_h(i,j) = CS%KE(i,j,k) * (CDp%diapyc_vel(i,j,k) - CDp%diapyc_vel(i,j,k+1))
       enddo ; enddo
       if (.not.G%symmetric) &
-         call do_group_pass(CS%pass_KE_uv, G%domain)
+        call do_group_pass(CS%pass_KE_uv, G%domain)
       do j=js,je ; do i=is,ie
         CS%KE_dia(i,j,k) = KE_h(i,j) + 0.5 * G%IareaT(i,j) &
             * (KE_u(I,j) + KE_u(I-1,j) + KE_v(i,J) + KE_v(i,J-1))
@@ -1894,6 +1913,11 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, US, param_file, diag
       'm3 s-3', conversion=GV%H_to_m*(US%L_T_to_m_s**2)*US%s_to_T)
   if (CS%id_KE_visc>0) call safe_alloc_ptr(CS%KE_visc,isd,ied,jsd,jed,nz)
 
+  CS%id_KE_stress = register_diag_field('ocean_model', 'KE_stress', diag%axesTL, Time, &
+      'Kinetic Energy Source from Surface Stresses or Body Wind Stress', &
+      'm3 s-3', conversion=GV%H_to_m*(US%L_T_to_m_s**2)*US%s_to_T)
+  if (CS%id_KE_stress>0) call safe_alloc_ptr(CS%KE_stress,isd,ied,jsd,jed,nz)
+
   CS%id_KE_horvisc = register_diag_field('ocean_model', 'KE_horvisc', diag%axesTL, Time, &
       'Kinetic Energy Source from Horizontal Viscosity', &
       'm3 s-3', conversion=GV%H_to_m*(US%L_T_to_m_s**2)*US%s_to_T)
@@ -2108,7 +2132,8 @@ subroutine write_static_fields(G, GV, US, tv, diag)
   type(diag_ctrl), target, intent(inout) :: diag !< regulates diagnostic output
 
   ! Local variables
-  integer :: id
+  real :: work_2d(SZI_(G),SZJ_(G))         ! A 2-d temporary work array.
+  integer :: id, i, j
   logical :: use_temperature
 
   id = register_static_field('ocean_model', 'geolat', diag%axesT1, &
@@ -2180,7 +2205,10 @@ subroutine write_static_fields(G, GV, US, tv, diag)
         cmor_field_name='deptho', cmor_long_name='Sea Floor Depth',      &
         cmor_standard_name='sea_floor_depth_below_geoid', area=diag%axesT1%id_area, &
         x_cell_method='mean', y_cell_method='mean', area_cell_method='mean')
-  if (id > 0) call post_data(id, G%bathyT, diag, .true., mask=G%mask2dT)
+  if (id > 0) then
+    do j=G%jsc,G%jec ; do i=G%isc,G%iec ; work_2d(i,j) = G%bathyT(i,j)+G%Z_ref ; enddo ; enddo
+    call post_data(id, work_2d, diag, .true., mask=G%mask2dT)
+  endif
 
   id = register_static_field('ocean_model', 'wet', diag%axesT1, &
         '0 if land, 1 if ocean at tracer points', 'none', area=diag%axesT1%id_area)
@@ -2294,7 +2322,7 @@ subroutine set_dependent_diagnostics(MIS, ADp, CDp, G, GV, CS)
 
   if (associated(CS%dKE_dt) .or. associated(CS%PE_to_KE) .or. &
       associated(CS%KE_BT) .or. associated(CS%KE_CorAdv) .or. &
-      associated(CS%KE_adv) .or. associated(CS%KE_visc) .or. &
+      associated(CS%KE_adv) .or. associated(CS%KE_visc) .or. associated(CS%KE_stress) .or. &
       associated(CS%KE_horvisc) .or. associated(CS%KE_dia)) &
     call safe_alloc_ptr(CS%KE,isd,ied,jsd,jed,nz)
 
@@ -2317,10 +2345,14 @@ subroutine set_dependent_diagnostics(MIS, ADp, CDp, G, GV, CS)
     call safe_alloc_ptr(ADp%gradKEu,IsdB,IedB,jsd,jed,nz)
     call safe_alloc_ptr(ADp%gradKEv,isd,ied,JsdB,JedB,nz)
   endif
-
   if (associated(CS%KE_visc)) then
     call safe_alloc_ptr(ADp%du_dt_visc,IsdB,IedB,jsd,jed,nz)
     call safe_alloc_ptr(ADp%dv_dt_visc,isd,ied,JsdB,JedB,nz)
+  endif
+
+  if (associated(CS%KE_stress)) then
+    call safe_alloc_ptr(ADp%du_dt_str,IsdB,IedB,jsd,jed,nz)
+    call safe_alloc_ptr(ADp%dv_dt_str,isd,ied,JsdB,JedB,nz)
   endif
 
   if (associated(CS%KE_dia)) then
@@ -2353,6 +2385,7 @@ subroutine MOM_diagnostics_end(CS, ADp, CDp)
   if (associated(CS%KE_Coradv))  deallocate(CS%KE_Coradv)
   if (associated(CS%KE_adv))     deallocate(CS%KE_adv)
   if (associated(CS%KE_visc))    deallocate(CS%KE_visc)
+  if (associated(CS%KE_stress))  deallocate(CS%KE_stress)
   if (associated(CS%KE_horvisc)) deallocate(CS%KE_horvisc)
   if (associated(CS%KE_dia))     deallocate(CS%KE_dia)
   if (associated(CS%dv_dt))      deallocate(CS%dv_dt)
@@ -2365,9 +2398,11 @@ subroutine MOM_diagnostics_end(CS, ADp, CDp)
   if (associated(CS%vhGM_Rlay))  deallocate(CS%vhGM_Rlay)
 
   if (associated(ADp%gradKEu))    deallocate(ADp%gradKEu)
-  if (associated(ADp%gradKEu))    deallocate(ADp%gradKEu)
+  if (associated(ADp%gradKEv))    deallocate(ADp%gradKEv)
   if (associated(ADp%du_dt_visc)) deallocate(ADp%du_dt_visc)
   if (associated(ADp%dv_dt_visc)) deallocate(ADp%dv_dt_visc)
+  if (associated(ADp%du_dt_str))  deallocate(ADp%du_dt_str)
+  if (associated(ADp%dv_dt_str))  deallocate(ADp%dv_dt_str)
   if (associated(ADp%du_dt_dia))  deallocate(ADp%du_dt_dia)
   if (associated(ADp%dv_dt_dia))  deallocate(ADp%dv_dt_dia)
   if (associated(ADp%du_other))   deallocate(ADp%du_other)

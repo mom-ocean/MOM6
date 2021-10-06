@@ -67,16 +67,16 @@ subroutine ice_shelf_state_init(ISS, G)
   endif
   allocate(ISS)
 
-  allocate(ISS%mass_shelf(isd:ied,jsd:jed) )   ; ISS%mass_shelf(:,:) = 0.0
-  allocate(ISS%area_shelf_h(isd:ied,jsd:jed) ) ; ISS%area_shelf_h(:,:) = 0.0
-  allocate(ISS%h_shelf(isd:ied,jsd:jed) )      ; ISS%h_shelf(:,:) = 0.0
-  allocate(ISS%hmask(isd:ied,jsd:jed) )        ; ISS%hmask(:,:) = -2.0
+  allocate(ISS%mass_shelf(isd:ied,jsd:jed), source=0.0 )
+  allocate(ISS%area_shelf_h(isd:ied,jsd:jed), source=0.0 )
+  allocate(ISS%h_shelf(isd:ied,jsd:jed), source=0.0 )
+  allocate(ISS%hmask(isd:ied,jsd:jed), source=-2.0 )
 
-  allocate(ISS%tflux_ocn(isd:ied,jsd:jed) )    ; ISS%tflux_ocn(:,:) = 0.0
-  allocate(ISS%water_flux(isd:ied,jsd:jed) )   ; ISS%water_flux(:,:) = 0.0
-  allocate(ISS%salt_flux(isd:ied,jsd:jed) )    ; ISS%salt_flux(:,:) = 0.0
-  allocate(ISS%tflux_shelf(isd:ied,jsd:jed) )  ; ISS%tflux_shelf(:,:) = 0.0
-  allocate(ISS%tfreeze(isd:ied,jsd:jed) )      ; ISS%tfreeze(:,:) = 0.0
+  allocate(ISS%tflux_ocn(isd:ied,jsd:jed), source=0.0 )
+  allocate(ISS%water_flux(isd:ied,jsd:jed), source=0.0 )
+  allocate(ISS%salt_flux(isd:ied,jsd:jed), source=0.0 )
+  allocate(ISS%tflux_shelf(isd:ied,jsd:jed), source=0.0 )
+  allocate(ISS%tfreeze(isd:ied,jsd:jed), source=0.0 )
 
 end subroutine ice_shelf_state_init
 

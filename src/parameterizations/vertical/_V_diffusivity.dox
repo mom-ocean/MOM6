@@ -1,0 +1,610 @@
+/*! \page Internal_Vert_Mixing Internal Vertical Mixing
+
+Sets the interior vertical diffusion of scalars due to the following processes:
+
+-# Shear-driven mixing (\ref section_Shear): \cite jackson2008 or KPP interior;
+-# Background mixing (\ref section_Background): via CVMix (Bryan-Lewis profile),
+   the scheme described by \cite harrison2008, or that in \cite danabasoglu2012.
+-# Double-diffusion (\ref section_Double_Diff): old method or new method via CVMix;
+-# Tidal mixing: many options available, see \ref section_Internal_Tidal_Mixing.
+
+In addition, the MOM_set_diffusivity has the option to set the interior vertical
+viscosity associated with processes 1,2 and 4 listed above, which is stored in
+visc\%Kv\_slow. Vertical viscosity due to shear-driven mixing is passed via
+visc\%Kv\_shear
+
+The resulting diffusivity, \f$K_d\f$, is the sum of all the contributions
+unless you set BBL_MIXING_AS_MAX to True, in which case the maximum of
+all the contributions is used.
+
+In addition, \f$K_d\f$ is multiplied by the term:
+
+\f[
+   \frac{N^2}{N^2 + \Omega^2}
+\f]
+
+where \f$N\f$ is the buoyancy frequency and \f$\Omega\f$ is the angular velocity
+of the Earth. This allows the buoyancy fluxes to tend to zero in regions
+of very weak stratification, allowing a no-flux bottom boundary condition
+to be satisfied.
+
+\section section_Shear Shear-driven Mixing
+
+Below the surface mixed layer, there are places in the world's oceans
+where shear mixing is known to take place. This shear-driven mixing can
+be represented in MOM6 through either CVMix or the parameterization of
+\cite jackson2008.
+
+\subsection subsection_CVMix_shear Shear-driven mixing in CVMix
+
+The community vertical mixing (CVMix) code contains options for shear
+mixing from either \cite large1994 or from \cite pacanowski1981. In MOM6,
+CVMix is included via a git submodule which loads the external CVMix
+package. The shear mixing routine in CVMix was developed to reproduce the
+observed mixing of the equatorial undercurrent in the Pacific.
+
+We first compute the gradient Richardson number \f$\mbox{Ri} = N^2 / S^2\f$,
+where \f$S\f$ is the vertical shear (\f$S = ||\bf{u}_z ||\f$) and \f$N\f$
+is the buoyancy frequency (\f$N^2 = -g \rho_z / \rho_0\f$). The
+parameterization of \cite large1994 is as follows, where the diffusivity \f$\kappa\f$
+is given by
+
+\f[
+   \kappa = \kappa_0 \left[ 1 - \min \left( 1, \frac{\mbox{Ri}}{\mbox{Ri}_c} \right)
+   ^2 \right] ^3 ,
+\f]
+
+with \f$\kappa_0 = 5 \times 10^{-3}\, \mbox{m}^2 \,\mbox{s}^{-1}\f$ and \f$\mbox{Ri}_c = 0.7\f$.
+
+One can instead select the \cite pacanowski1981 scheme within CVMix. Unlike
+the \cite large1994 scheme, they propose that the vertical shear
+viscosity \f$\nu_{\mbox{shear}}\f$ be different from the vertical shear
+diffusivity \f$\kappa_{\mbox{shear}}\f$. For gravitationally stable
+profiles (i.e., \f$N^2 > 0\f$), they chose
+
+\f[
+   \nu_{\mbox{shear}} = \frac{\nu_0}{(1 + a \mbox{Ri})^n}
+\f]
+
+\f[
+   \kappa_{\mbox{shear}} = \frac{\nu_0}{(1 + a \mbox{Ri})^{n+1}}
+\f]
+
+where \f$\nu_0\f$, \f$a\f$ and \f$n\f$ are adjustable parameters. Common settings are \f$a = 5\f$
+and \f$n = 2\f$.
+
+For both CVMix shear mixing schemes, the mixing coefficients are set to
+a large value for gravitationally unstable profiles.
+
+\subsection subsection_kappa_shear Shear-driven mixing in Jackson
+
+While the above parameterization works well enough in the equatorial
+Pacific, another place one can expect shear-mixing to matter is
+in overflows of dense water. \cite jackson2008 proposes a new shear
+parameterization with the goal of working in both the equatorial undercurrent
+and for overflows, also to have smooth transitions between unstable and
+stable regions. Their scheme looks like:
+
+\f{eqnarray}
+   \frac{\partial^2 \kappa}{\partial z^2} - \frac{\kappa}{L^2_d} &= - 2 SF(\mbox{Ri}) .
+   \label{eq:Jackson_10}
+\f}
+
+This is similar to the locally constant stratification limit of
+\cite turner1986, but with the addition of a decay length scale
+\f$L_d = \lambda L_b\f$. Here \f$L_b = Q^{1/2} / N\f$ is the buoyancy
+length scale where \f$Q\f$ is the turbulent kinetic energy (TKE) per
+unit mass, and \f$\lambda\f$ is a nondimensional constant.  The function
+\f$F(\mbox{Ri})\f$ is a function of the Richardson number that remains
+to be determined. As in \cite turner1986, there must be a critical
+value of \f$\mbox{Ri}\f$ above which \f$F(\mbox{Ri}) = 0\f$.
+For better agreement with observations in a law-of-the-wall configuration,
+we modify \f$L_d\f$ to be \f$\min (\lambda L_b, L_z)\f$, where \f$L_z\f$
+is the distance to the nearest solid boundary. This can be understood by
+considering \f$L_d\f$ to be the size of the largest turbulent eddies,
+whether they are constrained by the stratification (through \f$L_b\f$)
+or through the geometry (through \f$L_z\f$).
+
+There are two length scales: the width of the low Richardson number region
+as in \cite turner1986, and the buoyancy length scale, which is the
+length scale over which the TKE is affected by the stratification (see
+\cite jackson2008 for more details). In particular, the inclusion of a
+decay length scale means that the diffusivity decays exponentially away
+from the mixing region with a length scale of \f$L_d\f$. This is important
+since turbulent eddies generated in the low \f$\mbox{Ri}\f$ layer can
+be vertically self-advected and mix nearby regions. This method yields
+a smoother diffusivity than that in \cite hallberg2000, especially in
+areas where the Richardson number is noisy.
+
+This parameterization predicts the turbulent eddy diffusivity in terms
+of the vertical profiles of velocity and density, providing that the
+TKE is known. To complete the parameterization we use a TKE \f$Q\f$
+budget such as that used in second-order turbulence closure models
+(\cite umlauf2005). We make a few additional assumptions, however,
+and use the simplified form
+
+\f{eqnarray}
+   \frac{\partial}{\partial z} \left[ (\kappa + \nu_0) \frac{\partial Q}
+   {\partial z} \right] + \kappa (S^2 - N^2) - Q(c_N N + c_S S) &= 0.
+   \label{eq:Jackson_11}
+\f}
+
+The system is therefore in balance between a vertical diffusion of
+TKE caused by both the eddy and molecular viscosity \f$(\nu_0)\f$,
+the production of TKE by shear, a sink due to stratification, and the
+dissipation. Note that we are assuming a Prandtl number of 1, although a
+parameterization for the Prandtl number could be added. We have assumed
+that the TKE reaches a quasi-steady state faster than the flow is evolving
+and faster than it can be affected by mean-flow advection so that \f$DQ/Dt =
+0\f$. Since this parameterization is meant to be used in climate models
+with low horizontal resolution and large time steps compared to the
+mixing time scales, this is a reasonable assumption. The most tenuous
+assumption is in the form of the dissipation \f$\epsilon = Q(C_N N +
+c_S S)\f$ (where \f$c_N\f$ and \f$c_S\f$ are to be determined),
+which is assumed to be dependent on the buoyancy frequency (through loss
+of energy to internal waves) and the velocity shear (through the energy
+cascade to smaller scales).
+
+We can rewrite \eqref{eq:Jackson_10} as the steady "transport" equation
+for the turbulent diffusivity (i.e., with \f$D\kappa/Dt = 0\f$),
+
+\f[
+  \frac{\partial}{\partial z} \left( \kappa \frac{\partial \kappa}{\partial z}
+  \right) + 2\kappa SF(\mbox{Ri}) - \left( \frac{\kappa}{L_d} \right)^2 -
+  \left( \frac{\partial \kappa}{\partial z} \right) ^2 = 0 .
+\f]
+
+The first term on the left can be regarded as a vertical transport of
+diffusivity, the second term as a source, and the final two as sinks.
+This equation with \eqref{eq:Jackson_11} are simple enough to solve quickly
+using an iterative technique.
+
+We also need boundary conditions for \eqref{eq:Jackson_10}
+and \eqref{eq:Jackson_11}. For the turbulent diffusivity we use
+\f$\kappa = 0\f$ since our diffusivity is numerically defined on
+layer interfaces. This ensures that there is no turbulent flux across
+boundaries. For the TKE we use boundary conditions of \f$Q = Q_0\f$ where
+\f$Q_0\f$ is a constant value of TKE, used to prevent a singularity
+in \eqref{eq:Jackson_10}, that is chosen to be small enough to not
+influence results. Note that the value of \f$\kappa\f$ calculated here
+reflects shear-driven turbulent mixing only; the total diffusivity would
+be this value plus any diffusivities due to other turbulent processes
+or a background value.
+
+Based on \cite turner1986, we choose \f$F(\mbox{Ri})\f$ of the form
+
+\f[
+   F(\mbox{Ri}) = F_0 \left( \frac{1 - \mbox{Ri} / \mbox{Ri}_c}
+   {1 + \alpha \mbox{Ri} / \mbox{Ri}_c} \right) ,
+\f]
+
+where \f$\alpha\f$ is the curvature parameter. This table shows the default
+values of the relevant parameters:
+
+<table>
+<caption id="shear_params">Shear mixing parameters</caption>
+<tr><th>Parameter      <th>Default value <th>MOM6 parameter
+<tr><td>\f$\mbox{Ri}_c\f$   <td>0.25     <td>RINO_CRIT
+<tr><td>\f$\nu_0\f$         <td>\f$1.5 \times 10^{-5}\f$ <td>KD_KAPPA_SHEAR_0
+<tr><td>\f$F_0\f$           <td>0.089    <td>SHEARMIX_RATE
+<tr><td>\f$\alpha\f$        <td>-0.97    <td>FRI_CURVATURE
+<tr><td>\f$\lambda\f$       <td>0.82     <td>KAPPA_BUOY_SCALE_COEF
+<tr><td>\f$c_N\f$           <td>0.24     <td>TKE_N_DECAY_CONST
+<tr><td>\f$c_S\f$           <td>0.14     <td>TKE_SHEAR_DECAY_CONST
+</table>
+
+These can all be adjusted at run time, plus some other parameters such as the maximum number of iterations
+to perform.
+
+\section section_Background Background Mixing
+
+There are three choices for the vertical background mixing: that in
+CVMix (\cite bryan1979), that in \cite harrison2008, and that in
+\cite danabasoglu2012.
+
+\subsection subsection_bryan_lewis CVMix background mixing
+
+The background vertical mixing in \cite bryan1979 is of the form:
+
+\f[
+   \kappa = C_1 + C_2 \mbox{atan} [ C_3 ( |z| - C_4 )]
+\f]
+
+where the constants are runtime parameters as shown here:
+
+<table>
+<caption id="bryan_lewis_parms">Bryan Lewis parameters</caption>
+<tr><th>Parameter         <th>Units   <th>MOM6 parameter
+<tr><td>\f$C_1\f$         <td>m2 s-1  <td>BRYAN_LEWIS_C1
+<tr><td>\f$C_2\f$         <td>m2 s-1  <td>BRYAN_LEWIS_C2
+<tr><td>\f$C_3\f$         <td>m-1     <td>BRYAN_LEWIS_C3
+<tr><td>\f$C_4\f$         <td>m       <td>BRYAN_LEWIS_C4
+</table>
+
+\subsection subsection_henyey Henyey IGW background mixing
+
+\cite harrison2008 choose a vertical background mixing with a latitudinal
+dependence based on \cite henyey1986. Specifically, theory predicts
+a minimum in mixing due to wave-wave interactions at the equator and
+observations support that theory. In this option, the surface background
+diffusivity is
+
+\f[
+   \kappa_s (\phi) = \max \left[ 10^{-7}, \kappa_0 \left| \frac{f}{f_{30}} \right|
+   \frac{ \cosh^{-1} (1/f) }{ \cosh^{-1} (1/f_{30})} \right] ,
+\f]
+
+where \f$f_{30}\f$ is the Coriolis frequency at \f$30^\circ\f$ latitude. The two-dimensional equation for
+the diffusivity is
+
+\f[
+   \kappa(\phi, z) = \kappa_s + \Gamma \mbox{atan} \left( \frac{H_t}{\delta_t} \right) +
+   \Gamma \mbox{atan} \left( \frac{z - H_t}{\delta_t} \right) ,
+\f]
+\f[
+   \Gamma = \frac{(\kappa_d - \kappa_s) }{\left[ 0.5 \pi + \mbox{atan} \left( \frac{H_t}{\delta_t} \right)
+   \right] },
+\f]
+
+where \f$H_t = 2500\, \mbox{m}\f$, \f$\delta_t = 222\, \mbox{m}\f$, and
+\f$\kappa_d\f$ is the deep ocean diffusivity of \f$10^{-4}\, \mbox{m}^2
+\, \mbox{s}^{-1}\f$. Note that this is the vertical structure described
+in \cite harrison2008, but that isn't what is in the MOM6 code. Instead, the surface
+value is propagated down, with the assumption that the tidal mixing parameterization
+will provide the deep mixing: \ref section_Internal_Tidal_Mixing.
+
+There is also a "new" Henyey version, taking into account the effect of stratification on
+TKE dissipation,
+
+\todo Harrison (personal communication) recommends that this option be made obsolete and
+eventually removed.
+
+\f[
+   \epsilon = \epsilon_0 \frac{f}{f_0} \frac{\mbox{acosh} (N/f)}{\mbox{acosh} (N_0 / f_0)}
+\f]
+
+where \f$N_0\f$ and \f$f_0\f$ are the reference buoyancy frequency and inertial frequencies, respectively
+and \f$\epsilon_0\f$ is the reference dissipation at \f$(N_0, f_0)\f$. In the previous version, \f$N =
+N_0\f$. Additionally, the relationship between diapycnal diffusivities and stratification is included:
+
+\f[
+   \kappa = \frac{\epsilon}{N^2}
+\f]
+This approach assumes that work done against gravity is uniformly distributed throughout the water column.
+The original version concentrates buoyancy work in regions of strong stratification.
+
+\subsection subsection_danabasoglu_back Danabasoglu background mixing
+
+The shape of the \cite danabasoglu2012 background mixing has a uniform background value, with a dip
+at the equator and a bump at \f$\pm 30^{\circ}\f$ degrees latitude. The form is shown in this figure
+
+\image html background_varying.png "Form of the vertically uniform background mixing in \cite danabasoglu2012. The values are symmetric about the equator."
+\imagelatex{background_varying.png,Form of the vertically uniform background mixing in \cite danabasoglu2012. The values are symmetric about the equator.,\includegraphics[width=\textwidth\,height=\textheight/2\,keepaspectratio=true]}
+
+Some parameters of this curve are set in the input file, some are hard-coded in calculate_bkgnd_mixing.
+
+\section section_Double_Diff Double Diffusion
+
+From \cite large1994, \cite griffies2015a, double-diffusive mixing
+can occur when the vertical gradient of density is stable but the
+vertical gradient of either salinity or temperature is unstable in its
+contribution to density. The key stratification parameter for double
+diffusive processes is
+
+\f[
+   R_\rho = \frac{\alpha}{\beta} \left( \frac{\partial \Theta / \partial z}{\partial S /
+   \partial z} \right) ,
+\f]
+
+where the thermal expansion coefficient is given by
+
+\f[
+   \alpha = - \frac{1}{\rho} \left( \frac{\partial \rho}{\partial \Theta} \right) ,
+\f]
+
+and the haline contraction coefficient is
+
+\f[
+   \beta = \frac{1}{\rho} \left( \frac{\partial \rho}{\partial S} \right) .
+\f]
+
+Note that the effects from double diffusive processes on viscosity are not well known and
+are ignored in MOM6.
+
+In MOM6, there are two choices for the implementation of double
+diffusion. The older DOUBLE_DIFFUSION option, with reference to an
+unknown tech report from NCAR, aims to match the scheme used in MOM4, an update on
+\cite large1994. The newer option is to call the routines from CVMix (USE_CVMIX_DDIFF).
+
+There are two regimes of double diffusive processes, salt fingering and diffusive
+convective, with differing parameterizations in the two regimes.
+
+\subsection subsection_salt_finger Salt fingering regime
+
+The salt fingering regime occurs when salinity is destabilizing the water column (salty,
+above fresh water) and when the stratification parameter \f$R_\rho\f$ is within a
+particular range:
+
+\f[
+   \frac{\partial S}{\partial z} > 0
+\f]
+\f[
+   1 < R_\rho < R_\rho^0.
+\f]
+
+The value of the cutoff \f$R_\rho\f$ is 1.9 in the old code, 2.55 in CVMix.
+
+The form of the diffusivity for both is
+
+\f{eqnarray}{
+   \kappa_d =& \kappa_d^0 \left[ 1 - \left( \frac{R_\rho - 1}{R_\rho^0 - 1} \right)
+   \right]^3 & \mbox{for } 1 < R_\rho < R_\rho^0 \\
+   \kappa_d =& 0 & \mbox{otherwise.}
+\f}
+
+The default values of \f$\kappa_d^0\f$ are
+
+\f{eqnarray}{
+   \kappa_d^0 =& 1 \times 10^{-4} & \mbox{for salinity and other tracers} \\
+   \kappa_d^0 =& 0.7 \times 10^{-4} & \mbox{for temperature.}
+\f}
+
+Note that the form in \cite large1994 is slightly different.
+
+\subsection subsection_diffusive_convective Diffusive convective regime
+
+Both implementations of the diffusive convective double diffusion have the same form
+(\cite large1994) and are active when
+
+\f[
+   \frac{\partial \Theta}{\partial z} < 0
+\f]
+\f[
+   0 < R_\rho < 1.
+\f]
+
+For temperature, the vertical diffusivity is given by
+
+\f[
+   \kappa_d = \nu_\mbox{molecular} \times 0.909 \exp \left( 4.6 \exp \left[ -.54
+   \left( R_\rho^{-1} - 1 \right) \right] \right) ,
+\f]
+
+where
+
+\f[
+   \nu_\mbox{molecular} = 1.5 \times 10^{-6} \mbox{m}^2 \mbox{s}^{-1}
+\f]
+
+is the molecular viscosity of water. Multiplying the diffusivity by the Prandtl number
+\f$Pr\f$
+
+\f{eqnarray}{
+   Pr = \left\{ \begin{matrix} (1.85 - 0.85 R_\rho^{-1} ) R_\rho & 0.5 \leq R_\rho < 1 \\
+   0.15 R_\rho & R_\rho < 0.5 , \end{matrix} \right.
+\f}
+
+gives the diffusivity for salinity and other tracers.
+
+\section section_Internal_Tidal_Mixing Internal Tidal Mixing
+
+Two parameterizations of vertical mixing due to internal tides are
+available with the option INT_TIDE_DISSIPATION. The first is that of
+\cite st_laurent2002 while the second is that of \cite polzin2009. Choose
+between them with the INT_TIDE_PROFILE option. There are other relevant
+parameters which can be seen in MOM_parameter_doc.all once the main tidal
+dissipation switch is turned on.
+
+\subsection subsection_st_laurent St Laurent et al.
+
+The estimated turbulent dissipation rate of
+internal tide energy \f$\epsilon\f$ is:
+
+\f[
+   \epsilon = \frac{q E(x,y)}{\rho} F(z).
+\f]
+
+where \f$\rho\f$ is the reference density of seawater, \f$E(x,y)\f$ is
+the energy flux per unit area transferred from barotropic to baroclinic
+tides, \f$q\f$ is the fraction of the internal-tide energy dissipated
+locally, and \f$F(z)\f$ is the vertical structure of the dissipation.
+This \f$q\f$ is estimated to be roughly 0.3 based on observations. The
+term \f$E(x,y)\f$ is given by \cite st_laurent2002 as:
+
+\f[
+   E(x,y) \simeq \frac{1}{2} \rho N_b \kappa h^2 \langle U^2 \rangle
+\f]
+
+where \f$\rho\f$ is the reference density of seawater, \f$N_b\f$ is
+the buoyancy frequency along the seafloor, and \f$(\kappa, h)\f$ are
+the wavenumber and amplitude scales for the topographic roughness, and
+\f$\langle U^2 \rangle\f$ is the barotropic tide variance. It is assumed
+that the model will read in topographic roughness squared \f$h^2\f$
+from a file (the variable must be named "h2").
+
+To convert from energy dissipation to vertical diffusion \f$K_d\f$,
+the simple estimate is:
+
+\f[
+   K_d \approx \frac{\Gamma q E(x,y) F(z)}{\rho N^2}
+\f]
+
+where \f$\Gamma\f$ is the mixing efficiency, generally set to 0.2
+and \f$F(z)\f$ is a vertical structure function with exponential decay
+from the bottom:
+
+\f[
+   F(z) = \frac{e^{-(H+z)/\zeta}}{\zeta (1 - e^{H/\zeta}}.
+\f]
+
+Here, \f$\zeta\f$ is a vertical decay scale with a default of 500 meters.
+One change in MOM6 from the St. Laurent scheme is to use this form of \f$\Gamma\f$:
+
+\f[
+   \Gamma = 0.2 \frac{N^2}{N^2 + \Omega^2}
+\f]
+
+instead of \f$\Gamma = 0.2\f$, where \f$\Omega\f$ is the angular velocity
+of the Earth. This allows the buoyancy fluxes to tend to zero in regions
+of very weak stratification, allowing a no-flux bottom boundary condition
+to be satisfied.
+
+\subsection subsection_polzin Polzin
+
+The vertical diffusion profile of \cite polzin2009 is a WKB-stretched
+algebraic decay profile. It is based on a radiation balance equation,
+which links the dissipation profile associated with internal breaking to
+the finescale internal wave shear producing that dissipation. The vertical
+profile of internal-tide driven energy dissipation can then vary in time
+and space, and evolve in a changing climate (\cite melet2012). \cite melet2012
+describes how the Polzin scheme is implemented in MOM6,
+copied here.
+
+The parameterization of \cite polzin2009 links the energy dissipation
+profile to the finescale internal wave shear producing that
+dissipation, using an idealized vertical wavenumber energy spectrum
+to identify analytic solutions to a radiation balance equation
+(\cite polzin2004). These solutions yield a dissipation profile
+\f$\epsilon(z)\f$:
+
+\f[
+   \epsilon = \frac{\epsilon_0}{[1 + (z/z_p)]^2},
+\f]
+
+where the magnitude \f$\epsilon_0\f$ and scale height \f$z_p\f$ can be expressed in terms of the
+spectral amplitude and bandwidth of the idealized vertical wavenumber energy spectrum in uniform
+stratification (\cite polzin2009).
+
+To take into account the nonuniform stratification, \cite polzin2009 applied a buoyancy scaling
+using the Wentzel-Kramers-Brillouin (WKB) approximation. As a result, the vertical wavenumber of a
+wave packet varies in proportion to the buoyancy frequency \f$N\f$, which in turn implies an
+additional transport of energy to smaller scales, and thus a possible enhanced mixing in regions of
+strong stratification. Such effects can be described by buoyancy scaling the vertical coordinate
+\f$z\f$ as
+
+\f[
+   z^{\ast}(z) = \int_{0}^{z} \left[ \frac{N^2 (z^\prime )}{N_b^2} \right] dz^{\prime} ,
+\f]
+
+with \f$z^\prime\f$ being positive upward relative to the bottom of the ocean. The turbulent
+dissipation rate then becomes
+
+\f[
+   \epsilon = \frac{\epsilon_0}{[1 + (z^{\ast} /z_p)]^2} \frac{N^2(z)}{N_b^2} .
+\f]
+
+The spectral amplitude and bandwidth of the idealized vertical wavenumber
+energy spectrum are identified after WKB scaling using a quasi-linear
+spectral model of internal-tide generation that incorporates horizontal
+advection of the barotropic tide into the momentum equation (\cite bell1975).
+As a result, Polzin's formulation leads to an expression for
+the spatially and temporally varying dissipation of internal tide energy
+at the bottom \f$\epsilon_0\f$, and the vertical scale of decay for the
+dissipation of internal tide energy \f$z_p\f$.
+
+\subsubsection subsection_energy_conserving Energy-conserving form
+
+To satisfy energy conservation (the integral of the vertical structure for the turbulent dissipation
+over depth should be unity), the dissipation is rewritten as
+
+\f[
+   \epsilon = \frac{\epsilon_0 z_p}{1 + (z^\ast/z_p)]^2} \frac{N^2(z)}{N^2_b} \left[
+   \frac{1}{z^{\ast(z=H)}} + \frac{1}{z_p} \right] .
+\f]
+
+In the MOM6 implementation, we use the \cite st_laurent2002 template for the vertical flux of energy
+at the ocean floor, so that in both formulations:
+
+\f[
+   \int_{0}^{H} \epsilon (z) dz = \frac{qE}{\rho} .
+\f]
+
+Whereas \cite polzin2009 assumed that the total dissipation was locally in balance with the
+barotropic to baroclinic energy conversion rate \f$(q=1)\f$, here we use the \cite simmons2004 value
+of \f$q=1/3\f$ to retain as much consistency as possible between both parameterizations.
+
+\subsubsection subsection_vertical_decay_scale Vertical decay-scale reformulation
+
+We follow the \cite polzin2009 prescription for the vertical scale of
+decay for the dissipation of internal-tide energy. However, we assume
+that the topographic power law, denoted as \f$\nu\f$ in \cite polzin2009,
+is equal to 1 (instead of 0.9) and we reformulated the expression of
+\f$z_p\f$ to put it in a more readable form:
+
+\f[
+   z_p = \frac{z_p^\mbox{ref} (\kappa^\mbox{ref})^2 (h^\mbox{ref})^2 (N_b^\mbox{ref})^3} {U^\mbox{ref}}
+   \frac{U}{h^2 \kappa^2 N_b^3} .
+\f]
+
+The superscript ref refers to reference values of the various parameters, as given by
+observations from the Brazil basin. Therefore, the above can be rewritten as
+
+\f[
+   z_p = \mu (N_b^\mbox{ref} )^2
+   \frac{U}{h^2 \kappa^2 N_b^3} .
+\f]
+
+where \f$\mu\f$ is a nondimensional constant \f$(\mu = 0.06970)\f$ and \f$N_b^\mbox{ref} = 9.6 \times
+10^{-4} s^{-1}\f$. Finally, a minimum decay scale of \f$z_p = 100 m\f$ is imposed in our
+implementation.
+
+\subsubsection subsection_reformulation_WKB Reformulation of the WKB scaling
+
+Since the dissipation is expressed as a function of the ratio \f$z^\ast / z_p\f$, a different WKB
+scaling can be used so long as we modify \f$z_p\f$ accordingly. In the implemented parameterization,
+we define the scaled height coordinate \f$z^\ast\f$ by
+
+\f[
+   z^\ast (z) = \frac{1}{\overline{N^2 (z)}^z} \int_{0}^{z} N^2(z^\prime ) dz ^\prime ,
+\f]
+
+with \f$z^\prime\f$ defined to be the height above the ocean bottom. By normalizing \f$N^2\f$ by its
+vertical mean \f$\overline{N^2}^z\f$, \f$z^\ast\f$ ranges from \f$0\f$ to \f$H\f$, the depth of the
+ocean.
+
+The WKB-scaled vertical decay scale for the Polzin formulation becomes
+
+\f[
+   z^\ast_p = \mu(N_b^\mbox{ref})^2 \frac{U}{h^2 \kappa^2 N_b \overline{N^2}^z} .
+\f]
+
+Unlike the \cite st_laurent2002 parameterization, the vertical decay scale now depends on physical
+variables and can evolve with a changing climate.
+
+Finally, the Polzin vertical profile of dissipation implemented in the model is given by
+
+\f[
+   \epsilon = \frac{qE(x,y)}{\rho [1 + (z^\ast/z_p^\ast)]^2} \frac{N^2(z)}{\overline{N^2}^z}
+   \left( \frac{1}{H} + \frac{1}{z_p^\ast} \right) .
+\f]
+
+In both parameterizations, turbulent diapycnal diffusivities are inferred from the dissipation
+\f$\epsilon\f$ by:
+
+\f[
+   K_d = \frac{\Gamma \epsilon}{N^2}
+\f]
+
+and using this form of \f$\Gamma\f$:
+
+\f[
+   \Gamma = 0.2 \frac{N^2}{N^2 + \Omega^2}
+\f]
+
+instead of \f$\Gamma = 0.2\f$, where \f$\Omega\f$ is the angular velocity
+of the Earth. This allows the buoyancy fluxes to tend to zero in regions
+of very weak stratification, allowing a no-flux bottom boundary condition
+to be satisfied.
+
+\subsection subsection_Lee_waves Nikurashin Lee Wave Mixing
+
+If one has the INT_TIDE_DISSIPATION flag on, there is an option to also turn on
+LEE_WAVE_DISSIPATION. The theory is presented in \cite nikurashin2010a
+while the application of it is presented in \cite nikurashin2010b. For
+the implementation in MOM6, it is required that you provide an estimate
+of the TKE loss due to the Lee waves which is then applied with either
+the St. Laurent or the Polzin vertical profile.
+
+\todo Is there a script to produce this somewhere or what???
+
+*/

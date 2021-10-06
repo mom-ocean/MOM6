@@ -49,6 +49,7 @@ use MOM_kappa_shear,         only : kappa_shear_is_used
 use MOM_CVMix_KPP,           only : KPP_CS, KPP_init, KPP_compute_BLD, KPP_calculate
 use MOM_CVMix_KPP,           only : KPP_end, KPP_get_BLD
 use MOM_CVMix_KPP,           only : KPP_NonLocalTransport_temp, KPP_NonLocalTransport_saln
+use MOM_oda_incupd,          only : apply_oda_incupd, oda_incupd_CS
 use MOM_opacity,             only : opacity_init, opacity_end, opacity_CS
 use MOM_opacity,             only : absorbRemainingSW, optics_type, optics_nbands
 use MOM_open_boundary,       only : ocean_OBC_type
@@ -110,6 +111,8 @@ type, public:: diabatic_CS; private
                                      !! domain.  The exact location and properties of
                                      !! those sponges are set by calls to
                                      !! initialize_sponge and set_up_sponge_field.
+  logical :: use_oda_incupd          !< If True, DA incremental update is
+                                     !! applied everywhere
   logical :: use_geothermal          !< If true, apply geothermal heating.
   logical :: use_int_tides           !< If true, use the code that advances a separate set
                                      !! of equations for the internal tide energy density.
@@ -233,6 +236,7 @@ type, public:: diabatic_CS; private
   type(KPP_CS),                 pointer :: KPP_CSp               => NULL() !< Control structure for a child module
   type(CVMix_conv_cs),          pointer :: CVMix_conv_CSp        => NULL() !< Control structure for a child module
   type(diapyc_energy_req_CS),   pointer :: diapyc_en_rec_CSp     => NULL() !< Control structure for a child module
+  type(oda_incupd_CS),          pointer :: oda_incupd_CSp        => NULL() !< Control structure for a child module
 
   type(group_pass_type) :: pass_hold_eb_ea !< For group halo pass
   type(group_pass_type) :: pass_Kv         !< For group halo pass
@@ -251,7 +255,7 @@ end type diabatic_CS
 integer :: id_clock_entrain, id_clock_mixedlayer, id_clock_set_diffusivity
 integer :: id_clock_tracers, id_clock_tridiag, id_clock_pass, id_clock_sponge
 integer :: id_clock_geothermal, id_clock_differential_diff, id_clock_remap
-integer :: id_clock_kpp
+integer :: id_clock_kpp, id_clock_oda_incupd
 !>@}
 
 contains
@@ -312,7 +316,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
   if (CS%id_T_predia > 0) call post_data(CS%id_T_predia, tv%T, CS%diag)
   if (CS%id_S_predia > 0) call post_data(CS%id_S_predia, tv%S, CS%diag)
   if (CS%id_e_predia > 0) then
-    call find_eta(h, tv, G, GV, US, eta, eta_to_m=1.0)
+    call find_eta(h, tv, G, GV, US, eta, eta_to_m=1.0, dZref=G%Z_ref)
     call post_data(CS%id_e_predia, eta, CS%diag)
   endif
 
@@ -624,11 +628,19 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
                                  CS%KPP_buoy_flux, CS%KPP_temp_flux, CS%KPP_salt_flux)
     ! The KPP scheme calculates boundary layer diffusivities and non-local transport.
 
-    call KPP_compute_BLD(CS%KPP_CSp, G, GV, US, h, tv%T, tv%S, u, v, tv, &
-                         fluxes%ustar, CS%KPP_buoy_flux, Waves=Waves)
+    if ( associated(fluxes%lamult) ) then
+      call KPP_compute_BLD(CS%KPP_CSp, G, GV, US, h, tv%T, tv%S, u, v, tv, &
+                            fluxes%ustar, CS%KPP_buoy_flux, Waves=Waves, lamult=fluxes%lamult)
 
-    call KPP_calculate(CS%KPP_CSp, G, GV, US, h, fluxes%ustar, CS%KPP_buoy_flux, Kd_heat, &
-                       Kd_salt, visc%Kv_shear, CS%KPP_NLTheat, CS%KPP_NLTscalar, Waves=Waves)
+      call KPP_calculate(CS%KPP_CSp, G, GV, US, h, fluxes%ustar, CS%KPP_buoy_flux, Kd_heat, &
+                          Kd_salt, visc%Kv_shear, CS%KPP_NLTheat, CS%KPP_NLTscalar, Waves=Waves, lamult=fluxes%lamult)
+    else
+      call KPP_compute_BLD(CS%KPP_CSp, G, GV, US, h, tv%T, tv%S, u, v, tv, &
+                            fluxes%ustar, CS%KPP_buoy_flux, Waves=Waves)
+
+      call KPP_calculate(CS%KPP_CSp, G, GV, US, h, fluxes%ustar, CS%KPP_buoy_flux, Kd_heat, &
+                          Kd_salt, visc%Kv_shear, CS%KPP_NLTheat, CS%KPP_NLTscalar, Waves=Waves)
+    endif
 
     if (associated(Hml)) then
       call KPP_get_BLD(CS%KPP_CSp, Hml(:,:), G, US)
@@ -1000,6 +1012,20 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
       call MOM_thermovar_chksum("apply_sponge ", tv, G)
     endif
   endif ! CS%use_sponge
+
+  ! Apply data assimilation incremental update -oda_incupd-
+  if (CS%use_oda_incupd .and. associated(CS%oda_incupd_CSp)) then
+    call MOM_mesg("Starting ODA_INCUPD legacy ", 5)
+    call cpu_clock_begin(id_clock_oda_incupd)
+    call apply_oda_incupd(h, tv, u, v, dt, G, GV, US, CS%oda_incupd_CSp)
+    call cpu_clock_end(id_clock_oda_incupd)
+    if (CS%debug) then
+      call MOM_state_chksum("apply_oda_incupd ", u, v, h, G, GV, US, haloshift=0)
+      call MOM_thermovar_chksum("apply_oda_incupd ", tv, G)
+    endif
+  endif ! CS%use_oda_incupd
+
+
 
   call disable_averaging(CS%diag)
 
@@ -1492,6 +1518,19 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
     endif
   endif ! CS%use_sponge
 
+  ! Apply data assimilation incremental update -oda_incupd-
+  if (CS%use_oda_incupd .and. associated(CS%oda_incupd_CSp)) then
+    call MOM_mesg("Starting ODA_INCUPD ", 5)
+    call cpu_clock_begin(id_clock_oda_incupd)
+    call apply_oda_incupd(h, tv, u, v, dt, G, GV, US, CS%oda_incupd_CSp)
+    call cpu_clock_end(id_clock_oda_incupd)
+    if (CS%debug) then
+      call MOM_state_chksum("apply_oda_incupd ", u, v, h, G, GV, US, haloshift=0)
+      call MOM_thermovar_chksum("apply_oda_incupd ", tv, G)
+    endif
+  endif ! CS%use_oda_incupd
+
+
   call cpu_clock_begin(id_clock_pass)
   ! visc%Kv_slow is not in the group pass because it has larger vertical extent.
   if (associated(visc%Kv_slow)) &
@@ -1771,11 +1810,19 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
       enddo ; enddo ; enddo
     endif
 
-    call KPP_compute_BLD(CS%KPP_CSp, G, GV, US, h, tv%T, tv%S, u, v, tv, &
-                         fluxes%ustar, CS%KPP_buoy_flux, Waves=Waves)
+    if ( associated(fluxes%lamult) ) then
+      call KPP_compute_BLD(CS%KPP_CSp, G, GV, US, h, tv%T, tv%S, u, v, tv, &
+                           fluxes%ustar, CS%KPP_buoy_flux, Waves=Waves, lamult=fluxes%lamult)
 
-    call KPP_calculate(CS%KPP_CSp, G, GV, US, h, fluxes%ustar, CS%KPP_buoy_flux, Kd_heat, &
-                       Kd_salt, visc%Kv_shear, CS%KPP_NLTheat, CS%KPP_NLTscalar, Waves=Waves)
+      call KPP_calculate(CS%KPP_CSp, G, GV, US, h, fluxes%ustar, CS%KPP_buoy_flux, Kd_heat, &
+                         Kd_salt, visc%Kv_shear, CS%KPP_NLTheat, CS%KPP_NLTscalar, Waves=Waves, lamult=fluxes%lamult)
+    else
+      call KPP_compute_BLD(CS%KPP_CSp, G, GV, US, h, tv%T, tv%S, u, v, tv, &
+                           fluxes%ustar, CS%KPP_buoy_flux, Waves=Waves)
+
+      call KPP_calculate(CS%KPP_CSp, G, GV, US, h, fluxes%ustar, CS%KPP_buoy_flux, Kd_heat, &
+                         Kd_salt, visc%Kv_shear, CS%KPP_NLTheat, CS%KPP_NLTscalar, Waves=Waves)
+    endif
 
     if (associated(Hml)) then
       call KPP_get_BLD(CS%KPP_CSp, Hml(:,:), G, US)
@@ -2275,6 +2322,19 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
     endif
   endif ! CS%use_sponge
 
+  ! Apply data assimilation incremental update -oda_incupd-
+  if (CS%use_oda_incupd .and. associated(CS%oda_incupd_CSp)) then
+    call cpu_clock_begin(id_clock_oda_incupd)
+    call apply_oda_incupd(h, tv, u, v, dt, G, GV, US, CS%oda_incupd_CSp)
+    call cpu_clock_end(id_clock_oda_incupd)
+    if (CS%debug) then
+      call MOM_state_chksum("apply_oda_incupd ", u, v, h, G, GV, US, haloshift=0)
+      call MOM_thermovar_chksum("apply_oda_incupd ", tv, G)
+    endif
+  endif ! CS%use_oda_incupd
+
+
+
 !   Save the diapycnal mass fluxes as a diagnostic field.
   if (associated(CDp%diapyc_vel)) then
     !$OMP parallel do default(shared)
@@ -2429,8 +2489,7 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
 
   !! Diagnostics for terms multiplied by fractional thicknesses
   if (CS%id_hf_dudt_dia_2d > 0) then
-    allocate(hf_dudt_dia_2d(G%IsdB:G%IedB,G%jsd:G%jed))
-    hf_dudt_dia_2d(:,:) = 0.0
+    allocate(hf_dudt_dia_2d(G%IsdB:G%IedB,G%jsd:G%jed), source=0.0)
     do k=1,nz ; do j=js,je ; do I=Isq,Ieq
       hf_dudt_dia_2d(I,j) = hf_dudt_dia_2d(I,j) + ADp%du_dt_dia(I,j,k) * ADp%diag_hfrac_u(I,j,k)
     enddo ; enddo ; enddo
@@ -2439,8 +2498,7 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
   endif
 
   if (CS%id_hf_dvdt_dia_2d > 0) then
-    allocate(hf_dvdt_dia_2d(G%isd:G%ied,G%JsdB:G%JedB))
-    hf_dvdt_dia_2d(:,:) = 0.0
+    allocate(hf_dvdt_dia_2d(G%isd:G%ied,G%JsdB:G%JedB), source=0.0)
     do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
       hf_dvdt_dia_2d(i,J) = hf_dvdt_dia_2d(i,J) + ADp%dv_dt_dia(i,J,k) * ADp%diag_hfrac_v(i,J,k)
     enddo ; enddo ; enddo
@@ -2753,8 +2811,8 @@ subroutine adiabatic_driver_init(Time, G, param_file, diag, CS, &
   type(tracer_flow_control_CS), pointer  :: tracer_flow_CSp  !< pointer to control structure of the
                                                              !! tracer flow control module
 
-! This "include" declares and sets the variable "version".
-#include "version_variable.h"
+  ! This "include" declares and sets the variable "version".
+# include "version_variable.h"
   character(len=40)  :: mdl = "MOM_diabatic_driver" ! This module's name.
 
   if (associated(CS)) then
@@ -2766,9 +2824,34 @@ subroutine adiabatic_driver_init(Time, G, param_file, diag, CS, &
   CS%diag => diag
   if (associated(tracer_flow_CSp)) CS%tracer_flow_CSp => tracer_flow_CSp
 
-! Set default, read and log parameters
+  ! Set default, read and log parameters
   call log_version(param_file, mdl, version, &
                    "The following parameters are used for diabatic processes.")
+
+  ! Check for any subsidiary parameters that are inconsistent with the adiabatic mode.
+  call get_param(param_file, mdl, "SPONGE", CS%use_sponge, &
+                 "If true, sponges may be applied anywhere in the domain. "//&
+                 "The exact location and properties of those sponges are "//&
+                 "specified via calls to initialize_sponge and possibly "//&
+                 "set_up_sponge_field.", default=.false., do_not_log=.true.)
+  call get_param(param_file, mdl, "ENERGETICS_SFC_PBL", CS%use_energetic_PBL, &
+                 "If true, use an implied energetics planetary boundary "//&
+                 "layer scheme to determine the diffusivity and viscosity "//&
+                 "in the surface boundary layer.", default=.false., do_not_log=.true.)
+  call get_param(param_file, mdl, "USE_KPP", CS%use_KPP, &
+                 "If true, turns on the [CVMix] KPP scheme of Large et al., 1994, "//&
+                 "to calculate diffusivities and non-local transport in the OBL.", &
+                 default=.false., do_not_log=.true.)
+
+  if (CS%use_sponge) call MOM_error(WARNING, &
+    "When ADIABATIC = True, it is inconsistent to set SPONGE = True.")
+  if (CS%use_energetic_PBL) call MOM_error(WARNING, &
+    "When ADIABATIC = True, it is inconsistent to set ENERGETICS_SFC_PBL = True.")
+  if (CS%use_KPP) call MOM_error(WARNING, &
+    "When ADIABATIC = True, it is inconsistent to set USE_KPP = True.")
+
+  if (CS%use_sponge .or. CS%use_energetic_PBL .or. CS%use_KPP) &
+    call MOM_error(FATAL, "adiabatic_driver_init is aborting due to inconsistent parameter settings.")
 
 end subroutine adiabatic_driver_init
 
@@ -2776,7 +2859,7 @@ end subroutine adiabatic_driver_init
 !> This routine initializes the diabatic driver module.
 subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, diag, &
                                 ADp, CDp, CS, tracer_flow_CSp, sponge_CSp, &
-                                ALE_sponge_CSp)
+                                ALE_sponge_CSp, oda_incupd_CSp)
   type(time_type), target                :: Time             !< model time
   type(ocean_grid_type),   intent(inout) :: G                !< model grid structure
   type(verticalGrid_type), intent(in)    :: GV               !< model vertical grid structure
@@ -2792,14 +2875,16 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
                                                              !! tracer flow control module
   type(sponge_CS),         pointer       :: sponge_CSp       !< pointer to the sponge module control structure
   type(ALE_sponge_CS),     pointer       :: ALE_sponge_CSp   !< pointer to the ALE sponge module control structure
+  type(oda_incupd_CS),     pointer       :: oda_incupd_CSp   !< pointer to the oda incupd module control structure
 
+  ! Local variables
   real    :: Kd  ! A diffusivity used in the default for other tracer diffusivities, in MKS units [m2 s-1]
   integer :: num_mode
   logical :: use_temperature
   character(len=20) :: EN1, EN2, EN3
 
-! This "include" declares and sets the variable "version".
-#include "version_variable.h"
+  ! This "include" declares and sets the variable "version".
+# include "version_variable.h"
   character(len=40)  :: mdl = "MOM_diabatic_driver" ! This module's name.
   character(len=48)  :: thickness_units
   character(len=40)  :: var_name
@@ -2822,6 +2907,7 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
   if (associated(tracer_flow_CSp)) CS%tracer_flow_CSp => tracer_flow_CSp
   if (associated(sponge_CSp))      CS%sponge_CSp      => sponge_CSp
   if (associated(ALE_sponge_CSp))  CS%ALE_sponge_CSp  => ALE_sponge_CSp
+  if (associated(oda_incupd_CSp))  CS%oda_incupd_CSp  => oda_incupd_CSp
 
   CS%useALEalgorithm = useALEalgorithm
   CS%bulkmixedlayer = (GV%nkml > 0)
@@ -2839,6 +2925,9 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
                  "The exact location and properties of those sponges are "//&
                  "specified via calls to initialize_sponge and possibly "//&
                  "set_up_sponge_field.", default=.false.)
+  call get_param(param_file, mdl, "ODA_INCUPD", CS%use_oda_incupd, &
+                 "If true, oda incremental updates will be applied "//&
+                 "everywhere in the domain.", default=.false.)
   call get_param(param_file, mdl, "ENABLE_THERMODYNAMICS", use_temperature, &
                  "If true, temperature and salinity are used as state "//&
                  "variables.", default=.true.)
@@ -3001,7 +3090,7 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
   if (CS%use_int_tides) then
     CS%id_cg1 = register_diag_field('ocean_model', 'cn1', diag%axesT1, &
                  Time, 'First baroclinic mode (eigen) speed', 'm s-1', conversion=US%L_T_to_m_s)
-    allocate(CS%id_cn(CS%nMode)) ; CS%id_cn(:) = -1
+    allocate(CS%id_cn(CS%nMode), source=-1)
     do m=1,CS%nMode
       write(var_name, '("cn_mode",i1)') m
       write(var_descript, '("Baroclinic (eigen) speed of mode ",i1)') m
@@ -3114,13 +3203,13 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
   ! KPP_init() allocated CS%KPP_Csp and also sets CS%KPPisPassive
   CS%useKPP = KPP_init(param_file, G, GV, US, diag, Time, CS%KPP_CSp, passive=CS%KPPisPassive)
   if (CS%useKPP) then
-    allocate( CS%KPP_NLTheat(isd:ied,jsd:jed,nz+1) )   ; CS%KPP_NLTheat(:,:,:)   = 0.
-    allocate( CS%KPP_NLTscalar(isd:ied,jsd:jed,nz+1) ) ; CS%KPP_NLTscalar(:,:,:) = 0.
+    allocate(CS%KPP_NLTheat(isd:ied,jsd:jed,nz+1), source=0.0)
+    allocate(CS%KPP_NLTscalar(isd:ied,jsd:jed,nz+1), source=0.0)
   endif
   if (CS%useKPP) then
-    allocate( CS%KPP_buoy_flux(isd:ied,jsd:jed,nz+1) ) ; CS%KPP_buoy_flux(:,:,:) = 0.
-    allocate( CS%KPP_temp_flux(isd:ied,jsd:jed) )      ; CS%KPP_temp_flux(:,:)   = 0.
-    allocate( CS%KPP_salt_flux(isd:ied,jsd:jed) )      ; CS%KPP_salt_flux(:,:)   = 0.
+    allocate(CS%KPP_buoy_flux(isd:ied,jsd:jed,nz+1), source=0.0)
+    allocate(CS%KPP_temp_flux(isd:ied,jsd:jed), source=0.0)
+    allocate(CS%KPP_salt_flux(isd:ied,jsd:jed), source=0.0)
   endif
 
 
@@ -3328,6 +3417,8 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
   id_clock_tracers = cpu_clock_id('(Ocean tracer_columns)', grain=CLOCK_MODULE_DRIVER+5)
   if (CS%use_sponge) &
     id_clock_sponge = cpu_clock_id('(Ocean sponges)', grain=CLOCK_MODULE)
+  if (CS%use_oda_incupd) &
+    id_clock_oda_incupd = cpu_clock_id('(Ocean inc. update data assimilation)', grain=CLOCK_MODULE)
   id_clock_tridiag = cpu_clock_id('(Ocean diabatic tridiag)', grain=CLOCK_ROUTINE)
   id_clock_pass = cpu_clock_id('(Ocean diabatic message passing)', grain=CLOCK_ROUTINE)
   id_clock_differential_diff = -1 ; if (CS%double_diffuse .and. .not.CS%use_CVMix_ddiff) &

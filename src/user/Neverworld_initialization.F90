@@ -239,12 +239,14 @@ end function circ_ridge
 !! by finding the depths of interfaces in a specified latitude-dependent
 !! temperature profile with an exponentially decaying thermocline on top of a
 !! linear stratification.
-subroutine Neverworld_initialize_thickness(h, G, GV, US, param_file, eqn_of_state, P_ref)
+subroutine Neverworld_initialize_thickness(h, depth_tot, G, GV, US, param_file, eqn_of_state, P_ref)
   type(ocean_grid_type),   intent(in) :: G                    !< The ocean's grid structure.
   type(verticalGrid_type), intent(in) :: GV                   !< The ocean's vertical grid structure.
   type(unit_scale_type),   intent(in) :: US                   !< A dimensional unit scaling type
-  real, intent(out), dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: h !< The thickness that is being
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: h !< The thickness that is being
                                                               !! initialized [H ~> m or kg m-2].
+  real, dimension(SZI_(G),SZJ_(G)), &
+                           intent(in) :: depth_tot  !< The nominal total depth of the ocean [Z ~> m]
   type(param_file_type),   intent(in) :: param_file           !< A structure indicating the open
                                                               !! file to parse for model
                                                               !! parameter values.
@@ -283,7 +285,7 @@ subroutine Neverworld_initialize_thickness(h, G, GV, US, param_file, eqn_of_stat
   enddo
 
   do j=js,je ; do i=is,ie
-    e_interface = -G%bathyT(i,j)
+    e_interface = -depth_tot(i,j)
     do k=nz,2,-1
       h(i,j,k) = GV%Z_to_H * (e0(k) - e_interface) ! Nominal thickness
       x=(G%geoLonT(i,j)-G%west_lon)/G%len_lon

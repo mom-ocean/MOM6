@@ -88,8 +88,8 @@ function register_pseudo_salt_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mdl, version, "")
 
-  allocate(CS%ps(isd:ied,jsd:jed,nz)) ; CS%ps(:,:,:) = 0.0
-  allocate(CS%diff(isd:ied,jsd:jed,nz)) ; CS%diff(:,:,:) = 0.0
+  allocate(CS%ps(isd:ied,jsd:jed,nz), source=0.0)
+  allocate(CS%diff(isd:ied,jsd:jed,nz), source=0.0)
 
   CS%tr_desc = var_desc(trim("pseudo_salt"), "psu", &
                      "Pseudo salt passive tracer", caller=mdl)

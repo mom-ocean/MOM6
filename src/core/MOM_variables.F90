@@ -171,6 +171,10 @@ type, public :: accel_diag_ptrs
     PFv => NULL(), &       !< Meridional acceleration due to pressure forces [L T-2 ~> m s-2]
     du_dt_visc => NULL(), &!< Zonal acceleration due to vertical viscosity [L T-2 ~> m s-2]
     dv_dt_visc => NULL(), &!< Meridional acceleration due to vertical viscosity [L T-2 ~> m s-2]
+    du_dt_str => NULL(), & !< Zonal acceleration due to the surface stress (included
+                           !! in du_dt_visc) [L T-2 ~> m s-2]
+    dv_dt_str => NULL(), & !< Meridional acceleration due to the surface stress (included
+                           !! in dv_dt_visc) [L T-2 ~> m s-2]
     du_dt_dia => NULL(), & !< Zonal acceleration due to diapycnal  mixing [L T-2 ~> m s-2]
     dv_dt_dia => NULL(), & !< Meridional acceleration due to diapycnal  mixing [L T-2 ~> m s-2]
     u_accel_bt => NULL(), &!< Pointer to the zonal barotropic-solver acceleration [L T-2 ~> m s-2]
@@ -192,6 +196,9 @@ type, public :: accel_diag_ptrs
   real, pointer :: diag_hfrac_v(:,:,:) => NULL() !< Fractional layer thickness at v points
   real, pointer :: diag_hu(:,:,:) => NULL() !< layer thickness at u points
   real, pointer :: diag_hv(:,:,:) => NULL() !< layer thickness at v points
+
+  real, pointer :: visc_rem_u(:,:,:) => NULL() !< viscous remnant at u points
+  real, pointer :: visc_rem_v(:,:,:) => NULL() !< viscous remnant at v points
 
 end type accel_diag_ptrs
 
@@ -341,43 +348,43 @@ subroutine allocate_surface_state(sfc_state, G, use_temperature, do_integrals, &
   if (sfc_state%arrays_allocated) return
 
   if (use_temp) then
-    allocate(sfc_state%SST(isd:ied,jsd:jed)) ; sfc_state%SST(:,:) = 0.0
-    allocate(sfc_state%SSS(isd:ied,jsd:jed)) ; sfc_state%SSS(:,:) = 0.0
+    allocate(sfc_state%SST(isd:ied,jsd:jed), source=0.0)
+    allocate(sfc_state%SSS(isd:ied,jsd:jed), source=0.0)
   else
-    allocate(sfc_state%sfc_density(isd:ied,jsd:jed)) ; sfc_state%sfc_density(:,:) = 0.0
+    allocate(sfc_state%sfc_density(isd:ied,jsd:jed), source=0.0)
   endif
   if (use_temp .and. alloc_frazil) then
-    allocate(sfc_state%frazil(isd:ied,jsd:jed)) ; sfc_state%frazil(:,:) = 0.0
+    allocate(sfc_state%frazil(isd:ied,jsd:jed), source=0.0)
   endif
-  allocate(sfc_state%sea_lev(isd:ied,jsd:jed)) ; sfc_state%sea_lev(:,:) = 0.0
-  allocate(sfc_state%Hml(isd:ied,jsd:jed)) ; sfc_state%Hml(:,:) = 0.0
-  allocate(sfc_state%u(IsdB:IedB,jsd:jed)) ; sfc_state%u(:,:) = 0.0
-  allocate(sfc_state%v(isd:ied,JsdB:JedB)) ; sfc_state%v(:,:) = 0.0
+  allocate(sfc_state%sea_lev(isd:ied,jsd:jed), source=0.0)
+  allocate(sfc_state%Hml(isd:ied,jsd:jed), source=0.0)
+  allocate(sfc_state%u(IsdB:IedB,jsd:jed), source=0.0)
+  allocate(sfc_state%v(isd:ied,JsdB:JedB), source=0.0)
 
   if (use_melt_potential) then
-    allocate(sfc_state%melt_potential(isd:ied,jsd:jed)) ; sfc_state%melt_potential(:,:) = 0.0
+    allocate(sfc_state%melt_potential(isd:ied,jsd:jed), source=0.0)
   endif
 
   if (alloc_cfcs) then
-    allocate(sfc_state%sfc_cfc11(isd:ied,jsd:jed)) ; sfc_state%sfc_cfc11(:,:) = 0.0
-    allocate(sfc_state%sfc_cfc12(isd:ied,jsd:jed)) ; sfc_state%sfc_cfc12(:,:) = 0.0
+    allocate(sfc_state%sfc_cfc11(isd:ied,jsd:jed), source=0.0)
+    allocate(sfc_state%sfc_cfc12(isd:ied,jsd:jed), source=0.0)
   endif
 
   if (alloc_integ) then
     ! Allocate structures for the vertically integrated ocean_mass, ocean_heat, and ocean_salt.
-    allocate(sfc_state%ocean_mass(isd:ied,jsd:jed)) ; sfc_state%ocean_mass(:,:) = 0.0
+    allocate(sfc_state%ocean_mass(isd:ied,jsd:jed), source=0.0)
     if (use_temp) then
-      allocate(sfc_state%ocean_heat(isd:ied,jsd:jed)) ; sfc_state%ocean_heat(:,:) = 0.0
-      allocate(sfc_state%ocean_salt(isd:ied,jsd:jed)) ; sfc_state%ocean_salt(:,:) = 0.0
-      allocate(sfc_state%TempxPmE(isd:ied,jsd:jed))   ; sfc_state%TempxPmE(:,:) = 0.0
-      allocate(sfc_state%salt_deficit(isd:ied,jsd:jed))  ; sfc_state%salt_deficit(:,:) = 0.0
-      allocate(sfc_state%internal_heat(isd:ied,jsd:jed)) ; sfc_state%internal_heat(:,:) = 0.0
+      allocate(sfc_state%ocean_heat(isd:ied,jsd:jed), source=0.0)
+      allocate(sfc_state%ocean_salt(isd:ied,jsd:jed), source=0.0)
+      allocate(sfc_state%TempxPmE(isd:ied,jsd:jed), source=0.0)
+      allocate(sfc_state%salt_deficit(isd:ied,jsd:jed), source=0.0)
+      allocate(sfc_state%internal_heat(isd:ied,jsd:jed), source=0.0)
     endif
   endif
 
   if (alloc_iceshelves) then
-    allocate(sfc_state%taux_shelf(IsdB:IedB,jsd:jed)) ; sfc_state%taux_shelf(:,:) = 0.0
-    allocate(sfc_state%tauy_shelf(isd:ied,JsdB:JedB)) ; sfc_state%tauy_shelf(:,:) = 0.0
+    allocate(sfc_state%taux_shelf(IsdB:IedB,jsd:jed), source=0.0)
+    allocate(sfc_state%tauy_shelf(isd:ied,JsdB:JedB), source=0.0)
   endif
 
   if (present(gas_fields_ocn)) &
@@ -502,23 +509,23 @@ subroutine alloc_BT_cont_type(BT_cont, G, GV, alloc_faces)
     "alloc_BT_cont_type called with an associated BT_cont_type pointer.")
 
   allocate(BT_cont)
-  allocate(BT_cont%FA_u_WW(IsdB:IedB,jsd:jed)) ; BT_cont%FA_u_WW(:,:) = 0.0
-  allocate(BT_cont%FA_u_W0(IsdB:IedB,jsd:jed)) ; BT_cont%FA_u_W0(:,:) = 0.0
-  allocate(BT_cont%FA_u_E0(IsdB:IedB,jsd:jed)) ; BT_cont%FA_u_E0(:,:) = 0.0
-  allocate(BT_cont%FA_u_EE(IsdB:IedB,jsd:jed)) ; BT_cont%FA_u_EE(:,:) = 0.0
-  allocate(BT_cont%uBT_WW(IsdB:IedB,jsd:jed))  ; BT_cont%uBT_WW(:,:) = 0.0
-  allocate(BT_cont%uBT_EE(IsdB:IedB,jsd:jed))  ; BT_cont%uBT_EE(:,:) = 0.0
+  allocate(BT_cont%FA_u_WW(IsdB:IedB,jsd:jed), source=0.0)
+  allocate(BT_cont%FA_u_W0(IsdB:IedB,jsd:jed), source=0.0)
+  allocate(BT_cont%FA_u_E0(IsdB:IedB,jsd:jed), source=0.0)
+  allocate(BT_cont%FA_u_EE(IsdB:IedB,jsd:jed), source=0.0)
+  allocate(BT_cont%uBT_WW(IsdB:IedB,jsd:jed), source=0.0)
+  allocate(BT_cont%uBT_EE(IsdB:IedB,jsd:jed), source=0.0)
 
-  allocate(BT_cont%FA_v_SS(isd:ied,JsdB:JedB)) ; BT_cont%FA_v_SS(:,:) = 0.0
-  allocate(BT_cont%FA_v_S0(isd:ied,JsdB:JedB)) ; BT_cont%FA_v_S0(:,:) = 0.0
-  allocate(BT_cont%FA_v_N0(isd:ied,JsdB:JedB)) ; BT_cont%FA_v_N0(:,:) = 0.0
-  allocate(BT_cont%FA_v_NN(isd:ied,JsdB:JedB)) ; BT_cont%FA_v_NN(:,:) = 0.0
-  allocate(BT_cont%vBT_SS(isd:ied,JsdB:JedB))  ; BT_cont%vBT_SS(:,:) = 0.0
-  allocate(BT_cont%vBT_NN(isd:ied,JsdB:JedB))  ; BT_cont%vBT_NN(:,:) = 0.0
+  allocate(BT_cont%FA_v_SS(isd:ied,JsdB:JedB), source=0.0)
+  allocate(BT_cont%FA_v_S0(isd:ied,JsdB:JedB), source=0.0)
+  allocate(BT_cont%FA_v_N0(isd:ied,JsdB:JedB), source=0.0)
+  allocate(BT_cont%FA_v_NN(isd:ied,JsdB:JedB), source=0.0)
+  allocate(BT_cont%vBT_SS(isd:ied,JsdB:JedB), source=0.0)
+  allocate(BT_cont%vBT_NN(isd:ied,JsdB:JedB), source=0.0)
 
   if (present(alloc_faces)) then ; if (alloc_faces) then
-    allocate(BT_cont%h_u(IsdB:IedB,jsd:jed,1:nz)) ; BT_cont%h_u(:,:,:) = 0.0
-    allocate(BT_cont%h_v(isd:ied,JsdB:JedB,1:nz)) ; BT_cont%h_v(:,:,:) = 0.0
+    allocate(BT_cont%h_u(IsdB:IedB,jsd:jed,1:nz), source=0.0)
+    allocate(BT_cont%h_v(isd:ied,JsdB:JedB,1:nz), source=0.0)
   endif ; endif
 
 end subroutine alloc_BT_cont_type

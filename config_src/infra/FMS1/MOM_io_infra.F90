@@ -31,7 +31,7 @@ implicit none ; private
 ! These interfaces are actually implemented or have explicit interfaces in this file.
 public :: open_file, open_ASCII_file, file_is_open, close_file, flush_file, file_exists
 public :: get_file_info, get_file_fields, get_file_times, get_filename_suffix
-public :: MOM_read_data, MOM_read_vector, write_metadata, write_field
+public :: read_field, read_vector, write_metadata, write_field
 public :: field_exists, get_field_atts, get_field_size, get_axis_data, read_field_chksum
 public :: io_infra_init, io_infra_end, MOM_namelist_file, check_namelist_error, write_version
 public :: stdout_if_root
@@ -55,13 +55,13 @@ interface open_file
 end interface open_file
 
 !> Read a data field from a file
-interface MOM_read_data
-  module procedure MOM_read_data_4d
-  module procedure MOM_read_data_3d
-  module procedure MOM_read_data_2d, MOM_read_data_2d_region
-  module procedure MOM_read_data_1d, MOM_read_data_1d_int
-  module procedure MOM_read_data_0d, MOM_read_data_0d_int
-end interface
+interface read_field
+  module procedure read_field_4d
+  module procedure read_field_3d
+  module procedure read_field_2d, read_field_2d_region
+  module procedure read_field_1d, read_field_1d_int
+  module procedure read_field_0d, read_field_0d_int
+end interface read_field
 
 !> Write a registered field to an output file
 interface write_field
@@ -74,10 +74,10 @@ interface write_field
 end interface write_field
 
 !> Read a pair of data fields representing the two components of a vector from a file
-interface MOM_read_vector
+interface read_vector
   module procedure MOM_read_vector_3d
   module procedure MOM_read_vector_2d
-end interface MOM_read_vector
+end interface read_vector
 
 !> Write metadata about a variable or axis to a file and store it for later reuse
 interface write_metadata
@@ -416,8 +416,8 @@ end subroutine get_axis_data
 
 !> This routine uses the fms_io subroutine read_data to read a scalar named
 !! "fieldname" from a single or domain-decomposed file "filename".
-subroutine MOM_read_data_0d(filename, fieldname, data, timelevel, scale, MOM_Domain, &
-                            global_file, file_may_be_4d)
+subroutine read_field_0d(filename, fieldname, data, timelevel, scale, MOM_Domain, &
+                         global_file, file_may_be_4d)
   character(len=*),       intent(in)    :: filename  !< The name of the file to read
   character(len=*),       intent(in)    :: fieldname !< The variable name of the data in the file
   real,                   intent(inout) :: data      !< The 1-dimensional array into which the data
@@ -471,12 +471,11 @@ subroutine MOM_read_data_0d(filename, fieldname, data, timelevel, scale, MOM_Dom
   if (present(scale)) then ; if (scale /= 1.0) then
     data = scale*data
   endif ; endif
-
-end subroutine MOM_read_data_0d
+end subroutine read_field_0d
 
 !> This routine uses the fms_io subroutine read_data to read a 1-D data field named
 !! "fieldname" from a single or domain-decomposed file "filename".
-subroutine MOM_read_data_1d(filename, fieldname, data, timelevel, scale, MOM_Domain, &
+subroutine read_field_1d(filename, fieldname, data, timelevel, scale, MOM_Domain, &
                             global_file, file_may_be_4d)
   character(len=*),       intent(in)    :: filename  !< The name of the file to read
   character(len=*),       intent(in)    :: fieldname !< The variable name of the data in the file
@@ -521,7 +520,7 @@ subroutine MOM_read_data_1d(filename, fieldname, data, timelevel, scale, MOM_Dom
       endif
     enddo
     if ((n == nvar+1) .or. (nvar < 1)) call MOM_error(WARNING, &
-      "MOM_read_data apparently did not find 1-d variable "//trim(fieldname)//" in file "//trim(filename))
+      "read_field apparently did not find 1-d variable "//trim(fieldname)//" in file "//trim(filename))
 
     deallocate(fields)
     call mpp_close(unit)
@@ -534,14 +533,13 @@ subroutine MOM_read_data_1d(filename, fieldname, data, timelevel, scale, MOM_Dom
   if (present(scale)) then ; if (scale /= 1.0) then
     data(:) = scale*data(:)
   endif ; endif
-
-end subroutine MOM_read_data_1d
+end subroutine read_field_1d
 
 !> This routine uses the fms_io subroutine read_data to read a distributed
 !! 2-D data field named "fieldname" from file "filename".  Valid values for
 !! "position" include CORNER, CENTER, EAST_FACE and NORTH_FACE.
-subroutine MOM_read_data_2d(filename, fieldname, data, MOM_Domain, &
-                            timelevel, position, scale, global_file, file_may_be_4d)
+subroutine read_field_2d(filename, fieldname, data, MOM_Domain, &
+                         timelevel, position, scale, global_file, file_may_be_4d)
   character(len=*),       intent(in)    :: filename  !< The name of the file to read
   character(len=*),       intent(in)    :: fieldname !< The variable name of the data in the file
   real, dimension(:,:),   intent(inout) :: data      !< The 2-dimensional array into which the data
@@ -589,7 +587,7 @@ subroutine MOM_read_data_2d(filename, fieldname, data, MOM_Domain, &
       endif
     enddo
     if ((n == nvar+1) .or. (nvar < 1)) call MOM_error(WARNING, &
-      "MOM_read_data apparently did not find 2-d variable "//trim(fieldname)//" in file "//trim(filename))
+      "read_field apparently did not find 2-d variable "//trim(fieldname)//" in file "//trim(filename))
 
     deallocate(fields)
     call mpp_close(unit)
@@ -598,13 +596,12 @@ subroutine MOM_read_data_2d(filename, fieldname, data, MOM_Domain, &
   if (present(scale)) then ; if (scale /= 1.0) then
     call rescale_comp_data(MOM_Domain, data, scale)
   endif ; endif
-
-end subroutine MOM_read_data_2d
+end subroutine read_field_2d
 
 !> This routine uses the fms_io subroutine read_data to read a region from a distributed or
 !! global 2-D data field named "fieldname" from file "filename".
-subroutine MOM_read_data_2d_region(filename, fieldname, data, start, nread, MOM_domain, &
-                                   no_domain, scale)
+subroutine read_field_2d_region(filename, fieldname, data, start, nread, MOM_domain, &
+                                no_domain, scale)
   character(len=*),       intent(in)    :: filename  !< The name of the file to read
   character(len=*),       intent(in)    :: fieldname !< The variable name of the data in the file
   real, dimension(:,:),   intent(inout) :: data      !< The 2-dimensional array into which the data
@@ -637,13 +634,12 @@ subroutine MOM_read_data_2d_region(filename, fieldname, data, start, nread, MOM_
       data(:,:) = scale*data(:,:)
     endif
   endif ; endif
-
-end subroutine MOM_read_data_2d_region
+end subroutine read_field_2d_region
 
 !> This routine uses the fms_io subroutine read_data to read a distributed
 !! 3-D data field named "fieldname" from file "filename".  Valid values for
 !! "position" include CORNER, CENTER, EAST_FACE and NORTH_FACE.
-subroutine MOM_read_data_3d(filename, fieldname, data, MOM_Domain, &
+subroutine read_field_3d(filename, fieldname, data, MOM_Domain, &
                             timelevel, position, scale, global_file, file_may_be_4d)
   character(len=*),       intent(in)    :: filename  !< The name of the file to read
   character(len=*),       intent(in)    :: fieldname !< The variable name of the data in the file
@@ -692,7 +688,7 @@ subroutine MOM_read_data_3d(filename, fieldname, data, MOM_Domain, &
       endif
     enddo
     if ((n == nvar+1) .or. (nvar < 1)) call MOM_error(WARNING, &
-      "MOM_read_data apparently did not find 3-d variable "//trim(fieldname)//" in file "//trim(filename))
+      "read_field apparently did not find 3-d variable "//trim(fieldname)//" in file "//trim(filename))
 
     deallocate(fields)
     call mpp_close(unit)
@@ -701,13 +697,12 @@ subroutine MOM_read_data_3d(filename, fieldname, data, MOM_Domain, &
   if (present(scale)) then ; if (scale /= 1.0) then
     call rescale_comp_data(MOM_Domain, data, scale)
   endif ; endif
-
-end subroutine MOM_read_data_3d
+end subroutine read_field_3d
 
 !> This routine uses the fms_io subroutine read_data to read a distributed
 !! 4-D data field named "fieldname" from file "filename".  Valid values for
 !! "position" include CORNER, CENTER, EAST_FACE and NORTH_FACE.
-subroutine MOM_read_data_4d(filename, fieldname, data, MOM_Domain, &
+subroutine read_field_4d(filename, fieldname, data, MOM_Domain, &
                             timelevel, position, scale, global_file)
   character(len=*),       intent(in)    :: filename  !< The name of the file to read
   character(len=*),       intent(in)    :: fieldname !< The variable name of the data in the file
@@ -754,7 +749,7 @@ subroutine MOM_read_data_4d(filename, fieldname, data, MOM_Domain, &
     endif
   enddo
   if ((n == nvar+1) .or. (nvar < 1)) call MOM_error(WARNING, &
-    "MOM_read_data apparently did not find 4-d variable "//trim(fieldname)//" in file "//trim(filename))
+    "read_field apparently did not find 4-d variable "//trim(fieldname)//" in file "//trim(filename))
 
   deallocate(fields)
   call mpp_close(unit)
@@ -762,32 +757,29 @@ subroutine MOM_read_data_4d(filename, fieldname, data, MOM_Domain, &
   if (present(scale)) then ; if (scale /= 1.0) then
     call rescale_comp_data(MOM_Domain, data, scale)
   endif ; endif
-
-end subroutine MOM_read_data_4d
+end subroutine read_field_4d
 
 !> This routine uses the fms_io subroutine read_data to read a scalar integer
 !! data field named "fieldname" from file "filename".
-subroutine MOM_read_data_0d_int(filename, fieldname, data, timelevel)
+subroutine read_field_0d_int(filename, fieldname, data, timelevel)
   character(len=*),       intent(in)    :: filename  !< The name of the file to read
   character(len=*),       intent(in)    :: fieldname !< The variable name of the data in the file
   integer,                intent(inout) :: data      !< The 1-dimensional array into which the data
   integer,      optional, intent(in)    :: timelevel !< The time level in the file to read
 
   call read_data(filename, fieldname, data, timelevel=timelevel, no_domain=.true.)
-
-end subroutine MOM_read_data_0d_int
+end subroutine read_field_0d_int
 
 !> This routine uses the fms_io subroutine read_data to read a 1-D integer
 !! data field named "fieldname" from file "filename".
-subroutine MOM_read_data_1d_int(filename, fieldname, data, timelevel)
+subroutine read_field_1d_int(filename, fieldname, data, timelevel)
   character(len=*),       intent(in)    :: filename  !< The name of the file to read
   character(len=*),       intent(in)    :: fieldname !< The variable name of the data in the file
   integer, dimension(:),  intent(inout) :: data      !< The 1-dimensional array into which the data
   integer,      optional, intent(in)    :: timelevel !< The time level in the file to read
 
   call read_data(filename, fieldname, data, timelevel=timelevel, no_domain=.true.)
-
-end subroutine MOM_read_data_1d_int
+end subroutine read_field_1d_int
 
 
 !> This routine uses the fms_io subroutine read_data to read a pair of distributed

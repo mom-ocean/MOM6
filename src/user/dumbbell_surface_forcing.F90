@@ -235,7 +235,7 @@ subroutine dumbbell_surface_forcing_init(Time, G, US, param_file, diag, CS)
     CS%Flux_const = CS%Flux_const / 86400.0
 
 
-    allocate(CS%forcing_mask(G%isd:G%ied, G%jsd:G%jed)); CS%forcing_mask(:,:)=0.0
+    allocate(CS%forcing_mask(G%isd:G%ied, G%jsd:G%jed), source=0.0)
     allocate(CS%S_restore(G%isd:G%ied, G%jsd:G%jed))
 
     do j=G%jsc,G%jec

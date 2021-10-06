@@ -75,7 +75,7 @@ function register_DOME_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
   character(len=48) :: flux_units ! The units for tracer fluxes, usually
                             ! kg(tracer) kg(water)-1 m3 s-1 or kg(tracer) s-1.
   character(len=200) :: inputdir
-  real, pointer :: tr_ptr(:,:,:) => NULL()
+  real, pointer :: tr_ptr(:,:,:) => NULL()  ! A pointer to the tracer field
   logical :: register_DOME_tracer
   integer :: isd, ied, jsd, jed, nz, m
   isd = HI%isd ; ied = HI%ied ; jsd = HI%jsd ; jed = HI%jed ; nz = GV%ke
@@ -105,7 +105,7 @@ function register_DOME_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
                  "The exact location and properties of those sponges are "//&
                  "specified from MOM_initialization.F90.", default=.false.)
 
-  allocate(CS%tr(isd:ied,jsd:jed,nz,NTR)) ; CS%tr(:,:,:,:) = 0.0
+  allocate(CS%tr(isd:ied,jsd:jed,nz,NTR), source=0.0)
 
   do m=1,NTR
     if (m < 10) then ; write(name,'("tr_D",I1.1)') m
@@ -166,13 +166,15 @@ subroutine initialize_DOME_tracer(restart, day, G, GV, US, h, diag, OBC, CS, &
   character(len=48) :: units    ! The dimensions of the variable.
   character(len=48) :: flux_units ! The units for tracer fluxes, usually
                             ! kg(tracer) kg(water)-1 m3 s-1 or kg(tracer) s-1.
-  real, pointer :: tr_ptr(:,:,:) => NULL()
+  real, pointer :: tr_ptr(:,:,:) => NULL()  ! A pointer to the tracer field
   real :: PI     ! 3.1415926... calculated as 4*atan(1)
   real :: tr_y   ! Initial zonally uniform tracer concentrations.
   real :: h_neglect         ! A thickness that is so small it is usually lost
                             ! in roundoff and can be neglected [H ~> m or kg m-2].
-  real :: e(SZK_(GV)+1), e_top, e_bot ! Heights [Z ~> m].
-  real :: d_tr   ! A change in tracer concentraions, in tracer units.
+  real :: e(SZK_(GV)+1)     ! Interface heights relative to the sea surface (negative down) [Z ~> m]
+  real :: e_top  ! Height of the top of the tracer band relative to the sea surface [Z ~> m]
+  real :: e_bot  ! Height of the bottom of the tracer band relative to the sea surface [Z ~> m]
+  real :: d_tr   ! A change in tracer concentrations, in tracer units.
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz, m
   integer :: IsdB, IedB, JsdB, JedB
 
@@ -215,9 +217,9 @@ subroutine initialize_DOME_tracer(restart, day, G, GV, US, h, diag, OBC, CS, &
 
       if (NTR > 7) then
         do j=js,je ; do i=is,ie
-          e(nz+1) = -G%bathyT(i,j)
-          do k=nz,1,-1
-            e(K) = e(K+1) + h(i,j,k)*GV%H_to_Z
+          e(1) = 0.0
+          do k=1,nz
+            e(K+1) = e(K) - h(i,j,k)*GV%H_to_Z
             do m=7,NTR
               e_top = (-600.0*real(m-1) + 3000.0) * US%m_to_Z
               e_bot = (-600.0*real(m-1) + 2700.0) * US%m_to_Z

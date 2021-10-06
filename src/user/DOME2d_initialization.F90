@@ -90,12 +90,14 @@ subroutine DOME2d_initialize_topography( D, G, param_file, max_depth )
 end subroutine DOME2d_initialize_topography
 
 !> Initialize thicknesses according to coordinate mode
-subroutine DOME2d_initialize_thickness ( h, G, GV, US, param_file, just_read_params )
+subroutine DOME2d_initialize_thickness ( h, depth_tot, G, GV, US, param_file, just_read_params )
   type(ocean_grid_type),   intent(in)  :: G  !< Ocean grid structure
   type(verticalGrid_type), intent(in)  :: GV !< Vertical grid structure
   type(unit_scale_type),   intent(in)  :: US !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(out) :: h           !< The thickness that is being initialized [H ~> m or kg m-2].
+  real, dimension(SZI_(G),SZJ_(G)), &
+                           intent(in)  :: depth_tot  !< The nominal total depth of the ocean [Z ~> m]
   type(param_file_type),   intent(in)  :: param_file  !< A structure indicating the open file
                                                       !! to parse for model parameter values.
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
@@ -150,7 +152,7 @@ subroutine DOME2d_initialize_thickness ( h, G, GV, US, param_file, just_read_par
     case ( REGRIDDING_LAYER, REGRIDDING_RHO )
 
       do j=js,je ; do i=is,ie
-        eta1D(nz+1) = -G%bathyT(i,j)
+        eta1D(nz+1) = -depth_tot(i,j)
         do k=nz,1,-1
           eta1D(k) = e0(k)
           if (eta1D(k) < (eta1D(k+1) + GV%Angstrom_Z)) then
@@ -172,7 +174,7 @@ subroutine DOME2d_initialize_thickness ( h, G, GV, US, param_file, just_read_par
  !  case ( IC_RHO_C )
  !
  !    do j=js,je ; do i=is,ie
- !       eta1D(nz+1) = -G%bathyT(i,j)
+ !       eta1D(nz+1) = -depth_tot(i,j)
  !       do k=nz,1,-1
  !         eta1D(k) = e0(k)
  !         if (eta1D(k) < (eta1D(k+1) + min_thickness)) then
@@ -194,7 +196,7 @@ subroutine DOME2d_initialize_thickness ( h, G, GV, US, param_file, just_read_par
     case ( REGRIDDING_ZSTAR )
 
       do j=js,je ; do i=is,ie
-        eta1D(nz+1) = -G%bathyT(i,j)
+        eta1D(nz+1) = -depth_tot(i,j)
         do k=nz,1,-1
           eta1D(k) = e0(k)
           if (eta1D(k) < (eta1D(k+1) + min_thickness)) then
@@ -208,7 +210,7 @@ subroutine DOME2d_initialize_thickness ( h, G, GV, US, param_file, just_read_par
 
     case ( REGRIDDING_SIGMA )
       do j=js,je ; do i=is,ie
-        h(i,j,:) = GV%Z_to_H*G%bathyT(i,j) / nz
+        h(i,j,:) = GV%Z_to_H*depth_tot(i,j) / nz
       enddo ; enddo
 
     case default
@@ -353,11 +355,13 @@ subroutine DOME2d_initialize_temperature_salinity ( T, S, h, G, GV, param_file, 
 end subroutine DOME2d_initialize_temperature_salinity
 
 !> Set up sponges in 2d DOME configuration
-subroutine DOME2d_initialize_sponges(G, GV, US, tv, param_file, use_ALE, CSp, ACSp)
+subroutine DOME2d_initialize_sponges(G, GV, US, tv, depth_tot, param_file, use_ALE, CSp, ACSp)
   type(ocean_grid_type),   intent(in) :: G  !< Ocean grid structure
   type(verticalGrid_type), intent(in) :: GV !< Vertical grid structure
   type(unit_scale_type),   intent(in) :: US !< A dimensional unit scaling type
   type(thermo_var_ptrs),   intent(in) :: tv !< Thermodynamics structure
+  real, dimension(SZI_(G),SZJ_(G)), &
+                           intent(in) :: depth_tot  !< The nominal total depth of the ocean [Z ~> m]
   type(param_file_type),   intent(in) :: param_file !< Parameter file structure
   logical,                 intent(in) :: use_ALE !< If true, indicates model is in ALE mode
   type(sponge_CS),         pointer    :: CSp !< Layer-mode sponge structure
@@ -453,7 +457,7 @@ subroutine DOME2d_initialize_sponges(G, GV, US, tv, param_file, use_ALE, CSp, AC
     enddo
     e0(nz+1) = -G%max_depth
     do j=js,je ; do i=is,ie
-      eta1D(nz+1) = -G%bathyT(i,j)
+      eta1D(nz+1) = -depth_tot(i,j)
       do k=nz,1,-1
         eta1D(k) = e0(k)
         if (eta1D(k) < (eta1D(k+1) + GV%Angstrom_Z)) then
@@ -470,7 +474,7 @@ subroutine DOME2d_initialize_sponges(G, GV, US, tv, param_file, use_ALE, CSp, AC
     ! Construct temperature and salinity on the arbitrary grid
     T(:,:,:) = 0.0 ; S(:,:,:) = 0.0
     do j=js,je ; do i=is,ie
-      z = -G%bathyT(i,j)
+      z = -depth_tot(i,j)
       do k = nz,1,-1
         z = z + 0.5 * GV%H_to_Z * h(i,j,k) ! Position of the center of layer k
         S(i,j,k) = 34.0 - 1.0 * (z / (G%max_depth))
@@ -491,7 +495,7 @@ subroutine DOME2d_initialize_sponges(G, GV, US, tv, param_file, use_ALE, CSp, AC
 
     ! Construct interface heights to restore toward
     do j=js,je ; do i=is,ie
-      eta1D(nz+1) = -G%bathyT(i,j)
+      eta1D(nz+1) = -depth_tot(i,j)
       do k=nz,1,-1
         eta1D(K) = -G%max_depth * real(k-1) / real(nz)
         if (eta1D(K) < (eta1D(K+1) + GV%Angstrom_Z)) then
@@ -508,7 +512,7 @@ subroutine DOME2d_initialize_sponges(G, GV, US, tv, param_file, use_ALE, CSp, AC
         d_eta(nz) = dome2d_depth_bay * G%max_depth - (nz-1) * GV%Angstrom_Z
       endif
 
-      eta(i,j,nz+1) = -G%bathyT(i,j)
+      eta(i,j,nz+1) = -depth_tot(i,j)
       do K=nz,1,-1
         eta(i,j,K) = eta(i,j,K+1) + d_eta(k)
       enddo

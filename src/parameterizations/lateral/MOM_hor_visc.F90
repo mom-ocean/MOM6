@@ -190,6 +190,7 @@ type, public :: hor_visc_CS ; private
   integer :: id_h_diffu  = -1, id_h_diffv      = -1
   integer :: id_hf_diffu_2d = -1, id_hf_diffv_2d = -1
   integer :: id_intz_diffu_2d = -1, id_intz_diffv_2d = -1
+  integer :: id_diffu_visc_rem = -1, id_diffv_visc_rem = -1
   integer :: id_Ah_h      = -1, id_Ah_q          = -1
   integer :: id_Kh_h      = -1, id_Kh_q          = -1
   integer :: id_GME_coeff_h = -1, id_GME_coeff_q = -1
@@ -276,10 +277,14 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
     grad_vel_mag_h, & ! Magnitude of the velocity gradient tensor squared at h-points [T-2 ~> s-2]
     grad_vel_mag_bt_h, & ! Magnitude of the barotropic velocity gradient tensor squared at h-points [T-2 ~> s-2]
     grad_d2vel_mag_h, & ! Magnitude of the Laplacian of the velocity vector, squared [L-2 T-2 ~> m-2 s-2]
+    GME_effic_h, &  ! The filtered efficiency of the GME terms at h points [nondim]
+    htot, &         ! The total thickness of all layers [Z ~> m]
     boundary_mask_h ! A mask that zeroes out cells with at least one land edge [nondim]
 
   real, allocatable, dimension(:,:,:) :: h_diffu ! h x diffu [H L T-2 ~> m2 s-2]
   real, allocatable, dimension(:,:,:) :: h_diffv ! h x diffv [H L T-2 ~> m2 s-2]
+  real, allocatable, dimension(:,:,:) :: diffu_visc_rem ! diffu x visc_rem_u [L T-2 ~> m s-2]
+  real, allocatable, dimension(:,:,:) :: diffv_visc_rem ! diffv x visc_rem_v [L T-2 ~> m s-2]
 
   real, dimension(SZIB_(G),SZJB_(G)) :: &
     dvdx, dudy, & ! components in the shearing strain [T-1 ~> s-1]
@@ -301,6 +306,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
     hq, &         ! harmonic mean of the harmonic means of the u- & v point thicknesses [H ~> m or kg m-2]
                   ! This form guarantees that hq/hu < 4.
     grad_vel_mag_bt_q, &  ! Magnitude of the barotropic velocity gradient tensor squared at q-points [T-2 ~> s-2]
+    GME_effic_q, &  ! The filtered efficiency of the GME terms at q points [nondim]
     boundary_mask_q ! A mask that zeroes out cells with at least one land edge [nondim]
 
   real, dimension(SZIB_(G),SZJB_(G),SZK_(GV)) :: &
@@ -338,6 +344,10 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
   real :: hu, hv     ! Thicknesses interpolated by arithmetic means to corner
                      ! points; these are first interpolated to u or v velocity
                      ! points where masks are applied [H ~> m or kg m-2].
+  real :: h_arith_q  ! The arithmetic mean total thickness at q points [Z ~> m]
+  real :: h_harm_q   ! The harmonic mean total thickness at q points [Z ~> m]
+  real :: I_hq       ! The inverse of the arithmetic mean total thickness at q points [Z-1 ~> m-1]
+  real :: I_GME_h0   ! The inverse of GME tapering scale [Z-1 ~> m-1]
   real :: h_neglect  ! thickness so small it can be lost in roundoff and so neglected [H ~> m or kg m-2]
   real :: h_neglect3 ! h_neglect^3 [H3 ~> m3 or kg3 m-6]
   real :: h_min      ! Minimum h at the 4 neighboring velocity points [H ~> m]
@@ -496,9 +506,38 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
     enddo ; enddo
 
     do J=js-2,Jeq+1 ; do I=is-2,Ieq+1
-      grad_vel_mag_bt_q(I,J) = boundary_mask_q(I,J) * (dvdx_bt(i,j)**2 + dudy_bt(i,j)**2 + &
+      grad_vel_mag_bt_q(I,J) = boundary_mask_q(I,J) * (dvdx_bt(I,J)**2 + dudy_bt(I,J)**2 + &
             (0.25*((dudx_bt(i,j)+dudx_bt(i+1,j+1))+(dudx_bt(i,j+1)+dudx_bt(i+1,j))))**2 + &
             (0.25*((dvdy_bt(i,j)+dvdy_bt(i+1,j+1))+(dvdy_bt(i,j+1)+dvdy_bt(i+1,j))))**2)
+    enddo ; enddo
+
+    do j=js-1,je+1 ; do i=is-1,ie+1
+      htot(i,j) = 0.0
+    enddo ; enddo
+    do k=1,nz ; do j=js-1,je+1 ; do i=is-1,ie+1
+      htot(i,j) = htot(i,j) + GV%H_to_Z*h(i,j,k)
+    enddo ; enddo ; enddo
+
+    I_GME_h0 = 1.0 / CS%GME_h0
+    do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+      if (grad_vel_mag_bt_h(i,j)>0) then
+        GME_effic_h(i,j) = CS%GME_efficiency * boundary_mask_h(i,j) * &
+            (MIN(htot(i,j) * I_GME_h0, 1.0)**2)
+      else
+        GME_effic_h(i,j) = 0.0
+      endif
+    enddo ; enddo
+
+    do J=js-1,Jeq ; do I=is-1,Ieq
+      if (grad_vel_mag_bt_q(I,J)>0) then
+        h_arith_q = 0.25 * ((htot(i,j) + htot(i+1,j+1)) + (htot(i+1,j) + htot(i,j+1)))
+        I_hq = 1.0 / h_arith_q
+        h_harm_q = 0.25 * h_arith_q * ((htot(i,j)*I_hq + htot(i+1,j+1)*I_hq) + &
+                                       (htot(i+1,j)*I_hq + htot(i,j+1)*I_hq))
+        GME_effic_q(I,J) = CS%GME_efficiency * boundary_mask_q(I,J) * (MIN(h_harm_q * I_GME_h0, 1.0)**2)
+      else
+        GME_effic_q(I,J) = 0.0
+      endif
     enddo ; enddo
 
   endif ! use_GME
@@ -509,7 +548,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
   !$OMP   is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, &
   !$OMP   apply_OBC, rescale_Kh, legacy_bound, find_FrictWork, &
   !$OMP   use_MEKE_Ku, use_MEKE_Au, boundary_mask_h, boundary_mask_q, &
-  !$OMP   backscat_subround, GME_coeff_limiter, &
+  !$OMP   backscat_subround, GME_coeff_limiter, GME_effic_h, GME_effic_q, &
   !$OMP   h_neglect, h_neglect3, FWfrac, inv_PI3, inv_PI6, H0_GME, &
   !$OMP   diffu, diffv, Kh_h, Kh_q, Ah_h, Ah_q, FrictWork, FrictWork_GME, &
   !$OMP   div_xx_h, sh_xx_h, vort_xy_q, sh_xy_q, GME_coeff_h, GME_coeff_q, &
@@ -1388,15 +1427,8 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
       call pass_vector(KH_u_GME, KH_v_GME, G%Domain)
 
       do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-        if (grad_vel_mag_bt_h(i,j)>0) then
-          GME_coeff = CS%GME_efficiency * (MIN(G%bathyT(i,j)/CS%GME_h0,1.0)**2) * &
-            (0.25*(KH_u_GME(I,j,k)+KH_u_GME(I-1,j,k)+KH_v_GME(i,J,k)+KH_v_GME(i,J-1,k)))
-        else
-          GME_coeff = 0.0
-        endif
-
-        ! apply mask
-        GME_coeff = GME_coeff * boundary_mask_h(i,j)
+        GME_coeff = GME_effic_h(i,j) * 0.25 * &
+            ((KH_u_GME(I,j,k)+KH_u_GME(I-1,j,k)) + (KH_v_GME(i,J,k)+KH_v_GME(i,J-1,k)))
         GME_coeff = MIN(GME_coeff, CS%GME_limiter)
 
         if ((CS%id_GME_coeff_h>0) .or. find_FrictWork) GME_coeff_h(i,j,k) = GME_coeff
@@ -1405,15 +1437,8 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
       enddo ; enddo
 
       do J=js-1,Jeq ; do I=is-1,Ieq
-        if (grad_vel_mag_bt_q(i,j)>0) then
-          GME_coeff = CS%GME_efficiency * (MIN(G%bathyT(i,j)/CS%GME_h0,1.0)**2) * &
-              (0.25*(KH_u_GME(I,j,k)+KH_u_GME(I,j+1,k)+KH_v_GME(i,J,k)+KH_v_GME(i+1,J,k)))
-        else
-          GME_coeff = 0.0
-        endif
-
-        ! apply mask
-        GME_coeff = GME_coeff * boundary_mask_q(I,J)
+        GME_coeff = GME_effic_q(I,J) * 0.25 * &
+            ((KH_u_GME(I,j,k)+KH_u_GME(I,j+1,k)) + (KH_v_GME(i,J,k)+KH_v_GME(i+1,J,k)))
         GME_coeff = MIN(GME_coeff, CS%GME_limiter)
 
         if (CS%id_GME_coeff_q>0) GME_coeff_q(I,J,k) = GME_coeff
@@ -1422,8 +1447,8 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
       enddo ; enddo
 
       ! Applying GME diagonal term.  This is linear and the arguments can be rescaled.
-      call smooth_GME(CS,G,GME_flux_h=str_xx_GME)
-      call smooth_GME(CS,G,GME_flux_q=str_xy_GME)
+      call smooth_GME(CS, G, GME_flux_h=str_xx_GME)
+      call smooth_GME(CS, G, GME_flux_q=str_xy_GME)
 
       do J=Jsq,Jeq+1 ; do i=Isq,Ieq+1
         str_xx(i,j) = (str_xx(i,j) + str_xx_GME(i,j)) * (h(i,j,k) * CS%reduction_xx(i,j))
@@ -1444,7 +1469,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
         enddo ; enddo
       endif
 
-    else ! use_GME
+    else ! .not. use_GME
       do J=Jsq,Jeq+1 ; do i=Isq,Ieq+1
         str_xx(i,j) = str_xx(i,j) * (h(i,j,k) * CS%reduction_xx(i,j))
       enddo ; enddo
@@ -1686,8 +1711,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
   endif
 
   if (present(ADp) .and. (CS%id_h_diffu > 0)) then
-    allocate(h_diffu(G%IsdB:G%IedB,G%jsd:G%jed,GV%ke))
-    h_diffu(:,:,:) = 0.0
+    allocate(h_diffu(G%IsdB:G%IedB,G%jsd:G%jed,GV%ke), source=0.0)
     do k=1,nz ; do j=js,je ; do I=Isq,Ieq
       h_diffu(I,j,k) = diffu(I,j,k) * ADp%diag_hu(I,j,k)
     enddo ; enddo ; enddo
@@ -1695,13 +1719,29 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
     deallocate(h_diffu)
   endif
   if (present(ADp) .and. (CS%id_h_diffv > 0)) then
-    allocate(h_diffv(G%isd:G%ied,G%JsdB:G%JedB,GV%ke))
-    h_diffv(:,:,:) = 0.0
+    allocate(h_diffv(G%isd:G%ied,G%JsdB:G%JedB,GV%ke), source=0.0)
     do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
       h_diffv(i,J,k) = diffv(i,J,k) * ADp%diag_hv(i,J,k)
     enddo ; enddo ; enddo
     call post_data(CS%id_h_diffv, h_diffv, CS%diag)
     deallocate(h_diffv)
+  endif
+
+  if (present(ADp) .and. (CS%id_diffu_visc_rem > 0)) then
+    allocate(diffu_visc_rem(G%IsdB:G%IedB,G%jsd:G%jed,GV%ke), source=0.0)
+    do k=1,nz ; do j=js,je ; do I=Isq,Ieq
+      diffu_visc_rem(I,j,k) = diffu(I,j,k) * ADp%visc_rem_u(I,j,k)
+    enddo ; enddo ; enddo
+    call post_data(CS%id_diffu_visc_rem, diffu_visc_rem, CS%diag)
+    deallocate(diffu_visc_rem)
+  endif
+  if (present(ADp) .and. (CS%id_diffv_visc_rem > 0)) then
+    allocate(diffv_visc_rem(G%isd:G%ied,G%JsdB:G%JedB,GV%ke), source=0.0)
+    do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
+      diffv_visc_rem(i,J,k) = diffv(i,J,k) * ADp%visc_rem_v(i,J,k)
+    enddo ; enddo ; enddo
+    call post_data(CS%id_diffv_visc_rem, diffv_visc_rem, CS%diag)
+    deallocate(diffv_visc_rem)
   endif
 
 end subroutine horizontal_viscosity
@@ -2446,6 +2486,20 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, MEKE, ADp)
       'm2 s-2', conversion=GV%H_to_m*US%L_T2_to_m_s2)
   if ((CS%id_intz_diffv_2d > 0) .and. (present(ADp))) then
     call safe_alloc_ptr(ADp%diag_hv,G%isd,G%ied,G%JsdB,G%JedB,GV%ke)
+  endif
+
+  CS%id_diffu_visc_rem = register_diag_field('ocean_model', 'diffu_visc_rem', diag%axesCuL, Time, &
+      'Zonal Acceleration from Horizontal Viscosity multiplied by viscous remnant', 'm s-2', &
+      conversion=US%L_T2_to_m_s2)
+  if ((CS%id_diffu_visc_rem > 0) .and. (present(ADp))) then
+    call safe_alloc_ptr(ADp%visc_rem_u,G%IsdB,G%IedB,G%jsd,G%jed,GV%ke)
+  endif
+
+  CS%id_diffv_visc_rem = register_diag_field('ocean_model', 'diffv_visc_rem', diag%axesCvL, Time, &
+      'Meridional Acceleration from Horizontal Viscosity multiplied by viscous remnant', 'm s-2', &
+      conversion=US%L_T2_to_m_s2)
+  if ((CS%id_diffv_visc_rem > 0) .and. (present(ADp))) then
+    call safe_alloc_ptr(ADp%visc_rem_v,G%isd,G%ied,G%JsdB,G%JedB,GV%ke)
   endif
 
   if (CS%biharmonic) then
