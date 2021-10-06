@@ -50,7 +50,7 @@ end subroutine particles_save_restart
 !> Deallocate all memory and disassociated pointer
 subroutine particles_end(parts,temp,salt)
 ! Arguments
-type(particles), pointer :: parts !< Container for all types and memory 
+type(particles), pointer :: parts !< Container for all types and memory
 real,dimension(:,:,:),optional,intent(in) :: temp !< Optional container for temperature
 real,dimension(:,:,:),optional,intent(in) :: salt !< Optional container for salinity
 
