@@ -155,36 +155,8 @@ integer :: id_clock_EOS=0, id_clock_resort=0, id_clock_pass=0
 
 contains
 
-!>    This subroutine partially steps the bulk mixed layer model.
-!!  The following processes are executed, in the order listed.
-!!    1. Undergo convective adjustment into mixed layer.
-!!    2. Apply surface heating and cooling.
-!!    3. Starting from the top, entrain whatever fluid the TKE budget
-!!       permits.  Penetrating shortwave radiation is also applied at
-!!      this point.
-!!    4. If there is any unentrained fluid that was formerly in the
-!!      mixed layer, detrain this fluid into the buffer layer.  This
-!!     is equivalent to the mixed layer detraining to the Monin-
-!!       Obukhov depth.
-!!    5. Divide the fluid in the mixed layer evenly into CS%nkml pieces.
-!!    6. Split the buffer layer if appropriate.
-!! Layers 1 to nkml are the mixed layer, nkml+1 to nkml+nkbl are the
-!! buffer layers. The results of this subroutine are mathematically
-!! identical if there are multiple pieces of the mixed layer with
-!! the same density or if there is just a single layer. There is no
-!! stability limit on the time step.
-!!
-!!   The key parameters for the mixed layer are found in the control structure.
-!! These include mstar, nstar, nstar2, pen_SW_frac, pen_SW_scale, and TKE_decay.
-!!   For the Oberhuber (1993) mixed layer, the values of these are:
-!!      pen_SW_frac = 0.42, pen_SW_scale = 15.0 m, mstar = 1.25,
-!!      nstar = 1, TKE_decay = 2.5, conv_decay = 0.5
-!!  TKE_decay is 1/kappa in eq. 28 of Oberhuber (1993), while conv_decay is 1/mu.
-!!  Conv_decay has been eliminated in favor of the well-calibrated form for the
-!!  efficiency of penetrating convection from Wang (2003).
-!!    For a traditional Kraus-Turner mixed layer, the values are:
-!!      pen_SW_frac = 0.0, pen_SW_scale = 0.0 m, mstar = 1.25,
-!!      nstar = 0.4, TKE_decay = 0.0, conv_decay = 0.0
+!> This subroutine partially steps the bulk mixed layer model.
+!! See \ref BML for more details.
 subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, GV, US, CS, &
                           optics, Hml, aggregate_FW_forcing, dt_diag, last_call)
   type(ocean_grid_type),      intent(inout) :: G      !< The ocean's grid structure.
@@ -3708,16 +3680,15 @@ end function EF4
 !!
 !!   This file contains the subroutine (bulkmixedlayer) that
 !! implements a Kraus-Turner-like bulk mixed layer, based on the work
-!! of various people, as described in the review paper by Niiler and
-!! Kraus (1979), with particular attention to the form proposed by
-!! Oberhuber (JPO, 1993, 808-829), with an extension to a refied bulk
-!! mixed layer as described in Hallberg (Aha Huliko'a, 2003).  The
-!! physical processes portrayed in this subroutine include convective
-!! adjustment and mixed layer entrainment and detrainment.
-!! Penetrating shortwave radiation and an exponential decay of TKE
-!! fluxes are also supported by this subroutine.  Several constants
+!! of various people, as described in the review paper by \cite Niiler1977,
+!! with particular attention to the form proposed by \cite Oberhuber1993,
+!! with an extension to a refined bulk mixed layer as described in
+!! Hallberg (\cite muller2003). The physical processes portrayed in
+!! this subroutine include convective adjustment and mixed layer entrainment
+!! and detrainment. Penetrating shortwave radiation and an exponential decay
+!! of TKE fluxes are also supported by this subroutine.  Several constants
 !! can alternately be set to give a traditional Kraus-Turner mixed
 !! layer scheme, although that is not the preferred option.  The
-!! physical processes and arguments are described in detail below.
+!! physical processes and arguments are described in detail in \ref BML.
 
 end module MOM_bulk_mixed_layer
