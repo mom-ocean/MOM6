@@ -30,7 +30,7 @@ use MOM_energetic_PBL,       only : energetic_PBL, energetic_PBL_init
 use MOM_energetic_PBL,       only : energetic_PBL_end, energetic_PBL_CS
 use MOM_energetic_PBL,       only : energetic_PBL_get_MLD
 use MOM_entrain_diffusive,   only : entrainment_diffusive, entrain_diffusive_init
-use MOM_entrain_diffusive,   only : entrain_diffusive_end, entrain_diffusive_CS
+use MOM_entrain_diffusive,   only : entrain_diffusive_CS
 use MOM_EOS,                 only : calculate_density, calculate_TFreeze, EOS_domain
 use MOM_error_handler,       only : MOM_error, FATAL, WARNING, callTree_showQuery,MOM_mesg
 use MOM_error_handler,       only : callTree_enter, callTree_leave, callTree_waypoint
@@ -219,7 +219,6 @@ type, public :: diabatic_CS ; private
   logical :: frazil_tendency_diag = .false. !< If true calculate frazil tendency diagnostics
 
   type(diabatic_aux_CS),        pointer :: diabatic_aux_CSp      => NULL() !< Control structure for a child module
-  type(entrain_diffusive_CS),   pointer :: entrain_diffusive_CSp => NULL() !< Control structure for a child module
   type(bulkmixedlayer_CS),      pointer :: bulkmixedlayer_CSp    => NULL() !< Control structure for a child module
   type(energetic_PBL_CS),       pointer :: energetic_PBL_CSp     => NULL() !< Control structure for a child module
   type(regularize_layers_CS),   pointer :: regularize_layers_CSp => NULL() !< Control structure for a child module
@@ -236,7 +235,8 @@ type, public :: diabatic_CS ; private
   type(CVMix_conv_cs),          pointer :: CVMix_conv_CSp        => NULL() !< Control structure for a child module
   type(diapyc_energy_req_CS),   pointer :: diapyc_en_rec_CSp     => NULL() !< Control structure for a child module
   type(oda_incupd_CS),          pointer :: oda_incupd_CSp        => NULL() !< Control structure for a child module
-  type(int_tide_CS) :: int_tide   !< Internal tide control struct
+  type(int_tide_CS) :: int_tide                     !< Internal tide control struct
+  type(entrain_diffusive_CS) :: entrain_diffusive   !< Diffusive entrainment control struct
 
   type(group_pass_type) :: pass_hold_eb_ea !< For group halo pass
   type(group_pass_type) :: pass_Kv         !< For group halo pass
@@ -1921,7 +1921,7 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
   call cpu_clock_begin(id_clock_entrain)
   ! Calculate appropriately limited diapycnal mass fluxes to account
   ! for diapycnal diffusion and advection.  Sets: ea, eb. Changes: kb
-  call Entrainment_diffusive(h, tv, fluxes, dt, G, GV, US, CS%entrain_diffusive_CSp, &
+  call Entrainment_diffusive(h, tv, fluxes, dt, G, GV, US, CS%entrain_diffusive, &
                              ea, eb, kb, Kd_lay=Kd_lay, Kd_int=Kd_int)
   call cpu_clock_end(id_clock_entrain)
   if (showCallTree) call callTree_waypoint("done with Entrainment_diffusive (diabatic)")
@@ -3388,7 +3388,7 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
   ! CS%use_CVMix_conv is set to True if CVMix convection will be used, otherwise it is False.
   CS%use_CVMix_conv = CVMix_conv_init(Time, G, GV, US, param_file, diag, CS%CVMix_conv_CSp)
 
-  call entrain_diffusive_init(Time, G, GV, US, param_file, diag, CS%entrain_diffusive_CSp, &
+  call entrain_diffusive_init(Time, G, GV, US, param_file, diag, CS%entrain_diffusive, &
                               just_read_params=CS%useALEalgorithm)
 
   ! initialize the geothermal heating module
@@ -3486,8 +3486,6 @@ subroutine diabatic_driver_end(CS)
     call geothermal_end(CS%geothermal_CSp)
     deallocate(CS%geothermal_CSp)
   endif
-
-  call entrain_diffusive_end(CS%entrain_diffusive_CSp)
 
   if (CS%use_CVMix_conv) deallocate(CS%CVMix_conv_CSp)
 
