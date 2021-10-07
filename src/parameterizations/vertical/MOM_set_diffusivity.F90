@@ -72,6 +72,7 @@ type, public :: set_diffusivity_CS ; private
                              !! added.
   logical :: use_LOTW_BBL_diffusivity !< If true, use simpler/less precise, BBL diffusivity.
   logical :: LOTW_BBL_use_omega !< If true, use simpler/less precise, BBL diffusivity.
+  logical :: use_int_tides
   real    :: BBL_effic       !< efficiency with which the energy extracted
                              !! by bottom drag drives BBL diffusion [nondim]
   real    :: cdrag           !< quadratic drag coefficient [nondim]
@@ -257,6 +258,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: IW_KD_quad_loss
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: IW_KD_itidal_loss
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: IW_KD_froude_loss
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: Kd_lay_IW
 
   real, dimension(SZI_(G),SZK_(GV)) :: &
     N2_lay, &     !< Squared buoyancy frequency associated with layers [T-2 ~> s-2]
@@ -319,6 +321,20 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
   if (present(Kd_extra_T)) Kd_extra_T(:,:,:) = 0.0
   if (present(Kd_extra_S)) Kd_extra_S(:,:,:) = 0.0
   if (associated(visc%Kv_slow)) visc%Kv_slow(:,:,:) = CS%Kv
+
+  IW_leak_loss_2d=0.
+  IW_quad_loss_2d=0.
+  IW_itidal_loss_2d=0.
+  IW_froude_loss_2d=0.
+  IW_leak_loss_3d=0.
+  IW_quad_loss_3d=0.
+  IW_itidal_loss_3d=0.
+  IW_froude_loss_3d=0.
+  IW_KD_leak_loss=0.
+  IW_KD_quad_loss=0.
+  IW_KD_itidal_loss=0.
+  IW_KD_froude_loss=0.
+  Kd_lay_IW=0.
 
   ! Set up arrays for diagnostics.
 
@@ -400,49 +416,56 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
   ! be an appropriate place to add a depth-dependent parameterization or another explicit
   ! parameterization of Kd.
 
-  do j=js,je ; do i=is,ie
-    call get_lowmode_loss(i, j, G, CS%int_tide_CSp, 'LeakDrag', IW_leak_loss_2d(i,j))
-  enddo ; enddo
+  if (CS%use_int_tides) then
+    do j=js,je ; do i=is,ie
+      call get_lowmode_loss(i, j, G, CS%int_tide_CSp, 'LeakDrag', IW_leak_loss_2d(i,j))
+    enddo ; enddo
+  
+    do j=js,je ; do i=is,ie
+      call get_lowmode_loss(i, j, G, CS%int_tide_CSp, 'QuadDrag', IW_quad_loss_2d(i,j))
+    enddo ; enddo
+  
+    do j=js,je ; do i=is,ie
+      call get_lowmode_loss(i, j, G, CS%int_tide_CSp, 'WaveDrag', IW_itidal_loss_2d(i,j))
+    enddo ; enddo
+  
+    do j=js,je ; do i=is,ie
+      call get_lowmode_loss(i, j, G, CS%int_tide_CSp, 'Froude', IW_froude_loss_2d(i,j))
+    enddo ; enddo
+  
+  
+    do j=js,je
+      call find_N2(h, tv, T_f, S_f, fluxes, j, G, GV, US, CS, dRho_int, N2_lay, N2_int, N2_bot)
+      call find_TKE_to_Kd(h, tv, dRho_int, N2_lay, j, dt, G, GV, US, CS, TKE_to_Kd, maxTKE, kb)
+  
+      ! leak loss
+      call N2_profile(IW_leak_loss_2d, N2_lay, h, j, G, GV, US, IW_leak_loss_3d)
+      IW_KD_leak_loss(:,j,:) = TKE_to_Kd(:,:) * IW_leak_loss_3d(:,j,:) 
+      ! itidal loss
+      call N_profile(IW_itidal_loss_2d, N2_lay, h, j, G, GV, US, IW_itidal_loss_3d)
+      IW_KD_itidal_loss(:,j,:) = TKE_to_Kd(:,:) * IW_itidal_loss_3d(:,j,:) 
+      ! quad loss
+      call exp_profile(IW_quad_loss_2d, 100., h, j, G, GV, US, IW_quad_loss_3d)
+      IW_KD_quad_loss(:,j,:) = TKE_to_Kd(:,:) * IW_quad_loss_3d(:,j,:) 
+      ! froude loss
+      call exp_profile(IW_froude_loss_2d, 100., h, j, G, GV, US, IW_froude_loss_3d)
+      IW_KD_froude_loss(:,j,:) = TKE_to_Kd(:,:) * IW_froude_loss_3d(:,j,:) 
+    enddo
 
-  do j=js,je ; do i=is,ie
-    call get_lowmode_loss(i, j, G, CS%int_tide_CSp, 'QuadDrag', IW_quad_loss_2d(i,j))
-  enddo ; enddo
-
-  do j=js,je ; do i=is,ie
-    call get_lowmode_loss(i, j, G, CS%int_tide_CSp, 'WaveDrag', IW_itidal_loss_2d(i,j))
-  enddo ; enddo
-
-  do j=js,je ; do i=is,ie
-    call get_lowmode_loss(i, j, G, CS%int_tide_CSp, 'Froude', IW_froude_loss_2d(i,j))
-  enddo ; enddo
-
-
-  do j=js,je
-    call find_N2(h, tv, T_f, S_f, fluxes, j, G, GV, US, CS, dRho_int, N2_lay, N2_int, N2_bot)
-    call find_TKE_to_Kd(h, tv, dRho_int, N2_lay, j, dt, G, GV, US, CS, TKE_to_Kd, maxTKE, kb)
-
-    ! leak loss
-    call N2_profile(IW_leak_loss_2d, N2_lay, h, j, G, GV, US, IW_leak_loss_3d)
-    IW_KD_leak_loss(:,j,:) = TKE_to_Kd(:,:) * IW_leak_loss_3d(:,j,:)
-    ! itidal loss
-    call N_profile(IW_itidal_loss_2d, N2_lay, h, j, G, GV, US, IW_itidal_loss_3d)
-    IW_KD_itidal_loss(:,j,:) = TKE_to_Kd(:,:) * IW_itidal_loss_3d(:,j,:)
-    ! quad loss
-    call exp_profile(IW_quad_loss_2d, 100., h, j, G, GV, US, IW_quad_loss_3d)
-    IW_KD_quad_loss(:,j,:) = TKE_to_Kd(:,:) * IW_quad_loss_3d(:,j,:)
-    ! froude loss
-    call exp_profile(IW_froude_loss_2d, 100., h, j, G, GV, US, IW_froude_loss_3d)
-    IW_KD_froude_loss(:,j,:) = TKE_to_Kd(:,:) * IW_froude_loss_3d(:,j,:)
-  enddo
-
-  do j=js,je ; do i=is,ie
-    Kd_lay(i,j,:) = Kd_lay(i,j,:) + IW_KD_leak_loss(i,j,:) + IW_KD_itidal_loss(i,j,:) + &
-                    IW_KD_quad_loss(i,j,:) + IW_KD_froude_loss(i,j,:)
-  enddo ; enddo
-
-  do k=2,nz ; do j=js,je ; do i=is,ie
-    Kd_int(i,j,k) = 0.5 * ( Kd_lay(i,j,k) + Kd_lay(i,j,k-1) )
-  enddo ; enddo ; enddo
+    call hchksum(IW_KD_leak_loss, "IW_KD_leak_loss", G%HI, haloshift=0)
+    call hchksum(IW_KD_leak_loss, "IW_KD_itidal_loss", G%HI, haloshift=0)
+    call hchksum(IW_KD_leak_loss, "IW_KD_quad_loss", G%HI, haloshift=0)
+    call hchksum(IW_KD_leak_loss, "IW_KD_froude_loss", G%HI, haloshift=0)
+  
+    do j=js,je ; do i=is,ie
+      Kd_lay_IW(i,j,:) = IW_KD_leak_loss(i,j,:) + IW_KD_itidal_loss(i,j,:) + &
+                         IW_KD_quad_loss(i,j,:) + IW_KD_froude_loss(i,j,:)
+    enddo ; enddo
+  
+    !do k=2,nz ; do j=js,je ; do i=is,ie
+    !  Kd_int(i,j,k) = 0.5 * ( Kd_lay(i,j,k) + Kd_lay(i,j,k-1) )
+    !enddo ; enddo ; enddo
+  endif
 
   !$OMP parallel do default(shared) private(dRho_int,N2_lay,Kd_lay_2d,Kd_int_2d,Kv_bkgnd,N2_int,&
   !$OMP                                     N2_bot,KT_extra,KS_extra,TKE_to_Kd,maxTKE,dissip,kb)&
@@ -652,6 +675,15 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
       Kd_lay(i,j,k) = Kd_lay_2d(i,k)
     enddo ; enddo ; endif
   enddo ! j-loop
+
+
+  if (CS%use_int_tides) then
+
+    do k=1,nz ; do j=js,je ; do i=is,ie
+      Kd_lay(i,j,k) = Kd_lay_IW(i,j,k)
+    enddo ; enddo ; enddo
+
+  endif
 
   if (CS%user_change_diff) then
     call user_change_diff(h, tv, G, GV, US, CS%user_change_diff_CSp, Kd_lay, Kd_int, &
@@ -2051,13 +2083,14 @@ subroutine exp_profile(En2d, decay, h, j, G, GV, US, En3d)
   integer, intent(in) :: j
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(out) :: En3d
   real, dimension(SZK_(G)) :: z_from_bot
-  real :: Idecay, htot, norm
+  real :: Idecay, Irho0, htot, norm
 
   integer :: i,k
   integer :: is,ie,nz
 
   is = G%isc ; ie = G%iec ; nz = GV%ke
   Idecay = 1./decay
+  Irho0 = 1 / GV%Rho0
 
   do i=is,ie 
     z_from_bot(nz) = h(i,j,nz)
@@ -2068,7 +2101,9 @@ subroutine exp_profile(En2d, decay, h, j, G, GV, US, En3d)
     enddo
 
     norm = decay * (1 - exp(-Idecay*htot))
-    En3d(i,j,:) = En2d(i,j) * exp(-Idecay*z_from_bot(:)) / norm
+    if (norm > 1.0e-14) then
+      En3d(i,j,:) = En2d(i,j) * Irho0 * G%IareaT(i,j) * exp(-Idecay*z_from_bot(:)) / norm
+    endif
   enddo
 
 end subroutine exp_profile
@@ -2085,11 +2120,12 @@ subroutine N2_profile(En2d, N2_lay, h, j, G, GV, US, En3d)
   integer, intent(in) :: j
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(out) :: En3d
 
-  real :: htot, N2_sum, N2_mean
+  real :: htot, N2_sum, N2_mean, Irho0
   integer :: i,k
   integer :: is,ie,nz
 
   is = G%isc ; ie = G%iec ; nz = GV%ke
+  Irho0 = 1 / GV%Rho0
 
   do i=is,ie 
     htot = 0.
@@ -2098,9 +2134,10 @@ subroutine N2_profile(En2d, N2_lay, h, j, G, GV, US, En3d)
       htot = htot + h(i,j,k)
       N2_sum = N2_sum + N2_lay(i,k)*h(i,j,k)
     enddo
-    N2_mean = N2_sum / htot
-
-    En3d(i,j,:) = En2d(i,j) * N2_lay(i,:) / N2_mean
+    if (N2_sum > 1.0e-14) then
+      N2_mean = N2_sum / htot
+      En3d(i,j,:) = En2d(i,j) * Irho0 * G%IareaT(i,j) * N2_lay(i,:) / N2_mean
+    endif
   enddo
 
 end subroutine N2_profile
@@ -2117,11 +2154,12 @@ subroutine N_profile(En2d, N2_lay, h, j, G, GV, US, En3d)
   integer, intent(in) :: j
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(out) :: En3d
 
-  real :: htot, N2_sum, N_mean
+  real :: htot, N2_sum, N_mean, Irho0
   integer :: i,k
   integer :: is,ie,nz
 
   is = G%isc ; ie = G%iec ; nz = GV%ke
+  Irho0 = 1 / GV%Rho0
 
   do i=is,ie
     htot = 0.
@@ -2130,9 +2168,10 @@ subroutine N_profile(En2d, N2_lay, h, j, G, GV, US, En3d)
       htot = htot + h(i,j,k)
       N2_sum = N2_sum + N2_lay(i,k)*h(i,j,k)
     enddo
-    N_mean = sqrt(N2_sum) / htot
-
-    En3d(i,j,:) = En2d(i,j) * sqrt(N2_lay(i,:)) / N_mean
+    if (N2_sum > 1.0e-14) then
+      N_mean = sqrt(N2_sum) / htot
+      En3d(i,j,:) = En2d(i,j) * Irho0 * G%IareaT(i,j) * sqrt(N2_lay(i,:)) / N_mean
+    endif
   enddo
 
 end subroutine N_profile
@@ -2369,6 +2408,10 @@ subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, int_tide_
   call get_param(param_file, mdl, "DISSIPATION_KD_MIN", CS%dissip_Kd_min, &
                  "The minimum vertical diffusivity applied as a floor.", &
                  units="m2 s-1", default=0.0, scale=US%m2_s_to_Z2_T)
+  call get_param(param_file, mdl, "INTERNAL_TIDES", CS%use_int_tides, &
+                 "If true, use the code that advances a separate set of "//&
+                 "equations for the internal tide energy density.", default=.false.)
+
 
   CS%limit_dissipation = (CS%dissip_min>0.) .or. (CS%dissip_N1>0.) .or. &
                          (CS%dissip_N0>0.) .or. (CS%dissip_Kd_min>0.)
