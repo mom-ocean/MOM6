@@ -161,7 +161,7 @@ type, public :: set_diffusivity_CS ; private
   type(CVMix_ddiff_cs),      pointer :: CVMix_ddiff_csp      => NULL() !< Control structure for a child module
   type(bkgnd_mixing_cs),     pointer :: bkgnd_mixing_csp     => NULL() !< Control structure for a child module
   type(int_tide_CS),         pointer :: int_tide_CSp         => NULL() !< Control structure for a child module
-  type(tidal_mixing_cs),     pointer :: tidal_mixing_CSp     => NULL() !< Control structure for a child module
+  type(tidal_mixing_cs) :: tidal_mixing   !< Control structure for a child module
 
   !>@{ Diagnostic IDs
   integer :: id_maxTKE     = -1, id_TKE_to_Kd   = -1, id_Kd_user    = -1
@@ -326,7 +326,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, Kd_i
 
   ! set up arrays for tidal mixing diagnostics
   if (CS%use_tidal_mixing) &
-    call setup_tidal_diagnostics(G, GV, CS%tidal_mixing_CSp)
+    call setup_tidal_diagnostics(G, GV, CS%tidal_mixing)
 
   if (CS%useKappaShear) then
     if (CS%debug) then
@@ -493,8 +493,10 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, Kd_i
 
     ! Add the Nikurashin and / or tidal bottom-driven mixing
     if (CS%use_tidal_mixing) &
-      call calculate_tidal_mixing(h, N2_bot, j, TKE_to_Kd, maxTKE, G, GV, US, CS%tidal_mixing_CSp, &
-                                  N2_lay, N2_int, Kd_lay_2d, Kd_int_2d, CS%Kd_max, visc%Kv_slow)
+      call calculate_tidal_mixing(h, j, N2_bot, N2_lay, N2_int, TKE_to_Kd, &
+                                  maxTKE, G, GV, US, CS%tidal_mixing, &
+                                  CS%Kd_max, visc%Kv_slow, Kd_lay_2d, Kd_int_2d)
+
 
     ! This adds the diffusion sustained by the energy extracted from the flow by the bottom drag.
     if (CS%bottomdraglaw .and. (CS%BBL_effic>0.0)) then
@@ -609,7 +611,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, Kd_i
 
   ! tidal mixing
   if (CS%use_tidal_mixing) &
-    call post_tidal_diagnostics(G, GV, h, CS%tidal_mixing_CSp)
+    call post_tidal_diagnostics(G, GV, h, CS%tidal_mixing)
 
   if (CS%id_N2 > 0)         call post_data(CS%id_N2,        dd%N2_3d,     CS%diag)
   if (CS%id_Kd_Work > 0)    call post_data(CS%id_Kd_Work,   dd%Kd_Work,   CS%diag)
@@ -965,7 +967,7 @@ subroutine find_N2(h, tv, T_f, S_f, fluxes, j, G, GV, US, CS, dRho_int, &
     z_from_bot(i) = 0.5*GV%H_to_Z*h(i,j,nz)
     do_i(i) = (G%mask2dT(i,j) > 0.5)
   enddo
-  if (CS%use_tidal_mixing) call tidal_mixing_h_amp(h_amp, G, j, CS%tidal_mixing_CSp)
+  if (CS%use_tidal_mixing) call tidal_mixing_h_amp(h_amp, G, j, CS%tidal_mixing)
 
   do k=nz,2,-1
     do_any = .false.
@@ -2019,7 +2021,7 @@ subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, int_tide_
 
   ! CS%use_tidal_mixing is set to True if an internal tidal dissipation scheme is to be used.
   CS%use_tidal_mixing = tidal_mixing_init(Time, G, GV, US, param_file, &
-                                          CS%int_tide_CSp, diag, CS%tidal_mixing_CSp)
+                                          CS%int_tide_CSp, diag, CS%tidal_mixing)
 
   call get_param(param_file, mdl, "ML_RADIATION", CS%ML_radiation, &
                  "If true, allow a fraction of TKE available from wind "//&
@@ -2296,10 +2298,8 @@ subroutine set_diffusivity_end(CS)
 
   call bkgnd_mixing_end(CS%bkgnd_mixing_csp)
 
-  if (CS%use_tidal_mixing) then
-    call tidal_mixing_end(CS%tidal_mixing_CSp)
-    deallocate(CS%tidal_mixing_CSp)
-  endif
+  if (CS%use_tidal_mixing) &
+    call tidal_mixing_end(CS%tidal_mixing)
 
   if (CS%user_change_diff) call user_change_diff_end(CS%user_change_diff_CSp)
 
