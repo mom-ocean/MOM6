@@ -222,7 +222,6 @@ type, public :: diabatic_CS ; private
   type(bulkmixedlayer_CS),      pointer :: bulkmixedlayer_CSp    => NULL() !< Control structure for a child module
   type(energetic_PBL_CS),       pointer :: energetic_PBL_CSp     => NULL() !< Control structure for a child module
   type(regularize_layers_CS),   pointer :: regularize_layers_CSp => NULL() !< Control structure for a child module
-  type(geothermal_CS),          pointer :: geothermal_CSp        => NULL() !< Control structure for a child module
   type(int_tide_input_CS),      pointer :: int_tide_input_CSp    => NULL() !< Control structure for a child module
   type(int_tide_input_type),    pointer :: int_tide_input        => NULL() !< Control structure for a child module
   type(opacity_CS),             pointer :: opacity_CSp           => NULL() !< Control structure for a child module
@@ -235,8 +234,9 @@ type, public :: diabatic_CS ; private
   type(CVMix_conv_cs),          pointer :: CVMix_conv_CSp        => NULL() !< Control structure for a child module
   type(diapyc_energy_req_CS),   pointer :: diapyc_en_rec_CSp     => NULL() !< Control structure for a child module
   type(oda_incupd_CS),          pointer :: oda_incupd_CSp        => NULL() !< Control structure for a child module
-  type(int_tide_CS) :: int_tide                     !< Internal tide control struct
   type(entrain_diffusive_CS) :: entrain_diffusive   !< Diffusive entrainment control struct
+  type(geothermal_CS) :: geothermal                 !< Geothermal control struct
+  type(int_tide_CS) :: int_tide                     !< Internal tide control struct
 
   type(group_pass_type) :: pass_hold_eb_ea !< For group halo pass
   type(group_pass_type) :: pass_Kv         !< For group halo pass
@@ -549,7 +549,7 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
 
   if (CS%use_geothermal) then
     call cpu_clock_begin(id_clock_geothermal)
-    call geothermal_in_place(h, tv, dt, G, GV, US, CS%geothermal_CSp, halo=CS%halo_TS_diff)
+    call geothermal_in_place(h, tv, dt, G, GV, US, CS%geothermal, halo=CS%halo_TS_diff)
     call cpu_clock_end(id_clock_geothermal)
     if (showCallTree) call callTree_waypoint("geothermal (diabatic)")
     if (CS%debugConservation) call MOM_state_stats('geothermal', u, v, h, tv%T, tv%S, G, GV, US)
@@ -1134,7 +1134,7 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
 
   if (CS%use_geothermal) then
     call cpu_clock_begin(id_clock_geothermal)
-    call geothermal_in_place(h, tv, dt, G, GV, US, CS%geothermal_CSp, halo=CS%halo_TS_diff)
+    call geothermal_in_place(h, tv, dt, G, GV, US, CS%geothermal, halo=CS%halo_TS_diff)
     call cpu_clock_end(id_clock_geothermal)
     if (showCallTree) call callTree_waypoint("geothermal (diabatic)")
     if (CS%debugConservation) call MOM_state_stats('geothermal', u, v, h, tv%T, tv%S, G, GV, US)
@@ -1686,7 +1686,7 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
 
   if (CS%use_geothermal) then
     call cpu_clock_begin(id_clock_geothermal)
-    call geothermal_entraining(h, tv, dt, eaml, ebml, G, GV, US, CS%geothermal_CSp, halo=CS%halo_TS_diff)
+    call geothermal_entraining(h, tv, dt, eaml, ebml, G, GV, US, CS%geothermal, halo=CS%halo_TS_diff)
     call cpu_clock_end(id_clock_geothermal)
     if (showCallTree) call callTree_waypoint("geothermal (diabatic)")
     if (CS%debugConservation) call MOM_state_stats('geothermal', u, v, h, tv%T, tv%S, G, GV, US)
@@ -3393,7 +3393,7 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
 
   ! initialize the geothermal heating module
   if (CS%use_geothermal) &
-    call geothermal_init(Time, G, GV, US, param_file, diag, CS%geothermal_CSp, useALEalgorithm)
+    call geothermal_init(Time, G, GV, US, param_file, diag, CS%geothermal, useALEalgorithm)
 
   ! initialize module for internal tide induced mixing
   if (CS%use_int_tides) then
@@ -3482,10 +3482,8 @@ subroutine diabatic_driver_end(CS)
 
   deallocate(CS%set_diff_CSp)
 
-  if (CS%use_geothermal) then
-    call geothermal_end(CS%geothermal_CSp)
-    deallocate(CS%geothermal_CSp)
-  endif
+  if (CS%use_geothermal) &
+    call geothermal_end(CS%geothermal)
 
   if (CS%use_CVMix_conv) deallocate(CS%CVMix_conv_CSp)
 
