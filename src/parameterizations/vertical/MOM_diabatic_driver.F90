@@ -224,7 +224,6 @@ type, public :: diabatic_CS ; private
   type(regularize_layers_CS),   pointer :: regularize_layers_CSp => NULL() !< Control structure for a child module
   type(int_tide_input_CS),      pointer :: int_tide_input_CSp    => NULL() !< Control structure for a child module
   type(int_tide_input_type),    pointer :: int_tide_input        => NULL() !< Control structure for a child module
-  type(opacity_CS),             pointer :: opacity_CSp           => NULL() !< Control structure for a child module
   type(set_diffusivity_CS),     pointer :: set_diff_CSp          => NULL() !< Control structure for a child module
   type(sponge_CS),              pointer :: sponge_CSp            => NULL() !< Control structure for a child module
   type(ALE_sponge_CS),          pointer :: ALE_sponge_CSp        => NULL() !< Control structure for a child module
@@ -237,6 +236,7 @@ type, public :: diabatic_CS ; private
   type(entrain_diffusive_CS) :: entrain_diffusive   !< Diffusive entrainment control struct
   type(geothermal_CS) :: geothermal                 !< Geothermal control struct
   type(int_tide_CS) :: int_tide                     !< Internal tide control struct
+  type(opacity_CS) :: opacity                       !< Opacity control struct
 
   type(group_pass_type) :: pass_hold_eb_ea !< For group halo pass
   type(group_pass_type) :: pass_Kv         !< For group halo pass
@@ -563,7 +563,7 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
   ! It will need to be modified later to include information about the
   ! biological properties and layer thicknesses.
   if (associated(CS%optics)) &
-    call set_pen_shortwave(CS%optics, fluxes, G, GV, US, CS%diabatic_aux_CSp, CS%opacity_CSp, CS%tracer_flow_CSp)
+    call set_pen_shortwave(CS%optics, fluxes, G, GV, US, CS%diabatic_aux_CSp, CS%opacity, CS%tracer_flow_CSp)
 
   if (CS%debug) call MOM_state_chksum("before find_uv_at_h", u, v, h, G, GV, US, haloshift=0)
 
@@ -1148,7 +1148,7 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
   ! It will need to be modified later to include information about the
   ! biological properties and layer thicknesses.
   if (associated(CS%optics)) &
-    call set_pen_shortwave(CS%optics, fluxes, G, GV, US, CS%diabatic_aux_CSp, CS%opacity_CSp, CS%tracer_flow_CSp)
+    call set_pen_shortwave(CS%optics, fluxes, G, GV, US, CS%diabatic_aux_CSp, CS%opacity, CS%tracer_flow_CSp)
 
   if (CS%debug) call MOM_state_chksum("before find_uv_at_h", u, v, h, G, GV, US, haloshift=0)
 
@@ -1700,7 +1700,7 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
   ! It will need to be modified later to include information about the
   ! biological properties and layer thicknesses.
   if (associated(CS%optics)) &
-    call set_pen_shortwave(CS%optics, fluxes, G, GV, US, CS%diabatic_aux_CSp, CS%opacity_CSp, CS%tracer_flow_CSp)
+    call set_pen_shortwave(CS%optics, fluxes, G, GV, US, CS%diabatic_aux_CSp, CS%opacity, CS%tracer_flow_CSp)
 
   if (CS%bulkmixedlayer) then
     if (CS%debug) call MOM_forcing_chksum("Before mixedlayer", fluxes, G, US, haloshift=0)
@@ -2523,7 +2523,7 @@ end subroutine layered_diabatic
 !! each returned argument is an optional argument
 subroutine extract_diabatic_member(CS, opacity_CSp, optics_CSp, evap_CFL_limit, minimum_forcing_depth, &
                                    KPP_CSp, energetic_PBL_CSp, diabatic_aux_CSp, diabatic_halo)
-  type(diabatic_CS), intent(in   )           :: CS !< module control structure
+  type(diabatic_CS), target, intent(in)      :: CS !< module control structure
   ! All output arguments are optional
   type(opacity_CS),  optional, pointer       :: opacity_CSp !< A pointer to be set to the opacity control structure
   type(optics_type), optional, pointer       :: optics_CSp  !< A pointer to be set to the optics control structure
@@ -2539,7 +2539,7 @@ subroutine extract_diabatic_member(CS, opacity_CSp, optics_CSp, evap_CFL_limit, 
                                                             !! assume thermodynamics properties are valid.
 
   ! Pointers to control structures
-  if (present(opacity_CSp))       opacity_CSp => CS%opacity_CSp
+  if (present(opacity_CSp))       opacity_CSp => CS%opacity
   if (present(optics_CSp))        optics_CSp  => CS%optics
   if (present(KPP_CSp))           KPP_CSp     => CS%KPP_CSp
   if (present(energetic_PBL_CSp)) energetic_PBL_CSp => CS%energetic_PBL_CSp
@@ -3449,7 +3449,7 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
     call get_param(param_file, mdl, "PEN_SW_NBANDS", nbands, default=1)
     if (nbands > 0) then
       allocate(CS%optics)
-      call opacity_init(Time, G, GV, US, param_file, diag, CS%opacity_CSp, CS%optics)
+      call opacity_init(Time, G, GV, US, param_file, diag, CS%opacity, CS%optics)
     endif
   endif
 
@@ -3464,7 +3464,7 @@ subroutine diabatic_driver_end(CS)
   type(diabatic_CS), intent(inout) :: CS  !< module control structure
 
   if (associated(CS%optics)) then
-    call opacity_end(CS%opacity_CSp, CS%optics)
+    call opacity_end(CS%opacity, CS%optics)
     deallocate(CS%optics)
   endif
 
