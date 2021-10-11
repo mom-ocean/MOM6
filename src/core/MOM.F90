@@ -47,7 +47,6 @@ use MOM_spatial_means,        only : global_mass_integral
 use MOM_time_manager,         only : time_type, real_to_time, time_type_to_real, operator(+)
 use MOM_time_manager,         only : operator(-), operator(>), operator(*), operator(/)
 use MOM_time_manager,         only : operator(>=), operator(==), increment_date
-use MOM_time_manager,         only : set_time
 use MOM_unit_tests,           only : unit_tests
 
 ! MOM core modules
