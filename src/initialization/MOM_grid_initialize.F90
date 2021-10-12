@@ -1219,14 +1219,9 @@ subroutine initialize_masks(G, PF, US)
                  units="m", default=0.0, scale=m_to_Z_scale)
   call get_param(PF, mdl, "MASKING_DEPTH", mask_depth, &
                  "The depth below which to mask points as land points, for which all "//&
-                 "fluxes are zeroed out. MASKING_DEPTH needs to be smaller than MINIMUM_DEPTH", &
+                 "fluxes are zeroed out. MASKING_DEPTH is ignored if it has the special "//&
+                 "default value.", &
                  units="m", default=-9999.0, scale=m_to_Z_scale)
-
-  if (mask_depth > min_depth) then
-    mask_depth = -9999.0*m_to_Z_scale
-    call MOM_error(WARNING, "MOM_grid_init: initialize_masks "//&
-                  'MASKING_DEPTH is larger than MINIMUM_DEPTH and therefore ignored.')
-  endif
 
   Dmask = mask_depth
   if (mask_depth == -9999.*m_to_Z_scale) Dmask = min_depth
