@@ -1840,16 +1840,19 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, MEKE, ADp)
   CS%diag => diag
   ! Read parameters and write them to the model log.
   call log_version(param_file, mdl, version, "")
-  !   It is not clear whether these initialization lines are needed for the
+  !   It is not clear whether all of these initialization lines are needed for the
   ! cases where the corresponding parameters are not read.
   CS%bound_Kh = .false. ; CS%better_bound_Kh = .false. ; CS%Smagorinsky_Kh = .false. ; CS%Leith_Kh = .false.
   CS%bound_Ah = .false. ; CS%better_bound_Ah = .false. ; CS%Smagorinsky_Ah = .false. ; CS%Leith_Ah = .false.
   CS%use_QG_Leith_visc = .false.
   CS%bound_Coriolis = .false.
   CS%Modified_Leith = .false.
-  CS%anisotropic = .false.
   CS%dynamic_aniso = .false.
   Kh = 0.0 ; Ah = 0.0
+  ! These initialization lines are needed because they are used even in cases where they are not read.
+  CS%anisotropic = .false.
+  CS%res_scale_MEKE = .false.
+
   !   If GET_ALL_PARAMS is true, all parameters are read in all cases to enable
   ! parameter spelling checks.
   call get_param(param_file, mdl, "GET_ALL_PARAMS", get_all, default=.false.)
@@ -1897,6 +1900,7 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, MEKE, ADp)
     call get_param(param_file, mdl, "LEITH_KH", CS%Leith_Kh, &
                  "If true, use a Leith nonlinear eddy viscosity.", &
                  default=.false.)
+    ! This call duplicates one that occurs 26 lines later, and is probably unneccessary.
     call get_param(param_file, mdl, "MODIFIED_LEITH", CS%Modified_Leith, &
                  "If true, add a term to Leith viscosity which is "//&
                  "proportional to the gradient of divergence.", &
@@ -1924,7 +1928,7 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, MEKE, ADp)
                  "If true, include the beta term in the Leith nonlinear eddy viscosity.", &
                  default=CS%Leith_Kh)
       call get_param(param_file, mdl, "MODIFIED_LEITH", CS%modified_Leith, &
-                 "If true, add a term to Leith viscosity which is \n"//&
+                 "If true, add a term to Leith viscosity which is "//&
                  "proportional to the gradient of divergence.", &
                  default=.false.)
     endif
