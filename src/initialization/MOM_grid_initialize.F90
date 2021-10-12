@@ -9,7 +9,7 @@ use MOM_domains,       only : AGRID, BGRID_NE, CGRID_NE, To_All, Scalar_Pair
 use MOM_domains,       only : To_North, To_South, To_East, To_West
 use MOM_domains,       only : MOM_domain_type, clone_MOM_domain, deallocate_MOM_domain
 use MOM_dyn_horgrid,   only : dyn_horgrid_type, set_derived_dyn_horgrid
-use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, WARNING, is_root_pe
+use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, is_root_pe
 use MOM_error_handler, only : callTree_enter, callTree_leave
 use MOM_file_parser,   only : get_param, log_param, log_version, param_file_type
 use MOM_io,            only : MOM_read_data, slasher, file_exists, stdout

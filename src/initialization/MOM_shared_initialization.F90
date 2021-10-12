@@ -433,21 +433,21 @@ subroutine limit_topography(D, G, param_file, max_depth, US)
   ! TBD: The following f.p. equivalence uses a special value. Originally, any negative value
   !      indicated the branch. We should create a logical flag to indicate this branch.
   if (mask_depth == -9999.*m_to_Z) then
-    if (min_depth > 0.0) then
-      ! This is the old path way. The 0.5*min_depth is obscure and is retained to be
-      ! backward reproducible. If you are looking at the following line you should probably
-      ! set MASKING_DEPTH.
-      do j=G%jsd,G%jed ; do i=G%isd,G%ied
-        D(i,j) = min( max( D(i,j), 0.5*min_depth ), max_depth )
-      enddo ; enddo
-    else
-      do j=G%jsd,G%jed ; do i=G%isd,G%ied
-        D(i,j) = min( max( D(i,j), min_depth ), max_depth )
-      enddo ; enddo
+    if (min_depth<0.) then
+      call MOM_error(FATAL, trim(mdl)//": MINIMUM_DEPTH<0 does not work as expected "//&
+                 "unless MASKING_DEPTH has been set appropriately. Set a meaningful "//&
+                 "MASKING_DEPTH to enabled negative depths (land elevations) and to "//&
+                 "enable flooding.")
     endif
+    ! This is the old path way. The 0.5*min_depth is obscure and is retained to be
+    ! backward reproducible. If you are looking at the following line you should probably
+    ! set MASKING_DEPTH. This path way does not work for negative depths, i.e. flooding.
+    do j=G%jsd,G%jed ; do i=G%isd,G%ied
+      D(i,j) = min( max( D(i,j), 0.5*min_depth ), max_depth )
+    enddo ; enddo
   else
     ! This is the preferred path way.
-    ! mask_depth has a meaningful value; anything shallower that mask_depth is land.
+    ! mask_depth has a meaningful value; anything shallower than mask_depth is land.
     ! If min_depth<mask_depth (which happens when using positive depths and not changing
     ! MINIMUM_DEPTH) then the shallower is used to modify and determine values on land points.
     do j=G%jsd,G%jed ; do i=G%isd,G%ied
