@@ -188,8 +188,8 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, Waves)
   real, dimension(SZIB_(G),SZJB_(G),SZK_(GV)) :: &
     PV, &       ! A diagnostic array of the potential vorticities [H-1 T-1 ~> m-1 s-1 or m2 kg-1 s-1].
     RV          ! A diagnostic array of the relative vorticities [T-1 ~> s-1].
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: &    CAuS !
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)) :: &    CAvS !
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)) ::     CAuS !
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)) ::     CAvS !
   real :: fv1, fv2, fv3, fv4   ! (f+rv)*v [L T-2 ~> m s-2].
   real :: fu1, fu2, fu3, fu4   ! -(f+rv)*u [L T-2 ~> m s-2].
   real :: max_fv, max_fu       ! The maximum or minimum of the neighboring Coriolis
