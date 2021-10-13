@@ -73,8 +73,10 @@ type, public :: MOM_restart_CS ; private
                         !! file.  Otherwise some fields must be initialized approximately.
   integer :: novars = 0 !< The number of restart fields that have been registered.
   integer :: num_obsolete_vars = 0  !< The number of obsolete restart fields that have been registered.
-  logical :: parallel_restartfiles  !< If true, each PE writes its own restart file,
-                                    !! otherwise they are combined internally.
+  logical :: parallel_restartfiles  !< If true, the IO layout is used to group processors that write
+                                    !! to the same restart file or each processor writes its own
+                                    !! (numbered) restart file.  If false, a single restart file is
+                                    !! generated after internally combining output from all PEs.
   logical :: new_run                !< If true, the input filenames and restart file existence will
                                     !! result in a new run that is not initialized from restart files.
   logical :: new_run_set = .false.  !< If true, new_run has been determined for this restart_CS.
@@ -1535,11 +1537,11 @@ subroutine restart_init(param_file, CS, restart_root)
 
   ! Determine whether all paramters are set to their default values.
   call get_param(param_file, mdl, "PARALLEL_RESTARTFILES", CS%parallel_restartfiles, &
-                 default=.true., do_not_log=.true.)
+                 default=.false., do_not_log=.true.)
   call get_param(param_file, mdl, "MAX_FIELDS", CS%max_fields, default=100, do_not_log=.true.)
   call get_param(param_file, mdl, "RESTART_CHECKSUMS_REQUIRED", CS%checksum_required, &
                  default=.true., do_not_log=.true.)
-  all_default = ((CS%parallel_restartfiles) .and. (CS%max_fields == 100) .and. &
+  all_default = ((.not.CS%parallel_restartfiles) .and. (CS%max_fields == 100) .and. &
                  (CS%checksum_required))
   if (.not.present(restart_root)) then
     call get_param(param_file, mdl, "RESTARTFILE", CS%restartfile, &
@@ -1553,7 +1555,7 @@ subroutine restart_init(param_file, CS, restart_root)
                  "If true, the IO layout is used to group processors that write to the same "//&
                  "restart file or each processor writes its own (numbered) restart file. "//&
                  "If false, a single restart file is generated combining output from all PEs.", &
-                 default=.true.)
+                 default=.false.)
 
   if (present(restart_root)) then
     CS%restartfile = restart_root
