@@ -90,7 +90,7 @@ type, public :: tracer_flow_control_CS ; private
   logical :: use_pseudo_salt_tracer = .false.      !< If true, use the psuedo_salt tracer  package
   logical :: use_boundary_impulse_tracer = .false. !< If true, use the boundary impulse tracer package
   logical :: use_dyed_obc_tracer = .false.         !< If true, use the dyed OBC tracer package
-  logical :: use_nw2_tracers = .false.             !< If true, use the ideal age tracer package
+  logical :: use_nw2_tracers = .false.             !< If true, use the NW2 tracer package
   !>@{ Pointers to the control strucures for the tracer packages
   type(USER_tracer_example_CS), pointer :: USER_tracer_example_CSp => NULL()
   type(DOME_tracer_CS), pointer :: DOME_tracer_CSp => NULL()
@@ -267,7 +267,7 @@ subroutine call_tracer_register(HI, GV, US, param_file, CS, tr_Reg, restart_CS)
   if (CS%use_dyed_obc_tracer) CS%use_dyed_obc_tracer = &
     register_dyed_obc_tracer(HI, GV, param_file, CS%dyed_obc_tracer_CSp, &
                              tr_Reg, restart_CS)
-  if (CS%use_nw2_tracers) CS%use_ideal_age = &
+  if (CS%use_nw2_tracers) CS%use_nw2_tracers = &
     register_nw2_tracers(HI, GV, param_file,  CS%nw2_tracers_CSp, tr_Reg, restart_CS)
 
 end subroutine call_tracer_register
