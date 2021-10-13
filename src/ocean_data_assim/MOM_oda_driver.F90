@@ -17,6 +17,7 @@ use MOM_error_handler, only : stdout, stdlog, MOM_error
 use MOM_io, only : SINGLE_FILE
 use MOM_interp_infra, only : init_extern_field, get_external_field_info
 use MOM_interp_infra, only : time_interp_extern
+use MOM_remapping,    only : remappingSchemesDoc
 use MOM_time_manager, only : time_type, real_to_time, get_date
 use MOM_time_manager, only : operator(+), operator(>=), operator(/=)
 use MOM_time_manager, only : operator(==), operator(<)
@@ -139,6 +140,7 @@ end type ODA_CS
 !>@{  DA parameters
 integer, parameter :: NO_ASSIM = 0, OI_ASSIM=1, EAKF_ASSIM=2
 !>@}
+character(len=40)  :: mdl = "MOM_oda_driver" !< This module's name.
 
 contains
 
@@ -190,45 +192,49 @@ subroutine init_oda(Time, G, GV, diag_CS, CS)
   call get_MOM_input(PF,dirs,ensemble_num=0)
   call unit_scaling_init(PF, CS%US)
 
-  call get_param(PF, "MOM", "ASSIM_METHOD", assim_method,  &
+  call get_param(PF, mdl, "ASSIM_METHOD", assim_method,  &
        "String which determines the data assimilation method "//&
        "Valid methods are: \'EAKF\',\'OI\', and \'NO_ASSIM\'", default='NO_ASSIM')
-  call get_param(PF, "MOM", "ASSIM_FREQUENCY", CS%assim_frequency,  &
+  call get_param(PF, mdl, "ASSIM_FREQUENCY", CS%assim_frequency,  &
        "data assimilation frequency in hours")
-  call get_param(PF, "MOM", "USE_REGRIDDING", CS%use_ALE_algorithm , &
+  call get_param(PF, mdl, "USE_REGRIDDING", CS%use_ALE_algorithm , &
                 "If True, use the ALE algorithm (regridding/remapping).\n"//&
                 "If False, use the layered isopycnal algorithm.", default=.false. )
-  call get_param(PF, "MOM", "REENTRANT_X", CS%reentrant_x, &
+  call get_param(PF, mdl, "REENTRANT_X", CS%reentrant_x, &
        "If true, the domain is zonally reentrant.", default=.true.)
-  call get_param(PF, "MOM", "REENTRANT_Y", CS%reentrant_y, &
+  call get_param(PF, mdl, "REENTRANT_Y", CS%reentrant_y, &
        "If true, the domain is meridionally reentrant.", &
        default=.false.)
-  call get_param(PF,"MOM", "TRIPOLAR_N", CS%tripolar_N, &
+  call get_param(PF, mdl, "TRIPOLAR_N", CS%tripolar_N, &
        "Use tripolar connectivity at the northern edge of the "//&
        "domain.  With TRIPOLAR_N, NIGLOBAL must be even.", &
        default=.false.)
-  call get_param(PF,"MOM", "APPLY_TRACER_TENDENCY_ADJUSTMENT", CS%do_bias_adjustment, &
+  call get_param(PF, mdl, "APPLY_TRACER_TENDENCY_ADJUSTMENT", CS%do_bias_adjustment, &
        "If true, add a spatio-temporally varying climatological adjustment "//&
        "to temperature and salinity.", &
        default=.false.)
   if (CS%do_bias_adjustment) then
-    call get_param(PF,"MOM", "TRACER_ADJUSTMENT_FACTOR", CS%bias_adjustment_multiplier, &
+    call get_param(PF, mdl, "TRACER_ADJUSTMENT_FACTOR", CS%bias_adjustment_multiplier, &
        "A multiplicative scaling factor for the climatological tracer tendency adjustment ", &
        default=1.0)
   endif
-  call get_param(PF,"MOM", "USE_BASIN_MASK", CS%use_basin_mask, &
+  call get_param(PF, mdl, "USE_BASIN_MASK", CS%use_basin_mask, &
        "If true, add a basin mask to delineate weakly connected "//&
        "ocean basins for the purpose of data assimilation.", &
        default=.false.)
 
-  call get_param(PF,"MOM", "NIGLOBAL", CS%ni, &
+  call get_param(PF, mdl, "NIGLOBAL", CS%ni, &
        "The total number of thickness grid points in the "//&
        "x-direction in the physical domain.")
-  call get_param(PF,"MOM", "NJGLOBAL", CS%nj, &
+  call get_param(PF, mdl, "NJGLOBAL", CS%nj, &
        "The total number of thickness grid points in the "//&
        "y-direction in the physical domain.")
-  call get_param(PF, 'MOM', "INPUTDIR", inputdir)
-  call get_param(PF, "MOM", "ODA_REMAPPING_SCHEME", remap_scheme, default="PPM_H4")
+  call get_param(PF, mdl, "INPUTDIR", inputdir)
+  call get_param(PF, mdl, "ODA_REMAPPING_SCHEME", remap_scheme, &
+                 "This sets the reconstruction scheme used "//&
+                 "for vertical remapping for all variables. "//&
+                 "It can be one of the following schemes: "//&
+                 trim(remappingSchemesDoc), default="PPM_H4")
   inputdir = slasher(inputdir)
 
   select case(lowercase(trim(assim_method)))
@@ -347,7 +353,7 @@ subroutine init_oda(Time, G, GV, diag_CS, CS)
   call set_PElist(CS%ensemble_pelist(CS%ensemble_id,:))
 
   if (CS%do_bias_adjustment) then
-     call get_param(PF, "MOM", "TEMP_SALT_ADJUSTMENT_FILE", bias_correction_file,  &
+     call get_param(PF, mdl, "TEMP_SALT_ADJUSTMENT_FILE", bias_correction_file,  &
        "The name of the file containing temperature and salinity "//&
        "tendency adjustments", default='temp_salt_adjustment.nc')
 
