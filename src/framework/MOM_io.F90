@@ -6,7 +6,7 @@ module MOM_io
 use MOM_array_transform,  only : allocate_rotated_array, rotate_array
 use MOM_array_transform,  only : rotate_array_pair, rotate_vector
 use MOM_domains,          only : MOM_domain_type, domain1D, broadcast, get_domain_components
-use MOM_domains,          only : rescale_comp_data, AGRID, BGRID_NE, CGRID_NE
+use MOM_domains,          only : rescale_comp_data, num_PEs, AGRID, BGRID_NE, CGRID_NE
 use MOM_dyn_horgrid,      only : dyn_horgrid_type
 use MOM_ensemble_manager, only : get_ensemble_id
 use MOM_error_handler,    only : MOM_error, NOTE, FATAL, WARNING, is_root_PE
@@ -235,6 +235,8 @@ subroutine create_file(IO_handle, filename, vars, novars, fields, threading, tim
     isg = dG%isg ; ieg = dG%ieg ; jsg = dG%jsg ; jeg = dG%jeg
     IsgB = dG%IsgB ; IegB = dG%IegB ; JsgB = dG%JsgB ; JegB = dG%JegB
   endif
+
+  if (domain_set .and. (num_PEs() == 1)) thread = SINGLE_FILE
 
   one_file = .true.
   if (domain_set) one_file = (thread == SINGLE_FILE)
