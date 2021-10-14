@@ -82,6 +82,9 @@ type, public :: MEKE_CS ; private
   real :: MEKE_topographic_beta !< Weight for how much topographic beta is considered
                                 !! when computing beta in Rhines scale [nondim]
   real :: MEKE_restoring_rate !< Inverse of the timescale used to nudge MEKE toward its equilibrium value [s-1].
+  logical :: MEKE_advection_bug !< If true, recover a bug in the calculation of the barotropic
+                        !! transport for the advection of MEKE, wherein only the transports in the
+                        !! deepest layer are used.
   logical :: fixed_total_depth  !< If true, use the nominal bathymetric depth as the estimate of
                         !! the time-varying ocean depth.  Otherwise base the depth on the total
                         !! ocean mass per unit area.
@@ -220,7 +223,7 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
       enddo ; enddo
       do k=1,nz
         do j=js,je ; do I=is-1,ie
-          baroHu(I,j) = hu(I,j,k) * GV%H_to_RZ
+          baroHu(I,j) = baroHu(I,j) + hu(I,j,k) * GV%H_to_RZ
         enddo ; enddo
       enddo
       do J=js-1,je ; do i=is,ie
@@ -228,9 +231,19 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
       enddo ; enddo
       do k=1,nz
         do J=js-1,je ; do i=is,ie
-          baroHv(i,J) = hv(i,J,k) * GV%H_to_RZ
+          baroHv(i,J) = baroHv(i,J) + hv(i,J,k) * GV%H_to_RZ
         enddo ; enddo
       enddo
+      if (CS%MEKE_advection_bug) then
+        ! This code obviously incorrect code reproduces a bug in the original implementation of
+        ! the MEKE advection.
+        do j=js,je ; do I=is-1,ie
+          baroHu(I,j) = hu(I,j,nz) * GV%H_to_RZ
+        enddo ; enddo
+        do J=js-1,je ; do i=is,ie
+          baroHv(i,J) = hv(i,J,nz) * GV%H_to_RZ
+        enddo ; enddo
+      endif
     endif
 
 
@@ -1212,6 +1225,10 @@ logical function MEKE_init(Time, G, US, param_file, diag, CS, MEKE, restart_CS)
                  "Using unity would be normal but other values could accommodate a mismatch "//&
                  "between the advecting barotropic flow and the vertical structure of MEKE.", &
                  units="nondim", default=0.0)
+  call get_param(param_file, mdl, "MEKE_ADVECTION_BUG", CS%MEKE_advection_bug, &
+                 "If true, recover a bug in the calculation of the barotropic transport for "//&
+                 "the advection of MEKE.  With the bug, only the transports in the deepest "//&
+                 "layer are used.", default=.false., do_not_log=(CS%MEKE_advection_factor<=0.))
   call get_param(param_file, mdl, "MEKE_TOPOGRAPHIC_BETA", CS%MEKE_topographic_beta, &
                  "A scale factor to determine how much topographic beta is weighed in " //&
                  "computing beta in the expression of Rhines scale. Use 1 if full "//&

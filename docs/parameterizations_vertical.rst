@@ -14,8 +14,12 @@ K-profile parameterization (KPP)
 Energetic Planetary Boundary Layer (ePBL)
   A energetically constrained boundary layer scheme following :cite:`reichl2018`. Implemented in MOM_energetic_PBL.
 
+   :ref:`EPBL`
+
 Bulk mixed layer (BML)
   A 2-layer bulk mixed layer used in pure-isopycnal model. Implemented in MOM_bulk_mixed_layer.
+
+   :ref:`BML`
 
 Interior and bottom-driven mixing
 ---------------------------------
