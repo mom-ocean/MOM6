@@ -1,0 +1,49 @@
+/*! \page BML Bulk Surface Mixed Layer
+
+This bulk surface mixed layer scheme was designed to be used with a
+purely isopycnal model. Following \cite niiler1977, \cite oberhuber1993,
+and Hallberg (\cite muller2003) the TKE budget is used to construct a
+time-evolving homogeneous mixed layer. A buffer layer sits between
+the mixed layer and the interior ocean to mediate between the two.
+
+ The following processes are executed, in the order listed.
+
+\li 1. Undergo convective adjustment into mixed layer.
+\li 2. Apply surface heating and cooling.
+\li 3. Starting from the top, entrain whatever fluid the TKE budget
+      permits.  Penetrating shortwave radiation is also applied at
+     this point.
+\li 4. If there is any unentrained fluid that was formerly in the
+     mixed layer, detrain this fluid into the buffer layer.  This
+    is equivalent to the mixed layer detraining to the Monin-
+      Obukhov depth.
+\li 5. Divide the fluid in the mixed layer evenly into CS\%nkml pieces.
+\li 6. Split the buffer layer if appropriate.
+
+Layers 1 to nkml are the mixed layer, nkml+1 to nkml+nkbl are the
+buffer layers. The results of this subroutine are mathematically
+identical if there are multiple pieces of the mixed layer with
+the same density or if there is just a single layer. There is no
+stability limit on the time step.
+
+The key parameters for the mixed layer are found in the control structure.
+These include mstar, nstar, nstar2, pen\_SW\_frac, pen\_SW\_scale, and TKE\_decay.
+For the \cite oberhuber1993 and \cite kraus1967 mixed layers, the values of these are:
+
+<table>
+<caption id="table_symbols_bml">Model variables used in the bulk mixed layer</caption>
+<tr><th>Symbol <th>Value in Oberhuber (1993) <th>Value in Kraus-Turner (1967)
+<tr><td>pen\_SW\_frac    <td> 0.42   <td> 0.0
+<tr><td>pen\_SW\_scale   <td> 15.0 m <td> 0.0 m
+<tr><td>mstar            <td> 1.25   <td> 1.25
+<tr><td>nstar            <td> 1      <td> 0.4
+<tr><td>TKE\_decay       <td> 2.5    <td> 0.0
+<tr><td>conv\_decay      <td> 0.5    <td> 0.0
+</table>
+
+TKE\_decay is \f$1/\kappa\f$ in eq. 28 of \cite oberhuber1993, while
+conv\_decay is \f$1/\mu\f$. Conv\_decay has been eliminated in favor of
+the well-calibrated form for the efficiency of penetrating convection
+from \cite wang2003.
+
+*/

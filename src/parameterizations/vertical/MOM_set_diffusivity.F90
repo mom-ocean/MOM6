@@ -2007,9 +2007,14 @@ subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, int_tide_
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
   character(len=40)  :: mdl = "MOM_set_diffusivity"  ! This module's name.
-  real :: omega_frac_dflt
+  real    :: omega_frac_dflt ! The default value for the fraction of the absolute rotation rate
+                             ! that is used in place of the absolute value of the local Coriolis
+                             ! parameter in the denominator of some expressions [nondim]
   logical :: Bryan_Lewis_diffusivity ! If true, the background diapycnal diffusivity uses
                                      ! the Bryan-Lewis (1979) style tanh profile.
+  logical :: use_regridding  ! If true, use the ALE algorithm rather than layered
+                             ! isopycnal or stacked shallow water mode.
+  logical :: TKE_to_Kd_used  ! If true, TKE_to_Kd and maxTKE need to be calculated.
   integer :: i, j, is, ie, js, je
   integer :: isd, ied, jsd, jed
 
@@ -2151,11 +2156,15 @@ subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, int_tide_
   endif
   CS%id_Kd_BBL = register_diag_field('ocean_model', 'Kd_BBL', diag%axesTi, Time, &
                  'Bottom Boundary Layer Diffusivity', 'm2 s-1', conversion=US%Z2_T_to_m2_s)
+
+  TKE_to_Kd_used = (CS%use_tidal_mixing .or. CS%ML_radiation .or. &
+                   (CS%bottomdraglaw .and. .not.CS%use_LOTW_BBL_diffusivity))
   call get_param(param_file, mdl, "SIMPLE_TKE_TO_KD", CS%simple_TKE_to_Kd, &
                  "If true, uses a simple estimate of Kd/TKE that will "//&
                  "work for arbitrary vertical coordinates. If false, "//&
                  "calculates Kd/TKE and bounds based on exact energetics "//&
-                 "for an isopycnal layer-formulation.", default=.false.)
+                 "for an isopycnal layer-formulation.", &
+                 default=.false., do_not_log=.not.TKE_to_Kd_used)
 
   ! set params related to the background mixing
   call bkgnd_mixing_init(Time, G, GV, US, param_file, CS%diag, CS%bkgnd_mixing_csp)
@@ -2176,8 +2185,15 @@ subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, int_tide_
                  "The maximum permitted increment for the diapycnal "//&
                  "diffusivity from TKE-based parameterizations, or a negative "//&
                  "value for no limit.", units="m2 s-1", default=-1.0, scale=US%m2_s_to_Z2_T)
-  if (CS%simple_TKE_to_Kd .and. CS%Kd_max<=0.) call MOM_error(FATAL, &
+  if (CS%simple_TKE_to_Kd) then
+    if (CS%Kd_max<=0.) call MOM_error(FATAL, &
          "set_diffusivity_init: To use SIMPLE_TKE_TO_KD, KD_MAX must be set to >0.")
+    call get_param(param_file, mdl, "USE_REGRIDDING", use_regridding, &
+                 do_not_log=.true., default=.false.)
+    if (use_regridding) call MOM_error(WARNING, &
+         "set_diffusivity_init: SIMPLE_TKE_TO_KD can not be used reliably with USE_REGRIDDING.")
+  endif
+
   call get_param(param_file, mdl, "KD_ADD", CS%Kd_add, &
                  "A uniform diapycnal diffusivity that is added "//&
                  "everywhere without any filtering or scaling.", &
