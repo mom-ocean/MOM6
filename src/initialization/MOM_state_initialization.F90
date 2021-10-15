@@ -34,7 +34,7 @@ use MOM_sponge, only : initialize_sponge, sponge_CS
 use MOM_ALE_sponge, only : set_up_ALE_sponge_field, set_up_ALE_sponge_vel_field
 use MOM_ALE_sponge, only : ALE_sponge_CS, initialize_ALE_sponge
 use MOM_string_functions, only : uppercase, lowercase
-use MOM_time_manager, only : time_type
+use MOM_time_manager, only : time_type, operator(/=)
 use MOM_tracer_registry, only : tracer_registry_type
 use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : thermo_var_ptrs
@@ -163,6 +163,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
   logical :: new_sim
   integer :: write_geom
   logical :: use_temperature, use_sponge, use_OBC, use_oda_incupd
+  logical :: verify_restart_time
   logical :: use_EOS     ! If true, density is calculated from T & S using an equation of state.
   logical :: depress_sfc ! If true, remove the mass that would be displaced
                          ! by a large surface pressure by squeezing the column.
@@ -235,14 +236,20 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
     depth_tot(i,j) = G%bathyT(i,j) + G%Z_ref
   enddo ; enddo
 
+  call get_param(PF, mdl, "FATAL_INCONSISTENT_RESTART_TIME", verify_restart_time, &
+                 "If true and a time_in value is provided to MOM_initialize_state, verify that "//&
+                 "the time read from a restart file is the same as time_in, and issue a fatal "//&
+                 "error if it is not.  Otherwise, simply set the time to time_in if present.", &
+                 default=.false.)
+
   ! The remaining initialization calls are done, regardless of whether the
   ! fields are actually initialized here (if just_read=.false.) or whether it
   ! is just to make sure that all valid parameters are read to enable the
   ! detection of unused parameters.
   call get_param(PF, mdl, "INIT_LAYERS_FROM_Z_FILE", from_Z_file, &
-             "If true, initialize the layer thicknesses, temperatures, "//&
-             "and salinities from a Z-space file on a latitude-longitude "//&
-             "grid.", default=.false., do_not_log=just_read)
+             "If true, initialize the layer thicknesses, temperatures, and "//&
+             "salinities from a Z-space file on a latitude-longitude grid.", &
+             default=.false., do_not_log=just_read)
 
   if (from_Z_file) then
     ! Initialize thickness and T/S from z-coordinate data in a file.
@@ -507,7 +514,11 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
     !    This line calls a subroutine that reads the initial conditions
     !  from a previously generated file.
     call restore_state(dirs%input_filename, dirs%restart_input_dir, Time, G, restart_CS)
-    if (present(Time_in)) Time = Time_in
+    if (present(Time_in)) then
+      if (verify_restart_time .and. (Time /= Time_in)) call MOM_error(FATAL, &
+        "MOM6 attempted to restart from a file from a different time than given by Time_in.")
+      Time = Time_in
+    endif
     if ((GV%m_to_H_restart /= 0.0) .and. (GV%m_to_H_restart /= GV%m_to_H)) then
       H_rescale = GV%m_to_H / GV%m_to_H_restart
       do k=1,nz ; do j=js,je ; do i=is,ie ; h(i,j,k) = H_rescale * h(i,j,k) ; enddo ; enddo ; enddo
