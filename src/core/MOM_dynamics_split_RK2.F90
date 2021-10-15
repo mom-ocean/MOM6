@@ -1373,7 +1373,7 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, US, param
   ALLOC_(CS%v_accel_bt(isd:ied,JsdB:JedB,nz)) ; CS%v_accel_bt(:,:,:) = 0.0
   ALLOC_(CS%PFu_Stokes(IsdB:IedB,jsd:jed,nz)) ; CS%PFu_Stokes(:,:,:) = 0.0
   ALLOC_(CS%PFv_Stokes(isd:ied,JsdB:JedB,nz)) ; CS%PFv_Stokes(:,:,:) = 0.0
-  
+
   MIS%diffu      => CS%diffu
   MIS%diffv      => CS%diffv
   MIS%PFu        => CS%PFu

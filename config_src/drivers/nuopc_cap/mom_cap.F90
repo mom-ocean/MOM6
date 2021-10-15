@@ -2215,7 +2215,7 @@ subroutine fld_list_add(num, fldlist, stdname, transferOffer, shortname, ungridd
      fldlist(num)%shortname   = trim(stdname)
   endif
   fldlist(num)%transferOffer  = trim(transferOffer)
-  if (present(ungridded_lbound) .and. present(ungridded_ubound)) then 
+  if (present(ungridded_lbound) .and. present(ungridded_ubound)) then
     fldlist(num)%ungridded_lbound = ungridded_lbound
     fldlist(num)%ungridded_ubound = ungridded_ubound
   end if
