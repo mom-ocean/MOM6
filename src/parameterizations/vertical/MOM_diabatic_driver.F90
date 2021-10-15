@@ -219,7 +219,6 @@ type, public :: diabatic_CS ; private
   logical :: frazil_tendency_diag = .false. !< If true calculate frazil tendency diagnostics
 
   type(diabatic_aux_CS),        pointer :: diabatic_aux_CSp      => NULL() !< Control structure for a child module
-  type(energetic_PBL_CS),       pointer :: energetic_PBL_CSp     => NULL() !< Control structure for a child module
   type(regularize_layers_CS),   pointer :: regularize_layers_CSp => NULL() !< Control structure for a child module
   type(int_tide_input_CS),      pointer :: int_tide_input_CSp    => NULL() !< Control structure for a child module
   type(int_tide_input_type),    pointer :: int_tide_input        => NULL() !< Control structure for a child module
@@ -233,6 +232,7 @@ type, public :: diabatic_CS ; private
   type(diapyc_energy_req_CS),   pointer :: diapyc_en_rec_CSp     => NULL() !< Control structure for a child module
   type(oda_incupd_CS),          pointer :: oda_incupd_CSp        => NULL() !< Control structure for a child module
   type(bulkmixedlayer_CS) :: bulkmixedlayer         !< Bulk mixed layer control struct
+  type(energetic_PBL_CS) :: energetic_PBL           !< Energetic PBL control struct
   type(entrain_diffusive_CS) :: entrain_diffusive   !< Diffusive entrainment control struct
   type(geothermal_CS) :: geothermal                 !< Geothermal control struct
   type(int_tide_CS) :: int_tide                     !< Internal tide control struct
@@ -779,15 +779,15 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
 
     call find_uv_at_h(u, v, h, u_h, v_h, G, GV, US)
     call energetic_PBL(h, u_h, v_h, tv, fluxes, dt, Kd_ePBL, G, GV, US, &
-                       CS%energetic_PBL_CSp, dSV_dT, dSV_dS, cTKE, SkinBuoyFlux, waves=waves)
+                       CS%energetic_PBL, dSV_dT, dSV_dS, cTKE, SkinBuoyFlux, waves=waves)
 
     if (associated(Hml)) then
-      call energetic_PBL_get_MLD(CS%energetic_PBL_CSp, Hml(:,:), G, US)
+      call energetic_PBL_get_MLD(CS%energetic_PBL, Hml(:,:), G, US)
       call pass_var(Hml, G%domain, halo=1)
       ! If visc%MLD exists, copy ePBL's MLD into it
       if (associated(visc%MLD)) visc%MLD(:,:) = Hml(:,:)
     elseif (associated(visc%MLD)) then
-      call energetic_PBL_get_MLD(CS%energetic_PBL_CSp, visc%MLD, G, US)
+      call energetic_PBL_get_MLD(CS%energetic_PBL, visc%MLD, G, US)
       call pass_var(visc%MLD, G%domain, halo=1)
     endif
 
@@ -1315,15 +1315,15 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
 
     call find_uv_at_h(u, v, h, u_h, v_h, G, GV, US)
     call energetic_PBL(h, u_h, v_h, tv, fluxes, dt, Kd_ePBL, G, GV, US, &
-                       CS%energetic_PBL_CSp, dSV_dT, dSV_dS, cTKE, SkinBuoyFlux, waves=waves)
+                       CS%energetic_PBL, dSV_dT, dSV_dS, cTKE, SkinBuoyFlux, waves=waves)
 
     if (associated(Hml)) then
-      call energetic_PBL_get_MLD(CS%energetic_PBL_CSp, Hml(:,:), G, US)
+      call energetic_PBL_get_MLD(CS%energetic_PBL, Hml(:,:), G, US)
       call pass_var(Hml, G%domain, halo=1)
       ! If visc%MLD exists, copy ePBL's MLD into it
       if (associated(visc%MLD)) visc%MLD(:,:) = Hml(:,:)
     elseif (associated(visc%MLD)) then
-      call energetic_PBL_get_MLD(CS%energetic_PBL_CSp, visc%MLD, G, US)
+      call energetic_PBL_get_MLD(CS%energetic_PBL, visc%MLD, G, US)
       call pass_var(visc%MLD, G%domain, halo=1)
     endif
 
@@ -2542,7 +2542,7 @@ subroutine extract_diabatic_member(CS, opacity_CSp, optics_CSp, evap_CFL_limit, 
   if (present(opacity_CSp))       opacity_CSp => CS%opacity
   if (present(optics_CSp))        optics_CSp  => CS%optics
   if (present(KPP_CSp))           KPP_CSp     => CS%KPP_CSp
-  if (present(energetic_PBL_CSp)) energetic_PBL_CSp => CS%energetic_PBL_CSp
+  if (present(energetic_PBL_CSp)) energetic_PBL_CSp => CS%energetic_PBL
 
   ! Constants within diabatic_CS
   if (present(evap_CFL_limit))        evap_CFL_limit = CS%evap_CFL_limit
@@ -3437,7 +3437,7 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
   if (CS%use_bulkmixedlayer) &
     call bulkmixedlayer_init(Time, G, GV, US, param_file, diag, CS%bulkmixedlayer)
   if (CS%use_energetic_PBL) &
-    call energetic_PBL_init(Time, G, GV, US, param_file, diag, CS%energetic_PBL_CSp)
+    call energetic_PBL_init(Time, G, GV, US, param_file, diag, CS%energetic_PBL)
 
   call regularize_layers_init(Time, G, GV, param_file, diag, CS%regularize_layers_CSp)
 
@@ -3474,7 +3474,7 @@ subroutine diabatic_driver_end(CS)
   deallocate(CS%regularize_layers_CSp)
 
   if (CS%use_energetic_PBL) &
-    call energetic_PBL_end(CS%energetic_PBL_CSp)
+    call energetic_PBL_end(CS%energetic_PBL)
 
   call diabatic_aux_end(CS%diabatic_aux_CSp)
 
