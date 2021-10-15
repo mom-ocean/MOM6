@@ -219,7 +219,6 @@ type, public :: diabatic_CS ; private
   logical :: frazil_tendency_diag = .false. !< If true calculate frazil tendency diagnostics
 
   type(diabatic_aux_CS),        pointer :: diabatic_aux_CSp      => NULL() !< Control structure for a child module
-  type(regularize_layers_CS),   pointer :: regularize_layers_CSp => NULL() !< Control structure for a child module
   type(int_tide_input_CS),      pointer :: int_tide_input_CSp    => NULL() !< Control structure for a child module
   type(int_tide_input_type),    pointer :: int_tide_input        => NULL() !< Control structure for a child module
   type(set_diffusivity_CS),     pointer :: set_diff_CSp          => NULL() !< Control structure for a child module
@@ -237,6 +236,7 @@ type, public :: diabatic_CS ; private
   type(geothermal_CS) :: geothermal                 !< Geothermal control struct
   type(int_tide_CS) :: int_tide                     !< Internal tide control struct
   type(opacity_CS) :: opacity                       !< Opacity control struct
+  type(regularize_layers_CS) :: regularize_layers   !< Regularize layer control struct
 
   type(group_pass_type) :: pass_hold_eb_ea !< For group halo pass
   type(group_pass_type) :: pass_Kv         !< For group halo pass
@@ -2183,7 +2183,7 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
   endif
 
   call cpu_clock_begin(id_clock_remap)
-  call regularize_layers(h, tv, dt, ea, eb, G, GV, US, CS%regularize_layers_CSp)
+  call regularize_layers(h, tv, dt, ea, eb, G, GV, US, CS%regularize_layers)
   call cpu_clock_end(id_clock_remap)
   if (showCallTree) call callTree_waypoint("done with regularize_layers (diabatic)")
   if (CS%debugConservation) call MOM_state_stats('regularize_layers', u, v, h, tv%T, tv%S, G, GV, US)
@@ -3439,7 +3439,7 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
   if (CS%use_energetic_PBL) &
     call energetic_PBL_init(Time, G, GV, US, param_file, diag, CS%energetic_PBL)
 
-  call regularize_layers_init(Time, G, GV, param_file, diag, CS%regularize_layers_CSp)
+  call regularize_layers_init(Time, G, GV, param_file, diag, CS%regularize_layers)
 
   if (CS%debug_energy_req) &
     call diapyc_energy_req_init(Time, G, GV, US, param_file, diag, CS%diapyc_en_rec_CSp)
@@ -3470,8 +3470,6 @@ subroutine diabatic_driver_end(CS)
 
   if (CS%debug_energy_req) &
     call diapyc_energy_req_end(CS%diapyc_en_rec_CSp)
-
-  deallocate(CS%regularize_layers_CSp)
 
   if (CS%use_energetic_PBL) &
     call energetic_PBL_end(CS%energetic_PBL)
