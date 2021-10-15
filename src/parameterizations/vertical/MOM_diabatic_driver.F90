@@ -92,7 +92,7 @@ type, public :: diabatic_CS ; private
   logical :: use_legacy_diabatic     !< If true (default), use a legacy version of the diabatic
                                      !! algorithm. This is temporary and is needed to avoid change
                                      !! in answers.
-  logical :: bulkmixedlayer          !< If true, a refined bulk mixed layer is used with
+  logical :: use_bulkmixedlayer      !< If true, a refined bulk mixed layer is used with
                                      !! nkml sublayers (and additional buffer layers).
   logical :: use_energetic_PBL       !< If true, use the implicit energetics planetary
                                      !! boundary layer scheme to determine the diffusivity
@@ -219,7 +219,6 @@ type, public :: diabatic_CS ; private
   logical :: frazil_tendency_diag = .false. !< If true calculate frazil tendency diagnostics
 
   type(diabatic_aux_CS),        pointer :: diabatic_aux_CSp      => NULL() !< Control structure for a child module
-  type(bulkmixedlayer_CS),      pointer :: bulkmixedlayer_CSp    => NULL() !< Control structure for a child module
   type(energetic_PBL_CS),       pointer :: energetic_PBL_CSp     => NULL() !< Control structure for a child module
   type(regularize_layers_CS),   pointer :: regularize_layers_CSp => NULL() !< Control structure for a child module
   type(int_tide_input_CS),      pointer :: int_tide_input_CSp    => NULL() !< Control structure for a child module
@@ -233,6 +232,7 @@ type, public :: diabatic_CS ; private
   type(CVMix_conv_cs),          pointer :: CVMix_conv_CSp        => NULL() !< Control structure for a child module
   type(diapyc_energy_req_CS),   pointer :: diapyc_en_rec_CSp     => NULL() !< Control structure for a child module
   type(oda_incupd_CS),          pointer :: oda_incupd_CSp        => NULL() !< Control structure for a child module
+  type(bulkmixedlayer_CS) :: bulkmixedlayer         !< Bulk mixed layer control struct
   type(entrain_diffusive_CS) :: entrain_diffusive   !< Diffusive entrainment control struct
   type(geothermal_CS) :: geothermal                 !< Geothermal control struct
   type(int_tide_CS) :: int_tide                     !< Internal tide control struct
@@ -1702,7 +1702,7 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
   if (associated(CS%optics)) &
     call set_pen_shortwave(CS%optics, fluxes, G, GV, US, CS%diabatic_aux_CSp, CS%opacity, CS%tracer_flow_CSp)
 
-  if (CS%bulkmixedlayer) then
+  if (CS%use_bulkmixedlayer) then
     if (CS%debug) call MOM_forcing_chksum("Before mixedlayer", fluxes, G, US, haloshift=0)
 
     if (CS%ML_mix_first > 0.0) then
@@ -1719,11 +1719,11 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
       if (CS%ML_mix_first < 1.0) then
         ! Changes: h, tv%T, tv%S, eaml and ebml  (G is also inout???)
         call bulkmixedlayer(h, u_h, v_h, tv, fluxes, dt*CS%ML_mix_first, &
-                            eaml,ebml, G, GV, US, CS%bulkmixedlayer_CSp, CS%optics, &
+                            eaml, ebml, G, GV, US, CS%bulkmixedlayer, CS%optics, &
                             Hml, CS%aggregate_FW_forcing, dt, last_call=.false.)
         ! Changes: h, tv%T, tv%S, eaml and ebml  (G is also inout???)
         call bulkmixedlayer(h, u_h, v_h, tv, fluxes, dt, eaml, ebml, &
-                            G, GV, US, CS%bulkmixedlayer_CSp, CS%optics, &
+                            G, GV, US, CS%bulkmixedlayer, CS%optics, &
                             Hml, CS%aggregate_FW_forcing, dt, last_call=.true.)
       endif
 
@@ -1988,7 +1988,7 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
   ! If using the bulk mixed layer, T and S are also updated
   ! by surface fluxes (in fluxes%*).
   ! This is a very long block.
-  if (CS%bulkmixedlayer) then
+  if (CS%use_bulkmixedlayer) then
 
     if (associated(tv%T)) then
       call cpu_clock_begin(id_clock_tridiag)
@@ -2107,7 +2107,7 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
       call cpu_clock_begin(id_clock_mixedlayer)
       ! Changes: h, tv%T, tv%S, ea and eb  (G is also inout???)
       call bulkmixedlayer(h, u_h, v_h, tv, fluxes, dt_mix, ea, eb, &
-                          G, GV, US, CS%bulkmixedlayer_CSp, CS%optics, &
+                          G, GV, US, CS%bulkmixedlayer, CS%optics, &
                           Hml, CS%aggregate_FW_forcing, dt, last_call=.true.)
 
       !  Keep salinity from falling below a small but positive threshold.
@@ -2310,7 +2310,7 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
   if (CS%use_sponge) then
     call cpu_clock_begin(id_clock_sponge)
     ! Layer mode sponge
-    if (CS%bulkmixedlayer .and. associated(tv%eqn_of_state)) then
+    if (CS%use_bulkmixedlayer .and. associated(tv%eqn_of_state)) then
       do i=is,ie ; p_ref_cv(i) = tv%P_Ref ; enddo
       EOSdom(:) = EOS_domain(G%HI)
       !$OMP parallel do default(shared)
@@ -2359,7 +2359,7 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
 ! For momentum, it is only the net flux that homogenizes within
 ! the mixed layer.  Vertical viscosity that is proportional to the
 ! mixed layer turbulence is applied elsewhere.
-  if (CS%bulkmixedlayer) then
+  if (CS%use_bulkmixedlayer) then
     if (CS%debug) then
       call hchksum(ea, "before net flux rearrangement ea", G%HI, scale=GV%H_to_m)
       call hchksum(eb, "before net flux rearrangement eb", G%HI, scale=GV%H_to_m)
@@ -2917,7 +2917,7 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
   if (associated(oda_incupd_CSp))  CS%oda_incupd_CSp  => oda_incupd_CSp
 
   CS%useALEalgorithm = useALEalgorithm
-  CS%bulkmixedlayer = (GV%nkml > 0)
+  CS%use_bulkmixedlayer = (GV%nkml > 0)
 
   ! Set default, read and log parameters
   call log_version(param_file, mdl, version, &
@@ -2958,7 +2958,7 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
   CS%use_kappa_shear = kappa_shear_is_used(param_file)
   CS%use_CVMix_shear = CVMix_shear_is_used(param_file)
 
-  if (CS%bulkmixedlayer) then
+  if (CS%use_bulkmixedlayer) then
     call get_param(param_file, mdl, "ML_MIX_FIRST", CS%ML_mix_first, &
                  "The fraction of the mixed layer mixing that is applied "//&
                  "before interior diapycnal mixing.  0 by default.", &
@@ -3412,7 +3412,7 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
 
   ! set up the clocks for this module
   id_clock_entrain = cpu_clock_id('(Ocean diabatic entrain)', grain=CLOCK_MODULE)
-  if (CS%bulkmixedlayer) &
+  if (CS%use_bulkmixedlayer) &
     id_clock_mixedlayer = cpu_clock_id('(Ocean mixed layer)', grain=CLOCK_MODULE)
   id_clock_remap = cpu_clock_id('(Ocean vert remap)', grain=CLOCK_MODULE)
   if (CS%use_geothermal) &
@@ -3434,8 +3434,8 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
                          CS%useALEalgorithm, CS%use_energetic_PBL)
 
   ! initialize the boundary layer modules
-  if (CS%bulkmixedlayer) &
-    call bulkmixedlayer_init(Time, G, GV, US, param_file, diag, CS%bulkmixedlayer_CSp)
+  if (CS%use_bulkmixedlayer) &
+    call bulkmixedlayer_init(Time, G, GV, US, param_file, diag, CS%bulkmixedlayer)
   if (CS%use_energetic_PBL) &
     call energetic_PBL_init(Time, G, GV, US, param_file, diag, CS%energetic_PBL_CSp)
 
