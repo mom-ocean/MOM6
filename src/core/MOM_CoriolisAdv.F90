@@ -138,7 +138,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, Waves)
   type(unit_scale_type),                      intent(in)    :: US  !< A dimensional unit scaling type
   type(CoriolisAdv_CS),                       pointer       :: CS  !< Control structure for MOM_CoriolisAdv
   type(Wave_parameters_CS),         optional, pointer       :: Waves !< An optional pointer to Stokes drift CS
-  
+
   ! Local variables
   real, dimension(SZIB_(G),SZJB_(G)) :: &
     q, &        ! Layer potential vorticity [H-1 T-1 ~> m-1 s-1 or m2 kg-1 s-1].
@@ -176,7 +176,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, Waves)
                 ! discretization [H-1 s-1 ~> m-1 s-1 or m2 kg-1 s-1].
   real, dimension(SZIB_(G),SZJB_(G)) :: &
     dvdx, dudy, & ! Contributions to the circulation around q-points [L2 T-1 ~> m2 s-1]
-    dvSdx, duSdy, & ! idem. for Stokes drift [L2 T-1 ~> m2 s-1]   
+    dvSdx, duSdy, & ! idem. for Stokes drift [L2 T-1 ~> m2 s-1]
     rel_vort, & ! Relative vorticity at q-points [T-1 ~> s-1].
     abs_vort, & ! Absolute vorticity at q-points [T-1 ~> s-1].
     stk_vort, & ! Stokes vorticity at q-points [T-1 ~> s-1].
@@ -229,7 +229,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, Waves)
   real :: QUHeff,QVHeff ! More temporary variables [H L2 T-1 s-1 ~> m3 s-2 or kg s-2].
   integer :: i, j, k, n, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
   logical :: Stokes_VF, Passive_Stokes_VF
-  
+
 ! Diagnostics for fractional thickness-weighted terms
   real, allocatable, dimension(:,:) :: &
     hf_gKEu_2d, hf_gKEv_2d, & ! Depth sum of hf_gKEu, hf_gKEv [L T-2 ~> m s-2].
@@ -292,7 +292,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, Waves)
     Area_q(i,j) = (Area_h(i,j) + Area_h(i+1,j+1)) + &
                   (Area_h(i+1,j) + Area_h(i,j+1))
   enddo ; enddo
-  
+
   Stokes_VF = present(Waves)
   if (Stokes_VF) Stokes_VF = associated(Waves)
   if (Stokes_VF) Stokes_VF = Waves%Stokes_VF
@@ -482,20 +482,24 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, Waves)
       do J=Jsq-1,Jeq+1 ; do I=Isq-1,Ieq+1
         rel_vort(I,J) = (2.0 - G%mask2dBu(I,J)) * (dvdx(I,J) - dudy(I,J)) * G%IareaBu(I,J)
       enddo; enddo
-      if (CS%id_CAuS>0 .or. CS%id_CAvS>0) then
-        do J=Jsq-1,Jeq+1 ; do I=Isq-1,Ieq+1
-          stk_vort(I,J) = (2.0 - G%mask2dBu(I,J)) * (dvSdx(I,J) - duSdy(I,J)) * G%IareaBu(I,J)
-        enddo; enddo
-      endif 
+      if (Stokes_VF) then
+        if (CS%id_CAuS>0 .or. CS%id_CAvS>0) then
+          do J=Jsq-1,Jeq+1 ; do I=Isq-1,Ieq+1
+            stk_vort(I,J) = (2.0 - G%mask2dBu(I,J)) * (dvSdx(I,J) - duSdy(I,J)) * G%IareaBu(I,J)
+          enddo; enddo
+        endif
+      endif
     else
       do J=Jsq-1,Jeq+1 ; do I=Isq-1,Ieq+1
         rel_vort(I,J) = G%mask2dBu(I,J) * (dvdx(I,J) - dudy(I,J)) * G%IareaBu(I,J)
       enddo; enddo
-      if (CS%id_CAuS>0 .or. CS%id_CAvS>0) then
-        do J=Jsq-1,Jeq+1 ; do I=Isq-1,Ieq+1
-          stk_vort(I,J) = (2.0 - G%mask2dBu(I,J)) * (dvSdx(I,J) - duSdy(I,J)) * G%IareaBu(I,J)
-        enddo; enddo
-      endif 
+      if (Stokes_VF) then
+        if (CS%id_CAuS>0 .or. CS%id_CAvS>0) then
+          do J=Jsq-1,Jeq+1 ; do I=Isq-1,Ieq+1
+            stk_vort(I,J) = (2.0 - G%mask2dBu(I,J)) * (dvSdx(I,J) - duSdy(I,J)) * G%IareaBu(I,J)
+          enddo; enddo
+        endif
+      endif
     endif
 
     do J=Jsq-1,Jeq+1 ; do I=Isq-1,Ieq+1
@@ -508,10 +512,12 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, Waves)
       q(I,J) = abs_vort(I,J) * Ih_q(I,J)
     enddo; enddo
 
-    if (CS%id_CAuS>0 .or. CS%id_CAvS>0) then
-      do J=Jsq-1,Jeq+1 ; do I=Isq-1,Ieq+1
-        qS(I,J) = stk_vort(I,J) * Ih_q(I,J)
-      enddo; enddo
+    if (Stokes_VF) then
+      if (CS%id_CAuS>0 .or. CS%id_CAvS>0) then
+        do J=Jsq-1,Jeq+1 ; do I=Isq-1,Ieq+1
+          qS(I,J) = stk_vort(I,J) * Ih_q(I,J)
+        enddo; enddo
+      endif
     endif
 
     if (CS%id_rv > 0) then
@@ -736,15 +742,17 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, Waves)
             (ep_u(i,j)*uh(I-1,j,k) - ep_u(i+1,j)*uh(I+1,j,k)) * G%IdxCu(I,j)
     enddo ; enddo ; endif
 
-    if (CS%id_CAuS>0 .or. CS%id_CAvS>0) then
-      ! Computing the diagnostic Stokes contribution to CAu
-      do j=js,je ; do I=Isq,Ieq
-        CAuS(I,j,k) = 0.25 * &
-              (qS(I,J) * (vh(i+1,J,k) + vh(i,J,k)) + &
-               qS(I,J-1) * (vh(i,J-1,k) + vh(i+1,J-1,k))) * G%IdxCu(I,j)
-      enddo ; enddo
+    if (Stokes_VF) then
+      if (CS%id_CAuS>0 .or. CS%id_CAvS>0) then
+        ! Computing the diagnostic Stokes contribution to CAu
+        do j=js,je ; do I=Isq,Ieq
+          CAuS(I,j,k) = 0.25 * &
+                (qS(I,J) * (vh(i+1,J,k) + vh(i,J,k)) + &
+                 qS(I,J-1) * (vh(i,J-1,k) + vh(i+1,J-1,k))) * G%IdxCu(I,j)
+        enddo ; enddo
+      endif
     endif
-    
+
     if (CS%bound_Coriolis) then
       do j=js,je ; do I=Isq,Ieq
         fv1 = abs_vort(I,J) * v(i+1,J,k)
@@ -858,15 +866,17 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, Waves)
             (ep_v(i,j)*vh(i,J-1,k) - ep_v(i,j+1)*vh(i,J+1,k)) * G%IdyCv(i,J)
     enddo ; enddo ; endif
 
-    if (CS%id_CAuS>0 .or. CS%id_CAvS>0) then
-      ! Computing the diagnostic Stokes contribution to CAv
-      do J=Jsq,Jeq ; do i=is,ie
-        CAvS(I,j,k) = 0.25 * &
-              (qS(I,J) * (uh(I,j+1,k) + uh(I,j,k)) + &
-               qS(I,J-1) * (uh(I-1,j,k) + uh(I-1,j+1,k))) * G%IdyCv(i,J)
-      enddo; enddo
+    if (Stokes_VF) then
+      if (CS%id_CAuS>0 .or. CS%id_CAvS>0) then
+        ! Computing the diagnostic Stokes contribution to CAv
+        do J=Jsq,Jeq ; do i=is,ie
+          CAvS(I,j,k) = 0.25 * &
+                (qS(I,J) * (uh(I,j+1,k) + uh(I,j,k)) + &
+                 qS(I,J-1) * (uh(I-1,j,k) + uh(I-1,j+1,k))) * G%IdyCv(i,J)
+        enddo; enddo
+      endif
     endif
-    
+
     if (CS%bound_Coriolis) then
       do J=Jsq,Jeq ; do i=is,ie
         fu1 = -abs_vort(I,J) * u(I,j+1,k)
@@ -943,8 +953,10 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, Waves)
     if (CS%id_gKEv>0) call post_data(CS%id_gKEv, AD%gradKEv, CS%diag)
     if (CS%id_rvxu > 0) call post_data(CS%id_rvxu, AD%rv_x_u, CS%diag)
     if (CS%id_rvxv > 0) call post_data(CS%id_rvxv, AD%rv_x_v, CS%diag)
-    if (CS%id_CAuS > 0) call post_data(CS%id_CAuS, CAuS, CS%diag)
-    if (CS%id_CAvS > 0) call post_data(CS%id_CAvS, CAvS, CS%diag)
+    if (Stokes_VF) then
+      if (CS%id_CAuS > 0) call post_data(CS%id_CAuS, CAuS, CS%diag)
+      if (CS%id_CAvS > 0) call post_data(CS%id_CAvS, CAvS, CS%diag)
+    endif
 
     ! Diagnostics for terms multiplied by fractional thicknesses
 
@@ -1358,7 +1370,7 @@ subroutine CoriolisAdv_init(Time, G, GV, US, param_file, diag, AD, CS)
   CS%id_CAvS = register_diag_field('ocean_model', 'CAvS', diag%axesCvL, Time, &
      'Meridional Acceleration from Stokes Vorticity', 'm-1 s-2', conversion=US%L_T2_to_m_s2)
   ! add to AD
-  
+
   !CS%id_hf_gKEu = register_diag_field('ocean_model', 'hf_gKEu', diag%axesCuL, Time, &
   !   'Fractional Thickness-weighted Zonal Acceleration from Grad. Kinetic Energy', &
   !   'm s-2', v_extensive=.true., conversion=US%L_T2_to_m_s2)
