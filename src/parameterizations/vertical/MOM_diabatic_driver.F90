@@ -23,7 +23,7 @@ use MOM_diag_mediator,       only : diag_save_grids, diag_restore_grids
 use MOM_diapyc_energy_req,   only : diapyc_energy_req_init, diapyc_energy_req_end
 use MOM_diapyc_energy_req,   only : diapyc_energy_req_calc, diapyc_energy_req_test, diapyc_energy_req_CS
 use MOM_CVMix_conv,          only : CVMix_conv_init, CVMix_conv_cs
-use MOM_CVMix_conv,          only : CVMix_conv_end, calculate_CVMix_conv
+use MOM_CVMix_conv,          only : calculate_CVMix_conv
 use MOM_domains,             only : pass_var, To_West, To_South, To_All, Omit_Corners
 use MOM_domains,             only : create_group_pass, do_group_pass, group_pass_type
 use MOM_energetic_PBL,       only : energetic_PBL, energetic_PBL_init
@@ -227,10 +227,10 @@ type, public :: diabatic_CS ; private
   type(tracer_flow_control_CS), pointer :: tracer_flow_CSp       => NULL() !< Control structure for a child module
   type(optics_type),            pointer :: optics                => NULL() !< Control structure for a child module
   type(KPP_CS),                 pointer :: KPP_CSp               => NULL() !< Control structure for a child module
-  type(CVMix_conv_cs),          pointer :: CVMix_conv_CSp        => NULL() !< Control structure for a child module
   type(diapyc_energy_req_CS),   pointer :: diapyc_en_rec_CSp     => NULL() !< Control structure for a child module
   type(oda_incupd_CS),          pointer :: oda_incupd_CSp        => NULL() !< Control structure for a child module
   type(bulkmixedlayer_CS) :: bulkmixedlayer         !< Bulk mixed layer control struct
+  type(CVMix_conv_CS) :: CVMix_conv                 !< CVMix convection control struct
   type(energetic_PBL_CS) :: energetic_PBL           !< Energetic PBL control struct
   type(entrain_diffusive_CS) :: entrain_diffusive   !< Diffusive entrainment control struct
   type(geothermal_CS) :: geothermal                 !< Geothermal control struct
@@ -723,7 +723,7 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
   ! Calculate vertical mixing due to convection (computed via CVMix)
   if (CS%use_CVMix_conv) then
     ! Increment vertical diffusion and viscosity due to convection
-    call calculate_CVMix_conv(h, tv, G, GV, US, CS%CVMix_conv_CSp, Hml, Kd_int, visc%Kv_slow)
+    call calculate_CVMix_conv(h, tv, G, GV, US, CS%CVMix_conv, Hml, Kd_int, visc%Kv_slow)
   endif
 
   ! This block sets ent_t and ent_s from h and Kd_int.
@@ -1276,9 +1276,9 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
   if (CS%use_CVMix_conv) then
     ! Increment vertical diffusion and viscosity due to convection
     if (CS%useKPP) then
-      call calculate_CVMix_conv(h, tv, G, GV, US, CS%CVMix_conv_CSp, Hml, Kd_heat, visc%Kv_shear, Kd_aux=Kd_salt)
+      call calculate_CVMix_conv(h, tv, G, GV, US, CS%CVMix_conv, Hml, Kd_heat, visc%Kv_shear, Kd_aux=Kd_salt)
     else
-      call calculate_CVMix_conv(h, tv, G, GV, US, CS%CVMix_conv_CSp, Hml, Kd_heat, visc%Kv_slow, Kd_aux=Kd_salt)
+      call calculate_CVMix_conv(h, tv, G, GV, US, CS%CVMix_conv, Hml, Kd_heat, visc%Kv_slow, Kd_aux=Kd_salt)
     endif
   endif
 
@@ -1866,7 +1866,7 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
 
   ! Add vertical diff./visc. due to convection (computed via CVMix)
   if (CS%use_CVMix_conv) then
-    call calculate_CVMix_conv(h, tv, G, GV, US, CS%CVMix_conv_CSp, Hml, Kd_int, visc%Kv_slow)
+    call calculate_CVMix_conv(h, tv, G, GV, US, CS%CVMix_conv, Hml, Kd_int, visc%Kv_slow)
   endif
 
   if (CS%useKPP) then
@@ -3386,7 +3386,7 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
   endif
 
   ! CS%use_CVMix_conv is set to True if CVMix convection will be used, otherwise it is False.
-  CS%use_CVMix_conv = CVMix_conv_init(Time, G, GV, US, param_file, diag, CS%CVMix_conv_CSp)
+  CS%use_CVMix_conv = CVMix_conv_init(Time, G, GV, US, param_file, diag, CS%CVMix_conv)
 
   call entrain_diffusive_init(Time, G, GV, US, param_file, diag, CS%entrain_diffusive, &
                               just_read_params=CS%useALEalgorithm)
@@ -3482,8 +3482,6 @@ subroutine diabatic_driver_end(CS)
 
   if (CS%use_geothermal) &
     call geothermal_end(CS%geothermal)
-
-  if (CS%use_CVMix_conv) deallocate(CS%CVMix_conv_CSp)
 
   if (CS%useKPP) then
     deallocate( CS%KPP_buoy_flux )
