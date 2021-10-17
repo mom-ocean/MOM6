@@ -90,18 +90,18 @@ subroutine DOME2d_initialize_topography( D, G, param_file, max_depth )
 end subroutine DOME2d_initialize_topography
 
 !> Initialize thicknesses according to coordinate mode
-subroutine DOME2d_initialize_thickness ( h, depth_tot, G, GV, US, param_file, just_read_params )
+subroutine DOME2d_initialize_thickness ( h, depth_tot, G, GV, US, param_file, just_read )
   type(ocean_grid_type),   intent(in)  :: G  !< Ocean grid structure
   type(verticalGrid_type), intent(in)  :: GV !< Vertical grid structure
   type(unit_scale_type),   intent(in)  :: US !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(out) :: h           !< The thickness that is being initialized [H ~> m or kg m-2].
   real, dimension(SZI_(G),SZJ_(G)), &
-                           intent(in)  :: depth_tot  !< The nominal total depth of the ocean [Z ~> m]
+                           intent(in)  :: depth_tot   !< The nominal total depth of the ocean [Z ~> m]
   type(param_file_type),   intent(in)  :: param_file  !< A structure indicating the open file
                                                       !! to parse for model parameter values.
-  logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
-                                                      !! only read parameters without changing h.
+  logical,                 intent(in)  :: just_read   !< If true, this call will only read
+                                                      !! parameters without changing h.
 
   ! Local variables
   real :: e0(SZK_(GV))     ! The resting interface heights, in depth units [Z ~> m], usually
@@ -113,12 +113,9 @@ subroutine DOME2d_initialize_thickness ( h, depth_tot, G, GV, US, param_file, ju
   real    :: delta_h
   real    :: min_thickness
   real    :: dome2d_width_bay, dome2d_width_bottom, dome2d_depth_bay
-  logical :: just_read    ! If true, just read parameters but set nothing.
   character(len=40) :: verticalCoordinate
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
-
-  just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
 
   if (.not.just_read) &
     call MOM_mesg("MOM_initialization.F90, DOME2d_initialize_thickness: setting thickness")
@@ -224,7 +221,7 @@ end subroutine DOME2d_initialize_thickness
 
 !> Initialize temperature and salinity in the 2d DOME configuration
 subroutine DOME2d_initialize_temperature_salinity ( T, S, h, G, GV, param_file, &
-                     eqn_of_state, just_read_params)
+                     eqn_of_state, just_read)
   type(ocean_grid_type),                     intent(in)  :: G !< Ocean grid structure
   type(verticalGrid_type),                   intent(in)  :: GV !< The ocean's vertical grid structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: T !< Potential temperature [degC]
@@ -232,7 +229,7 @@ subroutine DOME2d_initialize_temperature_salinity ( T, S, h, G, GV, param_file, 
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)  :: h !< Layer thickness [H ~> m or kg m-2]
   type(param_file_type),                     intent(in)  :: param_file !< Parameter file structure
   type(EOS_type),                            pointer     :: eqn_of_state !< Equation of state structure
-  logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
+  logical,                                   intent(in)  :: just_read !< If true, this call will
                                                       !! only read parameters without changing T & S.
 
   ! Local variables
@@ -240,16 +237,13 @@ subroutine DOME2d_initialize_temperature_salinity ( T, S, h, G, GV, param_file, 
   real      :: x
   integer   :: index_bay_z
   real      :: delta_S, delta_T
-  real      :: S_ref, T_ref;        ! Reference salinity and temperature within surface layer
-  real      :: S_range, T_range;    ! Range of salinities and temperatures over the vertical
+  real      :: S_ref, T_ref         ! Reference salinity and temperature within surface layer
+  real      :: S_range, T_range     ! Range of salinities and temperatures over the vertical
   real      :: xi0, xi1
-  logical :: just_read    ! If true, just read parameters but set nothing.
   character(len=40) :: verticalCoordinate
   real    :: dome2d_width_bay, dome2d_width_bottom, dome2d_depth_bay
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
-
-  just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
 
   call get_param(param_file, mdl,"REGRIDDING_COORDINATE_MODE", verticalCoordinate, &
                  default=DEFAULT_COORDINATE_MODE, do_not_log=.true.)

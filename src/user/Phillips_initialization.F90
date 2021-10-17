@@ -35,7 +35,7 @@ public Phillips_initialize_topography
 contains
 
 !> Initialize the thickness field for the Phillips model test case.
-subroutine Phillips_initialize_thickness(h, depth_tot, G, GV, US, param_file, just_read_params)
+subroutine Phillips_initialize_thickness(h, depth_tot, G, GV, US, param_file, just_read)
   type(ocean_grid_type),   intent(in)  :: G          !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)  :: GV         !< The ocean's vertical grid structure.
   type(unit_scale_type),   intent(in)  :: US         !< A dimensional unit scaling type
@@ -45,8 +45,8 @@ subroutine Phillips_initialize_thickness(h, depth_tot, G, GV, US, param_file, ju
                            intent(in)  :: depth_tot  !< The nominal total depth of the ocean [Z ~> m]
   type(param_file_type),   intent(in)  :: param_file !< A structure indicating the open file
                                                      !! to parse for model parameter values.
-  logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
-                                                     !! only read parameters without changing h.
+  logical,                 intent(in)  :: just_read  !< If true, this call will only read
+                                                     !! parameters without changing h.
 
   real :: eta0(SZK_(GV)+1)  ! The 1-d nominal positions of the interfaces [Z ~> m]
   real :: eta_im(SZJ_(G),SZK_(GV)+1) ! A temporary array for zonal-mean eta [Z ~> m]
@@ -56,7 +56,6 @@ subroutine Phillips_initialize_thickness(h, depth_tot, G, GV, US, param_file, ju
   real :: y_2             ! The y-position relative to the center of the domain [km]
   real :: half_strat      ! The fractional depth where the stratification is centered [nondim]
   real :: half_depth      ! The depth where the stratification is centered [Z ~> m]
-  logical :: just_read    ! If true, just read parameters but set nothing.
   logical :: reentrant_y  ! If true, model is re-entrant in the y direction
   character(len=40)  :: mdl = "Phillips_initialize_thickness" ! This subroutine's name.
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz
@@ -66,8 +65,6 @@ subroutine Phillips_initialize_thickness(h, depth_tot, G, GV, US, param_file, ju
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
   eta_im(:,:) = 0.0
-
-  just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
 
   if (.not.just_read) call log_version(param_file, mdl, version)
   call get_param(param_file, mdl, "HALF_STRAT_DEPTH", half_strat, &
@@ -130,7 +127,7 @@ subroutine Phillips_initialize_thickness(h, depth_tot, G, GV, US, param_file, ju
 end subroutine Phillips_initialize_thickness
 
 !> Initialize the velocity fields for the Phillips model test case
-subroutine Phillips_initialize_velocity(u, v, G, GV, US, param_file, just_read_params)
+subroutine Phillips_initialize_velocity(u, v, G, GV, US, param_file, just_read)
   type(ocean_grid_type),   intent(in)  :: G  !< Grid structure
   type(verticalGrid_type), intent(in)  :: GV !< Vertical grid structure
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
@@ -140,8 +137,8 @@ subroutine Phillips_initialize_velocity(u, v, G, GV, US, param_file, just_read_p
   type(unit_scale_type),   intent(in)  :: US !< A dimensional unit scaling type
   type(param_file_type),   intent(in)  :: param_file !< A structure indicating the open file to
                                                      !! parse for modelparameter values.
-  logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
-                                                     !! only read parameters without changing h.
+  logical,                 intent(in)  :: just_read  !< If true, this call will only read
+                                                     !! parameters without changing u & v.
 
   real :: jet_width       ! The width of the zonal-mean jet [km]
   real :: jet_height      ! The interface height scale associated with the zonal-mean jet [Z ~> m]
@@ -150,12 +147,9 @@ subroutine Phillips_initialize_velocity(u, v, G, GV, US, param_file, just_read_p
   real :: velocity_amplitude ! The amplitude of velocity perturbations [L T-1 ~> m s-1]
   real :: pi              ! The ratio of the circumference of a circle to its diameter [nondim]
   integer :: i, j, k, is, ie, js, je, nz, m
-  logical :: just_read    ! If true, just read parameters but set nothing.
   logical :: reentrant_y  ! If true, model is re-entrant in the y direction
   character(len=40)  :: mdl = "Phillips_initialize_velocity" ! This subroutine's name.
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
-
-  just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
 
   if (.not.just_read) call log_version(param_file, mdl, version)
   call get_param(param_file, mdl, "VELOCITY_IC_PERTURB_AMP", velocity_amplitude, &

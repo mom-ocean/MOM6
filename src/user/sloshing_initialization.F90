@@ -53,17 +53,17 @@ end subroutine sloshing_initialize_topography
 !! same thickness but all interfaces (except bottom and sea surface) are
 !! displaced according to a half-period cosine, with maximum value on the
 !! left and minimum value on the right. This sets off a regular sloshing motion.
-subroutine sloshing_initialize_thickness ( h, depth_tot, G, GV, US, param_file, just_read_params)
+subroutine sloshing_initialize_thickness ( h, depth_tot, G, GV, US, param_file, just_read)
   type(ocean_grid_type),   intent(in)  :: G           !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)  :: GV          !< The ocean's vertical grid structure.
   type(unit_scale_type),   intent(in)  :: US          !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(out) :: h           !< The thickness that is being initialized [H ~> m or kg m-2].
   real, dimension(SZI_(G),SZJ_(G)), &
-                           intent(in)  :: depth_tot  !< The nominal total depth of the ocean [Z ~> m]
+                           intent(in)  :: depth_tot   !< The nominal total depth of the ocean [Z ~> m]
   type(param_file_type),   intent(in)  :: param_file  !< A structure indicating the open file
                                                       !! to parse for model parameter values.
-  logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
+  logical,                 intent(in)  :: just_read !< If true, this call will
                                                       !! only read parameters without changing h.
 
   real    :: displ(SZK_(GV)+1)  ! The interface displacement [Z ~> m].
@@ -74,7 +74,6 @@ subroutine sloshing_initialize_thickness ( h, depth_tot, G, GV, US, param_file, 
   real    :: x1, y1, x2, y2     ! Dimensonless parameters.
   real    :: x, t               ! Dimensionless depth coordinates?
   logical :: use_IC_bug         ! If true, set the initial conditions retaining an old bug.
-  logical :: just_read          ! If true, just read parameters but set nothing.
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
   character(len=40)  :: mdl = "sloshing_initialization" !< This module's name.
@@ -83,7 +82,6 @@ subroutine sloshing_initialize_thickness ( h, depth_tot, G, GV, US, param_file, 
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
-  just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
   if (.not.just_read) call log_version(param_file, mdl, version, "")
   call get_param(param_file, mdl, "SLOSHING_IC_AMPLITUDE", a0, &
                  "Initial amplitude of sloshing internal interface height "//&
@@ -179,7 +177,7 @@ end subroutine sloshing_initialize_thickness
 !! Note that the linear distribution is set up with respect to the layer
 !! number, not the physical position).
 subroutine sloshing_initialize_temperature_salinity ( T, S, h, G, GV, param_file, &
-                                                      eqn_of_state, just_read_params)
+                                                      eqn_of_state, just_read)
   type(ocean_grid_type),                     intent(in)  :: G !< Ocean grid structure.
   type(verticalGrid_type),                   intent(in)  :: GV !< The ocean's vertical grid structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: T !< Potential temperature [degC].
@@ -189,8 +187,8 @@ subroutine sloshing_initialize_temperature_salinity ( T, S, h, G, GV, param_file
                                                             !! open file to parse for model
                                                             !! parameter values.
   type(EOS_type),                            pointer     :: eqn_of_state !< Equation of state structure.
-  logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
-                                                      !! only read parameters without changing h.
+  logical,                                   intent(in)  :: just_read !< If true, this call will
+                                                      !! only read parameters without changing T & S.
 
   integer :: i, j, k, is, ie, js, je, nz
   real    :: delta_S, delta_T
@@ -201,13 +199,10 @@ subroutine sloshing_initialize_temperature_salinity ( T, S, h, G, GV, param_file
   integer :: kdelta
   real    :: deltah
   real    :: xi0, xi1
-  logical :: just_read    ! If true, just read parameters but set nothing.
   character(len=40)  :: mdl = "initialize_temp_salt_linear" ! This subroutine's
                                                             ! name.
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
-
-  just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
 
   call get_param(param_file, mdl, "S_REF", S_ref, 'Reference value for salinity', &
                  default=35.0, units='1e-3', do_not_log=just_read)
