@@ -233,7 +233,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
                                  intent(out) :: diffv  !< Meridional acceleration due to convergence
                                                        !! of along-coordinate stress tensor [L T-2 ~> m s-2].
-  type(MEKE_type),               pointer     :: MEKE   !< Pointer to a structure containing fields
+  type(MEKE_type),               intent(inout) :: MEKE !< MEKE fields
                                                        !! related to Mesoscale Eddy Kinetic Energy.
   type(VarMix_CS),               pointer     :: VarMix !< Pointer to a structure with fields that
                                                        !! specify the spatially variable viscosities
@@ -420,21 +420,16 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
 
   find_FrictWork = (CS%id_FrictWork > 0)
   if (CS%id_FrictWorkIntz > 0) find_FrictWork = .true.
-  if (associated(MEKE)) then
-    if (associated(MEKE%mom_src)) find_FrictWork = .true.
-    backscat_subround = 0.0
-    if (find_FrictWork .and. associated(MEKE%mom_src) .and. (MEKE%backscatter_Ro_c > 0.0) .and. &
-        (MEKE%backscatter_Ro_Pow /= 0.0)) &
-      backscat_subround = (1.0e-16/MEKE%backscatter_Ro_c)**(1.0/MEKE%backscatter_Ro_Pow)
-  endif
+
+  if (allocated(MEKE%mom_src)) find_FrictWork = .true.
+  backscat_subround = 0.0
+  if (find_FrictWork .and. allocated(MEKE%mom_src) .and. (MEKE%backscatter_Ro_c > 0.0) .and. &
+      (MEKE%backscatter_Ro_Pow /= 0.0)) &
+    backscat_subround = (1.0e-16/MEKE%backscatter_Ro_c)**(1.0/MEKE%backscatter_Ro_Pow)
 
   ! Toggle whether to use a Laplacian viscosity derived from MEKE
-  if (associated(MEKE)) then
-    use_MEKE_Ku = associated(MEKE%Ku)
-    use_MEKE_Au = associated(MEKE%Au)
-  else
-    use_MEKE_Ku = .false. ; use_MEKE_Au = .false.
-  endif
+  use_MEKE_Ku = allocated(MEKE%Ku)
+  use_MEKE_Au = allocated(MEKE%Au)
 
   rescale_Kh = .false.
   if (associated(VarMix)) then
@@ -1468,7 +1463,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
         endif
       enddo ; enddo
 
-      if (associated(MEKE%GME_snk)) then
+      if (allocated(MEKE%GME_snk)) then
         do j=js,je ; do i=is,ie
           FrictWork_GME(i,j,k) = GME_coeff_h(i,j,k) * h(i,j,k) * GV%H_to_kg_m2 * grad_vel_mag_bt_h(i,j)
         enddo ; enddo
@@ -1557,12 +1552,12 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
     ! Make a similar calculation as for FrictWork above but accumulating into
     ! the vertically integrated MEKE source term, and adjusting for any
     ! energy loss seen as a reduction in the (biharmonic) frictional source term.
-    if (find_FrictWork .and. associated(MEKE)) then ; if (associated(MEKE%mom_src)) then
+    if (find_FrictWork .and. allocated(MEKE%mom_src)) then
       if (k==1) then
         do j=js,je ; do i=is,ie
           MEKE%mom_src(i,j) = 0.
         enddo ; enddo
-        if (associated(MEKE%GME_snk)) then
+        if (allocated(MEKE%GME_snk)) then
           do j=js,je ; do i=is,ie
             MEKE%GME_snk(i,j) = 0.
           enddo ; enddo
@@ -1615,13 +1610,13 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
         MEKE%mom_src(i,j) = MEKE%mom_src(i,j) + FrictWork(i,j,k)
       enddo ; enddo
 
-      if (CS%use_GME .and. associated(MEKE)) then ; if (associated(MEKE%GME_snk)) then
+      if (CS%use_GME .and. allocated(MEKE%GME_snk)) then
         do j=js,je ; do i=is,ie
           MEKE%GME_snk(i,j) = MEKE%GME_snk(i,j) + FrictWork_GME(i,j,k)
         enddo ; enddo
-      endif ; endif
+      endif
 
-    endif ; endif ! find_FrictWork and associated(mom_src)
+    endif ! find_FrictWork and associated(mom_src)
 
   enddo ! end of k loop
 

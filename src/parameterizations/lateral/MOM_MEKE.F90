@@ -112,7 +112,7 @@ contains
 !> Integrates forward-in-time the MEKE eddy energy equation.
 !! See \ref section_MEKE_equations.
 subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, hv)
-  type(MEKE_type),                          pointer       :: MEKE !< MEKE data.
+  type(MEKE_type),                          intent(inout) :: MEKE !< MEKE fields
   type(ocean_grid_type),                    intent(inout) :: G    !< Ocean grid.
   type(verticalGrid_type),                  intent(in)    :: GV   !< Ocean vertical grid structure.
   type(unit_scale_type),                    intent(in)    :: US   !< A dimensional unit scaling type
@@ -175,9 +175,6 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
 
-  if (.not.associated(MEKE)) call MOM_error(FATAL, &
-         "MOM_MEKE: MEKE must be initialized before it is used.")
-
   if ((CS%MEKE_Cd_scale > 0.0) .or. (CS%MEKE_Cb>0.) .or. CS%visc_drag) then
     use_drag_rate = .true.
   else
@@ -185,19 +182,20 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
   endif
 
   ! Only integrate the MEKE equations if MEKE is required.
-  if (.not.associated(MEKE%MEKE)) then
+  if (.not. allocated(MEKE%MEKE)) then
 !   call MOM_error(FATAL, "MOM_MEKE: MEKE%MEKE is not associated!")
     return
   endif
 
     if (CS%debug) then
-      if (associated(MEKE%mom_src)) &
+      if (allocated(MEKE%mom_src)) &
         call hchksum(MEKE%mom_src, 'MEKE mom_src', G%HI, scale=US%RZ3_T3_to_W_m2*US%L_to_Z**2)
-      if (associated(MEKE%GME_snk)) &
+      if (allocated(MEKE%GME_snk)) &
         call hchksum(MEKE%GME_snk, 'MEKE GME_snk', G%HI, scale=US%RZ3_T3_to_W_m2*US%L_to_Z**2)
-      if (associated(MEKE%GM_src)) &
+      if (allocated(MEKE%GM_src)) &
         call hchksum(MEKE%GM_src, 'MEKE GM_src', G%HI, scale=US%RZ3_T3_to_W_m2*US%L_to_Z**2)
-      if (associated(MEKE%MEKE)) call hchksum(MEKE%MEKE, 'MEKE MEKE', G%HI, scale=US%L_T_to_m_s**2)
+      if (allocated(MEKE%MEKE)) &
+        call hchksum(MEKE%MEKE, 'MEKE MEKE', G%HI, scale=US%L_T_to_m_s**2)
       call uvchksum("MEKE SN_[uv]", SN_u, SN_v, G%HI, scale=US%s_to_T, &
                     scalar_pair=.true.)
       call uvchksum("MEKE h[uv]", hu, hv, G%HI, haloshift=1, &
@@ -323,21 +321,21 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
       src(i,j) = CS%MEKE_BGsrc
     enddo ; enddo
 
-    if (associated(MEKE%mom_src)) then
+    if (allocated(MEKE%mom_src)) then
       !$OMP parallel do default(shared)
       do j=js,je ; do i=is,ie
         src(i,j) = src(i,j) - CS%MEKE_FrCoeff*I_mass(i,j)*MEKE%mom_src(i,j)
       enddo ; enddo
     endif
 
-    if (associated(MEKE%GME_snk)) then
+    if (allocated(MEKE%GME_snk)) then
       !$OMP parallel do default(shared)
       do j=js,je ; do i=is,ie
         src(i,j) = src(i,j) - CS%MEKE_GMECoeff*I_mass(i,j)*MEKE%GME_snk(i,j)
       enddo ; enddo
     endif
 
-    if (associated(MEKE%GM_src)) then
+    if (allocated(MEKE%GM_src)) then
       if (CS%GM_src_alt) then
         !$OMP parallel do default(shared)
         do j=js,je ; do i=is,ie
@@ -471,10 +469,10 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
       !$OMP parallel do default(shared) firstprivate(Kh_here) private(Inv_Kh_max)
       do j=js,je ; do I=is-1,ie
         ! Limit Kh to avoid CFL violations.
-        if (associated(MEKE%Kh)) &
+        if (allocated(MEKE%Kh)) &
           Kh_here = max(0., CS%MEKE_Kh) + &
               CS%KhMEKE_Fac*0.5*(MEKE%Kh(i,j)+MEKE%Kh(i+1,j))
-        if (associated(MEKE%Kh_diff)) &
+        if (allocated(MEKE%Kh_diff)) &
           Kh_here = max(0.,CS%MEKE_Kh) + &
               CS%KhMEKE_Fac*0.5*(MEKE%Kh_diff(i,j)+MEKE%Kh_diff(i+1,j))
         Inv_Kh_max = 2.0*sdt * ((G%dy_Cu(I,j)*G%IdxCu(I,j)) * &
@@ -489,9 +487,9 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
       enddo ; enddo
       !$OMP parallel do default(shared) firstprivate(Kh_here) private(Inv_Kh_max)
       do J=js-1,je ; do i=is,ie
-        if (associated(MEKE%Kh)) &
+        if (allocated(MEKE%Kh)) &
           Kh_here = max(0.,CS%MEKE_Kh) + CS%KhMEKE_Fac * 0.5*(MEKE%Kh(i,j)+MEKE%Kh(i,j+1))
-        if (associated(MEKE%Kh_diff)) &
+        if (allocated(MEKE%Kh_diff)) &
           Kh_here = max(0.,CS%MEKE_Kh) + CS%KhMEKE_Fac * 0.5*(MEKE%Kh_diff(i,j)+MEKE%Kh_diff(i,j+1))
         Inv_Kh_max = 2.0*sdt * ((G%dx_Cv(i,J)*G%IdyCv(i,J)) * max(G%IareaT(i,j),G%IareaT(i,j+1)))
         if (Kh_here*Inv_Kh_max > 0.25) Kh_here = 0.25 / Inv_Kh_max
@@ -612,7 +610,7 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
       enddo ; enddo
     endif
 
-    if (associated(MEKE%Kh) .or. associated(MEKE%Ku) .or. associated(MEKE%Au)) then
+    if (allocated(MEKE%Kh) .or. allocated(MEKE%Ku) .or. allocated(MEKE%Au)) then
       call cpu_clock_begin(CS%id_clock_pass)
       call do_group_pass(CS%pass_Kh, G%Domain)
       call cpu_clock_end(CS%id_clock_pass)
@@ -674,7 +672,7 @@ subroutine MEKE_equilibrium(CS, MEKE, G, GV, US, SN_u, SN_v, drag_rate_visc, I_m
   type(verticalGrid_type),           intent(in)    :: GV   !< Ocean vertical grid structure.
   type(unit_scale_type),             intent(in)    :: US   !< A dimensional unit scaling type
   type(MEKE_CS),                     intent(in)    :: CS   !< MEKE control structure.
-  type(MEKE_type),                   pointer       :: MEKE !< A structure with MEKE data.
+  type(MEKE_type),                   intent(inout) :: MEKE !< MEKE fields
   real, dimension(SZIB_(G),SZJ_(G)), intent(in)    :: SN_u !< Eady growth rate at u-points [T-1 ~> s-1].
   real, dimension(SZI_(G),SZJB_(G)), intent(in)    :: SN_v !< Eady growth rate at v-points [T-1 ~> s-1].
   real, dimension(SZI_(G),SZJ_(G)),  intent(in)    :: drag_rate_visc !< Mean flow velocity contribution
@@ -871,7 +869,7 @@ end subroutine MEKE_equilibrium_restoring
 subroutine MEKE_lengthScales(CS, MEKE, G, GV, US, SN_u, SN_v, EKE, depth_tot, &
                              bottomFac2, barotrFac2, LmixScale)
   type(MEKE_CS),                     intent(in)    :: CS   !< MEKE control structure.
-  type(MEKE_type),                   intent(in)    :: MEKE !< MEKE data.
+  type(MEKE_type),                   intent(in)    :: MEKE !< MEKE field
   type(ocean_grid_type),             intent(inout) :: G    !< Ocean grid.
   type(verticalGrid_type),           intent(in)    :: GV   !< Ocean vertical grid structure.
   type(unit_scale_type),             intent(in)    :: US   !< A dimensional unit scaling type
@@ -1023,7 +1021,7 @@ logical function MEKE_init(Time, G, US, param_file, diag, CS, MEKE, restart_CS)
   type(param_file_type),   intent(in)    :: param_file !< Parameter file parser structure.
   type(diag_ctrl), target, intent(inout) :: diag       !< Diagnostics structure.
   type(MEKE_CS),           intent(inout) :: CS         !< MEKE control structure.
-  type(MEKE_type),         pointer       :: MEKE       !< MEKE-related fields.
+  type(MEKE_type),         intent(inout) :: MEKE       !< MEKE fields
   type(MOM_restart_CS),    pointer       :: restart_CS !< Restart control structure for MOM_MEKE.
 
   ! Local variables
@@ -1050,13 +1048,6 @@ logical function MEKE_init(Time, G, US, param_file, diag, CS, MEKE, restart_CS)
                  "a sub-grid mesoscale eddy kinetic energy budget.", &
                  default=.false.)
   if (.not. MEKE_init) return
-
-  if (.not. associated(MEKE)) then
-    ! The MEKE structure should have been allocated in MEKE_alloc_register_restart()
-    call MOM_error(WARNING, "MEKE_init called with NO associated "// &
-                            "MEKE-type structure.")
-    return
-  endif
 
   call MOM_mesg("MEKE_init: reading parameters ", 5)
 
@@ -1258,25 +1249,25 @@ logical function MEKE_init(Time, G, US, param_file, diag, CS, MEKE, restart_CS)
   CS%diag => diag
   CS%id_MEKE = register_diag_field('ocean_model', 'MEKE', diag%axesT1, Time, &
      'Mesoscale Eddy Kinetic Energy', 'm2 s-2', conversion=US%L_T_to_m_s**2)
-  if (.not. associated(MEKE%MEKE)) CS%id_MEKE = -1
+  if (.not. allocated(MEKE%MEKE)) CS%id_MEKE = -1
   CS%id_Kh = register_diag_field('ocean_model', 'MEKE_KH', diag%axesT1, Time, &
      'MEKE derived diffusivity', 'm2 s-1', conversion=US%L_to_m**2*US%s_to_T)
-  if (.not. associated(MEKE%Kh)) CS%id_Kh = -1
+  if (.not. allocated(MEKE%Kh)) CS%id_Kh = -1
   CS%id_Ku = register_diag_field('ocean_model', 'MEKE_KU', diag%axesT1, Time, &
      'MEKE derived lateral viscosity', 'm2 s-1', conversion=US%L_to_m**2*US%s_to_T)
-  if (.not. associated(MEKE%Ku)) CS%id_Ku = -1
+  if (.not. allocated(MEKE%Ku)) CS%id_Ku = -1
   CS%id_Au = register_diag_field('ocean_model', 'MEKE_AU', diag%axesT1, Time, &
      'MEKE derived lateral biharmonic viscosity', 'm4 s-1', conversion=US%L_to_m**4*US%s_to_T)
-  if (.not. associated(MEKE%Au)) CS%id_Au = -1
+  if (.not. allocated(MEKE%Au)) CS%id_Au = -1
   CS%id_Ue = register_diag_field('ocean_model', 'MEKE_Ue', diag%axesT1, Time, &
      'MEKE derived eddy-velocity scale', 'm s-1', conversion=US%L_T_to_m_s)
-  if (.not. associated(MEKE%MEKE)) CS%id_Ue = -1
+  if (.not. allocated(MEKE%MEKE)) CS%id_Ue = -1
   CS%id_Ub = register_diag_field('ocean_model', 'MEKE_Ub', diag%axesT1, Time, &
      'MEKE derived bottom eddy-velocity scale', 'm s-1', conversion=US%L_T_to_m_s)
-  if (.not. associated(MEKE%MEKE)) CS%id_Ub = -1
+  if (.not. allocated(MEKE%MEKE)) CS%id_Ub = -1
   CS%id_Ut = register_diag_field('ocean_model', 'MEKE_Ut', diag%axesT1, Time, &
      'MEKE derived barotropic eddy-velocity scale', 'm s-1', conversion=US%L_T_to_m_s)
-  if (.not. associated(MEKE%MEKE)) CS%id_Ut = -1
+  if (.not. allocated(MEKE%MEKE)) CS%id_Ut = -1
   CS%id_src = register_diag_field('ocean_model', 'MEKE_src', diag%axesT1, Time, &
      'MEKE energy source', 'm2 s-3', conversion=(US%L_T_to_m_s**2)*US%s_to_T)
   CS%id_decay = register_diag_field('ocean_model', 'MEKE_decay', diag%axesT1, Time, &
@@ -1284,15 +1275,15 @@ logical function MEKE_init(Time, G, US, param_file, diag, CS, MEKE, restart_CS)
   CS%id_GM_src = register_diag_field('ocean_model', 'MEKE_GM_src', diag%axesT1, Time, &
      'MEKE energy available from thickness mixing', &
      'W m-2', conversion=US%RZ3_T3_to_W_m2*US%L_to_Z**2)
-  if (.not. associated(MEKE%GM_src)) CS%id_GM_src = -1
+  if (.not. allocated(MEKE%GM_src)) CS%id_GM_src = -1
   CS%id_mom_src = register_diag_field('ocean_model', 'MEKE_mom_src',diag%axesT1, Time, &
      'MEKE energy available from momentum', &
      'W m-2', conversion=US%RZ3_T3_to_W_m2*US%L_to_Z**2)
-  if (.not. associated(MEKE%mom_src)) CS%id_mom_src = -1
+  if (.not. allocated(MEKE%mom_src)) CS%id_mom_src = -1
   CS%id_GME_snk = register_diag_field('ocean_model', 'MEKE_GME_snk',diag%axesT1, Time, &
      'MEKE energy lost to GME backscatter', &
      'W m-2', conversion=US%RZ3_T3_to_W_m2*US%L_to_Z**2)
-  if (.not. associated(MEKE%GME_snk)) CS%id_GME_snk = -1
+  if (.not. allocated(MEKE%GME_snk)) CS%id_GME_snk = -1
   CS%id_Le = register_diag_field('ocean_model', 'MEKE_Le', diag%axesT1, Time, &
      'Eddy mixing length used in the MEKE derived eddy diffusivity', 'm', conversion=US%L_to_m)
   CS%id_Lrhines = register_diag_field('ocean_model', 'MEKE_Lrhines', diag%axesT1, Time, &
@@ -1336,31 +1327,31 @@ logical function MEKE_init(Time, G, US, param_file, diag, CS, MEKE, restart_CS)
     L_rescale = US%m_to_L / US%m_to_L_restart
 
   if (L_rescale*I_T_rescale /= 1.0) then
-    if (associated(MEKE%MEKE)) then ; if (query_initialized(MEKE%MEKE, "MEKE_MEKE", restart_CS)) then
+    if (allocated(MEKE%MEKE)) then ; if (query_initialized(MEKE%MEKE, "MEKE_MEKE", restart_CS)) then
       do j=js,je ; do i=is,ie
         MEKE%MEKE(i,j) = L_rescale*I_T_rescale * MEKE%MEKE(i,j)
       enddo ; enddo
     endif ; endif
   endif
   if (L_rescale**2*I_T_rescale /= 1.0) then
-    if (associated(MEKE%Kh)) then ; if (query_initialized(MEKE%Kh, "MEKE_Kh", restart_CS)) then
+    if (allocated(MEKE%Kh)) then ; if (query_initialized(MEKE%Kh, "MEKE_Kh", restart_CS)) then
       do j=js,je ; do i=is,ie
         MEKE%Kh(i,j) = L_rescale**2*I_T_rescale * MEKE%Kh(i,j)
       enddo ; enddo
     endif ; endif
-    if (associated(MEKE%Ku)) then ; if (query_initialized(MEKE%Ku, "MEKE_Ku", restart_CS)) then
+    if (allocated(MEKE%Ku)) then ; if (query_initialized(MEKE%Ku, "MEKE_Ku", restart_CS)) then
       do j=js,je ; do i=is,ie
         MEKE%Ku(i,j) = L_rescale**2*I_T_rescale * MEKE%Ku(i,j)
       enddo ; enddo
     endif ; endif
-    if (associated(MEKE%Kh_diff)) then ; if (query_initialized(MEKE%Kh, "MEKE_Kh_diff", restart_CS)) then
+    if (allocated(MEKE%Kh_diff)) then ; if (query_initialized(MEKE%Kh, "MEKE_Kh_diff", restart_CS)) then
       do j=js,je ; do i=is,ie
         MEKE%Kh_diff(i,j) = L_rescale**2*I_T_rescale * MEKE%Kh_diff(i,j)
       enddo ; enddo
     endif ; endif
   endif
   if (L_rescale**4*I_T_rescale /= 1.0) then
-    if (associated(MEKE%Au)) then ; if (query_initialized(MEKE%Au, "MEKE_Au", restart_CS)) then
+    if (allocated(MEKE%Au)) then ; if (query_initialized(MEKE%Au, "MEKE_Au", restart_CS)) then
       do j=js,je ; do i=is,ie
         MEKE%Au(i,j) = L_rescale**4*I_T_rescale * MEKE%Au(i,j)
       enddo ; enddo
@@ -1368,16 +1359,16 @@ logical function MEKE_init(Time, G, US, param_file, diag, CS, MEKE, restart_CS)
   endif
 
   ! Set up group passes.  In the case of a restart, these fields need a halo update now.
-  if (associated(MEKE%MEKE)) then
+  if (allocated(MEKE%MEKE)) then
     call create_group_pass(CS%pass_MEKE, MEKE%MEKE, G%Domain)
-    if (associated(MEKE%Kh_diff)) call create_group_pass(CS%pass_MEKE, MEKE%Kh_diff, G%Domain)
+    if (allocated(MEKE%Kh_diff)) call create_group_pass(CS%pass_MEKE, MEKE%Kh_diff, G%Domain)
     if (.not.CS%initialize) call do_group_pass(CS%pass_MEKE, G%Domain)
   endif
-  if (associated(MEKE%Kh)) call create_group_pass(CS%pass_Kh, MEKE%Kh, G%Domain)
-  if (associated(MEKE%Ku)) call create_group_pass(CS%pass_Kh, MEKE%Ku, G%Domain)
-  if (associated(MEKE%Au)) call create_group_pass(CS%pass_Kh, MEKE%Au, G%Domain)
+  if (allocated(MEKE%Kh)) call create_group_pass(CS%pass_Kh, MEKE%Kh, G%Domain)
+  if (allocated(MEKE%Ku)) call create_group_pass(CS%pass_Kh, MEKE%Ku, G%Domain)
+  if (allocated(MEKE%Au)) call create_group_pass(CS%pass_Kh, MEKE%Au, G%Domain)
 
-  if (associated(MEKE%Kh) .or. associated(MEKE%Ku) .or. associated(MEKE%Au)) &
+  if (allocated(MEKE%Kh) .or. allocated(MEKE%Ku) .or. allocated(MEKE%Au)) &
     call do_group_pass(CS%pass_Kh, G%Domain)
 
 end function MEKE_init
@@ -1387,7 +1378,7 @@ subroutine MEKE_alloc_register_restart(HI, param_file, MEKE, restart_CS)
 ! Arguments
   type(hor_index_type),  intent(in)    :: HI         !< Horizontal index structure
   type(param_file_type), intent(in)    :: param_file !< Parameter file parser structure.
-  type(MEKE_type),       pointer       :: MEKE       !< A structure with MEKE-related fields.
+  type(MEKE_type),       intent(inout) :: MEKE       !< MEKE fields
   type(MOM_restart_CS),  pointer       :: restart_CS !< Restart control structure for MOM_MEKE.
 ! Local variables
   type(vardesc) :: vd
@@ -1407,12 +1398,6 @@ subroutine MEKE_alloc_register_restart(HI, param_file, MEKE, restart_CS)
   MEKE_viscCoeff_Ku =0.; call read_param(param_file,"MEKE_VISCOSITY_COEFF_KU",MEKE_viscCoeff_Ku)
   MEKE_viscCoeff_Au =0.; call read_param(param_file,"MEKE_VISCOSITY_COEFF_AU",MEKE_viscCoeff_Au)
   Use_KH_in_MEKE = .false.; call read_param(param_file,"USE_KH_IN_MEKE", Use_KH_in_MEKE)
-! Allocate control structure
-  if (associated(MEKE)) then
-    call MOM_error(WARNING, "MEKE_alloc_register_restart called with an associated "// &
-                             "MEKE type.")
-    return
-  else; allocate(MEKE); endif
 
   if (.not. useMEKE) return
 
@@ -1464,15 +1449,15 @@ subroutine MEKE_end(MEKE)
   !  So these must all be conditional, even though MEKE%MEKE and MEKE%Rd_dx_h
   !  are always allocated (when MEKE is enabled)
 
-  if (associated(MEKE%Au)) deallocate(MEKE%Au)
-  if (associated(MEKE%Kh_diff)) deallocate(MEKE%Kh_diff)
-  if (associated(MEKE%Ku)) deallocate(MEKE%Ku)
-  if (associated(MEKE%Rd_dx_h)) deallocate(MEKE%Rd_dx_h)
-  if (associated(MEKE%Kh)) deallocate(MEKE%Kh)
-  if (associated(MEKE%GME_snk)) deallocate(MEKE%GME_snk)
-  if (associated(MEKE%mom_src)) deallocate(MEKE%mom_src)
-  if (associated(MEKE%GM_src)) deallocate(MEKE%GM_src)
-  if (associated(MEKE%MEKE)) deallocate(MEKE%MEKE)
+  if (allocated(MEKE%Au)) deallocate(MEKE%Au)
+  if (allocated(MEKE%Kh_diff)) deallocate(MEKE%Kh_diff)
+  if (allocated(MEKE%Ku)) deallocate(MEKE%Ku)
+  if (allocated(MEKE%Rd_dx_h)) deallocate(MEKE%Rd_dx_h)
+  if (allocated(MEKE%Kh)) deallocate(MEKE%Kh)
+  if (allocated(MEKE%GME_snk)) deallocate(MEKE%GME_snk)
+  if (allocated(MEKE%mom_src)) deallocate(MEKE%mom_src)
+  if (allocated(MEKE%GM_src)) deallocate(MEKE%GM_src)
+  if (allocated(MEKE%MEKE)) deallocate(MEKE%MEKE)
 end subroutine MEKE_end
 
 !> \namespace mom_meke

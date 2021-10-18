@@ -109,7 +109,7 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, GV, US, CS, Reg, tv, do_online
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                               intent(in)    :: h       !< Layer thickness [H ~> m or kg m-2]
   real,                       intent(in)    :: dt      !< time step [T ~> s]
-  type(MEKE_type),            pointer       :: MEKE    !< MEKE type
+  type(MEKE_type),            intent(in)    :: MEKE    !< MEKE fields
   type(VarMix_CS),            pointer       :: VarMix  !< Variable mixing type
   type(unit_scale_type),      intent(in)    :: US      !< A dimensional unit scaling type
   type(tracer_hor_diff_CS),   pointer       :: CS      !< module control structure
@@ -219,7 +219,7 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, GV, US, CS, Reg, tv, do_online
       do j=js,je ; do I=is-1,ie
         Kh_loc = CS%KhTr
         if (use_Eady) Kh_loc = Kh_loc + CS%KhTr_Slope_Cff*VarMix%L2u(I,j)*VarMix%SN_u(I,j)
-        if (associated(MEKE%Kh)) &
+        if (allocated(MEKE%Kh)) &
           Kh_loc = Kh_loc + MEKE%KhTr_fac*sqrt(MEKE%Kh(i,j)*MEKE%Kh(i+1,j))
         if (CS%KhTr_max > 0.) Kh_loc = min(Kh_loc, CS%KhTr_max)
         if (Resoln_scaled) &
@@ -236,7 +236,7 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, GV, US, CS, Reg, tv, do_online
       do J=js-1,je ;  do i=is,ie
         Kh_loc = CS%KhTr
         if (use_Eady) Kh_loc = Kh_loc + CS%KhTr_Slope_Cff*VarMix%L2v(i,J)*VarMix%SN_v(i,J)
-        if (associated(MEKE%Kh)) &
+        if (allocated(MEKE%Kh)) &
           Kh_loc = Kh_loc + MEKE%KhTr_fac*sqrt(MEKE%Kh(i,j)*MEKE%Kh(i,j+1))
         if (CS%KhTr_max > 0.) Kh_loc = min(Kh_loc, CS%KhTr_max)
         if (Resoln_scaled) &

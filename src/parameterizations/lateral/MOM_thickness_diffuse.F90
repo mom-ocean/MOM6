@@ -115,7 +115,7 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
                                                                       !! [L2 H ~> m3 or kg]
   type(thermo_var_ptrs),                      intent(in)    :: tv     !< Thermodynamics structure
   real,                                       intent(in)    :: dt     !< Time increment [T ~> s]
-  type(MEKE_type),                            pointer       :: MEKE   !< MEKE control structure
+  type(MEKE_type),                            intent(inout) :: MEKE   !< MEKE fields
   type(VarMix_CS),                            pointer       :: VarMix !< Variable mixing coefficients
   type(cont_diag_ptrs),                       intent(inout) :: CDp    !< Diagnostics for the continuity equation
   type(thickness_diffuse_CS),                 intent(inout) :: CS     !< Control structure for thickness diffusion
@@ -160,16 +160,13 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
   real :: KH_u_lay(SZI_(G), SZJ_(G)) ! layer ave thickness diffusivities [L2 T-1 ~> m2 s-1]
   real :: KH_v_lay(SZI_(G), SZJ_(G)) ! layer ave thickness diffusivities [L2 T-1 ~> m2 s-1]
 
-  if ((.not.CS%thickness_diffuse) .or. &
-       .not.( CS%Khth > 0.0 .or. associated(VarMix) .or. associated(MEKE) ) ) return
+  if ((.not.CS%thickness_diffuse) .or. .not.(CS%Khth > 0.0 .or. associated(VarMix))) return
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   h_neglect = GV%H_subroundoff
 
-  if (associated(MEKE)) then
-    if (associated(MEKE%GM_src)) then
-      do j=js,je ; do i=is,ie ; MEKE%GM_src(i,j) = 0. ; enddo ; enddo
-    endif
+  if (allocated(MEKE%GM_src)) then
+    do j=js,je ; do i=is,ie ; MEKE%GM_src(i,j) = 0. ; enddo ; enddo
   endif
 
   use_VarMix = .false. ; Resoln_scaled = .false. ; use_stored_slopes = .false.
@@ -225,7 +222,7 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
     endif
   endif
 
-  if (associated(MEKE)) then ; if (associated(MEKE%Kh)) then
+  if (allocated(MEKE%Kh)) then
     if (CS%MEKE_GEOMETRIC) then
 !$OMP do
       do j=js,je ; do I=is-1,ie
@@ -238,7 +235,7 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
         Khth_loc_u(I,j) = Khth_loc_u(I,j) + MEKE%KhTh_fac*sqrt(MEKE%Kh(i,j)*MEKE%Kh(i+1,j))
       enddo ; enddo
     endif
-  endif ; endif
+  endif
 
   if (Resoln_scaled) then
 !$OMP do
@@ -311,7 +308,7 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
       enddo ; enddo
     endif
   endif
-  if (associated(MEKE)) then ; if (associated(MEKE%Kh)) then
+  if (allocated(MEKE%Kh)) then
     if (CS%MEKE_GEOMETRIC) then
 !$OMP do
       do J=js-1,je ; do i=is,ie
@@ -324,7 +321,7 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
         Khth_loc_v(i,J) = Khth_loc_v(i,J) + MEKE%KhTh_fac*sqrt(MEKE%Kh(i,j)*MEKE%Kh(i,j+1))
       enddo ; enddo
     endif
-  endif ; endif
+  endif
 
   if (Resoln_scaled) then
 !$OMP do
@@ -387,7 +384,7 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
     enddo ; enddo ; enddo
   endif
 
-  if (associated(MEKE)) then ; if (associated(MEKE%Kh)) then
+  if (allocated(MEKE%Kh)) then
     if (CS%MEKE_GEOMETRIC) then
       if (CS%MEKE_GEOM_answers_2018) then
         !$OMP do
@@ -409,7 +406,7 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
         enddo ; enddo
       endif
     endif
-  endif ; endif
+  endif
 
 
 !$OMP do
@@ -448,8 +445,8 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
                                 int_slope_u, int_slope_v)
   endif
 
-  if (associated(MEKE) .AND. associated(VarMix)) then
-    if (associated(MEKE%Rd_dx_h) .and. associated(VarMix%Rd_dx_h)) then
+  if (associated(VarMix)) then
+    if (allocated(MEKE%Rd_dx_h) .and. associated(VarMix%Rd_dx_h)) then
 !$OMP parallel do default(none) shared(is,ie,js,je,MEKE,VarMix)
       do j=js,je ; do i=is,ie
         MEKE%Rd_dx_h(i,j) = VarMix%Rd_dx_h(i,j)
@@ -574,7 +571,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
                                                                      !! [H L2 T-1 ~> m3 s-1 or kg s-1]
   real, dimension(:,:),                         pointer     :: cg1   !< Wave speed [L T-1 ~> m s-1]
   real,                                         intent(in)  :: dt    !< Time increment [T ~> s]
-  type(MEKE_type),                              pointer     :: MEKE  !< MEKE control structure
+  type(MEKE_type),                              intent(inout) :: MEKE  !< MEKE fields
   type(thickness_diffuse_CS),                   intent(inout) :: CS  !< Control structure for thickness diffusion
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)+1), intent(in)  :: int_slope_u !< Ratio that determine how much of
                                                                      !! the isopycnal slopes are taken directly from
@@ -721,8 +718,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
   hN2_x_PE(:,:,:) = 0.0
   hN2_y_PE(:,:,:) = 0.0
 
-  find_work = .false.
-  if (associated(MEKE)) find_work = associated(MEKE%GM_src)
+  find_work = allocated(MEKE%GM_src)
   find_work = (allocated(CS%GMwork) .or. find_work)
 
   if (use_EOS) then
@@ -1408,12 +1404,12 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
     Work_h = 0.5 * G%IareaT(i,j) * &
       ((Work_u(I-1,j) + Work_u(I,j)) + (Work_v(i,J-1) + Work_v(i,J)))
     if (allocated(CS%GMwork)) CS%GMwork(i,j) = Work_h
-    if (associated(MEKE) .and. .not.CS%GM_src_alt) then ; if (associated(MEKE%GM_src)) then
+    if (.not. CS%GM_src_alt) then ; if (allocated(MEKE%GM_src)) then
       MEKE%GM_src(i,j) = MEKE%GM_src(i,j) + Work_h
     endif ; endif
   enddo ; enddo ; endif
 
-  if (find_work .and. CS%GM_src_alt .and. associated(MEKE)) then ; if (associated(MEKE%GM_src)) then
+  if (find_work .and. CS%GM_src_alt) then ; if (allocated(MEKE%GM_src)) then
     do j=js,je ; do i=is,ie ; do k=nz,1,-1
       PE_release_h = -0.25*(KH_u(I,j,k)*(Slope_x_PE(I,j,k)**2) * hN2_x_PE(I,j,k) + &
                             Kh_u(I-1,j,k)*(Slope_x_PE(I-1,j,k)**2) * hN2_x_PE(I-1,j,k) + &

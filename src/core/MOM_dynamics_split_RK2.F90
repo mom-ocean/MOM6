@@ -289,7 +289,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
   type(MOM_dyn_split_RK2_CS),        pointer       :: CS           !< module control structure
   logical,                           intent(in)    :: calc_dtbt    !< if true, recalculate barotropic time step
   type(VarMix_CS),                   pointer       :: VarMix       !< specify the spatially varying viscosities
-  type(MEKE_type),                   pointer       :: MEKE         !< related to mesoscale eddy kinetic energy param
+  type(MEKE_type),                   intent(inout) :: MEKE         !< MEKE fields
   type(thickness_diffuse_CS),        intent(inout) :: thickness_diffuse_CSp !< Pointer to a structure containing
                                                                    !! interface height diffusivities
   type(wave_parameters_CS), optional, pointer      :: Waves        !< A pointer to a structure containing
@@ -1258,7 +1258,7 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, US, param
   type(ocean_internal_state),       intent(inout) :: MIS        !< "MOM6 internal state" used to pass
                                                                 !! diagnostic pointers
   type(VarMix_CS),                  pointer       :: VarMix     !< points to spatially variable viscosities
-  type(MEKE_type),                  pointer       :: MEKE       !< points to mesoscale eddy kinetic energy fields
+  type(MEKE_type),                  intent(inout) :: MEKE       !< MEKE fields
   type(thickness_diffuse_CS),       intent(inout) :: thickness_diffuse_CSp !< Pointer to the control structure
                                                   !! used for the isopycnal height diffusive transport.
   type(ocean_OBC_type),             pointer       :: OBC        !< points to OBC related fields

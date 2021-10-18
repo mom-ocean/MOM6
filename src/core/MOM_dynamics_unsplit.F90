@@ -218,8 +218,7 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, forces, &
                                                    !! initialize_dyn_unsplit.
   type(VarMix_CS),         pointer       :: VarMix !< A pointer to a structure with fields
                                  !! that specify the spatially variable viscosities.
-  type(MEKE_type),         pointer       :: MEKE   !< A pointer to a structure containing
-                                 !! fields related to the Mesoscale Eddy Kinetic Energy.
+  type(MEKE_type),         intent(inout) :: MEKE   !< MEKE fields
   type(wave_parameters_CS), optional, pointer :: Waves !< A pointer to a structure containing
                                  !! fields related to the surface wave conditions
 
@@ -551,7 +550,7 @@ end subroutine register_restarts_dyn_unsplit
 
 !> Initialize parameters and allocate memory associated with the unsplit dynamics module.
 subroutine initialize_dyn_unsplit(u, v, h, Time, G, GV, US, param_file, diag, CS, &
-                                  restart_CS, Accel_diag, Cont_diag, MIS, MEKE, &
+                                  restart_CS, Accel_diag, Cont_diag, MIS, &
                                   OBC, update_OBC_CSp, ALE_CSp, setVisc_CSp, &
                                   visc, dirs, ntrunc, cont_stencil)
   type(ocean_grid_type),          intent(inout) :: G          !< The ocean's grid structure.
@@ -581,7 +580,6 @@ subroutine initialize_dyn_unsplit(u, v, h, Time, G, GV, US, param_file, diag, CS
   type(ocean_internal_state),     intent(inout) :: MIS        !< The "MOM6 Internal State"
                                                    !! structure, used to pass around pointers
                                                    !! to various arrays for diagnostic purposes.
-  type(MEKE_type),                pointer       :: MEKE !< MEKE data
   type(ocean_OBC_type),           pointer       :: OBC        !< If open boundary conditions are
                                                        !! used, this points to the ocean_OBC_type
                                                        !! that was set up in MOM_initialization.

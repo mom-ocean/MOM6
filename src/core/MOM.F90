@@ -227,8 +227,7 @@ type, public :: MOM_control_struct ; private
   type(diag_ctrl)     :: diag !< structure to regulate diagnostic output timing
   type(vertvisc_type) :: visc !< structure containing vertical viscosities,
                     !! bottom drag viscosities, and related fields
-  type(MEKE_type), pointer :: MEKE => NULL() !<  structure containing fields
-                    !! related to the Mesoscale Eddy Kinetic Energy
+  type(MEKE_type) :: MEKE   !< Fields related to the Mesoscale Eddy Kinetic Energy
   logical :: adiabatic !< If true, there are no diapycnal mass fluxes, and no calls
                     !! to routines to calculate or apply diapycnal fluxes.
   logical :: diabatic_first !< If true, apply diabatic and thermodynamic processes before time
@@ -2663,13 +2662,13 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   elseif (CS%use_RK2) then
     call initialize_dyn_unsplit_RK2(CS%u, CS%v, CS%h, Time, G, GV, US,     &
             param_file, diag, CS%dyn_unsplit_RK2_CSp, restart_CSp,         &
-            CS%ADp, CS%CDp, MOM_internal_state, CS%MEKE, CS%OBC,           &
+            CS%ADp, CS%CDp, MOM_internal_state, CS%OBC,                    &
             CS%update_OBC_CSp, CS%ALE_CSp, CS%set_visc_CSp, CS%visc, dirs, &
             CS%ntrunc, cont_stencil=CS%cont_stencil)
   else
     call initialize_dyn_unsplit(CS%u, CS%v, CS%h, Time, G, GV, US,         &
             param_file, diag, CS%dyn_unsplit_CSp, restart_CSp,             &
-            CS%ADp, CS%CDp, MOM_internal_state, CS%MEKE, CS%OBC,           &
+            CS%ADp, CS%CDp, MOM_internal_state, CS%OBC,                    &
             CS%update_OBC_CSp, CS%ALE_CSp, CS%set_visc_CSp, CS%visc, dirs, &
             CS%ntrunc, cont_stencil=CS%cont_stencil)
   endif
@@ -3622,10 +3621,7 @@ subroutine MOM_end(CS)
   if (associated(CS%set_visc_CSp)) &
     call set_visc_end(CS%visc, CS%set_visc_CSp)
 
-  if (associated(CS%MEKE)) then
-    call MEKE_end(CS%MEKE)
-    deallocate(CS%MEKE)
-  endif
+  call MEKE_end(CS%MEKE)
 
   if (associated(CS%tv%internal_heat)) deallocate(CS%tv%internal_heat)
   if (associated(CS%tv%TempxPmE)) deallocate(CS%tv%TempxPmE)
