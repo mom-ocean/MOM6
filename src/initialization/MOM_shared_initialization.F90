@@ -1308,8 +1308,9 @@ subroutine write_ocean_geometry_file(G, param_file, directory, geom_file, US)
   endif
 
   call get_param(param_file, mdl, "PARALLEL_RESTARTFILES", multiple_files, &
-                 "If true, each processor writes its own restart file, "//&
-                 "otherwise a single restart file is generated", &
+                 "If true, the IO layout is used to group processors that write to the same "//&
+                 "restart file or each processor writes its own (numbered) restart file. "//&
+                 "If false, a single restart file is generated combining output from all PEs.", &
                  default=.false.)
   file_threading = SINGLE_FILE
   if (multiple_files) file_threading = MULTIPLE
