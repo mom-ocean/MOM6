@@ -148,8 +148,7 @@ type, public :: diagnostics_CS ; private
   integer :: id_drho_dT        = -1, id_drho_dS        = -1
   integer :: id_h_pre_sync     = -1
   !>@}
-  !> The control structure for calculating wave speed.
-  type(wave_speed_CS), pointer :: wave_speed_CSp => NULL()
+  type(wave_speed_CS) :: wave_speed  !< Wave speed control struct
 
   type(p3d) :: var_ptr(MAX_FIELDS_)  !< pointers to variables used in the calculation
                                      !! of time derivatives
@@ -735,7 +734,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
 
   if ((CS%id_cg1>0) .or. (CS%id_Rd1>0) .or. (CS%id_cfl_cg1>0) .or. &
       (CS%id_cfl_cg1_x>0) .or. (CS%id_cfl_cg1_y>0)) then
-    call wave_speed(h, tv, G, GV, US, CS%cg1, CS%wave_speed_CSp)
+    call wave_speed(h, tv, G, GV, US, CS%cg1, CS%wave_speed)
     if (CS%id_cg1>0) call post_data(CS%id_cg1, CS%cg1, CS%diag)
     if (CS%id_Rd1>0) then
       !$OMP parallel do default(shared) private(f2_h,mag_beta)
@@ -775,12 +774,12 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
   endif
   if ((CS%id_cg_ebt>0) .or. (CS%id_Rd_ebt>0) .or. (CS%id_p_ebt>0)) then
     if (CS%id_p_ebt>0) then
-      call wave_speed(h, tv, G, GV, US, CS%cg1, CS%wave_speed_CSp, use_ebt_mode=.true., &
+      call wave_speed(h, tv, G, GV, US, CS%cg1, CS%wave_speed, use_ebt_mode=.true., &
                       mono_N2_column_fraction=CS%mono_N2_column_fraction, &
                       mono_N2_depth=CS%mono_N2_depth, modal_structure=CS%p_ebt)
       call post_data(CS%id_p_ebt, CS%p_ebt, CS%diag)
     else
-      call wave_speed(h, tv, G, GV, US, CS%cg1, CS%wave_speed_CSp, use_ebt_mode=.true., &
+      call wave_speed(h, tv, G, GV, US, CS%cg1, CS%wave_speed, use_ebt_mode=.true., &
                       mono_N2_column_fraction=CS%mono_N2_column_fraction, &
                       mono_N2_depth=CS%mono_N2_depth)
     endif
@@ -1951,10 +1950,10 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, US, param_file, diag
   if ((CS%id_cg1>0) .or. (CS%id_Rd1>0) .or. (CS%id_cfl_cg1>0) .or. &
       (CS%id_cfl_cg1_x>0) .or. (CS%id_cfl_cg1_y>0) .or. &
       (CS%id_cg_ebt>0) .or. (CS%id_Rd_ebt>0) .or. (CS%id_p_ebt>0)) then
-    call wave_speed_init(CS%wave_speed_CSp, remap_answers_2018=remap_answers_2018, &
+    call wave_speed_init(CS%wave_speed, remap_answers_2018=remap_answers_2018, &
                          better_speed_est=better_speed_est, min_speed=wave_speed_min, &
                          wave_speed_tol=wave_speed_tol)
-!###    call wave_speed_init(CS%wave_speed_CSp, remap_answers_2018=remap_answers_2018)
+!###    call wave_speed_init(CS%wave_speed, remap_answers_2018=remap_answers_2018)
     call safe_alloc_ptr(CS%cg1,isd,ied,jsd,jed)
     if (CS%id_Rd1>0)       call safe_alloc_ptr(CS%Rd1,isd,ied,jsd,jed)
     if (CS%id_Rd_ebt>0)    call safe_alloc_ptr(CS%Rd1,isd,ied,jsd,jed)

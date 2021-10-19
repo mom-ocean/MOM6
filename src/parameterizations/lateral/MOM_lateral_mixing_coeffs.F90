@@ -152,7 +152,7 @@ type, public :: VarMix_CS
                                    !! timing of diagnostic output.
   !>@}
 
-  type(wave_speed_CS), pointer :: wave_speed_CSp => NULL() !< Wave speed control structure
+  type(wave_speed_CS) :: wave_speed !< Wave speed control structure
   type(group_pass_type) :: pass_cg1 !< For group halo pass
   logical :: debug      !< If true, write out checksums of data for debugging
 end type VarMix_CS
@@ -224,16 +224,16 @@ subroutine calc_resoln_function(h, tv, G, GV, US, CS)
         "calc_resoln_function: %ebt_struct is not associated with RESOLN_USE_EBT.")
       if (CS%Resoln_use_ebt) then
         ! Both resolution fn and vertical structure are using EBT
-        call wave_speed(h, tv, G, GV, US, CS%cg1, CS%wave_speed_CSp, modal_structure=CS%ebt_struct)
+        call wave_speed(h, tv, G, GV, US, CS%cg1, CS%wave_speed, modal_structure=CS%ebt_struct)
       else
         ! Use EBT to get vertical structure first and then re-calculate cg1 using first baroclinic mode
-        call wave_speed(h, tv, G, GV, US, CS%cg1, CS%wave_speed_CSp, modal_structure=CS%ebt_struct, &
+        call wave_speed(h, tv, G, GV, US, CS%cg1, CS%wave_speed, modal_structure=CS%ebt_struct, &
                         use_ebt_mode=.true.)
-        call wave_speed(h, tv, G, GV, US, CS%cg1, CS%wave_speed_CSp)
+        call wave_speed(h, tv, G, GV, US, CS%cg1, CS%wave_speed)
       endif
       call pass_var(CS%ebt_struct, G%Domain)
     else
-      call wave_speed(h, tv, G, GV, US, CS%cg1, CS%wave_speed_CSp)
+      call wave_speed(h, tv, G, GV, US, CS%cg1, CS%wave_speed)
     endif
 
     call create_group_pass(CS%pass_cg1, CS%cg1, G%Domain)
@@ -1527,7 +1527,7 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
     call get_param(param_file, mdl, "INTERNAL_WAVE_SPEED_BETTER_EST", better_speed_est, &
                  "If true, use a more robust estimate of the first mode wave speed as the "//&
                  "starting point for iterations.", default=.true.)
-    call wave_speed_init(CS%wave_speed_CSp, use_ebt_mode=CS%Resoln_use_ebt, &
+    call wave_speed_init(CS%wave_speed, use_ebt_mode=CS%Resoln_use_ebt, &
                          mono_N2_depth=N2_filter_depth, remap_answers_2018=remap_answers_2018, &
                          better_speed_est=better_speed_est, min_speed=wave_speed_min, &
                          wave_speed_tol=wave_speed_tol)
@@ -1634,9 +1634,6 @@ subroutine VarMix_end(CS)
     DEALLOC_(CS%KH_u_QG)
     DEALLOC_(CS%KH_v_QG)
   endif
-
-  if (CS%calculate_cg1) deallocate(CS%wave_speed_CSp)
-
 end subroutine VarMix_end
 
 !> \namespace mom_lateral_mixing_coeffs
