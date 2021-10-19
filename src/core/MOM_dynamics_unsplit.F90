@@ -216,8 +216,7 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, forces, &
                                                    !! column mass [H ~> m or kg m-2].
   type(MOM_dyn_unsplit_CS), pointer      :: CS     !< The control structure set up by
                                                    !! initialize_dyn_unsplit.
-  type(VarMix_CS),         pointer       :: VarMix !< A pointer to a structure with fields
-                                 !! that specify the spatially variable viscosities.
+  type(VarMix_CS),         intent(inout) :: VarMix !< Variable mixing control struct
   type(MEKE_type),         intent(inout) :: MEKE   !< MEKE fields
   type(wave_parameters_CS), optional, pointer :: Waves !< A pointer to a structure containing
                                  !! fields related to the surface wave conditions

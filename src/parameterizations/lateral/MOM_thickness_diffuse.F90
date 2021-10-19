@@ -116,7 +116,7 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
   type(thermo_var_ptrs),                      intent(in)    :: tv     !< Thermodynamics structure
   real,                                       intent(in)    :: dt     !< Time increment [T ~> s]
   type(MEKE_type),                            intent(inout) :: MEKE   !< MEKE fields
-  type(VarMix_CS),                            pointer       :: VarMix !< Variable mixing coefficients
+  type(VarMix_CS), target,                    intent(in)    :: VarMix !< Variable mixing coefficients
   type(cont_diag_ptrs),                       intent(inout) :: CDp    !< Diagnostics for the continuity equation
   type(thickness_diffuse_CS),                 intent(inout) :: CS     !< Control structure for thickness diffusion
   ! Local variables
@@ -160,7 +160,8 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
   real :: KH_u_lay(SZI_(G), SZJ_(G)) ! layer ave thickness diffusivities [L2 T-1 ~> m2 s-1]
   real :: KH_v_lay(SZI_(G), SZJ_(G)) ! layer ave thickness diffusivities [L2 T-1 ~> m2 s-1]
 
-  if ((.not.CS%thickness_diffuse) .or. .not.(CS%Khth > 0.0 .or. associated(VarMix))) return
+  if ((.not.CS%thickness_diffuse) &
+      .or. .not. (CS%Khth > 0.0 .or. VarMix%use_variable_mixing)) return
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   h_neglect = GV%H_subroundoff
@@ -173,7 +174,7 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
   khth_use_ebt_struct = .false. ; use_Visbeck = .false. ; use_QG_Leith = .false.
   Depth_scaled = .false.
 
-  if (associated(VarMix)) then
+  if (VarMix%use_variable_mixing) then
     use_VarMix = VarMix%use_variable_mixing .and. (CS%KHTH_Slope_Cff > 0.)
     Resoln_scaled = VarMix%Resoln_scaled_KhTh
     Depth_scaled = VarMix%Depth_scaled_KhTh
@@ -181,7 +182,7 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
     khth_use_ebt_struct = VarMix%khth_use_ebt_struct
     use_Visbeck = VarMix%use_Visbeck
     use_QG_Leith = VarMix%use_QG_Leith_GM
-    if (associated(VarMix%cg1)) cg1 => VarMix%cg1
+    if (allocated(VarMix%cg1)) cg1 => VarMix%cg1
   else
     cg1 => null()
   endif
@@ -445,8 +446,8 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
                                 int_slope_u, int_slope_v)
   endif
 
-  if (associated(VarMix)) then
-    if (allocated(MEKE%Rd_dx_h) .and. associated(VarMix%Rd_dx_h)) then
+  if (VarMix%use_variable_mixing) then
+    if (allocated(MEKE%Rd_dx_h) .and. allocated(VarMix%Rd_dx_h)) then
 !$OMP parallel do default(none) shared(is,ie,js,je,MEKE,VarMix)
       do j=js,je ; do i=is,ie
         MEKE%Rd_dx_h(i,j) = VarMix%Rd_dx_h(i,j)

@@ -357,8 +357,8 @@ type, public :: MOM_control_struct ; private
     !< Pointer to the control structure for the diabatic driver
   type(MEKE_CS) :: MEKE_CSp
     !< Pointer to the control structure for the MEKE updates
-  type(VarMix_CS),               pointer :: VarMix => NULL()
-    !< Pointer to the control structure for the variable mixing module
+  type(VarMix_CS) :: VarMix
+    !< Control structure for the variable mixing module
   type(Barotropic_CS),           pointer :: Barotropic_CSp => NULL()
     !< Pointer to the control structure for the barotropic module
   type(tracer_registry_type),    pointer :: tracer_Reg => NULL()
@@ -636,7 +636,7 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
     CS%time_in_cycle = 0.0
     do j=js,je ; do i=is,ie ; CS%ssh_rint(i,j) = 0.0 ; enddo ; enddo
 
-    if (associated(CS%VarMix)) then
+    if (CS%VarMix%use_variable_mixing) then
       call enable_averages(cycle_time, Time_start + real_to_time(US%T_to_s*cycle_time), CS%diag)
       call calc_resoln_function(h, CS%tv, G, GV, US, CS%VarMix)
       call calc_depth_function(G, CS%VarMix)
@@ -1032,7 +1032,7 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_thermo, &
 
     call enable_averages(dt_thermo, Time_local+real_to_time(US%T_to_s*(dt_thermo-dt)), CS%diag)
     call cpu_clock_begin(id_clock_thick_diff)
-    if (associated(CS%VarMix)) &
+    if (CS%VarMix%use_variable_mixing) &
       call calc_slope_functions(h, CS%tv, dt, G, GV, US, CS%VarMix, OBC=CS%OBC)
     call thickness_diffuse(h, CS%uhtr, CS%vhtr, CS%tv, dt_thermo, G, GV, US, &
                            CS%MEKE, CS%VarMix, CS%CDp, CS%thickness_diffuse_CSp)
@@ -1111,7 +1111,7 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_thermo, &
 
     if (CS%debug) call hchksum(h,"Pre-thickness_diffuse h", G%HI, haloshift=0, scale=GV%H_to_m)
 
-    if (associated(CS%VarMix)) &
+    if (CS%VarMix%use_variable_mixing) &
       call calc_slope_functions(h, CS%tv, dt, G, GV, US, CS%VarMix, OBC=CS%OBC)
     call thickness_diffuse(h, CS%uhtr, CS%vhtr, CS%tv, dt, G, GV, US, &
                            CS%MEKE, CS%VarMix, CS%CDp, CS%thickness_diffuse_CSp)
@@ -1562,7 +1562,7 @@ subroutine step_offline(forces, fluxes, sfc_state, Time_start, time_interval, CS
 
         ! Perform offline diffusion if requested
         if (.not. skip_diffusion) then
-          if (associated(CS%VarMix)) then
+          if (CS%VarMix%use_variable_mixing) then
             call pass_var(CS%h, G%Domain)
             call calc_resoln_function(CS%h, CS%tv, G, GV, US, CS%VarMix)
             call calc_depth_function(G, CS%VarMix)
@@ -1588,7 +1588,7 @@ subroutine step_offline(forces, fluxes, sfc_state, Time_start, time_interval, CS
         call offline_redistribute_residual(CS%offline_CSp, CS%h, uhtr, vhtr, adv_converged)
                 ! Perform offline diffusion if requested
         if (.not. skip_diffusion) then
-          if (associated(CS%VarMix)) then
+          if (CS%VarMix%use_variable_mixing) then
             call pass_var(CS%h, G%Domain)
             call calc_resoln_function(CS%h, CS%tv, G, GV, US, CS%VarMix)
             call calc_depth_function(G, CS%VarMix)
@@ -3613,10 +3613,7 @@ subroutine MOM_end(CS)
 
   call thickness_diffuse_end(CS%thickness_diffuse_CSp, CS%CDp)
 
-  if (associated(CS%VarMix)) then
-    call VarMix_end(CS%VarMix)
-    deallocate(CS%VarMix)
-  endif
+  call VarMix_end(CS%VarMix)
 
   if (associated(CS%set_visc_CSp)) &
     call set_visc_end(CS%visc, CS%set_visc_CSp)

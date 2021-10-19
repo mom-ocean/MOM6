@@ -227,9 +227,7 @@ subroutine step_MOM_dyn_unsplit_RK2(u_in, v_in, h_in, tv, visc, Time_local, dt, 
                                                               !! or column mass [H ~> m or kg m-2].
   type(MOM_dyn_unsplit_RK2_CS),      pointer       :: CS      !< The control structure set up by
                                                               !! initialize_dyn_unsplit_RK2.
-  type(VarMix_CS),                   pointer       :: VarMix  !< A pointer to a structure with
-                                                              !! fields that specify the spatially
-                                                              !! variable viscosities.
+  type(VarMix_CS),                   intent(inout) :: VarMix  !< Variable mixing control struct
   type(MEKE_type),                   intent(inout) :: MEKE    !< MEKE fields
                                                               !! fields related to the Mesoscale
                                                               !! Eddy Kinetic Energy.

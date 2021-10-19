@@ -110,7 +110,7 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, GV, US, CS, Reg, tv, do_online
                               intent(in)    :: h       !< Layer thickness [H ~> m or kg m-2]
   real,                       intent(in)    :: dt      !< time step [T ~> s]
   type(MEKE_type),            intent(in)    :: MEKE    !< MEKE fields
-  type(VarMix_CS),            pointer       :: VarMix  !< Variable mixing type
+  type(VarMix_CS),            intent(in)    :: VarMix  !< Variable mixing type
   type(unit_scale_type),      intent(in)    :: US      !< A dimensional unit scaling type
   type(tracer_hor_diff_CS),   pointer       :: CS      !< module control structure
   type(tracer_registry_type), pointer       :: Reg     !< registered tracers
@@ -176,7 +176,7 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, GV, US, CS, Reg, tv, do_online
        "register_tracer must be called before tracer_hordiff.")
   if (LOC(Reg)==0) call MOM_error(FATAL, "MOM_tracer_hor_diff: "// &
        "register_tracer must be called before tracer_hordiff.")
-  if ((Reg%ntr==0) .or. ((CS%KhTr <= 0.0) .and. .not.associated(VarMix)) ) return
+  if (Reg%ntr == 0 .or. (CS%KhTr <= 0.0 .and. .not. VarMix%use_variable_mixing)) return
 
   if (CS%show_call_tree) call callTree_enter("tracer_hordiff(), MOM_tracer_hor_diff.F90")
 
@@ -199,7 +199,7 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, GV, US, CS, Reg, tv, do_online
   if (CS%debug) call MOM_tracer_chksum("Before tracer diffusion ", Reg%Tr, ntr, G)
 
   use_VarMix = .false. ; Resoln_scaled = .false. ; use_Eady = .false.
-  if (Associated(VarMix)) then
+  if (VarMix%use_variable_mixing) then
     use_VarMix = VarMix%use_variable_mixing
     Resoln_scaled = VarMix%Resoln_scaled_KhTr
     use_Eady = CS%KhTr_Slope_Cff > 0.

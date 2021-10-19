@@ -235,8 +235,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
                                                        !! of along-coordinate stress tensor [L T-2 ~> m s-2].
   type(MEKE_type),               intent(inout) :: MEKE !< MEKE fields
                                                        !! related to Mesoscale Eddy Kinetic Energy.
-  type(VarMix_CS),               pointer     :: VarMix !< Pointer to a structure with fields that
-                                                       !! specify the spatially variable viscosities
+  type(VarMix_CS),               intent(inout) :: VarMix !< Variable mixing control struct
   type(unit_scale_type),         intent(in)  :: US     !< A dimensional unit scaling type
   type(hor_visc_CS),             intent(in)  :: CS     !< Horizontal viscosity control struct
   type(ocean_OBC_type), optional, pointer    :: OBC    !< Pointer to an open boundary condition type
@@ -432,10 +431,10 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
   use_MEKE_Au = allocated(MEKE%Au)
 
   rescale_Kh = .false.
-  if (associated(VarMix)) then
+  if (VarMix%use_variable_mixing) then
     rescale_Kh = VarMix%Resoln_scaled_Kh
-    if ((rescale_Kh .or. CS%res_scale_MEKE) .and. &
-    (.not.associated(VarMix%Res_fn_h) .or. .not.associated(VarMix%Res_fn_q))) &
+    if ((rescale_Kh .or. CS%res_scale_MEKE) &
+        .and. (.not. allocated(VarMix%Res_fn_h) .or. .not. allocated(VarMix%Res_fn_q))) &
       call MOM_error(FATAL, "MOM_hor_visc: VarMix%Res_fn_h and VarMix%Res_fn_q "//&
         "both need to be associated with Resoln_scaled_Kh or RES_SCALE_MEKE_VISC.")
   elseif (CS%res_scale_MEKE) then

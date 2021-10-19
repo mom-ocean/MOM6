@@ -101,7 +101,7 @@ subroutine mixedlayer_restrat(h, uhtr, vhtr, tv, forces, dt, MLD, VarMix, G, GV,
   real,                                       intent(in)    :: dt     !< Time increment [T ~> s]
   real, dimension(:,:),                       pointer       :: MLD    !< Mixed layer depth provided by the
                                                                       !! PBL scheme [Z ~> m]
-  type(VarMix_CS),                            pointer       :: VarMix !< Container for derived fields
+  type(VarMix_CS),                            intent(in)    :: VarMix !< Variable mixing control struct
   type(mixedlayer_restrat_CS),                intent(inout) :: CS     !< Module control structure
 
   if (GV%nkml>0) then
@@ -128,7 +128,7 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, forces, dt, MLD_in, Var
   real,                                       intent(in)    :: dt     !< Time increment [T ~> s]
   real, dimension(:,:),                       pointer       :: MLD_in !< Mixed layer depth provided by the
                                                                       !! PBL scheme [Z ~> m] (not H)
-  type(VarMix_CS),                            pointer       :: VarMix !< Container for derived fields
+  type(VarMix_CS),                            intent(in)    :: VarMix !< Variable mixing control struct
   type(mixedlayer_restrat_CS),                intent(inout) :: CS     !< Module control structure
   ! Local variables
   real :: uhml(SZIB_(G),SZJ_(G),SZK_(GV)) ! zonal mixed layer transport [H L2 T-1 ~> m3 s-1 or kg s-1]
@@ -196,7 +196,8 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, forces, dt, MLD_in, Var
 
   if (.not.associated(tv%eqn_of_state)) call MOM_error(FATAL, "MOM_mixedlayer_restrat: "// &
          "An equation of state must be used with this module.")
-  if (.not.associated(VarMix) .and. CS%front_length>0.) call MOM_error(FATAL, "MOM_mixedlayer_restrat: "// &
+  if (.not. allocated(VarMix%Rd_dx_h) .and. CS%front_length > 0.) &
+    call MOM_error(FATAL, "MOM_mixedlayer_restrat: "// &
          "The resolution argument, Rd/dx, was not associated.")
 
   if (CS%MLE_density_diff > 0.) then ! We need to calculate a mixed layer depth, MLD.
