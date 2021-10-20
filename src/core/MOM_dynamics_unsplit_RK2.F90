@@ -281,7 +281,7 @@ subroutine step_MOM_dyn_unsplit_RK2(u_in, v_in, h_in, tv, visc, Time_local, dt, 
   call cpu_clock_begin(id_clock_continuity)
   ! This is a duplicate calculation of the last continuity from the previous step
   ! and could/should be optimized out. -AJA
-  call continuity(u_in, v_in, h_in, hp, uh, vh, dt_pred, G, GV, US, CS%continuity_CSp, OBC=CS%OBC)
+  call continuity(u_in, v_in, h_in, hp, uh, vh, dt_pred, G, GV, US, CS%continuity_CSp, CS%OBC)
   call cpu_clock_end(id_clock_continuity)
   call pass_var(hp, G%Domain, clock=id_clock_pass)
   call pass_vector(uh, vh, G%Domain, clock=id_clock_pass)
@@ -350,7 +350,7 @@ subroutine step_MOM_dyn_unsplit_RK2(u_in, v_in, h_in, tv, visc, Time_local, dt, 
 ! uh = up[n-1/2] * h[n-1/2]
 ! h_av = h + dt div . uh
   call cpu_clock_begin(id_clock_continuity)
-  call continuity(up, vp, h_in, hp, uh, vh, dt, G, GV, US, CS%continuity_CSp, OBC=CS%OBC)
+  call continuity(up, vp, h_in, hp, uh, vh, dt, G, GV, US, CS%continuity_CSp, CS%OBC)
   call cpu_clock_end(id_clock_continuity)
   call pass_var(hp, G%Domain, clock=id_clock_pass)
   call pass_vector(uh, vh, G%Domain, clock=id_clock_pass)
@@ -405,7 +405,7 @@ subroutine step_MOM_dyn_unsplit_RK2(u_in, v_in, h_in, tv, visc, Time_local, dt, 
 ! uh = up[n] * h[n]  (up[n] might be extrapolated to damp GWs)
 ! h[n+1] = h[n] + dt div . uh
   call cpu_clock_begin(id_clock_continuity)
-  call continuity(up, vp, h_in, h_in, uh, vh, dt, G, GV, US, CS%continuity_CSp, OBC=CS%OBC)
+  call continuity(up, vp, h_in, h_in, uh, vh, dt, G, GV, US, CS%continuity_CSp, CS%OBC)
   call cpu_clock_end(id_clock_continuity)
   call pass_var(h_in, G%Domain, clock=id_clock_pass)
   call pass_vector(uh, vh, G%Domain, clock=id_clock_pass)
@@ -547,7 +547,7 @@ subroutine initialize_dyn_unsplit_RK2(u, v, h, Time, G, GV, US, param_file, diag
   integer, target,                           intent(inout) :: ntrunc !< A target for the variable
                                                        !! that records the number of times the
                                                        !! velocity is truncated (this should be 0).
-  integer,                         optional, intent(out)   :: cont_stencil !< The stencil for
+  integer,                                   intent(out)   :: cont_stencil !< The stencil for
                                                        !! thickness from the continuity solver.
 
   !   This subroutine initializes all of the variables that are used by this
@@ -615,7 +615,7 @@ subroutine initialize_dyn_unsplit_RK2(u, v, h, Time, G, GV, US, param_file, diag
   Accel_diag%CAu => CS%CAu ; Accel_diag%CAv => CS%CAv
 
   call continuity_init(Time, G, GV, US, param_file, diag, CS%continuity_CSp)
-  if (present(cont_stencil)) cont_stencil = continuity_stencil(CS%continuity_CSp)
+  cont_stencil = continuity_stencil(CS%continuity_CSp)
   call CoriolisAdv_init(Time, G, GV, US, param_file, diag, CS%ADp, CS%CoriolisAdv_CSp)
   if (use_tides) call tidal_forcing_init(Time, G, param_file, CS%tides_CSp)
   call PressureForce_init(Time, G, GV, US, param_file, diag, CS%PressureForce_CSp, &

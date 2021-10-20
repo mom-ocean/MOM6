@@ -50,8 +50,7 @@ subroutine PressureForce(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm, pbce, e
                            intent(out) :: PFv  !< Meridional pressure force acceleration [L T-2 ~> m s-2]
   type(PressureForce_CS),  pointer     :: CS   !< Pressure force control structure
   type(ALE_CS),            pointer     :: ALE_CSp !< ALE control structure
-  real, dimension(:,:), &
-                 optional, pointer     :: p_atm !< The pressure at the ice-ocean or
+  real, dimension(:,:),    pointer     :: p_atm !< The pressure at the ice-ocean or
                                                !! atmosphere-ocean interface [R L2 T-2 ~> Pa].
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                  optional, intent(out) :: pbce !< The baroclinic pressure anomaly in each layer
@@ -89,7 +88,7 @@ subroutine PressureForce_init(Time, G, GV, US, param_file, diag, CS, tides_CSp)
   type(param_file_type),   intent(in)    :: param_file !< Parameter file handles
   type(diag_ctrl), target, intent(inout) :: diag !< Diagnostics control structure
   type(PressureForce_CS),  pointer       :: CS   !< Pressure force control structure
-  type(tidal_forcing_CS), optional, pointer :: tides_CSp !< Tide control structure
+  type(tidal_forcing_CS),  pointer       :: tides_CSp !< Tide control structure
 #include "version_variable.h"
   character(len=40)  :: mdl = "MOM_PressureForce" ! This module's name.
 
