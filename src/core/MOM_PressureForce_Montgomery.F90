@@ -71,7 +71,7 @@ subroutine PressureForce_Mont_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm, pb
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), intent(out) :: PFv !< Meridional acceleration due to pressure gradients
                                                                  !! (equal to -dM/dy) [L T-2 ~> m s-2].
   type(PressureForce_Mont_CS),                pointer     :: CS  !< Control structure for Montgomery potential PGF
-  real, dimension(:,:),             optional, pointer     :: p_atm !< The pressure at the ice-ocean or
+  real, dimension(:,:),                       pointer     :: p_atm !< The pressure at the ice-ocean or
                                                                  !! atmosphere-ocean [R L2 T-2 ~> Pa].
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                                     optional, intent(out) :: pbce !< The baroclinic pressure anomaly in
@@ -133,9 +133,8 @@ subroutine PressureForce_Mont_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm, pb
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   EOSdom(1) = Isq - (G%isd-1) ;  EOSdom(2) = G%iec+1 - (G%isd-1)
 
-  use_p_atm = .false.
-  if (present(p_atm)) then ; if (associated(p_atm)) use_p_atm = .true. ; endif
-  is_split = .false. ; if (present(pbce)) is_split = .true.
+  use_p_atm = associated(p_atm)
+  is_split = present(pbce)
   use_EOS = associated(tv%eqn_of_state)
 
   if (.not.associated(CS)) call MOM_error(FATAL, &
@@ -368,7 +367,7 @@ subroutine PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm, pbce,
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), intent(out) :: PFv !< Meridional acceleration due to pressure gradients
                                                                  !! (equal to -dM/dy) [L T-2 ~> m s2].
   type(PressureForce_Mont_CS),                pointer     :: CS  !< Control structure for Montgomery potential PGF
-  real, dimension(:,:),                      optional, pointer     :: p_atm !< The pressure at the ice-ocean or
+  real, dimension(:,:),                       pointer     :: p_atm !< The pressure at the ice-ocean or
                                                                 !! atmosphere-ocean [R L2 T-2 ~> Pa].
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), optional, intent(out) :: pbce !< The baroclinic pressure anomaly in
                                                                 !! each layer due to free surface height anomalies
@@ -421,9 +420,8 @@ subroutine PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm, pbce,
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   EOSdom(1) = Isq - (G%isd-1) ;  EOSdom(2) = G%iec+1 - (G%isd-1)
 
-  use_p_atm = .false.
-  if (present(p_atm)) then ; if (associated(p_atm)) use_p_atm = .true. ; endif
-  is_split = .false. ; if (present(pbce)) is_split = .true.
+  use_p_atm = associated(p_atm)
+  is_split = present(pbce)
   use_EOS = associated(tv%eqn_of_state)
 
   if (.not.associated(CS)) call MOM_error(FATAL, &
@@ -826,8 +824,8 @@ subroutine PressureForce_Mont_init(Time, G, GV, US, param_file, diag, CS, tides_
   type(unit_scale_type),   intent(in)    :: US !< A dimensional unit scaling type
   type(param_file_type),   intent(in)    :: param_file !< Parameter file handles
   type(diag_ctrl), target, intent(inout) :: diag !< Diagnostics control structure
-  type(PressureForce_Mont_CS),  pointer  :: CS !< Montgomery PGF control structure
-  type(tidal_forcing_CS), optional, pointer :: tides_CSp !< Tides control structure
+  type(PressureForce_Mont_CS), pointer   :: CS !< Montgomery PGF control structure
+  type(tidal_forcing_CS),  pointer       :: tides_CSp !< Tides control structure
 
   ! Local variables
   logical :: use_temperature, use_EOS
@@ -842,9 +840,7 @@ subroutine PressureForce_Mont_init(Time, G, GV, US, param_file, diag, CS, tides_
   else ; allocate(CS) ; endif
 
   CS%diag => diag ; CS%Time => Time
-  if (present(tides_CSp)) then
-    if (associated(tides_CSp)) CS%tides_CSp => tides_CSp
-  endif
+  if (associated(tides_CSp)) CS%tides_CSp => tides_CSp
 
   mdl = "MOM_PressureForce_Mont"
   call log_version(param_file, mdl, version, "")
