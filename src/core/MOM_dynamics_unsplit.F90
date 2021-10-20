@@ -265,7 +265,7 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, forces, &
 ! uh = u*h
 ! hp = h + dt/2 div . uh
   call cpu_clock_begin(id_clock_continuity)
-  call continuity(u, v, h, hp, uh, vh, dt*0.5, G, GV, US, CS%continuity_CSp, OBC=CS%OBC)
+  call continuity(u, v, h, hp, uh, vh, dt*0.5, G, GV, US, CS%continuity_CSp, CS%OBC)
   call cpu_clock_end(id_clock_continuity)
   call pass_var(hp, G%Domain, clock=id_clock_pass)
   call pass_vector(uh, vh, G%Domain, clock=id_clock_pass)
@@ -355,7 +355,7 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, forces, &
 ! uh = up * hp
 ! h_av = hp + dt/2 div . uh
   call cpu_clock_begin(id_clock_continuity)
-  call continuity(up, vp, hp, h_av, uh, vh, (0.5*dt), G, GV, US, CS%continuity_CSp, OBC=CS%OBC)
+  call continuity(up, vp, hp, h_av, uh, vh, (0.5*dt), G, GV, US, CS%continuity_CSp, CS%OBC)
   call cpu_clock_end(id_clock_continuity)
   call pass_var(h_av, G%Domain, clock=id_clock_pass)
   call pass_vector(uh, vh, G%Domain, clock=id_clock_pass)
@@ -415,7 +415,7 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, forces, &
 ! uh = upp * hp
 ! h = hp + dt/2 div . uh
   call cpu_clock_begin(id_clock_continuity)
-  call continuity(upp, vpp, hp, h, uh, vh, (dt*0.5), G, GV, US, CS%continuity_CSp, OBC=CS%OBC)
+  call continuity(upp, vpp, hp, h, uh, vh, (dt*0.5), G, GV, US, CS%continuity_CSp, CS%OBC)
   call cpu_clock_end(id_clock_continuity)
   call pass_var(h, G%Domain, clock=id_clock_pass)
   call pass_vector(uh, vh, G%Domain, clock=id_clock_pass)
@@ -572,7 +572,7 @@ subroutine initialize_dyn_unsplit(u, v, h, Time, G, GV, US, param_file, diag, CS
   type(MOM_dyn_unsplit_CS),       pointer       :: CS         !< The control structure set up
                                                               !! by initialize_dyn_unsplit.
   type(MOM_restart_CS),           pointer       :: restart_CS !< A pointer to the restart control
-                                                              !!structure.
+                                                              !! structure.
   type(accel_diag_ptrs),  target, intent(inout) :: Accel_diag !< A set of pointers to the various
                                      !! accelerations in the momentum equations, which can be used
                                      !! for later derived diagnostics, like energy budgets.
@@ -601,7 +601,7 @@ subroutine initialize_dyn_unsplit(u, v, h, Time, G, GV, US, param_file, diag, CS
   integer, target,                intent(inout) :: ntrunc     !< A target for the variable that
                                                         !! records the number of times the velocity
                                                         !! is truncated (this should be 0).
-  integer,              optional, intent(out)   :: cont_stencil !< The stencil for thickness
+  integer,                        intent(out)   :: cont_stencil !< The stencil for thickness
                                                                 !! from the continuity solver.
 
   !   This subroutine initializes all of the variables that are used by this
@@ -653,7 +653,7 @@ subroutine initialize_dyn_unsplit(u, v, h, Time, G, GV, US, param_file, diag, CS
   Accel_diag%CAu => CS%CAu ; Accel_diag%CAv => CS%CAv
 
   call continuity_init(Time, G, GV, US, param_file, diag, CS%continuity_CSp)
-  if (present(cont_stencil)) cont_stencil = continuity_stencil(CS%continuity_CSp)
+  cont_stencil = continuity_stencil(CS%continuity_CSp)
   call CoriolisAdv_init(Time, G, GV, US, param_file, diag, CS%ADp, CS%CoriolisAdv_CSp)
   if (use_tides) call tidal_forcing_init(Time, G, param_file, CS%tides_CSp)
   call PressureForce_init(Time, G, GV, US, param_file, diag, CS%PressureForce_CSp, &
