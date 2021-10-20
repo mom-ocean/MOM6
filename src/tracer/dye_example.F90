@@ -72,7 +72,7 @@ function register_dye_tracer(HI, GV, US, param_file, CS, tr_Reg, restart_CS)
                                                  !! structure for this module
   type(tracer_registry_type), pointer    :: tr_Reg !< A pointer that is set to point to the control
                                                  !! structure for the tracer advection and diffusion module.
-  type(MOM_restart_CS),       pointer    :: restart_CS !< A pointer to the restart control structure.
+  type(MOM_restart_CS), target, intent(inout) :: restart_CS !< MOM restart control struct
 
 ! Local variables
 ! This include declares and sets the variable "version".

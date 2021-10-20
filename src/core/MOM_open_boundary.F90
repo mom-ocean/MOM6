@@ -1786,13 +1786,13 @@ end subroutine parse_segment_param_real
 
 !> Initialize open boundary control structure and do any necessary rescaling of OBC
 !! fields that have been read from a restart file.
-subroutine open_boundary_init(G, GV, US, param_file, OBC, restart_CSp)
+subroutine open_boundary_init(G, GV, US, param_file, OBC, restart_CS)
   type(ocean_grid_type),   intent(in) :: G   !< Ocean grid structure
   type(verticalGrid_type), intent(in) :: GV  !< Container for vertical grid information
   type(unit_scale_type),   intent(in) :: US  !< A dimensional unit scaling type
   type(param_file_type),   intent(in) :: param_file !< Parameter file handle
   type(ocean_OBC_type),    pointer    :: OBC !< Open boundary control structure
-  type(MOM_restart_CS),    pointer    :: restart_CSp !< Restart structure, data intent(inout)
+  type(MOM_restart_CS),    intent(in) :: restart_CS !< Restart structure, data intent(inout)
 
   ! Local variables
   real :: vel2_rescale ! A rescaling factor for squared velocities from the representation in
@@ -1830,12 +1830,12 @@ subroutine open_boundary_init(G, GV, US, param_file, OBC, restart_CSp)
 !  if ( OBC%radiation_BCs_exist_globally .and. (US%s_to_T_restart * US%m_to_L_restart /= 0.0) .and. &
 !       ((US%m_to_L * US%s_to_T_restart) /= (US%m_to_L_restart * US%s_to_T)) ) then
 !    vel_rescale = (US%m_to_L * US%s_to_T_restart) /  (US%m_to_L_restart * US%s_to_T)
-!    if (query_initialized(OBC%rx_normal, "rx_normal", restart_CSp)) then
+!    if (query_initialized(OBC%rx_normal, "rx_normal", restart_CS)) then
 !      do k=1,nz ; do j=jsd,jed ; do I=IsdB,IedB
 !        OBC%rx_normal(I,j,k) = vel_rescale * OBC%rx_normal(I,j,k)
 !      enddo ; enddo ; enddo
 !    endif
-!    if (query_initialized(OBC%ry_normal, "ry_normal", restart_CSp)) then
+!    if (query_initialized(OBC%ry_normal, "ry_normal", restart_CS)) then
 !      do k=1,nz ; do J=JsdB,JedB ; do i=isd,ied
 !        OBC%ry_normal(i,J,k) = vel_rescale * OBC%ry_normal(i,J,k)
 !      enddo ; enddo ; enddo
@@ -1846,17 +1846,17 @@ subroutine open_boundary_init(G, GV, US, param_file, OBC, restart_CSp)
   if ( OBC%oblique_BCs_exist_globally .and. (US%s_to_T_restart * US%m_to_L_restart /= 0.0) .and. &
        ((US%m_to_L * US%s_to_T_restart) /= (US%m_to_L_restart * US%s_to_T)) ) then
     vel2_rescale = (US%m_to_L * US%s_to_T_restart)**2 /  (US%m_to_L_restart * US%s_to_T)**2
-    if (query_initialized(OBC%rx_oblique, "rx_oblique", restart_CSp)) then
+    if (query_initialized(OBC%rx_oblique, "rx_oblique", restart_CS)) then
       do k=1,nz ; do j=jsd,jed ; do I=IsdB,IedB
         OBC%rx_oblique(I,j,k) = vel2_rescale * OBC%rx_oblique(I,j,k)
       enddo ; enddo ; enddo
     endif
-    if (query_initialized(OBC%ry_oblique, "ry_oblique", restart_CSp)) then
+    if (query_initialized(OBC%ry_oblique, "ry_oblique", restart_CS)) then
       do k=1,nz ; do J=JsdB,JedB ; do i=isd,ied
         OBC%ry_oblique(i,J,k) = vel2_rescale * OBC%ry_oblique(i,J,k)
       enddo ; enddo ; enddo
     endif
-    if (query_initialized(OBC%cff_normal, "cff_normal", restart_CSp)) then
+    if (query_initialized(OBC%cff_normal, "cff_normal", restart_CS)) then
       do k=1,nz ; do J=JsdB,JedB ; do I=IsdB,IedB
         OBC%cff_normal(I,J,k) = vel2_rescale * OBC%cff_normal(I,J,k)
       enddo ; enddo ; enddo
@@ -4927,14 +4927,14 @@ subroutine flood_fill2(G, color, cin, cout, cland)
 end subroutine flood_fill2
 
 !> Register OBC segment data for restarts
-subroutine open_boundary_register_restarts(HI, GV, OBC, Reg, param_file, restart_CSp, &
+subroutine open_boundary_register_restarts(HI, GV, OBC, Reg, param_file, restart_CS, &
                                            use_temperature)
   type(hor_index_type),    intent(in) :: HI !< Horizontal indices
   type(verticalGrid_type), pointer    :: GV !< Container for vertical grid information
   type(ocean_OBC_type),    pointer    :: OBC !< OBC data structure, data intent(inout)
   type(tracer_registry_type), pointer :: Reg !< pointer to tracer registry
   type(param_file_type),   intent(in) :: param_file !< Parameter file handle
-  type(MOM_restart_CS),    pointer    :: restart_CSp !< Restart structure, data intent(inout)
+  type(MOM_restart_CS),    intent(inout) :: restart_CS !< MOM restart control structure
   logical,                 intent(in) :: use_temperature !< If true, T and S are used
   ! Local variables
   type(vardesc) :: vd(2)
@@ -4966,7 +4966,7 @@ subroutine open_boundary_register_restarts(HI, GV, OBC, Reg, param_file, restart
     vd(1) = var_desc("rx_normal", "m s-1", "Normal Phase Speed for EW radiation OBCs", 'u', 'L')
     vd(2) = var_desc("ry_normal", "m s-1", "Normal Phase Speed for NS radiation OBCs", 'v', 'L')
     call register_restart_pair(OBC%rx_normal, OBC%ry_normal, vd(1), vd(2), &
-        .false., restart_CSp)
+        .false., restart_CS)
   endif
 
   if (OBC%oblique_BCs_exist_globally) then
@@ -4976,11 +4976,11 @@ subroutine open_boundary_register_restarts(HI, GV, OBC, Reg, param_file, restart
     vd(1) = var_desc("rx_oblique", "m2 s-2", "Radiation Speed Squared for EW oblique OBCs", 'u', 'L')
     vd(2) = var_desc("ry_oblique", "m2 s-2", "Radiation Speed Squared for NS oblique OBCs", 'v', 'L')
     call register_restart_pair(OBC%rx_oblique, OBC%ry_oblique, vd(1), vd(2), &
-        .false., restart_CSp)
+        .false., restart_CS)
 
     allocate(OBC%cff_normal(HI%IsdB:HI%IedB,HI%jsdB:HI%jedB,GV%ke), source=0.0)
     vd(1) = var_desc("cff_normal", "m2 s-2", "denominator for oblique OBCs", 'q', 'L')
-    call register_restart_field(OBC%cff_normal, vd(1), .false., restart_CSp)
+    call register_restart_field(OBC%cff_normal, vd(1), .false., restart_CS)
   endif
 
   if (Reg%ntr == 0) return
@@ -5006,11 +5006,11 @@ subroutine open_boundary_register_restarts(HI, GV, OBC, Reg, param_file, restart
         if (modulo(HI%turns, 2) /= 0) then
           write(mesg,'("tres_y_",I3.3)') m
           vd(1) = var_desc(mesg,"Conc", "Tracer concentration for NS OBCs",'v','L')
-          call register_restart_field(OBC%tres_x(:,:,:,m), vd(1), .false., restart_CSp)
+          call register_restart_field(OBC%tres_x(:,:,:,m), vd(1), .false., restart_CS)
         else
           write(mesg,'("tres_x_",I3.3)') m
           vd(1) = var_desc(mesg,"Conc", "Tracer concentration for EW OBCs",'u','L')
-          call register_restart_field(OBC%tres_x(:,:,:,m), vd(1), .false., restart_CSp)
+          call register_restart_field(OBC%tres_x(:,:,:,m), vd(1), .false., restart_CS)
         endif
       endif
     enddo
@@ -5022,11 +5022,11 @@ subroutine open_boundary_register_restarts(HI, GV, OBC, Reg, param_file, restart
         if (modulo(HI%turns, 2) /= 0) then
           write(mesg,'("tres_x_",I3.3)') m
           vd(1) = var_desc(mesg,"Conc", "Tracer concentration for EW OBCs",'u','L')
-          call register_restart_field(OBC%tres_y(:,:,:,m), vd(1), .false., restart_CSp)
+          call register_restart_field(OBC%tres_y(:,:,:,m), vd(1), .false., restart_CS)
         else
           write(mesg,'("tres_y_",I3.3)') m
           vd(1) = var_desc(mesg,"Conc", "Tracer concentration for NS OBCs",'v','L')
-          call register_restart_field(OBC%tres_y(:,:,:,m), vd(1), .false., restart_CSp)
+          call register_restart_field(OBC%tres_y(:,:,:,m), vd(1), .false., restart_CS)
         endif
       endif
     enddo
@@ -5433,14 +5433,14 @@ end subroutine rotate_OBC_segment_config
 
 
 !> Initialize the segments and field-related data of a rotated OBC.
-subroutine rotate_OBC_init(OBC_in, G, GV, US, param_file, tv, restart_CSp, OBC)
+subroutine rotate_OBC_init(OBC_in, G, GV, US, param_file, tv, restart_CS, OBC)
   type(ocean_OBC_type), pointer, intent(in) :: OBC_in   !< OBC on input map
   type(ocean_grid_type), intent(in) :: G                !< Rotated grid metric
   type(verticalGrid_type), intent(in) :: GV             !< Vertical grid
   type(unit_scale_type), intent(in) :: US               !< Unit scaling
   type(param_file_type), intent(in) :: param_file       !< Input parameters
   type(thermo_var_ptrs), intent(inout) :: tv            !< Tracer fields
-  type(MOM_restart_CS), pointer, intent(in) :: restart_CSp  !< Restart CS
+  type(MOM_restart_CS), intent(in) :: restart_CS        !< Restart CS
   type(ocean_OBC_type), pointer, intent(inout) :: OBC   !< Rotated OBC
 
   logical :: use_temperature
@@ -5457,7 +5457,7 @@ subroutine rotate_OBC_init(OBC_in, G, GV, US, param_file, tv, restart_CSp, OBC)
   if (use_temperature) &
     call fill_temp_salt_segments(G, GV, OBC, tv)
 
-  call open_boundary_init(G, GV, US, param_file, OBC, restart_CSp)
+  call open_boundary_init(G, GV, US, param_file, OBC, restart_CS)
 end subroutine rotate_OBC_init
 
 

@@ -217,9 +217,7 @@ subroutine register_tracer(tr_ptr, Reg, param_file, HI, GV, name, longname, unit
   integer,              optional, intent(in)    :: diag_form    !< An integer (1 or 2, 1 by default) indicating the
                                                                 !! character string template to use in
                                                                 !! labeling diagnostics
-  type(MOM_restart_CS), optional, pointer       :: restart_CS   !< A pointer to the restart control structure
-                                                                !! this tracer will be registered for
-                                                                !! restarts if this argument is present
+  type(MOM_restart_CS), optional, intent(inout) :: restart_CS   !< MOM restart control struct
   logical,              optional, intent(in)    :: mandatory    !< If true, this tracer must be read
                                                                 !! from a restart file.
 
@@ -317,14 +315,13 @@ subroutine register_tracer(tr_ptr, Reg, param_file, HI, GV, name, longname, unit
 
   if (present(advection_xy)) then ; if (associated(advection_xy)) Tr%advection_xy => advection_xy ; endif
 
-  if (present(restart_CS)) then ; if (associated(restart_CS)) then
+  if (present(restart_CS)) then
     ! Register this tracer to be read from and written to restart files.
     mand = .true. ; if (present(mandatory)) mand = mandatory
 
     call register_restart_field(tr_ptr, Tr%name, mand, restart_CS, &
                                 longname=Tr%longname, units=Tr%units)
-  endif ; endif
-
+  endif
 end subroutine register_tracer
 
 

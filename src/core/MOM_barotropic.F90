@@ -4253,7 +4253,7 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, US, param_file, diag, CS, 
                                                  !! output.
   type(barotropic_CS),     pointer       :: CS   !< A pointer to the control structure for this module
                                                  !! that is set in register_barotropic_restarts.
-  type(MOM_restart_CS),    pointer       :: restart_CS !< A pointer to the restart control structure.
+  type(MOM_restart_CS),    intent(in)    :: restart_CS !< MOM restart control struct
   logical,                 intent(out)   :: calc_dtbt  !< If true, the barotropic time step must
                                                  !! be recalculated before stepping.
   type(BT_cont_type),      pointer       :: BT_cont    !< A structure with elements that describe the
@@ -5013,7 +5013,7 @@ subroutine register_barotropic_restarts(HI, GV, param_file, CS, restart_CS)
   type(barotropic_CS),     pointer    :: CS         !< A pointer that is set to point to the control
                                                     !! structure for this module.
   type(verticalGrid_type), intent(in) :: GV         !< The ocean's vertical grid structure.
-  type(MOM_restart_CS),    pointer    :: restart_CS !< A pointer to the restart control structure.
+  type(MOM_restart_CS),    intent(inout) :: restart_CS !< MOM restart control struct
 
   ! Local variables
   type(vardesc) :: vd(3)

@@ -92,14 +92,12 @@ contains
 !> This subroutine defined the control structure of module and register
 !the time counter to full update in restart
 subroutine initialize_oda_incupd_fixed( G, GV, US, CS, restart_CS)
-
-  type(ocean_grid_type),            intent(in) :: G          !< The ocean's grid structure.
-  type(verticalGrid_type),          intent(in) :: GV         !< ocean vertical grid structure
-  type(unit_scale_type),            intent(in) :: US         !< A dimensional unit scaling type
-  type(oda_incupd_CS),              pointer    :: CS         !< A pointer that is set to point to the control
-                                                             !! structure for this module (in/out).
-  type(MOM_restart_CS),             pointer    :: restart_CS !< A pointer to the restart control structure.
-
+  type(ocean_grid_type),   intent(in)    :: G           !< The ocean's grid structure.
+  type(verticalGrid_type), intent(in)    :: GV          !< ocean vertical grid structure
+  type(unit_scale_type),   intent(in)    :: US          !< A dimensional unit scaling type
+  type(oda_incupd_CS),     pointer       :: CS          !< A pointer that is set to point to the control
+                                                        !! structure for this module (in/out).
+  type(MOM_restart_CS),    intent(inout) :: restart_CS  !< MOM restart control struct
 
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
@@ -116,28 +114,23 @@ subroutine initialize_oda_incupd_fixed( G, GV, US, CS, restart_CS)
   ! register ncount in restart
   call register_restart_field(CS%ncount, "oda_incupd_ncount", .false., restart_CS,&
                               "Number of inc. update already done", "N/A")
-
-
 end subroutine initialize_oda_incupd_fixed
 
 
 !> This subroutine defined the number of time step for full update, stores the layer pressure
 !! increments and initialize remap structure.
 subroutine initialize_oda_incupd( G, GV, US, param_file, CS, data_h,nz_data, restart_CS)
-
-  type(ocean_grid_type),            intent(in) :: G          !< The ocean's grid structure.
-  type(verticalGrid_type),          intent(in) :: GV         !< ocean vertical grid structure
-  type(unit_scale_type),            intent(in) :: US         !< A dimensional unit scaling type
-  integer,                          intent(in) :: nz_data    !< The total number of incr. input layers.
-  type(param_file_type),            intent(in) :: param_file !< A structure indicating the open file
-                                                             !! to parse for model parameter values.
-  type(oda_incupd_CS),              pointer    :: CS         !< A pointer that is set to point to the control
-                                                             !! structure for this module (in/out).
+  type(ocean_grid_type),      intent(in) :: G           !< The ocean's grid structure.
+  type(verticalGrid_type),    intent(in) :: GV          !< ocean vertical grid structure
+  type(unit_scale_type),      intent(in) :: US          !< A dimensional unit scaling type
+  integer,                    intent(in) :: nz_data     !< The total number of incr. input layers.
+  type(param_file_type),      intent(in) :: param_file  !< A structure indicating the open file
+                                                        !! to parse for model parameter values.
+  type(oda_incupd_CS),        pointer    :: CS          !< A pointer that is set to point to the control
+                                                        !! structure for this module (in/out).
   real, dimension(SZI_(G),SZJ_(G),nz_data), intent(in) :: data_h !< The ODA h
                                                                  !! [H ~> m or kg m-2].
-  type(MOM_restart_CS),       pointer       :: restart_CS !< A pointer to the restart control
-                                                    !! structure.
-
+  type(MOM_restart_CS),       intent(in) :: restart_CS  !< MOM restart control struct
 
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
@@ -242,8 +235,6 @@ subroutine initialize_oda_incupd( G, GV, US, param_file, CS, data_h,nz_data, res
   ! Call the constructor for remapping control structure
   call initialize_remapping(CS%remap_cs, remapScheme, boundary_extrapolation=bndExtrapolation, &
                             answers_2018=.false.)
-
-
 end subroutine initialize_oda_incupd
 
 

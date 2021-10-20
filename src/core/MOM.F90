@@ -2350,10 +2350,10 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
              CS%dyn_split_RK2_CSp, restart_CSp, CS%uh, CS%vh)
   elseif (CS%use_RK2) then
     call register_restarts_dyn_unsplit_RK2(HI, GV, param_file, &
-           CS%dyn_unsplit_RK2_CSp, restart_CSp)
+           CS%dyn_unsplit_RK2_CSp)
   else
     call register_restarts_dyn_unsplit(HI, GV, param_file, &
-           CS%dyn_unsplit_CSp, restart_CSp)
+           CS%dyn_unsplit_CSp)
   endif
 
   ! This subroutine calls user-specified tracer registration routines.
@@ -2661,13 +2661,13 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
     endif
   elseif (CS%use_RK2) then
     call initialize_dyn_unsplit_RK2(CS%u, CS%v, CS%h, Time, G, GV, US,     &
-            param_file, diag, CS%dyn_unsplit_RK2_CSp, restart_CSp,         &
+            param_file, diag, CS%dyn_unsplit_RK2_CSp,                      &
             CS%ADp, CS%CDp, MOM_internal_state, CS%OBC,                    &
             CS%update_OBC_CSp, CS%ALE_CSp, CS%set_visc_CSp, CS%visc, dirs, &
             CS%ntrunc, cont_stencil=CS%cont_stencil)
   else
     call initialize_dyn_unsplit(CS%u, CS%v, CS%h, Time, G, GV, US,         &
-            param_file, diag, CS%dyn_unsplit_CSp, restart_CSp,             &
+            param_file, diag, CS%dyn_unsplit_CSp,                          &
             CS%ADp, CS%CDp, MOM_internal_state, CS%OBC,                    &
             CS%update_OBC_CSp, CS%ALE_CSp, CS%set_visc_CSp, CS%visc, dirs, &
             CS%ntrunc, cont_stencil=CS%cont_stencil)

@@ -2080,7 +2080,7 @@ end subroutine PPM_limit_pos
 !   type(ocean_grid_type), intent(inout) :: G    !< The ocean's grid structure
 !   type(param_file_type), intent(in) :: param_file !< A structure to parse for run-time parameters
 !   type(int_tide_CS),     intent(in)    :: CS   !< Internal tide control struct
-!   type(MOM_restart_CS),  pointer :: restart_CS !<  A pointer to the restart control structure.
+!   type(MOM_restart_CS),  intent(inout) :: restart_CS !< MOM restart control struct
 
 !   ! This subroutine is not currently in use!!
 

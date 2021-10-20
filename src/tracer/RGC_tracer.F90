@@ -72,7 +72,7 @@ function register_RGC_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
   type(RGC_tracer_CS),        pointer    :: CS   !< A pointer that is set to point to the control
                                                  !! structure for this module (in/out).
   type(tracer_registry_type), pointer    :: tr_Reg !< A pointer to the tracer registry.
-  type(MOM_restart_CS),       pointer    :: restart_CS !< A pointer to the restart control structure.
+  type(MOM_restart_CS),    intent(inout) :: restart_CS !< MOM restart control struct
 
   character(len=80)  :: name, longname
 ! This include declares and sets the variable "version".

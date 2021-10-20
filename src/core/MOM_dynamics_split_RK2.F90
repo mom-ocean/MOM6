@@ -1160,7 +1160,7 @@ subroutine register_restarts_dyn_split_RK2(HI, GV, param_file, CS, restart_CS, u
   type(verticalGrid_type),       intent(in)    :: GV         !< ocean vertical grid structure
   type(param_file_type),         intent(in)    :: param_file !< parameter file
   type(MOM_dyn_split_RK2_CS),    pointer       :: CS         !< module control structure
-  type(MOM_restart_CS),          pointer       :: restart_CS !< restart control structure
+  type(MOM_restart_CS),          intent(inout) :: restart_CS !< MOM restart control struct
   real, dimension(SZIB_(HI),SZJ_(HI),SZK_(GV)), &
                          target, intent(inout) :: uh !< zonal volume/mass transport [H L2 T-1 ~> m3 s-1 or kg s-1]
   real, dimension(SZI_(HI),SZJB_(HI),SZK_(GV)), &
@@ -1250,7 +1250,7 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, US, param
   type(param_file_type),            intent(in)    :: param_file !< parameter file for parsing
   type(diag_ctrl),          target, intent(inout) :: diag       !< to control diagnostics
   type(MOM_dyn_split_RK2_CS),       pointer       :: CS         !< module control structure
-  type(MOM_restart_CS),             pointer       :: restart_CS !< restart control structure
+  type(MOM_restart_CS),             intent(in)    :: restart_CS !< MOM restart control struct
   real,                             intent(in)    :: dt         !< time step [T ~> s]
   type(accel_diag_ptrs),    target, intent(inout) :: Accel_diag !< points to momentum equation terms for
                                                                 !! budget analysis

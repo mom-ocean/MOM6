@@ -795,7 +795,7 @@ logical function mixedlayer_restrat_init(Time, G, GV, US, param_file, diag, CS, 
   type(param_file_type),       intent(in)    :: param_file !< Parameter file to parse
   type(diag_ctrl), target,     intent(inout) :: diag       !< Regulate diagnostics
   type(mixedlayer_restrat_CS), intent(inout) :: CS         !< Module control structure
-  type(MOM_restart_CS),        pointer       :: restart_CS !< A pointer to the restart control structure
+  type(MOM_restart_CS),        intent(in)    :: restart_CS !< MOM restart control struct
 
   ! Local variables
   real :: H_rescale  ! A rescaling factor for thicknesses from the representation in
@@ -940,7 +940,7 @@ subroutine mixedlayer_restrat_register_restarts(HI, param_file, CS, restart_CS)
   type(hor_index_type),        intent(in)    :: HI         !< Horizontal index structure
   type(param_file_type),       intent(in)    :: param_file !< Parameter file to parse
   type(mixedlayer_restrat_CS), intent(inout) :: CS         !< Module control structure
-  type(MOM_restart_CS),        pointer       :: restart_CS !< A pointer to the restart control structure
+  type(MOM_restart_CS),        intent(inout) :: restart_CS !< MOM restart control struct
   ! Local variables
   type(vardesc) :: vd
   logical :: mixedlayer_restrat_init

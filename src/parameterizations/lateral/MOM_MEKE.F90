@@ -1022,7 +1022,7 @@ logical function MEKE_init(Time, G, US, param_file, diag, CS, MEKE, restart_CS)
   type(diag_ctrl), target, intent(inout) :: diag       !< Diagnostics structure.
   type(MEKE_CS),           intent(inout) :: CS         !< MEKE control structure.
   type(MEKE_type),         intent(inout) :: MEKE       !< MEKE fields
-  type(MOM_restart_CS),    pointer       :: restart_CS !< Restart control structure for MOM_MEKE.
+  type(MOM_restart_CS),    intent(in)    :: restart_CS !< MOM restart control struct
 
   ! Local variables
   real    :: I_T_rescale   ! A rescaling factor for time from the internal representation in this
@@ -1379,7 +1379,7 @@ subroutine MEKE_alloc_register_restart(HI, param_file, MEKE, restart_CS)
   type(hor_index_type),  intent(in)    :: HI         !< Horizontal index structure
   type(param_file_type), intent(in)    :: param_file !< Parameter file parser structure.
   type(MEKE_type),       intent(inout) :: MEKE       !< MEKE fields
-  type(MOM_restart_CS),  pointer       :: restart_CS !< Restart control structure for MOM_MEKE.
+  type(MOM_restart_CS),  intent(inout) :: restart_CS !< MOM restart control struct
 ! Local variables
   type(vardesc) :: vd
   real :: MEKE_GMcoeff, MEKE_FrCoeff, MEKE_GMECoeff, MEKE_KHCoeff, MEKE_viscCoeff_Ku, MEKE_viscCoeff_Au

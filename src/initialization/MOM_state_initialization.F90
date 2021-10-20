@@ -136,8 +136,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
                                                     !! for model parameter values.
   type(directories),          intent(in)    :: dirs !< A structure containing several relevant
                                                     !! directory paths.
-  type(MOM_restart_CS),       pointer       :: restart_CS !< A pointer to the restart control
-                                                    !! structure.
+  type(MOM_restart_CS),       intent(inout) :: restart_CS !< MOM restart control struct
   type(ALE_CS),               pointer       :: ALE_CSp !< The ALE control structure for remapping
   type(tracer_registry_type), pointer       :: tracer_Reg !< A pointer to the tracer registry
   type(sponge_CS),            pointer       :: sponge_CSp !< The layerwise sponge control structure.
@@ -653,8 +652,6 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
     call initialize_oda_incupd_file(G, GV, US, use_temperature, tv, h, u, v, &
                                     PF, oda_incupd_CSp, restart_CS, Time)
   endif
-
-
 end subroutine MOM_initialize_state
 
 !> Reads the layer thicknesses or interface heights from a file.
@@ -2060,8 +2057,7 @@ subroutine initialize_oda_incupd_file(G, GV, US, use_temperature, tv, h, u, v, p
   type(param_file_type),   intent(in) :: param_file !< A structure to parse for run-time parameters.
   type(oda_incupd_CS),     pointer    :: oda_incupd_CSp  !< A pointer that is set to point to the control
                                                   !! structure for this module.
-  type(MOM_restart_CS),    pointer    :: restart_CS !< A pointer to the restart control
-                                                    !! structure.
+  type(MOM_restart_CS),    intent(in) :: restart_CS !< MOM restart control struct
   type(time_type),         intent(in) :: Time !< Time at the start of the run segment. Time_in
                                               !! overrides any value set for
                                               !Time.

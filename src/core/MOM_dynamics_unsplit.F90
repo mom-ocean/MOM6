@@ -67,8 +67,6 @@ use MOM_domains, only : To_South, To_West, To_All, CGRID_NE, SCALAR_PAIR
 use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, WARNING, is_root_pe
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_get_input, only : directories
-use MOM_restart, only : register_restart_field, query_initialized, save_restart
-use MOM_restart, only : restart_init, MOM_restart_CS
 use MOM_time_manager, only : time_type, real_to_time, operator(+)
 use MOM_time_manager, only : operator(-), operator(>), operator(*), operator(/)
 
@@ -509,16 +507,14 @@ end subroutine step_MOM_dyn_unsplit
 !!
 !! All variables registered here should have the ability to be recreated if they are not present
 !! in a restart file.
-subroutine register_restarts_dyn_unsplit(HI, GV, param_file, CS, restart_CS)
+subroutine register_restarts_dyn_unsplit(HI, GV, param_file, CS)
   type(hor_index_type),      intent(in) :: HI         !< A horizontal index type structure.
   type(verticalGrid_type),   intent(in) :: GV         !< The ocean's vertical grid structure.
   type(param_file_type),     intent(in) :: param_file !< A structure to parse for
                                                       !! run-time parameters.
   type(MOM_dyn_unsplit_CS),  pointer    :: CS         !< The control structure set up by
                                                       !! initialize_dyn_unsplit.
-  type(MOM_restart_CS),      pointer    :: restart_CS !< A pointer to the restart control structure.
 
-  ! Local arguments
   character(len=40)  :: mdl = "MOM_dynamics_unsplit" ! This module's name.
   character(len=48) :: thickness_units, flux_units
   integer :: isd, ied, jsd, jed, nz, IsdB, IedB, JsdB, JedB
@@ -549,7 +545,7 @@ end subroutine register_restarts_dyn_unsplit
 
 !> Initialize parameters and allocate memory associated with the unsplit dynamics module.
 subroutine initialize_dyn_unsplit(u, v, h, Time, G, GV, US, param_file, diag, CS, &
-                                  restart_CS, Accel_diag, Cont_diag, MIS, &
+                                  Accel_diag, Cont_diag, MIS, &
                                   OBC, update_OBC_CSp, ALE_CSp, setVisc_CSp, &
                                   visc, dirs, ntrunc, cont_stencil)
   type(ocean_grid_type),          intent(inout) :: G          !< The ocean's grid structure.
@@ -568,8 +564,6 @@ subroutine initialize_dyn_unsplit(u, v, h, Time, G, GV, US, param_file, diag, CS
                                                               !! regulate diagnostic output.
   type(MOM_dyn_unsplit_CS),       pointer       :: CS         !< The control structure set up
                                                               !! by initialize_dyn_unsplit.
-  type(MOM_restart_CS),           pointer       :: restart_CS !< A pointer to the restart control
-                                                              !! structure.
   type(accel_diag_ptrs),  target, intent(inout) :: Accel_diag !< A set of pointers to the various
                                      !! accelerations in the momentum equations, which can be used
                                      !! for later derived diagnostics, like energy budgets.

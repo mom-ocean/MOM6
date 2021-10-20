@@ -158,7 +158,7 @@ subroutine call_tracer_register(HI, GV, US, param_file, CS, tr_Reg, restart_CS)
   type(tracer_registry_type),   pointer    :: tr_Reg     !< A pointer that is set to point to the
                                                          !! control structure for the tracer
                                                          !! advection and diffusion module.
-  type(MOM_restart_CS),         pointer    :: restart_CS !< A pointer to the restart control
+  type(MOM_restart_CS), intent(inout) :: restart_CS !< A pointer to the restart control
                                                          !! structure.
 
 
