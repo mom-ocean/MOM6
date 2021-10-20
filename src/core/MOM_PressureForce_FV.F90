@@ -86,7 +86,7 @@ subroutine PressureForce_FV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), intent(out) :: PFv !< Meridional acceleration [L T-2 ~> m s-2]
   type(PressureForce_FV_CS),                  pointer     :: CS  !< Finite volume PGF control structure
   type(ALE_CS),                               pointer     :: ALE_CSp !< ALE control structure
-  real, dimension(:,:),                      optional, pointer :: p_atm !< The pressure at the ice-ocean
+  real, dimension(:,:),                       pointer     :: p_atm !< The pressure at the ice-ocean
                                                            !! or atmosphere-ocean interface [R L2 T-2 ~> Pa].
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), optional, intent(out) :: pbce !< The baroclinic pressure
                                                            !! anomaly in each layer due to eta anomalies
@@ -167,8 +167,7 @@ subroutine PressureForce_FV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_
        "MOM_PressureForce_FV_nonBouss: The Stanley parameterization is not yet"//&
        "implemented in non-Boussinesq mode.")
 
-  use_p_atm = .false.
-  if (present(p_atm)) then ; if (associated(p_atm)) use_p_atm = .true. ; endif
+  use_p_atm = associated(p_atm)
   use_EOS = associated(tv%eqn_of_state)
   use_ALE = .false.
   if (associated(ALE_CSp)) use_ALE = CS%reconstruct .and. use_EOS
@@ -425,7 +424,7 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), intent(out) :: PFv !< Meridional acceleration [L T-2 ~> m s-2]
   type(PressureForce_FV_CS),                  pointer     :: CS  !< Finite volume PGF control structure
   type(ALE_CS),                               pointer     :: ALE_CSp !< ALE control structure
-  real, dimension(:,:),                      optional, pointer :: p_atm !< The pressure at the ice-ocean
+  real, dimension(:,:),                       pointer     :: p_atm !< The pressure at the ice-ocean
                                                          !! or atmosphere-ocean interface [R L2 T-2 ~> Pa].
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), optional, intent(out) :: pbce !< The baroclinic pressure
                                                          !! anomaly in each layer due to eta anomalies
@@ -501,8 +500,7 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm
   if (.not.associated(CS)) call MOM_error(FATAL, &
        "MOM_PressureForce_FV_Bouss: Module must be initialized before it is used.")
 
-  use_p_atm = .false.
-  if (present(p_atm)) then ; if (associated(p_atm)) use_p_atm = .true. ; endif
+  use_p_atm = associated(p_atm)
   use_EOS = associated(tv%eqn_of_state)
   do i=Isq,Ieq+1 ; p0(i) = 0.0 ; enddo
   use_ALE = .false.
@@ -808,7 +806,7 @@ subroutine PressureForce_FV_init(Time, G, GV, US, param_file, diag, CS, tides_CS
   type(param_file_type),      intent(in)    :: param_file !< Parameter file handles
   type(diag_ctrl), target,    intent(inout) :: diag !< Diagnostics control structure
   type(PressureForce_FV_CS),  pointer       :: CS !< Finite volume PGF control structure
-  type(tidal_forcing_CS), optional, pointer :: tides_CSp !< Tides control structure
+  type(tidal_forcing_CS),     pointer       :: tides_CSp !< Tides control structure
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
   character(len=40)  :: mdl  ! This module's name.
@@ -821,9 +819,7 @@ subroutine PressureForce_FV_init(Time, G, GV, US, param_file, diag, CS, tides_CS
   else ; allocate(CS) ; endif
 
   CS%diag => diag ; CS%Time => Time
-  if (present(tides_CSp)) then
-    if (associated(tides_CSp)) CS%tides_CSp => tides_CSp
-  endif
+  if (associated(tides_CSp)) CS%tides_CSp => tides_CSp
 
   mdl = "MOM_PressureForce_FV"
   call log_version(param_file, mdl, version, "")

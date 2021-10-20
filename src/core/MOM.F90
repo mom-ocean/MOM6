@@ -3056,8 +3056,8 @@ subroutine adjust_ssh_for_p_atm(tv, G, GV, US, ssh, p_atm, use_EOS)
   type(verticalGrid_type),           intent(in)    :: GV  !< ocean vertical grid structure
   type(unit_scale_type),             intent(in)    :: US  !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G)),  intent(inout) :: ssh !< time mean surface height [m]
-  real, dimension(:,:),    optional, pointer       :: p_atm !< Ocean surface pressure [R L2 T-2 ~> Pa]
-  logical,                 optional, intent(in)    :: use_EOS !< If true, calculate the density for
+  real, dimension(:,:),              pointer       :: p_atm !< Ocean surface pressure [R L2 T-2 ~> Pa]
+  logical,                           intent(in)    :: use_EOS !< If true, calculate the density for
                                                        !! the SSH correction using the equation of state.
 
   real :: Rho_conv(SZI_(G))  ! The density used to convert surface pressure to
@@ -3069,9 +3069,8 @@ subroutine adjust_ssh_for_p_atm(tv, G, GV, US, ssh, p_atm, use_EOS)
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   EOSdom(:) = EOS_domain(G%HI)
-  if (present(p_atm)) then ; if (associated(p_atm)) then
-    calc_rho = associated(tv%eqn_of_state)
-    if (present(use_EOS) .and. calc_rho) calc_rho = use_EOS
+  if (associated(p_atm)) then
+    calc_rho = use_EOS .and. associated(tv%eqn_of_state)
     ! Correct the output sea surface height for the contribution from the ice pressure.
     do j=js,je
       if (calc_rho) then
@@ -3087,7 +3086,7 @@ subroutine adjust_ssh_for_p_atm(tv, G, GV, US, ssh, p_atm, use_EOS)
         enddo
       endif
     enddo
-  endif ; endif
+  endif
 
 end subroutine adjust_ssh_for_p_atm
 
