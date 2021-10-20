@@ -106,7 +106,7 @@ function register_boundary_impulse_tracer(HI, GV, param_file, CS, tr_Reg, restar
                  "it is a fatal error if the tracers are not found in the "//&
                  "restart files of a restarted run.", default=.false.)
   CS%ntr = NTR_MAX
-  allocate(CS%tr(isd:ied,jsd:jed,nz,CS%ntr)) ; CS%tr(:,:,:,:) = 0.0
+  allocate(CS%tr(isd:ied,jsd:jed,nz,CS%ntr), source=0.0)
 
   CS%nkml = max(GV%nkml,1)
 

@@ -332,12 +332,9 @@ subroutine MOM_wave_interface_init(time, G, GV, US, param_file, CS, diag )
          "STK_BAND_COUPLER is the number of Stokes drift bands in the coupler. "// &
          "This has to be consistent with the number of Stokes drift bands in WW3, "//&
          "or the model will fail.",units='', default=1)
-      allocate( CS%WaveNum_Cen(CS%NumBands) )
-      allocate( CS%STKx0(G%isdB:G%iedB,G%jsd:G%jed,CS%NumBands))
-      allocate( CS%STKy0(G%isdB:G%iedB,G%jsd:G%jed,CS%NumBands))
-      CS%WaveNum_Cen(:) = 0.0
-      CS%STKx0(:,:,:) = 0.0
-      CS%STKy0(:,:,:) = 0.0
+      allocate( CS%WaveNum_Cen(CS%NumBands), source=0.0 )
+      allocate( CS%STKx0(G%isdB:G%iedB,G%jsd:G%jed,CS%NumBands), source=0.0 )
+      allocate( CS%STKy0(G%isdB:G%iedB,G%jsd:G%jed,CS%NumBands), source=0.0 )
       CS%PartitionMode = 0
       call get_param(param_file, mdl, "SURFBAND_WAVENUMBERS", CS%WaveNum_Cen, &
            "Central wavenumbers for surface Stokes drift bands.", &
@@ -349,16 +346,11 @@ subroutine MOM_wave_interface_init(time, G, GV, US, param_file, CS, diag )
          "Make sure this is consistnet w/ WAVENUMBERS, STOKES_X, and "// &
          "STOKES_Y, there are no safety checks in the code.",              &
          units='', default=1)
-      allocate( CS%WaveNum_Cen(1:CS%NumBands) )
-      CS%WaveNum_Cen(:) = 0.0
-      allocate( CS%PrescribedSurfStkX(1:CS%NumBands))
-      CS%PrescribedSurfStkX(:) = 0.0
-      allocate( CS%PrescribedSurfStkY(1:CS%NumBands))
-      CS%PrescribedSurfStkY(:) = 0.0
-      allocate( CS%STKx0(G%isdB:G%iedB,G%jsd:G%jed,1:CS%NumBands))
-      CS%STKx0(:,:,:) = 0.0
-      allocate( CS%STKy0(G%isd:G%ied,G%jsdB:G%jedB,1:CS%NumBands))
-      CS%STKy0(:,:,:) = 0.0
+      allocate( CS%WaveNum_Cen(1:CS%NumBands), source=0.0 )
+      allocate( CS%PrescribedSurfStkX(1:CS%NumBands), source=0.0 )
+      allocate( CS%PrescribedSurfStkY(1:CS%NumBands), source=0.0 )
+      allocate( CS%STKx0(G%isdB:G%iedB,G%jsd:G%jed,1:CS%NumBands), source=0.0 )
+      allocate( CS%STKy0(G%isd:G%ied,G%jsdB:G%jedB,1:CS%NumBands), source=0.0 )
       CS%PartitionMode = 0
       call get_param(param_file, mdl, "SURFBAND_WAVENUMBERS", CS%WaveNum_Cen, &
            "Central wavenumbers for surface Stokes drift bands.", &
@@ -409,24 +401,17 @@ subroutine MOM_wave_interface_init(time, G, GV, US, param_file, CS, diag )
 
   ! Allocate and initialize
   ! a. Stokes driftProfiles
-  allocate(CS%Us_x(G%isdB:G%IedB,G%jsd:G%jed,GV%ke))
-  CS%Us_x(:,:,:) = 0.0
-  allocate(CS%Us_y(G%isd:G%Ied,G%jsdB:G%jedB,GV%ke))
-  CS%Us_y(:,:,:) = 0.0
+  allocate(CS%Us_x(G%isdB:G%IedB,G%jsd:G%jed,GV%ke), source=0.0)
+  allocate(CS%Us_y(G%isd:G%Ied,G%jsdB:G%jedB,GV%ke), source=0.0)
   ! b. Surface Values
-  allocate(CS%US0_x(G%isdB:G%iedB,G%jsd:G%jed))
-  CS%US0_x(:,:) = 0.0
-  allocate(CS%US0_y(G%isd:G%ied,G%jsdB:G%jedB))
-  CS%US0_y(:,:) = 0.0
+  allocate(CS%US0_x(G%isdB:G%iedB,G%jsd:G%jed), source=0.0)
+  allocate(CS%US0_y(G%isd:G%ied,G%jsdB:G%jedB), source=0.0)
   ! c. Langmuir number
-  allocate(CS%La_SL(G%isc:G%iec,G%jsc:G%jec))
-  allocate(CS%La_turb(G%isc:G%iec,G%jsc:G%jec))
-  CS%La_SL(:,:) = 0.0
-  CS%La_turb (:,:) = 0.0
+  allocate(CS%La_SL(G%isc:G%iec,G%jsc:G%jec), source=0.0)
+  allocate(CS%La_turb(G%isc:G%iec,G%jsc:G%jec), source=0.0)
   ! d. Viscosity for Stokes drift
   if (CS%StokesMixing) then
-    allocate(CS%KvS(G%isd:G%Ied,G%jsd:G%jed,GV%ke))
-    CS%KvS(:,:,:) = 0.0
+    allocate(CS%KvS(G%isd:G%Ied,G%jsd:G%jed,GV%ke), source=0.0)
   endif
 
   ! Initialize Wave related outputs
@@ -868,7 +853,7 @@ subroutine Surface_Bands_by_data_override(day_center, G, GV, US, CS)
 
     CS%NUMBANDS = sizes(1)
     ! Allocate the wavenumber bins
-    allocate( CS%WaveNum_Cen(CS%NUMBANDS) ) ; CS%WaveNum_Cen(:) = 0.0
+    allocate( CS%WaveNum_Cen(CS%NUMBANDS), source=0.0 )
 
     if (wavenumber_exists) then
       ! Wavenumbers found, so this file uses the old method:
@@ -882,7 +867,7 @@ subroutine Surface_Bands_by_data_override(day_center, G, GV, US, CS)
       CS%PartitionMode = 1
 
       ! Allocate the frequency bins
-      allocate( CS%Freq_Cen(CS%NUMBANDS) ) ; CS%Freq_Cen(:) = 0.0
+      allocate( CS%Freq_Cen(CS%NUMBANDS), source=0.0 )
 
       ! Reading frequencies
       PI = 4.0*atan(1.0)
@@ -894,10 +879,10 @@ subroutine Surface_Bands_by_data_override(day_center, G, GV, US, CS)
     endif
 
     if (.not.allocated(CS%STKx0)) then
-      allocate( CS%STKx0(G%isdB:G%iedB,G%jsd:G%jed,CS%NUMBANDS) ) ; CS%STKx0(:,:,:) = 0.0
+      allocate( CS%STKx0(G%isdB:G%iedB,G%jsd:G%jed,CS%NUMBANDS), source=0.0 )
     endif
     if (.not.allocated(CS%STKy0)) then
-      allocate( CS%STKy0(G%isd:G%ied,G%jsdB:G%jedB,CS%NUMBANDS) ) ; CS%STKy0(:,:,:) = 0.0
+      allocate( CS%STKy0(G%isd:G%ied,G%jsdB:G%jedB,CS%NUMBANDS), source=0.0 )
     endif
   endif
 

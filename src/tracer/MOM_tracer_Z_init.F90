@@ -96,8 +96,8 @@ function tracer_Z_init(tr, h, filename, tr_name, G, GV, US, missing_val, land_va
     return
   endif
 
-  allocate(tr_in(G%isd:G%ied,G%jsd:G%jed,nz_in)) ; tr_in(:,:,:) = 0.0
-  allocate(tr_1d(nz_in)) ; tr_1d(:) = 0.0
+  allocate(tr_in(G%isd:G%ied,G%jsd:G%jed,nz_in), source=0.0)
+  allocate(tr_1d(nz_in), source=0.0)
   call MOM_read_data(filename, tr_name, tr_in(:,:,:), G%Domain)
 
   ! Fill missing values from above?  Use a "close" test to avoid problems
@@ -137,8 +137,8 @@ function tracer_Z_init(tr, h, filename, tr_name, G, GV, US, missing_val, land_va
 
       do i=is,ie ; if (G%mask2dT(i,j)*htot(i) > 0.0) then
         ! Determine the z* heights of the model interfaces.
-        dilate = (G%bathyT(i,j) - 0.0) / htot(i)
-        e(nz+1) = -G%bathyT(i,j)
+        dilate = (G%bathyT(i,j) + G%Z_ref) / htot(i)
+        e(nz+1) = -G%bathyT(i,j) - G%Z_ref
         do k=nz,1,-1 ; e(K) = e(K+1) + dilate * h(i,j,k) ; enddo
 
         ! Create a single-column copy of tr_in.  Efficiency is not an issue here.
@@ -212,8 +212,8 @@ function tracer_Z_init(tr, h, filename, tr_name, G, GV, US, missing_val, land_va
 
       do i=is,ie ; if (G%mask2dT(i,j)*htot(i) > 0.0) then
         ! Determine the z* heights of the model interfaces.
-        dilate = (G%bathyT(i,j) - 0.0) / htot(i)
-        e(nz+1) = -G%bathyT(i,j)
+        dilate = (G%bathyT(i,j) + G%Z_ref) / htot(i)
+        e(nz+1) = -G%bathyT(i,j) - G%Z_ref
         do k=nz,1,-1 ; e(K) = e(K+1) + dilate * h(i,j,k) ; enddo
 
         ! Create a single-column copy of tr_in.  Efficiency is not an issue here.
@@ -426,7 +426,7 @@ subroutine read_Z_edges(filename, tr_name, z_edges, nz_out, has_edges, &
   call read_attribute(filename, "edges", edge_name, varname=dim_names(3), found=has_edges, ncid_in=ncid)
 
   nz_edge = sizes(3) ; if (has_edges) nz_edge = sizes(3)+1
-  allocate(z_edges(nz_edge)) ; z_edges(:) = 0.0
+  allocate(z_edges(nz_edge), source=0.0)
 
   if (nz_out < 1) return
 

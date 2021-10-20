@@ -542,7 +542,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
       enddo ; enddo ; enddo
       mass_tot = reproducing_sum(tmp1, isr, ier, jsr, jer, sums=mass_lay, EFP_sum=mass_EFP)
 
-      call find_eta(h, tv, G, GV, US, eta)
+      call find_eta(h, tv, G, GV, US, eta, dZref=G%Z_ref)
       do k=1,nz ; do j=js,je ; do i=is,ie
         tmp1(i,j,k) = US%Z_to_m*US%L_to_m**2*(eta(i,j,K)-eta(i,j,K+1)) * areaTm(i,j)
       enddo ; enddo ; enddo
@@ -674,8 +674,8 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
         hbelow = 0.0
         do k=nz,1,-1
           hbelow = hbelow + h(i,j,k) * GV%H_to_Z
-          hint = Z_0APE(K) + (hbelow - G%bathyT(i,j))
-          hbot = Z_0APE(K) - G%bathyT(i,j)
+          hint = Z_0APE(K) + (hbelow - (G%bathyT(i,j) + G%Z_ref))
+          hbot = Z_0APE(K) - (G%bathyT(i,j) + G%Z_ref)
           hbot = (hbot + ABS(hbot)) * 0.5
           PE_pt(i,j,K) = (0.5 * PE_scale_factor * areaTm(i,j)) * (GV%Rho0*GV%g_prime(K)) * &
                   (hint * hint - hbot * hbot)
@@ -685,7 +685,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
       do j=js,je ; do i=is,ie
         do k=nz,1,-1
           hint = Z_0APE(K) + eta(i,j,K)  ! eta and H_0 have opposite signs.
-          hbot = max(Z_0APE(K) - G%bathyT(i,j), 0.0)
+          hbot = max(Z_0APE(K) - (G%bathyT(i,j) + G%Z_ref), 0.0)
           PE_pt(i,j,K) = (0.5 * PE_scale_factor * areaTm(i,j) * (GV%Rho0*GV%g_prime(K))) * &
                   (hint * hint - hbot * hbot)
         enddo
@@ -1166,7 +1166,7 @@ subroutine create_depth_list(G, DL, min_depth_inc)
     i_global = i + G%idg_offset - (G%isg-1)
 
     list_pos = (j_global-1)*G%Domain%niglobal + i_global
-    Dlist(list_pos) = G%bathyT(i,j)
+    Dlist(list_pos) = G%bathyT(i,j) + G%Z_ref
     Arealist(list_pos) = G%mask2dT(i,j) * G%areaT(i,j)
   enddo ; enddo
 
@@ -1401,7 +1401,7 @@ subroutine get_depth_list_checksums(G, depth_chksum, area_chksum)
 
   ! Depth checksum
   do j=G%jsc,G%jec ; do i=G%isc,G%iec
-    field(i,j) = G%bathyT(i,j)
+    field(i,j) = G%bathyT(i,j) + G%Z_ref
   enddo ; enddo
   write(depth_chksum, '(Z16)') field_chksum(field(:,:))
 

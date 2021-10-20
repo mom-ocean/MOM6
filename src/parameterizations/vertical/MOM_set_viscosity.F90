@@ -115,80 +115,6 @@ end type set_visc_CS
 contains
 
 !> Calculates the thickness of the bottom boundary layer and the viscosity within that layer.
-!!
-!! A drag law is used, either linearized about an assumed bottom velocity or using the
-!! actual near-bottom velocities combined with an assumed unresolved velocity.  The bottom
-!! boundary layer thickness is limited by a combination of stratification and rotation, as
-!! in the paper of Killworth and Edwards, JPO 1999. It is not necessary to calculate the
-!! thickness and viscosity every time step; instead previous values may be used.
-!!
-!! \section set_viscous_BBL Viscous Bottom Boundary Layer
-!!
-!! If set_visc_cs.bottomdraglaw is True then a bottom boundary layer viscosity and thickness
-!! are calculated so that the bottom stress is
-!! \f[
-!! \mathbf{\tau}_b = C_d | U_{bbl} | \mathbf{u}_{bbl}
-!! \f]
-!! If set_visc_cs.bottomdraglaw is True then the term \f$|U_{bbl}|\f$ is set equal to the
-!! value in set_visc_cs.drag_bg_vel so that \f$C_d |U_{bbl}|\f$ becomes a Rayleigh bottom drag.
-!! Otherwise \f$|U_{bbl}|\f$ is found by averaging the flow over the bottom set_visc_cs.hbbl
-!! of the model, adding the amplitude of tides set_visc_cs.tideamp and a constant
-!! set_visc_cs.drag_bg_vel. For these calculations the vertical grid at the velocity
-!! component locations is found by
-!! \f[
-!! \begin{array}{ll}
-!! \frac{2 h^- h^+}{h^- + h^+} & u \left( h^+ - h^-\right) >= 0
-!! \\
-!! \frac{1}{2} \left( h^- + h^+ \right) &  u \left( h^+ - h^-\right) < 0
-!! \end{array}
-!! \f]
-!! which biases towards the thin cell if the thin cell is upwind. Biasing the grid toward
-!! thin upwind cells helps increase the effect of viscosity and inhibits flow out of these
-!! thin cells.
-!!
-!! After diagnosing \f$|U_{bbl}|\f$ over a fixed depth an active viscous boundary layer
-!! thickness is found using the ideas of Killworth and Edwards, 1999 (hereafter KW99).
-!! KW99 solve the equation
-!! \f[
-!! \left( \frac{h_{bbl}}{h_f} \right)^2 + \frac{h_{bbl}}{h_N} = 1
-!! \f]
-!! for the boundary layer depth \f$h_{bbl}\f$. Here
-!! \f[
-!! h_f = \frac{C_n u_*}{f}
-!! \f]
-!! is the rotation controlled boundary layer depth in the absence of stratification.
-!! \f$u_*\f$ is the surface friction speed given by
-!! \f[
-!! u_*^2 = C_d |U_{bbl}|^2
-!! \f]
-!! and is a function of near bottom model flow.
-!! \f[
-!! h_N = \frac{C_i u_*}{N} = \frac{ (C_i u_* )^2 }{g^\prime}
-!! \f]
-!! is the stratification controlled boundary layer depth. The non-dimensional parameters
-!! \f$C_n=0.5\f$ and \f$C_i=20\f$ are suggested by Zilitinkevich and Mironov, 1996.
-!!
-!! If a Richardson number dependent mixing scheme is being used, as indicated by
-!! set_visc_cs.rino_mix, then the boundary layer thickness is bounded to be no larger
-!! than a half of set_visc_cs.hbbl .
-!!
-!! \todo Channel drag needs to be explained
-!!
-!! A BBL viscosity is calculated so that the no-slip boundary condition in the vertical
-!! viscosity solver implies the stress \f$\mathbf{\tau}_b\f$.
-!!
-!! \subsection set_viscous_BBL_ref References
-!!
-!! \arg Killworth, P. D., and N. R. Edwards, 1999:
-!! A Turbulent Bottom Boundary Layer Code for Use in Numerical Ocean Models.
-!! J. Phys. Oceanogr., 29, 1221-1238,
-!! <a href="https://doi.org/10.1175/1520-0485(1999)029<1221:ATBBLC>2.0.CO;2"
-!! >doi:10.1175/1520-0485(1999)029<1221:ATBBLC>2.0.CO;2</a>
-!! \arg Zilitinkevich, S., Mironov, D.V., 1996:
-!! A multi-limit formulation for the equilibrium depth of a stably stratified boundary layer.
-!! Boundary-Layer Meteorology 81, 325-351.
-!! <a href="https://doi.org/10.1007/BF02430334">doi:10.1007/BF02430334</a>
-!!
 subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
   type(ocean_grid_type),    intent(inout) :: G    !< The ocean's grid structure.
   type(verticalGrid_type),  intent(in)    :: GV   !< The ocean's vertical grid structure.
@@ -228,11 +154,11 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
   real :: Rhtot ! Running sum of thicknesses times the layer potential
                 ! densities [H R ~> kg m-2 or kg2 m-5].
   real, dimension(SZIB_(G),SZJ_(G)) :: &
-    D_u, &      ! Bottom depth interpolated to u points [Z ~> m].
+    D_u, &      ! Bottom depth linearly interpolated to u points [Z ~> m].
     mask_u      ! A mask that disables any contributions from u points that
                 ! are land or past open boundary conditions [nondim], 0 or 1.
   real, dimension(SZI_(G),SZJB_(G)) :: &
-    D_v, &      ! Bottom depth interpolated to v points [Z ~> m].
+    D_v, &      ! Bottom depth linearly interpolated to v points [Z ~> m].
     mask_v      ! A mask that disables any contributions from v points that
                 ! are land or past open boundary conditions [nondim], 0 or 1.
   real, dimension(SZIB_(G),SZK_(GV)) :: &
@@ -399,12 +325,12 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
 
   !$OMP parallel do default(shared)
   do J=js-1,je ; do i=is-1,ie+1
-    D_v(i,J) = 0.5*(G%bathyT(i,j) + G%bathyT(i,j+1))
+    D_v(i,J) = 0.5*(G%bathyT(i,j) + G%bathyT(i,j+1)) + G%Z_ref
     mask_v(i,J) = G%mask2dCv(i,J)
   enddo ; enddo
   !$OMP parallel do default(shared)
   do j=js-1,je+1 ; do I=is-1,ie
-    D_u(I,j) = 0.5*(G%bathyT(i,j) + G%bathyT(i+1,j))
+    D_u(I,j) = 0.5*(G%bathyT(i,j) + G%bathyT(i+1,j)) + G%Z_ref
     mask_u(I,j) = G%mask2dCu(I,j)
   enddo ; enddo
 
@@ -414,13 +340,13 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
     I = OBC%segment(n)%HI%IsdB ; J = OBC%segment(n)%HI%JsdB
     if (OBC%segment(n)%is_N_or_S .and. (J >= js-1) .and. (J <= je)) then
       do i = max(is-1,OBC%segment(n)%HI%isd), min(ie+1,OBC%segment(n)%HI%ied)
-        if (OBC%segment(n)%direction == OBC_DIRECTION_N) D_v(i,J) = G%bathyT(i,j)
-        if (OBC%segment(n)%direction == OBC_DIRECTION_S) D_v(i,J) = G%bathyT(i,j+1)
+        if (OBC%segment(n)%direction == OBC_DIRECTION_N) D_v(i,J) = G%bathyT(i,j) + G%Z_ref
+        if (OBC%segment(n)%direction == OBC_DIRECTION_S) D_v(i,J) = G%bathyT(i,j+1) + G%Z_ref
       enddo
     elseif (OBC%segment(n)%is_E_or_W .and. (I >= is-1) .and. (I <= ie)) then
       do j = max(js-1,OBC%segment(n)%HI%jsd), min(je+1,OBC%segment(n)%HI%jed)
-        if (OBC%segment(n)%direction == OBC_DIRECTION_E) D_u(I,j) = G%bathyT(i,j)
-        if (OBC%segment(n)%direction == OBC_DIRECTION_W) D_u(I,j) = G%bathyT(i+1,j)
+        if (OBC%segment(n)%direction == OBC_DIRECTION_E) D_u(I,j) = G%bathyT(i,j) + G%Z_ref
+        if (OBC%segment(n)%direction == OBC_DIRECTION_W) D_u(I,j) = G%bathyT(i+1,j) + G%Z_ref
       enddo
     endif
   enddo ; endif
@@ -809,6 +735,8 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
         ! The drag within the bottommost bbl_thick is applied as a part of
         ! an enhanced bottom viscosity, while above this the drag is applied
         ! directly to the layers in question as a Rayleigh drag term.
+
+        !### The harmonic mean edge depths here are not invariant to offsets!
         if (m==1) then
           D_vel = D_u(I,j)
           tmp = G%mask2dCu(I,j+1) * D_u(I,j+1)
@@ -2217,12 +2145,12 @@ subroutine set_visc_init(Time, G, GV, US, param_file, diag, visc, CS, restart_CS
   endif
 
   if (CS%bottomdraglaw) then
-    allocate(visc%bbl_thick_u(IsdB:IedB,jsd:jed)) ; visc%bbl_thick_u(:,:) = 0.0
-    allocate(visc%kv_bbl_u(IsdB:IedB,jsd:jed)) ; visc%kv_bbl_u(:,:) = 0.0
-    allocate(visc%bbl_thick_v(isd:ied,JsdB:JedB)) ; visc%bbl_thick_v(:,:) = 0.0
-    allocate(visc%kv_bbl_v(isd:ied,JsdB:JedB)) ; visc%kv_bbl_v(:,:) = 0.0
-    allocate(visc%ustar_bbl(isd:ied,jsd:jed)) ; visc%ustar_bbl(:,:) = 0.0
-    allocate(visc%TKE_bbl(isd:ied,jsd:jed)) ; visc%TKE_bbl(:,:) = 0.0
+    allocate(visc%bbl_thick_u(IsdB:IedB,jsd:jed), source=0.0)
+    allocate(visc%kv_bbl_u(IsdB:IedB,jsd:jed), source=0.0)
+    allocate(visc%bbl_thick_v(isd:ied,JsdB:JedB), source=0.0)
+    allocate(visc%kv_bbl_v(isd:ied,JsdB:JedB), source=0.0)
+    allocate(visc%ustar_bbl(isd:ied,jsd:jed), source=0.0)
+    allocate(visc%TKE_bbl(isd:ied,jsd:jed), source=0.0)
 
     CS%id_bbl_thick_u = register_diag_field('ocean_model', 'bbl_thick_u', &
        diag%axesCu1, Time, 'BBL thickness at u points', 'm', conversion=US%Z_to_m)
@@ -2231,7 +2159,7 @@ subroutine set_visc_init(Time, G, GV, US, param_file, diag, visc, CS, restart_CS
     CS%id_bbl_u = register_diag_field('ocean_model', 'bbl_u', diag%axesCu1, &
        Time, 'BBL mean u current', 'm s-1', conversion=US%L_T_to_m_s)
     if (CS%id_bbl_u>0) then
-      allocate(CS%bbl_u(IsdB:IedB,jsd:jed)) ; CS%bbl_u(:,:) = 0.0
+      allocate(CS%bbl_u(IsdB:IedB,jsd:jed), source=0.0)
     endif
     CS%id_bbl_thick_v = register_diag_field('ocean_model', 'bbl_thick_v', &
        diag%axesCv1, Time, 'BBL thickness at v points', 'm', conversion=US%Z_to_m)
@@ -2240,10 +2168,10 @@ subroutine set_visc_init(Time, G, GV, US, param_file, diag, visc, CS, restart_CS
     CS%id_bbl_v = register_diag_field('ocean_model', 'bbl_v', diag%axesCv1, &
        Time, 'BBL mean v current', 'm s-1', conversion=US%L_T_to_m_s)
     if (CS%id_bbl_v>0) then
-      allocate(CS%bbl_v(isd:ied,JsdB:JedB)) ; CS%bbl_v(:,:) = 0.0
+      allocate(CS%bbl_v(isd:ied,JsdB:JedB), source=0.0)
     endif
     if (CS%BBL_use_tidal_bg) then
-      allocate(CS%tideamp(isd:ied,jsd:jed)) ; CS%tideamp(:,:) = 0.0
+      allocate(CS%tideamp(isd:ied,jsd:jed), source=0.0)
       filename = trim(CS%inputdir) // trim(tideamp_file)
       call log_param(param_file, mdl, "INPUTDIR/TIDEAMP_FILE", filename)
       call MOM_read_data(filename, 'tideamp', CS%tideamp, G%domain, scale=US%m_to_Z*US%T_to_s)
@@ -2251,8 +2179,8 @@ subroutine set_visc_init(Time, G, GV, US, param_file, diag, visc, CS, restart_CS
     endif
   endif
   if (CS%Channel_drag) then
-    allocate(visc%Ray_u(IsdB:IedB,jsd:jed,nz)) ; visc%Ray_u(:,:,:) = 0.0
-    allocate(visc%Ray_v(isd:ied,JsdB:JedB,nz)) ; visc%Ray_v(:,:,:) = 0.0
+    allocate(visc%Ray_u(IsdB:IedB,jsd:jed,nz), source=0.0)
+    allocate(visc%Ray_v(isd:ied,JsdB:JedB,nz), source=0.0)
     CS%id_Ray_u = register_diag_field('ocean_model', 'Rayleigh_u', diag%axesCuL, &
        Time, 'Rayleigh drag velocity at u points', 'm s-1', conversion=US%Z_to_m*US%s_to_T)
     CS%id_Ray_v = register_diag_field('ocean_model', 'Rayleigh_v', diag%axesCvL, &
@@ -2261,8 +2189,8 @@ subroutine set_visc_init(Time, G, GV, US, param_file, diag, visc, CS, restart_CS
 
 
   if (CS%dynamic_viscous_ML) then
-    allocate(visc%nkml_visc_u(IsdB:IedB,jsd:jed)) ; visc%nkml_visc_u(:,:) = 0.0
-    allocate(visc%nkml_visc_v(isd:ied,JsdB:JedB)) ; visc%nkml_visc_v(:,:) = 0.0
+    allocate(visc%nkml_visc_u(IsdB:IedB,jsd:jed), source=0.0)
+    allocate(visc%nkml_visc_v(isd:ied,JsdB:JedB), source=0.0)
     CS%id_nkml_visc_u = register_diag_field('ocean_model', 'nkml_visc_u', &
        diag%axesCu1, Time, 'Number of layers in viscous mixed layer at u points', 'm')
     CS%id_nkml_visc_v = register_diag_field('ocean_model', 'nkml_visc_v', &

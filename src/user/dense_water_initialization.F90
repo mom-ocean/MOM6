@@ -152,11 +152,13 @@ subroutine dense_water_initialize_TS(G, GV, param_file, eqn_of_state, T, S, h, j
 end subroutine dense_water_initialize_TS
 
 !> Initialize the restoring sponges for the dense water experiment
-subroutine dense_water_initialize_sponges(G, GV, US, tv, param_file, use_ALE, CSp, ACSp)
+subroutine dense_water_initialize_sponges(G, GV, US, tv, depth_tot, param_file, use_ALE, CSp, ACSp)
   type(ocean_grid_type),   intent(in) :: G !< Horizontal grid control structure
   type(verticalGrid_type), intent(in) :: GV !< Vertical grid control structure
   type(unit_scale_type),   intent(in) :: US !< A dimensional unit scaling type
   type(thermo_var_ptrs),   intent(in) :: tv !< Thermodynamic variables
+  real, dimension(SZI_(G),SZJ_(G)), &
+                           intent(in) :: depth_tot  !< The nominal total depth of the ocean [Z ~> m]
   type(param_file_type),   intent(in) :: param_file !< Parameter file structure
   logical,                 intent(in) :: use_ALE !< ALE flag
   type(sponge_CS),         pointer    :: CSp !< Layered sponge control structure pointer
@@ -234,7 +236,7 @@ subroutine dense_water_initialize_sponges(G, GV, US, tv, param_file, use_ALE, CS
 
     do j = G%jsc,G%jec
       do i = G%isc,G%iec
-        eta1D(nz+1) = -G%bathyT(i,j)
+        eta1D(nz+1) = -depth_tot(i,j)
         do k = nz,1,-1
           eta1D(k) = e0(k)
 

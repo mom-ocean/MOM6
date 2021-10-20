@@ -340,7 +340,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
   if (CS%id_T_predia > 0) call post_data(CS%id_T_predia, tv%T, CS%diag)
   if (CS%id_S_predia > 0) call post_data(CS%id_S_predia, tv%S, CS%diag)
   if (CS%id_e_predia > 0) then
-    call find_eta(h, tv, G, GV, US, eta, eta_to_m=1.0)
+    call find_eta(h, tv, G, GV, US, eta, eta_to_m=1.0, dZref=G%Z_ref)
     call post_data(CS%id_e_predia, eta, CS%diag)
   endif
 
@@ -2545,8 +2545,7 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
 
   !! Diagnostics for terms multiplied by fractional thicknesses
   if (CS%id_hf_dudt_dia_2d > 0) then
-    allocate(hf_dudt_dia_2d(G%IsdB:G%IedB,G%jsd:G%jed))
-    hf_dudt_dia_2d(:,:) = 0.0
+    allocate(hf_dudt_dia_2d(G%IsdB:G%IedB,G%jsd:G%jed), source=0.0)
     do k=1,nz ; do j=js,je ; do I=Isq,Ieq
       hf_dudt_dia_2d(I,j) = hf_dudt_dia_2d(I,j) + ADp%du_dt_dia(I,j,k) * ADp%diag_hfrac_u(I,j,k)
     enddo ; enddo ; enddo
@@ -2555,8 +2554,7 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
   endif
 
   if (CS%id_hf_dvdt_dia_2d > 0) then
-    allocate(hf_dvdt_dia_2d(G%isd:G%ied,G%JsdB:G%JedB))
-    hf_dvdt_dia_2d(:,:) = 0.0
+    allocate(hf_dvdt_dia_2d(G%isd:G%ied,G%JsdB:G%JedB), source=0.0)
     do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
       hf_dvdt_dia_2d(i,J) = hf_dvdt_dia_2d(i,J) + ADp%dv_dt_dia(i,J,k) * ADp%diag_hfrac_v(i,J,k)
     enddo ; enddo ; enddo
@@ -2869,8 +2867,8 @@ subroutine adiabatic_driver_init(Time, G, param_file, diag, CS, &
   type(tracer_flow_control_CS), pointer  :: tracer_flow_CSp  !< pointer to control structure of the
                                                              !! tracer flow control module
 
-! This "include" declares and sets the variable "version".
-#include "version_variable.h"
+  ! This "include" declares and sets the variable "version".
+# include "version_variable.h"
   character(len=40)  :: mdl = "MOM_diabatic_driver" ! This module's name.
 
   if (associated(CS)) then
@@ -2882,9 +2880,34 @@ subroutine adiabatic_driver_init(Time, G, param_file, diag, CS, &
   CS%diag => diag
   if (associated(tracer_flow_CSp)) CS%tracer_flow_CSp => tracer_flow_CSp
 
-! Set default, read and log parameters
+  ! Set default, read and log parameters
   call log_version(param_file, mdl, version, &
                    "The following parameters are used for diabatic processes.")
+
+  ! Check for any subsidiary parameters that are inconsistent with the adiabatic mode.
+  call get_param(param_file, mdl, "SPONGE", CS%use_sponge, &
+                 "If true, sponges may be applied anywhere in the domain. "//&
+                 "The exact location and properties of those sponges are "//&
+                 "specified via calls to initialize_sponge and possibly "//&
+                 "set_up_sponge_field.", default=.false., do_not_log=.true.)
+  call get_param(param_file, mdl, "ENERGETICS_SFC_PBL", CS%use_energetic_PBL, &
+                 "If true, use an implied energetics planetary boundary "//&
+                 "layer scheme to determine the diffusivity and viscosity "//&
+                 "in the surface boundary layer.", default=.false., do_not_log=.true.)
+  call get_param(param_file, mdl, "USE_KPP", CS%use_KPP, &
+                 "If true, turns on the [CVMix] KPP scheme of Large et al., 1994, "//&
+                 "to calculate diffusivities and non-local transport in the OBL.", &
+                 default=.false., do_not_log=.true.)
+
+  if (CS%use_sponge) call MOM_error(WARNING, &
+    "When ADIABATIC = True, it is inconsistent to set SPONGE = True.")
+  if (CS%use_energetic_PBL) call MOM_error(WARNING, &
+    "When ADIABATIC = True, it is inconsistent to set ENERGETICS_SFC_PBL = True.")
+  if (CS%use_KPP) call MOM_error(WARNING, &
+    "When ADIABATIC = True, it is inconsistent to set USE_KPP = True.")
+
+  if (CS%use_sponge .or. CS%use_energetic_PBL .or. CS%use_KPP) &
+    call MOM_error(FATAL, "adiabatic_driver_init is aborting due to inconsistent parameter settings.")
 
 end subroutine adiabatic_driver_init
 
@@ -2910,13 +2933,14 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
   type(ALE_sponge_CS),     pointer       :: ALE_sponge_CSp   !< pointer to the ALE sponge module control structure
   type(oda_incupd_CS),     pointer       :: oda_incupd_CSp   !< pointer to the oda incupd module control structure
 
+  ! Local variables
   real    :: Kd  ! A diffusivity used in the default for other tracer diffusivities, in MKS units [m2 s-1]
   integer :: num_mode
   logical :: use_temperature
   character(len=20) :: EN1, EN2, EN3
 
-! This "include" declares and sets the variable "version".
-#include "version_variable.h"
+  ! This "include" declares and sets the variable "version".
+# include "version_variable.h"
   character(len=40)  :: mdl = "MOM_diabatic_driver" ! This module's name.
   character(len=48)  :: thickness_units
   character(len=40)  :: var_name
@@ -3122,7 +3146,7 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
   if (CS%use_int_tides) then
     CS%id_cg1 = register_diag_field('ocean_model', 'cn1', diag%axesT1, &
                  Time, 'First baroclinic mode (eigen) speed', 'm s-1', conversion=US%L_T_to_m_s)
-    allocate(CS%id_cn(CS%nMode)) ; CS%id_cn(:) = -1
+    allocate(CS%id_cn(CS%nMode), source=-1)
     do m=1,CS%nMode
       write(var_name, '("cn_mode",i1)') m
       write(var_descript, '("Baroclinic (eigen) speed of mode ",i1)') m
@@ -3235,13 +3259,13 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
   ! KPP_init() allocated CS%KPP_Csp and also sets CS%KPPisPassive
   CS%useKPP = KPP_init(param_file, G, GV, US, diag, Time, CS%KPP_CSp, passive=CS%KPPisPassive)
   if (CS%useKPP) then
-    allocate( CS%KPP_NLTheat(isd:ied,jsd:jed,nz+1) )   ; CS%KPP_NLTheat(:,:,:)   = 0.
-    allocate( CS%KPP_NLTscalar(isd:ied,jsd:jed,nz+1) ) ; CS%KPP_NLTscalar(:,:,:) = 0.
+    allocate(CS%KPP_NLTheat(isd:ied,jsd:jed,nz+1), source=0.0)
+    allocate(CS%KPP_NLTscalar(isd:ied,jsd:jed,nz+1), source=0.0)
   endif
   if (CS%useKPP) then
-    allocate( CS%KPP_buoy_flux(isd:ied,jsd:jed,nz+1) ) ; CS%KPP_buoy_flux(:,:,:) = 0.
-    allocate( CS%KPP_temp_flux(isd:ied,jsd:jed) )      ; CS%KPP_temp_flux(:,:)   = 0.
-    allocate( CS%KPP_salt_flux(isd:ied,jsd:jed) )      ; CS%KPP_salt_flux(:,:)   = 0.
+    allocate(CS%KPP_buoy_flux(isd:ied,jsd:jed,nz+1), source=0.0)
+    allocate(CS%KPP_temp_flux(isd:ied,jsd:jed), source=0.0)
+    allocate(CS%KPP_salt_flux(isd:ied,jsd:jed), source=0.0)
   endif
 
 

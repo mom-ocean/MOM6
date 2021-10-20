@@ -16,37 +16,43 @@
 #   These settings can be provided as either command-line flags, or saved in a
 #   `config.mk` file.
 #
-# Test suite configuration:
+# Experiment Configuration:
+#   BUILDS  Executables to be built by `make` or `make all`
+#   CONFIGS Model configurations to test (default: `tc*`)
+#   TESTS   Tests to run
+#   DIMS    Dimensional scaling tests
+# (NOTE: Each test will build its required executables, regardless of BUILDS)
 #
+# General test configuration:
+#   FRAMEWORK               Model framework (fms1 or fms2)
 #   MPIRUN                  MPI job launcher (mpirun, srun, etc)
 #   DO_REPRO_TESTS          Enable production ("repro") testing equivalence
-#   DO_REGRESSION_TESTS:    Enable regression tests (usually dev/gfdl)
+#   DO_REGRESSION_TESTS     Enable regression tests (usually dev/gfdl)
 #   REPORT_COVERAGE         Enable code coverage and report to codecov
 #
 # Compiler configuration:
-#   (NOTE: These are environment variables and may be inherited from a shell.)
-#
 #   CC      C compiler
 #   MPICC   MPI C compiler
 #   FC      Fortran compiler
 #   MPIFC   MPI Fortran compiler
+# (NOTE: These are environment variables and may be inherited from a shell.)
 #
 # Build configuration:
 #   FCFLAGS_DEBUG       Testing ("debug") compiler flags
 #   FCFLAGS_REPRO       Production ("repro") compiler flags
+#   FCFLAGS_OPT         Aggressive optimization compiler flags
 #   FCFLAGS_INIT        Variable initialization flags
 #   FCFLAGS_COVERAGE    Code coverage flags
 #
 # Regression repository ("target") configuration:
-#   (NOTE: These would typically be configured by a CI such as Travis.)
-#
 #   MOM_TARGET_SLUG             URL slug (minus domain) of the target repo
 #   MOM_TARGET_URL              Full URL of the target repo
 #   MOM_TARGET_LOCAL_BRANCH     Target branch name
+# (NOTE: These would typically be configured by a CI.)
 #
 #----
 
-# TODO: Bourne shell compatibility
+# TODO: POSIX shell compatibility
 SHELL = bash
 
 # No implicit rules
@@ -57,6 +63,9 @@ MAKEFLAGS += -R
 
 # User-defined configuration
 -include config.mk
+
+# Set the infra framework
+FRAMEWORK ?= fms1
 
 # Set the MPI launcher here
 # TODO: This needs more automated configuration
@@ -72,10 +81,11 @@ export MPIFC
 # NOTE: FMS will be built using FCFLAGS_DEBUG
 FCFLAGS_DEBUG ?= -g -O0
 FCFLAGS_REPRO ?= -g -O2
+FCFLAGS_OPT ?= -g -O3 -mavx -fno-omit-frame-pointer
 FCFLAGS_INIT ?=
 FCFLAGS_COVERAGE ?=
 # Additional notes:
-# - The default values are simple, minimalist flags, supported by nearly all
+# - These default values are simple, minimalist flags, supported by nearly all
 #   compilers which are comparable to GFDL's canonical DEBUG and REPRO builds.
 #
 # - These flags should be configured outside of the Makefile, either with
@@ -96,6 +106,14 @@ DO_REPRO_TESTS ?=
 # Time measurement (configurable by the CI)
 TIME ?= time
 
+
+# Experiment configuration
+BUILDS ?= symmetric asymmetric openmp
+CONFIGS ?= $(wildcard tc*)
+TESTS ?= grid layout rotate restart openmp nan $(foreach d,$(DIMS),dim.$(d))
+DIMS ?= t l h z q r
+
+
 #---
 # Dependencies
 DEPS = deps
@@ -108,18 +126,17 @@ MKMF := $(DEPS)/bin/mkmf
 #---
 # Test configuration
 
-# Executables
-BUILDS = symmetric asymmetric repro openmp
-CONFIGS := $(wildcard tc*)
-TESTS = grids layouts restarts nans dims openmps rotations
-DIMS = t l h z q r
-
 # REPRO tests enable reproducibility with optimization, and often do not match
 # the DEBUG results in older GCCs and vendor compilers, so we can optionally
 # disable them.
 ifeq ($(DO_REPRO_TESTS), true)
   BUILDS += repro
-  TESTS += repros
+  TESTS += repro
+endif
+
+# Profiling
+ifeq ($(DO_PROFILE), false)
+  BUILDS += opt opt_target
 endif
 
 # The following variables are configured by Travis:
@@ -132,7 +149,7 @@ REPORT_COVERAGE ?=
 
 ifeq ($(DO_REGRESSION_TESTS), true)
   BUILDS += target
-  TESTS += regressions
+  TESTS += regression
 
   MOM_TARGET_SLUG ?= NOAA-GFDL/MOM6
   MOM_TARGET_URL ?= https://github.com/$(MOM_TARGET_SLUG)
@@ -192,9 +209,10 @@ endif
 #---
 # Rules
 
-.PHONY: all build.regressions
+.PHONY: all build.regressions build.prof
 all: $(foreach b,$(BUILDS),build/$(b)/MOM6) $(VENV_PATH)
 build.regressions: $(foreach b,symmetric target,build/$(b)/MOM6)
+build.prof: $(foreach b,opt opt_target,build/$(b)/MOM6)
 
 # Executable
 BUILD_TARGETS = MOM6 Makefile path_names
@@ -217,6 +235,7 @@ PATH_FMS = PATH="${PATH}:../../$(DEPS)/bin"
 SYMMETRIC_FCFLAGS := FCFLAGS="$(FCFLAGS_DEBUG) $(FCFLAGS_INIT) $(COVERAGE) $(FCFLAGS_FMS)"
 ASYMMETRIC_FCFLAGS := FCFLAGS="$(FCFLAGS_DEBUG) $(FCFLAGS_INIT) $(FCFLAGS_FMS)"
 REPRO_FCFLAGS := FCFLAGS="$(FCFLAGS_REPRO) $(FCFLAGS_FMS)"
+OPT_FCFLAGS := FCFLAGS="$(FCFLAGS_OPT) $(FCFLAGS_FMS)"
 OPENMP_FCFLAGS := FCFLAGS="$(FCFLAGS_DEBUG) $(FCFLAGS_INIT) $(FCFLAGS_FMS)"
 TARGET_FCFLAGS := FCFLAGS="$(FCFLAGS_DEBUG) $(FCFLAGS_INIT) $(FCFLAGS_FMS)"
 
@@ -230,6 +249,8 @@ build/asymmetric/Makefile: MOM_ENV=$(PATH_FMS) $(ASYMMETRIC_FCFLAGS) $(MOM_LDFLA
 build/repro/Makefile: MOM_ENV=$(PATH_FMS) $(REPRO_FCFLAGS) $(MOM_LDFLAGS)
 build/openmp/Makefile: MOM_ENV=$(PATH_FMS) $(OPENMP_FCFLAGS) $(MOM_LDFLAGS)
 build/target/Makefile: MOM_ENV=$(PATH_FMS) $(TARGET_FCFLAGS) $(MOM_LDFLAGS)
+build/opt/Makefile: MOM_ENV=$(PATH_FMS) $(OPT_FCFLAGS) $(MOM_LDFLAGS)
+build/opt_target/Makefile: MOM_ENV=$(PATH_FMS) $(OPT_FCFLAGS) $(MOM_LDFLAGS)
 build/coupled/Makefile: MOM_ENV=$(PATH_FMS) $(SYMMETRIC_FCFLAGS) $(SYMMETRIC_LDFLAGS)
 build/nuopc/Makefile: MOM_ENV=$(PATH_FMS) $(SYMMETRIC_FCFLAGS) $(SYMMETRIC_LDFLAGS)
 build/mct/Makefile: MOM_ENV=$(PATH_FMS) $(SYMMETRIC_FCFLAGS) $(SYMMETRIC_LDFLAGS)
@@ -240,12 +261,15 @@ build/asymmetric/Makefile: MOM_ACFLAGS=--enable-asymmetric
 build/repro/Makefile: MOM_ACFLAGS=
 build/openmp/Makefile: MOM_ACFLAGS=--enable-openmp
 build/target/Makefile: MOM_ACFLAGS=
+build/opt/Makefile: MOM_ACFLAGS=
+build/opt_target/Makefile: MOM_ACFLAGS=
 build/coupled/Makefile: MOM_ACFLAGS=--with-driver=coupled_driver
 build/nuopc/Makefile: MOM_ACFLAGS=--with-driver=nuopc_driver
 build/mct/Makefile: MOM_ACFLAGS=--with-driver=mct_driver
 
 # Fetch regression target source code
 build/target/Makefile: | $(TARGET_CODEBASE)
+build/opt_target/Makefile: | $(TARGET_CODEBASE)
 
 
 # Define source code dependencies
@@ -267,7 +291,7 @@ build/%/MOM6: build/%/Makefile
 build/%/Makefile: ../ac/configure ../ac/Makefile.in $(DEPS)/lib/libFMS.a $(MKMF) $(LIST_PATHS)
 	mkdir -p $(@D)
 	cd $(@D) \
-	  && $(MOM_ENV) ../../../ac/configure $(MOM_ACFLAGS) \
+	  && $(MOM_ENV) ../../../ac/configure $(MOM_ACFLAGS) --with-framework=$(FRAMEWORK) \
 	  || (cat config.log && false)
 
 
@@ -276,7 +300,8 @@ build/%/Makefile: ../ac/configure ../ac/Makefile.in $(DEPS)/lib/libFMS.a $(MKMF)
 
 
 # Fetch the regression target codebase
-build/target/Makefile: $(TARGET_CODEBASE)/ac/configure $(DEPS)/lib/libFMS.a $(MKMF) $(LIST_PATHS)
+build/target/Makefile build/opt_target/Makefile: \
+  $(TARGET_CODEBASE)/ac/configure $(DEPS)/lib/libFMS.a $(MKMF) $(LIST_PATHS)
 	mkdir -p $(@D)
 	cd $(@D) \
 	  && $(MOM_ENV) ../../$(TARGET_CODEBASE)/ac/configure $(MOM_ACFLAGS) \
@@ -333,6 +358,7 @@ $(DEPS)/Makefile: ../ac/deps/Makefile
 	mkdir -p $(@D)
 	cp $< $@
 
+
 #---
 # The following block does a non-library build of a coupled driver interface to MOM, along with everything below it.
 # This simply checks that we have not broken the ability to compile. This is not a means to build a complete coupled executable.
@@ -352,6 +378,7 @@ check_mom6_api_coupled: build/coupled/ocean_model_MOM.o
 build/mct/mom_ocean_model_mct.o: build/mct/Makefile
 	cd $(@D) && make $(@F)
 check_mom6_api_mct: build/mct/mom_ocean_model_mct.o
+
 
 #---
 # Python preprocessing
@@ -382,21 +409,38 @@ test: $(foreach t,$(TESTS),test.$(t))
 # TODO: restart checksum comparison is not yet implemented
 
 .PHONY: $(foreach t,$(TESTS),test.$(t))
-test.grids: $(foreach c,$(filter-out tc3,$(CONFIGS)),$(c).grid $(c).grid.diag)
-test.layouts: $(foreach c,$(CONFIGS),$(c).layout $(c).layout.diag)
-test.rotations: $(foreach c,$(CONFIGS),$(c).rotate)
-test.restarts: $(foreach c,$(CONFIGS),$(c).restart)
-test.repros: $(foreach c,$(CONFIGS),$(c).repro $(c).repro.diag)
-test.openmps: $(foreach c,$(CONFIGS),$(c).openmp $(c).openmp.diag)
-test.nans: $(foreach c,$(CONFIGS),$(c).nan $(c).nan.diag)
-test.dims: $(foreach c,$(CONFIGS),$(foreach d,$(DIMS),$(c).dim.$(d) $(c).dim.$(d).diag))
-test.regressions: $(foreach c,$(CONFIGS),$(c).regression $(c).regression.diag)
+test.grid: $(foreach c,$(filter-out tc3,$(CONFIGS)),$(c).grid $(c).grid.diag)
+test.layout: $(foreach c,$(CONFIGS),$(c).layout $(c).layout.diag)
+test.rotate: $(foreach c,$(CONFIGS),$(c).rotate)
+test.restart: $(foreach c,$(CONFIGS),$(c).restart)
+test.repro: $(foreach c,$(CONFIGS),$(c).repro $(c).repro.diag)
+test.openmp: $(foreach c,$(CONFIGS),$(c).openmp $(c).openmp.diag)
+test.nan: $(foreach c,$(CONFIGS),$(c).nan $(c).nan.diag)
+test.regression: $(foreach c,$(CONFIGS),$(c).regression $(c).regression.diag)
+test.dim: $(foreach d,$(DIMS),test.dim.$(d))
+define TEST_DIM_RULE
+test.dim.$(1): $(foreach c,$(CONFIGS),$(c).dim.$(1) $(c).dim.$(1).diag)
+endef
+$(foreach d,$(DIMS),$(eval $(call TEST_DIM_RULE,$(d))))
 
 .PHONY: run.symmetric run.asymmetric run.nans run.openmp
 run.symmetric: $(foreach c,$(CONFIGS),work/$(c)/symmetric/ocean.stats)
 run.asymmetric: $(foreach c,$(filter-out tc3,$(CONFIGS)),$(CONFIGS),work/$(c)/asymmetric/ocean.stats)
-run.nans: $(foreach c,$(CONFIGS),work/$(c)/nan/ocean.stats)
+run.nan: $(foreach c,$(CONFIGS),work/$(c)/nan/ocean.stats)
 run.openmp: $(foreach c,$(CONFIGS),work/$(c)/openmp/ocean.stats)
+
+# Configuration test rules
+# $(1): Configuration name (tc1, tc2, &c.)
+# $(2): Excluded tests
+.PRECIOUS: $(foreach c,$(CONFIGS),$(c))
+define CONFIG_RULE
+$(1): \
+  $(foreach t,$(filter-out $(2),$(TESTS)),$(1).$(t)) \
+  $(foreach t,$(filter-out $(2) rotate restart,$(TESTS)),$(1).$(t).diag)
+endef
+$(foreach c,$(filter-out tc3,$(CONFIGS)),$(eval $(call CONFIG_RULE,$(c),)))
+# NOTE: tc3 uses OBCs and does not support asymmetric grid
+$(eval $(call CONFIG_RULE,tc3,grid))
 
 # Color highlights for test results
 RED = \033[0;31m
@@ -411,36 +455,41 @@ WARN = ${YELLOW}WARN${RESET}
 FAIL = ${RED}FAIL${RESET}
 
 # Comparison rules
-# $(1): Test type (grid, layout, &c.)
-# $(2): Comparison targets (symmetric asymmetric, symmetric layout, &c.)
+# $(1): Configuration (tc1, tc2, &c.)
+# $(2): Test type (grid, layout, &c.)
+# $(3): Comparison targets (symmetric asymmetric, symmetric layout, &c.)
 define CMP_RULE
-.PRECIOUS: $(foreach b,$(2),work/%/$(b)/ocean.stats)
-%.$(1): $(foreach b,$(2),work/%/$(b)/ocean.stats)
-	@test "$$(shell ls -A results/$$* 2>/dev/null)" || rm -rf results/$$*
+.PRECIOUS: $(foreach b,$(3),work/$(1)/$(b)/ocean.stats)
+$(1).$(2): $(foreach b,$(3),work/$(1)/$(b)/ocean.stats)
+	@test "$$(shell ls -A results/$(1) 2>/dev/null)" || rm -rf results/$(1)
 	@cmp $$^ || !( \
-	  mkdir -p results/$$*; \
-	  (diff $$^ | tee results/$$*/ocean.stats.$(1).diff | head -n 20) ; \
-	  echo -e "$(FAIL): Solutions $$*.$(1) have changed." \
+	  mkdir -p results/$(1); \
+	  (diff $$^ | tee results/$(1)/ocean.stats.$(2).diff | head -n 20) ; \
+	  echo -e "$(FAIL): Solutions $(1).$(2) have changed." \
 	)
-	@echo -e "$(PASS): Solutions $$*.$(1) agree."
+	@echo -e "$(PASS): Solutions $(1).$(2) agree."
 
-.PRECIOUS: $(foreach b,$(2),work/%/$(b)/chksum_diag)
-%.$(1).diag: $(foreach b,$(2),work/%/$(b)/chksum_diag)
+.PRECIOUS: $(foreach b,$(3),work/$(1)/$(b)/chksum_diag)
+$(1).$(2).diag: $(foreach b,$(3),work/$(1)/$(b)/chksum_diag)
 	@cmp $$^ || !( \
-	  mkdir -p results/$$*; \
-	  (diff $$^ | tee results/$$*/chksum_diag.$(1).diff | head -n 20) ; \
-	  echo -e "$(FAIL): Diagnostics $$*.$(1).diag have changed." \
+	  mkdir -p results/$(1); \
+	  (diff $$^ | tee results/$(1)/chksum_diag.$(2).diff | head -n 20) ; \
+	  echo -e "$(FAIL): Diagnostics $(1).$(2).diag have changed." \
 	)
-	@echo -e "$(PASS): Diagnostics $$*.$(1).diag agree."
+	@echo -e "$(PASS): Diagnostics $(1).$(2).diag agree."
 endef
 
-$(eval $(call CMP_RULE,grid,symmetric asymmetric))
-$(eval $(call CMP_RULE,layout,symmetric layout))
-$(eval $(call CMP_RULE,rotate,symmetric rotate))
-$(eval $(call CMP_RULE,repro,symmetric repro))
-$(eval $(call CMP_RULE,openmp,symmetric openmp))
-$(eval $(call CMP_RULE,nan,symmetric nan))
-$(foreach d,$(DIMS),$(eval $(call CMP_RULE,dim.$(d),symmetric dim.$(d))))
+$(foreach c,$(CONFIGS),$(eval $(call CMP_RULE,$(c),grid,symmetric asymmetric)))
+$(foreach c,$(CONFIGS),$(eval $(call CMP_RULE,$(c),layout,symmetric layout)))
+$(foreach c,$(CONFIGS),$(eval $(call CMP_RULE,$(c),rotate,symmetric rotate)))
+$(foreach c,$(CONFIGS),$(eval $(call CMP_RULE,$(c),repro,symmetric repro)))
+$(foreach c,$(CONFIGS),$(eval $(call CMP_RULE,$(c),openmp,symmetric openmp)))
+$(foreach c,$(CONFIGS),$(eval $(call CMP_RULE,$(c),nan,symmetric nan)))
+define CONFIG_DIM_RULE
+$(1).dim: $(foreach d,$(DIMS),$(1).dim.$(d))
+$(foreach d,$(DIMS),$(eval $(call CMP_RULE,$(1),dim.$(d),symmetric dim.$(d))))
+endef
+$(foreach c,$(CONFIGS),$(eval $(call CONFIG_DIM_RULE,$(c))))
 
 # Custom comparison rules
 
@@ -521,9 +570,10 @@ work/%/$(1)/ocean.stats work/%/$(1)/chksum_diag: build/$(2)/MOM6 $(VENV_PATH)
 	@echo -e "$(DONE): $$*.$(1); no runtime errors."
 	if [ $(3) ]; then \
 	  mkdir -p results/$$* ; \
-	  bash <(curl -s https://codecov.io/bash) -n $$@ \
-	    > work/$$*/codecov.$(1).out \
-	    2> work/$$*/codecov.$(1).err \
+	  cd build/symmetric \
+	    && bash <(curl -s https://codecov.io/bash) -Z -n $$@ \
+	      > codecov.$$*.$(1).out \
+	      2> codecov.$$*.$(1).err \
 	    && echo -e "${MAGENTA}Report uploaded to codecov.${RESET}"; \
 	fi
 endef
@@ -539,7 +589,7 @@ $(eval $(call STAT_RULE,repro,repro,,,,1))
 $(eval $(call STAT_RULE,openmp,openmp,,,GOMP_CPU_AFFINITY=0,1))
 $(eval $(call STAT_RULE,layout,symmetric,,LAYOUT=2$(,)1,,2))
 $(eval $(call STAT_RULE,rotate,symmetric,,ROTATE_INDEX=True\nINDEX_TURNS=1,,1))
-$(eval $(call STAT_RULE,nan,symmetric,,,MALLOC_PERTURB_=256,1))
+$(eval $(call STAT_RULE,nan,symmetric,,,MALLOC_PERTURB_=1,1))
 $(eval $(call STAT_RULE,dim.t,symmetric,,T_RESCALE_POWER=11,,1))
 $(eval $(call STAT_RULE,dim.l,symmetric,,L_RESCALE_POWER=11,,1))
 $(eval $(call STAT_RULE,dim.h,symmetric,,H_RESCALE_POWER=11,,1))
@@ -548,7 +598,11 @@ $(eval $(call STAT_RULE,dim.q,symmetric,,Q_RESCALE_POWER=11,,1))
 $(eval $(call STAT_RULE,dim.r,symmetric,,R_RESCALE_POWER=11,,1))
 
 
-# Restart tests require significant preprocessing, and are handled separately.
+# Generate the half-period input namelist as follows:
+#  1. Fetch DAYMAX and TIMEUNIT from MOM_input
+#  2. Convert DAYMAX from TIMEUNIT to seconds
+#  3. Apply seconds to `ocean_solo_nml` inside input.nml.
+# NOTE: Assumes that runtime set by DAYMAX, will fail if set by input.nml
 work/%/restart/ocean.stats: build/symmetric/MOM6 $(VENV_PATH)
 	rm -rf $(@D)
 	mkdir -p $(@D)
@@ -561,14 +615,13 @@ work/%/restart/ocean.stats: build/symmetric/MOM6 $(VENV_PATH)
 	  cd work/$*/restart; \
 	fi
 	mkdir -p $(@D)/RESTART
-	# Generate the half-period input namelist
-	# TODO: Assumes that runtime set by DAYMAX, will fail if set by input.nml
+	# Set the half-period
 	cd $(@D) \
 	  && daymax=$$(grep DAYMAX MOM_input | cut -d '!' -f 1 | cut -d '=' -f 2 | xargs) \
 	  && timeunit=$$(grep TIMEUNIT MOM_input | cut -d '!' -f 1 | cut -d '=' -f 2 | xargs) \
 	  && if [ -z "$${timeunit}" ]; then timeunit="8.64e4"; fi \
 	  && printf -v timeunit_int "%.f" "$${timeunit}" \
-	  && halfperiod=$$(printf "%.f" $$(bc <<< "scale=10; 0.5 * $${daymax} * $${timeunit_int}")) \
+	  && halfperiod=$$(awk -v t=$${daymax} -v dt=$${timeunit} 'BEGIN {printf "%.f", 0.5*t*dt}') \
 	  && printf "\n&ocean_solo_nml\n    seconds = $${halfperiod}\n/\n" >> input.nml
 	# Remove any previous archived output
 	rm -f results/$*/std.restart{1,2}.{out,err}
@@ -620,11 +673,75 @@ test.summary:
 	fi
 
 
+#---
+# Profiling
+# XXX: This is experimental work to track, log, and report changes in runtime
+PCONFIGS = p0
+
+.PHONY: profile
+profile: $(foreach p,$(PCONFIGS), prof.$(p))
+
+.PHONY: prof.p0
+prof.p0: work/p0/opt/clocks.json work/p0/opt_target/clocks.json
+	python tools/compare_clocks.py $^
+
+work/p0/%/clocks.json: work/p0/%/std.out
+	python tools/parse_fms_clocks.py -d $(@D) $^ > $@
+
+work/p0/opt/std.out: build/opt/MOM6
+work/p0/opt_target/std.out: build/opt_target/MOM6
+
+work/p0/%/std.out:
+	mkdir -p $(@D)
+	cp -RL p0/* $(@D)
+	mkdir -p $(@D)/RESTART
+	echo -e "" > $(@D)/MOM_override
+	cd $(@D) \
+	  && $(MPIRUN) -n 1 ../../../$< 2> std.err > std.out
+
+#---
+# Same but with perf
+
+# TODO: This expects the -e flag, can I handle it in the command?
+PERF_EVENTS ?=
+
+.PHONY: perf
+perf: $(foreach p,$(PCONFIGS), perf.$(p))
+
+.PHONY: prof.p0
+perf.p0: work/p0/opt/profile.json work/p0/opt_target/profile.json
+	python tools/compare_perf.py $^
+
+work/p0/%/profile.json: work/p0/%/perf.data
+	python tools/parse_perf.py -f $< > $@
+
+work/p0/opt/perf.data: build/opt/MOM6
+work/p0/opt_target/perf.data: build/opt_target/MOM6
+
+work/p0/%/perf.data:
+	mkdir -p $(@D)
+	cp -RL p0/* $(@D)
+	mkdir -p $(@D)/RESTART
+	echo -e "" > $(@D)/MOM_override
+	cd $(@D) \
+	  && perf record \
+	    -F 3999 \
+	    ${PERF_EVENTS} \
+	    ../../../$< 2> std.perf.err > std.perf.out \
+	  || cat std.perf.err
+
+
 #----
 # NOTE: These tests assert that we are in the .testing directory.
 
 .PHONY: clean
-clean: clean.stats
+clean: clean.build clean.stats
+	@[ $$(basename $$(pwd)) = .testing ]
+	rm -rf deps
+
+
+.PHONY: clean.build
+clean.build:
 	@[ $$(basename $$(pwd)) = .testing ]
 	rm -rf build
 

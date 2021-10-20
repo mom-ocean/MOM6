@@ -152,7 +152,7 @@ subroutine MOM_initialize_tracer_from_Z(h, tr, G, GV, US, PF, src_file, src_var_
       if (G%mask2dT(i,j)>0.) then
         ! Build the source grid
         zTopOfCell = 0. ; zBottomOfCell = 0. ; nPoints = 0
-        z_bathy = G%bathyT(i,j)
+        z_bathy = G%bathyT(i,j) + G%Z_ref
         do k = 1, kd
           if (mask_z(i,j,k) > 0.) then
             zBottomOfCell = -min( z_edges_in(k+1), z_bathy )
