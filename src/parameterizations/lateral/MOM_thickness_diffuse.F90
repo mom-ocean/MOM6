@@ -580,11 +580,11 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
   real,                                         intent(in)  :: dt    !< Time increment [T ~> s]
   type(MEKE_type),                              pointer     :: MEKE  !< MEKE control structure
   type(thickness_diffuse_CS),                   pointer     :: CS    !< Control structure for thickness diffusion
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)+1), optional, intent(in)  :: int_slope_u !< Ratio that determine how much of
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)+1), intent(in)  :: int_slope_u !< Ratio that determine how much of
                                                                      !! the isopycnal slopes are taken directly from
                                                                      !! the interface slopes without consideration of
                                                                      !! density gradients [nondim].
-  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)+1), optional, intent(in)  :: int_slope_v !< Ratio that determine how much of
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)+1), intent(in)  :: int_slope_v !< Ratio that determine how much of
                                                                      !! the isopycnal slopes are taken directly from
                                                                      !! the interface slopes without consideration of
                                                                      !! density gradients [nondim].
@@ -694,7 +694,6 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
 
   real, dimension(SZIB_(G), SZJ_(G),SZK_(GV)+1) :: diag_sfn_x, diag_sfn_unlim_x ! Diagnostics
   real, dimension(SZI_(G), SZJB_(G),SZK_(GV)+1) :: diag_sfn_y, diag_sfn_unlim_y ! Diagnostics
-  logical :: present_int_slope_u, present_int_slope_v
   logical :: present_slope_x, present_slope_y, calc_derivatives
   integer, dimension(2) ::  EOSdom_u ! The shifted i-computational domain to use for equation of
                                      ! state calculations at u-points.
@@ -715,8 +714,6 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
   N2_floor = CS%N2_floor*US%Z_to_L**2
 
   use_EOS = associated(tv%eqn_of_state)
-  present_int_slope_u = PRESENT(int_slope_u)
-  present_int_slope_v = PRESENT(int_slope_v)
   present_slope_x = PRESENT(slope_x)
   present_slope_y = PRESENT(slope_y)
   use_Stanley = CS%Stanley_det_coeff >= 0.
@@ -818,12 +815,10 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
 
     EOSdom_u(1) = (is-1) - (G%IsdB-1) ; EOSdom_u(2) = ie - (G%IsdB-1)
 !$OMP parallel do default(none) shared(nz,is,ie,js,je,find_work,use_EOS,G,GV,US,pres,T,S, &
-!$OMP                                  nk_linear,IsdB,tv,h,h_neglect,e,dz_neglect,  &
-!$OMP                                  I_slope_max2,h_neglect2,present_int_slope_u, &
-!$OMP                                  int_slope_u,KH_u,uhtot,h_frac,h_avail_rsum,  &
-!$OMP                                  uhD,h_avail,G_scale,Work_u,CS,slope_x,cg1,   &
-!$OMP                                  diag_sfn_x, diag_sfn_unlim_x,N2_floor,EOSdom_u, &
-!$OMP                                  use_stanley, Tsgs2,                          &
+!$OMP                                  nk_linear,IsdB,tv,h,h_neglect,e,dz_neglect,I_slope_max2, &
+!$OMP                                  h_neglect2,int_slope_u,KH_u,uhtot,h_frac,h_avail_rsum, &
+!$OMP                                  uhD,h_avail,G_scale,Work_u,CS,slope_x,cg1,diag_sfn_x, &
+!$OMP                                  diag_sfn_unlim_x,N2_floor,EOSdom_u,use_stanley, Tsgs2, &
 !$OMP                                  present_slope_x,G_rho0,Slope_x_PE,hN2_x_PE)  &
 !$OMP                          private(drdiA,drdiB,drdkL,drdkR,pres_u,T_u,S_u,      &
 !$OMP                                  drho_dT_u,drho_dS_u,hg2A,hg2B,hg2L,hg2R,haA, &
@@ -941,11 +936,9 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
 
             ! Adjust real slope by weights that bias towards slope of interfaces
             ! that ignore density gradients along layers.
-            if (present_int_slope_u) then
-              Slope = (1.0 - int_slope_u(I,j,K)) * Slope + &
-                      int_slope_u(I,j,K) * ((e(i+1,j,K)-e(i,j,K)) * G%IdxCu(I,j))
-              slope2_Ratio_u(I,K) = (1.0 - int_slope_u(I,j,K)) * slope2_Ratio_u(I,K)
-            endif
+            Slope = (1.0 - int_slope_u(I,j,K)) * Slope + &
+                    int_slope_u(I,j,K) * ((e(i+1,j,K)-e(i,j,K)) * G%IdxCu(I,j))
+            slope2_Ratio_u(I,K) = (1.0 - int_slope_u(I,j,K)) * slope2_Ratio_u(I,K)
 
             Slope_x_PE(I,j,k) = MIN(Slope,CS%slope_max)
             hN2_x_PE(I,j,k) = hN2_u(I,K)
@@ -1090,12 +1083,10 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
     ! Calculate the meridional fluxes and gradients.
     EOSdom_v(:) = EOS_domain(G%HI)
 !$OMP parallel do default(none) shared(nz,is,ie,js,je,find_work,use_EOS,G,GV,US,pres,T,S, &
-!$OMP                                  nk_linear,IsdB,tv,h,h_neglect,e,dz_neglect,  &
-!$OMP                                  I_slope_max2,h_neglect2,present_int_slope_v, &
-!$OMP                                  int_slope_v,KH_v,vhtot,h_frac,h_avail_rsum,  &
-!$OMP                                  vhD,h_avail,G_scale,Work_v,CS,slope_y,cg1,   &
-!$OMP                                  diag_sfn_y,diag_sfn_unlim_y,N2_floor,EOSdom_v,&
-!$OMP                                  use_stanley, Tsgs2,                          &
+!$OMP                                  nk_linear,IsdB,tv,h,h_neglect,e,dz_neglect,I_slope_max2, &
+!$OMP                                  h_neglect2,int_slope_v,KH_v,vhtot,h_frac,h_avail_rsum, &
+!$OMP                                  vhD,h_avail,G_scale,Work_v,CS,slope_y,cg1,diag_sfn_y, &
+!$OMP                                  diag_sfn_unlim_y,N2_floor,EOSdom_v,use_stanley,Tsgs2, &
 !$OMP                                  present_slope_y,G_rho0,Slope_y_PE,hN2_y_PE)  &
 !$OMP                          private(drdjA,drdjB,drdkL,drdkR,pres_v,T_v,S_v,      &
 !$OMP                                  drho_dT_v,drho_dS_v,hg2A,hg2B,hg2L,hg2R,haA, &
@@ -1211,11 +1202,9 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
 
             ! Adjust real slope by weights that bias towards slope of interfaces
             ! that ignore density gradients along layers.
-            if (present_int_slope_v) then
-              Slope = (1.0 - int_slope_v(i,J,K)) * Slope + &
-                      int_slope_v(i,J,K) * ((e(i,j+1,K)-e(i,j,K)) * G%IdyCv(i,J))
-              slope2_Ratio_v(i,K) = (1.0 - int_slope_v(i,J,K)) * slope2_Ratio_v(i,K)
-            endif
+            Slope = (1.0 - int_slope_v(i,J,K)) * Slope + &
+                    int_slope_v(i,J,K) * ((e(i,j+1,K)-e(i,j,K)) * G%IdyCv(i,J))
+            slope2_Ratio_v(i,K) = (1.0 - int_slope_v(i,J,K)) * slope2_Ratio_v(i,K)
 
             Slope_y_PE(i,J,k) = MIN(Slope,CS%slope_max)
             hN2_y_PE(i,J,k) = hN2_v(i,K)
