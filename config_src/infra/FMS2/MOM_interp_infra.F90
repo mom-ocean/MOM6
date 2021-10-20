@@ -231,7 +231,7 @@ end subroutine time_interp_extern_3d
 
 !> initialize an external field
 integer function init_extern_field(file, fieldname, MOM_domain, domain, verbose, &
-                                   threading, ierr, ignore_axis_atts )
+                                   threading, ierr, ignore_axis_atts, correct_leap_year_inconsistency )
 
   character(len=*),         intent(in)  :: file  !< The name of the file to read
   character(len=*),         intent(in)  :: fieldname !< The name of the field in the file
@@ -246,13 +246,22 @@ integer function init_extern_field(file, fieldname, MOM_domain, domain, verbose,
   logical,        optional, intent(in)  :: ignore_axis_atts !< If present and true, do not issue a
                                                  !! fatal error if the axis Cartesian attribute is
                                                  !! not set to a recognized value.
+  logical,        optional, intent(in)  :: correct_leap_year_inconsistency !< If present and true,
+                                                 !! then if, (1) a calendar containing leap years
+                                                 !! is in use, and (2) the modulo time period of the
+                                                 !! data is an integer number of years, then map
+                                                 !! a model date of Feb 29. onto a common year on Feb. 28.
+
+
 
   if (present(MOM_Domain)) then
     init_extern_field = init_external_field(file, fieldname, domain=MOM_domain%mpp_domain, &
-             verbose=verbose, threading=threading, ierr=ierr, ignore_axis_atts=ignore_axis_atts)
+             verbose=verbose, threading=threading, ierr=ierr, ignore_axis_atts=ignore_axis_atts, &
+             correct_leap_year_inconsistency=correct_leap_year_inconsistency)
   else
     init_extern_field = init_external_field(file, fieldname, domain=domain, &
-             verbose=verbose, threading=threading, ierr=ierr, ignore_axis_atts=ignore_axis_atts)
+             verbose=verbose, threading=threading, ierr=ierr, ignore_axis_atts=ignore_axis_atts, &
+             correct_leap_year_inconsistency=correct_leap_year_inconsistency)
   endif
 
 end function init_extern_field

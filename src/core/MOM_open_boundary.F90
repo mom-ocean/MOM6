@@ -342,8 +342,6 @@ end type OBC_registry_type
 integer :: id_clock_pass !< A CPU time clock
 
 character(len=40)  :: mdl = "MOM_open_boundary" !< This module's name.
-! This include declares and sets the variable "version".
-#include "version_variable.h"
 
 contains
 
@@ -359,6 +357,7 @@ subroutine open_boundary_config(G, US, param_file, OBC)
   type(unit_scale_type),   intent(in)    :: US  !< A dimensional unit scaling type
   type(param_file_type),   intent(in)    :: param_file !< Parameter file handle
   type(ocean_OBC_type),    pointer       :: OBC !< Open boundary control structure
+
   ! Local variables
   integer :: l ! For looping over segments
   logical :: debug_OBC, debug, mask_outside, reentrant_x, reentrant_y
@@ -370,6 +369,9 @@ subroutine open_boundary_config(G, US, param_file, OBC)
   logical :: answers_2018, default_2018_answers
   logical :: check_reconstruction, check_remapping, force_bounds_in_subcell
   character(len=32)  :: remappingScheme
+! This include declares and sets the variable "version".
+# include "version_variable.h"
+
   allocate(OBC)
 
   call get_param(param_file, mdl, "OBC_NUMBER_OF_SEGMENTS", OBC%number_of_segments, &
@@ -521,8 +523,8 @@ subroutine open_boundary_config(G, US, param_file, OBC)
       OBC%segment(l)%Velocity_nudging_timescale_out = 0.0
       OBC%segment(l)%num_fields = 0
     enddo
-    allocate(OBC%segnum_u(G%IsdB:G%IedB,G%jsd:G%jed)) ; OBC%segnum_u(:,:) = OBC_NONE
-    allocate(OBC%segnum_v(G%isd:G%ied,G%JsdB:G%JedB)) ; OBC%segnum_v(:,:) = OBC_NONE
+    allocate(OBC%segnum_u(G%IsdB:G%IedB,G%jsd:G%jed), source=OBC_NONE)
+    allocate(OBC%segnum_v(G%isd:G%ied,G%JsdB:G%JedB), source=OBC_NONE)
 
     do l = 1, OBC%number_of_segments
       write(segment_param_str(1:15),"('OBC_SEGMENT_',i3.3)") l
@@ -3520,88 +3522,72 @@ subroutine allocate_OBC_segment_data(OBC, segment)
 
   if (segment%is_E_or_W) then
     ! If these are just Flather, change update_OBC_segment_data accordingly
-    allocate(segment%Cg(IsdB:IedB,jsd:jed));                  segment%Cg(:,:)=0.
-    allocate(segment%Htot(IsdB:IedB,jsd:jed));                segment%Htot(:,:)=0.0
-    allocate(segment%h(IsdB:IedB,jsd:jed,OBC%ke));            segment%h(:,:,:)=0.0
-    allocate(segment%eta(IsdB:IedB,jsd:jed));                 segment%eta(:,:)=0.0
-    if (segment%radiation) then
-      allocate(segment%rx_norm_rad(IsdB:IedB,jsd:jed,OBC%ke));  segment%rx_norm_rad(:,:,:)=0.0
-    endif
-    allocate(segment%normal_vel(IsdB:IedB,jsd:jed,OBC%ke));   segment%normal_vel(:,:,:)=0.0
-    allocate(segment%normal_vel_bt(IsdB:IedB,jsd:jed));       segment%normal_vel_bt(:,:)=0.0
-    allocate(segment%normal_trans(IsdB:IedB,jsd:jed,OBC%ke)); segment%normal_trans(:,:,:)=0.0
-    if (segment%nudged) then
-      allocate(segment%nudged_normal_vel(IsdB:IedB,jsd:jed,OBC%ke)); segment%nudged_normal_vel(:,:,:)=0.0
-    endif
+    allocate(segment%Cg(IsdB:IedB,jsd:jed), source=0.0)
+    allocate(segment%Htot(IsdB:IedB,jsd:jed), source=0.0)
+    allocate(segment%h(IsdB:IedB,jsd:jed,OBC%ke), source=0.0)
+    allocate(segment%eta(IsdB:IedB,jsd:jed), source=0.0)
+    if (segment%radiation) &
+      allocate(segment%rx_norm_rad(IsdB:IedB,jsd:jed,OBC%ke), source=0.0)
+    allocate(segment%normal_vel(IsdB:IedB,jsd:jed,OBC%ke), source=0.0)
+    allocate(segment%normal_vel_bt(IsdB:IedB,jsd:jed), source=0.0)
+    allocate(segment%normal_trans(IsdB:IedB,jsd:jed,OBC%ke), source=0.0)
+    if (segment%nudged) &
+      allocate(segment%nudged_normal_vel(IsdB:IedB,jsd:jed,OBC%ke), source=0.0)
     if (segment%radiation_tan .or. segment%nudged_tan .or. segment%specified_tan .or. &
-        segment%oblique_tan .or. OBC%computed_vorticity .or. OBC%computed_strain) then
-      allocate(segment%tangential_vel(IsdB:IedB,JsdB:JedB,OBC%ke)); segment%tangential_vel(:,:,:)=0.0
-    endif
-    if (segment%nudged_tan) then
-      allocate(segment%nudged_tangential_vel(IsdB:IedB,JsdB:JedB,OBC%ke)); segment%nudged_tangential_vel(:,:,:)=0.0
-    endif
-    if (segment%nudged_grad) then
-      allocate(segment%nudged_tangential_grad(IsdB:IedB,JsdB:JedB,OBC%ke)); segment%nudged_tangential_grad(:,:,:)=0.0
-    endif
+        segment%oblique_tan .or. OBC%computed_vorticity .or. OBC%computed_strain) &
+      allocate(segment%tangential_vel(IsdB:IedB,JsdB:JedB,OBC%ke), source=0.0)
+    if (segment%nudged_tan) &
+      allocate(segment%nudged_tangential_vel(IsdB:IedB,JsdB:JedB,OBC%ke), source=0.0)
+    if (segment%nudged_grad) &
+      allocate(segment%nudged_tangential_grad(IsdB:IedB,JsdB:JedB,OBC%ke), source=0.0)
     if (OBC%specified_vorticity .or. OBC%specified_strain .or. segment%radiation_grad .or. &
-              segment%oblique_grad .or. segment%specified_grad) then
-      allocate(segment%tangential_grad(IsdB:IedB,JsdB:JedB,OBC%ke)); segment%tangential_grad(:,:,:)=0.0
-    endif
+              segment%oblique_grad .or. segment%specified_grad) &
+      allocate(segment%tangential_grad(IsdB:IedB,JsdB:JedB,OBC%ke), source=0.0)
     if (segment%oblique) then
-      allocate(segment%grad_normal(JsdB:JedB,2,OBC%ke));      segment%grad_normal(:,:,:) = 0.0
-      allocate(segment%rx_norm_obl(IsdB:IedB,jsd:jed,OBC%ke));  segment%rx_norm_obl(:,:,:)=0.0
-      allocate(segment%ry_norm_obl(IsdB:IedB,jsd:jed,OBC%ke));  segment%ry_norm_obl(:,:,:)=0.0
-      allocate(segment%cff_normal(IsdB:IedB,jsd:jed,OBC%ke)); segment%cff_normal(:,:,:)=0.0
+      allocate(segment%grad_normal(JsdB:JedB,2,OBC%ke), source=0.0)
+      allocate(segment%rx_norm_obl(IsdB:IedB,jsd:jed,OBC%ke), source=0.0)
+      allocate(segment%ry_norm_obl(IsdB:IedB,jsd:jed,OBC%ke), source=0.0)
+      allocate(segment%cff_normal(IsdB:IedB,jsd:jed,OBC%ke), source=0.0)
     endif
-    if (segment%oblique_tan) then
-      allocate(segment%grad_tan(jsd-1:jed+1,2,OBC%ke));           segment%grad_tan(:,:,:) = 0.0
-    endif
-    if (segment%oblique_grad) then
-      allocate(segment%grad_gradient(jsd:jed,2,OBC%ke));      segment%grad_gradient(:,:,:) = 0.0
-    endif
+    if (segment%oblique_tan) &
+      allocate(segment%grad_tan(jsd-1:jed+1,2,OBC%ke), source=0.0)
+    if (segment%oblique_grad) &
+      allocate(segment%grad_gradient(jsd:jed,2,OBC%ke), source=0.0)
   endif
 
   if (segment%is_N_or_S) then
     ! If these are just Flather, change update_OBC_segment_data accordingly
-    allocate(segment%Cg(isd:ied,JsdB:JedB));                  segment%Cg(:,:)=0.
-    allocate(segment%Htot(isd:ied,JsdB:JedB));                segment%Htot(:,:)=0.0
-    allocate(segment%h(isd:ied,JsdB:JedB,OBC%ke));            segment%h(:,:,:)=0.0
-    allocate(segment%eta(isd:ied,JsdB:JedB));                 segment%eta(:,:)=0.0
-    if (segment%radiation) then
-      allocate(segment%ry_norm_rad(isd:ied,JsdB:JedB,OBC%ke));  segment%ry_norm_rad(:,:,:)=0.0
-    endif
-    allocate(segment%normal_vel(isd:ied,JsdB:JedB,OBC%ke));   segment%normal_vel(:,:,:)=0.0
-    allocate(segment%normal_vel_bt(isd:ied,JsdB:JedB));       segment%normal_vel_bt(:,:)=0.0
-    allocate(segment%normal_trans(isd:ied,JsdB:JedB,OBC%ke)); segment%normal_trans(:,:,:)=0.0
-    if (segment%nudged) then
-      allocate(segment%nudged_normal_vel(isd:ied,JsdB:JedB,OBC%ke)); segment%nudged_normal_vel(:,:,:)=0.0
-    endif
+    allocate(segment%Cg(isd:ied,JsdB:JedB), source=0.0)
+    allocate(segment%Htot(isd:ied,JsdB:JedB), source=0.0)
+    allocate(segment%h(isd:ied,JsdB:JedB,OBC%ke), source=0.0)
+    allocate(segment%eta(isd:ied,JsdB:JedB), source=0.0)
+    if (segment%radiation) &
+      allocate(segment%ry_norm_rad(isd:ied,JsdB:JedB,OBC%ke), source=0.0)
+    allocate(segment%normal_vel(isd:ied,JsdB:JedB,OBC%ke), source=0.0)
+    allocate(segment%normal_vel_bt(isd:ied,JsdB:JedB), source=0.0)
+    allocate(segment%normal_trans(isd:ied,JsdB:JedB,OBC%ke), source=0.0)
+    if (segment%nudged) &
+      allocate(segment%nudged_normal_vel(isd:ied,JsdB:JedB,OBC%ke), source=0.0)
     if (segment%radiation_tan .or. segment%nudged_tan .or. segment%specified_tan .or. &
-        segment%oblique_tan .or. OBC%computed_vorticity .or. OBC%computed_strain) then
-      allocate(segment%tangential_vel(IsdB:IedB,JsdB:JedB,OBC%ke)); segment%tangential_vel(:,:,:)=0.0
-    endif
-    if (segment%nudged_tan) then
-      allocate(segment%nudged_tangential_vel(IsdB:IedB,JsdB:JedB,OBC%ke)); segment%nudged_tangential_vel(:,:,:)=0.0
-    endif
-    if (segment%nudged_grad) then
-      allocate(segment%nudged_tangential_grad(IsdB:IedB,JsdB:JedB,OBC%ke)); segment%nudged_tangential_grad(:,:,:)=0.0
-    endif
+        segment%oblique_tan .or. OBC%computed_vorticity .or. OBC%computed_strain) &
+      allocate(segment%tangential_vel(IsdB:IedB,JsdB:JedB,OBC%ke), source=0.0)
+    if (segment%nudged_tan) &
+      allocate(segment%nudged_tangential_vel(IsdB:IedB,JsdB:JedB,OBC%ke), source=0.0)
+    if (segment%nudged_grad) &
+      allocate(segment%nudged_tangential_grad(IsdB:IedB,JsdB:JedB,OBC%ke), source=0.0)
     if (OBC%specified_vorticity .or. OBC%specified_strain .or. segment%radiation_grad .or. &
-              segment%oblique_grad .or. segment%specified_grad) then
-      allocate(segment%tangential_grad(IsdB:IedB,JsdB:JedB,OBC%ke)); segment%tangential_grad(:,:,:)=0.0
-    endif
+              segment%oblique_grad .or. segment%specified_grad) &
+      allocate(segment%tangential_grad(IsdB:IedB,JsdB:JedB,OBC%ke), source=0.0)
     if (segment%oblique) then
-      allocate(segment%grad_normal(IsdB:IedB,2,OBC%ke));      segment%grad_normal(:,:,:) = 0.0
-      allocate(segment%rx_norm_obl(isd:ied,JsdB:JedB,OBC%ke));  segment%rx_norm_obl(:,:,:)=0.0
-      allocate(segment%ry_norm_obl(isd:ied,JsdB:JedB,OBC%ke));  segment%ry_norm_obl(:,:,:)=0.0
-      allocate(segment%cff_normal(isd:ied,JsdB:JedB,OBC%ke)); segment%cff_normal(:,:,:)=0.0
+      allocate(segment%grad_normal(IsdB:IedB,2,OBC%ke), source=0.0)
+      allocate(segment%rx_norm_obl(isd:ied,JsdB:JedB,OBC%ke), source=0.0)
+      allocate(segment%ry_norm_obl(isd:ied,JsdB:JedB,OBC%ke), source=0.0)
+      allocate(segment%cff_normal(isd:ied,JsdB:JedB,OBC%ke), source=0.0)
     endif
-    if (segment%oblique_tan) then
-      allocate(segment%grad_tan(isd-1:ied+1,2,OBC%ke));           segment%grad_tan(:,:,:) = 0.0
-    endif
-    if (segment%oblique_grad) then
-      allocate(segment%grad_gradient(isd:ied,2,OBC%ke));      segment%grad_gradient(:,:,:) = 0.0
-    endif
+    if (segment%oblique_tan) &
+      allocate(segment%grad_tan(isd-1:ied+1,2,OBC%ke), source=0.0)
+    if (segment%oblique_grad) &
+      allocate(segment%grad_gradient(isd:ied,2,OBC%ke), source=0.0)
   endif
 
 end subroutine allocate_OBC_segment_data
@@ -3799,35 +3785,32 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
      ! calculate auxiliary fields at staggered locations
     ishift=0;jshift=0
     if (segment%is_E_or_W) then
-      allocate(normal_trans_bt(segment%HI%IsdB:segment%HI%IedB,segment%HI%jsd:segment%HI%jed))
-      normal_trans_bt(:,:)=0.0
+      allocate(normal_trans_bt(segment%HI%IsdB:segment%HI%IedB,segment%HI%jsd:segment%HI%jed), source=0.0)
       if (segment%direction == OBC_DIRECTION_W) ishift=1
       I=segment%HI%IsdB
       do j=segment%HI%jsd,segment%HI%jed
-        segment%Cg(I,j) = sqrt(GV%g_prime(1)*G%bathyT(i+ishift,j))
-        segment%Htot(I,j)=0.0
+        segment%Htot(I,j) = 0.0
         do k=1,GV%ke
           segment%h(I,j,k) = h(i+ishift,j,k)
-          segment%Htot(I,j)=segment%Htot(I,j)+segment%h(I,j,k)
+          segment%Htot(I,j) = segment%Htot(I,j) + segment%h(I,j,k)
         enddo
+        segment%Cg(I,j) = sqrt(GV%g_prime(1)*segment%Htot(I,j)*GV%H_to_Z)
       enddo
     else! (segment%direction == OBC_DIRECTION_N .or. segment%direction == OBC_DIRECTION_S)
-      allocate(normal_trans_bt(segment%HI%isd:segment%HI%ied,segment%HI%JsdB:segment%HI%JedB))
-      normal_trans_bt(:,:)=0.0
+      allocate(normal_trans_bt(segment%HI%isd:segment%HI%ied,segment%HI%JsdB:segment%HI%JedB), source=0.0)
       if (segment%direction == OBC_DIRECTION_S) jshift=1
       J=segment%HI%JsdB
       do i=segment%HI%isd,segment%HI%ied
-        segment%Cg(i,J) = sqrt(GV%g_prime(1)*G%bathyT(i,j+jshift))
-        segment%Htot(i,J)=0.0
+        segment%Htot(i,J) = 0.0
         do k=1,GV%ke
           segment%h(i,J,k) = h(i,j+jshift,k)
-          segment%Htot(i,J)=segment%Htot(i,J)+segment%h(i,J,k)
+          segment%Htot(i,J) = segment%Htot(i,J) + segment%h(i,J,k)
         enddo
+        segment%Cg(i,J) = sqrt(GV%g_prime(1)*segment%Htot(i,J)*GV%H_to_Z)
       enddo
     endif
 
-    allocate(h_stack(GV%ke))
-    h_stack(:) = 0.0
+    allocate(h_stack(GV%ke), source=0.0)
     do m = 1,segment%num_fields
       if (segment%field(m)%fid > 0) then
         siz(1)=size(segment%field(m)%buffer_src,1)
@@ -4433,8 +4416,8 @@ subroutine register_OBC(name, param_file, Reg)
   Reg%OB(nobc)%name = name
 
   if (Reg%locked) call MOM_error(FATAL, &
-      "MOM register_tracer was called for variable "//trim(Reg%OB(nobc)%name)//&
-      " with a locked tracer registry.")
+      "MOM register_OBC was called for OBC "//trim(Reg%OB(nobc)%name)//&
+      " with a locked OBC registry.")
 
 end subroutine register_OBC
 
@@ -4445,7 +4428,7 @@ subroutine OBC_registry_init(param_file, Reg)
 
   integer, save :: init_calls = 0
 
-#include "version_variable.h"
+# include "version_variable.h"
   character(len=40)  :: mdl = "MOM_open_boundary" ! This module's name.
   character(len=256) :: mesg    ! Message for error messages.
 
@@ -4453,7 +4436,7 @@ subroutine OBC_registry_init(param_file, Reg)
   else ; return ; endif
 
   ! Read all relevant parameters and write them to the model log.
-! call log_version(param_file, mdl,s version, "")
+! call log_version(param_file, mdl, version, "")
 
   init_calls = init_calls + 1
   if (init_calls > 1) then
@@ -4503,7 +4486,7 @@ subroutine segment_tracer_registry_init(param_file, segment)
   integer, save :: init_calls = 0
 
 ! This include declares and sets the variable "version".
-#include "version_variable.h"
+# include "version_variable.h"
   character(len=40)  :: mdl = "segment_tracer_registry_init" ! This routine's name.
   character(len=256) :: mesg    ! Message for error messages.
 
@@ -4527,6 +4510,8 @@ subroutine segment_tracer_registry_init(param_file, segment)
 
 end subroutine segment_tracer_registry_init
 
+!> Register a tracer array that is active on an OBC segment, potentially also specifing how the
+!! tracer inflow values are specified.
 subroutine register_segment_tracer(tr_ptr, param_file, GV, segment, &
                                    OBC_scalar, OBC_array)
   type(verticalGrid_type), intent(in)   :: GV         !< ocean vertical grid structure
@@ -4537,7 +4522,7 @@ subroutine register_segment_tracer(tr_ptr, param_file, GV, segment, &
                                                       !! but it also means that any updates to this
                                                       !! structure in the calling module will be
                                                       !! available subsequently to the tracer registry.
-  type(param_file_type), intent(in)     :: param_file !< file to parse for  model parameter values
+  type(param_file_type), intent(in)     :: param_file !< file to parse for model parameter values
   type(OBC_segment_type), intent(inout) :: segment    !< current segment data structure
   real, optional, intent(in)            :: OBC_scalar !< If present, use scalar value for segment tracer
                                                       !! inflow concentration.
@@ -4555,8 +4540,8 @@ subroutine register_segment_tracer(tr_ptr, param_file, GV, segment, &
 
   if (segment%tr_Reg%ntseg>=MAX_FIELDS_) then
     write(mesg,'("Increase MAX_FIELDS_ in MOM_memory.h to at least ",I3," to allow for &
-        &all the tracers being registered via register_tracer.")') segment%tr_Reg%ntseg+1
-    call MOM_error(FATAL,"MOM register_tracer: "//mesg)
+        &all the tracers being registered via register_segment_tracer.")') segment%tr_Reg%ntseg+1
+    call MOM_error(FATAL,"MOM register_segment_tracer: "//mesg)
   endif
   segment%tr_Reg%ntseg = segment%tr_Reg%ntseg + 1
   ntseg     = segment%tr_Reg%ntseg
@@ -4570,18 +4555,18 @@ subroutine register_segment_tracer(tr_ptr, param_file, GV, segment, &
   segment%tr_Reg%Tr(ntseg)%name = tr_ptr%name
 
   if (segment%tr_Reg%locked) call MOM_error(FATAL, &
-      "MOM register_tracer was called for variable "//trim(segment%tr_Reg%Tr(ntseg)%name)//&
+      "MOM register_segment_tracer was called for variable "//trim(segment%tr_Reg%Tr(ntseg)%name)//&
       " with a locked tracer registry.")
 
   if (present(OBC_scalar)) segment%tr_Reg%Tr(ntseg)%OBC_inflow_conc = OBC_scalar ! initialize tracer value later
   if (present(OBC_array)) then
     if (segment%is_E_or_W) then
-      allocate(segment%tr_Reg%Tr(ntseg)%t(IsdB:IedB,jsd:jed,1:GV%ke));segment%tr_Reg%Tr(ntseg)%t(:,:,:)=0.0
-      allocate(segment%tr_Reg%Tr(ntseg)%tres(IsdB:IedB,jsd:jed,1:GV%ke));segment%tr_Reg%Tr(ntseg)%tres(:,:,:)=0.0
+      allocate(segment%tr_Reg%Tr(ntseg)%t(IsdB:IedB,jsd:jed,1:GV%ke), source=0.0)
+      allocate(segment%tr_Reg%Tr(ntseg)%tres(IsdB:IedB,jsd:jed,1:GV%ke), source=0.0)
       segment%tr_Reg%Tr(ntseg)%is_initialized=.false.
     elseif (segment%is_N_or_S) then
-      allocate(segment%tr_Reg%Tr(ntseg)%t(isd:ied,JsdB:JedB,1:GV%ke));segment%tr_Reg%Tr(ntseg)%t(:,:,:)=0.0
-      allocate(segment%tr_Reg%Tr(ntseg)%tres(isd:ied,JsdB:JedB,1:GV%ke));segment%tr_Reg%Tr(ntseg)%tres(:,:,:)=0.0
+      allocate(segment%tr_Reg%Tr(ntseg)%t(isd:ied,JsdB:JedB,1:GV%ke), source=0.0)
+      allocate(segment%tr_Reg%Tr(ntseg)%tres(isd:ied,JsdB:JedB,1:GV%ke), source=0.0)
       segment%tr_Reg%Tr(ntseg)%is_initialized=.false.
     endif
   endif
@@ -4711,7 +4696,7 @@ subroutine mask_outside_OBCs(G, US, param_file, OBC)
   integer :: i, j
   integer :: l_seg
   logical :: fatal_error = .False.
-  real    :: min_depth
+  real    :: min_depth ! The minimum depth for ocean points [Z ~> m]
   integer, parameter :: cin = 3, cout = 4, cland = -1, cedge = -2
   character(len=256) :: mesg    ! Message for error messages.
   type(OBC_segment_type), pointer :: segment => NULL() ! pointer to segment type list
@@ -4722,10 +4707,10 @@ subroutine mask_outside_OBCs(G, US, param_file, OBC)
 
   call get_param(param_file, mdl, "MINIMUM_DEPTH", min_depth, &
                  units="m", default=0.0, scale=US%m_to_Z, do_not_log=.true.)
+  ! The reference depth on a dyn_horgrid is 0, otherwise would need:  min_depth = min_depth - G%Z_ref
 
-  allocate(color(G%isd:G%ied, G%jsd:G%jed)) ; color = 0
-  allocate(color2(G%isd:G%ied, G%jsd:G%jed)) ; color2 = 0
-
+  allocate(color(G%isd:G%ied, G%jsd:G%jed), source=0.0)
+  allocate(color2(G%isd:G%ied, G%jsd:G%jed), source=0.0)
 
   ! Paint a frame around the outside.
   do j=G%jsd,G%jed
@@ -4975,10 +4960,8 @@ subroutine open_boundary_register_restarts(HI, GV, OBC, Reg, param_file, restart
   ! to be able to add 2D ( x,z or y,z ) data to restarts to avoid using
   ! so much memory and disk space. ***
   if (OBC%radiation_BCs_exist_globally) then
-    allocate(OBC%rx_normal(HI%isdB:HI%iedB,HI%jsd:HI%jed,GV%ke))
-    allocate(OBC%ry_normal(HI%isd:HI%ied,HI%jsdB:HI%jedB,GV%ke))
-    OBC%rx_normal(:,:,:) = 0.0
-    OBC%ry_normal(:,:,:) = 0.0
+    allocate(OBC%rx_normal(HI%isdB:HI%iedB,HI%jsd:HI%jed,GV%ke), source=0.0)
+    allocate(OBC%ry_normal(HI%isd:HI%ied,HI%jsdB:HI%jedB,GV%ke), source=0.0)
 
     vd(1) = var_desc("rx_normal", "m s-1", "Normal Phase Speed for EW radiation OBCs", 'u', 'L')
     vd(2) = var_desc("ry_normal", "m s-1", "Normal Phase Speed for NS radiation OBCs", 'v', 'L')
@@ -4987,18 +4970,15 @@ subroutine open_boundary_register_restarts(HI, GV, OBC, Reg, param_file, restart
   endif
 
   if (OBC%oblique_BCs_exist_globally) then
-    allocate(OBC%rx_oblique(HI%isdB:HI%iedB,HI%jsd:HI%jed,GV%ke))
-    allocate(OBC%ry_oblique(HI%isd:HI%ied,HI%jsdB:HI%jedB,GV%ke))
-    OBC%rx_oblique(:,:,:) = 0.0
-    OBC%ry_oblique(:,:,:) = 0.0
+    allocate(OBC%rx_oblique(HI%isdB:HI%iedB,HI%jsd:HI%jed,GV%ke), source=0.0)
+    allocate(OBC%ry_oblique(HI%isd:HI%ied,HI%jsdB:HI%jedB,GV%ke), source=0.0)
 
     vd(1) = var_desc("rx_oblique", "m2 s-2", "Radiation Speed Squared for EW oblique OBCs", 'u', 'L')
     vd(2) = var_desc("ry_oblique", "m2 s-2", "Radiation Speed Squared for NS oblique OBCs", 'v', 'L')
     call register_restart_pair(OBC%rx_oblique, OBC%ry_oblique, vd(1), vd(2), &
         .false., restart_CSp)
 
-    allocate(OBC%cff_normal(HI%IsdB:HI%IedB,HI%jsdB:HI%jedB,GV%ke))
-    OBC%cff_normal(:,:,:) = 0.0
+    allocate(OBC%cff_normal(HI%IsdB:HI%IedB,HI%jsdB:HI%jedB,GV%ke), source=0.0)
     vd(1) = var_desc("cff_normal", "m2 s-2", "denominator for oblique OBCs", 'q', 'L')
     call register_restart_field(OBC%cff_normal, vd(1), .false., restart_CSp)
   endif
@@ -5006,10 +4986,8 @@ subroutine open_boundary_register_restarts(HI, GV, OBC, Reg, param_file, restart
   if (Reg%ntr == 0) return
   if (.not. associated(OBC%tracer_x_reservoirs_used)) then
     OBC%ntr = Reg%ntr
-    allocate(OBC%tracer_x_reservoirs_used(Reg%ntr))
-    allocate(OBC%tracer_y_reservoirs_used(Reg%ntr))
-    OBC%tracer_x_reservoirs_used(:) = .false.
-    OBC%tracer_y_reservoirs_used(:) = .false.
+    allocate(OBC%tracer_x_reservoirs_used(Reg%ntr), source=.false.)
+    allocate(OBC%tracer_y_reservoirs_used(Reg%ntr), source=.false.)
     call parse_for_tracer_reservoirs(OBC, param_file, use_temperature)
   else
     ! This would be coming from user code such as DOME.
@@ -5022,8 +5000,7 @@ subroutine open_boundary_register_restarts(HI, GV, OBC, Reg, param_file, restart
 
   ! Still painfully inefficient, now in four dimensions.
   if (any(OBC%tracer_x_reservoirs_used)) then
-    allocate(OBC%tres_x(HI%isdB:HI%iedB,HI%jsd:HI%jed,GV%ke,OBC%ntr))
-    OBC%tres_x(:,:,:,:) = 0.0
+    allocate(OBC%tres_x(HI%isdB:HI%iedB,HI%jsd:HI%jed,GV%ke,OBC%ntr), source=0.0)
     do m=1,OBC%ntr
       if (OBC%tracer_x_reservoirs_used(m)) then
         if (modulo(HI%turns, 2) /= 0) then
@@ -5039,8 +5016,7 @@ subroutine open_boundary_register_restarts(HI, GV, OBC, Reg, param_file, restart
     enddo
   endif
   if (any(OBC%tracer_y_reservoirs_used)) then
-    allocate(OBC%tres_y(HI%isd:HI%ied,HI%jsdB:HI%jedB,GV%ke,OBC%ntr))
-    OBC%tres_y(:,:,:,:) = 0.0
+    allocate(OBC%tres_y(HI%isd:HI%ied,HI%jsdB:HI%jedB,GV%ke,OBC%ntr), source=0.0)
     do m=1,OBC%ntr
       if (OBC%tracer_y_reservoirs_used(m)) then
         if (modulo(HI%turns, 2) /= 0) then
