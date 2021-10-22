@@ -150,6 +150,7 @@ use MOM_offline_main,          only : offline_fw_fluxes_into_ocean, offline_fw_f
 use MOM_offline_main,          only : offline_advection_layer, offline_transport_end
 use MOM_ALE,                   only : ale_offline_tracer_final, ALE_main_offline
 use MOM_ice_shelf,             only : ice_shelf_CS, ice_shelf_query, initialize_ice_shelf
+use MOM_particles_mod,         only : particles, particles_init, particles_run, particles_save_restart, particles_end
 
 implicit none ; private
 
@@ -329,6 +330,8 @@ type, public :: MOM_control_struct ; private
   logical :: answers_2018       !< If true, use expressions for the surface properties that recover
                                 !! the answers from the end of 2018. Otherwise, use more appropriate
                                 !! expressions that differ at roundoff for non-Boussinsq cases.
+  logical :: use_particles      !< Turns on the particles package
+  character(len=10) :: particle_type !< Particle types include: surface(default), profiling and sail drone.
 
   type(MOM_diag_IDs)       :: IDs      !<  Handles used for diagnostics.
   type(transport_diag_IDs) :: transport_IDs  !< Handles used for transport diagnostics.
@@ -396,6 +399,7 @@ type, public :: MOM_control_struct ; private
   type(ODA_CS), pointer :: odaCS => NULL() !< a pointer to the control structure for handling
                                 !! ensemble model state vectors and data assimilation
                                 !! increments and priors
+  type(particles), pointer :: particles => NULL() !<Lagrangian particles
 end type MOM_control_struct
 
 public initialize_MOM, finish_MOM_initialization, MOM_end
@@ -1049,8 +1053,7 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_thermo, &
               Time_local + real_to_time(US%T_to_s*(bbl_time_int-dt)), CS%diag)
     ! Calculate the BBL properties and store them inside visc (u,h).
     call cpu_clock_begin(id_clock_BBL_visc)
-    call set_viscous_BBL(CS%u, CS%v, CS%h, CS%tv, CS%visc, G, GV, US, &
-                         CS%set_visc_CSp, symmetrize=.true.)
+    call set_viscous_BBL(CS%u, CS%v, CS%h, CS%tv, CS%visc, G, GV, US, CS%set_visc_CSp)
     call cpu_clock_end(id_clock_BBL_visc)
     if (showCallTree) call callTree_wayPoint("done with set_viscous_BBL (step_MOM)")
     call disable_averaging(CS%diag)
@@ -1096,6 +1099,13 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_thermo, &
     if (showCallTree) call callTree_waypoint("finished step_MOM_dyn_unsplit (step_MOM)")
 
   endif ! -------------------------------------------------- end SPLIT
+
+   if (CS%do_dynamics) then!run particles whether or not stepping is split
+     if (CS%use_particles) then
+       call particles_run(CS%particles, Time_local, CS%u, CS%v, CS%h, CS%tv) ! Run the particles model
+     endif
+   endif
+
 
   if (CS%thickness_diffuse .and. .not.CS%thickness_diffuse_first) then
     call cpu_clock_begin(id_clock_thick_diff)
@@ -1321,7 +1331,7 @@ subroutine step_MOM_thermo(CS, G, GV, US, u, v, h, tv, fluxes, dtdia, &
     ! DIABATIC_FIRST=True. Otherwise diabatic() is called after the dynamics
     ! and set_viscous_BBL is called as a part of the dynamic stepping.
     call cpu_clock_begin(id_clock_BBL_visc)
-    call set_viscous_BBL(u, v, h, tv, CS%visc, G, GV, US, CS%set_visc_CSp, symmetrize=.true.)
+    call set_viscous_BBL(u, v, h, tv, CS%visc, G, GV, US, CS%set_visc_CSp)
     call cpu_clock_end(id_clock_BBL_visc)
     if (showCallTree) call callTree_wayPoint("done with set_viscous_BBL (step_MOM_thermo)")
   endif
@@ -1342,7 +1352,7 @@ subroutine step_MOM_thermo(CS, G, GV, US, u, v, h, tv, fluxes, dtdia, &
     call cpu_clock_begin(id_clock_diabatic)
 
     call diabatic(u, v, h, tv, CS%Hml, fluxes, CS%visc, CS%ADp, CS%CDp, dtdia, &
-                  Time_end_thermo, G, GV, US, CS%diabatic_CSp, OBC=CS%OBC, Waves=Waves)
+                  Time_end_thermo, G, GV, US, CS%diabatic_CSp, CS%OBC, Waves)
     fluxes%fluxes_used = .true.
 
     if (showCallTree) call callTree_waypoint("finished diabatic (step_MOM_thermo)")
@@ -2091,6 +2101,9 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
     call get_param(param_file, "MOM", "ICE_SHELF", use_ice_shelf, &
        "If true, enables the ice shelf model.", default=.false.)
   endif
+
+  call get_param(param_file, "MOM", "USE_PARTICLES", CS%use_particles, &
+                 "If true, use the particles package.", default=.false.)
 
   CS%ensemble_ocean=.false.
   call get_param(param_file, "MOM", "ENSEMBLE_OCEAN", CS%ensemble_ocean, &
@@ -2870,6 +2883,11 @@ subroutine finish_MOM_initialization(Time, dirs, CS, restart_CSp)
   call fix_restart_scaling(GV)
   call fix_restart_unit_scaling(US)
 
+
+  if (CS%use_particles) then
+    call particles_init(CS%particles, G, CS%Time, CS%dt_therm, CS%u, CS%v)
+  endif
+
   ! Write initial conditions
   if (CS%write_IC) then
     allocate(restart_CSp_tmp)
@@ -3037,8 +3055,8 @@ subroutine adjust_ssh_for_p_atm(tv, G, GV, US, ssh, p_atm, use_EOS)
   type(verticalGrid_type),           intent(in)    :: GV  !< ocean vertical grid structure
   type(unit_scale_type),             intent(in)    :: US  !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G)),  intent(inout) :: ssh !< time mean surface height [m]
-  real, dimension(:,:),    optional, pointer       :: p_atm !< Ocean surface pressure [R L2 T-2 ~> Pa]
-  logical,                 optional, intent(in)    :: use_EOS !< If true, calculate the density for
+  real, dimension(:,:),              pointer       :: p_atm !< Ocean surface pressure [R L2 T-2 ~> Pa]
+  logical,                           intent(in)    :: use_EOS !< If true, calculate the density for
                                                        !! the SSH correction using the equation of state.
 
   real :: Rho_conv(SZI_(G))  ! The density used to convert surface pressure to
@@ -3050,9 +3068,8 @@ subroutine adjust_ssh_for_p_atm(tv, G, GV, US, ssh, p_atm, use_EOS)
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   EOSdom(:) = EOS_domain(G%HI)
-  if (present(p_atm)) then ; if (associated(p_atm)) then
-    calc_rho = associated(tv%eqn_of_state)
-    if (present(use_EOS) .and. calc_rho) calc_rho = use_EOS
+  if (associated(p_atm)) then
+    calc_rho = use_EOS .and. associated(tv%eqn_of_state)
     ! Correct the output sea surface height for the contribution from the ice pressure.
     do j=js,je
       if (calc_rho) then
@@ -3068,7 +3085,7 @@ subroutine adjust_ssh_for_p_atm(tv, G, GV, US, ssh, p_atm, use_EOS)
         enddo
       endif
     enddo
-  endif ; endif
+  endif
 
 end subroutine adjust_ssh_for_p_atm
 
@@ -3562,6 +3579,10 @@ end subroutine get_ocean_stocks
 subroutine MOM_end(CS)
   type(MOM_control_struct), intent(inout) :: CS   !< MOM control structure
 
+  if (CS%use_particles) then
+    call particles_save_restart(CS%particles)
+  endif
+
   call MOM_sum_output_end(CS%sum_output_CSp)
 
   if (CS%use_ALE_algorithm) call ALE_end(CS%ALE_CSp)
@@ -3590,6 +3611,11 @@ subroutine MOM_end(CS)
     call end_dyn_unsplit_RK2(CS%dyn_unsplit_RK2_CSp)
   else
     call end_dyn_unsplit(CS%dyn_unsplit_CSp)
+  endif
+
+  if (CS%use_particles) then
+     call particles_end(CS%particles)
+     deallocate(CS%particles)
   endif
 
   call thickness_diffuse_end(CS%thickness_diffuse_CSp, CS%CDp)

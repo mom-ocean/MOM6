@@ -23,7 +23,7 @@ contains
 
 !> This subroutine initializes layer thicknesses for the lock_exchange experiment.
 ! -----------------------------------------------------------------------------
-subroutine lock_exchange_initialize_thickness(h, G, GV, US, param_file, just_read_params)
+subroutine lock_exchange_initialize_thickness(h, G, GV, US, param_file, just_read)
   type(ocean_grid_type),   intent(in)  :: G           !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)  :: GV          !< The ocean's vertical grid structure.
   type(unit_scale_type),   intent(in)  :: US          !< A dimensional unit scaling type
@@ -31,8 +31,8 @@ subroutine lock_exchange_initialize_thickness(h, G, GV, US, param_file, just_rea
                            intent(out) :: h           !< The thickness that is being initialized [H ~> m or kg m-2].
   type(param_file_type),   intent(in)  :: param_file  !< A structure indicating the open file
                                                       !! to parse for model parameter values.
-  logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
-                                                      !! only read parameters without changing h.
+  logical,                 intent(in)  :: just_read   !< If true, this call will only read
+                                                      !! parameters without changing h.
 
   real :: e0(SZK_(GV))     ! The resting interface heights [Z ~> m], usually
                            ! negative because it is positive upward.
@@ -41,15 +41,12 @@ subroutine lock_exchange_initialize_thickness(h, G, GV, US, param_file, just_rea
                            ! positive upward [Z ~> m].
   real :: front_displacement ! Vertical displacement acrodd front
   real :: thermocline_thickness ! Thickness of stratified region
-  logical :: just_read    ! If true, just read parameters but set nothing.
-! This include declares and sets the variable "version".
-#include "version_variable.h"
+  ! This include declares and sets the variable "version".
+# include "version_variable.h"
   character(len=40)  :: mdl = "lock_exchange_initialize_thickness" ! This subroutine's name.
   integer :: i, j, k, is, ie, js, je, nz
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
-
-  just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
 
   if (.not.just_read) &
     call MOM_mesg("  lock_exchange_initialization.F90, lock_exchange_initialize_thickness: setting thickness", 5)

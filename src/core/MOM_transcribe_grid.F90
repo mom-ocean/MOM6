@@ -170,7 +170,7 @@ end subroutine copy_dyngrid_to_MOM_grid
 subroutine copy_MOM_grid_to_dyngrid(oG, dG, US)
   type(ocean_grid_type),  intent(in)    :: oG  !< Ocean grid type
   type(dyn_horgrid_type), intent(inout) :: dG  !< Common horizontal grid type
-  type(unit_scale_type), optional, intent(in) :: US !< A dimensional unit scaling type
+  type(unit_scale_type),  intent(in)    :: US  !< A dimensional unit scaling type
 
   integer :: isd, ied, jsd, jed      ! Common data domains.
   integer :: IsdB, IedB, JsdB, JedB  ! Common data domains.
@@ -305,7 +305,7 @@ subroutine copy_MOM_grid_to_dyngrid(oG, dG, US)
     call pass_vector(dG%Dopen_u, dG%Dopen_v, dG%Domain, To_All+Scalar_Pair, CGRID_NE)
   endif
 
-  call  set_derived_dyn_horgrid(dG, US)
+  call set_derived_dyn_horgrid(dG, US)
 
 end subroutine copy_MOM_grid_to_dyngrid
 

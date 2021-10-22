@@ -181,18 +181,17 @@ contains
 
 !> Initialize the CVMix KPP module and set up diagnostics
 !! Returns True if KPP is to be used, False otherwise.
-logical function KPP_init(paramFile, G, GV, US, diag, Time, CS, passive, Waves)
+logical function KPP_init(paramFile, G, GV, US, diag, Time, CS, passive)
 
   ! Arguments
   type(param_file_type),   intent(in)    :: paramFile !< File parser
   type(ocean_grid_type),   intent(in)    :: G         !< Ocean grid
-  type(verticalGrid_type), intent(in)    :: GV        !< Vertical grid structure.
+  type(verticalGrid_type), intent(in)    :: GV        !< Vertical grid structure
   type(unit_scale_type),   intent(in)    :: US        !< A dimensional unit scaling type
   type(diag_ctrl), target, intent(in)    :: diag      !< Diagnostics
   type(time_type),         intent(in)    :: Time      !< Model time
   type(KPP_CS),            pointer       :: CS        !< Control structure
   logical,       optional, intent(out)   :: passive   !< Copy of %passiveMode
-  type(wave_parameters_CS), optional, pointer :: Waves !< Wave CS
 
   ! Local variables
 # include "version_variable.h"
@@ -394,7 +393,7 @@ logical function KPP_init(paramFile, G, GV, US, diag, Time, CS, passive, Waves)
   call get_param(paramFile, mdl, "USE_KPP_LT_K", CS%LT_K_Enhancement, &
        'Flag for Langmuir turbulence enhancement of turbulent'//&
        'mixing coefficient.', units="", Default=.false.)
-  call get_param(paramFile, mdl, "STOKES_MIXING", CS%STOKES_MIXING, &
+  call get_param(paramFile, mdl, "STOKES_MIXING", CS%Stokes_Mixing, &
        'Flag for Langmuir turbulence enhancement of turbulent'//&
        'mixing coefficient.', units="", Default=.false.)
   if (CS%LT_K_Enhancement) then
@@ -607,9 +606,8 @@ logical function KPP_init(paramFile, G, GV, US, diag, Time, CS, passive, Waves)
 end function KPP_init
 
 !> KPP vertical diffusivity/viscosity and non-local tracer transport
-subroutine KPP_calculate(CS, G, GV, US, h, uStar, &
-                         buoyFlux, Kt, Ks, Kv, nonLocalTransHeat,&
-                         nonLocalTransScalar, waves, lamult)
+subroutine KPP_calculate(CS, G, GV, US, h, uStar, buoyFlux, Kt, Ks, Kv, &
+                         nonLocalTransHeat, nonLocalTransScalar, Waves, lamult)
 
   ! Arguments
   type(KPP_CS),                                pointer       :: CS    !< Control structure
@@ -630,8 +628,8 @@ subroutine KPP_calculate(CS, G, GV, US, h, uStar, &
                                                                     !!       [Z2 T-1 ~> m2 s-1]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), intent(inout) :: nonLocalTransHeat   !< Temp non-local transport [m s-1]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), intent(inout) :: nonLocalTransScalar !< scalar non-local trans. [m s-1]
-  type(wave_parameters_CS),          optional, pointer       :: Waves   !< Wave CS
-  real, dimension(SZI_(G),SZJ_(G)), optional, intent(in)     :: lamult  !< Langmuir enhancement multiplier
+  type(wave_parameters_CS),                    pointer       :: Waves   !< Wave CS for Langmuir turbulence
+  real, dimension(SZI_(G),SZJ_(G)),  optional, intent(in)    :: lamult  !< Langmuir enhancement multiplier
 
 ! Local variables
   integer :: i, j, k                             ! Loop indices
@@ -650,6 +648,8 @@ subroutine KPP_calculate(CS, G, GV, US, h, uStar, &
   ! For Langmuir Calculations
   real :: LangEnhK     ! Langmuir enhancement for mixing coefficient
 
+  if (CS%Stokes_Mixing .and. .not.associated(Waves)) call MOM_error(FATAL, &
+      "KPP_calculate: The Waves control structure must be associated if STOKES_MIXING is True.")
 
   if (CS%debug) then
     call hchksum(h, "KPP in: h",G%HI,haloshift=0, scale=GV%H_to_m)
@@ -671,7 +671,7 @@ subroutine KPP_calculate(CS, G, GV, US, h, uStar, &
   !$OMP                           surfBuoyFlux, Kdiffusivity, Kviscosity, LangEnhK, sigma,  &
   !$OMP                           sigmaRatio)                                               &
   !$OMP                           shared(G, GV, CS, US, uStar, h, buoy_scale, buoyFlux, Kt, &
-  !$OMP                           Ks, Kv, nonLocalTransHeat, nonLocalTransScalar, waves, lamult)
+  !$OMP                           Ks, Kv, nonLocalTransHeat, nonLocalTransScalar, Waves, lamult)
   ! loop over horizontal points on processor
   do j = G%jsc, G%jec
     do i = G%isc, G%iec
@@ -920,7 +920,7 @@ subroutine KPP_compute_BLD(CS, G, GV, US, h, Temp, Salt, u, v, tv, uStar, buoyFl
   type(thermo_var_ptrs),                      intent(in)    :: tv    !< Thermodynamics structure.
   real, dimension(SZI_(G),SZJ_(G)),           intent(in)    :: uStar !< Surface friction velocity [Z T-1 ~> m s-1]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), intent(in)   :: buoyFlux !< Surface buoyancy flux [L2 T-3 ~> m2 s-3]
-  type(wave_parameters_CS),         optional, pointer       :: Waves !< Wave CS
+  type(wave_parameters_CS),                   pointer       :: Waves !< Wave CS for Langmuir turbulence
   real, dimension(SZI_(G),SZJ_(G)), optional, intent(in)    :: lamult!< Langmuir enhancement factor
 
   ! Local variables
@@ -968,6 +968,8 @@ subroutine KPP_compute_BLD(CS, G, GV, US, h, Temp, Salt, u, v, tv, uStar, buoyFl
   integer :: B
   real :: WST
 
+  if (CS%Stokes_Mixing .and. .not.associated(Waves)) call MOM_error(FATAL, &
+      "KPP_compute_BLD: The Waves control structure must be associated if STOKES_MIXING is True.")
 
   if (CS%debug) then
     call hchksum(Salt, "KPP in: S",G%HI,haloshift=0)
@@ -1061,8 +1063,8 @@ subroutine KPP_compute_BLD(CS, G, GV, US, h, Temp, Salt, u, v, tv, uStar, buoyFl
           surfHu    = surfHu + 0.5*US%L_T_to_m_s*(u(i,j,ktmp)+u(i-1,j,ktmp)) * delH
           surfHv    = surfHv + 0.5*US%L_T_to_m_s*(v(i,j,ktmp)+v(i,j-1,ktmp)) * delH
           if (CS%Stokes_Mixing) then
-            surfHus = surfHus + 0.5*US%L_T_to_m_s*(WAVES%US_x(i,j,ktmp)+WAVES%US_x(i-1,j,ktmp)) * delH
-            surfHvs = surfHvs + 0.5*US%L_T_to_m_s*(WAVES%US_y(i,j,ktmp)+WAVES%US_y(i,j-1,ktmp)) * delH
+            surfHus = surfHus + 0.5*US%L_T_to_m_s*(Waves%US_x(i,j,ktmp)+Waves%US_x(i-1,j,ktmp)) * delH
+            surfHvs = surfHvs + 0.5*US%L_T_to_m_s*(Waves%US_y(i,j,ktmp)+Waves%US_y(i,j-1,ktmp)) * delH
           endif
 
         enddo

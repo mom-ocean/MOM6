@@ -433,20 +433,28 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
       backscat_subround = (1.0e-16/MEKE%backscatter_Ro_c)**(1.0/MEKE%backscatter_Ro_Pow)
   endif
 
+  ! Toggle whether to use a Laplacian viscosity derived from MEKE
+  if (associated(MEKE)) then
+    use_MEKE_Ku = associated(MEKE%Ku)
+    use_MEKE_Au = associated(MEKE%Au)
+  else
+    use_MEKE_Ku = .false. ; use_MEKE_Au = .false.
+  endif
+
   rescale_Kh = .false.
   if (associated(VarMix)) then
     rescale_Kh = VarMix%Resoln_scaled_Kh
-    if (rescale_Kh .and. &
+    if ((rescale_Kh .or. CS%res_scale_MEKE) .and. &
     (.not.associated(VarMix%Res_fn_h) .or. .not.associated(VarMix%Res_fn_q))) &
-      call MOM_error(FATAL, "MOM_hor_visc: VarMix%Res_fn_h and " //&
-        "VarMix%Res_fn_q both need to be associated with Resoln_scaled_Kh.")
+      call MOM_error(FATAL, "MOM_hor_visc: VarMix%Res_fn_h and VarMix%Res_fn_q "//&
+        "both need to be associated with Resoln_scaled_Kh or RES_SCALE_MEKE_VISC.")
+  elseif (CS%res_scale_MEKE) then
+    call MOM_error(FATAL, "MOM_hor_visc: VarMix needs to be associated if "//&
+                          "RES_SCALE_MEKE_VISC is True.")
   endif
+
   legacy_bound = (CS%Smagorinsky_Kh .or. CS%Leith_Kh) .and. &
                  (CS%bound_Kh .and. .not.CS%better_bound_Kh)
-
-  ! Toggle whether to use a Laplacian viscosity derived from MEKE
-  use_MEKE_Ku = associated(MEKE%Ku)
-  use_MEKE_Au = associated(MEKE%Au)
 
   if (CS%use_GME) then
     do j=Jsq-1,Jeq+2 ; do i=Isq-1,Ieq+2
@@ -892,8 +900,6 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
 
     endif ! CS%Leith_Kh
 
-    meke_res_fn = 1.
-
     if ((CS%Smagorinsky_Kh) .or. (CS%Smagorinsky_Ah)) then
       do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
         sh_xx_sq = sh_xx(i,j) * sh_xx(i,j)
@@ -977,13 +983,18 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
         Kh(i,j) = max(Kh(i,j), CS%Kh_bg_min)
       enddo ; enddo
 
-      do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-        if (CS%res_scale_MEKE) meke_res_fn = VarMix%Res_fn_h(i,j)
-
-        if (use_MEKE_Ku) &
-          ! *Add* the MEKE contribution (might be negative)
-          Kh(i,j) = Kh(i,j) + MEKE%Ku(i,j) * meke_res_fn
-      enddo ; enddo
+      if (use_MEKE_Ku) then
+        ! *Add* the MEKE contribution (which might be negative)
+        if (CS%res_scale_MEKE) then
+          do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+            Kh(i,j) = Kh(i,j) + MEKE%Ku(i,j) * VarMix%Res_fn_h(i,j)
+          enddo ; enddo
+        else
+          do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+            Kh(i,j) = Kh(i,j) + MEKE%Ku(i,j)
+          enddo ; enddo
+        endif
+      endif
 
       if (CS%anisotropic) then
         do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
@@ -1803,6 +1814,7 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, MEKE, ADp)
                            ! valid parameters.
   logical :: split         ! If true, use the split time stepping scheme.
                            ! If false and USE_GME = True, issue a FATAL error.
+  logical :: use_MEKE      ! If true, the MEKE parameterization is in use.
   logical :: default_2018_answers
   character(len=64) :: inputdir, filename
   real    :: deg2rad       ! Converts degrees to radians
@@ -1828,16 +1840,19 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, MEKE, ADp)
   CS%diag => diag
   ! Read parameters and write them to the model log.
   call log_version(param_file, mdl, version, "")
-  !   It is not clear whether these initialization lines are needed for the
+  !   It is not clear whether all of these initialization lines are needed for the
   ! cases where the corresponding parameters are not read.
   CS%bound_Kh = .false. ; CS%better_bound_Kh = .false. ; CS%Smagorinsky_Kh = .false. ; CS%Leith_Kh = .false.
   CS%bound_Ah = .false. ; CS%better_bound_Ah = .false. ; CS%Smagorinsky_Ah = .false. ; CS%Leith_Ah = .false.
   CS%use_QG_Leith_visc = .false.
   CS%bound_Coriolis = .false.
   CS%Modified_Leith = .false.
-  CS%anisotropic = .false.
   CS%dynamic_aniso = .false.
   Kh = 0.0 ; Ah = 0.0
+  ! These initialization lines are needed because they are used even in cases where they are not read.
+  CS%anisotropic = .false.
+  CS%res_scale_MEKE = .false.
+
   !   If GET_ALL_PARAMS is true, all parameters are read in all cases to enable
   ! parameter spelling checks.
   call get_param(param_file, mdl, "GET_ALL_PARAMS", get_all, default=.false.)
@@ -1885,13 +1900,17 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, MEKE, ADp)
     call get_param(param_file, mdl, "LEITH_KH", CS%Leith_Kh, &
                  "If true, use a Leith nonlinear eddy viscosity.", &
                  default=.false.)
+    ! This call duplicates one that occurs 26 lines later, and is probably unneccessary.
     call get_param(param_file, mdl, "MODIFIED_LEITH", CS%Modified_Leith, &
                  "If true, add a term to Leith viscosity which is "//&
                  "proportional to the gradient of divergence.", &
                  default=.false.)
+    call get_param(param_file, mdl, "USE_MEKE", use_MEKE, &
+                 default=.false., do_not_log=.true.)
     call get_param(param_file, mdl, "RES_SCALE_MEKE_VISC", CS%res_scale_MEKE, &
                  "If true, the viscosity contribution from MEKE is scaled by "//&
-                 "the resolution function.", default=.false.)
+                 "the resolution function.", default=.false., do_not_log=.not.use_MEKE)
+    if (.not.use_MEKE) CS%res_scale_MEKE = .false.
     if (CS%Leith_Kh .or. get_all) then
       call get_param(param_file, mdl, "LEITH_LAP_CONST", Leith_Lap_const, &
                  "The nondimensional Laplacian Leith constant, "//&
@@ -1901,7 +1920,7 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, MEKE, ADp)
                  "If true, use QG Leith nonlinear eddy viscosity.", &
                  default=.false.)
       if (CS%use_QG_Leith_visc .and. .not. CS%Leith_Kh) call MOM_error(FATAL, &
-                 "MOM_lateral_mixing_coeffs.F90, VarMix_init:"//&
+                 "MOM_hor_visc.F90, hor_visc_init:"//&
                  "LEITH_KH must be True when USE_QG_LEITH_VISC=True.")
     endif
     if (CS%Leith_Kh .or. CS%Leith_Ah .or. get_all) then
@@ -1909,7 +1928,7 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, MEKE, ADp)
                  "If true, include the beta term in the Leith nonlinear eddy viscosity.", &
                  default=CS%Leith_Kh)
       call get_param(param_file, mdl, "MODIFIED_LEITH", CS%modified_Leith, &
-                 "If true, add a term to Leith viscosity which is \n"//&
+                 "If true, add a term to Leith viscosity which is "//&
                  "proportional to the gradient of divergence.", &
                  default=.false.)
     endif

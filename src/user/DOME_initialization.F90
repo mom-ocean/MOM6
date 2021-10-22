@@ -87,7 +87,7 @@ end subroutine DOME_initialize_topography
 
 ! -----------------------------------------------------------------------------
 !> This subroutine initializes layer thicknesses for the DOME experiment
-subroutine DOME_initialize_thickness(h, depth_tot, G, GV, param_file, just_read_params)
+subroutine DOME_initialize_thickness(h, depth_tot, G, GV, param_file, just_read)
   type(ocean_grid_type),   intent(in)  :: G           !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)  :: GV          !< The ocean's vertical grid structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
@@ -96,20 +96,17 @@ subroutine DOME_initialize_thickness(h, depth_tot, G, GV, param_file, just_read_
                            intent(in)  :: depth_tot   !< The nominal total depth of the ocean [Z ~> m]
   type(param_file_type),   intent(in)  :: param_file  !< A structure indicating the open file
                                                       !! to parse for model parameter values.
-  logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
-                                                      !! only read parameters without changing h.
+  logical,                 intent(in)  :: just_read   !< If true, this call will only read
+                                                      !! parameters without changing h.
 
   real :: e0(SZK_(GV)+1)    ! The resting interface heights [Z ~> m], usually
                             ! negative because it is positive upward [Z ~> m].
   real :: eta1D(SZK_(GV)+1) ! Interface height relative to the sea surface
                             ! positive upward [Z ~> m].
-  logical :: just_read    ! If true, just read parameters but set nothing.
   character(len=40)  :: mdl = "DOME_initialize_thickness" ! This subroutine's name.
   integer :: i, j, k, is, ie, js, je, nz
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
-
-  just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
 
   if (just_read) return ! This subroutine has no run-time parameters.
 
@@ -149,8 +146,8 @@ end subroutine DOME_initialize_thickness
 !! the first registered field.                                        !
 subroutine DOME_initialize_sponges(G, GV, US, tv, depth_tot, PF, CSp)
   type(ocean_grid_type),   intent(in) :: G    !< The ocean's grid structure.
-  type(verticalGrid_type), intent(in) :: GV !< The ocean's vertical grid structure.
-  type(unit_scale_type),   intent(in) :: US !< A dimensional unit scaling type
+  type(verticalGrid_type), intent(in) :: GV   !< The ocean's vertical grid structure.
+  type(unit_scale_type),   intent(in) :: US   !< A dimensional unit scaling type
   type(thermo_var_ptrs),   intent(in) :: tv   !< A structure containing pointers to any available
                                 !! thermodynamic fields, including potential temperature and
                                 !! salinity or mixed layer density. Absent fields have NULL ptrs.
@@ -250,7 +247,7 @@ end subroutine DOME_initialize_sponges
 subroutine register_DOME_OBC(param_file, US, OBC, tr_Reg)
   type(param_file_type),      intent(in) :: param_file !< parameter file.
   type(unit_scale_type),      intent(in) :: US       !< A dimensional unit scaling type
-  type(ocean_OBC_type),       pointer    :: OBC  !< OBC registry.
+  type(ocean_OBC_type),       pointer    :: OBC      !< OBC registry.
   type(tracer_registry_type), pointer    :: tr_Reg   !< Tracer registry.
 
   if (OBC%number_of_segments /= 1) then

@@ -83,20 +83,20 @@ end subroutine benchmark_initialize_topography
 !! temperature profile with an exponentially decaying thermocline on top of a
 !! linear stratification.
 subroutine benchmark_initialize_thickness(h, depth_tot, G, GV, US, param_file, eqn_of_state, &
-                                          P_Ref, just_read_params)
+                                          P_Ref, just_read)
   type(ocean_grid_type),   intent(in)  :: G           !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)  :: GV          !< The ocean's vertical grid structure.
-  type(unit_scale_type),   intent(in)  :: US !< A dimensional unit scaling type
+  type(unit_scale_type),   intent(in)  :: US          !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(out) :: h           !< The thickness that is being initialized [H ~> m or kg m-2].
   real, dimension(SZI_(G),SZJ_(G)), &
-                           intent(in)  :: depth_tot !< The nominal total depth of the ocean [Z ~> m]
+                           intent(in)  :: depth_tot   !< The nominal total depth of the ocean [Z ~> m]
   type(param_file_type),   intent(in)  :: param_file  !< A structure indicating the open file
                                                       !! to parse for model parameter values.
   type(EOS_type),          pointer     :: eqn_of_state !< Equation of state structure
   real,                    intent(in)  :: P_Ref       !< The coordinate-density
                                                       !! reference pressure [R L2 T-2 ~> Pa].
-  logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
+  logical,                 intent(in)  :: just_read   !< If true, this call will
                                                       !! only read parameters without changing h.
   ! Local variables
   real :: e0(SZK_(GV)+1)     ! The resting interface heights, in depth units [Z ~> m],
@@ -122,7 +122,6 @@ subroutine benchmark_initialize_thickness(h, depth_tot, G, GV, US, param_file, e
   real :: err, derr_dz  ! The error between the profile's temperature and the
                     ! interface temperature for a given z and its derivative.
   real :: pi, z
-  logical :: just_read
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
   character(len=40)  :: mdl = "benchmark_initialize_thickness" ! This subroutine's name.
@@ -130,7 +129,6 @@ subroutine benchmark_initialize_thickness(h, depth_tot, G, GV, US, param_file, e
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
-  just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
   if (.not.just_read) call log_version(param_file, mdl, version, "")
   call get_param(param_file, mdl, "BENCHMARK_ML_DEPTH_IC", ML_depth, &
                  "Initial mixed layer depth in the benchmark test case.", &
@@ -215,7 +213,7 @@ end subroutine benchmark_initialize_thickness
 
 !> Initializes layer temperatures and salinities for benchmark
 subroutine benchmark_init_temperature_salinity(T, S, G, GV, US, param_file, &
-               eqn_of_state, P_Ref, just_read_params)
+               eqn_of_state, P_Ref, just_read)
   type(ocean_grid_type),               intent(in)  :: G            !< The ocean's grid structure.
   type(verticalGrid_type),             intent(in)  :: GV           !< The ocean's vertical grid structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: T      !< The potential temperature
@@ -229,8 +227,8 @@ subroutine benchmark_init_temperature_salinity(T, S, G, GV, US, param_file, &
   type(EOS_type),                      pointer     :: eqn_of_state !< Equation of state structure
   real,                                intent(in)  :: P_Ref        !< The coordinate-density
                                                                    !! reference pressure [R L2 T-2 ~> Pa].
-  logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
-                                                      !! only read parameters without changing h.
+  logical,                             intent(in)  :: just_read    !< If true, this call will only read
+                                                                   !! parameters without changing T & S.
   ! Local variables
   real :: T0(SZK_(GV))       ! A profile of temperatures [degC]
   real :: S0(SZK_(GV))       ! A profile of salinities [ppt]
@@ -241,13 +239,10 @@ subroutine benchmark_init_temperature_salinity(T, S, G, GV, US, param_file, &
   real :: PI        ! 3.1415926... calculated as 4*atan(1)
   real :: SST       !  The initial sea surface temperature [degC].
   real :: lat
-  logical :: just_read    ! If true, just read parameters but set nothing.
   character(len=40)  :: mdl = "benchmark_init_temperature_salinity" ! This subroutine's name.
   integer :: i, j, k, k1, is, ie, js, je, nz, itt
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
-
-  just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
 
   if (just_read) return ! All run-time parameters have been read, so return.
 
