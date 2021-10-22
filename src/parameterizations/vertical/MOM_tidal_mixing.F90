@@ -12,6 +12,7 @@ use MOM_file_parser,        only : openParameterBlock, closeParameterBlock
 use MOM_file_parser,        only : get_param, log_param, log_version, param_file_type
 use MOM_grid,               only : ocean_grid_type
 use MOM_io,                 only : slasher, MOM_read_data, field_size
+use MOM_internal_tides,     only : int_tide_CS, get_lowmode_loss
 use MOM_remapping,          only : remapping_CS, initialize_remapping, remapping_core_h
 use MOM_string_functions,   only : uppercase, lowercase
 use MOM_unit_scaling,       only : unit_scale_type
@@ -155,6 +156,7 @@ type, public :: tidal_mixing_cs ; private
   real, pointer, dimension(:,:) :: mask_itidal => NULL() !< A mask of where internal tide energy is input
   real, pointer, dimension(:,:) :: h2          => NULL() !< Squared bottom depth variance [Z2 ~> m2].
   real, pointer, dimension(:,:) :: tideamp     => NULL() !< RMS tidal amplitude [Z T-1 ~> m s-1]
+  type(int_tide_CS), pointer    :: int_tide_CSp=> NULL() !< Control structure for a child module
   real, allocatable, dimension(:)     :: h_src           !< tidal constituent input layer thickness [m]
   real, allocatable, dimension(:,:)   :: tidal_qe_2d     !< Tidal energy input times the local dissipation
                                                          !! fraction, q*E(x,y), with the CVMix implementation
@@ -209,12 +211,13 @@ integer,        parameter :: SCHMITTNER   = 2
 contains
 
 !> Initializes internal tidal dissipation scheme for diapycnal mixing
-logical function tidal_mixing_init(Time, G, GV, US, param_file, diag, CS)
+logical function tidal_mixing_init(Time, G, GV, US, param_file, int_tide_CSp, diag, CS)
   type(time_type),          intent(in)    :: Time       !< The current time.
   type(ocean_grid_type),    intent(in)    :: G          !< Grid structure.
   type(verticalGrid_type),  intent(in)    :: GV         !< Vertical grid structure.
   type(unit_scale_type),    intent(in)    :: US         !< A dimensional unit scaling type
   type(param_file_type),    intent(in)    :: param_file !< Run-time parameter file handle
+  type(int_tide_CS),target, intent(in)    :: int_tide_CSp !< A pointer to the internal tides control structure
   type(diag_ctrl), target,  intent(inout) :: diag       !< Diagnostics control structure.
   type(tidal_mixing_cs),    pointer       :: CS         !< This module's control structure.
 
@@ -272,6 +275,7 @@ logical function tidal_mixing_init(Time, G, GV, US, param_file, diag, CS)
   allocate(CS%dd)
   CS%debug = CS%debug.and.is_root_pe()
   CS%diag => diag
+  CS%int_tide_CSp  => int_tide_CSp
   CS%use_CVmix_tidal = use_CVmix_tidal
   CS%int_tide_dissipation = int_tide_dissipation
 
@@ -1215,12 +1219,7 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, US,
     TKE_lowmode_bot(i) = 0.0
     if (CS%Lowmode_itidal_dissipation) then
       ! get loss rate due to wave drag on low modes (already multiplied by q)
-
-      ! TODO: uncomment the following call and fix it
-      !call get_lowmode_loss(i,j,G,CS%int_tide_CSp,"WaveDrag",TKE_lowmode_tot)
-      write (mesg,*) "========", __FILE__, __LINE__
-      call MOM_error(FATAL,trim(mesg)//": this block not supported yet. (aa)")
-
+      call get_lowmode_loss(i,j,G,CS%int_tide_CSp,"WaveDrag",TKE_lowmode_tot)
       TKE_lowmode_bot(i) = CS%Mu_itides * I_rho0 * TKE_lowmode_tot
     endif
     ! Vertical energy flux at bottom
