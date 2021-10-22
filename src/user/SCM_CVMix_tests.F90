@@ -52,7 +52,7 @@ character(len=40)  :: mdl = "SCM_CVMix_tests" !< This module's name.
 contains
 
 !> Initializes temperature and salinity for the SCM CVMix test example
-subroutine SCM_CVMix_tests_TS_init(T, S, h, G, GV, US, param_file, just_read_params)
+subroutine SCM_CVMix_tests_TS_init(T, S, h, G, GV, US, param_file, just_read)
   type(ocean_grid_type),                     intent(in)  :: G  !< Grid structure
   type(verticalGrid_type),                   intent(in)  :: GV !< Vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: T  !< Potential temperature [degC]
@@ -60,8 +60,8 @@ subroutine SCM_CVMix_tests_TS_init(T, S, h, G, GV, US, param_file, just_read_par
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)  :: h  !< Layer thickness [H ~> m or kg m-2]
   type(unit_scale_type),                     intent(in)  :: US !< A dimensional unit scaling type
   type(param_file_type),                     intent(in)  :: param_file !< Input parameter structure
-  logical,                         optional, intent(in)  :: just_read_params !< If present and true, this call
-                                                               !! will only read parameters without changing h.
+  logical,                                   intent(in)  :: just_read !< If present and true, this call
+                                                               !! will only read parameters without changing T & S.
   ! Local variables
   real :: UpperLayerTempMLD !< Upper layer Temp MLD thickness [Z ~> m].
   real :: UpperLayerSaltMLD !< Upper layer Salt MLD thickness [Z ~> m].
@@ -73,14 +73,10 @@ subroutine SCM_CVMix_tests_TS_init(T, S, h, G, GV, US, param_file, just_read_par
   real :: LowerLayerdSdz !< Salt gradient in lower layer [ppt / Z ~> ppt m-1].
   real :: LowerLayerMinTemp !< Minimum temperature in lower layer [degC]
   real :: zC, DZ, top, bottom ! Depths and thicknesses [Z ~> m].
-  logical :: just_read    ! If true, just read parameters but set nothing.
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
-
-
-  just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
 
   if (.not.just_read) call log_version(param_file, mdl, version)
   call get_param(param_file, mdl, "SCM_TEMP_MLD", UpperLayerTempMLD, &

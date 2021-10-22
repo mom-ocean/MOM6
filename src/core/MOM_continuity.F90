@@ -39,7 +39,7 @@ contains
 
 !> Time steps the layer thicknesses, using a monotonically limited, directionally split PPM scheme,
 !! based on Lin (1994).
-subroutine continuity(u, v, hin, h, uh, vh, dt, G, GV, US, CS, uhbt, vhbt, OBC, &
+subroutine continuity(u, v, hin, h, uh, vh, dt, G, GV, US, CS, OBC, uhbt, vhbt, &
                       visc_rem_u, visc_rem_v, u_cor, v_cor, BT_cont)
   type(ocean_grid_type),   intent(inout) :: G   !< Ocean grid structure.
   type(verticalGrid_type), intent(in)    :: GV  !< Vertical grid structure.
@@ -60,14 +60,13 @@ subroutine continuity(u, v, hin, h, uh, vh, dt, G, GV, US, CS, uhbt, vhbt, OBC, 
   real,                    intent(in)    :: dt  !< Time increment [T ~> s].
   type(unit_scale_type),   intent(in)    :: US  !< A dimensional unit scaling type
   type(continuity_CS),     pointer       :: CS  !< Control structure for mom_continuity.
+  type(ocean_OBC_type),    pointer       :: OBC !< Open boundaries control structure.
   real, dimension(SZIB_(G),SZJ_(G)), &
                  optional, intent(in)    :: uhbt !< The vertically summed volume
                                                 !! flux through zonal faces [H L2 T-1 ~> m3 s-1 or kg s-1].
   real, dimension(SZI_(G),SZJB_(G)), &
                  optional, intent(in)    :: vhbt !< The vertically summed volume
                                                 !! flux through meridional faces [H L2 T-1 ~> m3 s-1 or kg s-1].
-  type(ocean_OBC_type), &
-                 optional, pointer       :: OBC !< Open boundaries control structure.
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
                  optional, intent(in)    :: visc_rem_u !< Both the fraction of
           !! zonal momentum that remains after a time-step of viscosity, and the fraction of a time-step's
@@ -96,7 +95,7 @@ subroutine continuity(u, v, hin, h, uh, vh, dt, G, GV, US, CS, uhbt, vhbt, OBC, 
        " one must be present in call to continuity.")
 
   if (CS%continuity_scheme == PPM_SCHEME) then
-    call continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, US, CS%PPM_CSp, uhbt, vhbt, OBC, &
+    call continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, US, CS%PPM_CSp, OBC, uhbt, vhbt, &
                         visc_rem_u, visc_rem_v, u_cor, v_cor, BT_cont=BT_cont)
   else
     call MOM_error(FATAL, "continuity: Unrecognized value of continuity_scheme")

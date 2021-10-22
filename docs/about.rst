@@ -8,7 +8,7 @@ Here is where to find particular documentation:
 
 Download, compile and run
   Installation documentation is in the form of user-driven (editable) wiki attached to the MOM6-examples GitHub repository.
-  Goto https://github.com/NOAA-GFDL/MOM6-examples/wiki and look at "Getting Started".
+  Go to https://github.com/NOAA-GFDL/MOM6-examples/wiki and look at "Getting Started".
 
   Installation, compilation and running are platform specific operations for which we can only provide templates (as is
   done in on the wiki) but for which MOM6 developers cannot possibly support since every platform is different. Normally
@@ -31,4 +31,4 @@ Repository policies
   Policies governing how the repositories are organized and operated live at https://github.com/NOAA-GFDL/MOM6-examples/wiki/MOM6-repository-policies.
 
 Developer guide
-  Beyond the API reference above, developer specific wiki pages are attached to the `MOM6 code repository <https://github.com/NOAA-GFDL/MOM6/wiki>`.
+  Beyond the API reference above, developer specific wiki pages are attached to the `MOM6 code repository <https://github.com/NOAA-GFDL/MOM6/wiki>`_.

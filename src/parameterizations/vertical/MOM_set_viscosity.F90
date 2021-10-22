@@ -1916,9 +1916,15 @@ subroutine set_visc_init(Time, G, GV, US, param_file, diag, visc, CS, restart_CS
   type(ocean_OBC_type),    pointer       :: OBC  !< A pointer to an open boundary condition structure
 
   ! Local variables
-  real    :: Csmag_chan_dflt, smag_const1, TKE_decay_dflt, bulk_Ri_ML_dflt
-  real    :: Kv_background
-  real    :: omega_frac_dflt
+  real    :: Csmag_chan_dflt ! The default value for SMAG_CONST_CHANNEL [nondim]
+  real    :: smag_const1     ! The default value for the Smagorinsky Laplacian coefficient [nondim]
+  real    :: TKE_decay_dflt  ! The default value of a coeficient scaling the vertical decay
+                             ! rate of TKE [nondim]
+  real    :: bulk_Ri_ML_dflt ! The default bulk Richardson number for a bulk mixed layer [nondim]
+  real    :: Kv_background   ! The background kinematic viscosity in the interior [m2 s-1]
+  real    :: omega_frac_dflt ! The default value for the fraction of the absolute rotation rate that
+                             ! is used in place of the absolute value of the local Coriolis
+                             ! parameter in the denominator of some expressions [nondim]
   real    :: Z_rescale     ! A rescaling factor for heights from the representation in
                            ! a restart file to the internal representation in this run.
   real    :: I_T_rescale   ! A rescaling factor for time from the internal representation in this run
@@ -1930,7 +1936,10 @@ subroutine set_visc_init(Time, G, GV, US, param_file, diag, visc, CS, restart_CS
   logical :: default_2018_answers
   logical :: use_kappa_shear, adiabatic, use_omega, MLE_use_PBL_MLD
   logical :: use_KPP
-  logical :: use_regridding
+  logical :: use_regridding  ! If true, use the ALE algorithm rather than layered
+                             ! isopycnal or stacked shallow water mode.
+  logical :: use_temperature ! If true, temperature and salinity are used as state variables.
+  logical :: use_EOS         ! If true, density calculated from T & S using an equation of state.
   character(len=200) :: filename, tideamp_file
   type(OBC_segment_type), pointer :: segment => NULL() ! pointer to OBC segment type
   ! This include declares and sets the variable "version".
@@ -2071,15 +2080,18 @@ subroutine set_visc_init(Time, G, GV, US, param_file, diag, visc, CS, restart_CS
                    "BOTTOMDRAGLAW is defined.", units="m s-1", default=0.0, scale=US%m_s_to_L_T)
     endif
     call get_param(param_file, mdl, "USE_REGRIDDING", use_regridding, &
-         do_not_log = .true., default = .false. )
+                 do_not_log=.true., default=.false. )
+    call get_param(param_file, mdl, "ENABLE_THERMODYNAMICS", use_temperature, &
+                 default=.true., do_not_log=.true.)
+    call get_param(param_file, mdl, "USE_EOS", use_EOS, &
+                 default=use_temperature, do_not_log=.true.)
     call get_param(param_file, mdl, "BBL_USE_EOS", CS%BBL_use_EOS, &
-                 "If true, use the equation of state in determining the "//&
-                 "properties of the bottom boundary layer.  Otherwise use "//&
-                 "the layer target potential densities.  The default of "//&
-                 "this is determined by USE_REGRIDDING.", default=use_regridding)
+                 "If true, use the equation of state in determining the properties of the "//&
+                 "bottom boundary layer.  Otherwise use the layer target potential densities.  "//&
+                 "The default of this parameter is the value of USE_EOS.", &
+                 default=use_EOS, do_not_log=.not.use_temperature)
     if (use_regridding .and. (.not. CS%BBL_use_EOS)) &
-      call MOM_error(FATAL,"When using MOM6 in ALE mode it is required to "//&
-           "set BBL_USE_EOS to True")
+      call MOM_error(FATAL,"When using MOM6 in ALE mode it is required to set BBL_USE_EOS to True.")
   endif
   call get_param(param_file, mdl, "BBL_THICK_MIN", CS%BBL_thick_min, &
                  "The minimum bottom boundary layer thickness that can be "//&
