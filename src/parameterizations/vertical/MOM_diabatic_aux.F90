@@ -318,7 +318,7 @@ end subroutine differential_diffuse_T_S
 !> This subroutine keeps salinity from falling below a small but positive threshold.
 !! This usually occurs when the ice model attempts to extract more salt then
 !! is actually available to it from the ocean.
-subroutine adjust_salt(h, tv, G, GV, CS, halo)
+subroutine adjust_salt(h, tv, G, GV, CS)
   type(ocean_grid_type),   intent(in)    :: G    !< The ocean's grid structure
   type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
@@ -327,7 +327,6 @@ subroutine adjust_salt(h, tv, G, GV, CS, halo)
                                                  !! available thermodynamic fields.
   type(diabatic_aux_CS),   intent(in)    :: CS   !< The control structure returned by a previous
                                                  !! call to diabatic_aux_init.
-  integer,       optional, intent(in)    :: halo !< Halo width over which to work
 
   ! local variables
   real :: salt_add_col(SZI_(G),SZJ_(G)) !< The accumulated salt requirement [ppt R Z ~> gSalt m-2]
@@ -336,9 +335,6 @@ subroutine adjust_salt(h, tv, G, GV, CS, halo)
   integer :: i, j, k, is, ie, js, je, nz
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
-  if (present(halo)) then
-    is = G%isc-halo ; ie = G%iec+halo ; js = G%jsc-halo ; je = G%jec+halo
-  endif
 
 !  call cpu_clock_begin(id_clock_adjust_salt)
 
@@ -1024,7 +1020,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
                  optional, intent(out)   :: dSV_dS !< Partial derivative of specific volume with
                                                !! salinity [R-1 ppt-1 ~> m3 kg-1 ppt-1].
   real, dimension(SZI_(G),SZJ_(G)), &
-                   optional, intent(out) :: SkinBuoyFlux !< Buoyancy flux at surface [Z2 T-3 ~> m2 s-3].
+                 optional, intent(out)   :: SkinBuoyFlux !< Buoyancy flux at surface [Z2 T-3 ~> m2 s-3].
 
   ! Local variables
   integer, parameter :: maxGroundings = 5

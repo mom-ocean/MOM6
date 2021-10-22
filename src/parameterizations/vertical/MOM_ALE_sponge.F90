@@ -840,7 +840,7 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
   real,                      intent(in)    :: dt !< The amount of time covered by this call [T ~> s].
   type(ALE_sponge_CS),       pointer       :: CS !< A pointer to the control structure for this module
                                                  !! that is set by a previous call to initialize_ALE_sponge (in).
-  type(time_type), optional, intent(in)    :: Time !< The current model date
+  type(time_type),           intent(in)    :: Time !< The current model date
 
   real :: damp                                  ! The timestep times the local damping coefficient [nondim].
   real :: I1pdamp                               ! I1pdamp is 1/(1 + damp). [nondim].
@@ -885,8 +885,6 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
   endif
 
   if (CS%time_varying_sponges) then
-    if (.not. present(Time)) &
-      call MOM_error(FATAL,"apply_ALE_sponge: No time information provided")
     do m=1,CS%fldno
       nz_data = CS%Ref_val(m)%nz_data
       call horiz_interp_and_extrap_tracer(CS%Ref_val(m)%id, Time, 1.0, G, sp_val, mask_z, z_in, &
@@ -971,9 +969,6 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
   if (CS%sponge_uv) then
 
     if (CS%time_varying_sponges) then
-      if (.not. present(Time)) &
-         call MOM_error(FATAL,"apply_ALE_sponge: No time information provided")
-
       nz_data = CS%Ref_val_u%nz_data
       ! Interpolate from the external horizontal grid and in time
       call horiz_interp_and_extrap_tracer(CS%Ref_val_u%id, Time, 1.0, G, sp_val, mask_z, z_in, &
