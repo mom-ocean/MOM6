@@ -115,7 +115,7 @@ end type set_visc_CS
 contains
 
 !> Calculates the thickness of the bottom boundary layer and the viscosity within that layer.
-subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
+subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS)
   type(ocean_grid_type),    intent(inout) :: G    !< The ocean's grid structure.
   type(verticalGrid_type),  intent(in)    :: GV   !< The ocean's vertical grid structure.
   type(unit_scale_type),    intent(in)    :: US   !< A dimensional unit scaling type
@@ -132,9 +132,6 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
                                                   !! related fields.
   type(set_visc_CS),        pointer       :: CS   !< The control structure returned by a previous
                                                   !! call to set_visc_init.
-  logical,        optional, intent(in)    :: symmetrize !< If present and true, do extra calculations
-                                                  !! of those values in visc that would be
-                                                  !! calculated with symmetric memory.
 
   ! Local variables
   real, dimension(SZIB_(G)) :: &
@@ -280,7 +277,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
   type(ocean_OBC_type), pointer :: OBC => NULL()
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
-  Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
+  Isq = G%isc-1 ; Ieq = G%IecB ; Jsq = G%jsc-1 ; Jeq = G%JecB
   nkmb = GV%nk_rho_varies ; nkml = GV%nkml
   h_neglect = GV%H_subroundoff
   Rho0x400_G = 400.0*(GV%Rho0 / (US%L_to_Z**2 * GV%g_Earth)) * GV%Z_to_H
@@ -290,10 +287,6 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, symmetrize)
   if (.not.associated(CS)) call MOM_error(FATAL,"MOM_set_viscosity(BBL): "//&
          "Module must be initialized before it is used.")
   if (.not.CS%bottomdraglaw) return
-
-  if (present(symmetrize)) then ; if (symmetrize) then
-    Jsq = js-1 ; Isq = is-1
-  endif ; endif
 
   if (CS%debug) then
     call uvchksum("Start set_viscous_BBL [uv]", u, v, G%HI, haloshift=1, scale=US%L_T_to_m_s)
@@ -1134,7 +1127,7 @@ end function set_u_at_v
 !! A bulk Richardson criterion or the thickness of the topmost NKML layers (with a bulk mixed layer)
 !! are currently used.  The thicknesses are given in terms of fractional layers, so that this
 !! thickness will move as the thickness of the topmost layers change.
-subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS, symmetrize)
+subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS)
   type(ocean_grid_type),   intent(inout) :: G    !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure.
   type(unit_scale_type),   intent(in)    :: US   !< A dimensional unit scaling type
@@ -1153,9 +1146,6 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS, symmetri
   real,                    intent(in)    :: dt   !< Time increment [T ~> s].
   type(set_visc_CS),       pointer       :: CS   !< The control structure returned by a previous
                                                  !! call to set_visc_init.
-  logical,        optional, intent(in)    :: symmetrize !< If present and true, do extra calculations
-                                                 !! of those values in visc that would be
-                                                 !! calculated with symmetric memory.
 
   ! Local variables
   real, dimension(SZIB_(G)) :: &
@@ -1254,17 +1244,13 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS, symmetri
   type(ocean_OBC_type), pointer :: OBC => NULL()
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
-  Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
+  Isq = G%isc-1 ; Ieq = G%IecB ; Jsq = G%jsc-1 ; Jeq = G%JecB
   nkmb = GV%nk_rho_varies ; nkml = GV%nkml
 
   if (.not.associated(CS)) call MOM_error(FATAL,"MOM_set_viscosity(visc_ML): "//&
          "Module must be initialized before it is used.")
   if (.not.(CS%dynamic_viscous_ML .or. associated(forces%frac_shelf_u) .or. &
             associated(forces%frac_shelf_v)) ) return
-
-  if (present(symmetrize)) then ; if (symmetrize) then
-    Jsq = js-1 ; Isq = is-1
-  endif ; endif
 
   Rho0x400_G = 400.0*(GV%Rho0/(US%L_to_Z**2 * GV%g_Earth)) * GV%Z_to_H
   U_bg_sq = CS%drag_bg_vel * CS%drag_bg_vel
@@ -1916,9 +1902,15 @@ subroutine set_visc_init(Time, G, GV, US, param_file, diag, visc, CS, restart_CS
   type(ocean_OBC_type),    pointer       :: OBC  !< A pointer to an open boundary condition structure
 
   ! Local variables
-  real    :: Csmag_chan_dflt, smag_const1, TKE_decay_dflt, bulk_Ri_ML_dflt
-  real    :: Kv_background
-  real    :: omega_frac_dflt
+  real    :: Csmag_chan_dflt ! The default value for SMAG_CONST_CHANNEL [nondim]
+  real    :: smag_const1     ! The default value for the Smagorinsky Laplacian coefficient [nondim]
+  real    :: TKE_decay_dflt  ! The default value of a coeficient scaling the vertical decay
+                             ! rate of TKE [nondim]
+  real    :: bulk_Ri_ML_dflt ! The default bulk Richardson number for a bulk mixed layer [nondim]
+  real    :: Kv_background   ! The background kinematic viscosity in the interior [m2 s-1]
+  real    :: omega_frac_dflt ! The default value for the fraction of the absolute rotation rate that
+                             ! is used in place of the absolute value of the local Coriolis
+                             ! parameter in the denominator of some expressions [nondim]
   real    :: Z_rescale     ! A rescaling factor for heights from the representation in
                            ! a restart file to the internal representation in this run.
   real    :: I_T_rescale   ! A rescaling factor for time from the internal representation in this run
@@ -1930,7 +1922,10 @@ subroutine set_visc_init(Time, G, GV, US, param_file, diag, visc, CS, restart_CS
   logical :: default_2018_answers
   logical :: use_kappa_shear, adiabatic, use_omega, MLE_use_PBL_MLD
   logical :: use_KPP
-  logical :: use_regridding
+  logical :: use_regridding  ! If true, use the ALE algorithm rather than layered
+                             ! isopycnal or stacked shallow water mode.
+  logical :: use_temperature ! If true, temperature and salinity are used as state variables.
+  logical :: use_EOS         ! If true, density calculated from T & S using an equation of state.
   character(len=200) :: filename, tideamp_file
   type(OBC_segment_type), pointer :: segment => NULL() ! pointer to OBC segment type
   ! This include declares and sets the variable "version".
@@ -2071,15 +2066,18 @@ subroutine set_visc_init(Time, G, GV, US, param_file, diag, visc, CS, restart_CS
                    "BOTTOMDRAGLAW is defined.", units="m s-1", default=0.0, scale=US%m_s_to_L_T)
     endif
     call get_param(param_file, mdl, "USE_REGRIDDING", use_regridding, &
-         do_not_log = .true., default = .false. )
+                 do_not_log=.true., default=.false. )
+    call get_param(param_file, mdl, "ENABLE_THERMODYNAMICS", use_temperature, &
+                 default=.true., do_not_log=.true.)
+    call get_param(param_file, mdl, "USE_EOS", use_EOS, &
+                 default=use_temperature, do_not_log=.true.)
     call get_param(param_file, mdl, "BBL_USE_EOS", CS%BBL_use_EOS, &
-                 "If true, use the equation of state in determining the "//&
-                 "properties of the bottom boundary layer.  Otherwise use "//&
-                 "the layer target potential densities.  The default of "//&
-                 "this is determined by USE_REGRIDDING.", default=use_regridding)
+                 "If true, use the equation of state in determining the properties of the "//&
+                 "bottom boundary layer.  Otherwise use the layer target potential densities.  "//&
+                 "The default of this parameter is the value of USE_EOS.", &
+                 default=use_EOS, do_not_log=.not.use_temperature)
     if (use_regridding .and. (.not. CS%BBL_use_EOS)) &
-      call MOM_error(FATAL,"When using MOM6 in ALE mode it is required to "//&
-           "set BBL_USE_EOS to True")
+      call MOM_error(FATAL,"When using MOM6 in ALE mode it is required to set BBL_USE_EOS to True.")
   endif
   call get_param(param_file, mdl, "BBL_THICK_MIN", CS%BBL_thick_min, &
                  "The minimum bottom boundary layer thickness that can be "//&

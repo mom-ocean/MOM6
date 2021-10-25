@@ -283,8 +283,8 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
   type(time_type),                            intent(in)    :: Time_end !< Time at the end of the interval
   type(unit_scale_type),                      intent(in)    :: US       !< A dimensional unit scaling type
   type(diabatic_CS),                          pointer       :: CS       !< module control structure
-  type(ocean_OBC_type),             optional, pointer       :: OBC      !< Open boundaries control structure.
-  type(Wave_parameters_CS),         optional, pointer       :: Waves    !< Surface gravity waves
+  type(ocean_OBC_type),                       pointer       :: OBC      !< Open boundaries control structure.
+  type(Wave_parameters_CS),                   pointer       :: Waves    !< Surface gravity waves
 
   ! local variables
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1) :: &
@@ -473,7 +473,7 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
   real,                                       intent(in)    :: dt       !< time increment [T ~> s]
   type(time_type),                            intent(in)    :: Time_end !< Time at the end of the interval
   type(diabatic_CS),                          pointer       :: CS       !< module control structure
-  type(Wave_parameters_CS),         optional, pointer       :: Waves    !< Surface gravity waves
+  type(Wave_parameters_CS),                   pointer       :: Waves    !< Surface gravity waves
 
   ! local variables
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: &
@@ -1057,7 +1057,7 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
   real,                                       intent(in)    :: dt       !< time increment [T ~> s]
   type(time_type),                            intent(in)    :: Time_end !< Time at the end of the interval
   type(diabatic_CS),                          pointer       :: CS       !< module control structure
-  type(Wave_parameters_CS),         optional, pointer       :: Waves    !< Surface gravity waves
+  type(Wave_parameters_CS),                   pointer       :: Waves    !< Surface gravity waves
 
   ! local variables
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: &
@@ -1566,7 +1566,7 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
   real,                                       intent(in)    :: dt       !< time increment [T ~> s]
   type(time_type),                            intent(in)    :: Time_end !< Time at the end of the interval
   type(diabatic_CS),                          pointer       :: CS       !< module control structure
-  type(Wave_parameters_CS),         optional, pointer       :: Waves    !< Surface gravity waves
+  type(Wave_parameters_CS),                   pointer       :: Waves    !< Surface gravity waves
 
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: &
     ea,     &    ! amount of fluid entrained from the layer above within

@@ -26,6 +26,9 @@ implicit none ; private
 !> Variable mixing coefficients
 type, public :: VarMix_CS
   logical :: use_variable_mixing  !< If true, use the variable mixing.
+  logical :: Resoln_scaling_used  !< If true, a resolution function is used somewhere to scale
+                                  !! away one of the viscosities or diffusivities when the
+                                  !! deformation radius is well resolved.
   logical :: Resoln_scaled_Kh     !< If true, scale away the Laplacian viscosity
                                   !! when the deformation radius is well resolved.
   logical :: Resoln_scaled_KhTh   !< If true, scale away the thickness diffusivity
@@ -1162,6 +1165,8 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
   real :: grid_sp_u3, grid_sp_v3 ! Intermediate quantities for Leith metrics [L3 ~> m3]
   real :: wave_speed_min      ! A floor in the first mode speed below which 0 is returned [L T-1 ~> m s-1]
   real :: wave_speed_tol      ! The fractional tolerance for finding the wave speeds [nondim]
+  logical :: Resoln_scaled_MEKE_visc ! If true, the viscosity contribution from MEKE is
+                                  ! scaled by the resolution function.
   logical :: better_speed_est ! If true, use a more robust estimate of the first
                               ! mode wave speed as the starting point for iterations.
 ! This include declares and sets the variable "version".
@@ -1217,6 +1222,12 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
                  "If true, the epipycnal tracer diffusivity is scaled "//&
                  "away when the first baroclinic deformation radius is "//&
                  "well resolved.", default=.false.)
+  call get_param(param_file, mdl, "USE_MEKE", use_MEKE, &
+                 default=.false., do_not_log=.true.)
+  call get_param(param_file, mdl, "RES_SCALE_MEKE_VISC", Resoln_scaled_MEKE_visc, &
+                 "If true, the viscosity contribution from MEKE is scaled by "//&
+                 "the resolution function.", default=.false., do_not_log=.true.) ! Logged elsewhere.
+  if (.not.use_MEKE) Resoln_scaled_MEKE_visc = .false.
   call get_param(param_file, mdl, "RESOLN_USE_EBT", CS%Resoln_use_ebt, &
                  "If true, uses the equivalent barotropic wave speed instead "//&
                  "of first baroclinic wave for calculating the resolution fn.",&
@@ -1245,13 +1256,9 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
   call get_param(param_file, mdl, "KHTH_USE_FGNV_STREAMFUNCTION", use_FGNV_streamfn, &
                  default=.false., do_not_log=.true.)
   CS%calculate_cg1 = CS%calculate_cg1 .or. use_FGNV_streamfn
-  call get_param(param_file, mdl, "USE_MEKE", use_MEKE, &
-                 default=.false., do_not_log=.true.)
   CS%calculate_Rd_dx = CS%calculate_Rd_dx .or. use_MEKE
   ! Indicate whether to calculate the Eady growth rate
-  CS%calculate_Eady_growth_rate = use_MEKE &
-                                  .or. (KhTr_Slope_Cff>0.) &
-                                  .or. (KhTh_Slope_Cff>0.)
+  CS%calculate_Eady_growth_rate = use_MEKE .or. (KhTr_Slope_Cff>0.) .or. (KhTh_Slope_Cff>0.)
   call get_param(param_file, mdl, "KHTR_PASSIVITY_COEFF", KhTr_passivity_coeff, &
                  default=0., do_not_log=.true.)
   CS%calculate_Rd_dx = CS%calculate_Rd_dx .or. (KhTr_passivity_coeff>0.)
@@ -1383,7 +1390,9 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
   endif
 
   oneOrTwo = 1.0
-  if (CS%Resoln_scaled_Kh .or. CS%Resoln_scaled_KhTh .or. CS%Resoln_scaled_KhTr) then
+  CS%Resoln_scaling_used = CS%Resoln_scaled_Kh .or. CS%Resoln_scaled_KhTh .or. &
+                           CS%Resoln_scaled_KhTr .or. Resoln_scaled_MEKE_visc
+  if (CS%Resoln_scaling_used) then
     CS%calculate_Rd_dx = .true.
     CS%calculate_res_fns = .true.
     allocate(CS%Res_fn_h(isd:ied,jsd:jed), source=0.0)
@@ -1535,7 +1544,7 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
                  units="m s-1", default=0.0, scale=US%m_s_to_L_T)
     call get_param(param_file, mdl, "INTERNAL_WAVE_SPEED_BETTER_EST", better_speed_est, &
                  "If true, use a more robust estimate of the first mode wave speed as the "//&
-                 "starting point for iterations.", default=.false.) !### Change the default.
+                 "starting point for iterations.", default=.true.)
     call wave_speed_init(CS%wave_speed_CSp, use_ebt_mode=CS%Resoln_use_ebt, &
                          mono_N2_depth=N2_filter_depth, remap_answers_2018=remap_answers_2018, &
                          better_speed_est=better_speed_est, min_speed=wave_speed_min, &
@@ -1615,7 +1624,7 @@ subroutine VarMix_end(CS)
   if (associated(CS%L2u)) deallocate(CS%L2u)
   if (associated(CS%L2v)) deallocate(CS%L2v)
 
-  if (CS%Resoln_scaled_Kh .or. CS%Resoln_scaled_KhTh .or. CS%Resoln_scaled_KhTr) then
+  if (CS%Resoln_scaling_used) then
     deallocate(CS%Res_fn_h)
     deallocate(CS%Res_fn_q)
     deallocate(CS%Res_fn_u)

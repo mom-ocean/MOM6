@@ -160,7 +160,7 @@ type, public :: OBC_segment_type
   integer :: zphase_index   !< Save where zphase is in segment%field.
   real :: Velocity_nudging_timescale_in  !< Nudging timescale on inflow [T ~> s].
   real :: Velocity_nudging_timescale_out !< Nudging timescale on outflow [T ~> s].
-  logical :: on_pe          !< true if segment is located in the computational domain
+  logical :: on_pe          !< true if any portion of the segment is located in this PE's data domain
   logical :: temp_segment_data_exists !< true if temperature data arrays are present
   logical :: salt_segment_data_exists !< true if salinity data arrays are present
   real, pointer, dimension(:,:)   :: Cg=>NULL()     !< The external gravity wave speed [L T-1 ~> m s-1]
