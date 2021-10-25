@@ -1705,7 +1705,7 @@ subroutine set_BBL_TKE(u, v, h, fluxes, visc, G, GV, US, CS, OBC)
   type(vertvisc_type),      intent(in)    :: visc !< Structure containing vertical viscosities, bottom
                                                   !! boundary layer properies, and related fields.
   type(set_diffusivity_CS), pointer       :: CS   !< Diffusivity control structure
-  type(ocean_OBC_type), optional, pointer :: OBC  !< Open boundaries control structure.
+  type(ocean_OBC_type),     pointer       :: OBC  !< Open boundaries control structure.
 
   ! This subroutine calculates several properties related to bottom
   ! boundary layer turbulence.
@@ -1736,10 +1736,10 @@ subroutine set_BBL_TKE(u, v, h, fluxes, visc, G, GV, US, CS, OBC)
 
   local_open_u_BC = .false.
   local_open_v_BC = .false.
-  if (present(OBC)) then ; if (associated(OBC)) then
+  if (associated(OBC)) then
     local_open_u_BC = OBC%open_u_BCs_exist_globally
     local_open_v_BC = OBC%open_v_BCs_exist_globally
-  endif ; endif
+  endif
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
@@ -2058,8 +2058,8 @@ subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, int_tide_
                  "forms of the same expressions.", default=default_2018_answers)
 
   ! CS%use_tidal_mixing is set to True if an internal tidal dissipation scheme is to be used.
-  CS%use_tidal_mixing = tidal_mixing_init(Time, G, GV, US, param_file, diag, &
-                                          CS%tidal_mixing_CSp)
+  CS%use_tidal_mixing = tidal_mixing_init(Time, G, GV, US, param_file, &
+                                          CS%int_tide_CSp, diag, CS%tidal_mixing_CSp)
 
   call get_param(param_file, mdl, "ML_RADIATION", CS%ML_radiation, &
                  "If true, allow a fraction of TKE available from wind "//&

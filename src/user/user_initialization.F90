@@ -78,23 +78,19 @@ subroutine USER_initialize_topography(D, G, param_file, max_depth, US)
 end subroutine USER_initialize_topography
 
 !> initialize thicknesses.
-subroutine USER_initialize_thickness(h, G, GV, param_file, just_read_params)
+subroutine USER_initialize_thickness(h, G, GV, param_file, just_read)
   type(ocean_grid_type),   intent(in)  :: G  !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)  :: GV !< The ocean's vertical grid structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(out) :: h  !< The thicknesses being initialized [H ~> m or kg m-2].
   type(param_file_type),   intent(in)  :: param_file !< A structure indicating the open
                                              !! file to parse for model parameter values.
-  logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
+  logical,                 intent(in)  :: just_read !< If true, this call will
                                              !! only read parameters without changing h.
-
-  logical :: just_read    ! If true, just read parameters but set nothing.
 
   call MOM_error(FATAL, &
     "USER_initialization.F90, USER_initialize_thickness: " // &
     "Unmodified user routine called - you must edit the routine to use it")
-
-  just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
 
   if (just_read) return ! All run-time parameters have been read, so return.
 
@@ -105,7 +101,7 @@ subroutine USER_initialize_thickness(h, G, GV, param_file, just_read_params)
 end subroutine USER_initialize_thickness
 
 !> initialize velocities.
-subroutine USER_initialize_velocity(u, v, G, GV, US, param_file, just_read_params)
+subroutine USER_initialize_velocity(u, v, G, GV, US, param_file, just_read)
   type(ocean_grid_type),                       intent(in)  :: G !< Ocean grid structure.
   type(verticalGrid_type),                     intent(in)  :: GV !< The ocean's vertical grid structure.
   real, dimension(SZIB_(G), SZJ_(G),SZK_(GV)), intent(out) :: u !< i-component of velocity [L T-1 ~> m s-1]
@@ -114,16 +110,12 @@ subroutine USER_initialize_velocity(u, v, G, GV, US, param_file, just_read_param
   type(param_file_type),                       intent(in)  :: param_file !< A structure indicating the
                                                             !! open file to parse for model
                                                             !! parameter values.
-  logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
-                                                      !! only read parameters without changing h.
-
-  logical :: just_read    ! If true, just read parameters but set nothing.
+  logical,                                     intent(in)  :: just_read !< If true, this call will
+                                                      !! only read parameters without changing u & v.
 
   call MOM_error(FATAL, &
     "USER_initialization.F90, USER_initialize_velocity: " // &
     "Unmodified user routine called - you must edit the routine to use it")
-
-  just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
 
   if (just_read) return ! All run-time parameters have been read, so return.
 
@@ -136,7 +128,7 @@ end subroutine USER_initialize_velocity
 
 !> This function puts the initial layer temperatures and salinities
 !! into T(:,:,:) and S(:,:,:).
-subroutine USER_init_temperature_salinity(T, S, G, GV, param_file, eqn_of_state, just_read_params)
+subroutine USER_init_temperature_salinity(T, S, G, GV, param_file, eqn_of_state, just_read)
   type(ocean_grid_type),                     intent(in)  :: G !< Ocean grid structure.
   type(verticalGrid_type),                   intent(in)  :: GV !< The ocean's vertical grid structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: T !< Potential temperature [degC].
@@ -145,16 +137,12 @@ subroutine USER_init_temperature_salinity(T, S, G, GV, param_file, eqn_of_state,
                                                             !! open file to parse for model
                                                             !! parameter values.
   type(EOS_type),                            pointer     :: eqn_of_state !< Equation of state structure
-  logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will only
+  logical,                                   intent(in)  :: just_read !< If true, this call will only
                                                            !! read parameters without changing T & S.
-
-  logical :: just_read    ! If true, just read parameters but set nothing.
 
   call MOM_error(FATAL, &
     "USER_initialization.F90, USER_init_temperature_salinity: " // &
     "Unmodified user routine called - you must edit the routine to use it")
-
-  just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
 
   if (just_read) return ! All run-time parameters have been read, so return.
 
@@ -229,8 +217,8 @@ subroutine write_user_log(param_file)
                                                   !! open file to parse for model
                                                   !! parameter values.
 
-! This include declares and sets the variable "version".
-#include "version_variable.h"
+  ! This include declares and sets the variable "version".
+# include "version_variable.h"
   character(len=40)  :: mdl = "user_initialization" ! This module's name.
 
   call log_version(param_file, mdl, version)

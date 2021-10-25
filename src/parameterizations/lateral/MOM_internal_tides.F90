@@ -1451,9 +1451,9 @@ subroutine propagate_x(En, speed_x, Cgx_av, dCgx, dt, G, US, Nangle, CS, LB)
   ! Only reflect newly arrived energy; existing energy in incident wedge is not reflected
   ! and will eventually propagate out of cell. (This code only reflects if En > 0.)
   call reflect(Fdt_m, Nangle, CS, G, LB)
-  call teleport(Fdt_m, Nangle, CS, G, LB)
+  !call teleport(Fdt_m, Nangle, CS, G, LB)
   call reflect(Fdt_p, Nangle, CS, G, LB)
-  call teleport(Fdt_p, Nangle, CS, G, LB)
+  !call teleport(Fdt_p, Nangle, CS, G, LB)
 
   ! Update reflected energy [R Z3 T-2 ~> J m-2]
   do a=1,Nangle ; do j=jsh,jeh ; do i=ish,ieh
@@ -1533,9 +1533,9 @@ subroutine propagate_y(En, speed_y, Cgy_av, dCgy, dt, G, US, Nangle, CS, LB)
   ! Only reflect newly arrived energy; existing energy in incident wedge is not reflected
   ! and will eventually propagate out of cell. (This code only reflects if En > 0.)
   call reflect(Fdt_m, Nangle, CS, G, LB)
-  call teleport(Fdt_m, Nangle, CS, G, LB)
+  !call teleport(Fdt_m, Nangle, CS, G, LB)
   call reflect(Fdt_p, Nangle, CS, G, LB)
-  call teleport(Fdt_p, Nangle, CS, G, LB)
+  !call teleport(Fdt_p, Nangle, CS, G, LB)
 
   ! Update reflected energy [R Z3 T-2 ~> J m-2]
   do a=1,Nangle ; do j=jsh,jeh ; do i=ish,ieh

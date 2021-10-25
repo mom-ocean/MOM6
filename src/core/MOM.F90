@@ -1053,8 +1053,7 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_thermo, &
               Time_local + real_to_time(US%T_to_s*(bbl_time_int-dt)), CS%diag)
     ! Calculate the BBL properties and store them inside visc (u,h).
     call cpu_clock_begin(id_clock_BBL_visc)
-    call set_viscous_BBL(CS%u, CS%v, CS%h, CS%tv, CS%visc, G, GV, US, &
-                         CS%set_visc_CSp, symmetrize=.true.)
+    call set_viscous_BBL(CS%u, CS%v, CS%h, CS%tv, CS%visc, G, GV, US, CS%set_visc_CSp)
     call cpu_clock_end(id_clock_BBL_visc)
     if (showCallTree) call callTree_wayPoint("done with set_viscous_BBL (step_MOM)")
     call disable_averaging(CS%diag)
@@ -1332,7 +1331,7 @@ subroutine step_MOM_thermo(CS, G, GV, US, u, v, h, tv, fluxes, dtdia, &
     ! DIABATIC_FIRST=True. Otherwise diabatic() is called after the dynamics
     ! and set_viscous_BBL is called as a part of the dynamic stepping.
     call cpu_clock_begin(id_clock_BBL_visc)
-    call set_viscous_BBL(u, v, h, tv, CS%visc, G, GV, US, CS%set_visc_CSp, symmetrize=.true.)
+    call set_viscous_BBL(u, v, h, tv, CS%visc, G, GV, US, CS%set_visc_CSp)
     call cpu_clock_end(id_clock_BBL_visc)
     if (showCallTree) call callTree_wayPoint("done with set_viscous_BBL (step_MOM_thermo)")
   endif
@@ -1353,7 +1352,7 @@ subroutine step_MOM_thermo(CS, G, GV, US, u, v, h, tv, fluxes, dtdia, &
     call cpu_clock_begin(id_clock_diabatic)
 
     call diabatic(u, v, h, tv, CS%Hml, fluxes, CS%visc, CS%ADp, CS%CDp, dtdia, &
-                  Time_end_thermo, G, GV, US, CS%diabatic_CSp, OBC=CS%OBC, Waves=Waves)
+                  Time_end_thermo, G, GV, US, CS%diabatic_CSp, CS%OBC, Waves)
     fluxes%fluxes_used = .true.
 
     if (showCallTree) call callTree_waypoint("finished diabatic (step_MOM_thermo)")

@@ -77,18 +77,18 @@ end subroutine seamount_initialize_topography
 
 !> Initialization of thicknesses.
 !! This subroutine initializes the layer thicknesses to be uniform.
-subroutine seamount_initialize_thickness (h, depth_tot, G, GV, US, param_file, just_read_params)
+subroutine seamount_initialize_thickness (h, depth_tot, G, GV, US, param_file, just_read)
   type(ocean_grid_type),   intent(in)  :: G           !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)  :: GV          !< The ocean's vertical grid structure.
   type(unit_scale_type),   intent(in)  :: US          !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(out) :: h           !< The thickness that is being initialized [H ~> m or kg m-2].
   real, dimension(SZI_(G),SZJ_(G)), &
-                           intent(in)  :: depth_tot  !< The nominal total depth of the ocean [Z ~> m]
+                           intent(in)  :: depth_tot   !< The nominal total depth of the ocean [Z ~> m]
   type(param_file_type),   intent(in)  :: param_file  !< A structure indicating the open file
                                                       !! to parse for model parameter values.
-  logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
-                                                      !! only read parameters without changing h.
+  logical,                 intent(in)  :: just_read   !< If true, this call will only read
+                                                      !! parameters without changing h.
 
   real :: e0(SZK_(GV)+1)  ! The resting interface heights [Z ~> m], usually
                           ! negative because it is positive upward.
@@ -97,12 +97,9 @@ subroutine seamount_initialize_thickness (h, depth_tot, G, GV, US, param_file, j
   real :: S_surf, S_range, S_ref, S_light, S_dense ! Various salinities [ppt].
   real :: eta_IC_quanta   ! The granularity of quantization of intial interface heights [Z-1 ~> m-1].
   character(len=20) :: verticalCoordinate
-  logical :: just_read    ! If true, just read parameters but set nothing.
   integer :: i, j, k, is, ie, js, je, nz
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
-
-  just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
 
   if (.not.just_read) &
     call MOM_mesg("MOM_initialization.F90, initialize_thickness_uniform: setting thickness")
@@ -193,7 +190,7 @@ end subroutine seamount_initialize_thickness
 
 !> Initial values for temperature and salinity
 subroutine seamount_initialize_temperature_salinity ( T, S, h, G, GV, param_file, &
-                                                  eqn_of_state, just_read_params)
+                                                  eqn_of_state, just_read)
   type(ocean_grid_type),                     intent(in)  :: G !< Ocean grid structure
   type(verticalGrid_type),                   intent(in)  :: GV !< Vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: T !< Potential temperature [degC]
@@ -201,19 +198,16 @@ subroutine seamount_initialize_temperature_salinity ( T, S, h, G, GV, param_file
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)  :: h !< Layer thickness [H ~> m or kg m-2]
   type(param_file_type),                     intent(in)  :: param_file !< Parameter file structure
   type(EOS_type),                            pointer     :: eqn_of_state !< Equation of state structure
-  logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
-                                                      !! only read parameters without changing h.
+  logical,                                   intent(in)  :: just_read !< If true, this call will
+                                                      !! only read parameters without changing T & S.
 
   ! Local variables
   integer :: i, j, k, is, ie, js, je, nz, k_light
   real    :: xi0, xi1, dxi, r, S_surf, T_surf, S_range, T_range
   real    :: T_ref, T_Light, T_Dense, S_ref, S_Light, S_Dense, a1, frac_dense, k_frac, res_rat
-  logical :: just_read    ! If true, just read parameters but set nothing.
   character(len=20) :: verticalCoordinate, density_profile
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
-
-  just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
 
   call get_param(param_file, mdl, "REGRIDDING_COORDINATE_MODE", verticalCoordinate, &
                  default=DEFAULT_COORDINATE_MODE, do_not_log=just_read)
