@@ -195,8 +195,9 @@ subroutine apply_topography_edits_from_file(D, G, param_file, US)
   character(len=200) :: topo_edits_file, inputdir ! Strings for file/path
   character(len=40)  :: mdl = "apply_topography_edits_from_file" ! This subroutine's name.
   integer :: i, j, n, ncid, n_edits, i_file, j_file, ndims, sizes(8)
-  logical :: found
   logical :: topo_edits_change_mask
+  real :: min_depth ! The shallowest value of wet points [Z ~> m]
+  real :: mask_depth ! The depth defining the land-sea boundary [Z ~> m]
 
   call callTree_enter(trim(mdl)//"(), MOM_shared_initialization.F90")
 
@@ -210,6 +211,18 @@ subroutine apply_topography_edits_from_file(D, G, param_file, US)
   call get_param(param_file, mdl, "ALLOW_LANDMASK_CHANGES", topo_edits_change_mask, &
                  "If true, allow topography overrides to change land mask.", &
                  default=.false.)
+  call get_param(param_file, mdl, "MINIMUM_DEPTH", min_depth, &
+                 "If MASKING_DEPTH is unspecified, then anything shallower than "//&
+                 "MINIMUM_DEPTH is assumed to be land and all fluxes are masked out. "//&
+                 "If MASKING_DEPTH is specified, then all depths shallower than "//&
+                 "MINIMUM_DEPTH but deeper than MASKING_DEPTH are rounded to MINIMUM_DEPTH.", &
+                 units="m", default=0.0, scale=m_to_Z)
+  call get_param(param_file, mdl, "MASKING_DEPTH", mask_depth, &
+                 "The depth below which to mask points as land points, for which all "//&
+                 "fluxes are zeroed out. MASKING_DEPTH is ignored if it has the special "//&
+                 "default value.", &
+                 units="m", default=-9999.0, scale=m_to_Z)
+  if (mask_depth == -9999.*m_to_Z) mask_depth = min_depth
 
   if (len_trim(topo_edits_file)==0) return
 
@@ -249,7 +262,7 @@ subroutine apply_topography_edits_from_file(D, G, param_file, US)
     i = ig(n) - G%isd_global + 2 ! +1 for python indexing and +1 for ig-isd_global+1
     j = jg(n) - G%jsd_global + 2
     if (i>=G%isc .and. i<=G%iec .and. j>=G%jsc .and. j<=G%jec) then
-      if (new_depth(n)/=0.) then
+      if (new_depth(n)*m_to_Z /= mask_depth) then
         write(stdout,'(a,3i5,f8.2,a,f8.2,2i4)') &
           'Ocean topography edit: ', n, ig(n), jg(n), D(i,j)/m_to_Z, '->', abs(new_depth(n)), i, j
         D(i,j) = abs(m_to_Z*new_depth(n)) ! Allows for height-file edits (i.e. converts negatives)
@@ -397,7 +410,8 @@ subroutine limit_topography(D, G, param_file, max_depth, US)
   real :: m_to_Z  ! A dimensional rescaling factor.
   integer :: i, j
   character(len=40)  :: mdl = "limit_topography" ! This subroutine's name.
-  real :: min_depth, mask_depth
+  real :: min_depth ! The shallowest value of wet points [Z ~> m]
+  real :: mask_depth ! The depth defining the land-sea boundary [Z ~> m]
 
   call callTree_enter(trim(mdl)//"(), MOM_shared_initialization.F90")
 
@@ -410,30 +424,39 @@ subroutine limit_topography(D, G, param_file, max_depth, US)
                  "MINIMUM_DEPTH but deeper than MASKING_DEPTH are rounded to MINIMUM_DEPTH.", &
                  units="m", default=0.0, scale=m_to_Z)
   call get_param(param_file, mdl, "MASKING_DEPTH", mask_depth, &
-                 "The depth below which to mask the ocean as land.", &
+                 "The depth below which to mask points as land points, for which all "//&
+                 "fluxes are zeroed out. MASKING_DEPTH is ignored if it has the special "//&
+                 "default value.", &
                  units="m", default=-9999.0, scale=m_to_Z, do_not_log=.true.)
 
-  if (mask_depth > min_depth) then
-    mask_depth = -9999.0*m_to_Z
-    call MOM_error(WARNING, "MOM_shared_initialization: limit_topography "//&
-                  'MASKING_DEPTH is larger than MINIMUM_DEPTH and therefore ignored.')
-  endif
-
   ! Make sure that min_depth < D(x,y) < max_depth for ocean points
+  ! TBD: The following f.p. equivalence uses a special value. Originally, any negative value
+  !      indicated the branch. We should create a logical flag to indicate this branch.
   if (mask_depth == -9999.*m_to_Z) then
-    if (min_depth > 0.0) then  ! This is retained to avoid answer changes (over the land points) in the test cases.
-      do j=G%jsd,G%jed ; do i=G%isd,G%ied
-        D(i,j) = min( max( D(i,j), 0.5*min_depth ), max_depth )
-      enddo ; enddo
-    else
-      do j=G%jsd,G%jed ; do i=G%isd,G%ied
-        D(i,j) = min( max( D(i,j), min_depth ), max_depth )
-      enddo ; enddo
+    if (min_depth<0.) then
+      call MOM_error(FATAL, trim(mdl)//": MINIMUM_DEPTH<0 does not work as expected "//&
+                 "unless MASKING_DEPTH has been set appropriately. Set a meaningful "//&
+                 "MASKING_DEPTH to enabled negative depths (land elevations) and to "//&
+                 "enable flooding.")
     endif
-  else
+    ! This is the old path way. The 0.5*min_depth is obscure and is retained to be
+    ! backward reproducible. If you are looking at the following line you should probably
+    ! set MASKING_DEPTH. This path way does not work for negative depths, i.e. flooding.
     do j=G%jsd,G%jed ; do i=G%isd,G%ied
-      if (D(i,j) > mask_depth) then
+      D(i,j) = min( max( D(i,j), 0.5*min_depth ), max_depth )
+    enddo ; enddo
+  else
+    ! This is the preferred path way.
+    ! mask_depth has a meaningful value; anything shallower than mask_depth is land.
+    ! If min_depth<mask_depth (which happens when using positive depths and not changing
+    ! MINIMUM_DEPTH) then the shallower is used to modify and determine values on land points.
+    do j=G%jsd,G%jed ; do i=G%isd,G%ied
+      if (D(i,j) > min(min_depth,mask_depth)) then
         D(i,j) = min( max( D(i,j), min_depth ), max_depth )
+      else
+        ! This statement is required for cases with masked-out PEs over the land,
+        ! to remove the large initialized values (-9e30) from the halos.
+        D(i,j) = min(min_depth,mask_depth)
       endif
     enddo ; enddo
   endif
@@ -894,17 +917,17 @@ subroutine reset_face_lengths_list(G, param_file, US)
   if (num_lines > 0) then
     allocate(lines(num_lines))
 
-    allocate(u_lat(2,num_lines)) ; u_lat(:,:) = -1e34
-    allocate(u_lon(2,num_lines)) ; u_lon(:,:) = -1e34
-    allocate(u_width(num_lines)) ; u_width(:) = -1e34
-    allocate(u_line_used(num_lines)) ; u_line_used(:) = 0
-    allocate(u_line_no(num_lines)) ; u_line_no(:) = 0
+    allocate(u_lat(2,num_lines), source=-1e34)
+    allocate(u_lon(2,num_lines), source=-1e34)
+    allocate(u_width(num_lines), source=-1e34)
+    allocate(u_line_used(num_lines), source=0)
+    allocate(u_line_no(num_lines), source=0)
 
-    allocate(v_lat(2,num_lines)) ; v_lat(:,:) = -1e34
-    allocate(v_lon(2,num_lines)) ; v_lon(:,:) = -1e34
-    allocate(v_width(num_lines)) ; v_width(:) = -1e34
-    allocate(v_line_used(num_lines)) ; v_line_used(:) = 0
-    allocate(v_line_no(num_lines)) ; v_line_no(:) = 0
+    allocate(v_lat(2,num_lines), source=-1e34)
+    allocate(v_lon(2,num_lines), source=-1e34)
+    allocate(v_width(num_lines), source=-1e34)
+    allocate(v_line_used(num_lines), source=0)
+    allocate(v_line_no(num_lines), source=0)
 
     ! Actually read the lines.
     if (is_root_pe()) then

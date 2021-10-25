@@ -36,7 +36,7 @@ Compute the required quantities using the equation of state from \cite jackett19
 Compute the required quantities using the equation of state from
 [TEOS-10](http://www.teos-10.org/).
 
-\section TFREEZE Freezing Temperature of Sea Water
+\section section_TFREEZE Freezing Temperature of Sea Water
 
 There are three choices for computing the freezing point of sea water:
 

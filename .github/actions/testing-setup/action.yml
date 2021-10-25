@@ -33,6 +33,7 @@ runs:
         echo "::group::Install linux packages"
         sudo apt-get update
         sudo apt-get install netcdf-bin libnetcdf-dev libnetcdff-dev mpich libmpich-dev
+        sudo apt-get install linux-tools-common
         echo "::endgroup::"
 
     - name: Compile FMS library

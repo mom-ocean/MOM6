@@ -77,8 +77,8 @@ subroutine PressureForce_Mont_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm, pb
                                     optional, intent(out) :: pbce !< The baroclinic pressure anomaly in
                                                                  !! each layer due to free surface height anomalies,
                                                                  !! [L2 T-2 H-1 ~> m s-2 or m4 kg-1 s-2].
-  real, dimension(SZI_(G),SZJ_(G)), optional, intent(out) :: eta !< Free surface height [H ~> kg m-1].
-
+  real, dimension(SZI_(G),SZJ_(G)), optional, intent(out) :: eta !< The total column mass used to calculate
+                                                                 !! PFu and PFv [H ~> kg m-2].
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: &
     M, &          ! The Montgomery potential, M = (p/rho + gz)  [L2 T-2 ~> m2 s-2].
@@ -104,7 +104,7 @@ subroutine PressureForce_Mont_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm, pb
     SSH, &        ! The sea surface height anomaly, in depth units [Z ~> m].
     e_tidal, &    !   Bottom geopotential anomaly due to tidal forces from
                   ! astronomical sources and self-attraction and loading [Z ~> m].
-    geopot_bot    !   Bottom geopotential relative to time-mean sea level,
+    geopot_bot    !   Bottom geopotential relative to a temporally fixed reference value,
                   ! including any tidal contributions [L2 T-2 ~> m2 s-2].
   real :: p_ref(SZI_(G))     !   The pressure used to calculate the coordinate
                              ! density [R L2 T-2 ~> Pa] (usually 2e7 Pa = 2000 dbar).
@@ -183,7 +183,7 @@ subroutine PressureForce_Mont_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm, pb
     ! of self-attraction and loading.
     !$OMP parallel do default(shared)
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-      SSH(i,j) = -G%bathyT(i,j)
+      SSH(i,j) = -G%bathyT(i,j) - G%Z_ref
     enddo ; enddo
     if (use_EOS) then
       !$OMP parallel do default(shared)
@@ -393,6 +393,7 @@ subroutine PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm, pbce,
                 ! the deepest variable density near-surface layer [R ~> kg m-3].
   real :: h_star(SZI_(G),SZJ_(G)) ! Layer thickness after compensation
                              ! for compressibility [Z ~> m].
+  real :: SSH(SZI_(G),SZJ_(G)) ! The sea surface height anomaly, in depth units [Z ~> m].
   real :: e_tidal(SZI_(G),SZJ_(G)) ! Bottom geopotential anomaly due to tidal
                              ! forces from astronomical sources and self-
                              ! attraction and loading, in depth units [Z ~> m].
@@ -444,12 +445,12 @@ subroutine PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm, pbce,
     ! barotropic tides.
     !$OMP parallel do default(shared)
     do j=Jsq,Jeq+1
-      do i=Isq,Ieq+1 ; e(i,j,1) = -G%bathyT(i,j) ; enddo
+      do i=Isq,Ieq+1 ; SSH(i,j) = -G%bathyT(i,j) - G%Z_ref ; enddo
       do k=1,nz ; do i=Isq,Ieq+1
-        e(i,j,1) = e(i,j,1) + h(i,j,k)*GV%H_to_Z
+        SSH(i,j) = SSH(i,j) + h(i,j,k)*GV%H_to_Z
       enddo ; enddo
     enddo
-    call calc_tidal_forcing(CS%Time, e(:,:,1), e_tidal, G, CS%tides_CSp, m_to_Z=US%m_to_Z)
+    call calc_tidal_forcing(CS%Time, SSH, e_tidal, G, CS%tides_CSp, m_to_Z=US%m_to_Z)
   endif
 
 !    Here layer interface heights, e, are calculated.
@@ -664,7 +665,7 @@ subroutine Set_pbce_Bouss(e, tv, G, GV, US, Rho0, GFS_scale, pbce, rho_star)
       do j=Jsq,Jeq+1
         do i=Isq,Ieq+1
           Ihtot(i) = GV%H_to_Z / ((e(i,j,1)-e(i,j,nz+1)) + z_neglect)
-          press(i) = -Rho0xG*e(i,j,1)
+          press(i) = -Rho0xG*(e(i,j,1) - G%Z_ref)
         enddo
         call calculate_density(tv%T(:,j,1), tv%S(:,j,1), press, rho_in_situ, &
                                tv%eqn_of_state, EOSdom)
@@ -673,7 +674,7 @@ subroutine Set_pbce_Bouss(e, tv, G, GV, US, Rho0, GFS_scale, pbce, rho_star)
         enddo
         do k=2,nz
           do i=Isq,Ieq+1
-            press(i) = -Rho0xG*e(i,j,K)
+            press(i) = -Rho0xG*(e(i,j,K) - G%Z_ref)
             T_int(i) = 0.5*(tv%T(i,j,k-1)+tv%T(i,j,k))
             S_int(i) = 0.5*(tv%S(i,j,k-1)+tv%S(i,j,k))
           enddo

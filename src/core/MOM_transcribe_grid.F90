@@ -20,7 +20,8 @@ public copy_dyngrid_to_MOM_grid, copy_MOM_grid_to_dyngrid, rotate_dyngrid
 contains
 
 !> Copies information from a dynamic (shared) horizontal grid type into an
-!! ocean_grid_type.
+!! ocean_grid_type.  There may also be a change in the reference
+!! height for topography between the two grids.
 subroutine copy_dyngrid_to_MOM_grid(dG, oG, US)
   type(dyn_horgrid_type), intent(in)    :: dG  !< Common horizontal grid type
   type(ocean_grid_type),  intent(inout) :: oG  !< Ocean grid type
@@ -54,7 +55,7 @@ subroutine copy_dyngrid_to_MOM_grid(dG, oG, US)
     oG%dxT(i,j) = dG%dxT(i+ido,j+jdo)
     oG%dyT(i,j) = dG%dyT(i+ido,j+jdo)
     oG%areaT(i,j) = dG%areaT(i+ido,j+jdo)
-    oG%bathyT(i,j) = dG%bathyT(i+ido,j+jdo)
+    oG%bathyT(i,j) = dG%bathyT(i+ido,j+jdo) - oG%Z_ref
 
     oG%dF_dx(i,j) = dG%dF_dx(i+ido,j+jdo)
     oG%dF_dy(i,j) = dG%dF_dy(i+ido,j+jdo)
@@ -100,12 +101,12 @@ subroutine copy_dyngrid_to_MOM_grid(dG, oG, US)
   oG%bathymetry_at_vel = dG%bathymetry_at_vel
   if (oG%bathymetry_at_vel) then
     do I=IsdB,IedB ; do j=jsd,jed
-      oG%Dblock_u(I,j) = dG%Dblock_u(I+ido,j+jdo)
-      oG%Dopen_u(I,j) = dG%Dopen_u(I+ido,j+jdo)
+      oG%Dblock_u(I,j) = dG%Dblock_u(I+ido,j+jdo) - oG%Z_ref
+      oG%Dopen_u(I,j) = dG%Dopen_u(I+ido,j+jdo) - oG%Z_ref
     enddo ; enddo
     do i=isd,ied ; do J=JsdB,JedB
-      oG%Dblock_v(i,J) = dG%Dblock_v(i+ido,J+jdo)
-      oG%Dopen_v(i,J) = dG%Dopen_v(i+ido,J+jdo)
+      oG%Dblock_v(i,J) = dG%Dblock_v(i+ido,J+jdo) - oG%Z_ref
+      oG%Dopen_v(i,J) = dG%Dopen_v(i+ido,J+jdo) - oG%Z_ref
     enddo ; enddo
   endif
 
@@ -164,7 +165,8 @@ end subroutine copy_dyngrid_to_MOM_grid
 
 
 !> Copies information from an ocean_grid_type into a dynamic (shared)
-!! horizontal grid type.
+!! horizontal grid type.  There may also be a change in the reference
+!! height for topography between the two grids.
 subroutine copy_MOM_grid_to_dyngrid(oG, dG, US)
   type(ocean_grid_type),  intent(in)    :: oG  !< Ocean grid type
   type(dyn_horgrid_type), intent(inout) :: dG  !< Common horizontal grid type
@@ -198,7 +200,7 @@ subroutine copy_MOM_grid_to_dyngrid(oG, dG, US)
     dG%dxT(i,j) = oG%dxT(i+ido,j+jdo)
     dG%dyT(i,j) = oG%dyT(i+ido,j+jdo)
     dG%areaT(i,j) = oG%areaT(i+ido,j+jdo)
-    dG%bathyT(i,j) = oG%bathyT(i+ido,j+jdo)
+    dG%bathyT(i,j) = oG%bathyT(i+ido,j+jdo) + oG%Z_ref
 
     dG%dF_dx(i,j) = oG%dF_dx(i+ido,j+jdo)
     dG%dF_dy(i,j) = oG%dF_dy(i+ido,j+jdo)
@@ -244,12 +246,12 @@ subroutine copy_MOM_grid_to_dyngrid(oG, dG, US)
   dG%bathymetry_at_vel = oG%bathymetry_at_vel
   if (dG%bathymetry_at_vel) then
     do I=IsdB,IedB ; do j=jsd,jed
-      dG%Dblock_u(I,j) = oG%Dblock_u(I+ido,j+jdo)
-      dG%Dopen_u(I,j) = oG%Dopen_u(I+ido,j+jdo)
+      dG%Dblock_u(I,j) = oG%Dblock_u(I+ido,j+jdo) + oG%Z_ref
+      dG%Dopen_u(I,j) = oG%Dopen_u(I+ido,j+jdo) + oG%Z_ref
     enddo ; enddo
     do i=isd,ied ; do J=JsdB,JedB
-      dG%Dblock_v(i,J) = oG%Dblock_v(i+ido,J+jdo)
-      dG%Dopen_v(i,J) = oG%Dopen_v(i+ido,J+jdo)
+      dG%Dblock_v(i,J) = oG%Dblock_v(i+ido,J+jdo) + oG%Z_ref
+      dG%Dopen_v(i,J) = oG%Dopen_v(i+ido,J+jdo) + oG%Z_ref
     enddo ; enddo
   endif
 

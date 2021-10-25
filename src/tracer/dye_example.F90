@@ -149,7 +149,7 @@ function register_dye_tracer(HI, GV, US, param_file, CS, tr_Reg, restart_CS)
   if (minval(CS%dye_source_maxdepth(:)) < -1.e29*US%m_to_Z) &
     call MOM_error(FATAL, "register_dye_tracer: Not enough values provided for DYE_SOURCE_MAXDEPTH ")
 
-  allocate(CS%tr(isd:ied,jsd:jed,nz,CS%ntr)) ; CS%tr(:,:,:,:) = 0.0
+  allocate(CS%tr(isd:ied,jsd:jed,nz,CS%ntr), source=0.0)
 
   do m = 1, CS%ntr
     write(var_name(:),'(A,I3.3)') "dye",m
@@ -203,9 +203,10 @@ subroutine initialize_dye_tracer(restart, day, G, GV, h, diag, OBC, CS, sponge_C
   character(len=48) :: units    ! The dimensions of the variable.
   character(len=48) :: flux_units ! The units for age tracer fluxes, either
                                 ! years m3 s-1 or years kg s-1.
+  real    :: z_bot    ! Height of the bottom of the layer relative to the sea surface [Z ~> m]
+  real    :: z_center ! Height of the center of the layer relative to the sea surface [Z ~> m]
   logical :: OK
   integer :: i, j, k, m
-  real    :: z_bot, z_center
 
   if (.not.associated(CS)) return
   if (CS%ntr < 1) return
@@ -221,14 +222,14 @@ subroutine initialize_dye_tracer(restart, day, G, GV, h, diag, OBC, CS, sponge_C
           CS%dye_source_minlat(m)<G%geoLatT(i,j) .and. &
           CS%dye_source_maxlat(m)>=G%geoLatT(i,j) .and. &
           G%mask2dT(i,j) > 0.0 ) then
-        z_bot = -G%bathyT(i,j)
-        do k = GV%ke, 1, -1
+        z_bot = 0.0
+        do k = 1, GV%ke
+          z_bot = z_bot - h(i,j,k)*GV%H_to_Z
           z_center = z_bot + 0.5*h(i,j,k)*GV%H_to_Z
           if ( z_center > -CS%dye_source_maxdepth(m) .and. &
                z_center < -CS%dye_source_mindepth(m) ) then
             CS%tr(i,j,k,m) = 1.0
           endif
-          z_bot = z_bot + h(i,j,k)*GV%H_to_Z
         enddo
       endif
     enddo ; enddo
@@ -273,9 +274,10 @@ subroutine dye_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, US
   real :: sfc_val  ! The surface value for the tracers.
   real :: Isecs_per_year  ! The number of seconds in a year.
   real :: year            ! The time in years.
+  real    :: z_bot    ! Height of the bottom of the layer relative to the sea surface [Z ~> m]
+  real    :: z_center ! Height of the center of the layer relative to the sea surface [Z ~> m]
   integer :: secs, days   ! Integer components of the time type.
   integer :: i, j, k, is, ie, js, je, nz, m
-  real    :: z_bot, z_center
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
@@ -305,14 +307,14 @@ subroutine dye_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, US
           CS%dye_source_minlat(m)<G%geoLatT(i,j) .and. &
           CS%dye_source_maxlat(m)>=G%geoLatT(i,j) .and. &
           G%mask2dT(i,j) > 0.0 ) then
-        z_bot = -G%bathyT(i,j)
-        do k=nz,1,-1
+        z_bot = 0.0
+        do k=1,nz
+          z_bot = z_bot - h_new(i,j,k)*GV%H_to_Z
           z_center = z_bot + 0.5*h_new(i,j,k)*GV%H_to_Z
           if ( z_center > -CS%dye_source_maxdepth(m) .and. &
                z_center < -CS%dye_source_mindepth(m) ) then
             CS%tr(i,j,k,m) = 1.0
           endif
-          z_bot = z_bot + h_new(i,j,k)*GV%H_to_Z
         enddo
       endif
     enddo ; enddo

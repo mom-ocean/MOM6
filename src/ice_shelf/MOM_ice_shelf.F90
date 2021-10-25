@@ -1309,7 +1309,7 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces_in,
   ! Set up the bottom depth, G%D either analytically or from file
   call MOM_initialize_topography(dG%bathyT, CS%Grid%max_depth, dG, param_file)
   call rescale_dyn_horgrid_bathymetry(dG, CS%US%Z_to_m)
-  call copy_dyngrid_to_MOM_grid(dG,CS%Grid,CS%US)
+  call copy_dyngrid_to_MOM_grid(dG, CS%Grid, CS%US)
   call destroy_dyn_horgrid(dG)
 !  endif
   G => CS%Grid ; CS%Grid_in => CS%Grid
@@ -1524,7 +1524,7 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces_in,
     inputdir = slasher(inputdir)
     TideAmp_file = trim(inputdir) // trim(TideAmp_file)
     if (CS%rotate_index) then
-      allocate(tmp2d(CS%Grid_in%isd:CS%Grid_in%ied,CS%Grid_in%jsd:CS%Grid_in%jed)) ; tmp2d(:,:) = 0.0
+      allocate(tmp2d(CS%Grid_in%isd:CS%Grid_in%ied,CS%Grid_in%jsd:CS%Grid_in%jed), source=0.0)
       call MOM_read_data(TideAmp_file, 'tideamp', tmp2d, CS%Grid_in%domain, timelevel=1, scale=US%m_s_to_L_T)
       call rotate_array(tmp2d, CS%turns, CS%utide)
       deallocate(tmp2d)
@@ -1994,9 +1994,9 @@ subroutine update_shelf_mass(G, US, CS, ISS, Time)
 
 
   if (CS%rotate_index) then
-    allocate(tmp2d(CS%Grid_in%isc:CS%Grid_in%iec,CS%Grid_in%jsc:CS%Grid_in%jec)) ; tmp2d(:,:) = 0.0
+    allocate(tmp2d(CS%Grid_in%isc:CS%Grid_in%iec,CS%Grid_in%jsc:CS%Grid_in%jec), source=0.0)
   else
-    allocate(tmp2d(is:ie,js:je)) ; tmp2d(:,:) = 0.0
+    allocate(tmp2d(is:ie,js:je), source=0.0)
   endif
 
   call time_interp_external(CS%id_read_mass, Time, tmp2d)

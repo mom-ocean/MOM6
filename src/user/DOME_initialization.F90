@@ -26,7 +26,7 @@ implicit none ; private
 public DOME_initialize_topography
 public DOME_initialize_thickness
 public DOME_initialize_sponges
-public DOME_set_OBC_data
+public DOME_set_OBC_data, register_DOME_OBC
 
 ! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
 ! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
@@ -87,11 +87,13 @@ end subroutine DOME_initialize_topography
 
 ! -----------------------------------------------------------------------------
 !> This subroutine initializes layer thicknesses for the DOME experiment
-subroutine DOME_initialize_thickness(h, G, GV, param_file, just_read_params)
+subroutine DOME_initialize_thickness(h, depth_tot, G, GV, param_file, just_read_params)
   type(ocean_grid_type),   intent(in)  :: G           !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)  :: GV          !< The ocean's vertical grid structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(out) :: h           !< The thickness that is being initialized [H ~> m or kg m-2].
+  real, dimension(SZI_(G),SZJ_(G)), &
+                           intent(in)  :: depth_tot   !< The nominal total depth of the ocean [Z ~> m]
   type(param_file_type),   intent(in)  :: param_file  !< A structure indicating the open file
                                                       !! to parse for model parameter values.
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
@@ -124,7 +126,7 @@ subroutine DOME_initialize_thickness(h, G, GV, param_file, just_read_params)
 !  Angstrom thick, and 2.  the interfaces are where they should be   !
 !  based on the resting depths and interface height perturbations,   !
 !  as long at this doesn't interfere with 1.                         !
-    eta1D(nz+1) = -G%bathyT(i,j)
+    eta1D(nz+1) = -depth_tot(i,j)
     do k=nz,1,-1
       eta1D(K) = e0(K)
       if (eta1D(K) < (eta1D(K+1) + GV%Angstrom_Z)) then
@@ -145,17 +147,19 @@ end subroutine DOME_initialize_thickness
 !! number of tracers should be restored within each sponge. The       !
 !! interface height is always subject to damping, and must always be  !
 !! the first registered field.                                        !
-subroutine DOME_initialize_sponges(G, GV, US, tv, PF, CSp)
-  type(ocean_grid_type), intent(in) :: G    !< The ocean's grid structure.
+subroutine DOME_initialize_sponges(G, GV, US, tv, depth_tot, PF, CSp)
+  type(ocean_grid_type),   intent(in) :: G    !< The ocean's grid structure.
   type(verticalGrid_type), intent(in) :: GV !< The ocean's vertical grid structure.
   type(unit_scale_type),   intent(in) :: US !< A dimensional unit scaling type
-  type(thermo_var_ptrs), intent(in) :: tv   !< A structure containing pointers to any available
-                               !! thermodynamic fields, including potential temperature and
-                               !! salinity or mixed layer density. Absent fields have NULL ptrs.
-  type(param_file_type), intent(in) :: PF   !< A structure indicating the open file to
-                                            !! parse for model parameter values.
-  type(sponge_CS),       pointer    :: CSp  !< A pointer that is set to point to the control
-                                            !! structure for this module.
+  type(thermo_var_ptrs),   intent(in) :: tv   !< A structure containing pointers to any available
+                                !! thermodynamic fields, including potential temperature and
+                                !! salinity or mixed layer density. Absent fields have NULL ptrs.
+  real, dimension(SZI_(G),SZJ_(G)), &
+                           intent(in) :: depth_tot  !< The nominal total depth of the ocean [Z ~> m]
+  type(param_file_type),   intent(in) :: PF   !< A structure indicating the open file to
+                                              !! parse for model parameter values.
+  type(sponge_CS),         pointer    :: CSp  !< A pointer that is set to point to the control
+                                              !! structure for this module.
 
   real :: eta(SZI_(G),SZJ_(G),SZK_(GV)+1) ! A temporary array for interface heights [Z ~> m].
   real :: temp(SZI_(G),SZJ_(G),SZK_(GV)) ! A temporary array for other variables. !
@@ -204,16 +208,16 @@ subroutine DOME_initialize_sponges(G, GV, US, tv, PF, CSp)
     ! depth space for Boussinesq or non-Boussinesq models.
     eta(i,j,1) = 0.0
     do k=2,nz
-!     eta(i,j,K)=max(H0(k), -G%bathyT(i,j), GV%Angstrom_Z*(nz-k+1) - G%bathyT(i,j))
-      e_dense = -G%bathyT(i,j)
+!     eta(i,j,K) = max(H0(k), -depth_tot(i,j), GV%Angstrom_Z*(nz-k+1) - depth_tot(i,j))
+      e_dense = -depth_tot(i,j)
       if (e_dense >= H0(k)) then ; eta(i,j,K) = e_dense
       else ; eta(i,j,K) = H0(k) ; endif
-      if (eta(i,j,K) < GV%Angstrom_Z*(nz-k+1) - G%bathyT(i,j)) &
-          eta(i,j,K) = GV%Angstrom_Z*(nz-k+1) - G%bathyT(i,j)
+      if (eta(i,j,K) < GV%Angstrom_Z*(nz-k+1) - depth_tot(i,j)) &
+          eta(i,j,K) = GV%Angstrom_Z*(nz-k+1) - depth_tot(i,j)
     enddo
-    eta(i,j,nz+1) = -G%bathyT(i,j)
+    eta(i,j,nz+1) = -depth_tot(i,j)
 
-    if (G%bathyT(i,j) > min_depth) then
+    if (depth_tot(i,j) > min_depth) then
       Idamp(i,j) = damp / 86400.0
     else ; Idamp(i,j) = 0.0 ; endif
   enddo ; enddo
@@ -240,6 +244,30 @@ subroutine DOME_initialize_sponges(G, GV, US, tv, PF, CSp)
   endif
 
 end subroutine DOME_initialize_sponges
+
+!> Add DOME to the OBC registry and set up some variables that will be used to guide
+!! code setting up the restart fieldss related to the OBCs.
+subroutine register_DOME_OBC(param_file, US, OBC, tr_Reg)
+  type(param_file_type),      intent(in) :: param_file !< parameter file.
+  type(unit_scale_type),      intent(in) :: US       !< A dimensional unit scaling type
+  type(ocean_OBC_type),       pointer    :: OBC  !< OBC registry.
+  type(tracer_registry_type), pointer    :: tr_Reg   !< Tracer registry.
+
+  if (OBC%number_of_segments /= 1) then
+    call MOM_error(FATAL, 'Error in register_DOME_OBC - DOME should have 1 OBC segment', .true.)
+  endif
+
+  ! Store this information for use in setting up the OBC restarts for tracer reservoirs.
+  OBC%ntr = tr_Reg%ntr
+  if (.not. associated(OBC%tracer_x_reservoirs_used)) then
+    allocate(OBC%tracer_x_reservoirs_used(OBC%ntr))
+    allocate(OBC%tracer_y_reservoirs_used(OBC%ntr))
+    OBC%tracer_x_reservoirs_used(:) = .false.
+    OBC%tracer_y_reservoirs_used(:) = .false.
+    OBC%tracer_y_reservoirs_used(1) = .true.
+  endif
+
+end subroutine register_DOME_OBC
 
 !> This subroutine sets the properties of flow at open boundary conditions.
 !! This particular example is for the DOME inflow describe in Legg et al. 2006.
@@ -276,8 +304,8 @@ subroutine DOME_set_OBC_data(OBC, tv, G, GV, US, param_file, tr_Reg)
   real :: Ri_trans          ! The shear Richardson number in the transition
                             ! region of the specified shear profile.
   character(len=40)  :: mdl = "DOME_set_OBC_data" ! This subroutine's name.
-  character(len=32)  :: name
-  integer :: i, j, k, itt, is, ie, js, je, isd, ied, jsd, jed, m, nz, NTR
+  character(len=32)  :: name ! The name of a tracer field.
+  integer :: i, j, k, itt, is, ie, js, je, isd, ied, jsd, jed, m, nz
   integer :: IsdB, IedB, JsdB, JedB
   type(OBC_segment_type), pointer :: segment => NULL()
   type(tracer_type), pointer      :: tr_ptr => NULL()
@@ -302,22 +330,10 @@ subroutine DOME_set_OBC_data(OBC, tv, G, GV, US, param_file, tr_Reg)
     return   !!! Need a better error message here
   endif
 
-  NTR = tr_Reg%NTR
-
-  ! Stash this information away for the messy tracer restarts.
-  OBC%ntr = NTR
-  if (.not. associated(OBC%tracer_x_reservoirs_used)) then
-    allocate(OBC%tracer_x_reservoirs_used(NTR))
-    allocate(OBC%tracer_y_reservoirs_used(NTR))
-    OBC%tracer_x_reservoirs_used(:) = .false.
-    OBC%tracer_y_reservoirs_used(:) = .false.
-    OBC%tracer_y_reservoirs_used(1) = .true.
-  endif
-
   segment => OBC%segment(1)
   if (.not. segment%on_pe) return
 
-  allocate(segment%field(NTR))
+  allocate(segment%field(tr_Reg%ntr))
 
   do k=1,nz
     rst = -1.0
@@ -393,9 +409,9 @@ subroutine DOME_set_OBC_data(OBC, tv, G, GV, US, param_file, tr_Reg)
   call register_segment_tracer(tr_ptr, param_file, GV, &
                                OBC%segment(1), OBC_array=.true.)
 
-  ! All tracers but the first have 0 concentration in their inflows. As this
-  ! is the default value, the following calls are unnecessary.
-  do m=2,NTR
+  ! All tracers but the first have 0 concentration in their inflows. As 0 is the
+  ! default value for the inflow concentrations, the following calls are unnecessary.
+  do m=2,tr_Reg%ntr
     if (m < 10) then ; write(name,'("tr_D",I1.1)') m
     else ; write(name,'("tr_D",I2.2)') m ; endif
     call tracer_name_lookup(tr_Reg, tr_ptr, name)
