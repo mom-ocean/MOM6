@@ -18,8 +18,6 @@ use MOM_io,            only : field_size, read_variable, read_attribute, open_AS
 use MOM_io,            only : axis_info, set_axis_info, delete_axis_info, get_filename_appendix
 use MOM_io,            only : attribute_info, set_attribute_info, delete_attribute_info
 use MOM_io,            only : APPEND_FILE, SINGLE_FILE, WRITEONLY_FILE
-use MOM_open_boundary, only : ocean_OBC_type, OBC_segment_type
-use MOM_open_boundary, only : OBC_DIRECTION_E, OBC_DIRECTION_W, OBC_DIRECTION_N, OBC_DIRECTION_S
 use MOM_time_manager,  only : time_type, get_time, get_date, set_time, operator(>)
 use MOM_time_manager,  only : operator(+), operator(-), operator(*), operator(/)
 use MOM_time_manager,  only : operator(/=), operator(<=), operator(>=), operator(<)
@@ -297,7 +295,7 @@ end subroutine MOM_sum_output_end
 
 !>  This subroutine calculates and writes the total model energy, the energy and
 !! mass of each layer, and other globally integrated  physical quantities.
-subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_forcing)
+subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, dt_forcing)
   type(ocean_grid_type),   intent(in)    :: G   !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)    :: GV  !< The ocean's vertical grid structure.
   type(unit_scale_type),   intent(in)    :: US  !< A dimensional unit scaling type
@@ -314,11 +312,10 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
                                                 !! current execution.
   type(Sum_output_CS),     pointer       :: CS  !< The control structure returned by a
                                                 !! previous call to MOM_sum_output_init.
-  type(tracer_flow_control_CS), &
-                    optional, pointer    :: tracer_CSp !< tracer control structure.
-  type(ocean_OBC_type),         &
-                    optional, pointer    :: OBC !< Open boundaries control structure.
+  type(tracer_flow_control_CS), pointer  :: tracer_CSp !< Control structure with the tree of
+                                                !! all registered tracer packages
   type(time_type),  optional, intent(in) :: dt_forcing !< The forcing time step
+
   ! Local variables
   real :: eta(SZI_(G),SZJ_(G),SZK_(GV)+1) ! The height of interfaces [Z ~> m].
   real :: areaTm(SZI_(G),SZJ_(G)) ! A masked version of areaT [L2 ~> m2].
@@ -409,17 +406,22 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
   character(len=32)  :: mesg_intro, time_units, day_str, n_str, date_str
   logical :: date_stamped
   type(time_type) :: dt_force ! A time_type version of the forcing timestep.
-  real :: Tr_stocks(MAX_FIELDS_)
-  real :: Tr_min(MAX_FIELDS_), Tr_max(MAX_FIELDS_)
-  real :: Tr_min_x(MAX_FIELDS_), Tr_min_y(MAX_FIELDS_), Tr_min_z(MAX_FIELDS_)
-  real :: Tr_max_x(MAX_FIELDS_), Tr_max_y(MAX_FIELDS_), Tr_max_z(MAX_FIELDS_)
-  logical :: Tr_minmax_got(MAX_FIELDS_) = .false.
+  real :: Tr_stocks(MAX_FIELDS_) ! The total amounts of each of the registered tracers
+  real :: Tr_min(MAX_FIELDS_)   ! The global minimum unmasked value of the tracers
+  real :: Tr_max(MAX_FIELDS_)   ! The global maximum unmasked value of the tracers
+  real :: Tr_min_x(MAX_FIELDS_) ! The x-positions of the global tracer minima
+  real :: Tr_min_y(MAX_FIELDS_) ! The y-positions of the global tracer minima
+  real :: Tr_min_z(MAX_FIELDS_) ! The z-positions of the global tracer minima
+  real :: Tr_max_x(MAX_FIELDS_) ! The x-positions of the global tracer maxima
+  real :: Tr_max_y(MAX_FIELDS_) ! The y-positions of the global tracer maxima
+  real :: Tr_max_z(MAX_FIELDS_) ! The z-positions of the global tracer maxima
+  logical :: Tr_minmax_avail(MAX_FIELDS_) ! A flag indicating whether the global minimum and
+                                ! maximum information are available for each of the tracers
   character(len=40), dimension(MAX_FIELDS_) :: &
-    Tr_names, Tr_units
-  integer :: nTr_stocks
+    Tr_names, &          ! The short names for each of the tracers
+    Tr_units             ! The units for each of the tracers
+  integer :: nTr_stocks  ! The total number of tracers in all registered tracer packages
   integer :: iyear, imonth, iday, ihour, iminute, isecond, itick ! For call to get_date()
-  logical :: local_open_BC
-  type(OBC_segment_type), pointer :: segment => NULL()
 
  ! A description for output of each of the fields.
   type(vardesc) :: vars(NUM_FIELDS+MAX_FIELDS_)
@@ -479,15 +481,9 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
     vars(17) = var_desc("Heat_anom","Joules","Anomalous Total Heat Change",'1','1')
   endif
 
-  local_open_BC = .false.
-  if (present(OBC)) then ; if (associated(OBC)) then
-    local_open_BC = (OBC%open_u_BCs_exist_globally .or. OBC%open_v_BCs_exist_globally)
-  endif ; endif
-
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   isr = is - (G%isd-1) ; ier = ie - (G%isd-1) ; jsr = js - (G%jsd-1) ; jer = je - (G%jsd-1)
-
 
   HL2_to_kg = GV%H_to_kg_m2*US%L_to_m**2
 
@@ -503,34 +499,6 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
     do k=1,nz ; do j=js,je ; do i=is,ie
       tmp1(i,j,k) = h(i,j,k) * (HL2_to_kg*areaTm(i,j))
     enddo ; enddo ; enddo
-
-    ! This block avoids using the points beyond an open boundary condition
-    ! in the accumulation of mass, but perhaps it would be unnecessary if there
-    ! were a more judicious use of masks in the loops 4 or 7 lines above.
-    if (local_open_BC) then
-      do ns=1, OBC%number_of_segments
-        segment => OBC%segment(ns)
-        if (.not. segment%on_pe .or. segment%specified) cycle
-        I=segment%HI%IsdB ; J=segment%HI%JsdB
-        if (segment%direction == OBC_DIRECTION_E) then
-          do k=1,nz ; do j=segment%HI%jsd,segment%HI%jed
-            tmp1(i+1,j,k) = 0.0
-          enddo ; enddo
-        elseif (segment%direction == OBC_DIRECTION_W) then
-          do k=1,nz ; do j=segment%HI%jsd,segment%HI%jed
-            tmp1(i,j,k) = 0.0
-          enddo ; enddo
-        elseif (segment%direction == OBC_DIRECTION_N) then
-          do k=1,nz ; do i=segment%HI%isd,segment%HI%ied
-            tmp1(i,j+1,k) = 0.0
-          enddo ; enddo
-        elseif (segment%direction == OBC_DIRECTION_S) then
-          do k=1,nz ; do i=segment%HI%isd,segment%HI%ied
-            tmp1(i,j,k) = 0.0
-          enddo ; enddo
-        endif
-      enddo
-    endif
 
     mass_tot = reproducing_sum(tmp1, isr, ier, jsr, jer, sums=mass_lay, EFP_sum=mass_EFP)
     do k=1,nz ; vol_lay(k) = (US%m_to_L**2*GV%H_to_Z/GV%H_to_kg_m2)*mass_lay(k) ; enddo
@@ -558,19 +526,18 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
   endif ! Boussinesq
 
   nTr_stocks = 0
-  if (present(tracer_CSp)) then
-    call call_tracer_stocks(h, Tr_stocks, G, GV, tracer_CSp, stock_names=Tr_names, &
-                            stock_units=Tr_units, num_stocks=nTr_stocks,&
-                            got_min_max=Tr_minmax_got, global_min=Tr_min, global_max=Tr_max, &
-                            xgmin=Tr_min_x, ygmin=Tr_min_y, zgmin=Tr_min_z,&
-                            xgmax=Tr_max_x, ygmax=Tr_max_y, zgmax=Tr_max_z)
-    if (nTr_stocks > 0) then
-      do m=1,nTr_stocks
-        vars(num_nc_fields+m) = var_desc(Tr_names(m), units=Tr_units(m), &
-                      longname=Tr_names(m), hor_grid='1', z_grid='1')
-      enddo
-      num_nc_fields = num_nc_fields + nTr_stocks
-    endif
+  Tr_minmax_avail(:) = .false.
+  call call_tracer_stocks(h, Tr_stocks, G, GV, tracer_CSp, stock_names=Tr_names, &
+                          stock_units=Tr_units, num_stocks=nTr_stocks,&
+                          got_min_max=Tr_minmax_avail, global_min=Tr_min, global_max=Tr_max, &
+                          xgmin=Tr_min_x, ygmin=Tr_min_y, zgmin=Tr_min_z,&
+                          xgmax=Tr_max_x, ygmax=Tr_max_y, zgmax=Tr_max_z)
+  if (nTr_stocks > 0) then
+    do m=1,nTr_stocks
+      vars(num_nc_fields+m) = var_desc(Tr_names(m), units=Tr_units(m), &
+                    longname=Tr_names(m), hor_grid='1', z_grid='1')
+    enddo
+    num_nc_fields = num_nc_fields + nTr_stocks
   endif
 
   if (CS%previous_calls == 0) then
@@ -884,7 +851,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, OBC, dt_
          write(stdout,'("      Total ",a,": ",ES24.16,X,a)') &
               trim(Tr_names(m)), Tr_stocks(m), trim(Tr_units(m))
 
-         if (Tr_minmax_got(m)) then
+         if (Tr_minmax_avail(m)) then
            write(stdout,'(64X,"Global Min:",ES24.16,X,"at: (", f7.2,","f7.2,","f8.2,")"  )') &
                 Tr_min(m),Tr_min_x(m),Tr_min_y(m),Tr_min_z(m)
            write(stdout,'(64X,"Global Max:",ES24.16,X,"at: (", f7.2,","f7.2,","f8.2,")"  )') &

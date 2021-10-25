@@ -51,9 +51,9 @@ subroutine ISOMIP_initialize_topography(D, G, param_file, max_depth, US)
   real :: min_depth ! The minimum and maximum depths [Z ~> m].
   real :: m_to_Z  ! A dimensional rescaling factor.
   ! The following variables are used to set up the bathymetry in the ISOMIP example.
-  real :: bmax            ! max depth of bedrock topography
-  real :: b0,b2,b4,b6     ! first, second, third and fourth bedrock topography coeff
-  real :: xbar            ! characteristic along-flow lenght scale of the bedrock
+  real :: bmax            ! max depth of bedrock topography [Z ~> m]
+  real :: b0,b2,b4,b6     ! first, second, third and fourth bedrock topography coeffs [Z ~> m]
+  real :: xbar            ! characteristic along-flow length scale of the bedrock
   real :: dc              ! depth of the trough compared with side walls [Z ~> m].
   real :: fc              ! characteristic width of the side walls of the channel
   real :: wc              ! half-width of the trough
@@ -128,7 +128,7 @@ subroutine ISOMIP_initialize_topography(D, G, param_file, max_depth, US)
 end subroutine ISOMIP_initialize_topography
 
 !> Initialization of thicknesses
-subroutine ISOMIP_initialize_thickness ( h, depth_tot, G, GV, US, param_file, tv, just_read_params)
+subroutine ISOMIP_initialize_thickness ( h, depth_tot, G, GV, US, param_file, tv, just_read)
   type(ocean_grid_type),   intent(in)  :: G           !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)  :: GV          !< The ocean's vertical grid structure.
   type(unit_scale_type),   intent(in)  :: US          !< A dimensional unit scaling type
@@ -141,8 +141,8 @@ subroutine ISOMIP_initialize_thickness ( h, depth_tot, G, GV, US, param_file, tv
   type(thermo_var_ptrs),   intent(in)  :: tv          !< A structure containing pointers to any
                                                       !! available thermodynamic fields, including
                                                       !! the eqn. of state.
-  logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
-                                                      !! only read parameters without changing h.
+  logical,                 intent(in)  :: just_read   !< If true, this call will only read
+                                                      !! parameters without changing h.
   ! Local variables
   real :: e0(SZK_(GV)+1)  ! The resting interface heights, in depth units [Z ~> m],
                           !  usually negative because it is positive upward.
@@ -153,13 +153,10 @@ subroutine ISOMIP_initialize_thickness ( h, depth_tot, G, GV, US, param_file, tv
   real    :: min_thickness, s_sur, s_bot, t_sur, t_bot
   real    :: rho_sur, rho_bot  ! Surface and bottom densities [R ~> kg m-3]
   real    :: rho_range    ! The range of densities [R ~> kg m-3]
-  logical :: just_read    ! If true, just read parameters but set nothing.
   character(len=256) :: mesg  ! The text of an error message
   character(len=40) :: verticalCoordinate
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
-
-  just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
 
   if (.not.just_read) &
     call MOM_mesg("MOM_initialization.F90, initialize_thickness_uniform: setting thickness")
@@ -251,7 +248,7 @@ end subroutine ISOMIP_initialize_thickness
 
 !> Initial values for temperature and salinity
 subroutine ISOMIP_initialize_temperature_salinity ( T, S, h, depth_tot, G, GV, US, param_file, &
-                                                    eqn_of_state, just_read_params)
+                                                    eqn_of_state, just_read)
   type(ocean_grid_type),                     intent(in)  :: G  !< Ocean grid structure
   type(verticalGrid_type),                   intent(in)  :: GV !< Vertical grid structure
   type(unit_scale_type),                     intent(in)  :: US !< A dimensional unit scaling type
@@ -262,7 +259,7 @@ subroutine ISOMIP_initialize_temperature_salinity ( T, S, h, depth_tot, G, GV, U
                                                                !! depth of the ocean [Z ~> m]
   type(param_file_type),                     intent(in)  :: param_file !< Parameter file structure
   type(EOS_type),                            pointer     :: eqn_of_state !< Equation of state structure
-  logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
+  logical,                                   intent(in)  :: just_read !< If true, this call will
                                                       !! only read parameters without changing T & S.
   ! Local variables
   integer   :: i, j, k, is, ie, js, je, nz, itt
@@ -277,7 +274,6 @@ subroutine ISOMIP_initialize_temperature_salinity ( T, S, h, depth_tot, G, GV, U
   character(len=256) :: mesg ! The text of an error message
   character(len=40) :: verticalCoordinate, density_profile
   real :: rho_tmp
-  logical :: just_read       ! If true, just read parameters but set nothing.
   logical :: fit_salin       ! If true, accept the prescribed temperature and fit the salinity.
   real :: T0(SZK_(GV))       ! A profile of temperatures [degC]
   real :: S0(SZK_(GV))       ! A profile of salinities [ppt]
@@ -290,8 +286,6 @@ subroutine ISOMIP_initialize_temperature_salinity ( T, S, h, depth_tot, G, GV, U
   real :: T_Ref, S_Ref
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   pres(:) = 0.0
-
-  just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
 
   call get_param(param_file, mdl, "REGRIDDING_COORDINATE_MODE", verticalCoordinate, &
                  default=DEFAULT_COORDINATE_MODE, do_not_log=just_read)
