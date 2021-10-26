@@ -6,7 +6,7 @@ module MOM_barotropic
 use MOM_debugging, only : hchksum, uvchksum
 use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end, CLOCK_ROUTINE
 use MOM_diag_mediator, only : post_data, query_averaging_enabled, register_diag_field
-use MOM_diag_mediator, only : safe_alloc_ptr, diag_ctrl, enable_averaging
+use MOM_diag_mediator, only : diag_ctrl, enable_averaging
 use MOM_domains, only : min_across_PEs, clone_MOM_domain, deallocate_MOM_domain
 use MOM_domains, only : To_All, Scalar_Pair, AGRID, CORNER, MOM_domain_type
 use MOM_domains, only : create_group_pass, do_group_pass, group_pass_type
@@ -67,22 +67,22 @@ public register_barotropic_restarts, set_dtbt, barotropic_get_tav
 
 !> The barotropic stepping open boundary condition type
 type, private :: BT_OBC_type
-  real, dimension(:,:), pointer :: Cg_u => NULL()  !< The external wave speed at u-points [L T-1 ~> m s-1].
-  real, dimension(:,:), pointer :: Cg_v => NULL()  !< The external wave speed at u-points [L T-1 ~> m s-1].
-  real, dimension(:,:), pointer :: H_u => NULL()   !< The total thickness at the u-points [H ~> m or kg m-2].
-  real, dimension(:,:), pointer :: H_v => NULL()   !< The total thickness at the v-points [H ~> m or kg m-2].
-  real, dimension(:,:), pointer :: uhbt => NULL()  !< The zonal barotropic thickness fluxes specified
-                                     !! for open boundary conditions (if any) [H L2 T-1 ~> m3 s-1 or kg s-1].
-  real, dimension(:,:), pointer :: vhbt => NULL()  !< The meridional barotropic thickness fluxes specified
-                                     !! for open boundary conditions (if any) [H L2 T-1 ~> m3 s-1 or kg s-1].
-  real, dimension(:,:), pointer :: ubt_outer => NULL() !< The zonal velocities just outside the domain,
-                                     !! as set by the open boundary conditions [L T-1 ~> m s-1].
-  real, dimension(:,:), pointer :: vbt_outer => NULL() !< The meridional velocities just outside the domain,
-                                     !! as set by the open boundary conditions [L T-1 ~> m s-1].
-  real, dimension(:,:), pointer :: eta_outer_u => NULL() !< The surface height outside of the domain
-                                     !! at a u-point with an open boundary condition [H ~> m or kg m-2].
-  real, dimension(:,:), pointer :: eta_outer_v => NULL() !< The surface height outside of the domain
-                                     !! at a v-point with an open boundary condition [H ~> m or kg m-2].
+  real, allocatable :: Cg_u(:,:)  !< The external wave speed at u-points [L T-1 ~> m s-1].
+  real, allocatable :: Cg_v(:,:)  !< The external wave speed at u-points [L T-1 ~> m s-1].
+  real, allocatable :: H_u(:,:)   !< The total thickness at the u-points [H ~> m or kg m-2].
+  real, allocatable :: H_v(:,:)   !< The total thickness at the v-points [H ~> m or kg m-2].
+  real, allocatable :: uhbt(:,:)  !< The zonal barotropic thickness fluxes specified
+                                  !! for open boundary conditions (if any) [H L2 T-1 ~> m3 s-1 or kg s-1].
+  real, allocatable :: vhbt(:,:)  !< The meridional barotropic thickness fluxes specified
+                                  !! for open boundary conditions (if any) [H L2 T-1 ~> m3 s-1 or kg s-1].
+  real, allocatable :: ubt_outer(:,:) !< The zonal velocities just outside the domain,
+                                  !! as set by the open boundary conditions [L T-1 ~> m s-1].
+  real, allocatable :: vbt_outer(:,:) !< The meridional velocities just outside the domain,
+                                  !! as set by the open boundary conditions [L T-1 ~> m s-1].
+  real, allocatable :: eta_outer_u(:,:) !< The surface height outside of the domain
+                                  !! at a u-point with an open boundary condition [H ~> m or kg m-2].
+  real, allocatable :: eta_outer_v(:,:) !< The surface height outside of the domain
+                                  !! at a v-point with an open boundary condition [H ~> m or kg m-2].
   logical :: apply_u_OBCs !< True if this PE has an open boundary at a u-point.
   logical :: apply_v_OBCs !< True if this PE has an open boundary at a v-point.
   !>@{ Index ranges for the open boundary conditions
@@ -149,8 +149,8 @@ type, public :: barotropic_CS ; private
   real ALLOCABLE_, dimension(NIMEMBW_,NJMEMBW_) :: &
     q_D             !< f / D at PV points [Z-1 T-1 ~> m-1 s-1].
 
-  real, dimension(:,:,:), pointer :: frhatu1 => NULL() !< Predictor step values of frhatu stored for diagnostics.
-  real, dimension(:,:,:), pointer :: frhatv1 => NULL() !< Predictor step values of frhatv stored for diagnostics.
+  real, allocatable :: frhatu1(:,:,:)  !< Predictor step values of frhatu stored for diagnostics.
+  real, allocatable :: frhatv1(:,:,:)  !< Predictor step values of frhatv stored for diagnostics.
 
   type(BT_OBC_type) :: BT_OBC !< A structure with all of this modules fields
                               !! for applying open boundary conditions.
@@ -451,8 +451,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   real, dimension(SZI_(G),SZJB_(G)),         intent(out) :: vhbtav        !< the barotropic meridional volume or mass
                                                          !! fluxes averaged through the barotropic steps
                                                          !! [H L2 T-1 ~> m3 s-1 or kg s-1].
-  type(barotropic_CS),                       pointer     :: CS            !< The control structure returned by a
-                                                         !! previous call to barotropic_init.
+  type(barotropic_CS),                       intent(inout) :: CS           !< Barotropic control struct
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), intent(in)  :: visc_rem_u    !< Both the fraction of the momentum
                                                          !! originally in a layer that remains after a time-step of
                                                          !! viscosity, and the fraction of a time-step's worth of a
@@ -695,8 +694,6 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   integer :: ioff, joff
   integer :: l_seg
 
-  if (.not.associated(CS)) call MOM_error(FATAL, &
-      "btstep: Module MOM_barotropic must be initialized before it is used.")
   if (.not.CS%split) return
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
@@ -2718,7 +2715,7 @@ subroutine set_dtbt(G, GV, US, CS, eta, pbce, BT_cont, gtot_est, SSH_add)
   type(ocean_grid_type),        intent(inout) :: G    !< The ocean's grid structure.
   type(verticalGrid_type),      intent(in)    :: GV   !< The ocean's vertical grid structure.
   type(unit_scale_type),        intent(in)    :: US   !< A dimensional unit scaling type
-  type(barotropic_CS),          pointer       :: CS   !< Barotropic control structure.
+  type(barotropic_CS),          intent(inout) :: CS   !< Barotropic control structure
   real, dimension(SZI_(G),SZJ_(G)), optional, intent(in) :: eta  !< The barotropic free surface
                                                       !! height anomaly or column mass anomaly [H ~> m or kg m-2].
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), optional, intent(in) :: pbce  !< The baroclinic pressure
@@ -2767,8 +2764,6 @@ subroutine set_dtbt(G, GV, US, CS, eta, pbce, BT_cont, gtot_est, SSH_add)
   character(len=200) :: mesg
   integer :: i, j, k, is, ie, js, je, nz
 
-  if (.not.associated(CS)) call MOM_error(FATAL, &
-      "set_dtbt: Module MOM_barotropic must be initialized before it is used.")
   if (.not.CS%split) return
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   MS%isdw = G%isd ; MS%iedw = G%ied ; MS%jsdw = G%jsd ; MS%jedw = G%jed
@@ -3044,7 +3039,7 @@ end subroutine apply_velocity_OBCs
 !! boundary conditions, as developed by Mehmet Ilicak.
 subroutine set_up_BT_OBC(OBC, eta, BT_OBC, BT_Domain, G, GV, US, MS, halo, use_BT_cont, &
                          integral_BT_cont, dt_baroclinic, Datu, Datv, BTCL_u, BTCL_v)
-  type(ocean_OBC_type),                  pointer       :: OBC    !< An associated pointer to an OBC type.
+  type(ocean_OBC_type),                  intent(inout) :: OBC    !< An associated pointer to an OBC type.
   type(memory_size_type),                intent(in)    :: MS     !< A type that describes the memory sizes of the
                                                                  !! argument arrays.
   real, dimension(SZIW_(MS),SZJW_(MS)),  intent(in)    :: eta    !< The barotropic free surface height anomaly or
@@ -3263,8 +3258,7 @@ subroutine btcalc(h, G, GV, CS, h_u, h_v, may_use_default, OBC)
   type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(in)    :: h    !< Layer thicknesses [H ~> m or kg m-2].
-  type(barotropic_CS),     pointer       :: CS   !< The control structure returned by a previous
-                                                 !! call to barotropic_init.
+  type(barotropic_CS),     intent(inout) :: CS   !< Barotropic control struct
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
                  optional, intent(in)    :: h_u  !< The specified thicknesses at u-points [H ~> m or kg m-2].
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
@@ -3304,8 +3298,6 @@ subroutine btcalc(h, G, GV, CS, h_u, h_v, may_use_default, OBC)
 
 !    This section interpolates thicknesses onto u & v grid points with the
 ! second order accurate estimate h = 2*(h+ * h-)/(h+ + h-).
-  if (.not.associated(CS)) call MOM_error(FATAL, &
-      "btcalc: Module MOM_barotropic must be initialized before it is used.")
   if (.not.CS%split) return
 
   use_default = .false.
@@ -4090,8 +4082,7 @@ subroutine find_face_areas(Datu, Datv, G, GV, US, CS, MS, halo, eta, add_max)
   type(ocean_grid_type),   intent(in)  :: G    !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)  :: GV   !< The ocean's vertical grid structure.
   type(unit_scale_type),   intent(in)  :: US   !< A dimensional unit scaling type
-  type(barotropic_CS),     pointer     :: CS   !< The control structure returned by a previous
-                                               !! call to barotropic_init.
+  type(barotropic_CS),     intent(in)  :: CS   !< Barotropic control struct
   integer,                 intent(in)  :: halo !< The halo size to use, default = 1.
   real, dimension(MS%isdw:MS%iedw,MS%jsdw:MS%jedw), &
                  optional, intent(in)  :: eta  !< The barotropic free surface height anomaly
@@ -4185,8 +4176,7 @@ subroutine bt_mass_source(h, eta, set_cor, G, GV, CS)
                                                              !! fluxes (and update the slowly varying part of eta_cor)
                                                              !! (.true.) or whether to incrementally update the
                                                              !! corrective fluxes.
-  type(barotropic_CS),                pointer    :: CS       !< The control structure returned by a previous call
-                                                             !! to barotropic_init.
+  type(barotropic_CS),                intent(inout) :: CS    !< Barotropic control struct
 
   ! Local variables
   real :: h_tot(SZI_(G))      ! The sum of the layer thicknesses [H ~> m or kg m-2].
@@ -4196,8 +4186,6 @@ subroutine bt_mass_source(h, eta, set_cor, G, GV, CS)
                               ! thicknesses [H ~> m or kg m-2].
   integer :: is, ie, js, je, nz, i, j, k
 
-  if (.not.associated(CS)) call MOM_error(FATAL, "bt_mass_source: "// &
-        "Module MOM_barotropic must be initialized before it is used.")
   if (.not.CS%split) return
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
@@ -4251,8 +4239,7 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, US, param_file, diag, CS, 
   type(param_file_type),   intent(in)    :: param_file !< A structure to parse for run-time parameters.
   type(diag_ctrl), target, intent(inout) :: diag !< A structure that is used to regulate diagnostic
                                                  !! output.
-  type(barotropic_CS),     pointer       :: CS   !< A pointer to the control structure for this module
-                                                 !! that is set in register_barotropic_restarts.
+  type(barotropic_CS),     intent(inout) :: CS   !< Barotropic control struct
   type(MOM_restart_CS),    intent(in)    :: restart_CS !< MOM restart control struct
   logical,                 intent(out)   :: calc_dtbt  !< If true, the barotropic time step must
                                                  !! be recalculated before stepping.
@@ -4880,8 +4867,8 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, US, param_file, diag, CS, 
   CS%id_vhbt0 = register_diag_field('ocean_model', 'vhbt0', diag%axesCv1, Time, &
       'Barotropic meridional transport difference', 'm3 s-1', conversion=GV%H_to_m*US%L_to_m**2*US%s_to_T)
 
-  if (CS%id_frhatu1 > 0) call safe_alloc_ptr(CS%frhatu1, IsdB,IedB,jsd,jed,nz)
-  if (CS%id_frhatv1 > 0) call safe_alloc_ptr(CS%frhatv1, isd,ied,JsdB,JedB,nz)
+  if (CS%id_frhatu1 > 0) allocate(CS%frhatu1(IsdB:IedB,jsd:jed,nz), source=0.)
+  if (CS%id_frhatv1 > 0) allocate(CS%frhatv1(isd:ied,JsdB:JedB,nz), source=0.)
 
   if (.NOT.query_initialized(CS%ubtav,"ubtav",restart_CS) .or. &
       .NOT.query_initialized(CS%vbtav,"vbtav",restart_CS)) then
@@ -4961,7 +4948,7 @@ end subroutine barotropic_init
 
 !> Copies ubtav and vbtav from private type into arrays
 subroutine barotropic_get_tav(CS, ubtav, vbtav, G, US)
-  type(barotropic_CS),               pointer       :: CS    !< Control structure for this module
+  type(barotropic_CS),               intent(in)    :: CS    !< Barotropic control struct
   type(ocean_grid_type),             intent(in)    :: G     !< Grid structure
   real, dimension(SZIB_(G),SZJ_(G)), intent(inout) :: ubtav !< Zonal barotropic velocity averaged
                                                             !! over a baroclinic timestep [L T-1 ~> m s-1]
@@ -4997,8 +4984,8 @@ subroutine barotropic_end(CS)
   DEALLOC_(CS%eta_cor)
   DEALLOC_(CS%frhatu)   ; DEALLOC_(CS%frhatv)
 
-  if (associated(CS%frhatu1)) deallocate(CS%frhatu1)
-  if (associated(CS%frhatv1)) deallocate(CS%frhatv1)
+  if (allocated(CS%frhatu1)) deallocate(CS%frhatu1)
+  if (allocated(CS%frhatv1)) deallocate(CS%frhatv1)
   call deallocate_MOM_domain(CS%BT_domain)
 
   ! Allocated in restart registration, prior to timestep initialization
@@ -5010,8 +4997,7 @@ end subroutine barotropic_end
 subroutine register_barotropic_restarts(HI, GV, param_file, CS, restart_CS)
   type(hor_index_type),    intent(in) :: HI         !< A horizontal index type structure.
   type(param_file_type),   intent(in) :: param_file !< A structure to parse for run-time parameters.
-  type(barotropic_CS),     pointer    :: CS         !< A pointer that is set to point to the control
-                                                    !! structure for this module.
+  type(barotropic_CS),     intent(inout) :: CS      !< Barotropic control struct
   type(verticalGrid_type), intent(in) :: GV         !< The ocean's vertical grid structure.
   type(MOM_restart_CS),    intent(inout) :: restart_CS !< MOM restart control struct
 
@@ -5022,13 +5008,6 @@ subroutine register_barotropic_restarts(HI, GV, param_file, CS, restart_CS)
 
   isd = HI%isd ; ied = HI%ied ; jsd = HI%jsd ; jed = HI%jed
   IsdB = HI%IsdB ; IedB = HI%IedB ; JsdB = HI%JsdB ; JedB = HI%JedB
-
-  if (associated(CS)) then
-    call MOM_error(WARNING, "register_barotropic_restarts called with an associated "// &
-                            "control structure.")
-    return
-  endif
-  allocate(CS)
 
   call get_param(param_file, mdl, "GRADUAL_BT_ICS", CS%gradual_BT_ICs, &
                  "If true, adjust the initial conditions for the "//&

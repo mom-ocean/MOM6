@@ -359,8 +359,6 @@ type, public :: MOM_control_struct ; private
     !< Pointer to the control structure for the MEKE updates
   type(VarMix_CS) :: VarMix
     !< Control structure for the variable mixing module
-  type(Barotropic_CS),           pointer :: Barotropic_CSp => NULL()
-    !< Pointer to the control structure for the barotropic module
   type(tracer_registry_type),    pointer :: tracer_Reg => NULL()
     !< Pointer to the MOM tracer registry
   type(tracer_advect_CS),        pointer :: tracer_adv_CSp => NULL()

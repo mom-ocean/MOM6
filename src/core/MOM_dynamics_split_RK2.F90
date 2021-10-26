@@ -206,12 +206,12 @@ type, public :: MOM_dyn_split_RK2_CS ; private
   type(CoriolisAdv_CS),   pointer :: CoriolisAdv_CSp   => NULL()
   !> A pointer to the PressureForce control structure
   type(PressureForce_CS), pointer :: PressureForce_CSp => NULL()
-  !> A pointer to the barotropic stepping control structure
-  type(barotropic_CS),    pointer :: barotropic_CSp    => NULL()
   !> A pointer to a structure containing interface height diffusivities
   type(vertvisc_CS),      pointer :: vertvisc_CSp      => NULL()
   !> A pointer to the set_visc control structure
   type(set_visc_CS),      pointer :: set_visc_CSp      => NULL()
+  !> A pointer to the barotropic stepping control structure
+  type(barotropic_CS) :: barotropic_CSp
   !> A pointer to the tidal forcing control structure
   type(tidal_forcing_CS) :: tides_CSp
   !> A pointer to the ALE control structure.
@@ -1689,7 +1689,6 @@ subroutine end_dyn_split_RK2(CS)
   type(MOM_dyn_split_RK2_CS), pointer :: CS  !< module control structure
 
   call barotropic_end(CS%barotropic_CSp)
-  deallocate(CS%barotropic_CSp)
 
   call vertvisc_end(CS%vertvisc_CSp)
   deallocate(CS%vertvisc_CSp)
