@@ -2058,8 +2058,8 @@ subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, int_tide_
                  "forms of the same expressions.", default=default_2018_answers)
 
   ! CS%use_tidal_mixing is set to True if an internal tidal dissipation scheme is to be used.
-  CS%use_tidal_mixing = tidal_mixing_init(Time, G, GV, US, param_file, diag, &
-                                          CS%tidal_mixing_CSp)
+  CS%use_tidal_mixing = tidal_mixing_init(Time, G, GV, US, param_file, &
+                                          CS%int_tide_CSp, diag, CS%tidal_mixing_CSp)
 
   call get_param(param_file, mdl, "ML_RADIATION", CS%ML_radiation, &
                  "If true, allow a fraction of TKE available from wind "//&
