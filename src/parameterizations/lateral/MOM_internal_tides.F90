@@ -116,8 +116,7 @@ type, public :: int_tide_CS ; private
 
   type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to regulate the
                         !! timing of diagnostic output.
-  type(wave_structure_CS), pointer :: wave_structure_CSp => NULL()
-                        !< A pointer to the wave_structure module control structure
+  type(wave_structure_CS) :: wave_struct    !< Wave structure control struct
 
   !>@{ Diag handles
   ! Diag handles relevant to all modes, frequencies, and angles
@@ -404,13 +403,13 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
     do m=1,CS%NMode ; do fr=1,CS%Nfreq
       ! Calculate modal structure for given mode and frequency
       call wave_structure(h, tv, G, GV, US, cn(:,:,m), m, CS%frequency(fr), &
-                          CS%wave_structure_CSp, tot_En_mode(:,:,fr,m), full_halos=.true.)
+                          CS%wave_struct, tot_En_mode(:,:,fr,m), full_halos=.true.)
       ! Pick out near-bottom and max horizontal baroclinic velocity values at each point
       do j=jsd,jed ; do i=isd,ied
         id_g = i + G%idg_offset ; jd_g = j + G%jdg_offset ! for debugging
-        nzm = CS%wave_structure_CSp%num_intfaces(i,j)
-        Ub(i,j,fr,m) = CS%wave_structure_CSp%Uavg_profile(i,j,nzm)
-        Umax(i,j,fr,m) = maxval(CS%wave_structure_CSp%Uavg_profile(i,j,1:nzm))
+        nzm = CS%wave_struct%num_intfaces(i,j)
+        Ub(i,j,fr,m) = CS%wave_struct%Uavg_profile(i,j,nzm)
+        Umax(i,j,fr,m) = maxval(CS%wave_struct%Uavg_profile(i,j,1:nzm))
       enddo ; enddo ! i-loop, j-loop
     enddo ; enddo ! fr-loop, m-loop
   endif ! apply_wave or _Froude_drag (Ub or Umax needed)
@@ -448,7 +447,7 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
         c_phase = 0.0
         if (Kmag2 > 0.0) then
           c_phase = sqrt(freq2/Kmag2)
-          nzm = CS%wave_structure_CSp%num_intfaces(i,j)
+          nzm = CS%wave_struct%num_intfaces(i,j)
           Fr2_max = (Umax(i,j,fr,m) / c_phase)**2
           ! Dissipate energy if Fr>1; done here with an arbitrary time scale
           if (Fr2_max > 1.0) then
@@ -2558,7 +2557,7 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
   enddo ; enddo
 
   ! Initialize wave_structure (not sure if this should be here - BDM)
-  call wave_structure_init(Time, G, GV, param_file, diag, CS%wave_structure_CSp)
+  call wave_structure_init(Time, G, GV, param_file, diag, CS%wave_struct)
 
 end subroutine internal_tides_init
 
