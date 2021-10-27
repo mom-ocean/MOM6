@@ -385,7 +385,7 @@ type, public :: MOM_control_struct ; private
   ! Pointers to control structures used for diagnostics
   type(sum_output_CS),           pointer :: sum_output_CSp => NULL()
     !< Pointer to the globally summed output control structure
-  type(diagnostics_CS),          pointer :: diagnostics_CSp => NULL()
+  type(diagnostics_CS) :: diagnostics_CSp
     !< Pointer to the MOM diagnostics control structure
   type(offline_transport_CS),    pointer :: offline_CSp => NULL()
     !< Pointer to the offline tracer transport control structure
@@ -3592,7 +3592,6 @@ subroutine MOM_end(CS)
   endif
 
   call MOM_diagnostics_end(CS%diagnostics_CSp, CS%ADp, CS%CDp)
-  deallocate(CS%diagnostics_CSp)
 
   if (CS%offline_tracer_mode) call offline_transport_end(CS%offline_CSp)
 
