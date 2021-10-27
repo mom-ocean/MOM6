@@ -4,15 +4,16 @@ module MOM_dyn_horgrid
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-use MOM_hor_index, only : hor_index_type
-use MOM_domains, only : MOM_domain_type, deallocate_MOM_domain
-use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, WARNING
-use MOM_unit_scaling, only : unit_scale_type
+use MOM_array_transform, only : rotate_array, rotate_array_pair
+use MOM_domains,         only : MOM_domain_type, deallocate_MOM_domain
+use MOM_error_handler,   only : MOM_error, MOM_mesg, FATAL, WARNING
+use MOM_hor_index,       only : hor_index_type
+use MOM_unit_scaling,    only : unit_scale_type
 
 implicit none ; private
 
 public create_dyn_horgrid, destroy_dyn_horgrid, set_derived_dyn_horgrid
-public rescale_dyn_horgrid_bathymetry
+public rescale_dyn_horgrid_bathymetry, rotate_dyn_horgrid
 
 ! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
 ! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
@@ -278,6 +279,93 @@ subroutine create_dyn_horgrid(G, HI, bathymetry_at_vel)
   allocate(G%gridLatB(jsg-1:jeg), source=0.0)
 
 end subroutine create_dyn_horgrid
+
+
+!> Copy the rotated contents of one horizontal grid type into another.  The input
+!! and output grid type arguments can not use the same object.
+subroutine rotate_dyn_horgrid(G_in, G, US, turns)
+  type(dyn_horgrid_type), intent(in)    :: G_in   !< The input horizontal grid type
+  type(dyn_horgrid_type), intent(inout) :: G      !< An output rotated horizontal grid type
+                                                  !! that has already been allocated, but whose
+                                                  !! contents are largely replaced here.
+  type(unit_scale_type),  intent(in)    :: US     !< A dimensional unit scaling type
+  integer, intent(in) :: turns                    !< Number of quarter turns
+
+  integer :: jsc, jec, jscB, jecB
+  integer :: qturn
+
+  ! Center point
+  call rotate_array(G_in%geoLonT, turns, G%geoLonT)
+  call rotate_array(G_in%geoLatT, turns, G%geoLatT)
+  call rotate_array_pair(G_in%dxT, G_in%dyT, turns, G%dxT, G%dyT)
+  call rotate_array(G_in%areaT, turns, G%areaT)
+  call rotate_array(G_in%bathyT, turns, G%bathyT)
+
+  call rotate_array_pair(G_in%df_dx, G_in%df_dy, turns, G%df_dx, G%df_dy)
+  call rotate_array(G_in%sin_rot, turns, G%sin_rot)
+  call rotate_array(G_in%cos_rot, turns, G%cos_rot)
+  call rotate_array(G_in%mask2dT, turns, G%mask2dT)
+
+  ! Face points
+  call rotate_array_pair(G_in%geoLonCu, G_in%geoLonCv, turns, G%geoLonCu, G%geoLonCv)
+  call rotate_array_pair(G_in%geoLatCu, G_in%geoLatCv, turns, G%geoLatCu, G%geoLatCv)
+  call rotate_array_pair(G_in%dxCu, G_in%dyCv, turns, G%dxCu, G%dyCv)
+  call rotate_array_pair(G_in%dxCv, G_in%dyCu, turns, G%dxCv, G%dyCu)
+  call rotate_array_pair(G_in%dx_Cv, G_in%dy_Cu, turns, G%dx_Cv, G%dy_Cu)
+
+  call rotate_array_pair(G_in%mask2dCu, G_in%mask2dCv, turns, G%mask2dCu, G%mask2dCv)
+  call rotate_array_pair(G_in%areaCu, G_in%areaCv, turns, G%areaCu, G%areaCv)
+  call rotate_array_pair(G_in%IareaCu, G_in%IareaCv, turns, G%IareaCu, G%IareaCv)
+
+  ! Vertex point
+  call rotate_array(G_in%geoLonBu, turns, G%geoLonBu)
+  call rotate_array(G_in%geoLatBu, turns, G%geoLatBu)
+  call rotate_array_pair(G_in%dxBu, G_in%dyBu, turns, G%dxBu, G%dyBu)
+  call rotate_array(G_in%areaBu, turns, G%areaBu)
+  call rotate_array(G_in%CoriolisBu, turns, G%CoriolisBu)
+  call rotate_array(G_in%mask2dBu, turns, G%mask2dBu)
+
+  ! Topography at the cell faces
+  G%bathymetry_at_vel = G_in%bathymetry_at_vel
+  if (G%bathymetry_at_vel) then
+    call rotate_array_pair(G_in%Dblock_u, G_in%Dblock_v, turns, G%Dblock_u, G%Dblock_v)
+    call rotate_array_pair(G_in%Dopen_u, G_in%Dopen_v, turns, G%Dopen_u, G%Dopen_v)
+  endif
+
+  ! Nominal grid axes
+  ! TODO: We should not assign lat values to the lon axis, and vice versa.
+  !   We temporarily copy lat <-> lon since several components still expect
+  !   lat and lon sizes to match the first and second dimension sizes.
+  !   But we ought to instead leave them unchanged and adjust the references to
+  !   these axes.
+  if (modulo(turns, 2) /= 0) then
+    G%gridLonT(:) = G_in%gridLatT(G_in%jeg:G_in%jsg:-1)
+    G%gridLatT(:) = G_in%gridLonT(:)
+    G%gridLonB(:) = G_in%gridLatB(G_in%jeg:(G_in%jsg-1):-1)
+    G%gridLatB(:) = G_in%gridLonB(:)
+  else
+    G%gridLonT(:) = G_in%gridLonT(:)
+    G%gridLatT(:) = G_in%gridLatT(:)
+    G%gridLonB(:) = G_in%gridLonB(:)
+    G%gridLatB(:) = G_in%gridLatB(:)
+  endif
+
+  G%x_axis_units = G_in%y_axis_units
+  G%y_axis_units = G_in%x_axis_units
+  G%south_lat = G_in%south_lat
+  G%west_lon = G_in%west_lon
+  G%len_lat = G_in%len_lat
+  G%len_lon = G_in%len_lon
+
+  ! Rotation-invariant fields
+  G%areaT_global = G_in%areaT_global
+  G%IareaT_global = G_in%IareaT_global
+  G%Rad_Earth = G_in%Rad_Earth
+  G%max_depth = G_in%max_depth
+
+  call set_derived_dyn_horgrid(G, US)
+end subroutine rotate_dyn_horgrid
+
 
 !> rescale_dyn_horgrid_bathymetry permits a change in the internal units for the bathymetry on the
 !! grid, both rescaling the depths and recording the new internal depth units.
