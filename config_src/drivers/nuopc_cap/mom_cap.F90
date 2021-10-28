@@ -709,11 +709,11 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
 
   call query_ocean_state(ocean_state, use_waves=use_waves, wave_method=wave_method)
   if (use_waves) then
-    call query_ocean_state(ocean_state, NumWaveBands=Ice_ocean_boundary%num_stk_bands)
     if (wave_method == "EFACTOR") then
       allocate( Ice_ocean_boundary%lamult(isc:iec,jsc:jec) )
       Ice_ocean_boundary%lamult          = 0.0
-    else
+    else if (wave_method == "SURFACE_BANDS") then
+      call query_ocean_state(ocean_state, NumWaveBands=Ice_ocean_boundary%num_stk_bands)
       allocate ( Ice_ocean_boundary% ustk0 (isc:iec,jsc:jec),         &
                  Ice_ocean_boundary% vstk0 (isc:iec,jsc:jec),         &
                  Ice_ocean_boundary% ustkb (isc:iec,jsc:jec,Ice_ocean_boundary%num_stk_bands), &
@@ -724,6 +724,8 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
       call query_ocean_state(ocean_state, WaveNumbers=Ice_ocean_boundary%stk_wavenumbers, unscale=.true.)
       Ice_ocean_boundary%ustkb           = 0.0
       Ice_ocean_boundary%vstkb           = 0.0
+    else
+      call MOM_error(FATAL, "Unsupported WAVE_METHOD encountered in NUOPC cap.")
     endif
   endif
   ! Consider adding this:
@@ -765,16 +767,26 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
   if (use_waves) then
     if (wave_method == "EFACTOR") then
       call fld_list_add(fldsToOcn_num, fldsToOcn, "Sw_lamult"                 , "will provide")
-    else
-      if (Ice_ocean_boundary%num_stk_bands > 3) then
-        call MOM_error(FATAL, "Number of Stokes Bands > 3, NUOPC cap not set up for this")
+    else if (wave_method == "SURFACE_BANDS") then
+      if (cesm_coupled) then
+        call fld_list_add(fldsToOcn_num, fldsToOcn, "Sw_pstokes_x", "will provide", &
+          ungridded_lbound=1, ungridded_ubound=Ice_ocean_boundary%num_stk_bands)
+        call fld_list_add(fldsToOcn_num, fldsToOcn, "Sw_pstokes_y", "will provide", &
+          ungridded_lbound=1, ungridded_ubound=Ice_ocean_boundary%num_stk_bands)
+      else ! below is the old approach of importing partitioned stokes drift components. after the planned ww3 nuopc
+           ! cap unification, this else block should be removed in favor of the more flexible import approach above.
+        if (Ice_ocean_boundary%num_stk_bands > 3) then
+          call MOM_error(FATAL, "Number of Stokes Bands > 3, NUOPC cap not set up for this")
+        endif
+        call fld_list_add(fldsToOcn_num, fldsToOcn, "eastward_partitioned_stokes_drift_1" , "will provide")
+        call fld_list_add(fldsToOcn_num, fldsToOcn, "northward_partitioned_stokes_drift_1", "will provide")
+        call fld_list_add(fldsToOcn_num, fldsToOcn, "eastward_partitioned_stokes_drift_2" , "will provide")
+        call fld_list_add(fldsToOcn_num, fldsToOcn, "northward_partitioned_stokes_drift_2", "will provide")
+        call fld_list_add(fldsToOcn_num, fldsToOcn, "eastward_partitioned_stokes_drift_3" , "will provide")
+        call fld_list_add(fldsToOcn_num, fldsToOcn, "northward_partitioned_stokes_drift_3", "will provide")
       endif
-      call fld_list_add(fldsToOcn_num, fldsToOcn, "eastward_partitioned_stokes_drift_1" , "will provide")
-      call fld_list_add(fldsToOcn_num, fldsToOcn, "northward_partitioned_stokes_drift_1", "will provide")
-      call fld_list_add(fldsToOcn_num, fldsToOcn, "eastward_partitioned_stokes_drift_2" , "will provide")
-      call fld_list_add(fldsToOcn_num, fldsToOcn, "northward_partitioned_stokes_drift_2", "will provide")
-      call fld_list_add(fldsToOcn_num, fldsToOcn, "eastward_partitioned_stokes_drift_3" , "will provide")
-      call fld_list_add(fldsToOcn_num, fldsToOcn, "northward_partitioned_stokes_drift_3", "will provide")
+    else
+      call MOM_error(FATAL, "Unsupported WAVE_METHOD encountered in NUOPC cap.")
     endif
   endif
 
@@ -1648,7 +1660,7 @@ subroutine ModelAdvance(gcomp, rc)
      ! Import data
      !---------------
 
-     call mom_import(ocean_public, ocean_grid, importState, ice_ocean_boundary, rc=rc)
+     call mom_import(ocean_public, ocean_grid, importState, ice_ocean_boundary, cesm_coupled, rc=rc)
      if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
      !---------------

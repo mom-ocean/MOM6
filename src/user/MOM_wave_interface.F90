@@ -606,6 +606,8 @@ subroutine Update_Stokes_Drift(G, GV, US, CS, h, ustar, dt)
   integer :: ii, jj, kk, b, iim1, jjm1
   real    :: idt ! 1 divided by the time step
 
+  if (CS%WaveMethod==EFACTOR) return
+
   one_cm = 0.01*US%m_to_Z
   min_level_thick_avg = 1.e-3*US%m_to_Z
   idt = 1.0/dt
@@ -824,8 +826,6 @@ subroutine Update_Stokes_Drift(G, GV, US, CS, h, ustar, dt)
       enddo
       CS%DHH85_is_set = .true.
     endif
-  elseif (CS%WaveMethod==EFACTOR) then
-    return ! pass
   else! Keep this else, fallback to 0 Stokes drift
     do kk= 1,GV%ke
       do jj = G%jsd,G%jed
