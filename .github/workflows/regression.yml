@@ -24,4 +24,4 @@ jobs:
       run: make run.symmetric -k -s
 
     - name: Regression test
-      run: make test.regressions DO_REGRESSION_TESTS=true -k -s
+      run: make test.regression DO_REGRESSION_TESTS=true -k -s

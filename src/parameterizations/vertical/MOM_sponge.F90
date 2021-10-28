@@ -147,9 +147,9 @@ subroutine initialize_sponge(Iresttime, int_height, G, param_file, CS, GV, &
 
   if (CS%num_col > 0) then
 
-    allocate(CS%Iresttime_col(CS%num_col)) ; CS%Iresttime_col = 0.0
-    allocate(CS%col_i(CS%num_col))         ; CS%col_i = 0
-    allocate(CS%col_j(CS%num_col))         ; CS%col_j = 0
+    allocate(CS%Iresttime_col(CS%num_col), source=0.0)
+    allocate(CS%col_i(CS%num_col), source=0)
+    allocate(CS%col_j(CS%num_col), source=0)
 
     col = 1
     do j=G%jsc,G%jec ; do i=G%isc,G%iec
@@ -168,8 +168,8 @@ subroutine initialize_sponge(Iresttime, int_height, G, param_file, CS, GV, &
   endif
 
   if (CS%do_i_mean_sponge) then
-    allocate(CS%Iresttime_im(G%jsd:G%jed)) ; CS%Iresttime_im(:) = 0.0
-    allocate(CS%Ref_eta_im(G%jsd:G%jed,GV%ke+1)) ; CS%Ref_eta_im(:,:) = 0.0
+    allocate(CS%Iresttime_im(G%jsd:G%jed), source=0.0)
+    allocate(CS%Ref_eta_im(G%jsd:G%jed,GV%ke+1), source=0.0)
 
     do j=G%jsc,G%jec
       CS%Iresttime_im(j) = Iresttime_i_mean(j)
@@ -238,8 +238,7 @@ subroutine set_up_sponge_field(sp_val, f_ptr, G, GV, nlay, CS, sp_val_i_mean)
     call MOM_error(FATAL,"set_up_sponge_field: "//mesg)
   endif
 
-  allocate(CS%Ref_val(CS%fldno)%p(CS%nz,CS%num_col))
-  CS%Ref_val(CS%fldno)%p(:,:) = 0.0
+  allocate(CS%Ref_val(CS%fldno)%p(CS%nz,CS%num_col), source=0.0)
   do col=1,CS%num_col
     do k=1,nlay
       CS%Ref_val(CS%fldno)%p(k,col) = sp_val(CS%col_i(col),CS%col_j(col),k)
@@ -262,8 +261,7 @@ subroutine set_up_sponge_field(sp_val, f_ptr, G, GV, nlay, CS, sp_val_i_mean)
     if (.not.present(sp_val_i_mean)) call MOM_error(FATAL, &
       "set_up_sponge_field: sp_val_i_mean must be present with i-mean sponges.")
 
-    allocate(CS%Ref_val_im(CS%fldno)%p(CS%jsd:CS%jed,CS%nz))
-    CS%Ref_val(CS%fldno)%p(:,:) = 0.0
+    allocate(CS%Ref_val_im(CS%fldno)%p(CS%jsd:CS%jed,CS%nz), source=0.0)
     do k=1,CS%nz ; do j=CS%jsc,CS%jec
       CS%Ref_val_im(CS%fldno)%p(j,k) = sp_val_i_mean(j,k)
     enddo ; enddo
@@ -302,7 +300,7 @@ subroutine set_up_sponge_ML_density(sp_val, G, CS, sp_val_i_mean)
   endif
 
   CS%bulkmixedlayer = .true.
-  allocate(CS%Rcv_ml_ref(CS%num_col)) ; CS%Rcv_ml_ref(:) = 0.0
+  allocate(CS%Rcv_ml_ref(CS%num_col), source=0.0)
   do col=1,CS%num_col
     CS%Rcv_ml_ref(col) = sp_val(CS%col_i(col),CS%col_j(col))
   enddo
@@ -311,7 +309,7 @@ subroutine set_up_sponge_ML_density(sp_val, G, CS, sp_val_i_mean)
     if (.not.present(sp_val_i_mean)) call MOM_error(FATAL, &
       "set_up_sponge_field: sp_val_i_mean must be present with i-mean sponges.")
 
-    allocate(CS%Rcv_ml_ref_im(CS%jsd:CS%jed)) ; CS%Rcv_ml_ref_im(:) = 0.0
+    allocate(CS%Rcv_ml_ref_im(CS%jsd:CS%jed), source=0.0)
     do j=CS%jsc,CS%jec
       CS%Rcv_ml_ref_im(j) = sp_val_i_mean(j)
     enddo
@@ -409,17 +407,17 @@ subroutine apply_sponge(h, dt, G, GV, US, ea, eb, CS, Rcv_ml)
     enddo ; enddo ; enddo
     do j=js,je
       do i=is,ie
-        dilate(i) = G%bathyT(i,j) / (e_D(i,j,1) + G%bathyT(i,j))
+        dilate(i) = (G%bathyT(i,j) + G%Z_ref) / (e_D(i,j,1) + G%bathyT(i,j))
       enddo
       do k=1,nz+1 ; do i=is,ie
-        e_D(i,j,K) = dilate(i) * (e_D(i,j,K) + G%bathyT(i,j)) - G%bathyT(i,j)
+        e_D(i,j,K) = dilate(i) * (e_D(i,j,K) + G%bathyT(i,j)) - (G%bathyT(i,j) + G%Z_ref)
       enddo ; enddo
     enddo
 
     do k=2,nz
       do j=js,je ; do i=is,ie
         eta_anom(i,j) = e_D(i,j,k) - CS%Ref_eta_im(j,k)
-        if (CS%Ref_eta_im(j,K) < -G%bathyT(i,j)) eta_anom(i,j) = 0.0
+        if (CS%Ref_eta_im(j,K) < -(G%bathyT(i,j) + G%Z_ref)) eta_anom(i,j) = 0.0
       enddo ; enddo
       call global_i_mean(eta_anom(:,:), eta_mean_anom(:,K), G, tmp_scale=US%Z_to_m)
     enddo

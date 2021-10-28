@@ -38,11 +38,10 @@ subroutine safe_alloc_ptr_1d(ptr, i1, i2)
   integer, optional,  intent(in) :: i2 !< The ending index of the array
   if (.not.associated(ptr)) then
     if (present(i2)) then
-      allocate(ptr(i1:i2))
+      allocate(ptr(i1:i2), source=0.0)
     else
-      allocate(ptr(i1))
+      allocate(ptr(i1), source=0.0)
     endif
-    ptr(:) = 0.0
   endif
 end subroutine safe_alloc_ptr_1d
 
@@ -52,8 +51,7 @@ subroutine safe_alloc_ptr_2d_2arg(ptr, ni, nj)
   integer, intent(in) :: ni !< The size of the 1st dimension of the array
   integer, intent(in) :: nj !< The size of the 2nd dimension of the array
   if (.not.associated(ptr)) then
-    allocate(ptr(ni,nj))
-    ptr(:,:) = 0.0
+    allocate(ptr(ni,nj), source=0.0)
   endif
 end subroutine safe_alloc_ptr_2d_2arg
 
@@ -64,8 +62,7 @@ subroutine safe_alloc_ptr_3d_3arg(ptr, ni, nj, nk)
   integer, intent(in) :: nj !< The size of the 2nd dimension of the array
   integer, intent(in) :: nk !< The size of the 3rd dimension of the array
   if (.not.associated(ptr)) then
-    allocate(ptr(ni,nj,nk))
-    ptr(:,:,:) = 0.0
+    allocate(ptr(ni,nj,nk), source=0.0)
   endif
 end subroutine safe_alloc_ptr_3d_3arg
 
@@ -77,8 +74,7 @@ subroutine safe_alloc_ptr_2d(ptr, is, ie, js, je)
   integer, intent(in) :: js !< The start index to allocate for the 2nd dimension
   integer, intent(in) :: je !< The end index to allocate for the 2nd dimension
   if (.not.associated(ptr)) then
-    allocate(ptr(is:ie,js:je))
-    ptr(:,:) = 0.0
+    allocate(ptr(is:ie,js:je), source=0.0)
   endif
 end subroutine safe_alloc_ptr_2d
 
@@ -91,8 +87,7 @@ subroutine safe_alloc_ptr_3d(ptr, is, ie, js, je, nk)
   integer, intent(in) :: je !< The end index to allocate for the 2nd dimension
   integer, intent(in) :: nk !< The size to allocate for the 3rd dimension
   if (.not.associated(ptr)) then
-    allocate(ptr(is:ie,js:je,nk))
-    ptr(:,:,:) = 0.0
+    allocate(ptr(is:ie,js:je,nk), source=0.0)
   endif
 end subroutine safe_alloc_ptr_3d
 
@@ -106,8 +101,7 @@ subroutine safe_alloc_ptr_3d_6arg(ptr, is, ie, js, je, ks, ke)
   integer, intent(in) :: ks !< The start index to allocate for the 3rd dimension
   integer, intent(in) :: ke !< The end index to allocate for the 3rd dimension
   if (.not.associated(ptr)) then
-    allocate(ptr(is:ie,js:je,ks:ke))
-    ptr(:,:,:) = 0.0
+    allocate(ptr(is:ie,js:je,ks:ke), source=0.0)
   endif
 end subroutine safe_alloc_ptr_3d_6arg
 
@@ -120,8 +114,7 @@ subroutine safe_alloc_allocatable_2d(ptr, is, ie, js, je)
   integer, intent(in) :: js !< The start index to allocate for the 2nd dimension
   integer, intent(in) :: je !< The end index to allocate for the 2nd dimension
   if (.not.allocated(ptr)) then
-    allocate(ptr(is:ie,js:je))
-    ptr(:,:) = 0.0
+    allocate(ptr(is:ie,js:je), source=0.0)
   endif
 end subroutine safe_alloc_allocatable_2d
 
@@ -135,8 +128,7 @@ subroutine safe_alloc_allocatable_3d(ptr, is, ie, js, je, nk)
   integer, intent(in) :: je !< The end index to allocate for the 2nd dimension
   integer, intent(in) :: nk !< The size to allocate for the 3rd dimension
   if (.not.allocated(ptr)) then
-    allocate(ptr(is:ie,js:je,nk))
-    ptr(:,:,:) = 0.0
+    allocate(ptr(is:ie,js:je,nk), source=0.0)
   endif
 end subroutine safe_alloc_allocatable_3d
 
@@ -150,8 +142,7 @@ subroutine safe_alloc_allocatable_3d_6arg(ptr, is, ie, js, je, ks, ke)
   integer, intent(in) :: ks !< The start index to allocate for the 3rd dimension
   integer, intent(in) :: ke !< The end index to allocate for the 3rd dimension
   if (.not.allocated(ptr)) then
-    allocate(ptr(is:ie,js:je,ks:ke))
-    ptr(:,:,:) = 0.0
+    allocate(ptr(is:ie,js:je,ks:ke), source=0.0)
   endif
 end subroutine safe_alloc_allocatable_3d_6arg
 

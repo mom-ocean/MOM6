@@ -99,7 +99,7 @@ function USER_register_tracer_example(HI, GV, param_file, CS, tr_Reg, restart_CS
                  "The exact location and properties of those sponges are "//&
                  "specified from MOM_initialization.F90.", default=.false.)
 
-  allocate(CS%tr(isd:ied,jsd:jed,nz,NTR)) ; CS%tr(:,:,:,:) = 0.0
+  allocate(CS%tr(isd:ied,jsd:jed,nz,NTR), source=0.0)
 
   do m=1,NTR
     if (m < 10) then ; write(name,'("tr",I1.1)') m

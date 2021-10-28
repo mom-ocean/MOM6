@@ -408,7 +408,7 @@ end subroutine calculate_compress_wright
 !! finite-volume form pressure accelerations in a Boussinesq model.
 subroutine int_density_dz_wright(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
                                  dpa, intz_dpa, intx_dpa, inty_dpa, &
-                                 bathyT, dz_neglect, useMassWghtInterp, rho_scale, pres_scale)
+                                 bathyT, dz_neglect, useMassWghtInterp, rho_scale, pres_scale, Z_0p)
   type(hor_index_type), intent(in)  :: HI       !< The horizontal index type for the arrays.
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
                         intent(in)  :: T        !< Potential temperature relative to the surface
@@ -451,6 +451,7 @@ subroutine int_density_dz_wright(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
                                                  !! from kg m-3 to the desired units [R m3 kg-1 ~> 1]
   real,       optional, intent(in)  :: pres_scale !< A multiplicative factor to convert pressure
                                                  !! into Pa [Pa T2 R-1 L-2 ~> 1].
+  real,       optional, intent(in)  :: Z_0p      !< The height at which the pressure is 0 [Z ~> m]
 
   ! Local variables
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed) :: al0_2d, p0_2d, lambda_2d
@@ -461,7 +462,8 @@ subroutine int_density_dz_wright(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
   real :: g_Earth    ! The gravitational acceleration [m2 Z-1 s-2 ~> m s-2]
   real :: I_Rho      ! The inverse of the Boussinesq density [m3 kg-1]
   real :: rho_ref_mks ! The reference density in MKS units, never rescaled from kg m-3 [kg m-3]
-  real :: p_ave, I_al0, I_Lzz
+  real :: p_ave      ! The layer averaged pressure [Pa]
+  real :: I_al0, I_Lzz
   real :: dz         ! The layer thickness [Z ~> m].
   real :: hWght      ! A pressure-thickness below topography [Z ~> m].
   real :: hL, hR     ! Pressure-thicknesses of the columns to the left and right [Z ~> m].
@@ -470,10 +472,11 @@ subroutine int_density_dz_wright(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
   real :: hWt_RL, hWt_RR ! hWt_RA is the weighted influence of A on the right column [nondim].
   real :: wt_L, wt_R ! The linear weights of the left and right columns [nondim].
   real :: wtT_L, wtT_R ! The weights for tracers from the left and right columns [nondim].
-  real :: intz(5)    ! The integrals of density with height at the
-                     ! 5 sub-column locations [R L2 T-2 ~> Pa].
+  real :: intz(5)    ! The gravitational acceleration times the integrals of density
+                     ! with height at the 5 sub-column locations [R L2 T-2 ~> Pa] or [Pa].
   real :: Pa_to_RL2_T2 ! A conversion factor of pressures from Pa to the output units indicated by
                        ! pres_scale [R L2 T-2 Pa-1 ~> 1] or [1].
+  real :: z0pres     ! The height at which the pressure is zero [Z ~> m]
   logical :: do_massWeight ! Indicates whether to do mass weighting.
   real, parameter :: C1_3 = 1.0/3.0, C1_7 = 1.0/7.0    ! Rational constants.
   real, parameter :: C1_9 = 1.0/9.0, C1_90 = 1.0/90.0  ! Rational constants.
@@ -499,6 +502,7 @@ subroutine int_density_dz_wright(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
   else
     rho_ref_mks = rho_ref ; I_Rho = 1.0 / rho_0
   endif
+  z0pres = 0.0 ; if (present(Z_0p)) z0pres = Z_0p
 
   do_massWeight = .false.
   if (present(useMassWghtInterp)) then ; if (useMassWghtInterp) then
@@ -517,7 +521,7 @@ subroutine int_density_dz_wright(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
     al0 = al0_2d(i,j) ; p0 = p0_2d(i,j) ; lambda = lambda_2d(i,j)
 
     dz = z_t(i,j) - z_b(i,j)
-    p_ave = -0.5*GxRho*(z_t(i,j)+z_b(i,j))
+    p_ave = -GxRho*(0.5*(z_t(i,j)+z_b(i,j)) - z0pres)
 
     I_al0 = 1.0 / al0
     I_Lzz = 1.0 / (p0 + (lambda * I_al0) + p_ave)
@@ -561,8 +565,7 @@ subroutine int_density_dz_wright(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
       lambda = wtT_L*lambda_2d(i,j) + wtT_R*lambda_2d(i+1,j)
 
       dz = wt_L*(z_t(i,j) - z_b(i,j)) + wt_R*(z_t(i+1,j) - z_b(i+1,j))
-      p_ave = -0.5*GxRho*(wt_L*(z_t(i,j)+z_b(i,j)) + &
-                          wt_R*(z_t(i+1,j)+z_b(i+1,j)))
+      p_ave = -GxRho*(0.5*(wt_L*(z_t(i,j)+z_b(i,j)) + wt_R*(z_t(i+1,j)+z_b(i+1,j))) - z0pres)
 
       I_al0 = 1.0 / al0
       I_Lzz = 1.0 / (p0 + (lambda * I_al0) + p_ave)
@@ -603,8 +606,7 @@ subroutine int_density_dz_wright(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
       lambda = wtT_L*lambda_2d(i,j) + wtT_R*lambda_2d(i,j+1)
 
       dz = wt_L*(z_t(i,j) - z_b(i,j)) + wt_R*(z_t(i,j+1) - z_b(i,j+1))
-      p_ave = -0.5*GxRho*(wt_L*(z_t(i,j)+z_b(i,j)) + &
-                          wt_R*(z_t(i,j+1)+z_b(i,j+1)))
+      p_ave = -GxRho*(0.5*(wt_L*(z_t(i,j)+z_b(i,j)) + wt_R*(z_t(i,j+1)+z_b(i,j+1))) - z0pres)
 
       I_al0 = 1.0 / al0
       I_Lzz = 1.0 / (p0 + (lambda * I_al0) + p_ave)
