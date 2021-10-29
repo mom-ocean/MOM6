@@ -338,6 +338,8 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
                      ! viscosity. Here set equal to nondimensional Laplacian Leith constant.
                      ! This is set equal to zero if modified Leith is not used.
   real :: Shear_mag_bc  ! Shear_mag value in backscatter [T-1 ~> s-1]
+  real :: sh_xx_sq   ! Square of tension (sh_xx) [T-2 ~> s-2]
+  real :: sh_xy_sq   ! Square of shearing strain (sh_xy) [T-2 ~> s-2]
   real :: h2uq, h2vq ! temporary variables [H2 ~> m2 or kg2 m-4].
   real :: hu, hv     ! Thicknesses interpolated by arithmetic means to corner
                      ! points; these are first interpolated to u or v velocity
@@ -571,7 +573,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
   !$OMP   grad_vel_mag_h, grad_vel_mag_q, &
   !$OMP   grad_vel_mag_bt_h, grad_vel_mag_bt_q, grad_d2vel_mag_h, &
   !$OMP   meke_res_fn, Shear_mag, Shear_mag_bc, vert_vort_mag, h_min, hrat_min, visc_bound_rem, &
-  !$OMP   grid_Ah, grid_Kh, d_Del2u, d_Del2v, d_str, &
+  !$OMP   sh_xx_sq, sh_xy_sq, grid_Ah, grid_Kh, d_Del2u, d_Del2v, d_str, &
   !$OMP   Kh, Ah, AhSm, AhLth, local_strain, Sh_F_pow, &
   !$OMP   dDel2vdx, dDel2udy, DY_dxCv, DX_dyCu, Del2vort_q, Del2vort_h, KE, &
   !$OMP   h2uq, h2vq, hu, hv, hq, FatH, RoScl, GME_coeff &
@@ -900,9 +902,10 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
 
     if ((CS%Smagorinsky_Kh) .or. (CS%Smagorinsky_Ah)) then
       do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-        Shear_mag(i,j) = sqrt( sh_xx(i,j)**2 + &
-                               0.25*((sh_xy(I-1,J-1)**2 + sh_xy(I,J)**2) + &
-                                     (sh_xy(I-1,J)**2 + sh_xy(I,J-1)**2)) )
+        sh_xx_sq = sh_xx(i,j)**2
+        sh_xy_sq = 0.25 * ( (sh_xy(I-1,J-1)**2 + sh_xy(I,J)**2) &
+                          + (sh_xy(I-1,J)**2 + sh_xy(I,J-1)**2) )
+        Shear_mag(i,j) = sqrt(sh_xx_sq + sh_xy_sq)
       enddo ; enddo
     endif
 
@@ -1179,9 +1182,10 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
 
     if ((CS%Smagorinsky_Kh) .or. (CS%Smagorinsky_Ah)) then
       do J=js-1,Jeq ; do I=is-1,Ieq
-        Shear_mag(I,J) = sqrt( sh_xy(I,J)**2 + &
-                               0.25*((sh_xx(i,j)**2 + sh_xx(i+1,j+1)**2) + &
-                                     (sh_xx(i,j+1)**2 + sh_xx(i+1,j)**2)) )
+        sh_xy_sq = sh_xy(I,J)**2
+        sh_xx_sq = 0.25 * ( (sh_xx(i,j)**2 + sh_xx(i+1,j+1)**2) &
+                          + (sh_xx(i,j+1)**2 + sh_xx(i+1,j)**2) )
+        Shear_mag(I,J) = sqrt(sh_xy_sq + sh_xx_sq)
       enddo ; enddo
     endif
 
