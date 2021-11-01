@@ -1545,13 +1545,14 @@ end subroutine delete_axis_info
 
 !> Retrieve the information from an axis_info type.
 subroutine get_axis_info(axis,name,longname,units,cartesian,ax_size,ax_data)
-  type(axis_info), intent(in) :: axis  !< An array with information about named axes
-  character(len=*), intent(out), optional    :: name !<  An associated name.
-  character(len=*), intent(out), optional    :: longname !< An associated longname.
-  character(len=*), intent(out), optional    :: units !< Units
-  character(len=*), intent(out), optional    :: cartesian !< cartesian direction [X,Y,Z,T]
-  integer,          intent(out), optional   :: ax_size !< The size of the axis.
-  real, optional, allocatable, dimension(:), intent(out) :: ax_data !< axis label data.
+  type(axis_info), intent(in) :: axis                               !< An axis type
+  character(len=*), intent(out), optional    :: name                !< The axis name.
+  character(len=*), intent(out), optional    :: longname            !< The axis longname.
+  character(len=*), intent(out), optional    :: units               !< The axis units.
+  character(len=*), intent(out), optional    :: cartesian           !< The cartesian attribute
+                                                                    !! of the axis [X,Y,Z,T].
+  integer,          intent(out), optional   :: ax_size              !< The size of the axis.
+  real, optional, allocatable, dimension(:), intent(out) :: ax_data !< The axis label data.
 
   if (present(ax_data)) then
      if (allocated(ax_data)) deallocate(ax_data)
