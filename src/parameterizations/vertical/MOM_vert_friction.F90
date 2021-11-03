@@ -128,6 +128,8 @@ type, public :: vertvisc_CS ; private
   ! integer :: id_hf_du_dt_visc    = -1, id_hf_dv_dt_visc    = -1
   integer :: id_h_du_dt_visc    = -1, id_h_dv_dt_visc    = -1
   integer :: id_hf_du_dt_visc_2d = -1, id_hf_dv_dt_visc_2d = -1
+  integer :: id_h_du_dt_str    = -1, id_h_dv_dt_str    = -1
+  integer :: id_du_dt_str_visc_rem = -1, id_dv_dt_str_visc_rem = -1
   !>@}
 
   type(PointAccel_CS), pointer :: PointAccel_CSp => NULL() !< A pointer to the control structure
@@ -219,6 +221,11 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
 
   real, allocatable, dimension(:,:,:) :: h_du_dt_visc ! h x du_dt_visc [H L T-2 ~> m2 s-2]
   real, allocatable, dimension(:,:,:) :: h_dv_dt_visc ! h x dv_dt_visc [H L T-2 ~> m2 s-2]
+  
+  real, allocatable, dimension(:,:,:) :: h_du_dt_str ! h x du_dt_str [H L T-2 ~> m2 s-2]
+  real, allocatable, dimension(:,:,:) :: h_dv_dt_str ! h x dv_dt_str [H L T-2 ~> m2 s-2]
+  real, allocatable, dimension(:,:,:) :: du_dt_str_visc_rem ! du_dt_str x visc_rem_u [L T-2 ~> m s-2]
+  real, allocatable, dimension(:,:,:) :: dv_dt_str_visc_rem ! dv_dt_str x visc_rem_v [L T-2 ~> m s-2]
 
   logical :: do_i(SZIB_(G))
   logical :: DoStokesMixing
@@ -563,6 +570,44 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
     enddo ; enddo ; enddo
     call post_data(CS%id_h_dv_dt_visc, h_dv_dt_visc, CS%diag)
     deallocate(h_dv_dt_visc)
+  endif
+  
+  if (CS%id_h_du_dt_str > 0) then
+    allocate(h_du_dt_str(G%IsdB:G%IedB,G%jsd:G%jed,GV%ke))
+    h_du_dt_str(:,:,:) = 0.0
+    do k=1,nz ; do j=js,je ; do I=Isq,Ieq
+      h_du_dt_str(I,j,k) = ADp%du_dt_str(I,j,k) * ADp%diag_hu(I,j,k)
+    enddo ; enddo ; enddo
+    call post_data(CS%id_h_du_dt_str, h_du_dt_str, CS%diag)
+    deallocate(h_du_dt_str)
+  endif
+  if (CS%id_h_dv_dt_str > 0) then
+    allocate(h_dv_dt_str(G%isd:G%ied,G%JsdB:G%JedB,GV%ke))
+    h_dv_dt_str(:,:,:) = 0.0
+    do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
+      h_dv_dt_str(i,J,k) = ADp%dv_dt_str(i,J,k) * ADp%diag_hv(i,J,k)
+    enddo ; enddo ; enddo
+    call post_data(CS%id_h_dv_dt_str, h_dv_dt_str, CS%diag)
+    deallocate(h_dv_dt_str)
+  endif
+
+  if (CS%id_du_dt_str_visc_rem > 0) then
+    allocate(du_dt_str_visc_rem(G%IsdB:G%IedB,G%jsd:G%jed,GV%ke))
+    du_dt_str_visc_rem(:,:,:) = 0.0
+    do k=1,nz ; do j=js,je ; do I=Isq,Ieq
+      du_dt_str_visc_rem(I,j,k) = ADp%du_dt_str(I,j,k) * ADp%visc_rem_u(I,j,k)
+    enddo ; enddo ; enddo
+    call post_data(CS%id_du_dt_str_visc_rem, du_dt_str_visc_rem, CS%diag)
+    deallocate(du_dt_str_visc_rem)
+  endif
+  if (CS%id_dv_dt_str_visc_rem > 0) then
+    allocate(dv_dt_str_visc_rem(G%isd:G%ied,G%JsdB:G%JedB,GV%ke))
+    dv_dt_str_visc_rem(:,:,:) = 0.0
+    do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
+      dv_dt_str_visc_rem(i,J,k) = ADp%dv_dt_str(i,J,k) * ADp%visc_rem_v(i,J,k)
+    enddo ; enddo ; enddo
+    call post_data(CS%id_dv_dt_str_visc_rem, dv_dt_str_visc_rem, CS%diag)
+    deallocate(dv_dt_str_visc_rem)
   endif
 
 end subroutine vertvisc
@@ -1912,6 +1957,38 @@ subroutine vertvisc_init(MIS, Time, G, GV, US, param_file, diag, ADp, dirs, &
   if (CS%id_h_dv_dt_visc > 0) then
     call safe_alloc_ptr(ADp%dv_dt_visc,isd,ied,JsdB,JedB,nz)
     call safe_alloc_ptr(ADp%diag_hv,isd,ied,JsdB,JedB,nz)
+  endif
+  
+  CS%id_h_du_dt_str = register_diag_field('ocean_model', 'h_du_dt_str', diag%axesCuL, Time, &
+      'Thickness Multiplied Zonal Acceleration from Surface Wind Stresses', 'm2 s-2', &
+      conversion=GV%H_to_m*US%L_T2_to_m_s2)
+  if (CS%id_h_du_dt_str > 0) then
+    call safe_alloc_ptr(ADp%du_dt_str,IsdB,IedB,jsd,jed,nz)
+    call safe_alloc_ptr(ADp%diag_hu,IsdB,IedB,jsd,jed,nz)
+  endif
+
+  CS%id_h_dv_dt_str = register_diag_field('ocean_model', 'h_dv_dt_str', diag%axesCvL, Time, &
+      'Thickness Multiplied Meridional Acceleration from Surface Wind Stresses', 'm2 s-2', &
+      conversion=GV%H_to_m*US%L_T2_to_m_s2)
+  if (CS%id_h_dv_dt_str > 0) then
+    call safe_alloc_ptr(ADp%dv_dt_str,isd,ied,JsdB,JedB,nz)
+    call safe_alloc_ptr(ADp%diag_hv,isd,ied,JsdB,JedB,nz)
+  endif
+  
+  CS%id_du_dt_str_visc_rem = register_diag_field('ocean_model', 'du_dt_str_visc_rem', diag%axesCuL, Time, &
+      'Zonal Acceleration from Surface Wind Stresses multiplied by viscous remnant', 'm s-2', &
+      conversion=US%L_T2_to_m_s2)
+  if (CS%id_du_dt_str_visc_rem > 0) then
+    call safe_alloc_ptr(ADp%du_dt_str,IsdB,IedB,jsd,jed,nz)
+    call safe_alloc_ptr(ADp%visc_rem_u,IsdB,IedB,jsd,jed,nz)
+  endif
+
+  CS%id_dv_dt_str_visc_rem = register_diag_field('ocean_model', 'dv_dt_str_visc_rem', diag%axesCvL, Time, &
+      'Meridional Acceleration from Surface Wind Stresses multiplied by viscous remnant', 'm s-2', &
+      conversion=US%L_T2_to_m_s2)
+  if (CS%id_dv_dt_str_visc_rem > 0) then
+    call safe_alloc_ptr(ADp%dv_dt_str,isd,ied,JsdB,JedB,nz)
+    call safe_alloc_ptr(ADp%visc_rem_v,isd,ied,JsdB,JedB,nz)
   endif
 
   if ((len_trim(CS%u_trunc_file) > 0) .or. (len_trim(CS%v_trunc_file) > 0)) &
