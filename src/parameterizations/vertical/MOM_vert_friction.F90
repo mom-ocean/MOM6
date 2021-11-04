@@ -1957,7 +1957,7 @@ subroutine vertvisc_init(MIS, Time, G, GV, US, param_file, diag, ADp, dirs, &
     call safe_alloc_ptr(ADp%dv_dt_visc,isd,ied,JsdB,JedB,nz)
     call safe_alloc_ptr(ADp%diag_hv,isd,ied,JsdB,JedB,nz)
   endif
- 
+
   CS%id_h_du_dt_str = register_diag_field('ocean_model', 'h_du_dt_str', diag%axesCuL, Time, &
       'Thickness Multiplied Zonal Acceleration from Surface Wind Stresses', 'm2 s-2', &
       conversion=GV%H_to_m*US%L_T2_to_m_s2)
