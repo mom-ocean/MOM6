@@ -221,7 +221,6 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
 
   real, allocatable, dimension(:,:,:) :: h_du_dt_visc ! h x du_dt_visc [H L T-2 ~> m2 s-2]
   real, allocatable, dimension(:,:,:) :: h_dv_dt_visc ! h x dv_dt_visc [H L T-2 ~> m2 s-2]
-  
   real, allocatable, dimension(:,:,:) :: h_du_dt_str ! h x du_dt_str [H L T-2 ~> m2 s-2]
   real, allocatable, dimension(:,:,:) :: h_dv_dt_str ! h x dv_dt_str [H L T-2 ~> m2 s-2]
   real, allocatable, dimension(:,:,:) :: du_dt_str_visc_rem ! du_dt_str x visc_rem_u [L T-2 ~> m s-2]
@@ -571,7 +570,7 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
     call post_data(CS%id_h_dv_dt_visc, h_dv_dt_visc, CS%diag)
     deallocate(h_dv_dt_visc)
   endif
-  
+
   if (CS%id_h_du_dt_str > 0) then
     allocate(h_du_dt_str(G%IsdB:G%IedB,G%jsd:G%jed,GV%ke))
     h_du_dt_str(:,:,:) = 0.0
@@ -1958,7 +1957,7 @@ subroutine vertvisc_init(MIS, Time, G, GV, US, param_file, diag, ADp, dirs, &
     call safe_alloc_ptr(ADp%dv_dt_visc,isd,ied,JsdB,JedB,nz)
     call safe_alloc_ptr(ADp%diag_hv,isd,ied,JsdB,JedB,nz)
   endif
-  
+ 
   CS%id_h_du_dt_str = register_diag_field('ocean_model', 'h_du_dt_str', diag%axesCuL, Time, &
       'Thickness Multiplied Zonal Acceleration from Surface Wind Stresses', 'm2 s-2', &
       conversion=GV%H_to_m*US%L_T2_to_m_s2)
@@ -1974,7 +1973,7 @@ subroutine vertvisc_init(MIS, Time, G, GV, US, param_file, diag, ADp, dirs, &
     call safe_alloc_ptr(ADp%dv_dt_str,isd,ied,JsdB,JedB,nz)
     call safe_alloc_ptr(ADp%diag_hv,isd,ied,JsdB,JedB,nz)
   endif
-  
+
   CS%id_du_dt_str_visc_rem = register_diag_field('ocean_model', 'du_dt_str_visc_rem', diag%axesCuL, Time, &
       'Zonal Acceleration from Surface Wind Stresses multiplied by viscous remnant', 'm s-2', &
       conversion=US%L_T2_to_m_s2)
