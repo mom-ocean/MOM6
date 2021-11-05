@@ -24,11 +24,11 @@ integer,intent(in)    :: mpiroot, mpicomm
 integer, intent(out) :: iret
 
 iret=0
-if (pert_epbl_in .EQ. .true. ) then
+if (pert_epbl_in .EQV. .true. ) then
    print*,'pert_epbl needs to be false if using the stub'
    iret=-1
 endif
-if (do_sppt_in.EQ. .true. ) then
+if (do_sppt_in.EQV. .true. ) then
    print*,'do_sppt needs to be false if using the stub'
    iret=-1
 endif
