@@ -28,10 +28,10 @@ public stochastics_init, update_stochastics
 
 !> This control structure holds parameters for the MOM_stochastics module
 type, public:: stochastic_CS
-  logical :: do_sppt                 !< If true, stochastically perturb the diabatic
-  logical :: pert_epbl       !! If true, then randomly perturb the KE dissipation and genration terms
-  integer :: id_sppt_wts  = -1
-  integer :: id_epbl1_wts=-1,id_epbl2_wts=-1
+  logical :: do_sppt         !< If true, stochastically perturb the diabatic
+  logical :: pert_epbl       !< If true, then randomly perturb the KE dissipation and genration terms
+  integer :: id_sppt_wts  = -1 !< Diagnostic id for SPPT
+  integer :: id_epbl1_wts=-1,id_epbl2_wts=-1 !< Diagnostic id for epbl
   ! stochastic patterns
   real, allocatable :: sppt_wts(:,:)  !< Random pattern for ocean SPPT
                                      !! tendencies with a number between 0 and 2
@@ -46,9 +46,9 @@ contains
 !!   This subroutine initializes the stochastics physics control structure.
 subroutine stochastics_init(dt, grid, GV, CS, param_file, diag, Time)
   real, intent(in)                     :: dt       !< time step [T ~> s]
-  type(ocean_grid_type),   intent(in)  :: grid     ! horizontal grid information
-  type(verticalGrid_type), intent(in)  :: GV       ! vertical grid structure
-  type(stochastic_CS), pointer,     intent(inout):: CS
+  type(ocean_grid_type),   intent(in)  :: grid     !< horizontal grid information
+  type(verticalGrid_type), intent(in)  :: GV       !< vertical grid structure
+  type(stochastic_CS), pointer,     intent(inout):: CS !< stochastic control structure
   type(param_file_type),   intent(in)    :: param_file !< A structure to parse for run-time parameters
   type(diag_ctrl), target, intent(inout) :: diag             !< structure to regulate diagnostic output
   type(time_type), target                :: Time             !< model time
