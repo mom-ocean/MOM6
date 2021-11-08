@@ -178,8 +178,6 @@ type, public :: ocean_state_type ; private
                               !! steps can span multiple coupled time steps.
   logical :: diabatic_first   !< If true, apply diabatic and thermodynamic
                               !! processes before time stepping the dynamics.
-  logical,public :: do_sppt   !< If true, write stochastic physics restarts
-  logical,public :: pert_epbl !< If true, write stochastic physics restarts
 
   real :: eps_omesh           !< Max allowable difference between ESMF mesh and MOM6
                               !! domain coordinates
@@ -428,17 +426,6 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn, i
 
   endif
 
-  ! check to see if stochastic physics is active
-  call get_param(param_file, mdl, "DO_SPPT", OS%do_sppt, &
-                 "If true, then stochastically perturb the thermodynamic "//&
-                 "tendemcies of T,S, amd h.  Amplitude and correlations are "//&
-                 "controlled by the nam_stoch namelist in the UFS model only.", &
-                 default=.false.)
-  call get_param(param_file, mdl, "PERT_EPBL", OS%pert_epbl, &
-                 "If true, then stochastically perturb the kinetic energy "//&
-                 "production and dissipation terms.  Amplitude and correlations are "//&
-                 "controlled by the nam_stoch namelist in the UFS model only.", &
-                 default=.false.)
   call extract_surface_state(OS%MOM_CSp, OS%sfc_state)
 
   call close_param_file(param_file)

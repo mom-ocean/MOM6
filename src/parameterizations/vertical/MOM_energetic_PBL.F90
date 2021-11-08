@@ -600,8 +600,8 @@ subroutine ePBL_column(h, u, v, T0, S0, dSV_dT, dSV_dS, TKE_forcing, B_flux, abs
                  optional, pointer       :: Waves  !< Wave CS for Langmuir turbulence
   type(ocean_grid_type), &
                  optional, intent(inout) :: G      !< The ocean's grid structure.
-  real,          optional, intent(in)    :: epbl1_wt ! random number to perturb KE generation
-  real,          optional, intent(in)    :: epbl2_wt ! random number to perturb KE dissipation
+  real,          optional, intent(in)    :: epbl1_wt !< random number to perturb KE generation
+  real,          optional, intent(in)    :: epbl2_wt !< random number to perturb KE dissipation
   integer,       optional, intent(in)    :: i      !< The i-index to work on (used for Waves)
   integer,       optional, intent(in)    :: j      !< The i-index to work on (used for Waves)
 
