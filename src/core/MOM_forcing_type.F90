@@ -3494,15 +3494,21 @@ subroutine rotate_mech_forcing(forces_in, turns, forces)
 end subroutine rotate_mech_forcing
 
 !< Homogenize the forcing fields from the input domain
-subroutine homogenize_mech_forcing(forces, G)
-  type(mech_forcing), intent(in)  :: forces     !< Forcing on the input domain
+subroutine homogenize_mech_forcing(forces, G, US, Rho0)
+  type(mech_forcing),    intent(in) :: forces !< Forcing on the input domain
   type(ocean_grid_type), intent(in) :: G      !< Grid metric of target forcing
+  type(unit_scale_type), intent(in) :: US     !< A dimensional unit scaling type
+  real,                  intent(in) :: Rho0   !< A reference density of seawater [R ~> kg m-3],
+                                              !! as used to calculate ustar.
 
   real :: tx_mean, ty_mean, avg
+  real :: iRho0
   logical :: do_stress, do_ustar, do_shelf, do_press, do_iceberg
   integer :: i, j, is, ie, js, je, isB, ieB, jsB, jeB
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   isB = G%iscB ; ieB = G%iecB ; jsB = G%jscB ; jeB = G%jecB
+
+  iRho0 = US%L_to_Z / Rho0
 
   call get_mech_forcing_groups(forces, do_stress, do_ustar, do_shelf, &
                               do_press, do_iceberg)
@@ -3520,7 +3526,7 @@ subroutine homogenize_mech_forcing(forces, G)
     enddo ; enddo
 
     do j=js,je ; do i=is,ie
-      if (G%mask2dT(i,j) > 0.) forces%ustar(i,j) = sqrt(tx_mean**2 + ty_mean**2)
+      if (G%mask2dT(i,j) > 0.) forces%ustar(i,j) = sqrt(US%L_to_Z * sqrt(tx_mean**2 + ty_mean**2)*iRho0)
     enddo ; enddo
 
   else

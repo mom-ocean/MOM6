@@ -572,7 +572,7 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
 
   ! Homogenize the forces
   if (CS%homogenize_forcings) then
-    call homogenize_mech_forcing(forces, G)
+    call homogenize_mech_forcing(forces, G, US, GV%Rho0)
     call homogenize_forcing(fluxes, G)
   endif
 
