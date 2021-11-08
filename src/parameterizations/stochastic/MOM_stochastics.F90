@@ -31,7 +31,8 @@ type, public:: stochastic_CS
   logical :: do_sppt         !< If true, stochastically perturb the diabatic
   logical :: pert_epbl       !< If true, then randomly perturb the KE dissipation and genration terms
   integer :: id_sppt_wts  = -1 !< Diagnostic id for SPPT
-  integer :: id_epbl1_wts=-1,id_epbl2_wts=-1 !< Diagnostic id for epbl
+  integer :: id_epbl1_wts=-1 !< Diagnostic id for epbl generation perturbation
+  integer :: id_epbl2_wts=-1 !< Diagnostic id for epbl dissipation perturbation
   ! stochastic patterns
   real, allocatable :: sppt_wts(:,:)  !< Random pattern for ocean SPPT
                                      !! tendencies with a number between 0 and 2
