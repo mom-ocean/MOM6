@@ -71,6 +71,10 @@ subroutine copy_dyngrid_to_MOM_grid(dG, oG, US)
     oG%dyCu(I,j) = dG%dyCu(I+ido,j+jdo)
     oG%dy_Cu(I,j) = dG%dy_Cu(I+ido,j+jdo)
 
+    oG%porous_DminU(I,j) = dG%porous_DminU(I+ido,j+jdo)
+    oG%porous_DmaxU(I,j) = dG%porous_DmaxU(I+ido,j+jdo)
+    oG%porous_DavgU(I,j) = dG%porous_DavgU(I+ido,j+jdo)
+
     oG%mask2dCu(I,j) = dG%mask2dCu(I+ido,j+jdo)
     oG%areaCu(I,j) = dG%areaCu(I+ido,j+jdo)
     oG%IareaCu(I,j) = dG%IareaCu(I+ido,j+jdo)
@@ -82,6 +86,10 @@ subroutine copy_dyngrid_to_MOM_grid(dG, oG, US)
     oG%dxCv(i,J) = dG%dxCv(i+ido,J+jdo)
     oG%dyCv(i,J) = dG%dyCv(i+ido,J+jdo)
     oG%dx_Cv(i,J) = dG%dx_Cv(i+ido,J+jdo)
+
+    oG%porous_DminV(i,J) = dG%porous_DminV(i+ido,J+jdo)
+    oG%porous_DmaxV(i,J) = dG%porous_DmaxV(i+ido,J+jdo)
+    oG%porous_DavgV(i,J) = dG%porous_DavgV(i+ido,J+jdo)
 
     oG%mask2dCv(i,J) = dG%mask2dCv(i+ido,J+jdo)
     oG%areaCv(i,J) = dG%areaCv(i+ido,J+jdo)
@@ -216,6 +224,10 @@ subroutine copy_MOM_grid_to_dyngrid(oG, dG, US)
     dG%dyCu(I,j) = oG%dyCu(I+ido,j+jdo)
     dG%dy_Cu(I,j) = oG%dy_Cu(I+ido,j+jdo)
 
+    dG%porous_DminU(I,j) = oG%porous_DminU(I+ido,j+jdo)
+    dG%porous_DmaxU(I,j) = oG%porous_DmaxU(I+ido,j+jdo)
+    dG%porous_DavgU(I,j) = oG%porous_DavgU(I+ido,j+jdo)
+
     dG%mask2dCu(I,j) = oG%mask2dCu(I+ido,j+jdo)
     dG%areaCu(I,j) = oG%areaCu(I+ido,j+jdo)
     dG%IareaCu(I,j) = oG%IareaCu(I+ido,j+jdo)
@@ -227,6 +239,10 @@ subroutine copy_MOM_grid_to_dyngrid(oG, dG, US)
     dG%dxCv(i,J) = oG%dxCv(i+ido,J+jdo)
     dG%dyCv(i,J) = oG%dyCv(i+ido,J+jdo)
     dG%dx_Cv(i,J) = oG%dx_Cv(i+ido,J+jdo)
+
+    dG%porous_DminV(i,J) = oG%porous_DminU(i+ido,J+jdo)
+    dG%porous_DmaxV(i,J) = oG%porous_DmaxU(i+ido,J+jdo)
+    dG%porous_DavgV(i,J) = oG%porous_DavgU(i+ido,J+jdo)
 
     dG%mask2dCv(i,J) = oG%mask2dCv(i+ido,J+jdo)
     dG%areaCv(i,J) = oG%areaCv(i+ido,J+jdo)
@@ -338,6 +354,13 @@ subroutine rotate_dyngrid(G_in, G, US, turns)
   call rotate_array_pair(G_in%dxCu, G_in%dyCv, turns, G%dxCu, G%dyCv)
   call rotate_array_pair(G_in%dxCv, G_in%dyCu, turns, G%dxCv, G%dyCu)
   call rotate_array_pair(G_in%dx_Cv, G_in%dy_Cu, turns, G%dx_Cv, G%dy_Cu)
+
+  call rotate_array_pair(G_in%porous_DminV, G_in%porous_DminU, turns, &
+      G%porous_DminV, G%porous_DminU)
+  call rotate_array_pair(G_in%porous_DmaxV, G_in%porous_DmaxU, turns, &
+      G%porous_DmaxV, G%porous_DmaxU)
+  call rotate_array_pair(G_in%porous_DavgV, G_in%porous_DavgU, turns, &
+      G%porous_DavgV, G%porous_DavgU)
 
   call rotate_array_pair(G_in%mask2dCu, G_in%mask2dCv, turns, &
       G%mask2dCu, G%mask2dCv)
