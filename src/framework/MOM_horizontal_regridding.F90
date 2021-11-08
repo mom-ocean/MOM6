@@ -17,8 +17,7 @@ use MOM_interpolate,   only : build_horiz_interp_weights, run_horiz_interp, hori
 use MOM_interp_infra,  only : axistype, get_external_field_info, get_axis_data
 use MOM_time_manager,  only : time_type
 use MOM_io,            only : axis_info, get_axis_info, get_var_axes_info, MOM_read_data
-use netcdf, only : NF90_OPEN, NF90_NOWRITE, NF90_GET_ATT, NF90_GET_VAR
-use netcdf, only : NF90_INQ_VARID, NF90_INQUIRE_VARIABLE, NF90_INQUIRE_DIMENSION
+use MOM_io,            only : read_attribute
 
 implicit none ; private
 
@@ -304,6 +303,7 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
   real :: max_lat, min_lat, pole, max_depth, npole
   real :: roundoff  ! The magnitude of roundoff, usually ~2e-16.
   real :: add_offset, scale_factor
+  logical :: found_attr
   logical :: add_np
   logical :: is_ongrid
   character(len=8)  :: laynum
@@ -384,6 +384,21 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
     endif
   endif
   ! construct level cell boundaries as the mid-point between adjacent centers
+
+  ! Set the I/O attributes
+  call read_attribute(trim(filename), "_FillValue", missing_value, &
+                      varname=trim(varnam), found=found_attr)
+  if (.not. found_attr) call MOM_error(FATAL, &
+    "error finding missing value for " // trim(varnam) // &
+    " in file " // trim(filename) // " in hinterp_extrap")
+
+  call read_attribute(trim(filename), "scale_factor", scale_factor, &
+                      varname=trim(varnam), found=found_attr)
+  if (.not. found_attr) scale_factor = 0.
+
+  call read_attribute(trim(filename), "add_offset", add_offset, &
+                      varname=trim(varnam), found=found_attr)
+  if (.not. found_attr) add_offset = 0.
 
   z_edges_in(1) = 0.0
   do K=2,kd
