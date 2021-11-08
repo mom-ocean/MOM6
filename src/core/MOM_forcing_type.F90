@@ -17,6 +17,7 @@ use MOM_file_parser,   only : get_param, log_param, log_version, param_file_type
 use MOM_grid,          only : ocean_grid_type
 use MOM_opacity,       only : sumSWoverBands, optics_type, extract_optics_slice, optics_nbands
 use MOM_spatial_means, only : global_area_integral, global_area_mean
+use MOM_spatial_means, only : global_area_mean_u, global_area_mean_v
 use MOM_unit_scaling,  only : unit_scale_type
 use MOM_variables,     only : surface, thermo_var_ptrs
 use MOM_verticalGrid,  only : verticalGrid_type
@@ -35,6 +36,7 @@ public copy_common_forcing_fields, allocate_mech_forcing, deallocate_mech_forcin
 public set_derived_forcing_fields, copy_back_forcing_fields
 public set_net_mass_forcing, get_net_mass_forcing
 public rotate_forcing, rotate_mech_forcing
+public homogenize_forcing, homogenize_mech_forcing
 
 !> Allocate the fields of a (flux) forcing type, based on either a set of input
 !! flags for each group of fields, or a pre-allocated reference forcing.
@@ -3385,6 +3387,7 @@ subroutine rotate_forcing(fluxes_in, fluxes, turns)
   if (do_iceberg) then
     call rotate_array(fluxes_in%ustar_berg, turns, fluxes%ustar_berg)
     call rotate_array(fluxes_in%area_berg, turns, fluxes%area_berg)
+    !BGR: pretty sure the following line isn't supposed to be here.
     call rotate_array(fluxes_in%iceshelf_melt, turns, fluxes%iceshelf_melt)
   endif
 
@@ -3489,6 +3492,419 @@ subroutine rotate_mech_forcing(forces_in, turns, forces)
   forces%accumulate_rigidity = forces_in%accumulate_rigidity
   forces%initialized = forces_in%initialized
 end subroutine rotate_mech_forcing
+
+!< Homogenize the forcing fields from the input domain
+subroutine homogenize_mech_forcing(forces, G)
+  type(mech_forcing), intent(in)  :: forces     !< Forcing on the input domain
+  type(ocean_grid_type), intent(in) :: G      !< Grid metric of target forcing
+
+  real :: tx_mean, ty_mean, avg
+  logical :: do_stress, do_ustar, do_shelf, do_press, do_iceberg
+  integer :: i, j, is, ie, js, je, isB, ieB, jsB, jeB
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
+  isB = G%iscB ; ieB = G%iecB ; jsB = G%jscB ; jeB = G%jecB
+
+  call get_mech_forcing_groups(forces, do_stress, do_ustar, do_shelf, &
+                              do_press, do_iceberg)
+
+  if (do_stress) then
+
+    tx_mean = global_area_mean_u(forces%taux, G)
+    do j=js,je ; do i=isB,ieB
+      if (G%mask2dCu(I,j) > 0.) forces%taux(I,j) = tx_mean
+    enddo ; enddo
+
+    ty_mean = global_area_mean_v(forces%tauy, G)
+    do j=jsB,jeB ; do i=is,ie
+      if (G%mask2dCv(i,J) > 0.) forces%tauy(i,J) = ty_mean
+    enddo ; enddo
+
+    do j=js,je ; do i=is,ie
+      if (G%mask2dT(i,j) > 0.) forces%ustar(i,j) = sqrt(tx_mean**2 + ty_mean**2)
+    enddo ; enddo
+
+  else
+
+    if (do_ustar) then
+      avg = global_area_mean(forces%ustar, G)
+      do j=js,je ; do i=is,ie
+        if (G%mask2dT(i,j) > 0.) forces%ustar(i,j) = avg
+      enddo ; enddo
+    endif
+  endif
+
+
+
+  if (do_shelf) then
+
+    avg = global_area_mean_u(forces%rigidity_ice_u, G)
+    do j=js,je ; do i=isB,ieB
+      if (G%mask2dCu(I,j) > 0.) forces%rigidity_ice_u(I,j) = avg
+    enddo ; enddo
+
+    avg = global_area_mean_v(forces%rigidity_ice_v, G)
+    do j=jsB,jeB ; do i=is,ie
+      if (G%mask2dCv(i,j) > 0.) forces%rigidity_ice_v(i,J) = avg
+    enddo ; enddo
+
+    avg = global_area_mean_u(forces%frac_shelf_u, G)
+    do j=js,je ; do i=isB,ieB
+      if (G%mask2dCu(i,j) > 0.) forces%frac_shelf_u(I,j) = avg
+    enddo ; enddo
+
+    avg = global_area_mean_v(forces%frac_shelf_v, G)
+    do j=jsB,jeB ; do i=is,ie
+      if (G%mask2dCv(i,j) > 0.) forces%frac_shelf_v(i,J) = avg
+    enddo ; enddo
+
+  endif
+
+  if (do_press) then
+
+    ! NOTE: p_surf_SSH either points to p_surf or p_surf_full
+
+    avg = global_area_mean(forces%p_surf, G)
+    do j=js,je ; do i=is,ie
+      if (G%mask2dT(i,j) > 0.) forces%p_surf(i,j) = avg
+    enddo ; enddo
+
+    avg = global_area_mean(forces%p_surf_full, G)
+    do j=js,je ; do i=is,ie
+      if (G%mask2dT(i,j) > 0.) forces%p_surf_full(i,j) = avg
+    enddo; enddo
+
+    avg = global_area_mean(forces%net_mass_src, G)
+    do j=js,je ; do i=is,ie
+      if (G%mask2dT(i,j) > 0.) forces%net_mass_src(i,j) = avg
+    enddo ; enddo
+
+  endif
+
+  if (do_iceberg) then
+
+    avg = global_area_mean(forces%area_berg, G)
+    do j=js,je ; do i=is,ie
+      if (G%mask2dT(i,j) > 0.) forces%area_berg(i,j) = avg
+    enddo ; enddo
+
+    avg = global_area_mean(forces%mass_berg, G)
+    do j=js,je ; do i=is,ie
+      if (G%mask2dT(i,j) > 0.) forces%mass_berg(i,j) = avg
+     enddo; enddo
+
+  endif
+
+end subroutine homogenize_mech_forcing
+
+!< Homogenize the fluxes
+subroutine homogenize_forcing(fluxes, G)
+  type(forcing), intent(inout)  :: fluxes     !< Input forcing struct
+  type(ocean_grid_type), intent(in) :: G      !< Grid metric of target forcing
+
+  real :: avg
+  logical :: do_ustar, do_water, do_heat, do_salt, do_press, do_shelf, &
+      do_iceberg, do_heat_added, do_buoy
+  integer :: i, j, is, ie, js, je, isB, ieB, jsB, jeB
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
+  isB = G%iscB ; ieB = G%iecB ; jsB = G%jscB ; jeB = G%jecB
+
+  call get_forcing_groups(fluxes, do_water, do_heat, do_ustar, do_press, &
+      do_shelf, do_iceberg, do_salt, do_heat_added, do_buoy)
+
+  if (do_ustar) then
+
+    ! This is wrong!!!!
+    avg = global_area_mean(fluxes%ustar, G)
+    do j=js,je ; do i=is,ie
+      if (G%mask2dT(i,j) > 0.) fluxes%ustar(i,j) = avg
+    enddo ; enddo
+
+    avg = global_area_mean(fluxes%ustar_gustless, G)
+    do j=js,je ; do i=is,ie
+      if (G%mask2dT(i,j) > 0.) fluxes%ustar_gustless(i,j) = avg
+    enddo ; enddo
+
+  endif
+
+  if (do_water) then
+
+     avg = global_area_mean(fluxes%evap, G)
+     do j=js,je ; do i=is,ie
+       if (G%mask2dT(i,j) > 0.) fluxes%evap(i,j) = avg
+     enddo ; enddo
+
+     avg = global_area_mean(fluxes%lprec, G)
+     do j=js,je ; do i=is,ie
+       if (G%mask2dT(i,j) > 0.) fluxes%lprec(i,j) = avg
+     enddo ; enddo
+
+     avg = global_area_mean(fluxes%fprec, G)
+     do j=js,je ; do i=is,ie
+       if (G%mask2dT(i,j) > 0.) fluxes%fprec (i,j) = avg
+     enddo ; enddo
+
+     avg  = global_area_mean(fluxes%vprec, G)
+     do j=js,je ; do i=is,ie
+       if (G%mask2dT(i,j) > 0.) fluxes%vprec(i,j) = avg
+     enddo ; enddo
+
+     avg = global_area_mean(fluxes%lrunoff, G)
+     do j=js,je ; do i=is,ie
+       if (G%mask2dT(i,j) > 0.) fluxes%lrunoff(i,j) = avg
+     enddo ; enddo
+
+    avg = global_area_mean(fluxes%frunoff, G)
+    do j=js,je ; do i=is,ie
+      if (G%mask2dT(i,j) > 0.) fluxes%frunoff(i,j) = avg
+    enddo ; enddo
+
+    avg = global_area_mean(fluxes%seaice_melt, G)
+    do j=js,je ; do i=is,ie
+      if (G%mask2dT(i,j) > 0.) fluxes%seaice_melt(i,j) = avg
+    enddo ; enddo
+
+    avg = global_area_mean(fluxes%netMassOut, G)
+    do j=js,je ; do i=is,ie
+      if (G%mask2dT(i,j) > 0.) fluxes%netMassOut(i,j) = avg
+   enddo ; enddo
+
+    avg  = global_area_mean(fluxes%netMassIn, G)
+    do j=js,je ; do i=is,ie
+      if (G%mask2dT(i,j) > 0.) fluxes%netMassIn(i,j) = avg
+    enddo ; enddo
+
+    avg = global_area_mean(fluxes%netSalt, G)
+    do j=js,je ; do i=is,ie
+      if (G%mask2dT(i,j) > 0.) fluxes%netSalt(i,j) = avg
+    enddo ; enddo
+
+  endif
+
+  if (do_heat) then
+
+    avg= global_area_mean(fluxes%seaice_melt_heat, G)
+    do j=js,je ; do i=is,ie
+      if (G%mask2dT(i,j) > 0.) fluxes%seaice_melt_heat(i,j) = avg
+    enddo ; enddo
+
+    avg = global_area_mean(fluxes%sw, G)
+    do j=js,je ; do i=is,ie
+      if (G%mask2dT(i,j) > 0.) fluxes%sw(i,j) = avg
+    enddo ; enddo
+
+    avg = global_area_mean(fluxes%lw, G)
+    do j=js,je ; do i=is,ie
+      if (G%mask2dT(i,j) > 0.) fluxes%lw(i,j) = avg
+    enddo ; enddo
+
+    avg = global_area_mean(fluxes%latent, G)
+    do j=js,je ; do i=is,ie
+      if (G%mask2dT(i,j) > 0.) fluxes%latent(i,j) = avg
+    enddo ; enddo
+
+    avg = global_area_mean(fluxes%sens, G)
+    do j=js,je ; do i=is,ie
+      if (G%mask2dT(i,j) > 0.) fluxes%sens(i,j) = avg
+    enddo ; enddo
+
+    avg = global_area_mean(fluxes%latent_evap_diag, G)
+    do j=js,je ; do i=is,ie
+      if (G%mask2dT(i,j) > 0.) fluxes%latent_evap_diag(i,j) = avg
+    enddo ; enddo
+
+    avg = global_area_mean(fluxes%latent_fprec_diag, G)
+    do j=js,je ; do i=is,ie
+      if (G%mask2dT(i,j) > 0.) fluxes%latent_fprec_diag(i,j) = avg
+    enddo ; enddo
+
+    avg = global_area_mean(fluxes%latent_frunoff_diag, G)
+    do j=js,je ; do i=is,ie
+      if (G%mask2dT(i,j) > 0.) fluxes%latent_frunoff_diag(i,j) = avg
+    enddo ; enddo
+
+  endif
+
+  if (do_salt) then
+    avg = global_area_mean(fluxes%salt_flux, G)
+    do j=js,je ; do i=is,ie
+      if (G%mask2dT(i,j) > 0.) fluxes%salt_flux(i,j) = avg
+    enddo ; enddo
+  endif
+
+  if (do_heat .and. do_water) then
+
+    avg = global_area_mean(fluxes%heat_content_cond, G)
+    do j=js,je ; do i=is,ie
+      if (G%mask2dT(i,j) > 0.) fluxes%heat_content_cond(i,j) = avg
+    enddo ; enddo
+
+    avg =global_area_mean(fluxes%heat_content_icemelt, G)
+    do j=js,je ; do i=is,ie
+      if (G%mask2dT(i,j) > 0.) fluxes%heat_content_icemelt(i,j) = avg
+    enddo ; enddo
+
+    avg =global_area_mean(fluxes%heat_content_lprec, G)
+    do j=js,je ; do i=is,ie
+      if (G%mask2dT(i,j) > 0.) fluxes%heat_content_lprec(i,j) = avg
+    enddo ; enddo
+
+    avg =global_area_mean(fluxes%heat_content_fprec, G)
+    do j=js,je ; do i=is,ie
+      if (G%mask2dT(i,j) > 0.) fluxes%heat_content_fprec(i,j) = avg
+    enddo ; enddo
+
+    avg =global_area_mean(fluxes%heat_content_vprec, G)
+    do j=js,je ; do i=is,ie
+      if (G%mask2dT(i,j) > 0.) fluxes%heat_content_vprec(i,j) = avg
+    enddo ; enddo
+
+    avg =global_area_mean(fluxes%heat_content_lrunoff, G)
+    do j=js,je ; do i=is,ie
+      if (G%mask2dT(i,j) > 0.) fluxes%heat_content_lrunoff(i,j) = avg
+    enddo ; enddo
+
+    avg =global_area_mean(fluxes%heat_content_frunoff, G)
+    do j=js,je ; do i=is,ie
+      if (G%mask2dT(i,j) > 0.) fluxes%heat_content_frunoff(i,j) = avg
+    enddo ; enddo
+
+    avg =global_area_mean(fluxes%heat_content_massout, G)
+    do j=js,je ; do i=is,ie
+      if (G%mask2dT(i,j) > 0.) fluxes%heat_content_massout(i,j) = avg
+    enddo ; enddo
+
+    avg =global_area_mean(fluxes%heat_content_massin, G)
+    do j=js,je ; do i=is,ie
+      if (G%mask2dT(i,j) > 0.) fluxes%heat_content_massin(i,j) = avg
+    enddo ; enddo
+
+  endif
+
+  if (do_press) then
+    avg = global_area_mean(fluxes%p_surf, G)
+    do j=js,je ; do i=is,ie
+      if (G%mask2dT(i,j) > 0.) fluxes%p_surf(i,j) = avg
+    enddo ; enddo
+  endif
+
+  if (do_shelf) then
+
+    avg  = global_area_mean(fluxes%frac_shelf_h, G)
+    do j=js,je ; do i=is,ie
+      if (G%mask2dT(i,j) > 0.) fluxes%frac_shelf_h(i,j) = avg
+    enddo ; enddo
+
+    avg = global_area_mean(fluxes%ustar_shelf, G)
+    do j=js,je ; do i=is,ie
+      if (G%mask2dT(i,j) > 0.) fluxes%ustar_shelf(i,j) = avg
+    enddo ; enddo
+
+    avg = global_area_mean(fluxes%iceshelf_melt, G)
+    do j=js,je ; do i=is,ie
+      if (G%mask2dT(i,j) > 0.) fluxes%iceshelf_melt(i,j) = avg
+    enddo ; enddo
+
+  endif
+
+  if (do_iceberg) then
+
+    avg = global_area_mean(fluxes%ustar_berg, G)
+     do j=js,je ; do i=is,ie
+      if (G%mask2dT(i,j) > 0.) fluxes%ustar_berg (i,j) = avg
+    enddo ; enddo
+
+    avg = global_area_mean(fluxes%area_berg, G)
+    do j=js,je ; do i=is,ie
+      if (G%mask2dT(i,j) > 0.) fluxes%area_berg (i,j) = avg
+    enddo ; enddo
+
+  endif
+
+  if (do_heat_added) then
+    avg = global_area_mean(fluxes%heat_added, G)
+    do j=js,je ; do i=is,ie
+      if (G%mask2dT(i,j) > 0.) fluxes%heat_added(i,j) = avg
+    enddo ; enddo
+  endif
+
+  ! The following fields are handled by drivers rather than control flags.
+  if (associated(fluxes%sw_vis_dir)) then
+    avg = global_area_mean(fluxes%sw_vis_dir, G)
+    do j=js,je ; do i=is,ie
+      if (G%mask2dT(i,j) > 0.) fluxes%sw_vis_dir(i,j) = avg
+    enddo ; enddo
+  endif
+
+  if (associated(fluxes%sw_vis_dif)) then
+    avg  = global_area_mean(fluxes%sw_vis_dif, G)
+    do j=js,je ; do i=is,ie
+      if (G%mask2dT(i,j) > 0.) fluxes%sw_vis_dif(i,j) = avg
+    enddo ; enddo
+  endif
+
+  if (associated(fluxes%sw_nir_dir)) then
+    avg= global_area_mean(fluxes%sw_nir_dir, G)
+    do j=js,je ; do i=is,ie
+      if (G%mask2dT(i,j) > 0.) fluxes%sw_nir_dir(i,j) = avg
+    enddo ; enddo
+  endif
+
+  if (associated(fluxes%sw_nir_dif)) then
+    avg = global_area_mean(fluxes%sw_nir_dif, G)
+    do j=js,je ; do i=is,ie
+      if (G%mask2dT(i,j) > 0.) fluxes%sw_nir_dif(i,j) = avg
+    enddo ; enddo
+  endif
+
+  if (associated(fluxes%salt_flux_in)) then
+    avg = global_area_mean(fluxes%salt_flux_in, G)
+    do j=js,je ; do i=is,ie
+      if (G%mask2dT(i,j) > 0.) fluxes%salt_flux_in(i,j) = avg
+    enddo ; enddo
+  endif
+
+  if (associated(fluxes%salt_flux_added)) then
+    avg = global_area_mean(fluxes%salt_flux_added, G)
+    do j=js,je ; do i=is,ie
+      if (G%mask2dT(i,j) > 0.) fluxes%salt_flux_added(i,j) = avg
+    enddo ; enddo
+  endif
+
+  if (associated(fluxes%p_surf_full)) then
+    avg = global_area_mean(fluxes%p_surf_full, G)
+    do j=js,je ; do i=is,ie
+      if (G%mask2dT(i,j) > 0.) fluxes%p_surf_full(i,j) = avg
+    enddo ; enddo
+  endif
+
+  if (associated(fluxes%buoy)) then
+    avg = global_area_mean(fluxes%buoy, G)
+    do j=js,je ; do i=is,ie
+      if (G%mask2dT(i,j) > 0.) fluxes%buoy(i,j) = avg
+    enddo ; enddo
+  endif
+
+  if (associated(fluxes%TKE_tidal)) then
+   avg = global_area_mean(fluxes%TKE_tidal, G)
+   do j=js,je ; do i=is,ie
+     if (G%mask2dT(i,j) > 0.) fluxes%TKE_tidal(i,j) = avg
+    enddo ; enddo
+  endif
+
+  if (associated(fluxes%ustar_tidal)) then
+    avg = global_area_mean(fluxes%ustar_tidal, G)
+    do j=js,je ; do i=is,ie
+      if (G%mask2dT(i,j) > 0.) fluxes%ustar_tidal(i,j) = avg
+    enddo ; enddo
+  endif
+
+  ! TODO: tracer flux homogenization
+  ! Having a warning causes a lot of errors (each time step).
+  !if (coupler_type_initialized(fluxes%tr_fluxes)) &
+  !  call MOM_error(WARNING, "Homogenization of tracer BC fluxes not yet implemented.")
+
+end subroutine homogenize_forcing
+
 
 !> \namespace mom_forcing_type
 !!
