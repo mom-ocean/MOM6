@@ -184,6 +184,7 @@ type, public :: forcing
                                   !! average of the gustless wind stress.
   real :: C_p                !< heat capacity of seawater [Q degC-1 ~> J kg-1 degC-1].
                              !! C_p is is the same value as in thermovar_ptrs_type.
+  real :: gust_const         !< Constant unresolved background gustiness for ustar [R L Z T-1 ~> Pa]
 
   ! CFC-related arrays needed in the MOM_CFC_cap module
   real, pointer, dimension(:,:) :: &
@@ -3494,110 +3495,69 @@ subroutine rotate_mech_forcing(forces_in, turns, forces)
 end subroutine rotate_mech_forcing
 
 !< Homogenize the forcing fields from the input domain
-subroutine homogenize_mech_forcing(forces, G, US, Rho0)
-  type(mech_forcing),    intent(in) :: forces !< Forcing on the input domain
-  type(ocean_grid_type), intent(in) :: G      !< Grid metric of target forcing
-  type(unit_scale_type), intent(in) :: US     !< A dimensional unit scaling type
-  real,                  intent(in) :: Rho0   !< A reference density of seawater [R ~> kg m-3],
+subroutine homogenize_mech_forcing(forces, G, US, Rho0, UpdateUstar)
+  type(mech_forcing),    intent(inout) :: forces !< Forcing on the input domain
+  type(ocean_grid_type),    intent(in) :: G      !< Grid metric of target forcing
+  type(unit_scale_type),    intent(in) :: US     !< A dimensional unit scaling type
+  real,                     intent(in) :: Rho0   !< A reference density of seawater [R ~> kg m-3],
                                               !! as used to calculate ustar.
+  logical, optional,        intent(in) :: UpdateUstar !< A logical to determine if Ustar should be directly averaged
+                                                   !! or updated from mean tau.
 
   real :: tx_mean, ty_mean, avg
   real :: iRho0
-  logical :: do_stress, do_ustar, do_shelf, do_press, do_iceberg
+  logical :: do_stress, do_ustar, do_shelf, do_press, do_iceberg, tau2ustar
   integer :: i, j, is, ie, js, je, isB, ieB, jsB, jeB
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   isB = G%iscB ; ieB = G%iecB ; jsB = G%jscB ; jeB = G%jecB
 
   iRho0 = US%L_to_Z / Rho0
 
+  tau2ustar = .false.
+  if (present(UpdateUstar)) tau2ustar = UpdateUstar
+
   call get_mech_forcing_groups(forces, do_stress, do_ustar, do_shelf, &
                               do_press, do_iceberg)
 
   if (do_stress) then
-
     tx_mean = global_area_mean_u(forces%taux, G)
     do j=js,je ; do i=isB,ieB
       if (G%mask2dCu(I,j) > 0.) forces%taux(I,j) = tx_mean
     enddo ; enddo
-
     ty_mean = global_area_mean_v(forces%tauy, G)
     do j=jsB,jeB ; do i=is,ie
       if (G%mask2dCv(i,J) > 0.) forces%tauy(i,J) = ty_mean
     enddo ; enddo
-
-    do j=js,je ; do i=is,ie
-      if (G%mask2dT(i,j) > 0.) forces%ustar(i,j) = sqrt(US%L_to_Z * sqrt(tx_mean**2 + ty_mean**2)*iRho0)
-    enddo ; enddo
-
-  else
-
-    if (do_ustar) then
-      avg = global_area_mean(forces%ustar, G)
+    if (tau2ustar) then
       do j=js,je ; do i=is,ie
-        if (G%mask2dT(i,j) > 0.) forces%ustar(i,j) = avg
+        if (G%mask2dT(i,j) > 0.) forces%ustar(i,j) = sqrt(sqrt(tx_mean**2 + ty_mean**2)*iRho0)
       enddo ; enddo
+   else
+      call homogenize_field_t(forces%ustar, G)
+    endif
+  else
+    if (do_ustar) then
+      call homogenize_field_t(forces%ustar, G)
     endif
   endif
 
-
-
   if (do_shelf) then
-
-    avg = global_area_mean_u(forces%rigidity_ice_u, G)
-    do j=js,je ; do i=isB,ieB
-      if (G%mask2dCu(I,j) > 0.) forces%rigidity_ice_u(I,j) = avg
-    enddo ; enddo
-
-    avg = global_area_mean_v(forces%rigidity_ice_v, G)
-    do j=jsB,jeB ; do i=is,ie
-      if (G%mask2dCv(i,j) > 0.) forces%rigidity_ice_v(i,J) = avg
-    enddo ; enddo
-
-    avg = global_area_mean_u(forces%frac_shelf_u, G)
-    do j=js,je ; do i=isB,ieB
-      if (G%mask2dCu(i,j) > 0.) forces%frac_shelf_u(I,j) = avg
-    enddo ; enddo
-
-    avg = global_area_mean_v(forces%frac_shelf_v, G)
-    do j=jsB,jeB ; do i=is,ie
-      if (G%mask2dCv(i,j) > 0.) forces%frac_shelf_v(i,J) = avg
-    enddo ; enddo
-
+    call homogenize_field_u(forces%rigidity_ice_u, G)
+    call homogenize_field_v(forces%rigidity_ice_v, G)
+    call homogenize_field_u(forces%frac_shelf_u, G)
+    call homogenize_field_v(forces%frac_shelf_v, G)
   endif
 
   if (do_press) then
-
     ! NOTE: p_surf_SSH either points to p_surf or p_surf_full
-
-    avg = global_area_mean(forces%p_surf, G)
-    do j=js,je ; do i=is,ie
-      if (G%mask2dT(i,j) > 0.) forces%p_surf(i,j) = avg
-    enddo ; enddo
-
-    avg = global_area_mean(forces%p_surf_full, G)
-    do j=js,je ; do i=is,ie
-      if (G%mask2dT(i,j) > 0.) forces%p_surf_full(i,j) = avg
-    enddo; enddo
-
-    avg = global_area_mean(forces%net_mass_src, G)
-    do j=js,je ; do i=is,ie
-      if (G%mask2dT(i,j) > 0.) forces%net_mass_src(i,j) = avg
-    enddo ; enddo
-
+    call homogenize_field_t(forces%p_surf, G)
+    call homogenize_field_t(forces%p_surf_full, G)
+    call homogenize_field_t(forces%net_mass_src, G)
   endif
 
   if (do_iceberg) then
-
-    avg = global_area_mean(forces%area_berg, G)
-    do j=js,je ; do i=is,ie
-      if (G%mask2dT(i,j) > 0.) forces%area_berg(i,j) = avg
-    enddo ; enddo
-
-    avg = global_area_mean(forces%mass_berg, G)
-    do j=js,je ; do i=is,ie
-      if (G%mask2dT(i,j) > 0.) forces%mass_berg(i,j) = avg
-     enddo; enddo
-
+    call homogenize_field_t(forces%area_berg, G)
+    call homogenize_field_t(forces%mass_berg, G)
   endif
 
 end subroutine homogenize_mech_forcing
@@ -3618,291 +3578,96 @@ subroutine homogenize_forcing(fluxes, G)
       do_shelf, do_iceberg, do_salt, do_heat_added, do_buoy)
 
   if (do_ustar) then
-
-    ! This is wrong!!!!
-    avg = global_area_mean(fluxes%ustar, G)
-    do j=js,je ; do i=is,ie
-      if (G%mask2dT(i,j) > 0.) fluxes%ustar(i,j) = avg
-    enddo ; enddo
-
-    avg = global_area_mean(fluxes%ustar_gustless, G)
-    do j=js,je ; do i=is,ie
-      if (G%mask2dT(i,j) > 0.) fluxes%ustar_gustless(i,j) = avg
-    enddo ; enddo
-
+    call homogenize_field_t(fluxes%ustar, G)
+    call homogenize_field_t(fluxes%ustar_gustless, G)
   endif
 
   if (do_water) then
-
-     avg = global_area_mean(fluxes%evap, G)
-     do j=js,je ; do i=is,ie
-       if (G%mask2dT(i,j) > 0.) fluxes%evap(i,j) = avg
-     enddo ; enddo
-
-     avg = global_area_mean(fluxes%lprec, G)
-     do j=js,je ; do i=is,ie
-       if (G%mask2dT(i,j) > 0.) fluxes%lprec(i,j) = avg
-     enddo ; enddo
-
-     avg = global_area_mean(fluxes%fprec, G)
-     do j=js,je ; do i=is,ie
-       if (G%mask2dT(i,j) > 0.) fluxes%fprec (i,j) = avg
-     enddo ; enddo
-
-     avg  = global_area_mean(fluxes%vprec, G)
-     do j=js,je ; do i=is,ie
-       if (G%mask2dT(i,j) > 0.) fluxes%vprec(i,j) = avg
-     enddo ; enddo
-
-     avg = global_area_mean(fluxes%lrunoff, G)
-     do j=js,je ; do i=is,ie
-       if (G%mask2dT(i,j) > 0.) fluxes%lrunoff(i,j) = avg
-     enddo ; enddo
-
-    avg = global_area_mean(fluxes%frunoff, G)
-    do j=js,je ; do i=is,ie
-      if (G%mask2dT(i,j) > 0.) fluxes%frunoff(i,j) = avg
-    enddo ; enddo
-
-    avg = global_area_mean(fluxes%seaice_melt, G)
-    do j=js,je ; do i=is,ie
-      if (G%mask2dT(i,j) > 0.) fluxes%seaice_melt(i,j) = avg
-    enddo ; enddo
-
-    avg = global_area_mean(fluxes%netMassOut, G)
-    do j=js,je ; do i=is,ie
-      if (G%mask2dT(i,j) > 0.) fluxes%netMassOut(i,j) = avg
-   enddo ; enddo
-
-    avg  = global_area_mean(fluxes%netMassIn, G)
-    do j=js,je ; do i=is,ie
-      if (G%mask2dT(i,j) > 0.) fluxes%netMassIn(i,j) = avg
-    enddo ; enddo
-
-    avg = global_area_mean(fluxes%netSalt, G)
-    do j=js,je ; do i=is,ie
-      if (G%mask2dT(i,j) > 0.) fluxes%netSalt(i,j) = avg
-    enddo ; enddo
-
+    call homogenize_field_t(fluxes%evap, G)
+    call homogenize_field_t(fluxes%lprec, G)
+    call homogenize_field_t(fluxes%lprec, G)
+    call homogenize_field_t(fluxes%fprec, G)
+    call homogenize_field_t(fluxes%vprec, G)
+    call homogenize_field_t(fluxes%lrunoff, G)
+    call homogenize_field_t(fluxes%frunoff, G)
+    call homogenize_field_t(fluxes%seaice_melt, G)
+    call homogenize_field_t(fluxes%netMassOut, G)
+    call homogenize_field_t(fluxes%netMassIn, G)
+    call homogenize_field_t(fluxes%netSalt, G)
   endif
 
   if (do_heat) then
-
-    avg= global_area_mean(fluxes%seaice_melt_heat, G)
-    do j=js,je ; do i=is,ie
-      if (G%mask2dT(i,j) > 0.) fluxes%seaice_melt_heat(i,j) = avg
-    enddo ; enddo
-
-    avg = global_area_mean(fluxes%sw, G)
-    do j=js,je ; do i=is,ie
-      if (G%mask2dT(i,j) > 0.) fluxes%sw(i,j) = avg
-    enddo ; enddo
-
-    avg = global_area_mean(fluxes%lw, G)
-    do j=js,je ; do i=is,ie
-      if (G%mask2dT(i,j) > 0.) fluxes%lw(i,j) = avg
-    enddo ; enddo
-
-    avg = global_area_mean(fluxes%latent, G)
-    do j=js,je ; do i=is,ie
-      if (G%mask2dT(i,j) > 0.) fluxes%latent(i,j) = avg
-    enddo ; enddo
-
-    avg = global_area_mean(fluxes%sens, G)
-    do j=js,je ; do i=is,ie
-      if (G%mask2dT(i,j) > 0.) fluxes%sens(i,j) = avg
-    enddo ; enddo
-
-    avg = global_area_mean(fluxes%latent_evap_diag, G)
-    do j=js,je ; do i=is,ie
-      if (G%mask2dT(i,j) > 0.) fluxes%latent_evap_diag(i,j) = avg
-    enddo ; enddo
-
-    avg = global_area_mean(fluxes%latent_fprec_diag, G)
-    do j=js,je ; do i=is,ie
-      if (G%mask2dT(i,j) > 0.) fluxes%latent_fprec_diag(i,j) = avg
-    enddo ; enddo
-
-    avg = global_area_mean(fluxes%latent_frunoff_diag, G)
-    do j=js,je ; do i=is,ie
-      if (G%mask2dT(i,j) > 0.) fluxes%latent_frunoff_diag(i,j) = avg
-    enddo ; enddo
-
+    call homogenize_field_t(fluxes%seaice_melt_heat, G)
+    call homogenize_field_t(fluxes%sw, G)
+    call homogenize_field_t(fluxes%lw, G)
+    call homogenize_field_t(fluxes%latent, G)
+    call homogenize_field_t(fluxes%sens, G)
+    call homogenize_field_t(fluxes%latent_evap_diag, G)
+    call homogenize_field_t(fluxes%latent_fprec_diag, G)
+    call homogenize_field_t(fluxes%latent_frunoff_diag, G)
   endif
 
-  if (do_salt) then
-    avg = global_area_mean(fluxes%salt_flux, G)
-    do j=js,je ; do i=is,ie
-      if (G%mask2dT(i,j) > 0.) fluxes%salt_flux(i,j) = avg
-    enddo ; enddo
-  endif
+  if (do_salt) call homogenize_field_t(fluxes%salt_flux, G)
 
   if (do_heat .and. do_water) then
-
-    avg = global_area_mean(fluxes%heat_content_cond, G)
-    do j=js,je ; do i=is,ie
-      if (G%mask2dT(i,j) > 0.) fluxes%heat_content_cond(i,j) = avg
-    enddo ; enddo
-
-    avg =global_area_mean(fluxes%heat_content_icemelt, G)
-    do j=js,je ; do i=is,ie
-      if (G%mask2dT(i,j) > 0.) fluxes%heat_content_icemelt(i,j) = avg
-    enddo ; enddo
-
-    avg =global_area_mean(fluxes%heat_content_lprec, G)
-    do j=js,je ; do i=is,ie
-      if (G%mask2dT(i,j) > 0.) fluxes%heat_content_lprec(i,j) = avg
-    enddo ; enddo
-
-    avg =global_area_mean(fluxes%heat_content_fprec, G)
-    do j=js,je ; do i=is,ie
-      if (G%mask2dT(i,j) > 0.) fluxes%heat_content_fprec(i,j) = avg
-    enddo ; enddo
-
-    avg =global_area_mean(fluxes%heat_content_vprec, G)
-    do j=js,je ; do i=is,ie
-      if (G%mask2dT(i,j) > 0.) fluxes%heat_content_vprec(i,j) = avg
-    enddo ; enddo
-
-    avg =global_area_mean(fluxes%heat_content_lrunoff, G)
-    do j=js,je ; do i=is,ie
-      if (G%mask2dT(i,j) > 0.) fluxes%heat_content_lrunoff(i,j) = avg
-    enddo ; enddo
-
-    avg =global_area_mean(fluxes%heat_content_frunoff, G)
-    do j=js,je ; do i=is,ie
-      if (G%mask2dT(i,j) > 0.) fluxes%heat_content_frunoff(i,j) = avg
-    enddo ; enddo
-
-    avg =global_area_mean(fluxes%heat_content_massout, G)
-    do j=js,je ; do i=is,ie
-      if (G%mask2dT(i,j) > 0.) fluxes%heat_content_massout(i,j) = avg
-    enddo ; enddo
-
-    avg =global_area_mean(fluxes%heat_content_massin, G)
-    do j=js,je ; do i=is,ie
-      if (G%mask2dT(i,j) > 0.) fluxes%heat_content_massin(i,j) = avg
-    enddo ; enddo
-
+    call homogenize_field_t(fluxes%heat_content_cond, G)
+    call homogenize_field_t(fluxes%heat_content_icemelt, G)
+    call homogenize_field_t(fluxes%heat_content_lprec, G)
+    call homogenize_field_t(fluxes%heat_content_fprec, G)
+    call homogenize_field_t(fluxes%heat_content_vprec, G)
+    call homogenize_field_t(fluxes%heat_content_lrunoff, G)
+    call homogenize_field_t(fluxes%heat_content_frunoff, G)
+    call homogenize_field_t(fluxes%heat_content_massout, G)
+    call homogenize_field_t(fluxes%heat_content_massin, G)
   endif
 
-  if (do_press) then
-    avg = global_area_mean(fluxes%p_surf, G)
-    do j=js,je ; do i=is,ie
-      if (G%mask2dT(i,j) > 0.) fluxes%p_surf(i,j) = avg
-    enddo ; enddo
-  endif
+  if (do_press) call homogenize_field_t(fluxes%p_surf, G)
 
   if (do_shelf) then
-
-    avg  = global_area_mean(fluxes%frac_shelf_h, G)
-    do j=js,je ; do i=is,ie
-      if (G%mask2dT(i,j) > 0.) fluxes%frac_shelf_h(i,j) = avg
-    enddo ; enddo
-
-    avg = global_area_mean(fluxes%ustar_shelf, G)
-    do j=js,je ; do i=is,ie
-      if (G%mask2dT(i,j) > 0.) fluxes%ustar_shelf(i,j) = avg
-    enddo ; enddo
-
-    avg = global_area_mean(fluxes%iceshelf_melt, G)
-    do j=js,je ; do i=is,ie
-      if (G%mask2dT(i,j) > 0.) fluxes%iceshelf_melt(i,j) = avg
-    enddo ; enddo
-
+    call homogenize_field_t(fluxes%frac_shelf_h, G)
+    call homogenize_field_t(fluxes%ustar_shelf, G)
+    call homogenize_field_t(fluxes%iceshelf_melt, G)
   endif
 
   if (do_iceberg) then
-
-    avg = global_area_mean(fluxes%ustar_berg, G)
-     do j=js,je ; do i=is,ie
-      if (G%mask2dT(i,j) > 0.) fluxes%ustar_berg (i,j) = avg
-    enddo ; enddo
-
-    avg = global_area_mean(fluxes%area_berg, G)
-    do j=js,je ; do i=is,ie
-      if (G%mask2dT(i,j) > 0.) fluxes%area_berg (i,j) = avg
-    enddo ; enddo
-
+    call homogenize_field_t(fluxes%ustar_berg, G)
+    call homogenize_field_t(fluxes%area_berg, G)
   endif
 
   if (do_heat_added) then
-    avg = global_area_mean(fluxes%heat_added, G)
-    do j=js,je ; do i=is,ie
-      if (G%mask2dT(i,j) > 0.) fluxes%heat_added(i,j) = avg
-    enddo ; enddo
+    call homogenize_field_t(fluxes%heat_added, G)
   endif
 
   ! The following fields are handled by drivers rather than control flags.
-  if (associated(fluxes%sw_vis_dir)) then
-    avg = global_area_mean(fluxes%sw_vis_dir, G)
-    do j=js,je ; do i=is,ie
-      if (G%mask2dT(i,j) > 0.) fluxes%sw_vis_dir(i,j) = avg
-    enddo ; enddo
-  endif
+  if (associated(fluxes%sw_vis_dir)) &
+    call homogenize_field_t(fluxes%sw_vis_dir, G)
 
-  if (associated(fluxes%sw_vis_dif)) then
-    avg  = global_area_mean(fluxes%sw_vis_dif, G)
-    do j=js,je ; do i=is,ie
-      if (G%mask2dT(i,j) > 0.) fluxes%sw_vis_dif(i,j) = avg
-    enddo ; enddo
-  endif
+  if (associated(fluxes%sw_vis_dif)) &
+    call homogenize_field_t(fluxes%sw_vis_dif, G)
 
-  if (associated(fluxes%sw_nir_dir)) then
-    avg= global_area_mean(fluxes%sw_nir_dir, G)
-    do j=js,je ; do i=is,ie
-      if (G%mask2dT(i,j) > 0.) fluxes%sw_nir_dir(i,j) = avg
-    enddo ; enddo
-  endif
+  if (associated(fluxes%sw_nir_dir)) &
+    call homogenize_field_t(fluxes%sw_nir_dir, G)
 
-  if (associated(fluxes%sw_nir_dif)) then
-    avg = global_area_mean(fluxes%sw_nir_dif, G)
-    do j=js,je ; do i=is,ie
-      if (G%mask2dT(i,j) > 0.) fluxes%sw_nir_dif(i,j) = avg
-    enddo ; enddo
-  endif
+  if (associated(fluxes%sw_nir_dif)) &
+    call homogenize_field_t(fluxes%sw_nir_dif, G)
 
-  if (associated(fluxes%salt_flux_in)) then
-    avg = global_area_mean(fluxes%salt_flux_in, G)
-    do j=js,je ; do i=is,ie
-      if (G%mask2dT(i,j) > 0.) fluxes%salt_flux_in(i,j) = avg
-    enddo ; enddo
-  endif
+  if (associated(fluxes%salt_flux_in)) &
+    call homogenize_field_t(fluxes%salt_flux_in, G)
 
-  if (associated(fluxes%salt_flux_added)) then
-    avg = global_area_mean(fluxes%salt_flux_added, G)
-    do j=js,je ; do i=is,ie
-      if (G%mask2dT(i,j) > 0.) fluxes%salt_flux_added(i,j) = avg
-    enddo ; enddo
-  endif
+  if (associated(fluxes%salt_flux_added)) &
+    call homogenize_field_t(fluxes%salt_flux_added, G)
 
-  if (associated(fluxes%p_surf_full)) then
-    avg = global_area_mean(fluxes%p_surf_full, G)
-    do j=js,je ; do i=is,ie
-      if (G%mask2dT(i,j) > 0.) fluxes%p_surf_full(i,j) = avg
-    enddo ; enddo
-  endif
+  if (associated(fluxes%p_surf_full)) &
+    call homogenize_field_t(fluxes%p_surf_full, G)
 
-  if (associated(fluxes%buoy)) then
-    avg = global_area_mean(fluxes%buoy, G)
-    do j=js,je ; do i=is,ie
-      if (G%mask2dT(i,j) > 0.) fluxes%buoy(i,j) = avg
-    enddo ; enddo
-  endif
+  if (associated(fluxes%buoy)) &
+    call homogenize_field_t(fluxes%buoy, G)
 
-  if (associated(fluxes%TKE_tidal)) then
-   avg = global_area_mean(fluxes%TKE_tidal, G)
-   do j=js,je ; do i=is,ie
-     if (G%mask2dT(i,j) > 0.) fluxes%TKE_tidal(i,j) = avg
-    enddo ; enddo
-  endif
+  if (associated(fluxes%TKE_tidal)) &
+    call homogenize_field_t(fluxes%TKE_tidal, G)
 
-  if (associated(fluxes%ustar_tidal)) then
-    avg = global_area_mean(fluxes%ustar_tidal, G)
-    do j=js,je ; do i=is,ie
-      if (G%mask2dT(i,j) > 0.) fluxes%ustar_tidal(i,j) = avg
-    enddo ; enddo
-  endif
+  if (associated(fluxes%ustar_tidal)) &
+    call homogenize_field_t(fluxes%ustar_tidal, G)
 
   ! TODO: tracer flux homogenization
   ! Having a warning causes a lot of errors (each time step).
@@ -3911,6 +3676,50 @@ subroutine homogenize_forcing(fluxes, G)
 
 end subroutine homogenize_forcing
 
+subroutine homogenize_field_t(var, G)
+  type(ocean_grid_type),                intent(in) :: G   !< The ocean's grid structure
+  real, dimension(SZI_(G), SZJ_(G)), intent(inout) :: var !< The variable to homogenize
+
+  real    :: avg
+  integer :: i, j, is, ie, js, je
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
+
+  avg = global_area_mean(var, G)
+  do j=js,je ; do i=is,ie
+    if (G%mask2dT(i,j) > 0.) var(i,j) = avg
+  enddo ; enddo
+
+end subroutine homogenize_field_t
+
+subroutine homogenize_field_v(var, G)
+  type(ocean_grid_type),             intent(in)    :: G    !< The ocean's grid structure
+  real, dimension(SZI_(G), SZJB_(G)), intent(inout) :: var  !< The variable to homogenize
+
+  real    :: avg
+  integer :: i, j, is, ie, jsB, jeB
+  is = G%isc ; ie = G%iec ; jsB = G%jscB ; jeB = G%jecB
+
+  avg = global_area_mean_v(var, G)
+  do J=jsB,jeB ; do i=is,ie
+    if (G%mask2dCv(i,J) > 0.) var(i,J) = avg
+  enddo ; enddo
+
+end subroutine homogenize_field_v
+
+subroutine homogenize_field_u(var, G)
+  type(ocean_grid_type),             intent(in)    :: G    !< The ocean's grid structure
+  real, dimension(SZI_(G), SZJB_(G)), intent(inout) :: var  !< The variable to homogenize
+
+  real    :: avg
+  integer :: i, j, isB, ieB, js, je
+  isB = G%iscB ; ieB = G%iecB ; js = G%jsc ; je = G%jec
+
+  avg = global_area_mean_u(var, G)
+  do j=js,je ; do I=isB,ieB
+    if (G%mask2dCu(I,j) > 0.) var(I,j) = avg
+  enddo ; enddo
+
+end subroutine homogenize_field_u
 
 !> \namespace mom_forcing_type
 !!

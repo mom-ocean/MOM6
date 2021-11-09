@@ -48,50 +48,48 @@ function global_area_mean(var, G, scale)
 end function global_area_mean
 
 !> Return the global area mean of a variable. This uses reproducing sums.
-function global_area_mean_v(var, G, scale)
+function global_area_mean_v(var, G)
   type(ocean_grid_type),             intent(in)  :: G    !< The ocean's grid structure
   real, dimension(SZI_(G), SZJB_(G)), intent(in)  :: var  !< The variable to average
-  real,                    optional, intent(in)  :: scale !< A rescaling factor for the variable
 
-  real, dimension(SZI_(G), SZJB_(G))              :: tmpForSumming
+  real, dimension(SZI_(G), SZJ_(G))              :: tmpForSumming
   real :: global_area_mean_v
-
-  real :: scalefac  ! An overall scaling factor for the areas and variable.
   integer :: i, j, is, ie, js, je, isB, ieB, jsB, jeB
+
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   isB = G%iscB ; ieB = G%iecB ; jsB = G%jscB ; jeB = G%jecB
 
-  scalefac = G%US%L_to_m**2 ; if (present(scale)) scalefac = G%US%L_to_m**2*scale
-
   tmpForSumming(:,:) = 0.
-  do J=jsB,jeB ; do i=is,ie
-    tmpForSumming(i,J) = var(i,J) * (scalefac * G%areaCv(i,J) * G%mask2dCv(i,J))
+  do J=js,je ; do i=is,ie
+     tmpForSumming(i,j) = G%areaT(i,j)/max(1.e-20,&
+                          G%mask2dCv(i,J)+G%mask2dCv(i,J-1)) * &
+                          (var(i,J) * G%mask2dCv(i,J) + &
+                           var(i,J-1) * G%mask2dCv(i,J-1))
   enddo ; enddo
-  global_area_mean_v = reproducing_sum(tmpForSumming) * G%IareaT_global !Need to add IareaCv?
+  global_area_mean_v = reproducing_sum(tmpForSumming) * G%IareaT_global
 
 end function global_area_mean_v
 
 !> Return the global area mean of a variable on U grid. This uses reproducing sums.
-function global_area_mean_u(var, G, scale)
+function global_area_mean_u(var, G)
   type(ocean_grid_type),             intent(in)  :: G    !< The ocean's grid structure
   real, dimension(SZIB_(G), SZJ_(G)), intent(in)  :: var  !< The variable to average
-  real,                    optional, intent(in)  :: scale !< A rescaling factor for the variable
 
   real, dimension(SZI_(G), SZJ_(G))              :: tmpForSumming
   real :: global_area_mean_u
-
-  real :: scalefac  ! An overall scaling factor for the areas and variable.
   integer :: i, j, is, ie, js, je, isB, ieB, jsB, jeB
+
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   isB = G%iscB ; ieB = G%iecB ; jsB = G%jscB ; jeB = G%jecB
 
-  scalefac = G%US%L_to_m**2 ; if (present(scale)) scalefac = G%US%L_to_m**2*scale
-
   tmpForSumming(:,:) = 0.
-  do j=js,je ; do I=isB,ieB
-    tmpForSumming(I,j) = var(I,j) * (scalefac * G%areaCu(I,j) * G%mask2dCu(I,j))
+  do j=js,je ; do i=is,ie
+    tmpForSumming(i,j) = G%areaT(i,j)/max(1.e-20,&
+                         G%mask2dCu(I,j)+G%mask2dCu(I-1,j)) * &
+                         (var(I,j) * G%mask2dCu(I,j) + &
+                          var(I-1,j) * G%mask2dCu(I-1,j))
   enddo ; enddo
-  global_area_mean_u = reproducing_sum(tmpForSumming) * G%IareaT_global !Need to add IareaCu?
+  global_area_mean_u = reproducing_sum(tmpForSumming) * G%IareaT_global
 
 end function global_area_mean_u
 
