@@ -184,7 +184,6 @@ type, public :: forcing
                                   !! average of the gustless wind stress.
   real :: C_p                !< heat capacity of seawater [Q degC-1 ~> J kg-1 degC-1].
                              !! C_p is is the same value as in thermovar_ptrs_type.
-  real :: gust_const         !< Constant unresolved background gustiness for ustar [R L Z T-1 ~> Pa]
 
   ! CFC-related arrays needed in the MOM_CFC_cap module
   real, pointer, dimension(:,:) :: &
@@ -3532,7 +3531,7 @@ subroutine homogenize_mech_forcing(forces, G, US, Rho0, UpdateUstar)
       do j=js,je ; do i=is,ie
         if (G%mask2dT(i,j) > 0.) forces%ustar(i,j) = sqrt(sqrt(tx_mean**2 + ty_mean**2)*iRho0)
       enddo ; enddo
-   else
+    else
       call homogenize_field_t(forces%ustar, G)
     endif
   else

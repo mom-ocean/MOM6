@@ -61,10 +61,9 @@ function global_area_mean_v(var, G)
 
   tmpForSumming(:,:) = 0.
   do J=js,je ; do i=is,ie
-     tmpForSumming(i,j) = G%areaT(i,j)/max(1.e-20,&
-                          G%mask2dCv(i,J)+G%mask2dCv(i,J-1)) * &
-                          (var(i,J) * G%mask2dCv(i,J) + &
-                           var(i,J-1) * G%mask2dCv(i,J-1))
+    tmpForSumming(i,j) = G%areaT(i,j) * (var(i,J) * G%mask2dCv(i,J) + &
+                                         var(i,J-1) * G%mask2dCv(i,J-1)) &
+                         / max(1.e-20,G%mask2dCv(i,J)+G%mask2dCv(i,J-1))
   enddo ; enddo
   global_area_mean_v = reproducing_sum(tmpForSumming) * G%IareaT_global
 
@@ -84,10 +83,9 @@ function global_area_mean_u(var, G)
 
   tmpForSumming(:,:) = 0.
   do j=js,je ; do i=is,ie
-    tmpForSumming(i,j) = G%areaT(i,j)/max(1.e-20,&
-                         G%mask2dCu(I,j)+G%mask2dCu(I-1,j)) * &
-                         (var(I,j) * G%mask2dCu(I,j) + &
-                          var(I-1,j) * G%mask2dCu(I-1,j))
+    tmpForSumming(i,j) = G%areaT(i,j) * (var(I,j) * G%mask2dCu(I,j) + &
+                                         var(I-1,j) * G%mask2dCv(I-1,j)) &
+                         / max(1.e-20,G%mask2dCv(I,j)+G%mask2dCv(I-1,j))
   enddo ; enddo
   global_area_mean_u = reproducing_sum(tmpForSumming) * G%IareaT_global
 
