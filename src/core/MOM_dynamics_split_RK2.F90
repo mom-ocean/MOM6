@@ -1230,7 +1230,7 @@ end subroutine register_restarts_dyn_split_RK2
 subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, US, param_file, &
                       diag, CS, restart_CS, dt, Accel_diag, Cont_diag, MIS, &
                       VarMix, MEKE, thickness_diffuse_CSp,                  &
-                      OBC, update_OBC_CSp, ALE_CSp, setVisc_CSp, &
+                      OBC, update_OBC_CSp, ALE_CSp, set_visc, &
                       visc, dirs, ntrunc, calc_dtbt, cont_stencil)
   type(ocean_grid_type),            intent(inout) :: G          !< ocean grid structure
   type(verticalGrid_type),          intent(in)    :: GV         !< ocean vertical grid structure
@@ -1264,7 +1264,7 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, US, param
   type(ocean_OBC_type),             pointer       :: OBC        !< points to OBC related fields
   type(update_OBC_CS),              pointer       :: update_OBC_CSp !< points to OBC update related fields
   type(ALE_CS),                     pointer       :: ALE_CSp    !< points to ALE control structure
-  type(set_visc_CS),                pointer       :: setVisc_CSp !< points to the set_visc control structure.
+  type(set_visc_CS),        target, intent(in)    :: set_visc   !< set_visc control structure
   type(vertvisc_type),              intent(inout) :: visc       !< vertical viscosities, bottom drag, and related
   type(directories),                intent(in)    :: dirs       !< contains directory paths
   integer, target,                  intent(inout) :: ntrunc     !< A target for the variable that records
@@ -1395,9 +1395,7 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, US, param
   call hor_visc_init(Time, G, GV, US, param_file, diag, CS%hor_visc, ADp=CS%ADp)
   call vertvisc_init(MIS, Time, G, GV, US, param_file, diag, CS%ADp, dirs, &
                      ntrunc, CS%vertvisc_CSp)
-  if (.not.associated(setVisc_CSp)) call MOM_error(FATAL, &
-    "initialize_dyn_split_RK2 called with setVisc_CSp unassociated.")
-  CS%set_visc_CSp => setVisc_CSp
+  CS%set_visc_CSp => set_visc
   call updateCFLtruncationValue(Time, CS%vertvisc_CSp, &
                                 activate=is_new_run(restart_CS) )
 

@@ -351,7 +351,7 @@ type, public :: MOM_control_struct ; private
     !! This is also common referred to as Gent-McWilliams diffusion
   type(mixedlayer_restrat_CS) :: mixedlayer_restrat_CSp
     !< Pointer to the control structure used for the mixed layer restratification
-  type(set_visc_CS),             pointer :: set_visc_CSp => NULL()
+  type(set_visc_CS)           :: set_visc_CSp
     !< Pointer to the control structure used to set viscosities
   type(diabatic_CS),             pointer :: diabatic_CSp => NULL()
     !< Pointer to the control structure for the diabatic driver
@@ -3609,12 +3609,8 @@ subroutine MOM_end(CS)
   endif
 
   call thickness_diffuse_end(CS%thickness_diffuse_CSp, CS%CDp)
-
   call VarMix_end(CS%VarMix)
-
-  if (associated(CS%set_visc_CSp)) &
-    call set_visc_end(CS%visc, CS%set_visc_CSp)
-
+  call set_visc_end(CS%visc, CS%set_visc_CSp)
   call MEKE_end(CS%MEKE)
 
   if (associated(CS%tv%internal_heat)) deallocate(CS%tv%internal_heat)

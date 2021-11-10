@@ -546,7 +546,7 @@ end subroutine register_restarts_dyn_unsplit
 !> Initialize parameters and allocate memory associated with the unsplit dynamics module.
 subroutine initialize_dyn_unsplit(u, v, h, Time, G, GV, US, param_file, diag, CS, &
                                   Accel_diag, Cont_diag, MIS, &
-                                  OBC, update_OBC_CSp, ALE_CSp, setVisc_CSp, &
+                                  OBC, update_OBC_CSp, ALE_CSp, set_visc, &
                                   visc, dirs, ntrunc, cont_stencil)
   type(ocean_grid_type),          intent(inout) :: G          !< The ocean's grid structure.
   type(verticalGrid_type),        intent(in)    :: GV         !< The ocean's vertical grid structure.
@@ -581,8 +581,7 @@ subroutine initialize_dyn_unsplit(u, v, h, Time, G, GV, US, param_file, diag, CS
                                                             !! the appropriate control structure.
   type(ALE_CS),                   pointer       :: ALE_CSp    !< This points to the ALE control
                                                               !! structure.
-  type(set_visc_CS),              pointer       :: setVisc_CSp !< This points to the set_visc
-                                                               !! control structure.
+  type(set_visc_CS),      target, intent(in)    :: set_visc   !< set_visc control struct
   type(vertvisc_type),            intent(inout) :: visc       !< A structure containing vertical
                                                               !! viscosities, bottom drag
                                                               !! viscosities, and related fields.
@@ -651,9 +650,7 @@ subroutine initialize_dyn_unsplit(u, v, h, Time, G, GV, US, param_file, diag, CS
   call hor_visc_init(Time, G, GV, US, param_file, diag, CS%hor_visc)
   call vertvisc_init(MIS, Time, G, GV, US, param_file, diag, CS%ADp, dirs, &
                      ntrunc, CS%vertvisc_CSp)
-  if (.not.associated(setVisc_CSp)) call MOM_error(FATAL, &
-    "initialize_dyn_unsplit called with setVisc_CSp unassociated.")
-  CS%set_visc_CSp => setVisc_CSp
+  CS%set_visc_CSp => set_visc
 
   if (associated(ALE_CSp)) CS%ALE_CSp => ALE_CSp
   if (associated(OBC)) CS%OBC => OBC
