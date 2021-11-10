@@ -390,7 +390,7 @@ subroutine extractFluxes1d(G, GV, US, fluxes, optics, nsw, j, dt, &
                   FluxRescaleDepth, useRiverHeatContent, useCalvingHeatContent, &
                   h, T, netMassInOut, netMassOut, net_heat, net_salt, pen_SW_bnd, tv, &
                   aggregate_FW, nonpenSW, netmassInOut_rate, net_Heat_Rate, &
-                  net_salt_rate, pen_sw_bnd_Rate, skip_diags)
+                  net_salt_rate, pen_sw_bnd_Rate)
 
   type(ocean_grid_type),    intent(in)    :: G              !< ocean grid structure
   type(verticalGrid_type),  intent(in)    :: GV             !< ocean vertical grid structure
@@ -452,7 +452,6 @@ subroutine extractFluxes1d(G, GV, US, fluxes, optics, nsw, j, dt, &
   real, dimension(max(1,nsw),G%isd:G%ied), &
                   optional, intent(out)   :: pen_sw_bnd_rate !< Rate of penetrative shortwave heating
                                                              !! [degC H T-1 ~> degC m s-1 or degC kg m-2 s-1].
-  logical,        optional, intent(in)    :: skip_diags      !< If present and true, skip calculating diagnostics
 
   ! local
   real :: htot(SZI_(G))       ! total ocean depth [H ~> m or kg m-2]
@@ -492,7 +491,6 @@ subroutine extractFluxes1d(G, GV, US, fluxes, optics, nsw, j, dt, &
   is = G%isc ; ie = G%iec ; nz = GV%ke
 
   calculate_diags = .true.
-  if (present(skip_diags)) calculate_diags = .not. skip_diags
 
   ! error checking
 
@@ -914,7 +912,7 @@ end subroutine extractFluxes2d
 !! extractFluxes routine allows us to get "stuf per time" rather than the time integrated
 !! fluxes needed in other routines that call extractFluxes.
 subroutine calculateBuoyancyFlux1d(G, GV, US, fluxes, optics, nsw, h, Temp, Salt, tv, j, &
-                                   buoyancyFlux, netHeatMinusSW, netSalt, skip_diags)
+                                   buoyancyFlux, netHeatMinusSW, netSalt)
   type(ocean_grid_type),                    intent(in)    :: G              !< ocean grid
   type(verticalGrid_type),                  intent(in)    :: GV             !< ocean vertical grid structure
   type(unit_scale_type),                    intent(in)    :: US             !< A dimensional unit scaling type
@@ -928,12 +926,11 @@ subroutine calculateBuoyancyFlux1d(G, GV, US, fluxes, optics, nsw, h, Temp, Salt
   type(thermo_var_ptrs),                    intent(inout) :: tv             !< thermodynamics type
   integer,                                  intent(in)    :: j              !< j-row to work on
   real, dimension(SZI_(G),SZK_(GV)+1),      intent(inout) :: buoyancyFlux   !< buoyancy fluxes [L2 T-3 ~> m2 s-3]
-  real, dimension(SZI_(G)),                 intent(inout) :: netHeatMinusSW !< surf Heat flux
+  real, dimension(SZI_(G)),                 intent(inout) :: netHeatMinusSW !< Surface heat flux excluding shortwave
                                                                       !! [degC H s-1 ~> degC m s-1 or degC kg m-2 s-1]
-  real, dimension(SZI_(G)),                 intent(inout) :: netSalt        !< surf salt flux
+  real, dimension(SZI_(G)),                 intent(inout) :: netSalt        !< surface salt flux
                                                                       !! [ppt H s-1 ~> ppt m s-1 or ppt kg m-2 s-1]
-  logical,                        optional, intent(in)    :: skip_diags     !< If present and true, skip calculating
-                                                                            !! diagnostics inside extractFluxes1d()
+
   ! local variables
   integer                               :: k
   real, parameter                       :: dt = 1.    ! to return a rate from extractFluxes1d
@@ -942,12 +939,12 @@ subroutine calculateBuoyancyFlux1d(G, GV, US, fluxes, optics, nsw, h, Temp, Salt
                                                       ! [H s-1 ~> m s-1 or kg m-2 s-1]
   real, dimension(SZI_(G))              :: netHeat    ! net temp flux [degC H s-1 ~> degC m s-2 or degC kg m-2 s-1]
   real, dimension(max(nsw,1), SZI_(G))  :: penSWbnd   ! penetrating SW radiation by band
-                                                      ! [degC H ~> degC m or degC kg m-2]
+                                                      ! [degC H s-1 ~> degC m s-1 or degC kg m-2 s-1]
   real, dimension(SZI_(G))              :: pressure   ! pressure at the surface [R L2 T-2 ~> Pa]
   real, dimension(SZI_(G))              :: dRhodT     ! density partial derivative wrt temp [R degC-1 ~> kg m-3 degC-1]
   real, dimension(SZI_(G))              :: dRhodS     ! density partial derivative wrt saln [R ppt-1 ~> kg m-3 ppt-1]
   real, dimension(SZI_(G),SZK_(GV)+1)   :: netPen     ! The net penetrating shortwave radiation at each level
-                                                      ! [degC H ~> degC m or degC kg m-2]
+                                                      ! [degC H s-1 ~> degC m s-1 or degC kg m-2 s-1]
 
   logical :: useRiverHeatContent
   logical :: useCalvingHeatContent
@@ -978,7 +975,7 @@ subroutine calculateBuoyancyFlux1d(G, GV, US, fluxes, optics, nsw, h, Temp, Salt
   call extractFluxes1d(G, GV, US, fluxes, optics, nsw, j, dt*US%s_to_T,               &
                 depthBeforeScalingFluxes, useRiverHeatContent, useCalvingHeatContent, &
                 h(:,j,:), Temp(:,j,:), netH, netEvap, netHeatMinusSW,                 &
-                netSalt, penSWbnd, tv, .false., skip_diags=skip_diags)
+                netSalt, penSWbnd, tv, .false.)
 
   ! Sum over bands and attenuate as a function of depth
   ! netPen is the netSW as a function of depth
@@ -1011,7 +1008,7 @@ end subroutine calculateBuoyancyFlux1d
 !> Calculates surface buoyancy flux by adding up the heat, FW and salt fluxes,
 !! for 2d arrays.  This is a wrapper for calculateBuoyancyFlux1d.
 subroutine calculateBuoyancyFlux2d(G, GV, US, fluxes, optics, h, Temp, Salt, tv, &
-                                   buoyancyFlux, netHeatMinusSW, netSalt, skip_diags)
+                                   buoyancyFlux, netHeatMinusSW, netSalt)
   type(ocean_grid_type),                      intent(in)    :: G      !< ocean grid
   type(verticalGrid_type),                    intent(in)    :: GV     !< ocean vertical grid structure
   type(unit_scale_type),                      intent(in)    :: US     !< A dimensional unit scaling type
@@ -1021,26 +1018,18 @@ subroutine calculateBuoyancyFlux2d(G, GV, US, fluxes, optics, h, Temp, Salt, tv,
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(in)    :: Temp   !< temperature [degC]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(in)    :: Salt   !< salinity [ppt]
   type(thermo_var_ptrs),                      intent(inout) :: tv     !< thermodynamics type
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), intent(inout) :: buoyancyFlux   !< buoyancy fluxes [L2 T-3 ~> m2 s-3]
-  real, dimension(SZI_(G),SZJ_(G)), optional, intent(inout) :: netHeatMinusSW !< surf temp flux
-                                                                              !! [degC H ~> degC m or degC kg m-2]
-  real, dimension(SZI_(G),SZJ_(G)), optional, intent(inout) :: netSalt        !< surf salt flux
-                                                                              !! [ppt H ~> ppt m or ppt kg m-2]
-  logical, optional,                          intent(in)    :: skip_diags     !< If present and true, skip calculating
-                                                                              !! diagnostics inside extractFluxes1d()
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), intent(inout) :: buoyancyFlux  !< buoyancy fluxes [L2 T-3 ~> m2 s-3]
+  real, dimension(SZI_(G),SZJ_(G)),           intent(inout) :: netHeatMinusSW !< surface heat flux excluding shortwave
+                                                                      !! [degC H s-1 ~> degC m s-1 or degC kg m-2 s-1]
+  real, dimension(SZI_(G),SZJ_(G)),           intent(inout) :: netSalt !< Net surface salt flux
+                                                                      !! [ppt H s-1 ~> ppt m s-1 or ppt kg m-2 s-1]
   ! local variables
-  real, dimension( SZI_(G) ) :: netT ! net temperature flux [degC H s-1 ~> degC m s-2 or degC kg m-2 s-1]
-  real, dimension( SZI_(G) ) :: netS ! net saln flux !! [ppt H s-1 ~> ppt m s-1 or ppt kg m-2 s-1]
   integer :: j
 
-  netT(G%isc:G%iec) = 0. ; netS(G%isc:G%iec) = 0.
-
-  !$OMP parallel do default(shared) firstprivate(netT,netS)
+  !$OMP parallel do default(shared)
   do j=G%jsc,G%jec
     call calculateBuoyancyFlux1d(G, GV, US, fluxes, optics, optics_nbands(optics), h, Temp, Salt, &
-                                 tv, j, buoyancyFlux(:,j,:), netT, netS, skip_diags=skip_diags)
-    if (present(netHeatMinusSW)) netHeatMinusSW(G%isc:G%iec,j) = netT(G%isc:G%iec)
-    if (present(netSalt)) netSalt(G%isc:G%iec,j) = netS(G%isc:G%iec)
+                                 tv, j, buoyancyFlux(:,j,:), netHeatMinusSW(:,j),  netSalt(:,j))
   enddo
 
 end subroutine calculateBuoyancyFlux2d
