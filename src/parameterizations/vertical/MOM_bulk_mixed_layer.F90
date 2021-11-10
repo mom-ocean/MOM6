@@ -3628,15 +3628,21 @@ subroutine bulkmixedlayer_init(Time, G, GV, US, param_file, diag, CS)
   if (CS%id_ML_depth > 0) call safe_alloc_alloc(CS%ML_depth, isd, ied, jsd, jed)
 
   if (CS%allow_clocks_in_omp_loops) then
-    id_clock_detrain = cpu_clock_id('(Ocean mixed layer detrain)', grain=CLOCK_ROUTINE)
-    id_clock_mech = cpu_clock_id('(Ocean mixed layer mechanical entrainment)', grain=CLOCK_ROUTINE)
-    id_clock_conv = cpu_clock_id('(Ocean mixed layer convection)', grain=CLOCK_ROUTINE)
+    id_clock_detrain = cpu_clock_id('(Ocean mixed layer detrain)', &
+        sync=.false., grain=CLOCK_ROUTINE)
+    id_clock_mech = cpu_clock_id('(Ocean mixed layer mechanical entrainment)', &
+        sync=.false., grain=CLOCK_ROUTINE)
+    id_clock_conv = cpu_clock_id('(Ocean mixed layer convection)', &
+        sync=.false., grain=CLOCK_ROUTINE)
     if (CS%ML_resort) then
-      id_clock_resort = cpu_clock_id('(Ocean mixed layer resorting)', grain=CLOCK_ROUTINE)
+      id_clock_resort = cpu_clock_id('(Ocean mixed layer resorting)', &
+          sync=.false., grain=CLOCK_ROUTINE)
     else
-      id_clock_adjustment = cpu_clock_id('(Ocean mixed layer convective adjustment)', grain=CLOCK_ROUTINE)
+      id_clock_adjustment = cpu_clock_id('(Ocean mixed layer convective adjustment)', &
+          sync=.false., grain=CLOCK_ROUTINE)
     endif
-    id_clock_EOS = cpu_clock_id('(Ocean mixed layer EOS)', grain=CLOCK_ROUTINE)
+    id_clock_EOS = cpu_clock_id('(Ocean mixed layer EOS)', &
+        sync=.false., grain=CLOCK_ROUTINE)
   endif
 
   if (CS%limit_det .or. (CS%id_Hsfc_min > 0)) &
