@@ -220,19 +220,16 @@ end subroutine DOME2d_initialize_thickness
 
 
 !> Initialize temperature and salinity in the 2d DOME configuration
-subroutine DOME2d_initialize_temperature_salinity ( T, S, h, G, GV, param_file, &
-                     eqn_of_state, just_read)
+subroutine DOME2d_initialize_temperature_salinity ( T, S, h, G, GV, param_file, just_read)
   type(ocean_grid_type),                     intent(in)  :: G !< Ocean grid structure
   type(verticalGrid_type),                   intent(in)  :: GV !< The ocean's vertical grid structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: T !< Potential temperature [degC]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: S !< Salinity [ppt]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)  :: h !< Layer thickness [H ~> m or kg m-2]
   type(param_file_type),                     intent(in)  :: param_file !< Parameter file structure
-  type(EOS_type),                            pointer     :: eqn_of_state !< Equation of state structure
   logical,                                   intent(in)  :: just_read !< If true, this call will
                                                       !! only read parameters without changing T & S.
 
-  ! Local variables
   integer   :: i, j, k, is, ie, js, je, nz
   real      :: x
   integer   :: index_bay_z

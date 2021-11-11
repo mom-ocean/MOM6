@@ -309,8 +309,8 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
                                 just_read=just_read)
       case ("benchmark"); call benchmark_initialize_thickness(h, depth_tot, G, GV, US, PF, &
                                    tv%eqn_of_state, tv%P_Ref, just_read=just_read)
-      case ("Neverworld","Neverland"); call Neverworld_initialize_thickness(h, depth_tot, G, GV, US, PF, &
-                                tv%eqn_of_state, tv%P_Ref)
+      case ("Neverworld","Neverland"); call Neverworld_initialize_thickness(h, depth_tot, &
+                                   G, GV, US, PF, tv%P_Ref)
       case ("search"); call initialize_thickness_search()
       case ("circle_obcs"); call circle_obcs_initialize_thickness(h, depth_tot, G, GV, PF, &
                                      just_read=just_read)
@@ -375,26 +375,26 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
         case ("linear"); call initialize_temp_salt_linear(tv%T, tv%S, G, GV, PF, &
                                   just_read=just_read)
         case ("DOME2D"); call DOME2d_initialize_temperature_salinity ( tv%T, &
-                                  tv%S, h, G, GV, PF, eos, just_read=just_read)
+                                  tv%S, h, G, GV, PF, just_read=just_read)
         case ("ISOMIP"); call ISOMIP_initialize_temperature_salinity ( tv%T, &
                                   tv%S, h, depth_tot, G, GV, US, PF, eos, just_read=just_read)
         case ("adjustment2d"); call adjustment_initialize_temperature_salinity ( tv%T, &
-                                        tv%S, h, depth_tot, G, GV, PF, eos, just_read=just_read)
+                                        tv%S, h, depth_tot, G, GV, PF, just_read=just_read)
         case ("baroclinic_zone"); call baroclinic_zone_init_temperature_salinity( tv%T, &
                                            tv%S, h, depth_tot, G, GV, US, PF, just_read=just_read)
         case ("sloshing"); call sloshing_initialize_temperature_salinity(tv%T, &
-                                    tv%S, h, G, GV, PF, eos, just_read=just_read)
+                                    tv%S, h, G, GV, PF, just_read=just_read)
         case ("seamount"); call seamount_initialize_temperature_salinity(tv%T, &
-                                    tv%S, h, G, GV, PF, eos, just_read=just_read)
+                                    tv%S, h, G, GV, PF, just_read=just_read)
         case ("dumbbell"); call dumbbell_initialize_temperature_salinity(tv%T, &
-                                    tv%S, h, G, GV, PF, eos, just_read=just_read)
+                                    tv%S, h, G, GV, PF, just_read=just_read)
         case ("rossby_front"); call Rossby_front_initialize_temperature_salinity ( tv%T, &
-                                        tv%S, h, G, GV, PF, eos, just_read=just_read)
+                                        tv%S, h, G, GV, PF, just_read=just_read)
         case ("SCM_CVMix_tests"); call SCM_CVMix_tests_TS_init(tv%T, tv%S, h, &
                                            G, GV, US, PF, just_read=just_read)
-        case ("dense"); call dense_water_initialize_TS(G, GV, PF, eos, tv%T, tv%S, &
+        case ("dense"); call dense_water_initialize_TS(G, GV, PF, tv%T, tv%S, &
                                  h, just_read=just_read)
-        case ("USER"); call user_init_temperature_salinity(tv%T, tv%S, G, GV, PF, eos, &
+        case ("USER"); call user_init_temperature_salinity(tv%T, tv%S, G, GV, PF, &
                                 just_read=just_read)
         case default ; call MOM_error(FATAL,  "MOM_initialize_state: "//&
                "Unrecognized Temp & salt configuration "//trim(config))
@@ -1584,7 +1584,7 @@ subroutine initialize_temp_salt_fit(T, S, G, GV, US, param_file, eqn_of_state, P
   type(unit_scale_type),   intent(in)  :: US           !< A dimensional unit scaling type
   type(param_file_type),   intent(in)  :: param_file   !< A structure to parse for run-time
                                                        !! parameters.
-  type(EOS_type),          pointer     :: eqn_of_state !< Equation of state structure
+  type(EOS_type),          intent(in)  :: eqn_of_state !< Equation of state structure
   real,                    intent(in)  :: P_Ref        !< The coordinate-density reference pressure
                                                        !! [R L2 T-2 ~> Pa].
   logical,                 intent(in)  :: just_read    !< If true, this call will only read

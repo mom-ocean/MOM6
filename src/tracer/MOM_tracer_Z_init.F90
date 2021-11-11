@@ -559,7 +559,7 @@ end function find_limited_slope
 !> This subroutine determines the potential temperature and salinity that
 !! is consistent with the target density using provided initial guess
 subroutine determine_temperature(temp, salt, R_tgt, p_ref, niter, land_fill, h, k_start, G, GV, US, &
-                                 eos, h_massless)
+                                 EOS, h_massless)
   type(ocean_grid_type),         intent(in)    :: G    !< The ocean's grid structure
   type(verticalGrid_type),       intent(in)    :: GV   !< The ocean's vertical grid structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
@@ -575,7 +575,7 @@ subroutine determine_temperature(temp, salt, R_tgt, p_ref, niter, land_fill, h, 
                                  intent(in)    :: h   !< layer thickness, used only to avoid working on
                                                       !! massless layers [H ~> m or kg m-2]
   type(unit_scale_type),         intent(in)    :: US  !< A dimensional unit scaling type
-  type(eos_type),                pointer       :: eos !< seawater equation of state control structure
+  type(EOS_type),                intent(in)    :: EOS !< seawater equation of state control structure
   real,                optional, intent(in)    :: h_massless !< A threshold below which a layer is
                                                       !! determined to be massless [H ~> m or kg m-2]
 
@@ -627,9 +627,9 @@ subroutine determine_temperature(temp, salt, R_tgt, p_ref, niter, land_fill, h, 
     adjust_salt = .true.
     iter_loop: do itt = 1,niter
       do k=1,nz
-        call calculate_density(T(:,k), S(:,k), press, rho(:,k), eos, EOSdom )
+        call calculate_density(T(:,k), S(:,k), press, rho(:,k), EOS, EOSdom )
         call calculate_density_derivs(T(:,k), S(:,k), press, drho_dT(:,k), drho_dS(:,k), &
-                                      eos, EOSdom )
+                                      EOS, EOSdom )
       enddo
       do k=k_start,nz ; do i=is,ie
 !       if (abs(rho(i,k)-R_tgt(k))>tol_rho .and. hin(i,k)>h_massless .and. abs(T(i,k)-land_fill) < epsln) then
@@ -656,9 +656,9 @@ subroutine determine_temperature(temp, salt, R_tgt, p_ref, niter, land_fill, h, 
 
     if (adjust_salt .and. old_fit) then ; do itt = 1,niter
       do k=1,nz
-        call calculate_density(T(:,k), S(:,k), press, rho(:,k), eos, EOSdom )
+        call calculate_density(T(:,k), S(:,k), press, rho(:,k), EOS, EOSdom )
         call calculate_density_derivs(T(:,k), S(:,k), press, drho_dT(:,k), drho_dS(:,k), &
-                                      eos, EOSdom )
+                                      EOS, EOSdom )
       enddo
       do k=k_start,nz ; do i=is,ie
 !       if (abs(rho(i,k)-R_tgt(k))>tol_rho .and. hin(i,k)>h_massless .and. abs(T(i,k)-land_fill) < epsln ) then
