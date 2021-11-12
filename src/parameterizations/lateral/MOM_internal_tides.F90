@@ -1451,9 +1451,9 @@ subroutine propagate_x(En, speed_x, Cgx_av, dCgx, dt, G, US, Nangle, CS, LB)
   ! Only reflect newly arrived energy; existing energy in incident wedge is not reflected
   ! and will eventually propagate out of cell. (This code only reflects if En > 0.)
   call reflect(Fdt_m, Nangle, CS, G, LB)
-  call teleport(Fdt_m, Nangle, CS, G, LB)
+  !call teleport(Fdt_m, Nangle, CS, G, LB)
   call reflect(Fdt_p, Nangle, CS, G, LB)
-  call teleport(Fdt_p, Nangle, CS, G, LB)
+  !call teleport(Fdt_p, Nangle, CS, G, LB)
 
   ! Update reflected energy [R Z3 T-2 ~> J m-2]
   do a=1,Nangle ; do j=jsh,jeh ; do i=ish,ieh
@@ -1533,9 +1533,9 @@ subroutine propagate_y(En, speed_y, Cgy_av, dCgy, dt, G, US, Nangle, CS, LB)
   ! Only reflect newly arrived energy; existing energy in incident wedge is not reflected
   ! and will eventually propagate out of cell. (This code only reflects if En > 0.)
   call reflect(Fdt_m, Nangle, CS, G, LB)
-  call teleport(Fdt_m, Nangle, CS, G, LB)
+  !call teleport(Fdt_m, Nangle, CS, G, LB)
   call reflect(Fdt_p, Nangle, CS, G, LB)
-  call teleport(Fdt_p, Nangle, CS, G, LB)
+  !call teleport(Fdt_p, Nangle, CS, G, LB)
 
   ! Update reflected energy [R Z3 T-2 ~> J m-2]
   do a=1,Nangle ; do j=jsh,jeh ; do i=ish,ieh
@@ -1905,7 +1905,7 @@ subroutine PPM_reconstruction_x(h_in, h_l, h_r, G, LB, simple_2nd)
   real, dimension(SZI_(G),SZJ_(G)), intent(out) :: h_l  !< Left edge value of reconstruction (2D).
   real, dimension(SZI_(G),SZJ_(G)), intent(out) :: h_r  !< Right edge value of reconstruction (2D).
   type(loop_bounds_type),           intent(in)  :: LB   !< A structure with the active loop bounds.
-  logical, optional,                intent(in)  :: simple_2nd !< If true, use the arithmetic mean
+  logical,                          intent(in)  :: simple_2nd !< If true, use the arithmetic mean
                                                         !! energy densities as default edge values
                                                         !! for a simple 2nd order scheme.
   ! Local variables
@@ -1913,15 +1913,14 @@ subroutine PPM_reconstruction_x(h_in, h_l, h_r, G, LB, simple_2nd)
   real, parameter :: oneSixth = 1./6.
   real :: h_ip1, h_im1
   real :: dMx, dMn
-  logical :: use_CW84, use_2nd
+  logical :: use_CW84
   character(len=256) :: mesg  ! The text of an error message
   integer :: i, j, isl, iel, jsl, jel, stencil
 
-  use_2nd = .false. ; if (present(simple_2nd)) use_2nd = simple_2nd
   isl = LB%ish-1 ; iel = LB%ieh+1 ; jsl = LB%jsh ; jel = LB%jeh
 
   ! This is the stencil of the reconstruction, not the scheme overall.
-  stencil = 2 ; if (use_2nd) stencil = 1
+  stencil = 2 ; if (simple_2nd) stencil = 1
 
   if ((isl-stencil < G%isd) .or. (iel+stencil > G%ied)) then
     write(mesg,'("In MOM_internal_tides, PPM_reconstruction_x called with a ", &
@@ -1936,7 +1935,7 @@ subroutine PPM_reconstruction_x(h_in, h_l, h_r, G, LB, simple_2nd)
     call MOM_error(FATAL,mesg)
   endif
 
-  if (use_2nd) then
+  if (simple_2nd) then
     do j=jsl,jel ; do i=isl,iel
       h_im1 = G%mask2dT(i-1,j) * h_in(i-1,j) + (1.0-G%mask2dT(i-1,j)) * h_in(i,j)
       h_ip1 = G%mask2dT(i+1,j) * h_in(i+1,j) + (1.0-G%mask2dT(i+1,j)) * h_in(i,j)
@@ -1981,7 +1980,7 @@ subroutine PPM_reconstruction_y(h_in, h_l, h_r, G, LB, simple_2nd)
   real, dimension(SZI_(G),SZJ_(G)), intent(out) :: h_l  !< Left edge value of reconstruction (2D).
   real, dimension(SZI_(G),SZJ_(G)), intent(out) :: h_r  !< Right edge value of reconstruction (2D).
   type(loop_bounds_type),           intent(in)  :: LB   !< A structure with the active loop bounds.
-  logical, optional,                intent(in)  :: simple_2nd !< If true, use the arithmetic mean
+  logical,                          intent(in)  :: simple_2nd !< If true, use the arithmetic mean
                                                         !! energy densities as default edge values
                                                         !! for a simple 2nd order scheme.
   ! Local variables
@@ -1989,15 +1988,13 @@ subroutine PPM_reconstruction_y(h_in, h_l, h_r, G, LB, simple_2nd)
   real, parameter :: oneSixth = 1./6.
   real :: h_jp1, h_jm1
   real :: dMx, dMn
-  logical :: use_2nd
   character(len=256) :: mesg  ! The text of an error message
   integer :: i, j, isl, iel, jsl, jel, stencil
 
-  use_2nd = .false. ; if (present(simple_2nd)) use_2nd = simple_2nd
   isl = LB%ish ; iel = LB%ieh ; jsl = LB%jsh-1 ; jel = LB%jeh+1
 
   ! This is the stencil of the reconstruction, not the scheme overall.
-  stencil = 2 ; if (use_2nd) stencil = 1
+  stencil = 2 ; if (simple_2nd) stencil = 1
 
   if ((isl < G%isd) .or. (iel > G%ied)) then
     write(mesg,'("In MOM_internal_tides, PPM_reconstruction_y called with a ", &
@@ -2012,7 +2009,7 @@ subroutine PPM_reconstruction_y(h_in, h_l, h_r, G, LB, simple_2nd)
     call MOM_error(FATAL,mesg)
   endif
 
-  if (use_2nd) then
+  if (simple_2nd) then
     do j=jsl,jel ; do i=isl,iel
       h_jm1 = G%mask2dT(i,j-1) * h_in(i,j-1) + (1.0-G%mask2dT(i,j-1)) * h_in(i,j)
       h_jp1 = G%mask2dT(i,j+1) * h_in(i,j+1) + (1.0-G%mask2dT(i,j+1)) * h_in(i,j)

@@ -451,7 +451,7 @@ subroutine calc_slope_functions(h, tv, dt, G, GV, US, CS, OBC)
   type(thermo_var_ptrs),                     intent(in)    :: tv !< Thermodynamic variables
   real,                                      intent(in)    :: dt !< Time increment [T ~> s]
   type(VarMix_CS),                           pointer       :: CS !< Variable mixing coefficients
-  type(ocean_OBC_type),            optional, pointer       :: OBC !< Open boundaries control structure.
+  type(ocean_OBC_type),                      pointer       :: OBC !< Open boundaries control structure.
   ! Local variables
   real, dimension(SZI_(G), SZJ_(G),SZK_(GV)+1) :: &
     e             ! The interface heights relative to mean sea level [Z ~> m].
@@ -477,10 +477,10 @@ subroutine calc_slope_functions(h, tv, dt, G, GV, US, CS, OBC)
       if (CS%use_stored_slopes) then
         call calc_isoneutral_slopes(G, GV, US, h, e, tv, dt*CS%kappa_smooth, &
                                     CS%slope_x, CS%slope_y, N2_u=N2_u, N2_v=N2_v, halo=1, OBC=OBC)
-        call calc_Visbeck_coeffs_old(h, CS%slope_x, CS%slope_y, N2_u, N2_v, G, GV, US, CS, OBC=OBC)
+        call calc_Visbeck_coeffs_old(h, CS%slope_x, CS%slope_y, N2_u, N2_v, G, GV, US, CS, OBC)
       else
         !call calc_isoneutral_slopes(G, GV, h, e, tv, dt*CS%kappa_smooth, CS%slope_x, CS%slope_y)
-        call calc_slope_functions_using_just_e(h, G, GV, US, CS, e, .true., OBC=OBC)
+        call calc_slope_functions_using_just_e(h, G, GV, US, CS, e, .true., OBC)
       endif
     endif
   endif
@@ -515,7 +515,7 @@ subroutine calc_Visbeck_coeffs_old(h, slope_x, slope_y, N2_u, N2_v, G, GV, US, C
                                                                          !! at v-points [L2 Z-2 T-2 ~> s-2]
   type(unit_scale_type),                        intent(in)    :: US !< A dimensional unit scaling type
   type(VarMix_CS),                              pointer       :: CS !< Variable mixing coefficients
-  type(ocean_OBC_type),               optional, pointer       :: OBC !< Open boundaries control structure.
+  type(ocean_OBC_type),                         pointer       :: OBC !< Open boundaries control structure.
 
   ! Local variables
   real :: S2            ! Interface slope squared [nondim]
@@ -543,10 +543,10 @@ subroutine calc_Visbeck_coeffs_old(h, slope_x, slope_y, N2_u, N2_v, G, GV, US, C
 
   local_open_u_BC = .false.
   local_open_v_BC = .false.
-  if (present(OBC)) then ; if (associated(OBC)) then
+  if (associated(OBC)) then
     local_open_u_BC = OBC%open_u_BCs_exist_globally
     local_open_v_BC = OBC%open_v_BCs_exist_globally
-  endif ; endif
+  endif
 
   S2max = CS%Visbeck_S_max**2
 
@@ -673,8 +673,8 @@ subroutine calc_Eady_growth_rate_2D(CS, G, GV, US, OBC, h, e, dzu, dzv, dzSxN, d
   type(ocean_grid_type),                        intent(in) :: G   !< Ocean grid structure
   type(verticalGrid_type),                      intent(in) :: GV  !< Vertical grid structure
   type(unit_scale_type),                        intent(in) :: US  !< A dimensional unit scaling type
-  type(ocean_OBC_type),                pointer, intent(in) :: OBC !< Open boundaries control structure.
-real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),    intent(in) :: h   !< Interface height [Z ~> m]
+  type(ocean_OBC_type),                         pointer    :: OBC !< Open boundaries control structure.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),    intent(in) :: h   !< Interface height [Z ~> m]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1),  intent(in) :: e   !< Interface height [Z ~> m]
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)+1), intent(in) :: dzu !< dz at u-points [Z ~> m]
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)+1), intent(in) :: dzv !< dz at v-points [Z ~> m]
@@ -859,7 +859,7 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, US, CS, e, calculate_slop
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), intent(in)    :: e  !< Interface position [Z ~> m]
   logical,                                     intent(in)    :: calculate_slopes !< If true, calculate slopes
                                                                    !! internally otherwise use slopes stored in CS
-  type(ocean_OBC_type),              optional, pointer       :: OBC !< Open boundaries control structure.
+  type(ocean_OBC_type),                        pointer       :: OBC !< Open boundaries control structure.
   ! Local variables
   real :: E_x(SZIB_(G), SZJ_(G))  ! X-slope of interface at u points [nondim] (for diagnostics)
   real :: E_y(SZI_(G), SZJB_(G))  ! Y-slope of interface at v points [nondim] (for diagnostics)
@@ -890,10 +890,10 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, US, CS, e, calculate_slop
 
   local_open_u_BC = .false.
   local_open_v_BC = .false.
-  if (present(OBC)) then ; if (associated(OBC)) then
+  if (associated(OBC)) then
     local_open_u_BC = OBC%open_u_BCs_exist_globally
     local_open_v_BC = OBC%open_v_BCs_exist_globally
-  endif ; endif
+  endif
 
   one_meter = 1.0 * GV%m_to_H
   h_neglect = GV%H_subroundoff
