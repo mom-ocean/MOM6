@@ -1116,20 +1116,20 @@ end subroutine opacity_init
 
 
 subroutine opacity_end(CS, optics)
-  type(opacity_CS),  pointer           :: CS !< An opacity control structure that should be deallocated.
-  type(optics_type), optional, pointer :: optics !< An optics type structure that should be deallocated.
+  type(opacity_CS),  pointer :: CS !< An opacity control structure that should be deallocated.
+  type(optics_type), pointer :: optics !< An optics type structure that should be deallocated.
 
   if (associated(CS%id_opacity)) deallocate(CS%id_opacity)
   if (associated(CS)) deallocate(CS)
 
-  if (present(optics)) then ; if (associated(optics)) then
+  if (associated(optics)) then
     if (associated(optics%sw_pen_band)) deallocate(optics%sw_pen_band)
     if (associated(optics%opacity_band)) deallocate(optics%opacity_band)
     if (associated(optics%max_wavelength_band)) &
       deallocate(optics%max_wavelength_band)
     if (associated(optics%min_wavelength_band)) &
       deallocate(optics%min_wavelength_band)
-  endif ; endif
+  endif
 
 end subroutine opacity_end
 

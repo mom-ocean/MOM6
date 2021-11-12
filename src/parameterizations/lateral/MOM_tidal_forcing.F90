@@ -579,7 +579,7 @@ end subroutine tidal_forcing_sensitivity
 !! height.  For now, eta and eta_tidal are both geopotential heights in depth
 !! units, but probably the input for eta should really be replaced with the
 !! column mass anomalies.
-subroutine calc_tidal_forcing(Time, eta, eta_tidal, G, CS, deta_tidal_deta, m_to_Z)
+subroutine calc_tidal_forcing(Time, eta, eta_tidal, G, CS, m_to_Z)
   type(ocean_grid_type),            intent(in)  :: G         !< The ocean's grid structure.
   type(time_type),                  intent(in)  :: Time      !< The time for the caluculation.
   real, dimension(SZI_(G),SZJ_(G)), intent(in)  :: eta       !< The sea surface height anomaly from
@@ -588,16 +588,12 @@ subroutine calc_tidal_forcing(Time, eta, eta_tidal, G, CS, deta_tidal_deta, m_to
                                                              !! anomalies [Z ~> m].
   type(tidal_forcing_CS),           pointer     :: CS        !< The control structure returned by a
                                                              !! previous call to tidal_forcing_init.
-  real, optional,                   intent(out) :: deta_tidal_deta !< The partial derivative of
-                                                             !! eta_tidal with the local value of
-                                                             !! eta [nondim].
-  real, optional,                   intent(in)  :: m_to_Z    !< A scaling factor from m to the units of eta.
+  real,                             intent(in)  :: m_to_Z    !< A scaling factor from m to the units of eta.
 
   ! Local variables
   real :: now       ! The relative time in seconds.
   real :: amp_cosomegat, amp_sinomegat
   real :: cosomegat, sinomegat
-  real :: m_Z       ! A scaling factor from m to depth units.
   real :: eta_prop  ! The nondimenional constant of proportionality beteen eta and eta_tidal.
   integer :: i, j, c, m, is, ie, js, je, Isq, Ieq, Jsq, Jeq
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
@@ -622,21 +618,14 @@ subroutine calc_tidal_forcing(Time, eta, eta_tidal, G, CS, deta_tidal_deta, m_to
     eta_prop = 0.0
   endif
 
-  if (present(deta_tidal_deta)) then
-    deta_tidal_deta = eta_prop
-    do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1 ; eta_tidal(i,j) = 0.0 ; enddo ; enddo
-  else
-    do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-      eta_tidal(i,j) = eta_prop*eta(i,j)
-    enddo ; enddo
-  endif
-
-  m_Z = 1.0 ; if (present(m_to_Z)) m_Z = m_to_Z
+  do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+    eta_tidal(i,j) = eta_prop*eta(i,j)
+  enddo ; enddo
 
   do c=1,CS%nc
     m = CS%struct(c)
-    amp_cosomegat = m_Z*CS%amp(c)*CS%love_no(c) * cos(CS%freq(c)*now + CS%phase0(c))
-    amp_sinomegat = m_Z*CS%amp(c)*CS%love_no(c) * sin(CS%freq(c)*now + CS%phase0(c))
+    amp_cosomegat = m_to_Z*CS%amp(c)*CS%love_no(c) * cos(CS%freq(c)*now + CS%phase0(c))
+    amp_sinomegat = m_to_Z*CS%amp(c)*CS%love_no(c) * sin(CS%freq(c)*now + CS%phase0(c))
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
       eta_tidal(i,j) = eta_tidal(i,j) + (amp_cosomegat*CS%cos_struct(i,j,m) + &
                                          amp_sinomegat*CS%sin_struct(i,j,m))
@@ -647,7 +636,7 @@ subroutine calc_tidal_forcing(Time, eta, eta_tidal, G, CS, deta_tidal_deta, m_to
     cosomegat = cos(CS%freq(c)*now)
     sinomegat = sin(CS%freq(c)*now)
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-      eta_tidal(i,j) = eta_tidal(i,j) + m_Z*CS%ampsal(i,j,c) * &
+      eta_tidal(i,j) = eta_tidal(i,j) + m_to_Z*CS%ampsal(i,j,c) * &
            (cosomegat*CS%cosphasesal(i,j,c) + sinomegat*CS%sinphasesal(i,j,c))
     enddo ; enddo
   enddo ; endif
@@ -656,7 +645,7 @@ subroutine calc_tidal_forcing(Time, eta, eta_tidal, G, CS, deta_tidal_deta, m_to
     cosomegat = cos(CS%freq(c)*now)
     sinomegat = sin(CS%freq(c)*now)
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-      eta_tidal(i,j) = eta_tidal(i,j) - m_Z*CS%SAL_SCALAR*CS%amp_prev(i,j,c) * &
+      eta_tidal(i,j) = eta_tidal(i,j) - m_to_Z*CS%SAL_SCALAR*CS%amp_prev(i,j,c) * &
           (cosomegat*CS%cosphase_prev(i,j,c) + sinomegat*CS%sinphase_prev(i,j,c))
     enddo ; enddo
   enddo ; endif

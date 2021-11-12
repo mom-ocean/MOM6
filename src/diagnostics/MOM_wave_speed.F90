@@ -55,7 +55,7 @@ contains
 
 !> Calculates the wave speed of the first baroclinic mode.
 subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, mono_N2_column_fraction, &
-                      mono_N2_depth, modal_structure, better_speed_est, min_speed, wave_speed_tol)
+                      mono_N2_depth, modal_structure)
   type(ocean_grid_type),            intent(in)  :: G  !< Ocean grid structure
   type(verticalGrid_type),          intent(in)  :: GV !< Vertical grid structure
   type(unit_scale_type),            intent(in)  :: US !< A dimensional unit scaling type
@@ -76,12 +76,6 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, mono_
                                           !! modal structure [Z ~> m].
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                           optional, intent(out) :: modal_structure !< Normalized model structure [nondim]
-  logical, optional, intent(in) :: better_speed_est !< If true, use a more robust estimate of the first
-                                     !! mode speed as the starting point for iterations.
-  real,    optional, intent(in) :: min_speed !< If present, set a floor in the first mode speed
-                                     !! below which 0 is returned [L T-1 ~> m s-1].
-  real,    optional, intent(in) :: wave_speed_tol !< The fractional tolerance for finding the
-                                     !! wave speeds [nondim]
 
   ! Local variables
   real, dimension(SZK_(GV)+1) :: &
@@ -181,10 +175,10 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, mono_
   Z_to_pres = GV%Z_to_H * (GV%H_to_RZ * GV%g_Earth)
   use_EOS = associated(tv%eqn_of_state)
 
-  better_est = CS%better_cg1_est ; if (present(better_speed_est)) better_est = better_speed_est
+  better_est = CS%better_cg1_est
 
   if (better_est) then
-    tol_solve = CS%wave_speed_tol ; if (present(wave_speed_tol)) tol_solve = wave_speed_tol
+    tol_solve = CS%wave_speed_tol
     tol_Hfrac  = 0.1*tol_solve ; tol_merge = tol_solve / real(nz)
   else
     tol_solve = 0.001 ; tol_Hfrac  = 0.0001 ; tol_merge = 0.001
@@ -197,7 +191,7 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, mono_
   ! worst possible oceanic case of g'H < 0.5*10m/s2*1e4m = 5.e4 m2/s2 < 1024**2*c2_scale, suggesting
   ! that c2_scale can safely be set to 1/(16*1024**2), which would decrease the stable floor on
   ! min_speed to ~6.9e-8 m/s for 90 layers or 2.33e-7 m/s for 1000 layers.
-  cg1_min2 = CS%min_speed2 ; if (present(min_speed)) cg1_min2 = min_speed**2
+  cg1_min2 = CS%min_speed2
   rescale = 1024.0**4 ; I_rescale = 1.0/rescale
   c2_scale = US%m_s_to_L_T**2 / 4096.0**2 ! Other powers of 2 give identical results.
 
@@ -638,8 +632,7 @@ subroutine tdma6(n, a, c, lam, y)
 end subroutine tdma6
 
 !> Calculates the wave speeds for the first few barolinic modes.
-subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, full_halos, better_speed_est, &
-                       min_speed, wave_speed_tol)
+subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, full_halos)
   type(ocean_grid_type),                    intent(in)  :: G !< Ocean grid structure
   type(verticalGrid_type),                  intent(in)  :: GV !< Vertical grid structure
   type(unit_scale_type),                    intent(in)  :: US !< A dimensional unit scaling type
@@ -650,12 +643,6 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, full_halos, better_spee
   type(wave_speed_CS), optional,            pointer     :: CS !< Control structure for MOM_wave_speed
   logical,             optional,            intent(in)  :: full_halos !< If true, do the calculation
                                                                       !! over the entire computational domain.
-  logical, optional, intent(in) :: better_speed_est !< If true, use a more robust estimate of the first
-                                     !! mode speed as the starting point for iterations.
-  real,    optional, intent(in) :: min_speed !< If present, set a floor in the first mode speed
-                                     !! below which 0 is returned [L T-1 ~> m s-1].
-  real,    optional, intent(in) :: wave_speed_tol !< The fractional tolerance for finding the
-                                     !! wave speeds [nondim]
 
   ! Local variables
   real, dimension(SZK_(GV)+1) :: &
@@ -757,16 +744,13 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, full_halos, better_spee
   c2_scale = US%m_s_to_L_T**2 / 4096.0**2 ! Other powers of 2 give identical results.
 
   better_est = .false. ; if (present(CS)) better_est = CS%better_cg1_est
-  if (present(better_speed_est)) better_est = better_speed_est
   if (better_est) then
     tol_solve = 0.001 ; if (present(CS)) tol_solve = CS%wave_speed_tol
-    if (present(wave_speed_tol)) tol_solve = wave_speed_tol
     tol_Hfrac  = 0.1*tol_solve ; tol_merge = tol_solve / real(nz)
   else
     tol_solve = 0.001 ; tol_Hfrac  = 0.0001 ; tol_merge = 0.001
   endif
   cg1_min2 = 0.0 ; if (present(CS)) cg1_min2 = CS%min_speed2
-  if (present(min_speed)) cg1_min2 = min_speed**2
 
   ! Zero out all wave speeds.  Values over land or for columns that are too weakly stratified
   ! are not changed from this zero value.
@@ -1151,18 +1135,16 @@ subroutine tridiag_det(a, c, ks, ke, lam, det, ddet, row_scale)
   real,               intent(in) :: lam   !< Value subtracted from b
   real,               intent(out):: det   !< Determinant
   real,               intent(out):: ddet  !< Derivative of determinant with lam
-  real,     optional, intent(in) :: row_scale !< A scaling factor of the rows of the
+  real,               intent(in) :: row_scale !< A scaling factor of the rows of the
                                       !! matrix to limit the growth of the determinant
   ! Local variables
   real :: detKm1, detKm2   ! Cumulative value of the determinant for the previous two layers.
   real :: ddetKm1, ddetKm2 ! Derivative of the cumulative determinant with lam for the previous two layers.
   real, parameter :: rescale = 1024.0**4 ! max value of determinant allowed before rescaling
-  real :: rscl      ! A rescaling factor that is applied succesively to each row.
   real :: I_rescale ! inverse of rescale
   integer :: k      ! row (layer interface) index
 
   I_rescale = 1.0 / rescale
-  rscl = 1.0 ; if (present(row_scale)) rscl = row_scale
 
   detKm1 = 1.0 ; ddetKm1 = 0.0
   det = (a(ks)+c(ks)) - lam ; ddet = -1.0

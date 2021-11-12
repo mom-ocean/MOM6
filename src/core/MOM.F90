@@ -75,6 +75,7 @@ use MOM_dynamics_unsplit_RK2,  only : step_MOM_dyn_unsplit_RK2, register_restart
 use MOM_dynamics_unsplit_RK2,  only : initialize_dyn_unsplit_RK2, end_dyn_unsplit_RK2
 use MOM_dynamics_unsplit_RK2,  only : MOM_dyn_unsplit_RK2_CS
 use MOM_dyn_horgrid,           only : dyn_horgrid_type, create_dyn_horgrid, destroy_dyn_horgrid
+use MOM_dyn_horgrid,           only : rotate_dyn_horgrid
 use MOM_EOS,                   only : EOS_init, calculate_density, calculate_TFreeze, EOS_domain
 use MOM_fixed_initialization,  only : MOM_initialize_fixed
 use MOM_forcing_type,          only : allocate_forcing_type, allocate_mech_forcing
@@ -123,7 +124,6 @@ use MOM_tracer_flow_control,   only : call_tracer_register, tracer_flow_control_
 use MOM_tracer_flow_control,   only : tracer_flow_control_init, call_tracer_surface_state
 use MOM_tracer_flow_control,   only : tracer_flow_control_end
 use MOM_transcribe_grid,       only : copy_dyngrid_to_MOM_grid, copy_MOM_grid_to_dyngrid
-use MOM_transcribe_grid,       only : rotate_dyngrid
 use MOM_unit_scaling,          only : unit_scale_type, unit_scaling_init
 use MOM_unit_scaling,          only : unit_scaling_end, fix_restart_unit_scaling
 use MOM_variables,             only : surface, allocate_surface_state, deallocate_surface_state
@@ -1053,8 +1053,7 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_thermo, &
               Time_local + real_to_time(US%T_to_s*(bbl_time_int-dt)), CS%diag)
     ! Calculate the BBL properties and store them inside visc (u,h).
     call cpu_clock_begin(id_clock_BBL_visc)
-    call set_viscous_BBL(CS%u, CS%v, CS%h, CS%tv, CS%visc, G, GV, US, &
-                         CS%set_visc_CSp, symmetrize=.true.)
+    call set_viscous_BBL(CS%u, CS%v, CS%h, CS%tv, CS%visc, G, GV, US, CS%set_visc_CSp)
     call cpu_clock_end(id_clock_BBL_visc)
     if (showCallTree) call callTree_wayPoint("done with set_viscous_BBL (step_MOM)")
     call disable_averaging(CS%diag)
@@ -1332,7 +1331,7 @@ subroutine step_MOM_thermo(CS, G, GV, US, u, v, h, tv, fluxes, dtdia, &
     ! DIABATIC_FIRST=True. Otherwise diabatic() is called after the dynamics
     ! and set_viscous_BBL is called as a part of the dynamic stepping.
     call cpu_clock_begin(id_clock_BBL_visc)
-    call set_viscous_BBL(u, v, h, tv, CS%visc, G, GV, US, CS%set_visc_CSp, symmetrize=.true.)
+    call set_viscous_BBL(u, v, h, tv, CS%visc, G, GV, US, CS%set_visc_CSp)
     call cpu_clock_end(id_clock_BBL_visc)
     if (showCallTree) call callTree_wayPoint("done with set_viscous_BBL (step_MOM_thermo)")
   endif
@@ -1353,7 +1352,7 @@ subroutine step_MOM_thermo(CS, G, GV, US, u, v, h, tv, fluxes, dtdia, &
     call cpu_clock_begin(id_clock_diabatic)
 
     call diabatic(u, v, h, tv, CS%Hml, fluxes, CS%visc, CS%ADp, CS%CDp, dtdia, &
-                  Time_end_thermo, G, GV, US, CS%diabatic_CSp, OBC=CS%OBC, Waves=Waves)
+                  Time_end_thermo, G, GV, US, CS%diabatic_CSp, CS%OBC, Waves)
     fluxes%fluxes_used = .true.
 
     if (showCallTree) call callTree_waypoint("finished diabatic (step_MOM_thermo)")
@@ -1694,7 +1693,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   type(hor_index_type),   pointer :: HI => NULL()   ! A hor_index_type for array extents
   type(hor_index_type),   target  :: HI_in          ! HI on the input grid
   type(verticalGrid_type), pointer :: GV => NULL()
-  type(dyn_horgrid_type), pointer :: dG => NULL()
+  type(dyn_horgrid_type), pointer :: dG => NULL(), test_dG => NULL()
   type(dyn_horgrid_type), pointer :: dG_in => NULL()
   type(diag_ctrl),        pointer :: diag => NULL()
   type(unit_scale_type),  pointer :: US => NULL()
@@ -2154,8 +2153,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   ! Swap axes for quarter and 3-quarter turns
   if (CS%rotate_index) then
     allocate(CS%G)
-    call clone_MOM_domain(G_in%Domain, CS%G%Domain, turns=turns, &
-        domain_name="MOM_rot")
+    call clone_MOM_domain(G_in%Domain, CS%G%Domain, turns=turns, domain_name="MOM_rot")
     first_direction = modulo(first_direction + turns, 2)
   else
     CS%G => G_in
@@ -2180,19 +2178,34 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
                       local_indexing=.not.global_indexing)
   call create_dyn_horgrid(dG_in, HI_in, bathymetry_at_vel=bathy_at_vel)
   call clone_MOM_domain(G_in%Domain, dG_in%Domain)
+  ! Also allocate the input ocean_grid_type type at this point based on the same information.
+  call MOM_grid_init(G_in, param_file, US, HI_in, bathymetry_at_vel=bathy_at_vel)
 
   ! Allocate initialize time-invariant MOM variables.
   call MOM_initialize_fixed(dG_in, US, OBC_in, param_file, .false., dirs%output_directory)
 
+  ! Copy the grid metrics and bathymetry to the ocean_grid_type
+  call copy_dyngrid_to_MOM_grid(dG_in, G_in, US)
+
   call callTree_waypoint("returned from MOM_initialize_fixed() (initialize_MOM)")
 
-  ! Determine HI and dG for the model index map.
+  call verticalGridInit( param_file, CS%GV, US )
+  GV => CS%GV
+
+  !   Shift from using the temporary dynamic grid type to using the final (potentially static)
+  ! and properly rotated ocean-specific grid type and horizontal index type.
   if (CS%rotate_index) then
     allocate(HI)
     call rotate_hor_index(HI_in, turns, HI)
+    ! NOTE: If indices are rotated, then G and G_in must both be initialized separately, and
+    ! the dynamic grid must be created to handle the grid rotation. G%domain has already been
+    ! initialzed above.
+    call MOM_grid_init(G, param_file, US, HI, bathymetry_at_vel=bathy_at_vel)
     call create_dyn_horgrid(dG, HI, bathymetry_at_vel=bathy_at_vel)
     call clone_MOM_domain(G%Domain, dG%Domain)
-    call rotate_dyngrid(dG_in, dG, US, turns)
+    call rotate_dyn_horgrid(dG_in, dG, US, turns)
+    call copy_dyngrid_to_MOM_grid(dG, G, US)
+
     if (associated(OBC_in)) then
       ! TODO: General OBC index rotations is not yet supported.
       if (modulo(turns, 4) /= 1) &
@@ -2200,18 +2213,15 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
       allocate(CS%OBC)
       call rotate_OBC_config(OBC_in, dG_in, CS%OBC, dG, turns)
     endif
+
+    call destroy_dyn_horgrid(dG)
   else
+    ! If not rotated, then G_in and G are the same grid.
     HI => HI_in
-    dG => dG_in
+    G => G_in
     CS%OBC => OBC_in
   endif
-
-  call verticalGridInit( param_file, CS%GV, US )
-  GV => CS%GV
-
-  ! Allocate the auxiliary non-symmetric domain for debugging or I/O purposes.
-  if (CS%debug .or. dG%symmetric) &
-    call clone_MOM_domain(dG%Domain, dG%Domain_aux, symmetric=.false.)
+  ! dG_in is retained for now so that it can be used with write_ocean_geometry_file() below.
 
   call callTree_waypoint("grids initialized (initialize_MOM)")
 
@@ -2220,9 +2230,9 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   call tracer_registry_init(param_file, CS%tracer_Reg)
 
   ! Allocate and initialize space for the primary time-varying MOM variables.
-  is   = dG%isc   ; ie   = dG%iec  ; js   = dG%jsc  ; je   = dG%jec ; nz = GV%ke
-  isd  = dG%isd   ; ied  = dG%ied  ; jsd  = dG%jsd  ; jed  = dG%jed
-  IsdB = dG%IsdB  ; IedB = dG%IedB ; JsdB = dG%JsdB ; JedB = dG%JedB
+  is   = HI%isc   ; ie   = HI%iec  ; js   = HI%jsc  ; je   = HI%jec ; nz = GV%ke
+  isd  = HI%isd   ; ied  = HI%ied  ; jsd  = HI%jsd  ; jed  = HI%jed
+  IsdB = HI%IsdB  ; IedB = HI%IedB ; JsdB = HI%JsdB ; JedB = HI%JedB
   ALLOC_(CS%u(IsdB:IedB,jsd:jed,nz))   ; CS%u(:,:,:) = 0.0
   ALLOC_(CS%v(isd:ied,JsdB:JedB,nz))   ; CS%v(:,:,:) = 0.0
   ALLOC_(CS%h(isd:ied,jsd:jed,nz))     ; CS%h(:,:,:) = GV%Angstrom_H
@@ -2259,12 +2269,12 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
       else
         conv2salt = GV%H_to_kg_m2
       endif
-      call register_tracer(CS%tv%T, CS%tracer_Reg, param_file, dG%HI, GV, &
+      call register_tracer(CS%tv%T, CS%tracer_Reg, param_file, HI, GV, &
                            tr_desc=vd_T, registry_diags=.true., flux_nameroot='T', &
                            flux_units='W', flux_longname='Heat', &
                            flux_scale=conv2watt, convergence_units='W m-2', &
                            convergence_scale=conv2watt, CMOR_tendprefix="opottemp", diag_form=2)
-      call register_tracer(CS%tv%S, CS%tracer_Reg, param_file, dG%HI, GV, &
+      call register_tracer(CS%tv%S, CS%tracer_Reg, param_file, HI, GV, &
                            tr_desc=vd_S, registry_diags=.true., flux_nameroot='S', &
                            flux_units=S_flux_units, flux_longname='Salt', &
                            flux_scale=conv2salt, convergence_units='kg m-2 s-1', &
@@ -2337,24 +2347,24 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   call restart_init(param_file, restart_CSp)
   call set_restart_fields(GV, US, param_file, CS, restart_CSp)
   if (CS%split) then
-    call register_restarts_dyn_split_RK2(dG%HI, GV, param_file, &
+    call register_restarts_dyn_split_RK2(HI, GV, param_file, &
              CS%dyn_split_RK2_CSp, restart_CSp, CS%uh, CS%vh)
   elseif (CS%use_RK2) then
-    call register_restarts_dyn_unsplit_RK2(dG%HI, GV, param_file, &
+    call register_restarts_dyn_unsplit_RK2(HI, GV, param_file, &
            CS%dyn_unsplit_RK2_CSp, restart_CSp)
   else
-    call register_restarts_dyn_unsplit(dG%HI, GV, param_file, &
+    call register_restarts_dyn_unsplit(HI, GV, param_file, &
            CS%dyn_unsplit_CSp, restart_CSp)
   endif
 
   ! This subroutine calls user-specified tracer registration routines.
   ! Additional calls can be added to MOM_tracer_flow_control.F90.
-  call call_tracer_register(dG%HI, GV, US, param_file, CS%tracer_flow_CSp, &
+  call call_tracer_register(HI, GV, US, param_file, CS%tracer_flow_CSp, &
                             CS%tracer_Reg, restart_CSp)
 
-  call MEKE_alloc_register_restart(dG%HI, param_file, CS%MEKE, restart_CSp)
-  call set_visc_register_restarts(dG%HI, GV, param_file, CS%visc, restart_CSp)
-  call mixedlayer_restrat_register_restarts(dG%HI, param_file, &
+  call MEKE_alloc_register_restart(HI, param_file, CS%MEKE, restart_CSp)
+  call set_visc_register_restarts(HI, GV, param_file, CS%visc, restart_CSp)
+  call mixedlayer_restrat_register_restarts(HI, param_file, &
            CS%mixedlayer_restrat_CSp, restart_CSp)
 
   if (CS%rotate_index .and. associated(OBC_in) .and. use_temperature) then
@@ -2383,33 +2393,16 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
 
     ! This needs the number of tracers and to have called any code that sets whether
     ! reservoirs are used.
-    call open_boundary_register_restarts(dg%HI, GV, CS%OBC, CS%tracer_Reg, &
+    call open_boundary_register_restarts(HI, GV, CS%OBC, CS%tracer_Reg, &
                           param_file, restart_CSp, use_temperature)
   endif
 
   call callTree_waypoint("restart registration complete (initialize_MOM)")
   call restart_registry_lock(restart_CSp)
 
-  !   Shift from using the temporary dynamic grid type to using the final
-  ! (potentially static) ocean-specific grid type.
-  !   The next line would be needed if G%Domain had not already been init'd above:
-  !     call clone_MOM_domain(dG%Domain, G%Domain)
-
-  ! NOTE: If indices are rotated, then G and G_in must both be initialized.
-  !   If not rotated, then G_in and G are the same grid.
-  if (CS%rotate_index) then
-    call MOM_grid_init(G, param_file, US, HI, bathymetry_at_vel=bathy_at_vel)
-    call copy_dyngrid_to_MOM_grid(dG, G, US)
-    call destroy_dyn_horgrid(dG)
-  endif
-  call MOM_grid_init(G_in, param_file, US, HI_in, bathymetry_at_vel=bathy_at_vel)
-  call copy_dyngrid_to_MOM_grid(dG_in, G_in, US)
-  if (.not. CS%rotate_index) G => G_in
-
+  ! Write out all of the grid data used by this run.
   new_sim = determine_is_new_run(dirs%input_filename, dirs%restart_input_dir, G_in, restart_CSp)
   write_geom_files = ((write_geom==2) .or. ((write_geom==1) .and. new_sim))
-
-  ! Write out all of the grid data used by this run.
   if (write_geom_files) call write_ocean_geometry_file(dG_in, param_file, dirs%output_directory, US=US)
 
   call destroy_dyn_horgrid(dG_in)
@@ -2535,16 +2528,16 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
 
   if (test_grid_copy) then
     !  Copy the data from the temporary grid to the dyn_hor_grid to CS%G.
-    call create_dyn_horgrid(dG, G%HI)
-    call clone_MOM_domain(G%Domain, dG%Domain)
+    call create_dyn_horgrid(test_dG, G%HI)
+    call clone_MOM_domain(G%Domain, test_dG%Domain)
 
     call clone_MOM_domain(G%Domain, CS%G%Domain)
     call MOM_grid_init(CS%G, param_file, US)
 
-    call copy_MOM_grid_to_dyngrid(G, dg, US)
-    call copy_dyngrid_to_MOM_grid(dg, CS%G, US)
+    call copy_MOM_grid_to_dyngrid(G, test_dG, US)
+    call copy_dyngrid_to_MOM_grid(test_dG, CS%G, US)
 
-    call destroy_dyn_horgrid(dG)
+    call destroy_dyn_horgrid(test_dG)
     call MOM_grid_end(G) ; deallocate(G)
 
     G => CS%G

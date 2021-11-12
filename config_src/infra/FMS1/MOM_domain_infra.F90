@@ -1716,13 +1716,13 @@ subroutine clone_MD_to_d2D(MD_in, mpp_domain, min_halo, halo_size, symmetric, &
                 symmetry=symmetric_dom, xextent=xextent, yextent=yextent, name=dom_name)
   endif
 
-  if ((MD_in%io_layout(1) + MD_in%io_layout(2) > 0) .and. &
-      (MD_in%layout(1)*MD_in%layout(2) > 1)) then
-    call mpp_define_io_domain(mpp_domain, MD_in%io_layout)
-  else
-    call mpp_define_io_domain(mpp_domain, (/ 1, 1 /) )
+  if (MD_in%layout(1) * MD_in%layout(2) > 1) then
+    if ((MD_in%io_layout(1) + MD_in%io_layout(2) > 0)) then
+      call mpp_define_io_domain(mpp_domain, MD_in%io_layout)
+    else
+      call mpp_define_io_domain(mpp_domain, [1, 1] )
+    endif
   endif
-
 end subroutine clone_MD_to_d2D
 
 !> Returns the index ranges that have been stored in a MOM_domain_type

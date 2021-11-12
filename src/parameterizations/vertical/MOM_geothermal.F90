@@ -499,7 +499,7 @@ subroutine geothermal_init(Time, G, GV, US, param_file, diag, CS, useALEalgorith
   type(diag_ctrl), target, intent(inout) :: diag !< Structure used to regulate diagnostic output.
   type(geothermal_CS),     pointer       :: CS   !< Pointer pointing to the module control
                                                  !! structure.
-  logical,       optional, intent(in)    :: useALEalgorithm  !< logical for whether to use ALE remapping
+  logical,                 intent(in)    :: useALEalgorithm  !< logical for whether to use ALE remapping
 
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
@@ -587,13 +587,13 @@ subroutine geothermal_init(Time, G, GV, US, param_file, diag, CS, useALEalgorith
         'internal_heat_temp_tendency', diag%axesTL, Time,              &
         'Temperature tendency (in 3D) due to internal (geothermal) sources', &
         'degC s-1', conversion=US%s_to_T, v_extensive=.true.)
-  if (present(useALEalgorithm)) then ; if (.not.useALEalgorithm) then
+  if (.not.useALEalgorithm) then
     ! Do not offer this diagnostic if heating will be in place.
     CS%id_internal_heat_h_tendency=register_diag_field('ocean_model',    &
         'internal_heat_h_tendency', diag%axesTL, Time,                &
         'Thickness tendency (in 3D) due to internal (geothermal) sources', &
         trim(thickness_units)//' s-1', conversion=GV%H_to_MKS*US%s_to_T, v_extensive=.true.)
-  endif ; endif
+  endif
 
 end subroutine geothermal_init
 

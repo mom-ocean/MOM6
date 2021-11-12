@@ -150,10 +150,10 @@ subroutine calculate_CVMix_conv(h, tv, G, GV, US, CS, hbl, Kd, Kv, Kd_aux)
                                                                 !! by a previous call to CVMix_conv_init.
   real, dimension(SZI_(G),SZJ_(G)),          intent(in)  :: hbl !< Depth of ocean boundary layer [Z ~> m]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), &
-                                   optional, intent(inout) :: Kd !< Diapycnal diffusivity at each interface that
+                                             intent(inout) :: Kd !< Diapycnal diffusivity at each interface that
                                                                  !! will be incremented here [Z2 T-1 ~> m2 s-1].
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), &
-                                   optional, intent(inout) :: KV !< Viscosity at each interface that will be
+                                             intent(inout) :: KV !< Viscosity at each interface that will be
                                                                  !! incremented here [Z2 T-1 ~> m2 s-1].
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), &
                                    optional, intent(inout) :: Kd_aux !< A second diapycnal diffusivity at each
@@ -243,12 +243,10 @@ subroutine calculate_CVMix_conv(h, tv, G, GV, US, CS, hbl, Kd, Kv, Kd_aux)
                              max_nlev=GV%ke, &
                              OBL_ind=kOBL)
 
-      if (present(Kd)) then
-        ! Increment the diffusivity outside of the boundary layer.
-        do K=max(1,kOBL+1),GV%ke+1
-          Kd(i,j,K) = Kd(i,j,K) + US%m2_s_to_Z2_T * kd_col(K)
-        enddo
-      endif
+      ! Increment the diffusivity outside of the boundary layer.
+      do K=max(1,kOBL+1),GV%ke+1
+        Kd(i,j,K) = Kd(i,j,K) + US%m2_s_to_Z2_T * kd_col(K)
+      enddo
       if (present(Kd_aux)) then
         ! Increment the other diffusivity outside of the boundary layer.
         do K=max(1,kOBL+1),GV%ke+1
@@ -256,12 +254,10 @@ subroutine calculate_CVMix_conv(h, tv, G, GV, US, CS, hbl, Kd, Kv, Kd_aux)
         enddo
       endif
 
-      if (present(Kv)) then
-        ! Increment the viscosity outside of the boundary layer.
-        do K=max(1,kOBL+1),GV%ke+1
-          Kv(i,j,K) = Kv(i,j,K) + US%m2_s_to_Z2_T * kv_col(K)
-        enddo
-      endif
+      ! Increment the viscosity outside of the boundary layer.
+      do K=max(1,kOBL+1),GV%ke+1
+        Kv(i,j,K) = Kv(i,j,K) + US%m2_s_to_Z2_T * kv_col(K)
+      enddo
 
       ! Store 3-d arrays for diagnostics.
       if (CS%id_kv_conv > 0) then
@@ -288,8 +284,8 @@ subroutine calculate_CVMix_conv(h, tv, G, GV, US, CS, hbl, Kd, Kv, Kd_aux)
     !   call hchksum(Kd_conv, "MOM_CVMix_conv: Kd_conv", G%HI, haloshift=0, scale=US%Z2_T_to_m2_s)
     ! if (CS%id_kv_conv > 0) &
     !   call hchksum(Kv_conv, "MOM_CVMix_conv: Kv_conv", G%HI, haloshift=0, scale=US%m2_s_to_Z2_T)
-    if (present(Kd)) call hchksum(Kd, "MOM_CVMix_conv: Kd", G%HI, haloshift=0, scale=US%Z2_T_to_m2_s)
-    if (present(Kv)) call hchksum(Kv, "MOM_CVMix_conv: Kv", G%HI, haloshift=0, scale=US%Z2_T_to_m2_s)
+    call hchksum(Kd, "MOM_CVMix_conv: Kd", G%HI, haloshift=0, scale=US%Z2_T_to_m2_s)
+    call hchksum(Kv, "MOM_CVMix_conv: Kv", G%HI, haloshift=0, scale=US%Z2_T_to_m2_s)
   endif
 
   ! send diagnostics to post_data
