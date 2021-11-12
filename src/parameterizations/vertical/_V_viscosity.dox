@@ -1,12 +1,25 @@
-/*! \page Vertical_Viscosity Viscous Bottom Boundary Layer
+/*! \page Vertical_Viscosity Vertical Viscosity
+
+The vertical viscosity is composed of several components.
+
+-# The vertical diffusivity computations for the background and shear
+mixing all save contributions to the viscosity with an assumed turbulent
+Prandtl number of 1.0, though this can be changed with the PRANDTL_BKGND and
+PRANDTL_TURB parameters, respectively.
+-# If the ePBL scheme is used, it contributes to the vertical viscosity
+with a Prandtl number of PRANDTL_EPBL.
+-# If the CVMix scheme is used, it contributes to the vertical viscosity
+with a Prandtl number of PRANDTL_CONV.
+-# If the tidal mixing scheme is used, it contributes to the vertical
+viscosity with a Prandtl number of PRANDTL_TIDAL.
+
+\section set_viscous_BBL Viscous Bottom Boundary Layer
 
 A drag law is used, either linearized about an assumed bottom velocity or using the
 actual near-bottom velocities combined with an assumed unresolved velocity. The bottom
 boundary layer thickness is limited by a combination of stratification and rotation, as
 in the paper of \cite killworth1999. It is not necessary to calculate the
 thickness and viscosity every time step; instead previous values may be used.
-
-\section set_viscous_BBL Viscous Bottom Boundary Layer
 
 If set_visc_CS\%bottomdraglaw is True then a bottom boundary layer viscosity and thickness
 are calculated so that the bottom stress is
@@ -31,7 +44,7 @@ thin upwind cells helps increase the effect of viscosity and inhibits flow out o
 thin cells.
 
 After diagnosing \f$|U_{bbl}|\f$ over a fixed depth an active viscous boundary layer
-thickness is found using the ideas of Killworth and Edwards, 1999 (hereafter KW99).
+thickness is found using the ideas of \cite killworth1999 (hereafter KW99).
 KW99 solve the equation
 \f[
 \left( \frac{h_{bbl}}{h_f} \right)^2 + \frac{h_{bbl}}{h_N} = 1
@@ -56,9 +69,20 @@ If a Richardson number dependent mixing scheme is being used, as indicated by
 set_visc_CS\%rino_mix, then the boundary layer thickness is bounded to be no larger
 than a half of set_visc_CS\%hbbl .
 
-\todo Channel drag needs to be explained
-
 A BBL viscosity is calculated so that the no-slip boundary condition in the vertical
-viscosity solver implies the stress \f$\mathbf{\tau}_b\f$.
+viscosity solver implies the stress \f$\mathbf{\tau}_b\f$:
+
+\f[
+    K_{bbl} = \frac{1}{2} h_{bbl} \sqrt{C_{drag}} u^\ast
+\f]
+
+\todo Channel drag needs to be explained
+\section section_Channel_drag Channel Drag
+
+The channel drag is an extra Rayleigh drag applied to cells near the bottom when the
+laterally adjacent cell vanishes. The bottom shape is approximated as locally
+parabolic, such that the bottom-most layer could be more than one of the model's
+layers. The bottom drag is applied to each layer with a factor \f$R_k\f$, the sum of
+which is 1 over all the layers.
 
 */
