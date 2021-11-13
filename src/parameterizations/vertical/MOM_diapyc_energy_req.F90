@@ -196,8 +196,9 @@ subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, &
                 ! ensure positive definiteness [H ~> m or kg m-2].
   real, dimension(GV%ke+1) :: &
     pres, &     ! Interface pressures [R L2 T-2 ~> Pa].
-    pres_Z, &   ! Interface pressures with a rescaling factor to convert interface height
-                ! movements into changes in column potential energy [R L2 T-2 m Z-1 ~> J m-3].
+    pres_Z, &   ! The hydrostatic interface pressure, which is used to relate
+                ! the changes in column thickness to the energy that is radiated
+                ! as gravity waves and unavailable to drive mixing [R L2 T-2 ~> J m-3].
     z_Int, &    ! Interface heights relative to the surface [H ~> m or kg m-2].
     N2, &       ! An estimate of the buoyancy frequency [T-2 ~> s-2].
     Kddt_h, &   ! The diapycnal diffusivity times a timestep divided by the
@@ -1011,7 +1012,7 @@ subroutine find_PE_chg(Kddt_h0, dKddt_h, hp_a, hp_b, Th_a, Sh_a, Th_b, Sh_b, &
                                 !! in the salinities of all the layers below [R Z L2 T-2 ppt-1 ~> J m-2 ppt-1].
   real, intent(in)  :: pres_Z   !< The hydrostatic interface pressure, which is used to relate
                                 !! the changes in column thickness to the energy that is radiated
-                                !! as gravity waves and unavailable to drive mixing [R L2 T-2 m Z-1 ~> J m-3].
+                                !! as gravity waves and unavailable to drive mixing [R L2 T-2 ~> J m-3].
   real, intent(in)  :: dT_to_dColHt_a !< A factor (mass_lay*dSColHtc_vol/dT) relating
                                 !! a layer's temperature change to the change in column
                                 !! height, including all implicit diffusive changes
@@ -1193,12 +1194,14 @@ subroutine find_PE_chg_orig(Kddt_h, h_k, b_den_1, dTe_term, dSe_term, &
   real :: ColHt_chg     ! The change in column thickness [Z ~> m].
   real :: dColHt_max    ! The change in column thickness for infinite diffusivity [Z ~> m].
   real :: dColHt_dKd    ! The partial derivative of column thickness with Kddt_h [Z H-1 ~> 1 or m3 kg-1].
-  real :: dT_k, dT_km1  ! Temporary arrays [degC].
-  real :: dS_k, dS_km1  ! Temporary arrays [ppt].
-  real :: I_Kr_denom    ! Temporary arrays [H-2 ~> m-2 or m4 kg-2].
-  real :: dKr_dKd       ! Nondimensional temporary array [nondim].
-  real :: ddT_k_dKd, ddT_km1_dKd ! Temporary arrays [degC H-1 ~> m-1 or m2 kg-1].
-  real :: ddS_k_dKd, ddS_km1_dKd ! Temporary arrays [ppt H-1 ~> ppt m-1 or ppt m2 kg-1].
+  real :: dT_k, dT_km1  ! Temperature changes in layers k and k-1 [degC]
+  real :: dS_k, dS_km1  ! Salinity changes in layers k and k-1 [ppt]
+  real :: I_Kr_denom    ! Temporary array [H-2 ~> m-2 or m4 kg-2]
+  real :: dKr_dKd       ! Temporary array [H-2 ~> m-2 or m4 kg-2]
+  real :: ddT_k_dKd, ddT_km1_dKd ! Temporary arrays indicating the temperature changes
+                        ! per unit change in Kddt_h [degC H-1 ~> degC m-1 or degC m2 kg-1]
+  real :: ddS_k_dKd, ddS_km1_dKd ! Temporary arrays indicating the salinity changes
+                        ! per unit change in Kddt_h [ppt H-1 ~> ppt m-1 or ppt m2 kg-1]
 
   b1 = 1.0 / (b_den_1 + Kddt_h)
   b1Kd = Kddt_h*b1

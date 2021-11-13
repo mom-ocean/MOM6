@@ -54,9 +54,6 @@ type, public :: PointAccel_CS ; private
     S => NULL(), &          !< Salinity [ppt].
     u_accel_bt => NULL(), & !< Barotropic u-acclerations [L T-2 ~> m s-2]
     v_accel_bt => NULL()    !< Barotropic v-acclerations [L T-2 ~> m s-2]
-  real, pointer, dimension(:,:,:) :: pbce => NULL() !< pbce times eta gives the baroclinic
-                            !! pressure anomaly in each layer due to free surface height anomalies
-                            !! [m2 s-2 H-1 ~> m s-2 or m4 kg-1 s-2].
 end type PointAccel_CS
 
 contains
@@ -85,7 +82,7 @@ subroutine write_u_accel(I, j, um, hin, ADp, CDp, dt_in_T, G, GV, US, CS, vel_rp
   real, optional,              intent(in) :: str !< The surface wind stress integrated over a time
                                                  !! step divided by the Boussinesq density [m2 s-1].
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
-                     optional, intent(in) :: a   !< The layer coupling coefficients from vertvisc [Z s-1 ~> m s-1].
+                     optional, intent(in) :: a   !< The layer coupling coefficients from vertvisc [Z T-1 ~> m s-1].
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
                      optional, intent(in) :: hv  !< The layer thicknesses at velocity grid points,
                                                  !! from vertvisc [H ~> m or kg m-2].
@@ -219,7 +216,7 @@ subroutine write_u_accel(I, j, um, hin, ADp, CDp, dt_in_T, G, GV, US, CS, vel_rp
     endif
     if (present(a)) then
       write(file,'(/,"a:     ",$)')
-      do k=ks,ke+1 ; if (do_k(k)) write(file,'(ES10.3," ",$)') a(I,j,k)*US%Z_to_m*dt; enddo
+      do k=ks,ke+1 ; if (do_k(k)) write(file,'(ES10.3," ",$)') a(I,j,k)*US%Z_to_m*dt_in_T; enddo
     endif
     if (present(hv)) then
       write(file,'(/,"hvel:  ",$)')
@@ -418,7 +415,7 @@ subroutine write_v_accel(i, J, vm, hin, ADp, CDp, dt_in_T, G, GV, US, CS, vel_rp
   real, optional,              intent(in) :: str !< The surface wind stress integrated over a time
                                                  !! step divided by the Boussinesq density [m2 s-1].
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
-                     optional, intent(in) :: a   !< The layer coupling coefficients from vertvisc [Z s-1 ~> m s-1].
+                     optional, intent(in) :: a   !< The layer coupling coefficients from vertvisc [Z T-1 ~> m s-1].
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
                      optional, intent(in) :: hv  !< The layer thicknesses at velocity grid points,
                                                  !! from vertvisc [H ~> m or kg m-2].
@@ -556,7 +553,7 @@ subroutine write_v_accel(i, J, vm, hin, ADp, CDp, dt_in_T, G, GV, US, CS, vel_rp
     endif
     if (present(a)) then
       write(file,'(/,"a:     ",$)')
-      do k=ks,ke+1 ; if (do_k(k)) write(file,'(ES10.3," ",$)') a(i,j,k)*US%Z_to_m*dt; enddo
+      do k=ks,ke+1 ; if (do_k(k)) write(file,'(ES10.3," ",$)') a(i,j,k)*US%Z_to_m*dt_in_T; enddo
     endif
     if (present(hv)) then
       write(file,'(/,"hvel:  ",$)')
@@ -742,8 +739,8 @@ subroutine PointAccel_init(MIS, Time, G, param_file, diag, dirs, CS)
                                                       !! directory paths.
   type(PointAccel_CS),          pointer       :: CS   !< A pointer that is set to point to the
                                                       !! control structure for this module.
-! This include declares and sets the variable "version".
-#include "version_variable.h"
+  ! This include declares and sets the variable "version".
+# include "version_variable.h"
   character(len=40)  :: mdl = "MOM_PointAccel" ! This module's name.
 
   if (associated(CS)) return
@@ -751,7 +748,7 @@ subroutine PointAccel_init(MIS, Time, G, param_file, diag, dirs, CS)
 
   CS%diag => diag ; CS%Time => Time
 
-  CS%T => MIS%T ; CS%S => MIS%S ; CS%pbce => MIS%pbce
+  CS%T => MIS%T ; CS%S => MIS%S
   CS%u_accel_bt => MIS%u_accel_bt ; CS%v_accel_bt => MIS%v_accel_bt
   CS%u_prev => MIS%u_prev ; CS%v_prev => MIS%v_prev
   CS%u_av => MIS%u_av; if (.not.associated(MIS%u_av)) CS%u_av => MIS%u(:,:,:)

@@ -170,7 +170,7 @@ subroutine entrainment_diffusive(h, tv, fluxes, dt, G, GV, US, CS, ea, eb, &
   real :: dRHo      ! The change in locally referenced potential density between
                     ! the layers above and below an interface [R ~> kg m-3].
   real :: g_2dt     ! 0.5 * G_Earth / dt, times unit conversion factors
-                    ! [m3 H-2 s-2 T-1 ~> m s-3 or m7 kg-2 s-3].
+                    ! [Z3 H-2 T-3 ~> m s-3 or m7 kg-2 s-3].
   real, dimension(SZI_(G)) :: &
     pressure, &      ! The pressure at an interface [R L2 T-2 ~> Pa].
     T_eos, S_eos, &  ! The potential temperature and salinity at which to
@@ -184,7 +184,7 @@ subroutine entrainment_diffusive(h, tv, fluxes, dt, G, GV, US, CS, ea, eb, &
                      ! in roundoff and can be neglected [H ~> m or kg m-2].
   real :: F_cor      ! A correction to the amount of F that is used to
                      ! entrain from the layer above [H ~> m or kg m-2].
-  real :: Kd_here    ! The effective diapycnal diffusivity [H2 s-1 ~> m2 s-1 or kg2 m-4 s-1].
+  real :: Kd_here    ! The effective diapycnal diffusivity times the timestep [H2 ~> m2 or kg2 m-4].
   real :: h_avail    ! The thickness that is available for entrainment [H ~> m or kg m-2].
   real :: dS_kb_eff  ! The value of dS_kb after limiting is taken into account.
   real :: Rho_cor    ! The depth-integrated potential density anomaly that

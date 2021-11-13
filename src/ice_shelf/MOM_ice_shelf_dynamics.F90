@@ -80,7 +80,7 @@ type, public :: ice_shelf_dyn_CS ; private
   real, pointer, dimension(:,:) :: tmask => NULL()   !< A mask on tracer points that is 1 where there is ice.
   real, pointer, dimension(:,:) :: ice_visc => NULL()   !< Glen's law ice viscosity, often in [R L4 Z T-1 ~> kg m2 s-1].
   real, pointer, dimension(:,:) :: AGlen_visc => NULL() !< Ice-stiffness parameter in Glen's law ice viscosity,
-                                                      !!often in [R-1/3 L-2/3 Z-1/3 T-1 ~> kg-1/3 m-1/3 s-1].
+                                                      !! often in [kg-1/3 m-1/3 s-1].
   real, pointer, dimension(:,:) :: thickness_bdry_val => NULL() !< The ice thickness at an inflowing boundary [Z ~> m].
   real, pointer, dimension(:,:) :: u_bdry_val => NULL() !< The zonal ice velocity at inflowing boundaries
                                        !! [L yr-1 ~> m yr-1]
@@ -1378,7 +1378,7 @@ subroutine ice_shelf_advect_thickness_x(CS, G, LB, time_step, hmask, h0, h_after
 
   integer :: i, j
   integer :: ish, ieh, jsh, jeh
-  real :: u_face     ! Zonal velocity at a face [L Z-1 ~> m s-1]
+  real :: u_face     ! Zonal velocity at a face [L T-1 ~> m s-1]
   real :: h_face     ! Thickness at a face for transport [Z ~> m]
   real :: slope_lim  ! The value of the slope limiter, in the range of 0 to 2 [nondim]
 
@@ -1461,7 +1461,7 @@ subroutine ice_shelf_advect_thickness_y(CS, G, LB, time_step, hmask, h0, h_after
 
   integer :: i, j
   integer :: ish, ieh, jsh, jeh
-  real :: v_face     ! Pseudo-meridional velocity at a face [L Z-1 ~> m s-1]
+  real :: v_face     ! Pseudo-meridional velocity at a face [L T-1 ~> m s-1]
   real :: h_face     ! Thickness at a face for transport [Z ~> m]
   real :: slope_lim  ! The value of the slope limiter, in the range of 0 to 2 [nondim]
 
@@ -1793,7 +1793,7 @@ subroutine calc_shelf_driving_stress(CS, ISS, G, US, taudx, taudy, OD)
 
 
   real    :: rho, rhow, rhoi_rhow ! Ice and ocean densities [R ~> kg m-3]
-  real    :: sx, sy    ! Ice shelf top slopes [Z L-1 ~> m s-1]
+  real    :: sx, sy    ! Ice shelf top slopes [Z L-1 ~> nondim]
   real    :: neumann_val ! [R Z L2 T-2 ~> kg s-2]
   real    :: dxh, dyh  ! Local grid spacing [L ~> m]
   real    :: grav      ! The gravitational acceleration [L2 Z-1 T-2 ~> m s-2]

@@ -156,13 +156,13 @@ subroutine lateral_boundary_diffusion(G, GV, US, h, Coef_x, Coef_y, dt, Reg, CS)
 
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G))           :: hbl         !< Boundary layer depth [H ~> m or kg m-2]
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)) :: uFlx        !< Zonal flux of tracer [conc H L2 ~> conc kg or conc m^3]
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)) :: uFlx        !< Zonal flux of tracer [conc H L2 ~> conc m3 or conc kg]
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)) :: vFlx        !< Meridional flux of tracer
-                                                            !! [conc H L2 ~> conc kg or conc m^3]
+                                                            !! [conc H L2 ~> conc m3 or conc kg]
   real, dimension(SZIB_(G),SZJ_(G))          :: uwork_2d    !< Layer summed u-flux transport
-                                                            !! [conc H L2 ~> conc kg or conc m^3]
+                                                            !! [conc H L2 ~> conc m3 or conc kg]
   real, dimension(SZI_(G),SZJB_(G))          :: vwork_2d    !< Layer summed v-flux transport
-                                                            !! [conc H L2 ~> conc kg or conc m^3]
+                                                            !! [conc H L2 ~> conc m3 or conc kg]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV))  :: tendency    !< tendency array for diagnostic [conc T-1 ~> conc s-1]
   real, dimension(SZI_(G),SZJ_(G))           :: tendency_2d !< depth integrated content tendency for diagn
   type(tracer_type), pointer                 :: tracer => NULL() !< Pointer to the current tracer

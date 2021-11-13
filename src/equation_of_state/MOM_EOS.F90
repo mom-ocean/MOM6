@@ -709,7 +709,7 @@ subroutine calculate_density_derivs_array(T, S, pressure, drho_dT, drho_dS, star
   real, dimension(:), intent(inout) :: drho_dT  !< The partial derivative of density with potential
                                                 !! temperature [kg m-3 degC-1] or [R degC-1 ~> kg m-3 degC-1]
   real, dimension(:), intent(inout) :: drho_dS  !< The partial derivative of density with salinity,
-                                                !! in [kg m-3 ppt-1] or [R degC-1 ~> kg m-3 ppt-1]
+                                                !! in [kg m-3 ppt-1] or [R ppt-1 ~> kg m-3 ppt-1]
   integer,            intent(in)    :: start    !< Starting index within the array
   integer,            intent(in)    :: npts     !< The number of values to calculate
   type(EOS_type),     pointer       :: EOS      !< Equation of state structure
@@ -754,7 +754,7 @@ subroutine calculate_density_derivs_1d(T, S, pressure, drho_dT, drho_dS, EOS, do
   real, dimension(:),    intent(inout) :: drho_dT  !< The partial derivative of density with potential
                                                    !! temperature [R degC-1 ~> kg m-3 degC-1]
   real, dimension(:),    intent(inout) :: drho_dS  !< The partial derivative of density with salinity
-                                                   !! [R degC-1 ~> kg m-3 ppt-1]
+                                                   !! [R ppt-1 ~> kg m-3 ppt-1]
   type(EOS_type),        pointer       :: EOS      !< Equation of state structure
   integer, dimension(2), optional, intent(in) :: dom   !< The domain of indices to work on, taking
                                                        !! into account that arrays start at 1.
