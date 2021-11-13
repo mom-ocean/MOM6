@@ -145,7 +145,7 @@ type, public :: MOM_dyn_unsplit_CS ; private
   !> A pointer to the continuity control structure
   type(continuity_CS), pointer :: continuity_CSp => NULL()
   !> A pointer to the CoriolisAdv control structure
-  type(CoriolisAdv_CS), pointer :: CoriolisAdv_CSp => NULL()
+  type(CoriolisAdv_CS) :: CoriolisAdv
   !> A pointer to the PressureForce control structure
   type(PressureForce_CS), pointer :: PressureForce_CSp => NULL()
   !> A pointer to the vertvisc control structure
@@ -297,7 +297,7 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, forces, &
 ! CAu = -(f+zeta)/h_av vh + d/dx KE
   call cpu_clock_begin(id_clock_Cor)
   call CorAdCalc(u, v, h_av, uh, vh, CS%CAu, CS%CAv, CS%OBC, CS%ADp, &
-                 G, GV, US, CS%CoriolisAdv_CSp)
+                 G, GV, US, CS%CoriolisAdv)
   call cpu_clock_end(id_clock_Cor)
 
 ! PFu = d/dx M(h_av,T,S)
@@ -363,7 +363,7 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, forces, &
 ! CAu = -(f+zeta(up))/h_av vh + d/dx KE(up)
   call cpu_clock_begin(id_clock_Cor)
   call CorAdCalc(up, vp, h_av, uh, vh, CS%CAu, CS%CAv, CS%OBC, CS%ADp, &
-                 G, GV, US, CS%CoriolisAdv_CSp)
+                 G, GV, US, CS%CoriolisAdv)
   call cpu_clock_end(id_clock_Cor)
 
 ! PFu = d/dx M(h_av,T,S)
@@ -441,7 +441,7 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, forces, &
 ! CAu = -(f+zeta(upp))/h_av vh + d/dx KE(upp)
   call cpu_clock_begin(id_clock_Cor)
   call CorAdCalc(upp, vpp, h_av, uh, vh, CS%CAu, CS%CAv, CS%OBC, CS%ADp, &
-                 G, GV, US, CS%CoriolisAdv_CSp)
+                 G, GV, US, CS%CoriolisAdv)
   call cpu_clock_end(id_clock_Cor)
 
 ! PFu = d/dx M(h_av,T,S)
@@ -643,7 +643,7 @@ subroutine initialize_dyn_unsplit(u, v, h, Time, G, GV, US, param_file, diag, CS
 
   call continuity_init(Time, G, GV, US, param_file, diag, CS%continuity_CSp)
   cont_stencil = continuity_stencil(CS%continuity_CSp)
-  call CoriolisAdv_init(Time, G, GV, US, param_file, diag, CS%ADp, CS%CoriolisAdv_CSp)
+  call CoriolisAdv_init(Time, G, GV, US, param_file, diag, CS%ADp, CS%CoriolisAdv)
   if (use_tides) call tidal_forcing_init(Time, G, param_file, CS%tides_CSp)
   call PressureForce_init(Time, G, GV, US, param_file, diag, CS%PressureForce_CSp, &
                           CS%tides_CSp)

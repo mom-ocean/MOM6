@@ -202,8 +202,8 @@ type, public :: MOM_dyn_split_RK2_CS ; private
   type(hor_visc_CS) :: hor_visc
   !> A pointer to the continuity control structure
   type(continuity_CS),    pointer :: continuity_CSp    => NULL()
-  !> A pointer to the CoriolisAdv control structure
-  type(CoriolisAdv_CS),   pointer :: CoriolisAdv_CSp   => NULL()
+  !> The CoriolisAdv control structure
+  type(CoriolisAdv_CS) :: CoriolisAdv
   !> A pointer to the PressureForce control structure
   type(PressureForce_CS), pointer :: PressureForce_CSp => NULL()
   !> A pointer to a structure containing interface height diffusivities
@@ -478,7 +478,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
 ! CAu = -(f+zeta_av)/h_av vh + d/dx KE_av
   call cpu_clock_begin(id_clock_Cor)
   call CorAdCalc(u_av, v_av, h_av, uh, vh, CS%CAu, CS%CAv, CS%OBC, CS%ADp, &
-                 G, Gv, US, CS%CoriolisAdv_CSp)
+                 G, Gv, US, CS%CoriolisAdv)
   call cpu_clock_end(id_clock_Cor)
   if (showCallTree) call callTree_wayPoint("done with CorAdCalc (step_MOM_dyn_split_RK2)")
 
@@ -731,7 +731,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
 ! CAu = -(f+zeta_av)/h_av vh + d/dx KE_av
   call cpu_clock_begin(id_clock_Cor)
   call CorAdCalc(u_av, v_av, h_av, uh, vh, CS%CAu, CS%CAv, CS%OBC, CS%ADp, &
-                 G, GV, US, CS%CoriolisAdv_CSp)
+                 G, GV, US, CS%CoriolisAdv)
   call cpu_clock_end(id_clock_Cor)
   if (showCallTree) call callTree_wayPoint("done with CorAdCalc (step_MOM_dyn_split_RK2)")
 
@@ -1388,7 +1388,7 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, US, param
 
   call continuity_init(Time, G, GV, US, param_file, diag, CS%continuity_CSp)
   cont_stencil = continuity_stencil(CS%continuity_CSp)
-  call CoriolisAdv_init(Time, G, GV, US, param_file, diag, CS%ADp, CS%CoriolisAdv_CSp)
+  call CoriolisAdv_init(Time, G, GV, US, param_file, diag, CS%ADp, CS%CoriolisAdv)
   if (use_tides) call tidal_forcing_init(Time, G, param_file, CS%tides_CSp)
   call PressureForce_init(Time, G, GV, US, param_file, diag, CS%PressureForce_CSp, &
                           CS%tides_CSp)
@@ -1698,8 +1698,7 @@ subroutine end_dyn_split_RK2(CS)
 
   call tidal_forcing_end(CS%tides_CSp)
 
-  call CoriolisAdv_end(CS%CoriolisAdv_Csp)
-  deallocate(CS%CoriolisAdv_CSp)
+  call CoriolisAdv_end(CS%CoriolisAdv)
 
   call continuity_end(CS%continuity_CSp)
   deallocate(CS%continuity_CSp)

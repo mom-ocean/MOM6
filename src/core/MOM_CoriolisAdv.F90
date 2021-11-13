@@ -134,7 +134,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS)
   type(ocean_OBC_type),                       pointer       :: OBC !< Open boundary control structure
   type(accel_diag_ptrs),                      intent(inout) :: AD  !< Storage for acceleration diagnostics
   type(unit_scale_type),                      intent(in)    :: US  !< A dimensional unit scaling type
-  type(CoriolisAdv_CS),                       pointer       :: CS  !< Control structure for MOM_CoriolisAdv
+  type(CoriolisAdv_CS),                       intent(in)    :: CS  !< Control structure for MOM_CoriolisAdv
 
   ! Local variables
   real, dimension(SZIB_(G),SZJB_(G)) :: &
@@ -245,8 +245,6 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS)
 !   v(is-1:ie+2,js-1:je+1), u(is-1:ie+1,js-1:je+2), h(is-1:ie+2,js-1:je+2),
 !   uh(is-1,ie,js:je+1) and vh(is:ie+1,js-1:je).
 
-  if (.not.associated(CS)) call MOM_error(FATAL, &
-         "MOM_CoriolisAdv: Module must be initialized before it is used.")
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB ; nz = GV%ke
   vol_neglect = GV%H_subroundoff * (1e-4 * US%m_to_L)**2
@@ -1034,7 +1032,7 @@ subroutine gradKE(u, v, h, KE, KEx, KEy, k, OBC, G, GV, US, CS)
   integer,                                    intent(in)  :: k   !< Layer number to calculate for
   type(ocean_OBC_type),                       pointer     :: OBC !< Open boundary control structure
   type(unit_scale_type),                      intent(in)  :: US  !< A dimensional unit scaling type
-  type(CoriolisAdv_CS),                       pointer     :: CS  !< Control structure for MOM_CoriolisAdv
+  type(CoriolisAdv_CS),                       intent(in)  :: CS  !< Control structure for MOM_CoriolisAdv
   ! Local variables
   real :: um, up, vm, vp         ! Temporary variables [L T-1 ~> m s-1].
   real :: um2, up2, vm2, vp2     ! Temporary variables [L2 T-2 ~> m2 s-2].
@@ -1113,7 +1111,7 @@ subroutine CoriolisAdv_init(Time, G, GV, US, param_file, diag, AD, CS)
   type(param_file_type),   intent(in)    :: param_file !< Runtime parameter handles
   type(diag_ctrl), target, intent(inout) :: diag !< Diagnostics control structure
   type(accel_diag_ptrs),   target, intent(inout) :: AD !< Strorage for acceleration diagnostics
-  type(CoriolisAdv_CS),    pointer       :: CS !< Control structure fro MOM_CoriolisAdv
+  type(CoriolisAdv_CS),    intent(inout) :: CS !< Control structure fro MOM_CoriolisAdv
   ! Local variables
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
@@ -1124,12 +1122,6 @@ subroutine CoriolisAdv_init(Time, G, GV, US, param_file, diag, AD, CS)
 
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nz = GV%ke
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
-
-  if (associated(CS)) then
-    call MOM_error(WARNING, "CoriolisAdv_init called with associated control structure.")
-    return
-  endif
-  allocate(CS)
 
   CS%diag => diag ; CS%Time => Time
 
