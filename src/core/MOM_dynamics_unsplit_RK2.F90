@@ -145,7 +145,7 @@ type, public :: MOM_dyn_unsplit_RK2_CS ; private
   !> A pointer to the horizontal viscosity control structure
   type(hor_visc_CS) :: hor_visc
   !> A pointer to the continuity control structure
-  type(continuity_CS), pointer :: continuity_CSp => NULL()
+  type(continuity_CS) :: continuity_CSp
   !> The CoriolisAdv control structure
   type(CoriolisAdv_CS) :: CoriolisAdv
   !> A pointer to the PressureForce control structure

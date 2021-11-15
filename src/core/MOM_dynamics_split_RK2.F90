@@ -39,8 +39,7 @@ use MOM_barotropic,            only : register_barotropic_restarts, set_dtbt, ba
 use MOM_barotropic,            only : barotropic_end
 use MOM_boundary_update,       only : update_OBC_data, update_OBC_CS
 use MOM_continuity,            only : continuity, continuity_CS
-use MOM_continuity,            only : continuity_init, continuity_end
-use MOM_continuity,            only : continuity_stencil
+use MOM_continuity,            only : continuity_init, continuity_stencil
 use MOM_CoriolisAdv,           only : CorAdCalc, CoriolisAdv_CS
 use MOM_CoriolisAdv,           only : CoriolisAdv_init, CoriolisAdv_end
 use MOM_debugging,             only : check_redundant
@@ -201,7 +200,7 @@ type, public :: MOM_dyn_split_RK2_CS ; private
   !> A pointer to the horizontal viscosity control structure
   type(hor_visc_CS) :: hor_visc
   !> A pointer to the continuity control structure
-  type(continuity_CS),    pointer :: continuity_CSp    => NULL()
+  type(continuity_CS) :: continuity_CSp
   !> The CoriolisAdv control structure
   type(CoriolisAdv_CS) :: CoriolisAdv
   !> A pointer to the PressureForce control structure
@@ -1694,9 +1693,6 @@ subroutine end_dyn_split_RK2(CS)
   call hor_visc_end(CS%hor_visc)
   call tidal_forcing_end(CS%tides_CSp)
   call CoriolisAdv_end(CS%CoriolisAdv)
-
-  call continuity_end(CS%continuity_CSp)
-  deallocate(CS%continuity_CSp)
 
   DEALLOC_(CS%diffu) ; DEALLOC_(CS%diffv)
   DEALLOC_(CS%CAu)   ; DEALLOC_(CS%CAv)

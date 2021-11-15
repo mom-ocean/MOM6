@@ -18,7 +18,7 @@ implicit none ; private
 
 #include <MOM_memory.h>
 
-public continuity_PPM, continuity_PPM_init, continuity_PPM_end, continuity_PPM_stencil
+public continuity_PPM, continuity_PPM_init, continuity_PPM_stencil
 
 !>@{ CPU time clock IDs
 integer :: id_clock_update, id_clock_correct
@@ -91,7 +91,7 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, US, CS, OBC, uhbt, vh
                            intent(out)   :: vh  !< Meridional volume flux, v*h*dx [H L2 T-1 ~> m3 s-1 or kg s-1].
   real,                    intent(in)    :: dt  !< Time increment [T ~> s].
   type(unit_scale_type),   intent(in)    :: US  !< A dimensional unit scaling type
-  type(continuity_PPM_CS), pointer       :: CS  !< Module's control structure.
+  type(continuity_PPM_CS), intent(in)    :: CS  !< Module's control structure.
   type(ocean_OBC_type),    pointer       :: OBC !< Open boundaries control structure.
   real, dimension(SZIB_(G),SZJ_(G)), &
                  optional, intent(in)    :: uhbt !< The summed volume flux through zonal faces
@@ -134,8 +134,6 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, US, CS, OBC, uhbt, vh
 
   h_min = GV%Angstrom_H
 
-  if (.not.associated(CS)) call MOM_error(FATAL, &
-         "MOM_continuity_PPM: Module must be initialized before it is used.")
   x_first = (MOD(G%first_direction,2) == 0)
 
   if (present(visc_rem_u) .neqv. present(visc_rem_v)) call MOM_error(FATAL, &
@@ -220,7 +218,7 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, GV, US, CS, LB, OBC, uhbt, &
                                                  !! [H L2 T-1 ~> m3 s-1 or kg s-1].
   real,                    intent(in)    :: dt   !< Time increment [T ~> s].
   type(unit_scale_type),   intent(in)    :: US   !< A dimensional unit scaling type
-  type(continuity_PPM_CS), pointer       :: CS   !< This module's control structure.
+  type(continuity_PPM_CS), intent(in)       :: CS   !< This module's control structure.
   type(loop_bounds_type),  intent(in)    :: LB   !< Loop bounds structure.
   type(ocean_OBC_type),    pointer       :: OBC  !< Open boundaries control structure.
   real, dimension(SZIB_(G),SZJ_(G)), &
@@ -736,7 +734,7 @@ subroutine zonal_flux_adjust(u, h_in, h_L, h_R, uhbt, uh_tot_0, duhdu_tot_0, &
                        !! The barotropic velocity adjustment [L T-1 ~> m s-1].
   real,                                      intent(in)    :: dt   !< Time increment [T ~> s].
   type(unit_scale_type),                     intent(in)    :: US   !< A dimensional unit scaling type
-  type(continuity_PPM_CS),                   pointer       :: CS   !< This module's control structure.
+  type(continuity_PPM_CS),                   intent(in)    :: CS   !< This module's control structure.
   integer,                                   intent(in)    :: j    !< Spatial index.
   integer,                                   intent(in)    :: ish  !< Start of index range.
   integer,                                   intent(in)    :: ieh  !< End of index range.
@@ -878,7 +876,7 @@ subroutine set_zonal_BT_cont(u, h_in, h_L, h_R, BT_cont, uh_tot_0, duhdu_tot_0, 
                        !! value of du [L T-1 ~> m s-1].
   real,                                      intent(in)    :: dt   !< Time increment [T ~> s].
   type(unit_scale_type),                     intent(in)    :: US   !< A dimensional unit scaling type
-  type(continuity_PPM_CS),                   pointer       :: CS   !< This module's control structure.
+  type(continuity_PPM_CS),                   intent(in)    :: CS   !< This module's control structure.
   real, dimension(SZIB_(G),SZK_(GV)),        intent(in)    :: visc_rem !< Both the fraction of the
                        !! momentum originally in a layer that remains after a time-step of viscosity, and
                        !! the fraction of a time-step's worth of a barotropic acceleration that a layer
@@ -1029,7 +1027,7 @@ subroutine meridional_mass_flux(v, h_in, vh, dt, G, GV, US, CS, LB, OBC, vhbt, &
                                                                     !! faces = v*h*dx [H L2 s-1 ~> m3 s-1 or kg s-1]
   real,                                       intent(in)    :: dt   !< Time increment [T ~> s].
   type(unit_scale_type),                      intent(in)    :: US   !< A dimensional unit scaling type
-  type(continuity_PPM_CS),                    pointer       :: CS   !< This module's control structure.G
+  type(continuity_PPM_CS),                    intent(in)    :: CS   !< This module's control structure.G
   type(loop_bounds_type),                     intent(in)    :: LB   !< Loop bounds structure.
   type(ocean_OBC_type),                       pointer       :: OBC  !< Open boundary condition type
                                    !! specifies whether, where, and what open boundary conditions are used.
@@ -1545,7 +1543,7 @@ subroutine meridional_flux_adjust(v, h_in, h_L, h_R, vhbt, vh_tot_0, dvhdv_tot_0
   real, dimension(SZI_(G)), intent(out)   :: dv   !< The barotropic velocity adjustment [L T-1 ~> m s-1].
   real,                     intent(in)    :: dt   !< Time increment [T ~> s].
   type(unit_scale_type),    intent(in)    :: US   !< A dimensional unit scaling type
-  type(continuity_PPM_CS),  pointer       :: CS   !< This module's control structure.
+  type(continuity_PPM_CS),  intent(in)    :: CS   !< This module's control structure.
   integer,                  intent(in)    :: j    !< Spatial index.
   integer,                  intent(in)    :: ish  !< Start of index range.
   integer,                  intent(in)    :: ieh  !< End of index range.
@@ -1688,7 +1686,7 @@ subroutine set_merid_BT_cont(v, h_in, h_L, h_R, BT_cont, vh_tot_0, dvhdv_tot_0, 
                                                                    !!  of dv [L T-1 ~> m s-1].
   real,                                      intent(in)    :: dt   !< Time increment [T ~> s].
   type(unit_scale_type),                     intent(in)    :: US   !< A dimensional unit scaling type
-  type(continuity_PPM_CS),                   pointer       :: CS   !< This module's control structure.
+  type(continuity_PPM_CS),                   intent(in)    :: CS   !< This module's control structure.
   real, dimension(SZI_(G),SZK_(GV)),         intent(in)    :: visc_rem !< Both the fraction of the
                        !! momentum originally in a layer that remains after a time-step
                        !! of viscosity, and the fraction of a time-step's worth of a barotropic
@@ -2198,17 +2196,11 @@ subroutine continuity_PPM_init(Time, G, GV, US, param_file, diag, CS)
                   !! the open file to parse for model parameter values.
   type(diag_ctrl), target, intent(inout) :: diag !< A structure that is used to
                   !! regulate diagnostic output.
-  type(continuity_PPM_CS), pointer       :: CS   !< Module's control structure.
+  type(continuity_PPM_CS), intent(inout) :: CS   !< Module's control structure.
 !> This include declares and sets the variable "version".
 #include "version_variable.h"
   real :: tol_eta_m  ! An unscaled version of tol_eta [m].
   character(len=40)  :: mdl = "MOM_continuity_PPM" ! This module's name.
-
-  if (associated(CS)) then
-    call MOM_error(WARNING, "continuity_PPM_init called with associated control structure.")
-    return
-  endif
-  allocate(CS)
 
 ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mdl, version, "")
@@ -2286,18 +2278,12 @@ end subroutine continuity_PPM_init
 
 !> continuity_PPM_stencil returns the continuity solver stencil size
 function continuity_PPM_stencil(CS) result(stencil)
-  type(continuity_PPM_CS), pointer       :: CS  !< Module's control structure.
+  type(continuity_PPM_CS), intent(in) :: CS   !< Module's control structure.
   integer ::  stencil !< The continuity solver stencil size with the current settings.
 
   stencil = 3 ; if (CS%simple_2nd) stencil = 2 ; if (CS%upwind_1st) stencil = 1
 
 end function continuity_PPM_stencil
-
-!> Destructor for continuity_ppm_cs
-subroutine continuity_PPM_end(CS)
-  type(continuity_PPM_CS), pointer :: CS   !< Module's control structure.
-  deallocate(CS)
-end subroutine continuity_PPM_end
 
 !> \namespace mom_continuity_ppm
 !!
