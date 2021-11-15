@@ -147,7 +147,7 @@ type, public :: MOM_dyn_unsplit_CS ; private
   !> A pointer to the CoriolisAdv control structure
   type(CoriolisAdv_CS) :: CoriolisAdv
   !> A pointer to the PressureForce control structure
-  type(PressureForce_CS), pointer :: PressureForce_CSp => NULL()
+  type(PressureForce_CS) :: PressureForce_CSp
   !> A pointer to the vertvisc control structure
   type(vertvisc_CS), pointer :: vertvisc_CSp => NULL()
   !> A pointer to the set_visc control structure

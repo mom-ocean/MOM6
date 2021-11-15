@@ -55,7 +55,7 @@ use MOM_open_boundary,         only : ocean_OBC_type, radiation_open_bdry_conds
 use MOM_open_boundary,         only : open_boundary_zero_normal_flow
 use MOM_open_boundary,         only : open_boundary_test_extern_h, update_OBC_ramp
 use MOM_PressureForce,         only : PressureForce, PressureForce_CS
-use MOM_PressureForce,         only : PressureForce_init, PressureForce_end
+use MOM_PressureForce,         only : PressureForce_init
 use MOM_set_visc,              only : set_viscous_ML, set_visc_CS
 use MOM_thickness_diffuse,     only : thickness_diffuse_CS
 use MOM_tidal_forcing,         only : tidal_forcing_CS
@@ -205,7 +205,7 @@ type, public :: MOM_dyn_split_RK2_CS ; private
   !> The CoriolisAdv control structure
   type(CoriolisAdv_CS) :: CoriolisAdv
   !> A pointer to the PressureForce control structure
-  type(PressureForce_CS), pointer :: PressureForce_CSp => NULL()
+  type(PressureForce_CS) :: PressureForce_CSp
   !> A pointer to a structure containing interface height diffusivities
   type(vertvisc_CS),      pointer :: vertvisc_CSp      => NULL()
   !> A pointer to the set_visc control structure
@@ -1692,12 +1692,7 @@ subroutine end_dyn_split_RK2(CS)
   deallocate(CS%vertvisc_CSp)
 
   call hor_visc_end(CS%hor_visc)
-
-  call PressureForce_end(CS%PressureForce_CSp)
-  deallocate(CS%PressureForce_CSp)
-
   call tidal_forcing_end(CS%tides_CSp)
-
   call CoriolisAdv_end(CS%CoriolisAdv)
 
   call continuity_end(CS%continuity_CSp)
