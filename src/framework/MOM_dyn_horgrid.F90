@@ -110,6 +110,16 @@ type, public :: dyn_horgrid_type
     areaCv       !< The areas of the v-grid cells [L2 ~> m2].
 
   real, allocatable, dimension(:,:) :: &
+    porous_DminU, & !< minimum topographic height of U-face [m]
+    porous_DmaxU, & !< maximum topographic height of U-face [m]
+    porous_DavgU    !< average topographic height of U-face [m]
+
+  real, allocatable, dimension(:,:) :: &
+    porous_DminV, & !< minimum topographic height of V-face [m]
+    porous_DmaxV, & !< maximum topographic height of V-face [m]
+    porous_DavgV    !< average topographic height of V-face [m]
+
+  real, allocatable, dimension(:,:) :: &
     mask2dBu, &  !< 0 for boundary points and 1 for ocean points on the q grid [nondim].
     geoLatBu, &  !< The geographic latitude at q points [degrees of latitude] or [m].
     geoLonBu, &  !< The geographic longitude at q points [degrees of longitude] or [m].
@@ -255,6 +265,15 @@ subroutine create_dyn_horgrid(G, HI, bathymetry_at_vel)
   allocate(G%areaCv(isd:ied,JsdB:JedB), source=0.0)
   allocate(G%IareaCu(IsdB:IedB,jsd:jed), source=0.0)
   allocate(G%IareaCv(isd:ied,JsdB:JedB), source=0.0)
+
+  allocate(G%porous_DminU(IsdB:IedB,jsd:jed), source=0.0)
+  allocate(G%porous_DmaxU(IsdB:IedB,jsd:jed), source=0.0)
+  allocate(G%porous_DavgU(IsdB:IedB,jsd:jed), source=0.0)
+
+  allocate(G%porous_DminV(isd:ied,JsdB:JedB), source=0.0)
+  allocate(G%porous_DmaxV(isd:ied,JsdB:JedB), source=0.0)
+  allocate(G%porous_DavgV(isd:ied,JsdB:JedB), source=0.0)
+
 
   allocate(G%bathyT(isd:ied, jsd:jed), source=0.0)
   allocate(G%CoriolisBu(IsdB:IedB, JsdB:JedB), source=0.0)
@@ -488,6 +507,9 @@ subroutine destroy_dyn_horgrid(G)
   deallocate(G%geoLonCv) ; deallocate(G%geoLonBu)
 
   deallocate(G%dx_Cv) ; deallocate(G%dy_Cu)
+
+  deallocate(G%porous_DminU) ; deallocate(G%porous_DmaxU) ; deallocate(G%porous_DavgU)
+  deallocate(G%porous_DminV) ; deallocate(G%porous_DmaxV) ; deallocate(G%porous_DavgV)
 
   deallocate(G%bathyT)  ; deallocate(G%CoriolisBu)
   deallocate(G%dF_dx)  ; deallocate(G%dF_dy)
