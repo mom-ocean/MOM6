@@ -1002,16 +1002,16 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
       endif
 
       ! Newer method of bounding for stability
-      do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-        if (CS%better_bound_Kh) then
+      if (CS%better_bound_Kh) then
+        do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
           if (Kh(i,j) >= hrat_min(i,j) * CS%Kh_Max_xx(i,j)) then
             visc_bound_rem(i,j) = 0.0
             Kh(i,j) = hrat_min(i,j) * CS%Kh_Max_xx(i,j)
           else
             visc_bound_rem(i,j) = 1.0 - Kh(i,j) / (hrat_min(i,j) * CS%Kh_Max_xx(i,j))
           endif
-        endif
-      enddo ; enddo
+        enddo ; enddo
+      endif
 
       if (CS%id_Kh_h>0 .or. CS%debug) then
         do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
@@ -1914,7 +1914,7 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, MEKE, ADp)
                  "MOM_hor_visc.F90, hor_visc_init:"//&
                  "LEITH_KH must be True when USE_QG_LEITH_VISC=True.")
 
-  !### The following two get_param_calls need to occur after Leith_Ah is read, but for now it replciates prior code.
+  !### The following two get_param_calls need to occur after Leith_Ah is read, but for now it replicates prior code.
   CS%Leith_Ah = .false.
   call get_param(param_file, mdl, "USE_BETA_IN_LEITH", CS%use_beta_in_Leith, &
                  "If true, include the beta term in the Leith nonlinear eddy viscosity.", &
@@ -2040,7 +2040,7 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, MEKE, ADp)
                  fail_if_missing=CS%Leith_Ah, do_not_log=.not.CS%Leith_Ah)
 
   call get_param(param_file, mdl, "USE_LAND_MASK_FOR_HVISC", CS%use_land_mask, &
-                 "If true, use Use the land mask for the computation of thicknesses "//&
+                 "If true, use the land mask for the computation of thicknesses "//&
                  "at velocity locations. This eliminates the dependence on arbitrary "//&
                  "values over land or outside of the domain.", default=.true.)
   call get_param(param_file, mdl, "HORVISC_BOUND_COEF", CS%bound_coef, &
@@ -2802,7 +2802,7 @@ end subroutine hor_visc_end
 !! \hat{\bf y} \cdot \left( \nabla \cdot {\bf \sigma} \right)
 !! & = &
 !! \partial_x \left( \frac{1}{2} \sigma_S \right)
-!! + \partial_y \left( \frac{1}{2} \sigma_T \right)
+!! + \partial_y \left( - \frac{1}{2} \sigma_T \right)
 !! \\\\
 !! & = &
 !! \partial_x \left( \kappa_h \dot{e}_S \right)
