@@ -1,4 +1,4 @@
-!> Function for calculating curve fit for porous topography.
+!> Module for calculating curve fit for porous topography.
 !written by sjd
 module MOM_porous_barriers
 
@@ -24,6 +24,7 @@ end interface porous_widths
 
 contains
 
+!> subroutine to assign cell face areas and layer widths for porous topography
 subroutine por_widths(h, tv, G, GV, US, eta, pbv, eta_bt, halo_size, eta_to_m)
   !eta_bt, halo_size, eta_to_m not currently used
   !variables needed to call find_eta
@@ -57,69 +58,74 @@ subroutine por_widths(h, tv, G, GV, US, eta, pbv, eta_bt, halo_size, eta_to_m)
   IsdB = G%IsdB; IedB = G%IedB; JsdB = G%JsdB; JedB = G%JedB
 
   !eta is zero at surface and decreases downward
-  !all calculations are done in [m]
 
   nk = SZK_(G)
 
   !currently no treatment for using optional find_eta arguments if present
   call find_eta(h, tv, G, GV, US, eta)
 
-  do I=IsdB,IedB; do j=jsd,jed
-     if (G%porous_DavgU(I,j) < 0.) then
-        do K = nk+1,1,-1
-           eta_s = max(US%Z_to_m*eta(I,j,K), US%Z_to_m*eta(I+1,j,K)) !take shallower layer height
-           !eta_s = 0.5 * (US%Z_to_m*eta(I,j,K) + US%Z_to_m*eta(I+1,j,K)) !take arithmetic mean
-           if (eta_s <= G%porous_DminU(I,j)) then
-              pbv%por_layer_widthU(I,j,K) = 0.0
-              A_layer_prev = 0.0
-              if (K < nk+1) then
-                 pbv%por_face_areaU(I,j,k) = 0.0; endif
-           else
-              call calc_por_layer(G%porous_DminU(I,j), G%porous_DmaxU(I,j), G%porous_DavgU(I,j),&
-                   eta_s, w_layer, A_layer)
-              pbv%por_layer_widthU(I,j,K) = w_layer
-              if (k <= nk) then
-                 if ((eta_s - eta_prev) > 0.0) then
-                   pbv%por_face_areaU(I,j,k) = (A_layer - A_layer_prev)/&
+  do j=jsd,jed; do I=IsdB,IedB
+    if (G%porous_DavgU(I,j) < 0.) then
+      do K = nk+1,1,-1
+        eta_s = max(US%Z_to_m*eta(I,j,K), US%Z_to_m*eta(I+1,j,K)) !take shallower layer height
+        !eta_s = 0.5 * (US%Z_to_m*eta(I,j,K) + US%Z_to_m*eta(I+1,j,K)) !take arithmetic mean
+        if (eta_s <= G%porous_DminU(I,j)) then
+          pbv%por_layer_widthU(I,j,K) = 0.0
+          A_layer_prev = 0.0
+          if (K < nk+1) then
+            pbv%por_face_areaU(I,j,k) = 0.0; endif
+        else
+          call calc_por_layer(US%Z_to_m*(G%porous_DminU(I,j)-G%Z_ref), &
+            US%Z_to_m*(G%porous_DmaxU(I,j)-G%Z_ref), &
+            US%Z_to_m*(G%porous_DavgU(I,j)-G%Z_ref), eta_s, w_layer, A_layer)
+          pbv%por_layer_widthU(I,j,K) = w_layer
+          if (k <= nk) then
+            if ((eta_s - eta_prev) > 0.0) then
+              pbv%por_face_areaU(I,j,k) = (A_layer - A_layer_prev)/&
                    (eta_s-eta_prev)
-                 else
-                   pbv%por_face_areaU(I,j,k) = 0.0; endif
-              endif
-               eta_prev = eta_s
-               A_layer_prev = A_layer
-           endif; enddo
-       endif; enddo; enddo
+            else
+              pbv%por_face_areaU(I,j,k) = 0.0; endif
+          endif
+          eta_prev = eta_s
+          A_layer_prev = A_layer
+        endif
+      enddo
+    endif
+  enddo; enddo
 
   do i=isd,ied; do J=JsdB,JedB
-     if (G%porous_DavgV(i,J) < 0.) then
-        do K = nk+1,1,-1
-           eta_s = max(US%Z_to_m*eta(i,J,K), US%Z_to_m*eta(i,J+1,K)) !take shallower layer height
-           !eta_s = 0.5 * (US%Z_to_m*eta(i,J,K) + US%Z_to_m*eta(i,J+1,K)) !take arithmetic mean
-           if (eta_s <= G%porous_DminV(i,J)) then
-              pbv%por_layer_widthV(i,J,K) = 0.0
-              A_layer_prev = 0.0
-              if (K < nk+1) then
-                 pbv%por_face_areaV(i,J,k) = 0.0; endif
-           else
-              call calc_por_layer(G%porous_DminV(i,J), G%porous_DmaxV(i,J), G%porous_DavgV(i,J),&
-                   eta_s, w_layer, A_layer)
-              pbv%por_layer_widthV(i,J,K) = w_layer
-              if (k <= nk) then
-                 if ((eta_s - eta_prev) > 0.0) then
-                   pbv%por_face_areaV(i,J,k) = (A_layer - A_layer_prev)/&
+    if (G%porous_DavgV(i,J) < 0.) then
+      do K = nk+1,1,-1
+        eta_s = max(US%Z_to_m*eta(i,J,K), US%Z_to_m*eta(i,J+1,K)) !take shallower layer height
+        !eta_s = 0.5 * (US%Z_to_m*eta(i,J,K) + US%Z_to_m*eta(i,J+1,K)) !take arithmetic mean
+        if (eta_s <= G%porous_DminV(i,J)) then
+          pbv%por_layer_widthV(i,J,K) = 0.0
+          A_layer_prev = 0.0
+          if (K < nk+1) then
+            pbv%por_face_areaV(i,J,k) = 0.0; endif
+        else
+          call calc_por_layer(US%Z_to_m*(G%porous_DminV(i,J)-G%Z_ref), &
+            US%Z_to_m*(G%porous_DmaxV(i,J)-G%Z_ref), &
+            US%Z_to_m*(G%porous_DavgV(i,J)-G%Z_ref), eta_s, w_layer, A_layer)
+          pbv%por_layer_widthV(i,J,K) = w_layer
+          if (k <= nk) then
+            if ((eta_s - eta_prev) > 0.0) then
+              pbv%por_face_areaV(i,J,k) = (A_layer - A_layer_prev)/&
                    (eta_s-eta_prev)
-                 else
-                   pbv%por_face_areaU(I,j,k) = 0.0; endif
-              endif
-               eta_prev = eta_s
-               A_layer_prev = A_layer
-           endif; enddo
-       endif; enddo; enddo
+            else
+              pbv%por_face_areaU(I,j,k) = 0.0; endif
+          endif
+          eta_prev = eta_s
+          A_layer_prev = A_layer
+        endif
+      enddo
+    endif
+  enddo; enddo
 
 end subroutine por_widths
 
+!> subroutine to calculate the profile fit for a single layer in a column
 subroutine calc_por_layer(D_min, D_max, D_avg, eta_layer, w_layer, A_layer)
-!subroutine to calculate the profile fit for a layer
 
   real,            intent(in) :: D_min !< minimum topographic height [m]
   real,            intent(in) :: D_max !< maximum topographic height [m]
@@ -140,24 +146,24 @@ subroutine calc_por_layer(D_min, D_max, D_avg, eta_layer, w_layer, A_layer)
   zeta = (eta_layer - D_min)/(D_max - D_min)
 
   if (eta_layer <= D_min) then
-     w_layer = 0.0
-     A_layer = 0.0
+    w_layer = 0.0
+    A_layer = 0.0
   elseif (eta_layer >= D_max) then
-     w_layer = 1.0
-     A_layer = eta_layer - D_avg
+    w_layer = 1.0
+    A_layer = eta_layer - D_avg
   else
-     if (m < 0.5) then
-        psi = zeta**(1./a)
-        psi_int = (1.-m)*zeta**(1./(1.-m))
-     elseif (m == 0.5) then
-        psi = zeta
-        psi_int = 0.5*zeta*zeta
-     else
-        psi = 1. - (1. - zeta)**a
-        psi_int = zeta - m + m*((1-zeta)**(1/m))
-     endif
-     w_layer = psi
-     A_layer = (D_max - D_min)*psi_int
+    if (m < 0.5) then
+      psi = zeta**(1./a)
+      psi_int = (1.-m)*zeta**(1./(1.-m))
+    elseif (m == 0.5) then
+      psi = zeta
+      psi_int = 0.5*zeta*zeta
+    else
+      psi = 1. - (1. - zeta)**a
+      psi_int = zeta - m + m*((1-zeta)**(1/m))
+    endif
+    w_layer = psi
+    A_layer = (D_max - D_min)*psi_int
   endif
 
 

@@ -113,14 +113,14 @@ type, public :: ocean_grid_type
     areaCv       !< The areas of the v-grid cells [L2 ~> m2].
 
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_) :: &
-    porous_DminU, & !< minimum topographic height of U-face [m]
-    porous_DmaxU, & !< maximum topographic height of U-face [m]
-    porous_DavgU    !< average topographic height of U-face [m]
+    porous_DminU, & !< minimum topographic height of U-face [Z ~> m]
+    porous_DmaxU, & !< maximum topographic height of U-face [Z ~> m]
+    porous_DavgU    !< average topographic height of U-face [Z ~> m]
 
   real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_) :: &
-    porous_DminV, & !< minimum topographic height of V-face [m]
-    porous_DmaxV, & !< maximum topographic height of V-face [m]
-    porous_DavgV    !< average topographic height of V-face [m]
+    porous_DminV, & !< minimum topographic height of V-face [Z ~> m]
+    porous_DmaxV, & !< maximum topographic height of V-face [Z ~> m]
+    porous_DavgV    !< average topographic height of V-face [Z ~> m]
 
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEMB_PTR_) :: &
     mask2dBu, &  !< 0 for boundary points and 1 for ocean points on the q grid [nondim].

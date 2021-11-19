@@ -244,7 +244,8 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, forces, &
   h_av(:,:,:) = 0; hp(:,:,:) = 0
   up(:,:,:) = 0; upp(:,:,:) = 0
   vp(:,:,:) = 0; vpp(:,:,:) = 0
-  ueffA(:,:,:) = 0; veffA(:,:,:) = 0
+  if (CS%id_ueffA > 0) ueffA(:,:,:) = 0
+  if (CS%id_veffA > 0) veffA(:,:,:) = 0
 
   dyn_p_surf = associated(p_surf_begin) .and. associated(p_surf_end)
   if (dyn_p_surf) then

@@ -398,7 +398,8 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
     do j=G%jsdB,G%jedB ; do i=G%isd,G%ied   ;  vp(i,j,k) = 0.0 ; enddo ; enddo
     do j=G%jsd,G%jed   ; do i=G%isd,G%ied   ;  hp(i,j,k) = h(i,j,k) ; enddo ; enddo
   enddo
-  ueffA(:,:,:) = 0; veffA(:,:,:) = 0
+  if (CS%id_ueffA > 0) ueffA(:,:,:) = 0
+  if (CS%id_veffA > 0) veffA(:,:,:) = 0
 
   ! Update CFL truncation value as function of time
   call updateCFLtruncationValue(Time_local, CS%vertvisc_CSp)
