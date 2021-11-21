@@ -371,7 +371,7 @@ subroutine int_density_dz_generic_plm(k, tv, T_t, T_b, S_t, S_b, e, rho_ref, &
   real, dimension(SZI_(HI),SZJ_(HI)), &
               optional, intent(inout) :: intz_dpa !< The integral through the thickness of the layer of
                                            !! the pressure anomaly relative to the anomaly at the
-                                           !! top of the layer [R L2 Z T-2 ~> Pa Z]
+                                           !! top of the layer [R L2 Z T-2 ~> Pa m]
   real, dimension(SZIB_(HI),SZJ_(HI)), &
               optional, intent(inout) :: intx_dpa !< The integral in x of the difference between the
                                            !! pressure anomaly at the top and bottom of the layer

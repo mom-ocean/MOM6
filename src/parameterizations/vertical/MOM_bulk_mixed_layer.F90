@@ -817,8 +817,8 @@ subroutine convective_adjustment(h, u, v, R0, Rcv, T, S, eps, d_eb, &
                 ! [H ppt ~> m ppt or ppt kg m-2].
     uhtot, &    !   The depth integrated zonal and meridional velocities in
     vhtot, &    ! the mixed layer [H L T-1 ~> m2 s-1 or kg m-1 s-1].
-    KE_orig, &  !   The total mean kinetic energy in the mixed layer before
-                ! convection, [H L2 T-2 ~> H m2 s-2].
+    KE_orig, &  !   The total mean kinetic energy per unit area in the mixed layer before
+                ! convection, [H L2 T-2 ~> m3 s-2 or kg s-2].
     h_orig_k1   !   The depth of layer k1 before convective adjustment [H ~> m or kg m-2].
   real :: h_ent !   The thickness from a layer that is entrained [H ~> m or kg m-2].
   real :: Ih    !   The inverse of a thickness [H-1 ~> m-1 or m2 kg-1].
@@ -1300,7 +1300,7 @@ subroutine find_starting_TKE(htot, h_CA, fluxes, Conv_En, cTKE, dKE_FC, dKE_CA, 
                                                        !! kinetic energy due to convective
                                                        !! adjustment [Z L2 T-2 ~> m3 s-2].
   real, dimension(SZI_(G)),   intent(out)   :: TKE     !< The turbulent kinetic energy available for
-                                                       !! mixing over a time step [Z m2 T-2 ~> m3 s-2].
+                                                       !! mixing over a time step [Z L2 T-2 ~> m3 s-2].
   real, dimension(SZI_(G)),   intent(out)   :: Idecay_len_TKE !< The inverse of the vertical decay
                                                        !! scale for TKE [H-1 ~> m-1 or m2 kg-1].
   real, dimension(SZI_(G)),   intent(in)    :: TKE_river !< The source of turbulent kinetic energy
@@ -1520,7 +1520,7 @@ subroutine mechanical_entrainment(h, d_eb, htot, Ttot, Stot, uhtot, vhtot, &
                                                    !! penetrating shortwave radiation [H-1 ~> m-1 or m2 kg-1].
   real, dimension(SZI_(G)), intent(inout) :: TKE   !< The turbulent kinetic energy
                                                    !! available for mixing over a time
-                                                   !! step [Z m2 T-2 ~> m3 s-2].
+                                                   !! step [Z L2 T-2 ~> m3 s-2].
   real, dimension(SZI_(G)), intent(inout) :: Idecay_len_TKE !< The vertical TKE decay rate [H-1 ~> m-1 or m2 kg-1].
   integer,                  intent(in)    :: j     !< The j-index to work on.
   integer, dimension(SZI_(G),SZK_(GV)), &
@@ -1551,7 +1551,7 @@ subroutine mechanical_entrainment(h, d_eb, htot, Ttot, Stot, uhtot, vhtot, &
   real :: dRL       ! Work required to mix water from the next layer
                     ! across the mixed layer [L2 T-2 ~> L2 s-2].
   real :: Pen_En_Contrib  ! Penetrating SW contributions to the changes in
-                          ! TKE, divided by layer thickness in m [L2 T2 ~> m2 s-2].
+                          ! TKE, divided by layer thickness in m [L2 T-2 ~> m2 s-2].
   real :: Cpen1     ! A temporary variable [L2 T-2 ~> m2 s-2].
   real :: dMKE      ! A temporary variable related to the release of mean
                     ! kinetic energy [H Z L2 T-2 ~> m4 s-2 or kg m s-2]
@@ -2310,15 +2310,15 @@ subroutine mixedlayer_detrain_2(h, T, S, R0, Rcv, RcvTgt, dt, dt_diag, d_ea, j, 
   real :: h_neglect ! A thickness that is so small it is usually lost
                     ! in roundoff and can be neglected [H ~> m or kg m-2].
 
-  real :: s1en                    ! A work variable [H2 L2 kg m-1 T-3 ~> kg m3 s-3 or kg3 m-3 s-3].
+  real :: s1en                    ! A work variable [R Z L2 T-3 ~> W m-2]
   real :: s1, s2, bh0             ! Work variables [H ~> m or kg m-2].
   real :: s3sq                    ! A work variable [H2 ~> m2 or kg2 m-4].
-  real :: I_ya, b1                ! Nondimensional work variables.
+  real :: I_ya, b1                ! Nondimensional work variables [nondim]
   real :: Ih, Ihdet, Ih1f, Ih2f   ! Assorted inverse thickness work variables,
   real :: Ihk0, Ihk1, Ih12        ! all in [H-1 ~> m-1 or m2 kg-1].
   real :: dR1, dR2, dR2b, dRk1    ! Assorted density difference work variables,
   real :: dR0, dR21, dRcv         ! all in [R ~> kg m-3].
-  real :: dRcv_stays, dRcv_det, dRcv_lim
+  real :: dRcv_stays, dRcv_det, dRcv_lim ! Assorted densities [R ~> kg m-3]
   real :: Angstrom                ! The minumum layer thickness [H ~> m or kg m-2].
 
   real :: h2_to_k1_lim, T_new, S_new, T_max, T_min, S_max, S_min
@@ -3628,15 +3628,21 @@ subroutine bulkmixedlayer_init(Time, G, GV, US, param_file, diag, CS)
   if (CS%id_ML_depth > 0) call safe_alloc_alloc(CS%ML_depth, isd, ied, jsd, jed)
 
   if (CS%allow_clocks_in_omp_loops) then
-    id_clock_detrain = cpu_clock_id('(Ocean mixed layer detrain)', grain=CLOCK_ROUTINE)
-    id_clock_mech = cpu_clock_id('(Ocean mixed layer mechanical entrainment)', grain=CLOCK_ROUTINE)
-    id_clock_conv = cpu_clock_id('(Ocean mixed layer convection)', grain=CLOCK_ROUTINE)
+    id_clock_detrain = cpu_clock_id('(Ocean mixed layer detrain)', &
+        sync=.false., grain=CLOCK_ROUTINE)
+    id_clock_mech = cpu_clock_id('(Ocean mixed layer mechanical entrainment)', &
+        sync=.false., grain=CLOCK_ROUTINE)
+    id_clock_conv = cpu_clock_id('(Ocean mixed layer convection)', &
+        sync=.false., grain=CLOCK_ROUTINE)
     if (CS%ML_resort) then
-      id_clock_resort = cpu_clock_id('(Ocean mixed layer resorting)', grain=CLOCK_ROUTINE)
+      id_clock_resort = cpu_clock_id('(Ocean mixed layer resorting)', &
+          sync=.false., grain=CLOCK_ROUTINE)
     else
-      id_clock_adjustment = cpu_clock_id('(Ocean mixed layer convective adjustment)', grain=CLOCK_ROUTINE)
+      id_clock_adjustment = cpu_clock_id('(Ocean mixed layer convective adjustment)', &
+          sync=.false., grain=CLOCK_ROUTINE)
     endif
-    id_clock_EOS = cpu_clock_id('(Ocean mixed layer EOS)', grain=CLOCK_ROUTINE)
+    id_clock_EOS = cpu_clock_id('(Ocean mixed layer EOS)', &
+        sync=.false., grain=CLOCK_ROUTINE)
   endif
 
   if (CS%limit_det .or. (CS%id_Hsfc_min > 0)) &

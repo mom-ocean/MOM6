@@ -80,7 +80,7 @@ subroutine PressureForce_FV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_
   type(ocean_grid_type),                      intent(in)  :: G   !< Ocean grid structure
   type(verticalGrid_type),                    intent(in)  :: GV  !< Vertical grid structure
   type(unit_scale_type),                      intent(in)  :: US  !< A dimensional unit scaling type
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(in)  :: h   !< Layer thickness [H ~> kg/m2]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(in)  :: h   !< Layer thickness [H ~> kg m-2]
   type(thermo_var_ptrs),                      intent(in)  :: tv  !< Thermodynamic variables
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), intent(out) :: PFu !< Zonal acceleration [L T-2 ~> m s-2]
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), intent(out) :: PFv !< Meridional acceleration [L T-2 ~> m s-2]
@@ -109,9 +109,9 @@ subroutine PressureForce_FV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_
     dza, &      ! The change in geopotential anomaly between the top and bottom
                 ! of a layer [L2 T-2 ~> m2 s-2].
     intp_dza    ! The vertical integral in depth of the pressure anomaly less
-                ! the pressure anomaly at the top of the layer [R L4 Z-4 ~> Pa m2 s-2].
+                ! the pressure anomaly at the top of the layer [R L4 T-4 ~> Pa m2 s-2].
   real, dimension(SZI_(G),SZJ_(G))  :: &
-    dp, &       ! The (positive) change in pressure across a layer [R L2 Z-2 ~> Pa].
+    dp, &       ! The (positive) change in pressure across a layer [R L2 T-2 ~> Pa].
     SSH, &      ! The sea surface height anomaly, in depth units [Z ~> m].
     e_tidal, &  ! The bottom geopotential anomaly due to tidal forces from
                 ! astronomical sources and self-attraction and loading [Z ~> m].
@@ -137,7 +137,7 @@ subroutine PressureForce_FV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_
 
   real :: dp_neglect         ! A thickness that is so small it is usually lost
                              ! in roundoff and can be neglected [R L2 T-2 ~> Pa].
-  real :: I_gEarth           ! The inverse of GV%g_Earth [L2 Z L-2 ~> s2 m-1]
+  real :: I_gEarth           ! The inverse of GV%g_Earth [T2 Z L-2 ~> s2 m-1]
   real :: alpha_anom         ! The in-situ specific volume, averaged over a
                              ! layer, less alpha_ref [R-1 ~> m3 kg-1].
   logical :: use_p_atm       ! If true, use the atmospheric pressure.
@@ -148,8 +148,10 @@ subroutine PressureForce_FV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_
   real :: alpha_ref     ! A reference specific volume [R-1 ~> m3 kg-1] that is used
                         ! to reduce the impact of truncation errors.
   real :: rho_in_situ(SZI_(G)) ! The in situ density [R ~> kg m-3].
-  real :: Pa_to_H       ! A factor to convert from Pa to the thicknesss units (H) [H T2 R-1 L-2 ~> H Pa-1].
-  real :: H_to_RL2_T2   ! A factor to convert from thicknesss units (H) to pressure units [R L2 T-2 H-1 ~> Pa H-1].
+  real :: Pa_to_H       ! A factor to convert from Pa to the thickness units (H)
+                        ! [H T2 R-1 L-2 ~> m Pa-1 or kg m-2 Pa-1].
+  real :: H_to_RL2_T2   ! A factor to convert from thickness units (H) to pressure
+                        ! units [R L2 T-2 H-1 ~> Pa m-1 or Pa m2 kg-1].
 !  real :: oneatm = 101325.0  ! 1 atm in [Pa] = [kg m-1 s-2]
   real, parameter :: C1_6 = 1.0/6.0
   integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, nkmb

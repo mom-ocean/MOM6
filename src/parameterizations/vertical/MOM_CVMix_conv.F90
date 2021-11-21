@@ -174,7 +174,7 @@ subroutine calculate_CVMix_conv(h, tv, G, GV, US, CS, hbl, Kd, Kv, Kd_aux)
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1) :: &
     kd_conv, &                         !< Diffusivity added by convection for diagnostics [Z2 T-1 ~> m2 s-1]
     kv_conv, &                         !< Viscosity added by convection for diagnostics [Z2 T-1 ~> m2 s-1]
-    N2_3d                              !< Squared buoyancy frequency for diagnostics [N-2 ~> s-2]
+    N2_3d                              !< Squared buoyancy frequency for diagnostics [T-2 ~> s-2]
   integer :: kOBL                      !< level of OBL extent
   real :: g_o_rho0  ! Gravitational acceleration divided by density times unit convserion factors
                     ! [Z s-2 R-1 ~> m4 s-2 kg-1]

@@ -312,11 +312,6 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
     ! uh_in and vh_in are the zonal or meridional mass transports that would be
     ! obtained using the initial velocities [H L2 T-1 ~> m3 s-1 or kg s-1].
 
-  real, dimension(SZIB_(G),SZJ_(G)) :: uhbt_out
-  real, dimension(SZI_(G),SZJB_(G)) :: vhbt_out
-    ! uhbt_out and vhbt_out are the vertically summed transports from the
-    ! barotropic solver based on its final velocities [H m2 s-1 ~> m3 s-1 or kg s-1].
-
   real, dimension(SZI_(G),SZJ_(G)) :: eta_pred
     ! eta_pred is the predictor value of the free surface height or column mass,
     ! [H ~> m or kg m-2].

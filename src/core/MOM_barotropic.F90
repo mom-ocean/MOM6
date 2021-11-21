@@ -447,10 +447,10 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
                                                          !! height anomaly or column mass anomaly [H ~> m or kg m-2].
   real, dimension(SZIB_(G),SZJ_(G)),         intent(out) :: uhbtav        !< the barotropic zonal volume or mass
                                                          !! fluxes averaged through the barotropic steps
-                                                         !! [H L2 T-1 ~> m3 or kg s-1].
+                                                         !! [H L2 T-1 ~> m3 s-1 or kg s-1].
   real, dimension(SZI_(G),SZJB_(G)),         intent(out) :: vhbtav        !< the barotropic meridional volume or mass
                                                          !! fluxes averaged through the barotropic steps
-                                                         !! [H L2 T-1 ~> m3 or kg s-1].
+                                                         !! [H L2 T-1 ~> m3 s-1 or kg s-1].
   type(barotropic_CS),                       pointer     :: CS            !< The control structure returned by a
                                                          !! previous call to barotropic_init.
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), intent(in)  :: visc_rem_u    !< Both the fraction of the momentum
@@ -623,7 +623,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
     vhbt_prev, vhbt_sum_prev, & ! Previous transports stored for OBCs [L2 H T-1 ~> m3 s-1]
     vbt_int_prev, & ! Previous value of time-integrated velocity stored for OBCs [L ~> m]
     vhbt_int_prev   ! Previous value of time-integrated transport stored for OBCs [L2 H ~> m3]
-  real :: mass_to_Z   ! The depth unit conversion divided by the mean density (Rho0) [Z m-1 R-1 ~> m3 kg-1].
+  real :: mass_to_Z   ! The depth unit conversion divided by the mean density (Rho0) [Z m-1 R-1 ~> m3 kg-1] !### R-1
   real :: mass_accel_to_Z ! The inverse of the mean density (Rho0) [R-1 ~> m3 kg-1].
   real :: visc_rem    ! A work variable that may equal visc_rem_[uv].  Nondim.
   real :: vel_prev    ! The previous velocity [L T-1 ~> m s-1].
@@ -773,7 +773,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   bebt = CS%bebt
   be_proj = CS%bebt
   mass_accel_to_Z = 1.0 / GV%Rho0
-  mass_to_Z = US%m_to_Z / GV%Rho0
+  mass_to_Z = US%m_to_Z / GV%Rho0  !### THis should be the same as mass_accel_to_Z.
 
   !--- setup the weight when computing vbt_trans and ubt_trans
   if (project_velocity) then
@@ -3566,7 +3566,7 @@ function find_duhbt_du(u, BTC) result(duhbt_du)
                            !! allow the barotropic transports to be calculated consistently
                            !! with the layers' continuity equations.  The dimensions of some
                            !! of the elements in this type vary depending on INTEGRAL_BT_CONT.
-  real :: duhbt_du !< The zonal barotropic face area [L H ~> m2]
+  real :: duhbt_du !< The zonal barotropic face area [L H ~> m2 or kg m-1]
 
   if (u == 0.0) then
     duhbt_du = 0.5*(BTC%FA_u_E0 + BTC%FA_u_W0)  ! Note the potential discontinuity here.
@@ -3701,7 +3701,7 @@ function find_dvhbt_dv(v, BTC) result(dvhbt_dv)
                            !! allow the barotropic transports to be calculated consistently
                            !! with the layers' continuity equations.  The dimensions of some
                            !! of the elements in this type vary depending on INTEGRAL_BT_CONT.
-  real :: dvhbt_dv !< The meridional barotropic face area [L H ~> m2]
+  real :: dvhbt_dv !< The meridional barotropic face area [L H ~> m2 or kg m-1]
 
   if (v == 0.0) then
     dvhbt_dv = 0.5*(BTC%FA_v_N0 + BTC%FA_v_S0)  ! Note the potential discontinuity here.

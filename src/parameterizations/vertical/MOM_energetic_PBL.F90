@@ -276,7 +276,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
   real,                    intent(in)    :: dt     !< Time increment [T ~> s].
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), &
                            intent(out)   :: Kd_int !< The diagnosed diffusivities at interfaces
-                                                   !! [Z2 s-1 ~> m2 s-1].
+                                                   !! [Z2 T-1 ~> m2 s-1].
   type(energetic_PBL_CS),  pointer       :: CS     !< The control structure returned by a previous
                                                    !! call to energetic_PBL_init.
   real, dimension(SZI_(G),SZJ_(G)), &
@@ -621,7 +621,7 @@ subroutine ePBL_column(h, u, v, T0, S0, dSV_dT, dSV_dS, TKE_forcing, B_flux, abs
                     ! the MKE conversion equation [H-1 ~> m-1 or m2 kg-1].
 
   real :: dt_h      ! The timestep divided by the averages of the thicknesses around
-                    ! a layer, times a thickness conversion factor [H T m-2 ~> s m-1 or kg s m-4].
+                    ! a layer, times a thickness conversion factor [H T Z-2 ~> s m-1 or kg s m-4].
   real :: h_bot     ! The distance from the bottom [H ~> m or kg m-2].
   real :: h_rsum    ! The running sum of h from the top [Z ~> m].
   real :: I_hs      ! The inverse of h_sum [H-1 ~> m-1 or m2 kg-1].
@@ -1642,13 +1642,15 @@ subroutine find_PE_chg_orig(Kddt_h, h_k, b_den_1, dTe_term, dSe_term, &
   real :: b1Kd          ! Temporary array [nondim]
   real :: ColHt_chg     ! The change in column thickness [Z ~> m].
   real :: dColHt_max    ! The change in column thickness for infinite diffusivity [Z ~> m].
-  real :: dColHt_dKd    ! The partial derivative of column thickness with Kddt_h [Z H-1 ~> 1 or m3 kg-2].
-  real :: dT_k, dT_km1  ! Temporary arrays [degC].
-  real :: dS_k, dS_km1  ! Temporary arrays [ppt].
+  real :: dColHt_dKd    ! The partial derivative of column thickness with Kddt_h [Z H-1 ~> 1 or m3 kg-1].
+  real :: dT_k, dT_km1  ! Temperature changes in layers k and k-1 [degC]
+  real :: dS_k, dS_km1  ! Salinity changes in layers k and k-1 [ppt]
   real :: I_Kr_denom    ! Temporary array [H-2 ~> m-2 or m4 kg-2]
-  real :: dKr_dKd       ! Nondimensional temporary array.
-  real :: ddT_k_dKd, ddT_km1_dKd ! Temporary arrays [degC H-1 ~> m-1 or m2 kg-1].
-  real :: ddS_k_dKd, ddS_km1_dKd ! Temporary arrays [ppt H-1 ~> ppt m-1 or ppt m2 kg-1].
+  real :: dKr_dKd       ! Temporary array [H-2 ~> m-2 or m4 kg-2]
+  real :: ddT_k_dKd, ddT_km1_dKd ! Temporary arrays indicating the temperature changes
+                        ! per unit change in Kddt_h [degC H-1 ~> degC m-1 or degC m2 kg-1]
+  real :: ddS_k_dKd, ddS_km1_dKd ! Temporary arrays indicating the salinity changes
+                        ! per unit change in Kddt_h [ppt H-1 ~> ppt m-1 or ppt m2 kg-1]
 
   b1 = 1.0 / (b_den_1 + Kddt_h)
   b1Kd = Kddt_h*b1

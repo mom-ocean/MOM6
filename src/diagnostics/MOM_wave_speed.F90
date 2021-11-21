@@ -103,9 +103,9 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, mono_
     Hc_H          ! Hc(:) rescaled from Z to thickness units [H ~> m or kg m-2]
   real :: I_Htot  ! The inverse of the total filtered thicknesses [Z ~> m]
   real :: det, ddet, detKm1, detKm2, ddetKm1, ddetKm2
-  real :: lam     ! The eigenvalue [T2 L-2 ~> s m-1]
-  real :: dlam    ! The change in estimates of the eigenvalue [T2 L-2 ~> s m-1]
-  real :: lam0    ! The first guess of the eigenvalue [T2 L-2 ~> s m-1]
+  real :: lam     ! The eigenvalue [T2 L-2 ~> s2 m-2]
+  real :: dlam    ! The change in estimates of the eigenvalue [T2 L-2 ~> s2 m-2]
+  real :: lam0    ! The first guess of the eigenvalue [T2 L-2 ~> s2 m-2]
   real :: min_h_frac ! [nondim]
   real :: Z_to_pres  ! A conversion factor from thicknesses to pressure [R L2 T-2 Z-1 ~> Pa m-1]
   real, dimension(SZI_(G)) :: &
@@ -675,7 +675,7 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, full_halos)
   real :: det, ddet       ! determinant & its derivative of eigen system
   real :: lam_1           ! approximate mode-1 eigenvalue [T2 L-2 ~> s2 m-2]
   real :: lam_n           ! approximate mode-n eigenvalue [T2 L-2 ~> s2 m-2]
-  real :: dlam            ! The change in estimates of the eigenvalue [T2 L-2 ~> s m-1]
+  real :: dlam            ! The change in estimates of the eigenvalue [T2 L-2 ~> s2 m-2]
   real :: lamMin          ! minimum lam value for root searching range [T2 L-2 ~> s2 m-2]
   real :: lamMax          ! maximum lam value for root searching range [T2 L-2 ~> s2 m-2]
   real :: lamInc          ! width of moving window for root searching [T2 L-2 ~> s2 m-2]

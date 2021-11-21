@@ -26,7 +26,7 @@ type, public :: geothermal_CS ; private
   real    :: dRcv_dT_inplace  !< The value of dRcv_dT above which (dRcv_dT is negative) the
                               !! water is heated in place instead of moving upward between
                               !! layers in non-ALE layered mode [R degC-1 ~> kg m-3 degC-1]
-  real, allocatable, dimension(:,:) :: geo_heat !< The geothermal heat flux [J m-2 T-1 ~> W m-2]
+  real, allocatable, dimension(:,:) :: geo_heat !< The geothermal heat flux [Q R Z T-1 ~> W m-2]
   real    :: geothermal_thick !< The thickness over which geothermal heating is
                               !! applied [H ~> m or kg m-2]
   logical :: apply_geothermal !< If true, geothermal heating will be applied.  This is false if

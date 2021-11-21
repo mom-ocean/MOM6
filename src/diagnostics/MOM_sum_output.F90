@@ -54,7 +54,7 @@ type :: Depth_List
   integer                         :: listsize  !< length of the list <= niglobal*njglobal + 1
   real, allocatable, dimension(:) :: depth     !< A list of depths [Z ~> m]
   real, allocatable, dimension(:) :: area      !< The cross-sectional area of the ocean at that depth [L2 ~> m2]
-  real, allocatable, dimension(:) :: vol_below !< The ocean volume below that depth [Z m2 ~> m3]
+  real, allocatable, dimension(:) :: vol_below !< The ocean volume below that depth [Z L2 ~> m3]
 end type Depth_List
 
 !> The control structure for the MOM_sum_output module
