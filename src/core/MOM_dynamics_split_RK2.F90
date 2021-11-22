@@ -39,8 +39,7 @@ use MOM_barotropic,            only : register_barotropic_restarts, set_dtbt, ba
 use MOM_barotropic,            only : barotropic_end
 use MOM_boundary_update,       only : update_OBC_data, update_OBC_CS
 use MOM_continuity,            only : continuity, continuity_CS
-use MOM_continuity,            only : continuity_init, continuity_end
-use MOM_continuity,            only : continuity_stencil
+use MOM_continuity,            only : continuity_init, continuity_stencil
 use MOM_CoriolisAdv,           only : CorAdCalc, CoriolisAdv_CS
 use MOM_CoriolisAdv,           only : CoriolisAdv_init, CoriolisAdv_end
 use MOM_debugging,             only : check_redundant
@@ -55,7 +54,7 @@ use MOM_open_boundary,         only : ocean_OBC_type, radiation_open_bdry_conds
 use MOM_open_boundary,         only : open_boundary_zero_normal_flow
 use MOM_open_boundary,         only : open_boundary_test_extern_h, update_OBC_ramp
 use MOM_PressureForce,         only : PressureForce, PressureForce_CS
-use MOM_PressureForce,         only : PressureForce_init, PressureForce_end
+use MOM_PressureForce,         only : PressureForce_init
 use MOM_set_visc,              only : set_viscous_ML, set_visc_CS
 use MOM_thickness_diffuse,     only : thickness_diffuse_CS
 use MOM_tidal_forcing,         only : tidal_forcing_CS
@@ -199,23 +198,21 @@ type, public :: MOM_dyn_split_RK2_CS ; private
 
   ! The remainder of the structure points to child subroutines' control structures.
   !> A pointer to the horizontal viscosity control structure
-  type(hor_visc_CS),      pointer :: hor_visc_CSp      => NULL()
+  type(hor_visc_CS) :: hor_visc
   !> A pointer to the continuity control structure
-  type(continuity_CS),    pointer :: continuity_CSp    => NULL()
-  !> A pointer to the CoriolisAdv control structure
-  type(CoriolisAdv_CS),   pointer :: CoriolisAdv_CSp   => NULL()
+  type(continuity_CS) :: continuity_CSp
+  !> The CoriolisAdv control structure
+  type(CoriolisAdv_CS) :: CoriolisAdv
   !> A pointer to the PressureForce control structure
-  type(PressureForce_CS), pointer :: PressureForce_CSp => NULL()
-  !> A pointer to the barotropic stepping control structure
-  type(barotropic_CS),    pointer :: barotropic_CSp    => NULL()
+  type(PressureForce_CS) :: PressureForce_CSp
   !> A pointer to a structure containing interface height diffusivities
-  type(thickness_diffuse_CS), pointer :: thickness_diffuse_CSp => NULL()
-  !> A pointer to the vertical viscosity control structure
   type(vertvisc_CS),      pointer :: vertvisc_CSp      => NULL()
   !> A pointer to the set_visc control structure
   type(set_visc_CS),      pointer :: set_visc_CSp      => NULL()
+  !> A pointer to the barotropic stepping control structure
+  type(barotropic_CS) :: barotropic_CSp
   !> A pointer to the tidal forcing control structure
-  type(tidal_forcing_CS), pointer :: tides_CSp         => NULL()
+  type(tidal_forcing_CS) :: tides_CSp
   !> A pointer to the ALE control structure.
   type(ALE_CS), pointer :: ALE_CSp => NULL()
 
@@ -290,9 +287,9 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
                                                                    !! averaged over time step [H ~> m or kg m-2]
   type(MOM_dyn_split_RK2_CS),        pointer       :: CS           !< module control structure
   logical,                           intent(in)    :: calc_dtbt    !< if true, recalculate barotropic time step
-  type(VarMix_CS),                   pointer       :: VarMix       !< specify the spatially varying viscosities
-  type(MEKE_type),                   pointer       :: MEKE         !< related to mesoscale eddy kinetic energy param
-  type(thickness_diffuse_CS),        pointer       :: thickness_diffuse_CSp !< Pointer to a structure containing
+  type(VarMix_CS),                   intent(inout) :: VarMix       !< Variable mixing control struct
+  type(MEKE_type),                   intent(inout) :: MEKE         !< MEKE fields
+  type(thickness_diffuse_CS),        intent(inout) :: thickness_diffuse_CSp !< Pointer to a structure containing
                                                                    !! interface height diffusivities
   type(wave_parameters_CS), optional, pointer      :: Waves        !< A pointer to a structure containing
                                                                    !! fields related to the surface wave conditions
@@ -480,7 +477,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
 ! CAu = -(f+zeta_av)/h_av vh + d/dx KE_av
   call cpu_clock_begin(id_clock_Cor)
   call CorAdCalc(u_av, v_av, h_av, uh, vh, CS%CAu, CS%CAv, CS%OBC, CS%ADp, &
-                 G, Gv, US, CS%CoriolisAdv_CSp)
+                 G, Gv, US, CS%CoriolisAdv)
   call cpu_clock_end(id_clock_Cor)
   if (showCallTree) call callTree_wayPoint("done with CorAdCalc (step_MOM_dyn_split_RK2)")
 
@@ -724,7 +721,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
 ! diffu = horizontal viscosity terms (u_av)
   call cpu_clock_begin(id_clock_horvisc)
   call horizontal_viscosity(u_av, v_av, h_av, CS%diffu, CS%diffv, &
-                            MEKE, Varmix, G, GV, US, CS%hor_visc_CSp, &
+                            MEKE, Varmix, G, GV, US, CS%hor_visc, &
                             OBC=CS%OBC, BT=CS%barotropic_CSp, TD=thickness_diffuse_CSp, &
                             ADp=CS%ADp)
   call cpu_clock_end(id_clock_horvisc)
@@ -733,7 +730,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
 ! CAu = -(f+zeta_av)/h_av vh + d/dx KE_av
   call cpu_clock_begin(id_clock_Cor)
   call CorAdCalc(u_av, v_av, h_av, uh, vh, CS%CAu, CS%CAv, CS%OBC, CS%ADp, &
-                 G, GV, US, CS%CoriolisAdv_CSp)
+                 G, GV, US, CS%CoriolisAdv)
   call cpu_clock_end(id_clock_Cor)
   if (showCallTree) call callTree_wayPoint("done with CorAdCalc (step_MOM_dyn_split_RK2)")
 
@@ -1162,7 +1159,7 @@ subroutine register_restarts_dyn_split_RK2(HI, GV, param_file, CS, restart_CS, u
   type(verticalGrid_type),       intent(in)    :: GV         !< ocean vertical grid structure
   type(param_file_type),         intent(in)    :: param_file !< parameter file
   type(MOM_dyn_split_RK2_CS),    pointer       :: CS         !< module control structure
-  type(MOM_restart_CS),          pointer       :: restart_CS !< restart control structure
+  type(MOM_restart_CS),          intent(inout) :: restart_CS !< MOM restart control struct
   real, dimension(SZIB_(HI),SZJ_(HI),SZK_(GV)), &
                          target, intent(inout) :: uh !< zonal volume/mass transport [H L2 T-1 ~> m3 s-1 or kg s-1]
   real, dimension(SZI_(HI),SZJB_(HI),SZK_(GV)), &
@@ -1232,7 +1229,7 @@ end subroutine register_restarts_dyn_split_RK2
 subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, US, param_file, &
                       diag, CS, restart_CS, dt, Accel_diag, Cont_diag, MIS, &
                       VarMix, MEKE, thickness_diffuse_CSp,                  &
-                      OBC, update_OBC_CSp, ALE_CSp, setVisc_CSp, &
+                      OBC, update_OBC_CSp, ALE_CSp, set_visc, &
                       visc, dirs, ntrunc, calc_dtbt, cont_stencil)
   type(ocean_grid_type),            intent(inout) :: G          !< ocean grid structure
   type(verticalGrid_type),          intent(in)    :: GV         !< ocean vertical grid structure
@@ -1252,21 +1249,21 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, US, param
   type(param_file_type),            intent(in)    :: param_file !< parameter file for parsing
   type(diag_ctrl),          target, intent(inout) :: diag       !< to control diagnostics
   type(MOM_dyn_split_RK2_CS),       pointer       :: CS         !< module control structure
-  type(MOM_restart_CS),             pointer       :: restart_CS !< restart control structure
+  type(MOM_restart_CS),             intent(in)    :: restart_CS !< MOM restart control struct
   real,                             intent(in)    :: dt         !< time step [T ~> s]
   type(accel_diag_ptrs),    target, intent(inout) :: Accel_diag !< points to momentum equation terms for
                                                                 !! budget analysis
   type(cont_diag_ptrs),     target, intent(inout) :: Cont_diag  !< points to terms in continuity equation
   type(ocean_internal_state),       intent(inout) :: MIS        !< "MOM6 internal state" used to pass
                                                                 !! diagnostic pointers
-  type(VarMix_CS),                  pointer       :: VarMix     !< points to spatially variable viscosities
-  type(MEKE_type),                  pointer       :: MEKE       !< points to mesoscale eddy kinetic energy fields
-  type(thickness_diffuse_CS),       pointer       :: thickness_diffuse_CSp !< Pointer to the control structure
+  type(VarMix_CS),                  intent(inout) :: VarMix     !< points to spatially variable viscosities
+  type(MEKE_type),                  intent(inout) :: MEKE       !< MEKE fields
+  type(thickness_diffuse_CS),       intent(inout) :: thickness_diffuse_CSp !< Pointer to the control structure
                                                   !! used for the isopycnal height diffusive transport.
   type(ocean_OBC_type),             pointer       :: OBC        !< points to OBC related fields
   type(update_OBC_CS),              pointer       :: update_OBC_CSp !< points to OBC update related fields
   type(ALE_CS),                     pointer       :: ALE_CSp    !< points to ALE control structure
-  type(set_visc_CS),                pointer       :: setVisc_CSp !< points to the set_visc control structure.
+  type(set_visc_CS),        target, intent(in)    :: set_visc   !< set_visc control structure
   type(vertvisc_type),              intent(inout) :: visc       !< vertical viscosities, bottom drag, and related
   type(directories),                intent(in)    :: dirs       !< contains directory paths
   integer, target,                  intent(inout) :: ntrunc     !< A target for the variable that records
@@ -1390,16 +1387,14 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, US, param
 
   call continuity_init(Time, G, GV, US, param_file, diag, CS%continuity_CSp)
   cont_stencil = continuity_stencil(CS%continuity_CSp)
-  call CoriolisAdv_init(Time, G, GV, US, param_file, diag, CS%ADp, CS%CoriolisAdv_CSp)
+  call CoriolisAdv_init(Time, G, GV, US, param_file, diag, CS%ADp, CS%CoriolisAdv)
   if (use_tides) call tidal_forcing_init(Time, G, param_file, CS%tides_CSp)
   call PressureForce_init(Time, G, GV, US, param_file, diag, CS%PressureForce_CSp, &
                           CS%tides_CSp)
-  call hor_visc_init(Time, G, GV, US, param_file, diag, CS%hor_visc_CSp, MEKE, ADp=CS%ADp)
+  call hor_visc_init(Time, G, GV, US, param_file, diag, CS%hor_visc, ADp=CS%ADp)
   call vertvisc_init(MIS, Time, G, GV, US, param_file, diag, CS%ADp, dirs, &
                      ntrunc, CS%vertvisc_CSp)
-  if (.not.associated(setVisc_CSp)) call MOM_error(FATAL, &
-    "initialize_dyn_split_RK2 called with setVisc_CSp unassociated.")
-  CS%set_visc_CSp => setVisc_CSp
+  CS%set_visc_CSp => set_visc
   call updateCFLtruncationValue(Time, CS%vertvisc_CSp, &
                                 activate=is_new_run(restart_CS) )
 
@@ -1438,7 +1433,7 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, US, param
   if (.not. query_initialized(CS%diffu,"diffu",restart_CS) .or. &
       .not. query_initialized(CS%diffv,"diffv",restart_CS)) then
     call horizontal_viscosity(u, v, h, CS%diffu, CS%diffv, MEKE, VarMix, &
-                              G, GV, US, CS%hor_visc_CSp, &
+                              G, GV, US, CS%hor_visc, &
                               OBC=CS%OBC, BT=CS%barotropic_CSp, &
                               TD=thickness_diffuse_CSp)
   else
@@ -1691,26 +1686,13 @@ subroutine end_dyn_split_RK2(CS)
   type(MOM_dyn_split_RK2_CS), pointer :: CS  !< module control structure
 
   call barotropic_end(CS%barotropic_CSp)
-  deallocate(CS%barotropic_CSp)
 
   call vertvisc_end(CS%vertvisc_CSp)
   deallocate(CS%vertvisc_CSp)
 
-  call hor_visc_end(CS%hor_visc_CSp)
-
-  call PressureForce_end(CS%PressureForce_CSp)
-  deallocate(CS%PressureForce_CSp)
-
-  if (associated(CS%tides_CSp)) then
-    call tidal_forcing_end(CS%tides_CSp)
-    deallocate(CS%tides_CSp)
-  endif
-
-  call CoriolisAdv_end(CS%CoriolisAdv_Csp)
-  deallocate(CS%CoriolisAdv_CSp)
-
-  call continuity_end(CS%continuity_CSp)
-  deallocate(CS%continuity_CSp)
+  call hor_visc_end(CS%hor_visc)
+  call tidal_forcing_end(CS%tides_CSp)
+  call CoriolisAdv_end(CS%CoriolisAdv)
 
   DEALLOC_(CS%diffu) ; DEALLOC_(CS%diffv)
   DEALLOC_(CS%CAu)   ; DEALLOC_(CS%CAv)

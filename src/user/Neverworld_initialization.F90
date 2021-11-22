@@ -239,7 +239,7 @@ end function circ_ridge
 !! by finding the depths of interfaces in a specified latitude-dependent
 !! temperature profile with an exponentially decaying thermocline on top of a
 !! linear stratification.
-subroutine Neverworld_initialize_thickness(h, depth_tot, G, GV, US, param_file, eqn_of_state, P_ref)
+subroutine Neverworld_initialize_thickness(h, depth_tot, G, GV, US, param_file, P_ref)
   type(ocean_grid_type),   intent(in) :: G                    !< The ocean's grid structure.
   type(verticalGrid_type), intent(in) :: GV                   !< The ocean's vertical grid structure.
   type(unit_scale_type),   intent(in) :: US                   !< A dimensional unit scaling type
@@ -250,7 +250,6 @@ subroutine Neverworld_initialize_thickness(h, depth_tot, G, GV, US, param_file, 
   type(param_file_type),   intent(in) :: param_file           !< A structure indicating the open
                                                               !! file to parse for model
                                                               !! parameter values.
-  type(EOS_type),          pointer    :: eqn_of_state         !< Equation of state structure
   real,                    intent(in) :: P_Ref                !< The coordinate-density
                                                               !! reference pressure [R L2 T-2 ~> Pa].
   ! Local variables

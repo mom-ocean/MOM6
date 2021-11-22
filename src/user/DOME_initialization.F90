@@ -256,7 +256,7 @@ subroutine register_DOME_OBC(param_file, US, OBC, tr_Reg)
 
   ! Store this information for use in setting up the OBC restarts for tracer reservoirs.
   OBC%ntr = tr_Reg%ntr
-  if (.not. associated(OBC%tracer_x_reservoirs_used)) then
+  if (.not. allocated(OBC%tracer_x_reservoirs_used)) then
     allocate(OBC%tracer_x_reservoirs_used(OBC%ntr))
     allocate(OBC%tracer_y_reservoirs_used(OBC%ntr))
     OBC%tracer_x_reservoirs_used(:) = .false.

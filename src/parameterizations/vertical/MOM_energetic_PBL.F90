@@ -277,8 +277,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), &
                            intent(out)   :: Kd_int !< The diagnosed diffusivities at interfaces
                                                    !! [Z2 T-1 ~> m2 s-1].
-  type(energetic_PBL_CS),  pointer       :: CS     !< The control structure returned by a previous
-                                                   !! call to energetic_PBL_init.
+  type(energetic_PBL_CS),  intent(inout) :: CS     !< Energetic PBL control struct
   real, dimension(SZI_(G),SZJ_(G)), &
                            intent(in)    :: buoy_flux !< The surface buoyancy flux [Z2 T-3 ~> m2 s-3].
   type(wave_parameters_CS), pointer      :: Waves  !< Waves control structure for Langmuir turbulence
@@ -344,9 +343,6 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
   integer :: i, j, k, is, ie, js, je, nz
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
-
-  if (.not. associated(CS)) call MOM_error(FATAL, "energetic_PBL: "//&
-         "Module must be initialized before it is used.")
 
   if (.not. associated(tv%eqn_of_state)) call MOM_error(FATAL, &
       "energetic_PBL: Temperature, salinity and an equation of state "//&
@@ -526,8 +522,7 @@ subroutine ePBL_column(h, u, v, T0, S0, dSV_dT, dSV_dS, TKE_forcing, B_flux, abs
                                                    !! [Z T-1 ~> m s-1].
   real, dimension(SZK_(GV)+1), &
                            intent(out)   :: mixlen !< The mixing length scale used in Kd [Z ~> m].
-  type(energetic_PBL_CS),  pointer       :: CS     !< The control structure returned by a previous
-                                                   !! call to energetic_PBL_init.
+  type(energetic_PBL_CS),  intent(inout) :: CS     !< Energetic PBL control struct
   type(ePBL_column_diags), intent(inout) :: eCD    !< A container for passing around diagnostics.
   type(wave_parameters_CS), pointer      :: Waves  !< Waves control structure for Langmuir turbulence
   type(ocean_grid_type),   intent(inout) :: G      !< The ocean's grid structure.
@@ -730,9 +725,6 @@ subroutine ePBL_column(h, u, v, T0, S0, dSV_dT, dSV_dS, TKE_forcing, B_flux, abs
   integer :: k, nz, itt, max_itt
 
   nz = GV%ke
-
-  if (.not. associated(CS)) call MOM_error(FATAL, "energetic_PBL: "//&
-         "Module must be initialized before it is used.")
 
   debug = .false.  ! Change this hard-coded value for debugging.
   calc_Te = (debug .or. (.not.CS%orig_PE_calc))
@@ -1718,7 +1710,7 @@ end subroutine find_PE_chg_orig
 subroutine find_mstar(CS, US, Buoyancy_Flux, UStar, UStar_Mean,&
                       BLD, Abs_Coriolis, MStar, Langmuir_Number,&
                       MStar_LT, Convect_Langmuir_Number)
-  type(energetic_PBL_CS), pointer    :: CS    !< Energetic_PBL control structure.
+  type(energetic_PBL_CS), intent(in) :: CS    !< Energetic PBL control structure
   type(unit_scale_type), intent(in)  :: US    !< A dimensional unit scaling type
   real,                  intent(in)  :: UStar !< ustar w/ gustiness [Z T-1 ~> m s-1]
   real,                  intent(in)  :: UStar_Mean !< ustar w/o gustiness [Z T-1 ~> m s-1]
@@ -1804,7 +1796,7 @@ end subroutine Find_Mstar
 !> This subroutine modifies the Mstar value if the Langmuir number is present
 subroutine Mstar_Langmuir(CS, US, Abs_Coriolis, Buoyancy_Flux, UStar, BLD, Langmuir_Number, &
                           Mstar, MStar_LT, Convect_Langmuir_Number)
-  type(energetic_PBL_CS), pointer    :: CS    !< Energetic_PBL control structure.
+  type(energetic_PBL_CS), intent(in) :: CS    !< Energetic PBL control structure
   type(unit_scale_type), intent(in)  :: US    !< A dimensional unit scaling type
   real,                  intent(in)  :: Abs_Coriolis !< Absolute value of the Coriolis parameter [T-1 ~> s-1]
   real,                  intent(in)  :: Buoyancy_Flux !< Buoyancy flux [Z2 T-3 ~> m2 s-3]
@@ -1890,7 +1882,7 @@ end subroutine Mstar_Langmuir
 
 !> Copies the ePBL active mixed layer depth into MLD, in units of [Z ~> m] unless other units are specified.
 subroutine energetic_PBL_get_MLD(CS, MLD, G, US, m_to_MLD_units)
-  type(energetic_PBL_CS),           pointer     :: CS  !< Control structure for ePBL
+  type(energetic_PBL_CS),           intent(in)  :: CS  !< Energetic PBL control struct
   type(ocean_grid_type),            intent(in)  :: G   !< Grid structure
   type(unit_scale_type),            intent(in)  :: US  !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G)), intent(out) :: MLD !< Depth of ePBL active mixing layer [Z ~> m] or other units
@@ -1917,8 +1909,8 @@ subroutine energetic_PBL_init(Time, G, GV, US, param_file, diag, CS)
   type(unit_scale_type),   intent(in)    :: US   !< A dimensional unit scaling type
   type(param_file_type),   intent(in)    :: param_file !< A structure to parse for run-time parameters
   type(diag_ctrl), target, intent(inout) :: diag !< A structure that is used to regulate diagnostic output
-  type(energetic_PBL_CS),  pointer       :: CS   !< A pointer that is set to point to the control
-                                                 !! structure for this module
+  type(energetic_PBL_CS),  intent(inout) :: CS   !< Energetic PBL control struct
+
   ! Local variables
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
@@ -1931,12 +1923,6 @@ subroutine energetic_PBL_init(Time, G, GV, US, param_file, diag, CS)
   logical :: use_temperature, use_omega
   logical :: use_la_windsea
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
-
-  if (associated(CS)) then
-    call MOM_error(WARNING, "energetic_PBL_init called with an associated"//&
-                            "associated control structure.")
-    return
-  else ; allocate(CS) ; endif
 
   CS%diag => diag
   CS%Time => Time
@@ -2360,13 +2346,10 @@ end subroutine energetic_PBL_init
 
 !> Clean up and deallocate memory associated with the energetic_PBL module.
 subroutine energetic_PBL_end(CS)
-  type(energetic_PBL_CS), pointer :: CS !< Energetic_PBL control structure that
-                                        !! will be deallocated in this subroutine.
+  type(energetic_PBL_CS), intent(inout) :: CS !< Energetic_PBL control struct
 
   character(len=256) :: mesg
   real :: avg_its
-
-  if (.not.associated(CS)) return
 
   if (allocated(CS%ML_depth))            deallocate(CS%ML_depth)
   if (allocated(CS%LA))                  deallocate(CS%LA)
@@ -2390,9 +2373,6 @@ subroutine energetic_PBL_end(CS)
     write (mesg,*) "Average ePBL iterations = ", avg_its
     call MOM_mesg(mesg)
   endif
-
-  deallocate(CS)
-
 end subroutine energetic_PBL_end
 
 !> \namespace MOM_energetic_PBL

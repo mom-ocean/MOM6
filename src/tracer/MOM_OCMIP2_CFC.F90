@@ -95,7 +95,7 @@ function register_OCMIP2_CFC(HI, GV, param_file, CS, tr_Reg, restart_CS)
                                                     !! structure for this module.
   type(tracer_registry_type), &
                            pointer    :: tr_Reg     !< A pointer to the tracer registry.
-  type(MOM_restart_CS),    pointer    :: restart_CS !< A pointer to the restart control structure.
+  type(MOM_restart_CS), target, intent(inout) :: restart_CS !< MOM restart control struct
 ! This subroutine is used to register tracer fields and subroutines
 ! to be used with MOM.
 

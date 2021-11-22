@@ -24,7 +24,7 @@ implicit none ; private
 
 #include <MOM_memory.h>
 
-public PressureForce_FV_init, PressureForce_FV_end
+public PressureForce_FV_init
 public PressureForce_FV_Bouss, PressureForce_FV_nonBouss
 
 ! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
@@ -84,7 +84,7 @@ subroutine PressureForce_FV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_
   type(thermo_var_ptrs),                      intent(in)  :: tv  !< Thermodynamic variables
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), intent(out) :: PFu !< Zonal acceleration [L T-2 ~> m s-2]
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), intent(out) :: PFv !< Meridional acceleration [L T-2 ~> m s-2]
-  type(PressureForce_FV_CS),                  pointer     :: CS  !< Finite volume PGF control structure
+  type(PressureForce_FV_CS),                  intent(in)  :: CS  !< Finite volume PGF control structure
   type(ALE_CS),                               pointer     :: ALE_CSp !< ALE control structure
   real, dimension(:,:),                       pointer     :: p_atm !< The pressure at the ice-ocean
                                                            !! or atmosphere-ocean interface [R L2 T-2 ~> Pa].
@@ -163,8 +163,6 @@ subroutine PressureForce_FV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   EOSdom(1) = Isq - (G%isd-1) ;  EOSdom(2) = G%iec+1 - (G%isd-1)
 
-  if (.not.associated(CS)) call MOM_error(FATAL, &
-       "MOM_PressureForce_FV_nonBouss: Module must be initialized before it is used.")
   if (CS%Stanley_T2_det_coeff>=0.) call MOM_error(FATAL, &
        "MOM_PressureForce_FV_nonBouss: The Stanley parameterization is not yet"//&
        "implemented in non-Boussinesq mode.")
@@ -424,7 +422,7 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm
   type(thermo_var_ptrs),                      intent(in)  :: tv  !< Thermodynamic variables
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), intent(out) :: PFu !< Zonal acceleration [L T-2 ~> m s-2]
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), intent(out) :: PFv !< Meridional acceleration [L T-2 ~> m s-2]
-  type(PressureForce_FV_CS),                  pointer     :: CS  !< Finite volume PGF control structure
+  type(PressureForce_FV_CS),                  intent(in)  :: CS  !< Finite volume PGF control structure
   type(ALE_CS),                               pointer     :: ALE_CSp !< ALE control structure
   real, dimension(:,:),                       pointer     :: p_atm !< The pressure at the ice-ocean
                                                          !! or atmosphere-ocean interface [R L2 T-2 ~> Pa].
@@ -498,9 +496,6 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm
   nkmb=GV%nk_rho_varies
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   EOSdom(1) = Isq - (G%isd-1) ;  EOSdom(2) = G%iec+1 - (G%isd-1)
-
-  if (.not.associated(CS)) call MOM_error(FATAL, &
-       "MOM_PressureForce_FV_Bouss: Module must be initialized before it is used.")
 
   use_p_atm = associated(p_atm)
   use_EOS = associated(tv%eqn_of_state)
@@ -807,21 +802,16 @@ subroutine PressureForce_FV_init(Time, G, GV, US, param_file, diag, CS, tides_CS
   type(unit_scale_type),      intent(in)    :: US !< A dimensional unit scaling type
   type(param_file_type),      intent(in)    :: param_file !< Parameter file handles
   type(diag_ctrl), target,    intent(inout) :: diag !< Diagnostics control structure
-  type(PressureForce_FV_CS),  pointer       :: CS !< Finite volume PGF control structure
-  type(tidal_forcing_CS),     pointer       :: tides_CSp !< Tides control structure
+  type(PressureForce_FV_CS),  intent(inout) :: CS !< Finite volume PGF control structure
+  type(tidal_forcing_CS), intent(in), target, optional :: tides_CSp !< Tides control structure
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
   character(len=40)  :: mdl  ! This module's name.
   logical :: use_ALE
 
-  if (associated(CS)) then
-    call MOM_error(WARNING, "PressureForce_init called with an associated "// &
-                            "control structure.")
-    return
-  else ; allocate(CS) ; endif
-
   CS%diag => diag ; CS%Time => Time
-  if (associated(tides_CSp)) CS%tides_CSp => tides_CSp
+  if (present(tides_CSp)) &
+    CS%tides_CSp => tides_CSp
 
   mdl = "MOM_PressureForce_FV"
   call log_version(param_file, mdl, version, "")
@@ -880,13 +870,6 @@ subroutine PressureForce_FV_init(Time, G, GV, US, param_file, diag, CS, tides_CS
   call log_param(param_file, mdl, "GFS / G_EARTH", CS%GFS_scale)
 
 end subroutine PressureForce_FV_init
-
-!> Deallocates the finite volume pressure gradient control structure
-subroutine PressureForce_FV_end(CS)
-  type(PressureForce_FV_CS), pointer :: CS !< Finite volume pressure control structure that
-                                            !! will be deallocated in this subroutine.
-  if (associated(CS)) deallocate(CS)
-end subroutine PressureForce_FV_end
 
 !> \namespace mom_pressureforce_fv
 !!

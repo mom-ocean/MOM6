@@ -78,7 +78,7 @@ function register_oil_tracer(HI, GV, US, param_file, CS, tr_Reg, restart_CS)
   type(tracer_registry_type), pointer    :: tr_Reg !< A pointer that is set to point to the control
                                                  !! structure for the tracer advection and
                                                  !! diffusion module
-  type(MOM_restart_CS),       pointer    :: restart_CS !< A pointer to the restart control structure
+  type(MOM_restart_CS), target, intent(inout) :: restart_CS !< MOM restart control struct
 
   ! Local variables
   character(len=40)  :: mdl = "oil_tracer" ! This module's name.

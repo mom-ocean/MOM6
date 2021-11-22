@@ -65,7 +65,7 @@ subroutine geothermal_entraining(h, tv, dt, ea, eb, G, GV, US, CS, halo)
                                                                  !! increased due to mixed layer
                                                                  !! entrainment [H ~> m or kg m-2].
   type(unit_scale_type),                     intent(in)    :: US !< A dimensional unit scaling type
-  type(geothermal_CS),                       pointer       :: CS !< The control structure returned by
+  type(geothermal_CS),                       intent(in)    :: CS !< The control structure returned by
                                                                  !! a previous call to
                                                                  !! geothermal_init.
   integer,                         optional, intent(in)    :: halo !< Halo width over which to work
@@ -119,8 +119,6 @@ subroutine geothermal_entraining(h, tv, dt, ea, eb, G, GV, US, CS, halo)
     is = G%isc-halo ; ie = G%iec+halo ; js = G%jsc-halo ; je = G%jec+halo
   endif
 
-  if (.not. associated(CS)) call MOM_error(FATAL, "MOM_geothermal: "//&
-         "Module must be initialized before it is used.")
   if (.not.CS%apply_geothermal) return
 
   nkmb      = GV%nk_rho_varies
@@ -367,8 +365,7 @@ subroutine geothermal_in_place(h, tv, dt, G, GV, US, CS, halo)
                                                                  !! to any available thermodynamic fields.
   real,                                      intent(in)    :: dt !< Time increment [T ~> s].
   type(unit_scale_type),                     intent(in)    :: US !< A dimensional unit scaling type
-  type(geothermal_CS),                       pointer       :: CS !< The control structure returned by
-                                                                 !! a previous call to geothermal_init.
+  type(geothermal_CS),                       intent(in)    :: CS !< Geothermal heating control struct
   integer,                         optional, intent(in)    :: halo !< Halo width over which to work
 
   ! Local variables
@@ -395,8 +392,6 @@ subroutine geothermal_in_place(h, tv, dt, G, GV, US, CS, halo)
     is = G%isc-halo ; ie = G%iec+halo ; js = G%jsc-halo ; je = G%jec+halo
   endif
 
-  if (.not. associated(CS)) call MOM_error(FATAL, "MOM_geothermal: "//&
-         "Module must be initialized before it is used.")
   if (.not.CS%apply_geothermal) return
 
   Irho_cp   = 1.0 / (GV%H_to_RZ * tv%C_p)
@@ -497,9 +492,8 @@ subroutine geothermal_init(Time, G, GV, US, param_file, diag, CS, useALEalgorith
   type(param_file_type),   intent(in)    :: param_file !< A structure to parse for run-time
                                                  !! parameters.
   type(diag_ctrl), target, intent(inout) :: diag !< Structure used to regulate diagnostic output.
-  type(geothermal_CS),     pointer       :: CS   !< Pointer pointing to the module control
-                                                 !! structure.
-  logical,                 intent(in)    :: useALEalgorithm  !< logical for whether to use ALE remapping
+  type(geothermal_CS),     intent(inout) :: CS   !< Geothermal heating control struct
+  logical,       optional, intent(in)    :: useALEalgorithm  !< logical for whether to use ALE remapping
 
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
@@ -511,12 +505,6 @@ subroutine geothermal_init(Time, G, GV, US, param_file, diag, CS, useALEalgorith
                      ! [Q R Z T-1 ~> W m-2] or [Q R Z m2 s J-1 T-1 ~> 1]
   integer :: i, j, isd, ied, jsd, jed, id
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
-
-  if (associated(CS)) then
-    call MOM_error(WARNING, "geothermal_init called with an associated"// &
-                            "associated control structure.")
-    return
-  else ; allocate(CS) ; endif
 
   CS%diag => diag
   CS%Time => Time
@@ -599,8 +587,7 @@ end subroutine geothermal_init
 
 !> Clean up and deallocate memory associated with the geothermal heating module.
 subroutine geothermal_end(CS)
-  type(geothermal_CS), intent(inout) :: CS !< Geothermal heating control structure that
-                                           !! will be deallocated in this subroutine.
+  type(geothermal_CS), intent(inout) :: CS !< Geothermal heating control struct
   if (allocated(CS%geo_heat)) deallocate(CS%geo_heat)
 end subroutine geothermal_end
 

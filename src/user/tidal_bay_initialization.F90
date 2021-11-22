@@ -20,7 +20,7 @@ implicit none ; private
 
 #include <MOM_memory.h>
 
-public tidal_bay_set_OBC_data, tidal_bay_OBC_end
+public tidal_bay_set_OBC_data
 public register_tidal_bay_OBC
 
 !> Control structure for tidal bay open boundaries.
@@ -33,19 +33,12 @@ contains
 !> Add tidal bay to OBC registry.
 function register_tidal_bay_OBC(param_file, CS, US, OBC_Reg)
   type(param_file_type),    intent(in) :: param_file !< parameter file.
-  type(tidal_bay_OBC_CS),   pointer    :: CS         !< tidal bay control structure.
+  type(tidal_bay_OBC_CS),   intent(inout) :: CS      !< tidal bay control structure.
   type(unit_scale_type),    intent(in) :: US         !< A dimensional unit scaling type
   type(OBC_registry_type),  pointer    :: OBC_Reg    !< OBC registry.
   logical                              :: register_tidal_bay_OBC
   character(len=32)  :: casename = "tidal bay"       !< This case's name.
   character(len=40)  :: mdl = "tidal_bay_initialization" ! This module's name.
-
-  if (associated(CS)) then
-    call MOM_error(WARNING, "register_tidal_bay_OBC called with an "// &
-                            "associated control structure.")
-    return
-  endif
-  allocate(CS)
 
   call get_param(param_file, mdl, "TIDAL_BAY_FLOW", CS%tide_flow, &
                  "Maximum total tidal volume flux.", &
@@ -57,21 +50,12 @@ function register_tidal_bay_OBC(param_file, CS, US, OBC_Reg)
 
 end function register_tidal_bay_OBC
 
-!> Clean up the tidal bay OBC from registry.
-subroutine tidal_bay_OBC_end(CS)
-  type(tidal_bay_OBC_CS), pointer    :: CS         !< tidal bay control structure.
-
-  if (associated(CS)) then
-    deallocate(CS)
-  endif
-end subroutine tidal_bay_OBC_end
-
 !> This subroutine sets the properties of flow at open boundary conditions.
 subroutine tidal_bay_set_OBC_data(OBC, CS, G, GV, h, Time)
   type(ocean_OBC_type),    pointer    :: OBC  !< This open boundary condition type specifies
                                               !! whether, where, and what open boundary
                                               !! conditions are used.
-  type(tidal_bay_OBC_CS),  pointer    :: CS   !< tidal bay control structure.
+  type(tidal_bay_OBC_CS),  intent(in) :: CS   !< tidal bay control structure.
   type(ocean_grid_type),   intent(in) :: G    !< The ocean's grid structure.
   type(verticalGrid_type), intent(in) :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in) :: h !< layer thickness [H ~> m or kg m-2]

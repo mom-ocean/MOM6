@@ -37,9 +37,7 @@ implicit none ; private
 
 #include <MOM_memory.h>
 
-public EOS_allocate
 public EOS_domain
-public EOS_end
 public EOS_init
 public EOS_manual_init
 public EOS_quadrature
@@ -167,16 +165,13 @@ subroutine calculate_density_scalar(T, S, pressure, rho, EOS, rho_ref, scale)
   real,           intent(in)  :: S        !< Salinity [ppt]
   real,           intent(in)  :: pressure !< Pressure [Pa] or [R L2 T-2 ~> Pa]
   real,           intent(out) :: rho      !< Density (in-situ if pressure is local) [kg m-3] or [R ~> kg m-3]
-  type(EOS_type), pointer     :: EOS      !< Equation of state structure
+  type(EOS_type), intent(in)  :: EOS      !< Equation of state structure
   real, optional, intent(in)  :: rho_ref  !< A reference density [kg m-3]
   real, optional, intent(in)  :: scale    !< A multiplicative factor by which to scale density in
                                           !! combination with scaling given by US [various]
 
   real :: rho_scale ! A factor to convert density from kg m-3 to the desired units [R m3 kg-1 ~> 1]
   real :: p_scale   ! A factor to convert pressure to units of Pa [Pa T2 R-1 L-2 ~> 1]
-
-  if (.not.associated(EOS)) call MOM_error(FATAL, &
-    "calculate_density_scalar called with an unassociated EOS_type EOS.")
 
   p_scale = EOS%RL2_T2_to_Pa
 
@@ -216,7 +211,7 @@ subroutine calculate_stanley_density_scalar(T, S, pressure, Tvar, TScov, Svar, r
   real,           intent(in)  :: Svar     !< Variance of salinity [ppt2]
   real,           intent(in)  :: pressure !< Pressure [Pa]
   real,           intent(out) :: rho      !< Density (in-situ if pressure is local) [kg m-3] or [R ~> kg m-3]
-  type(EOS_type), pointer     :: EOS      !< Equation of state structure
+  type(EOS_type), intent(in)  :: EOS      !< Equation of state structure
   real, optional, intent(in)  :: rho_ref  !< A reference density [kg m-3].
   real, optional, intent(in)  :: scale    !< A multiplicative factor by which to scale density
                                           !! from kg m-3 to the desired units [R m3 kg-1]
@@ -224,9 +219,6 @@ subroutine calculate_stanley_density_scalar(T, S, pressure, Tvar, TScov, Svar, r
   real :: d2RdTT, d2RdST, d2RdSS, d2RdSp, d2RdTp ! Second derivatives of density wrt T,S,p
   real :: rho_scale ! A factor to convert density from kg m-3 to the desired units [R m3 kg-1 ~> 1]
   real :: p_scale   ! A factor to convert pressure to units of Pa [Pa T2 R-1 L-2 ~> 1]
-
-  if (.not.associated(EOS)) call MOM_error(FATAL, &
-    "calculate_stanley_density_scalar called with an unassociated EOS_type EOS.")
 
   p_scale = EOS%RL2_T2_to_Pa
 
@@ -266,14 +258,11 @@ subroutine calculate_density_array(T, S, pressure, rho, start, npts, EOS, rho_re
   real, dimension(:), intent(inout) :: rho      !< Density (in-situ if pressure is local) [kg m-3] or [R ~> kg m-3]
   integer,            intent(in)    :: start    !< Start index for computation
   integer,            intent(in)    :: npts     !< Number of point to compute
-  type(EOS_type),     pointer       :: EOS      !< Equation of state structure
+  type(EOS_type),     intent(in)    :: EOS      !< Equation of state structure
   real,                  optional, intent(in) :: rho_ref  !< A reference density [kg m-3]
   real,                  optional, intent(in) :: scale    !< A multiplicative factor by which to scale density
                                                 !! in combination with scaling given by US [various]
   integer :: j
-
-  if (.not.associated(EOS)) call MOM_error(FATAL, &
-    "calculate_density_array called with an unassociated EOS_type EOS.")
 
   select case (EOS%form_of_EOS)
     case (EOS_LINEAR)
@@ -312,16 +301,13 @@ subroutine calculate_stanley_density_array(T, S, pressure, Tvar, TScov, Svar, rh
   real, dimension(:), intent(inout) :: rho      !< Density (in-situ if pressure is local) [kg m-3]
   integer,            intent(in)    :: start    !< Start index for computation
   integer,            intent(in)    :: npts     !< Number of point to compute
-  type(EOS_type),     pointer       :: EOS      !< Equation of state structure
+  type(EOS_type),     intent(in)    :: EOS      !< Equation of state structure
   real,     optional, intent(in)    :: rho_ref  !< A reference density [kg m-3].
   real,     optional, intent(in)    :: scale    !< A multiplicative factor by which to scale density
                                                 !! from kg m-3 to the desired units [R m3 kg-1]
   ! Local variables
   real, dimension(size(T)) :: d2RdTT, d2RdST, d2RdSS, d2RdSp, d2RdTp ! Second derivatives of density wrt T,S,p
   integer :: j
-
-  if (.not.associated(EOS)) call MOM_error(FATAL, &
-    "calculate_density_array called with an unassociated EOS_type EOS.")
 
   select case (EOS%form_of_EOS)
     case (EOS_LINEAR)
@@ -361,7 +347,7 @@ subroutine calculate_density_1d(T, S, pressure, rho, EOS, dom, rho_ref, scale)
   real, dimension(:),    intent(in)    :: S        !< Salinity [ppt]
   real, dimension(:),    intent(in)    :: pressure !< Pressure [R L2 T-2 ~> Pa]
   real, dimension(:),    intent(inout) :: rho      !< Density (in-situ if pressure is local) [R ~> kg m-3]
-  type(EOS_type),        pointer       :: EOS      !< Equation of state structure
+  type(EOS_type),        intent(in)    :: EOS      !< Equation of state structure
   integer, dimension(2), optional, intent(in) :: dom   !< The domain of indices to work on, taking
                                                        !! into account that arrays start at 1.
   real,                  optional, intent(in) :: rho_ref !< A reference density [kg m-3]
@@ -374,9 +360,6 @@ subroutine calculate_density_1d(T, S, pressure, rho, EOS, dom, rho_ref, scale)
   real :: rho_reference ! rho_ref converted to [kg m-3]
   real, dimension(size(rho)) :: pres  ! Pressure converted to [Pa]
   integer :: i, is, ie, npts
-
-  if (.not.associated(EOS)) call MOM_error(FATAL, &
-    "calculate_density_1d called with an unassociated EOS_type EOS.")
 
   if (present(dom)) then
     is = dom(1) ; ie = dom(2) ; npts = 1 + ie - is
@@ -421,7 +404,7 @@ subroutine calculate_stanley_density_1d(T, S, pressure, Tvar, TScov, Svar, rho, 
   real, dimension(:),    intent(in)    :: TScov    !< Covariance of potential temperature and salinity [degC ppt]
   real, dimension(:),    intent(in)    :: Svar     !< Variance of salinity [ppt2]
   real, dimension(:),    intent(inout) :: rho      !< Density (in-situ if pressure is local) [R ~> kg m-3]
-  type(EOS_type),        pointer       :: EOS      !< Equation of state structure
+  type(EOS_type),        intent(in)    :: EOS      !< Equation of state structure
   integer, dimension(2), optional, intent(in) :: dom   !< The domain of indices to work on, taking
                                                        !! into account that arrays start at 1.
   real,                  optional, intent(in) :: rho_ref !< A reference density [kg m-3]
@@ -433,9 +416,6 @@ subroutine calculate_stanley_density_1d(T, S, pressure, Tvar, TScov, Svar, rho, 
   real, dimension(size(rho)) :: pres  ! Pressure converted to [Pa]
   real, dimension(size(T)) :: d2RdTT, d2RdST, d2RdSS, d2RdSp, d2RdTp ! Second derivatives of density wrt T,S,p
   integer :: i, is, ie, npts
-
-  if (.not.associated(EOS)) call MOM_error(FATAL, &
-    "calculate_density_1d called with an unassociated EOS_type EOS.")
 
   if (present(dom)) then
     is = dom(1) ; ie = dom(2) ; npts = 1 + ie - is
@@ -489,16 +469,13 @@ subroutine calculate_spec_vol_array(T, S, pressure, specvol, start, npts, EOS, s
   real, dimension(:), intent(inout) :: specvol  !< in situ specific volume [kg m-3]
   integer,            intent(in)    :: start    !< the starting point in the arrays.
   integer,            intent(in)    :: npts     !< the number of values to calculate.
-  type(EOS_type),     pointer       :: EOS      !< Equation of state structure
+  type(EOS_type),     intent(in)    :: EOS      !< Equation of state structure
   real,     optional, intent(in)    :: spv_ref  !< A reference specific volume [m3 kg-1]
   real,     optional, intent(in)    :: scale    !< A multiplicative factor by which to scale specific
                                                 !! volume in combination with scaling given by US [various]
 
   real, dimension(size(specvol))  :: rho   ! Density [kg m-3]
   integer :: j
-
-  if (.not.associated(EOS)) call MOM_error(FATAL, &
-    "calculate_spec_vol_array called with an unassociated EOS_type EOS.")
 
   select case (EOS%form_of_EOS)
     case (EOS_LINEAR)
@@ -534,7 +511,7 @@ subroutine calc_spec_vol_scalar(T, S, pressure, specvol, EOS, spv_ref, scale)
   real,           intent(in)  :: S        !< Salinity [ppt]
   real,           intent(in)  :: pressure !< Pressure [Pa] or [R L2 T-2 ~> Pa]
   real,           intent(out) :: specvol  !< In situ? specific volume [m3 kg-1] or [R-1 ~> m3 kg-1]
-  type(EOS_type), pointer     :: EOS      !< Equation of state structure
+  type(EOS_type), intent(in)  :: EOS      !< Equation of state structure
   real, optional, intent(in)  :: spv_ref  !< A reference specific volume [m3 kg-1] or [R-1 m3 kg-1]
   real, optional, intent(in)  :: scale    !< A multiplicative factor by which to scale specific
                                           !! volume in combination with scaling given by US [various]
@@ -542,9 +519,6 @@ subroutine calc_spec_vol_scalar(T, S, pressure, specvol, EOS, spv_ref, scale)
   real, dimension(1) :: Ta, Sa, pres, spv  ! Rescaled single element array versions of the arguments.
   real :: spv_reference ! spv_ref converted to [m3 kg-1]
   real :: spv_scale ! A factor to convert specific volume from m3 kg-1 to the desired units [kg R-1 m-3 ~> 1]
-
-  if (.not.associated(EOS)) call MOM_error(FATAL, &
-    "calc_spec_vol_scalar called with an unassociated EOS_type EOS.")
 
   pres(1) = EOS%RL2_T2_to_Pa*pressure
   Ta(1) = T ; Sa(1) = S
@@ -572,7 +546,7 @@ subroutine calc_spec_vol_1d(T, S, pressure, specvol, EOS, dom, spv_ref, scale)
   real, dimension(:),    intent(in)    :: S        !< Salinity [ppt]
   real, dimension(:),    intent(in)    :: pressure !< Pressure [R L2 T-2 ~> Pa]
   real, dimension(:),    intent(inout) :: specvol  !< In situ specific volume [R-1 ~> m3 kg-1]
-  type(EOS_type),        pointer       :: EOS      !< Equation of state structure
+  type(EOS_type),        intent(in)    :: EOS      !< Equation of state structure
   integer, dimension(2), optional, intent(in) :: dom   !< The domain of indices to work on, taking
                                                        !! into account that arrays start at 1.
   real,                  optional, intent(in) :: spv_ref !< A reference specific volume [R-1 ~> m3 kg-1]
@@ -586,9 +560,6 @@ subroutine calc_spec_vol_1d(T, S, pressure, specvol, EOS, dom, spv_ref, scale)
   real :: spv_scale ! A factor to convert specific volume from m3 kg-1 to the desired units [kg m-3 R-1 ~> 1]
   real :: spv_reference ! spv_ref converted to [m3 kg-1]
   integer :: i, is, ie, npts
-
-  if (.not.associated(EOS)) call MOM_error(FATAL, &
-    "calc_spec_vol_1d called with an unassociated EOS_type EOS.")
 
   if (present(dom)) then
     is = dom(1) ; ie = dom(2) ; npts = 1 + ie - is
@@ -626,14 +597,11 @@ subroutine calculate_TFreeze_scalar(S, pressure, T_fr, EOS, pres_scale)
   real,           intent(in)  :: pressure !< Pressure [Pa] or [other]
   real,           intent(out) :: T_fr !< Freezing point potential temperature referenced
                                       !! to the surface [degC]
-  type(EOS_type), pointer     :: EOS !< Equation of state structure
+  type(EOS_type), intent(in)  :: EOS !< Equation of state structure
   real, optional, intent(in)  :: pres_scale !< A multiplicative factor to convert pressure into Pa
 
   ! Local variables
   real :: p_scale ! A factor to convert pressure to units of Pa.
-
-  if (.not.associated(EOS)) call MOM_error(FATAL, &
-    "calculate_TFreeze_scalar called with an unassociated EOS_type EOS.")
 
   p_scale = 1.0 ; if (present(pres_scale)) p_scale = pres_scale
 
@@ -659,16 +627,13 @@ subroutine calculate_TFreeze_array(S, pressure, T_fr, start, npts, EOS, pres_sca
                                                 !! to the surface [degC]
   integer,            intent(in)    :: start    !< Starting index within the array
   integer,            intent(in)    :: npts     !< The number of values to calculate
-  type(EOS_type),     pointer       :: EOS      !< Equation of state structure
+  type(EOS_type),     intent(in)    :: EOS      !< Equation of state structure
   real,     optional, intent(in)    :: pres_scale !< A multiplicative factor to convert pressure into Pa.
 
   ! Local variables
   real, dimension(size(pressure)) :: pres  ! Pressure converted to [Pa]
   real :: p_scale ! A factor to convert pressure to units of Pa.
   integer :: j
-
-  if (.not.associated(EOS)) call MOM_error(FATAL, &
-    "calculate_TFreeze_scalar called with an unassociated EOS_type EOS.")
 
   p_scale = 1.0 ; if (present(pres_scale)) p_scale = pres_scale
 
@@ -712,15 +677,12 @@ subroutine calculate_density_derivs_array(T, S, pressure, drho_dT, drho_dS, star
                                                 !! in [kg m-3 ppt-1] or [R ppt-1 ~> kg m-3 ppt-1]
   integer,            intent(in)    :: start    !< Starting index within the array
   integer,            intent(in)    :: npts     !< The number of values to calculate
-  type(EOS_type),     pointer       :: EOS      !< Equation of state structure
+  type(EOS_type),     intent(in)    :: EOS      !< Equation of state structure
   real,     optional, intent(in)    :: scale !< A multiplicative factor by which to scale density
                                                 !! in combination with scaling given by US [various]
 
   ! Local variables
   integer :: j
-
-  if (.not.associated(EOS)) call MOM_error(FATAL, &
-    "calculate_density_derivs called with an unassociated EOS_type EOS.")
 
   select case (EOS%form_of_EOS)
     case (EOS_LINEAR)
@@ -755,7 +717,7 @@ subroutine calculate_density_derivs_1d(T, S, pressure, drho_dT, drho_dS, EOS, do
                                                    !! temperature [R degC-1 ~> kg m-3 degC-1]
   real, dimension(:),    intent(inout) :: drho_dS  !< The partial derivative of density with salinity
                                                    !! [R ppt-1 ~> kg m-3 ppt-1]
-  type(EOS_type),        pointer       :: EOS      !< Equation of state structure
+  type(EOS_type),        intent(in)    :: EOS      !< Equation of state structure
   integer, dimension(2), optional, intent(in) :: dom   !< The domain of indices to work on, taking
                                                        !! into account that arrays start at 1.
   real,                  optional, intent(in) :: scale !< A multiplicative factor by which to scale density
@@ -765,9 +727,6 @@ subroutine calculate_density_derivs_1d(T, S, pressure, drho_dT, drho_dS, EOS, do
   real :: rho_scale ! A factor to convert density from kg m-3 to the desired units [R m3 kg-1 ~> 1]
   real :: p_scale   ! A factor to convert pressure to units of Pa [Pa T2 R-1 L-2 ~> 1]
   integer :: i, is, ie, npts
-
-  if (.not.associated(EOS)) call MOM_error(FATAL, &
-    "calculate_density_derivs called with an unassociated EOS_type EOS.")
 
   if (present(dom)) then
     is = dom(1) ; ie = dom(2) ; npts = 1 + ie - is
@@ -804,16 +763,13 @@ subroutine calculate_density_derivs_scalar(T, S, pressure, drho_dT, drho_dS, EOS
                                          !! temperature [kg m-3 degC-1] or [R degC-1 ~> kg m-3 degC-1]
   real,           intent(out) :: drho_dS !< The partial derivative of density with salinity,
                                          !! in [kg m-3 ppt-1] or [R ppt-1 ~> kg m-3 ppt-1]
-  type(EOS_type), pointer     :: EOS     !< Equation of state structure
+  type(EOS_type), intent(in)  :: EOS     !< Equation of state structure
   real, optional, intent(in)  :: scale   !< A multiplicative factor by which to scale density
                                          !! in combination with scaling given by US [various]
   ! Local variables
   real :: rho_scale ! A factor to convert density from kg m-3 to the desired units [R m3 kg-1 ~> 1]
   real :: p_scale   ! A factor to convert pressure to units of Pa [Pa T2 R-1 L-2 ~> 1]
   integer :: j
-
-  if (.not.associated(EOS)) call MOM_error(FATAL, &
-    "calculate_density_derivs called with an unassociated EOS_type EOS.")
 
   p_scale = EOS%RL2_T2_to_Pa
 
@@ -856,7 +812,7 @@ subroutine calculate_density_second_derivs_array(T, S, pressure, drho_dS_dS, drh
                                                   !! [kg m-3 degC-1 Pa-1] or [R degC-1 Pa-1 ~> kg m-3 degC-1 Pa-1]
   integer,            intent(in)  :: start !< Starting index within the array
   integer,            intent(in)  :: npts  !< The number of values to calculate
-  type(EOS_type),     pointer     :: EOS   !< Equation of state structure
+  type(EOS_type),     intent(in)  :: EOS   !< Equation of state structure
   real,                  optional, intent(in) :: scale !< A multiplicative factor by which to scale density
                                                   !! in combination with scaling given by US [various]
   ! Local variables
@@ -865,9 +821,6 @@ subroutine calculate_density_second_derivs_array(T, S, pressure, drho_dS_dS, drh
   real :: p_scale   ! A factor to convert pressure to units of Pa [Pa T2 R-1 L-2 ~> 1]
   real :: I_p_scale ! The inverse of the factor to convert pressure to units of Pa [R L2 T-2 Pa-1 ~> 1]
   integer :: j
-
-  if (.not.associated(EOS)) call MOM_error(FATAL, &
-    "calculate_density_derivs called with an unassociated EOS_type EOS.")
 
   p_scale = EOS%RL2_T2_to_Pa
 
@@ -938,16 +891,13 @@ subroutine calculate_density_second_derivs_scalar(T, S, pressure, drho_dS_dS, dr
                                   !! [kg m-3 ppt-1 Pa-1] or [R ppt-1 Pa-1 ~> kg m-3 ppt-1 Pa-1]
   real, intent(out) :: drho_dT_dP !< Partial derivative of alpha with respect to pressure
                                   !! [kg m-3 degC-1 Pa-1] or [R degC-1 Pa-1 ~> kg m-3 degC-1 Pa-1]
-  type(EOS_type), pointer    :: EOS !< Equation of state structure
+  type(EOS_type), intent(in) :: EOS !< Equation of state structure
   real, optional, intent(in) :: scale !< A multiplicative factor by which to scale density
                                   !! in combination with scaling given by US [various]
   ! Local variables
   real :: rho_scale ! A factor to convert density from kg m-3 to the desired units [R m3 kg-1 ~> 1]
   real :: p_scale   ! A factor to convert pressure to units of Pa [Pa T2 R-1 L-2 ~> 1]
   real :: I_p_scale ! The inverse of the factor to convert pressure to units of Pa [R L2 T-2 Pa-1 ~> 1]
-
-  if (.not.associated(EOS)) call MOM_error(FATAL, &
-    "calculate_density_derivs called with an unassociated EOS_type EOS.")
 
   p_scale = EOS%RL2_T2_to_Pa
 
@@ -994,7 +944,7 @@ subroutine calculate_spec_vol_derivs_array(T, S, pressure, dSV_dT, dSV_dS, start
                                               !! [m3 kg-1 ppt-1]
   integer,            intent(in)  :: start  !< Starting index within the array
   integer,            intent(in)  :: npts   !< The number of values to calculate
-  type(EOS_type),     pointer     :: EOS    !< Equation of state structure
+  type(EOS_type),     intent(in)  :: EOS    !< Equation of state structure
 
   ! Local variables
   real, dimension(size(T)) :: press   ! Pressure converted to [Pa]
@@ -1002,9 +952,6 @@ subroutine calculate_spec_vol_derivs_array(T, S, pressure, dSV_dT, dSV_dS, start
   real, dimension(size(T)) :: dRho_dT ! Derivative of density with temperature [kg m-3 degC-1]
   real, dimension(size(T)) :: dRho_dS ! Derivative of density with salinity [kg m-3 ppt-1]
   integer :: j
-
-  if (.not.associated(EOS)) call MOM_error(FATAL, &
-    "calculate_spec_vol_derivs_array called with an unassociated EOS_type EOS.")
 
   select case (EOS%form_of_EOS)
     case (EOS_LINEAR)
@@ -1044,7 +991,7 @@ subroutine calc_spec_vol_derivs_1d(T, S, pressure, dSV_dT, dSV_dS, EOS, dom, sca
                                                 !! temperature [R-1 degC-1 ~> m3 kg-1 degC-1]
   real, dimension(:), intent(inout) :: dSV_dS   !< The partial derivative of specific volume with salinity
                                                 !! [R-1 ppt-1 ~> m3 kg-1 ppt-1]
-  type(EOS_type),     pointer       :: EOS      !< Equation of state structure
+  type(EOS_type),     intent(in)    :: EOS      !< Equation of state structure
   integer, dimension(2), optional, intent(in) :: dom   !< The domain of indices to work on, taking
                                                        !! into account that arrays start at 1.
   real,                  optional, intent(in) :: scale !< A multiplicative factor by which to scale specific
@@ -1055,9 +1002,6 @@ subroutine calc_spec_vol_derivs_1d(T, S, pressure, dSV_dT, dSV_dS, EOS, dom, sca
   real :: spv_scale ! A factor to convert specific volume from m3 kg-1 to the desired units [kg R-1 m-3 ~> 1]
   real :: p_scale   ! A factor to convert pressure to units of Pa [Pa T2 R-1 L-2 ~> 1]
   integer :: i, is, ie, npts
-
-  if (.not.associated(EOS)) call MOM_error(FATAL, &
-    "calculate_spec_vol_derivs_1d called with an unassociated EOS_type EOS.")
 
   if (present(dom)) then
     is = dom(1) ; ie = dom(2) ; npts = 1 + ie - is
@@ -1095,14 +1039,11 @@ subroutine calculate_compress_array(T, S, press, rho, drho_dp, start, npts, EOS)
                                                 !! [s2 m-2] or [T2 L-2]
   integer,            intent(in)  :: start    !< Starting index within the array
   integer,            intent(in)  :: npts     !< The number of values to calculate
-  type(EOS_type),     pointer     :: EOS      !< Equation of state structure
+  type(EOS_type),     intent(in)  :: EOS      !< Equation of state structure
 
   ! Local variables
   real, dimension(size(press)) :: pressure  ! Pressure converted to [Pa]
   integer :: i, is, ie
-
-  if (.not.associated(EOS)) call MOM_error(FATAL, &
-    "calculate_compress called with an unassociated EOS_type EOS.")
 
   is = start ; ie = is + npts - 1
   do i=is,ie ; pressure(i) = EOS%RL2_T2_to_Pa * press(i) ; enddo
@@ -1142,13 +1083,11 @@ subroutine calculate_compress_scalar(T, S, pressure, rho, drho_dp, EOS)
   real, intent(out)       :: rho      !< In situ density [kg m-3] or [R ~> kg m-3]
   real, intent(out)       :: drho_dp  !< The partial derivative of density with pressure (also the
                                       !! inverse of the square of sound speed) [s2 m-2] or [T2 L-2]
-  type(EOS_type), pointer :: EOS      !< Equation of state structure
+  type(EOS_type), intent(in) :: EOS   !< Equation of state structure
 
   ! Local variables
   real, dimension(1) :: Ta, Sa, pa, rhoa, drho_dpa
 
-  if (.not.associated(EOS)) call MOM_error(FATAL, &
-    "calculate_compress called with an unassociated EOS_type EOS.")
   Ta(1) = T ; Sa(1) = S; pa(1) = pressure
 
   call calculate_compress_array(Ta, Sa, pa, rhoa, drho_dpa, 1, 1, EOS)
@@ -1198,7 +1137,7 @@ subroutine analytic_int_specific_vol_dp(T, S, p_t, p_b, alpha_ref, HI, EOS, &
                             !! to reduce the magnitude of each of the integrals [R-1 ~> m3 kg-1]
                             !! The calculation is mathematically identical with different values of
                             !! alpha_ref, but this reduces the effects of roundoff.
-  type(EOS_type),       pointer     :: EOS !< Equation of state structure
+  type(EOS_type),       intent(in)  :: EOS !< Equation of state structure
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
                         intent(inout) :: dza !< The change in the geopotential anomaly across
                             !! the layer [L2 T-2 ~> m2 s-2] or [m2 s-2]
@@ -1225,9 +1164,6 @@ subroutine analytic_int_specific_vol_dp(T, S, p_t, p_b, alpha_ref, HI, EOS, &
   real :: pres_scale    ! A unit conversion factor from the rescaled units of pressure to Pa [Pa T2 R-1 L-2 ~> 1]
   real :: SV_scale      ! A multiplicative factor by which to scale specific
                         ! volume from m3 kg-1 to the desired units [kg m-3 R-1 ~> 1]
-
-  if (.not.associated(EOS)) call MOM_error(FATAL, &
-    "int_specific_vol_dp called with an unassociated EOS_type EOS.")
 
   ! We should never reach this point with quadrature. EOS_quadrature indicates that numerical
   ! integration be used instead of analytic. This is a safety check.
@@ -1271,7 +1207,7 @@ subroutine analytic_int_density_dz(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, EOS,
                                            !! used in the equation of state.
   real,                 intent(in)  :: G_e !< The Earth's gravitational acceleration
                                            !! [L2 Z-1 T-2 ~> m s-2] or [m2 Z-1 s-2 ~> m s-2]
-  type(EOS_type),       pointer     :: EOS !< Equation of state structure
+  type(EOS_type),       intent(in)  :: EOS !< Equation of state structure
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
                       intent(inout) :: dpa !< The change in the pressure anomaly
                                            !! across the layer [R L2 T-2 ~> Pa] or [Pa]
@@ -1298,9 +1234,6 @@ subroutine analytic_int_density_dz(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, EOS,
   real :: rho_scale  ! A multiplicative factor by which to scale density from kg m-3 to the
                      ! desired units [R m3 kg-1 ~> 1]
   real :: pres_scale ! A multiplicative factor to convert pressure into Pa [Pa T2 R-1 L-2 ~> 1]
-
-  if (.not.associated(EOS)) call MOM_error(FATAL, &
-    "int_density_dz called with an unassociated EOS_type EOS.")
 
   ! We should never reach this point with quadrature. EOS_quadrature indicates that numerical
   ! integration be used instead of analytic. This is a safety check.
@@ -1338,10 +1271,7 @@ end subroutine analytic_int_density_dz
 
 !> Returns true if the equation of state is compressible (i.e. has pressure dependence)
 logical function query_compressible(EOS)
-  type(EOS_type), pointer :: EOS !< Equation of state structure
-
-  if (.not.associated(EOS)) call MOM_error(FATAL, &
-    "query_compressible called with an unassociated EOS_type EOS.")
+  type(EOS_type), intent(in) :: EOS !< Equation of state structure
 
   query_compressible = EOS%compressible
 end function query_compressible
@@ -1349,15 +1279,13 @@ end function query_compressible
 !> Initializes EOS_type by allocating and reading parameters
 subroutine EOS_init(param_file, EOS, US)
   type(param_file_type), intent(in) :: param_file !< Parameter file structure
-  type(EOS_type),        pointer    :: EOS !< Equation of state structure
+  type(EOS_type), intent(inout)     :: EOS !< Equation of state structure
   type(unit_scale_type), intent(in) :: US  !< A dimensional unit scaling type
   optional :: US
   ! Local variables
 #include "version_variable.h"
   character(len=40)  :: mdl = "MOM_EOS" ! This module's name.
   character(len=40)  :: tmpstr
-
-  if (.not.associated(EOS)) call EOS_allocate(EOS)
 
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mdl, version, "")
@@ -1457,7 +1385,7 @@ end subroutine EOS_init
 !> Manually initialized an EOS type (intended for unit testing of routines which need a specific EOS)
 subroutine EOS_manual_init(EOS, form_of_EOS, form_of_TFreeze, EOS_quadrature, Compressible, &
                            Rho_T0_S0, drho_dT, dRho_dS, TFr_S0_P0, dTFr_dS, dTFr_dp)
-  type(EOS_type),    pointer    :: EOS !< Equation of state structure
+  type(EOS_type),    intent(inout) :: EOS !< Equation of state structure
   integer, optional, intent(in) :: form_of_EOS !< A coded integer indicating the equation of state to use.
   integer, optional, intent(in) :: form_of_TFreeze !< A coded integer indicating the expression for
                                        !! the potential temperature of the freezing point.
@@ -1488,20 +1416,6 @@ subroutine EOS_manual_init(EOS, form_of_EOS, form_of_TFreeze, EOS_quadrature, Co
 
 end subroutine EOS_manual_init
 
-!> Allocates EOS_type
-subroutine EOS_allocate(EOS)
-  type(EOS_type), pointer :: EOS !< Equation of state structure
-
-  if (.not.associated(EOS)) allocate(EOS)
-end subroutine EOS_allocate
-
-!> Deallocates EOS_type
-subroutine EOS_end(EOS)
-  type(EOS_type), pointer :: EOS !< Equation of state structure
-
-  if (associated(EOS)) deallocate(EOS)
-end subroutine EOS_end
-
 !> Set equation of state structure (EOS) to linear with given coefficients
 !!
 !! \note This routine is primarily for testing and allows a local copy of the
@@ -1513,10 +1427,7 @@ subroutine EOS_use_linear(Rho_T0_S0, dRho_dT, dRho_dS, EOS, use_quadrature)
   real,              intent(in) :: dRho_dS   !< Partial derivative of density with salinity [kg m-3 ppt-1]
   logical, optional, intent(in) :: use_quadrature !< If true, always use the generic (quadrature)
                                              !! code for the integrals of density.
-  type(EOS_type),    pointer    :: EOS       !< Equation of state structure
-
-  if (.not.associated(EOS)) call MOM_error(FATAL, &
-    "MOM_EOS.F90: EOS_use_linear() called with an unassociated EOS_type EOS.")
+  type(EOS_type),    intent(inout) :: EOS    !< Equation of state structure
 
   EOS%form_of_EOS = EOS_LINEAR
   EOS%Compressible = .false.
@@ -1539,14 +1450,11 @@ subroutine convert_temp_salt_for_TEOS10(T, S, HI, kd, mask_z, EOS)
                          intent(inout) :: S   !< Salinity [ppt]
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed,kd), &
                          intent(in)    :: mask_z !< 3d mask regulating which points to convert.
-  type(EOS_type),        pointer       :: EOS !< Equation of state structure
+  type(EOS_type),        intent(in)    :: EOS !< Equation of state structure
 
   integer :: i, j, k
   real :: gsw_sr_from_sp, gsw_ct_from_pt, gsw_sa_from_sp
   real :: p
-
-  if (.not.associated(EOS)) call MOM_error(FATAL, &
-    "convert_temp_salt_to_TEOS10 called with an unassociated EOS_type EOS.")
 
   if ((EOS%form_of_EOS /= EOS_TEOS10) .and. (EOS%form_of_EOS /= EOS_NEMO)) return
 
@@ -1564,7 +1472,7 @@ end subroutine convert_temp_salt_for_TEOS10
 
 !> Return value of EOS_quadrature
 logical function EOS_quadrature(EOS)
-  type(EOS_type),    pointer     :: EOS !< Equation of state structure
+  type(EOS_type), intent(in) :: EOS   !< Equation of state structure
 
   EOS_quadrature  = EOS%EOS_quadrature
 
@@ -1573,7 +1481,7 @@ end function EOS_quadrature
 !> Extractor routine for the EOS type if the members need to be accessed outside this module
 subroutine extract_member_EOS(EOS, form_of_EOS, form_of_TFreeze, EOS_quadrature, Compressible, &
                               Rho_T0_S0, drho_dT, dRho_dS, TFr_S0_P0, dTFr_dS, dTFr_dp)
-  type(EOS_type),    pointer     :: EOS !< Equation of state structure
+  type(EOS_type),    intent(in)  :: EOS !< Equation of state structure
   integer, optional, intent(out) :: form_of_EOS !< A coded integer indicating the equation of state to use.
   integer, optional, intent(out) :: form_of_TFreeze !< A coded integer indicating the expression for
                                        !! the potential temperature of the freezing point.

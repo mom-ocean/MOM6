@@ -177,8 +177,8 @@ type, public :: hor_visc_CS ; private
 
   type(diag_ctrl), pointer :: diag => NULL() !< structure to regulate diagnostics
 
-  ! real, pointer :: hf_diffu(:,:,:)   => NULL() ! Zonal hor. visc. accel. x fract. thickness [L T-2 ~> m s-2].
-  ! real, pointer :: hf_diffv(:,:,:)   => NULL() ! Merdional hor. visc. accel. x fract. thickness [L T-2 ~> m s-2].
+  ! real, allocatable :: hf_diffu(:,:,:)  ! Zonal hor. visc. accel. x fract. thickness [L T-2 ~> m s-2].
+  ! real, allocatable :: hf_diffv(:,:,:)  ! Merdional hor. visc. accel. x fract. thickness [L T-2 ~> m s-2].
   ! 3D diagnostics hf_diffu(diffv) are commented because there is no clarity on proper remapping grid option.
   ! The code is retained for degugging purposes in the future.
 
@@ -233,19 +233,15 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
                                  intent(out) :: diffv  !< Meridional acceleration due to convergence
                                                        !! of along-coordinate stress tensor [L T-2 ~> m s-2].
-  type(MEKE_type),               pointer     :: MEKE   !< Pointer to a structure containing fields
+  type(MEKE_type),               intent(inout) :: MEKE !< MEKE fields
                                                        !! related to Mesoscale Eddy Kinetic Energy.
-  type(VarMix_CS),               pointer     :: VarMix !< Pointer to a structure with fields that
-                                                       !! specify the spatially variable viscosities
+  type(VarMix_CS),               intent(inout) :: VarMix !< Variable mixing control struct
   type(unit_scale_type),         intent(in)  :: US     !< A dimensional unit scaling type
-  type(hor_visc_CS),             pointer     :: CS     !< Control structure returned by a previous
-                                                       !! call to hor_visc_init.
+  type(hor_visc_CS),             intent(in)  :: CS     !< Horizontal viscosity control struct
   type(ocean_OBC_type), optional, pointer    :: OBC    !< Pointer to an open boundary condition type
-  type(barotropic_CS),  optional, pointer    :: BT     !< Pointer to a structure containing
-                                                       !! barotropic velocities.
-  type(thickness_diffuse_CS), optional, pointer :: TD  !< Pointer to a structure containing
-                                                       !! thickness diffusivities.
-  type(accel_diag_ptrs), optional, pointer :: ADp      !< Acceleration diagnostic pointers
+  type(barotropic_CS), intent(in), optional  :: BT     !< Barotropic control struct
+  type(thickness_diffuse_CS), intent(in), optional :: TD  !< Thickness diffusion control struct
+  type(accel_diag_ptrs), intent(in), optional :: ADp   !< Acceleration diagnostics
 
   ! Local variables
   real, dimension(SZIB_(G),SZJ_(G)) :: &
@@ -419,33 +415,26 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
     apply_OBC = .true.
   endif ; endif ; endif
 
-  if (.not.associated(CS)) call MOM_error(FATAL, &
-         "MOM_hor_visc: Module must be initialized before it is used.")
   if (.not.(CS%Laplacian .or. CS%biharmonic)) return
 
   find_FrictWork = (CS%id_FrictWork > 0)
   if (CS%id_FrictWorkIntz > 0) find_FrictWork = .true.
-  if (associated(MEKE)) then
-    if (associated(MEKE%mom_src)) find_FrictWork = .true.
-    backscat_subround = 0.0
-    if (find_FrictWork .and. associated(MEKE%mom_src) .and. (MEKE%backscatter_Ro_c > 0.0) .and. &
-        (MEKE%backscatter_Ro_Pow /= 0.0)) &
-      backscat_subround = (1.0e-16/MEKE%backscatter_Ro_c)**(1.0/MEKE%backscatter_Ro_Pow)
-  endif
+
+  if (allocated(MEKE%mom_src)) find_FrictWork = .true.
+  backscat_subround = 0.0
+  if (find_FrictWork .and. allocated(MEKE%mom_src) .and. (MEKE%backscatter_Ro_c > 0.0) .and. &
+      (MEKE%backscatter_Ro_Pow /= 0.0)) &
+    backscat_subround = (1.0e-16/MEKE%backscatter_Ro_c)**(1.0/MEKE%backscatter_Ro_Pow)
 
   ! Toggle whether to use a Laplacian viscosity derived from MEKE
-  if (associated(MEKE)) then
-    use_MEKE_Ku = associated(MEKE%Ku)
-    use_MEKE_Au = associated(MEKE%Au)
-  else
-    use_MEKE_Ku = .false. ; use_MEKE_Au = .false.
-  endif
+  use_MEKE_Ku = allocated(MEKE%Ku)
+  use_MEKE_Au = allocated(MEKE%Au)
 
   rescale_Kh = .false.
-  if (associated(VarMix)) then
+  if (VarMix%use_variable_mixing) then
     rescale_Kh = VarMix%Resoln_scaled_Kh
-    if ((rescale_Kh .or. CS%res_scale_MEKE) .and. &
-    (.not.associated(VarMix%Res_fn_h) .or. .not.associated(VarMix%Res_fn_q))) &
+    if ((rescale_Kh .or. CS%res_scale_MEKE) &
+        .and. (.not. allocated(VarMix%Res_fn_h) .or. .not. allocated(VarMix%Res_fn_q))) &
       call MOM_error(FATAL, "MOM_hor_visc: VarMix%Res_fn_h and VarMix%Res_fn_q "//&
         "both need to be associated with Resoln_scaled_Kh or RES_SCALE_MEKE_VISC.")
   elseif (CS%res_scale_MEKE) then
@@ -1457,11 +1446,8 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
       enddo ; enddo
 
       ! Applying GME diagonal term.  This is linear and the arguments can be rescaled.
-      !### This smoothing is only applied at computational grid points, but is used in extra halo points!
-      !### There are blocking halo updates in the smooth_GME routines, which could be avoided by expanding
-      !    the loop ranges by a point in the code setting str_xx_GME and str_xy_GME a few lines above.
-      call smooth_GME(CS, G, GME_flux_h=str_xx_GME)
-      call smooth_GME(CS, G, GME_flux_q=str_xy_GME)
+      call smooth_GME(G, GME_flux_h=str_xx_GME)
+      call smooth_GME(G, GME_flux_q=str_xy_GME)
 
       do J=Jsq,Jeq+1 ; do i=Isq,Ieq+1
         str_xx(i,j) = (str_xx(i,j) + str_xx_GME(i,j)) * (h(i,j,k) * CS%reduction_xx(i,j))
@@ -1476,7 +1462,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
         endif
       enddo ; enddo
 
-      if (associated(MEKE%GME_snk)) then
+      if (allocated(MEKE%GME_snk)) then
         do j=js,je ; do i=is,ie
           FrictWork_GME(i,j,k) = GME_coeff_h(i,j,k) * h(i,j,k) * GV%H_to_kg_m2 * grad_vel_mag_bt_h(i,j)
         enddo ; enddo
@@ -1565,12 +1551,12 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
     ! Make a similar calculation as for FrictWork above but accumulating into
     ! the vertically integrated MEKE source term, and adjusting for any
     ! energy loss seen as a reduction in the (biharmonic) frictional source term.
-    if (find_FrictWork .and. associated(MEKE)) then ; if (associated(MEKE%mom_src)) then
+    if (find_FrictWork .and. allocated(MEKE%mom_src)) then
       if (k==1) then
         do j=js,je ; do i=is,ie
           MEKE%mom_src(i,j) = 0.
         enddo ; enddo
-        if (associated(MEKE%GME_snk)) then
+        if (allocated(MEKE%GME_snk)) then
           do j=js,je ; do i=is,ie
             MEKE%GME_snk(i,j) = 0.
           enddo ; enddo
@@ -1623,13 +1609,13 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
         MEKE%mom_src(i,j) = MEKE%mom_src(i,j) + FrictWork(i,j,k)
       enddo ; enddo
 
-      if (CS%use_GME .and. associated(MEKE)) then ; if (associated(MEKE%GME_snk)) then
+      if (CS%use_GME .and. allocated(MEKE%GME_snk)) then
         do j=js,je ; do i=is,ie
           MEKE%GME_snk(i,j) = MEKE%GME_snk(i,j) + FrictWork_GME(i,j,k)
         enddo ; enddo
-      endif ; endif
+      endif
 
-    endif ; endif ! find_FrictWork and associated(mom_src)
+    endif ! find_FrictWork and associated(mom_src)
 
   enddo ! end of k loop
 
@@ -1756,13 +1742,12 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
     call post_data(CS%id_diffv_visc_rem, diffv_visc_rem, CS%diag)
     deallocate(diffv_visc_rem)
   endif
-
 end subroutine horizontal_viscosity
 
 !> Allocates space for and calculates static variables used by horizontal_viscosity().
 !! hor_visc_init calculates and stores the values of a number of metric functions that
 !! are used in horizontal_viscosity().
-subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, MEKE, ADp)
+subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, ADp)
   type(time_type),         intent(in)    :: Time !< Current model time.
   type(ocean_grid_type),   intent(inout) :: G    !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure
@@ -1770,10 +1755,9 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, MEKE, ADp)
   type(param_file_type),   intent(in)    :: param_file !< A structure to parse for run-time
                                                  !! parameters.
   type(diag_ctrl), target, intent(inout) :: diag !< Structure to regulate diagnostic output.
-  type(hor_visc_CS), pointer             :: CS   !< Pointer to the control structure for this module
-  type(MEKE_type), pointer               :: MEKE !< MEKE data
-  type(accel_diag_ptrs), optional, pointer :: ADp !< Acceleration diagnostic pointers
-  ! Local variables
+  type(hor_visc_CS),       intent(inout) :: CS   !< Horizontal viscosity control struct
+  type(accel_diag_ptrs), intent(in), optional :: ADp !< Acceleration diagnostics
+
   real, dimension(SZIB_(G),SZJ_(G)) :: u0u, u0v
   real, dimension(SZI_(G),SZJB_(G)) :: v0u, v0v
                 ! u0v is the Laplacian sensitivities to the v velocities
@@ -1830,12 +1814,7 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, MEKE, ADp)
   Isq  = G%IscB ; Ieq  = G%IecB ; Jsq  = G%JscB ; Jeq  = G%JecB
   isd  = G%isd  ; ied  = G%ied  ; jsd  = G%jsd  ; jed  = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
-  if (associated(CS)) then
-    call MOM_error(WARNING, "hor_visc_init called with an associated "// &
-                            "control structure.")
-    return
-  endif
-  allocate(CS)
+
   CS%diag => diag
   ! Read parameters and write them to the model log.
   call log_version(param_file, mdl, version, "")
@@ -2455,7 +2434,7 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, MEKE, ADp)
   !    'Fractional Thickness-weighted Zonal Acceleration from Horizontal Viscosity', &
   !    'm s-2', v_extensive=.true., conversion=US%L_T2_to_m_s2)
   !if ((CS%id_hf_diffu > 0) .and. (present(ADp))) then
-  !  call safe_alloc_ptr(CS%hf_diffu,G%IsdB,G%IedB,G%jsd,G%jed,GV%ke)
+  !  call safe_alloc_alloc(CS%hf_diffu,G%IsdB,G%IedB,G%jsd,G%jed,GV%ke)
   !  call safe_alloc_ptr(ADp%diag_hfrac_u,G%IsdB,G%IedB,G%jsd,G%jed,GV%ke)
   !endif
 
@@ -2463,7 +2442,7 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, MEKE, ADp)
   !    'Fractional Thickness-weighted Meridional Acceleration from Horizontal Viscosity', &
   !    'm s-2', v_extensive=.true., conversion=US%L_T2_to_m_s2)
   !if ((CS%id_hf_diffv > 0) .and. (present(ADp))) then
-  !  call safe_alloc_ptr(CS%hf_diffv,G%isd,G%ied,G%JsdB,G%JedB,GV%ke)
+  !  call safe_alloc_alloc(CS%hf_diffv,G%isd,G%ied,G%JsdB,G%JedB,GV%ke)
   !  call safe_alloc_ptr(ADp%diag_hfrac_v,G%isd,G%ied,G%JsdB,G%JedB,GV%ke)
   !endif
 
@@ -2587,7 +2566,7 @@ end subroutine hor_visc_init
 !> Calculates factors in the anisotropic orientation tensor to be align with the grid.
 !! With n1=1 and n2=0, this recovers the approach of Large et al, 2001.
 subroutine align_aniso_tensor_to_grid(CS, n1, n2)
-  type(hor_visc_CS), pointer :: CS !< Control structure for horizontal viscosity
+  type(hor_visc_CS), intent(inout) :: CS !< Control structure for horizontal viscosity
   real,              intent(in) :: n1 !< i-component of direction vector [nondim]
   real,              intent(in) :: n2 !< j-component of direction vector [nondim]
   ! Local variables
@@ -2603,9 +2582,7 @@ end subroutine align_aniso_tensor_to_grid
 
 !> Apply a 1-1-4-1-1 Laplacian filter one time on GME diffusive flux to reduce any
 !! horizontal two-grid-point noise
-subroutine smooth_GME(CS,G,GME_flux_h,GME_flux_q)
-  ! Arguments
-  type(hor_visc_CS),                            pointer       :: CS        !< Control structure
+subroutine smooth_GME(G, GME_flux_h, GME_flux_q)
   type(ocean_grid_type),                        intent(in)    :: G         !< Ocean grid
   real, dimension(SZI_(G),SZJ_(G)),   optional, intent(inout) :: GME_flux_h!< GME diffusive flux
                                                               !! at h points
@@ -2672,8 +2649,7 @@ end subroutine smooth_GME
 
 !> Deallocates any variables allocated in hor_visc_init.
 subroutine hor_visc_end(CS)
-  type(hor_visc_CS), pointer :: CS !< The control structure returned by a
-                                   !! previous call to hor_visc_init.
+  type(hor_visc_CS), intent(inout) :: CS !< Horizontal viscosity control struct
   if (CS%Laplacian .or. CS%biharmonic) then
     DEALLOC_(CS%dx2h) ; DEALLOC_(CS%dx2q) ; DEALLOC_(CS%dy2h) ; DEALLOC_(CS%dy2q)
     DEALLOC_(CS%dx_dyT) ; DEALLOC_(CS%dy_dxT) ; DEALLOC_(CS%dx_dyBu) ; DEALLOC_(CS%dy_dxBu)
@@ -2716,7 +2692,6 @@ subroutine hor_visc_end(CS)
     DEALLOC_(CS%n1n1_m_n2n2_h)
     DEALLOC_(CS%n1n1_m_n2n2_q)
   endif
-  deallocate(CS)
 end subroutine hor_visc_end
 !> \namespace mom_hor_visc
 !!

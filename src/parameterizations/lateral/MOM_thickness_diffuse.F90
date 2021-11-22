@@ -82,13 +82,12 @@ type, public :: thickness_diffuse_CS ; private
                                  !! Negative values disable the scheme." [nondim]
 
   type(diag_ctrl), pointer :: diag => NULL() !< structure used to regulate timing of diagnostics
-  real, pointer :: GMwork(:,:)       => NULL()  !< Work by thickness diffusivity [R Z L2 T-3 ~> W m-2]
-  real, pointer :: diagSlopeX(:,:,:) => NULL()  !< Diagnostic: zonal neutral slope [Z L-1 ~> nondim]
-  real, pointer :: diagSlopeY(:,:,:) => NULL()  !< Diagnostic: zonal neutral slope [Z L-1 ~> nondim]
+  real, allocatable :: GMwork(:,:)        !< Work by thickness diffusivity [R Z L2 T-3 ~> W m-2]
+  real, allocatable :: diagSlopeX(:,:,:)  !< Diagnostic: zonal neutral slope [Z L-1 ~> nondim]
+  real, allocatable :: diagSlopeY(:,:,:)  !< Diagnostic: zonal neutral slope [Z L-1 ~> nondim]
 
-  real, dimension(:,:,:), pointer :: &
-    KH_u_GME => NULL(), &        !< interface height diffusivities in u-columns [L2 T-1 ~> m2 s-1]
-    KH_v_GME => NULL()           !< interface height diffusivities in v-columns [L2 T-1 ~> m2 s-1]
+  real, allocatable :: KH_u_GME(:,:,:)  !< interface height diffusivities in u-columns [L2 T-1 ~> m2 s-1]
+  real, allocatable :: KH_v_GME(:,:,:)  !< interface height diffusivities in v-columns [L2 T-1 ~> m2 s-1]
 
   !>@{
   !! Diagnostic identifier
@@ -116,10 +115,10 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
                                                                       !! [L2 H ~> m3 or kg]
   type(thermo_var_ptrs),                      intent(in)    :: tv     !< Thermodynamics structure
   real,                                       intent(in)    :: dt     !< Time increment [T ~> s]
-  type(MEKE_type),                            pointer       :: MEKE   !< MEKE control structure
-  type(VarMix_CS),                            pointer       :: VarMix !< Variable mixing coefficients
+  type(MEKE_type),                            intent(inout) :: MEKE   !< MEKE fields
+  type(VarMix_CS), target,                    intent(in)    :: VarMix !< Variable mixing coefficients
   type(cont_diag_ptrs),                       intent(inout) :: CDp    !< Diagnostics for the continuity equation
-  type(thickness_diffuse_CS),                 pointer       :: CS     !< Control structure for thickness diffusion
+  type(thickness_diffuse_CS),                 intent(inout) :: CS     !< Control structure for thickness diffusion
   ! Local variables
   real :: e(SZI_(G), SZJ_(G),SZK_(GV)+1) ! heights of interfaces, relative to mean
                                          ! sea level [Z ~> m], positive up.
@@ -161,26 +160,21 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
   real :: KH_u_lay(SZI_(G), SZJ_(G)) ! layer ave thickness diffusivities [L2 T-1 ~> m2 s-1]
   real :: KH_v_lay(SZI_(G), SZJ_(G)) ! layer ave thickness diffusivities [L2 T-1 ~> m2 s-1]
 
-  if (.not. associated(CS)) call MOM_error(FATAL, "MOM_thickness_diffuse: "//&
-         "Module must be initialized before it is used.")
-
-  if ((.not.CS%thickness_diffuse) .or. &
-       .not.( CS%Khth > 0.0 .or. associated(VarMix) .or. associated(MEKE) ) ) return
+  if ((.not.CS%thickness_diffuse) &
+      .or. .not. (CS%Khth > 0.0 .or. VarMix%use_variable_mixing)) return
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   h_neglect = GV%H_subroundoff
 
-  if (associated(MEKE)) then
-    if (associated(MEKE%GM_src)) then
-      do j=js,je ; do i=is,ie ; MEKE%GM_src(i,j) = 0. ; enddo ; enddo
-    endif
+  if (allocated(MEKE%GM_src)) then
+    do j=js,je ; do i=is,ie ; MEKE%GM_src(i,j) = 0. ; enddo ; enddo
   endif
 
   use_VarMix = .false. ; Resoln_scaled = .false. ; use_stored_slopes = .false.
   khth_use_ebt_struct = .false. ; use_Visbeck = .false. ; use_QG_Leith = .false.
   Depth_scaled = .false.
 
-  if (associated(VarMix)) then
+  if (VarMix%use_variable_mixing) then
     use_VarMix = VarMix%use_variable_mixing .and. (CS%KHTH_Slope_Cff > 0.)
     Resoln_scaled = VarMix%Resoln_scaled_KhTh
     Depth_scaled = VarMix%Depth_scaled_KhTh
@@ -188,7 +182,7 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
     khth_use_ebt_struct = VarMix%khth_use_ebt_struct
     use_Visbeck = VarMix%use_Visbeck
     use_QG_Leith = VarMix%use_QG_Leith_GM
-    if (associated(VarMix%cg1)) cg1 => VarMix%cg1
+    if (allocated(VarMix%cg1)) cg1 => VarMix%cg1
   else
     cg1 => null()
   endif
@@ -229,7 +223,7 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
     endif
   endif
 
-  if (associated(MEKE)) then ; if (associated(MEKE%Kh)) then
+  if (allocated(MEKE%Kh)) then
     if (CS%MEKE_GEOMETRIC) then
 !$OMP do
       do j=js,je ; do I=is-1,ie
@@ -242,7 +236,7 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
         Khth_loc_u(I,j) = Khth_loc_u(I,j) + MEKE%KhTh_fac*sqrt(MEKE%Kh(i,j)*MEKE%Kh(i+1,j))
       enddo ; enddo
     endif
-  endif ; endif
+  endif
 
   if (Resoln_scaled) then
 !$OMP do
@@ -315,7 +309,7 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
       enddo ; enddo
     endif
   endif
-  if (associated(MEKE)) then ; if (associated(MEKE%Kh)) then
+  if (allocated(MEKE%Kh)) then
     if (CS%MEKE_GEOMETRIC) then
 !$OMP do
       do J=js-1,je ; do i=is,ie
@@ -328,7 +322,7 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
         Khth_loc_v(i,J) = Khth_loc_v(i,J) + MEKE%KhTh_fac*sqrt(MEKE%Kh(i,j)*MEKE%Kh(i,j+1))
       enddo ; enddo
     endif
-  endif ; endif
+  endif
 
   if (Resoln_scaled) then
 !$OMP do
@@ -391,7 +385,7 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
     enddo ; enddo ; enddo
   endif
 
-  if (associated(MEKE)) then ; if (associated(MEKE%Kh)) then
+  if (allocated(MEKE%Kh)) then
     if (CS%MEKE_GEOMETRIC) then
       if (CS%MEKE_GEOM_answers_2018) then
         !$OMP do
@@ -413,7 +407,7 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
         enddo ; enddo
       endif
     endif
-  endif ; endif
+  endif
 
 
 !$OMP do
@@ -452,8 +446,8 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
                                 int_slope_u, int_slope_v)
   endif
 
-  if (associated(MEKE) .AND. associated(VarMix)) then
-    if (associated(MEKE%Rd_dx_h) .and. associated(VarMix%Rd_dx_h)) then
+  if (VarMix%use_variable_mixing) then
+    if (allocated(MEKE%Rd_dx_h) .and. allocated(VarMix%Rd_dx_h)) then
 !$OMP parallel do default(none) shared(is,ie,js,je,MEKE,VarMix)
       do j=js,je ; do i=is,ie
         MEKE%Rd_dx_h(i,j) = VarMix%Rd_dx_h(i,j)
@@ -578,8 +572,8 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
                                                                      !! [H L2 T-1 ~> m3 s-1 or kg s-1]
   real, dimension(:,:),                         pointer     :: cg1   !< Wave speed [L T-1 ~> m s-1]
   real,                                         intent(in)  :: dt    !< Time increment [T ~> s]
-  type(MEKE_type),                              pointer     :: MEKE  !< MEKE control structure
-  type(thickness_diffuse_CS),                   pointer     :: CS    !< Control structure for thickness diffusion
+  type(MEKE_type),                              intent(inout) :: MEKE  !< MEKE fields
+  type(thickness_diffuse_CS),                   intent(inout) :: CS  !< Control structure for thickness diffusion
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)+1), intent(in)  :: int_slope_u !< Ratio that determine how much of
                                                                      !! the isopycnal slopes are taken directly from
                                                                      !! the interface slopes without consideration of
@@ -725,9 +719,8 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
   hN2_x_PE(:,:,:) = 0.0
   hN2_y_PE(:,:,:) = 0.0
 
-  find_work = .false.
-  if (associated(MEKE)) find_work = associated(MEKE%GM_src)
-  find_work = (associated(CS%GMwork) .or. find_work)
+  find_work = allocated(MEKE%GM_src)
+  find_work = (allocated(CS%GMwork) .or. find_work)
 
   if (use_EOS) then
     halo = 1 ! Default halo to fill is 1
@@ -1411,13 +1404,13 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
     ! Note that the units of Work_v and Work_u are W, while Work_h is W m-2.
     Work_h = 0.5 * G%IareaT(i,j) * &
       ((Work_u(I-1,j) + Work_u(I,j)) + (Work_v(i,J-1) + Work_v(i,J)))
-    if (associated(CS%GMwork)) CS%GMwork(i,j) = Work_h
-    if (associated(MEKE) .and. .not.CS%GM_src_alt) then ; if (associated(MEKE%GM_src)) then
+    if (allocated(CS%GMwork)) CS%GMwork(i,j) = Work_h
+    if (.not. CS%GM_src_alt) then ; if (allocated(MEKE%GM_src)) then
       MEKE%GM_src(i,j) = MEKE%GM_src(i,j) + Work_h
     endif ; endif
   enddo ; enddo ; endif
 
-  if (find_work .and. CS%GM_src_alt .and. associated(MEKE)) then ; if (associated(MEKE%GM_src)) then
+  if (find_work .and. CS%GM_src_alt) then ; if (allocated(MEKE%GM_src)) then
     do j=js,je ; do i=is,ie ; do k=nz,1,-1
       PE_release_h = -0.25*(KH_u(I,j,k)*(Slope_x_PE(I,j,k)**2) * hN2_x_PE(I,j,k) + &
                             Kh_u(I-1,j,k)*(Slope_x_PE(I-1,j,k)**2) * hN2_x_PE(I-1,j,k) + &
@@ -1487,7 +1480,7 @@ subroutine add_detangling_Kh(h, e, Kh_u, Kh_v, KH_u_CFL, KH_v_CFL, tv, dt, G, GV
                                                                       !! at v points [L2 T-1 ~> m2 s-1]
   type(thermo_var_ptrs),                        intent(in)    :: tv   !< Thermodynamics structure
   real,                                         intent(in)    :: dt   !< Time increment [T ~> s]
-  type(thickness_diffuse_CS),                   pointer       :: CS   !< Control structure for thickness diffusion
+  type(thickness_diffuse_CS),                   intent(in)    :: CS   !< Control structure for thickness diffusion
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)+1), intent(inout) :: int_slope_u !< Ratio that determine how much of
                                                                       !! the isopycnal slopes are taken directly from
                                                                       !! the interface slopes without consideration
@@ -1893,7 +1886,7 @@ subroutine thickness_diffuse_init(Time, G, GV, US, param_file, diag, CDp, CS)
   type(param_file_type),   intent(in) :: param_file !< Parameter file handles
   type(diag_ctrl), target, intent(inout) :: diag !< Diagnostics control structure
   type(cont_diag_ptrs),    intent(inout) :: CDp  !< Continuity equation diagnostics
-  type(thickness_diffuse_CS), pointer    :: CS   !< Control structure for thickness diffusion
+  type(thickness_diffuse_CS), intent(inout) :: CS   !< Control structure for thickness diffusion
 
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
@@ -1903,12 +1896,6 @@ subroutine thickness_diffuse_init(Time, G, GV, US, param_file, diag, CDp, CS)
                        ! streamfunction formulation, expressed as a fraction of planetary
                        ! rotation [nondim].
   logical :: default_2018_answers ! The default setting for the various 2018_ANSWERS flags.
-
-  if (associated(CS)) then
-    call MOM_error(WARNING, &
-      "Thickness_diffuse_init called with an associated control structure.")
-    return
-  else ; allocate(CS) ; endif
 
   CS%diag => diag
 
@@ -2027,8 +2014,8 @@ subroutine thickness_diffuse_init(Time, G, GV, US, param_file, diag, CDp, CS)
                  default=.false.)
 
   if (CS%use_GME_thickness_diffuse) then
-    call safe_alloc_ptr(CS%KH_u_GME,G%IsdB,G%IedB,G%jsd,G%jed,GV%ke+1)
-    call safe_alloc_ptr(CS%KH_v_GME,G%isd,G%ied,G%JsdB,G%JedB,GV%ke+1)
+    allocate(CS%KH_u_GME(G%IsdB:G%IedB, G%jsd:G%jed, GV%ke+1), source=0.)
+    allocate(CS%KH_v_GME(G%isd:G%ied, G%JsdB:G%JedB, GV%ke+1), source=0.)
   endif
 
   CS%id_uhGM = register_diag_field('ocean_model', 'uhGM', diag%axesCuL, Time, &
@@ -2047,7 +2034,8 @@ subroutine thickness_diffuse_init(Time, G, GV, US, param_file, diag, CDp, CS)
           'W m-2', conversion=US%RZ3_T3_to_W_m2*US%L_to_Z**2, cmor_field_name='tnkebto', &
           cmor_long_name='Integrated Tendency of Ocean Mesoscale Eddy KE from Parameterized Eddy Advection', &
           cmor_standard_name='tendency_of_ocean_eddy_kinetic_energy_content_due_to_parameterized_eddy_advection')
-  if (CS%id_GMwork > 0) call safe_alloc_ptr(CS%GMwork,G%isd,G%ied,G%jsd,G%jed)
+  if (CS%id_GMwork > 0) &
+    allocate(CS%GMwork(G%isd:G%ied,G%jsd:G%jed), source=0.)
 
   CS%id_KH_u = register_diag_field('ocean_model', 'KHTH_u', diag%axesCui, Time, &
            'Parameterized mesoscale eddy advection diffusivity at U-point', &
@@ -2074,10 +2062,14 @@ subroutine thickness_diffuse_init(Time, G, GV, US, param_file, diag, CDp, CS)
 
   CS%id_slope_x =  register_diag_field('ocean_model', 'neutral_slope_x', diag%axesCui, Time, &
            'Zonal slope of neutral surface', 'nondim', conversion=US%Z_to_L)
-  if (CS%id_slope_x > 0) call safe_alloc_ptr(CS%diagSlopeX,G%IsdB,G%IedB,G%jsd,G%jed,GV%ke+1)
+  if (CS%id_slope_x > 0) &
+    allocate(CS%diagSlopeX(G%IsdB:G%IedB,G%jsd:G%jed,GV%ke+1), source=0.)
+
   CS%id_slope_y =  register_diag_field('ocean_model', 'neutral_slope_y', diag%axesCvi, Time, &
            'Meridional slope of neutral surface', 'nondim', conversion=US%Z_to_L)
-  if (CS%id_slope_y > 0) call safe_alloc_ptr(CS%diagSlopeY,G%isd,G%ied,G%JsdB,G%JedB,GV%ke+1)
+  if (CS%id_slope_y > 0) &
+    allocate(CS%diagSlopeY(G%isd:G%ied,G%JsdB:G%JedB,GV%ke+1), source=0.)
+
   CS%id_sfn_x =  register_diag_field('ocean_model', 'GM_sfn_x', diag%axesCui, Time, &
            'Parameterized Zonal Overturning Streamfunction', &
            'm3 s-1', conversion=GV%H_to_m*US%L_to_m**2*US%s_to_T)
@@ -2095,7 +2087,7 @@ end subroutine thickness_diffuse_init
 
 !> Copies ubtav and vbtav from private type into arrays
 subroutine thickness_diffuse_get_KH(CS, KH_u_GME, KH_v_GME, G, GV)
-  type(thickness_diffuse_CS),          pointer     :: CS   !< Control structure for this module
+  type(thickness_diffuse_CS),          intent(in)  :: CS   !< Control structure for this module
   type(ocean_grid_type),               intent(in)  :: G    !< Grid structure
   type(verticalGrid_type),             intent(in)  :: GV   !< Vertical grid structure
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)+1), intent(inout) :: KH_u_GME !< interface height
