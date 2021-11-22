@@ -21,7 +21,7 @@ implicit none ; private
 
 #include <MOM_memory.h>
 
-public CVMix_conv_init, calculate_CVMix_conv, CVMix_conv_end, CVMix_conv_is_used
+public CVMix_conv_init, calculate_CVMix_conv, CVMix_conv_is_used
 
 !> Control structure including parameters for CVMix convection.
 type, public :: CVMix_conv_cs ; private
@@ -55,19 +55,13 @@ logical function CVMix_conv_init(Time, G, GV, US, param_file, diag, CS)
   type(unit_scale_type),   intent(in)    :: US         !< A dimensional unit scaling type
   type(param_file_type),   intent(in)    :: param_file !< Run-time parameter file handle
   type(diag_ctrl), target, intent(inout) :: diag       !< Diagnostics control structure.
-  type(CVMix_conv_cs),     pointer       :: CS         !< This module's control structure.
-  ! Local variables
+  type(CVMix_conv_cs),     intent(inout) :: CS         !< CVMix convetction control struct
+
   real    :: prandtl_conv !< Turbulent Prandtl number used in convective instabilities.
   logical :: useEPBL      !< If True, use the ePBL boundary layer scheme.
 
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
-
-  if (associated(CS)) then
-    call MOM_error(WARNING, "CVMix_conv_init called with an associated "// &
-                            "control structure.")
-    return
-  endif
 
   ! Read parameters
   call get_param(param_file, mdl, "USE_CVMix_CONVECTION", CVMix_conv_init, default=.false., do_not_log=.true.)
@@ -82,7 +76,6 @@ logical function CVMix_conv_init(Time, G, GV, US, param_file, diag, CS)
                  default=.false.)
 
   if (.not. CVMix_conv_init) return
-  allocate(CS)
 
   call get_param(param_file, mdl, "ENERGETICS_SFC_PBL", useEPBL, default=.false., &
                 do_not_log=.true.)
@@ -146,8 +139,7 @@ subroutine calculate_CVMix_conv(h, tv, G, GV, US, CS, hbl, Kd, Kv, Kd_aux)
   type(unit_scale_type),                     intent(in)  :: US !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)  :: h  !< Layer thickness [H ~> m or kg m-2].
   type(thermo_var_ptrs),                     intent(in)  :: tv !< Thermodynamics structure.
-  type(CVMix_conv_cs),                       pointer     :: CS !< The control structure returned
-                                                                !! by a previous call to CVMix_conv_init.
+  type(CVMix_conv_cs),                       intent(in)  :: CS !< CVMix convection control struct
   real, dimension(SZI_(G),SZJ_(G)),          intent(in)  :: hbl !< Depth of ocean boundary layer [Z ~> m]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), &
                                              intent(inout) :: Kd !< Diapycnal diffusivity at each interface that
@@ -174,7 +166,7 @@ subroutine calculate_CVMix_conv(h, tv, G, GV, US, CS, hbl, Kd, Kv, Kd_aux)
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1) :: &
     kd_conv, &                         !< Diffusivity added by convection for diagnostics [Z2 T-1 ~> m2 s-1]
     kv_conv, &                         !< Viscosity added by convection for diagnostics [Z2 T-1 ~> m2 s-1]
-    N2_3d                              !< Squared buoyancy frequency for diagnostics [N-2 ~> s-2]
+    N2_3d                              !< Squared buoyancy frequency for diagnostics [T-2 ~> s-2]
   integer :: kOBL                      !< level of OBL extent
   real :: g_o_rho0  ! Gravitational acceleration divided by density times unit convserion factors
                     ! [Z s-2 R-1 ~> m4 s-2 kg-1]
@@ -304,12 +296,5 @@ logical function CVMix_conv_is_used(param_file)
                  default=.false., do_not_log = .true.)
 
 end function CVMix_conv_is_used
-
-!> Clear pointers and dealocate memory
-! NOTE: Placeholder destructor
-subroutine CVMix_conv_end(CS)
-  type(CVMix_conv_cs), pointer :: CS !< Control structure for this module that
-                                     !! will be deallocated in this subroutine
-end subroutine CVMix_conv_end
 
 end module MOM_CVMix_conv

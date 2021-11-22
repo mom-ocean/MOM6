@@ -161,7 +161,7 @@ type, public :: set_diffusivity_CS ; private
   type(CVMix_ddiff_cs),      pointer :: CVMix_ddiff_csp      => NULL() !< Control structure for a child module
   type(bkgnd_mixing_cs),     pointer :: bkgnd_mixing_csp     => NULL() !< Control structure for a child module
   type(int_tide_CS),         pointer :: int_tide_CSp         => NULL() !< Control structure for a child module
-  type(tidal_mixing_cs),     pointer :: tidal_mixing_CSp     => NULL() !< Control structure for a child module
+  type(tidal_mixing_cs) :: tidal_mixing   !< Control structure for a child module
 
   !>@{ Diagnostic IDs
   integer :: id_maxTKE     = -1, id_TKE_to_Kd   = -1, id_Kd_user    = -1
@@ -326,7 +326,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, Kd_i
 
   ! set up arrays for tidal mixing diagnostics
   if (CS%use_tidal_mixing) &
-    call setup_tidal_diagnostics(G, GV, CS%tidal_mixing_CSp)
+    call setup_tidal_diagnostics(G, GV, CS%tidal_mixing)
 
   if (CS%useKappaShear) then
     if (CS%debug) then
@@ -493,8 +493,10 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, Kd_i
 
     ! Add the Nikurashin and / or tidal bottom-driven mixing
     if (CS%use_tidal_mixing) &
-      call calculate_tidal_mixing(h, N2_bot, j, TKE_to_Kd, maxTKE, G, GV, US, CS%tidal_mixing_CSp, &
-                                  N2_lay, N2_int, Kd_lay_2d, Kd_int_2d, CS%Kd_max, visc%Kv_slow)
+      call calculate_tidal_mixing(h, j, N2_bot, N2_lay, N2_int, TKE_to_Kd, &
+                                  maxTKE, G, GV, US, CS%tidal_mixing, &
+                                  CS%Kd_max, visc%Kv_slow, Kd_lay_2d, Kd_int_2d)
+
 
     ! This adds the diffusion sustained by the energy extracted from the flow by the bottom drag.
     if (CS%bottomdraglaw .and. (CS%BBL_effic>0.0)) then
@@ -609,7 +611,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, Kd_i
 
   ! tidal mixing
   if (CS%use_tidal_mixing) &
-    call post_tidal_diagnostics(G, GV, h, CS%tidal_mixing_CSp)
+    call post_tidal_diagnostics(G, GV, h, CS%tidal_mixing)
 
   if (CS%id_N2 > 0)         call post_data(CS%id_N2,        dd%N2_3d,     CS%diag)
   if (CS%id_Kd_Work > 0)    call post_data(CS%id_Kd_Work,   dd%Kd_Work,   CS%diag)
@@ -965,7 +967,7 @@ subroutine find_N2(h, tv, T_f, S_f, fluxes, j, G, GV, US, CS, dRho_int, &
     z_from_bot(i) = 0.5*GV%H_to_Z*h(i,j,nz)
     do_i(i) = (G%mask2dT(i,j) > 0.5)
   enddo
-  if (CS%use_tidal_mixing) call tidal_mixing_h_amp(h_amp, G, j, CS%tidal_mixing_CSp)
+  if (CS%use_tidal_mixing) call tidal_mixing_h_amp(h_amp, G, j, CS%tidal_mixing)
 
   do k=nz,2,-1
     do_any = .false.
@@ -1159,9 +1161,9 @@ subroutine add_drag_diffusivity(h, u, v, tv, fluxes, visc, j, TKE_to_Kd, &
   real, dimension(SZI_(G)) :: &
     htot, &       ! total thickness above or below a layer, or the
                   ! integrated thickness in the BBL [Z ~> m].
-    rho_htot, &   ! running integral with depth of density [Z R ~> kg m-2]
+    rho_htot, &   ! running integral with depth of density [R Z ~> kg m-2]
     gh_sum_top, & ! BBL value of g'h that can be supported by
-                  ! the local ustar, times R0_g [R ~> kg m-2]
+                  ! the local ustar, times R0_g [R Z ~> kg m-2]
     Rho_top, &    ! density at top of the BBL [R ~> kg m-3]
     TKE, &        ! turbulent kinetic energy available to drive
                   ! bottom-boundary layer mixing in a layer [Z3 T-3 ~> m3 s-3]
@@ -1174,7 +1176,7 @@ subroutine add_drag_diffusivity(h, u, v, tv, fluxes, visc, j, TKE_to_Kd, &
   real    :: cdrag_sqrt     ! square root of the drag coefficient [nondim]
   real    :: ustar_h        ! value of ustar at a thickness point [Z T-1 ~> m s-1].
   real    :: absf           ! average absolute Coriolis parameter around a thickness point [T-1 ~> s-1]
-  real    :: R0_g           ! Rho0 / G_Earth [R T2 Z-1 m-1 ~> kg s2 m-5]
+  real    :: R0_g           ! Rho0 / G_Earth [R T2 Z-1 ~> kg s2 m-4]
   real    :: I_rho0         ! 1 / RHO0 [R-1 ~> m3 kg-1]
   real    :: delta_Kd       ! increment to Kd from the bottom boundary layer mixing [Z2 T-1 ~> m2 s-1].
   logical :: Rayleigh_drag  ! Set to true if Rayleigh drag velocities
@@ -1395,7 +1397,7 @@ subroutine add_LOTW_BBL_diffusivity(h, u, v, tv, fluxes, visc, j, N2_int, Kd_int
   real :: Kd_wall          ! Law of the wall diffusivity [Z2 T-1 ~> m2 s-1].
   real :: Kd_lower         ! diffusivity for lower interface [Z2 T-1 ~> m2 s-1]
   real :: ustar_D          ! u* x D  [Z2 T-1 ~> m2 s-1].
-  real :: I_Rho0           ! 1 / rho0 [R-1  ~> m3 kg-1]
+  real :: I_Rho0           ! 1 / rho0 [R-1 ~> m3 kg-1]
   real :: N2_min           ! Minimum value of N2 to use in calculation of TKE_Kd_wall [T-2 ~> s-2]
   logical :: Rayleigh_drag ! Set to true if there are Rayleigh drag velocities defined in visc, on
                            ! the assumption that this extracted energy also drives diapycnal mixing.
@@ -1438,7 +1440,7 @@ subroutine add_LOTW_BBL_diffusivity(h, u, v, tv, fluxes, visc, j, N2_int, Kd_int
     ! (Note that visc%TKE_BBL is in [Z3 T-3 ~> m3 s-3], set in set_BBL_TKE().)
     ! I am still unsure about sqrt(cdrag) in this expressions - AJA
     TKE_column = cdrag_sqrt * visc%TKE_BBL(i,j)
-    ! Add in tidal dissipation energy at the bottom [R Z3 T-3 ~> m3 s-3].
+    ! Add in tidal dissipation energy at the bottom [Z3 T-3 ~> m3 s-3].
     ! Note that TKE_tidal is in [R Z3 T-3 ~> W m-2].
     if (associated(fluxes%TKE_tidal)) &
       TKE_column = TKE_column + fluxes%TKE_tidal(i,j) * I_Rho0
@@ -1954,9 +1956,8 @@ subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, int_tide_
   type(diag_ctrl), target,  intent(inout) :: diag !< A structure used to regulate diagnostic output.
   type(set_diffusivity_CS), pointer       :: CS   !< pointer set to point to the module control
                                                   !! structure.
-  type(int_tide_CS),        pointer       :: int_tide_CSp !< A pointer to the internal tides control
-                                                  !! structure
-  integer,                  intent(out)   :: halo_TS !< The halo size of tracer points that must be
+  type(int_tide_CS),        intent(in), target :: int_tide_CSp !< Internal tide control struct
+  integer,        optional, intent(out)   :: halo_TS !< The halo size of tracer points that must be
                                                   !! valid for the calculations in set_diffusivity.
   logical,                  intent(out)   :: double_diffuse !< This indicates whether some version
                                                   !! of double diffusion is being used.
@@ -1990,7 +1991,7 @@ subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, int_tide_
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
   CS%diag => diag
-  if (associated(int_tide_CSp))  CS%int_tide_CSp  => int_tide_CSp
+  CS%int_tide_CSp  => int_tide_CSp
 
   ! These default values always need to be set.
   CS%BBL_mixing_as_max = .true.
@@ -2020,7 +2021,7 @@ subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, int_tide_
 
   ! CS%use_tidal_mixing is set to True if an internal tidal dissipation scheme is to be used.
   CS%use_tidal_mixing = tidal_mixing_init(Time, G, GV, US, param_file, &
-                                          CS%int_tide_CSp, diag, CS%tidal_mixing_CSp)
+                                          CS%int_tide_CSp, diag, CS%tidal_mixing)
 
   call get_param(param_file, mdl, "ML_RADIATION", CS%ML_radiation, &
                  "If true, allow a fraction of TKE available from wind "//&
@@ -2297,10 +2298,8 @@ subroutine set_diffusivity_end(CS)
 
   call bkgnd_mixing_end(CS%bkgnd_mixing_csp)
 
-  if (CS%use_tidal_mixing) then
-    call tidal_mixing_end(CS%tidal_mixing_CSp)
-    deallocate(CS%tidal_mixing_CSp)
-  endif
+  if (CS%use_tidal_mixing) &
+    call tidal_mixing_end(CS%tidal_mixing)
 
   if (CS%user_change_diff) call user_change_diff_end(CS%user_change_diff_CSp)
 

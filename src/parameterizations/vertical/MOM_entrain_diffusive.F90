@@ -18,7 +18,7 @@ implicit none ; private
 
 #include <MOM_memory.h>
 
-public entrainment_diffusive, entrain_diffusive_init, entrain_diffusive_end
+public entrainment_diffusive, entrain_diffusive_init
 
 ! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
 ! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
@@ -60,7 +60,7 @@ subroutine entrainment_diffusive(h, tv, fluxes, dt, G, GV, US, CS, ea, eb, &
   type(forcing),              intent(in)  :: fluxes !< A structure of surface fluxes that may
                                                 !! be used.
   real,                       intent(in)  :: dt !< The time increment [T ~> s].
-  type(entrain_diffusive_CS), pointer     :: CS !< The control structure returned by a previous
+  type(entrain_diffusive_CS), intent(in)  :: CS !< The control structure returned by a previous
                                                 !! call to entrain_diffusive_init.
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  &
                               intent(out) :: ea !< The amount of fluid entrained from the layer
@@ -170,7 +170,7 @@ subroutine entrainment_diffusive(h, tv, fluxes, dt, G, GV, US, CS, ea, eb, &
   real :: dRHo      ! The change in locally referenced potential density between
                     ! the layers above and below an interface [R ~> kg m-3].
   real :: g_2dt     ! 0.5 * G_Earth / dt, times unit conversion factors
-                    ! [m3 H-2 s-2 T-1 ~> m s-3 or m7 kg-2 s-3].
+                    ! [Z3 H-2 T-3 ~> m s-3 or m7 kg-2 s-3].
   real, dimension(SZI_(G)) :: &
     pressure, &      ! The pressure at an interface [R L2 T-2 ~> Pa].
     T_eos, S_eos, &  ! The potential temperature and salinity at which to
@@ -184,7 +184,7 @@ subroutine entrainment_diffusive(h, tv, fluxes, dt, G, GV, US, CS, ea, eb, &
                      ! in roundoff and can be neglected [H ~> m or kg m-2].
   real :: F_cor      ! A correction to the amount of F that is used to
                      ! entrain from the layer above [H ~> m or kg m-2].
-  real :: Kd_here    ! The effective diapycnal diffusivity [H2 s-1 ~> m2 s-1 or kg2 m-4 s-1].
+  real :: Kd_here    ! The effective diapycnal diffusivity times the timestep [H2 ~> m2 or kg2 m-4].
   real :: h_avail    ! The thickness that is available for entrainment [H ~> m or kg m-2].
   real :: dS_kb_eff  ! The value of dS_kb after limiting is taken into account.
   real :: Rho_cor    ! The depth-integrated potential density anomaly that
@@ -206,9 +206,6 @@ subroutine entrainment_diffusive(h, tv, fluxes, dt, G, GV, US, CS, ea, eb, &
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   Angstrom = GV%Angstrom_H
   h_neglect = GV%H_subroundoff
-
-  if (.not. associated(CS)) call MOM_error(FATAL, &
-         "MOM_entrain_diffusive: Module must be initialized before it is used.")
 
   if (.not.(present(Kd_Lay) .or. present(Kd_int))) call MOM_error(FATAL, &
       "MOM_entrain_diffusive: Either Kd_Lay or Kd_int must be present in call.")
@@ -1022,7 +1019,7 @@ subroutine set_Ent_bl(h, dtKd_int, tv, kb, kmb, do_i, G, GV, US, CS, j, Ent_bl, 
   logical, dimension(SZI_(G)),      intent(in)    :: do_i !< A logical variable indicating which
                                                           !! i-points to work on.
   type(unit_scale_type),            intent(in)    :: US   !< A dimensional unit scaling type
-  type(entrain_diffusive_CS),       pointer       :: CS   !< This module's control structure.
+  type(entrain_diffusive_CS),       intent(in)    :: CS   !< This module's control structure.
   integer,                          intent(in)    :: j    !< The meridional index upon which to work.
   real, dimension(SZI_(G),SZK_(GV)+1), &
                                     intent(out)   :: Ent_bl !< The average entrainment upward and
@@ -1440,7 +1437,7 @@ subroutine F_kb_to_ea_kb(h_bl, Sref, Ent_bl, I_dSkbp1, F_kb, kmb, i, &
                                                   !! uppermost interior layer [H ~> m or kg m-2]
   integer,                  intent(in)    :: kmb  !< The number of mixed and buffer layers.
   integer,                  intent(in)    :: i    !< The i-index to work on
-  type(entrain_diffusive_CS), pointer     :: CS   !< This module's control structure.
+  type(entrain_diffusive_CS), intent(in)  :: CS   !< This module's control structure.
   real, dimension(SZI_(G)), intent(inout) :: ea_kb !< The entrainment from above by the layer below
                                                   !! the buffer layer (i.e. layer kb) [H ~> m or kg m-2].
   real,           optional, intent(in)    :: tol_in !< A tolerance for the iterative determination
@@ -1582,7 +1579,7 @@ subroutine determine_Ea_kb(h_bl, dtKd_kb, Sref, I_dSkbp1, Ent_bl, ea_kbp1, &
   integer,                          intent(in)  :: ie       !< The end of the i-index range to work on.
   logical, dimension(SZI_(G)),      intent(in)  :: do_i     !< A logical variable indicating which
                                                             !! i-points to work on.
-  type(entrain_diffusive_CS),       pointer     :: CS       !< This module's control structure.
+  type(entrain_diffusive_CS),       intent(in)  :: CS       !< This module's control structure.
   real, dimension(SZI_(G)),         intent(inout) :: Ent    !< The entrainment rate of the uppermost
                                                             !! interior layer [H ~> m or kg m-2].
                                                             !! The input value is the first guess.
@@ -1786,7 +1783,7 @@ subroutine find_maxF_kb(h_bl, Sref, Ent_bl, I_dSkbp1, min_ent_in, max_ent_in, &
   integer,                    intent(in)  :: kmb      !< The number of mixed and buffer layers.
   integer,                    intent(in)  :: is       !< The start of the i-index range to work on.
   integer,                    intent(in)  :: ie       !< The end of the i-index range to work on.
-  type(entrain_diffusive_CS), pointer     :: CS       !< This module's control structure.
+  type(entrain_diffusive_CS), intent(in)  :: CS       !< This module's control structure.
   real, dimension(SZI_(G)),   intent(out) :: maxF     !< The maximum value of F
                                                       !! = ent*ds_kb*I_dSkbp1 found in the range
                                                       !! min_ent < ent < max_ent [H ~> m or kg m-2].
@@ -2067,8 +2064,7 @@ subroutine entrain_diffusive_init(Time, G, GV, US, param_file, diag, CS, just_re
                                                  !! parameters.
   type(diag_ctrl), target, intent(inout) :: diag !< A structure that is used to regulate diagnostic
                                                  !! output.
-  type(entrain_diffusive_CS), pointer    :: CS   !< A pointer that is set to point to the control
-                                                 !! structure.
+  type(entrain_diffusive_CS), intent(inout) :: CS !< Entrainment diffusion control struct
   logical,                 intent(in)    :: just_read_params !< If true, this call will only read
                                                  !! and log parameters without registering
                                                  !! any diagnostics
@@ -2079,13 +2075,6 @@ subroutine entrain_diffusive_init(Time, G, GV, US, param_file, diag, CS, just_re
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
   character(len=40)  :: mdl = "MOM_entrain_diffusive" ! This module's name.
-
-  if (associated(CS)) then
-    call MOM_error(WARNING, "entrain_diffusive_init called with an associated "// &
-                            "control structure.")
-    return
-  endif
-  allocate(CS)
 
   CS%diag => diag
 
@@ -2115,19 +2104,7 @@ subroutine entrain_diffusive_init(Time, G, GV, US, param_file, diag, CS, just_re
         'Work actually done by diapycnal diffusion across each interface', &
         'W m-2', conversion=US%RZ3_T3_to_W_m2)
   endif
-
-  if (just_read_params) deallocate(CS)
-
 end subroutine entrain_diffusive_init
-
-!> This subroutine cleans up and deallocates any memory associated with the
-!! entrain_diffusive module.
-subroutine entrain_diffusive_end(CS)
-  type(entrain_diffusive_CS), pointer :: CS !< A pointer to the control structure for this
-                                            !! module that will be deallocated.
-  if (associated(CS)) deallocate(CS)
-
-end subroutine entrain_diffusive_end
 
 !> \namespace mom_entrain_diffusive
 !!

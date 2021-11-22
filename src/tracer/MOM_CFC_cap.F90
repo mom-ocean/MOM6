@@ -76,7 +76,7 @@ function register_CFC_cap(HI, GV, param_file, CS, tr_Reg, restart_CS)
                                                     !! structure for this module.
   type(tracer_registry_type), &
                            pointer    :: tr_Reg     !< A pointer to the tracer registry.
-  type(MOM_restart_CS),    pointer    :: restart_CS !< A pointer to the restart control structure.
+  type(MOM_restart_CS), target, intent(inout) :: restart_CS !< MOM restart control struct
 
   ! Local variables
   character(len=40)  :: mdl = "MOM_CFC_cap" ! This module's name.

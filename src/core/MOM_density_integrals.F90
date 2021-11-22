@@ -56,7 +56,7 @@ subroutine int_density_dz(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, EOS, US, dpa,
                                            !! used in the equation of state.
   real,                 intent(in)  :: G_e !< The Earth's gravitational acceleration
                                            !! [L2 Z-1 T-2 ~> m s-2] or [m2 Z-1 s-2 ~> m s-2]
-  type(EOS_type),       pointer     :: EOS !< Equation of state structure
+  type(EOS_type),       intent(in)  :: EOS !< Equation of state structure
   type(unit_scale_type), intent(in) :: US  !< A dimensional unit scaling type
   real, dimension(SZI_(HI),SZJ_(HI)), &
                       intent(inout) :: dpa !< The change in the pressure anomaly
@@ -113,7 +113,7 @@ subroutine int_density_dz_generic_pcm(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
                                           !! used in the equation of state.
   real,                 intent(in)  :: G_e !< The Earth's gravitational acceleration
                                           !! [L2 Z-1 T-2 ~> m s-2] or [m2 Z-1 s-2 ~> m s-2]
-  type(EOS_type),       pointer     :: EOS !< Equation of state structure
+  type(EOS_type),       intent(in)  :: EOS !< Equation of state structure
   type(unit_scale_type), intent(in) :: US !< A dimensional unit scaling type
   real, dimension(SZI_(HI),SZJ_(HI)), &
                       intent(inout) :: dpa !< The change in the pressure anomaly
@@ -364,14 +364,14 @@ subroutine int_density_dz_generic_plm(k, tv, T_t, T_b, S_t, S_b, e, rho_ref, &
   real,                 intent(in)  :: dz_subroundoff !< A minuscule thickness change [Z ~> m]
   real, dimension(SZI_(HI),SZJ_(HI)), &
                         intent(in)  :: bathyT !< The depth of the bathymetry [Z ~> m]
-  type(EOS_type),       pointer     :: EOS !< Equation of state structure
+  type(EOS_type),       intent(in)  :: EOS !< Equation of state structure
   type(unit_scale_type), intent(in) :: US !< A dimensional unit scaling type
   real, dimension(SZI_(HI),SZJ_(HI)), &
                         intent(inout) :: dpa !< The change in the pressure anomaly across the layer [R L2 T-2 ~> Pa]
   real, dimension(SZI_(HI),SZJ_(HI)), &
               optional, intent(inout) :: intz_dpa !< The integral through the thickness of the layer of
                                            !! the pressure anomaly relative to the anomaly at the
-                                           !! top of the layer [R L2 Z T-2 ~> Pa Z]
+                                           !! top of the layer [R L2 Z T-2 ~> Pa m]
   real, dimension(SZIB_(HI),SZJ_(HI)), &
               optional, intent(inout) :: intx_dpa !< The integral in x of the difference between the
                                            !! pressure anomaly at the top and bottom of the layer
@@ -806,7 +806,7 @@ subroutine int_density_dz_generic_ppm(k, tv, T_t, T_b, S_t, S_b, e, &
   real,                 intent(in)  :: dz_subroundoff !< A minuscule thickness change [Z ~> m]
   real, dimension(SZI_(HI),SZJ_(HI)), &
                         intent(in)  :: bathyT !< The depth of the bathymetry [Z ~> m]
-  type(EOS_type),       pointer     :: EOS !< Equation of state structure
+  type(EOS_type),       intent(in)  :: EOS !< Equation of state structure
   type(unit_scale_type), intent(in) :: US  !< A dimensional unit scaling type
   real, dimension(SZI_(HI),SZJ_(HI)), &
                         intent(inout) :: dpa !< The change in the pressure anomaly across the layer [R L2 T-2 ~> Pa]
@@ -1137,7 +1137,7 @@ subroutine int_specific_vol_dp(T, S, p_t, p_b, alpha_ref, HI, EOS, US, &
                             !! to reduce the magnitude of each of the integrals [R-1 ~> m3 kg-1]
                             !! The calculation is mathematically identical with different values of
                             !! alpha_ref, but this reduces the effects of roundoff.
-  type(EOS_type),       pointer     :: EOS !< Equation of state structure
+  type(EOS_type),       intent(in)  :: EOS !< Equation of state structure
   type(unit_scale_type), intent(in) :: US  !< A dimensional unit scaling type
   real, dimension(SZI_(HI),SZJ_(HI)), &
                         intent(inout) :: dza !< The change in the geopotential anomaly across
@@ -1196,7 +1196,7 @@ subroutine int_spec_vol_dp_generic_pcm(T, S, p_t, p_b, alpha_ref, HI, EOS, US, d
                             !! The calculation is mathematically identical with different values of
                             !! alpha_ref, but alpha_ref alters the effects of roundoff, and
                             !! answers do change.
-  type(EOS_type),       pointer     :: EOS !< Equation of state structure
+  type(EOS_type),       intent(in)  :: EOS !< Equation of state structure
   type(unit_scale_type), intent(in) :: US !< A dimensional unit scaling type
   real, dimension(SZI_(HI),SZJ_(HI)), &
                         intent(inout) :: dza !< The change in the geopotential anomaly
@@ -1419,7 +1419,7 @@ subroutine int_spec_vol_dp_generic_plm(T_t, T_b, S_t, S_b, p_t, p_b, alpha_ref, 
                                              !! the same units as p_t [R L2 T-2 ~> Pa] or [Pa]
   real, dimension(SZI_(HI),SZJ_(HI)), &
                         intent(in)  :: bathyP !< The pressure at the bathymetry [R L2 T-2 ~> Pa] or [Pa]
-  type(EOS_type),       pointer     :: EOS !< Equation of state structure
+  type(EOS_type),       intent(in)  :: EOS !< Equation of state structure
   type(unit_scale_type), intent(in) :: US !< A dimensional unit scaling type
   real, dimension(SZI_(HI),SZJ_(HI)), &
                         intent(inout) :: dza !< The change in the geopotential anomaly
@@ -1657,7 +1657,7 @@ subroutine find_depth_of_pressure_in_cell(T_t, T_b, S_t, S_b, z_t, z_b, P_t, P_t
   real,                  intent(in)  :: rho_ref !< Reference density with which calculation
                                             !! are anomalous to [R ~> kg m-3]
   real,                  intent(in)  :: G_e !< Gravitational acceleration [L2 Z-1 T-2 ~> m s-2]
-  type(EOS_type),        pointer     :: EOS !< Equation of state structure
+  type(EOS_type),        intent(in)  :: EOS !< Equation of state structure
   type(unit_scale_type), intent(in)  :: US !< A dimensional unit scaling type
   real,                  intent(out) :: P_b !< Pressure at the bottom of the cell [R L2 T-2 ~> Pa]
   real,                  intent(out) :: z_out !< Absolute depth at which anomalous pressure = p_tgt [Z ~> m]
@@ -1736,7 +1736,7 @@ real function frac_dp_at_pos(T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, G_e, pos, EO
                                      !! reduce the magnitude of each of the integrals.
   real,           intent(in)  :: G_e !< The Earth's gravitational acceleration [L2 Z-1 T-2 ~> m s-2]
   real,           intent(in)  :: pos !< The fractional vertical position, 0 to 1 [nondim]
-  type(EOS_type), pointer     :: EOS !< Equation of state structure
+  type(EOS_type), intent(in)  :: EOS !< Equation of state structure
   real                        :: fract_dp_at_pos !< The change in pressure from the layer top to
                                      !! fractional position pos [R L2 T-2 ~> Pa]
   ! Local variables

@@ -102,7 +102,7 @@ contains
     type(MOM_generic_tracer_CS), pointer     :: CS         !< Pointer to the control structure for this module
     type(tracer_registry_type), pointer      :: tr_Reg     !< Pointer to the control structure for the tracer
                                                            !! advection and diffusion module.
-    type(MOM_restart_CS),       pointer      :: restart_CS !< Pointer to the restart control structure.
+    type(MOM_restart_CS), target, intent(inout)  :: restart_CS !< MOM restart control struct
 
 ! Local variables
     logical :: register_MOM_generic_tracer

@@ -319,7 +319,7 @@ subroutine smoothed_dRdT_dRdS(h, tv, Kddt, dR_dT, dR_dS, G, GV, US, j, p_surf, h
                                                !! potential density with temperature [R degC-1 ~> kg m-3 degC-1]
   real, dimension(SZI_(G),SZK_(GV)+1), &
                            intent(out) :: dR_dS !< Derivative of locally referenced
-                                               !! potential density with salinity [R degC-1 ~> kg m-3 ppt-1]
+                                               !! potential density with salinity [R ppt-1 ~> kg m-3 ppt-1]
   type(unit_scale_type),   intent(in)  :: US   !< A dimensional unit scaling type
   integer,                 intent(in)  :: j    !< The j-point to work on.
   real, dimension(:,:),    pointer     :: p_surf !< The pressure at the ocean surface [R L2 T-2 ~> Pa].
@@ -328,8 +328,9 @@ subroutine smoothed_dRdT_dRdS(h, tv, Kddt, dR_dT, dR_dS, G, GV, US, j, p_surf, h
   ! Local variables
   real :: mix(SZI_(G),SZK_(GV)+1)  ! The diffusive mixing length (kappa*dt)/dz
                                    ! between layers within in a timestep [H ~> m or kg m-2].
-  real :: b1(SZI_(G)), d1(SZI_(G)) ! b1, c1, and d1 are variables used by the
-  real :: c1(SZI_(G),SZK_(GV))     ! tridiagonal solver.
+  real :: b1(SZI_(G))              ! A tridiagonal solver variable [H-1 ~> m-1 or m2 kg-1]
+  real :: d1(SZI_(G))              ! A tridiagonal solver variable [nondim]
+  real :: c1(SZI_(G),SZK_(GV))     ! A tridiagonal solver variable [nondim]
   real :: T_f(SZI_(G),SZK_(GV))    ! Filtered temperatures [degC]
   real :: S_f(SZI_(G),SZK_(GV))    ! Filtered salinities [ppt]
   real :: pres(SZI_(G))            ! Interface pressures [R L2 T-2 ~> Pa].

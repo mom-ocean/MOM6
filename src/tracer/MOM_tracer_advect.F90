@@ -364,7 +364,7 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
   real, dimension(SZIB_(G),SZJ_(G),ntr) :: &
     flux_x              ! The tracer flux across a boundary [H L2 conc ~> m3 conc or kg conc].
   real, dimension(SZI_(G),ntr) :: &
-    T_tmp               ! The copy of the tracer concentration at constant i,k [H m2 conc ~> m3 conc or kg conc].
+    T_tmp               ! The copy of the tracer concentration at constant i,k [conc].
 
   real :: maxslope      ! The maximum concentration slope per grid point
                         ! consistent with monotonicity [conc].
@@ -450,7 +450,7 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
           if (j>=segment%HI%jsd .and. j<=segment%HI%jed) then
             I = segment%HI%IsdB
             do m = 1,ntr ! replace tracers with OBC values
-              if (associated(segment%tr_Reg%Tr(m)%tres)) then
+              if (allocated(segment%tr_Reg%Tr(m)%tres)) then
                 if (segment%direction == OBC_DIRECTION_W) then
                   T_tmp(i,m) = segment%tr_Reg%Tr(m)%tres(i,j,k)
                 else
@@ -594,7 +594,7 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
                 uhh(I) = uhr(I,j,k)
               ! should the reservoir evolve for this case Kate ?? - Nope
                 do m=1,ntr
-                  if (associated(segment%tr_Reg%Tr(m)%tres)) then
+                  if (allocated(segment%tr_Reg%Tr(m)%tres)) then
                     flux_x(I,j,m) = uhh(I)*segment%tr_Reg%Tr(m)%tres(I,j,k)
                   else ; flux_x(I,j,m) = uhh(I)*segment%tr_Reg%Tr(m)%OBC_inflow_conc ; endif
                 enddo
@@ -617,7 +617,7 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
                 (uhr(I,j,k) < 0.0) .and. (G%mask2dT(i+1,j) < 0.5)) then
               uhh(I) = uhr(I,j,k)
               do m=1,ntr
-                if (associated(segment%tr_Reg%Tr(m)%tres)) then
+                if (allocated(segment%tr_Reg%Tr(m)%tres)) then
                   flux_x(I,j,m) = uhh(I)*segment%tr_Reg%Tr(m)%tres(I,j,k)
                 else; flux_x(I,j,m) = uhh(I)*segment%tr_Reg%Tr(m)%OBC_inflow_conc; endif
               enddo
@@ -727,9 +727,9 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
   real, dimension(SZI_(G),ntr,SZJ_(G)) :: &
     slope_y                     ! The concentration slope per grid point [conc].
   real, dimension(SZI_(G),ntr,SZJB_(G)) :: &
-    flux_y                      ! The tracer flux across a boundary [H m2 conc ~> m3 conc or kg conc].
+    flux_y                      ! The tracer flux across a boundary [H L2 conc ~> m3 conc or kg conc].
   real, dimension(SZI_(G),ntr,SZJB_(G)) :: &
-    T_tmp               ! The copy of the tracer concentration at constant i,k [H m2 conc ~> m3 conc or kg conc].
+    T_tmp               ! The copy of the tracer concentration at constant i,k [conc].
   real :: maxslope              ! The maximum concentration slope per grid point
                                 ! consistent with monotonicity [conc].
   real :: vhh(SZI_(G),SZJB_(G)) ! The meridional flux that occurs during the
@@ -821,7 +821,7 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
           if (i>=segment%HI%isd .and. i<=segment%HI%ied) then
             J = segment%HI%JsdB
             do m = 1,ntr ! replace tracers with OBC values
-              if (associated(segment%tr_Reg%Tr(m)%tres)) then
+              if (allocated(segment%tr_Reg%Tr(m)%tres)) then
                 if (segment%direction == OBC_DIRECTION_S) then
                   T_tmp(i,m,j) = segment%tr_Reg%Tr(m)%tres(i,j,k)
                 else
@@ -966,7 +966,7 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
                     (vhr(i,J,k) < 0.0) .and. (segment%direction == OBC_DIRECTION_N)) then
                   vhh(i,J) = vhr(i,J,k)
                   do m=1,ntr
-                    if (associated(segment%tr_Reg%Tr(m)%t)) then
+                    if (allocated(segment%tr_Reg%Tr(m)%t)) then
                       flux_y(i,m,J) = vhh(i,J)*OBC%segment(n)%tr_Reg%Tr(m)%tres(i,J,k)
                     else ; flux_y(i,m,J) = vhh(i,J)*OBC%segment(n)%tr_Reg%Tr(m)%OBC_inflow_conc ; endif
                   enddo
@@ -989,7 +989,7 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
                   (vhr(i,J,k) < 0.0) .and. (G%mask2dT(i,j+1) < 0.5)) then
                 vhh(i,J) = vhr(i,J,k)
                 do m=1,ntr
-                  if (associated(segment%tr_Reg%Tr(m)%t)) then
+                  if (allocated(segment%tr_Reg%Tr(m)%t)) then
                     flux_y(i,m,J) = vhh(i,J)*segment%tr_Reg%Tr(m)%tres(i,J,k)
                   else ; flux_y(i,m,J) = vhh(i,J)*segment%tr_Reg%Tr(m)%OBC_inflow_conc ; endif
                 enddo

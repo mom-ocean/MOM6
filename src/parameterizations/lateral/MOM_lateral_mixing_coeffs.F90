@@ -63,46 +63,46 @@ type, public :: VarMix_CS
                                   !! This parameter is set depending on other parameters.
   real :: cropping_distance       !< Distance from surface or bottom to filter out outcropped or
                                   !! incropped interfaces for the Eady growth rate calc [Z ~> m]
-  real, dimension(:,:), pointer :: &
-    SN_u => NULL(), &     !< S*N at u-points [T-1 ~> s-1]
-    SN_v => NULL(), &     !< S*N at v-points [T-1 ~> s-1]
-    L2u => NULL(), &      !< Length scale^2 at u-points [L2 ~> m2]
-    L2v => NULL(), &      !< Length scale^2 at v-points [L2 ~> m2]
-    cg1 => NULL(), &      !< The first baroclinic gravity wave speed [L T-1 ~> m s-1].
-    Res_fn_h => NULL(), & !< Non-dimensional function of the ratio the first baroclinic
-                          !! deformation radius to the grid spacing at h points [nondim].
-    Res_fn_q => NULL(), & !< Non-dimensional function of the ratio the first baroclinic
-                          !! deformation radius to the grid spacing at q points [nondim].
-    Res_fn_u => NULL(), & !< Non-dimensional function of the ratio the first baroclinic
-                          !! deformation radius to the grid spacing at u points [nondim].
-    Res_fn_v => NULL(), & !< Non-dimensional function of the ratio the first baroclinic
-                          !! deformation radius to the grid spacing at v points [nondim].
-    Depth_fn_u => NULL(), & !< Non-dimensional function of the ratio of the depth to
-                            !! a reference depth (maximum 1) at u points [nondim]
-    Depth_fn_v => NULL(), & !< Non-dimensional function of the ratio of the depth to
-                            !! a reference depth (maximum 1) at v points [nondim]
-    beta_dx2_h => NULL(), & !< The magnitude of the gradient of the Coriolis parameter
-                            !! times the grid spacing squared at h points [L T-1 ~> m s-1].
-    beta_dx2_q => NULL(), & !< The magnitude of the gradient of the Coriolis parameter
-                            !! times the grid spacing squared at q points [L T-1 ~> m s-1].
-    beta_dx2_u => NULL(), & !< The magnitude of the gradient of the Coriolis parameter
-                            !! times the grid spacing squared at u points [L T-1 ~> m s-1].
-    beta_dx2_v => NULL(), & !< The magnitude of the gradient of the Coriolis parameter
-                            !! times the grid spacing squared at v points [L T-1 ~> m s-1].
-    f2_dx2_h => NULL(), & !< The Coriolis parameter squared times the grid
-                          !! spacing squared at h [L2 T-2 ~> m2 s-2].
-    f2_dx2_q => NULL(), & !< The Coriolis parameter squared times the grid
-                          !! spacing squared at q [L2 T-2 ~> m2 s-2].
-    f2_dx2_u => NULL(), & !< The Coriolis parameter squared times the grid
-                          !! spacing squared at u [L2 T-2 ~> m2 s-2].
-    f2_dx2_v => NULL(), & !< The Coriolis parameter squared times the grid
-                          !! spacing squared at v [L2 T-2 ~> m2 s-2].
-    Rd_dx_h => NULL()     !< Deformation radius over grid spacing [nondim]
 
-  real, dimension(:,:,:), pointer :: &
-    slope_x => NULL(), &  !< Zonal isopycnal slope [nondim]
-    slope_y => NULL(), &  !< Meridional isopycnal slope [nondim]
-    ebt_struct => NULL()  !< Vertical structure function to scale diffusivities with [nondim]
+  real, allocatable :: SN_u(:,:)      !< S*N at u-points [T-1 ~> s-1]
+  real, allocatable :: SN_v(:,:)      !< S*N at v-points [T-1 ~> s-1]
+  real, allocatable :: L2u(:,:)       !< Length scale^2 at u-points [L2 ~> m2]
+  real, allocatable :: L2v(:,:)       !< Length scale^2 at v-points [L2 ~> m2]
+  real, allocatable :: cg1(:,:)       !< The first baroclinic gravity wave speed [L T-1 ~> m s-1].
+  real, allocatable :: Res_fn_h(:,:)  !< Non-dimensional function of the ratio the first baroclinic
+                                      !! deformation radius to the grid spacing at h points [nondim].
+  real, allocatable :: Res_fn_q(:,:)  !< Non-dimensional function of the ratio the first baroclinic
+                                      !! deformation radius to the grid spacing at q points [nondim].
+  real, allocatable :: Res_fn_u(:,:)  !< Non-dimensional function of the ratio the first baroclinic
+                                      !! deformation radius to the grid spacing at u points [nondim].
+  real, allocatable :: Res_fn_v(:,:)  !< Non-dimensional function of the ratio the first baroclinic
+                                      !! deformation radius to the grid spacing at v points [nondim].
+  real, allocatable :: Depth_fn_u(:,:) !< Non-dimensional function of the ratio of the depth to
+                                      !! a reference depth (maximum 1) at u points [nondim]
+  real, allocatable :: Depth_fn_v(:,:) !< Non-dimensional function of the ratio of the depth to
+                                      !! a reference depth (maximum 1) at v points [nondim]
+  real, allocatable :: beta_dx2_h(:,:) !< The magnitude of the gradient of the Coriolis parameter
+                                      !! times the grid spacing squared at h points [L T-1 ~> m s-1].
+  real, allocatable :: beta_dx2_q(:,:) !< The magnitude of the gradient of the Coriolis parameter
+                                      !! times the grid spacing squared at q points [L T-1 ~> m s-1].
+  real, allocatable :: beta_dx2_u(:,:) !< The magnitude of the gradient of the Coriolis parameter
+                                      !! times the grid spacing squared at u points [L T-1 ~> m s-1].
+  real, allocatable :: beta_dx2_v(:,:) !< The magnitude of the gradient of the Coriolis parameter
+                                      !! times the grid spacing squared at v points [L T-1 ~> m s-1].
+  real, allocatable :: f2_dx2_h(:,:)  !< The Coriolis parameter squared times the grid
+                                      !! spacing squared at h [L2 T-2 ~> m2 s-2].
+  real, allocatable :: f2_dx2_q(:,:)  !< The Coriolis parameter squared times the grid
+                                      !! spacing squared at q [L2 T-2 ~> m2 s-2].
+  real, allocatable :: f2_dx2_u(:,:)  !< The Coriolis parameter squared times the grid
+                                      !! spacing squared at u [L2 T-2 ~> m2 s-2].
+  real, allocatable :: f2_dx2_v(:,:)  !< The Coriolis parameter squared times the grid
+                                      !! spacing squared at v [L2 T-2 ~> m2 s-2].
+  real, allocatable :: Rd_dx_h(:,:)   !< Deformation radius over grid spacing [nondim]
+
+  real, allocatable :: slope_x(:,:,:)     !< Zonal isopycnal slope [nondim]
+  real, allocatable :: slope_y(:,:,:)     !< Meridional isopycnal slope [nondim]
+  real, allocatable :: ebt_struct(:,:,:)  !< Vertical structure function to scale diffusivities with [nondim]
+
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_) :: &
     Laplac3_const_u       !< Laplacian metric-dependent constants [L3 ~> m3]
 
@@ -152,7 +152,7 @@ type, public :: VarMix_CS
                                    !! timing of diagnostic output.
   !>@}
 
-  type(wave_speed_CS), pointer :: wave_speed_CSp => NULL() !< Wave speed control structure
+  type(wave_speed_CS) :: wave_speed !< Wave speed control structure
   type(group_pass_type) :: pass_cg1 !< For group halo pass
   logical :: debug      !< If true, write out checksums of data for debugging
 end type VarMix_CS
@@ -164,8 +164,8 @@ contains
 
 !> Calculates the non-dimensional depth functions.
 subroutine calc_depth_function(G, CS)
-  type(ocean_grid_type),                    intent(in) :: G  !< Ocean grid structure
-  type(VarMix_CS),                          pointer       :: CS !< Variable mixing coefficients
+  type(ocean_grid_type),  intent(in)    :: G  !< Ocean grid structure
+  type(VarMix_CS),        intent(inout) :: CS !< Variable mixing control struct
 
   ! Local variables
   integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq
@@ -175,12 +175,10 @@ subroutine calc_depth_function(G, CS)
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
 
-  if (.not. associated(CS)) call MOM_error(FATAL, "calc_depth_function:"// &
-         "Module must be initialized before it is used.")
   if (.not. CS%calculate_depth_fns) return
-  if (.not. associated(CS%Depth_fn_u)) call MOM_error(FATAL, &
+  if (.not. allocated(CS%Depth_fn_u)) call MOM_error(FATAL, &
     "calc_depth_function: %Depth_fn_u is not associated with Depth_scaled_KhTh.")
-  if (.not. associated(CS%Depth_fn_v)) call MOM_error(FATAL, &
+  if (.not. allocated(CS%Depth_fn_v)) call MOM_error(FATAL, &
     "calc_depth_function: %Depth_fn_v is not associated with Depth_scaled_KhTh.")
 
   H0 = CS%depth_scaled_khth_h0
@@ -203,7 +201,7 @@ subroutine calc_resoln_function(h, tv, G, GV, US, CS)
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)    :: h  !< Layer thickness [H ~> m or kg m-2]
   type(thermo_var_ptrs),                     intent(in)    :: tv !< Thermodynamic variables
   type(unit_scale_type),                     intent(in)    :: US !< A dimensional unit scaling type
-  type(VarMix_CS),                           pointer       :: CS !< Variable mixing coefficients
+  type(VarMix_CS),                           intent(inout) :: CS !< Variable mixing control struct
 
   ! Local variables
   ! Depending on the power-function being used, dimensional rescaling may be limited, so some
@@ -218,26 +216,24 @@ subroutine calc_resoln_function(h, tv, G, GV, US, CS)
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
 
-  if (.not. associated(CS)) call MOM_error(FATAL, "calc_resoln_function:"// &
-         "Module must be initialized before it is used.")
   if (CS%calculate_cg1) then
-    if (.not. associated(CS%cg1)) call MOM_error(FATAL, &
+    if (.not. allocated(CS%cg1)) call MOM_error(FATAL, &
       "calc_resoln_function: %cg1 is not associated with Resoln_scaled_Kh.")
     if (CS%khth_use_ebt_struct) then
-      if (.not. associated(CS%ebt_struct)) call MOM_error(FATAL, &
+      if (.not. allocated(CS%ebt_struct)) call MOM_error(FATAL, &
         "calc_resoln_function: %ebt_struct is not associated with RESOLN_USE_EBT.")
       if (CS%Resoln_use_ebt) then
         ! Both resolution fn and vertical structure are using EBT
-        call wave_speed(h, tv, G, GV, US, CS%cg1, CS%wave_speed_CSp, modal_structure=CS%ebt_struct)
+        call wave_speed(h, tv, G, GV, US, CS%cg1, CS%wave_speed, modal_structure=CS%ebt_struct)
       else
         ! Use EBT to get vertical structure first and then re-calculate cg1 using first baroclinic mode
-        call wave_speed(h, tv, G, GV, US, CS%cg1, CS%wave_speed_CSp, modal_structure=CS%ebt_struct, &
+        call wave_speed(h, tv, G, GV, US, CS%cg1, CS%wave_speed, modal_structure=CS%ebt_struct, &
                         use_ebt_mode=.true.)
-        call wave_speed(h, tv, G, GV, US, CS%cg1, CS%wave_speed_CSp)
+        call wave_speed(h, tv, G, GV, US, CS%cg1, CS%wave_speed)
       endif
       call pass_var(CS%ebt_struct, G%Domain)
     else
-      call wave_speed(h, tv, G, GV, US, CS%cg1, CS%wave_speed_CSp)
+      call wave_speed(h, tv, G, GV, US, CS%cg1, CS%wave_speed)
     endif
 
     call create_group_pass(CS%pass_cg1, CS%cg1, G%Domain)
@@ -247,7 +243,7 @@ subroutine calc_resoln_function(h, tv, G, GV, US, CS)
   ! Calculate and store the ratio between deformation radius and grid-spacing
   ! at h-points [nondim].
   if (CS%calculate_rd_dx) then
-    if (.not. associated(CS%Rd_dx_h)) call MOM_error(FATAL, &
+    if (.not. allocated(CS%Rd_dx_h)) call MOM_error(FATAL, &
       "calc_resoln_function: %Rd_dx_h is not associated with calculate_rd_dx.")
     !$OMP parallel do default(shared)
     do j=js-1,je+1 ; do i=is-1,ie+1
@@ -261,29 +257,29 @@ subroutine calc_resoln_function(h, tv, G, GV, US, CS)
 
   if (.not. CS%calculate_res_fns) return
 
-  if (.not. associated(CS%Res_fn_h)) call MOM_error(FATAL, &
+  if (.not. allocated(CS%Res_fn_h)) call MOM_error(FATAL, &
     "calc_resoln_function: %Res_fn_h is not associated with Resoln_scaled_Kh.")
-  if (.not. associated(CS%Res_fn_q)) call MOM_error(FATAL, &
+  if (.not. allocated(CS%Res_fn_q)) call MOM_error(FATAL, &
     "calc_resoln_function: %Res_fn_q is not associated with Resoln_scaled_Kh.")
-  if (.not. associated(CS%Res_fn_u)) call MOM_error(FATAL, &
+  if (.not. allocated(CS%Res_fn_u)) call MOM_error(FATAL, &
     "calc_resoln_function: %Res_fn_u is not associated with Resoln_scaled_Kh.")
-  if (.not. associated(CS%Res_fn_v)) call MOM_error(FATAL, &
+  if (.not. allocated(CS%Res_fn_v)) call MOM_error(FATAL, &
     "calc_resoln_function: %Res_fn_v is not associated with Resoln_scaled_Kh.")
-  if (.not. associated(CS%f2_dx2_h)) call MOM_error(FATAL, &
+  if (.not. allocated(CS%f2_dx2_h)) call MOM_error(FATAL, &
     "calc_resoln_function: %f2_dx2_h is not associated with Resoln_scaled_Kh.")
-  if (.not. associated(CS%f2_dx2_q)) call MOM_error(FATAL, &
+  if (.not. allocated(CS%f2_dx2_q)) call MOM_error(FATAL, &
     "calc_resoln_function: %f2_dx2_q is not associated with Resoln_scaled_Kh.")
-  if (.not. associated(CS%f2_dx2_u)) call MOM_error(FATAL, &
+  if (.not. allocated(CS%f2_dx2_u)) call MOM_error(FATAL, &
     "calc_resoln_function: %f2_dx2_u is not associated with Resoln_scaled_Kh.")
-  if (.not. associated(CS%f2_dx2_v)) call MOM_error(FATAL, &
+  if (.not. allocated(CS%f2_dx2_v)) call MOM_error(FATAL, &
     "calc_resoln_function: %f2_dx2_v is not associated with Resoln_scaled_Kh.")
-  if (.not. associated(CS%beta_dx2_h)) call MOM_error(FATAL, &
+  if (.not. allocated(CS%beta_dx2_h)) call MOM_error(FATAL, &
     "calc_resoln_function: %beta_dx2_h is not associated with Resoln_scaled_Kh.")
-  if (.not. associated(CS%beta_dx2_q)) call MOM_error(FATAL, &
+  if (.not. allocated(CS%beta_dx2_q)) call MOM_error(FATAL, &
     "calc_resoln_function: %beta_dx2_q is not associated with Resoln_scaled_Kh.")
-  if (.not. associated(CS%beta_dx2_u)) call MOM_error(FATAL, &
+  if (.not. allocated(CS%beta_dx2_u)) call MOM_error(FATAL, &
     "calc_resoln_function: %beta_dx2_u is not associated with Resoln_scaled_Kh.")
-  if (.not. associated(CS%beta_dx2_v)) call MOM_error(FATAL, &
+  if (.not. allocated(CS%beta_dx2_v)) call MOM_error(FATAL, &
     "calc_resoln_function: %beta_dx2_v is not associated with Resoln_scaled_Kh.")
 
   !   Do this calculation on the extent used in MOM_hor_visc.F90, and
@@ -450,7 +446,7 @@ subroutine calc_slope_functions(h, tv, dt, G, GV, US, CS, OBC)
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(inout) :: h  !< Layer thickness [H ~> m or kg m-2]
   type(thermo_var_ptrs),                     intent(in)    :: tv !< Thermodynamic variables
   real,                                      intent(in)    :: dt !< Time increment [T ~> s]
-  type(VarMix_CS),                           pointer       :: CS !< Variable mixing coefficients
+  type(VarMix_CS),                           intent(inout) :: CS !< Variable mixing control struct
   type(ocean_OBC_type),                      pointer       :: OBC !< Open boundaries control structure.
   ! Local variables
   real, dimension(SZI_(G), SZJ_(G),SZK_(GV)+1) :: &
@@ -461,9 +457,6 @@ subroutine calc_slope_functions(h, tv, dt, G, GV, US, CS, OBC)
   real, dimension(SZI_(G), SZJB_(G),SZK_(GV)+1) :: dzv ! Z-thickness at v-points [Z ~> m]
   real, dimension(SZIB_(G), SZJ_(G),SZK_(GV)+1) :: dzSxN ! |Sx| N times dz at u-points [Z T-1 ~> m s-1]
   real, dimension(SZI_(G), SZJB_(G),SZK_(GV)+1) :: dzSyN ! |Sy| N times dz at v-points [Z T-1 ~> m s-1]
-
-  if (.not. associated(CS)) call MOM_error(FATAL, "MOM_lateral_mixing_coeffs.F90, calc_slope_functions:"//&
-         "Module must be initialized before it is used.")
 
   if (CS%calculate_Eady_growth_rate) then
     if (CS%use_simpler_Eady_growth_rate) then
@@ -514,7 +507,7 @@ subroutine calc_Visbeck_coeffs_old(h, slope_x, slope_y, N2_u, N2_v, G, GV, US, C
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)+1), intent(in)    :: N2_v    !< Buoyancy (Brunt-Vaisala) frequency
                                                                          !! at v-points [L2 Z-2 T-2 ~> s-2]
   type(unit_scale_type),                        intent(in)    :: US !< A dimensional unit scaling type
-  type(VarMix_CS),                              pointer       :: CS !< Variable mixing coefficients
+  type(VarMix_CS),                              intent(inout) :: CS !< Variable mixing control struct
   type(ocean_OBC_type),                         pointer       :: OBC !< Open boundaries control structure.
 
   ! Local variables
@@ -531,12 +524,10 @@ subroutine calc_Visbeck_coeffs_old(h, slope_x, slope_y, N2_u, N2_v, G, GV, US, C
   real :: S2_v(SZI_(G), SZJB_(G))
   logical :: local_open_u_BC, local_open_v_BC
 
-  if (.not. associated(CS)) call MOM_error(FATAL, "calc_slope_function:"// &
-         "Module must be initialized before it is used.")
   if (.not. CS%calculate_Eady_growth_rate) return
-  if (.not. associated(CS%SN_u)) call MOM_error(FATAL, "calc_slope_function:"// &
+  if (.not. allocated(CS%SN_u)) call MOM_error(FATAL, "calc_slope_function:"// &
          "%SN_u is not associated with use_variable_mixing.")
-  if (.not. associated(CS%SN_v)) call MOM_error(FATAL, "calc_slope_function:"// &
+  if (.not. allocated(CS%SN_v)) call MOM_error(FATAL, "calc_slope_function:"// &
          "%SN_v is not associated with use_variable_mixing.")
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
@@ -669,11 +660,11 @@ end subroutine calc_Visbeck_coeffs_old
 
 !> Calculates the Eady growth rate (2D fields) for use in MEKE and the Visbeck schemes
 subroutine calc_Eady_growth_rate_2D(CS, G, GV, US, OBC, h, e, dzu, dzv, dzSxN, dzSyN, SN_u, SN_v)
-  type(VarMix_CS),                              intent(in) :: CS  !< Variable mixing coefficients
+  type(VarMix_CS),                              intent(inout) :: CS !< Variable mixing coefficients
   type(ocean_grid_type),                        intent(in) :: G   !< Ocean grid structure
   type(verticalGrid_type),                      intent(in) :: GV  !< Vertical grid structure
   type(unit_scale_type),                        intent(in) :: US  !< A dimensional unit scaling type
-  type(ocean_OBC_type),                         pointer    :: OBC !< Open boundaries control structure.
+  type(ocean_OBC_type),                pointer, intent(in) :: OBC !< Open boundaries control structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),    intent(in) :: h   !< Interface height [Z ~> m]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1),  intent(in) :: e   !< Interface height [Z ~> m]
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)+1), intent(in) :: dzu !< dz at u-points [Z ~> m]
@@ -855,7 +846,7 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, US, CS, e, calculate_slop
   type(verticalGrid_type),                     intent(in)    :: GV !< Vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),   intent(inout) :: h  !< Layer thickness [H ~> m or kg m-2]
   type(unit_scale_type),                       intent(in)    :: US !< A dimensional unit scaling type
-  type(VarMix_CS),                             pointer       :: CS !< Variable mixing coefficients
+  type(VarMix_CS),                             intent(inout) :: CS !< Variable mixing control struct
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), intent(in)    :: e  !< Interface position [Z ~> m]
   logical,                                     intent(in)    :: calculate_slopes !< If true, calculate slopes
                                                                    !! internally otherwise use slopes stored in CS
@@ -878,12 +869,10 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, US, CS, e, calculate_slop
   real    :: S2N2_v_local(SZI_(G), SZJB_(G),SZK_(GV))
   logical :: local_open_u_BC, local_open_v_BC
 
-  if (.not. associated(CS)) call MOM_error(FATAL, "calc_slope_function:"// &
-         "Module must be initialized before it is used.")
   if (.not. CS%calculate_Eady_growth_rate) return
-  if (.not. associated(CS%SN_u)) call MOM_error(FATAL, "calc_slope_function:"// &
+  if (.not. allocated(CS%SN_u)) call MOM_error(FATAL, "calc_slope_function:"// &
          "%SN_u is not associated with use_variable_mixing.")
-  if (.not. associated(CS%SN_v)) call MOM_error(FATAL, "calc_slope_function:"// &
+  if (.not. allocated(CS%SN_v)) call MOM_error(FATAL, "calc_slope_function:"// &
          "%SN_v is not associated with use_variable_mixing.")
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
@@ -1014,7 +1003,7 @@ end subroutine calc_slope_functions_using_just_e
 
 !> Calculates the Leith Laplacian and bi-harmonic viscosity coefficients
 subroutine calc_QG_Leith_viscosity(CS, G, GV, US, h, k, div_xx_dx, div_xx_dy, vort_xy_dx, vort_xy_dy)
-  type(VarMix_CS),                           pointer     :: CS !< Variable mixing coefficients
+  type(VarMix_CS),                           intent(inout) :: CS !< Variable mixing coefficients
   type(ocean_grid_type),                     intent(in)  :: G  !< Ocean grid structure
   type(verticalGrid_type),                   intent(in)  :: GV !< The ocean's vertical grid structure.
   type(unit_scale_type),                     intent(in)  :: US   !< A dimensional unit scaling type
@@ -1149,7 +1138,7 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
   type(unit_scale_type),      intent(in) :: US   !< A dimensional unit scaling type
   type(param_file_type),      intent(in) :: param_file !< Parameter file handles
   type(diag_ctrl), target, intent(inout) :: diag !< Diagnostics control structure
-  type(VarMix_CS),               pointer :: CS   !< Variable mixing coefficients
+  type(VarMix_CS),         intent(inout) :: CS   !< Variable mixing coefficients
   ! Local variables
   real :: KhTr_Slope_Cff, KhTh_Slope_Cff, oneOrTwo
   real :: N2_filter_depth  ! A depth below which stratification is treated as monotonic when
@@ -1179,13 +1168,6 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
-  if (associated(CS)) then
-    call MOM_error(WARNING, "VarMix_init called with an associated "// &
-                             "control structure.")
-    return
-  endif
-
-  allocate(CS)
   in_use = .false. ! Set to true to avoid deallocating
   CS%diag => diag ! Diagnostics pointer
   CS%calculate_cg1 = .false.
@@ -1545,7 +1527,7 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
     call get_param(param_file, mdl, "INTERNAL_WAVE_SPEED_BETTER_EST", better_speed_est, &
                  "If true, use a more robust estimate of the first mode wave speed as the "//&
                  "starting point for iterations.", default=.true.)
-    call wave_speed_init(CS%wave_speed_CSp, use_ebt_mode=CS%Resoln_use_ebt, &
+    call wave_speed_init(CS%wave_speed, use_ebt_mode=CS%Resoln_use_ebt, &
                          mono_N2_depth=N2_filter_depth, remap_answers_2018=remap_answers_2018, &
                          better_speed_est=better_speed_est, min_speed=wave_speed_min, &
                          wave_speed_tol=wave_speed_tol)
@@ -1594,14 +1576,8 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
            "USE_STORED_SLOPES must be True when using QG Leith.")
   endif
 
-  ! If nothing is being stored in this class then deallocate
-  if (in_use) then
-    CS%use_variable_mixing = .true.
-  else
-    deallocate(CS)
-    return
-  endif
-
+  ! Re-enable variable mixing if one of the schemes was enabled
+  CS%use_variable_mixing = in_use .or. CS%use_variable_mixing
 end subroutine VarMix_init
 
 !> Destructor for VarMix control structure
@@ -1621,8 +1597,8 @@ subroutine VarMix_end(CS)
     deallocate(CS%SN_v)
   endif
 
-  if (associated(CS%L2u)) deallocate(CS%L2u)
-  if (associated(CS%L2v)) deallocate(CS%L2v)
+  if (allocated(CS%L2u)) deallocate(CS%L2u)
+  if (allocated(CS%L2v)) deallocate(CS%L2v)
 
   if (CS%Resoln_scaling_used) then
     deallocate(CS%Res_fn_h)
@@ -1658,9 +1634,6 @@ subroutine VarMix_end(CS)
     DEALLOC_(CS%KH_u_QG)
     DEALLOC_(CS%KH_v_QG)
   endif
-
-  if (CS%calculate_cg1) deallocate(CS%wave_speed_CSp)
-
 end subroutine VarMix_end
 
 !> \namespace mom_lateral_mixing_coeffs

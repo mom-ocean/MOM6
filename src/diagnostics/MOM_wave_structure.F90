@@ -102,8 +102,7 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
                                                               !! gravity wave speed [L T-1 ~> m s-1].
   integer,                                  intent(in)  :: ModeNum !< Mode number
   real,                                     intent(in)  :: freq !< Intrinsic wave frequency [T-1 ~> s-1].
-  type(wave_structure_CS),                  pointer     :: CS !< The control structure returned by a
-                                                              !! previous call to wave_structure_init.
+  type(wave_structure_CS),                  intent(inout) :: CS !< Wave structure control struct
   real, dimension(SZI_(G),SZJ_(G)), &
                                   optional, intent(in)  :: En !< Internal wave energy density [R Z3 T-2 ~> J m-2]
   logical,                        optional, intent(in)  :: full_halos !< If true, do the calculation
@@ -112,7 +111,7 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
   real, dimension(SZK_(GV)+1) :: &
     dRho_dT, &    !< Partial derivative of density with temperature [R degC-1 ~> kg m-3 degC-1]
     dRho_dS, &    !< Partial derivative of density with salinity [R ppt-1 ~> kg m-3 ppt-1]
-    pres, &       !< Interface pressure [R L H T-2 ~> Pa]
+    pres, &       !< Interface pressure [R L2 T-2 ~> Pa]
     T_int, &      !< Temperature interpolated to interfaces [degC]
     S_int, &      !< Salinity interpolated to interfaces [ppt]
     gprime        !< The reduced gravity across each interface [L2 Z-1 T-2 ~> m s-2].
@@ -145,7 +144,6 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
   real :: I_Hnew   !< The inverse of a new layer thickness [Z-1 ~> m-1]
   real :: drxh_sum !< The sum of density diffrences across interfaces times thicknesses [R Z ~> kg m-2]
   real, parameter :: tol1  = 0.0001, tol2 = 0.001
-  real, pointer, dimension(:,:,:) :: T => NULL(), S => NULL()
   real :: g_Rho0  !< G_Earth/Rho0 in [L2 Z-1 T-2 R-1 ~> m4 s-2 kg-1].
   ! real :: rescale, I_rescale
   integer :: kf(SZI_(G))
@@ -193,18 +191,12 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   I_a_int = 1/a_int
 
-  !if (present(CS)) then
-    if (.not. associated(CS)) call MOM_error(FATAL, "MOM_wave_structure: "// &
-           "Module must be initialized before it is used.")
-  !endif
-
   if (present(full_halos)) then ; if (full_halos) then
     is = G%isd ; ie = G%ied ; js = G%jsd ; je = G%jed
   endif ; endif
 
   Pi = (4.0*atan(1.0))
 
-  S => tv%S ; T => tv%T
   g_Rho0 = GV%g_Earth / GV%Rho0
 
   !if (CS%debug) call chksum0(g_Rho0, "g/rho0 in wave struct", &
@@ -242,12 +234,12 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
 
           ! Start a new layer
           H_here(i) = h(i,j,k)*GV%H_to_Z
-          HxT_here(i) = (h(i,j,k)*GV%H_to_Z)*T(i,j,k)
-          HxS_here(i) = (h(i,j,k)*GV%H_to_Z)*S(i,j,k)
+          HxT_here(i) = (h(i,j,k) * GV%H_to_Z) * tv%T(i,j,k)
+          HxS_here(i) = (h(i,j,k) * GV%H_to_Z) * tv%S(i,j,k)
         else
           H_here(i) = H_here(i) + h(i,j,k)*GV%H_to_Z
-          HxT_here(i) = HxT_here(i) + (h(i,j,k)*GV%H_to_Z)*T(i,j,k)
-          HxS_here(i) = HxS_here(i) + (h(i,j,k)*GV%H_to_Z)*S(i,j,k)
+          HxT_here(i) = HxT_here(i) + (h(i,j,k) * GV%H_to_Z) * tv%T(i,j,k)
+          HxS_here(i) = HxS_here(i) + (h(i,j,k) * GV%H_to_Z) * tv%S(i,j,k)
         endif
       enddo ; enddo
       do i=is,ie ; if (H_here(i) > 0.0) then
@@ -727,20 +719,14 @@ subroutine wave_structure_init(Time, G, GV, param_file, diag, CS)
                                               !! parameters.
   type(diag_ctrl), target, intent(in) :: diag !< A structure that is used to regulate
                                               !! diagnostic output.
-  type(wave_structure_CS), pointer    :: CS   !< A pointer that is set to point to the
-                                              !! control structure for this module.
+  type(wave_structure_CS), intent(inout) :: CS  !< Wave structure control struct
+
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
   character(len=40)  :: mdl = "MOM_wave_structure"  ! This module's name.
   integer :: isd, ied, jsd, jed, nz
 
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nz = GV%ke
-
-  if (associated(CS)) then
-    call MOM_error(WARNING, "wave_structure_init called with an "// &
-                            "associated control structure.")
-    return
-  else ; allocate(CS) ; endif
 
   call get_param(param_file, mdl, "INTERNAL_TIDE_SOURCE_X", CS%int_tide_source_x, &
                  "X Location of generation site for internal tide", default=1.)

@@ -190,8 +190,7 @@ subroutine adjustment_initialize_thickness ( h, G, GV, US, param_file, just_read
 end subroutine adjustment_initialize_thickness
 
 !> Initialization of temperature and salinity in the adjustment test case
-subroutine adjustment_initialize_temperature_salinity(T, S, h, depth_tot, G, GV, param_file, &
-                                                      eqn_of_state, just_read)
+subroutine adjustment_initialize_temperature_salinity(T, S, h, depth_tot, G, GV, param_file, just_read)
   type(ocean_grid_type),   intent(in)  :: G           !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)  :: GV          !< The ocean's vertical grid structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: T !< The temperature that is being initialized.
@@ -201,7 +200,6 @@ subroutine adjustment_initialize_temperature_salinity(T, S, h, depth_tot, G, GV,
                            intent(in)  :: depth_tot    !< The nominal total depth of the ocean [Z ~> m]
   type(param_file_type),   intent(in)  :: param_file   !< A structure indicating the open file to
                                                        !! parse for model parameter values.
-  type(EOS_type),          pointer     :: eqn_of_state !< Equation of state.
   logical,                 intent(in)  :: just_read    !< If true, this call will only read
                                                        !! parameters without changing T & S.
 
