@@ -32,6 +32,7 @@ public energetic_PBL_get_MLD
 
 !> This control structure holds parameters for the MOM_energetic_PBL module
 type, public :: energetic_PBL_CS ; private
+  logical :: initialized = .false. !< True if this control structure has been initialized.
 
   !/ Constants
   real    :: VonKar = 0.41   !< The von Karman coefficient.  This should be a runtime parameter,
@@ -346,6 +347,9 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
   if (.not. associated(CS)) call MOM_error(FATAL, "energetic_PBL: "//&
+         "Module must be initialized before it is used.")
+
+  if (.not. CS%initialized) call MOM_error(FATAL, "energetic_PBL: "//&
          "Module must be initialized before it is used.")
 
   if (.not. associated(tv%eqn_of_state)) call MOM_error(FATAL, &
@@ -1937,6 +1941,8 @@ subroutine energetic_PBL_init(Time, G, GV, US, param_file, diag, CS)
                             "associated control structure.")
     return
   else ; allocate(CS) ; endif
+
+  CS%initialized = .true.
 
   CS%diag => diag
   CS%Time => Time

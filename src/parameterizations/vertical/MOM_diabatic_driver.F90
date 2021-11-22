@@ -88,6 +88,7 @@ public adiabatic_driver_init
 
 !> Control structure for this module
 type, public :: diabatic_CS ; private
+  logical :: initialized = .false.   !< True if this control structure has been initialized.
 
   logical :: use_legacy_diabatic     !< If true (default), use a legacy version of the diabatic
                                      !! algorithm. This is temporary and is needed to avoid change
@@ -305,6 +306,10 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
 
   if (.not. associated(CS)) call MOM_error(FATAL, "MOM_diabatic_driver: "// &
          "Module must be initialized before it is used.")
+
+  if (.not. CS%initialized) call MOM_error(FATAL, "MOM_diabatic_driver: "// &
+         "Module must be initialized before it is used.")
+
   if (dt == 0.0) call MOM_error(FATAL, "MOM_diabatic_driver: "// &
         "diabatic was called with a zero length timestep.")
   if (dt < 0.0) call MOM_error(FATAL, "MOM_diabatic_driver: "// &
@@ -2907,6 +2912,8 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
   else
     allocate(CS)
   endif
+
+  CS%initialized = .true.
 
   CS%diag => diag
   CS%Time => Time

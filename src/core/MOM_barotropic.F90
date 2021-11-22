@@ -697,6 +697,10 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
 
   if (.not.associated(CS)) call MOM_error(FATAL, &
       "btstep: Module MOM_barotropic must be initialized before it is used.")
+
+  if (.not.CS%module_is_initialized) call MOM_error(FATAL, &
+      "btstep: Module MOM_barotropic must be initialized before it is used.")
+
   if (.not.CS%split) return
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
@@ -2769,6 +2773,10 @@ subroutine set_dtbt(G, GV, US, CS, eta, pbce, BT_cont, gtot_est, SSH_add)
 
   if (.not.associated(CS)) call MOM_error(FATAL, &
       "set_dtbt: Module MOM_barotropic must be initialized before it is used.")
+
+  if (.not.CS%module_is_initialized) call MOM_error(FATAL, &
+      "set_dtbt: Module MOM_barotropic must be initialized before it is used.")
+
   if (.not.CS%split) return
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   MS%isdw = G%isd ; MS%iedw = G%ied ; MS%jsdw = G%jsd ; MS%jedw = G%jed
@@ -3306,6 +3314,10 @@ subroutine btcalc(h, G, GV, CS, h_u, h_v, may_use_default, OBC)
 ! second order accurate estimate h = 2*(h+ * h-)/(h+ + h-).
   if (.not.associated(CS)) call MOM_error(FATAL, &
       "btcalc: Module MOM_barotropic must be initialized before it is used.")
+
+  if (.not.CS%module_is_initialized) call MOM_error(FATAL, &
+      "btcalc: Module MOM_barotropic must be initialized before it is used.")
+
   if (.not.CS%split) return
 
   use_default = .false.
@@ -4198,6 +4210,10 @@ subroutine bt_mass_source(h, eta, set_cor, G, GV, CS)
 
   if (.not.associated(CS)) call MOM_error(FATAL, "bt_mass_source: "// &
         "Module MOM_barotropic must be initialized before it is used.")
+
+  if (.not.CS%module_is_initialized) call MOM_error(FATAL, "bt_mass_source: "// &
+        "Module MOM_barotropic must be initialized before it is used.")
+
   if (.not.CS%split) return
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke

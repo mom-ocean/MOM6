@@ -30,6 +30,7 @@ public bulkmixedlayer, bulkmixedlayer_init
 
 !> The control structure with parameters for the MOM_bulk_mixed_layer module
 type, public :: bulkmixedlayer_CS ; private
+  logical :: initialized = .false. !< True if this control structure has been initialized.
   integer :: nkml            !< The number of layers in the mixed layer.
   integer :: nkbl            !< The number of buffer layers.
   integer :: nsw             !< The number of bands of penetrating shortwave radiation.
@@ -331,6 +332,10 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, GV, US, C
 
   if (.not. associated(CS)) call MOM_error(FATAL, "MOM_mixed_layer: "//&
          "Module must be initialized before it is used.")
+
+  if (.not. CS%initialized) call MOM_error(FATAL, "MOM_bulk_mixed_layer: "//&
+         "Module must be initialized before it is used.")
+
   if (GV%nkml < 1) return
 
   if (.not. associated(tv%eqn_of_state)) call MOM_error(FATAL, &
@@ -3382,6 +3387,8 @@ subroutine bulkmixedlayer_init(Time, G, GV, US, param_file, diag, CS)
                             "associated control structure.")
     return
   else ; allocate(CS) ; endif
+
+  CS%initialized = .true.
 
   CS%diag => diag
   CS%Time => Time

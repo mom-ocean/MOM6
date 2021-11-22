@@ -30,6 +30,7 @@ public Set_pbce_nonBouss, PressureForce_Mont_init, PressureForce_Mont_end
 
 !> Control structure for the Montgomery potential form of pressure gradient
 type, public :: PressureForce_Mont_CS ; private
+  logical :: initialized = .false. !< True if this control structure has been initialized.
   logical :: tides          !< If true, apply tidal momentum forcing.
   real    :: Rho0           !< The density used in the Boussinesq
                             !! approximation [R ~> kg m-3].
@@ -139,6 +140,10 @@ subroutine PressureForce_Mont_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm, pb
 
   if (.not.associated(CS)) call MOM_error(FATAL, &
       "MOM_PressureForce_Mont: Module must be initialized before it is used.")
+
+  if (.not.CS%initialized) call MOM_error(FATAL, &
+      "MOM_PressureForce_Mont: Module must be initialized before it is used.")
+
   if (use_EOS) then
     if (query_compressible(tv%eqn_of_state)) call MOM_error(FATAL, &
       "PressureForce_Mont_nonBouss: The Montgomery form of the pressure force "//&
@@ -426,6 +431,10 @@ subroutine PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm, pbce,
 
   if (.not.associated(CS)) call MOM_error(FATAL, &
        "MOM_PressureForce_Mont: Module must be initialized before it is used.")
+
+  if (.not.CS%initialized) call MOM_error(FATAL, &
+       "MOM_PressureForce_Mont: Module must be initialized before it is used.")
+
   if (use_EOS) then
     if (query_compressible(tv%eqn_of_state)) call MOM_error(FATAL, &
       "PressureForce_Mont_Bouss: The Montgomery form of the pressure force "//&
@@ -838,6 +847,8 @@ subroutine PressureForce_Mont_init(Time, G, GV, US, param_file, diag, CS, tides_
                             "control structure.")
     return
   else ; allocate(CS) ; endif
+
+  CS%initialized = .true.
 
   CS%diag => diag ; CS%Time => Time
   if (associated(tides_CSp)) CS%tides_CSp => tides_CSp

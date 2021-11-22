@@ -29,6 +29,7 @@ public step_forward_MEKE, MEKE_init, MEKE_alloc_register_restart, MEKE_end
 
 !> Control structure that contains MEKE parameters and diagnostics handles
 type, public :: MEKE_CS ; private
+  logical :: initialized = .false. !< True if this control structure has been initialized.
   ! Parameters
   real, dimension(:,:), pointer :: equilibrium_value => NULL() !< The equilbrium value
                         !! of MEKE to be calculated at each time step [L2 T-2 ~> m2 s-2]
@@ -179,6 +180,9 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
          "MOM_MEKE: Module must be initialized before it is used.")
   if (.not.associated(MEKE)) call MOM_error(FATAL, &
          "MOM_MEKE: MEKE must be initialized before it is used.")
+
+  if (.not.CS%initialized) call MOM_error(FATAL, &
+         "MOM_MEKE: Module must be initialized before it is used.")
 
   if ((CS%MEKE_Cd_scale > 0.0) .or. (CS%MEKE_Cb>0.) .or. CS%visc_drag) then
     use_drag_rate = .true.
@@ -1063,6 +1067,8 @@ logical function MEKE_init(Time, G, US, param_file, diag, CS, MEKE, restart_CS)
       "MEKE_init called with an associated control structure.")
     return
   else ; allocate(CS) ; endif
+
+  CS%initialized = .true.
 
   call MOM_mesg("MEKE_init: reading parameters ", 5)
 

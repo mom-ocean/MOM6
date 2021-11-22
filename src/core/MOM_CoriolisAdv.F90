@@ -25,6 +25,7 @@ public CorAdCalc, CoriolisAdv_init, CoriolisAdv_end
 
 !> Control structure for mom_coriolisadv
 type, public :: CoriolisAdv_CS ; private
+  logical :: initialized = .false. !< True if this control structure has been initialized.
   integer :: Coriolis_Scheme !< Selects the discretization for the Coriolis terms.
                              !! Valid values are:
                              !! - SADOURNY75_ENERGY - Sadourny, 1975
@@ -247,6 +248,10 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS)
 
   if (.not.associated(CS)) call MOM_error(FATAL, &
          "MOM_CoriolisAdv: Module must be initialized before it is used.")
+
+  if (.not.CS%initialized) call MOM_error(FATAL, &
+         "MOM_CoriolisAdv: Module must be initialized before it is used.")
+
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB ; nz = GV%ke
   vol_neglect = GV%H_subroundoff * (1e-4 * US%m_to_L)**2
@@ -1130,6 +1135,8 @@ subroutine CoriolisAdv_init(Time, G, GV, US, param_file, diag, AD, CS)
     return
   endif
   allocate(CS)
+
+  CS%initialized = .true.
 
   CS%diag => diag ; CS%Time => Time
 

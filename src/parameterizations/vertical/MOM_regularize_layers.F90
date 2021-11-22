@@ -23,6 +23,7 @@ public regularize_layers, regularize_layers_init
 
 !> This control structure holds parameters used by the MOM_regularize_layers module
 type, public :: regularize_layers_CS ; private
+  logical :: initialized = .false. !< True if this control structure has been initialized.
   logical :: regularize_surface_layers !< If true, vertically restructure the
                              !! near-surface layers when they have too much
                              !! lateral variations to allow for sensible lateral
@@ -94,6 +95,9 @@ subroutine regularize_layers(h, tv, dt, ea, eb, G, GV, US, CS)
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
   if (.not. associated(CS)) call MOM_error(FATAL, "MOM_regularize_layers: "//&
+         "Module must be initialized before it is used.")
+
+  if (.not. CS%initialized) call MOM_error(FATAL, "MOM_regularize_layers: "//&
          "Module must be initialized before it is used.")
 
   if (CS%regularize_surface_layers) then
@@ -195,6 +199,9 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, GV, US, CS)
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
   if (.not. associated(CS)) call MOM_error(FATAL, "MOM_regularize_layers: "//&
+         "Module must be initialized before it is used.")
+
+  if (.not. CS%initialized) call MOM_error(FATAL, "MOM_regularize_layers: "//&
          "Module must be initialized before it is used.")
 
   if (GV%nkml<1) return
@@ -734,6 +741,8 @@ subroutine regularize_layers_init(Time, G, GV, param_file, diag, CS)
                             "associated control structure.")
     return
   else ; allocate(CS) ; endif
+
+  CS%initialized = .true.
 
   CS%diag => diag
   CS%Time => Time

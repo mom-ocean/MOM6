@@ -30,6 +30,7 @@ public horizontal_viscosity, hor_visc_init, hor_visc_end
 
 !> Control structure for horizontal viscosity
 type, public :: hor_visc_CS ; private
+  logical :: initialized = .false. !< True if this control structure has been initialized.
   logical :: Laplacian       !< Use a Laplacian horizontal viscosity if true.
   logical :: biharmonic      !< Use a biharmonic horizontal viscosity if true.
   logical :: debug           !< If true, write verbose checksums for debugging purposes.
@@ -421,6 +422,10 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
 
   if (.not.associated(CS)) call MOM_error(FATAL, &
          "MOM_hor_visc: Module must be initialized before it is used.")
+
+  if (.not.CS%initialized) call MOM_error(FATAL, &
+         "MOM_hor_visc: Module must be initialized before it is used.")
+
   if (.not.(CS%Laplacian .or. CS%biharmonic)) return
 
   find_FrictWork = (CS%id_FrictWork > 0)
@@ -1836,6 +1841,9 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, MEKE, ADp)
     return
   endif
   allocate(CS)
+
+  CS%initialized = .true.
+
   CS%diag => diag
   ! Read parameters and write them to the model log.
   call log_version(param_file, mdl, version, "")

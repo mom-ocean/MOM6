@@ -26,6 +26,7 @@ public wave_speed, wave_speeds, wave_speed_init, wave_speed_set_param
 
 !> Control structure for MOM_wave_speed
 type, public :: wave_speed_CS ; private
+  logical :: initialized = .false.     !< True if this control structure has been initialized.
   logical :: use_ebt_mode = .false.    !< If true, calculate the equivalent barotropic wave speed instead
                                        !! of the first baroclinic wave speed.
                                        !! This parameter controls the default behavior of wave_speed() which
@@ -149,6 +150,10 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, mono_
 
   if (.not. associated(CS)) call MOM_error(FATAL, "MOM_wave_speed: "// &
            "Module must be initialized before it is used.")
+
+  if (.not. CS%initialized) call MOM_error(FATAL, "MOM_wave_speed: "// &
+           "Module must be initialized before it is used.")
+
   if (present(full_halos)) then ; if (full_halos) then
     is = G%isd ; ie = G%ied ; js = G%jsd ; je = G%jed
   endif ; endif
@@ -731,6 +736,11 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, full_halos)
            "Module must be initialized before it is used.")
   endif
 
+  if (present(CS)) then
+    if (.not. CS%initialized) call MOM_error(FATAL, "MOM_wave_speed: "// &
+           "Module must be initialized before it is used.")
+  endif
+
   if (present(full_halos)) then ; if (full_halos) then
     is = G%isd ; ie = G%ied ; js = G%jsd ; je = G%jed
   endif ; endif
@@ -1199,6 +1209,8 @@ subroutine wave_speed_init(CS, use_ebt_mode, mono_N2_column_fraction, mono_N2_de
                             "associated control structure.")
     return
   else ; allocate(CS) ; endif
+
+  CS%initialized = .true.
 
   ! Write all relevant parameters to the model log.
   call log_version(mdl, version)

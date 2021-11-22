@@ -25,6 +25,7 @@ implicit none ; private
 
 !> Variable mixing coefficients
 type, public :: VarMix_CS
+  logical :: initialized = .false. !< True if this control structure has been initialized.
   logical :: use_variable_mixing  !< If true, use the variable mixing.
   logical :: Resoln_scaling_used  !< If true, a resolution function is used somewhere to scale
                                   !! away one of the viscosities or diffusivities when the
@@ -177,6 +178,10 @@ subroutine calc_depth_function(G, CS)
 
   if (.not. associated(CS)) call MOM_error(FATAL, "calc_depth_function:"// &
          "Module must be initialized before it is used.")
+
+  if (.not. CS%initialized) call MOM_error(FATAL, "calc_depth_function: "// &
+         "Module must be initialized before it is used.")
+
   if (.not. CS%calculate_depth_fns) return
   if (.not. associated(CS%Depth_fn_u)) call MOM_error(FATAL, &
     "calc_depth_function: %Depth_fn_u is not associated with Depth_scaled_KhTh.")
@@ -220,6 +225,10 @@ subroutine calc_resoln_function(h, tv, G, GV, US, CS)
 
   if (.not. associated(CS)) call MOM_error(FATAL, "calc_resoln_function:"// &
          "Module must be initialized before it is used.")
+
+  if (.not. CS%initialized) call MOM_error(FATAL, "calc_resoln_function: "// &
+         "Module must be initialized before it is used.")
+
   if (CS%calculate_cg1) then
     if (.not. associated(CS%cg1)) call MOM_error(FATAL, &
       "calc_resoln_function: %cg1 is not associated with Resoln_scaled_Kh.")
@@ -465,6 +474,9 @@ subroutine calc_slope_functions(h, tv, dt, G, GV, US, CS, OBC)
   if (.not. associated(CS)) call MOM_error(FATAL, "MOM_lateral_mixing_coeffs.F90, calc_slope_functions:"//&
          "Module must be initialized before it is used.")
 
+  if (.not. CS%initialized) call MOM_error(FATAL, "MOM_lateral_mixing_coeffs.F90, calc_slope_functions: "//&
+         "Module must be initialized before it is used.")
+
   if (CS%calculate_Eady_growth_rate) then
     if (CS%use_simpler_Eady_growth_rate) then
       call find_eta(h, tv, G, GV, US, e, halo_size=2)
@@ -533,6 +545,10 @@ subroutine calc_Visbeck_coeffs_old(h, slope_x, slope_y, N2_u, N2_v, G, GV, US, C
 
   if (.not. associated(CS)) call MOM_error(FATAL, "calc_slope_function:"// &
          "Module must be initialized before it is used.")
+
+  if (.not. CS%initialized) call MOM_error(FATAL, "calc_Visbeck_coeffs_old: "// &
+         "Module must be initialized before it is used.")
+
   if (.not. CS%calculate_Eady_growth_rate) return
   if (.not. associated(CS%SN_u)) call MOM_error(FATAL, "calc_slope_function:"// &
          "%SN_u is not associated with use_variable_mixing.")
@@ -880,6 +896,10 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, US, CS, e, calculate_slop
 
   if (.not. associated(CS)) call MOM_error(FATAL, "calc_slope_function:"// &
          "Module must be initialized before it is used.")
+
+  if (.not. CS%initialized) call MOM_error(FATAL, "calc_slope_functions_using_just_e: "// &
+         "Module must be initialized before it is used.")
+
   if (.not. CS%calculate_Eady_growth_rate) return
   if (.not. associated(CS%SN_u)) call MOM_error(FATAL, "calc_slope_function:"// &
          "%SN_u is not associated with use_variable_mixing.")
@@ -1186,6 +1206,9 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
   endif
 
   allocate(CS)
+
+  CS%initialized = .true.
+
   in_use = .false. ! Set to true to avoid deallocating
   CS%diag => diag ! Diagnostics pointer
   CS%calculate_cg1 = .false.

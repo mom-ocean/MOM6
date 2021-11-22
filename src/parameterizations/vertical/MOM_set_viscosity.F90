@@ -43,6 +43,7 @@ public set_visc_register_restarts
 
 !> Control structure for MOM_set_visc
 type, public :: set_visc_CS ; private
+  logical :: initialized = .false. !< True if this control structure has been initialized.
   real    :: Hbbl           !< The static bottom boundary layer thickness [H ~> m or kg m-2].
                             !! Runtime parameter `HBBL`.
   real    :: cdrag          !< The quadratic drag coefficient.
@@ -286,6 +287,10 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS)
 
   if (.not.associated(CS)) call MOM_error(FATAL,"MOM_set_viscosity(BBL): "//&
          "Module must be initialized before it is used.")
+
+  if (.not.CS%initialized) call MOM_error(FATAL,"MOM_set_viscosity(BBL): "//&
+         "Module must be initialized before it is used.")
+
   if (.not.CS%bottomdraglaw) return
 
   if (CS%debug) then
@@ -1249,6 +1254,10 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS)
 
   if (.not.associated(CS)) call MOM_error(FATAL,"MOM_set_viscosity(visc_ML): "//&
          "Module must be initialized before it is used.")
+
+  if (.not.CS%initialized) call MOM_error(FATAL,"MOM_set_viscosity(visc_ML): "//&
+         "Module must be initialized before it is used.")
+
   if (.not.(CS%dynamic_viscous_ML .or. associated(forces%frac_shelf_u) .or. &
             associated(forces%frac_shelf_v)) ) return
 
@@ -1938,6 +1947,8 @@ subroutine set_visc_init(Time, G, GV, US, param_file, diag, visc, CS, restart_CS
     return
   endif
   allocate(CS)
+
+  CS%initialized = .true.
 
   CS%OBC => OBC
 

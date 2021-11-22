@@ -34,6 +34,7 @@ public PressureForce_FV_Bouss, PressureForce_FV_nonBouss
 
 !> Finite volume pressure gradient control structure
 type, public :: PressureForce_FV_CS ; private
+  logical :: initialized = .false. !< True if this control structure has been initialized.
   logical :: tides          !< If true, apply tidal momentum forcing.
   real    :: Rho0           !< The density used in the Boussinesq
                             !! approximation [R ~> kg m-3].
@@ -165,6 +166,10 @@ subroutine PressureForce_FV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_
 
   if (.not.associated(CS)) call MOM_error(FATAL, &
        "MOM_PressureForce_FV_nonBouss: Module must be initialized before it is used.")
+
+  if (.not.CS%initialized) call MOM_error(FATAL, &
+       "MOM_PressureForce_FV_nonBouss: Module must be initialized before it is used.")
+
   if (CS%Stanley_T2_det_coeff>=0.) call MOM_error(FATAL, &
        "MOM_PressureForce_FV_nonBouss: The Stanley parameterization is not yet"//&
        "implemented in non-Boussinesq mode.")
@@ -502,6 +507,9 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm
   if (.not.associated(CS)) call MOM_error(FATAL, &
        "MOM_PressureForce_FV_Bouss: Module must be initialized before it is used.")
 
+  if (.not.CS%initialized) call MOM_error(FATAL, &
+       "MOM_PressureForce_FV_Bouss: Module must be initialized before it is used.")
+
   use_p_atm = associated(p_atm)
   use_EOS = associated(tv%eqn_of_state)
   do i=Isq,Ieq+1 ; p0(i) = 0.0 ; enddo
@@ -819,6 +827,8 @@ subroutine PressureForce_FV_init(Time, G, GV, US, param_file, diag, CS, tides_CS
                             "control structure.")
     return
   else ; allocate(CS) ; endif
+
+  CS%initialized = .true.
 
   CS%diag => diag ; CS%Time => Time
   if (associated(tides_CSp)) CS%tides_CSp => tides_CSp

@@ -49,6 +49,7 @@ public MOM_diagnostics_init, MOM_diagnostics_end
 
 !> The control structure for the MOM_diagnostics module
 type, public :: diagnostics_CS ; private
+  logical :: initialized = .false.     !< True if this control structure has been initialized.
   real :: mono_N2_column_fraction = 0. !< The lower fraction of water column over which N2 is limited as
                                        !! monotonic for the purposes of calculating the equivalent
                                        !! barotropic wave speed.
@@ -270,6 +271,9 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
   absurdly_small_freq2 = 1e-34*US%T_to_s**2
 
   if (loc(CS)==0) call MOM_error(FATAL, &
+         "calculate_diagnostic_fields: Module must be initialized before used.")
+
+  if (.not. CS%initialized) call MOM_error(FATAL, &
          "calculate_diagnostic_fields: Module must be initialized before used.")
 
   call calculate_derivs(dt, G, CS)
@@ -1253,6 +1257,9 @@ subroutine register_time_deriv(lb, f_ptr, deriv_ptr, CS)
   if (.not.associated(CS)) call MOM_error(FATAL, &
          "register_time_deriv: Module must be initialized before it is used.")
 
+  if (.not.CS%initialized) call MOM_error(FATAL, &
+         "register_time_deriv: Module must be initialized before it is used.")
+
   if (CS%num_time_deriv >= MAX_FIELDS_) then
     call MOM_error(WARNING,"MOM_diagnostics:  Attempted to register more than " // &
                    "MAX_FIELDS_ diagnostic time derivatives via register_time_deriv.")
@@ -1619,6 +1626,8 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, US, param_file, diag
     return
   endif
   allocate(CS)
+
+  CS%initialized = .true.
 
   CS%diag => diag
   use_temperature = associated(tv%T)

@@ -59,6 +59,8 @@ end type Depth_List
 
 !> The control structure for the MOM_sum_output module
 type, public :: sum_output_CS ; private
+  logical :: initialized = .false. !< True if this control structure has been initialized.
+
   type(Depth_List)              :: DL !< The sorted depth list.
 
   integer, allocatable, dimension(:) :: lH
@@ -159,6 +161,8 @@ subroutine MOM_sum_output_init(G, GV, US, param_file, directory, ntrnc, &
     return
   endif
   allocate(CS)
+
+  CS%initialized = .true.
 
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mdl, version, "")
@@ -488,6 +492,9 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, dt_forci
   HL2_to_kg = GV%H_to_kg_m2*US%L_to_m**2
 
   if (.not.associated(CS)) call MOM_error(FATAL, &
+         "write_energy: Module must be initialized before it is used.")
+
+  if (.not.CS%initialized) call MOM_error(FATAL, &
          "write_energy: Module must be initialized before it is used.")
 
   do j=js,je ; do i=is,ie
