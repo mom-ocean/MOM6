@@ -179,7 +179,7 @@ type, public :: ocean_state_type ; private
                               !! processes before time stepping the dynamics.
   logical :: do_sppt         !< If true, stochastically perturb the diabatic and
                              !! write restarts
-  logical :: pert_epbl       !< If true, then randomly perturb the KE dissipation and 
+  logical :: pert_epbl       !< If true, then randomly perturb the KE dissipation and
                              !! genration termsand write restarts
 
   real :: eps_omesh           !< Max allowable difference between ESMF mesh and MOM6
