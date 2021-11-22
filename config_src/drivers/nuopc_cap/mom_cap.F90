@@ -98,7 +98,6 @@ use NUOPC_Model, only: model_label_SetRunClock    => label_SetRunClock
 use NUOPC_Model, only: model_label_Finalize       => label_Finalize
 use NUOPC_Model, only: SetVM
 
-use get_stochy_pattern_mod,  only : write_stoch_restart_ocn
 !$use omp_lib             , only : omp_set_num_threads
 
 implicit none; private
@@ -1526,7 +1525,7 @@ subroutine ModelAdvance(gcomp, rc)
   integer                                :: nc
   type(ESMF_Time)                        :: MyTime
   integer                                :: seconds, day, year, month, hour, minute
-  character(ESMF_MAXSTR)                 :: restartname, cvalue
+  character(ESMF_MAXSTR)                 :: restartname, cvalue, stoch_restartname
   character(240)                         :: msgString
   character(ESMF_MAXSTR)                 :: casename
   integer                                :: iostat
@@ -1740,24 +1739,19 @@ subroutine ModelAdvance(gcomp, rc)
         ! write the final restart without a timestamp
         if (ESMF_AlarmIsRinging(stop_alarm, rc=rc)) then
            write(restartname,'(A)')"MOM.res"
+           write(stoch_restartname,'(A)')"ocn_stoch.res.nc"
         else
            write(restartname,'(A,I4.4,"-",I2.2,"-",I2.2,"-",I2.2,"-",I2.2,"-",I2.2)') &
                 "MOM.res.", year, month, day, hour, minute, seconds
+           write(stoch_restartname,'(A,I4.4,"-",I2.2,"-",I2.2,"-",I2.2,"-",I2.2,"-",I2.2,A)') &
+                "ocn_stoch.res.", year, month, day, hour, minute, seconds,".nc"
         endif
         call ESMF_LogWrite("MOM_cap: Writing restart :  "//trim(restartname), ESMF_LOGMSG_INFO)
 
         ! write restart file(s)
-        call ocean_model_restart(ocean_state, restartname=restartname)
+        call ocean_model_restart(ocean_state, restartname=restartname, &
+                                stoch_restartname=stoch_restartname)
 
-        if (ESMF_AlarmIsRinging(stop_alarm, rc=rc)) then
-           write(restartname,'(A)')"ocn_stoch.res.nc"
-        else
-           write(restartname,'(A,I4.4,"-",I2.2,"-",I2.2,"-",I2.2,"-",I2.2,"-",I2.2,A)') &
-                "ocn_stoch.res.", year, month, day, hour, minute, seconds,".nc"
-        endif
-        call ESMF_LogWrite("MOM_cap: Writing stoch restart :  "//trim(restartname), &
-                           ESMF_LOGMSG_INFO)
-        call write_stoch_restart_ocn('RESTART/'//trim(restartname))
      endif
 
      if (is_root_pe()) then
