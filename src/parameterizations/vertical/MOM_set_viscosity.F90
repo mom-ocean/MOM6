@@ -177,7 +177,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS)
                            ! Rho0 divided by G_Earth and the conversion
                            ! from m to thickness units [H R ~> kg m-2 or kg2 m-5].
   real :: cdrag_sqrt_Z     ! Square root of the drag coefficient, times a unit conversion
-                           ! factor from lateral lengths to vertical depths [Z L-1 ~> 1].
+                           ! factor from lateral lengths to vertical depths [Z L-1 ~> nondim].
   real :: cdrag_sqrt       ! Square root of the drag coefficient [nondim].
   real :: oldfn            ! The integrated energy required to
                            ! entrain up to the bottom of the layer,
@@ -256,7 +256,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS)
   real :: Cell_width       ! The transverse width of the velocity cell [L ~> m].
   real :: Rayleigh         ! A nondimensional value that is multiplied by the layer's
                            ! velocity magnitude to give the Rayleigh drag velocity, times
-                           ! a lateral to vertical distance conversion factor [Z L-1 ~> 1].
+                           ! a lateral to vertical distance conversion factor [Z L-1 ~> nondim].
   real :: gam              ! The ratio of the change in the open interface width
                            ! to the open interface width atop a cell [nondim].
   real :: BBL_frac         ! The fraction of a layer's drag that goes into the
@@ -947,10 +947,10 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS)
           ! set kv_bbl to the bound and recompute bbl_thick to be consistent
           ! but with a ridiculously large upper bound on thickness (for Cd u*=0)
           kv_bbl = CS%Kv_BBL_min
-          if (cdrag_sqrt*ustar(i)*BBL_visc_frac*G%Rad_Earth*US%m_to_Z > kv_bbl) then
+          if (cdrag_sqrt*ustar(i)*BBL_visc_frac*G%Rad_Earth_L*US%L_to_Z > kv_bbl) then
             bbl_thick_Z = kv_bbl / ( cdrag_sqrt*ustar(i)*BBL_visc_frac )
           else
-            bbl_thick_Z = G%Rad_Earth * US%m_to_Z
+            bbl_thick_Z = G%Rad_Earth_L * US%L_to_Z
           endif
         else
           kv_bbl = cdrag_sqrt*ustar(i)*bbl_thick_Z*BBL_visc_frac
@@ -979,10 +979,10 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS)
           ! set kv_bbl to the bound and recompute bbl_thick to be consistent
           ! but with a ridiculously large upper bound on thickness (for Cd u*=0)
           kv_bbl = CS%Kv_BBL_min
-          if (cdrag_sqrt*ustar(i)*G%Rad_Earth*US%m_to_Z > kv_bbl) then
+          if (cdrag_sqrt*ustar(i)*G%Rad_Earth_L*US%L_to_Z > kv_bbl) then
             bbl_thick_Z = kv_bbl / ( cdrag_sqrt*ustar(i) )
           else
-            bbl_thick_Z = G%Rad_Earth * US%m_to_Z
+            bbl_thick_Z = G%Rad_Earth_L * US%L_to_Z
           endif
         else
           kv_bbl = cdrag_sqrt*ustar(i)*bbl_thick_Z
@@ -1214,7 +1214,7 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS)
                       ! Rho0 divided by G_Earth and the conversion
                       ! from m to thickness units [H R ~> kg m-2 or kg2 m-5].
   real :: cdrag_sqrt_Z  ! Square root of the drag coefficient, times a unit conversion
-                      ! factor from lateral lengths to vertical depths [Z L-1 ~> 1].
+                      ! factor from lateral lengths to vertical depths [Z L-1 ~> nondim]
   real :: cdrag_sqrt  ! Square root of the drag coefficient [nondim].
   real :: oldfn       ! The integrated energy required to
                       ! entrain up to the bottom of the layer,
