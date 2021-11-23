@@ -1711,7 +1711,8 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
 
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz
   integer :: IsdB, IedB, JsdB, JedB
-  real    :: dtbt        ! The barotropic timestep [s]
+  real    :: dtbt              ! If negative, this specifies the barotropic timestep as a fraction
+                               ! of the maximum stable value [nondim].
 
   real, allocatable, dimension(:,:)   :: eta ! free surface height or column mass [H ~> m or kg m-2]
   real, allocatable, dimension(:,:)   :: area_shelf_in ! area occupied by ice shelf [L2 ~> m2]

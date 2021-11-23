@@ -309,13 +309,13 @@ subroutine set_coord_from_TS_range(Rlay, g_prime, GV, US, param_file, eqn_of_sta
   ! Local variables
   real, dimension(GV%ke) :: T0, S0,  Pref
   real :: S_Ref, S_Light, S_Dense ! Salinity range parameters [ppt].
-  real :: T_Ref, T_Light, T_Dense ! Temperature range parameters [decC].
+  real :: T_Ref, T_Light, T_Dense ! Temperature range parameters [degC].
   real :: res_rat ! The ratio of density space resolution in the denser part
                   ! of the range to that in the lighter part of the range.
                   ! Setting this greater than 1 increases the resolution for
-                  ! the denser water.
+                  ! the denser water [nondim].
   real :: g_fs    ! Reduced gravity across the free surface [L2 Z-1 T-2 ~> m s-2].
-  real :: a1, frac_dense, k_frac
+  real :: a1, frac_dense, k_frac  ! Nondimensional temporary variables [nondim]
   integer :: k, nz, k_light
   character(len=40)  :: mdl = "set_coord_from_TS_range" ! This subroutine's name.
   character(len=200) :: filename, coord_file, inputdir ! Strings for file/path

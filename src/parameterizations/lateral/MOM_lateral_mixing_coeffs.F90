@@ -682,7 +682,7 @@ subroutine calc_Eady_growth_rate_2D(CS, G, GV, US, OBC, h, e, dzu, dzv, dzSxN, d
   real :: vint_SN(SZIB_(G)) ! Cumulative integral of SN [Z T-1 ~> m s-1]
   real, dimension(SZIB_(G),SZJ_(G)) :: SN_cpy !< SN at u-points [T-1 ~> s-1]
   real :: dz_neglect ! An incy wincy distance to avoid division by  zero [Z ~> m]
-  real :: r_crp_dist ! The inverse of the distance over which to scale the cropping [Z-1 ~. m-1]
+  real :: r_crp_dist ! The inverse of the distance over which to scale the cropping [Z-1 ~> m-1]
   real :: dB, dT ! Elevation variables used when cropping [Z ~> m]
   integer :: i, j, k, l_seg
   logical :: local_open_u_BC, local_open_v_BC, crop

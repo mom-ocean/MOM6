@@ -1763,10 +1763,10 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, u, v, depth_t
   real, allocatable, dimension(:,:,:) :: tmp_tr ! A temporary array for reading sponge fields
   real, allocatable, dimension(:,:,:) :: tmp_u,tmp_v ! A temporary array for reading sponge fields
 
-  real :: Idamp(SZI_(G),SZJ_(G))    ! The inverse damping rate [T-1 ~> s-1].
-  real :: Idamp_u(SZIB_(G),SZJ_(G)) ! The inverse damping rate for velocity fields [T-1 ~> s-1].
-  real :: Idamp_v(SZI_(G),SZJB_(G)) ! The inverse damping rate for velocity fields [T-1 ~> s-1].
-  real :: pres(SZI_(G))     ! An array of the reference pressure [R L2 T-2 ~> Pa].
+  real :: Idamp(SZI_(G),SZJ_(G))    ! The sponge damping rate [T-1 ~> s-1]
+  real :: Idamp_u(SZIB_(G),SZJ_(G)) ! The sponge damping rate for velocity fields [T-1 ~> s-1]
+  real :: Idamp_v(SZI_(G),SZJB_(G)) ! The sponge damping rate for velocity fields [T-1 ~> s-1]
+  real :: pres(SZI_(G))             ! An array of the reference pressure [R L2 T-2 ~> Pa]
 
   integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state
   integer :: i, j, k, is, ie, js, je, nz
@@ -1852,7 +1852,7 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, u, v, depth_t
                  "of sponge restoring data.", default=time_space_interp_sponge)
 
 
-  ! Read in inverse damping rate for tracers
+  ! Read in sponge damping rate for tracers
   filename = trim(inputdir)//trim(damping_file)
   call log_param(param_file, mdl, "INPUTDIR/SPONGE_DAMPING_FILE", filename)
   if (.not.file_exists(filename, G%Domain)) &
@@ -1863,7 +1863,7 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, u, v, depth_t
 
   call MOM_read_data(filename, Idamp_var, Idamp(:,:), G%Domain, scale=US%T_to_s)
 
-  ! Read in inverse damping rate for velocities
+  ! Read in sponge damping rate for velocities
   if (sponge_uv) then
     if (separate_idamp_for_uv()) then
       filename = trim(inputdir)//trim(uv_damping_file)
@@ -1911,7 +1911,7 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, u, v, depth_t
       if (eta(i,j,K) < (eta(i,j,K+1) + GV%Angstrom_Z)) &
         eta(i,j,K) = eta(i,j,K+1) + GV%Angstrom_Z
     enddo ; enddo ; enddo
-    ! Set the inverse damping rates so that the model will know where to
+    ! Set the sponge damping rates so that the model will know where to
     ! apply the sponges, along with the interface heights.
     call initialize_sponge(Idamp, eta, G, param_file, Layer_CSp, GV)
     deallocate(eta)

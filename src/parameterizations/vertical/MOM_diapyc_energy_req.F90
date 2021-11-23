@@ -68,7 +68,7 @@ subroutine diapyc_energy_req_test(h_3d, dt, tv, G, GV, US, CS, Kd_int)
     Kd, &       ! A column of diapycnal diffusivities at interfaces [Z2 T-1 ~> m2 s-1].
     h_top, h_bot ! Distances from the top or bottom [H ~> m or kg m-2].
   real :: ustar, absf, htot
-  real :: energy_Kd ! The energy used by diapycnal mixing [W m-2].
+  real :: energy_Kd ! The energy used by diapycnal mixing [R Z L2 T-3 ~> W m-2].
   real :: tmp1  ! A temporary array.
   integer :: i, j, k, is, ie, js, je, nz, itt
   logical :: may_print

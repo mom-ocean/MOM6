@@ -592,7 +592,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS)
     ! When stratification dominates h_N<<h_f, and vice versa.
     do i=is,ie ; if (do_i(i)) then
       ! The 400.0 in this expression is the square of a Ci introduced in KW99, eq. 2.22.
-      ustarsq = Rho0x400_G * ustar(i)**2 ! Note not in units of u*^2 but [H R]
+      ustarsq = Rho0x400_G * ustar(i)**2 ! Note not in units of u*^2 but [H R ~> kg m-2 or kg m-5]
       htot = 0.0
 
       ! Calculate the thickness of a stratification limited BBL ignoring rotation:

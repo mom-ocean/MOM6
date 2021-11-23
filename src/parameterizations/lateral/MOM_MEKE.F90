@@ -79,7 +79,8 @@ type, public :: MEKE_CS ; private
   real :: MEKE_advection_factor !< A scaling in front of the advection of MEKE [nondim]
   real :: MEKE_topographic_beta !< Weight for how much topographic beta is considered
                                 !! when computing beta in Rhines scale [nondim]
-  real :: MEKE_restoring_rate !< Inverse of the timescale used to nudge MEKE toward its equilibrium value [s-1].
+  real :: MEKE_restoring_rate !< Inverse of the timescale used to nudge MEKE toward its
+                        !! equilibrium value [T-1 ~> s-1].
   logical :: MEKE_advection_bug !< If true, recover a bug in the calculation of the barotropic
                         !! transport for the advection of MEKE, wherein only the transports in the
                         !! deepest layer are used.
