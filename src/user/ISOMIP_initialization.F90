@@ -258,7 +258,7 @@ subroutine ISOMIP_initialize_temperature_salinity ( T, S, h, depth_tot, G, GV, U
   real, dimension(SZI_(G),SZJ_(G)),          intent(in)  :: depth_tot  !< The nominal total bottom-to-top
                                                                !! depth of the ocean [Z ~> m]
   type(param_file_type),                     intent(in)  :: param_file !< Parameter file structure
-  type(EOS_type),                            pointer     :: eqn_of_state !< Equation of state structure
+  type(EOS_type),                            intent(in)  :: eqn_of_state !< Equation of state structure
   logical,                                   intent(in)  :: just_read !< If true, this call will
                                                       !! only read parameters without changing T & S.
   ! Local variables

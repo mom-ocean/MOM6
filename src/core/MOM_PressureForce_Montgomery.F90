@@ -21,7 +21,7 @@ implicit none ; private
 #include <MOM_memory.h>
 
 public PressureForce_Mont_Bouss, PressureForce_Mont_nonBouss, Set_pbce_Bouss
-public Set_pbce_nonBouss, PressureForce_Mont_init, PressureForce_Mont_end
+public Set_pbce_nonBouss, PressureForce_Mont_init
 
 ! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
 ! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
@@ -40,9 +40,9 @@ type, public :: PressureForce_Mont_CS ; private
   type(time_type), pointer :: Time => NULL() !< A pointer to the ocean model's clock.
   type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to regulate
                             !! the timing of diagnostic output.
-  real, pointer :: PFu_bc(:,:,:) => NULL() !< Zonal accelerations due to pressure gradients
+  real, allocatable :: PFu_bc(:,:,:) !< Zonal accelerations due to pressure gradients
                             !! deriving from density gradients within layers [L T-2 ~> m s-2].
-  real, pointer :: PFv_bc(:,:,:) => NULL() !< Meridional accelerations due to pressure gradients
+  real, allocatable :: PFv_bc(:,:,:) !< Meridional accelerations due to pressure gradients
                             !! deriving from density gradients within layers [L T-2 ~> m s-2].
   !>@{ Diagnostic IDs
   integer :: id_PFu_bc = -1, id_PFv_bc = -1, id_e_tidal = -1
@@ -71,7 +71,7 @@ subroutine PressureForce_Mont_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm, pb
                                                                  !! (equal to -dM/dx) [L T-2 ~> m s-2].
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), intent(out) :: PFv !< Meridional acceleration due to pressure gradients
                                                                  !! (equal to -dM/dy) [L T-2 ~> m s-2].
-  type(PressureForce_Mont_CS),                pointer     :: CS  !< Control structure for Montgomery potential PGF
+  type(PressureForce_Mont_CS),                intent(inout) :: CS  !< Control structure for Montgomery potential PGF
   real, dimension(:,:),                       pointer     :: p_atm !< The pressure at the ice-ocean or
                                                                  !! atmosphere-ocean [R L2 T-2 ~> Pa].
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
@@ -137,9 +137,6 @@ subroutine PressureForce_Mont_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm, pb
   use_p_atm = associated(p_atm)
   is_split = present(pbce)
   use_EOS = associated(tv%eqn_of_state)
-
-  if (.not.associated(CS)) call MOM_error(FATAL, &
-      "MOM_PressureForce_Mont: Module must be initialized before it is used.")
 
   if (.not.CS%initialized) call MOM_error(FATAL, &
       "MOM_PressureForce_Mont: Module must be initialized before it is used.")
@@ -326,14 +323,14 @@ subroutine PressureForce_Mont_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm, pb
             ((dp_star(i,j)*dp_star(i+1,j) + (p(i,j,K)*dp_star(i+1,j) + p(i+1,j,K)*dp_star(i,j))) / &
              (dp_star(i,j) + dp_star(i+1,j))))
         PFu(I,j,k) = -(M(i+1,j,k) - M(i,j,k)) * G%IdxCu(I,j) + PFu_bc
-        if (associated(CS%PFu_bc)) CS%PFu_bc(i,j,k) = PFu_bc
+        if (allocated(CS%PFu_bc)) CS%PFu_bc(i,j,k) = PFu_bc
       enddo ; enddo
       do J=Jsq,Jeq ; do i=is,ie
         PFv_bc = (alpha_star(i,j+1,k) - alpha_star(i,j,k)) * (G%IdyCv(i,J) * &
             ((dp_star(i,j)*dp_star(i,j+1) + (p(i,j,K)*dp_star(i,j+1) + p(i,j+1,K)*dp_star(i,j))) / &
              (dp_star(i,j) + dp_star(i,j+1))))
         PFv(i,J,k) = -(M(i,j+1,k) - M(i,j,k)) * G%IdyCv(i,J) + PFv_bc
-        if (associated(CS%PFv_bc)) CS%PFv_bc(i,j,k) = PFv_bc
+        if (allocated(CS%PFv_bc)) CS%PFv_bc(i,j,k) = PFv_bc
       enddo ; enddo
     enddo ! k-loop
   else ! .not. use_EOS
@@ -371,7 +368,7 @@ subroutine PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm, pbce,
                                                                  !! (equal to -dM/dx) [L T-2 ~> m s-2].
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), intent(out) :: PFv !< Meridional acceleration due to pressure gradients
                                                                  !! (equal to -dM/dy) [L T-2 ~> m s-2].
-  type(PressureForce_Mont_CS),                pointer     :: CS  !< Control structure for Montgomery potential PGF
+  type(PressureForce_Mont_CS),                intent(inout) :: CS  !< Control structure for Montgomery potential PGF
   real, dimension(:,:),                       pointer     :: p_atm !< The pressure at the ice-ocean or
                                                                 !! atmosphere-ocean [R L2 T-2 ~> Pa].
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), optional, intent(out) :: pbce !< The baroclinic pressure anomaly in
@@ -428,9 +425,6 @@ subroutine PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm, pbce,
   use_p_atm = associated(p_atm)
   is_split = present(pbce)
   use_EOS = associated(tv%eqn_of_state)
-
-  if (.not.associated(CS)) call MOM_error(FATAL, &
-       "MOM_PressureForce_Mont: Module must be initialized before it is used.")
 
   if (.not.CS%initialized) call MOM_error(FATAL, &
        "MOM_PressureForce_Mont: Module must be initialized before it is used.")
@@ -564,14 +558,14 @@ subroutine PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm, pbce,
           ((h_star(i,j) * h_star(i+1,j) - (e(i,j,K) * h_star(i+1,j) + &
           e(i+1,j,K) * h_star(i,j))) / (h_star(i,j) + h_star(i+1,j))))
         PFu(I,j,k) = -(M(i+1,j,k) - M(i,j,k)) * G%IdxCu(I,j) + PFu_bc
-        if (associated(CS%PFu_bc)) CS%PFu_bc(i,j,k) = PFu_bc
+        if (allocated(CS%PFu_bc)) CS%PFu_bc(i,j,k) = PFu_bc
       enddo ; enddo
       do J=Jsq,Jeq ; do i=is,ie
         PFv_bc = -1.0*(rho_star(i,j+1,k) - rho_star(i,j,k)) * (G%IdyCv(i,J) * &
           ((h_star(i,j) * h_star(i,j+1) - (e(i,j,K) * h_star(i,j+1) + &
           e(i,j+1,K) * h_star(i,j))) / (h_star(i,j) + h_star(i,j+1))))
         PFv(i,J,k) = -(M(i,j+1,k) - M(i,j,k)) * G%IdyCv(i,J) + PFv_bc
-        if (associated(CS%PFv_bc)) CS%PFv_bc(i,j,k) = PFv_bc
+        if (allocated(CS%PFv_bc)) CS%PFv_bc(i,j,k) = PFv_bc
       enddo ; enddo
     enddo ! k-loop
   else ! .not. use_EOS
@@ -833,8 +827,8 @@ subroutine PressureForce_Mont_init(Time, G, GV, US, param_file, diag, CS, tides_
   type(unit_scale_type),   intent(in)    :: US !< A dimensional unit scaling type
   type(param_file_type),   intent(in)    :: param_file !< Parameter file handles
   type(diag_ctrl), target, intent(inout) :: diag !< Diagnostics control structure
-  type(PressureForce_Mont_CS), pointer   :: CS !< Montgomery PGF control structure
-  type(tidal_forcing_CS),  pointer       :: tides_CSp !< Tides control structure
+  type(PressureForce_Mont_CS), intent(inout) :: CS !< Montgomery PGF control structure
+  type(tidal_forcing_CS), intent(in), target, optional :: tides_CSp !< Tides control structure
 
   ! Local variables
   logical :: use_temperature, use_EOS
@@ -842,16 +836,10 @@ subroutine PressureForce_Mont_init(Time, G, GV, US, param_file, diag, CS, tides_
 # include "version_variable.h"
   character(len=40)  :: mdl   ! This module's name.
 
-  if (associated(CS)) then
-    call MOM_error(WARNING, "PressureForce_init called with an associated "// &
-                            "control structure.")
-    return
-  else ; allocate(CS) ; endif
-
   CS%initialized = .true.
-
   CS%diag => diag ; CS%Time => Time
-  if (associated(tides_CSp)) CS%tides_CSp => tides_CSp
+  if (present(tides_CSp)) &
+    CS%tides_CSp => tides_CSp
 
   mdl = "MOM_PressureForce_Mont"
   call log_version(param_file, mdl, version, "")
@@ -871,14 +859,10 @@ subroutine PressureForce_Mont_init(Time, G, GV, US, param_file, diag, CS, tides_
          'Density Gradient Zonal Pressure Force Accel.', "meter second-2", conversion=US%L_T2_to_m_s2)
     CS%id_PFv_bc = register_diag_field('ocean_model', 'PFv_bc', diag%axesCvL, Time, &
          'Density Gradient Meridional Pressure Force Accel.', "meter second-2", conversion=US%L_T2_to_m_s2)
-    if (CS%id_PFu_bc > 0) then
-      call safe_alloc_ptr(CS%PFu_bc,G%IsdB,G%IedB,G%jsd,G%jed,GV%ke)
-      CS%PFu_bc(:,:,:) = 0.0
-    endif
-    if (CS%id_PFv_bc > 0) then
-      call safe_alloc_ptr(CS%PFv_bc,G%isd,G%ied,G%JsdB,G%JedB,GV%ke)
-      CS%PFv_bc(:,:,:) = 0.0
-    endif
+    if (CS%id_PFu_bc > 0) &
+      allocate(CS%PFu_bc(G%IsdB:G%IedB,G%jsd:G%jed,GV%ke), source=0.)
+    if (CS%id_PFv_bc > 0) &
+      allocate(CS%PFv_bc(G%isd:G%ied,G%JsdB:G%JedB,GV%ke), source=0.)
   endif
 
   if (CS%tides) then
@@ -892,12 +876,6 @@ subroutine PressureForce_Mont_init(Time, G, GV, US, param_file, diag, CS, tides_
   call log_param(param_file, mdl, "GFS / G_EARTH", CS%GFS_scale)
 
 end subroutine PressureForce_Mont_init
-
-!> Deallocates the Montgomery-potential form of PGF control structure
-subroutine PressureForce_Mont_end(CS)
-  type(PressureForce_Mont_CS), pointer :: CS  !< Control structure for Montgomery potential PGF
-  if (associated(CS)) deallocate(CS)
-end subroutine PressureForce_Mont_end
 
 !>\namespace mom_pressureforce_mont
 !!

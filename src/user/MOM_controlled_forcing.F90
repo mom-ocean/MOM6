@@ -411,7 +411,7 @@ subroutine register_ctrl_forcing_restarts(G, param_file, CS, restart_CS)
                                                   !! parameter values.
   type(ctrl_forcing_CS), pointer :: CS            !< A pointer that is set to point to the
                                                   !! control structure for this module.
-  type(MOM_restart_CS),  pointer :: restart_CS    !< A pointer to the restart control structure.
+  type(MOM_restart_CS), intent(inout) :: restart_CS !< MOM restart control struct
 
   logical :: controlled, use_temperature
   character (len=8) :: period_str

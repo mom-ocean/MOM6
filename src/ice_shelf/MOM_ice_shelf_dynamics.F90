@@ -228,7 +228,7 @@ subroutine register_ice_shelf_dyn_restarts(G, param_file, CS, restart_CS)
   type(ocean_grid_type),  intent(inout) :: G    !< The grid type describing the ice shelf grid.
   type(param_file_type),  intent(in)    :: param_file !< A structure to parse for run-time parameters
   type(ice_shelf_dyn_CS), pointer       :: CS !< A pointer to the ice shelf dynamics control structure
-  type(MOM_restart_CS),   pointer       :: restart_CS !< A pointer to the restart control structure.
+  type(MOM_restart_CS),   intent(inout) :: restart_CS !< MOM restart control struct
 
   logical :: shelf_mass_is_dynamic, override_shelf_movement, active_shelf_dynamics
   character(len=40)  :: mdl = "MOM_ice_shelf_dyn"  ! This module's name.

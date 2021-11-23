@@ -181,7 +181,7 @@ subroutine build_slight_column(CS, eqn_of_state, H_to_pres, H_subroundoff, &
                                nz, depth, h_col, T_col, S_col, p_col, z_col, z_col_new, &
                                h_neglect, h_neglect_edge)
   type(slight_CS),       intent(in)    :: CS    !< Coordinate control structure
-  type(EOS_type),        pointer       :: eqn_of_state !< Equation of state structure
+  type(EOS_type),        intent(in)    :: eqn_of_state !< Equation of state structure
   real,                  intent(in)    :: H_to_pres !< A conversion factor from thicknesses to
                                                 !! scaled pressure [R L2 T-2 H-1 ~> Pa m-1 or Pa m2 kg-1]
   real,                  intent(in)    :: H_subroundoff !< GV%H_subroundoff

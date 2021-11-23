@@ -67,8 +67,6 @@ use MOM_domains, only : To_South, To_West, To_All, CGRID_NE, SCALAR_PAIR
 use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, WARNING, is_root_pe
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_get_input, only : directories
-use MOM_restart, only : register_restart_field, query_initialized, save_restart
-use MOM_restart, only : restart_init, MOM_restart_CS
 use MOM_time_manager, only : time_type, real_to_time, operator(+)
 use MOM_time_manager, only : operator(-), operator(>), operator(*), operator(/)
 
@@ -89,7 +87,6 @@ use MOM_open_boundary, only : radiation_open_bdry_conds
 use MOM_open_boundary, only : open_boundary_zero_normal_flow
 use MOM_PressureForce, only : PressureForce, PressureForce_init, PressureForce_CS
 use MOM_set_visc, only : set_viscous_ML, set_visc_CS
-use MOM_thickness_diffuse, only : thickness_diffuse_CS
 use MOM_tidal_forcing, only : tidal_forcing_init, tidal_forcing_CS
 use MOM_unit_scaling,  only : unit_scale_type
 use MOM_vert_friction, only : vertvisc, vertvisc_coef, vertvisc_init, vertvisc_CS
@@ -144,13 +141,13 @@ type, public :: MOM_dyn_unsplit_CS ; private
 
   ! The remainder of the structure points to child subroutines' control structures.
   !> A pointer to the horizontal viscosity control structure
-  type(hor_visc_CS), pointer :: hor_visc_CSp => NULL()
+  type(hor_visc_CS) :: hor_visc
   !> A pointer to the continuity control structure
-  type(continuity_CS), pointer :: continuity_CSp => NULL()
+  type(continuity_CS) :: continuity_CSp
   !> A pointer to the CoriolisAdv control structure
-  type(CoriolisAdv_CS), pointer :: CoriolisAdv_CSp => NULL()
+  type(CoriolisAdv_CS) :: CoriolisAdv
   !> A pointer to the PressureForce control structure
-  type(PressureForce_CS), pointer :: PressureForce_CSp => NULL()
+  type(PressureForce_CS) :: PressureForce_CSp
   !> A pointer to the vertvisc control structure
   type(vertvisc_CS), pointer :: vertvisc_CSp => NULL()
   !> A pointer to the set_visc control structure
@@ -217,10 +214,8 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, forces, &
                                                    !! column mass [H ~> m or kg m-2].
   type(MOM_dyn_unsplit_CS), pointer      :: CS     !< The control structure set up by
                                                    !! initialize_dyn_unsplit.
-  type(VarMix_CS),         pointer       :: VarMix !< A pointer to a structure with fields
-                                 !! that specify the spatially variable viscosities.
-  type(MEKE_type),         pointer       :: MEKE   !< A pointer to a structure containing
-                                 !! fields related to the Mesoscale Eddy Kinetic Energy.
+  type(VarMix_CS),         intent(inout) :: VarMix !< Variable mixing control struct
+  type(MEKE_type),         intent(inout) :: MEKE   !< MEKE fields
   type(wave_parameters_CS), optional, pointer :: Waves !< A pointer to a structure containing
                                  !! fields related to the surface wave conditions
 
@@ -258,7 +253,7 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, forces, &
 ! diffu = horizontal viscosity terms (u,h)
   call enable_averages(dt, Time_local, CS%diag)
   call cpu_clock_begin(id_clock_horvisc)
-  call horizontal_viscosity(u, v, h, CS%diffu, CS%diffv, MEKE, Varmix, G, GV, US, CS%hor_visc_CSp)
+  call horizontal_viscosity(u, v, h, CS%diffu, CS%diffv, MEKE, Varmix, G, GV, US, CS%hor_visc)
   call cpu_clock_end(id_clock_horvisc)
   call disable_averaging(CS%diag)
 
@@ -302,7 +297,7 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, forces, &
 ! CAu = -(f+zeta)/h_av vh + d/dx KE
   call cpu_clock_begin(id_clock_Cor)
   call CorAdCalc(u, v, h_av, uh, vh, CS%CAu, CS%CAv, CS%OBC, CS%ADp, &
-                 G, GV, US, CS%CoriolisAdv_CSp)
+                 G, GV, US, CS%CoriolisAdv)
   call cpu_clock_end(id_clock_Cor)
 
 ! PFu = d/dx M(h_av,T,S)
@@ -368,7 +363,7 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, forces, &
 ! CAu = -(f+zeta(up))/h_av vh + d/dx KE(up)
   call cpu_clock_begin(id_clock_Cor)
   call CorAdCalc(up, vp, h_av, uh, vh, CS%CAu, CS%CAv, CS%OBC, CS%ADp, &
-                 G, GV, US, CS%CoriolisAdv_CSp)
+                 G, GV, US, CS%CoriolisAdv)
   call cpu_clock_end(id_clock_Cor)
 
 ! PFu = d/dx M(h_av,T,S)
@@ -446,7 +441,7 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, forces, &
 ! CAu = -(f+zeta(upp))/h_av vh + d/dx KE(upp)
   call cpu_clock_begin(id_clock_Cor)
   call CorAdCalc(upp, vpp, h_av, uh, vh, CS%CAu, CS%CAv, CS%OBC, CS%ADp, &
-                 G, GV, US, CS%CoriolisAdv_CSp)
+                 G, GV, US, CS%CoriolisAdv)
   call cpu_clock_end(id_clock_Cor)
 
 ! PFu = d/dx M(h_av,T,S)
@@ -512,16 +507,14 @@ end subroutine step_MOM_dyn_unsplit
 !!
 !! All variables registered here should have the ability to be recreated if they are not present
 !! in a restart file.
-subroutine register_restarts_dyn_unsplit(HI, GV, param_file, CS, restart_CS)
+subroutine register_restarts_dyn_unsplit(HI, GV, param_file, CS)
   type(hor_index_type),      intent(in) :: HI         !< A horizontal index type structure.
   type(verticalGrid_type),   intent(in) :: GV         !< The ocean's vertical grid structure.
   type(param_file_type),     intent(in) :: param_file !< A structure to parse for
                                                       !! run-time parameters.
   type(MOM_dyn_unsplit_CS),  pointer    :: CS         !< The control structure set up by
                                                       !! initialize_dyn_unsplit.
-  type(MOM_restart_CS),      pointer    :: restart_CS !< A pointer to the restart control structure.
 
-  ! Local arguments
   character(len=40)  :: mdl = "MOM_dynamics_unsplit" ! This module's name.
   character(len=48) :: thickness_units, flux_units
   integer :: isd, ied, jsd, jed, nz, IsdB, IedB, JsdB, JedB
@@ -552,8 +545,8 @@ end subroutine register_restarts_dyn_unsplit
 
 !> Initialize parameters and allocate memory associated with the unsplit dynamics module.
 subroutine initialize_dyn_unsplit(u, v, h, Time, G, GV, US, param_file, diag, CS, &
-                                  restart_CS, Accel_diag, Cont_diag, MIS, MEKE, &
-                                  OBC, update_OBC_CSp, ALE_CSp, setVisc_CSp, &
+                                  Accel_diag, Cont_diag, MIS, &
+                                  OBC, update_OBC_CSp, ALE_CSp, set_visc, &
                                   visc, dirs, ntrunc, cont_stencil)
   type(ocean_grid_type),          intent(inout) :: G          !< The ocean's grid structure.
   type(verticalGrid_type),        intent(in)    :: GV         !< The ocean's vertical grid structure.
@@ -571,8 +564,6 @@ subroutine initialize_dyn_unsplit(u, v, h, Time, G, GV, US, param_file, diag, CS
                                                               !! regulate diagnostic output.
   type(MOM_dyn_unsplit_CS),       pointer       :: CS         !< The control structure set up
                                                               !! by initialize_dyn_unsplit.
-  type(MOM_restart_CS),           pointer       :: restart_CS !< A pointer to the restart control
-                                                              !! structure.
   type(accel_diag_ptrs),  target, intent(inout) :: Accel_diag !< A set of pointers to the various
                                      !! accelerations in the momentum equations, which can be used
                                      !! for later derived diagnostics, like energy budgets.
@@ -582,7 +573,6 @@ subroutine initialize_dyn_unsplit(u, v, h, Time, G, GV, US, param_file, diag, CS
   type(ocean_internal_state),     intent(inout) :: MIS        !< The "MOM6 Internal State"
                                                    !! structure, used to pass around pointers
                                                    !! to various arrays for diagnostic purposes.
-  type(MEKE_type),                pointer       :: MEKE !< MEKE data
   type(ocean_OBC_type),           pointer       :: OBC        !< If open boundary conditions are
                                                        !! used, this points to the ocean_OBC_type
                                                        !! that was set up in MOM_initialization.
@@ -591,8 +581,7 @@ subroutine initialize_dyn_unsplit(u, v, h, Time, G, GV, US, param_file, diag, CS
                                                             !! the appropriate control structure.
   type(ALE_CS),                   pointer       :: ALE_CSp    !< This points to the ALE control
                                                               !! structure.
-  type(set_visc_CS),              pointer       :: setVisc_CSp !< This points to the set_visc
-                                                               !! control structure.
+  type(set_visc_CS),      target, intent(in)    :: set_visc   !< set_visc control struct
   type(vertvisc_type),            intent(inout) :: visc       !< A structure containing vertical
                                                               !! viscosities, bottom drag
                                                               !! viscosities, and related fields.
@@ -654,16 +643,14 @@ subroutine initialize_dyn_unsplit(u, v, h, Time, G, GV, US, param_file, diag, CS
 
   call continuity_init(Time, G, GV, US, param_file, diag, CS%continuity_CSp)
   cont_stencil = continuity_stencil(CS%continuity_CSp)
-  call CoriolisAdv_init(Time, G, GV, US, param_file, diag, CS%ADp, CS%CoriolisAdv_CSp)
+  call CoriolisAdv_init(Time, G, GV, US, param_file, diag, CS%ADp, CS%CoriolisAdv)
   if (use_tides) call tidal_forcing_init(Time, G, param_file, CS%tides_CSp)
   call PressureForce_init(Time, G, GV, US, param_file, diag, CS%PressureForce_CSp, &
                           CS%tides_CSp)
-  call hor_visc_init(Time, G, GV, US, param_file, diag, CS%hor_visc_CSp, MEKE)
+  call hor_visc_init(Time, G, GV, US, param_file, diag, CS%hor_visc)
   call vertvisc_init(MIS, Time, G, GV, US, param_file, diag, CS%ADp, dirs, &
                      ntrunc, CS%vertvisc_CSp)
-  if (.not.associated(setVisc_CSp)) call MOM_error(FATAL, &
-    "initialize_dyn_unsplit called with setVisc_CSp unassociated.")
-  CS%set_visc_CSp => setVisc_CSp
+  CS%set_visc_CSp => set_visc
 
   if (associated(ALE_CSp)) CS%ALE_CSp => ALE_CSp
   if (associated(OBC)) CS%OBC => OBC

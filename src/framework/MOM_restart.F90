@@ -138,7 +138,7 @@ contains
 subroutine register_restart_field_as_obsolete(field_name, replacement_name, CS)
   character(*), intent(in) :: field_name       !< Name of restart field that is no longer in use
   character(*), intent(in) :: replacement_name !< Name of replacement restart field, if applicable
-  type(MOM_restart_CS), pointer :: CS          !< A pointer to a MOM_restart_CS object (intent in/out)
+  type(MOM_restart_CS), intent(inout) :: CS    !< MOM restart control struct
 
   CS%num_obsolete_vars = CS%num_obsolete_vars+1
   CS%restart_obsolete(CS%num_obsolete_vars)%field_name = field_name
@@ -152,10 +152,7 @@ subroutine register_restart_field_ptr3d(f_ptr, var_desc, mandatory, CS)
   type(vardesc),              intent(in) :: var_desc  !< A structure with metadata about this variable
   logical,                    intent(in) :: mandatory !< If true, the run will abort if this field is not
                                                       !! successfully read from the restart file.
-  type(MOM_restart_CS),       pointer    :: CS        !< A pointer to a MOM_restart_CS object (intent in/out)
-
-  if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
-      "register_restart_field: Module must be initialized before it is used.")
+  type(MOM_restart_CS),       intent(inout) :: CS     !< MOM restart control struct
 
   if (.not.CS%initialized) call MOM_error(FATAL, "MOM_restart " // &
       "register_restart_field: Module must be initialized before it is used.")
@@ -188,10 +185,7 @@ subroutine register_restart_field_ptr4d(f_ptr, var_desc, mandatory, CS)
   type(vardesc),              intent(in) :: var_desc  !< A structure with metadata about this variable
   logical,                    intent(in) :: mandatory !< If true, the run will abort if this field is not
                                                       !! successfully read from the restart file.
-  type(MOM_restart_CS),       pointer    :: CS        !< A pointer to a MOM_restart_CS object (intent in/out)
-
-  if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
-      "register_restart_field: Module must be initialized before it is used.")
+  type(MOM_restart_CS),       intent(inout) :: CS     !< MOM restart control struct
 
   if (.not.CS%initialized) call MOM_error(FATAL, "MOM_restart " // &
       "register_restart_field: Module must be initialized before it is used.")
@@ -224,10 +218,7 @@ subroutine register_restart_field_ptr2d(f_ptr, var_desc, mandatory, CS)
   type(vardesc),              intent(in) :: var_desc  !< A structure with metadata about this variable
   logical,                    intent(in) :: mandatory !< If true, the run will abort if this field is not
                                                       !! successfully read from the restart file.
-  type(MOM_restart_CS),       pointer    :: CS        !< A pointer to a MOM_restart_CS object (intent in/out)
-
-  if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
-      "register_restart_field: Module must be initialized before it is used.")
+  type(MOM_restart_CS),       intent(inout) :: CS     !< MOM restart control struct
 
   if (.not.CS%initialized) call MOM_error(FATAL, "MOM_restart " // &
       "register_restart_field: Module must be initialized before it is used.")
@@ -259,10 +250,7 @@ subroutine register_restart_field_ptr1d(f_ptr, var_desc, mandatory, CS)
   type(vardesc),              intent(in) :: var_desc  !< A structure with metadata about this variable
   logical,                    intent(in) :: mandatory !< If true, the run will abort if this field is not
                                                       !! successfully read from the restart file.
-  type(MOM_restart_CS),       pointer    :: CS        !< A pointer to a MOM_restart_CS object (intent in/out)
-
-  if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
-      "register_restart_field: Module must be initialized before it is used.")
+  type(MOM_restart_CS),       intent(inout) :: CS     !< MOM restart control struct
 
   if (.not.CS%initialized) call MOM_error(FATAL, "MOM_restart " // &
       "register_restart_field: Module must be initialized before it is used.")
@@ -294,10 +282,7 @@ subroutine register_restart_field_ptr0d(f_ptr, var_desc, mandatory, CS)
   type(vardesc),              intent(in) :: var_desc  !< A structure with metadata about this variable
   logical,                    intent(in) :: mandatory !< If true, the run will abort if this field is not
                                                       !! successfully read from the restart file.
-  type(MOM_restart_CS),       pointer    :: CS        !< A pointer to a MOM_restart_CS object (intent in/out)
-
-  if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
-      "register_restart_field: Module must be initialized before it is used.")
+  type(MOM_restart_CS),       intent(inout) :: CS     !< MOM restart control struct
 
   if (.not.CS%initialized) call MOM_error(FATAL, "MOM_restart " // &
       "register_restart_field: Module must be initialized before it is used.")
@@ -332,7 +317,7 @@ subroutine register_restart_pair_ptr2d(a_ptr, b_ptr, a_desc, b_desc, &
   type(vardesc), intent(in) :: a_desc   !< First field descriptor
   type(vardesc), intent(in) :: b_desc   !< Second field descriptor
   logical, intent(in) :: mandatory      !< If true, abort if field is missing
-  type(MOM_restart_CS), pointer :: CS   !< MOM restart control structure
+  type(MOM_restart_CS), intent(inout) :: CS   !< MOM restart control structure
 
   call lock_check(CS, a_desc)
 
@@ -354,7 +339,7 @@ subroutine register_restart_pair_ptr3d(a_ptr, b_ptr, a_desc, b_desc, &
   type(vardesc), intent(in) :: a_desc   !< First field descriptor
   type(vardesc), intent(in) :: b_desc   !< Second field descriptor
   logical, intent(in) :: mandatory      !< If true, abort if field is missing
-  type(MOM_restart_CS), pointer :: CS   !< MOM restart control structure
+  type(MOM_restart_CS), intent(inout) :: CS   !< MOM restart control structure
 
   call lock_check(CS, a_desc)
 
@@ -376,7 +361,7 @@ subroutine register_restart_pair_ptr4d(a_ptr, b_ptr, a_desc, b_desc, &
   type(vardesc), intent(in) :: a_desc   !< First field descriptor
   type(vardesc), intent(in) :: b_desc   !< Second field descriptor
   logical, intent(in) :: mandatory      !< If true, abort if field is missing
-  type(MOM_restart_CS), pointer :: CS   !< MOM restart control structure
+  type(MOM_restart_CS), intent(inout) :: CS   !< MOM restart control structure
 
   call lock_check(CS, a_desc)
 
@@ -400,7 +385,7 @@ subroutine register_restart_field_4d(f_ptr, name, mandatory, CS, longname, units
   character(len=*),           intent(in) :: name      !< variable name to be used in the restart file
   logical,                    intent(in) :: mandatory !< If true, the run will abort if this field is not
                                                       !! successfully read from the restart file.
-  type(MOM_restart_CS),       pointer    :: CS        !< A pointer to a MOM_restart_CS object (intent in/out)
+  type(MOM_restart_CS),       intent(inout) :: CS     !< MOM restart control struct
   character(len=*), optional, intent(in) :: longname  !< variable long name
   character(len=*), optional, intent(in) :: units     !< variable units
   character(len=*), optional, intent(in) :: hor_grid  !< variable horizontal staggering, 'h' if absent
@@ -408,10 +393,6 @@ subroutine register_restart_field_4d(f_ptr, name, mandatory, CS, longname, units
   character(len=*), optional, intent(in) :: t_grid    !< time description: s, p, or 1, 's' if absent
 
   type(vardesc) :: vd
-
-  if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart: " // &
-      "register_restart_field_4d: Module must be initialized before "//&
-      "it is used to register "//trim(name))
 
   if (.not.CS%initialized) call MOM_error(FATAL, "MOM_restart: " // &
       "register_restart_field_4d: Module must be initialized before "//&
@@ -434,7 +415,7 @@ subroutine register_restart_field_3d(f_ptr, name, mandatory, CS, longname, units
   character(len=*),           intent(in) :: name      !< variable name to be used in the restart file
   logical,                    intent(in) :: mandatory !< If true, the run will abort if this field is not
                                                       !! successfully read from the restart file.
-  type(MOM_restart_CS),       pointer    :: CS        !< A pointer to a MOM_restart_CS object (intent in/out)
+  type(MOM_restart_CS),       intent(inout) :: CS     !< MOM restart control struct
   character(len=*), optional, intent(in) :: longname  !< variable long name
   character(len=*), optional, intent(in) :: units     !< variable units
   character(len=*), optional, intent(in) :: hor_grid  !< variable horizontal staggering, 'h' if absent
@@ -442,10 +423,6 @@ subroutine register_restart_field_3d(f_ptr, name, mandatory, CS, longname, units
   character(len=*), optional, intent(in) :: t_grid    !< time description: s, p, or 1, 's' if absent
 
   type(vardesc) :: vd
-
-  if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart: " // &
-      "register_restart_field_3d: Module must be initialized before "//&
-      "it is used to register "//trim(name))
 
   if (.not.CS%initialized) call MOM_error(FATAL, "MOM_restart: " // &
       "register_restart_field_3d: Module must be initialized before "//&
@@ -468,7 +445,7 @@ subroutine register_restart_field_2d(f_ptr, name, mandatory, CS, longname, units
   character(len=*),           intent(in) :: name      !< variable name to be used in the restart file
   logical,                    intent(in) :: mandatory !< If true, the run will abort if this field is not
                                                       !! successfully read from the restart file.
-  type(MOM_restart_CS),       pointer    :: CS        !< A pointer to a MOM_restart_CS object (intent in/out)
+  type(MOM_restart_CS),       intent(inout) :: CS     !< MOM restart control struct
   character(len=*), optional, intent(in) :: longname  !< variable long name
   character(len=*), optional, intent(in) :: units     !< variable units
   character(len=*), optional, intent(in) :: hor_grid  !< variable horizontal staggering, 'h' if absent
@@ -477,10 +454,6 @@ subroutine register_restart_field_2d(f_ptr, name, mandatory, CS, longname, units
 
   type(vardesc) :: vd
   character(len=8) :: Zgrid
-
-  if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart: " // &
-      "register_restart_field_2d: Module must be initialized before "//&
-      "it is used to register "//trim(name))
 
   if (.not.CS%initialized) call MOM_error(FATAL, "MOM_restart: " // &
       "register_restart_field_2d: Module must be initialized before "//&
@@ -504,7 +477,7 @@ subroutine register_restart_field_1d(f_ptr, name, mandatory, CS, longname, units
   character(len=*),           intent(in) :: name      !< variable name to be used in the restart file
   logical,                    intent(in) :: mandatory !< If true, the run will abort if this field is not
                                                       !! successfully read from the restart file.
-  type(MOM_restart_CS),       pointer    :: CS        !< A pointer to a MOM_restart_CS object (intent in/out)
+  type(MOM_restart_CS),       intent(inout) :: CS     !< MOM restart control struct
   character(len=*), optional, intent(in) :: longname  !< variable long name
   character(len=*), optional, intent(in) :: units     !< variable units
   character(len=*), optional, intent(in) :: hor_grid  !< variable horizontal staggering, '1' if absent
@@ -513,10 +486,6 @@ subroutine register_restart_field_1d(f_ptr, name, mandatory, CS, longname, units
 
   type(vardesc) :: vd
   character(len=8) :: hgrid
-
-  if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart: " // &
-      "register_restart_field_3d: Module must be initialized before "//&
-      "it is used to register "//trim(name))
 
   if (.not.CS%initialized) call MOM_error(FATAL, "MOM_restart: " // &
       "register_restart_field_3d: Module must be initialized before "//&
@@ -540,16 +509,12 @@ subroutine register_restart_field_0d(f_ptr, name, mandatory, CS, longname, units
   character(len=*),           intent(in) :: name      !< variable name to be used in the restart file
   logical,                    intent(in) :: mandatory !< If true, the run will abort if this field is not
                                                       !! successfully read from the restart file.
-  type(MOM_restart_CS),       pointer    :: CS        !< A pointer to a MOM_restart_CS object (intent in/out)
+  type(MOM_restart_CS),       intent(inout) :: CS     !< MOM restart control struct
   character(len=*), optional, intent(in) :: longname  !< variable long name
   character(len=*), optional, intent(in) :: units     !< variable units
   character(len=*), optional, intent(in) :: t_grid    !< time description: s, p, or 1, 's' if absent
 
   type(vardesc) :: vd
-
-  if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart: " // &
-      "register_restart_field_0d: Module must be initialized before "//&
-      "it is used to register "//trim(name))
 
   if (.not.CS%initialized) call MOM_error(FATAL, "MOM_restart: " // &
       "register_restart_field_0d: Module must be initialized before "//&
@@ -568,14 +533,11 @@ end subroutine register_restart_field_0d
 !> query_initialized_name determines whether a named field has been successfully
 !! read from a restart file yet.
 function query_initialized_name(name, CS) result(query_initialized)
-  character(len=*),     intent(in) :: name !< The name of the field that is being queried
-  type(MOM_restart_CS), pointer    :: CS !< A pointer to a MOM_restart_CS object (intent in)
+  character(len=*),     intent(in) :: name  !< The name of the field that is being queried
+  type(MOM_restart_CS), intent(in) :: CS    !< MOM restart control struct
   logical :: query_initialized
 
   integer :: m, n
-
-  if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
-      "query_initialized: Module must be initialized before it is used.")
 
   if (.not.CS%initialized) call MOM_error(FATAL, "MOM_restart " // &
       "query_initialized: Module must be initialized before it is used.")
@@ -605,13 +567,10 @@ end function query_initialized_name
 !> Indicate whether the field pointed to by f_ptr has been initialized from a restart file.
 function query_initialized_0d(f_ptr, CS) result(query_initialized)
   real,         target, intent(in) :: f_ptr !< A pointer to the field that is being queried
-  type(MOM_restart_CS), pointer    :: CS !< A pointer to a MOM_restart_CS object (intent in)
+  type(MOM_restart_CS), intent(in) :: CS    !< MOM restart control struct
   logical :: query_initialized
 
   integer :: m, n
-
-  if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
-      "query_initialized: Module must be initialized before it is used.")
 
   if (.not.CS%initialized) call MOM_error(FATAL, "MOM_restart " // &
       "query_initialized: Module must be initialized before it is used.")
@@ -634,13 +593,10 @@ end function query_initialized_0d
 !> Indicate whether the field pointed to by f_ptr has been initialized from a restart file.
 function query_initialized_1d(f_ptr, CS) result(query_initialized)
   real, dimension(:), target, intent(in) :: f_ptr !< A pointer to the field that is being queried
-  type(MOM_restart_CS),       pointer    :: CS !< A pointer to a MOM_restart_CS object (intent in)
+  type(MOM_restart_CS),       intent(in) :: CS    !< MOM restart control struct
   logical :: query_initialized
 
   integer :: m, n
-
-  if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
-      "query_initialized: Module must be initialized before it is used.")
 
   if (.not.CS%initialized) call MOM_error(FATAL, "MOM_restart " // &
       "query_initialized: Module must be initialized before it is used.")
@@ -664,13 +620,10 @@ end function query_initialized_1d
 function query_initialized_2d(f_ptr, CS) result(query_initialized)
   real, dimension(:,:), &
                 target, intent(in) :: f_ptr !< A pointer to the field that is being queried
-  type(MOM_restart_CS), pointer    :: CS !< A pointer to a MOM_restart_CS object (intent in)
+  type(MOM_restart_CS), intent(in) :: CS    !< MOM restart control struct
   logical :: query_initialized
 
   integer :: m, n
-
-  if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
-      "query_initialized: Module must be initialized before it is used.")
 
   if (.not.CS%initialized) call MOM_error(FATAL, "MOM_restart " // &
       "query_initialized: Module must be initialized before it is used.")
@@ -694,13 +647,10 @@ end function query_initialized_2d
 function query_initialized_3d(f_ptr, CS) result(query_initialized)
   real, dimension(:,:,:), &
                 target, intent(in) :: f_ptr !< A pointer to the field that is being queried
-  type(MOM_restart_CS), pointer    :: CS !< A pointer to a MOM_restart_CS object (intent in)
+  type(MOM_restart_CS), intent(in) :: CS    !< MOM restart control struct
   logical :: query_initialized
 
   integer :: m, n
-
-  if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
-      "query_initialized: Module must be initialized before it is used.")
 
   if (.not.CS%initialized) call MOM_error(FATAL, "MOM_restart " // &
       "query_initialized: Module must be initialized before it is used.")
@@ -724,13 +674,10 @@ end function query_initialized_3d
 function query_initialized_4d(f_ptr, CS) result(query_initialized)
   real, dimension(:,:,:,:),  &
                 target, intent(in) :: f_ptr !< A pointer to the field that is being queried
-  type(MOM_restart_CS), pointer    :: CS !< A pointer to a MOM_restart_CS object (intent in)
+  type(MOM_restart_CS), intent(in) :: CS    !< MOM restart control struct
   logical :: query_initialized
 
   integer :: m, n
-
-  if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
-      "query_initialized: Module must be initialized before it is used.")
 
   if (.not.CS%initialized) call MOM_error(FATAL, "MOM_restart " // &
       "query_initialized: Module must be initialized before it is used.")
@@ -754,14 +701,11 @@ end function query_initialized_4d
 !! name has been initialized from a restart file.
 function query_initialized_0d_name(f_ptr, name, CS) result(query_initialized)
   real,         target, intent(in) :: f_ptr !< A pointer to the field that is being queried
-  character(len=*),     intent(in) :: name !< The name of the field that is being queried
-  type(MOM_restart_CS), pointer    :: CS !< A pointer to a MOM_restart_CS object (intent in)
+  character(len=*),     intent(in) :: name  !< The name of the field that is being queried
+  type(MOM_restart_CS), intent(in) :: CS    !< MOM restart control struct
   logical :: query_initialized
 
   integer :: m, n
-
-  if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
-      "query_initialized: Module must be initialized before it is used.")
 
   if (.not.CS%initialized) call MOM_error(FATAL, "MOM_restart " // &
       "query_initialized: Module must be initialized before it is used.")
@@ -792,14 +736,11 @@ end function query_initialized_0d_name
 function query_initialized_1d_name(f_ptr, name, CS) result(query_initialized)
   real, dimension(:),  &
                 target, intent(in) :: f_ptr !< A pointer to the field that is being queried
-  character(len=*),     intent(in) :: name !< The name of the field that is being queried
-  type(MOM_restart_CS), pointer    :: CS !< A pointer to a MOM_restart_CS object (intent in)
+  character(len=*),     intent(in) :: name  !< The name of the field that is being queried
+  type(MOM_restart_CS), intent(in) :: CS    !< MOM restart control struct
   logical :: query_initialized
 
   integer :: m, n
-
-  if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
-      "query_initialized: Module must be initialized before it is used.")
 
   if (.not.CS%initialized) call MOM_error(FATAL, "MOM_restart " // &
       "query_initialized: Module must be initialized before it is used.")
@@ -830,14 +771,11 @@ end function query_initialized_1d_name
 function query_initialized_2d_name(f_ptr, name, CS) result(query_initialized)
   real, dimension(:,:),  &
                 target, intent(in) :: f_ptr !< A pointer to the field that is being queried
-  character(len=*),     intent(in) :: name !< The name of the field that is being queried
-  type(MOM_restart_CS), pointer    :: CS !< A pointer to a MOM_restart_CS object (intent in)
+  character(len=*),     intent(in) :: name  !< The name of the field that is being queried
+  type(MOM_restart_CS), intent(in) :: CS    !< MOM restart control struct
   logical :: query_initialized
 
   integer :: m, n
-
-  if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
-      "query_initialized: Module must be initialized before it is used.")
 
   if (.not.CS%initialized) call MOM_error(FATAL, "MOM_restart " // &
       "query_initialized: Module must be initialized before it is used.")
@@ -868,14 +806,11 @@ end function query_initialized_2d_name
 function query_initialized_3d_name(f_ptr, name, CS) result(query_initialized)
   real, dimension(:,:,:),  &
                 target, intent(in) :: f_ptr !< A pointer to the field that is being queried
-  character(len=*),     intent(in) :: name !< The name of the field that is being queried
-  type(MOM_restart_CS), pointer    :: CS !< A pointer to a MOM_restart_CS object (intent in)
+  character(len=*),     intent(in) :: name  !< The name of the field that is being queried
+  type(MOM_restart_CS), intent(in) :: CS    !< MOM restart control struct
   logical :: query_initialized
 
   integer :: m, n
-
-  if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
-      "query_initialized: Module must be initialized before it is used.")
 
   if (.not.CS%initialized) call MOM_error(FATAL, "MOM_restart " // &
       "query_initialized: Module must be initialized before it is used.")
@@ -906,14 +841,11 @@ end function query_initialized_3d_name
 function query_initialized_4d_name(f_ptr, name, CS) result(query_initialized)
   real, dimension(:,:,:,:),  &
                 target, intent(in) :: f_ptr !< A pointer to the field that is being queried
-  character(len=*),     intent(in) :: name !< The name of the field that is being queried
-  type(MOM_restart_CS), pointer    :: CS !< A pointer to a MOM_restart_CS object (intent in)
+  character(len=*),     intent(in) :: name  !< The name of the field that is being queried
+  type(MOM_restart_CS), intent(in) :: CS    !< MOM restart control struct
   logical :: query_initialized
 
   integer :: m, n
-
-  if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
-      "query_initialized: Module must be initialized before it is used.")
 
   if (.not.CS%initialized) call MOM_error(FATAL, "MOM_restart " // &
       "query_initialized: Module must be initialized before it is used.")
@@ -945,8 +877,7 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV, num_
                                                   !! are to be written
   type(time_type),         intent(in)    :: time  !< The current model time
   type(ocean_grid_type),   intent(inout) :: G     !< The ocean's grid structure
-  type(MOM_restart_CS),    pointer       :: CS    !< The control structure returned by a previous
-                                                  !! call to restart_init
+  type(MOM_restart_CS),    intent(inout) :: CS    !< MOM restart control struct
   logical,       optional, intent(in)    :: time_stamped !< If present and true, add time-stamp
                                                   !! to the restart file names
   character(len=*), optional, intent(in) :: filename !< A filename that overrides the name in CS%restartfile
@@ -987,9 +918,6 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV, num_
   integer :: turns
 
   turns = CS%turns
-
-  if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
-      "save_restart: Module must be initialized before it is used.")
 
   if (.not.CS%initialized) call MOM_error(FATAL, "MOM_restart " // &
       "save_restart: Module must be initialized before it is used.")
@@ -1154,8 +1082,7 @@ subroutine restore_state(filename, directory, day, G, CS)
   character(len=*),      intent(in)  :: directory !< The directory in which to find restart files
   type(time_type),       intent(out) :: day       !< The time of the restarted run
   type(ocean_grid_type), intent(in)  :: G         !< The ocean's grid structure
-  type(MOM_restart_CS),  pointer     :: CS        !< The control structure returned by a previous
-                                                  !! call to restart_init
+  type(MOM_restart_CS),  intent(inout) :: CS      !< MOM restart control struct
 
   ! Local variables
   character(len=200) :: filepath  ! The path (dir/file) to the file being opened.
@@ -1182,9 +1109,6 @@ subroutine restore_state(filename, directory, day, G, CS)
   logical            :: is_there_a_checksum ! Is there a valid checksum that should be checked.
   integer(kind=8)    :: checksum_file  ! The checksum value recorded in the input file.
   integer(kind=8)    :: checksum_data  ! The checksum value for the data that was read in.
-
-  if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
-      "restore_state: Module must be initialized before it is used.")
 
   if (.not.CS%initialized) call MOM_error(FATAL, "MOM_restart " // &
       "restore_state: Module must be initialized before it is used.")
@@ -1375,15 +1299,11 @@ function restart_files_exist(filename, directory, G, CS)
                                                   !! character 'r' to read automatically named files
   character(len=*),      intent(in)  :: directory !< The directory in which to find restart files
   type(ocean_grid_type), intent(in)  :: G         !< The ocean's grid structure
-  type(MOM_restart_CS),  pointer     :: CS        !< The control structure returned by a previous
-                                                  !! call to restart_init
+  type(MOM_restart_CS),  intent(in)  :: CS        !< MOM restart control struct
   logical :: restart_files_exist                  !< The function result, which indicates whether
                                                   !! any of the explicitly or automatically named
                                                   !! restart files exist in directory
   integer :: num_files
-
-  if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
-      "restart_files_exist: Module must be initialized before it is used.")
 
   if (.not.CS%initialized) call MOM_error(FATAL, "MOM_restart " // &
       "restart_files_exist: Module must be initialized before it is used.")
@@ -1394,7 +1314,6 @@ function restart_files_exist(filename, directory, G, CS)
     num_files = get_num_restart_files(filename, directory, G, CS)
   endif
   restart_files_exist = (num_files > 0)
-
 end function restart_files_exist
 
 !> determine_is_new_run determines from the value of filename and the existence
@@ -1405,17 +1324,14 @@ function determine_is_new_run(filename, directory, G, CS) result(is_new_run)
                                                   !! character 'r' to read automatically named files
   character(len=*),      intent(in)  :: directory !< The directory in which to find restart files
   type(ocean_grid_type), intent(in)  :: G         !< The ocean's grid structure
-  type(MOM_restart_CS),  pointer     :: CS        !< The control structure returned by a previous
-                                                  !! call to restart_init
+  type(MOM_restart_CS),  intent(inout) :: CS      !< MOM restart control struct
   logical :: is_new_run                           !< The function result, which indicates whether
                                                   !! this is a new run, based on the value of
                                                   !! filename and whether restart files exist
 
-  if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
-      "determine_is_new_run: Module must be initialized before it is used.")
-
   if (.not.CS%initialized) call MOM_error(FATAL, "MOM_restart " // &
       "determine_is_new_run: Module must be initialized before it is used.")
+
   if (LEN_TRIM(filename) > 1) then
     CS%new_run = .false.
   elseif (LEN_TRIM(filename) == 0) then
@@ -1435,13 +1351,10 @@ end function determine_is_new_run
 !> is_new_run returns whether this is going to be a new run based on the
 !! information stored in CS by a previous call to determine_is_new_run.
 function is_new_run(CS)
-  type(MOM_restart_CS),  pointer :: CS !< The control structure returned by a previous
-                                       !! call to restart_init
+  type(MOM_restart_CS), intent(in) :: CS  !< MOM restart control struct
+
   logical :: is_new_run                !< The function result, which had been stored in CS during
                                        !! a previous call to determine_is_new_run
-
-  if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
-      "is_new_run: Module must be initialized before it is used.")
 
   if (.not.CS%initialized) call MOM_error(FATAL, "MOM_restart " // &
       "is_new_run: Module must be initialized before it is used.")
@@ -1460,8 +1373,8 @@ function open_restart_units(filename, directory, G, CS, IO_handles, file_paths, 
                                                   !! character 'r' to read automatically named files
   character(len=*),      intent(in)  :: directory !< The directory in which to find restart files
   type(ocean_grid_type), intent(in)  :: G         !< The ocean's grid structure
-  type(MOM_restart_CS),  pointer     :: CS        !< The control structure returned by a previous
-                                                  !! call to restart_init
+  type(MOM_restart_CS),  intent(in)  :: CS        !< MOM restart control struct
+
   type(file_type), dimension(:), &
                optional, intent(out) :: IO_handles !< The I/O handles of all opened files
   character(len=*), dimension(:), &
@@ -1487,9 +1400,6 @@ function open_restart_units(filename, directory, G, CS, IO_handles, file_paths, 
   logical :: fexists         ! True if a file has been found
   character(len=32) :: filename_appendix = '' ! Filename appendix for ensemble runs
   character(len=80) :: restartname
-
-  if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
-      "open_restart_units: Module must be initialized before it is used.")
 
   if (.not.CS%initialized) call MOM_error(FATAL, "MOM_restart " // &
       "open_restart_units: Module must be initialized before it is used.")
@@ -1599,15 +1509,12 @@ function get_num_restart_files(filenames, directory, G, CS, file_paths) result(n
                                                   !! character 'r' to read automatically named files
   character(len=*),      intent(in)  :: directory !< The directory in which to find restart files
   type(ocean_grid_type), intent(in)  :: G         !< The ocean's grid structure
-  type(MOM_restart_CS),  pointer     :: CS        !< The control structure returned by a previous
-                                                  !! call to restart_init
+  type(MOM_restart_CS),  intent(in)  :: CS        !< MOM restart control struct
   character(len=*), dimension(:), &
                optional, intent(out) :: file_paths !< The full paths to the restart files.
+
   integer :: num_files  !< The function result, the number of files (both automatically named
                         !! restart files and others explicitly in filename) that have been opened
-
-  if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
-      "get_num_restart_files: Module must be initialized before it is used.")
 
   if (.not.CS%initialized) call MOM_error(FATAL, "MOM_restart " // &
       "get_num_restart_files: Module must be initialized before it is used.")
@@ -1762,7 +1669,7 @@ subroutine restart_end(CS)
 end subroutine restart_end
 
 subroutine restart_error(CS)
-  type(MOM_restart_CS),  pointer    :: CS !< A pointer to a MOM_restart_CS object
+  type(MOM_restart_CS),  intent(in) :: CS   !< MOM restart control struct
 
   character(len=16)  :: num  ! String for error messages
 

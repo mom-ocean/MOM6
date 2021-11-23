@@ -35,15 +35,14 @@ contains
 !! This case is set up in such a way that the temperature of the topmost layer is equal to the SST at the
 !! southern edge of the domain. The temperatures are then converted to densities of the top and bottom layers
 !! and linearly interpolated for the intermediate layers.
-subroutine BFB_set_coord(Rlay, g_prime, GV, US, param_file, eqn_of_state)
+subroutine BFB_set_coord(Rlay, g_prime, GV, US, param_file)
   type(verticalGrid_type),  intent(in)  :: GV      !< The ocean's vertical grid structure
   real, dimension(GV%ke),   intent(out) :: Rlay    !< Layer potential density [R ~> kg m-3].
   real, dimension(GV%ke+1), intent(out) :: g_prime !< The reduced gravity at each
                                                    !! interface [L2 Z-1 T-2 ~> m s-2].
   type(unit_scale_type),    intent(in)  :: US      !< A dimensional unit scaling type
   type(param_file_type),    intent(in)  :: param_file !< A structure to parse for run-time parameters
-  type(EOS_type),           pointer     :: eqn_of_state !< Equation of state structure
-  ! Local variables
+
   real                                 :: drho_dt, SST_s, T_bot, rho_top, rho_bot
   integer                              :: k, nz
   character(len=40)  :: mdl = "BFB_set_coord" ! This subroutine's name.

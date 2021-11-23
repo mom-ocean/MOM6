@@ -157,7 +157,7 @@ type, public :: ice_shelf_CS ; private
   real :: input_thickness   !< Ice thickness at an upstream open boundary [m].
 
   type(time_type) :: Time                !< The component's time.
-  type(EOS_type), pointer :: eqn_of_state => NULL() !< Type that indicates the
+  type(EOS_type) :: eqn_of_state         !< Type that indicates the
                                          !! equation of state to use.
   logical :: active_shelf_dynamics       !< True if the ice shelf mass changes as a result
                                          !! the dynamic ice-shelf model.

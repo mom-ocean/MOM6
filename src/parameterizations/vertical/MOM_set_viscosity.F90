@@ -131,7 +131,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS)
                                                   !! have NULL ptrs..
   type(vertvisc_type),      intent(inout) :: visc !< A structure containing vertical viscosities and
                                                   !! related fields.
-  type(set_visc_CS),        pointer       :: CS   !< The control structure returned by a previous
+  type(set_visc_CS),        intent(inout) :: CS   !< The control structure returned by a previous
                                                   !! call to set_visc_init.
 
   ! Local variables
@@ -284,9 +284,6 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS)
   Rho0x400_G = 400.0*(GV%Rho0 / (US%L_to_Z**2 * GV%g_Earth)) * GV%Z_to_H
   Vol_quit = 0.9*GV%Angstrom_H + h_neglect
   C2pi_3 = 8.0*atan(1.0)/3.0
-
-  if (.not.associated(CS)) call MOM_error(FATAL,"MOM_set_viscosity(BBL): "//&
-         "Module must be initialized before it is used.")
 
   if (.not.CS%initialized) call MOM_error(FATAL,"MOM_set_viscosity(BBL): "//&
          "Module must be initialized before it is used.")
@@ -1149,7 +1146,7 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS)
   type(vertvisc_type),     intent(inout) :: visc !< A structure containing vertical viscosities and
                                                  !! related fields.
   real,                    intent(in)    :: dt   !< Time increment [T ~> s].
-  type(set_visc_CS),       pointer       :: CS   !< The control structure returned by a previous
+  type(set_visc_CS),       intent(inout) :: CS   !< The control structure returned by a previous
                                                  !! call to set_visc_init.
 
   ! Local variables
@@ -1251,9 +1248,6 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS)
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   Isq = G%isc-1 ; Ieq = G%IecB ; Jsq = G%jsc-1 ; Jeq = G%JecB
   nkmb = GV%nk_rho_varies ; nkml = GV%nkml
-
-  if (.not.associated(CS)) call MOM_error(FATAL,"MOM_set_viscosity(visc_ML): "//&
-         "Module must be initialized before it is used.")
 
   if (.not.CS%initialized) call MOM_error(FATAL,"MOM_set_viscosity(visc_ML): "//&
          "Module must be initialized before it is used.")
@@ -1816,7 +1810,7 @@ subroutine set_visc_register_restarts(HI, GV, param_file, visc, restart_CS)
   type(vertvisc_type),     intent(inout) :: visc       !< A structure containing vertical
                                                        !! viscosities and related fields.
                                                        !! Allocated here.
-  type(MOM_restart_CS),    pointer       :: restart_CS !< A pointer to the restart control structure.
+  type(MOM_restart_CS),    intent(inout) :: restart_CS !< MOM restart control struct
   ! Local variables
   logical :: use_kappa_shear, KS_at_vertex
   logical :: adiabatic, useKPP, useEPBL
@@ -1905,9 +1899,8 @@ subroutine set_visc_init(Time, G, GV, US, param_file, diag, visc, CS, restart_CS
                                                  !! output.
   type(vertvisc_type),     intent(inout) :: visc !< A structure containing vertical viscosities and
                                                  !! related fields.  Allocated here.
-  type(set_visc_CS),       pointer       :: CS   !< A pointer that is set to point to the control
-                                                 !! structure for this module
-  type(MOM_restart_CS),    pointer       :: restart_CS !< A pointer to the restart control structure.
+  type(set_visc_CS),       intent(inout) :: CS   !< Vertical viscosity control struct
+  type(MOM_restart_CS),    intent(inout) :: restart_CS !< MOM restart control struct
   type(ocean_OBC_type),    pointer       :: OBC  !< A pointer to an open boundary condition structure
 
   ! Local variables
@@ -1941,15 +1934,7 @@ subroutine set_visc_init(Time, G, GV, US, param_file, diag, visc, CS, restart_CS
 # include "version_variable.h"
   character(len=40)  :: mdl = "MOM_set_visc"  ! This module's name.
 
-  if (associated(CS)) then
-    call MOM_error(WARNING, "set_visc_init called with an associated "// &
-                            "control structure.")
-    return
-  endif
-  allocate(CS)
-
   CS%initialized = .true.
-
   CS%OBC => OBC
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
@@ -2253,7 +2238,7 @@ end subroutine set_visc_init
 subroutine set_visc_end(visc, CS)
   type(vertvisc_type), intent(inout) :: visc !< A structure containing vertical viscosities and
                                              !! related fields.  Elements are deallocated here.
-  type(set_visc_CS),   pointer       :: CS   !< The control structure returned by a previous
+  type(set_visc_CS),   intent(inout) :: CS   !< The control structure returned by a previous
                                              !! call to set_visc_init.
   if (CS%bottomdraglaw) then
     deallocate(visc%bbl_thick_u) ; deallocate(visc%bbl_thick_v)
@@ -2280,8 +2265,6 @@ subroutine set_visc_end(visc, CS)
   if (associated(visc%tbl_thick_shelf_v)) deallocate(visc%tbl_thick_shelf_v)
   if (associated(visc%kv_tbl_shelf_u)) deallocate(visc%kv_tbl_shelf_u)
   if (associated(visc%kv_tbl_shelf_v)) deallocate(visc%kv_tbl_shelf_v)
-
-  deallocate(CS)
 end subroutine set_visc_end
 
 !> \namespace mom_set_visc

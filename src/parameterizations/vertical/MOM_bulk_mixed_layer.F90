@@ -186,8 +186,7 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, GV, US, C
                               intent(inout) :: eb     !< The amount of fluid moved upward into a
                                                       !! layer; this should be increased due to
                                                       !! mixed layer entrainment [H ~> m or kg m-2].
-  type(bulkmixedlayer_CS),    pointer       :: CS     !< The control structure returned by a
-                                                      !! previous call to mixedlayer_init.
+  type(bulkmixedlayer_CS),    intent(inout) :: CS     !< Bulk mixed layer control struct
   type(optics_type),          pointer       :: optics !< The structure containing the inverse of the
                                                       !! vertical absorption decay scale for
                                                       !! penetrating shortwave radiation [m-1].
@@ -330,12 +329,8 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, GV, US, C
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
-  if (.not. associated(CS)) call MOM_error(FATAL, "MOM_mixed_layer: "//&
-         "Module must be initialized before it is used.")
-
   if (.not. CS%initialized) call MOM_error(FATAL, "MOM_bulk_mixed_layer: "//&
          "Module must be initialized before it is used.")
-
   if (GV%nkml < 1) return
 
   if (.not. associated(tv%eqn_of_state)) call MOM_error(FATAL, &
@@ -803,7 +798,7 @@ subroutine convective_adjustment(h, u, v, R0, Rcv, T, S, eps, d_eb, &
                                                            !! [Z L2 T-2 ~> m3 s-2].
   integer,                            intent(in)    :: j   !< The j-index to work on.
   type(unit_scale_type),              intent(in)    :: US  !< A dimensional unit scaling type
-  type(bulkmixedlayer_CS),            pointer       :: CS  !< The control structure for this module.
+  type(bulkmixedlayer_CS),            intent(in)    :: CS  !< Bulk mixed layer control struct
   integer,                  optional, intent(in)    :: nz_conv !< If present, the number of layers
                                                            !! over which to do convective adjustment
                                                            !! (perhaps CS%nkml).
@@ -980,7 +975,7 @@ subroutine mixedlayer_convection(h, d_eb, htot, Ttot, Stot, uhtot, vhtot,      &
   integer, dimension(SZI_(G),SZK_(GV)), &
                             intent(in)    :: ksort !< The density-sorted k-indices.
   type(unit_scale_type),    intent(in)    :: US    !< A dimensional unit scaling type
-  type(bulkmixedlayer_CS),  pointer       :: CS    !< The control structure for this module.
+  type(bulkmixedlayer_CS),  intent(in)    :: CS    !< Bulk mixed layer control struct
   type(thermo_var_ptrs),    intent(inout) :: tv    !< A structure containing pointers to any
                                                    !! available thermodynamic fields. Absent
                                                    !! fields have NULL ptrs.
@@ -1320,7 +1315,7 @@ subroutine find_starting_TKE(htot, h_CA, fluxes, Conv_En, cTKE, dKE_FC, dKE_CA, 
   integer,                    intent(in)    :: j       !< The j-index to work on.
   integer, dimension(SZI_(G),SZK_(GV)), &
                               intent(in)    :: ksort   !< The density-sorted k-indicies.
-  type(bulkmixedlayer_CS),    pointer       :: CS      !< The control structure for this module.
+  type(bulkmixedlayer_CS),    intent(inout) :: CS      !< Bulk mixed layer control struct
 
 !   This subroutine determines the TKE available at the depth of free
 ! convection to drive mechanical entrainment.
@@ -1530,7 +1525,7 @@ subroutine mechanical_entrainment(h, d_eb, htot, Ttot, Stot, uhtot, vhtot, &
   integer,                  intent(in)    :: j     !< The j-index to work on.
   integer, dimension(SZI_(G),SZK_(GV)), &
                             intent(in)    :: ksort !< The density-sorted k-indicies.
-  type(bulkmixedlayer_CS),  pointer       :: CS    !< The control structure for this module.
+  type(bulkmixedlayer_CS),  intent(inout) :: CS    !< Bulk mixed layer control struct
 
 ! This subroutine calculates mechanically driven entrainment.
 
@@ -1813,8 +1808,7 @@ subroutine sort_ML(h, R0, eps, G, GV, CS, ksort)
                                                              !! the layers [R ~> kg m-3].
   real, dimension(SZI_(G),SZK_(GV)),    intent(in)  :: eps   !< The (small) thickness that must
                                                              !! remain in each layer [H ~> m or kg m-2].
-  type(bulkmixedlayer_CS),              pointer     :: CS    !< The control structure returned by a
-                                                             !! previous call to mixedlayer_init.
+  type(bulkmixedlayer_CS),              intent(in)  :: CS    !< Bulk mixed layer control struct
   integer, dimension(SZI_(G),SZK_(GV)), intent(out) :: ksort !< The k-index to use in the sort.
 
   ! Local variables
@@ -1883,8 +1877,7 @@ subroutine resort_ML(h, T, S, R0, Rcv, RcvTgt, eps, d_ea, d_eb, ksort, G, GV, CS
                                                                  !! below [H ~> m or kg m-2]. Positive values go
                                                                  !! with mass gain by a layer.
   integer, dimension(SZI_(G),SZK_(GV)), intent(in)    :: ksort   !< The density-sorted k-indicies.
-  type(bulkmixedlayer_CS),              pointer       :: CS      !< The control structure for this
-                                                                 !! module.
+  type(bulkmixedlayer_CS),              intent(in)    :: CS      !< Bulk mixed layer control struct
   real, dimension(SZI_(G)),             intent(in)    :: dR0_dT  !< The partial derivative of
                                                                  !! potential density referenced
                                                                  !! to the surface with potential
@@ -2199,8 +2192,7 @@ subroutine mixedlayer_detrain_2(h, T, S, R0, Rcv, RcvTgt, dt, dt_diag, d_ea, j, 
                                                             !! goes with layer thickness increases.
   integer,                            intent(in)    :: j    !< The meridional row to work on.
   type(unit_scale_type),              intent(in)    :: US   !< A dimensional unit scaling type
-  type(bulkmixedlayer_CS),            pointer       :: CS   !< The control structure returned by a
-                                                            !! previous call to mixedlayer_init.
+  type(bulkmixedlayer_CS),            intent(inout) :: CS   !< Bulk mixed layer control struct
   real, dimension(SZI_(G)),           intent(in)    :: dR0_dT  !< The partial derivative of
                                                             !! potential density referenced to the
                                                             !! surface with potential temperature,
@@ -3095,8 +3087,7 @@ subroutine mixedlayer_detrain_1(h, T, S, R0, Rcv, RcvTgt, dt, dt_diag, d_ea, d_e
                                                             !! a layer.
   integer,                            intent(in)    :: j    !< The meridional row to work on.
   type(unit_scale_type),              intent(in)    :: US   !< A dimensional unit scaling type
-  type(bulkmixedlayer_CS),            pointer       :: CS   !< The control structure returned by a
-                                                            !! previous call to mixedlayer_init.
+  type(bulkmixedlayer_CS),            intent(inout) :: CS   !< Bulk mixed layer control struct
   real, dimension(SZI_(G)),           intent(in)    :: dRcv_dT !< The partial derivative of
                                                             !! coordinate defining potential density
                                                             !! with potential temperature
@@ -3363,16 +3354,8 @@ subroutine bulkmixedlayer_init(Time, G, GV, US, param_file, diag, CS)
                                                  !! parameters.
   type(diag_ctrl), target, intent(inout) :: diag !< A structure that is used to regulate diagnostic
                                                  !! output.
-  type(bulkmixedlayer_CS), pointer       :: CS   !< A pointer that is set to point to the control
-                                                 !! structure for this module.
-! Arguments: Time - The current model time.
-!  (in)      G - The ocean's grid structure.
-!  (in)      GV - The ocean's vertical grid structure.
-!  (in)      param_file - A structure indicating the open file to parse for
-!                         model parameter values.
-!  (in)      diag - A structure that is used to regulate diagnostic output.
-!  (in/out)  CS - A pointer that is set to point to the control structure
-!                  for this module
+  type(bulkmixedlayer_CS), intent(inout) :: CS   !< Bulk mixed layer control struct
+
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
   character(len=40)  :: mdl = "MOM_mixed_layer"  ! This module's name.
@@ -3382,14 +3365,7 @@ subroutine bulkmixedlayer_init(Time, G, GV, US, param_file, diag, CS)
   logical :: use_temperature, use_omega
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
-  if (associated(CS)) then
-    call MOM_error(WARNING, "mixedlayer_init called with an associated"// &
-                            "associated control structure.")
-    return
-  else ; allocate(CS) ; endif
-
   CS%initialized = .true.
-
   CS%diag => diag
   CS%Time => Time
 

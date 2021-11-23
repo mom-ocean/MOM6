@@ -107,14 +107,13 @@ end subroutine Rossby_front_initialize_thickness
 
 !> Initialization of temperature and salinity in the Rossby front test
 subroutine Rossby_front_initialize_temperature_salinity(T, S, h, G, GV, &
-                   param_file, eqn_of_state, just_read)
+                   param_file, just_read)
   type(ocean_grid_type),                     intent(in)  :: G  !< Grid structure
   type(verticalGrid_type),                   intent(in)  :: GV !< The ocean's vertical grid structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: T  !< Potential temperature [degC]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: S  !< Salinity [ppt]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)  :: h  !< Thickness [H ~> m or kg m-2]
   type(param_file_type),                     intent(in)  :: param_file   !< Parameter file handle
-  type(EOS_type),                            pointer     :: eqn_of_state !< Equation of state structure
   logical,                                   intent(in)  :: just_read !< If true, this call will
                                                       !! only read parameters without changing T & S.
 
