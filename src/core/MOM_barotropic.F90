@@ -338,9 +338,9 @@ type, private :: local_BT_cont_u_type
                   !! the time-integrated barotropic velocity [L ~> m], beyond which the marginal
                   !! open face area is FA_u_EE. uBT_EE must be non-positive.
   real :: uh_crvW !< The curvature of face area with velocity for flow from the west [H T2 L-1 ~> s2 or kg s2 m-3]
-                  !! or [H L-1 ~> 1 or kg m-3] with INTEGRAL_BT_CONTINUITY.
+                  !! or [H L-1 ~> nondim or kg m-3] with INTEGRAL_BT_CONTINUITY.
   real :: uh_crvE !< The curvature of face area with velocity for flow from the east [H T2 L-1 ~> s2 or kg s2 m-3]
-                  !! or [H L-1 ~> 1 or kg m-3] with INTEGRAL_BT_CONTINUITY.
+                  !! or [H L-1 ~> nondim or kg m-3] with INTEGRAL_BT_CONTINUITY.
   real :: uh_WW   !< The zonal transport when ubt=ubt_WW [H L2 T-1 ~> m3 s-1 or kg s-1], or the equivalent
                   !! time-integrated transport with INTEGRAL_BT_CONTINUITY [H L2 ~> m3 or kg].
   real :: uh_EE   !< The zonal transport when ubt=ubt_EE [H L2 T-1 ~> m3 s-1 or kg s-1], or the equivalent
@@ -364,9 +364,9 @@ type, private :: local_BT_cont_v_type
                   !! the time-integrated barotropic velocity [L ~> m], beyond which the marginal
                   !! open face area is FA_v_NN.  vBT_NN must be non-positive.
   real :: vh_crvS !< The curvature of face area with velocity for flow from the south [H T2 L-1 ~> s2 or kg s2 m-3]
-                  !! or [H L-1 ~> 1 or kg m-3] with INTEGRAL_BT_CONTINUITY.
+                  !! or [H L-1 ~> nondim or kg m-3] with INTEGRAL_BT_CONTINUITY.
   real :: vh_crvN !< The curvature of face area with velocity for flow from the north [H T2 L-1 ~> s2 or kg s2 m-3]
-                  !! or [H L-1 ~> 1 or kg m-3] with INTEGRAL_BT_CONTINUITY.
+                  !! or [H L-1 ~> nondim or kg m-3] with INTEGRAL_BT_CONTINUITY.
   real :: vh_SS   !< The meridional transport when vbt=vbt_SS [H L2 T-1 ~> m3 s-1 or kg s-1], or the equivalent
                   !! time-integrated transport with INTEGRAL_BT_CONTINUITY [H L2 ~> m3 or kg].
   real :: vh_NN   !< The meridional transport when vbt=vbt_NN [H L2 T-1 ~> m3 s-1 or kg s-1], or the equivalent
@@ -622,24 +622,23 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
     vhbt_prev, vhbt_sum_prev, & ! Previous transports stored for OBCs [L2 H T-1 ~> m3 s-1]
     vbt_int_prev, & ! Previous value of time-integrated velocity stored for OBCs [L ~> m]
     vhbt_int_prev   ! Previous value of time-integrated transport stored for OBCs [L2 H ~> m3]
-  real :: mass_to_Z   ! The depth unit conversion divided by the mean density (Rho0) [Z m-1 R-1 ~> m3 kg-1] !### R-1
-  real :: mass_accel_to_Z ! The inverse of the mean density (Rho0) [R-1 ~> m3 kg-1].
-  real :: visc_rem    ! A work variable that may equal visc_rem_[uv].  Nondim.
+  real :: mass_to_Z   ! The inverse of the the mean density (Rho0) [R-1 ~> m3 kg-1]
+  real :: visc_rem    ! A work variable that may equal visc_rem_[uv] [nondim]
   real :: vel_prev    ! The previous velocity [L T-1 ~> m s-1].
   real :: dtbt        ! The barotropic time step [T ~> s].
   real :: bebt        ! A copy of CS%bebt [nondim].
   real :: be_proj     ! The fractional amount by which velocities are projected
-                      ! when project_velocity is true. For now be_proj is set
+                      ! when project_velocity is true [nondim]. For now be_proj is set
                       ! to equal bebt, as they have similar roles and meanings.
   real :: Idt         ! The inverse of dt [T-1 ~> s-1].
   real :: det_de      ! The partial derivative due to self-attraction and loading
-                      ! of the reference geopotential with the sea surface height.
+                      ! of the reference geopotential with the sea surface height [nondim].
                       ! This is typically ~0.09 or less.
   real :: dgeo_de     ! The constant of proportionality between geopotential and
-                      ! sea surface height.  It is a nondimensional number of
+                      ! sea surface height [nondim].  It is a nondimensional number of
                       ! order 1.  For stability, this may be made larger
                       ! than the physical problem would suggest.
-  real :: Instep      ! The inverse of the number of barotropic time steps to take.
+  real :: Instep      ! The inverse of the number of barotropic time steps to take [nondim].
   real :: wt_end      ! The weighting of the final value of eta_PF [nondim]
   integer :: nstep    ! The number of barotropic time steps to take.
   type(time_type) :: &
@@ -772,8 +771,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   Idtbt = 1.0 / dtbt
   bebt = CS%bebt
   be_proj = CS%bebt
-  mass_accel_to_Z = 1.0 / GV%Rho0
-  mass_to_Z = US%m_to_Z / GV%Rho0  !### THis should be the same as mass_accel_to_Z.
+  mass_to_Z = 1.0 / GV%Rho0
 
   !--- setup the weight when computing vbt_trans and ubt_trans
   if (project_velocity) then
@@ -1243,7 +1241,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
       endif
     endif
 
-    BT_force_u(I,j) = forces%taux(I,j) * mass_accel_to_Z * CS%IDatu(I,j)*visc_rem_u(I,j,1)
+    BT_force_u(I,j) = forces%taux(I,j) * mass_to_Z * CS%IDatu(I,j)*visc_rem_u(I,j,1)
   else
     BT_force_u(I,j) = 0.0
   endif ; enddo ; enddo
@@ -1269,11 +1267,11 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
       endif
     endif
 
-    BT_force_v(i,J) = forces%tauy(i,J) * mass_accel_to_Z * CS%IDatv(i,J)*visc_rem_v(i,J,1)
+    BT_force_v(i,J) = forces%tauy(i,J) * mass_to_Z * CS%IDatv(i,J)*visc_rem_v(i,J,1)
   else
     BT_force_v(i,J) = 0.0
   endif ; enddo ; enddo
-    if (associated(taux_bot) .and. associated(tauy_bot)) then
+  if (associated(taux_bot) .and. associated(tauy_bot)) then
     !$OMP parallel do default(shared)
     do j=js,je ; do I=is-1,ie ; if (G%mask2dCu(I,j) > 0.0) then
       BT_force_u(I,j) = BT_force_u(I,j) - taux_bot(I,j) * mass_to_Z  * CS%IDatu(I,j)
