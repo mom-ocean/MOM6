@@ -46,14 +46,14 @@ type, public :: PointAccel_CS ; private
 ! that are used to step the physical model forward.  They all use the same
 ! names as the variables they point to in MOM.F90
   real, pointer, dimension(:,:,:) :: &
-    u_av => NULL(), &       !< Time average u-velocity [L T-1 ~> m s-1].
-    v_av => NULL(), &       !< Time average velocity [L T-1 ~> m s-1].
-    u_prev => NULL(), &     !< Previous u-velocity [L T-1 ~> m s-1].
-    v_prev => NULL(), &     !< Previous v-velocity [L T-1 ~> m s-1].
-    T => NULL(), &          !< Temperature [degC].
-    S => NULL(), &          !< Salinity [ppt].
-    u_accel_bt => NULL(), & !< Barotropic u-acclerations [L T-2 ~> m s-2]
-    v_accel_bt => NULL()    !< Barotropic v-acclerations [L T-2 ~> m s-2]
+    u_av => NULL(), &       !< Time average u-velocity [L T-1 ~> m s-1]
+    v_av => NULL(), &       !< Time average velocity [L T-1 ~> m s-1]
+    u_prev => NULL(), &     !< Previous u-velocity [L T-1 ~> m s-1]
+    v_prev => NULL(), &     !< Previous v-velocity [L T-1 ~> m s-1]
+    T => NULL(), &          !< Temperature [degC]
+    S => NULL(), &          !< Salinity [ppt]
+    u_accel_bt => NULL(), & !< Barotropic u-accelerations [L T-2 ~> m s-2]
+    v_accel_bt => NULL()    !< Barotropic v-accelerations [L T-2 ~> m s-2]
 end type PointAccel_CS
 
 contains
@@ -61,7 +61,7 @@ contains
 !> This subroutine writes to an output file all of the accelerations
 !! that have been applied to a column of zonal velocities over the
 !! previous timestep.  This subroutine is called from vertvisc.
-subroutine write_u_accel(I, j, um, hin, ADp, CDp, dt_in_T, G, GV, US, CS, vel_rpt, str, a, hv)
+subroutine write_u_accel(I, j, um, hin, ADp, CDp, dt, G, GV, US, CS, vel_rpt, str, a, hv)
   integer,                     intent(in) :: I   !< The zonal index of the column to be documented.
   integer,                     intent(in) :: j   !< The meridional index of the column to be documented.
   type(ocean_grid_type),       intent(in) :: G   !< The ocean's grid structure.
@@ -75,25 +75,25 @@ subroutine write_u_accel(I, j, um, hin, ADp, CDp, dt_in_T, G, GV, US, CS, vel_rp
                                                  !! accelerations in the momentum equations.
   type(cont_diag_ptrs),        intent(in) :: CDp !<  A structure with pointers to various terms
                                                  !! in the continuity equations.
-  real,                        intent(in) :: dt_in_T  !< The ocean dynamics time step [T ~> s].
+  real,                        intent(in) :: dt  !< The ocean dynamics time step [T ~> s].
   type(PointAccel_CS),         pointer    :: CS  !< The control structure returned by a previous
                                                  !! call to PointAccel_init.
-  real,                        intent(in) :: vel_rpt !< The velocity magnitude that triggers a report [L T-1 ~> m s-1].
-  real, optional,              intent(in) :: str !< The surface wind stress integrated over a time
-                                                 !! step divided by the Boussinesq density [m2 s-1].
+  real,                        intent(in) :: vel_rpt !< The velocity magnitude that triggers a report [L T-1 ~> m s-1]
+  real, optional,              intent(in) :: str !< The surface wind stress [R L Z T-2 ~> Pa]
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
                      optional, intent(in) :: a   !< The layer coupling coefficients from vertvisc [Z T-1 ~> m s-1].
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
                      optional, intent(in) :: hv  !< The layer thicknesses at velocity grid points,
                                                  !! from vertvisc [H ~> m or kg m-2].
   ! Local variables
-  real    :: f_eff, CFL
-  real    :: Angstrom
-  real    :: truncvel, du
-  real    :: dt  ! The time step [s]
-  real    :: Inorm(SZK_(GV))
-  real    :: e(SZK_(GV)+1)
-  real    :: h_scale, uh_scale
+  real    :: CFL              ! The local velocity-based CFL number [nondim]
+  real    :: Angstrom         ! A negligibly small thickness [H ~> m or kg m-2]
+  real    :: du               ! A velocity change [L T-1 ~> m s-1]
+  real    :: Inorm(SZK_(GV))  ! The inverse of the normalized velocity change [L T-1 ~> m s-1]
+  real    :: e(SZK_(GV)+1)    ! Simple estimates of interface heights based on the sum of thicknesses [m]
+  real    :: h_scale          ! A scaling factor for thicknesses [m H-1 ~> 1 or m3 kg-1]
+  real    :: vel_scale        ! A scaling factor for velocities [m T s-1 L-1 ~> 1]
+  real    :: uh_scale         ! A scaling factor for transport per unit length [m2 T s-1 L-1 H-1 ~> 1 or m3 kg-1]
   integer :: yr, mo, day, hr, minute, sec, yearday
   integer :: k, ks, ke
   integer :: nz
@@ -102,8 +102,7 @@ subroutine write_u_accel(I, j, um, hin, ADp, CDp, dt_in_T, G, GV, US, CS, vel_rp
   integer :: file
 
   Angstrom = GV%Angstrom_H + GV%H_subroundoff
-  dt = US%T_to_s*dt_in_T
-  h_scale = GV%H_to_m ; uh_scale = GV%H_to_m*US%L_T_to_m_s
+  h_scale = GV%H_to_m ; vel_scale = US%L_T_to_m_s ; uh_scale = GV%H_to_m*US%L_T_to_m_s
 
 !  if (.not.associated(CS)) return
   nz = GV%ke
@@ -150,7 +149,7 @@ subroutine write_u_accel(I, j, um, hin, ADp, CDp, dt_in_T, G, GV, US, CS, vel_rp
     write (file,'(/,"Time ",i5,i4,F6.2," U-velocity violation at ",I4,": ",2(I3), &
         & " (",F7.2," E "F7.2," N) Layers ",I3," to ",I3,". dt = ",1PG10.4)') &
         yr, yearday, (REAL(sec)/3600.0), pe_here(), I, j, &
-        G%geoLonCu(I,j), G%geoLatCu(I,j), ks, ke, dt
+        G%geoLonCu(I,j), G%geoLatCu(I,j), ks, ke, US%T_to_s*dt
 
     if (ks <= GV%nk_rho_varies) ks = 1
     do k=ks,ke
@@ -158,98 +157,98 @@ subroutine write_u_accel(I, j, um, hin, ADp, CDp, dt_in_T, G, GV, US, CS, vel_rp
     enddo
 
     write(file,'(/,"Layers:",$)')
-    do k=ks,ke ; if (do_k(k)) write(file,'(I10," ",$)') (k); enddo
+    do k=ks,ke ; if (do_k(k)) write(file,'(I10," ",$)') (k) ; enddo
     write(file,'(/,"u(m):  ",$)')
-    do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') (US%L_T_to_m_s*um(I,j,k)); enddo
+    do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') (vel_scale*um(I,j,k)) ; enddo
     if (prev_avail) then
       write(file,'(/,"u(mp): ",$)')
-      do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') (US%L_T_to_m_s*CS%u_prev(I,j,k)); enddo
+      do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') (vel_scale*CS%u_prev(I,j,k)) ; enddo
     endif
     write(file,'(/,"u(3):  ",$)')
-    do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') (US%L_T_to_m_s*CS%u_av(I,j,k)); enddo
+    do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') (vel_scale*CS%u_av(I,j,k)) ; enddo
 
     write(file,'(/,"CFL u: ",$)')
     do k=ks,ke ; if (do_k(k)) then
-      CFL = abs(um(I,j,k)) * US%s_to_T*dt * G%dy_Cu(I,j)
+      CFL = abs(um(I,j,k)) * dt * G%dy_Cu(I,j)
       if (um(I,j,k) < 0.0) then ; CFL = CFL * G%IareaT(i+1,j)
       else ; CFL = CFL * G%IareaT(i,j) ; endif
       write(file,'(ES10.3," ",$)') CFL
     endif ; enddo
     write(file,'(/,"CFL0 u:",$)')
     do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-                                    abs(um(I,j,k)) * US%s_to_T*dt * G%IdxCu(I,j) ; enddo
+                                    abs(um(I,j,k)) * dt * G%IdxCu(I,j) ; enddo
 
     if (prev_avail) then
       write(file,'(/,"du:    ",$)')
       do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-                                      (US%L_T_to_m_s*(um(I,j,k)-CS%u_prev(I,j,k))); enddo
+                                      (vel_scale*(um(I,j,k)-CS%u_prev(I,j,k))) ; enddo
     endif
     write(file,'(/,"CAu:   ",$)')
-    do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') (dt*US%L_T2_to_m_s2*ADp%CAu(I,j,k)); enddo
+    do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') (vel_scale*dt*ADp%CAu(I,j,k)) ; enddo
     write(file,'(/,"PFu:   ",$)')
-    do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') (dt*US%L_T2_to_m_s2*ADp%PFu(I,j,k)); enddo
+    do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') (vel_scale*dt*ADp%PFu(I,j,k)) ; enddo
     write(file,'(/,"diffu: ",$)')
-    do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') (dt*US%L_T2_to_m_s2*ADp%diffu(I,j,k)); enddo
+    do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') (vel_scale*dt*ADp%diffu(I,j,k)) ; enddo
 
     if (associated(ADp%gradKEu)) then
       write(file,'(/,"KEu:   ",$)')
       do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-                                      (dt*US%L_T2_to_m_s2*ADp%gradKEu(I,j,k)); enddo
+                                      (vel_scale*dt*ADp%gradKEu(I,j,k)) ; enddo
     endif
     if (associated(ADp%rv_x_v)) then
       write(file,'(/,"Coru:  ",$)')
       do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-          dt*US%L_T2_to_m_s2*(ADp%CAu(I,j,k)-ADp%rv_x_v(I,j,k)); enddo
+          vel_scale*dt*(ADp%CAu(I,j,k)-ADp%rv_x_v(I,j,k)) ; enddo
     endif
     if (associated(ADp%du_dt_visc)) then
       write(file,'(/,"ubv:   ",$)')
       do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-          US%L_T_to_m_s*(um(I,j,k) - US%s_to_T*dt*ADp%du_dt_visc(I,j,k)); enddo
+          vel_scale*(um(I,j,k) - dt*ADp%du_dt_visc(I,j,k)) ; enddo
       write(file,'(/,"duv:   ",$)')
       do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-                                      (dt*US%L_T2_to_m_s2*ADp%du_dt_visc(I,j,k)); enddo
+                                      (vel_scale*dt*ADp%du_dt_visc(I,j,k)) ; enddo
     endif
     if (associated(ADp%du_other)) then
       write(file,'(/,"du_other: ",$)')
       do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-                                      (US%L_T_to_m_s*ADp%du_other(I,j,k)); enddo
+                                      (vel_scale*ADp%du_other(I,j,k)) ; enddo
     endif
     if (present(a)) then
       write(file,'(/,"a:     ",$)')
-      do k=ks,ke+1 ; if (do_k(k)) write(file,'(ES10.3," ",$)') a(I,j,k)*US%Z_to_m*dt_in_T; enddo
+      do k=ks,ke+1 ; if (do_k(k)) write(file,'(ES10.3," ",$)') (US%Z_to_m*a(I,j,k)*dt) ; enddo
     endif
     if (present(hv)) then
       write(file,'(/,"hvel:  ",$)')
-      do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') hv(I,j,k); enddo
+      do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') h_scale*hv(I,j,k) ; enddo
     endif
-    write(file,'(/,"Stress:  ",ES10.3)') str
+    write(file,'(/,"Stress:  ",ES10.3)') vel_scale*US%Z_to_m * (str*dt / GV%Rho0)
 
     if (associated(CS%u_accel_bt)) then
       write(file,'("dubt:  ",$)')
       do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-                                      (dt*US%L_T2_to_m_s2*CS%u_accel_bt(I,j,k)) ; enddo
+                                      (vel_scale*dt*CS%u_accel_bt(I,j,k)) ; enddo
       write(file,'(/)')
     endif
 
     write(file,'(/,"h--:   ",$)')
-    do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') (h_scale*hin(i,j-1,k)); enddo
+    do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') (h_scale*hin(i,j-1,k)) ; enddo
     write(file,'(/,"h+-:   ",$)')
-    do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') (h_scale*hin(i+1,j-1,k)); enddo
+    do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') (h_scale*hin(i+1,j-1,k)) ; enddo
     write(file,'(/,"h-0:   ",$)')
-    do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') (h_scale*hin(i,j,k)); enddo
+    do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') (h_scale*hin(i,j,k)) ; enddo
     write(file,'(/,"h+0:   ",$)')
-    do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') (h_scale*hin(i+1,j,k)); enddo
+    do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') (h_scale*hin(i+1,j,k)) ; enddo
     write(file,'(/,"h-+:   ",$)')
-    do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') (h_scale*hin(i,j+1,k)); enddo
+    do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') (h_scale*hin(i,j+1,k)) ; enddo
     write(file,'(/,"h++:   ",$)')
-    do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') (h_scale*hin(i+1,j+1,k)); enddo
+    do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') (h_scale*hin(i+1,j+1,k)) ; enddo
 
 
     e(nz+1) = -US%Z_to_m*(G%bathyT(i,j) + G%Z_ref)
     do k=nz,1,-1 ; e(K) = e(K+1) + h_scale*hin(i,j,k) ; enddo
     write(file,'(/,"e-:    ",$)')
     write(file,'(ES10.3," ",$)') e(ks)
-    do K=ks+1,ke+1 ; if (do_k(k-1)) write(file,'(ES10.3," ",$)') e(K); enddo
+    do K=ks+1,ke+1 ; if (do_k(k-1)) write(file,'(ES10.3," ",$)') e(K) ; enddo
 
     e(nz+1) = -US%Z_to_m*(G%bathyT(i+1,j) + G%Z_ref)
     do k=nz,1,-1 ; e(K) = e(K+1) + h_scale*hin(i+1,j,k) ; enddo
@@ -258,74 +257,74 @@ subroutine write_u_accel(I, j, um, hin, ADp, CDp, dt_in_T, G, GV, US, CS, vel_rp
     do K=ks+1,ke+1 ; if (do_k(k-1)) write(file,'(ES10.3," ",$)') e(K) ; enddo
     if (associated(CS%T)) then
       write(file,'(/,"T-:    ",$)')
-      do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') CS%T(i,j,k); enddo
+      do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') CS%T(i,j,k) ; enddo
       write(file,'(/,"T+:    ",$)')
-      do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') CS%T(i+1,j,k); enddo
+      do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') CS%T(i+1,j,k) ; enddo
     endif
     if (associated(CS%S)) then
       write(file,'(/,"S-:    ",$)')
-      do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') CS%S(i,j,k); enddo
+      do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') CS%S(i,j,k) ; enddo
       write(file,'(/,"S+:    ",$)')
-      do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') CS%S(i+1,j,k); enddo
+      do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') CS%S(i+1,j,k) ; enddo
     endif
 
     if (prev_avail) then
       write(file,'(/,"v--:   ",$)')
-      do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') (CS%v_prev(i,J-1,k)); enddo
+      do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') (vel_scale*CS%v_prev(i,J-1,k)) ; enddo
       write(file,'(/,"v-+:   ",$)')
-      do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') (CS%v_prev(i,J,k)); enddo
+      do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') (vel_scale*CS%v_prev(i,J,k)) ; enddo
       write(file,'(/,"v+-:   ",$)')
-      do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') (CS%v_prev(i+1,J-1,k)); enddo
+      do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') (vel_scale*CS%v_prev(i+1,J-1,k)) ; enddo
       write(file,'(/,"v++:   ",$)')
-      do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') (CS%v_prev(i+1,J,k)); enddo
+      do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') (vel_scale*CS%v_prev(i+1,J,k)) ; enddo
     endif
 
     write(file,'(/,"vh--:  ",$)')
     do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-                                    (uh_scale*CDp%vh(i,J-1,k)*G%IdxCv(i,J-1)); enddo
+                                    (uh_scale*CDp%vh(i,J-1,k)*G%IdxCv(i,J-1)) ; enddo
     write(file,'(/," vhC--:",$)')
     do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-                        (0.5*US%L_T_to_m_s*CS%v_av(i,j-1,k)*h_scale*(hin(i,j-1,k) + hin(i,j,k))); enddo
+                        (0.5*CS%v_av(i,j-1,k)*uh_scale*(hin(i,j-1,k) + hin(i,j,k))) ; enddo
     if (prev_avail) then
       write(file,'(/," vhCp--:",$)')
       do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-                          (0.5*CS%v_prev(i,j-1,k)*h_scale*(hin(i,j-1,k) + hin(i,j,k))); enddo
+                          (0.5*CS%v_prev(i,j-1,k)*uh_scale*(hin(i,j-1,k) + hin(i,j,k))) ; enddo
     endif
 
     write(file,'(/,"vh-+:  ",$)')
     do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-                                    (uh_scale*CDp%vh(i,J,k)*G%IdxCv(i,J)); enddo
+                                    (uh_scale*CDp%vh(i,J,k)*G%IdxCv(i,J)) ; enddo
     write(file,'(/," vhC-+:",$)')
     do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-                        (0.5*US%L_T_to_m_s*CS%v_av(i,J,k)*h_scale*(hin(i,j,k) + hin(i,j+1,k))); enddo
+                        (0.5*CS%v_av(i,J,k)*uh_scale*(hin(i,j,k) + hin(i,j+1,k))) ; enddo
     if (prev_avail) then
       write(file,'(/," vhCp-+:",$)')
       do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-                          (0.5*CS%v_prev(i,J,k)*h_scale*(hin(i,j,k) + hin(i,j+1,k))); enddo
+                          (0.5*CS%v_prev(i,J,k)*uh_scale*(hin(i,j,k) + hin(i,j+1,k))) ; enddo
     endif
 
     write(file,'(/,"vh+-:  ",$)')
     do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-                                      (uh_scale*CDp%vh(i+1,J-1,k)*G%IdxCv(i+1,J-1)); enddo
+                                      (uh_scale*CDp%vh(i+1,J-1,k)*G%IdxCv(i+1,J-1)) ; enddo
     write(file,'(/," vhC+-:",$)')
     do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-                    (0.5*US%L_T_to_m_s*CS%v_av(i+1,J-1,k)*h_scale*(hin(i+1,j-1,k) + hin(i+1,j,k))); enddo
+                    (0.5*CS%v_av(i+1,J-1,k)*uh_scale*(hin(i+1,j-1,k) + hin(i+1,j,k))) ; enddo
     if (prev_avail) then
       write(file,'(/," vhCp+-:",$)')
       do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-                      (0.5*CS%v_prev(i+1,J-1,k)*h_scale*(hin(i+1,j-1,k) + hin(i+1,j,k))); enddo
+                      (0.5*CS%v_prev(i+1,J-1,k)*uh_scale*(hin(i+1,j-1,k) + hin(i+1,j,k))) ; enddo
     endif
 
     write(file,'(/,"vh++:  ",$)')
     do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-                          (uh_scale*CDp%vh(i+1,J,k)*G%IdxCv(i+1,J)); enddo
+                          (uh_scale*CDp%vh(i+1,J,k)*G%IdxCv(i+1,J)) ; enddo
     write(file,'(/," vhC++:",$)')
          do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-                     (0.5*US%L_T_to_m_s*CS%v_av(i+1,J,k)*h_scale*(hin(i+1,j,k) + hin(i+1,j+1,k))); enddo
+                     (0.5*CS%v_av(i+1,J,k)*uh_scale*(hin(i+1,j,k) + hin(i+1,j+1,k))) ; enddo
     if (prev_avail) then
       write(file,'(/," vhCp++:",$)')
            do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-                       (0.5*US%L_T_to_m_s*CS%v_av(i+1,J,k)*h_scale*(hin(i+1,j,k) + hin(i+1,j+1,k))); enddo
+                       (0.5*CS%v_av(i+1,J,k)*uh_scale*(hin(i+1,j,k) + hin(i+1,j+1,k))) ; enddo
     endif
 
     write(file,'(/,"D:     ",2(ES10.3))') US%Z_to_m*(G%bathyT(i,j) + G%Z_ref), US%Z_to_m*(G%bathyT(i+1,j) + G%Z_ref)
@@ -333,54 +332,54 @@ subroutine write_u_accel(I, j, um, hin, ADp, CDp, dt_in_T, G, GV, US, CS, vel_rp
   !  From here on, the normalized accelerations are written.
     if (prev_avail) then
       do k=ks,ke
-        du = US%L_T_to_m_s*(um(I,j,k) - CS%u_prev(I,j,k))
-        if (abs(du) < 1.0e-6) du = 1.0e-6
+        du = um(I,j,k) - CS%u_prev(I,j,k)
+        if (abs(du) < 1.0e-6*US%m_s_to_L_T) du = 1.0e-6*US%m_s_to_L_T
         Inorm(k) = 1.0 / du
       enddo
 
       write(file,'(2/,"Norm:  ",$)')
-      do k=ks,ke ; if (do_k(k)) write(file,'(F10.6," ",$)') (1.0/Inorm(k)); enddo
+      do k=ks,ke ; if (do_k(k)) write(file,'(F10.6," ",$)') (vel_scale / Inorm(k)) ; enddo
 
       write(file,'(/,"du:    ",$)')
       do k=ks,ke ; if (do_k(k)) write(file,'(F10.6," ",$)') &
-                        (US%L_T_to_m_s*(um(I,j,k)-CS%u_prev(I,j,k))*Inorm(k)); enddo
+                                      ((um(I,j,k)-CS%u_prev(I,j,k)) * Inorm(k)) ; enddo
 
       write(file,'(/,"CAu:   ",$)')
       do k=ks,ke ; if (do_k(k)) write(file,'(F10.6," ",$)') &
-                                      (dt*US%L_T2_to_m_s2*ADp%CAu(I,j,k)*Inorm(k)); enddo
+                                      (dt*ADp%CAu(I,j,k) * Inorm(k)) ; enddo
 
       write(file,'(/,"PFu:   ",$)')
       do k=ks,ke ; if (do_k(k)) write(file,'(F10.6," ",$)') &
-                                      (dt*US%L_T2_to_m_s2*ADp%PFu(I,j,k)*Inorm(k)); enddo
+                                      (dt*ADp%PFu(I,j,k) * Inorm(k)) ; enddo
 
       write(file,'(/,"diffu: ",$)')
       do k=ks,ke ; if (do_k(k)) write(file,'(F10.6," ",$)') &
-                                      (dt*US%L_T2_to_m_s2*ADp%diffu(I,j,k)*Inorm(k)); enddo
+                                      (dt*ADp%diffu(I,j,k) * Inorm(k)) ; enddo
 
       if (associated(ADp%gradKEu)) then
         write(file,'(/,"KEu:   ",$)')
         do k=ks,ke ; if (do_k(k)) write(file,'(F10.6," ",$)') &
-                                        (dt*US%L_T2_to_m_s2*ADp%gradKEu(I,j,k)*Inorm(k)); enddo
+                                        (dt*ADp%gradKEu(I,j,k) * Inorm(k)) ; enddo
       endif
       if (associated(ADp%rv_x_v)) then
         write(file,'(/,"Coru:  ",$)')
         do k=ks,ke ; if (do_k(k)) write(file,'(F10.6," ",$)') &
-            dt*US%L_T2_to_m_s2*(ADp%CAu(I,j,k)-ADp%rv_x_v(I,j,k))*Inorm(k); enddo
+                                        (dt*(ADp%CAu(I,j,k)-ADp%rv_x_v(I,j,k)) * Inorm(k)) ; enddo
       endif
       if (associated(ADp%du_dt_visc)) then
         write(file,'(/,"duv:   ",$)')
         do k=ks,ke ; if (do_k(k)) write(file,'(F10.6," ",$)') &
-            (dt*US%L_T2_to_m_s2*ADp%du_dt_visc(I,j,k))*Inorm(k); enddo
+                                        (dt*ADp%du_dt_visc(I,j,k) * Inorm(k)) ; enddo
       endif
       if (associated(ADp%du_other)) then
         write(file,'(/,"du_other: ",$)')
         do k=ks,ke ; if (do_k(k)) write(file,'(F10.6," ",$)') &
-            (US%L_T_to_m_s*ADp%du_other(I,j,k))*Inorm(k); enddo
+                                        (ADp%du_other(I,j,k) * Inorm(k)) ; enddo
       endif
       if (associated(CS%u_accel_bt)) then
         write(file,'(/,"dubt:  ",$)')
         do k=ks,ke ; if (do_k(k)) write(file,'(F10.6," ",$)') &
-                                        (dt*US%L_T2_to_m_s2*CS%u_accel_bt(I,j,k)*Inorm(k)) ; enddo
+                                        (dt*CS%u_accel_bt(I,j,k) * Inorm(k)) ; enddo
       endif
     endif
 
@@ -394,7 +393,7 @@ end subroutine write_u_accel
 !> This subroutine writes to an output file all of the accelerations
 !! that have been applied to a column of meridional velocities over
 !! the previous timestep.  This subroutine is called from vertvisc.
-subroutine write_v_accel(i, J, vm, hin, ADp, CDp, dt_in_T, G, GV, US, CS, vel_rpt, str, a, hv)
+subroutine write_v_accel(i, J, vm, hin, ADp, CDp, dt, G, GV, US, CS, vel_rpt, str, a, hv)
   integer,                     intent(in) :: i   !< The zonal index of the column to be documented.
   integer,                     intent(in) :: J   !< The meridional index of the column to be documented.
   type(ocean_grid_type),       intent(in) :: G   !< The ocean's grid structure.
@@ -408,25 +407,25 @@ subroutine write_v_accel(i, J, vm, hin, ADp, CDp, dt_in_T, G, GV, US, CS, vel_rp
                                                  !! accelerations in the momentum equations.
   type(cont_diag_ptrs),        intent(in) :: CDp !< A structure with pointers to various terms in
                                                  !! the continuity equations.
-  real,                        intent(in) :: dt_in_T  !< The ocean dynamics time step [T ~> s].
+  real,                        intent(in) :: dt  !< The ocean dynamics time step [T ~> s].
   type(PointAccel_CS),         pointer    :: CS  !< The control structure returned by a previous
                                                  !! call to PointAccel_init.
-  real,                        intent(in) :: vel_rpt !< The velocity magnitude that triggers a report [L T-1 ~> m s-1].
-  real, optional,              intent(in) :: str !< The surface wind stress integrated over a time
-                                                 !! step divided by the Boussinesq density [m2 s-1].
+  real,                        intent(in) :: vel_rpt !< The velocity magnitude that triggers a report [L T-1 ~> m s-1]
+  real, optional,              intent(in) :: str !< The surface wind stress [R L Z T-2 ~> Pa]
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
                      optional, intent(in) :: a   !< The layer coupling coefficients from vertvisc [Z T-1 ~> m s-1].
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
                      optional, intent(in) :: hv  !< The layer thicknesses at velocity grid points,
                                                  !! from vertvisc [H ~> m or kg m-2].
   ! Local variables
-  real    :: f_eff, CFL
-  real    :: Angstrom
-  real    :: truncvel, dv
-  real    :: dt  ! The time step [s]
-  real    :: Inorm(SZK_(GV))
-  real    :: e(SZK_(GV)+1)
-  real    :: h_scale, uh_scale
+  real    :: CFL              ! The local velocity-based CFL number [nondim]
+  real    :: Angstrom         ! A negligibly small thickness [H ~> m or kg m-2]
+  real    :: dv               ! A velocity change [L T-1 ~> m s-1]
+  real    :: Inorm(SZK_(GV))  ! The inverse of the normalized velocity change [L T-1 ~> m s-1]
+  real    :: e(SZK_(GV)+1)    ! Simple estimates of interface heights based on the sum of thicknesses [m]
+  real    :: h_scale          ! A scaling factor for thicknesses [m H-1 ~> 1 or m3 kg-1]
+  real    :: vel_scale        ! A scaling factor for velocities [m T s-1 L-1 ~> 1]
+  real    :: uh_scale         ! A scaling factor for transport per unit length [m2 T s-1 L-1 H-1 ~> 1 or m3 kg-1]
   integer :: yr, mo, day, hr, minute, sec, yearday
   integer :: k, ks, ke
   integer :: nz
@@ -435,8 +434,7 @@ subroutine write_v_accel(i, J, vm, hin, ADp, CDp, dt_in_T, G, GV, US, CS, vel_rp
   integer :: file
 
   Angstrom = GV%Angstrom_H + GV%H_subroundoff
-  dt = US%T_to_s*dt_in_T
-  h_scale = GV%H_to_m ; uh_scale = GV%H_to_m*US%L_T_to_m_s
+  h_scale = GV%H_to_m ; vel_scale = US%L_T_to_m_s ; uh_scale = GV%H_to_m*US%L_T_to_m_s
 
 !  if (.not.associated(CS)) return
   nz = GV%ke
@@ -482,7 +480,7 @@ subroutine write_v_accel(i, J, vm, hin, ADp, CDp, dt_in_T, G, GV, US, CS, vel_rp
     write (file,'(/,"Time ",i5,i4,F6.2," V-velocity violation at ",I4,": ",2(I3), &
         & " (",F7.2," E ",F7.2," N) Layers ",I3," to ",I3,". dt = ",1PG10.4)') &
         yr, yearday, (REAL(sec)/3600.0), pe_here(), i, J, &
-        G%geoLonCv(i,J), G%geoLatCv(i,J), ks, ke, dt
+        G%geoLonCv(i,J), G%geoLatCv(i,J), ks, ke, US%T_to_s*dt
 
     if (ks <= GV%nk_rho_varies) ks = 1
     do k=ks,ke
@@ -490,178 +488,178 @@ subroutine write_v_accel(i, J, vm, hin, ADp, CDp, dt_in_T, G, GV, US, CS, vel_rp
     enddo
 
     write(file,'(/,"Layers:",$)')
-    do k=ks,ke ; if (do_k(k)) write(file,'(I10," ",$)') (k); enddo
+    do k=ks,ke ; if (do_k(k)) write(file,'(I10," ",$)') (k) ; enddo
     write(file,'(/,"v(m):  ",$)')
-    do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') (US%L_T_to_m_s*vm(i,J,k)); enddo
+    do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') (vel_scale*vm(i,J,k)) ; enddo
 
     if (prev_avail) then
       write(file,'(/,"v(mp): ",$)')
-      do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') (US%L_T_to_m_s*CS%v_prev(i,J,k)); enddo
+      do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') (vel_scale*CS%v_prev(i,J,k)) ; enddo
     endif
 
     write(file,'(/,"v(3):  ",$)')
-    do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') (US%L_T_to_m_s*CS%v_av(i,J,k)); enddo
+    do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') (vel_scale*CS%v_av(i,J,k)) ; enddo
     write(file,'(/,"CFL v: ",$)')
     do k=ks,ke ; if (do_k(k)) then
-      CFL = abs(vm(i,J,k)) * US%s_to_T*dt * G%dx_Cv(i,J)
+      CFL = abs(vm(i,J,k)) * dt * G%dx_Cv(i,J)
       if (vm(i,J,k) < 0.0) then ; CFL = CFL * G%IareaT(i,j+1)
       else ; CFL = CFL * G%IareaT(i,j) ; endif
       write(file,'(ES10.3," ",$)') CFL
     endif ; enddo
     write(file,'(/,"CFL0 v:",$)')
     do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-                                    abs(vm(i,J,k)) * US%s_to_T*dt * G%IdyCv(i,J) ; enddo
+                                    abs(vm(i,J,k)) * dt * G%IdyCv(i,J) ; enddo
 
     if (prev_avail) then
       write(file,'(/,"dv:    ",$)')
       do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-                                      (US%L_T_to_m_s*(vm(i,J,k)-CS%v_prev(i,J,k))); enddo
+                                      (vel_scale*(vm(i,J,k)-CS%v_prev(i,J,k))) ; enddo
     endif
 
     write(file,'(/,"CAv:   ",$)')
-    do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') (dt*US%L_T2_to_m_s2*ADp%CAv(i,J,k)); enddo
+    do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') (vel_scale*dt*ADp%CAv(i,J,k)) ; enddo
 
     write(file,'(/,"PFv:   ",$)')
-    do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') (dt*US%L_T2_to_m_s2*ADp%PFv(i,J,k)); enddo
+    do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') (vel_scale*dt*ADp%PFv(i,J,k)) ; enddo
 
     write(file,'(/,"diffv: ",$)')
-    do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') (dt*US%L_T2_to_m_s2*ADp%diffv(i,J,k)); enddo
+    do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') (vel_scale*dt*ADp%diffv(i,J,k)) ; enddo
 
     if (associated(ADp%gradKEv)) then
       write(file,'(/,"KEv:   ",$)')
       do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-                                      (dt*US%L_T2_to_m_s2*ADp%gradKEv(i,J,k)); enddo
+                                      (vel_scale*dt*ADp%gradKEv(i,J,k)) ; enddo
     endif
     if (associated(ADp%rv_x_u)) then
       write(file,'(/,"Corv:  ",$)')
       do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-                                 dt*US%L_T2_to_m_s2*(ADp%CAv(i,J,k)-ADp%rv_x_u(i,J,k)); enddo
+                                 vel_scale*dt*(ADp%CAv(i,J,k)-ADp%rv_x_u(i,J,k)) ; enddo
     endif
     if (associated(ADp%dv_dt_visc)) then
       write(file,'(/,"vbv:   ",$)')
       do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-          US%L_T_to_m_s*(vm(i,J,k) - US%s_to_T*dt*ADp%dv_dt_visc(i,J,k)); enddo
+          vel_scale*(vm(i,J,k) - dt*ADp%dv_dt_visc(i,J,k)) ; enddo
 
       write(file,'(/,"dvv:   ",$)')
       do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-                                      (dt*US%L_T2_to_m_s2*ADp%dv_dt_visc(i,J,k)); enddo
+                                      (vel_scale*dt*ADp%dv_dt_visc(i,J,k)) ; enddo
     endif
     if (associated(ADp%dv_other)) then
       write(file,'(/,"dv_other: ",$)')
       do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-                                      (US%L_T_to_m_s*ADp%dv_other(i,J,k)); enddo
+                                      (vel_scale*ADp%dv_other(i,J,k)) ; enddo
     endif
     if (present(a)) then
       write(file,'(/,"a:     ",$)')
-      do k=ks,ke+1 ; if (do_k(k)) write(file,'(ES10.3," ",$)') a(i,j,k)*US%Z_to_m*dt_in_T; enddo
+      do k=ks,ke+1 ; if (do_k(k)) write(file,'(ES10.3," ",$)') (US%Z_to_m*a(i,j,k)*dt) ; enddo
     endif
     if (present(hv)) then
       write(file,'(/,"hvel:  ",$)')
-      do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') hv(i,J,k); enddo
+      do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') h_scale*hv(i,J,k) ; enddo
     endif
-    write(file,'(/,"Stress:  ",ES10.3)') str
+    write(file,'(/,"Stress:  ",ES10.3)') vel_scale*US%Z_to_m * (str*dt / GV%Rho0)
 
     if (associated(CS%v_accel_bt)) then
       write(file,'("dvbt:  ",$)')
       do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-                                      (dt*US%L_T2_to_m_s2*CS%v_accel_bt(i,J,k)) ; enddo
+                                      (vel_scale*dt*CS%v_accel_bt(i,J,k)) ; enddo
       write(file,'(/)')
     endif
 
     write(file,'("h--:   ",$)')
-    do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') h_scale*hin(i-1,j,k); enddo
+    do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') h_scale*hin(i-1,j,k) ; enddo
     write(file,'(/,"h0-:   ",$)')
-    do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') h_scale*hin(i,j,k); enddo
+    do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') h_scale*hin(i,j,k) ; enddo
     write(file,'(/,"h+-:   ",$)')
-    do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') h_scale*hin(i+1,j,k); enddo
+    do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') h_scale*hin(i+1,j,k) ; enddo
     write(file,'(/,"h-+:   ",$)')
-    do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') h_scale*hin(i-1,j+1,k); enddo
+    do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') h_scale*hin(i-1,j+1,k) ; enddo
     write(file,'(/,"h0+:   ",$)')
-    do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') h_scale*hin(i,j+1,k); enddo
+    do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') h_scale*hin(i,j+1,k) ; enddo
     write(file,'(/,"h++:   ",$)')
-    do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') h_scale*hin(i+1,j+1,k); enddo
+    do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') h_scale*hin(i+1,j+1,k) ; enddo
 
     e(nz+1) = -US%Z_to_m*(G%bathyT(i,j) + G%Z_ref)
-    do k=nz,1,-1 ; e(K) = e(K+1) + h_scale*hin(i,j,k); enddo
+    do k=nz,1,-1 ; e(K) = e(K+1) + h_scale*hin(i,j,k) ; enddo
     write(file,'(/,"e-:    ",$)')
     write(file,'(ES10.3," ",$)') e(ks)
-    do K=ks+1,ke+1 ; if (do_k(k-1)) write(file,'(ES10.3," ",$)') e(K); enddo
+    do K=ks+1,ke+1 ; if (do_k(k-1)) write(file,'(ES10.3," ",$)') e(K) ; enddo
 
     e(nz+1) = -US%Z_to_m*(G%bathyT(i,j+1) + G%Z_ref)
     do k=nz,1,-1 ; e(K) = e(K+1) + h_scale*hin(i,j+1,k) ; enddo
     write(file,'(/,"e+:    ",$)')
     write(file,'(ES10.3," ",$)') e(ks)
-    do K=ks+1,ke+1 ; if (do_k(k-1)) write(file,'(ES10.3," ",$)') e(K); enddo
+    do K=ks+1,ke+1 ; if (do_k(k-1)) write(file,'(ES10.3," ",$)') e(K) ; enddo
     if (associated(CS%T)) then
       write(file,'(/,"T-:    ",$)')
-      do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') CS%T(i,j,k); enddo
+      do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') CS%T(i,j,k) ; enddo
       write(file,'(/,"T+:    ",$)')
-      do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') CS%T(i,j+1,k); enddo
+      do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') CS%T(i,j+1,k) ; enddo
     endif
     if (associated(CS%S)) then
       write(file,'(/,"S-:    ",$)')
-      do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') CS%S(i,j,k); enddo
+      do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') CS%S(i,j,k) ; enddo
       write(file,'(/,"S+:    ",$)')
-      do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') CS%S(i,j+1,k); enddo
+      do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') CS%S(i,j+1,k) ; enddo
     endif
 
     if (prev_avail) then
       write(file,'(/,"u--:   ",$)')
-      do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') CS%u_prev(I-1,j,k); enddo
+      do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') vel_scale*CS%u_prev(I-1,j,k) ; enddo
       write(file,'(/,"u-+:   ",$)')
-      do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') CS%u_prev(I-1,j+1,k); enddo
+      do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') vel_scale*CS%u_prev(I-1,j+1,k) ; enddo
       write(file,'(/,"u+-:   ",$)')
-      do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') CS%u_prev(I,j,k); enddo
+      do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') vel_scale*CS%u_prev(I,j,k) ; enddo
       write(file,'(/,"u++:   ",$)')
-      do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') CS%u_prev(I,j+1,k); enddo
+      do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') vel_scale*CS%u_prev(I,j+1,k) ; enddo
     endif
 
     write(file,'(/,"uh--:  ",$)')
     do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-                                    (uh_scale*CDp%uh(I-1,j,k)*G%IdyCu(I-1,j)); enddo
+                                    (uh_scale*CDp%uh(I-1,j,k)*G%IdyCu(I-1,j)) ; enddo
     write(file,'(/," uhC--: ",$)')
     do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-            (US%L_T_to_m_s*CS%u_av(I-1,j,k) * h_scale*0.5*(hin(i-1,j,k) + hin(i,j,k))); enddo
+            (CS%u_av(I-1,j,k) * uh_scale*0.5*(hin(i-1,j,k) + hin(i,j,k))) ; enddo
     if (prev_avail) then
       write(file,'(/," uhCp--:",$)')
       do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-            (CS%u_prev(I-1,j,k) * h_scale*0.5*(hin(i-1,j,k) + hin(i,j,k))); enddo
+            (CS%u_prev(I-1,j,k) * uh_scale*0.5*(hin(i-1,j,k) + hin(i,j,k))) ; enddo
     endif
 
     write(file,'(/,"uh-+:  ",$)')
     do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-                                    (uh_scale*CDp%uh(I-1,j+1,k)*G%IdyCu(I-1,j+1)); enddo
+                                    (uh_scale*CDp%uh(I-1,j+1,k)*G%IdyCu(I-1,j+1)) ; enddo
     write(file,'(/," uhC-+: ",$)')
     do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-            (US%L_T_to_m_s*CS%u_av(I-1,j+1,k) * h_scale*0.5*(hin(i-1,j+1,k) + hin(i,j+1,k))); enddo
+            (CS%u_av(I-1,j+1,k) * uh_scale*0.5*(hin(i-1,j+1,k) + hin(i,j+1,k))) ; enddo
     if (prev_avail) then
       write(file,'(/," uhCp-+:",$)')
       do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-            (CS%u_prev(I-1,j+1,k) * h_scale*0.5*(hin(i-1,j+1,k) + hin(i,j+1,k))); enddo
+            (CS%u_prev(I-1,j+1,k) * uh_scale*0.5*(hin(i-1,j+1,k) + hin(i,j+1,k))) ; enddo
     endif
 
     write(file,'(/,"uh+-:  ",$)')
     do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-                                    (uh_scale*CDp%uh(I,j,k)*G%IdyCu(I,j)); enddo
+                                    (uh_scale*CDp%uh(I,j,k)*G%IdyCu(I,j)) ; enddo
     write(file,'(/," uhC+-: ",$)')
     do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-            (US%L_T_to_m_s*CS%u_av(I,j,k) * h_scale*0.5*(hin(i,j,k) + hin(i+1,j,k))); enddo
+            (CS%u_av(I,j,k) * uh_scale*0.5*(hin(i,j,k) + hin(i+1,j,k))) ; enddo
     if (prev_avail) then
       write(file,'(/," uhCp+-:",$)')
       do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-            (CS%u_prev(I,j,k) * h_scale*0.5*(hin(i,j,k) + hin(i+1,j,k))); enddo
+            (CS%u_prev(I,j,k) * uh_scale*0.5*(hin(i,j,k) + hin(i+1,j,k))) ; enddo
     endif
 
     write(file,'(/,"uh++:  ",$)')
     do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-                                    (uh_scale*CDp%uh(I,j+1,k)*G%IdyCu(I,j+1)); enddo
+                                    (uh_scale*CDp%uh(I,j+1,k)*G%IdyCu(I,j+1)) ; enddo
     write(file,'(/," uhC++: ",$)')
     do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-            (US%L_T_to_m_s*CS%u_av(I,j+1,k) * 0.5*h_scale*(hin(i,j+1,k) + hin(i+1,j+1,k))); enddo
+            (CS%u_av(I,j+1,k) * uh_scale*0.5*(hin(i,j+1,k) + hin(i+1,j+1,k))) ; enddo
     if (prev_avail) then
       write(file,'(/," uhCp++:",$)')
       do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ",$)') &
-            (CS%u_prev(I,j+1,k) * h_scale*0.5*(hin(i,j+1,k) + hin(i+1,j+1,k))); enddo
+            (CS%u_prev(I,j+1,k) * uh_scale*0.5*(hin(i,j+1,k) + hin(i+1,j+1,k))) ; enddo
     endif
 
     write(file,'(/,"D:     ",2(ES10.3))') US%Z_to_m*(G%bathyT(i,j) + G%Z_ref), US%Z_to_m*(G%bathyT(i,j+1) + G%Z_ref)
@@ -669,50 +667,50 @@ subroutine write_v_accel(i, J, vm, hin, ADp, CDp, dt_in_T, G, GV, US, CS, vel_rp
   !  From here on, the normalized accelerations are written.
     if (prev_avail) then
       do k=ks,ke
-        dv = US%L_T_to_m_s*(vm(i,J,k)-CS%v_prev(i,J,k))
-        if (abs(dv) < 1.0e-6) dv = 1.0e-6
+        dv = vm(i,J,k) - CS%v_prev(i,J,k)
+        if (abs(dv) < 1.0e-6*US%m_s_to_L_T) dv = 1.0e-6*US%m_s_to_L_T
         Inorm(k) = 1.0 / dv
       enddo
 
       write(file,'(2/,"Norm:  ",$)')
-      do k=ks,ke ; if (do_k(k)) write(file,'(F10.6," ",$)') (1.0/Inorm(k)); enddo
+      do k=ks,ke ; if (do_k(k)) write(file,'(F10.6," ",$)') (vel_scale / Inorm(k)) ; enddo
       write(file,'(/,"dv:    ",$)')
       do k=ks,ke ; if (do_k(k)) write(file,'(F10.6," ",$)') &
-                                      (US%L_T_to_m_s*(vm(i,J,k)-CS%v_prev(i,J,k))*Inorm(k)); enddo
+                                      ((vm(i,J,k)-CS%v_prev(i,J,k)) * Inorm(k)) ; enddo
       write(file,'(/,"CAv:   ",$)')
       do k=ks,ke ; if (do_k(k)) write(file,'(F10.6," ",$)') &
-                                      (dt*US%L_T2_to_m_s2*ADp%CAv(i,J,k)*Inorm(k)); enddo
+                                      (dt*ADp%CAv(i,J,k) * Inorm(k)) ; enddo
       write(file,'(/,"PFv:   ",$)')
       do k=ks,ke ; if (do_k(k)) write(file,'(F10.6," ",$)') &
-                                      (dt*US%L_T2_to_m_s2*ADp%PFv(i,J,k)*Inorm(k)); enddo
+                                      (dt*ADp%PFv(i,J,k) * Inorm(k)) ; enddo
       write(file,'(/,"diffv: ",$)')
       do k=ks,ke ; if (do_k(k)) write(file,'(F10.6," ",$)') &
-                                      (dt*US%L_T2_to_m_s2*ADp%diffv(i,J,k)*Inorm(k)); enddo
+                                      (dt*ADp%diffv(i,J,k) * Inorm(k)) ; enddo
 
       if (associated(ADp%gradKEu)) then
         write(file,'(/,"KEv:   ",$)')
         do k=ks,ke ; if (do_k(k)) write(file,'(F10.6," ",$)') &
-                                      (dt*US%L_T2_to_m_s2*ADp%gradKEv(i,J,k)*Inorm(k)); enddo
+                                        (dt*ADp%gradKEv(i,J,k) * Inorm(k)) ; enddo
       endif
       if (associated(ADp%rv_x_u)) then
         write(file,'(/,"Corv:  ",$)')
         do k=ks,ke ; if (do_k(k)) write(file,'(F10.6," ",$)') &
-            dt*US%L_T2_to_m_s2*(ADp%CAv(i,J,k)-ADp%rv_x_u(i,J,k))*Inorm(k); enddo
+                                        (dt*(ADp%CAv(i,J,k)-ADp%rv_x_u(i,J,k)) * Inorm(k)) ; enddo
       endif
       if (associated(ADp%dv_dt_visc)) then
         write(file,'(/,"dvv:   ",$)')
         do k=ks,ke ; if (do_k(k)) write(file,'(F10.6," ",$)') &
-            (dt*US%L_T2_to_m_s2*ADp%dv_dt_visc(i,J,k)*Inorm(k)); enddo
+                                        (dt*ADp%dv_dt_visc(i,J,k) * Inorm(k)) ; enddo
       endif
       if (associated(ADp%dv_other)) then
         write(file,'(/,"dv_other: ",$)')
         do k=ks,ke ; if (do_k(k)) write(file,'(F10.6," ",$)') &
-            (US%L_T_to_m_s*ADp%dv_other(i,J,k)*Inorm(k)); enddo
+                                        (ADp%dv_other(i,J,k) * Inorm(k)) ; enddo
       endif
       if (associated(CS%v_accel_bt)) then
         write(file,'(/,"dvbt:  ",$)')
         do k=ks,ke ; if (do_k(k)) write(file,'(F10.6," ",$)') &
-                                        (dt*US%L_T2_to_m_s2*CS%v_accel_bt(i,J,k)*Inorm(k)) ; enddo
+                                        (dt*CS%v_accel_bt(i,J,k) * Inorm(k)) ; enddo
       endif
     endif
 
