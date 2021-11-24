@@ -925,34 +925,32 @@ subroutine calculateBuoyancyFlux1d(G, GV, US, fluxes, optics, nsw, h, Temp, Salt
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)    :: Salt           !< salinity [ppt]
   type(thermo_var_ptrs),                    intent(inout) :: tv             !< thermodynamics type
   integer,                                  intent(in)    :: j              !< j-row to work on
-  real, dimension(SZI_(G),SZK_(GV)+1),      intent(inout) :: buoyancyFlux   !< buoyancy fluxes [L2 T-3 ~> m2 s-3]
-  real, dimension(SZI_(G)),                 intent(inout) :: netHeatMinusSW !< Surface heat flux excluding shortwave
-                                                                      !! [degC H s-1 ~> degC m s-1 or degC kg m-2 s-1]
-  real, dimension(SZI_(G)),                 intent(inout) :: netSalt        !< surface salt flux
-                                                                      !! [ppt H s-1 ~> ppt m s-1 or ppt kg m-2 s-1]
+  real, dimension(SZI_(G),SZK_(GV)+1),      intent(out)   :: buoyancyFlux   !< buoyancy fluxes [L2 T-3 ~> m2 s-3]
+  real, dimension(SZI_(G)),                 intent(out)   :: netHeatMinusSW !< Surface heat flux excluding shortwave
+                                                                      !! [degC H T-1 ~> degC m s-1 or degC kg m-2 s-1]
+  real, dimension(SZI_(G)),                 intent(out)   :: netSalt        !< surface salt flux
+                                                                      !! [ppt H T-1 ~> ppt m s-1 or ppt kg m-2 s-1]
 
   ! local variables
-  integer                               :: k
-  real, parameter                       :: dt = 1.    ! to return a rate from extractFluxes1d
-  real, dimension(SZI_(G))              :: netH       ! net FW flux [H s-1 ~> m s-1 or kg m-2 s-1]
+  real, dimension(SZI_(G))              :: netH       ! net FW flux [H T-1 ~> m s-1 or kg m-2 s-1]
   real, dimension(SZI_(G))              :: netEvap    ! net FW flux leaving ocean via evaporation
-                                                      ! [H s-1 ~> m s-1 or kg m-2 s-1]
-  real, dimension(SZI_(G))              :: netHeat    ! net temp flux [degC H s-1 ~> degC m s-1 or degC kg m-2 s-1]
+                                                      ! [H T-1 ~> m s-1 or kg m-2 s-1]
+  real, dimension(SZI_(G))              :: netHeat    ! net temp flux [degC H T-1 ~> degC m s-1 or degC kg m-2 s-1]
   real, dimension(max(nsw,1), SZI_(G))  :: penSWbnd   ! penetrating SW radiation by band
-                                                      ! [degC H s-1 ~> degC m s-1 or degC kg m-2 s-1]
+                                                      ! [degC H T-1 ~> degC m s-1 or degC kg m-2 s-1]
   real, dimension(SZI_(G))              :: pressure   ! pressure at the surface [R L2 T-2 ~> Pa]
   real, dimension(SZI_(G))              :: dRhodT     ! density partial derivative wrt temp [R degC-1 ~> kg m-3 degC-1]
   real, dimension(SZI_(G))              :: dRhodS     ! density partial derivative wrt saln [R ppt-1 ~> kg m-3 ppt-1]
   real, dimension(SZI_(G),SZK_(GV)+1)   :: netPen     ! The net penetrating shortwave radiation at each level
-                                                      ! [degC H s-1 ~> degC m s-1 or degC kg m-2 s-1]
+                                                      ! [degC H T-1 ~> degC m s-1 or degC kg m-2 s-1]
 
   logical :: useRiverHeatContent
   logical :: useCalvingHeatContent
   real    :: depthBeforeScalingFluxes  ! A depth scale [H ~> m or kg m-2]
-  real    :: GoRho ! The gravitational acceleration divided by mean density times some
-                   ! unit conversion factors [L2 H-1 s R-1 T-3 ~> m4 kg-1 s-2 or m7 kg-2 s-2]
+  real    :: GoRho ! The gravitational acceleration divided by mean density times a
+                   ! unit conversion factor [L2 H-1 R-1 T-2 ~> m4 kg-1 s-2 or m7 kg-2 s-2]
   real    :: H_limit_fluxes            ! Another depth scale [H ~> m or kg m-2]
-  integer :: i
+  integer :: i, k
 
   !  smg: what do we do when have heat fluxes from calving and river?
   useRiverHeatContent   = .False.
@@ -961,25 +959,25 @@ subroutine calculateBuoyancyFlux1d(G, GV, US, fluxes, optics, nsw, h, Temp, Salt
   depthBeforeScalingFluxes = max( GV%Angstrom_H, 1.e-30*GV%m_to_H )
   pressure(:) = 0.
   if (associated(tv%p_surf)) then ; do i=G%isc,G%iec ; pressure(i) = tv%p_surf(i,j) ; enddo ; endif
-  GoRho       = (GV%g_Earth * GV%H_to_Z*US%T_to_s) / GV%Rho0
+  GoRho       = (GV%g_Earth * GV%H_to_Z) / GV%Rho0
 
   H_limit_fluxes = depthBeforeScalingFluxes
 
   ! The surface forcing is contained in the fluxes type.
   ! We aggregate the thermodynamic forcing for a time step into the following:
-  ! netH       = water added/removed via surface fluxes [H s-1 ~> m s-1 or kg m-2 s-1]
-  ! netHeat    = heat via surface fluxes [degC H s-1 ~> degC m s-1 or degC kg m-2 s-1]
-  ! netSalt    = salt via surface fluxes [ppt H s-1 ~> ppt m s-1 or gSalt m-2 s-1]
+  ! netH       = water added/removed via surface fluxes [H T-1 ~> m s-1 or kg m-2 s-1]
+  ! netHeat    = heat via surface fluxes [degC H T-1 ~> degC m s-1 or degC kg m-2 s-1]
+  ! netSalt    = salt via surface fluxes [ppt H T-1 ~> ppt m s-1 or gSalt m-2 s-1]
   ! Note that unlike other calls to extractFLuxes1d() that return the time-integrated flux
-  ! this call returns the rate because dt=1
-  call extractFluxes1d(G, GV, US, fluxes, optics, nsw, j, dt*US%s_to_T,               &
+  ! this call returns the rate because dt=1 (in arbitrary time units)
+  call extractFluxes1d(G, GV, US, fluxes, optics, nsw, j, 1.0,                        &
                 depthBeforeScalingFluxes, useRiverHeatContent, useCalvingHeatContent, &
                 h(:,j,:), Temp(:,j,:), netH, netEvap, netHeatMinusSW,                 &
                 netSalt, penSWbnd, tv, .false.)
 
   ! Sum over bands and attenuate as a function of depth
   ! netPen is the netSW as a function of depth
-  call sumSWoverBands(G, GV, US, h(:,j,:), optics_nbands(optics), optics, j, dt*US%s_to_T, &
+  call sumSWoverBands(G, GV, US, h(:,j,:), optics_nbands(optics), optics, j, 1.0, &
                       H_limit_fluxes, .true., penSWbnd, netPen)
 
   ! Density derivatives
@@ -987,12 +985,14 @@ subroutine calculateBuoyancyFlux1d(G, GV, US, fluxes, optics, nsw, h, Temp, Salt
                                 tv%eqn_of_state, EOS_domain(G%HI))
 
   ! Adjust netSalt to reflect dilution effect of FW flux
-  netSalt(G%isc:G%iec) = netSalt(G%isc:G%iec) - Salt(G%isc:G%iec,j,1) * netH(G%isc:G%iec) ! ppt H/s
+  ! [ppt H T-1 ~> ppt m s-1 or ppt kg m-2 s-1]
+  netSalt(G%isc:G%iec) = netSalt(G%isc:G%iec) - Salt(G%isc:G%iec,j,1) * netH(G%isc:G%iec)
 
   ! Add in the SW heating for purposes of calculating the net
   ! surface buoyancy flux affecting the top layer.
+  ! [degC H T-1 ~> degC m s-1 or degC kg m-2 s-1]
   !netHeat(:) = netHeatMinusSW(:) + sum( penSWbnd, dim=1 )
-  netHeat(G%isc:G%iec) = netHeatMinusSW(G%isc:G%iec) + netPen(G%isc:G%iec,1) ! K H/s
+  netHeat(G%isc:G%iec) = netHeatMinusSW(G%isc:G%iec) + netPen(G%isc:G%iec,1)
 
   ! Convert to a buoyancy flux, excluding penetrating SW heating
   buoyancyFlux(G%isc:G%iec,1) = - GoRho * ( dRhodS(G%isc:G%iec) * netSalt(G%isc:G%iec) + &
@@ -1020,9 +1020,9 @@ subroutine calculateBuoyancyFlux2d(G, GV, US, fluxes, optics, h, Temp, Salt, tv,
   type(thermo_var_ptrs),                      intent(inout) :: tv     !< thermodynamics type
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), intent(inout) :: buoyancyFlux  !< buoyancy fluxes [L2 T-3 ~> m2 s-3]
   real, dimension(SZI_(G),SZJ_(G)),           intent(inout) :: netHeatMinusSW !< surface heat flux excluding shortwave
-                                                                      !! [degC H s-1 ~> degC m s-1 or degC kg m-2 s-1]
+                                                                      !! [degC H T-1 ~> degC m s-1 or degC kg m-2 s-1]
   real, dimension(SZI_(G),SZJ_(G)),           intent(inout) :: netSalt !< Net surface salt flux
-                                                                      !! [ppt H s-1 ~> ppt m s-1 or ppt kg m-2 s-1]
+                                                                      !! [ppt H T-1 ~> ppt m s-1 or ppt kg m-2 s-1]
   ! local variables
   integer :: j
 
