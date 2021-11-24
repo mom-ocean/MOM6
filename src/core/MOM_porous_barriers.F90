@@ -50,8 +50,8 @@ subroutine por_widths(h, tv, G, GV, US, eta, pbv, eta_bt, halo_size, eta_to_m)
   !local variables
   integer ii, i, j, k, nk, isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
   real w_layer, & ! fractional open width of layer interface [nondim]
-       A_layer, & ! integral of fractional open width from bottom to current layer[nondim]
-       A_layer_prev, & ! integral of fractional open width from bottom to previous layer [nondim]
+       A_layer, & ! integral of fractional open width from bottom to current layer[Z ~> m]
+       A_layer_prev, & ! integral of fractional open width from bottom to previous layer [Z ~> m]
        eta_s, & ! layer height used for fit [Z ~> m]
        eta_prev ! interface height of previous layer [Z ~> m]
   isd = G%isd; ied = G%ied; jsd = G%jsd; jed = G%jed
@@ -67,22 +67,20 @@ subroutine por_widths(h, tv, G, GV, US, eta, pbv, eta_bt, halo_size, eta_to_m)
   do j=jsd,jed; do I=IsdB,IedB
     if (G%porous_DavgU(I,j) < 0.) then
       do K = nk+1,1,-1
-        eta_s = max(US%Z_to_m*eta(I,j,K), US%Z_to_m*eta(I+1,j,K)) !take shallower layer height
-        !eta_s = 0.5 * (US%Z_to_m*eta(I,j,K) + US%Z_to_m*eta(I+1,j,K)) !take arithmetic mean
-        if (eta_s <= G%porous_DminU(I,j)) then
+        eta_s = max(eta(I,j,K), eta(I+1,j,K)) !take shallower layer height
+        if (US%Z_to_m*eta_s <= (US%Z_to_m*G%porous_DminU(I,j))) then
           pbv%por_layer_widthU(I,j,K) = 0.0
           A_layer_prev = 0.0
           if (K < nk+1) then
             pbv%por_face_areaU(I,j,k) = 0.0; endif
         else
-          call calc_por_layer(US%Z_to_m*(G%porous_DminU(I,j)-G%Z_ref), &
-            US%Z_to_m*(G%porous_DmaxU(I,j)-G%Z_ref), &
-            US%Z_to_m*(G%porous_DavgU(I,j)-G%Z_ref), eta_s, w_layer, A_layer)
+          call calc_por_layer(G%porous_DminU(I,j), G%porous_DmaxU(I,j), &
+            G%porous_DavgU(I,j), eta_s, w_layer, A_layer, G%Z_ref, US%Z_to_m)
           pbv%por_layer_widthU(I,j,K) = w_layer
           if (k <= nk) then
             if ((eta_s - eta_prev) > 0.0) then
               pbv%por_face_areaU(I,j,k) = (A_layer - A_layer_prev)/&
-                   (eta_s-eta_prev)
+                   (US%Z_to_m*(eta_s-eta_prev))
             else
               pbv%por_face_areaU(I,j,k) = 0.0; endif
           endif
@@ -96,22 +94,20 @@ subroutine por_widths(h, tv, G, GV, US, eta, pbv, eta_bt, halo_size, eta_to_m)
   do i=isd,ied; do J=JsdB,JedB
     if (G%porous_DavgV(i,J) < 0.) then
       do K = nk+1,1,-1
-        eta_s = max(US%Z_to_m*eta(i,J,K), US%Z_to_m*eta(i,J+1,K)) !take shallower layer height
-        !eta_s = 0.5 * (US%Z_to_m*eta(i,J,K) + US%Z_to_m*eta(i,J+1,K)) !take arithmetic mean
-        if (eta_s <= G%porous_DminV(i,J)) then
+        eta_s = max(eta(i,J,K), eta(i,J+1,K)) !take shallower layer height
+        if (US%Z_to_m*eta_s <= US%Z_to_m*G%porous_DminV(i,J)) then
           pbv%por_layer_widthV(i,J,K) = 0.0
           A_layer_prev = 0.0
           if (K < nk+1) then
             pbv%por_face_areaV(i,J,k) = 0.0; endif
         else
-          call calc_por_layer(US%Z_to_m*(G%porous_DminV(i,J)-G%Z_ref), &
-            US%Z_to_m*(G%porous_DmaxV(i,J)-G%Z_ref), &
-            US%Z_to_m*(G%porous_DavgV(i,J)-G%Z_ref), eta_s, w_layer, A_layer)
+          call calc_por_layer(G%porous_DminV(i,J), G%porous_DmaxV(i,J), &
+            G%porous_DavgV(i,J), eta_s, w_layer, A_layer, G%Z_ref, US%Z_to_m)
           pbv%por_layer_widthV(i,J,K) = w_layer
           if (k <= nk) then
             if ((eta_s - eta_prev) > 0.0) then
               pbv%por_face_areaV(i,J,k) = (A_layer - A_layer_prev)/&
-                   (eta_s-eta_prev)
+                   (US%Z_to_m*(eta_s-eta_prev))
             else
               pbv%por_face_areaU(I,j,k) = 0.0; endif
           endif
@@ -125,32 +121,39 @@ subroutine por_widths(h, tv, G, GV, US, eta, pbv, eta_bt, halo_size, eta_to_m)
 end subroutine por_widths
 
 !> subroutine to calculate the profile fit for a single layer in a column
-subroutine calc_por_layer(D_min, D_max, D_avg, eta_layer, w_layer, A_layer)
+subroutine calc_por_layer(D_min, D_max, D_avg, eta_layer, w_layer, A_layer, Z_ref, Z_to_m)
 
-  real,            intent(in) :: D_min !< minimum topographic height [m]
-  real,            intent(in) :: D_max !< maximum topographic height [m]
-  real,            intent(in) :: D_avg !< mean topographic height [m]
-  real,            intent(in) :: eta_layer !< height of interface [m]
+  real,            intent(in)  :: D_min !< minimum topographic height [Z ~> m]
+  real,            intent(in)  :: D_max !< maximum topographic height [Z ~> m]
+  real,            intent(in)  :: D_avg !< mean topographic height [Z ~> m]
+  real,            intent(in)  :: eta_layer !< height of interface [Z ~> m]
   real,            intent(out) :: w_layer !< frac. open interface width of current layer [nondim]
-  real,            intent(out) :: A_layer !< frac. open face area of current layer [nondim]
+  real,            intent(out) :: A_layer !< frac. open face area of current layer [Z ~> m]
+  real,            intent(in)  :: Z_ref !< reference value for geometric height fields [Z ~> m]
+  real,            intent(in)  :: Z_to_m !< a unit conversion factor from units of Z to m
   !local variables
-  real m, a, &   !convenience constant for fit [nondim]
-       zeta, &   !normalized vertical coordinate [nondim]
-       psi, &    !fractional width of layer between Dmin and Dmax [nondim]
-       psi_int !integral of psi from 0 to zeta
+  real Dmin, Dmax, Davg, & !copies of input topographic heights stored in [m]
+       etam, &             !copy of eta_layer stored in [m]
+       m, a, &             !convenience constant for fit [nondim]
+       zeta, &             !normalized vertical coordinate [nondim]
+       psi, &              !fractional width of layer between Dmin and Dmax [nondim]
+       psi_int             !integral of psi from 0 to zeta
+
+  Dmin = Z_to_m*(D_min - Z_ref); Dmax = Z_to_m*(D_max - Z_ref)
+  Davg = Z_to_m*(D_avg - Z_ref); etam = Z_to_m*(eta_layer - Z_ref)
 
   !three parameter fit from Adcroft 2013
-  m = (D_avg - D_min)/(D_max - D_min)
+  m = (Davg - Dmin)/(Dmax - Dmin)
   a = (1. - m)/m
 
-  zeta = (eta_layer - D_min)/(D_max - D_min)
+  zeta = (etam - Dmin)/(Dmax - Dmin)
 
-  if (eta_layer <= D_min) then
+  if (etam <= Dmin) then
     w_layer = 0.0
     A_layer = 0.0
-  elseif (eta_layer >= D_max) then
+  elseif (etam >= Dmax) then
     w_layer = 1.0
-    A_layer = eta_layer - D_avg
+    A_layer = etam - Davg
   else
     if (m < 0.5) then
       psi = zeta**(1./a)
@@ -163,7 +166,7 @@ subroutine calc_por_layer(D_min, D_max, D_avg, eta_layer, w_layer, A_layer)
       psi_int = zeta - m + m*((1-zeta)**(1/m))
     endif
     w_layer = psi
-    A_layer = (D_max - D_min)*psi_int
+    A_layer = (Dmax - Dmin)*psi_int
   endif
 
 

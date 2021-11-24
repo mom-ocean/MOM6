@@ -336,6 +336,14 @@ subroutine rotate_dyn_horgrid(G_in, G, US, turns)
   call rotate_array_pair(G_in%areaCu, G_in%areaCv, turns, G%areaCu, G%areaCv)
   call rotate_array_pair(G_in%IareaCu, G_in%IareaCv, turns, G%IareaCu, G%IareaCv)
 
+  call rotate_array_pair(G_in%porous_DminU, G_in%porous_DminV, &
+       turns, G%porous_DminU, G%porous_DminV)
+  call rotate_array_pair(G_in%porous_DmaxU, G_in%porous_DmaxV, &
+       turns, G%porous_DmaxU, G%porous_DmaxV)
+  call rotate_array_pair(G_in%porous_DavgU, G_in%porous_DavgV, &
+       turns, G%porous_DavgU, G%porous_DavgV)
+
+
   ! Vertex point
   call rotate_array(G_in%geoLonBu, turns, G%geoLonBu)
   call rotate_array(G_in%geoLatBu, turns, G%geoLatBu)
