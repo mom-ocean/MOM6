@@ -433,7 +433,7 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn, i
 ! get number of processors and PE list for stocasthci physics initialization
   call get_param(param_file, mdl, "DO_SPPT", OS%do_sppt, &
                  "If true, then stochastically perturb the thermodynamic "//&
-                 "tendemcies of T,S, amd h.  Amplitude and correlations are "//&
+                 "tendencies of T,S, and h.  Amplitude and correlations are "//&
                  "controlled by the nam_stoch namelist in the UFS model only.", &
                  default=.false.)
   call get_param(param_file, mdl, "PERT_EPBL", OS%pert_epbl, &
@@ -752,7 +752,7 @@ subroutine ocean_model_restart(OS, timestamp, restartname, stoch_restartname, nu
         endif
      endif
   endif
-  if (present(restartname)) then
+  if (present(stoch_restartname)) then
       if (OS%do_sppt .OR. OS%pert_epbl) then
          call write_stoch_restart_ocn('RESTART/'//trim(stoch_restartname))
      endif
