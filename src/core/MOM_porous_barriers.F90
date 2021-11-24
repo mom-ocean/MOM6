@@ -121,7 +121,7 @@ subroutine por_widths(h, tv, G, GV, US, eta, pbv, eta_bt, halo_size, eta_to_m)
 end subroutine por_widths
 
 !> subroutine to calculate the profile fit for a single layer in a column
-subroutine calc_por_layer(D_min, D_max, D_avg, eta_layer, w_layer, A_layer, Z_ref, Z_to_m)
+subroutine calc_por_layer(D_min, D_max, D_avg, eta_layer, w_layer, A_layer)
 
   real,            intent(in)  :: D_min !< minimum topographic height [Z ~> m]
   real,            intent(in)  :: D_max !< maximum topographic height [Z ~> m]
