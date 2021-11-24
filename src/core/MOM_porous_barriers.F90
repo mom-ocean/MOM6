@@ -80,7 +80,7 @@ subroutine por_widths(h, tv, G, GV, US, eta, pbv, eta_bt, halo_size, eta_to_m)
           if (k <= nk) then
             if ((eta_s - eta_prev) > 0.0) then
               pbv%por_face_areaU(I,j,k) = (A_layer - A_layer_prev)/&
-                   (US%Z_to_m*(eta_s-eta_prev))
+                   (eta_s-eta_prev)
             else
               pbv%por_face_areaU(I,j,k) = 0.0; endif
           endif
@@ -107,7 +107,7 @@ subroutine por_widths(h, tv, G, GV, US, eta, pbv, eta_bt, halo_size, eta_to_m)
           if (k <= nk) then
             if ((eta_s - eta_prev) > 0.0) then
               pbv%por_face_areaV(i,J,k) = (A_layer - A_layer_prev)/&
-                   (US%Z_to_m*(eta_s-eta_prev))
+                   (eta_s-eta_prev)
             else
               pbv%por_face_areaU(I,j,k) = 0.0; endif
           endif
