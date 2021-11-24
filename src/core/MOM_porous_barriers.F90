@@ -68,14 +68,14 @@ subroutine por_widths(h, tv, G, GV, US, eta, pbv, eta_bt, halo_size, eta_to_m)
     if (G%porous_DavgU(I,j) < 0.) then
       do K = nk+1,1,-1
         eta_s = max(eta(I,j,K), eta(I+1,j,K)) !take shallower layer height
-        if (US%Z_to_m*eta_s <= (US%Z_to_m*G%porous_DminU(I,j))) then
+        if (eta_s <= G%porous_DminU(I,j)) then
           pbv%por_layer_widthU(I,j,K) = 0.0
           A_layer_prev = 0.0
           if (K < nk+1) then
             pbv%por_face_areaU(I,j,k) = 0.0; endif
         else
           call calc_por_layer(G%porous_DminU(I,j), G%porous_DmaxU(I,j), &
-            G%porous_DavgU(I,j), eta_s, w_layer, A_layer, G%Z_ref, US%Z_to_m)
+            G%porous_DavgU(I,j), eta_s, w_layer, A_layer)
           pbv%por_layer_widthU(I,j,K) = w_layer
           if (k <= nk) then
             if ((eta_s - eta_prev) > 0.0) then
@@ -95,14 +95,14 @@ subroutine por_widths(h, tv, G, GV, US, eta, pbv, eta_bt, halo_size, eta_to_m)
     if (G%porous_DavgV(i,J) < 0.) then
       do K = nk+1,1,-1
         eta_s = max(eta(i,J,K), eta(i,J+1,K)) !take shallower layer height
-        if (US%Z_to_m*eta_s <= US%Z_to_m*G%porous_DminV(i,J)) then
+        if (eta_s <= G%porous_DminV(i,J)) then
           pbv%por_layer_widthV(i,J,K) = 0.0
           A_layer_prev = 0.0
           if (K < nk+1) then
             pbv%por_face_areaV(i,J,k) = 0.0; endif
         else
           call calc_por_layer(G%porous_DminV(i,J), G%porous_DmaxV(i,J), &
-            G%porous_DavgV(i,J), eta_s, w_layer, A_layer, G%Z_ref, US%Z_to_m)
+            G%porous_DavgV(i,J), eta_s, w_layer, A_layer)
           pbv%por_layer_widthV(i,J,K) = w_layer
           if (k <= nk) then
             if ((eta_s - eta_prev) > 0.0) then
@@ -129,18 +129,11 @@ subroutine calc_por_layer(D_min, D_max, D_avg, eta_layer, w_layer, A_layer, Z_re
   real,            intent(in)  :: eta_layer !< height of interface [Z ~> m]
   real,            intent(out) :: w_layer !< frac. open interface width of current layer [nondim]
   real,            intent(out) :: A_layer !< frac. open face area of current layer [Z ~> m]
-  real,            intent(in)  :: Z_ref !< reference value for geometric height fields [Z ~> m]
-  real,            intent(in)  :: Z_to_m !< a unit conversion factor from units of Z to m
   !local variables
-  real Dmin, Dmax, Davg, & !copies of input topographic heights stored in [m]
-       etam, &             !copy of eta_layer stored in [m]
-       m, a, &             !convenience constant for fit [nondim]
+  real m, a, &             !convenience constant for fit [nondim]
        zeta, &             !normalized vertical coordinate [nondim]
        psi, &              !fractional width of layer between Dmin and Dmax [nondim]
        psi_int             !integral of psi from 0 to zeta
-
-  Dmin = Z_to_m*(D_min - Z_ref); Dmax = Z_to_m*(D_max - Z_ref)
-  Davg = Z_to_m*(D_avg - Z_ref); etam = Z_to_m*(eta_layer - Z_ref)
 
   !three parameter fit from Adcroft 2013
   m = (Davg - Dmin)/(Dmax - Dmin)
