@@ -56,6 +56,7 @@ public set_diffusivity_end
 
 !> This control structure contains parameters for MOM_set_diffusivity.
 type, public :: set_diffusivity_CS ; private
+  logical :: initialized = .false. !< True if this control structure has been initialized.
   logical :: debug           !< If true, write verbose checksums for debugging.
 
   logical :: bulkmixedlayer  !< If true, a refined bulk mixed layer is used with
@@ -280,6 +281,9 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, Kd_i
   if (showCallTree) call callTree_enter("set_diffusivity(), MOM_set_diffusivity.F90")
 
   if (.not.associated(CS)) call MOM_error(FATAL,"set_diffusivity: "//&
+         "Module must be initialized before it is used.")
+
+  if (.not.CS%initialized) call MOM_error(FATAL,"set_diffusivity: "//&
          "Module must be initialized before it is used.")
 
   if (CS%answers_2018) then
@@ -1709,6 +1713,9 @@ subroutine set_BBL_TKE(u, v, h, fluxes, visc, G, GV, US, CS, OBC)
   if (.not.associated(CS)) call MOM_error(FATAL,"set_BBL_TKE: "//&
          "Module must be initialized before it is used.")
 
+  if (.not.CS%initialized) call MOM_error(FATAL,"set_BBL_TKE: "//&
+         "Module must be initialized before it is used.")
+
   if (.not.CS%bottomdraglaw .or. (CS%BBL_effic<=0.0)) then
     if (associated(visc%ustar_BBL)) then
       do j=js,je ; do i=is,ie ; visc%ustar_BBL(i,j) = 0.0 ; enddo ; enddo
@@ -1986,6 +1993,8 @@ subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, int_tide_
     return
   endif
   allocate(CS)
+
+  CS%initialized = .true.
 
   is  = G%isc ; ie  = G%iec ; js  = G%jsc ; je  = G%jec
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed

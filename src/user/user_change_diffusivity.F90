@@ -25,6 +25,7 @@ public user_change_diff, user_change_diff_init, user_change_diff_end
 
 !> Control structure for user_change_diffusivity
 type, public :: user_change_diff_CS ; private
+  logical :: initialized = .false. !< True if this control structure has been initialized.
   real :: Kd_add        !< The scale of a diffusivity that is added everywhere
                         !! without any filtering or scaling [Z2 T-1 ~> m2 s-1].
   real :: lat_range(4)  !< 4 values that define the latitude range over which
@@ -84,6 +85,9 @@ subroutine user_change_diff(h, tv, G, GV, US, CS, Kd_lay, Kd_int, T_f, S_f, Kd_i
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
   if (.not.associated(CS)) call MOM_error(FATAL,"user_set_diffusivity: "//&
+         "Module must be initialized before it is used.")
+
+  if (.not.CS%initialized) call MOM_error(FATAL,"user_set_diffusivity: "//&
          "Module must be initialized before it is used.")
 
   use_EOS = associated(tv%eqn_of_state)
@@ -213,6 +217,8 @@ subroutine user_change_diff_init(Time, G, GV, US, param_file, diag, CS)
     return
   endif
   allocate(CS)
+
+  CS%initialized = .true.
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
 

@@ -25,6 +25,7 @@ public CorAdCalc, CoriolisAdv_init, CoriolisAdv_end
 
 !> Control structure for mom_coriolisadv
 type, public :: CoriolisAdv_CS ; private
+  logical :: initialized = .false. !< True if this control structure has been initialized.
   integer :: Coriolis_Scheme !< Selects the discretization for the Coriolis terms.
                              !! Valid values are:
                              !! - SADOURNY75_ENERGY - Sadourny, 1975
@@ -244,6 +245,9 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS)
 ! is to ie range before this subroutine is called:
 !   v(is-1:ie+2,js-1:je+1), u(is-1:ie+1,js-1:je+2), h(is-1:ie+2,js-1:je+2),
 !   uh(is-1,ie,js:je+1) and vh(is:ie+1,js-1:je).
+
+  if (.not.CS%initialized) call MOM_error(FATAL, &
+         "MOM_CoriolisAdv: Module must be initialized before it is used.")
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB ; nz = GV%ke
@@ -1123,6 +1127,7 @@ subroutine CoriolisAdv_init(Time, G, GV, US, param_file, diag, AD, CS)
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nz = GV%ke
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
+  CS%initialized = .true.
   CS%diag => diag ; CS%Time => Time
 
   ! Read all relevant parameters and write them to the model log.

@@ -77,6 +77,9 @@ subroutine diapyc_energy_req_test(h_3d, dt, tv, G, GV, US, CS, Kd_int)
   if (.not. associated(CS)) call MOM_error(FATAL, "diapyc_energy_req_test: "// &
          "Module must be initialized before it is used.")
 
+  if (.not. CS%initialized) call MOM_error(FATAL, "diapyc_energy_req_test: "// &
+         "Module must be initialized before it is used.")
+
 !$OMP do
   do j=js,je ; do i=is,ie ; if (G%mask2dT(i,j) > 0.5) then
     if (present(Kd_int) .and. .not.CS%use_test_Kh_profile) then
