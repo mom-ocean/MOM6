@@ -23,6 +23,7 @@ public geothermal_entraining, geothermal_in_place, geothermal_init, geothermal_e
 
 !> Control structure for geothermal heating
 type, public :: geothermal_CS ; private
+  logical :: initialized = .false. !< True if this control structure has been initialized.
   real    :: dRcv_dT_inplace  !< The value of dRcv_dT above which (dRcv_dT is negative) the
                               !! water is heated in place instead of moving upward between
                               !! layers in non-ALE layered mode [R degC-1 ~> kg m-3 degC-1]
@@ -119,6 +120,8 @@ subroutine geothermal_entraining(h, tv, dt, ea, eb, G, GV, US, CS, halo)
     is = G%isc-halo ; ie = G%iec+halo ; js = G%jsc-halo ; je = G%jec+halo
   endif
 
+  if (.not. CS%initialized) call MOM_error(FATAL, "MOM_geothermal: "//&
+         "Module must be initialized before it is used.")
   if (.not.CS%apply_geothermal) return
 
   nkmb      = GV%nk_rho_varies
@@ -392,6 +395,8 @@ subroutine geothermal_in_place(h, tv, dt, G, GV, US, CS, halo)
     is = G%isc-halo ; ie = G%iec+halo ; js = G%jsc-halo ; je = G%jec+halo
   endif
 
+  if (.not. CS%initialized) call MOM_error(FATAL, "MOM_geothermal: "//&
+         "Module must be initialized before it is used.")
   if (.not.CS%apply_geothermal) return
 
   Irho_cp   = 1.0 / (GV%H_to_RZ * tv%C_p)
@@ -506,6 +511,7 @@ subroutine geothermal_init(Time, G, GV, US, param_file, diag, CS, useALEalgorith
   integer :: i, j, isd, ied, jsd, jed, id
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
+  CS%initialized = .true.
   CS%diag => diag
   CS%Time => Time
 

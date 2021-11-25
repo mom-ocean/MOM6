@@ -29,6 +29,7 @@ public step_forward_MEKE, MEKE_init, MEKE_alloc_register_restart, MEKE_end
 
 !> Control structure that contains MEKE parameters and diagnostics handles
 type, public :: MEKE_CS ; private
+  logical :: initialized = .false. !< True if this control structure has been initialized.
   ! Parameters
   real :: MEKE_FrCoeff  !< Efficiency of conversion of ME into MEKE [nondim]
   real :: MEKE_GMcoeff  !< Efficiency of conversion of PE into MEKE [nondim]
@@ -175,6 +176,9 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
+
+  if (.not.CS%initialized) call MOM_error(FATAL, &
+         "MOM_MEKE: Module must be initialized before it is used.")
 
   if ((CS%MEKE_Cd_scale > 0.0) .or. (CS%MEKE_Cb>0.) .or. CS%visc_drag) then
     use_drag_rate = .true.
@@ -1049,6 +1053,7 @@ logical function MEKE_init(Time, G, US, param_file, diag, CS, MEKE, restart_CS)
                  "a sub-grid mesoscale eddy kinetic energy budget.", &
                  default=.false.)
   if (.not. MEKE_init) return
+  CS%initialized = .true.
 
   call MOM_mesg("MEKE_init: reading parameters ", 5)
 

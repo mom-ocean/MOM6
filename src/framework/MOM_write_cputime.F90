@@ -20,6 +20,7 @@ integer :: MAX_TICKS      = 1000 !< The number of ticks per second, used by the 
 
 !> A control structure that regulates the writing of CPU time
 type, public :: write_cputime_CS ; private
+  logical :: initialized = .false. !< True if this control structure has been initialized.
   real :: maxcpu                !<   The maximum amount of cpu time per processor
                                 !! for which MOM should run before saving a restart
                                 !! file and quiting with a return value that
@@ -70,6 +71,8 @@ subroutine MOM_write_cputime_init(param_file, directory, Input_start_time, CS)
     call SYSTEM_CLOCK(new_cputime, CLOCKS_PER_SEC, MAX_TICKS)
     CS%prev_cputime = new_cputime
   endif
+
+  CS%initialized = .true.
 
   ! Read all relevant parameters and write them to the model log.
 
@@ -140,6 +143,9 @@ subroutine write_cputime(day, n, CS, nmax, call_end)
 
   if (.not.associated(CS)) call MOM_error(FATAL, &
          "write_energy: Module must be initialized before it is used.")
+
+  if (.not.CS%initialized) call MOM_error(FATAL, &
+         "write_cputime: Module must be initialized before it is used.")
 
   call SYSTEM_CLOCK(new_cputime, CLOCKS_PER_SEC, MAX_TICKS)
 !   The following lines extract useful information even if the clock has rolled

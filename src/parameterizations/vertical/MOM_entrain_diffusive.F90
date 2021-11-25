@@ -27,6 +27,7 @@ public entrainment_diffusive, entrain_diffusive_init
 
 !> The control structure holding parametes for the MOM_entrain_diffusive module
 type, public :: entrain_diffusive_CS ; private
+  logical :: initialized = .false. !< True if this control structure has been initialized.
   logical :: bulkmixedlayer  !< If true, a refined bulk mixed layer is used with
                              !! GV%nk_rho_varies variable density mixed & buffer layers.
   integer :: max_ent_it      !< The maximum number of iterations that may be used to
@@ -206,6 +207,9 @@ subroutine entrainment_diffusive(h, tv, fluxes, dt, G, GV, US, CS, ea, eb, &
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   Angstrom = GV%Angstrom_H
   h_neglect = GV%H_subroundoff
+
+  if (.not. CS%initialized) call MOM_error(FATAL, &
+         "MOM_entrain_diffusive: Module must be initialized before it is used.")
 
   if (.not.(present(Kd_Lay) .or. present(Kd_int))) call MOM_error(FATAL, &
       "MOM_entrain_diffusive: Either Kd_Lay or Kd_int must be present in call.")
@@ -2076,6 +2080,7 @@ subroutine entrain_diffusive_init(Time, G, GV, US, param_file, diag, CS, just_re
 # include "version_variable.h"
   character(len=40)  :: mdl = "MOM_entrain_diffusive" ! This module's name.
 
+  CS%initialized = .true.
   CS%diag => diag
 
   CS%bulkmixedlayer = (GV%nkml > 0)
