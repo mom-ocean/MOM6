@@ -190,7 +190,7 @@ type, public :: barotropic_CS ; private
   logical :: integral_bt_cont !< If true, use the time-integrated velocity over the barotropic steps
                              !! to determine the integrated transports used to update the continuity
                              !! equation.  Otherwise the transports are the sum of the transports
-                             !! based on ]a series of instantaneous velocities and the BT_CONT_TYPE
+                             !! based on a series of instantaneous velocities and the BT_CONT_TYPE
                              !! for transports.  This is only valid if a BT_CONT_TYPE is used.
   logical :: Nonlinear_continuity !< If true, the barotropic continuity equation
                              !! uses the full ocean thickness for transport.

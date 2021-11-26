@@ -95,8 +95,8 @@ type, public :: diagnostics_CS ; private
   ! The following arrays hold diagnostics in the layer-integrated energy budget.
   real, allocatable :: KE(:,:,:)          !< KE per unit mass [L2 T-2 ~> m2 s-2]
   real, allocatable :: dKE_dt(:,:,:)      !< time derivative of the layer KE [H L2 T-3 ~> m3 s-3]
-  real, allocatable :: PE_to_KE(:,:,:)    !< potential energy to KE term [m3 s-3]
-  real, allocatable :: KE_BT(:,:,:)       !< barotropic contribution to KE term [m3 s-3]
+  real, allocatable :: PE_to_KE(:,:,:)    !< potential energy to KE term [H L2 T-3 ~> m3 s-3]
+  real, allocatable :: KE_BT(:,:,:)       !< barotropic contribution to KE term [H L2 T-3 ~> m3 s-3]
   real, allocatable :: KE_CorAdv(:,:,:)   !< KE source from the combined Coriolis and
                                           !! advection terms [H L2 T-3 ~> m3 s-3].
                                           !! The Coriolis source should be zero, but is not due to truncation
@@ -422,7 +422,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
     call post_data(CS%id_masso, masso, CS%diag)
   endif
 
-  ! diagnose thickness/volumes of grid cells [m]
+  ! diagnose thickness/volumes of grid cells [Z ~> m] and [m3]
   if (CS%id_thkcello>0 .or. CS%id_volcello>0) then
     if (GV%Boussinesq) then ! thkcello = h for Boussinesq
       if (CS%id_thkcello > 0) then ; if (GV%H_to_Z == 1.0) then
@@ -903,7 +903,7 @@ subroutine calculate_vertical_integrals(h, tv, p_surf, G, GV, US, CS)
               ! at the ocean surface [R L2 T-2 ~> Pa].
     dpress, & ! Change in hydrostatic pressure across a layer [R L2 T-2 ~> Pa].
     tr_int    ! vertical integral of a tracer times density,
-              ! (Rho_0 in a Boussinesq model) [TR kg m-2].
+              ! (Rho_0 in a Boussinesq model) [Conc R Z ~> Conc kg m-2].
   real    :: IG_Earth  ! Inverse of gravitational acceleration [T2 Z L-2 ~> s2 m-1].
 
   integer :: i, j, k, is, ie, js, je, nz

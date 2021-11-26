@@ -623,7 +623,7 @@ subroutine tdma6(n, a, c, lam, y)
     endif
     yy(k) = y(k) + a(k) * yy(k-1) * I_beta(k-1)
   enddo
-  ! The units of y change by a factor of [L2 T-2] in the following lines.
+  ! The units of y change by a factor of [L2 T-2 ~> m2 s-2] in the following lines.
   y(n) = yy(n) * I_beta(n)
   do k = n-1, 1, -1
     y(k) = ( yy(k) + c(k) * y(k+1) ) * I_beta(k)

@@ -747,7 +747,7 @@ subroutine calculate_CVMix_tidal(h, j, N2_int, G, GV, US, CS, Kv, Kd_lay, Kd_int
 
   integer :: i, k, is, ie
   real :: dh, hcorr, Simmons_coeff
-  real, parameter :: rho_fw = 1000.0 ! fresh water density [kg/m^3]
+  real, parameter :: rho_fw = 1000.0 ! fresh water density [kg m-3]
                                      ! TODO: when coupled, get this from CESM (SHR_CONST_RHOFW)
 
   is  = G%isc ; ie  = G%iec
@@ -1001,7 +1001,7 @@ subroutine add_int_tide_diffusivity(h, j, N2_bot, N2_lay, TKE_to_Kd, max_TKE, &
                         ! multiplied by N2_bot/N2_meanz to be coherent with the WKB scaled z
                         ! z*=int(N2/N2_bot) * N2_bot/N2_meanz = int(N2/N2_meanz)
                         ! z0_Polzin_scaled = z0_Polzin * N2_bot/N2_meanz
-    N2_meanz,         & ! vertically averaged squared buoyancy frequency [T-2] for WKB scaling
+    N2_meanz,         & ! vertically averaged squared buoyancy frequency [T-2 ~> s-2] for WKB scaling
     TKE_itidal_rem,   & ! remaining internal tide TKE (from barotropic source) [Z3 T-3 ~> m3 s-3]
     TKE_Niku_rem,     & ! remaining lee-wave TKE [Z3 T-3 ~> m3 s-3]
     TKE_lowmode_rem,  & ! remaining internal tide TKE (from propagating low mode source) [Z3 T-3 ~> m3 s-3] (BDM)
@@ -1578,13 +1578,13 @@ subroutine read_tidal_constituents(G, US, tidal_energy_file, CS)
     tidal_qk1, &  ! qk1 coefficient used in Schmittner & Egbert
     tidal_qo1     ! qo1 coefficient used in Schmittner & Egbert
   real, allocatable, dimension(:) :: &
-    z_t, &        ! depth from surface to midpoint of input layer [Z]
-    z_w           ! depth from surface to top of input layer [Z]
+    z_t, &        ! depth from surface to midpoint of input layer [Z ~> m]
+    z_w           ! depth from surface to top of input layer [Z ~> m]
   real, allocatable, dimension(:,:,:) :: &
-    tc_m2, &      ! input lunar semidiurnal tidal energy flux [W/m^2]
-    tc_s2, &      ! input solar semidiurnal tidal energy flux [W/m^2]
-    tc_k1, &      ! input lunar diurnal tidal energy flux [W/m^2]
-    tc_o1         ! input lunar diurnal tidal energy flux [W/m^2]
+    tc_m2, &      ! input lunar semidiurnal tidal energy flux [W m-2]
+    tc_s2, &      ! input solar semidiurnal tidal energy flux [W m-2]
+    tc_k1, &      ! input lunar diurnal tidal energy flux [W m-2]
+    tc_o1         ! input lunar diurnal tidal energy flux [W m-2]
   integer, dimension(4) :: nz_in
   integer               :: k, is, ie, js, je, isd, ied, jsd, jed, i, j
 

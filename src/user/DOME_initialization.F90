@@ -160,7 +160,7 @@ subroutine DOME_initialize_sponges(G, GV, US, tv, depth_tot, PF, CSp)
 
   real :: eta(SZI_(G),SZJ_(G),SZK_(GV)+1) ! A temporary array for interface heights [Z ~> m].
   real :: temp(SZI_(G),SZJ_(G),SZK_(GV)) ! A temporary array for other variables. !
-  real :: Idamp(SZI_(G),SZJ_(G))    ! The inverse damping rate [T-1 ~> s-1].
+  real :: Idamp(SZI_(G),SZJ_(G))    ! The sponge damping rate [T-1 ~> s-1].
 
   real :: H0(SZK_(GV)) ! Interface heights [Z ~> m].
   real :: min_depth    ! The minimum depth at which to apply damping [Z ~> m]
@@ -174,7 +174,7 @@ subroutine DOME_initialize_sponges(G, GV, US, tv, depth_tot, PF, CSp)
 
   eta(:,:,:) = 0.0 ; temp(:,:,:) = 0.0 ; Idamp(:,:) = 0.0
 
-!  Here the inverse damping time [s-1], is set. Set Idamp to 0     !
+!  Here the inverse damping time [T-1 ~> s-1], is set. Set Idamp to 0  !
 !  wherever there is no sponge, and the subroutines that are called  !
 !  will automatically set up the sponges only where Idamp is positive!
 !  and mask2dT is 1.                                                   !
