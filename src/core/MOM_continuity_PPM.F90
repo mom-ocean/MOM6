@@ -26,6 +26,7 @@ integer :: id_clock_update, id_clock_correct
 
 !> Control structure for mom_continuity_ppm
 type, public :: continuity_PPM_CS ; private
+  logical :: initialized = .false. !< True if this control structure has been initialized.
   type(diag_ctrl), pointer :: diag !< Diagnostics control structure.
   logical :: upwind_1st      !< If true, use a first-order upwind scheme.
   logical :: monotonic       !< If true, use the Colella & Woodward monotonic
@@ -133,6 +134,9 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, US, CS, OBC, uhbt, vh
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
   h_min = GV%Angstrom_H
+
+  if (.not.CS%initialized) call MOM_error(FATAL, &
+         "MOM_continuity_PPM: Module must be initialized before it is used.")
 
   x_first = (MOD(G%first_direction,2) == 0)
 
@@ -2201,6 +2205,8 @@ subroutine continuity_PPM_init(Time, G, GV, US, param_file, diag, CS)
 #include "version_variable.h"
   real :: tol_eta_m  ! An unscaled version of tol_eta [m].
   character(len=40)  :: mdl = "MOM_continuity_PPM" ! This module's name.
+
+  CS%initialized = .true.
 
 ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mdl, version, "")

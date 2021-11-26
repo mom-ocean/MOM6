@@ -552,8 +552,8 @@ subroutine absorbRemainingSW(G, GV, US, h, opacity_band, nsw, optics, j, dt, H_l
   real, dimension(SZI_(G)), optional, intent(in)    :: htot !< Total mixed layer thickness [H ~> m or kg m-2].
   real, dimension(SZI_(G)), optional, intent(inout) :: Ttot !< Depth integrated mixed layer
                                                            !! temperature [degC H ~> degC m or degC kg m-2]
-  real, dimension(SZI_(G),SZK_(GV)), optional, intent(in) :: dSV_dT !< The partial derivative of specific
-                                                           !! volume with temperature [R-1 degC-1].
+  real, dimension(SZI_(G),SZK_(GV)), optional, intent(in) :: dSV_dT !< The partial derivative of specific volume
+                                                           !! with temperature [R-1 degC-1 ~> m3 kg-1 degC-1]
   real, dimension(SZI_(G),SZK_(GV)), optional, intent(inout) :: TKE !< The TKE sink from mixing the heating
                                                            !! throughout a layer [R Z3 T-2 ~> J m-2].
 
@@ -935,7 +935,7 @@ subroutine opacity_init(Time, G, GV, US, param_file, diag, CS, optics)
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
   real :: PenSW_absorb_minthick ! A thickness that is used to absorb the remaining shortwave heat
-                                ! flux when that flux drops below PEN_SW_FLUX_ABSORB [m].
+                                ! flux when that flux drops below PEN_SW_FLUX_ABSORB [H ~> m or kg m-2]
   real :: PenSW_minthick_dflt ! The default for PenSW_absorb_minthick [m]
   logical :: default_2018_answers
   logical :: use_scheme

@@ -144,7 +144,7 @@ subroutine MOM_initialize_fixed(G, US, OBC, PF, write_geom, output_dir)
   endif
 
 !    Calculate the value of the Coriolis parameter at the latitude   !
-!  of the q grid points [s-1].
+!  of the q grid points [T-1 ~> s-1].
   call MOM_initialize_rotation(G%CoriolisBu, G, PF, US=US)
 !   Calculate the components of grad f (beta)
   call MOM_calculate_grad_Coriolis(G%dF_dx, G%dF_dy, G, US=US)
@@ -167,13 +167,13 @@ subroutine MOM_initialize_fixed(G, US, OBC, PF, write_geom, output_dir)
 end subroutine MOM_initialize_fixed
 
 !> MOM_initialize_topography makes the appropriate call to set up the bathymetry.  At this
-!! point the topography is in units of [m], but this can be changed later.
+!! point the topography is in units of [Z ~> m] or [m], depending on the presence of US.
 subroutine MOM_initialize_topography(D, max_depth, G, PF, US)
   type(dyn_horgrid_type),           intent(in)  :: G  !< The dynamic horizontal grid type
   real, dimension(G%isd:G%ied,G%jsd:G%jed), &
-                                    intent(out) :: D  !< Ocean bottom depth [m]
+                                    intent(out) :: D  !< Ocean bottom depth [Z ~> m] or [m]
   type(param_file_type),            intent(in)  :: PF !< Parameter file structure
-  real,                             intent(out) :: max_depth !< Maximum depth of model [m]
+  real,                             intent(out) :: max_depth !< Maximum depth of model [Z ~> m] or [m]
   type(unit_scale_type),  optional, intent(in)  :: US !< A dimensional unit scaling type
 
   ! This subroutine makes the appropriate call to set up the bottom depth.

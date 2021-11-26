@@ -35,6 +35,7 @@ public thickness_diffuse_get_KH
 
 !> Control structure for thickness diffusion
 type, public :: thickness_diffuse_CS ; private
+  logical :: initialized = .false. !< True if this control structure has been initialized.
   real    :: Khth                !< Background interface depth diffusivity [L2 T-1 ~> m2 s-1]
   real    :: Khth_Slope_Cff      !< Slope dependence coefficient of Khth [nondim]
   real    :: max_Khth_CFL        !< Maximum value of the diffusive CFL for thickness diffusion
@@ -159,6 +160,9 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
   real :: hv(SZI_(G), SZJ_(G))       ! v-thickness [H ~> m or kg m-2]
   real :: KH_u_lay(SZI_(G), SZJ_(G)) ! layer ave thickness diffusivities [L2 T-1 ~> m2 s-1]
   real :: KH_v_lay(SZI_(G), SZJ_(G)) ! layer ave thickness diffusivities [L2 T-1 ~> m2 s-1]
+
+  if (.not. CS%initialized) call MOM_error(FATAL, "MOM_thickness_diffuse: "//&
+         "Module must be initialized before it is used.")
 
   if ((.not.CS%thickness_diffuse) &
       .or. .not. (CS%Khth > 0.0 .or. VarMix%use_variable_mixing)) return
@@ -1897,6 +1901,7 @@ subroutine thickness_diffuse_init(Time, G, GV, US, param_file, diag, CDp, CS)
                        ! rotation [nondim].
   logical :: default_2018_answers ! The default setting for the various 2018_ANSWERS flags.
 
+  CS%initialized = .true.
   CS%diag => diag
 
   ! Read all relevant parameters and write them to the model log.

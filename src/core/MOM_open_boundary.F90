@@ -3730,13 +3730,16 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
   integer :: is_obc, ie_obc, js_obc, je_obc  ! segment indices within local domain
   integer :: ishift, jshift  ! offsets for staggered locations
   real, dimension(:,:,:), allocatable, target :: tmp_buffer
-  real, dimension(:), allocatable :: h_stack
+  real, dimension(:), allocatable :: h_stack  ! Thicknesses at corner points [H ~> m or kg m-2]
   integer :: is_obc2, js_obc2
-  real :: net_H_src, net_H_int, scl_fac
-  real :: tidal_vel, tidal_elev
-  real, allocatable :: normal_trans_bt(:,:)   ! barotropic transport
+  real :: net_H_src   ! Total thickness of the incoming flow in the source field [H ~> m or kg m-2]
+  real :: net_H_int   ! Total thickness of the incoming flow in the model [H ~> m or kg m-2]
+  real :: scl_fac     ! A nondimensional scaling factor [nondim]
+  real :: tidal_vel   ! Tangential tidal velocity [m s-1]
+  real :: tidal_elev  ! Tidal elevation at an OBC point [m]
+  real, allocatable :: normal_trans_bt(:,:) ! barotropic transport [H L2 T-1 ~> m3 s-1]
   integer :: turns      ! Number of index quarter turns
-  real :: time_delta  ! Time since tidal reference date
+  real :: time_delta    ! Time since tidal reference date [s]
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
@@ -5110,7 +5113,7 @@ subroutine adjustSegmentEtaToFitBathymetry(G, GV, US, segment,fld)
 
   integer :: i, j, k, is, ie, js, je, nz, contractions, dilations
   integer :: n
-  real, allocatable, dimension(:,:,:) :: eta ! Segment source data interface heights, [Z -> m]
+  real, allocatable, dimension(:,:,:) :: eta ! Segment source data interface heights [Z ~> m]
   real :: hTolerance = 0.1 !<  Tolerance to exceed adjustment criteria [Z ~> m]
   real :: hTmp, eTmp, dilate
   character(len=100) :: mesg

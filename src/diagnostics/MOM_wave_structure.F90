@@ -36,6 +36,7 @@ public wave_structure, wave_structure_init
 
 !> The control structure for the MOM_wave_structure module
 type, public :: wave_structure_CS ; !private
+  logical :: initialized = .false. !< True if this control structure has been initialized.
   type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to
                                    !! regulate the timing of diagnostic output.
   real, allocatable, dimension(:,:,:) :: w_strct
@@ -190,6 +191,9 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   I_a_int = 1/a_int
+
+  if (.not. CS%initialized) call MOM_error(FATAL, "MOM_wave_structure: "// &
+         "Module must be initialized before it is used.")
 
   if (present(full_halos)) then ; if (full_halos) then
     is = G%isd ; ie = G%ied ; js = G%jsd ; je = G%jed
@@ -727,6 +731,8 @@ subroutine wave_structure_init(Time, G, GV, param_file, diag, CS)
   integer :: isd, ied, jsd, jed, nz
 
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nz = GV%ke
+
+  CS%initialized = .true.
 
   call get_param(param_file, mdl, "INTERNAL_TIDE_SOURCE_X", CS%int_tide_source_x, &
                  "X Location of generation site for internal tide", default=1.)

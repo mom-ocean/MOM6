@@ -184,7 +184,8 @@ end subroutine initialize_topography_from_file
 subroutine apply_topography_edits_from_file(D, G, param_file, US)
   type(dyn_horgrid_type),           intent(in)    :: G !< The dynamic horizontal grid type
   real, dimension(G%isd:G%ied,G%jsd:G%jed), &
-                                    intent(inout) :: D !< Ocean bottom depth in m or Z if US is present
+                                    intent(inout) :: D !< Ocean bottom depth [m] or [Z ~> m] if
+                                                       !! US is present
   type(param_file_type),            intent(in)    :: param_file !< Parameter file structure
   type(unit_scale_type),  optional, intent(in)    :: US !< A dimensional unit scaling type
 

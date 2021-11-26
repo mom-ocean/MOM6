@@ -190,7 +190,7 @@ type, public :: barotropic_CS ; private
   logical :: integral_bt_cont !< If true, use the time-integrated velocity over the barotropic steps
                              !! to determine the integrated transports used to update the continuity
                              !! equation.  Otherwise the transports are the sum of the transports
-                             !! based on ]a series of instantaneous velocities and the BT_CONT_TYPE
+                             !! based on a series of instantaneous velocities and the BT_CONT_TYPE
                              !! for transports.  This is only valid if a BT_CONT_TYPE is used.
   logical :: Nonlinear_continuity !< If true, the barotropic continuity equation
                              !! uses the full ocean thickness for transport.
@@ -693,6 +693,9 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
   integer :: ioff, joff
   integer :: l_seg
+
+  if (.not.CS%module_is_initialized) call MOM_error(FATAL, &
+      "btstep: Module MOM_barotropic must be initialized before it is used.")
 
   if (.not.CS%split) return
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
@@ -2764,6 +2767,9 @@ subroutine set_dtbt(G, GV, US, CS, eta, pbce, BT_cont, gtot_est, SSH_add)
   character(len=200) :: mesg
   integer :: i, j, k, is, ie, js, je, nz
 
+  if (.not.CS%module_is_initialized) call MOM_error(FATAL, &
+      "set_dtbt: Module MOM_barotropic must be initialized before it is used.")
+
   if (.not.CS%split) return
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   MS%isdw = G%isd ; MS%iedw = G%ied ; MS%jsdw = G%jsd ; MS%jedw = G%jed
@@ -3298,6 +3304,9 @@ subroutine btcalc(h, G, GV, CS, h_u, h_v, may_use_default, OBC)
 
 !    This section interpolates thicknesses onto u & v grid points with the
 ! second order accurate estimate h = 2*(h+ * h-)/(h+ + h-).
+  if (.not.CS%module_is_initialized) call MOM_error(FATAL, &
+      "btcalc: Module MOM_barotropic must be initialized before it is used.")
+
   if (.not.CS%split) return
 
   use_default = .false.
@@ -4185,6 +4194,9 @@ subroutine bt_mass_source(h, eta, set_cor, G, GV, CS)
   real :: d_eta               ! The difference between estimates of the total
                               ! thicknesses [H ~> m or kg m-2].
   integer :: is, ie, js, je, nz, i, j, k
+
+  if (.not.CS%module_is_initialized) call MOM_error(FATAL, "bt_mass_source: "// &
+        "Module MOM_barotropic must be initialized before it is used.")
 
   if (.not.CS%split) return
 

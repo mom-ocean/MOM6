@@ -67,7 +67,7 @@ type, public :: surface
   logical :: T_is_conT = .false. !< If true, the temperature variable SST is actually the
                    !! conservative temperature in [degC].
   logical :: S_is_absS = .false. !< If true, the salinity variable SSS is actually the
-                   !! absolute salinity in [g/kg].
+                   !! absolute salinity in [gSalt kg-1].
   type(coupler_2d_bc_type) :: tr_fields !< A structure that may contain an
                 !! array of named fields describing tracer-related quantities.
        !### NOTE: ALL OF THE ARRAYS IN TR_FIELDS USE THE COUPLER'S INDEXING CONVENTION AND HAVE NO
@@ -95,7 +95,7 @@ type, public :: thermo_var_ptrs
   logical :: T_is_conT = .false. !< If true, the temperature variable tv%T is
                          !! actually the conservative temperature [degC].
   logical :: S_is_absS = .false. !< If true, the salinity variable tv%S is
-                         !! actually the absolute salinity in units of [gSalt/kg].
+                         !! actually the absolute salinity in units of [gSalt kg-1].
   real :: min_salinity = 0.01 !< The minimum value of salinity when BOUND_SALINITY=True [ppt].
                          !! The default is 0.01 for backward compatibility but should be 0.
   ! These arrays are accumulated fluxes for communication with other components.

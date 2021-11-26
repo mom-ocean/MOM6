@@ -43,6 +43,7 @@ public set_visc_register_restarts
 
 !> Control structure for MOM_set_visc
 type, public :: set_visc_CS ; private
+  logical :: initialized = .false. !< True if this control structure has been initialized.
   real    :: Hbbl           !< The static bottom boundary layer thickness [H ~> m or kg m-2].
                             !! Runtime parameter `HBBL`.
   real    :: cdrag          !< The quadratic drag coefficient.
@@ -283,6 +284,9 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS)
   Rho0x400_G = 400.0*(GV%Rho0 / (US%L_to_Z**2 * GV%g_Earth)) * GV%Z_to_H
   Vol_quit = 0.9*GV%Angstrom_H + h_neglect
   C2pi_3 = 8.0*atan(1.0)/3.0
+
+  if (.not.CS%initialized) call MOM_error(FATAL,"MOM_set_viscosity(BBL): "//&
+         "Module must be initialized before it is used.")
 
   if (.not.CS%bottomdraglaw) return
 
@@ -592,7 +596,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS)
     ! When stratification dominates h_N<<h_f, and vice versa.
     do i=is,ie ; if (do_i(i)) then
       ! The 400.0 in this expression is the square of a Ci introduced in KW99, eq. 2.22.
-      ustarsq = Rho0x400_G * ustar(i)**2 ! Note not in units of u*^2 but [H R]
+      ustarsq = Rho0x400_G * ustar(i)**2 ! Note not in units of u*^2 but [H R ~> kg m-2 or kg m-5]
       htot = 0.0
 
       ! Calculate the thickness of a stratification limited BBL ignoring rotation:
@@ -1244,6 +1248,9 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS)
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   Isq = G%isc-1 ; Ieq = G%IecB ; Jsq = G%jsc-1 ; Jeq = G%JecB
   nkmb = GV%nk_rho_varies ; nkml = GV%nkml
+
+  if (.not.CS%initialized) call MOM_error(FATAL,"MOM_set_viscosity(visc_ML): "//&
+         "Module must be initialized before it is used.")
 
   if (.not.(CS%dynamic_viscous_ML .or. associated(forces%frac_shelf_u) .or. &
             associated(forces%frac_shelf_v)) ) return
@@ -1927,6 +1934,7 @@ subroutine set_visc_init(Time, G, GV, US, param_file, diag, visc, CS, restart_CS
 # include "version_variable.h"
   character(len=40)  :: mdl = "MOM_set_visc"  ! This module's name.
 
+  CS%initialized = .true.
   CS%OBC => OBC
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec

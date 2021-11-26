@@ -30,6 +30,7 @@ public bulkmixedlayer, bulkmixedlayer_init
 
 !> The control structure with parameters for the MOM_bulk_mixed_layer module
 type, public :: bulkmixedlayer_CS ; private
+  logical :: initialized = .false. !< True if this control structure has been initialized.
   integer :: nkml            !< The number of layers in the mixed layer.
   integer :: nkbl            !< The number of buffer layers.
   integer :: nsw             !< The number of bands of penetrating shortwave radiation.
@@ -186,9 +187,9 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, GV, US, C
                                                       !! layer; this should be increased due to
                                                       !! mixed layer entrainment [H ~> m or kg m-2].
   type(bulkmixedlayer_CS),    intent(inout) :: CS     !< Bulk mixed layer control struct
-  type(optics_type),          pointer       :: optics !< The structure containing the inverse of the
-                                                      !! vertical absorption decay scale for
-                                                      !! penetrating shortwave radiation [m-1].
+  type(optics_type),          pointer       :: optics !< The structure that can be queried for the
+                                                      !! inverse of the vertical absorption decay
+                                                      !! scale for penetrating shortwave radiation.
   real, dimension(:,:),       pointer       :: Hml    !< Active mixed layer depth [Z ~> m].
   logical,                    intent(in)    :: aggregate_FW_forcing !< If true, the net incoming and
                                                      !! outgoing surface freshwater fluxes are
@@ -328,6 +329,8 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, GV, US, C
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
+  if (.not. CS%initialized) call MOM_error(FATAL, "MOM_bulk_mixed_layer: "//&
+         "Module must be initialized before it is used.")
   if (GV%nkml < 1) return
 
   if (.not. associated(tv%eqn_of_state)) call MOM_error(FATAL, &
@@ -474,9 +477,9 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, GV, US, C
       ! Here we add an additional source of TKE to the mixed layer where river
       ! is present to simulate unresolved estuaries. The TKE input is diagnosed
       ! as follows:
-      !   TKE_river[m3 s-3] = 0.5*rivermix_depth*g*Irho0*drho_ds*
+      !   TKE_river[Z L2 T-3 ~> m3 s-3] = 0.5*rivermix_depth * g * Irho0**2 * drho_ds *
       !                       River*(Samb - Sriver) = CS%mstar*U_star^3
-      ! where River is in units of [m s-1].
+      ! where River is in units of [R Z T-1 ~> kg m-2 s-1].
       ! Samb = Ambient salinity at the mouth of the estuary
       ! rivermix_depth =  The prescribed depth over which to mix river inflow
       ! drho_ds = The gradient of density wrt salt at the ambient surface salinity.
@@ -3362,6 +3365,7 @@ subroutine bulkmixedlayer_init(Time, G, GV, US, param_file, diag, CS)
   logical :: use_temperature, use_omega
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
+  CS%initialized = .true.
   CS%diag => diag
   CS%Time => Time
 
