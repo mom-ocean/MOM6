@@ -392,9 +392,9 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, dt_forci
     Temp_int, Salt_int ! Layer and cell integrated heat and salt [J] and [g Salt].
   real :: HL2_to_kg    ! A conversion factor from a thickness-volume to mass [kg H-1 L-2 ~> kg m-3 or 1]
   real :: KE_scale_factor   ! The combination of unit rescaling factors in the kinetic energy
-                            ! calculation [kg T2 H-1 L-2 s-2 ~> kg m-3 or nondim]
+                            ! calculation [kg T2 H-1 L-2 s-2 ~> kg m-3 or 1]
   real :: PE_scale_factor   ! The combination of unit rescaling factors in the potential energy
-                            ! calculation [kg T2 R-1 Z-1 L-2 s-2 ~> nondim]
+                            ! calculation [kg T2 R-1 Z-1 L-2 s-2 ~> 1]
   integer :: num_nc_fields  ! The number of fields that will actually go into
                             ! the NetCDF file.
   integer :: i, j, k, is, ie, js, je, ns, nz, m, Isq, Ieq, Jsq, Jeq, isr, ier, jsr, jer

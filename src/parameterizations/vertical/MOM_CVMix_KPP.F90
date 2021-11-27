@@ -641,7 +641,7 @@ subroutine KPP_calculate(CS, G, GV, US, h, uStar, buoyFlux, Kt, Ks, Kv, &
 
   real :: surfFricVel, surfBuoyFlux
   real :: sigma, sigmaRatio
-  real :: buoy_scale ! A unit conversion factor for buoyancy fluxes [m2 T3 L-2 s-3 ~> nondim]
+  real :: buoy_scale ! A unit conversion factor for buoyancy fluxes [m2 T3 L-2 s-3 ~> 1]
   real :: dh    ! The local thickness used for calculating interface positions [m]
   real :: hcorr ! A cumulative correction arising from inflation of vanished layers [m]
 
@@ -948,7 +948,7 @@ subroutine KPP_compute_BLD(CS, G, GV, US, h, Temp, Salt, u, v, tv, uStar, buoyFl
   real :: zBottomMinusOffset   ! Height of bottom plus a little bit [m]
   real :: SLdepth_0d           ! Surface layer depth = surf_layer_ext*OBLdepth.
   real :: hTot                 ! Running sum of thickness used in the surface layer average [m]
-  real :: buoy_scale           ! A unit conversion factor for buoyancy fluxes [m2 T3 L-2 s-3 ~> nondim]
+  real :: buoy_scale           ! A unit conversion factor for buoyancy fluxes [m2 T3 L-2 s-3 ~> 1]
   real :: delH                 ! Thickness of a layer [m]
   real :: surfHtemp, surfTemp  ! Integral and average of temp over the surface layer
   real :: surfHsalt, surfSalt  ! Integral and average of saln over the surface layer

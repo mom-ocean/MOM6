@@ -310,7 +310,7 @@ subroutine tracer_flow_control_init(restart, day, G, GV, US, h, param_file, diag
 
 !  Add other user-provided calls here.
   if (CS%use_USER_tracer_example) &
-    call USER_initialize_tracer(restart, day, G, GV, h, diag, OBC, CS%USER_tracer_example_CSp, &
+    call USER_initialize_tracer(restart, day, G, GV, US, h, diag, OBC, CS%USER_tracer_example_CSp, &
                                 sponge_CSp)
   if (CS%use_DOME_tracer) &
     call initialize_DOME_tracer(restart, day, G, GV, US, h, diag, OBC, CS%DOME_tracer_CSp, &

@@ -95,7 +95,7 @@ subroutine MOM_calculate_grad_Coriolis(dF_dx, dF_dy, G, US)
   type(unit_scale_type),    optional, intent(in)    :: US !< A dimensional unit scaling type
   ! Local variables
   integer :: i,j
-  real :: m_to_L  ! A unit conversion factor [L m-1 ~> nondim]
+  real :: m_to_L  ! A unit conversion factor [L m-1 ~> 1]
   real :: f1, f2
 
   m_to_L = 1.0 ; if (present(US)) m_to_L = US%m_to_L
@@ -299,13 +299,13 @@ subroutine initialize_topography_named(D, G, param_file, topog_config, max_depth
   ! This subroutine places the bottom depth in m into D(:,:), shaped according to the named config.
 
   ! Local variables
-  real :: m_to_Z               ! A dimensional rescaling factor.
+  real :: m_to_Z               ! A dimensional rescaling factor [Z m-1 ~> 1]
+  real :: m_to_L               ! A dimensional rescaling factor [L m-1 ~> 1]
   real :: min_depth            ! The minimum depth [Z ~> m].
   real :: PI                   ! 3.1415926... calculated as 4*atan(1)
-  real :: D0                   ! A constant to make the maximum  basin depth MAXIMUM_DEPTH.
-  real :: expdecay             ! A decay scale of associated with the sloping boundaries [m].
-  real :: Dedge                ! The depth [Z ~> m], at the basin edge
-! real :: south_lat, west_lon, len_lon, len_lat, Rad_earth
+  real :: D0                   ! A constant to make the maximum basin depth MAXIMUM_DEPTH [Z ~> m]
+  real :: expdecay             ! A decay scale of associated with the sloping boundaries [L ~> m]
+  real :: Dedge                ! The depth at the basin edge [Z ~> m]
   integer :: i, j, is, ie, js, je, isd, ied, jsd, jed
   character(len=40)  :: mdl = "initialize_topography_named" ! This subroutine's name.
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
@@ -316,6 +316,7 @@ subroutine initialize_topography_named(D, G, param_file, topog_config, max_depth
                  "TOPO_CONFIG = "//trim(topog_config), 5)
 
   m_to_Z = 1.0 ; if (present(US)) m_to_Z = US%m_to_Z
+  m_to_L = 1.0 ; if (present(US)) m_to_L = US%m_to_L
 
   call get_param(param_file, mdl, "MINIMUM_DEPTH", min_depth, &
                  "The minimum depth of the ocean.", units="m", default=0.0, scale=m_to_Z)
@@ -326,23 +327,9 @@ subroutine initialize_topography_named(D, G, param_file, topog_config, max_depth
     call get_param(param_file, mdl, "EDGE_DEPTH", Dedge, &
                    "The depth at the edge of one of the named topographies.", &
                    units="m", default=100.0, scale=m_to_Z)
-!   call get_param(param_file, mdl, "SOUTHLAT", south_lat, &
-!                  "The southern latitude of the domain.", units="degrees", &
-!                  fail_if_missing=.true.)
-!   call get_param(param_file, mdl, "LENLAT", len_lat, &
-!                  "The latitudinal length of the domain.", units="degrees", &
-!                  fail_if_missing=.true.)
-!   call get_param(param_file, mdl, "WESTLON", west_lon, &
-!                  "The western longitude of the domain.", units="degrees", &
-!                  default=0.0)
-!   call get_param(param_file, mdl, "LENLON", len_lon, &
-!                  "The longitudinal length of the domain.", units="degrees", &
-!                  fail_if_missing=.true.)
-!   call get_param(param_file, mdl, "RAD_EARTH", Rad_Earth, &
-!                  "The radius of the Earth.", units="m", default=6.378e6)
     call get_param(param_file, mdl, "TOPOG_SLOPE_SCALE", expdecay, &
                    "The exponential decay scale used in defining some of "//&
-                   "the named topographies.", units="m", default=400000.0)
+                   "the named topographies.", units="m", default=400000.0, scale=m_to_L)
   endif
 
 
@@ -352,30 +339,30 @@ subroutine initialize_topography_named(D, G, param_file, topog_config, max_depth
     do i=is,ie ; do j=js,je ; D(i,j) = max_depth ; enddo ; enddo
   elseif (trim(topog_config) == "spoon") then
     D0 = (max_depth - Dedge) / &
-             ((1.0 - exp(-0.5*G%len_lat*G%Rad_earth*PI/(180.0 *expdecay))) * &
-              (1.0 - exp(-0.5*G%len_lat*G%Rad_earth*PI/(180.0 *expdecay))))
+             ((1.0 - exp(-0.5*G%len_lat*G%Rad_Earth_L*PI/(180.0 *expdecay))) * &
+              (1.0 - exp(-0.5*G%len_lat*G%Rad_Earth_L*PI/(180.0 *expdecay))))
     do i=is,ie ; do j=js,je
   !  This sets a bowl shaped (sort of) bottom topography, with a       !
   !  maximum depth of max_depth.                                   !
       D(i,j) =  Dedge + D0 * &
              (sin(PI * (G%geoLonT(i,j) - (G%west_lon)) / G%len_lon) * &
-           (1.0 - exp((G%geoLatT(i,j) - (G%south_lat+G%len_lat))*G%Rad_earth*PI / &
+           (1.0 - exp((G%geoLatT(i,j) - (G%south_lat+G%len_lat))*G%Rad_Earth_L*PI / &
                       (180.0*expdecay)) ))
     enddo ; enddo
   elseif (trim(topog_config) == "bowl") then
     D0 = (max_depth - Dedge) / &
-             ((1.0 - exp(-0.5*G%len_lat*G%Rad_earth*PI/(180.0 *expdecay))) * &
-              (1.0 - exp(-0.5*G%len_lat*G%Rad_earth*PI/(180.0 *expdecay))))
+             ((1.0 - exp(-0.5*G%len_lat*G%Rad_Earth_L*PI/(180.0 *expdecay))) * &
+              (1.0 - exp(-0.5*G%len_lat*G%Rad_Earth_L*PI/(180.0 *expdecay))))
 
   !  This sets a bowl shaped (sort of) bottom topography, with a
   !  maximum depth of max_depth.
     do i=is,ie ; do j=js,je
       D(i,j) =  Dedge + D0 * &
              (sin(PI * (G%geoLonT(i,j) - G%west_lon) / G%len_lon) * &
-             ((1.0 - exp(-(G%geoLatT(i,j) - G%south_lat)*G%Rad_Earth*PI/ &
+             ((1.0 - exp(-(G%geoLatT(i,j) - G%south_lat)*G%Rad_Earth_L*PI/ &
                           (180.0*expdecay))) * &
              (1.0 - exp((G%geoLatT(i,j) - (G%south_lat+G%len_lat))* &
-                         G%Rad_Earth*PI/(180.0*expdecay)))))
+                         G%Rad_Earth_L*PI/(180.0*expdecay)))))
     enddo ; enddo
   elseif (trim(topog_config) == "halfpipe") then
     D0 = max_depth - Dedge
@@ -511,10 +498,13 @@ subroutine set_rotation_beta_plane(f, G, param_file, US)
 ! This subroutine sets up the Coriolis parameter for a beta-plane
   integer :: I, J
   real    :: f_0    ! The reference value of the Coriolis parameter [T-1 ~> s-1]
-  real    :: beta   ! The meridional gradient of the Coriolis parameter [T-1 m-1 ~> s-1 m-1]
-  real    :: beta_lat_ref  ! The reference latitude for the beta plane [degrees/km/m/cm]
-  real    :: y_scl, Rad_Earth
-  real    :: T_to_s ! A time unit conversion factor
+  real    :: beta   ! The meridional gradient of the Coriolis parameter [T-1 L-1 ~> s-1 m-1]
+  real    :: beta_lat_ref ! The reference latitude for the beta plane [degrees/km/m/cm]
+  real    :: Rad_Earth_L  ! The radius of the planet in rescaled units [L ~> m]
+  real    :: y_scl  ! A scaling factor from the units of latitude [L lat-1 ~> m lat-1]
+  real    :: T_to_s ! A time unit conversion factor [s T-1 ~> 1]
+  real    :: m_to_L  ! A length unit conversion factor [L m-1 ~> 1]
+  real    :: L_to_m  ! A length unit conversion factor [m L-1 ~> 1]
   real    :: PI
   character(len=40)  :: mdl = "set_rotation_beta_plane" ! This subroutine's name.
   character(len=200) :: axis_units
@@ -523,28 +513,30 @@ subroutine set_rotation_beta_plane(f, G, param_file, US)
   call callTree_enter(trim(mdl)//"(), MOM_shared_initialization.F90")
 
   T_to_s = 1.0 ; if (present(US)) T_to_s = US%T_to_s
+  m_to_L = 1.0 ; if (present(US)) m_to_L = US%m_to_L
+  L_to_m = 1.0 ; if (present(US)) L_to_m = US%L_to_m
 
   call get_param(param_file, mdl, "F_0", f_0, &
                  "The reference value of the Coriolis parameter with the "//&
                  "betaplane option.", units="s-1", default=0.0, scale=T_to_s)
   call get_param(param_file, mdl, "BETA", beta, &
                  "The northward gradient of the Coriolis parameter with "//&
-                 "the betaplane option.", units="m-1 s-1", default=0.0, scale=T_to_s)
+                 "the betaplane option.", units="m-1 s-1", default=0.0, scale=T_to_s*L_to_m)
   call get_param(param_file, mdl, "AXIS_UNITS", axis_units, default="degrees")
 
   PI = 4.0*atan(1.0)
   select case (axis_units(1:1))
     case ("d")
-      call get_param(param_file, mdl, "RAD_EARTH", Rad_Earth, &
-                   "The radius of the Earth.", units="m", default=6.378e6)
+      call get_param(param_file, mdl, "RAD_EARTH", Rad_Earth_L, &
+                   "The radius of the Earth.", units="m", default=6.378e6, scale=m_to_L)
       beta_lat_ref_units = "degrees"
-      y_scl = PI * Rad_Earth/ 180.
+      y_scl = PI * Rad_Earth_L / 180.
     case ("k")
       beta_lat_ref_units = "kilometers"
-      y_scl = 1.E3
+      y_scl = 1.E3 * m_to_L
     case ("m")
       beta_lat_ref_units = "meters"
-      y_scl = 1.
+      y_scl = 1. * m_to_L
     case default ; call MOM_error(FATAL, &
       " set_rotation_beta_plane: unknown AXIS_UNITS = "//trim(axis_units))
   end select
@@ -645,8 +637,8 @@ subroutine reset_face_lengths_named(G, param_file, name, US)
 
   ! Local variables
   character(len=256) :: mesg    ! Message for error messages.
-  real :: m_to_L  ! A unit conversion factor [L m-1 ~> nondim]
-  real :: L_to_m  ! A unit conversion factor [m L-1 ~> nondim]
+  real :: m_to_L  ! A unit conversion factor [L m-1 ~> 1]
+  real :: L_to_m  ! A unit conversion factor [m L-1 ~> 1]
   real    :: dx_2 = -1.0, dy_2 = -1.0
   real    :: pi_180
   integer :: option = -1
@@ -773,8 +765,8 @@ subroutine reset_face_lengths_file(G, param_file, US)
   character(len=40)  :: mdl = "reset_face_lengths_file" ! This subroutine's name.
   character(len=256) :: mesg    ! Message for error messages.
   character(len=200) :: filename, chan_file, inputdir ! Strings for file/path
-  real :: m_to_L  ! A unit conversion factor [L m-1 ~> nondim]
-  real :: L_to_m  ! A unit conversion factor [m L-1 ~> nondim]
+  real :: m_to_L  ! A unit conversion factor [L m-1 ~> 1]
+  real :: L_to_m  ! A unit conversion factor [m L-1 ~> 1]
   integer :: i, j, isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
@@ -851,8 +843,8 @@ subroutine reset_face_lengths_list(G, param_file, US)
   integer, allocatable, dimension(:) :: &
     u_line_no, v_line_no, &  ! The line numbers in lines of u- and v-face lines
     u_line_used, v_line_used ! The number of times each u- and v-line is used.
-  real    :: m_to_L       ! A unit conversion factor [L m-1 ~> nondim]
-  real    :: L_to_m       ! A unit conversion factor [m L-1 ~> nondim]
+  real    :: m_to_L       ! A unit conversion factor [L m-1 ~> 1]
+  real    :: L_to_m       ! A unit conversion factor [m L-1 ~> 1]
   real    :: lat, lon     ! The latitude and longitude of a point.
   real    :: len_lon      ! The periodic range of longitudes, usually 360 degrees.
   real    :: len_lat      ! The range of latitudes, usually 180 degrees.
@@ -1023,7 +1015,7 @@ subroutine reset_face_lengths_list(G, param_file, US)
            ((lon_p >= u_lon(1,npt)) .and. (lon_p <= u_lon(2,npt))) .or. &
            ((lon_m >= u_lon(1,npt)) .and. (lon_m <= u_lon(2,npt)))) ) then
 
-        G%dy_Cu(I,j) = G%mask2dCu(I,j) * m_to_L*min(L_to_m*G%dyCu(I,j), max(u_width(npt), 0.0))
+        G%dy_Cu(I,j) = G%mask2dCu(I,j) * min(G%dyCu(I,j), max(m_to_L*u_width(npt), 0.0))
         if (j>=G%jsc .and. j<=G%jec .and. I>=G%isc .and. I<=G%iec) then ! Limit messages/checking to compute domain
           if ( G%mask2dCu(I,j) == 0.0 )  then
             write(stdout,'(A,2F8.2,A,4F8.2,A)') "read_face_lengths_list : G%mask2dCu=0 at ",lat,lon," (",&
@@ -1053,7 +1045,7 @@ subroutine reset_face_lengths_list(G, param_file, US)
           (((lon >= v_lon(1,npt)) .and. (lon <= v_lon(2,npt))) .or. &
            ((lon_p >= v_lon(1,npt)) .and. (lon_p <= v_lon(2,npt))) .or. &
            ((lon_m >= v_lon(1,npt)) .and. (lon_m <= v_lon(2,npt)))) ) then
-        G%dx_Cv(i,J) = G%mask2dCv(i,J) * m_to_L*min(L_to_m*G%dxCv(i,J), max(v_width(npt), 0.0))
+        G%dx_Cv(i,J) = G%mask2dCv(i,J) * min(G%dxCv(i,J), max(m_to_L*v_width(npt), 0.0))
         if (i>=G%isc .and. i<=G%iec .and. J>=G%jsc .and. J<=G%jec) then ! Limit messages/checking to compute domain
           if ( G%mask2dCv(i,J) == 0.0 )  then
             write(stdout,'(A,2F8.2,A,4F8.2,A)') "read_face_lengths_list : G%mask2dCv=0 at ",lat,lon," (",&

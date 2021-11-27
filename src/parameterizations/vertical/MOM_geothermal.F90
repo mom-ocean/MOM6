@@ -507,7 +507,7 @@ subroutine geothermal_init(Time, G, GV, US, param_file, diag, CS, useALEalgorith
   ! Local variables
   character(len=200) :: inputdir, geo_file, filename, geotherm_var
   real :: geo_scale  ! A constant heat flux or dimensionally rescaled geothermal flux scaling factor
-                     ! [Q R Z T-1 ~> W m-2] or [Q R Z m2 s J-1 T-1 ~> 1]
+                     ! [Q R Z T-1 ~> W m-2] or [Q R Z m2 s J-1 T-1 ~> nondim]
   integer :: i, j, isd, ied, jsd, jed, id
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
