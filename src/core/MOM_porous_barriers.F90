@@ -91,7 +91,7 @@ subroutine por_widths(h, tv, G, GV, US, eta, pbv, eta_bt, halo_size, eta_to_m)
     endif
   enddo; enddo
 
-  do i=isd,ied; do J=JsdB,JedB
+  do J=JsdB,JedB; do i=isd,ied
     if (G%porous_DavgV(i,J) < 0.) then
       do K = nk+1,1,-1
         eta_s = max(eta(i,J,K), eta(i,J+1,K)) !take shallower layer height
