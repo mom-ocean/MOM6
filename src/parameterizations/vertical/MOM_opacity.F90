@@ -25,16 +25,17 @@ public absorbRemainingSW, sumSWoverBands
 type, public :: optics_type
   integer :: nbands     !< The number of penetrating bands of SW radiation
 
-  real, pointer, dimension(:,:,:,:) :: opacity_band => NULL() !< SW optical depth per unit thickness [m-1]
+  real, allocatable :: opacity_band(:,:,:,:) !< SW optical depth per unit thickness [m-1]
                         !! The number of radiation bands is most rapidly varying (first) index.
 
-  real, pointer, dimension(:,:,:) :: sw_pen_band  => NULL()  !< shortwave radiation [Q R Z T-1 ~> W m-2]
+  real, allocatable :: sw_pen_band(:,:,:) !< shortwave radiation [Q R Z T-1 ~> W m-2]
                         !! at the surface in each of the nbands bands that penetrates beyond the surface.
                         !! The most rapidly varying dimension is the band.
 
-  real, pointer, dimension(:) :: &
-    min_wavelength_band => NULL(), & !< The minimum wavelength in each band of penetrating shortwave radiation [nm]
-    max_wavelength_band => NULL()    !< The maximum wavelength in each band of penetrating shortwave radiation [nm]
+  real, allocatable :: min_wavelength_band(:)
+      !< The minimum wavelength in each band of penetrating shortwave radiation [nm]
+  real, allocatable :: max_wavelength_band(:)
+      !< The maximum wavelength in each band of penetrating shortwave radiation [nm]
 
   real :: PenSW_flux_absorb !< A heat flux that is small enough to be completely absorbed in the next
                         !! sufficiently thick layer [H degC T-1 ~> degC m s-1 or degC kg m-2 s-1].
@@ -69,7 +70,7 @@ type, public :: opacity_CS ; private
 
   !>@{ Diagnostic IDs
   integer :: id_sw_pen = -1, id_sw_vis_pen = -1
-  integer, pointer :: id_opacity(:) => NULL()
+  integer, allocatable :: id_opacity(:)
   !>@}
 end type opacity_CS
 
@@ -100,7 +101,7 @@ subroutine set_opacity(optics, sw_total, sw_vis_dir, sw_vis_dif, sw_nir_dir, sw_
   type(ocean_grid_type),   intent(in)    :: G      !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)    :: GV     !< The ocean's vertical grid structure.
   type(unit_scale_type),   intent(in)    :: US     !< A dimensional unit scaling type
-  type(opacity_CS),        pointer       :: CS     !< The control structure earlier set up by opacity_init.
+  type(opacity_CS)                       :: CS     !< The control structure earlier set up by opacity_init.
   real, dimension(SZI_(G),SZJ_(G)), &
                  optional, intent(in)    :: chl_2d !< Vertically uniform chlorophyll-A concentractions [mg m-3]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
@@ -117,9 +118,6 @@ subroutine set_opacity(optics, sw_total, sw_vis_dir, sw_vis_dif, sw_nir_dir, sw_
   real :: Pen_SW_tot(SZI_(G),SZJ_(G))   ! The penetrating shortwave radiation
                                         ! summed across all bands [Q R Z T-1 ~> W m-2].
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
-
-  if (.not. associated(CS)) call MOM_error(FATAL, "set_opacity: "// &
-         "Module must be initialized via opacity_init before it is used.")
 
   if (present(chl_2d) .or. present(chl_3d)) then
     ! The optical properties are based on cholophyll concentrations.
@@ -229,7 +227,7 @@ subroutine opacity_from_chl(optics, sw_total, sw_vis_dir, sw_vis_dif, sw_nir_dir
   type(ocean_grid_type),   intent(in)    :: G      !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)    :: GV     !< The ocean's vertical grid structure.
   type(unit_scale_type),   intent(in)    :: US     !< A dimensional unit scaling type
-  type(opacity_CS),        pointer       :: CS     !< The control structure.
+  type(opacity_CS)                       :: CS     !< The control structure.
   real, dimension(SZI_(G),SZJ_(G)), &
                  optional, intent(in)    :: chl_2d !< Vertically uniform chlorophyll-A concentractions [mg m-3]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
@@ -554,8 +552,8 @@ subroutine absorbRemainingSW(G, GV, US, h, opacity_band, nsw, optics, j, dt, H_l
   real, dimension(SZI_(G)), optional, intent(in)    :: htot !< Total mixed layer thickness [H ~> m or kg m-2].
   real, dimension(SZI_(G)), optional, intent(inout) :: Ttot !< Depth integrated mixed layer
                                                            !! temperature [degC H ~> degC m or degC kg m-2]
-  real, dimension(SZI_(G),SZK_(GV)), optional, intent(in) :: dSV_dT !< The partial derivative of specific
-                                                           !! volume with temperature [R-1 degC-1].
+  real, dimension(SZI_(G),SZK_(GV)), optional, intent(in) :: dSV_dT !< The partial derivative of specific volume
+                                                           !! with temperature [R-1 degC-1 ~> m3 kg-1 degC-1]
   real, dimension(SZI_(G),SZK_(GV)), optional, intent(inout) :: TKE !< The TKE sink from mixing the heating
                                                            !! throughout a layer [R Z3 T-2 ~> J m-2].
 
@@ -775,7 +773,7 @@ end subroutine absorbRemainingSW
 
 !> This subroutine calculates the total shortwave heat flux integrated over
 !! bands as a function of depth.  This routine is only called for computing
-!! buoyancy fluxes for use in KPP. This routine does not updat e the state.
+!! buoyancy fluxes for use in KPP. This routine does not update the state.
 subroutine sumSWoverBands(G, GV, US, h, nsw, optics, j, dt, &
                           H_limit_fluxes, absorbAllSW, iPen_SW_bnd, netPen)
   type(ocean_grid_type),    intent(in)    :: G   !< The ocean's grid structure.
@@ -795,9 +793,8 @@ subroutine sumSWoverBands(G, GV, US, h, nsw, optics, j, dt, &
   logical,                  intent(in)    :: absorbAllSW !< If true, ensure that all shortwave
                                                  !! radiation is absorbed in the ocean water column.
   real, dimension(max(nsw,1),SZI_(G)), intent(in) :: iPen_SW_bnd !< The incident penetrating shortwave
-                                                 !! heating in each band that hits the bottom and
-                                                 !! will be redistributed through the water column
-                                                 !! [degC H ~> degC m or degC kg m-2]; size nsw x SZI_(G).
+                                                 !! in each band at the sea surface; size nsw x SZI_(G)
+                                                 !! [degC H ~> degC m or degC kg m-2].
   real, dimension(SZI_(G),SZK_(GV)+1), &
                              intent(inout) :: netPen !< Net penetrating shortwave heat flux at each
                                                  !! interface, summed across all bands
@@ -925,9 +922,8 @@ subroutine opacity_init(Time, G, GV, US, param_file, diag, CS, optics)
                                                  !! parameters.
   type(diag_ctrl), target, intent(inout) :: diag !< A structure that is used to regulate diagnostic
                                                  !! output.
-  type(opacity_CS),        pointer       :: CS   !< A pointer that is set to point to the control
-                                                 !! structure for this module.
-  type(optics_type),       pointer       :: optics !< An optics structure that has parameters
+  type(opacity_CS) :: CS                         !< Opacity control struct
+  type(optics_type) :: optics                    !< An optics structure that has parameters
                                                  !! set and arrays allocated here.
   ! Local variables
   character(len=200) :: tmpstr
@@ -938,18 +934,12 @@ subroutine opacity_init(Time, G, GV, US, param_file, diag, CS, optics)
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
   real :: PenSW_absorb_minthick ! A thickness that is used to absorb the remaining shortwave heat
-                                ! flux when that flux drops below PEN_SW_FLUX_ABSORB [m].
+                                ! flux when that flux drops below PEN_SW_FLUX_ABSORB [H ~> m or kg m-2]
   real :: PenSW_minthick_dflt ! The default for PenSW_absorb_minthick [m]
   logical :: default_2018_answers
   logical :: use_scheme
   integer :: isd, ied, jsd, jed, nz, n
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nz = GV%ke
-
-  if (associated(CS)) then
-    call MOM_error(WARNING, "opacity_init called with an associated"// &
-                             "associated control structure.")
-    return
-  else ; allocate(CS) ; endif
 
   CS%diag => diag
 
@@ -1069,9 +1059,9 @@ subroutine opacity_init(Time, G, GV, US, param_file, diag, CS, optics)
                  default=PenSW_minthick_dflt, units="m", scale=GV%m_to_H)
   optics%PenSW_absorb_Invlen = 1.0 / (PenSW_absorb_minthick + GV%H_subroundoff)
 
-  if (.not.associated(optics%min_wavelength_band)) &
+  if (.not.allocated(optics%min_wavelength_band)) &
     allocate(optics%min_wavelength_band(optics%nbands))
-  if (.not.associated(optics%max_wavelength_band)) &
+  if (.not.allocated(optics%max_wavelength_band)) &
     allocate(optics%max_wavelength_band(optics%nbands))
 
   if (CS%opacity_scheme == MANIZZA_05) then
@@ -1093,9 +1083,9 @@ subroutine opacity_init(Time, G, GV, US, param_file, diag, CS, optics)
                  "The value to use for opacity over land. The default is "//&
                  "10 m-1 - a value for muddy water.", units="m-1", default=10.0)
 
-  if (.not.associated(optics%opacity_band)) &
+  if (.not.allocated(optics%opacity_band)) &
     allocate(optics%opacity_band(optics%nbands,isd:ied,jsd:jed,nz))
-  if (.not.associated(optics%sw_pen_band)) &
+  if (.not.allocated(optics%sw_pen_band)) &
     allocate(optics%sw_pen_band(optics%nbands,isd:ied,jsd:jed))
   allocate(CS%id_opacity(optics%nbands), source=-1)
 
@@ -1116,21 +1106,19 @@ end subroutine opacity_init
 
 
 subroutine opacity_end(CS, optics)
-  type(opacity_CS),  pointer :: CS !< An opacity control structure that should be deallocated.
-  type(optics_type), pointer :: optics !< An optics type structure that should be deallocated.
+  type(opacity_CS)  :: CS     !< Opacity control struct
+  type(optics_type) :: optics !< An optics type structure that should be deallocated.
 
-  if (associated(CS%id_opacity)) deallocate(CS%id_opacity)
-  if (associated(CS)) deallocate(CS)
-
-  if (associated(optics)) then
-    if (associated(optics%sw_pen_band)) deallocate(optics%sw_pen_band)
-    if (associated(optics%opacity_band)) deallocate(optics%opacity_band)
-    if (associated(optics%max_wavelength_band)) &
-      deallocate(optics%max_wavelength_band)
-    if (associated(optics%min_wavelength_band)) &
-      deallocate(optics%min_wavelength_band)
-  endif
-
+  if (allocated(CS%id_opacity)) &
+    deallocate(CS%id_opacity)
+  if (allocated(optics%sw_pen_band)) &
+    deallocate(optics%sw_pen_band)
+  if (allocated(optics%opacity_band)) &
+    deallocate(optics%opacity_band)
+  if (allocated(optics%max_wavelength_band)) &
+    deallocate(optics%max_wavelength_band)
+  if (allocated(optics%min_wavelength_band)) &
+    deallocate(optics%min_wavelength_band)
 end subroutine opacity_end
 
 !> \namespace mom_opacity

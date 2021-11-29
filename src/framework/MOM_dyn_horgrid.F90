@@ -173,10 +173,11 @@ type, public :: dyn_horgrid_type
   ! initialization routines (but not all)
   real :: south_lat     !< The latitude (or y-coordinate) of the first v-line
   real :: west_lon      !< The longitude (or x-coordinate) of the first u-line
-  real :: len_lat = 0.  !< The latitudinal (or y-coord) extent of physical domain
-  real :: len_lon = 0.  !< The longitudinal (or x-coord) extent of physical domain
-  real :: Rad_Earth = 6.378e6 !< The radius of the planet [m].
-  real :: max_depth     !< The maximum depth of the ocean [Z ~> m].
+  real :: len_lat       !< The latitudinal (or y-coord) extent of physical domain
+  real :: len_lon       !< The longitudinal (or x-coord) extent of physical domain
+  real :: Rad_Earth     !< The radius of the planet [m]
+  real :: Rad_Earth_L   !< The radius of the planet in rescaled units [L ~> m]
+  real :: max_depth     !< The maximum depth of the ocean [Z ~> m]
 end type dyn_horgrid_type
 
 contains
@@ -388,6 +389,7 @@ subroutine rotate_dyn_horgrid(G_in, G, US, turns)
   G%areaT_global = G_in%areaT_global
   G%IareaT_global = G_in%IareaT_global
   G%Rad_Earth = G_in%Rad_Earth
+  G%Rad_Earth_L = G_in%Rad_Earth_L
   G%max_depth = G_in%max_depth
 
   call set_derived_dyn_horgrid(G, US)
@@ -433,12 +435,8 @@ subroutine set_derived_dyn_horgrid(G, US)
   type(unit_scale_type), optional, intent(in) :: US !< A dimensional unit scaling type
 !    Various inverse grid spacings and derived areas are calculated within this
 !  subroutine.
-  real :: m_to_L  ! A unit conversion factor [L m-1 ~> nondim]
-  real :: L_to_m  ! A unit conversion factor [L m-1 ~> nondim]
   integer :: i, j, isd, ied, jsd, jed
   integer :: IsdB, IedB, JsdB, JedB
-  m_to_L = 1.0 ; if (present(US)) m_to_L = US%m_to_L
-  L_to_m = 1.0 ; if (present(US)) L_to_m = US%L_to_m
 
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB

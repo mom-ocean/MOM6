@@ -434,7 +434,7 @@ subroutine query_wave_properties(CS, NumBands, WaveNumbers, US)
   integer,               optional, intent(out) :: NumBands    !< If present, this returns the number of
                                                        !!< wavenumber partitions in the wave discretization
   real, dimension(:),    optional, intent(out) :: Wavenumbers !< If present this returns the characteristic
-                                                       !! wavenumbers of the wave discretization [m-1 or Z-1 ~> m-1]
+                                                       !! wavenumbers of the wave discretization [m-1] or [Z-1 ~> m-1]
   type(unit_scale_type), optional, intent(in)  :: US   !< A dimensional unit scaling type that is used to undo
                                                        !! the dimensional scaling of the output variables, if present
   integer :: n

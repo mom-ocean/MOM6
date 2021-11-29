@@ -390,7 +390,7 @@ subroutine triDiagTS(G, GV, is, ie, js, je, hold, ea, eb, T, S)
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(inout) :: S  !< Layer salinities [ppt].
 
   ! Local variables
-  real :: b1(SZIB_(G))          ! A variable used by the tridiagonal solver [H-1 ~> m-2 or m2 kg-1].
+  real :: b1(SZIB_(G))          ! A variable used by the tridiagonal solver [H-1 ~> m-1 or m2 kg-1].
   real :: d1(SZIB_(G))          ! A variable used by the tridiagonal solver [nondim].
   real :: c1(SZIB_(G),SZK_(GV)) ! A variable used by the tridiagonal solver [nondim].
   real :: h_tr, b_denom_1       ! Two temporary thicknesses [H ~> m or kg m-2].
@@ -438,7 +438,7 @@ subroutine triDiagTS_Eulerian(G, GV, is, ie, js, je, hold, ent, T, S)
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(inout) :: S    !< Layer salinities [ppt].
 
   ! Local variables
-  real :: b1(SZIB_(G))          ! A variable used by the tridiagonal solver [H-1 ~> m-2 or m2 kg-1].
+  real :: b1(SZIB_(G))          ! A variable used by the tridiagonal solver [H-1 ~> m-1 or m2 kg-1].
   real :: d1(SZIB_(G))          ! A variable used by the tridiagonal solver [nondim].
   real :: c1(SZIB_(G),SZK_(GV)) ! A variable used by the tridiagonal solver [nondim].
   real :: h_tr, b_denom_1       ! Two temporary thicknesses [H ~> m or kg m-2].
@@ -590,7 +590,7 @@ subroutine find_uv_at_h(u, v, h, u_h, v_h, G, GV, US, ea, eb, zero_mix)
 end subroutine find_uv_at_h
 
 
-subroutine set_pen_shortwave(optics, fluxes, G, GV, US, CS, opacity_CSp, tracer_flow_CSp)
+subroutine set_pen_shortwave(optics, fluxes, G, GV, US, CS, opacity, tracer_flow_CSp)
   type(optics_type),       pointer       :: optics !< An optics structure that has will contain
                                                    !! information about shortwave fluxes and absorption.
   type(forcing),           intent(inout) :: fluxes !< points to forcing fields
@@ -599,7 +599,7 @@ subroutine set_pen_shortwave(optics, fluxes, G, GV, US, CS, opacity_CSp, tracer_
   type(verticalGrid_type), intent(in)    :: GV     !< The ocean's vertical grid structure.
   type(unit_scale_type),   intent(in)    :: US     !< A dimensional unit scaling type
   type(diabatic_aux_CS),   pointer       :: CS     !< Control structure for diabatic_aux
-  type(opacity_CS),        pointer       :: opacity_CSp !< The control structure for the opacity module.
+  type(opacity_CS)                       :: opacity !< The control structure for the opacity module.
   type(tracer_flow_control_CS), pointer  :: tracer_flow_CSp !< A pointer to the control structure
                                                    !! organizing the tracer modules.
 
@@ -629,7 +629,7 @@ subroutine set_pen_shortwave(optics, fluxes, G, GV, US, CS, opacity_CSp, tracer_
       if (CS%id_chl > 0) call post_data(CS%id_chl, chl_2d, CS%diag)
 
       call set_opacity(optics, fluxes%sw, fluxes%sw_vis_dir, fluxes%sw_vis_dif, &
-                       fluxes%sw_nir_dir, fluxes%sw_nir_dif, G, GV, US, opacity_CSp, chl_2d=chl_2d)
+                       fluxes%sw_nir_dir, fluxes%sw_nir_dif, G, GV, US, opacity, chl_2d=chl_2d)
     else
       if (.not.associated(tracer_flow_CSp)) call MOM_error(FATAL, &
         "The tracer flow control structure must be associated when the model sets "//&
@@ -639,11 +639,11 @@ subroutine set_pen_shortwave(optics, fluxes, G, GV, US, CS, opacity_CSp, tracer_
       if (CS%id_chl > 0) call post_data(CS%id_chl, chl_3d(:,:,1), CS%diag)
 
       call set_opacity(optics, fluxes%sw, fluxes%sw_vis_dir, fluxes%sw_vis_dif, &
-                       fluxes%sw_nir_dir, fluxes%sw_nir_dif, G, GV, US, opacity_CSp, chl_3d=chl_3d)
+                       fluxes%sw_nir_dir, fluxes%sw_nir_dif, G, GV, US, opacity, chl_3d=chl_3d)
     endif
   else
     call set_opacity(optics, fluxes%sw, fluxes%sw_vis_dir, fluxes%sw_vis_dif, &
-                     fluxes%sw_nir_dir, fluxes%sw_nir_dif, G, GV, US, opacity_CSp)
+                     fluxes%sw_nir_dir, fluxes%sw_nir_dif, G, GV, US, opacity)
   endif
 
 end subroutine set_pen_shortwave

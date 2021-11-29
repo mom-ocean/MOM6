@@ -54,17 +54,26 @@ type, public :: verticalGrid_type
                         !! as parts of a homogeneous region.
   integer :: nk_rho_varies = 0 !< The number of layers at the top where the
                         !! density does not track any target density.
-  real :: H_to_kg_m2    !< A constant that translates thicknesses from the units of thickness to kg m-2.
-  real :: kg_m2_to_H    !< A constant that translates thicknesses from kg m-2 to the units of thickness.
-  real :: m_to_H        !< A constant that translates distances in m to the units of thickness.
-  real :: H_to_m        !< A constant that translates distances in the units of thickness to m.
-  real :: H_to_Pa       !< A constant that translates the units of thickness to pressure [Pa].
-  real :: H_to_Z        !< A constant that translates thickness units to the units of depth.
-  real :: Z_to_H        !< A constant that translates depth units to thickness units.
-  real :: H_to_RZ       !< A constant that translates thickness units to the units of mass per unit area.
-  real :: RZ_to_H       !< A constant that translates mass per unit area units to thickness units.
-  real :: H_to_MKS      !< A constant that translates thickness units to its
-                        !! MKS unit (m or kg m-2) based on GV%Boussinesq
+  real :: H_to_kg_m2    !< A constant that translates thicknesses from the units of thickness
+                        !! to kg m-2 [kg m-2 H-1 ~> kg m-3 or 1].
+  real :: kg_m2_to_H    !< A constant that translates thicknesses from kg m-2 to the units
+                        !! of thickness [H m2 kg-1 ~> m3 kg-1 or 1].
+  real :: m_to_H        !< A constant that translates distances in m to the units of
+                        !! thickness [H m-1 ~> 1 or kg m-3].
+  real :: H_to_m        !< A constant that translates distances in the units of thickness
+                        !! to m [m H-1 ~> 1 or m3 kg-1].
+  real :: H_to_Pa       !< A constant that translates the units of thickness to pressure
+                        !! [Pa H-1 = kg m-1 s-2 H-1 ~> kg m-2 s-2 or m s-2].
+  real :: H_to_Z        !< A constant that translates thickness units to the units of
+                        !! depth [Z H-1 ~> 1 or m3 kg-1].
+  real :: Z_to_H        !< A constant that translates depth units to thickness units
+                        !! depth [H Z-1 ~> 1 or kg m-3].
+  real :: H_to_RZ       !< A constant that translates thickness units to the units of
+                        !! mass per unit area [R Z H-1 ~> kg m-3 or 1].
+  real :: RZ_to_H       !< A constant that translates mass per unit area units to
+                        !! thickness units [H R-1 Z-1 ~> m3 kg-2 or 1].
+  real :: H_to_MKS      !< A constant that translates thickness units to its MKS unit
+                        !! (m or kg m-2) based on GV%Boussinesq [m H-1 ~> 1] or [kg m-2 H-1 ~> 1]
 
   real :: m_to_H_restart = 0.0 !< A copy of the m_to_H that is used in restart files.
 end type verticalGrid_type

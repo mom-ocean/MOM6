@@ -54,11 +54,13 @@ type :: Depth_List
   integer                         :: listsize  !< length of the list <= niglobal*njglobal + 1
   real, allocatable, dimension(:) :: depth     !< A list of depths [Z ~> m]
   real, allocatable, dimension(:) :: area      !< The cross-sectional area of the ocean at that depth [L2 ~> m2]
-  real, allocatable, dimension(:) :: vol_below !< The ocean volume below that depth [Z m2 ~> m3]
+  real, allocatable, dimension(:) :: vol_below !< The ocean volume below that depth [Z L2 ~> m3]
 end type Depth_List
 
 !> The control structure for the MOM_sum_output module
 type, public :: sum_output_CS ; private
+  logical :: initialized = .false. !< True if this control structure has been initialized.
+
   type(Depth_List)              :: DL !< The sorted depth list.
 
   integer, allocatable, dimension(:) :: lH
@@ -145,11 +147,10 @@ subroutine MOM_sum_output_init(G, GV, US, param_file, directory, ntrnc, &
   type(Sum_output_CS),     pointer       :: CS         !< A pointer that is set to point to the
                                                        !! control structure for this module.
   ! Local variables
-  real :: Time_unit ! The time unit in seconds for ENERGYSAVEDAYS.
-  real :: Rho_0     ! A reference density [kg m-3]
+  real :: Time_unit ! The time unit in seconds for ENERGYSAVEDAYS [s]
   real :: maxvel    ! The maximum permitted velocity [m s-1]
-! This include declares and sets the variable "version".
-#include "version_variable.h"
+  ! This include declares and sets the variable "version".
+# include "version_variable.h"
   character(len=40)  :: mdl = "MOM_sum_output" ! This module's name.
   character(len=200) :: energyfile  ! The name of the energy file.
   character(len=32) :: filename_appendix = '' !fms appendix to filename for ensemble runs
@@ -159,6 +160,8 @@ subroutine MOM_sum_output_init(G, GV, US, param_file, directory, ntrnc, &
     return
   endif
   allocate(CS)
+
+  CS%initialized = .true.
 
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mdl, version, "")
@@ -377,11 +380,10 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, dt_forci
     mass_anom_EFP      ! The change in fresh water that cannot be accounted for by the surface
                        ! fluxes [kg].
   type(EFP_type), dimension(5) :: EFP_list ! An array of EFP types for joint global sums.
-  real :: CFL_Iarea    ! Direction-based inverse area used in CFL test [L-2].
+  real :: CFL_Iarea    ! Direction-based inverse area used in CFL test [L-2 ~> m-2].
   real :: CFL_trans    ! A transport-based definition of the CFL number [nondim].
   real :: CFL_lin      ! A simpler definition of the CFL number [nondim].
   real :: max_CFL(2)   ! The maxima of the CFL numbers [nondim].
-  real :: Irho0        ! The inverse of the reference density [m3 kg-1].
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: &
     tmp1               ! A temporary array
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1) :: &
@@ -390,9 +392,9 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, dt_forci
     Temp_int, Salt_int ! Layer and cell integrated heat and salt [J] and [g Salt].
   real :: HL2_to_kg    ! A conversion factor from a thickness-volume to mass [kg H-1 L-2 ~> kg m-3 or 1]
   real :: KE_scale_factor   ! The combination of unit rescaling factors in the kinetic energy
-                            ! calculation [kg T2 H-1 L-2 s-2 ~> kg m-3 or nondim]
+                            ! calculation [kg T2 H-1 L-2 s-2 ~> kg m-3 or 1]
   real :: PE_scale_factor   ! The combination of unit rescaling factors in the potential energy
-                            ! calculation [kg T2 R-1 Z-1 L-2 s-2 ~> nondim]
+                            ! calculation [kg T2 R-1 Z-1 L-2 s-2 ~> 1]
   integer :: num_nc_fields  ! The number of fields that will actually go into
                             ! the NetCDF file.
   integer :: i, j, k, is, ie, js, je, ns, nz, m, Isq, Ieq, Jsq, Jeq, isr, ier, jsr, jer
@@ -488,6 +490,9 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, dt_forci
   HL2_to_kg = GV%H_to_kg_m2*US%L_to_m**2
 
   if (.not.associated(CS)) call MOM_error(FATAL, &
+         "write_energy: Module must be initialized before it is used.")
+
+  if (.not.CS%initialized) call MOM_error(FATAL, &
          "write_energy: Module must be initialized before it is used.")
 
   do j=js,je ; do i=is,ie
@@ -734,7 +739,6 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, dt_forci
   if (nTr_stocks > 0) call sum_across_PEs(Tr_stocks,nTr_stocks)
 
   call max_across_PEs(max_CFL, 2)
-  Irho0 = 1.0 / (US%R_to_kg_m3*GV%Rho0)
 
   if (CS%use_temperature) then
     if (CS%previous_calls == 0) then
@@ -1031,7 +1035,7 @@ subroutine accumulate_net_input(fluxes, sfc_state, tv, dt, G, US, CS)
 !    enddo ; enddo ; endif
 
     if (associated(fluxes%salt_flux)) then ; do j=js,je ; do i=is,ie
-      ! convert salt_flux from kg (salt)/(m^2 s) to ppt * [m s-1].
+      ! integrate salt_flux in [R Z T-1 ~> kgSalt m-2 s-1] to give [ppt kg]
       salt_in(i,j) = RZL2_to_kg * dt * &
                      G%areaT(i,j)*(1000.0*fluxes%salt_flux(i,j))
     enddo ; enddo ; endif

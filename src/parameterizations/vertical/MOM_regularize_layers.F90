@@ -23,6 +23,7 @@ public regularize_layers, regularize_layers_init
 
 !> This control structure holds parameters used by the MOM_regularize_layers module
 type, public :: regularize_layers_CS ; private
+  logical :: initialized = .false. !< True if this control structure has been initialized.
   logical :: regularize_surface_layers !< If true, vertically restructure the
                              !! near-surface layers when they have too much
                              !! lateral variations to allow for sensible lateral
@@ -86,14 +87,14 @@ subroutine regularize_layers(h, tv, dt, ea, eb, G, GV, US, CS)
                                                   !! this should be increased due to mixed layer
                                                   !! entrainment [H ~> m or kg m-2].
   type(unit_scale_type),      intent(in)    :: US !< A dimensional unit scaling type
-  type(regularize_layers_CS), pointer       :: CS !< The control structure returned by a previous
-                                                  !! call to regularize_layers_init.
+  type(regularize_layers_CS), intent(in)    :: CS !< Regularize layer control struct
+
   ! Local variables
   integer :: i, j, k, is, ie, js, je, nz
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
-  if (.not. associated(CS)) call MOM_error(FATAL, "MOM_regularize_layers: "//&
+  if (.not. CS%initialized) call MOM_error(FATAL, "MOM_regularize_layers: "//&
          "Module must be initialized before it is used.")
 
   if (CS%regularize_surface_layers) then
@@ -123,8 +124,8 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, GV, US, CS)
                                                   !! this should be increased due to mixed layer
                                                   !! entrainment [H ~> m or kg m-2].
   type(unit_scale_type),      intent(in)    :: US !< A dimensional unit scaling type
-  type(regularize_layers_CS), pointer       :: CS !< The control structure returned by a previous
-                                                  !! call to regularize_layers_init.
+  type(regularize_layers_CS), intent(in)    :: CS !< Regularize layer control struct
+
   ! Local variables
   real, dimension(SZIB_(G),SZJ_(G)) :: &
     def_rat_u   ! The ratio of the thickness deficit to the minimum depth [nondim].
@@ -194,7 +195,7 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, GV, US, CS)
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
-  if (.not. associated(CS)) call MOM_error(FATAL, "MOM_regularize_layers: "//&
+  if (.not. CS%initialized) call MOM_error(FATAL, "MOM_regularize_layers: "//&
          "Module must be initialized before it is used.")
 
   if (GV%nkml<1) return
@@ -623,8 +624,7 @@ subroutine find_deficit_ratios(e, def_rat_u, def_rat_v, G, GV, CS, h)
   real, dimension(SZI_(G),SZJB_(G)),          &
                               intent(out) :: def_rat_v !< The thickness deficit ratio at v points,
                                                        !! [nondim].
-  type(regularize_layers_CS), pointer     :: CS        !< The control structure returned by a
-                                                       !! previous call to regularize_layers_init.
+  type(regularize_layers_CS), intent(in)  :: CS        !< Regularize layer control struct
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  &
                               intent(in)  :: h         !< Layer thicknesses [H ~> m or kg m-2].
 
@@ -719,8 +719,8 @@ subroutine regularize_layers_init(Time, G, GV, param_file, diag, CS)
                                                  !! run-time parameters.
   type(diag_ctrl), target, intent(inout) :: diag !< A structure that is used to regulate
                                                  !! diagnostic output.
-  type(regularize_layers_CS), pointer    :: CS   !< A pointer that is set to point to the
-                                                 !! control structure for this module.
+  type(regularize_layers_CS), intent(inout) :: CS !< Regularize layer control struct
+
 #include "version_variable.h"
   character(len=40)  :: mdl = "MOM_regularize_layers"  ! This module's name.
   logical :: use_temperature
@@ -729,11 +729,7 @@ subroutine regularize_layers_init(Time, G, GV, param_file, diag, CS)
   integer :: isd, ied, jsd, jed
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
-  if (associated(CS)) then
-    call MOM_error(WARNING, "regularize_layers_init called with an associated"// &
-                            "associated control structure.")
-    return
-  else ; allocate(CS) ; endif
+  CS%initialized = .true.
 
   CS%diag => diag
   CS%Time => Time

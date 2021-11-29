@@ -37,7 +37,7 @@ logical :: first_call = .true.
 contains
 
 !> Set vertical coordinates.
-subroutine USER_set_coord(Rlay, g_prime, GV, US, param_file, eqn_of_state)
+subroutine USER_set_coord(Rlay, g_prime, GV, US, param_file)
   type(verticalGrid_type),  intent(in)  :: GV      !< The ocean's vertical grid structure
   real, dimension(GV%ke),   intent(out) :: Rlay    !< Layer potential density [R ~> kg m-3].
   real, dimension(GV%ke+1), intent(out) :: g_prime !< The reduced gravity at each
@@ -46,7 +46,6 @@ subroutine USER_set_coord(Rlay, g_prime, GV, US, param_file, eqn_of_state)
   type(param_file_type),    intent(in)  :: param_file !< A structure indicating the
                                                    !! open file to parse for model
                                                    !! parameter values.
-  type(EOS_type),           pointer     :: eqn_of_state !< Equation of state structure
 
   call MOM_error(FATAL, &
     "USER_initialization.F90, USER_set_coord: " // &
@@ -128,7 +127,7 @@ end subroutine USER_initialize_velocity
 
 !> This function puts the initial layer temperatures and salinities
 !! into T(:,:,:) and S(:,:,:).
-subroutine USER_init_temperature_salinity(T, S, G, GV, param_file, eqn_of_state, just_read)
+subroutine USER_init_temperature_salinity(T, S, G, GV, param_file, just_read)
   type(ocean_grid_type),                     intent(in)  :: G !< Ocean grid structure.
   type(verticalGrid_type),                   intent(in)  :: GV !< The ocean's vertical grid structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: T !< Potential temperature [degC].
@@ -136,7 +135,6 @@ subroutine USER_init_temperature_salinity(T, S, G, GV, param_file, eqn_of_state,
   type(param_file_type),                     intent(in)  :: param_file !< A structure indicating the
                                                             !! open file to parse for model
                                                             !! parameter values.
-  type(EOS_type),                            pointer     :: eqn_of_state !< Equation of state structure
   logical,                                   intent(in)  :: just_read !< If true, this call will only
                                                            !! read parameters without changing T & S.
 
@@ -241,7 +239,7 @@ end subroutine write_user_log
 !!  - GV%Rlay - Layer potential density (coordinate variable) [R ~> kg m-3].
 !!  If ENABLE_THERMODYNAMICS is defined:
 !!  - T - Temperature [degC].
-!!  - S - Salinity [psu].
+!!  - S - Salinity [ppt].
 !!  If BULKMIXEDLAYER is defined:
 !!  - Rml - Mixed layer and buffer layer potential densities [R ~> kg m-3].
 !!  If SPONGE is defined:

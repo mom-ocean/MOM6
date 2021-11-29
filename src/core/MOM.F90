@@ -229,8 +229,7 @@ type, public :: MOM_control_struct ; private
   type(diag_ctrl)     :: diag !< structure to regulate diagnostic output timing
   type(vertvisc_type) :: visc !< structure containing vertical viscosities,
                     !! bottom drag viscosities, and related fields
-  type(MEKE_type), pointer :: MEKE => NULL() !<  structure containing fields
-                    !! related to the Mesoscale Eddy Kinetic Energy
+  type(MEKE_type) :: MEKE   !< Fields related to the Mesoscale Eddy Kinetic Energy
   logical :: adiabatic !< If true, there are no diapycnal mass fluxes, and no calls
                     !! to routines to calculate or apply diapycnal fluxes.
   logical :: diabatic_first !< If true, apply diabatic and thermodynamic processes before time
@@ -349,21 +348,19 @@ type, public :: MOM_control_struct ; private
     !< Pointer to the control structure used for the unsplit RK2 dynamics
   type(MOM_dyn_split_RK2_CS),    pointer :: dyn_split_RK2_CSp => NULL()
     !< Pointer to the control structure used for the mode-split RK2 dynamics
-  type(thickness_diffuse_CS),    pointer :: thickness_diffuse_CSp => NULL()
+  type(thickness_diffuse_CS) :: thickness_diffuse_CSp
     !< Pointer to the control structure used for the isopycnal height diffusive transport.
     !! This is also common referred to as Gent-McWilliams diffusion
-  type(mixedlayer_restrat_CS),   pointer :: mixedlayer_restrat_CSp => NULL()
+  type(mixedlayer_restrat_CS) :: mixedlayer_restrat_CSp
     !< Pointer to the control structure used for the mixed layer restratification
-  type(set_visc_CS),             pointer :: set_visc_CSp => NULL()
+  type(set_visc_CS)           :: set_visc_CSp
     !< Pointer to the control structure used to set viscosities
   type(diabatic_CS),             pointer :: diabatic_CSp => NULL()
     !< Pointer to the control structure for the diabatic driver
-  type(MEKE_CS),                 pointer :: MEKE_CSp => NULL()
+  type(MEKE_CS) :: MEKE_CSp
     !< Pointer to the control structure for the MEKE updates
-  type(VarMix_CS),               pointer :: VarMix => NULL()
-    !< Pointer to the control structure for the variable mixing module
-  type(Barotropic_CS),           pointer :: Barotropic_CSp => NULL()
-    !< Pointer to the control structure for the barotropic module
+  type(VarMix_CS) :: VarMix
+    !< Control structure for the variable mixing module
   type(tracer_registry_type),    pointer :: tracer_Reg => NULL()
     !< Pointer to the MOM tracer registry
   type(tracer_advect_CS),        pointer :: tracer_adv_CSp => NULL()
@@ -390,7 +387,7 @@ type, public :: MOM_control_struct ; private
   ! Pointers to control structures used for diagnostics
   type(sum_output_CS),           pointer :: sum_output_CSp => NULL()
     !< Pointer to the globally summed output control structure
-  type(diagnostics_CS),          pointer :: diagnostics_CSp => NULL()
+  type(diagnostics_CS) :: diagnostics_CSp
     !< Pointer to the MOM diagnostics control structure
   type(offline_transport_CS),    pointer :: offline_CSp => NULL()
     !< Pointer to the offline tracer transport control structure
@@ -648,7 +645,7 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
     CS%time_in_cycle = 0.0
     do j=js,je ; do i=is,ie ; CS%ssh_rint(i,j) = 0.0 ; enddo ; enddo
 
-    if (associated(CS%VarMix)) then
+    if (CS%VarMix%use_variable_mixing) then
       call enable_averages(cycle_time, Time_start + real_to_time(US%T_to_s*cycle_time), CS%diag)
       call calc_resoln_function(h, CS%tv, G, GV, US, CS%VarMix)
       call calc_depth_function(G, CS%VarMix)
@@ -1046,7 +1043,7 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_thermo, &
 
     call enable_averages(dt_thermo, Time_local+real_to_time(US%T_to_s*(dt_thermo-dt)), CS%diag)
     call cpu_clock_begin(id_clock_thick_diff)
-    if (associated(CS%VarMix)) &
+    if (CS%VarMix%use_variable_mixing) &
       call calc_slope_functions(h, CS%tv, dt, G, GV, US, CS%VarMix, OBC=CS%OBC)
     call thickness_diffuse(h, CS%uhtr, CS%vhtr, CS%tv, dt_thermo, G, GV, US, &
                            CS%MEKE, CS%VarMix, CS%CDp, CS%thickness_diffuse_CSp)
@@ -1128,7 +1125,7 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_thermo, &
 
     if (CS%debug) call hchksum(h,"Pre-thickness_diffuse h", G%HI, haloshift=0, scale=GV%H_to_m)
 
-    if (associated(CS%VarMix)) &
+    if (CS%VarMix%use_variable_mixing) &
       call calc_slope_functions(h, CS%tv, dt, G, GV, US, CS%VarMix, OBC=CS%OBC)
     call thickness_diffuse(h, CS%uhtr, CS%vhtr, CS%tv, dt, G, GV, US, &
                            CS%MEKE, CS%VarMix, CS%CDp, CS%thickness_diffuse_CSp)
@@ -1584,7 +1581,7 @@ subroutine step_offline(forces, fluxes, sfc_state, Time_start, time_interval, CS
 
         ! Perform offline diffusion if requested
         if (.not. skip_diffusion) then
-          if (associated(CS%VarMix)) then
+          if (CS%VarMix%use_variable_mixing) then
             call pass_var(CS%h, G%Domain)
             call calc_resoln_function(CS%h, CS%tv, G, GV, US, CS%VarMix)
             call calc_depth_function(G, CS%VarMix)
@@ -1610,7 +1607,7 @@ subroutine step_offline(forces, fluxes, sfc_state, Time_start, time_interval, CS
         call offline_redistribute_residual(CS%offline_CSp, CS%h, uhtr, vhtr, adv_converged)
                 ! Perform offline diffusion if requested
         if (.not. skip_diffusion) then
-          if (associated(CS%VarMix)) then
+          if (CS%VarMix%use_variable_mixing) then
             call pass_var(CS%h, G%Domain)
             call calc_resoln_function(CS%h, CS%tv, G, GV, US, CS%VarMix)
             call calc_depth_function(G, CS%VarMix)
@@ -1735,7 +1732,8 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
 
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz
   integer :: IsdB, IedB, JsdB, JedB
-  real    :: dtbt        ! The barotropic timestep [s]
+  real    :: dtbt              ! If negative, this specifies the barotropic timestep as a fraction
+                               ! of the maximum stable value [nondim].
 
   real, allocatable, dimension(:,:)   :: eta ! free surface height or column mass [H ~> m or kg m-2]
   real, allocatable, dimension(:,:)   :: area_shelf_in ! area occupied by ice shelf [L2 ~> m2]
@@ -2361,7 +2359,10 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   ! Use the Wright equation of state by default, unless otherwise specified
   ! Note: this line and the following block ought to be in a separate
   ! initialization routine for tv.
-  if (use_EOS) call EOS_init(param_file, CS%tv%eqn_of_state, US)
+  if (use_EOS) then
+    allocate(CS%tv%eqn_of_state)
+    call EOS_init(param_file, CS%tv%eqn_of_state, US)
+  endif
   if (use_temperature) then
     allocate(CS%tv%TempxPmE(isd:ied,jsd:jed), source=0.0)
     if (use_geothermal) then
@@ -2379,10 +2380,10 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
              CS%dyn_split_RK2_CSp, restart_CSp, CS%uh, CS%vh)
   elseif (CS%use_RK2) then
     call register_restarts_dyn_unsplit_RK2(HI, GV, param_file, &
-           CS%dyn_unsplit_RK2_CSp, restart_CSp)
+           CS%dyn_unsplit_RK2_CSp)
   else
     call register_restarts_dyn_unsplit(HI, GV, param_file, &
-           CS%dyn_unsplit_CSp, restart_CSp)
+           CS%dyn_unsplit_CSp)
   endif
 
   ! This subroutine calls user-specified tracer registration routines.
@@ -2690,14 +2691,14 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
     endif
   elseif (CS%use_RK2) then
     call initialize_dyn_unsplit_RK2(CS%u, CS%v, CS%h, Time, G, GV, US,     &
-            param_file, diag, CS%dyn_unsplit_RK2_CSp, restart_CSp,         &
-            CS%ADp, CS%CDp, MOM_internal_state, CS%MEKE, CS%OBC,           &
+            param_file, diag, CS%dyn_unsplit_RK2_CSp,                      &
+            CS%ADp, CS%CDp, MOM_internal_state, CS%OBC,                    &
             CS%update_OBC_CSp, CS%ALE_CSp, CS%set_visc_CSp, CS%visc, dirs, &
             CS%ntrunc, cont_stencil=CS%cont_stencil)
   else
     call initialize_dyn_unsplit(CS%u, CS%v, CS%h, Time, G, GV, US,         &
-            param_file, diag, CS%dyn_unsplit_CSp, restart_CSp,             &
-            CS%ADp, CS%CDp, MOM_internal_state, CS%MEKE, CS%OBC,           &
+            param_file, diag, CS%dyn_unsplit_CSp,                          &
+            CS%ADp, CS%CDp, MOM_internal_state, CS%OBC,                    &
             CS%update_OBC_CSp, CS%ALE_CSp, CS%set_visc_CSp, CS%visc, dirs, &
             CS%ntrunc, cont_stencil=CS%cont_stencil)
   endif
@@ -3569,7 +3570,7 @@ subroutine get_MOM_state_elements(CS, G, GV, US, C_p, C_p_scaled, use_temp)
   type(unit_scale_type),   optional, pointer     :: US   !< A dimensional unit scaling type
   real,                    optional, intent(out) :: C_p  !< The heat capacity [J kg degC-1]
   real,                    optional, intent(out) :: C_p_scaled !< The heat capacity in scaled
-                                                         !! units [Q degC-1 ~> J kg degC-1]
+                                                         !! units [Q degC-1 ~> J kg-1 degC-1]
   logical,                 optional, intent(out) :: use_temp !< True if temperature is a state variable
 
   if (present(G)) G => CS%G_in
@@ -3627,7 +3628,6 @@ subroutine MOM_end(CS)
   endif
 
   call MOM_diagnostics_end(CS%diagnostics_CSp, CS%ADp, CS%CDp)
-  deallocate(CS%diagnostics_CSp)
 
   if (CS%offline_tracer_mode) call offline_transport_end(CS%offline_CSp)
 
@@ -3645,25 +3645,9 @@ subroutine MOM_end(CS)
   endif
 
   call thickness_diffuse_end(CS%thickness_diffuse_CSp, CS%CDp)
-  deallocate(CS%thickness_diffuse_CSp)
-
-  if (associated(CS%VarMix)) then
-    call VarMix_end(CS%VarMix)
-    deallocate(CS%VarMix)
-  endif
-
-  if (associated(CS%mixedlayer_restrat_CSp)) &
-    deallocate(CS%mixedlayer_restrat_CSp)
-
-  if (associated(CS%set_visc_CSp)) &
-    call set_visc_end(CS%visc, CS%set_visc_CSp)
-
-  if (associated(CS%MEKE_CSp)) deallocate(CS%MEKE_CSp)
-
-  if (associated(CS%MEKE)) then
-    call MEKE_end(CS%MEKE)
-    deallocate(CS%MEKE)
-  endif
+  call VarMix_end(CS%VarMix)
+  call set_visc_end(CS%visc, CS%set_visc_CSp)
+  call MEKE_end(CS%MEKE)
 
   if (associated(CS%tv%internal_heat)) deallocate(CS%tv%internal_heat)
   if (associated(CS%tv%TempxPmE)) deallocate(CS%tv%TempxPmE)

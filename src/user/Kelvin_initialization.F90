@@ -287,7 +287,7 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, GV, US, h, Time)
           endif
         endif
       enddo ; enddo
-      if (associated(segment%tangential_vel)) then
+      if (allocated(segment%tangential_vel)) then
         do J=JsdB+1,JedB-1 ; do I=IsdB,IedB
           x1 = km_to_L_scale * G%geoLonBu(I,J)
           y1 = km_to_L_scale * G%geoLatBu(I,J)
@@ -343,7 +343,7 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, GV, US, h, Time)
           endif
         endif
       enddo ; enddo
-      if (associated(segment%tangential_vel)) then
+      if (allocated(segment%tangential_vel)) then
         do J=JsdB,JedB ; do I=IsdB+1,IedB-1
           x1 = km_to_L_scale * G%geoLonBu(I,J)
           y1 = km_to_L_scale * G%geoLatBu(I,J)

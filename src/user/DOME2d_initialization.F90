@@ -220,19 +220,16 @@ end subroutine DOME2d_initialize_thickness
 
 
 !> Initialize temperature and salinity in the 2d DOME configuration
-subroutine DOME2d_initialize_temperature_salinity ( T, S, h, G, GV, param_file, &
-                     eqn_of_state, just_read)
+subroutine DOME2d_initialize_temperature_salinity ( T, S, h, G, GV, param_file, just_read)
   type(ocean_grid_type),                     intent(in)  :: G !< Ocean grid structure
   type(verticalGrid_type),                   intent(in)  :: GV !< The ocean's vertical grid structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: T !< Potential temperature [degC]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: S !< Salinity [ppt]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)  :: h !< Layer thickness [H ~> m or kg m-2]
   type(param_file_type),                     intent(in)  :: param_file !< Parameter file structure
-  type(EOS_type),                            pointer     :: eqn_of_state !< Equation of state structure
   logical,                                   intent(in)  :: just_read !< If true, this call will
                                                       !! only read parameters without changing T & S.
 
-  ! Local variables
   integer   :: i, j, k, is, ie, js, je, nz
   real      :: x
   integer   :: index_bay_z
@@ -365,7 +362,7 @@ subroutine DOME2d_initialize_sponges(G, GV, US, tv, depth_tot, param_file, use_A
   real :: S(SZI_(G),SZJ_(G),SZK_(GV))  ! A temporary array for salt [ppt]
   real :: h(SZI_(G),SZJ_(G),SZK_(GV))  ! A temporary array for thickness [H ~> m or kg m-2].
   real :: eta(SZI_(G),SZJ_(G),SZK_(GV)+1) ! A temporary array for interface heights [Z ~> m]
-  real :: Idamp(SZI_(G),SZJ_(G))       ! The inverse damping rate [T-1 ~> s-1].
+  real :: Idamp(SZI_(G),SZJ_(G))       ! The sponge damping rate [T-1 ~> s-1]
   real :: S_ref                        ! Reference salinity within the surface layer [ppt]
   real :: T_ref                        ! Reference temerature within the surface layer [degC]
   real :: S_range                      ! Range of salinities in the vertical [ppt]
@@ -421,7 +418,7 @@ subroutine DOME2d_initialize_sponges(G, GV, US, tv, depth_tot, param_file, use_A
   call get_param(param_file, mdl, "T_RANGE", T_range, default=0.0)
 
 
-  ! Set the inverse damping rate as a function of position
+  ! Set the sponge damping rate as a function of position
   Idamp(:,:) = 0.0
   do j=js,je ; do i=is,ie
     if (G%mask2dT(i,j) > 0.) then ! Only set damping rate for wet points

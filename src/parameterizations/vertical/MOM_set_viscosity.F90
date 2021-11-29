@@ -43,6 +43,7 @@ public set_visc_register_restarts
 
 !> Control structure for MOM_set_visc
 type, public :: set_visc_CS ; private
+  logical :: initialized = .false. !< True if this control structure has been initialized.
   real    :: Hbbl           !< The static bottom boundary layer thickness [H ~> m or kg m-2].
                             !! Runtime parameter `HBBL`.
   real    :: cdrag          !< The quadratic drag coefficient.
@@ -130,7 +131,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, pbv)
                                                   !! have NULL ptrs..
   type(vertvisc_type),      intent(inout) :: visc !< A structure containing vertical viscosities and
                                                   !! related fields.
-  type(set_visc_CS),        pointer       :: CS   !< The control structure returned by a previous
+  type(set_visc_CS),        intent(inout) :: CS   !< The control structure returned by a previous
                                                   !! call to set_visc_init.
   type(porous_barrier_ptrs),intent(in)    :: pbv  !< porous barrier fractional cell metrics
 
@@ -178,7 +179,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, pbv)
                            ! Rho0 divided by G_Earth and the conversion
                            ! from m to thickness units [H R ~> kg m-2 or kg2 m-5].
   real :: cdrag_sqrt_Z     ! Square root of the drag coefficient, times a unit conversion
-                           ! factor from lateral lengths to vertical depths [Z L-1 ~> 1].
+                           ! factor from lateral lengths to vertical depths [Z L-1 ~> nondim].
   real :: cdrag_sqrt       ! Square root of the drag coefficient [nondim].
   real :: oldfn            ! The integrated energy required to
                            ! entrain up to the bottom of the layer,
@@ -257,7 +258,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, pbv)
   real :: Cell_width       ! The transverse width of the velocity cell [L ~> m].
   real :: Rayleigh         ! A nondimensional value that is multiplied by the layer's
                            ! velocity magnitude to give the Rayleigh drag velocity, times
-                           ! a lateral to vertical distance conversion factor [Z L-1 ~> 1].
+                           ! a lateral to vertical distance conversion factor [Z L-1 ~> nondim].
   real :: gam              ! The ratio of the change in the open interface width
                            ! to the open interface width atop a cell [nondim].
   real :: BBL_frac         ! The fraction of a layer's drag that goes into the
@@ -285,8 +286,9 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, pbv)
   Vol_quit = 0.9*GV%Angstrom_H + h_neglect
   C2pi_3 = 8.0*atan(1.0)/3.0
 
-  if (.not.associated(CS)) call MOM_error(FATAL,"MOM_set_viscosity(BBL): "//&
+  if (.not.CS%initialized) call MOM_error(FATAL,"MOM_set_viscosity(BBL): "//&
          "Module must be initialized before it is used.")
+
   if (.not.CS%bottomdraglaw) return
 
   if (CS%debug) then
@@ -595,7 +597,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, pbv)
     ! When stratification dominates h_N<<h_f, and vice versa.
     do i=is,ie ; if (do_i(i)) then
       ! The 400.0 in this expression is the square of a Ci introduced in KW99, eq. 2.22.
-      ustarsq = Rho0x400_G * ustar(i)**2 ! Note not in units of u*^2 but [H R]
+      ustarsq = Rho0x400_G * ustar(i)**2 ! Note not in units of u*^2 but [H R ~> kg m-2 or kg m-5]
       htot = 0.0
 
       ! Calculate the thickness of a stratification limited BBL ignoring rotation:
@@ -954,10 +956,10 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, pbv)
           ! set kv_bbl to the bound and recompute bbl_thick to be consistent
           ! but with a ridiculously large upper bound on thickness (for Cd u*=0)
           kv_bbl = CS%Kv_BBL_min
-          if (cdrag_sqrt*ustar(i)*BBL_visc_frac*G%Rad_Earth*US%m_to_Z > kv_bbl) then
+          if (cdrag_sqrt*ustar(i)*BBL_visc_frac*G%Rad_Earth_L*US%L_to_Z > kv_bbl) then
             bbl_thick_Z = kv_bbl / ( cdrag_sqrt*ustar(i)*BBL_visc_frac )
           else
-            bbl_thick_Z = G%Rad_Earth * US%m_to_Z
+            bbl_thick_Z = G%Rad_Earth_L * US%L_to_Z
           endif
         else
           kv_bbl = cdrag_sqrt*ustar(i)*bbl_thick_Z*BBL_visc_frac
@@ -986,10 +988,10 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, pbv)
           ! set kv_bbl to the bound and recompute bbl_thick to be consistent
           ! but with a ridiculously large upper bound on thickness (for Cd u*=0)
           kv_bbl = CS%Kv_BBL_min
-          if (cdrag_sqrt*ustar(i)*G%Rad_Earth*US%m_to_Z > kv_bbl) then
+          if (cdrag_sqrt*ustar(i)*G%Rad_Earth_L*US%L_to_Z > kv_bbl) then
             bbl_thick_Z = kv_bbl / ( cdrag_sqrt*ustar(i) )
           else
-            bbl_thick_Z = G%Rad_Earth * US%m_to_Z
+            bbl_thick_Z = G%Rad_Earth_L * US%L_to_Z
           endif
         else
           kv_bbl = cdrag_sqrt*ustar(i)*bbl_thick_Z
@@ -1149,7 +1151,7 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS)
   type(vertvisc_type),     intent(inout) :: visc !< A structure containing vertical viscosities and
                                                  !! related fields.
   real,                    intent(in)    :: dt   !< Time increment [T ~> s].
-  type(set_visc_CS),       pointer       :: CS   !< The control structure returned by a previous
+  type(set_visc_CS),       intent(inout) :: CS   !< The control structure returned by a previous
                                                  !! call to set_visc_init.
 
   ! Local variables
@@ -1221,7 +1223,7 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS)
                       ! Rho0 divided by G_Earth and the conversion
                       ! from m to thickness units [H R ~> kg m-2 or kg2 m-5].
   real :: cdrag_sqrt_Z  ! Square root of the drag coefficient, times a unit conversion
-                      ! factor from lateral lengths to vertical depths [Z L-1 ~> 1].
+                      ! factor from lateral lengths to vertical depths [Z L-1 ~> nondim]
   real :: cdrag_sqrt  ! Square root of the drag coefficient [nondim].
   real :: oldfn       ! The integrated energy required to
                       ! entrain up to the bottom of the layer,
@@ -1252,8 +1254,9 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS)
   Isq = G%isc-1 ; Ieq = G%IecB ; Jsq = G%jsc-1 ; Jeq = G%JecB
   nkmb = GV%nk_rho_varies ; nkml = GV%nkml
 
-  if (.not.associated(CS)) call MOM_error(FATAL,"MOM_set_viscosity(visc_ML): "//&
+  if (.not.CS%initialized) call MOM_error(FATAL,"MOM_set_viscosity(visc_ML): "//&
          "Module must be initialized before it is used.")
+
   if (.not.(CS%dynamic_viscous_ML .or. associated(forces%frac_shelf_u) .or. &
             associated(forces%frac_shelf_v)) ) return
 
@@ -1812,7 +1815,7 @@ subroutine set_visc_register_restarts(HI, GV, param_file, visc, restart_CS)
   type(vertvisc_type),     intent(inout) :: visc       !< A structure containing vertical
                                                        !! viscosities and related fields.
                                                        !! Allocated here.
-  type(MOM_restart_CS),    pointer       :: restart_CS !< A pointer to the restart control structure.
+  type(MOM_restart_CS),    intent(inout) :: restart_CS !< MOM restart control struct
   ! Local variables
   logical :: use_kappa_shear, KS_at_vertex
   logical :: adiabatic, useKPP, useEPBL
@@ -1901,9 +1904,8 @@ subroutine set_visc_init(Time, G, GV, US, param_file, diag, visc, CS, restart_CS
                                                  !! output.
   type(vertvisc_type),     intent(inout) :: visc !< A structure containing vertical viscosities and
                                                  !! related fields.  Allocated here.
-  type(set_visc_CS),       pointer       :: CS   !< A pointer that is set to point to the control
-                                                 !! structure for this module
-  type(MOM_restart_CS),    pointer       :: restart_CS !< A pointer to the restart control structure.
+  type(set_visc_CS),       intent(inout) :: CS   !< Vertical viscosity control struct
+  type(MOM_restart_CS),    intent(inout) :: restart_CS !< MOM restart control struct
   type(ocean_OBC_type),    pointer       :: OBC  !< A pointer to an open boundary condition structure
 
   ! Local variables
@@ -1937,13 +1939,7 @@ subroutine set_visc_init(Time, G, GV, US, param_file, diag, visc, CS, restart_CS
 # include "version_variable.h"
   character(len=40)  :: mdl = "MOM_set_visc"  ! This module's name.
 
-  if (associated(CS)) then
-    call MOM_error(WARNING, "set_visc_init called with an associated "// &
-                            "control structure.")
-    return
-  endif
-  allocate(CS)
-
+  CS%initialized = .true.
   CS%OBC => OBC
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
@@ -2247,7 +2243,7 @@ end subroutine set_visc_init
 subroutine set_visc_end(visc, CS)
   type(vertvisc_type), intent(inout) :: visc !< A structure containing vertical viscosities and
                                              !! related fields.  Elements are deallocated here.
-  type(set_visc_CS),   pointer       :: CS   !< The control structure returned by a previous
+  type(set_visc_CS),   intent(inout) :: CS   !< The control structure returned by a previous
                                              !! call to set_visc_init.
   if (CS%bottomdraglaw) then
     deallocate(visc%bbl_thick_u) ; deallocate(visc%bbl_thick_v)
@@ -2274,8 +2270,6 @@ subroutine set_visc_end(visc, CS)
   if (associated(visc%tbl_thick_shelf_v)) deallocate(visc%tbl_thick_shelf_v)
   if (associated(visc%kv_tbl_shelf_u)) deallocate(visc%kv_tbl_shelf_u)
   if (associated(visc%kv_tbl_shelf_v)) deallocate(visc%kv_tbl_shelf_v)
-
-  deallocate(CS)
 end subroutine set_visc_end
 
 !> \namespace mom_set_visc
