@@ -65,6 +65,10 @@ type, public :: int_tide_CS ; private
                         !< identifies reflection cells where double reflection
                         !! is possible (i.e. ridge cells)
                         ! (could be in G control structure)
+  real, allocatable, dimension(:,:) :: trans
+                        !< partial transmission coeff for each "coast cell"
+  real, allocatable, dimension(:,:) :: residual
+                        !< residual of reflection and transmission coeff for each "coast cell"
   real, allocatable, dimension(:,:,:,:) :: cp
                         !< horizontal phase speed [L T-1 ~> m s-1]
   real, allocatable, dimension(:,:,:,:,:) :: TKE_leak_loss
@@ -79,6 +83,8 @@ type, public :: int_tide_CS ; private
                         !! the energy losses in [R Z3 T-3 ~> W m-2]
   real, allocatable, dimension(:,:,:,:,:) :: TKE_itidal_loss
                         !< energy lost due to small-scale wave drag [R Z3 T-3 ~> W m-2]
+  real, allocatable, dimension(:,:,:,:,:) :: TKE_residual_loss
+
   real, allocatable, dimension(:,:) :: tot_leak_loss !< Energy loss rates due to misc bakground processes,
                         !! summed over angle, frequency and mode [R Z3 T-3 ~> W m-2]
   real, allocatable, dimension(:,:) :: tot_quad_loss !< Energy loss rates due to quadratic bottom drag,
@@ -87,6 +93,8 @@ type, public :: int_tide_CS ; private
                         !! summed over angle, frequency and mode [R Z3 T-3 ~> W m-2]
   real, allocatable, dimension(:,:) :: tot_Froude_loss !< Energy loss rates due to wave breaking,
                         !! summed over angle, frequency and mode [R Z3 T-3 ~> W m-2]
+  real, allocatable, dimension(:,:) :: tot_residual_loss !< Energy loss rates due to wave breaking,
+
   real, allocatable, dimension(:,:) :: tot_allprocesses_loss !< Energy loss rates due to all processes,
                         !! summed over angle, frequency and mode [R Z3 T-3 ~> W m-2]
   real :: q_itides      !< fraction of local dissipation [nondim]
@@ -107,6 +115,8 @@ type, public :: int_tide_CS ; private
                         !< If true, apply scattering due to small-scale roughness as a sink.
   logical :: apply_Froude_drag
                         !< If true, apply wave breaking as a sink.
+  logical :: apply_residual_drag
+                        !< If true, apply sink from residual term of reflection/transmission.
   real, dimension(:,:,:,:,:), pointer :: En => NULL()
                         !< The internal wave energy density as a function of (i,j,angle,frequency,mode)
                         !! integrated within an angular and frequency band [R Z3 T-2 ~> J m-2]
@@ -123,10 +133,11 @@ type, public :: int_tide_CS ; private
   ! Diag handles relevant to all modes, frequencies, and angles
   integer :: id_tot_En = -1, id_TKE_itidal_input = -1, id_itide_drag = -1
   integer :: id_refl_pref = -1, id_refl_ang = -1, id_land_mask = -1
+  integer :: id_trans = -1, id_residual = -1
   integer :: id_dx_Cv = -1, id_dy_Cu = -1
   ! Diag handles considering: sums over all modes, frequencies, and angles
   integer :: id_tot_leak_loss = -1, id_tot_quad_loss = -1, id_tot_itidal_loss = -1
-  integer :: id_tot_Froude_loss = -1, id_tot_allprocesses_loss = -1
+  integer :: id_tot_Froude_loss = -1, id_tot_residual_loss = -1, id_tot_allprocesses_loss = -1
   ! Diag handles considering: all modes & freqs; summed over angles
   integer, allocatable, dimension(:,:) :: &
              id_En_mode, &
@@ -186,7 +197,7 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
     flux_prec_y
   real, dimension(SZI_(G),SZJ_(G)) :: &
     tot_En, &      ! energy summed over angles, modes, frequencies [R Z3 T-2 ~> J m-2]
-    tot_leak_loss, tot_quad_loss, tot_itidal_loss, tot_Froude_loss, tot_allprocesses_loss, &
+    tot_leak_loss, tot_quad_loss, tot_itidal_loss, tot_Froude_loss, tot_residual_loss, tot_allprocesses_loss, &
                    ! energy loss rates summed over angle, freq, and mode [R Z3 T-3 ~> W m-2]
     htot, &        ! The vertical sum of the layer thicknesses [H ~> m or kg m-2]
     drag_scale, &  ! bottom drag scale [T-1 ~> s-1]
@@ -505,6 +516,16 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
     enddo ; enddo
   enddo ; enddo ; enddo
 
+  ! loss from residual of reflection/transmission coefficients
+  if (CS%apply_residual_drag) then
+    do m=1,CS%nMode ; do fr=1,CS%nFreq ; do a=1,CS%nAngle ; do j=jsd,jed ; do i=isd,ied
+
+    CS%TKE_residual_loss(i,j,a,fr,m)  = CS%En(i,j,a,fr,m) * CS%residual(i,j) * CS%decay_rate ! loss rate [R Z3 T-3 ~> W m-2] RD???
+    CS%En(i,j,a,fr,m) = CS%En(i,j,a,fr,m) / (1.0 + dt * CS%residual(i,j) * CS%decay_rate) ! implicit update
+    enddo ; enddo ; enddo ; enddo ; enddo
+  endif
+
+
   ! Check for energy conservation on computational domain.*************************
   do m=1,CS%NMode ; do fr=1,CS%Nfreq
     call sum_En(G,CS,CS%En(:,:,:,fr,m),'prop_int_tide')
@@ -540,21 +561,25 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
     tot_quad_loss(:,:)   = 0.0
     tot_itidal_loss(:,:) = 0.0
     tot_Froude_loss(:,:) = 0.0
+    tot_residual_loss(:,:) = 0.0
     tot_allprocesses_loss(:,:) = 0.0
     do m=1,CS%NMode ; do fr=1,CS%Nfreq ; do a=1,CS%nAngle ; do j=js,je ; do i=is,ie
       tot_leak_loss(i,j)   = tot_leak_loss(i,j)   + CS%TKE_leak_loss(i,j,a,fr,m)
       tot_quad_loss(i,j)   = tot_quad_loss(i,j)   + CS%TKE_quad_loss(i,j,a,fr,m)
       tot_itidal_loss(i,j) = tot_itidal_loss(i,j) + CS%TKE_itidal_loss(i,j,a,fr,m)
       tot_Froude_loss(i,j) = tot_Froude_loss(i,j) + CS%TKE_Froude_loss(i,j,a,fr,m)
+      tot_residual_loss(i,j) = tot_residual_loss(i,j) + CS%TKE_residual_loss(i,j,a,fr,m)
     enddo ; enddo ; enddo ; enddo ; enddo
     do j=js,je ; do i=is,ie
       tot_allprocesses_loss(i,j) = tot_leak_loss(i,j) + tot_quad_loss(i,j) + &
-                          tot_itidal_loss(i,j) + tot_Froude_loss(i,j)
+                          tot_itidal_loss(i,j) + tot_Froude_loss(i,j) + &
+                          tot_residual_loss(i,j)
     enddo ; enddo
     CS%tot_leak_loss         = tot_leak_loss
     CS%tot_quad_loss         = tot_quad_loss
     CS%tot_itidal_loss       = tot_itidal_loss
     CS%tot_Froude_loss       = tot_Froude_loss
+    CS%tot_residual_loss     = tot_residual_loss
     CS%tot_allprocesses_loss = tot_allprocesses_loss
     if (CS%id_tot_leak_loss > 0) then
       call post_data(CS%id_tot_leak_loss, tot_leak_loss, CS%diag)
@@ -567,6 +592,9 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
     endif
     if (CS%id_tot_Froude_loss > 0) then
       call post_data(CS%id_tot_Froude_loss, tot_Froude_loss, CS%diag)
+    endif
+    if (CS%id_tot_residual_loss > 0) then
+      call post_data(CS%id_tot_residual_loss, tot_residual_loss, CS%diag)
     endif
     if (CS%id_tot_allprocesses_loss > 0) then
       call post_data(CS%id_tot_allprocesses_loss, tot_allprocesses_loss, CS%diag)
@@ -581,7 +609,8 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
         itidal_loss_mode(i,j)       = itidal_loss_mode(i,j) + CS%TKE_itidal_loss(i,j,a,fr,m)
         allprocesses_loss_mode(i,j) = allprocesses_loss_mode(i,j) + &
                                  CS%TKE_leak_loss(i,j,a,fr,m) + CS%TKE_quad_loss(i,j,a,fr,m) + &
-                                 CS%TKE_itidal_loss(i,j,a,fr,m) + CS%TKE_Froude_loss(i,j,a,fr,m)
+                                 CS%TKE_itidal_loss(i,j,a,fr,m) + CS%TKE_Froude_loss(i,j,a,fr,m) + &
+                                 CS%TKE_residual_loss(i,j,a,fr,m)
       enddo ; enddo ; enddo
       call post_data(CS%id_itidal_loss_mode(fr,m), itidal_loss_mode, CS%diag)
       call post_data(CS%id_allprocesses_loss_mode(fr,m), allprocesses_loss_mode, CS%diag)
@@ -2162,7 +2191,7 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
   character(len=160) :: var_descript
   character(len=200) :: filename
   character(len=200) :: refl_angle_file, land_mask_file
-  character(len=200) :: refl_pref_file, refl_dbl_file
+  character(len=200) :: refl_pref_file, refl_dbl_file, trans_file
   character(len=200) :: dy_Cu_file, dx_Cv_file
   character(len=200) :: h2_file
 
@@ -2289,6 +2318,9 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
   call get_param(param_file, mdl, "INTERNAL_TIDE_WAVE_DRAG", CS%apply_wave_drag, &
                  "If true, apply scattering due to small-scale roughness as a sink.", &
                  default=.false.)
+  call get_param(param_file, mdl, "INTERNAL_TIDE_RESIDUAL_DRAG", CS%apply_residual_drag, &
+                 "If true, TBD", &
+                 default=.false.)
   call get_param(param_file, mdl, "INTERNAL_TIDE_DRAG_MIN_DEPTH", CS%drag_min_depth, &
                  "The minimum total ocean thickness that will be used in the denominator "//&
                  "of the quadratic drag terms for internal tides.", &
@@ -2327,10 +2359,12 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
   allocate(CS%TKE_quad_loss(isd:ied,jsd:jed,num_angle,num_freq,num_mode), source=0.0)
   allocate(CS%TKE_itidal_loss(isd:ied,jsd:jed,num_angle,num_freq,num_mode), source=0.0)
   allocate(CS%TKE_Froude_loss(isd:ied,jsd:jed,num_angle,num_freq,num_mode), source=0.0)
+  allocate(CS%TKE_residual_loss(isd:ied,jsd:jed,num_angle,num_freq,num_mode), source=0.0)
   allocate(CS%tot_leak_loss(isd:ied,jsd:jed), source=0.0)
   allocate(CS%tot_quad_loss(isd:ied,jsd:jed), source=0.0)
   allocate(CS%tot_itidal_loss(isd:ied,jsd:jed), source=0.0)
   allocate(CS%tot_Froude_loss(isd:ied,jsd:jed), source=0.0)
+  allocate(CS%tot_residual_loss(isd:ied,jsd:jed), source=0.0)
 
   ! Compute the fixed part of the bottom drag loss from baroclinic modes
   call get_param(param_file, mdl, "H2_FILE", h2_file, &
@@ -2426,6 +2460,32 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
     else ; CS%refl_dbl(i,j) = .false. ; endif
   enddo ; enddo
 
+  ! Read in the transmission coefficient and infer the residual
+  call get_param(param_file, mdl, "TRANS_FILE", trans_file, &
+               "The path to the file containing the transmission coefficent for internal tides.", &
+               fail_if_missing=.false., default='')
+  filename = trim(CS%inputdir) // trim(trans_file)
+  allocate(CS%trans(isd:ied,jsd:jed), source=0.0)
+  if (file_exists(filename, G%domain)) then
+    call log_param(param_file, mdl, "INPUTDIR/TRANS_FILE", filename)
+    call MOM_read_data(filename, 'trans', CS%trans, G%domain)
+  else
+    if (trim(trans_file) /= '' ) call MOM_error(FATAL, &
+                                                "TRANS_FILE: "//trim(filename)//" not found")
+  endif
+
+  call pass_var(CS%trans,G%domain)
+  ! residual
+  allocate(CS%residual(isd:ied,jsd:jed), source=0.0)
+  do j=jsd,jed
+    do i=isd,ied
+      if (CS%refl_pref_logical(i,j)) then
+        CS%residual(i,j) = 1. - CS%refl_pref(i,j) - CS%trans(i,j)
+      endif
+    enddo
+  enddo
+  call pass_var(CS%residual,G%domain)
+
   ! Read in prescribed land mask from file (if overwriting -BDM).
   ! This should be done in MOM_initialize_topography subroutine
   ! defined in MOM_fixed_initialization.F90 (BDM)
@@ -2465,6 +2525,10 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
                  Time, 'Local angle of coastline/ridge/shelf with respect to equator', 'rad')
   CS%id_refl_pref = register_diag_field('ocean_model', 'refl_pref', diag%axesT1, &
                  Time, 'Partial reflection coefficients', '')
+  CS%id_trans = register_diag_field('ocean_model', 'trans', diag%axesT1, &
+                 Time, 'Partial transmission coefficients', '')
+  CS%id_residual = register_diag_field('ocean_model', 'residual', diag%axesT1, &
+                 Time, 'Residual of reflection and transmission coefficients', '')
   CS%id_dx_Cv = register_diag_field('ocean_model', 'dx_Cv', diag%axesT1, &
                  Time, 'North face unblocked width', 'm', conversion=US%L_to_m)
   CS%id_dy_Cu = register_diag_field('ocean_model', 'dy_Cu', diag%axesT1, &
@@ -2474,6 +2538,8 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
   ! Output reflection parameters as diags here (not needed every timestep)
   if (CS%id_refl_ang > 0)   call post_data(CS%id_refl_ang, CS%refl_angle, CS%diag)
   if (CS%id_refl_pref > 0)  call post_data(CS%id_refl_pref, CS%refl_pref, CS%diag)
+  if (CS%id_trans > 0)      call post_data(CS%id_trans, CS%trans, CS%diag)
+  if (CS%id_residual > 0)   call post_data(CS%id_residual, CS%residual, CS%diag)
   if (CS%id_dx_Cv > 0)      call post_data(CS%id_dx_Cv, G%dx_Cv, CS%diag)
   if (CS%id_dy_Cu > 0)      call post_data(CS%id_dy_Cu, G%dy_Cu, CS%diag)
   if (CS%id_land_mask > 0)  call post_data(CS%id_land_mask, G%mask2dT, CS%diag)
@@ -2502,6 +2568,9 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
                 'W m-2', conversion=US%RZ3_T3_to_W_m2)
   CS%id_tot_Froude_loss = register_diag_field('ocean_model', 'ITide_tot_Froude_loss', diag%axesT1, &
                 Time, 'Internal tide energy loss to wave breaking', &
+                'W m-2', conversion=US%RZ3_T3_to_W_m2)
+  CS%id_tot_residual_loss = register_diag_field('ocean_model', 'ITide_tot_residual_loss', diag%axesT1, &
+                Time, 'Internal tide energy loss to residual on slopes', &
                 'W m-2', conversion=US%RZ3_T3_to_W_m2)
   CS%id_tot_allprocesses_loss = register_diag_field('ocean_model', 'ITide_tot_allprocesses_loss', diag%axesT1, &
                 Time, 'Internal tide energy loss summed over all processes', &
