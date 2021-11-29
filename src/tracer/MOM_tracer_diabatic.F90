@@ -35,17 +35,17 @@ subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, GV, &
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(inout) :: tr     !< tracer concentration in concentration units [CU]
   real,                                      intent(in)    :: dt     !< amount of time covered by this call [T ~> s]
   real, dimension(SZI_(G),SZJ_(G)), optional,intent(in)    :: sfc_flux !< surface flux of the tracer in units of
-                                                                     !! [CU kg m-2 T-1 ~> CU kg m-2 s-1] or
+                                                                     !! [CU R Z T-1 ~> CU kg m-2 s-1] or
                                                                      !! [CU H ~> CU m or CU kg m-2] if
                                                                      !! convert_flux_in is .false.
   real, dimension(SZI_(G),SZJ_(G)), optional,intent(in)    :: btm_flux !< The (negative upward) bottom flux of the
-                                                                     !! tracer in [CU kg m-2 T-1 ~> CU kg m-2 s-1] or
+                                                                     !! tracer in [CU R Z T-1 ~> CU kg m-2 s-1] or
                                                                      !! [CU H ~> CU m or CU kg m-2] if
                                                                      !! convert_flux_in is .false.
   real, dimension(SZI_(G),SZJ_(G)), optional,intent(inout) :: btm_reservoir !< amount of tracer in a bottom reservoir
-                                                                     !! [CU kg m-2]; formerly [CU m]
+                                                                     !! [CU R Z ~> CU kg m-2]
   real,                             optional,intent(in)    :: sink_rate !< rate at which the tracer sinks
-                                                                     !! [m T-1 ~> m s-1]
+                                                                     !! [Z T-1 ~> m s-1]
   logical,                          optional,intent(in)    :: convert_flux_in !< True if the specified sfc_flux needs
                                                                      !! to be integrated in time
 
@@ -83,7 +83,7 @@ subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, GV, &
   if (present(convert_flux_in)) convert_flux = convert_flux_in
   h_neglect = GV%H_subroundoff
   sink_dist = 0.0
-  if (present(sink_rate)) sink_dist = (dt*sink_rate) * GV%m_to_H
+  if (present(sink_rate)) sink_dist = (dt*sink_rate) * GV%Z_to_H
   !$OMP parallel default(shared) private(sink,h_minus_dsink,b_denom_1,b1,d1,h_tr,c1)
   !$OMP do
   do j=js,je ; do i=is,ie ; sfc_src(i,j) = 0.0 ; btm_src(i,j) = 0.0 ; enddo ; enddo
@@ -91,7 +91,7 @@ subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, GV, &
     if (convert_flux) then
       !$OMP do
       do j=js,je ; do i=is,ie
-        sfc_src(i,j) = (sfc_flux(i,j)*dt) * GV%kg_m2_to_H
+        sfc_src(i,j) = (sfc_flux(i,j)*dt) * GV%RZ_to_H
       enddo ; enddo
     else
       !$OMP do
@@ -104,7 +104,7 @@ subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, GV, &
     if (convert_flux) then
       !$OMP do
       do j=js,je ; do i=is,ie
-        btm_src(i,j) = (btm_flux(i,j)*dt) * GV%kg_m2_to_H
+        btm_src(i,j) = (btm_flux(i,j)*dt) * GV%RZ_to_H
       enddo ; enddo
     else
       !$OMP do
@@ -174,8 +174,7 @@ subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, GV, &
                               (ea(i,j,nz) + sink(i,nz)) * tr(i,j,nz-1))
       endif ; enddo
       if (present(btm_reservoir)) then ; do i=is,ie ; if (G%mask2dT(i,j)>0.5) then
-        btm_reservoir(i,j) = btm_reservoir(i,j) + &
-                             (sink(i,nz+1)*tr(i,j,nz)) * GV%H_to_kg_m2
+        btm_reservoir(i,j) = btm_reservoir(i,j) + (sink(i,nz+1)*tr(i,j,nz)) * GV%H_to_RZ
       endif ; enddo ; endif
 
       do k=nz-1,1,-1 ; do i=is,ie ; if (G%mask2dT(i,j) > 0.5) then
@@ -233,7 +232,7 @@ subroutine tracer_vertdiff_Eulerian(h_old, ent, dt, tr, G, GV, &
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(inout) :: tr     !< tracer concentration in concentration units [CU]
   real,                                      intent(in)    :: dt     !< amount of time covered by this call [T ~> s]
   real, dimension(SZI_(G),SZJ_(G)), optional,intent(in)    :: sfc_flux !< surface flux of the tracer in units of
-                                                                     !! [CU kg m-2 T-1 ~> CU kg m-2 s-1] or
+                                                                     !! [CU R Z T-1 ~> CU kg m-2 s-1] or
                                                                      !! [CU H ~> CU m or CU kg m-2] if
                                                                      !! convert_flux_in is .false.
   real, dimension(SZI_(G),SZJ_(G)), optional,intent(in)    :: btm_flux !< The (negative upward) bottom flux of the
@@ -241,9 +240,9 @@ subroutine tracer_vertdiff_Eulerian(h_old, ent, dt, tr, G, GV, &
                                                                      !! [CU H ~> CU m or CU kg m-2] if
                                                                      !! convert_flux_in is .false.
   real, dimension(SZI_(G),SZJ_(G)), optional,intent(inout) :: btm_reservoir !< amount of tracer in a bottom reservoir
-                                                                     !! [CU kg m-2]; formerly [CU m]
+                                                                     !! [CU R Z ~> CU kg m-2]
   real,                             optional,intent(in)    :: sink_rate !< rate at which the tracer sinks
-                                                                     !! [m T-1 ~> m s-1]
+                                                                     !! [Z T-1 ~> m s-1]
   logical,                          optional,intent(in)    :: convert_flux_in !< True if the specified sfc_flux needs
                                                                      !! to be integrated in time
 
@@ -282,7 +281,7 @@ subroutine tracer_vertdiff_Eulerian(h_old, ent, dt, tr, G, GV, &
   if (present(convert_flux_in)) convert_flux = convert_flux_in
   h_neglect = GV%H_subroundoff
   sink_dist = 0.0
-  if (present(sink_rate)) sink_dist = (dt*sink_rate) * GV%m_to_H
+  if (present(sink_rate)) sink_dist = (dt*sink_rate) * GV%Z_to_H
   !$OMP parallel default(shared) private(sink,h_minus_dsink,b_denom_1,b1,d1,h_tr,c1)
   !$OMP do
   do j=js,je ; do i=is,ie ; sfc_src(i,j) = 0.0 ; btm_src(i,j) = 0.0 ; enddo ; enddo
@@ -290,7 +289,7 @@ subroutine tracer_vertdiff_Eulerian(h_old, ent, dt, tr, G, GV, &
     if (convert_flux) then
       !$OMP do
       do j=js,je ; do i=is,ie
-        sfc_src(i,j) = (sfc_flux(i,j)*dt) * GV%kg_m2_to_H
+        sfc_src(i,j) = (sfc_flux(i,j)*dt) * GV%RZ_to_H
       enddo ; enddo
     else
       !$OMP do
@@ -373,8 +372,7 @@ subroutine tracer_vertdiff_Eulerian(h_old, ent, dt, tr, G, GV, &
                               (ent(i,j,nz) + sink(i,nz)) * tr(i,j,nz-1))
       endif ; enddo
       if (present(btm_reservoir)) then ; do i=is,ie ; if (G%mask2dT(i,j)>0.5) then
-        btm_reservoir(i,j) = btm_reservoir(i,j) + &
-                             (sink(i,nz+1)*tr(i,j,nz)) * GV%H_to_kg_m2
+        btm_reservoir(i,j) = btm_reservoir(i,j) + (sink(i,nz+1)*tr(i,j,nz)) * GV%H_to_RZ
       endif ; enddo ; endif
 
       do k=nz-1,1,-1 ; do i=is,ie ; if (G%mask2dT(i,j) > 0.5) then

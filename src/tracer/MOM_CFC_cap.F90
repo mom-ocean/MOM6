@@ -304,21 +304,12 @@ subroutine CFC_cap_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, US, C
   !     h_new(k) = h_old(k) + ea(k) - eb(k-1) + eb(k) - ea(k+1)
 
   ! Local variables
-  real, pointer, dimension(:,:,:) :: CFC11 => NULL(), CFC12 => NULL()
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: h_work ! Used so that h can be modified [H ~> m or kg m-2]
-  real :: scale_factor ! convert from cfc1[12]_flux to units of sfc_flux in tracer_vertdiff
   integer :: i, j, k, m, is, ie, js, je, nz
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
   if (.not.associated(CS)) return
-
-  ! set factor to convert from cfc1[12]_flux units to tracer_vertdiff argument sfc_flux units
-  ! cfc1[12]_flux units are CU Z T-1 kg m-3
-  ! tracer_vertdiff argument sfc_flux units are CU kg m-2 T-1
-  scale_factor = US%Z_to_m
-
-  CFC11 => CS%CFC11 ; CFC12 => CS%CFC12
 
   ! Use a tridiagonal solver to determine the concentrations after the
   ! surface source is applied and diapycnal advection and diffusion occurs.
@@ -326,24 +317,24 @@ subroutine CFC_cap_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, US, C
     do k=1,nz ;do j=js,je ; do i=is,ie
       h_work(i,j,k) = h_old(i,j,k)
     enddo ; enddo ; enddo
-    call applyTracerBoundaryFluxesInOut(G, GV, CFC11, dt, fluxes, h_work, &
+    call applyTracerBoundaryFluxesInOut(G, GV, CS%CFC11, dt, fluxes, h_work, &
                                         evap_CFL_limit, minimum_forcing_depth)
-    call tracer_vertdiff(h_work, ea, eb, dt, CFC11, G, GV, sfc_flux=fluxes%cfc11_flux*scale_factor)
+    call tracer_vertdiff(h_work, ea, eb, dt, CS%CFC11, G, GV, sfc_flux=fluxes%cfc11_flux)
 
     do k=1,nz ;do j=js,je ; do i=is,ie
       h_work(i,j,k) = h_old(i,j,k)
     enddo ; enddo ; enddo
-    call applyTracerBoundaryFluxesInOut(G, GV, CFC12, dt, fluxes, h_work, &
+    call applyTracerBoundaryFluxesInOut(G, GV, CS%CFC12, dt, fluxes, h_work, &
                                         evap_CFL_limit, minimum_forcing_depth)
-    call tracer_vertdiff(h_work, ea, eb, dt, CFC12, G, GV, sfc_flux=fluxes%cfc12_flux*scale_factor)
+    call tracer_vertdiff(h_work, ea, eb, dt, CS%CFC12, G, GV, sfc_flux=fluxes%cfc12_flux)
   else
-    call tracer_vertdiff(h_old, ea, eb, dt, CFC11, G, GV, sfc_flux=fluxes%cfc11_flux*scale_factor)
-    call tracer_vertdiff(h_old, ea, eb, dt, CFC12, G, GV, sfc_flux=fluxes%cfc12_flux*scale_factor)
+    call tracer_vertdiff(h_old, ea, eb, dt, CS%CFC11, G, GV, sfc_flux=fluxes%cfc11_flux)
+    call tracer_vertdiff(h_old, ea, eb, dt, CS%CFC12, G, GV, sfc_flux=fluxes%cfc12_flux)
   endif
 
   ! If needed, write out any desired diagnostics from tracer sources & sinks here.
-  if (CS%id_cfc11_cmor > 0) call post_data(CS%id_cfc11_cmor, (GV%Rho0*US%R_to_kg_m3)*CFC11, CS%diag)
-  if (CS%id_cfc12_cmor > 0) call post_data(CS%id_cfc12_cmor, (GV%Rho0*US%R_to_kg_m3)*CFC12, CS%diag)
+  if (CS%id_cfc11_cmor > 0) call post_data(CS%id_cfc11_cmor, (GV%Rho0*US%R_to_kg_m3)*CS%CFC11, CS%diag)
+  if (CS%id_cfc12_cmor > 0) call post_data(CS%id_cfc12_cmor, (GV%Rho0*US%R_to_kg_m3)*CS%CFC12, CS%diag)
 
 end subroutine CFC_cap_column_physics
 
@@ -449,11 +440,10 @@ subroutine CFC_cap_fluxes(fluxes, sfc_state, G, US, Rho0, Time, id_cfc11_atm, id
   real :: sal       ! Surface salinity [PSU].
   real :: alpha_11  ! The solubility of CFC 11 [mol kg-1 atm-1].
   real :: alpha_12  ! The solubility of CFC 12 [mol kg-1 atm-1].
-  real :: sc_11, sc_12 ! The Schmidt numbers of CFC 11 and CFC 12.
+  real :: sc_11, sc_12 ! The Schmidt numbers of CFC 11 and CFC 12 [nondim].
   real :: kw_coeff     ! A coefficient used to compute the piston velocity [Z T-1 T2 L-2 = Z T L-2 ~> s / m]
-  real :: Rho0_kg_m3   ! Rho0 in non-scaled units [kg m-3]
-  real, parameter :: pa_to_atm = 9.8692316931427e-6 ! factor for converting from Pa to atm.
-  real :: press_to_atm ! converts from model pressure units to atm
+  real, parameter :: pa_to_atm = 9.8692316931427e-6 ! factor for converting from Pa to atm [atm Pa-1].
+  real :: press_to_atm ! converts from model pressure units to atm [atm T2 R-1 L-2 ~> atm Pa-1]
   integer :: i, j, m, is, ie, js, je
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
@@ -488,7 +478,6 @@ subroutine CFC_cap_fluxes(fluxes, sfc_state, G, US, Rho0, Time, id_cfc11_atm, id
   kw_coeff = (US%m_to_Z*US%s_to_T*US%L_to_m**2) * 6.97e-7
 
   ! set unit conversion factors
-  Rho0_kg_m3 = Rho0 * US%R_to_kg_m3
   press_to_atm = US%R_to_kg_m3*US%L_T_to_m_s**2 * pa_to_atm
 
   do j=js,je ; do i=is,ie
@@ -506,14 +495,14 @@ subroutine CFC_cap_fluxes(fluxes, sfc_state, G, US, Rho0, Time, id_cfc11_atm, id
     kw_wo_sc_no_term(i,j) = kw_coeff * ((1.0 - fluxes%ice_fraction(i,j))*fluxes%u10_sqr(i,j))
 
     ! air concentrations and cfcs BC's fluxes
-    ! CFC flux units: CU Z T-1 kg m-3 = mol kg-1 Z T-1 kg m-3 ~> mol m-2 s-1
+    ! CFC flux units: CU R Z T-1 = mol kg-1 R Z T-1 ~> mol m-2 s-1
     kw(i,j) = kw_wo_sc_no_term(i,j) * sqrt(660.0 / sc_11)
     cair(i,j) = press_to_atm * alpha_11 * cfc11_atm(i,j) * fluxes%p_surf_full(i,j)
-    fluxes%cfc11_flux(i,j) = kw(i,j) * (cair(i,j) - sfc_state%sfc_CFC11(i,j)) * Rho0_kg_m3
+    fluxes%cfc11_flux(i,j) = kw(i,j) * (cair(i,j) - sfc_state%sfc_CFC11(i,j)) * Rho0
 
     kw(i,j) = kw_wo_sc_no_term(i,j) * sqrt(660.0 / sc_12)
     cair(i,j) = press_to_atm * alpha_12 * cfc12_atm(i,j) * fluxes%p_surf_full(i,j)
-    fluxes%cfc12_flux(i,j) = kw(i,j) * (cair(i,j) - sfc_state%sfc_CFC12(i,j)) * Rho0_kg_m3
+    fluxes%cfc12_flux(i,j) = kw(i,j) * (cair(i,j) - sfc_state%sfc_CFC12(i,j)) * Rho0
   enddo ; enddo
 
 end subroutine CFC_cap_fluxes
@@ -524,7 +513,7 @@ subroutine get_solubility(alpha_11, alpha_12, ta, sal , mask)
   real, intent(inout) :: alpha_12 !< The solubility of CFC 12 [mol kg-1 atm-1]
   real, intent(in   ) :: ta       !< Absolute sea surface temperature [hectoKelvin]
   real, intent(in   ) :: sal      !< Surface salinity [PSU].
-  real, intent(in   ) :: mask     !< ocean mask
+  real, intent(in   ) :: mask     !< ocean mask [nondim]
 
   ! Local variables
 
@@ -574,17 +563,17 @@ subroutine comp_CFC_schmidt(sst_in, cfc11_sc, cfc12_sc)
   real, intent(inout) :: cfc12_sc !< Schmidt number of CFC12 [nondim].
 
   !local variables
-  real , parameter :: a_11 = 3579.2
-  real , parameter :: b_11 = -222.63
-  real , parameter :: c_11 = 7.5749
-  real , parameter :: d_11 = -0.14595
-  real , parameter :: e_11 = 0.0011874
-  real , parameter :: a_12 = 3828.1
-  real , parameter :: b_12 = -249.86
-  real , parameter :: c_12 = 8.7603
-  real , parameter :: d_12 = -0.1716
-  real , parameter :: e_12 = 0.001408
-  real             :: sst
+  real , parameter :: a_11 = 3579.2    ! CFC11 Schmidt number fit coefficient [nondim]
+  real , parameter :: b_11 = -222.63   ! CFC11 Schmidt number fit coefficient [degC-1]
+  real , parameter :: c_11 = 7.5749    ! CFC11 Schmidt number fit coefficient [degC-2]
+  real , parameter :: d_11 = -0.14595  ! CFC11 Schmidt number fit coefficient [degC-3]
+  real , parameter :: e_11 = 0.0011874 ! CFC11 Schmidt number fit coefficient [degC-4]
+  real , parameter :: a_12 = 3828.1    ! CFC12 Schmidt number fit coefficient [nondim]
+  real , parameter :: b_12 = -249.86   ! CFC12 Schmidt number fit coefficient [degC-1]
+  real , parameter :: c_12 = 8.7603    ! CFC12 Schmidt number fit coefficient [degC-2]
+  real , parameter :: d_12 = -0.1716   ! CFC12 Schmidt number fit coefficient [degC-3]
+  real , parameter :: e_12 = 0.001408  ! CFC12 Schmidt number fit coefficient [degC-4]
+  real             :: sst  ! A range-limited sea surface temperature [degC]
 
 
   ! clip SST to avoid bad values
