@@ -102,15 +102,15 @@ subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, &
   real :: h_neglect     ! A thickness that is so small it is usually lost
                         ! in roundoff and can be neglected [H ~> m or kg m-2].
   real :: h_neglect2    ! h_neglect^2 [H2 ~> m2 or kg2 m-4].
-  real :: dz_neglect    ! A change in interface heighs that is so small it is usually lost
+  real :: dz_neglect    ! A change in interface heights that is so small it is usually lost
                         ! in roundoff and can be neglected [Z ~> m].
   logical :: use_EOS    ! If true, density is calculated from T & S using an equation of state.
   real :: G_Rho0        ! The gravitational acceleration divided by density [L2 Z-1 T-2 R-1 ~> m4 s-2 kg-1]
   real :: Z_to_L        ! A conversion factor between from units for e to the
-                        ! units for lateral distances.
+                        ! units for lateral distances [L Z-1 ~> 1]
   real :: L_to_Z        ! A conversion factor between from units for lateral distances
-                        ! to the units for e.
-  real :: H_to_Z        ! A conversion factor from thickness units to the units of e.
+                        ! to the units for e [Z L-1 ~> 1]
+  real :: H_to_Z        ! A conversion factor from thickness units to the units of e [Z H-1 ~> 1 or m3 kg-1]
 
   logical :: present_N2_u, present_N2_v
   integer, dimension(2) :: EOSdom_u, EOSdom_v ! Domains for the equation of state calculations at u and v points
@@ -457,7 +457,7 @@ subroutine vert_fill_TS(h, T_in, S_in, kappa_dt, T_f, S_f, G, GV, halo_here, lar
   real :: kap_dt_x2                ! The 2*kappa_dt converted to H units [H2 ~> m2 or kg2 m-4].
   real :: h_neglect                ! A negligible thickness [H ~> m or kg m-2], to allow for zero thicknesses.
   real :: h0                       ! A negligible thickness to allow for zero thickness layers without
-                                   ! completely decouping groups of layers [H ~> m or kg m-2].
+                                   ! completely decoupling groups of layers [H ~> m or kg m-2].
                                    ! Often 0 < h_neglect << h0.
   real :: h_tr                     ! h_tr is h at tracer points with a tiny thickness
                                    ! added to ensure positive definiteness [H ~> m or kg m-2].

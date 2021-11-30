@@ -148,15 +148,15 @@ type, public :: MOM_dyn_split_RK2_CS ; private
                                   !! dynamically.
 
   real    :: be      !< A nondimensional number from 0.5 to 1 that controls
-                     !! the backward weighting of the time stepping scheme.
+                     !! the backward weighting of the time stepping scheme [nondim]
   real    :: begw    !< A nondimensional number from 0 to 1 that controls
                      !! the extent to which the treatment of gravity waves
                      !! is forward-backward (0) or simulated backward
-                     !! Euler (1).  0 is almost always used.
+                     !! Euler (1) [nondim].  0 is often used.
   logical :: debug   !< If true, write verbose checksums for debugging purposes.
   logical :: debug_OBC !< If true, do debugging calls for open boundary conditions.
 
-  logical :: module_is_initialized = .false. !< Record whether this mouled has been initialzed.
+  logical :: module_is_initialized = .false. !< Record whether this module has been initialized.
 
   !>@{ Diagnostic IDs
   integer :: id_uh     = -1, id_vh     = -1
@@ -254,41 +254,41 @@ contains
 subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_surf_begin, p_surf_end, &
                                   uh, vh, uhtr, vhtr, eta_av, G, GV, US, CS, calc_dtbt, VarMix, &
                                   MEKE, thickness_diffuse_CSp, pbv, Waves)
-  type(ocean_grid_type),             intent(inout) :: G            !< ocean grid structure
-  type(verticalGrid_type),           intent(in)    :: GV           !< ocean vertical grid structure
+  type(ocean_grid_type),             intent(inout) :: G            !< Ocean grid structure
+  type(verticalGrid_type),           intent(in)    :: GV           !< Ocean vertical grid structure
   type(unit_scale_type),             intent(in)    :: US           !< A dimensional unit scaling type
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
-                             target, intent(inout) :: u            !< zonal velocity [L T-1 ~> m s-1]
+                             target, intent(inout) :: u            !< Zonal velocity [L T-1 ~> m s-1]
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
-                             target, intent(inout) :: v            !< merid velocity [L T-1 ~> m s-1]
+                             target, intent(inout) :: v            !< Meridional velocity [L T-1 ~> m s-1]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
-                                     intent(inout) :: h            !< layer thickness [H ~> m or kg m-2]
-  type(thermo_var_ptrs),             intent(in)    :: tv           !< thermodynamic type
-  type(vertvisc_type),               intent(inout) :: visc         !< vertical visc, bottom drag, and related
-  type(time_type),                   intent(in)    :: Time_local   !< model time at end of time step
-  real,                              intent(in)    :: dt           !< time step [T ~> s]
+                                     intent(inout) :: h            !< Layer thickness [H ~> m or kg m-2]
+  type(thermo_var_ptrs),             intent(in)    :: tv           !< Thermodynamic type
+  type(vertvisc_type),               intent(inout) :: visc         !< Vertical visc, bottom drag, and related
+  type(time_type),                   intent(in)    :: Time_local   !< Model time at end of time step
+  real,                              intent(in)    :: dt           !< Baroclinic dynamics time step [T ~> s]
   type(mech_forcing),                intent(in)    :: forces       !< A structure with the driving mechanical forces
-  real, dimension(:,:),              pointer       :: p_surf_begin !< surf pressure at the start of this dynamic
+  real, dimension(:,:),              pointer       :: p_surf_begin !< Surface pressure at the start of this dynamic
                                                                    !! time step [R L2 T-2 ~> Pa]
-  real, dimension(:,:),              pointer       :: p_surf_end   !< surf pressure at the end of this dynamic
+  real, dimension(:,:),              pointer       :: p_surf_end   !< Surface pressure at the end of this dynamic
                                                                    !! time step [R L2 T-2 ~> Pa]
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
-                             target, intent(inout) :: uh           !< zonal volume/mass transport
+                             target, intent(inout) :: uh           !< Zonal volume or mass transport
                                                                    !! [H L2 T-1 ~> m3 s-1 or kg s-1]
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
-                             target, intent(inout) :: vh           !< merid volume/mass transport
+                             target, intent(inout) :: vh           !< Meridional volume or mass transport
                                                                    !! [H L2 T-1 ~> m3 s-1 or kg s-1]
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
-                                     intent(inout) :: uhtr         !< accumulatated zonal volume/mass transport
+                                     intent(inout) :: uhtr         !< Accumulated zonal volume or mass transport
                                                                    !! since last tracer advection [H L2 ~> m3 or kg]
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
-                                     intent(inout) :: vhtr         !< accumulatated merid volume/mass transport
+                                     intent(inout) :: vhtr         !< Accumulated meridional volume or mass transport
                                                                    !! since last tracer advection [H L2 ~> m3 or kg]
-  real, dimension(SZI_(G),SZJ_(G)),  intent(out)   :: eta_av       !< free surface height or column mass time
+  real, dimension(SZI_(G),SZJ_(G)),  intent(out)   :: eta_av       !< Free surface height or column mass
                                                                    !! averaged over time step [H ~> m or kg m-2]
-  type(MOM_dyn_split_RK2_CS),        pointer       :: CS           !< module control structure
-  logical,                           intent(in)    :: calc_dtbt    !< if true, recalculate barotropic time step
-  type(VarMix_CS),                   intent(inout) :: VarMix       !< Variable mixing control struct
+  type(MOM_dyn_split_RK2_CS),        pointer       :: CS           !< Module control structure
+  logical,                           intent(in)    :: calc_dtbt    !< If true, recalculate the barotropic time step
+  type(VarMix_CS),                   intent(inout) :: VarMix       !< Variable mixing control structure
   type(MEKE_type),                   intent(inout) :: MEKE         !< MEKE fields
   type(thickness_diffuse_CS),        intent(inout) :: thickness_diffuse_CSp !< Pointer to a structure containing
                                                                    !! interface height diffusivities
@@ -324,12 +324,22 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
   real :: pres_to_eta ! A factor that converts pressures to the units of eta
                       ! [H T2 R-1 L-2 ~> m Pa-1 or kg m-2 Pa-1]
   real, pointer, dimension(:,:) :: &
-    p_surf => NULL(), eta_PF_start => NULL(), &
-    taux_bot => NULL(), tauy_bot => NULL(), &
-    eta => NULL()
+    p_surf => NULL(), &         ! A pointer to the surface pressure [R L2 T-2 ~> Pa]
+    eta_PF_start => NULL(), &   ! The value of eta that corresponds to the starting pressure
+                                ! for the barotropic solver [H ~> m or kg m-2]
+    taux_bot => NULL(), &       ! A pointer to the zonal bottom stress in some cases [R L Z T-2 ~> Pa]
+    tauy_bot => NULL(), &       ! A pointer to the meridional bottom stress in some cases [R L Z T-2 ~> Pa]
+    ! This pointer is just used as shorthand for CS%eta.
+    eta => NULL()               ! A pointer to the instantaneous free surface height (in Boussinesq
+                                ! mode) or column mass anomaly (in non-Boussinesq mode) [H ~> m or kg m-2]
 
   real, pointer, dimension(:,:,:) :: &
-    uh_ptr => NULL(), u_ptr => NULL(),  vh_ptr => NULL(), v_ptr => NULL(), &
+    ! These pointers are used to alter which fields are passed to btstep with various options:
+    u_ptr => NULL(), &   ! A pointer to a zonal velocity [L T-1]
+    v_ptr => NULL(), &   ! A pointer to a meridional velocity [L T-1]
+    uh_ptr => NULL(), &  ! A pointer to a zonal volume or mass transport [H L2 T-1 ~> m3 s-1 or kg s-1]
+    vh_ptr => NULL(), &  ! A pointer to a meridional volume or mass transport [H L2 T-1 ~> m3 s-1 or kg s-1]
+    ! These pointers are just used as shorthand for CS%u_av, CS%v_av, and CS%h_av.
     u_av, & ! The zonal velocity time-averaged over a time step [L T-1 ~> m s-1].
     v_av, & ! The meridional velocity time-averaged over a time step [L T-1 ~> m s-1].
     h_av    ! The layer thickness time-averaged over a time step [H ~> m or kg m-2].
@@ -339,12 +349,12 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
     ! hf_CAu, hf_CAv, & ! Coriolis force accel. x fract. thickness [L T-2 ~> m s-2].
     ! hf_u_BT_accel, hf_v_BT_accel ! barotropic correction accel. x fract. thickness [L T-2 ~> m s-2].
     ! 3D diagnostics hf_PFu etc. are commented because there is no clarity on proper remapping grid option.
-    ! The code is retained for degugging purposes in the future.
+    ! The code is retained for debugging purposes in the future.
 
   real, allocatable, dimension(:,:) :: &
-    hf_PFu_2d, hf_PFv_2d, & ! Depth integeral of hf_PFu, hf_PFv [L T-2 ~> m s-2].
-    hf_CAu_2d, hf_CAv_2d, & ! Depth integeral of hf_CAu, hf_CAv [L T-2 ~> m s-2].
-    hf_u_BT_accel_2d, hf_v_BT_accel_2d ! Depth integeral of hf_u_BT_accel, hf_v_BT_accel
+    hf_PFu_2d, hf_PFv_2d, & ! Depth integral of hf_PFu, hf_PFv [L T-2 ~> m s-2].
+    hf_CAu_2d, hf_CAv_2d, & ! Depth integral of hf_CAu, hf_CAv [L T-2 ~> m s-2].
+    hf_u_BT_accel_2d, hf_v_BT_accel_2d ! Depth integral of hf_u_BT_accel, hf_v_BT_accel
 
   ! Diagnostics for thickness x momentum budget terms
   real, allocatable, dimension(:,:,:) :: &
@@ -352,7 +362,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
     h_CAu, h_CAv, & ! Coriolis force accel. x thickness [H L T-2 ~> m2 s-2].
     h_u_BT_accel, h_v_BT_accel ! barotropic correction accel. x thickness [H L T-2 ~> m2 s-2].
 
-  ! Dignostics for layer-sum of thickness x momentum budget terms
+  ! Diagnostics for layer-sum of thickness x momentum budget terms
   real, dimension(SZIB_(G),SZJ_(G)) :: &
     intz_PFu_2d, intz_CAu_2d, intz_u_BT_accel_2d ! [H L T-2 ~> m2 s-2].
   real, dimension(SZI_(G),SZJB_(G)) :: &
@@ -888,6 +898,9 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
   !   The time-averaged free surface height has already been set by the last
   !  call to btstep.
 
+  ! Deallocate this memory to avoid a memory leak.  ###We should also revisit how this array is declared. - RWH
+  !### if (dyn_p_surf .and. associated(eta_PF_start)) deallocate(eta_PF_start)
+
   !  Here various terms used in to update the momentum equations are
   !  offered for time averaging.
   if (CS%id_PFu > 0) call post_data(CS%id_PFu, CS%PFu, CS%diag)
@@ -922,7 +935,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
   ! Diagnostics for terms multiplied by fractional thicknesses
 
   ! 3D diagnostics hf_PFu etc. are commented because there is no clarity on proper remapping grid option.
-  ! The code is retained for degugging purposes in the future.
+  ! The code is retained for debugging purposes in the future.
   !if (CS%id_hf_PFu > 0) then
   !  allocate(hf_PFu(G%IsdB:G%IedB,G%jsd:G%jed,GV%ke))
   !  do k=1,nz ; do j=js,je ; do I=Isq,Ieq
@@ -1173,18 +1186,18 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
 end subroutine step_MOM_dyn_split_RK2
 
 !> This subroutine sets up any auxiliary restart variables that are specific
-!! to the unsplit time stepping scheme.  All variables registered here should
+!! to the split-explicit time stepping scheme.  All variables registered here should
 !! have the ability to be recreated if they are not present in a restart file.
 subroutine register_restarts_dyn_split_RK2(HI, GV, param_file, CS, restart_CS, uh, vh)
   type(hor_index_type),          intent(in)    :: HI         !< Horizontal index structure
   type(verticalGrid_type),       intent(in)    :: GV         !< ocean vertical grid structure
   type(param_file_type),         intent(in)    :: param_file !< parameter file
   type(MOM_dyn_split_RK2_CS),    pointer       :: CS         !< module control structure
-  type(MOM_restart_CS),          intent(inout) :: restart_CS !< MOM restart control struct
+  type(MOM_restart_CS),          intent(inout) :: restart_CS !< MOM restart control structure
   real, dimension(SZIB_(HI),SZJ_(HI),SZK_(GV)), &
-                         target, intent(inout) :: uh !< zonal volume/mass transport [H L2 T-1 ~> m3 s-1 or kg s-1]
+                         target, intent(inout) :: uh !< zonal volume or mass transport [H L2 T-1 ~> m3 s-1 or kg s-1]
   real, dimension(SZI_(HI),SZJB_(HI),SZK_(GV)), &
-                         target, intent(inout) :: vh !< merid volume/mass transport [H L2 T-1 ~> m3 s-1 or kg s-1]
+                         target, intent(inout) :: vh !< merid volume or mass transport [H L2 T-1 ~> m3 s-1 or kg s-1]
 
   type(vardesc)      :: vd(2)
   character(len=40)  :: mdl = "MOM_dynamics_split_RK2" ! This module's name.
@@ -1270,7 +1283,7 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, US, param
   type(param_file_type),            intent(in)    :: param_file !< parameter file for parsing
   type(diag_ctrl),          target, intent(inout) :: diag       !< to control diagnostics
   type(MOM_dyn_split_RK2_CS),       pointer       :: CS         !< module control structure
-  type(MOM_restart_CS),             intent(in)    :: restart_CS !< MOM restart control struct
+  type(MOM_restart_CS),             intent(in)    :: restart_CS !< MOM restart control structure
   real,                             intent(in)    :: dt         !< time step [T ~> s]
   type(accel_diag_ptrs),    target, intent(inout) :: Accel_diag !< points to momentum equation terms for
                                                                 !! budget analysis
@@ -1280,7 +1293,7 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, US, param
   type(VarMix_CS),                  intent(inout) :: VarMix     !< points to spatially variable viscosities
   type(MEKE_type),                  intent(inout) :: MEKE       !< MEKE fields
   type(thickness_diffuse_CS),       intent(inout) :: thickness_diffuse_CSp !< Pointer to the control structure
-                                                  !! used for the isopycnal height diffusive transport.
+                                                                !! used for the isopycnal height diffusive transport.
   type(ocean_OBC_type),             pointer       :: OBC        !< points to OBC related fields
   type(update_OBC_CS),              pointer       :: update_OBC_CSp !< points to OBC update related fields
   type(ALE_CS),                     pointer       :: ALE_CSp    !< points to ALE control structure
@@ -1296,19 +1309,19 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, US, param
                                                                 !! from the continuity solver.
 
   ! local variables
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: h_tmp
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: h_tmp ! A temporary copy of the layer thicknesses [H ~> m or kg m-2]
   character(len=40) :: mdl = "MOM_dynamics_split_RK2" ! This module's name.
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
   character(len=48) :: thickness_units, flux_units, eta_rest_name
-  real :: H_rescale  ! A rescaling factor for thicknesses from the representation in
-                     ! a restart file to the internal representation in this run.
-  real :: vel_rescale  ! A rescaling factor for velocities from the representation in
-                     ! a restart file to the internal representation in this run.
-  real :: uH_rescale ! A rescaling factor for thickness transports from the representation in
-                     ! a restart file to the internal representation in this run.
-  real :: accel_rescale ! A rescaling factor for accelerations from the representation in
-                     ! a restart file to the internal representation in this run.
+  real :: H_rescale  ! A rescaling factor for thicknesses from the representation in a
+                     ! restart file to the internal representation in this run  [various units ~> 1]
+  real :: vel_rescale ! A rescaling factor for velocities from the representation in a
+                     ! restart file to the internal representation in this run  [various units ~> 1]
+  real :: uH_rescale ! A rescaling factor for thickness transports from the representation in a
+                     ! restart file to the internal representation in this run  [various units ~> 1]
+  real :: accel_rescale ! A rescaling factor for accelerations from the representation in a
+                     ! restart file to the internal representation in this run  [various units ~> 1]
   type(group_pass_type) :: pass_av_h_uvh
   logical :: use_tides, debug_truncations
 

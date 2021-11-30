@@ -163,7 +163,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv)
   real, dimension(SZI_(G),SZJB_(G)) :: &
     hArea_v, &  ! The cell area weighted thickness interpolated to v points
                 ! times the effective areas [H L2 ~> m3 or kg].
-    KEy, &      ! The meridonal gradient of Kinetic energy per unit mass [L T-2 ~> m s-2],
+    KEy, &      ! The meridional gradient of Kinetic energy per unit mass [L T-2 ~> m s-2],
                 ! KEy = d/dy KE.
     vh_center   ! Transport based on arithmetic mean h at v-points [H L2 T-1 ~> m3 s-1 or kg s-1]
   real, dimension(SZI_(G),SZJ_(G)) :: &
@@ -204,17 +204,17 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv)
 
   real :: uhc, vhc               ! Centered estimates of uh and vh [H L2 T-1 ~> m3 s-1 or kg s-1].
   real :: uhm, vhm               ! The input estimates of uh and vh [H L2 T-1 ~> m3 s-1 or kg s-1].
-  real :: c1, c2, c3, slope      ! Nondimensional parameters for the Coriolis limiter scheme.
+  real :: c1, c2, c3, slope      ! Nondimensional parameters for the Coriolis limiter scheme [nondim]
 
-  real :: Fe_m2         ! Nondimensional temporary variables asssociated with
-  real :: rat_lin       ! the ARAKAWA_LAMB_BLEND scheme.
+  real :: Fe_m2         ! Temporary variable associated with the ARAKAWA_LAMB_BLEND scheme [nondim]
+  real :: rat_lin       ! Temporary variable associated with the ARAKAWA_LAMB_BLEND scheme [nondim]
   real :: rat_m1        ! The ratio of the maximum neighboring inverse thickness
-                        ! to the minimum inverse thickness minus 1. rat_m1 >= 0.
+                        ! to the minimum inverse thickness minus 1 [nondim]. rat_m1 >= 0.
   real :: AL_wt         ! The relative weight of the Arakawa & Lamb scheme to the
-                        ! Arakawa & Hsu scheme, nondimensional between 0 and 1.
+                        ! Arakawa & Hsu scheme [nondim], between 0 and 1.
   real :: Sad_wt        ! The relative weight of the Sadourny energy scheme to
-                        ! the other two with the ARAKAWA_LAMB_BLEND scheme,
-                        ! nondimensional between 0 and 1.
+                        ! the other two with the ARAKAWA_LAMB_BLEND scheme [nondim],
+                        ! between 0 and 1.
 
   real :: Heff1, Heff2  ! Temporary effective H at U or V points [H ~> m or kg m-2].
   real :: Heff3, Heff4  ! Temporary effective H at U or V points [H ~> m or kg m-2].
@@ -232,7 +232,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv)
   !  hf_gKEu, hf_gKEv, & ! accel. due to KE gradient x fract. thickness  [L T-2 ~> m s-2].
   !  hf_rvxu, hf_rvxv    ! accel. due to RV x fract. thickness [L T-2 ~> m s-2].
   ! 3D diagnostics hf_gKEu etc. are commented because there is no clarity on proper remapping grid option.
-  ! The code is retained for degugging purposes in the future.
+  ! The code is retained for debugging purposes in the future.
 
 ! Diagnostics for thickness multiplied momentum budget terms
   real, allocatable, dimension(:,:,:) :: h_gKEu, h_gKEv ! h x gKEu, h x gKEv [H L T-2 ~> m2 s-2].
@@ -676,7 +676,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv)
         endif
       enddo ; enddo
     endif
-    ! Add in the additonal terms with Arakawa & Lamb.
+    ! Add in the additional terms with Arakawa & Lamb.
     if ((CS%Coriolis_Scheme == ARAKAWA_LAMB81) .or. &
         (CS%Coriolis_Scheme == AL_BLEND)) then ; do j=js,je ; do I=Isq,Ieq
       CAu(I,j,k) = CAu(I,j,k) + &
@@ -876,7 +876,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv)
     ! Diagnostics for terms multiplied by fractional thicknesses
 
     ! 3D diagnostics hf_gKEu etc. are commented because there is no clarity on proper remapping grid option.
-    ! The code is retained for degugging purposes in the future.
+    ! The code is retained for debugging purposes in the future.
     !if (CS%id_hf_gKEu > 0) then
     !  allocate(hf_gKEu(G%IsdB:G%IedB,G%jsd:G%jed,GV%ke))
     !  do k=1,nz ; do j=js,je ; do I=Isq,Ieq
@@ -1025,7 +1025,7 @@ end subroutine CorAdCalc
 
 !> Calculates the acceleration due to the gradient of kinetic energy.
 subroutine gradKE(u, v, h, KE, KEx, KEy, k, OBC, G, GV, US, CS)
-  type(ocean_grid_type),                      intent(in)  :: G   !< Ocen grid structure
+  type(ocean_grid_type),                      intent(in)  :: G   !< Ocean grid structure
   type(verticalGrid_type),                    intent(in)  :: GV  !< Vertical grid structure
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), intent(in)  :: u   !< Zonal velocity [L T-1 ~> m s-1]
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), intent(in)  :: v   !< Meridional velocity [L T-1 ~> m s-1]
@@ -1061,7 +1061,7 @@ subroutine gradKE(u, v, h, KE, KEx, KEy, k, OBC, G, GV, US, CS)
                     G%areaCv(i,J-1)*(v(i,J-1,k)*v(i,J-1,k)) ) )*0.25*G%IareaT(i,j)
     enddo ; enddo
   elseif (CS%KE_Scheme == KE_SIMPLE_GUDONOV) then
-    ! The following discretization of KE is based on the one-dimensinal Gudonov
+    ! The following discretization of KE is based on the one-dimensional Gudonov
     ! scheme which does not take into account any geometric factors
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
       up = 0.5*( u(I-1,j,k) + ABS( u(I-1,j,k) ) ) ; up2 = up*up
@@ -1071,7 +1071,7 @@ subroutine gradKE(u, v, h, KE, KEx, KEy, k, OBC, G, GV, US, CS)
       KE(i,j) = ( max(up2,um2) + max(vp2,vm2) ) *0.5
     enddo ; enddo
   elseif (CS%KE_Scheme == KE_GUDONOV) then
-    ! The following discretization of KE is based on the one-dimensinal Gudonov
+    ! The following discretization of KE is based on the one-dimensional Gudonov
     ! scheme but has been adapted to take horizontal grid factors into account
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
       up = 0.5*( u(I-1,j,k) + ABS( u(I-1,j,k) ) ) ; up2a = up*up*G%areaCu(I-1,j)
@@ -1108,16 +1108,16 @@ subroutine gradKE(u, v, h, KE, KEx, KEy, k, OBC, G, GV, US, CS)
 
 end subroutine gradKE
 
-!> Initializes the control structure for coriolisadv_cs
+!> Initializes the control structure for MOM_CoriolisAdv
 subroutine CoriolisAdv_init(Time, G, GV, US, param_file, diag, AD, CS)
   type(time_type), target, intent(in)    :: Time !< Current model time
-  type(ocean_grid_type),   intent(in)    :: G  !< Ocean grid structure
-  type(verticalGrid_type), intent(in)    :: GV !< Vertical grid structure
-  type(unit_scale_type),   intent(in)    :: US  !< A dimensional unit scaling type
+  type(ocean_grid_type),   intent(in)    :: G    !< Ocean grid structure
+  type(verticalGrid_type), intent(in)    :: GV   !< Vertical grid structure
+  type(unit_scale_type),   intent(in)    :: US   !< A dimensional unit scaling type
   type(param_file_type),   intent(in)    :: param_file !< Runtime parameter handles
   type(diag_ctrl), target, intent(inout) :: diag !< Diagnostics control structure
-  type(accel_diag_ptrs),   target, intent(inout) :: AD !< Strorage for acceleration diagnostics
-  type(CoriolisAdv_CS),    intent(inout) :: CS !< Control structure fro MOM_CoriolisAdv
+  type(accel_diag_ptrs),   target, intent(inout) :: AD !< Storage for acceleration diagnostics
+  type(CoriolisAdv_CS),    intent(inout) :: CS   !< Control structure for MOM_CoriolisAdv
   ! Local variables
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
@@ -1405,7 +1405,7 @@ end subroutine CoriolisAdv_init
 
 !> Destructor for coriolisadv_cs
 subroutine CoriolisAdv_end(CS)
-  type(CoriolisAdv_CS), intent(inout) :: CS !< Control structure fro MOM_CoriolisAdv
+  type(CoriolisAdv_CS), intent(inout) :: CS !< Control structure for MOM_CoriolisAdv
 end subroutine CoriolisAdv_end
 
 !> \namespace mom_coriolisadv

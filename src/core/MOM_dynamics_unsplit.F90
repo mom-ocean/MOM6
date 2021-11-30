@@ -12,7 +12,7 @@ module MOM_dynamics_unsplit
 !*  Runge-Kutta time stepping scheme for the momentum and a forward-   *
 !*  backward coupling between the momentum and continuity equations.   *
 !*  This was the orignal unsplit time stepping scheme used in early    *
-!*  versions of HIM and its precuror.  While it is very simple and     *
+!*  versions of HIM and its precursor.  While it is very simple and    *
 !*  accurate, it is much less efficient that the split time stepping   *
 !*  scheme for realistic oceanographic applications.  It has been      *
 !*  retained for all of these years primarily to verify that the split *
@@ -121,7 +121,7 @@ type, public :: MOM_dyn_unsplit_CS ; private
                                  !! for viscosity.  The default should be true, but it is false.
   logical :: debug           !< If true, write verbose checksums for debugging purposes.
 
-  logical :: module_is_initialized = .false. !< Record whether this mouled has been initialzed.
+  logical :: module_is_initialized = .false. !< Record whether this module has been initialized.
 
   !>@{ Diagnostic IDs
   integer :: id_uh = -1, id_vh = -1
@@ -215,19 +215,19 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, forces, &
                                                    !! column mass [H ~> m or kg m-2].
   type(MOM_dyn_unsplit_CS), pointer      :: CS     !< The control structure set up by
                                                    !! initialize_dyn_unsplit.
-  type(VarMix_CS),         intent(inout) :: VarMix !< Variable mixing control struct
+  type(VarMix_CS),         intent(inout) :: VarMix !< Variable mixing control structure
   type(MEKE_type),         intent(inout) :: MEKE   !< MEKE fields
   type(porous_barrier_ptrs), intent(in) :: pbv     !< porous barrier fractional cell metrics
   type(wave_parameters_CS), optional, pointer :: Waves !< A pointer to a structure containing
                                  !! fields related to the surface wave conditions
 
   ! Local variables
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: h_av, hp ! Prediced or averaged layer thicknesses [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: h_av, hp ! Predicted or averaged layer thicknesses [H ~> m or kg m-2]
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)) :: up, upp ! Predicted zonal velocities [L T-1 ~> m s-1]
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)) :: vp, vpp ! Predicted meridional velocities [L T-1 ~> m s-1]
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)) :: ueffA   ! Effective Area of U-Faces [H L ~> m2]
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)) :: veffA   ! Effective Area of V-Faces [H L ~> m2]
-  real, dimension(:,:), pointer :: p_surf => NULL()
+  real, dimension(:,:), pointer :: p_surf => NULL()     ! A pointer to the surface pressure [R L2 T-2 ~> Pa]
   real :: dt_pred   ! The time step for the predictor part of the baroclinic time stepping [T ~> s].
   real :: dt_visc   ! The time step for a part of the update due to viscosity [T ~> s].
   logical :: dyn_p_surf
@@ -603,7 +603,7 @@ subroutine initialize_dyn_unsplit(u, v, h, Time, G, GV, US, param_file, diag, CS
                                                             !! the appropriate control structure.
   type(ALE_CS),                   pointer       :: ALE_CSp    !< This points to the ALE control
                                                               !! structure.
-  type(set_visc_CS),      target, intent(in)    :: set_visc   !< set_visc control struct
+  type(set_visc_CS),      target, intent(in)    :: set_visc   !< set_visc control structure
   type(vertvisc_type),            intent(inout) :: visc       !< A structure containing vertical
                                                               !! viscosities, bottom drag
                                                               !! viscosities, and related fields.

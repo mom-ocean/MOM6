@@ -425,7 +425,7 @@ subroutine applyTracerBoundaryFluxesInOut(G, GV, Tr, dt, fluxes, h, evap_CFL_lim
 
   type(ocean_grid_type),                      intent(in   ) :: G  !< Grid structure
   type(verticalGrid_type),                    intent(in   ) :: GV !< ocean vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(inout) :: Tr !< Tracer concentration on T-cell
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(inout) :: Tr !< Tracer concentration on T-cell [conc]
   real,                                       intent(in   ) :: dt !< Time-step over which forcing is applied [T ~> s]
   type(forcing),                              intent(in   ) :: fluxes !< Surface fluxes container
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(inout) :: h  !< Layer thickness [H ~> m or kg m-2]
@@ -436,30 +436,36 @@ subroutine applyTracerBoundaryFluxesInOut(G, GV, Tr, dt, fluxes, h, evap_CFL_lim
                                                                   !! which fluxes can be applied [H ~> m or kg m-2]
   real, dimension(SZI_(G),SZJ_(G)), optional, intent(in   ) :: in_flux_optional !< The total time-integrated
                                                                   !! amount of tracer that enters with freshwater
+                                                                  !! [conc H ~> conc m or conc kg m-2]
   real, dimension(SZI_(G),SZJ_(G)), optional, intent(in) :: out_flux_optional !< The total time-integrated
                                                                   !! amount of tracer that leaves with freshwater
+                                                                  !! [conc H ~> conc m or conc kg m-2]
   logical,                          optional, intent(in) :: update_h_opt  !< Optional flag to determine whether
                                                                   !! h should be updated
 
   integer, parameter :: maxGroundings = 5
   integer :: numberOfGroundings, iGround(maxGroundings), jGround(maxGroundings)
-  real :: H_limit_fluxes, IforcingDepthScale
-  real :: dThickness, dTracer
-  real :: fractionOfForcing, hOld, Ithickness
-  real :: RivermixConst  ! A constant used in implementing river mixing [Pa s].
-  real, dimension(SZI_(G)) :: &
-    netMassInOut, &  ! surface water fluxes [H ~> m or kg m-2] over time step
-    netMassIn,    &  ! mass entering ocean surface [H ~> m or kg m-2] over a time step
-    netMassOut       ! mass leaving ocean surface [H ~> m or kg m-2] over a time step
+  real :: IforcingDepthScale ! The inverse of the scale over which to apply forcing [H-1 ~> m-1 or m2 kg-1]
+  real :: dThickness         ! The change in a layer's thickness [H ~> m or kg m-2]
+  real :: dTracer            ! The change in the integrated tracer content of a layer [conc H ~> conc m or conc kg m-2]
+  real :: fractionOfForcing  ! The fraction of the forcing to apply to a layer [nondim]
+  real :: hOld               ! The layer thickness before surface forcing is applied [H ~> m or kg m-2]
+  real :: Ithickness         ! The inverse of the new layer thickness [H-1 ~> m-1 or m2 kg-1]
 
-  real, dimension(SZI_(G),SZK_(GV)) :: h2d, Tr2d
-  real, dimension(SZI_(G),SZJ_(G))  :: in_flux  ! The total time-integrated amount of tracer!
-                                                   ! that enters with freshwater
-  real, dimension(SZI_(G),SZJ_(G))  :: out_flux ! The total time-integrated amount of tracer!
-                                                    ! that leaves with freshwater
-  real, dimension(SZI_(G))          :: in_flux_1d, out_flux_1d
-  real                              :: hGrounding(maxGroundings)
-  real    :: Tr_in
+  real :: h2d(SZI_(G),SZK_(GV))     ! A 2-d work copy of layer thicknesses [H ~> m or kg m-2]
+  real :: Tr2d(SZI_(G),SZK_(GV))    ! A 2-d work copy of tracer concentrations [conc]
+  real :: in_flux(SZI_(G),SZJ_(G))  ! The total time-integrated amount of tracer that
+                                    ! enters with freshwater [conc H ~> conc m or conc kg m-2]
+  real :: out_flux(SZI_(G),SZJ_(G)) ! The total time-integrated amount of tracer that
+                                    ! leaves with freshwater [conc H ~> conc m or conc kg m-2]
+  real :: netMassIn(SZI_(G))   ! The remaining mass entering ocean surface [H ~> m or kg m-2]
+  real :: netMassOut(SZI_(G))  ! The remaining mass leaving ocean surface [H ~> m or kg m-2]
+  real :: in_flux_1d(SZI_(G))  ! The remaining amount of tracer that enters with
+                               ! the freshwater [conc H ~> conc m or conc kg m-2]
+  real :: out_flux_1d(SZI_(G)) ! The remaining amount of tracer that leaves with
+                               ! the freshwater [conc H ~> conc m or conc kg m-2]
+  real :: hGrounding(maxGroundings) ! The remaining fresh water flux that was not able to be
+                               ! supplied from a column that grounded out [H ~> m or kg m-2]
   logical :: update_h
   integer :: i, j, is, ie, js, je, k, nz, n, nsw
   character(len=45) :: mesg
@@ -493,10 +499,9 @@ subroutine applyTracerBoundaryFluxesInOut(G, GV, Tr, dt, fluxes, h, evap_CFL_lim
 !$OMP                                  IforcingDepthScale,minimum_forcing_depth, &
 !$OMP                                  numberOfGroundings,iGround,jGround,update_h, &
 !$OMP                                  in_flux,out_flux,hGrounding,evap_CFL_limit) &
-!$OMP                          private(h2d,Tr2d,netMassInOut,netMassOut,      &
+!$OMP                          private(h2d,Tr2d,netMassIn,netMassOut,      &
 !$OMP                                  in_flux_1d,out_flux_1d,fractionOfForcing,     &
-!$OMP                                  dThickness,dTracer,hOld,Ithickness,           &
-!$OMP                                  netMassIn, Tr_in)
+!$OMP                                  dThickness,dTracer,hOld,Ithickness)
 
   ! Work in vertical slices for efficiency
   do j=js,je
@@ -521,8 +526,8 @@ subroutine applyTracerBoundaryFluxesInOut(G, GV, Tr, dt, fluxes, h, evap_CFL_lim
     ! Note here that the aggregateFW flag has already been taken care of in the call to
     ! applyBoundaryFluxesInOut
     do i=is,ie
-        netMassOut(i) = fluxes%netMassOut(i,j)
-        netMassIn(i)  = fluxes%netMassIn(i,j)
+      netMassOut(i) = fluxes%netMassOut(i,j)
+      netMassIn(i)  = fluxes%netMassIn(i,j)
     enddo
 
     ! Apply the surface boundary fluxes in three steps:

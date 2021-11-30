@@ -174,8 +174,8 @@ subroutine lateral_boundary_diffusion(G, GV, US, h, Coef_x, Coef_y, dt, Reg, CS)
   real, dimension(SZI_(G),SZJ_(G))           :: tracer_end  !< integrated tracer after LBD is applied.
                                                             !! [conc H L2 ~> conc m3 or conc kg]
   integer :: i, j, k, m   !< indices to loop over
-  real    :: Idt          !< inverse of the time step [s-1]
-  real    :: tmp1, tmp2 !< temporary variables
+  real    :: Idt          !< inverse of the time step [T-1 ~> s-1]
+  real    :: tmp1, tmp2   !< temporary variables [conc H L2 ~> conc m3 or conc kg]
 
   call cpu_clock_begin(id_clock_lbd)
   Idt = 1./dt
@@ -569,51 +569,50 @@ end subroutine boundary_k_range
 !> Calculate the lateral boundary diffusive fluxes using the layer by layer method.
 !! See \ref section_method
 subroutine fluxes_layer_method(boundary, ke, hbl_L, hbl_R, h_L, h_R, phi_L, phi_R, &
-                              khtr_u, F_layer, area_L, area_R, CS)
+                               khtr_u, F_layer, area_L, area_R, CS)
 
-  integer,               intent(in   ) :: boundary !< Which boundary layer SURFACE or BOTTOM           [nondim]
-  integer,               intent(in   ) :: ke       !< Number of layers in the native grid              [nondim]
-  real,                  intent(in   ) :: hbl_L    !< Thickness of the boundary boundary
-                                                   !! layer (left)                           [H ~> m or kg m-2]
-  real,                  intent(in   ) :: hbl_R    !< Thickness of the boundary boundary
-                                                   !! layer (right)                          [H ~> m or kg m-2]
-  real, dimension(ke),   intent(in   ) :: h_L      !< Thicknesses in the native grid (left)  [H ~> m or kg m-2]
-  real, dimension(ke),   intent(in   ) :: h_R      !< Thicknesses in the native grid (right) [H ~> m or kg m-2]
-  real, dimension(ke),   intent(in   ) :: phi_L    !< Tracer values in the native grid (left)            [conc]
-  real, dimension(ke),   intent(in   ) :: phi_R    !< Tracer values in the native grid (right)           [conc]
-  real,                  intent(in   ) :: khtr_u   !< Horizontal diffusivities times delta t
-                                                   !! at a velocity point                            [L2 ~> m2]
-  real, dimension(ke),   intent(  out) :: F_layer  !< Layerwise diffusive flux at U- or V-point in the native
-                                                   !! grid                               [H L2 conc ~> m3 conc]
-  real,                  intent(in   ) :: area_L   !< Area of the horizontal grid (left)  [L2 ~> m2]
-  real,                  intent(in   ) :: area_R   !< Area of the horizontal grid (right) [L2 ~> m2]
-  type(lbd_CS),          pointer       :: CS       !< Lateral diffusion control structure
-                                                      !! the boundary layer
+  integer,              intent(in   ) :: boundary !< Which boundary layer SURFACE or BOTTOM           [nondim]
+  integer,              intent(in   ) :: ke       !< Number of layers in the native grid              [nondim]
+  real,                 intent(in   ) :: hbl_L    !< Thickness of the boundary boundary
+                                                  !! layer (left)                           [H ~> m or kg m-2]
+  real,                 intent(in   ) :: hbl_R    !< Thickness of the boundary boundary
+                                                  !! layer (right)                          [H ~> m or kg m-2]
+  real, dimension(ke),  intent(in   ) :: h_L      !< Thicknesses in the native grid (left)  [H ~> m or kg m-2]
+  real, dimension(ke),  intent(in   ) :: h_R      !< Thicknesses in the native grid (right) [H ~> m or kg m-2]
+  real, dimension(ke),  intent(in   ) :: phi_L    !< Tracer values in the native grid (left)            [conc]
+  real, dimension(ke),  intent(in   ) :: phi_R    !< Tracer values in the native grid (right)           [conc]
+  real,                 intent(in   ) :: khtr_u   !< Horizontal diffusivities times the time step
+                                                  !! at a velocity point                            [L2 ~> m2]
+  real, dimension(ke),  intent(  out) :: F_layer  !< Layerwise diffusive flux at U- or V-point
+                                                  !! in the native grid                 [H L2 conc ~> m3 conc]
+  real,                 intent(in   ) :: area_L   !< Area of the horizontal grid (left)             [L2 ~> m2]
+  real,                 intent(in   ) :: area_R   !< Area of the horizontal grid (right)            [L2 ~> m2]
+  type(lbd_CS),         pointer       :: CS       !< Lateral diffusion control structure
+
   ! Local variables
-  real, dimension(:), allocatable :: dz_top    !< The LBD z grid to be created                                [L ~ m]
-  real, dimension(:), allocatable :: phi_L_z   !< Tracer values in the ztop grid (left)                        [conc]
-  real, dimension(:), allocatable :: phi_R_z   !< Tracer values in the ztop grid (right)                       [conc]
-  real, dimension(:), allocatable :: F_layer_z !< Diffusive flux at U/V-point in the ztop grid [H L2 conc ~> m3 conc]
-  real, dimension(ke)             :: h_vel     !< Thicknesses at u- and v-points in the native grid
-                                               !! The harmonic mean is used to avoid zero values   [H ~> m or kg m-2]
-  real    :: khtr_avg                !< Thickness-weighted diffusivity at the u-point                      [m^2 s^-1]
+  real, allocatable :: dz_top(:)     !< The LBD z grid to be created                        [H ~> m or kg m-2]
+  real, allocatable :: phi_L_z(:)    !< Tracer values in the ztop grid (left)                           [conc]
+  real, allocatable :: phi_R_z(:)    !< Tracer values in the ztop grid (right)                          [conc]
+  real, allocatable :: F_layer_z(:)  !< Diffusive flux at U/V-point in the ztop grid    [H L2 conc ~> m3 conc]
+  real              :: h_vel(ke)     !< Thicknesses at u- and v-points in the native grid
+                                     !! The harmonic mean is used to avoid zero values      [H ~> m or kg m-2]
+  real    :: khtr_avg                !< Thickness-weighted diffusivity at the velocity-point [L2 T-1 ~> m s-1]
                                      !! This is just to remind developers that khtr_avg should be
                                      !! computed once khtr is 3D.
-  real    :: htot                    !< Total column thickness [H ~> m or kg m-2]
+  real    :: htot                    !< Total column thickness                              [H ~> m or kg m-2]
   integer :: k, k_bot_min, k_top_max !< k-indices, min and max for bottom and top, respectively
   integer :: k_bot_max, k_top_min    !< k-indices, max and min for bottom and top, respectively
   integer :: k_bot_diff, k_top_diff  !< different between left and right k-indices for bottom and top, respectively
   integer :: k_top_L, k_bot_L        !< k-indices left native grid
   integer :: k_top_R, k_bot_R        !< k-indices right native grid
   real    :: zeta_top_L, zeta_top_R  !< distance from the top of a layer to the boundary
-                                     !! layer depth in the native grid                  [nondim]
+                                     !! layer depth in the native grid                                [nondim]
   real    :: zeta_bot_L, zeta_bot_R  !< distance from the bottom of a layer to the boundary
-                                     !!layer depth in the native grid                   [nondim]
-  real    :: hbl_min                 !< minimum BLD (left and right)                          [m]
-  real    :: wgt                     !< weight to be used in the linear transition to the interior [nondim]
+                                     !! layer depth in the native grid                                [nondim]
+  real    :: wgt                     !< weight to be used in the linear transition to the interior    [nondim]
   real    :: a                       !< coefficient to be used in the linear transition to the interior [nondim]
-  real    :: tmp1, tmp2              !< dummy variables
-  real    :: htot_max                !< depth below which no fluxes should be applied
+  real    :: tmp1, tmp2              !< dummy variables                                     [H ~> m or kg m-2]
+  real    :: htot_max                !< depth below which no fluxes should be applied       [H ~> m or kg m-2]
   integer :: nk                      !< number of layers in the LBD grid
 
   F_layer(:) = 0.0
@@ -743,16 +742,16 @@ logical function near_boundary_unit_tests( verbose )
   integer, parameter    :: nk = 2               ! Number of layers
   real, dimension(nk+1) :: eta1                 ! Updated interfaces with one extra value           [m]
   real, dimension(:), allocatable :: h1         ! Upates layer thicknesses                          [m]
-  real, dimension(nk)   :: phi_L, phi_R         ! Tracer values (left and right column)             [ nondim m^-3 ]
+  real, dimension(nk)   :: phi_L, phi_R         ! Tracer values (left and right column)             [conc]
   real, dimension(nk)   :: h_L, h_R             ! Layer thickness (left and right)                  [m]
-  real                  :: khtr_u               ! Horizontal diffusivities at U-point               [m^2 s^-1]
+  real                  :: khtr_u               ! Horizontal diffusivities at U-point               [m2 s-1]
   real                  :: hbl_L, hbl_R         ! Depth of the boundary layer (left and right)      [m]
-  real, dimension(nk)   :: F_layer              ! Diffusive flux within each layer at U-point       [nondim s^-1]
+  real, dimension(nk)   :: F_layer              ! Diffusive flux within each layer at U-point       [conc m3 s-1]
   character(len=120)    :: test_name            ! Title of the unit test
   integer               :: k_top                ! Index of cell containing top of boundary
-  real                  :: zeta_top             ! Nondimension position
+  real                  :: zeta_top             ! Nondimension position                             [nondim]
   integer               :: k_bot                ! Index of cell containing bottom of boundary
-  real                  :: zeta_bot             ! Nondimension position
+  real                  :: zeta_bot             ! Nondimension position                             [nondim]
   type(lbd_CS), pointer :: CS
 
   allocate(CS)

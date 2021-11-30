@@ -826,7 +826,7 @@ subroutine MOM_tracer_chkinv(mesg, G, GV, h, Tr, ntr)
   integer,                                   intent(in) :: ntr  !< number of registered tracers
 
   ! Local variables
-  real :: vol_scale ! The dimensional scaling factor to convert volumes to m3 [m3 H-1 L-2 ~> nondim or m3 kg-1]
+  real :: vol_scale ! The dimensional scaling factor to convert volumes to m3 [m3 H-1 L-2 ~> 1 or m3 kg-1]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: tr_inv ! Volumetric tracer inventory in each cell [conc m3]
   real :: total_inv ! The total amount of tracer [conc m3]
   integer :: is, ie, js, je, nz

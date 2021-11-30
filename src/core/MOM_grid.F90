@@ -59,8 +59,8 @@ type, public :: ocean_grid_type
   integer :: JsgB !< The start j-index of cell vertices within the global domain
   integer :: JegB !< The end j-index of cell vertices within the global domain
 
-  integer :: isd_global !< The value of isd in the global index space (decompoistion invariant).
-  integer :: jsd_global !< The value of isd in the global index space (decompoistion invariant).
+  integer :: isd_global !< The value of isd in the global index space (decomposition invariant).
+  integer :: jsd_global !< The value of isd in the global index space (decomposition invariant).
   integer :: idg_offset !< The offset between the corresponding global and local i-indices.
   integer :: jdg_offset !< The offset between the corresponding global and local j-indices.
   integer :: ke         !< The number of layers in the vertical.
@@ -206,7 +206,7 @@ subroutine MOM_grid_init(G, param_file, US, HI, global_indexing, bathymetry_at_v
                              !! are entirely determined from thickness points.
 
   ! Local variables
-  real :: mean_SeaLev_scale
+  real :: mean_SeaLev_scale ! A scaling factor for the reference height variable [1] or [Z m-1 ~> 1]
   integer :: isd, ied, jsd, jed, nk
   integer :: IsdB, IedB, JsdB, JedB
   integer :: ied_max, jed_max
@@ -398,10 +398,10 @@ end subroutine MOM_grid_init
 subroutine rescale_grid_bathymetry(G, m_in_new_units)
   type(ocean_grid_type), intent(inout) :: G    !< The horizontal grid structure
   real,                  intent(in)    :: m_in_new_units !< The new internal representation of 1 m depth.
-  ! It appears that this routine is never called.
+  !### It appears that this routine is never called.
 
   ! Local variables
-  real :: rescale
+  real :: rescale ! A unit rescaling factor [various combinations of units ~> 1]
   integer :: i, j, isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
 
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
@@ -489,14 +489,16 @@ logical function isPointInCell(G, i, j, x, y)
   real,                  intent(in) :: x !< x coordinate of point
   real,                  intent(in) :: y !< y coordinate of point
   ! Local variables
-  real :: xNE, xNW, xSE, xSW, yNE, yNW, ySE, ySW
-  real :: p0, p1, p2, p3, l0, l1, l2, l3
+  real :: xNE, xNW, xSE, xSW ! Longitudes of cell corners [degLon]
+  real :: yNE, yNW, ySE, ySW ! Latitudes of cell corners [degLat]
+  real :: l0, l1, l2, l3 ! Crossed products of differences in position [degLon degLat]
+  real :: p0, p1, p2, p3 ! Trinary unitary values reflecting the signs of the crossed products [nondim]
   isPointInCell = .false.
   xNE = G%geoLonBu(i  ,j  ) ; yNE = G%geoLatBu(i  ,j  )
   xNW = G%geoLonBu(i-1,j  ) ; yNW = G%geoLatBu(i-1,j  )
   xSE = G%geoLonBu(i  ,j-1) ; ySE = G%geoLatBu(i  ,j-1)
   xSW = G%geoLonBu(i-1,j-1) ; ySW = G%geoLatBu(i-1,j-1)
-  ! This is a crude calculation that assume a geographic coordinate system
+  ! This is a crude calculation that assumes a geographic coordinate system
   if (x<min(xNE,xNW,xSE,xSW) .or. x>max(xNE,xNW,xSE,xSW) .or. &
       y<min(yNE,yNW,ySE,ySW) .or. y>max(yNE,yNW,ySE,ySW) ) then
     return ! Avoid the more complicated calculation

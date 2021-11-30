@@ -106,15 +106,15 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, US, CS, OBC, pbv, uhb
                              !< The fraction of zonal momentum originally
                              !! in a layer that remains after a time-step of viscosity, and the
                              !! fraction of a time-step's worth of a barotropic acceleration that
-                             !! a layer experiences after viscosity is applied.
-                             !! Non-dimensional between 0 (at the bottom) and 1 (far above the bottom).
+                             !! a layer experiences after viscosity is applied [nondim].
+                             !! Visc_rem_u is between 0 (at the bottom) and 1 (far above the bottom).
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
                  optional, intent(in)    :: visc_rem_v
                              !< The fraction of meridional momentum originally
                              !! in a layer that remains after a time-step of viscosity, and the
                              !! fraction of a time-step's worth of a barotropic acceleration that
-                             !! a layer experiences after viscosity is applied.
-                             !! Non-dimensional between 0 (at the bottom) and 1 (far above the bottom).
+                             !! a layer experiences after viscosity is applied [nondim].
+                             !! Visc_rem_v is between 0 (at the bottom) and 1 (far above the bottom).
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
                  optional, intent(out)   :: u_cor
                              !< The zonal velocities that give uhbt as the depth-integrated transport [L T-1 ~> m s-1].
@@ -239,11 +239,11 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, GV, US, CS, LB, OBC, por_face_are
                  optional, intent(in)    :: visc_rem_u
                      !< The fraction of zonal momentum originally in a layer that remains after a
                      !! time-step of viscosity, and the fraction of a time-step's worth of a barotropic
-                     !! acceleration that a layer experiences after viscosity is applied.
-                     !! Non-dimensional between 0 (at the bottom) and 1 (far above the bottom).
+                     !! acceleration that a layer experiences after viscosity is applied [nondim].
+                     !! Visc_rem_u is between 0 (at the bottom) and 1 (far above the bottom).
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
                  optional, intent(out)   :: u_cor
-                     !< The zonal velocitiess (u with a barotropic correction)
+                     !< The zonal velocities (u with a barotropic correction)
                      !! that give uhbt as the depth-integrated transport, m s-1.
   type(BT_cont_type), optional, pointer  :: BT_cont !< A structure with elements that describe the
                      !! effective open face areas as a function of barotropic flow.
@@ -254,13 +254,13 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, GV, US, CS, LB, OBC, por_face_are
   real, dimension(SZIB_(G)) :: &
     du, &      ! Corrective barotropic change in the velocity [L T-1 ~> m s-1].
     du_min_CFL, & ! Min/max limits on du correction
-    du_max_CFL, & ! to avoid CFL violations
+    du_max_CFL, & ! to avoid CFL violations [L T-1 ~> m s-1]
     duhdu_tot_0, & ! Summed partial derivative of uh with u [H L ~> m2 or kg m-1].
     uh_tot_0, & ! Summed transport with no barotropic correction [H L2 T-1 ~> m3 s-1 or kg s-1].
-    visc_rem_max  ! The column maximum of visc_rem.
+    visc_rem_max  ! The column maximum of visc_rem [nondim].
   logical, dimension(SZIB_(G)) :: do_I
   real, dimension(SZIB_(G),SZK_(GV)) :: &
-    visc_rem      ! A 2-D copy of visc_rem_u or an array of 1's.
+    visc_rem      ! A 2-D copy of visc_rem_u or an array of 1's [nondim].
   real, dimension(SZIB_(G)) :: FAuI  ! A list of sums of zonal face areas [H L ~> m2 or kg m-1].
   real :: FA_u    ! A sum of zonal face areas [H L ~> m2 or kg m-1].
   real :: I_vrm   ! 1.0 / visc_rem_max, nondim.
@@ -533,8 +533,8 @@ subroutine zonal_flux_layer(u, h, h_L, h_R, uh, duhdu, visc_rem, dt, G, US, j, &
   real, dimension(SZIB_(G)),    intent(in)    :: visc_rem !< Both the fraction of the
                         !! momentum originally in a layer that remains after a time-step
                         !! of viscosity, and the fraction of a time-step's worth of a barotropic
-                        !! acceleration that a layer experiences after viscosity is applied.
-                        !! Non-dimensional between 0 (at the bottom) and 1 (far above the bottom).
+                        !! acceleration that a layer experiences after viscosity is applied [nondim].
+                        !! Visc_rem is between 0 (at the bottom) and 1 (far above the bottom).
   real, dimension(SZI_(G)),     intent(in)    :: h        !< Layer thickness [H ~> m or kg m-2].
   real, dimension(SZI_(G)),     intent(in)    :: h_L      !< Left thickness [H ~> m or kg m-2].
   real, dimension(SZI_(G)),     intent(in)    :: h_R      !< Right thickness [H ~> m or kg m-2].
@@ -635,8 +635,8 @@ subroutine zonal_face_thickness(u, h, h_L, h_R, h_u, dt, G, GV, US, LB, vol_CFL,
                                    optional, intent(in)    :: visc_rem_u
                           !< Both the fraction of the momentum originally in a layer that remains after
                           !! a time-step of viscosity, and the fraction of a time-step's worth of a
-                          !! barotropic acceleration that a layer experiences after viscosity is applied.
-                          !! Non-dimensional between 0 (at the bottom) and 1 (far above the bottom).
+                          !! barotropic acceleration that a layer experiences after viscosity is applied [nondim].
+                          !! Visc_rem_u is between 0 (at the bottom) and 1 (far above the bottom).
 
   ! Local variables
   real :: CFL  ! The CFL number based on the local velocity and grid spacing [nondim]
@@ -665,7 +665,7 @@ subroutine zonal_face_thickness(u, h, h_L, h_R, h_u, dt, G, GV, US, LB, vol_CFL,
                                     3.0*curv_3*(CFL - 1.0))
     else
       h_avg = 0.5 * (h_L(i+1,j,k) + h_R(i,j,k))
-      !   The choice to use the arithmetic mean here is somewhat arbitrariy, but
+      !   The choice to use the arithmetic mean here is somewhat arbitrarily, but
       ! it should be noted that h_L(i+1,j,k) and h_R(i,j,k) are usually the same.
       h_marg = 0.5 * (h_L(i+1,j,k) + h_R(i,j,k))
  !    h_marg = (2.0 * h_L(i+1,j,k) * h_R(i,j,k)) / &
@@ -733,8 +733,8 @@ subroutine zonal_flux_adjust(u, h_in, h_L, h_R, uhbt, uh_tot_0, duhdu_tot_0, &
   real, dimension(SZIB_(G),SZK_(GV)),        intent(in)    :: visc_rem !< Both the fraction of the
                        !! momentum originally in a layer that remains after a time-step of viscosity, and
                        !! the fraction of a time-step's worth of a barotropic acceleration that a layer
-                       !! experiences after viscosity is applied.
-                       !! Non-dimensional between 0 (at the bottom) and 1 (far above the bottom).
+                       !! experiences after viscosity is applied [nondim].
+                       !! Visc_rem is between 0 (at the bottom) and 1 (far above the bottom).
   real, dimension(SZIB_(G)),       optional, intent(in)    :: uhbt !< The summed volume flux
                        !! through zonal faces [H L2 T-1 ~> m3 s-1 or kg s-1].
 
@@ -898,9 +898,9 @@ subroutine set_zonal_BT_cont(u, h_in, h_L, h_R, BT_cont, uh_tot_0, duhdu_tot_0, 
   real, dimension(SZIB_(G),SZK_(GV)),        intent(in)    :: visc_rem !< Both the fraction of the
                        !! momentum originally in a layer that remains after a time-step of viscosity, and
                        !! the fraction of a time-step's worth of a barotropic acceleration that a layer
-                       !! experiences after viscosity is applied.
-                       !! Non-dimensional between 0 (at the bottom) and 1 (far above the bottom).
-  real, dimension(SZIB_(G)),                 intent(in)    :: visc_rem_max !< Maximum allowable visc_rem.
+                       !! experiences after viscosity is applied [nondim].
+                       !! Visc_rem is between 0 (at the bottom) and 1 (far above the bottom).
+  real, dimension(SZIB_(G)),                 intent(in)    :: visc_rem_max !< Maximum allowable visc_rem [nondim].
   integer,                                   intent(in)    :: j        !< Spatial index.
   integer,                                   intent(in)    :: ish      !< Start of index range.
   integer,                                   intent(in)    :: ieh      !< End of index range.
@@ -929,7 +929,7 @@ subroutine set_zonal_BT_cont(u, h_in, h_L, h_R, BT_cont, uh_tot_0, duhdu_tot_0, 
   real :: FA_0    ! The effective face area with 0 barotropic transport [L H ~> m2 or kg m].
   real :: FA_avg  ! The average effective face area [L H ~> m2 or kg m], nominally given by
                   ! the realized transport divided by the barotropic velocity.
-  real :: visc_rem_lim ! The larger of visc_rem and min_visc_rem [nondim]  This
+  real :: visc_rem_lim ! The larger of visc_rem and min_visc_rem [nondim]. This
                        ! limiting is necessary to keep the inverse of visc_rem
                        ! from leading to large CFL numbers.
   real :: min_visc_rem ! The smallest permitted value for visc_rem that is used
@@ -1059,11 +1059,11 @@ subroutine meridional_mass_flux(v, h_in, vh, dt, G, GV, US, CS, LB, OBC, por_fac
                                    optional, intent(in)    :: visc_rem_v !< Both the fraction of the momentum
                                    !! originally in a layer that remains after a time-step of viscosity,
                                    !! and the fraction of a time-step's worth of a barotropic acceleration
-                                   !! that a layer experiences after viscosity is applied.  Nondimensional between
-                                   !! 0 (at the bottom) and 1 (far above the bottom).
+                                   !! that a layer experiences after viscosity is applied [nondim].
+                                   !! Visc_rem_v is between 0 (at the bottom) and 1 (far above the bottom).
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
                                      optional, intent(out) :: v_cor
-                                   !< The meridional velocitiess (v with a barotropic correction)
+                                   !< The meridional velocities (v with a barotropic correction)
                                    !! that give vhbt as the depth-integrated transport [L T-1 ~> m s-1].
   type(BT_cont_type),              optional, pointer       :: BT_cont !< A structure with elements that describe
                                    !! the effective open face areas as a function of barotropic flow.
@@ -1349,8 +1349,8 @@ subroutine merid_flux_layer(v, h, h_L, h_R, vh, dvhdv, visc_rem, dt, G, US, J, &
   real, dimension(SZI_(G)),     intent(in)    :: visc_rem !< Both the fraction of the
          !! momentum originally in a layer that remains after a time-step
          !! of viscosity, and the fraction of a time-step's worth of a barotropic
-         !! acceleration that a layer experiences after viscosity is applied.
-         !! Non-dimensional between 0 (at the bottom) and 1 (far above the bottom).
+         !! acceleration that a layer experiences after viscosity is applied [nondim].
+         !! Visc_rem is between 0 (at the bottom) and 1 (far above the bottom).
   real, dimension(SZI_(G),SZJ_(G)),  intent(in) :: h      !< Layer thickness used to calculate fluxes,
                                                           !! [H ~> m or kg m-2].
   real, dimension(SZI_(G),SZJ_(G)),  intent(in) :: h_L    !< Left thickness in the reconstruction
@@ -1456,8 +1456,8 @@ subroutine merid_face_thickness(v, h, h_L, h_R, h_v, dt, G, GV, US, LB, vol_CFL,
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), optional, intent(in) :: visc_rem_v !< Both the fraction
                           !! of the momentum originally in a layer that remains after a time-step of
                           !! viscosity, and the fraction of a time-step's worth of a barotropic
-                          !! acceleration that a layer experiences after viscosity is applied.
-                          !! Non-dimensional between 0 (at the bottom) and 1 (far above the bottom).
+                          !! acceleration that a layer experiences after viscosity is applied [nondim].
+                          !! Visc_rem_v is between 0 (at the bottom) and 1 (far above the bottom).
 
   ! Local variables
   real :: CFL ! The CFL number based on the local velocity and grid spacing [nondim]
@@ -1487,7 +1487,7 @@ subroutine merid_face_thickness(v, h, h_L, h_R, h_v, dt, G, GV, US, LB, vol_CFL,
                                     3.0*curv_3*(CFL - 1.0))
     else
       h_avg = 0.5 * (h_L(i,j+1,k) + h_R(i,j,k))
-      !   The choice to use the arithmetic mean here is somewhat arbitrariy, but
+      !   The choice to use the arithmetic mean here is somewhat arbitrarily, but
       ! it should be noted that h_L(i+1,j,k) and h_R(i,j,k) are usually the same.
       h_marg = 0.5 * (h_L(i,j+1,k) + h_R(i,j,k))
  !    h_marg = (2.0 * h_L(i,j+1,k) * h_R(i,j,k)) / &
@@ -1556,8 +1556,8 @@ subroutine meridional_flux_adjust(v, h_in, h_L, h_R, vhbt, vh_tot_0, dvhdv_tot_0
                              !< Both the fraction of the momentum originally
                              !! in a layer that remains after a time-step of viscosity, and the
                              !! fraction of a time-step's worth of a barotropic acceleration that
-                             !! a layer experiences after viscosity is applied. Non-dimensional
-                             !! between 0 (at the bottom) and 1 (far above the bottom).
+                             !! a layer experiences after viscosity is applied [nondim].
+                             !! Visc_rem is between 0 (at the bottom) and 1 (far above the bottom).
   real, dimension(SZI_(G)), &
                   optional, intent(in)    :: vhbt !< The summed volume flux through meridional faces
                                                   !! [H L2 T-1 ~> m3 s-1 or kg s-1].
@@ -1719,9 +1719,9 @@ subroutine set_merid_BT_cont(v, h_in, h_L, h_R, BT_cont, vh_tot_0, dvhdv_tot_0, 
   real, dimension(SZI_(G),SZK_(GV)),         intent(in)    :: visc_rem !< Both the fraction of the
                        !! momentum originally in a layer that remains after a time-step
                        !! of viscosity, and the fraction of a time-step's worth of a barotropic
-                       !! acceleration that a layer experiences after viscosity is applied.
-                       !! Non-dimensional between 0 (at the bottom) and 1 (far above the bottom).
-  real, dimension(SZI_(G)),                  intent(in)    :: visc_rem_max !< Maximum allowable visc_rem.
+                       !! acceleration that a layer experiences after viscosity is applied [nondim].
+                       !! Visc_rem is between 0 (at the bottom) and 1 (far above the bottom).
+  real, dimension(SZI_(G)),                  intent(in)    :: visc_rem_max !< Maximum allowable visc_rem [nondim]
   integer,                                   intent(in)    :: j        !< Spatial index.
   integer,                                   intent(in)    :: ish      !< Start of index range.
   integer,                                   intent(in)    :: ieh      !< End of index range.
@@ -1755,7 +1755,7 @@ subroutine set_merid_BT_cont(v, h_in, h_L, h_R, BT_cont, vh_tot_0, dvhdv_tot_0, 
                        ! from leading to large CFL numbers.
   real :: min_visc_rem ! The smallest permitted value for visc_rem that is used
                        ! in finding the barotropic velocity that changes the
-                       ! flow direction.  This is necessary to keep the inverse
+                       ! flow direction [nondim].  This is necessary to keep the inverse
                        ! of visc_rem from leading to large CFL numbers.
   real :: CFL_min ! A minimal increment in the CFL to try to ensure that the
                   ! flow is truly upwind [nondim]
@@ -1876,8 +1876,9 @@ subroutine PPM_reconstruction_x(h_in, h_L, h_R, G, LB, h_min, monotonic, simple_
   ! Local variables with useful mnemonic names.
   real, dimension(SZI_(G),SZJ_(G))  :: slp ! The slopes.
   real, parameter :: oneSixth = 1./6.
-  real :: h_ip1, h_im1
-  real :: dMx, dMn
+  real :: h_ip1, h_im1 ! Neighboring thicknesses or sensibly extrapolated values [H ~> m or kg m-2]
+  real :: dMx, dMn     ! The difference between the local thickness and the maximum (dMx) or
+                       ! minimum (dMn) of the surrounding values [H ~> m or kg m-2]
   character(len=256) :: mesg
   integer :: i, j, isl, iel, jsl, jel, n, stencil
   logical :: local_open_BC
@@ -2011,8 +2012,9 @@ subroutine PPM_reconstruction_y(h_in, h_L, h_R, G, LB, h_min, monotonic, simple_
   ! Local variables with useful mnemonic names.
   real, dimension(SZI_(G),SZJ_(G))  :: slp ! The slopes.
   real, parameter :: oneSixth = 1./6.
-  real :: h_jp1, h_jm1
-  real :: dMx, dMn
+  real :: h_jp1, h_jm1 ! Neighboring thicknesses or sensibly extrapolated values [H ~> m or kg m-2]
+  real :: dMx, dMn     ! The difference between the local thickness and the maximum (dMx) or
+                       ! minimum (dMn) of the surrounding values [H ~> m or kg m-2]
   character(len=256) :: mesg
   integer :: i, j, isl, iel, jsl, jel, n, stencil
   logical :: local_open_BC
@@ -2139,8 +2141,9 @@ subroutine PPM_limit_pos(h_in, h_L, h_R, h_min, G, iis, iie, jis, jie)
   integer,                           intent(in)  :: jie      !< End of j index range.
 
 ! Local variables
-  real    :: curv, dh, scale
-  character(len=256) :: mesg
+  real    :: curv  ! The grid-normalized curvature of the three thicknesses  [H ~> m or kg m-2]
+  real    :: dh    ! The difference between the edge thicknesses             [H ~> m or kg m-2]
+  real    :: scale ! A scaling factor to reduce the curvature of the fit               [nondim]
   integer :: i,j
 
   do j=jis,jie ; do i=iis,iie
@@ -2180,9 +2183,12 @@ subroutine PPM_limit_CW84(h_in, h_L, h_R, G, iis, iie, jis, jie)
   integer,                           intent(in)  :: jie   !< End of j index range.
 
   ! Local variables
-  real    :: h_i, RLdiff, RLdiff2, RLmean, FunFac
-  character(len=256) :: mesg
-  integer :: i,j
+  real    :: h_i      ! A copy of the cell-average layer thickness                [H ~> m or kg m-2]
+  real    :: RLdiff   ! The difference between the input edge values              [H ~> m or kg m-2]
+  real    :: RLdiff2  ! The squared difference between the input edge values   [H2 ~> m2 or kg2 m-4]
+  real    :: RLmean   ! The average of the input edge thicknesses                 [H ~> m or kg m-2]
+  real    :: FunFac   ! A curious product of the thickness slope and curvature [H2 ~> m2 or kg2 m-4]
+  integer :: i, j
 
   do j=jis,jie ; do i=iis,iie
     ! This limiter monotonizes the parabola following

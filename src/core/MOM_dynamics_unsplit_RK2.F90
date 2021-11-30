@@ -113,17 +113,17 @@ type, public :: MOM_dyn_unsplit_RK2_CS ; private
                                                       !! to the seafloor [R L Z T-2 ~> Pa]
 
   real    :: be      !< A nondimensional number from 0.5 to 1 that controls
-                     !! the backward weighting of the time stepping scheme.
+                     !! the backward weighting of the time stepping scheme [nondim].
   real    :: begw    !< A nondimensional number from 0 to 1 that controls
                      !! the extent to which the treatment of gravity waves
                      !! is forward-backward (0) or simulated backward
-                     !! Euler (1).  0 is almost always used.
+                     !! Euler (1) [nondim].  0 is often used.
   logical :: use_correct_dt_visc !< If true, use the correct timestep in the calculation of the
                                  !! turbulent mixed layer properties for viscosity.
                                  !! The default should be true, but it is false.
   logical :: debug   !< If true, write verbose checksums for debugging purposes.
 
-  logical :: module_is_initialized = .false. !< Record whether this mouled has been initialzed.
+  logical :: module_is_initialized = .false. !< Record whether this module has been initialized.
 
   !>@{ Diagnostic IDs
   integer :: id_uh = -1, id_vh = -1
@@ -226,18 +226,19 @@ subroutine step_MOM_dyn_unsplit_RK2(u_in, v_in, h_in, tv, visc, Time_local, dt, 
                                                               !! or column mass [H ~> m or kg m-2].
   type(MOM_dyn_unsplit_RK2_CS),      pointer       :: CS      !< The control structure set up by
                                                               !! initialize_dyn_unsplit_RK2.
-  type(VarMix_CS),                   intent(inout) :: VarMix  !< Variable mixing control struct
+  type(VarMix_CS),                   intent(inout) :: VarMix  !< Variable mixing control structure
   type(MEKE_type),                   intent(inout) :: MEKE    !< MEKE fields
                                                               !! fields related to the Mesoscale
                                                               !! Eddy Kinetic Energy.
   type(porous_barrier_ptrs), intent(in) :: pbv                !< porous barrier fractional cell metrics
   ! Local variables
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: h_av, hp
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV))  :: h_av ! Averaged layer thicknesses [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV))  :: hp ! Predicted layer thicknesses [H ~> m or kg m-2]
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)) :: up ! Predicted zonal velocities [L T-1 ~> m s-1]
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)) :: vp ! Predicted meridional velocities [L T-1 ~> m s-1]
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)) :: ueffA   ! Effective Area of U-Faces [H L ~> m2]
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)) :: veffA   ! Effective Area of V-Faces [H L ~> m2]
-  real, dimension(:,:), pointer :: p_surf => NULL()
+  real, dimension(:,:), pointer :: p_surf => NULL() ! A pointer to the surface pressure [R L2 T-2 ~> Pa]
   real :: dt_pred   ! The time step for the predictor part of the baroclinic time stepping [T ~> s]
   real :: dt_visc   ! The time step for a part of the update due to viscosity [T ~> s]
   logical :: dyn_p_surf
@@ -548,7 +549,7 @@ subroutine initialize_dyn_unsplit_RK2(u, v, h, Time, G, GV, US, param_file, diag
                                                          !! to the appropriate control structure.
   type(ALE_CS),                              pointer       :: ALE_CSp     !< This points to the ALE
                                                                           !! control structure.
-  type(set_visc_CS),                 target, intent(in)    :: set_visc  !< set visc control struct
+  type(set_visc_CS),                 target, intent(in)    :: set_visc  !< set visc control structure
   type(vertvisc_type),                       intent(inout) :: visc !< A structure containing
                                                          !! vertical viscosities, bottom drag
                                                          !! viscosities, and related fields.
