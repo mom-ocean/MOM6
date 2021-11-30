@@ -1755,8 +1755,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   logical :: debug_truncations ! If true, turn on diagnostics useful for debugging truncations.
   integer :: first_direction   ! An integer that indicates which direction is to be
                                ! updated first in directionally split parts of the
-                               ! calculation.  This can be altered during the course
-                               ! of the run via calls to set_first_direction.
+                               ! calculation.
   integer :: nkml, nkbl, verbosity, write_geom
   integer :: dynamics_stencil  ! The computational stencil for the calculations
                                ! in the dynamic core.
@@ -2027,7 +2026,6 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
                  "direction updates occur first in directionally split parts of the calculation. "//&
                  "If this is true, FIRST_DIRECTION applies at the start of a new run or if "//&
                  "the next first direction can not be found in the restart file.", default=.false.)
-
   call get_param(param_file, "MOM", "CHECK_BAD_SURFACE_VALS", CS%check_bad_sfc_vals, &
                  "If true, check the surface state for ridiculous values.", &
                  default=.false.)
@@ -2125,6 +2123,11 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
     if (num_PEs() /= 1) &
       call MOM_error(FATAL, "Index rotation is only supported on one PE.")
 
+    ! Alternate_first_direction is not permitted with index rotation.
+    !   This feature can be added later in the future if needed.
+    if (CS%alternate_first_direction) &
+      call MOM_error(FATAL, "Alternating_first_direction is not compatible with index rotation.")
+
     call get_param(param_file, "MOM", "INDEX_TURNS", turns, &
         "Number of counterclockwise quarter-turn index rotations.", &
         default=1, debuggingParam=.true.)
@@ -2152,7 +2155,6 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   if (CS%rotate_index) then
     allocate(CS%G)
     call clone_MOM_domain(G_in%Domain, CS%G%Domain, turns=turns, domain_name="MOM_rot")
-    first_direction = modulo(first_direction + turns, 2)
   else
     CS%G => G_in
   endif
@@ -2420,8 +2422,11 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   endif
 
   ! Set a few remaining fields that are specific to the ocean grid type.
-  call set_first_direction(G, first_direction)
-  CS%first_dir_restart = real(G%first_direction)
+  if (CS%rotate_index) then
+    call set_first_direction(G, modulo(first_direction + turns, 2))
+  else
+    call set_first_direction(G, modulo(first_direction, 2))
+  endif
   ! Allocate the auxiliary non-symmetric domain for debugging or I/O purposes.
   if (CS%debug .or. G%symmetric) then
     call clone_MOM_domain(G%Domain, G%Domain_aux, symmetric=.false.)
@@ -2470,11 +2475,12 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
       CS%tv%S => CS%S
     endif
 
-    ! Reset the first direction if it was found in a restart file.
-    if (CS%first_dir_restart > -0.5) &
-      call set_first_direction(G, NINT(CS%first_dir_restart))
-    ! Store the first direction for the next time a restart file is written.
-    CS%first_dir_restart = real(G%first_direction)
+    ! Reset the first direction if it was found in a restart file
+    if (CS%first_dir_restart > -1.0) then
+      call set_first_direction(G, modulo(NINT(CS%first_dir_restart) + turns, 2))
+    else
+      CS%first_dir_restart = real(modulo(first_direction, 2))
+    endif
 
     call rotate_initial_state(u_in, v_in, h_in, T_in, S_in, use_temperature, &
         turns, CS%u, CS%v, CS%h, CS%T, CS%S)
@@ -2515,6 +2521,13 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
       call MOM_initialize_state(CS%u, CS%v, CS%h, CS%tv, Time, G, GV, US, &
           param_file, dirs, restart_CSp, CS%ALE_CSp, CS%tracer_Reg, &
           CS%sponge_CSp, CS%ALE_sponge_CSp, CS%oda_incupd_CSp, CS%OBC, Time_in)
+    endif
+
+    ! Reset the first direction if it was found in a restart file.
+    if (CS%first_dir_restart > -1.0) then
+      call set_first_direction(G, NINT(CS%first_dir_restart))
+    else
+      CS%first_dir_restart = real(modulo(first_direction, 2))
     endif
   endif
 
