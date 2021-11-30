@@ -110,6 +110,16 @@ type, public :: dyn_horgrid_type
     areaCv       !< The areas of the v-grid cells [L2 ~> m2].
 
   real, allocatable, dimension(:,:) :: &
+    porous_DminU, & !< minimum topographic height of U-face [Z ~> m]
+    porous_DmaxU, & !< maximum topographic height of U-face [Z ~> m]
+    porous_DavgU    !< average topographic height of U-face [Z ~> m]
+
+  real, allocatable, dimension(:,:) :: &
+    porous_DminV, & !< minimum topographic height of V-face [Z ~> m]
+    porous_DmaxV, & !< maximum topographic height of V-face [Z ~> m]
+    porous_DavgV    !< average topographic height of V-face [Z ~> m]
+
+  real, allocatable, dimension(:,:) :: &
     mask2dBu, &  !< 0 for boundary points and 1 for ocean points on the q grid [nondim].
     geoLatBu, &  !< The geographic latitude at q points [degrees of latitude] or [m].
     geoLonBu, &  !< The geographic longitude at q points [degrees of longitude] or [m].
@@ -257,6 +267,15 @@ subroutine create_dyn_horgrid(G, HI, bathymetry_at_vel)
   allocate(G%IareaCu(IsdB:IedB,jsd:jed), source=0.0)
   allocate(G%IareaCv(isd:ied,JsdB:JedB), source=0.0)
 
+  allocate(G%porous_DminU(IsdB:IedB,jsd:jed), source=0.0)
+  allocate(G%porous_DmaxU(IsdB:IedB,jsd:jed), source=0.0)
+  allocate(G%porous_DavgU(IsdB:IedB,jsd:jed), source=0.0)
+
+  allocate(G%porous_DminV(isd:ied,JsdB:JedB), source=0.0)
+  allocate(G%porous_DmaxV(isd:ied,JsdB:JedB), source=0.0)
+  allocate(G%porous_DavgV(isd:ied,JsdB:JedB), source=0.0)
+
+
   allocate(G%bathyT(isd:ied, jsd:jed), source=0.0)
   allocate(G%CoriolisBu(IsdB:IedB, JsdB:JedB), source=0.0)
   allocate(G%dF_dx(isd:ied, jsd:jed), source=0.0)
@@ -317,6 +336,14 @@ subroutine rotate_dyn_horgrid(G_in, G, US, turns)
   call rotate_array_pair(G_in%mask2dCu, G_in%mask2dCv, turns, G%mask2dCu, G%mask2dCv)
   call rotate_array_pair(G_in%areaCu, G_in%areaCv, turns, G%areaCu, G%areaCv)
   call rotate_array_pair(G_in%IareaCu, G_in%IareaCv, turns, G%IareaCu, G%IareaCv)
+
+  call rotate_array_pair(G_in%porous_DminU, G_in%porous_DminV, &
+       turns, G%porous_DminU, G%porous_DminV)
+  call rotate_array_pair(G_in%porous_DmaxU, G_in%porous_DmaxV, &
+       turns, G%porous_DmaxU, G%porous_DmaxV)
+  call rotate_array_pair(G_in%porous_DavgU, G_in%porous_DavgV, &
+       turns, G%porous_DavgU, G%porous_DavgV)
+
 
   ! Vertex point
   call rotate_array(G_in%geoLonBu, turns, G%geoLonBu)
@@ -486,6 +513,9 @@ subroutine destroy_dyn_horgrid(G)
   deallocate(G%geoLonCv) ; deallocate(G%geoLonBu)
 
   deallocate(G%dx_Cv) ; deallocate(G%dy_Cu)
+
+  deallocate(G%porous_DminU) ; deallocate(G%porous_DmaxU) ; deallocate(G%porous_DavgU)
+  deallocate(G%porous_DminV) ; deallocate(G%porous_DmaxV) ; deallocate(G%porous_DavgV)
 
   deallocate(G%bathyT)  ; deallocate(G%CoriolisBu)
   deallocate(G%dF_dx)  ; deallocate(G%dF_dy)

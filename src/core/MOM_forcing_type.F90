@@ -105,10 +105,12 @@ type, public :: forcing
     frunoff     => NULL(), & !< frozen river runoff (calving) entering ocean [R Z T-1 ~> kg m-2 s-1]
     seaice_melt => NULL()    !< snow/seaice melt (positive) or formation (negative) [R Z T-1 ~> kg m-2 s-1]
 
-  ! Aggregated water mass fluxes into the ocean, used for passive tracer sources [R Z T-1 ~> kg m-2 s-1]
+  ! Integrated water mass fluxes into the ocean, used for passive tracer sources [H ~> m or kg m-2]
   real, pointer, dimension(:,:) :: &
-    netMassIn   => NULL(), & !< Sum of water mass flux out of the ocean [kg m-2 s-1]
-    netMassOut  => NULL()    !< Net water mass flux into of the ocean [kg m-2 s-1]
+    netMassIn   => NULL(), & !< Sum of water mass fluxes into the ocean integrated over a
+                             !! forcing timestep [H ~> m or kg m-2]
+    netMassOut  => NULL()    !< Net water mass flux out of the ocean integrated over a forcing timestep,
+                             !! with negative values for water leaving the ocean [H ~> m or kg m-2]
 
   ! heat associated with water crossing ocean surface
   real, pointer, dimension(:,:) :: &
@@ -154,14 +156,14 @@ type, public :: forcing
   ! iceberg related inputs
   real, pointer, dimension(:,:) :: &
     ustar_berg => NULL(), &   !< iceberg contribution to top ustar [Z T-1 ~> m s-1].
-    area_berg  => NULL(), &   !< area of ocean surface covered by icebergs [m2 m-2]
+    area_berg  => NULL(), &   !< fractional area of ocean surface covered by icebergs [nondim]
     mass_berg  => NULL()      !< mass of icebergs [R Z ~> kg m-2]
 
   ! land ice-shelf related inputs
   real, pointer, dimension(:,:) :: ustar_shelf => NULL()  !< Friction velocity under ice-shelves [Z T-1 ~> m s-1].
                                  !! as computed by the ocean at the previous time step.
   real, pointer, dimension(:,:) :: frac_shelf_h => NULL() !< Fractional ice shelf coverage of
-                                 !! h-cells, nondimensional from 0 to 1. This is only
+                                 !! h-cells, from 0 to 1 [nondim]. This is only
                                  !! associated if ice shelves are enabled, and are
                                  !! exactly 0 away from shelves or on land.
   real, pointer, dimension(:,:) :: iceshelf_melt => NULL() !< Ice shelf melt rate (positive)
@@ -179,7 +181,7 @@ type, public :: forcing
                                   !! fluxes have been applied to the ocean.
   real :: dt_buoy_accum = -1.0    !< The amount of time over which the buoyancy fluxes
                                   !! should be applied [T ~> s].  If negative, this forcing
-                                  !! type variable has not yet been inialized.
+                                  !! type variable has not yet been initialized.
   logical :: gustless_accum_bug = .true. !< If true, use an incorrect expression in the time
                                   !! average of the gustless wind stress.
   real :: C_p                !< heat capacity of seawater [Q degC-1 ~> J kg-1 degC-1].
@@ -233,7 +235,7 @@ type, public :: mech_forcing
 
   ! iceberg related inputs
   real, pointer, dimension(:,:) :: &
-    area_berg  => NULL(), &    !< fractional area of ocean surface covered by icebergs [m2 m-2]
+    area_berg  => NULL(), &    !< fractional area of ocean surface covered by icebergs [nondim]
     mass_berg  => NULL()       !< mass of icebergs per unit ocean area [R Z ~> kg m-2]
 
   ! land ice-shelf related inputs
@@ -259,15 +261,15 @@ type, public :: mech_forcing
                                 !! ice needs to be accumulated, and the rigidity explicitly
                                 !! reset to zero at the driver level when appropriate.
   real, pointer, dimension(:,:) :: &
-       ustk0 => NULL(), &       !< Surface Stokes drift, zonal [m/s]
-       vstk0 => NULL()          !< Surface Stokes drift, meridional [m/s]
+       ustk0 => NULL(), &       !< Surface Stokes drift, zonal [m s-1]
+       vstk0 => NULL()          !< Surface Stokes drift, meridional [m s-1]
   real, pointer, dimension(:) :: &
-       stk_wavenumbers => NULL() !< The central wave number of Stokes bands [rad/m]
+       stk_wavenumbers => NULL() !< The central wave number of Stokes bands [rad m-1]
   real, pointer, dimension(:,:,:) :: &
-       ustkb => NULL(), &       !< Stokes Drift spectrum, zonal [m/s]
+       ustkb => NULL(), &       !< Stokes Drift spectrum, zonal [m s-1]
                                 !! Horizontal - u points
                                 !! 3rd dimension - wavenumber
-       vstkb => NULL()          !< Stokes Drift spectrum, meridional [m/s]
+       vstkb => NULL()          !< Stokes Drift spectrum, meridional [m s-1]
                                 !! Horizontal - v points
                                 !! 3rd dimension - wavenumber
 
@@ -462,7 +464,7 @@ subroutine extractFluxes1d(G, GV, US, fluxes, optics, nsw, j, dt, &
                               ! [degC H T-1 ~> degC m s-1 or degC kg m-2 s-1]
   real :: Ih_limit            ! inverse depth at which surface fluxes start to be limited
                               ! or 0 for no limiting [H-1 ~> m-1 or m2 kg-1]
-  real :: scale               ! scale scales away fluxes if depth < FluxRescaleDepth
+  real :: scale               ! scale scales away fluxes if depth < FluxRescaleDepth [nondim]
   real :: I_Cp                ! 1.0 / C_p [degC Q-1 ~> kg degC J-1]
   real :: I_Cp_Hconvert       ! Unit conversion factors divided by the heat capacity
                               ! [degC H R-1 Z-1 Q-1 ~> degC m3 J-1 or kg degC J-1]
@@ -921,61 +923,57 @@ subroutine calculateBuoyancyFlux1d(G, GV, US, fluxes, optics, nsw, h, Temp, Salt
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)    :: Salt           !< salinity [ppt]
   type(thermo_var_ptrs),                    intent(inout) :: tv             !< thermodynamics type
   integer,                                  intent(in)    :: j              !< j-row to work on
-  real, dimension(SZI_(G),SZK_(GV)+1),      intent(inout) :: buoyancyFlux   !< buoyancy fluxes [L2 T-3 ~> m2 s-3]
-  real, dimension(SZI_(G)),                 intent(inout) :: netHeatMinusSW !< Surface heat flux excluding shortwave
-                                                                      !! [degC H s-1 ~> degC m s-1 or degC kg m-2 s-1]
-  real, dimension(SZI_(G)),                 intent(inout) :: netSalt        !< surface salt flux
-                                                                      !! [ppt H s-1 ~> ppt m s-1 or ppt kg m-2 s-1]
+  real, dimension(SZI_(G),SZK_(GV)+1),      intent(out)   :: buoyancyFlux   !< buoyancy fluxes [L2 T-3 ~> m2 s-3]
+  real, dimension(SZI_(G)),                 intent(out)   :: netHeatMinusSW !< Surface heat flux excluding shortwave
+                                                                      !! [degC H T-1 ~> degC m s-1 or degC kg m-2 s-1]
+  real, dimension(SZI_(G)),                 intent(out)   :: netSalt        !< surface salt flux
+                                                                      !! [ppt H T-1 ~> ppt m s-1 or ppt kg m-2 s-1]
 
   ! local variables
-  integer                               :: k
-  real, parameter                       :: dt = 1.    ! to return a rate from extractFluxes1d
-  real, dimension(SZI_(G))              :: netH       ! net FW flux [H s-1 ~> m s-1 or kg m-2 s-1]
+  real, dimension(SZI_(G))              :: netH       ! net FW flux [H T-1 ~> m s-1 or kg m-2 s-1]
   real, dimension(SZI_(G))              :: netEvap    ! net FW flux leaving ocean via evaporation
-                                                      ! [H s-1 ~> m s-1 or kg m-2 s-1]
-  real, dimension(SZI_(G))              :: netHeat    ! net temp flux [degC H s-1 ~> degC m s-1 or degC kg m-2 s-1]
+                                                      ! [H T-1 ~> m s-1 or kg m-2 s-1]
+  real, dimension(SZI_(G))              :: netHeat    ! net temp flux [degC H T-1 ~> degC m s-1 or degC kg m-2 s-1]
   real, dimension(max(nsw,1), SZI_(G))  :: penSWbnd   ! penetrating SW radiation by band
-                                                      ! [degC H s-1 ~> degC m s-1 or degC kg m-2 s-1]
+                                                      ! [degC H T-1 ~> degC m s-1 or degC kg m-2 s-1]
   real, dimension(SZI_(G))              :: pressure   ! pressure at the surface [R L2 T-2 ~> Pa]
   real, dimension(SZI_(G))              :: dRhodT     ! density partial derivative wrt temp [R degC-1 ~> kg m-3 degC-1]
   real, dimension(SZI_(G))              :: dRhodS     ! density partial derivative wrt saln [R ppt-1 ~> kg m-3 ppt-1]
   real, dimension(SZI_(G),SZK_(GV)+1)   :: netPen     ! The net penetrating shortwave radiation at each level
-                                                      ! [degC H s-1 ~> degC m s-1 or degC kg m-2 s-1]
+                                                      ! [degC H T-1 ~> degC m s-1 or degC kg m-2 s-1]
 
   logical :: useRiverHeatContent
   logical :: useCalvingHeatContent
-  real    :: depthBeforeScalingFluxes  ! A depth scale [H ~> m or kg m-2]
-  real    :: GoRho ! The gravitational acceleration divided by mean density times some
-                   ! unit conversion factors [L2 H-1 s R-1 T-3 ~> m4 kg-1 s-2 or m7 kg-2 s-2]
-  real    :: H_limit_fluxes            ! Another depth scale [H ~> m or kg m-2]
-  integer :: i
+  real    :: GoRho ! The gravitational acceleration divided by mean density times a
+                   ! unit conversion factor [L2 H-1 R-1 T-2 ~> m4 kg-1 s-2 or m7 kg-2 s-2]
+  real    :: H_limit_fluxes ! A depth scale that specifies when the ocean is shallow that
+                            ! it is necessary to eliminate fluxes [H ~> m or kg m-2]
+  integer :: i, k
 
   !  smg: what do we do when have heat fluxes from calving and river?
   useRiverHeatContent   = .False.
   useCalvingHeatContent = .False.
 
-  depthBeforeScalingFluxes = max( GV%Angstrom_H, 1.e-30*GV%m_to_H )
+  H_limit_fluxes = max( GV%Angstrom_H, 1.e-30*GV%m_to_H )
   pressure(:) = 0.
   if (associated(tv%p_surf)) then ; do i=G%isc,G%iec ; pressure(i) = tv%p_surf(i,j) ; enddo ; endif
-  GoRho       = (GV%g_Earth * GV%H_to_Z*US%T_to_s) / GV%Rho0
-
-  H_limit_fluxes = depthBeforeScalingFluxes
+  GoRho       = (GV%g_Earth * GV%H_to_Z) / GV%Rho0
 
   ! The surface forcing is contained in the fluxes type.
   ! We aggregate the thermodynamic forcing for a time step into the following:
-  ! netH       = water added/removed via surface fluxes [H s-1 ~> m s-1 or kg m-2 s-1]
-  ! netHeat    = heat via surface fluxes [degC H s-1 ~> degC m s-1 or degC kg m-2 s-1]
-  ! netSalt    = salt via surface fluxes [ppt H s-1 ~> ppt m s-1 or gSalt m-2 s-1]
+  ! netH       = water added/removed via surface fluxes [H T-1 ~> m s-1 or kg m-2 s-1]
+  ! netHeat    = heat via surface fluxes [degC H T-1 ~> degC m s-1 or degC kg m-2 s-1]
+  ! netSalt    = salt via surface fluxes [ppt H T-1 ~> ppt m s-1 or gSalt m-2 s-1]
   ! Note that unlike other calls to extractFLuxes1d() that return the time-integrated flux
-  ! this call returns the rate because dt=1
-  call extractFluxes1d(G, GV, US, fluxes, optics, nsw, j, dt*US%s_to_T,               &
-                depthBeforeScalingFluxes, useRiverHeatContent, useCalvingHeatContent, &
+  ! this call returns the rate because dt=1 (in arbitrary time units)
+  call extractFluxes1d(G, GV, US, fluxes, optics, nsw, j, 1.0,                        &
+                H_limit_fluxes, useRiverHeatContent, useCalvingHeatContent, &
                 h(:,j,:), Temp(:,j,:), netH, netEvap, netHeatMinusSW,                 &
                 netSalt, penSWbnd, tv, .false.)
 
   ! Sum over bands and attenuate as a function of depth
   ! netPen is the netSW as a function of depth
-  call sumSWoverBands(G, GV, US, h(:,j,:), optics_nbands(optics), optics, j, dt*US%s_to_T, &
+  call sumSWoverBands(G, GV, US, h(:,j,:), optics_nbands(optics), optics, j, 1.0, &
                       H_limit_fluxes, .true., penSWbnd, netPen)
 
   ! Density derivatives
@@ -983,12 +981,14 @@ subroutine calculateBuoyancyFlux1d(G, GV, US, fluxes, optics, nsw, h, Temp, Salt
                                 tv%eqn_of_state, EOS_domain(G%HI))
 
   ! Adjust netSalt to reflect dilution effect of FW flux
-  netSalt(G%isc:G%iec) = netSalt(G%isc:G%iec) - Salt(G%isc:G%iec,j,1) * netH(G%isc:G%iec) ! ppt H/s
+  ! [ppt H T-1 ~> ppt m s-1 or ppt kg m-2 s-1]
+  netSalt(G%isc:G%iec) = netSalt(G%isc:G%iec) - Salt(G%isc:G%iec,j,1) * netH(G%isc:G%iec)
 
   ! Add in the SW heating for purposes of calculating the net
   ! surface buoyancy flux affecting the top layer.
+  ! [degC H T-1 ~> degC m s-1 or degC kg m-2 s-1]
   !netHeat(:) = netHeatMinusSW(:) + sum( penSWbnd, dim=1 )
-  netHeat(G%isc:G%iec) = netHeatMinusSW(G%isc:G%iec) + netPen(G%isc:G%iec,1) ! K H/s
+  netHeat(G%isc:G%iec) = netHeatMinusSW(G%isc:G%iec) + netPen(G%isc:G%iec,1)
 
   ! Convert to a buoyancy flux, excluding penetrating SW heating
   buoyancyFlux(G%isc:G%iec,1) = - GoRho * ( dRhodS(G%isc:G%iec) * netSalt(G%isc:G%iec) + &
@@ -1016,9 +1016,9 @@ subroutine calculateBuoyancyFlux2d(G, GV, US, fluxes, optics, h, Temp, Salt, tv,
   type(thermo_var_ptrs),                      intent(inout) :: tv     !< thermodynamics type
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), intent(inout) :: buoyancyFlux  !< buoyancy fluxes [L2 T-3 ~> m2 s-3]
   real, dimension(SZI_(G),SZJ_(G)),           intent(inout) :: netHeatMinusSW !< surface heat flux excluding shortwave
-                                                                      !! [degC H s-1 ~> degC m s-1 or degC kg m-2 s-1]
+                                                                      !! [degC H T-1 ~> degC m s-1 or degC kg m-2 s-1]
   real, dimension(SZI_(G),SZJ_(G)),           intent(inout) :: netSalt !< Net surface salt flux
-                                                                      !! [ppt H s-1 ~> ppt m s-1 or ppt kg m-2 s-1]
+                                                                      !! [ppt H T-1 ~> ppt m s-1 or ppt kg m-2 s-1]
   ! local variables
   integer :: j
 
@@ -1417,11 +1417,10 @@ subroutine register_forcing_type_diags(Time, diag, US, use_temperature, handles,
   handles%id_massout_flux = register_diag_field('ocean_model', 'massout_flux', diag%axesT1, Time, &
         'Net mass flux of freshwater out of the ocean (used in the boundary flux calculation)', &
          'kg m-2', conversion=diag%GV%H_to_kg_m2)
-        ! This diagnostic is calculated in MKS units.
 
   handles%id_massin_flux  = register_diag_field('ocean_model', 'massin_flux', diag%axesT1, Time, &
-        'Net mass flux of freshwater into the ocean (used in boundary flux calculation)', 'kg m-2')
-        ! This diagnostic is calculated in MKS units.
+        'Net mass flux of freshwater into the ocean (used in boundary flux calculation)', &
+        'kg m-2', conversion=diag%GV%H_to_kg_m2)
 
   !=========================================================================
   ! area integrated surface mass transport, all are rescaled to MKS units before area integration.
@@ -1977,12 +1976,12 @@ subroutine fluxes_accumulate(flux_tmp, fluxes, G, wt2, forces)
   real,                      intent(out)   :: wt2    !< The relative weight of the new fluxes
   type(mech_forcing), optional, intent(in) :: forces !< A structure with the driving mechanical forces
 
-  ! This subroutine copies mechancal forcing from flux_tmp to fluxes and
+  ! This subroutine copies mechanical forcing from flux_tmp to fluxes and
   ! stores the time-weighted averages of the various buoyancy fluxes in fluxes,
   ! and increments the amount of time over which the buoyancy forcing in fluxes should be
   ! applied based on the time interval stored in flux_tmp.
 
-  real :: wt1
+  real :: wt1  ! The relative weight of the previous fluxes [nondim]
   integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq, i0, j0
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, isr, ier, jsr, jer
   is   = G%isc   ; ie   = G%iec    ; js   = G%jsc   ; je   = G%jec
@@ -2338,17 +2337,18 @@ subroutine forcing_diagnostics(fluxes_in, sfc_state, G_in, US, time_end, diag, h
   type(diag_ctrl),       intent(inout) :: diag      !< diagnostic regulator
   type(forcing_diags),   intent(inout) :: handles   !< diagnostic ids
 
-  ! local
+  ! local variables
   type(ocean_grid_type), pointer :: G   ! Grid metric on model index map
   type(forcing), pointer :: fluxes      ! Fluxes on the model index map
-  real, dimension(SZI_(diag%G),SZJ_(diag%G)) :: res
-  real :: total_transport ! for diagnosing integrated boundary transport
-  real :: ave_flux        ! for diagnosing averaged   boundary flux
+  real, dimension(SZI_(diag%G),SZJ_(diag%G)) :: res ! A temporary array for rescaled combinations
+                          ! of fluxes in MKS units, like [kg m-2 s-1] or [W m-2]
+  real :: total_transport ! for diagnosing integrated boundary transport, in MKS units like [kg s-1] or [W]
+  real :: ave_flux        ! for diagnosing averaged boundary flux, in MKS units like [kg m-2 s-1] or [W m-2]
   real :: RZ_T_conversion ! A combination of scaling factors for mass fluxes [kg T m-2 s-1 R-1 Z-1 ~> 1]
   real :: I_dt            ! inverse time step [T-1 ~> s-1]
-  real :: ppt2mks         ! conversion between ppt and mks
+  real :: ppt2mks         ! conversion between ppt and mks units [nondim]
   integer :: turns        ! Number of index quarter turns
-  integer :: i,j,is,ie,js,je
+  integer :: i, j, is, ie, js, je
 
   call cpu_clock_begin(handles%id_clock_forcing)
 
@@ -3303,8 +3303,8 @@ end subroutine deallocate_mech_forcing
 
 !< Rotate the fluxes by a set number of quarter turns
 subroutine rotate_forcing(fluxes_in, fluxes, turns)
-  type(forcing), intent(in)  :: fluxes_in     !< Input forcing struct
-  type(forcing), intent(inout) :: fluxes      !< Rotated forcing struct
+  type(forcing), intent(in)  :: fluxes_in     !< Input forcing structure
+  type(forcing), intent(inout) :: fluxes      !< Rotated forcing structure
   integer, intent(in) :: turns                !< Number of quarter turns
 
   logical :: do_ustar, do_water, do_heat, do_salt, do_press, do_shelf, &
@@ -3500,7 +3500,7 @@ end subroutine rotate_mech_forcing
 !! \subsection subsection_mass_fluxes Surface boundary mass fluxes
 !!
 !! The ocean gains or loses mass through evaporation, precipitation,
-!! sea ice melt/form, and and river runoff.  Positive mass fluxes
+!! sea ice melt/form, and river runoff.  Positive mass fluxes
 !! add mass to the liquid ocean. The boundary mass flux units are
 !! (kilogram per square meter per sec: kg/(m2/sec)).
 !!

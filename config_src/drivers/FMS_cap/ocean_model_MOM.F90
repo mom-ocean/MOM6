@@ -86,7 +86,7 @@ end interface
 
 !> This type is used for communication with other components via the FMS coupler.
 !! The element names and types can be changed only with great deliberation, hence
-!! the persistnce of things like the cutsy element name "avg_kount".
+!! the persistence of things like the cutesy element name "avg_kount".
 type, public ::  ocean_public_type
   type(domain2d) :: Domain    !< The domain for the surface fields.
   logical :: is_ocean_pe      !< .true. on processors that run the ocean model.
@@ -110,8 +110,8 @@ type, public ::  ocean_public_type
                     !! a global max across ocean and non-ocean processors can be
                     !! used to determine its value.
   real, pointer, dimension(:,:)  :: &
-    t_surf => NULL(), & !< SST on t-cell (degrees Kelvin)
-    s_surf => NULL(), & !< SSS on t-cell (psu)
+    t_surf => NULL(), & !< SST on t-cell [degrees Kelvin]
+    s_surf => NULL(), & !< SSS on t-cell [ppt]
     u_surf => NULL(), & !< i-velocity at the locations indicated by stagger [m s-1].
     v_surf => NULL(), & !< j-velocity at the locations indicated by stagger [m s-1].
     sea_lev => NULL(), & !< Sea level in m after correction for surface pressure,
@@ -221,7 +221,7 @@ contains
 !! for restarts and reading restart files if appropriate.
 !!
 !!   This subroutine initializes both the ocean state and the ocean surface type.
-!! Because of the way that indicies and domains are handled, Ocean_sfc must have
+!! Because of the way that indices and domains are handled, Ocean_sfc must have
 !! been used in a previous call to initialize_ocean_type.
 subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, wind_stagger, gas_fields_ocn)
   type(ocean_public_type), target, &
@@ -766,7 +766,7 @@ subroutine initialize_ocean_public_type(input_domain, Ocean_sfc, diag, gas_field
                                               !! tracer fluxes.
 
   integer :: xsz, ysz, layout(2)
-  ! ice-ocean-boundary fields are always allocated using absolute indicies
+  ! ice-ocean-boundary fields are always allocated using absolute indices
   ! and have no halos.
   integer :: isc, iec, jsc, jec
 
@@ -806,7 +806,7 @@ end subroutine initialize_ocean_public_type
 !! surface state variable.  This may eventually be folded into the MOM
 !! code that calculates the surface state in the first place.
 !! Note the offset in the arrays because the ocean_data_type has no
-!! halo points in its arrays and always uses absolute indicies.
+!! halo points in its arrays and always uses absolute indices.
 subroutine convert_state_to_ocean_type(sfc_state, Ocean_sfc, G, US, patm, press_to_z)
   type(surface),         intent(inout) :: sfc_state !< A structure containing fields that
                                                !! describe the surface state of the ocean.
@@ -946,7 +946,7 @@ end subroutine ocean_model_init_sfc
 
 !> ocean_model_flux_init is used to initialize properties of the air-sea fluxes
 !! as determined by various run-time parameters.  It can be called from
-!! non-ocean PEs, or PEs that have not yet been initialzed, and it can safely
+!! non-ocean PEs, or PEs that have not yet been initialized, and it can safely
 !! be called multiple times.
 subroutine ocean_model_flux_init(OS, verbosity)
   type(ocean_state_type), optional, pointer :: OS  !< An optional pointer to the ocean state,

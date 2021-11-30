@@ -203,8 +203,8 @@ type, public :: OBC_segment_type
   type(segment_tracer_registry_type), pointer  :: tr_Reg=> NULL()!< A pointer to the tracer registry for the segment.
   type(hor_index_type) :: HI !< Horizontal index ranges
   real :: Tr_InvLscale_out                                  !< An effective inverse length scale for restoring
-                                                            !! the tracer concentration in a ficticious
-                                                            !! reservior towards interior values when flow
+                                                            !! the tracer concentration in a fictitious
+                                                            !! reservoir towards interior values when flow
                                                             !! is exiting the domain [L-1 ~> m-1]
   real :: Tr_InvLscale_in                                   !< An effective inverse length scale for restoring
                                                             !! the tracer concentration towards an externally
@@ -283,7 +283,7 @@ type, public :: ocean_OBC_type
   ! The following parameters are used in the baroclinic radiation code:
   real :: gamma_uv !< The relative weighting for the baroclinic radiation
                    !! velocities (or speed of characteristics) at the
-                   !! new time level (1) or the running mean (0) for velocities.
+                   !! new time level (1) or the running mean (0) for velocities [nondim].
                    !! Valid values range from 0 to 1, with a default of 0.3.
   real :: rx_max   !< The maximum magnitude of the baroclinic radiation velocity (or speed of
                    !! characteristics) in units of grid points per timestep [nondim].
@@ -303,13 +303,12 @@ type, public :: ocean_OBC_type
                    !! the independence of the OBCs to this external data [H ~> m or kg m-2].
   real :: silly_u  !< A silly value of velocity outside of the domain that can be used to test
                    !! the independence of the OBCs to this external data [L T-1 ~> m s-1].
-  logical :: ramp = .false.                 !< If True, ramp from zero to the external values
-                                            !! for SSH.
+  logical :: ramp = .false.                 !< If True, ramp from zero to the external values for SSH.
   logical :: ramping_is_activated = .false. !< True if the ramping has been initialized
-  real :: ramp_timescale                    !< If ramp is True, use this timescale for ramping.
-  real :: trunc_ramp_time                   !< If ramp is True, time after which ramp is done.
+  real :: ramp_timescale                    !< If ramp is True, use this timescale for ramping [s].
+  real :: trunc_ramp_time                   !< If ramp is True, time after which ramp is done [s].
   real :: ramp_value                        !< If ramp is True, where we are on the ramp from
-                                            !! zero to one.
+                                            !! zero to one [nondim].
   type(time_type) :: ramp_start_time        !< Time when model was started.
 end type ocean_OBC_type
 
@@ -653,7 +652,7 @@ subroutine initialize_segment_data(G, OBC, PF)
   character(len=256) :: filename
   character(len=20)  :: segnam, suffix
   character(len=32)  :: varnam, fieldname
-  real               :: value
+  real               :: value  ! A value that is parsed from the segment data string [various units]
   character(len=32), dimension(MAX_OBC_FIELDS) :: fields  ! segment field names
   character(len=128) :: inputdir
   type(OBC_segment_type), pointer :: segment => NULL() ! pointer to segment type list
@@ -896,7 +895,7 @@ subroutine initialize_segment_data(G, OBC, PF)
         segment%field(m)%value = value
         segment%field(m)%name = trim(fields(m))
         ! Check if this is a tidal field. If so, the number
-        ! of expected constiuents must be 1.
+        ! of expected constituents must be 1.
         if ((index(segment%field(m)%name, 'phase') > 0) .or. (index(segment%field(m)%name, 'amp') > 0)) then
           if (OBC%n_tide_constituents .gt. 1 .and. OBC%add_tide_constituents) then
             call MOM_error(FATAL, 'Only one constituent is supported when specifying '//&
@@ -1025,7 +1024,7 @@ subroutine initialize_obc_tides(OBC, param_file)
         " are true, or if OBC_TIDE_N_CONSTITUENTS > 0 and "//trim(OBC%tide_names(c))//&
         " is in OBC_TIDE_CONSTITUENTS.", units="s-1", default=tidal_frequency(trim(OBC%tide_names(c))))
 
-    ! Find equilibrum phase if needed
+    ! Find equilibrium phase if needed
     if (OBC%add_eq_phase) then
       OBC%tide_eq_phases(c) = eq_phase(trim(OBC%tide_names(c)), OBC%tidal_longitudes)
     else
@@ -1179,7 +1178,7 @@ subroutine setup_u_point_obc(OBC, G, US, segment_str, l_seg, PF, reentrant_y)
   integer :: j, a_loop
   character(len=32) :: action_str(8)
   character(len=128) :: segment_param_str
-  real, allocatable, dimension(:)  :: tnudge
+  real, allocatable, dimension(:)  :: tnudge ! Nudging timescales [T ~> s]
   ! This returns the global indices for the segment
   call parse_segment_str(G%ieg, G%jeg, segment_str, I_obc, Js_obc, Je_obc, action_str, reentrant_y)
 
@@ -1319,7 +1318,7 @@ subroutine setup_v_point_obc(OBC, G, US, segment_str, l_seg, PF, reentrant_x)
   integer :: i, a_loop
   character(len=32) :: action_str(8)
   character(len=128) :: segment_param_str
-  real, allocatable, dimension(:)  :: tnudge
+  real, allocatable, dimension(:)  :: tnudge ! Nudging timescales [T ~> s]
 
   ! This returns the global indices for the segment
   call parse_segment_str(G%ieg, G%jeg, segment_str, J_obc, Is_obc, Ie_obc, action_str, reentrant_x)
@@ -1470,7 +1469,7 @@ subroutine parse_segment_str(ni_global, nj_global, segment_str, l, m, n, action_
     mn_max = nj_global
     if (.not. (word2(1:2)=='J=')) call MOM_error(FATAL, "MOM_open_boundary.F90, parse_segment_str: "//&
                      "Second word of string '"//trim(segment_str)//"' must start with 'J='.")
-  elseif (word1(1:2)=='J=') then ! Note that the file_parser uniformaly expands "=" to " = "
+  elseif (word1(1:2)=='J=') then ! Note that the file_parser uniformly expands "=" to " = "
     l_max = nj_global
     mn_max = ni_global
     if (.not. (word2(1:2)=='I=')) call MOM_error(FATAL, "MOM_open_boundary.F90, parse_segment_str: "//&
@@ -1640,7 +1639,7 @@ end subroutine parse_segment_data_str
   character(len=256) :: filename
   character(len=20)  :: segnam, suffix
   character(len=32)  :: varnam, fieldname
-  real               :: value
+  real               :: value  ! A value that is parsed from the segment data string [various units]
   character(len=32), dimension(MAX_OBC_FIELDS) :: fields  ! segment field names
   type(OBC_segment_type), pointer :: segment => NULL() ! pointer to segment type list
   character(len=256) :: mesg    ! Message for error messages.
@@ -1910,7 +1909,7 @@ subroutine open_boundary_end(OBC)
   call open_boundary_dealloc(OBC)
 end subroutine open_boundary_end
 
-!> Sets the slope of bathymetry normal to an open bounndary to zero.
+!> Sets the slope of bathymetry normal to an open boundary to zero.
 subroutine open_boundary_impose_normal_slope(OBC, G, depth)
   type(ocean_OBC_type),             pointer       :: OBC !< Open boundary control structure
   type(dyn_horgrid_type),           intent(in)    :: G !< Ocean grid structure
@@ -2236,7 +2235,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, GV, US,
       do k=1,nz ;  do j=segment%HI%jsd,segment%HI%jed
         if (segment%radiation) then
           dhdt = (u_old(I-1,j,k) - u_new(I-1,j,k)) !old-new
-          dhdx = (u_new(I-1,j,k) - u_new(I-2,j,k)) !in new time backward sasha for I-1
+          dhdx = (u_new(I-1,j,k) - u_new(I-2,j,k)) !in new time backward sashay for I-1
           rx_new = 0.0
           if (dhdt*dhdx > 0.0) rx_new = min( (dhdt/dhdx), rx_max) ! outward phase speed
           if (gamma_u < 1.0) then
@@ -2256,7 +2255,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, GV, US,
           endif
         elseif (segment%oblique) then
           dhdt = (u_old(I-1,j,k) - u_new(I-1,j,k)) !old-new
-          dhdx = (u_new(I-1,j,k) - u_new(I-2,j,k)) !in new time backward sasha for I-1
+          dhdx = (u_new(I-1,j,k) - u_new(I-2,j,k)) !in new time backward sashay for I-1
           if (dhdt*(segment%grad_normal(J,1,k) + segment%grad_normal(J-1,1,k)) > 0.0) then
             dhdy = segment%grad_normal(J-1,1,k)
           elseif (dhdt*(segment%grad_normal(J,1,k) + segment%grad_normal(J-1,1,k)) == 0.0) then
@@ -2319,7 +2318,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, GV, US,
           else
             do J=segment%HI%JsdB,segment%HI%JedB
               dhdt = v_old(i,J,k)-v_new(i,J,k)   !old-new
-              dhdx = v_new(i,J,k)-v_new(i-1,J,k) !in new time backward sasha for I-1
+              dhdx = v_new(i,J,k)-v_new(i-1,J,k) !in new time backward sashay for I-1
               rx_tang_rad(I,J,k) = 0.0
               if (dhdt*dhdx > 0.0) rx_tang_rad(I,J,k) = min( (dhdt/dhdx), rx_max) ! outward phase speed
             enddo
@@ -2398,7 +2397,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, GV, US,
           else
             do J=segment%HI%JsdB,segment%HI%JedB
               dhdt = v_old(i,J,k)-v_new(i,J,k)   !old-new
-              dhdx = v_new(i,J,k)-v_new(i-1,J,k) !in new time backward sasha for I-1
+              dhdx = v_new(i,J,k)-v_new(i-1,J,k) !in new time backward sashay for I-1
               if (dhdt*(segment%grad_tan(j,1,k) + segment%grad_tan(j+1,1,k)) > 0.0) then
                 dhdy = segment%grad_tan(j,1,k)
               elseif (dhdt*(segment%grad_tan(j,1,k) + segment%grad_tan(j+1,1,k)) == 0.0) then
@@ -2480,7 +2479,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, GV, US,
       do k=1,nz ; do j=segment%HI%jsd,segment%HI%jed
         if (segment%radiation) then
           dhdt = (u_old(I+1,j,k) - u_new(I+1,j,k)) !old-new
-          dhdx = (u_new(I+1,j,k) - u_new(I+2,j,k)) !in new time forward sasha for I+1
+          dhdx = (u_new(I+1,j,k) - u_new(I+2,j,k)) !in new time forward sashay for I+1
           rx_new = 0.0
           if (dhdt*dhdx > 0.0) rx_new = min( (dhdt/dhdx), rx_max)
           if (gamma_u < 1.0) then
@@ -2500,7 +2499,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, GV, US,
           endif
         elseif (segment%oblique) then
           dhdt = (u_old(I+1,j,k) - u_new(I+1,j,k)) !old-new
-          dhdx = (u_new(I+1,j,k) - u_new(I+2,j,k)) !in new time forward sasha for I+1
+          dhdx = (u_new(I+1,j,k) - u_new(I+2,j,k)) !in new time forward sashay for I+1
           if (dhdt*(segment%grad_normal(J,1,k) + segment%grad_normal(J-1,1,k)) > 0.0) then
             dhdy = segment%grad_normal(J-1,1,k)
           elseif (dhdt*(segment%grad_normal(J,1,k) + segment%grad_normal(J-1,1,k)) == 0.0) then
@@ -2564,7 +2563,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, GV, US,
           else
             do J=segment%HI%JsdB,segment%HI%JedB
               dhdt = v_old(i+1,J,k)-v_new(i+1,J,k)   !old-new
-              dhdx = v_new(i+1,J,k)-v_new(i+2,J,k) !in new time backward sasha for I-1
+              dhdx = v_new(i+1,J,k)-v_new(i+2,J,k) !in new time backward sashay for I-1
               rx_tang_rad(I,J,k) = 0.0
               if (dhdt*dhdx > 0.0) rx_tang_rad(I,J,k) = min( (dhdt/dhdx), rx_max) ! outward phase speed
             enddo
@@ -2643,7 +2642,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, GV, US,
           else
             do J=segment%HI%JsdB,segment%HI%JedB
               dhdt = v_old(i+1,J,k)-v_new(i+1,J,k)   !old-new
-              dhdx = v_new(i+1,J,k)-v_new(i+2,J,k) !in new time backward sasha for I-1
+              dhdx = v_new(i+1,J,k)-v_new(i+2,J,k) !in new time backward sashay for I-1
               if (dhdt*(segment%grad_tan(j,1,k) + segment%grad_tan(j+1,1,k)) > 0.0) then
                 dhdy = segment%grad_tan(j,1,k)
               elseif (dhdt*(segment%grad_tan(j,1,k) + segment%grad_tan(j+1,1,k)) == 0.0) then
@@ -2725,7 +2724,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, GV, US,
       do k=1,nz ;  do i=segment%HI%isd,segment%HI%ied
         if (segment%radiation) then
           dhdt = (v_old(i,J-1,k) - v_new(i,J-1,k)) !old-new
-          dhdy = (v_new(i,J-1,k) - v_new(i,J-2,k)) !in new time backward sasha for J-1
+          dhdy = (v_new(i,J-1,k) - v_new(i,J-2,k)) !in new time backward sashay for J-1
           ry_new = 0.0
           if (dhdt*dhdy > 0.0) ry_new = min( (dhdt/dhdy), ry_max)
           if (gamma_u < 1.0) then
@@ -2745,7 +2744,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, GV, US,
           endif
         elseif (segment%oblique) then
           dhdt = (v_old(i,J-1,k) - v_new(i,J-1,k)) !old-new
-          dhdy = (v_new(i,J-1,k) - v_new(i,J-2,k)) !in new time backward sasha for J-1
+          dhdy = (v_new(i,J-1,k) - v_new(i,J-2,k)) !in new time backward sashay for J-1
           if (dhdt*(segment%grad_normal(I,1,k) + segment%grad_normal(I-1,1,k)) > 0.0) then
             dhdx = segment%grad_normal(I-1,1,k)
           elseif (dhdt*(segment%grad_normal(I,1,k) + segment%grad_normal(I-1,1,k)) == 0.0) then
@@ -2808,7 +2807,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, GV, US,
           else
             do I=segment%HI%IsdB,segment%HI%IedB
               dhdt = u_old(I,j-1,k)-u_new(I,j-1,k)   !old-new
-              dhdy = u_new(I,j-1,k)-u_new(I,j-2,k) !in new time backward sasha for I-1
+              dhdy = u_new(I,j-1,k)-u_new(I,j-2,k) !in new time backward sashay for I-1
               ry_tang_rad(I,J,k) = 0.0
               if (dhdt*dhdy > 0.0) ry_tang_rad(I,J,k) = min( (dhdt/dhdy), rx_max) ! outward phase speed
             enddo
@@ -2887,7 +2886,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, GV, US,
           else
             do I=segment%HI%IsdB,segment%HI%IedB
               dhdt = u_old(I,j,k)-u_new(I,j,k)   !old-new
-              dhdy = u_new(I,j,k)-u_new(I,j-1,k) !in new time backward sasha for I-1
+              dhdy = u_new(I,j,k)-u_new(I,j-1,k) !in new time backward sashay for I-1
               if (dhdt*(segment%grad_tan(i,1,k) + segment%grad_tan(i+1,1,k)) > 0.0) then
                 dhdx = segment%grad_tan(i,1,k)
               elseif (dhdt*(segment%grad_tan(i,1,k) + segment%grad_tan(i+1,1,k)) == 0.0) then
@@ -2969,7 +2968,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, GV, US,
       do k=1,nz ;  do i=segment%HI%isd,segment%HI%ied
         if (segment%radiation) then
           dhdt = (v_old(i,J+1,k) - v_new(i,J+1,k)) !old-new
-          dhdy = (v_new(i,J+1,k) - v_new(i,J+2,k)) !in new time backward sasha for J-1
+          dhdy = (v_new(i,J+1,k) - v_new(i,J+2,k)) !in new time backward sashay for J-1
           ry_new = 0.0
           if (dhdt*dhdy > 0.0) ry_new = min( (dhdt/dhdy), ry_max)
           if (gamma_u < 1.0) then
@@ -2989,7 +2988,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, GV, US,
           endif
         elseif (segment%oblique) then
           dhdt = (v_old(i,J+1,k) - v_new(i,J+1,k)) !old-new
-          dhdy = (v_new(i,J+1,k) - v_new(i,J+2,k)) !in new time backward sasha for J-1
+          dhdy = (v_new(i,J+1,k) - v_new(i,J+2,k)) !in new time backward sashay for J-1
           if (dhdt*(segment%grad_normal(I,1,k) + segment%grad_normal(I-1,1,k)) > 0.0) then
             dhdx = segment%grad_normal(I-1,1,k)
           elseif (dhdt*(segment%grad_normal(I,1,k) + segment%grad_normal(I-1,1,k)) == 0.0) then
@@ -3053,7 +3052,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, GV, US,
           else
             do I=segment%HI%IsdB,segment%HI%IedB
               dhdt = u_old(I,j+1,k)-u_new(I,j+1,k)   !old-new
-              dhdy = u_new(I,j+1,k)-u_new(I,j+2,k) !in new time backward sasha for I-1
+              dhdy = u_new(I,j+1,k)-u_new(I,j+2,k) !in new time backward sashay for I-1
               ry_tang_rad(I,J,k) = 0.0
               if (dhdt*dhdy > 0.0) ry_tang_rad(I,J,k) = min( (dhdt/dhdy), rx_max) ! outward phase speed
             enddo
@@ -3132,7 +3131,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, GV, US,
           else
             do I=segment%HI%IsdB,segment%HI%IedB
               dhdt = u_old(I,j+1,k)-u_new(I,j+1,k)   !old-new
-              dhdy = u_new(I,j+1,k)-u_new(I,j+2,k) !in new time backward sasha for I-1
+              dhdy = u_new(I,j+1,k)-u_new(I,j+2,k) !in new time backward sashay for I-1
               if (dhdt*(segment%grad_tan(i,1,k) + segment%grad_tan(i+1,1,k)) > 0.0) then
                 dhdx = segment%grad_tan(i,1,k)
               elseif (dhdt*(segment%grad_tan(i,1,k) + segment%grad_tan(i+1,1,k)) == 0.0) then
@@ -3420,19 +3419,8 @@ subroutine set_tracer_data(OBC, tv, h, G, GV, PF)
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(inout) :: h   !< Thickness
   type(param_file_type),                     intent(in)    :: PF  !< Parameter file handle
 
-  integer :: i, j, k, itt, is, ie, js, je, isd, ied, jsd, jed, nz, n
-  integer :: isd_off, jsd_off
-  integer :: IsdB, IedB, JsdB, JedB
   type(OBC_segment_type), pointer :: segment  => NULL() ! pointer to segment type list
-  character(len=40)  :: mdl = "set_tracer_data" ! This subroutine's name.
-  character(len=200) :: filename, OBC_file, inputdir ! Strings for file/path
-
-  real :: temp_u(G%domain%niglobal+1,G%domain%njglobal)
-  real :: temp_v(G%domain%niglobal,G%domain%njglobal+1)
-
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
-  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
-  IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
+  integer :: i, j, k, n
 
   ! For now, there are no radiation conditions applied to the thicknesses, since
   ! the thicknesses might not be physically motivated.  Instead, sponges should be
@@ -3723,23 +3711,23 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
   character(len=200) :: filename, OBC_file, inputdir ! Strings for file/path
   type(OBC_segment_type), pointer :: segment => NULL()
   integer, dimension(4) :: siz
-  real, dimension(:,:,:), pointer :: tmp_buffer_in => NULL()  ! Unrotated input
+  real, dimension(:,:,:), pointer :: tmp_buffer_in => NULL()  ! Unrotated input [various units]
   integer :: ni_seg, nj_seg  ! number of src gridpoints along the segments
   integer :: ni_buf, nj_buf  ! Number of filled values in tmp_buffer
   integer :: i2, j2          ! indices for referencing local domain array
   integer :: is_obc, ie_obc, js_obc, je_obc  ! segment indices within local domain
   integer :: ishift, jshift  ! offsets for staggered locations
-  real, dimension(:,:,:), allocatable, target :: tmp_buffer
+  real, dimension(:,:,:), allocatable, target :: tmp_buffer ! A buffer for input data [various units]
   real, dimension(:), allocatable :: h_stack  ! Thicknesses at corner points [H ~> m or kg m-2]
   integer :: is_obc2, js_obc2
   real :: net_H_src   ! Total thickness of the incoming flow in the source field [H ~> m or kg m-2]
   real :: net_H_int   ! Total thickness of the incoming flow in the model [H ~> m or kg m-2]
-  real :: scl_fac     ! A nondimensional scaling factor [nondim]
-  real :: tidal_vel   ! Tangential tidal velocity [m s-1]
-  real :: tidal_elev  ! Tidal elevation at an OBC point [m]
+  real :: scl_fac     ! A scaling factor to compensate for differences in total thicknesses [nondim]
+  real :: tidal_vel   ! Interpolated tidal velocity at the OBC points [m s-1]
+  real :: tidal_elev  ! Interpolated tidal elevation at the OBC points [m]
   real, allocatable :: normal_trans_bt(:,:) ! barotropic transport [H L2 T-1 ~> m3 s-1]
-  integer :: turns      ! Number of index quarter turns
-  real :: time_delta    ! Time since tidal reference date [s]
+  integer :: turns    ! Number of index quarter turns
+  real :: time_delta  ! Time since tidal reference date [s]
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
@@ -3857,15 +3845,15 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
         ! NOTE: buffer is sized for vertex points, but may be used for faces
         if (siz(1)==1) then
           if (OBC%brushcutter_mode) then
-            allocate(tmp_buffer(1,nj_seg*2-1,segment%field(m)%nk_src))  ! segment data is currrently on supergrid
+            allocate(tmp_buffer(1,nj_seg*2-1,segment%field(m)%nk_src))  ! segment data is currently on supergrid
           else
-            allocate(tmp_buffer(1,nj_seg,segment%field(m)%nk_src))  ! segment data is currrently on supergrid
+            allocate(tmp_buffer(1,nj_seg,segment%field(m)%nk_src))  ! segment data is currently on supergrid
           endif
         else
           if (OBC%brushcutter_mode) then
-            allocate(tmp_buffer(ni_seg*2-1,1,segment%field(m)%nk_src))  ! segment data is currrently on supergrid
+            allocate(tmp_buffer(ni_seg*2-1,1,segment%field(m)%nk_src))  ! segment data is currently on supergrid
           else
-            allocate(tmp_buffer(ni_seg,1,segment%field(m)%nk_src))  ! segment data is currrently on supergrid
+            allocate(tmp_buffer(ni_seg,1,segment%field(m)%nk_src))  ! segment data is currently on supergrid
           endif
         endif
 
@@ -4351,11 +4339,12 @@ end subroutine update_OBC_segment_data
 subroutine update_OBC_ramp(Time, OBC, activate)
   type(time_type), target, intent(in)    :: Time     !< Current model time
   type(ocean_OBC_type),    intent(inout) :: OBC      !< Open boundary structure
-  logical, optional,       intent(in)    :: activate !< Specifiy whether to record the value of
+  logical, optional,       intent(in)    :: activate !< Specify whether to record the value of
                                                      !! Time as the beginning of the ramp period
 
   ! Local variables
-  real :: deltaTime, wghtA
+  real :: deltaTime ! The time since start of ramping [s]
+  real :: wghtA     ! A temporary variable used to set OBC%ramp_value [nondim]
   character(len=12) :: msg
 
   if (.not. OBC%ramp) return ! This indicates the ramping is turned off
@@ -4502,7 +4491,7 @@ subroutine segment_tracer_registry_init(param_file, segment)
 
 end subroutine segment_tracer_registry_init
 
-!> Register a tracer array that is active on an OBC segment, potentially also specifing how the
+!> Register a tracer array that is active on an OBC segment, potentially also specifying how the
 !! tracer inflow values are specified.
 subroutine register_segment_tracer(tr_ptr, param_file, GV, segment, &
                                    OBC_scalar, OBC_array)
@@ -4974,7 +4963,7 @@ subroutine open_boundary_register_restarts(HI, GV, OBC, Reg, param_file, restart
   else
     ! This would be coming from user code such as DOME.
     if (OBC%ntr /= Reg%ntr) then
-!        call MOM_error(FATAL, "open_boundary_regiser_restarts: Inconsistent value for ntr")
+!        call MOM_error(FATAL, "open_boundary_register_restarts: Inconsistent value for ntr")
       write(mesg,'("Inconsistent values for ntr ", I8," and ",I8,".")') OBC%ntr, Reg%ntr
       call MOM_error(WARNING, 'open_boundary_register_restarts: '//mesg)
     endif
@@ -5115,7 +5104,7 @@ subroutine adjustSegmentEtaToFitBathymetry(G, GV, US, segment,fld)
   integer :: n
   real, allocatable, dimension(:,:,:) :: eta ! Segment source data interface heights [Z ~> m]
   real :: hTolerance = 0.1 !<  Tolerance to exceed adjustment criteria [Z ~> m]
-  real :: hTmp, eTmp, dilate
+  ! real :: dilate      ! A factor by which to dilate the water column [nondim]
   character(len=100) :: mesg
 
   hTolerance = 0.1*US%m_to_Z
