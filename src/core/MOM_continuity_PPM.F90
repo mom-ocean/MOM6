@@ -466,7 +466,7 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, GV, US, CS, LB, OBC, por_face_are
             if (l_seg /= OBC_NONE) &
               do_I(I) = OBC%segment(l_seg)%specified
 
-            if (do_I(I)) FAuI(I) = GV%H_subroundoff*(G%dy_Cu(I,j)*por_face_areaU(I,j,k))
+            if (do_I(I)) FAuI(I) = GV%H_subroundoff*G%dy_Cu(I,j)
           enddo
           ! NOTE: do_I(I) should prevent access to segment OBC_NONE
           do k=1,nz ; do I=ish-1,ieh ; if (do_I(I)) then
@@ -1282,7 +1282,7 @@ subroutine meridional_mass_flux(v, h_in, vh, dt, G, GV, US, CS, LB, OBC, por_fac
             if(l_seg /= OBC_NONE) &
               do_I(i) = (OBC%segment(l_seg)%specified)
 
-            if (do_I(i)) FAvi(i) = GV%H_subroundoff*(G%dx_Cv(i,J)*por_face_areaV(i,J,k))
+            if (do_I(i)) FAvi(i) = GV%H_subroundoff*G%dx_Cv(i,J)
           enddo
           ! NOTE: do_I(I) should prevent access to segment OBC_NONE
           do k=1,nz ; do i=ish,ieh ; if (do_I(i)) then
