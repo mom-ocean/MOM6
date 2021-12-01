@@ -68,13 +68,16 @@ subroutine diapyc_energy_req_test(h_3d, dt, tv, G, GV, US, CS, Kd_int)
     Kd, &       ! A column of diapycnal diffusivities at interfaces [Z2 T-1 ~> m2 s-1].
     h_top, h_bot ! Distances from the top or bottom [H ~> m or kg m-2].
   real :: ustar, absf, htot
-  real :: energy_Kd ! The energy used by diapycnal mixing [W m-2].
+  real :: energy_Kd ! The energy used by diapycnal mixing [R Z L2 T-3 ~> W m-2].
   real :: tmp1  ! A temporary array.
   integer :: i, j, k, is, ie, js, je, nz, itt
   logical :: may_print
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
   if (.not. associated(CS)) call MOM_error(FATAL, "diapyc_energy_req_test: "// &
+         "Module must be initialized before it is used.")
+
+  if (.not. CS%initialized) call MOM_error(FATAL, "diapyc_energy_req_test: "// &
          "Module must be initialized before it is used.")
 
 !$OMP do
@@ -1193,7 +1196,7 @@ subroutine find_PE_chg_orig(Kddt_h, h_k, b_den_1, dTe_term, dSe_term, &
   real :: b1Kd          ! Temporary array [nondim]
   real :: ColHt_chg     ! The change in column thickness [Z ~> m].
   real :: dColHt_max    ! The change in column thickness for infinite diffusivity [Z ~> m].
-  real :: dColHt_dKd    ! The partial derivative of column thickness with Kddt_h [Z H-1 ~> 1 or m3 kg-1].
+  real :: dColHt_dKd    ! The partial derivative of column thickness with Kddt_h [Z H-1 ~> nondim or m3 kg-1]
   real :: dT_k, dT_km1  ! Temperature changes in layers k and k-1 [degC]
   real :: dS_k, dS_km1  ! Salinity changes in layers k and k-1 [ppt]
   real :: I_Kr_denom    ! Temporary array [H-2 ~> m-2 or m4 kg-2]

@@ -91,7 +91,7 @@ subroutine BFB_initialize_sponges_southonly(G, GV, US, use_temperature, tv, dept
 
   ! Local variables
   real :: eta(SZI_(G),SZJ_(G),SZK_(GV)+1) ! A temporary array for eta, in depth units [Z ~> m].
-  real :: Idamp(SZI_(G),SZJ_(G))    ! The inverse damping rate [T-1 ~> s-1].
+  real :: Idamp(SZI_(G),SZJ_(G))    ! The sponge damping rate [T-1 ~> s-1]
   real :: H0(SZK_(GV))              ! Resting layer thicknesses in depth units [Z ~> m].
   real :: min_depth                 ! The minimum ocean depth in depth units [Z ~> m].
   real :: slat, wlon, lenlat, lenlon, nlat

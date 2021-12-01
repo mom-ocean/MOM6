@@ -88,6 +88,7 @@ public adiabatic_driver_init
 
 !> Control structure for this module
 type, public :: diabatic_CS ; private
+  logical :: initialized = .false.   !< True if this control structure has been initialized.
 
   logical :: use_legacy_diabatic     !< If true (default), use a legacy version of the diabatic
                                      !! algorithm. This is temporary and is needed to avoid change
@@ -247,9 +248,9 @@ type, public :: diabatic_CS ; private
   real, allocatable, dimension(:,:,:) :: KPP_NLTscalar  !< KPP non-local transport for scalars [nondim]
   real, allocatable, dimension(:,:,:) :: KPP_buoy_flux  !< KPP forcing buoyancy flux [L2 T-3 ~> m2 s-3]
   real, allocatable, dimension(:,:)   :: KPP_temp_flux  !< KPP effective temperature flux
-                                                        !! [degC H s-1 ~> degC m s-1 or degC kg m-2 s-1]
+                                                        !! [degC H T-1 ~> degC m s-1 or degC kg m-2 s-1]
   real, allocatable, dimension(:,:)   :: KPP_salt_flux  !< KPP effective salt flux
-                                                        !! [ppt H s-1 ~> ppt m s-1 or ppt kg m-2 s-1]
+                                                        !! [ppt H T-1 ~> ppt m s-1 or ppt kg m-2 s-1]
 
   type(time_type), pointer :: Time !< Pointer to model time (needed for sponges)
 end type diabatic_CS
@@ -305,6 +306,10 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
 
   if (.not. associated(CS)) call MOM_error(FATAL, "MOM_diabatic_driver: "// &
          "Module must be initialized before it is used.")
+
+  if (.not. CS%initialized) call MOM_error(FATAL, "MOM_diabatic_driver: "// &
+         "Module must be initialized before it is used.")
+
   if (dt == 0.0) call MOM_error(FATAL, "MOM_diabatic_driver: "// &
         "diabatic was called with a zero length timestep.")
   if (dt < 0.0) call MOM_error(FATAL, "MOM_diabatic_driver: "// &
@@ -675,17 +680,17 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
       call MOM_thermovar_chksum("after KPP", tv, G)
       call hchksum(Kd_heat, "after KPP Kd_heat", G%HI, haloshift=0, scale=US%Z2_T_to_m2_s)
       call hchksum(Kd_salt, "after KPP Kd_salt", G%HI, haloshift=0, scale=US%Z2_T_to_m2_s)
-      call hchksum(CS%KPP_temp_flux, "before KPP_applyNLT netHeat", G%HI, haloshift=0, scale=GV%H_to_m)
-      call hchksum(CS%KPP_salt_flux, "before KPP_applyNLT netSalt", G%HI, haloshift=0, scale=GV%H_to_m)
+      call hchksum(CS%KPP_temp_flux, "before KPP_applyNLT netHeat", G%HI, haloshift=0, scale=GV%H_to_m*US%s_to_T)
+      call hchksum(CS%KPP_salt_flux, "before KPP_applyNLT netSalt", G%HI, haloshift=0, scale=GV%H_to_m*US%s_to_T)
       call hchksum(CS%KPP_NLTheat, "before KPP_applyNLT NLTheat", G%HI, haloshift=0)
       call hchksum(CS%KPP_NLTscalar, "before KPP_applyNLT NLTscalar", G%HI, haloshift=0)
     endif
     ! Apply non-local transport of heat and salt
     ! Changes: tv%T, tv%S
     call KPP_NonLocalTransport_temp(CS%KPP_CSp, G, GV, h, CS%KPP_NLTheat,   CS%KPP_temp_flux, &
-                                    US%T_to_s*dt, tv%T, US%Q_to_J_kg*tv%C_p)
+                                    dt, tv%T, tv%C_p)
     call KPP_NonLocalTransport_saln(CS%KPP_CSp, G, GV, h, CS%KPP_NLTscalar, CS%KPP_salt_flux, &
-                                    US%T_to_s*dt, tv%S)
+                                    dt, tv%S)
     call cpu_clock_end(id_clock_kpp)
     if (showCallTree) call callTree_waypoint("done with KPP_applyNonLocalTransport (diabatic)")
     if (CS%debugConservation) call MOM_state_stats('KPP_applyNonLocalTransport', u, v, h, tv%T, tv%S, G, GV, US)
@@ -1250,17 +1255,17 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
       call MOM_thermovar_chksum("after KPP", tv, G)
       call hchksum(Kd_heat, "after KPP Kd_heat", G%HI, haloshift=0, scale=US%Z2_T_to_m2_s)
       call hchksum(Kd_salt, "after KPP Kd_salt", G%HI, haloshift=0, scale=US%Z2_T_to_m2_s)
-      call hchksum(CS%KPP_temp_flux, "before KPP_applyNLT netHeat", G%HI, haloshift=0, scale=GV%H_to_m)
-      call hchksum(CS%KPP_salt_flux, "before KPP_applyNLT netSalt", G%HI, haloshift=0, scale=GV%H_to_m)
+      call hchksum(CS%KPP_temp_flux, "before KPP_applyNLT netHeat", G%HI, haloshift=0, scale=GV%H_to_m*US%s_to_T)
+      call hchksum(CS%KPP_salt_flux, "before KPP_applyNLT netSalt", G%HI, haloshift=0, scale=GV%H_to_m*US%s_to_T)
       call hchksum(CS%KPP_NLTheat, "before KPP_applyNLT NLTheat", G%HI, haloshift=0)
       call hchksum(CS%KPP_NLTscalar, "before KPP_applyNLT NLTscalar", G%HI, haloshift=0)
     endif
     ! Apply non-local transport of heat and salt
     ! Changes: tv%T, tv%S
     call KPP_NonLocalTransport_temp(CS%KPP_CSp, G, GV, h, CS%KPP_NLTheat,   CS%KPP_temp_flux, &
-                                    US%T_to_s*dt, tv%T, US%Q_to_J_kg*tv%C_p)
+                                    dt, tv%T, tv%C_p)
     call KPP_NonLocalTransport_saln(CS%KPP_CSp, G, GV, h, CS%KPP_NLTscalar, CS%KPP_salt_flux, &
-                                    US%T_to_s*dt, tv%S)
+                                    dt, tv%S)
     call cpu_clock_end(id_clock_kpp)
     if (showCallTree) call callTree_waypoint("done with KPP_applyNonLocalTransport (diabatic)")
     if (CS%debugConservation) call MOM_state_stats('KPP_applyNonLocalTransport', u, v, h, tv%T, tv%S, G, GV, US)
@@ -1872,17 +1877,17 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
   if (CS%useKPP) then
     call cpu_clock_begin(id_clock_kpp)
     if (CS%debug) then
-      call hchksum(CS%KPP_temp_flux, "before KPP_applyNLT netHeat", G%HI, haloshift=0, scale=GV%H_to_m)
-      call hchksum(CS%KPP_salt_flux, "before KPP_applyNLT netSalt", G%HI, haloshift=0, scale=GV%H_to_m)
+      call hchksum(CS%KPP_temp_flux, "before KPP_applyNLT netHeat", G%HI, haloshift=0, scale=GV%H_to_m*US%s_to_T)
+      call hchksum(CS%KPP_salt_flux, "before KPP_applyNLT netSalt", G%HI, haloshift=0, scale=GV%H_to_m*US%s_to_T)
       call hchksum(CS%KPP_NLTheat, "before KPP_applyNLT NLTheat", G%HI, haloshift=0)
       call hchksum(CS%KPP_NLTscalar, "before KPP_applyNLT NLTscalar", G%HI, haloshift=0)
     endif
     ! Apply non-local transport of heat and salt
     ! Changes: tv%T, tv%S
     call KPP_NonLocalTransport_temp(CS%KPP_CSp, G, GV, h, CS%KPP_NLTheat,   CS%KPP_temp_flux, &
-                                    US%T_to_s*dt, tv%T, US%Q_to_J_kg*tv%C_p)
+                                    dt, tv%T, tv%C_p)
     call KPP_NonLocalTransport_saln(CS%KPP_CSp, G, GV, h, CS%KPP_NLTscalar, CS%KPP_salt_flux, &
-                                    US%T_to_s*dt, tv%S)
+                                    dt, tv%S)
     call cpu_clock_end(id_clock_kpp)
     if (showCallTree) call callTree_waypoint("done with KPP_applyNonLocalTransport (diabatic)")
     if (CS%debugConservation) call MOM_state_stats('KPP_applyNonLocalTransport', u, v, h, tv%T, tv%S, G, GV, US)
@@ -2907,6 +2912,8 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
   else
     allocate(CS)
   endif
+
+  CS%initialized = .true.
 
   CS%diag => diag
   CS%Time => Time

@@ -440,7 +440,7 @@ subroutine ISOMIP_initialize_sponges(G, GV, US, tv, depth_tot, PF, use_ALE, CSp,
   real :: S(SZI_(G),SZJ_(G),SZK_(GV)) ! A temporary array for salt [ppt]
   ! real :: RHO(SZI_(G),SZJ_(G),SZK_(GV)) ! A temporary array for RHO [R ~> kg m-3]
   real :: h(SZI_(G),SZJ_(G),SZK_(GV)) ! A temporary array for thickness [H ~> m or kg m-2]
-  real :: Idamp(SZI_(G),SZJ_(G))    ! The inverse damping rate [T-1 ~> s-1].
+  real :: Idamp(SZI_(G),SZJ_(G))    ! The sponge damping rate [T-1 ~> s-1]
   real :: TNUDG                     ! Nudging time scale [T ~> s]
   real :: S_sur, T_sur              ! Surface salinity and temerature in sponge
   real :: S_bot, T_bot              ! Bottom salinity and temerature in sponge
@@ -660,7 +660,7 @@ subroutine ISOMIP_initialize_sponges(G, GV, US, tv, depth_tot, PF, use_ALE, CSp,
     !  call MOM_mesg(mesg,5)
     !enddo
 
-    ! Set the inverse damping rates so that the model will know where to
+    ! Set the sponge damping rates so that the model will know where to
     ! apply the sponges, along with the interface heights.
     call initialize_sponge(Idamp, eta, G, PF, CSp, GV)
     ! Apply sponge in tracer fields

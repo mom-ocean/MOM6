@@ -239,7 +239,7 @@ end subroutine write_user_log
 !!  - GV%Rlay - Layer potential density (coordinate variable) [R ~> kg m-3].
 !!  If ENABLE_THERMODYNAMICS is defined:
 !!  - T - Temperature [degC].
-!!  - S - Salinity [psu].
+!!  - S - Salinity [ppt].
 !!  If BULKMIXEDLAYER is defined:
 !!  - Rml - Mixed layer and buffer layer potential densities [R ~> kg m-3].
 !!  If SPONGE is defined:

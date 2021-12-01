@@ -37,6 +37,7 @@ public updateCFLtruncationValue
 
 !> The control structure with parameters and memory for the MOM_vert_friction module
 type, public :: vertvisc_CS ; private
+  logical :: initialized = .false. !< True if this control structure has been initialized.
   real    :: Hmix            !< The mixed layer thickness in thickness units [H ~> m or kg m-2].
   real    :: Hmix_stress     !< The mixed layer thickness over which the wind
                              !! stress is applied with direct_stress [H ~> m or kg m-2].
@@ -234,6 +235,9 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB ; nz = GV%ke
 
   if (.not.associated(CS)) call MOM_error(FATAL,"MOM_vert_friction(visc): "// &
+         "Module must be initialized before it is used.")
+
+  if (.not.CS%initialized) call MOM_error(FATAL,"MOM_vert_friction(visc): "// &
          "Module must be initialized before it is used.")
 
   if (CS%direct_stress) then
@@ -648,6 +652,9 @@ subroutine vertvisc_remnant(visc, visc_rem_u, visc_rem_v, dt, G, GV, US, CS)
   if (.not.associated(CS)) call MOM_error(FATAL,"MOM_vert_friction(visc): "// &
          "Module must be initialized before it is used.")
 
+  if (.not.CS%initialized) call MOM_error(FATAL,"MOM_vert_friction(remant): "// &
+         "Module must be initialized before it is used.")
+
   dt_Z_to_H = dt*GV%Z_to_H
 
   do k=1,nz ; do i=Isq,Ieq ; Ray(i,k) = 0.0 ; enddo ; enddo
@@ -798,6 +805,9 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, US, CS, OBC)
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB ; nz = GV%ke
 
   if (.not.associated(CS)) call MOM_error(FATAL,"MOM_vert_friction(coef): "// &
+         "Module must be initialized before it is used.")
+
+  if (.not.CS%initialized) call MOM_error(FATAL,"MOM_vert_friction(coef): "// &
          "Module must be initialized before it is used.")
 
   h_neglect = GV%H_subroundoff
@@ -1481,7 +1491,6 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, forces, visc, dt, G, GV, US, CS
   real :: truncvel         ! are truncated to truncvel, both [L T-1 ~> m s-1].
   real :: CFL              ! The local CFL number.
   real :: H_report         ! A thickness below which not to report truncations.
-  real :: dt_Rho0          ! The timestep divided by the Boussinesq density [m2 T2 s-1 L-1 Z-1 R-1 ~> s m3 kg-1].
   real :: vel_report(SZIB_(G),SZJB_(G))   ! The velocity to report [L T-1 ~> m s-1]
   real :: u_old(SZIB_(G),SZJ_(G),SZK_(GV)) ! The previous u-velocity [L T-1 ~> m s-1]
   real :: v_old(SZI_(G),SZJB_(G),SZK_(GV)) ! The previous v-velocity [L T-1 ~> m s-1]
@@ -1493,7 +1502,6 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, forces, visc, dt, G, GV, US, CS
   maxvel = CS%maxvel
   truncvel = 0.9*maxvel
   H_report = 6.0 * GV%Angstrom_H
-  dt_Rho0 = (US%L_T_to_m_s*US%Z_to_m) * dt / GV%Rho0
 
   if (len_trim(CS%u_trunc_file) > 0) then
     !$OMP parallel do default(shared) private(trunc_any,CFL)
@@ -1576,7 +1584,7 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, forces, visc, dt, G, GV, US, CS
 !   Here the diagnostic reporting subroutines are called if
 ! unphysically large values were found.
       call write_u_accel(I, j, u_old, h, ADp, CDp, dt, G, GV, US, CS%PointAccel_CSp, &
-               vel_report(I,j), forces%taux(I,j)*dt_Rho0, a=CS%a_u, hv=CS%h_u)
+               vel_report(I,j), forces%taux(I,j), a=CS%a_u, hv=CS%h_u)
     endif ; enddo ; enddo
   endif
 
@@ -1661,7 +1669,7 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, forces, visc, dt, G, GV, US, CS
 !   Here the diagnostic reporting subroutines are called if
 ! unphysically large values were found.
       call write_v_accel(i, J, v_old, h, ADp, CDp, dt, G, GV, US, CS%PointAccel_CSp, &
-               vel_report(i,J), forces%tauy(i,J)*dt_Rho0, a=CS%a_v, hv=CS%h_v)
+               vel_report(i,J), forces%tauy(i,J), a=CS%a_v, hv=CS%h_v)
     endif ; enddo ; enddo
   endif
 
@@ -1703,6 +1711,8 @@ subroutine vertvisc_init(MIS, Time, G, GV, US, param_file, diag, ADp, dirs, &
     return
   endif
   allocate(CS)
+
+  CS%initialized = .true.
 
   if (GV%Boussinesq) then; thickness_units = "m"
   else; thickness_units = "kg m-2"; endif

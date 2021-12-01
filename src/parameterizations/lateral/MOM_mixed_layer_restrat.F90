@@ -36,6 +36,7 @@ public mixedlayer_restrat_register_restarts
 
 !> Control structure for mom_mixed_layer_restrat
 type, public :: mixedlayer_restrat_CS ; private
+  logical :: initialized = .false. !< True if this control structure has been initialized.
   real    :: ml_restrat_coef       !< A non-dimensional factor by which the instability is enhanced
                                    !! over what would be predicted based on the resolved gradients
                                    !! [nondim].  This increases with grid spacing^2, up to something
@@ -103,6 +104,9 @@ subroutine mixedlayer_restrat(h, uhtr, vhtr, tv, forces, dt, MLD, VarMix, G, GV,
                                                                       !! PBL scheme [Z ~> m]
   type(VarMix_CS),                            intent(in)    :: VarMix !< Variable mixing control struct
   type(mixedlayer_restrat_CS),                intent(inout) :: CS     !< Module control structure
+
+  if (.not. CS%initialized) call MOM_error(FATAL, "MOM_mixedlayer_restrat: "// &
+         "Module must be initialized before it is used.")
 
   if (GV%nkml>0) then
     call mixedlayer_restrat_BML(h, uhtr, vhtr, tv, forces, dt, G, GV, US, CS)
@@ -610,6 +614,9 @@ subroutine mixedlayer_restrat_BML(h, uhtr, vhtr, tv, forces, dt, G, GV, US, CS)
   is  = G%isc  ; ie  = G%iec  ; js  = G%jsc  ; je  = G%jec ; nz = GV%ke
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB ; nkml = GV%nkml
 
+  if (.not. CS%initialized) call MOM_error(FATAL, "MOM_mixedlayer_restrat: "// &
+         "Module must be initialized before it is used.")
+
   if ((nkml<2) .or. (CS%ml_restrat_coef<=0.0)) return
 
   uDml(:)    = 0.0 ; vDml(:) = 0.0
@@ -815,6 +822,8 @@ logical function mixedlayer_restrat_init(Time, G, GV, US, param_file, diag, CS, 
              "without restriction but in layer mode can only be used if "//&
              "BULKMIXEDLAYER is true.", default=.false.)
   if (.not. mixedlayer_restrat_init) return
+
+  CS%initialized = .true.
 
   ! Nonsense values to cause problems when these parameters are not used
   CS%MLE_MLD_decay_time = -9.e9*US%s_to_T

@@ -327,7 +327,7 @@ subroutine oil_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, US
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: h_work ! Used so that h can be modified [H ~> m or kg m-2]
   real :: Isecs_per_year = 1.0 / (365.0*86400.0)
-  real :: vol_scale ! A conversion factor for volumes into m3 [m3 H-1 L-2 ~> nondim or m3 kg-1]
+  real :: vol_scale ! A conversion factor for volumes into m3 [m3 H-1 L-2 ~> 1 or m3 kg-1]
   real :: year, h_total, ldecay
   integer :: i, j, k, is, ie, js, je, nz, m, k_max
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
@@ -414,7 +414,7 @@ function oil_stock(h, stocks, G, GV, CS, names, units, stock_index)
   integer                                           :: oil_stock !< The number of stocks calculated here.
 
   ! Local variables
-  real :: stock_scale ! The dimensional scaling factor to convert stocks to kg [kg H-1 L-2 ~> kg m-3 or nondim]
+  real :: stock_scale ! The dimensional scaling factor to convert stocks to kg [kg H-1 L-2 ~> kg m-3 or 1]
   integer :: i, j, k, is, ie, js, je, nz, m
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 

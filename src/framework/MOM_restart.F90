@@ -69,6 +69,7 @@ end type obsolete_restart
 
 !> A restart registry and the control structure for restarts
 type, public :: MOM_restart_CS ; private
+  logical :: initialized = .false. !< True if this control structure has been initialized.
   logical :: restart    !< restart is set to .true. if the run has been started from a full restart
                         !! file.  Otherwise some fields must be initialized approximately.
   integer :: novars = 0 !< The number of restart fields that have been registered.
@@ -153,6 +154,9 @@ subroutine register_restart_field_ptr3d(f_ptr, var_desc, mandatory, CS)
                                                       !! successfully read from the restart file.
   type(MOM_restart_CS),       intent(inout) :: CS     !< MOM restart control struct
 
+  if (.not.CS%initialized) call MOM_error(FATAL, "MOM_restart " // &
+      "register_restart_field: Module must be initialized before it is used.")
+
   call lock_check(CS, var_desc)
 
   CS%novars = CS%novars+1
@@ -182,6 +186,9 @@ subroutine register_restart_field_ptr4d(f_ptr, var_desc, mandatory, CS)
   logical,                    intent(in) :: mandatory !< If true, the run will abort if this field is not
                                                       !! successfully read from the restart file.
   type(MOM_restart_CS),       intent(inout) :: CS     !< MOM restart control struct
+
+  if (.not.CS%initialized) call MOM_error(FATAL, "MOM_restart " // &
+      "register_restart_field: Module must be initialized before it is used.")
 
   call lock_check(CS, var_desc)
 
@@ -213,6 +220,9 @@ subroutine register_restart_field_ptr2d(f_ptr, var_desc, mandatory, CS)
                                                       !! successfully read from the restart file.
   type(MOM_restart_CS),       intent(inout) :: CS     !< MOM restart control struct
 
+  if (.not.CS%initialized) call MOM_error(FATAL, "MOM_restart " // &
+      "register_restart_field: Module must be initialized before it is used.")
+
   call lock_check(CS, var_desc)
 
   CS%novars = CS%novars+1
@@ -242,6 +252,9 @@ subroutine register_restart_field_ptr1d(f_ptr, var_desc, mandatory, CS)
                                                       !! successfully read from the restart file.
   type(MOM_restart_CS),       intent(inout) :: CS     !< MOM restart control struct
 
+  if (.not.CS%initialized) call MOM_error(FATAL, "MOM_restart " // &
+      "register_restart_field: Module must be initialized before it is used.")
+
   call lock_check(CS, var_desc)
 
   CS%novars = CS%novars+1
@@ -270,6 +283,9 @@ subroutine register_restart_field_ptr0d(f_ptr, var_desc, mandatory, CS)
   logical,                    intent(in) :: mandatory !< If true, the run will abort if this field is not
                                                       !! successfully read from the restart file.
   type(MOM_restart_CS),       intent(inout) :: CS     !< MOM restart control struct
+
+  if (.not.CS%initialized) call MOM_error(FATAL, "MOM_restart " // &
+      "register_restart_field: Module must be initialized before it is used.")
 
   call lock_check(CS, var_desc)
 
@@ -378,6 +394,10 @@ subroutine register_restart_field_4d(f_ptr, name, mandatory, CS, longname, units
 
   type(vardesc) :: vd
 
+  if (.not.CS%initialized) call MOM_error(FATAL, "MOM_restart: " // &
+      "register_restart_field_4d: Module must be initialized before "//&
+      "it is used to register "//trim(name))
+
   call lock_check(CS, name=name)
 
   vd = var_desc(name, units=units, longname=longname, hor_grid=hor_grid, &
@@ -403,6 +423,10 @@ subroutine register_restart_field_3d(f_ptr, name, mandatory, CS, longname, units
   character(len=*), optional, intent(in) :: t_grid    !< time description: s, p, or 1, 's' if absent
 
   type(vardesc) :: vd
+
+  if (.not.CS%initialized) call MOM_error(FATAL, "MOM_restart: " // &
+      "register_restart_field_3d: Module must be initialized before "//&
+      "it is used to register "//trim(name))
 
   call lock_check(CS, name=name)
 
@@ -430,6 +454,10 @@ subroutine register_restart_field_2d(f_ptr, name, mandatory, CS, longname, units
 
   type(vardesc) :: vd
   character(len=8) :: Zgrid
+
+  if (.not.CS%initialized) call MOM_error(FATAL, "MOM_restart: " // &
+      "register_restart_field_2d: Module must be initialized before "//&
+      "it is used to register "//trim(name))
 
   zgrid = '1' ; if (present(z_grid)) zgrid = z_grid
 
@@ -459,6 +487,10 @@ subroutine register_restart_field_1d(f_ptr, name, mandatory, CS, longname, units
   type(vardesc) :: vd
   character(len=8) :: hgrid
 
+  if (.not.CS%initialized) call MOM_error(FATAL, "MOM_restart: " // &
+      "register_restart_field_3d: Module must be initialized before "//&
+      "it is used to register "//trim(name))
+
   hgrid = '1' ; if (present(hor_grid)) hgrid = hor_grid
 
   call lock_check(CS, name=name)
@@ -484,6 +516,10 @@ subroutine register_restart_field_0d(f_ptr, name, mandatory, CS, longname, units
 
   type(vardesc) :: vd
 
+  if (.not.CS%initialized) call MOM_error(FATAL, "MOM_restart: " // &
+      "register_restart_field_0d: Module must be initialized before "//&
+      "it is used to register "//trim(name))
+
   call lock_check(CS, name=name)
 
   vd = var_desc(name, units=units, longname=longname, hor_grid='1', &
@@ -502,6 +538,9 @@ function query_initialized_name(name, CS) result(query_initialized)
   logical :: query_initialized
 
   integer :: m, n
+
+  if (.not.CS%initialized) call MOM_error(FATAL, "MOM_restart " // &
+      "query_initialized: Module must be initialized before it is used.")
 
   if (CS%novars > CS%max_fields) call restart_error(CS)
 
@@ -533,6 +572,9 @@ function query_initialized_0d(f_ptr, CS) result(query_initialized)
 
   integer :: m, n
 
+  if (.not.CS%initialized) call MOM_error(FATAL, "MOM_restart " // &
+      "query_initialized: Module must be initialized before it is used.")
+
   if (CS%novars > CS%max_fields) call restart_error(CS)
 
   query_initialized = .false.
@@ -555,6 +597,9 @@ function query_initialized_1d(f_ptr, CS) result(query_initialized)
   logical :: query_initialized
 
   integer :: m, n
+
+  if (.not.CS%initialized) call MOM_error(FATAL, "MOM_restart " // &
+      "query_initialized: Module must be initialized before it is used.")
 
   if (CS%novars > CS%max_fields) call restart_error(CS)
 
@@ -580,6 +625,9 @@ function query_initialized_2d(f_ptr, CS) result(query_initialized)
 
   integer :: m, n
 
+  if (.not.CS%initialized) call MOM_error(FATAL, "MOM_restart " // &
+      "query_initialized: Module must be initialized before it is used.")
+
   if (CS%novars > CS%max_fields) call restart_error(CS)
 
   query_initialized = .false.
@@ -603,6 +651,9 @@ function query_initialized_3d(f_ptr, CS) result(query_initialized)
   logical :: query_initialized
 
   integer :: m, n
+
+  if (.not.CS%initialized) call MOM_error(FATAL, "MOM_restart " // &
+      "query_initialized: Module must be initialized before it is used.")
 
   if (CS%novars > CS%max_fields) call restart_error(CS)
 
@@ -628,6 +679,9 @@ function query_initialized_4d(f_ptr, CS) result(query_initialized)
 
   integer :: m, n
 
+  if (.not.CS%initialized) call MOM_error(FATAL, "MOM_restart " // &
+      "query_initialized: Module must be initialized before it is used.")
+
   if (CS%novars > CS%max_fields) call restart_error(CS)
 
   query_initialized = .false.
@@ -652,6 +706,9 @@ function query_initialized_0d_name(f_ptr, name, CS) result(query_initialized)
   logical :: query_initialized
 
   integer :: m, n
+
+  if (.not.CS%initialized) call MOM_error(FATAL, "MOM_restart " // &
+      "query_initialized: Module must be initialized before it is used.")
 
   if (CS%novars > CS%max_fields) call restart_error(CS)
 
@@ -685,6 +742,9 @@ function query_initialized_1d_name(f_ptr, name, CS) result(query_initialized)
 
   integer :: m, n
 
+  if (.not.CS%initialized) call MOM_error(FATAL, "MOM_restart " // &
+      "query_initialized: Module must be initialized before it is used.")
+
   if (CS%novars > CS%max_fields) call restart_error(CS)
 
   query_initialized = .false.
@@ -716,6 +776,9 @@ function query_initialized_2d_name(f_ptr, name, CS) result(query_initialized)
   logical :: query_initialized
 
   integer :: m, n
+
+  if (.not.CS%initialized) call MOM_error(FATAL, "MOM_restart " // &
+      "query_initialized: Module must be initialized before it is used.")
 
   if (CS%novars > CS%max_fields) call restart_error(CS)
 
@@ -749,6 +812,9 @@ function query_initialized_3d_name(f_ptr, name, CS) result(query_initialized)
 
   integer :: m, n
 
+  if (.not.CS%initialized) call MOM_error(FATAL, "MOM_restart " // &
+      "query_initialized: Module must be initialized before it is used.")
+
   if (CS%novars > CS%max_fields) call restart_error(CS)
 
   query_initialized = .false.
@@ -780,6 +846,9 @@ function query_initialized_4d_name(f_ptr, name, CS) result(query_initialized)
   logical :: query_initialized
 
   integer :: m, n
+
+  if (.not.CS%initialized) call MOM_error(FATAL, "MOM_restart " // &
+      "query_initialized: Module must be initialized before it is used.")
 
   if (CS%novars > CS%max_fields) call restart_error(CS)
 
@@ -849,6 +918,9 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV, num_
   integer :: turns
 
   turns = CS%turns
+
+  if (.not.CS%initialized) call MOM_error(FATAL, "MOM_restart " // &
+      "save_restart: Module must be initialized before it is used.")
 
   if (CS%novars > CS%max_fields) call restart_error(CS)
 
@@ -1037,6 +1109,9 @@ subroutine restore_state(filename, directory, day, G, CS)
   logical            :: is_there_a_checksum ! Is there a valid checksum that should be checked.
   integer(kind=8)    :: checksum_file  ! The checksum value recorded in the input file.
   integer(kind=8)    :: checksum_data  ! The checksum value for the data that was read in.
+
+  if (.not.CS%initialized) call MOM_error(FATAL, "MOM_restart " // &
+      "restore_state: Module must be initialized before it is used.")
 
   if (CS%novars > CS%max_fields) call restart_error(CS)
 
@@ -1230,6 +1305,9 @@ function restart_files_exist(filename, directory, G, CS)
                                                   !! restart files exist in directory
   integer :: num_files
 
+  if (.not.CS%initialized) call MOM_error(FATAL, "MOM_restart " // &
+      "restart_files_exist: Module must be initialized before it is used.")
+
   if ((LEN_TRIM(filename) == 1) .and. (filename(1:1) == 'F')) then
     num_files = get_num_restart_files('r', directory, G, CS)
   else
@@ -1250,6 +1328,9 @@ function determine_is_new_run(filename, directory, G, CS) result(is_new_run)
   logical :: is_new_run                           !< The function result, which indicates whether
                                                   !! this is a new run, based on the value of
                                                   !! filename and whether restart files exist
+
+  if (.not.CS%initialized) call MOM_error(FATAL, "MOM_restart " // &
+      "determine_is_new_run: Module must be initialized before it is used.")
 
   if (LEN_TRIM(filename) > 1) then
     CS%new_run = .false.
@@ -1274,6 +1355,9 @@ function is_new_run(CS)
 
   logical :: is_new_run                !< The function result, which had been stored in CS during
                                        !! a previous call to determine_is_new_run
+
+  if (.not.CS%initialized) call MOM_error(FATAL, "MOM_restart " // &
+      "is_new_run: Module must be initialized before it is used.")
 
   if (.not.CS%new_run_set) call MOM_error(FATAL, "MOM_restart " // &
       "determine_is_new_run must be called for a restart file before is_new_run.")
@@ -1316,6 +1400,9 @@ function open_restart_units(filename, directory, G, CS, IO_handles, file_paths, 
   logical :: fexists         ! True if a file has been found
   character(len=32) :: filename_appendix = '' ! Filename appendix for ensemble runs
   character(len=80) :: restartname
+
+  if (.not.CS%initialized) call MOM_error(FATAL, "MOM_restart " // &
+      "open_restart_units: Module must be initialized before it is used.")
 
   ! Get NetCDF ids for all of the restart files.
   num_restart = 0 ; nf = 0 ; start_char = 1
@@ -1429,6 +1516,9 @@ function get_num_restart_files(filenames, directory, G, CS, file_paths) result(n
   integer :: num_files  !< The function result, the number of files (both automatically named
                         !! restart files and others explicitly in filename) that have been opened
 
+  if (.not.CS%initialized) call MOM_error(FATAL, "MOM_restart " // &
+      "get_num_restart_files: Module must be initialized before it is used.")
+
   ! This call uses open_restart_units without the optional arguments needed to actually
   ! open the files to determine the number of restart files.
   num_files = open_restart_units(filenames, directory, G, CS, file_paths=file_paths)
@@ -1457,6 +1547,8 @@ subroutine restart_init(param_file, CS, restart_root)
     return
   endif
   allocate(CS)
+
+  CS%initialized = .true.
 
   ! Determine whether all paramters are set to their default values.
   call get_param(param_file, mdl, "PARALLEL_RESTARTFILES", CS%parallel_restartfiles, &

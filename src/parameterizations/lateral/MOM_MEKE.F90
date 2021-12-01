@@ -29,6 +29,7 @@ public step_forward_MEKE, MEKE_init, MEKE_alloc_register_restart, MEKE_end
 
 !> Control structure that contains MEKE parameters and diagnostics handles
 type, public :: MEKE_CS ; private
+  logical :: initialized = .false. !< True if this control structure has been initialized.
   ! Parameters
   real :: MEKE_FrCoeff  !< Efficiency of conversion of ME into MEKE [nondim]
   real :: MEKE_GMcoeff  !< Efficiency of conversion of PE into MEKE [nondim]
@@ -79,7 +80,8 @@ type, public :: MEKE_CS ; private
   real :: MEKE_advection_factor !< A scaling in front of the advection of MEKE [nondim]
   real :: MEKE_topographic_beta !< Weight for how much topographic beta is considered
                                 !! when computing beta in Rhines scale [nondim]
-  real :: MEKE_restoring_rate !< Inverse of the timescale used to nudge MEKE toward its equilibrium value [s-1].
+  real :: MEKE_restoring_rate !< Inverse of the timescale used to nudge MEKE toward its
+                        !! equilibrium value [T-1 ~> s-1].
   logical :: MEKE_advection_bug !< If true, recover a bug in the calculation of the barotropic
                         !! transport for the advection of MEKE, wherein only the transports in the
                         !! deepest layer are used.
@@ -174,6 +176,9 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
+
+  if (.not.CS%initialized) call MOM_error(FATAL, &
+         "MOM_MEKE: Module must be initialized before it is used.")
 
   if ((CS%MEKE_Cd_scale > 0.0) .or. (CS%MEKE_Cb>0.) .or. CS%visc_drag) then
     use_drag_rate = .true.
@@ -1048,6 +1053,7 @@ logical function MEKE_init(Time, G, US, param_file, diag, CS, MEKE, restart_CS)
                  "a sub-grid mesoscale eddy kinetic energy budget.", &
                  default=.false.)
   if (.not. MEKE_init) return
+  CS%initialized = .true.
 
   call MOM_mesg("MEKE_init: reading parameters ", 5)
 

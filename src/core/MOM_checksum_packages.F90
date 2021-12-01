@@ -97,7 +97,7 @@ subroutine MOM_state_chksum_3arg(mesg, u, v, h, G, GV, US, haloshift, symmetric)
   integer,               optional, intent(in) :: haloshift !< The width of halos to check (default 0).
   logical,               optional, intent(in) :: symmetric !< If true, do checksums on the fully
                                                     !! symmetric computational domain.
-  real :: L_T_to_m_s ! A rescaling factor for velocities [m T s-1 L-1 ~> nondim] or [nondim]
+  real :: L_T_to_m_s ! A rescaling factor for velocities [m T s-1 L-1 ~> 1] or [1]
   integer :: hs
   logical :: sym
 

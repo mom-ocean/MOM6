@@ -302,7 +302,7 @@ function boundary_impulse_stock(h, stocks, G, GV, CS, names, units, stock_index)
 ! is present, only the stock corresponding to that coded index is returned.
 
   ! Local variables
-  real :: stock_scale ! The dimensional scaling factor to convert stocks to kg [kg H-1 L-2 ~> kg m-3 or nondim]
+  real :: stock_scale ! The dimensional scaling factor to convert stocks to kg [kg H-1 L-2 ~> kg m-3 or 1]
   integer :: i, j, k, is, ie, js, je, nz, m
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 

@@ -32,6 +32,7 @@ public energetic_PBL_get_MLD
 
 !> This control structure holds parameters for the MOM_energetic_PBL module
 type, public :: energetic_PBL_CS ; private
+  logical :: initialized = .false. !< True if this control structure has been initialized.
 
   !/ Constants
   real    :: VonKar = 0.41   !< The von Karman coefficient.  This should be a runtime parameter,
@@ -344,6 +345,8 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
+  if (.not. CS%initialized) call MOM_error(FATAL, "energetic_PBL: "//&
+         "Module must be initialized before it is used.")
   if (.not. associated(tv%eqn_of_state)) call MOM_error(FATAL, &
       "energetic_PBL: Temperature, salinity and an equation of state "//&
       "must now be used.")
@@ -636,7 +639,7 @@ subroutine ePBL_column(h, u, v, T0, S0, dSV_dT, dSV_dS, TKE_forcing, B_flux, abs
   real :: LA        ! The value of the Langmuir number [nondim]
   real :: LAmod     ! The modified Langmuir number by convection [nondim]
   real :: hbs_here  ! The local minimum of hb_hs and MixLen_shape, times a
-                    ! conversion factor from H to Z [Z H-1 ~> 1 or m3 kg-1].
+                    ! conversion factor from H to Z [Z H-1 ~> nondim or m3 kg-1].
   real :: nstar_FC  ! The fraction of conv_PErel that can be converted to mixing [nondim].
   real :: TKE_reduc ! The fraction by which TKE and other energy fields are
                     ! reduced to support mixing [nondim]. between 0 and 1.
@@ -1634,7 +1637,7 @@ subroutine find_PE_chg_orig(Kddt_h, h_k, b_den_1, dTe_term, dSe_term, &
   real :: b1Kd          ! Temporary array [nondim]
   real :: ColHt_chg     ! The change in column thickness [Z ~> m].
   real :: dColHt_max    ! The change in column thickness for infinite diffusivity [Z ~> m].
-  real :: dColHt_dKd    ! The partial derivative of column thickness with Kddt_h [Z H-1 ~> 1 or m3 kg-1].
+  real :: dColHt_dKd    ! The partial derivative of column thickness with Kddt_h [Z H-1 ~> nondim or m3 kg-1]
   real :: dT_k, dT_km1  ! Temperature changes in layers k and k-1 [degC]
   real :: dS_k, dS_km1  ! Salinity changes in layers k and k-1 [ppt]
   real :: I_Kr_denom    ! Temporary array [H-2 ~> m-2 or m4 kg-2]
@@ -1924,6 +1927,7 @@ subroutine energetic_PBL_init(Time, G, GV, US, param_file, diag, CS)
   logical :: use_la_windsea
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
+  CS%initialized = .true.
   CS%diag => diag
   CS%Time => Time
 

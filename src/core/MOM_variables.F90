@@ -67,7 +67,7 @@ type, public :: surface
   logical :: T_is_conT = .false. !< If true, the temperature variable SST is actually the
                    !! conservative temperature in [degC].
   logical :: S_is_absS = .false. !< If true, the salinity variable SSS is actually the
-                   !! absolute salinity in [g/kg].
+                   !! absolute salinity in [gSalt kg-1].
   type(coupler_2d_bc_type) :: tr_fields !< A structure that may contain an
                 !! array of named fields describing tracer-related quantities.
        !### NOTE: ALL OF THE ARRAYS IN TR_FIELDS USE THE COUPLER'S INDEXING CONVENTION AND HAVE NO
@@ -95,7 +95,7 @@ type, public :: thermo_var_ptrs
   logical :: T_is_conT = .false. !< If true, the temperature variable tv%T is
                          !! actually the conservative temperature [degC].
   logical :: S_is_absS = .false. !< If true, the salinity variable tv%S is
-                         !! actually the absolute salinity in units of [gSalt/kg].
+                         !! actually the absolute salinity in units of [gSalt kg-1].
   real :: min_salinity = 0.01 !< The minimum value of salinity when BOUND_SALINITY=True [ppt].
                          !! The default is 0.01 for backward compatibility but should be 0.
   ! These arrays are accumulated fluxes for communication with other components.
@@ -303,6 +303,16 @@ type, public :: BT_cont_type
   type(group_pass_type) :: pass_polarity_BT !< Structure for polarity group halo updates
   type(group_pass_type) :: pass_FA_uv !< Structure for face area group halo updates
 end type BT_cont_type
+
+
+!> pointers to grids modifying cell metric at porous barriers
+type, public :: porous_barrier_ptrs
+   real, pointer, dimension(:,:,:) :: por_face_areaU => NULL() !< fractional open area of U-faces [nondim]
+   real, pointer, dimension(:,:,:) :: por_face_areaV => NULL() !< fractional open area of V-faces [nondim]
+   real, pointer, dimension(:,:,:) :: por_layer_widthU => NULL() !< fractional open width of U-faces [nondim]
+   real, pointer, dimension(:,:,:) :: por_layer_widthV => NULL() !< fractional open width of V-faces [nondim]
+end type porous_barrier_ptrs
+
 
 contains
 

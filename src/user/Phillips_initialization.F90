@@ -237,7 +237,7 @@ subroutine Phillips_initialize_sponges(G, GV, US, tv, param_file, CSp, h)
   real :: eta0(SZK_(GV)+1)  ! The 1-d nominal positions of the interfaces.
   real :: eta(SZI_(G),SZJ_(G),SZK_(GV)+1) ! A temporary array for interface heights [Z ~> m].
   real :: temp(SZI_(G),SZJ_(G),SZK_(GV)) ! A temporary array for other variables.
-  real :: Idamp(SZI_(G),SZJ_(G))    ! The inverse damping rate [T-1 ~> s-1].
+  real :: Idamp(SZI_(G),SZJ_(G))    ! The sponge damping rate [T-1 ~> s-1]
   real :: eta_im(SZJ_(G),SZK_(GV)+1) ! A temporary array for zonal-mean eta [Z ~> m].
   real :: Idamp_im(SZJ_(G))         ! The inverse zonal-mean damping rate [T-1 ~> s-1].
   real :: damp_rate    ! The inverse zonal-mean damping rate [T-1 ~> s-1].

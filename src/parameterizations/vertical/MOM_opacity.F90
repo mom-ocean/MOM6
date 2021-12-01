@@ -552,8 +552,8 @@ subroutine absorbRemainingSW(G, GV, US, h, opacity_band, nsw, optics, j, dt, H_l
   real, dimension(SZI_(G)), optional, intent(in)    :: htot !< Total mixed layer thickness [H ~> m or kg m-2].
   real, dimension(SZI_(G)), optional, intent(inout) :: Ttot !< Depth integrated mixed layer
                                                            !! temperature [degC H ~> degC m or degC kg m-2]
-  real, dimension(SZI_(G),SZK_(GV)), optional, intent(in) :: dSV_dT !< The partial derivative of specific
-                                                           !! volume with temperature [R-1 degC-1].
+  real, dimension(SZI_(G),SZK_(GV)), optional, intent(in) :: dSV_dT !< The partial derivative of specific volume
+                                                           !! with temperature [R-1 degC-1 ~> m3 kg-1 degC-1]
   real, dimension(SZI_(G),SZK_(GV)), optional, intent(inout) :: TKE !< The TKE sink from mixing the heating
                                                            !! throughout a layer [R Z3 T-2 ~> J m-2].
 
@@ -773,7 +773,7 @@ end subroutine absorbRemainingSW
 
 !> This subroutine calculates the total shortwave heat flux integrated over
 !! bands as a function of depth.  This routine is only called for computing
-!! buoyancy fluxes for use in KPP. This routine does not updat e the state.
+!! buoyancy fluxes for use in KPP. This routine does not update the state.
 subroutine sumSWoverBands(G, GV, US, h, nsw, optics, j, dt, &
                           H_limit_fluxes, absorbAllSW, iPen_SW_bnd, netPen)
   type(ocean_grid_type),    intent(in)    :: G   !< The ocean's grid structure.
@@ -793,9 +793,8 @@ subroutine sumSWoverBands(G, GV, US, h, nsw, optics, j, dt, &
   logical,                  intent(in)    :: absorbAllSW !< If true, ensure that all shortwave
                                                  !! radiation is absorbed in the ocean water column.
   real, dimension(max(nsw,1),SZI_(G)), intent(in) :: iPen_SW_bnd !< The incident penetrating shortwave
-                                                 !! heating in each band that hits the bottom and
-                                                 !! will be redistributed through the water column
-                                                 !! [degC H ~> degC m or degC kg m-2]; size nsw x SZI_(G).
+                                                 !! in each band at the sea surface; size nsw x SZI_(G)
+                                                 !! [degC H ~> degC m or degC kg m-2].
   real, dimension(SZI_(G),SZK_(GV)+1), &
                              intent(inout) :: netPen !< Net penetrating shortwave heat flux at each
                                                  !! interface, summed across all bands
@@ -935,7 +934,7 @@ subroutine opacity_init(Time, G, GV, US, param_file, diag, CS, optics)
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
   real :: PenSW_absorb_minthick ! A thickness that is used to absorb the remaining shortwave heat
-                                ! flux when that flux drops below PEN_SW_FLUX_ABSORB [m].
+                                ! flux when that flux drops below PEN_SW_FLUX_ABSORB [H ~> m or kg m-2]
   real :: PenSW_minthick_dflt ! The default for PenSW_absorb_minthick [m]
   logical :: default_2018_answers
   logical :: use_scheme

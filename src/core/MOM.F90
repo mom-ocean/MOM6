@@ -127,7 +127,7 @@ use MOM_transcribe_grid,       only : copy_dyngrid_to_MOM_grid, copy_MOM_grid_to
 use MOM_unit_scaling,          only : unit_scale_type, unit_scaling_init
 use MOM_unit_scaling,          only : unit_scaling_end, fix_restart_unit_scaling
 use MOM_variables,             only : surface, allocate_surface_state, deallocate_surface_state
-use MOM_variables,             only : thermo_var_ptrs, vertvisc_type
+use MOM_variables,             only : thermo_var_ptrs, vertvisc_type, porous_barrier_ptrs
 use MOM_variables,             only : accel_diag_ptrs, cont_diag_ptrs, ocean_internal_state
 use MOM_variables,             only : rotate_surface_state
 use MOM_verticalGrid,          only : verticalGrid_type, verticalGridInit, verticalGridEnd
@@ -135,6 +135,8 @@ use MOM_verticalGrid,          only : fix_restart_scaling
 use MOM_verticalGrid,          only : get_thickness_units, get_flux_units, get_tr_flux_units
 use MOM_wave_interface,        only : wave_parameters_CS, waves_end
 use MOM_wave_interface,        only : Update_Stokes_Drift
+
+use MOM_porous_barriers,      only : porous_widths
 
 ! ODA modules
 use MOM_oda_driver_mod,        only : ODA_CS, oda, init_oda, oda_end
@@ -166,7 +168,7 @@ type MOM_diag_IDs
   !>@{ 3-d state field diagnostic IDs
   integer :: id_u  = -1, id_v  = -1, id_h  = -1
   !>@}
-  !> 2-d state field diagnotic ID
+  !> 2-d state field diagnostic ID
   integer :: id_ssh_inst = -1
 end type MOM_diag_IDs
 
@@ -247,7 +249,7 @@ type, public :: MOM_control_struct ; private
   real    :: dt_therm                !< thermodynamics time step [T ~> s]
   logical :: thermo_spans_coupling   !< If true, thermodynamic and tracer time
                                      !! steps can span multiple coupled time steps.
-  integer :: nstep_tot = 0           !< The total number of dynamic timesteps tcaaken
+  integer :: nstep_tot = 0           !< The total number of dynamic timesteps taken
                                      !! so far in this run segment
   logical :: count_calls = .false.   !< If true, count the calls to step_MOM, rather than the
                                      !! number of dynamics steps in nstep_tot
@@ -328,7 +330,7 @@ type, public :: MOM_control_struct ; private
   real    :: bad_val_col_thick  !< Minimum column thickness before triggering bad value message [Z ~> m]
   logical :: answers_2018       !< If true, use expressions for the surface properties that recover
                                 !! the answers from the end of 2018. Otherwise, use more appropriate
-                                !! expressions that differ at roundoff for non-Boussinsq cases.
+                                !! expressions that differ at roundoff for non-Boussinesq cases.
   logical :: use_particles      !< Turns on the particles package
   character(len=10) :: particle_type !< Particle types include: surface(default), profiling and sail drone.
 
@@ -396,6 +398,15 @@ type, public :: MOM_control_struct ; private
   type(ODA_CS), pointer :: odaCS => NULL() !< a pointer to the control structure for handling
                                 !! ensemble model state vectors and data assimilation
                                 !! increments and priors
+  type(porous_barrier_ptrs) :: pbv !< porous barrier fractional cell metrics
+  real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_,NKMEM_) &
+                            :: por_face_areaU !< fractional open area of U-faces [nondim]
+  real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_,NKMEM_) &
+                            :: por_face_areaV !< fractional open area of V-faces [nondim]
+  real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_,NK_INTERFACE_) &
+                            :: por_layer_widthU !< fractional open width of U-faces [nondim]
+  real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_,NK_INTERFACE_) &
+                            :: por_layer_widthV !< fractional open width of V-faces [nondim]
   type(particles), pointer :: particles => NULL() !<Lagrangian particles
 end type MOM_control_struct
 
@@ -482,7 +493,8 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
   real :: dt_therm        ! a limited and quantized version of CS%dt_therm [T ~> s]
   real :: dt_therm_here   ! a further limited value of dt_therm [T ~> s]
 
-  real :: wt_end, wt_beg
+  real :: wt_end, wt_beg  ! Fractional weights of the future pressure at the end
+                          ! and beginning of the current time step [nondim]
   real :: bbl_time_int    ! The amount of time over which the calculated BBL
                           ! properties will apply, for use in diagnostics, or 0
                           ! if it is not to be calculated anew [T ~> s].
@@ -1016,6 +1028,8 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_thermo, &
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
 
+  real, dimension(SZI_(CS%G),SZJ_(CS%G),SZK_(CS%G)+1) :: eta_por ! layer interface heights
+                                                    !! for porous topo. [Z ~> m or 1/eta_to_m]
   G => CS%G ; GV => CS%GV ; US => CS%US ; IDs => CS%IDs
   is   = G%isc  ; ie   = G%iec  ; js   = G%jsc  ; je   = G%jec ; nz = GV%ke
   Isq  = G%IscB ; Ieq  = G%IecB ; Jsq  = G%JscB ; Jeq  = G%JecB
@@ -1044,13 +1058,16 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_thermo, &
     call diag_update_remap_grids(CS%diag)
   endif
 
+  !update porous barrier fractional cell metrics
+  call porous_widths(h, CS%tv, G, GV, US, eta_por, CS%pbv)
+
   ! The bottom boundary layer properties need to be recalculated.
   if (bbl_time_int > 0.0) then
     call enable_averages(bbl_time_int, &
               Time_local + real_to_time(US%T_to_s*(bbl_time_int-dt)), CS%diag)
     ! Calculate the BBL properties and store them inside visc (u,h).
     call cpu_clock_begin(id_clock_BBL_visc)
-    call set_viscous_BBL(CS%u, CS%v, CS%h, CS%tv, CS%visc, G, GV, US, CS%set_visc_CSp)
+    call set_viscous_BBL(CS%u, CS%v, CS%h, CS%tv, CS%visc, G, GV, US, CS%set_visc_CSp, CS%pbv)
     call cpu_clock_end(id_clock_BBL_visc)
     if (showCallTree) call callTree_wayPoint("done with set_viscous_BBL (step_MOM)")
     call disable_averaging(CS%diag)
@@ -1073,7 +1090,7 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_thermo, &
     call step_MOM_dyn_split_RK2(u, v, h, CS%tv, CS%visc, Time_local, dt, forces, &
                 p_surf_begin, p_surf_end, CS%uh, CS%vh, CS%uhtr, CS%vhtr, &
                 CS%eta_av_bc, G, GV, US, CS%dyn_split_RK2_CSp, calc_dtbt, CS%VarMix, &
-                CS%MEKE, CS%thickness_diffuse_CSp, waves=waves)
+                CS%MEKE, CS%thickness_diffuse_CSp, CS%pbv, waves=waves)
     if (showCallTree) call callTree_waypoint("finished step_MOM_dyn_split (step_MOM)")
 
   elseif (CS%do_dynamics) then ! ------------------------------------ not SPLIT
@@ -1087,11 +1104,11 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_thermo, &
     if (CS%use_RK2) then
       call step_MOM_dyn_unsplit_RK2(u, v, h, CS%tv, CS%visc, Time_local, dt, forces, &
                p_surf_begin, p_surf_end, CS%uh, CS%vh, CS%uhtr, CS%vhtr, &
-               CS%eta_av_bc, G, GV, US, CS%dyn_unsplit_RK2_CSp, CS%VarMix, CS%MEKE)
+               CS%eta_av_bc, G, GV, US, CS%dyn_unsplit_RK2_CSp, CS%VarMix, CS%MEKE, CS%pbv)
     else
       call step_MOM_dyn_unsplit(u, v, h, CS%tv, CS%visc, Time_local, dt, forces, &
                p_surf_begin, p_surf_end, CS%uh, CS%vh, CS%uhtr, CS%vhtr, &
-               CS%eta_av_bc, G, GV, US, CS%dyn_unsplit_CSp, CS%VarMix, CS%MEKE, Waves=Waves)
+               CS%eta_av_bc, G, GV, US, CS%dyn_unsplit_CSp, CS%VarMix, CS%MEKE, CS%pbv, Waves=Waves)
     endif
     if (showCallTree) call callTree_waypoint("finished step_MOM_dyn_unsplit (step_MOM)")
 
@@ -1293,6 +1310,9 @@ subroutine step_MOM_thermo(CS, G, GV, US, u, v, h, tv, fluxes, dtdia, &
   integer :: halo_sz ! The size of a halo where data must be valid.
   integer :: i, j, k, is, ie, js, je, nz
 
+  real, dimension(SZI_(CS%G),SZJ_(CS%G),SZK_(CS%G)+1) :: eta_por ! layer interface heights
+                                                    !! for porous topo. [Z ~> m or 1/eta_to_m]
+
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   showCallTree = callTree_showQuery()
   if (showCallTree) call callTree_enter("step_MOM_thermo(), MOM.F90")
@@ -1328,7 +1348,9 @@ subroutine step_MOM_thermo(CS, G, GV, US, u, v, h, tv, fluxes, dtdia, &
     ! DIABATIC_FIRST=True. Otherwise diabatic() is called after the dynamics
     ! and set_viscous_BBL is called as a part of the dynamic stepping.
     call cpu_clock_begin(id_clock_BBL_visc)
-    call set_viscous_BBL(u, v, h, tv, CS%visc, G, GV, US, CS%set_visc_CSp)
+    !update porous barrier fractional cell metrics
+    call porous_widths(h, CS%tv, G, GV, US, eta_por, CS%pbv)
+    call set_viscous_BBL(u, v, h, tv, CS%visc, G, GV, US, CS%set_visc_CSp, CS%pbv)
     call cpu_clock_end(id_clock_BBL_visc)
     if (showCallTree) call callTree_wayPoint("done with set_viscous_BBL (step_MOM_thermo)")
   endif
@@ -1496,12 +1518,12 @@ subroutine step_offline(forces, fluxes, sfc_state, Time_start, time_interval, CS
 
   ! 3D pointers
   real, dimension(:,:,:), pointer :: &
-    uhtr => NULL(), vhtr => NULL(), &
-    eatr => NULL(), ebtr => NULL(), &
-    h_end => NULL()
+    uhtr => NULL(), &  ! Accumulated zonal thickness fluxes to advect tracers [H L2 ~> m3 or kg]
+    vhtr => NULL(), &  ! Accumulated meridional thickness fluxes to advect tracers [H L2 ~> m3 or kg]
+    eatr => NULL(), &  ! Layer entrainment rates across the interface above [H ~> m or kg m-2]
+    ebtr => NULL(), &  ! Layer entrainment rates across the interface below [H ~> m or kg m-2]
+    h_end => NULL()    ! Layer thicknesses at the end of a step [H ~> m or kg m-2]
 
-  ! 2D Array for diagnostics
-  real, dimension(SZI_(CS%G),SZJ_(CS%G)) :: eta_pre, eta_end
   type(time_type) :: Time_end    ! End time of a segment, as a time type
 
   ! Grid-related pointer assignments
@@ -1698,9 +1720,13 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   integer :: turns   ! Number of grid quarter-turns
 
   ! Initial state on the input index map
-  real, allocatable, dimension(:,:,:) :: u_in, v_in, h_in
-  real, allocatable, dimension(:,:), target :: frac_shelf_in
-  real, allocatable, dimension(:,:,:), target :: T_in, S_in
+  real, allocatable         :: u_in(:,:,:) ! Initial zonal velocities [L T-1 ~> m s-1]
+  real, allocatable         :: v_in(:,:,:) ! Initial meridional velocities [L T-1 ~> m s-1]
+  real, allocatable         :: h_in(:,:,:) ! Initial layer thicknesses [H ~> m or kg m-2]
+  real, allocatable, target :: frac_shelf_in(:,:) ! Initial fraction of the total cell area occupied
+                                           ! by an ice shelf [nondim]
+  real, allocatable, target :: T_in(:,:,:) ! Initial temperatures [degC]
+  real, allocatable, target :: S_in(:,:,:) ! Initial salinities [ppt]
   type(ocean_OBC_type), pointer :: OBC_in => NULL()
   type(sponge_CS), pointer :: sponge_in_CSp => NULL()
   type(ALE_sponge_CS), pointer :: ALE_sponge_in_CSp => NULL()
@@ -1711,7 +1737,8 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
 
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz
   integer :: IsdB, IedB, JsdB, JedB
-  real    :: dtbt        ! The barotropic timestep [s]
+  real    :: dtbt              ! If negative, this specifies the barotropic timestep as a fraction
+                               ! of the maximum stable value [nondim].
 
   real, allocatable, dimension(:,:)   :: eta ! free surface height or column mass [H ~> m or kg m-2]
   real, allocatable, dimension(:,:)   :: area_shelf_in ! area occupied by ice shelf [L2 ~> m2]
@@ -1732,7 +1759,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
 
   logical :: bulkmixedlayer    ! If true, a refined bulk mixed layer scheme is used
                                ! with nkml sublayers and nkbl buffer layer.
-  logical :: use_temperature   ! If true, temp and saln used as state variables.
+  logical :: use_temperature   ! If true, temperature and salinity used as state variables.
   logical :: use_frazil        ! If true, liquid seawater freezes if temp below freezing,
                                ! with accumulated heat deficit returned to surface ocean.
   logical :: bound_salinity    ! If true, salt is added to keep salinity above
@@ -1759,7 +1786,9 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   integer :: nkml, nkbl, verbosity, write_geom
   integer :: dynamics_stencil  ! The computational stencil for the calculations
                                ! in the dynamic core.
-  real :: conv2watt, conv2salt
+  real :: conv2watt            ! A conversion factor from temperature fluxes to heat
+                               ! fluxes [J m-2 H-1 degC-1 ~> J m-3 degC-1 or J kg-1 degC-1]
+  real :: conv2salt            ! A conversion factor for salt fluxes [m H-1 ~> 1] or [kg m-2 H-1 ~> 1]
   real :: RL2_T2_rescale, Z_rescale, QRZ_rescale ! Unit conversion factors
   character(len=48) :: flux_units, S_flux_units
 
@@ -2156,7 +2185,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
     CS%G => G_in
   endif
 
-  ! TODO: It is unlikey that test_grid_copy and rotate_index would work at the
+  ! TODO: It is unlikely that test_grid_copy and rotate_index would work at the
   !   same time.  It may be possible to enable both but for now we prevent it.
   if (test_grid_copy .and. CS%rotate_index) &
     call MOM_error(FATAL, "Grid cannot be copied during index rotation.")
@@ -2196,7 +2225,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
     call rotate_hor_index(HI_in, turns, HI)
     ! NOTE: If indices are rotated, then G and G_in must both be initialized separately, and
     ! the dynamic grid must be created to handle the grid rotation. G%domain has already been
-    ! initialzed above.
+    ! initialized above.
     call MOM_grid_init(G, param_file, US, HI, bathymetry_at_vel=bathy_at_vel)
     call create_dyn_horgrid(dG, HI, bathymetry_at_vel=bathy_at_vel)
     call clone_MOM_domain(G%Domain, dG%Domain)
@@ -2327,6 +2356,13 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   ALLOC_(CS%eta_av_bc(isd:ied,jsd:jed)) ; CS%eta_av_bc(:,:) = 0.0 ! -G%Z_ref
   CS%time_in_cycle = 0.0 ; CS%time_in_thermo_cycle = 0.0
 
+  !allocate porous topography variables
+  ALLOC_(CS%por_face_areaU(IsdB:IedB,jsd:jed,nz)) ; CS%por_face_areaU(:,:,:) = 1.0
+  ALLOC_(CS%por_face_areaV(isd:ied,JsdB:JedB,nz)) ; CS%por_face_areaV(:,:,:) = 1.0
+  ALLOC_(CS%por_layer_widthU(IsdB:IedB,jsd:jed,nz+1)) ; CS%por_layer_widthU(:,:,:) = 1.0
+  ALLOC_(CS%por_layer_widthV(isd:ied,JsdB:JedB,nz+1)) ; CS%por_layer_widthV(:,:,:) = 1.0
+  CS%pbv%por_face_areaU => CS%por_face_areaU; CS%pbv%por_face_areaV=> CS%por_face_areaV
+  CS%pbv%por_layer_widthU => CS%por_layer_widthU; CS%pbv%por_layer_widthV => CS%por_layer_widthV
   ! Use the Wright equation of state by default, unless otherwise specified
   ! Note: this line and the following block ought to be in a separate
   ! initialization routine for tv.
@@ -2647,7 +2683,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
               CS%dt, CS%ADp, CS%CDp, MOM_internal_state, CS%VarMix, CS%MEKE, &
               CS%thickness_diffuse_CSp,                                      &
               CS%OBC, CS%update_OBC_CSp, CS%ALE_CSp, CS%set_visc_CSp,        &
-              CS%visc, dirs, CS%ntrunc, calc_dtbt=calc_dtbt, cont_stencil=CS%cont_stencil)
+              CS%visc, dirs, CS%ntrunc, CS%pbv, calc_dtbt=calc_dtbt, cont_stencil=CS%cont_stencil)
     if (CS%dtbt_reset_period > 0.0) then
       CS%dtbt_reset_interval = real_to_time(CS%dtbt_reset_period)
       ! Set dtbt_reset_time to be the next even multiple of dtbt_reset_interval.
@@ -3113,7 +3149,7 @@ subroutine extract_surface_state(CS, sfc_state_in)
                              !! calculation of properties of the uppermost ocean [nondim] or [Z H-1 ~> 1 or m3 kg-1]
                              !  After the ANSWERS_2018 flag has been obsoleted, H_rescale will be 1.
   real :: delT(SZI_(CS%G))   !< Depth integral of T-T_freeze [Z degC ~> m degC]
-  logical :: use_temperature !< If true, temp and saln used as state variables.
+  logical :: use_temperature !< If true, temperature and salinity are used as state variables.
   integer :: i, j, k, is, ie, js, je, nz, numberOfErrors, ig, jg
   integer :: isd, ied, jsd, jed
   integer :: iscB, iecB, jscB, jecB, isdB, iedB, jsdB, jedB
@@ -3499,10 +3535,18 @@ end subroutine extract_surface_state
 !> Rotate initialization fields from input to rotated arrays.
 subroutine rotate_initial_state(u_in, v_in, h_in, T_in, S_in, &
     use_temperature, turns, u, v, h, T, S)
-  real, dimension(:,:,:), intent(in) :: u_in, v_in, h_in, T_in, S_in
-  logical, intent(in) :: use_temperature
-  integer, intent(in) :: turns
-  real, dimension(:,:,:), intent(out) :: u, v, h, T, S
+  real, dimension(:,:,:), intent(in)  :: u_in  !< Zonal velocity on the initial grid [L T-1 ~> m s-1]
+  real, dimension(:,:,:), intent(in)  :: v_in  !< Meridional velocity on the initial grid [L T-1 ~> m s-1]
+  real, dimension(:,:,:), intent(in)  :: h_in  !< Layer thickness on the initial grid [H ~> m or kg m-2]
+  real, dimension(:,:,:), intent(in)  :: T_in  !< Temperature on the initial grid [degC]
+  real, dimension(:,:,:), intent(in)  :: S_in  !< Salinity on the initial grid [ppt]
+  logical,                intent(in)  :: use_temperature !< If true, temperature and salinity are active
+  integer,                intent(in)  :: turns !< The number quarter-turns to apply
+  real, dimension(:,:,:), intent(out) :: u     !< Zonal velocity on the rotated grid [L T-1 ~> m s-1]
+  real, dimension(:,:,:), intent(out) :: v     !< Meridional velocity on the rotated grid [L T-1 ~> m s-1]
+  real, dimension(:,:,:), intent(out) :: h     !< Layer thickness on the rotated grid [H ~> m or kg m-2]
+  real, dimension(:,:,:), intent(out) :: T     !< Temperature on the rotated grid [degC]
+  real, dimension(:,:,:), intent(out) :: S     !< Salinity on the rotated grid [ppt]
 
   call rotate_vector(u_in, v_in, turns, u, v)
   call rotate_array(h_in, turns, h)
@@ -3580,6 +3624,10 @@ subroutine MOM_end(CS)
   call MOM_sum_output_end(CS%sum_output_CSp)
 
   if (CS%use_ALE_algorithm) call ALE_end(CS%ALE_CSp)
+
+  !deallocate porous topography variables
+  DEALLOC_(CS%por_face_areaU) ; DEALLOC_(CS%por_face_areaV)
+  DEALLOC_(CS%por_layer_widthU) ; DEALLOC_(CS%por_layer_widthV)
 
   ! NOTE: Allocated in PressureForce_FV_Bouss
   if (associated(CS%tv%varT)) deallocate(CS%tv%varT)
@@ -3819,29 +3867,48 @@ end subroutine MOM_end
 !!
 !! \verbatim
 !!        ../MOM
+!!        |-- ac
 !!        |-- config_src
-!!        |   |-- coupled_driver
-!!        |   |-- dynamic
-!!        |   `-- solo_driver
-!!        |-- examples
-!!        |   |-- CM2G
+!!        |   |-- drivers
+!!        |   !   |-- FMS_cap
+!!        |   !   |-- ice_solo_driver
+!!        |   !   |-- mct_cap
+!!        |   !   |-- nuopc_cap
+!!        |   !   |-- solo_driver
+!!        |   !   `-- unit_drivers
+!!        |   |-- external
+!!        |   !   |-- drifters
+!!        |   !   |-- GFDL_ocean_BGC
+!!        |   !   `-- ODA_hooks
+!!        |   |-- infra
+!!        |   !   |-- FMS1
+!!        |   !   `-- FMS2
+!!        |   `-- memory
+!!        |   !   |-- dynamic_nonsymmetric
+!!        |   !   `-- dynamic_symmetric
+!!        |-- docs
+!!        |-- pkg
+!!        |   |-- CVMix-src
 !!        |   |-- ...
-!!        |   `-- torus_advection_test
+!!        |   `-- MOM6_DA_hooks
 !!        `-- src
+!!            |-- ALE
 !!            |-- core
 !!            |-- diagnostics
 !!            |-- equation_of_state
 !!            |-- framework
 !!            |-- ice_shelf
 !!            |-- initialization
+!!            |-- ocean_data_assim
 !!            |-- parameterizations
+!!            |   |-- CVMix
 !!            |   |-- lateral
 !!            |   `-- vertical
 !!            |-- tracer
 !!            `-- user
 !! \endverbatim
 !!
-!!  Rather than describing each file here, each directory contents
+!!  Rather than describing each file here, selected directory contents
 !!  will be described to give a broad overview of the MOM code
 !!  structure.
 !!
@@ -3850,27 +3917,35 @@ end subroutine MOM_end
 !!  Only one or two of these directories are used in compiling any,
 !!  particular run.
 !!
-!!  * config_src/coupled_driver:
+!!  * config_src/drivers/FMS-cap:
 !!    The files here are used to couple MOM as a component in a larger
 !!    run driven by the FMS coupler.  This includes code that converts
 !!    various forcing fields into the code structures and flux and unit
 !!    conventions used by MOM, and converts the MOM surface fields
 !!    back to the forms used by other FMS components.
 !!
-!!  * config_src/dynamic:
-!!    The only file here is the version of MOM_memory.h that is used
-!!    for dynamic memory configurations of MOM.
+!!  * config_src/drivers/nuopc-cap:
+!!    The files here are used to couple MOM as a component in a larger
+!!    run driven by the NUOPC coupler.  This includes code that converts
+!!    various forcing fields into the code structures and flux and unit
+!!    conventions used by MOM, and converts the MOM surface fields
+!!    back to the forms used by other NUOPC components.
 !!
-!!  * config_src/solo_driver:
+!!  * config_src/drivers/solo_driver:
 !!    The files here are include the _main driver that is used when
 !!    MOM is configured as an ocean-only model, as well as the files
 !!    that specify the surface forcing in this configuration.
 !!
-!!    The directories under examples provide a large number of working
-!!  configurations of MOM, along with reference solutions for several
-!!  different compilers on GFDL's latest large computer.  The versions
-!!  of MOM_memory.h in these directories need not be used if dynamic
-!!  memory allocation is desired, and the answers should be unchanged.
+!!  * config_src/external:
+!!    The files here are mostly just stubs, so that MOM6 can compile
+!!    with calls to the public interfaces external packages, but
+!!    without actually requiring those packages themselves.  In more
+!!    elaborate configurations, would be linked to the actual code for
+!!    those external packages rather than these simple stubs.
+!!
+!!  * config_src/memory/dynamic-symmetric:
+!!    The only file here is the version of MOM_memory.h that is used
+!!    for dynamic memory configurations of MOM.
 !!
 !!    The directories under src contain most of the MOM files.  These
 !!  files are used in every configuration using MOM.
@@ -3883,7 +3958,7 @@ end subroutine MOM_end
 !!    subroutine argument lists.
 !!
 !!  * src/diagnostics:
-!!    The files here calculate various diagnostics that are anciliary
+!!    The files here calculate various diagnostics that are ancilliary
 !!    to the model itself.  While most of these diagnostics do not
 !!    directly affect the model's solution, there are some, like the
 !!    calculation of the deformation radius, that are used in some
@@ -3940,13 +4015,19 @@ end subroutine MOM_end
 !!  to build an appropriate makefile, and path_names should be edited
 !!  to reflect the actual location of the desired source code.
 !!
+!!    The separate MOM-examples git repository provides a large number
+!!  of working configurations of MOM, along with reference solutions for several
+!!  different compilers on GFDL's latest large computer.  The versions
+!!  of MOM_memory.h in these directories need not be used if dynamic
+!!  memory allocation is desired, and the answers should be unchanged.
+!!
 !!
 !!  There are 3 publicly visible subroutines in this file (MOM.F90).
 !!  * step_MOM steps MOM over a specified interval of time.
 !!  * MOM_initialize calls initialize and does other initialization
 !!    that does not warrant user modification.
 !!  * extract_surface_state determines the surface (bulk mixed layer
-!!    if traditional isoycnal vertical coordinate) properties of the
+!!    if traditional isopycnal vertical coordinate) properties of the
 !!    current model state and packages pointers to these fields into an
 !!    exported structure.
 !!

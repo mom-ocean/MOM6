@@ -26,6 +26,7 @@ public wave_speed, wave_speeds, wave_speed_init, wave_speed_set_param
 
 !> Control structure for MOM_wave_speed
 type, public :: wave_speed_CS ; private
+  logical :: initialized = .false.     !< True if this control structure has been initialized.
   logical :: use_ebt_mode = .false.    !< If true, calculate the equivalent barotropic wave speed instead
                                        !! of the first baroclinic wave speed.
                                        !! This parameter controls the default behavior of wave_speed() which
@@ -145,6 +146,9 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, mono_
   real :: mode_struct(SZK_(GV)), ms_min, ms_max, ms_sq
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
+
+  if (.not. CS%initialized) call MOM_error(FATAL, "MOM_wave_speed: "// &
+           "Module must be initialized before it is used.")
 
   if (present(full_halos)) then ; if (full_halos) then
     is = G%isd ; ie = G%ied ; js = G%jsd ; je = G%jed
@@ -619,7 +623,7 @@ subroutine tdma6(n, a, c, lam, y)
     endif
     yy(k) = y(k) + a(k) * yy(k-1) * I_beta(k-1)
   enddo
-  ! The units of y change by a factor of [L2 T-2] in the following lines.
+  ! The units of y change by a factor of [L2 T-2 ~> m2 s-2] in the following lines.
   y(n) = yy(n) * I_beta(n)
   do k = n-1, 1, -1
     y(k) = ( yy(k) + c(k) * y(k+1) ) * I_beta(k)
@@ -721,6 +725,11 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, full_halos)
   integer :: i, j, k, k2, itt, is, ie, js, je, nz, row, iint, m, ig, jg
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
+
+  if (present(CS)) then
+    if (.not. CS%initialized) call MOM_error(FATAL, "MOM_wave_speed: "// &
+           "Module must be initialized before it is used.")
+  endif
 
   if (present(full_halos)) then ; if (full_halos) then
     is = G%isd ; ie = G%ied ; js = G%jsd ; je = G%jed
@@ -1184,6 +1193,8 @@ subroutine wave_speed_init(CS, use_ebt_mode, mono_N2_column_fraction, mono_N2_de
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
   character(len=40)  :: mdl = "MOM_wave_speed"  ! This module's name.
+
+  CS%initialized = .true.
 
   ! Write all relevant parameters to the model log.
   call log_version(mdl, version)

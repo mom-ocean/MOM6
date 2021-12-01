@@ -71,6 +71,10 @@ subroutine copy_dyngrid_to_MOM_grid(dG, oG, US)
     oG%dyCu(I,j) = dG%dyCu(I+ido,j+jdo)
     oG%dy_Cu(I,j) = dG%dy_Cu(I+ido,j+jdo)
 
+    oG%porous_DminU(I,j) = dG%porous_DminU(I+ido,j+jdo) - oG%Z_ref
+    oG%porous_DmaxU(I,j) = dG%porous_DmaxU(I+ido,j+jdo) - oG%Z_ref
+    oG%porous_DavgU(I,j) = dG%porous_DavgU(I+ido,j+jdo) - oG%Z_ref
+
     oG%mask2dCu(I,j) = dG%mask2dCu(I+ido,j+jdo)
     oG%areaCu(I,j) = dG%areaCu(I+ido,j+jdo)
     oG%IareaCu(I,j) = dG%IareaCu(I+ido,j+jdo)
@@ -82,6 +86,10 @@ subroutine copy_dyngrid_to_MOM_grid(dG, oG, US)
     oG%dxCv(i,J) = dG%dxCv(i+ido,J+jdo)
     oG%dyCv(i,J) = dG%dyCv(i+ido,J+jdo)
     oG%dx_Cv(i,J) = dG%dx_Cv(i+ido,J+jdo)
+
+    oG%porous_DminV(i,J) = dG%porous_DminV(i+ido,J+jdo) - oG%Z_ref
+    oG%porous_DmaxV(i,J) = dG%porous_DmaxV(i+ido,J+jdo) - oG%Z_ref
+    oG%porous_DavgV(i,J) = dG%porous_DavgV(i+ido,J+jdo) - oG%Z_ref
 
     oG%mask2dCv(i,J) = dG%mask2dCv(i+ido,J+jdo)
     oG%areaCv(i,J) = dG%areaCv(i+ido,J+jdo)
@@ -126,7 +134,8 @@ subroutine copy_dyngrid_to_MOM_grid(dG, oG, US)
   oG%areaT_global = dG%areaT_global ; oG%IareaT_global = dG%IareaT_global
   oG%south_lat = dG%south_lat ; oG%west_lon  = dG%west_lon
   oG%len_lat = dG%len_lat ; oG%len_lon = dG%len_lon
-  oG%Rad_Earth = dG%Rad_Earth ; oG%max_depth = dG%max_depth
+  oG%Rad_Earth = dG%Rad_Earth ; oG%Rad_Earth_L = dG%Rad_Earth_L
+  oG%max_depth = dG%max_depth
 
 ! Update the halos in case the dynamic grid has smaller halos than the ocean grid.
   call pass_var(oG%areaT, oG%Domain)
@@ -216,6 +225,10 @@ subroutine copy_MOM_grid_to_dyngrid(oG, dG, US)
     dG%dyCu(I,j) = oG%dyCu(I+ido,j+jdo)
     dG%dy_Cu(I,j) = oG%dy_Cu(I+ido,j+jdo)
 
+    dG%porous_DminU(I,j) = oG%porous_DminU(I+ido,j+jdo) + oG%Z_ref
+    dG%porous_DmaxU(I,j) = oG%porous_DmaxU(I+ido,j+jdo) + oG%Z_ref
+    dG%porous_DavgU(I,j) = oG%porous_DavgU(I+ido,j+jdo) + oG%Z_ref
+
     dG%mask2dCu(I,j) = oG%mask2dCu(I+ido,j+jdo)
     dG%areaCu(I,j) = oG%areaCu(I+ido,j+jdo)
     dG%IareaCu(I,j) = oG%IareaCu(I+ido,j+jdo)
@@ -227,6 +240,10 @@ subroutine copy_MOM_grid_to_dyngrid(oG, dG, US)
     dG%dxCv(i,J) = oG%dxCv(i+ido,J+jdo)
     dG%dyCv(i,J) = oG%dyCv(i+ido,J+jdo)
     dG%dx_Cv(i,J) = oG%dx_Cv(i+ido,J+jdo)
+
+    dG%porous_DminV(i,J) = oG%porous_DminU(i+ido,J+jdo) + oG%Z_ref
+    dG%porous_DmaxV(i,J) = oG%porous_DmaxU(i+ido,J+jdo) + oG%Z_ref
+    dG%porous_DavgV(i,J) = oG%porous_DavgU(i+ido,J+jdo) + oG%Z_ref
 
     dG%mask2dCv(i,J) = oG%mask2dCv(i+ido,J+jdo)
     dG%areaCv(i,J) = oG%areaCv(i+ido,J+jdo)
@@ -272,7 +289,8 @@ subroutine copy_MOM_grid_to_dyngrid(oG, dG, US)
   dG%areaT_global = oG%areaT_global ; dG%IareaT_global = oG%IareaT_global
   dG%south_lat = oG%south_lat ; dG%west_lon  = oG%west_lon
   dG%len_lat = oG%len_lat ; dG%len_lon = oG%len_lon
-  dG%Rad_Earth = oG%Rad_Earth ; dG%max_depth = oG%max_depth
+  dG%Rad_Earth = oG%Rad_Earth ; dG%Rad_Earth_L = oG%Rad_Earth_L
+  dG%max_depth = oG%max_depth
 
 ! Update the halos in case the dynamic grid has smaller halos than the ocean grid.
   call pass_var(dG%areaT, dG%Domain)
