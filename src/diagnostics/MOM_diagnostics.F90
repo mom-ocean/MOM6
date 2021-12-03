@@ -9,6 +9,8 @@ use MOM_coms,              only : reproducing_sum
 use MOM_coupler_types,     only : coupler_type_send_data
 use MOM_density_integrals, only : int_density_dz
 use MOM_diag_mediator,     only : post_data, get_diag_time_end
+use MOM_diag_mediator,     only : post_product_u, post_product_sum_u
+use MOM_diag_mediator,     only : post_product_v, post_product_sum_v
 use MOM_diag_mediator,     only : register_diag_field, register_scalar_field
 use MOM_diag_mediator,     only : register_static_field, diag_register_area_ids
 use MOM_diag_mediator,     only : diag_ctrl, time_type, safe_alloc_ptr
@@ -226,8 +228,6 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
                                                  !! previous call to diagnostics_init.
 
   ! Local variables
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: usq ! squared eastward velocity  [L2 T-2 ~> m2 s-2]
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)) :: vsq ! squared northward velocity [L2 T-2 ~> m2 s-2]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G))  :: uv  ! u x v at h-points          [L2 T-2 ~> m2 s-2]
 
   integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state
@@ -237,12 +237,6 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
   real :: work_3d(SZI_(G),SZJ_(G),SZK_(GV)) ! A 3-d temporary work array.
   real :: work_2d(SZI_(G),SZJ_(G))         ! A 2-d temporary work array.
   real :: rho_in_situ(SZI_(G))             ! In situ density [R ~> kg m-3]
-
-  real, allocatable, dimension(:,:) :: &
-    hf_du_dt_2d, hf_dv_dt_2d ! z integeral of hf_du_dt, hf_dv_dt [L T-2 ~> m s-2].
-
-  real, allocatable, dimension(:,:,:) :: h_du_dt ! h x dudt [H L T-2 ~> m2 s-2]
-  real, allocatable, dimension(:,:,:) :: h_dv_dt ! h x dvdt [H L T-2 ~> m2 s-2]
 
   ! tmp array for surface properties
   real :: surface_field(SZI_(G),SZJ_(G))
@@ -278,70 +272,32 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
     call diag_copy_storage_to_diag(CS%diag, diag_pre_sync)
 
     if (CS%id_h_pre_sync > 0) &
-        call post_data(CS%id_h_pre_sync, diag_pre_sync%h_state, CS%diag, alt_h = diag_pre_sync%h_state)
+        call post_data(CS%id_h_pre_sync, diag_pre_sync%h_state, CS%diag, alt_h=diag_pre_sync%h_state)
 
-    if (CS%id_du_dt>0) call post_data(CS%id_du_dt, CS%du_dt, CS%diag, alt_h = diag_pre_sync%h_state)
+    if (CS%id_du_dt>0) call post_data(CS%id_du_dt, CS%du_dt, CS%diag, alt_h=diag_pre_sync%h_state)
 
-    if (CS%id_dv_dt>0) call post_data(CS%id_dv_dt, CS%dv_dt, CS%diag, alt_h = diag_pre_sync%h_state)
+    if (CS%id_dv_dt>0) call post_data(CS%id_dv_dt, CS%dv_dt, CS%diag, alt_h=diag_pre_sync%h_state)
 
-    if (CS%id_dh_dt>0) call post_data(CS%id_dh_dt, CS%dh_dt, CS%diag, alt_h = diag_pre_sync%h_state)
+    if (CS%id_dh_dt>0) call post_data(CS%id_dh_dt, CS%dh_dt, CS%diag, alt_h=diag_pre_sync%h_state)
 
     !! Diagnostics for terms multiplied by fractional thicknesses
 
     ! 3D diagnostics hf_du(dv)_dt are commented because there is no clarity on proper remapping grid option.
-    ! The code is retained for degugging purposes in the future.
+    ! The code is retained for debugging purposes in the future.
     !if (CS%id_hf_du_dt > 0) then
-    !  do k=1,nz ; do j=js,je ; do I=Isq,Ieq
-    !    CS%hf_du_dt(I,j,k) = CS%du_dt(I,j,k) * ADp%diag_hfrac_u(I,j,k)
-    !  enddo ; enddo ; enddo
-    !  call post_data(CS%id_hf_du_dt, CS%hf_du_dt, CS%diag, alt_h = diag_pre_sync%h_state)
-    !endif
+    !  call post_product_u(CS%id_hf_du_dt, CS%du_dt, ADp%diag_hfrac_u, G, nz, CS%diag, alt_h=diag_pre_sync%h_state)
+    !if (CS%id_hf_dv_dt > 0) &
+    !  call post_product_v(CS%id_hf_dv_dt, CS%dv_dt, ADp%diag_hfrac_v, G, nz, CS%diag, alt_h=diag_pre_sync%h_state)
 
-    !if (CS%id_hf_dv_dt > 0) then
-    !  do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
-    !    CS%hf_dv_dt(i,J,k) = CS%dv_dt(i,J,k) * ADp%diag_hfrac_v(i,J,k)
-    !  enddo ; enddo ; enddo
-    !  call post_data(CS%id_hf_dv_dt, CS%hf_dv_dt, CS%diag, alt_h = diag_pre_sync%h_state)
-    !endif
+    if (CS%id_hf_du_dt_2d > 0) &
+      call post_product_sum_u(CS%id_hf_du_dt_2d, CS%du_dt, ADp%diag_hfrac_u, G, nz, CS%diag)
+    if (CS%id_hf_dv_dt_2d > 0) &
+      call post_product_sum_v(CS%id_hf_dv_dt_2d, CS%dv_dt, ADp%diag_hfrac_v, G, nz, CS%diag)
 
-    if (CS%id_hf_du_dt_2d > 0) then
-      allocate(hf_du_dt_2d(G%IsdB:G%IedB,G%jsd:G%jed))
-      hf_du_dt_2d(:,:) = 0.0
-      do k=1,nz ; do j=js,je ; do I=Isq,Ieq
-        hf_du_dt_2d(I,j) = hf_du_dt_2d(I,j) + CS%du_dt(I,j,k) * ADp%diag_hfrac_u(I,j,k)
-      enddo ; enddo ; enddo
-      call post_data(CS%id_hf_du_dt_2d, hf_du_dt_2d, CS%diag)
-      deallocate(hf_du_dt_2d)
-    endif
-
-    if (CS%id_hf_dv_dt_2d > 0) then
-      allocate(hf_dv_dt_2d(G%isd:G%ied,G%JsdB:G%JedB))
-      hf_dv_dt_2d(:,:) = 0.0
-      do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
-        hf_dv_dt_2d(i,J) = hf_dv_dt_2d(i,J) + CS%dv_dt(i,J,k) * ADp%diag_hfrac_v(i,J,k)
-      enddo ; enddo ; enddo
-      call post_data(CS%id_hf_dv_dt_2d, hf_dv_dt_2d, CS%diag)
-      deallocate(hf_dv_dt_2d)
-    endif
-
-    if (CS%id_h_du_dt > 0) then
-      allocate(h_du_dt(G%IsdB:G%IedB,G%jsd:G%jed,GV%ke))
-      h_du_dt(:,:,:) = 0.0
-      do k=1,nz ; do j=js,je ; do I=Isq,Ieq
-        h_du_dt(I,j,k) = CS%du_dt(I,j,k) * ADp%diag_hu(I,j,k)
-      enddo ; enddo ; enddo
-      call post_data(CS%id_h_du_dt, h_du_dt, CS%diag)
-      deallocate(h_du_dt)
-    endif
-    if (CS%id_h_dv_dt > 0) then
-      allocate(h_dv_dt(G%isd:G%ied,G%JsdB:G%JedB,GV%ke))
-      h_dv_dt(:,:,:) = 0.0
-      do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
-        h_dv_dt(i,J,k) = CS%dv_dt(i,J,k) * ADp%diag_hv(i,J,k)
-      enddo ; enddo ; enddo
-      call post_data(CS%id_h_dv_dt, h_dv_dt, CS%diag)
-      deallocate(h_dv_dt)
-    endif
+    if (CS%id_h_du_dt > 0) &
+      call post_product_u(CS%id_h_du_dt, CS%du_dt, ADp%diag_hu, G, nz, CS%diag)
+    if (CS%id_h_dv_dt > 0) &
+      call post_product_v(CS%id_h_dv_dt, CS%dv_dt, ADp%diag_hv, G, nz, CS%diag)
 
     call diag_restore_grids(CS%diag)
 
@@ -362,24 +318,14 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
 
   if (CS%id_h > 0) call post_data(CS%id_h, h, CS%diag)
 
-  if (CS%id_usq > 0) then
-    do k=1,nz ; do j=js,je ; do I=Isq,Ieq
-      usq(I,j,k) = u(I,j,k) * u(I,j,k)
-    enddo ; enddo ; enddo
-    call post_data(CS%id_usq, usq, CS%diag)
-  endif
+  if (CS%id_usq > 0) call post_product_u(CS%id_usq, u, u, G, nz, CS%diag)
 
-  if (CS%id_vsq > 0) then
-    do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
-      vsq(i,J,k) = v(i,J,k) * v(i,J,k)
-    enddo ; enddo ; enddo
-    call post_data(CS%id_vsq, vsq, CS%diag)
-  endif
+  if (CS%id_vsq > 0) call post_product_v(CS%id_vsq, v, v, G, nz, CS%diag)
 
   if (CS%id_uv > 0) then
     do k=1,nz ; do j=js,je ; do i=is,ie
       uv(i,j,k) = (0.5*(u(I-1,j,k) + u(I,j,k))) * &
-                (0.5*(v(i,J-1,k) + v(i,J,k)))
+                  (0.5*(v(i,J-1,k) + v(i,J,k)))
     enddo ; enddo ; enddo
     call post_data(CS%id_uv, uv, CS%diag)
   endif
