@@ -27,7 +27,7 @@ public USER_wind_forcing, USER_buoyancy_forcing, USER_surface_forcing_init
 !! It can be readily modified for a specific case, and because it is private there
 !! will be no changes needed in other code (although they will have to be recompiled).
 type, public :: user_surface_forcing_CS ; private
-  !   The variables in the cannonical example are used for some common
+  !   The variables in the canonical example are used for some common
   ! cases, but do not need to be used.
 
   logical :: use_temperature !< If true, temperature and salinity are used as state variables.
@@ -221,7 +221,7 @@ subroutine USER_buoyancy_forcing(sfc_state, fluxes, day, dt, G, US, CS)
       buoy_rest_const = -1.0 * (CS%G_Earth * CS%Flux_const) / CS%Rho0
       do j=js,je ; do i=is,ie
        !   Set density_restore to an expression for the surface potential
-       ! density [kg m-3] that is being restored toward.
+       ! density [R ~> kg m-3] that is being restored toward.
         density_restore = 1030.0*US%kg_m3_to_R
 
         fluxes%buoy(i,j) = G%mask2dT(i,j) * buoy_rest_const * &

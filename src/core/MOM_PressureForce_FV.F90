@@ -199,7 +199,7 @@ subroutine PressureForce_FV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_
 
   if (use_EOS) then
   !   With a bulk mixed layer, replace the T & S of any layers that are
-  ! lighter than the the buffer layer with the properties of the buffer
+  ! lighter than the buffer layer with the properties of the buffer
   ! layer.  These layers will be massless anyway, and it avoids any
   ! formal calculations with hydrostatically unstable profiles.
     if (nkmb>0) then
@@ -230,7 +230,7 @@ subroutine PressureForce_FV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_
   ! If regridding is activated, do a linear reconstruction of salinity
   ! and temperature across each layer. The subscripts 't' and 'b' refer
   ! to top and bottom values within each layer (these are the only degrees
-  ! of freedeom needed to know the linear profile).
+  ! of freedom needed to know the linear profile).
   if ( use_ALE ) then
     if ( CS%Recon_Scheme == 1 ) then
       call TS_PLM_edge_values(ALE_CSp, S_t, S_b, T_t, T_b, G, GV, tv, h, CS%boundary_extrap)
@@ -595,7 +595,7 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm
 
   if (use_EOS) then
 ! With a bulk mixed layer, replace the T & S of any layers that are
-! lighter than the the buffer layer with the properties of the buffer
+! lighter than the buffer layer with the properties of the buffer
 ! layer.  These layers will be massless anyway, and it avoids any
 ! formal calculations with hydrostatically unstable profiles.
 
@@ -654,7 +654,7 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm
   ! If regridding is activated, do a linear reconstruction of salinity
   ! and temperature across each layer. The subscripts 't' and 'b' refer
   ! to top and bottom values within each layer (these are the only degrees
-  ! of freedeom needed to know the linear profile).
+  ! of freedom needed to know the linear profile).
   if ( use_ALE ) then
     if ( CS%Recon_Scheme == 1 ) then
       call TS_PLM_edge_values(ALE_CSp, S_t, S_b, T_t, T_b, G, GV, tv, h, CS%boundary_extrap)

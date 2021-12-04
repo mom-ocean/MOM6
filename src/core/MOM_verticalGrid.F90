@@ -90,7 +90,7 @@ subroutine verticalGridInit( param_file, GV, US )
 
   ! Local variables
   integer :: nk, H_power
-  real    :: H_rescale_factor
+  real    :: H_rescale_factor ! The integer power of 2 by which thicknesses are rescaled [nondim]
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
   character(len=16) :: mdl = 'MOM_verticalGrid'

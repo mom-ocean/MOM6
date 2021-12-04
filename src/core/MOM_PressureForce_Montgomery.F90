@@ -219,7 +219,7 @@ subroutine PressureForce_Mont_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm, pb
     !   Calculate in-situ specific volumes (alpha_star).
 
     !   With a bulk mixed layer, replace the T & S of any layers that are
-    ! lighter than the the buffer layer with the properties of the buffer
+    ! lighter than the buffer layer with the properties of the buffer
     ! layer.  These layers will be massless anyway, and it avoids any
     ! formal calculations with hydrostatically unstable profiles.
     if (nkmb>0) then
@@ -475,7 +475,7 @@ subroutine PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm, pbce,
 !   Calculate in-situ densities (rho_star).
 
 ! With a bulk mixed layer, replace the T & S of any layers that are
-! lighter than the the buffer layer with the properties of the buffer
+! lighter than the buffer layer with the properties of the buffer
 ! layer.  These layers will be massless anyway, and it avoids any
 ! formal calculations with hydrostatically unstable profiles.
 

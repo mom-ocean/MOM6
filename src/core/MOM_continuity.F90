@@ -13,7 +13,7 @@ use MOM_string_functions, only : uppercase
 use MOM_grid, only : ocean_grid_type
 use MOM_open_boundary, only : ocean_OBC_type
 use MOM_unit_scaling, only : unit_scale_type
-use MOM_variables, only : BT_cont_type
+use MOM_variables, only : BT_cont_type, porous_barrier_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
 
 implicit none ; private
@@ -39,7 +39,7 @@ contains
 
 !> Time steps the layer thicknesses, using a monotonically limited, directionally split PPM scheme,
 !! based on Lin (1994).
-subroutine continuity(u, v, hin, h, uh, vh, dt, G, GV, US, CS, OBC, uhbt, vhbt, &
+subroutine continuity(u, v, hin, h, uh, vh, dt, G, GV, US, CS, OBC, pbv, uhbt, vhbt, &
                       visc_rem_u, visc_rem_v, u_cor, v_cor, BT_cont)
   type(ocean_grid_type),   intent(inout) :: G   !< Ocean grid structure.
   type(verticalGrid_type), intent(in)    :: GV  !< Vertical grid structure.
@@ -61,6 +61,7 @@ subroutine continuity(u, v, hin, h, uh, vh, dt, G, GV, US, CS, OBC, uhbt, vhbt, 
   type(unit_scale_type),   intent(in)    :: US  !< A dimensional unit scaling type
   type(continuity_CS),     intent(in)    :: CS  !< Control structure for mom_continuity.
   type(ocean_OBC_type),    pointer       :: OBC !< Open boundaries control structure.
+  type(porous_barrier_ptrs), intent(in)  :: pbv !< porous barrier fractional cell metrics
   real, dimension(SZIB_(G),SZJ_(G)), &
                  optional, intent(in)    :: uhbt !< The vertically summed volume
                                                 !! flux through zonal faces [H L2 T-1 ~> m3 s-1 or kg s-1].
@@ -95,7 +96,7 @@ subroutine continuity(u, v, hin, h, uh, vh, dt, G, GV, US, CS, OBC, uhbt, vhbt, 
        " one must be present in call to continuity.")
 
   if (CS%continuity_scheme == PPM_SCHEME) then
-    call continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, US, CS%PPM, OBC, uhbt, vhbt, &
+    call continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, US, CS%PPM, OBC, pbv, uhbt, vhbt, &
                         visc_rem_u, visc_rem_v, u_cor, v_cor, BT_cont=BT_cont)
   else
     call MOM_error(FATAL, "continuity: Unrecognized value of continuity_scheme")
