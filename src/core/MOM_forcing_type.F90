@@ -103,13 +103,14 @@ type, public :: forcing
     vprec       => NULL(), & !< virtual liquid precip associated w/ SSS restoring [R Z T-1 ~> kg m-2 s-1]
     lrunoff     => NULL(), & !< liquid river runoff entering ocean [R Z T-1 ~> kg m-2 s-1]
     frunoff     => NULL(), & !< frozen river runoff (calving) entering ocean [R Z T-1 ~> kg m-2 s-1]
-    seaice_melt => NULL(), & !< snow/seaice melt (positive) or formation (negative) [R Z T-1 ~> kg m-2 s-1]
-    netMassIn   => NULL(), & !< Sum of water mass flux out of the ocean integrated over a
+    seaice_melt => NULL()    !< snow/seaice melt (positive) or formation (negative) [R Z T-1 ~> kg m-2 s-1]
+
+  ! Integrated water mass fluxes into the ocean, used for passive tracer sources [H ~> m or kg m-2]
+  real, pointer, dimension(:,:) :: &
+    netMassIn   => NULL(), & !< Sum of water mass fluxes into the ocean integrated over a
                              !! forcing timestep [H ~> m or kg m-2]
-    netMassOut  => NULL(), & !< Net water mass flux into of the ocean integrated over a
-                             !! forcing timestep [H ~> m or kg m-2]
-    !### Net salt is used with inconsistent units and only in one place and should be eliminated as unneeded.
-    netSalt     => NULL()    !< Net salt entering the ocean [kgSalt m-2 s-1]
+    netMassOut  => NULL()    !< Net water mass flux out of the ocean integrated over a forcing timestep,
+                             !! with negative values for water leaving the ocean [H ~> m or kg m-2]
 
   ! heat associated with water crossing ocean surface
   real, pointer, dimension(:,:) :: &
@@ -732,12 +733,6 @@ subroutine extractFluxes1d(G, GV, US, fluxes, optics, nsw, j, dt, &
 
     ! Diagnostics follow...
     if (calculate_diags) then
-
-      ! Store Net_salt for unknown reason?
-      if (associated(fluxes%salt_flux)) then
-        ! This seems like a bad idea to me. -RWH
-        if (calculate_diags) fluxes%netSalt(i,j) = US%kg_m2s_to_RZ_T*Net_salt(i)
-      endif
 
       ! Initialize heat_content_massin that is diagnosed in mixedlayer_convection or
       ! applyBoundaryFluxes such that the meaning is as the sum of all incoming components.
@@ -2977,7 +2972,6 @@ subroutine allocate_forcing_by_group(G, fluxes, water, heat, ustar, press, &
   call myAlloc(fluxes%seaice_melt,isd,ied,jsd,jed, water)
   call myAlloc(fluxes%netMassOut,isd,ied,jsd,jed, water)
   call myAlloc(fluxes%netMassIn,isd,ied,jsd,jed, water)
-  call myAlloc(fluxes%netSalt,isd,ied,jsd,jed, water)
   call myAlloc(fluxes%seaice_melt_heat,isd,ied,jsd,jed, heat)
   call myAlloc(fluxes%sw,isd,ied,jsd,jed, heat)
   call myAlloc(fluxes%lw,isd,ied,jsd,jed, heat)
@@ -3264,6 +3258,8 @@ subroutine deallocate_forcing_type(fluxes)
   if (associated(fluxes%lrunoff))              deallocate(fluxes%lrunoff)
   if (associated(fluxes%frunoff))              deallocate(fluxes%frunoff)
   if (associated(fluxes%seaice_melt))          deallocate(fluxes%seaice_melt)
+  if (associated(fluxes%netMassOut))           deallocate(fluxes%netMassOut)
+  if (associated(fluxes%netMassIn))            deallocate(fluxes%netMassIn)
   if (associated(fluxes%salt_flux))            deallocate(fluxes%salt_flux)
   if (associated(fluxes%p_surf_full))          deallocate(fluxes%p_surf_full)
   if (associated(fluxes%p_surf))               deallocate(fluxes%p_surf)
@@ -3332,7 +3328,6 @@ subroutine rotate_forcing(fluxes_in, fluxes, turns)
     call rotate_array(fluxes_in%seaice_melt, turns, fluxes%seaice_melt)
     call rotate_array(fluxes_in%netMassOut, turns, fluxes%netMassOut)
     call rotate_array(fluxes_in%netMassIn, turns, fluxes%netMassIn)
-    call rotate_array(fluxes_in%netSalt, turns, fluxes%netSalt)
   endif
 
   if (do_heat) then
