@@ -304,6 +304,16 @@ type, public :: BT_cont_type
   type(group_pass_type) :: pass_FA_uv !< Structure for face area group halo updates
 end type BT_cont_type
 
+
+!> pointers to grids modifying cell metric at porous barriers
+type, public :: porous_barrier_ptrs
+   real, pointer, dimension(:,:,:) :: por_face_areaU => NULL() !< fractional open area of U-faces [nondim]
+   real, pointer, dimension(:,:,:) :: por_face_areaV => NULL() !< fractional open area of V-faces [nondim]
+   real, pointer, dimension(:,:,:) :: por_layer_widthU => NULL() !< fractional open width of U-faces [nondim]
+   real, pointer, dimension(:,:,:) :: por_layer_widthV => NULL() !< fractional open width of V-faces [nondim]
+end type porous_barrier_ptrs
+
+
 contains
 
 !> Allocates the fields for the surface (return) properties of

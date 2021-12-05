@@ -40,9 +40,9 @@ contains
 subroutine DOME_initialize_topography(D, G, param_file, max_depth, US)
   type(dyn_horgrid_type),          intent(in)  :: G !< The dynamic horizontal grid type
   real, dimension(G%isd:G%ied,G%jsd:G%jed), &
-                                   intent(out) :: D !< Ocean bottom depth in m or Z if US is present
+                                   intent(out) :: D !< Ocean bottom depth in [m] or [Z ~> m] if US is present
   type(param_file_type),           intent(in)  :: param_file !< Parameter file structure
-  real,                            intent(in)  :: max_depth !< Maximum model depth in the units of D
+  real,                            intent(in)  :: max_depth !< Maximum model depth [m] or [Z ~> m]
   type(unit_scale_type), optional, intent(in)  :: US !< A dimensional unit scaling type
 
   ! Local variables
@@ -139,18 +139,16 @@ end subroutine DOME_initialize_thickness
 ! -----------------------------------------------------------------------------
 
 ! -----------------------------------------------------------------------------
-!> This subroutine sets the inverse restoration time (Idamp), and     !
-!! the values towards which the interface heights and an arbitrary    !
-!! number of tracers should be restored within each sponge. The       !
-!! interface height is always subject to damping, and must always be  !
-!! the first registered field.                                        !
+!> This subroutine sets the inverse restoration time (Idamp), and the values
+!! toward which the interface heights and an arbitrary number of tracers will be
+!! restored within the sponges for the DOME configuration.                                        !
 subroutine DOME_initialize_sponges(G, GV, US, tv, depth_tot, PF, CSp)
   type(ocean_grid_type),   intent(in) :: G    !< The ocean's grid structure.
   type(verticalGrid_type), intent(in) :: GV   !< The ocean's vertical grid structure.
   type(unit_scale_type),   intent(in) :: US   !< A dimensional unit scaling type
-  type(thermo_var_ptrs),   intent(in) :: tv   !< A structure containing pointers to any available
-                                !! thermodynamic fields, including potential temperature and
-                                !! salinity or mixed layer density. Absent fields have NULL ptrs.
+  type(thermo_var_ptrs),   intent(in) :: tv   !< A structure containing any available
+                                              !! thermodynamic fields, including potential
+                                              !! temperature and salinity or mixed layer density.
   real, dimension(SZI_(G),SZJ_(G)), &
                            intent(in) :: depth_tot  !< The nominal total depth of the ocean [Z ~> m]
   type(param_file_type),   intent(in) :: PF   !< A structure indicating the open file to
@@ -159,12 +157,15 @@ subroutine DOME_initialize_sponges(G, GV, US, tv, depth_tot, PF, CSp)
                                               !! structure for this module.
 
   real :: eta(SZI_(G),SZJ_(G),SZK_(GV)+1) ! A temporary array for interface heights [Z ~> m].
-  real :: temp(SZI_(G),SZJ_(G),SZK_(GV)) ! A temporary array for other variables. !
-  real :: Idamp(SZI_(G),SZJ_(G))    ! The sponge damping rate [T-1 ~> s-1].
+  real :: temp(SZI_(G),SZJ_(G),SZK_(GV))  ! A temporary array for other variables [various]
+  real :: Idamp(SZI_(G),SZJ_(G))          ! The sponge damping rate [T-1 ~> s-1]
 
-  real :: H0(SZK_(GV)) ! Interface heights [Z ~> m].
+  real :: e_tgt(SZK_(GV)+1) ! Target interface heights [Z ~> m].
   real :: min_depth    ! The minimum depth at which to apply damping [Z ~> m]
-  real :: damp, damp_new ! Damping rates in the sponge [days]
+  real :: damp_W, damp_E  ! Damping rates in the western and eastern sponges [days-1]
+  real :: peak_damping ! The maximum sponge damping rates as the edges [days-1]
+  real :: edge_dist    ! The distance to an edge, in the same units as longitude [km]
+  real :: sponge_width ! The width of the sponges, in the same units as longitude [km]
   real :: e_dense      ! The depth of the densest interfaces [Z ~> m]
   character(len=40)  :: mdl = "DOME_initialize_sponges" ! This subroutine's name.
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz
@@ -172,66 +173,61 @@ subroutine DOME_initialize_sponges(G, GV, US, tv, depth_tot, PF, CSp)
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
-  eta(:,:,:) = 0.0 ; temp(:,:,:) = 0.0 ; Idamp(:,:) = 0.0
-
-!  Here the inverse damping time [T-1 ~> s-1], is set. Set Idamp to 0  !
-!  wherever there is no sponge, and the subroutines that are called  !
-!  will automatically set up the sponges only where Idamp is positive!
-!  and mask2dT is 1.                                                   !
-
-!   Set up sponges for DOME configuration
+  !   Set up sponges for the DOME configuration
   call get_param(PF, mdl, "MINIMUM_DEPTH", min_depth, &
                  "The minimum depth of the ocean.", units="m", default=0.0, scale=US%m_to_Z)
 
-  H0(1) = 0.0
-  do k=2,nz ; H0(k) = -(real(k-1)-0.5)*G%max_depth / real(nz-1) ; enddo
-  do j=js,je ; do i=is,ie
-    if (G%geoLonT(i,j) < 100.0) then ; damp = 10.0
-    elseif (G%geoLonT(i,j) < 200.0) then
-      damp = 10.0 * (200.0-G%geoLonT(i,j))/100.0
-    else ; damp=0.0
+  ! Here the inverse damping time [T-1 ~> s-1], is set. Set Idamp to 0 wherever
+  ! there is no sponge, and the subroutines that are called will automatically
+  ! set up the sponges only where Idamp is positive and mask2dT is 1.
+  peak_damping = 10.0  ! The maximum sponge damping rate in [days-1]
+  sponge_width = 200.0 ! The width of the sponges [km]
+  Idamp(:,:) = 0.0
+  do j=js,je ; do i=is,ie ; if (depth_tot(i,j) > min_depth) then
+    edge_dist = G%geoLonT(i,j) - G%west_lon
+    if (edge_dist < 0.5*sponge_width) then
+      damp_W = peak_damping
+    elseif (edge_dist < sponge_width) then
+      damp_W = peak_damping * (sponge_width - edge_dist) / (0.5*sponge_width)
+    else
+      damp_W = 0.0
     endif
 
-    if (G%geoLonT(i,j) > 1400.0) then ; damp_new = 10.0
-    elseif (G%geoLonT(i,j) > 1300.0) then
-      damp_new = 10.0 * (G%geoLonT(i,j)-1300.0)/100.0
-    else ; damp_new = 0.0
+    edge_dist = (G%len_lon + G%west_lon) - G%geoLonT(i,j)
+    if (edge_dist < 0.5*sponge_width) then
+      damp_E = peak_damping
+    elseif (edge_dist < sponge_width) then
+      damp_E = peak_damping * (sponge_width - edge_dist) / (0.5*sponge_width)
+    else
+      damp_E = 0.0
     endif
 
-    if (damp <= damp_new) damp = damp_new
-    damp = US%T_to_s*damp
+    Idamp(i,j) = max(damp_W, damp_E) / (86400.0 * US%s_to_T)
+  endif ; enddo ; enddo
 
-    ! These will be stretched inside of apply_sponge, so they can be in
-    ! depth space for Boussinesq or non-Boussinesq models.
-    eta(i,j,1) = 0.0
-    do k=2,nz
-!     eta(i,j,K) = max(H0(k), -depth_tot(i,j), GV%Angstrom_Z*(nz-k+1) - depth_tot(i,j))
-      e_dense = -depth_tot(i,j)
-      if (e_dense >= H0(k)) then ; eta(i,j,K) = e_dense
-      else ; eta(i,j,K) = H0(k) ; endif
-      if (eta(i,j,K) < GV%Angstrom_Z*(nz-k+1) - depth_tot(i,j)) &
-          eta(i,j,K) = GV%Angstrom_Z*(nz-k+1) - depth_tot(i,j)
-    enddo
-    eta(i,j,nz+1) = -depth_tot(i,j)
+  e_tgt(1) = 0.0
+  do K=2,nz ; e_tgt(K) = -(real(K-1)-0.5)*G%max_depth / real(nz-1) ; enddo
+  e_tgt(nz+1) = -G%max_depth
+  eta(:,:,:) = 0.0
+  do K=1,nz+1 ; do j=js,je ; do i=is,ie
+    ! These target interface heights will be rescaled inside of apply_sponge, so
+    ! they can be in depth space for Boussinesq or non-Boussinesq models.
+    eta(i,j,K) = max(e_tgt(K), GV%Angstrom_Z*(nz+1-K) - depth_tot(i,j))
+  enddo ; enddo ; enddo
 
-    if (depth_tot(i,j) > min_depth) then
-      Idamp(i,j) = damp / 86400.0
-    else ; Idamp(i,j) = 0.0 ; endif
-  enddo ; enddo
-
-!  This call sets up the damping rates and interface heights.
-!  This sets the inverse damping timescale fields in the sponges.    !
+  !  This call stores the sponge damping rates and target interface heights.
   call initialize_sponge(Idamp, eta, G, PF, CSp, GV)
 
-!   Now register all of the fields which are damped in the sponge.   !
-! By default, momentum is advected vertically within the sponge, but !
-! momentum is typically not damped within the sponge.                !
+  !   Now register all of the fields which are damped in the sponge.
+  ! By default, momentum is advected vertically within the sponge, but
+  ! momentum is typically not damped within the layer-mode sponge.
 
-! At this point, the DOME configuration is done. The following are here as a
+! At this point, the layer-mode DOME configuration is done. The following are here as a
 ! template for other configurations.
 
-!  The remaining calls to set_up_sponge_field can be in any order. !
+  !  The remaining calls to set_up_sponge_field can be in any order.
   if ( associated(tv%T) ) then
+    temp(:,:,:) = 0.0
     call MOM_error(FATAL,"DOME_initialize_sponges is not set up for use with"//&
                          " a temperatures defined.")
     ! This should use the target values of T in temp.
@@ -283,26 +279,34 @@ subroutine DOME_set_OBC_data(OBC, tv, G, GV, US, param_file, tr_Reg)
                               !! to parse for model parameter values.
   type(tracer_registry_type), pointer    :: tr_Reg !< Tracer registry.
 
-! Local variables
-  ! The following variables are used to set the target temperature and salinity.
-  real :: T0(SZK_(GV))       ! A profile of temperatures [degC]
-  real :: S0(SZK_(GV))       ! A profile of salinities [ppt]
+  ! Local variables
+  real :: T0(SZK_(GV))       ! A profile of target temperatures [degC]
+  real :: S0(SZK_(GV))       ! A profile of target salinities [ppt]
   real :: pres(SZK_(GV))     ! An array of the reference pressure [R L2 T-2 ~> Pa].
   real :: drho_dT(SZK_(GV))  ! Derivative of density with temperature [R degC-1 ~> kg m-3 degC-1].
   real :: drho_dS(SZK_(GV))  ! Derivative of density with salinity [R ppt-1 ~> kg m-3 ppt-1].
   real :: rho_guess(SZK_(GV)) ! Potential density at T0 & S0 [R ~> kg m-3].
   ! The following variables are used to set up the transport in the DOME example.
-  real :: tr_0, y1, y2, tr_k, rst, rsb, rc, v_k, lon_im1
-  real :: D_edge            ! The thickness [Z ~> m], of the dense fluid at the
-                            ! inner edge of the inflow.
-  real :: g_prime_tot       ! The reduced gravity across all layers [L2 Z-1 T-2 ~> m s-2].
-  real :: Def_Rad           ! The deformation radius, based on fluid of
-                            ! thickness D_edge, in the same units as lat [m].
+  real :: tr_0              ! The total integrated inflow transport [H L2 T-1 ~> m3 s-1 or kg s-1]
+  real :: tr_k              ! The integrated inflow transport of a layer [H L2 T-1 ~> m3 s-1 or kg s-1]
+  real :: v_k               ! The velocity of a layer at the edge [L T-1 ~> m s-1]
+  real :: yt, yb            ! The log of these variables gives the fractional velocities at the
+                            ! top and bottom of a layer [nondim]
+  real :: rst, rsb          ! The relative position of the top and bottom of a layer [nondim],
+                            ! with a range from 0 for the densest water to -1 for the lightest
+  real :: rc                ! The relative position of the center of a layer [nondim]
+  real :: lon_im1           ! An extrapolated value for the longitude of the western edge of a
+                            ! v-velocity face, in the same units as G%geoLon [km]
+  real :: D_edge            ! The thickness [Z ~> m] of the dense fluid at the
+                            ! inner edge of the inflow
+  real :: g_prime_tot       ! The reduced gravity across all layers [L2 Z-1 T-2 ~> m s-2]
+  real :: Def_Rad           ! The deformation radius, based on fluid of thickness D_edge,
+                            ! in the same units as G%geoLon [km]
   real :: Ri_trans          ! The shear Richardson number in the transition
-                            ! region of the specified shear profile.
+                            ! region of the specified shear profile [nondim]
   character(len=40)  :: mdl = "DOME_set_OBC_data" ! This subroutine's name.
   character(len=32)  :: name ! The name of a tracer field.
-  integer :: i, j, k, itt, is, ie, js, je, isd, ied, jsd, jed, m, nz
+  integer :: i, j, k, itt, is, ie, js, je, isd, ied, jsd, jed, m, nz, ntherm
   integer :: IsdB, IedB, JsdB, JedB
   type(OBC_segment_type), pointer :: segment => NULL()
   type(tracer_type), pointer      :: tr_ptr => NULL()
@@ -330,7 +334,11 @@ subroutine DOME_set_OBC_data(OBC, tv, G, GV, US, param_file, tr_Reg)
   segment => OBC%segment(1)
   if (.not. segment%on_pe) return
 
-  allocate(segment%field(tr_Reg%ntr))
+  ! Set up space for the OBCs to use for all the tracers.
+  ntherm = 0
+  if (associated(tv%S)) ntherm = ntherm + 1
+  if (associated(tv%T)) ntherm = ntherm + 1
+  allocate(segment%field(ntherm+tr_Reg%ntr))
 
   do k=1,nz
     rst = -1.0
@@ -341,10 +349,10 @@ subroutine DOME_set_OBC_data(OBC, tv, G, GV, US, param_file, tr_Reg)
     rc = -1.0 + real(k-1)/real(nz-1)
 
     ! These come from assuming geostrophy and a constant Ri profile.
-    y1 = (2.0*Ri_trans*rst + Ri_trans + 2.0)/(2.0 - Ri_trans)
-    y2 = (2.0*Ri_trans*rsb + Ri_trans + 2.0)/(2.0 - Ri_trans)
+    yt = (2.0*Ri_trans*rst + Ri_trans + 2.0)/(2.0 - Ri_trans)
+    yb = (2.0*Ri_trans*rsb + Ri_trans + 2.0)/(2.0 - Ri_trans)
     tr_k = tr_0 * (2.0/(Ri_trans*(2.0-Ri_trans))) * &
-           ((log(y1)+1.0)/y1 - (log(y2)+1.0)/y2)
+           ((log(yt)+1.0)/yt - (log(yb)+1.0)/yb)
     v_k = -sqrt(D_edge*g_prime_tot)*log((2.0 + Ri_trans*(1.0 + 2.0*rc)) / &
                                         (2.0 - Ri_trans))
     if (k == nz)  tr_k = tr_k + tr_0 * (2.0/(Ri_trans*(2.0+Ri_trans))) * &
@@ -353,6 +361,8 @@ subroutine DOME_set_OBC_data(OBC, tv, G, GV, US, param_file, tr_Reg)
     isd = segment%HI%isd ; ied = segment%HI%ied
     JsdB = segment%HI%JsdB ; JedB = segment%HI%JedB
     do J=JsdB,JedB ; do i=isd,ied
+      ! Here lon_im1 estimates G%geoLonBu(I-1,J), which may not have been set if
+      ! the symmetric memory mode is not being used.
       lon_im1 = 2.0*G%geoLonCv(i,J) - G%geoLonBu(I,J)
       segment%normal_trans(i,J,k) = tr_k * (exp(-2.0*(lon_im1 - 1000.0)/Def_Rad) -&
                                   exp(-2.0*(G%geoLonBu(I,J) - 1000.0)/Def_Rad))
@@ -383,7 +393,7 @@ subroutine DOME_set_OBC_data(OBC, tv, G, GV, US, param_file, tr_Reg)
       do k=1,nz ; T0(k) = T0(k) + (GV%Rlay(k)-rho_guess(k)) / drho_dT(k) ; enddo
     enddo
 
-    ! Temperature on tracer 1???
+    ! Temperature is tracer 1 for the OBCs.
     allocate(segment%field(1)%buffer_src(segment%HI%isd:segment%HI%ied,segment%HI%JsdB:segment%HI%JedB,nz))
     do k=1,nz ; do J=JsdB,JedB ; do i=isd,ied
       segment%field(1)%buffer_src(i,j,k) = T0(k)
@@ -393,18 +403,17 @@ subroutine DOME_set_OBC_data(OBC, tv, G, GV, US, param_file, tr_Reg)
     call register_segment_tracer(tr_ptr, param_file, GV, segment, OBC_array=.true.)
   endif
 
-  ! Dye tracers - fight with T,S???
+  ! Set up dye tracers
   ! First dye - only one with OBC values
-  ! This field(1) requires tr_D1 to be the first tracer.
-  allocate(segment%field(1)%buffer_src(segment%HI%isd:segment%HI%ied,segment%HI%JsdB:segment%HI%JedB,nz))
+  ! This field(ntherm+1) requires tr_D1 to be the first tracer after temperature and salinity.
+  allocate(segment%field(ntherm+1)%buffer_src(segment%HI%isd:segment%HI%ied,segment%HI%JsdB:segment%HI%JedB,nz))
   do k=1,nz ; do j=segment%HI%jsd,segment%HI%jed ; do i=segment%HI%isd,segment%HI%ied
-    if (k < nz/2) then ; segment%field(1)%buffer_src(i,j,k) = 0.0
-    else ; segment%field(1)%buffer_src(i,j,k) = 1.0 ; endif
+    if (k < nz/2) then ; segment%field(ntherm+1)%buffer_src(i,j,k) = 0.0
+    else ; segment%field(ntherm+1)%buffer_src(i,j,k) = 1.0 ; endif
   enddo ; enddo ; enddo
   name = 'tr_D1'
   call tracer_name_lookup(tr_Reg, tr_ptr, name)
-  call register_segment_tracer(tr_ptr, param_file, GV, &
-                               OBC%segment(1), OBC_array=.true.)
+  call register_segment_tracer(tr_ptr, param_file, GV, OBC%segment(1), OBC_array=.true.)
 
   ! All tracers but the first have 0 concentration in their inflows. As 0 is the
   ! default value for the inflow concentrations, the following calls are unnecessary.
@@ -412,8 +421,7 @@ subroutine DOME_set_OBC_data(OBC, tv, G, GV, US, param_file, tr_Reg)
     if (m < 10) then ; write(name,'("tr_D",I1.1)') m
     else ; write(name,'("tr_D",I2.2)') m ; endif
     call tracer_name_lookup(tr_Reg, tr_ptr, name)
-    call register_segment_tracer(tr_ptr, param_file, GV, &
-                                 OBC%segment(1), OBC_scalar=0.0)
+    call register_segment_tracer(tr_ptr, param_file, GV, OBC%segment(1), OBC_scalar=0.0)
   enddo
 
 end subroutine DOME_set_OBC_data
