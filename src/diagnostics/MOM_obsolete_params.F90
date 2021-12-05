@@ -87,6 +87,7 @@ subroutine find_obsolete_params(param_file)
   call obsolete_logical(param_file, "MSTAR_FIXED", hint="Instead use MSTAR_MODE.")
   call obsolete_logical(param_file, "USE_VISBECK_SLOPE_BUG", .false.)
 
+  call obsolete_logical(param_file, "ALLOW_CLOCKS_IN_OMP_LOOPS", .true.)
   call obsolete_logical(param_file, "LARGE_FILE_SUPPORT", .true.)
   call obsolete_real(param_file, "MIN_Z_DIAG_INTERVAL")
   call obsolete_char(param_file, "Z_OUTPUT_GRID_FILE")
