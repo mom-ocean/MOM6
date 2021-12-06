@@ -28,7 +28,7 @@
 #   MPIRUN                  MPI job launcher (mpirun, srun, etc)
 #   DO_REPRO_TESTS          Enable production ("repro") testing equivalence
 #   DO_REGRESSION_TESTS     Enable regression tests (usually dev/gfdl)
-#   REPORT_COVERAGE         Enable code coverage and report to codecov
+#   REPORT_COVERAGE         Enable code coverage and generate reports
 #
 # Compiler configuration:
 #   CC      C compiler
@@ -82,11 +82,11 @@ export MPIFC
 FCFLAGS_DEBUG ?= -g -O0
 FCFLAGS_REPRO ?= -g -O2
 FCFLAGS_OPT ?= -g -O3 -mavx -fno-omit-frame-pointer
+FCFLAGS_COVERAGE ?= -g -O0 -fbacktrace --coverage
 FCFLAGS_INIT ?=
-FCFLAGS_COVERAGE ?=
 # Additional notes:
 # - These default values are simple, minimalist flags, supported by nearly all
-#   compilers which are comparable to GFDL's canonical DEBUG and REPRO builds.
+#   compilers, and are comparable to GFDL's canonical DEBUG and REPRO builds.
 #
 # - These flags should be configured outside of the Makefile, either with
 #   config.mk or as environment variables.
@@ -95,6 +95,7 @@ FCFLAGS_COVERAGE ?=
 #   so FCFLAGS_INIT is used to provide additional MOM6 configuration.
 
 # User-defined LDFLAGS (applied to all builds and FMS)
+LDFLAGS_COVERAGE ?= --coverage
 LDFLAGS_USER ?=
 
 # Set to `true` to require identical results from DEBUG and REPRO builds
@@ -139,6 +140,9 @@ ifeq ($(DO_PROFILE), false)
   BUILDS += opt opt_target
 endif
 
+# Unit test testing
+BUILDS += cov unit
+
 # The following variables are configured by Travis:
 #   DO_REGRESSION_TESTS: true if $(TRAVIS_PULL_REQUEST) is a PR number
 #   MOM_TARGET_SLUG: TRAVIS_REPO_SLUG
@@ -164,8 +168,6 @@ else
   MOM_TARGET_BRANCH =
   TARGET_CODEBASE =
 endif
-
-
 
 # List of source files to link this Makefile's dependencies to model Makefiles
 # Assumes a depth of two, and the following extensions: F90 inc c h
@@ -220,10 +222,8 @@ build.prof: $(foreach b,opt opt_target,build/$(b)/MOM6)
 BUILD_TARGETS = MOM6 Makefile path_names
 .PRECIOUS: $(foreach b,$(BUILDS),$(foreach f,$(BUILD_TARGETS),build/$(b)/$(f)))
 
-# Compiler flags
 
-# Conditionally build symmetric with coverage support
-COVERAGE=$(if $(REPORT_COVERAGE),$(FCFLAGS_COVERAGE),)
+# Compiler flags
 
 # .testing dependencies
 # TODO: We should probably build TARGET with the FMS that it was configured
@@ -234,28 +234,31 @@ PATH_FMS = PATH="${PATH}:../../$(DEPS)/bin"
 
 
 # Define the build targets in terms of the traditional DEBUG/REPRO/etc labels
-SYMMETRIC_FCFLAGS := FCFLAGS="$(FCFLAGS_DEBUG) $(FCFLAGS_INIT) $(COVERAGE) $(FCFLAGS_FMS)"
+SYMMETRIC_FCFLAGS := FCFLAGS="$(FCFLAGS_DEBUG) $(FCFLAGS_INIT) $(FCFLAGS_FMS)"
 ASYMMETRIC_FCFLAGS := FCFLAGS="$(FCFLAGS_DEBUG) $(FCFLAGS_INIT) $(FCFLAGS_FMS)"
 REPRO_FCFLAGS := FCFLAGS="$(FCFLAGS_REPRO) $(FCFLAGS_FMS)"
 OPT_FCFLAGS := FCFLAGS="$(FCFLAGS_OPT) $(FCFLAGS_FMS)"
 OPENMP_FCFLAGS := FCFLAGS="$(FCFLAGS_DEBUG) $(FCFLAGS_INIT) $(FCFLAGS_FMS)"
 TARGET_FCFLAGS := FCFLAGS="$(FCFLAGS_DEBUG) $(FCFLAGS_INIT) $(FCFLAGS_FMS)"
+COV_FCFLAGS := FCFLAGS="$(FCFLAGS_COVERAGE) $(FCFLAGS_FMS)"
 
 MOM_LDFLAGS := LDFLAGS="$(LDFLAGS_FMS) $(LDFLAGS_USER)"
-SYMMETRIC_LDFLAGS := LDFLAGS="$(COVERAGE) $(LDFLAGS_FMS) $(LDFLAGS_USER)"
+COV_LDFLAGS := LDFLAGS="$(LDFLAGS_COVERAGE) $(LDFLAGS_FMS) $(LDFLAGS_USER)"
 
 
 # Environment variable configuration
-build/symmetric/Makefile: MOM_ENV=$(PATH_FMS) $(SYMMETRIC_FCFLAGS) $(SYMMETRIC_LDFLAGS)
+build/symmetric/Makefile: MOM_ENV=$(PATH_FMS) $(SYMMETRIC_FCFLAGS) $(MOM_LDFLAGS)
 build/asymmetric/Makefile: MOM_ENV=$(PATH_FMS) $(ASYMMETRIC_FCFLAGS) $(MOM_LDFLAGS)
 build/repro/Makefile: MOM_ENV=$(PATH_FMS) $(REPRO_FCFLAGS) $(MOM_LDFLAGS)
 build/openmp/Makefile: MOM_ENV=$(PATH_FMS) $(OPENMP_FCFLAGS) $(MOM_LDFLAGS)
 build/target/Makefile: MOM_ENV=$(PATH_FMS) $(TARGET_FCFLAGS) $(MOM_LDFLAGS)
 build/opt/Makefile: MOM_ENV=$(PATH_FMS) $(OPT_FCFLAGS) $(MOM_LDFLAGS)
 build/opt_target/Makefile: MOM_ENV=$(PATH_FMS) $(OPT_FCFLAGS) $(MOM_LDFLAGS)
-build/coupled/Makefile: MOM_ENV=$(PATH_FMS) $(SYMMETRIC_FCFLAGS) $(SYMMETRIC_LDFLAGS)
-build/nuopc/Makefile: MOM_ENV=$(PATH_FMS) $(SYMMETRIC_FCFLAGS) $(SYMMETRIC_LDFLAGS)
-build/mct/Makefile: MOM_ENV=$(PATH_FMS) $(SYMMETRIC_FCFLAGS) $(SYMMETRIC_LDFLAGS)
+build/coupled/Makefile: MOM_ENV=$(PATH_FMS) $(SYMMETRIC_FCFLAGS) $(MOM_LDFLAGS)
+build/nuopc/Makefile: MOM_ENV=$(PATH_FMS) $(SYMMETRIC_FCFLAGS) $(MOM_LDFLAGS)
+build/mct/Makefile: MOM_ENV=$(PATH_FMS) $(SYMMETRIC_FCFLAGS) $(MOM_LDFLAGS)
+build/cov/Makefile: MOM_ENV=$(PATH_FMS) $(COV_FCFLAGS) $(COV_LDFLAGS)
+build/unit/Makefile: MOM_ENV=$(PATH_FMS) $(COV_FCFLAGS) $(COV_LDFLAGS)
 
 # Configure script flags
 build/symmetric/Makefile: MOM_ACFLAGS=
@@ -268,6 +271,8 @@ build/opt_target/Makefile: MOM_ACFLAGS=
 build/coupled/Makefile: MOM_ACFLAGS=--with-driver=FMS_cap
 build/nuopc/Makefile: MOM_ACFLAGS=--with-driver=nuopc_cap
 build/mct/Makefile: MOM_ACFLAGS=--with-driver=mct_cap
+build/cov/Makefile: MOM_ACFLAGS=
+build/unit/Makefile: MOM_ACFLAGS=--with-driver=unit_tests
 
 # Fetch regression target source code
 build/target/Makefile: | $(TARGET_CODEBASE)
@@ -276,7 +281,7 @@ build/opt_target/Makefile: | $(TARGET_CODEBASE)
 
 # Define source code dependencies
 # NOTE: ./configure is too much, but Makefile is not enough!
-#   Ideally we would want to re-run both Makefile and mkmf, but our mkmf call
+#   Ideally we only want to re-run both Makefile and mkmf, but the mkmf call
 #   is inside ./configure, so we must re-run ./configure as well.
 $(foreach b,$(filter-out target,$(BUILDS)),build/$(b)/Makefile): $(MOM_SOURCE)
 build/target_codebase/configure: $(TARGET_SOURCE)
@@ -362,11 +367,13 @@ $(DEPS)/Makefile: ../ac/deps/Makefile
 
 
 #---
-# The following block does a non-library build of a coupled driver interface to MOM, along with everything below it.
-# This simply checks that we have not broken the ability to compile. This is not a means to build a complete coupled executable.
-# Todo: 
-# - avoid re-building FMS and MOM6 src by re-using existing object/mod files
-# - use autoconf rather than mkmf templates
+# The following block does a non-library build of a coupled driver interface to
+# MOM, along with everything below it.  This simply checks that we have not
+# broken the ability to compile.  This is not a means to build a complete
+# coupled executable.
+# TODO:
+# 	- Avoid re-building FMS and MOM6 src by re-using existing object/mod files
+# 	- Use autoconf rather than mkmf templates
 MK_TEMPLATE ?= ../../$(DEPS)/mkmf/templates/ncrc-gnu.mk
 # NUOPC driver
 build/nuopc/mom_ocean_model_nuopc.o: build/nuopc/Makefile
@@ -425,11 +432,12 @@ test.dim.$(1): $(foreach c,$(CONFIGS),$(c).dim.$(1) $(c).dim.$(1).diag)
 endef
 $(foreach d,$(DIMS),$(eval $(call TEST_DIM_RULE,$(d))))
 
-.PHONY: run.symmetric run.asymmetric run.nans run.openmp
+.PHONY: run.symmetric run.asymmetric run.nans run.openmp run.cov
 run.symmetric: $(foreach c,$(CONFIGS),work/$(c)/symmetric/ocean.stats)
 run.asymmetric: $(foreach c,$(filter-out tc3,$(CONFIGS)),$(CONFIGS),work/$(c)/asymmetric/ocean.stats)
 run.nan: $(foreach c,$(CONFIGS),work/$(c)/nan/ocean.stats)
 run.openmp: $(foreach c,$(CONFIGS),work/$(c)/openmp/ocean.stats)
+run.cov: $(foreach c,$(CONFIGS),work/$(c)/cov/ocean.stats)
 
 # Configuration test rules
 # $(1): Configuration name (tc1, tc2, &c.)
@@ -573,11 +581,11 @@ work/%/$(1)/ocean.stats work/%/$(1)/chksum_diag: build/$(2)/MOM6 $(VENV_PATH)
 	@echo -e "$(DONE): $$*.$(1); no runtime errors."
 	if [ $(3) ]; then \
 	  mkdir -p results/$$* ; \
-	  cd build/symmetric ; \
-	  gcov *.gcda > gcov.$$*.$(1).out ; \
+	  cd build/$(2) ; \
+	  gcov -b *.gcda > gcov.$$*.$(1).out ; \
 	  curl -s $(CODECOV_UPLOADER_URL) -o codecov ; \
 	  chmod +x codecov ; \
-	  ./codecov -Z -f "*.gcov" -n $$@ \
+	  ./codecov -R . -Z -f "*.gcov" -n $$@ \
 	    > codecov.$$*.$(1).out \
 	    2> codecov.$$*.$(1).err \
 	    && echo -e "${MAGENTA}Report uploaded to codecov.${RESET}"; \
@@ -603,6 +611,7 @@ $(eval $(call STAT_RULE,dim.z,symmetric,,Z_RESCALE_POWER=11,,1))
 $(eval $(call STAT_RULE,dim.q,symmetric,,Q_RESCALE_POWER=11,,1))
 $(eval $(call STAT_RULE,dim.r,symmetric,,R_RESCALE_POWER=11,,1))
 
+$(eval $(call STAT_RULE,cov,cov,$(REPORT_COVERAGE),,,1))
 
 # Generate the half-period input namelist as follows:
 #  1. Fetch DAYMAX and TIMEUNIT from MOM_input
@@ -652,7 +661,6 @@ work/%/restart/ocean.stats: build/symmetric/MOM6 $(VENV_PATH)
 
 # TODO: Restart checksum diagnostics
 
-
 #---
 # Not a true rule; only call this after `make test` to summarize test results.
 .PHONY: test.summary
@@ -678,6 +686,53 @@ test.summary:
 	  echo -e "$(PASS): All tests passed!"; \
 	fi
 
+
+#---
+# unit test
+
+.PHONY: unit.cov
+unit.cov: build/unit/MOM_new_unit_tests.gcov
+
+work/unit/std.out: build/unit/MOM6
+	if [ $(REPORT_COVERAGE) ]; then \
+	  find build/unit -name *.gcda -exec rm -f '{}' \; ; \
+	fi
+	rm -rf $(@D)
+	mkdir -p $(@D)
+	cd $(@D) \
+	  && $(TIME) $(MPIRUN) -n 1 ../../$< 2> std.err > std.out \
+	  || !( \
+	    cat std.out | tail -n 100 ; \
+	    cat std.err | tail -n 100 ; \
+	  )
+	cd $(@D) \
+	  && $(TIME) $(MPIRUN) -n 2 ../../$< 2> p2.std.err > p2.std.out \
+	  || !( \
+	    cat p2.std.out | tail -n 100 ; \
+	    cat p2.std.err | tail -n 100 ; \
+	  )
+
+build/unit/codecov:
+	mkdir -p $(@D)
+	cd $(@D) \
+	  && curl -s $(CODECOV_UPLOADER_URL) -o $(@F)
+	chmod +x $@
+
+# Use driver coverage file as a proxy for the run
+# TODO: Replace work/unit/std.out with *.gcda?
+build/unit/MOM_new_unit_tests.gcov: work/unit/std.out
+	mkdir -p $(@D)
+	cd $(@D) \
+	  && gcov -b *.gcda > gcov.unit.out
+
+# Use driver coverage file as a proxy for the run
+.PHONY: unit.cov.upload
+unit.cov.upload: build/unit/MOM_new_unit_tests.gcov build/unit/codecov
+	cd build/unit \
+	  && ./codecov -R . -Z -f "*.gcov" -n "Unit tests" \
+	    > codecov.unit.out \
+	    2> codecov.unit.err \
+	  && echo -e "${MAGENTA}Report uploaded to codecov.${RESET}"
 
 #---
 # Profiling
