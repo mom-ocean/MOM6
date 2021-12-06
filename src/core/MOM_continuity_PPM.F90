@@ -466,7 +466,7 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, GV, US, CS, LB, OBC, por_face_are
             if (l_seg /= OBC_NONE) &
               do_I(I) = OBC%segment(l_seg)%specified
 
-            if (do_I(I)) FAuI(I) = GV%H_subroundoff*(G%dy_Cu(I,j)*por_face_areaU(I,j,k))
+            if (do_I(I)) FAuI(I) = GV%H_subroundoff*G%dy_Cu(I,j)
           enddo
           ! NOTE: do_I(I) should prevent access to segment OBC_NONE
           do k=1,nz ; do I=ish-1,ieh ; if (do_I(I)) then
@@ -572,7 +572,7 @@ subroutine zonal_flux_layer(u, h, h_L, h_R, uh, duhdu, visc_rem, dt, G, US, j, &
       if (vol_CFL) then ; CFL = (u(I) * dt) * (G%dy_Cu(I,j) * G%IareaT(i,j))
       else ; CFL = u(I) * dt * G%IdxT(i,j) ; endif
       curv_3 = h_L(i) + h_R(i) - 2.0*h(i)
-      uh(I) = (G%dy_Cu(I,j) * por_face_areaU(I))* u(I) * &
+      uh(I) = (G%dy_Cu(I,j) * por_face_areaU(I)) * u(I) * &
           (h_R(i) + CFL * (0.5*(h_L(i) - h_R(i)) + curv_3*(CFL - 1.5)))
       h_marg = h_R(i) + CFL * ((h_L(i) - h_R(i)) + 3.0*curv_3*(CFL - 1.0))
     elseif (u(I) < 0.0) then
@@ -586,7 +586,7 @@ subroutine zonal_flux_layer(u, h, h_L, h_R, uh, duhdu, visc_rem, dt, G, US, j, &
       uh(I) = 0.0
       h_marg = 0.5 * (h_L(i+1) + h_R(i))
     endif
-    duhdu(I) = (G%dy_Cu(I,j)* por_face_areaU(I)) * h_marg * visc_rem(I)
+    duhdu(I) = (G%dy_Cu(I,j) * por_face_areaU(I)) * h_marg * visc_rem(I)
   endif ; enddo
 
   if (local_open_BC) then
@@ -596,10 +596,10 @@ subroutine zonal_flux_layer(u, h, h_L, h_R, uh, duhdu, visc_rem, dt, G, US, j, &
       if (l_seg /= OBC_NONE) then
         if (OBC%segment(l_seg)%open) then
           if (OBC%segment(l_seg)%direction == OBC_DIRECTION_E) then
-            uh(I) = (G%dy_Cu(I,j)* por_face_areaU(I)) * u(I) * h(i)
-            duhdu(I) = (G%dy_Cu(I,j)* por_face_areaU(I)) * h(i) * visc_rem(I)
+            uh(I) = (G%dy_Cu(I,j) * por_face_areaU(I)) * u(I) * h(i)
+            duhdu(I) = (G%dy_Cu(I,j) * por_face_areaU(I)) * h(i) * visc_rem(I)
           else
-            uh(I) = (G%dy_Cu(I,j)* por_face_areaU(I)) * u(I) * h(i+1)
+            uh(I) = (G%dy_Cu(I,j) * por_face_areaU(I)) * u(I) * h(i+1)
             duhdu(I) = (G%dy_Cu(I,j)* por_face_areaU(I)) * h(i+1) * visc_rem(I)
           endif
         endif
@@ -842,7 +842,7 @@ subroutine zonal_flux_adjust(u, h_in, h_L, h_R, uhbt, uh_tot_0, duhdu_tot_0, &
       do I=ish-1,ieh ; u_new(I) = u(I,j,k) + du(I) * visc_rem(I,k) ; enddo
       call zonal_flux_layer(u_new, h_in(:,j,k), h_L(:,j,k), h_R(:,j,k), &
                             uh_aux(:,k), duhdu(:,k), visc_rem(:,k), &
-                            dt, G, US, j, ish, ieh, do_I, CS%vol_CFL,por_face_areaU(:,j,k),OBC)
+                            dt, G, US, j, ish, ieh, do_I, CS%vol_CFL, por_face_areaU(:,j,k), OBC)
     enddo ; endif
 
     if (itt < max_itts) then
@@ -992,9 +992,9 @@ subroutine set_zonal_BT_cont(u, h_in, h_L, h_R, BT_cont, uh_tot_0, duhdu_tot_0, 
     call zonal_flux_layer(u_0, h_in(:,j,k), h_L(:,j,k), h_R(:,j,k), uh_0, duhdu_0, &
                           visc_rem(:,k), dt, G, US, j, ish, ieh, do_I, CS%vol_CFL, por_face_areaU(:,j,k))
     call zonal_flux_layer(u_L, h_in(:,j,k), h_L(:,j,k), h_R(:,j,k), uh_L, duhdu_L, &
-                          visc_rem(:,k), dt, G, US, j, ish, ieh, do_I, CS%vol_CFL,por_face_areaU(:,j,k))
+                          visc_rem(:,k), dt, G, US, j, ish, ieh, do_I, CS%vol_CFL, por_face_areaU(:,j,k))
     call zonal_flux_layer(u_R, h_in(:,j,k), h_L(:,j,k), h_R(:,j,k), uh_R, duhdu_R, &
-                          visc_rem(:,k), dt, G, US, j, ish, ieh, do_I, CS%vol_CFL,por_face_areaU(:,j,k))
+                          visc_rem(:,k), dt, G, US, j, ish, ieh, do_I, CS%vol_CFL, por_face_areaU(:,j,k))
     do I=ish-1,ieh ; if (do_I(I)) then
       FAmt_0(I) = FAmt_0(I) + duhdu_0(I)
       FAmt_L(I) = FAmt_L(I) + duhdu_L(I)
@@ -1282,7 +1282,7 @@ subroutine meridional_mass_flux(v, h_in, vh, dt, G, GV, US, CS, LB, OBC, por_fac
             if(l_seg /= OBC_NONE) &
               do_I(i) = (OBC%segment(l_seg)%specified)
 
-            if (do_I(i)) FAvi(i) = GV%H_subroundoff*(G%dx_Cv(i,J)*por_face_areaV(i,J,k))
+            if (do_I(i)) FAvi(i) = GV%H_subroundoff*G%dx_Cv(i,J)
           enddo
           ! NOTE: do_I(I) should prevent access to segment OBC_NONE
           do k=1,nz ; do i=ish,ieh ; if (do_I(i)) then
