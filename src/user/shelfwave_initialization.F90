@@ -28,8 +28,8 @@ public register_shelfwave_OBC, shelfwave_OBC_end
 
 !> Control structure for shelfwave open boundaries.
 type, public :: shelfwave_OBC_CS ; private
-  real :: Lx = 100.0        !< Long-shore length scale of bathymetry.
-  real :: Ly = 50.0         !< Cross-shore length scale.
+  real :: Lx = 100.0        !< Long-shore length scale of bathymetry [km]
+  real :: Ly = 50.0         !< Cross-shore length scale [km]
   real :: f0 = 1.e-4        !< Coriolis parameter [T-1 ~> s-1]
   real :: jj = 1            !< Cross-shore wave mode.
   real :: kk                !< Parameter.
@@ -101,22 +101,19 @@ end subroutine shelfwave_OBC_end
 subroutine shelfwave_initialize_topography( D, G, param_file, max_depth, US )
   type(dyn_horgrid_type),          intent(in)  :: G !< The dynamic horizontal grid type
   real, dimension(G%isd:G%ied,G%jsd:G%jed), &
-                                   intent(out) :: D !< Ocean bottom depth in m or Z if US is present
+                                   intent(out) :: D !< Ocean bottom depth [Z ~> m]
   type(param_file_type),           intent(in)  :: param_file !< Parameter file structure
-  real,                            intent(in)  :: max_depth !< Maximum model depth in the units of D
-  type(unit_scale_type), optional, intent(in)  :: US !< A dimensional unit scaling type
+  real,                            intent(in)  :: max_depth !< Maximum model depth [Z ~> m]
+  type(unit_scale_type),           intent(in)  :: US !< A dimensional unit scaling type
 
   ! Local variables
-  real :: m_to_Z  ! A dimensional rescaling factor.
   integer   :: i, j
   real      :: y, rLy, Ly, H0
-
-  m_to_Z = 1.0 ; if (present(US)) m_to_Z = US%m_to_Z
 
   call get_param(param_file, mdl,"SHELFWAVE_Y_LENGTH_SCALE",Ly, &
                  default=50., do_not_log=.true.)
   call get_param(param_file, mdl,"MINIMUM_DEPTH", H0, &
-                 default=10., units="m", scale=m_to_Z, do_not_log=.true.)
+                 default=10., units="m", scale=US%m_to_Z, do_not_log=.true.)
 
   rLy = 0. ; if (Ly>0.) rLy = 1. / Ly
 
