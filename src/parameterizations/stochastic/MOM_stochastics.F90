@@ -59,7 +59,7 @@ subroutine stochastics_init(dt, grid, GV, CS, param_file, diag, Time)
   integer :: num_procs         ! number of processors to pass to stochastic physics
   integer :: iret              ! return code from stochastic physics
   integer :: me                !  my pe
-  integer :: master            !  root pe
+  integer :: pe_zero           !  root pe
   integer :: nx                ! number of x-points including halo
   integer :: ny                ! number of x-points including halo
 
@@ -95,11 +95,11 @@ subroutine stochastics_init(dt, grid, GV, CS, param_file, diag, Time)
      num_procs=num_PEs()
      allocate(pelist(num_procs))
      call Get_PElist(pelist,commID = mom_comm)
-     master=root_PE()
+     pe_zero=root_PE()
      nx = grid%ied - grid%isd + 1
      ny = grid%jed - grid%jsd + 1
      call init_stochastic_physics_ocn(dt,grid%geoLonT,grid%geoLatT,nx,ny,GV%ke, &
-                                      CS%pert_epbl,CS%do_sppt,master,mom_comm,iret)
+                                      CS%pert_epbl,CS%do_sppt,pe_zero,mom_comm,iret)
      if (iret/=0)  then
          call MOM_error(FATAL, "call to init_stochastic_physics_ocn failed")
          return
