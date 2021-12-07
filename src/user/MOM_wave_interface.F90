@@ -83,7 +83,6 @@ type, public :: wave_parameters_CS ; private
   real, allocatable, dimension(:,:,:), public :: &
     KvS                !< Viscosity for Stokes Drift shear [Z2 T-1 ~> m2 s-1]
 
-  integer, public :: id_PFu_Stokes = -1 , id_PFv_Stokes = -1
   ! The remainder of this control structure is private
   integer :: WaveMethod = -99 !< Options for including wave information
                               !! Valid (tested) choices are:
@@ -187,6 +186,7 @@ type, public :: wave_parameters_CS ; private
                                    !! timing of diagnostic output.
 
   !>@{ Diagnostic handles
+  integer, public :: id_PFu_Stokes = -1 , id_PFv_Stokes = -1
   integer :: id_surfacestokes_x = -1 , id_surfacestokes_y = -1
   integer :: id_3dstokes_x = -1 , id_3dstokes_y = -1
   integer :: id_ddt_3dstokes_x = -1 , id_ddt_3dstokes_y = -1
@@ -1775,7 +1775,7 @@ subroutine waves_register_restarts(CS, HI, GV, param_file, restart_CSp)
 
   if (associated(CS)) then
     call MOM_error(FATAL, "waves_register_restarts: Called with initialized waves control structure")
-  endif 
+  endif
   allocate(CS)
 
   call get_param(param_file, mdl, "USE_WAVES", use_waves, &

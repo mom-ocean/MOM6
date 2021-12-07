@@ -303,7 +303,7 @@ subroutine mom_import(ocean_public, ocean_grid, importState, ice_ocean_boundary,
       if (ChkErr(rc,__LINE__,u_FILE_u)) return
       call state_getimport(importState,'Sw_pstokes_y', isc, iec, jsc, jec, 1, nsc, stky, rc=rc)
       if (ChkErr(rc,__LINE__,u_FILE_u)) return
-  
+
       ! rotate from true zonal/meridional to local coordinates
       do j = jsc, jec
          jg = j + ocean_grid%jsc - jsc
