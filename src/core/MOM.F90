@@ -133,7 +133,7 @@ use MOM_variables,             only : rotate_surface_state
 use MOM_verticalGrid,          only : verticalGrid_type, verticalGridInit, verticalGridEnd
 use MOM_verticalGrid,          only : fix_restart_scaling
 use MOM_verticalGrid,          only : get_thickness_units, get_flux_units, get_tr_flux_units
-use MOM_wave_interface,        only : wave_parameters_CS, waves_end
+use MOM_wave_interface,        only : wave_parameters_CS, waves_end, waves_register_restarts
 use MOM_wave_interface,        only : Update_Stokes_Drift
 
 ! ODA modules
@@ -1634,7 +1634,7 @@ end subroutine step_offline
 !! initializing the ocean state variables, and initializing subsidiary modules
 subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
                           Time_in, offline_tracer_mode, input_restart_file, diag_ptr, &
-                          count_calls, tracer_flow_CSp,  ice_shelf_CSp)
+                          count_calls, tracer_flow_CSp,  ice_shelf_CSp, waves_CSp)
   type(time_type), target,   intent(inout) :: Time        !< model time, set in this routine
   type(time_type),           intent(in)    :: Time_init   !< The start time for the coupled model's calendar
   type(param_file_type),     intent(out)   :: param_file  !< structure indicating parameter file to parse
@@ -1656,6 +1656,8 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
                                                           !! calls to step_MOM instead of the number of
                                                           !! dynamics timesteps.
   type(ice_shelf_CS), optional,     pointer :: ice_shelf_CSp !< A pointer to an ice shelf control structure
+  type(Wave_parameters_CS), &
+                   optional, pointer       :: Waves_CSp       !< An optional pointer to a wave property CS
   ! local variables
   type(ocean_grid_type),  pointer :: G => NULL()    ! A pointer to the metric grid use for the run
   type(ocean_grid_type),  pointer :: G_in => NULL() ! Pointer to the input grid
@@ -2348,6 +2350,9 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   if (associated(CS%OBC)) &
     call open_boundary_register_restarts(dg%HI, GV, CS%OBC, CS%tracer_Reg, &
                           param_file, restart_CSp, use_temperature)
+  if (present(waves_CSp)) then
+    call waves_register_restarts(waves_CSp, dG%HI, GV, param_file, restart_CSp)
+  endif
 
   call callTree_waypoint("restart registration complete (initialize_MOM)")
 

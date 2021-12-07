@@ -12,12 +12,15 @@ use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser,   only : get_param, log_version, param_file_type
 use MOM_forcing_type,  only : mech_forcing
 use MOM_grid,          only : ocean_grid_type
+use MOM_hor_index,     only : hor_index_type
 use MOM_io,            only : file_exists, get_var_sizes, read_variable
+use MOM_io,            only : vardesc, var_desc
 use MOM_safe_alloc,    only : safe_alloc_ptr
 use MOM_time_manager,  only : time_type, operator(+), operator(/)
 use MOM_unit_scaling,  only : unit_scale_type
 use MOM_variables,     only : thermo_var_ptrs, surface
 use MOM_verticalgrid,  only : verticalGrid_type
+use MOM_restart,       only : register_restart_field, MOM_restart_CS, query_initialized
 
 implicit none ; private
 
@@ -42,6 +45,7 @@ public CoriolisStokes ! NOT READY - Public interface to add Coriolis-Stokes acce
                       ! CL2 effects.
 public Waves_end ! public interface to deallocate and free wave related memory.
 public get_wave_method ! public interface to obtain the wave method string
+public waves_register_restarts ! public interface to register wave restart fields
 
 ! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
 ! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
@@ -210,7 +214,7 @@ character*(7), parameter  :: EFACTOR_STRING   = "EFACTOR"       !< EFACTOR (base
 contains
 
 !> Initializes parameters related to MOM_wave_interface
-subroutine MOM_wave_interface_init(time, G, GV, US, param_file, CS, diag )
+subroutine MOM_wave_interface_init(time, G, GV, US, param_file, CS, diag, restart_CSp)
   type(time_type), target, intent(in)    :: Time       !< Model time
   type(ocean_grid_type),   intent(inout) :: G          !< Grid structure
   type(verticalGrid_type), intent(in)    :: GV         !< Vertical grid structure
@@ -218,6 +222,7 @@ subroutine MOM_wave_interface_init(time, G, GV, US, param_file, CS, diag )
   type(param_file_type),   intent(in)    :: param_file !< Input parameter structure
   type(wave_parameters_CS), pointer      :: CS         !< Wave parameter control structure
   type(diag_ctrl), target, intent(inout) :: diag       !< Diagnostic Pointer
+  type(MOM_restart_CS), optional, pointer:: restart_CSp!< Restart control structure
 
   ! Local variables
   character(len=40)  :: mdl = "MOM_wave_interface" !< This module's name.
@@ -231,8 +236,8 @@ subroutine MOM_wave_interface_init(time, G, GV, US, param_file, CS, diag )
   logical :: StatisticalWaves
 
   ! Dummy Check
-  if (associated(CS)) then
-    call MOM_error(FATAL, "wave_interface_init called with an associated control structure.")
+  if (.not. associated(CS)) then
+    call MOM_error(FATAL, "wave_interface_init called without an associated control structure.")
     return
   endif
 
@@ -244,9 +249,6 @@ subroutine MOM_wave_interface_init(time, G, GV, US, param_file, CS, diag )
                  do_not_log=.true.,default=.false.)
 
   if (.not.(use_waves .or. StatisticalWaves)) return
-
-  ! Allocate CS and set pointers
-  allocate(CS)
 
   CS%UseWaves = use_waves
   CS%diag => diag
@@ -441,10 +443,6 @@ subroutine MOM_wave_interface_init(time, G, GV, US, param_file, CS, diag )
 
   ! Allocate and initialize
   ! a. Stokes driftProfiles
-  allocate(CS%Us_x(G%isdB:G%IedB,G%jsd:G%jed,GV%ke))
-  CS%Us_x(:,:,:) = 0.0
-  allocate(CS%Us_y(G%isd:G%Ied,G%jsdB:G%jedB,GV%ke))
-  CS%Us_y(:,:,:) = 0.0
   if (CS%Stokes_DDT) then
     allocate(CS%ddt_Us_x(G%isdB:G%IedB,G%jsd:G%jed,G%ke))
     CS%ddt_Us_x(:,:,:) = 0.0
@@ -611,6 +609,10 @@ subroutine Update_Stokes_Drift(G, GV, US, CS, h, ustar, dt)
   one_cm = 0.01*US%m_to_Z
   min_level_thick_avg = 1.e-3*US%m_to_Z
   idt = 1.0/dt
+
+  if (allocated(CS%US_x) .and. allocated(CS%US_y)) then
+    call pass_vector(CS%US_x(:,:,:),CS%US_y(:,:,:), G%Domain)
+  endif
 
   ! Getting Stokes drift profile from previous step
   CS%ddt_us_x(:,:,:) = CS%US_x(:,:,:)
@@ -1756,6 +1758,51 @@ subroutine Waves_end(CS)
   deallocate( CS )
 
 end subroutine Waves_end
+
+!> Register wave restart fields. To be called before MOM_wave_interface_init
+subroutine waves_register_restarts(CS, HI, GV, param_file, restart_CSp)
+  type(wave_parameters_CS), pointer       :: CS           !< Wave parameter Control structure
+  type(hor_index_type),     intent(inout) :: HI           !< Grid structure
+  type(verticalGrid_type),  intent(in)    :: GV           !< Vertical grid structure
+  type(param_file_type),    intent(in)    :: param_file   !< Input parameter structure
+  type(MOM_restart_CS),     pointer       :: restart_CSp  !< Restart structure, data intent(inout)
+  ! Local variables
+  type(vardesc) :: vd(2)
+  logical :: use_waves
+  logical :: StatisticalWaves
+  character*(13) :: wave_method_str
+  character(len=40)  :: mdl = "MOM_wave_interface" !< This module's name.
+
+  if (associated(CS)) then
+    call MOM_error(FATAL, "waves_register_restarts: Called with initialized waves control structure")
+  endif 
+  allocate(CS)
+
+  call get_param(param_file, mdl, "USE_WAVES", use_waves, &
+       "If true, enables surface wave modules.", do_not_log=.true., default=.false.)
+
+  ! Check if using LA_LI2016
+  call get_param(param_file,mdl,"USE_LA_LI2016",StatisticalWaves,     &
+                 do_not_log=.true.,default=.false.)
+
+  if (.not.(use_waves .or. StatisticalWaves)) return
+
+  ! Allocate wave fields needed for restart file
+  allocate(CS%Us_x(HI%isdB:HI%IedB,HI%jsd:HI%jed,GV%ke))
+  CS%Us_x(:,:,:) = 0.0
+  allocate(CS%Us_y(HI%isd:HI%Ied,HI%jsdB:HI%jedB,GV%ke))
+  CS%Us_y(:,:,:) = 0.0
+
+  call get_param(param_file,mdl,"WAVE_METHOD",wave_method_str, do_not_log=.true., default=NULL_STRING)
+
+  if (trim(wave_method_str)== trim(SURFBANDS_STRING)) then
+    vd(1) = var_desc("US_x", "m s-1", "3d zonal Stokes drift profile")
+    vd(2) = var_desc("US_y", "m s-1", "3d meridional Stokes drift profile")
+    call register_restart_field(CS%US_x(:,:,:), vd(1), .true., restart_CSp)
+    call register_restart_field(CS%US_y(:,:,:), vd(2), .false., restart_CSp)
+  endif
+
+end subroutine waves_register_restarts
 
 !> \namespace  mom_wave_interface
 !!
