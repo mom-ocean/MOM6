@@ -43,7 +43,7 @@ end subroutine init_stochastic_physics_ocn
 subroutine run_stochastic_physics_ocn(sppt_wts,t_rp1,t_rp2)
 implicit none
 real, intent(inout) :: sppt_wts(:,:) !< array containing random weights for SPPT range [0,2]
-real, intent(inout) :: t_rp1(:,:)    !< array containing random weights for ePBL 
+real, intent(inout) :: t_rp1(:,:)    !< array containing random weights for ePBL
                                      !! perturbations (KE generation) range [0,2]
 real, intent(inout) :: t_rp2(:,:)    !< array containing random weights for ePBL
                                      !! perturbations (KE dissipation) range [0,2]
