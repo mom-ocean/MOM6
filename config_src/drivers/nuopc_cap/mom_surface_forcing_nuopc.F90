@@ -585,7 +585,7 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
 
   ! CFCs
   if (CS%use_CFC) then
-    call CFC_cap_fluxes(fluxes, sfc_state, G, CS%Rho0, Time, CS%id_cfc11_atm, CS%id_cfc11_atm)
+    call CFC_cap_fluxes(fluxes, sfc_state, G, US, CS%Rho0, Time, CS%id_cfc11_atm, CS%id_cfc11_atm)
   endif
 
   if (associated(IOB%salt_flux)) then
@@ -1410,7 +1410,9 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, restore_salt,
                    "internal BC generation (TODO).", default=" ", do_not_log=.true.)
     if ((len_trim(CS%CFC_BC_file) > 0) .and. (scan(CS%CFC_BC_file,'/') == 0)) then
       ! Add the directory if CFC_BC_file is not already a complete path.
-      CS%CFC_BC_file = trim(slasher(CS%inputdir))//trim(CS%CFC_BC_file)
+      CS%CFC_BC_file = trim(CS%inputdir) // trim(CS%CFC_BC_file)
+    endif
+    if (len_trim(CS%CFC_BC_file) > 0) then
       call get_param(param_file, mdl, "CFC11_VARIABLE", CS%cfc11_var_name, &
                    "The name of the variable representing CFC-11 in  "//&
                    "CFC_BC_FILE.", default="CFC_11", do_not_log=.true.)

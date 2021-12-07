@@ -667,7 +667,7 @@ subroutine KPP_calculate(CS, G, GV, US, h, uStar, &
   if (CS%debug) then
     call hchksum(h, "KPP in: h",G%HI,haloshift=0, scale=GV%H_to_m)
     call hchksum(uStar, "KPP in: uStar",G%HI,haloshift=0, scale=US%Z_to_m*US%s_to_T)
-    call hchksum(buoyFlux, "KPP in: buoyFlux",G%HI,haloshift=0)
+    call hchksum(buoyFlux, "KPP in: buoyFlux",G%HI,haloshift=0, scale=US%L_to_m**2*US%s_to_T**3)
     call hchksum(Kt, "KPP in: Kt",G%HI,haloshift=0, scale=US%Z2_T_to_m2_s)
     call hchksum(Ks, "KPP in: Ks",G%HI,haloshift=0, scale=US%Z2_T_to_m2_s)
   endif
@@ -985,8 +985,8 @@ subroutine KPP_compute_BLD(CS, G, GV, US, h, Temp, Salt, u, v, tv, uStar, buoyFl
   if (CS%debug) then
     call hchksum(Salt, "KPP in: S",G%HI,haloshift=0)
     call hchksum(Temp, "KPP in: T",G%HI,haloshift=0)
-    call hchksum(u, "KPP in: u",G%HI,haloshift=0)
-    call hchksum(v, "KPP in: v",G%HI,haloshift=0)
+    call hchksum(u, "KPP in: u",G%HI,haloshift=0,scale=US%L_T_to_m_s)
+    call hchksum(v, "KPP in: v",G%HI,haloshift=0,scale=US%L_T_to_m_s)
   endif
 
   call cpu_clock_begin(id_clock_KPP_compute_BLD)
