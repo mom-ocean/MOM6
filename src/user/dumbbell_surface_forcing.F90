@@ -52,7 +52,7 @@ subroutine dumbbell_buoyancy_forcing(sfc_state, fluxes, day, dt, G, US, CS)
                                                          !! have NULL ptrs.
   type(time_type),               intent(in)    :: day    !< Time of the fluxes.
   real,                          intent(in)    :: dt     !< The amount of time over which
-                                                         !! the fluxes apply [s]
+                                                         !! the fluxes apply [T ~> s]
   type(ocean_grid_type),         intent(in)    :: G      !< The ocean's grid structure
   type(unit_scale_type),         intent(in)    :: US     !< A dimensional unit scaling type
   type(dumbbell_surface_forcing_CS),  pointer  :: CS     !< A control structure returned by a previous
@@ -126,7 +126,7 @@ subroutine dumbbell_buoyancy_forcing(sfc_state, fluxes, day, dt, G, US, CS)
 end subroutine dumbbell_buoyancy_forcing
 
 !> Dynamic forcing for the dumbbell test case
-subroutine dumbbell_dynamic_forcing(sfc_state, fluxes, day, dt, G, CS)
+subroutine dumbbell_dynamic_forcing(sfc_state, fluxes, day, dt, G, US, CS)
   type(surface),                 intent(inout) :: sfc_state  !< A structure containing fields that
                                                        !! describe the surface state of the ocean.
   type(forcing),                 intent(inout) :: fluxes !< A structure containing pointers to any
@@ -134,15 +134,17 @@ subroutine dumbbell_dynamic_forcing(sfc_state, fluxes, day, dt, G, CS)
                                                        !! have NULL ptrs.
   type(time_type),               intent(in)    :: day  !< Time of the fluxes.
   real,                          intent(in)    :: dt   !< The amount of time over which
-                                                       !! the fluxes apply [s]
+                                                       !! the fluxes apply [T ~> s]
   type(ocean_grid_type),         intent(in)    :: G    !< The ocean's grid structure
+  type(unit_scale_type),         intent(in)    :: US   !< A dimensional unit scaling type
   type(dumbbell_surface_forcing_CS),  pointer  :: CS   !< A control structure returned by a previous
                                                        !! call to dumbbell_surface_forcing_init
   ! Local variables
   integer :: i, j, is, ie, js, je
   integer :: isd, ied, jsd, jed
   integer :: idays, isecs
-  real :: deg_rad, rdays
+  real :: deg_rad  ! A conversion factor from degrees to radians [nondim]
+  real :: rdays    ! The elapsed time [days]
 
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
@@ -178,11 +180,12 @@ subroutine dumbbell_surface_forcing_init(Time, G, US, param_file, diag, CS)
   type(dumbbell_surface_forcing_CS), &
                                 pointer    :: CS   !< A pointer to the control structure for this module
   ! Local variables
-  real :: S_surf, S_range
-  real :: x, y
+  real :: S_surf  ! Initial surface salinity [ppt]
+  real :: S_range ! Range of the initial vertical distribution of salinity [ppt]
+  real :: x, y    ! Latitude and longitude normalized by the domain size [nondim]
   integer :: i, j
   logical :: dbrotate    ! If true, rotate the domain.
-#include "version_variable.h"
+# include "version_variable.h"
   character(len=40)  :: mdl = "dumbbell_surface_forcing" ! This module's name.
 
   if (associated(CS)) then

@@ -404,7 +404,7 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
       delta_sst = data_restore(i,j)- sfc_state%SST(i,j)
       delta_sst = sign(1.0,delta_sst)*min(abs(delta_sst),CS%max_delta_trestore)
       fluxes%heat_added(i,j) = G%mask2dT(i,j) * CS%trestore_mask(i,j) * &
-                               rhoXcp * delta_sst * CS%Flux_const_temp  ! W m-2
+                               rhoXcp * delta_sst * CS%Flux_const_temp  ! [Q R Z T-1 ~> W m-2]
     enddo ; enddo
   endif
 
@@ -568,8 +568,8 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
 !#CTRL#     SSS_anom(i,j) = sfc_state%SSS(i,j) - CS%S_Restore(i,j)
 !#CTRL#     SSS_mean(i,j) = 0.5*(sfc_state%SSS(i,j) + CS%S_Restore(i,j))
 !#CTRL#   enddo ; enddo
-!#CTRL#   call apply_ctrl_forcing(SST_anom, SSS_anom, SSS_mean, fluxes%heat_restore, &
-!#CTRL#                           fluxes%vprec, day, dt, G, CS%ctrl_forcing_CSp)
+!#CTRL#   call apply_ctrl_forcing(SST_anom, SSS_anom, SSS_mean, fluxes%heat_added, &
+!#CTRL#                           fluxes%vprec, day, US%s_to_T*valid_time, G, US, CS%ctrl_forcing_CSp)
 !#CTRL# endif
 
   ! adjust the NET fresh-water flux to zero, if flagged
@@ -1601,7 +1601,7 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, wind_stagger)
     endif
   endif
 
-!#CTRL#  call controlled_forcing_init(Time, G, param_file, diag, CS%ctrl_forcing_CSp)
+!#CTRL#  call controlled_forcing_init(Time, G, US, param_file, diag, CS%ctrl_forcing_CSp)
 
   call user_revise_forcing_init(param_file, CS%urf_CS)
 
