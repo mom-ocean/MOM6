@@ -228,7 +228,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, Waves)
   real :: UHeff, VHeff  ! More temporary variables [H L2 T-1 ~> m3 s-1 or kg s-1].
   real :: QUHeff,QVHeff ! More temporary variables [H L2 T-1 s-1 ~> m3 s-2 or kg s-2].
   integer :: i, j, k, n, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
-  logical :: Stokes_VF, Passive_Stokes_VF
+  logical :: Stokes_VF
 
 ! Diagnostics for fractional thickness-weighted terms
   real, allocatable, dimension(:,:) :: &
@@ -293,12 +293,13 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, Waves)
                   (Area_h(i+1,j) + Area_h(i,j+1))
   enddo ; enddo
 
-  Stokes_VF = present(Waves)
-  if (Stokes_VF) Stokes_VF = associated(Waves)
-  if (Stokes_VF) Stokes_VF = Waves%Stokes_VF
+  Stokes_VF = .false.
+  if (present(Waves)) then ; if (associated(Waves)) then
+    Stokes_VF = Waves%Stokes_VF
+  endif ; endif
 
   !$OMP parallel do default(private) shared(u,v,h,uh,vh,CAu,CAv,G,GV,CS,AD,Area_h,Area_q,&
-  !$OMP                        RV,PV,is,ie,js,je,Isq,Ieq,Jsq,Jeq,nz,vol_neglect,h_tiny,OBC,eps_vel)
+  !$OMP                        RV,PV,is,ie,js,je,Isq,Ieq,Jsq,Jeq,nz,vol_neglect,h_tiny,OBC,eps_vel,Stokes_VF)
   do k=1,nz
 
     ! Here the second order accurate layer potential vorticities, q,
@@ -315,19 +316,12 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, Waves)
                         (-Waves%us_x(I,j,k))*G%dxCu(I,j))
         enddo; enddo
       endif
-      if (Passive_Stokes_VF) then
-        do J=Jsq-1,Jeq+1 ; do I=Isq-1,Ieq+1
-          dvdx(I,J) = (v(i+1,J,k)*G%dyCv(i+1,J) - v(i,J,k)*G%dyCv(i,J))
-          dudy(I,J) = (u(I,j+1,k)*G%dxCu(I,j+1) - u(I,j,k)*G%dxCu(I,j))
-        enddo; enddo
-      else
-        do J=Jsq-1,Jeq+1 ; do I=Isq-1,Ieq+1
-          dvdx(I,J) = ((v(i+1,J,k)-Waves%us_y(i+1,J,k))*G%dyCv(i+1,J) - &
-                       (v(i,J,k)-Waves%us_y(i,J,k))*G%dyCv(i,J))
-          dudy(I,J) = ((u(I,j+1,k)-Waves%us_x(I,j+1,k))*G%dxCu(I,j+1) - &
-                       (u(I,j,k)-Waves%us_x(I,j,k))*G%dxCu(I,j))
-        enddo; enddo
-      endif
+      do J=Jsq-1,Jeq+1 ; do I=Isq-1,Ieq+1
+        dvdx(I,J) = ((v(i+1,J,k)-Waves%us_y(i+1,J,k))*G%dyCv(i+1,J) - &
+                     (v(i,J,k)-Waves%us_y(i,J,k))*G%dyCv(i,J))
+        dudy(I,J) = ((u(I,j+1,k)-Waves%us_x(I,j+1,k))*G%dxCu(I,j+1) - &
+                     (u(I,j,k)-Waves%us_x(I,j,k))*G%dxCu(I,j))
+      enddo; enddo
     else
       do J=Jsq-1,Jeq+1 ; do I=Isq-1,Ieq+1
         dvdx(I,J) = (v(i+1,J,k)*G%dyCv(i+1,J) - v(i,J,k)*G%dyCv(i,J))
