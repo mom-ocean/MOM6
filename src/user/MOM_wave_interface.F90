@@ -56,13 +56,13 @@ public waves_register_restarts ! public interface to register wave restart field
 type, public :: wave_parameters_CS ; private
 
   ! Main surface wave options and publicly visible variables
-  logical, public :: UseWaves = .false. !< Flag to enable surface gravity wave feature
-  logical, public :: Stokes_VF     !< Developmental:
-                                   !! True if Stokes vortex force is used
-  logical, public :: Stokes_PGF    !< Developmental:
-                                   !! True if Stokes shear pressure Gradient force is used
-  logical, public :: Passive_Stokes_PGF !< Keeps Stokes_PGF on, but doesn't affect dynamics
-  logical, public :: Stokes_DDT    !< Developmental:
+  logical, public :: UseWaves = .false.     !< Flag to enable surface gravity wave feature
+  logical, public :: Stokes_VF = .false.    !< Developmental:
+                                            !! True if Stokes vortex force is used
+  logical, public :: Stokes_PGF = .false.   !< Developmental:
+                                            !! True if Stokes shear pressure Gradient force is used
+  logical, public :: Passive_Stokes_PGF = .false. !< Keeps Stokes_PGF on, but doesn't affect dynamics
+  logical, public :: Stokes_DDT = .false.   !< Developmental:
                                    !! True if Stokes d/dt is used
   real, allocatable, dimension(:,:,:), public :: &
     Us_x               !< 3d zonal Stokes drift profile [L T-1 ~> m s-1]
