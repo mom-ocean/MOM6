@@ -154,8 +154,8 @@ type, public :: ocean_state_type ; private
 
   logical :: icebergs_alter_ocean !< If true, the icebergs can change ocean the
                               !! ocean dynamics and forcing fluxes.
-  real :: press_to_z          !< A conversion factor between pressure and ocean
-                              !! depth in m, usually 1/(rho_0*g) [m Pa-1].
+  real :: press_to_z          !< A conversion factor between pressure and ocean depth,
+                              !! usually 1/(rho_0*g) [Z T2 R-1 L-2 ~> m Pa-1].
   real :: C_p                 !< The heat capacity of seawater [J degC-1 kg-1].
   logical :: offline_tracer_mode = .false. !< If false, use the model in prognostic mode
                               !! with the barotropic and baroclinic dynamics, thermodynamics,
@@ -242,16 +242,16 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, wind_stagger, gas
                                               !! tracer fluxes, and can be used to spawn related
                                               !! internal variables in the ice model.
   ! Local variables
-  real :: Rho0        ! The Boussinesq ocean density [kg m-3].
-  real :: G_Earth     ! The gravitational acceleration [m s-2].
-  real :: HFrz        !< If HFrz > 0 (m), melt potential will be computed.
+  real :: Rho0        ! The Boussinesq ocean density [R ~> kg m-3]
+  real :: G_Earth     ! The gravitational acceleration [L2 Z-1 T-2 ~> m s-2]
+  real :: HFrz        !< If HFrz > 0 [Z ~> m], melt potential will be computed.
                       !! The actual depth over which melt potential is computed will
                       !! min(HFrz, OBLD), where OBLD is the boundary layer depth.
                       !! If HFrz <= 0 (default), melt potential will not be computed.
-  logical :: use_melt_pot!< If true, allocate melt_potential array
+  logical :: use_melt_pot !< If true, allocate melt_potential array
 
-! This include declares and sets the variable "version".
-#include "version_variable.h"
+  ! This include declares and sets the variable "version".
+# include "version_variable.h"
   character(len=40)  :: mdl = "ocean_model_init"  ! This module's name.
   character(len=48)  :: stagger ! A string indicating the staggering locations for the
                                 ! surface velocities returned to the coupler.
@@ -331,10 +331,10 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, wind_stagger, gas
                  "calculate accelerations and the mass for conservation "//&
                  "properties, or with BOUSSINSEQ false to convert some "//&
                  "parameters from vertical units of m to kg m-2.", &
-                 units="kg m-3", default=1035.0)
+                 units="kg m-3", default=1035.0, scale=OS%US%kg_m3_to_R)
   call get_param(param_file, mdl, "G_EARTH", G_Earth, &
                  "The gravitational acceleration of the Earth.", &
-                 units="m s-2", default = 9.80)
+                 units="m s-2", default=9.80, scale=OS%US%m_s_to_L_T**2*OS%US%Z_to_m)
 
   call get_param(param_file, mdl, "ICE_SHELF",  OS%use_ice_shelf, &
                  "If true, enables the ice shelf model.", default=.false.)
@@ -342,7 +342,7 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, wind_stagger, gas
   call get_param(param_file, mdl, "ICEBERGS_APPLY_RIGID_BOUNDARY",  OS%icebergs_alter_ocean, &
                  "If true, allows icebergs to change boundary condition felt by ocean", default=.false.)
 
-  OS%press_to_z = 1.0/(Rho0*G_Earth)
+  OS%press_to_z = 1.0 / (Rho0*G_Earth)
 
   !   Consider using a run-time flag to determine whether to do the diagnostic
   ! vertical integrals, since the related 3-d sums are not negligible in cost.
@@ -350,9 +350,10 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, wind_stagger, gas
                  "If HFREEZE > 0, melt potential will be computed. The actual depth "//&
                  "over which melt potential is computed will be min(HFREEZE, OBLD), "//&
                  "where OBLD is the boundary layer depth. If HFREEZE <= 0 (default), "//&
-                 "melt potential will not be computed.", units="m", default=-1.0, do_not_log=.true.)
+                 "melt potential will not be computed.", &
+                 units="m", default=-1.0, scale=OS%US%m_to_Z, do_not_log=.true.)
 
-  if (HFrz .gt. 0.0) then
+  if (HFrz > 0.0) then
     use_melt_pot=.true.
   else
     use_melt_pot=.false.
@@ -655,7 +656,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, time_start_upda
 
 ! Translate state into Ocean.
 !  call convert_state_to_ocean_type(OS%sfc_state, Ocean_sfc, OS%grid, OS%US, &
-!                                   Ice_ocean_boundary%p, OS%press_to_z)
+!                                   OS%fluxes%p_surf_full, OS%press_to_z)
   call convert_state_to_ocean_type(OS%sfc_state, Ocean_sfc, OS%grid, OS%US)
   Time1 = OS%Time ; if (do_dyn) Time1 = OS%Time_dyn
   call coupler_type_send_data(Ocean_sfc%fields, Time1)
@@ -816,9 +817,9 @@ subroutine convert_state_to_ocean_type(sfc_state, Ocean_sfc, G, US, patm, press_
                                                !! have their data set here.
   type(ocean_grid_type), intent(inout) :: G    !< The ocean's grid structure
   type(unit_scale_type), intent(in)    :: US   !< A dimensional unit scaling type
-  real,        optional, intent(in)    :: patm(:,:)  !< The pressure at the ocean surface [Pa].
-  real,        optional, intent(in)    :: press_to_z !< A conversion factor between pressure and
-                                               !! ocean depth in m, usually 1/(rho_0*g) [m Pa-1].
+  real,        optional, intent(in)    :: patm(:,:)  !< The pressure at the ocean surface [R L2 T-2 ~> Pa]
+  real,        optional, intent(in)    :: press_to_z !< A conversion factor between pressure and ocean
+                                               !! depth, usually 1/(rho_0*g) [Z T2 R-1 L-2 ~> m Pa-1]
   ! Local variables
   real :: IgR0
   character(len=48)  :: val_str
@@ -860,7 +861,7 @@ subroutine convert_state_to_ocean_type(sfc_state, Ocean_sfc, G, US, patm, press_
 
   if (present(patm)) then
     do j=jsc_bnd,jec_bnd ; do i=isc_bnd,iec_bnd
-      Ocean_sfc%sea_lev(i,j) = US%Z_to_m * sfc_state%sea_lev(i+i0,j+j0) + patm(i,j) * press_to_z
+      Ocean_sfc%sea_lev(i,j) = US%Z_to_m * (sfc_state%sea_lev(i+i0,j+j0) + patm(i,j) * press_to_z)
       Ocean_sfc%area(i,j) = US%L_to_m**2 * G%areaT(i+i0,j+j0)
     enddo ; enddo
   else

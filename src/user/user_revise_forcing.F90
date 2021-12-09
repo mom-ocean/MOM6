@@ -24,9 +24,6 @@ type, public :: user_revise_forcing_CS ; private
   real :: cdrag  !< The quadratic bottom drag coefficient.
 end type user_revise_forcing_CS
 
-! This include declares and sets the variable "version".
-#include "version_variable.h"
-  character(len=40) :: mdl = "user_revise_forcing" !< This module's name.
 contains
 
 !> This subroutine sets the surface wind stresses.
@@ -41,6 +38,7 @@ subroutine user_alter_forcing(sfc_state, fluxes, day, G, CS)
   type(user_revise_forcing_CS), pointer   :: CS     !< A pointer to the control structure
                                                     !! returned by a previous call to
                                                     !! surface_forcing_init.
+  return
 
 end subroutine user_alter_forcing
 
@@ -51,6 +49,10 @@ subroutine user_revise_forcing_init(param_file,CS)
   type(user_revise_forcing_CS), pointer   :: CS     !< A pointer to the control structure
                                                     !! returned by a previous call to
                                                     !! surface_forcing_init.
+
+  ! This include declares and sets the variable "version".
+# include "version_variable.h"
+  character(len=40) :: mdl = "user_revise_forcing" !< This module's name.
 
   call log_version(param_file, mdl, version)
 

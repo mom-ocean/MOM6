@@ -15,6 +15,7 @@ use MOM_diabatic_aux,        only : make_frazil, adjust_salt, differential_diffu
 use MOM_diabatic_aux,        only : triDiagTS_Eulerian, find_uv_at_h, diagnoseMLDbyDensityDifference
 use MOM_diabatic_aux,        only : applyBoundaryFluxesInOut, diagnoseMLDbyEnergy, set_pen_shortwave
 use MOM_diag_mediator,       only : post_data, register_diag_field, safe_alloc_ptr
+use MOM_diag_mediator,       only : post_product_sum_u, post_product_sum_v
 use MOM_diag_mediator,       only : diag_ctrl, time_type, diag_update_remap_grids
 use MOM_diag_mediator,       only : diag_ctrl, query_averaging_enabled, enable_averages, disable_averaging
 use MOM_diag_mediator,       only : diag_grid_storage, diag_grid_storage_init, diag_grid_storage_end
@@ -2499,24 +2500,11 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
   if (CS%id_Sdif > 0) call post_data(CS%id_Sdif, Sdif_flx, CS%diag)
   if (CS%id_Sadv > 0) call post_data(CS%id_Sadv, Sadv_flx, CS%diag)
 
-  !! Diagnostics for terms multiplied by fractional thicknesses
-  if (CS%id_hf_dudt_dia_2d > 0) then
-    allocate(hf_dudt_dia_2d(G%IsdB:G%IedB,G%jsd:G%jed), source=0.0)
-    do k=1,nz ; do j=js,je ; do I=Isq,Ieq
-      hf_dudt_dia_2d(I,j) = hf_dudt_dia_2d(I,j) + ADp%du_dt_dia(I,j,k) * ADp%diag_hfrac_u(I,j,k)
-    enddo ; enddo ; enddo
-    call post_data(CS%id_hf_dudt_dia_2d, hf_dudt_dia_2d, CS%diag)
-    deallocate(hf_dudt_dia_2d)
-  endif
-
-  if (CS%id_hf_dvdt_dia_2d > 0) then
-    allocate(hf_dvdt_dia_2d(G%isd:G%ied,G%JsdB:G%JedB), source=0.0)
-    do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
-      hf_dvdt_dia_2d(i,J) = hf_dvdt_dia_2d(i,J) + ADp%dv_dt_dia(i,J,k) * ADp%diag_hfrac_v(i,J,k)
-    enddo ; enddo ; enddo
-    call post_data(CS%id_hf_dvdt_dia_2d, hf_dvdt_dia_2d, CS%diag)
-    deallocate(hf_dvdt_dia_2d)
-  endif
+  ! Diagnostics for thickness-weighted vertically averaged diapycnal accelerations
+  if (CS%id_hf_dudt_dia_2d > 0) &
+    call post_product_sum_u(CS%id_hf_dudt_dia_2d, ADp%du_dt_dia, ADp%diag_hfrac_u, G, nz, CS%diag)
+  if (CS%id_hf_dvdt_dia_2d > 0) &
+    call post_product_sum_v(CS%id_hf_dvdt_dia_2d, ADp%dv_dt_dia, ADp%diag_hfrac_v, G, nz, CS%diag)
 
   call disable_averaging(CS%diag)
 

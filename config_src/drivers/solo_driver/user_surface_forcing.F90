@@ -104,7 +104,7 @@ subroutine USER_buoyancy_forcing(sfc_state, fluxes, day, dt, G, US, CS)
   type(forcing),                 intent(inout) :: fluxes !< A structure containing thermodynamic forcing fields
   type(time_type),               intent(in)    :: day  !< The time of the fluxes
   real,                          intent(in)    :: dt   !< The amount of time over which
-                                                       !! the fluxes apply [s]
+                                                       !! the fluxes apply [T ~> s]
   type(ocean_grid_type),         intent(in)    :: G    !< The ocean's grid structure
   type(unit_scale_type),         intent(in)    :: US   !< A dimensional unit scaling type
   type(user_surface_forcing_CS), pointer       :: CS   !< A pointer to the control structure returned
@@ -242,8 +242,8 @@ subroutine USER_surface_forcing_init(Time, G, US, param_file, diag, CS)
   type(user_surface_forcing_CS), pointer    :: CS   !< A pointer that is set to point to
                                                     !! the control structure for this module
 
-! This include declares and sets the variable "version".
-#include "version_variable.h"
+  ! This include declares and sets the variable "version".
+# include "version_variable.h"
   character(len=40)  :: mdl = "user_surface_forcing" ! This module's name.
 
   if (associated(CS)) then
