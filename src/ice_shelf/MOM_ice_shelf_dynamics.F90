@@ -1791,7 +1791,7 @@ subroutine calc_shelf_driving_stress(CS, ISS, G, US, taudx, taudy, OD)
                          intent(inout) :: taudx  !< X-direction driving stress at q-points [kg L s-2 ~> kg m s-2]
   real, dimension(SZDIB_(G),SZDJB_(G)), &
                          intent(inout) :: taudy  !< Y-direction driving stress at q-points [kg L s-2 ~> kg m s-2]
-                                                  ! This will become [R L3 Z T-2 ~> kg m s-2]
+                                                  ! This will become  [R L3 Z T-2 ~> kg m s-2]
 
 ! driving stress!
 
