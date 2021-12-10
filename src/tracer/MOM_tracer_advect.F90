@@ -34,7 +34,7 @@ type, public :: tracer_advect_CS ; private
   logical :: debug                 !< If true, write verbose checksums for debugging purposes.
   logical :: usePPM                !< If true, use PPM instead of PLM
   logical :: useHuynh              !< If true, use the Huynh scheme for PPM interface values
-  type(group_pass_type) :: pass_uhr_vhr_t_hprev !< A structred used for group passes
+  type(group_pass_type) :: pass_uhr_vhr_t_hprev !< A structure used for group passes
 end type tracer_advect_CS
 
 !>@{ CPU time clocks
@@ -63,18 +63,20 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, GV, US, CS, Reg, &
   type(tracer_advect_CS),  pointer       :: CS    !< control structure for module
   type(tracer_registry_type), pointer    :: Reg   !< pointer to tracer registry
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
-                 optional, intent(in)    :: h_prev_opt !< layer thickness before advection [H ~> m or kg m-2]
+                 optional, intent(in)    :: h_prev_opt !< Cell volume before advection [H L2 ~> m3 or kg]
   integer,       optional, intent(in)    :: max_iter_in !< The maximum number of iterations
   logical,       optional, intent(in)    :: x_first_in !< If present, indicate whether to update
                                                   !! first in the x- or y-direction.
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
-                 optional, intent(out)    :: uhr_out  !< accumulated volume/mass flux through zonal face
+                 optional, intent(out)    :: uhr_out !< Remaining accumulated volume/mass flux through zonal face
                                                   !! [H L2 ~> m3 or kg]
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
-                 optional, intent(out)    :: vhr_out  !< accumulated volume/mass flux through merid face
+                 optional, intent(out)    :: vhr_out !< Remaining accumulated volume/mass flux through meridional face
                                                   !! [H L2 ~> m3 or kg]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
-                 optional, intent(out)    :: h_out !< layer thickness before advection [H ~> m or kg m-2]
+                 optional, intent(out)    :: h_out !< Cell volume after the transport that was done
+                                                  !! by this call [H L2 ~> m3 or kg].  If all the transport
+                                                  !! could be accommodated, this is close to h_end*G%areaT.
 
   type(tracer_type) :: Tr(MAX_FIELDS_) ! The array of registered tracers
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: &
@@ -380,7 +382,7 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
     CFL                 ! The absolute value of the advective upwind-cell CFL number [nondim].
   real :: min_h         ! The minimum thickness that can be realized during
                         ! any of the passes [H ~> m or kg m-2].
-  real :: tiny_h        ! The smallest numerically invertable thickness [H ~> m or kg m-2].
+  real :: tiny_h        ! The smallest numerically invertible thickness [H ~> m or kg m-2].
   real :: h_neglect     ! A thickness that is so small it is usually lost
                         ! in roundoff and can be neglected [H ~> m or kg m-2].
   logical :: do_i(SZIB_(G),SZJ_(G))     ! If true, work on given points.
@@ -744,7 +746,7 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
     CFL                 ! The absolute value of the advective upwind-cell CFL number [nondim].
   real :: min_h         ! The minimum thickness that can be realized during
                         ! any of the passes [H ~> m or kg m-2].
-  real :: tiny_h        ! The smallest numerically invertable thickness [H ~> m or kg m-2].
+  real :: tiny_h        ! The smallest numerically invertible thickness [H ~> m or kg m-2].
   real :: h_neglect     ! A thickness that is so small it is usually lost
                         ! in roundoff and can be neglected [H ~> m or kg m-2].
   logical :: do_j_tr(SZJ_(G))   ! If true, calculate the tracer profiles.
