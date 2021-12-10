@@ -351,7 +351,7 @@ subroutine ALE_main( G, GV, US, h, u, v, tv, Reg, CS, OBC, dt, frac_shelf_h)
   if (CS%id_T_preale > 0) call post_data(CS%id_T_preale, tv%T, CS%diag)
   if (CS%id_S_preale > 0) call post_data(CS%id_S_preale, tv%S, CS%diag)
   if (CS%id_e_preale > 0) then
-    call find_eta(h, tv, G, GV, US, eta_preale)
+    call find_eta(h, tv, G, GV, US, eta_preale, dZref=G%Z_ref)
     call post_data(CS%id_e_preale, eta_preale, CS%diag)
   endif
 
@@ -1304,7 +1304,7 @@ subroutine ALE_initThicknessToCoord( CS, G, GV, h )
   integer :: i, j, k
 
   do j = G%jsd,G%jed ; do i = G%isd,G%ied
-    h(i,j,:) = GV%Z_to_H * getStaticThickness( CS%regridCS, 0., G%bathyT(i,j) )
+    h(i,j,:) = GV%Z_to_H * getStaticThickness( CS%regridCS, 0., G%bathyT(i,j)+G%Z_ref )
   enddo ; enddo
 
 end subroutine ALE_initThicknessToCoord

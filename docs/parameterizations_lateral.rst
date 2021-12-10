@@ -43,4 +43,6 @@ Tidal forcing
 -------------
 
 Astronomical tidal forcings and self-attraction and loading are implement in MOM_tidal_forcing.
+Tides can also be added via an open boundary tidal specification,
+see [OBC wiki page](https://github.com/NOAA-GFDL/MOM6-examples/wiki/Open-Boundary-Conditions).
 

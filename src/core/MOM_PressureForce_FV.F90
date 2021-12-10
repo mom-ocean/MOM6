@@ -90,10 +90,9 @@ subroutine PressureForce_FV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_
                                                            !! or atmosphere-ocean interface [R L2 T-2 ~> Pa].
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), optional, intent(out) :: pbce !< The baroclinic pressure
                                                            !! anomaly in each layer due to eta anomalies
-                                                           !! [L2 T-2 H-1 ~> m s-2 or m4 s-2 kg-1].
-  real, dimension(SZI_(G),SZJ_(G)),          optional, intent(out) :: eta !< The bottom mass used to
-                                                           !! calculate PFu and PFv [H ~> m or kg m-2], with any tidal
-                                                           !! contributions or compressibility compensation.
+                                                           !! [L2 T-2 H-1 ~> m4 s-2 kg-1].
+  real, dimension(SZI_(G),SZJ_(G)),          optional, intent(out) :: eta !< The total column mass used to
+                                                           !! calculate PFu and PFv [H ~> kg m-2].
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1) :: p ! Interface pressure [R L2 T-2 ~> Pa].
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), target :: &
@@ -301,7 +300,7 @@ subroutine PressureForce_FV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_
     ! Find and add the tidal geopotential anomaly.
     !$OMP parallel do default(shared)
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-      SSH(i,j) = (za(i,j) - alpha_ref*p(i,j,1)) * I_gEarth
+      SSH(i,j) = (za(i,j) - alpha_ref*p(i,j,1)) * I_gEarth - G%Z_ref
     enddo ; enddo
     call calc_tidal_forcing(CS%Time, SSH, e_tidal, G, CS%tides_CSp, m_to_Z=US%m_to_Z)
     !$OMP parallel do default(shared)
@@ -430,15 +429,16 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm
                                                          !! or atmosphere-ocean interface [R L2 T-2 ~> Pa].
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), optional, intent(out) :: pbce !< The baroclinic pressure
                                                          !! anomaly in each layer due to eta anomalies
-                                                         !! [L2 T-2 H-1 ~> m s-2 or m4 s-2 kg-1].
-  real, dimension(SZI_(G),SZJ_(G)),          optional, intent(out) :: eta !< The bottom mass used to
-                                                         !! calculate PFu and PFv [H ~> m or kg m-2], with any
-                                                         !! tidal contributions or compressibility compensation.
+                                                         !! [L2 T-2 H-1 ~> m s-2].
+  real, dimension(SZI_(G),SZJ_(G)),          optional, intent(out) :: eta !< The sea-surface height used to
+                                                         !! calculate PFu and PFv [H ~> m], with any
+                                                         !! tidal contributions.
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1) :: e ! Interface height in depth units [Z ~> m].
   real, dimension(SZI_(G),SZJ_(G))  :: &
     e_tidal, &  ! The bottom geopotential anomaly due to tidal forces from
                 ! astronomical sources and self-attraction and loading [Z ~> m].
+    SSH, &      ! The sea surface height anomaly, in depth units [Z ~> m].
     dM          ! The barotropic adjustment to the Montgomery potential to
                 ! account for a reduced gravity model [L2 T-2 ~> m2 s-2].
   real, dimension(SZI_(G)) :: &
@@ -451,7 +451,7 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm
     dpa, &      ! The change in pressure anomaly between the top and bottom
                 ! of a layer [R L2 T-2 ~> Pa].
     intz_dpa    ! The vertical integral in depth of the pressure anomaly less the
-                ! pressure anomaly at the top of the layer [H R L2 T-2 ~> m Pa or kg m-2 Pa].
+                ! pressure anomaly at the top of the layer [H R L2 T-2 ~> m Pa].
   real, dimension(SZIB_(G),SZJ_(G)) :: &
     intx_pa, &  ! The zonal integral of the pressure anomaly along the interface
                 ! atop a layer, divided by the grid spacing [R L2 T-2 ~> Pa].
@@ -485,7 +485,7 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm
   type(thermo_var_ptrs) :: tv_tmp! A structure of temporary T & S.
   real :: Tl(5)              ! copy and T in local stencil [degC]
   real :: mn_T               ! mean of T in local stencil [degC]
-  real :: mn_T2              ! mean of T**2 in local stencil [degC]
+  real :: mn_T2              ! mean of T**2 in local stencil [degC2]
   real :: hl(5)              ! Copy of local stencil of H [H ~> m]
   real :: r_sm_H             ! Reciprocal of sum of H in local stencil [H-1 ~> m-1]
   real, parameter :: C1_6 = 1.0/6.0
@@ -565,13 +565,13 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm
     !$OMP parallel do default(shared)
     do j=Jsq,Jeq+1
       do i=Isq,Ieq+1
-        e(i,j,1) = -G%bathyT(i,j)
+        SSH(i,j) = -G%bathyT(i,j) - G%Z_ref
       enddo
       do k=1,nz ; do i=Isq,Ieq+1
-        e(i,j,1) = e(i,j,1) + h(i,j,k)*GV%H_to_Z
+        SSH(i,j) = SSH(i,j) + h(i,j,k)*GV%H_to_Z
       enddo ; enddo
     enddo
-    call calc_tidal_forcing(CS%Time, e(:,:,1), e_tidal, G, CS%tides_CSp, m_to_Z=US%m_to_Z)
+    call calc_tidal_forcing(CS%Time, SSH, e_tidal, G, CS%tides_CSp, m_to_Z=US%m_to_Z)
   endif
 
 !    Here layer interface heights, e, are calculated.
@@ -637,13 +637,13 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm
                                  tv%eqn_of_state, EOSdom)
         endif
         do i=Isq,Ieq+1
-          dM(i,j) = (CS%GFS_scale - 1.0) * (G_Rho0 * rho_in_situ(i)) * e(i,j,1)
+          dM(i,j) = (CS%GFS_scale - 1.0) * (G_Rho0 * rho_in_situ(i)) * (e(i,j,1) - G%Z_ref)
         enddo
       enddo
     else
       !$OMP parallel do default(shared)
       do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-        dM(i,j) = (CS%GFS_scale - 1.0) * (G_Rho0 * GV%Rlay(1)) * e(i,j,1)
+        dM(i,j) = (CS%GFS_scale - 1.0) * (G_Rho0 * GV%Rlay(1)) * (e(i,j,1) - G%Z_ref)
       enddo ; enddo
     endif
   endif
@@ -667,12 +667,12 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm
   if (use_p_atm) then
     !$OMP parallel do default(shared)
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-      pa(i,j) = (rho_ref*GV%g_Earth)*e(i,j,1) + p_atm(i,j)
+      pa(i,j) = (rho_ref*GV%g_Earth)*(e(i,j,1) - G%Z_ref) + p_atm(i,j)
     enddo ; enddo
   else
     !$OMP parallel do default(shared)
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-      pa(i,j) = (rho_ref*GV%g_Earth)*e(i,j,1)
+      pa(i,j) = (rho_ref*GV%g_Earth)*(e(i,j,1) - G%Z_ref)
     enddo ; enddo
   endif
   !$OMP parallel do default(shared)
@@ -700,17 +700,17 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm
                     rho_ref, CS%Rho0, GV%g_Earth, dz_neglect, G%bathyT, &
                     G%HI, GV, tv%eqn_of_state, US, dpa, intz_dpa, intx_dpa, inty_dpa, &
                     useMassWghtInterp=CS%useMassWghtInterp, &
-                    use_inaccurate_form=CS%use_inaccurate_pgf_rho_anom)
+                    use_inaccurate_form=CS%use_inaccurate_pgf_rho_anom, Z_0p=G%Z_ref)
         elseif ( CS%Recon_Scheme == 2 ) then
           call int_density_dz_generic_ppm(k, tv, T_t, T_b, S_t, S_b, e, &
                     rho_ref, CS%Rho0, GV%g_Earth, dz_neglect, G%bathyT, &
                     G%HI, GV, tv%eqn_of_state, US, dpa, intz_dpa, intx_dpa, inty_dpa, &
-                    useMassWghtInterp=CS%useMassWghtInterp)
+                    useMassWghtInterp=CS%useMassWghtInterp, Z_0p=G%Z_ref)
         endif
       else
         call int_density_dz(tv_tmp%T(:,:,k), tv_tmp%S(:,:,k), e(:,:,K), e(:,:,K+1), &
                   rho_ref, CS%Rho0, GV%g_Earth, G%HI, tv%eqn_of_state, US, dpa, &
-                  intz_dpa, intx_dpa, inty_dpa, G%bathyT, dz_neglect, CS%useMassWghtInterp)
+                  intz_dpa, intx_dpa, inty_dpa, G%bathyT, dz_neglect, CS%useMassWghtInterp, Z_0p=G%Z_ref)
       endif
       !$OMP parallel do default(shared)
       do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1

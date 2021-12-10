@@ -180,8 +180,7 @@ program MOM_main
                                  ! and diffusion equation are read in from files stored from
                                  ! a previous integration of the prognostic model
 
-  type(MOM_control_struct),  pointer :: MOM_CSp => NULL()
-  !> A pointer to the tracer flow control structure.
+  type(MOM_control_struct) :: MOM_CSp   !> MOM control structure
   type(tracer_flow_control_CS), pointer :: &
     tracer_flow_CSp => NULL()  !< A pointer to the tracer flow control structure
   type(surface_forcing_CS),  pointer :: surface_forcing_CSp => NULL()

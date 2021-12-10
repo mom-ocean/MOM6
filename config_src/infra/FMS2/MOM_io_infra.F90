@@ -42,7 +42,7 @@ implicit none ; private
 ! These interfaces are actually implemented or have explicit interfaces in this file.
 public :: open_file, open_ASCII_file, file_is_open, close_file, flush_file, file_exists
 public :: get_file_info, get_file_fields, get_file_times, get_filename_suffix
-public :: MOM_read_data, MOM_read_vector, write_metadata, write_field
+public :: read_field, read_vector, write_metadata, write_field
 public :: field_exists, get_field_atts, get_field_size, get_axis_data, read_field_chksum
 public :: io_infra_init, io_infra_end, MOM_namelist_file, check_namelist_error, write_version
 public :: stdout_if_root
@@ -66,12 +66,12 @@ interface open_file
 end interface open_file
 
 !> Read a data field from a file
-interface MOM_read_data
-  module procedure MOM_read_data_4d
-  module procedure MOM_read_data_3d
-  module procedure MOM_read_data_2d, MOM_read_data_2d_region
-  module procedure MOM_read_data_1d, MOM_read_data_1d_int
-  module procedure MOM_read_data_0d, MOM_read_data_0d_int
+interface read_field
+  module procedure read_field_4d
+  module procedure read_field_3d
+  module procedure read_field_2d, read_field_2d_region
+  module procedure read_field_1d, read_field_1d_int
+  module procedure read_field_0d, read_field_0d_int
 end interface
 
 !> Write a registered field to an output file
@@ -85,10 +85,10 @@ interface write_field
 end interface write_field
 
 !> Read a pair of data fields representing the two components of a vector from a file
-interface MOM_read_vector
-  module procedure MOM_read_vector_3d
-  module procedure MOM_read_vector_2d
-end interface MOM_read_vector
+interface read_vector
+  module procedure read_vector_3d
+  module procedure read_vector_2d
+end interface read_vector
 
 !> Write metadata about a variable or axis to a file and store it for later reuse
 interface write_metadata
@@ -659,8 +659,8 @@ end subroutine get_axis_data
 
 !> This routine uses the fms_io subroutine read_data to read a scalar named
 !! "fieldname" from a single or domain-decomposed file "filename".
-subroutine MOM_read_data_0d(filename, fieldname, data, timelevel, scale, MOM_Domain, &
-                            global_file, file_may_be_4d)
+subroutine read_field_0d(filename, fieldname, data, timelevel, scale, MOM_Domain, &
+                         global_file, file_may_be_4d)
   character(len=*),       intent(in)    :: filename  !< The name of the file to read
   character(len=*),       intent(in)    :: fieldname !< The variable name of the data in the file
   real,                   intent(inout) :: data      !< The 1-dimensional array into which the data
@@ -686,7 +686,7 @@ subroutine MOM_read_data_0d(filename, fieldname, data, timelevel, scale, MOM_Dom
     if (.not.success) call MOM_error(FATAL, "Failed to open "//trim(filename))
 
     ! Find the matching case-insensitive variable name in the file and prepare to read it.
-    call prepare_to_read_var(fileobj_DD, fieldname, "MOM_read_data_0d: ", filename, &
+    call prepare_to_read_var(fileobj_DD, fieldname, "read_field_0d: ", filename, &
                              var_to_read, has_time_dim, timelevel)
 
     ! Read the data.
@@ -705,7 +705,7 @@ subroutine MOM_read_data_0d(filename, fieldname, data, timelevel, scale, MOM_Dom
 
     ! Find the matching case-insensitive variable name in the file, and determine whether it
     ! has a time dimension.
-    call find_varname_in_file(fileObj, fieldname, "MOM_read_data_0d: ", filename, &
+    call find_varname_in_file(fileObj, fieldname, "read_field_0d: ", filename, &
                               var_to_read, has_time_dim, timelevel)
 
     ! Read the data.
@@ -727,12 +727,12 @@ subroutine MOM_read_data_0d(filename, fieldname, data, timelevel, scale, MOM_Dom
     data = scale*data
   endif ; endif
 
-end subroutine MOM_read_data_0d
+end subroutine read_field_0d
 
 !> This routine uses the fms_io subroutine read_data to read a 1-D data field named
 !! "fieldname" from a single or domain-decomposed file "filename".
-subroutine MOM_read_data_1d(filename, fieldname, data, timelevel, scale, MOM_Domain, &
-                            global_file, file_may_be_4d)
+subroutine read_field_1d(filename, fieldname, data, timelevel, scale, MOM_Domain, &
+                         global_file, file_may_be_4d)
   character(len=*),       intent(in)    :: filename  !< The name of the file to read
   character(len=*),       intent(in)    :: fieldname !< The variable name of the data in the file
   real, dimension(:),     intent(inout) :: data      !< The 1-dimensional array into which the data
@@ -758,7 +758,7 @@ subroutine MOM_read_data_1d(filename, fieldname, data, timelevel, scale, MOM_Dom
     if (.not.success) call MOM_error(FATAL, "Failed to open "//trim(filename))
 
     ! Find the matching case-insensitive variable name in the file and prepare to read it.
-    call prepare_to_read_var(fileobj_DD, fieldname, "MOM_read_data_1d: ", filename, &
+    call prepare_to_read_var(fileobj_DD, fieldname, "read_field_1d: ", filename, &
                              var_to_read, has_time_dim, timelevel)
 
     ! Read the data.
@@ -777,7 +777,7 @@ subroutine MOM_read_data_1d(filename, fieldname, data, timelevel, scale, MOM_Dom
 
     ! Find the matching case-insensitive variable name in the file, and determine whether it
     ! has a time dimension.
-    call find_varname_in_file(fileObj, fieldname, "MOM_read_data_1d: ", filename, &
+    call find_varname_in_file(fileObj, fieldname, "read_field_1d: ", filename, &
                               var_to_read, has_time_dim, timelevel)
 
     ! Read the data.
@@ -799,13 +799,13 @@ subroutine MOM_read_data_1d(filename, fieldname, data, timelevel, scale, MOM_Dom
     data(:) = scale*data(:)
   endif ; endif
 
-end subroutine MOM_read_data_1d
+end subroutine read_field_1d
 
 !> This routine uses the fms_io subroutine read_data to read a distributed
 !! 2-D data field named "fieldname" from file "filename".  Valid values for
 !! "position" include CORNER, CENTER, EAST_FACE and NORTH_FACE.
-subroutine MOM_read_data_2d(filename, fieldname, data, MOM_Domain, &
-                            timelevel, position, scale, global_file, file_may_be_4d)
+subroutine read_field_2d(filename, fieldname, data, MOM_Domain, &
+                         timelevel, position, scale, global_file, file_may_be_4d)
   character(len=*),       intent(in)    :: filename  !< The name of the file to read
   character(len=*),       intent(in)    :: fieldname !< The variable name of the data in the file
   real, dimension(:,:),   intent(inout) :: data      !< The 2-dimensional array into which the data
@@ -831,7 +831,7 @@ subroutine MOM_read_data_2d(filename, fieldname, data, MOM_Domain, &
     if (.not.success) call MOM_error(FATAL, "Failed to open "//trim(filename))
 
     ! Find the matching case-insensitive variable name in the file and prepare to read it.
-    call prepare_to_read_var(fileobj, fieldname, "MOM_read_data_2d: ", filename, &
+    call prepare_to_read_var(fileobj, fieldname, "read_field_2d: ", filename, &
                              var_to_read, has_time_dim, timelevel, position)
 
     ! Read the data.
@@ -852,12 +852,12 @@ subroutine MOM_read_data_2d(filename, fieldname, data, MOM_Domain, &
     call rescale_comp_data(MOM_Domain, data, scale)
   endif ; endif
 
-end subroutine MOM_read_data_2d
+end subroutine read_field_2d
 
 !> This routine uses the fms_io subroutine read_data to read a region from a distributed or
 !! global 2-D data field named "fieldname" from file "filename".
-subroutine MOM_read_data_2d_region(filename, fieldname, data, start, nread, MOM_domain, &
-                                   no_domain, scale)
+subroutine read_field_2d_region(filename, fieldname, data, start, nread, MOM_domain, &
+                                no_domain, scale)
   character(len=*),       intent(in)    :: filename  !< The name of the file to read
   character(len=*),       intent(in)    :: fieldname !< The variable name of the data in the file
   real, dimension(:,:),   intent(inout) :: data      !< The 2-dimensional array into which the data
@@ -887,7 +887,7 @@ subroutine MOM_read_data_2d_region(filename, fieldname, data, start, nread, MOM_
     if (.not.success) call MOM_error(FATAL, "Failed to open "//trim(filename))
 
     ! Find the matching case-insensitive variable name in the file and prepare to read it.
-    call prepare_to_read_var(fileobj_DD, fieldname, "MOM_read_data_2d_region: ", &
+    call prepare_to_read_var(fileobj_DD, fieldname, "read_field_2d_region: ", &
                              filename, var_to_read)
 
     ! Read the data.
@@ -902,7 +902,7 @@ subroutine MOM_read_data_2d_region(filename, fieldname, data, start, nread, MOM_
 
     ! Find the matching case-insensitive variable name in the file, and determine whether it
     ! has a time dimension.
-    call find_varname_in_file(fileObj, fieldname, "MOM_read_data_2d_region: ", filename, var_to_read)
+    call find_varname_in_file(fileObj, fieldname, "read_field_2d_region: ", filename, var_to_read)
 
     ! Read the data.
     call fms2_read_data(fileobj, var_to_read, data, corner=start(1:2), edge_lengths=nread(1:2))
@@ -925,13 +925,13 @@ subroutine MOM_read_data_2d_region(filename, fieldname, data, start, nread, MOM_
     endif
   endif ; endif
 
-end subroutine MOM_read_data_2d_region
+end subroutine read_field_2d_region
 
 !> This routine uses the fms_io subroutine read_data to read a distributed
 !! 3-D data field named "fieldname" from file "filename".  Valid values for
 !! "position" include CORNER, CENTER, EAST_FACE and NORTH_FACE.
-subroutine MOM_read_data_3d(filename, fieldname, data, MOM_Domain, &
-                            timelevel, position, scale, global_file, file_may_be_4d)
+subroutine read_field_3d(filename, fieldname, data, MOM_Domain, &
+                         timelevel, position, scale, global_file, file_may_be_4d)
   character(len=*),       intent(in)    :: filename  !< The name of the file to read
   character(len=*),       intent(in)    :: fieldname !< The variable name of the data in the file
   real, dimension(:,:,:), intent(inout) :: data      !< The 3-dimensional array into which the data
@@ -957,7 +957,7 @@ subroutine MOM_read_data_3d(filename, fieldname, data, MOM_Domain, &
     if (.not.success) call MOM_error(FATAL, "Failed to open "//trim(filename))
 
     ! Find the matching case-insensitive variable name in the file and prepare to read it.
-    call prepare_to_read_var(fileobj, fieldname, "MOM_read_data_3d: ", filename, &
+    call prepare_to_read_var(fileobj, fieldname, "read_field_3d: ", filename, &
                              var_to_read, has_time_dim, timelevel, position)
 
     ! Read the data.
@@ -978,13 +978,13 @@ subroutine MOM_read_data_3d(filename, fieldname, data, MOM_Domain, &
     call rescale_comp_data(MOM_Domain, data, scale)
   endif ; endif
 
-end subroutine MOM_read_data_3d
+end subroutine read_field_3d
 
 !> This routine uses the fms_io subroutine read_data to read a distributed
 !! 4-D data field named "fieldname" from file "filename".  Valid values for
 !! "position" include CORNER, CENTER, EAST_FACE and NORTH_FACE.
-subroutine MOM_read_data_4d(filename, fieldname, data, MOM_Domain, &
-                            timelevel, position, scale, global_file)
+subroutine read_field_4d(filename, fieldname, data, MOM_Domain, &
+                         timelevel, position, scale, global_file)
   character(len=*),       intent(in)    :: filename  !< The name of the file to read
   character(len=*),       intent(in)    :: fieldname !< The variable name of the data in the file
   real, dimension(:,:,:,:), intent(inout) :: data    !< The 4-dimensional array into which the data
@@ -1009,7 +1009,7 @@ subroutine MOM_read_data_4d(filename, fieldname, data, MOM_Domain, &
     if (.not.success) call MOM_error(FATAL, "Failed to open "//trim(filename))
 
     ! Find the matching case-insensitive variable name in the file and prepare to read it.
-    call prepare_to_read_var(fileobj, fieldname, "MOM_read_data_4d: ", filename, &
+    call prepare_to_read_var(fileobj, fieldname, "read_field_4d: ", filename, &
                              var_to_read, has_time_dim, timelevel, position)
 
     ! Read the data.
@@ -1030,11 +1030,11 @@ subroutine MOM_read_data_4d(filename, fieldname, data, MOM_Domain, &
     call rescale_comp_data(MOM_Domain, data, scale)
   endif ; endif
 
-end subroutine MOM_read_data_4d
+end subroutine read_field_4d
 
 !> This routine uses the fms_io subroutine read_data to read a scalar integer
 !! data field named "fieldname" from file "filename".
-subroutine MOM_read_data_0d_int(filename, fieldname, data, timelevel)
+subroutine read_field_0d_int(filename, fieldname, data, timelevel)
   character(len=*),       intent(in)    :: filename  !< The name of the file to read
   character(len=*),       intent(in)    :: fieldname !< The variable name of the data in the file
   integer,                intent(inout) :: data      !< The 1-dimensional array into which the data
@@ -1054,7 +1054,7 @@ subroutine MOM_read_data_0d_int(filename, fieldname, data, timelevel)
 
     ! Find the matching case-insensitive variable name in the file, and determine whether it
     ! has a time dimension.
-    call find_varname_in_file(fileObj, fieldname, "MOM_read_data_0d_int: ", filename, &
+    call find_varname_in_file(fileObj, fieldname, "read_field_0d_int: ", filename, &
                               var_to_read, has_time_dim, timelevel)
 
     ! Read the data.
@@ -1070,11 +1070,11 @@ subroutine MOM_read_data_0d_int(filename, fieldname, data, timelevel)
     call read_data(filename, fieldname, data, timelevel=timelevel, no_domain=.true.)
   endif
 
-end subroutine MOM_read_data_0d_int
+end subroutine read_field_0d_int
 
 !> This routine uses the fms_io subroutine read_data to read a 1-D integer
 !! data field named "fieldname" from file "filename".
-subroutine MOM_read_data_1d_int(filename, fieldname, data, timelevel)
+subroutine read_field_1d_int(filename, fieldname, data, timelevel)
   character(len=*),       intent(in)    :: filename  !< The name of the file to read
   character(len=*),       intent(in)    :: fieldname !< The variable name of the data in the file
   integer, dimension(:),  intent(inout) :: data      !< The 1-dimensional array into which the data
@@ -1095,7 +1095,7 @@ subroutine MOM_read_data_1d_int(filename, fieldname, data, timelevel)
 
     ! Find the matching case-insensitive variable name in the file, and determine whether it
     ! has a time dimension.
-    call find_varname_in_file(fileObj, fieldname, "MOM_read_data_1d_int: ", filename, &
+    call find_varname_in_file(fileObj, fieldname, "read_field_1d_int: ", filename, &
                               var_to_read, has_time_dim, timelevel)
 
     ! Read the data.
@@ -1111,14 +1111,14 @@ subroutine MOM_read_data_1d_int(filename, fieldname, data, timelevel)
     call read_data(filename, fieldname, data, timelevel=timelevel, no_domain=.true.)
   endif
 
-end subroutine MOM_read_data_1d_int
+end subroutine read_field_1d_int
 
 
 !> This routine uses the fms_io subroutine read_data to read a pair of distributed
 !! 2-D data fields with names given by "[uv]_fieldname" from file "filename".  Valid values for
 !! "stagger" include CGRID_NE, BGRID_NE, and AGRID.
-subroutine MOM_read_vector_2d(filename, u_fieldname, v_fieldname, u_data, v_data, MOM_Domain, &
-                              timelevel, stagger, scalar_pair, scale)
+subroutine read_vector_2d(filename, u_fieldname, v_fieldname, u_data, v_data, MOM_Domain, &
+                          timelevel, stagger, scalar_pair, scale)
   character(len=*),       intent(in)    :: filename  !< The name of the file to read
   character(len=*),       intent(in)    :: u_fieldname !< The variable name of the u data in the file
   character(len=*),       intent(in)    :: v_fieldname !< The variable name of the v data in the file
@@ -1152,9 +1152,9 @@ subroutine MOM_read_vector_2d(filename, u_fieldname, v_fieldname, u_data, v_data
     if (.not.success) call MOM_error(FATAL, "Failed to open "//trim(filename))
 
     ! Find the matching case-insensitive u- and v-variable names in the file and prepare to read them.
-    call prepare_to_read_var(fileobj, u_fieldname, "MOM_read_vector_2d: ", filename, &
+    call prepare_to_read_var(fileobj, u_fieldname, "read_vector_2d: ", filename, &
                              u_var, has_time_dim, timelevel, position=u_pos)
-    call prepare_to_read_var(fileobj, v_fieldname, "MOM_read_vector_2d: ", filename, &
+    call prepare_to_read_var(fileobj, v_fieldname, "read_vector_2d: ", filename, &
                              v_var, has_time_dim, timelevel, position=v_pos)
 
     ! Read the u-data and v-data. There would already been an error message for one
@@ -1181,13 +1181,13 @@ subroutine MOM_read_vector_2d(filename, u_fieldname, v_fieldname, u_data, v_data
     call rescale_comp_data(MOM_Domain, v_data, scale)
   endif ; endif
 
-end subroutine MOM_read_vector_2d
+end subroutine read_vector_2d
 
 !> This routine uses the fms_io subroutine read_data to read a pair of distributed
 !! 3-D data fields with names given by "[uv]_fieldname" from file "filename".  Valid values for
 !! "stagger" include CGRID_NE, BGRID_NE, and AGRID.
-subroutine MOM_read_vector_3d(filename, u_fieldname, v_fieldname, u_data, v_data, MOM_Domain, &
-                              timelevel, stagger, scalar_pair, scale)
+subroutine read_vector_3d(filename, u_fieldname, v_fieldname, u_data, v_data, MOM_Domain, &
+                          timelevel, stagger, scalar_pair, scale)
   character(len=*),       intent(in)    :: filename  !< The name of the file to read
   character(len=*),       intent(in)    :: u_fieldname !< The variable name of the u data in the file
   character(len=*),       intent(in)    :: v_fieldname !< The variable name of the v data in the file
@@ -1222,9 +1222,9 @@ subroutine MOM_read_vector_3d(filename, u_fieldname, v_fieldname, u_data, v_data
     if (.not.success) call MOM_error(FATAL, "Failed to open "//trim(filename))
 
     ! Find the matching case-insensitive u- and v-variable names in the file and prepare to read them.
-    call prepare_to_read_var(fileobj, u_fieldname, "MOM_read_vector_3d: ", filename, &
+    call prepare_to_read_var(fileobj, u_fieldname, "read_vector_3d: ", filename, &
                              u_var, has_time_dim, timelevel, position=u_pos)
-    call prepare_to_read_var(fileobj, v_fieldname, "MOM_read_vector_3d: ", filename, &
+    call prepare_to_read_var(fileobj, v_fieldname, "read_vector_3d: ", filename, &
                              v_var, has_time_dim, timelevel, position=v_pos)
 
     ! Read the u-data and v-data, dangerously assuming either both or neither have time dimensions.
@@ -1251,7 +1251,7 @@ subroutine MOM_read_vector_3d(filename, u_fieldname, v_fieldname, u_data, v_data
     call rescale_comp_data(MOM_Domain, v_data, scale)
   endif ; endif
 
-end subroutine MOM_read_vector_3d
+end subroutine read_vector_3d
 
 
 !> Find the case-sensitive name of the variable in a netCDF file with a case-insensitive name match.

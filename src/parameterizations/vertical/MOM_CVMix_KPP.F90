@@ -411,11 +411,14 @@ logical function KPP_init(paramFile, G, GV, US, diag, Time, CS, passive, Waves)
                     "Unrecognized KPP_LT_K_SHAPE option: "//trim(string))
     end select
     call get_param(paramFile, mdl, "KPP_LT_K_METHOD", string ,                   &
-                   'Method to enhance mixing coefficient in KPP. '//           &
+                   'Method to enhance mixing coefficient in KPP. '//             &
                    'Valid options are: \n'//                                     &
                    '\t CONSTANT = Constant value (KPP_K_ENH_FAC) \n'//           &
                    '\t VR12     = Function of Langmuir number based on VR12\n'// &
-                   '\t RW16     = Function of Langmuir number based on RW16',    &
+                   '\t            (Van Roekel et al. 2012)\n'//                  &
+                   '\t            (Li et al. 2016, OM) \n'//                     &
+                   '\t RW16     = Function of Langmuir number based on RW16\n'// &
+                   '\t            (Reichl et al., 2016, JPO)',    &
                    default='CONSTANT')
     select case ( trim(string))
       case ("CONSTANT")
@@ -443,12 +446,16 @@ logical function KPP_init(paramFile, G, GV, US, diag, Time, CS, passive, Waves)
        'in Bulk Richardson Number.', units="", Default=.false.)
   if (CS%LT_Vt2_Enhancement) then
     call get_param(paramFile, mdl, "KPP_LT_VT2_METHOD",string ,                  &
-                   'Method to enhance Vt2 in KPP. '//                          &
+                   'Method to enhance Vt2 in KPP. '//                            &
                    'Valid options are: \n'//                                     &
                    '\t CONSTANT = Constant value (KPP_VT2_ENH_FAC) \n'//         &
                    '\t VR12     = Function of Langmuir number based on VR12\n'// &
+                   '\t            (Van Roekel et al., 2012) \n'//                &
+                   '\t            (Li et al. 2016, OM) \n'//                     &
                    '\t RW16     = Function of Langmuir number based on RW16\n'// &
-                   '\t LF17     = Function of Langmuir number based on LF17',    &
+                   '\t            (Reichl et al., 2016, JPO) \n'//               &
+                   '\t LF17     = Function of Langmuir number based on LF17\n'// &
+                   '\t            (Li and Fox-Kemper, 2017, JPO)',    &
                    default='CONSTANT')
     select case ( trim(string))
       case ("CONSTANT")
@@ -570,49 +577,29 @@ logical function KPP_init(paramFile, G, GV, US, diag, Time, CS, passive, Waves)
   CS%id_La_SL = register_diag_field('ocean_model', 'KPP_La_SL', diag%axesT1, Time, &
       'Surface-layer Langmuir number computed in [CVMix] KPP','nondim')
 
-  allocate( CS%N( SZI_(G), SZJ_(G),SZK_(GV)+1 ) )
-  CS%N(:,:,:) = 0.
-  allocate( CS%OBLdepth( SZI_(G), SZJ_(G) ) )
-  CS%OBLdepth(:,:) = 0.
-  allocate( CS%kOBL( SZI_(G), SZJ_(G) ) )
-  CS%kOBL(:,:) = 0.
-  allocate( CS%La_SL( SZI_(G), SZJ_(G) ) )
-  CS%La_SL(:,:) = 0.
-  allocate( CS%Vt2( SZI_(G), SZJ_(G),SZK_(GV) ) )
-  CS%Vt2(:,:,:) = 0.
+  allocate( CS%N( SZI_(G), SZJ_(G), SZK_(GV)+1 ), source=0. )
+  allocate( CS%OBLdepth( SZI_(G), SZJ_(G) ), source=0. )
+  allocate( CS%kOBL( SZI_(G), SZJ_(G) ), source=0. )
+  allocate( CS%La_SL( SZI_(G), SZJ_(G) ), source=0. )
+  allocate( CS%Vt2( SZI_(G), SZJ_(G), SZK_(GV) ), source=0. )
   if (CS%id_OBLdepth_original > 0) allocate( CS%OBLdepth_original( SZI_(G), SZJ_(G) ) )
 
-  allocate( CS%OBLdepthprev( SZI_(G), SZJ_(G) ) ) ; CS%OBLdepthprev(:,:) = 0.0
-  if (CS%id_BulkDrho > 0) allocate( CS%dRho( SZI_(G), SZJ_(G),SZK_(GV) ) )
-  if (CS%id_BulkDrho > 0) CS%dRho(:,:,:) = 0.
-  if (CS%id_BulkUz2 > 0)  allocate( CS%Uz2( SZI_(G), SZJ_(G),SZK_(GV) ) )
-  if (CS%id_BulkUz2 > 0)  CS%Uz2(:,:,:) = 0.
-  if (CS%id_BulkRi > 0)   allocate( CS%BulkRi( SZI_(G), SZJ_(G),SZK_(GV) ) )
-  if (CS%id_BulkRi > 0)   CS%BulkRi(:,:,:) = 0.
-  if (CS%id_Sigma > 0)    allocate( CS%sigma( SZI_(G), SZJ_(G),SZK_(GV)+1 ) )
-  if (CS%id_Sigma > 0)    CS%sigma(:,:,:) = 0.
-  if (CS%id_Ws > 0)       allocate( CS%Ws( SZI_(G), SZJ_(G),SZK_(GV) ) )
-  if (CS%id_Ws > 0)       CS%Ws(:,:,:) = 0.
-  if (CS%id_N2 > 0)       allocate( CS%N2( SZI_(G), SZJ_(G),SZK_(GV)+1 ) )
-  if (CS%id_N2 > 0)       CS%N2(:,:,:) = 0.
-  if (CS%id_Kt_KPP > 0)   allocate( CS%Kt_KPP( SZI_(G), SZJ_(G),SZK_(GV)+1 ) )
-  if (CS%id_Kt_KPP > 0)   CS%Kt_KPP(:,:,:) = 0.
-  if (CS%id_Ks_KPP > 0)   allocate( CS%Ks_KPP( SZI_(G), SZJ_(G),SZK_(GV)+1 ) )
-  if (CS%id_Ks_KPP > 0)   CS%Ks_KPP(:,:,:) = 0.
-  if (CS%id_Kv_KPP > 0)   allocate( CS%Kv_KPP( SZI_(G), SZJ_(G),SZK_(GV)+1 ) )
-  if (CS%id_Kv_KPP > 0)   CS%Kv_KPP(:,:,:) = 0.
-  if (CS%id_Tsurf > 0)    allocate( CS%Tsurf( SZI_(G), SZJ_(G)) )
-  if (CS%id_Tsurf > 0)    CS%Tsurf(:,:) = 0.
-  if (CS%id_Ssurf > 0)    allocate( CS%Ssurf( SZI_(G), SZJ_(G)) )
-  if (CS%id_Ssurf > 0)    CS%Ssurf(:,:) = 0.
-  if (CS%id_Usurf > 0)    allocate( CS%Usurf( SZIB_(G), SZJ_(G)) )
-  if (CS%id_Usurf > 0)    CS%Usurf(:,:) = 0.
-  if (CS%id_Vsurf > 0)    allocate( CS%Vsurf( SZI_(G), SZJB_(G)) )
-  if (CS%id_Vsurf > 0)    CS%Vsurf(:,:) = 0.
-  if (CS%id_EnhVt2 > 0)    allocate( CS%EnhVt2( SZI_(G), SZJ_(G),SZK_(GV)) )
-  if (CS%id_EnhVt2 > 0)    CS%EnhVt2(:,:,:) = 0.
-  if (CS%id_EnhK > 0)    allocate( CS%EnhK( SZI_(G), SZJ_(G),SZK_(GV)+1 ) )
-  if (CS%id_EnhK > 0)    CS%EnhK(:,:,:) = 0.
+  allocate( CS%OBLdepthprev( SZI_(G), SZJ_(G) ), source=0.0 )
+  if (CS%id_BulkDrho > 0) allocate( CS%dRho( SZI_(G), SZJ_(G), SZK_(GV) ), source=0. )
+  if (CS%id_BulkUz2 > 0)  allocate( CS%Uz2( SZI_(G), SZJ_(G), SZK_(GV) ), source=0. )
+  if (CS%id_BulkRi > 0)   allocate( CS%BulkRi( SZI_(G), SZJ_(G), SZK_(GV) ), source=0. )
+  if (CS%id_Sigma > 0)    allocate( CS%sigma( SZI_(G), SZJ_(G), SZK_(GV)+1 ), source=0. )
+  if (CS%id_Ws > 0)       allocate( CS%Ws( SZI_(G), SZJ_(G), SZK_(GV) ), source=0. )
+  if (CS%id_N2 > 0)       allocate( CS%N2( SZI_(G), SZJ_(G), SZK_(GV)+1 ), source=0. )
+  if (CS%id_Kt_KPP > 0)   allocate( CS%Kt_KPP( SZI_(G), SZJ_(G), SZK_(GV)+1 ), source=0. )
+  if (CS%id_Ks_KPP > 0)   allocate( CS%Ks_KPP( SZI_(G), SZJ_(G), SZK_(GV)+1 ), source=0. )
+  if (CS%id_Kv_KPP > 0)   allocate( CS%Kv_KPP( SZI_(G), SZJ_(G), SZK_(GV)+1 ), source=0. )
+  if (CS%id_Tsurf > 0)    allocate( CS%Tsurf( SZI_(G), SZJ_(G) ), source=0. )
+  if (CS%id_Ssurf > 0)    allocate( CS%Ssurf( SZI_(G), SZJ_(G) ), source=0. )
+  if (CS%id_Usurf > 0)    allocate( CS%Usurf( SZIB_(G), SZJ_(G) ), source=0. )
+  if (CS%id_Vsurf > 0)    allocate( CS%Vsurf( SZI_(G), SZJB_(G) ), source=0. )
+  if (CS%id_EnhVt2 > 0)   allocate( CS%EnhVt2( SZI_(G), SZJ_(G), SZK_(GV) ), source=0. )
+  if (CS%id_EnhK > 0)     allocate( CS%EnhK( SZI_(G), SZJ_(G), SZK_(GV)+1 ), source=0. )
 
   id_clock_KPP_calc = cpu_clock_id('Ocean KPP calculate)', grain=CLOCK_MODULE)
   id_clock_KPP_compute_BLD = cpu_clock_id('(Ocean KPP comp BLD)', grain=CLOCK_ROUTINE)
