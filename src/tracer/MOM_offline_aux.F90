@@ -673,21 +673,23 @@ subroutine update_offline_from_files(G, GV, nk_input, mean_file, sum_file, snap_
     vhtr(:,:,:) = 0.0
     ! Time-summed fields
     call MOM_read_vector(sum_file, 'uhtr_sum', 'vhtr_sum', uhtr(:,:,1:nk_input), &
-                         vhtr(:,:,1:nk_input), G%Domain, timelevel=ridx_sum)
+                         vhtr(:,:,1:nk_input), G%Domain, timelevel=ridx_sum, &
+                         scale=GV%kg_m2_to_H)
     call MOM_read_data(snap_file, 'h_end', h_end(:,:,1:nk_input), G%Domain, &
                        timelevel=ridx_snap,position=CENTER)
     call MOM_read_data(mean_file, 'temp', temp_mean(:,:,1:nk_input), G%Domain, &
                        timelevel=ridx_sum,position=CENTER)
     call MOM_read_data(mean_file, 'salt', salt_mean(:,:,1:nk_input), G%Domain, &
                        timelevel=ridx_sum,position=CENTER)
-  endif
 
-  do j=js,je ; do i=is,ie
-    if (G%mask2dT(i,j)>0.) then
-      temp_mean(:,:,nk_input:nz) = temp_mean(i,j,nk_input)
-      salt_mean(:,:,nk_input:nz) = salt_mean(i,j,nk_input)
-    endif
-  enddo ; enddo
+    ! Fill temperature and salinity downward from the deepest input data.
+    do k=nk_input+1,nz ; do j=js,je ; do i=is,ie
+      if (G%mask2dT(i,j)>0.) then
+        temp_mean(i,j,k) = temp_mean(i,j,nk_input)
+        salt_mean(i,j,k) = salt_mean(i,j,nk_input)
+      endif
+    enddo ; enddo ; enddo
+  endif
 
   ! Check if reading vertical diffusivities or entrainment fluxes
   call MOM_read_data( mean_file, 'Kd_interface', Kd(:,:,1:nk_input+1), G%Domain, &
