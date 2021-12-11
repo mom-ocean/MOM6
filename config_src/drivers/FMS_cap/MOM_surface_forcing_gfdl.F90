@@ -1168,8 +1168,8 @@ subroutine apply_force_adjustments(G, US, CS, Time, forces)
   tempx_at_h(:,:) = 0.0 ; tempy_at_h(:,:) = 0.0
   ! Either reads data or leaves contents unchanged
   overrode_x = .false. ; overrode_y = .false.
-  call data_override(G%Domain, 'taux_adj', tempx_at_h, Time, override=overrode_x, scale=Pa_conversion)
-  call data_override(G%Domain, 'tauy_adj', tempy_at_h, Time, override=overrode_y, scale=Pa_conversion)
+  call data_override(G%Domain, 'taux_adj', tempx_at_h(isc:iec,jsc:jec), Time, override=overrode_x, scale=Pa_conversion)
+  call data_override(G%Domain, 'tauy_adj', tempy_at_h(isc:iec,jsc:jec), Time, override=overrode_y, scale=Pa_conversion)
 
   if (overrode_x .or. overrode_y) then
     if (.not. (overrode_x .and. overrode_y)) call MOM_error(FATAL,"apply_flux_adjustments: "//&

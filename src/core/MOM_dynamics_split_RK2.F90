@@ -865,11 +865,10 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
     enddo ; enddo
   enddo
 
-  !   The time-averaged free surface height has already been set by the last
-  !  call to btstep.
+  ! The time-averaged free surface height has already been set by the last call to btstep.
 
-  ! Deallocate this memory to avoid a memory leak.  ###We should also revisit how this array is declared. - RWH
-  !### if (dyn_p_surf .and. associated(eta_PF_start)) deallocate(eta_PF_start)
+  ! Deallocate this memory to avoid a memory leak. ### We should revisit how this array is declared. -RWH
+  if (dyn_p_surf .and. associated(eta_PF_start)) deallocate(eta_PF_start)
 
   !  Here various terms used in to update the momentum equations are
   !  offered for time averaging.
