@@ -223,7 +223,7 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, GV, US, CS, LB, OBC, por_face_are
                                                  !! [H L2 T-1 ~> m3 s-1 or kg s-1].
   real,                    intent(in)    :: dt   !< Time increment [T ~> s].
   type(unit_scale_type),   intent(in)    :: US   !< A dimensional unit scaling type
-  type(continuity_PPM_CS), intent(in)       :: CS   !< This module's control structure.
+  type(continuity_PPM_CS), intent(in)    :: CS   !< This module's control structure.
   type(loop_bounds_type),  intent(in)    :: LB   !< Loop bounds structure.
   type(ocean_OBC_type),    pointer       :: OBC  !< Open boundaries control structure.
   real, dimension(SZIB_(G), SZJ_(G), SZK_(G)), &
@@ -512,10 +512,10 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, GV, US, CS, LB, OBC, por_face_are
   if  (set_BT_cont) then ; if (allocated(BT_cont%h_u)) then
     if (present(u_cor)) then
       call zonal_face_thickness(u_cor, h_in, h_L, h_R, BT_cont%h_u, dt, G, GV, US, LB, &
-                                CS%vol_CFL, CS%marginal_faces, OBC, por_face_areaU(:,j,k), visc_rem_u)
+                                CS%vol_CFL, CS%marginal_faces, OBC, por_face_areaU, visc_rem_u)
     else
       call zonal_face_thickness(u, h_in, h_L, h_R, BT_cont%h_u, dt, G, GV, US, LB, &
-                                CS%vol_CFL, CS%marginal_faces, OBC, por_face_areaU(:,j,k), visc_rem_u)
+                                CS%vol_CFL, CS%marginal_faces, OBC, por_face_areaU, visc_rem_u)
     endif
   endif ; endif
 
@@ -672,9 +672,11 @@ subroutine zonal_face_thickness(u, h, h_L, h_R, h_u, dt, G, GV, US, LB, vol_CFL,
     else ; h_u(I,j,k) = h_avg ; endif
   enddo ; enddo ; enddo
   if (present(visc_rem_u)) then
+    !### The expression setting h_u should also be multiplied by por_face_areaU in this case,
+    !    and in the two OBC cases below with visc_rem_u.
     !$OMP parallel do default(shared)
     do k=1,nz ; do j=jsh,jeh ; do I=ish-1,ieh
-      h_u(I,j,k) = h_u(I,j,k) * visc_rem_u(I,j,k)
+      h_u(I,j,k) = h_u(I,j,k) * visc_rem_u(I,j,k) !### * por_face_areaU(I,j,k)
     enddo ; enddo ; enddo
   endif
 
@@ -687,7 +689,7 @@ subroutine zonal_face_thickness(u, h, h_L, h_R, h_u, dt, G, GV, US, LB, vol_CFL,
         if (OBC%segment(n)%direction == OBC_DIRECTION_E) then
           if (present(visc_rem_u)) then ; do k=1,nz
             do j = OBC%segment(n)%HI%jsd, OBC%segment(n)%HI%jed
-              h_u(I,j,k) = h(i,j,k) * visc_rem_u(I,j,k)
+              h_u(I,j,k) = h(i,j,k) * visc_rem_u(I,j,k) !### * por_face_areaU(I,j,k)
             enddo
           enddo ; else ; do k=1,nz
             do j = OBC%segment(n)%HI%jsd, OBC%segment(n)%HI%jed
@@ -697,7 +699,7 @@ subroutine zonal_face_thickness(u, h, h_L, h_R, h_u, dt, G, GV, US, LB, vol_CFL,
         else
           if (present(visc_rem_u)) then ; do k=1,nz
             do j = OBC%segment(n)%HI%jsd, OBC%segment(n)%HI%jed
-              h_u(I,j,k) = h(i+1,j,k) * visc_rem_u(I,j,k)
+              h_u(I,j,k) = h(i+1,j,k) * visc_rem_u(I,j,k) !### * por_face_areaU(I,j,k)
             enddo
           enddo ; else ; do k=1,nz
             do j = OBC%segment(n)%HI%jsd, OBC%segment(n)%HI%jed
@@ -1495,9 +1497,11 @@ subroutine merid_face_thickness(v, h, h_L, h_R, h_v, dt, G, GV, US, LB, vol_CFL,
   enddo ; enddo ; enddo
 
   if (present(visc_rem_v)) then
+    !### This expression setting h_v should also be multiplied by por_face_areaU in this case,
+    !    and in the two OBC cases below with visc_rem_u.
     !$OMP parallel do default(shared)
     do k=1,nz ; do J=jsh-1,jeh ; do i=ish,ieh
-      h_v(i,J,k) = h_v(i,J,k) * visc_rem_v(i,J,k)
+      h_v(i,J,k) = h_v(i,J,k) * visc_rem_v(i,J,k) !### * por_face_areaV(i,J,k)
     enddo ; enddo ; enddo
   endif
 
@@ -1510,7 +1514,7 @@ subroutine merid_face_thickness(v, h, h_L, h_R, h_v, dt, G, GV, US, LB, vol_CFL,
         if (OBC%segment(n)%direction == OBC_DIRECTION_N) then
           if (present(visc_rem_v)) then ; do k=1,nz
             do i = OBC%segment(n)%HI%isd, OBC%segment(n)%HI%ied
-              h_v(i,J,k) = h(i,j,k) * visc_rem_v(i,J,k)
+              h_v(i,J,k) = h(i,j,k) * visc_rem_v(i,J,k) !### * por_face_areaV(i,J,k)
             enddo
           enddo ; else ; do k=1,nz
             do i = OBC%segment(n)%HI%isd, OBC%segment(n)%HI%ied
@@ -1520,7 +1524,7 @@ subroutine merid_face_thickness(v, h, h_L, h_R, h_v, dt, G, GV, US, LB, vol_CFL,
         else
           if (present(visc_rem_v)) then ; do k=1,nz
             do i = OBC%segment(n)%HI%isd, OBC%segment(n)%HI%ied
-              h_v(i,J,k) = h(i,j+1,k) * visc_rem_v(i,J,k)
+              h_v(i,J,k) = h(i,j+1,k) * visc_rem_v(i,J,k) !### * por_face_areaV(i,J,k)
             enddo
           enddo ; else ; do k=1,nz
             do i = OBC%segment(n)%HI%isd, OBC%segment(n)%HI%ied
