@@ -209,18 +209,23 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
 
 
   ! tmp array for surface properties
-  real :: surface_field(SZI_(G),SZJ_(G))
+  real :: surface_field(SZI_(G),SZJ_(G)) ! The surface temperature or salinity [degC] or [ppt]
   real :: pressure_1d(SZI_(G)) ! Temporary array for pressure when calling EOS [R L2 T-2 ~> Pa]
-  real :: wt, wt_p
-
+  real :: wt, wt_p ! The fractional weights of two successive values when interpolating from
+                   ! a list [nondim], scaled so that wt + wt_p = 1.
   real :: f2_h     ! Squared Coriolis parameter at to h-points [T-2 ~> s-2]
   real :: mag_beta ! Magnitude of the gradient of f [T-1 L-1 ~> s-1 m-1]
   real :: absurdly_small_freq2 ! Frequency squared used to avoid division by 0 [T-2 ~> s-2]
 
   integer :: k_list
 
-  real, dimension(SZK_(GV)) :: temp_layer_ave, salt_layer_ave
-  real :: thetaoga, soga, masso, tosga, sosga
+  real, dimension(SZK_(GV)) :: temp_layer_ave ! The average temperature in a layer [degC]
+  real, dimension(SZK_(GV)) :: salt_layer_ave ! The average salinity in a layer [degC]
+  real :: thetaoga  ! The volume mean potential temperature [degC]
+  real :: soga      ! The volume mean ocean salinity [ppt]
+  real :: masso     ! The total mass of the ocean [kg]
+  real :: tosga     ! The area mean sea surface temperature [degC]
+  real :: sosga     ! The area mean sea surface salinity [ppt]
 
   is  = G%isc  ; ie   = G%iec  ; js  = G%jsc  ; je  = G%jec
   Isq = G%IscB ; Ieq  = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
@@ -437,7 +442,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
     do j=js,je ; do i=is,ie
       surface_field(i,j) = tv%T(i,j,1)
     enddo ; enddo
-    tosga = global_area_mean(surface_field, G)
+    tosga = global_area_mean(tv%T(:,:,1), G)
     call post_data(CS%id_tosga, tosga, CS%diag)
   endif
 
@@ -1240,7 +1245,8 @@ subroutine post_surface_dyn_diags(IDs, G, diag, sfc_state, ssh)
   type(diag_ctrl),          intent(in) :: diag !< regulates diagnostic output
   type(surface),            intent(in) :: sfc_state !< structure describing the ocean surface state
   real, dimension(SZI_(G),SZJ_(G)), &
-                            intent(in) :: ssh !< Time mean surface height without corrections for ice displacement [m]
+                            intent(in) :: ssh !< Time mean surface height without corrections
+                                              !! for ice displacement [Z ~> m]
 
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G)) :: speed  ! The surface speed [L T-1 ~> m s-1]
@@ -1280,23 +1286,25 @@ subroutine post_surface_thermo_diags(IDs, G, GV, US, diag, dt_int, sfc_state, tv
   real,                     intent(in) :: dt_int !< total time step associated with these diagnostics [T ~> s].
   type(surface),            intent(in) :: sfc_state !< structure describing the ocean surface state
   type(thermo_var_ptrs),    intent(in) :: tv  !< A structure pointing to various thermodynamic variables
-  real, dimension(SZI_(G),SZJ_(G)), &
-                            intent(in) :: ssh !< Time mean surface height without corrections for ice displacement [m]
+  real, dimension(SZI_(G),SZJ_(G)), intent(in) :: ssh !< Time mean surface height without corrections
+                                              !! for ice displacement [Z ~> m]
   real, dimension(SZI_(G),SZJ_(G)), intent(in) :: ssh_ibc !< Time mean surface height with corrections
-                                                  !! for ice displacement and the inverse barometer [m]
+                                              !! for ice displacement and the inverse barometer [Z ~> m]
 
   real, dimension(SZI_(G),SZJ_(G)) :: work_2d  ! A 2-d work array
   real, dimension(SZI_(G),SZJ_(G)) :: &
     zos  ! dynamic sea lev (zero area mean) from inverse-barometer adjusted ssh [m]
   real :: I_time_int    ! The inverse of the time interval [T-1 ~> s-1].
-  real :: zos_area_mean, volo, ssh_ga
+  real :: zos_area_mean ! Global area mean sea surface height [m]
+  real :: volo          ! Total volume of the ocean [m3]
+  real :: ssh_ga        ! Global ocean area weighted mean sea seaface height [m]
   integer :: i, j, is, ie, js, je
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
 
   ! area mean SSH
   if (IDs%id_ssh_ga > 0) then
-    ssh_ga = global_area_mean(ssh, G)
+    ssh_ga = global_area_mean(ssh, G, scale=US%Z_to_m)
     call post_data(IDs%id_ssh_ga, ssh_ga, diag)
   endif
 
@@ -1306,7 +1314,7 @@ subroutine post_surface_thermo_diags(IDs, G, GV, US, diag, dt_int, sfc_state, tv
   if (IDs%id_zos > 0 .or. IDs%id_zossq > 0) then
     zos(:,:) = 0.0
     do j=js,je ; do i=is,ie
-      zos(i,j) = ssh_ibc(i,j)
+      zos(i,j) = US%Z_to_m*ssh_ibc(i,j)
     enddo ; enddo
     zos_area_mean = global_area_mean(zos, G)
     do j=js,je ; do i=is,ie
@@ -1324,9 +1332,9 @@ subroutine post_surface_thermo_diags(IDs, G, GV, US, diag, dt_int, sfc_state, tv
   ! post total volume of the liquid ocean
   if (IDs%id_volo > 0) then
     do j=js,je ; do i=is,ie
-      work_2d(i,j) = G%mask2dT(i,j)*(ssh(i,j) + US%Z_to_m*G%bathyT(i,j))
+      work_2d(i,j) = G%mask2dT(i,j) * (ssh(i,j) + G%bathyT(i,j))
     enddo ; enddo
-    volo = global_area_integral(work_2d, G)
+    volo = global_area_integral(work_2d, G, scale=US%Z_to_m)
     call post_data(IDs%id_volo, volo, diag)
   endif
 
@@ -1841,7 +1849,7 @@ subroutine register_surface_diags(Time, G, US, IDs, diag, tv)
       standard_name='square_of_sea_surface_height_above_geoid',             &
       long_name='Square of sea surface height above geoid', units='m2')
   IDs%id_ssh = register_diag_field('ocean_model', 'SSH', diag%axesT1, Time, &
-      'Sea Surface Height', 'm')
+      'Sea Surface Height', 'm', conversion=US%Z_to_m)
   IDs%id_ssh_ga = register_scalar_field('ocean_model', 'ssh_ga', Time, diag,&
       long_name='Area averaged sea surface height', units='m',            &
       standard_name='area_averaged_sea_surface_height')
