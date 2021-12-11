@@ -6,6 +6,7 @@ module MOM_offline_main
 
 use MOM_ALE,                  only : ALE_CS, ALE_main_offline, ALE_offline_inputs
 use MOM_checksums,            only : hchksum, uvchksum
+use MOM_coms,                 only : reproducing_sum
 use MOM_cpu_clock,            only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock,            only : CLOCK_COMPONENT, CLOCK_SUBCOMPONENT
 use MOM_cpu_clock,            only : CLOCK_MODULE_DRIVER, CLOCK_MODULE, CLOCK_ROUTINE
@@ -13,7 +14,7 @@ use MOM_diabatic_aux,         only : diabatic_aux_CS, set_pen_shortwave
 use MOM_diabatic_driver,      only : diabatic_CS, extract_diabatic_member
 use MOM_diabatic_aux,         only : tridiagTS
 use MOM_diag_mediator,        only : diag_ctrl, post_data, register_diag_field
-use MOM_domains,              only : sum_across_PEs, pass_var, pass_vector
+use MOM_domains,              only : pass_var, pass_vector
 use MOM_error_handler,        only : MOM_error, MOM_mesg, FATAL, WARNING
 use MOM_error_handler,        only : callTree_enter, callTree_leave
 use MOM_file_parser,          only : read_param, get_param, log_version, param_file_type
@@ -39,7 +40,6 @@ use MOM_verticalGrid,         only : verticalGrid_type
 implicit none ; private
 
 #include "MOM_memory.h"
-#include "version_variable.h"
 
 !> The control structure for the offline transport module
 type, public :: offline_transport_CS ; private
@@ -305,7 +305,7 @@ subroutine offline_advection_ale(fluxes, Time_start, time_interval, G, GV, US, C
     call hchksum(h_pre, "h_pre before transport", G%HI, scale=GV%H_to_m)
     call uvchksum("[uv]htr_sub before transport", uhtr_sub, vhtr_sub, G%HI, scale=HL2_to_kg_scale)
   endif
-  tot_residual = remaining_transport_sum(G, GV, uhtr, vhtr)
+  tot_residual = remaining_transport_sum(G, GV, US, uhtr, vhtr, h_new)
   if (CS%print_adv_offline) then
     write(mesg,'(A,ES24.16)') "Main advection starting transport: ", tot_residual*HL2_to_kg_scale
     call MOM_mesg(mesg)
@@ -328,15 +328,15 @@ subroutine offline_advection_ale(fluxes, Time_start, time_interval, G, GV, US, C
     endif
 
     call advect_tracer(h_pre, uhtr_sub, vhtr_sub, CS%OBC, CS%dt_offline, G, GV, US, &
-        CS%tracer_adv_CSp, CS%tracer_Reg, h_vol, max_iter_in=1, &
-        uhr_out=uhtr, vhr_out=vhtr, h_out=h_new, x_first_in=x_before_y)
+            CS%tracer_adv_CSp, CS%tracer_Reg, x_first_in=x_before_y, vol_prev=h_vol, &
+            max_iter_in=1, update_vol_prev=.true., uhr_out=uhtr, vhr_out=vhtr)
 
     ! Switch the direction every iteration
     x_before_y = .not. x_before_y
 
     ! Update the new layer thicknesses after one round of advection has happened
     do k=1,nz ; do j=js,je ; do i=is,ie
-      h_new(i,j,k) = h_new(i,j,k) / (G%areaT(i,j))  !### Replace with "* G%IareaT(i,j)"
+      h_new(i,j,k) = h_vol(i,j,k) * G%IareaT(i,j)
     enddo ; enddo ; enddo
 
     if (MODULO(iter,CS%off_ale_mod)==0) then
@@ -367,7 +367,7 @@ subroutine offline_advection_ale(fluxes, Time_start, time_interval, G, GV, US, C
 
     ! Check for whether we've used up all the advection, or if we need to move on because
     ! advection has stalled
-    tot_residual = remaining_transport_sum(G, GV, uhtr, vhtr)
+    tot_residual = remaining_transport_sum(G, GV, US, uhtr, vhtr, h_new)
     if (CS%print_adv_offline) then
       write(mesg,'(A,ES24.16)') "Main advection remaining transport: ", tot_residual*HL2_to_kg_scale
       call MOM_mesg(mesg)
@@ -478,9 +478,6 @@ subroutine offline_redistribute_residual(CS, G, GV, US, h_pre, uhtr, vhtr, conve
         call pass_var(h_vol,G%Domain)
         call pass_vector(uhtr, vhtr, G%Domain)
 
-        ! Store volumes for advect_tracer
-        h_pre(:,:,:) = h_vol(:,:,:)
-
         if (CS%debug) then
           call MOM_tracer_chksum("Before upwards redistribute ", CS%tracer_Reg%Tr, CS%tracer_Reg%ntr, G)
           call uvchksum("[uv]tr before upwards redistribute", uhtr, vhtr, G%HI, scale=HL2_to_kg_scale)
@@ -495,8 +492,8 @@ subroutine offline_redistribute_residual(CS, G, GV, US, h_pre, uhtr, vhtr, conve
         endif
 
         call advect_tracer(h_pre, uhtr, vhtr, CS%OBC, CS%dt_offline, G, GV, US, &
-            CS%tracer_adv_CSp, CS%tracer_Reg, h_prev_opt=h_pre, max_iter_in=1, &
-            h_out=h_vol, uhr_out=uhr, vhr_out=vhr, x_first_in=x_before_y)
+                CS%tracer_adv_CSp, CS%tracer_Reg, x_first_in=x_before_y, vol_prev=h_vol, &
+                max_iter_in=1, update_vol_prev=.true., uhr_out=uhr, vhr_out=vhr)
 
         if (CS%debug) then
           call MOM_tracer_chksum("After upwards redistribute ", CS%tracer_Reg%Tr, CS%tracer_Reg%ntr, G)
@@ -506,7 +503,7 @@ subroutine offline_redistribute_residual(CS, G, GV, US, h_pre, uhtr, vhtr, conve
         do k=1,nz ; do j=js,je ; do i=is,ie
           uhtr(I,j,k) = uhr(I,j,k)
           vhtr(i,J,k) = vhr(i,J,k)
-          h_new(i,j,k) = h_vol(i,j,k) / (G%areaT(i,j))
+          h_new(i,j,k) = h_vol(i,j,k) * G%IareaT(i,j)
           h_pre(i,j,k) = h_new(i,j,k)
         enddo ; enddo ; enddo
 
@@ -522,9 +519,6 @@ subroutine offline_redistribute_residual(CS, G, GV, US, h_pre, uhtr, vhtr, conve
         call pass_var(h_vol, G%Domain)
         call pass_vector(uhtr, vhtr, G%Domain)
 
-        ! Copy h_vol to h_pre for advect_tracer routine
-        h_pre(:,:,:) = h_vol(:,:,:)
-
         if (CS%debug) then
           call MOM_tracer_chksum("Before barotropic redistribute ", CS%tracer_Reg%Tr, CS%tracer_Reg%ntr, G)
           call uvchksum("[uv]tr before upwards redistribute", uhtr, vhtr, G%HI, scale=HL2_to_kg_scale)
@@ -539,8 +533,8 @@ subroutine offline_redistribute_residual(CS, G, GV, US, h_pre, uhtr, vhtr, conve
         endif
 
         call advect_tracer(h_pre, uhtr, vhtr, CS%OBC, CS%dt_offline, G, GV, US, &
-                CS%tracer_adv_CSp, CS%tracer_Reg, h_prev_opt=h_pre, max_iter_in=1, &
-                h_out=h_vol, uhr_out=uhr, vhr_out=vhr, x_first_in=x_before_y)
+                CS%tracer_adv_CSp, CS%tracer_Reg, x_first_in=x_before_y, vol_prev=h_vol, &
+                max_iter_in=1, update_vol_prev=.true., uhr_out=uhr, vhr_out=vhr)
 
         if (CS%debug) then
           call MOM_tracer_chksum("After barotropic redistribute ", CS%tracer_Reg%Tr, CS%tracer_Reg%ntr, G)
@@ -550,14 +544,14 @@ subroutine offline_redistribute_residual(CS, G, GV, US, h_pre, uhtr, vhtr, conve
         do k=1,nz ; do j=js,je ; do i=is,ie
           uhtr(I,j,k) = uhr(I,j,k)
           vhtr(i,J,k) = vhr(i,J,k)
-          h_new(i,j,k) = h_vol(i,j,k) / (G%areaT(i,j))
+          h_new(i,j,k) = h_vol(i,j,k) * G%IareaT(i,j)
           h_pre(i,j,k) = h_new(i,j,k)
         enddo ; enddo ; enddo
 
       endif ! redistribute barotropic
 
       ! Check to see if all transport has been exhausted
-      tot_residual = remaining_transport_sum(G, GV, uhtr, vhtr)
+      tot_residual = remaining_transport_sum(G, GV, US, uhtr, vhtr, h_new)
       if (CS%print_adv_offline) then
         write(mesg,'(A,ES24.16)') "Residual advection remaining transport: ", tot_residual*HL2_to_kg_scale
         call MOM_mesg(mesg)
@@ -597,39 +591,40 @@ subroutine offline_redistribute_residual(CS, G, GV, US, h_pre, uhtr, vhtr, conve
 end subroutine offline_redistribute_residual
 
 !> Returns the sums of any non-negligible remaining transport [H L2 ~> m3 or kg] to check for advection convergence
-real function remaining_transport_sum(G, GV, uhtr, vhtr)
+real function remaining_transport_sum(G, GV, US, uhtr, vhtr, h_new)
   type(ocean_grid_type),      intent(in)    :: G     !< Ocean grid structure
   type(verticalGrid_type),    intent(in)    :: GV    !< Vertical grid structure
+  type(unit_scale_type),      intent(in)    :: US    !< A dimensional unit scaling type
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
                               intent(in   ) :: uhtr  !< Zonal mass transport [H L2 ~> m3 or kg]
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
                               intent(in   ) :: vhtr  !< Meridional mass transport [H L2 ~> m3 or kg]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
+                              intent(in   ) :: h_new !< Layer thicknesses [H ~> m or kg m-2]
 
   ! Local variables
-  integer :: i, j, k
-  integer :: is, ie, js, je, nz
-  real :: h_min !< A layer thickness below roundoff from GV type
-  real :: uh_neglect !< A small value of zonal transport that effectively is below roundoff error
-  real :: vh_neglect !< A small value of meridional transport that effectively is below roundoff error
+  real, dimension(SZI_(G),SZJ_(G)) :: trans_rem_col !< The vertical sum of the absolute value of
+                     !! transports through the faces of a column, in MKS units [kg].
+  real :: trans_cell !< The sum of the absolute value of the remaining transports through the faces
+                     !! of a tracer cell [H L2 ~> m3 or kg]
+  real :: HL2_to_kg_scale !< Unit conversion factor to cell mass [kg H-1 L-2 ~> kg m-3 or 1]
+  integer :: i, j, k, is, ie, js, je, nz
 
-  nz = GV%ke
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
-  h_min = GV%H_subroundoff
+  HL2_to_kg_scale = GV%H_to_kg_m2 * US%L_to_m**2
 
-  remaining_transport_sum = 0.
+  trans_rem_col(:,:) = 0.0
   do k=1,nz ; do j=js,je ; do i=is,ie
-    uh_neglect = h_min * MIN(G%areaT(i,j), G%areaT(i+1,j))
-    vh_neglect = h_min * MIN(G%areaT(i,j), G%areaT(i,j+1))
-    if (ABS(uhtr(I,j,k))>uh_neglect) then
-      remaining_transport_sum = remaining_transport_sum + ABS(uhtr(I,j,k))
-    endif
-    if (ABS(vhtr(i,J,k))>vh_neglect) then
-      remaining_transport_sum = remaining_transport_sum + ABS(vhtr(i,J,k))
-    endif
+    trans_cell = (ABS(uhtr(I-1,j,k)) + ABS(uhtr(I,j,k))) + &
+                 (ABS(vhtr(i,J-1,k)) + ABS(vhtr(i,J,k)))
+    if (trans_cell > max(1.0e-16*h_new(i,j,k), GV%H_subroundoff) * G%areaT(i,j)) &
+      trans_rem_col(i,j) =  trans_rem_col(i,j) + HL2_to_kg_scale * trans_cell
   enddo ; enddo ; enddo
-  !### The value of this sum is not layout independent.
-  call sum_across_PEs(remaining_transport_sum)
+
+  ! The factor of 0.5 here is to avoid double-counting because two cells share a face.
+  remaining_transport_sum = 0.5 * GV%kg_m2_to_H*US%m_to_L**2 * &
+      reproducing_sum(trans_rem_col, is+(1-G%isd), ie+(1-G%isd), js+(1-G%jsd), je+(1-G%jsd))
 
 end function remaining_transport_sum
 
@@ -854,11 +849,14 @@ subroutine offline_advection_layer(fluxes, Time_start, time_interval, G, GV, US,
   ! Remaining meridional mass transports [H L2 ~> m3 or kg]
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV))   :: vhtr_sub
 
-  real :: sum_abs_fluxes, sum_u, sum_v  ! Used to keep track of how close to convergence we are [H L2 ~> m3 or kg]
-  ! Vertical diffusion related variables [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJB_(G)) :: rem_col_flux ! The summed absolute value of the remaining
+                         ! fluxes through the faces of a column or within a column, in mks units [kg]
+  real :: sum_flux       ! Globally summed absolute value of fluxes in mks units [kg], which is
+                         ! used to keep track of how close to convergence we are.
+
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: &
-      eatr_sub, &
-      ebtr_sub
+      eatr_sub, &  ! Layer entrainment rate from above for this sub-cycle [H ~> m or kg m-2]
+      ebtr_sub     ! Layer entrainment rate from below for this sub-cycle [H ~> m or kg m-2]
   ! Variables used to keep track of layer thicknesses at various points in the code
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: &
       h_new, &  ! Updated thicknesses [H ~> m or kg m-2]
@@ -899,7 +897,6 @@ subroutine offline_advection_layer(fluxes, Time_start, time_interval, G, GV, US,
       vhtr_sub(i,J,k) = vhtr(i,J,k)
     enddo ; enddo ; enddo
 
-
     ! Calculate 3d mass transports to be used in this iteration
     call limit_mass_flux_3d(G, GV, uhtr_sub, vhtr_sub, eatr_sub, ebtr_sub, h_pre)
 
@@ -920,11 +917,11 @@ subroutine offline_advection_layer(fluxes, Time_start, time_interval, G, GV, US,
         h_vol(i,j,k) = h_pre(i,j,k) * G%areaT(i,j)
       enddo ; enddo ; enddo
       call advect_tracer(h_pre, uhtr_sub, vhtr_sub, CS%OBC, dt_iter, G, GV, US, &
-          CS%tracer_adv_CSp, CS%tracer_Reg, h_vol, max_iter_in=30, x_first_in=x_before_y)
+              CS%tracer_adv_CSp, CS%tracer_Reg, x_first_in=x_before_y, vol_prev=h_vol, max_iter_in=30)
 
       ! Done with horizontal so now h_pre should be h_new
       do k=1,nz ; do i=is-1,ie+1 ; do j=js-1,je+1
-          h_pre(i,j,k) = h_new(i,j,k)
+        h_pre(i,j,k) = h_new(i,j,k)
       enddo ; enddo ; enddo
 
     endif
@@ -936,12 +933,12 @@ subroutine offline_advection_layer(fluxes, Time_start, time_interval, G, GV, US,
       do k=1,nz ; do i=is-1,ie+1 ; do j=js-1,je+1
         h_vol(i,j,k) = h_pre(i,j,k) * G%areaT(i,j)
       enddo ; enddo ; enddo
-      call advect_tracer(h_pre, uhtr_sub, vhtr_sub, CS%OBC, dt_iter, G, GV, US, &
-          CS%tracer_adv_CSp, CS%tracer_Reg, h_vol, max_iter_in=30, x_first_in=x_before_y)
+      call advect_tracer(h_pre, uhtr_sub, vhtr_sub, CS%OBC, dt_iter, G, GV, US, CS%tracer_adv_CSp, &
+              CS%tracer_Reg, x_first_in=x_before_y, vol_prev=h_vol, max_iter_in=30)
 
       ! Done with horizontal so now h_pre should be h_new
       do k=1,nz ; do i=is-1,ie+1 ; do j=js-1,je+1
-          h_pre(i,j,k) = h_new(i,j,k)
+        h_pre(i,j,k) = h_new(i,j,k)
       enddo ; enddo ; enddo
 
       ! Second vertical advection
@@ -973,28 +970,25 @@ subroutine offline_advection_layer(fluxes, Time_start, time_interval, G, GV, US,
     call pass_var(ebtr,G%Domain)
     call pass_var(h_pre,G%Domain)
     call pass_vector(uhtr,vhtr,G%Domain)
-  !
+
     ! Calculate how close we are to converging by summing the remaining fluxes at each point
-    sum_abs_fluxes = 0.0
-    sum_u = 0.0
-    sum_v = 0.0
-    do k=1,nz ; do j=js,je ; do i=is,ie
-      sum_u = sum_u + abs(uhtr(I-1,j,k))+abs(uhtr(I,j,k))
-      sum_v = sum_v + abs(vhtr(i,J-1,k))+abs(vhtr(I,J,k))
-      sum_abs_fluxes = sum_abs_fluxes + abs(eatr(i,j,k)) + abs(ebtr(i,j,k)) + abs(uhtr(I-1,j,k)) + &
-          abs(uhtr(I,j,k)) + abs(vhtr(i,J-1,k)) + abs(vhtr(i,J,k))
-    enddo ; enddo ; enddo
-    call sum_across_PEs(sum_abs_fluxes)
-
     HL2_to_kg_scale = US%L_to_m**2*GV%H_to_kg_m2
+    rem_col_flux(:,:) = 0.0
+    do k=1,nz ; do j=js,je ; do i=is,ie
+      rem_col_flux(i,j) = rem_col_flux(i,j) + HL2_to_kg_scale * &
+          ( (abs(eatr(i,j,k)) + abs(ebtr(i,j,k))) + &
+           ((abs(uhtr(I-1,j,k)) + abs(uhtr(I,j,k))) + &
+            (abs(vhtr(i,J-1,k)) + abs(vhtr(i,J,k))) ) )
+    enddo ; enddo ; enddo
+    sum_flux = reproducing_sum(rem_col_flux, is+(1-G%isd), ie+(1-G%isd), js+(1-G%jsd), je+(1-G%jsd))
 
-    write(mesg,*) "offline_advection_layer: Remaining u-flux, v-flux:", &
-                  sum_u*HL2_to_kg_scale, sum_v*HL2_to_kg_scale
-    call MOM_mesg(mesg)
-    if (sum_abs_fluxes==0) then
+    if (sum_flux==0) then
       write(mesg,*) 'offline_advection_layer: Converged after iteration', iter
       call MOM_mesg(mesg)
       exit
+    else
+      write(mesg,*) "offline_advection_layer: Iteration ", iter, " remaining total fluxes: ", sum_flux
+      call MOM_mesg(mesg)
     endif
 
     ! Switch order of Strang split every iteration
@@ -1321,7 +1315,8 @@ subroutine offline_transport_init(param_file, CS, diabatic_CSp, G, GV, US)
 
   character(len=40)  :: mdl = "offline_transport"
   character(len=20)  :: redistribute_method
-
+  ! This include declares and sets the variable "version".
+# include "version_variable.h"
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz
   integer :: IsdB, IedB, JsdB, JedB
 
@@ -1336,7 +1331,7 @@ subroutine offline_transport_init(param_file, CS, diabatic_CSp, G, GV, US)
     return
   endif
   allocate(CS)
-  call log_version(param_file, mdl,version, "This module allows for tracers to be run offline")
+  call log_version(param_file, mdl, version, "This module allows for tracers to be run offline")
 
   ! Parse MOM_input for offline control
   call get_param(param_file, mdl, "OFFLINEDIR", CS%offlinedir, &

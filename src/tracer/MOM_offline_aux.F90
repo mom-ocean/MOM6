@@ -70,7 +70,7 @@ subroutine update_h_horizontal_flux(G, GV, uhtr, vhtr, h_pre, h_new)
           max(GV%Angstrom_H, 1.0e-13*h_new(i,j,k) - G%areaT(i,j)*h_pre(i,j,k))
 
       ! Convert back to thickness
-      h_new(i,j,k) = h_new(i,j,k) / (G%areaT(i,j))
+      h_new(i,j,k) = h_new(i,j,k) * G%IareaT(i,j)
 
     enddo ; enddo
   enddo
@@ -102,11 +102,11 @@ subroutine update_h_vertical_flux(G, GV, ea, eb, h_pre, h_new)
   do j=js-1,je+1
     do i=is-1,ie+1
       ! Top layer
-      h_new(i,j,1) = max(0.0, h_pre(i,j,1) + (eb(i,j,1) - ea(i,j,2) + ea(i,j,1) ))
+      h_new(i,j,1) = max(0.0, h_pre(i,j,1) + ((eb(i,j,1) - ea(i,j,2)) + ea(i,j,1)))
       h_new(i,j,1) = h_new(i,j,1) + max(0.0, 1.0e-13*h_new(i,j,1) - h_pre(i,j,1))
 
       ! Bottom layer
-      h_new(i,j,nz) = max(0.0, h_pre(i,j,nz) + (ea(i,j,nz) - eb(i,j,nz-1)+eb(i,j,nz)))
+      h_new(i,j,nz) = max(0.0, h_pre(i,j,nz) + ((ea(i,j,nz) - eb(i,j,nz-1)) + eb(i,j,nz)))
       h_new(i,j,nz) = h_new(i,j,nz) + max(0.0, 1.0e-13*h_new(i,j,nz) - h_pre(i,j,nz))
     enddo
 
@@ -140,13 +140,15 @@ subroutine limit_mass_flux_3d(G, GV, uh, vh, ea, eb, h_pre)
                                                   !! step [H ~> m or kg m-2]
 
   ! Local variables
-  integer :: i, j, k, m, is, ie, js, je, nz
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: top_flux    ! Net fluxes through the layer top [H ~> m or kg m-2]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: bottom_flux ! Net fluxes through the layer bottom [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: top_flux    ! Net upward fluxes through the layer
+                                                           ! top [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: bottom_flux ! Net downward fluxes through the layer
+                                                           ! bottom [H ~> m or kg m-2]
   real :: pos_flux ! Net flux out of cell [H L2 ~> m3 or kg m-2]
   real :: hvol     ! Cell volume [H L2 ~> m3 or kg m-2]
   real :: scale_factor  ! A nondimensional rescaling factor between 0 and 1 [nondim]
   real :: max_off_cfl   ! The maximum permitted fraction that can leave in a timestep [nondim]
+  integer :: i, j, k, m, is, ie, js, je, nz
 
   max_off_cfl = 0.5
 
@@ -182,46 +184,33 @@ subroutine limit_mass_flux_3d(G, GV, uh, vh, ea, eb, h_pre)
   do k=1,nz ; do j=js-1,je+1 ; do i=is-1,ie+1
 
     hvol = h_pre(i,j,k) * G%areaT(i,j)
-    pos_flux  = max(0.0,-uh(I-1,j,k)) + max(0.0, -vh(i,J-1,k)) + &
-        max(0.0, uh(I,j,k)) + max(0.0, vh(i,J,k)) + &
-        max(0.0, top_flux(i,j,k)*G%areaT(i,j)) + max(0.0, bottom_flux(i,j,k)*G%areaT(i,j))
+    pos_flux  = ((max(0.0, -uh(I-1,j,k)) + max(0.0, uh(I,j,k))) + &
+                 (max(0.0, -vh(i,J-1,k)) + max(0.0, vh(i,J,k)))) + &
+                (max(0.0, top_flux(i,j,k)) + max(0.0, bottom_flux(i,j,k))) * G%areaT(i,j)
 
     if (pos_flux>hvol .and. pos_flux>0.0) then
-      scale_factor = (hvol / pos_flux)*max_off_cfl
+      scale_factor = (hvol / pos_flux) * max_off_cfl
     else ! Don't scale
       scale_factor = 1.0
     endif
 
     ! Scale horizontal fluxes
-    if (-uh(I-1,j,k)>0) uh(I-1,j,k) = uh(I-1,j,k)*scale_factor
-    if (uh(I,j,k)>0)    uh(I,j,k)   = uh(I,j,k)*scale_factor
-    if (-vh(i,J-1,k)>0) vh(i,J-1,k) = vh(i,J-1,k)*scale_factor
-    if (vh(i,J,k)>0)    vh(i,J,k)   = vh(i,J,k)*scale_factor
+    if (-uh(I-1,j,k) > 0.0) uh(I-1,j,k) = uh(I-1,j,k) * scale_factor
+    if (uh(I,j,k) > 0.0)    uh(I,j,k)   = uh(I,j,k) * scale_factor
+    if (-vh(i,J-1,k) > 0.0) vh(i,J-1,k) = vh(i,J-1,k) * scale_factor
+    if (vh(i,J,k) > 0.0)    vh(i,J,k)   = vh(i,J,k) * scale_factor
 
-    if (k>1 .and. k<nz) then
-    ! Scale interior layers
-      if (top_flux(i,j,k)>0.0) then
-        ea(i,j,k) = ea(i,j,k)*scale_factor
-        eb(i,j,k-1) = eb(i,j,k-1)*scale_factor
-      endif
-      if (bottom_flux(i,j,k)>0.0) then
-        eb(i,j,k) = eb(i,j,k)*scale_factor
-        ea(i,j,k+1) = ea(i,j,k+1)*scale_factor
-      endif
-    ! Scale top layer
-    elseif (k==1) then
-      if (top_flux(i,j,k)>0.0)    ea(i,j,k) = ea(i,j,k)*scale_factor
-      if (bottom_flux(i,j,k)>0.0) then
-        eb(i,j,k)   = eb(i,j,k)*scale_factor
-        ea(i,j,k+1) = ea(i,j,k+1)*scale_factor
-      endif
-    ! Scale bottom layer
-    elseif (k==nz) then
-      if (top_flux(i,j,k)>0.0) then
-        ea(i,j,k)   = ea(i,j,k)*scale_factor
-        eb(i,j,k-1) = eb(i,j,k-1)*scale_factor
-      endif
-      if (bottom_flux(i,j,k)>0.0) eb(i,j,k) = eb(i,j,k)*scale_factor
+    ! Scale the flux across the interface atop a layer if it is upward
+    if (top_flux(i,j,k) > 0.0) then
+      ea(i,j,k) = ea(i,j,k) * scale_factor
+      if (k > 1) &
+        eb(i,j,k-1) = eb(i,j,k-1) * scale_factor
+    endif
+    ! Scale the flux across the interface atop a layer if it is downward
+    if (bottom_flux(i,j,k) > 0.0) then
+      eb(i,j,k) = eb(i,j,k) * scale_factor
+      if (k < nz) &
+        ea(i,j,k+1) = ea(i,j,k+1) * scale_factor
     endif
   enddo ; enddo ; enddo
 
@@ -244,6 +233,8 @@ subroutine distribute_residual_uh_barotropic(G, GV, hvol, uh)
   real, dimension(SZI_(G),SZK_(GV))   :: h2d      ! A 2-d slice of cell volumes [H L2 ~> m3 or kg]
   real, dimension(SZI_(G))            :: h2d_sum  ! Vertically summed cell volumes [H L2 ~> m3 or kg]
 
+  real :: abs_uh_sum  ! The vertical sum of the absolute value of the transports [H L2 ~> m3 or kg]
+  real :: new_uh_sum  ! The vertically summed transports after redistribution [H L2 ~> m3 or kg]
   real :: uh_neglect  ! A negligible transport [H L2 ~> m3 or kg]
   integer :: i, j, k, m, is, ie, js, je, nz
 
@@ -253,7 +244,7 @@ subroutine distribute_residual_uh_barotropic(G, GV, hvol, uh)
   do j=js,je
     uh2d_sum(:) = 0.0
     ! Copy over uh to a working array and sum up the remaining fluxes in a column
-    do k=1,nz ; do i=is-1,ie
+    do k=1,nz ; do I=is-1,ie
       uh2d(I,k) = uh(I,j,k)
       uh2d_sum(I) = uh2d_sum(I) + uh2d(I,k)
     enddo ; enddo
@@ -265,13 +256,13 @@ subroutine distribute_residual_uh_barotropic(G, GV, hvol, uh)
       if (hvol(i,j,k)>0.) then
         h2d_sum(i) = h2d_sum(i) + h2d(i,k)
       else
-        h2d(i,k) = GV%H_subroundoff * 1.0*G%US%m_to_L**2 !### Change to G%areaT(i,j)
+        h2d(i,k) = GV%H_subroundoff * G%areaT(i,j)
       endif
     enddo ; enddo
 
     ! Distribute flux. Note min/max is intended to make sure that the mass transport
     ! does not deplete a cell
-    do i=is-1,ie
+    do I=is-1,ie
       if ( uh2d_sum(I)>0.0 ) then
         do k=1,nz
           uh2d(I,k) = uh2d_sum(I)*(h2d(i,k)/h2d_sum(i))
@@ -285,16 +276,20 @@ subroutine distribute_residual_uh_barotropic(G, GV, hvol, uh)
           uh2d(I,k) = 0.0
         enddo
       endif
-      ! Calculate and check that column integrated transports match the original to
-      ! within the tolerance limit
+
+      ! Check that column integrated transports match the original to within roundoff.
       uh_neglect = GV%Angstrom_H * min(G%areaT(i,j), G%areaT(i+1,j))
-      ! ### This test may not work if GV%Angstrom_H is set to 0.
-      !     Instead try the max of this and ~roundoff compared with absolute transports?
-      if ( abs(sum(uh2d(I,:))-uh2d_sum(I)) > uh_neglect) &
-        call MOM_error(WARNING, "Column integral of uh does not match after barotropic redistribution")
+      abs_uh_sum = 0.0 ; new_uh_sum = 0.0
+      do k=1,nz
+        abs_uh_sum = abs_uh_sum + abs(uh2d(j,k))
+        new_uh_sum = new_uh_sum + uh2d(j,k)
+      enddo
+      if ( abs(new_uh_sum - uh2d_sum(j)) > max(uh_neglect, (5.0e-16*nz)*abs_uh_sum) ) &
+        call MOM_error(WARNING, "Column integral of uh does not match after "//&
+                                "barotropic redistribution")
     enddo
 
-    do k=1,nz ; do i=is-1,ie
+    do k=1,nz ; do I=is-1,ie
       uh(I,j,k) = uh2d(I,k)
     enddo ; enddo
   enddo
@@ -317,6 +312,8 @@ subroutine distribute_residual_vh_barotropic(G, GV, hvol, vh)
   real, dimension(SZJ_(G),SZK_(GV))   :: h2d      ! A 2-d slice of cell volumes [H L2 ~> m3 or kg]
   real, dimension(SZJ_(G))            :: h2d_sum  ! Vertically summed cell volumes [H L2 ~> m3 or kg]
 
+  real :: abs_vh_sum  ! The vertical sum of the absolute value of the transports [H L2 ~> m3 or kg]
+  real :: new_vh_sum  ! The vertically summed transports after redistribution [H L2 ~> m3 or kg]
   real :: vh_neglect  ! A negligible transport [H L2 ~> m3 or kg]
   integer :: i, j, k, m, is, ie, js, je, nz
 
@@ -326,7 +323,7 @@ subroutine distribute_residual_vh_barotropic(G, GV, hvol, vh)
   do i=is,ie
     vh2d_sum(:) = 0.0
     ! Copy over uh to a working array and sum up the remaining fluxes in a column
-    do k=1,nz ; do j=js-1,je
+    do k=1,nz ; do J=js-1,je
       vh2d(J,k) = vh(i,J,k)
       vh2d_sum(J) = vh2d_sum(J) + vh2d(J,k)
     enddo ; enddo
@@ -338,12 +335,12 @@ subroutine distribute_residual_vh_barotropic(G, GV, hvol, vh)
       if (hvol(i,j,k)>0.) then
         h2d_sum(j) = h2d_sum(j) + h2d(j,k)
       else
-        h2d(j,k) = GV%H_subroundoff * 1.0*G%US%m_to_L**2 !### Change to G%areaT(i,j)
+        h2d(i,k) = GV%H_subroundoff * G%areaT(i,j)
       endif
     enddo ; enddo
 
     ! Distribute flux evenly throughout a column
-    do j=js-1,je
+    do J=js-1,je
       if ( vh2d_sum(J)>0.0 ) then
         do k=1,nz
           vh2d(J,k) = vh2d_sum(J)*(h2d(j,k)/h2d_sum(j))
@@ -357,19 +354,20 @@ subroutine distribute_residual_vh_barotropic(G, GV, hvol, vh)
           vh2d(J,k) = 0.0
         enddo
       endif
-      ! Calculate and check that column integrated transports match the original to
-      ! within the tolerance limit
-      vh_neglect = GV%Angstrom_H * min(G%areaT(i,j), G%areaT(i,j+1))
-      ! ### This test may not work if GV%Angstrom_H is set to 0.
-      !     Instead try the max of this and ~roundoff compared with absolute transports?
-      if ( abs(sum(vh2d(J,:))-vh2d_sum(J)) > vh_neglect) then
-          call MOM_error(WARNING,"Column integral of vh does not match after "//&
-          "barotropic redistribution")
-      endif
 
+      ! Check that column integrated transports match the original to within roundoff.
+      vh_neglect = GV%Angstrom_H * min(G%areaT(i,j), G%areaT(i,j+1))
+      abs_vh_sum = 0.0 ; new_vh_sum = 0.0
+      do k=1,nz
+        abs_vh_sum = abs_vh_sum + abs(vh2d(J,k))
+        new_vh_sum = new_vh_sum + vh2d(J,k)
+      enddo
+      if ( abs(new_vh_sum - vh2d_sum(J)) > max(vh_neglect, (5.0e-16*nz)*abs_vh_sum) ) &
+        call MOM_error(WARNING, "Column integral of vh does not match after "//&
+                                "barotropic redistribution")
     enddo
 
-    do k=1,nz ; do j=js-1,je
+    do k=1,nz ; do J=js-1,je
       vh(i,J,k) = vh2d(J,k)
     enddo ; enddo
   enddo
@@ -411,7 +409,7 @@ subroutine distribute_residual_uh_upwards(G, GV, hvol, uh)
       h2d(i,k) = hvol(i,j,k) - min_h * G%areaT(i,j)
     enddo ; enddo
 
-    do i=is-1,ie
+    do I=is-1,ie
       uh_col = SUM(uh2d(I,:)) ! Store original column-integrated transport
       do k=1,nz
         uh_remain = uh2d(I,k)
@@ -466,7 +464,7 @@ subroutine distribute_residual_uh_upwards(G, GV, hvol, uh)
 
     enddo ! i-loop
 
-    do k=1,nz ; do i=is-1,ie
+    do k=1,nz ; do I=is-1,ie
       uh(I,j,k) = uh2d(I,k)
     enddo ; enddo
   enddo
@@ -502,14 +500,14 @@ subroutine distribute_residual_vh_upwards(G, GV, hvol, vh)
 
   do i=is,ie
     ! Copy over uh and cell volume to working arrays
-    do k=1,nz ; do j=js-2,je+1
+    do k=1,nz ; do J=js-2,je+1
       vh2d(J,k) = vh(i,J,k)
     enddo ; enddo
     do k=1,nz ; do j=js-1,je+1
       h2d(j,k) = hvol(i,j,k) - min_h * G%areaT(i,j)
     enddo ; enddo
 
-    do j=js-1,je
+    do J=js-1,je
       vh_col = SUM(vh2d(J,:))
       do k=1,nz
         vh_remain = vh2d(J,k)
@@ -565,7 +563,7 @@ subroutine distribute_residual_vh_upwards(G, GV, hvol, vh)
       endif
     enddo
 
-    do k=1,nz ; do j=js-1,je
+    do k=1,nz ; do J=js-1,je
       vh(i,J,k) = vh2d(J,k)
     enddo ; enddo
   enddo
