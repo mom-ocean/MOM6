@@ -41,10 +41,6 @@ type, public :: continuity_PPM_CS ; private
   real :: tol_vel            !< The tolerance for barotropic velocity
                              !! discrepancies between the barotropic solution and
                              !! the sum of the layer thicknesses [L T-1 ~> m s-1].
-  real :: tol_eta_aux        !< The tolerance for free-surface height
-                             !! discrepancies between the barotropic solution and
-                             !! the sum of the layer thicknesses when calculating
-                             !! the auxiliary corrected velocities [H ~> m or kg m-2].
   real :: CFL_limit_adjust   !< The maximum CFL of the adjusted velocities [nondim]
   logical :: aggress_adjust  !< If true, allow the adjusted velocities to have a
                              !! relative CFL change up to 0.5.  False by default.
@@ -227,7 +223,7 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, GV, US, CS, LB, OBC, por_face_are
                                                  !! [H L2 T-1 ~> m3 s-1 or kg s-1].
   real,                    intent(in)    :: dt   !< Time increment [T ~> s].
   type(unit_scale_type),   intent(in)    :: US   !< A dimensional unit scaling type
-  type(continuity_PPM_CS), intent(in)       :: CS   !< This module's control structure.
+  type(continuity_PPM_CS), intent(in)    :: CS   !< This module's control structure.
   type(loop_bounds_type),  intent(in)    :: LB   !< Loop bounds structure.
   type(ocean_OBC_type),    pointer       :: OBC  !< Open boundaries control structure.
   real, dimension(SZIB_(G), SZJ_(G), SZK_(G)), &
@@ -516,10 +512,10 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, GV, US, CS, LB, OBC, por_face_are
   if  (set_BT_cont) then ; if (allocated(BT_cont%h_u)) then
     if (present(u_cor)) then
       call zonal_face_thickness(u_cor, h_in, h_L, h_R, BT_cont%h_u, dt, G, GV, US, LB, &
-                                CS%vol_CFL, CS%marginal_faces, OBC, por_face_areaU(:,j,k), visc_rem_u)
+                                CS%vol_CFL, CS%marginal_faces, OBC, por_face_areaU, visc_rem_u)
     else
       call zonal_face_thickness(u, h_in, h_L, h_R, BT_cont%h_u, dt, G, GV, US, LB, &
-                                CS%vol_CFL, CS%marginal_faces, OBC, por_face_areaU(:,j,k), visc_rem_u)
+                                CS%vol_CFL, CS%marginal_faces, OBC, por_face_areaU, visc_rem_u)
     endif
   endif ; endif
 
@@ -676,9 +672,11 @@ subroutine zonal_face_thickness(u, h, h_L, h_R, h_u, dt, G, GV, US, LB, vol_CFL,
     else ; h_u(I,j,k) = h_avg ; endif
   enddo ; enddo ; enddo
   if (present(visc_rem_u)) then
+    !### The expression setting h_u should also be multiplied by por_face_areaU in this case,
+    !    and in the two OBC cases below with visc_rem_u.
     !$OMP parallel do default(shared)
     do k=1,nz ; do j=jsh,jeh ; do I=ish-1,ieh
-      h_u(I,j,k) = h_u(I,j,k) * visc_rem_u(I,j,k)
+      h_u(I,j,k) = h_u(I,j,k) * visc_rem_u(I,j,k) !### * por_face_areaU(I,j,k)
     enddo ; enddo ; enddo
   endif
 
@@ -691,7 +689,7 @@ subroutine zonal_face_thickness(u, h, h_L, h_R, h_u, dt, G, GV, US, LB, vol_CFL,
         if (OBC%segment(n)%direction == OBC_DIRECTION_E) then
           if (present(visc_rem_u)) then ; do k=1,nz
             do j = OBC%segment(n)%HI%jsd, OBC%segment(n)%HI%jed
-              h_u(I,j,k) = h(i,j,k) * visc_rem_u(I,j,k)
+              h_u(I,j,k) = h(i,j,k) * visc_rem_u(I,j,k) !### * por_face_areaU(I,j,k)
             enddo
           enddo ; else ; do k=1,nz
             do j = OBC%segment(n)%HI%jsd, OBC%segment(n)%HI%jed
@@ -701,7 +699,7 @@ subroutine zonal_face_thickness(u, h, h_L, h_R, h_u, dt, G, GV, US, LB, vol_CFL,
         else
           if (present(visc_rem_u)) then ; do k=1,nz
             do j = OBC%segment(n)%HI%jsd, OBC%segment(n)%HI%jed
-              h_u(I,j,k) = h(i+1,j,k) * visc_rem_u(I,j,k)
+              h_u(I,j,k) = h(i+1,j,k) * visc_rem_u(I,j,k) !### * por_face_areaU(I,j,k)
             enddo
           enddo ; else ; do k=1,nz
             do j = OBC%segment(n)%HI%jsd, OBC%segment(n)%HI%jed
@@ -1499,9 +1497,11 @@ subroutine merid_face_thickness(v, h, h_L, h_R, h_v, dt, G, GV, US, LB, vol_CFL,
   enddo ; enddo ; enddo
 
   if (present(visc_rem_v)) then
+    !### This expression setting h_v should also be multiplied by por_face_areaU in this case,
+    !    and in the two OBC cases below with visc_rem_u.
     !$OMP parallel do default(shared)
     do k=1,nz ; do J=jsh-1,jeh ; do i=ish,ieh
-      h_v(i,J,k) = h_v(i,J,k) * visc_rem_v(i,J,k)
+      h_v(i,J,k) = h_v(i,J,k) * visc_rem_v(i,J,k) !### * por_face_areaV(i,J,k)
     enddo ; enddo ; enddo
   endif
 
@@ -1514,7 +1514,7 @@ subroutine merid_face_thickness(v, h, h_L, h_R, h_v, dt, G, GV, US, LB, vol_CFL,
         if (OBC%segment(n)%direction == OBC_DIRECTION_N) then
           if (present(visc_rem_v)) then ; do k=1,nz
             do i = OBC%segment(n)%HI%isd, OBC%segment(n)%HI%ied
-              h_v(i,J,k) = h(i,j,k) * visc_rem_v(i,J,k)
+              h_v(i,J,k) = h(i,j,k) * visc_rem_v(i,J,k) !### * por_face_areaV(i,J,k)
             enddo
           enddo ; else ; do k=1,nz
             do i = OBC%segment(n)%HI%isd, OBC%segment(n)%HI%ied
@@ -1524,7 +1524,7 @@ subroutine merid_face_thickness(v, h, h_L, h_R, h_v, dt, G, GV, US, LB, vol_CFL,
         else
           if (present(visc_rem_v)) then ; do k=1,nz
             do i = OBC%segment(n)%HI%isd, OBC%segment(n)%HI%ied
-              h_v(i,J,k) = h(i,j+1,k) * visc_rem_v(i,J,k)
+              h_v(i,J,k) = h(i,j+1,k) * visc_rem_v(i,J,k) !### * por_face_areaV(i,J,k)
             enddo
           enddo ; else ; do k=1,nz
             do i = OBC%segment(n)%HI%isd, OBC%segment(n)%HI%ied
@@ -2234,9 +2234,9 @@ subroutine continuity_PPM_init(Time, G, GV, US, param_file, diag, CS)
   type(diag_ctrl), target, intent(inout) :: diag !< A structure that is used to
                   !! regulate diagnostic output.
   type(continuity_PPM_CS), intent(inout) :: CS   !< Module's control structure.
-!> This include declares and sets the variable "version".
-#include "version_variable.h"
-  real :: tol_eta_m  ! An unscaled version of tol_eta [m].
+
+  !> This include declares and sets the variable "version".
+# include "version_variable.h"
   character(len=40)  :: mdl = "MOM_continuity_PPM" ! This module's name.
 
   CS%initialized = .true.
@@ -2267,16 +2267,8 @@ subroutine continuity_PPM_init(Time, G, GV, US, param_file, diag, CS)
                  "tolerance for SSH is 4 times this value.  The default "//&
                  "is 0.5*NK*ANGSTROM, and this should not be set less "//&
                  "than about 10^-15*MAXIMUM_DEPTH.", units="m", scale=GV%m_to_H, &
-                 default=0.5*GV%ke*GV%Angstrom_m, unscaled=tol_eta_m)
+                 default=0.5*GV%ke*GV%Angstrom_m)
 
-  !### ETA_TOLERANCE_AUX can be obsoleted.
-  call get_param(param_file, mdl, "ETA_TOLERANCE_AUX", CS%tol_eta_aux, &
-                 "The tolerance for free-surface height discrepancies "//&
-                 "between the barotropic solution and the sum of the "//&
-                 "layer thicknesses when calculating the auxiliary "//&
-                 "corrected velocities. By default, this is the same as "//&
-                 "ETA_TOLERANCE, but can be made larger for efficiency.", &
-                 units="m", default=tol_eta_m, scale=GV%m_to_H)
   call get_param(param_file, mdl, "VELOCITY_TOLERANCE", CS%tol_vel, &
                  "The tolerance for barotropic velocity discrepancies "//&
                  "between the barotropic solution and  the sum of the "//&

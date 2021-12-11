@@ -1407,12 +1407,12 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces_in,
                  "If true, user specifies a constant nondimensional heat-transfer coefficient "//&
                  "(GAMMA_T_3EQ), from which the default salt-transfer coefficient is set "//&
                  "as GAMMA_T_3EQ/35. This is used with SHELF_THREE_EQN.", default=.false.)
-  if (CS%threeeq) then
-    call get_param(param_file, mdl, "SHELF_S_ROOT", CS%find_salt_root, &
+  call get_param(param_file, mdl, "SHELF_S_ROOT", CS%find_salt_root, &
                  "If SHELF_S_ROOT = True, salinity at the ice/ocean interface (Sbdry) "//&
                  "is computed from a quadratic equation. Otherwise, the previous "//&
-                 "interactive method to estimate Sbdry is used.", default=.false.)
-  else
+                 "interactive method to estimate Sbdry is used.", &
+                 default=.false., do_not_log=.not.CS%threeeq)
+  if (.not.CS%threeeq) then
     call get_param(param_file, mdl, "SHELF_2EQ_GAMMA_T", CS%gamma_t, &
                  "If SHELF_THREE_EQN is false, this the fixed turbulent "//&
                  "exchange velocity at the ice-ocean interface.", &
