@@ -39,6 +39,7 @@ implicit none ; private
 #define MAX_DSAMP_LEV 2
 
 public set_axes_info, post_data, register_diag_field, time_type
+public post_product_u, post_product_sum_u, post_product_v, post_product_sum_v
 public set_masks_for_axes
 public post_data_1d_k
 public safe_alloc_ptr, safe_alloc_alloc
@@ -1801,6 +1802,108 @@ subroutine post_data_3d_low(diag, field, diag_cs, is_static, mask)
     deallocate( locfield )
 
 end subroutine post_data_3d_low
+
+!> Calculate and write out diagnostics that are the product of two 3-d arrays at u-points
+subroutine post_product_u(id, u_a, u_b, G, nz, diag, mask, alt_h)
+  integer,                  intent(in) :: id   !< The ID for this diagnostic
+  type(ocean_grid_type),    intent(in) :: G    !< ocean grid structure
+  integer,                  intent(in) :: nz   !< The size of the arrays in the vertical
+  real, dimension(G%IsdB:G%IedB, G%jsd:G%jed, nz), &
+                            intent(in) :: u_a  !< The first u-point array in arbitrary units [A]
+  real, dimension(G%IsdB:G%IedB, G%jsd:G%jed, nz), &
+                            intent(in) :: u_b  !< The second u-point array in arbitrary units [B]
+  type(diag_ctrl),          intent(in) :: diag !< regulates diagnostic output
+  real,           optional, intent(in) :: mask(:,:,:)  !< If present, use this real array as the data mask [nondim]
+  real,   target, optional, intent(in) :: alt_h(:,:,:) !< An alternate thickness to use for vertically
+                                               !! remapping this diagnostic [H ~> m or kg m-2]
+
+  ! Local variables
+  real, dimension(G%IsdB:G%IedB, G%jsd:G%jed, nz) :: u_prod ! The product of u_a and u_b [A B]
+  integer :: i, j, k
+
+  if (id <= 0) return
+
+  do k=1,nz ; do j=G%jsc,G%jec ; do I=G%IscB,G%IecB
+    u_prod(I,j,k) = u_a(I,j,k) * u_b(I,j,k)
+  enddo ; enddo ; enddo
+  call post_data(id, u_prod, diag, mask=mask, alt_h=alt_h)
+
+end subroutine post_product_u
+
+!> Calculate and write out diagnostics that are the vertical sum of the product of two 3-d arrays at u-points
+subroutine post_product_sum_u(id, u_a, u_b, G, nz, diag)
+  integer,                  intent(in) :: id   !< The ID for this diagnostic
+  type(ocean_grid_type),    intent(in) :: G    !< ocean grid structure
+  integer,                  intent(in) :: nz   !< The size of the arrays in the vertical
+  real, dimension(G%IsdB:G%IedB, G%jsd:G%jed, nz), &
+                            intent(in) :: u_a  !< The first u-point array in arbitrary units [A]
+  real, dimension(G%IsdB:G%IedB, G%jsd:G%jed, nz), &
+                            intent(in) :: u_b  !< The second u-point array in arbitrary units [B]
+  type(diag_ctrl),          intent(in) :: diag !< regulates diagnostic output
+
+  real, dimension(G%IsdB:G%IedB, G%jsd:G%jed) :: u_sum  ! The vertical sum of the product of u_a and u_b [A B]
+  integer :: i, j, k
+
+  if (id <= 0) return
+
+  u_sum(:,:) = 0.0
+  do k=1,nz ; do j=G%jsc,G%jec ; do I=G%IscB,G%IecB
+    u_sum(I,j) = u_sum(I,j) + u_a(I,j,k) * u_b(I,j,k)
+  enddo ; enddo ; enddo
+  call post_data(id, u_sum, diag)
+
+end subroutine post_product_sum_u
+
+!> Calculate and write out diagnostics that are the product of two 3-d arrays at v-points
+subroutine post_product_v(id, v_a, v_b, G, nz, diag, mask, alt_h)
+  integer,                  intent(in) :: id   !< The ID for this diagnostic
+  type(ocean_grid_type),    intent(in) :: G    !< ocean grid structure
+  integer,                  intent(in) :: nz   !< The size of the arrays in the vertical
+  real, dimension(G%isd:G%ied, G%JsdB:G%JedB, nz), &
+                            intent(in) :: v_a  !< The first v-point array in arbitrary units [A]
+  real, dimension(G%isd:G%ied, G%JsdB:G%JedB, nz), &
+                            intent(in) :: v_b  !< The second v-point array in arbitrary units [B]
+  type(diag_ctrl),          intent(in) :: diag !< regulates diagnostic output
+  real,           optional, intent(in) :: mask(:,:,:)  !< If present, use this real array as the data mask [nondim]
+  real,   target, optional, intent(in) :: alt_h(:,:,:) !< An alternate thickness to use for vertically
+                                               !! remapping this diagnostic [H ~> m or kg m-2]
+
+  ! Local variables
+  real, dimension(G%isd:G%ied, G%JsdB:G%JedB, nz) :: v_prod ! The product of v_a and v_b [A B]
+  integer :: i, j, k
+
+  if (id <= 0) return
+
+  do k=1,nz ; do J=G%JscB,G%JecB ; do i=G%isc,G%iec
+    v_prod(i,J,k) = v_a(i,J,k) * v_b(i,J,k)
+  enddo ; enddo ; enddo
+  call post_data(id, v_prod, diag, mask=mask, alt_h=alt_h)
+
+end subroutine post_product_v
+
+!> Calculate and write out diagnostics that are the vertical sum of the product of two 3-d arrays at v-points
+subroutine post_product_sum_v(id, v_a, v_b, G, nz, diag)
+  integer,                  intent(in) :: id   !< The ID for this diagnostic
+  type(ocean_grid_type),    intent(in) :: G    !< ocean grid structure
+  integer,                  intent(in) :: nz   !< The size of the arrays in the vertical
+  real, dimension(G%isd:G%ied, G%JsdB:G%JedB, nz), &
+                            intent(in) :: v_a  !< The first v-point array in arbitrary units [A]
+  real, dimension(G%isd:G%ied, G%JsdB:G%JedB, nz), &
+                            intent(in) :: v_b  !< The second v-point array in arbitrary units [B]
+  type(diag_ctrl),          intent(in) :: diag !< regulates diagnostic output
+
+  real, dimension(G%isd:G%ied, G%JsdB:G%JedB) :: v_sum ! The vertical sum of the product of v_a and v_b [A B]
+  integer :: i, j, k
+
+  if (id <= 0) return
+
+  v_sum(:,:) = 0.0
+  do k=1,nz ; do J=G%JscB,G%JecB ; do i=G%isc,G%iec
+    v_sum(i,J) = v_sum(i,J) + v_a(i,J,k) * v_b(i,J,k)
+  enddo ; enddo ; enddo
+  call post_data(id, v_sum, diag)
+
+end subroutine post_product_sum_v
 
 !> Post the horizontally area-averaged diagnostic
 subroutine post_xy_average(diag_cs, diag, field)

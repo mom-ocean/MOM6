@@ -40,13 +40,12 @@ contains
 subroutine DOME_initialize_topography(D, G, param_file, max_depth, US)
   type(dyn_horgrid_type),          intent(in)  :: G !< The dynamic horizontal grid type
   real, dimension(G%isd:G%ied,G%jsd:G%jed), &
-                                   intent(out) :: D !< Ocean bottom depth in [m] or [Z ~> m] if US is present
+                                   intent(out) :: D !< Ocean bottom depth [Z ~> m]
   type(param_file_type),           intent(in)  :: param_file !< Parameter file structure
-  real,                            intent(in)  :: max_depth !< Maximum model depth [m] or [Z ~> m]
-  type(unit_scale_type), optional, intent(in)  :: US !< A dimensional unit scaling type
+  real,                            intent(in)  :: max_depth !< Maximum model depth [Z ~> m]
+  type(unit_scale_type),           intent(in)  :: US !< A dimensional unit scaling type
 
   ! Local variables
-  real :: m_to_Z  ! A dimensional rescaling factor.
   real :: min_depth ! The minimum and maximum depths [Z ~> m].
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
@@ -57,22 +56,20 @@ subroutine DOME_initialize_topography(D, G, param_file, max_depth, US)
 
   call MOM_mesg("  DOME_initialization.F90, DOME_initialize_topography: setting topography", 5)
 
-  m_to_Z = 1.0 ; if (present(US)) m_to_Z = US%m_to_Z
-
   call log_version(param_file, mdl, version, "")
   call get_param(param_file, mdl, "MINIMUM_DEPTH", min_depth, &
-                 "The minimum depth of the ocean.", units="m", default=0.0, scale=m_to_Z)
+                 "The minimum depth of the ocean.", units="m", default=0.0, scale=US%m_to_Z)
 
   do j=js,je ; do i=is,ie
     if (G%geoLatT(i,j) < 600.0) then
       if (G%geoLatT(i,j) < 300.0) then
         D(i,j) = max_depth
       else
-        D(i,j) = max_depth - 10.0*m_to_Z * (G%geoLatT(i,j)-300.0)
+        D(i,j) = max_depth - 10.0*US%m_to_Z * (G%geoLatT(i,j)-300.0)
       endif
     else
       if ((G%geoLonT(i,j) > 1000.0) .AND. (G%geoLonT(i,j) < 1100.0)) then
-        D(i,j) = 600.0*m_to_Z
+        D(i,j) = 600.0*US%m_to_Z
       else
         D(i,j) = 0.5*min_depth
       endif

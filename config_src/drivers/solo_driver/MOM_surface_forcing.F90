@@ -233,7 +233,7 @@ subroutine set_forcing(sfc_state, forces, fluxes, day_start, day_interval, G, US
   type(surface_forcing_CS), pointer    :: CS   !< pointer to control structure returned by
                                                !! a previous surface_forcing_init call
   ! Local variables
-  real :: dt                     ! length of time over which fluxes applied [s]
+  real :: dt                     ! length of time over which fluxes applied [T ~> s]
   type(time_type) :: day_center  ! central time of the fluxes.
   integer :: isd, ied, jsd, jed
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
@@ -242,7 +242,7 @@ subroutine set_forcing(sfc_state, forces, fluxes, day_start, day_interval, G, US
   call callTree_enter("set_forcing, MOM_surface_forcing.F90")
 
   day_center = day_start + day_interval/2
-  dt = time_type_to_real(day_interval)
+  dt = US%s_to_T * time_type_to_real(day_interval)
 
   if (CS%first_call_set_forcing) then
     ! Allocate memory for the mechanical and thermodynamic forcing fields.
@@ -899,7 +899,7 @@ subroutine buoyancy_forcing_from_files(sfc_state, fluxes, day, dt, G, US, CS)
   type(forcing),         intent(inout) :: fluxes !< A structure containing thermodynamic forcing fields
   type(time_type),       intent(in)    :: day  !< The time of the fluxes
   real,                  intent(in)    :: dt   !< The amount of time over which
-                                               !! the fluxes apply [s]
+                                               !! the fluxes apply [T ~> s]
   type(ocean_grid_type), intent(inout) :: G    !< The ocean's grid structure
   type(unit_scale_type), intent(in)    :: US   !< A dimensional unit scaling type
   type(surface_forcing_CS), pointer    :: CS   !< pointer to control structure returned by
@@ -1162,7 +1162,7 @@ subroutine buoyancy_forcing_from_files(sfc_state, fluxes, day, dt, G, US, CS)
 !#CTRL#     SSS_mean(i,j) = 0.5*(sfc_state%SSS(i,j) + CS%S_Restore(i,j))
 !#CTRL#   enddo ; enddo
 !#CTRL#   call apply_ctrl_forcing(SST_anom, SSS_anom, SSS_mean, fluxes%heat_added, &
-!#CTRL#                           fluxes%vprec, day, dt, G, CS%ctrl_forcing_CSp)
+!#CTRL#                           fluxes%vprec, day, dt, G, US, CS%ctrl_forcing_CSp)
 !#CTRL# endif
 
   call callTree_leave("buoyancy_forcing_from_files")
@@ -1175,7 +1175,7 @@ subroutine buoyancy_forcing_from_data_override(sfc_state, fluxes, day, dt, G, US
   type(forcing),            intent(inout) :: fluxes !< A structure containing thermodynamic forcing fields
   type(time_type),          intent(in)    :: day  !< The time of the fluxes
   real,                     intent(in)    :: dt   !< The amount of time over which
-                                                  !! the fluxes apply [s]
+                                                  !! the fluxes apply [T ~> s]
   type(ocean_grid_type),    intent(inout) :: G    !< The ocean's grid structure
   type(unit_scale_type),    intent(in)    :: US   !< A dimensional unit scaling type
   type(surface_forcing_CS), pointer       :: CS   !< pointer to control structure returned by
@@ -1289,7 +1289,7 @@ subroutine buoyancy_forcing_from_data_override(sfc_state, fluxes, day, dt, G, US
 !#CTRL#     SSS_mean(i,j) = 0.5*(sfc_state%SSS(i,j) + CS%S_Restore(i,j))
 !#CTRL#   enddo ; enddo
 !#CTRL#   call apply_ctrl_forcing(SST_anom, SSS_anom, SSS_mean, fluxes%heat_added, &
-!#CTRL#                           fluxes%vprec, day, dt, G, CS%ctrl_forcing_CSp)
+!#CTRL#                           fluxes%vprec, day, US%T_to_s*dt, G, US, CS%ctrl_forcing_CSp)
 !#CTRL# endif
 
   call callTree_leave("buoyancy_forcing_from_data_override")
@@ -1302,7 +1302,7 @@ subroutine buoyancy_forcing_zero(sfc_state, fluxes, day, dt, G, CS)
   type(forcing),         intent(inout) :: fluxes !< A structure containing thermodynamic forcing fields
   type(time_type),       intent(in)    :: day  !< The time of the fluxes
   real,                  intent(in)    :: dt   !< The amount of time over which
-                                               !! the fluxes apply [s]
+                                               !! the fluxes apply [T ~> s]
   type(ocean_grid_type), intent(in)    :: G    !< The ocean's grid structure
   type(surface_forcing_CS), pointer    :: CS   !< pointer to control structure returned by
                                                !! a previous surface_forcing_init call
@@ -1345,7 +1345,7 @@ subroutine buoyancy_forcing_const(sfc_state, fluxes, day, dt, G, US, CS)
   type(forcing),         intent(inout) :: fluxes !< A structure containing thermodynamic forcing fields
   type(time_type),       intent(in)    :: day  !< The time of the fluxes
   real,                  intent(in)    :: dt   !< The amount of time over which
-                                               !! the fluxes apply [s]
+                                               !! the fluxes apply [T ~> s]
   type(ocean_grid_type), intent(in)    :: G    !< The ocean's grid structure
   type(unit_scale_type), intent(in)    :: US   !< A dimensional unit scaling type
   type(surface_forcing_CS), pointer    :: CS   !< pointer to control structure returned by
@@ -1388,7 +1388,7 @@ subroutine buoyancy_forcing_linear(sfc_state, fluxes, day, dt, G, US, CS)
   type(forcing),         intent(inout) :: fluxes !< A structure containing thermodynamic forcing fields
   type(time_type),       intent(in)    :: day  !< The time of the fluxes
   real,                  intent(in)    :: dt   !< The amount of time over which
-                                               !! the fluxes apply [s]
+                                               !! the fluxes apply [T ~> s]
   type(ocean_grid_type), intent(in)    :: G    !< The ocean's grid structure
   type(unit_scale_type), intent(in)    :: US   !< A dimensional unit scaling type
   type(surface_forcing_CS), pointer    :: CS   !< pointer to control structure returned by
@@ -1908,7 +1908,7 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, tracer_flow_C
   if (trim(CS%wind_config) == "file") &
     CS%wind_nlev = num_timelevels(CS%wind_file, CS%stress_x_var, min_dims=3)
 
-!#CTRL#  call controlled_forcing_init(Time, G, param_file, diag, CS%ctrl_forcing_CSp)
+!#CTRL#  call controlled_forcing_init(Time, G, US, param_file, diag, CS%ctrl_forcing_CSp)
 
   call user_revise_forcing_init(param_file, CS%urf_CS)
 

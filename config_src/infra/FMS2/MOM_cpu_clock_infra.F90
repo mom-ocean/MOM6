@@ -85,8 +85,13 @@ integer function cpu_clock_id(name, sync, grain)
   integer :: clock_flags
 
   clock_flags = clock_flag_default
-  if (present(sync)) &
-    clock_flags = ibset(clock_flags, 0)
+  if (present(sync)) then
+    if (sync) then
+      clock_flags = ibset(clock_flags, 0)
+    else
+      clock_flags = ibclr(clock_flags, 0)
+    endif
+  endif
 
   cpu_clock_id = mpp_clock_id(name, flags=clock_flags, grain=grain)
 end function cpu_clock_id

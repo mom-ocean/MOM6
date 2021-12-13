@@ -52,7 +52,7 @@ subroutine BFB_buoyancy_forcing(sfc_state, fluxes, day, dt, G, US, CS)
                                                       !! have NULL ptrs.
   type(time_type),              intent(in)    :: day  !< Time of the fluxes.
   real,                         intent(in)    :: dt   !< The amount of time over which
-                                                      !! the fluxes apply [s]
+                                                      !! the fluxes apply [T ~> s]
   type(ocean_grid_type),        intent(in)    :: G    !< The ocean's grid structure
   type(unit_scale_type),        intent(in)    :: US   !< A dimensional unit scaling type
   type(BFB_surface_forcing_CS), pointer       :: CS   !< A pointer to the control structure
@@ -177,8 +177,9 @@ subroutine BFB_surface_forcing_init(Time, G, US, param_file, diag, CS)
   type(diag_ctrl), target,      intent(in) :: diag !< A structure that is used to
                                                    !! regulate diagnostic output.
   type(BFB_surface_forcing_CS), pointer    :: CS   !< A pointer to the control structure for this module
-! This include declares and sets the variable "version".
-#include "version_variable.h"
+
+  ! This include declares and sets the variable "version".
+# include "version_variable.h"
   character(len=40)  :: mdl = "BFB_surface_forcing" ! This module's name.
 
   if (associated(CS)) then
