@@ -601,7 +601,7 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
   if (CS%debug) then
     call MOM_state_chksum("after set_diffusivity ", u, v, h, G, GV, US, haloshift=0)
     call MOM_forcing_chksum("after set_diffusivity ", fluxes, G, US, haloshift=0)
-    call MOM_thermovar_chksum("after set_diffusivity ", tv, G)
+    call MOM_thermovar_chksum("after set_diffusivity ", tv, G, US)
     call hchksum(Kd_Int, "after set_diffusivity Kd_Int", G%HI, haloshift=0, scale=US%Z2_T_to_m2_s)
   endif
 
@@ -678,7 +678,7 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
     if (CS%debug) then
       call MOM_state_chksum("after KPP", u, v, h, G, GV, US, haloshift=0)
       call MOM_forcing_chksum("after KPP", fluxes, G, US, haloshift=0)
-      call MOM_thermovar_chksum("after KPP", tv, G)
+      call MOM_thermovar_chksum("after KPP", tv, G, US)
       call hchksum(Kd_heat, "after KPP Kd_heat", G%HI, haloshift=0, scale=US%Z2_T_to_m2_s)
       call hchksum(Kd_salt, "after KPP Kd_salt", G%HI, haloshift=0, scale=US%Z2_T_to_m2_s)
       call hchksum(CS%KPP_temp_flux, "before KPP_applyNLT netHeat", G%HI, haloshift=0, scale=GV%H_to_m*US%s_to_T)
@@ -699,7 +699,7 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
     if (CS%debug) then
       call MOM_state_chksum("after KPP_applyNLT ", u, v, h, G, GV, US, haloshift=0)
       call MOM_forcing_chksum("after KPP_applyNLT ", fluxes, G, US, haloshift=0)
-      call MOM_thermovar_chksum("after KPP_applyNLT ", tv, G)
+      call MOM_thermovar_chksum("after KPP_applyNLT ", tv, G, US)
     endif
   endif ! endif for KPP
 
@@ -747,7 +747,7 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
 
   if (CS%debug) then
     call MOM_forcing_chksum("after calc_entrain ", fluxes, G, US, haloshift=0)
-    call MOM_thermovar_chksum("after calc_entrain ", tv, G)
+    call MOM_thermovar_chksum("after calc_entrain ", tv, G, US)
     call MOM_state_chksum("after calc_entrain ", u, v, h, G, GV, US, haloshift=0)
     call hchksum(ent_s, "after calc_entrain ent_s", G%HI, haloshift=0, scale=GV%H_to_m)
   endif
@@ -842,7 +842,7 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
   call cpu_clock_end(id_clock_remap)
   if (CS%debug) then
     call MOM_forcing_chksum("after applyBoundaryFluxes ", fluxes, G, US, haloshift=0)
-    call MOM_thermovar_chksum("after applyBoundaryFluxes ", tv, G)
+    call MOM_thermovar_chksum("after applyBoundaryFluxes ", tv, G, US)
     call MOM_state_chksum("after applyBoundaryFluxes ", u, v, h, G, GV, US, haloshift=0)
   endif
   if (showCallTree) call callTree_waypoint("done with applyBoundaryFluxes (diabatic)")
@@ -851,7 +851,7 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
   if (CS%debug) then
     call MOM_state_chksum("after negative check ", u, v, h, G, GV, US, haloshift=0)
     call MOM_forcing_chksum("after negative check ", fluxes, G, US, haloshift=0)
-    call MOM_thermovar_chksum("after negative check ", tv, G)
+    call MOM_thermovar_chksum("after negative check ", tv, G, US)
   endif
   if (showCallTree) call callTree_waypoint("done with h=ea-eb (diabatic)")
   if (CS%debugConservation) call MOM_state_stats('h=ea-eb', u, v, h, tv%T, tv%S, G, GV, US)
@@ -908,7 +908,7 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
 
   if (CS%debug) then
     call MOM_state_chksum("after mixed layer ", u, v, h, G, GV, US, haloshift=0)
-    call MOM_thermovar_chksum("after mixed layer ", tv, G)
+    call MOM_thermovar_chksum("after mixed layer ", tv, G, US)
   endif
 
   ! Whenever thickness changes let the diag manager know, as the
@@ -1020,7 +1020,7 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
     call cpu_clock_end(id_clock_sponge)
     if (CS%debug) then
       call MOM_state_chksum("apply_sponge ", u, v, h, G, GV, US, haloshift=0)
-      call MOM_thermovar_chksum("apply_sponge ", tv, G)
+      call MOM_thermovar_chksum("apply_sponge ", tv, G, US)
     endif
   endif ! CS%use_sponge
 
@@ -1032,7 +1032,7 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
     call cpu_clock_end(id_clock_oda_incupd)
     if (CS%debug) then
       call MOM_state_chksum("apply_oda_incupd ", u, v, h, G, GV, US, haloshift=0)
-      call MOM_thermovar_chksum("apply_oda_incupd ", tv, G)
+      call MOM_thermovar_chksum("apply_oda_incupd ", tv, G, US)
     endif
   endif ! CS%use_oda_incupd
 
@@ -1185,7 +1185,7 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
   if (CS%debug) then
     call MOM_state_chksum("after set_diffusivity ", u, v, h, G, GV, US, haloshift=0)
     call MOM_forcing_chksum("after set_diffusivity ", fluxes, G, US, haloshift=0)
-    call MOM_thermovar_chksum("after set_diffusivity ", tv, G)
+    call MOM_thermovar_chksum("after set_diffusivity ", tv, G, US)
     call hchksum(Kd_heat, "after set_diffusivity Kd_heat", G%HI, haloshift=0, scale=US%Z2_T_to_m2_s)
   endif
 
@@ -1253,7 +1253,7 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
     if (CS%debug) then
       call MOM_state_chksum("after KPP", u, v, h, G, GV, US, haloshift=0)
       call MOM_forcing_chksum("after KPP", fluxes, G, US, haloshift=0)
-      call MOM_thermovar_chksum("after KPP", tv, G)
+      call MOM_thermovar_chksum("after KPP", tv, G, US)
       call hchksum(Kd_heat, "after KPP Kd_heat", G%HI, haloshift=0, scale=US%Z2_T_to_m2_s)
       call hchksum(Kd_salt, "after KPP Kd_salt", G%HI, haloshift=0, scale=US%Z2_T_to_m2_s)
       call hchksum(CS%KPP_temp_flux, "before KPP_applyNLT netHeat", G%HI, haloshift=0, scale=GV%H_to_m*US%s_to_T)
@@ -1274,7 +1274,7 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
     if (CS%debug) then
       call MOM_state_chksum("after KPP_applyNLT ", u, v, h, G, GV, US, haloshift=0)
       call MOM_forcing_chksum("after KPP_applyNLT ", fluxes, G, US, haloshift=0)
-      call MOM_thermovar_chksum("after KPP_applyNLT ", tv, G)
+      call MOM_thermovar_chksum("after KPP_applyNLT ", tv, G, US)
     endif
   endif ! endif for KPP
 
@@ -1372,7 +1372,7 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
   call cpu_clock_end(id_clock_remap)
   if (CS%debug) then
     call MOM_forcing_chksum("after applyBoundaryFluxes ", fluxes, G, US, haloshift=0)
-    call MOM_thermovar_chksum("after applyBoundaryFluxes ", tv, G)
+    call MOM_thermovar_chksum("after applyBoundaryFluxes ", tv, G, US)
     call MOM_state_chksum("after applyBoundaryFluxes ", u, v, h, G, GV, US, haloshift=0)
   endif
   if (showCallTree) call callTree_waypoint("done with applyBoundaryFluxes (diabatic)")
@@ -1439,7 +1439,7 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
 
   if (CS%debug) then
     call MOM_state_chksum("after mixed layer ", u, v, h, G, GV, US, haloshift=0)
-    call MOM_thermovar_chksum("after mixed layer ", tv, G)
+    call MOM_thermovar_chksum("after mixed layer ", tv, G, US)
   endif
 
   ! Whenever thickness changes let the diag manager know, as the
@@ -1526,7 +1526,7 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
     call cpu_clock_end(id_clock_sponge)
     if (CS%debug) then
       call MOM_state_chksum("apply_sponge ", u, v, h, G, GV, US, haloshift=0)
-      call MOM_thermovar_chksum("apply_sponge ", tv, G)
+      call MOM_thermovar_chksum("apply_sponge ", tv, G, US)
     endif
   endif ! CS%use_sponge
 
@@ -1538,7 +1538,7 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
     call cpu_clock_end(id_clock_oda_incupd)
     if (CS%debug) then
       call MOM_state_chksum("apply_oda_incupd ", u, v, h, G, GV, US, haloshift=0)
-      call MOM_thermovar_chksum("apply_oda_incupd ", tv, G)
+      call MOM_thermovar_chksum("apply_oda_incupd ", tv, G, US)
     endif
   endif ! CS%use_oda_incupd
 
@@ -1789,7 +1789,7 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
   if (CS%debug) then
     call MOM_state_chksum("after set_diffusivity ", u, v, h, G, GV, US, haloshift=0)
     call MOM_forcing_chksum("after set_diffusivity ", fluxes, G, US, haloshift=0)
-    call MOM_thermovar_chksum("after set_diffusivity ", tv, G)
+    call MOM_thermovar_chksum("after set_diffusivity ", tv, G, US)
     call hchksum(Kd_lay, "after set_diffusivity Kd_lay", G%HI, haloshift=0, scale=US%Z2_T_to_m2_s)
     call hchksum(Kd_Int, "after set_diffusivity Kd_Int", G%HI, haloshift=0, scale=US%Z2_T_to_m2_s)
   endif
@@ -1863,7 +1863,7 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
     if (CS%debug) then
       call MOM_state_chksum("after KPP", u, v, h, G, GV, US, haloshift=0)
       call MOM_forcing_chksum("after KPP", fluxes, G, US, haloshift=0)
-      call MOM_thermovar_chksum("after KPP", tv, G)
+      call MOM_thermovar_chksum("after KPP", tv, G, US)
       call hchksum(Kd_lay, "after KPP Kd_lay", G%HI, haloshift=0, scale=US%Z2_T_to_m2_s)
       call hchksum(Kd_Int, "after KPP Kd_Int", G%HI, haloshift=0, scale=US%Z2_T_to_m2_s)
     endif
@@ -1896,7 +1896,7 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
     if (CS%debug) then
       call MOM_state_chksum("after KPP_applyNLT ", u, v, h, G, GV, US, haloshift=0)
       call MOM_forcing_chksum("after KPP_applyNLT ", fluxes, G, US, haloshift=0)
-      call MOM_thermovar_chksum("after KPP_applyNLT ", tv, G)
+      call MOM_thermovar_chksum("after KPP_applyNLT ", tv, G, US)
     endif
   endif ! endif for KPP
 
@@ -1934,7 +1934,7 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
 
   if (CS%debug) then
     call MOM_forcing_chksum("after calc_entrain ", fluxes, G, US, haloshift=0)
-    call MOM_thermovar_chksum("after calc_entrain ", tv, G)
+    call MOM_thermovar_chksum("after calc_entrain ", tv, G, US)
     call MOM_state_chksum("after calc_entrain ", u, v, h, G, GV, US, haloshift=0)
     call hchksum(ea, "after calc_entrain ea", G%HI, haloshift=0, scale=GV%H_to_m)
     call hchksum(eb, "after calc_entrain eb", G%HI, haloshift=0, scale=GV%H_to_m)
@@ -1985,7 +1985,7 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
   if (CS%debug) then
     call MOM_state_chksum("after negative check ", u, v, h, G, GV, US, haloshift=0)
     call MOM_forcing_chksum("after negative check ", fluxes, G, US, haloshift=0)
-    call MOM_thermovar_chksum("after negative check ", tv, G)
+    call MOM_thermovar_chksum("after negative check ", tv, G, US)
   endif
   if (showCallTree) call callTree_waypoint("done with h=ea-eb (diabatic)")
   if (CS%debugConservation) call MOM_state_stats('h=ea-eb', u, v, h, tv%T, tv%S, G, GV, US)
@@ -2183,7 +2183,7 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
 
   if (CS%debug) then
     call MOM_state_chksum("after mixed layer ", u, v, h, G, GV, US, haloshift=0)
-    call MOM_thermovar_chksum("after mixed layer ", tv, G)
+    call MOM_thermovar_chksum("after mixed layer ", tv, G, US)
     call hchksum(ea, "after mixed layer ea", G%HI, scale=GV%H_to_m)
     call hchksum(eb, "after mixed layer eb", G%HI, scale=GV%H_to_m)
   endif
@@ -2331,7 +2331,7 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
     call cpu_clock_end(id_clock_sponge)
     if (CS%debug) then
       call MOM_state_chksum("apply_sponge ", u, v, h, G, GV, US, haloshift=0)
-      call MOM_thermovar_chksum("apply_sponge ", tv, G)
+      call MOM_thermovar_chksum("apply_sponge ", tv, G, US)
     endif
   endif ! CS%use_sponge
 
@@ -2342,7 +2342,7 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
     call cpu_clock_end(id_clock_oda_incupd)
     if (CS%debug) then
       call MOM_state_chksum("apply_oda_incupd ", u, v, h, G, GV, US, haloshift=0)
-      call MOM_thermovar_chksum("apply_oda_incupd ", tv, G)
+      call MOM_thermovar_chksum("apply_oda_incupd ", tv, G, US)
     endif
   endif ! CS%use_oda_incupd
 

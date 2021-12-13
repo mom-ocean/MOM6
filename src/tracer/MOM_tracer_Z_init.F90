@@ -565,7 +565,7 @@ subroutine determine_temperature(temp, salt, R_tgt, p_ref, niter, land_fill, h, 
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                                  intent(inout) :: temp !< potential temperature [degC]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
-                                 intent(inout) :: salt !< salinity [PSU]
+                                 intent(inout) :: salt !< salinity [ppt]
   real, dimension(SZK_(GV)),     intent(in)    :: R_tgt !< desired potential density [R ~> kg m-3].
   real,                          intent(in)    :: p_ref !< reference pressure [R L2 T-2 ~> Pa].
   integer,                       intent(in)    :: niter !< maximum number of iterations

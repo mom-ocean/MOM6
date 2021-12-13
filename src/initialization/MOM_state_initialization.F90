@@ -620,7 +620,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
     elseif (trim(config) == "shelfwave") then
       OBC%update_OBC = .true.
     elseif (lowercase(trim(config)) == "supercritical") then
-      call supercritical_set_OBC_data(OBC, G, GV, PF)
+      call supercritical_set_OBC_data(OBC, G, GV, US, PF)
     elseif (trim(config) == "tidal_bay") then
       OBC%update_OBC = .true.
     elseif (trim(config) == "USER") then

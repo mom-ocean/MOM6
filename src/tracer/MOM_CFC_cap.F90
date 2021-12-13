@@ -341,13 +341,14 @@ end subroutine CFC_cap_column_physics
 !> Calculates the mass-weighted integral of all tracer stocks,
 !! returning the number of stocks it has calculated.  If the stock_index
 !! is present, only the stock corresponding to that coded index is returned.
-function CFC_cap_stock(h, stocks, G, GV, CS, names, units, stock_index)
+function CFC_cap_stock(h, stocks, G, GV, US, CS, names, units, stock_index)
   type(ocean_grid_type),           intent(in)    :: G      !< The ocean's grid structure.
   type(verticalGrid_type),         intent(in)    :: GV     !< The ocean's vertical grid structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                                    intent(in)    :: h      !< Layer thicknesses [H ~> m or kg m-2].
   real, dimension(:),              intent(out)   :: stocks !< the mass-weighted integrated amount of each
                                                            !! tracer, in kg times concentration units [kg conc].
+  type(unit_scale_type),           intent(in)    :: US     !< A dimensional unit scaling type
   type(CFC_cap_CS),                pointer       :: CS     !< The control structure returned by a
                                                            !! previous call to register_CFC_cap.
   character(len=*), dimension(:),  intent(out)   :: names  !< The names of the stocks calculated.
@@ -376,7 +377,7 @@ function CFC_cap_stock(h, stocks, G, GV, CS, names, units, stock_index)
   call query_vardesc(CS%CFC12_desc, name=names(2), units=units(2), caller="CFC_cap_stock")
   units(1) = trim(units(1))//" kg" ; units(2) = trim(units(2))//" kg"
 
-  stock_scale = G%US%L_to_m**2 * GV%H_to_kg_m2
+  stock_scale = US%L_to_m**2 * GV%H_to_kg_m2
   stocks(1) = 0.0 ; stocks(2) = 0.0
   do k=1,nz ; do j=js,je ; do i=is,ie
     mass = G%mask2dT(i,j) * G%areaT(i,j) * h(i,j,k)

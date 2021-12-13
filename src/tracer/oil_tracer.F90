@@ -51,7 +51,6 @@ type, public :: oil_tracer_CS ; private
   real, pointer :: tr(:,:,:,:) => NULL() !< The array of tracers used in this subroutine, in g m-3?
   real, dimension(NTR_MAX) :: IC_val = 0.0    !< The (uniform) initial condition value.
   real, dimension(NTR_MAX) :: land_val = -1.0 !< The value of tr used where land is masked out.
-  real, dimension(NTR_MAX) :: oil_decay_days  !< Decay time scale of oil [days]
   real, dimension(NTR_MAX) :: oil_decay_rate  !< Decay rate of oil [T-1 ~> s-1] calculated from oil_decay_days
   integer, dimension(NTR_MAX) :: oil_source_k !< Layer of source
   logical :: oil_may_reinit  !< If true, oil tracers may be reset by the initialization code
@@ -83,7 +82,8 @@ function register_oil_tracer(HI, GV, US, param_file, CS, tr_Reg, restart_CS)
   ! Local variables
   character(len=40)  :: mdl = "oil_tracer" ! This module's name.
 ! This include declares and sets the variable "version".
-#include "version_variable.h"
+# include "version_variable.h"
+  real, dimension(NTR_MAX) :: oil_decay_days  !< Decay time scale of oil [days]
   character(len=200) :: inputdir ! The directory where the input files are.
   character(len=48)  :: var_name ! The variable's name.
   character(len=3)   :: name_tag ! String for creating identifying oils
@@ -136,7 +136,7 @@ function register_oil_tracer(HI, GV, US, param_file, CS, tr_Reg, restart_CS)
   call get_param(param_file, mdl, "OIL_SOURCE_RATE", CS%oil_source_rate, &
                  "The rate of oil injection.", &
                  units="kg s-1", scale=US%T_to_s, default=1.0)
-  call get_param(param_file, mdl, "OIL_DECAY_DAYS", CS%oil_decay_days, &
+  call get_param(param_file, mdl, "OIL_DECAY_DAYS", oil_decay_days, &
                  "The decay timescale in days (if positive), or no decay "//&
                  "if 0, or use the temperature dependent decay rate of "//&
                  "Adcroft et al. (GRL, 2010) if negative.", units="days", &
@@ -156,9 +156,9 @@ function register_oil_tracer(HI, GV, US, param_file, CS, tr_Reg, restart_CS)
       CS%ntr = CS%ntr + 1
       CS%tr_desc(m) = var_desc("oil"//trim(name_tag), "kg m-3", "Oil Tracer", caller=mdl)
       CS%IC_val(m) = 0.0
-      if (CS%oil_decay_days(m)>0.) then
-        CS%oil_decay_rate(m) = 1. / (86400.0*US%s_to_T * CS%oil_decay_days(m))
-      elseif (CS%oil_decay_days(m)<0.) then
+      if (oil_decay_days(m) > 0.) then
+        CS%oil_decay_rate(m) = 1. / (86400.0*US%s_to_T * oil_decay_days(m))
+      elseif (oil_decay_days(m) < 0.) then
         CS%oil_decay_rate(m) = -1.
       endif
     endif
@@ -326,9 +326,12 @@ subroutine oil_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, US
 
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: h_work ! Used so that h can be modified [H ~> m or kg m-2]
-  real :: Isecs_per_year = 1.0 / (365.0*86400.0)
+  real :: Isecs_per_year = 1.0 / (365.0*86400.0) ! Conversion factor from seconds to year [year s-1]
   real :: vol_scale ! A conversion factor for volumes into m3 [m3 H-1 L-2 ~> 1 or m3 kg-1]
-  real :: year, h_total, ldecay
+  real :: year      ! Time in fractional years [years]
+  real :: h_total   ! A running sum of thicknesses [H ~> m or kg m-2]
+  real :: decay_timescale ! Chemical decay timescale for oil [T ~> s]
+  real :: ldecay    ! Chemical decay rate of oil [T-1 ~> s-1]
   integer :: i, j, k, is, ie, js, je, nz, m, k_max
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
@@ -360,8 +363,8 @@ subroutine oil_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, US
       if (CS%oil_decay_rate(m)>0.) then
         CS%tr(i,j,k,m) = G%mask2dT(i,j)*max(1. - dt*CS%oil_decay_rate(m),0.)*CS%tr(i,j,k,m) ! Safest
       elseif (CS%oil_decay_rate(m)<0.) then
-        ldecay = 12.*(3.0**(-(tv%T(i,j,k)-20.)/10.)) ! Timescale [days]
-        ldecay = 1. / (86400.*US%s_to_T * ldecay) ! Rate [T-1 ~> s-1]
+        decay_timescale = (12.*(3.0**(-(tv%T(i,j,k)-20.)/10.))) * (86400.*US%s_to_T) ! Timescale [s ~> T]
+        ldecay = 1. / decay_timescale ! Rate [T-1 ~> s-1]
         CS%tr(i,j,k,m) = G%mask2dT(i,j)*max(1. - dt*ldecay,0.)*CS%tr(i,j,k,m)
       endif
     enddo ; enddo ; enddo
@@ -399,12 +402,13 @@ end subroutine oil_tracer_column_physics
 
 !> Calculate the mass-weighted integral of the oil tracer stocks, returning the number of stocks it
 !! has calculated.  If the stock_index is present, only the stock corresponding to that coded index is returned.
-function oil_stock(h, stocks, G, GV, CS, names, units, stock_index)
+function oil_stock(h, stocks, G, GV, US, CS, names, units, stock_index)
   type(ocean_grid_type),              intent(in)    :: G    !< The ocean's grid structure
   type(verticalGrid_type),            intent(in)    :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in) :: h    !< Layer thicknesses [H ~> m or kg m-2]
   real, dimension(:),                 intent(out)   :: stocks !< the mass-weighted integrated amount of each
                                                               !! tracer, in kg times concentration units [kg conc].
+  type(unit_scale_type),              intent(in)    :: US   !< A dimensional unit scaling type
   type(oil_tracer_CS),                pointer       :: CS   !< The control structure returned by a previous
                                                             !! call to register_oil_tracer.
   character(len=*), dimension(:),     intent(out)   :: names  !< the names of the stocks calculated.
@@ -429,7 +433,7 @@ function oil_stock(h, stocks, G, GV, CS, names, units, stock_index)
     return
   endif ; endif
 
-  stock_scale = G%US%L_to_m**2 * GV%H_to_kg_m2
+  stock_scale = US%L_to_m**2 * GV%H_to_kg_m2
   do m=1,CS%ntr
     call query_vardesc(CS%tr_desc(m), name=names(m), units=units(m), caller="oil_stock")
     units(m) = trim(units(m))//" kg"

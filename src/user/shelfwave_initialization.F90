@@ -158,7 +158,7 @@ subroutine shelfwave_set_OBC_data(OBC, CS, G, GV, US, h, Time)
   time_sec = US%s_to_T*time_type_to_real(Time)
   omega = CS%omega
   alpha = CS%alpha
-  my_amp = 1.0*G%US%m_s_to_L_T
+  my_amp = 1.0*US%m_s_to_L_T
   jj = CS%jj
   kk = CS%kk
   ll = CS%ll
