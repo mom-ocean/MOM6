@@ -1264,16 +1264,18 @@ subroutine calc_sfc_displacement(PF, G, GV, US, mass_shelf, tv, h)
   real, dimension(SZK_(GV)) :: p_ref     ! pressure for density [RZ ~> kg m-2]
   real, dimension(SZK_(GV)+1) :: ei_tmp, ei_orig ! temporary storage for interface positions [Z ~> m]
   real :: z_top, z_col, mass_disp, residual, tol
-  integer :: is, ie, js, je, k, nz, i, j
+  integer :: is, ie, js, je, k, nz, i, j, max_iter, iter
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
   tol = US%m_to_Z*0.001 ! 1mm tolerance
+  max_iter = 1e3
 
   call MOM_mesg("Started calculating initial interface position under ice shelf ")
   ! Convert thicknesses to interface heights.
   call find_eta(h, tv, G, GV, US, eta, dZref=G%Z_ref)
   do j = js, je ; do i = is, ie
+    iter=1
     z_top_shelf(i,j) = 0.0
     p_ref(:) = tv%p_ref
     if (G%mask2dT(i,j) > 0. .and. mass_shelf(i,j) .gt. 0.) then
@@ -1293,7 +1295,7 @@ subroutine calc_sfc_displacement(PF, G, GV, US, mass_shelf, tv, h)
         mass_disp = mass_disp + rho_h(k)
       enddo
       residual = mass_shelf(i,j) - mass_disp
-      do while (abs(residual)>tol .and. z_top>-G%bathyT(i,j))
+      do while (abs(residual)>tol .and. z_top>-G%bathyT(i,j) .and. iter .lt. max_iter)
         z_top=min(max(z_top-(residual*0.5e-3),-G%bathyT(i,j)),0.0)
         h_tmp = 0.0
         z_col = 0.0
@@ -1308,7 +1310,9 @@ subroutine calc_sfc_displacement(PF, G, GV, US, mass_shelf, tv, h)
           mass_disp = mass_disp + rho_h(k)
         enddo
         residual = mass_shelf(i,j) - mass_disp
+        iter=iter+1
       end do
+      if (iter .ge. max_iter) call MOM_mesg("Warning: calc_sfc_displacement too many iterations.")
       z_top_shelf(i,j) = z_top
     endif
   enddo; enddo
