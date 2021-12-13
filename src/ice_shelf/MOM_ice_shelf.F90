@@ -2034,11 +2034,12 @@ subroutine update_shelf_mass(G, US, CS, ISS, Time)
 end subroutine update_shelf_mass
 
 !> Save the ice shelf restart file
-subroutine ice_shelf_query(CS, G, frac_shelf_h)
+subroutine ice_shelf_query(CS, G, frac_shelf_h, mass_shelf)
   type(ice_shelf_CS),         pointer    :: CS !< ice shelf control structure
   type(ocean_grid_type), intent(in)      :: G  !< A pointer to an ocean grid control structure.
-  real, optional, dimension(SZI_(G),SZJ_(G))  :: frac_shelf_h !<
-                                      !< Ice shelf area fraction [nodim].
+  real, optional, dimension(SZI_(G),SZJ_(G))  :: frac_shelf_h !< Ice shelf area fraction [nodim].
+  real, optional, dimension(SZI_(G),SZJ_(G))  :: mass_shelf !<Ice shelf mass [RZ -> kg m-2]
+
 
   integer :: i, j
 
@@ -2046,6 +2047,13 @@ subroutine ice_shelf_query(CS, G, frac_shelf_h)
     do j=G%jsd,G%jed ; do i=G%isd,G%ied
       frac_shelf_h(i,j) = 0.0
       if (G%areaT(i,j)>0.) frac_shelf_h(i,j) = CS%ISS%area_shelf_h(i,j) / G%areaT(i,j)
+    enddo ; enddo
+  endif
+
+  if (present(mass_shelf)) then
+    do j=G%jsd,G%jed ; do i=G%isd,G%ied
+      mass_shelf(i,j) = 0.0
+      if (G%areaT(i,j)>0.) mass_shelf(i,j) = CS%ISS%mass_shelf(i,j)
     enddo ; enddo
   endif
 
