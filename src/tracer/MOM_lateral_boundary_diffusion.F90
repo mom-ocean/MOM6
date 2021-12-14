@@ -596,7 +596,7 @@ subroutine fluxes_layer_method(boundary, ke, hbl_L, hbl_R, h_L, h_R, phi_L, phi_
   real, allocatable :: F_layer_z(:)  !< Diffusive flux at U/V-point in the ztop grid    [H L2 conc ~> m3 conc]
   real              :: h_vel(ke)     !< Thicknesses at u- and v-points in the native grid
                                      !! The harmonic mean is used to avoid zero values      [H ~> m or kg m-2]
-  real    :: khtr_avg                !< Thickness-weighted diffusivity at the velocity-point [L2 T-1 ~> m s-1]
+  real    :: khtr_avg                !< Thickness-weighted diffusivity at the velocity-point [L2 T-1 ~> m2 s-1]
                                      !! This is just to remind developers that khtr_avg should be
                                      !! computed once khtr is 3D.
   real    :: htot                    !< Total column thickness                              [H ~> m or kg m-2]

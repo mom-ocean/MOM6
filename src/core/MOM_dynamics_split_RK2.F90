@@ -337,8 +337,8 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
 
   real, pointer, dimension(:,:,:) :: &
     ! These pointers are used to alter which fields are passed to btstep with various options:
-    u_ptr => NULL(), &   ! A pointer to a zonal velocity [L T-1]
-    v_ptr => NULL(), &   ! A pointer to a meridional velocity [L T-1]
+    u_ptr => NULL(), &   ! A pointer to a zonal velocity [L T-1 ~> m s-1]
+    v_ptr => NULL(), &   ! A pointer to a meridional velocity [L T-1 ~> m s-1]
     uh_ptr => NULL(), &  ! A pointer to a zonal volume or mass transport [H L2 T-1 ~> m3 s-1 or kg s-1]
     vh_ptr => NULL(), &  ! A pointer to a meridional volume or mass transport [H L2 T-1 ~> m3 s-1 or kg s-1]
     ! These pointers are just used as shorthand for CS%u_av, CS%v_av, and CS%h_av.

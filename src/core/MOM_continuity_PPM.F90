@@ -924,8 +924,8 @@ subroutine set_zonal_BT_cont(u, h_in, h_L, h_R, BT_cont, uh_tot_0, duhdu_tot_0, 
     FAmt_0, &     ! test velocities [H L ~> m2 or kg m-1].
     uhtot_L, &    ! The summed transport with the westerly (uhtot_L) and
     uhtot_R       ! and easterly (uhtot_R) test velocities [H L2 T-1 ~> m3 s-1 or kg s-1].
-  real :: FA_0    ! The effective face area with 0 barotropic transport [L H ~> m2 or kg m].
-  real :: FA_avg  ! The average effective face area [L H ~> m2 or kg m], nominally given by
+  real :: FA_0    ! The effective face area with 0 barotropic transport [L H ~> m2 or kg m-1].
+  real :: FA_avg  ! The average effective face area [L H ~> m2 or kg m-1], nominally given by
                   ! the realized transport divided by the barotropic velocity.
   real :: visc_rem_lim ! The larger of visc_rem and min_visc_rem [nondim]. This
                        ! limiting is necessary to keep the inverse of visc_rem

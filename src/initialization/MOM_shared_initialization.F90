@@ -814,7 +814,7 @@ subroutine reset_face_lengths_list(G, param_file, US)
   real, allocatable, dimension(:) :: &
     Dmin_u, Dmax_u, Davg_u   ! Porous barrier monomial fit params [m]
   real, allocatable, dimension(:) :: &
-    Dmin_v, Dmax_v, Davg_v
+    Dmin_v, Dmax_v, Davg_v   ! Porous barrier monomial fit params [m]
   real    :: lat, lon     ! The latitude and longitude of a point.
   real    :: len_lon      ! The periodic range of longitudes, usually 360 degrees.
   real    :: len_lat      ! The range of latitudes, usually 180 degrees.

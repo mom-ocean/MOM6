@@ -153,7 +153,7 @@ subroutine PressureForce_FV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_
                         ! [H T2 R-1 L-2 ~> m Pa-1 or kg m-2 Pa-1].
   real :: H_to_RL2_T2   ! A factor to convert from thickness units (H) to pressure
                         ! units [R L2 T-2 H-1 ~> Pa m-1 or Pa m2 kg-1].
-!  real :: oneatm = 101325.0  ! 1 atm in [Pa] = [kg m-1 s-2]
+!  real :: oneatm       ! 1 standard atmosphere of pressure in [R L2 T-2 ~> Pa]
   real, parameter :: C1_6 = 1.0/6.0
   integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, nkmb
   integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state
@@ -187,6 +187,7 @@ subroutine PressureForce_FV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_
       p(i,j,1) = p_atm(i,j)
     enddo ; enddo
   else
+    ! oneatm = 101325.0 * US%kg_m3_to_R * US%m_s_to_L_T**2 ! 1 atm scaled to [R L2 T-2 ~> Pa]
     !$OMP parallel do default(shared)
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
       p(i,j,1) = 0.0 ! or oneatm

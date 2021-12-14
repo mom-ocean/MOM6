@@ -1171,7 +1171,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
     !                netMassOut < 0 means mass leaves ocean.
     ! netHeat      = heat via surface fluxes [degC H ~> degC m or degC kg m-2], excluding the part
     !                contained in Pen_SW_bnd; and excluding heat_content of netMassOut < 0.
-    ! netSalt      = surface salt fluxes [ppt H ~> dppt m or gSalt m-2]
+    ! netSalt      = surface salt fluxes [ppt H ~> ppt m or gSalt m-2]
     ! Pen_SW_bnd   = components to penetrative shortwave radiation split according to bands.
     !                This field provides that portion of SW from atmosphere that in fact
     !                enters to the ocean and participates in pentrative SW heating.
