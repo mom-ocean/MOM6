@@ -374,7 +374,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
   enddo
 
   ! Update CFL truncation value as function of time
-  call updateCFLtruncationValue(Time_local, CS%vertvisc_CSp)
+  call updateCFLtruncationValue(Time_local, CS%vertvisc_CSp, US)
 
   if (CS%debug) then
     call MOM_state_chksum("Start predictor ", u, v, h, uh, vh, G, GV, US, symmetric=sym)
@@ -395,7 +395,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
     if (CS%debug_OBC) call open_boundary_test_extern_h(G, GV, CS%OBC, h)
 
     ! Update OBC ramp value as function of time
-    call update_OBC_ramp(Time_local, CS%OBC)
+    call update_OBC_ramp(Time_local, CS%OBC, US)
 
     do k=1,nz ; do j=G%jsd,G%jed ; do I=G%IsdB,G%IedB
       u_old_rad_OBC(I,j,k) = u_av(I,j,k)
@@ -1207,20 +1207,20 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, US, param
   call continuity_init(Time, G, GV, US, param_file, diag, CS%continuity_CSp)
   cont_stencil = continuity_stencil(CS%continuity_CSp)
   call CoriolisAdv_init(Time, G, GV, US, param_file, diag, CS%ADp, CS%CoriolisAdv)
-  if (use_tides) call tidal_forcing_init(Time, G, param_file, CS%tides_CSp)
+  if (use_tides) call tidal_forcing_init(Time, G, US, param_file, CS%tides_CSp)
   call PressureForce_init(Time, G, GV, US, param_file, diag, CS%PressureForce_CSp, &
                           CS%tides_CSp)
   call hor_visc_init(Time, G, GV, US, param_file, diag, CS%hor_visc, ADp=CS%ADp)
   call vertvisc_init(MIS, Time, G, GV, US, param_file, diag, CS%ADp, dirs, &
                      ntrunc, CS%vertvisc_CSp)
   CS%set_visc_CSp => set_visc
-  call updateCFLtruncationValue(Time, CS%vertvisc_CSp, &
+  call updateCFLtruncationValue(Time, CS%vertvisc_CSp, US, &
                                 activate=is_new_run(restart_CS) )
 
   if (associated(ALE_CSp)) CS%ALE_CSp => ALE_CSp
   if (associated(OBC)) then
     CS%OBC => OBC
-    if (OBC%ramp) call update_OBC_ramp(Time, CS%OBC, &
+    if (OBC%ramp) call update_OBC_ramp(Time, CS%OBC, US, &
                                 activate=is_new_run(restart_CS) )
   endif
   if (associated(update_OBC_CSp)) CS%update_OBC_CSp => update_OBC_CSp
