@@ -144,8 +144,8 @@ subroutine limit_mass_flux_3d(G, GV, uh, vh, ea, eb, h_pre)
                                                            ! top [H ~> m or kg m-2]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: bottom_flux ! Net downward fluxes through the layer
                                                            ! bottom [H ~> m or kg m-2]
-  real :: pos_flux ! Net flux out of cell [H L2 ~> m3 or kg m-2]
-  real :: hvol     ! Cell volume [H L2 ~> m3 or kg m-2]
+  real :: pos_flux ! Net flux out of cell [H L2 ~> m3 or kg]
+  real :: hvol     ! Cell volume [H L2 ~> m3 or kg]
   real :: scale_factor  ! A nondimensional rescaling factor between 0 and 1 [nondim]
   real :: max_off_cfl   ! The maximum permitted fraction that can leave in a timestep [nondim]
   integer :: i, j, k, m, is, ie, js, je, nz
