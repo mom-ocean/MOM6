@@ -19,7 +19,7 @@ implicit none ; private
 public :: global_i_mean, global_j_mean
 public :: global_area_mean, global_area_mean_u, global_area_mean_v, global_layer_mean
 public :: global_area_integral
-public :: global_volume_mean, global_mass_integral
+public :: global_volume_mean, global_mass_integral, global_mass_int_EFP
 public :: adjust_area_mean_to_zero
 
 contains
@@ -233,6 +233,49 @@ function global_mass_integral(h, G, GV, var, on_PE_only, scale)
   endif
 
 end function global_mass_integral
+
+!> Find the global mass-weighted order invariant integral of a variable in mks units,
+!! returning the value as an EFP_type. This uses reproducing sums.
+function global_mass_int_EFP(h, G, GV, var, on_PE_only, scale)
+  type(ocean_grid_type),   intent(in)  :: G    !< The ocean's grid structure
+  type(verticalGrid_type), intent(in)  :: GV   !< The ocean's vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
+                           intent(in)  :: h    !< Layer thicknesses [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
+                 optional, intent(in)  :: var  !< The variable being integrated
+  logical,       optional, intent(in)  :: on_PE_only  !< If present and true, the sum is only done
+                                               !! on the local PE, but it is still order invariant.
+  real,          optional, intent(in)  :: scale !< A rescaling factor for the variable
+  type(EFP_type) :: global_mass_int_EFP  !< The mass-weighted integral of var (or 1) in
+                                         !! kg times the units of var
+
+  ! Local variables
+  real, dimension(SZI_(G), SZJ_(G)) :: tmpForSum
+  real :: scalefac  ! An overall scaling factor for the areas and variable.
+  integer :: i, j, k, is, ie, js, je, nz, isr, ier, jsr, jer
+
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
+  isr = is - (G%isd-1) ; ier = ie - (G%isd-1) ; jsr = js - (G%jsd-1) ; jer = je - (G%jsd-1)
+
+  scalefac = GV%H_to_kg_m2 * G%US%L_to_m**2
+  if (present(scale)) scalefac = scale * scalefac
+
+  tmpForSum(:,:) = 0.0
+  if (present(var)) then
+    do k=1,nz ; do j=js,je ; do i=is,ie
+      tmpForSum(i,j) = tmpForSum(i,j) + var(i,j,k) * &
+                ((scalefac * h(i,j,k)) * (G%areaT(i,j) * G%mask2dT(i,j)))
+    enddo ; enddo ; enddo
+  else
+    do k=1,nz ; do j=js,je ; do i=is,ie
+      tmpForSum(i,j) = tmpForSum(i,j) + &
+                ((scalefac * h(i,j,k)) * (G%areaT(i,j) * G%mask2dT(i,j)))
+    enddo ; enddo ; enddo
+  endif
+
+  global_mass_int_EFP = reproducing_sum_EFP(tmpForSum, isr, ier, jsr, jer, only_on_PE=on_PE_only)
+
+end function global_mass_int_EFP
 
 
 !> Determine the global mean of a field along rows of constant i, returning it
