@@ -6,7 +6,7 @@ module MOM_fixed_initialization
 
 use MOM_debugging, only : hchksum, qchksum, uvchksum
 use MOM_domains, only : pass_var
-use MOM_dyn_horgrid, only : dyn_horgrid_type, rescale_dyn_horgrid_bathymetry
+use MOM_dyn_horgrid, only : dyn_horgrid_type
 use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, WARNING, is_root_pe
 use MOM_error_handler, only : callTree_enter, callTree_leave, callTree_waypoint
 use MOM_file_parser, only : get_param, read_param, log_param, param_file_type
@@ -82,7 +82,6 @@ subroutine MOM_initialize_fixed(G, US, OBC, PF, write_geom, output_dir)
   ! This also sets G%max_depth based on the input parameter MAXIMUM_DEPTH,
   ! or, if absent, is diagnosed as G%max_depth = max( G%D(:,:) )
   call MOM_initialize_topography(G%bathyT, G%max_depth, G, PF, US)
-!  call rescale_dyn_horgrid_bathymetry(G, US%Z_to_m)
 
   ! To initialize masks, the bathymetry in halo regions must be filled in
   call pass_var(G%bathyT, G%Domain)
@@ -174,19 +173,15 @@ subroutine MOM_initialize_topography(D, max_depth, G, PF, US)
                                     intent(out) :: D  !< Ocean bottom depth [Z ~> m] or [m]
   type(param_file_type),            intent(in)  :: PF !< Parameter file structure
   real,                             intent(out) :: max_depth !< Maximum depth of model [Z ~> m] or [m]
-  type(unit_scale_type),  optional, intent(in)  :: US !< A dimensional unit scaling type
+  type(unit_scale_type),            intent(in)  :: US !< A dimensional unit scaling type
 
   ! This subroutine makes the appropriate call to set up the bottom depth.
   ! This is a separate subroutine so that it can be made public and shared with
   ! the ice-sheet code or other components.
 
   ! Local variables
-  real :: m_to_Z, Z_to_m  ! Dimensional rescaling factors
   character(len=40)  :: mdl = "MOM_initialize_topography" ! This subroutine's name.
   character(len=200) :: config
-
-  m_to_Z = 1.0 ; if (present(US)) m_to_Z = US%m_to_Z
-  Z_to_m = 1.0 ; if (present(US)) Z_to_m = US%Z_to_m
 
   call get_param(PF, mdl, "TOPO_CONFIG", config, &
                  "This specifies how bathymetry is specified: \n"//&
@@ -216,7 +211,7 @@ subroutine MOM_initialize_topography(D, max_depth, G, PF, US)
                  " \t dense - Denmark Strait-like dense water formation and overflow.\n"//&
                  " \t USER - call a user modified routine.", &
                  fail_if_missing=.true.)
-  max_depth = -1.e9*m_to_Z ; call read_param(PF, "MAXIMUM_DEPTH", max_depth, scale=m_to_Z)
+  max_depth = -1.e9*US%m_to_Z ; call read_param(PF, "MAXIMUM_DEPTH", max_depth, scale=US%m_to_Z)
   select case ( trim(config) )
     case ("file");      call initialize_topography_from_file(D, G, PF, US)
     case ("flat");      call initialize_topography_named(D, G, PF, config, max_depth, US)
@@ -241,11 +236,11 @@ subroutine MOM_initialize_topography(D, max_depth, G, PF, US)
       "Unrecognized topography setup '"//trim(config)//"'")
   end select
   if (max_depth>0.) then
-    call log_param(PF, mdl, "MAXIMUM_DEPTH", max_depth*Z_to_m, &
+    call log_param(PF, mdl, "MAXIMUM_DEPTH", max_depth*US%Z_to_m, &
                    "The maximum depth of the ocean.", units="m")
   else
     max_depth = diagnoseMaximumDepth(D,G)
-    call log_param(PF, mdl, "!MAXIMUM_DEPTH", max_depth*Z_to_m, &
+    call log_param(PF, mdl, "!MAXIMUM_DEPTH", max_depth*US%Z_to_m, &
                    "The (diagnosed) maximum depth of the ocean.", units="m", like_default=.true.)
   endif
   if (trim(config) /= "DOME") then

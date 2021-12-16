@@ -188,10 +188,10 @@ type, public :: MOM_control_struct ; private
     vh, &           !< vh = v * h * dx at v grid points [H L2 T-1 ~> m3 s-1 or kg s-1]
     vhtr            !< accumulated meridional thickness fluxes to advect tracers [H L2 ~> m3 or kg]
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: ssh_rint
-                    !< A running time integral of the sea surface height [T m ~> s m].
+                    !< A running time integral of the sea surface height [T Z ~> s m].
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: ave_ssh_ibc
                     !< time-averaged (over a forcing time step) sea surface height
-                    !! with a correction for the inverse barometer [m]
+                    !! with a correction for the inverse barometer [Z ~> m]
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: eta_av_bc
                     !< free surface height or column mass time averaged over the last
                     !! baroclinic dynamics time step [H ~> m or kg m-2]
@@ -515,7 +515,7 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
   logical :: therm_reset ! If true, reset running sums of thermodynamic quantities.
   real :: cycle_time    ! The length of the coupled time-stepping cycle [T ~> s].
   real, dimension(SZI_(CS%G),SZJ_(CS%G)) :: &
-    ssh         ! sea surface height, which may be based on eta_av [m]
+    ssh         ! sea surface height, which may be based on eta_av [Z ~> m]
 
   real, dimension(:,:,:), pointer :: &
     u => NULL(), & ! u : zonal velocity component [L T-1 ~> m s-1]
@@ -868,7 +868,7 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
       ! Determining the time-average sea surface height is part of the algorithm.
       ! This may be eta_av if Boussinesq, or need to be diagnosed if not.
       CS%time_in_cycle = CS%time_in_cycle + dt
-      call find_eta(h, CS%tv, G, GV, US, ssh, CS%eta_av_bc, eta_to_m=1.0, dZref=G%Z_ref)
+      call find_eta(h, CS%tv, G, GV, US, ssh, CS%eta_av_bc, dZref=G%Z_ref)
       do j=js,je ; do i=is,ie
         CS%ssh_rint(i,j) = CS%ssh_rint(i,j) + dt*ssh(i,j)
       enddo ; enddo
@@ -2867,11 +2867,18 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
     endif
   endif
 
-  if (.not.query_initialized(CS%ave_ssh_ibc,"ave_ssh",restart_CSp)) then
+  if (query_initialized(CS%ave_ssh_ibc,"ave_ssh",restart_CSp)) then
+    if ((US%m_to_Z_restart /= 0.0) .and. (US%m_to_Z /= US%m_to_Z_restart) ) then
+      Z_rescale = US%m_to_Z / US%m_to_Z_restart
+      do j=js,je ; do i=is,ie
+        CS%ave_ssh_ibc(i,j) = Z_rescale * CS%ave_ssh_ibc(i,j)
+      enddo ; enddo
+    endif
+  else
     if (CS%split) then
-      call find_eta(CS%h, CS%tv, G, GV, US, CS%ave_ssh_ibc, eta, eta_to_m=1.0, dZref=G%Z_ref)
+      call find_eta(CS%h, CS%tv, G, GV, US, CS%ave_ssh_ibc, eta, dZref=G%Z_ref)
     else
-      call find_eta(CS%h, CS%tv, G, GV, US, CS%ave_ssh_ibc, eta_to_m=1.0, dZref=G%Z_ref)
+      call find_eta(CS%h, CS%tv, G, GV, US, CS%ave_ssh_ibc, dZref=G%Z_ref)
     endif
   endif
   if (CS%split) deallocate(eta)
@@ -2977,7 +2984,7 @@ subroutine register_diags(Time, G, GV, US, IDs, diag)
       'Layer Thickness after the dynamics update', thickness_units, conversion=GV%H_to_MKS, &
       v_extensive=.true.)
   IDs%id_ssh_inst = register_diag_field('ocean_model', 'SSH_inst', diag%axesT1, &
-      Time, 'Instantaneous Sea Surface Height', 'm')
+      Time, 'Instantaneous Sea Surface Height', 'm', conversion=US%Z_to_m)
 end subroutine register_diags
 
 !> Set up CPU clock IDs for timing various subroutines.
@@ -3097,14 +3104,14 @@ subroutine adjust_ssh_for_p_atm(tv, G, GV, US, ssh, p_atm, use_EOS)
   type(ocean_grid_type),             intent(in)    :: G   !< ocean grid structure
   type(verticalGrid_type),           intent(in)    :: GV  !< ocean vertical grid structure
   type(unit_scale_type),             intent(in)    :: US  !< A dimensional unit scaling type
-  real, dimension(SZI_(G),SZJ_(G)),  intent(inout) :: ssh !< time mean surface height [m]
+  real, dimension(SZI_(G),SZJ_(G)),  intent(inout) :: ssh !< time mean surface height [Z ~> m]
   real, dimension(:,:),              pointer       :: p_atm !< Ocean surface pressure [R L2 T-2 ~> Pa]
   logical,                           intent(in)    :: use_EOS !< If true, calculate the density for
                                                        !! the SSH correction using the equation of state.
 
   real :: Rho_conv(SZI_(G))  ! The density used to convert surface pressure to
                       ! a corrected effective SSH [R ~> kg m-3].
-  real :: IgR0        ! The SSH conversion factor from R L2 T-2 to m [m T2 R-1 L-2 ~> m Pa-1].
+  real :: IgR0        ! The SSH conversion factor from R L2 T-2 to Z [Z T2 R-1 L-2 ~> m Pa-1].
   logical :: calc_rho
   integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state
   integer :: i, j, is, ie, js, je
@@ -3119,12 +3126,13 @@ subroutine adjust_ssh_for_p_atm(tv, G, GV, US, ssh, p_atm, use_EOS)
         call calculate_density(tv%T(:,j,1), tv%S(:,j,1), 0.5*p_atm(:,j), Rho_conv, &
                                tv%eqn_of_state, EOSdom)
         do i=is,ie
-          IgR0 = US%Z_to_m / (Rho_conv(i) * GV%g_Earth)
+          IgR0 = 1.0 / (Rho_conv(i) * GV%g_Earth)
           ssh(i,j) = ssh(i,j) + p_atm(i,j) * IgR0
         enddo
       else
+        IgR0 = 1.0 / (GV%Rho0 * GV%g_Earth)
         do i=is,ie
-          ssh(i,j) = ssh(i,j) + p_atm(i,j) * (US%Z_to_m / (GV%Rho0 * GV%g_Earth))
+          ssh(i,j) = ssh(i,j) + p_atm(i,j) * IgR0
         enddo
       endif
     enddo
@@ -3209,7 +3217,7 @@ subroutine extract_surface_state(CS, sfc_state_in)
   sfc_state%S_is_absS = CS%tv%S_is_absS
 
   do j=js,je ; do i=is,ie
-    sfc_state%sea_lev(i,j) = US%m_to_Z*CS%ave_ssh_ibc(i,j)
+    sfc_state%sea_lev(i,j) = CS%ave_ssh_ibc(i,j)
   enddo ; enddo
 
   if (allocated(sfc_state%frazil) .and. associated(CS%tv%frazil)) then ; do j=js,je ; do i=is,ie

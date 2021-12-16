@@ -34,32 +34,28 @@ contains
 subroutine benchmark_initialize_topography(D, G, param_file, max_depth, US)
   type(dyn_horgrid_type),          intent(in)  :: G !< The dynamic horizontal grid type
   real, dimension(G%isd:G%ied,G%jsd:G%jed), &
-                                   intent(out) :: D !< Ocean bottom depth in [m] or [Z ~> m] if US is present
+                                   intent(out) :: D !< Ocean bottom depth [Z ~> m]
   type(param_file_type),           intent(in)  :: param_file !< Parameter file structure
-  real,                            intent(in)  :: max_depth !< Maximum model depth in the units of D, [m] or [Z ~> m]
-  type(unit_scale_type), optional, intent(in)  :: US !< A dimensional unit scaling type
+  real,                            intent(in)  :: max_depth !< Maximum model depth [Z ~> m]
+  type(unit_scale_type),           intent(in)  :: US !< A dimensional unit scaling type
 
   ! Local variables
-  real :: min_depth ! The minimum basin depth [m] or [Z ~> m]
+  real :: min_depth ! The minimum basin depth [Z ~> m]
   real :: PI        ! 3.1415926... calculated as 4*atan(1)
-  real :: D0        ! A constant to make the maximum basin depth MAXIMUM_DEPTH [m] or [Z ~> m]
-  real :: m_to_Z    ! A dimensional rescaling factor [Z m-1 ~> 1]
+  real :: D0        ! A constant to make the maximum basin depth MAXIMUM_DEPTH [Z ~> m]
   real :: x         ! Longitude relative to the domain edge, normalized by its extent [nondim]
   real :: y         ! Latitude relative to the domain edge, normalized by its extent [nondim]
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
   character(len=40)  :: mdl = "benchmark_initialize_topography" ! This subroutine's name.
-  integer :: i, j, is, ie, js, je, isd, ied, jsd, jed
+  integer :: i, j, is, ie, js, je
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
-  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
   call MOM_mesg("  benchmark_initialization.F90, benchmark_initialize_topography: setting topography", 5)
 
-  m_to_Z = 1.0 ; if (present(US)) m_to_Z = US%m_to_Z
-
   call log_version(param_file, mdl, version, "")
   call get_param(param_file, mdl, "MINIMUM_DEPTH", min_depth, &
-                 "The minimum depth of the ocean.", units="m", default=0.0, scale=m_to_Z)
+                 "The minimum depth of the ocean.", units="m", default=0.0, scale=US%m_to_Z)
 
   PI = 4.0*atan(1.0)
   D0 = max_depth / 0.5

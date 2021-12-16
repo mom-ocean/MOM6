@@ -29,6 +29,7 @@ program MOM_main
   use MOM_io, only : MOM_io_init, file_exists, open_file, close_file
   use MOM_io, only : check_nml_error, io_infra_init, io_infra_end
   use MOM_io, only : APPEND_FILE, ASCII_FILE, READONLY_FILE, SINGLE_FILE
+  use MOM_unit_scaling, only : unit_scale_type, unit_no_scaling_init, unit_scaling_end
 
   implicit none
 
@@ -39,6 +40,8 @@ program MOM_main
   type(hor_index_type)   :: HI        ! A hor_index_type for array extents
   type(param_file_type)  :: param_file ! The structure indicating the file(s)
                                 ! containing all run-time parameters.
+  type(unit_scale_type), pointer :: US => NULL() !< A structure containing various unit
+                                ! conversion factors, but in this case all are 1.
   real    :: max_depth          ! The maximum ocean depth [m]
   integer :: verbosity
   integer :: num_sums
@@ -104,7 +107,8 @@ program MOM_main
   allocate(depth_tot_fastR(num_sums)) ; depth_tot_fastR(:) = 0.0
 
 ! Set up the parameters of the physical grid
-  call set_grid_metrics(grid, param_file)
+  call unit_no_scaling_init(US)
+  call set_grid_metrics(grid, param_file, US)
 
 ! Set up the bottom depth, grid%bathyT either analytically or from file
   call get_param(param_file, "MOM", "MAXIMUM_DEPTH", max_depth, &
@@ -162,6 +166,7 @@ program MOM_main
   enddo
 
   call destroy_dyn_horgrid(grid)
+  call unit_scaling_end(US)
   call io_infra_end ; call MOM_infra_end
 
 contains
