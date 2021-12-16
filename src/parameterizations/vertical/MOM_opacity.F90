@@ -503,11 +503,15 @@ end subroutine extract_optics_fields
 
 !> Return the number of bands of penetrating shortwave radiation.
 function optics_nbands(optics)
-  type(optics_type),       intent(in)  :: optics !< An optics structure that has values of opacities
+  type(optics_type),           pointer :: optics !< An optics structure that has values of opacities
                                                  !! and shortwave fluxes.
   integer :: optics_nbands !< The number of penetrating bands of SW radiation
 
-  optics_nbands = optics%nbands
+  if (associated(optics)) then
+    optics_nbands = optics%nbands
+  else
+    optics_nbands = 0
+  endif
 end function optics_nbands
 
 !> Apply shortwave heating below the boundary layer (when running with the bulk mixed layer inherited
@@ -617,8 +621,10 @@ subroutine absorbRemainingSW(G, GV, US, h, opacity_band, nsw, optics, j, dt, H_l
                             ! TKE budget of the shortwave heating.
   real :: C1_6, C1_60
   integer :: is, ie, nz, i, k, ks, n
-  SW_Remains = .false.
 
+  if (nsw < 1) return
+
+  SW_Remains = .false.
   min_SW_heat = optics%PenSW_flux_absorb * dt
   I_Habs = optics%PenSW_absorb_Invlen
 
@@ -842,11 +848,15 @@ subroutine sumSWoverBands(G, GV, US, h, nsw, optics, j, dt, &
   integer :: is, ie, nz, i, k, ks, n
   SW_Remains = .false.
 
-  min_SW_heat = optics%PenSW_flux_absorb*dt ! Default of 2.5e-11*US%T_to_s*GV%m_to_H
   I_Habs = 1e3*GV%H_to_m ! optics%PenSW_absorb_Invlen
 
   h_min_heat = 2.0*GV%Angstrom_H + GV%H_subroundoff
   is = G%isc ; ie = G%iec ; nz = GV%ke
+
+  if (nsw < 1) then
+    netPen(:,:) = 0.0
+    return
+  endif
 
   pen_SW_bnd(:,:) = iPen_SW_bnd(:,:)
   do i=is,ie ; h_heat(i) = 0.0 ; enddo
@@ -859,6 +869,7 @@ subroutine sumSWoverBands(G, GV, US, h, nsw, optics, j, dt, &
 
   ! Apply penetrating SW radiation to remaining parts of layers.
   ! Excessively thin layers are not heated to avoid runaway temps.
+  min_SW_heat = optics%PenSW_flux_absorb*dt ! Default of 2.5e-11*US%T_to_s*GV%m_to_H
   do k=1,nz
 
     do i=is,ie
