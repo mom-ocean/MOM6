@@ -54,7 +54,7 @@ module MOM_generic_tracer
 
   implicit none ; private
 
-  !> An state hidden in module data that is very much not allowed in MOM6
+  !> A state hidden in module data that is very much not allowed in MOM6
   ! ### This needs to be fixed
   logical :: g_registered = .false.
 
@@ -83,12 +83,7 @@ module MOM_generic_tracer
     !> Pointer to the first element of the linked list of generic tracers.
     type(g_tracer_type), pointer :: g_tracer_list => NULL()
 
-    integer :: H_to_m !< Auxiliary to access GV%H_to_m in routines that do not have access to GV
-
   end type MOM_generic_tracer_CS
-
-! This include declares and sets the variable "version".
-#include "version_variable.h"
 
 contains
 
@@ -104,8 +99,11 @@ contains
                                                            !! advection and diffusion module.
     type(MOM_restart_CS), target, intent(inout)  :: restart_CS !< MOM restart control struct
 
-! Local variables
+    ! Local variables
     logical :: register_MOM_generic_tracer
+
+    ! This include declares and sets the variable "version".
+#   include "version_variable.h"
 
     character(len=128), parameter :: sub_name = 'register_MOM_generic_tracer'
     character(len=200) :: inputdir ! The directory where NetCDF input files are.
@@ -381,8 +379,6 @@ contains
     call g_tracer_set_csdiag(CS%diag)
 #endif
 
-    CS%H_to_m = GV%H_to_m
-
   end subroutine initialize_MOM_generic_tracer
 
   !>  Column physics for generic tracers.
@@ -503,7 +499,8 @@ contains
     !
     !Calculate tendencies (i.e., field changes at dt) from the sources / sinks
     !
-    if ((G%US%L_to_m == 1.0) .and. (G%US%RZ_to_kg_m2 == 1.0) .and. (G%US%s_to_T == 1.0)) then
+    if ((G%US%L_to_m == 1.0) .and. (G%US%s_to_T == 1.0) .and. (G%US%Z_to_m == 1.0) .and. &
+        (G%US%Q_to_J_kg == 1.0) .and. (G%US%RZ_to_kg_m2 == 1.0)) then
       ! Avoid unnecessary copies when no unit conversion is needed.
       call generic_tracer_source(tv%T, tv%S, rho_dzt, dzt, dz_ml, G%isd, G%jsd, 1, dt, &
                G%areaT, get_diag_time_end(CS%diag), &
@@ -512,7 +509,9 @@ contains
     else
       call generic_tracer_source(tv%T, tv%S, rho_dzt, dzt, dz_ml, G%isd, G%jsd, 1, dt, &
                G%US%L_to_m**2*G%areaT(:,:), get_diag_time_end(CS%diag), &
-               optics%nbands, optics%max_wavelength_band, optics%sw_pen_band, optics%opacity_band, &
+               optics%nbands, optics%max_wavelength_band, &
+               sw_pen_band=G%US%QRZ_T_to_W_m2*optics%sw_pen_band(:,:,:), &
+               opacity_band=G%US%m_to_Z*optics%opacity_band(:,:,:,:), &
                internal_heat=G%US%RZ_to_kg_m2*tv%internal_heat(:,:), &
                frunoff=G%US%RZ_T_to_kg_m2s*fluxes%frunoff(:,:), sosga=sosga)
     endif
@@ -864,7 +863,7 @@ contains
     !nnz: fake rho0
     rho0=1.0
 
-    dzt(:,:,:) = CS%H_to_m * h(:,:,:)
+    dzt(:,:,:) = GV%H_to_m * h(:,:,:)
 
     sosga = global_area_mean(sfc_state%SSS, G)
 
