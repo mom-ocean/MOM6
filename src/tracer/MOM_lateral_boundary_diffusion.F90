@@ -8,16 +8,17 @@ module MOM_lateral_boundary_diffusion
 use MOM_cpu_clock,             only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock,             only : CLOCK_MODULE
 use MOM_checksums,             only : hchksum
-use MOM_domains,               only : pass_var, sum_across_PEs
+use MOM_domains,               only : pass_var
 use MOM_diag_mediator,         only : diag_ctrl, time_type
 use MOM_diag_mediator,         only : post_data, register_diag_field
 use MOM_diag_vkernels,         only : reintegrate_column
-use MOM_error_handler,         only : MOM_error, FATAL, is_root_pe
+use MOM_error_handler,         only : MOM_error, MOM_mesg, FATAL, is_root_pe
 use MOM_file_parser,           only : get_param, log_version, param_file_type
 use MOM_grid,                  only : ocean_grid_type
 use MOM_remapping,             only : remapping_CS, initialize_remapping
 use MOM_remapping,             only : extract_member_remapping_CS, remapping_core_h
 use MOM_remapping,             only : remappingSchemesDoc, remappingDefaultScheme
+use MOM_spatial_means,         only : global_mass_integral
 use MOM_tracer_registry,       only : tracer_registry_type, tracer_type
 use MOM_unit_scaling,          only : unit_scale_type
 use MOM_verticalGrid,          only : verticalGrid_type
@@ -169,13 +170,11 @@ subroutine lateral_boundary_diffusion(G, GV, US, h, Coef_x, Coef_y, dt, Reg, CS)
   real, dimension(SZK_(GV)) :: tracer_1d                    !< 1d-array used to remap tracer change to native grid
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV))  :: tracer_old  !< local copy of the initial tracer concentration,
                                                             !! only used to compute tendencies.
-  real, dimension(SZI_(G),SZJ_(G))           :: tracer_int  !< integrated tracer before LBD is applied
-                                                            !! [conc H L2 ~> conc m3 or conc kg]
-  real, dimension(SZI_(G),SZJ_(G))           :: tracer_end  !< integrated tracer after LBD is applied.
-                                                            !! [conc H L2 ~> conc m3 or conc kg]
-  integer :: i, j, k, m   !< indices to loop over
+  real :: tracer_int_prev !< Globally integrated tracer before LBD is applied, in mks units [conc kg]
+  real :: tracer_int_end  !< Integrated tracer after LBD is applied, in mks units [conc kg]
   real    :: Idt          !< inverse of the time step [T-1 ~> s-1]
-  real    :: tmp1, tmp2   !< temporary variables [conc H L2 ~> conc m3 or conc kg]
+  character(len=256) :: mesg !< Message for error messages.
+  integer :: i, j, k, m   !< indices to loop over
 
   call cpu_clock_begin(id_clock_lbd)
   Idt = 1./dt
@@ -236,22 +235,11 @@ subroutine lateral_boundary_diffusion(G, GV, US, h, Coef_x, Coef_y, dt, Reg, CS)
 
     if (CS%debug) then
       call hchksum(tracer%t, "after LBD "//tracer%name,G%HI)
-      tracer_int(:,:) = 0.0; tracer_end(:,:) = 0.0
-      ! tracer (native grid) before and after LBD
-      do j=G%jsc,G%jec ; do i=G%isc,G%iec
-        do k=1,GV%ke
-          tracer_int(i,j) = tracer_int(i,j) + tracer_old(i,j,k) * &
-                    (h(i,j,k)*(G%mask2dT(i,j)*G%areaT(i,j)))
-          tracer_end(i,j) = tracer_end(i,j) + tracer%t(i,j,k) * &
-                      (h(i,j,k)*(G%mask2dT(i,j)*G%areaT(i,j)))
-        enddo
-      enddo; enddo
-
-      tmp1 = SUM(tracer_int)
-      tmp2 = SUM(tracer_end)
-      call sum_across_PEs(tmp1)
-      call sum_across_PEs(tmp2)
-      if (is_root_pe()) write(*,*)'Total '//tracer%name//' before/after LBD:', tmp1, tmp2
+      ! tracer (native grid) integrated tracer amounts before and after LBD
+      tracer_int_prev = global_mass_integral(h, G, GV, tracer_old)
+      tracer_int_end = global_mass_integral(h, G, GV, tracer%t)
+      write(mesg,*) 'Total '//tracer%name//' before/after LBD:', tracer_int_prev, tracer_int_end
+      call MOM_mesg(mesg)
     endif
 
     ! Post the tracer diagnostics
