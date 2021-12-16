@@ -733,10 +733,6 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, dt_forci
   enddo ; enddo ; enddo
 
   call sum_across_PEs(CS%ntrunc)
-  !   Sum the various quantities across all the processors.  This sum is NOT
-  ! guaranteed to be bitwise reproducible, even on the same decomposition.
-  !   The sum of Tr_stocks should be reimplemented using the reproducing sums.
-  if (nTr_stocks > 0) call sum_across_PEs(Tr_stocks,nTr_stocks)
 
   call max_across_PEs(max_CFL, 2)
 
