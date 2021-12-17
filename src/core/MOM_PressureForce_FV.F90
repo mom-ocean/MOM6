@@ -244,7 +244,7 @@ subroutine PressureForce_FV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_
     ! Calculate 4 integrals through the layer that are required in the
     ! subsequent calculation.
     if (use_EOS) then
-      if ( use_ALE ) then
+      if ( use_ALE .and. CS%Recon_Scheme .gt. 0 ) then
         if ( CS%Recon_Scheme == 1 ) then
           call int_spec_vol_dp_generic_plm( T_t(:,:,k), T_b(:,:,k), S_t(:,:,k), S_b(:,:,k), &
                     p(:,:,K), p(:,:,K+1), alpha_ref, dp_neglect, p(:,:,nz+1), G%HI, &
@@ -696,7 +696,7 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm
       ! assumed when regridding is activated. Otherwise, the previous version
       ! is used, whereby densities within each layer are constant no matter
       ! where the layers are located.
-      if ( use_ALE ) then
+      if ( use_ALE .and. CS%Recon_Scheme .gt. 0 ) then
         if ( CS%Recon_Scheme == 1 ) then
           call int_density_dz_generic_plm(k, tv,  T_t, T_b, S_t, S_b, e, &
                     rho_ref, CS%Rho0, GV%g_Earth, dz_neglect, G%bathyT, &
