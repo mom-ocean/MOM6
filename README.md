@@ -1,5 +1,5 @@
 [![Read The Docs Status](https://readthedocs.org/projects/mom6/badge/?badge=latest)](http://mom6.readthedocs.io/)
-[![codecov](https://codecov.io/gh/NOAA-GFDL/MOM6/branch/dev%2Fmaster/graph/badge.svg)](https://codecov.io/gh/NOAA-GFDL/MOM6)
+[![codecov](https://codecov.io/gh/NOAA-GFDL/MOM6/branch/dev/gfdl/graph/badge.svg?token=uF8SVydCdp)](https://codecov.io/gh/NOAA-GFDL/MOM6)
 
 # MOM6
 
