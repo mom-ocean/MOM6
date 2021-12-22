@@ -532,7 +532,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, dt_forci
 
   nTr_stocks = 0
   Tr_minmax_avail(:) = .false.
-  call call_tracer_stocks(h, Tr_stocks, G, GV, tracer_CSp, stock_names=Tr_names, &
+  call call_tracer_stocks(h, Tr_stocks, G, GV, US, tracer_CSp, stock_names=Tr_names, &
                           stock_units=Tr_units, num_stocks=nTr_stocks,&
                           got_min_max=Tr_minmax_avail, global_min=Tr_min, global_max=Tr_max, &
                           xgmin=Tr_min_x, ygmin=Tr_min_y, zgmin=Tr_min_z,&
@@ -1248,7 +1248,7 @@ subroutine write_depth_list(G, US, DL, filename)
   character(len=16) :: depth_chksum, area_chksum
 
   ! All ranks are required to compute the global checksum
-  call get_depth_list_checksums(G, depth_chksum, area_chksum)
+  call get_depth_list_checksums(G, US, depth_chksum, area_chksum)
 
   if (.not.is_root_pe()) return
 
@@ -1313,7 +1313,7 @@ subroutine read_depth_list(G, US, DL, filename, require_chksum, file_matches)
       call MOM_error(WARNING, trim(var_msg) // " some diagnostics may not be reproducible.")
     endif
   else
-    call get_depth_list_checksums(G, depth_grid_chksum, area_grid_chksum)
+    call get_depth_list_checksums(G, US, depth_grid_chksum, area_grid_chksum)
 
     if ((trim(depth_grid_chksum) /= trim(depth_file_chksum)) .or. &
         (trim(area_grid_chksum) /= trim(area_file_chksum)) ) then
@@ -1360,8 +1360,9 @@ end subroutine read_depth_list
 !!
 !! Checksums are saved as hexadecimal strings, in order to avoid potential
 !! datatype issues with netCDF attributes.
-subroutine get_depth_list_checksums(G, depth_chksum, area_chksum)
+subroutine get_depth_list_checksums(G, US, depth_chksum, area_chksum)
   type(ocean_grid_type), intent(in) :: G          !< Ocean grid structure
+  type(unit_scale_type), intent(in) :: US         !< A dimensional unit scaling type
   character(len=16), intent(out) :: depth_chksum  !< Depth checksum hexstring
   character(len=16), intent(out) :: area_chksum   !< Area checksum hexstring
 
@@ -1378,7 +1379,7 @@ subroutine get_depth_list_checksums(G, depth_chksum, area_chksum)
 
   ! Area checksum
   do j=G%jsc,G%jec ; do i=G%isc,G%iec
-    field(i,j) = G%mask2dT(i,j) * G%US%L_to_m**2*G%areaT(i,j)
+    field(i,j) = G%mask2dT(i,j) * US%L_to_m**2*G%areaT(i,j)
   enddo ; enddo
   write(area_chksum, '(Z16)') field_chksum(field(:,:))
 

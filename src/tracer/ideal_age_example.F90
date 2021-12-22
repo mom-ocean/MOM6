@@ -369,13 +369,14 @@ end subroutine ideal_age_tracer_column_physics
 
 !> Calculates the mass-weighted integral of all tracer stocks, returning the number of stocks it
 !! has calculated.  If stock_index is present, only the stock corresponding to that coded index is found.
-function ideal_age_stock(h, stocks, G, GV, CS, names, units, stock_index)
+function ideal_age_stock(h, stocks, G, GV, US, CS, names, units, stock_index)
   type(ocean_grid_type),              intent(in)    :: G    !< The ocean's grid structure
   type(verticalGrid_type),            intent(in)    :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                                       intent(in)    :: h    !< Layer thicknesses [H ~> m or kg m-2]
   real, dimension(:),                 intent(out)   :: stocks !< the mass-weighted integrated amount of each
                                                             !! tracer, in kg times concentration units [kg conc].
+  type(unit_scale_type),              intent(in)    :: US   !< A dimensional unit scaling type
   type(ideal_age_tracer_CS),          pointer       :: CS   !< The control structure returned by a previous
                                                             !! call to register_ideal_age_tracer.
   character(len=*), dimension(:),     intent(out)   :: names  !< the names of the stocks calculated.
@@ -400,7 +401,7 @@ function ideal_age_stock(h, stocks, G, GV, CS, names, units, stock_index)
     return
   endif ; endif
 
-  stock_scale = G%US%L_to_m**2 * GV%H_to_kg_m2
+  stock_scale = US%L_to_m**2 * GV%H_to_kg_m2
   do m=1,CS%ntr
     call query_vardesc(CS%tr_desc(m), name=names(m), units=units(m), caller="ideal_age_stock")
     units(m) = trim(units(m))//" kg"

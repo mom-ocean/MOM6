@@ -46,9 +46,8 @@ type, public :: boundary_impulse_tracer_CS ; private
 
   integer :: nkml !< Number of layers in mixed layer
   real, dimension(NTR_MAX)  :: land_val = -1.0 !< A value to use to fill in tracers over land
-  real :: kw_eff !< An effective piston velocity used to flux tracer out at the surface
   real :: remaining_source_time !< How much longer (same units as the timestep) to
-                                !! inject the tracer at the surface [s]
+                                !! inject the tracer at the surface [T ~> s]
 
   type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to
                                    !! regulate the timing of diagnostic output.
@@ -60,9 +59,10 @@ end type boundary_impulse_tracer_CS
 contains
 
 !> Read in runtime options and add boundary impulse tracer to tracer registry
-function register_boundary_impulse_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
+function register_boundary_impulse_tracer(HI, GV, US, param_file, CS, tr_Reg, restart_CS)
   type(hor_index_type),             intent(in   ) :: HI   !< A horizontal index type structure
   type(verticalGrid_type),          intent(in   ) :: GV   !< The ocean's vertical grid structure
+  type(unit_scale_type),            intent(in   ) :: US   !< A dimensional unit scaling type
   type(param_file_type),            intent(in   ) :: param_file !< A structure to parse for run-time parameters
   type(boundary_impulse_tracer_CS), pointer       :: CS   !< The control structure returned by a previous
                                                           !! call to register_boundary_impulse_tracer.
@@ -79,7 +79,7 @@ function register_boundary_impulse_tracer(HI, GV, param_file, CS, tr_Reg, restar
   character(len=48)  :: flux_units ! The units for tracer fluxes, usually
                             ! kg(tracer) kg(water)-1 m3 s-1 or kg(tracer) s-1.
   ! This include declares and sets the variable "version".
-#include "version_variable.h"
+# include "version_variable.h"
   real, pointer :: tr_ptr(:,:,:) => NULL()
   real, pointer :: rem_time_ptr => NULL()
   logical :: register_boundary_impulse_tracer
@@ -99,7 +99,7 @@ function register_boundary_impulse_tracer(HI, GV, param_file, CS, tr_Reg, restar
                  "Length of time for the boundary tracer to be injected "//&
                  "into the mixed layer. After this time has elapsed, the "//&
                  "surface becomes a sink for the boundary impulse tracer.", &
-                 default=31536000.0)
+                 default=31536000.0, scale=US%s_to_T)
   call get_param(param_file, mdl, "TRACERS_MAY_REINIT", CS%tracers_may_reinit, &
                  "If true, tracers may go through the initialization code "//&
                  "if they are not found in the restart files.  Otherwise "//&
@@ -145,13 +145,14 @@ function register_boundary_impulse_tracer(HI, GV, param_file, CS, tr_Reg, restar
 end function register_boundary_impulse_tracer
 
 !> Initialize tracer from restart or set to 1 at surface to initialize
-subroutine initialize_boundary_impulse_tracer(restart, day, G, GV, h, diag, OBC, CS, &
+subroutine initialize_boundary_impulse_tracer(restart, day, G, GV, US, h, diag, OBC, CS, &
                                   sponge_CSp, tv)
   logical,                            intent(in) :: restart !< .true. if the fields have already
                                                          !! been read from a restart file.
   type(time_type),            target, intent(in) :: day  !< Time of the start of the run.
   type(ocean_grid_type),              intent(in) :: G    !< The ocean's grid structure
   type(verticalGrid_type),            intent(in) :: GV   !< The ocean's vertical grid structure
+  type(unit_scale_type),              intent(in) :: US   !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                                       intent(in) :: h    !< Layer thicknesses [H ~> m or kg m-2]
   type(diag_ctrl),            target, intent(in) :: diag !< A structure that is used to regulate
@@ -186,13 +187,16 @@ subroutine initialize_boundary_impulse_tracer(restart, day, G, GV, h, diag, OBC,
 
   do m=1,CS%ntr
     call query_vardesc(CS%tr_desc(m), name=name, caller="initialize_boundary_impulse_tracer")
-    if ((.not.restart) .or. (.not. &
-        query_initialized(CS%tr(:,:,:,m), name, CS%restart_CSp))) then
+    if ((.not.restart) .or. (.not. query_initialized(CS%tr(:,:,:,m), name, CS%restart_CSp))) then
       do k=1,CS%nkml ; do j=jsd,jed ; do i=isd,ied
         CS%tr(i,j,k,m) = 1.0
       enddo ; enddo ; enddo
     endif
   enddo ! Tracer loop
+
+  if (restart .and. (US%s_to_T_restart /= 0.0) .and. (US%s_to_T /= US%s_to_T_restart) ) then
+    CS%remaining_source_time = (US%s_to_T / US%s_to_T_restart) * CS%remaining_source_time
+  endif
 
   if (associated(OBC)) then
   ! Steal from updated DOME in the fullness of time.
@@ -268,7 +272,7 @@ subroutine boundary_impulse_tracer_column_physics(h_old, h_new, ea, eb, fluxes, 
       do k=1,CS%nkml ; do j=js,je ; do i=is,ie
         CS%tr(i,j,k,m) = 1.0
       enddo ; enddo ; enddo
-      CS%remaining_source_time = CS%remaining_source_time-US%T_to_s*dt
+      CS%remaining_source_time = CS%remaining_source_time-dt
     else
       do k=1,CS%nkml ; do j=js,je ; do i=is,ie
         CS%tr(i,j,k,m) = 0.0
@@ -283,12 +287,13 @@ end subroutine boundary_impulse_tracer_column_physics
 !> This function calculates the mass-weighted integral of the boundary impulse,
 !! tracer stocks returning the number of stocks it has calculated.  If the stock_index
 !! is present, only the stock corresponding to that coded index is returned.
-function boundary_impulse_stock(h, stocks, G, GV, CS, names, units, stock_index)
+function boundary_impulse_stock(h, stocks, G, GV, US, CS, names, units, stock_index)
   type(ocean_grid_type),                    intent(in   ) :: G    !< The ocean's grid structure
   type(verticalGrid_type),                  intent(in   ) :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in   ) :: h    !< Layer thicknesses [H ~> m or kg m-2]
   real, dimension(:),                       intent(  out) :: stocks !< the mass-weighted integrated amount of each
                                                                   !! tracer, in kg times concentration units [kg conc].
+  type(unit_scale_type),                    intent(in   ) :: US   !< A dimensional unit scaling type
   type(boundary_impulse_tracer_CS),         pointer       :: CS   !< The control structure returned by a previous
                                                                   !! call to register_boundary_impulse_tracer.
   character(len=*), dimension(:),           intent(  out) :: names  !< The names of the stocks calculated.
@@ -317,7 +322,7 @@ function boundary_impulse_stock(h, stocks, G, GV, CS, names, units, stock_index)
     return
   endif ; endif
 
-  stock_scale = G%US%L_to_m**2 * GV%H_to_kg_m2
+  stock_scale = US%L_to_m**2 * GV%H_to_kg_m2
   do m=1,1
     call query_vardesc(CS%tr_desc(m), name=names(m), units=units(m), caller="boundary_impulse_stock")
     units(m) = trim(units(m))//" kg"

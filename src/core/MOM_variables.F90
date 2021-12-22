@@ -11,6 +11,7 @@ use MOM_domains,       only : MOM_domain_type, get_domain_extent, group_pass_typ
 use MOM_EOS,           only : EOS_type
 use MOM_error_handler, only : MOM_error, FATAL
 use MOM_grid,          only : ocean_grid_type
+use MOM_unit_scaling,  only : unit_scale_type
 use MOM_verticalGrid,  only : verticalGrid_type
 
 implicit none ; private
@@ -562,10 +563,11 @@ subroutine dealloc_BT_cont_type(BT_cont)
 end subroutine dealloc_BT_cont_type
 
 !> Diagnostic checksums on various elements of a thermo_var_ptrs type for debugging.
-subroutine MOM_thermovar_chksum(mesg, tv, G)
+subroutine MOM_thermovar_chksum(mesg, tv, G, US)
   character(len=*),      intent(in) :: mesg !< A message that appears in the checksum lines
   type(thermo_var_ptrs), intent(in) :: tv   !< A structure pointing to various thermodynamic variables
   type(ocean_grid_type), intent(in) :: G    !< The ocean's grid structure
+  type(unit_scale_type), intent(in) :: US   !< A dimensional unit scaling type
 
   ! Note that for the chksum calls to be useful for reproducing across PE
   ! counts, there must be no redundant points, so all variables use is..ie
@@ -575,11 +577,11 @@ subroutine MOM_thermovar_chksum(mesg, tv, G)
   if (associated(tv%S)) &
     call hchksum(tv%S, mesg//" tv%S", G%HI)
   if (associated(tv%frazil)) &
-    call hchksum(tv%frazil, mesg//" tv%frazil", G%HI, scale=G%US%Q_to_J_kg*G%US%RZ_to_kg_m2)
+    call hchksum(tv%frazil, mesg//" tv%frazil", G%HI, scale=US%Q_to_J_kg*US%RZ_to_kg_m2)
   if (associated(tv%salt_deficit)) &
-    call hchksum(tv%salt_deficit, mesg//" tv%salt_deficit", G%HI, scale=G%US%RZ_to_kg_m2)
+    call hchksum(tv%salt_deficit, mesg//" tv%salt_deficit", G%HI, scale=US%RZ_to_kg_m2)
   if (associated(tv%TempxPmE)) &
-    call hchksum(tv%TempxPmE, mesg//" tv%TempxPmE", G%HI, scale=G%US%RZ_to_kg_m2)
+    call hchksum(tv%TempxPmE, mesg//" tv%TempxPmE", G%HI, scale=US%RZ_to_kg_m2)
 end subroutine MOM_thermovar_chksum
 
 end module MOM_variables

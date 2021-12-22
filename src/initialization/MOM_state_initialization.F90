@@ -620,7 +620,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
     elseif (trim(config) == "shelfwave") then
       OBC%update_OBC = .true.
     elseif (lowercase(trim(config)) == "supercritical") then
-      call supercritical_set_OBC_data(OBC, G, GV, PF)
+      call supercritical_set_OBC_data(OBC, G, GV, US, PF)
     elseif (trim(config) == "tidal_bay") then
       OBC%update_OBC = .true.
     elseif (trim(config) == "USER") then
@@ -742,7 +742,7 @@ end subroutine initialize_thickness_from_file
 !> Adjust interface heights to fit the bathymetry and diagnose layer thickness.
 !!
 !! If the bottom most interface is below the topography then the bottom-most
-!! layers are contracted to GV%Angstrom_m.
+!! layers are contracted to ANGSTROM thickness (which may be 0).
 !! If the bottom most interface is above the topography then the entire column
 !! is dilated (expanded) to fill the void.
 !!   @remark{There is a (hard-wired) "tolerance" parameter such that the

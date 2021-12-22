@@ -21,7 +21,6 @@ use MOM_IS_diag_mediator, only : MOM_IS_diag_mediator_close_registration
 use MOM_domains, only : MOM_domains_init, pass_var, pass_vector, clone_MOM_domain
 use MOM_domains, only : TO_ALL, CGRID_NE, BGRID_NE, CORNER
 use MOM_dyn_horgrid, only : dyn_horgrid_type, create_dyn_horgrid, destroy_dyn_horgrid
-use MOM_dyn_horgrid, only : rescale_dyn_horgrid_bathymetry
 use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, WARNING, is_root_pe
 use MOM_file_parser, only : read_param, get_param, log_param, log_version, param_file_type
 use MOM_grid, only : MOM_grid_init, ocean_grid_type
@@ -1306,9 +1305,8 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces_in,
   call create_dyn_horgrid(dG, CS%Grid%HI)
   call clone_MOM_domain(CS%Grid%Domain,dG%Domain)
   call set_grid_metrics(dG,param_file,CS%US)
-  ! Set up the bottom depth, G%D either analytically or from file
-  call MOM_initialize_topography(dG%bathyT, CS%Grid%max_depth, dG, param_file)
-  call rescale_dyn_horgrid_bathymetry(dG, CS%US%Z_to_m)
+  ! Set up the bottom depth, dG%bathyT, either analytically or from file
+  call MOM_initialize_topography(dG%bathyT, CS%Grid%max_depth, dG, param_file, CS%US)
   call copy_dyngrid_to_MOM_grid(dG, CS%Grid, CS%US)
   call destroy_dyn_horgrid(dG)
 !  endif

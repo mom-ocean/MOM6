@@ -42,14 +42,6 @@ type, public :: sponge_CS ; private
   logical :: bulkmixedlayer  !< If true, a refined bulk mixed layer is used with
                        !! nkml sublayers and nkbl buffer layer.
   integer :: nz        !< The total number of layers.
-  integer :: isc       !< The starting i-index of the computational domain at h.
-  integer :: iec       !< The ending i-index of the computational domain at h.
-  integer :: jsc       !< The starting j-index of the computational domain at h.
-  integer :: jec       !< The ending j-index of the computational domain at h.
-  integer :: isd       !< The starting i-index of the data domain at h.
-  integer :: ied       !< The ending i-index of the data domain at h.
-  integer :: jsd       !< The starting j-index of the data domain at h.
-  integer :: jed       !< The ending j-index of the data domain at h.
   integer :: num_col   !< The number of sponge points within the computational domain.
   integer :: fldno = 0 !< The number of fields which have already been
                        !! registered by calls to set_up_sponge_field
@@ -80,11 +72,10 @@ end type sponge_CS
 
 contains
 
-!> This subroutine determines the number of points which are within
-!! sponges in this computational domain.  Only points that have
-!! positive values of Iresttime and which mask2dT indicates are ocean
-!! points are included in the sponges.  It also stores the target interface
-!! heights.
+!> This subroutine determines the number of points which are within sponges in
+!! this computational domain.  Only points that have positive values of
+!! Iresttime and which mask2dT indicates are ocean points are included in the
+!! sponges.  It also stores the target interface heights.
 subroutine initialize_sponge(Iresttime, int_height, G, param_file, CS, GV, &
                              Iresttime_i_mean, int_height_i_mean)
   type(ocean_grid_type),   intent(in) :: G          !< The ocean's grid structure
@@ -104,8 +95,8 @@ subroutine initialize_sponge(Iresttime, int_height, G, param_file, CS, GV, &
                                                            !! damp the zonal mean heights [Z ~> m].
 
 
-! This include declares and sets the variable "version".
-#include "version_variable.h"
+  ! This include declares and sets the variable "version".
+# include "version_variable.h"
   character(len=40)  :: mdl = "MOM_sponge"  ! This module's name.
   logical :: use_sponge
   integer :: i, j, k, col, total_sponge_cols
@@ -134,8 +125,7 @@ subroutine initialize_sponge(Iresttime, int_height, G, param_file, CS, GV, &
   CS%do_i_mean_sponge = present(Iresttime_i_mean)
 
   CS%nz = GV%ke
-!  CS%isc = G%isc ; CS%iec = G%iec ; CS%jsc = G%jsc ; CS%jec = G%jec
-!  CS%isd = G%isd ; CS%ied = G%ied ; CS%jsd = G%jsd ; CS%jed = G%jed
+
   ! CS%bulkmixedlayer may be set later via a call to set_up_sponge_ML_density.
   CS%bulkmixedlayer = .false.
 
@@ -203,13 +193,12 @@ subroutine init_sponge_diags(Time, G, GV, US, diag, CS)
 
   CS%diag => diag
   CS%id_w_sponge = register_diag_field('ocean_model', 'w_sponge', diag%axesTi, &
-      Time, 'The diapycnal motion due to the sponges', 'm s-1', conversion=US%s_to_T)
+      Time, 'The diapycnal motion due to the sponges', 'm s-1', conversion=GV%H_to_m*US%s_to_T)
 
 end subroutine init_sponge_diags
 
-!> This subroutine stores the reference profile for the variable
-!! whose address is given by f_ptr. nlay is the number of layers in
-!! this variable.
+!> This subroutine stores the reference profile for the variable whose
+!! address is given by f_ptr. nlay is the number of layers in this variable.
 subroutine set_up_sponge_field(sp_val, f_ptr, G, GV, nlay, CS, sp_val_i_mean)
   type(ocean_grid_type),   intent(in) :: G      !< The ocean's grid structure
   type(verticalGrid_type), intent(in) :: GV     !< The ocean's vertical grid structure
@@ -261,8 +250,8 @@ subroutine set_up_sponge_field(sp_val, f_ptr, G, GV, nlay, CS, sp_val_i_mean)
     if (.not.present(sp_val_i_mean)) call MOM_error(FATAL, &
       "set_up_sponge_field: sp_val_i_mean must be present with i-mean sponges.")
 
-    allocate(CS%Ref_val_im(CS%fldno)%p(CS%jsd:CS%jed,CS%nz), source=0.0)
-    do k=1,CS%nz ; do j=CS%jsc,CS%jec
+    allocate(CS%Ref_val_im(CS%fldno)%p(G%jsd:G%jed,CS%nz), source=0.0)
+    do k=1,CS%nz ; do j=G%jsc,G%jec
       CS%Ref_val_im(CS%fldno)%p(j,k) = sp_val_i_mean(j,k)
     enddo ; enddo
   endif
@@ -278,16 +267,10 @@ subroutine set_up_sponge_ML_density(sp_val, G, CS, sp_val_i_mean)
                          intent(in) :: sp_val !< The reference values of the mixed layer density [R ~> kg m-3]
   type(sponge_CS),       pointer    :: CS   !< A pointer to the control structure for this module that is
                                             !! set by a previous call to initialize_sponge.
+                                            !  The contents of this structure are intent(inout) here.
   real, dimension(SZJ_(G)), &
                optional, intent(in) :: sp_val_i_mean !< the reference values of the zonal mean mixed
                                             !! layer density [R ~> kg m-3], for use if Iresttime_i_mean > 0.
-!   This subroutine stores the reference value for mixed layer density.  It is
-! handled differently from other values because it is only used in determining
-! which layers can be inflated.
-
-! Arguments: sp_val - The reference values of the mixed layer density.
-!  (in/out)  CS - A pointer to the control structure for this module that is
-!                 set by a previous call to initialize_sponge.
 
   integer :: j, col
   character(len=256) :: mesg ! String for error messages
@@ -309,8 +292,8 @@ subroutine set_up_sponge_ML_density(sp_val, G, CS, sp_val_i_mean)
     if (.not.present(sp_val_i_mean)) call MOM_error(FATAL, &
       "set_up_sponge_field: sp_val_i_mean must be present with i-mean sponges.")
 
-    allocate(CS%Rcv_ml_ref_im(CS%jsd:CS%jed), source=0.0)
-    do j=CS%jsc,CS%jec
+    allocate(CS%Rcv_ml_ref_im(G%jsd:G%jed), source=0.0)
+    do j=G%jsc,G%jec
       CS%Rcv_ml_ref_im(j) = sp_val_i_mean(j)
     enddo
   endif
@@ -339,10 +322,6 @@ subroutine apply_sponge(h, dt, G, GV, US, ea, eb, CS, Rcv_ml)
   real, dimension(SZI_(G),SZJ_(G)), &
                  optional, intent(inout) :: Rcv_ml !<  The coordinate density of the mixed layer [R ~> kg m-3].
 
-! This subroutine applies damping to the layers thicknesses, mixed
-! layer buoyancy, and a variety of tracers for every column where
-! there is damping.
-
   ! Local variables
   real, dimension(SZI_(G), SZJ_(G), SZK_(GV)+1) :: &
     w_int, &       ! Water moved upward across an interface within a timestep,
@@ -369,17 +348,18 @@ subroutine apply_sponge(h, dt, G, GV, US, ea, eb, CS, Rcv_ml)
   real :: e0       ! The height of the free surface [Z ~> m].
   real :: e_str    ! A nondimensional amount by which the reference
                    ! profile must be stretched for the free surfaces
-                   ! heights in the two profiles to agree.
+                   ! heights in the two profiles to agree [nondim].
   real :: w        ! The thickness of water moving upward through an
                    ! interface within 1 timestep [H ~> m or kg m-2].
   real :: wm       ! wm is w if w is negative and 0 otherwise [H ~> m or kg m-2].
   real :: wb       ! w at the interface below a layer [H ~> m or kg m-2].
   real :: wpb      ! wpb is wb if wb is positive and 0 otherwise [H ~> m or kg m-2].
-  real :: ea_k, eb_k ! [H ~> m or kg m-2]
-  real :: damp     ! The timestep times the local damping  coefficient [nondim].
+  real :: ea_k     ! Water entrained from above within a timestep [H ~> m or kg m-2]
+  real :: eb_k     ! Water entrained from below within a timestep [H ~> m or kg m-2]
+  real :: damp     ! The timestep times the local damping coefficient [nondim].
   real :: I1pdamp  ! I1pdamp is 1/(1 + damp). [nondim]
   real :: damp_1pdamp ! damp_1pdamp is damp/(1 + damp). [nondim]
-  real :: Idt      ! 1.0/dt times a height unit conversion factor [m H-1 T-1 ~> s-1 or m3 kg-1 s-1].
+  real :: Idt      ! The inverse of the timestep [T-1 ~> s-1]
   integer :: c, m, nkmb, i, j, k, is, ie, js, je, nz
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
@@ -575,7 +555,7 @@ subroutine apply_sponge(h, dt, G, GV, US, ea, eb, CS, Rcv_ml)
 
   if (associated(CS%diag)) then ; if (query_averaging_enabled(CS%diag)) then
     if (CS%id_w_sponge > 0) then
-      Idt = GV%H_to_m / dt  ! Do any height unit conversion here for efficiency.
+      Idt = 1.0 / dt
       do k=1,nz+1 ; do j=js,je ; do i=is,ie
         w_int(i,j,K) = w_int(i,j,K) * Idt ! Scale values by clobbering array since it is local
       enddo ; enddo ; enddo
