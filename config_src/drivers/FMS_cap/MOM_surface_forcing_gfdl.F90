@@ -1461,6 +1461,8 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, wind_stagger)
     call get_param(param_file, mdl, "SPEAR_ECDA_SST_RESTORE_TFREEZE", CS%trestore_SPEAR_ECDA, &
                  "If true, modify SST restoring field using SSS state. This only modifies the "//&
                  "restoring data that is within 0.0001degC of -1.8degC.", default=.false.)
+  else
+    CS%trestore_SPEAR_ECDA = .false. ! Needed to toggle logging of SPEAR_DTFREEZE_DS
   endif
   call get_param(param_file, mdl, "SPEAR_DTFREEZE_DS", CS%SPEAR_dTf_dS, &
                  "The derivative of the freezing temperature with salinity.", &
