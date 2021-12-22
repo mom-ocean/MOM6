@@ -63,14 +63,16 @@ subroutine update_h_horizontal_flux(G, GV, uhtr, vhtr, h_pre, h_new)
       h_new(i,j,k) = max(0.0, G%areaT(i,j)*h_pre(i,j,k) + &
           ((uhtr(I-1,j,k) - uhtr(I,j,k)) + (vhtr(i,J-1,k) - vhtr(i,J,k))))
 
-      ! In the case that the layer is now dramatically thinner than it was previously,
-      ! add a bit of mass to avoid truncation errors.  This will lead to
-      ! non-conservation of tracers
-      h_new(i,j,k) = h_new(i,j,k) + &
-          max(GV%Angstrom_H, 1.0e-13*h_new(i,j,k) - G%areaT(i,j)*h_pre(i,j,k))
+      ! This line was used previously, but it makes no sense, as it applies to the case of
+      ! wetting, not drying, and it does not seem to serve any useful purpose. Test runs
+      ! without this line seem to work properly, but it is being retained in a comment
+      ! pending verification that it is in fact unnecessary.
+
+      ! h_new(i,j,k) = h_new(i,j,k) + &
+      !     max(GV%Angstrom_H, 1.0e-13*h_new(i,j,k) - G%areaT(i,j)*h_pre(i,j,k))
 
       ! Convert back to thickness
-      h_new(i,j,k) = h_new(i,j,k) * G%IareaT(i,j)
+      h_new(i,j,k) = max(GV%Angstrom_H, h_new(i,j,k) * G%IareaT(i,j))
 
     enddo ; enddo
   enddo
@@ -103,18 +105,24 @@ subroutine update_h_vertical_flux(G, GV, ea, eb, h_pre, h_new)
     do i=is-1,ie+1
       ! Top layer
       h_new(i,j,1) = max(0.0, h_pre(i,j,1) + ((eb(i,j,1) - ea(i,j,2)) + ea(i,j,1)))
-      h_new(i,j,1) = h_new(i,j,1) + max(0.0, 1.0e-13*h_new(i,j,1) - h_pre(i,j,1))
+      ! h_new(i,j,1) = h_new(i,j,1) + max(0.0, 1.0e-13*h_new(i,j,1) - h_pre(i,j,1))
 
       ! Bottom layer
       h_new(i,j,nz) = max(0.0, h_pre(i,j,nz) + ((ea(i,j,nz) - eb(i,j,nz-1)) + eb(i,j,nz)))
-      h_new(i,j,nz) = h_new(i,j,nz) + max(0.0, 1.0e-13*h_new(i,j,nz) - h_pre(i,j,nz))
+      ! h_new(i,j,nz) = h_new(i,j,nz) + max(0.0, 1.0e-13*h_new(i,j,nz) - h_pre(i,j,nz))
     enddo
 
     ! Interior layers
     do k=2,nz-1 ; do i=is-1,ie+1
       h_new(i,j,k) = max(0.0, h_pre(i,j,k) + ((ea(i,j,k) - eb(i,j,k-1)) + &
                                               (eb(i,j,k) - ea(i,j,k+1))))
-      h_new(i,j,k) = h_new(i,j,k) + max(0.0, 1.0e-13*h_new(i,j,k) - h_pre(i,j,k))
+
+      ! This line and its two counterparts above were used previously, but it makes no sense as
+      ! written because it acts in the case of wetting, not drying, and it does not seem to serve
+      ! any useful purpose.  Test runs without these lines seem to work fine, but they are
+      ! being retained in comments pending verification that they are in fact unnecessary.
+
+      ! h_new(i,j,k) = h_new(i,j,k) + max(0.0, 1.0e-13*h_new(i,j,k) - h_pre(i,j,k))
     enddo ; enddo
   enddo
 
