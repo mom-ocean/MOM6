@@ -3274,9 +3274,19 @@ subroutine btcalc(h, G, GV, CS, h_u, h_v, may_use_default, OBC)
                            intent(in)    :: h    !< Layer thicknesses [H ~> m or kg m-2].
   type(barotropic_CS),     intent(inout) :: CS   !< Barotropic control structure
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
-                 optional, intent(in)    :: h_u  !< The specified thicknesses at u-points [H ~> m or kg m-2].
+                 optional, intent(in)    :: h_u  !< The specified effective thicknesses at u-points,
+                                                 !! perhaps scaled down to account for viscosity and
+                                                 !! fractional open areas [H ~> m or kg m-2].  These
+                                                 !! are used here as non-normalized weights for each
+                                                 !! layer that are converted the normalized weights
+                                                 !! for determining the barotropic accelerations.
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
-                 optional, intent(in)    :: h_v  !< The specified thicknesses at v-points [H ~> m or kg m-2].
+                 optional, intent(in)    :: h_v  !< The specified effective thicknesses at v-points,
+                                                 !! perhaps scaled down to account for viscosity and
+                                                 !! fractional open areas [H ~> m or kg m-2].  These
+                                                 !! are used here as non-normalized weights for each
+                                                 !! layer that are converted the normalized weights
+                                                 !! for determining the barotropic accelerations.
   logical,       optional, intent(in)    :: may_use_default !< An optional logical argument
                                                  !! to indicate that the default velocity point
                                                  !! thicknesses may be used for this particular
@@ -3296,9 +3306,9 @@ subroutine btcalc(h, G, GV, CS, h_u, h_v, may_use_default, OBC)
                                ! in roundoff and can be neglected [H ~> m or kg m-2].
   real :: wt_arith             ! The weight for the arithmetic mean thickness [nondim].
                                ! The harmonic mean uses a weight of (1 - wt_arith).
-  real :: Rh                   ! A ratio of summed thicknesses, nondim.
-  real :: e_u(SZIB_(G),SZK_(GV)+1) !   The interface heights at u-velocity and
-  real :: e_v(SZI_(G),SZK_(GV)+1)  ! v-velocity points [H ~> m or kg m-2].
+  real :: Rh                   ! A ratio of summed thicknesses [nondim]
+  real :: e_u(SZIB_(G),SZK_(GV)+1) ! The interface heights at u-velocity points [H ~> m or kg m-2]
+  real :: e_v(SZI_(G),SZK_(GV)+1)  ! The interface heights at v-velocity points [H ~> m or kg m-2]
   real :: D_shallow_u(SZI_(G)) ! The height of the shallower of the adjacent bathymetric depths
                                ! around a u-point (positive upward) [H ~> m or kg m-2]
   real :: D_shallow_v(SZIB_(G))! The height of the shallower of the adjacent bathymetric depths
