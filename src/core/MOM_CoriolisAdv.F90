@@ -6,6 +6,8 @@ module MOM_CoriolisAdv
 !> \author Robert Hallberg, April 1994 - June 2002
 
 use MOM_diag_mediator, only : post_data, query_averaging_enabled, diag_ctrl
+use MOM_diag_mediator, only : post_product_u, post_product_sum_u
+use MOM_diag_mediator, only : post_product_v, post_product_sum_v
 use MOM_diag_mediator, only : register_diag_field, safe_alloc_ptr, time_type
 use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, WARNING
 use MOM_file_parser,   only : get_param, log_version, param_file_type
@@ -119,7 +121,7 @@ contains
 
 !> Calculates the Coriolis and momentum advection contributions to the acceleration.
 subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv)
-  type(ocean_grid_type),                      intent(in)    :: G  !< Ocen grid structure
+  type(ocean_grid_type),                      intent(in)    :: G  !< Ocean grid structure
   type(verticalGrid_type),                    intent(in)    :: GV !< Vertical grid structure
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), intent(in)    :: u  !< Zonal velocity [L T-1 ~> m s-1]
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), intent(in)    :: v  !< Meridional velocity [L T-1 ~> m s-1]
@@ -222,25 +224,6 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv)
   real :: UHeff, VHeff  ! More temporary variables [H L2 T-1 ~> m3 s-1 or kg s-1].
   real :: QUHeff,QVHeff ! More temporary variables [H L2 T-2 ~> m3 s-2 or kg s-2].
   integer :: i, j, k, n, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
-
-! Diagnostics for fractional thickness-weighted terms
-  real, allocatable, dimension(:,:) :: &
-    hf_gKEu_2d, hf_gKEv_2d, & ! Depth sum of hf_gKEu, hf_gKEv [L T-2 ~> m s-2].
-    hf_rvxu_2d, hf_rvxv_2d    ! Depth sum of hf_rvxu, hf_rvxv [L T-2 ~> m s-2].
-
-  !real, allocatable, dimension(:,:,:) :: &
-  !  hf_gKEu, hf_gKEv, & ! accel. due to KE gradient x fract. thickness  [L T-2 ~> m s-2].
-  !  hf_rvxu, hf_rvxv    ! accel. due to RV x fract. thickness [L T-2 ~> m s-2].
-  ! 3D diagnostics hf_gKEu etc. are commented because there is no clarity on proper remapping grid option.
-  ! The code is retained for debugging purposes in the future.
-
-! Diagnostics for thickness multiplied momentum budget terms
-  real, allocatable, dimension(:,:,:) :: h_gKEu, h_gKEv ! h x gKEu, h x gKEv [H L T-2 ~> m2 s-2].
-  real, allocatable, dimension(:,:,:) :: h_rvxv, h_rvxu ! h x rvxv, h x rvxu [H L T-2 ~> m2 s-2].
-
-! Diagnostics for depth-integrated momentum budget terms
-  real, dimension(SZIB_(G),SZJ_(G)) :: intz_gKEu_2d, intz_rvxv_2d ! [H L T-2 ~> m2 s-2].
-  real, dimension(SZI_(G),SZJB_(G)) :: intz_gKEv_2d, intz_rvxu_2d ! [H L T-2 ~> m2 s-2].
 
 ! To work, the following fields must be set outside of the usual
 ! is to ie range before this subroutine is called:
@@ -877,147 +860,26 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv)
 
     ! 3D diagnostics hf_gKEu etc. are commented because there is no clarity on proper remapping grid option.
     ! The code is retained for debugging purposes in the future.
-    !if (CS%id_hf_gKEu > 0) then
-    !  allocate(hf_gKEu(G%IsdB:G%IedB,G%jsd:G%jed,GV%ke))
-    !  do k=1,nz ; do j=js,je ; do I=Isq,Ieq
-    !    hf_gKEu(I,j,k) = AD%gradKEu(I,j,k) * AD%diag_hfrac_u(I,j,k)
-    !  enddo ; enddo ; enddo
-    !  call post_data(CS%id_hf_gKEu, hf_gKEu, CS%diag)
-    !endif
+    ! if (CS%id_hf_gKEu > 0) call post_product_u(CS%id_hf_gKEu, AD%gradKEu, AD%diag_hfrac_u, G, nz, CS%diag)
+    ! if (CS%id_hf_gKEv > 0) call post_product_v(CS%id_hf_gKEv, AD%gradKEv, AD%diag_hfrac_v, G, nz, CS%diag)
+    ! if (CS%id_hf_rvxv > 0) call post_product_u(CS%id_hf_rvxv, AD%rv_x_v, AD%diag_hfrac_u, G, nz, CS%diag)
+    ! if (CS%id_hf_rvxu > 0) call post_product_v(CS%id_hf_rvxu, AD%rv_x_u, AD%diag_hfrac_v, G, nz, CS%diag)
 
-    !if (CS%id_hf_gKEv > 0) then
-    !  allocate(hf_gKEv(G%isd:G%ied,G%JsdB:G%JedB,GV%ke))
-    !  do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
-    !    hf_gKEv(i,J,k) = AD%gradKEv(i,J,k) * AD%diag_hfrac_v(i,J,k)
-    !  enddo ; enddo ; enddo
-    !  call post_data(CS%id_hf_gKEv, hf_gKEv, CS%diag)
-    !endif
+    if (CS%id_hf_gKEu_2d > 0) call post_product_sum_u(CS%id_hf_gKEu_2d, AD%gradKEu, AD%diag_hfrac_u, G, nz, CS%diag)
+    if (CS%id_hf_gKEv_2d > 0) call post_product_sum_v(CS%id_hf_gKEv_2d, AD%gradKEv, AD%diag_hfrac_v, G, nz, CS%diag)
+    if (CS%id_intz_gKEu_2d > 0) call post_product_sum_u(CS%id_intz_gKEu_2d, AD%gradKEu, AD%diag_hu, G, nz, CS%diag)
+    if (CS%id_intz_gKEv_2d > 0) call post_product_sum_v(CS%id_intz_gKEv_2d, AD%gradKEv, AD%diag_hv, G, nz, CS%diag)
 
-    if (CS%id_hf_gKEu_2d > 0) then
-      allocate(hf_gKEu_2d(G%IsdB:G%IedB,G%jsd:G%jed))
-      hf_gKEu_2d(:,:) = 0.0
-      do k=1,nz ; do j=js,je ; do I=Isq,Ieq
-        hf_gKEu_2d(I,j) = hf_gKEu_2d(I,j) + AD%gradKEu(I,j,k) * AD%diag_hfrac_u(I,j,k)
-      enddo ; enddo ; enddo
-      call post_data(CS%id_hf_gKEu_2d, hf_gKEu_2d, CS%diag)
-      deallocate(hf_gKEu_2d)
-    endif
+    if (CS%id_hf_rvxv_2d > 0) call post_product_sum_u(CS%id_hf_rvxv_2d, AD%rv_x_v, AD%diag_hfrac_u, G, nz, CS%diag)
+    if (CS%id_hf_rvxu_2d > 0) call post_product_sum_v(CS%id_hf_rvxu_2d, AD%rv_x_u, AD%diag_hfrac_v, G, nz, CS%diag)
 
-    if (CS%id_hf_gKEv_2d > 0) then
-      allocate(hf_gKEv_2d(G%isd:G%ied,G%JsdB:G%JedB))
-      hf_gKEv_2d(:,:) = 0.0
-      do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
-        hf_gKEv_2d(i,J) = hf_gKEv_2d(i,J) + AD%gradKEv(i,J,k) * AD%diag_hfrac_v(i,J,k)
-      enddo ; enddo ; enddo
-      call post_data(CS%id_hf_gKEv_2d, hf_gKEv_2d, CS%diag)
-      deallocate(hf_gKEv_2d)
-    endif
+    if (CS%id_h_gKEu > 0) call post_product_u(CS%id_h_gKEu, AD%gradKEu, AD%diag_hu, G, nz, CS%diag)
+    if (CS%id_h_gKEv > 0) call post_product_v(CS%id_h_gKEv, AD%gradKEv, AD%diag_hv, G, nz, CS%diag)
+    if (CS%id_h_rvxv > 0) call post_product_u(CS%id_h_rvxv, AD%rv_x_v, AD%diag_hu, G, nz, CS%diag)
+    if (CS%id_h_rvxu > 0) call post_product_v(CS%id_h_rvxu, AD%rv_x_u, AD%diag_hv, G, nz, CS%diag)
 
-    if (CS%id_intz_gKEu_2d > 0) then
-      intz_gKEu_2d(:,:) = 0.0
-      do k=1,nz ; do j=js,je ; do I=Isq,Ieq
-        intz_gKEu_2d(I,j) = intz_gKEu_2d(I,j) + AD%gradKEu(I,j,k) * AD%diag_hu(I,j,k)
-      enddo ; enddo ; enddo
-      call post_data(CS%id_intz_gKEu_2d, intz_gKEu_2d, CS%diag)
-    endif
-
-    if (CS%id_intz_gKEv_2d > 0) then
-      intz_gKEv_2d(:,:) = 0.0
-      do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
-        intz_gKEv_2d(i,J) = intz_gKEv_2d(i,J) + AD%gradKEv(i,J,k) * AD%diag_hv(i,J,k)
-      enddo ; enddo ; enddo
-      call post_data(CS%id_intz_gKEv_2d, intz_gKEv_2d, CS%diag)
-    endif
-
-    !if (CS%id_hf_rvxv > 0) then
-    !  allocate(hf_rvxv(G%IsdB:G%IedB,G%jsd:G%jed,GV%ke))
-    !  do k=1,nz ; do j=js,je ; do I=Isq,Ieq
-    !    hf_rvxv(I,j,k) = AD%rv_x_v(I,j,k) * AD%diag_hfrac_u(I,j,k)
-    !  enddo ; enddo ; enddo
-    !  call post_data(CS%id_hf_rvxv, hf_rvxv, CS%diag)
-    !endif
-
-    !if (CS%id_hf_rvxu > 0) then
-    !  allocate(hf_rvxu(G%isd:G%ied,G%JsdB:G%JedB,GV%ke))
-    !  do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
-    !    hf_rvxu(i,J,k) = AD%rv_x_u(i,J,k) * AD%diag_hfrac_v(i,J,k)
-    !  enddo ; enddo ; enddo
-    !  call post_data(CS%id_hf_rvxu, hf_rvxu, CS%diag)
-    !endif
-
-    if (CS%id_hf_rvxv_2d > 0) then
-      allocate(hf_rvxv_2d(G%IsdB:G%IedB,G%jsd:G%jed))
-      hf_rvxv_2d(:,:) = 0.0
-      do k=1,nz ; do j=js,je ; do I=Isq,Ieq
-        hf_rvxv_2d(I,j) = hf_rvxv_2d(I,j) + AD%rv_x_v(I,j,k) * AD%diag_hfrac_u(I,j,k)
-      enddo ; enddo ; enddo
-      call post_data(CS%id_hf_rvxv_2d, hf_rvxv_2d, CS%diag)
-      deallocate(hf_rvxv_2d)
-    endif
-
-    if (CS%id_hf_rvxu_2d > 0) then
-      allocate(hf_rvxu_2d(G%isd:G%ied,G%JsdB:G%JedB))
-      hf_rvxu_2d(:,:) = 0.0
-      do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
-        hf_rvxu_2d(i,J) = hf_rvxu_2d(i,J) + AD%rv_x_u(i,J,k) * AD%diag_hfrac_v(i,J,k)
-      enddo ; enddo ; enddo
-      call post_data(CS%id_hf_rvxu_2d, hf_rvxu_2d, CS%diag)
-      deallocate(hf_rvxu_2d)
-    endif
-
-    if (CS%id_h_gKEu > 0) then
-      allocate(h_gKEu(G%IsdB:G%IedB,G%jsd:G%jed,GV%ke))
-      h_gKEu(:,:,:) = 0.0
-      do k=1,nz ; do j=js,je ; do I=Isq,Ieq
-        h_gKEu(I,j,k) = AD%gradKEu(I,j,k) * AD%diag_hu(I,j,k)
-      enddo ; enddo ; enddo
-      call post_data(CS%id_h_gKEu, h_gKEu, CS%diag)
-      deallocate(h_gKEu)
-    endif
-    if (CS%id_h_gKEv > 0) then
-      allocate(h_gKEv(G%isd:G%ied,G%JsdB:G%JedB,GV%ke))
-      h_gKEv(:,:,:) = 0.0
-      do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
-        h_gKEv(i,J,k) = AD%gradKEv(i,J,k) * AD%diag_hv(i,J,k)
-      enddo ; enddo ; enddo
-      call post_data(CS%id_h_gKEv, h_gKEv, CS%diag)
-      deallocate(h_gKEv)
-    endif
-
-    if (CS%id_h_rvxv > 0) then
-      allocate(h_rvxv(G%IsdB:G%IedB,G%jsd:G%jed,GV%ke))
-      h_rvxv(:,:,:) = 0.0
-      do k=1,nz ; do j=js,je ; do I=Isq,Ieq
-        h_rvxv(I,j,k) = AD%rv_x_v(I,j,k) * AD%diag_hu(I,j,k)
-      enddo ; enddo ; enddo
-      call post_data(CS%id_h_rvxv, h_rvxv, CS%diag)
-      deallocate(h_rvxv)
-    endif
-    if (CS%id_h_rvxu > 0) then
-      allocate(h_rvxu(G%isd:G%ied,G%JsdB:G%JedB,GV%ke))
-      h_rvxu(:,:,:) = 0.0
-      do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
-        h_rvxu(i,J,k) = AD%rv_x_u(i,J,k) * AD%diag_hv(i,J,k)
-      enddo ; enddo ; enddo
-      call post_data(CS%id_h_rvxu, h_rvxu, CS%diag)
-      deallocate(h_rvxu)
-    endif
-
-    if (CS%id_intz_rvxv_2d > 0) then
-      intz_rvxv_2d(:,:) = 0.0
-      do k=1,nz ; do j=js,je ; do I=Isq,Ieq
-        intz_rvxv_2d(I,j) = intz_rvxv_2d(I,j) + AD%rv_x_v(I,j,k) * AD%diag_hu(I,j,k)
-      enddo ; enddo ; enddo
-      call post_data(CS%id_intz_rvxv_2d, intz_rvxv_2d, CS%diag)
-    endif
-
-    if (CS%id_intz_rvxu_2d > 0) then
-      intz_rvxu_2d(:,:) = 0.0
-      do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
-        intz_rvxu_2d(i,J) = intz_rvxu_2d(i,J) + AD%rv_x_u(i,J,k) * AD%diag_hv(i,J,k)
-      enddo ; enddo ; enddo
-      call post_data(CS%id_intz_rvxu_2d, intz_rvxu_2d, CS%diag)
-    endif
+    if (CS%id_intz_rvxv_2d > 0) call post_product_sum_u(CS%id_intz_rvxv_2d, AD%rv_x_v, AD%diag_hu, G, nz, CS%diag)
+    if (CS%id_intz_rvxu_2d > 0) call post_product_sum_v(CS%id_intz_rvxu_2d, AD%rv_x_u, AD%diag_hv, G, nz, CS%diag)
   endif
 
 end subroutine CorAdCalc
@@ -1259,146 +1121,111 @@ subroutine CoriolisAdv_init(Time, G, GV, US, param_file, diag, AD, CS)
 
   CS%id_gKEu = register_diag_field('ocean_model', 'gKEu', diag%axesCuL, Time, &
      'Zonal Acceleration from Grad. Kinetic Energy', 'm s-2', conversion=US%L_T2_to_m_s2)
-  if (CS%id_gKEu > 0) call safe_alloc_ptr(AD%gradKEu,IsdB,IedB,jsd,jed,nz)
 
   CS%id_gKEv = register_diag_field('ocean_model', 'gKEv', diag%axesCvL, Time, &
      'Meridional Acceleration from Grad. Kinetic Energy', 'm s-2', conversion=US%L_T2_to_m_s2)
-  if (CS%id_gKEv > 0) call safe_alloc_ptr(AD%gradKEv,isd,ied,JsdB,JedB,nz)
 
   CS%id_rvxu = register_diag_field('ocean_model', 'rvxu', diag%axesCvL, Time, &
      'Meridional Acceleration from Relative Vorticity', 'm s-2', conversion=US%L_T2_to_m_s2)
-  if (CS%id_rvxu > 0) call safe_alloc_ptr(AD%rv_x_u,isd,ied,JsdB,JedB,nz)
 
   CS%id_rvxv = register_diag_field('ocean_model', 'rvxv', diag%axesCuL, Time, &
      'Zonal Acceleration from Relative Vorticity', 'm s-2', conversion=US%L_T2_to_m_s2)
-  if (CS%id_rvxv > 0) call safe_alloc_ptr(AD%rv_x_v,IsdB,IedB,jsd,jed,nz)
 
   !CS%id_hf_gKEu = register_diag_field('ocean_model', 'hf_gKEu', diag%axesCuL, Time, &
   !   'Fractional Thickness-weighted Zonal Acceleration from Grad. Kinetic Energy', &
   !   'm s-2', v_extensive=.true., conversion=US%L_T2_to_m_s2)
-  !if (CS%id_hf_gKEu > 0) then
-  !  call safe_alloc_ptr(AD%gradKEu,IsdB,IedB,jsd,jed,nz)
-  !  call safe_alloc_ptr(AD%diag_hfrac_u,IsdB,IedB,jsd,jed,nz)
-  !endif
+  CS%id_hf_gKEu_2d = register_diag_field('ocean_model', 'hf_gKEu_2d', diag%axesCu1, Time, &
+     'Depth-sum Fractional Thickness-weighted Zonal Acceleration from Grad. Kinetic Energy', &
+     'm s-2', conversion=US%L_T2_to_m_s2)
 
   !CS%id_hf_gKEv = register_diag_field('ocean_model', 'hf_gKEv', diag%axesCvL, Time, &
   !   'Fractional Thickness-weighted Meridional Acceleration from Grad. Kinetic Energy', &
   !   'm s-2', v_extensive=.true., conversion=US%L_T2_to_m_s2)
-  !if (CS%id_hf_gKEv > 0) then
-  !  call safe_alloc_ptr(AD%gradKEv,isd,ied,JsdB,JedB,nz)
-  !  call safe_alloc_ptr(AD%diag_hfrac_v,isd,ied,JsdB,JedB,nz)
-  !endif
-
-  CS%id_hf_gKEu_2d = register_diag_field('ocean_model', 'hf_gKEu_2d', diag%axesCu1, Time, &
-     'Depth-sum Fractional Thickness-weighted Zonal Acceleration from Grad. Kinetic Energy', &
-     'm s-2', conversion=US%L_T2_to_m_s2)
-  if (CS%id_hf_gKEu_2d > 0) then
-    call safe_alloc_ptr(AD%gradKEu,IsdB,IedB,jsd,jed,nz)
-    call safe_alloc_ptr(AD%diag_hfrac_u,IsdB,IedB,jsd,jed,nz)
-  endif
-
   CS%id_hf_gKEv_2d = register_diag_field('ocean_model', 'hf_gKEv_2d', diag%axesCv1, Time, &
      'Depth-sum Fractional Thickness-weighted Meridional Acceleration from Grad. Kinetic Energy', &
      'm s-2', conversion=US%L_T2_to_m_s2)
-  if (CS%id_hf_gKEv_2d > 0) then
-    call safe_alloc_ptr(AD%gradKEv,isd,ied,JsdB,JedB,nz)
-    call safe_alloc_ptr(AD%diag_hfrac_v,isd,ied,JsdB,JedB,nz)
-  endif
 
   CS%id_h_gKEu = register_diag_field('ocean_model', 'h_gKEu', diag%axesCuL, Time, &
      'Thickness Multiplied Zonal Acceleration from Grad. Kinetic Energy', &
      'm2 s-2', conversion=GV%H_to_m*US%L_T2_to_m_s2)
-  if (CS%id_h_gKEu > 0) then
-    call safe_alloc_ptr(AD%gradKEu,IsdB,IedB,jsd,jed,nz)
-    call safe_alloc_ptr(AD%diag_hu,IsdB,IedB,jsd,jed,nz)
-  endif
-
   CS%id_intz_gKEu_2d = register_diag_field('ocean_model', 'intz_gKEu_2d', diag%axesCu1, Time, &
      'Depth-integral of Zonal Acceleration from Grad. Kinetic Energy', &
      'm2 s-2', conversion=GV%H_to_m*US%L_T2_to_m_s2)
-  if (CS%id_intz_gKEu_2d > 0) then
-    call safe_alloc_ptr(AD%gradKEu,IsdB,IedB,jsd,jed,nz)
-    call safe_alloc_ptr(AD%diag_hu,IsdB,IedB,jsd,jed,nz)
-  endif
 
   CS%id_h_gKEv = register_diag_field('ocean_model', 'h_gKEv', diag%axesCvL, Time, &
      'Thickness Multiplied Meridional Acceleration from Grad. Kinetic Energy', &
      'm2 s-2', conversion=GV%H_to_m*US%L_T2_to_m_s2)
-  if (CS%id_h_gKEv > 0) then
-    call safe_alloc_ptr(AD%gradKEv,isd,ied,JsdB,JedB,nz)
-    call safe_alloc_ptr(AD%diag_hv,isd,ied,JsdB,JedB,nz)
-  endif
-
   CS%id_intz_gKEv_2d = register_diag_field('ocean_model', 'intz_gKEv_2d', diag%axesCv1, Time, &
      'Depth-integral of Meridional Acceleration from Grad. Kinetic Energy', &
      'm2 s-2', conversion=GV%H_to_m*US%L_T2_to_m_s2)
-  if (CS%id_intz_gKEv_2d > 0) then
-    call safe_alloc_ptr(AD%gradKEv,isd,ied,JsdB,JedB,nz)
-    call safe_alloc_ptr(AD%diag_hv,isd,ied,JsdB,JedB,nz)
-  endif
 
   !CS%id_hf_rvxu = register_diag_field('ocean_model', 'hf_rvxu', diag%axesCvL, Time, &
   !   'Fractional Thickness-weighted Meridional Acceleration from Relative Vorticity', &
   !   'm-1 s-2', v_extensive=.true., conversion=US%L_T2_to_m_s2)
-  !if (CS%id_hf_rvxu > 0) then
-  !  call safe_alloc_ptr(AD%rv_x_u,isd,ied,JsdB,JedB,nz)
-  !  call safe_alloc_ptr(AD%diag_hfrac_v,isd,ied,JsdB,JedB,nz)
-  !endif
+  CS%id_hf_rvxu_2d = register_diag_field('ocean_model', 'hf_rvxu_2d', diag%axesCv1, Time, &
+     'Depth-sum Fractional Thickness-weighted Meridional Acceleration from Relative Vorticity', &
+     'm s-2', conversion=US%L_T2_to_m_s2)
 
   !CS%id_hf_rvxv = register_diag_field('ocean_model', 'hf_rvxv', diag%axesCuL, Time, &
   !   'Fractional Thickness-weighted Zonal Acceleration from Relative Vorticity', &
   !   'm-1 s-2', v_extensive=.true., conversion=US%L_T2_to_m_s2)
-  !if (CS%id_hf_rvxv > 0) then
-  !  call safe_alloc_ptr(AD%rv_x_v,IsdB,IedB,jsd,jed,nz)
-  !  call safe_alloc_ptr(AD%diag_hfrac_u,IsdB,IedB,jsd,jed,nz)
-  !endif
-
-  CS%id_hf_rvxu_2d = register_diag_field('ocean_model', 'hf_rvxu_2d', diag%axesCv1, Time, &
-     'Depth-sum Fractional Thickness-weighted Meridional Acceleration from Relative Vorticity', &
-     'm s-2', conversion=US%L_T2_to_m_s2)
-  if (CS%id_hf_rvxu_2d > 0) then
-    call safe_alloc_ptr(AD%rv_x_u,isd,ied,JsdB,JedB,nz)
-    call safe_alloc_ptr(AD%diag_hfrac_v,isd,ied,JsdB,JedB,nz)
-  endif
-
   CS%id_hf_rvxv_2d = register_diag_field('ocean_model', 'hf_rvxv_2d', diag%axesCu1, Time, &
      'Depth-sum Fractional Thickness-weighted Zonal Acceleration from Relative Vorticity', &
      'm s-2', conversion=US%L_T2_to_m_s2)
-  if (CS%id_hf_rvxv_2d > 0) then
-    call safe_alloc_ptr(AD%rv_x_v,IsdB,IedB,jsd,jed,nz)
-    call safe_alloc_ptr(AD%diag_hfrac_u,IsdB,IedB,jsd,jed,nz)
-  endif
 
   CS%id_h_rvxu = register_diag_field('ocean_model', 'h_rvxu', diag%axesCvL, Time, &
      'Thickness Multiplied Meridional Acceleration from Relative Vorticity', &
      'm2 s-2', conversion=GV%H_to_m*US%L_T2_to_m_s2)
-  if (CS%id_h_rvxu > 0) then
-    call safe_alloc_ptr(AD%rv_x_u,isd,ied,JsdB,JedB,nz)
-    call safe_alloc_ptr(AD%diag_hv,isd,ied,JsdB,JedB,nz)
-  endif
-
   CS%id_intz_rvxu_2d = register_diag_field('ocean_model', 'intz_rvxu_2d', diag%axesCv1, Time, &
      'Depth-integral of Meridional Acceleration from Relative Vorticity', &
      'm2 s-2', conversion=GV%H_to_m*US%L_T2_to_m_s2)
-  if (CS%id_intz_rvxu_2d > 0) then
-    call safe_alloc_ptr(AD%rv_x_u,isd,ied,JsdB,JedB,nz)
-    call safe_alloc_ptr(AD%diag_hv,isd,ied,JsdB,JedB,nz)
-  endif
 
   CS%id_h_rvxv = register_diag_field('ocean_model', 'h_rvxv', diag%axesCuL, Time, &
      'Thickness Multiplied Zonal Acceleration from Relative Vorticity', &
      'm2 s-2', conversion=GV%H_to_m*US%L_T2_to_m_s2)
-  if (CS%id_h_rvxv > 0) then
-    call safe_alloc_ptr(AD%rv_x_v,IsdB,IedB,jsd,jed,nz)
-    call safe_alloc_ptr(AD%diag_hu,IsdB,IedB,jsd,jed,nz)
-  endif
-
   CS%id_intz_rvxv_2d = register_diag_field('ocean_model', 'intz_rvxv_2d', diag%axesCu1, Time, &
      'Depth-integral of Fractional Thickness-weighted Zonal Acceleration from Relative Vorticity', &
      'm2 s-2', conversion=GV%H_to_m*US%L_T2_to_m_s2)
-  if (CS%id_intz_rvxv_2d > 0) then
-    call safe_alloc_ptr(AD%rv_x_v,IsdB,IedB,jsd,jed,nz)
-    call safe_alloc_ptr(AD%diag_hu,IsdB,IedB,jsd,jed,nz)
+
+  ! Allocate memory needed for the diagnostics that have been enabled.
+  if ((CS%id_gKEu > 0) .or. (CS%id_hf_gKEu_2d > 0) .or. &
+    ! (CS%id_hf_gKEu > 0) .or. &
+      (CS%id_h_gKEu > 0) .or. (CS%id_intz_gKEu_2d > 0)) then
+    call safe_alloc_ptr(AD%gradKEu, IsdB, IedB, jsd, jed, nz)
+  endif
+  if ((CS%id_gKEv > 0) .or. (CS%id_hf_gKEv_2d > 0) .or. &
+    ! (CS%id_hf_gKEv > 0) .or. &
+      (CS%id_h_gKEv > 0) .or. (CS%id_intz_gKEv_2d > 0)) then
+    call safe_alloc_ptr(AD%gradKEv, isd, ied, JsdB, JedB, nz)
+  endif
+  if ((CS%id_rvxu > 0) .or. (CS%id_hf_rvxu_2d > 0) .or. &
+    ! (CS%id_hf_rvxu > 0) .or. &
+      (CS%id_h_rvxu > 0) .or. (CS%id_intz_rvxu_2d > 0)) then
+    call safe_alloc_ptr(AD%rv_x_u, isd, ied, JsdB, JedB, nz)
+  endif
+  if ((CS%id_rvxv > 0) .or. (CS%id_hf_rvxv_2d > 0) .or. &
+    ! (CS%id_hf_rvxv > 0) .or. &
+      (CS%id_h_rvxv > 0) .or. (CS%id_intz_rvxv_2d > 0)) then
+    call safe_alloc_ptr(AD%rv_x_v, IsdB, IedB, jsd, jed, nz)
+  endif
+
+  if ((CS%id_hf_gKEv_2d > 0) .or. &
+    ! (CS%id_hf_gKEv > 0) .or. (CS%id_hf_rvxu > 0) .or. &
+      (CS%id_hf_rvxu_2d > 0)) then
+    call safe_alloc_ptr(AD%diag_hfrac_v, isd, ied, JsdB, JedB, nz)
+  endif
+  if ((CS%id_hf_gKEu_2d > 0) .or. &
+    ! (CS%id_hf_gKEu > 0) .or. (CS%id_hf_rvxv > 0) .or. &
+      (CS%id_hf_rvxv_2d > 0)) then
+    call safe_alloc_ptr(AD%diag_hfrac_u, IsdB, IedB, jsd, jed, nz)
+  endif
+  if ((CS%id_h_gKEu > 0) .or. (CS%id_intz_gKEu_2d > 0) .or. &
+      (CS%id_h_rvxv > 0) .or. (CS%id_intz_rvxv_2d > 0)) then
+    call safe_alloc_ptr(AD%diag_hu, IsdB, IedB, jsd, jed, nz)
+  endif
+  if ((CS%id_h_gKEv > 0) .or. (CS%id_intz_gKEv_2d > 0) .or. &
+      (CS%id_h_rvxu > 0) .or. (CS%id_intz_rvxu_2d > 0)) then
+    call safe_alloc_ptr(AD%diag_hv, isd, ied, JsdB, JedB, nz)
   endif
 
 end subroutine CoriolisAdv_init
