@@ -661,20 +661,12 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
     if (CS%UseWaves) then
       ! Update wave information, which is presently kept static over each call to step_mom
       call enable_averages(time_interval, Time_start + real_to_time(US%T_to_s*time_interval), CS%diag)
-      call Update_Stokes_Drift(G, GV, US, Waves, h, forces%ustar, dt)
-      if (Waves%Stokes_DDT) then
-        u(:,:,:) = u(:,:,:) + Waves%ddt_us_x(:,:,:)*dt
-        v(:,:,:) = v(:,:,:) + Waves%ddt_us_y(:,:,:)*dt
-      endif
+      call Update_Stokes_Drift(G, GV, US, Waves, h, forces%ustar, time_interval)
       call disable_averaging(CS%diag)
     endif
   else ! not do_dyn.
     if (CS%UseWaves) then ! Diagnostics are not enabled in this call.
-      call Update_Stokes_Drift(G, GV, US, Waves, h, fluxes%ustar, dt)
-      !if (Waves%Stokes_DDT) then
-      !  u(:,:,:) = u(:,:,:) + Waves%ddt_us_x(:,:,:)*dt
-      !  v(:,:,:) = v(:,:,:) + Waves%ddt_us_y(:,:,:)*dt
-      !endif
+      call Update_Stokes_Drift(G, GV, US, Waves, h, fluxes%ustar, time_interval)
     endif
   endif
 
@@ -1105,6 +1097,17 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_thermo, &
     if (showCallTree) call callTree_waypoint("finished step_MOM_dyn_unsplit (step_MOM)")
 
   endif ! -------------------------------------------------- end SPLIT
+
+  ! Update the model's current to reflect wind-wave growth
+  if (Waves%Stokes_DDT .and. (.not.Waves%Passive_Stokes_DDT)) then
+    do J=jsq,jeq ; do i=is,ie
+      v(i,J,:) = v(i,J,:) + Waves%ddt_us_y(i,J,:)*dt
+    enddo; enddo
+    do j=js,je ; do I=isq,ieq
+      u(I,j,:) = u(I,j,:) + Waves%ddt_us_x(I,j,:)*dt
+    enddo; enddo
+    call pass_vector(u,v,G%Domain)
+  endif
 
   if (CS%thickness_diffuse .and. .not.CS%thickness_diffuse_first) then
     call cpu_clock_begin(id_clock_thick_diff)

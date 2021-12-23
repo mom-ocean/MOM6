@@ -63,7 +63,9 @@ type, public :: wave_parameters_CS ; private
                                             !! True if Stokes shear pressure Gradient force is used
   logical, public :: Passive_Stokes_PGF = .false. !< Keeps Stokes_PGF on, but doesn't affect dynamics
   logical, public :: Stokes_DDT = .false.   !< Developmental:
-                                   !! True if Stokes d/dt is used
+                                            !! True if Stokes d/dt is used
+  logical, public :: Passive_Stokes_DDT = .false.   !< Keeps Stokes_DDT on, but doesn't affect dynamics
+
   real, allocatable, dimension(:,:,:), public :: &
     Us_x               !< 3d zonal Stokes drift profile [L T-1 ~> m s-1]
                        !! Horizontal -> U points
@@ -310,6 +312,9 @@ subroutine MOM_wave_interface_init(time, G, GV, US, param_file, CS, diag, restar
   call get_param(param_file, mdl, "STOKES_DDT", CS%Stokes_DDT, &
        "Flag to use Stokes d/dt", units="", &
        Default=.false.)
+  call get_param(param_file, mdl, "PASSIVE_STOKES_DDT", CS%Passive_Stokes_DDT, &
+       "Flag to make Stokes d/dt diagnostic only", units="", &
+       Default=.false.)
 
   ! Get Wave Method and write to integer WaveMethod
   call get_param(param_file,mdl,"WAVE_METHOD",TMPSTRING1,             &
@@ -461,10 +466,12 @@ subroutine MOM_wave_interface_init(time, G, GV, US, param_file, CS, diag, restar
        CS%diag%axesCvL,Time,'3d Stokes drift (y)', 'm s-1', conversion=US%L_T_to_m_s)
   CS%id_3dstokes_x = register_diag_field('ocean_model','3d_stokes_x', &
        CS%diag%axesCuL,Time,'3d Stokes drift (x)', 'm s-1', conversion=US%L_T_to_m_s)
-  CS%id_ddt_3dstokes_y = register_diag_field('ocean_model','dvdt_Stokes', &
-       CS%diag%axesCvL,Time,'d/dt Stokes drift (meridional)','m s-2')
-  CS%id_ddt_3dstokes_x = register_diag_field('ocean_model','dudt_Stokes', &
-       CS%diag%axesCuL,Time,'d/dt Stokes drift (zonal)','m s-2')
+  if (CS%Stokes_DDT) then
+    CS%id_ddt_3dstokes_y = register_diag_field('ocean_model','dvdt_Stokes', &
+         CS%diag%axesCvL,Time,'d/dt Stokes drift (meridional)','m s-2')
+    CS%id_ddt_3dstokes_x = register_diag_field('ocean_model','dudt_Stokes', &
+         CS%diag%axesCuL,Time,'d/dt Stokes drift (zonal)','m s-2')
+  endif
   CS%id_PFv_Stokes = register_diag_field('ocean_model','PFv_Stokes', &
        CS%diag%axesCvL,Time,'PF from Stokes drift (meridional)','m s-2')!Needs conversion
   CS%id_PFu_Stokes = register_diag_field('ocean_model','PFu_Stokes', &
@@ -602,16 +609,16 @@ subroutine Update_Stokes_Drift(G, GV, US, CS, h, ustar, dt)
   endif
 
   ! Getting Stokes drift profile from previous step
-  CS%ddt_us_x(:,:,:) = CS%US_x(:,:,:)
-  CS%ddt_us_y(:,:,:) = CS%US_y(:,:,:)
+  if (CS%Stokes_DDT) CS%ddt_us_x(:,:,:) = CS%US_x(:,:,:)
+  if (CS%Stokes_DDT) CS%ddt_us_y(:,:,:) = CS%US_y(:,:,:)
 
   ! 1. If Test Profile Option is chosen
   !    Computing mid-point value from surface value and decay wavelength
   if (CS%WaveMethod==TESTPROF) then
     PI = 4.0*atan(1.0)
     DecayScale = 4.*PI / CS%TP_WVL !4pi
-    do jj = G%jsd,G%jed
-      do II = G%isdB,G%iedB
+    do jj = G%jsc,G%jec
+      do II = G%iscB,G%iecB
         IIm1 = max(1,II-1)
         Bottom = 0.0
         MidPoint = 0.0
@@ -623,8 +630,8 @@ subroutine Update_Stokes_Drift(G, GV, US, CS, h, ustar, dt)
         enddo
       enddo
     enddo
-    do JJ = G%jsdB,G%jedB
-      do ii = G%isd,G%ied
+    do JJ = G%jscB,G%jecB
+      do ii = G%isc,G%iec
         JJm1 = max(1,JJ-1)
         Bottom = 0.0
         MidPoint = 0.0
@@ -636,6 +643,7 @@ subroutine Update_Stokes_Drift(G, GV, US, CS, h, ustar, dt)
         enddo
       enddo
     enddo
+    call pass_vector(CS%Us_x(:,:,:),CS%Us_y(:,:,:), G%Domain, To_All)
   ! 2. If Surface Bands is chosen
   !    In wavenumber mode compute integral for layer averaged Stokes drift.
   !    In frequency mode compuate value at midpoint.
@@ -645,8 +653,8 @@ subroutine Update_Stokes_Drift(G, GV, US, CS, h, ustar, dt)
     CS%Us0_x(:,:) = 0.0
     CS%Us0_y(:,:) = 0.0
     ! Computing X direction Stokes drift
-    do jj = G%jsd,G%jed
-      do II = G%isdB,G%iedB
+    do jj = G%jsc,G%jec
+      do II = G%iscB,G%iecB
         ! 1. First compute the surface Stokes drift
         !    by integrating over the partitions.
         do b = 1,CS%NumBands
@@ -709,8 +717,8 @@ subroutine Update_Stokes_Drift(G, GV, US, CS, h, ustar, dt)
       enddo
     enddo
     ! Computing Y direction Stokes drift
-    do JJ = G%jsdB,G%jedB
-      do ii = G%isd,G%ied
+    do JJ = G%jscB,G%jecB
+      do ii = G%isc,G%iec
         ! Compute the surface values.
         do b = 1,CS%NumBands
           if (CS%PartitionMode==0) then
@@ -771,10 +779,12 @@ subroutine Update_Stokes_Drift(G, GV, US, CS, h, ustar, dt)
         enddo
       enddo
     enddo
+    call pass_vector(CS%Us_x(:,:,:),CS%Us_y(:,:,:), G%Domain, To_All)
+    call pass_vector(CS%Us0_x(:,:),CS%Us0_y(:,:), G%Domain)
   elseif (CS%WaveMethod == DHH85) then
     if (.not.(CS%StaticWaves .and. CS%DHH85_is_set)) then
-      do jj = G%jsd,G%jed
-        do II = G%isdB,G%iedB
+      do jj = G%jsc,G%jec
+        do II = G%iscB,G%iecB
           bottom = 0.0
           do kk = 1,GV%ke
             Top = Bottom
@@ -791,8 +801,8 @@ subroutine Update_Stokes_Drift(G, GV, US, CS, h, ustar, dt)
           enddo
         enddo
       enddo
-      do JJ = G%jsdB,G%jedB
-        do ii = G%isd,G%ied
+      do JJ = G%jscB,G%jecB
+        do ii = G%isc,G%iec
           Bottom = 0.0
           do kk=1, GV%ke
             Top = Bottom
@@ -815,6 +825,7 @@ subroutine Update_Stokes_Drift(G, GV, US, CS, h, ustar, dt)
       enddo
       CS%DHH85_is_set = .true.
     endif
+    call pass_vector(CS%Us_x(:,:),CS%Us_y(:,:), G%Domain)
   else! Keep this else, fallback to 0 Stokes drift
     do kk= 1,GV%ke
       do jj = G%jsd,G%jed
@@ -844,8 +855,8 @@ subroutine Update_Stokes_Drift(G, GV, US, CS, h, ustar, dt)
 
   ! Finding tendency of Stokes drift over the time step to apply
   !  as an acceleration to the models current.
-  CS%ddt_us_x(:,:,:) = (CS%US_x(:,:,:) - CS%ddt_us_x(:,:,:)) * idt
-  CS%ddt_us_y(:,:,:) = (CS%US_y(:,:,:) - CS%ddt_us_y(:,:,:)) * idt
+  if (CS%Stokes_DDT) CS%ddt_us_x(:,:,:) = (CS%US_x(:,:,:) - CS%ddt_us_x(:,:,:)) * idt
+  if (CS%Stokes_DDT) CS%ddt_us_y(:,:,:) = (CS%US_y(:,:,:) - CS%ddt_us_y(:,:,:)) * idt
 
   ! Output any desired quantities
   if (CS%id_surfacestokes_y>0) &
@@ -856,10 +867,12 @@ subroutine Update_Stokes_Drift(G, GV, US, CS, h, ustar, dt)
     call post_data(CS%id_3dstokes_y, CS%us_y, CS%diag)
   if (CS%id_3dstokes_x>0) &
     call post_data(CS%id_3dstokes_x, CS%us_x, CS%diag)
-  if (CS%id_ddt_3dstokes_x>0) &
-    call post_data(CS%id_ddt_3dstokes_x, CS%ddt_us_x, CS%diag)
-  if (CS%id_ddt_3dstokes_y>0) &
-    call post_data(CS%id_ddt_3dstokes_y, CS%ddt_us_y, CS%diag)
+  if (CS%Stokes_DDT) then
+    if (CS%id_ddt_3dstokes_x>0) &
+      call post_data(CS%id_ddt_3dstokes_x, CS%ddt_us_x, CS%diag)
+    if (CS%id_ddt_3dstokes_y>0) &
+      call post_data(CS%id_ddt_3dstokes_y, CS%ddt_us_y, CS%diag)
+  endif
   if (CS%id_La_turb>0) &
     call post_data(CS%id_La_turb, CS%La_turb, CS%diag)
 
@@ -1783,9 +1796,11 @@ subroutine waves_register_restarts(CS, HI, GV, param_file, restart_CSp)
   call get_param(param_file,mdl,"WAVE_METHOD",wave_method_str, do_not_log=.true., default=NULL_STRING)
 
   if (trim(wave_method_str)== trim(SURFBANDS_STRING)) then
-    vd(1) = var_desc("US_x", "m s-1", "3d zonal Stokes drift profile")
-    vd(2) = var_desc("US_y", "m s-1", "3d meridional Stokes drift profile")
-    call register_restart_field(CS%US_x(:,:,:), vd(1), .true., restart_CSp)
+    vd(1) = var_desc("US_x", "m s-1", "3d zonal Stokes drift profile",&
+                     hor_grid='u',z_grid='L')
+    vd(2) = var_desc("US_y", "m s-1", "3d meridional Stokes drift profile",&
+                      hor_grid='v',z_grid='L')
+    call register_restart_field(CS%US_x(:,:,:), vd(1), .false., restart_CSp)
     call register_restart_field(CS%US_y(:,:,:), vd(2), .false., restart_CSp)
   endif
 
