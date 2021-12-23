@@ -373,7 +373,7 @@ subroutine MOM_wave_interface_init(time, G, GV, US, param_file, CS, diag, restar
          "or the model will fail.",units='', default=1)
       allocate( CS%WaveNum_Cen(CS%NumBands), source=0.0 )
       allocate( CS%STKx0(G%isdB:G%iedB,G%jsd:G%jed,CS%NumBands), source=0.0 )
-      allocate( CS%STKy0(G%isdB:G%iedB,G%jsd:G%jed,CS%NumBands), source=0.0 )
+      allocate( CS%STKy0(G%isd:G%ied,G%jsdB:G%jedB,CS%NumBands), source=0.0 )
       CS%PartitionMode = 0
       call get_param(param_file, mdl, "SURFBAND_WAVENUMBERS", CS%WaveNum_Cen, &
            "Central wavenumbers for surface Stokes drift bands.", &
@@ -442,9 +442,7 @@ subroutine MOM_wave_interface_init(time, G, GV, US, param_file, CS, diag, restar
   ! a. Stokes driftProfiles
   if (CS%Stokes_DDT) then
     allocate(CS%ddt_Us_x(G%isdB:G%IedB,G%jsd:G%jed,G%ke), source=0.0)
-    CS%ddt_Us_x(:,:,:) = 0.0
     allocate(CS%ddt_Us_y(G%isd:G%Ied,G%jsdB:G%jedB,G%ke), source=0.0)
-    CS%ddt_Us_y(:,:,:) = 0.0
   endif
   ! b. Surface Values
   allocate(CS%US0_x(G%isdB:G%iedB,G%jsd:G%jed), source=0.0)
@@ -825,7 +823,7 @@ subroutine Update_Stokes_Drift(G, GV, US, CS, h, ustar, dt)
       enddo
       CS%DHH85_is_set = .true.
     endif
-    call pass_vector(CS%Us_x(:,:),CS%Us_y(:,:), G%Domain)
+    call pass_vector(CS%Us_x(:,:,:),CS%Us_y(:,:,:), G%Domain)
   else! Keep this else, fallback to 0 Stokes drift
     do kk= 1,GV%ke
       do jj = G%jsd,G%jed
@@ -1520,7 +1518,7 @@ subroutine CoriolisStokes(G, GV, dt, h, u, v, WAVES, US)
   integer :: i,j,k
 
   do k = 1, GV%ke
-do j = G%jsc, G%jec
+    do j = G%jsc, G%jec
       do I = G%iscB, G%iecB
         DVel = 0.25*(WAVES%us_y(i,j+1,k)+WAVES%us_y(i-1,j+1,k))*G%CoriolisBu(i,j+1) + &
                0.25*(WAVES%us_y(i,j,k)+WAVES%us_y(i-1,j,k))*G%CoriolisBu(i,j)
@@ -1788,10 +1786,8 @@ subroutine waves_register_restarts(CS, HI, GV, param_file, restart_CSp)
   if (.not.(use_waves .or. StatisticalWaves)) return
 
   ! Allocate wave fields needed for restart file
-  allocate(CS%Us_x(HI%isdB:HI%IedB,HI%jsd:HI%jed,GV%ke))
-  CS%Us_x(:,:,:) = 0.0
-  allocate(CS%Us_y(HI%isd:HI%Ied,HI%jsdB:HI%jedB,GV%ke))
-  CS%Us_y(:,:,:) = 0.0
+  allocate(CS%Us_x(HI%isdB:HI%IedB,HI%jsd:HI%jed,GV%ke), source=0.0)
+  allocate(CS%Us_y(HI%isd:HI%Ied,HI%jsdB:HI%jedB,GV%ke), source=0.0)
 
   call get_param(param_file,mdl,"WAVE_METHOD",wave_method_str, do_not_log=.true., default=NULL_STRING)
 
