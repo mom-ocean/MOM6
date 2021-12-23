@@ -193,8 +193,6 @@ type, public :: ice_ocean_boundary_type
                                                               !! for divergence damping, as determined
                                                               !! outside of the ocean model in [m3/s]
   real, pointer, dimension(:,:)   :: lamult          => NULL() !< Langmuir enhancement factor [nondim]
-  real, pointer, dimension(:,:)   :: ustk0           => NULL() !< Surface Stokes drift, zonal [m/s]
-  real, pointer, dimension(:,:)   :: vstk0           => NULL() !< Surface Stokes drift, meridional [m/s]
   real, pointer, dimension(:)     :: stk_wavenumbers => NULL() !< The central wave number of Stokes bands [rad/m]
   real, pointer, dimension(:,:,:) :: ustkb           => NULL() !< Stokes Drift spectrum, zonal [m/s]
                                                                !! Horizontal  - u points
@@ -893,17 +891,13 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, US, CS)
   if ( associated(IOB%ustkb) ) then
 
     forces%stk_wavenumbers(:) = IOB%stk_wavenumbers
-    do j=js,je; do i=is,ie
-      forces%ustk0(i,j) = IOB%ustk0(i-I0,j-J0) ! How to be careful here that the domains are right?
-      forces%vstk0(i,j) = IOB%vstk0(i-I0,j-J0)
-    enddo ; enddo
-    call pass_vector(forces%ustk0,forces%vstk0, G%domain )
     do istk = 1,IOB%num_stk_bands
       do j=js,je; do i=is,ie
         forces%ustkb(i,j,istk) = IOB%ustkb(i-I0,j-J0,istk)
         forces%vstkb(i,j,istk) = IOB%vstkb(i-I0,j-J0,istk)
       enddo; enddo
-      call pass_vector(forces%ustkb(:,:,istk),forces%vstkb(:,:,istk), G%domain )
+      call pass_var(forces%ustkb(:,:,istk), G%domain )
+      call pass_var(forces%vstkb(:,:,istk), G%domain )
     enddo
   endif
 
