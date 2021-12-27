@@ -51,13 +51,14 @@ function register_tidal_bay_OBC(param_file, CS, US, OBC_Reg)
 end function register_tidal_bay_OBC
 
 !> This subroutine sets the properties of flow at open boundary conditions.
-subroutine tidal_bay_set_OBC_data(OBC, CS, G, GV, h, Time)
+subroutine tidal_bay_set_OBC_data(OBC, CS, G, GV, US, h, Time)
   type(ocean_OBC_type),    pointer    :: OBC  !< This open boundary condition type specifies
                                               !! whether, where, and what open boundary
                                               !! conditions are used.
   type(tidal_bay_OBC_CS),  intent(in) :: CS   !< tidal bay control structure.
   type(ocean_grid_type),   intent(in) :: G    !< The ocean's grid structure.
   type(verticalGrid_type), intent(in) :: GV   !< The ocean's vertical grid structure
+  type(unit_scale_type),   intent(in) :: US   !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in) :: h !< layer thickness [H ~> m or kg m-2]
   type(time_type),         intent(in) :: Time !< model time.
 
@@ -84,7 +85,7 @@ subroutine tidal_bay_set_OBC_data(OBC, CS, G, GV, h, Time)
 
   allocate(my_area(1:1,js:je))
 
-  flux_scale = GV%H_to_m*G%US%L_to_m
+  flux_scale = GV%H_to_m*US%L_to_m
 
   time_sec = time_type_to_real(Time)
   cff_eta = 0.1*GV%m_to_H * sin(2.0*PI*time_sec/(12.0*3600.0))
@@ -108,7 +109,7 @@ subroutine tidal_bay_set_OBC_data(OBC, CS, G, GV, h, Time)
 
     if (.not. segment%on_pe) cycle
 
-    segment%normal_vel_bt(:,:) = my_flux / (G%US%m_to_Z*G%US%m_to_L*total_area)
+    segment%normal_vel_bt(:,:) = my_flux / (US%m_to_Z*US%m_to_L*total_area)
     segment%eta(:,:) = cff_eta
 
   enddo ! end segment loop

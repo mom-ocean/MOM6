@@ -442,7 +442,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
 
   if (new_sim) call pass_vector(u, v, G%Domain)
   if (debug .and. new_sim) then
-    call uvchksum("MOM_initialize_state [uv]", u, v, G%HI, haloshift=1, scale=US%m_s_to_L_T)
+    call uvchksum("MOM_initialize_state [uv]", u, v, G%HI, haloshift=1, scale=US%L_T_to_m_s)
   endif
 
   ! Optionally convert the thicknesses from m to kg m-2.  This is particularly
@@ -620,7 +620,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
     elseif (trim(config) == "shelfwave") then
       OBC%update_OBC = .true.
     elseif (lowercase(trim(config)) == "supercritical") then
-      call supercritical_set_OBC_data(OBC, G, GV, PF)
+      call supercritical_set_OBC_data(OBC, G, GV, US, PF)
     elseif (trim(config) == "tidal_bay") then
       OBC%update_OBC = .true.
     elseif (trim(config) == "USER") then

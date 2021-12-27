@@ -489,7 +489,7 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, GV, US, C
     ! netMassInOut = water [H ~> m or kg m-2] added/removed via surface fluxes
     ! netMassOut   = water [H ~> m or kg m-2] removed via evaporating surface fluxes
     ! net_heat     = heat via surface fluxes [degC H ~> degC m or degC kg m-2]
-    ! net_salt     = salt via surface fluxes [ppt H ~> dppt m or gSalt m-2]
+    ! net_salt     = salt via surface fluxes [ppt H ~> ppt m or gSalt m-2]
     ! Pen_SW_bnd   = components to penetrative shortwave radiation
     call extractFluxes1d(G, GV, US, fluxes, optics, nsw, j, dt, &
                   CS%H_limit_fluxes, CS%use_river_heat_content, CS%use_calving_heat_content, &
@@ -1527,7 +1527,7 @@ subroutine mechanical_entrainment(h, d_eb, htot, Ttot, Stot, uhtot, vhtot, &
   real :: TKE_full_ent  ! The TKE remaining if a layer is fully entrained
                         ! [Z L2 T-2 ~> m3 s-2].
   real :: dRL       ! Work required to mix water from the next layer
-                    ! across the mixed layer [L2 T-2 ~> L2 s-2].
+                    ! across the mixed layer [L2 T-2 ~> m2 s-2].
   real :: Pen_En_Contrib  ! Penetrating SW contributions to the changes in
                           ! TKE, divided by layer thickness in m [L2 T-2 ~> m2 s-2].
   real :: Cpen1     ! A temporary variable [L2 T-2 ~> m2 s-2].

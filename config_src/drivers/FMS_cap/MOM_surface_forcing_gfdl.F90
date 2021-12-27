@@ -113,6 +113,8 @@ type, public :: surface_forcing_CS ; private
   real    :: Flux_const                     !< Piston velocity for surface restoring [Z T-1 ~> m s-1]
   real    :: Flux_const_salt                !< Piston velocity for surface salt restoring [Z T-1 ~> m s-1]
   real    :: Flux_const_temp                !< Piston velocity for surface temp restoring [Z T-1 ~> m s-1]
+  logical :: trestore_SPEAR_ECDA            !< If true, modify restoring data wrt local SSS
+  real    :: SPEAR_dTf_dS                   !< The derivative of the freezing temperature with salinity.
   logical :: salt_restore_as_sflux          !< If true, SSS restore as salt flux instead of water flux
   logical :: adjust_net_srestore_to_zero    !< Adjust srestore to zero (for both salt_flux or vprec)
   logical :: adjust_net_srestore_by_scaling !< Adjust srestore w/o moving zero contour
@@ -346,7 +348,7 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
     open_ocn_mask(:,:) = 1.0
     if (CS%mask_srestore_under_ice) then ! Do not restore under sea-ice
       do j=js,je ; do i=is,ie
-        if (sfc_state%SST(i,j) <= -0.0539*sfc_state%SSS(i,j)) open_ocn_mask(i,j)=0.0
+        if (sfc_state%SST(i,j) <= CS%SPEAR_dTf_dS*sfc_state%SSS(i,j)) open_ocn_mask(i,j)=0.0
       enddo ; enddo
     endif
     if (CS%salt_restore_as_sflux) then
@@ -400,6 +402,14 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
   ! SST restoring logic
   if (CS%restore_temp) then
     call time_interp_external(CS%id_trestore, Time, data_restore)
+    if ( CS%trestore_SPEAR_ECDA ) then
+      do j=js,je ; do i=is,ie
+        if (abs(data_restore(i,j)+1.8)<0.0001) then
+          data_restore(i,j) = CS%SPEAR_dTf_dS*sfc_state%SSS(i,j)
+        endif
+      enddo ; enddo
+    endif
+
     do j=js,je ; do i=is,ie
       delta_sst = data_restore(i,j)- sfc_state%SST(i,j)
       delta_sst = sign(1.0,delta_sst)*min(abs(delta_sst),CS%max_delta_trestore)
@@ -1448,7 +1458,15 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, wind_stagger)
                  "If true, read a file (temp_restore_mask) containing "//&
                  "a mask for SST restoring.", default=.false.)
 
+    call get_param(param_file, mdl, "SPEAR_ECDA_SST_RESTORE_TFREEZE", CS%trestore_SPEAR_ECDA, &
+                 "If true, modify SST restoring field using SSS state. This only modifies the "//&
+                 "restoring data that is within 0.0001degC of -1.8degC.", default=.false.)
+  else
+    CS%trestore_SPEAR_ECDA = .false. ! Needed to toggle logging of SPEAR_DTFREEZE_DS
   endif
+  call get_param(param_file, mdl, "SPEAR_DTFREEZE_DS", CS%SPEAR_dTf_dS, &
+                 "The derivative of the freezing temperature with salinity.", &
+                 units="deg C PSU-1", default=-0.054, do_not_log=.not.CS%trestore_SPEAR_ECDA)
 
   ! Optionally read tidal amplitude from input file [Z T-1 ~> m s-1] on model grid.
   ! Otherwise use default tidal amplitude for bottom frictionally-generated

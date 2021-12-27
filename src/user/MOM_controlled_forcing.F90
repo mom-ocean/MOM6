@@ -46,7 +46,7 @@ type, public :: ctrl_forcing_CS ; private
   real    :: lam_prec       !< A constant of proportionality between SSS anomalies
                             !! (normalised by mean SSS) and precipitation [R Z T-1 ~> kg m-2 s-1]
   real    :: lam_cyc_heat   !< A constant of proportionality between cyclical SST
-                            !! anomalies and corrective heat fluxes [W m-2 degC-1]
+                            !! anomalies and corrective heat fluxes [Q R Z T-1 degC-1 ~> W m-2 degC-1]
   real    :: lam_cyc_prec   !< A constant of proportionality between cyclical SSS
                             !! anomalies (normalised by mean SSS) and corrective
                             !! precipitation [R Z T-1 ~> kg m-2 s-1]
@@ -270,7 +270,8 @@ subroutine apply_ctrl_forcing(SST_anom, SSS_anom, SSS_mean, virt_heat, virt_prec
     ! Accumulate the average anomalies for this period.
     dt_wt = wt_per1 * dt
     CS%avg_time(m_mid) = CS%avg_time(m_mid) + dt_wt
-    ! These loops temporarily change the units of the CS%avg_ variables to [degC s] or [ppt s].
+    ! These loops temporarily change the units of the CS%avg_ variables to [degC T ~> degC s]
+    ! or [ppt T ~> ppt s].
     do j=js,je ; do i=is,ie
       CS%avg_SST_anom(i,j,m_mid) = CS%avg_SST_anom(i,j,m_mid) + &
                                    dt_wt * G%mask2dT(i,j) * SST_anom(i,j)

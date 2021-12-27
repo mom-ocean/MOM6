@@ -391,7 +391,7 @@ contains
   !! tracer physics or chemistry to the tracers from this file.
   !! CFCs are relatively simple, as they are passive tracers. with only a surface
   !! flux as a source.
-  subroutine MOM_generic_tracer_column_physics(h_old, h_new, ea, eb, fluxes, Hml, dt, G, GV, CS, tv, optics, &
+  subroutine MOM_generic_tracer_column_physics(h_old, h_new, ea, eb, fluxes, Hml, dt, G, GV, US, CS, tv, optics, &
         evap_CFL_limit, minimum_forcing_depth)
     type(ocean_grid_type),   intent(in) :: G     !< The ocean's grid structure
     type(verticalGrid_type), intent(in) :: GV    !< The ocean's vertical grid structure
@@ -408,7 +408,8 @@ contains
     type(forcing),           intent(in) :: fluxes !< A structure containing pointers to thermodynamic
                                                  !! and tracer forcing fields.
     real, dimension(SZI_(G),SZJ_(G)), intent(in) :: Hml  !< Mixed layer depth [Z ~> m]
-    real,                    intent(in) :: dt    !< The amount of time covered by this call [s]
+    real,                    intent(in) :: dt    !< The amount of time covered by this call [T ~> s]
+    type(unit_scale_type),   intent(in) :: US    !< A dimensional unit scaling type
     type(MOM_generic_tracer_CS), pointer :: CS   !< Pointer to the control structure for this module.
     type(thermo_var_ptrs),   intent(in) :: tv    !< A structure pointing to various thermodynamic variables
     type(optics_type),       intent(in) :: optics !< The structure containing optical properties.
@@ -465,7 +466,7 @@ contains
           call g_tracer_get_pointer(g_tracer,g_tracer_name,'runoff_tracer_flux',runoff_tracer_flux_array)
           !nnz: Why is fluxes%river = 0?
           runoff_tracer_flux_array(:,:) = trunoff_array(:,:) * &
-                   G%US%RZ_T_to_kg_m2s*fluxes%lrunoff(:,:)
+                   US%RZ_T_to_kg_m2s*fluxes%lrunoff(:,:)
           stf_array = stf_array + runoff_tracer_flux_array
        endif
 
@@ -492,7 +493,7 @@ contains
     dz_ml(:,:) = 0.0
     do j=jsc,jec ; do i=isc,iec
       surface_field(i,j) = tv%S(i,j,1)
-      dz_ml(i,j) = G%US%Z_to_m * Hml(i,j)
+      dz_ml(i,j) = US%Z_to_m * Hml(i,j)
     enddo ; enddo
     sosga = global_area_mean(surface_field, G)
 
@@ -525,7 +526,7 @@ contains
           do k=1,nk ;do j=jsc,jec ; do i=isc,iec
             h_work(i,j,k) = h_old(i,j,k)
           enddo ; enddo ; enddo
-          call applyTracerBoundaryFluxesInOut(G, GV, g_tracer%field(:,:,:,1), G%US%s_to_T*dt, &
+          call applyTracerBoundaryFluxesInOut(G, GV, g_tracer%field(:,:,:,1), dt, &
                             fluxes, h_work, evap_CFL_limit, minimum_forcing_depth)
         endif
 
@@ -543,16 +544,16 @@ contains
     ! surface source is applied and diapycnal advection and diffusion occurs.
     if (present(evap_CFL_limit) .and. present(minimum_forcing_depth)) then
       ! Last arg is tau which is always 1 for MOM6
-      call generic_tracer_vertdiff_G(h_work, ea, eb, dt, GV%kg_m2_to_H, GV%m_to_H, 1)
+      call generic_tracer_vertdiff_G(h_work, ea, eb, US%T_to_s*dt, GV%kg_m2_to_H, GV%m_to_H, 1)
     else
       ! Last arg is tau which is always 1 for MOM6
-      call generic_tracer_vertdiff_G(h_old, ea, eb, dt, GV%kg_m2_to_H, GV%m_to_H, 1)
+      call generic_tracer_vertdiff_G(h_old, ea, eb, US%T_to_s*dt, GV%kg_m2_to_H, GV%m_to_H, 1)
     endif
 
     ! Update bottom fields after vertical processes
 
     ! Second arg is tau which is always 1 for MOM6
-    call generic_tracer_update_from_bottom(dt, 1, get_diag_time_end(CS%diag))
+    call generic_tracer_update_from_bottom(US%T_to_s*dt, 1, get_diag_time_end(CS%diag))
 
     !Output diagnostics via diag_manager for all generic tracers and their fluxes
     call g_tracer_send_diag(CS%g_tracer_list, get_diag_time_end(CS%diag), tau=1)
@@ -567,12 +568,13 @@ contains
   !! being requested specifically, returning the number of stocks it has
   !! calculated. If the stock_index is present, only the stock corresponding
   !! to that coded index is returned.
-  function MOM_generic_tracer_stock(h, stocks, G, GV, CS, names, units, stock_index)
+  function MOM_generic_tracer_stock(h, stocks, G, GV, US, CS, names, units, stock_index)
     type(ocean_grid_type),              intent(in)    :: G    !< The ocean's grid structure
     type(verticalGrid_type),            intent(in)    :: GV   !< The ocean's vertical grid structure
     real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in) :: h !< Layer thicknesses [H ~> m or kg m-2]
     real, dimension(:),                 intent(out)   :: stocks !< The mass-weighted integrated amount of each
                                                                 !! tracer, in kg times concentration units [kg conc].
+    type(unit_scale_type),              intent(in)    :: US     !< A dimensional unit scaling type
     type(MOM_generic_tracer_CS),        pointer       :: CS     !< Pointer to the control structure for this module.
     character(len=*), dimension(:),     intent(out)   :: names  !< The names of the stocks calculated.
     character(len=*), dimension(:),     intent(out)   :: units  !< The units of the stocks calculated.
@@ -603,7 +605,7 @@ contains
 
     if (.NOT. associated(CS%g_tracer_list)) return ! No stocks.
 
-    stock_scale = G%US%L_to_m**2 * GV%H_to_kg_m2
+    stock_scale = US%L_to_m**2 * GV%H_to_kg_m2
     m=1 ; g_tracer=>CS%g_tracer_list
     do
       call g_tracer_get_alias(g_tracer,names(m))

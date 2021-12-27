@@ -56,12 +56,12 @@ type, public :: vertvisc_CS ; private
                              !! absolute velocities.
   real    :: CFL_trunc       !< Velocity components will be truncated when they
                              !! are large enough that the corresponding CFL number
-                             !! exceeds this value, nondim.
+                             !! exceeds this value [nondim].
   real    :: CFL_report      !< The value of the CFL number that will cause the
-                             !! accelerations to be reported, nondim.  CFL_report
+                             !! accelerations to be reported [nondim].  CFL_report
                              !! will often equal CFL_trunc.
   real    :: truncRampTime   !< The time-scale over which to ramp up the value of
-                             !! CFL_trunc from CFL_truncS to CFL_truncE
+                             !! CFL_trunc from CFL_truncS to CFL_truncE [T ~> s]
   real    :: CFL_truncS      !< The start value of CFL_trunc
   real    :: CFL_truncE      !< The end/target value of CFL_trunc
   logical :: CFLrampingIsActivated = .false. !< True if the ramping has been initialized
@@ -105,7 +105,7 @@ type, public :: vertvisc_CS ; private
                             !! thickness for viscosity.
   logical :: answers_2018   !< If true, use the order of arithmetic and expressions that recover the
                             !! answers from the end of 2018.  Otherwise, use expressions that do not
-                            !! use an arbitary and hard-coded maximum viscous coupling coefficient
+                            !! use an arbitrary and hard-coded maximum viscous coupling coefficient
                             !! between layers.
   logical :: debug          !< If true, write verbose checksums for debugging purposes.
   integer :: nkml           !< The number of layers in the mixed layer.
@@ -533,7 +533,7 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
   endif
 
   if (associated(ADp%du_dt_str) .and.  associated(ADp%dv_dt_str)) then
-    ! Diagnostics for thickness x wind stress acclerations
+    ! Diagnostics for thickness x wind stress accelerations
     if (CS%id_h_du_dt_str > 0) call post_product_u(CS%id_h_du_dt_str, ADp%du_dt_str, ADp%diag_hu, G, nz, CS%diag)
     if (CS%id_h_dv_dt_str > 0) call post_product_v(CS%id_h_dv_dt_str, ADp%dv_dt_str, ADp%diag_hv, G, nz, CS%diag)
 
@@ -555,11 +555,11 @@ subroutine vertvisc_remnant(visc, visc_rem_u, visc_rem_v, dt, G, GV, US, CS)
   type(vertvisc_type),   intent(in)   :: visc !< Viscosities and bottom drag
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
                          intent(inout) :: visc_rem_u !< Fraction of a time-step's worth of a
-                                              !! barotopic acceleration that a layer experiences after
+                                              !! barotropic acceleration that a layer experiences after
                                               !! viscosity is applied in the zonal direction [nondim]
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
                          intent(inout) :: visc_rem_v !< Fraction of a time-step's worth of a
-                                              !! barotopic acceleration that a layer experiences after
+                                              !! barotropic acceleration that a layer experiences after
                                               !! viscosity is applied in the meridional direction [nondim]
   real,                  intent(in)    :: dt  !< Time increment [T ~> s]
   type(unit_scale_type), intent(in)    :: US  !< A dimensional unit scaling type
@@ -692,7 +692,7 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, US, CS, OBC)
     a_shelf, &  ! The drag coefficients across interfaces in water columns under
                 ! ice shelves [Z T-1 ~> m s-1].
     z_i         ! An estimate of each interface's height above the bottom,
-                ! normalized by the bottom boundary layer thickness, nondim.
+                ! normalized by the bottom boundary layer thickness [nondim]
   real, dimension(SZIB_(G)) :: &
     kv_bbl, &     ! The bottom boundary layer viscosity [Z2 T-1 ~> m2 s-1].
     bbl_thick, &  ! The bottom boundary layer thickness [H ~> m or kg m-2].
@@ -715,10 +715,10 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, US, CS, OBC)
                   ! than Hbbl into the interior.
   real :: topfn   ! A function which goes from 1 at the top to 0 much more
                   ! than Htbl into the interior.
-  real :: z2      ! The distance from the bottom, normalized by Hbbl, nondim.
+  real :: z2      ! The distance from the bottom, normalized by Hbbl [nondim]
   real :: z2_wt   ! A nondimensional (0-1) weight used when calculating z2.
   real :: z_clear ! The clearance of an interface above the surrounding topography [H ~> m or kg m-2].
-  real :: a_cpl_max  ! The maximum drag doefficient across interfaces, set so that it will be
+  real :: a_cpl_max  ! The maximum drag coefficient across interfaces, set so that it will be
                      ! representable as a 32-bit float in MKS units  [Z T-1 ~> m s-1]
   real :: h_neglect  ! A thickness that is so small it is usually lost
                      ! in roundoff and can be neglected [H ~> m or kg m-2].
@@ -1193,7 +1193,7 @@ subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i,
   h_neglect = GV%H_subroundoff
 
   if (CS%answers_2018) then
-    !   The maximum coupling coefficent was originally introduced to avoid
+    !   The maximum coupling coefficient was originally introduced to avoid
     ! truncation error problems in the tridiagonal solver. Effectively, the 1e-10
     ! sets the maximum coupling coefficient increment to 1e10 m per timestep.
     I_amax = (1.0e-10*US%Z_to_m) * dt
@@ -1759,7 +1759,7 @@ subroutine vertvisc_init(MIS, Time, G, GV, US, param_file, diag, ADp, dirs, &
   call get_param(param_file, mdl, "CFL_TRUNCATE_RAMP_TIME", CS%truncRampTime, &
                  "The time over which the CFL truncation value is ramped "//&
                  "up at the beginning of the run.", &
-                 units="s", default=0.)
+                 units="s", default=0., scale=US%s_to_T)
   CS%CFL_truncE = CS%CFL_trunc
   call get_param(param_file, mdl, "CFL_TRUNCATE_START", CS%CFL_truncS, &
                  "The start value of the truncation CFL number used when "//&
@@ -1937,14 +1937,16 @@ end subroutine vertvisc_init
 !> Update the CFL truncation value as a function of time.
 !! If called with the optional argument activate=.true., record the
 !! value of Time as the beginning of the ramp period.
-subroutine updateCFLtruncationValue(Time, CS, activate)
+subroutine updateCFLtruncationValue(Time, CS, US, activate)
   type(time_type), target, intent(in)    :: Time     !< Current model time
   type(vertvisc_CS),       pointer       :: CS       !< Vertical viscosity control structure
+  type(unit_scale_type),   intent(in)    :: US       !< A dimensional unit scaling type
   logical, optional,       intent(in)    :: activate !< Specify whether to record the value of
                                                      !! Time as the beginning of the ramp period
 
   ! Local variables
-  real :: deltaTime, wghtA
+  real :: deltaTime ! The time since CS%rampStartTime [T ~> s], which may be negative.
+  real :: wghtA     ! The relative weight of the final value [nondim]
   character(len=12) :: msg
 
   if (CS%truncRampTime==0.) return ! This indicates to ramping is turned off
@@ -1958,7 +1960,7 @@ subroutine updateCFLtruncationValue(Time, CS, activate)
     endif
   endif
   if (.not.CS%CFLrampingIsActivated) return
-  deltaTime = max( 0., time_type_to_real( Time - CS%rampStartTime ) )
+  deltaTime = max( 0., US%s_to_T*time_type_to_real( Time - CS%rampStartTime ) )
   if (deltaTime >= CS%truncRampTime) then
     CS%CFL_trunc = CS%CFL_truncE
     CS%truncRampTime = 0. ! This turns off ramping after this call
@@ -1966,7 +1968,7 @@ subroutine updateCFLtruncationValue(Time, CS, activate)
     wghtA = min( 1., deltaTime / CS%truncRampTime ) ! Linear profile in time
     !wghtA = wghtA*wghtA ! Convert linear profile to parabolic profile in time
     !wghtA = wghtA*wghtA*(3. - 2.*wghtA) ! Convert linear profile to cosine profile
-    wghtA = 1. - ( (1. - wghtA)**2 ) ! Convert linear profiel to nverted parabolic profile
+    wghtA = 1. - ( (1. - wghtA)**2 ) ! Convert linear profile to inverted parabolic profile
     CS%CFL_trunc = CS%CFL_truncS + wghtA * ( CS%CFL_truncE - CS%CFL_truncS )
   endif
   write(msg(1:12),'(es12.3)') CS%CFL_trunc
