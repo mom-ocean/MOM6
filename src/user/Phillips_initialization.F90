@@ -325,7 +325,7 @@ end function sech
 subroutine Phillips_initialize_topography(D, G, param_file, max_depth, US)
   type(dyn_horgrid_type),          intent(in)  :: G !< The dynamic horizontal grid type
   real, dimension(G%isd:G%ied,G%jsd:G%jed), &
-                                   intent(out) :: D !< Ocean bottom depth [m ~> Z]
+                                   intent(out) :: D !< Ocean bottom depth [Z ~> m]
   type(param_file_type),           intent(in)  :: param_file !< Parameter file structure
   real,                            intent(in)  :: max_depth !< Maximum model depth [Z ~> m]
   type(unit_scale_type),           intent(in)  :: US !< A dimensional unit scaling type

@@ -42,7 +42,7 @@ contains
     integer,                       intent(in) :: jsd !< Data start index in j direction
     integer,                       intent(in) :: jed !< Data end index in j direction
     integer,                       intent(in) :: nk  !< Number of levels in k direction
-    integer,                       intent(in) :: ntau !< Unknown
+    integer,                       intent(in) :: ntau !< The number of tracer time levels (always 1 for MOM6)
     integer,                       intent(in) :: axes(3) !< Domain axes?
     type(time_type),               intent(in) :: init_time !< Time
     real, dimension(:,:,:),target, intent(in) :: grid_tmask !< Mask
@@ -61,7 +61,7 @@ contains
   !> Unknown
   subroutine  generic_tracer_coupler_accumulate(IOB_struc, weight, model_time)
     type(coupler_2d_bc_type), intent(in) :: IOB_struc !< Ice Ocean Boundary flux structure
-    real,                     intent(in) :: weight !< Unknown
+    real,                     intent(in) :: weight    !< A weight for accumulating these fluxes
     type(time_type), optional,intent(in) :: model_time !< Time
   end subroutine generic_tracer_coupler_accumulate
 
@@ -69,44 +69,53 @@ contains
   subroutine generic_tracer_source(Temp,Salt,rho_dzt,dzt,hblt_depth,ilb,jlb,tau,dtts,&
        grid_dat,model_time,nbands,max_wavelength_band,sw_pen_band,opacity_band,internal_heat,&
        frunoff,grid_ht, current_wave_stress, sosga)
-    real, dimension(ilb:,jlb:,:),   intent(in) :: Temp !< Potential temperature [deg C]
-    real, dimension(ilb:,jlb:,:),   intent(in) :: Salt !< Salinity [psu]
-    real, dimension(ilb:,jlb:,:),   intent(in) :: rho_dzt !< Unknown
-    real, dimension(ilb:,jlb:,:),   intent(in) :: dzt !< Ocean layer thickness [m]
-    real, dimension(ilb:,jlb:),     intent(in) :: hblt_depth !< Boundary layer depth
-    integer,                        intent(in) :: ilb !< Lower bounds of x extent of input arrays on data domain
-    integer,                        intent(in) :: jlb !< Lower bounds of y extent of input arrays on data domain
-    integer,                        intent(in) :: tau !< Time step index of %field
-    real,                           intent(in) :: dtts !< Unknown
-    real, dimension(ilb:,jlb:),     intent(in) :: grid_dat !< Unknown
+    real, dimension(ilb:,jlb:,:),   intent(in) :: Temp   !< Potential temperature [deg C]
+    real, dimension(ilb:,jlb:,:),   intent(in) :: Salt   !< Salinity [psu]
+    real, dimension(ilb:,jlb:,:),   intent(in) :: rho_dzt !< Mass per unit area of each layer [kg m-2]
+    real, dimension(ilb:,jlb:,:),   intent(in) :: dzt    !< Ocean layer thickness [m]
+    real, dimension(ilb:,jlb:),     intent(in) :: hblt_depth !< Boundary layer depth [m]
+    integer,                        intent(in) :: ilb    !< Lower bounds of x extent of input arrays on data domain
+    integer,                        intent(in) :: jlb    !< Lower bounds of y extent of input arrays on data domain
+    integer,                        intent(in) :: tau    !< Time step index of %field
+    real,                           intent(in) :: dtts   !< The time step for this call [s]
+    real, dimension(ilb:,jlb:),     intent(in) :: grid_dat !< Grid cell areas [m2]
     type(time_type),                intent(in) :: model_time !< Time
-    integer,                        intent(in) :: nbands !< Unknown
-    real, dimension(:),             intent(in) :: max_wavelength_band !< Unknown
-    real, dimension(:,ilb:,jlb:),   intent(in) :: sw_pen_band !< Shortwave penetration
-    real, dimension(:,ilb:,jlb:,:), intent(in) :: opacity_band !< Unknown
-    real, dimension(ilb:,jlb:),optional,  intent(in) :: internal_heat !< Unknown
-    real, dimension(ilb:,jlb:),optional,  intent(in) :: frunoff !< Unknown
-    real, dimension(ilb:,jlb:),optional,  intent(in) :: grid_ht !< Unknown
-    real, dimension(ilb:,jlb:),optional , intent(in) :: current_wave_stress !< Unknown
-    real,                      optional , intent(in) :: sosga !< Global average sea surface salinity
+    integer,                        intent(in) :: nbands !< The number of bands of penetrating shortwave radiation
+    real, dimension(:),             intent(in) :: max_wavelength_band !< The maximum wavelength in each band
+                                                         !! of penetrating shortwave radiation [nm]
+    real, dimension(:,ilb:,jlb:),   intent(in) :: sw_pen_band !< Penetrating shortwave radiation per band [W m-2].
+                                                         !! The wavelength or angular direction band is the first index.
+    real, dimension(:,ilb:,jlb:,:), intent(in) :: opacity_band !< Opacity of seawater averaged over each band [m-1].
+                                                         !! The wavelength or angular direction band is the first index.
+    real, dimension(ilb:,jlb:),optional,  intent(in) :: internal_heat !< Any internal or geothermal heat
+                                                         !! sources that are applied to the ocean integrated
+                                                         !! over this timestep [degC kg m-2]
+    real, dimension(ilb:,jlb:),optional,  intent(in) :: frunoff !< Rate of iceberg calving [kg m-2 s-1]
+    real, dimension(ilb:,jlb:),optional,  intent(in) :: grid_ht !< Unknown, and presently unused by MOM6
+    real, dimension(ilb:,jlb:),optional , intent(in) :: current_wave_stress !< Unknown, and presently unused by MOM6
+    real,                      optional , intent(in) :: sosga !< Global average sea surface salinity [ppt]
   end subroutine generic_tracer_source
 
   !> Update the tracers from bottom fluxes
   subroutine generic_tracer_update_from_bottom(dt, tau, model_time)
-    real,            intent(in) :: dt !< Time step increment
+    real,            intent(in) :: dt !< Time step increment [s]
     integer,         intent(in) :: tau !< Time step index used for the concentration field
     type(time_type), intent(in) :: model_time !< Time
   end subroutine generic_tracer_update_from_bottom
 
   !> Vertically diffuse all generic tracers for GOLD ocean
   subroutine generic_tracer_vertdiff_G(h_old, ea, eb, dt, kg_m2_to_H, m_to_H, tau)
-    real, dimension(:,:,:), intent(in) :: h_old !< Unknown
-    real, dimension(:,:,:), intent(in) :: ea !< Unknown
-    real, dimension(:,:,:), intent(in) :: eb !< Unknown
-    real,                   intent(in) :: dt !< Unknown
-    real,                   intent(in) :: kg_m2_to_H !< Unknown
-    real,                   intent(in) :: m_to_H !< Unknown
-    integer,                intent(in) :: tau !< Unknown
+    real, dimension(:,:,:), intent(in) :: h_old  !< Layer thickness before entrainment [H ~> m or kg m-2]
+    real, dimension(:,:,:), intent(in) :: ea     !< The amount of fluid entrained from the layer
+                                                 !! above during this call [H ~> m or kg m-2]
+    real, dimension(:,:,:), intent(in) :: eb     !< The amount of fluid entrained from the layer
+                                                 !! below during this call [H ~> m or kg m-2]
+    real,                   intent(in) :: dt     !< The amount of time covered by this call [s]
+    real,                   intent(in) :: kg_m2_to_H !< A unit conversion factor from mass per unit
+                                                 !! area to thickness units [H m2 kg-1 ~> m3 kg-1 or 1]
+    real,                   intent(in) :: m_to_H !< A unit conversion factor from heights to
+                                                 !! thickness units [H m-1 ~> 1 or kg m-3]
+    integer,                intent(in) :: tau    !< The time level to work on (always 1 for MOM6)
   end subroutine generic_tracer_vertdiff_G
 
   !> Set the coupler values for each generic tracer
@@ -115,11 +124,11 @@ contains
     integer,                     intent(in) :: ilb !< Lower bounds of x extent of input arrays on data domain
     integer,                     intent(in) :: jlb !< Lower bounds of y extent of input arrays on data domain
     integer,                     intent(in) :: tau !< Time step index of %field
-    real, dimension(ilb:,jlb:),  intent(in) :: ST !< Sea surface temperature [deg C]
-    real, dimension(ilb:,jlb:),  intent(in) :: SS !< Sea surface salinity [psu]
+    real, dimension(ilb:,jlb:),  intent(in) :: ST !< Sea surface temperature [degC]
+    real, dimension(ilb:,jlb:),  intent(in) :: SS !< Sea surface salinity [ppt]
     real, dimension(ilb:,jlb:,:,:), intent(in) :: rho !< Ocean density [kg m-3]
     real, dimension(ilb:,jlb:,:), optional, intent(in) :: dzt !< Layer thickness [m]
-    real,           optional, intent(in) :: sosga !< Unknown
+    real,           optional, intent(in) :: sosga !< Global mean sea surface salinity [ppt]
     type(time_type),optional, intent(in) :: model_time !< Time
   end subroutine generic_tracer_coupler_set
 

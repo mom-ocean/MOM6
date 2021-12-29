@@ -1105,7 +1105,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
   ! To accommodate vanishing upper layers, we need to allow for an instantaneous
   ! distribution of forcing over some finite vertical extent. The bulk mixed layer
   ! code handles this issue properly.
-  H_limit_fluxes = max(GV%Angstrom_H, 1.E-30*GV%m_to_H)
+  H_limit_fluxes = max(GV%Angstrom_H, 1.0e-30*GV%m_to_H)
 
   ! diagnostic to see if need to create mass to avoid grounding
   if (CS%id_createdH>0) CS%createdH(:,:) = 0.
@@ -1160,7 +1160,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
     ! Nothing more is done on this j-slice if there is no buoyancy forcing.
     if (.not.associated(fluxes%sw)) cycle
 
-    if (nsw>0) call extract_optics_slice(optics, j, G, GV, opacity=opacityBand, opacity_scale=(1.0/GV%m_to_H))
+    if (nsw>0) call extract_optics_slice(optics, j, G, GV, opacity=opacityBand, opacity_scale=(1.0/GV%Z_to_H))
 
     ! The surface forcing is contained in the fluxes type.
     ! We aggregate the thermodynamic forcing for a time step into the following:

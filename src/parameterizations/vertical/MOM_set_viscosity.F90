@@ -1191,7 +1191,7 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS)
   real :: Uh2   ! The squared magnitude of the difference between the velocity
                 ! integrated through the mixed layer and the velocity of the
                 ! interior layer layer times the depth of the the mixed layer
-                ! [H2 Z2 T-2 ~> m4 s-2 or kg2 m-2 s-2].
+                ! [H2 L2 T-2 ~> m4 s-2 or kg2 m-2 s-2].
   real :: htot_vel  ! Sum of the layer thicknesses up to some point [H ~> m or kg m-2].
   real :: hwtot     ! Sum of the thicknesses used to calculate
                     ! the near-bottom velocity magnitude [H ~> m or kg m-2].

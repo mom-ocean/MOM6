@@ -424,7 +424,7 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, GV, US, C
       eps(i,k) = 0.0 ; if (k > nkmb) eps(i,k) = GV%Angstrom_H
       T(i,k) = tv%T(i,j,k) ; S(i,k) = tv%S(i,j,k)
     enddo ; enddo
-    if (nsw>0) call extract_optics_slice(optics, j, G, GV, opacity=opacity_band, opacity_scale=GV%H_to_m)
+    if (nsw>0) call extract_optics_slice(optics, j, G, GV, opacity=opacity_band, opacity_scale=GV%H_to_Z)
 
     do k=1,nz ; do i=is,ie
       d_ea(i,k) = 0.0 ; d_eb(i,k) = 0.0
