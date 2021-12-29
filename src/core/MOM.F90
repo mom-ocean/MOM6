@@ -1495,7 +1495,7 @@ subroutine step_offline(forces, fluxes, sfc_state, Time_start, time_interval, CS
   type(forcing),      intent(inout) :: fluxes        !< pointers to forcing fields
   type(surface),      intent(inout) :: sfc_state     !< surface ocean state
   type(time_type),    intent(in)    :: Time_start    !< starting time of a segment, as a time type
-  real,               intent(in)    :: time_interval !< time interval
+  real,               intent(in)    :: time_interval !< time interval [s]
   type(MOM_control_struct), intent(inout) :: CS      !< control structure from initialize_MOM
 
   ! Local pointers
@@ -1573,17 +1573,17 @@ subroutine step_offline(forces, fluxes, sfc_state, Time_start, time_interval, CS
       ! call update_transport_from_files(G, GV, CS%offline_CSp, h_end, eatr, ebtr, uhtr, vhtr, &
       !     CS%tv%T, CS%tv%S, fluxes, CS%use_ALE_algorithm)
       ! call update_transport_from_arrays(CS%offline_CSp)
-      call update_offline_fields(CS%offline_CSp, CS%h, fluxes, CS%use_ALE_algorithm)
+      call update_offline_fields(CS%offline_CSp, G, GV, US, CS%h, fluxes, CS%use_ALE_algorithm)
 
       ! Apply any fluxes into the ocean
       call offline_fw_fluxes_into_ocean(G, GV, CS%offline_CSp, fluxes, CS%h)
 
       if (.not.CS%diabatic_first) then
-        call offline_advection_ale(fluxes, Time_start, time_interval, CS%offline_CSp, id_clock_ALE, &
-            CS%h, uhtr, vhtr, converged=adv_converged)
+        call offline_advection_ale(fluxes, Time_start, time_interval, G, GV, US, CS%offline_CSp, &
+                                   id_clock_ALE, CS%h, uhtr, vhtr, converged=adv_converged)
 
         ! Redistribute any remaining transport
-        call offline_redistribute_residual(CS%offline_CSp, CS%h, uhtr, vhtr, adv_converged)
+        call offline_redistribute_residual(CS%offline_CSp, G, GV, US, CS%h, uhtr, vhtr, adv_converged)
 
         ! Perform offline diffusion if requested
         if (.not. skip_diffusion) then
@@ -1594,23 +1594,24 @@ subroutine step_offline(forces, fluxes, sfc_state, Time_start, time_interval, CS
             call calc_slope_functions(CS%h, CS%tv, dt_offline, G, GV, US, CS%VarMix, OBC=CS%OBC)
           endif
           call tracer_hordiff(CS%h, dt_offline, CS%MEKE, CS%VarMix, G, GV, US, &
-              CS%tracer_diff_CSp, CS%tracer_Reg, CS%tv)
+                              CS%tracer_diff_CSp, CS%tracer_Reg, CS%tv)
         endif
       endif
     endif
     ! The functions related to column physics of tracers is performed separately in ALE mode
     if (do_vertical) then
-      call offline_diabatic_ale(fluxes, Time_start, Time_end, CS%offline_CSp, CS%h, eatr, ebtr)
+      call offline_diabatic_ale(fluxes, Time_start, Time_end, G, GV, US, CS%offline_CSp, &
+                                CS%h, eatr, ebtr)
     endif
 
     ! Last thing that needs to be done is the final ALE remapping
     if (last_iter) then
       if (CS%diabatic_first) then
-        call offline_advection_ale(fluxes, Time_start, time_interval, CS%offline_CSp, id_clock_ALE, &
-            CS%h, uhtr, vhtr, converged=adv_converged)
+        call offline_advection_ale(fluxes, Time_start, time_interval, G, GV, US, CS%offline_CSp, &
+                                   id_clock_ALE, CS%h, uhtr, vhtr, converged=adv_converged)
 
         ! Redistribute any remaining transport and perform the remaining advection
-        call offline_redistribute_residual(CS%offline_CSp, CS%h, uhtr, vhtr, adv_converged)
+        call offline_redistribute_residual(CS%offline_CSp, G, GV, US, CS%h, uhtr, vhtr, adv_converged)
                 ! Perform offline diffusion if requested
         if (.not. skip_diffusion) then
           if (CS%VarMix%use_variable_mixing) then
@@ -1630,7 +1631,7 @@ subroutine step_offline(forces, fluxes, sfc_state, Time_start, time_interval, CS
       call offline_fw_fluxes_out_ocean(G, GV, CS%offline_CSp, fluxes, CS%h)
       ! These diagnostic can be used to identify which grid points did not converge within
       ! the specified number of advection sub iterations
-      call post_offline_convergence_diags(CS%offline_CSp, CS%h, h_end, uhtr, vhtr)
+      call post_offline_convergence_diags(G, GV, CS%offline_CSp, CS%h, h_end, uhtr, vhtr)
 
       ! Call ALE one last time to make sure that tracers are remapped onto the layer thicknesses
       ! stored from the forward run
@@ -1649,9 +1650,9 @@ subroutine step_offline(forces, fluxes, sfc_state, Time_start, time_interval, CS
       call MOM_error(FATAL, &
           "For offline tracer mode in a non-ALE configuration, dt_offline must equal time_interval")
     endif
-    call update_offline_fields(CS%offline_CSp, CS%h, fluxes, CS%use_ALE_algorithm)
-    call offline_advection_layer(fluxes, Time_start, time_interval, CS%offline_CSp, &
-        CS%h, eatr, ebtr, uhtr, vhtr)
+    call update_offline_fields(CS%offline_CSp, G, GV, US, CS%h, fluxes, CS%use_ALE_algorithm)
+    call offline_advection_layer(fluxes, Time_start, time_interval, G, GV, US, CS%offline_CSp, &
+                                 CS%h, eatr, ebtr, uhtr, vhtr)
     ! Perform offline diffusion if requested
     if (.not. skip_diffusion) then
       call tracer_hordiff(h_end, dt_offline, CS%MEKE, CS%VarMix, G, GV, US, &
@@ -2796,10 +2797,10 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
     ! Setup some initial parameterizations and also assign some of the subtypes
     call offline_transport_init(param_file, CS%offline_CSp, CS%diabatic_CSp, G, GV, US)
     call insert_offline_main( CS=CS%offline_CSp, ALE_CSp=CS%ALE_CSp, diabatic_CSp=CS%diabatic_CSp, &
-                              diag=CS%diag, OBC=CS%OBC, tracer_adv_CSp=CS%tracer_adv_CSp,              &
-                              tracer_flow_CSp=CS%tracer_flow_CSp, tracer_Reg=CS%tracer_Reg,            &
+                              diag=CS%diag, OBC=CS%OBC, tracer_adv_CSp=CS%tracer_adv_CSp, &
+                              tracer_flow_CSp=CS%tracer_flow_CSp, tracer_Reg=CS%tracer_Reg, &
                               tv=CS%tv, x_before_y=(MODULO(first_direction,2)==0), debug=CS%debug )
-    call register_diags_offline_transport(Time, CS%diag, CS%offline_CSp)
+    call register_diags_offline_transport(Time, CS%diag, CS%offline_CSp, GV, US)
   endif
 
   !--- set up group pass for u,v,T,S and h. pass_uv_T_S_h also is used in step_MOM
@@ -3522,7 +3523,7 @@ subroutine extract_surface_state(CS, sfc_state_in)
                 'Extreme surface sfc_state detected: i=',ig,'j=',jg, &
                 'lon=',G%geoLonT(i,j), 'lat=',G%geoLatT(i,j), &
                 'x=',G%gridLonT(ig), 'y=',G%gridLatT(jg), &
-                'D=',US%Z_to_m*(G%bathyT(i,j)+G%Z_ref),  'SSH=',US%Z_to_m*sfc_state%sea_lev(i,j), &
+                'D=',US%Z_to_m*(G%bathyT(i,j)+G%Z_ref), 'SSH=',US%Z_to_m*sfc_state%sea_lev(i,j), &
                 'SST=',sfc_state%SST(i,j), 'SSS=',sfc_state%SSS(i,j), &
                 'U-=',US%L_T_to_m_s*sfc_state%u(I-1,j), 'U+=',US%L_T_to_m_s*sfc_state%u(I,j), &
                 'V-=',US%L_T_to_m_s*sfc_state%v(i,J-1), 'V+=',US%L_T_to_m_s*sfc_state%v(i,J)
@@ -3531,7 +3532,7 @@ subroutine extract_surface_state(CS, sfc_state_in)
                 'Extreme surface sfc_state detected: i=',ig,'j=',jg, &
                 'lon=',G%geoLonT(i,j), 'lat=',G%geoLatT(i,j), &
                 'x=',G%gridLonT(i), 'y=',G%gridLatT(j), &
-                'D=',US%Z_to_m*(G%bathyT(i,j)+G%Z_ref),  'SSH=',US%Z_to_m*sfc_state%sea_lev(i,j), &
+                'D=',US%Z_to_m*(G%bathyT(i,j)+G%Z_ref), 'SSH=',US%Z_to_m*sfc_state%sea_lev(i,j), &
                 'U-=',US%L_T_to_m_s*sfc_state%u(I-1,j), 'U+=',US%L_T_to_m_s*sfc_state%u(I,j), &
                 'V-=',US%L_T_to_m_s*sfc_state%v(i,J-1), 'V+=',US%L_T_to_m_s*sfc_state%v(i,J)
             endif

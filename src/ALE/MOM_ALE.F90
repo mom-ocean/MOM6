@@ -459,21 +459,21 @@ subroutine ALE_offline_inputs(CS, G, GV, h, tv, Reg, uhtr, vhtr, Kd, debug, OBC)
   type(ALE_CS),                                 pointer       :: CS    !< Regridding parameters and options
   type(ocean_grid_type),                        intent(in   ) :: G     !< Ocean grid informations
   type(verticalGrid_type),                      intent(in   ) :: GV    !< Ocean vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),    intent(inout) :: h     !< Layer thicknesses
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),    intent(inout) :: h     !< Layer thicknesses [H ~> m or kg m-2]
   type(thermo_var_ptrs),                        intent(inout) :: tv    !< Thermodynamic variable structure
   type(tracer_registry_type),                   pointer       :: Reg   !< Tracer registry structure
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)),   intent(inout) :: uhtr  !< Zonal mass fluxes
-  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)),   intent(inout) :: vhtr  !< Meridional mass fluxes
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1),  intent(inout) :: Kd    !< Input diffusivites
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)),   intent(inout) :: uhtr  !< Zonal mass fluxes [H L2 ~> m3 or kg]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)),   intent(inout) :: vhtr  !< Meridional mass fluxes [H L2 ~> m3 or kg]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1),  intent(inout) :: Kd    !< Input diffusivites [Z2 T-1 ~> m2 s-1]
   logical,                                      intent(in   ) :: debug !< If true, then turn checksums
   type(ocean_OBC_type),                         pointer       :: OBC   !< Open boundary structure
   ! Local variables
   integer :: nk, i, j, k, isc, iec, jsc, jec
-  real, dimension(SZI_(G), SZJ_(G), SZK_(GV))   :: h_new    ! Layer thicknesses after regridding
+  real, dimension(SZI_(G), SZJ_(G), SZK_(GV))   :: h_new    ! Layer thicknesses after regridding [H ~> m or kg m-2]
   real, dimension(SZI_(G), SZJ_(G), SZK_(GV)+1) :: dzRegrid ! The change in grid interface positions
-  real, dimension(SZK_(GV)) :: h_src
-  real, dimension(SZK_(GV)) :: h_dest, uh_dest
-  real, dimension(SZK_(GV)) :: temp_vec
+  real, dimension(SZK_(GV)) :: h_src   ! Source grid thicknesses at velocity points [H ~> m or kg m-2]
+  real, dimension(SZK_(GV)) :: h_dest  ! Destination grid  thicknesses at velocity points [H ~> m or kg m-2]
+  real, dimension(SZK_(GV)) :: temp_vec ! Transports on the destination grid [H L2 ~> m3 or kg]
 
   nk = GV%ke; isc = G%isc; iec = G%iec; jsc = G%jsc; jec = G%jec
   dzRegrid(:,:,:) = 0.0

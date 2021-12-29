@@ -34,7 +34,7 @@ type, public :: tracer_advect_CS ; private
   logical :: debug                 !< If true, write verbose checksums for debugging purposes.
   logical :: usePPM                !< If true, use PPM instead of PLM
   logical :: useHuynh              !< If true, use the Huynh scheme for PPM interface values
-  type(group_pass_type) :: pass_uhr_vhr_t_hprev !< A structred used for group passes
+  type(group_pass_type) :: pass_uhr_vhr_t_hprev !< A structure used for group passes
 end type tracer_advect_CS
 
 !>@{ CPU time clocks
@@ -47,34 +47,41 @@ contains
 
 !> This routine time steps the tracer concentration using a
 !! monotonic, conservative, weakly diffusive scheme.
-subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, GV, US, CS, Reg, &
-      h_prev_opt, max_iter_in, x_first_in, uhr_out, vhr_out, h_out)
+subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, GV, US, CS, Reg, x_first_in, &
+                         vol_prev, max_iter_in, update_vol_prev, uhr_out, vhr_out)
   type(ocean_grid_type),   intent(inout) :: G     !< ocean grid structure
   type(verticalGrid_type), intent(in)    :: GV    !< ocean vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
-                           intent(in)    :: h_end !< layer thickness after advection [H ~> m or kg m-2]
+                           intent(in)    :: h_end !< Layer thickness after advection [H ~> m or kg m-2]
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
-                           intent(in)    :: uhtr  !< accumulated volume/mass flux through zonal face [H L2 ~> m3 or kg]
+                           intent(in)    :: uhtr  !< Accumulated volume or mass flux through the
+                                                  !! zonal faces [H L2 ~> m3 or kg]
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
-                           intent(in)    :: vhtr  !< accumulated volume/mass flux through merid face [H L2 ~> m3 or kg]
+                           intent(in)    :: vhtr  !< Accumulated volume or mass flux through the
+                                                  !! meridional faces [H L2 ~> m3 or kg]
   type(ocean_OBC_type),    pointer       :: OBC   !< specifies whether, where, and what OBCs are used
   real,                    intent(in)    :: dt    !< time increment [T ~> s]
   type(unit_scale_type),   intent(in)    :: US    !< A dimensional unit scaling type
   type(tracer_advect_CS),  pointer       :: CS    !< control structure for module
   type(tracer_registry_type), pointer    :: Reg   !< pointer to tracer registry
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
-                 optional, intent(in)    :: h_prev_opt !< layer thickness before advection [H ~> m or kg m-2]
-  integer,       optional, intent(in)    :: max_iter_in !< The maximum number of iterations
   logical,       optional, intent(in)    :: x_first_in !< If present, indicate whether to update
                                                   !! first in the x- or y-direction.
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
-                 optional, intent(out)    :: uhr_out  !< accumulated volume/mass flux through zonal face
-                                                  !! [H L2 ~> m3 or kg]
-  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
-                 optional, intent(out)    :: vhr_out  !< accumulated volume/mass flux through merid face
-                                                  !! [H L2 ~> m3 or kg]
+  ! The remaining optional arguments are only used in offline tracer mode.
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
-                 optional, intent(out)    :: h_out !< layer thickness before advection [H ~> m or kg m-2]
+                 optional, intent(inout) :: vol_prev !< Cell volume before advection [H L2 ~> m3 or kg].
+                                                  !! If update_vol_prev is true, the returned value is
+                                                  !! the cell volume after the transport that was done
+                                                  !! by this call, and if all the transport could be
+                                                  !! accommodated it should be close to h_end*G%areaT.
+  integer,       optional, intent(in)    :: max_iter_in !< The maximum number of iterations
+  logical,       optional, intent(in)    :: update_vol_prev !< If present and true, update vol_prev to
+                                                  !! return its value after the tracer have been updated.
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
+                 optional, intent(out)   :: uhr_out !< Remaining accumulated volume or mass fluxes
+                                                  !! through the zonal faces [H L2 ~> m3 or kg]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
+                 optional, intent(out)   :: vhr_out !< Remaining accumulated volume or mass fluxes
+                                                  !! through the meridional faces [H L2 ~> m3 or kg]
 
   type(tracer_type) :: Tr(MAX_FIELDS_) ! The array of registered tracers
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: &
@@ -135,9 +142,7 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, GV, US, CS, Reg, &
   enddo
   call cpu_clock_end(id_clock_pass)
 
-!$OMP parallel default(none) shared(nz,jsd,jed,IsdB,IedB,uhr,jsdB,jedB,Isd,Ied,vhr, &
-!$OMP                               hprev,domore_k,js,je,is,ie,uhtr,vhtr,G,GV,h_end,&
-!$OMP                               uh_neglect,vh_neglect,ntr,Tr,h_prev_opt)
+  !$OMP parallel default(shared)
 
   ! This initializes the halos of uhr and vhr because pass_vector might do
   ! calculations on them, even though they are never used.
@@ -150,7 +155,7 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, GV, US, CS, Reg, &
     !  Put the remaining (total) thickness fluxes into uhr and vhr.
     do j=js,je ; do I=is-1,ie ; uhr(I,j,k) = uhtr(I,j,k) ; enddo ; enddo
     do J=js-1,je ; do i=is,ie ; vhr(i,J,k) = vhtr(i,J,k) ; enddo ; enddo
-    if (.not. present(h_prev_opt)) then
+    if (.not. present(vol_prev)) then
     !   This loop reconstructs the thickness field the last time that the
     ! tracers were updated, probably just after the diabatic forcing.  A useful
     ! diagnostic could be to compare this reconstruction with that older value.
@@ -165,7 +170,7 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, GV, US, CS, Reg, &
       enddo ; enddo
     else
       do i=is,ie ; do j=js,je
-        hprev(i,j,k) = h_prev_opt(i,j,k)
+        hprev(i,j,k) = vol_prev(i,j,k)
       enddo ; enddo
     endif
   enddo
@@ -324,7 +329,9 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, GV, US, CS, Reg, &
 
   if (present(uhr_out)) uhr_out(:,:,:) = uhr(:,:,:)
   if (present(vhr_out)) vhr_out(:,:,:) = vhr(:,:,:)
-  if (present(h_out)) h_out(:,:,:) = hprev(:,:,:)
+  if (present(vol_prev) .and. present(update_vol_prev)) then
+    if (update_vol_prev) vol_prev(:,:,:) = hprev(:,:,:)
+  endif
 
   call cpu_clock_end(id_clock_advect)
 
@@ -380,7 +387,7 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
     CFL                 ! The absolute value of the advective upwind-cell CFL number [nondim].
   real :: min_h         ! The minimum thickness that can be realized during
                         ! any of the passes [H ~> m or kg m-2].
-  real :: tiny_h        ! The smallest numerically invertable thickness [H ~> m or kg m-2].
+  real :: tiny_h        ! The smallest numerically invertible thickness [H ~> m or kg m-2].
   real :: h_neglect     ! A thickness that is so small it is usually lost
                         ! in roundoff and can be neglected [H ~> m or kg m-2].
   logical :: do_i(SZIB_(G),SZJ_(G))     ! If true, work on given points.
@@ -744,7 +751,7 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
     CFL                 ! The absolute value of the advective upwind-cell CFL number [nondim].
   real :: min_h         ! The minimum thickness that can be realized during
                         ! any of the passes [H ~> m or kg m-2].
-  real :: tiny_h        ! The smallest numerically invertable thickness [H ~> m or kg m-2].
+  real :: tiny_h        ! The smallest numerically invertible thickness [H ~> m or kg m-2].
   real :: h_neglect     ! A thickness that is so small it is usually lost
                         ! in roundoff and can be neglected [H ~> m or kg m-2].
   logical :: do_j_tr(SZJ_(G))   ! If true, calculate the tracer profiles.
