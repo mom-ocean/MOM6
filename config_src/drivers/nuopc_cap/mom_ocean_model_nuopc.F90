@@ -62,8 +62,7 @@ use MOM_surface_forcing_nuopc, only : surface_forcing_init, convert_IOB_to_fluxe
 use MOM_surface_forcing_nuopc, only : convert_IOB_to_forces, ice_ocn_bnd_type_chksum
 use MOM_surface_forcing_nuopc, only : ice_ocean_boundary_type, surface_forcing_CS
 use MOM_surface_forcing_nuopc, only : forcing_save_restart
-use MOM_domains,               only : root_PE,num_PEs
-use MOM_coms,                  only : Get_PElist
+use get_stochy_pattern_mod,  only : write_stoch_restart_ocn
 use iso_fortran_env,           only : int64
 
 #include <MOM_memory.h>
@@ -178,8 +177,10 @@ type, public :: ocean_state_type ; private
                               !! steps can span multiple coupled time steps.
   logical :: diabatic_first   !< If true, apply diabatic and thermodynamic
                               !! processes before time stepping the dynamics.
-  logical,public :: do_sppt   !< If true, write stochastic physics restarts
-  logical,public :: pert_epbl !< If true, write stochastic physics restarts
+  logical :: do_sppt         !< If true, stochastically perturb the diabatic and
+                             !! write restarts
+  logical :: pert_epbl       !< If true, then randomly perturb the KE dissipation and
+                             !! genration termsand write restarts
 
   real :: eps_omesh           !< Max allowable difference between ESMF mesh and MOM6
                               !! domain coordinates
@@ -428,10 +429,11 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn, i
 
   endif
 
-  ! check to see if stochastic physics is active
+  call extract_surface_state(OS%MOM_CSp, OS%sfc_state)
+! get number of processors and PE list for stocasthci physics initialization
   call get_param(param_file, mdl, "DO_SPPT", OS%do_sppt, &
                  "If true, then stochastically perturb the thermodynamic "//&
-                 "tendemcies of T,S, amd h.  Amplitude and correlations are "//&
+                 "tendencies of T,S, and h.  Amplitude and correlations are "//&
                  "controlled by the nam_stoch namelist in the UFS model only.", &
                  default=.false.)
   call get_param(param_file, mdl, "PERT_EPBL", OS%pert_epbl, &
@@ -439,7 +441,6 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn, i
                  "production and dissipation terms.  Amplitude and correlations are "//&
                  "controlled by the nam_stoch namelist in the UFS model only.", &
                  default=.false.)
-  call extract_surface_state(OS%MOM_CSp, OS%sfc_state)
 
   call close_param_file(param_file)
   call diag_mediator_close_registration(OS%diag)
@@ -701,12 +702,15 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
 end subroutine update_ocean_model
 
 !> This subroutine writes out the ocean model restart file.
-subroutine ocean_model_restart(OS, timestamp, restartname, num_rest_files)
+subroutine ocean_model_restart(OS, timestamp, restartname, stoch_restartname, num_rest_files)
   type(ocean_state_type),     pointer    :: OS !< A pointer to the structure containing the
                                                !! internal ocean state being saved to a restart file
   character(len=*), optional, intent(in) :: timestamp !< An optional timestamp string that should be
                                                !! prepended to the file name. (Currently this is unused.)
   character(len=*), optional, intent(in) :: restartname !< Name of restart file to use
+                                               !! This option distinguishes the cesm interface from the
+                                               !! non-cesm interface
+  character(len=*), optional, intent(in) :: stoch_restartname !< Name of restart file to use
                                                !! This option distinguishes the cesm interface from the
                                                !! non-cesm interface
   integer, optional, intent(out)         :: num_rest_files !< number of restart files written
@@ -746,6 +750,11 @@ subroutine ocean_model_restart(OS, timestamp, restartname, num_rest_files)
         if (OS%use_ice_shelf) then
            call ice_shelf_save_restart(OS%Ice_shelf_CSp, OS%Time, OS%dirs%restart_output_dir)
         endif
+     endif
+  endif
+  if (present(stoch_restartname)) then
+      if (OS%do_sppt .OR. OS%pert_epbl) then
+         call write_stoch_restart_ocn('RESTART/'//trim(stoch_restartname))
      endif
   endif
 

@@ -19,20 +19,20 @@ use mpp_domains_mod,         only : mpp_define_domains, mpp_get_compute_domain, 
 use MOM_domains,             only : root_PE,num_PEs
 use MOM_coms,                only : Get_PElist
 use stochastic_physics,      only : init_stochastic_physics_ocn, run_stochastic_physics_ocn
-use get_stochy_pattern_mod, only: write_stoch_restart_ocn
 
 #include <MOM_memory.h>
 
 implicit none ; private
 
-public stochastics_init, update_stochastics, write_mom_restart_stoch
+public stochastics_init, update_stochastics
 
 !> This control structure holds parameters for the MOM_stochastics module
 type, public:: stochastic_CS
-  logical :: do_sppt                 !< If true, stochastically perturb the diabatic
-  logical :: pert_epbl       !! If true, then randomly perturb the KE dissipation and genration terms
-  integer :: id_sppt_wts  = -1
-  integer :: id_epbl1_wts=-1,id_epbl2_wts=-1
+  logical :: do_sppt         !< If true, stochastically perturb the diabatic
+  logical :: pert_epbl       !< If true, then randomly perturb the KE dissipation and genration terms
+  integer :: id_sppt_wts  = -1 !< Diagnostic id for SPPT
+  integer :: id_epbl1_wts=-1 !< Diagnostic id for epbl generation perturbation
+  integer :: id_epbl2_wts=-1 !< Diagnostic id for epbl dissipation perturbation
   ! stochastic patterns
   real, allocatable :: sppt_wts(:,:)  !< Random pattern for ocean SPPT
                                      !! tendencies with a number between 0 and 2
@@ -47,9 +47,9 @@ contains
 !!   This subroutine initializes the stochastics physics control structure.
 subroutine stochastics_init(dt, grid, GV, CS, param_file, diag, Time)
   real, intent(in)                     :: dt       !< time step [T ~> s]
-  type(ocean_grid_type),   intent(in)  :: grid     ! horizontal grid information
-  type(verticalGrid_type), intent(in)  :: GV       ! vertical grid structure
-  type(stochastic_CS), pointer,     intent(inout):: CS
+  type(ocean_grid_type),   intent(in)  :: grid     !< horizontal grid information
+  type(verticalGrid_type), intent(in)  :: GV       !< vertical grid structure
+  type(stochastic_CS), pointer,     intent(inout):: CS !< stochastic control structure
   type(param_file_type),   intent(in)    :: param_file !< A structure to parse for run-time parameters
   type(diag_ctrl), target, intent(inout) :: diag             !< structure to regulate diagnostic output
   type(time_type), target                :: Time             !< model time
@@ -59,7 +59,7 @@ subroutine stochastics_init(dt, grid, GV, CS, param_file, diag, Time)
   integer :: num_procs         ! number of processors to pass to stochastic physics
   integer :: iret              ! return code from stochastic physics
   integer :: me                !  my pe
-  integer :: master            !  root pe
+  integer :: pe_zero           !  root pe
   integer :: nx                ! number of x-points including halo
   integer :: ny                ! number of x-points including halo
 
@@ -95,11 +95,11 @@ subroutine stochastics_init(dt, grid, GV, CS, param_file, diag, Time)
      num_procs=num_PEs()
      allocate(pelist(num_procs))
      call Get_PElist(pelist,commID = mom_comm)
-     master=root_PE()
+     pe_zero=root_PE()
      nx = grid%ied - grid%isd + 1
      ny = grid%jed - grid%jsd + 1
      call init_stochastic_physics_ocn(dt,grid%geoLonT,grid%geoLatT,nx,ny,GV%ke, &
-                                      CS%pert_epbl,CS%do_sppt,master,mom_comm,iret)
+                                      CS%pert_epbl,CS%do_sppt,pe_zero,mom_comm,iret)
      if (iret/=0)  then
          call MOM_error(FATAL, "call to init_stochastic_physics_ocn failed")
          return
@@ -139,17 +139,6 @@ subroutine update_stochastics(CS)
 
   return
 end subroutine update_stochastics
-
-!< wrapper to write ocean stochastic restarts
-subroutine write_mom_restart_stoch(filename)
-  character(len=*) :: filename
-
-  call callTree_enter("write_mom_restart_stoch(), MOM_stochastics.F90")
-
-  call write_stoch_restart_ocn(filename)
-
-  return
-end subroutine write_mom_restart_stoch
 
 end module MOM_stochastics
 
