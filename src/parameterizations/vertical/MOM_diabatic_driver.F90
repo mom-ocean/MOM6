@@ -296,7 +296,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
 
   ! local variables
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1) :: &
-    eta      ! Interface heights before diapycnal mixing [m].
+    eta      ! Interface heights before diapycnal mixing [Z ~> m]
   real, dimension(SZI_(G),SZJ_(G),CS%nMode) :: &
     cn_IGW   ! baroclinic internal gravity wave speeds [L T-1 ~> m s-1]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: temp_diag  ! Previous temperature for diagnostics [degC]
@@ -350,7 +350,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
   if (CS%id_T_predia > 0) call post_data(CS%id_T_predia, tv%T, CS%diag)
   if (CS%id_S_predia > 0) call post_data(CS%id_S_predia, tv%S, CS%diag)
   if (CS%id_e_predia > 0) then
-    call find_eta(h, tv, G, GV, US, eta, eta_to_m=1.0, dZref=G%Z_ref)
+    call find_eta(h, tv, G, GV, US, eta, dZref=G%Z_ref)
     call post_data(CS%id_e_predia, eta, CS%diag)
   endif
 
@@ -2590,6 +2590,7 @@ subroutine extract_diabatic_member(CS, opacity_CSp, optics_CSp, evap_CFL_limit, 
   if (present(optics_CSp))        optics_CSp  => CS%optics
   if (present(KPP_CSp))           KPP_CSp     => CS%KPP_CSp
   if (present(energetic_PBL_CSp)) energetic_PBL_CSp => CS%energetic_PBL
+  if (present(diabatic_aux_CSp)) diabatic_aux_CSp => CS%diabatic_aux_CSp
 
   ! Constants within diabatic_CS
   if (present(evap_CFL_limit))        evap_CFL_limit = CS%evap_CFL_limit
@@ -3229,7 +3230,7 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
       'Layer Thickness before diabatic forcing', &
       trim(thickness_units), conversion=GV%H_to_MKS, v_extensive=.true.)
   CS%id_e_predia = register_diag_field('ocean_model', 'e_predia', diag%axesTi, Time, &
-      'Interface Heights before diabatic forcing', 'm')
+      'Interface Heights before diabatic forcing', 'm', conversion=US%Z_to_m)
   if (use_temperature) then
     CS%id_T_predia = register_diag_field('ocean_model', 'temp_predia', diag%axesTL, Time, &
         'Potential Temperature', 'degC')
