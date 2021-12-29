@@ -55,21 +55,13 @@ subroutine update_h_horizontal_flux(G, GV, uhtr, vhtr, h_pre, h_new)
   ! Local variables
   integer :: i, j, k, m, is, ie, js, je, nz
   ! Set index-related variables for fields on T-grid
-  is  = G%isc ; ie  = G%iec ; js  = G%jsc ; je  = G%jec ; nz = GV%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
   do k=1,nz
     do i=is-1,ie+1 ; do j=js-1,je+1
 
       h_new(i,j,k) = max(0.0, G%areaT(i,j)*h_pre(i,j,k) + &
           ((uhtr(I-1,j,k) - uhtr(I,j,k)) + (vhtr(i,J-1,k) - vhtr(i,J,k))))
-
-      ! This line was used previously, but it makes no sense, as it applies to the case of
-      ! wetting, not drying, and it does not seem to serve any useful purpose. Test runs
-      ! without this line seem to work properly, but it is being retained in a comment
-      ! pending verification that it is in fact unnecessary.
-
-      ! h_new(i,j,k) = h_new(i,j,k) + &
-      !     max(GV%Angstrom_H, 1.0e-13*h_new(i,j,k) - G%areaT(i,j)*h_pre(i,j,k))
 
       ! Convert back to thickness
       h_new(i,j,k) = max(GV%Angstrom_H, h_new(i,j,k) * G%IareaT(i,j))
@@ -98,31 +90,22 @@ subroutine update_h_vertical_flux(G, GV, ea, eb, h_pre, h_new)
   ! Local variables
   integer :: i, j, k, m, is, ie, js, je, nz
   ! Set index-related variables for fields on T-grid
-  is  = G%isc ; ie  = G%iec ; js  = G%jsc ; je  = G%jec ; nz = GV%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
   ! Update h_new with convergence of vertical mass transports
   do j=js-1,je+1
     do i=is-1,ie+1
       ! Top layer
       h_new(i,j,1) = max(0.0, h_pre(i,j,1) + ((eb(i,j,1) - ea(i,j,2)) + ea(i,j,1)))
-      ! h_new(i,j,1) = h_new(i,j,1) + max(0.0, 1.0e-13*h_new(i,j,1) - h_pre(i,j,1))
 
       ! Bottom layer
       h_new(i,j,nz) = max(0.0, h_pre(i,j,nz) + ((ea(i,j,nz) - eb(i,j,nz-1)) + eb(i,j,nz)))
-      ! h_new(i,j,nz) = h_new(i,j,nz) + max(0.0, 1.0e-13*h_new(i,j,nz) - h_pre(i,j,nz))
     enddo
 
     ! Interior layers
     do k=2,nz-1 ; do i=is-1,ie+1
       h_new(i,j,k) = max(0.0, h_pre(i,j,k) + ((ea(i,j,k) - eb(i,j,k-1)) + &
                                               (eb(i,j,k) - ea(i,j,k+1))))
-
-      ! This line and its two counterparts above were used previously, but it makes no sense as
-      ! written because it acts in the case of wetting, not drying, and it does not seem to serve
-      ! any useful purpose.  Test runs without these lines seem to work fine, but they are
-      ! being retained in comments pending verification that they are in fact unnecessary.
-
-      ! h_new(i,j,k) = h_new(i,j,k) + max(0.0, 1.0e-13*h_new(i,j,k) - h_pre(i,j,k))
     enddo ; enddo
   enddo
 
@@ -165,7 +148,7 @@ subroutine limit_mass_flux_3d(G, GV, uh, vh, ea, eb, h_pre)
   ! Hence, uh(I-1) is multipled by negative one, but uh(I) is not
 
   ! Set index-related variables for fields on T-grid
-  is = G%isc ; ie = G%iec ; js  = G%jsc ; je  = G%jec ; nz = GV%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
   ! Calculate top and bottom fluxes from ea and eb. Note the explicit negative signs
   ! to enforce the positive out convention
@@ -247,7 +230,7 @@ subroutine distribute_residual_uh_barotropic(G, GV, hvol, uh)
   integer :: i, j, k, m, is, ie, js, je, nz
 
   ! Set index-related variables for fields on T-grid
-  is  = G%isc ; ie  = G%iec ; js  = G%jsc ; je  = G%jec ; nz = GV%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
   do j=js,je
     uh2d_sum(:) = 0.0
@@ -326,7 +309,7 @@ subroutine distribute_residual_vh_barotropic(G, GV, hvol, vh)
   integer :: i, j, k, m, is, ie, js, je, nz
 
   ! Set index-related variables for fields on T-grid
-  is  = G%isc ; ie  = G%iec ; js  = G%jsc ; je  = G%jec ; nz = GV%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
   do i=is,ie
     vh2d_sum(:) = 0.0
@@ -403,7 +386,7 @@ subroutine distribute_residual_uh_upwards(G, GV, hvol, uh)
   integer :: i, j, k, m, is, ie, js, je, nz, k_rev
 
   ! Set index-related variables for fields on T-grid
-  is  = G%isc ; ie  = G%iec ; js  = G%jsc ; je  = G%jec ; nz = GV%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
   min_h = GV%Angstrom_H*0.1
 
@@ -502,7 +485,7 @@ subroutine distribute_residual_vh_upwards(G, GV, hvol, vh)
   integer :: i, j, k, m, is, ie, js, je, nz, k_rev
 
   ! Set index-related variables for fields on T-grid
-  is  = G%isc ; ie  = G%iec ; js  = G%jsc ; je  = G%jec ; nz = GV%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
   min_h = 0.1*GV%Angstrom_H
 
