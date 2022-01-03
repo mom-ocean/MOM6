@@ -95,11 +95,10 @@ subroutine dense_water_initialize_topography(D, G, param_file, max_depth)
 end subroutine dense_water_initialize_topography
 
 !> Initialize the temperature and salinity for the dense water experiment
-subroutine dense_water_initialize_TS(G, GV, param_file, eqn_of_state, T, S, h, just_read)
+subroutine dense_water_initialize_TS(G, GV, param_file, T, S, h, just_read)
   type(ocean_grid_type),                     intent(in)  :: G !< Horizontal grid control structure
   type(verticalGrid_type),                   intent(in)  :: GV !< Vertical grid control structure
   type(param_file_type),                     intent(in)  :: param_file !< Parameter file structure
-  type(EOS_type),                            pointer     :: eqn_of_state !< EOS structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: T !< Output temperature [degC]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: S !< Output salinity [ppt]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)  :: h !< Layer thicknesses [H ~> m or kg m-2]

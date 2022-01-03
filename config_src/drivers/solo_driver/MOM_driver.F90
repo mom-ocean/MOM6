@@ -332,7 +332,8 @@ program MOM_main
                  "The default value is given by DT.", units="s", default=dt)
   if (offline_tracer_mode) then
     call get_param(param_file, mod_name, "DT_OFFLINE", dt_forcing, &
-                   "Time step for the offline time step")
+                   "Length of time between reading in of input fields", &
+                   units='s', fail_if_missing=.true.)
     dt = dt_forcing
   endif
   ntstep = MAX(1,ceiling(dt_forcing/dt - 0.001))

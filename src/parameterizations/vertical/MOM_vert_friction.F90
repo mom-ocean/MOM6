@@ -4,23 +4,25 @@ module MOM_vert_friction
 ! This file is part of MOM6. See LICENSE.md for the license.
 use MOM_domains,       only : pass_var, To_All, Omit_corners
 use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_ptr
+use MOM_diag_mediator, only : post_product_u, post_product_sum_u
+use MOM_diag_mediator, only : post_product_v, post_product_sum_v
 use MOM_diag_mediator, only : diag_ctrl
-use MOM_debugging, only : uvchksum, hchksum
+use MOM_debugging,     only : uvchksum, hchksum
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, NOTE
-use MOM_file_parser, only : get_param, log_version, param_file_type
-use MOM_forcing_type, only : mech_forcing
-use MOM_get_input, only : directories
-use MOM_grid, only : ocean_grid_type
+use MOM_file_parser,   only : get_param, log_version, param_file_type
+use MOM_forcing_type,  only : mech_forcing
+use MOM_get_input,     only : directories
+use MOM_grid,          only : ocean_grid_type
 use MOM_open_boundary, only : ocean_OBC_type, OBC_SIMPLE, OBC_NONE, OBC_DIRECTION_E
 use MOM_open_boundary, only : OBC_DIRECTION_W, OBC_DIRECTION_N, OBC_DIRECTION_S
-use MOM_PointAccel, only : write_u_accel, write_v_accel, PointAccel_init
-use MOM_PointAccel, only : PointAccel_CS
-use MOM_time_manager, only : time_type, time_type_to_real, operator(-)
-use MOM_unit_scaling, only : unit_scale_type
-use MOM_variables, only : thermo_var_ptrs, vertvisc_type
-use MOM_variables, only : cont_diag_ptrs, accel_diag_ptrs
-use MOM_variables, only : ocean_internal_state
-use MOM_verticalGrid, only : verticalGrid_type
+use MOM_PointAccel,    only : write_u_accel, write_v_accel, PointAccel_init
+use MOM_PointAccel,    only : PointAccel_CS
+use MOM_time_manager,  only : time_type, time_type_to_real, operator(-)
+use MOM_unit_scaling,  only : unit_scale_type
+use MOM_variables,     only : thermo_var_ptrs, vertvisc_type
+use MOM_variables,     only : cont_diag_ptrs, accel_diag_ptrs
+use MOM_variables,     only : ocean_internal_state
+use MOM_verticalGrid,  only : verticalGrid_type
 use MOM_wave_interface, only : wave_parameters_CS
 implicit none ; private
 
@@ -37,6 +39,7 @@ public updateCFLtruncationValue
 
 !> The control structure with parameters and memory for the MOM_vert_friction module
 type, public :: vertvisc_CS ; private
+  logical :: initialized = .false. !< True if this control structure has been initialized.
   real    :: Hmix            !< The mixed layer thickness in thickness units [H ~> m or kg m-2].
   real    :: Hmix_stress     !< The mixed layer thickness over which the wind
                              !! stress is applied with direct_stress [H ~> m or kg m-2].
@@ -53,12 +56,12 @@ type, public :: vertvisc_CS ; private
                              !! absolute velocities.
   real    :: CFL_trunc       !< Velocity components will be truncated when they
                              !! are large enough that the corresponding CFL number
-                             !! exceeds this value, nondim.
+                             !! exceeds this value [nondim].
   real    :: CFL_report      !< The value of the CFL number that will cause the
-                             !! accelerations to be reported, nondim.  CFL_report
+                             !! accelerations to be reported [nondim].  CFL_report
                              !! will often equal CFL_trunc.
   real    :: truncRampTime   !< The time-scale over which to ramp up the value of
-                             !! CFL_trunc from CFL_truncS to CFL_truncE
+                             !! CFL_trunc from CFL_truncS to CFL_truncE [T ~> s]
   real    :: CFL_truncS      !< The start value of CFL_trunc
   real    :: CFL_truncE      !< The end/target value of CFL_trunc
   logical :: CFLrampingIsActivated = .false. !< True if the ramping has been initialized
@@ -102,7 +105,7 @@ type, public :: vertvisc_CS ; private
                             !! thickness for viscosity.
   logical :: answers_2018   !< If true, use the order of arithmetic and expressions that recover the
                             !! answers from the end of 2018.  Otherwise, use expressions that do not
-                            !! use an arbitary and hard-coded maximum viscous coupling coefficient
+                            !! use an arbitrary and hard-coded maximum viscous coupling coefficient
                             !! between layers.
   logical :: debug          !< If true, write verbose checksums for debugging purposes.
   integer :: nkml           !< The number of layers in the mixed layer.
@@ -134,11 +137,6 @@ type, public :: vertvisc_CS ; private
 
   type(PointAccel_CS), pointer :: PointAccel_CSp => NULL() !< A pointer to the control structure
                               !! for recording accelerations leading to velocity truncations
-
-  ! real, pointer :: hf_du_dt_visc(:,:,:)  => NULL() ! Zonal friction accel. x fract. thickness [L T-2 ~> m s-2].
-  ! real, pointer :: hf_dv_dt_visc(:,:,:)  => NULL() ! Merdional friction accel. x fract. thickness [L T-2 ~> m s-2].
-  ! 3D diagnostics hf_du(dv)_dt_visc are commented because there is no clarity on proper remapping grid option.
-  ! The code is retained for degugging purposes in the future.
 
 end type vertvisc_CS
 
@@ -216,16 +214,6 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
   real :: surface_stress(SZIB_(G))! The same as stress, unless the wind stress
                            ! stress is applied as a body force [H L T-1 ~> m2 s-1 or kg m-1 s-1].
 
-  real, allocatable, dimension(:,:) :: hf_du_dt_visc_2d ! Depth sum of hf_du_dt_visc [L T-2 ~> m s-2]
-  real, allocatable, dimension(:,:) :: hf_dv_dt_visc_2d ! Depth sum of hf_dv_dt_visc [L T-2 ~> m s-2]
-
-  real, allocatable, dimension(:,:,:) :: h_du_dt_visc ! h x du_dt_visc [H L T-2 ~> m2 s-2]
-  real, allocatable, dimension(:,:,:) :: h_dv_dt_visc ! h x dv_dt_visc [H L T-2 ~> m2 s-2]
-  real, allocatable, dimension(:,:,:) :: h_du_dt_str ! h x du_dt_str [H L T-2 ~> m2 s-2]
-  real, allocatable, dimension(:,:,:) :: h_dv_dt_str ! h x dv_dt_str [H L T-2 ~> m2 s-2]
-  real, allocatable, dimension(:,:,:) :: du_dt_str_visc_rem ! du_dt_str x visc_rem_u [L T-2 ~> m s-2]
-  real, allocatable, dimension(:,:,:) :: dv_dt_str_visc_rem ! dv_dt_str x visc_rem_v [L T-2 ~> m s-2]
-
   logical :: do_i(SZIB_(G))
   logical :: DoStokesMixing
 
@@ -234,6 +222,9 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB ; nz = GV%ke
 
   if (.not.associated(CS)) call MOM_error(FATAL,"MOM_vert_friction(visc): "// &
+         "Module must be initialized before it is used.")
+
+  if (.not.CS%initialized) call MOM_error(FATAL,"MOM_vert_friction(visc): "// &
          "Module must be initialized before it is used.")
 
   if (CS%direct_stress) then
@@ -521,92 +512,36 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
   if (CS%id_dv_dt_str > 0) &
     call post_data(CS%id_dv_dt_str, ADp%dv_dt_str, CS%diag)
 
-  ! Diagnostics for terms multiplied by fractional thicknesses
+  if (associated(ADp%du_dt_visc) .and. associated(ADp%du_dt_visc)) then
+    ! Diagnostics of the fractional thicknesses times momentum budget terms
+    ! 3D diagnostics of hf_du(dv)_dt_visc are commented because there is no clarity on proper remapping grid option.
+    ! The code is retained for debugging purposes in the future.
+    !if (CS%id_hf_du_dt_visc > 0) &
+    !  call post_product_u(CS%id_hf_du_dt_visc, ADp%du_dt_visc, ADp%diag_hfrac_u, G, nz, CS%diag)
+    !if (CS%id_hf_dv_dt_visc > 0) &
+    !  call post_product_v(CS%id_hf_dv_dt_visc, ADp%dv_dt_visc, ADp%diag_hfrac_v, G, nz, CS%diag)
 
-  ! 3D diagnostics hf_du(dv)_dt_visc are commented because there is no clarity on proper remapping grid option.
-  ! The code is retained for degugging purposes in the future.
-  !if (CS%id_hf_du_dt_visc > 0) then
-  !  do k=1,nz ; do j=js,je ; do I=Isq,Ieq
-  !    CS%hf_du_dt_visc(I,j,k) = ADp%du_dt_visc(I,j,k) * ADp%diag_hfrac_u(I,j,k)
-  !  enddo ; enddo ; enddo
-  !  call post_data(CS%id_hf_du_dt_visc, CS%hf_du_dt_visc, CS%diag)
-  !endif
-  !if (CS%id_hf_dv_dt_visc > 0) then
-  !  do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
-  !    CS%hf_dv_dt_visc(i,J,k) = ADp%dv_dt_visc(i,J,k) * ADp%diag_hfrac_v(i,J,k)
-  !  enddo ; enddo ; enddo
-  !  call post_data(CS%id_hf_dv_dt_visc, CS%hf_dv_dt_visc, CS%diag)
-  !endif
-  if (CS%id_hf_du_dt_visc_2d > 0) then
-    allocate(hf_du_dt_visc_2d(G%IsdB:G%IedB,G%jsd:G%jed), source=0.0)
-    do k=1,nz ; do j=js,je ; do I=Isq,Ieq
-      hf_du_dt_visc_2d(I,j) = hf_du_dt_visc_2d(I,j) + ADp%du_dt_visc(I,j,k) * ADp%diag_hfrac_u(I,j,k)
-    enddo ; enddo ; enddo
-    call post_data(CS%id_hf_du_dt_visc_2d, hf_du_dt_visc_2d, CS%diag)
-    deallocate(hf_du_dt_visc_2d)
-  endif
-  if (CS%id_hf_dv_dt_visc_2d > 0) then
-    allocate(hf_dv_dt_visc_2d(G%isd:G%ied,G%JsdB:G%JedB), source=0.0)
-    do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
-      hf_dv_dt_visc_2d(i,J) = hf_dv_dt_visc_2d(i,J) + ADp%dv_dt_visc(i,J,k) * ADp%diag_hfrac_v(i,J,k)
-    enddo ; enddo ; enddo
-    call post_data(CS%id_hf_dv_dt_visc_2d, hf_dv_dt_visc_2d, CS%diag)
-    deallocate(hf_dv_dt_visc_2d)
+    ! Diagnostics for thickness-weighted vertically averaged viscous accelerations
+    if (CS%id_hf_du_dt_visc_2d > 0) &
+      call post_product_sum_u(CS%id_hf_du_dt_visc_2d, ADp%du_dt_visc, ADp%diag_hfrac_u, G, nz, CS%diag)
+    if (CS%id_hf_dv_dt_visc_2d > 0) &
+      call post_product_sum_v(CS%id_hf_dv_dt_visc_2d, ADp%dv_dt_visc, ADp%diag_hfrac_v, G, nz, CS%diag)
+
+    ! Diagnostics for thickness x viscous accelerations
+    if (CS%id_h_du_dt_visc > 0) call post_product_u(CS%id_h_du_dt_visc, ADp%du_dt_visc, ADp%diag_hu, G, nz, CS%diag)
+    if (CS%id_h_dv_dt_visc > 0) call post_product_v(CS%id_h_dv_dt_visc, ADp%dv_dt_visc, ADp%diag_hv, G, nz, CS%diag)
   endif
 
-  if (CS%id_h_du_dt_visc > 0) then
-    allocate(h_du_dt_visc(G%IsdB:G%IedB,G%jsd:G%jed,GV%ke), source=0.0)
-    do k=1,nz ; do j=js,je ; do I=Isq,Ieq
-      h_du_dt_visc(I,j,k) = ADp%du_dt_visc(I,j,k) * ADp%diag_hu(I,j,k)
-    enddo ; enddo ; enddo
-    call post_data(CS%id_h_du_dt_visc, h_du_dt_visc, CS%diag)
-    deallocate(h_du_dt_visc)
-  endif
-  if (CS%id_h_dv_dt_visc > 0) then
-    allocate(h_dv_dt_visc(G%isd:G%ied,G%JsdB:G%JedB,GV%ke), source=0.0)
-    do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
-      h_dv_dt_visc(i,J,k) = ADp%dv_dt_visc(i,J,k) * ADp%diag_hv(i,J,k)
-    enddo ; enddo ; enddo
-    call post_data(CS%id_h_dv_dt_visc, h_dv_dt_visc, CS%diag)
-    deallocate(h_dv_dt_visc)
-  endif
+  if (associated(ADp%du_dt_str) .and.  associated(ADp%dv_dt_str)) then
+    ! Diagnostics for thickness x wind stress accelerations
+    if (CS%id_h_du_dt_str > 0) call post_product_u(CS%id_h_du_dt_str, ADp%du_dt_str, ADp%diag_hu, G, nz, CS%diag)
+    if (CS%id_h_dv_dt_str > 0) call post_product_v(CS%id_h_dv_dt_str, ADp%dv_dt_str, ADp%diag_hv, G, nz, CS%diag)
 
-  if (CS%id_h_du_dt_str > 0) then
-    allocate(h_du_dt_str(G%IsdB:G%IedB,G%jsd:G%jed,GV%ke))
-    h_du_dt_str(:,:,:) = 0.0
-    do k=1,nz ; do j=js,je ; do I=Isq,Ieq
-      h_du_dt_str(I,j,k) = ADp%du_dt_str(I,j,k) * ADp%diag_hu(I,j,k)
-    enddo ; enddo ; enddo
-    call post_data(CS%id_h_du_dt_str, h_du_dt_str, CS%diag)
-    deallocate(h_du_dt_str)
-  endif
-  if (CS%id_h_dv_dt_str > 0) then
-    allocate(h_dv_dt_str(G%isd:G%ied,G%JsdB:G%JedB,GV%ke))
-    h_dv_dt_str(:,:,:) = 0.0
-    do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
-      h_dv_dt_str(i,J,k) = ADp%dv_dt_str(i,J,k) * ADp%diag_hv(i,J,k)
-    enddo ; enddo ; enddo
-    call post_data(CS%id_h_dv_dt_str, h_dv_dt_str, CS%diag)
-    deallocate(h_dv_dt_str)
-  endif
-
-  if (CS%id_du_dt_str_visc_rem > 0) then
-    allocate(du_dt_str_visc_rem(G%IsdB:G%IedB,G%jsd:G%jed,GV%ke))
-    du_dt_str_visc_rem(:,:,:) = 0.0
-    do k=1,nz ; do j=js,je ; do I=Isq,Ieq
-      du_dt_str_visc_rem(I,j,k) = ADp%du_dt_str(I,j,k) * ADp%visc_rem_u(I,j,k)
-    enddo ; enddo ; enddo
-    call post_data(CS%id_du_dt_str_visc_rem, du_dt_str_visc_rem, CS%diag)
-    deallocate(du_dt_str_visc_rem)
-  endif
-  if (CS%id_dv_dt_str_visc_rem > 0) then
-    allocate(dv_dt_str_visc_rem(G%isd:G%ied,G%JsdB:G%JedB,GV%ke))
-    dv_dt_str_visc_rem(:,:,:) = 0.0
-    do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
-      dv_dt_str_visc_rem(i,J,k) = ADp%dv_dt_str(i,J,k) * ADp%visc_rem_v(i,J,k)
-    enddo ; enddo ; enddo
-    call post_data(CS%id_dv_dt_str_visc_rem, dv_dt_str_visc_rem, CS%diag)
-    deallocate(dv_dt_str_visc_rem)
+    ! Diagnostics for wind stress accelerations multiplied by visc_rem_[uv],
+    if (CS%id_du_dt_str_visc_rem > 0) &
+      call post_product_u(CS%id_du_dt_str_visc_rem, ADp%du_dt_str, ADp%visc_rem_u, G, nz, CS%diag)
+    if (CS%id_dv_dt_str_visc_rem > 0) &
+      call post_product_v(CS%id_dv_dt_str_visc_rem, ADp%dv_dt_str, ADp%visc_rem_v, G, nz, CS%diag)
   endif
 
 end subroutine vertvisc
@@ -620,11 +555,11 @@ subroutine vertvisc_remnant(visc, visc_rem_u, visc_rem_v, dt, G, GV, US, CS)
   type(vertvisc_type),   intent(in)   :: visc !< Viscosities and bottom drag
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
                          intent(inout) :: visc_rem_u !< Fraction of a time-step's worth of a
-                                              !! barotopic acceleration that a layer experiences after
+                                              !! barotropic acceleration that a layer experiences after
                                               !! viscosity is applied in the zonal direction [nondim]
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
                          intent(inout) :: visc_rem_v !< Fraction of a time-step's worth of a
-                                              !! barotopic acceleration that a layer experiences after
+                                              !! barotropic acceleration that a layer experiences after
                                               !! viscosity is applied in the meridional direction [nondim]
   real,                  intent(in)    :: dt  !< Time increment [T ~> s]
   type(unit_scale_type), intent(in)    :: US  !< A dimensional unit scaling type
@@ -646,6 +581,9 @@ subroutine vertvisc_remnant(visc, visc_rem_u, visc_rem_v, dt, G, GV, US, CS)
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB ; nz = GV%ke
 
   if (.not.associated(CS)) call MOM_error(FATAL,"MOM_vert_friction(visc): "// &
+         "Module must be initialized before it is used.")
+
+  if (.not.CS%initialized) call MOM_error(FATAL,"MOM_vert_friction(remant): "// &
          "Module must be initialized before it is used.")
 
   dt_Z_to_H = dt*GV%Z_to_H
@@ -754,7 +692,7 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, US, CS, OBC)
     a_shelf, &  ! The drag coefficients across interfaces in water columns under
                 ! ice shelves [Z T-1 ~> m s-1].
     z_i         ! An estimate of each interface's height above the bottom,
-                ! normalized by the bottom boundary layer thickness, nondim.
+                ! normalized by the bottom boundary layer thickness [nondim]
   real, dimension(SZIB_(G)) :: &
     kv_bbl, &     ! The bottom boundary layer viscosity [Z2 T-1 ~> m2 s-1].
     bbl_thick, &  ! The bottom boundary layer thickness [H ~> m or kg m-2].
@@ -777,10 +715,10 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, US, CS, OBC)
                   ! than Hbbl into the interior.
   real :: topfn   ! A function which goes from 1 at the top to 0 much more
                   ! than Htbl into the interior.
-  real :: z2      ! The distance from the bottom, normalized by Hbbl, nondim.
+  real :: z2      ! The distance from the bottom, normalized by Hbbl [nondim]
   real :: z2_wt   ! A nondimensional (0-1) weight used when calculating z2.
   real :: z_clear ! The clearance of an interface above the surrounding topography [H ~> m or kg m-2].
-  real :: a_cpl_max  ! The maximum drag doefficient across interfaces, set so that it will be
+  real :: a_cpl_max  ! The maximum drag coefficient across interfaces, set so that it will be
                      ! representable as a 32-bit float in MKS units  [Z T-1 ~> m s-1]
   real :: h_neglect  ! A thickness that is so small it is usually lost
                      ! in roundoff and can be neglected [H ~> m or kg m-2].
@@ -798,6 +736,9 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, US, CS, OBC)
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB ; nz = GV%ke
 
   if (.not.associated(CS)) call MOM_error(FATAL,"MOM_vert_friction(coef): "// &
+         "Module must be initialized before it is used.")
+
+  if (.not.CS%initialized) call MOM_error(FATAL,"MOM_vert_friction(coef): "// &
          "Module must be initialized before it is used.")
 
   h_neglect = GV%H_subroundoff
@@ -1252,7 +1193,7 @@ subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i,
   h_neglect = GV%H_subroundoff
 
   if (CS%answers_2018) then
-    !   The maximum coupling coefficent was originally introduced to avoid
+    !   The maximum coupling coefficient was originally introduced to avoid
     ! truncation error problems in the tridiagonal solver. Effectively, the 1e-10
     ! sets the maximum coupling coefficient increment to 1e10 m per timestep.
     I_amax = (1.0e-10*US%Z_to_m) * dt
@@ -1481,7 +1422,6 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, forces, visc, dt, G, GV, US, CS
   real :: truncvel         ! are truncated to truncvel, both [L T-1 ~> m s-1].
   real :: CFL              ! The local CFL number.
   real :: H_report         ! A thickness below which not to report truncations.
-  real :: dt_Rho0          ! The timestep divided by the Boussinesq density [m2 T2 s-1 L-1 Z-1 R-1 ~> s m3 kg-1].
   real :: vel_report(SZIB_(G),SZJB_(G))   ! The velocity to report [L T-1 ~> m s-1]
   real :: u_old(SZIB_(G),SZJ_(G),SZK_(GV)) ! The previous u-velocity [L T-1 ~> m s-1]
   real :: v_old(SZI_(G),SZJB_(G),SZK_(GV)) ! The previous v-velocity [L T-1 ~> m s-1]
@@ -1493,7 +1433,6 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, forces, visc, dt, G, GV, US, CS
   maxvel = CS%maxvel
   truncvel = 0.9*maxvel
   H_report = 6.0 * GV%Angstrom_H
-  dt_Rho0 = (US%L_T_to_m_s*US%Z_to_m) * dt / GV%Rho0
 
   if (len_trim(CS%u_trunc_file) > 0) then
     !$OMP parallel do default(shared) private(trunc_any,CFL)
@@ -1576,7 +1515,7 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, forces, visc, dt, G, GV, US, CS
 !   Here the diagnostic reporting subroutines are called if
 ! unphysically large values were found.
       call write_u_accel(I, j, u_old, h, ADp, CDp, dt, G, GV, US, CS%PointAccel_CSp, &
-               vel_report(I,j), forces%taux(I,j)*dt_Rho0, a=CS%a_u, hv=CS%h_u)
+               vel_report(I,j), forces%taux(I,j), a=CS%a_u, hv=CS%h_u)
     endif ; enddo ; enddo
   endif
 
@@ -1661,7 +1600,7 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, forces, visc, dt, G, GV, US, CS
 !   Here the diagnostic reporting subroutines are called if
 ! unphysically large values were found.
       call write_v_accel(i, J, v_old, h, ADp, CDp, dt, G, GV, US, CS%PointAccel_CSp, &
-               vel_report(i,J), forces%tauy(i,J)*dt_Rho0, a=CS%a_v, hv=CS%h_v)
+               vel_report(i,J), forces%tauy(i,J), a=CS%a_v, hv=CS%h_v)
     endif ; enddo ; enddo
   endif
 
@@ -1703,6 +1642,8 @@ subroutine vertvisc_init(MIS, Time, G, GV, US, param_file, diag, ADp, dirs, &
     return
   endif
   allocate(CS)
+
+  CS%initialized = .true.
 
   if (GV%Boussinesq) then; thickness_units = "m"
   else; thickness_units = "kg m-2"; endif
@@ -1818,7 +1759,7 @@ subroutine vertvisc_init(MIS, Time, G, GV, US, param_file, diag, ADp, dirs, &
   call get_param(param_file, mdl, "CFL_TRUNCATE_RAMP_TIME", CS%truncRampTime, &
                  "The time over which the CFL truncation value is ramped "//&
                  "up at the beginning of the run.", &
-                 units="s", default=0.)
+                 units="s", default=0., scale=US%s_to_T)
   CS%CFL_truncE = CS%CFL_trunc
   call get_param(param_file, mdl, "CFL_TRUNCATE_START", CS%CFL_truncS, &
                  "The start value of the truncation CFL number used when "//&
@@ -1912,7 +1853,6 @@ subroutine vertvisc_init(MIS, Time, G, GV, US, param_file, diag, ADp, dirs, &
   !    'Fractional Thickness-weighted Zonal Acceleration from Vertical Viscosity', &
   !    'm s-2', v_extensive=.true., conversion=US%L_T2_to_m_s2)
   !if (CS%id_hf_du_dt_visc > 0) then
-  !  call safe_alloc_ptr(CS%hf_du_dt_visc,IsdB,IedB,jsd,jed,nz)
   !  call safe_alloc_ptr(ADp%du_dt_visc,IsdB,IedB,jsd,jed,nz)
   !  call safe_alloc_ptr(ADp%diag_hfrac_u,IsdB,IedB,jsd,jed,nz)
   !endif
@@ -1921,7 +1861,6 @@ subroutine vertvisc_init(MIS, Time, G, GV, US, param_file, diag, ADp, dirs, &
   !    'Fractional Thickness-weighted Meridional Acceleration from Vertical Viscosity', &
   !    'm s-2', v_extensive=.true., conversion=US%L_T2_to_m_s2)
   !if (CS%id_hf_dv_dt_visc > 0) then
-  !  call safe_alloc_ptr(CS%hf_dv_dt_visc,isd,ied,JsdB,JedB,nz)
   !  call safe_alloc_ptr(ADp%dv_dt_visc,isd,ied,JsdB,JedB,nz)
   !  call safe_alloc_ptr(ADp%diag_hfrac_v,isd,ied,JsdB,JedB,nz)
   !endif
@@ -1943,48 +1882,48 @@ subroutine vertvisc_init(MIS, Time, G, GV, US, param_file, diag, ADp, dirs, &
   endif
 
   CS%id_h_du_dt_visc = register_diag_field('ocean_model', 'h_du_dt_visc', diag%axesCuL, Time, &
-      'Thickness Multiplied Zonal Acceleration from Horizontal Viscosity', 'm2 s-2', &
-      conversion=GV%H_to_m*US%L_T2_to_m_s2)
+      'Thickness Multiplied Zonal Acceleration from Horizontal Viscosity', &
+      'm2 s-2', conversion=GV%H_to_m*US%L_T2_to_m_s2)
   if (CS%id_h_du_dt_visc > 0) then
     call safe_alloc_ptr(ADp%du_dt_visc,IsdB,IedB,jsd,jed,nz)
     call safe_alloc_ptr(ADp%diag_hu,IsdB,IedB,jsd,jed,nz)
   endif
 
   CS%id_h_dv_dt_visc = register_diag_field('ocean_model', 'h_dv_dt_visc', diag%axesCvL, Time, &
-      'Thickness Multiplied Meridional Acceleration from Horizontal Viscosity', 'm2 s-2', &
-      conversion=GV%H_to_m*US%L_T2_to_m_s2)
+      'Thickness Multiplied Meridional Acceleration from Horizontal Viscosity', &
+      'm2 s-2', conversion=GV%H_to_m*US%L_T2_to_m_s2)
   if (CS%id_h_dv_dt_visc > 0) then
     call safe_alloc_ptr(ADp%dv_dt_visc,isd,ied,JsdB,JedB,nz)
     call safe_alloc_ptr(ADp%diag_hv,isd,ied,JsdB,JedB,nz)
   endif
 
   CS%id_h_du_dt_str = register_diag_field('ocean_model', 'h_du_dt_str', diag%axesCuL, Time, &
-      'Thickness Multiplied Zonal Acceleration from Surface Wind Stresses', 'm2 s-2', &
-      conversion=GV%H_to_m*US%L_T2_to_m_s2)
+      'Thickness Multiplied Zonal Acceleration from Surface Wind Stresses', &
+      'm2 s-2', conversion=GV%H_to_m*US%L_T2_to_m_s2)
   if (CS%id_h_du_dt_str > 0) then
     call safe_alloc_ptr(ADp%du_dt_str,IsdB,IedB,jsd,jed,nz)
     call safe_alloc_ptr(ADp%diag_hu,IsdB,IedB,jsd,jed,nz)
   endif
 
   CS%id_h_dv_dt_str = register_diag_field('ocean_model', 'h_dv_dt_str', diag%axesCvL, Time, &
-      'Thickness Multiplied Meridional Acceleration from Surface Wind Stresses', 'm2 s-2', &
-      conversion=GV%H_to_m*US%L_T2_to_m_s2)
+      'Thickness Multiplied Meridional Acceleration from Surface Wind Stresses', &
+      'm2 s-2', conversion=GV%H_to_m*US%L_T2_to_m_s2)
   if (CS%id_h_dv_dt_str > 0) then
     call safe_alloc_ptr(ADp%dv_dt_str,isd,ied,JsdB,JedB,nz)
     call safe_alloc_ptr(ADp%diag_hv,isd,ied,JsdB,JedB,nz)
   endif
 
   CS%id_du_dt_str_visc_rem = register_diag_field('ocean_model', 'du_dt_str_visc_rem', diag%axesCuL, Time, &
-      'Zonal Acceleration from Surface Wind Stresses multiplied by viscous remnant', 'm s-2', &
-      conversion=US%L_T2_to_m_s2)
+      'Zonal Acceleration from Surface Wind Stresses multiplied by viscous remnant', &
+      'm s-2', conversion=US%L_T2_to_m_s2)
   if (CS%id_du_dt_str_visc_rem > 0) then
     call safe_alloc_ptr(ADp%du_dt_str,IsdB,IedB,jsd,jed,nz)
     call safe_alloc_ptr(ADp%visc_rem_u,IsdB,IedB,jsd,jed,nz)
   endif
 
   CS%id_dv_dt_str_visc_rem = register_diag_field('ocean_model', 'dv_dt_str_visc_rem', diag%axesCvL, Time, &
-      'Meridional Acceleration from Surface Wind Stresses multiplied by viscous remnant', 'm s-2', &
-      conversion=US%L_T2_to_m_s2)
+      'Meridional Acceleration from Surface Wind Stresses multiplied by viscous remnant', &
+      'm s-2', conversion=US%L_T2_to_m_s2)
   if (CS%id_dv_dt_str_visc_rem > 0) then
     call safe_alloc_ptr(ADp%dv_dt_str,isd,ied,JsdB,JedB,nz)
     call safe_alloc_ptr(ADp%visc_rem_v,isd,ied,JsdB,JedB,nz)
@@ -1998,14 +1937,16 @@ end subroutine vertvisc_init
 !> Update the CFL truncation value as a function of time.
 !! If called with the optional argument activate=.true., record the
 !! value of Time as the beginning of the ramp period.
-subroutine updateCFLtruncationValue(Time, CS, activate)
+subroutine updateCFLtruncationValue(Time, CS, US, activate)
   type(time_type), target, intent(in)    :: Time     !< Current model time
   type(vertvisc_CS),       pointer       :: CS       !< Vertical viscosity control structure
+  type(unit_scale_type),   intent(in)    :: US       !< A dimensional unit scaling type
   logical, optional,       intent(in)    :: activate !< Specify whether to record the value of
                                                      !! Time as the beginning of the ramp period
 
   ! Local variables
-  real :: deltaTime, wghtA
+  real :: deltaTime ! The time since CS%rampStartTime [T ~> s], which may be negative.
+  real :: wghtA     ! The relative weight of the final value [nondim]
   character(len=12) :: msg
 
   if (CS%truncRampTime==0.) return ! This indicates to ramping is turned off
@@ -2019,7 +1960,7 @@ subroutine updateCFLtruncationValue(Time, CS, activate)
     endif
   endif
   if (.not.CS%CFLrampingIsActivated) return
-  deltaTime = max( 0., time_type_to_real( Time - CS%rampStartTime ) )
+  deltaTime = max( 0., US%s_to_T*time_type_to_real( Time - CS%rampStartTime ) )
   if (deltaTime >= CS%truncRampTime) then
     CS%CFL_trunc = CS%CFL_truncE
     CS%truncRampTime = 0. ! This turns off ramping after this call
@@ -2027,7 +1968,7 @@ subroutine updateCFLtruncationValue(Time, CS, activate)
     wghtA = min( 1., deltaTime / CS%truncRampTime ) ! Linear profile in time
     !wghtA = wghtA*wghtA ! Convert linear profile to parabolic profile in time
     !wghtA = wghtA*wghtA*(3. - 2.*wghtA) ! Convert linear profile to cosine profile
-    wghtA = 1. - ( (1. - wghtA)**2 ) ! Convert linear profiel to nverted parabolic profile
+    wghtA = 1. - ( (1. - wghtA)**2 ) ! Convert linear profile to inverted parabolic profile
     CS%CFL_trunc = CS%CFL_truncS + wghtA * ( CS%CFL_truncE - CS%CFL_truncS )
   endif
   write(msg(1:12),'(es12.3)') CS%CFL_trunc

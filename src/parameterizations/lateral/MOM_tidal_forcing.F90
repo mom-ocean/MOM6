@@ -11,6 +11,7 @@ use MOM_file_parser,   only : get_param, log_version, param_file_type
 use MOM_grid,          only : ocean_grid_type
 use MOM_io,            only : field_exists, file_exists, MOM_read_data
 use MOM_time_manager,  only : set_date, time_type, time_type_to_real, operator(-)
+use MOM_unit_scaling,  only : unit_scale_type
 
 implicit none ; private
 
@@ -47,12 +48,12 @@ type, public :: tidal_forcing_CS ; private
                       !! astronomical/equilibrium argument.
   real    :: sal_scalar !< The constant of proportionality between sea surface
                       !! height (really it should be bottom pressure) anomalies
-                      !! and bottom geopotential anomalies.
+                      !! and bottom geopotential anomalies [nondim].
   integer :: nc       !< The number of tidal constituents in use.
   real, dimension(MAX_CONSTITUENTS) :: &
-    freq, &           !< The frequency of a tidal constituent [s-1].
-    phase0, &         !< The phase of a tidal constituent at time 0, in radians.
-    amp, &            !< The amplitude of a tidal constituent at time 0 [m].
+    freq, &           !< The frequency of a tidal constituent [T-1 ~> s-1].
+    phase0, &         !< The phase of a tidal constituent at time 0 [rad].
+    amp, &            !< The amplitude of a tidal constituent at time 0 [Z ~> m].
     love_no           !< The Love number of a tidal constituent at time 0 [nondim].
   integer :: struct(MAX_CONSTITUENTS) !< An encoded spatial structure for each constituent
   character (len=16) :: const_name(MAX_CONSTITUENTS) !< The name of each constituent
@@ -60,15 +61,15 @@ type, public :: tidal_forcing_CS ; private
   type(time_type) :: time_ref !< Reference time (t = 0) used to calculate tidal forcing.
   type(astro_longitudes) :: tidal_longitudes !< Astronomical longitudes used to calculate
                                    !! tidal phases at t = 0.
-  real, pointer, dimension(:,:,:) :: &
-    sin_struct => NULL(), &    !< The sine and cosine based structures that can
-    cos_struct => NULL(), &    !< be associated with the astronomical forcing.
-    cosphasesal => NULL(), &   !< The cosine and sine of the phase of the
-    sinphasesal => NULL(), &   !< self-attraction and loading amphidromes.
-    ampsal => NULL(), &        !< The amplitude of the SAL [m].
-    cosphase_prev => NULL(), & !< The cosine and sine of the phase of the
-    sinphase_prev => NULL(), & !< amphidromes in the previous tidal solutions.
-    amp_prev => NULL()         !< The amplitude of the previous tidal solution [m].
+  real, allocatable :: &
+    sin_struct(:,:,:), &    !< The sine and cosine based structures that can
+    cos_struct(:,:,:), &    !< be associated with the astronomical forcing [nondim].
+    cosphasesal(:,:,:), &   !< The cosine and sine of the phase of the
+    sinphasesal(:,:,:), &   !< self-attraction and loading amphidromes.
+    ampsal(:,:,:), &        !< The amplitude of the SAL [Z ~> m].
+    cosphase_prev(:,:,:), & !< The cosine and sine of the phase of the
+    sinphase_prev(:,:,:), & !< amphidromes in the previous tidal solutions.
+    amp_prev(:,:,:)         !< The amplitude of the previous tidal solution [Z ~> m].
 end type tidal_forcing_CS
 
 integer :: id_clock_tides !< CPU clock for tides
@@ -87,8 +88,9 @@ contains
 subroutine astro_longitudes_init(time_ref, longitudes)
   type(time_type), intent(in) :: time_ref            !> Time to calculate longitudes for.
   type(astro_longitudes), intent(out) :: longitudes  !> Lunar and solar longitudes at time_ref.
-  real :: D, T                                       !> Date offsets
-  real, parameter :: PI = 4.0 * atan(1.0)            !> 3.14159...
+  real :: D                                          !> Time since the reference date [days]
+  real :: T                                          !> Time in Julian centuries [centuries]
+  real, parameter :: PI = 4.0 * atan(1.0)            !> 3.14159... [nondim]
   ! Find date at time_ref in days since 1900-01-01
   D = time_type_to_real(time_ref - set_date(1900, 1, 1)) / (24.0 * 3600.0)
   ! Time since 1900-01-01 in Julian centuries
@@ -176,44 +178,45 @@ end function tidal_frequency
 !> Find amplitude (f) and phase (u) modulation of tidal constituents by the 18.6
 !! year nodal cycle. Values here follow Table I.6 in Kowalik and Luick,
 !! "Modern Theory and Practice of Tide Analysis and Tidal Power", 2019.
-subroutine nodal_fu(constit, N, fn, un)
-  character (len=2), intent(in) :: constit              !> Tidal constituent to find modulation for.
-  real, intent(in) :: N                                 !> Longitude of ascending node [rad].
-                                                        !! Calculate using astro_longitudes_init.
-  real, parameter :: RADIANS = 4.0 * atan(1.0) / 180.0  !> Converts degrees to radians.
-  real, intent(out) :: &
-    fn, & !> Amplitude modulation [nondim]
-    un    !> Phase modulation [rad]
+subroutine nodal_fu(constit, nodelon, fn, un)
+  character (len=2), intent(in)  :: constit !> Tidal constituent to find modulation for.
+  real,              intent(in)  :: nodelon !> Longitude of ascending node [rad], which
+                                            !! can be calculated using astro_longitudes_init.
+  real,              intent(out) :: fn      !> Amplitude modulation [nondim]
+  real,              intent(out) :: un      !> Phase modulation [rad]
+
+  real, parameter :: RADIANS = 4.0 * atan(1.0) / 180.0  !> Converts degrees to radians [nondim]
+
   select case (constit)
     case ("M2")
-      fn = 1.0 - 0.037 * cos(N)
-      un = -2.1 * RADIANS * sin(N)
+      fn = 1.0 - 0.037 * cos(nodelon)
+      un = -2.1 * RADIANS * sin(nodelon)
     case ("S2")
       fn = 1.0  ! Solar S2 has no amplitude modulation.
       un = 0.0  ! S2 has no phase modulation.
     case ("N2")
-      fn = 1.0 - 0.037 * cos(N)
-      un = -2.1 * RADIANS * sin(N)
+      fn = 1.0 - 0.037 * cos(nodelon)
+      un = -2.1 * RADIANS * sin(nodelon)
     case ("K2")
-      fn = 1.024 + 0.286 * cos(N)
-      un = -17.7 * RADIANS * sin(N)
+      fn = 1.024 + 0.286 * cos(nodelon)
+      un = -17.7 * RADIANS * sin(nodelon)
     case ("K1")
-      fn = 1.006 + 0.115 * cos(N)
-      un = -8.9 * RADIANS * sin(N)
+      fn = 1.006 + 0.115 * cos(nodelon)
+      un = -8.9 * RADIANS * sin(nodelon)
     case ("O1")
-      fn = 1.009 + 0.187 * cos(N)
-      un = 10.8 * RADIANS * sin(N)
+      fn = 1.009 + 0.187 * cos(nodelon)
+      un = 10.8 * RADIANS * sin(nodelon)
     case ("P1")
       fn = 1.0  ! P1 has no amplitude modulation.
       un = 0.0  ! P1 has no phase modulation.
     case ("Q1")
-      fn = 1.009 + 0.187 * cos(N)
-      un = 10.8 * RADIANS * sin(N)
+      fn = 1.009 + 0.187 * cos(nodelon)
+      un = 10.8 * RADIANS * sin(nodelon)
     case ("MF")
-      fn = 1.043 + 0.414 * cos(N)
-      un = -23.7 * RADIANS * sin(N)
+      fn = 1.043 + 0.414 * cos(nodelon)
+      un = -23.7 * RADIANS * sin(nodelon)
     case ("MM")
-      fn = 1.0 - 0.130 * cos(N)
+      fn = 1.0 - 0.130 * cos(nodelon)
       un = 0.0  ! MM has no phase modulation.
     case default
       call MOM_error(FATAL, "nodal_fu: unrecognized constituent")
@@ -226,26 +229,30 @@ end subroutine nodal_fu
 !! while fields like the background viscosities are 2-D arrays.
 !! ALLOC is a macro defined in MOM_memory.h for allocate or nothing with
 !! static memory.
-subroutine tidal_forcing_init(Time, G, param_file, CS)
-  type(time_type),       intent(in)    :: Time !< The current model time.
-  type(ocean_grid_type), intent(inout) :: G    !< The ocean's grid structure.
-  type(param_file_type), intent(in)    :: param_file !< A structure to parse for run-time parameters.
-  type(tidal_forcing_CS), pointer      :: CS   !< A pointer that is set to point to the control
-                                               !! structure for this module.
+subroutine tidal_forcing_init(Time, G, US, param_file, CS)
+  type(time_type),        intent(in)    :: Time !< The current model time.
+  type(ocean_grid_type),  intent(inout) :: G    !< The ocean's grid structure.
+  type(unit_scale_type),  intent(in)    :: US   !< A dimensional unit scaling type
+  type(param_file_type),  intent(in)    :: param_file !< A structure to parse for run-time parameters.
+  type(tidal_forcing_CS), intent(inout) :: CS   !< Tidal forcing control struct
+
   ! Local variables
   real, dimension(SZI_(G), SZJ_(G)) :: &
     phase, &          ! The phase of some tidal constituent.
     lat_rad, lon_rad  ! Latitudes and longitudes of h-points in radians.
   real :: deg_to_rad
-  real, dimension(MAX_CONSTITUENTS) :: freq_def, phase0_def, amp_def, love_def
+  real, dimension(MAX_CONSTITUENTS) :: freq_def ! Default frequency for each tidal constituent [s-1]
+  real, dimension(MAX_CONSTITUENTS) :: phase0_def ! Default reference phase for each tidal constituent [rad]
+  real, dimension(MAX_CONSTITUENTS) :: amp_def  ! Default amplitude for each tidal constituent [m]
+  real, dimension(MAX_CONSTITUENTS) :: love_def ! Default love number for each constituent [nondim]
   integer, dimension(3) :: tide_ref_date !< Reference date (t = 0) for tidal forcing.
   logical :: use_const  ! True if a constituent is being used.
   logical :: use_M2, use_S2, use_N2, use_K2, use_K1, use_O1, use_P1, use_Q1
   logical :: use_MF, use_MM
   logical :: tides      ! True if a tidal forcing is to be used.
   logical :: FAIL_IF_MISSING = .true.
-! This include declares and sets the variable "version".
-#include "version_variable.h"
+  ! This include declares and sets the variable "version".
+# include "version_variable.h"
   character(len=40)  :: mdl = "MOM_tidal_forcing" ! This module's name.
   character(len=128) :: mesg
   character(len=200) :: tidal_input_files(4*MAX_CONSTITUENTS)
@@ -253,20 +260,12 @@ subroutine tidal_forcing_init(Time, G, param_file, CS)
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   isd = G%isd ; ied = G%ied ; jsd = G%jsd; jed = G%jed
 
-  if (associated(CS)) then
-    call MOM_error(WARNING, "tidal_forcing_init called with an associated "// &
-                            "control structure.")
-    return
-  endif
-
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mdl, version, "")
   call get_param(param_file, mdl, "TIDES", tides, &
                  "If true, apply tidal momentum forcing.", default=.false.)
 
   if (.not.tides) return
-
-  allocate(CS)
 
   ! Set up the spatial structure functions for the diurnal, semidiurnal, and
   ! low-frequency tidal components.
@@ -397,68 +396,68 @@ subroutine tidal_forcing_init(Time, G, param_file, CS)
     endif
     CS%time_ref = set_date(tide_ref_date(1), tide_ref_date(2), tide_ref_date(3))
   endif
-  ! Set the parameters for all components that are in use.
-  ! Initialize reference time for tides and
-  ! find relevant lunar and solar longitudes at the reference time.
+
+  ! Initialize reference time for tides and find relevant lunar and solar
+  ! longitudes at the reference time.
   if (CS%use_eq_phase) call astro_longitudes_init(CS%time_ref, CS%tidal_longitudes)
+
+  ! Set the parameters for all components that are in use.
   c=0
   if (use_M2) then
     c=c+1 ; CS%const_name(c) = "M2" ; CS%struct(c) = 2
-    CS%love_no(c) = 0.693 ; CS%amp(c) = 0.242334
+    CS%love_no(c) = 0.693 ; amp_def(c) = 0.242334 ! Default amplitude in m.
   endif
 
   if (use_S2) then
     c=c+1 ; CS%const_name(c) = "S2" ; CS%struct(c) = 2
-    CS%love_no(c) = 0.693 ; CS%amp(c) = 0.112743
+    CS%love_no(c) = 0.693 ; amp_def(c) = 0.112743 ! Default amplitude in m.
   endif
 
   if (use_N2) then
     c=c+1 ; CS%const_name(c) = "N2" ; CS%struct(c) = 2
-    CS%love_no(c) = 0.693 ; CS%amp(c) = 0.046397
+    CS%love_no(c) = 0.693 ; amp_def(c) = 0.046397 ! Default amplitude in m.
   endif
 
   if (use_K2) then
     c=c+1 ; CS%const_name(c) = "K2" ; CS%struct(c) = 2
-    CS%love_no(c) = 0.693 ; CS%amp(c) = 0.030684
+    CS%love_no(c) = 0.693 ; amp_def(c) = 0.030684 ! Default amplitude in m.
   endif
 
   if (use_K1) then
     c=c+1 ; CS%const_name(c) = "K1" ; CS%struct(c) = 1
-    CS%love_no(c) = 0.736 ; CS%amp(c) = 0.141565
+    CS%love_no(c) = 0.736 ; amp_def(c) = 0.141565 ! Default amplitude in m.
   endif
 
   if (use_O1) then
     c=c+1 ; CS%const_name(c) = "O1" ; CS%struct(c) = 1
-    CS%love_no(c) = 0.695 ; CS%amp(c) = 0.100661
+    CS%love_no(c) = 0.695 ; amp_def(c) = 0.100661 ! Default amplitude in m.
   endif
 
   if (use_P1) then
     c=c+1 ; CS%const_name(c) = "P1" ; CS%struct(c) = 1
-    CS%love_no(c) = 0.706 ; CS%amp(c) = 0.046848
+    CS%love_no(c) = 0.706 ; amp_def(c) = 0.046848 ! Default amplitude in m.
   endif
 
   if (use_Q1) then
     c=c+1 ; CS%const_name(c) = "Q1" ; CS%struct(c) = 1
-    CS%love_no(c) = 0.695 ; CS%amp(c) = 0.019273
+    CS%love_no(c) = 0.695 ; amp_def(c) = 0.019273 ! Default amplitude in m.
   endif
 
   if (use_MF) then
     c=c+1 ; CS%const_name(c) = "MF" ; CS%struct(c) = 3
-    CS%love_no(c) = 0.693 ; CS%amp(c) = 0.042041
+    CS%love_no(c) = 0.693 ; amp_def(c) = 0.042041 ! Default amplitude in m.
   endif
 
   if (use_MM) then
     c=c+1 ; CS%const_name(c) = "MM" ; CS%struct(c) = 3
-    CS%love_no(c) = 0.693 ; CS%amp(c) = 0.022191
+    CS%love_no(c) = 0.693 ; amp_def(c) = 0.022191 ! Default amplitude in m.
   endif
 
   ! Set defaults for all included constituents
   ! and things that can be set by functions
   do c=1,nc
-    CS%freq(c) = tidal_frequency(CS%const_name(c))
-    freq_def(c) = CS%freq(c)
+    freq_def(c) = tidal_frequency(CS%const_name(c))
     love_def(c) = CS%love_no(c)
-    amp_def(c) = CS%amp(c)
     CS%phase0(c) = 0.0
     if (CS%use_eq_phase) then
       phase0_def(c) = eq_phase(CS%const_name(c), CS%tidal_longitudes)
@@ -475,11 +474,11 @@ subroutine tidal_forcing_init(Time, G, param_file, CS)
                    "Frequency of the "//trim(CS%const_name(c))//" tidal constituent. "//&
                    "This is only used if TIDES and TIDE_"//trim(CS%const_name(c))// &
                    " are true, or if OBC_TIDE_N_CONSTITUENTS > 0 and "//trim(CS%const_name(c))// &
-                   " is in OBC_TIDE_CONSTITUENTS.", units="s-1", default=freq_def(c))
+                   " is in OBC_TIDE_CONSTITUENTS.", units="s-1", default=freq_def(c), scale=US%T_to_s)
     call get_param(param_file, mdl, "TIDE_"//trim(CS%const_name(c))//"_AMP", CS%amp(c), &
                    "Amplitude of the "//trim(CS%const_name(c))//" tidal constituent. "//&
                    "This is only used if TIDES and TIDE_"//trim(CS%const_name(c))// &
-                   " are true.", units="m", default=amp_def(c))
+                   " are true.", units="m", default=amp_def(c), scale=US%m_to_Z)
     call get_param(param_file, mdl, "TIDE_"//trim(CS%const_name(c))//"_PHASE_T0", CS%phase0(c), &
                    "Phase of the "//trim(CS%const_name(c))//" tidal constituent at time 0. "//&
                    "This is only used if TIDES and TIDE_"//trim(CS%const_name(c))// &
@@ -492,8 +491,9 @@ subroutine tidal_forcing_init(Time, G, param_file, CS)
     allocate(CS%ampsal(isd:ied,jsd:jed,nc))
     do c=1,nc
       ! Read variables with names like PHASE_SAL_M2 and AMP_SAL_M2.
-      call find_in_files(tidal_input_files,"PHASE_SAL_"//trim(CS%const_name(c)),phase,G)
-      call find_in_files(tidal_input_files,"AMP_SAL_"//trim(CS%const_name(c)),CS%ampsal(:,:,c),G)
+      call find_in_files(tidal_input_files, "PHASE_SAL_"//trim(CS%const_name(c)), phase, G)
+      call find_in_files(tidal_input_files, "AMP_SAL_"//trim(CS%const_name(c)), CS%ampsal(:,:,c), &
+                         G, scale=US%m_to_Z)
       call pass_var(phase,           G%domain,complete=.false.)
       call pass_var(CS%ampsal(:,:,c),G%domain,complete=.true.)
       do j=js-1,je+1 ; do i=is-1,ie+1
@@ -509,8 +509,9 @@ subroutine tidal_forcing_init(Time, G, param_file, CS)
     allocate(CS%amp_prev(isd:ied,jsd:jed,nc))
     do c=1,nc
       ! Read variables with names like PHASE_PREV_M2 and AMP_PREV_M2.
-      call find_in_files(tidal_input_files,"PHASE_PREV_"//trim(CS%const_name(c)),phase,G)
-      call find_in_files(tidal_input_files,"AMP_PREV_"//trim(CS%const_name(c)),CS%amp_prev(:,:,c),G)
+      call find_in_files(tidal_input_files, "PHASE_PREV_"//trim(CS%const_name(c)), phase, G)
+      call find_in_files(tidal_input_files, "AMP_PREV_"//trim(CS%const_name(c)), CS%amp_prev(:,:,c), &
+                         G, scale=US%m_to_Z)
       call pass_var(phase,             G%domain,complete=.false.)
       call pass_var(CS%amp_prev(:,:,c),G%domain,complete=.true.)
       do j=js-1,je+1 ; do i=is-1,ie+1
@@ -526,18 +527,19 @@ end subroutine tidal_forcing_init
 
 !> This subroutine finds a named variable in a list of files and reads its
 !! values into a domain-decomposed 2-d array
-subroutine find_in_files(filenames, varname, array, G)
+subroutine find_in_files(filenames, varname, array, G, scale)
   character(len=*), dimension(:),   intent(in)  :: filenames !< The names of the files to search for the named variable
   character(len=*),                 intent(in)  :: varname   !< The name of the variable to read
   type(ocean_grid_type),            intent(in)  :: G         !< The ocean's grid structure
   real, dimension(SZI_(G),SZJ_(G)), intent(out) :: array     !< The array to fill with the data
+  real,                   optional, intent(in)  :: scale     !< A factor by which to rescale the array.
   ! Local variables
   integer :: nf
 
   do nf=1,size(filenames)
     if (LEN_TRIM(filenames(nf)) == 0) cycle
     if (field_exists(filenames(nf), varname, MOM_domain=G%Domain)) then
-      call MOM_read_data(filenames(nf), varname, array, G%Domain)
+      call MOM_read_data(filenames(nf), varname, array, G%Domain, scale=scale)
       return
     endif
   enddo
@@ -560,7 +562,7 @@ end subroutine find_in_files
 !! and loading.
 subroutine tidal_forcing_sensitivity(G, CS, deta_tidal_deta)
   type(ocean_grid_type),  intent(in)  :: G  !< The ocean's grid structure.
-  type(tidal_forcing_CS), pointer     :: CS !< The control structure returned by a previous call to tidal_forcing_init.
+  type(tidal_forcing_CS), intent(in)  :: CS !< The control structure returned by a previous call to tidal_forcing_init.
   real,                   intent(out) :: deta_tidal_deta !< The partial derivative of eta_tidal with
                                             !! the local value of eta [nondim].
 
@@ -579,27 +581,25 @@ end subroutine tidal_forcing_sensitivity
 !! height.  For now, eta and eta_tidal are both geopotential heights in depth
 !! units, but probably the input for eta should really be replaced with the
 !! column mass anomalies.
-subroutine calc_tidal_forcing(Time, eta, eta_tidal, G, CS, m_to_Z)
+subroutine calc_tidal_forcing(Time, eta, eta_tidal, G, US, CS)
   type(ocean_grid_type),            intent(in)  :: G         !< The ocean's grid structure.
   type(time_type),                  intent(in)  :: Time      !< The time for the caluculation.
   real, dimension(SZI_(G),SZJ_(G)), intent(in)  :: eta       !< The sea surface height anomaly from
                                                              !! a time-mean geoid [Z ~> m].
   real, dimension(SZI_(G),SZJ_(G)), intent(out) :: eta_tidal !< The tidal forcing geopotential height
                                                              !! anomalies [Z ~> m].
-  type(tidal_forcing_CS),           pointer     :: CS        !< The control structure returned by a
+  type(unit_scale_type),            intent(in)  :: US        !< A dimensional unit scaling type
+  type(tidal_forcing_CS),           intent(in)  :: CS        !< The control structure returned by a
                                                              !! previous call to tidal_forcing_init.
-  real,                             intent(in)  :: m_to_Z    !< A scaling factor from m to the units of eta.
 
   ! Local variables
-  real :: now       ! The relative time in seconds.
-  real :: amp_cosomegat, amp_sinomegat
-  real :: cosomegat, sinomegat
-  real :: eta_prop  ! The nondimenional constant of proportionality beteen eta and eta_tidal.
+  real :: now       ! The relative time compared with the tidal reference [T ~> s]
+  real :: amp_cosomegat, amp_sinomegat ! The tidal amplitudes times the components of phase [Z ~> m]
+  real :: cosomegat, sinomegat ! The components of the phase [nondim]
+  real :: eta_prop  ! The nondimenional constant of proportionality beteen eta and eta_tidal [nondim]
   integer :: i, j, c, m, is, ie, js, je, Isq, Ieq, Jsq, Jeq
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
-
-  if (.not.associated(CS)) return
 
   call cpu_clock_begin(id_clock_tides)
 
@@ -608,7 +608,7 @@ subroutine calc_tidal_forcing(Time, eta, eta_tidal, G, CS, m_to_Z)
     return
   endif
 
-  now = time_type_to_real(Time - cs%time_ref)
+  now = US%s_to_T * time_type_to_real(Time - cs%time_ref)
 
   if (CS%USE_SAL_SCALAR .and. CS%USE_PREV_TIDES) then
     eta_prop = 2.0*CS%SAL_SCALAR
@@ -624,8 +624,8 @@ subroutine calc_tidal_forcing(Time, eta, eta_tidal, G, CS, m_to_Z)
 
   do c=1,CS%nc
     m = CS%struct(c)
-    amp_cosomegat = m_to_Z*CS%amp(c)*CS%love_no(c) * cos(CS%freq(c)*now + CS%phase0(c))
-    amp_sinomegat = m_to_Z*CS%amp(c)*CS%love_no(c) * sin(CS%freq(c)*now + CS%phase0(c))
+    amp_cosomegat = CS%amp(c)*CS%love_no(c) * cos(CS%freq(c)*now + CS%phase0(c))
+    amp_sinomegat = CS%amp(c)*CS%love_no(c) * sin(CS%freq(c)*now + CS%phase0(c))
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
       eta_tidal(i,j) = eta_tidal(i,j) + (amp_cosomegat*CS%cos_struct(i,j,m) + &
                                          amp_sinomegat*CS%sin_struct(i,j,m))
@@ -636,7 +636,7 @@ subroutine calc_tidal_forcing(Time, eta, eta_tidal, G, CS, m_to_Z)
     cosomegat = cos(CS%freq(c)*now)
     sinomegat = sin(CS%freq(c)*now)
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-      eta_tidal(i,j) = eta_tidal(i,j) + m_to_Z*CS%ampsal(i,j,c) * &
+      eta_tidal(i,j) = eta_tidal(i,j) + CS%ampsal(i,j,c) * &
            (cosomegat*CS%cosphasesal(i,j,c) + sinomegat*CS%sinphasesal(i,j,c))
     enddo ; enddo
   enddo ; endif
@@ -645,7 +645,7 @@ subroutine calc_tidal_forcing(Time, eta, eta_tidal, G, CS, m_to_Z)
     cosomegat = cos(CS%freq(c)*now)
     sinomegat = sin(CS%freq(c)*now)
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-      eta_tidal(i,j) = eta_tidal(i,j) - m_to_Z*CS%SAL_SCALAR*CS%amp_prev(i,j,c) * &
+      eta_tidal(i,j) = eta_tidal(i,j) - CS%SAL_SCALAR*CS%amp_prev(i,j,c) * &
           (cosomegat*CS%cosphase_prev(i,j,c) + sinomegat*CS%sinphase_prev(i,j,c))
     enddo ; enddo
   enddo ; endif
@@ -659,16 +659,16 @@ subroutine tidal_forcing_end(CS)
   type(tidal_forcing_CS), intent(inout) :: CS !< The control structure returned by a previous call
                                               !! to tidal_forcing_init; it is deallocated here.
 
-  if (associated(CS%sin_struct)) deallocate(CS%sin_struct)
-  if (associated(CS%cos_struct)) deallocate(CS%cos_struct)
+  if (allocated(CS%sin_struct)) deallocate(CS%sin_struct)
+  if (allocated(CS%cos_struct)) deallocate(CS%cos_struct)
 
-  if (associated(CS%cosphasesal)) deallocate(CS%cosphasesal)
-  if (associated(CS%sinphasesal)) deallocate(CS%sinphasesal)
-  if (associated(CS%ampsal))      deallocate(CS%ampsal)
+  if (allocated(CS%cosphasesal)) deallocate(CS%cosphasesal)
+  if (allocated(CS%sinphasesal)) deallocate(CS%sinphasesal)
+  if (allocated(CS%ampsal))      deallocate(CS%ampsal)
 
-  if (associated(CS%cosphase_prev)) deallocate(CS%cosphase_prev)
-  if (associated(CS%sinphase_prev)) deallocate(CS%sinphase_prev)
-  if (associated(CS%amp_prev))      deallocate(CS%amp_prev)
+  if (allocated(CS%cosphase_prev)) deallocate(CS%cosphase_prev)
+  if (allocated(CS%sinphase_prev)) deallocate(CS%sinphase_prev)
+  if (allocated(CS%amp_prev))      deallocate(CS%amp_prev)
 end subroutine tidal_forcing_end
 
 !> \namespace tidal_forcing

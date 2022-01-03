@@ -26,6 +26,7 @@ public wave_speed, wave_speeds, wave_speed_init, wave_speed_set_param
 
 !> Control structure for MOM_wave_speed
 type, public :: wave_speed_CS ; private
+  logical :: initialized = .false.     !< True if this control structure has been initialized.
   logical :: use_ebt_mode = .false.    !< If true, calculate the equivalent barotropic wave speed instead
                                        !! of the first baroclinic wave speed.
                                        !! This parameter controls the default behavior of wave_speed() which
@@ -63,7 +64,7 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, mono_
                                     intent(in)  :: h  !< Layer thickness [H ~> m or kg m-2]
   type(thermo_var_ptrs),            intent(in)  :: tv !< Thermodynamic variables
   real, dimension(SZI_(G),SZJ_(G)), intent(out) :: cg1 !< First mode internal wave speed [L T-1 ~> m s-1]
-  type(wave_speed_CS),              pointer     :: CS !< Control structure for MOM_wave_speed
+  type(wave_speed_CS),              intent(in)  :: CS !< Wave speed control struct
   logical,                optional, intent(in)  :: full_halos !< If true, do the calculation
                                           !! over the entire computational domain.
   logical,                optional, intent(in)  :: use_ebt_mode !< If true, use the equivalent
@@ -103,9 +104,9 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, mono_
     Hc_H          ! Hc(:) rescaled from Z to thickness units [H ~> m or kg m-2]
   real :: I_Htot  ! The inverse of the total filtered thicknesses [Z ~> m]
   real :: det, ddet, detKm1, detKm2, ddetKm1, ddetKm2
-  real :: lam     ! The eigenvalue [T2 L-2 ~> s m-1]
-  real :: dlam    ! The change in estimates of the eigenvalue [T2 L-2 ~> s m-1]
-  real :: lam0    ! The first guess of the eigenvalue [T2 L-2 ~> s m-1]
+  real :: lam     ! The eigenvalue [T2 L-2 ~> s2 m-2]
+  real :: dlam    ! The change in estimates of the eigenvalue [T2 L-2 ~> s2 m-2]
+  real :: lam0    ! The first guess of the eigenvalue [T2 L-2 ~> s2 m-2]
   real :: min_h_frac ! [nondim]
   real :: Z_to_pres  ! A conversion factor from thicknesses to pressure [R L2 T-2 Z-1 ~> Pa m-1]
   real, dimension(SZI_(G)) :: &
@@ -119,7 +120,6 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, mono_
   real :: I_Hnew   ! The inverse of a new layer thickness [Z-1 ~> m-1]
   real :: drxh_sum ! The sum of density differences across interfaces times thicknesses [R Z ~> kg m-2]
   real :: L2_to_Z2 ! A scaling factor squared from units of lateral distances to depths [Z2 L-2 ~> 1].
-  real, pointer, dimension(:,:,:) :: T => NULL(), S => NULL()
   real :: g_Rho0   ! G_Earth/Rho0 [L2 T-2 Z-1 R-1 ~> m4 s-2 kg-1].
   real :: c2_scale ! A scaling factor for wave speeds to help control the growth of the determinant
                    ! and its derivative with lam between rows of the Thomas algorithm solver.  The
@@ -147,8 +147,9 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, mono_
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
-  if (.not. associated(CS)) call MOM_error(FATAL, "MOM_wave_speed: "// &
+  if (.not. CS%initialized) call MOM_error(FATAL, "MOM_wave_speed: "// &
            "Module must be initialized before it is used.")
+
   if (present(full_halos)) then ; if (full_halos) then
     is = G%isd ; ie = G%ied ; js = G%jsd ; je = G%jed
   endif ; endif
@@ -169,7 +170,6 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, mono_
     enddo ; enddo ; enddo
   endif
 
-  S => tv%S ; T => tv%T
   g_Rho0 = GV%g_Earth / GV%Rho0
   ! Simplifying the following could change answers at roundoff.
   Z_to_pres = GV%Z_to_H * (GV%H_to_RZ * GV%g_Earth)
@@ -196,7 +196,7 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, mono_
   c2_scale = US%m_s_to_L_T**2 / 4096.0**2 ! Other powers of 2 give identical results.
 
   min_h_frac = tol_Hfrac / real(nz)
-!$OMP parallel do default(none) shared(is,ie,js,je,nz,h,G,GV,US,min_h_frac,use_EOS,T,S,tv,&
+!$OMP parallel do default(none) shared(is,ie,js,je,nz,h,G,GV,US,min_h_frac,use_EOS,tv,&
 !$OMP                                  calc_modal_structure,l_use_ebt_mode,modal_structure, &
 !$OMP                                  l_mono_N2_column_fraction,l_mono_N2_depth,CS,   &
 !$OMP                                  Z_to_pres,cg1,g_Rho0,rescale,I_rescale,L2_to_Z2, &
@@ -229,12 +229,12 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, mono_
 
           ! Start a new layer
           H_here(i) = h(i,j,k)*GV%H_to_Z
-          HxT_here(i) = (h(i,j,k)*GV%H_to_Z)*T(i,j,k)
-          HxS_here(i) = (h(i,j,k)*GV%H_to_Z)*S(i,j,k)
+          HxT_here(i) = (h(i,j,k) * GV%H_to_Z) * tv%T(i,j,k)
+          HxS_here(i) = (h(i,j,k) * GV%H_to_Z) * tv%S(i,j,k)
         else
           H_here(i) = H_here(i) + h(i,j,k)*GV%H_to_Z
-          HxT_here(i) = HxT_here(i) + (h(i,j,k)*GV%H_to_Z)*T(i,j,k)
-          HxS_here(i) = HxS_here(i) + (h(i,j,k)*GV%H_to_Z)*S(i,j,k)
+          HxT_here(i) = HxT_here(i) + (h(i,j,k) * GV%H_to_Z) * tv%T(i,j,k)
+          HxS_here(i) = HxS_here(i) + (h(i,j,k) * GV%H_to_Z) * tv%S(i,j,k)
         endif
       enddo ; enddo
       do i=is,ie ; if (H_here(i) > 0.0) then
@@ -623,7 +623,7 @@ subroutine tdma6(n, a, c, lam, y)
     endif
     yy(k) = y(k) + a(k) * yy(k-1) * I_beta(k-1)
   enddo
-  ! The units of y change by a factor of [L2 T-2] in the following lines.
+  ! The units of y change by a factor of [L2 T-2 ~> m2 s-2] in the following lines.
   y(n) = yy(n) * I_beta(n)
   do k = n-1, 1, -1
     y(k) = ( yy(k) + c(k) * y(k+1) ) * I_beta(k)
@@ -640,7 +640,7 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, full_halos)
   type(thermo_var_ptrs),                    intent(in)  :: tv !< Thermodynamic variables
   integer,                                  intent(in)  :: nmodes !< Number of modes
   real, dimension(G%isd:G%ied,G%jsd:G%jed,nmodes), intent(out) :: cn !< Waves speeds [L T-1 ~> m s-1]
-  type(wave_speed_CS), optional,            pointer     :: CS !< Control structure for MOM_wave_speed
+  type(wave_speed_CS), optional,            intent(in)  :: CS !< Wave speed control struct
   logical,             optional,            intent(in)  :: full_halos !< If true, do the calculation
                                                                       !! over the entire computational domain.
 
@@ -675,7 +675,7 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, full_halos)
   real :: det, ddet       ! determinant & its derivative of eigen system
   real :: lam_1           ! approximate mode-1 eigenvalue [T2 L-2 ~> s2 m-2]
   real :: lam_n           ! approximate mode-n eigenvalue [T2 L-2 ~> s2 m-2]
-  real :: dlam            ! The change in estimates of the eigenvalue [T2 L-2 ~> s m-1]
+  real :: dlam            ! The change in estimates of the eigenvalue [T2 L-2 ~> s2 m-2]
   real :: lamMin          ! minimum lam value for root searching range [T2 L-2 ~> s2 m-2]
   real :: lamMax          ! maximum lam value for root searching range [T2 L-2 ~> s2 m-2]
   real :: lamInc          ! width of moving window for root searching [T2 L-2 ~> s2 m-2]
@@ -727,7 +727,7 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, full_halos)
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
   if (present(CS)) then
-    if (.not. associated(CS)) call MOM_error(FATAL, "MOM_wave_speed: "// &
+    if (.not. CS%initialized) call MOM_error(FATAL, "MOM_wave_speed: "// &
            "Module must be initialized before it is used.")
   endif
 
@@ -1171,7 +1171,7 @@ end subroutine tridiag_det
 !> Initialize control structure for MOM_wave_speed
 subroutine wave_speed_init(CS, use_ebt_mode, mono_N2_column_fraction, mono_N2_depth, remap_answers_2018, &
                            better_speed_est, min_speed, wave_speed_tol)
-  type(wave_speed_CS), pointer :: CS !< Control structure for MOM_wave_speed
+  type(wave_speed_CS), intent(inout) :: CS  !< Wave speed control struct
   logical, optional, intent(in) :: use_ebt_mode  !< If true, use the equivalent
                                      !! barotropic mode instead of the first baroclinic mode.
   real,    optional, intent(in) :: mono_N2_column_fraction !< The lower fraction of water column over
@@ -1194,11 +1194,7 @@ subroutine wave_speed_init(CS, use_ebt_mode, mono_N2_column_fraction, mono_N2_de
 # include "version_variable.h"
   character(len=40)  :: mdl = "MOM_wave_speed"  ! This module's name.
 
-  if (associated(CS)) then
-    call MOM_error(WARNING, "wave_speed_init called with an "// &
-                            "associated control structure.")
-    return
-  else ; allocate(CS) ; endif
+  CS%initialized = .true.
 
   ! Write all relevant parameters to the model log.
   call log_version(mdl, version)
@@ -1214,7 +1210,8 @@ end subroutine wave_speed_init
 !> Sets internal parameters for MOM_wave_speed
 subroutine wave_speed_set_param(CS, use_ebt_mode, mono_N2_column_fraction, mono_N2_depth, remap_answers_2018, &
                                 better_speed_est, min_speed, wave_speed_tol)
-  type(wave_speed_CS), pointer  :: CS !< Control structure for MOM_wave_speed
+  type(wave_speed_CS), intent(inout)  :: CS
+                                      !< Control structure for MOM_wave_speed
   logical, optional, intent(in) :: use_ebt_mode  !< If true, use the equivalent
                                       !! barotropic mode instead of the first baroclinic mode.
   real,    optional, intent(in) :: mono_N2_column_fraction !< The lower fraction of water column over
@@ -1232,9 +1229,6 @@ subroutine wave_speed_set_param(CS, use_ebt_mode, mono_N2_column_fraction, mono_
                                      !! below which 0 is returned [L T-1 ~> m s-1].
   real,    optional, intent(in) :: wave_speed_tol !< The fractional tolerance for finding the
                                      !! wave speeds [nondim]
-
-  if (.not.associated(CS)) call MOM_error(FATAL, &
-     "wave_speed_set_param called with an associated control structure.")
 
   if (present(use_ebt_mode)) CS%use_ebt_mode = use_ebt_mode
   if (present(mono_N2_column_fraction)) CS%mono_N2_column_fraction = mono_N2_column_fraction

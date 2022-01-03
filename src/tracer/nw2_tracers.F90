@@ -33,7 +33,8 @@ type, public :: nw2_tracers_CS ; private
   type(time_type), pointer :: Time => NULL() !< A pointer to the ocean model's clock.
   type(tracer_registry_type), pointer :: tr_Reg => NULL() !< A pointer to the tracer registry
   real, pointer :: tr(:,:,:,:) => NULL()   !< The array of tracers used in this package, in g m-3?
-  real, allocatable , dimension(:) :: restore_rate !< The exponential growth rate for restoration value [year-1].
+  real, allocatable , dimension(:) :: restore_rate !< The rate at which the tracer is damped toward
+                                             !! its target profile [T-1 ~> s-1]
   type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to
                                              !! regulate the timing of diagnostic output.
   type(MOM_restart_CS), pointer :: restart_CSp => NULL() !< A pointer to the restart controls structure
@@ -42,16 +43,17 @@ end type nw2_tracers_CS
 contains
 
 !> Register the NW2 tracer fields to be used with MOM.
-logical function register_nw2_tracers(HI, GV, param_file, CS, tr_Reg, restart_CS)
+logical function register_nw2_tracers(HI, GV, US, param_file, CS, tr_Reg, restart_CS)
   type(hor_index_type),       intent(in) :: HI   !< A horizontal index type structure
   type(verticalGrid_type),    intent(in) :: GV   !< The ocean's vertical grid structure
+  type(unit_scale_type),      intent(in) :: US   !< A dimensional unit scaling type
   type(param_file_type),      intent(in) :: param_file !< A structure to parse for run-time parameters
   type(nw2_tracers_CS),       pointer    :: CS !< The control structure returned by a previous
                                                !! call to register_nw2_tracer.
   type(tracer_registry_type), pointer    :: tr_Reg !< A pointer that is set to point to the control
                                                   !! structure for the tracer advection and
                                                   !! diffusion module
-  type(MOM_restart_CS),       pointer    :: restart_CS !< A pointer to the restart control structure
+  type(MOM_restart_CS), target, intent(inout) :: restart_CS !< MOM restart control struct
 
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
@@ -62,7 +64,7 @@ logical function register_nw2_tracers(HI, GV, param_file, CS, tr_Reg, restart_CS
   logical :: do_nw2
   integer :: isd, ied, jsd, jed, nz, m, ig
   integer :: n_groups ! Number of groups of three tracers (i.e. # tracers/3)
-  real, allocatable, dimension(:) :: timescale_in_days
+  real, allocatable, dimension(:) :: timescale_in_days ! Damping timescale [days]
   type(vardesc) :: tr_desc ! Descriptions and metadata for the tracers
   isd = HI%isd ; ied = HI%ied ; jsd = HI%jsd ; jed = HI%jed ; nz = GV%ke
 
@@ -100,7 +102,7 @@ logical function register_nw2_tracers(HI, GV, param_file, CS, tr_Reg, restart_CS
     call register_tracer(tr_ptr, tr_Reg, param_file, HI, GV, tr_desc=tr_desc, &
                          registry_diags=.true., restart_CS=restart_CS, mandatory=.false.)
     ig = int( (m+2)/3 ) ! maps (1,2,3)->1, (4,5,6)->2, ...
-    CS%restore_rate(m) = 1.0 / ( timescale_in_days(ig) * 86400.0 )
+    CS%restore_rate(m) = 1.0 / ( timescale_in_days(ig) * 86400.0*US%s_to_T )
   enddo
 
   CS%tr_Reg => tr_Reg
@@ -125,8 +127,8 @@ subroutine initialize_nw2_tracers(restart, day, G, GV, US, h, tv, diag, CS)
   type(nw2_tracers_CS),               pointer    :: CS !< The control structure returned by a previous
                                                        !! call to register_nw2_tracer.
   ! Local variables
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1) :: eta ! Interface heights
-  real :: rscl ! z* scaling factor
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1) :: eta ! Interface heights [Z ~> m]
+  real :: rscl ! z* scaling factor [nondim]
   character(len=8)  :: var_name ! The variable's name.
   integer :: i, j, k, m
 
@@ -206,11 +208,11 @@ subroutine nw2_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, US
 ! The arguments to this subroutine are redundant in that
 !     h_new(k) = h_old(k) + ea(k) - eb(k-1) + eb(k) - ea(k+1)
   ! Local variables
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: h_work ! Used so that h can be modified
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1) :: eta ! Interface heights
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: h_work ! Used so that h can be modified [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1) :: eta ! Interface heights [Z ~> m]
   integer :: i, j, k, m
-  real :: dt_x_rate ! dt * restoring rate
-  real :: rscl ! z* scaling factor
+  real :: dt_x_rate ! dt * restoring rate [nondim]
+  real :: rscl ! z* scaling factor [nondim]
   real :: target_value ! tracer value
 
 ! if (.not.associated(CS)) return
@@ -253,8 +255,8 @@ subroutine nw2_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, US
   endif
 
   do m=1,CS%ntr
-    dt_x_rate = ( dt * CS%restore_rate(m) ) * US%T_to_s
-!$OMP parallel do default(private) shared(CS,G,dt,dt_x_rate)
+    dt_x_rate = dt * CS%restore_rate(m)
+    !$OMP parallel do default(shared) private(target_value)
     do k=1,GV%ke ; do j=G%jsc,G%jec ; do i=G%isc,G%iec
       target_value = nw2_tracer_dist(m, G, GV, eta, i, j, k)
       CS%tr(i,j,k,m) = CS%tr(i,j,k,m) + G%mask2dT(i,j) * dt_x_rate * ( target_value - CS%tr(i,j,k,m) )
@@ -270,13 +272,13 @@ real function nw2_tracer_dist(m, G, GV, eta, i, j, k)
   type(ocean_grid_type),   intent(in) :: G   !< The ocean's grid structure
   type(verticalGrid_type), intent(in) :: GV  !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),0:SZK_(G)), &
-                           intent(in) :: eta !< Interface position [m]
+                           intent(in) :: eta !< Interface position [Z ~> m]
   integer, intent(in) :: i !< Cell index i
   integer, intent(in) :: j !< Cell index j
   integer, intent(in) :: k !< Layer index k
   ! Local variables
-  real :: pi ! 3.1415...
-  real :: x, y, z ! non-dimensional positions
+  real :: pi ! 3.1415... [nondim]
+  real :: x, y, z ! non-dimensional relative positions [nondim]
   pi = 2.*acos(0.)
   x = ( G%geolonT(i,j) - G%west_lon ) / G%len_lon ! 0 ... 1
   y = -G%geolatT(i,j) / G%south_lat ! -1 ... 1

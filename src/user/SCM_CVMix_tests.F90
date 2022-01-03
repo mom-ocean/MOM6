@@ -36,8 +36,8 @@ type SCM_CVMix_tests_CS ; private
   logical :: UseHeatFlux    !< True to use heat flux
   logical :: UseEvaporation !< True to use evaporation
   logical :: UseDiurnalSW   !< True to use diurnal sw radiation
-  real :: tau_x !< (Constant) Wind stress, X [Pa]
-  real :: tau_y !< (Constant) Wind stress, Y [Pa]
+  real :: tau_x !< (Constant) Wind stress, X [R L Z T-2 ~> Pa]
+  real :: tau_y !< (Constant) Wind stress, Y [R L Z T-2 ~> Pa]
   real :: surf_HF !< (Constant) Heat flux [degC Z T-1 ~> m degC s-1]
   real :: surf_evap !< (Constant) Evaporation rate [Z T-1 ~> m s-1]
   real :: Max_sw !< maximum of diurnal sw radiation [degC Z T-1 ~> degC m s-1]
@@ -56,7 +56,7 @@ subroutine SCM_CVMix_tests_TS_init(T, S, h, G, GV, US, param_file, just_read)
   type(ocean_grid_type),                     intent(in)  :: G  !< Grid structure
   type(verticalGrid_type),                   intent(in)  :: GV !< Vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: T  !< Potential temperature [degC]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: S  !< Salinity [psu]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: S  !< Salinity [ppt]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)  :: h  !< Layer thickness [H ~> m or kg m-2]
   type(unit_scale_type),                     intent(in)  :: US !< A dimensional unit scaling type
   type(param_file_type),                     intent(in)  :: param_file !< Input parameter structure
@@ -69,8 +69,8 @@ subroutine SCM_CVMix_tests_TS_init(T, S, h, G, GV, US, param_file, just_read)
   real :: UpperLayerSalt !< Upper layer salinity (SSS if thickness 0) [ppt]
   real :: LowerLayerTemp !< Temp at top of lower layer [degC]
   real :: LowerLayerSalt !< Salt at top of lower layer [ppt]
-  real :: LowerLayerdTdz !< Temp gradient in lower layer [degC / Z ~> degC m-1].
-  real :: LowerLayerdSdz !< Salt gradient in lower layer [ppt / Z ~> ppt m-1].
+  real :: LowerLayerdTdz !< Temp gradient in lower layer [degC Z-1 ~> degC m-1].
+  real :: LowerLayerdSdz !< Salt gradient in lower layer [ppt Z-1 ~> ppt m-1].
   real :: LowerLayerMinTemp !< Minimum temperature in lower layer [degC]
   real :: zC, DZ, top, bottom ! Depths and thicknesses [Z ~> m].
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz

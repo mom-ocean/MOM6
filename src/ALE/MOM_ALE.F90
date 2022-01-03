@@ -293,7 +293,7 @@ subroutine adjustGridForIntegrity( CS, G, GV, h )
   type(ocean_grid_type),                     intent(in)    :: G   !< Ocean grid informations
   type(verticalGrid_type),                   intent(in)    :: GV  !< Ocean vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(inout) :: h   !< Current 3D grid thickness that
-                                                                  !! are to be adjusted [H ~> m or kg-2]
+                                                                  !! are to be adjusted [H ~> m or kg m-2]
   call inflate_vanished_layers_old( CS%regridCS, G, GV, h(:,:,:) )
 
 end subroutine adjustGridForIntegrity
@@ -334,7 +334,7 @@ subroutine ALE_main( G, GV, US, h, u, v, tv, Reg, CS, OBC, dt, frac_shelf_h)
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1) :: dzRegrid ! The change in grid interface positions
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1) :: eta_preale
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: h_new ! New 3D grid obtained after last time step [H ~> m or kg-2]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: h_new ! New 3D grid obtained after last time step [H ~> m or kg m-2]
   integer :: nk, i, j, k, isc, iec, jsc, jec
   logical :: ice_shelf
 
@@ -405,7 +405,7 @@ subroutine ALE_main_offline( G, GV, h, tv, Reg, CS, OBC, dt)
   type(ocean_grid_type),                      intent(in)    :: G   !< Ocean grid informations
   type(verticalGrid_type),                    intent(in)    :: GV  !< Ocean vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(inout) :: h   !< Current 3D grid obtained after the
-                                                                   !! last time step [H ~> m or kg-2]
+                                                                   !! last time step [H ~> m or kg m-2]
   type(thermo_var_ptrs),                      intent(inout) :: tv  !< Thermodynamic variable structure
   type(tracer_registry_type),                 pointer       :: Reg !< Tracer registry structure
   type(ALE_CS),                               pointer       :: CS  !< Regridding parameters and options
@@ -413,7 +413,7 @@ subroutine ALE_main_offline( G, GV, h, tv, Reg, CS, OBC, dt)
   real,                             optional, intent(in)    :: dt  !< Time step between calls to ALE_main [T ~> s]
   ! Local variables
   real, dimension(SZI_(G), SZJ_(G), SZK_(GV)+1) :: dzRegrid ! The change in grid interface positions
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: h_new ! New 3D grid obtained after last time step [H ~> m or kg-2]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: h_new ! New 3D grid obtained after last time step [H ~> m or kg m-2]
   integer :: nk, i, j, k, isc, iec, jsc, jec
 
   nk = GV%ke; isc = G%isc; iec = G%iec; jsc = G%jsc; jec = G%jec
@@ -459,21 +459,21 @@ subroutine ALE_offline_inputs(CS, G, GV, h, tv, Reg, uhtr, vhtr, Kd, debug, OBC)
   type(ALE_CS),                                 pointer       :: CS    !< Regridding parameters and options
   type(ocean_grid_type),                        intent(in   ) :: G     !< Ocean grid informations
   type(verticalGrid_type),                      intent(in   ) :: GV    !< Ocean vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),    intent(inout) :: h     !< Layer thicknesses
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),    intent(inout) :: h     !< Layer thicknesses [H ~> m or kg m-2]
   type(thermo_var_ptrs),                        intent(inout) :: tv    !< Thermodynamic variable structure
   type(tracer_registry_type),                   pointer       :: Reg   !< Tracer registry structure
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)),   intent(inout) :: uhtr  !< Zonal mass fluxes
-  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)),   intent(inout) :: vhtr  !< Meridional mass fluxes
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1),  intent(inout) :: Kd    !< Input diffusivites
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)),   intent(inout) :: uhtr  !< Zonal mass fluxes [H L2 ~> m3 or kg]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)),   intent(inout) :: vhtr  !< Meridional mass fluxes [H L2 ~> m3 or kg]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1),  intent(inout) :: Kd    !< Input diffusivites [Z2 T-1 ~> m2 s-1]
   logical,                                      intent(in   ) :: debug !< If true, then turn checksums
   type(ocean_OBC_type),                         pointer       :: OBC   !< Open boundary structure
   ! Local variables
   integer :: nk, i, j, k, isc, iec, jsc, jec
-  real, dimension(SZI_(G), SZJ_(G), SZK_(GV))   :: h_new    ! Layer thicknesses after regridding
+  real, dimension(SZI_(G), SZJ_(G), SZK_(GV))   :: h_new    ! Layer thicknesses after regridding [H ~> m or kg m-2]
   real, dimension(SZI_(G), SZJ_(G), SZK_(GV)+1) :: dzRegrid ! The change in grid interface positions
-  real, dimension(SZK_(GV)) :: h_src
-  real, dimension(SZK_(GV)) :: h_dest, uh_dest
-  real, dimension(SZK_(GV)) :: temp_vec
+  real, dimension(SZK_(GV)) :: h_src   ! Source grid thicknesses at velocity points [H ~> m or kg m-2]
+  real, dimension(SZK_(GV)) :: h_dest  ! Destination grid  thicknesses at velocity points [H ~> m or kg m-2]
+  real, dimension(SZK_(GV)) :: temp_vec ! Transports on the destination grid [H L2 ~> m3 or kg]
 
   nk = GV%ke; isc = G%isc; iec = G%iec; jsc = G%jsc; jec = G%jec
   dzRegrid(:,:,:) = 0.0
@@ -540,10 +540,10 @@ subroutine ALE_offline_tracer_final( G, GV, h, tv, h_target, Reg, CS, OBC)
   type(ocean_grid_type),                      intent(in)    :: G   !< Ocean grid informations
   type(verticalGrid_type),                    intent(in)    :: GV  !< Ocean vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(inout) :: h   !< Current 3D grid obtained after the
-                                                                   !! last time step [H ~> m or kg-2]
+                                                                   !! last time step [H ~> m or kg m-2]
   type(thermo_var_ptrs),                      intent(inout) :: tv  !< Thermodynamic variable structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(inout) :: h_target !< Current 3D grid obtained after
-                                                                        !! last time step  [H ~> m or kg-2]
+                                                                        !! last time step  [H ~> m or kg m-2]
   type(tracer_registry_type),                 pointer       :: Reg !< Tracer registry structure
   type(ALE_CS),                               pointer       :: CS  !< Regridding parameters and options
   type(ocean_OBC_type),                       pointer       :: OBC !< Open boundary structure
@@ -615,7 +615,7 @@ subroutine ALE_build_grid( G, GV, regridCS, remapCS, h, tv, debug, frac_shelf_h 
   type(remapping_CS),                      intent(in)    :: remapCS  !< Remapping parameters and options
   type(thermo_var_ptrs),                   intent(inout) :: tv       !< Thermodynamical variable structure
   real, dimension(SZI_(G),SZJ_(G), SZK_(GV)), intent(inout) :: h     !< Current 3D grid obtained after the
-                                                                     !! last time step [H ~> m or kg-2]
+                                                                     !! last time step [H ~> m or kg m-2]
   logical,                       optional, intent(in)    :: debug    !< If true, show the call tree
   real, dimension(SZI_(G),SZJ_(G)),  optional, intent(in):: frac_shelf_h !< Fractional ice shelf coverage [nondim]
   ! Local variables
@@ -654,7 +654,7 @@ subroutine ALE_regrid_accelerated(CS, G, GV, h, tv, n, u, v, OBC, Reg, dt, dzReg
   type(ocean_grid_type),   intent(inout) :: G      !< Ocean grid
   type(verticalGrid_type), intent(in)    :: GV     !< Vertical grid
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
-                           intent(inout) :: h      !< Original thicknesses [H ~> m or kg-2]
+                           intent(inout) :: h      !< Original thicknesses [H ~> m or kg m-2]
   type(thermo_var_ptrs),   intent(inout) :: tv     !< Thermo vars (T/S/EOS)
   integer,                 intent(in)    :: n      !< Number of times to regrid
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
@@ -741,14 +741,14 @@ subroutine remap_all_state_vars(CS_remapping, CS_ALE, G, GV, h_old, h_new, Reg, 
   type(ocean_grid_type),                     intent(in)    :: G            !< Ocean grid structure
   type(verticalGrid_type),                   intent(in)    :: GV           !< Ocean vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)    :: h_old        !< Thickness of source grid
-                                                                           !! [H ~> m or kg-2]
+                                                                           !! [H ~> m or kg m-2]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)    :: h_new        !< Thickness of destination grid
-                                                                           !! [H ~> m or kg-2]
+                                                                           !! [H ~> m or kg m-2]
   type(tracer_registry_type),                pointer       :: Reg          !< Tracer registry structure
   type(ocean_OBC_type),                      pointer       :: OBC          !< Open boundary structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), &
                                    optional, intent(in)    :: dxInterface  !< Change in interface position
-                                                                           !! [H ~> m or kg-2]
+                                                                           !! [H ~> m or kg m-2]
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
                                    optional, intent(inout) :: u      !< Zonal velocity [L T-1 ~> m s-1]
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
@@ -940,10 +940,10 @@ subroutine ALE_remap_scalar(CS, G, GV, nk_src, h_src, s_src, h_dst, s_dst, all_c
   type(verticalGrid_type),                 intent(in)    :: GV        !< Ocean vertical grid structure
   integer,                                 intent(in)    :: nk_src    !< Number of levels on source grid
   real, dimension(SZI_(G),SZJ_(G),nk_src), intent(in)    :: h_src     !< Level thickness of source grid
-                                                                      !! [H ~> m or kg-2]
+                                                                      !! [H ~> m or kg m-2]
   real, dimension(SZI_(G),SZJ_(G),nk_src), intent(in)    :: s_src     !< Scalar on source grid
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),intent(in)   :: h_dst     !< Level thickness of destination grid
-                                                                      !! [H ~> m or kg-2]
+                                                                      !! [H ~> m or kg m-2]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),intent(inout) :: s_dst    !< Scalar on destination grid
   logical, optional,                       intent(in)    :: all_cells !< If false, only reconstruct for
                                                                       !! non-vanished cells. Use all vanished

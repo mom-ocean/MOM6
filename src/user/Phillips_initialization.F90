@@ -237,7 +237,7 @@ subroutine Phillips_initialize_sponges(G, GV, US, tv, param_file, CSp, h)
   real :: eta0(SZK_(GV)+1)  ! The 1-d nominal positions of the interfaces.
   real :: eta(SZI_(G),SZJ_(G),SZK_(GV)+1) ! A temporary array for interface heights [Z ~> m].
   real :: temp(SZI_(G),SZJ_(G),SZK_(GV)) ! A temporary array for other variables.
-  real :: Idamp(SZI_(G),SZJ_(G))    ! The inverse damping rate [T-1 ~> s-1].
+  real :: Idamp(SZI_(G),SZJ_(G))    ! The sponge damping rate [T-1 ~> s-1]
   real :: eta_im(SZJ_(G),SZK_(GV)+1) ! A temporary array for zonal-mean eta [Z ~> m].
   real :: Idamp_im(SZJ_(G))         ! The inverse zonal-mean damping rate [T-1 ~> s-1].
   real :: damp_rate    ! The inverse zonal-mean damping rate [T-1 ~> s-1].
@@ -325,13 +325,12 @@ end function sech
 subroutine Phillips_initialize_topography(D, G, param_file, max_depth, US)
   type(dyn_horgrid_type),          intent(in)  :: G !< The dynamic horizontal grid type
   real, dimension(G%isd:G%ied,G%jsd:G%jed), &
-                                   intent(out) :: D !< Ocean bottom depth in m or Z if US is present
+                                   intent(out) :: D !< Ocean bottom depth [Z ~> m]
   type(param_file_type),           intent(in)  :: param_file !< Parameter file structure
-  real,                            intent(in)  :: max_depth !< Maximum model depth in the units of D
-  type(unit_scale_type), optional, intent(in)  :: US !< A dimensional unit scaling type
+  real,                            intent(in)  :: max_depth !< Maximum model depth [Z ~> m]
+  type(unit_scale_type),           intent(in)  :: US !< A dimensional unit scaling type
 
   ! Local variables
-  real :: m_to_Z  ! A dimensional rescaling factor.
   real :: PI, Htop, Wtop, Ltop, offset, dist
   real :: x1, x2, x3, x4, y1, y2
   integer :: i,j,is,ie,js,je
@@ -340,10 +339,9 @@ subroutine Phillips_initialize_topography(D, G, param_file, max_depth, US)
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
 
   PI = 4.0*atan(1.0)
-  m_to_Z = 1.0 ; if (present(US)) m_to_Z = US%m_to_Z
 
   call get_param(param_file, mdl, "PHILLIPS_HTOP", Htop, &
-                 "The maximum height of the topography.", units="m", scale=m_to_Z, &
+                 "The maximum height of the topography.", units="m", scale=US%m_to_Z, &
                  fail_if_missing=.true.)
 ! Htop=0.375*max_depth     ! max height of topog. above max_depth
   Wtop = 0.5*G%len_lat     ! meridional width of drake and mount

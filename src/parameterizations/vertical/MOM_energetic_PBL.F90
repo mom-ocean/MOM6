@@ -17,6 +17,7 @@ use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
 use MOM_wave_interface, only: wave_parameters_CS, Get_Langmuir_Number
+use MOM_stochastics,         only : stochastic_CS
 
 implicit none ; private
 
@@ -32,6 +33,7 @@ public energetic_PBL_get_MLD
 
 !> This control structure holds parameters for the MOM_energetic_PBL module
 type, public :: energetic_PBL_CS ; private
+  logical :: initialized = .false. !< True if this control structure has been initialized.
 
   !/ Constants
   real    :: VonKar = 0.41   !< The von Karman coefficient.  This should be a runtime parameter,
@@ -168,7 +170,6 @@ type, public :: energetic_PBL_CS ; private
 
   real, allocatable, dimension(:,:) :: &
     ML_depth            !< The mixed layer depth determined by active mixing in ePBL [Z ~> m].
-
   ! These are terms in the mixed layer TKE budget, all in [R Z3 T-3 ~> W m-2 = kg s-3].
   real, allocatable, dimension(:,:) :: &
     diag_TKE_wind, &   !< The wind source of TKE [R Z3 T-3 ~> W m-2].
@@ -244,7 +245,7 @@ contains
 !!  have already been applied.  All calculations are done implicitly, and there
 !!  is no stability limit on the time step.
 subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS, &
-                         dSV_dT, dSV_dS, TKE_forced, buoy_flux, Waves )
+                         stoch_CS, dSV_dT, dSV_dS, TKE_forced, buoy_flux, Waves )
   type(ocean_grid_type),   intent(inout) :: G      !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)    :: GV     !< The ocean's vertical grid structure.
   type(unit_scale_type),   intent(in)    :: US     !< A dimensional unit scaling type
@@ -276,12 +277,12 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
   real,                    intent(in)    :: dt     !< Time increment [T ~> s].
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), &
                            intent(out)   :: Kd_int !< The diagnosed diffusivities at interfaces
-                                                   !! [Z2 s-1 ~> m2 s-1].
-  type(energetic_PBL_CS),  pointer       :: CS     !< The control structure returned by a previous
-                                                   !! call to energetic_PBL_init.
+                                                   !! [Z2 T-1 ~> m2 s-1].
+  type(energetic_PBL_CS),  intent(inout) :: CS     !< Energetic PBL control struct
   real, dimension(SZI_(G),SZJ_(G)), &
                            intent(in)    :: buoy_flux !< The surface buoyancy flux [Z2 T-3 ~> m2 s-3].
   type(wave_parameters_CS), pointer      :: Waves  !< Waves control structure for Langmuir turbulence
+  type(stochastic_CS),  pointer       :: stoch_CS  !< The control structure returned by a previous
 
 !    This subroutine determines the diffusivities from the integrated energetics
 !  mixed layer model.  It assumes that heating, cooling and freshwater fluxes
@@ -345,9 +346,8 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
-  if (.not. associated(CS)) call MOM_error(FATAL, "energetic_PBL: "//&
+  if (.not. CS%initialized) call MOM_error(FATAL, "energetic_PBL: "//&
          "Module must be initialized before it is used.")
-
   if (.not. associated(tv%eqn_of_state)) call MOM_error(FATAL, &
       "energetic_PBL: Temperature, salinity and an equation of state "//&
       "must now be used.")
@@ -423,10 +423,16 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
       MLD_io = -1.0
       if (CS%MLD_iteration_guess .and. (CS%ML_Depth(i,j) > 0.0))  MLD_io = CS%ML_Depth(i,j)
 
-      call ePBL_column(h, u, v, T0, S0, dSV_dT_1d, dSV_dS_1d, TKE_forcing, B_flux, absf, &
-                       u_star, u_star_mean, dt, MLD_io, Kd, mixvel, mixlen, GV, &
-                       US, CS, eCD, Waves, G, i, j)
-
+      if (stoch_CS%pert_epbl) then ! stochastics are active
+        call ePBL_column(h, u, v, T0, S0, dSV_dT_1d, dSV_dS_1d, TKE_forcing, B_flux, absf, &
+                         u_star, u_star_mean, dt, MLD_io, Kd, mixvel, mixlen, GV, &
+                         US, CS, eCD, Waves, G, i, j, &
+                         epbl1_wt=stoch_CS%epbl1_wts(i,j),epbl2_wt=stoch_CS%epbl2_wts(i,j))
+      else
+        call ePBL_column(h, u, v, T0, S0, dSV_dT_1d, dSV_dS_1d, TKE_forcing, B_flux, absf, &
+                         u_star, u_star_mean, dt, MLD_io, Kd, mixvel, mixlen, GV, &
+                         US, CS, eCD, Waves, G, i, j)
+      endif
 
       ! Copy the diffusivities to a 2-d array.
       do K=1,nz+1
@@ -482,7 +488,10 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
   if (CS%id_LA > 0)       call post_data(CS%id_LA, CS%LA, CS%diag)
   if (CS%id_LA_MOD > 0)   call post_data(CS%id_LA_MOD, CS%LA_MOD, CS%diag)
   if (CS%id_MSTAR_LT > 0) call post_data(CS%id_MSTAR_LT, CS%MSTAR_LT, CS%diag)
-
+  if  (stoch_CS%pert_epbl) then
+    if (stoch_CS%id_epbl1_wts > 0) call post_data(stoch_CS%id_epbl1_wts, stoch_CS%epbl1_wts, CS%diag)
+    if (stoch_CS%id_epbl2_wts > 0) call post_data(stoch_CS%id_epbl2_wts, stoch_CS%epbl2_wts, CS%diag)
+  endif
 end subroutine energetic_PBL
 
 
@@ -491,7 +500,7 @@ end subroutine energetic_PBL
 !!  mixed layer model for a single column of water.
 subroutine ePBL_column(h, u, v, T0, S0, dSV_dT, dSV_dS, TKE_forcing, B_flux, absf, &
                        u_star, u_star_mean, dt, MLD_io, Kd, mixvel, mixlen, GV, US, CS, eCD, &
-                       Waves, G, i, j)
+                       Waves, G, i, j, epbl1_wt, epbl2_wt)
   type(verticalGrid_type), intent(in)    :: GV     !< The ocean's vertical grid structure.
   type(unit_scale_type),   intent(in)    :: US     !< A dimensional unit scaling type
   real, dimension(SZK_(GV)), intent(in)  :: h      !< Layer thicknesses [H ~> m or kg m-2].
@@ -526,11 +535,12 @@ subroutine ePBL_column(h, u, v, T0, S0, dSV_dT, dSV_dS, TKE_forcing, B_flux, abs
                                                    !! [Z T-1 ~> m s-1].
   real, dimension(SZK_(GV)+1), &
                            intent(out)   :: mixlen !< The mixing length scale used in Kd [Z ~> m].
-  type(energetic_PBL_CS),  pointer       :: CS     !< The control structure returned by a previous
-                                                   !! call to energetic_PBL_init.
+  type(energetic_PBL_CS),  intent(inout) :: CS     !< Energetic PBL control struct
   type(ePBL_column_diags), intent(inout) :: eCD    !< A container for passing around diagnostics.
   type(wave_parameters_CS), pointer      :: Waves  !< Waves control structure for Langmuir turbulence
   type(ocean_grid_type),   intent(inout) :: G      !< The ocean's grid structure.
+  real,          optional, intent(in)    :: epbl1_wt !< random number to perturb KE generation
+  real,          optional, intent(in)    :: epbl2_wt !< random number to perturb KE dissipation
   integer,                 intent(in)    :: i      !< The i-index to work on (used for Waves)
   integer,                 intent(in)    :: j      !< The i-index to work on (used for Waves)
 
@@ -621,7 +631,7 @@ subroutine ePBL_column(h, u, v, T0, S0, dSV_dT, dSV_dS, TKE_forcing, B_flux, abs
                     ! the MKE conversion equation [H-1 ~> m-1 or m2 kg-1].
 
   real :: dt_h      ! The timestep divided by the averages of the thicknesses around
-                    ! a layer, times a thickness conversion factor [H T m-2 ~> s m-1 or kg s m-4].
+                    ! a layer, times a thickness conversion factor [H T Z-2 ~> s m-1 or kg s m-4].
   real :: h_bot     ! The distance from the bottom [H ~> m or kg m-2].
   real :: h_rsum    ! The running sum of h from the top [Z ~> m].
   real :: I_hs      ! The inverse of h_sum [H-1 ~> m-1 or m2 kg-1].
@@ -641,7 +651,7 @@ subroutine ePBL_column(h, u, v, T0, S0, dSV_dT, dSV_dS, TKE_forcing, B_flux, abs
   real :: LA        ! The value of the Langmuir number [nondim]
   real :: LAmod     ! The modified Langmuir number by convection [nondim]
   real :: hbs_here  ! The local minimum of hb_hs and MixLen_shape, times a
-                    ! conversion factor from H to Z [Z H-1 ~> 1 or m3 kg-1].
+                    ! conversion factor from H to Z [Z H-1 ~> nondim or m3 kg-1].
   real :: nstar_FC  ! The fraction of conv_PErel that can be converted to mixing [nondim].
   real :: TKE_reduc ! The fraction by which TKE and other energy fields are
                     ! reduced to support mixing [nondim]. between 0 and 1.
@@ -730,9 +740,6 @@ subroutine ePBL_column(h, u, v, T0, S0, dSV_dT, dSV_dS, TKE_forcing, B_flux, abs
   integer :: k, nz, itt, max_itt
 
   nz = GV%ke
-
-  if (.not. associated(CS)) call MOM_error(FATAL, "energetic_PBL: "//&
-         "Module must be initialized before it is used.")
 
   debug = .false.  ! Change this hard-coded value for debugging.
   calc_Te = (debug .or. (.not.CS%orig_PE_calc))
@@ -824,6 +831,8 @@ subroutine ePBL_column(h, u, v, T0, S0, dSV_dT, dSV_dS, TKE_forcing, B_flux, abs
       else
         mech_TKE = MSTAR_total * (dt*GV%Rho0* u_star**3)
       endif
+      ! stochastically pertrub mech_TKE in the UFS
+      if (present(epbl1_wt)) mech_TKE=mech_TKE*epbl1_wt
 
       if (CS%TKE_diagnostics) then
         eCD%dTKE_conv = 0.0 ; eCD%dTKE_mixing = 0.0
@@ -906,7 +915,12 @@ subroutine ePBL_column(h, u, v, T0, S0, dSV_dT, dSV_dS, TKE_forcing, B_flux, abs
         if (Idecay_len_TKE > 0.0) exp_kh = exp(-h(k-1)*Idecay_len_TKE)
         if (CS%TKE_diagnostics) &
           eCD%dTKE_mech_decay = eCD%dTKE_mech_decay + (exp_kh-1.0) * mech_TKE * I_dtdiag
-        mech_TKE = mech_TKE * exp_kh
+        if (present(epbl2_wt)) then ! perturb the TKE destruction
+           mech_TKE = mech_TKE * (1+(exp_kh-1) * epbl2_wt)
+        else
+           mech_TKE = mech_TKE * exp_kh
+        endif
+        !if ( i .eq. 10 .and. j .eq. 10 .and. k .eq. nz) print*,'mech TKE', mech_TKE
 
         !   Accumulate any convectively released potential energy to contribute
         ! to wstar and to drive penetrating convection.
@@ -1642,13 +1656,15 @@ subroutine find_PE_chg_orig(Kddt_h, h_k, b_den_1, dTe_term, dSe_term, &
   real :: b1Kd          ! Temporary array [nondim]
   real :: ColHt_chg     ! The change in column thickness [Z ~> m].
   real :: dColHt_max    ! The change in column thickness for infinite diffusivity [Z ~> m].
-  real :: dColHt_dKd    ! The partial derivative of column thickness with Kddt_h [Z H-1 ~> 1 or m3 kg-2].
-  real :: dT_k, dT_km1  ! Temporary arrays [degC].
-  real :: dS_k, dS_km1  ! Temporary arrays [ppt].
+  real :: dColHt_dKd    ! The partial derivative of column thickness with Kddt_h [Z H-1 ~> nondim or m3 kg-1]
+  real :: dT_k, dT_km1  ! Temperature changes in layers k and k-1 [degC]
+  real :: dS_k, dS_km1  ! Salinity changes in layers k and k-1 [ppt]
   real :: I_Kr_denom    ! Temporary array [H-2 ~> m-2 or m4 kg-2]
-  real :: dKr_dKd       ! Nondimensional temporary array.
-  real :: ddT_k_dKd, ddT_km1_dKd ! Temporary arrays [degC H-1 ~> m-1 or m2 kg-1].
-  real :: ddS_k_dKd, ddS_km1_dKd ! Temporary arrays [ppt H-1 ~> ppt m-1 or ppt m2 kg-1].
+  real :: dKr_dKd       ! Temporary array [H-2 ~> m-2 or m4 kg-2]
+  real :: ddT_k_dKd, ddT_km1_dKd ! Temporary arrays indicating the temperature changes
+                        ! per unit change in Kddt_h [degC H-1 ~> degC m-1 or degC m2 kg-1]
+  real :: ddS_k_dKd, ddS_km1_dKd ! Temporary arrays indicating the salinity changes
+                        ! per unit change in Kddt_h [ppt H-1 ~> ppt m-1 or ppt m2 kg-1]
 
   b1 = 1.0 / (b_den_1 + Kddt_h)
   b1Kd = Kddt_h*b1
@@ -1716,7 +1732,7 @@ end subroutine find_PE_chg_orig
 subroutine find_mstar(CS, US, Buoyancy_Flux, UStar, UStar_Mean,&
                       BLD, Abs_Coriolis, MStar, Langmuir_Number,&
                       MStar_LT, Convect_Langmuir_Number)
-  type(energetic_PBL_CS), pointer    :: CS    !< Energetic_PBL control structure.
+  type(energetic_PBL_CS), intent(in) :: CS    !< Energetic PBL control structure
   type(unit_scale_type), intent(in)  :: US    !< A dimensional unit scaling type
   real,                  intent(in)  :: UStar !< ustar w/ gustiness [Z T-1 ~> m s-1]
   real,                  intent(in)  :: UStar_Mean !< ustar w/o gustiness [Z T-1 ~> m s-1]
@@ -1802,7 +1818,7 @@ end subroutine Find_Mstar
 !> This subroutine modifies the Mstar value if the Langmuir number is present
 subroutine Mstar_Langmuir(CS, US, Abs_Coriolis, Buoyancy_Flux, UStar, BLD, Langmuir_Number, &
                           Mstar, MStar_LT, Convect_Langmuir_Number)
-  type(energetic_PBL_CS), pointer    :: CS    !< Energetic_PBL control structure.
+  type(energetic_PBL_CS), intent(in) :: CS    !< Energetic PBL control structure
   type(unit_scale_type), intent(in)  :: US    !< A dimensional unit scaling type
   real,                  intent(in)  :: Abs_Coriolis !< Absolute value of the Coriolis parameter [T-1 ~> s-1]
   real,                  intent(in)  :: Buoyancy_Flux !< Buoyancy flux [Z2 T-3 ~> m2 s-3]
@@ -1888,7 +1904,7 @@ end subroutine Mstar_Langmuir
 
 !> Copies the ePBL active mixed layer depth into MLD, in units of [Z ~> m] unless other units are specified.
 subroutine energetic_PBL_get_MLD(CS, MLD, G, US, m_to_MLD_units)
-  type(energetic_PBL_CS),           pointer     :: CS  !< Control structure for ePBL
+  type(energetic_PBL_CS),           intent(in)  :: CS  !< Energetic PBL control struct
   type(ocean_grid_type),            intent(in)  :: G   !< Grid structure
   type(unit_scale_type),            intent(in)  :: US  !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G)), intent(out) :: MLD !< Depth of ePBL active mixing layer [Z ~> m] or other units
@@ -1915,8 +1931,8 @@ subroutine energetic_PBL_init(Time, G, GV, US, param_file, diag, CS)
   type(unit_scale_type),   intent(in)    :: US   !< A dimensional unit scaling type
   type(param_file_type),   intent(in)    :: param_file !< A structure to parse for run-time parameters
   type(diag_ctrl), target, intent(inout) :: diag !< A structure that is used to regulate diagnostic output
-  type(energetic_PBL_CS),  pointer       :: CS   !< A pointer that is set to point to the control
-                                                 !! structure for this module
+  type(energetic_PBL_CS),  intent(inout) :: CS   !< Energetic PBL control struct
+
   ! Local variables
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
@@ -1930,12 +1946,7 @@ subroutine energetic_PBL_init(Time, G, GV, US, param_file, diag, CS)
   logical :: use_la_windsea
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
-  if (associated(CS)) then
-    call MOM_error(WARNING, "energetic_PBL_init called with an associated"//&
-                            "associated control structure.")
-    return
-  else ; allocate(CS) ; endif
-
+  CS%initialized = .true.
   CS%diag => diag
   CS%Time => Time
 
@@ -2312,7 +2323,6 @@ subroutine energetic_PBL_init(Time, G, GV, US, param_file, diag, CS)
       Time, 'Velocity Scale that is used.', 'm s-1', conversion=US%Z_to_m*US%s_to_T)
   CS%id_MSTAR_mix = register_diag_field('ocean_model', 'MSTAR', diag%axesT1, &
       Time, 'Total mstar that is used.', 'nondim')
-
   if (CS%use_LT) then
     CS%id_LA = register_diag_field('ocean_model', 'LA', diag%axesT1, &
         Time, 'Langmuir number.', 'nondim')
@@ -2358,13 +2368,10 @@ end subroutine energetic_PBL_init
 
 !> Clean up and deallocate memory associated with the energetic_PBL module.
 subroutine energetic_PBL_end(CS)
-  type(energetic_PBL_CS), pointer :: CS !< Energetic_PBL control structure that
-                                        !! will be deallocated in this subroutine.
+  type(energetic_PBL_CS), intent(inout) :: CS !< Energetic_PBL control struct
 
   character(len=256) :: mesg
   real :: avg_its
-
-  if (.not.associated(CS)) return
 
   if (allocated(CS%ML_depth))            deallocate(CS%ML_depth)
   if (allocated(CS%LA))                  deallocate(CS%LA)
@@ -2388,9 +2395,6 @@ subroutine energetic_PBL_end(CS)
     write (mesg,*) "Average ePBL iterations = ", avg_its
     call MOM_mesg(mesg)
   endif
-
-  deallocate(CS)
-
 end subroutine energetic_PBL_end
 
 !> \namespace MOM_energetic_PBL

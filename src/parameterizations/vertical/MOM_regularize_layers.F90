@@ -23,6 +23,7 @@ public regularize_layers, regularize_layers_init
 
 !> This control structure holds parameters used by the MOM_regularize_layers module
 type, public :: regularize_layers_CS ; private
+  logical :: initialized = .false. !< True if this control structure has been initialized.
   logical :: regularize_surface_layers !< If true, vertically restructure the
                              !! near-surface layers when they have too much
                              !! lateral variations to allow for sensible lateral
@@ -55,13 +56,11 @@ type, public :: regularize_layers_CS ; private
   logical :: debug           !< If true, do more thorough checks for debugging purposes.
 
   integer :: id_def_rat = -1 !< A diagnostic ID
-  logical :: allow_clocks_in_omp_loops  !< If true, clocks can be called from inside loops that
-                             !! can be threaded. To run with multiple threads, set to False.
 end type regularize_layers_CS
 
 !>@{ Clock IDs
 !! \todo Should these be global?
-integer :: id_clock_pass, id_clock_EOS
+integer :: id_clock_pass
 !>@}
 
 contains
@@ -86,14 +85,14 @@ subroutine regularize_layers(h, tv, dt, ea, eb, G, GV, US, CS)
                                                   !! this should be increased due to mixed layer
                                                   !! entrainment [H ~> m or kg m-2].
   type(unit_scale_type),      intent(in)    :: US !< A dimensional unit scaling type
-  type(regularize_layers_CS), pointer       :: CS !< The control structure returned by a previous
-                                                  !! call to regularize_layers_init.
+  type(regularize_layers_CS), intent(in)    :: CS !< Regularize layer control struct
+
   ! Local variables
   integer :: i, j, k, is, ie, js, je, nz
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
-  if (.not. associated(CS)) call MOM_error(FATAL, "MOM_regularize_layers: "//&
+  if (.not. CS%initialized) call MOM_error(FATAL, "MOM_regularize_layers: "//&
          "Module must be initialized before it is used.")
 
   if (CS%regularize_surface_layers) then
@@ -123,8 +122,8 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, GV, US, CS)
                                                   !! this should be increased due to mixed layer
                                                   !! entrainment [H ~> m or kg m-2].
   type(unit_scale_type),      intent(in)    :: US !< A dimensional unit scaling type
-  type(regularize_layers_CS), pointer       :: CS !< The control structure returned by a previous
-                                                  !! call to regularize_layers_init.
+  type(regularize_layers_CS), intent(in)    :: CS !< Regularize layer control struct
+
   ! Local variables
   real, dimension(SZIB_(G),SZJ_(G)) :: &
     def_rat_u   ! The ratio of the thickness deficit to the minimum depth [nondim].
@@ -194,7 +193,7 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, GV, US, CS)
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
-  if (.not. associated(CS)) call MOM_error(FATAL, "MOM_regularize_layers: "//&
+  if (.not. CS%initialized) call MOM_error(FATAL, "MOM_regularize_layers: "//&
          "Module must be initialized before it is used.")
 
   if (GV%nkml<1) return
@@ -232,12 +231,10 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, GV, US, CS)
   ! Now restructure the layers.
   !$OMP parallel do default(private) shared(is,ie,js,je,nz,do_j,def_rat_h,CS,nkmb,G,GV,US, &
   !$OMP                                     e,I_dtol,h,tv,debug,h_neglect,p_ref_cv,ea, &
-  !$OMP                                     eb,id_clock_EOS,nkml,EOSdom)
+  !$OMP                                     eb,nkml,EOSdom)
   do j=js,je ; if (do_j(j)) then
 
-!  call cpu_clock_begin(id_clock_EOS)
 !  call calculate_density_derivs(T(:,1), S(:,1), p_ref_cv, dRcv_dT, dRcv_dS, tv%eqn_of_state, EOSdom)
-!  call cpu_clock_end(id_clock_EOS)
 
     do k=1,nz ; do i=is,ie ; d_ea(i,k) = 0.0 ; d_eb(i,k) = 0.0 ; enddo ; enddo
     kmax_d_ea = 0
@@ -366,11 +363,9 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, GV, US, CS)
       enddo
     endif
     if (det_any) then
-      call cpu_clock_begin(id_clock_EOS)
       do k=1,nkmb
         call calculate_density(T_2d(:,k), S_2d(:,k), p_ref_cv, Rcv(:,k), tv%eqn_of_state, EOSdom)
       enddo
-      call cpu_clock_end(id_clock_EOS)
 
       do i=is,ie ; if (det_i(i)) then
         k1 = nkmb ; k2 = nz
@@ -623,8 +618,7 @@ subroutine find_deficit_ratios(e, def_rat_u, def_rat_v, G, GV, CS, h)
   real, dimension(SZI_(G),SZJB_(G)),          &
                               intent(out) :: def_rat_v !< The thickness deficit ratio at v points,
                                                        !! [nondim].
-  type(regularize_layers_CS), pointer     :: CS        !< The control structure returned by a
-                                                       !! previous call to regularize_layers_init.
+  type(regularize_layers_CS), intent(in)  :: CS        !< Regularize layer control struct
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  &
                               intent(in)  :: h         !< Layer thicknesses [H ~> m or kg m-2].
 
@@ -719,8 +713,8 @@ subroutine regularize_layers_init(Time, G, GV, param_file, diag, CS)
                                                  !! run-time parameters.
   type(diag_ctrl), target, intent(inout) :: diag !< A structure that is used to regulate
                                                  !! diagnostic output.
-  type(regularize_layers_CS), pointer    :: CS   !< A pointer that is set to point to the
-                                                 !! control structure for this module.
+  type(regularize_layers_CS), intent(inout) :: CS !< Regularize layer control struct
+
 #include "version_variable.h"
   character(len=40)  :: mdl = "MOM_regularize_layers"  ! This module's name.
   logical :: use_temperature
@@ -729,11 +723,7 @@ subroutine regularize_layers_init(Time, G, GV, param_file, diag, CS)
   integer :: isd, ied, jsd, jed
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
-  if (associated(CS)) then
-    call MOM_error(WARNING, "regularize_layers_init called with an associated"// &
-                            "associated control structure.")
-    return
-  else ; allocate(CS) ; endif
+  CS%initialized = .true.
 
   CS%diag => diag
   CS%Time => Time
@@ -784,19 +774,11 @@ subroutine regularize_layers_init(Time, G, GV, param_file, diag, CS)
 !    call get_param(param_file, mdl, "DEBUG_CONSERVATION", CS%debug, &
 !                 "If true, monitor conservation and extrema.", default=.false., do_not_log=just_read)
 
-  call get_param(param_file, mdl, "ALLOW_CLOCKS_IN_OMP_LOOPS", CS%allow_clocks_in_omp_loops, &
-                 "If true, clocks can be called from inside loops that can "//&
-                 "be threaded. To run with multiple threads, set to False.", &
-                 default=.true., do_not_log=just_read)
-
   if (.not.CS%regularize_surface_layers) return
 
   CS%id_def_rat = register_diag_field('ocean_model', 'deficit_ratio', diag%axesT1, &
       Time, 'Max face thickness deficit ratio', 'nondim')
 
-  if (CS%allow_clocks_in_omp_loops) then
-    id_clock_EOS = cpu_clock_id('(Ocean regularize_layers EOS)', grain=CLOCK_ROUTINE)
-  endif
   id_clock_pass = cpu_clock_id('(Ocean regularize_layers halo updates)', grain=CLOCK_ROUTINE)
 
 end subroutine regularize_layers_init

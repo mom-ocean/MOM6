@@ -136,8 +136,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
                                                     !! for model parameter values.
   type(directories),          intent(in)    :: dirs !< A structure containing several relevant
                                                     !! directory paths.
-  type(MOM_restart_CS),       pointer       :: restart_CS !< A pointer to the restart control
-                                                    !! structure.
+  type(MOM_restart_CS),       intent(inout) :: restart_CS !< MOM restart control struct
   type(ALE_CS),               pointer       :: ALE_CSp !< The ALE control structure for remapping
   type(tracer_registry_type), pointer       :: tracer_Reg !< A pointer to the tracer registry
   type(sponge_CS),            pointer       :: sponge_CSp !< The layerwise sponge control structure.
@@ -310,8 +309,8 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
                                 just_read=just_read)
       case ("benchmark"); call benchmark_initialize_thickness(h, depth_tot, G, GV, US, PF, &
                                    tv%eqn_of_state, tv%P_Ref, just_read=just_read)
-      case ("Neverworld","Neverland"); call Neverworld_initialize_thickness(h, depth_tot, G, GV, US, PF, &
-                                tv%eqn_of_state, tv%P_Ref)
+      case ("Neverworld","Neverland"); call Neverworld_initialize_thickness(h, depth_tot, &
+                                   G, GV, US, PF, tv%P_Ref)
       case ("search"); call initialize_thickness_search()
       case ("circle_obcs"); call circle_obcs_initialize_thickness(h, depth_tot, G, GV, PF, &
                                      just_read=just_read)
@@ -376,26 +375,26 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
         case ("linear"); call initialize_temp_salt_linear(tv%T, tv%S, G, GV, PF, &
                                   just_read=just_read)
         case ("DOME2D"); call DOME2d_initialize_temperature_salinity ( tv%T, &
-                                  tv%S, h, G, GV, PF, eos, just_read=just_read)
+                                  tv%S, h, G, GV, PF, just_read=just_read)
         case ("ISOMIP"); call ISOMIP_initialize_temperature_salinity ( tv%T, &
                                   tv%S, h, depth_tot, G, GV, US, PF, eos, just_read=just_read)
         case ("adjustment2d"); call adjustment_initialize_temperature_salinity ( tv%T, &
-                                        tv%S, h, depth_tot, G, GV, PF, eos, just_read=just_read)
+                                        tv%S, h, depth_tot, G, GV, PF, just_read=just_read)
         case ("baroclinic_zone"); call baroclinic_zone_init_temperature_salinity( tv%T, &
                                            tv%S, h, depth_tot, G, GV, US, PF, just_read=just_read)
         case ("sloshing"); call sloshing_initialize_temperature_salinity(tv%T, &
-                                    tv%S, h, G, GV, PF, eos, just_read=just_read)
+                                    tv%S, h, G, GV, PF, just_read=just_read)
         case ("seamount"); call seamount_initialize_temperature_salinity(tv%T, &
-                                    tv%S, h, G, GV, PF, eos, just_read=just_read)
+                                    tv%S, h, G, GV, PF, just_read=just_read)
         case ("dumbbell"); call dumbbell_initialize_temperature_salinity(tv%T, &
-                                    tv%S, h, G, GV, PF, eos, just_read=just_read)
+                                    tv%S, h, G, GV, PF, just_read=just_read)
         case ("rossby_front"); call Rossby_front_initialize_temperature_salinity ( tv%T, &
-                                        tv%S, h, G, GV, PF, eos, just_read=just_read)
+                                        tv%S, h, G, GV, PF, just_read=just_read)
         case ("SCM_CVMix_tests"); call SCM_CVMix_tests_TS_init(tv%T, tv%S, h, &
                                            G, GV, US, PF, just_read=just_read)
-        case ("dense"); call dense_water_initialize_TS(G, GV, PF, eos, tv%T, tv%S, &
+        case ("dense"); call dense_water_initialize_TS(G, GV, PF, tv%T, tv%S, &
                                  h, just_read=just_read)
-        case ("USER"); call user_init_temperature_salinity(tv%T, tv%S, G, GV, PF, eos, &
+        case ("USER"); call user_init_temperature_salinity(tv%T, tv%S, G, GV, PF, &
                                 just_read=just_read)
         case default ; call MOM_error(FATAL,  "MOM_initialize_state: "//&
                "Unrecognized Temp & salt configuration "//trim(config))
@@ -443,7 +442,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
 
   if (new_sim) call pass_vector(u, v, G%Domain)
   if (debug .and. new_sim) then
-    call uvchksum("MOM_initialize_state [uv]", u, v, G%HI, haloshift=1, scale=US%m_s_to_L_T)
+    call uvchksum("MOM_initialize_state [uv]", u, v, G%HI, haloshift=1, scale=US%L_T_to_m_s)
   endif
 
   ! Optionally convert the thicknesses from m to kg m-2.  This is particularly
@@ -621,7 +620,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
     elseif (trim(config) == "shelfwave") then
       OBC%update_OBC = .true.
     elseif (lowercase(trim(config)) == "supercritical") then
-      call supercritical_set_OBC_data(OBC, G, GV, PF)
+      call supercritical_set_OBC_data(OBC, G, GV, US, PF)
     elseif (trim(config) == "tidal_bay") then
       OBC%update_OBC = .true.
     elseif (trim(config) == "USER") then
@@ -631,7 +630,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
               "OBC_USER_CONFIG = "//trim(config)//" have not been fully implemented.")
     endif
     if (open_boundary_query(OBC, apply_open_OBC=.true.)) then
-      call set_tracer_data(OBC, tv, h, G, GV, PF, tracer_Reg)
+      call set_tracer_data(OBC, tv, h, G, GV, PF)
     endif
   endif
 ! if (open_boundary_query(OBC, apply_nudged_OBC=.true.)) then
@@ -653,8 +652,6 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
     call initialize_oda_incupd_file(G, GV, US, use_temperature, tv, h, u, v, &
                                     PF, oda_incupd_CSp, restart_CS, Time)
   endif
-
-
 end subroutine MOM_initialize_state
 
 !> Reads the layer thicknesses or interface heights from a file.
@@ -745,7 +742,7 @@ end subroutine initialize_thickness_from_file
 !> Adjust interface heights to fit the bathymetry and diagnose layer thickness.
 !!
 !! If the bottom most interface is below the topography then the bottom-most
-!! layers are contracted to GV%Angstrom_m.
+!! layers are contracted to ANGSTROM thickness (which may be 0).
 !! If the bottom most interface is above the topography then the entire column
 !! is dilated (expanded) to fill the void.
 !!   @remark{There is a (hard-wired) "tolerance" parameter such that the
@@ -1587,7 +1584,7 @@ subroutine initialize_temp_salt_fit(T, S, G, GV, US, param_file, eqn_of_state, P
   type(unit_scale_type),   intent(in)  :: US           !< A dimensional unit scaling type
   type(param_file_type),   intent(in)  :: param_file   !< A structure to parse for run-time
                                                        !! parameters.
-  type(EOS_type),          pointer     :: eqn_of_state !< Equation of state structure
+  type(EOS_type),          intent(in)  :: eqn_of_state !< Equation of state structure
   real,                    intent(in)  :: P_Ref        !< The coordinate-density reference pressure
                                                        !! [R L2 T-2 ~> Pa].
   logical,                 intent(in)  :: just_read    !< If true, this call will only read
@@ -1766,10 +1763,10 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, u, v, depth_t
   real, allocatable, dimension(:,:,:) :: tmp_tr ! A temporary array for reading sponge fields
   real, allocatable, dimension(:,:,:) :: tmp_u,tmp_v ! A temporary array for reading sponge fields
 
-  real :: Idamp(SZI_(G),SZJ_(G))    ! The inverse damping rate [T-1 ~> s-1].
-  real :: Idamp_u(SZIB_(G),SZJ_(G)) ! The inverse damping rate for velocity fields [T-1 ~> s-1].
-  real :: Idamp_v(SZI_(G),SZJB_(G)) ! The inverse damping rate for velocity fields [T-1 ~> s-1].
-  real :: pres(SZI_(G))     ! An array of the reference pressure [R L2 T-2 ~> Pa].
+  real :: Idamp(SZI_(G),SZJ_(G))    ! The sponge damping rate [T-1 ~> s-1]
+  real :: Idamp_u(SZIB_(G),SZJ_(G)) ! The sponge damping rate for velocity fields [T-1 ~> s-1]
+  real :: Idamp_v(SZI_(G),SZJB_(G)) ! The sponge damping rate for velocity fields [T-1 ~> s-1]
+  real :: pres(SZI_(G))             ! An array of the reference pressure [R L2 T-2 ~> Pa]
 
   integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state
   integer :: i, j, k, is, ie, js, je, nz
@@ -1855,7 +1852,7 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, u, v, depth_t
                  "of sponge restoring data.", default=time_space_interp_sponge)
 
 
-  ! Read in inverse damping rate for tracers
+  ! Read in sponge damping rate for tracers
   filename = trim(inputdir)//trim(damping_file)
   call log_param(param_file, mdl, "INPUTDIR/SPONGE_DAMPING_FILE", filename)
   if (.not.file_exists(filename, G%Domain)) &
@@ -1866,7 +1863,7 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, u, v, depth_t
 
   call MOM_read_data(filename, Idamp_var, Idamp(:,:), G%Domain, scale=US%T_to_s)
 
-  ! Read in inverse damping rate for velocities
+  ! Read in sponge damping rate for velocities
   if (sponge_uv) then
     if (separate_idamp_for_uv()) then
       filename = trim(inputdir)//trim(uv_damping_file)
@@ -1914,7 +1911,7 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, u, v, depth_t
       if (eta(i,j,K) < (eta(i,j,K+1) + GV%Angstrom_Z)) &
         eta(i,j,K) = eta(i,j,K+1) + GV%Angstrom_Z
     enddo ; enddo ; enddo
-    ! Set the inverse damping rates so that the model will know where to
+    ! Set the sponge damping rates so that the model will know where to
     ! apply the sponges, along with the interface heights.
     call initialize_sponge(Idamp, eta, G, param_file, Layer_CSp, GV)
     deallocate(eta)
@@ -2060,8 +2057,7 @@ subroutine initialize_oda_incupd_file(G, GV, US, use_temperature, tv, h, u, v, p
   type(param_file_type),   intent(in) :: param_file !< A structure to parse for run-time parameters.
   type(oda_incupd_CS),     pointer    :: oda_incupd_CSp  !< A pointer that is set to point to the control
                                                   !! structure for this module.
-  type(MOM_restart_CS),    pointer    :: restart_CS !< A pointer to the restart control
-                                                    !! structure.
+  type(MOM_restart_CS),    intent(in) :: restart_CS !< MOM restart control struct
   type(time_type),         intent(in) :: Time !< Time at the start of the run segment. Time_in
                                               !! overrides any value set for
                                               !Time.

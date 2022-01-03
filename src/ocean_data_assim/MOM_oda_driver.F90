@@ -278,8 +278,8 @@ subroutine init_oda(Time, G, GV, diag_CS, CS)
   allocate(dG)
   call create_dyn_horgrid(dG, HI)
   call clone_MOM_domain(CS%Grid%Domain, dG%Domain,symmetric=.false.)
-  call set_grid_metrics(dG,PF)
-  call MOM_initialize_topography(dg%bathyT,dG%max_depth,dG,PF)
+  call set_grid_metrics(dG, PF, CS%US)
+  call MOM_initialize_topography(dG%bathyT, dG%max_depth, dG, PF, CS%US)
   call MOM_initialize_coord(CS%GV, CS%US, PF, .false., &
            dirs%output_directory, tv_dummy, dG%max_depth)
   call ALE_init(PF, CS%GV, CS%US, dG%max_depth, CS%ALE_CS)
@@ -313,9 +313,9 @@ subroutine init_oda(Time, G, GV, diag_CS, CS)
   !jsd=jsd+jdg_offset; jed=jed+jdg_offset ! TODO:  switch to local indexing? (mjh)
 
   if (.not. associated(CS%h)) then
-    allocate(CS%h(isd:ied,jsd:jed,CS%GV%ke), source=CS%GV%Angstrom_m*CS%GV%H_to_m)
+    allocate(CS%h(isd:ied,jsd:jed,CS%GV%ke), source=CS%GV%Angstrom_H)
     ! assign thicknesses
-    call ALE_initThicknessToCoord(CS%ALE_CS,G,CS%GV,CS%h)
+    call ALE_initThicknessToCoord(CS%ALE_CS, G, CS%GV, CS%h)
   endif
   allocate(CS%tv)
   allocate(CS%tv%T(isd:ied,jsd:jed,CS%GV%ke), source=0.0)

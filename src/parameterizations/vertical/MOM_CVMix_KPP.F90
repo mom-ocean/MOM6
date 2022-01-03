@@ -538,9 +538,9 @@ logical function KPP_init(paramFile, G, GV, US, diag, Time, CS, passive)
   CS%id_buoyFlux = register_diag_field('ocean_model', 'KPP_buoyFlux', diag%axesTi, Time, &
       'Surface (and penetrating) buoyancy flux, as used by [CVMix] KPP', 'm2/s3', conversion=US%L_to_m**2*US%s_to_T**3)
   CS%id_QminusSW = register_diag_field('ocean_model', 'KPP_QminusSW', diag%axesT1, Time, &
-      'Net temperature flux ignoring short-wave, as used by [CVMix] KPP', 'K m/s')
+      'Net temperature flux ignoring short-wave, as used by [CVMix] KPP', 'K m/s', conversion=GV%H_to_m*US%s_to_T)
   CS%id_netS = register_diag_field('ocean_model', 'KPP_netSalt', diag%axesT1, Time, &
-      'Effective net surface salt flux, as used by [CVMix] KPP', 'ppt m/s')
+      'Effective net surface salt flux, as used by [CVMix] KPP', 'ppt m/s', conversion=GV%H_to_m*US%s_to_T)
   CS%id_Kt_KPP = register_diag_field('ocean_model', 'KPP_Kheat', diag%axesTi, Time, &
       'Heat diffusivity due to KPP, as calculated by [CVMix] KPP', 'm2/s')
   CS%id_Kd_in = register_diag_field('ocean_model', 'KPP_Kd_in', diag%axesTi, Time, &
@@ -554,13 +554,17 @@ logical function KPP_init(paramFile, G, GV, US, diag, Time, CS, passive)
   CS%id_NLTs = register_diag_field('ocean_model', 'KPP_NLtransport_salt', diag%axesTi, Time, &
       'Non-local tranpsort (Cs*G(sigma)) for scalars, as calculated by [CVMix] KPP', 'nondim')
   CS%id_NLT_dTdt = register_diag_field('ocean_model', 'KPP_NLT_dTdt', diag%axesTL, Time, &
-      'Temperature tendency due to non-local transport of heat, as calculated by [CVMix] KPP', 'K/s')
+      'Temperature tendency due to non-local transport of heat, as calculated by [CVMix] KPP', &
+      'K/s', conversion=US%s_to_T)
   CS%id_NLT_dSdt = register_diag_field('ocean_model', 'KPP_NLT_dSdt', diag%axesTL, Time, &
-      'Salinity tendency due to non-local transport of salt, as calculated by [CVMix] KPP', 'ppt/s')
+      'Salinity tendency due to non-local transport of salt, as calculated by [CVMix] KPP', &
+      'ppt/s', conversion=US%s_to_T)
   CS%id_NLT_temp_budget = register_diag_field('ocean_model', 'KPP_NLT_temp_budget', diag%axesTL, Time, &
-      'Heat content change due to non-local transport, as calculated by [CVMix] KPP', 'W/m^2')
+      'Heat content change due to non-local transport, as calculated by [CVMix] KPP', &
+      'W/m^2', conversion=US%QRZ_T_to_W_m2)
   CS%id_NLT_saln_budget = register_diag_field('ocean_model', 'KPP_NLT_saln_budget', diag%axesTL, Time, &
-      'Salt content change due to non-local transport, as calculated by [CVMix] KPP', 'kg/(sec*m^2)')
+      'Salt content change due to non-local transport, as calculated by [CVMix] KPP', &
+      'kg/(sec*m^2)', conversion=US%RZ_T_to_kg_m2s)
   CS%id_Tsurf = register_diag_field('ocean_model', 'KPP_Tsurf', diag%axesT1, Time, &
       'Temperature of surface layer (10% of OBL depth) as passed to [CVMix] KPP', 'C')
   CS%id_Ssurf = register_diag_field('ocean_model', 'KPP_Ssurf', diag%axesT1, Time, &
@@ -641,7 +645,7 @@ subroutine KPP_calculate(CS, G, GV, US, h, uStar, buoyFlux, Kt, Ks, Kv, &
 
   real :: surfFricVel, surfBuoyFlux
   real :: sigma, sigmaRatio
-  real :: buoy_scale ! A unit conversion factor for buoyancy fluxes [m2 T3 L-2 s-3 ~> nondim]
+  real :: buoy_scale ! A unit conversion factor for buoyancy fluxes [m2 T3 L-2 s-3 ~> 1]
   real :: dh    ! The local thickness used for calculating interface positions [m]
   real :: hcorr ! A cumulative correction arising from inflation of vanished layers [m]
 
@@ -948,7 +952,7 @@ subroutine KPP_compute_BLD(CS, G, GV, US, h, Temp, Salt, u, v, tv, uStar, buoyFl
   real :: zBottomMinusOffset   ! Height of bottom plus a little bit [m]
   real :: SLdepth_0d           ! Surface layer depth = surf_layer_ext*OBLdepth.
   real :: hTot                 ! Running sum of thickness used in the surface layer average [m]
-  real :: buoy_scale           ! A unit conversion factor for buoyancy fluxes [m2 T3 L-2 s-3 ~> nondim]
+  real :: buoy_scale           ! A unit conversion factor for buoyancy fluxes [m2 T3 L-2 s-3 ~> 1]
   real :: delH                 ! Thickness of a layer [m]
   real :: surfHtemp, surfTemp  ! Integral and average of temp over the surface layer
   real :: surfHsalt, surfSalt  ! Integral and average of saln over the surface layer
@@ -1179,7 +1183,7 @@ subroutine KPP_compute_BLD(CS, G, GV, US, h, Temp, Salt, u, v, tv, uStar, buoyFl
       ! Calculate Bulk Richardson number from eq (21) of LMD94
       BulkRi_1d = CVmix_kpp_compute_bulk_Richardson( &
                   zt_cntr = cellHeight(1:GV%ke),     & ! Depth of cell center [m]
-                  delta_buoy_cntr=GoRho*deltaRho,    & ! Bulk buoyancy difference, Br-B(z) [s-1]
+                  delta_buoy_cntr=GoRho*deltaRho,    & ! Bulk buoyancy difference, Br-B(z) [m s-2]
                   delta_Vsqr_cntr=deltaU2,           & ! Square of resolved velocity difference [m2 s-2]
                   ws_cntr=Ws_1d,                     & ! Turbulent velocity scale profile [m s-1]
                   N_iface=CS%N(i,j,:),               & ! Buoyancy frequency [s-1]
@@ -1285,12 +1289,12 @@ subroutine KPP_smooth_BLD(CS,G,GV,h)
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in) :: h    !< Layer/level thicknesses [H ~> m or kg m-2]
 
   ! local
-  real, dimension(SZI_(G),SZJ_(G)) :: OBLdepth_prev     ! OBLdepth before s.th smoothing iteration
+  real, dimension(SZI_(G),SZJ_(G)) :: OBLdepth_prev     ! OBLdepth before s.th smoothing iteration [m]
   real, dimension( GV%ke )         :: cellHeight        ! Cell center heights referenced to surface [m]
                                                         ! (negative in the ocean)
   real, dimension( GV%ke+1 )       :: iFaceHeight       ! Interface heights referenced to surface [m]
                                                         ! (negative in the ocean)
-  real :: wc, ww, we, wn, ws ! averaging weights for smoothing
+  real :: wc, ww, we, wn, ws ! averaging weights for smoothing [nondim]
   real :: dh                 ! The local thickness used for calculating interface positions [m]
   real :: hcorr              ! A cumulative correction arising from inflation of vanished layers [m]
   integer :: i, j, k, s
@@ -1390,13 +1394,14 @@ subroutine KPP_NonLocalTransport_temp(CS, G, GV, h, nonLocalTrans, surfFlux, &
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(in)    :: h      !< Layer/level thickness [H ~> m or kg m-2]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), intent(in)   :: nonLocalTrans !< Non-local transport [nondim]
   real, dimension(SZI_(G),SZJ_(G)),           intent(in)    :: surfFlux  !< Surface flux of temperature
-                                                                      !! [degC H s-1 ~> degC m s-1 or degC kg m-2 s-1]
-  real,                                       intent(in)    :: dt     !< Time-step [s]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(inout) :: scalar !< temperature
-  real,                                       intent(in)    :: C_p    !< Seawater specific heat capacity [J kg-1 degC-1]
+                                                                      !! [degC H T-1 ~> degC m s-1 or degC kg m-2 s-1]
+  real,                                       intent(in)    :: dt     !< Time-step [T ~> s]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(inout) :: scalar !< temperature [degC]
+  real,                                       intent(in)    :: C_p    !< Seawater specific heat capacity
+                                                                      !! [Q degC-1 ~> J kg-1 degC-1]
 
   integer :: i, j, k
-  real, dimension( SZI_(G), SZJ_(G),SZK_(GV) ) :: dtracer
+  real, dimension( SZI_(G), SZJ_(G),SZK_(GV) ) :: dtracer ! Rate of tracer change [degC T-1 ~> degC s-1]
 
 
   dtracer(:,:,:) = 0.0
@@ -1431,8 +1436,9 @@ subroutine KPP_NonLocalTransport_temp(CS, G, GV, h, nonLocalTrans, surfFlux, &
     do k = 1, GV%ke
       do j = G%jsc, G%jec
         do i = G%isc, G%iec
+          ! Here dtracer has units of [Q R Z T-1 ~> W m-2].
           dtracer(i,j,k) = (nonLocalTrans(i,j,k) - nonLocalTrans(i,j,k+1)) * &
-                           surfFlux(i,j) * C_p * GV%H_to_kg_m2
+                           surfFlux(i,j) * C_p * GV%H_to_RZ
         enddo
       enddo
     enddo
@@ -1446,18 +1452,18 @@ end subroutine KPP_NonLocalTransport_temp
 !> This routine is a useful prototype for other material tracers.
 subroutine KPP_NonLocalTransport_saln(CS, G, GV, h, nonLocalTrans, surfFlux, dt, scalar)
 
-  type(KPP_CS),                               intent(in)    :: CS            !< Control structure
-  type(ocean_grid_type),                      intent(in)    :: G             !< Ocean grid
-  type(verticalGrid_type),                    intent(in)    :: GV            !< Ocean vertical grid
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(in)    :: h             !< Layer/level thickness [H ~> m or kg m-2]
+  type(KPP_CS),                               intent(in)    :: CS          !< Control structure
+  type(ocean_grid_type),                      intent(in)    :: G           !< Ocean grid
+  type(verticalGrid_type),                    intent(in)    :: GV          !< Ocean vertical grid
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(in)    :: h           !< Layer/level thickness [H ~> m or kg m-2]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), intent(in)   :: nonLocalTrans !< Non-local transport [nondim]
-  real, dimension(SZI_(G),SZJ_(G)),           intent(in)    :: surfFlux      !< Surface flux of salt
-                                                                           !! [ppt H s-1 ~> ppt m s-1 or ppt kg m-2 s-1]
-  real,                                       intent(in)    :: dt            !< Time-step [s]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(inout) :: scalar        !< Scalar (scalar units [conc])
+  real, dimension(SZI_(G),SZJ_(G)),           intent(in)    :: surfFlux    !< Surface flux of salt
+                                                                           !! [ppt H T-1 ~> ppt m s-1 or ppt kg m-2 s-1]
+  real,                                       intent(in)    :: dt          !< Time-step [T ~> s]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(inout) :: scalar      !< Salinity [ppt]
 
   integer :: i, j, k
-  real, dimension( SZI_(G), SZJ_(G),SZK_(GV) ) :: dtracer
+  real, dimension( SZI_(G), SZJ_(G),SZK_(GV) ) :: dtracer  ! Rate of tracer change [ppt T-1 ~> ppt s-1]
 
 
   dtracer(:,:,:) = 0.0
@@ -1492,8 +1498,9 @@ subroutine KPP_NonLocalTransport_saln(CS, G, GV, h, nonLocalTrans, surfFlux, dt,
     do k = 1, GV%ke
       do j = G%jsc, G%jec
         do i = G%isc, G%iec
+          ! Here dtracer has units of [ppt R Z T-1 ~> ppt kg m-2 s-1]
           dtracer(i,j,k) = (nonLocalTrans(i,j,k) - nonLocalTrans(i,j,k+1)) * &
-                           surfFlux(i,j) * GV%H_to_kg_m2
+                           surfFlux(i,j) * GV%H_to_RZ
         enddo
       enddo
     enddo

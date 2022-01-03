@@ -31,7 +31,7 @@ type, public :: MESO_surface_forcing_CS ; private
   real :: G_Earth            !< The gravitational acceleration [L2 Z-1 T-2 ~> m s-2].
   real :: Flux_const         !< The restoring rate at the surface [Z T-1 ~> m s-1].
   real :: gust_const         !< A constant unresolved background gustiness
-                             !! that contributes to ustar [Pa].
+                             !! that contributes to ustar [R L Z T-1 ~> Pa]
   real, dimension(:,:), pointer :: &
     T_Restore(:,:) => NULL(), & !< The temperature to restore the SST toward [degC].
     S_Restore(:,:) => NULL(), & !< The salinity to restore the sea surface salnity toward [ppt]
@@ -61,7 +61,7 @@ subroutine MESO_buoyancy_forcing(sfc_state, fluxes, day, dt, G, US, CS)
   type(forcing),                 intent(inout) :: fluxes !< A structure containing thermodynamic forcing fields
   type(time_type),               intent(in)    :: day  !< The time of the fluxes
   real,                          intent(in)    :: dt   !< The amount of time over which
-                                                       !! the fluxes apply [s]
+                                                       !! the fluxes apply [T ~> s]
   type(ocean_grid_type),         intent(in)    :: G    !< The ocean's grid structure
   type(unit_scale_type),         intent(in)    :: US   !< A dimensional unit scaling type
   type(MESO_surface_forcing_CS), pointer       :: CS   !< A pointer to the control structure returned by
@@ -138,7 +138,7 @@ subroutine MESO_buoyancy_forcing(sfc_state, fluxes, day, dt, G, US, CS)
     ! Set whichever fluxes are to be used here.  Any fluxes that
     ! are always zero do not need to be changed here.
     do j=js,je ; do i=is,ie
-      ! Fluxes of fresh water through the surface are in units of [kg m-2 s-1]
+      ! Fluxes of fresh water through the surface are in units of [R Z T-1 ~> kg m-2 s-1]
       ! and are positive downward - i.e. evaporation should be negative.
       fluxes%evap(i,j) = -0.0 * G%mask2dT(i,j)
       fluxes%lprec(i,j) =  CS%PmE(i,j) * CS%Rho0 * G%mask2dT(i,j)
@@ -215,8 +215,8 @@ subroutine MESO_surface_forcing_init(Time, G, US, param_file, diag, CS)
   type(MESO_surface_forcing_CS), pointer       :: CS   !< A pointer that is set to point to the
                                                        !! control structure for this module
 
-! This include declares and sets the variable "version".
-#include "version_variable.h"
+  ! This include declares and sets the variable "version".
+# include "version_variable.h"
   character(len=40)  :: mdl = "MESO_surface_forcing" ! This module's name.
 
   if (associated(CS)) then

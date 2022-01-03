@@ -21,7 +21,6 @@ use MOM_IS_diag_mediator, only : MOM_IS_diag_mediator_close_registration
 use MOM_domains, only : MOM_domains_init, pass_var, pass_vector, clone_MOM_domain
 use MOM_domains, only : TO_ALL, CGRID_NE, BGRID_NE, CORNER
 use MOM_dyn_horgrid, only : dyn_horgrid_type, create_dyn_horgrid, destroy_dyn_horgrid
-use MOM_dyn_horgrid, only : rescale_dyn_horgrid_bathymetry
 use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, WARNING, is_root_pe
 use MOM_file_parser, only : read_param, get_param, log_param, log_version, param_file_type
 use MOM_grid, only : MOM_grid_init, ocean_grid_type
@@ -157,7 +156,7 @@ type, public :: ice_shelf_CS ; private
   real :: input_thickness   !< Ice thickness at an upstream open boundary [m].
 
   type(time_type) :: Time                !< The component's time.
-  type(EOS_type), pointer :: eqn_of_state => NULL() !< Type that indicates the
+  type(EOS_type) :: eqn_of_state         !< Type that indicates the
                                          !! equation of state to use.
   logical :: active_shelf_dynamics       !< True if the ice shelf mass changes as a result
                                          !! the dynamic ice-shelf model.
@@ -250,10 +249,10 @@ subroutine shelf_calc_flux(sfc_state_in, fluxes_in, Time, time_step, CS)
     exch_vel_s     !< Sub-shelf salt exchange velocity [Z T-1 ~> m s-1]
 
   real, dimension(SZDI_(CS%grid),SZDJ_(CS%grid)) :: &
-    mass_flux  !< Total mass flux of freshwater across the ice-ocean interface. [R Z L2 T-1 ~> kg/s]
+    mass_flux  !< Total mass flux of freshwater across the ice-ocean interface. [R Z L2 T-1 ~> kg s-1]
   real, dimension(SZDI_(CS%grid),SZDJ_(CS%grid)) :: &
     haline_driving !< (SSS - S_boundary) ice-ocean
-               !! interface, positive for melting and negative for freezing.
+               !! interface, positive for melting and negative for freezing [ppt].
                !! This is computed as part of the ISOMIP diagnostics.
   real, parameter :: VK    = 0.40 !< Von Karman's constant - dimensionless
   real :: ZETA_N = 0.052 !> The fraction of the boundary layer over which the
@@ -1159,7 +1158,7 @@ subroutine add_shelf_flux(G, US, CS, sfc_state, fluxes)
       if (bal_frac(i,j) > 0.0) then
         ! evap is negative, and vprec has units of [R Z T-1 ~> kg m-2 s-1]
         fluxes%vprec(i,j) = -balancing_flux
-        fluxes%sens(i,j) = fluxes%vprec(i,j) * CS%Cp * CS%T0 ! [ Q R Z T-1 ~> W /m^2 ]
+        fluxes%sens(i,j) = fluxes%vprec(i,j) * CS%Cp * CS%T0 ! [Q R Z T-1 ~> W m-2]
         fluxes%salt_flux(i,j) = fluxes%vprec(i,j) * CS%S0*1.0e-3 ! [kgSalt/kg R Z T-1 ~> kgSalt m-2 s-1]
       endif
     enddo ; enddo
@@ -1306,9 +1305,8 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces_in,
   call create_dyn_horgrid(dG, CS%Grid%HI)
   call clone_MOM_domain(CS%Grid%Domain,dG%Domain)
   call set_grid_metrics(dG,param_file,CS%US)
-  ! Set up the bottom depth, G%D either analytically or from file
-  call MOM_initialize_topography(dG%bathyT, CS%Grid%max_depth, dG, param_file)
-  call rescale_dyn_horgrid_bathymetry(dG, CS%US%Z_to_m)
+  ! Set up the bottom depth, dG%bathyT, either analytically or from file
+  call MOM_initialize_topography(dG%bathyT, CS%Grid%max_depth, dG, param_file, CS%US)
   call copy_dyngrid_to_MOM_grid(dG, CS%Grid, CS%US)
   call destroy_dyn_horgrid(dG)
 !  endif
@@ -1409,12 +1407,12 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces_in,
                  "If true, user specifies a constant nondimensional heat-transfer coefficient "//&
                  "(GAMMA_T_3EQ), from which the default salt-transfer coefficient is set "//&
                  "as GAMMA_T_3EQ/35. This is used with SHELF_THREE_EQN.", default=.false.)
-  if (CS%threeeq) then
-    call get_param(param_file, mdl, "SHELF_S_ROOT", CS%find_salt_root, &
+  call get_param(param_file, mdl, "SHELF_S_ROOT", CS%find_salt_root, &
                  "If SHELF_S_ROOT = True, salinity at the ice/ocean interface (Sbdry) "//&
                  "is computed from a quadratic equation. Otherwise, the previous "//&
-                 "interactive method to estimate Sbdry is used.", default=.false.)
-  else
+                 "interactive method to estimate Sbdry is used.", &
+                 default=.false., do_not_log=.not.CS%threeeq)
+  if (.not.CS%threeeq) then
     call get_param(param_file, mdl, "SHELF_2EQ_GAMMA_T", CS%gamma_t, &
                  "If SHELF_THREE_EQN is false, this the fixed turbulent "//&
                  "exchange velocity at the ice-ocean interface.", &

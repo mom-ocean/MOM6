@@ -1944,8 +1944,8 @@ end subroutine chksum1d
 !> chksum2d does a checksum of all data in a 2-d array.
 subroutine chksum2d(array, mesg)
 
-  real, dimension(:,:) :: array !< The array to be checksummed
-  character(len=*) :: mesg  !< An identifying message
+  real, dimension(:,:), intent(in) :: array !< The array to be checksummed
+  character(len=*),     intent(in) :: mesg  !< An identifying message
 
   integer :: xs,xe,ys,ye,i,j,sum1,bc
   real :: sum
@@ -1972,8 +1972,8 @@ end subroutine chksum2d
 !> chksum3d does a checksum of all data in a 2-d array.
 subroutine chksum3d(array, mesg)
 
-  real, dimension(:,:,:) :: array !< The array to be checksummed
-  character(len=*) :: mesg  !< An identifying message
+  real, dimension(:,:,:), intent(in) :: array !< The array to be checksummed
+  character(len=*),       intent(in) :: mesg  !< An identifying message
 
   integer :: xs,xe,ys,ye,zs,ze,i,j,k, bc,sum1
   real :: sum

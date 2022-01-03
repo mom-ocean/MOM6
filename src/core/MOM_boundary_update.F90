@@ -19,7 +19,7 @@ use MOM_variables,             only : thermo_var_ptrs
 use MOM_verticalGrid,          only : verticalGrid_type
 use DOME_initialization,       only : register_DOME_OBC
 use tidal_bay_initialization,  only : tidal_bay_set_OBC_data, register_tidal_bay_OBC
-use tidal_bay_initialization,  only : tidal_bay_OBC_end, tidal_bay_OBC_CS
+use tidal_bay_initialization,  only : tidal_bay_OBC_CS
 use Kelvin_initialization,     only : Kelvin_set_OBC_data, register_Kelvin_OBC
 use Kelvin_initialization,     only : Kelvin_OBC_end, Kelvin_OBC_CS
 use shelfwave_initialization,  only : shelfwave_set_OBC_data, register_shelfwave_OBC
@@ -44,7 +44,7 @@ type, public :: update_OBC_CS ; private
   !>@{ Pointers to the control structures for named OBC specifications
   type(file_OBC_CS), pointer :: file_OBC_CSp => NULL()
   type(Kelvin_OBC_CS), pointer :: Kelvin_OBC_CSp => NULL()
-  type(tidal_bay_OBC_CS), pointer :: tidal_bay_OBC_CSp => NULL()
+  type(tidal_bay_OBC_CS) :: tidal_bay_OBC
   type(shelfwave_OBC_CS), pointer :: shelfwave_OBC_CSp => NULL()
   type(dyed_channel_OBC_CS), pointer :: dyed_channel_OBC_CSp => NULL()
   !>@}
@@ -118,7 +118,7 @@ subroutine call_OBC_register(param_file, CS, US, OBC, tr_Reg)
   endif
 
   if (CS%use_tidal_bay) CS%use_tidal_bay = &
-    register_tidal_bay_OBC(param_file, CS%tidal_bay_OBC_CSp, US, &
+    register_tidal_bay_OBC(param_file, CS%tidal_bay_OBC, US, &
                OBC%OBC_Reg)
   if (CS%use_Kelvin) CS%use_Kelvin = &
     register_Kelvin_OBC(param_file, CS%Kelvin_OBC_CSp, US, &
@@ -147,13 +147,13 @@ subroutine update_OBC_data(OBC, G, GV, US, tv, h, CS, Time)
 ! if (CS%use_files) &
 !     call update_OBC_segment_data(G, GV, OBC, tv, h, Time)
   if (CS%use_tidal_bay) &
-      call tidal_bay_set_OBC_data(OBC, CS%tidal_bay_OBC_CSp, G, GV, h, Time)
+      call tidal_bay_set_OBC_data(OBC, CS%tidal_bay_OBC, G, GV, US, h, Time)
   if (CS%use_Kelvin)  &
       call Kelvin_set_OBC_data(OBC, CS%Kelvin_OBC_CSp, G, GV, US, h, Time)
   if (CS%use_shelfwave) &
       call shelfwave_set_OBC_data(OBC, CS%shelfwave_OBC_CSp, G, GV, US, h, Time)
   if (CS%use_dyed_channel) &
-      call dyed_channel_update_flow(OBC, CS%dyed_channel_OBC_CSp, G, GV, Time)
+      call dyed_channel_update_flow(OBC, CS%dyed_channel_OBC_CSp, G, GV, US, Time)
   if (OBC%needs_IO_for_data .or. OBC%add_tide_constituents)  &
       call update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
 
@@ -164,7 +164,6 @@ subroutine OBC_register_end(CS)
   type(update_OBC_CS),       pointer    :: CS !< Control structure for OBCs
 
   if (CS%use_files) call file_OBC_end(CS%file_OBC_CSp)
-  if (CS%use_tidal_bay) call tidal_bay_OBC_end(CS%tidal_bay_OBC_CSp)
   if (CS%use_Kelvin) call Kelvin_OBC_end(CS%Kelvin_OBC_CSp)
 
   if (associated(CS)) deallocate(CS)

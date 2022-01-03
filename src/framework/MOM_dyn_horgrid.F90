@@ -110,6 +110,16 @@ type, public :: dyn_horgrid_type
     areaCv       !< The areas of the v-grid cells [L2 ~> m2].
 
   real, allocatable, dimension(:,:) :: &
+    porous_DminU, & !< minimum topographic height of U-face [Z ~> m]
+    porous_DmaxU, & !< maximum topographic height of U-face [Z ~> m]
+    porous_DavgU    !< average topographic height of U-face [Z ~> m]
+
+  real, allocatable, dimension(:,:) :: &
+    porous_DminV, & !< minimum topographic height of V-face [Z ~> m]
+    porous_DmaxV, & !< maximum topographic height of V-face [Z ~> m]
+    porous_DavgV    !< average topographic height of V-face [Z ~> m]
+
+  real, allocatable, dimension(:,:) :: &
     mask2dBu, &  !< 0 for boundary points and 1 for ocean points on the q grid [nondim].
     geoLatBu, &  !< The geographic latitude at q points [degrees of latitude] or [m].
     geoLonBu, &  !< The geographic longitude at q points [degrees of longitude] or [m].
@@ -163,10 +173,11 @@ type, public :: dyn_horgrid_type
   ! initialization routines (but not all)
   real :: south_lat     !< The latitude (or y-coordinate) of the first v-line
   real :: west_lon      !< The longitude (or x-coordinate) of the first u-line
-  real :: len_lat = 0.  !< The latitudinal (or y-coord) extent of physical domain
-  real :: len_lon = 0.  !< The longitudinal (or x-coord) extent of physical domain
-  real :: Rad_Earth = 6.378e6 !< The radius of the planet [m].
-  real :: max_depth     !< The maximum depth of the ocean [Z ~> m].
+  real :: len_lat       !< The latitudinal (or y-coord) extent of physical domain
+  real :: len_lon       !< The longitudinal (or x-coord) extent of physical domain
+  real :: Rad_Earth     !< The radius of the planet [m]
+  real :: Rad_Earth_L   !< The radius of the planet in rescaled units [L ~> m]
+  real :: max_depth     !< The maximum depth of the ocean [Z ~> m]
 end type dyn_horgrid_type
 
 contains
@@ -256,6 +267,15 @@ subroutine create_dyn_horgrid(G, HI, bathymetry_at_vel)
   allocate(G%IareaCu(IsdB:IedB,jsd:jed), source=0.0)
   allocate(G%IareaCv(isd:ied,JsdB:JedB), source=0.0)
 
+  allocate(G%porous_DminU(IsdB:IedB,jsd:jed), source=0.0)
+  allocate(G%porous_DmaxU(IsdB:IedB,jsd:jed), source=0.0)
+  allocate(G%porous_DavgU(IsdB:IedB,jsd:jed), source=0.0)
+
+  allocate(G%porous_DminV(isd:ied,JsdB:JedB), source=0.0)
+  allocate(G%porous_DmaxV(isd:ied,JsdB:JedB), source=0.0)
+  allocate(G%porous_DavgV(isd:ied,JsdB:JedB), source=0.0)
+
+
   allocate(G%bathyT(isd:ied, jsd:jed), source=0.0)
   allocate(G%CoriolisBu(IsdB:IedB, JsdB:JedB), source=0.0)
   allocate(G%dF_dx(isd:ied, jsd:jed), source=0.0)
@@ -317,6 +337,14 @@ subroutine rotate_dyn_horgrid(G_in, G, US, turns)
   call rotate_array_pair(G_in%areaCu, G_in%areaCv, turns, G%areaCu, G%areaCv)
   call rotate_array_pair(G_in%IareaCu, G_in%IareaCv, turns, G%IareaCu, G%IareaCv)
 
+  call rotate_array_pair(G_in%porous_DminU, G_in%porous_DminV, &
+       turns, G%porous_DminU, G%porous_DminV)
+  call rotate_array_pair(G_in%porous_DmaxU, G_in%porous_DmaxV, &
+       turns, G%porous_DmaxU, G%porous_DmaxV)
+  call rotate_array_pair(G_in%porous_DavgU, G_in%porous_DavgV, &
+       turns, G%porous_DavgU, G%porous_DavgV)
+
+
   ! Vertex point
   call rotate_array(G_in%geoLonBu, turns, G%geoLonBu)
   call rotate_array(G_in%geoLatBu, turns, G%geoLatBu)
@@ -361,6 +389,7 @@ subroutine rotate_dyn_horgrid(G_in, G, US, turns)
   G%areaT_global = G_in%areaT_global
   G%IareaT_global = G_in%IareaT_global
   G%Rad_Earth = G_in%Rad_Earth
+  G%Rad_Earth_L = G_in%Rad_Earth_L
   G%max_depth = G_in%max_depth
 
   call set_derived_dyn_horgrid(G, US)
@@ -406,12 +435,8 @@ subroutine set_derived_dyn_horgrid(G, US)
   type(unit_scale_type), optional, intent(in) :: US !< A dimensional unit scaling type
 !    Various inverse grid spacings and derived areas are calculated within this
 !  subroutine.
-  real :: m_to_L  ! A unit conversion factor [L m-1 ~> nondim]
-  real :: L_to_m  ! A unit conversion factor [L m-1 ~> nondim]
   integer :: i, j, isd, ied, jsd, jed
   integer :: IsdB, IedB, JsdB, JedB
-  m_to_L = 1.0 ; if (present(US)) m_to_L = US%m_to_L
-  L_to_m = 1.0 ; if (present(US)) L_to_m = US%L_to_m
 
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
@@ -488,6 +513,9 @@ subroutine destroy_dyn_horgrid(G)
   deallocate(G%geoLonCv) ; deallocate(G%geoLonBu)
 
   deallocate(G%dx_Cv) ; deallocate(G%dy_Cu)
+
+  deallocate(G%porous_DminU) ; deallocate(G%porous_DmaxU) ; deallocate(G%porous_DavgU)
+  deallocate(G%porous_DminV) ; deallocate(G%porous_DmaxV) ; deallocate(G%porous_DavgV)
 
   deallocate(G%bathyT)  ; deallocate(G%CoriolisBu)
   deallocate(G%dF_dx)  ; deallocate(G%dF_dy)

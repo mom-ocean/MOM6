@@ -34,6 +34,7 @@ public set_int_tide_input, int_tide_input_init, int_tide_input_end
 
 !> This control structure holds parameters that regulate internal tide energy inputs.
 type, public :: int_tide_input_CS ; private
+  logical :: initialized = .false. !< True if this control structure has been initialized.
   logical :: debug      !< If true, write verbose checksums for debugging.
   type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to
                         !! regulate the timing of diagnostic output.
@@ -109,6 +110,9 @@ subroutine set_int_tide_input(u, v, h, tv, fluxes, itide, dt, G, GV, US, CS)
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
   if (.not.associated(CS)) call MOM_error(FATAL,"set_diffusivity: "//&
+         "Module must be initialized before it is used.")
+
+  if (.not.CS%initialized) call MOM_error(FATAL,"set_diffusivity: "//&
          "Module must be initialized before it is used.")
 
   use_EOS = associated(tv%eqn_of_state)
@@ -329,6 +333,8 @@ subroutine int_tide_input_init(Time, G, GV, US, param_file, diag, CS, itide)
   endif
   allocate(CS)
   allocate(itide)
+
+  CS%initialized = .true.
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
