@@ -36,7 +36,7 @@ subroutine bcz_params(G, GV, US, param_file, S_ref, dSdz, delta_S, dSdx, T_ref, 
   real,                    intent(out) :: S_ref      !< Reference salinity [ppt]
   real,                    intent(out) :: dSdz       !< Salinity stratification [ppt Z-1 ~> ppt m-1]
   real,                    intent(out) :: delta_S    !< Salinity difference across baroclinic zone [ppt]
-  real,                    intent(out) :: dSdx       !< Linear salinity gradient [ppt m-1]
+  real,                    intent(out) :: dSdx       !< Linear salinity gradient [ppt G%xaxis_units-1]
   real,                    intent(out) :: T_ref      !< Reference temperature [degC]
   real,                    intent(out) :: dTdz       !< Temperature stratification [degC Z-1 ~> degC m-1]
   real,                    intent(out) :: delta_T    !< Temperature difference across baroclinic zone [degC]

@@ -56,13 +56,11 @@ type, public :: regularize_layers_CS ; private
   logical :: debug           !< If true, do more thorough checks for debugging purposes.
 
   integer :: id_def_rat = -1 !< A diagnostic ID
-  logical :: allow_clocks_in_omp_loops  !< If true, clocks can be called from inside loops that
-                             !! can be threaded. To run with multiple threads, set to False.
 end type regularize_layers_CS
 
 !>@{ Clock IDs
 !! \todo Should these be global?
-integer :: id_clock_pass, id_clock_EOS
+integer :: id_clock_pass
 !>@}
 
 contains
@@ -233,12 +231,10 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, GV, US, CS)
   ! Now restructure the layers.
   !$OMP parallel do default(private) shared(is,ie,js,je,nz,do_j,def_rat_h,CS,nkmb,G,GV,US, &
   !$OMP                                     e,I_dtol,h,tv,debug,h_neglect,p_ref_cv,ea, &
-  !$OMP                                     eb,id_clock_EOS,nkml,EOSdom)
+  !$OMP                                     eb,nkml,EOSdom)
   do j=js,je ; if (do_j(j)) then
 
-!  call cpu_clock_begin(id_clock_EOS)
 !  call calculate_density_derivs(T(:,1), S(:,1), p_ref_cv, dRcv_dT, dRcv_dS, tv%eqn_of_state, EOSdom)
-!  call cpu_clock_end(id_clock_EOS)
 
     do k=1,nz ; do i=is,ie ; d_ea(i,k) = 0.0 ; d_eb(i,k) = 0.0 ; enddo ; enddo
     kmax_d_ea = 0
@@ -367,11 +363,9 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, GV, US, CS)
       enddo
     endif
     if (det_any) then
-      call cpu_clock_begin(id_clock_EOS)
       do k=1,nkmb
         call calculate_density(T_2d(:,k), S_2d(:,k), p_ref_cv, Rcv(:,k), tv%eqn_of_state, EOSdom)
       enddo
-      call cpu_clock_end(id_clock_EOS)
 
       do i=is,ie ; if (det_i(i)) then
         k1 = nkmb ; k2 = nz
@@ -780,19 +774,11 @@ subroutine regularize_layers_init(Time, G, GV, param_file, diag, CS)
 !    call get_param(param_file, mdl, "DEBUG_CONSERVATION", CS%debug, &
 !                 "If true, monitor conservation and extrema.", default=.false., do_not_log=just_read)
 
-  call get_param(param_file, mdl, "ALLOW_CLOCKS_IN_OMP_LOOPS", CS%allow_clocks_in_omp_loops, &
-                 "If true, clocks can be called from inside loops that can "//&
-                 "be threaded. To run with multiple threads, set to False.", &
-                 default=.true., do_not_log=just_read)
-
   if (.not.CS%regularize_surface_layers) return
 
   CS%id_def_rat = register_diag_field('ocean_model', 'deficit_ratio', diag%axesT1, &
       Time, 'Max face thickness deficit ratio', 'nondim')
 
-  if (CS%allow_clocks_in_omp_loops) then
-    id_clock_EOS = cpu_clock_id('(Ocean regularize_layers EOS)', grain=CLOCK_ROUTINE)
-  endif
   id_clock_pass = cpu_clock_id('(Ocean regularize_layers halo updates)', grain=CLOCK_ROUTINE)
 
 end subroutine regularize_layers_init

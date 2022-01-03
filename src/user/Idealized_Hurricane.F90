@@ -595,7 +595,7 @@ subroutine SCM_idealized_hurricane_wind_forcing(sfc_state, forces, day, G, US, C
   U_TS = CS%hurr_translation_spd*0.5*cos(transdir)
   V_TS = CS%hurr_translation_spd*0.5*sin(transdir)
 
-  ! Set the surface wind stresses, in [Pa]. A positive taux
+  ! Set the surface wind stresses, in [R L Z T-2 ~> Pa]. A positive taux
   ! accelerates the ocean to the (pseudo-)east.
   !   The i-loop extends to is-1 so that taux can be used later in the
   ! calculation of ustar - otherwise the lower bound would be Isq.

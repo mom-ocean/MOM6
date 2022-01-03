@@ -34,32 +34,28 @@ contains
 subroutine benchmark_initialize_topography(D, G, param_file, max_depth, US)
   type(dyn_horgrid_type),          intent(in)  :: G !< The dynamic horizontal grid type
   real, dimension(G%isd:G%ied,G%jsd:G%jed), &
-                                   intent(out) :: D !< Ocean bottom depth in m or [Z ~> m] if US is present
+                                   intent(out) :: D !< Ocean bottom depth [Z ~> m]
   type(param_file_type),           intent(in)  :: param_file !< Parameter file structure
-  real,                            intent(in)  :: max_depth !< Maximum model depth in the units of D
-  type(unit_scale_type), optional, intent(in)  :: US !< A dimensional unit scaling type
+  real,                            intent(in)  :: max_depth !< Maximum model depth [Z ~> m]
+  type(unit_scale_type),           intent(in)  :: US !< A dimensional unit scaling type
 
   ! Local variables
-  real :: min_depth            ! The minimum and maximum depths [Z ~> m].
-  real :: PI                   ! 3.1415926... calculated as 4*atan(1)
-  real :: D0                   ! A constant to make the maximum     !
-                               ! basin depth MAXIMUM_DEPTH.         !
-  real :: m_to_Z  ! A dimensional rescaling factor.
-  real :: x, y
+  real :: min_depth ! The minimum basin depth [Z ~> m]
+  real :: PI        ! 3.1415926... calculated as 4*atan(1)
+  real :: D0        ! A constant to make the maximum basin depth MAXIMUM_DEPTH [Z ~> m]
+  real :: x         ! Longitude relative to the domain edge, normalized by its extent [nondim]
+  real :: y         ! Latitude relative to the domain edge, normalized by its extent [nondim]
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
   character(len=40)  :: mdl = "benchmark_initialize_topography" ! This subroutine's name.
-  integer :: i, j, is, ie, js, je, isd, ied, jsd, jed
+  integer :: i, j, is, ie, js, je
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
-  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
   call MOM_mesg("  benchmark_initialization.F90, benchmark_initialize_topography: setting topography", 5)
 
-  m_to_Z = 1.0 ; if (present(US)) m_to_Z = US%m_to_Z
-
   call log_version(param_file, mdl, version, "")
   call get_param(param_file, mdl, "MINIMUM_DEPTH", min_depth, &
-                 "The minimum depth of the ocean.", units="m", default=0.0, scale=m_to_Z)
+                 "The minimum depth of the ocean.", units="m", default=0.0, scale=US%m_to_Z)
 
   PI = 4.0*atan(1.0)
   D0 = max_depth / 0.5
@@ -118,10 +114,13 @@ subroutine benchmark_initialize_thickness(h, depth_tot, G, GV, US, param_file, e
   real :: a_exp     ! The fraction of the overall stratification that is exponential.
   real :: I_ts, I_md ! Inverse lengthscales [Z-1 ~> m-1].
   real :: T_frac    ! A ratio of the interface temperature to the range
-                    ! between SST and the bottom temperature.
-  real :: err, derr_dz  ! The error between the profile's temperature and the
-                    ! interface temperature for a given z and its derivative.
-  real :: pi, z
+                    ! between SST and the bottom temperature [nondim].
+  real :: err       ! The normalized error between the profile's temperature and the
+                    ! interface temperature for a given z [nondim]
+  real :: derr_dz   ! The derivative of the normalized error between the profile's
+                    ! temperature and the interface temperature with z [Z-1 ~> m-1]
+  real :: pi        ! 3.1415926... calculated as 4*atan(1)
+  real :: z         ! A work variable for the interface position [Z ~> m]
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
   character(len=40)  :: mdl = "benchmark_initialize_thickness" ! This subroutine's name.
@@ -178,9 +177,10 @@ subroutine benchmark_initialize_thickness(h, depth_tot, G, GV, US, param_file, e
     do k=1,nz ; e_pert(K) = 0.0 ; enddo
 
     !   This sets the initial thickness (in [H ~> m or kg m-2]) of the layers.  The thicknesses
-    ! are set to insure that: 1. each layer is at least  Gv%Angstrom_m thick, and
-    ! 2. the interfaces are where they should be based on the resting depths and interface
-    ! height perturbations, as long at this doesn't interfere with 1.
+    ! are set to insure that:
+    !   1. each layer is at least GV%Angstrom_H thick, and
+    !   2. the interfaces are where they should be based on the resting depths and
+    !      interface height perturbations, as long at this doesn't interfere with 1.
     eta1D(nz+1) = -depth_tot(i,j)
 
     do k=nz,2,-1
@@ -214,8 +214,8 @@ end subroutine benchmark_initialize_thickness
 !> Initializes layer temperatures and salinities for benchmark
 subroutine benchmark_init_temperature_salinity(T, S, G, GV, US, param_file, &
                eqn_of_state, P_Ref, just_read)
-  type(ocean_grid_type),               intent(in)  :: G            !< The ocean's grid structure.
-  type(verticalGrid_type),             intent(in)  :: GV           !< The ocean's vertical grid structure.
+  type(ocean_grid_type),               intent(in)  :: G            !< The ocean's grid structure
+  type(verticalGrid_type),             intent(in)  :: GV           !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: T      !< The potential temperature
                                                                    !! that is being initialized [degC]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: S      !< The salinity that is being
@@ -226,19 +226,18 @@ subroutine benchmark_init_temperature_salinity(T, S, G, GV, US, param_file, &
                                                                    !! model parameter values.
   type(EOS_type),                      intent(in)  :: eqn_of_state !< Equation of state structure
   real,                                intent(in)  :: P_Ref        !< The coordinate-density
-                                                                   !! reference pressure [R L2 T-2 ~> Pa].
+                                                                   !! reference pressure [R L2 T-2 ~> Pa]
   logical,                             intent(in)  :: just_read    !< If true, this call will only read
                                                                    !! parameters without changing T & S.
   ! Local variables
   real :: T0(SZK_(GV))       ! A profile of temperatures [degC]
   real :: S0(SZK_(GV))       ! A profile of salinities [ppt]
-  real :: pres(SZK_(GV))     ! Reference pressure [R L2 T-2 ~> Pa].
-  real :: drho_dT(SZK_(GV))  ! Derivative of density with temperature [R degC-1 ~> kg m-3 degC-1].
-  real :: drho_dS(SZK_(GV))  ! Derivative of density with salinity [R ppt-1 ~> kg m-3 ppt-1].
-  real :: rho_guess(SZK_(GV)) ! Potential density at T0 & S0 [R ~> kg m-3].
-  real :: PI        ! 3.1415926... calculated as 4*atan(1)
-  real :: SST       !  The initial sea surface temperature [degC].
-  real :: lat
+  real :: pres(SZK_(GV))     ! Reference pressure [R L2 T-2 ~> Pa]
+  real :: drho_dT(SZK_(GV))  ! Derivative of density with temperature [R degC-1 ~> kg m-3 degC-1]
+  real :: drho_dS(SZK_(GV))  ! Derivative of density with salinity [R ppt-1 ~> kg m-3 ppt-1]
+  real :: rho_guess(SZK_(GV)) ! Potential density at T0 & S0 [R ~> kg m-3]
+  real :: PI                 ! 3.1415926... calculated as 4*atan(1)
+  real :: SST                !  The initial sea surface temperature [degC]
   character(len=40)  :: mdl = "benchmark_init_temperature_salinity" ! This subroutine's name.
   integer :: i, j, k, k1, is, ie, js, je, nz, itt
 

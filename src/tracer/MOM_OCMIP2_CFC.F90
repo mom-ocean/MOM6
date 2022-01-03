@@ -31,9 +31,6 @@ public register_OCMIP2_CFC, initialize_OCMIP2_CFC, flux_init_OCMIP2_CFC
 public OCMIP2_CFC_column_physics, OCMIP2_CFC_surface_state
 public OCMIP2_CFC_stock, OCMIP2_CFC_end
 
-
-integer, parameter :: NTR = 2 !< the number of tracers in this module.
-
 !> The control structure for the  OCMPI2_CFC tracer package
 type, public :: OCMIP2_CFC_CS ; private
   character(len=200) :: IC_file !< The file in which the CFC initial values can
@@ -96,18 +93,16 @@ function register_OCMIP2_CFC(HI, GV, param_file, CS, tr_Reg, restart_CS)
   type(tracer_registry_type), &
                            pointer    :: tr_Reg     !< A pointer to the tracer registry.
   type(MOM_restart_CS), target, intent(inout) :: restart_CS !< MOM restart control struct
-! This subroutine is used to register tracer fields and subroutines
-! to be used with MOM.
 
   ! Local variables
   character(len=40)  :: mdl = "MOM_OCMIP2_CFC" ! This module's name.
   character(len=200) :: inputdir ! The directory where NetCDF input files are.
   ! This include declares and sets the variable "version".
-#include "version_variable.h"
+# include "version_variable.h"
   real, dimension(:,:,:), pointer :: tr_ptr => NULL()
   real :: a11_dflt(4), a12_dflt(4) ! Default values of the various coefficients
-  real :: d11_dflt(4), d12_dflt(4) ! In the expressions for the solubility and
-  real :: e11_dflt(3), e12_dflt(3) ! Schmidt numbers.
+  real :: d11_dflt(4), d12_dflt(4) ! in the expressions for the solubility and
+  real :: e11_dflt(3), e12_dflt(3) ! Schmidt numbers [various units by element].
   character(len=48) :: flux_units ! The units for tracer fluxes.
   logical :: register_OCMIP2_CFC
   integer :: isd, ied, jsd, jed, nz, m
@@ -330,10 +325,6 @@ subroutine initialize_OCMIP2_CFC(restart, day, G, GV, US, h, diag, OBC, CS, &
   type(sponge_CS),                pointer    :: sponge_CSp !< A pointer to the control structure for
                                                            !! the sponges, if they are in use.
                                                            !! Otherwise this may be unassociated.
-!   This subroutine initializes the NTR tracer fields in tr(:,:,:,:)
-! and it sets up the tracer output.
-
-  logical :: from_file = .false.
 
   if (.not.associated(CS)) return
 
@@ -441,9 +432,8 @@ subroutine OCMIP2_CFC_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, US
 
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G)) :: &
-    CFC11_flux, &    ! The fluxes of CFC11 and CFC12 into the ocean, in the
-    CFC12_flux       ! units of CFC concentrations times meters per second.
-  real, pointer, dimension(:,:,:) :: CFC11 => NULL(), CFC12 => NULL()
+    CFC11_flux, &    ! The fluxes of CFC11 and CFC12 into the ocean, in unscaled units of
+    CFC12_flux       ! CFC concentrations times meters per second [CU R Z T-1 ~> CU kg m-2 s-1]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: h_work ! Used so that h can be modified [H ~> m or kg m-2]
   integer :: i, j, k, m, is, ie, js, je, nz, idim(4), jdim(4)
 
@@ -452,15 +442,13 @@ subroutine OCMIP2_CFC_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, US
 
   if (.not.associated(CS)) return
 
-  CFC11 => CS%CFC11 ; CFC12 => CS%CFC12
-
   ! These two calls unpack the fluxes from the input arrays.
-  !   The -GV%Rho0 changes the sign convention of the flux and changes the units
-  ! of the flux from [Conc. m s-1] to [Conc. kg m-2 T-1].
+  !   The -GV%Rho0 changes the sign convention of the flux and with the scaling factors changes
+  ! the units of the flux from [Conc. m s-1] to [Conc. R Z T-1 ~> Conc. kg m-2 s-1].
   call extract_coupler_type_data(fluxes%tr_fluxes, CS%ind_cfc_11_flux, CFC11_flux, &
-                                 scale_factor=-GV%Rho0*US%R_to_kg_m3*US%T_to_s, idim=idim, jdim=jdim)
+                                 scale_factor=-GV%Rho0*US%m_to_Z*US%T_to_s, idim=idim, jdim=jdim)
   call extract_coupler_type_data(fluxes%tr_fluxes, CS%ind_cfc_12_flux, CFC12_flux, &
-                                 scale_factor=-GV%Rho0*US%R_to_kg_m3*US%T_to_s, idim=idim, jdim=jdim)
+                                 scale_factor=-GV%Rho0*US%m_to_Z*US%T_to_s, idim=idim, jdim=jdim)
 
   ! Use a tridiagonal solver to determine the concentrations after the
   ! surface source is applied and diapycnal advection and diffusion occurs.
@@ -468,19 +456,19 @@ subroutine OCMIP2_CFC_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, US
     do k=1,nz ;do j=js,je ; do i=is,ie
       h_work(i,j,k) = h_old(i,j,k)
     enddo ; enddo ; enddo
-    call applyTracerBoundaryFluxesInOut(G, GV, CFC11, dt, fluxes, h_work, &
+    call applyTracerBoundaryFluxesInOut(G, GV, CS%CFC11, dt, fluxes, h_work, &
                                         evap_CFL_limit, minimum_forcing_depth)
-    call tracer_vertdiff(h_work, ea, eb, dt, CFC11, G, GV, sfc_flux=CFC11_flux)
+    call tracer_vertdiff(h_work, ea, eb, dt, CS%CFC11, G, GV, sfc_flux=CFC11_flux)
 
     do k=1,nz ;do j=js,je ; do i=is,ie
       h_work(i,j,k) = h_old(i,j,k)
     enddo ; enddo ; enddo
-    call applyTracerBoundaryFluxesInOut(G, GV, CFC12, dt, fluxes, h_work, &
+    call applyTracerBoundaryFluxesInOut(G, GV, CS%CFC12, dt, fluxes, h_work, &
                                         evap_CFL_limit, minimum_forcing_depth)
-    call tracer_vertdiff(h_work, ea, eb, dt, CFC12, G, GV, sfc_flux=CFC12_flux)
+    call tracer_vertdiff(h_work, ea, eb, dt, CS%CFC12, G, GV, sfc_flux=CFC12_flux)
   else
-    call tracer_vertdiff(h_old, ea, eb, dt, CFC11, G, GV, sfc_flux=CFC11_flux)
-    call tracer_vertdiff(h_old, ea, eb, dt, CFC12, G, GV, sfc_flux=CFC12_flux)
+    call tracer_vertdiff(h_old, ea, eb, dt, CS%CFC11, G, GV, sfc_flux=CFC11_flux)
+    call tracer_vertdiff(h_old, ea, eb, dt, CS%CFC12, G, GV, sfc_flux=CFC12_flux)
   endif
 
   ! Write out any desired diagnostics from tracer sources & sinks here.
@@ -490,13 +478,14 @@ end subroutine OCMIP2_CFC_column_physics
 !> This function calculates the mass-weighted integral of all tracer stocks,
 !! returning the number of stocks it has calculated.  If the stock_index
 !! is present, only the stock corresponding to that coded index is returned.
-function OCMIP2_CFC_stock(h, stocks, G, GV, CS, names, units, stock_index)
+function OCMIP2_CFC_stock(h, stocks, G, GV, US, CS, names, units, stock_index)
   type(ocean_grid_type),           intent(in)    :: G      !< The ocean's grid structure.
   type(verticalGrid_type),         intent(in)    :: GV     !< The ocean's vertical grid structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                                    intent(in)    :: h      !< Layer thicknesses [H ~> m or kg m-2].
   real, dimension(:),              intent(out)   :: stocks !< the mass-weighted integrated amount of each
                                                            !! tracer, in kg times concentration units [kg conc].
+  type(unit_scale_type),           intent(in)    :: US     !< A dimensional unit scaling type
   type(OCMIP2_CFC_CS),             pointer       :: CS     !< The control structure returned by a
                                                            !! previous call to register_OCMIP2_CFC.
   character(len=*), dimension(:),  intent(out)   :: names  !< The names of the stocks calculated.
@@ -525,7 +514,7 @@ function OCMIP2_CFC_stock(h, stocks, G, GV, CS, names, units, stock_index)
   call query_vardesc(CS%CFC12_desc, name=names(2), units=units(2), caller="OCMIP2_CFC_stock")
   units(1) = trim(units(1))//" kg" ; units(2) = trim(units(2))//" kg"
 
-  stock_scale = G%US%L_to_m**2 * GV%H_to_kg_m2
+  stock_scale = US%L_to_m**2 * GV%H_to_kg_m2
   stocks(1) = 0.0 ; stocks(2) = 0.0
   do k=1,nz ; do j=js,je ; do i=is,ie
     mass = G%mask2dT(i,j) * G%areaT(i,j) * h(i,j,k)

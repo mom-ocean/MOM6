@@ -171,11 +171,11 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
   real, dimension(SZK_(GV))   :: dz           !< thicknesses of merged layers (same as Hc I hope) [Z ~> m]
   ! real, dimension(SZK_(GV)+1) :: dWdz_profile !< profile of dW/dz
   real                        :: w2avg   !< average of squared vertical velocity structure funtion [Z ~> m]
-  real                        :: int_dwdz2
-  real                        :: int_w2
-  real                        :: int_N2w2
-  real                        :: KE_term !< terms in vertically averaged energy equation
-  real                        :: PE_term !< terms in vertically averaged energy equation
+  real                        :: int_dwdz2 !< Vertical integral of the square of u_strct [Z ~> m]
+  real                        :: int_w2   !< Vertical integral of the square of w_strct [Z ~> m]
+  real                        :: int_N2w2 !< Vertical integral of N2 [Z T-2 ~> m s-2]
+  real                        :: KE_term !< terms in vertically averaged energy equation [R Z ~> kg m-2]
+  real                        :: PE_term !< terms in vertically averaged energy equation [R Z ~> kg m-2]
   real                        :: W0      !< A vertical velocity magnitude [Z T-1 ~> m s-1]
   real                        :: gp_unscaled !< A version of gprime rescaled to [L T-2 ~> m s-2].
   real, dimension(SZK_(GV)-1) :: lam_z   !< product of eigen value and gprime(k); one value for each
@@ -183,8 +183,8 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
   real, dimension(SZK_(GV)-1) :: a_diag, b_diag, c_diag
                                          !< diagonals of tridiagonal matrix; one value for each
                                          !< interface (excluding surface and bottom)
-  real, dimension(SZK_(GV)-1) :: e_guess !< guess at eigen vector with unit amplitde (for TDMA)
-  real, dimension(SZK_(GV)-1) :: e_itt   !< improved guess at eigen vector (from TDMA)
+  real, dimension(SZK_(GV)-1) :: e_guess !< guess at eigen vector with unit amplitude (for TDMA) [nondim]
+  real, dimension(SZK_(GV)-1) :: e_itt   !< improved guess at eigen vector (from TDMA) [nondim]
   real    :: Pi
   integer :: kc
   integer :: i, j, k, k2, itt, is, ie, js, je, nz, nzm, row, ig, jg, ig_stop, jg_stop
@@ -523,7 +523,7 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
 
             ! Back-calculate amplitude from energy equation
             if (present(En) .and. (freq**2*Kmag2 > 0.0)) then
-              ! Units here are [R
+              ! Units here are [R Z ~> kg m-2]
               KE_term = 0.25*GV%Rho0*( ((freq**2 + f2) / (freq**2*Kmag2))*int_dwdz2 + int_w2 )
               PE_term = 0.25*GV%Rho0*( int_N2w2 / freq**2 )
               if (En(i,j) >= 0.0) then

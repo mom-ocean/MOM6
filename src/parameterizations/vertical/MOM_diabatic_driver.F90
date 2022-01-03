@@ -15,6 +15,7 @@ use MOM_diabatic_aux,        only : make_frazil, adjust_salt, differential_diffu
 use MOM_diabatic_aux,        only : triDiagTS_Eulerian, find_uv_at_h, diagnoseMLDbyDensityDifference
 use MOM_diabatic_aux,        only : applyBoundaryFluxesInOut, diagnoseMLDbyEnergy, set_pen_shortwave
 use MOM_diag_mediator,       only : post_data, register_diag_field, safe_alloc_ptr
+use MOM_diag_mediator,       only : post_product_sum_u, post_product_sum_v
 use MOM_diag_mediator,       only : diag_ctrl, time_type, diag_update_remap_grids
 use MOM_diag_mediator,       only : diag_ctrl, query_averaging_enabled, enable_averages, disable_averaging
 use MOM_diag_mediator,       only : diag_grid_storage, diag_grid_storage_init, diag_grid_storage_end
@@ -68,6 +69,7 @@ use MOM_variables,           only : cont_diag_ptrs, MOM_thermovar_chksum, p3d
 use MOM_verticalGrid,        only : verticalGrid_type, get_thickness_units
 use MOM_wave_speed,          only : wave_speeds
 use MOM_wave_interface,      only : wave_parameters_CS
+use MOM_stochastics,         only : stochastic_CS
 
 implicit none ; private
 
@@ -267,7 +269,7 @@ contains
 !>  This subroutine imposes the diapycnal mass fluxes and the
 !!  accompanying diapycnal advection of momentum and tracers.
 subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
-                    G, GV, US, CS, OBC, Waves)
+                    G, GV, US, CS, stoch_CS, OBC, Waves)
   type(ocean_grid_type),                      intent(inout) :: G        !< ocean grid structure
   type(verticalGrid_type),                    intent(in)    :: GV       !< ocean vertical grid structure
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), intent(inout) :: u        !< zonal velocity [L T-1 ~> m s-1]
@@ -288,17 +290,40 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
   type(time_type),                            intent(in)    :: Time_end !< Time at the end of the interval
   type(unit_scale_type),                      intent(in)    :: US       !< A dimensional unit scaling type
   type(diabatic_CS),                          pointer       :: CS       !< module control structure
+  type(stochastic_CS),                        pointer       :: stoch_CS !< stochastic control structure
   type(ocean_OBC_type),                       pointer       :: OBC      !< Open boundaries control structure.
   type(Wave_parameters_CS),                   pointer       :: Waves    !< Surface gravity waves
 
   ! local variables
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1) :: &
-    eta      ! Interface heights before diapycnal mixing [m].
+    eta      ! Interface heights before diapycnal mixing [Z ~> m]
   real, dimension(SZI_(G),SZJ_(G),CS%nMode) :: &
     cn_IGW   ! baroclinic internal gravity wave speeds [L T-1 ~> m s-1]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: temp_diag  ! Previous temperature for diagnostics [degC]
   integer :: i, j, k, m, is, ie, js, je, nz
   logical :: showCallTree ! If true, show the call tree
+
+  real, allocatable, dimension(:,:,:)    :: h_in  ! thickness before thermodynamics
+  real, allocatable, dimension(:,:,:)    :: t_in  ! temperature before thermodynamics
+  real, allocatable, dimension(:,:,:)    :: s_in  ! salinity before thermodynamics
+  real :: t_tend,s_tend,h_tend                  ! holder for tendencey needed for SPPT
+  real :: t_pert,s_pert,h_pert                  ! holder for perturbations needed for SPPT
+
+  if (G%ke == 1) return
+
+   ! save  copy of the date for SPPT if active
+  if (stoch_CS%do_sppt) then
+    allocate(h_in(G%isd:G%ied, G%jsd:G%jed,G%ke))
+    allocate(t_in(G%isd:G%ied, G%jsd:G%jed,G%ke))
+    allocate(s_in(G%isd:G%ied, G%jsd:G%jed,G%ke))
+    h_in(:,:,:)=h(:,:,:)
+    t_in(:,:,:)=tv%T(:,:,:)
+    s_in(:,:,:)=tv%S(:,:,:)
+
+    if (stoch_CS%id_sppt_wts > 0) then
+      call post_data(stoch_CS%id_sppt_wts, stoch_CS%sppt_wts, CS%diag)
+    endif
+  endif
 
   if (GV%ke == 1) return
 
@@ -325,7 +350,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
   if (CS%id_T_predia > 0) call post_data(CS%id_T_predia, tv%T, CS%diag)
   if (CS%id_S_predia > 0) call post_data(CS%id_S_predia, tv%S, CS%diag)
   if (CS%id_e_predia > 0) then
-    call find_eta(h, tv, G, GV, US, eta, eta_to_m=1.0, dZref=G%Z_ref)
+    call find_eta(h, tv, G, GV, US, eta, dZref=G%Z_ref)
     call post_data(CS%id_e_predia, eta, CS%diag)
   endif
 
@@ -387,10 +412,10 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
 
   if (CS%useALEalgorithm .and. CS%use_legacy_diabatic) then
     call diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
-                      G, GV, US, CS, Waves)
+                      G, GV, US, CS, stoch_CS, Waves)
   elseif (CS%useALEalgorithm) then
     call diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
-                      G, GV, US, CS, Waves)
+                      G, GV, US, CS, stoch_CS, Waves)
   else
     call layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
                           G, GV, US, CS, Waves)
@@ -456,13 +481,41 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
 
   if (CS%debugConservation) call MOM_state_stats('leaving diabatic', u, v, h, tv%T, tv%S, G, GV, US)
 
+  if (stoch_CS%do_sppt) then
+  ! perturb diabatic tendecies
+    do k=1,nz
+      do j=js,je
+        do i=is,ie
+          h_tend = (h(i,j,k)-h_in(i,j,k))*stoch_CS%sppt_wts(i,j)
+          t_tend = (tv%T(i,j,k)-t_in(i,j,k))*stoch_CS%sppt_wts(i,j)
+          s_tend = (tv%S(i,j,k)-s_in(i,j,k))*stoch_CS%sppt_wts(i,j)
+          h_pert=h_tend+h_in(i,j,k)
+          t_pert=t_tend+t_in(i,j,k)
+          s_pert=s_tend+s_in(i,j,k)
+          if (h_pert > GV%Angstrom_H) then
+            h(i,j,k) = h_pert
+          else
+            h(i,j,k) = GV%Angstrom_H
+          endif
+          tv%T(i,j,k) = t_pert
+          if (s_pert > 0.0) then
+            tv%S(i,j,k) = s_pert
+          endif
+        enddo
+      enddo
+    enddo
+    deallocate(h_in)
+    deallocate(t_in)
+    deallocate(s_in)
+  endif
+
 end subroutine diabatic
 
 
 !> Applies diabatic forcing and diapycnal mixing of temperature, salinity and other tracers for use
 !! with an ALE algorithm.  This version uses an older set of algorithms compared with diabatic_ALE.
 subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
-                           G, GV, US, CS, Waves)
+                           G, GV, US, CS, stoch_CS, Waves)
   type(ocean_grid_type),                      intent(inout) :: G        !< ocean grid structure
   type(verticalGrid_type),                    intent(in)    :: GV       !< ocean vertical grid structure
   type(unit_scale_type),                      intent(in)    :: US       !< A dimensional unit scaling type
@@ -483,6 +536,7 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
   real,                                       intent(in)    :: dt       !< time increment [T ~> s]
   type(time_type),                            intent(in)    :: Time_end !< Time at the end of the interval
   type(diabatic_CS),                          pointer       :: CS       !< module control structure
+  type(stochastic_CS),                        pointer       :: stoch_CS !< stochastic control structure
   type(Wave_parameters_CS),                   pointer       :: Waves    !< Surface gravity waves
 
   ! local variables
@@ -600,7 +654,7 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
   if (CS%debug) then
     call MOM_state_chksum("after set_diffusivity ", u, v, h, G, GV, US, haloshift=0)
     call MOM_forcing_chksum("after set_diffusivity ", fluxes, G, US, haloshift=0)
-    call MOM_thermovar_chksum("after set_diffusivity ", tv, G)
+    call MOM_thermovar_chksum("after set_diffusivity ", tv, G, US)
     call hchksum(Kd_Int, "after set_diffusivity Kd_Int", G%HI, haloshift=0, scale=US%Z2_T_to_m2_s)
   endif
 
@@ -677,7 +731,7 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
     if (CS%debug) then
       call MOM_state_chksum("after KPP", u, v, h, G, GV, US, haloshift=0)
       call MOM_forcing_chksum("after KPP", fluxes, G, US, haloshift=0)
-      call MOM_thermovar_chksum("after KPP", tv, G)
+      call MOM_thermovar_chksum("after KPP", tv, G, US)
       call hchksum(Kd_heat, "after KPP Kd_heat", G%HI, haloshift=0, scale=US%Z2_T_to_m2_s)
       call hchksum(Kd_salt, "after KPP Kd_salt", G%HI, haloshift=0, scale=US%Z2_T_to_m2_s)
       call hchksum(CS%KPP_temp_flux, "before KPP_applyNLT netHeat", G%HI, haloshift=0, scale=GV%H_to_m*US%s_to_T)
@@ -698,7 +752,7 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
     if (CS%debug) then
       call MOM_state_chksum("after KPP_applyNLT ", u, v, h, G, GV, US, haloshift=0)
       call MOM_forcing_chksum("after KPP_applyNLT ", fluxes, G, US, haloshift=0)
-      call MOM_thermovar_chksum("after KPP_applyNLT ", tv, G)
+      call MOM_thermovar_chksum("after KPP_applyNLT ", tv, G, US)
     endif
   endif ! endif for KPP
 
@@ -746,7 +800,7 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
 
   if (CS%debug) then
     call MOM_forcing_chksum("after calc_entrain ", fluxes, G, US, haloshift=0)
-    call MOM_thermovar_chksum("after calc_entrain ", tv, G)
+    call MOM_thermovar_chksum("after calc_entrain ", tv, G, US)
     call MOM_state_chksum("after calc_entrain ", u, v, h, G, GV, US, haloshift=0)
     call hchksum(ent_s, "after calc_entrain ent_s", G%HI, haloshift=0, scale=GV%H_to_m)
   endif
@@ -784,7 +838,7 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
 
     call find_uv_at_h(u, v, h, u_h, v_h, G, GV, US)
     call energetic_PBL(h, u_h, v_h, tv, fluxes, dt, Kd_ePBL, G, GV, US, &
-                       CS%energetic_PBL, dSV_dT, dSV_dS, cTKE, SkinBuoyFlux, waves=waves)
+                       CS%energetic_PBL, stoch_CS, dSV_dT, dSV_dS, cTKE, SkinBuoyFlux, waves=waves)
 
     if (associated(Hml)) then
       call energetic_PBL_get_MLD(CS%energetic_PBL, Hml(:,:), G, US)
@@ -841,7 +895,7 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
   call cpu_clock_end(id_clock_remap)
   if (CS%debug) then
     call MOM_forcing_chksum("after applyBoundaryFluxes ", fluxes, G, US, haloshift=0)
-    call MOM_thermovar_chksum("after applyBoundaryFluxes ", tv, G)
+    call MOM_thermovar_chksum("after applyBoundaryFluxes ", tv, G, US)
     call MOM_state_chksum("after applyBoundaryFluxes ", u, v, h, G, GV, US, haloshift=0)
   endif
   if (showCallTree) call callTree_waypoint("done with applyBoundaryFluxes (diabatic)")
@@ -850,7 +904,7 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
   if (CS%debug) then
     call MOM_state_chksum("after negative check ", u, v, h, G, GV, US, haloshift=0)
     call MOM_forcing_chksum("after negative check ", fluxes, G, US, haloshift=0)
-    call MOM_thermovar_chksum("after negative check ", tv, G)
+    call MOM_thermovar_chksum("after negative check ", tv, G, US)
   endif
   if (showCallTree) call callTree_waypoint("done with h=ea-eb (diabatic)")
   if (CS%debugConservation) call MOM_state_stats('h=ea-eb', u, v, h, tv%T, tv%S, G, GV, US)
@@ -907,7 +961,7 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
 
   if (CS%debug) then
     call MOM_state_chksum("after mixed layer ", u, v, h, G, GV, US, haloshift=0)
-    call MOM_thermovar_chksum("after mixed layer ", tv, G)
+    call MOM_thermovar_chksum("after mixed layer ", tv, G, US)
   endif
 
   ! Whenever thickness changes let the diag manager know, as the
@@ -1019,7 +1073,7 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
     call cpu_clock_end(id_clock_sponge)
     if (CS%debug) then
       call MOM_state_chksum("apply_sponge ", u, v, h, G, GV, US, haloshift=0)
-      call MOM_thermovar_chksum("apply_sponge ", tv, G)
+      call MOM_thermovar_chksum("apply_sponge ", tv, G, US)
     endif
   endif ! CS%use_sponge
 
@@ -1031,7 +1085,7 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
     call cpu_clock_end(id_clock_oda_incupd)
     if (CS%debug) then
       call MOM_state_chksum("apply_oda_incupd ", u, v, h, G, GV, US, haloshift=0)
-      call MOM_thermovar_chksum("apply_oda_incupd ", tv, G)
+      call MOM_thermovar_chksum("apply_oda_incupd ", tv, G, US)
     endif
   endif ! CS%use_oda_incupd
 
@@ -1047,7 +1101,7 @@ end subroutine diabatic_ALE_legacy
 !>  This subroutine imposes the diapycnal mass fluxes and the
 !!  accompanying diapycnal advection of momentum and tracers.
 subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
-                        G, GV, US, CS, Waves)
+                        G, GV, US, CS, stoch_CS, Waves)
   type(ocean_grid_type),                      intent(inout) :: G        !< ocean grid structure
   type(verticalGrid_type),                    intent(in)    :: GV       !< ocean vertical grid structure
   type(unit_scale_type),                      intent(in)    :: US       !< A dimensional unit scaling type
@@ -1068,6 +1122,7 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
   real,                                       intent(in)    :: dt       !< time increment [T ~> s]
   type(time_type),                            intent(in)    :: Time_end !< Time at the end of the interval
   type(diabatic_CS),                          pointer       :: CS       !< module control structure
+  type(stochastic_CS),                        pointer       :: stoch_CS !< stochastic control structure
   type(Wave_parameters_CS),                   pointer       :: Waves    !< Surface gravity waves
 
   ! local variables
@@ -1184,7 +1239,7 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
   if (CS%debug) then
     call MOM_state_chksum("after set_diffusivity ", u, v, h, G, GV, US, haloshift=0)
     call MOM_forcing_chksum("after set_diffusivity ", fluxes, G, US, haloshift=0)
-    call MOM_thermovar_chksum("after set_diffusivity ", tv, G)
+    call MOM_thermovar_chksum("after set_diffusivity ", tv, G, US)
     call hchksum(Kd_heat, "after set_diffusivity Kd_heat", G%HI, haloshift=0, scale=US%Z2_T_to_m2_s)
   endif
 
@@ -1252,7 +1307,7 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
     if (CS%debug) then
       call MOM_state_chksum("after KPP", u, v, h, G, GV, US, haloshift=0)
       call MOM_forcing_chksum("after KPP", fluxes, G, US, haloshift=0)
-      call MOM_thermovar_chksum("after KPP", tv, G)
+      call MOM_thermovar_chksum("after KPP", tv, G, US)
       call hchksum(Kd_heat, "after KPP Kd_heat", G%HI, haloshift=0, scale=US%Z2_T_to_m2_s)
       call hchksum(Kd_salt, "after KPP Kd_salt", G%HI, haloshift=0, scale=US%Z2_T_to_m2_s)
       call hchksum(CS%KPP_temp_flux, "before KPP_applyNLT netHeat", G%HI, haloshift=0, scale=GV%H_to_m*US%s_to_T)
@@ -1273,7 +1328,7 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
     if (CS%debug) then
       call MOM_state_chksum("after KPP_applyNLT ", u, v, h, G, GV, US, haloshift=0)
       call MOM_forcing_chksum("after KPP_applyNLT ", fluxes, G, US, haloshift=0)
-      call MOM_thermovar_chksum("after KPP_applyNLT ", tv, G)
+      call MOM_thermovar_chksum("after KPP_applyNLT ", tv, G, US)
     endif
   endif ! endif for KPP
 
@@ -1320,7 +1375,7 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
 
     call find_uv_at_h(u, v, h, u_h, v_h, G, GV, US)
     call energetic_PBL(h, u_h, v_h, tv, fluxes, dt, Kd_ePBL, G, GV, US, &
-                       CS%energetic_PBL, dSV_dT, dSV_dS, cTKE, SkinBuoyFlux, waves=waves)
+                       CS%energetic_PBL, stoch_CS, dSV_dT, dSV_dS, cTKE, SkinBuoyFlux, waves=waves)
 
     if (associated(Hml)) then
       call energetic_PBL_get_MLD(CS%energetic_PBL, Hml(:,:), G, US)
@@ -1371,7 +1426,7 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
   call cpu_clock_end(id_clock_remap)
   if (CS%debug) then
     call MOM_forcing_chksum("after applyBoundaryFluxes ", fluxes, G, US, haloshift=0)
-    call MOM_thermovar_chksum("after applyBoundaryFluxes ", tv, G)
+    call MOM_thermovar_chksum("after applyBoundaryFluxes ", tv, G, US)
     call MOM_state_chksum("after applyBoundaryFluxes ", u, v, h, G, GV, US, haloshift=0)
   endif
   if (showCallTree) call callTree_waypoint("done with applyBoundaryFluxes (diabatic)")
@@ -1438,7 +1493,7 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
 
   if (CS%debug) then
     call MOM_state_chksum("after mixed layer ", u, v, h, G, GV, US, haloshift=0)
-    call MOM_thermovar_chksum("after mixed layer ", tv, G)
+    call MOM_thermovar_chksum("after mixed layer ", tv, G, US)
   endif
 
   ! Whenever thickness changes let the diag manager know, as the
@@ -1525,7 +1580,7 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
     call cpu_clock_end(id_clock_sponge)
     if (CS%debug) then
       call MOM_state_chksum("apply_sponge ", u, v, h, G, GV, US, haloshift=0)
-      call MOM_thermovar_chksum("apply_sponge ", tv, G)
+      call MOM_thermovar_chksum("apply_sponge ", tv, G, US)
     endif
   endif ! CS%use_sponge
 
@@ -1537,7 +1592,7 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
     call cpu_clock_end(id_clock_oda_incupd)
     if (CS%debug) then
       call MOM_state_chksum("apply_oda_incupd ", u, v, h, G, GV, US, haloshift=0)
-      call MOM_thermovar_chksum("apply_oda_incupd ", tv, G)
+      call MOM_thermovar_chksum("apply_oda_incupd ", tv, G, US)
     endif
   endif ! CS%use_oda_incupd
 
@@ -1788,7 +1843,7 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
   if (CS%debug) then
     call MOM_state_chksum("after set_diffusivity ", u, v, h, G, GV, US, haloshift=0)
     call MOM_forcing_chksum("after set_diffusivity ", fluxes, G, US, haloshift=0)
-    call MOM_thermovar_chksum("after set_diffusivity ", tv, G)
+    call MOM_thermovar_chksum("after set_diffusivity ", tv, G, US)
     call hchksum(Kd_lay, "after set_diffusivity Kd_lay", G%HI, haloshift=0, scale=US%Z2_T_to_m2_s)
     call hchksum(Kd_Int, "after set_diffusivity Kd_Int", G%HI, haloshift=0, scale=US%Z2_T_to_m2_s)
   endif
@@ -1862,7 +1917,7 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
     if (CS%debug) then
       call MOM_state_chksum("after KPP", u, v, h, G, GV, US, haloshift=0)
       call MOM_forcing_chksum("after KPP", fluxes, G, US, haloshift=0)
-      call MOM_thermovar_chksum("after KPP", tv, G)
+      call MOM_thermovar_chksum("after KPP", tv, G, US)
       call hchksum(Kd_lay, "after KPP Kd_lay", G%HI, haloshift=0, scale=US%Z2_T_to_m2_s)
       call hchksum(Kd_Int, "after KPP Kd_Int", G%HI, haloshift=0, scale=US%Z2_T_to_m2_s)
     endif
@@ -1895,7 +1950,7 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
     if (CS%debug) then
       call MOM_state_chksum("after KPP_applyNLT ", u, v, h, G, GV, US, haloshift=0)
       call MOM_forcing_chksum("after KPP_applyNLT ", fluxes, G, US, haloshift=0)
-      call MOM_thermovar_chksum("after KPP_applyNLT ", tv, G)
+      call MOM_thermovar_chksum("after KPP_applyNLT ", tv, G, US)
     endif
   endif ! endif for KPP
 
@@ -1933,7 +1988,7 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
 
   if (CS%debug) then
     call MOM_forcing_chksum("after calc_entrain ", fluxes, G, US, haloshift=0)
-    call MOM_thermovar_chksum("after calc_entrain ", tv, G)
+    call MOM_thermovar_chksum("after calc_entrain ", tv, G, US)
     call MOM_state_chksum("after calc_entrain ", u, v, h, G, GV, US, haloshift=0)
     call hchksum(ea, "after calc_entrain ea", G%HI, haloshift=0, scale=GV%H_to_m)
     call hchksum(eb, "after calc_entrain eb", G%HI, haloshift=0, scale=GV%H_to_m)
@@ -1984,7 +2039,7 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
   if (CS%debug) then
     call MOM_state_chksum("after negative check ", u, v, h, G, GV, US, haloshift=0)
     call MOM_forcing_chksum("after negative check ", fluxes, G, US, haloshift=0)
-    call MOM_thermovar_chksum("after negative check ", tv, G)
+    call MOM_thermovar_chksum("after negative check ", tv, G, US)
   endif
   if (showCallTree) call callTree_waypoint("done with h=ea-eb (diabatic)")
   if (CS%debugConservation) call MOM_state_stats('h=ea-eb', u, v, h, tv%T, tv%S, G, GV, US)
@@ -2182,7 +2237,7 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
 
   if (CS%debug) then
     call MOM_state_chksum("after mixed layer ", u, v, h, G, GV, US, haloshift=0)
-    call MOM_thermovar_chksum("after mixed layer ", tv, G)
+    call MOM_thermovar_chksum("after mixed layer ", tv, G, US)
     call hchksum(ea, "after mixed layer ea", G%HI, scale=GV%H_to_m)
     call hchksum(eb, "after mixed layer eb", G%HI, scale=GV%H_to_m)
   endif
@@ -2330,7 +2385,7 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
     call cpu_clock_end(id_clock_sponge)
     if (CS%debug) then
       call MOM_state_chksum("apply_sponge ", u, v, h, G, GV, US, haloshift=0)
-      call MOM_thermovar_chksum("apply_sponge ", tv, G)
+      call MOM_thermovar_chksum("apply_sponge ", tv, G, US)
     endif
   endif ! CS%use_sponge
 
@@ -2341,7 +2396,7 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
     call cpu_clock_end(id_clock_oda_incupd)
     if (CS%debug) then
       call MOM_state_chksum("apply_oda_incupd ", u, v, h, G, GV, US, haloshift=0)
-      call MOM_thermovar_chksum("apply_oda_incupd ", tv, G)
+      call MOM_thermovar_chksum("apply_oda_incupd ", tv, G, US)
     endif
   endif ! CS%use_oda_incupd
 
@@ -2499,24 +2554,11 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
   if (CS%id_Sdif > 0) call post_data(CS%id_Sdif, Sdif_flx, CS%diag)
   if (CS%id_Sadv > 0) call post_data(CS%id_Sadv, Sadv_flx, CS%diag)
 
-  !! Diagnostics for terms multiplied by fractional thicknesses
-  if (CS%id_hf_dudt_dia_2d > 0) then
-    allocate(hf_dudt_dia_2d(G%IsdB:G%IedB,G%jsd:G%jed), source=0.0)
-    do k=1,nz ; do j=js,je ; do I=Isq,Ieq
-      hf_dudt_dia_2d(I,j) = hf_dudt_dia_2d(I,j) + ADp%du_dt_dia(I,j,k) * ADp%diag_hfrac_u(I,j,k)
-    enddo ; enddo ; enddo
-    call post_data(CS%id_hf_dudt_dia_2d, hf_dudt_dia_2d, CS%diag)
-    deallocate(hf_dudt_dia_2d)
-  endif
-
-  if (CS%id_hf_dvdt_dia_2d > 0) then
-    allocate(hf_dvdt_dia_2d(G%isd:G%ied,G%JsdB:G%JedB), source=0.0)
-    do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
-      hf_dvdt_dia_2d(i,J) = hf_dvdt_dia_2d(i,J) + ADp%dv_dt_dia(i,J,k) * ADp%diag_hfrac_v(i,J,k)
-    enddo ; enddo ; enddo
-    call post_data(CS%id_hf_dvdt_dia_2d, hf_dvdt_dia_2d, CS%diag)
-    deallocate(hf_dvdt_dia_2d)
-  endif
+  ! Diagnostics for thickness-weighted vertically averaged diapycnal accelerations
+  if (CS%id_hf_dudt_dia_2d > 0) &
+    call post_product_sum_u(CS%id_hf_dudt_dia_2d, ADp%du_dt_dia, ADp%diag_hfrac_u, G, nz, CS%diag)
+  if (CS%id_hf_dvdt_dia_2d > 0) &
+    call post_product_sum_v(CS%id_hf_dvdt_dia_2d, ADp%dv_dt_dia, ADp%diag_hfrac_v, G, nz, CS%diag)
 
   call disable_averaging(CS%diag)
 
@@ -2548,6 +2590,7 @@ subroutine extract_diabatic_member(CS, opacity_CSp, optics_CSp, evap_CFL_limit, 
   if (present(optics_CSp))        optics_CSp  => CS%optics
   if (present(KPP_CSp))           KPP_CSp     => CS%KPP_CSp
   if (present(energetic_PBL_CSp)) energetic_PBL_CSp => CS%energetic_PBL
+  if (present(diabatic_aux_CSp)) diabatic_aux_CSp => CS%diabatic_aux_CSp
 
   ! Constants within diabatic_CS
   if (present(evap_CFL_limit))        evap_CFL_limit = CS%evap_CFL_limit
@@ -3187,7 +3230,7 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
       'Layer Thickness before diabatic forcing', &
       trim(thickness_units), conversion=GV%H_to_MKS, v_extensive=.true.)
   CS%id_e_predia = register_diag_field('ocean_model', 'e_predia', diag%axesTi, Time, &
-      'Interface Heights before diabatic forcing', 'm')
+      'Interface Heights before diabatic forcing', 'm', conversion=US%Z_to_m)
   if (use_temperature) then
     CS%id_T_predia = register_diag_field('ocean_model', 'temp_predia', diag%axesTL, Time, &
         'Potential Temperature', 'degC')

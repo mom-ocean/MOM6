@@ -136,8 +136,6 @@ type, public :: bulkmixedlayer_CS ; private
                        !! detrainment [R Z L2 T-3 ~> W m-2].
     diag_PE_detrain2   !< The spurious source of potential energy due to mixed layer only
                        !! detrainment [R Z L2 T-3 ~> W m-2].
-  logical :: allow_clocks_in_omp_loops  !< If true, clocks can be called from inside loops that can
-                                        !! be threaded. To run with multiple threads, set to False.
   type(group_pass_type) :: pass_h_sum_hmbl_prev !< For group halo pass
 
   !>@{ Diagnostic IDs
@@ -150,8 +148,7 @@ type, public :: bulkmixedlayer_CS ; private
 end type bulkmixedlayer_CS
 
 !>@{ CPU clock IDs
-integer :: id_clock_detrain=0, id_clock_mech=0, id_clock_conv=0, id_clock_adjustment=0
-integer :: id_clock_EOS=0, id_clock_resort=0, id_clock_pass=0
+integer :: id_clock_pass=0
 !>@}
 
 contains
@@ -427,13 +424,12 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, GV, US, C
       eps(i,k) = 0.0 ; if (k > nkmb) eps(i,k) = GV%Angstrom_H
       T(i,k) = tv%T(i,j,k) ; S(i,k) = tv%S(i,j,k)
     enddo ; enddo
-    if (nsw>0) call extract_optics_slice(optics, j, G, GV, opacity=opacity_band, opacity_scale=GV%H_to_m)
+    if (nsw>0) call extract_optics_slice(optics, j, G, GV, opacity=opacity_band, opacity_scale=GV%H_to_Z)
 
     do k=1,nz ; do i=is,ie
       d_ea(i,k) = 0.0 ; d_eb(i,k) = 0.0
     enddo ; enddo
 
-    if (id_clock_EOS>0) call cpu_clock_begin(id_clock_EOS)
     ! Calculate an estimate of the mid-mixed layer pressure [R L2 T-2 ~> Pa]
     if (associated(tv%p_surf)) then
       do i=is,ie ; p_ref(i) = tv%p_surf(i,j) ; enddo
@@ -449,27 +445,22 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, GV, US, C
       call calculate_density(T(:,k), S(:,k), p_ref, R0(:,k), tv%eqn_of_state, EOSdom)
       call calculate_density(T(:,k), S(:,k), p_ref_cv, Rcv(:,k), tv%eqn_of_state, EOSdom)
     enddo
-    if (id_clock_EOS>0) call cpu_clock_end(id_clock_EOS)
 
     if (CS%ML_resort) then
-      if (id_clock_resort>0) call cpu_clock_begin(id_clock_resort)
       if (CS%ML_presort_nz_conv_adj > 0) &
         call convective_adjustment(h, u, v, R0, Rcv, T, S, eps, d_eb, dKE_CA, cTKE, j, G, GV, &
                                    US, CS, CS%ML_presort_nz_conv_adj)
 
       call sort_ML(h, R0, eps, G, GV, CS, ksort)
-      if (id_clock_resort>0) call cpu_clock_end(id_clock_resort)
     else
       do k=1,nz ; do i=is,ie ; ksort(i,k) = k ; enddo ; enddo
 
-      if (id_clock_adjustment>0) call cpu_clock_begin(id_clock_adjustment)
       !  Undergo instantaneous entrainment into the buffer layers and mixed layers
       ! to remove hydrostatic instabilities.  Any water that is lighter than
       ! currently in the mixed or buffer layer is entrained.
       call convective_adjustment(h, u, v, R0, Rcv, T, S, eps, d_eb, dKE_CA, cTKE, j, G, GV, US, CS)
       do i=is,ie ; h_CA(i) = h(i,1) ; enddo
 
-      if (id_clock_adjustment>0) call cpu_clock_end(id_clock_adjustment)
     endif
 
     if (associated(fluxes%lrunoff) .and. CS%do_rivermix) then
@@ -493,15 +484,12 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, GV, US, C
       do i=is,ie ; TKE_river(i) = 0.0 ; enddo
     endif
 
-
-    if (id_clock_conv>0) call cpu_clock_begin(id_clock_conv)
-
     ! The surface forcing is contained in the fluxes type.
     ! We aggregate the thermodynamic forcing for a time step into the following:
     ! netMassInOut = water [H ~> m or kg m-2] added/removed via surface fluxes
     ! netMassOut   = water [H ~> m or kg m-2] removed via evaporating surface fluxes
     ! net_heat     = heat via surface fluxes [degC H ~> degC m or degC kg m-2]
-    ! net_salt     = salt via surface fluxes [ppt H ~> dppt m or gSalt m-2]
+    ! net_salt     = salt via surface fluxes [ppt H ~> ppt m or gSalt m-2]
     ! Pen_SW_bnd   = components to penetrative shortwave radiation
     call extractFluxes1d(G, GV, US, fluxes, optics, nsw, j, dt, &
                   CS%H_limit_fluxes, CS%use_river_heat_content, CS%use_calving_heat_content, &
@@ -515,16 +503,12 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, GV, US, C
                                nsw, Pen_SW_bnd, opacity_band, Conv_En, dKE_FC, &
                                j, ksort, G, GV, US, CS, tv, fluxes, dt, aggregate_FW_forcing)
 
-    if (id_clock_conv>0) call cpu_clock_end(id_clock_conv)
-
     !   Now the mixed layer undergoes mechanically forced entrainment.
     ! The mixed layer may entrain down to the Monin-Obukhov depth if the
     ! surface is becoming lighter, and is effecti1336vely detraining.
 
     !    First the TKE at the depth of free convection that is available
     !  to drive mixing is calculated.
-    if (id_clock_mech>0) call cpu_clock_begin(id_clock_mech)
-
     call find_starting_TKE(htot, h_CA, fluxes, Conv_En, cTKE, dKE_FC, dKE_CA, &
                            TKE, TKE_river, Idecay_len_TKE, cMKE, dt, Idt_diag, &
                            j, ksort, G, GV, US, CS)
@@ -542,7 +526,6 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, GV, US, C
     if (CS%TKE_diagnostics) then ; do i=is,ie
       CS%diag_TKE_mech_decay(i,j) = CS%diag_TKE_mech_decay(i,j) - Idt_diag * TKE(i)
     enddo ; endif
-    if (id_clock_mech>0) call cpu_clock_end(id_clock_mech)
 
     ! Calculate the homogeneous mixed layer properties and store them in layer 0.
     do i=is,ie ; if (htot(i) > 0.0) then
@@ -572,10 +555,8 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, GV, US, C
 ! these unused layers (but not currently in the code).
 
     if (CS%ML_resort) then
-      if (id_clock_resort>0) call cpu_clock_begin(id_clock_resort)
       call resort_ML(h(:,0:), T(:,0:), S(:,0:), R0(:,0:), Rcv(:,0:), GV%Rlay(:), eps, &
                      d_ea, d_eb, ksort, G, GV, CS, dR0_dT, dR0_dS, dRcv_dT, dRcv_dS)
-      if (id_clock_resort>0) call cpu_clock_end(id_clock_resort)
     endif
 
     if (CS%limit_det .or. (CS%id_Hsfc_max > 0) .or. (CS%id_Hsfc_min > 0)) then
@@ -606,7 +587,6 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, GV, US, C
 ! Move water left in the former mixed layer into the buffer layer and
 ! from the buffer layer into the interior.  These steps might best be
 ! treated in conjuction.
-    if (id_clock_detrain>0) call cpu_clock_begin(id_clock_detrain)
     if (CS%nkbl == 1) then
       call mixedlayer_detrain_1(h(:,0:), T(:,0:), S(:,0:), R0(:,0:), Rcv(:,0:), &
                                 GV%Rlay(:), dt, dt__diag, d_ea, d_eb, j, G, GV, US, CS, &
@@ -619,8 +599,6 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, GV, US, C
       ! This code only works with 1 or 2 buffer layers.
       call MOM_error(FATAL, "MOM_mixed_layer: CS%nkbl must be 1 or 2 for now.")
     endif
-    if (id_clock_detrain>0) call cpu_clock_end(id_clock_detrain)
-
 
     if (CS%id_Hsfc_used > 0) then
       do i=is,ie ; Hsfc_used(i,j) = GV%H_to_Z * h(i,0) ; enddo
@@ -1549,7 +1527,7 @@ subroutine mechanical_entrainment(h, d_eb, htot, Ttot, Stot, uhtot, vhtot, &
   real :: TKE_full_ent  ! The TKE remaining if a layer is fully entrained
                         ! [Z L2 T-2 ~> m3 s-2].
   real :: dRL       ! Work required to mix water from the next layer
-                    ! across the mixed layer [L2 T-2 ~> L2 s-2].
+                    ! across the mixed layer [L2 T-2 ~> m2 s-2].
   real :: Pen_En_Contrib  ! Penetrating SW contributions to the changes in
                           ! TKE, divided by layer thickness in m [L2 T-2 ~> m2 s-2].
   real :: Cpen1     ! A temporary variable [L2 T-2 ~> m2 s-2].
@@ -3526,12 +3504,6 @@ subroutine bulkmixedlayer_init(Time, G, GV, US, param_file, diag, CS)
                  "If true, use code with a bug that causes a loss of momentum conservation "//&
                  "during mixedlayer convection.", default=.false.)
 
-  call get_param(param_file, mdl, "ALLOW_CLOCKS_IN_OMP_LOOPS", &
-                 CS%allow_clocks_in_omp_loops, &
-                 "If true, clocks can be called from inside loops that can "//&
-                 "be threaded. To run with multiple threads, set to False.", &
-                 default=.true.)
-
   CS%id_ML_depth = register_diag_field('ocean_model', 'h_ML', diag%axesT1, &
       Time, 'Surface mixed layer depth', 'm')
   CS%id_TKE_wind = register_diag_field('ocean_model', 'TKE_wind', diag%axesT1, &
@@ -3610,30 +3582,8 @@ subroutine bulkmixedlayer_init(Time, G, GV, US, param_file, diag, CS)
   if (CS%id_PE_detrain2 > 0) call safe_alloc_alloc(CS%diag_PE_detrain2, isd, ied, jsd, jed)
   if (CS%id_ML_depth > 0) call safe_alloc_alloc(CS%ML_depth, isd, ied, jsd, jed)
 
-  if (CS%allow_clocks_in_omp_loops) then
-    id_clock_detrain = cpu_clock_id('(Ocean mixed layer detrain)', &
-        sync=.false., grain=CLOCK_ROUTINE)
-    id_clock_mech = cpu_clock_id('(Ocean mixed layer mechanical entrainment)', &
-        sync=.false., grain=CLOCK_ROUTINE)
-    id_clock_conv = cpu_clock_id('(Ocean mixed layer convection)', &
-        sync=.false., grain=CLOCK_ROUTINE)
-    if (CS%ML_resort) then
-      id_clock_resort = cpu_clock_id('(Ocean mixed layer resorting)', &
-          sync=.false., grain=CLOCK_ROUTINE)
-    else
-      id_clock_adjustment = cpu_clock_id('(Ocean mixed layer convective adjustment)', &
-          sync=.false., grain=CLOCK_ROUTINE)
-    endif
-    id_clock_EOS = cpu_clock_id('(Ocean mixed layer EOS)', &
-        sync=.false., grain=CLOCK_ROUTINE)
-  endif
-
   if (CS%limit_det .or. (CS%id_Hsfc_min > 0)) &
-      id_clock_pass = cpu_clock_id('(Ocean mixed layer halo updates)', grain=CLOCK_ROUTINE)
-
-
-!  if (CS%limit_det) then
-!  endif
+    id_clock_pass = cpu_clock_id('(Ocean mixed layer halo updates)', grain=CLOCK_ROUTINE)
 
 end subroutine bulkmixedlayer_init
 

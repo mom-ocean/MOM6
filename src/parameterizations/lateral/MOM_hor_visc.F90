@@ -6,6 +6,8 @@ module MOM_hor_visc
 use MOM_checksums,             only : hchksum, Bchksum
 use MOM_coms,                  only : min_across_PEs
 use MOM_diag_mediator,         only : post_data, register_diag_field, safe_alloc_ptr
+use MOM_diag_mediator,         only : post_product_u, post_product_sum_u
+use MOM_diag_mediator,         only : post_product_v, post_product_sum_v
 use MOM_diag_mediator,         only : diag_ctrl, time_type
 use MOM_domains,               only : pass_var, CORNER, pass_vector, AGRID, BGRID_NE
 use MOM_error_handler,         only : MOM_error, FATAL, WARNING, is_root_pe
@@ -1662,90 +1664,30 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
     call post_data(CS%id_FrictWorkIntz, FrictWorkIntz, CS%diag)
   endif
 
-  ! Diagnostics for terms multiplied by fractional thicknesses
-
-  ! 3D diagnostics hf_diffu(diffv) are commented because there is no clarity on proper remapping grid option.
-  ! The code is retained for degugging purposes in the future.
-  !if (present(ADp) .and. (CS%id_hf_diffu > 0)) then
-  !  do k=1,nz ; do j=js,je ; do I=Isq,Ieq
-  !    CS%hf_diffu(I,j,k) = diffu(I,j,k) * ADp%diag_hfrac_u(I,j,k)
-  !  enddo ; enddo ; enddo
-  !  call post_data(CS%id_hf_diffu, CS%hf_diffu, CS%diag)
-  !endif
-  !if (present(ADp) .and. (CS%id_hf_diffv > 0)) then
-  !  do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
-  !    CS%hf_diffv(i,J,k) = diffv(i,J,k) * ADp%diag_hfrac_v(i,J,k)
-  !  enddo ; enddo ; enddo
-  !  call post_data(CS%id_hf_diffv, CS%hf_diffv, CS%diag)
-  !endif
-
   if (present(ADp)) then
-    if (CS%id_hf_diffu_2d > 0) then
-      hf_diffu_2d(:,:) = 0.0
-      do k=1,nz ; do j=js,je ; do I=Isq,Ieq
-        hf_diffu_2d(I,j) = hf_diffu_2d(I,j) + diffu(I,j,k) * ADp%diag_hfrac_u(I,j,k)
-      enddo ; enddo ; enddo
-      call post_data(CS%id_hf_diffu_2d, hf_diffu_2d, CS%diag)
-    endif
+    ! Diagnostics of the fractional thicknesses times momentum budget terms
+    ! 3D diagnostics of hf_diffu(diffv) are commented because there is no clarity on proper remapping grid option.
+    ! The code is retained for debugging purposes in the future.
+    !if (CS%id_hf_diffu > 0) call post_product_u(CS%id_hf_diffu, diffu, ADp%diag_hfrac_u, G, nz, CS%diag)
+    !if (CS%id_hf_diffv > 0) call post_product_v(CS%id_hf_diffv, diffv, ADp%diag_hfrac_v, G, nz, CS%diag)
 
-    if (CS%id_hf_diffv_2d > 0) then
-      hf_diffv_2d(:,:) = 0.0
-      do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
-        hf_diffv_2d(i,J) = hf_diffv_2d(i,J) + diffv(i,J,k) * ADp%diag_hfrac_v(i,J,k)
-      enddo ; enddo ; enddo
-      call post_data(CS%id_hf_diffv_2d, hf_diffv_2d, CS%diag)
-    endif
+    ! Diagnostics for thickness-weighted vertically averaged momentum budget terms
+    if (CS%id_hf_diffu_2d > 0) call post_product_sum_u(CS%id_hf_diffu_2d, diffu, ADp%diag_hfrac_u, G, nz, CS%diag)
+    if (CS%id_hf_diffv_2d > 0) call post_product_sum_v(CS%id_hf_diffv_2d, diffv, ADp%diag_hfrac_v, G, nz, CS%diag)
 
-    if (CS%id_intz_diffu_2d > 0) then
-      intz_diffu_2d(:,:) = 0.0
-      do k=1,nz ; do j=js,je ; do I=Isq,Ieq
-        intz_diffu_2d(I,j) = intz_diffu_2d(I,j) + diffu(I,j,k) * ADp%diag_hu(I,j,k)
-      enddo ; enddo ; enddo
-      call post_data(CS%id_intz_diffu_2d, intz_diffu_2d, CS%diag)
-    endif
+    ! Diagnostics for the vertical sum of layer thickness x momentum budget terms
+    if (CS%id_intz_diffu_2d > 0) call post_product_sum_u(CS%id_intz_diffu_2d, diffu, ADp%diag_hu, G, nz, CS%diag)
+    if (CS%id_intz_diffv_2d > 0) call post_product_sum_v(CS%id_intz_diffv_2d, diffv, ADp%diag_hv, G, nz, CS%diag)
 
-    if (CS%id_intz_diffv_2d > 0) then
-      intz_diffv_2d(:,:) = 0.0
-      do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
-        intz_diffv_2d(i,J) = intz_diffv_2d(i,J) + diffv(i,J,k) * ADp%diag_hv(i,J,k)
-      enddo ; enddo ; enddo
-      call post_data(CS%id_intz_diffv_2d, intz_diffv_2d, CS%diag)
-    endif
+    ! Diagnostics for thickness x momentum budget terms
+    if (CS%id_h_diffu > 0) call post_product_u(CS%id_h_diffu, diffu, ADp%diag_hu, G, nz, CS%diag)
+    if (CS%id_h_diffv > 0) call post_product_v(CS%id_h_diffv, diffv, ADp%diag_hv, G, nz, CS%diag)
+
+    ! Diagnostics for momentum budget terms multiplied by visc_rem_[uv],
+    if (CS%id_diffu_visc_rem > 0) call post_product_u(CS%id_diffu_visc_rem, diffu, ADp%visc_rem_u, G, nz, CS%diag)
+    if (CS%id_diffv_visc_rem > 0) call post_product_v(CS%id_diffv_visc_rem, diffv, ADp%visc_rem_v, G, nz, CS%diag)
   endif
 
-  if (present(ADp) .and. (CS%id_h_diffu > 0)) then
-    allocate(h_diffu(G%IsdB:G%IedB,G%jsd:G%jed,GV%ke), source=0.0)
-    do k=1,nz ; do j=js,je ; do I=Isq,Ieq
-      h_diffu(I,j,k) = diffu(I,j,k) * ADp%diag_hu(I,j,k)
-    enddo ; enddo ; enddo
-    call post_data(CS%id_h_diffu, h_diffu, CS%diag)
-    deallocate(h_diffu)
-  endif
-  if (present(ADp) .and. (CS%id_h_diffv > 0)) then
-    allocate(h_diffv(G%isd:G%ied,G%JsdB:G%JedB,GV%ke), source=0.0)
-    do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
-      h_diffv(i,J,k) = diffv(i,J,k) * ADp%diag_hv(i,J,k)
-    enddo ; enddo ; enddo
-    call post_data(CS%id_h_diffv, h_diffv, CS%diag)
-    deallocate(h_diffv)
-  endif
-
-  if (present(ADp) .and. (CS%id_diffu_visc_rem > 0)) then
-    allocate(diffu_visc_rem(G%IsdB:G%IedB,G%jsd:G%jed,GV%ke), source=0.0)
-    do k=1,nz ; do j=js,je ; do I=Isq,Ieq
-      diffu_visc_rem(I,j,k) = diffu(I,j,k) * ADp%visc_rem_u(I,j,k)
-    enddo ; enddo ; enddo
-    call post_data(CS%id_diffu_visc_rem, diffu_visc_rem, CS%diag)
-    deallocate(diffu_visc_rem)
-  endif
-  if (present(ADp) .and. (CS%id_diffv_visc_rem > 0)) then
-    allocate(diffv_visc_rem(G%isd:G%ied,G%JsdB:G%JedB,GV%ke), source=0.0)
-    do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
-      diffv_visc_rem(i,J,k) = diffv(i,J,k) * ADp%visc_rem_v(i,J,k)
-    enddo ; enddo ; enddo
-    call post_data(CS%id_diffv_visc_rem, diffv_visc_rem, CS%diag)
-    deallocate(diffv_visc_rem)
-  endif
 end subroutine horizontal_viscosity
 
 !> Allocates space for and calculates static variables used by horizontal_viscosity().
@@ -2467,15 +2409,15 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, ADp)
   endif
 
   CS%id_h_diffu = register_diag_field('ocean_model', 'h_diffu', diag%axesCuL, Time, &
-      'Thickness Multiplied Zonal Acceleration from Horizontal Viscosity', 'm2 s-2', &
-      conversion=GV%H_to_m*US%L_T2_to_m_s2)
+      'Thickness Multiplied Zonal Acceleration from Horizontal Viscosity', &
+      'm2 s-2', conversion=GV%H_to_m*US%L_T2_to_m_s2)
   if ((CS%id_h_diffu > 0) .and. (present(ADp))) then
     call safe_alloc_ptr(ADp%diag_hu,G%IsdB,G%IedB,G%jsd,G%jed,GV%ke)
   endif
 
   CS%id_h_diffv = register_diag_field('ocean_model', 'h_diffv', diag%axesCvL, Time, &
-      'Thickness Multiplied Meridional Acceleration from Horizontal Viscosity', 'm2 s-2', &
-      conversion=GV%H_to_m*US%L_T2_to_m_s2)
+      'Thickness Multiplied Meridional Acceleration from Horizontal Viscosity', &
+      'm2 s-2', conversion=GV%H_to_m*US%L_T2_to_m_s2)
   if ((CS%id_h_diffv > 0) .and. (present(ADp))) then
     call safe_alloc_ptr(ADp%diag_hv,G%isd,G%ied,G%JsdB,G%JedB,GV%ke)
   endif
@@ -2495,15 +2437,15 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, ADp)
   endif
 
   CS%id_diffu_visc_rem = register_diag_field('ocean_model', 'diffu_visc_rem', diag%axesCuL, Time, &
-      'Zonal Acceleration from Horizontal Viscosity multiplied by viscous remnant', 'm s-2', &
-      conversion=US%L_T2_to_m_s2)
+      'Zonal Acceleration from Horizontal Viscosity multiplied by viscous remnant', &
+      'm s-2', conversion=US%L_T2_to_m_s2)
   if ((CS%id_diffu_visc_rem > 0) .and. (present(ADp))) then
     call safe_alloc_ptr(ADp%visc_rem_u,G%IsdB,G%IedB,G%jsd,G%jed,GV%ke)
   endif
 
   CS%id_diffv_visc_rem = register_diag_field('ocean_model', 'diffv_visc_rem', diag%axesCvL, Time, &
-      'Meridional Acceleration from Horizontal Viscosity multiplied by viscous remnant', 'm s-2', &
-      conversion=US%L_T2_to_m_s2)
+      'Meridional Acceleration from Horizontal Viscosity multiplied by viscous remnant', &
+      'm s-2', conversion=US%L_T2_to_m_s2)
   if ((CS%id_diffv_visc_rem > 0) .and. (present(ADp))) then
     call safe_alloc_ptr(ADp%visc_rem_v,G%isd,G%ied,G%JsdB,G%JedB,GV%ke)
   endif

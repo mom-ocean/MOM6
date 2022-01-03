@@ -264,7 +264,7 @@ type, public :: ocean_OBC_type
   logical :: add_tide_constituents = .false.          !< If true, add tidal constituents to the boundary elevation
                                                       !! and velocity. Will be set to true if n_tide_constituents > 0.
   character(len=2), allocatable, dimension(:) :: tide_names  !< Names of tidal constituents to add to the boundary data.
-  real, allocatable, dimension(:) :: tide_frequencies        !< Angular frequencies of chosen tidal constituents [s-1].
+  real, allocatable, dimension(:) :: tide_frequencies !< Angular frequencies of chosen tidal constituents [T-1 ~> s-1].
   real, allocatable, dimension(:) :: tide_eq_phases   !< Equilibrium phases of chosen tidal constituents [rad].
   real, allocatable, dimension(:) :: tide_fn          !< Amplitude modulation of boundary tides by nodal cycle [nondim].
   real, allocatable, dimension(:) :: tide_un          !< Phase modulation of boundary tides by nodal cycle [rad].
@@ -305,8 +305,8 @@ type, public :: ocean_OBC_type
                    !! the independence of the OBCs to this external data [L T-1 ~> m s-1].
   logical :: ramp = .false.                 !< If True, ramp from zero to the external values for SSH.
   logical :: ramping_is_activated = .false. !< True if the ramping has been initialized
-  real :: ramp_timescale                    !< If ramp is True, use this timescale for ramping [s].
-  real :: trunc_ramp_time                   !< If ramp is True, time after which ramp is done [s].
+  real :: ramp_timescale                    !< If ramp is True, use this timescale for ramping [T ~> s].
+  real :: trunc_ramp_time                   !< If ramp is True, time after which ramp is done [T ~> s].
   real :: ramp_value                        !< If ramp is True, where we are on the ramp from
                                             !! zero to one [nondim].
   type(time_type) :: ramp_start_time        !< Time when model was started.
@@ -627,7 +627,7 @@ subroutine open_boundary_config(G, US, param_file, OBC)
        "Symmetric memory must be used when using Flather OBCs.")
   ! Need to do this last, because it depends on time_interp_external_init having already been called
   if (OBC%add_tide_constituents) then
-    call initialize_obc_tides(OBC, param_file)
+    call initialize_obc_tides(OBC, US, param_file)
     ! Tide update is done within update_OBC_segment_data, so this should be true if tides are included.
     OBC%update_OBC = .true.
   endif
@@ -948,8 +948,9 @@ subroutine initialize_segment_data(G, OBC, PF)
 
 end subroutine initialize_segment_data
 
-subroutine initialize_obc_tides(OBC, param_file)
+subroutine initialize_obc_tides(OBC, US, param_file)
   type(ocean_OBC_type), intent(inout) :: OBC  !< Open boundary control structure
+  type(unit_scale_type),   intent(in) :: US   !< A dimensional unit scaling type
   type(param_file_type), intent(in) :: param_file !< Parameter file handle
   integer, dimension(3) :: tide_ref_date      !< Reference date (t = 0) for tidal forcing (year, month, day).
   integer, dimension(3) :: nodal_ref_date     !< Date to calculate nodal modulation for (year, month, day).
@@ -1022,7 +1023,8 @@ subroutine initialize_obc_tides(OBC, param_file)
         "Frequency of the "//trim(OBC%tide_names(c))//" tidal constituent. "//&
         "This is only used if TIDES and TIDE_"//trim(OBC%tide_names(c))// &
         " are true, or if OBC_TIDE_N_CONSTITUENTS > 0 and "//trim(OBC%tide_names(c))//&
-        " is in OBC_TIDE_CONSTITUENTS.", units="s-1", default=tidal_frequency(trim(OBC%tide_names(c))))
+        " is in OBC_TIDE_CONSTITUENTS.", &
+        units="s-1", default=tidal_frequency(trim(OBC%tide_names(c))), scale=US%T_to_s)
 
     ! Find equilibrium phase if needed
     if (OBC%add_eq_phase) then
@@ -3727,7 +3729,7 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
   real :: tidal_elev  ! Interpolated tidal elevation at the OBC points [m]
   real, allocatable :: normal_trans_bt(:,:) ! barotropic transport [H L2 T-1 ~> m3 s-1]
   integer :: turns    ! Number of index quarter turns
-  real :: time_delta  ! Time since tidal reference date [s]
+  real :: time_delta  ! Time since tidal reference date [T ~> s]
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
@@ -3738,7 +3740,7 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
 
   if (.not. associated(OBC)) return
 
-  if (OBC%add_tide_constituents) time_delta = time_type_to_real(Time - OBC%time_ref)
+  if (OBC%add_tide_constituents) time_delta = US%s_to_T * time_type_to_real(Time - OBC%time_ref)
 
   do n = 1, OBC%number_of_segments
     segment => OBC%segment(n)
@@ -4336,14 +4338,15 @@ end subroutine update_OBC_segment_data
 !> Update the OBC ramp value as a function of time.
 !! If called with the optional argument activate=.true., record the
 !! value of Time as the beginning of the ramp period.
-subroutine update_OBC_ramp(Time, OBC, activate)
+subroutine update_OBC_ramp(Time, OBC, US, activate)
   type(time_type), target, intent(in)    :: Time     !< Current model time
   type(ocean_OBC_type),    intent(inout) :: OBC      !< Open boundary structure
+  type(unit_scale_type),   intent(in)    :: US       !< A dimensional unit scaling type
   logical, optional,       intent(in)    :: activate !< Specify whether to record the value of
                                                      !! Time as the beginning of the ramp period
 
   ! Local variables
-  real :: deltaTime ! The time since start of ramping [s]
+  real :: deltaTime ! The time since start of ramping [T ~> s]
   real :: wghtA     ! A temporary variable used to set OBC%ramp_value [nondim]
   character(len=12) :: msg
 
@@ -4359,7 +4362,7 @@ subroutine update_OBC_ramp(Time, OBC, activate)
     endif
   endif
   if (.not.OBC%ramping_is_activated) return
-  deltaTime = max( 0., time_type_to_real( Time - OBC%ramp_start_time ) )
+  deltaTime = max( 0., US%s_to_T*time_type_to_real( Time - OBC%ramp_start_time ) )
   if (deltaTime >= OBC%trunc_ramp_time) then
     OBC%ramp_value = 1.0
     OBC%ramp = .false. ! This turns off ramping after this call

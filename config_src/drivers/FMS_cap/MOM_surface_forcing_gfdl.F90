@@ -113,6 +113,8 @@ type, public :: surface_forcing_CS ; private
   real    :: Flux_const                     !< Piston velocity for surface restoring [Z T-1 ~> m s-1]
   real    :: Flux_const_salt                !< Piston velocity for surface salt restoring [Z T-1 ~> m s-1]
   real    :: Flux_const_temp                !< Piston velocity for surface temp restoring [Z T-1 ~> m s-1]
+  logical :: trestore_SPEAR_ECDA            !< If true, modify restoring data wrt local SSS
+  real    :: SPEAR_dTf_dS                   !< The derivative of the freezing temperature with salinity.
   logical :: salt_restore_as_sflux          !< If true, SSS restore as salt flux instead of water flux
   logical :: adjust_net_srestore_to_zero    !< Adjust srestore to zero (for both salt_flux or vprec)
   logical :: adjust_net_srestore_by_scaling !< Adjust srestore w/o moving zero contour
@@ -243,8 +245,8 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
   real :: delta_sss           ! temporary storage for sss diff from restoring value [ppt]
   real :: delta_sst           ! temporary storage for sst diff from restoring value [degC]
 
-  real :: kg_m2_s_conversion        ! A combination of unit conversion factors for rescaling
-                              ! mass fluxes [R Z s m2 kg-1 T-1 ~> 1].
+  real :: kg_m2_s_conversion  ! A combination of unit conversion factors for rescaling
+                              ! mass fluxes [R Z s m2 kg-1 T-1 ~> 1]
   real :: rhoXcp              ! Reference density times heat capacity times unit scaling
                               ! factors [Q R degC-1 ~> J m-3 degC-1]
   real :: sign_for_net_FW_bug ! Should be +1. but an old bug can be recovered by using -1.
@@ -346,7 +348,7 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
     open_ocn_mask(:,:) = 1.0
     if (CS%mask_srestore_under_ice) then ! Do not restore under sea-ice
       do j=js,je ; do i=is,ie
-        if (sfc_state%SST(i,j) <= -0.0539*sfc_state%SSS(i,j)) open_ocn_mask(i,j)=0.0
+        if (sfc_state%SST(i,j) <= CS%SPEAR_dTf_dS*sfc_state%SSS(i,j)) open_ocn_mask(i,j)=0.0
       enddo ; enddo
     endif
     if (CS%salt_restore_as_sflux) then
@@ -400,11 +402,19 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
   ! SST restoring logic
   if (CS%restore_temp) then
     call time_interp_external(CS%id_trestore, Time, data_restore)
+    if ( CS%trestore_SPEAR_ECDA ) then
+      do j=js,je ; do i=is,ie
+        if (abs(data_restore(i,j)+1.8)<0.0001) then
+          data_restore(i,j) = CS%SPEAR_dTf_dS*sfc_state%SSS(i,j)
+        endif
+      enddo ; enddo
+    endif
+
     do j=js,je ; do i=is,ie
       delta_sst = data_restore(i,j)- sfc_state%SST(i,j)
       delta_sst = sign(1.0,delta_sst)*min(abs(delta_sst),CS%max_delta_trestore)
       fluxes%heat_added(i,j) = G%mask2dT(i,j) * CS%trestore_mask(i,j) * &
-                               rhoXcp * delta_sst * CS%Flux_const_temp  ! W m-2
+                               rhoXcp * delta_sst * CS%Flux_const_temp  ! [Q R Z T-1 ~> W m-2]
     enddo ; enddo
   endif
 
@@ -568,8 +578,8 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
 !#CTRL#     SSS_anom(i,j) = sfc_state%SSS(i,j) - CS%S_Restore(i,j)
 !#CTRL#     SSS_mean(i,j) = 0.5*(sfc_state%SSS(i,j) + CS%S_Restore(i,j))
 !#CTRL#   enddo ; enddo
-!#CTRL#   call apply_ctrl_forcing(SST_anom, SSS_anom, SSS_mean, fluxes%heat_restore, &
-!#CTRL#                           fluxes%vprec, day, dt, G, CS%ctrl_forcing_CSp)
+!#CTRL#   call apply_ctrl_forcing(SST_anom, SSS_anom, SSS_mean, fluxes%heat_added, &
+!#CTRL#                           fluxes%vprec, day, US%s_to_T*valid_time, G, US, CS%ctrl_forcing_CSp)
 !#CTRL# endif
 
   ! adjust the NET fresh-water flux to zero, if flagged
@@ -658,7 +668,7 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, US, CS, dt_
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G)) :: &
     rigidity_at_h, &  ! Ice rigidity at tracer points [L4 Z-1 T-1 ~> m3 s-1]
-    net_mass_src, &   ! A temporary of net mass sources [kg m-2 s-1].
+    net_mass_src, &   ! A temporary of net mass sources [R Z T-1 ~> kg m-2 s-1].
     ustar_tmp         ! A temporary array of ustar values [Z T-1 ~> m s-1].
 
   real :: I_GEarth      ! The inverse of the gravitational acceleration [T2 Z L-2 ~> s2 m-1]
@@ -666,6 +676,8 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, US, CS, dt_
   real :: mass_ice      ! mass of sea ice at a face [R Z ~> kg m-2]
   real :: mass_eff      ! effective mass of sea ice for rigidity [R Z ~> kg m-2]
   real :: wt1, wt2      ! Relative weights of previous and current values of ustar [nondim].
+  real :: kg_m2_s_conversion  ! A combination of unit conversion factors for rescaling
+                              ! mass fluxes [R Z s m2 kg-1 T-1 ~> 1]
 
   integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq, i0, j0
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, isr, ier, jsr, jer
@@ -681,6 +693,8 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, US, CS, dt_
   IsdB = G%IsdB  ; IedB = G%IedB   ; JsdB = G%JsdB  ; JedB = G%JedB
   isr = is-isd+1 ; ier  = ie-isd+1 ; jsr = js-jsd+1 ; jer = je-jsd+1
   i0 = is - isc_bnd ; j0 = js - jsc_bnd
+
+  kg_m2_s_conversion = US%kg_m2s_to_RZ_T
 
   ! allocation and initialization if this is the first time that this
   ! mechanical forcing type has been used.
@@ -774,15 +788,15 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, US, CS, dt_
     i0 = is - isc_bnd ; j0 = js - jsc_bnd
     do j=js,je ; do i=is,ie ; if (G%mask2dT(i,j) > 0.0) then
       if (associated(IOB%lprec)) &
-        net_mass_src(i,j) = net_mass_src(i,j) + IOB%lprec(i-i0,j-j0)
+        net_mass_src(i,j) = net_mass_src(i,j) + kg_m2_s_conversion * IOB%lprec(i-i0,j-j0)
       if (associated(IOB%fprec)) &
-        net_mass_src(i,j) = net_mass_src(i,j) + IOB%fprec(i-i0,j-j0)
+        net_mass_src(i,j) = net_mass_src(i,j) + kg_m2_s_conversion * IOB%fprec(i-i0,j-j0)
       if (associated(IOB%runoff)) &
-        net_mass_src(i,j) = net_mass_src(i,j) + IOB%runoff(i-i0,j-j0)
+        net_mass_src(i,j) = net_mass_src(i,j) + kg_m2_s_conversion * IOB%runoff(i-i0,j-j0)
       if (associated(IOB%calving)) &
-        net_mass_src(i,j) = net_mass_src(i,j) + IOB%calving(i-i0,j-j0)
+        net_mass_src(i,j) = net_mass_src(i,j) + kg_m2_s_conversion * IOB%calving(i-i0,j-j0)
       if (associated(IOB%q_flux)) &
-        net_mass_src(i,j) = net_mass_src(i,j) - IOB%q_flux(i-i0,j-j0)
+        net_mass_src(i,j) = net_mass_src(i,j) - kg_m2_s_conversion * IOB%q_flux(i-i0,j-j0)
     endif ; enddo ; enddo
     if (wt1 <= 0.0) then
       do j=js,je ; do i=is,ie
@@ -1164,8 +1178,8 @@ subroutine apply_force_adjustments(G, US, CS, Time, forces)
   tempx_at_h(:,:) = 0.0 ; tempy_at_h(:,:) = 0.0
   ! Either reads data or leaves contents unchanged
   overrode_x = .false. ; overrode_y = .false.
-  call data_override(G%Domain, 'taux_adj', tempx_at_h, Time, override=overrode_x, scale=Pa_conversion)
-  call data_override(G%Domain, 'tauy_adj', tempy_at_h, Time, override=overrode_y, scale=Pa_conversion)
+  call data_override(G%Domain, 'taux_adj', tempx_at_h(isc:iec,jsc:jec), Time, override=overrode_x, scale=Pa_conversion)
+  call data_override(G%Domain, 'tauy_adj', tempy_at_h(isc:iec,jsc:jec), Time, override=overrode_y, scale=Pa_conversion)
 
   if (overrode_x .or. overrode_y) then
     if (.not. (overrode_x .and. overrode_y)) call MOM_error(FATAL,"apply_flux_adjustments: "//&
@@ -1444,7 +1458,15 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, wind_stagger)
                  "If true, read a file (temp_restore_mask) containing "//&
                  "a mask for SST restoring.", default=.false.)
 
+    call get_param(param_file, mdl, "SPEAR_ECDA_SST_RESTORE_TFREEZE", CS%trestore_SPEAR_ECDA, &
+                 "If true, modify SST restoring field using SSS state. This only modifies the "//&
+                 "restoring data that is within 0.0001degC of -1.8degC.", default=.false.)
+  else
+    CS%trestore_SPEAR_ECDA = .false. ! Needed to toggle logging of SPEAR_DTFREEZE_DS
   endif
+  call get_param(param_file, mdl, "SPEAR_DTFREEZE_DS", CS%SPEAR_dTf_dS, &
+                 "The derivative of the freezing temperature with salinity.", &
+                 units="deg C PSU-1", default=-0.054, do_not_log=.not.CS%trestore_SPEAR_ECDA)
 
   ! Optionally read tidal amplitude from input file [Z T-1 ~> m s-1] on model grid.
   ! Otherwise use default tidal amplitude for bottom frictionally-generated
@@ -1597,7 +1619,7 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, wind_stagger)
     endif
   endif
 
-!#CTRL#  call controlled_forcing_init(Time, G, param_file, diag, CS%ctrl_forcing_CSp)
+!#CTRL#  call controlled_forcing_init(Time, G, US, param_file, diag, CS%ctrl_forcing_CSp)
 
   call user_revise_forcing_init(param_file, CS%urf_CS)
 

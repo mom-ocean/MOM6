@@ -84,7 +84,8 @@ type, public :: tracer_type
 !  real, dimension(:,:,:), pointer :: diff_cont_xy   => NULL() !< convergence of lateral diffusive tracer fluxes
 !                                                              !! [conc H T-1 ~> conc m s-1 or conc kg m-2 s-1]
 !  real, dimension(:,:,:), pointer :: diff_conc_xy   => NULL() !< convergence of lateral diffusive tracer fluxes
-!                                                              !! expressed as a change in concentration [conc T-1]
+!                                                              !! expressed as a change in concentration
+!                                                              !! [conc T-1 ~> conc s-1]
   real, dimension(:,:,:), pointer :: t_prev         => NULL() !< tracer concentration array at a previous
                                                               !! timestep used for diagnostics [conc]
   real, dimension(:,:,:), pointer :: Trxh_prev      => NULL() !< layer integrated tracer concentration array
