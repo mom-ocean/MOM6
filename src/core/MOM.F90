@@ -82,6 +82,8 @@ use MOM_fixed_initialization,  only : MOM_initialize_fixed
 use MOM_forcing_type,          only : allocate_forcing_type, allocate_mech_forcing
 use MOM_forcing_type,          only : deallocate_mech_forcing, deallocate_forcing_type
 use MOM_forcing_type,          only : rotate_forcing, rotate_mech_forcing
+use MOM_forcing_type,          only : copy_common_forcing_fields, set_derived_forcing_fields
+use MOM_forcing_type,          only : homogenize_forcing, homogenize_mech_forcing
 use MOM_grid,                  only : ocean_grid_type, MOM_grid_init, MOM_grid_end
 use MOM_grid,                  only : set_first_direction, rescale_grid_bathymetry
 use MOM_hor_index,             only : hor_index_type, hor_index_init
@@ -207,6 +209,8 @@ type, public :: MOM_control_struct ; private
   type(ocean_grid_type) :: G_in                   !< Input grid metric
   type(ocean_grid_type), pointer :: G => NULL()   !< Model grid metric
   logical :: rotate_index = .false.   !< True if index map is rotated
+  logical :: homogenize_forcings = .false. !< True if all inputs are homogenized
+  logical :: update_ustar = .false.   !< True to update ustar from homogenized tau
 
   type(verticalGrid_type), pointer :: &
     GV => NULL()    !< structure containing vertical grid info
@@ -577,6 +581,20 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
   else
     forces => forces_in
     fluxes => fluxes_in
+  endif
+
+  ! Homogenize the forces
+  if (CS%homogenize_forcings) then
+    ! Homogenize all forcing and fluxes fields.
+    call homogenize_mech_forcing(forces, G, US, GV%Rho0, CS%update_ustar)
+    ! Note the following computes the mean ustar as the mean of ustar rather than
+    !  ustar of the mean of tau.
+    call homogenize_forcing(fluxes, G)
+    if (CS%update_ustar) then
+      ! These calls corrects the ustar values
+      call copy_common_forcing_fields(forces, fluxes, G)
+      call set_derived_forcing_fields(forces, fluxes, G, US, GV%Rho0)
+    endif
   endif
 
   ! First determine the time step that is consistent with this call and an
@@ -2143,6 +2161,14 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
                  "members for statistical evaluation and/or data assimilation.", default=.false.)
 
   call callTree_waypoint("MOM parameters read (initialize_MOM)")
+
+  call get_param(param_file, "MOM", "HOMOGENIZE_FORCINGS", CS%homogenize_forcings, &
+                 "If True, homogenize the forces and fluxes.", default=.false.)
+  call get_param(param_file, "MOM", "UPDATE_USTAR",CS%update_ustar, &
+                 "If True, update ustar from homogenized tau when using the "//&
+                 "HOMOGENIZE_FORCINGS option.  Note that this will not work "//&
+                 "with a non-zero gustiness factor.", default=.false., &
+                 do_not_log=.not.CS%homogenize_forcings)
 
   ! Grid rotation test
   call get_param(param_file, "MOM", "ROTATE_INDEX", CS%rotate_index, &

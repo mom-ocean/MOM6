@@ -17,6 +17,7 @@ use MOM_file_parser,   only : get_param, log_param, log_version, param_file_type
 use MOM_grid,          only : ocean_grid_type
 use MOM_opacity,       only : sumSWoverBands, optics_type, extract_optics_slice, optics_nbands
 use MOM_spatial_means, only : global_area_integral, global_area_mean
+use MOM_spatial_means, only : global_area_mean_u, global_area_mean_v
 use MOM_unit_scaling,  only : unit_scale_type
 use MOM_variables,     only : surface, thermo_var_ptrs
 use MOM_verticalGrid,  only : verticalGrid_type
@@ -35,6 +36,7 @@ public copy_common_forcing_fields, allocate_mech_forcing, deallocate_mech_forcin
 public set_derived_forcing_fields, copy_back_forcing_fields
 public set_net_mass_forcing, get_net_mass_forcing
 public rotate_forcing, rotate_mech_forcing
+public homogenize_forcing, homogenize_mech_forcing
 
 !> Allocate the fields of a (flux) forcing type, based on either a set of input
 !! flags for each group of fields, or a pre-allocated reference forcing.
@@ -3358,6 +3360,7 @@ subroutine rotate_forcing(fluxes_in, fluxes, turns)
   if (do_iceberg) then
     call rotate_array(fluxes_in%ustar_berg, turns, fluxes%ustar_berg)
     call rotate_array(fluxes_in%area_berg, turns, fluxes%area_berg)
+    !BGR: pretty sure the following line isn't supposed to be here.
     call rotate_array(fluxes_in%iceshelf_melt, turns, fluxes%iceshelf_melt)
   endif
 
@@ -3462,6 +3465,234 @@ subroutine rotate_mech_forcing(forces_in, turns, forces)
   forces%accumulate_rigidity = forces_in%accumulate_rigidity
   forces%initialized = forces_in%initialized
 end subroutine rotate_mech_forcing
+
+!< Homogenize the forcing fields from the input domain
+subroutine homogenize_mech_forcing(forces, G, US, Rho0, UpdateUstar)
+  type(mech_forcing),    intent(inout) :: forces !< Forcing on the input domain
+  type(ocean_grid_type),    intent(in) :: G      !< Grid metric of target forcing
+  type(unit_scale_type),    intent(in) :: US     !< A dimensional unit scaling type
+  real,                     intent(in) :: Rho0   !< A reference density of seawater [R ~> kg m-3],
+                                              !! as used to calculate ustar.
+  logical, optional,        intent(in) :: UpdateUstar !< A logical to determine if Ustar should be directly averaged
+                                                   !! or updated from mean tau.
+
+  real :: tx_mean, ty_mean, avg
+  real :: iRho0
+  logical :: do_stress, do_ustar, do_shelf, do_press, do_iceberg, tau2ustar
+  integer :: i, j, is, ie, js, je, isB, ieB, jsB, jeB
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
+  isB = G%iscB ; ieB = G%iecB ; jsB = G%jscB ; jeB = G%jecB
+
+  iRho0 = US%L_to_Z / Rho0
+
+  tau2ustar = .false.
+  if (present(UpdateUstar)) tau2ustar = UpdateUstar
+
+  call get_mech_forcing_groups(forces, do_stress, do_ustar, do_shelf, &
+                              do_press, do_iceberg)
+
+  if (do_stress) then
+    tx_mean = global_area_mean_u(forces%taux, G)
+    do j=js,je ; do i=isB,ieB
+      if (G%mask2dCu(I,j) > 0.) forces%taux(I,j) = tx_mean
+    enddo ; enddo
+    ty_mean = global_area_mean_v(forces%tauy, G)
+    do j=jsB,jeB ; do i=is,ie
+      if (G%mask2dCv(i,J) > 0.) forces%tauy(i,J) = ty_mean
+    enddo ; enddo
+    if (tau2ustar) then
+      do j=js,je ; do i=is,ie
+        if (G%mask2dT(i,j) > 0.) forces%ustar(i,j) = sqrt(sqrt(tx_mean**2 + ty_mean**2)*iRho0)
+      enddo ; enddo
+    else
+      call homogenize_field_t(forces%ustar, G)
+    endif
+  else
+    if (do_ustar) then
+      call homogenize_field_t(forces%ustar, G)
+    endif
+  endif
+
+  if (do_shelf) then
+    call homogenize_field_u(forces%rigidity_ice_u, G)
+    call homogenize_field_v(forces%rigidity_ice_v, G)
+    call homogenize_field_u(forces%frac_shelf_u, G)
+    call homogenize_field_v(forces%frac_shelf_v, G)
+  endif
+
+  if (do_press) then
+    ! NOTE: p_surf_SSH either points to p_surf or p_surf_full
+    call homogenize_field_t(forces%p_surf, G)
+    call homogenize_field_t(forces%p_surf_full, G)
+    call homogenize_field_t(forces%net_mass_src, G)
+  endif
+
+  if (do_iceberg) then
+    call homogenize_field_t(forces%area_berg, G)
+    call homogenize_field_t(forces%mass_berg, G)
+  endif
+
+end subroutine homogenize_mech_forcing
+
+!< Homogenize the fluxes
+subroutine homogenize_forcing(fluxes, G)
+  type(forcing), intent(inout)  :: fluxes     !< Input forcing struct
+  type(ocean_grid_type), intent(in) :: G      !< Grid metric of target forcing
+
+  real :: avg
+  logical :: do_ustar, do_water, do_heat, do_salt, do_press, do_shelf, &
+      do_iceberg, do_heat_added, do_buoy
+  integer :: i, j, is, ie, js, je, isB, ieB, jsB, jeB
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
+  isB = G%iscB ; ieB = G%iecB ; jsB = G%jscB ; jeB = G%jecB
+
+  call get_forcing_groups(fluxes, do_water, do_heat, do_ustar, do_press, &
+      do_shelf, do_iceberg, do_salt, do_heat_added, do_buoy)
+
+  if (do_ustar) then
+    call homogenize_field_t(fluxes%ustar, G)
+    call homogenize_field_t(fluxes%ustar_gustless, G)
+  endif
+
+  if (do_water) then
+    call homogenize_field_t(fluxes%evap, G)
+    call homogenize_field_t(fluxes%lprec, G)
+    call homogenize_field_t(fluxes%lprec, G)
+    call homogenize_field_t(fluxes%fprec, G)
+    call homogenize_field_t(fluxes%vprec, G)
+    call homogenize_field_t(fluxes%lrunoff, G)
+    call homogenize_field_t(fluxes%frunoff, G)
+    call homogenize_field_t(fluxes%seaice_melt, G)
+    call homogenize_field_t(fluxes%netMassOut, G)
+    call homogenize_field_t(fluxes%netMassIn, G)
+    !This was removed and I don't think replaced. Not needed?
+    !call homogenize_field_t(fluxes%netSalt, G)
+  endif
+
+  if (do_heat) then
+    call homogenize_field_t(fluxes%seaice_melt_heat, G)
+    call homogenize_field_t(fluxes%sw, G)
+    call homogenize_field_t(fluxes%lw, G)
+    call homogenize_field_t(fluxes%latent, G)
+    call homogenize_field_t(fluxes%sens, G)
+    call homogenize_field_t(fluxes%latent_evap_diag, G)
+    call homogenize_field_t(fluxes%latent_fprec_diag, G)
+    call homogenize_field_t(fluxes%latent_frunoff_diag, G)
+  endif
+
+  if (do_salt) call homogenize_field_t(fluxes%salt_flux, G)
+
+  if (do_heat .and. do_water) then
+    call homogenize_field_t(fluxes%heat_content_cond, G)
+    call homogenize_field_t(fluxes%heat_content_icemelt, G)
+    call homogenize_field_t(fluxes%heat_content_lprec, G)
+    call homogenize_field_t(fluxes%heat_content_fprec, G)
+    call homogenize_field_t(fluxes%heat_content_vprec, G)
+    call homogenize_field_t(fluxes%heat_content_lrunoff, G)
+    call homogenize_field_t(fluxes%heat_content_frunoff, G)
+    call homogenize_field_t(fluxes%heat_content_massout, G)
+    call homogenize_field_t(fluxes%heat_content_massin, G)
+  endif
+
+  if (do_press) call homogenize_field_t(fluxes%p_surf, G)
+
+  if (do_shelf) then
+    call homogenize_field_t(fluxes%frac_shelf_h, G)
+    call homogenize_field_t(fluxes%ustar_shelf, G)
+    call homogenize_field_t(fluxes%iceshelf_melt, G)
+  endif
+
+  if (do_iceberg) then
+    call homogenize_field_t(fluxes%ustar_berg, G)
+    call homogenize_field_t(fluxes%area_berg, G)
+  endif
+
+  if (do_heat_added) then
+    call homogenize_field_t(fluxes%heat_added, G)
+  endif
+
+  ! The following fields are handled by drivers rather than control flags.
+  if (associated(fluxes%sw_vis_dir)) &
+    call homogenize_field_t(fluxes%sw_vis_dir, G)
+
+  if (associated(fluxes%sw_vis_dif)) &
+    call homogenize_field_t(fluxes%sw_vis_dif, G)
+
+  if (associated(fluxes%sw_nir_dir)) &
+    call homogenize_field_t(fluxes%sw_nir_dir, G)
+
+  if (associated(fluxes%sw_nir_dif)) &
+    call homogenize_field_t(fluxes%sw_nir_dif, G)
+
+  if (associated(fluxes%salt_flux_in)) &
+    call homogenize_field_t(fluxes%salt_flux_in, G)
+
+  if (associated(fluxes%salt_flux_added)) &
+    call homogenize_field_t(fluxes%salt_flux_added, G)
+
+  if (associated(fluxes%p_surf_full)) &
+    call homogenize_field_t(fluxes%p_surf_full, G)
+
+  if (associated(fluxes%buoy)) &
+    call homogenize_field_t(fluxes%buoy, G)
+
+  if (associated(fluxes%TKE_tidal)) &
+    call homogenize_field_t(fluxes%TKE_tidal, G)
+
+  if (associated(fluxes%ustar_tidal)) &
+    call homogenize_field_t(fluxes%ustar_tidal, G)
+
+  ! TODO: tracer flux homogenization
+  ! Having a warning causes a lot of errors (each time step).
+  !if (coupler_type_initialized(fluxes%tr_fluxes)) &
+  !  call MOM_error(WARNING, "Homogenization of tracer BC fluxes not yet implemented.")
+
+end subroutine homogenize_forcing
+
+subroutine homogenize_field_t(var, G)
+  type(ocean_grid_type),                intent(in) :: G   !< The ocean's grid structure
+  real, dimension(SZI_(G), SZJ_(G)), intent(inout) :: var !< The variable to homogenize
+
+  real    :: avg
+  integer :: i, j, is, ie, js, je
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
+
+  avg = global_area_mean(var, G)
+  do j=js,je ; do i=is,ie
+    if (G%mask2dT(i,j) > 0.) var(i,j) = avg
+  enddo ; enddo
+
+end subroutine homogenize_field_t
+
+subroutine homogenize_field_v(var, G)
+  type(ocean_grid_type),             intent(in)    :: G    !< The ocean's grid structure
+  real, dimension(SZI_(G), SZJB_(G)), intent(inout) :: var  !< The variable to homogenize
+
+  real    :: avg
+  integer :: i, j, is, ie, jsB, jeB
+  is = G%isc ; ie = G%iec ; jsB = G%jscB ; jeB = G%jecB
+
+  avg = global_area_mean_v(var, G)
+  do J=jsB,jeB ; do i=is,ie
+    if (G%mask2dCv(i,J) > 0.) var(i,J) = avg
+  enddo ; enddo
+
+end subroutine homogenize_field_v
+
+subroutine homogenize_field_u(var, G)
+  type(ocean_grid_type),             intent(in)    :: G    !< The ocean's grid structure
+  real, dimension(SZI_(G), SZJB_(G)), intent(inout) :: var  !< The variable to homogenize
+
+  real    :: avg
+  integer :: i, j, isB, ieB, js, je
+  isB = G%iscB ; ieB = G%iecB ; js = G%jsc ; je = G%jec
+
+  avg = global_area_mean_u(var, G)
+  do j=js,je ; do I=isB,ieB
+    if (G%mask2dCu(I,j) > 0.) var(I,j) = avg
+  enddo ; enddo
+
+end subroutine homogenize_field_u
 
 !> \namespace mom_forcing_type
 !!
