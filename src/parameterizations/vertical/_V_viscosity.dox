@@ -73,16 +73,32 @@ A BBL viscosity is calculated so that the no-slip boundary condition in the vert
 viscosity solver implies the stress \f$\mathbf{\tau}_b\f$:
 
 \f[
-    K_{bbl} = \frac{1}{2} h_{bbl} \sqrt{C_{drag}} u^\ast
+    K_{bbl} = \frac{1}{2} h_{bbl} \sqrt{C_{drag}} \, u^\ast
 \f]
 
 \todo Channel drag needs to be explained
 \section section_Channel_drag Channel Drag
 
-The channel drag is an extra Rayleigh drag applied to cells near the bottom when the
-laterally adjacent cell vanishes. The bottom shape is approximated as locally
-parabolic, such that the bottom-most layer could be more than one of the model's
-layers. The bottom drag is applied to each layer with a factor \f$R_k\f$, the sum of
-which is 1 over all the layers.
+The channel drag is an extra Rayleigh drag applied to
+those layers within the bottom boundary layer.
+
+The bottom shape is approximated as locally parabolic, such that the
+bottom-most layer could be more than one of the model's layers. The
+bottom drag is applied to each layer with a factor \f$R_k\f$, the sum
+of which is 1 over all the layers.
+
+The code begins by finding the arithmetic mean of the water depths to find the
+depth at the velocity points. It then uses these to construct a parabolic bottom
+shape, valid for \f$I - \frac{1}{2}\f$ to \f$I + \frac{1}{2}\f$. The parabola is:
+
+\f[
+    D(x) = a x^2 + b x + D - \frac{a}{12}
+\f]
+
+For sufficiently small curvature \f$a\f$, one can drop the quadratic term and assume
+a linear function instead.
+
+With the bottom shape established, the code then figures out the various volumes,
+such as the deepest depth at which the cell is completely open (above the bottom).
 
 */
