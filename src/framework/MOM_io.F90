@@ -1617,16 +1617,16 @@ subroutine get_axis_info(axis,name,longname,units,cartesian,ax_size,ax_data)
   real, optional, allocatable, dimension(:), intent(out) :: ax_data !< The axis label data.
 
   if (present(ax_data)) then
-     if (allocated(ax_data)) deallocate(ax_data)
-     allocate(ax_data(axis%ax_size))
-     ax_data(:)=axis%ax_data
+    if (allocated(ax_data)) deallocate(ax_data)
+    allocate(ax_data(axis%ax_size))
+    ax_data(:) = axis%ax_data
   endif
 
-  if (present(name)) name=axis%name
-  if (present(longname)) longname=axis%longname
-  if (present(units)) units=axis%units
-  if (present(cartesian)) cartesian=axis%cartesian
-  if (present(ax_size)) ax_size=axis%ax_size
+  if (present(name)) name = axis%name
+  if (present(longname)) longname = axis%longname
+  if (present(units)) units = axis%units
+  if (present(cartesian)) cartesian = axis%cartesian
+  if (present(ax_size)) ax_size = axis%ax_size
 
 end subroutine get_axis_info
 

@@ -308,7 +308,7 @@ logical function tidal_mixing_init(Time, G, GV, US, param_file, int_tide_CSp, di
     endif ! CS%use_CVMix_tidal
 
     ! Read in vertical profile of tidal energy dissipation
-    if ( CS%CVMix_tidal_scheme.eq.SCHMITTNER .or. .not. CS%use_CVMix_tidal) then
+    if ( CS%CVMix_tidal_scheme == SCHMITTNER .or. .not. CS%use_CVMix_tidal) then
       call get_param(param_file, mdl, "INT_TIDE_PROFILE", int_tide_profile_str, &
                    "INT_TIDE_PROFILE selects the vertical profile of energy "//&
                    "dissipation with INT_TIDE_DISSIPATION. Valid values are:\n"//&
@@ -562,8 +562,8 @@ logical function tidal_mixing_init(Time, G, GV, US, param_file, int_tide_CSp, di
                  fail_if_missing=.true.)
     ! Check whether tidal energy input format and CVMix tidal mixing scheme are consistent
     if ( .not. ( &
-          (uppercase(tidal_energy_type(1:4)).eq.'JAYN' .and. CS%CVMix_tidal_scheme.eq.SIMMONS).or. &
-          (uppercase(tidal_energy_type(1:4)).eq.'ER03' .and. CS%CVMix_tidal_scheme.eq.SCHMITTNER) ) )then
+          (uppercase(tidal_energy_type(1:4)) == 'JAYN' .and. CS%CVMix_tidal_scheme == SIMMONS).or. &
+          (uppercase(tidal_energy_type(1:4)) == 'ER03' .and. CS%CVMix_tidal_scheme == SCHMITTNER) ) )then
         call MOM_error(FATAL, "tidal_mixing_init: Tidal energy file type ("//&
                       trim(tidal_energy_type)//") is incompatible with CVMix tidal "//&
                       " mixing scheme: "//trim(CVMix_tidal_scheme_str) )
@@ -1434,7 +1434,7 @@ subroutine setup_tidal_diagnostics(G, GV, CS)
   ! additional diags for CVMix
   if (CS%id_N2_int > 0) allocate(CS%dd%N2_int(isd:ied,jsd:jed,nz+1), source=0.0)
   if (CS%id_Simmons_coeff > 0) then
-    if (CS%CVMix_tidal_scheme .ne. SIMMONS) then
+    if (CS%CVMix_tidal_scheme /= SIMMONS) then
       call MOM_error(FATAL, "setup_tidal_diagnostics: Simmons_coeff diagnostics is available "//&
                             "only when CVMix_tidal_scheme is Simmons")
     endif
@@ -1442,14 +1442,14 @@ subroutine setup_tidal_diagnostics(G, GV, CS)
   endif
   if (CS%id_vert_dep > 0) allocate(CS%dd%vert_dep_3d(isd:ied,jsd:jed,nz+1), source=0.0)
   if (CS%id_Schmittner_coeff > 0) then
-    if (CS%CVMix_tidal_scheme .ne. SCHMITTNER) then
+    if (CS%CVMix_tidal_scheme /= SCHMITTNER) then
       call MOM_error(FATAL, "setup_tidal_diagnostics: Schmittner_coeff diagnostics is available "//&
                             "only when CVMix_tidal_scheme is Schmittner.")
     endif
     allocate(CS%dd%Schmittner_coeff_3d(isd:ied,jsd:jed,nz), source=0.0)
   endif
   if (CS%id_tidal_qe_md > 0) then
-    if (CS%CVMix_tidal_scheme .ne. SCHMITTNER) then
+    if (CS%CVMix_tidal_scheme /= SCHMITTNER) then
       call MOM_error(FATAL, "setup_tidal_diagnostics: tidal_qe_md diagnostics is available "//&
                             "only when CVMix_tidal_scheme is Schmittner.")
     endif
@@ -1635,21 +1635,6 @@ subroutine read_tidal_constituents(G, US, tidal_energy_file, CS)
                 tidal_qk1(i,j)*tc_k1(i,j,k) + tidal_qo1(i,j)*tc_o1(i,j,k)
     enddo ; enddo
   enddo
-
-  !open(unit=1905,file="out_1905.txt",access="APPEND")
-  !do j=G%jsd,G%jed
-  !  do i=isd,ied
-  !    if ( i+G%idg_offset .eq. 90 .and. j+G%jdg_offset .eq. 126) then
-  !      write(1905,*) "-------------------------------------------"
-  !      do k=50,nz_in(1)
-  !          write(1905,*) i,j,k
-  !          write(1905,*) CS%tidal_qe_3d_in(i,j,k), tc_m2(i,j,k)
-  !          write(1905,*) z_t(k), G%bathyT(i,j)+G%Z_ref, z_w(k),CS%tidal_diss_lim_tc
-  !      end do
-  !    endif
-  !  enddo
-  !enddo
-  !close(1905)
 
   ! test if qE is positive
   if (any(CS%tidal_qe_3d_in<0.0)) then

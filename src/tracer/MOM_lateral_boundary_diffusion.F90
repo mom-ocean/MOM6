@@ -643,7 +643,7 @@ subroutine fluxes_layer_method(boundary, ke, hbl_L, hbl_R, h_L, h_R, phi_L, phi_
     k_bot_diff = (k_bot_max - k_bot_min)
 
     ! tracer flux where the minimum BLD intersets layer
-    if ((CS%linear) .and. (k_bot_diff .gt. 1)) then
+    if ((CS%linear) .and. (k_bot_diff > 1)) then
       ! apply linear decay at the base of hbl
       do k = k_bot_min,1,-1
         F_layer_z(k) = -(dz_top(k) * khtr_u) * (phi_R_z(k) - phi_L_z(k))
@@ -678,11 +678,11 @@ subroutine fluxes_layer_method(boundary, ke, hbl_L, hbl_R, h_L, h_R, phi_L, phi_
 !    ! TODO: GMM add option to apply linear decay
 !    k_top_max = MAX(k_top_L, k_top_R)
 !    ! make sure left and right k indices span same range
-!    if (k_top_max .ne. k_top_L) then
+!    if (k_top_max /= k_top_L) then
 !      k_top_L = k_top_max
 !      zeta_top_L = 1.0
 !    endif
-!    if (k_top_max .ne. k_top_R) then
+!    if (k_top_max /= k_top_R) then
 !      k_top_R= k_top_max
 !      zeta_top_R = 1.0
 !    endif
@@ -1011,10 +1011,10 @@ logical function test_boundary_k_range(k_top, zeta_top, k_bot, zeta_bot, k_top_a
   character(len=80) :: test_name !< Name of the unit test
   logical :: verbose             !< If true always print output
 
-  test_boundary_k_range = k_top .ne. k_top_ans
-  test_boundary_k_range = test_boundary_k_range .or. (zeta_top .ne. zeta_top_ans)
-  test_boundary_k_range = test_boundary_k_range .or. (k_bot .ne. k_bot_ans)
-  test_boundary_k_range = test_boundary_k_range .or. (zeta_bot .ne. zeta_bot_ans)
+  test_boundary_k_range = k_top /= k_top_ans
+  test_boundary_k_range = test_boundary_k_range .or. (zeta_top /= zeta_top_ans)
+  test_boundary_k_range = test_boundary_k_range .or. (k_bot /= k_bot_ans)
+  test_boundary_k_range = test_boundary_k_range .or. (zeta_bot /= zeta_bot_ans)
 
   if (test_boundary_k_range) write(stdout,*) "UNIT TEST FAILED: ", test_name
   if (test_boundary_k_range .or. verbose) then

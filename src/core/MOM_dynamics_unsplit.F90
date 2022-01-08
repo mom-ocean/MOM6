@@ -239,8 +239,6 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, forces, &
   h_av(:,:,:) = 0; hp(:,:,:) = 0
   up(:,:,:) = 0; upp(:,:,:) = 0
   vp(:,:,:) = 0; vpp(:,:,:) = 0
-  if (CS%id_ueffA > 0) ueffA(:,:,:) = 0
-  if (CS%id_veffA > 0) veffA(:,:,:) = 0
 
   dyn_p_surf = associated(p_surf_begin) .and. associated(p_surf_end)
   if (dyn_p_surf) then
@@ -431,21 +429,22 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, forces, &
   call disable_averaging(CS%diag)
   call enable_averages(dt, Time_local, CS%diag)
 
-! Calculate effective areas and post data
+  ! Calculate effective areas and post data
   if (CS%id_ueffA > 0) then
-     do k=1,nz ; do j=js,je ; do I=Isq,Ieq
-        if (abs(up(I,j,k)) > 0.) ueffA(I,j,k) = uh(I,j,k)/up(I,j,k)
-     enddo ; enddo ; enddo
-     call post_data(CS%id_ueffA, ueffA, CS%diag)
+    ueffA(:,:,:) = 0
+    do k=1,nz ; do j=js,je ; do I=Isq,Ieq
+      if (abs(up(I,j,k)) > 0.) ueffA(I,j,k) = uh(I,j,k)/up(I,j,k)
+    enddo ; enddo ; enddo
+    call post_data(CS%id_ueffA, ueffA, CS%diag)
   endif
 
   if (CS%id_veffA > 0) then
-     do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
-        if (abs(vp(i,J,k)) > 0.) veffA(i,J,k) = vh(i,J,k)/vp(i,J,k)
-     enddo ; enddo ; enddo
-     call post_data(CS%id_veffA, veffA, CS%diag)
+    veffA(:,:,:) = 0
+    do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
+      if (abs(vp(i,J,k)) > 0.) veffA(i,J,k) = vh(i,J,k)/vp(i,J,k)
+    enddo ; enddo ; enddo
+    call post_data(CS%id_veffA, veffA, CS%diag)
   endif
-
 
 ! h_av = (h + hp)/2
   do k=1,nz

@@ -1282,7 +1282,7 @@ subroutine meridional_mass_flux(v, h_in, vh, dt, G, GV, US, CS, LB, OBC, por_fac
             l_seg = OBC%segnum_v(i,J)
 
             do_I(I) = .false.
-            if(l_seg /= OBC_NONE) &
+            if (l_seg /= OBC_NONE) &
               do_I(i) = (OBC%segment(l_seg)%specified)
 
             if (do_I(i)) FAvi(i) = GV%H_subroundoff*G%dx_Cv(i,J)

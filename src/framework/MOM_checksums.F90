@@ -110,7 +110,7 @@ subroutine chksum0(scalar, mesg, scale, logunit)
     call chksum_error(FATAL, 'NaN detected: '//trim(mesg))
 
   scaling = 1.0 ; if (present(scale)) scaling = scale
-  iounit = error_unit; if(present(logunit)) iounit = logunit
+  iounit = error_unit ; if (present(logunit)) iounit = logunit
 
   if (calculateStatistics) then
     rs = scaling * scalar
@@ -147,7 +147,7 @@ subroutine zchksum(array, mesg, scale, logunit)
   endif
 
   scaling = 1.0 ; if (present(scale)) scaling = scale
-  iounit = error_unit; if(present(logunit)) iounit = logunit
+  iounit = error_unit ; if (present(logunit)) iounit = logunit
 
   if (calculateStatistics) then
     if (present(scale)) then
@@ -352,7 +352,7 @@ subroutine chksum_h_2d(array_m, mesg, HI_m, haloshift, omit_corners, scale, logu
   endif
 
   scaling = 1.0 ; if (present(scale)) scaling = scale
-  iounit = error_unit; if(present(logunit)) iounit = logunit
+  iounit = error_unit ; if (present(logunit)) iounit = logunit
 
   if (calculateStatistics) then
     if (present(scale)) then
@@ -618,7 +618,7 @@ subroutine chksum_B_2d(array_m, mesg, HI_m, haloshift, symmetric, omit_corners, 
   endif
 
   scaling = 1.0 ; if (present(scale)) scaling = scale
-  iounit = error_unit; if(present(logunit)) iounit = logunit
+  iounit = error_unit ; if (present(logunit)) iounit = logunit
   sym_stats = .false. ; if (present(symmetric)) sym_stats = symmetric
   if (present(haloshift)) then ; if (haloshift > 0) sym_stats = .true. ; endif
 
@@ -901,7 +901,7 @@ subroutine chksum_u_2d(array_m, mesg, HI_m, haloshift, symmetric, omit_corners, 
   endif
 
   scaling = 1.0 ; if (present(scale)) scaling = scale
-  iounit = error_unit; if(present(logunit)) iounit = logunit
+  iounit = error_unit ; if (present(logunit)) iounit = logunit
   sym_stats = .false. ; if (present(symmetric)) sym_stats = symmetric
   if (present(haloshift)) then ; if (haloshift > 0) sym_stats = .true. ; endif
 
@@ -1079,7 +1079,7 @@ subroutine chksum_v_2d(array_m, mesg, HI_m, haloshift, symmetric, omit_corners, 
   endif
 
   scaling = 1.0 ; if (present(scale)) scaling = scale
-  iounit = error_unit; if(present(logunit)) iounit = logunit
+  iounit = error_unit ; if (present(logunit)) iounit = logunit
   sym_stats = .false. ; if (present(symmetric)) sym_stats = symmetric
   if (present(haloshift)) then ; if (haloshift > 0) sym_stats = .true. ; endif
 
@@ -1246,7 +1246,7 @@ subroutine chksum_h_3d(array_m, mesg, HI_m, haloshift, omit_corners, scale, logu
   endif
 
   scaling = 1.0 ; if (present(scale)) scaling = scale
-  iounit = error_unit; if(present(logunit)) iounit = logunit
+  iounit = error_unit ; if (present(logunit)) iounit = logunit
 
   if (calculateStatistics) then
     if (present(scale)) then
@@ -1397,7 +1397,7 @@ subroutine chksum_B_3d(array_m, mesg, HI_m, haloshift, symmetric, omit_corners, 
   endif
 
   scaling = 1.0 ; if (present(scale)) scaling = scale
-  iounit = error_unit; if(present(logunit)) iounit = logunit
+  iounit = error_unit ; if (present(logunit)) iounit = logunit
   sym_stats = .false. ; if (present(symmetric)) sym_stats = symmetric
   if (present(haloshift)) then ; if (haloshift > 0) sym_stats = .true. ; endif
 
@@ -1576,7 +1576,7 @@ subroutine chksum_u_3d(array_m, mesg, HI_m, haloshift, symmetric, omit_corners, 
   endif
 
   scaling = 1.0 ; if (present(scale)) scaling = scale
-  iounit = error_unit; if(present(logunit)) iounit = logunit
+  iounit = error_unit ; if (present(logunit)) iounit = logunit
   sym_stats = .false. ; if (present(symmetric)) sym_stats = symmetric
   if (present(haloshift)) then ; if (haloshift > 0) sym_stats = .true. ; endif
 
@@ -1754,7 +1754,7 @@ subroutine chksum_v_3d(array_m, mesg, HI_m, haloshift, symmetric, omit_corners, 
   endif
 
   scaling = 1.0 ; if (present(scale)) scaling = scale
-  iounit = error_unit; if(present(logunit)) iounit = logunit
+  iounit = error_unit ; if (present(logunit)) iounit = logunit
   sym_stats = .false. ; if (present(symmetric)) sym_stats = symmetric
   if (present(haloshift)) then ; if (haloshift > 0) sym_stats = .true. ; endif
 

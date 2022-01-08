@@ -1213,7 +1213,7 @@ subroutine KPP_compute_BLD(CS, G, GV, US, h, Temp, Salt, u, v, tv, uStar, buoyFl
       endif
 
       ! apply some constraints on OBLdepth
-      if(CS%fixedOBLdepth)  CS%OBLdepth(i,j) = CS%fixedOBLdepth_value
+      if (CS%fixedOBLdepth) CS%OBLdepth(i,j) = CS%fixedOBLdepth_value
       CS%OBLdepth(i,j) = max( CS%OBLdepth(i,j), -iFaceHeight(2) )       ! no shallower than top layer
       CS%OBLdepth(i,j) = min( CS%OBLdepth(i,j), -iFaceHeight(GV%ke+1) ) ! no deeper than bottom
       CS%kOBL(i,j)     = CVMix_kpp_compute_kOBL_depth( iFaceHeight, cellHeight, CS%OBLdepth(i,j) )

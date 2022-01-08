@@ -869,7 +869,7 @@ subroutine remap_all_state_vars(CS_remapping, CS_ALE, G, GV, h_old, h_new, Reg, 
         h2(:) = 0.5 * ( h_new(i,j,:) + h_new(i+1,j,:) )
       endif
       if (associated(OBC)) then
-        if (OBC%segnum_u(I,j) .ne. 0) then
+        if (OBC%segnum_u(I,j) /= 0) then
           if (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_E) then
             h1(:) = h_old(i,j,:)
             h2(:) = h_new(i,j,:)
@@ -902,7 +902,7 @@ subroutine remap_all_state_vars(CS_remapping, CS_ALE, G, GV, h_old, h_new, Reg, 
         h2(:) = 0.5 * ( h_new(i,j,:) + h_new(i,j+1,:) )
       endif
       if (associated(OBC)) then
-        if (OBC%segnum_v(i,J) .ne. 0) then
+        if (OBC%segnum_v(i,J) /= 0) then
           if (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_N) then
             h1(:) = h_old(i,j,:)
             h2(:) = h_new(i,j,:)

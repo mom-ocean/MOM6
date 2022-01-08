@@ -859,7 +859,7 @@ subroutine initialize_segment_data(G, OBC, PF)
               ! siz(3) is constituent for tidal variables
               call field_size(filename, 'constituent', siz, no_domain=.true.)
               ! expect third dimension to be number of constituents in MOM_input
-              if (siz(3) .ne. OBC%n_tide_constituents .and. OBC%add_tide_constituents) then
+              if (siz(3) /= OBC%n_tide_constituents .and. OBC%add_tide_constituents) then
                 call MOM_error(FATAL, 'Number of constituents in input data is not '//&
                     'the same as the number specified')
               endif
@@ -897,7 +897,7 @@ subroutine initialize_segment_data(G, OBC, PF)
         ! Check if this is a tidal field. If so, the number
         ! of expected constituents must be 1.
         if ((index(segment%field(m)%name, 'phase') > 0) .or. (index(segment%field(m)%name, 'amp') > 0)) then
-          if (OBC%n_tide_constituents .gt. 1 .and. OBC%add_tide_constituents) then
+          if (OBC%n_tide_constituents > 1 .and. OBC%add_tide_constituents) then
             call MOM_error(FATAL, 'Only one constituent is supported when specifying '//&
                 'tidal boundary conditions by value rather than file.')
           endif
@@ -997,7 +997,7 @@ subroutine initialize_obc_tides(OBC, US, param_file)
   ! If the nodal correction is based on a different time, initialize that.
   ! Otherwise, it can use N from the time reference.
   if (OBC%add_nodal_terms) then
-    if (sum(nodal_ref_date) .ne. 0) then
+    if (sum(nodal_ref_date) /= 0) then
       ! A reference date was provided for the nodal correction
       nodal_time = set_date(nodal_ref_date(1), nodal_ref_date(2), nodal_ref_date(3))
       call astro_longitudes_init(nodal_time, nodal_longitudes)
@@ -3939,7 +3939,7 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
         endif
         ! no dz for tidal variables
         if (segment%field(m)%nk_src > 1 .and.&
-            (index(segment%field(m)%name, 'phase') .le. 0 .and. index(segment%field(m)%name, 'amp') .le. 0)) then
+            (index(segment%field(m)%name, 'phase') <= 0 .and. index(segment%field(m)%name, 'amp') <= 0)) then
           call time_interp_external(segment%field(m)%fid_dz,Time, tmp_buffer_in)
           if (turns /= 0) then
             ! TODO: This is hardcoded for 90 degrees, and needs to be generalized.

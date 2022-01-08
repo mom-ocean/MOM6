@@ -388,7 +388,7 @@ subroutine tidal_forcing_init(Time, G, US, param_file, CS)
   if (sum(tide_ref_date) == 0) then  ! tide_ref_date defaults to 0.
     CS%time_ref = set_date(1, 1, 1)
   else
-    if(.not. CS%use_eq_phase) then
+    if (.not. CS%use_eq_phase) then
       ! Using a reference date but not using phase relative to equilibrium.
       ! This makes sense as long as either phases are overridden, or
       ! correctly simulating tidal phases is not desired.
