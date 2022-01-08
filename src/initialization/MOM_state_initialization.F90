@@ -1242,67 +1242,67 @@ subroutine calc_sfc_displacement(PF, G, GV, US, mass_shelf, tv, h)
                                    eta  ! The free surface height that the model should use [Z ~> m].
   ! temporary arrays
   real, dimension(SZK_(GV)) :: rho_col   ! potential density in the column for use in ice
-  real, dimension(SZK_(GV)) :: rho_h     ! potential density multiplied by thickness [R Z ~> kg m-2 ]
+  real, dimension(SZK_(GV)) :: rho_h     ! potential density multiplied by thickness [R Z ~> kg m-2]
   real, dimension(SZK_(GV)) :: h_tmp     ! temporary storage for thicknesses [H ~> m]
   real, dimension(SZK_(GV)) :: p_ref     ! pressure for density [R Z ~> kg m-2]
   real, dimension(SZK_(GV)+1) :: ei_tmp, ei_orig ! temporary storage for interface positions [Z ~> m]
-  real :: z_top, z_col, mass_disp, residual, tol
+  real :: z_top     ! An estimate of the height of the ice-ocean interface [Z ~> m]
+  real :: mass_disp ! The net mass of sea water that has been displaced by the shelf [R Z ~> kg m-2]
+  real :: residual  ! The difference between the displaced ocean mass and the ice shelf
+                    ! mass [R Z ~> kg m-2]
+  real :: tol       ! The initialization tolerance for ice shelf initialization [Z ~> m]
   integer :: is, ie, js, je, k, nz, i, j, max_iter, iter
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
-
-  tol = 0.001 ! The initialization tolerance for ice shelf initialization (m)
   call get_param(PF, mdl, "ICE_SHELF_INITIALIZATION_Z_TOLERANCE", tol, &
                 "A initialization tolerance for the calculation of the static "// &
                 "ice shelf displacement (m) using initial temperature and salinity profile.",&
-                 default=tol, units="m", scale=US%m_to_Z)
+                 default=0.001, units="m", scale=US%m_to_Z)
   max_iter = 1e3
   call MOM_mesg("Started calculating initial interface position under ice shelf ")
   ! Convert thicknesses to interface heights.
   call find_eta(h, tv, G, GV, US, eta, dZref=G%Z_ref)
-  do j = js, je ; do i = is, ie
+  do j=js,je ; do i=is,ie
     iter = 1
     z_top_shelf(i,j) = 0.0
     p_ref(:) = tv%p_ref
-    if (G%mask2dT(i,j) .gt. 0. .and. mass_shelf(i,j) .gt. 0.) then
+    if ((G%mask2dT(i,j) > 0.) .and. (mass_shelf(i,j) > 0.)) then
       call calculate_density(tv%T(i,j,:), tv%S(i,j,:), P_Ref, rho_col, tv%eqn_of_state)
-      z_top = min(max(-1.0*mass_shelf(i,j)/rho_col(1),-G%bathyT(i,j)),0.)
-      h_tmp = 0.0
-      z_col = 0.0
-      ei_tmp(1:nz+1)=eta(i,j,1:nz+1)
-      ei_orig(1:nz+1)=eta(i,j,1:nz+1)
+      z_top = min(max(-1.0*mass_shelf(i,j)/rho_col(1), -G%bathyT(i,j)), 0.)
+      h_tmp(:) = 0.0
+      ei_tmp(1:nz+1) = eta(i,j,1:nz+1)
+      ei_orig(1:nz+1) = eta(i,j,1:nz+1)
       do k=1,nz+1
-        if (ei_tmp(k)<z_top) ei_tmp(k)=z_top
+        if (ei_tmp(k) < z_top) ei_tmp(k) = z_top
       enddo
       mass_disp = 0.0
       do k=1,nz
-        h_tmp(k) = max(ei_tmp(k)-ei_tmp(k+1),GV%Angstrom_H)
+        h_tmp(k) = max(ei_tmp(k)-ei_tmp(k+1), GV%Angstrom_H)
         rho_h(k) = h_tmp(k) * rho_col(k)
         mass_disp = mass_disp + rho_h(k)
       enddo
       residual = mass_shelf(i,j) - mass_disp
-      do while (abs(residual) .gt. tol .and. z_top .gt. -G%bathyT(i,j) .and. iter .lt. max_iter)
-        z_top=min(max(z_top-(residual*0.5e-3),-G%bathyT(i,j)),0.0)
-        h_tmp = 0.0
-        z_col = 0.0
+      do while ((abs(residual) > tol) .and. (z_top > -G%bathyT(i,j)) .and. (iter < max_iter))
+        z_top = min(max(z_top-(residual*0.5e-3), -G%bathyT(i,j)), 0.0)
+        h_tmp(:) = 0.0
         ei_tmp(1:nz+1) = ei_orig(1:nz+1)
         do k=1,nz+1
-          if (ei_tmp(k)<z_top) ei_tmp(k)=z_top
+          if (ei_tmp(k) < z_top) ei_tmp(k) = z_top
         enddo
         mass_disp = 0.0
         do k=1,nz
-          h_tmp(k) = max(ei_tmp(k)-ei_tmp(k+1),GV%Angstrom_H)
+          h_tmp(k) = max(ei_tmp(k)-ei_tmp(k+1), GV%Angstrom_H)
           rho_h(k) = h_tmp(k) * rho_col(k)
           mass_disp = mass_disp + rho_h(k)
         enddo
         residual = mass_shelf(i,j) - mass_disp
         iter = iter+1
       end do
-      if (iter .ge. max_iter) call MOM_mesg("Warning: calc_sfc_displacement too many iterations.")
+      if (iter >= max_iter) call MOM_mesg("Warning: calc_sfc_displacement too many iterations.")
       z_top_shelf(i,j) = z_top
     endif
-  enddo; enddo
+  enddo ; enddo
   call MOM_mesg("Calling depress_surface ")
   call depress_surface(h, G, GV, US, PF, tv, just_read=.false.,z_top_shelf=z_top_shelf)
   call MOM_mesg("Finishing calling depress_surface ")
