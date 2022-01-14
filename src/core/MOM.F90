@@ -657,16 +657,15 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
     else
       CS%p_surf_end  => forces%p_surf
     endif
-
     if (CS%UseWaves) then
       ! Update wave information, which is presently kept static over each call to step_mom
       call enable_averages(time_interval, Time_start + real_to_time(US%T_to_s*time_interval), CS%diag)
-      call Update_Stokes_Drift(G, GV, US, Waves, h, forces%ustar, time_interval)
+      call Update_Stokes_Drift(G, GV, US, Waves, h, forces%ustar, time_interval, do_dyn)
       call disable_averaging(CS%diag)
     endif
   else ! not do_dyn.
     if (CS%UseWaves) then ! Diagnostics are not enabled in this call.
-      call Update_Stokes_Drift(G, GV, US, Waves, h, fluxes%ustar, time_interval)
+      call Update_Stokes_Drift(G, GV, US, Waves, h, fluxes%ustar, time_interval, do_dyn)
     endif
   endif
 
@@ -1107,6 +1106,19 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_thermo, &
       u(I,j,:) = u(I,j,:) + Waves%ddt_us_x(I,j,:)*dt
     enddo; enddo
     call pass_vector(u,v,G%Domain)
+  endif
+  ! Added an additional output to track Stokes drift time tendency.
+  ! It is mostly for debugging, and perhaps doesn't need to hang
+  ! around permanently.
+  if (Waves%Stokes_DDT .and. (Waves%id_3dstokes_y_from_ddt>0)) then
+    do J=jsq,jeq ; do i=is,ie
+      Waves%us_y_from_ddt(i,J,:) = Waves%us_y_from_ddt(i,J,:) + Waves%ddt_us_y(i,J,:)*dt
+    enddo; enddo
+  endif
+  if (Waves%Stokes_DDT .and. (Waves%id_3dstokes_x_from_ddt>0)) then
+    do j=js,je ; do I=isq,ieq
+      Waves%us_x_from_ddt(I,j,:) = Waves%us_x_from_ddt(I,j,:) + Waves%ddt_us_x(I,j,:)*dt
+    enddo; enddo
   endif
 
   if (CS%thickness_diffuse .and. .not.CS%thickness_diffuse_first) then

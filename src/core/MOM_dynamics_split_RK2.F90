@@ -66,7 +66,7 @@ use MOM_vert_friction,         only : vertvisc_init, vertvisc_end, vertvisc_CS
 use MOM_vert_friction,         only : updateCFLtruncationValue
 use MOM_verticalGrid,          only : verticalGrid_type, get_thickness_units
 use MOM_verticalGrid,          only : get_flux_units, get_tr_flux_units
-use MOM_wave_interface,        only: wave_parameters_CS, Stokes_PGF_Add_FD
+use MOM_wave_interface,        only: wave_parameters_CS, Stokes_PGF
 
 implicit none ; private
 
@@ -478,10 +478,11 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
     Use_Stokes_PGF = associated(Waves)
     if (Use_Stokes_PGF) Use_Stokes_PGF = Waves%Stokes_PGF
     if (Use_Stokes_PGF) then
-      call Stokes_PGF_Add_FD(G, GV, h, u, v, CS%PFu_Stokes, CS%PFv_Stokes, Waves)
+      call Stokes_PGF(G, GV, h, u, v, CS%PFu_Stokes, CS%PFv_Stokes, Waves)
+
       ! We are adding Stokes_PGF to hydrostatic PGF here.  The diag PFu/PFv
       ! will therefore report the sum total PGF and we avoid other
-      ! modifications in the code.  The PFu_Stokes can be output within the waves routines.
+      ! modifications in the code.  The PFu_Stokes is output within the waves routines.
       if (.not.Waves%Passive_Stokes_PGF) then
         do k=1,nz
           do j=js,je ; do I=Isq,Ieq
@@ -740,7 +741,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
       Use_Stokes_PGF = associated(Waves)
       if (Use_Stokes_PGF) Use_Stokes_PGF = Waves%Stokes_PGF
       if (Use_Stokes_PGF) then
-        call Stokes_PGF_Add_FD(G, GV, h, u, v, CS%PFu_Stokes, CS%PFv_Stokes, Waves)
+        call Stokes_PGF(G, GV, h, u, v, CS%PFu_Stokes, CS%PFv_Stokes, Waves)
         if (.not.Waves%Passive_Stokes_PGF) then
           do k=1,nz
             do j=js,je ; do I=Isq,Ieq

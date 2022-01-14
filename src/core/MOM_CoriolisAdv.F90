@@ -1353,11 +1353,11 @@ subroutine CoriolisAdv_init(Time, G, GV, US, param_file, diag, AD, CS)
      'Zonal Acceleration from Relative Vorticity', 'm s-2', conversion=US%L_T2_to_m_s2)
   if (CS%id_rvxv > 0) call safe_alloc_ptr(AD%rv_x_v,IsdB,IedB,jsd,jed,nz)
 
-  CS%id_CAuS = register_diag_field('ocean_model', 'CAuS', diag%axesCuL, Time, &
+  CS%id_CAuS = register_diag_field('ocean_model', 'CAu_Stokes', diag%axesCuL, Time, &
      'Zonal Acceleration from Stokes Vorticity', 'm-1 s-2', conversion=US%L_T2_to_m_s2)
   ! add to AD
 
-  CS%id_CAvS = register_diag_field('ocean_model', 'CAvS', diag%axesCvL, Time, &
+  CS%id_CAvS = register_diag_field('ocean_model', 'CAv_Stokes', diag%axesCvL, Time, &
      'Meridional Acceleration from Stokes Vorticity', 'm-1 s-2', conversion=US%L_T2_to_m_s2)
   ! add to AD
 
