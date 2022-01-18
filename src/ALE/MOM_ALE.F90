@@ -378,7 +378,7 @@ subroutine ALE_main( G, GV, US, h, u, v, tv, Reg, CS, OBC, dt, frac_shelf_h)
     call diag_update_remap_grids(CS%diag)
   endif
   ! Remap all variables from old grid h onto new grid h_new
-  call remap_all_state_vars( CS%remapCS, CS, G, GV, h, h_new, Reg, OBC, -dzRegrid, &
+  call remap_all_state_vars( CS%remapCS, CS, G, GV, h, h_new, Reg, OBC, dzRegrid, &
                              u, v, CS%show_call_tree, dt )
 
   if (CS%show_call_tree) call callTree_waypoint("state remapped (ALE_main)")
@@ -732,10 +732,10 @@ end subroutine ALE_regrid_accelerated
 !! new grids. When velocity components need to be remapped, thicknesses at
 !! velocity points are taken to be arithmetic averages of tracer thicknesses.
 !! This routine is called during initialization of the model at time=0, to
-!! remap initiali conditions to the model grid.  It is also called during a
+!! remap initial conditions to the model grid.  It is also called during a
 !! time step to update the state.
 subroutine remap_all_state_vars(CS_remapping, CS_ALE, G, GV, h_old, h_new, Reg, OBC, &
-                                dxInterface, u, v, debug, dt)
+                                dzInterface, u, v, debug, dt)
   type(remapping_CS),                        intent(in)    :: CS_remapping !< Remapping control structure
   type(ALE_CS),                              intent(in)    :: CS_ALE       !< ALE control structure
   type(ocean_grid_type),                     intent(in)    :: G            !< Ocean grid structure
@@ -747,7 +747,7 @@ subroutine remap_all_state_vars(CS_remapping, CS_ALE, G, GV, h_old, h_new, Reg, 
   type(tracer_registry_type),                pointer       :: Reg          !< Tracer registry structure
   type(ocean_OBC_type),                      pointer       :: OBC          !< Open boundary structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), &
-                                   optional, intent(in)    :: dxInterface  !< Change in interface position
+                                   optional, intent(in)    :: dzInterface  !< Change in interface position
                                                                            !! [H ~> m or kg m-2]
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
                                    optional, intent(inout) :: u      !< Zonal velocity [L T-1 ~> m s-1]
@@ -755,29 +755,34 @@ subroutine remap_all_state_vars(CS_remapping, CS_ALE, G, GV, h_old, h_new, Reg, 
                                    optional, intent(inout) :: v      !< Meridional velocity [L T-1 ~> m s-1]
   logical,                         optional, intent(in)    :: debug  !< If true, show the call tree
   real,                            optional, intent(in)    :: dt     !< time step for diagnostics [T ~> s]
+
   ! Local variables
-  integer                                     :: i, j, k, m
-  integer                                     :: nz, ntr
-  real, dimension(GV%ke+1)                    :: dx
-  real, dimension(GV%ke)                      :: h1, u_column
-  real, dimension(SZI_(G), SZJ_(G), SZK_(GV)) :: work_conc
-  real, dimension(SZI_(G), SZJ_(G), SZK_(GV)) :: work_cont
-  real, dimension(SZI_(G), SZJ_(G))           :: work_2d
-  real                                        :: Idt ! The inverse of the timestep [T-1 ~> s-1]
-  real                                        :: ppt2mks
-  real, dimension(GV%ke)                      :: h2
-  real :: h_neglect, h_neglect_edge
+  real, dimension(GV%ke+1)                    :: dz   ! The change in interface heights interpolated to
+                                                      ! a velocity point [H ~> m or kg m-2]
+  real, dimension(GV%ke)                      :: h1   ! A column of initial thicknesses [H ~> m or kg m-2]
+  real, dimension(GV%ke)                      :: h2   ! A column of updated thicknesses [H ~> m or kg m-2]
+  real, dimension(GV%ke)                      :: u_column ! A column of properties, like tracer concentrations
+                                                      ! or velocities, being remapped [various units]
+  real, dimension(SZI_(G), SZJ_(G), SZK_(GV)) :: work_conc ! The rate of change of concentrations [Conc T-1 ~> Conc s-1]
+  real, dimension(SZI_(G), SZJ_(G), SZK_(GV)) :: work_cont ! The rate of change of cell-integrated tracer
+                                                      ! content [Conc H T-1 ~> Conc m s-1 or Conc kg m-2 s-1] or
+                                                      ! cell thickness [H T-1 ~> m s-1 or Conc kg m-2 s-1]
+  real, dimension(SZI_(G), SZJ_(G))           :: work_2d ! The rate of change of column-integrated tracer
+                                                      ! content [Conc H T-1 ~> Conc m s-1 or Conc kg m-2 s-1]
+  real                                        :: Idt  ! The inverse of the timestep [T-1 ~> s-1]
+  real :: h_neglect, h_neglect_edge  ! Tiny thicknesses used in remapping [H ~> m or kg m-2]
   logical                                     :: show_call_tree
   type(tracer_type), pointer                  :: Tr => NULL()
+  integer :: i, j, k, m, nz, ntr
 
   show_call_tree = .false.
   if (present(debug)) show_call_tree = debug
   if (show_call_tree) call callTree_enter("remap_all_state_vars(), MOM_ALE.F90")
 
-  ! If remap_uv_using_old_alg is .true. and u or v is requested, then we must have dxInterface. Otherwise,
-  ! u and v can be remapped without dxInterface
-  if ( .not. present(dxInterface) .and. (CS_ALE%remap_uv_using_old_alg .and. (present(u) .or. present(v))) ) then
-    call MOM_error(FATAL, "remap_all_state_vars: dxInterface must be present if using old algorithm "// &
+  ! If remap_uv_using_old_alg is .true. and u or v is requested, then we must have dzInterface. Otherwise,
+  ! u and v can be remapped without dzInterface
+  if ( .not. present(dzInterface) .and. (CS_ALE%remap_uv_using_old_alg .and. (present(u) .or. present(v))) ) then
+    call MOM_error(FATAL, "remap_all_state_vars: dzInterface must be present if using old algorithm "// &
                           "and u/v are to be remapped")
   endif
 
@@ -790,7 +795,6 @@ subroutine remap_all_state_vars(CS_remapping, CS_ALE, G, GV, h_old, h_new, Reg, 
   endif
 
   nz      = GV%ke
-  ppt2mks = 0.001
 
   ntr = 0 ; if (associated(Reg)) ntr = Reg%ntr
 
@@ -856,14 +860,14 @@ subroutine remap_all_state_vars(CS_remapping, CS_ALE, G, GV, h_old, h_new, Reg, 
 
   ! Remap u velocity component
   if ( present(u) ) then
-    !$OMP parallel do default(shared) private(h1,h2,dx,u_column)
+    !$OMP parallel do default(shared) private(h1,h2,dz,u_column)
     do j = G%jsc,G%jec ; do I = G%iscB,G%iecB ; if (G%mask2dCu(I,j)>0.) then
       ! Build the start and final grids
       h1(:) = 0.5 * ( h_old(i,j,:) + h_old(i+1,j,:) )
       if (CS_ALE%remap_uv_using_old_alg) then
-        dx(:) = 0.5 * ( dxInterface(i,j,:) + dxInterface(i+1,j,:) )
+        dz(:) = 0.5 * ( dzInterface(i,j,:) + dzInterface(i+1,j,:) )
         do k = 1, nz
-          h2(k) = max( 0., h1(k) + ( dx(k+1) - dx(k) ) )
+          h2(k) = max( 0., h1(k) + ( dz(k) - dz(k+1) ) )
         enddo
       else
         h2(:) = 0.5 * ( h_new(i,j,:) + h_new(i+1,j,:) )
@@ -889,14 +893,14 @@ subroutine remap_all_state_vars(CS_remapping, CS_ALE, G, GV, h_old, h_new, Reg, 
 
   ! Remap v velocity component
   if ( present(v) ) then
-    !$OMP parallel do default(shared) private(h1,h2,dx,u_column)
+    !$OMP parallel do default(shared) private(h1,h2,dz,u_column)
     do J = G%jscB,G%jecB ; do i = G%isc,G%iec ; if (G%mask2dCv(i,j)>0.) then
       ! Build the start and final grids
       h1(:) = 0.5 * ( h_old(i,j,:) + h_old(i,j+1,:) )
       if (CS_ALE%remap_uv_using_old_alg) then
-        dx(:) = 0.5 * ( dxInterface(i,j,:) + dxInterface(i,j+1,:) )
+        dz(:) = 0.5 * ( dzInterface(i,j,:) + dzInterface(i,j+1,:) )
         do k = 1, nz
-          h2(k) = max( 0., h1(k) + ( dx(k+1) - dx(k) ) )
+          h2(k) = max( 0., h1(k) + ( dz(k) - dz(k+1) ) )
         enddo
       else
         h2(:) = 0.5 * ( h_new(i,j,:) + h_new(i,j+1,:) )
