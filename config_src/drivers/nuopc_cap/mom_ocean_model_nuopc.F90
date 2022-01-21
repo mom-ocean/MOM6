@@ -373,6 +373,8 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn, i
 
   call get_param(param_file, mdl, "USE_CFC_CAP", use_CFC, &
                  default=.false., do_not_log=.true.)
+  call get_param(param_file, mdl, "USE_WAVES", OS%Use_Waves, &
+       "If true, enables surface wave modules.", default=.false.)
 
   !   Consider using a run-time flag to determine whether to do the diagnostic
   ! vertical integrals, since the related 3-d sums are not negligible in cost.
@@ -393,12 +395,11 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn, i
       call allocate_forcing_type(OS%grid, OS%fluxes, shelf=.true.)
   endif
 
-  call allocate_forcing_type(OS%grid, OS%fluxes, waves=.true.)
-  call get_param(param_file, mdl, "USE_WAVES", OS%Use_Waves, &
-       "If true, enables surface wave modules.", default=.false.)
   if (OS%Use_Waves) then
     call get_param(param_file, mdl, "WAVE_METHOD", OS%wave_method, default="EMPTY", do_not_log=.true.)
   endif
+  call allocate_forcing_type(OS%grid, OS%fluxes, waves=.true., lamult=(trim(OS%wave_method)=="EFACTOR"))
+
   ! MOM_wave_interface_init is called regardless of the value of USE_WAVES because
   ! it also initializes statistical waves.
   call MOM_wave_interface_init(OS%Time, OS%grid, OS%GV, OS%US, param_file, OS%Waves, OS%diag, OS%restart_CSp)

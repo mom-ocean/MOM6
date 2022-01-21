@@ -714,16 +714,10 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
       Ice_ocean_boundary%lamult          = 0.0
     else if (wave_method == "SURFACE_BANDS") then
       call query_ocean_state(ocean_state, NumWaveBands=Ice_ocean_boundary%num_stk_bands)
-      allocate ( Ice_ocean_boundary% ustk0 (isc:iec,jsc:jec),         &
-                 Ice_ocean_boundary% vstk0 (isc:iec,jsc:jec),         &
-                 Ice_ocean_boundary% ustkb (isc:iec,jsc:jec,Ice_ocean_boundary%num_stk_bands), &
-                 Ice_ocean_boundary% vstkb (isc:iec,jsc:jec,Ice_ocean_boundary%num_stk_bands), &
-                 Ice_ocean_boundary%stk_wavenumbers (Ice_ocean_boundary%num_stk_bands))
-      Ice_ocean_boundary%ustk0           = 0.0
-      Ice_ocean_boundary%vstk0           = 0.0
+      allocate(Ice_ocean_boundary%ustkb(isc:iec,jsc:jec,Ice_ocean_boundary%num_stk_bands), source=0.0)
+      allocate(Ice_ocean_boundary%vstkb(isc:iec,jsc:jec,Ice_ocean_boundary%num_stk_bands), source=0.0)
+      allocate(Ice_ocean_boundary%stk_wavenumbers(Ice_ocean_boundary%num_stk_bands), source=0.0)
       call query_ocean_state(ocean_state, WaveNumbers=Ice_ocean_boundary%stk_wavenumbers, unscale=.true.)
-      Ice_ocean_boundary%ustkb           = 0.0
-      Ice_ocean_boundary%vstkb           = 0.0
     else
       call MOM_error(FATAL, "Unsupported WAVE_METHOD encountered in NUOPC cap.")
     endif

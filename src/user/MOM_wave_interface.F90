@@ -465,12 +465,9 @@ subroutine MOM_wave_interface_init(time, G, GV, US, param_file, CS, diag, restar
     !allocate(CS%Us_x_prev(G%isdB:G%IedB,G%jsd:G%jed,G%ke), source=0.0)
     !allocate(CS%Us_y_prev(G%isd:G%Ied,G%jsdB:G%jedB,G%ke), source=0.0)
     allocate(CS%ddt_Us_x(G%isdB:G%IedB,G%jsd:G%jed,G%ke), source=0.0)
-    CS%ddt_Us_x(:,:,:) = 0.0
     allocate(CS%ddt_Us_y(G%isd:G%Ied,G%jsdB:G%jedB,G%ke), source=0.0)
-    CS%ddt_Us_y(:,:,:) = 0.0
     allocate(CS%Us_x_from_ddt(G%isdB:G%IedB,G%jsd:G%jed,G%ke), source=0.0)
     allocate(CS%Us_y_from_ddt(G%isd:G%Ied,G%jsdB:G%jedB,G%ke), source=0.0)
-
   endif
   ! b. Surface Values
   allocate(CS%US0_x(G%isdB:G%iedB,G%jsd:G%jed), source=0.0)
@@ -1542,7 +1539,7 @@ subroutine CoriolisStokes(G, GV, dt, h, u, v, WAVES, US)
   integer :: i,j,k
 
   do k = 1, GV%ke
-do j = G%jsc, G%jec
+    do j = G%jsc, G%jec
       do I = G%iscB, G%iecB
         DVel = 0.25*(WAVES%us_y(i,j+1,k)+WAVES%us_y(i-1,j+1,k))*G%CoriolisBu(i,j+1) + &
                0.25*(WAVES%us_y(i,j,k)+WAVES%us_y(i-1,j,k))*G%CoriolisBu(i,j)
