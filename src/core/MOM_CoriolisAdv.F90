@@ -316,12 +316,19 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, Waves)
                         (-Waves%us_x(I,j,k))*G%dxCu(I,j))
         enddo; enddo
       endif
-      do J=Jsq-1,Jeq+1 ; do I=Isq-1,Ieq+1
-        dvdx(I,J) = ((v(i+1,J,k)-Waves%us_y(i+1,J,k))*G%dyCv(i+1,J) - &
-                     (v(i,J,k)-Waves%us_y(i,J,k))*G%dyCv(i,J))
-        dudy(I,J) = ((u(I,j+1,k)-Waves%us_x(I,j+1,k))*G%dxCu(I,j+1) - &
-                     (u(I,j,k)-Waves%us_x(I,j,k))*G%dxCu(I,j))
-      enddo; enddo
+      if (.not. Waves%Passive_Stokes_VF) then
+        do J=Jsq-1,Jeq+1 ; do I=Isq-1,Ieq+1
+          dvdx(I,J) = ((v(i+1,J,k)-Waves%us_y(i+1,J,k))*G%dyCv(i+1,J) - &
+                       (v(i,J,k)-Waves%us_y(i,J,k))*G%dyCv(i,J))
+          dudy(I,J) = ((u(I,j+1,k)-Waves%us_x(I,j+1,k))*G%dxCu(I,j+1) - &
+                       (u(I,j,k)-Waves%us_x(I,j,k))*G%dxCu(I,j))
+        enddo; enddo
+      else
+        do J=Jsq-1,Jeq+1 ; do I=Isq-1,Ieq+1
+          dvdx(I,J) = (v(i+1,J,k)*G%dyCv(i+1,J) - v(i,J,k)*G%dyCv(i,J))
+          dudy(I,J) = (u(I,j+1,k)*G%dxCu(I,j+1) - u(I,j,k)*G%dxCu(I,j))
+        enddo; enddo
+      endif
     else
       do J=Jsq-1,Jeq+1 ; do I=Isq-1,Ieq+1
         dvdx(I,J) = (v(i+1,J,k)*G%dyCv(i+1,J) - v(i,J,k)*G%dyCv(i,J))
