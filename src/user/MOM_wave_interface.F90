@@ -88,7 +88,7 @@ type, public :: wave_parameters_CS ; private
     Us_y_from_ddt      !< Check of 3d meridional Stokes drift profile [m s-1]
                        !! Horizontal -> V points
                        !! Vertical -> Mid-points
-    real, allocatable, dimension(:,:,:), public :: &
+  real, allocatable, dimension(:,:,:), public :: &
     Us_x_prev          !< 3d zonal Stokes drift profile, previous dynamics call [m s-1]
                        !! Horizontal -> U points
                        !! Vertical -> Mid-points
@@ -459,9 +459,11 @@ subroutine MOM_wave_interface_init(time, G, GV, US, param_file, CS, diag, restar
 
   ! Allocate and initialize
   ! a. Stokes driftProfiles
+  allocate(CS%Us_x(G%isdB:G%IedB,G%jsd:G%jed,G%ke), source=0.0)
+  allocate(CS%Us_y(G%isd:G%Ied,G%jsdB:G%jedB,G%ke), source=0.0)
   if (CS%Stokes_DDT) then
-    allocate(CS%Us_x_prev(G%isdB:G%IedB,G%jsd:G%jed,G%ke), source=0.0)
-    allocate(CS%Us_y_prev(G%isd:G%Ied,G%jsdB:G%jedB,G%ke), source=0.0)
+    !allocate(CS%Us_x_prev(G%isdB:G%IedB,G%jsd:G%jed,G%ke), source=0.0)
+    !allocate(CS%Us_y_prev(G%isd:G%Ied,G%jsdB:G%jedB,G%ke), source=0.0)
     allocate(CS%ddt_Us_x(G%isdB:G%IedB,G%jsd:G%jed,G%ke), source=0.0)
     CS%ddt_Us_x(:,:,:) = 0.0
     allocate(CS%ddt_Us_y(G%isd:G%Ied,G%jsdB:G%jedB,G%ke), source=0.0)
@@ -1906,7 +1908,7 @@ subroutine waves_register_restarts(CS, HI, GV, param_file, restart_CSp)
   type(vardesc) :: vd(2)
   logical :: use_waves
   logical :: StatisticalWaves
-  character*(13) :: wave_method_str
+  logical :: time_tendency_term
   character(len=40)  :: mdl = "MOM_wave_interface" !< This module's name.
 
   if (associated(CS)) then
@@ -1923,21 +1925,21 @@ subroutine waves_register_restarts(CS, HI, GV, param_file, restart_CSp)
 
   if (.not.(use_waves .or. StatisticalWaves)) return
 
-  ! Allocate wave fields needed for restart file
-  allocate(CS%Us_x(HI%isdB:HI%IedB,HI%jsd:HI%jed,GV%ke))
-  CS%Us_x(:,:,:) = 0.0
-  allocate(CS%Us_y(HI%isd:HI%Ied,HI%jsdB:HI%jedB,GV%ke))
-  CS%Us_y(:,:,:) = 0.0
+  call get_param(param_file,mdl,"STOKES_DDT",time_tendency_term, do_not_log=.true., default=.false.)
 
-  call get_param(param_file,mdl,"WAVE_METHOD",wave_method_str, do_not_log=.true., default=NULL_STRING)
-
-  if (trim(wave_method_str)== trim(SURFBANDS_STRING)) then
-    vd(1) = var_desc("US_x", "m s-1", "3d zonal Stokes drift profile",&
+  if (time_tendency_term) then
+    ! Allocate wave fields needed for restart file
+    allocate(CS%Us_x_prev(HI%isdB:HI%IedB,HI%jsd:HI%jed,GV%ke))
+    CS%Us_x_prev(:,:,:) = 0.0
+    allocate(CS%Us_y_prev(HI%isd:HI%Ied,HI%jsdB:HI%jedB,GV%ke))
+    CS%Us_y_prev(:,:,:) = 0.0
+    ! Register to restart
+    vd(1) = var_desc("Us_x_prev", "m s-1", "3d zonal Stokes drift profile",&
                      hor_grid='u',z_grid='L')
-    vd(2) = var_desc("US_y", "m s-1", "3d meridional Stokes drift profile",&
+    vd(2) = var_desc("Us_y_prev", "m s-1", "3d meridional Stokes drift profile",&
                       hor_grid='v',z_grid='L')
-    call register_restart_field(CS%US_x(:,:,:), vd(1), .false., restart_CSp)
-    call register_restart_field(CS%US_y(:,:,:), vd(2), .false., restart_CSp)
+    call register_restart_field(CS%US_x_prev(:,:,:), vd(1), .false., restart_CSp)
+    call register_restart_field(CS%US_y_prev(:,:,:), vd(2), .false., restart_CSp)
   endif
 
 end subroutine waves_register_restarts
