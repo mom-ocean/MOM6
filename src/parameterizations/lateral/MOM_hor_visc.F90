@@ -1308,8 +1308,8 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
           if (Kh(i,j) >= hrat_min(i,j) * CS%Kh_Max_xy(I,J)) then
             visc_bound_rem(i,j) = 0.0
             Kh(i,j) = hrat_min(i,j) * CS%Kh_Max_xy(I,J)
-          elseif (CS%Kh_Max_xy(I,J)>0.) then
             visc_bound_rem(i,j) = 1.0 - Kh(i,j) / (hrat_min(i,j) * CS%Kh_Max_xy(I,J))
+          elseif (hrat_min(I,J)*CS%Kh_Max_xy(I,J)>0.) then
           endif
         endif
 
