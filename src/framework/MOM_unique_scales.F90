@@ -1,5 +1,6 @@
-!> This module is used to check the scaling factors used by the MOM6 ocean model
-module MOM_scaling_check
+!> This module provides tools that can be used to check the uniqueness of the dimensional
+!! scaling factors used by the MOM6 ocean model or other models
+module MOM_unique_scales
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
@@ -12,7 +13,7 @@ implicit none ; private
 ! their mks counterparts with notation like "a velocity [Z T-1 ~> m s-1]".  If the units
 ! vary with the Boussinesq approximation, the Boussinesq variant is given first.
 
-public check_scaling_factors, scales_to_powers
+public check_scaling_uniqueness, scales_to_powers
 
 contains
 
@@ -20,7 +21,7 @@ contains
 !! overall scaling for each of the combinations of units in description, and suggests a better
 !! combination if it is not unique.  However, this subroutine does nothing if the verbosity level
 !! for this run is below 3.
-subroutine check_scaling_factors(component, descs, weights, key, scales, max_powers)
+subroutine check_scaling_uniqueness(component, descs, weights, key, scales, max_powers)
   character(len=*),  intent(in) :: component  !< The name of the component (e.g., MOM6) to use in messages
   character(len=*),  intent(in) :: descs(:)   !< The descriptions for each combination of units
   integer,           intent(in) :: weights(:) !< A list of the weights for each described combination
@@ -139,7 +140,7 @@ subroutine check_scaling_factors(component, descs, weights, key, scales, max_pow
 
   endif
 
-end subroutine check_scaling_factors
+end subroutine check_scaling_uniqueness
 
 !> Convert a unit scaling descriptor into an array of the dimensions of powers given in the key
 subroutine encode_dim_powers(scaling, key, dim_powers)
@@ -350,4 +351,4 @@ function int_array_msg(array)
   enddo
 end function int_array_msg
 
-end module MOM_scaling_check
+end module MOM_unique_scales

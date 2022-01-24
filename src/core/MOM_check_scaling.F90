@@ -1,10 +1,10 @@
-!> This module is used to check the scaling factors used by the MOM6 ocean model
+!> This module is used to check the dimensional scaling factors used by the MOM6 ocean model
 module MOM_check_scaling
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_error_handler,        only : MOM_error, MOM_mesg, FATAL, WARNING, assert, MOM_get_verbosity
-use MOM_scaling_check,        only : check_scaling_factors, scales_to_powers
+use MOM_unique_scales,        only : check_scaling_uniqueness, scales_to_powers
 use MOM_unit_scaling,         only : unit_scale_type
 use MOM_verticalGrid,         only : verticalGrid_type
 
@@ -53,7 +53,7 @@ subroutine check_MOM6_scaling_factors(GV, US)
   ! This call records all the list of powers, the descriptions, and their weights.
   call compose_dimension_list(ns, descriptions, weights)
 
-  call check_scaling_factors("MOM6", descriptions, weights, key, scale_pow2, max_pow)
+  call check_scaling_uniqueness("MOM6", descriptions, weights, key, scale_pow2, max_pow)
 
   deallocate(weights)
   deallocate(descriptions)
