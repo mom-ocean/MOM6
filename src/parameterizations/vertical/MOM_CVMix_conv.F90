@@ -101,7 +101,7 @@ logical function CVMix_conv_init(Time, G, GV, US, param_file, diag, CS)
 
   call get_param(param_file, mdl, 'KD_CONV', CS%kd_conv_const, &
                  "Diffusivity used in convective regime. Corresponding viscosity "//&
-                 "(KV_CONV) will be set to KD_CONV * PRANDTL_TURB.", &
+                 "(KV_CONV) will be set to KD_CONV * PRANDTL_CONV.", &
                  units='m2/s', default=1.00)
 
   call get_param(param_file, mdl, 'BV_SQR_CONV', CS%bv_sqr_conv, &

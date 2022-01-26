@@ -911,7 +911,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, pbv)
           else ; L(K) = L(K)*pbv%por_layer_widthV(i,J,K); endif
 
           ! Determine the drag contributing to the bottom boundary layer
-          ! and the Raleigh drag that acts on each layer.
+          ! and the Rayleigh drag that acts on each layer.
           if (L(K) > L(K+1)) then
             if (vol_below < bbl_thick) then
               BBL_frac = (1.0-vol_below/bbl_thick)**2
