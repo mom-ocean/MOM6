@@ -62,8 +62,8 @@ use MOM_surface_forcing_nuopc, only : surface_forcing_init, convert_IOB_to_fluxe
 use MOM_surface_forcing_nuopc, only : convert_IOB_to_forces, ice_ocn_bnd_type_chksum
 use MOM_surface_forcing_nuopc, only : ice_ocean_boundary_type, surface_forcing_CS
 use MOM_surface_forcing_nuopc, only : forcing_save_restart
-use MOM_domains,               only : root_PE,num_PEs
-use MOM_coms,                  only : Get_PElist
+use get_stochy_pattern_mod,  only : write_stoch_restart_ocn
+use iso_fortran_env,           only : int64
 
 #include <MOM_memory.h>
 
@@ -177,8 +177,10 @@ type, public :: ocean_state_type ; private
                               !! steps can span multiple coupled time steps.
   logical :: diabatic_first   !< If true, apply diabatic and thermodynamic
                               !! processes before time stepping the dynamics.
-  logical,public :: do_sppt   !< If true, write stochastic physics restarts
-  logical,public :: pert_epbl !< If true, write stochastic physics restarts
+  logical :: do_sppt         !< If true, stochastically perturb the diabatic and
+                             !! write restarts
+  logical :: pert_epbl       !< If true, then randomly perturb the KE dissipation and
+                             !! genration termsand write restarts
 
   real :: eps_omesh           !< Max allowable difference between ESMF mesh and MOM6
                               !! domain coordinates
@@ -253,7 +255,9 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn, i
                       !! The actual depth over which melt potential is computed will
                       !! min(HFrz, OBLD), where OBLD is the boundary layer depth.
                       !! If HFrz <= 0 (default), melt potential will not be computed.
-  logical :: use_melt_pot!< If true, allocate melt_potential array
+  logical :: use_melt_pot !< If true, allocate melt_potential array
+  logical :: use_CFC  !< If true, allocated arrays for surface CFCs.
+
 
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
@@ -425,10 +429,11 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn, i
 
   endif
 
-  ! check to see if stochastic physics is active
+  call extract_surface_state(OS%MOM_CSp, OS%sfc_state)
+! get number of processors and PE list for stocasthci physics initialization
   call get_param(param_file, mdl, "DO_SPPT", OS%do_sppt, &
                  "If true, then stochastically perturb the thermodynamic "//&
-                 "tendemcies of T,S, amd h.  Amplitude and correlations are "//&
+                 "tendencies of T,S, and h.  Amplitude and correlations are "//&
                  "controlled by the nam_stoch namelist in the UFS model only.", &
                  default=.false.)
   call get_param(param_file, mdl, "PERT_EPBL", OS%pert_epbl, &

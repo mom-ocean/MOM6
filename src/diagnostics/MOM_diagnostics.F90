@@ -1286,8 +1286,8 @@ subroutine post_surface_thermo_diags(IDs, G, GV, US, diag, dt_int, sfc_state, tv
   real,                     intent(in) :: dt_int !< total time step associated with these diagnostics [T ~> s].
   type(surface),            intent(in) :: sfc_state !< structure describing the ocean surface state
   type(thermo_var_ptrs),    intent(in) :: tv  !< A structure pointing to various thermodynamic variables
-  real, dimension(SZI_(G),SZJ_(G)), &
-                            intent(in) :: ssh !< Time mean surface height without corrections for ice displacement [m]
+  real, dimension(SZI_(G),SZJ_(G)), intent(in) :: ssh !< Time mean surface height without corrections
+                                              !! for ice displacement [Z ~> m]
   real, dimension(SZI_(G),SZJ_(G)), intent(in) :: ssh_ibc !< Time mean surface height with corrections
                                               !! for ice displacement and the inverse barometer [Z ~> m]
 
