@@ -228,7 +228,7 @@ type, public :: barotropic_CS ; private
   logical :: tidal_sal_bug   !< If true, the tidal self-attraction and loading anomaly in the
                              !! barotropic solver has the wrong sign, replicating a long-standing
                              !! bug.
-  real    :: G_extra         !< A nondimensional factor by which gtot is enhanced.
+  real    :: G_extra         !< A nondimensional factor by which gtot is enhanced [nondim].
   integer :: hvel_scheme     !< An integer indicating how the thicknesses at
                              !! velocity points are calculated. Valid values are
                              !! given by the parameters defined below:
@@ -4302,7 +4302,9 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, US, param_file, diag, CS, 
   real :: det_de      ! The partial derivative due to self-attraction and loading of the reference
                       ! geopotential with the sea surface height when tides are enabled.
                       ! This is typically ~0.09 or less.
-  real, allocatable, dimension(:,:) :: lin_drag_h
+  real, allocatable :: lin_drag_h(:,:)  ! A spatially varying linear drag coefficient at tracer points
+                                        ! that acts on the barotropic flow [Z T-1 ~> m s-1].
+
   type(memory_size_type) :: MS
   type(group_pass_type) :: pass_static_data, pass_q_D_Cor
   type(group_pass_type) :: pass_bt_hbt_btav, pass_a_polarity

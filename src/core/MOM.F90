@@ -132,7 +132,7 @@ use MOM_unit_scaling,          only : unit_scaling_end, fix_restart_unit_scaling
 use MOM_variables,             only : surface, allocate_surface_state, deallocate_surface_state
 use MOM_variables,             only : thermo_var_ptrs, vertvisc_type, porous_barrier_ptrs
 use MOM_variables,             only : accel_diag_ptrs, cont_diag_ptrs, ocean_internal_state
-use MOM_variables,             only : rotate_surface_state, stochastic_pattern
+use MOM_variables,             only : rotate_surface_state
 use MOM_verticalGrid,          only : verticalGrid_type, verticalGridInit, verticalGridEnd
 use MOM_verticalGrid,          only : fix_restart_scaling
 use MOM_verticalGrid,          only : get_thickness_units, get_flux_units, get_tr_flux_units
@@ -154,6 +154,8 @@ use MOM_offline_main,          only : offline_redistribute_residual, offline_dia
 use MOM_offline_main,          only : offline_fw_fluxes_into_ocean, offline_fw_fluxes_out_ocean
 use MOM_offline_main,          only : offline_advection_layer, offline_transport_end
 use MOM_ALE,                   only : ale_offline_tracer_final, ALE_main_offline
+use MOM_ice_shelf,             only : ice_shelf_CS, ice_shelf_query, initialize_ice_shelf
+use MOM_particles_mod,         only : particles, particles_init, particles_run, particles_save_restart, particles_end
 
 implicit none ; private
 
@@ -402,6 +404,16 @@ type, public :: MOM_control_struct ; private
   type(ODA_CS), pointer :: odaCS => NULL() !< a pointer to the control structure for handling
                                 !! ensemble model state vectors and data assimilation
                                 !! increments and priors
+  type(porous_barrier_ptrs) :: pbv !< porous barrier fractional cell metrics
+  real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_,NKMEM_) &
+                            :: por_face_areaU !< fractional open area of U-faces [nondim]
+  real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_,NKMEM_) &
+                            :: por_face_areaV !< fractional open area of V-faces [nondim]
+  real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_,NK_INTERFACE_) &
+                            :: por_layer_widthU !< fractional open width of U-faces [nondim]
+  real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_,NK_INTERFACE_) &
+                            :: por_layer_widthV !< fractional open width of V-faces [nondim]
+  type(particles), pointer :: particles => NULL() !<Lagrangian particles
   type(stochastic_CS), pointer :: stoch_CS => NULL() !< a pointer to the stochastics control structure
 end type MOM_control_struct
 
@@ -1381,7 +1393,7 @@ subroutine step_MOM_thermo(CS, G, GV, US, u, v, h, tv, fluxes, dtdia, &
     call cpu_clock_begin(id_clock_diabatic)
 
     call diabatic(u, v, h, tv, CS%Hml, fluxes, CS%visc, CS%ADp, CS%CDp, dtdia, &
-                  Time_end_thermo, G, GV, US, CS%diabatic_CSp, CS%stoch_CS,OBC=CS%OBC, Waves=Waves)
+                  Time_end_thermo, G, GV, US, CS%diabatic_CSp, CS%stoch_CS, CS%OBC, Waves)
     fluxes%fluxes_used = .true.
 
     if (showCallTree) call callTree_waypoint("finished diabatic (step_MOM_thermo)")
@@ -1799,7 +1811,10 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   integer :: nkml, nkbl, verbosity, write_geom
   integer :: dynamics_stencil  ! The computational stencil for the calculations
                                ! in the dynamic core.
-  real :: conv2watt, conv2salt
+  real :: conv2watt            ! A conversion factor from temperature fluxes to heat
+                               ! fluxes [J m-2 H-1 degC-1 ~> J m-3 degC-1 or J kg-1 degC-1]
+  real :: conv2salt            ! A conversion factor for salt fluxes [m H-1 ~> 1] or [kg m-2 H-1 ~> 1]
+  real :: RL2_T2_rescale, Z_rescale, QRZ_rescale ! Unit conversion factors
   character(len=48) :: flux_units, S_flux_units
 
   type(vardesc) :: vd_T, vd_S  ! Structures describing temperature and salinity variables.
@@ -2475,28 +2490,12 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
     call callTree_waypoint("returned from ALE_init() (initialize_MOM)")
   endif
 
-  !   Shift from using the temporary dynamic grid type to using the final
-  ! (potentially static) ocean-specific grid type.
-  !   The next line would be needed if G%Domain had not already been init'd above:
-  !     call clone_MOM_domain(dG%Domain, G%Domain)
-  call MOM_grid_init(G, param_file, US, HI, bathymetry_at_vel=bathy_at_vel)
-  call copy_dyngrid_to_MOM_grid(dG, G, US)
-  call destroy_dyn_horgrid(dG)
-
   ! Set a few remaining fields that are specific to the ocean grid type.
   if (CS%rotate_index) then
     call set_first_direction(G, modulo(first_direction + turns, 2))
   else
     call set_first_direction(G, modulo(first_direction, 2))
   endif
-  call MOM_grid_init(G_in, param_file, US, HI_in, bathymetry_at_vel=bathy_at_vel)
-  call copy_dyngrid_to_MOM_grid(dG_in, G_in, US)
-  call destroy_dyn_horgrid(dG_in)
-
-  if (.not. CS%rotate_index) &
-    G => G_in
-  ! Set a few remaining fields that are specific to the ocean grid type.
-  call set_first_direction(G, first_direction)
   ! Allocate the auxiliary non-symmetric domain for debugging or I/O purposes.
   if (CS%debug .or. G%symmetric) then
     call clone_MOM_domain(G%Domain, G%Domain_aux, symmetric=.false.)

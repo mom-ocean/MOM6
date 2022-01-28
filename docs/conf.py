@@ -159,7 +159,7 @@ master_doc = 'index'
 
 # General information about the project.
 project = u'MOM6'
-copyright = u'2017-2021, MOM6 developers'
+copyright = u'2017-2022, MOM6 developers'
 
 # The version info for the project you're documenting, acts as replacement for
 # |version| and |release|, also used in various other places throughout the
