@@ -598,7 +598,7 @@ function field_exists(filename, field_name, domain, no_domain, MOM_domain)
 end function field_exists
 
 !> Given filename and fieldname, this subroutine returns the size of the field in the file
-subroutine get_field_size(filename, fieldname, sizes, field_found, no_domain)
+subroutine get_field_size(filename, fieldname, sizes, field_found, no_domain, fms1_format)
   character(len=*),      intent(in)    :: filename  !< The name of the file to read
   character(len=*),      intent(in)    :: fieldname !< The name of the variable whose sizes are returned
   integer, dimension(:), intent(inout) :: sizes     !< The sizes of the variable in each dimension
@@ -607,16 +607,21 @@ subroutine get_field_size(filename, fieldname, sizes, field_found, no_domain)
                                                     !! is a fatal error if the field is not found.
   logical,     optional, intent(in)    :: no_domain !< If present and true, do not check for file
                                                     !! names with an appended tile number
-
+  logical,     optional, intent(in)    :: fms1_format !< If true (default) , then for (Nx,Ny,Nt) data
+                                                      !! return sizes=(Nx,Ny,1,Nt) if sizes if 4-dimensional
   ! Local variables
   type(FmsNetcdfFile_t) :: fileobj_read ! A handle to a non-domain-decomposed file for obtaining information
                                               ! about the exiting time axis entries in append mode.
   logical :: success         ! If true, the file was opened successfully
   logical :: field_exists    ! True if filename exists and field_name is in filename
+  logical :: fms1_fmt
   integer :: i, ndims
+
 
   if (FMS2_reads) then
     field_exists = .false.
+    fms1_fmt=.true.
+    if (present(fms1_format)) fms1_fmt=fms1_format
     if (file_exists(filename)) then
       success = fms2_open_file(fileObj_read, trim(filename), "read")
       if (success) then
@@ -627,6 +632,12 @@ subroutine get_field_size(filename, fieldname, sizes, field_found, no_domain)
             "get_field_size called with too few sizes for "//trim(fieldname)//" in "//trim(filename))
           call get_variable_size(fileobj_read, fieldname, sizes(1:ndims))
           do i=ndims+1,size(sizes) ; sizes(i) = 0 ; enddo
+          ! This preserves previous behavior when reading time-varying data without
+          ! a vertical extent.
+          if (fms1_fmt .and. size(sizes)==ndims+1) then
+            sizes(ndims+1)=sizes(ndims)
+            sizes(ndims)=1
+          endif
         endif
       endif
     endif
