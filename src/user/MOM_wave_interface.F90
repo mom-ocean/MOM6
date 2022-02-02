@@ -1585,7 +1585,8 @@ subroutine Stokes_PGF(G, GV, h, u, v, PFu_Stokes, PFv_Stokes, CS )
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: P_deltaStokes_L ! The stokes induced Pressure anomaly, layer averaged
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1) :: P_deltaStokes_i ! The stokes induced Pressure anomaly at interfaces
   real :: P_Stokes_l, P_Stokes_r ! Stokes-induced pressure anomaly over layer (left/right of point) [L2 T-2 ~> m2 s-2]
-  real :: P_Stokes_l0, P_Stokes_r0 ! Stokes-induced pressure anomaly at interface (left/right of point) [L2 T-2 ~> m2 s-2]
+  real :: P_Stokes_l0, P_Stokes_r0 ! Stokes-induced pressure anomaly at interface
+                                   ! (left/right of point) [L2 T-2 ~> m2 s-2]
   real :: dP_Stokes_l_dz, dP_Stokes_r_dz ! Contribution of layer to integrated Stokes pressure anomaly for summation
                                          ! (left/right of point) [L3 T-2 ~> m3 s-2]
   real :: dP_Stokes_l, dP_Stokes_r ! Net increment of Stokes pressure anomaly across layer for summation
