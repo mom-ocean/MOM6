@@ -122,6 +122,8 @@ type fld_list_type
   character(len=64) :: stdname
   character(len=64) :: shortname
   character(len=64) :: transferOffer
+  integer :: ungridded_lbound = 0
+  integer :: ungridded_ubound = 0
 end type fld_list_type
 
 integer,parameter    :: fldsMax = 100
@@ -707,21 +709,17 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
 
   call query_ocean_state(ocean_state, use_waves=use_waves, wave_method=wave_method)
   if (use_waves) then
-    call query_ocean_state(ocean_state, NumWaveBands=Ice_ocean_boundary%num_stk_bands)
     if (wave_method == "EFACTOR") then
       allocate( Ice_ocean_boundary%lamult(isc:iec,jsc:jec) )
       Ice_ocean_boundary%lamult          = 0.0
-    else
-      allocate ( Ice_ocean_boundary% ustk0 (isc:iec,jsc:jec),         &
-                 Ice_ocean_boundary% vstk0 (isc:iec,jsc:jec),         &
-                 Ice_ocean_boundary% ustkb (isc:iec,jsc:jec,Ice_ocean_boundary%num_stk_bands), &
-                 Ice_ocean_boundary% vstkb (isc:iec,jsc:jec,Ice_ocean_boundary%num_stk_bands), &
-                 Ice_ocean_boundary%stk_wavenumbers (Ice_ocean_boundary%num_stk_bands))
-      Ice_ocean_boundary%ustk0           = 0.0
-      Ice_ocean_boundary%vstk0           = 0.0
+    else if (wave_method == "SURFACE_BANDS") then
+      call query_ocean_state(ocean_state, NumWaveBands=Ice_ocean_boundary%num_stk_bands)
+      allocate(Ice_ocean_boundary%ustkb(isc:iec,jsc:jec,Ice_ocean_boundary%num_stk_bands), source=0.0)
+      allocate(Ice_ocean_boundary%vstkb(isc:iec,jsc:jec,Ice_ocean_boundary%num_stk_bands), source=0.0)
+      allocate(Ice_ocean_boundary%stk_wavenumbers(Ice_ocean_boundary%num_stk_bands), source=0.0)
       call query_ocean_state(ocean_state, WaveNumbers=Ice_ocean_boundary%stk_wavenumbers, unscale=.true.)
-      Ice_ocean_boundary%ustkb           = 0.0
-      Ice_ocean_boundary%vstkb           = 0.0
+    else
+      call MOM_error(FATAL, "Unsupported WAVE_METHOD encountered in NUOPC cap.")
     endif
   endif
   ! Consider adding this:
@@ -763,16 +761,26 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
   if (use_waves) then
     if (wave_method == "EFACTOR") then
       call fld_list_add(fldsToOcn_num, fldsToOcn, "Sw_lamult"                 , "will provide")
-    else
-      if (Ice_ocean_boundary%num_stk_bands > 3) then
-        call MOM_error(FATAL, "Number of Stokes Bands > 3, NUOPC cap not set up for this")
+    else if (wave_method == "SURFACE_BANDS") then
+      if (cesm_coupled) then
+        call fld_list_add(fldsToOcn_num, fldsToOcn, "Sw_pstokes_x", "will provide", &
+          ungridded_lbound=1, ungridded_ubound=Ice_ocean_boundary%num_stk_bands)
+        call fld_list_add(fldsToOcn_num, fldsToOcn, "Sw_pstokes_y", "will provide", &
+          ungridded_lbound=1, ungridded_ubound=Ice_ocean_boundary%num_stk_bands)
+      else ! below is the old approach of importing partitioned stokes drift components. after the planned ww3 nuopc
+           ! cap unification, this else block should be removed in favor of the more flexible import approach above.
+        if (Ice_ocean_boundary%num_stk_bands > 3) then
+          call MOM_error(FATAL, "Number of Stokes Bands > 3, NUOPC cap not set up for this")
+        endif
+        call fld_list_add(fldsToOcn_num, fldsToOcn, "eastward_partitioned_stokes_drift_1" , "will provide")
+        call fld_list_add(fldsToOcn_num, fldsToOcn, "northward_partitioned_stokes_drift_1", "will provide")
+        call fld_list_add(fldsToOcn_num, fldsToOcn, "eastward_partitioned_stokes_drift_2" , "will provide")
+        call fld_list_add(fldsToOcn_num, fldsToOcn, "northward_partitioned_stokes_drift_2", "will provide")
+        call fld_list_add(fldsToOcn_num, fldsToOcn, "eastward_partitioned_stokes_drift_3" , "will provide")
+        call fld_list_add(fldsToOcn_num, fldsToOcn, "northward_partitioned_stokes_drift_3", "will provide")
       endif
-      call fld_list_add(fldsToOcn_num, fldsToOcn, "eastward_partitioned_stokes_drift_1" , "will provide")
-      call fld_list_add(fldsToOcn_num, fldsToOcn, "northward_partitioned_stokes_drift_1", "will provide")
-      call fld_list_add(fldsToOcn_num, fldsToOcn, "eastward_partitioned_stokes_drift_2" , "will provide")
-      call fld_list_add(fldsToOcn_num, fldsToOcn, "northward_partitioned_stokes_drift_2", "will provide")
-      call fld_list_add(fldsToOcn_num, fldsToOcn, "eastward_partitioned_stokes_drift_3" , "will provide")
-      call fld_list_add(fldsToOcn_num, fldsToOcn, "northward_partitioned_stokes_drift_3", "will provide")
+    else
+      call MOM_error(FATAL, "Unsupported WAVE_METHOD encountered in NUOPC cap.")
     endif
   endif
 
@@ -1646,7 +1654,7 @@ subroutine ModelAdvance(gcomp, rc)
      ! Import data
      !---------------
 
-     call mom_import(ocean_public, ocean_grid, importState, ice_ocean_boundary, rc=rc)
+     call mom_import(ocean_public, ocean_grid, importState, ice_ocean_boundary, cesm_coupled, rc=rc)
      if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
      !---------------
@@ -2091,25 +2099,43 @@ subroutine MOM_RealizeFields(state, nfields, field_defs, tag, grid, mesh, rc)
 
         if (present(grid)) then
 
-           field = ESMF_FieldCreate(grid, ESMF_TYPEKIND_R8, indexflag=ESMF_INDEX_DELOCAL, &
-                name=field_defs(i)%shortname, rc=rc)
-           if (ChkErr(rc,__LINE__,u_FILE_u)) return
+           if (field_defs(i)%ungridded_lbound > 0 .and. field_defs(i)%ungridded_ubound > 0) then
+              call ESMF_LogWrite(trim(subname)//": ERROR ungridded dimensions not supported in MOM6 nuopc cap when "//&
+              "ESMF_GEOMTYPE_GRID is used. Use ESMF_GEOMTYPE_MESH instead.", ESMF_LOGMSG_ERROR)
+               rc = ESMF_FAILURE
+           else
+              field = ESMF_FieldCreate(grid, ESMF_TYPEKIND_R8, indexflag=ESMF_INDEX_DELOCAL, &
+                   name=field_defs(i)%shortname, rc=rc)
+              if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
-           ! initialize fldptr to zero
-           call ESMF_FieldGet(field, farrayPtr=fldptr2d, rc=rc)
-           if (ChkErr(rc,__LINE__,u_FILE_u)) return
-           fldptr2d(:,:) = 0.0
+              ! initialize fldptr to zero
+              call ESMF_FieldGet(field, farrayPtr=fldptr2d, rc=rc)
+              if (ChkErr(rc,__LINE__,u_FILE_u)) return
+              fldptr2d(:,:) = 0.0
+           endif
 
         else if (present(mesh)) then
 
-           field = ESMF_FieldCreate(mesh=mesh, typekind=ESMF_TYPEKIND_R8, meshloc=ESMF_MESHLOC_ELEMENT, &
-                name=field_defs(i)%shortname, rc=rc)
-           if (ChkErr(rc,__LINE__,u_FILE_u)) return
+           if (field_defs(i)%ungridded_lbound > 0 .and. field_defs(i)%ungridded_ubound > 0) then
+             field = ESMF_FieldCreate(mesh=mesh, typekind=ESMF_TYPEKIND_R8, meshloc=ESMF_MESHLOC_ELEMENT, &
+                  name=field_defs(i)%shortname, ungriddedLbound=(/field_defs(i)%ungridded_lbound/), &
+                  ungriddedUbound=(/field_defs(i)%ungridded_ubound/), gridToFieldMap=(/2/), rc=rc)
+             if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
-           ! initialize fldptr to zero
-           call ESMF_FieldGet(field, farrayPtr=fldptr1d, rc=rc)
-           if (ChkErr(rc,__LINE__,u_FILE_u)) return
-           fldptr1d(:) = 0.0
+             ! initialize fldptr to zero
+             call ESMF_FieldGet(field, farrayPtr=fldptr2d, rc=rc)
+             if (ChkErr(rc,__LINE__,u_FILE_u)) return
+             fldptr2d(:,:) = 0.0
+           else
+             field = ESMF_FieldCreate(mesh=mesh, typekind=ESMF_TYPEKIND_R8, meshloc=ESMF_MESHLOC_ELEMENT, &
+                  name=field_defs(i)%shortname, rc=rc)
+             if (ChkErr(rc,__LINE__,u_FILE_u)) return
+
+             ! initialize fldptr to zero
+             call ESMF_FieldGet(field, farrayPtr=fldptr1d, rc=rc)
+             if (ChkErr(rc,__LINE__,u_FILE_u)) return
+             fldptr1d(:) = 0.0
+           endif
 
         endif
 
@@ -2166,12 +2192,14 @@ end subroutine MOM_RealizeFields
 !===============================================================================
 
 !> Set up list of field information
-subroutine fld_list_add(num, fldlist, stdname, transferOffer, shortname)
+subroutine fld_list_add(num, fldlist, stdname, transferOffer, shortname, ungridded_lbound, ungridded_ubound)
   integer,                    intent(inout) :: num
   type(fld_list_type),        intent(inout) :: fldlist(:)
   character(len=*),           intent(in)    :: stdname
   character(len=*),           intent(in)    :: transferOffer
   character(len=*), optional, intent(in)    :: shortname
+  integer, optional,          intent(in)    :: ungridded_lbound
+  integer, optional,          intent(in)    :: ungridded_ubound
 
   ! local variables
   integer :: rc
@@ -2193,6 +2221,10 @@ subroutine fld_list_add(num, fldlist, stdname, transferOffer, shortname)
      fldlist(num)%shortname   = trim(stdname)
   endif
   fldlist(num)%transferOffer  = trim(transferOffer)
+  if (present(ungridded_lbound) .and. present(ungridded_ubound)) then
+    fldlist(num)%ungridded_lbound = ungridded_lbound
+    fldlist(num)%ungridded_ubound = ungridded_ubound
+  end if
 
 end subroutine fld_list_add
 

@@ -66,7 +66,7 @@ use MOM_vert_friction,         only : vertvisc_init, vertvisc_end, vertvisc_CS
 use MOM_vert_friction,         only : updateCFLtruncationValue
 use MOM_verticalGrid,          only : verticalGrid_type, get_thickness_units
 use MOM_verticalGrid,          only : get_flux_units, get_tr_flux_units
-use MOM_wave_interface, only: wave_parameters_CS
+use MOM_wave_interface,        only: wave_parameters_CS, Stokes_PGF
 
 implicit none ; private
 
@@ -77,11 +77,13 @@ type, public :: MOM_dyn_split_RK2_CS ; private
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_,NKMEM_) :: &
     CAu, &    !< CAu = f*v - u.grad(u) [L T-2 ~> m s-2]
     PFu, &    !< PFu = -dM/dx [L T-2 ~> m s-2]
+    PFu_Stokes, & !< PFu_Stokes = -d/dx int_r (u_L*duS/dr) [L T-2 ~> m s-2]
     diffu     !< Zonal acceleration due to convergence of the along-isopycnal stress tensor [L T-2 ~> m s-2]
 
   real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_,NKMEM_) :: &
     CAv, &    !< CAv = -f*u - u.grad(v) [L T-2 ~> m s-2]
     PFv, &    !< PFv = -dM/dy [L T-2 ~> m s-2]
+    PFv_Stokes, & !< PFv_Stokes = -d/dy int_r (v_L*dvS/dr) [L T-2 ~> m s-2]
     diffv     !< Meridional acceleration due to convergence of the along-isopycnal stress tensor [L T-2 ~> m s-2]
 
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_,NKMEM_) :: visc_rem_u
@@ -375,6 +377,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
   logical :: BT_cont_BT_thick ! If true, use the BT_cont_type to estimate the
                               ! relative weightings of the layers in calculating
                               ! the barotropic accelerations.
+  logical :: Use_Stokes_PGF ! If true, add Stokes PGF to hydrostatic PGF
   !---For group halo pass
   logical :: showCallTree, sym
 
@@ -469,6 +472,31 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
       eta_PF_start(i,j) = CS%eta_PF(i,j) - pres_to_eta * (p_surf_begin(i,j) - p_surf_end(i,j))
     enddo ; enddo
   endif
+  ! Stokes shear force contribution to pressure gradient
+  Use_Stokes_PGF = present(Waves)
+  if (Use_Stokes_PGF) then
+    Use_Stokes_PGF = associated(Waves)
+    if (Use_Stokes_PGF) Use_Stokes_PGF = Waves%Stokes_PGF
+    if (Use_Stokes_PGF) then
+      call Stokes_PGF(G, GV, h, u, v, CS%PFu_Stokes, CS%PFv_Stokes, Waves)
+
+      ! We are adding Stokes_PGF to hydrostatic PGF here.  The diag PFu/PFv
+      ! will therefore report the sum total PGF and we avoid other
+      ! modifications in the code.  The PFu_Stokes is output within the waves routines.
+      if (.not.Waves%Passive_Stokes_PGF) then
+        do k=1,nz
+          do j=js,je ; do I=Isq,Ieq
+            CS%PFu(I,j,k) = CS%PFu(I,j,k) + CS%PFu_Stokes(I,j,k)
+          enddo ; enddo
+        enddo
+        do k=1,nz
+          do J=Jsq,Jeq ; do i=is,ie
+             CS%PFv(i,J,k) = CS%PFv(i,J,k) + CS%PFv_Stokes(i,J,k)
+          enddo ; enddo
+        enddo
+      endif
+    endif
+  endif
   call cpu_clock_end(id_clock_pres)
   call disable_averaging(CS%diag)
   if (showCallTree) call callTree_wayPoint("done with PressureForce (step_MOM_dyn_split_RK2)")
@@ -485,7 +513,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
 ! CAu = -(f+zeta_av)/h_av vh + d/dx KE_av
   call cpu_clock_begin(id_clock_Cor)
   call CorAdCalc(u_av, v_av, h_av, uh, vh, CS%CAu, CS%CAv, CS%OBC, CS%ADp, &
-                 G, Gv, US, CS%CoriolisAdv_CSp)
+                 G, Gv, US, CS%CoriolisAdv_CSp, Waves=Waves)
   call cpu_clock_end(id_clock_Cor)
   if (showCallTree) call callTree_wayPoint("done with CorAdCalc (step_MOM_dyn_split_RK2)")
 
@@ -707,6 +735,27 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
     call cpu_clock_begin(id_clock_pres)
     call PressureForce(hp, tv, CS%PFu, CS%PFv, G, GV, US, CS%PressureForce_CSp, &
                        CS%ALE_CSp, p_surf, CS%pbce, CS%eta_PF)
+    ! Stokes shear force contribution to pressure gradient
+    Use_Stokes_PGF = present(Waves)
+    if (Use_Stokes_PGF) then
+      Use_Stokes_PGF = associated(Waves)
+      if (Use_Stokes_PGF) Use_Stokes_PGF = Waves%Stokes_PGF
+      if (Use_Stokes_PGF) then
+        call Stokes_PGF(G, GV, h, u, v, CS%PFu_Stokes, CS%PFv_Stokes, Waves)
+        if (.not.Waves%Passive_Stokes_PGF) then
+          do k=1,nz
+            do j=js,je ; do I=Isq,Ieq
+              CS%PFu(I,j,k) = CS%PFu(I,j,k) + CS%PFu_Stokes(I,j,k)
+            enddo ; enddo
+          enddo
+          do k=1,nz
+            do J=Jsq,Jeq ; do i=is,ie
+              CS%PFv(i,J,k) = CS%PFv(i,J,k) + CS%PFv_Stokes(i,J,k)
+            enddo ; enddo
+          enddo
+        endif
+      endif
+    endif
     call cpu_clock_end(id_clock_pres)
     if (showCallTree) call callTree_wayPoint("done with PressureForce[hp=(1-b).h+b.h] (step_MOM_dyn_split_RK2)")
   endif
@@ -741,7 +790,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
 ! CAu = -(f+zeta_av)/h_av vh + d/dx KE_av
   call cpu_clock_begin(id_clock_Cor)
   call CorAdCalc(u_av, v_av, h_av, uh, vh, CS%CAu, CS%CAv, CS%OBC, CS%ADp, &
-                 G, GV, US, CS%CoriolisAdv_CSp)
+                 G, GV, US, CS%CoriolisAdv_CSp, Waves=Waves)
   call cpu_clock_end(id_clock_Cor)
   if (showCallTree) call callTree_wayPoint("done with CorAdCalc (step_MOM_dyn_split_RK2)")
 
@@ -1369,6 +1418,8 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, US, param
 
   ALLOC_(CS%u_accel_bt(IsdB:IedB,jsd:jed,nz)) ; CS%u_accel_bt(:,:,:) = 0.0
   ALLOC_(CS%v_accel_bt(isd:ied,JsdB:JedB,nz)) ; CS%v_accel_bt(:,:,:) = 0.0
+  ALLOC_(CS%PFu_Stokes(IsdB:IedB,jsd:jed,nz)) ; CS%PFu_Stokes(:,:,:) = 0.0
+  ALLOC_(CS%PFv_Stokes(isd:ied,JsdB:JedB,nz)) ; CS%PFv_Stokes(:,:,:) = 0.0
 
   MIS%diffu      => CS%diffu
   MIS%diffv      => CS%diffv

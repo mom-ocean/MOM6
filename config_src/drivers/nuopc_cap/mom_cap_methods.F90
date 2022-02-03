@@ -32,7 +32,11 @@ public :: mom_export
 public :: state_diagnose
 public :: ChkErr
 
-private :: State_getImport
+interface State_getImport
+   module procedure State_getImport_2d
+   module procedure State_getImport_3d ! third dimension being an ungridded dimension
+end interface
+
 private :: State_setExport
 
 !> Get field pointer
@@ -68,21 +72,25 @@ end subroutine mom_set_geomtype
 !> This function has a few purposes:
 !! (1) it imports surface fluxes using data from the mediator; and
 !! (2) it can apply restoring in SST and SSS.
-subroutine mom_import(ocean_public, ocean_grid, importState, ice_ocean_boundary, rc)
+subroutine mom_import(ocean_public, ocean_grid, importState, ice_ocean_boundary, cesm_coupled, rc)
   type(ocean_public_type)       , intent(in)    :: ocean_public       !< Ocean surface state
   type(ocean_grid_type)         , intent(in)    :: ocean_grid         !< Ocean model grid
   type(ESMF_State)              , intent(inout) :: importState        !< incoming data from mediator
   type(ice_ocean_boundary_type) , intent(inout) :: ice_ocean_boundary !< Ocean boundary forcing
+  logical                       , intent(in)    :: cesm_coupled       !< Flag to check if coupled with cesm
   integer                       , intent(inout) :: rc                 !< Return code
 
   ! Local Variables
-  integer                         :: i, j, ig, jg, n
+  integer                         :: i, j, ib, ig, jg, n
   integer                         :: isc, iec, jsc, jec
+  integer                         :: nsc ! number of stokes drift components
   character(len=128)              :: fldname
   real(ESMF_KIND_R8), allocatable :: taux(:,:)
   real(ESMF_KIND_R8), allocatable :: tauy(:,:)
   real(ESMF_KIND_R8), allocatable :: stkx1(:,:),stkx2(:,:),stkx3(:,:)
   real(ESMF_KIND_R8), allocatable :: stky1(:,:),stky2(:,:),stky3(:,:)
+  real(ESMF_KIND_R8), allocatable :: stkx(:,:,:)
+  real(ESMF_KIND_R8), allocatable :: stky(:,:,:)
   character(len=*)  , parameter   :: subname = '(mom_import)'
 
   rc = ESMF_SUCCESS
@@ -285,49 +293,81 @@ subroutine mom_import(ocean_public, ocean_grid, importState, ice_ocean_boundary,
   ! Partitioned Stokes Drift Components
   !----
   if ( associated(ice_ocean_boundary%ustkb) ) then
-    allocate(stkx1(isc:iec,jsc:jec))
-    allocate(stky1(isc:iec,jsc:jec))
-    allocate(stkx2(isc:iec,jsc:jec))
-    allocate(stky2(isc:iec,jsc:jec))
-    allocate(stkx3(isc:iec,jsc:jec))
-    allocate(stky3(isc:iec,jsc:jec))
 
-    call state_getimport(importState,'eastward_partitioned_stokes_drift_1' , isc, iec, jsc, jec, stkx1,rc=rc)
-    if (ChkErr(rc,__LINE__,u_FILE_u)) return
-    call state_getimport(importState,'northward_partitioned_stokes_drift_1', isc, iec, jsc, jec, stky1,rc=rc)
-    if (ChkErr(rc,__LINE__,u_FILE_u)) return
-    call state_getimport(importState,'eastward_partitioned_stokes_drift_2' , isc, iec, jsc, jec, stkx2,rc=rc)
-    if (ChkErr(rc,__LINE__,u_FILE_u)) return
-    call state_getimport(importState,'northward_partitioned_stokes_drift_2', isc, iec, jsc, jec, stky2,rc=rc)
-    if (ChkErr(rc,__LINE__,u_FILE_u)) return
-    call state_getimport(importState,'eastward_partitioned_stokes_drift_3' , isc, iec, jsc, jec, stkx3,rc=rc)
-    if (ChkErr(rc,__LINE__,u_FILE_u)) return
-    call state_getimport(importState,'northward_partitioned_stokes_drift_3', isc, iec, jsc, jec, stky3,rc=rc)
-    if (ChkErr(rc,__LINE__,u_FILE_u)) return
+    if (cesm_coupled) then
+      nsc = Ice_ocean_boundary%num_stk_bands
+      allocate(stkx(isc:iec,jsc:jec,1:nsc))
+      allocate(stky(isc:iec,jsc:jec,1:nsc))
 
-    ! rotate from true zonal/meridional to local coordinates
-    do j = jsc, jec
-       jg = j + ocean_grid%jsc - jsc
-       do i = isc, iec
-          ig = i + ocean_grid%isc - isc
-          ice_ocean_boundary%ustkb(i,j,1) = ocean_grid%cos_rot(ig,jg)*stkx1(i,j) &
-               - ocean_grid%sin_rot(ig,jg)*stky1(i,j)
-          ice_ocean_boundary%vstkb(i,j,1) = ocean_grid%cos_rot(ig,jg)*stky1(i,j) &
-               + ocean_grid%sin_rot(ig,jg)*stkx1(i,j)
+      call state_getimport(importState,'Sw_pstokes_x', isc, iec, jsc, jec, 1, nsc, stkx, rc=rc)
+      if (ChkErr(rc,__LINE__,u_FILE_u)) return
+      call state_getimport(importState,'Sw_pstokes_y', isc, iec, jsc, jec, 1, nsc, stky, rc=rc)
+      if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
-          ice_ocean_boundary%ustkb(i,j,2) = ocean_grid%cos_rot(ig,jg)*stkx2(i,j) &
-               - ocean_grid%sin_rot(ig,jg)*stky2(i,j)
-          ice_ocean_boundary%vstkb(i,j,2) = ocean_grid%cos_rot(ig,jg)*stky2(i,j) &
-               + ocean_grid%sin_rot(ig,jg)*stkx2(i,j)
+      ! rotate from true zonal/meridional to local coordinates
+      do j = jsc, jec
+         jg = j + ocean_grid%jsc - jsc
+         do i = isc, iec
+            ig = i + ocean_grid%isc - isc
+            !rotate
+            do ib = 1, nsc
+               ice_ocean_boundary%ustkb(i,j,ib) = ocean_grid%cos_rot(ig,jg)*stkx(i,j,ib) &
+                    - ocean_grid%sin_rot(ig,jg)*stky(i,j,ib)
+               ice_ocean_boundary%vstkb(i,j,ib) = ocean_grid%cos_rot(ig,jg)*stky(i,j,ib) &
+                    + ocean_grid%sin_rot(ig,jg)*stkx(i,j,ib)
+            enddo
+            ! apply masks
+            ice_ocean_boundary%ustkb(i,j,:) = ice_ocean_boundary%ustkb(i,j,:) * ocean_grid%mask2dT(ig,jg)
+            ice_ocean_boundary%vstkb(i,j,:) = ice_ocean_boundary%vstkb(i,j,:) * ocean_grid%mask2dT(ig,jg)
+         enddo
+      enddo
+      deallocate(stkx,stky)
 
-          ice_ocean_boundary%ustkb(i,j,3) = ocean_grid%cos_rot(ig,jg)*stkx3(i,j) &
-               - ocean_grid%sin_rot(ig,jg)*stky3(i,j)
-          ice_ocean_boundary%vstkb(i,j,3) = ocean_grid%cos_rot(ig,jg)*stky3(i,j) &
-               + ocean_grid%sin_rot(ig,jg)*stkx3(i,j)
-       enddo
-    enddo
+    else ! below is the old approach of importing partitioned stokes drift components. after the planned ww3 nuopc
+         ! cap unification, this else block should be removed in favor of the more flexible import approach above.
+      allocate(stkx1(isc:iec,jsc:jec))
+      allocate(stky1(isc:iec,jsc:jec))
+      allocate(stkx2(isc:iec,jsc:jec))
+      allocate(stky2(isc:iec,jsc:jec))
+      allocate(stkx3(isc:iec,jsc:jec))
+      allocate(stky3(isc:iec,jsc:jec))
 
-    deallocate(stkx1,stkx2,stkx3,stky1,stky2,stky3)
+      call state_getimport(importState,'eastward_partitioned_stokes_drift_1' , isc, iec, jsc, jec, stkx1,rc=rc)
+      if (ChkErr(rc,__LINE__,u_FILE_u)) return
+      call state_getimport(importState,'northward_partitioned_stokes_drift_1', isc, iec, jsc, jec, stky1,rc=rc)
+      if (ChkErr(rc,__LINE__,u_FILE_u)) return
+      call state_getimport(importState,'eastward_partitioned_stokes_drift_2' , isc, iec, jsc, jec, stkx2,rc=rc)
+      if (ChkErr(rc,__LINE__,u_FILE_u)) return
+      call state_getimport(importState,'northward_partitioned_stokes_drift_2', isc, iec, jsc, jec, stky2,rc=rc)
+      if (ChkErr(rc,__LINE__,u_FILE_u)) return
+      call state_getimport(importState,'eastward_partitioned_stokes_drift_3' , isc, iec, jsc, jec, stkx3,rc=rc)
+      if (ChkErr(rc,__LINE__,u_FILE_u)) return
+      call state_getimport(importState,'northward_partitioned_stokes_drift_3', isc, iec, jsc, jec, stky3,rc=rc)
+      if (ChkErr(rc,__LINE__,u_FILE_u)) return
+
+      ! rotate from true zonal/meridional to local coordinates
+      do j = jsc, jec
+         jg = j + ocean_grid%jsc - jsc
+         do i = isc, iec
+            ig = i + ocean_grid%isc - isc
+            ice_ocean_boundary%ustkb(i,j,1) = ocean_grid%cos_rot(ig,jg)*stkx1(i,j) &
+                 - ocean_grid%sin_rot(ig,jg)*stky1(i,j)
+            ice_ocean_boundary%vstkb(i,j,1) = ocean_grid%cos_rot(ig,jg)*stky1(i,j) &
+                 + ocean_grid%sin_rot(ig,jg)*stkx1(i,j)
+
+            ice_ocean_boundary%ustkb(i,j,2) = ocean_grid%cos_rot(ig,jg)*stkx2(i,j) &
+                 - ocean_grid%sin_rot(ig,jg)*stky2(i,j)
+            ice_ocean_boundary%vstkb(i,j,2) = ocean_grid%cos_rot(ig,jg)*stky2(i,j) &
+                 + ocean_grid%sin_rot(ig,jg)*stkx2(i,j)
+
+            ice_ocean_boundary%ustkb(i,j,3) = ocean_grid%cos_rot(ig,jg)*stkx3(i,j) &
+                 - ocean_grid%sin_rot(ig,jg)*stky3(i,j)
+            ice_ocean_boundary%vstkb(i,j,3) = ocean_grid%cos_rot(ig,jg)*stky3(i,j) &
+                 + ocean_grid%sin_rot(ig,jg)*stkx3(i,j)
+         enddo
+      enddo
+      deallocate(stkx1,stkx2,stkx3,stky1,stky2,stky3)
+    endif
   endif
 
 end subroutine mom_import
@@ -648,8 +688,8 @@ subroutine State_GetFldPtr_2d(State, fldname, fldptr, rc)
 
 end subroutine State_GetFldPtr_2d
 
-!> Map import state field to output array
-subroutine State_GetImport(state, fldname, isc, iec, jsc, jec, output, do_sum, areacor, rc)
+!> Map 2d import state field to output array
+subroutine State_GetImport_2d(state, fldname, isc, iec, jsc, jec, output, do_sum, areacor, rc)
   type(ESMF_State)    , intent(in)    :: state   !< ESMF state
   character(len=*)    , intent(in)    :: fldname !< Field name
   integer             , intent(in)    :: isc     !< The start i-index of cell centers within
@@ -672,7 +712,7 @@ subroutine State_GetImport(state, fldname, isc, iec, jsc, jec, output, do_sum, a
   integer                       :: lbnd1,lbnd2
   real(ESMF_KIND_R8), pointer   :: dataPtr1d(:)
   real(ESMF_KIND_R8), pointer   :: dataPtr2d(:,:)
-  character(len=*)  , parameter :: subname='(MOM_cap_methods:state_getimport)'
+  character(len=*)  , parameter :: subname='(MOM_cap_methods:state_getimport_2d)'
   ! ----------------------------------------------
 
   rc = ESMF_SUCCESS
@@ -731,7 +771,80 @@ subroutine State_GetImport(state, fldname, isc, iec, jsc, jec, output, do_sum, a
 
   endif
 
-end subroutine State_GetImport
+end subroutine State_GetImport_2d
+
+!> Map 3d import state field to output array (where 3rd dim is an ungridded dimension)
+subroutine State_GetImport_3d(state, fldname, isc, iec, jsc, jec, lbd, ubd, output, do_sum, areacor, rc)
+  type(ESMF_State)    , intent(in)    :: state   !< ESMF state
+  character(len=*)    , intent(in)    :: fldname !< Field name
+  integer             , intent(in)    :: isc     !< The start i-index of cell centers within
+                                                 !! the computational domain
+  integer             , intent(in)    :: iec     !< The end i-index of cell centers within the
+                                                 !! computational domain
+  integer             , intent(in)    :: jsc     !< The start j-index of cell centers within
+                                                 !! the computational domain
+  integer             , intent(in)    :: jec     !< The end j-index of cell centers within
+                                                 !! the computational domain
+  integer             , intent(in)    :: lbd     !< lower bound of ungridded dimension
+  integer             , intent(in)    :: ubd     !< upper bound of ungridded dimension
+  real (ESMF_KIND_R8) , intent(inout) :: output(isc:iec,jsc:jec,lbd:ubd)!< Output 3D array
+  logical, optional   , intent(in)    :: do_sum  !< If true, sums the data
+  real (ESMF_KIND_R8), optional,  intent(in) :: areacor(:) !< flux area correction factors
+                                                           !! applicable to meshes
+  integer             , intent(out)   :: rc      !< Return code
+
+  ! local variables
+  type(ESMF_StateItem_Flag)     :: itemFlag
+  integer                       :: n, i, j, i1, j1, u
+  integer                       :: lbnd1,lbnd2
+  real(ESMF_KIND_R8), pointer   :: dataPtr2d(:,:)
+  character(len=*)  , parameter :: subname='(MOM_cap_methods:state_getimport_3d)'
+  ! ----------------------------------------------
+
+  rc = ESMF_SUCCESS
+
+  call ESMF_StateGet(State, trim(fldname), itemFlag, rc=rc)
+  if (itemFlag /= ESMF_STATEITEM_NOTFOUND) then
+
+     if (geomtype == ESMF_GEOMTYPE_MESH) then
+
+        ! get field pointer
+        call state_getfldptr(state, trim(fldname), dataptr2d, rc)
+        if (ChkErr(rc,__LINE__,u_FILE_u)) return
+
+        ! determine output array and apply area correction if present
+        do u = lbd, ubd ! ungridded dims
+           n = 0
+           do j = jsc,jec
+              do i = isc,iec
+                 n = n + 1
+                 if (present(do_sum)) then
+                    if (present(areacor)) then
+                       output(i,j,u)  = output(i,j,u) + dataPtr2d(u,n) * areacor(n)
+                    else
+                       output(i,j,u)  = output(i,j,u) + dataPtr2d(u,n)
+                    end if
+                 else
+                    if (present(areacor)) then
+                       output(i,j,u)  = dataPtr2d(u,n) * areacor(n)
+                    else
+                       output(i,j,u)  = dataPtr2d(u,n)
+                    end if
+                 endif
+              enddo
+           enddo
+         enddo
+
+     else if (geomtype == ESMF_GEOMTYPE_GRID) then
+        call ESMF_LogWrite(trim(subname)//": ERROR ungridded dimensions not supported in MOM6 nuopc cap when "// &
+         "ESMF_GEOMTYPE_GRID is used. Use ESMF_GEOMTYPE_MESH instead.", ESMF_LOGMSG_ERROR)
+        rc = ESMF_FAILURE
+        return
+     endif
+
+  endif
+
+end subroutine State_GetImport_3d
 
 !> Map input array to export state
 subroutine State_SetExport(state, fldname, isc, iec, jsc, jec, input, ocean_grid, areacor, rc)

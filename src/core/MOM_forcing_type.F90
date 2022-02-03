@@ -256,9 +256,6 @@ type, public :: mech_forcing
   logical :: accumulate_rigidity = .false. !< If true, the rigidity due to various types of
                                 !! ice needs to be accumulated, and the rigidity explicitly
                                 !! reset to zero at the driver level when appropriate.
-  real, pointer, dimension(:,:) :: &
-       ustk0 => NULL(), &       !< Surface Stokes drift, zonal [m/s]
-       vstk0 => NULL()          !< Surface Stokes drift, meridional [m/s]
   real, pointer, dimension(:) :: &
        stk_wavenumbers => NULL() !< The central wave number of Stokes bands [rad/m]
   real, pointer, dimension(:,:,:) :: &
@@ -2953,7 +2950,7 @@ end subroutine forcing_diagnostics
 
 !> Conditionally allocate fields within the forcing type
 subroutine allocate_forcing_by_group(G, fluxes, water, heat, ustar, press, &
-                                     shelf, iceberg, salt, fix_accum_bug, cfc, waves)
+                                     shelf, iceberg, salt, fix_accum_bug, cfc, waves, lamult)
   type(ocean_grid_type), intent(in) :: G       !< Ocean grid structure
   type(forcing),      intent(inout) :: fluxes  !< A structure containing thermodynamic forcing fields
   logical, optional,     intent(in) :: water   !< If present and true, allocate water fluxes
@@ -2967,6 +2964,7 @@ subroutine allocate_forcing_by_group(G, fluxes, water, heat, ustar, press, &
                                                !! accumulation of ustar_gustless
   logical, optional,     intent(in) :: cfc     !< If present and true, allocate cfc fluxes
   logical, optional,     intent(in) :: waves   !< If present and true, allocate wave fields
+  logical, optional,     intent(in) :: lamult  !< If present and true, allocate langmuir enhancement factor
 
   ! Local variables
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
@@ -3030,7 +3028,7 @@ subroutine allocate_forcing_by_group(G, fluxes, water, heat, ustar, press, &
 
   !These fields should only on allocated when wave coupling is activated.
   call myAlloc(fluxes%ice_fraction,isd,ied,jsd,jed, waves)
-  call myAlloc(fluxes%lamult,isd,ied,jsd,jed, waves)
+  call myAlloc(fluxes%lamult,isd,ied,jsd,jed, lamult)
 
   if (present(fix_accum_bug)) fluxes%gustless_accum_bug = .not.fix_accum_bug
 end subroutine allocate_forcing_by_group
@@ -3125,8 +3123,6 @@ subroutine allocate_mech_forcing_by_group(G, forces, stress, ustar, shelf, &
   call myAlloc(forces%mass_berg,isd,ied,jsd,jed, iceberg)
 
   !These fields should only be allocated when waves
-  call myAlloc(forces%ustk0,isd,ied,jsd,jed, waves)
-  call myAlloc(forces%vstk0,isd,ied,jsd,jed, waves)
   if (present(waves)) then; if (waves) then;
     if (.not. present(num_stk_bands)) then
       call MOM_error(FATAL,"Requested to &
@@ -3134,19 +3130,12 @@ subroutine allocate_mech_forcing_by_group(G, forces, stress, ustar, shelf, &
     endif
     if (num_stk_bands > 0) then
       if (.not.associated(forces%ustkb)) then
-        allocate(forces%stk_wavenumbers(num_stk_bands))
-        forces%stk_wavenumbers(:) = 0.0
-        allocate(forces%ustkb(isd:ied,jsd:jed,num_stk_bands))
-        forces%ustkb(isd:ied,jsd:jed,:) = 0.0
+        allocate(forces%stk_wavenumbers(num_stk_bands), source=0.0)
+        allocate(forces%ustkb(isd:ied,jsd:jed,num_stk_bands), source=0.0)
+        allocate(forces%vstkb(isd:ied,jsd:jed,num_stk_bands), source=0.0)
       endif
     endif
   endif ; endif
-
-
-  if (present(waves)) then; if (waves) then; if (.not.associated(forces%vstkb)) then
-    allocate(forces%vstkb(isd:ied,jsd:jed,num_stk_bands))
-    forces%vstkb(isd:ied,jsd:jed,:) = 0.0
-  endif ; endif ; endif
 
 end subroutine allocate_mech_forcing_by_group
 

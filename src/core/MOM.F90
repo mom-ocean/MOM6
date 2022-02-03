@@ -133,7 +133,7 @@ use MOM_variables,             only : rotate_surface_state
 use MOM_verticalGrid,          only : verticalGrid_type, verticalGridInit, verticalGridEnd
 use MOM_verticalGrid,          only : fix_restart_scaling
 use MOM_verticalGrid,          only : get_thickness_units, get_flux_units, get_tr_flux_units
-use MOM_wave_interface,        only : wave_parameters_CS, waves_end
+use MOM_wave_interface,        only : wave_parameters_CS, waves_end, waves_register_restarts
 use MOM_wave_interface,        only : Update_Stokes_Drift
 
 ! ODA modules
@@ -657,16 +657,16 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
     else
       CS%p_surf_end  => forces%p_surf
     endif
-
     if (CS%UseWaves) then
       ! Update wave information, which is presently kept static over each call to step_mom
       call enable_averages(time_interval, Time_start + real_to_time(US%T_to_s*time_interval), CS%diag)
-      call Update_Stokes_Drift(G, GV, US, Waves, h, forces%ustar)
+      call Update_Stokes_Drift(G, GV, US, Waves, h, forces%ustar, time_interval, do_dyn)
       call disable_averaging(CS%diag)
     endif
   else ! not do_dyn.
-    if (CS%UseWaves) & ! Diagnostics are not enabled in this call.
-      call Update_Stokes_Drift(G, GV, US, Waves, h, fluxes%ustar)
+    if (CS%UseWaves) then ! Diagnostics are not enabled in this call.
+      call Update_Stokes_Drift(G, GV, US, Waves, h, fluxes%ustar, time_interval, do_dyn)
+    endif
   endif
 
   if (CS%debug) then
@@ -1096,6 +1096,30 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_thermo, &
     if (showCallTree) call callTree_waypoint("finished step_MOM_dyn_unsplit (step_MOM)")
 
   endif ! -------------------------------------------------- end SPLIT
+
+  ! Update the model's current to reflect wind-wave growth
+  if (Waves%Stokes_DDT .and. (.not.Waves%Passive_Stokes_DDT)) then
+    do J=jsq,jeq ; do i=is,ie
+      v(i,J,:) = v(i,J,:) + Waves%ddt_us_y(i,J,:)*dt
+    enddo; enddo
+    do j=js,je ; do I=isq,ieq
+      u(I,j,:) = u(I,j,:) + Waves%ddt_us_x(I,j,:)*dt
+    enddo; enddo
+    call pass_vector(u,v,G%Domain)
+  endif
+  ! Added an additional output to track Stokes drift time tendency.
+  ! It is mostly for debugging, and perhaps doesn't need to hang
+  ! around permanently.
+  if (Waves%Stokes_DDT .and. (Waves%id_3dstokes_y_from_ddt>0)) then
+    do J=jsq,jeq ; do i=is,ie
+      Waves%us_y_from_ddt(i,J,:) = Waves%us_y_from_ddt(i,J,:) + Waves%ddt_us_y(i,J,:)*dt
+    enddo; enddo
+  endif
+  if (Waves%Stokes_DDT .and. (Waves%id_3dstokes_x_from_ddt>0)) then
+    do j=js,je ; do I=isq,ieq
+      Waves%us_x_from_ddt(I,j,:) = Waves%us_x_from_ddt(I,j,:) + Waves%ddt_us_x(I,j,:)*dt
+    enddo; enddo
+  endif
 
   if (CS%thickness_diffuse .and. .not.CS%thickness_diffuse_first) then
     call cpu_clock_begin(id_clock_thick_diff)
@@ -1655,7 +1679,7 @@ end subroutine step_offline
 !! initializing the ocean state variables, and initializing subsidiary modules
 subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
                           Time_in, offline_tracer_mode, input_restart_file, diag_ptr, &
-                          count_calls, tracer_flow_CSp,  ice_shelf_CSp)
+                          count_calls, tracer_flow_CSp,  ice_shelf_CSp, waves_CSp)
   type(time_type), target,   intent(inout) :: Time        !< model time, set in this routine
   type(time_type),           intent(in)    :: Time_init   !< The start time for the coupled model's calendar
   type(param_file_type),     intent(out)   :: param_file  !< structure indicating parameter file to parse
@@ -1677,6 +1701,8 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
                                                           !! calls to step_MOM instead of the number of
                                                           !! dynamics timesteps.
   type(ice_shelf_CS), optional,     pointer :: ice_shelf_CSp !< A pointer to an ice shelf control structure
+  type(Wave_parameters_CS), &
+                   optional, pointer       :: Waves_CSp       !< An optional pointer to a wave property CS
   ! local variables
   type(ocean_grid_type),  pointer :: G => NULL()    ! A pointer to the metric grid use for the run
   type(ocean_grid_type),  pointer :: G_in => NULL() ! Pointer to the input grid
@@ -2371,6 +2397,10 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
     ! reservoirs are used.
     call open_boundary_register_restarts(dg%HI, GV, CS%OBC, CS%tracer_Reg, &
                           param_file, restart_CSp, use_temperature)
+  endif
+
+  if (present(waves_CSp)) then
+    call waves_register_restarts(waves_CSp, dG%HI, GV, param_file, restart_CSp)
   endif
 
   call callTree_waypoint("restart registration complete (initialize_MOM)")
