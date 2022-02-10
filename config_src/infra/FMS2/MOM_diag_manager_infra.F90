@@ -236,9 +236,15 @@ integer function register_static_field_infra(module_name, field_name, axes, long
   integer,            optional, intent(in) :: area      !< Diagnostic ID of the field containing the area attribute
   integer,            optional, intent(in) :: volume    !< Diagnostic ID of the field containing the volume attribute
 
-  register_static_field_infra = register_static_field_fms(module_name, field_name, axes, long_name, units,&
-       & missing_value, range, mask_variant, standard_name, dynamic=.false.,do_not_log=do_not_log, &
+  if(present(missing_value) .or. present(range)) then
+    register_static_field_infra = register_static_field_fms(module_name, field_name, axes, long_name, units,&
+       & missing_value, range, mask_variant=mask_variant, standard_name=standard_name, dynamic=.false.,&
+       do_not_log=do_not_log, interp_method=interp_method,tile_count=tile_count, area=area, volume=volume)
+  else
+    register_static_field_infra = register_static_field_fms(module_name, field_name, axes, long_name, units,&
+       &  mask_variant=mask_variant, standard_name=standard_name, dynamic=.false.,do_not_log=do_not_log, &
        interp_method=interp_method,tile_count=tile_count, area=area, volume=volume)
+  endif
 end function register_static_field_infra
 
 !> Returns true if the argument data are successfully passed to a diagnostic manager
@@ -267,7 +273,20 @@ logical function send_data_infra_1d(diag_field_id, field, is_in, ie_in, time, ma
   character(len=*),      optional, intent(out) :: err_msg !< A log indicating the status of the post upon
                                                        !! returning to the calling routine
 
-  send_data_infra_1d = send_data_fms(diag_field_id, field, time, is_in, mask, rmask, ie_in, weight, err_msg)
+  if(present(rmask) .or. present(weight)) then
+   if(present(rmask) .and. present(weight)) then
+  send_data_infra_1d = send_data_fms(diag_field_id, field, time=time, is_in=is_in, mask=mask, rmask=rmask, ie_in=ie_in,&
+                                     weight=weight, err_msg=err_msg)
+   elseif(present(rmask)) then
+  send_data_infra_1d = send_data_fms(diag_field_id, field, time=time, is_in=is_in, mask=mask, rmask=rmask, ie_in=ie_in,&
+                                     err_msg=err_msg)
+   elseif(present(weight)) then
+  send_data_infra_1d = send_data_fms(diag_field_id, field, time=time, is_in=is_in, ie_in=ie_in, weight=weight,&
+                                     err_msg=err_msg)
+   endif
+  else
+  send_data_infra_1d = send_data_fms(diag_field_id, field, time=time, is_in=is_in, ie_in=ie_in, err_msg=err_msg)
+  endif
 
 end function send_data_infra_1d
 
@@ -289,9 +308,21 @@ logical function send_data_infra_2d(diag_field_id, field, is_in, ie_in, js_in, j
   character(len=*),        optional, intent(out) :: err_msg !< A log indicating the status of the post upon
                                                          !! returning to the calling routine
 
-  send_data_infra_2d = send_data_fms(diag_field_id, field, time, is_in, js_in, mask, &
-                                rmask, ie_in, je_in, weight, err_msg)
-
+  if(present(rmask) .or. present(weight)) then
+   if(present(rmask) .and. present(weight)) then
+    send_data_infra_2d = send_data_fms(diag_field_id, field, time=time, is_in=is_in, js_in=js_in, mask=mask, &
+                                rmask=rmask, ie_in=ie_in, je_in=je_in, weight=weight, err_msg=err_msg)
+   elseif(present(rmask)) then
+    send_data_infra_2d = send_data_fms(diag_field_id, field, time=time, is_in=is_in, js_in=js_in, mask=mask, &
+                                rmask=rmask, ie_in=ie_in, je_in=je_in, err_msg=err_msg)
+   elseif(present(weight)) then
+    send_data_infra_2d = send_data_fms(diag_field_id, field, time=time, is_in=is_in, js_in=js_in, mask=mask, &
+                                ie_in=ie_in, je_in=je_in, weight=weight, err_msg=err_msg)
+   endif
+  else
+    send_data_infra_2d = send_data_fms(diag_field_id, field, time=time, is_in=is_in, js_in=js_in, mask=mask, &
+                                ie_in=ie_in, je_in=je_in, err_msg=err_msg)
+  endif
 end function send_data_infra_2d
 
 !> Returns true if the argument data are successfully passed to a diagnostic manager
