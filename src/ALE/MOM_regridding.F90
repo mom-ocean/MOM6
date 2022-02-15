@@ -488,7 +488,6 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
       call setCoordinateResolution(dz, CS, scale=1.0)
     elseif (coordinateMode(coord_mode) == REGRIDDING_RHO) then
       call setCoordinateResolution(dz, CS, scale=US%kg_m3_to_R)
-      CS%coord_scale = US%R_to_kg_m3
     elseif (coordinateMode(coord_mode) == REGRIDDING_ADAPTIVE) then
       call setCoordinateResolution(dz, CS, scale=GV%m_to_H)
       CS%coord_scale = GV%H_to_m
@@ -497,6 +496,14 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
       CS%coord_scale = US%Z_to_m
     endif
   endif
+
+  ! set coord_scale for RHO regridding independent of allocation status of dz
+  if (coordinateMode(coord_mode) == REGRIDDING_RHO) then
+    CS%coord_scale = US%R_to_kg_m3
+  endif
+
+  ! ensure CS%ref_pressure is rescaled properly
+  CS%ref_pressure = (US%kg_m3_to_R * US%m_s_to_L_T**2) * CS%ref_pressure
 
   if (allocated(rho_target)) then
     call set_target_densities(CS, US%kg_m3_to_R*rho_target)
