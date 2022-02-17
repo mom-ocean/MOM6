@@ -17,6 +17,7 @@ use MOM_error_handler, only : stdout, stdlog, MOM_error
 use MOM_io, only : SINGLE_FILE
 use MOM_interp_infra, only : init_extern_field, get_external_field_info
 use MOM_interp_infra, only : time_interp_extern
+use MOM_remapping,    only : remappingSchemesDoc
 use MOM_time_manager, only : time_type, real_to_time, get_date
 use MOM_time_manager, only : operator(+), operator(>=), operator(/=)
 use MOM_time_manager, only : operator(==), operator(<)
@@ -65,11 +66,8 @@ public :: set_analysis_time, oda, apply_oda_tracer_increments
 
 !>@{ CPU time clock ID
 integer :: id_clock_oda_init
-integer :: id_clock_oda_filter
 integer :: id_clock_bias_adjustment
 integer :: id_clock_apply_increments
-integer :: id_clock_oda_prior
-integer :: id_clock_oda_posterior
 !>@}
 
 #include <MOM_memory.h>
@@ -81,9 +79,9 @@ end type ptr_mpp_domain
 
 !> A structure containing integer handles for bias adjustment of tracers
 type :: INC_CS
-   integer :: fldno = 0 !< The number of tracers
-   integer :: T_id !< The integer handle for the temperature file
-   integer :: S_id !< The integer handle for the salinity file
+  integer :: fldno = 0 !< The number of tracers
+  integer :: T_id !< The integer handle for the temperature file
+  integer :: S_id !< The integer handle for the salinity file
 end type INC_CS
 
 !> Control structure that contains a transpose of the ocean state across ensemble members.
@@ -142,6 +140,7 @@ end type ODA_CS
 !>@{  DA parameters
 integer, parameter :: NO_ASSIM = 0, OI_ASSIM=1, EAKF_ASSIM=2
 !>@}
+character(len=40)  :: mdl = "MOM_oda_driver" !< This module's name.
 
 contains
 
@@ -178,15 +177,13 @@ subroutine init_oda(Time, G, GV, diag_CS, CS)
   character(len=30) :: coord_mode
   character(len=200) :: inputdir, basin_file
   logical :: reentrant_x, reentrant_y, tripolar_N, symmetric
+  character(len=80) :: remap_scheme
   character(len=80) :: bias_correction_file, inc_file
 
   if (associated(CS)) call MOM_error(FATAL, 'Calling oda_init with associated control structure')
   allocate(CS)
 
   id_clock_oda_init=cpu_clock_id('(ODA initialization)')
-  id_clock_oda_prior=cpu_clock_id('(ODA setting prior)')
-  id_clock_oda_filter=cpu_clock_id('(ODA filter computation)')
-  id_clock_oda_posterior=cpu_clock_id('(ODA getting posterior)')
   call cpu_clock_begin(id_clock_oda_init)
 
 ! Use ens1 parameters , this could be changed at a later time
@@ -195,44 +192,49 @@ subroutine init_oda(Time, G, GV, diag_CS, CS)
   call get_MOM_input(PF,dirs,ensemble_num=0)
   call unit_scaling_init(PF, CS%US)
 
-  call get_param(PF, "MOM", "ASSIM_METHOD", assim_method,  &
+  call get_param(PF, mdl, "ASSIM_METHOD", assim_method,  &
        "String which determines the data assimilation method "//&
        "Valid methods are: \'EAKF\',\'OI\', and \'NO_ASSIM\'", default='NO_ASSIM')
-  call get_param(PF, "MOM", "ASSIM_FREQUENCY", CS%assim_frequency,  &
+  call get_param(PF, mdl, "ASSIM_FREQUENCY", CS%assim_frequency,  &
        "data assimilation frequency in hours")
-  call get_param(PF, "MOM", "USE_REGRIDDING", CS%use_ALE_algorithm , &
+  call get_param(PF, mdl, "USE_REGRIDDING", CS%use_ALE_algorithm , &
                 "If True, use the ALE algorithm (regridding/remapping).\n"//&
                 "If False, use the layered isopycnal algorithm.", default=.false. )
-  call get_param(PF, "MOM", "REENTRANT_X", CS%reentrant_x, &
+  call get_param(PF, mdl, "REENTRANT_X", CS%reentrant_x, &
        "If true, the domain is zonally reentrant.", default=.true.)
-  call get_param(PF, "MOM", "REENTRANT_Y", CS%reentrant_y, &
+  call get_param(PF, mdl, "REENTRANT_Y", CS%reentrant_y, &
        "If true, the domain is meridionally reentrant.", &
        default=.false.)
-  call get_param(PF,"MOM", "TRIPOLAR_N", CS%tripolar_N, &
+  call get_param(PF, mdl, "TRIPOLAR_N", CS%tripolar_N, &
        "Use tripolar connectivity at the northern edge of the "//&
        "domain.  With TRIPOLAR_N, NIGLOBAL must be even.", &
        default=.false.)
-  call get_param(PF,"MOM", "APPLY_TRACER_TENDENCY_ADJUSTMENT", CS%do_bias_adjustment, &
+  call get_param(PF, mdl, "APPLY_TRACER_TENDENCY_ADJUSTMENT", CS%do_bias_adjustment, &
        "If true, add a spatio-temporally varying climatological adjustment "//&
        "to temperature and salinity.", &
        default=.false.)
   if (CS%do_bias_adjustment) then
-    call get_param(PF,"MOM", "TRACER_ADJUSTMENT_FACTOR", CS%bias_adjustment_multiplier, &
+    call get_param(PF, mdl, "TRACER_ADJUSTMENT_FACTOR", CS%bias_adjustment_multiplier, &
        "A multiplicative scaling factor for the climatological tracer tendency adjustment ", &
        default=1.0)
   endif
-  call get_param(PF,"MOM", "USE_BASIN_MASK", CS%use_basin_mask, &
+  call get_param(PF, mdl, "USE_BASIN_MASK", CS%use_basin_mask, &
        "If true, add a basin mask to delineate weakly connected "//&
        "ocean basins for the purpose of data assimilation.", &
        default=.false.)
 
-  call get_param(PF,"MOM", "NIGLOBAL", CS%ni, &
+  call get_param(PF, mdl, "NIGLOBAL", CS%ni, &
        "The total number of thickness grid points in the "//&
        "x-direction in the physical domain.")
-  call get_param(PF,"MOM", "NJGLOBAL", CS%nj, &
+  call get_param(PF, mdl, "NJGLOBAL", CS%nj, &
        "The total number of thickness grid points in the "//&
        "y-direction in the physical domain.")
-  call get_param(PF, 'MOM', "INPUTDIR", inputdir)
+  call get_param(PF, mdl, "INPUTDIR", inputdir)
+  call get_param(PF, mdl, "ODA_REMAPPING_SCHEME", remap_scheme, &
+                 "This sets the reconstruction scheme used "//&
+                 "for vertical remapping for all variables. "//&
+                 "It can be one of the following schemes: "//&
+                 trim(remappingSchemesDoc), default="PPM_H4")
   inputdir = slasher(inputdir)
 
   select case(lowercase(trim(assim_method)))
@@ -276,12 +278,12 @@ subroutine init_oda(Time, G, GV, diag_CS, CS)
   allocate(dG)
   call create_dyn_horgrid(dG, HI)
   call clone_MOM_domain(CS%Grid%Domain, dG%Domain,symmetric=.false.)
-  call set_grid_metrics(dG,PF)
-  call MOM_initialize_topography(dg%bathyT,dG%max_depth,dG,PF)
+  call set_grid_metrics(dG, PF, CS%US)
+  call MOM_initialize_topography(dG%bathyT, dG%max_depth, dG, PF, CS%US)
   call MOM_initialize_coord(CS%GV, CS%US, PF, .false., &
            dirs%output_directory, tv_dummy, dG%max_depth)
   call ALE_init(PF, CS%GV, CS%US, dG%max_depth, CS%ALE_CS)
-  call MOM_grid_init(CS%Grid, PF)
+  call MOM_grid_init(CS%Grid, PF, global_indexing=.false.)
   call ALE_updateVerticalGridType(CS%ALE_CS, CS%GV)
   call copy_dyngrid_to_MOM_grid(dG, CS%Grid, CS%US)
   CS%mpp_domain => CS%Grid%Domain%mpp_domain
@@ -300,7 +302,7 @@ subroutine init_oda(Time, G, GV, diag_CS, CS)
        "Coordinate mode for vertical regridding.", &
        default="ZSTAR", fail_if_missing=.false.)
   call initialize_regridding(CS%regridCS, CS%GV, CS%US, dG%max_depth,PF,'oda_driver',coord_mode,'','')
-  call initialize_remapping(CS%remapCS,'PLM')
+  call initialize_remapping(CS%remapCS,remap_scheme)
   call set_regrid_params(CS%regridCS, min_thickness=0.)
   isd = G%isd; ied = G%ied; jsd = G%jsd; jed = G%jed
 
@@ -311,9 +313,9 @@ subroutine init_oda(Time, G, GV, diag_CS, CS)
   !jsd=jsd+jdg_offset; jed=jed+jdg_offset ! TODO:  switch to local indexing? (mjh)
 
   if (.not. associated(CS%h)) then
-    allocate(CS%h(isd:ied,jsd:jed,CS%GV%ke), source=CS%GV%Angstrom_m*CS%GV%H_to_m)
+    allocate(CS%h(isd:ied,jsd:jed,CS%GV%ke), source=CS%GV%Angstrom_H)
     ! assign thicknesses
-    call ALE_initThicknessToCoord(CS%ALE_CS,G,CS%GV,CS%h)
+    call ALE_initThicknessToCoord(CS%ALE_CS, G, CS%GV, CS%h)
   endif
   allocate(CS%tv)
   allocate(CS%tv%T(isd:ied,jsd:jed,CS%GV%ke), source=0.0)
@@ -351,21 +353,21 @@ subroutine init_oda(Time, G, GV, diag_CS, CS)
   call set_PElist(CS%ensemble_pelist(CS%ensemble_id,:))
 
   if (CS%do_bias_adjustment) then
-     call get_param(PF, "MOM", "TEMP_SALT_ADJUSTMENT_FILE", bias_correction_file,  &
-       "The name of the file containing temperature and salinity "//&
-       "tendency adjustments", default='temp_salt_adjustment.nc')
+    call get_param(PF, mdl, "TEMP_SALT_ADJUSTMENT_FILE", bias_correction_file,  &
+                "The name of the file containing temperature and salinity "//&
+                "tendency adjustments", default='temp_salt_adjustment.nc')
 
-     inc_file = trim(inputdir) // trim(bias_correction_file)
-     CS%INC_CS%T_id = init_extern_field(inc_file, "temp_increment", &
+    inc_file = trim(inputdir) // trim(bias_correction_file)
+    CS%INC_CS%T_id = init_extern_field(inc_file, "temp_increment", &
           correct_leap_year_inconsistency=.true.,verbose=.true.,domain=G%Domain%mpp_domain)
-     CS%INC_CS%S_id = init_extern_field(inc_file, "salt_increment", &
+    CS%INC_CS%S_id = init_extern_field(inc_file, "salt_increment", &
           correct_leap_year_inconsistency=.true.,verbose=.true.,domain=G%Domain%mpp_domain)
-     call get_external_field_info(CS%INC_CS%T_id,size=fld_sz)
-     CS%INC_CS%fldno = 2
-     if (CS%nk .ne. fld_sz(3)) call MOM_error(FATAL,'Increment levels /= ODA levels')
-     allocate(CS%tv_bc)     ! storage for increment
-     allocate(CS%tv_bc%T(G%isd:G%ied,G%jsd:G%jed,CS%GV%ke), source=0.0)
-     allocate(CS%tv_bc%S(G%isd:G%ied,G%jsd:G%jed,CS%GV%ke), source=0.0)
+    call get_external_field_info(CS%INC_CS%T_id,size=fld_sz)
+    CS%INC_CS%fldno = 2
+    if (CS%nk /= fld_sz(3)) call MOM_error(FATAL,'Increment levels /= ODA levels')
+    allocate(CS%tv_bc)     ! storage for increment
+    allocate(CS%tv_bc%T(G%isd:G%ied,G%jsd:G%jed,CS%GV%ke), source=0.0)
+    allocate(CS%tv_bc%S(G%isd:G%ied,G%jsd:G%jed,CS%GV%ke), source=0.0)
   endif
 
   call cpu_clock_end(id_clock_oda_init)
@@ -405,7 +407,6 @@ subroutine set_prior_tracer(Time, G, GV, h, tv, CS)
   !! switch to global pelist
   call set_PElist(CS%filter_pelist)
   !call MOM_mesg('Setting prior')
-  call cpu_clock_begin(id_clock_oda_prior)
 
   ! computational domain for the analysis grid
   isc=CS%Grid%isc;iec=CS%Grid%iec;jsc=CS%Grid%jsc;jec=CS%Grid%jec
@@ -432,7 +433,6 @@ subroutine set_prior_tracer(Time, G, GV, h, tv, CS)
     call pass_var(CS%Ocean_prior%S(:,:,:,m),CS%Grid%domain)
   enddo
 
-  call cpu_clock_end(id_clock_oda_prior)
   !! switch back to ensemble member pelist
   call set_PElist(CS%ensemble_pelist(CS%ensemble_id,:))
 
@@ -455,13 +455,12 @@ subroutine get_posterior_tracer(Time, CS, h, tv, increment)
   integer :: seconds_per_hour = 3600.
 
   ! return if not analysis time (retain pointers for h and tv)
-  if (Time < CS%Time .or. CS%assim_method .eq. NO_ASSIM) return
+  if (Time < CS%Time .or. CS%assim_method == NO_ASSIM) return
 
 
   !! switch to global pelist
   call set_PElist(CS%filter_pelist)
   call MOM_mesg('Getting posterior')
-  call cpu_clock_begin(id_clock_oda_posterior)
   if (present(h)) h => CS%h ! get analysis thickness
   !! Calculate and redistribute increments to CS%tv right after assimilation
   !! Retain CS%tv to calculate increments for IAU updates CS%tv_inc otherwise
@@ -490,7 +489,6 @@ subroutine get_posterior_tracer(Time, CS, h, tv, increment)
   if (present(tv)) tv => CS%tv
   if (present(h)) h => CS%h
 
-  call cpu_clock_end(id_clock_oda_posterior)
 
   !! switch back to ensemble member pelist
   call set_PElist(CS%ensemble_pelist(CS%ensemble_id,:))
@@ -518,12 +516,10 @@ subroutine oda(Time, CS)
 
     !! switch to global pelist
     call set_PElist(CS%filter_pelist)
-    call cpu_clock_begin(id_clock_oda_filter)
     call get_profiles(Time, CS%Profiles, CS%CProfiles)
 #ifdef ENABLE_ECDA
     call ensemble_filter(CS%Ocean_prior, CS%Ocean_posterior, CS%CProfiles, CS%kdroot, CS%mpp_domain, CS%oda_grid)
 #endif
-    call cpu_clock_end(id_clock_oda_filter)
     !! switch back to ensemble member pelist
     call set_PElist(CS%ensemble_pelist(CS%ensemble_id,:))
     call get_posterior_tracer(Time, CS, increment=.true.)
@@ -535,43 +531,43 @@ subroutine oda(Time, CS)
 end subroutine oda
 
 subroutine get_bias_correction_tracer(Time, CS)
-    type(time_type), intent(in) :: Time !< the current model time
-    type(ODA_CS), pointer :: CS !< ocean DA control structure
+  type(time_type), intent(in) :: Time !< the current model time
+  type(ODA_CS), pointer :: CS !< ocean DA control structure
 
-    integer :: i,j,k
-    real, allocatable, dimension(:,:,:) :: T_bias, S_bias
-    real, allocatable, dimension(:,:,:) :: mask_z
-    real, allocatable, dimension(:), target :: z_in, z_edges_in
-    real :: missing_value
-    integer,dimension(3) :: fld_sz
+  integer :: i,j,k
+  real, allocatable, dimension(:,:,:) :: T_bias, S_bias
+  real, allocatable, dimension(:,:,:) :: mask_z
+  real, allocatable, dimension(:), target :: z_in, z_edges_in
+  real :: missing_value
+  integer,dimension(3) :: fld_sz
 
-    call cpu_clock_begin(id_clock_bias_adjustment)
-    call horiz_interp_and_extrap_tracer(CS%INC_CS%T_id,Time,1.0,CS%G,T_bias,&
-            mask_z,z_in,z_edges_in,missing_value,.true.,.false.,.false.,.true.)
-    call horiz_interp_and_extrap_tracer(CS%INC_CS%S_id,Time,1.0,CS%G,S_bias,&
-            mask_z,z_in,z_edges_in,missing_value,.true.,.false.,.false.,.true.)
+  call cpu_clock_begin(id_clock_bias_adjustment)
+  call horiz_interp_and_extrap_tracer(CS%INC_CS%T_id,Time,1.0,CS%G,T_bias,&
+          mask_z,z_in,z_edges_in,missing_value,.true.,.false.,.false.,.true.)
+  call horiz_interp_and_extrap_tracer(CS%INC_CS%S_id,Time,1.0,CS%G,S_bias,&
+          mask_z,z_in,z_edges_in,missing_value,.true.,.false.,.false.,.true.)
 
-    ! This should be replaced to use mask_z instead of the following lines
-    ! which are intended to zero land values using an arbitrary limit.
-    fld_sz=shape(T_bias)
-    do i=1,fld_sz(1)
-       do j=1,fld_sz(2)
-          do k=1,fld_sz(3)
-             if (T_bias(i,j,k) .gt. 1.0E-3) T_bias(i,j,k) = 0.0
-             if (S_bias(i,j,k) .gt. 1.0E-3) S_bias(i,j,k) = 0.0
-          enddo
-       enddo
+  ! This should be replaced to use mask_z instead of the following lines
+  ! which are intended to zero land values using an arbitrary limit.
+  fld_sz=shape(T_bias)
+  do i=1,fld_sz(1)
+    do j=1,fld_sz(2)
+      do k=1,fld_sz(3)
+        if (T_bias(i,j,k) > 1.0E-3) T_bias(i,j,k) = 0.0
+        if (S_bias(i,j,k) > 1.0E-3) S_bias(i,j,k) = 0.0
+      enddo
     enddo
+  enddo
 
-    CS%tv_bc%T = T_bias * CS%bias_adjustment_multiplier
-    CS%tv_bc%S = S_bias * CS%bias_adjustment_multiplier
+  CS%tv_bc%T = T_bias * CS%bias_adjustment_multiplier
+  CS%tv_bc%S = S_bias * CS%bias_adjustment_multiplier
 
-    call pass_var(CS%tv_bc%T, CS%domains(CS%ensemble_id))
-    call pass_var(CS%tv_bc%S, CS%domains(CS%ensemble_id))
+  call pass_var(CS%tv_bc%T, CS%domains(CS%ensemble_id))
+  call pass_var(CS%tv_bc%S, CS%domains(CS%ensemble_id))
 
-    call cpu_clock_end(id_clock_bias_adjustment)
+  call cpu_clock_end(id_clock_bias_adjustment)
 
-  end subroutine get_bias_correction_tracer
+end subroutine get_bias_correction_tracer
 
 !> Finalize DA module
 subroutine oda_end(CS)
@@ -659,7 +655,7 @@ subroutine apply_oda_tracer_increments(dt, Time_end, G, GV, tv, h, CS)
   real :: missing_value
 
   if (.not. associated(CS)) return
-  if (CS%assim_method .eq. NO_ASSIM .and. (.not. CS%do_bias_adjustment)) return
+  if (CS%assim_method == NO_ASSIM .and. (.not. CS%do_bias_adjustment)) return
 
   call cpu_clock_begin(id_clock_apply_increments)
 

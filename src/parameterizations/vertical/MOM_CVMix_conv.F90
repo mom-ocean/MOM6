@@ -21,7 +21,7 @@ implicit none ; private
 
 #include <MOM_memory.h>
 
-public CVMix_conv_init, calculate_CVMix_conv, CVMix_conv_end, CVMix_conv_is_used
+public CVMix_conv_init, calculate_CVMix_conv, CVMix_conv_is_used
 
 !> Control structure including parameters for CVMix convection.
 type, public :: CVMix_conv_cs ; private
@@ -55,19 +55,13 @@ logical function CVMix_conv_init(Time, G, GV, US, param_file, diag, CS)
   type(unit_scale_type),   intent(in)    :: US         !< A dimensional unit scaling type
   type(param_file_type),   intent(in)    :: param_file !< Run-time parameter file handle
   type(diag_ctrl), target, intent(inout) :: diag       !< Diagnostics control structure.
-  type(CVMix_conv_cs),     pointer       :: CS         !< This module's control structure.
-  ! Local variables
+  type(CVMix_conv_cs),     intent(inout) :: CS         !< CVMix convetction control struct
+
   real    :: prandtl_conv !< Turbulent Prandtl number used in convective instabilities.
   logical :: useEPBL      !< If True, use the ePBL boundary layer scheme.
 
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
-
-  if (associated(CS)) then
-    call MOM_error(WARNING, "CVMix_conv_init called with an associated "// &
-                            "control structure.")
-    return
-  endif
 
   ! Read parameters
   call get_param(param_file, mdl, "USE_CVMix_CONVECTION", CVMix_conv_init, default=.false., do_not_log=.true.)
@@ -82,7 +76,6 @@ logical function CVMix_conv_init(Time, G, GV, US, param_file, diag, CS)
                  default=.false.)
 
   if (.not. CVMix_conv_init) return
-  allocate(CS)
 
   call get_param(param_file, mdl, "ENERGETICS_SFC_PBL", useEPBL, default=.false., &
                 do_not_log=.true.)
@@ -108,7 +101,7 @@ logical function CVMix_conv_init(Time, G, GV, US, param_file, diag, CS)
 
   call get_param(param_file, mdl, 'KD_CONV', CS%kd_conv_const, &
                  "Diffusivity used in convective regime. Corresponding viscosity "//&
-                 "(KV_CONV) will be set to KD_CONV * PRANDTL_TURB.", &
+                 "(KV_CONV) will be set to KD_CONV * PRANDTL_CONV.", &
                  units='m2/s', default=1.00)
 
   call get_param(param_file, mdl, 'BV_SQR_CONV', CS%bv_sqr_conv, &
@@ -146,14 +139,13 @@ subroutine calculate_CVMix_conv(h, tv, G, GV, US, CS, hbl, Kd, Kv, Kd_aux)
   type(unit_scale_type),                     intent(in)  :: US !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)  :: h  !< Layer thickness [H ~> m or kg m-2].
   type(thermo_var_ptrs),                     intent(in)  :: tv !< Thermodynamics structure.
-  type(CVMix_conv_cs),                       pointer     :: CS !< The control structure returned
-                                                                !! by a previous call to CVMix_conv_init.
+  type(CVMix_conv_cs),                       intent(in)  :: CS !< CVMix convection control struct
   real, dimension(SZI_(G),SZJ_(G)),          intent(in)  :: hbl !< Depth of ocean boundary layer [Z ~> m]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), &
-                                   optional, intent(inout) :: Kd !< Diapycnal diffusivity at each interface that
+                                             intent(inout) :: Kd !< Diapycnal diffusivity at each interface that
                                                                  !! will be incremented here [Z2 T-1 ~> m2 s-1].
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), &
-                                   optional, intent(inout) :: KV !< Viscosity at each interface that will be
+                                             intent(inout) :: KV !< Viscosity at each interface that will be
                                                                  !! incremented here [Z2 T-1 ~> m2 s-1].
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), &
                                    optional, intent(inout) :: Kd_aux !< A second diapycnal diffusivity at each
@@ -174,7 +166,7 @@ subroutine calculate_CVMix_conv(h, tv, G, GV, US, CS, hbl, Kd, Kv, Kd_aux)
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1) :: &
     kd_conv, &                         !< Diffusivity added by convection for diagnostics [Z2 T-1 ~> m2 s-1]
     kv_conv, &                         !< Viscosity added by convection for diagnostics [Z2 T-1 ~> m2 s-1]
-    N2_3d                              !< Squared buoyancy frequency for diagnostics [N-2 ~> s-2]
+    N2_3d                              !< Squared buoyancy frequency for diagnostics [T-2 ~> s-2]
   integer :: kOBL                      !< level of OBL extent
   real :: g_o_rho0  ! Gravitational acceleration divided by density times unit convserion factors
                     ! [Z s-2 R-1 ~> m4 s-2 kg-1]
@@ -243,12 +235,10 @@ subroutine calculate_CVMix_conv(h, tv, G, GV, US, CS, hbl, Kd, Kv, Kd_aux)
                              max_nlev=GV%ke, &
                              OBL_ind=kOBL)
 
-      if (present(Kd)) then
-        ! Increment the diffusivity outside of the boundary layer.
-        do K=max(1,kOBL+1),GV%ke+1
-          Kd(i,j,K) = Kd(i,j,K) + US%m2_s_to_Z2_T * kd_col(K)
-        enddo
-      endif
+      ! Increment the diffusivity outside of the boundary layer.
+      do K=max(1,kOBL+1),GV%ke+1
+        Kd(i,j,K) = Kd(i,j,K) + US%m2_s_to_Z2_T * kd_col(K)
+      enddo
       if (present(Kd_aux)) then
         ! Increment the other diffusivity outside of the boundary layer.
         do K=max(1,kOBL+1),GV%ke+1
@@ -256,12 +246,10 @@ subroutine calculate_CVMix_conv(h, tv, G, GV, US, CS, hbl, Kd, Kv, Kd_aux)
         enddo
       endif
 
-      if (present(Kv)) then
-        ! Increment the viscosity outside of the boundary layer.
-        do K=max(1,kOBL+1),GV%ke+1
-          Kv(i,j,K) = Kv(i,j,K) + US%m2_s_to_Z2_T * kv_col(K)
-        enddo
-      endif
+      ! Increment the viscosity outside of the boundary layer.
+      do K=max(1,kOBL+1),GV%ke+1
+        Kv(i,j,K) = Kv(i,j,K) + US%m2_s_to_Z2_T * kv_col(K)
+      enddo
 
       ! Store 3-d arrays for diagnostics.
       if (CS%id_kv_conv > 0) then
@@ -287,9 +275,9 @@ subroutine calculate_CVMix_conv(h, tv, G, GV, US, CS, hbl, Kd, Kv, Kd_aux)
     ! if (CS%id_kd_conv > 0) &
     !   call hchksum(Kd_conv, "MOM_CVMix_conv: Kd_conv", G%HI, haloshift=0, scale=US%Z2_T_to_m2_s)
     ! if (CS%id_kv_conv > 0) &
-    !   call hchksum(Kv_conv, "MOM_CVMix_conv: Kv_conv", G%HI, haloshift=0, scale=US%m2_s_to_Z2_T)
-    if (present(Kd)) call hchksum(Kd, "MOM_CVMix_conv: Kd", G%HI, haloshift=0, scale=US%Z2_T_to_m2_s)
-    if (present(Kv)) call hchksum(Kv, "MOM_CVMix_conv: Kv", G%HI, haloshift=0, scale=US%Z2_T_to_m2_s)
+    !   call hchksum(Kv_conv, "MOM_CVMix_conv: Kv_conv", G%HI, haloshift=0, scale=US%Z2_T_to_m2_s)
+    call hchksum(Kd, "MOM_CVMix_conv: Kd", G%HI, haloshift=0, scale=US%Z2_T_to_m2_s)
+    call hchksum(Kv, "MOM_CVMix_conv: Kv", G%HI, haloshift=0, scale=US%Z2_T_to_m2_s)
   endif
 
   ! send diagnostics to post_data
@@ -308,12 +296,5 @@ logical function CVMix_conv_is_used(param_file)
                  default=.false., do_not_log = .true.)
 
 end function CVMix_conv_is_used
-
-!> Clear pointers and dealocate memory
-! NOTE: Placeholder destructor
-subroutine CVMix_conv_end(CS)
-  type(CVMix_conv_cs), pointer :: CS !< Control structure for this module that
-                                     !! will be deallocated in this subroutine
-end subroutine CVMix_conv_end
 
 end module MOM_CVMix_conv

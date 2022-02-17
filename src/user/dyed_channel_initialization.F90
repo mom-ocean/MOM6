@@ -133,13 +133,14 @@ subroutine dyed_channel_set_OBC_tracer_data(OBC, G, GV, param_file, tr_Reg)
 end subroutine dyed_channel_set_OBC_tracer_data
 
 !> This subroutine updates the long-channel flow
-subroutine dyed_channel_update_flow(OBC, CS, G, GV, Time)
+subroutine dyed_channel_update_flow(OBC, CS, G, GV, US, Time)
   type(ocean_OBC_type),       pointer    :: OBC !< This open boundary condition type specifies
                                                 !! whether, where, and what open boundary
                                                 !! conditions are used.
   type(dyed_channel_OBC_CS),  pointer    :: CS  !< Dyed channel control structure.
   type(ocean_grid_type),      intent(in) :: G   !< The ocean's grid structure.
   type(verticalGrid_type),    intent(in) :: GV  !< The ocean's vertical grid structure.
+  type(unit_scale_type),      intent(in) :: US  !< A dimensional unit scaling type
   type(time_type),            intent(in) :: Time !< model time.
   ! Local variables
   character(len=40)  :: mdl = "dyed_channel_update_flow" ! This subroutine's name.
@@ -154,7 +155,7 @@ subroutine dyed_channel_update_flow(OBC, CS, G, GV, Time)
   if (.not.associated(OBC)) call MOM_error(FATAL, 'dyed_channel_initialization.F90: '// &
         'dyed_channel_update_flow() was called but OBC type was not initialized!')
 
-  time_sec = G%US%s_to_T * time_type_to_real(Time)
+  time_sec = US%s_to_T * time_type_to_real(Time)
   PI = 4.0*atan(1.0)
 
   do l=1, OBC%number_of_segments

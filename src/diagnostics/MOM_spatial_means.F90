@@ -17,7 +17,7 @@ implicit none ; private
 #include <MOM_memory.h>
 
 public :: global_i_mean, global_j_mean
-public :: global_area_mean, global_layer_mean
+public :: global_area_mean, global_area_mean_u, global_area_mean_v, global_layer_mean
 public :: global_area_integral
 public :: global_volume_mean, global_mass_integral
 public :: adjust_area_mean_to_zero
@@ -46,6 +46,50 @@ function global_area_mean(var, G, scale)
   global_area_mean = reproducing_sum(tmpForSumming) * G%IareaT_global
 
 end function global_area_mean
+
+!> Return the global area mean of a variable. This uses reproducing sums.
+function global_area_mean_v(var, G)
+  type(ocean_grid_type),             intent(in)  :: G    !< The ocean's grid structure
+  real, dimension(SZI_(G), SZJB_(G)), intent(in)  :: var  !< The variable to average
+
+  real, dimension(SZI_(G), SZJ_(G))              :: tmpForSumming
+  real :: global_area_mean_v
+  integer :: i, j, is, ie, js, je, isB, ieB, jsB, jeB
+
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
+  isB = G%iscB ; ieB = G%iecB ; jsB = G%jscB ; jeB = G%jecB
+
+  tmpForSumming(:,:) = 0.
+  do J=js,je ; do i=is,ie
+    tmpForSumming(i,j) = G%areaT(i,j) * (var(i,J) * G%mask2dCv(i,J) + &
+                                         var(i,J-1) * G%mask2dCv(i,J-1)) &
+                         / max(1.e-20,G%mask2dCv(i,J)+G%mask2dCv(i,J-1))
+  enddo ; enddo
+  global_area_mean_v = reproducing_sum(tmpForSumming) * G%IareaT_global
+
+end function global_area_mean_v
+
+!> Return the global area mean of a variable on U grid. This uses reproducing sums.
+function global_area_mean_u(var, G)
+  type(ocean_grid_type),             intent(in)  :: G    !< The ocean's grid structure
+  real, dimension(SZIB_(G), SZJ_(G)), intent(in)  :: var  !< The variable to average
+
+  real, dimension(SZI_(G), SZJ_(G))              :: tmpForSumming
+  real :: global_area_mean_u
+  integer :: i, j, is, ie, js, je, isB, ieB, jsB, jeB
+
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
+  isB = G%iscB ; ieB = G%iecB ; jsB = G%jscB ; jeB = G%jecB
+
+  tmpForSumming(:,:) = 0.
+  do j=js,je ; do i=is,ie
+    tmpForSumming(i,j) = G%areaT(i,j) * (var(I,j) * G%mask2dCu(I,j) + &
+                                         var(I-1,j) * G%mask2dCu(I-1,j)) &
+                         / max(1.e-20,G%mask2dCu(I,j)+G%mask2dCu(I-1,j))
+  enddo ; enddo
+  global_area_mean_u = reproducing_sum(tmpForSumming) * G%IareaT_global
+
+end function global_area_mean_u
 
 !> Return the global area integral of a variable, by default using the masked area from the
 !! grid, but an alternate could be used instead.  This uses reproducing sums.

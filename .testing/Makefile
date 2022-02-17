@@ -146,6 +146,7 @@ endif
 # These are set to true by our Travis configuration if testing a pull request
 DO_REGRESSION_TESTS ?=
 REPORT_COVERAGE ?=
+CODECOV_UPLOADER_URL ?= https://uploader.codecov.io/latest/linux/codecov
 
 ifeq ($(DO_REGRESSION_TESTS), true)
   BUILDS += target
@@ -163,6 +164,7 @@ else
   MOM_TARGET_BRANCH =
   TARGET_CODEBASE =
 endif
+
 
 
 # List of source files to link this Makefile's dependencies to model Makefiles
@@ -542,6 +544,7 @@ $(foreach c,$(CONFIGS),$(eval $(call CONFIG_DIM_RULE,$(c))))
 # $(4): MOM_override configuration
 # $(5): Environment variables
 # $(6): Number of MPI ranks
+
 define STAT_RULE
 work/%/$(1)/ocean.stats work/%/$(1)/chksum_diag: build/$(2)/MOM6 $(VENV_PATH)
 	@echo "Running test $$*.$(1)..."
@@ -570,10 +573,13 @@ work/%/$(1)/ocean.stats work/%/$(1)/chksum_diag: build/$(2)/MOM6 $(VENV_PATH)
 	@echo -e "$(DONE): $$*.$(1); no runtime errors."
 	if [ $(3) ]; then \
 	  mkdir -p results/$$* ; \
-	  cd build/symmetric \
-	    && bash <(curl -s https://codecov.io/bash) -Z -n $$@ \
-	      > codecov.$$*.$(1).out \
-	      2> codecov.$$*.$(1).err \
+	  cd build/symmetric ; \
+	  gcov *.gcda > gcov.$$*.$(1).out ; \
+	  curl -s $(CODECOV_UPLOADER_URL) -o codecov ; \
+	  chmod +x codecov ; \
+	  ./codecov -Z -f "*.gcov" -n $$@ \
+	    > codecov.$$*.$(1).out \
+	    2> codecov.$$*.$(1).err \
 	    && echo -e "${MAGENTA}Report uploaded to codecov.${RESET}"; \
 	fi
 endef

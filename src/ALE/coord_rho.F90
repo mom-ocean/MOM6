@@ -95,7 +95,7 @@ subroutine build_rho_column(CS, nz, depth, h, T, S, eqn_of_state, z_interface, &
   real, dimension(nz), intent(in)    :: h  !< Layer thicknesses [H ~> m or kg m-2]
   real, dimension(nz), intent(in)    :: T  !< Temperature for source column [degC]
   real, dimension(nz), intent(in)    :: S  !< Salinity for source column [ppt]
-  type(EOS_type),      pointer       :: eqn_of_state !< Equation of state structure
+  type(EOS_type),      intent(in)    :: eqn_of_state !< Equation of state structure
   real, dimension(CS%nk+1), &
                        intent(inout) :: z_interface !< Absolute positions of interfaces
   real, optional,      intent(in)    :: z_rigid_top !< The height of a rigid top (positive upward in the same
@@ -208,7 +208,7 @@ subroutine build_rho_column_iteratively(CS, remapCS, nz, depth, h, T, S, eqn_of_
   real, dimension(nz),   intent(in)    :: h  !< Layer thicknesses in Z coordinates [Z ~> m]
   real, dimension(nz),   intent(in)    :: T  !< T for column [degC]
   real, dimension(nz),   intent(in)    :: S  !< S for column [ppt]
-  type(EOS_type),        pointer       :: eqn_of_state !< Equation of state structure
+  type(EOS_type),        intent(in)    :: eqn_of_state !< Equation of state structure
   real, dimension(nz+1), intent(inout) :: zInterface !< Absolute positions of interfaces
   real,        optional, intent(in)    :: h_neglect !< A negligibly small width for the
                                              !! purpose of cell reconstructions

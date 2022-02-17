@@ -8,10 +8,10 @@ use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, WARNING, is_root_pe
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_grid, only : ocean_grid_type
 use MOM_PressureForce_FV, only : PressureForce_FV_Bouss, PressureForce_FV_nonBouss
-use MOM_PressureForce_FV, only : PressureForce_FV_init, PressureForce_FV_end
+use MOM_PressureForce_FV, only : PressureForce_FV_init
 use MOM_PressureForce_FV, only : PressureForce_FV_CS
 use MOM_PressureForce_Mont, only : PressureForce_Mont_Bouss, PressureForce_Mont_nonBouss
-use MOM_PressureForce_Mont, only : PressureForce_Mont_init, PressureForce_Mont_end
+use MOM_PressureForce_Mont, only : PressureForce_Mont_init
 use MOM_PressureForce_Mont, only : PressureForce_Mont_CS
 use MOM_tidal_forcing, only : tidal_forcing_CS
 use MOM_unit_scaling, only : unit_scale_type
@@ -22,16 +22,16 @@ implicit none ; private
 
 #include <MOM_memory.h>
 
-public PressureForce, PressureForce_init, PressureForce_end
+public PressureForce, PressureForce_init
 
 !> Pressure force control structure
 type, public :: PressureForce_CS ; private
   logical :: Analytic_FV_PGF !< If true, use the analytic finite volume form
                              !! (Adcroft et al., Ocean Mod. 2008) of the PGF.
   !> Control structure for the analytically integrated finite volume pressure force
-  type(PressureForce_FV_CS), pointer :: PressureForce_FV_CSp => NULL()
+  type(PressureForce_FV_CS) :: PressureForce_FV
   !> Control structure for the Montgomery potential form of pressure force
-  type(PressureForce_Mont_CS), pointer :: PressureForce_Mont_CSp => NULL()
+  type(PressureForce_Mont_CS) :: PressureForce_Mont
 end type PressureForce_CS
 
 contains
@@ -48,10 +48,9 @@ subroutine PressureForce(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm, pbce, e
                            intent(out) :: PFu  !< Zonal pressure force acceleration [L T-2 ~> m s-2]
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
                            intent(out) :: PFv  !< Meridional pressure force acceleration [L T-2 ~> m s-2]
-  type(PressureForce_CS),  pointer     :: CS   !< Pressure force control structure
+  type(PressureForce_CS),  intent(inout) :: CS !< Pressure force control structure
   type(ALE_CS),            pointer     :: ALE_CSp !< ALE control structure
-  real, dimension(:,:), &
-                 optional, pointer     :: p_atm !< The pressure at the ice-ocean or
+  real, dimension(:,:),    pointer     :: p_atm !< The pressure at the ice-ocean or
                                                !! atmosphere-ocean interface [R L2 T-2 ~> Pa].
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                  optional, intent(out) :: pbce !< The baroclinic pressure anomaly in each layer
@@ -62,18 +61,18 @@ subroutine PressureForce(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm, pbce, e
 
   if (CS%Analytic_FV_PGF) then
     if (GV%Boussinesq) then
-      call PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS%PressureForce_FV_CSp, &
+      call PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS%PressureForce_FV, &
                                    ALE_CSp, p_atm, pbce, eta)
     else
-      call PressureForce_FV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS%PressureForce_FV_CSp, &
+      call PressureForce_FV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS%PressureForce_FV, &
                                       ALE_CSp, p_atm, pbce, eta)
     endif
   else
     if (GV%Boussinesq) then
-      call PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, GV, US, CS%PressureForce_Mont_CSp, &
+      call PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, GV, US, CS%PressureForce_Mont, &
                                     p_atm, pbce, eta)
     else
-      call PressureForce_Mont_nonBouss(h, tv, PFu, PFv, G, GV, US, CS%PressureForce_Mont_CSp, &
+      call PressureForce_Mont_nonBouss(h, tv, PFu, PFv, G, GV, US, CS%PressureForce_Mont, &
                                        p_atm, pbce, eta)
     endif
   endif
@@ -88,16 +87,10 @@ subroutine PressureForce_init(Time, G, GV, US, param_file, diag, CS, tides_CSp)
   type(unit_scale_type),   intent(in)    :: US   !< A dimensional unit scaling type
   type(param_file_type),   intent(in)    :: param_file !< Parameter file handles
   type(diag_ctrl), target, intent(inout) :: diag !< Diagnostics control structure
-  type(PressureForce_CS),  pointer       :: CS   !< Pressure force control structure
-  type(tidal_forcing_CS), optional, pointer :: tides_CSp !< Tide control structure
+  type(PressureForce_CS),  intent(inout) :: CS   !< Pressure force control structure
+  type(tidal_forcing_CS), intent(inout), optional :: tides_CSp !< Tide control structure
 #include "version_variable.h"
   character(len=40)  :: mdl = "MOM_PressureForce" ! This module's name.
-
-  if (associated(CS)) then
-    call MOM_error(WARNING, "PressureForce_init called with an associated "// &
-                            "control structure.")
-    return
-  else ; allocate(CS) ; endif
 
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mdl, version, "")
@@ -110,24 +103,12 @@ subroutine PressureForce_init(Time, G, GV, US, param_file, diag, CS, tides_CSp)
 
   if (CS%Analytic_FV_PGF) then
     call PressureForce_FV_init(Time, G, GV, US, param_file, diag, &
-             CS%PressureForce_FV_CSp, tides_CSp)
+             CS%PressureForce_FV, tides_CSp)
   else
     call PressureForce_Mont_init(Time, G, GV, US, param_file, diag, &
-             CS%PressureForce_Mont_CSp, tides_CSp)
+             CS%PressureForce_Mont, tides_CSp)
   endif
-
 end subroutine PressureForce_init
-
-!> Deallocate the pressure force control structure
-subroutine PressureForce_end(CS)
-  type(PressureForce_CS), intent(inout) :: CS  !< Pressure force control structure
-
-  if (CS%Analytic_FV_PGF) then
-    call PressureForce_FV_end(CS%PressureForce_FV_CSp)
-  else
-    call PressureForce_Mont_end(CS%PressureForce_Mont_CSp)
-  endif
-end subroutine PressureForce_end
 
 !> \namespace mom_pressureforce
 !!

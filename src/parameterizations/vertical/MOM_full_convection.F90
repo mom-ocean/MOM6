@@ -18,8 +18,7 @@ public full_convection
 contains
 
 !> Calculate new temperatures and salinities that have been subject to full convective mixing.
-subroutine full_convection(G, GV, US, h, tv, T_adj, S_adj, p_surf, Kddt_smooth, &
-                           Kddt_convect, halo)
+subroutine full_convection(G, GV, US, h, tv, T_adj, S_adj, p_surf, Kddt_smooth, halo)
   type(ocean_grid_type),   intent(in)    :: G     !< The ocean's grid structure
   type(verticalGrid_type), intent(in)    :: GV    !< The ocean's vertical grid structure
   type(unit_scale_type),   intent(in)    :: US   !< A dimensional unit scaling type
@@ -34,9 +33,7 @@ subroutine full_convection(G, GV, US, h, tv, T_adj, S_adj, p_surf, Kddt_smooth, 
   real, dimension(:,:),    pointer       :: p_surf !< The pressure at the ocean surface [R L2 T-2 ~> Pa] (or NULL).
   real,                    intent(in)    :: Kddt_smooth  !< A smoothing vertical
                                                   !! diffusivity times a timestep [H2 ~> m2 or kg2 m-4].
-  real,          optional, intent(in)    :: Kddt_convect !< A large convecting vertical
-                                                  !! diffusivity times a timestep [H2 ~> m2 or kg2 m-4].
-  integer,       optional, intent(in)    :: halo  !< Halo width over which to compute
+  integer,                 intent(in)    :: halo  !< Halo width over which to compute
 
   ! Local variables
   real, dimension(SZI_(G),SZK_(GV)+1) :: &
@@ -46,61 +43,53 @@ subroutine full_convection(G, GV, US, h, tv, T_adj, S_adj, p_surf, Kddt_smooth, 
                         ! in roundoff and can be neglected [H ~> m or kg m-2].
 ! logical :: use_EOS    ! If true, density is calculated from T & S using an equation of state.
   real, dimension(SZI_(G),SZK0_(G)) :: &
-    Te_a, & ! A partially updated temperature estimate including the influnce from
+    Te_a, & ! A partially updated temperature estimate including the influence from
             ! mixing with layers above rescaled by a factor of d_a [degC].
-            ! This array is discreted on tracer cells, but contains an extra
+            ! This array is discretized on tracer cells, but contains an extra
             ! layer at the top for algorithmic convenience.
-    Se_a    ! A partially updated salinity estimate including the influnce from
+    Se_a    ! A partially updated salinity estimate including the influence from
             ! mixing with layers above rescaled by a factor of d_a [ppt].
-            ! This array is discreted on tracer cells, but contains an extra
+            ! This array is discretized on tracer cells, but contains an extra
             ! layer at the top for algorithmic convenience.
   real, dimension(SZI_(G),SZK_(GV)+1) :: &
-    Te_b, & ! A partially updated temperature estimate including the influnce from
+    Te_b, & ! A partially updated temperature estimate including the influence from
             ! mixing with layers below rescaled by a factor of d_b [degC].
-            ! This array is discreted on tracer cells, but contains an extra
+            ! This array is discretized on tracer cells, but contains an extra
             ! layer at the bottom for algorithmic convenience.
-    Se_b    ! A partially updated salinity estimate including the influnce from
+    Se_b    ! A partially updated salinity estimate including the influence from
             ! mixing with layers below rescaled by a factor of d_b [ppt].
-            ! This array is discreted on tracer cells, but contains an extra
+            ! This array is discretized on tracer cells, but contains an extra
             ! layer at the bottom for algorithmic convenience.
   real, dimension(SZI_(G),SZK_(GV)+1) :: &
     c_a, &  ! The fractional influence of the properties of the layer below
-            ! in the final properies with a downward-first solver, nondim.
+            ! in the final properties with a downward-first solver [nondim]
     d_a, &  ! The fractional influence of the properties of the layer in question
-            ! and layers above in the final properies with a downward-first solver, nondim.
+            ! and layers above in the final properties with a downward-first solver [nondim]
             ! d_a = 1.0 - c_a
     c_b, &  ! The fractional influence of the properties of the layer above
-            ! in the final properies with a upward-first solver, nondim.
+            ! in the final properties with a upward-first solver [nondim]
     d_b     ! The fractional influence of the properties of the layer in question
-            ! and layers below in the final properies with a upward-first solver, nondim.
+            ! and layers below in the final properties with a upward-first solver [nondim]
             ! d_b = 1.0 - c_b
   real, dimension(SZI_(G),SZK_(GV)+1) :: &
     mix     !< The amount of mixing across the interface between layers [H ~> m or kg m-2].
   real :: mix_len  ! The length-scale of mixing, when it is active [H ~> m or kg m-2]
-  real :: h_b, h_a ! The thicknessses of the layers above and below an interface [H ~> m or kg m-2]
+  real :: h_b, h_a ! The thicknesses of the layers above and below an interface [H ~> m or kg m-2]
   real :: b_b, b_a ! Inverse pivots used by the tridiagonal solver [H-1 ~> m-1 or m2 kg-1].
-
-  real :: kap_dt_x2 ! The product of 2*kappa*dt [H2 ~> m2 or kg2 m-4].
 
   logical, dimension(SZI_(G)) :: do_i ! Do more work on this column.
   logical, dimension(SZI_(G)) :: last_down ! The last setup pass was downward.
   integer, dimension(SZI_(G)) :: change_ct ! The number of interfaces where the
                          ! mixing has changed this iteration.
-  integer :: changed_col ! The number of colums whose mixing changed.
+  integer :: changed_col ! The number of columns whose mixing changed.
   integer :: i, j, k, is, ie, js, je, nz, itt
 
-  if (present(halo)) then
-    is = G%isc-halo ; ie = G%iec+halo ; js = G%jsc-halo ; je = G%jec+halo
-  else
-    is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
-  endif
+  is = G%isc-halo ; ie = G%iec+halo ; js = G%jsc-halo ; je = G%jec+halo
   nz = GV%ke
 
   if (.not.associated(tv%eqn_of_state)) return
 
   h_neglect = GV%H_subroundoff
-  kap_dt_x2 = 0.0
-  if (present(Kddt_convect)) kap_dt_x2 = 2.0*Kddt_convect
   mix_len = (1.0e20 * nz) * (G%max_depth * GV%Z_to_H)
   h0 = 1.0e-16*sqrt(Kddt_smooth) + h_neglect
 
@@ -135,7 +124,6 @@ subroutine full_convection(G, GV, US, h, tv, T_adj, S_adj, p_surf, Kddt_smooth, 
                           Te_a(i,k-2), Te_b(i,k+1), Se_a(i,k-2), Se_b(i,k+1), &
                           d_a(i,K-1), d_b(i,K+1))) then
             mix(i,K) = mix_len
-            if (kap_dt_x2 > 0.0) mix(i,K) = kap_dt_x2 / ((h(i,j,k-1)+h(i,j,k)) + h0)
             change_ct(i) = change_ct(i) + 1
           endif
         endif
@@ -178,7 +166,6 @@ subroutine full_convection(G, GV, US, h, tv, T_adj, S_adj, p_surf, Kddt_smooth, 
                           Te_a(i,k-2), Te_b(i,k+1), Se_a(i,k-2), Se_b(i,k+1), &
                           d_a(i,K-1), d_b(i,K+1))) then
             mix(i,K) = mix_len
-            if (kap_dt_x2 > 0.0) mix(i,K) = kap_dt_x2 / ((h(i,j,k-1)+h(i,j,k)) + h0)
             change_ct(i) = change_ct(i) + 1
           endif
         endif
@@ -260,7 +247,7 @@ subroutine full_convection(G, GV, US, h, tv, T_adj, S_adj, p_surf, Kddt_smooth, 
 
   k = 1 ! A hook for debugging.
 
-  ! The following set of expressions for the final values are derived from the the partial
+  ! The following set of expressions for the final values are derived from the partial
   ! updates for the estimated temperatures and salinities around an interface, then directly
   ! solving for the final temperatures and salinities.  They are here for later reference
   ! and to document an intermediate step in the stability calculation.
@@ -332,17 +319,18 @@ subroutine smoothed_dRdT_dRdS(h, tv, Kddt, dR_dT, dR_dS, G, GV, US, j, p_surf, h
                                                !! potential density with temperature [R degC-1 ~> kg m-3 degC-1]
   real, dimension(SZI_(G),SZK_(GV)+1), &
                            intent(out) :: dR_dS !< Derivative of locally referenced
-                                               !! potential density with salinity [R degC-1 ~> kg m-3 ppt-1]
+                                               !! potential density with salinity [R ppt-1 ~> kg m-3 ppt-1]
   type(unit_scale_type),   intent(in)  :: US   !< A dimensional unit scaling type
   integer,                 intent(in)  :: j    !< The j-point to work on.
   real, dimension(:,:),    pointer     :: p_surf !< The pressure at the ocean surface [R L2 T-2 ~> Pa].
-  integer,       optional, intent(in)  :: halo !< Halo width over which to compute
+  integer,                 intent(in)  :: halo !< Halo width over which to compute
 
   ! Local variables
   real :: mix(SZI_(G),SZK_(GV)+1)  ! The diffusive mixing length (kappa*dt)/dz
                                    ! between layers within in a timestep [H ~> m or kg m-2].
-  real :: b1(SZI_(G)), d1(SZI_(G)) ! b1, c1, and d1 are variables used by the
-  real :: c1(SZI_(G),SZK_(GV))     ! tridiagonal solver.
+  real :: b1(SZI_(G))              ! A tridiagonal solver variable [H-1 ~> m-1 or m2 kg-1]
+  real :: d1(SZI_(G))              ! A tridiagonal solver variable [nondim]
+  real :: c1(SZI_(G),SZK_(GV))     ! A tridiagonal solver variable [nondim]
   real :: T_f(SZI_(G),SZK_(GV))    ! Filtered temperatures [degC]
   real :: S_f(SZI_(G),SZK_(GV))    ! Filtered salinities [ppt]
   real :: pres(SZI_(G))            ! Interface pressures [R L2 T-2 ~> Pa].
@@ -352,14 +340,10 @@ subroutine smoothed_dRdT_dRdS(h, tv, Kddt, dR_dT, dR_dS, G, GV, US, j, p_surf, h
   real :: h_neglect, h0            ! Negligible thicknesses to allow for zero thicknesses,
                                    ! [H ~> m or kg m-2].
   real :: h_tr                     ! The thickness at tracer points, plus h_neglect [H ~> m or kg m-2].
-  integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state
+  integer, dimension(2) :: EOSdom  ! The i-computational domain for the equation of state
   integer :: i, k, is, ie, nz
 
-  if (present(halo)) then
-    is = G%isc-halo ; ie = G%iec+halo
-  else
-    is = G%isc ; ie = G%iec
-  endif
+  is = G%isc-halo ; ie = G%iec+halo
   nz = GV%ke
 
   h_neglect = GV%H_subroundoff

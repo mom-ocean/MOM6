@@ -27,7 +27,7 @@ public USER_wind_forcing, USER_buoyancy_forcing, USER_surface_forcing_init
 !! It can be readily modified for a specific case, and because it is private there
 !! will be no changes needed in other code (although they will have to be recompiled).
 type, public :: user_surface_forcing_CS ; private
-  !   The variables in the cannonical example are used for some common
+  !   The variables in the canonical example are used for some common
   ! cases, but do not need to be used.
 
   logical :: use_temperature !< If true, temperature and salinity are used as state variables.
@@ -104,7 +104,7 @@ subroutine USER_buoyancy_forcing(sfc_state, fluxes, day, dt, G, US, CS)
   type(forcing),                 intent(inout) :: fluxes !< A structure containing thermodynamic forcing fields
   type(time_type),               intent(in)    :: day  !< The time of the fluxes
   real,                          intent(in)    :: dt   !< The amount of time over which
-                                                       !! the fluxes apply [s]
+                                                       !! the fluxes apply [T ~> s]
   type(ocean_grid_type),         intent(in)    :: G    !< The ocean's grid structure
   type(unit_scale_type),         intent(in)    :: US   !< A dimensional unit scaling type
   type(user_surface_forcing_CS), pointer       :: CS   !< A pointer to the control structure returned
@@ -221,7 +221,7 @@ subroutine USER_buoyancy_forcing(sfc_state, fluxes, day, dt, G, US, CS)
       buoy_rest_const = -1.0 * (CS%G_Earth * CS%Flux_const) / CS%Rho0
       do j=js,je ; do i=is,ie
        !   Set density_restore to an expression for the surface potential
-       ! density [kg m-3] that is being restored toward.
+       ! density [R ~> kg m-3] that is being restored toward.
         density_restore = 1030.0*US%kg_m3_to_R
 
         fluxes%buoy(i,j) = G%mask2dT(i,j) * buoy_rest_const * &
@@ -242,8 +242,8 @@ subroutine USER_surface_forcing_init(Time, G, US, param_file, diag, CS)
   type(user_surface_forcing_CS), pointer    :: CS   !< A pointer that is set to point to
                                                     !! the control structure for this module
 
-! This include declares and sets the variable "version".
-#include "version_variable.h"
+  ! This include declares and sets the variable "version".
+# include "version_variable.h"
   character(len=40)  :: mdl = "user_surface_forcing" ! This module's name.
 
   if (associated(CS)) then

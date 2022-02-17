@@ -11,6 +11,7 @@ use MOM_domains,       only : MOM_domain_type, get_domain_extent, group_pass_typ
 use MOM_EOS,           only : EOS_type
 use MOM_error_handler, only : MOM_error, FATAL
 use MOM_grid,          only : ocean_grid_type
+use MOM_unit_scaling,  only : unit_scale_type
 use MOM_verticalGrid,  only : verticalGrid_type
 
 implicit none ; private
@@ -67,7 +68,7 @@ type, public :: surface
   logical :: T_is_conT = .false. !< If true, the temperature variable SST is actually the
                    !! conservative temperature in [degC].
   logical :: S_is_absS = .false. !< If true, the salinity variable SSS is actually the
-                   !! absolute salinity in [g/kg].
+                   !! absolute salinity in [gSalt kg-1].
   type(coupler_2d_bc_type) :: tr_fields !< A structure that may contain an
                 !! array of named fields describing tracer-related quantities.
        !### NOTE: ALL OF THE ARRAYS IN TR_FIELDS USE THE COUPLER'S INDEXING CONVENTION AND HAVE NO
@@ -95,7 +96,7 @@ type, public :: thermo_var_ptrs
   logical :: T_is_conT = .false. !< If true, the temperature variable tv%T is
                          !! actually the conservative temperature [degC].
   logical :: S_is_absS = .false. !< If true, the salinity variable tv%S is
-                         !! actually the absolute salinity in units of [gSalt/kg].
+                         !! actually the absolute salinity in units of [gSalt kg-1].
   real :: min_salinity = 0.01 !< The minimum value of salinity when BOUND_SALINITY=True [ppt].
                          !! The default is 0.01 for backward compatibility but should be 0.
   ! These arrays are accumulated fluxes for communication with other components.
@@ -192,13 +193,15 @@ type, public :: accel_diag_ptrs
   real, pointer :: rv_x_v(:,:,:) => NULL()   !< rv_x_v = rv * v at u [L T-2 ~> m s-2]
   real, pointer :: rv_x_u(:,:,:) => NULL()   !< rv_x_u = rv * u at v [L T-2 ~> m s-2]
 
-  real, pointer :: diag_hfrac_u(:,:,:) => NULL() !< Fractional layer thickness at u points
-  real, pointer :: diag_hfrac_v(:,:,:) => NULL() !< Fractional layer thickness at v points
-  real, pointer :: diag_hu(:,:,:) => NULL() !< layer thickness at u points
-  real, pointer :: diag_hv(:,:,:) => NULL() !< layer thickness at v points
+  real, pointer :: diag_hfrac_u(:,:,:) => NULL() !< Fractional layer thickness at u points [nondim]
+  real, pointer :: diag_hfrac_v(:,:,:) => NULL() !< Fractional layer thickness at v points [nondim]
+  real, pointer :: diag_hu(:,:,:) => NULL() !< layer thickness at u points, modulated by the viscous
+                                            !! remnant and fractional open areas [H ~> m or kg m-2]
+  real, pointer :: diag_hv(:,:,:) => NULL() !< layer thickness at v points, modulated by the viscous
+                                            !! remnant and fractional open areas [H ~> m or kg m-2]
 
-  real, pointer :: visc_rem_u(:,:,:) => NULL() !< viscous remnant at u points
-  real, pointer :: visc_rem_v(:,:,:) => NULL() !< viscous remnant at v points
+  real, pointer :: visc_rem_u(:,:,:) => NULL() !< viscous remnant at u points [nondim]
+  real, pointer :: visc_rem_v(:,:,:) => NULL() !< viscous remnant at v points [nondim]
 
 end type accel_diag_ptrs
 
@@ -282,10 +285,10 @@ type, public :: BT_cont_type
                                     !! drawing from nearby to the west [H L ~> m2 or kg m-1].
   real, allocatable :: FA_u_WW(:,:) !< The effective open face area for zonal barotropic transport
                                     !! drawing from locations far to the west [H L ~> m2 or kg m-1].
-  real, allocatable :: uBT_WW(:,:)  !< uBT_WW is the barotropic velocity [L T-1 ~> m s-1], beyond which the marginal
-                                    !! open face area is FA_u_WW.  uBT_WW must be non-negative.
-  real, allocatable :: uBT_EE(:,:)  !< uBT_EE is a barotropic velocity [L T-1 ~> m s-1], beyond which the marginal
-                                    !! open face area is FA_u_EE. uBT_EE must be non-positive.
+  real, allocatable :: uBT_WW(:,:)  !< uBT_WW is the barotropic velocity [L T-1 ~> m s-1], beyond which the
+                                    !! marginal open face area is FA_u_WW.  uBT_WW must be non-negative.
+  real, allocatable :: uBT_EE(:,:)  !< uBT_EE is a barotropic velocity [L T-1 ~> m s-1], beyond which the
+                                    !! marginal open face area is FA_u_EE. uBT_EE must be non-positive.
   real, allocatable :: FA_v_NN(:,:) !< The effective open face area for meridional barotropic transport
                                     !! drawing from locations far to the north [H L ~> m2 or kg m-1].
   real, allocatable :: FA_v_N0(:,:) !< The effective open face area for meridional barotropic transport
@@ -294,15 +297,31 @@ type, public :: BT_cont_type
                                     !! drawing from nearby to the south [H L ~> m2 or kg m-1].
   real, allocatable :: FA_v_SS(:,:) !< The effective open face area for meridional barotropic transport
                                     !! drawing from locations far to the south [H L ~> m2 or kg m-1].
-  real, allocatable :: vBT_SS(:,:)  !< vBT_SS is the barotropic velocity, [L T-1 ~> m s-1], beyond which the marginal
-                                    !! open face area is FA_v_SS. vBT_SS must be non-negative.
-  real, allocatable :: vBT_NN(:,:)  !< vBT_NN is the barotropic velocity, [L T-1 ~> m s-1], beyond which the marginal
-                                    !! open face area is FA_v_NN.  vBT_NN must be non-positive.
-  real, allocatable :: h_u(:,:,:)   !< An effective thickness at zonal faces [H ~> m or kg m-2].
-  real, allocatable :: h_v(:,:,:)   !< An effective thickness at meridional faces [H ~> m or kg m-2].
+  real, allocatable :: vBT_SS(:,:)  !< vBT_SS is the barotropic velocity, [L T-1 ~> m s-1], beyond which the
+                                    !! marginal open face area is FA_v_SS. vBT_SS must be non-negative.
+  real, allocatable :: vBT_NN(:,:)  !< vBT_NN is the barotropic velocity, [L T-1 ~> m s-1], beyond which the
+                                    !! marginal open face area is FA_v_NN.  vBT_NN must be non-positive.
+  real, allocatable :: h_u(:,:,:)   !< An effective thickness at zonal faces, taking into account the effects
+                                    !! of vertical viscosity and fractional open areas [H ~> m or kg m-2].
+                                    !! This is primarily used as a non-normalized weight in determining
+                                    !! the depth averaged accelerations for the barotropic solver.
+  real, allocatable :: h_v(:,:,:)   !< An effective thickness at meridional faces, taking into account the effects
+                                    !! of vertical viscosity and fractional open areas [H ~> m or kg m-2].
+                                    !! This is primarily used as a non-normalized weight in determining
+                                    !! the depth averaged accelerations for the barotropic solver.
   type(group_pass_type) :: pass_polarity_BT !< Structure for polarity group halo updates
   type(group_pass_type) :: pass_FA_uv !< Structure for face area group halo updates
 end type BT_cont_type
+
+
+!> pointers to grids modifying cell metric at porous barriers
+type, public :: porous_barrier_ptrs
+  real, pointer, dimension(:,:,:) :: por_face_areaU => NULL() !< fractional open area of U-faces [nondim]
+  real, pointer, dimension(:,:,:) :: por_face_areaV => NULL() !< fractional open area of V-faces [nondim]
+  real, pointer, dimension(:,:,:) :: por_layer_widthU => NULL() !< fractional open width of U-faces [nondim]
+  real, pointer, dimension(:,:,:) :: por_layer_widthV => NULL() !< fractional open width of V-faces [nondim]
+end type porous_barrier_ptrs
+
 
 contains
 
@@ -552,10 +571,11 @@ subroutine dealloc_BT_cont_type(BT_cont)
 end subroutine dealloc_BT_cont_type
 
 !> Diagnostic checksums on various elements of a thermo_var_ptrs type for debugging.
-subroutine MOM_thermovar_chksum(mesg, tv, G)
+subroutine MOM_thermovar_chksum(mesg, tv, G, US)
   character(len=*),      intent(in) :: mesg !< A message that appears in the checksum lines
   type(thermo_var_ptrs), intent(in) :: tv   !< A structure pointing to various thermodynamic variables
   type(ocean_grid_type), intent(in) :: G    !< The ocean's grid structure
+  type(unit_scale_type), intent(in) :: US   !< A dimensional unit scaling type
 
   ! Note that for the chksum calls to be useful for reproducing across PE
   ! counts, there must be no redundant points, so all variables use is..ie
@@ -565,11 +585,11 @@ subroutine MOM_thermovar_chksum(mesg, tv, G)
   if (associated(tv%S)) &
     call hchksum(tv%S, mesg//" tv%S", G%HI)
   if (associated(tv%frazil)) &
-    call hchksum(tv%frazil, mesg//" tv%frazil", G%HI, scale=G%US%Q_to_J_kg*G%US%RZ_to_kg_m2)
+    call hchksum(tv%frazil, mesg//" tv%frazil", G%HI, scale=US%Q_to_J_kg*US%RZ_to_kg_m2)
   if (associated(tv%salt_deficit)) &
-    call hchksum(tv%salt_deficit, mesg//" tv%salt_deficit", G%HI, scale=G%US%RZ_to_kg_m2)
+    call hchksum(tv%salt_deficit, mesg//" tv%salt_deficit", G%HI, scale=US%RZ_to_kg_m2)
   if (associated(tv%TempxPmE)) &
-    call hchksum(tv%TempxPmE, mesg//" tv%TempxPmE", G%HI, scale=G%US%RZ_to_kg_m2)
+    call hchksum(tv%TempxPmE, mesg//" tv%TempxPmE", G%HI, scale=US%RZ_to_kg_m2)
 end subroutine MOM_thermovar_chksum
 
 end module MOM_variables

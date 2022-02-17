@@ -24,7 +24,7 @@ implicit none ; private
 
 #include <MOM_memory.h>
 
-public PressureForce_FV_init, PressureForce_FV_end
+public PressureForce_FV_init
 public PressureForce_FV_Bouss, PressureForce_FV_nonBouss
 
 ! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
@@ -34,6 +34,7 @@ public PressureForce_FV_Bouss, PressureForce_FV_nonBouss
 
 !> Finite volume pressure gradient control structure
 type, public :: PressureForce_FV_CS ; private
+  logical :: initialized = .false. !< True if this control structure has been initialized.
   logical :: tides          !< If true, apply tidal momentum forcing.
   real    :: Rho0           !< The density used in the Boussinesq
                             !! approximation [R ~> kg m-3].
@@ -80,13 +81,13 @@ subroutine PressureForce_FV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_
   type(ocean_grid_type),                      intent(in)  :: G   !< Ocean grid structure
   type(verticalGrid_type),                    intent(in)  :: GV  !< Vertical grid structure
   type(unit_scale_type),                      intent(in)  :: US  !< A dimensional unit scaling type
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(in)  :: h   !< Layer thickness [H ~> kg/m2]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(in)  :: h   !< Layer thickness [H ~> kg m-2]
   type(thermo_var_ptrs),                      intent(in)  :: tv  !< Thermodynamic variables
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), intent(out) :: PFu !< Zonal acceleration [L T-2 ~> m s-2]
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), intent(out) :: PFv !< Meridional acceleration [L T-2 ~> m s-2]
-  type(PressureForce_FV_CS),                  pointer     :: CS  !< Finite volume PGF control structure
+  type(PressureForce_FV_CS),                  intent(in)  :: CS  !< Finite volume PGF control structure
   type(ALE_CS),                               pointer     :: ALE_CSp !< ALE control structure
-  real, dimension(:,:),                      optional, pointer :: p_atm !< The pressure at the ice-ocean
+  real, dimension(:,:),                       pointer     :: p_atm !< The pressure at the ice-ocean
                                                            !! or atmosphere-ocean interface [R L2 T-2 ~> Pa].
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), optional, intent(out) :: pbce !< The baroclinic pressure
                                                            !! anomaly in each layer due to eta anomalies
@@ -109,9 +110,9 @@ subroutine PressureForce_FV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_
     dza, &      ! The change in geopotential anomaly between the top and bottom
                 ! of a layer [L2 T-2 ~> m2 s-2].
     intp_dza    ! The vertical integral in depth of the pressure anomaly less
-                ! the pressure anomaly at the top of the layer [R L4 Z-4 ~> Pa m2 s-2].
+                ! the pressure anomaly at the top of the layer [R L4 T-4 ~> Pa m2 s-2].
   real, dimension(SZI_(G),SZJ_(G))  :: &
-    dp, &       ! The (positive) change in pressure across a layer [R L2 Z-2 ~> Pa].
+    dp, &       ! The (positive) change in pressure across a layer [R L2 T-2 ~> Pa].
     SSH, &      ! The sea surface height anomaly, in depth units [Z ~> m].
     e_tidal, &  ! The bottom geopotential anomaly due to tidal forces from
                 ! astronomical sources and self-attraction and loading [Z ~> m].
@@ -137,7 +138,7 @@ subroutine PressureForce_FV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_
 
   real :: dp_neglect         ! A thickness that is so small it is usually lost
                              ! in roundoff and can be neglected [R L2 T-2 ~> Pa].
-  real :: I_gEarth           ! The inverse of GV%g_Earth [L2 Z L-2 ~> s2 m-1]
+  real :: I_gEarth           ! The inverse of GV%g_Earth [T2 Z L-2 ~> s2 m-1]
   real :: alpha_anom         ! The in-situ specific volume, averaged over a
                              ! layer, less alpha_ref [R-1 ~> m3 kg-1].
   logical :: use_p_atm       ! If true, use the atmospheric pressure.
@@ -148,9 +149,11 @@ subroutine PressureForce_FV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_
   real :: alpha_ref     ! A reference specific volume [R-1 ~> m3 kg-1] that is used
                         ! to reduce the impact of truncation errors.
   real :: rho_in_situ(SZI_(G)) ! The in situ density [R ~> kg m-3].
-  real :: Pa_to_H       ! A factor to convert from Pa to the thicknesss units (H) [H T2 R-1 L-2 ~> H Pa-1].
-  real :: H_to_RL2_T2   ! A factor to convert from thicknesss units (H) to pressure units [R L2 T-2 H-1 ~> Pa H-1].
-!  real :: oneatm = 101325.0  ! 1 atm in [Pa] = [kg m-1 s-2]
+  real :: Pa_to_H       ! A factor to convert from Pa to the thickness units (H)
+                        ! [H T2 R-1 L-2 ~> m Pa-1 or kg m-2 Pa-1].
+  real :: H_to_RL2_T2   ! A factor to convert from thickness units (H) to pressure
+                        ! units [R L2 T-2 H-1 ~> Pa m-1 or Pa m2 kg-1].
+!  real :: oneatm       ! 1 standard atmosphere of pressure in [R L2 T-2 ~> Pa]
   real, parameter :: C1_6 = 1.0/6.0
   integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, nkmb
   integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state
@@ -161,14 +164,14 @@ subroutine PressureForce_FV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   EOSdom(1) = Isq - (G%isd-1) ;  EOSdom(2) = G%iec+1 - (G%isd-1)
 
-  if (.not.associated(CS)) call MOM_error(FATAL, &
+  if (.not.CS%initialized) call MOM_error(FATAL, &
        "MOM_PressureForce_FV_nonBouss: Module must be initialized before it is used.")
+
   if (CS%Stanley_T2_det_coeff>=0.) call MOM_error(FATAL, &
        "MOM_PressureForce_FV_nonBouss: The Stanley parameterization is not yet"//&
        "implemented in non-Boussinesq mode.")
 
-  use_p_atm = .false.
-  if (present(p_atm)) then ; if (associated(p_atm)) use_p_atm = .true. ; endif
+  use_p_atm = associated(p_atm)
   use_EOS = associated(tv%eqn_of_state)
   use_ALE = .false.
   if (associated(ALE_CSp)) use_ALE = CS%reconstruct .and. use_EOS
@@ -184,6 +187,7 @@ subroutine PressureForce_FV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_
       p(i,j,1) = p_atm(i,j)
     enddo ; enddo
   else
+    ! oneatm = 101325.0 * US%kg_m3_to_R * US%m_s_to_L_T**2 ! 1 atm scaled to [R L2 T-2 ~> Pa]
     !$OMP parallel do default(shared)
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
       p(i,j,1) = 0.0 ! or oneatm
@@ -196,7 +200,7 @@ subroutine PressureForce_FV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_
 
   if (use_EOS) then
   !   With a bulk mixed layer, replace the T & S of any layers that are
-  ! lighter than the the buffer layer with the properties of the buffer
+  ! lighter than the buffer layer with the properties of the buffer
   ! layer.  These layers will be massless anyway, and it avoids any
   ! formal calculations with hydrostatically unstable profiles.
     if (nkmb>0) then
@@ -227,7 +231,7 @@ subroutine PressureForce_FV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_
   ! If regridding is activated, do a linear reconstruction of salinity
   ! and temperature across each layer. The subscripts 't' and 'b' refer
   ! to top and bottom values within each layer (these are the only degrees
-  ! of freedeom needed to know the linear profile).
+  ! of freedom needed to know the linear profile).
   if ( use_ALE ) then
     if ( CS%Recon_Scheme == 1 ) then
       call TS_PLM_edge_values(ALE_CSp, S_t, S_b, T_t, T_b, G, GV, tv, h, CS%boundary_extrap)
@@ -241,7 +245,7 @@ subroutine PressureForce_FV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_
     ! Calculate 4 integrals through the layer that are required in the
     ! subsequent calculation.
     if (use_EOS) then
-      if ( use_ALE ) then
+      if ( use_ALE .and. CS%Recon_Scheme > 0 ) then
         if ( CS%Recon_Scheme == 1 ) then
           call int_spec_vol_dp_generic_plm( T_t(:,:,k), T_b(:,:,k), S_t(:,:,k), S_b(:,:,k), &
                     p(:,:,K), p(:,:,K+1), alpha_ref, dp_neglect, p(:,:,nz+1), G%HI, &
@@ -302,7 +306,7 @@ subroutine PressureForce_FV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
       SSH(i,j) = (za(i,j) - alpha_ref*p(i,j,1)) * I_gEarth - G%Z_ref
     enddo ; enddo
-    call calc_tidal_forcing(CS%Time, SSH, e_tidal, G, CS%tides_CSp, m_to_Z=US%m_to_Z)
+    call calc_tidal_forcing(CS%Time, SSH, e_tidal, G, US, CS%tides_CSp)
     !$OMP parallel do default(shared)
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
       za(i,j) = za(i,j) - GV%g_Earth * e_tidal(i,j)
@@ -423,9 +427,9 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm
   type(thermo_var_ptrs),                      intent(in)  :: tv  !< Thermodynamic variables
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), intent(out) :: PFu !< Zonal acceleration [L T-2 ~> m s-2]
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), intent(out) :: PFv !< Meridional acceleration [L T-2 ~> m s-2]
-  type(PressureForce_FV_CS),                  pointer     :: CS  !< Finite volume PGF control structure
+  type(PressureForce_FV_CS),                  intent(in)  :: CS  !< Finite volume PGF control structure
   type(ALE_CS),                               pointer     :: ALE_CSp !< ALE control structure
-  real, dimension(:,:),                      optional, pointer :: p_atm !< The pressure at the ice-ocean
+  real, dimension(:,:),                       pointer     :: p_atm !< The pressure at the ice-ocean
                                                          !! or atmosphere-ocean interface [R L2 T-2 ~> Pa].
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), optional, intent(out) :: pbce !< The baroclinic pressure
                                                          !! anomaly in each layer due to eta anomalies
@@ -498,11 +502,10 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   EOSdom(1) = Isq - (G%isd-1) ;  EOSdom(2) = G%iec+1 - (G%isd-1)
 
-  if (.not.associated(CS)) call MOM_error(FATAL, &
+  if (.not.CS%initialized) call MOM_error(FATAL, &
        "MOM_PressureForce_FV_Bouss: Module must be initialized before it is used.")
 
-  use_p_atm = .false.
-  if (present(p_atm)) then ; if (associated(p_atm)) use_p_atm = .true. ; endif
+  use_p_atm = associated(p_atm)
   use_EOS = associated(tv%eqn_of_state)
   do i=Isq,Ieq+1 ; p0(i) = 0.0 ; enddo
   use_ALE = .false.
@@ -571,7 +574,7 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm
         SSH(i,j) = SSH(i,j) + h(i,j,k)*GV%H_to_Z
       enddo ; enddo
     enddo
-    call calc_tidal_forcing(CS%Time, SSH, e_tidal, G, CS%tides_CSp, m_to_Z=US%m_to_Z)
+    call calc_tidal_forcing(CS%Time, SSH, e_tidal, G, US, CS%tides_CSp)
   endif
 
 !    Here layer interface heights, e, are calculated.
@@ -593,7 +596,7 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm
 
   if (use_EOS) then
 ! With a bulk mixed layer, replace the T & S of any layers that are
-! lighter than the the buffer layer with the properties of the buffer
+! lighter than the buffer layer with the properties of the buffer
 ! layer.  These layers will be massless anyway, and it avoids any
 ! formal calculations with hydrostatically unstable profiles.
 
@@ -652,7 +655,7 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm
   ! If regridding is activated, do a linear reconstruction of salinity
   ! and temperature across each layer. The subscripts 't' and 'b' refer
   ! to top and bottom values within each layer (these are the only degrees
-  ! of freedeom needed to know the linear profile).
+  ! of freedom needed to know the linear profile).
   if ( use_ALE ) then
     if ( CS%Recon_Scheme == 1 ) then
       call TS_PLM_edge_values(ALE_CSp, S_t, S_b, T_t, T_b, G, GV, tv, h, CS%boundary_extrap)
@@ -694,7 +697,7 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm
       ! assumed when regridding is activated. Otherwise, the previous version
       ! is used, whereby densities within each layer are constant no matter
       ! where the layers are located.
-      if ( use_ALE ) then
+      if ( use_ALE .and. CS%Recon_Scheme > 0 ) then
         if ( CS%Recon_Scheme == 1 ) then
           call int_density_dz_generic_plm(k, tv,  T_t, T_b, S_t, S_b, e, &
                     rho_ref, CS%Rho0, GV%g_Earth, dz_neglect, G%bathyT, &
@@ -807,23 +810,17 @@ subroutine PressureForce_FV_init(Time, G, GV, US, param_file, diag, CS, tides_CS
   type(unit_scale_type),      intent(in)    :: US !< A dimensional unit scaling type
   type(param_file_type),      intent(in)    :: param_file !< Parameter file handles
   type(diag_ctrl), target,    intent(inout) :: diag !< Diagnostics control structure
-  type(PressureForce_FV_CS),  pointer       :: CS !< Finite volume PGF control structure
-  type(tidal_forcing_CS), optional, pointer :: tides_CSp !< Tides control structure
+  type(PressureForce_FV_CS),  intent(inout) :: CS !< Finite volume PGF control structure
+  type(tidal_forcing_CS), intent(in), target, optional :: tides_CSp !< Tides control structure
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
   character(len=40)  :: mdl  ! This module's name.
   logical :: use_ALE
 
-  if (associated(CS)) then
-    call MOM_error(WARNING, "PressureForce_init called with an associated "// &
-                            "control structure.")
-    return
-  else ; allocate(CS) ; endif
-
+  CS%initialized = .true.
   CS%diag => diag ; CS%Time => Time
-  if (present(tides_CSp)) then
-    if (associated(tides_CSp)) CS%tides_CSp => tides_CSp
-  endif
+  if (present(tides_CSp)) &
+    CS%tides_CSp => tides_CSp
 
   mdl = "MOM_PressureForce_FV"
   call log_version(param_file, mdl, version, "")
@@ -882,13 +879,6 @@ subroutine PressureForce_FV_init(Time, G, GV, US, param_file, diag, CS, tides_CS
   call log_param(param_file, mdl, "GFS / G_EARTH", CS%GFS_scale)
 
 end subroutine PressureForce_FV_init
-
-!> Deallocates the finite volume pressure gradient control structure
-subroutine PressureForce_FV_end(CS)
-  type(PressureForce_FV_CS), pointer :: CS !< Finite volume pressure control structure that
-                                            !! will be deallocated in this subroutine.
-  if (associated(CS)) deallocate(CS)
-end subroutine PressureForce_FV_end
 
 !> \namespace mom_pressureforce_fv
 !!
