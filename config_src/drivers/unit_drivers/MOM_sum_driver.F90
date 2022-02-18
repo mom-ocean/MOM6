@@ -18,25 +18,30 @@ program MOM_main
   use MOM_coms, only : EFP_type, operator(+), operator(-), assignment(=), EFP_to_real, real_to_EFP
   use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
   use MOM_cpu_clock, only : CLOCK_COMPONENT
-  use MOM_domains, only : MOM_domains_init, MOM_infra_init, MOM_infra_end
+  use MOM_domains, only : MOM_domain_type, MOM_domains_init, MOM_infra_init, MOM_infra_end
+  use MOM_dyn_horgrid, only : dyn_horgrid_type, create_dyn_horgrid, destroy_dyn_horgrid
   use MOM_error_handler, only : MOM_error, MOM_mesg, WARNING, FATAL, is_root_pe
   use MOM_error_handler, only : MOM_set_verbosity
   use MOM_file_parser, only : read_param, get_param, log_param, log_version, param_file_type
   use MOM_file_parser, only : open_param_file, close_param_file
-  use MOM_grid, only : MOM_grid_init, ocean_grid_type
   use MOM_grid_initialize, only : set_grid_metrics
+  use MOM_hor_index, only : hor_index_type, hor_index_init
   use MOM_io, only : MOM_io_init, file_exists, open_file, close_file
   use MOM_io, only : check_nml_error, io_infra_init, io_infra_end
   use MOM_io, only : APPEND_FILE, ASCII_FILE, READONLY_FILE, SINGLE_FILE
+  use MOM_unit_scaling, only : unit_scale_type, unit_no_scaling_init, unit_scaling_end
 
   implicit none
 
 #include <MOM_memory.h>
 
-  type(ocean_grid_type) :: grid ! A structure containing metrics and grid info.
-
-  type(param_file_type) :: param_file ! The structure indicating the file(s)
+  type(MOM_domain_type), pointer :: Domain => NULL() !< Ocean model domain
+  type(dyn_horgrid_type), pointer :: grid => NULL() ! A structure containing metrics and grid info
+  type(hor_index_type)   :: HI        ! A hor_index_type for array extents
+  type(param_file_type)  :: param_file ! The structure indicating the file(s)
                                 ! containing all run-time parameters.
+  type(unit_scale_type), pointer :: US => NULL() !< A structure containing various unit
+                                ! conversion factors, but in this case all are 1.
   real    :: max_depth          ! The maximum ocean depth [m]
   integer :: verbosity
   integer :: num_sums
@@ -76,14 +81,16 @@ program MOM_main
   verbosity = 2 ; call read_param(param_file, "VERBOSITY", verbosity)
   call MOM_set_verbosity(verbosity)
 
-  call MOM_domains_init(grid%domain, param_file)
+  call MOM_domains_init(Domain, param_file)
 
   call MOM_io_init(param_file)
 !  call diag_mediator_init(param_file)
-  call MOM_grid_init(grid, param_file)
+  call hor_index_init(Domain, HI, param_file)
+  call create_dyn_horgrid(grid, HI)
+  grid%Domain => Domain
 
-  is = grid%isc ; ie = grid%iec ; js = grid%jsc ; je = grid%jec
-  isd = grid%isd ; ied = grid%ied ; jsd = grid%jsd ; jed = grid%jed
+  is = HI%isc ; ie = HI%iec ; js = HI%jsc ; je = HI%jec
+  isd = HI%isd ; ied = HI%ied ; jsd = HI%jsd ; jed = HI%jed
 
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, "MOM", version, "")
@@ -99,8 +106,9 @@ program MOM_main
   allocate(depth_tot_std(num_sums))   ; depth_tot_std(:) = 0.0
   allocate(depth_tot_fastR(num_sums)) ; depth_tot_fastR(:) = 0.0
 
-! Set up the parameters of the physical domain (i.e. the grid), G
-  call set_grid_metrics(grid, param_file)
+! Set up the parameters of the physical grid
+  call unit_no_scaling_init(US)
+  call set_grid_metrics(grid, param_file, US)
 
 ! Set up the bottom depth, grid%bathyT either analytically or from file
   call get_param(param_file, "MOM", "MAXIMUM_DEPTH", max_depth, &
@@ -157,14 +165,17 @@ program MOM_main
     endif
   enddo
 
+  call destroy_dyn_horgrid(grid)
+  call unit_scaling_end(US)
   call io_infra_end ; call MOM_infra_end
 
 contains
 
 !> This subroutine sets up the benchmark test case topography for debugging
 subroutine benchmark_init_topog_local(D, G, param_file, max_depth)
-  type(ocean_grid_type),            intent(in)  :: G    !< The ocean's grid structure
-  real, dimension(SZI_(G),SZJ_(G)), intent(out) :: D    !< The ocean bottom depth in m
+  type(dyn_horgrid_type),           intent(in)  :: G !< The dynamic horizontal grid type
+  real, dimension(G%isd:G%ied,G%jsd:G%jed), &
+                                    intent(out) :: D !< Ocean bottom depth in m or [Z ~> m] if US is present
   type(param_file_type),            intent(in)  :: param_file !< A structure to parse for run-time parameters
   real,                             intent(in)  :: max_depth !< The maximum ocean depth [m]
 
@@ -172,6 +183,7 @@ subroutine benchmark_init_topog_local(D, G, param_file, max_depth)
   real :: PI                   ! 3.1415926... calculated as 4*atan(1)
   real :: D0                   ! A constant to make the maximum     !
                                ! basin depth MAXIMUM_DEPTH.         !
+  real :: m_to_Z  ! A dimensional rescaling factor.
   real :: x, y
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
@@ -180,12 +192,14 @@ subroutine benchmark_init_topog_local(D, G, param_file, max_depth)
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
-  call log_version(param_file, mdl, version)
+  m_to_Z = 1.0 ! ; if (present(US)) m_to_Z = US%m_to_Z
+
+  call log_version(param_file, mdl, version, "")
   call get_param(param_file, mdl, "MINIMUM_DEPTH", min_depth, &
-                 "The minimum depth of the ocean.", units="m", default=0.0)
+                 "The minimum depth of the ocean.", units="m", default=0.0, scale=m_to_Z)
 
   PI = 4.0*atan(1.0)
-  D0 = max_depth / 0.5;
+  D0 = max_depth / 0.5
 
 !  Calculate the depth of the bottom.
   do i=is,ie ; do j=js,je

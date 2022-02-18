@@ -59,8 +59,8 @@ type, public :: ocean_grid_type
   integer :: JsgB !< The start j-index of cell vertices within the global domain
   integer :: JegB !< The end j-index of cell vertices within the global domain
 
-  integer :: isd_global !< The value of isd in the global index space (decompoistion invariant).
-  integer :: jsd_global !< The value of isd in the global index space (decompoistion invariant).
+  integer :: isd_global !< The value of isd in the global index space (decomposition invariant).
+  integer :: jsd_global !< The value of isd in the global index space (decomposition invariant).
   integer :: idg_offset !< The offset between the corresponding global and local i-indices.
   integer :: jdg_offset !< The offset between the corresponding global and local j-indices.
   integer :: ke         !< The number of layers in the vertical.
@@ -111,6 +111,16 @@ type, public :: ocean_grid_type
     dx_Cv, &     !< The unblocked lengths of the v-faces of the h-cell [L ~> m].
     IareaCv, &   !< The masked inverse areas of v-grid cells [L-2 ~> m-2].
     areaCv       !< The areas of the v-grid cells [L2 ~> m2].
+
+  real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_) :: &
+    porous_DminU, & !< minimum topographic height of U-face [Z ~> m]
+    porous_DmaxU, & !< maximum topographic height of U-face [Z ~> m]
+    porous_DavgU    !< average topographic height of U-face [Z ~> m]
+
+  real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_) :: &
+    porous_DminV, & !< minimum topographic height of V-face [Z ~> m]
+    porous_DmaxV, & !< maximum topographic height of V-face [Z ~> m]
+    porous_DavgV    !< average topographic height of V-face [Z ~> m]
 
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEMB_PTR_) :: &
     mask2dBu, &  !< 0 for boundary points and 1 for ocean points on the q grid [nondim].
@@ -171,10 +181,11 @@ type, public :: ocean_grid_type
   ! initialization routines (but not all)
   real :: south_lat     !< The latitude (or y-coordinate) of the first v-line
   real :: west_lon      !< The longitude (or x-coordinate) of the first u-line
-  real :: len_lat = 0.  !< The latitudinal (or y-coord) extent of physical domain
-  real :: len_lon = 0.  !< The longitudinal (or x-coord) extent of physical domain
-  real :: Rad_Earth = 6.378e6 !< The radius of the planet [m].
-  real :: max_depth     !< The maximum depth of the ocean in depth units [Z ~> m].
+  real :: len_lat       !< The latitudinal (or y-coord) extent of physical domain
+  real :: len_lon       !< The longitudinal (or x-coord) extent of physical domain
+  real :: Rad_Earth     !< The radius of the planet [m]
+  real :: Rad_Earth_L   !< The radius of the planet in rescaled units [L ~> m]
+  real :: max_depth     !< The maximum depth of the ocean in depth units [Z ~> m]
 end type ocean_grid_type
 
 contains
@@ -195,7 +206,7 @@ subroutine MOM_grid_init(G, param_file, US, HI, global_indexing, bathymetry_at_v
                              !! are entirely determined from thickness points.
 
   ! Local variables
-  real :: mean_SeaLev_scale
+  real :: mean_SeaLev_scale ! A scaling factor for the reference height variable [1] or [Z m-1 ~> 1]
   integer :: isd, ied, jsd, jed, nk
   integer :: IsdB, IedB, JsdB, JedB
   integer :: ied_max, jed_max
@@ -387,10 +398,10 @@ end subroutine MOM_grid_init
 subroutine rescale_grid_bathymetry(G, m_in_new_units)
   type(ocean_grid_type), intent(inout) :: G    !< The horizontal grid structure
   real,                  intent(in)    :: m_in_new_units !< The new internal representation of 1 m depth.
-  ! It appears that this routine is never called.
+  !### It appears that this routine is never called.
 
   ! Local variables
-  real :: rescale
+  real :: rescale ! A unit rescaling factor [various combinations of units ~> 1]
   integer :: i, j, isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
 
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
@@ -478,14 +489,16 @@ logical function isPointInCell(G, i, j, x, y)
   real,                  intent(in) :: x !< x coordinate of point
   real,                  intent(in) :: y !< y coordinate of point
   ! Local variables
-  real :: xNE, xNW, xSE, xSW, yNE, yNW, ySE, ySW
-  real :: p0, p1, p2, p3, l0, l1, l2, l3
+  real :: xNE, xNW, xSE, xSW ! Longitudes of cell corners [degLon]
+  real :: yNE, yNW, ySE, ySW ! Latitudes of cell corners [degLat]
+  real :: l0, l1, l2, l3 ! Crossed products of differences in position [degLon degLat]
+  real :: p0, p1, p2, p3 ! Trinary unitary values reflecting the signs of the crossed products [nondim]
   isPointInCell = .false.
   xNE = G%geoLonBu(i  ,j  ) ; yNE = G%geoLatBu(i  ,j  )
   xNW = G%geoLonBu(i-1,j  ) ; yNW = G%geoLatBu(i-1,j  )
   xSE = G%geoLonBu(i  ,j-1) ; ySE = G%geoLatBu(i  ,j-1)
   xSW = G%geoLonBu(i-1,j-1) ; ySW = G%geoLatBu(i-1,j-1)
-  ! This is a crude calculation that assume a geographic coordinate system
+  ! This is a crude calculation that assumes a geographic coordinate system
   if (x<min(xNE,xNW,xSE,xSW) .or. x>max(xNE,xNW,xSE,xSW) .or. &
       y<min(yNE,yNW,ySE,ySW) .or. y>max(yNE,yNW,ySE,ySW) ) then
     return ! Avoid the more complicated calculation
@@ -574,6 +587,14 @@ subroutine allocate_metrics(G)
   ALLOC_(G%dx_Cv(isd:ied,JsdB:JedB))     ; G%dx_Cv(:,:) = 0.0
   ALLOC_(G%dy_Cu(IsdB:IedB,jsd:jed))     ; G%dy_Cu(:,:) = 0.0
 
+  ALLOC_(G%porous_DminU(IsdB:IedB,jsd:jed)); G%porous_DminU(:,:) = 0.0
+  ALLOC_(G%porous_DmaxU(IsdB:IedB,jsd:jed)); G%porous_DmaxU(:,:) = 0.0
+  ALLOC_(G%porous_DavgU(IsdB:IedB,jsd:jed)); G%porous_DavgU(:,:) = 0.0
+
+  ALLOC_(G%porous_DminV(isd:ied,JsdB:JedB)); G%porous_DminV(:,:) = 0.0
+  ALLOC_(G%porous_DmaxV(isd:ied,JsdB:JedB)); G%porous_DmaxV(:,:) = 0.0
+  ALLOC_(G%porous_DavgV(isd:ied,JsdB:JedB)); G%porous_DavgV(:,:) = 0.0
+
   ALLOC_(G%areaCu(IsdB:IedB,jsd:jed))  ; G%areaCu(:,:) = 0.0
   ALLOC_(G%areaCv(isd:ied,JsdB:JedB))  ; G%areaCv(:,:) = 0.0
   ALLOC_(G%IareaCu(IsdB:IedB,jsd:jed)) ; G%IareaCu(:,:) = 0.0
@@ -629,6 +650,9 @@ subroutine MOM_grid_end(G)
   DEALLOC_(G%bathyT)  ; DEALLOC_(G%CoriolisBu)
   DEALLOC_(G%dF_dx)  ; DEALLOC_(G%dF_dy)
   DEALLOC_(G%sin_rot) ; DEALLOC_(G%cos_rot)
+
+  DEALLOC_(G%porous_DminU) ; DEALLOC_(G%porous_DmaxU) ; DEALLOC_(G%porous_DavgU)
+  DEALLOC_(G%porous_DminV) ; DEALLOC_(G%porous_DmaxV) ; DEALLOC_(G%porous_DavgV)
 
   deallocate(G%gridLonT) ; deallocate(G%gridLatT)
   deallocate(G%gridLonB) ; deallocate(G%gridLatB)

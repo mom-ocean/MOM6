@@ -76,7 +76,7 @@ subroutine RGC_initialize_sponges(G, GV, US, tv, u, v, depth_tot, PF, use_ALE, C
   real :: RHO(SZI_(G),SZJ_(G),SZK_(GV)) ! A temporary array for RHO
   real :: tmp(SZI_(G),SZJ_(G))        ! A temporary array for tracers.
   real :: h(SZI_(G),SZJ_(G),SZK_(GV)) ! A temporary array for thickness at h points
-  real :: Idamp(SZI_(G),SZJ_(G))    ! The inverse damping rate at h points [T-1 ~> s-1].
+  real :: Idamp(SZI_(G),SZJ_(G))    ! The sponge damping rate at h points [T-1 ~> s-1]
   real :: TNUDG                     ! Nudging time scale [T ~> s]
   real :: pres(SZI_(G))             ! An array of the reference pressure [R L2 T-2 ~> Pa]
   real :: eta(SZI_(G),SZJ_(G),SZK_(GV)+1) ! A temporary array for eta, positive upward [m].
@@ -196,7 +196,7 @@ subroutine RGC_initialize_sponges(G, GV, US, tv, u, v, depth_tot, PF, use_ALE, C
     !read eta
     call MOM_read_data(filename, eta_var, eta(:,:,:), G%Domain)
 
-    ! Set the inverse damping rates so that the model will know where to
+    ! Set the sponge damping rates so that the model will know where to
     ! apply the sponges, along with the interface heights.
     call initialize_sponge(Idamp, eta, G, PF, CSp, GV)
 

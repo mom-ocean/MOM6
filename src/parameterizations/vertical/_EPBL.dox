@@ -1,0 +1,254 @@
+/*! \page EPBL Energetically-constrained Planetary Boundary Layer
+
+We here describe a scheme for modeling the ocean surface boundary layer
+(OSBL) suitable for use in global climate models. It builds on the ideas in
+\ref BML, bringing in some of the ideas from \ref subsection_kappa_shear, to
+make an energetically consistent boundary layer suitable for use with
+a generalized vertical coordinate. Unlike in \ref BML, variables are
+allowed to have vertical structure within the boundary layer. The downward
+turbulent flux of buoyant water by OSBL turbulence converts mechanical
+energy into potential energy as it mixes with less buoyant water at the
+base of the OSBL. As described in \cite reichl2018, we focus on OSBL
+parameterizations that constrain this integrated potential energy
+conversion due to turbulent mixing.
+
+The leading-order mean OSBL equation for arbitrary scalar \f$\phi\f$ is:
+
+\f[
+   \frac{\partial \overline{\phi}}{\partial t} = - \frac{\partial}{\partial z}
+   \overline{w^\prime \phi^\prime} + \nu_\phi \frac{\partial^2 \overline{\phi}}{\partial z^2}
+\f]
+
+where the symbols are as follows:
+
+<table>
+<caption id="table_symbols_tke">Symbols used in TKE equation</caption>
+<tr><th>Symbol <th>Meaning
+<tr><td>\f$u_i\f$      <td> horizontal components of the velocity
+<tr><td>\f$\phi\f$     <td> arbitrary scalar (tracer) quantity
+<tr><td>\f$w\f$        <td> vertical component of the velocity
+<tr><td>\f$\overline{w}\f$ <td> ensemble average \f$w\f$
+<tr><td>\f$w^\prime\f$ <td> fluctuations from \f$\overline{w}\f$
+<tr><td>\f$k\f$        <td> turbulent kinetic energy (TKE)
+<tr><td>\f$K_M\f$      <td> turbulent mixing coefficient for momentum
+<tr><td>\f$K_\phi\f$   <td> turbulent mixing coefficient for \f$\phi\f$
+<tr><td>\f$\sigma_k\f$ <td> turbulent Schmidt number
+<tr><td>\f$b\f$        <td> buoyancy
+<tr><td>\f$\epsilon\f$ <td> buoyancy turbulent dissipation rate
+</table>
+
+This equation describes the evolution of mean quantity \f$\overline{\phi}\f$
+due to vertical processes, including the often negligible molecular
+mixing. We would like to parameterize the vertical mixing since we won't be
+resolving all the relevant time and space scales.
+
+We use the Boussinesq hypothesis for turbulence closure. This approximates
+the Reynolds stress terms using an eddy viscosity (eddy diffusivity for
+turbulent scalar fluxes):
+
+\f[
+   \overline{u_i^\prime w^\prime} = - K_M \frac{\partial \overline{u_i}}{\partial z} ,
+\f]
+
+Similarly, the eddy diffusivity is used to parameterize turbulent scalar fluxes as:
+
+\f[
+   \overline{\phi^\prime w^\prime} = - K_\phi \frac{\partial \overline{\phi}}{\partial z} ,
+\f]
+
+The parameters needed to close the system of equations are then reduced to the turbulent
+mixing coefficients, \f$K_\phi\f$ and \f$K_M\f$.
+
+We start with an equation for the turbulent kinetic energy (TKE):
+
+\f[
+  \frac{\partial k}{\partial t} = \frac{\partial}{\partial z} \left( \frac{K_M}{\sigma_k}
+  \frac{\partial k}{\partial z} \right) - \overline{u_i^\prime w^\prime} \frac{\partial \overline{u_i}}
+  {\partial z} + \overline{w^\prime b^\prime} - \epsilon
+\f]
+
+Terms in this equation represent TKE storage (LHS), TKE flux convergence,
+shear production, buoyancy production, and dissipation.
+
+\section section_WMBL Well-mixed Boundary Layers (WMBL)
+
+Assuming steady state and other parameterizations, integrating vertically
+over the surface boundary layer, \cite reichl2018 obtains the form:
+
+\f[
+   \frac{1}{2} H_{bl} w_e \Delta b = m_\ast u_\ast^3 - n_\ast \frac{H_{bl}}{2}
+   B(H_{bl}) ,
+\f]
+
+with the following variables:
+
+<table>
+<caption id="table_symbols_tke2">Symbols used in integrated TKE equation</caption>
+<tr><th>Symbol <th>Meaning
+<tr><td>\f$H_{bl}\f$      <td> boundary layer thickness
+<tr><td>\f$w_e\f$         <td> entrainment velocity
+<tr><td>\f$\Delta b\f$    <td> change in buoyancy at base of mixed layer
+<tr><td>\f$m_\ast\f$      <td> sum of mechanical coefficients
+<tr><td>\f$u_\ast\f$      <td> friction velocity (\f$u_\ast = (|\tau| / \rho_0)^{1/2}\f$)
+<tr><td>\f$\tau\f$        <td> wind stress
+<tr><td>\f$n_\ast\f$      <td> convective proportionality coefficient
+<tr><td>                  <td> 1 for stabilizing surface buoyancy flux, less otherwise
+<tr><td>\f$B(H_{bl})\f$   <td> surface buoyancy flux
+</table>
+
+\section section_ePBL Energetics-based Planetary Boundary Layer
+
+Once again, the goal is to formulate a surface mixing scheme to find the
+turbulent eddy diffusivity (and viscosity) in a way that is suitable for use
+in a global climate model, using long timesteps and large grid spacing.
+After evaluating a well-mixed boundary layer (WMBL), the shear mixing of
+\cite jackson2008 (JHL, \ref subsection_kappa_shear), as well as a more complete
+boundary layer scheme, it was decided to combine a number of these ideas
+into a new scheme:
+
+\f[
+   K(z) = F_x(K_{ePBL}(z), K_{JHL}(z), K_n(z))
+\f]
+
+where \f$F_x\f$ is some unknown function of a new \f$K_{ePBL}\f$,
+\f$K_{JHL}\f$, the diffusivity due to shear as determined by
+\cite jackson2008, and \f$K_n\f$, the diffusivity from other ideas.
+We start by specifying the form of \f$K_{ePBL}\f$ as being:
+
+\f[
+   K_{ePBL}(z) = C_K w_t l ,
+\f]
+
+where \f$w_t\f$ is a turbulent velocity scale, \f$C_K\f$ is a coefficient, and
+\f$l\f$ is a length scale.
+
+\subsection subsection_lengthscale Turbulent length scale
+
+We propose a form for the length scale as follows:
+
+\f[
+   l = (z_0 + |z|) \times \max \left[ \frac{l_b}{H_{bl}} , \left(
+   \frac{H_{bl} - |z|}{H_{bl}} \right)^\gamma \, \right] ,
+\f]
+
+where we have the following variables:
+
+<table>
+<caption id="table_symbols_tke3">Symbols used in ePBL length scale</caption>
+<tr><th>Symbol <th>Meaning
+<tr><td>\f$H_{bl}\f$      <td> boundary layer thickness
+<tr><td>\f$z_0\f$         <td> roughness length
+<tr><td>\f$\gamma\f$      <td> coefficient, 2 is as in KPP, \cite large1994
+<tr><td>\f$l_b\f$         <td> bottom length scale
+</table>
+
+\subsection subsection_velocityscale Turbulent velocity scale
+
+We do not predict the TKE prognostically and therefore approximate the vertical TKE
+profile to estimate \f$w_t\f$. An estimate for the mechanical contribution to the velocity
+scale follows the standard two-equation approach. In one and two-equation second-order
+\f$K\f$ parameterizations the boundary condition for the TKE is typically employed as a
+flux boundary condition.
+
+\f[
+   K \left. \frac{\partial k}{\partial z} \right|_{z=0} = c_\mu^0 u_\ast^3 .
+\f]
+
+The profile of \f$k\f$ decays in the vertical from \f$k \propto (c_\mu^0)^{2/3}
+u_\ast^2\f$ toward the base of the OSBL. Here we assume a similar relationship to estimate
+the mechanical contribution to the TKE profile. The value of \f$w_t\f$ due to mechanical
+sources, \f$v_\ast\f$, is estimate as \f$v_\ast (z=0) \propto (c_\mu^0)^{1/3} u_\ast\f$ at
+the surface. Since we only parameterize OSBL turbulent mixing due to surface forcing, the
+value of the velocity scale is assumed to decay moving away from the surface. For
+simplicity we employ a linear decay in depth:
+
+\f[
+   v_\ast (z) = (c_\mu^0)^{1/3} u_\ast \left( 1 - a \cdot \min \left[ 1,
+   \frac{|z|}{H_{bl}} \right] \right) ,
+\f]
+
+where \f$1 > a > 0\f$ has the effect of making \f$v_\ast(z=H_{bl}) > 0\f$.
+Making the constant coefficient \f$a\f$ close to one has the effect of reducing the mixing
+rate near the base of the boundary layer, thus producing a more diffuse entrainment
+region. Making \f$a\f$ close to zero has the effect of increasing the mixing at the base
+of the boundary layer, producing a more 'step-like' entrainment region.
+
+An estimate for the buoyancy contribution is found utilizing the convective velocity
+scale:
+
+\f[
+   w_\ast (z) = C_{w_\ast} \left( \int_z^0 \overline{w^\prime b^\prime} dz \right)^{1/3} ,
+\f]
+
+where \f$C_{w_\ast}\f$ is a non-dimensional empirical coefficient. Convection in one and
+two-equation closure causes a TKE profile that peaks below the surface. The quantity
+\f$\overline{w^\prime b^\prime}\f$ is solved for in ePBL as \f$KN^2\f$.
+
+These choices for the convective and mechanical components of the velocity scale in the
+OSBL are then added together to get an estimate for the total turbulent velocity scale:
+
+\f[
+   w_t (z) = w_\ast (z) + v_\ast (z) .
+\f]
+
+The value of \f$a\f$ is arbitrarily chosen to be 0.95 here.
+
+\subsection subsection_ePBL_summary Summarizing the ePBL implementation
+
+The ePBL mixing coefficient is found by multiplying a velocity scale
+(\ref subsection_velocityscale) by a length scale (\ref subsection_lengthscale). The
+precise value of the coefficient \f$C_K\f$ used does not significantly alter the
+prescribed potential energy change constraint. A reasonable value is \f$C_K \approx 0.55\f$ to
+be consistent with other approaches (e.g. \cite umlauf2005).
+
+The boundary layer thickness (\f$H_{bl}\f$) within ePBL is based on
+the depth where the energy requirement for turbulent mixing of density
+exceeds the available energy (\ref section_WMBL). \f$H_{bl}\f$ is
+determined by the energetic constraint imposed using the value of
+\f$m_\ast\f$ and \f$n_\ast\f$. An iterative solver is required because
+\f$m_\ast\f$ and the mixing length are dependent on \f$H_{bl}\f$.
+
+We use a constant value for convectively driven TKE of \f$n_\ast = 0.066\f$. The
+parameterizations for \f$m_\ast\f$ are formulated specifically for the regimes where
+\f$K_{JHL}\f$ is sensitive to model numerics \f$(|f| \Delta t \approx
+1)\f$ (\cite reichl2018).
+
+\subsection subsection_ePBL_JHL Combining ePBL and JHL mixing coefficients
+
+We now address the combination of the ePBL mixing coefficient and the JHL mixing
+coefficient. The function \f$F_x\f$ above cannot be the linear sum of \f$K_{ePBL}\f$ and
+\f$K_{JHL}\f$. One reason this sum is not valid is because the JHL mixing coefficient is
+determined by resolved current shear, including that driven by the surface wind. The
+wind-driven current is also included in the ePBL mixing coefficient formulation. An
+alternative approach is therefore needed to avoid double counting.
+
+\f$K_{ePBL}\f$ is not used at the equator as scalings are only investigated when \f$|f| >
+0\f$. The solution we employ is to use the maximum mixing coefficient of the two
+contributions,
+
+\f[
+  K (z) = \max (K_{ePBL} (z), K_{JHL} (z)),
+\f]
+
+where \f$m_\ast\f$ (and hence \f$K_{ePBL}\f$) is constrained to be small as \f$|f|
+\rightarrow 0\f$. This form uses the JHL mixing coefficient when the ePBL coefficient is
+small.
+
+This approach is reasonable when the wind-driven mixing dominates, since both JHL and ePBL
+give a similar solution when deployed optimally. One weakness of this approach is the
+tropical region, where the shear-driven ePBL \f$m_\ast\f$ coefficient is not formulated.
+The JHL parameterization is skillful to simulate this mixing, but does not include the
+contribution of convection. The convective portion of \f$K_{ePBL}\f$ should be combined
+with \f$K_{JHL}\f$ in the equatorial region when shear and convection occur together.
+Future research is warranted.
+
+Finally, one should note that the mixing coefficient here (\f$K\f$) is used for both
+diffusivity and viscosity, implying a turbulent Prandtl number of 1.0.
+
+\subsection subsection_Langmuir Langmuir circulation
+
+While only briefly alluded to in \cite reichl2018, the MOM6 code implementing ePBL does
+support the option to add a Langmuir parameterization. There are in fact two options, both
+adjusting \f$m_\ast\f$.
+
+*/

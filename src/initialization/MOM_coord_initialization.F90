@@ -48,9 +48,6 @@ subroutine MOM_initialize_coord(GV, US, PF, write_geom, output_dir, tv, max_dept
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
   integer :: nz
-  type(EOS_type), pointer :: eos => NULL()
-
-  if (associated(tv%eqn_of_state)) eos => tv%eqn_of_state
 
   nz = GV%ke
 
@@ -86,17 +83,17 @@ subroutine MOM_initialize_coord(GV, US, PF, write_geom, output_dir, tv, max_dept
     case ("linear")
       call set_coord_linear(GV%Rlay, GV%g_prime, GV, US, PF)
     case ("ts_ref")
-      call set_coord_from_TS_ref(GV%Rlay, GV%g_prime, GV, US, PF, eos, tv%P_Ref)
+      call set_coord_from_TS_ref(GV%Rlay, GV%g_prime, GV, US, PF, tv%eqn_of_state, tv%P_Ref)
     case ("ts_profile")
-      call set_coord_from_TS_profile(GV%Rlay, GV%g_prime, GV, US, PF, eos, tv%P_Ref)
+      call set_coord_from_TS_profile(GV%Rlay, GV%g_prime, GV, US, PF, tv%eqn_of_state, tv%P_Ref)
     case ("ts_range")
-      call set_coord_from_TS_range(GV%Rlay, GV%g_prime, GV, US, PF, eos, tv%P_Ref)
+      call set_coord_from_TS_range(GV%Rlay, GV%g_prime, GV, US, PF, tv%eqn_of_state, tv%P_Ref)
     case ("file")
       call set_coord_from_file(GV%Rlay, GV%g_prime, GV, US, PF)
     case ("USER")
-      call user_set_coord(GV%Rlay, GV%g_prime, GV, US, PF, eos)
+      call user_set_coord(GV%Rlay, GV%g_prime, GV, US, PF)
     case ("BFB")
-      call BFB_set_coord(GV%Rlay, GV%g_prime, GV, US, PF, eos)
+      call BFB_set_coord(GV%Rlay, GV%g_prime, GV, US, PF)
     case ("none", "ALE")
       call set_coord_to_none(GV%Rlay, GV%g_prime, GV, US, PF)
     case default ; call MOM_error(FATAL,"MOM_initialize_coord: "// &
@@ -208,7 +205,7 @@ subroutine set_coord_from_TS_ref(Rlay, g_prime, GV, US, param_file, eqn_of_state
                                                       !! [L2 Z-1 T-2 ~> m s-2].
   type(unit_scale_type),    intent(in)  :: US         !< A dimensional unit scaling type
   type(param_file_type),    intent(in)  :: param_file !< A structure to parse for run-time parameters
-  type(EOS_type),           pointer     :: eqn_of_state !< Equation of state structure
+  type(EOS_type),           intent(in)  :: eqn_of_state !< Equation of state structure
   real,                     intent(in)  :: P_Ref      !< The coordinate-density reference pressure
                                                       !! [R L2 T-2 ~> Pa].
 
@@ -258,7 +255,7 @@ subroutine set_coord_from_TS_profile(Rlay, g_prime, GV, US, param_file, eqn_of_s
                                                    !! interface [L2 Z-1 T-2 ~> m s-2].
   type(unit_scale_type),    intent(in)  :: US      !< A dimensional unit scaling type
   type(param_file_type),    intent(in)  :: param_file !< A structure to parse for run-time parameters
-  type(EOS_type),           pointer     :: eqn_of_state !< Equation of state structure
+  type(EOS_type),           intent(in)  :: eqn_of_state !< Equation of state structure
   real,                     intent(in)  :: P_Ref   !< The coordinate-density reference pressure
                                                    !! [R L2 T-2 ~> Pa].
 
@@ -305,20 +302,20 @@ subroutine set_coord_from_TS_range(Rlay, g_prime, GV, US, param_file, eqn_of_sta
                                                    !! interface [L2 Z-1 T-2 ~> m s-2].
   type(unit_scale_type),    intent(in)  :: US      !< A dimensional unit scaling type
   type(param_file_type),    intent(in)  :: param_file !< A structure to parse for run-time parameters
-  type(EOS_type),           pointer     :: eqn_of_state !< Equation of state structure
+  type(EOS_type),           intent(in)  :: eqn_of_state !< Equation of state structure
   real,                     intent(in)  :: P_Ref   !< The coordinate-density reference pressure
                                                    !! [R L2 T-2 ~> Pa].
 
   ! Local variables
   real, dimension(GV%ke) :: T0, S0,  Pref
   real :: S_Ref, S_Light, S_Dense ! Salinity range parameters [ppt].
-  real :: T_Ref, T_Light, T_Dense ! Temperature range parameters [decC].
+  real :: T_Ref, T_Light, T_Dense ! Temperature range parameters [degC].
   real :: res_rat ! The ratio of density space resolution in the denser part
                   ! of the range to that in the lighter part of the range.
                   ! Setting this greater than 1 increases the resolution for
-                  ! the denser water.
+                  ! the denser water [nondim].
   real :: g_fs    ! Reduced gravity across the free surface [L2 Z-1 T-2 ~> m s-2].
-  real :: a1, frac_dense, k_frac
+  real :: a1, frac_dense, k_frac  ! Nondimensional temporary variables [nondim]
   integer :: k, nz, k_light
   character(len=40)  :: mdl = "set_coord_from_TS_range" ! This subroutine's name.
   character(len=200) :: filename, coord_file, inputdir ! Strings for file/path

@@ -4,15 +4,16 @@ module MOM_dyn_horgrid
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-use MOM_hor_index, only : hor_index_type
-use MOM_domains, only : MOM_domain_type, deallocate_MOM_domain
-use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, WARNING
-use MOM_unit_scaling, only : unit_scale_type
+use MOM_array_transform, only : rotate_array, rotate_array_pair
+use MOM_domains,         only : MOM_domain_type, deallocate_MOM_domain
+use MOM_error_handler,   only : MOM_error, MOM_mesg, FATAL, WARNING
+use MOM_hor_index,       only : hor_index_type
+use MOM_unit_scaling,    only : unit_scale_type
 
 implicit none ; private
 
 public create_dyn_horgrid, destroy_dyn_horgrid, set_derived_dyn_horgrid
-public rescale_dyn_horgrid_bathymetry
+public rescale_dyn_horgrid_bathymetry, rotate_dyn_horgrid
 
 ! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
 ! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
@@ -109,6 +110,16 @@ type, public :: dyn_horgrid_type
     areaCv       !< The areas of the v-grid cells [L2 ~> m2].
 
   real, allocatable, dimension(:,:) :: &
+    porous_DminU, & !< minimum topographic height of U-face [Z ~> m]
+    porous_DmaxU, & !< maximum topographic height of U-face [Z ~> m]
+    porous_DavgU    !< average topographic height of U-face [Z ~> m]
+
+  real, allocatable, dimension(:,:) :: &
+    porous_DminV, & !< minimum topographic height of V-face [Z ~> m]
+    porous_DmaxV, & !< maximum topographic height of V-face [Z ~> m]
+    porous_DavgV    !< average topographic height of V-face [Z ~> m]
+
+  real, allocatable, dimension(:,:) :: &
     mask2dBu, &  !< 0 for boundary points and 1 for ocean points on the q grid [nondim].
     geoLatBu, &  !< The geographic latitude at q points [degrees of latitude] or [m].
     geoLonBu, &  !< The geographic longitude at q points [degrees of longitude] or [m].
@@ -162,10 +173,11 @@ type, public :: dyn_horgrid_type
   ! initialization routines (but not all)
   real :: south_lat     !< The latitude (or y-coordinate) of the first v-line
   real :: west_lon      !< The longitude (or x-coordinate) of the first u-line
-  real :: len_lat = 0.  !< The latitudinal (or y-coord) extent of physical domain
-  real :: len_lon = 0.  !< The longitudinal (or x-coord) extent of physical domain
-  real :: Rad_Earth = 6.378e6 !< The radius of the planet [m].
-  real :: max_depth     !< The maximum depth of the ocean [Z ~> m].
+  real :: len_lat       !< The latitudinal (or y-coord) extent of physical domain
+  real :: len_lon       !< The longitudinal (or x-coord) extent of physical domain
+  real :: Rad_Earth     !< The radius of the planet [m]
+  real :: Rad_Earth_L   !< The radius of the planet in rescaled units [L ~> m]
+  real :: max_depth     !< The maximum depth of the ocean [Z ~> m]
 end type dyn_horgrid_type
 
 contains
@@ -255,6 +267,15 @@ subroutine create_dyn_horgrid(G, HI, bathymetry_at_vel)
   allocate(G%IareaCu(IsdB:IedB,jsd:jed), source=0.0)
   allocate(G%IareaCv(isd:ied,JsdB:JedB), source=0.0)
 
+  allocate(G%porous_DminU(IsdB:IedB,jsd:jed), source=0.0)
+  allocate(G%porous_DmaxU(IsdB:IedB,jsd:jed), source=0.0)
+  allocate(G%porous_DavgU(IsdB:IedB,jsd:jed), source=0.0)
+
+  allocate(G%porous_DminV(isd:ied,JsdB:JedB), source=0.0)
+  allocate(G%porous_DmaxV(isd:ied,JsdB:JedB), source=0.0)
+  allocate(G%porous_DavgV(isd:ied,JsdB:JedB), source=0.0)
+
+
   allocate(G%bathyT(isd:ied, jsd:jed), source=0.0)
   allocate(G%CoriolisBu(IsdB:IedB, JsdB:JedB), source=0.0)
   allocate(G%dF_dx(isd:ied, jsd:jed), source=0.0)
@@ -278,6 +299,102 @@ subroutine create_dyn_horgrid(G, HI, bathymetry_at_vel)
   allocate(G%gridLatB(jsg-1:jeg), source=0.0)
 
 end subroutine create_dyn_horgrid
+
+
+!> Copy the rotated contents of one horizontal grid type into another.  The input
+!! and output grid type arguments can not use the same object.
+subroutine rotate_dyn_horgrid(G_in, G, US, turns)
+  type(dyn_horgrid_type), intent(in)    :: G_in   !< The input horizontal grid type
+  type(dyn_horgrid_type), intent(inout) :: G      !< An output rotated horizontal grid type
+                                                  !! that has already been allocated, but whose
+                                                  !! contents are largely replaced here.
+  type(unit_scale_type),  intent(in)    :: US     !< A dimensional unit scaling type
+  integer, intent(in) :: turns                    !< Number of quarter turns
+
+  integer :: jsc, jec, jscB, jecB
+  integer :: qturn
+
+  ! Center point
+  call rotate_array(G_in%geoLonT, turns, G%geoLonT)
+  call rotate_array(G_in%geoLatT, turns, G%geoLatT)
+  call rotate_array_pair(G_in%dxT, G_in%dyT, turns, G%dxT, G%dyT)
+  call rotate_array(G_in%areaT, turns, G%areaT)
+  call rotate_array(G_in%bathyT, turns, G%bathyT)
+
+  call rotate_array_pair(G_in%df_dx, G_in%df_dy, turns, G%df_dx, G%df_dy)
+  call rotate_array(G_in%sin_rot, turns, G%sin_rot)
+  call rotate_array(G_in%cos_rot, turns, G%cos_rot)
+  call rotate_array(G_in%mask2dT, turns, G%mask2dT)
+
+  ! Face points
+  call rotate_array_pair(G_in%geoLonCu, G_in%geoLonCv, turns, G%geoLonCu, G%geoLonCv)
+  call rotate_array_pair(G_in%geoLatCu, G_in%geoLatCv, turns, G%geoLatCu, G%geoLatCv)
+  call rotate_array_pair(G_in%dxCu, G_in%dyCv, turns, G%dxCu, G%dyCv)
+  call rotate_array_pair(G_in%dxCv, G_in%dyCu, turns, G%dxCv, G%dyCu)
+  call rotate_array_pair(G_in%dx_Cv, G_in%dy_Cu, turns, G%dx_Cv, G%dy_Cu)
+
+  call rotate_array_pair(G_in%mask2dCu, G_in%mask2dCv, turns, G%mask2dCu, G%mask2dCv)
+  call rotate_array_pair(G_in%areaCu, G_in%areaCv, turns, G%areaCu, G%areaCv)
+  call rotate_array_pair(G_in%IareaCu, G_in%IareaCv, turns, G%IareaCu, G%IareaCv)
+
+  call rotate_array_pair(G_in%porous_DminU, G_in%porous_DminV, &
+       turns, G%porous_DminU, G%porous_DminV)
+  call rotate_array_pair(G_in%porous_DmaxU, G_in%porous_DmaxV, &
+       turns, G%porous_DmaxU, G%porous_DmaxV)
+  call rotate_array_pair(G_in%porous_DavgU, G_in%porous_DavgV, &
+       turns, G%porous_DavgU, G%porous_DavgV)
+
+
+  ! Vertex point
+  call rotate_array(G_in%geoLonBu, turns, G%geoLonBu)
+  call rotate_array(G_in%geoLatBu, turns, G%geoLatBu)
+  call rotate_array_pair(G_in%dxBu, G_in%dyBu, turns, G%dxBu, G%dyBu)
+  call rotate_array(G_in%areaBu, turns, G%areaBu)
+  call rotate_array(G_in%CoriolisBu, turns, G%CoriolisBu)
+  call rotate_array(G_in%mask2dBu, turns, G%mask2dBu)
+
+  ! Topography at the cell faces
+  G%bathymetry_at_vel = G_in%bathymetry_at_vel
+  if (G%bathymetry_at_vel) then
+    call rotate_array_pair(G_in%Dblock_u, G_in%Dblock_v, turns, G%Dblock_u, G%Dblock_v)
+    call rotate_array_pair(G_in%Dopen_u, G_in%Dopen_v, turns, G%Dopen_u, G%Dopen_v)
+  endif
+
+  ! Nominal grid axes
+  ! TODO: We should not assign lat values to the lon axis, and vice versa.
+  !   We temporarily copy lat <-> lon since several components still expect
+  !   lat and lon sizes to match the first and second dimension sizes.
+  !   But we ought to instead leave them unchanged and adjust the references to
+  !   these axes.
+  if (modulo(turns, 2) /= 0) then
+    G%gridLonT(:) = G_in%gridLatT(G_in%jeg:G_in%jsg:-1)
+    G%gridLatT(:) = G_in%gridLonT(:)
+    G%gridLonB(:) = G_in%gridLatB(G_in%jeg:(G_in%jsg-1):-1)
+    G%gridLatB(:) = G_in%gridLonB(:)
+  else
+    G%gridLonT(:) = G_in%gridLonT(:)
+    G%gridLatT(:) = G_in%gridLatT(:)
+    G%gridLonB(:) = G_in%gridLonB(:)
+    G%gridLatB(:) = G_in%gridLatB(:)
+  endif
+
+  G%x_axis_units = G_in%y_axis_units
+  G%y_axis_units = G_in%x_axis_units
+  G%south_lat = G_in%south_lat
+  G%west_lon = G_in%west_lon
+  G%len_lat = G_in%len_lat
+  G%len_lon = G_in%len_lon
+
+  ! Rotation-invariant fields
+  G%areaT_global = G_in%areaT_global
+  G%IareaT_global = G_in%IareaT_global
+  G%Rad_Earth = G_in%Rad_Earth
+  G%Rad_Earth_L = G_in%Rad_Earth_L
+  G%max_depth = G_in%max_depth
+
+  call set_derived_dyn_horgrid(G, US)
+end subroutine rotate_dyn_horgrid
+
 
 !> rescale_dyn_horgrid_bathymetry permits a change in the internal units for the bathymetry on the
 !! grid, both rescaling the depths and recording the new internal depth units.
@@ -318,12 +435,8 @@ subroutine set_derived_dyn_horgrid(G, US)
   type(unit_scale_type), optional, intent(in) :: US !< A dimensional unit scaling type
 !    Various inverse grid spacings and derived areas are calculated within this
 !  subroutine.
-  real :: m_to_L  ! A unit conversion factor [L m-1 ~> nondim]
-  real :: L_to_m  ! A unit conversion factor [L m-1 ~> nondim]
   integer :: i, j, isd, ied, jsd, jed
   integer :: IsdB, IedB, JsdB, JedB
-  m_to_L = 1.0 ; if (present(US)) m_to_L = US%m_to_L
-  L_to_m = 1.0 ; if (present(US)) L_to_m = US%L_to_m
 
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
@@ -400,6 +513,9 @@ subroutine destroy_dyn_horgrid(G)
   deallocate(G%geoLonCv) ; deallocate(G%geoLonBu)
 
   deallocate(G%dx_Cv) ; deallocate(G%dy_Cu)
+
+  deallocate(G%porous_DminU) ; deallocate(G%porous_DmaxU) ; deallocate(G%porous_DavgU)
+  deallocate(G%porous_DminV) ; deallocate(G%porous_DmaxV) ; deallocate(G%porous_DavgV)
 
   deallocate(G%bathyT)  ; deallocate(G%CoriolisBu)
   deallocate(G%dF_dx)  ; deallocate(G%dF_dy)

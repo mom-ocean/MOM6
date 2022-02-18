@@ -36,7 +36,7 @@ real, parameter :: HMLmax = 0.75 !< Deepest ML as fractional depth of ocean [non
 contains
 
 !> Initialization of thicknesses in 2D Rossby front test
-subroutine Rossby_front_initialize_thickness(h, G, GV, US, param_file, just_read_params)
+subroutine Rossby_front_initialize_thickness(h, G, GV, US, param_file, just_read)
   type(ocean_grid_type),   intent(in)  :: G           !< Grid structure
   type(verticalGrid_type), intent(in)  :: GV          !< Vertical grid structure
   type(unit_scale_type),   intent(in)  :: US          !< A dimensional unit scaling type
@@ -44,19 +44,16 @@ subroutine Rossby_front_initialize_thickness(h, G, GV, US, param_file, just_read
                            intent(out) :: h           !< The thickness that is being initialized [H ~> m or kg m-2]
   type(param_file_type),   intent(in)  :: param_file  !< A structure indicating the open file
                                                       !! to parse for model parameter values.
-  logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
-                                                      !! only read parameters without changing h.
+  logical,                 intent(in)  :: just_read   !< If true, this call will only read
+                                                      !! parameters without changing h.
 
   integer :: i, j, k, is, ie, js, je, nz
   real    :: Tz, Dml, eta, stretch, h0
   real    :: min_thickness, T_range
   real    :: dRho_dT      ! The partial derivative of density with temperature [R degC-1 ~> kg m-3 degC-1]
-  logical :: just_read    ! If true, just read parameters but set nothing.
   character(len=40) :: verticalCoordinate
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
-
-  just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
 
   if (.not.just_read) &
     call MOM_mesg("Rossby_front_2d_initialization.F90, Rossby_front_initialize_thickness: setting thickness")
@@ -110,28 +107,24 @@ end subroutine Rossby_front_initialize_thickness
 
 !> Initialization of temperature and salinity in the Rossby front test
 subroutine Rossby_front_initialize_temperature_salinity(T, S, h, G, GV, &
-                   param_file, eqn_of_state, just_read_params)
+                   param_file, just_read)
   type(ocean_grid_type),                     intent(in)  :: G  !< Grid structure
   type(verticalGrid_type),                   intent(in)  :: GV !< The ocean's vertical grid structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: T  !< Potential temperature [degC]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: S  !< Salinity [ppt]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)  :: h  !< Thickness [H ~> m or kg m-2]
   type(param_file_type),                     intent(in)  :: param_file   !< Parameter file handle
-  type(EOS_type),                            pointer     :: eqn_of_state !< Equation of state structure
-  logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
+  logical,                                   intent(in)  :: just_read !< If true, this call will
                                                       !! only read parameters without changing T & S.
 
   integer   :: i, j, k, is, ie, js, je, nz
   real      :: T_ref, S_ref ! Reference salinity and temerature within surface layer
   real      :: T_range      ! Range of salinities and temperatures over the vertical
   real      :: y, zc, zi, dTdz
-  logical :: just_read    ! If true, just read parameters but set nothing.
   character(len=40) :: verticalCoordinate
   real      :: PI                   ! 3.1415926... calculated as 4*atan(1)
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
-
-  just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
 
   call get_param(param_file, mdl,"REGRIDDING_COORDINATE_MODE", verticalCoordinate, &
             default=DEFAULT_COORDINATE_MODE, do_not_log=just_read)
@@ -162,7 +155,7 @@ end subroutine Rossby_front_initialize_temperature_salinity
 
 
 !> Initialization of u and v in the Rossby front test
-subroutine Rossby_front_initialize_velocity(u, v, h, G, GV, US, param_file, just_read_params)
+subroutine Rossby_front_initialize_velocity(u, v, h, G, GV, US, param_file, just_read)
   type(ocean_grid_type),      intent(in)  :: G  !< Grid structure
   type(verticalGrid_type),    intent(in)  :: GV !< Vertical grid structure
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
@@ -174,8 +167,8 @@ subroutine Rossby_front_initialize_velocity(u, v, h, G, GV, US, param_file, just
   type(unit_scale_type),      intent(in)  :: US !< A dimensional unit scaling type
   type(param_file_type),      intent(in)  :: param_file !< A structure indicating the open file
                                                 !! to parse for model parameter values.
-  logical,          optional, intent(in)  :: just_read_params !< If present and true, this call
-                                                !! will only read parameters without setting u & v.
+  logical,                    intent(in)  :: just_read !< If present and true, this call will only
+                                                !! read parameters without setting u & v.
 
   real    :: y            ! Non-dimensional coordinate across channel, 0..pi
   real    :: T_range      ! Range of salinities and temperatures over the vertical
@@ -186,12 +179,9 @@ subroutine Rossby_front_initialize_velocity(u, v, h, G, GV, US, param_file, just
   real    :: Ty           ! The meridional temperature gradient [degC L-1 ~> degC m-1]
   real    :: hAtU         ! Interpolated layer thickness [Z ~> m].
   integer :: i, j, k, is, ie, js, je, nz
-  logical :: just_read    ! If true, just read parameters but set nothing.
   character(len=40) :: verticalCoordinate
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
-
-  just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
 
   call get_param(param_file, mdl, "REGRIDDING_COORDINATE_MODE", verticalCoordinate, &
                  default=DEFAULT_COORDINATE_MODE, do_not_log=just_read)

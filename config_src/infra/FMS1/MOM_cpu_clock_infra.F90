@@ -71,23 +71,29 @@ subroutine cpu_clock_end(id)
 end subroutine cpu_clock_end
 
 !> Returns the integer handle for a named CPU clock.
-integer function cpu_clock_id( name, synchro_flag, grain )
+integer function cpu_clock_id(name, sync, grain)
   character(len=*),  intent(in) :: name  !< The unique name of the CPU clock
-  integer, optional, intent(in) :: synchro_flag !< An integer flag that controls whether the PEs
-                                       !! are synchronized before the cpu clocks start counting.
-                                       !! Synchronization occurs before the start of a clock if this
-                                       !! is odd, while additional (expensive) statistics can set
-                                       !! for other values. If absent, the default is taken from the
-                                       !! settings for FMS.
+  logical, optional, intent(in) :: sync !< A flag that controls whether the
+                  !! PEs are synchronized before the cpu clocks start counting.
+                  !! Synchronization occurs before the start of a clock if this
+                  !! is enabled, while additional (expensive) statistics can
+                  !! set for other values.
+                  !! If absent, the default is taken from the settings for FMS.
   integer, optional, intent(in) :: grain !< The timing granularity for this clock, usually set to
                                        !! the values of CLOCK_COMPONENT, CLOCK_ROUTINE, CLOCK_LOOP, etc.
 
-  if (present(synchro_flag)) then
-    cpu_clock_id = mpp_clock_id(name, flags=synchro_flag, grain=grain)
-  else
-    cpu_clock_id = mpp_clock_id(name, flags=clock_flag_default, grain=grain)
+  integer :: clock_flags
+
+  clock_flags = clock_flag_default
+  if (present(sync)) then
+    if (sync) then
+      clock_flags = ibset(clock_flags, 0)
+    else
+      clock_flags = ibclr(clock_flags, 0)
+    endif
   endif
 
+  cpu_clock_id = mpp_clock_id(name, flags=clock_flags, grain=grain)
 end function cpu_clock_id
 
 end module MOM_cpu_clock_infra

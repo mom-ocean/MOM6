@@ -60,7 +60,7 @@ function USER_register_tracer_example(HI, GV, param_file, CS, tr_Reg, restart_CS
   type(tracer_registry_type), pointer   :: tr_Reg !< A pointer that is set to point to the control
                                                   !! structure for the tracer advection and
                                                   !! diffusion module
-  type(MOM_restart_CS),       pointer   :: restart_CS !< A pointer to the restart control structure
+  type(MOM_restart_CS), intent(inout)   :: restart_CS !< MOM restart control struct
 
 ! Local variables
   character(len=80)  :: name, longname
@@ -134,13 +134,14 @@ end function USER_register_tracer_example
 
 !> This subroutine initializes the NTR tracer fields in tr(:,:,:,:)
 !! and it sets up the tracer output.
-subroutine USER_initialize_tracer(restart, day, G, GV, h, diag, OBC, CS, &
+subroutine USER_initialize_tracer(restart, day, G, GV, US, h, diag, OBC, CS, &
                                   sponge_CSp)
   logical,                            intent(in) :: restart !< .true. if the fields have already
                                                          !! been read from a restart file.
   type(time_type),            target, intent(in) :: day  !< Time of the start of the run.
   type(ocean_grid_type),              intent(in) :: G    !< The ocean's grid structure
   type(verticalGrid_type),            intent(in) :: GV   !< The ocean's vertical grid structure
+  type(unit_scale_type),              intent(in) :: US   !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                                       intent(in) :: h    !< Layer thicknesses [H ~> m or kg m-2]
   type(diag_ctrl),            target, intent(in) :: diag !< A structure that is used to regulate
@@ -163,7 +164,7 @@ subroutine USER_initialize_tracer(restart, day, G, GV, h, diag, OBC, CS, &
   real, pointer :: tr_ptr(:,:,:) => NULL()
   real :: PI     ! 3.1415926... calculated as 4*atan(1)
   real :: tr_y   ! Initial zonally uniform tracer concentrations.
-  real :: dist2  ! The distance squared from a line [m2].
+  real :: dist2  ! The distance squared from a line [L2 ~> m2].
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz, m
   integer :: IsdB, IedB, JsdB, JedB, lntr
 
@@ -196,9 +197,9 @@ subroutine USER_initialize_tracer(restart, day, G, GV, h, diag, OBC, CS, &
 !    This sets a stripe of tracer across the basin.
       PI = 4.0*atan(1.0)
       do j=js,je
-        dist2 = (G%Rad_Earth * PI / 180.0)**2 * &
+        dist2 = (G%Rad_Earth_L * PI / 180.0)**2 * &
                (G%geoLatT(i,j) - 40.0) * (G%geoLatT(i,j) - 40.0)
-        tr_y = 0.5*exp(-dist2/(1.0e5*1.0e5))
+        tr_y = 0.5 * exp( -dist2 / (1.0e5*US%m_to_L)**2 )
 
         do k=1,nz ; do i=is,ie
 !      This adds the stripes of tracer to every layer.
@@ -282,10 +283,10 @@ subroutine tracer_column_physics(h_old, h_new,  ea,  eb, fluxes, dt, G, GV, US, 
 
 ! Local variables
   real :: hold0(SZI_(G))       ! The original topmost layer thickness,
-                               ! with surface mass fluxes added back, m.
-  real :: b1(SZI_(G))          ! b1 and c1 are variables used by the
-  real :: c1(SZI_(G),SZK_(GV)) ! tridiagonal solver.
-  real :: d1(SZI_(G))          ! d1=1-c1 is used by the tridiagonal solver.
+                               ! with surface mass fluxes added back [H ~> m or kg m-2].
+  real :: b1(SZI_(G))          ! b1 is a variable used by the tridiagonal solver [H ~> m or kg m-2].
+  real :: c1(SZI_(G),SZK_(GV)) ! c1 is a variable used by the tridiagonal solver [nondim].
+  real :: d1(SZI_(G))          ! d1=1-c1 is used by the tridiagonal solver [nondim].
   real :: h_neglect            ! A thickness that is so small it is usually lost
                                ! in roundoff and can be neglected [H ~> m or kg m-2].
   real :: b_denom_1 ! The first term in the denominator of b1 [H ~> m or kg m-2].
@@ -357,13 +358,14 @@ end subroutine tracer_column_physics
 !> This function calculates the mass-weighted integral of all tracer stocks,
 !! returning the number of stocks it has calculated.  If the stock_index
 !! is present, only the stock corresponding to that coded index is returned.
-function USER_tracer_stock(h, stocks, G, GV, CS, names, units, stock_index)
+function USER_tracer_stock(h, stocks, G, GV, US, CS, names, units, stock_index)
   type(ocean_grid_type),              intent(in)    :: G    !< The ocean's grid structure
   type(verticalGrid_type),            intent(in)    :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                                       intent(in)    :: h    !< Layer thicknesses [H ~> m or kg m-2]
   real, dimension(:),                 intent(out)   :: stocks !< the mass-weighted integrated amount of each
                                                               !! tracer, in kg times concentration units [kg conc].
+  type(unit_scale_type),              intent(in)    :: US     !< A dimensional unit scaling type
   type(USER_tracer_example_CS),       pointer       :: CS     !< The control structure returned by a
                                                               !! previous call to register_USER_tracer.
   character(len=*), dimension(:),     intent(out)   :: names  !< The names of the stocks calculated.
@@ -374,7 +376,7 @@ function USER_tracer_stock(h, stocks, G, GV, CS, names, units, stock_index)
                                                               !! stocks calculated here.
 
   ! Local variables
-  real :: stock_scale ! The dimensional scaling factor to convert stocks to kg [kg H-1 L-2 ~> kg m-3 or nondim]
+  real :: stock_scale ! The dimensional scaling factor to convert stocks to kg [kg H-1 L-2 ~> kg m-3 or 1]
   integer :: i, j, k, is, ie, js, je, nz, m
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
@@ -388,7 +390,7 @@ function USER_tracer_stock(h, stocks, G, GV, CS, names, units, stock_index)
     return
   endif ; endif
 
-  stock_scale = G%US%L_to_m**2 * GV%H_to_kg_m2
+  stock_scale = US%L_to_m**2 * GV%H_to_kg_m2
   do m=1,NTR
     call query_vardesc(CS%tr_desc(m), name=names(m), units=units(m), caller="USER_tracer_stock")
     units(m) = trim(units(m))//" kg"

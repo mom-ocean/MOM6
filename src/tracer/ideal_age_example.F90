@@ -76,7 +76,7 @@ function register_ideal_age_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
   type(tracer_registry_type), pointer    :: tr_Reg !< A pointer that is set to point to the control
                                                   !! structure for the tracer advection and
                                                   !! diffusion module
-  type(MOM_restart_CS),       pointer    :: restart_CS !< A pointer to the restart control structure
+  type(MOM_restart_CS), target, intent(inout) :: restart_CS !< MOM restart control struct
 
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
@@ -369,13 +369,14 @@ end subroutine ideal_age_tracer_column_physics
 
 !> Calculates the mass-weighted integral of all tracer stocks, returning the number of stocks it
 !! has calculated.  If stock_index is present, only the stock corresponding to that coded index is found.
-function ideal_age_stock(h, stocks, G, GV, CS, names, units, stock_index)
+function ideal_age_stock(h, stocks, G, GV, US, CS, names, units, stock_index)
   type(ocean_grid_type),              intent(in)    :: G    !< The ocean's grid structure
   type(verticalGrid_type),            intent(in)    :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                                       intent(in)    :: h    !< Layer thicknesses [H ~> m or kg m-2]
   real, dimension(:),                 intent(out)   :: stocks !< the mass-weighted integrated amount of each
                                                             !! tracer, in kg times concentration units [kg conc].
+  type(unit_scale_type),              intent(in)    :: US   !< A dimensional unit scaling type
   type(ideal_age_tracer_CS),          pointer       :: CS   !< The control structure returned by a previous
                                                             !! call to register_ideal_age_tracer.
   character(len=*), dimension(:),     intent(out)   :: names  !< the names of the stocks calculated.
@@ -385,7 +386,7 @@ function ideal_age_stock(h, stocks, G, GV, CS, names, units, stock_index)
   integer                                           :: ideal_age_stock !< The number of stocks calculated here.
 
   ! Local variables
-  real :: stock_scale ! The dimensional scaling factor to convert stocks to kg [kg H-1 L-2 ~> kg m-3 or nondim]
+  real :: stock_scale ! The dimensional scaling factor to convert stocks to kg [kg H-1 L-2 ~> kg m-3 or 1]
   integer :: i, j, k, is, ie, js, je, nz, m
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
@@ -400,7 +401,7 @@ function ideal_age_stock(h, stocks, G, GV, CS, names, units, stock_index)
     return
   endif ; endif
 
-  stock_scale = G%US%L_to_m**2 * GV%H_to_kg_m2
+  stock_scale = US%L_to_m**2 * GV%H_to_kg_m2
   do m=1,CS%ntr
     call query_vardesc(CS%tr_desc(m), name=names(m), units=units(m), caller="ideal_age_stock")
     units(m) = trim(units(m))//" kg"

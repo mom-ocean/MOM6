@@ -107,17 +107,16 @@ type, public :: int_tide_CS ; private
                         !< If true, apply scattering due to small-scale roughness as a sink.
   logical :: apply_Froude_drag
                         !< If true, apply wave breaking as a sink.
-  real, dimension(:,:,:,:,:), pointer :: En => NULL()
+  real, allocatable :: En(:,:,:,:,:)
                         !< The internal wave energy density as a function of (i,j,angle,frequency,mode)
                         !! integrated within an angular and frequency band [R Z3 T-2 ~> J m-2]
-  real, dimension(:,:,:), pointer :: En_restart => NULL()
+  real, allocatable :: En_restart(:,:,:)
                         !< The internal wave energy density as a function of (i,j,angle); temporary for restart
   real, allocatable, dimension(:) :: frequency  !< The frequency of each band [T-1 ~> s-1].
 
   type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to regulate the
                         !! timing of diagnostic output.
-  type(wave_structure_CS), pointer :: wave_structure_CSp => NULL()
-                        !< A pointer to the wave_structure module control structure
+  type(wave_structure_CS) :: wave_struct    !< Wave structure control struct
 
   !>@{ Diag handles
   ! Diag handles relevant to all modes, frequencies, and angles
@@ -169,8 +168,7 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
   real, dimension(SZI_(G),SZJ_(G)), intent(in)    :: Nb !< Near-bottom buoyancy frequency [T-1 ~> s-1].
   real,                             intent(in)    :: dt !< Length of time over which to advance
                                                         !! the internal tides [T ~> s].
-  type(int_tide_CS),                pointer       :: CS !< The control structure returned by a
-                                                        !! previous call to int_tide_init.
+  type(int_tide_CS),                intent(inout) :: CS !< Internal tide control struct
   real, dimension(SZI_(G),SZJ_(G),CS%nMode), &
                                     intent(in)    :: cn !< The internal wave speeds of each
                                                         !! mode [L T-1 ~> m s-1].
@@ -210,7 +208,6 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
   type(time_type) :: time_end
   logical:: avg_enabled
 
-  if (.not.associated(CS)) return
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nAngle = CS%NAngle
   I_rho0 = 1.0 / GV%Rho0
@@ -406,13 +403,13 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
     do m=1,CS%NMode ; do fr=1,CS%Nfreq
       ! Calculate modal structure for given mode and frequency
       call wave_structure(h, tv, G, GV, US, cn(:,:,m), m, CS%frequency(fr), &
-                          CS%wave_structure_CSp, tot_En_mode(:,:,fr,m), full_halos=.true.)
+                          CS%wave_struct, tot_En_mode(:,:,fr,m), full_halos=.true.)
       ! Pick out near-bottom and max horizontal baroclinic velocity values at each point
       do j=jsd,jed ; do i=isd,ied
         id_g = i + G%idg_offset ; jd_g = j + G%jdg_offset ! for debugging
-        nzm = CS%wave_structure_CSp%num_intfaces(i,j)
-        Ub(i,j,fr,m) = CS%wave_structure_CSp%Uavg_profile(i,j,nzm)
-        Umax(i,j,fr,m) = maxval(CS%wave_structure_CSp%Uavg_profile(i,j,1:nzm))
+        nzm = CS%wave_struct%num_intfaces(i,j)
+        Ub(i,j,fr,m) = CS%wave_struct%Uavg_profile(i,j,nzm)
+        Umax(i,j,fr,m) = maxval(CS%wave_struct%Uavg_profile(i,j,1:nzm))
       enddo ; enddo ! i-loop, j-loop
     enddo ; enddo ! fr-loop, m-loop
   endif ! apply_wave or _Froude_drag (Ub or Umax needed)
@@ -450,7 +447,7 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
         c_phase = 0.0
         if (Kmag2 > 0.0) then
           c_phase = sqrt(freq2/Kmag2)
-          nzm = CS%wave_structure_CSp%num_intfaces(i,j)
+          nzm = CS%wave_struct%num_intfaces(i,j)
           Fr2_max = (Umax(i,j,fr,m) / c_phase)**2
           ! Dissipate energy if Fr>1; done here with an arbitrary time scale
           if (Fr2_max > 1.0) then
@@ -611,8 +608,7 @@ end subroutine propagate_int_tide
 !> Checks for energy conservation on computational domain
 subroutine sum_En(G, CS, En, label)
   type(ocean_grid_type),  intent(in) :: G  !< The ocean's grid structure.
-  type(int_tide_CS),      pointer    :: CS !< The control structure returned by a
-                                           !! previous call to int_tide_init.
+  type(int_tide_CS),      intent(inout) :: CS !< Internal tide control struct
   real, dimension(G%isd:G%ied,G%jsd:G%jed,CS%NAngle), &
                           intent(in) :: En !< The energy density of the internal tides [R Z3 T-2 ~> J m-2].
   character(len=*),       intent(in) :: label !< A label to use in error messages
@@ -654,8 +650,7 @@ end subroutine sum_En
 subroutine itidal_lowmode_loss(G, US, CS, Nb, Ub, En, TKE_loss_fixed, TKE_loss, dt, full_halos)
   type(ocean_grid_type),     intent(in)    :: G  !< The ocean's grid structure.
   type(unit_scale_type),     intent(in)    :: US !< A dimensional unit scaling type
-  type(int_tide_CS),         pointer       :: CS !< The control structure returned by a
-                                                 !! previous call to int_tide_init.
+  type(int_tide_CS),         intent(in)    :: CS !< Internal tide control struct
   real, dimension(G%isd:G%ied,G%jsd:G%jed), &
                              intent(in)    :: Nb !< Near-bottom stratification [T-1 ~> s-1].
   real, dimension(G%isd:G%ied,G%jsd:G%jed,CS%nFreq,CS%nMode), &
@@ -747,8 +742,7 @@ subroutine get_lowmode_loss(i,j,G,CS,mechanism,TKE_loss_sum)
   integer,               intent(in)  :: i   !< The i-index of the value to be reported.
   integer,               intent(in)  :: j   !< The j-index of the value to be reported.
   type(ocean_grid_type), intent(in)  :: G   !< The ocean's grid structure
-  type(int_tide_CS),     pointer     :: CS  !< The control structure returned by a
-                                            !! previous call to int_tide_init.
+  type(int_tide_CS),     intent(in)  :: CS  !< Internal tide control struct
   character(len=*),      intent(in)  :: mechanism    !< The named mechanism of loss to return
   real,                  intent(out) :: TKE_loss_sum !< Total energy loss rate due to specified
                                                      !! mechanism [R Z3 T-3 ~> W m-2].
@@ -1011,8 +1005,8 @@ subroutine propagate(En, cn, freq, dt, G, US, CS, NAngle)
   real,                  intent(in)    :: freq !< Wave frequency [T-1 ~> s-1].
   real,                  intent(in)    :: dt   !< Time step [T ~> s].
   type(unit_scale_type), intent(in)    :: US   !< A dimensional unit scaling type
-  type(int_tide_CS),     pointer       :: CS   !< The control structure returned by a
-                                               !! previous call to int_tide_init.
+  type(int_tide_CS),     intent(in)    :: CS   !< Internal tide control struct
+
   ! Local variables
   real, dimension(G%IsdB:G%IedB,G%JsdB:G%JedB) :: &
     speed  ! The magnitude of the group velocity at the q points for corner adv [L T-1 ~> m s-1].
@@ -1137,8 +1131,7 @@ subroutine propagate_corner_spread(En, energized_wedge, NAngle, speed, dt, G, CS
   integer,                intent(in)    :: NAngle !< The number of wave orientations in the
                                                  !! discretized wave energy spectrum.
   real,                   intent(in)    :: dt    !< Time increment [T ~> s].
-  type(int_tide_CS),      pointer       :: CS    !< The control structure returned by a previous
-                                                 !! call to continuity_PPM_init.
+  type(int_tide_CS),      intent(in)    :: CS    !< Internal tide control struct
   type(loop_bounds_type), intent(in)    :: LB    !< A structure with the active energy loop bounds.
   ! Local variables
   integer :: i, j, k, ish, ieh, jsh, jeh, m
@@ -1405,19 +1398,18 @@ subroutine propagate_x(En, speed_x, Cgx_av, dCgx, dt, G, US, Nangle, CS, LB)
                                                !! edges of each angular band.
   real,                    intent(in)    :: dt !< Time increment [T ~> s].
   type(unit_scale_type),   intent(in)    :: US !< A dimensional unit scaling type
-  type(int_tide_CS),       pointer       :: CS !< The control structure returned by a previous call
-                                               !! to continuity_PPM_init.
+  type(int_tide_CS),       intent(in)    :: CS !< Internal tide control struct
   type(loop_bounds_type),  intent(in)    :: LB !< A structure with the active energy loop bounds.
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G)) :: &
     EnL, EnR    ! Left and right face energy densities [R Z3 T-2 ~> J m-2].
   real, dimension(SZIB_(G),SZJ_(G)) :: &
-    flux_x      ! The internal wave energy flux [J T-1 ~> J s-1].
+    flux_x      ! The internal wave energy flux [R Z3 L2 T-3 ~> J s-1].
   real, dimension(SZIB_(G)) :: &
     cg_p, cg_m, flux1, flux2
   !real, dimension(SZI_(G),SZJB_(G),Nangle) :: En_m, En_p
   real, dimension(G%isd:G%ied,G%jsd:G%jed,Nangle) :: &
-    Fdt_m, Fdt_p! Left and right energy fluxes [J]
+    Fdt_m, Fdt_p! Left and right energy fluxes [R Z3 L2 T-2 ~> J]
   integer :: i, j, k, ish, ieh, jsh, jeh, a
 
   ish = LB%ish ; ieh = LB%ieh ; jsh = LB%jsh ; jeh = LB%jeh
@@ -1442,8 +1434,8 @@ subroutine propagate_x(En, speed_x, Cgx_av, dCgx, dt, G, US, Nangle, CS, LB)
     enddo
 
     do j=jsh,jeh ; do i=ish,ieh
-      Fdt_m(i,j,a) = dt*flux_x(I-1,j) ! left face influx  (J)
-      Fdt_p(i,j,a) = -dt*flux_x(I,j)  ! right face influx (J)
+      Fdt_m(i,j,a) = dt*flux_x(I-1,j) ! left face influx  [R Z3 L2 T-2 ~> J]
+      Fdt_p(i,j,a) = -dt*flux_x(I,j)  ! right face influx [R Z3 L2 T-2 ~> J]
     enddo ; enddo
 
   enddo ! a-loop
@@ -1451,9 +1443,9 @@ subroutine propagate_x(En, speed_x, Cgx_av, dCgx, dt, G, US, Nangle, CS, LB)
   ! Only reflect newly arrived energy; existing energy in incident wedge is not reflected
   ! and will eventually propagate out of cell. (This code only reflects if En > 0.)
   call reflect(Fdt_m, Nangle, CS, G, LB)
-  call teleport(Fdt_m, Nangle, CS, G, LB)
+  !call teleport(Fdt_m, Nangle, CS, G, LB)
   call reflect(Fdt_p, Nangle, CS, G, LB)
-  call teleport(Fdt_p, Nangle, CS, G, LB)
+  !call teleport(Fdt_p, Nangle, CS, G, LB)
 
   ! Update reflected energy [R Z3 T-2 ~> J m-2]
   do a=1,Nangle ; do j=jsh,jeh ; do i=ish,ieh
@@ -1480,19 +1472,18 @@ subroutine propagate_y(En, speed_y, Cgy_av, dCgy, dt, G, US, Nangle, CS, LB)
                                                !! edges of each angular band.
   real,                    intent(in)    :: dt !< Time increment [T ~> s].
   type(unit_scale_type),   intent(in)    :: US !< A dimensional unit scaling type
-  type(int_tide_CS),       pointer       :: CS !< The control structure returned by a previous call
-                                               !! to continuity_PPM_init.
+  type(int_tide_CS),       intent(in)    :: CS !< Internal tide control struct
   type(loop_bounds_type),  intent(in)    :: LB !< A structure with the active energy loop bounds.
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G)) :: &
     EnL, EnR    ! South and north face energy densities [R Z3 T-2 ~> J m-2].
   real, dimension(SZI_(G),SZJB_(G)) :: &
-    flux_y      ! The internal wave energy flux [J T-1 ~> J s-1].
+    flux_y      ! The internal wave energy flux [R Z3 L2 T-3 ~> J s-1].
   real, dimension(SZI_(G)) :: &
     cg_p, cg_m, flux1, flux2
   !real, dimension(SZI_(G),SZJB_(G),Nangle) :: En_m, En_p
   real, dimension(G%isd:G%ied,G%jsd:G%jed,Nangle) :: &
-    Fdt_m, Fdt_p! South and north energy fluxes [J]
+    Fdt_m, Fdt_p! South and north energy fluxes [R Z3 L2 T-2 ~> J]
   character(len=160) :: mesg  ! The text of an error message
   integer :: i, j, k, ish, ieh, jsh, jeh, a
 
@@ -1518,8 +1509,8 @@ subroutine propagate_y(En, speed_y, Cgy_av, dCgy, dt, G, US, Nangle, CS, LB)
     enddo
 
     do j=jsh,jeh ; do i=ish,ieh
-      Fdt_m(i,j,a) = dt*flux_y(i,J-1) ! south face influx (J)
-      Fdt_p(i,j,a) = -dt*flux_y(i,J)  ! north face influx (J)
+      Fdt_m(i,j,a) = dt*flux_y(i,J-1) ! south face influx [R Z3 L2 T-2 ~> J]
+      Fdt_p(i,j,a) = -dt*flux_y(i,J)  ! north face influx [R Z3 L2 T-2 ~> J]
       !if ((En(i,j,a) + G%IareaT(i,j)*(Fdt_m(i,j,a) + Fdt_p(i,j,a))) < 0.0) then ! for debugging
       !  call MOM_error(WARNING, "propagate_y: OutFlux>Available prior to reflection", .true.)
       !  write(mesg,*) "flux_y_south=",flux_y(i,J-1),"flux_y_north=",flux_y(i,J),"En=",En(i,j,a), &
@@ -1533,9 +1524,9 @@ subroutine propagate_y(En, speed_y, Cgy_av, dCgy, dt, G, US, Nangle, CS, LB)
   ! Only reflect newly arrived energy; existing energy in incident wedge is not reflected
   ! and will eventually propagate out of cell. (This code only reflects if En > 0.)
   call reflect(Fdt_m, Nangle, CS, G, LB)
-  call teleport(Fdt_m, Nangle, CS, G, LB)
+  !call teleport(Fdt_m, Nangle, CS, G, LB)
   call reflect(Fdt_p, Nangle, CS, G, LB)
-  call teleport(Fdt_p, Nangle, CS, G, LB)
+  !call teleport(Fdt_p, Nangle, CS, G, LB)
 
   ! Update reflected energy [R Z3 T-2 ~> J m-2]
   do a=1,Nangle ; do j=jsh,jeh ; do i=ish,ieh
@@ -1641,8 +1632,7 @@ subroutine reflect(En, NAngle, CS, G, LB)
                           intent(inout) :: En !< The internal gravity wave energy density as a
                                               !! function of space and angular resolution
                                               !! [R Z3 T-2 ~> J m-2].
-  type(int_tide_CS),      pointer       :: CS !< The control structure returned by a
-                                              !! previous call to int_tide_init.
+  type(int_tide_CS),      intent(in)    :: CS !< Internal tide control struct
   type(loop_bounds_type), intent(in)    :: LB !< A structure with the active energy loop bounds.
   ! Local variables
   real, dimension(G%isd:G%ied,G%jsd:G%jed) :: angle_c
@@ -1706,13 +1696,13 @@ subroutine reflect(En, NAngle, CS, G, LB)
 
         if (ridge(i,j)) then
           ! if ray is not incident but in ridge cell, use complementary angle
-          if ((Nangle_d2 .lt. angle_to_wall) .and. (angle_to_wall .lt. Nangle)) then
+          if ((Nangle_d2 < angle_to_wall) .and. (angle_to_wall < Nangle)) then
             angle_wall0 = mod(angle_wall0 + Nangle_d2 + Nangle, Nangle)
           endif
         endif
 
         ! do reflection
-        if ((0 .lt. angle_to_wall) .and. (angle_to_wall .lt. Nangle_d2)) then
+        if ((0 < angle_to_wall) .and. (angle_to_wall < Nangle_d2)) then
           angle_r0 = mod(2*angle_wall0 - a0 + Nangle, Nangle)
           angle_r = angle_r0 + 1 !re-index to 1 -> Nangle
           if (a /= angle_r) then
@@ -1748,8 +1738,7 @@ subroutine teleport(En, NAngle, CS, G, LB)
                           intent(inout) :: En !< The internal gravity wave energy density as a
                                               !! function of space and angular resolution
                                               !! [R Z3 T-2 ~> J m-2].
-  type(int_tide_CS),      pointer       :: CS !< The control structure returned by a
-                                              !! previous call to int_tide_init.
+  type(int_tide_CS),      intent(in)    :: CS !< Internal tide control struct
   type(loop_bounds_type), intent(in)    :: LB !< A structure with the active energy loop bounds.
   ! Local variables
   real, dimension(G%isd:G%ied,G%jsd:G%jed)    :: angle_c
@@ -1905,7 +1894,7 @@ subroutine PPM_reconstruction_x(h_in, h_l, h_r, G, LB, simple_2nd)
   real, dimension(SZI_(G),SZJ_(G)), intent(out) :: h_l  !< Left edge value of reconstruction (2D).
   real, dimension(SZI_(G),SZJ_(G)), intent(out) :: h_r  !< Right edge value of reconstruction (2D).
   type(loop_bounds_type),           intent(in)  :: LB   !< A structure with the active loop bounds.
-  logical, optional,                intent(in)  :: simple_2nd !< If true, use the arithmetic mean
+  logical,                          intent(in)  :: simple_2nd !< If true, use the arithmetic mean
                                                         !! energy densities as default edge values
                                                         !! for a simple 2nd order scheme.
   ! Local variables
@@ -1913,15 +1902,14 @@ subroutine PPM_reconstruction_x(h_in, h_l, h_r, G, LB, simple_2nd)
   real, parameter :: oneSixth = 1./6.
   real :: h_ip1, h_im1
   real :: dMx, dMn
-  logical :: use_CW84, use_2nd
+  logical :: use_CW84
   character(len=256) :: mesg  ! The text of an error message
   integer :: i, j, isl, iel, jsl, jel, stencil
 
-  use_2nd = .false. ; if (present(simple_2nd)) use_2nd = simple_2nd
   isl = LB%ish-1 ; iel = LB%ieh+1 ; jsl = LB%jsh ; jel = LB%jeh
 
   ! This is the stencil of the reconstruction, not the scheme overall.
-  stencil = 2 ; if (use_2nd) stencil = 1
+  stencil = 2 ; if (simple_2nd) stencil = 1
 
   if ((isl-stencil < G%isd) .or. (iel+stencil > G%ied)) then
     write(mesg,'("In MOM_internal_tides, PPM_reconstruction_x called with a ", &
@@ -1936,7 +1924,7 @@ subroutine PPM_reconstruction_x(h_in, h_l, h_r, G, LB, simple_2nd)
     call MOM_error(FATAL,mesg)
   endif
 
-  if (use_2nd) then
+  if (simple_2nd) then
     do j=jsl,jel ; do i=isl,iel
       h_im1 = G%mask2dT(i-1,j) * h_in(i-1,j) + (1.0-G%mask2dT(i-1,j)) * h_in(i,j)
       h_ip1 = G%mask2dT(i+1,j) * h_in(i+1,j) + (1.0-G%mask2dT(i+1,j)) * h_in(i,j)
@@ -1981,7 +1969,7 @@ subroutine PPM_reconstruction_y(h_in, h_l, h_r, G, LB, simple_2nd)
   real, dimension(SZI_(G),SZJ_(G)), intent(out) :: h_l  !< Left edge value of reconstruction (2D).
   real, dimension(SZI_(G),SZJ_(G)), intent(out) :: h_r  !< Right edge value of reconstruction (2D).
   type(loop_bounds_type),           intent(in)  :: LB   !< A structure with the active loop bounds.
-  logical, optional,                intent(in)  :: simple_2nd !< If true, use the arithmetic mean
+  logical,                          intent(in)  :: simple_2nd !< If true, use the arithmetic mean
                                                         !! energy densities as default edge values
                                                         !! for a simple 2nd order scheme.
   ! Local variables
@@ -1989,15 +1977,13 @@ subroutine PPM_reconstruction_y(h_in, h_l, h_r, G, LB, simple_2nd)
   real, parameter :: oneSixth = 1./6.
   real :: h_jp1, h_jm1
   real :: dMx, dMn
-  logical :: use_2nd
   character(len=256) :: mesg  ! The text of an error message
   integer :: i, j, isl, iel, jsl, jel, stencil
 
-  use_2nd = .false. ; if (present(simple_2nd)) use_2nd = simple_2nd
   isl = LB%ish ; iel = LB%ieh ; jsl = LB%jsh-1 ; jel = LB%jeh+1
 
   ! This is the stencil of the reconstruction, not the scheme overall.
-  stencil = 2 ; if (use_2nd) stencil = 1
+  stencil = 2 ; if (simple_2nd) stencil = 1
 
   if ((isl < G%isd) .or. (iel > G%ied)) then
     write(mesg,'("In MOM_internal_tides, PPM_reconstruction_y called with a ", &
@@ -2012,7 +1998,7 @@ subroutine PPM_reconstruction_y(h_in, h_l, h_r, G, LB, simple_2nd)
     call MOM_error(FATAL,mesg)
   endif
 
-  if (use_2nd) then
+  if (simple_2nd) then
     do j=jsl,jel ; do i=isl,iel
       h_jm1 = G%mask2dT(i,j-1) * h_in(i,j-1) + (1.0-G%mask2dT(i,j-1)) * h_in(i,j)
       h_jp1 = G%mask2dT(i,j+1) * h_in(i,j+1) + (1.0-G%mask2dT(i,j+1)) * h_in(i,j)
@@ -2092,9 +2078,8 @@ end subroutine PPM_limit_pos
 ! subroutine register_int_tide_restarts(G, param_file, CS, restart_CS)
 !   type(ocean_grid_type), intent(inout) :: G    !< The ocean's grid structure
 !   type(param_file_type), intent(in) :: param_file !< A structure to parse for run-time parameters
-!   type(int_tide_CS),     pointer       :: CS  !< The control structure returned by a
-!                                               !! previous call to int_tide_init.
-!   type(MOM_restart_CS),  pointer :: restart_CS !<  A pointer to the restart control structure.
+!   type(int_tide_CS),     intent(in)    :: CS   !< Internal tide control struct
+!   type(MOM_restart_CS),  intent(inout) :: restart_CS !< MOM restart control struct
 
 !   ! This subroutine is not currently in use!!
 
@@ -2140,8 +2125,8 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
                                                    !! parameters.
   type(diag_ctrl), target,   intent(in)    :: diag !< A structure that is used to regulate
                                                    !! diagnostic output.
-  type(int_tide_CS),pointer                :: CS   !< A pointer that is set to point to the control
-                                                   !! structure for this module.
+  type(int_tide_CS),         intent(inout) :: CS   !< Internal tide control struct
+
   ! Local variables
   real                              :: Angle_size ! size of wedges, rad
   real, allocatable                 :: angles(:)  ! orientations of wedge centers, rad
@@ -2170,14 +2155,6 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
   character(len=200) :: h2_file
 
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
-
-  if (associated(CS)) then
-    call MOM_error(WARNING, "internal_tides_init called "//&
-                             "with an associated control structure.")
-    return
-  else
-    allocate(CS)
-  endif
 
   use_int_tides = .false.
   call read_param(param_file, "INTERNAL_TIDES", use_int_tides)
@@ -2580,24 +2557,19 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
   enddo ; enddo
 
   ! Initialize wave_structure (not sure if this should be here - BDM)
-  call wave_structure_init(Time, G, GV, param_file, diag, CS%wave_structure_CSp)
+  call wave_structure_init(Time, G, GV, param_file, diag, CS%wave_struct)
 
 end subroutine internal_tides_init
 
 !> This subroutine deallocates the memory associated with the internal tides control structure
 subroutine internal_tides_end(CS)
-  type(int_tide_CS), pointer :: CS  !< A pointer to the control structure returned by a previous
-                                    !! call to internal_tides_init, it will be deallocated here.
+  type(int_tide_CS), intent(inout) :: CS  !<  Internal tide control struct
 
-  if (associated(CS)) then
-    if (associated(CS%En)) deallocate(CS%En)
-    if (allocated(CS%frequency)) deallocate(CS%frequency)
-    if (allocated(CS%id_En_mode)) deallocate(CS%id_En_mode)
-    if (allocated(CS%id_Ub_mode)) deallocate(CS%id_Ub_mode)
-    if (allocated(CS%id_cp_mode)) deallocate(CS%id_cp_mode)
-    deallocate(CS)
-  endif
-  CS => NULL()
+  if (allocated(CS%En)) deallocate(CS%En)
+  if (allocated(CS%frequency)) deallocate(CS%frequency)
+  if (allocated(CS%id_En_mode)) deallocate(CS%id_En_mode)
+  if (allocated(CS%id_Ub_mode)) deallocate(CS%id_Ub_mode)
+  if (allocated(CS%id_cp_mode)) deallocate(CS%id_cp_mode)
 end subroutine internal_tides_end
 
 end module MOM_internal_tides

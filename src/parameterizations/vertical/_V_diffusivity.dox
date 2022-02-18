@@ -278,7 +278,7 @@ The original version concentrates buoyancy work in regions of strong stratificat
 The shape of the \cite danabasoglu2012 background mixing has a uniform background value, with a dip
 at the equator and a bump at \f$\pm 30^{\circ}\f$ degrees latitude. The form is shown in this figure
 
-\image html background_varying.png "Form of the vertically uniform background mixing in \cite danabasoglu2012. The values are symmetric about the equator."
+\image html background_varying.png "Form of the vertically uniform background mixing in Danabasoglu [2012]. The values are symmetric about the equator."
 \imagelatex{background_varying.png,Form of the vertically uniform background mixing in \cite danabasoglu2012. The values are symmetric about the equator.,\includegraphics[width=\textwidth\,height=\textheight/2\,keepaspectratio=true]}
 
 Some parameters of this curve are set in the input file, some are hard-coded in calculate_bkgnd_mixing.
