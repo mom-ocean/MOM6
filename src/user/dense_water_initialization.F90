@@ -95,25 +95,21 @@ subroutine dense_water_initialize_topography(D, G, param_file, max_depth)
 end subroutine dense_water_initialize_topography
 
 !> Initialize the temperature and salinity for the dense water experiment
-subroutine dense_water_initialize_TS(G, GV, param_file, eqn_of_state, T, S, h, just_read_params)
+subroutine dense_water_initialize_TS(G, GV, param_file, T, S, h, just_read)
   type(ocean_grid_type),                     intent(in)  :: G !< Horizontal grid control structure
   type(verticalGrid_type),                   intent(in)  :: GV !< Vertical grid control structure
   type(param_file_type),                     intent(in)  :: param_file !< Parameter file structure
-  type(EOS_type),                            pointer     :: eqn_of_state !< EOS structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: T !< Output temperature [degC]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: S !< Output salinity [ppt]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)  :: h !< Layer thicknesses [H ~> m or kg m-2]
-  logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
-                                                      !! only read parameters without changing h.
+  logical,                                   intent(in)  :: just_read !< If true, this call will
+                                                      !! only read parameters without changing T & S.
   ! Local variables
   real :: mld, S_ref, S_range, T_ref
   real :: zi, zmid
-  logical :: just_read    ! If true, just read parameters but set nothing.
   integer :: i, j, k, nz
 
   nz = GV%ke
-
-  just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
 
   call get_param(param_file, mdl, "DENSE_WATER_MLD", mld, &
        "Depth of unstratified mixed layer as a fraction of the water column.", &

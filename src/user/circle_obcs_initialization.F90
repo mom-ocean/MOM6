@@ -28,7 +28,7 @@ public circle_obcs_initialize_thickness
 contains
 
 !> This subroutine initializes layer thicknesses for the circle_obcs experiment.
-subroutine circle_obcs_initialize_thickness(h, depth_tot, G, GV, param_file, just_read_params)
+subroutine circle_obcs_initialize_thickness(h, depth_tot, G, GV, param_file, just_read)
   type(ocean_grid_type),   intent(in)  :: G   !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)  :: GV  !< The ocean's vertical grid structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
@@ -37,8 +37,8 @@ subroutine circle_obcs_initialize_thickness(h, depth_tot, G, GV, param_file, jus
                            intent(in)  :: depth_tot   !< The nominal total depth of the ocean [Z ~> m]
   type(param_file_type),   intent(in)  :: param_file  !< A structure indicating the open file
                                                       !! to parse for model parameter values.
-  logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
-                                                      !! only read parameters without changing h.
+  logical,                 intent(in)  :: just_read   !< If true, this call will only read
+                                                      !! parameters without changing h.
 
   real :: e0(SZK_(GV)+1)   ! The resting interface heights, in depth units [Z ~> m], usually
                            ! negative because it is positive upward.
@@ -46,15 +46,12 @@ subroutine circle_obcs_initialize_thickness(h, depth_tot, G, GV, param_file, jus
                            ! positive upward, in depth units [Z ~> m].
   real :: IC_amp           ! The amplitude of the initial height displacement [H ~> m or kg m-2].
   real :: diskrad, rad, xCenter, xRadius, lonC, latC, xOffset
-  logical :: just_read
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
   character(len=40)  :: mdl = "circle_obcs_initialization"   ! This module's name.
   integer :: i, j, k, is, ie, js, je, nz
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
-
-  just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
 
   if (.not.just_read) &
     call MOM_mesg("  circle_obcs_initialization.F90, circle_obcs_initialize_thickness: setting thickness", 5)

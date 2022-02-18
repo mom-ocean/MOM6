@@ -722,7 +722,7 @@ subroutine ocn_domain_mct( lsize, gsMap_ocn, dom_ocn)
   call mct_gGrid_importRattr(dom_ocn,"lat",data,lsize)
 
   k = 0
-  L2_to_rad2 = grid%US%L_to_m**2 / grid%Rad_Earth**2
+  L2_to_rad2 = 1.0 / grid%Rad_Earth_L**2
   do j = grid%jsc, grid%jec
     do i = grid%isc, grid%iec
       k = k + 1 ! Increment position within gindex

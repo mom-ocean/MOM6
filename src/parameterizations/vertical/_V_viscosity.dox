@@ -1,12 +1,25 @@
-/*! \page Vertical_Viscosity Viscous Bottom Boundary Layer
+/*! \page Vertical_Viscosity Vertical Viscosity
+
+The vertical viscosity is composed of several components.
+
+-# The vertical diffusivity computations for the background and shear
+mixing all save contributions to the viscosity with an assumed turbulent
+Prandtl number of 1.0, though this can be changed with the PRANDTL_BKGND and
+PRANDTL_TURB parameters, respectively.
+-# If the ePBL scheme is used, it contributes to the vertical viscosity
+with a Prandtl number of PRANDTL_EPBL.
+-# If the CVMix scheme is used, it contributes to the vertical viscosity
+with a Prandtl number of PRANDTL_CONV.
+-# If the tidal mixing scheme is used, it contributes to the vertical
+viscosity with a Prandtl number of PRANDTL_TIDAL.
+
+\section set_viscous_BBL Viscous Bottom Boundary Layer
 
 A drag law is used, either linearized about an assumed bottom velocity or using the
 actual near-bottom velocities combined with an assumed unresolved velocity. The bottom
 boundary layer thickness is limited by a combination of stratification and rotation, as
 in the paper of \cite killworth1999. It is not necessary to calculate the
 thickness and viscosity every time step; instead previous values may be used.
-
-\section set_viscous_BBL Viscous Bottom Boundary Layer
 
 If set_visc_CS\%bottomdraglaw is True then a bottom boundary layer viscosity and thickness
 are calculated so that the bottom stress is
@@ -31,7 +44,7 @@ thin upwind cells helps increase the effect of viscosity and inhibits flow out o
 thin cells.
 
 After diagnosing \f$|U_{bbl}|\f$ over a fixed depth an active viscous boundary layer
-thickness is found using the ideas of Killworth and Edwards, 1999 (hereafter KW99).
+thickness is found using the ideas of \cite killworth1999 (hereafter KW99).
 KW99 solve the equation
 \f[
 \left( \frac{h_{bbl}}{h_f} \right)^2 + \frac{h_{bbl}}{h_N} = 1
@@ -56,9 +69,54 @@ If a Richardson number dependent mixing scheme is being used, as indicated by
 set_visc_CS\%rino_mix, then the boundary layer thickness is bounded to be no larger
 than a half of set_visc_CS\%hbbl .
 
-\todo Channel drag needs to be explained
-
 A BBL viscosity is calculated so that the no-slip boundary condition in the vertical
-viscosity solver implies the stress \f$\mathbf{\tau}_b\f$.
+viscosity solver implies the stress \f$\mathbf{\tau}_b\f$:
+
+\f[
+    K_{bbl} = \frac{1}{2} h_{bbl} \sqrt{C_{drag}} \, u^\ast
+\f]
+
+\section section_Channel_drag Channel Drag
+
+The channel drag is an extra Rayleigh drag applied to those layers
+within the bottom boundary layer. It is called channel drag because it
+accounts for curvature of the bottom, applying the drag proportionally
+to how much of each cell is within the bottom boundary layer.
+The bottom shape is approximated as locally parabolic. The
+bottom drag is applied to each layer with a factor \f$R_k\f$, the sum
+of which is 1 over all the layers.
+
+\image html channel_drag.png "Example of layers intersecting a sloping bottom, with the blue showing the fraction of the cell over which bottom drag is applied."
+\imagelatex{channel_drag.png,Example of layers intersecting a sloping bottom\, with the blue showing the fraction of the cell over which bottom drag is applied.,\includegraphics[width=\textwidth\,height=\textheight/2\,keepaspectratio=true]}
+
+The velocity that is actually subject to the bottom drag may be
+substantially lower than the mean layer velocity, especially if only
+a small fraction of the layer's width is subject to the bottom drag.
+
+The code begins by finding the arithmetic mean of the water depths to
+find the depth at the velocity points. It then uses these to construct
+a parabolic bottom shape, valid for \f$I - \frac{1}{2}\f$ to \f$I +
+\frac{1}{2}\f$. The parabola is:
+
+\f[
+    D(x) = a x^2 + b x + D - \frac{a}{12}
+\f]
+
+For sufficiently small curvature \f$a\f$, one can drop the quadratic
+term and assume a linear function instead. We want a form that matches
+the traditional bottom drag when the bottom is flat.
+
+We defined the open fraction of each cell as \f$l(k) \equiv L(k)/L_{Tot}\f$,
+where terms of order \f$l^2\f$ will be dropped.
+
+Hallberg (personal communication) shows how they came up with the form used in the code, in which the
+\f$R_k\f$ above are set to:
+
+\f[
+   R_k = \gamma_k l_{k-1/2} \left[ \frac{12 c_{Smag} h_k}{12 c_{Smag} k_k + c_d \gamma_k (1 - \gamma_k)
+   (1 - \frac{3}{2} \gamma_k) l^2_{k-1/2} L_{Tot}} \right]
+\f]
+with the definition \f$\gamma_k \equiv (l_{k-1/2} - l_{k+1/2})/l_{k-1/2}\f$. This ensures that \f$\sum^N_{k=1}
+\gamma_k l_{k-1/2} = 1\f$ since \f$l_{1/2} = 1\f$ and \f$l_{N+1/2} = 0\f$.
 
 */

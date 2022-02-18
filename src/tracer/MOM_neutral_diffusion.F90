@@ -305,14 +305,15 @@ subroutine neutral_diffusion_calc_coeffs(G, GV, US, h, T, S, CS, p_surf)
   real, dimension(SZI_(G),SZJ_(G))  :: hbl      ! Boundary layer depth [H ~> m or kg m-2]
   integer :: iMethod
   real, dimension(SZI_(G)) :: ref_pres ! Reference pressure used to calculate alpha/beta [R L2 T-2 ~> Pa]
-  real, dimension(SZI_(G)) :: rho_tmp  ! Routine to calculate drho_dp, returns density which is not used
+  real, dimension(SZI_(G)) :: rho_tmp  ! Routine to calculate drho_dp, returns density which is not used [R ~> kg m-3]
   real :: h_neglect, h_neglect_edge    ! Negligible thicknesses [H ~> m or kg m-2]
   integer, dimension(SZI_(G), SZJ_(G)) :: k_top  ! Index of the first layer within the boundary
   real,    dimension(SZI_(G), SZJ_(G)) :: zeta_top ! Distance from the top of a layer to the intersection of the
                                                    ! top extent of the boundary layer (0 at top, 1 at bottom) [nondim]
   integer, dimension(SZI_(G), SZJ_(G)) :: k_bot    ! Index of the last layer within the boundary
-  real,    dimension(SZI_(G), SZJ_(G)) :: zeta_bot ! Distance of the lower layer to the boundary layer depth
-  real :: pa_to_H                      ! A conversion factor from pressure to H units [H T2 R-1 Z-2 ~> m Pa-1 or s2 m-2]
+  real,    dimension(SZI_(G), SZJ_(G)) :: zeta_bot ! Distance of the lower layer to the boundary layer depth [nondim]
+  real :: pa_to_H                      ! A conversion factor from rescaled pressure to thickness
+                                       ! (H) units [H T2 R-1 Z-2 ~> m Pa-1 or s2 m-1]
 
   pa_to_H = 1. / (GV%H_to_RZ * GV%g_Earth)
 
@@ -968,9 +969,9 @@ subroutine find_neutral_surface_positions_continuous(nk, Pl, Tl, Sl, dRdTl, dRdS
   real, dimension(nk+1),      intent(in)    :: dRdTr !< Left-column dRho/dT [R degC-1 ~> kg m-3 degC-1]
   real, dimension(nk+1),      intent(in)    :: dRdSr !< Left-column dRho/dS [R ppt-1 ~> kg m-3 ppt-1]
   real, dimension(2*nk+2),    intent(inout) :: PoL   !< Fractional position of neutral surface within
-                                                     !! layer KoL of left column
+                                                     !! layer KoL of left column [nondim]
   real, dimension(2*nk+2),    intent(inout) :: PoR   !< Fractional position of neutral surface within
-                                                     !! layer KoR of right column
+                                                     !! layer KoR of right column [nondim]
   integer, dimension(2*nk+2), intent(inout) :: KoL   !< Index of first left interface above neutral surface
   integer, dimension(2*nk+2), intent(inout) :: KoR   !< Index of first right interface above neutral surface
   real, dimension(2*nk+1),    intent(inout) :: hEff  !< Effective thickness between two neutral surfaces
@@ -985,7 +986,6 @@ subroutine find_neutral_surface_positions_continuous(nk, Pl, Tl, Sl, dRdTl, dRdS
   integer :: k_surface              ! Index of neutral surface
   integer :: kl                     ! Index of left interface
   integer :: kr                     ! Index of right interface
-  real    :: dRdT, dRdS             ! dRho/dT [kg m-3 degC-1] and dRho/dS [kg m-3 ppt-1] for the neutral surface
   logical :: searching_left_column  ! True if searching for the position of a right interface in the left column
   logical :: searching_right_column ! True if searching for the position of a left interface in the right column
   logical :: reached_bottom         ! True if one of the bottom-most interfaces has been used as the target
@@ -1245,7 +1245,7 @@ subroutine find_neutral_surface_positions_discontinuous(CS, nk, &
   integer, optional,              intent(in)    :: k_bot_L   !< k-index for the boundary layer (left) [nondim]
   integer, optional,              intent(in)    :: k_bot_R   !< k-index for the boundary layer (right) [nondim]
   logical, optional,              intent(in)    :: hard_fail_heff !< If true (default) bring down the model if the
-                                                             !! neutral surfaces ever cross [logical]
+                                                             !! neutral surfaces ever cross
   ! Local variables
   integer :: ns                     ! Number of neutral surfaces
   integer :: k_surface              ! Index of neutral surface
@@ -2389,7 +2389,6 @@ logical function ndiff_unit_tests_discontinuous(verbose)
   real, dimension(ns)         :: PoL, PoR
   real, dimension(ns-1)       :: hEff, Flx
   type(neutral_diffusion_CS)  :: CS        !< Neutral diffusion control structure
-  type(EOS_type),     pointer :: EOS       !< Structure for linear equation of state
   type(remapping_CS), pointer :: remap_CS  !< Remapping control structure (PLM)
   real, dimension(nk,2)       :: ppoly_T_l, ppoly_T_r ! Linear reconstruction for T
   real, dimension(nk,2)       :: ppoly_S_l, ppoly_S_r ! Linear reconstruction for S

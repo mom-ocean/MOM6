@@ -119,14 +119,13 @@ end subroutine Kelvin_OBC_end
 subroutine Kelvin_initialize_topography(D, G, param_file, max_depth, US)
   type(dyn_horgrid_type),          intent(in)  :: G !< The dynamic horizontal grid type
   real, dimension(G%isd:G%ied,G%jsd:G%jed), &
-                                   intent(out) :: D !< Ocean bottom depth in m or Z if US is present
+                                   intent(out) :: D !< Ocean bottom depth [Z ~> m]
   type(param_file_type),           intent(in)  :: param_file !< Parameter file structure
-  real,                            intent(in)  :: max_depth !< Maximum model depth in the units of D [Z ~> m or m]
-  type(unit_scale_type), optional, intent(in)  :: US !< A dimensional unit scaling type
+  real,                            intent(in)  :: max_depth !< Maximum model depth [Z ~> m]
+  type(unit_scale_type),           intent(in)  :: US !< A dimensional unit scaling type
 
   ! Local variables
   character(len=40)  :: mdl = "Kelvin_initialize_topography" ! This subroutine's name.
-  real :: m_to_Z  ! A dimensional rescaling factor.
   real :: min_depth ! The minimum and maximum depths [Z ~> m].
   real :: PI ! 3.1415...
   real :: coast_offset1, coast_offset2, coast_angle, right_angle
@@ -134,10 +133,8 @@ subroutine Kelvin_initialize_topography(D, G, param_file, max_depth, US)
 
   call MOM_mesg("  Kelvin_initialization.F90, Kelvin_initialize_topography: setting topography", 5)
 
-  m_to_Z = 1.0 ; if (present(US)) m_to_Z = US%m_to_Z
-
   call get_param(param_file, mdl, "MINIMUM_DEPTH", min_depth, &
-                 "The minimum depth of the ocean.", units="m", default=0.0, scale=m_to_Z)
+                 "The minimum depth of the ocean.", units="m", default=0.0, scale=US%m_to_Z)
   call get_param(param_file, mdl, "ROTATED_COAST_OFFSET_1", coast_offset1, &
                  default=100.0, do_not_log=.true.)
   call get_param(param_file, mdl, "ROTATED_COAST_OFFSET_2", coast_offset2, &
@@ -287,7 +284,7 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, GV, US, h, Time)
           endif
         endif
       enddo ; enddo
-      if (associated(segment%tangential_vel)) then
+      if (allocated(segment%tangential_vel)) then
         do J=JsdB+1,JedB-1 ; do I=IsdB,IedB
           x1 = km_to_L_scale * G%geoLonBu(I,J)
           y1 = km_to_L_scale * G%geoLatBu(I,J)
@@ -343,7 +340,7 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, GV, US, h, Time)
           endif
         endif
       enddo ; enddo
-      if (associated(segment%tangential_vel)) then
+      if (allocated(segment%tangential_vel)) then
         do J=JsdB,JedB ; do I=IsdB+1,IedB-1
           x1 = km_to_L_scale * G%geoLonBu(I,J)
           y1 = km_to_L_scale * G%geoLatBu(I,J)

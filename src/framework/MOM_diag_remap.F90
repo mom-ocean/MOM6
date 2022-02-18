@@ -280,7 +280,7 @@ subroutine diag_remap_update(remap_cs, G, GV, US, h, T, S, eqn_of_state, h_targe
   real, dimension(:,:,:),  intent(in) :: h  !< New thickness [H ~> m or kg m-2]
   real, dimension(:,:,:),  intent(in) :: T  !< New temperatures [degC]
   real, dimension(:,:,:),  intent(in) :: S  !< New salinities [ppt]
-  type(EOS_type),          pointer    :: eqn_of_state !< A pointer to the equation of state
+  type(EOS_type),          intent(in) :: eqn_of_state !< A pointer to the equation of state
   real, dimension(:,:,:),  intent(inout) :: h_target  !< The new diagnostic thicknesses [H ~> m or kg m-2]
 
   ! Local variables

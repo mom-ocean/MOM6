@@ -448,7 +448,7 @@ function register_MOM_IS_diag_field(module_name, field_name, axes, init_time, &
   type(diag_type), pointer :: diag => NULL()
 
   MOM_missing_value = axes%diag_cs%missing_value
-  if(present(missing_value)) MOM_missing_value = missing_value
+  if (present(missing_value)) MOM_missing_value = missing_value
 
   diag_cs => axes%diag_cs
   primary_id = -1
@@ -537,7 +537,7 @@ integer function register_MOM_IS_static_field(module_name, field_name, axes, &
   type(diag_ctrl), pointer :: diag_cs !< A structure that is used to regulate diagnostic output
 
   MOM_missing_value = axes%diag_cs%missing_value
-  if(present(missing_value)) MOM_missing_value = missing_value
+  if (present(missing_value)) MOM_missing_value = missing_value
 
   diag_cs => axes%diag_cs
   primary_id = -1
@@ -582,8 +582,8 @@ function i2s(a, n_in)
   character(len=15) :: i2s_temp
   integer :: i,n
 
-  n=size(a)
-  if(present(n_in)) n = n_in
+  n = size(a)
+  if (present(n_in)) n = n_in
 
   i2s = ''
   do i=1,n
