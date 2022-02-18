@@ -96,8 +96,6 @@ program MOM_main
   ! This is .true. if incremental restart files may be saved.
   logical :: permit_incr_restart = .true.
 
-  integer :: ns
-
   ! nmax is the number of iterations after which to stop so that the
   ! simulation does not exceed its CPU time limit.  nmax is determined by
   ! evaluating the CPU time used between successive calls to write_cputime.
@@ -120,6 +118,7 @@ program MOM_main
   type(time_type) :: Time_end           ! End time for the segment or experiment.
   type(time_type) :: restart_time       ! The next time to write restart files.
   type(time_type) :: Time_step_ocean    ! A time_type version of dt_forcing.
+  logical :: segment_start_time_set     ! True if segment_start_time has been set to a valid value.
 
   real    :: elapsed_time = 0.0   ! Elapsed time in this run  [s].
   logical :: elapsed_time_master  ! If true, elapsed time is used to set the
@@ -136,9 +135,9 @@ program MOM_main
                                   ! chosen so that dt_forcing is an integer multiple of dt_dyn.
   real :: dtdia                   ! The diabatic timestep [s]
   real :: t_elapsed_seg           ! The elapsed time in this run segment [s]
-  integer :: n, n_max, nts, n_last_thermo
+  integer :: n, ns, n_max, nts, n_last_thermo
   logical :: diabatic_first, single_step_call
-  type(time_type) :: Time2, time_chg
+  type(time_type) :: Time2, time_chg ! Temporary time variables
 
   integer :: Restart_control    ! An integer that is bit-tested to determine whether
                                 ! incremental restart files are saved and whether they
@@ -152,23 +151,13 @@ program MOM_main
   type(time_type) :: daymax          ! The final day of the simulation.
 
   integer :: CPU_steps          ! The number of steps between writing CPU time.
-  integer :: date_init(6)=0                ! The start date of the whole simulation.
-  integer :: date(6)=-1                    ! Possibly the start date of this run segment.
-  integer :: years=0, months=0, days=0     ! These may determine the segment run
-  integer :: hours=0, minutes=0, seconds=0 ! length, if read from a namelist.
-  integer :: yr, mon, day, hr, mins, sec   ! Temp variables for writing the date.
+  integer :: date(6)            ! Possibly the start date of this run segment.
   type(param_file_type) :: param_file      ! The structure indicating the file(s)
                                            ! containing all run-time parameters.
-  character(len=9)  :: month
-  character(len=16) :: calendar = 'julian'
-  integer :: calendar_type=-1
+
+  integer :: calendar_type=-1              ! A coded integer indicating the calendar type.
 
   integer :: unit, io_status, ierr
-  integer :: ensemble_size, nPEs_per, ensemble_info(6)
-
-  integer, dimension(0) :: atm_PElist, land_PElist, ice_PElist
-  integer, dimension(:), allocatable :: ocean_PElist
-  logical :: unit_in_use
   integer :: initClock, mainClock, termClock
 
   logical :: debug               ! If true, write verbose checksums for debugging purposes.
@@ -180,7 +169,8 @@ program MOM_main
                                  ! and diffusion equation are read in from files stored from
                                  ! a previous integration of the prognostic model
 
-  type(MOM_control_struct) :: MOM_CSp   !> MOM control structure
+  type(MOM_control_struct) :: MOM_CSp   !< The control structure with all the MOM6 internal types,
+                                        !! parameters and variables
   type(tracer_flow_control_CS), pointer :: &
     tracer_flow_CSp => NULL()  !< A pointer to the tracer flow control structure
   type(surface_forcing_CS),  pointer :: surface_forcing_CSp => NULL()
@@ -195,14 +185,18 @@ program MOM_main
   !-----------------------------------------------------------------------
 
   character(len=4), parameter :: vers_num = 'v2.0'
-! This include declares and sets the variable "version".
-#include "version_variable.h"
+  ! This include declares and sets the variable "version".
+# include "version_variable.h"
   character(len=40)  :: mod_name = "MOM_main (MOM_driver)" ! This module's name.
 
+  ! These are the variables that might be read via the namelist capability.
+  integer :: date_init(6)=0                ! The start date of the whole simulation.
+  character(len=16) :: calendar = 'julian' ! The name of the calendar type.
+  integer :: years=0, months=0, days=0     ! These may determine the segment run
+  integer :: hours=0, minutes=0, seconds=0 ! length, if read from a namelist.
   integer :: ocean_nthreads = 1
   logical :: use_hyper_thread = .false.
-  integer :: omp_get_num_threads,omp_get_thread_num
-  namelist /ocean_solo_nml/ date_init, calendar, months, days, hours, minutes, seconds,&
+  namelist /ocean_solo_nml/ date_init, calendar, months, days, hours, minutes, seconds, &
                             ocean_nthreads, use_hyper_thread
 
   !=====================================================================
@@ -213,18 +207,8 @@ program MOM_main
 
   !allocate(forces,fluxes,sfc_state)
 
-  ! Initialize the ensemble manager.  If there are no settings for ensemble_size
-  ! in input.nml(ensemble.nml), these should not do anything.  In coupled
-  ! configurations, this all occurs in the external driver.
-  call ensemble_manager_init() ; ensemble_info(:) =  get_ensemble_size()
-  ensemble_size=ensemble_info(1) ; nPEs_per=ensemble_info(2)
-  if (ensemble_size > 1) then ! There are multiple ensemble members.
-    allocate(ocean_pelist(nPEs_per))
-    call ensemble_pelist_setup(.true., 0, nPEs_per, 0, 0, atm_pelist, ocean_pelist, &
-                               land_pelist, ice_pelist)
-    call Set_PElist(ocean_pelist)
-    deallocate(ocean_pelist)
-  endif
+  ! Initialize the ensemble manager based on settings in input.nml(ensemble.nml).
+  call initialize_ocean_only_ensembles()
 
   ! These clocks are on the global pelist.
   initClock = cpu_clock_id( 'Initialization' )
@@ -241,9 +225,7 @@ program MOM_main
     read(unit, ocean_solo_nml, iostat=io_status)
     call close_file(unit)
     ierr = check_nml_error(io_status,'ocean_solo_nml')
-    if (years+months+days+hours+minutes+seconds > 0) then
-      if (is_root_pe()) write(*,ocean_solo_nml)
-    endif
+    if (is_root_pe() .and. (years+months+days+hours+minutes+seconds > 0)) write(*,ocean_solo_nml)
   endif
 
   ! This call sets the number and affinity of threads with openMP.
@@ -253,13 +235,22 @@ program MOM_main
   ! The contents of dirs will be reread in initialize_MOM.
   call get_MOM_input(dirs=dirs)
 
+  segment_start_time_set = .false.
   ! Read ocean_solo restart, which can override settings from the namelist.
   if (file_exists(trim(dirs%restart_input_dir)//'ocean_solo.res')) then
+    date(:) = -1
     call open_ASCII_file(unit, trim(dirs%restart_input_dir)//'ocean_solo.res', action=READONLY_FILE)
     read(unit,*) calendar_type
     read(unit,*) date_init
     read(unit,*) date
     call close_file(unit)
+
+    call set_calendar_type(calendar_type)
+    if (sum(date) >= 0) then
+      ! In this case, the segment starts at a time fixed by ocean_solo.res
+      segment_start_time = set_date(date(1), date(2), date(3), date(4), date(5), date(6))
+      segment_start_time_set = .true.
+    endif
   else
     calendar = uppercase(calendar)
     if (calendar(1:6) == 'JULIAN') then ;        calendar_type = JULIAN
@@ -272,8 +263,8 @@ program MOM_main
     else
       call MOM_error(FATAL,'MOM_driver: No namelist value for calendar')
     endif
+    call set_calendar_type(calendar_type)
   endif
-  call set_calendar_type(calendar_type)
 
 
   if (sum(date_init) > 0) then
@@ -285,24 +276,19 @@ program MOM_main
 
   call time_interp_external_init()
 
-  if (sum(date) >= 0) then
-    ! In this case, the segment starts at a time fixed by ocean_solo.res
-    segment_start_time = set_date(date(1), date(2), date(3), date(4), date(5), date(6))
-    Time = segment_start_time
-  else
-    ! In this case, the segment starts at a time read from the MOM restart file
-    ! or left as Start_time by MOM_initialize.
-    Time = Start_time
-  endif
-
   ! Call initialize MOM with an optional Ice Shelf CS which, if present triggers
   ! initialization of ice shelf parameters and arrays.
-  if (sum(date) >= 0) then
+  if (segment_start_time_set) then
+    ! In this case, the segment starts at a time fixed by ocean_solo.res
+    Time = segment_start_time
     call initialize_MOM(Time, Start_time, param_file, dirs, MOM_CSp, restart_CSp, &
                         segment_start_time, offline_tracer_mode=offline_tracer_mode, &
                         diag_ptr=diag, tracer_flow_CSp=tracer_flow_CSp, ice_shelf_CSp=ice_shelf_CSp, &
                         waves_CSp=Waves_CSp)
   else
+    ! In this case, the segment starts at a time read from the MOM restart file
+    ! or is left at Start_time by MOM_initialize.
+    Time = Start_time
     call initialize_MOM(Time, Start_time, param_file, dirs, MOM_CSp, restart_CSp, &
                         offline_tracer_mode=offline_tracer_mode, diag_ptr=diag, &
                         tracer_flow_CSp=tracer_flow_CSp, ice_shelf_CSp=ice_shelf_CSp, waves_CSp=Waves_CSp)
@@ -329,7 +315,7 @@ program MOM_main
   call callTree_waypoint("done surface_forcing_init")
 
 
-  call get_param(param_file,mod_name, "USE_WAVES", Use_Waves, &
+  call get_param(param_file, mod_name, "USE_WAVES", Use_Waves, &
        "If true, enables surface wave modules.",default=.false.)
   ! MOM_wave_interface_init is called regardless of the value of USE_WAVES because
   ! it also initializes statistical waves.
@@ -347,7 +333,8 @@ program MOM_main
                  "The default value is given by DT.", units="s", default=dt)
   if (offline_tracer_mode) then
     call get_param(param_file, mod_name, "DT_OFFLINE", dt_forcing, &
-                   "Time step for the offline time step")
+                   "Length of time between reading in of input fields", &
+                   units='s', fail_if_missing=.true.)
     dt = dt_forcing
   endif
   ntstep = MAX(1,ceiling(dt_forcing/dt - 0.001))
@@ -433,16 +420,7 @@ program MOM_main
   call diag_mediator_close_registration(diag)
 
   ! Write out a time stamp file.
-  if (is_root_pe() .and. (calendar_type /= NO_CALENDAR)) then
-    call open_ASCII_file(unit, 'time_stamp.out', action=APPEND_FILE)
-    call get_date(Time, date(1), date(2), date(3), date(4), date(5), date(6))
-    month = month_name(date(2))
-    write(unit,'(6i4,2x,a3)') date, month(1:3)
-    call get_date(Time_end, date(1), date(2), date(3), date(4), date(5), date(6))
-    month = month_name(date(2))
-    write(unit,'(6i4,2x,a3)') date, month(1:3)
-    call close_file(unit)
-  endif
+  if (is_root_pe() .and. (calendar_type /= NO_CALENDAR)) call write_time_stamp_file(Time)
 
   if (cpu_steps > 0) call write_cputime(Time, 0, write_CPU_CSp)
 
@@ -617,34 +595,19 @@ program MOM_main
     call save_restart(dirs%restart_output_dir, Time, grid, restart_CSp, GV=GV)
     if (use_ice_shelf) call ice_shelf_save_restart(ice_shelf_CSp, Time, &
                                 dirs%restart_output_dir)
-    ! Write ocean solo restart file.
-    if (is_root_pe()) then
-      call open_ASCII_file(unit, trim(dirs%restart_output_dir)//'ocean_solo.res')
-      write(unit, '(i6,8x,a)') calendar_type, &
-            '(Calendar: no_calendar=0, thirty_day_months=1, julian=2, gregorian=3, noleap=4)'
-
-      call get_date(Start_time, yr, mon, day, hr, mins, sec)
-      write(unit, '(6i6,8x,a)') yr, mon, day, hr, mins, sec, &
-            'Model start time:   year, month, day, hour, minute, second'
-      call get_date(Time, yr, mon, day, hr, mins, sec)
-      write(unit, '(6i6,8x,a)') yr, mon, day, hr, mins, sec, &
-            'Current model time: year, month, day, hour, minute, second'
-      call close_file(unit)
-    endif
+    ! Write the ocean solo restart file.
+    call write_ocean_solo_res(Time, Start_time, calendar_type, &
+                              trim(dirs%restart_output_dir)//'ocean_solo.res')
   endif
 
   if (is_root_pe()) then
-    do unit=10,1967
-      INQUIRE(unit,OPENED=unit_in_use)
-      if (.not.unit_in_use) exit
-    enddo
-    open(unit,FILE="exitcode",FORM="FORMATTED",STATUS="REPLACE",action="WRITE")
+    call open_ASCII_file(unit, "exitcode")
     if (Time < daymax) then
       write(unit,*) 9
     else
       write(unit,*) 0
     endif
-    close(unit)
+    call close_file(unit)
   endif
 
   call callTree_waypoint("End MOM_main")
@@ -656,5 +619,73 @@ program MOM_main
   call io_infra_end ; call MOM_infra_end
 
   call MOM_end(MOM_CSp)
+
+contains
+
+!> Write out the ocean solo restart file to the indicated path.
+subroutine write_ocean_solo_res(Time, Start_time, calendar, file_path)
+  type(time_type),  intent(in) :: Time      !< The current model time.
+  type(time_type),  intent(in) :: Start_Time !< The start time of the simulation.
+  integer,          intent(in) :: calendar  !< A coded integer indicating the calendar type.
+  character(len=*), intent(in) :: file_path !< The full path and name of the restart file
+
+  ! Local variables
+  integer :: unit
+  integer :: yr, mon, day, hr, mins, sec   ! Temp variables for writing the date.
+
+  if (.not.is_root_pe()) return
+
+  call open_ASCII_file(unit, trim(file_path))
+  write(unit, '(i6,8x,a)') calendar, &
+        '(Calendar: no_calendar=0, thirty_day_months=1, julian=2, gregorian=3, noleap=4)'
+
+  call get_date(Start_time, yr, mon, day, hr, mins, sec)
+  write(unit, '(6i6,8x,a)') yr, mon, day, hr, mins, sec, &
+        'Model start time:   year, month, day, hour, minute, second'
+  call get_date(Time, yr, mon, day, hr, mins, sec)
+  write(unit, '(6i6,8x,a)') yr, mon, day, hr, mins, sec, &
+        'Current model time: year, month, day, hour, minute, second'
+  call close_file(unit)
+end subroutine write_ocean_solo_res
+
+
+!> Write out an ascii time stamp file with the model time, following FMS conventions.
+subroutine write_time_stamp_file(Time)
+  type(time_type), intent(in) :: Time !< The current model time.
+  ! Local variables
+  integer :: unit
+  integer :: yr, mon, day, hr, mins, sec   ! Temp variables for writing the date.
+  character(len=9)  :: month ! The name of the month
+
+  if (.not.is_root_PE()) return
+
+  call open_ASCII_file(unit, 'time_stamp.out', action=APPEND_FILE)
+  call get_date(Time, yr, mon, day, hr, mins, sec)
+  month = month_name(mon)
+  write(unit,'(6i4,2x,a3)') yr, mon, day, hr, mins, sec, month(1:3)
+  call get_date(Time_end, yr, mon, day, hr, mins, sec)
+  month = month_name(mon)
+  write(unit,'(6i4,2x,a3)') yr, mon, day, hr, mins, sec, month(1:3)
+  call close_file(unit)
+end subroutine write_time_stamp_file
+
+!> Initialize the ensemble manager.  If there are no settings for ensemble_size
+!! in input.nml(ensemble.nml), these should not do anything.  In coupled
+!! configurations, this all occurs in the external driver.
+subroutine initialize_ocean_only_ensembles()
+  integer, dimension(:), allocatable :: ocean_PElist
+  integer, dimension(0) :: atm_PElist, land_PElist, ice_PElist
+  integer :: ensemble_size, nPEs_per, ensemble_info(6)
+
+  call ensemble_manager_init() ; ensemble_info(:) =  get_ensemble_size()
+  ensemble_size = ensemble_info(1) ; nPEs_per = ensemble_info(2)
+  if (ensemble_size > 1) then ! There are multiple ensemble members.
+    allocate(ocean_pelist(nPEs_per))
+    call ensemble_pelist_setup(.true., 0, nPEs_per, 0, 0, atm_pelist, ocean_pelist, &
+                               land_pelist, ice_pelist)
+    call Set_PElist(ocean_pelist)
+    deallocate(ocean_pelist)
+  endif
+end subroutine initialize_ocean_only_ensembles
 
 end program MOM_main

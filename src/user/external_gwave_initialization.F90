@@ -25,7 +25,7 @@ public external_gwave_initialize_thickness
 contains
 
 !> This subroutine initializes layer thicknesses for the external_gwave experiment.
-subroutine external_gwave_initialize_thickness(h, G, GV, US, param_file, just_read_params)
+subroutine external_gwave_initialize_thickness(h, G, GV, US, param_file, just_read)
   type(ocean_grid_type),   intent(in)  :: G           !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)  :: GV          !< The ocean's vertical grid structure.
   type(unit_scale_type),   intent(in)  :: US          !< A dimensional unit scaling type
@@ -33,23 +33,20 @@ subroutine external_gwave_initialize_thickness(h, G, GV, US, param_file, just_re
                            intent(out) :: h           !< The thickness that is being initialized [H ~> m or kg m-2].
   type(param_file_type),   intent(in)  :: param_file  !< A structure indicating the open file
                                                       !! to parse for model parameter values.
-  logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
-                                                      !! only read parameters without changing h.
+  logical,                 intent(in)  :: just_read   !< If true, this call will only read
+                                                      !! parameters without changing h.
   ! Local variables
   real :: eta1D(SZK_(GV)+1)  ! Interface height relative to the sea surface
                              ! positive upward [Z ~> m].
   real :: ssh_anomaly_height ! Vertical height of ssh anomaly [Z ~> m]
   real :: ssh_anomaly_width ! Lateral width of anomaly [degrees]
-  logical :: just_read    ! If true, just read parameters but set nothing.
   character(len=40)  :: mdl = "external_gwave_initialize_thickness" ! This subroutine's name.
-! This include declares and sets the variable "version".
-#include "version_variable.h"
+  ! This include declares and sets the variable "version".
+# include "version_variable.h"
   integer :: i, j, k, is, ie, js, je, nz
   real :: PI, Xnondim
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
-
-  just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
 
   if (.not.just_read) &
     call MOM_mesg("  external_gwave_initialization.F90, external_gwave_initialize_thickness: setting thickness", 5)

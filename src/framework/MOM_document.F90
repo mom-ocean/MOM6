@@ -672,22 +672,22 @@ function real_array_string(vals, sep)
   integer :: j, n, ns
   logical :: doWrite
   character(len=10) :: separator
-  n=1 ; doWrite=.true. ; real_array_string=''
+  n = 1 ; doWrite = .true. ; real_array_string = ''
   if (present(sep)) then
-    separator=sep ; ns=len(sep)
+    separator = sep ; ns = len(sep)
   else
-    separator=', ' ; ns=2
+    separator = ', ' ; ns = 2
   endif
   do j=1,size(vals)
-    doWrite=.true.
-    if (j<size(vals)) then
-      if (vals(j)==vals(j+1)) then
-        n=n+1
-        doWrite=.false.
+    doWrite = .true.
+    if (j < size(vals)) then
+      if (vals(j) == vals(j+1)) then
+        n = n+1
+        doWrite = .false.
       endif
     endif
     if (doWrite) then
-      if(len(real_array_string)>0) then ! Write separator if a number has already been written
+      if (len(real_array_string) > 0) then ! Write separator if a number has already been written
         real_array_string = real_array_string // separator(1:ns)
       endif
       if (n>1) then

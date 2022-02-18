@@ -17,6 +17,7 @@ use fms2_io_mod,          only : variable_att_exists, get_variable_attribute, ge
 use fms2_io_mod,          only : get_variable_dimension_names, is_dimension_registered, get_dimension_size
 use fms2_io_mod,          only : is_dimension_unlimited, register_axis, unlimited
 use fms2_io_mod,          only : get_global_io_domain_indices
+use fms_io_utils_mod,     only : fms2_file_exist => file_exists
 
 use fms_mod,              only : write_version_number, open_namelist_file, check_nml_error
 use fms_io_mod,           only : file_exist, field_exist, field_size, read_data
@@ -170,15 +171,12 @@ logical function MOM_file_exists(filename, MOM_Domain)
 end function MOM_file_exists
 
 !> Returns true if the named file or its domain-decomposed variant exists.
-logical function FMS_file_exists(filename, domain, no_domain)
+logical function FMS_file_exists(filename)
   character(len=*),         intent(in) :: filename  !< The name of the file being inquired about
-  type(domain2d), optional, intent(in) :: domain    !< The mpp domain2d that describes the decomposition
-  logical,        optional, intent(in) :: no_domain !< This file does not use domain decomposition
-! This function uses the fms_io function file_exist to determine whether
-! a named file (or its decomposed variant) exists.
+  ! This function uses the fms_io function file_exist to determine whether
+  ! a named file (or its decomposed variant) exists.
 
-  FMS_file_exists = file_exist(filename, domain, no_domain)
-
+  FMS_file_exists = fms2_file_exist(filename)
 end function FMS_file_exists
 
 !> indicates whether an I/O handle is attached to an open file

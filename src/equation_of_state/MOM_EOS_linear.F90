@@ -357,7 +357,7 @@ subroutine int_density_dz_linear(T, S, z_t, z_b, rho_ref, rho_0_pres, G_e, HI, &
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
               optional, intent(out) :: intz_dpa  !< The integral through the thickness of the layer
                                                  !! of the pressure anomaly relative to the anomaly
-                                                 !! at the top of the layer [R L2 Z T-2 ~> Pa Z] or [Pa Z].
+                                                 !! at the top of the layer [R L2 Z T-2 ~> Pa m] or [Pa m].
   real, dimension(HI%IsdB:HI%IedB,HI%jsd:HI%jed),  &
               optional, intent(out) :: intx_dpa  !< The integral in x of the difference between the
                                                  !! pressure anomaly at the top and bottom of the
@@ -549,7 +549,7 @@ subroutine int_spec_vol_dp_linear(T, S, p_t, p_b, alpha_ref, HI, Rho_T0_S0, &
   real :: dp, dpL, dpR  ! Layer pressure thicknesses [R L2 T-2 ~> Pa] or [Pa].
   real :: hWght      ! A pressure-thickness below topography [R L2 T-2 ~> Pa] or [Pa].
   real :: hL, hR     ! Pressure-thicknesses of the columns to the left and right [R L2 T-2 ~> Pa] or [Pa].
-  real :: iDenom     ! The inverse of the denominator in the weights [T4 R-2 L-2 ~> Pa-2] or [Pa-2].
+  real :: iDenom     ! The inverse of the denominator in the weights [T4 R-2 L-4 ~> Pa-2] or [Pa-2].
   real :: hWt_LL, hWt_LR ! hWt_LA is the weighted influence of A on the left column [nondim].
   real :: hWt_RL, hWt_RR ! hWt_RA is the weighted influence of A on the right column [nondim].
   real :: wt_L, wt_R ! The linear weights of the left and right columns [nondim].

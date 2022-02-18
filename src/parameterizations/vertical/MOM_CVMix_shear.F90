@@ -73,7 +73,7 @@ subroutine calculate_CVMix_shear(u_H, v_H, h, tv, kd, kv, G, GV, US, CS )
                                                                  !! call to CVMix_shear_init.
   ! Local variables
   integer :: i, j, k, kk, km1
-  real :: GoRho  ! Gravitational acceleration divided by density [Z T-2 R-1 ~> m4 s-2 kg-2]
+  real :: GoRho  ! Gravitational acceleration divided by density [Z T-2 R-1 ~> m4 s-2 kg-1]
   real :: pref   ! Interface pressures [R L2 T-2 ~> Pa]
   real :: DU, DV ! Velocity differences [L T-1 ~> m s-1]
   real :: DZ     ! Grid spacing around an interface [Z ~> m]

@@ -69,7 +69,6 @@ type :: p3d
   integer :: id !< id for FMS external time interpolator
   integer :: nz_data !< The number of vertical levels in the input field.
   integer :: num_tlevs !< The number of time records contained in the file
-  real, dimension(:,:,:), pointer :: mask_in => NULL() !< pointer to the data mask.
   real, dimension(:,:,:), pointer :: p => NULL() !< pointer to the data.
   real, dimension(:,:,:), pointer :: h => NULL() !< pointer to the data grid.
 end type p3d
@@ -79,7 +78,6 @@ type :: p2d
   integer :: id !< id for FMS external time interpolator
   integer :: nz_data !< The number of vertical levels in the input field
   integer :: num_tlevs !< The number of time records contained in the file
-  real, dimension(:,:), pointer :: mask_in => NULL()!< pointer to the data mask.
   real, dimension(:,:), pointer :: p => NULL() !< pointer the data.
   real, dimension(:,:), pointer :: h => NULL() !< pointer the data grid.
 end type p2d
@@ -94,16 +92,16 @@ type, public :: ALE_sponge_CS ; private
   integer :: fldno = 0 !< The number of fields which have already been
                        !! registered by calls to set_up_sponge_field
   logical :: sponge_uv !< Control whether u and v are included in sponge
-  integer, pointer :: col_i(:) => NULL()   !< Array of the i-indices of each tracer column being damped.
-  integer, pointer :: col_j(:) => NULL()   !< Array of the j-indices of each tracer column being damped.
-  integer, pointer :: col_i_u(:) => NULL() !< Array of the i-indices of each u-column being damped.
-  integer, pointer :: col_j_u(:) => NULL() !< Array of the j-indices of each u-column being damped.
-  integer, pointer :: col_i_v(:) => NULL() !< Array of the i-indices of each v-column being damped.
-  integer, pointer :: col_j_v(:) => NULL() !< Array of the j-indices of each v-column being damped.
+  integer, allocatable :: col_i(:)    !< Array of the i-indices of each tracer column being damped
+  integer, allocatable :: col_j(:)    !< Array of the j-indices of each tracer column being damped
+  integer, allocatable :: col_i_u(:)  !< Array of the i-indices of each u-column being damped
+  integer, allocatable :: col_j_u(:)  !< Array of the j-indices of each u-column being damped
+  integer, allocatable :: col_i_v(:)  !< Array of the i-indices of each v-column being damped
+  integer, allocatable :: col_j_v(:)  !< Array of the j-indices of each v-column being damped
 
-  real, pointer :: Iresttime_col(:)   => NULL() !< The inverse restoring time of each tracer column [T-1 ~> s-1].
-  real, pointer :: Iresttime_col_u(:) => NULL() !< The inverse restoring time of each u-column [T-1 ~> s-1].
-  real, pointer :: Iresttime_col_v(:) => NULL() !< The inverse restoring time of each v-column [T-1 ~> s-1].
+  real, allocatable :: Iresttime_col(:)   !< The inverse restoring time of each tracer column [T-1 ~> s-1]
+  real, allocatable :: Iresttime_col_u(:) !< The inverse restoring time of each u-column [T-1 ~> s-1]
+  real, allocatable :: Iresttime_col_v(:) !< The inverse restoring time of each v-column [T-1 ~> s-1]
 
   type(p3d) :: var(MAX_FIELDS_)      !< Pointers to the fields that are being damped.
   type(p2d) :: Ref_val(MAX_FIELDS_) !< The values to which the fields are damped.
@@ -366,15 +364,10 @@ end subroutine initialize_ALE_sponge_fixed
 !> Return the number of layers in the data with a fixed ALE sponge, or 0 if there are
 !! no sponge columns on this PE.
 function get_ALE_sponge_nz_data(CS)
-  type(ALE_sponge_CS),   pointer       :: CS !< A pointer that is set to point to the control
-                                             !! structure for the ALE_sponge module.
+  type(ALE_sponge_CS), intent(in) :: CS !< ALE sponge control struct
   integer :: get_ALE_sponge_nz_data  !< The number of layers in the fixed sponge data.
 
-  if (associated(CS)) then
-    get_ALE_sponge_nz_data = CS%nz_data
-  else
-    get_ALE_sponge_nz_data = 0
-  endif
+  get_ALE_sponge_nz_data = CS%nz_data
 end function get_ALE_sponge_nz_data
 
 !> Return the thicknesses used for the data with a fixed ALE sponge
@@ -600,10 +593,8 @@ subroutine init_ALE_sponge_diags(Time, G, diag, CS, US)
   type(ocean_grid_type),   intent(in)    :: G    !< The ocean's grid structure
   type(diag_ctrl), target, intent(inout) :: diag !< A structure that is used to regulate diagnostic
                                                  !! output.
-  type(ALE_sponge_CS),     pointer       :: CS   !< ALE sponge control structure
+  type(ALE_sponge_CS),     intent(inout) :: CS   !< ALE sponge control structure
   type(unit_scale_type),   intent(in)    :: US   !< A dimensional unit scaling type
-
-  if (.not.associated(CS)) return
 
   CS%diag => diag
 
@@ -840,7 +831,7 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
   real,                      intent(in)    :: dt !< The amount of time covered by this call [T ~> s].
   type(ALE_sponge_CS),       pointer       :: CS !< A pointer to the control structure for this module
                                                  !! that is set by a previous call to initialize_ALE_sponge (in).
-  type(time_type), optional, intent(in)    :: Time !< The current model date
+  type(time_type),           intent(in)    :: Time !< The current model date
 
   real :: damp                                  ! The timestep times the local damping coefficient [nondim].
   real :: I1pdamp                               ! I1pdamp is 1/(1 + damp). [nondim].
@@ -885,8 +876,6 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
   endif
 
   if (CS%time_varying_sponges) then
-    if (.not. present(Time)) &
-      call MOM_error(FATAL,"apply_ALE_sponge: No time information provided")
     do m=1,CS%fldno
       nz_data = CS%Ref_val(m)%nz_data
       call horiz_interp_and_extrap_tracer(CS%Ref_val(m)%id, Time, 1.0, G, sp_val, mask_z, z_in, &
@@ -971,9 +960,6 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
   if (CS%sponge_uv) then
 
     if (CS%time_varying_sponges) then
-      if (.not. present(Time)) &
-         call MOM_error(FATAL,"apply_ALE_sponge: No time information provided")
-
       nz_data = CS%Ref_val_u%nz_data
       ! Interpolate from the external horizontal grid and in time
       call horiz_interp_and_extrap_tracer(CS%Ref_val_u%id, Time, 1.0, G, sp_val, mask_z, z_in, &
@@ -1282,8 +1268,7 @@ end subroutine rotate_ALE_sponge
 !   after rotation.  This function is part of a temporary solution until
 !   something more robust is developed.
 subroutine update_ALE_sponge_field(sponge, p_old, G, GV, p_new)
-  type(ALE_sponge_CS),     pointer    :: sponge !< A pointer to the control structure for this module
-                                               !! that is set by a previous call to initialize_ALE_sponge.
+  type(ALE_sponge_CS),     intent(inout) :: sponge !< ALE sponge control struct
   real, dimension(:,:,:), &
                    target, intent(in) :: p_old !< The previous array of target values
   type(ocean_grid_type),   intent(in) :: G     !< The updated ocean grid structure
@@ -1296,7 +1281,6 @@ subroutine update_ALE_sponge_field(sponge, p_old, G, GV, p_new)
   do n=1,sponge%fldno
     if (associated(sponge%var(n)%p, p_old)) sponge%var(n)%p => p_new
   enddo
-
 end subroutine update_ALE_sponge_field
 
 
@@ -1311,16 +1295,16 @@ subroutine ALE_sponge_end(CS)
 
   if (.not.associated(CS)) return
 
-  if (associated(CS%col_i)) deallocate(CS%col_i)
-  if (associated(CS%col_i_u)) deallocate(CS%col_i_u)
-  if (associated(CS%col_i_v)) deallocate(CS%col_i_v)
-  if (associated(CS%col_j)) deallocate(CS%col_j)
-  if (associated(CS%col_j_u)) deallocate(CS%col_j_u)
-  if (associated(CS%col_j_v)) deallocate(CS%col_j_v)
+  if (allocated(CS%col_i)) deallocate(CS%col_i)
+  if (allocated(CS%col_i_u)) deallocate(CS%col_i_u)
+  if (allocated(CS%col_i_v)) deallocate(CS%col_i_v)
+  if (allocated(CS%col_j)) deallocate(CS%col_j)
+  if (allocated(CS%col_j_u)) deallocate(CS%col_j_u)
+  if (allocated(CS%col_j_v)) deallocate(CS%col_j_v)
 
-  if (associated(CS%Iresttime_col)) deallocate(CS%Iresttime_col)
-  if (associated(CS%Iresttime_col_u)) deallocate(CS%Iresttime_col_u)
-  if (associated(CS%Iresttime_col_v)) deallocate(CS%Iresttime_col_v)
+  if (allocated(CS%Iresttime_col)) deallocate(CS%Iresttime_col)
+  if (allocated(CS%Iresttime_col_u)) deallocate(CS%Iresttime_col_u)
+  if (allocated(CS%Iresttime_col_v)) deallocate(CS%Iresttime_col_v)
 
   do m=1,CS%fldno
     if (associated(CS%Ref_val(m)%p)) deallocate(CS%Ref_val(m)%p)
