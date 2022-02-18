@@ -1323,7 +1323,7 @@ subroutine register_forcing_type_diags(Time, diag, US, use_temperature, handles,
           'Fraction of cell area covered by sea ice', 'm2 m-2')
 
       handles%id_u10_sqr = register_diag_field('ocean_model', 'u10_sqr', diag%axesT1, Time, &
-          'Wind magnitude at 10m, squared', 'm2 s-2', conversion=US%Z_to_m**2*US%s_to_T**2)
+          'Wind magnitude at 10m, squared', 'm2 s-2', conversion=US%L_to_m**2*US%s_to_T**2)
     endif
   endif
 
