@@ -2,14 +2,14 @@
 module MOM_hor_visc
 
 ! This file is part of MOM6. See LICENSE.md for the license.
-
-use MOM_checksums,             only : hchksum, Bchksum
+use MOM_checksums,             only : hchksum, Bchksum, uvchksum
 use MOM_coms,                  only : min_across_PEs
 use MOM_diag_mediator,         only : post_data, register_diag_field, safe_alloc_ptr
 use MOM_diag_mediator,         only : post_product_u, post_product_sum_u
 use MOM_diag_mediator,         only : post_product_v, post_product_sum_v
 use MOM_diag_mediator,         only : diag_ctrl, time_type
 use MOM_domains,               only : pass_var, CORNER, pass_vector, AGRID, BGRID_NE
+use MOM_domains,               only : To_All, Scalar_Pair
 use MOM_error_handler,         only : MOM_error, FATAL, WARNING, is_root_pe
 use MOM_file_parser,           only : get_param, log_version, param_file_type
 use MOM_grid,                  only : ocean_grid_type
@@ -185,6 +185,7 @@ type, public :: hor_visc_CS ; private
   ! 3D diagnostics hf_diffu(diffv) are commented because there is no clarity on proper remapping grid option.
   ! The code is retained for degugging purposes in the future.
 
+  integer :: num_smooth_gme !< number of smoothing passes for the GME fluxes.
   !>@{
   !! Diagnostic id
   integer :: id_grid_Re_Ah = -1, id_grid_Re_Kh   = -1
@@ -197,6 +198,8 @@ type, public :: hor_visc_CS ; private
   integer :: id_Ah_h      = -1, id_Ah_q          = -1
   integer :: id_Kh_h      = -1, id_Kh_q          = -1
   integer :: id_GME_coeff_h = -1, id_GME_coeff_q = -1
+  integer :: id_dudx_bt = -1, id_dvdy_bt = -1
+  integer :: id_dudy_bt = -1, id_dvdx_bt = -1
   integer :: id_vort_xy_q = -1, id_div_xx_h      = -1
   integer :: id_sh_xy_q = -1,    id_sh_xx_h      = -1
   integer :: id_FrictWork = -1, id_FrictWorkIntz = -1
@@ -452,12 +455,13 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
                  (CS%bound_Kh .and. .not.CS%better_bound_Kh)
 
   if (CS%use_GME) then
+
     do j=Jsq-1,Jeq+2 ; do i=Isq-1,Ieq+2
       boundary_mask_h(i,j) = (G%mask2dCu(I,j) * G%mask2dCv(i,J) * G%mask2dCu(I-1,j) * G%mask2dCv(i,J-1))
     enddo ; enddo
 
-    do J=js-2,Jeq+1 ; do I=is-2,Ieq+1
-      boundary_mask_q(I,J) = (G%mask2dCv(i,J) * G%mask2dCv(i+1,J) * G%mask2dCu(I,j) * G%mask2dCu(I,j-1))
+    do J=Jsq-2,Jeq+1 ; do I=Isq-2,Ieq+1
+      boundary_mask_q(I,J) = (G%mask2dCv(i,J) * G%mask2dCv(i+1,J) * G%mask2dCu(I,j) * G%mask2dCu(I,j+1))
     enddo ; enddo
 
     ! initialize diag. array with zeros
@@ -468,80 +472,91 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
 
     ! Get barotropic velocities and their gradients
     call barotropic_get_tav(BT, ubtav, vbtav, G, US)
+
     call pass_vector(ubtav, vbtav, G%Domain)
 
-    do j=js-1,je+2 ; do i=is-1,ie+2
+    ! Calculate the barotropic horizontal tension
+    do j=Jsq-2,Jeq+2 ; do i=Isq-2,Ieq+2
       dudx_bt(i,j) = CS%DY_dxT(i,j)*(G%IdyCu(I,j) * ubtav(I,j) - &
                                      G%IdyCu(I-1,j) * ubtav(I-1,j))
       dvdy_bt(i,j) = CS%DX_dyT(i,j)*(G%IdxCv(i,J) * vbtav(i,J) - &
                                      G%IdxCv(i,J-1) * vbtav(i,J-1))
-    enddo ; enddo
-
-    do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
       sh_xx_bt(i,j) = dudx_bt(i,j) - dvdy_bt(i,j)
     enddo ; enddo
 
     ! Components for the barotropic shearing strain
-    do J=js-2,Jeq+1 ; do I=is-2,Ieq+1
+    do J=Jsq-2,Jeq+2 ; do I=Isq-2,Ieq+2
       dvdx_bt(I,J) = CS%DY_dxBu(I,J)*(vbtav(i+1,J)*G%IdyCv(i+1,J) &
                                     - vbtav(i,J)*G%IdyCv(i,J))
       dudy_bt(I,J) = CS%DX_dyBu(I,J)*(ubtav(I,j+1)*G%IdxCu(I,j+1) &
                                     - ubtav(I,j)*G%IdxCu(I,j))
     enddo ; enddo
 
-    call pass_vector(dudx_bt, dvdy_bt, G%Domain, stagger=BGRID_NE)
-    call pass_vector(dvdx_bt, dudy_bt, G%Domain, stagger=AGRID)
+    ! post barotropic tension and strain
+    if (CS%id_dudx_bt > 0) call post_data(CS%id_dudx_bt, dudx_bt, CS%diag)
+    if (CS%id_dvdy_bt > 0) call post_data(CS%id_dvdy_bt, dvdy_bt, CS%diag)
+    if (CS%id_dudy_bt > 0) call post_data(CS%id_dudy_bt, dudy_bt, CS%diag)
+    if (CS%id_dvdx_bt > 0) call post_data(CS%id_dvdx_bt, dvdx_bt, CS%diag)
 
     if (CS%no_slip) then
-      do J=js-1,Jeq ; do I=is-1,Ieq
+      do J=Jsq-2,Jeq+2 ; do I=Isq-2,Ieq+2
         sh_xy_bt(I,J) = (2.0-G%mask2dBu(I,J)) * ( dvdx_bt(I,J) + dudy_bt(I,J) )
       enddo ; enddo
     else
-      do J=js-1,Jeq ; do I=is-1,Ieq
+      do J=Jsq-2,Jeq+2 ; do I=Isq-2,Ieq+2
         sh_xy_bt(I,J) = G%mask2dBu(I,J) * ( dvdx_bt(I,J) + dudy_bt(I,J) )
       enddo ; enddo
     endif
 
     do j=Jsq-1,Jeq+2 ; do i=Isq-1,Ieq+2
-      grad_vel_mag_bt_h(i,j) = boundary_mask_h(i,j) * (dudx_bt(i,j)**2 + dvdy_bt(i,j)**2 + &
+      grad_vel_mag_bt_h(i,j) = G%mask2dT(I,J) * boundary_mask_h(i,j) * (dudx_bt(i,j)**2 + dvdy_bt(i,j)**2 + &
             (0.25*((dvdx_bt(I,J)+dvdx_bt(I-1,J-1))+(dvdx_bt(I,J-1)+dvdx_bt(I-1,J))))**2 + &
             (0.25*((dudy_bt(I,J)+dudy_bt(I-1,J-1))+(dudy_bt(I,J-1)+dudy_bt(I-1,J))))**2)
     enddo ; enddo
 
-    do J=js-2,Jeq+1 ; do I=is-2,Ieq+1
-      grad_vel_mag_bt_q(I,J) = boundary_mask_q(I,J) * (dvdx_bt(I,J)**2 + dudy_bt(I,J)**2 + &
+    do J=Jsq-2,Jeq+1 ; do I=Isq-2,Ieq+1
+      grad_vel_mag_bt_q(I,J) = G%mask2dBu(I,J) * boundary_mask_q(I,J) * (dvdx_bt(I,J)**2 + dudy_bt(I,J)**2 + &
             (0.25*((dudx_bt(i,j)+dudx_bt(i+1,j+1))+(dudx_bt(i,j+1)+dudx_bt(i+1,j))))**2 + &
             (0.25*((dvdy_bt(i,j)+dvdy_bt(i+1,j+1))+(dvdy_bt(i,j+1)+dvdy_bt(i+1,j))))**2)
     enddo ; enddo
 
-    do j=js-1,je+1 ; do i=is-1,ie+1
+    call pass_var(h, G%domain, halo=2)
+
+    do j=js-2,je+2 ; do i=is-2,ie+2
       htot(i,j) = 0.0
     enddo ; enddo
-    do k=1,nz ; do j=js-1,je+1 ; do i=is-1,ie+1
+    do k=1,nz ; do j=js-2,je+2 ; do i=is-2,ie+2
       htot(i,j) = htot(i,j) + GV%H_to_Z*h(i,j,k)
     enddo ; enddo ; enddo
 
     I_GME_h0 = 1.0 / CS%GME_h0
-    do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+    do j=Jsq-1,Jeq+2 ; do i=Isq-1,Ieq+2
       if (grad_vel_mag_bt_h(i,j)>0) then
-        GME_effic_h(i,j) = CS%GME_efficiency * boundary_mask_h(i,j) * &
+        GME_effic_h(i,j) = CS%GME_efficiency * G%mask2dT(I,J) * &
             (MIN(htot(i,j) * I_GME_h0, 1.0)**2)
       else
         GME_effic_h(i,j) = 0.0
       endif
     enddo ; enddo
 
-    do J=js-1,Jeq ; do I=is-1,Ieq
+    do J=Jsq-2,Jeq+1 ; do I=Isq-2,Ieq+1
       if (grad_vel_mag_bt_q(I,J)>0) then
         h_arith_q = 0.25 * ((htot(i,j) + htot(i+1,j+1)) + (htot(i+1,j) + htot(i,j+1)))
         I_hq = 1.0 / h_arith_q
         h_harm_q = 0.25 * h_arith_q * ((htot(i,j)*I_hq + htot(i+1,j+1)*I_hq) + &
                                        (htot(i+1,j)*I_hq + htot(i,j+1)*I_hq))
-        GME_effic_q(I,J) = CS%GME_efficiency * boundary_mask_q(I,J) * (MIN(h_harm_q * I_GME_h0, 1.0)**2)
+        GME_effic_q(I,J) = CS%GME_efficiency * G%mask2dBu(I,J) * (MIN(h_harm_q * I_GME_h0, 1.0)**2)
       else
         GME_effic_q(I,J) = 0.0
       endif
     enddo ; enddo
+
+    call thickness_diffuse_get_KH(TD, KH_u_GME, KH_v_GME, G, GV)
+
+    call pass_vector(KH_u_GME, KH_v_GME, G%domain, To_All+Scalar_Pair)
+
+    if (CS%debug) &
+    call uvchksum("GME KH[u,v]_GME", KH_u_GME, KH_v_GME, G%HI, haloshift=2, scale=US%L_to_m**2*US%s_to_T)
 
   endif ! use_GME
 
@@ -555,7 +570,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
   !$OMP   h_neglect, h_neglect3, FWfrac, inv_PI3, inv_PI6, H0_GME, &
   !$OMP   diffu, diffv, Kh_h, Kh_q, Ah_h, Ah_q, FrictWork, FrictWork_GME, &
   !$OMP   div_xx_h, sh_xx_h, vort_xy_q, sh_xy_q, GME_coeff_h, GME_coeff_q, &
-  !$OMP   TD, KH_u_GME, KH_v_GME, grid_Re_Kh, grid_Re_Ah, NoSt, ShSt &
+  !$OMP   KH_u_GME, KH_v_GME, grid_Re_Kh, grid_Re_Ah, NoSt, ShSt &
   !$OMP ) &
   !$OMP private( &
   !$OMP   i, j, k, n, &
@@ -565,10 +580,10 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
   !$OMP   vort_xy, vort_xy_dx, vort_xy_dy, div_xx, div_xx_dx, div_xx_dy, &
   !$OMP   grad_div_mag_h, grad_div_mag_q, grad_vort_mag_h, grad_vort_mag_q, &
   !$OMP   grad_vort, grad_vort_qg, grad_vort_mag_h_2d, grad_vort_mag_q_2d, &
-  !$OMP   grad_vel_mag_h, grad_vel_mag_q, &
+  !$OMP   grad_vel_mag_h, grad_vel_mag_q, sh_xx_sq, sh_xy_sq, &
   !$OMP   grad_vel_mag_bt_h, grad_vel_mag_bt_q, grad_d2vel_mag_h, &
   !$OMP   meke_res_fn, Shear_mag, Shear_mag_bc, vert_vort_mag, h_min, hrat_min, visc_bound_rem, &
-  !$OMP   sh_xx_sq, sh_xy_sq, grid_Ah, grid_Kh, d_Del2u, d_Del2v, d_str, &
+  !$OMP   grid_Ah, grid_Kh, d_Del2u, d_Del2v, d_str, &
   !$OMP   Kh, Ah, AhSm, AhLth, local_strain, Sh_F_pow, &
   !$OMP   dDel2vdx, dDel2udy, DY_dxCv, DX_dyCu, Del2vort_q, Del2vort_h, KE, &
   !$OMP   h2uq, h2vq, hu, hv, hq, FatH, RoScl, GME_coeff &
@@ -1426,52 +1441,40 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
     endif
 
     if (CS%use_GME) then
-      !### This call to get the 3-d GME diffusivity arrays and the subsequent blocking halo update
-      !    should occur outside of the k-loop, and perhaps the halo update should occur outside of
-      !    this routine altogether!
-      call thickness_diffuse_get_KH(TD, KH_u_GME, KH_v_GME, G, GV)
-      call pass_vector(KH_u_GME, KH_v_GME, G%Domain)
-
-      do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+      do j=Jsq-1,Jeq+2 ; do i=Isq-1,Ieq+2
         GME_coeff = GME_effic_h(i,j) * 0.25 * &
             ((KH_u_GME(I,j,k)+KH_u_GME(I-1,j,k)) + (KH_v_GME(i,J,k)+KH_v_GME(i,J-1,k)))
         GME_coeff = MIN(GME_coeff, CS%GME_limiter)
 
         if ((CS%id_GME_coeff_h>0) .or. find_FrictWork) GME_coeff_h(i,j,k) = GME_coeff
         str_xx_GME(i,j) = GME_coeff * sh_xx_bt(i,j)
-
       enddo ; enddo
 
-      do J=js-1,Jeq ; do I=is-1,Ieq
+      do J=Jsq-2,Jeq+1 ; do I=Isq-2,Ieq+1
         GME_coeff = GME_effic_q(I,J) * 0.25 * &
             ((KH_u_GME(I,j,k)+KH_u_GME(I,j+1,k)) + (KH_v_GME(i,J,k)+KH_v_GME(i+1,J,k)))
         GME_coeff = MIN(GME_coeff, CS%GME_limiter)
 
         if (CS%id_GME_coeff_q>0) GME_coeff_q(I,J,k) = GME_coeff
         str_xy_GME(I,J) = GME_coeff * sh_xy_bt(I,J)
-
       enddo ; enddo
 
       ! Applying GME diagonal term.  This is linear and the arguments can be rescaled.
-      call smooth_GME(G, GME_flux_h=str_xx_GME)
-      call smooth_GME(G, GME_flux_q=str_xy_GME)
+      call smooth_GME(CS, G, GME_flux_h=str_xx_GME)
+      call smooth_GME(CS, G, GME_flux_q=str_xy_GME)
 
       do J=Jsq,Jeq+1 ; do i=Isq,Ieq+1
         str_xx(i,j) = (str_xx(i,j) + str_xx_GME(i,j)) * (h(i,j,k) * CS%reduction_xx(i,j))
       enddo ; enddo
 
-      do J=js-1,Jeq ; do I=is-1,Ieq
-        ! GME is applied below
-        if (CS%no_slip) then
+      ! GME is applied below
+      if (CS%no_slip) then
+        do J=js-1,Jeq ; do I=is-1,Ieq
           str_xy(I,J) = (str_xy(I,J) + str_xy_GME(I,J)) * (hq(I,J) * CS%reduction_xy(I,J))
-        else
+        enddo ; enddo
+      else
+        do J=js-1,Jeq ; do I=is-1,Ieq
           str_xy(I,J) = (str_xy(I,J) + str_xy_GME(I,J)) * (hq(I,J) * G%mask2dBu(I,J) * CS%reduction_xy(I,J))
-        endif
-      enddo ; enddo
-
-      if (allocated(MEKE%GME_snk)) then
-        do j=js,je ; do i=is,ie
-          FrictWork_GME(i,j,k) = GME_coeff_h(i,j,k) * h(i,j,k) * GV%H_to_kg_m2 * grad_vel_mag_bt_h(i,j)
         enddo ; enddo
       endif
 
@@ -1551,6 +1554,27 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
                    (u(I-1,j+1,k)-u(I-1,j,k))*G%IdyBu(I-1,J)      &
                   +(v(i,J,k)-v(i-1,J,k))*G%IdxBu(I-1,J) )        &
               +str_xy(I,J-1)*(                                   &
+                   (u(I,j,k)-u(I,j-1,k))*G%IdyBu(I,J-1)          &
+                  +(v(i+1,J-1,k)-v(i,J-1,k))*G%IdxBu(I,J-1) )) ) )
+    enddo ; enddo ; endif
+
+    if (CS%use_GME) then
+      do j=js,je ; do i=is,ie
+        ! Diagnose   str_xx_GME*d_x u - str_yy_GME*d_y v + str_xy_GME*(d_y u + d_x v)
+        ! This is the old formulation that includes energy diffusion
+        FrictWork_GME(i,j,k) = GV%H_to_RZ * ( &
+              (str_xx_GME(i,j)*(u(I,j,k)-u(I-1,j,k))*G%IdxT(i,j)     &
+              -str_xx_GME(i,j)*(v(i,J,k)-v(i,J-1,k))*G%IdyT(i,j))    &
+         +0.25*((str_xy_GME(I,J)*(                                   &
+                   (u(I,j+1,k)-u(I,j,k))*G%IdyBu(I,J)            &
+                  +(v(i+1,J,k)-v(i,J,k))*G%IdxBu(I,J) )          &
+              +str_xy_GME(I-1,J-1)*(                             &
+                   (u(I-1,j,k)-u(I-1,j-1,k))*G%IdyBu(I-1,J-1)    &
+                  +(v(i,J-1,k)-v(i-1,J-1,k))*G%IdxBu(I-1,J-1) )) &
+             +(str_xy_GME(I-1,J)*(                               &
+                   (u(I-1,j+1,k)-u(I-1,j,k))*G%IdyBu(I-1,J)      &
+                  +(v(i,J,k)-v(i-1,J,k))*G%IdxBu(I-1,J) )        &
+              +str_xy_GME(I,J-1)*(                               &
                    (u(I,j,k)-u(I,j-1,k))*G%IdyBu(I,J-1)          &
                   +(v(i+1,J-1,k)-v(i,J-1,k))*G%IdxBu(I,J-1) )) ) )
     enddo ; enddo ; endif
@@ -1818,11 +1842,10 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, ADp)
                  "If true, use a Leith nonlinear eddy viscosity.", &
                  default=.false., do_not_log=.not.CS%Laplacian)
   if (.not.CS%Laplacian) CS%Leith_Kh = .false.
-  ! This call duplicates one that occurs 26 lines later, and is probably unneccessary.
-  call get_param(param_file, mdl, "MODIFIED_LEITH", CS%Modified_Leith, &
-                 "If true, add a term to Leith viscosity which is "//&
-                 "proportional to the gradient of divergence.", &
-                 default=.false., do_not_log=.not.CS%Laplacian) !### (.not.CS%Leith_Kh)?
+  call get_param(param_file, mdl, "LEITH_LAP_CONST", Leith_Lap_const, &
+                 "The nondimensional Laplacian Leith constant, "//&
+                 "often set to 1.0", units="nondim", default=0.0, &
+                  fail_if_missing=CS%Leith_Kh, do_not_log=.not.CS%Leith_Kh)
   call get_param(param_file, mdl, "USE_MEKE", use_MEKE, &
                  default=.false., do_not_log=.true.)
   call get_param(param_file, mdl, "RES_SCALE_MEKE_VISC", CS%res_scale_MEKE, &
@@ -1830,27 +1853,6 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, ADp)
                  "the resolution function.", default=.false., &
                  do_not_log=.not.(CS%Laplacian.and.use_MEKE))
   if (.not.(CS%Laplacian.and.use_MEKE)) CS%res_scale_MEKE = .false.
-
-  call get_param(param_file, mdl, "LEITH_LAP_CONST", Leith_Lap_const, &
-                 "The nondimensional Laplacian Leith constant, "//&
-                 "often set to 1.0", units="nondim", default=0.0, &
-                  fail_if_missing=CS%Leith_Kh, do_not_log=.not.CS%Leith_Kh)
-  call get_param(param_file, mdl, "USE_QG_LEITH_VISC", CS%use_QG_Leith_visc, &
-                 "If true, use QG Leith nonlinear eddy viscosity.", &
-                 default=.false., do_not_log=.not.CS%Leith_Kh)
-  if (CS%use_QG_Leith_visc .and. .not. CS%Leith_Kh) call MOM_error(FATAL, &
-                 "MOM_hor_visc.F90, hor_visc_init:"//&
-                 "LEITH_KH must be True when USE_QG_LEITH_VISC=True.")
-
-  !### The following two get_param_calls need to occur after Leith_Ah is read, but for now it replicates prior code.
-  CS%Leith_Ah = .false.
-  call get_param(param_file, mdl, "USE_BETA_IN_LEITH", CS%use_beta_in_Leith, &
-                 "If true, include the beta term in the Leith nonlinear eddy viscosity.", &
-                 default=CS%Leith_Kh, do_not_log=.not.(CS%Leith_Kh .or. CS%Leith_Ah) )
-  call get_param(param_file, mdl, "MODIFIED_LEITH", CS%modified_Leith, &
-                 "If true, add a term to Leith viscosity which is "//&
-                 "proportional to the gradient of divergence.", &
-                 default=.false., do_not_log=.not.(CS%Leith_Kh .or. CS%Leith_Ah) )
 
   call get_param(param_file, mdl, "BOUND_KH", CS%bound_Kh, &
                  "If true, the Laplacian coefficient is locally limited "//&
@@ -1944,6 +1946,21 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, ADp)
                  "typically 0.015 - 0.06.", units="nondim", default=0.0, &
                  fail_if_missing=CS%Smagorinsky_Ah, do_not_log=.not.CS%Smagorinsky_Ah)
 
+  call get_param(param_file, mdl, "USE_BETA_IN_LEITH", CS%use_beta_in_Leith, &
+                 "If true, include the beta term in the Leith nonlinear eddy viscosity.", &
+                 default=CS%Leith_Kh, do_not_log=.not.(CS%Leith_Kh .or. CS%Leith_Ah) )
+  call get_param(param_file, mdl, "MODIFIED_LEITH", CS%modified_Leith, &
+                 "If true, add a term to Leith viscosity which is "//&
+                 "proportional to the gradient of divergence.", &
+                 default=.false., do_not_log=.not.(CS%Leith_Kh .or. CS%Leith_Ah) )
+  call get_param(param_file, mdl, "USE_QG_LEITH_VISC", CS%use_QG_Leith_visc, &
+                 "If true, use QG Leith nonlinear eddy viscosity.", &
+                 default=.false., do_not_log=.not.(CS%Leith_Kh .or. CS%Leith_Ah) )
+  if (CS%use_QG_Leith_visc .and. .not. (CS%Leith_Kh .or. CS%Leith_Ah) ) then
+                 call MOM_error(FATAL, "MOM_hor_visc.F90, hor_visc_init:"//&
+                 "LEITH_KH or LEITH_AH must be True when USE_QG_LEITH_VISC=True.")
+  endif
+
   call get_param(param_file, mdl, "BOUND_CORIOLIS", bound_Cor_def, default=.false.)
   call get_param(param_file, mdl, "BOUND_CORIOLIS_BIHARM", CS%bound_Coriolis, &
                  "If true use a viscosity that increases with the square "//&
@@ -1999,17 +2016,22 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, ADp)
                  "Use the split time stepping if true.", default=.true., do_not_log=.true.)
   if (CS%use_GME .and. .not.split) call MOM_error(FATAL,"ERROR: Currently, USE_GME = True "// &
                                            "cannot be used with SPLIT=False.")
-  call get_param(param_file, mdl, "GME_H0", CS%GME_h0, &
-                 "The strength of GME tapers quadratically to zero when the bathymetric "//&
-                 "depth is shallower than GME_H0.", &
-                 units="m", scale=US%m_to_Z, default=1000.0, do_not_log=.not.CS%use_GME)
-  call get_param(param_file, mdl, "GME_EFFICIENCY", CS%GME_efficiency, &
-                 "The nondimensional prefactor multiplying the GME coefficient.", &
-                 units="nondim", default=1.0, do_not_log=.not.CS%use_GME)
-  call get_param(param_file, mdl, "GME_LIMITER", CS%GME_limiter, &
-                 "The absolute maximum value the GME coefficient is allowed to take.", &
-                 units="m2 s-1", scale=US%m_to_L**2*US%T_to_s, default=1.0e7, &
-                 do_not_log=.not.CS%use_GME)
+
+  if (CS%use_GME) then
+    call get_param(param_file, mdl, "GME_NUM_SMOOTHINGS", CS%num_smooth_gme, &
+                   "Number of smoothing passes for the GME fluxes.", &
+                   units="nondim", default=1)
+    call get_param(param_file, mdl, "GME_H0", CS%GME_h0, &
+                   "The strength of GME tapers quadratically to zero when the bathymetric "//&
+                   "depth is shallower than GME_H0.", &
+                   units="m", scale=US%m_to_Z, default=1000.0)
+    call get_param(param_file, mdl, "GME_EFFICIENCY", CS%GME_efficiency, &
+                   "The nondimensional prefactor multiplying the GME coefficient.", &
+                   units="nondim", default=1.0)
+    call get_param(param_file, mdl, "GME_LIMITER", CS%GME_limiter, &
+                   "The absolute maximum value the GME coefficient is allowed to take.", &
+                   units="m2 s-1", scale=US%m_to_L**2*US%T_to_s, default=1.0e7)
+  endif
 
   if (CS%Laplacian .or. CS%biharmonic) then
     call get_param(param_file, mdl, "DT", dt, &
@@ -2492,6 +2514,18 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, ADp)
       CS%min_grid_Kh = spacing(1.) * min_grid_sp_h2 * Idt
   endif
   if (CS%use_GME) then
+      CS%id_dudx_bt = register_diag_field('ocean_model', 'dudx_bt', diag%axesT1, Time, &
+        'Zonal component of the barotropic shearing strain at h points', 's-1', &
+        conversion=US%s_to_T)
+      CS%id_dudy_bt = register_diag_field('ocean_model', 'dudy_bt', diag%axesB1, Time, &
+        'Zonal component of the barotropic shearing strain at q points', 's-1', &
+        conversion=US%s_to_T)
+      CS%id_dvdy_bt = register_diag_field('ocean_model', 'dvdy_bt', diag%axesT1, Time, &
+        'Meridional component of the barotropic shearing strain at h points', 's-1', &
+        conversion=US%s_to_T)
+      CS%id_dvdx_bt = register_diag_field('ocean_model', 'dvdx_bt', diag%axesB1, Time, &
+        'Meridional component of the barotropic shearing strain at q points', 's-1', &
+        conversion=US%s_to_T)
       CS%id_GME_coeff_h = register_diag_field('ocean_model', 'GME_coeff_h', diag%axesTL, Time, &
         'GME coefficient at h Points', 'm2 s-1', conversion=US%L_to_m**2*US%s_to_T)
       CS%id_GME_coeff_q = register_diag_field('ocean_model', 'GME_coeff_q', diag%axesBL, Time, &
@@ -2501,7 +2535,8 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, ADp)
       'W m-2', conversion=US%RZ3_T3_to_W_m2*US%L_to_Z**2)
   endif
   CS%id_FrictWork = register_diag_field('ocean_model','FrictWork',diag%axesTL,Time,&
-      'Integral work done by lateral friction terms', &
+      'Integral work done by lateral friction terms. If GME is turned on, this '//&
+      'includes the GME contribution.', &
       'W m-2', conversion=US%RZ3_T3_to_W_m2*US%L_to_Z**2)
   CS%id_FrictWorkIntz = register_diag_field('ocean_model','FrictWorkIntz',diag%axesT1,Time,      &
       'Depth integrated work done by lateral friction', &
@@ -2531,7 +2566,8 @@ end subroutine align_aniso_tensor_to_grid
 
 !> Apply a 1-1-4-1-1 Laplacian filter one time on GME diffusive flux to reduce any
 !! horizontal two-grid-point noise
-subroutine smooth_GME(G, GME_flux_h, GME_flux_q)
+subroutine smooth_GME(CS, G, GME_flux_h, GME_flux_q)
+  type(hor_visc_CS),                            intent(in)    :: CS        !< Control structure
   type(ocean_grid_type),                        intent(in)    :: G         !< Ocean grid
   real, dimension(SZI_(G),SZJ_(G)),   optional, intent(inout) :: GME_flux_h!< GME diffusive flux
                                                               !! at h points
@@ -2542,15 +2578,18 @@ subroutine smooth_GME(G, GME_flux_h, GME_flux_q)
   real, dimension(SZIB_(G),SZJB_(G)) :: GME_flux_q_original
   real :: wc, ww, we, wn, ws ! averaging weights for smoothing
   integer :: i, j, k, s
-  do s=1,1
-    ! Update halos
+  integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq
+
+  is  = G%isc  ; ie  = G%iec  ; js  = G%jsc  ; je  = G%jec
+  Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
+  do s=1,CS%num_smooth_gme
     if (present(GME_flux_h)) then
-      !### Work on a wider halo to eliminate this blocking send!
-      call pass_var(GME_flux_h, G%Domain)
+      ! Update halos if needed
+      if (s >= 2) call pass_var(GME_flux_h, G%Domain)
       GME_flux_h_original(:,:) = GME_flux_h(:,:)
       ! apply smoothing on GME
-      do j = G%jsc, G%jec
-        do i = G%isc, G%iec
+      do j = Jsq, Jeq+1
+        do i = Isq, Ieq+1
           ! skip land points
           if (G%mask2dT(i,j)==0.) cycle
           ! compute weights
@@ -2558,24 +2597,22 @@ subroutine smooth_GME(G, GME_flux_h, GME_flux_q)
           we = 0.125 * G%mask2dT(i+1,j)
           ws = 0.125 * G%mask2dT(i,j-1)
           wn = 0.125 * G%mask2dT(i,j+1)
-          wc = 1.0 - (ww+we+wn+ws)
-          !### Add parentheses to make this rotationally invariant.
+          wc = 1.0 - ((ww+we)+(wn+ws))
           GME_flux_h(i,j) =  wc * GME_flux_h_original(i,j)   &
-                           + ww * GME_flux_h_original(i-1,j) &
-                           + we * GME_flux_h_original(i+1,j) &
-                           + ws * GME_flux_h_original(i,j-1) &
-                           + wn * GME_flux_h_original(i,j+1)
+                           + ((ww * GME_flux_h_original(i-1,j) &
+                           + we * GME_flux_h_original(i+1,j)) &
+                           + (ws * GME_flux_h_original(i,j-1) &
+                           + wn * GME_flux_h_original(i,j+1)))
         enddo
       enddo
     endif
-    ! Update halos
     if (present(GME_flux_q)) then
-      !### Work on a wider halo to eliminate this blocking send!
-      call pass_var(GME_flux_q, G%Domain, position=CORNER, complete=.true.)
+      ! Update halos if needed
+      if (s >= 2) call pass_var(GME_flux_q, G%Domain, position=CORNER, complete=.true.)
       GME_flux_q_original(:,:) = GME_flux_q(:,:)
       ! apply smoothing on GME
-      do J = G%JscB, G%JecB
-        do I = G%IscB, G%IecB
+      do J = Jsq-1, Jeq
+        do I = Isq-1, Ieq
           ! skip land points
           if (G%mask2dBu(I,J)==0.) cycle
           ! compute weights
@@ -2583,13 +2620,12 @@ subroutine smooth_GME(G, GME_flux_h, GME_flux_q)
           we = 0.125 * G%mask2dBu(I+1,J)
           ws = 0.125 * G%mask2dBu(I,J-1)
           wn = 0.125 * G%mask2dBu(I,J+1)
-          wc = 1.0 - (ww+we+wn+ws)
-          !### Add parentheses to make this rotationally invariant.
+          wc = 1.0 - ((ww+we)+(wn+ws))
           GME_flux_q(I,J) =  wc * GME_flux_q_original(I,J)   &
-                           + ww * GME_flux_q_original(I-1,J) &
-                           + we * GME_flux_q_original(I+1,J) &
-                           + ws * GME_flux_q_original(I,J-1) &
-                           + wn * GME_flux_q_original(I,J+1)
+                           + ((ww * GME_flux_q_original(I-1,J) &
+                           + we * GME_flux_q_original(I+1,J)) &
+                           + (ws * GME_flux_q_original(I,J-1) &
+                           + wn * GME_flux_q_original(I,J+1)))
         enddo
       enddo
     endif
