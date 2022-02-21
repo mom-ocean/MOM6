@@ -612,7 +612,7 @@ subroutine call_tracer_stocks(h, stock_values, G, GV, US, CS, stock_names, stock
   ! Local variables
   character(len=200), dimension(MAX_FIELDS_) :: names, units
   character(len=200) :: set_pkg_name
-  real, dimension(MAX_FIELDS_) :: values
+  ! real, dimension(MAX_FIELDS_) :: values
   type(EFP_type), dimension(MAX_FIELDS_) :: values_EFP
   type(EFP_type), dimension(MAX_FIELDS_) :: stock_val_EFP
   integer :: max_ns, ns_tot, ns, index, pkg, max_pkgs, nn, n
@@ -628,9 +628,8 @@ subroutine call_tracer_stocks(h, stock_values, G, GV, US, CS, stock_names, stock
 
 !  Add other user-provided calls here.
   if (CS%use_USER_tracer_example) then
-    ns = USER_tracer_stock(h, values, G, GV, US, CS%USER_tracer_example_CSp, &
+    ns = USER_tracer_stock(h, values_EFP, G, GV, CS%USER_tracer_example_CSp, &
                            names, units, stock_index)
-    do n=1,ns ; values_EFP(n) = real_to_EFP(values(n)) ; enddo
     call store_stocks("tracer_example", ns, names, units, values_EFP, index, stock_val_EFP, &
                        set_pkg_name, max_ns, ns_tot, stock_names, stock_units)
   endif
@@ -644,34 +643,27 @@ subroutine call_tracer_stocks(h, stock_values, G, GV, US, CS, stock_names, stock
   if (CS%use_ideal_age) then
     ns = ideal_age_stock(h, values_EFP, G, GV, CS%ideal_age_tracer_CSp, &
                          names, units, stock_index)
-    ! do n=1,ns ; values_EFP(n) = real_to_EFP(values(n)) ; enddo
     call store_stocks("ideal_age_example", ns, names, units, values_EFP, index, stock_val_EFP, &
                       set_pkg_name, max_ns, ns_tot, stock_names, stock_units)
   endif
   if (CS%use_regional_dyes) then
-    ns = dye_stock(h, values, G, GV, US, CS%dye_tracer_CSp, &
-                         names, units, stock_index)
-    do n=1,ns ; values_EFP(n) = real_to_EFP(values(n)) ; enddo
+    ns = dye_stock(h, values_EFP, G, GV, CS%dye_tracer_CSp, names, units, stock_index)
     call store_stocks("regional_dyes", ns, names, units, values_EFP, index, stock_val_EFP, &
                       set_pkg_name, max_ns, ns_tot, stock_names, stock_units)
   endif
   if (CS%use_oil) then
-    ns = oil_stock(h, values, G, GV, US, CS%oil_tracer_CSp, &
-                         names, units, stock_index)
-    do n=1,ns ; values_EFP(n) = real_to_EFP(values(n)) ; enddo
+    ns = oil_stock(h, values_EFP, G, GV, CS%oil_tracer_CSp, names, units, stock_index)
     call store_stocks("oil_tracer", ns, names, units, values_EFP, index, stock_val_EFP, &
                       set_pkg_name, max_ns, ns_tot, stock_names, stock_units)
   endif
   if (CS%use_OCMIP2_CFC) then
-    ns = OCMIP2_CFC_stock(h, values, G, GV, US, CS%OCMIP2_CFC_CSp, names, units, stock_index)
-    do n=1,ns ; values_EFP(n) = real_to_EFP(values(n)) ; enddo
+    ns = OCMIP2_CFC_stock(h, values_EFP, G, GV, CS%OCMIP2_CFC_CSp, names, units, stock_index)
     call store_stocks("MOM_OCMIP2_CFC", ns, names, units, values_EFP, index, stock_val_EFP, &
                       set_pkg_name, max_ns, ns_tot, stock_names, stock_units)
   endif
 
   if (CS%use_CFC_cap) then
-    ns = CFC_cap_stock(h, values, G, GV, US, CS%CFC_cap_CSp, names, units, stock_index)
-    do n=1,ns ; values_EFP(n) = real_to_EFP(values(n)) ; enddo
+    ns = CFC_cap_stock(h, values_EFP, G, GV, CS%CFC_cap_CSp, names, units, stock_index)
     call store_stocks("MOM_CFC_cap", ns, names, units, values_EFP, index, stock_val_EFP, &
                       set_pkg_name, max_ns, ns_tot, stock_names, stock_units)
   endif
@@ -685,9 +677,8 @@ subroutine call_tracer_stocks(h, stock_values, G, GV, US, CS, stock_names, stock
   endif
 
   if (CS%use_MOM_generic_tracer) then
-    ns = MOM_generic_tracer_stock(h, values, G, GV, US, CS%MOM_generic_tracer_CSp, &
+    ns = MOM_generic_tracer_stock(h, values_EFP, G, GV, CS%MOM_generic_tracer_CSp, &
                                    names, units, stock_index)
-    do n=1,ns ; values_EFP(n) = real_to_EFP(values(n)) ; enddo
     call store_stocks("MOM_generic_tracer", ns, names, units, values_EFP, index, stock_val_EFP, &
                       set_pkg_name, max_ns, ns_tot, stock_names, stock_units)
     nn=ns_tot-ns+1
@@ -697,17 +688,15 @@ subroutine call_tracer_stocks(h, stock_values, G, GV, US, CS, stock_names, stock
 
   endif
   if (CS%use_pseudo_salt_tracer) then
-    ns = pseudo_salt_stock(h, values, G, GV, US, CS%pseudo_salt_tracer_CSp, &
+    ns = pseudo_salt_stock(h, values_EFP, G, GV, CS%pseudo_salt_tracer_CSp, &
                          names, units, stock_index)
-    do n=1,ns ; values_EFP(n) = real_to_EFP(values(n)) ; enddo
     call store_stocks("pseudo_salt_tracer", ns, names, units, values_EFP, index, stock_val_EFP, &
                       set_pkg_name, max_ns, ns_tot, stock_names, stock_units)
   endif
 
   if (CS%use_boundary_impulse_tracer) then
-    ns = boundary_impulse_stock(h, values, G, GV, US, CS%boundary_impulse_tracer_CSp, &
+    ns = boundary_impulse_stock(h, values_EFP, G, GV, CS%boundary_impulse_tracer_CSp, &
                          names, units, stock_index)
-    do n=1,ns ; values_EFP(n) = real_to_EFP(values(n)) ; enddo
     call store_stocks("boundary_impulse_tracer", ns, names, units, values_EFP, index, stock_val_EFP, &
                       set_pkg_name, max_ns, ns_tot, stock_names, stock_units)
   endif

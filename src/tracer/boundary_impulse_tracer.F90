@@ -3,24 +3,26 @@ module boundary_impulse_tracer
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-use MOM_coupler_types, only : set_coupler_type_data, atmos_ocn_coupler_flux
-use MOM_diag_mediator, only : diag_ctrl
-use MOM_error_handler, only : MOM_error, FATAL, WARNING
-use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
-use MOM_forcing_type, only : forcing
-use MOM_grid, only : ocean_grid_type
-use MOM_hor_index, only : hor_index_type
-use MOM_io, only : vardesc, var_desc, query_vardesc
-use MOM_open_boundary, only : ocean_OBC_type
-use MOM_restart, only : register_restart_field, query_initialized, MOM_restart_CS
-use MOM_sponge, only : set_up_sponge_field, sponge_CS
-use MOM_time_manager, only : time_type
+use MOM_coms,            only : EFP_type
+use MOM_coupler_types,   only : set_coupler_type_data, atmos_ocn_coupler_flux
+use MOM_diag_mediator,   only : diag_ctrl
+use MOM_error_handler,   only : MOM_error, FATAL, WARNING
+use MOM_file_parser,     only : get_param, log_param, log_version, param_file_type
+use MOM_forcing_type,    only : forcing
+use MOM_grid,            only : ocean_grid_type
+use MOM_hor_index,       only : hor_index_type
+use MOM_io,              only : vardesc, var_desc, query_vardesc
+use MOM_open_boundary,   only : ocean_OBC_type
+use MOM_restart,         only : register_restart_field, query_initialized, MOM_restart_CS
+use MOM_spatial_means,   only : global_mass_int_EFP
+use MOM_sponge,          only : set_up_sponge_field, sponge_CS
+use MOM_time_manager,    only : time_type
 use MOM_tracer_registry, only : register_tracer, tracer_registry_type
 use MOM_tracer_diabatic, only : tracer_vertdiff, applyTracerBoundaryFluxesInOut
-use MOM_tracer_Z_init, only : tracer_Z_init
-use MOM_unit_scaling, only : unit_scale_type
-use MOM_variables, only : surface, thermo_var_ptrs
-use MOM_verticalGrid, only : verticalGrid_type
+use MOM_tracer_Z_init,   only : tracer_Z_init
+use MOM_unit_scaling,    only : unit_scale_type
+use MOM_variables,       only : surface, thermo_var_ptrs
+use MOM_verticalGrid,    only : verticalGrid_type
 
 implicit none ; private
 
@@ -287,13 +289,12 @@ end subroutine boundary_impulse_tracer_column_physics
 !> This function calculates the mass-weighted integral of the boundary impulse,
 !! tracer stocks returning the number of stocks it has calculated.  If the stock_index
 !! is present, only the stock corresponding to that coded index is returned.
-function boundary_impulse_stock(h, stocks, G, GV, US, CS, names, units, stock_index)
+function boundary_impulse_stock(h, stocks, G, GV, CS, names, units, stock_index)
   type(ocean_grid_type),                    intent(in   ) :: G    !< The ocean's grid structure
   type(verticalGrid_type),                  intent(in   ) :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in   ) :: h    !< Layer thicknesses [H ~> m or kg m-2]
-  real, dimension(:),                       intent(  out) :: stocks !< the mass-weighted integrated amount of each
-                                                                  !! tracer, in kg times concentration units [kg conc].
-  type(unit_scale_type),                    intent(in   ) :: US   !< A dimensional unit scaling type
+  type(EFP_type), dimension(:),             intent(  out) :: stocks !< The mass-weighted integrated amount of each
+                                                                  !! tracer, in kg times concentration units [kg conc]
   type(boundary_impulse_tracer_CS),         pointer       :: CS   !< The control structure returned by a previous
                                                                   !! call to register_boundary_impulse_tracer.
   character(len=*), dimension(:),           intent(  out) :: names  !< The names of the stocks calculated.
@@ -302,14 +303,8 @@ function boundary_impulse_stock(h, stocks, G, GV, US, CS, names, units, stock_in
                                                                   !! being sought.
   integer :: boundary_impulse_stock  !< Return value: the number of stocks calculated here.
 
-! This function calculates the mass-weighted integral of all tracer stocks,
-! returning the number of stocks it has calculated.  If the stock_index
-! is present, only the stock corresponding to that coded index is returned.
-
   ! Local variables
-  real :: stock_scale ! The dimensional scaling factor to convert stocks to kg [kg H-1 L-2 ~> kg m-3 or 1]
-  integer :: i, j, k, is, ie, js, je, nz, m
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
+  integer :: m
 
   boundary_impulse_stock = 0
   if (.not.associated(CS)) return
@@ -322,15 +317,10 @@ function boundary_impulse_stock(h, stocks, G, GV, US, CS, names, units, stock_in
     return
   endif ; endif
 
-  stock_scale = US%L_to_m**2 * GV%H_to_kg_m2
   do m=1,1
     call query_vardesc(CS%tr_desc(m), name=names(m), units=units(m), caller="boundary_impulse_stock")
     units(m) = trim(units(m))//" kg"
-    stocks(m) = 0.0
-    do k=1,nz ; do j=js,je ; do i=is,ie
-      stocks(m) = stocks(m) + CS%tr(i,j,k,m) * (G%mask2dT(i,j) * G%areaT(i,j) * h(i,j,k))
-    enddo ; enddo ; enddo
-    stocks(m) = stock_scale * stocks(m)
+    stocks(m) = global_mass_int_EFP(h, G, GV, CS%tr(:,:,:,m), on_PE_only=.true.)
   enddo
 
   boundary_impulse_stock = CS%ntr
