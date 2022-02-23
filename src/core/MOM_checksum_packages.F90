@@ -294,8 +294,8 @@ subroutine MOM_state_stats(mesg, u, v, h, Temp, Salt, G, GV, US, allowChange, pe
         T%average = T%average + dV*Temp(i,j,k)
         S%minimum = min( S%minimum, Salt(i,j,k) ) ; S%maximum = max( S%maximum, Salt(i,j,k) )
         S%average = S%average + dV*Salt(i,j,k)
-        tmp_T(i,j) = tmp_T(i,j) + dV*Temp(i,j,k) 
-        tmp_S(i,j) = tmp_S(i,j) + dV*Salt(i,j,k) 
+        tmp_T(i,j) = tmp_T(i,j) + dV*Temp(i,j,k)
+        tmp_S(i,j) = tmp_S(i,j) + dV*Salt(i,j,k)
       endif
       if (h_minimum > h(i,j,k)) h_minimum = h(i,j,k)
     endif
