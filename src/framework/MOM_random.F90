@@ -223,9 +223,9 @@ function new_RandomNumberSequence(seed) result(twister)
 
   twister%state(0) = iand(seed, -1)
   do i = 1,  blockSize - 1 ! ubound(twister%state)
-     twister%state(i) = 1812433253 * ieor(twister%state(i-1), &
-                                          ishft(twister%state(i-1), -30)) + i
-     twister%state(i) = iand(twister%state(i), -1) ! for >32 bit machines
+    twister%state(i) = 1812433253 * ieor(twister%state(i-1), &
+                                         ishft(twister%state(i-1), -30)) + i
+    twister%state(i) = iand(twister%state(i), -1) ! for >32 bit machines
   end do
   twister%currentElement = blockSize
 end function new_RandomNumberSequence
@@ -236,7 +236,7 @@ end function new_RandomNumberSequence
 integer function getRandomInt(twister)
   type(randomNumberSequence), intent(inout) :: twister !< The Mersenne Twister container
 
-  if(twister%currentElement >= blockSize) call nextState(twister)
+  if (twister%currentElement >= blockSize) call nextState(twister)
   getRandomInt = temper(twister%state(twister%currentElement))
   twister%currentElement = twister%currentElement + 1
 
@@ -251,7 +251,7 @@ double precision function getRandomReal(twister)
   integer :: localInt
 
   localInt = getRandomInt(twister)
-  if(localInt < 0) then
+  if (localInt < 0) then
     getRandomReal = dble(localInt + 2.0d0**32)/(2.0d0**32 - 1.0d0)
   else
     getRandomReal = dble(localInt            )/(2.0d0**32 - 1.0d0)

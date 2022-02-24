@@ -68,7 +68,6 @@ subroutine find_obsolete_params(param_file)
                      hint="Use NUM_DIAG_COORDS, DIAG_COORDS and DIAG_COORD_DEF_Z")
 
   call obsolete_real(param_file, "VSTAR_SCALE_FACTOR", hint="Use EPBL_VEL_SCALE_FACTOR instead.")
-  call obsolete_logical(param_file, "ORIG_MLD_ITERATION", .false.)
 
   call obsolete_real(param_file, "VSTAR_SCALE_COEF")
   call obsolete_real(param_file, "ZSTAR_RIGID_SURFACE_THRESHOLD")
@@ -81,6 +80,7 @@ subroutine find_obsolete_params(param_file)
     "find_obsolete_params: #define DYNAMIC_SURFACE_PRESSURE is not yet "//&
     "implemented without #define SPLIT.")
 
+  call obsolete_real(param_file, "ETA_TOLERANCE_AUX", only_warn=.true.)
   call obsolete_real(param_file, "BT_MASS_SOURCE_LIMIT", 0.0)
 
   call obsolete_int(param_file, "SEAMOUNT_LENGTH_SCALE", hint="Use SEAMOUNT_X_LENGTH_SCALE instead.")
@@ -88,6 +88,8 @@ subroutine find_obsolete_params(param_file)
   call obsolete_logical(param_file, "MSTAR_FIXED", hint="Instead use MSTAR_MODE.")
   call obsolete_logical(param_file, "USE_VISBECK_SLOPE_BUG", .false.)
 
+  call obsolete_logical(param_file, "ALLOW_CLOCKS_IN_OMP_LOOPS", .true.)
+  call obsolete_logical(param_file, "LARGE_FILE_SUPPORT", .true.)
   call obsolete_real(param_file, "MIN_Z_DIAG_INTERVAL")
   call obsolete_char(param_file, "Z_OUTPUT_GRID_FILE")
 
@@ -173,21 +175,25 @@ subroutine obsolete_char(param_file, varname, warning_val, hint)
 end subroutine obsolete_char
 
 !> Test for presence of obsolete REAL in parameter file.
-subroutine obsolete_real(param_file, varname, warning_val, hint)
+subroutine obsolete_real(param_file, varname, warning_val, hint, only_warn)
   type(param_file_type), intent(in) :: param_file  !< Structure containing parameter file data.
   character(len=*),      intent(in) :: varname     !< Name of obsolete REAL parameter.
   real,        optional, intent(in) :: warning_val !< An allowed value that causes a warning instead of an error.
   character(len=*), optional, intent(in) :: hint   !< A hint to the user about what to do.
+  logical,     optional, intent(in) :: only_warn   !< If present and true, issue warnings instead of fatal errors.
+
   ! Local variables
   real :: test_val, warn_val
+  logical :: issue_warning
   character(len=128) :: hint_msg
 
   test_val = -9e35; call read_param(param_file, varname, test_val)
   warn_val = -9e35; if (present(warning_val)) warn_val = warning_val
   hint_msg = " " ; if (present(hint)) hint_msg = hint
+  issue_warning = .false. ; if (present(only_warn)) issue_warning = only_warn
 
   if (test_val /= -9e35) then
-    if (test_val == warn_val) then
+    if ((test_val == warn_val) .or. issue_warning) then
       call MOM_ERROR(WARNING, "MOM_obsolete_params: "//trim(varname)// &
          " is an obsolete run-time flag. "//trim(hint_msg))
     else

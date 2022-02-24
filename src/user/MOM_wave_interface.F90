@@ -434,7 +434,7 @@ subroutine query_wave_properties(CS, NumBands, WaveNumbers, US)
   integer,               optional, intent(out) :: NumBands    !< If present, this returns the number of
                                                        !!< wavenumber partitions in the wave discretization
   real, dimension(:),    optional, intent(out) :: Wavenumbers !< If present this returns the characteristic
-                                                       !! wavenumbers of the wave discretization [m-1 or Z-1 ~> m-1]
+                                                       !! wavenumbers of the wave discretization [m-1] or [Z-1 ~> m-1]
   type(unit_scale_type), optional, intent(in)  :: US   !< A dimensional unit scaling type that is used to undo
                                                        !! the dimensional scaling of the output variables, if present
   integer :: n
@@ -780,7 +780,7 @@ subroutine Update_Stokes_Drift(G, GV, US, CS, h, ustar)
     do ii = G%isc,G%iec
       Top = h(ii,jj,1)*GV%H_to_Z
       call get_Langmuir_Number( La, G, GV, US, Top, ustar(ii,jj), ii, jj, &
-             H(ii,jj,:),Override_MA=.false.,WAVES=CS)
+             h(ii,jj,:), CS, Override_MA=.false.)
       CS%La_turb(ii,jj) = La
     enddo
   enddo
@@ -931,29 +931,27 @@ end subroutine Surface_Bands_by_data_override
 !! Note this can be called with an unallocated Waves pointer, which is okay if we
 !!  want the wind-speed only dependent Langmuir number.  Therefore, we need to be
 !!  careful about what we try to access here.
-subroutine get_Langmuir_Number( LA, G, GV, US, HBL, ustar, i, j, &
-                                H, U_H, V_H, Override_MA, Waves )
-  type(ocean_grid_type),   intent(in) :: G  !< Ocean grid structure
-  type(verticalGrid_type), intent(in) :: GV !< Ocean vertical grid structure
-  type(unit_scale_type),   intent(in) :: US !< A dimensional unit scaling type
-  integer, intent(in) :: i      !< Meridional index of h-point
-  integer, intent(in) :: j      !< Zonal index of h-point
-  real, intent(in)    :: ustar  !< Friction velocity [Z T-1 ~> m s-1].
-  real, intent(in)    :: HBL    !< (Positive) thickness of boundary layer [Z ~> m].
-  logical, optional,       intent(in) :: Override_MA !< Override to use misalignment in LA
-                                !! calculation. This can be used if diagnostic
-                                !! LA outputs are desired that are different than
-                                !! those used by the dynamical model.
-  real, dimension(SZK_(GV)), optional, &
-       intent(in)      :: H     !< Grid layer thickness [H ~> m or kg m-2]
-  real, dimension(SZK_(GV)), optional, &
-       intent(in)      :: U_H   !< Zonal velocity at H point [L T-1 ~> m s-1] or [m s-1]
-  real, dimension(SZK_(GV)), optional, &
-       intent(in)      :: V_H   !< Meridional velocity at H point [L T-1 ~> m s-1] or [m s-1]
-  type(Wave_parameters_CS), &
-       pointer         :: Waves !< Surface wave control structure.
+subroutine get_Langmuir_Number( LA, G, GV, US, HBL, ustar, i, j, h, Waves, &
+                                U_H, V_H, Override_MA )
+  type(ocean_grid_type),     intent(in)  :: G     !< Ocean grid structure
+  type(verticalGrid_type),   intent(in)  :: GV    !< Ocean vertical grid structure
+  real,                      intent(out) :: LA    !< Langmuir number [nondim]
+  type(unit_scale_type),     intent(in)  :: US    !< A dimensional unit scaling type
+  real,                      intent(in)  :: HBL   !< (Positive) thickness of boundary layer [Z ~> m]
+  real,                      intent(in)  :: ustar !< Friction velocity [Z T-1 ~> m s-1]
+  integer,                   intent(in)  :: i     !< Meridional index of h-point
+  integer,                   intent(in)  :: j     !< Zonal index of h-point
+  real, dimension(SZK_(GV)), intent(in)  :: h     !< Grid layer thickness [H ~> m or kg m-2]
+  type(Wave_parameters_CS),  pointer     :: Waves !< Surface wave control structure.
+  real, dimension(SZK_(GV)), &
+                   optional, intent(in)  :: U_H   !< Zonal velocity at H point [L T-1 ~> m s-1] or [m s-1]
+  real, dimension(SZK_(GV)), &
+                   optional, intent(in)  :: V_H   !< Meridional velocity at H point [L T-1 ~> m s-1] or [m s-1]
+  logical,         optional, intent(in)  :: Override_MA !< Override to use misalignment in LA
+                                                  !! calculation. This can be used if diagnostic
+                                                  !! LA outputs are desired that are different than
+                                                  !! those used by the dynamical model.
 
-  real, intent(out)    :: LA    !< Langmuir number [nondim]
 
 !Local Variables
   real :: Top, bottom, midpoint  ! Positions within each layer [Z ~> m]
@@ -975,9 +973,8 @@ subroutine get_Langmuir_Number( LA, G, GV, US, HBL, ustar, i, j, &
 
   ! If requesting to use misalignment in the Langmuir number compute the Shear Direction
   if (USE_MA) then
-    if (.not.(present(H).and.present(U_H).and.present(V_H))) then
-      call MOM_error(Fatal,'Get_LA_waves requested to consider misalignment.')
-    endif
+    if (.not.(present(U_H).and.present(V_H))) call MOM_error(FATAL, &
+        "Get_LA_waves requested to consider misalignment, but velocities were not provided.")
     ContinueLoop = .true.
     bottom = 0.0
     do kk = 1,GV%ke
@@ -993,30 +990,30 @@ subroutine get_Langmuir_Number( LA, G, GV, US, HBL, ustar, i, j, &
 
   if (Waves%WaveMethod==TESTPROF) then
     do kk = 1,GV%ke
-      US_H(kk) = 0.5*(WAVES%US_X(I,j,kk)+WAVES%US_X(I-1,j,kk))
-      VS_H(kk) = 0.5*(WAVES%US_Y(i,J,kk)+WAVES%US_Y(i,J-1,kk))
+      US_H(kk) = 0.5*(Waves%US_X(I,j,kk)+Waves%US_X(I-1,j,kk))
+      VS_H(kk) = 0.5*(Waves%US_Y(i,J,kk)+Waves%US_Y(i,J-1,kk))
     enddo
-    call Get_SL_Average_Prof( GV, Dpt_LASL, H, US_H, LA_STKx)
-    call Get_SL_Average_Prof( GV, Dpt_LASL, H, VS_H, LA_STKy)
+    call Get_SL_Average_Prof( GV, Dpt_LASL, h, US_H, LA_STKx)
+    call Get_SL_Average_Prof( GV, Dpt_LASL, h, VS_H, LA_STKy)
     LA_STK = sqrt(LA_STKX*LA_STKX+LA_STKY*LA_STKY)
   elseif (Waves%WaveMethod==SURFBANDS) then
-    allocate(StkBand_X(WAVES%NumBands), StkBand_Y(WAVES%NumBands))
-    do bb = 1,WAVES%NumBands
-      StkBand_X(bb) = 0.5*(WAVES%STKx0(I,j,bb)+WAVES%STKx0(I-1,j,bb))
-      StkBand_Y(bb) = 0.5*(WAVES%STKy0(i,J,bb)+WAVES%STKy0(i,J-1,bb))
+    allocate(StkBand_X(Waves%NumBands), StkBand_Y(Waves%NumBands))
+    do bb = 1,Waves%NumBands
+      StkBand_X(bb) = 0.5*(Waves%STKx0(I,j,bb)+Waves%STKx0(I-1,j,bb))
+      StkBand_Y(bb) = 0.5*(Waves%STKy0(i,J,bb)+Waves%STKy0(i,J-1,bb))
     enddo
-    call Get_SL_Average_Band(GV, Dpt_LASL, WAVES%NumBands, WAVES%WaveNum_Cen, StkBand_X, LA_STKx )
-    call Get_SL_Average_Band(GV, Dpt_LASL, WAVES%NumBands, WAVES%WaveNum_Cen, StkBand_Y, LA_STKy )
+    call Get_SL_Average_Band(GV, Dpt_LASL, Waves%NumBands, Waves%WaveNum_Cen, StkBand_X, LA_STKx )
+    call Get_SL_Average_Band(GV, Dpt_LASL, Waves%NumBands, Waves%WaveNum_Cen, StkBand_Y, LA_STKy )
     LA_STK = sqrt(LA_STKX**2 + LA_STKY**2)
     deallocate(StkBand_X, StkBand_Y)
   elseif (Waves%WaveMethod==DHH85) then
     ! Temporarily integrating profile rather than spectrum for simplicity
     do kk = 1,GV%ke
-      US_H(kk) = 0.5*(WAVES%US_X(I,j,kk)+WAVES%US_X(I-1,j,kk))
-      VS_H(kk) = 0.5*(WAVES%US_Y(i,J,kk)+WAVES%US_Y(i,J-1,kk))
+      US_H(kk) = 0.5*(Waves%US_X(I,j,kk)+Waves%US_X(I-1,j,kk))
+      VS_H(kk) = 0.5*(Waves%US_Y(i,J,kk)+Waves%US_Y(i,J-1,kk))
     enddo
-    call Get_SL_Average_Prof( GV, Dpt_LASL, H, US_H, LA_STKx)
-    call Get_SL_Average_Prof( GV, Dpt_LASL, H, VS_H, LA_STKy)
+    call Get_SL_Average_Prof( GV, Dpt_LASL, h, US_H, LA_STKx)
+    call Get_SL_Average_Prof( GV, Dpt_LASL, h, VS_H, LA_STKy)
     LA_STK = sqrt(LA_STKX**2 + LA_STKY**2)
   elseif (Waves%WaveMethod==LF17) then
     call get_StokesSL_LiFoxKemper(ustar, hbl*Waves%LA_FracHBL, GV, US, Waves, LA_STK, LA)
@@ -1034,7 +1031,7 @@ subroutine get_Langmuir_Number( LA, G, GV, US, HBL, ustar, i, j, &
     ! to prevent large enhancements in unconstrained parts of
     ! the curve fit parameterizations.
     ! Note the dimensional constant background Stokes velocity of 10^-10 m s-1.
-    LA = max(WAVES%La_min, sqrt(US%Z_to_L*ustar / (LA_STK + 1.e-10*US%m_s_to_L_T)))
+    LA = max(Waves%La_min, sqrt(US%Z_to_L*ustar / (LA_STK + 1.e-10*US%m_s_to_L_T)))
   endif
 
   if (Use_MA) then
@@ -1421,7 +1418,7 @@ end subroutine StokesMixing
 !! CHECK THAT RIGHT TIMESTEP IS PASSED IF YOU USE THIS**
 !!
 !! Not accessed in the standard code.
-subroutine CoriolisStokes(G, GV, dt, h, u, v, WAVES, US)
+subroutine CoriolisStokes(G, GV, dt, h, u, v, Waves)
   type(ocean_grid_type), &
        intent(in)    :: G     !< Ocean grid
   type(verticalGrid_type), &
@@ -1435,16 +1432,16 @@ subroutine CoriolisStokes(G, GV, dt, h, u, v, WAVES, US)
        intent(inout) :: v     !< Velocity j-component [L T-1 ~> m s-1]
   type(Wave_parameters_CS), &
        pointer       :: Waves !< Surface wave related control structure.
-  type(unit_scale_type),   intent(in) :: US     !< A dimensional unit scaling type
+
   ! Local variables
   real :: DVel ! A rescaled velocity change [L T-2 ~> m s-2]
-  integer :: i,j,k
+  integer :: i, j, k
 
   do k = 1, GV%ke
     do j = G%jsc, G%jec
       do I = G%iscB, G%iecB
-        DVel = 0.25*(WAVES%us_y(i,j+1,k)+WAVES%us_y(i-1,j+1,k))*G%CoriolisBu(i,j+1) + &
-               0.25*(WAVES%us_y(i,j,k)+WAVES%us_y(i-1,j,k))*G%CoriolisBu(i,j)
+        DVel = 0.25*(Waves%us_y(i,j+1,k)+Waves%us_y(i-1,j+1,k))*G%CoriolisBu(i,j+1) + &
+               0.25*(Waves%us_y(i,j,k)+Waves%us_y(i-1,j,k))*G%CoriolisBu(i,j)
         u(I,j,k) = u(I,j,k) + DVEL*dt
       enddo
     enddo
@@ -1453,8 +1450,8 @@ subroutine CoriolisStokes(G, GV, dt, h, u, v, WAVES, US)
   do k = 1, GV%ke
     do J = G%jscB, G%jecB
       do i = G%isc, G%iec
-        DVel = 0.25*(WAVES%us_x(i+1,j,k)+WAVES%us_x(i+1,j-1,k))*G%CoriolisBu(i+1,j) + &
-               0.25*(WAVES%us_x(i,j,k)+WAVES%us_x(i,j-1,k))*G%CoriolisBu(i,j)
+        DVel = 0.25*(Waves%us_x(i+1,j,k)+Waves%us_x(i+1,j-1,k))*G%CoriolisBu(i+1,j) + &
+               0.25*(Waves%us_x(i,j,k)+Waves%us_x(i,j-1,k))*G%CoriolisBu(i,j)
         v(i,J,k) = v(i,j,k) - DVEL*dt
       enddo
     enddo
