@@ -892,9 +892,17 @@ end subroutine read_variable_1d_int
 
 !> Read a 2d array from a netCDF input file and save to a variable.
 !!
-!! Start and nread ranks may exceed var, but must match the rank of the
-!! variable in the netCDF file.  This allows for reading slices of larger
-!! arrays.
+!! Start and nread lenths may exceed var rank.  This allows for reading slices
+!! of larger arrays.
+!!
+!! Previous versions of the model required a time axis on IO fields.  This
+!! constraint was dropped in later versions.  As a result, versions both with
+!! and without a time axis now exist.  In order to support all such versions,
+!! we use a reshaped version of start and nread in order to read the variable
+!! as it exists in the file.
+!!
+!! Certain constraints are still applied to start and nread in order to ensure
+!! that varname is a valid 2d array, or contains valid 2d slices.
 !!
 !! I/O occurs only on the root PE, and data is broadcast to other ranks.
 !! Due to potentially large memory communication and storage, this subroutine
@@ -908,11 +916,40 @@ subroutine read_variable_2d(filename, varname, var, start, nread, ncid_in)
   integer, optional, intent(in) :: ncid_in  !< netCDF ID of an opened file.
               !! If absent, the file is opened and closed within this routine.
 
-  integer :: ncid, varid, ndims, rc
-  character(len=*), parameter :: hdr = "read_variable_2d"
+  integer :: ncid, varid
+  integer :: field_ndims, dim_len
+  integer, allocatable :: field_dimids(:), field_shape(:)
+  integer, allocatable :: field_start(:), field_nread(:)
+  integer :: i, rc
+  character(len=*), parameter :: hdr = "read_variable_2d: "
   character(len=128) :: msg
-  logical :: size_mismatch
 
+  ! Validate shape of start and nread
+  if (present(start)) then
+    if (size(start) < 2) &
+      call MOM_error(FATAL, hdr // trim(nf90_strerror(rc)) &
+        // " start must have at least two dimensions.")
+  endif
+
+  if (present(nread)) then
+    if (size(nread) < 2) &
+      call MOM_error(FATAL, hdr // trim(nf90_strerror(rc)) &
+        // " nread must have at least two dimensions.")
+
+    if (any(nread(3:) > 1)) &
+      call MOM_error(FATAL, hdr // trim(nf90_strerror(rc)) &
+        // " nread may only read a single level in higher dimensions.")
+  endif
+
+  ! Since start and nread may be reshaped, we cannot rely on netCDF to ensure
+  ! that their lengths are equivalent, and must do it here.
+  if (present(start) .and. present(nread)) then
+    if (size(start) /= size(nread)) &
+      call MOM_error(FATAL, hdr // trim(nf90_strerror(rc)) &
+        // " start and nread must have the same length.")
+  endif
+
+  ! Open and read `varname` from `filename`
   if (is_root_pe()) then
     if (present(ncid_in)) then
       ncid = ncid_in
@@ -923,23 +960,57 @@ subroutine read_variable_2d(filename, varname, var, start, nread, ncid_in)
     call get_varid(varname, ncid, filename, varid, match_case=.false.)
     if (varid < 0) call MOM_error(FATAL, "Unable to get netCDF varid for "//trim(varname)//&
                                          " in "//trim(filename))
-    ! Verify that start(:) and nread(:) ranks match variable's dimension count
-    rc = nf90_inquire_variable(ncid, varid, ndims=ndims)
+
+    ! Query for the dimensionality of the input field
+    rc = nf90_inquire_variable(ncid, varid, ndims=field_ndims)
     if (rc /= NF90_NOERR) call MOM_error(FATAL, hdr // trim(nf90_strerror(rc)) //&
-          " Difficulties reading "//trim(varname)//" from "//trim(filename))
+          ": Difficulties reading "//trim(varname)//" from "//trim(filename))
 
-    size_mismatch = .false.
-    if (present(start)) size_mismatch = size_mismatch .or. size(start) /= ndims
-    if (present(nread)) size_mismatch = size_mismatch .or. size(nread) /= ndims
+    ! Confirm that field is at least 2d
+    if (field_ndims < 2) &
+      call MOM_error(FATAL, hdr // trim(nf90_strerror(rc)) // " " // &
+          trim(varname) // " from " // trim(filename) // " is not a 2D field.")
 
-    if (size_mismatch) then
-      write (msg, '("'// hdr //': size(start) ", i0, " and/or size(nread) ", &
-        i0, " do not match ndims ", i0)') size(start), size(nread), ndims
-      call MOM_error(FATAL, trim(msg))
+    ! If start and nread are present, then reshape them to match field dims
+    if (present(start) .or. present(nread)) then
+      allocate(field_shape(field_ndims))
+      allocate(field_dimids(field_ndims))
+
+      rc = nf90_inquire_variable(ncid, varid, dimids=field_dimids)
+      if (rc /= NF90_NOERR) call MOM_error(FATAL, hdr // trim(nf90_strerror(rc)) //&
+            ": Difficulties reading "//trim(varname)//" from "//trim(filename))
+
+      do i = 1, field_ndims
+        rc = nf90_inquire_dimension(ncid, field_dimids(i), len=dim_len)
+        if (rc /= NF90_NOERR) &
+          call MOM_error(FATAL, hdr // trim(nf90_strerror(rc)) &
+              // ": Difficulties reading dimensions from " // trim(filename))
+        field_shape(i) = dim_len
+      enddo
+
+      ! Reshape start(:) and nreads(:) in case ranks differ
+      allocate(field_start(field_ndims))
+      field_start(:) = 1
+      if (present(start)) then
+        dim_len = min(size(start), size(field_start))
+        field_start(:dim_len) = start(:dim_len)
+      endif
+
+      allocate(field_nread(field_ndims))
+      field_nread(:2) = field_shape(:2)
+      field_nread(3:) = 1
+      if (present(nread)) field_shape(:2) = nread(:2)
+
+      rc = nf90_get_var(ncid, varid, var, field_start, field_nread)
+
+      deallocate(field_start)
+      deallocate(field_nread)
+      deallocate(field_shape)
+      deallocate(field_dimids)
+    else
+      rc = nf90_get_var(ncid, varid, var)
     endif
-    ! NOTE: We could check additional information here (type, size, ...)
 
-    rc = nf90_get_var(ncid, varid, var, start, nread)
     if (rc /= NF90_NOERR) call MOM_error(FATAL, hdr // trim(nf90_strerror(rc)) //&
           " Difficulties reading "//trim(varname)//" from "//trim(filename))
 

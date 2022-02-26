@@ -688,6 +688,8 @@ subroutine initialize_thickness_from_file(h, depth_tot, G, GV, US, param_file, f
   real :: eta(SZI_(G),SZJ_(G),SZK_(GV)+1) ! Interface heights, in depth units [Z ~> m].
   integer :: inconsistent = 0
   logical :: correct_thickness
+  real    :: h_tolerance ! A parameter that controls the tolerance when adjusting the
+                         ! thickness to fit the bathymetry [Z ~> m].
   character(len=40)  :: mdl = "initialize_thickness_from_file" ! This subroutine's name.
   character(len=200) :: filename, thickness_file, inputdir, mesg ! Strings for file/path
   integer :: i, j, k, is, ie, js, je, nz
@@ -718,12 +720,18 @@ subroutine initialize_thickness_from_file(h, depth_tot, G, GV, US, param_file, f
                  "If true, all mass below the bottom removed if the "//&
                  "topography is shallower than the thickness input file "//&
                  "would indicate.", default=.false., do_not_log=just_read)
+    if (correct_thickness) then
+      call get_param(param_file, mdl, "THICKNESS_TOLERANCE", h_tolerance, &
+                 "A parameter that controls the tolerance when adjusting the "//&
+                 "thickness to fit the bathymetry. Used when ADJUST_THICKNESS=True.", &
+                 units="m", default=0.1, scale=US%m_to_Z, do_not_log=just_read)
+    endif
     if (just_read) return ! All run-time parameters have been read, so return.
 
     call MOM_read_data(filename, "eta", eta(:,:,:), G%Domain, scale=US%m_to_Z)
 
     if (correct_thickness) then
-      call adjustEtaToFitBathymetry(G, GV, US, eta, h, dZ_ref_eta=G%Z_ref)
+      call adjustEtaToFitBathymetry(G, GV, US, eta, h, h_tolerance, dZ_ref_eta=G%Z_ref)
     else
       do k=nz,1,-1 ; do j=js,je ; do i=is,ie
         if (eta(i,j,K) < (eta(i,j,K+1) + GV%Angstrom_Z)) then
@@ -757,31 +765,29 @@ end subroutine initialize_thickness_from_file
 !! layers are contracted to ANGSTROM thickness (which may be 0).
 !! If the bottom most interface is above the topography then the entire column
 !! is dilated (expanded) to fill the void.
-!!   @remark{There is a (hard-wired) "tolerance" parameter such that the
-!! criteria for adjustment must equal or exceed 10cm.}
-subroutine adjustEtaToFitBathymetry(G, GV, US, eta, h, dZ_ref_eta)
+subroutine adjustEtaToFitBathymetry(G, GV, US, eta, h, ht, dZ_ref_eta)
   type(ocean_grid_type),                       intent(in)    :: G   !< The ocean's grid structure
   type(verticalGrid_type),                     intent(in)    :: GV  !< The ocean's vertical grid structure
   type(unit_scale_type),                       intent(in)    :: US  !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), intent(inout) :: eta !< Interface heights [Z ~> m].
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),   intent(inout) :: h   !< Layer thicknesses [H ~> m or kg m-2]
+  real,                                        intent(in)    :: ht  !< Tolerance to exceed adjustment
+                                                                    !! criteria [Z ~> m]
   real,                              optional, intent(in)    :: dZ_ref_eta !< The difference between the
                                                                     !! reference heights for bathyT and
                                                                     !! eta [Z ~> m], 0 by default.
   ! Local variables
   integer :: i, j, k, is, ie, js, je, nz, contractions, dilations
-  real :: hTolerance = 0.1 !<  Tolerance to exceed adjustment criteria [Z ~> m]
   real :: dilate ! A factor by which the column is dilated [nondim]
   real :: dZ_ref ! The difference in the reference heights for G%bathyT and eta [Z ~> m]
   character(len=100) :: mesg
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
-  hTolerance = 0.1*US%m_to_Z
   dZ_ref = 0.0 ; if (present(dZ_ref_eta)) dZ_ref = dZ_ref_eta
 
   contractions = 0
   do j=js,je ; do i=is,ie
-    if (-eta(i,j,nz+1) > (G%bathyT(i,j) + dZ_ref) + hTolerance) then
+    if (-eta(i,j,nz+1) > (G%bathyT(i,j) + dZ_ref) + ht) then
       eta(i,j,nz+1) = -(G%bathyT(i,j) + dZ_ref)
       contractions = contractions + 1
     endif
@@ -811,7 +817,7 @@ subroutine adjustEtaToFitBathymetry(G, GV, US, eta, h, dZ_ref_eta)
     !   The whole column is dilated to accommodate deeper topography than
     ! the bathymetry would indicate.
     ! This should be...  if ((G%mask2dt(i,j)*(eta(i,j,1)-eta(i,j,nz+1)) > 0.0) .and. &
-    if (-eta(i,j,nz+1) < (G%bathyT(i,j) + dZ_ref) - hTolerance) then
+    if (-eta(i,j,nz+1) < (G%bathyT(i,j) + dZ_ref) - ht) then
       dilations = dilations + 1
       if (eta(i,j,1) <= eta(i,j,nz+1)) then
         do k=1,nz ; h(i,j,k) = (eta(i,j,1) + (G%bathyT(i,j) + dZ_ref)) / real(nz) ; enddo
@@ -2402,6 +2408,8 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, depth_tot, G, GV, US, PF, just
   real    :: dilate       ! A dilation factor to match topography [nondim]
   real    :: missing_value_temp, missing_value_salt
   logical :: correct_thickness
+  real    :: h_tolerance ! A parameter that controls the tolerance when adjusting the
+                         ! thickness to fit the bathymetry [Z ~> m].
   character(len=40) :: potemp_var, salin_var
   character(len=8)  :: laynum
 
@@ -2535,6 +2543,12 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, depth_tot, G, GV, US, PF, just
                  "If true, all mass below the bottom removed if the "//&
                  "topography is shallower than the thickness input file "//&
                  "would indicate.", default=.false., do_not_log=just_read)
+    if (correct_thickness) then
+      call get_param(PF, mdl, "THICKNESS_TOLERANCE", h_tolerance, &
+                 "A parameter that controls the tolerance when adjusting the "//&
+                 "thickness to fit the bathymetry. Used when ADJUST_THICKNESS=True.", &
+                 units="m", default=0.1, scale=US%m_to_Z, do_not_log=just_read)
+    endif
 
     call get_param(PF, mdl, "FIT_TO_TARGET_DENSITY_IC", adjust_temperature, &
                  "If true, all the interior layers are adjusted to "//&
@@ -2732,7 +2746,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, depth_tot, G, GV, US, PF, just
                          Hmix_depth, eps_z, eps_rho, density_extrap_bug)
 
     if (correct_thickness) then
-      call adjustEtaToFitBathymetry(G, GV, US, zi, h, dZ_ref_eta=G%Z_ref)
+      call adjustEtaToFitBathymetry(G, GV, US, zi, h, h_tolerance, dZ_ref_eta=G%Z_ref)
     else
       do k=nz,1,-1 ; do j=js,je ; do i=is,ie
         if (zi(i,j,K) < (zi(i,j,K+1) + GV%Angstrom_Z)) then

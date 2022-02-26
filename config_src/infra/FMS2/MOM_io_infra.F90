@@ -607,13 +607,13 @@ subroutine get_field_size(filename, fieldname, sizes, field_found, no_domain)
                                                     !! is a fatal error if the field is not found.
   logical,     optional, intent(in)    :: no_domain !< If present and true, do not check for file
                                                     !! names with an appended tile number
-
   ! Local variables
   type(FmsNetcdfFile_t) :: fileobj_read ! A handle to a non-domain-decomposed file for obtaining information
                                               ! about the exiting time axis entries in append mode.
   logical :: success         ! If true, the file was opened successfully
   logical :: field_exists    ! True if filename exists and field_name is in filename
   integer :: i, ndims
+
 
   if (FMS2_reads) then
     field_exists = .false.
@@ -627,6 +627,12 @@ subroutine get_field_size(filename, fieldname, sizes, field_found, no_domain)
             "get_field_size called with too few sizes for "//trim(fieldname)//" in "//trim(filename))
           call get_variable_size(fileobj_read, fieldname, sizes(1:ndims))
           do i=ndims+1,size(sizes) ; sizes(i) = 0 ; enddo
+          ! This preserves previous behavior when reading time-varying data without
+          ! a vertical extent.
+          if (size(sizes)==ndims+1) then
+            sizes(ndims+1)=sizes(ndims)
+            sizes(ndims)=1
+          endif
         endif
       endif
     endif
