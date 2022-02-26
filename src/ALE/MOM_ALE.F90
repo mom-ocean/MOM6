@@ -10,7 +10,7 @@ module MOM_ALE
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-use MOM_debugging,        only : check_column_integrals
+use MOM_debugging,        only : check_column_integrals,  hchksum, uvchksum
 use MOM_diag_mediator,    only : register_diag_field, post_data, diag_ctrl
 use MOM_diag_mediator,    only : time_type, diag_update_remap_grids
 use MOM_diag_vkernels,    only : interpolate_column, reintegrate_column
@@ -64,14 +64,26 @@ type, public :: ALE_CS ; private
   logical :: remap_uv_using_old_alg !< If true, uses the old "remapping via a delta z"
                                     !! method. If False, uses the new method that
                                     !! remaps between grids described by h.
+  logical :: partial_cell_vel_remap !< If true, use partial cell thicknesses at velocity points
+                                    !! that are masked out where they extend below the shallower
+                                    !! of the neighboring bathymetry for remapping velocity.
 
   real :: regrid_time_scale !< The time-scale used in blending between the current (old) grid
                             !! and the target (new) grid [T ~> s]
 
   type(regridding_CS) :: regridCS !< Regridding parameters and work arrays
   type(remapping_CS)  :: remapCS  !< Remapping parameters and work arrays
+  type(remapping_CS)  :: vel_remapCS  !< Remapping parameters for velocities and work arrays
 
   integer :: nk             !< Used only for queries, not directly by this module
+  real :: BBL_h_vel_mask    !< The thickness of a bottom boundary layer within which velocities in
+                            !! thin layers are zeroed out after remapping, following practice with
+                            !! Hybgen remapping, or a negative value to avoid such filtering
+                            !! altogether, in [H ~> m or kg m-2].
+  real :: h_vel_mask        !< A thickness at velocity points below which near-bottom layers are
+                            !! zeroed out after remapping, following the practice with Hybgen
+                            !! remapping, or a negative value to avoid such filtering altogether,
+                            !! in [H ~> m or kg m-2].
 
   logical :: remap_after_initialization !< Indicates whether to regrid/remap after initializing the state.
 
@@ -79,6 +91,7 @@ type, public :: ALE_CS ; private
                             !! that recover the answers from the end of 2018.  Otherwise, use more
                             !! robust and accurate forms of mathematically equivalent expressions.
 
+  logical :: debug   !< If true, write verbose checksums for debugging purposes.
   logical :: show_call_tree !< For debugging
 
   ! for diagnostics
@@ -144,16 +157,16 @@ subroutine ALE_init( param_file, GV, US, max_depth, CS)
   type(ALE_CS),            pointer    :: CS         !< Module control structure
 
   ! Local variables
-  real, dimension(:), allocatable :: dz
-  character(len=40)               :: mdl = "MOM_ALE" ! This module's name.
-  character(len=80)               :: string ! Temporary strings
-  real                            :: filter_shallow_depth, filter_deep_depth
-  logical       :: default_2018_answers
-  logical                         :: check_reconstruction
-  logical                         :: check_remapping
-  logical                         :: force_bounds_in_subcell
-  logical                         :: local_logical
-  logical                         :: remap_boundary_extrap
+  real, allocatable :: dz(:)
+  character(len=40) :: mdl = "MOM_ALE" ! This module's name.
+  character(len=80) :: string, vel_string ! Temporary strings
+  real              :: filter_shallow_depth, filter_deep_depth
+  logical           :: default_2018_answers
+  logical           :: check_reconstruction
+  logical           :: check_remapping
+  logical           :: force_bounds_in_subcell
+  logical           :: local_logical
+  logical           :: remap_boundary_extrap
 
   if (associated(CS)) then
     call MOM_error(WARNING, "ALE_init called with an associated "// &
@@ -174,12 +187,17 @@ subroutine ALE_init( param_file, GV, US, max_depth, CS)
   ! Initialize and configure regridding
   call ALE_initRegridding(GV, US, max_depth, param_file, mdl, CS%regridCS)
 
-  ! Initialize and configure remapping
+  ! Initialize and configure remapping that is orchestrated by ALE.
   call get_param(param_file, mdl, "REMAPPING_SCHEME", string, &
                  "This sets the reconstruction scheme used "//&
                  "for vertical remapping for all variables. "//&
                  "It can be one of the following schemes: "//&
                  trim(remappingSchemesDoc), default=remappingDefaultScheme)
+  call get_param(param_file, mdl, "VELOCITY_REMAPPING_SCHEME", vel_string, &
+                 "This sets the reconstruction scheme used for vertical remapping "//&
+                 "of velocities. By default it is the same as REMAPPING_SCHEME. "//&
+                 "It can be one of the following schemes: "//&
+                 trim(remappingSchemesDoc), default=trim(string))
   call get_param(param_file, mdl, "FATAL_CHECK_RECONSTRUCTIONS", check_reconstruction, &
                  "If true, cell-by-cell reconstructions are checked for "//&
                  "consistency and if non-monotonicity or an inconsistency is "//&
@@ -208,6 +226,17 @@ subroutine ALE_init( param_file, GV, US, max_depth, CS)
                              check_remapping=check_remapping, &
                              force_bounds_in_subcell=force_bounds_in_subcell, &
                              answers_2018=CS%answers_2018)
+  call initialize_remapping( CS%vel_remapCS, vel_string, &
+                             boundary_extrapolation=remap_boundary_extrap, &
+                             check_reconstruction=check_reconstruction, &
+                             check_remapping=check_remapping, &
+                             force_bounds_in_subcell=force_bounds_in_subcell, &
+                             answers_2018=CS%answers_2018)
+
+  call get_param(param_file, mdl, "PARTIAL_CELL_VELOCITY_REMAP", CS%partial_cell_vel_remap, &
+                 "If true, use partial cell thicknesses at velocity points that are masked out "//&
+                 "where they extend below the shallower of the neighboring bathymetry for "//&
+                 "remapping velocity.", default=.false.)
 
   call get_param(param_file, mdl, "REMAP_AFTER_INITIALIZATION", CS%remap_after_initialization, &
                  "If true, applies regridding and remapping immediately after "//&
@@ -238,6 +267,21 @@ subroutine ALE_init( param_file, GV, US, max_depth, CS)
                  "regridding integrates downward, consistant with the remapping "//&
                  "code.", default=.true., do_not_log=.true.)
   call set_regrid_params(CS%regridCS, integrate_downward_for_e=.not.local_logical)
+
+  call get_param(param_file, mdl, "REMAP_VEL_MASK_BBL_THICK", CS%BBL_h_vel_mask, &
+                 "A thickness of a bottom boundary layer below which velocities in thin layers "//&
+                 "are zeroed out after remapping, following practice with Hybgen remapping, "//&
+                 "or a negative value to avoid such filtering altogether.", &
+                 default=-0.001, units="m", scale=GV%m_to_H)
+  call get_param(param_file, mdl, "REMAP_VEL_MASK_H_THIN", CS%h_vel_mask, &
+                 "A thickness at velocity points below which near-bottom layers are zeroed out "//&
+                 "after remapping, following practice with Hybgen remapping, or a negative value "//&
+                 "to avoid such filtering altogether.", &
+                 default=1.0e-6, units="m", scale=GV%m_to_H, do_not_log=(CS%BBL_h_vel_mask<=0.0))
+
+  call get_param(param_file, "MOM", "DEBUG", CS%debug, &
+                 "If true, write out verbose debugging data.", &
+                 default=.false., debuggingParam=.true.)
 
   ! Keep a record of values for subsequent queries
   CS%nk = GV%ke
@@ -307,6 +351,7 @@ subroutine ALE_end(CS)
 
   ! Deallocate memory used for the regridding
   call end_remapping( CS%remapCS )
+
   call end_regridding( CS%regridCS )
 
   deallocate(CS)
@@ -335,12 +380,9 @@ subroutine ALE_main( G, GV, US, h, u, v, tv, Reg, CS, OBC, dt, frac_shelf_h)
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1) :: dzRegrid ! The change in grid interface positions
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1) :: eta_preale
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: h_new ! New 3D grid obtained after last time step [H ~> m or kg m-2]
-  integer :: nk, i, j, k, isc, iec, jsc, jec
-  logical :: ice_shelf
+  integer :: nk, i, j, k, isc, iec, jsc, jec, ntr
 
   nk = GV%ke; isc = G%isc; iec = G%iec; jsc = G%jsc; jec = G%jec
-
-  ice_shelf = present(frac_shelf_h)
 
   if (CS%show_call_tree) call callTree_enter("ALE_main(), MOM_ALE.F90")
 
@@ -362,11 +404,8 @@ subroutine ALE_main( G, GV, US, h, u, v, tv, Reg, CS, OBC, dt, frac_shelf_h)
 
   ! Build new grid. The new grid is stored in h_new. The old grid is h.
   ! Both are needed for the subsequent remapping of variables.
-  if (ice_shelf) then
-    call regridding_main( CS%remapCS, CS%regridCS, G, GV, h, tv, h_new, dzRegrid, frac_shelf_h)
-  else
-    call regridding_main( CS%remapCS, CS%regridCS, G, GV, h, tv, h_new, dzRegrid)
-  endif
+  call regridding_main( CS%remapCS, CS%regridCS, G, GV, h, tv, h_new, dzRegrid, &
+                        frac_shelf_h )
 
   call check_grid( G, GV, h, 0. )
 
@@ -377,23 +416,30 @@ subroutine ALE_main( G, GV, US, h, u, v, tv, Reg, CS, OBC, dt, frac_shelf_h)
   if (present(dt)) then
     call diag_update_remap_grids(CS%diag)
   endif
+
   ! Remap all variables from old grid h onto new grid h_new
-  call remap_all_state_vars( CS%remapCS, CS, G, GV, h, h_new, Reg, OBC, dzRegrid, &
-                             u, v, CS%show_call_tree, dt )
+  call remap_all_state_vars( CS, G, GV, h, h_new, Reg, OBC, dzRegrid, u, v, &
+                             CS%show_call_tree, dt )
 
   if (CS%show_call_tree) call callTree_waypoint("state remapped (ALE_main)")
 
   ! Override old grid with new one. The new grid 'h_new' is built in
   ! one of the 'build_...' routines above.
   !$OMP parallel do default(shared)
-  do k = 1,nk ; do j = jsc-1,jec+1 ; do i = isc-1,iec+1
+  do k=1,nk ; do j=jsc-1,jec+1 ; do i=isc-1,iec+1
     h(i,j,k) = h_new(i,j,k)
   enddo ; enddo ; enddo
 
-  if (CS%show_call_tree) call callTree_leave("ALE_main()")
+  if (CS%debug) then
+    call hchksum(h,    "Post-ALE_main h", G%HI, haloshift=0, scale=GV%H_to_m)
+    call hchksum(tv%T, "Post-ALE_main T", G%HI, haloshift=0)
+    call hchksum(tv%S, "Post-ALE_main S", G%HI, haloshift=0)
+    call uvchksum("Post-ALE_main [uv]", u, v, G%HI, haloshift=0, scale=US%L_T_to_m_s)
+  endif
 
   if (CS%id_dzRegrid>0 .and. present(dt)) call post_data(CS%id_dzRegrid, dzRegrid, CS%diag)
 
+  if (CS%show_call_tree) call callTree_leave("ALE_main()")
 
 end subroutine ALE_main
 
@@ -435,8 +481,7 @@ subroutine ALE_main_offline( G, GV, h, tv, Reg, CS, OBC, dt)
 
   ! Remap all variables from old grid h onto new grid h_new
 
-  call remap_all_state_vars(CS%remapCS, CS, G, GV, h, h_new, Reg, OBC, &
-                            debug=CS%show_call_tree, dt=dt )
+  call remap_all_state_vars( CS, G, GV, h, h_new, Reg, OBC, debug=CS%show_call_tree, dt=dt )
 
   if (CS%show_call_tree) call callTree_waypoint("state remapped (ALE_main)")
 
@@ -484,12 +529,12 @@ subroutine ALE_offline_inputs(CS, G, GV, h, tv, Reg, uhtr, vhtr, Kd, debug, OBC)
   ! Build new grid from the Zstar state onto the requested vertical coordinate. The new grid is stored
   ! in h_new. The old grid is h. Both are needed for the subsequent remapping of variables. Convective
   ! adjustment right now is not used because it is unclear what to do with vanished layers
-  call regridding_main( CS%remapCS, CS%regridCS, G, GV, h, tv, h_new, dzRegrid, conv_adjust = .false. )
+  call regridding_main( CS%remapCS, CS%regridCS, G, GV, h, tv, h_new, dzRegrid, conv_adjust=.false. )
   call check_grid( G, GV, h_new, 0. )
   if (CS%show_call_tree) call callTree_waypoint("new grid generated (ALE_offline_inputs)")
 
   ! Remap all variables from old grid h onto new grid h_new
-  call remap_all_state_vars( CS%remapCS, CS, G, GV, h, h_new, Reg, OBC, debug=CS%show_call_tree )
+  call remap_all_state_vars( CS, G, GV, h, h_new, Reg, OBC, debug=CS%show_call_tree )
   if (CS%show_call_tree) call callTree_waypoint("state remapped (ALE_inputs)")
 
   ! Reintegrate mass transports from Zstar to the offline vertical coordinate
@@ -565,7 +610,7 @@ subroutine ALE_offline_tracer_final( G, GV, h, tv, h_target, Reg, CS, OBC)
 
   ! Remap all variables from old grid h onto new grid h_new
 
-  call remap_all_state_vars( CS%remapCS, CS, G, GV, h, h_new, Reg, OBC, debug=CS%show_call_tree )
+  call remap_all_state_vars( CS, G, GV, h, h_new, Reg, OBC, debug=CS%show_call_tree )
 
   if (CS%show_call_tree) call callTree_waypoint("state remapped (ALE_offline_tracer_final)")
 
@@ -607,6 +652,7 @@ subroutine check_grid( G, GV, h, threshold )
 
 end subroutine check_grid
 
+!### This routine does not appear to be used.
 !> Generates new grid
 subroutine ALE_build_grid( G, GV, regridCS, remapCS, h, tv, debug, frac_shelf_h )
   type(ocean_grid_type),                   intent(in)    :: G        !< Ocean grid structure
@@ -622,20 +668,15 @@ subroutine ALE_build_grid( G, GV, regridCS, remapCS, h, tv, debug, frac_shelf_h 
   integer :: nk, i, j, k
   real, dimension(SZI_(G), SZJ_(G), SZK_(GV)+1) :: dzRegrid ! The change in grid interface positions
   real, dimension(SZI_(G), SZJ_(G), SZK_(GV)) :: h_new ! The new grid thicknesses
-  logical :: show_call_tree, use_ice_shelf
+  logical :: show_call_tree
 
   show_call_tree = .false.
   if (present(debug)) show_call_tree = debug
   if (show_call_tree) call callTree_enter("ALE_build_grid(), MOM_ALE.F90")
-  use_ice_shelf = present(frac_shelf_h)
 
   ! Build new grid. The new grid is stored in h_new. The old grid is h.
   ! Both are needed for the subsequent remapping of variables.
-  if (use_ice_shelf) then
-    call regridding_main( remapCS, regridCS, G, GV, h, tv, h_new, dzRegrid, frac_shelf_h )
-  else
-    call regridding_main( remapCS, regridCS, G, GV, h, tv, h_new, dzRegrid )
-  endif
+  call regridding_main( remapCS, regridCS, G, GV, h, tv, h_new, dzRegrid, frac_shelf_h )
 
   ! Override old grid with new one. The new grid 'h_new' is built in
   ! one of the 'build_...' routines above.
@@ -722,7 +763,7 @@ subroutine ALE_regrid_accelerated(CS, G, GV, h, tv, n, u, v, OBC, Reg, dt, dzReg
   enddo
 
   ! remap all state variables (including those that weren't needed for regridding)
-  call remap_all_state_vars(CS%remapCS, CS, G, GV, h_orig, h, Reg, OBC, dzIntTotal, u, v)
+  call remap_all_state_vars(CS, G, GV, h_orig, h, Reg, OBC, dzIntTotal, u, v)
 
   ! save total dzregrid for diags if needed?
   if (present(dzRegrid)) dzRegrid(:,:,:) = dzIntTotal(:,:,:)
@@ -734,10 +775,9 @@ end subroutine ALE_regrid_accelerated
 !! This routine is called during initialization of the model at time=0, to
 !! remap initial conditions to the model grid.  It is also called during a
 !! time step to update the state.
-subroutine remap_all_state_vars(CS_remapping, CS_ALE, G, GV, h_old, h_new, Reg, OBC, &
-                                dzInterface, u, v, debug, dt)
-  type(remapping_CS),                        intent(in)    :: CS_remapping !< Remapping control structure
-  type(ALE_CS),                              intent(in)    :: CS_ALE       !< ALE control structure
+subroutine remap_all_state_vars(CS, G, GV, h_old, h_new, Reg, OBC, &
+                                dzInterface, u, v, debug, dt )
+  type(ALE_CS),                              intent(in)    :: CS           !< ALE control structure
   type(ocean_grid_type),                     intent(in)    :: G            !< Ocean grid structure
   type(verticalGrid_type),                   intent(in)    :: GV           !< Ocean vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)    :: h_old        !< Thickness of source grid
@@ -757,36 +797,41 @@ subroutine remap_all_state_vars(CS_remapping, CS_ALE, G, GV, h_old, h_new, Reg, 
   real,                            optional, intent(in)    :: dt     !< time step for diagnostics [T ~> s]
 
   ! Local variables
+  real, dimension(SZI_(G),SZJ_(G)) :: h_tot  ! The vertically summed thicknesses [H ~> m or kg m-2]
+  real :: h_mask_vel ! A depth below which the thicknesses at a velocity point are masked out [H ~> m or kg m-2]
   real, dimension(GV%ke+1)                    :: dz   ! The change in interface heights interpolated to
                                                       ! a velocity point [H ~> m or kg m-2]
-  real, dimension(GV%ke)                      :: h1   ! A column of initial thicknesses [H ~> m or kg m-2]
-  real, dimension(GV%ke)                      :: h2   ! A column of updated thicknesses [H ~> m or kg m-2]
-  real, dimension(GV%ke)                      :: u_column ! A column of properties, like tracer concentrations
-                                                      ! or velocities, being remapped [various units]
-  real, dimension(SZI_(G), SZJ_(G), SZK_(GV)) :: work_conc ! The rate of change of concentrations [Conc T-1 ~> Conc s-1]
-  real, dimension(SZI_(G), SZJ_(G), SZK_(GV)) :: work_cont ! The rate of change of cell-integrated tracer
-                                                      ! content [Conc H T-1 ~> Conc m s-1 or Conc kg m-2 s-1] or
-                                                      ! cell thickness [H T-1 ~> m s-1 or Conc kg m-2 s-1]
-  real, dimension(SZI_(G), SZJ_(G))           :: work_2d ! The rate of change of column-integrated tracer
-                                                      ! content [Conc H T-1 ~> Conc m s-1 or Conc kg m-2 s-1]
-  real                                        :: Idt  ! The inverse of the timestep [T-1 ~> s-1]
+  real :: tr_column(GV%ke)  ! A column of updated tracer concentrations
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: work_conc ! The rate of change of concentrations [Conc T-1 ~> Conc s-1]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: work_cont ! The rate of change of cell-integrated tracer
+                                                       ! content [Conc H T-1 ~> Conc m s-1 or Conc kg m-2 s-1] or
+                                                       ! cell thickness [H T-1 ~> m s-1 or Conc kg m-2 s-1]
+  real, dimension(SZI_(G),SZJ_(G))          :: work_2d ! The rate of change of column-integrated tracer
+                                                       ! content [Conc H T-1 ~> Conc m s-1 or Conc kg m-2 s-1]
+  logical :: PCM(GV%ke) ! If true, do PCM remapping from a cell.
+  real :: Idt           ! The inverse of the timestep [T-1 ~> s-1]
+  real :: u_src(GV%ke)  ! A column of u-velocities on the source grid [L T-1 ~> m s-1]
+  real :: u_tgt(GV%ke)  ! A column of u-velocities on the target grid [L T-1 ~> m s-1]
+  real :: v_src(GV%ke)  ! A column of v-velocities on the source grid [L T-1 ~> m s-1]
+  real :: v_tgt(GV%ke)  ! A column of v-velocities on the target grid [L T-1 ~> m s-1]
+  real :: h1(GV%ke)     ! A column of source grid layer thicknesses [H ~> m or kg m-2]
+  real :: h2(GV%ke)     ! A column of target grid layer thicknesses [H ~> m or kg m-2]
   real :: h_neglect, h_neglect_edge  ! Tiny thicknesses used in remapping [H ~> m or kg m-2]
-  logical                                     :: show_call_tree
-  type(tracer_type), pointer                  :: Tr => NULL()
+  logical :: show_call_tree
+  type(tracer_type), pointer :: Tr => NULL()
   integer :: i, j, k, m, nz, ntr
 
   show_call_tree = .false.
   if (present(debug)) show_call_tree = debug
-  if (show_call_tree) call callTree_enter("remap_all_state_vars(), MOM_ALE.F90")
 
   ! If remap_uv_using_old_alg is .true. and u or v is requested, then we must have dzInterface. Otherwise,
   ! u and v can be remapped without dzInterface
-  if ( .not. present(dzInterface) .and. (CS_ALE%remap_uv_using_old_alg .and. (present(u) .or. present(v))) ) then
+  if ( .not. present(dzInterface) .and. (CS%remap_uv_using_old_alg .and. (present(u) .or. present(v))) ) then
     call MOM_error(FATAL, "remap_all_state_vars: dzInterface must be present if using old algorithm "// &
                           "and u/v are to be remapped")
   endif
 
-  if (.not.CS_ALE%answers_2018) then
+  if (.not.CS%answers_2018) then
     h_neglect = GV%H_subroundoff ; h_neglect_edge = GV%H_subroundoff
   elseif (GV%Boussinesq) then
     h_neglect = GV%m_to_H*1.0e-30 ; h_neglect_edge = GV%m_to_H*1.0e-10
@@ -794,7 +839,9 @@ subroutine remap_all_state_vars(CS_remapping, CS_ALE, G, GV, h_old, h_new, Reg, 
     h_neglect = GV%kg_m2_to_H*1.0e-30 ; h_neglect_edge = GV%kg_m2_to_H*1.0e-10
   endif
 
-  nz      = GV%ke
+  if (show_call_tree) call callTree_enter("remap_all_state_vars(), MOM_ALE.F90")
+
+  nz = GV%ke
 
   ntr = 0 ; if (associated(Reg)) ntr = Reg%ntr
 
@@ -804,43 +851,43 @@ subroutine remap_all_state_vars(CS_remapping, CS_ALE, G, GV, h_old, h_new, Reg, 
     work_cont(:,:,:) = 0.0
   endif
 
-  ! Remap tracer
+  ! Remap all registered tracers, including temperature and salinity.
   if (ntr>0) then
     if (show_call_tree) call callTree_waypoint("remapping tracers (remap_all_state_vars)")
-    !$OMP parallel do default(shared) private(h1,h2,u_column,Tr)
+    !$OMP parallel do default(shared) private(h1,h2,tr_column,Tr,PCM,work_conc,work_cont,work_2d)
     do m=1,ntr ! For each tracer
       Tr => Reg%Tr(m)
       do j = G%jsc,G%jec ; do i = G%isc,G%iec ; if (G%mask2dT(i,j)>0.) then
         ! Build the start and final grids
         h1(:) = h_old(i,j,:)
         h2(:) = h_new(i,j,:)
-        call remapping_core_h(CS_remapping, nz, h1, Tr%t(i,j,:), nz, h2, &
-                              u_column, h_neglect, h_neglect_edge)
+        call remapping_core_h(CS%remapCS, nz, h1, Tr%t(i,j,:), nz, h2, tr_column, &
+                              h_neglect, h_neglect_edge)
 
         ! Intermediate steps for tendency of tracer concentration and tracer content.
         if (present(dt)) then
           if (Tr%id_remap_conc > 0) then
             do k=1,GV%ke
-              work_conc(i,j,k) = (u_column(k) - Tr%t(i,j,k)) * Idt
+              work_conc(i,j,k) = (tr_column(k) - Tr%t(i,j,k)) * Idt
             enddo
           endif
           if (Tr%id_remap_cont > 0 .or. Tr%id_remap_cont_2d > 0) then
             do k=1,GV%ke
-              work_cont(i,j,k) = (u_column(k)*h2(k) - Tr%t(i,j,k)*h1(k)) * Idt
+              work_cont(i,j,k) = (tr_column(k)*h2(k) - Tr%t(i,j,k)*h1(k)) * Idt
             enddo
           endif
         endif
         ! update tracer concentration
-        Tr%t(i,j,:) = u_column(:)
+        Tr%t(i,j,:) = tr_column(:)
       endif ; enddo ; enddo
 
       ! tendency diagnostics.
       if (present(dt)) then
         if (Tr%id_remap_conc > 0) then
-          call post_data(Tr%id_remap_conc, work_conc, CS_ALE%diag)
+          call post_data(Tr%id_remap_conc, work_conc, CS%diag)
         endif
         if (Tr%id_remap_cont > 0) then
-          call post_data(Tr%id_remap_cont, work_cont, CS_ALE%diag)
+          call post_data(Tr%id_remap_cont, work_cont, CS%diag)
         endif
         if (Tr%id_remap_cont_2d > 0) then
           do j = G%jsc,G%jec ; do i = G%isc,G%iec
@@ -849,43 +896,65 @@ subroutine remap_all_state_vars(CS_remapping, CS_ALE, G, GV, h_old, h_new, Reg, 
               work_2d(i,j) = work_2d(i,j) + work_cont(i,j,k)
             enddo
           enddo ; enddo
-          call post_data(Tr%id_remap_cont_2d, work_2d, CS_ALE%diag)
+          call post_data(Tr%id_remap_cont_2d, work_2d, CS%diag)
         endif
       endif
     enddo ! m=1,ntr
 
-  endif   ! endif for ntr > 0
+  endif  ! endif for ntr > 0
 
   if (show_call_tree) call callTree_waypoint("tracers remapped (remap_all_state_vars)")
 
+  if (CS%partial_cell_vel_remap .and. (present(u) .or. present(v)) ) then
+    h_tot(:,:) = 0.0
+    do k=1,GV%ke ; do j=G%jsc-1,G%jec+1 ; do i=G%isc-1,G%iec+1
+      h_tot(i,j) = h_tot(i,j) + h_old(i,j,k)
+    enddo ; enddo ; enddo
+  endif
+
   ! Remap u velocity component
   if ( present(u) ) then
-    !$OMP parallel do default(shared) private(h1,h2,dz,u_column)
-    do j = G%jsc,G%jec ; do I = G%iscB,G%iecB ; if (G%mask2dCu(I,j)>0.) then
+
+    !$OMP parallel do default(shared) private(h1,h2,dz,u_src,h_mask_vel,u_tgt)
+    do j=G%jsc,G%jec ; do I=G%IscB,G%IecB ; if (G%mask2dCu(I,j)>0.) then
       ! Build the start and final grids
-      h1(:) = 0.5 * ( h_old(i,j,:) + h_old(i+1,j,:) )
-      if (CS_ALE%remap_uv_using_old_alg) then
+      do k=1,nz
+        u_src(k) = u(I,j,k)
+        h1(k) = 0.5*(h_old(i,j,k) + h_old(i+1,j,k))
+        h2(k) = 0.5*(h_new(i,j,k) + h_new(i+1,j,k))
+      enddo
+      if (CS%remap_uv_using_old_alg) then
         dz(:) = 0.5 * ( dzInterface(i,j,:) + dzInterface(i+1,j,:) )
         do k = 1, nz
           h2(k) = max( 0., h1(k) + ( dz(k) - dz(k+1) ) )
         enddo
-      else
-        h2(:) = 0.5 * ( h_new(i,j,:) + h_new(i+1,j,:) )
       endif
-      if (associated(OBC)) then
-        if (OBC%segnum_u(I,j) /= 0) then
-          if (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_E) then
-            h1(:) = h_old(i,j,:)
-            h2(:) = h_new(i,j,:)
-          else ! (OBC%segment(n)%direction == OBC_DIRECTION_W)
-            h1(:) = h_old(i+1,j,:)
-            h2(:) = h_new(i+1,j,:)
-          endif
+
+      if (CS%partial_cell_vel_remap) then
+        h_mask_vel = min(h_tot(i,j), h_tot(i+1,j))
+        call apply_partial_cell_mask(h1, h_mask_vel)
+        call apply_partial_cell_mask(h2, h_mask_vel)
+      endif
+
+      if (associated(OBC)) then ; if (OBC%segnum_u(I,j) /= 0) then
+        if (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_E) then
+          do k=1,nz ; h1(k) = h_old(i,j,k) ; h2(k) = h_new(i,j,k) ; enddo
+        else ! (OBC%segment(n)%direction == OBC_DIRECTION_W)
+          do k=1,nz ; h1(k) = h_old(i+1,j,k) ; h2(k) = h_new(i+1,j,k) ; enddo
         endif
+      endif ; endif
+
+      ! --- Remap u profiles from the source vertical grid onto the new target grid.
+      call remapping_core_h(CS%vel_remapCS, nz, h1, u_src, nz, h2, u_tgt, &
+                            h_neglect, h_neglect_edge)
+
+      if ((CS%BBL_h_vel_mask > 0.0) .and. (CS%h_vel_mask > 0.0)) then
+        call mask_near_bottom_vel(u_tgt, h2, CS%BBL_h_vel_mask, CS%h_vel_mask, nz)
       endif
-      call remapping_core_h(CS_remapping, nz, h1, u(I,j,:), nz, h2, &
-                            u_column, h_neglect, h_neglect_edge)
-      u(I,j,:) = u_column(:)
+
+      do k=1,nz
+        u(I,j,k) = u_tgt(k)
+      enddo !k
     endif ; enddo ; enddo
   endif
 
@@ -893,46 +962,107 @@ subroutine remap_all_state_vars(CS_remapping, CS_ALE, G, GV, h_old, h_new, Reg, 
 
   ! Remap v velocity component
   if ( present(v) ) then
-    !$OMP parallel do default(shared) private(h1,h2,dz,u_column)
-    do J = G%jscB,G%jecB ; do i = G%isc,G%iec ; if (G%mask2dCv(i,j)>0.) then
+    !$OMP parallel do default(shared) private(h1,h2,v_src,dz,h_mask_vel,v_tgt)
+    do J=G%JscB,G%JecB ; do i=G%isc,G%iec ; if (G%mask2dCv(i,J)>0.) then
       ! Build the start and final grids
-      h1(:) = 0.5 * ( h_old(i,j,:) + h_old(i,j+1,:) )
-      if (CS_ALE%remap_uv_using_old_alg) then
+      do k=1,nz
+        v_src(k) = v(i,J,k)
+        h1(k) = 0.5*(h_old(i,j,k) + h_old(i,j+1,k))
+        h2(k) = 0.5*(h_new(i,j,k) + h_new(i,j+1,k))
+      enddo
+      if (CS%remap_uv_using_old_alg) then
         dz(:) = 0.5 * ( dzInterface(i,j,:) + dzInterface(i,j+1,:) )
         do k = 1, nz
           h2(k) = max( 0., h1(k) + ( dz(k) - dz(k+1) ) )
         enddo
-      else
-        h2(:) = 0.5 * ( h_new(i,j,:) + h_new(i,j+1,:) )
       endif
-      if (associated(OBC)) then
-        if (OBC%segnum_v(i,J) /= 0) then
-          if (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_N) then
-            h1(:) = h_old(i,j,:)
-            h2(:) = h_new(i,j,:)
-          else ! (OBC%segment(n)%direction == OBC_DIRECTION_S)
-            h1(:) = h_old(i,j+1,:)
-            h2(:) = h_new(i,j+1,:)
-          endif
+      if (CS%partial_cell_vel_remap) then
+        h_mask_vel = min(h_tot(i,j), h_tot(i,j+1))
+        call apply_partial_cell_mask(h1, h_mask_vel)
+        call apply_partial_cell_mask(h2, h_mask_vel)
+      endif
+      if (associated(OBC)) then ; if (OBC%segnum_v(i,J) /= 0) then
+        if (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_N) then
+          do k=1,nz ; h1(k) = h_old(i,j,k) ; h2(k) = h_new(i,j,k) ; enddo
+        else ! (OBC%segment(n)%direction == OBC_DIRECTION_S)
+          do k=1,nz ; h1(k) = h_old(i,j+1,k) ; h2(k) = h_new(i,j+1,k) ; enddo
         endif
+      endif ; endif
+
+      ! --- Remap v profiles from the source vertical grid onto the new target grid.
+      call remapping_core_h(CS%vel_remapCS, nz, h1, v_src, nz, h2, v_tgt, &
+                            h_neglect, h_neglect_edge)
+
+      if ((CS%BBL_h_vel_mask > 0.0) .and. (CS%h_vel_mask > 0.0)) then
+        call mask_near_bottom_vel(v_tgt, h2, CS%BBL_h_vel_mask, CS%h_vel_mask, nz)
       endif
-      call remapping_core_h(CS_remapping, nz, h1, v(i,J,:), nz, h2, &
-                            u_column, h_neglect, h_neglect_edge)
-      v(i,J,:) = u_column(:)
+
+      do k=1,nz
+        v(i,J,k) = v_tgt(k)
+      enddo !k
     endif ; enddo ; enddo
   endif
 
-  if (CS_ALE%id_vert_remap_h > 0) call post_data(CS_ALE%id_vert_remap_h, h_old, CS_ALE%diag)
-  if ((CS_ALE%id_vert_remap_h_tendency > 0) .and. present(dt)) then
+  if (CS%id_vert_remap_h > 0) call post_data(CS%id_vert_remap_h, h_old, CS%diag)
+  if ((CS%id_vert_remap_h_tendency > 0) .and. present(dt)) then
     do k = 1, nz ; do j = G%jsc,G%jec ; do i = G%isc,G%iec
       work_cont(i,j,k) = (h_new(i,j,k) - h_old(i,j,k))*Idt
     enddo ; enddo ; enddo
-    call post_data(CS_ALE%id_vert_remap_h_tendency, work_cont, CS_ALE%diag)
+    call post_data(CS%id_vert_remap_h_tendency, work_cont, CS%diag)
   endif
   if (show_call_tree) call callTree_waypoint("v remapped (remap_all_state_vars)")
   if (show_call_tree) call callTree_leave("remap_all_state_vars()")
 
 end subroutine remap_all_state_vars
+
+
+!> Mask out thicknesses to 0 when their runing sum exceeds a specified value.
+subroutine apply_partial_cell_mask(h1, h_mask)
+  real, dimension(:), intent(inout) :: h1 !< A column of thicknesses to be masked out after their
+                                          !! running vertical sum exceeds h_mask [H ~> m or kg m-2]
+  real,               intent(in)    :: h_mask !< The depth after which the thicknesses in h1 are
+                                          !! masked out [H ~> m or kg m-2]
+  ! Local variables
+  real :: h1_rsum  ! The running sum of h1 [H ~> m or kg m-2]
+  integer :: k
+
+  h1_rsum = 0.0
+  do k=1,size(h1)
+    if (h1(k) > h_mask - h1_rsum) then
+      ! This thickness is reduced because it extends below the shallower neighboring bathymetry.
+      h1(k) = max(h_mask - h1_rsum, 0.0)
+      h1_rsum = h_mask
+    else
+      h1_rsum = h1_rsum + h1(k)
+    endif
+  enddo
+end subroutine apply_partial_cell_mask
+
+
+!> Zero out velocities in a column in very thin layers near the seafloor
+subroutine mask_near_bottom_vel(vel, h, h_BBL, h_thin, nk)
+  integer, intent(in)    :: nk      !< The number of layers in this column
+  real,    intent(inout) :: vel(nk) !< The velocity component being zeroed out [L T-1 ~> m s-1]
+  real,    intent(in)    :: h(nk)   !< The layer thicknesses at velocity points  [H ~> m or kg m-2]
+  real,    intent(in)    :: h_BBL   !< The thickness of the near-bottom region over which to apply
+                                    !! the filtering [H ~> m or kg m-2]
+  real,    intent(in)    :: h_thin  !< A layer thickness below which the filtering is applied [H ~> m or kg m-2]
+
+  ! Local variables
+  real :: h_from_bot  ! The distance between the top of a layer and the seafloor [H ~> m or kg m-2]
+  integer :: k
+
+  if ((h_BBL < 0.0) .or. (h_thin < 0.0)) return
+
+  h_from_bot = 0.0
+  do k=nk,1,-1
+    h_from_bot = h_from_bot + h(k)
+    if (h_from_bot > h_BBL) return
+    ! Set the velocity to zero in thin, near-bottom layers.
+    if (h(k) <= h_thin) vel(k) = 0.0
+  enddo !k
+
+end subroutine mask_near_bottom_vel
 
 
 !> Remaps a single scalar between grids described by thicknesses h_src and h_dst.
