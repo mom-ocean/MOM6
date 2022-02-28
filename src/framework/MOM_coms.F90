@@ -7,12 +7,14 @@ module MOM_coms
 use MOM_coms_infra,    only : PE_here, root_PE, num_PEs, set_rootPE, Set_PElist, Get_PElist
 use MOM_coms_infra,    only : broadcast, field_chksum, MOM_infra_init, MOM_infra_end
 use MOM_coms_infra,    only : sum_across_PEs, max_across_PEs, min_across_PEs
+use MOM_coms_infra,    only : all_across_PEs, any_across_PEs
 use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, WARNING
 
 implicit none ; private
 
 public :: PE_here, root_PE, num_PEs, MOM_infra_init, MOM_infra_end
 public :: broadcast, sum_across_PEs, min_across_PEs, max_across_PEs, field_chksum
+public :: all_across_PEs, any_across_PEs
 public :: set_PElist, Get_PElist, Set_rootPE
 public :: reproducing_sum, reproducing_sum_EFP, EFP_sum_across_PEs, EFP_list_sum_across_PEs
 public :: EFP_plus, EFP_minus, EFP_to_real, real_to_EFP, EFP_real_diff

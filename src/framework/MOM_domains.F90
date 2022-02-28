@@ -220,11 +220,11 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
     call get_param(param_file, mdl, "NIGLOBAL", n_global(1), &
                  "The total number of thickness grid points in the x-direction in the physical "//&
                  "domain. With STATIC_MEMORY_ this is set in "//trim(inc_nm)//" at compile time.", &
-                 static_value=NIGLOBAL)
+                 default=NIGLOBAL)
     call get_param(param_file, mdl, "NJGLOBAL", n_global(2), &
                  "The total number of thickness grid points in the y-direction in the physical "//&
                  "domain. With STATIC_MEMORY_ this is set in "//trim(inc_nm)//" at compile time.", &
-                 static_value=NJGLOBAL)
+                 default=NJGLOBAL)
     if (n_global(1) /= NIGLOBAL) call MOM_error(FATAL,"MOM_domains_init: " // &
           "static mismatch for NIGLOBAL_ domain size. Header file does not match input namelist")
     if (n_global(2) /= NJGLOBAL) call MOM_error(FATAL,"MOM_domains_init: " // &
@@ -256,11 +256,11 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
   call get_param(param_file, mdl, trim(nihalo_nm), n_halo(1), &
                  "The number of halo points on each side in the x-direction.  How this is set "//&
                  "varies with the calling component and static or dynamic memory configuration.", &
-                 default=nihalo_dflt, static_value=nihalo_dflt)
+                 default=nihalo_dflt)
   call get_param(param_file, mdl, trim(njhalo_nm), n_halo(2), &
                  "The number of halo points on each side in the y-direction.  How this is set "//&
                  "varies with the calling component and static or dynamic memory configuration.", &
-                 default=njhalo_dflt, static_value=njhalo_dflt)
+                 default=njhalo_dflt)
   if (present(min_halo)) then
     n_halo(1) = max(n_halo(1), min_halo(1))
     min_halo(1) = n_halo(1)
