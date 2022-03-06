@@ -163,16 +163,18 @@ subroutine initialize_ALE_sponge_fixed(Iresttime, G, GV, param_file, CS, data_h,
                                                                              ! time at v-points [T-1 ~> s-1].
 
 
-! This include declares and sets the variable "version".
-#include "version_variable.h"
+  ! Local variables
   character(len=40)  :: mdl = "MOM_sponge"  ! This module's name.
-  logical :: use_sponge
   real, allocatable, dimension(:,:) :: Iresttime_u !< inverse of the restoring time at u points [T-1 ~> s-1]
   real, allocatable, dimension(:,:) :: Iresttime_v !< inverse of the restoring time at v points [T-1 ~> s-1]
+  ! This include declares and sets the variable "version".
+# include "version_variable.h"
+  character(len=64)  :: remapScheme
+  logical :: use_sponge
   logical :: bndExtrapolation = .true. ! If true, extrapolate boundaries
   logical :: default_2018_answers
   integer :: i, j, k, col, total_sponge_cols, total_sponge_cols_u, total_sponge_cols_v
-  character(len=10)  :: remapScheme
+
   if (associated(CS)) then
     call MOM_error(WARNING, "initialize_ALE_sponge_fixed called with an associated "// &
                             "control structure.")
@@ -422,17 +424,18 @@ subroutine initialize_ALE_sponge_varying(Iresttime, G, GV, param_file, CS, Irest
   real, dimension(SZI_(G),SZJB_(G)), intent(in), optional :: Iresttime_v_in !< The inverse of the restoring time
                                                                             !! for v [T-1 ~> s-1].
 
-! This include declares and sets the variable "version".
-#include "version_variable.h"
+  ! Local variables
   character(len=40)  :: mdl = "MOM_sponge"  ! This module's name.
-  logical :: use_sponge
   real, allocatable, dimension(:,:) :: Iresttime_u !< inverse of the restoring time at u points [T-1 ~> s-1]
   real, allocatable, dimension(:,:) :: Iresttime_v !< inverse of the restoring time at v points [T-1 ~> s-1]
+  ! This include declares and sets the variable "version".
+# include "version_variable.h"
+  character(len=64)  :: remapScheme
+  logical :: use_sponge
   logical :: bndExtrapolation = .true. ! If true, extrapolate boundaries
   logical :: default_2018_answers
   logical :: spongeDataOngrid = .false.
   integer :: i, j, k, col, total_sponge_cols, total_sponge_cols_u, total_sponge_cols_v
-  character(len=10)  :: remapScheme
 
   if (associated(CS)) then
     call MOM_error(WARNING, "initialize_ALE_sponge_varying called with an associated "// &
