@@ -253,8 +253,8 @@ subroutine MOM_state_stats(mesg, u, v, h, Temp, Salt, G, GV, US, allowChange, pe
   real, dimension(G%isc:G%iec, G%jsc:G%jec) :: &
     tmp_A, &  ! The area per cell [m2] (unscaled to permit reproducing sum).
     tmp_V, &  ! The column-integrated volume [m3] (unscaled to permit reproducing sum)
-    tmp_T, &  ! The column-integrated temperature [degC m3]
-    tmp_S     ! The column-integrated salinity [ppt m3]
+    tmp_T, &  ! The column-integrated temperature [degC m3] (unscaled to permit reproducing sum)
+    tmp_S     ! The column-integrated salinity [ppt m3] (unscaled to permit reproducing sum)
   real :: Vol, dV    ! The total ocean volume and its change [m3] (unscaled to permit reproducing sum).
   real :: Area       ! The total ocean surface area [m2] (unscaled to permit reproducing sum).
   real :: h_minimum  ! The minimum layer thicknesses [H ~> m or kg m-2]
@@ -294,6 +294,8 @@ subroutine MOM_state_stats(mesg, u, v, h, Temp, Salt, G, GV, US, allowChange, pe
         T%average = T%average + dV*Temp(i,j,k)
         S%minimum = min( S%minimum, Salt(i,j,k) ) ; S%maximum = max( S%maximum, Salt(i,j,k) )
         S%average = S%average + dV*Salt(i,j,k)
+        tmp_T(i,j) = tmp_T(i,j) + dV*Temp(i,j,k)
+        tmp_S(i,j) = tmp_S(i,j) + dV*Salt(i,j,k)
       endif
       if (h_minimum > h(i,j,k)) h_minimum = h(i,j,k)
     endif

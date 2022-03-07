@@ -29,7 +29,7 @@ module MOM_generic_tracer
   use g_tracer_utils,   only: g_tracer_get_pointer,g_tracer_get_alias,g_tracer_set_csdiag
 
   use MOM_ALE_sponge, only : set_up_ALE_sponge_field, ALE_sponge_CS
-  use MOM_coms, only : max_across_PEs, min_across_PEs, PE_here
+  use MOM_coms, only : EFP_type, max_across_PEs, min_across_PEs, PE_here
   use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_ptr
   use MOM_diag_mediator, only : diag_ctrl, get_diag_time_end
   use MOM_error_handler, only : MOM_error, FATAL, WARNING, NOTE, is_root_pe
@@ -40,7 +40,7 @@ module MOM_generic_tracer
   use MOM_io, only : file_exists, MOM_read_data, slasher
   use MOM_open_boundary, only : ocean_OBC_type
   use MOM_restart, only : register_restart_field, query_initialized, MOM_restart_CS
-  use MOM_spatial_means, only : global_area_mean
+  use MOM_spatial_means, only : global_area_mean, global_mass_int_EFP
   use MOM_sponge, only : set_up_sponge_field, sponge_CS
   use MOM_time_manager, only : time_type, set_time
   use MOM_tracer_diabatic, only : tracer_vertdiff, applyTracerBoundaryFluxesInOut
@@ -568,13 +568,12 @@ contains
   !! being requested specifically, returning the number of stocks it has
   !! calculated. If the stock_index is present, only the stock corresponding
   !! to that coded index is returned.
-  function MOM_generic_tracer_stock(h, stocks, G, GV, US, CS, names, units, stock_index)
+  function MOM_generic_tracer_stock(h, stocks, G, GV, CS, names, units, stock_index)
     type(ocean_grid_type),              intent(in)    :: G    !< The ocean's grid structure
     type(verticalGrid_type),            intent(in)    :: GV   !< The ocean's vertical grid structure
     real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in) :: h !< Layer thicknesses [H ~> m or kg m-2]
-    real, dimension(:),                 intent(out)   :: stocks !< The mass-weighted integrated amount of each
-                                                                !! tracer, in kg times concentration units [kg conc].
-    type(unit_scale_type),              intent(in)    :: US     !< A dimensional unit scaling type
+    type(EFP_type), dimension(:),       intent(out)   :: stocks !< The mass-weighted integrated amount of each
+                                                                !! tracer, in kg times concentration units [kg conc]
     type(MOM_generic_tracer_CS),        pointer       :: CS     !< Pointer to the control structure for this module.
     character(len=*), dimension(:),     intent(out)   :: names  !< The names of the stocks calculated.
     character(len=*), dimension(:),     intent(out)   :: units  !< The units of the stocks calculated.
@@ -584,14 +583,12 @@ contains
                                                                      !! number of stocks calculated here.
 
     ! Local variables
-    real :: stock_scale ! The dimensional scaling factor to convert stocks to kg [kg H-1 L-2 ~> kg m-3 or 1]
     type(g_tracer_type), pointer  :: g_tracer, g_tracer_next
     real, dimension(:,:,:,:), pointer   :: tr_field
     real, dimension(:,:,:), pointer     :: tr_ptr
     character(len=128), parameter :: sub_name = 'MOM_generic_tracer_stock'
 
-    integer :: i, j, k, is, ie, js, je, nz, m
-    is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
+    integer :: m
 
     MOM_generic_tracer_stock = 0
     if (.not.associated(CS)) return
@@ -605,7 +602,6 @@ contains
 
     if (.NOT. associated(CS%g_tracer_list)) return ! No stocks.
 
-    stock_scale = US%L_to_m**2 * GV%H_to_kg_m2
     m=1 ; g_tracer=>CS%g_tracer_list
     do
       call g_tracer_get_alias(g_tracer,names(m))
@@ -613,12 +609,8 @@ contains
       units(m) = trim(units(m))//" kg"
       call g_tracer_get_pointer(g_tracer,names(m),'field',tr_field)
 
-      stocks(m) = 0.0
       tr_ptr => tr_field(:,:,:,1)
-      do k=1,nz ; do j=js,je ; do i=is,ie
-        stocks(m) = stocks(m) + tr_ptr(i,j,k) * (G%mask2dT(i,j) * G%areaT(i,j) * h(i,j,k))
-      enddo ; enddo ; enddo
-      stocks(m) = stock_scale * stocks(m)
+      stocks(m) = global_mass_int_EFP(h, G, GV, tr_ptr, on_PE_only=.true.)
 
       !traverse the linked list till hit NULL
       call g_tracer_get_next(g_tracer, g_tracer_next)

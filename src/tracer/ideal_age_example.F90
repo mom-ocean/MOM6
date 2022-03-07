@@ -3,6 +3,7 @@ module ideal_age_example
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
+use MOM_coms,          only : EFP_type
 use MOM_coupler_types, only : set_coupler_type_data, atmos_ocn_coupler_flux
 use MOM_diag_mediator, only : diag_ctrl
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
@@ -13,6 +14,7 @@ use MOM_hor_index, only : hor_index_type
 use MOM_io, only : file_exists, MOM_read_data, slasher, vardesc, var_desc, query_vardesc
 use MOM_open_boundary, only : ocean_OBC_type
 use MOM_restart, only : query_initialized, MOM_restart_CS
+use MOM_spatial_means, only : global_mass_int_EFP
 use MOM_sponge, only : set_up_sponge_field, sponge_CS
 use MOM_time_manager, only : time_type, time_type_to_real
 use MOM_tracer_registry, only : register_tracer, tracer_registry_type
@@ -78,8 +80,8 @@ function register_ideal_age_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
                                                   !! diffusion module
   type(MOM_restart_CS), target, intent(inout) :: restart_CS !< MOM restart control struct
 
-! This include declares and sets the variable "version".
-#include "version_variable.h"
+  ! This include declares and sets the variable "version".
+# include "version_variable.h"
   character(len=40)  :: mdl = "ideal_age_example" ! This module's name.
   character(len=200) :: inputdir ! The directory where the input files are.
   character(len=48)  :: var_name ! The variable's name.
@@ -369,14 +371,13 @@ end subroutine ideal_age_tracer_column_physics
 
 !> Calculates the mass-weighted integral of all tracer stocks, returning the number of stocks it
 !! has calculated.  If stock_index is present, only the stock corresponding to that coded index is found.
-function ideal_age_stock(h, stocks, G, GV, US, CS, names, units, stock_index)
+function ideal_age_stock(h, stocks, G, GV, CS, names, units, stock_index)
   type(ocean_grid_type),              intent(in)    :: G    !< The ocean's grid structure
   type(verticalGrid_type),            intent(in)    :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                                       intent(in)    :: h    !< Layer thicknesses [H ~> m or kg m-2]
-  real, dimension(:),                 intent(out)   :: stocks !< the mass-weighted integrated amount of each
+  type(EFP_type), dimension(:),       intent(out)   :: stocks !< the mass-weighted integrated amount of each
                                                             !! tracer, in kg times concentration units [kg conc].
-  type(unit_scale_type),              intent(in)    :: US   !< A dimensional unit scaling type
   type(ideal_age_tracer_CS),          pointer       :: CS   !< The control structure returned by a previous
                                                             !! call to register_ideal_age_tracer.
   character(len=*), dimension(:),     intent(out)   :: names  !< the names of the stocks calculated.
@@ -386,7 +387,6 @@ function ideal_age_stock(h, stocks, G, GV, US, CS, names, units, stock_index)
   integer                                           :: ideal_age_stock !< The number of stocks calculated here.
 
   ! Local variables
-  real :: stock_scale ! The dimensional scaling factor to convert stocks to kg [kg H-1 L-2 ~> kg m-3 or 1]
   integer :: i, j, k, is, ie, js, je, nz, m
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
@@ -401,15 +401,10 @@ function ideal_age_stock(h, stocks, G, GV, US, CS, names, units, stock_index)
     return
   endif ; endif
 
-  stock_scale = US%L_to_m**2 * GV%H_to_kg_m2
   do m=1,CS%ntr
     call query_vardesc(CS%tr_desc(m), name=names(m), units=units(m), caller="ideal_age_stock")
     units(m) = trim(units(m))//" kg"
-    stocks(m) = 0.0
-    do k=1,nz ; do j=js,je ; do i=is,ie
-      stocks(m) = stocks(m) + CS%tr(i,j,k,m) * (G%mask2dT(i,j) * G%areaT(i,j) * h(i,j,k))
-    enddo ; enddo ; enddo
-    stocks(m) = stock_scale * stocks(m)
+    stocks(m) = global_mass_int_EFP(h, G, GV, CS%tr(:,:,:,m), on_PE_only=.true.)
   enddo
   ideal_age_stock = CS%ntr
 

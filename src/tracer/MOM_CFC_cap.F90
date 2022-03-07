@@ -4,6 +4,7 @@ module MOM_CFC_cap
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
+use MOM_coms,            only : EFP_type
 use MOM_diag_mediator,   only : diag_ctrl, register_diag_field, post_data
 use MOM_error_handler,   only : MOM_error, FATAL, WARNING
 use MOM_file_parser,     only : get_param, log_param, log_version, param_file_type
@@ -14,6 +15,7 @@ use MOM_io,              only : file_exists, MOM_read_data, slasher
 use MOM_io,              only : vardesc, var_desc, query_vardesc, stdout
 use MOM_open_boundary,   only : ocean_OBC_type
 use MOM_restart,         only : query_initialized, MOM_restart_CS
+use MOM_spatial_means,   only : global_mass_int_EFP
 use MOM_time_manager,    only : time_type
 use time_interp_external_mod, only : init_external_field, time_interp_external
 use MOM_tracer_registry, only : register_tracer, tracer_registry_type
@@ -341,14 +343,13 @@ end subroutine CFC_cap_column_physics
 !> Calculates the mass-weighted integral of all tracer stocks,
 !! returning the number of stocks it has calculated.  If the stock_index
 !! is present, only the stock corresponding to that coded index is returned.
-function CFC_cap_stock(h, stocks, G, GV, US, CS, names, units, stock_index)
+function CFC_cap_stock(h, stocks, G, GV, CS, names, units, stock_index)
   type(ocean_grid_type),           intent(in)    :: G      !< The ocean's grid structure.
   type(verticalGrid_type),         intent(in)    :: GV     !< The ocean's vertical grid structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                                    intent(in)    :: h      !< Layer thicknesses [H ~> m or kg m-2].
-  real, dimension(:),              intent(out)   :: stocks !< the mass-weighted integrated amount of each
-                                                           !! tracer, in kg times concentration units [kg conc].
-  type(unit_scale_type),           intent(in)    :: US     !< A dimensional unit scaling type
+  type(EFP_type), dimension(:),    intent(out)   :: stocks !< The mass-weighted integrated amount of each
+                                                           !! tracer, in kg times concentration units [kg conc]
   type(CFC_cap_CS),                pointer       :: CS     !< The control structure returned by a
                                                            !! previous call to register_CFC_cap.
   character(len=*), dimension(:),  intent(out)   :: names  !< The names of the stocks calculated.
@@ -357,11 +358,6 @@ function CFC_cap_stock(h, stocks, G, GV, US, CS, names, units, stock_index)
                                                                 !! stock being sought.
   integer                                        :: CFC_cap_stock !< The number of stocks calculated here.
 
-  ! Local variables
-  real :: stock_scale ! The dimensional scaling factor to convert stocks to kg [kg H-1 L-2 ~> kg m-3 or 1]
-  real :: mass        ! The cell volume or mass [H L2 ~> m3 or kg]
-  integer :: i, j, k, is, ie, js, je, nz
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
   CFC_cap_stock = 0
   if (.not.associated(CS)) return
@@ -377,15 +373,8 @@ function CFC_cap_stock(h, stocks, G, GV, US, CS, names, units, stock_index)
   call query_vardesc(CS%CFC12_desc, name=names(2), units=units(2), caller="CFC_cap_stock")
   units(1) = trim(units(1))//" kg" ; units(2) = trim(units(2))//" kg"
 
-  stock_scale = US%L_to_m**2 * GV%H_to_kg_m2
-  stocks(1) = 0.0 ; stocks(2) = 0.0
-  do k=1,nz ; do j=js,je ; do i=is,ie
-    mass = G%mask2dT(i,j) * G%areaT(i,j) * h(i,j,k)
-    stocks(1) = stocks(1) + CS%CFC11(i,j,k) * mass
-    stocks(2) = stocks(2) + CS%CFC12(i,j,k) * mass
-  enddo ; enddo ; enddo
-  stocks(1) = stock_scale * stocks(1)
-  stocks(2) = stock_scale * stocks(2)
+  stocks(1) = global_mass_int_EFP(h, G, GV, CS%CFC11, on_PE_only=.true.)
+  stocks(2) = global_mass_int_EFP(h, G, GV, CS%CFC12, on_PE_only=.true.)
 
   CFC_cap_stock = 2
 

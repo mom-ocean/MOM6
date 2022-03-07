@@ -3,21 +3,22 @@ module MOM_tracer_flow_control
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
+use MOM_coms,          only : EFP_type, assignment(=), EFP_to_real, real_to_EFP, EFP_sum_across_PEs
 use MOM_diag_mediator, only : time_type, diag_ctrl
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
-use MOM_file_parser, only : get_param, log_version, param_file_type, close_param_file
-use MOM_forcing_type, only : forcing, optics_type
-use MOM_get_input, only : Get_MOM_input
-use MOM_grid, only : ocean_grid_type
-use MOM_hor_index, only : hor_index_type
+use MOM_file_parser,   only : get_param, log_version, param_file_type, close_param_file
+use MOM_forcing_type,  only : forcing, optics_type
+use MOM_get_input,     only : Get_MOM_input
+use MOM_grid,          only : ocean_grid_type
+use MOM_hor_index,     only : hor_index_type
 use MOM_open_boundary, only : ocean_OBC_type
-use MOM_restart, only : MOM_restart_CS
-use MOM_sponge, only : sponge_CS
-use MOM_ALE_sponge, only : ALE_sponge_CS
+use MOM_restart,       only : MOM_restart_CS
+use MOM_sponge,        only : sponge_CS
+use MOM_ALE_sponge,    only : ALE_sponge_CS
 use MOM_tracer_registry, only : tracer_registry_type
-use MOM_unit_scaling, only : unit_scale_type
-use MOM_variables, only : surface, thermo_var_ptrs
-use MOM_verticalGrid, only : verticalGrid_type
+use MOM_unit_scaling,  only : unit_scale_type
+use MOM_variables,     only : surface, thermo_var_ptrs
+use MOM_verticalGrid,  only : verticalGrid_type
 #include <MOM_memory.h>
 
 ! Add references to other user-provide tracer modules here.
@@ -582,8 +583,8 @@ subroutine call_tracer_stocks(h, stock_values, G, GV, US, CS, stock_names, stock
   type(verticalGrid_type),        intent(in)  :: GV          !< The ocean's vertical grid structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),    &
                                   intent(in)  :: h           !< Layer thicknesses [H ~> m or kg m-2]
-  real, dimension(:),             intent(out) :: stock_values !< The integrated amounts of a tracer
-                             !! on the current PE, usually in kg x concentration [kg conc].
+  real, dimension(:),             intent(out) :: stock_values !< The globally mass-integrated
+                                                             !! amount of a tracer [kg conc].
   type(unit_scale_type),          intent(in)  :: US          !< A dimensional unit scaling type
   type(tracer_flow_control_CS),   pointer     :: CS          !< The control structure returned by a
                                                              !! previous call to
@@ -611,8 +612,10 @@ subroutine call_tracer_stocks(h, stock_values, G, GV, US, CS, stock_names, stock
   ! Local variables
   character(len=200), dimension(MAX_FIELDS_) :: names, units
   character(len=200) :: set_pkg_name
-  real, dimension(MAX_FIELDS_) :: values
-  integer :: max_ns, ns_tot, ns, index, pkg, max_pkgs, nn
+  ! real, dimension(MAX_FIELDS_) :: values
+  type(EFP_type), dimension(MAX_FIELDS_) :: values_EFP
+  type(EFP_type), dimension(MAX_FIELDS_) :: stock_val_EFP
+  integer :: max_ns, ns_tot, ns, index, pkg, max_pkgs, nn, n
 
   if (.not. associated(CS)) call MOM_error(FATAL, "call_tracer_stocks: "// &
        "Module must be initialized via call_tracer_register before it is used.")
@@ -625,59 +628,59 @@ subroutine call_tracer_stocks(h, stock_values, G, GV, US, CS, stock_names, stock
 
 !  Add other user-provided calls here.
   if (CS%use_USER_tracer_example) then
-    ns = USER_tracer_stock(h, values, G, GV, US, CS%USER_tracer_example_CSp, &
+    ns = USER_tracer_stock(h, values_EFP, G, GV, CS%USER_tracer_example_CSp, &
                            names, units, stock_index)
-    call store_stocks("tracer_example", ns, names, units, values, index, stock_values, &
+    call store_stocks("tracer_example", ns, names, units, values_EFP, index, stock_val_EFP, &
                        set_pkg_name, max_ns, ns_tot, stock_names, stock_units)
   endif
 ! if (CS%use_DOME_tracer) then
 !   ns = DOME_tracer_stock(h, values, G, GV, CS%DOME_tracer_CSp, &
 !                          names, units, stock_index)
-!   call store_stocks("DOME_tracer", ns, names, units, values, index, stock_values, &
+!   do n=1,ns ; values_EFP(n) = real_to_EFP(values(n)) ; enddo
+!   call store_stocks("DOME_tracer", ns, names, units, values_EFP, index, stock_val_EFP, &
 !                      set_pkg_name, max_ns, ns_tot, stock_names, stock_units)
 ! endif
   if (CS%use_ideal_age) then
-    ns = ideal_age_stock(h, values, G, GV, US, CS%ideal_age_tracer_CSp, &
+    ns = ideal_age_stock(h, values_EFP, G, GV, CS%ideal_age_tracer_CSp, &
                          names, units, stock_index)
-    call store_stocks("ideal_age_example", ns, names, units, values, index, &
-           stock_values, set_pkg_name, max_ns, ns_tot, stock_names, stock_units)
+    call store_stocks("ideal_age_example", ns, names, units, values_EFP, index, stock_val_EFP, &
+                      set_pkg_name, max_ns, ns_tot, stock_names, stock_units)
   endif
   if (CS%use_regional_dyes) then
-    ns = dye_stock(h, values, G, GV, US, CS%dye_tracer_CSp, &
-                         names, units, stock_index)
-    call store_stocks("regional_dyes", ns, names, units, values, index, &
-           stock_values, set_pkg_name, max_ns, ns_tot, stock_names, stock_units)
+    ns = dye_stock(h, values_EFP, G, GV, CS%dye_tracer_CSp, names, units, stock_index)
+    call store_stocks("regional_dyes", ns, names, units, values_EFP, index, stock_val_EFP, &
+                      set_pkg_name, max_ns, ns_tot, stock_names, stock_units)
   endif
   if (CS%use_oil) then
-    ns = oil_stock(h, values, G, GV, US, CS%oil_tracer_CSp, &
-                         names, units, stock_index)
-    call store_stocks("oil_tracer", ns, names, units, values, index, &
-           stock_values, set_pkg_name, max_ns, ns_tot, stock_names, stock_units)
+    ns = oil_stock(h, values_EFP, G, GV, CS%oil_tracer_CSp, names, units, stock_index)
+    call store_stocks("oil_tracer", ns, names, units, values_EFP, index, stock_val_EFP, &
+                      set_pkg_name, max_ns, ns_tot, stock_names, stock_units)
   endif
   if (CS%use_OCMIP2_CFC) then
-    ns = OCMIP2_CFC_stock(h, values, G, GV, US, CS%OCMIP2_CFC_CSp, names, units, stock_index)
-    call store_stocks("MOM_OCMIP2_CFC", ns, names, units, values, index, stock_values, &
-                       set_pkg_name, max_ns, ns_tot, stock_names, stock_units)
+    ns = OCMIP2_CFC_stock(h, values_EFP, G, GV, CS%OCMIP2_CFC_CSp, names, units, stock_index)
+    call store_stocks("MOM_OCMIP2_CFC", ns, names, units, values_EFP, index, stock_val_EFP, &
+                      set_pkg_name, max_ns, ns_tot, stock_names, stock_units)
   endif
 
   if (CS%use_CFC_cap) then
-    ns = CFC_cap_stock(h, values, G, GV, US, CS%CFC_cap_CSp, names, units, stock_index)
-    call store_stocks("MOM_CFC_cap", ns, names, units, values, index, stock_values, &
-                       set_pkg_name, max_ns, ns_tot, stock_names, stock_units)
+    ns = CFC_cap_stock(h, values_EFP, G, GV, CS%CFC_cap_CSp, names, units, stock_index)
+    call store_stocks("MOM_CFC_cap", ns, names, units, values_EFP, index, stock_val_EFP, &
+                      set_pkg_name, max_ns, ns_tot, stock_names, stock_units)
   endif
 
   if (CS%use_advection_test_tracer) then
-    ns = advection_test_stock( h, values, G, GV, US, CS%advection_test_tracer_CSp, &
+    ns = advection_test_stock( h, values_EFP, G, GV, CS%advection_test_tracer_CSp, &
                          names, units, stock_index )
-    call store_stocks("advection_test_tracer", ns, names, units, values, index, &
-           stock_values, set_pkg_name, max_ns, ns_tot, stock_names, stock_units)
+    ! do n=1,ns ; values_EFP(n) = real_to_EFP(values(n)) ; enddo
+    call store_stocks("advection_test_tracer", ns, names, units, values_EFP, index, stock_val_EFP, &
+                      set_pkg_name, max_ns, ns_tot, stock_names, stock_units)
   endif
 
   if (CS%use_MOM_generic_tracer) then
-    ns = MOM_generic_tracer_stock(h, values, G, GV, US, CS%MOM_generic_tracer_CSp, &
+    ns = MOM_generic_tracer_stock(h, values_EFP, G, GV, CS%MOM_generic_tracer_CSp, &
                                    names, units, stock_index)
-    call store_stocks("MOM_generic_tracer", ns, names, units, values, index, stock_values, &
-                       set_pkg_name, max_ns, ns_tot, stock_names, stock_units)
+    call store_stocks("MOM_generic_tracer", ns, names, units, values_EFP, index, stock_val_EFP, &
+                      set_pkg_name, max_ns, ns_tot, stock_names, stock_units)
     nn=ns_tot-ns+1
     nn=MOM_generic_tracer_min_max(nn, got_min_max, global_min,  global_max, &
                                   xgmin, ygmin, zgmin, xgmax, ygmax, zgmax ,&
@@ -685,20 +688,26 @@ subroutine call_tracer_stocks(h, stock_values, G, GV, US, CS, stock_names, stock
 
   endif
   if (CS%use_pseudo_salt_tracer) then
-    ns = pseudo_salt_stock(h, values, G, GV, US, CS%pseudo_salt_tracer_CSp, &
+    ns = pseudo_salt_stock(h, values_EFP, G, GV, CS%pseudo_salt_tracer_CSp, &
                          names, units, stock_index)
-    call store_stocks("pseudo_salt_tracer", ns, names, units, values, index, &
-           stock_values, set_pkg_name, max_ns, ns_tot, stock_names, stock_units)
+    call store_stocks("pseudo_salt_tracer", ns, names, units, values_EFP, index, stock_val_EFP, &
+                      set_pkg_name, max_ns, ns_tot, stock_names, stock_units)
   endif
 
   if (CS%use_boundary_impulse_tracer) then
-    ns = boundary_impulse_stock(h, values, G, GV, US, CS%boundary_impulse_tracer_CSp, &
+    ns = boundary_impulse_stock(h, values_EFP, G, GV, CS%boundary_impulse_tracer_CSp, &
                          names, units, stock_index)
-    call store_stocks("boundary_impulse_tracer", ns, names, units, values, index, &
-           stock_values, set_pkg_name, max_ns, ns_tot, stock_names, stock_units)
+    call store_stocks("boundary_impulse_tracer", ns, names, units, values_EFP, index, stock_val_EFP, &
+                      set_pkg_name, max_ns, ns_tot, stock_names, stock_units)
   endif
 
-  if (ns_tot == 0) stock_values(1) = 0.0
+  !   Sum the various quantities across all the processors.
+  if (ns_tot > 0) then
+    call EFP_sum_across_PEs(stock_val_EFP, ns_tot)
+    do n=1,ns_tot ; stock_values(n) = EFP_to_real(stock_val_EFP(n)) ; enddo
+  else
+    stock_values(1) = 0.0
+  endif
 
   if (present(num_stocks)) num_stocks = ns_tot
 
@@ -713,11 +722,13 @@ subroutine store_stocks(pkg_name, ns, names, units, values, index, stock_values,
                       intent(in)    :: names   !< Diagnostic names to use for each stock.
   character(len=*), dimension(:), &
                       intent(in)    :: units   !< Units to use in the metadata for each stock.
-  real, dimension(:), intent(in)    :: values  !< The values of the tracer stocks
+  type(EFP_type), dimension(:), &
+                      intent(in)    :: values  !< The values of the tracer stocks
   integer,            intent(in)    :: index   !< The integer stock index from
                              !! stocks_constants_mod of the stock to be returned.  If this is
                              !! present and greater than 0, only a single stock can be returned.
-  real, dimension(:), intent(inout) :: stock_values !< The master list of stock values
+  type(EFP_type), dimension(:), &
+                      intent(inout) :: stock_values !< The master list of stock values
   character(len=*),   intent(inout) :: set_pkg_name !< The name of the last tracer package whose
                                                !! stocks were stored for a specific index.  This is
                                                !! used to trigger an error if there are redundant stocks.
