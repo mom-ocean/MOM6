@@ -599,7 +599,7 @@ real function remaining_transport_sum(G, GV, US, uhtr, vhtr, h_new)
                               intent(in   ) :: uhtr  !< Zonal mass transport [H L2 ~> m3 or kg]
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
                               intent(in   ) :: vhtr  !< Meridional mass transport [H L2 ~> m3 or kg]
-  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                               intent(in   ) :: h_new !< Layer thicknesses [H ~> m or kg m-2]
 
   ! Local variables
