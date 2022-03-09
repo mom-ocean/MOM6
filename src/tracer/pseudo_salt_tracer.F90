@@ -10,13 +10,14 @@ use MOM_error_handler,   only : MOM_error, FATAL, WARNING
 use MOM_file_parser,     only : get_param, log_param, log_version, param_file_type
 use MOM_forcing_type,    only : forcing
 use MOM_grid,            only : ocean_grid_type
+use MOM_CVMix_KPP,       only : KPP_NonLocalTransport, KPP_CS
 use MOM_hor_index,       only : hor_index_type
 use MOM_io,              only : vardesc, var_desc, query_vardesc
 use MOM_open_boundary,   only : ocean_OBC_type
 use MOM_restart,         only : query_initialized, MOM_restart_CS
 use MOM_sponge,          only : set_up_sponge_field, sponge_CS
 use MOM_time_manager,    only : time_type
-use MOM_tracer_registry, only : register_tracer, tracer_registry_type
+use MOM_tracer_registry, only : register_tracer, tracer_registry_type, tracer_type
 use MOM_tracer_diabatic, only : tracer_vertdiff, applyTracerBoundaryFluxesInOut
 use MOM_tracer_Z_init,   only : tracer_Z_init
 use MOM_unit_scaling,    only : unit_scale_type
@@ -33,6 +34,7 @@ public pseudo_salt_stock, pseudo_salt_tracer_end
 
 !> The control structure for the pseudo-salt tracer
 type, public :: pseudo_salt_tracer_CS ; private
+  type(tracer_type), pointer :: tr_ptr !< pointer to tracer inside Tr_reg
   type(time_type), pointer :: Time => NULL() !< A pointer to the ocean model's clock.
   type(tracer_registry_type), pointer :: tr_Reg => NULL() !< A pointer to the MOM tracer registry
   real, pointer :: ps(:,:,:) => NULL()   !< The array of pseudo-salt tracer used in this
@@ -96,7 +98,7 @@ function register_pseudo_salt_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
   call register_tracer(tr_ptr, tr_Reg, param_file, HI, GV, name="pseudo_salt", &
                        longname="Pseudo salt passive tracer", units="psu", &
                        registry_diags=.true., restart_CS=restart_CS, &
-                       mandatory=.not.CS%pseudo_salt_may_reinit)
+                       mandatory=.not.CS%pseudo_salt_may_reinit, Tr_out=CS%tr_ptr)
 
   CS%tr_Reg => tr_Reg
   CS%restart_CSp => restart_CS
@@ -157,7 +159,7 @@ end subroutine initialize_pseudo_salt_tracer
 
 !> Apply sources, sinks and diapycnal diffusion to the tracers in this package.
 subroutine pseudo_salt_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, US, CS, tv, debug, &
-              evap_CFL_limit, minimum_forcing_depth)
+              KPP_CSp, nonLocalTrans, evap_CFL_limit, minimum_forcing_depth)
   type(ocean_grid_type),   intent(in) :: G     !< The ocean's grid structure
   type(verticalGrid_type), intent(in) :: GV    !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
@@ -178,6 +180,8 @@ subroutine pseudo_salt_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G
                                                !! call to register_pseudo_salt_tracer
   type(thermo_var_ptrs),   intent(in) :: tv    !< A structure pointing to various thermodynamic variables
   logical,                 intent(in) :: debug !< If true calculate checksums
+  type(KPP_CS),  optional, pointer    :: KPP_CSp  !< KPP control structure
+  real,          optional, intent(in)   :: nonLocalTrans(:,:,:) !< Non-local transport [nondim]
   real,          optional, intent(in) :: evap_CFL_limit !< Limit on the fraction of the water that can
                                                !! be fluxed out of the top layer in a timestep [nondim]
   real,          optional, intent(in) :: minimum_forcing_depth !< The smallest depth over which
@@ -210,6 +214,14 @@ subroutine pseudo_salt_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G
     call hchksum(CS%ps,"pseudo_salt pre pseudo-salt vertdiff", G%HI)
   endif
 
+  ! Compute KPP nonlocal term if necessary
+  if (present(KPP_CSp)) then
+    if (associated(KPP_CSp) .and. present(nonLocalTrans)) &
+      call KPP_NonLocalTransport(KPP_CSp, G, GV, h_old, nonLocalTrans, fluxes%KPP_salt_flux(:,:), &
+                                 dt, CS%diag, CS%tr_ptr, CS%ps(:,:,:))
+  endif
+
+  ! This uses applyTracerBoundaryFluxesInOut, usually in ALE mode
   if (present(evap_CFL_limit) .and. present(minimum_forcing_depth)) then
     ! This option uses applyTracerBoundaryFluxesInOut, usually in ALE mode
 

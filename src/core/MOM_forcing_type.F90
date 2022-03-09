@@ -99,20 +99,21 @@ type, public :: forcing
 
   ! water mass fluxes into the ocean [R Z T-1 ~> kg m-2 s-1]; these fluxes impact the ocean mass
   real, pointer, dimension(:,:) :: &
-    evap        => NULL(), & !< (-1)*fresh water flux evaporated out of the ocean [R Z T-1 ~> kg m-2 s-1]
-    lprec       => NULL(), & !< precipitating liquid water into the ocean [R Z T-1 ~> kg m-2 s-1]
-    fprec       => NULL(), & !< precipitating frozen water into the ocean [R Z T-1 ~> kg m-2 s-1]
-    vprec       => NULL(), & !< virtual liquid precip associated w/ SSS restoring [R Z T-1 ~> kg m-2 s-1]
-    lrunoff     => NULL(), & !< liquid river runoff entering ocean [R Z T-1 ~> kg m-2 s-1]
-    frunoff     => NULL(), & !< frozen river runoff (calving) entering ocean [R Z T-1 ~> kg m-2 s-1]
-    seaice_melt => NULL()    !< snow/seaice melt (positive) or formation (negative) [R Z T-1 ~> kg m-2 s-1]
+    evap          => NULL(), & !< (-1)*fresh water flux evaporated out of the ocean [R Z T-1 ~> kg m-2 s-1]
+    lprec         => NULL(), & !< precipitating liquid water into the ocean [R Z T-1 ~> kg m-2 s-1]
+    fprec         => NULL(), & !< precipitating frozen water into the ocean [R Z T-1 ~> kg m-2 s-1]
+    vprec         => NULL(), & !< virtual liquid precip associated w/ SSS restoring [R Z T-1 ~> kg m-2 s-1]
+    lrunoff       => NULL(), & !< liquid river runoff entering ocean [R Z T-1 ~> kg m-2 s-1]
+    frunoff       => NULL(), & !< frozen river runoff (calving) entering ocean [R Z T-1 ~> kg m-2 s-1]
+    seaice_melt   => NULL()    !< snow/seaice melt (positive) or formation (negative) [R Z T-1 ~> kg m-2 s-1]
 
   ! Integrated water mass fluxes into the ocean, used for passive tracer sources [H ~> m or kg m-2]
   real, pointer, dimension(:,:) :: &
-    netMassIn   => NULL(), & !< Sum of water mass fluxes into the ocean integrated over a
-                             !! forcing timestep [H ~> m or kg m-2]
-    netMassOut  => NULL()    !< Net water mass flux out of the ocean integrated over a forcing timestep,
-                             !! with negative values for water leaving the ocean [H ~> m or kg m-2]
+    netMassIn     => NULL(), & !< Sum of water mass fluxes into the ocean integrated over a
+                               !! forcing timestep [H ~> m or kg m-2]
+    netMassOut    => NULL(), & !< Net water mass flux out of the ocean integrated over a forcing timestep,
+                               !! with negative values for water leaving the ocean [H ~> m or kg m-2]
+    KPP_salt_flux => NULL()    !< KPP effective salt flux [ppt m s-1]
 
   ! heat associated with water crossing ocean surface
   real, pointer, dimension(:,:) :: &
@@ -191,8 +192,8 @@ type, public :: forcing
 
   ! CFC-related arrays needed in the MOM_CFC_cap module
   real, pointer, dimension(:,:) :: &
-    cfc11_flux    => NULL(), &  !< flux of cfc_11 into the ocean [CU R Z T-1 kg m-3 ~> mol m-2 s-1]
-    cfc12_flux    => NULL(), &  !< flux of cfc_12 into the ocean [CU R Z T-1 kg m-3 ~> mol m-2 s-1]
+    cfc11_flux    => NULL(), &  !< flux of cfc_11 into the ocean [CU R Z T-1 ~> mol m-2 s-1]
+    cfc12_flux    => NULL(), &  !< flux of cfc_12 into the ocean [CU R Z T-1 ~> mol m-2 s-1]
     ice_fraction  => NULL(), &  !< fraction of sea ice coverage at h-cells, from 0 to 1 [nondim].
     u10_sqr       => NULL()     !< wind magnitude at 10 m squared [L2 T-2 ~> m2 s-2]
 
@@ -3554,8 +3555,6 @@ subroutine homogenize_forcing(fluxes, G)
     call homogenize_field_t(fluxes%seaice_melt, G)
     call homogenize_field_t(fluxes%netMassOut, G)
     call homogenize_field_t(fluxes%netMassIn, G)
-    !This was removed and I don't think replaced. Not needed?
-    !call homogenize_field_t(fluxes%netSalt, G)
   endif
 
   if (do_heat) then
