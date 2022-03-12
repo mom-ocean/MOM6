@@ -1892,10 +1892,9 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, u, v, depth_t
   character(len=200) :: filename, inputdir ! Strings for file/path and path.
 
   logical :: use_ALE ! True if ALE is being used, False if in layered mode
-  logical :: time_space_interp_sponge ! True if using sponge data which
-  ! need to be interpolated from in both the horizontal dimension and in
-  ! time prior to vertical remapping.
-
+  logical :: new_sponge_param ! The value of a deprecated parameter.
+  logical :: time_space_interp_sponge ! If true use sponge data that need to be interpolated in both
+                              ! the horizontal dimension and in time prior to vertical remapping.
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
@@ -1948,20 +1947,34 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, u, v, depth_t
                    "SPONGE_UV_DAMPING_FILE for the velocities.", default=Idamp_var)
   endif
   call get_param(param_file, mdl, "USE_REGRIDDING", use_ALE, do_not_log = .true.)
-  time_space_interp_sponge = .false.
-  call get_param(param_file, mdl, "NEW_SPONGES", time_space_interp_sponge, &
+
+  !### NEW_SPONGES should be obsoleted properly, rather than merely deprecated, at which
+  !    point only the else branch of the new_sponge_param block would be retained.
+  call get_param(param_file, mdl, "NEW_SPONGES", new_sponge_param, &
                  "Set True if using the newer sponging code which "//&
                  "performs on-the-fly regridding in lat-lon-time.",&
-                 "of sponge restoring data.", default=.false.)
-  if (time_space_interp_sponge) then
-    call MOM_error(WARNING, " initialize_sponges:  NEW_SPONGES has been deprecated. "//&
+                 "of sponge restoring data.", default=.false., do_not_log=.true.)
+  if (new_sponge_param) then
+    call get_param(param_file, mdl, "INTERPOLATE_SPONGE_TIME_SPACE", time_space_interp_sponge, &
+                 "If True, perform on-the-fly regridding in lat-lon-time of sponge restoring data.", &
+                 default=.true., do_not_log=.true.)
+    if (.not.time_space_interp_sponge) then
+      call MOM_error(FATAL, " initialize_sponges:  NEW_SPONGES has been deprecated, "//&
+                   "but is set to true inconsistently with INTERPOLATE_SPONGE_TIME_SPACE. "//&
+                   "Remove the NEW_SPONGES input line.")
+    else
+      call MOM_error(WARNING, " initialize_sponges:  NEW_SPONGES has been deprecated. "//&
                    "Please use INTERPOLATE_SPONGE_TIME_SPACE instead. Setting "//&
                    "INTERPOLATE_SPONGE_TIME_SPACE = True.")
+    endif
+    call log_param(param_file, mdl, "INTERPOLATE_SPONGE_TIME_SPACE", time_space_interp_sponge, &
+                 "If True, perform on-the-fly regridding in lat-lon-time of sponge restoring data.", &
+                 default=.true.)
+  else
+    call get_param(param_file, mdl, "INTERPOLATE_SPONGE_TIME_SPACE", time_space_interp_sponge, &
+                 "If True, perform on-the-fly regridding in lat-lon-time of sponge restoring data.", &
+                 default=.false.)
   endif
-  call get_param(param_file, mdl, "INTERPOLATE_SPONGE_TIME_SPACE", time_space_interp_sponge, &
-                 "Set True if using the newer sponging code which "//&
-                 "performs on-the-fly regridding in lat-lon-time.",&
-                 "of sponge restoring data.", default=time_space_interp_sponge)
 
 
   ! Read in sponge damping rate for tracers
