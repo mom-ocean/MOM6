@@ -61,29 +61,28 @@ subroutine RGC_initialize_sponges(G, GV, US, tv, u, v, depth_tot, PF, use_ALE, C
                  target, intent(in) :: v    !< Array with the v velocity [L T-1 ~> m s-1]
   real, dimension(SZI_(G),SZJ_(G)), &
                          intent(in) :: depth_tot  !< The nominal total depth of the ocean [Z ~> m]
-  type(param_file_type), intent(in) :: PF   !< A structure indicating the
-                                            !! open file to parse for model
-                                            !! parameter values.
-  logical, intent(in) :: use_ALE            !< If true, indicates model is in ALE mode
-  type(sponge_CS),   pointer    :: CSp      !< Layer-mode sponge structure
+  type(param_file_type), intent(in) :: PF   !< A structure to parse for model parameter values.
+  logical,               intent(in) :: use_ALE !< If true, indicates model is in ALE mode
+  type(sponge_CS),       pointer    :: CSp  !< Layer-mode sponge structure
   type(ALE_sponge_CS),   pointer    :: ACSp !< ALE-mode sponge structure
 
-! Local variables
-  real :: T(SZI_(G),SZJ_(G),SZK_(GV)) ! A temporary array for temp
-  real :: S(SZI_(G),SZJ_(G),SZK_(GV)) ! A temporary array for salt
+  ! Local variables
+  real :: T(SZI_(G),SZJ_(G),SZK_(GV)) ! A temporary array for temperature [degC]
+  real :: S(SZI_(G),SZJ_(G),SZK_(GV)) ! A temporary array for salinity [ppt]
   real :: U1(SZIB_(G),SZJ_(G),SZK_(GV)) ! A temporary array for u [L T-1 ~> m s-1]
   real :: V1(SZI_(G),SZJB_(G),SZK_(GV)) ! A temporary array for v [L T-1 ~> m s-1]
-  real :: RHO(SZI_(G),SZJ_(G),SZK_(GV)) ! A temporary array for RHO
   real :: tmp(SZI_(G),SZJ_(G))        ! A temporary array for tracers.
-  real :: h(SZI_(G),SZJ_(G),SZK_(GV)) ! A temporary array for thickness at h points
+  real :: h(SZI_(G),SZJ_(G),SZK_(GV)) ! A temporary array for thickness at h points [H ~> m or kg m-2]
   real :: Idamp(SZI_(G),SZJ_(G))    ! The sponge damping rate at h points [T-1 ~> s-1]
   real :: TNUDG                     ! Nudging time scale [T ~> s]
   real :: pres(SZI_(G))             ! An array of the reference pressure [R L2 T-2 ~> Pa]
-  real :: eta(SZI_(G),SZJ_(G),SZK_(GV)+1) ! A temporary array for eta, positive upward [m].
+  real :: eta(SZI_(G),SZJ_(G),SZK_(GV)+1) ! A temporary array for eta, positive upward [Z ~> m]
   logical :: sponge_uv              ! Nudge velocities (u and v) towards zero
-  real :: min_depth, dummy1, z, delta_h
-  real :: rho_dummy, min_thickness, rho_tmp, xi0
-  real :: lenlat, lenlon, lensponge
+  real :: min_depth                 ! The minimum depth of the ocean [Z ~> m]
+  real :: dummy1                    ! The position relative to the sponge width [nondim]
+  real :: min_thickness             ! A minimum layer thickness [H ~> m or kg m-2] (unused)
+  real :: lenlat, lenlon            ! The sizes of the domain [km]
+  real :: lensponge                 ! The width of the sponge [km]
   character(len=40) :: filename, state_file
   character(len=40) :: temp_var, salt_var, eta_var, inputdir, h_var
 
@@ -95,8 +94,9 @@ subroutine RGC_initialize_sponges(G, GV, US, tv, u, v, depth_tot, PF, use_ALE, C
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   iscB = G%iscB ; iecB = G%iecB; jscB = G%jscB ; jecB = G%jecB
 
+  ! The variable min_thickness is unused, and can probably be eliminated.
   call get_param(PF, mod,"MIN_THICKNESS", min_thickness, 'Minimum layer thickness', &
-                 units='m', default=1.e-3)
+                 units='m', default=1.e-3, scale=GV%m_to_H)
 
   call get_param(PF, mod, "RGC_TNUDG", TNUDG, 'Nudging time scale for sponge layers', &
                  units='days', default=0.0, scale=86400.0*US%s_to_T)
@@ -117,10 +117,10 @@ subroutine RGC_initialize_sponges(G, GV, US, tv, u, v, depth_tot, PF, use_ALE, C
                  "Nudge velocities (u and v) towards zero in the sponge layer.", &
                  default=.false., do_not_log=.true.)
 
-  T(:,:,:) = 0.0 ; S(:,:,:) = 0.0 ; Idamp(:,:) = 0.0 ; RHO(:,:,:) = 0.0
+  T(:,:,:) = 0.0 ; S(:,:,:) = 0.0 ; Idamp(:,:) = 0.0
 
   call get_param(PF, mod, "MINIMUM_DEPTH", min_depth, &
-                 "The minimum depth of the ocean.", units="m", default=0.0)
+                 "The minimum depth of the ocean.", units="m", default=0.0, scale=US%m_to_Z)
 
   if (associated(CSp)) call MOM_error(FATAL, &
           "RGC_initialize_sponges called with an associated control structure.")
@@ -147,11 +147,6 @@ subroutine RGC_initialize_sponges(G, GV, US, tv, u, v, depth_tot, PF, use_ALE, C
   ! 1) Read eta, salt and temp from IC file
   call get_param(PF, mod, "INPUTDIR", inputdir, default=".")
   inputdir = slasher(inputdir)
-   ! GM: get two different files, one with temp and one with salt values
-   ! this is work around to avoid having wrong values near the surface
-   ! because of the FIT_SALINITY option. To get salt values right in the
-   ! sponge, FIT_SALINITY=False. The oposite is true for temp. One can
-   ! combined the *correct* temp and salt values in one file instead.
   call get_param(PF, mod, "RGC_SPONGE_FILE", state_file, &
               "The name of the file with temps., salts. and interfaces to \n"// &
               " damp toward.", fail_if_missing=.true.)
@@ -176,12 +171,12 @@ subroutine RGC_initialize_sponges(G, GV, US, tv, u, v, depth_tot, PF, use_ALE, C
   call MOM_read_data(filename, salt_var, S(:,:,:), G%Domain)
   if (use_ALE) then
 
-    call MOM_read_data(filename, h_var, h(:,:,:), G%Domain)
+    call MOM_read_data(filename, h_var, h(:,:,:), G%Domain, scale=GV%m_to_H)
     call pass_var(h, G%domain)
 
     call initialize_ALE_sponge(Idamp, G, GV, PF, ACSp, h, nz)
 
-    !  The remaining calls to set_up_sponge_field can be in any order. !
+    !  The remaining calls to set_up_sponge_field can be in any order.
     if ( associated(tv%T) ) call set_up_ALE_sponge_field(T, G, GV, tv%T, ACSp)
     if ( associated(tv%S) ) call set_up_ALE_sponge_field(S, G, GV, tv%S, ACSp)
 
@@ -194,7 +189,7 @@ subroutine RGC_initialize_sponges(G, GV, US, tv, u, v, depth_tot, PF, use_ALE, C
   else ! layer mode
 
     !read eta
-    call MOM_read_data(filename, eta_var, eta(:,:,:), G%Domain)
+    call MOM_read_data(filename, eta_var, eta(:,:,:), G%Domain, scale=US%m_to_Z)
 
     ! Set the sponge damping rates so that the model will know where to
     ! apply the sponges, along with the interface heights.
