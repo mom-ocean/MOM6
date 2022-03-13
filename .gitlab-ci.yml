@@ -44,14 +44,14 @@ gnu:ocean-only-nolibs:
   tags:
     - ncrc4
   script:
-    - make -f tools/MRS/Makefile pipeline-build-gnu-oceanonly-nolibs
+    - make -f tools/MRS/Makefile MOM6_SRC=../.. pipeline-build-gnu-oceanonly-nolibs
 
 gnu:ice-ocean-nolibs:
   stage: builds
   tags:
     - ncrc4
   script:
-    - make -f tools/MRS/Makefile pipeline-build-gnu-iceocean-nolibs
+    - make -f tools/MRS/Makefile MOM6_SRC=../.. pipeline-build-gnu-iceocean-nolibs
 
 intel:repro:
   stage: builds
