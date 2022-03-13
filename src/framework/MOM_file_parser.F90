@@ -69,6 +69,9 @@ type, public :: param_file_type ; private
   logical  :: log_to_stdout = log_to_stdout_default !< If true, all log
                                     !! messages are also sent to stdout.
   logical  :: log_open = .false.    !< True if the log file has been opened.
+  integer  :: max_line_len = 4      !< The maximum number of characters in the lines
+                                    !! in any of the files in this param_file_type after
+                                    !! any continued lines have been combined.
   integer  :: stdout                !< The unit number from stdout().
   integer  :: stdlog                !< The unit number from stdlog().
   character(len=240) :: doc_file    !< A file where all run-time parameters, their
@@ -129,6 +132,7 @@ subroutine open_param_file(filename, CS, checkable, component, doc_file_dir)
   logical :: file_exists, unit_in_use, Netcdf_file, may_check, reopened_file
   integer :: ios, iounit, strlen, i
   character(len=240) :: doc_path
+  character(len=16)  :: sub_string
   type(parameter_block), pointer :: block => NULL()
 
   may_check = .true. ; if (present(checkable)) may_check = checkable
@@ -196,6 +200,11 @@ subroutine open_param_file(filename, CS, checkable, component, doc_file_dir)
                  " has been opened successfully.", 5)
 
   call populate_param_data(iounit, filename, CS%param_data(i))
+  ! Increment the maximum line length, but always report values in blocks of 4 characters.
+  CS%max_line_len = max(CS%max_line_len, 4 + 4*(max_input_line_length(CS, i) - 1) / 4)
+  write (sub_string, '(i4.4)') CS%max_line_len
+  call MOM_mesg("open_param_file: Maximum input line length determined to be "//&
+                trim(adjustl(sub_string))//" characters.", 5)
 
   call read_param(CS,"SEND_LOG_TO_STDOUT",CS%log_to_stdout)
   call read_param(CS,"REPORT_UNUSED_PARAMS",CS%report_unused)
@@ -574,7 +583,7 @@ subroutine read_param_int(CS, varname, value, fail_if_missing)
   logical,      optional, intent(in) :: fail_if_missing !< If present and true, a fatal error occurs
                                          !! if this variable is not found in the parameter file
   ! Local variables
-  character(len=INPUT_STR_LENGTH) :: value_string(1)
+  character(len=CS%max_line_len) :: value_string(1)
   logical            :: found, defined
 
   call get_variable_line(CS, varname, found, defined, value_string)
@@ -606,7 +615,7 @@ subroutine read_param_int_array(CS, varname, value, fail_if_missing)
   logical,      optional, intent(in) :: fail_if_missing !< If present and true, a fatal error occurs
                                          !! if this variable is not found in the parameter file
   ! Local variables
-  character(len=INPUT_STR_LENGTH) :: value_string(1)
+  character(len=CS%max_line_len) :: value_string(1)
   logical            :: found, defined
 
   call get_variable_line(CS, varname, found, defined, value_string)
@@ -642,7 +651,7 @@ subroutine read_param_real(CS, varname, value, fail_if_missing, scale)
                                          !! by before it is returned.
 
   ! Local variables
-  character(len=INPUT_STR_LENGTH) :: value_string(1)
+  character(len=CS%max_line_len) :: value_string(1)
   logical            :: found, defined
 
   call get_variable_line(CS, varname, found, defined, value_string)
@@ -678,8 +687,8 @@ subroutine read_param_real_array(CS, varname, value, fail_if_missing, scale)
                                          !! by before it is returned.
 
   ! Local variables
-  character(len=INPUT_STR_LENGTH) :: value_string(1)
-  logical                         :: found, defined
+  character(len=CS%max_line_len) :: value_string(1)
+  logical                        :: found, defined
 
   call get_variable_line(CS, varname, found, defined, value_string)
   if (found .and. defined .and. (LEN_TRIM(value_string(1)) > 0)) then
@@ -713,7 +722,7 @@ subroutine read_param_char(CS, varname, value, fail_if_missing)
   logical,      optional, intent(in) :: fail_if_missing !< If present and true, a fatal error occurs
                                          !! if this variable is not found in the parameter file
   ! Local variables
-  character(len=INPUT_STR_LENGTH) :: value_string(1)
+  character(len=CS%max_line_len) :: value_string(1)
   logical            :: found, defined
 
   call get_variable_line(CS, varname, found, defined, value_string)
@@ -737,7 +746,7 @@ subroutine read_param_char_array(CS, varname, value, fail_if_missing)
                                          !! if this variable is not found in the parameter file
 
   ! Local variables
-  character(len=INPUT_STR_LENGTH) :: value_string(1), loc_string
+  character(len=CS%max_line_len) :: value_string(1), loc_string
   logical            :: found, defined
   integer            :: i, i_out
 
@@ -775,7 +784,7 @@ subroutine read_param_logical(CS, varname, value, fail_if_missing)
                                          !! if this variable is not found in the parameter file
 
   ! Local variables
-  character(len=INPUT_STR_LENGTH) :: value_string(1)
+  character(len=CS%max_line_len) :: value_string(1)
   logical            :: found, defined
 
   call get_variable_line(CS, varname, found, defined, value_string, paramIsLogical=.true.)
@@ -802,7 +811,7 @@ subroutine read_param_time(CS, varname, value, timeunit, fail_if_missing, date_f
                                          !! later be logged in the same format.
 
   ! Local variables
-  character(len=INPUT_STR_LENGTH) :: value_string(1)
+  character(len=CS%max_line_len) :: value_string(1)
   character(len=240) :: err_msg
   logical            :: found, defined
   real               :: real_time, time_unit
@@ -861,7 +870,7 @@ end subroutine read_param_time
 !> This function removes single and double quotes from a character string
 function strip_quotes(val_str)
   character(len=*) :: val_str !< The character string to work on
-  character(len=INPUT_STR_LENGTH) :: strip_quotes
+  character(len=len(val_str)) :: strip_quotes
   ! Local variables
   integer :: i
   strip_quotes = val_str
@@ -879,7 +888,69 @@ function strip_quotes(val_str)
   enddo
 end function strip_quotes
 
-!> This subtoutine extracts the contents of lines in the param_file_type that refer to
+!> This function returns the maximum number of characters in any input lines after they
+!! have been combined by any line continuation.
+function max_input_line_length(CS, pf_num) result(max_len)
+  type(param_file_type),  intent(in) :: CS      !< The control structure for the file_parser module,
+                                                !! it is also a structure to parse for run-time parameters
+  integer,      optional, intent(in) :: pf_num  !< If present, only work on a single file in the
+                                                !! param_file_type, or return 0 if this exceeds the
+                                                !! number of files in the param_file_type.
+  integer :: max_len !< The maximum number of characters in any input lines after they
+                     !! have been combined by any line continuation.
+
+  ! Local variables
+  character(len=FILENAME_LENGTH) :: filename
+  ! character(len=:), allocatable :: line
+  character :: last_char
+  integer :: ipf, ipf_s, ipf_e
+  integer :: last, last1, line_len, count, contBufSize
+  logical :: continuedLine
+
+  max_len = 0
+  ipf_s = 1 ; ipf_e = CS%nfiles
+  if (present(pf_num)) then
+    if (pf_num > CS%nfiles) return
+    ipf_s = pf_num ; ipf_e = pf_num
+  endif
+
+  paramfile_loop: do ipf = ipf_s, ipf_e
+    filename = CS%filename(ipf)
+    contBufSize = 0
+    continuedLine = .false.
+
+    ! Scan through each line of the file
+    do count = 1, CS%param_data(ipf)%num_lines
+      ! line = CS%param_data(ipf)%line(count)
+      last = len_trim(CS%param_data(ipf)%line(count))
+      last_char = " "
+      if (last > 0) last_char = CS%param_data(ipf)%line(count)(last:last)
+      ! Check if line ends in continuation character (either & or \)
+      ! Note achar(92) is a backslash
+      if (last_char == achar(92) .or. last_char == "&") then
+        contBufSize = contBufSize + last - 1
+        continuedLine = .true.
+        if (count==CS%param_data(ipf)%num_lines .and. is_root_pe()) &
+           call MOM_error(FATAL, "MOM_file_parser : the last line of the file ends in a"// &
+                 " continuation character but there are no more lines to read. "// &
+                 " Line: '"//trim(CS%param_data(ipf)%line(count)(:last))//"'"// &
+                 " in file "//trim(filename)//".")
+        cycle ! cycle inorder to append the next line of the file
+      elseif (continuedLine) then
+        ! If we reached this point then this is the end of line continuation
+        line_len = contBufSize + last
+        contBufSize = 0
+        continuedLine = .false.
+      else  ! This is a simple line with no continuation.
+        line_len = last
+      endif
+      max_len = max(max_len, line_len)
+    enddo ! CS%param_data(ipf)%num_lines
+  enddo paramfile_loop
+
+end function max_input_line_length
+
+!> This subroutine extracts the contents of lines in the param_file_type that refer to
 !! a named parameter.  The value_string that is returned must be interepreted in a way
 !! that depends on the type of this variable.
 subroutine get_variable_line(CS, varname, found, defined, value_string, paramIsLogical)
@@ -893,9 +964,9 @@ subroutine get_variable_line(CS, varname, found, defined, value_string, paramIsL
                                                 !! that can be simply defined without parsing a value_string.
 
   ! Local variables
-  character(len=INPUT_STR_LENGTH) :: val_str, lname, origLine
-  character(len=INPUT_STR_LENGTH) :: line, continuationBuffer, blockName
-  character(len=FILENAME_LENGTH)  :: filename
+  character(len=CS%max_line_len) :: val_str, lname, origLine
+  character(len=CS%max_line_len) :: line, continuationBuffer, blockName
+  character(len=FILENAME_LENGTH) :: filename
   integer            :: is, id, isd, isu, ise, iso, ipf
   integer            :: last, last1, ival, oval, max_vals, count, contBufSize
   character(len=52)  :: set
@@ -907,7 +978,7 @@ subroutine get_variable_line(CS, varname, found, defined, value_string, paramIsL
   logical, parameter :: requireNamedClose = .false.
   integer, parameter :: verbose = 1
   set = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
-  continuationBuffer = repeat(" ",INPUT_STR_LENGTH)
+  continuationBuffer = repeat(" ", CS%max_line_len)
   contBufSize = 0
 
   variableKindIsLogical=.false.
@@ -949,7 +1020,7 @@ subroutine get_variable_line(CS, varname, found, defined, value_string, paramIsL
         ! If we reached this point then this is the end of line continuation
         continuationBuffer(contBufSize+1:contBufSize+len_trim(line))=line(:last)
         line = continuationBuffer
-        continuationBuffer=repeat(" ",INPUT_STR_LENGTH) ! Clear for next use
+        continuationBuffer=repeat(" ",CS%max_line_len) ! Clear for next use
         contBufSize = 0
         continuedLine = .false.
         last = len_trim(line)
@@ -1173,8 +1244,8 @@ end subroutine get_variable_line
 
 !> Record that a line has been used to set a parameter
 subroutine flag_line_as_read(line_used, count)
-  logical, dimension(:), pointer :: line_used !< A structure indicating which lines have been read
-  integer,            intent(in) :: count !< The parameter on this line number has been read
+  logical, dimension(:), pointer    :: line_used !< A structure indicating which lines have been read
+  integer,               intent(in) :: count !< The parameter on this line number has been read
   line_used(count) = .true.
 end subroutine flag_line_as_read
 
