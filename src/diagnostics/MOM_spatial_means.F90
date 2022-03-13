@@ -25,89 +25,121 @@ public :: adjust_area_mean_to_zero
 contains
 
 !> Return the global area mean of a variable. This uses reproducing sums.
-function global_area_mean(var, G, scale)
+function global_area_mean(var, G, scale, tmp_scale)
   type(ocean_grid_type),             intent(in)  :: G    !< The ocean's grid structure
   real, dimension(SZI_(G), SZJ_(G)), intent(in)  :: var  !< The variable to average
   real,                    optional, intent(in)  :: scale !< A rescaling factor for the variable
-
-  real, dimension(SZI_(G), SZJ_(G))              :: tmpForSumming
+  real,                    optional, intent(in)  :: tmp_scale !< A temporary rescaling factor for the
+                                                         !! variable that is reversed in the return value
   real :: global_area_mean
 
+  ! Local variables
+  real, dimension(SZI_(G), SZJ_(G))              :: tmpForSumming
   real :: scalefac  ! An overall scaling factor for the areas and variable.
+  real :: temp_scale ! A temporary scaling factor.
   integer :: i, j, is, ie, js, je
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
 
-  scalefac = G%US%L_to_m**2 ; if (present(scale)) scalefac = G%US%L_to_m**2*scale
+  temp_scale = 1.0 ; if (present(tmp_scale)) temp_scale = tmp_scale
+  scalefac = G%US%L_to_m**2*temp_scale ; if (present(scale)) scalefac = scalefac * scale
 
   tmpForSumming(:,:) = 0.
   do j=js,je ; do i=is,ie
     tmpForSumming(i,j) = var(i,j) * (scalefac * G%areaT(i,j) * G%mask2dT(i,j))
   enddo ; enddo
+
   global_area_mean = reproducing_sum(tmpForSumming) * G%IareaT_global
+
+  if ((temp_scale /= 0.0) .and. (temp_scale /= 1.0)) &
+    global_area_mean = global_area_mean / temp_scale
 
 end function global_area_mean
 
 !> Return the global area mean of a variable. This uses reproducing sums.
-function global_area_mean_v(var, G)
+function global_area_mean_v(var, G, tmp_scale)
   type(ocean_grid_type),             intent(in)  :: G    !< The ocean's grid structure
-  real, dimension(SZI_(G), SZJB_(G)), intent(in)  :: var  !< The variable to average
+  real, dimension(SZI_(G),SZJB_(G)), intent(in)  :: var  !< The variable to average
+  real,                    optional, intent(in)  :: tmp_scale !< A temporary rescaling factor for the
+                                                         !! variable that is reversed in the return value
 
-  real, dimension(SZI_(G), SZJ_(G))              :: tmpForSumming
   real :: global_area_mean_v
+
+  ! Local variables
+  real, dimension(SZI_(G), SZJ_(G))              :: tmpForSumming
+  real :: scalefac   ! An overall scaling factor for the areas and variable.
+  real :: temp_scale ! A temporary scaling factor
   integer :: i, j, is, ie, js, je, isB, ieB, jsB, jeB
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   isB = G%iscB ; ieB = G%iecB ; jsB = G%jscB ; jeB = G%jecB
 
+  temp_scale = 1.0 ; if (present(tmp_scale)) temp_scale = tmp_scale
+  scalefac = G%US%L_to_m**2*temp_scale
+
   tmpForSumming(:,:) = 0.
   do J=js,je ; do i=is,ie
-    tmpForSumming(i,j) = G%areaT(i,j) * (var(i,J) * G%mask2dCv(i,J) + &
-                                         var(i,J-1) * G%mask2dCv(i,J-1)) &
-                         / max(1.e-20,G%mask2dCv(i,J)+G%mask2dCv(i,J-1))
+    tmpForSumming(i,j) = G%areaT(i,j) * scalefac * &
+             (var(i,J) * G%mask2dCv(i,J) + var(i,J-1) * G%mask2dCv(i,J-1)) / &
+             max(1.e-20, G%mask2dCv(i,J)+G%mask2dCv(i,J-1))
   enddo ; enddo
   global_area_mean_v = reproducing_sum(tmpForSumming) * G%IareaT_global
+  if ((temp_scale /= 0.0) .and. (temp_scale /= 1.0)) &
+    global_area_mean_v = global_area_mean_v / temp_scale
 
 end function global_area_mean_v
 
 !> Return the global area mean of a variable on U grid. This uses reproducing sums.
-function global_area_mean_u(var, G)
+function global_area_mean_u(var, G, tmp_scale)
   type(ocean_grid_type),             intent(in)  :: G    !< The ocean's grid structure
-  real, dimension(SZIB_(G), SZJ_(G)), intent(in)  :: var  !< The variable to average
+  real, dimension(SZIB_(G),SZJ_(G)), intent(in)  :: var  !< The variable to average
+  real,                    optional, intent(in)  :: tmp_scale !< A temporary rescaling factor for the
+                                                         !! variable that is reversed in the return value
+  real :: global_area_mean_u
 
   real, dimension(SZI_(G), SZJ_(G))              :: tmpForSumming
-  real :: global_area_mean_u
+  real :: scalefac   ! An overall scaling factor for the areas and variable.
+  real :: temp_scale ! A temporary scaling factor
   integer :: i, j, is, ie, js, je, isB, ieB, jsB, jeB
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   isB = G%iscB ; ieB = G%iecB ; jsB = G%jscB ; jeB = G%jecB
 
+  temp_scale = 1.0 ; if (present(tmp_scale)) temp_scale = tmp_scale
+  scalefac = G%US%L_to_m**2*temp_scale
+
   tmpForSumming(:,:) = 0.
   do j=js,je ; do i=is,ie
-    tmpForSumming(i,j) = G%areaT(i,j) * (var(I,j) * G%mask2dCu(I,j) + &
-                                         var(I-1,j) * G%mask2dCu(I-1,j)) &
-                         / max(1.e-20,G%mask2dCu(I,j)+G%mask2dCu(I-1,j))
+    tmpForSumming(i,j) = G%areaT(i,j) * scalefac * &
+             (var(I,j) * G%mask2dCu(I,j) + var(I-1,j) * G%mask2dCu(I-1,j)) / &
+             max(1.e-20, G%mask2dCu(I,j)+G%mask2dCu(I-1,j))
   enddo ; enddo
   global_area_mean_u = reproducing_sum(tmpForSumming) * G%IareaT_global
+  if ((temp_scale /= 0.0) .and. (temp_scale /= 1.0)) &
+    global_area_mean_u = global_area_mean_u / temp_scale
 
 end function global_area_mean_u
 
 !> Return the global area integral of a variable, by default using the masked area from the
 !! grid, but an alternate could be used instead.  This uses reproducing sums.
-function global_area_integral(var, G, scale, area)
+function global_area_integral(var, G, scale, area, tmp_scale)
   type(ocean_grid_type),            intent(in)  :: G     !< The ocean's grid structure
   real, dimension(SZI_(G),SZJ_(G)), intent(in)  :: var   !< The variable to integrate
   real,                   optional, intent(in)  :: scale !< A rescaling factor for the variable
   real, dimension(SZI_(G),SZJ_(G)), optional, intent(in) :: area !< The alternate area to use, including
-                                                          !! any required masking [L2 ~> m2].
+                                                         !! any required masking [L2 ~> m2].
+  real,                   optional, intent(in)  :: tmp_scale !< A temporary rescaling factor for the
+                                                         !! variable that is reversed in the return value
   real :: global_area_integral !< The returned area integral, usually in the units of var times [m2].
 
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G)) :: tmpForSumming
   real :: scalefac  ! An overall scaling factor for the areas and variable.
+  real :: temp_scale ! A temporary scaling factor.
   integer :: i, j, is, ie, js, je
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
 
-  scalefac = G%US%L_to_m**2 ; if (present(scale)) scalefac = G%US%L_to_m**2*scale
+  temp_scale = 1.0 ; if (present(tmp_scale)) temp_scale = tmp_scale
+  scalefac = G%US%L_to_m**2*temp_scale ; if (present(scale)) scalefac = scalefac * scale
 
   tmpForSumming(:,:) = 0.
   if (present(area)) then
@@ -119,27 +151,35 @@ function global_area_integral(var, G, scale, area)
       tmpForSumming(i,j) = var(i,j) * (scalefac * G%areaT(i,j) * G%mask2dT(i,j))
     enddo ; enddo
   endif
+
   global_area_integral = reproducing_sum(tmpForSumming)
+
+  if ((temp_scale /= 0.0) .and. (temp_scale /= 1.0)) &
+    global_area_integral = global_area_integral / temp_scale
 
 end function global_area_integral
 
 !> Return the layerwise global thickness-weighted mean of a variable. This uses reproducing sums.
-function global_layer_mean(var, h, G, GV, scale)
+function global_layer_mean(var, h, G, GV, scale, tmp_scale)
   type(ocean_grid_type),                     intent(in)  :: G    !< The ocean's grid structure
   type(verticalGrid_type),                   intent(in)  :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)  :: var  !< The variable to average
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)  :: h    !< Layer thicknesses [H ~> m or kg m-2]
   real,                            optional, intent(in)  :: scale !< A rescaling factor for the variable
+  real,                            optional, intent(in)  :: tmp_scale !< A temporary rescaling factor for the
+                                                         !! variable that is reversed in the return value
   real, dimension(SZK_(GV))                   :: global_layer_mean
 
   real, dimension(G%isc:G%iec, G%jsc:G%jec, SZK_(GV)) :: tmpForSumming, weight
   type(EFP_type), dimension(2*SZK_(GV)) :: laysums
   real, dimension(SZK_(GV)) :: global_temp_scalar, global_weight_scalar
+  real :: temp_scale ! A temporary scaling factor
   real :: scalefac  ! A scaling factor for the variable.
   integer :: i, j, k, is, ie, js, je, nz
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
-  scalefac = 1.0 ; if (present(scale)) scalefac = scale
+  temp_scale = 1.0 ; if (present(tmp_scale)) temp_scale = tmp_scale
+  scalefac = temp_scale ; if (present(scale)) scalefac = scale * temp_scale
   tmpForSumming(:,:,:) = 0. ; weight(:,:,:) = 0.
 
   do k=1,nz ; do j=js,je ; do i=is,ie
@@ -152,13 +192,13 @@ function global_layer_mean(var, h, G, GV, scale)
   call EFP_sum_across_PEs(laysums, 2*nz)
 
   do k=1,nz
-    global_layer_mean(k) = EFP_to_real(laysums(k)) / EFP_to_real(laysums(nz+k))
+    global_layer_mean(k) = EFP_to_real(laysums(k)) / (temp_scale * EFP_to_real(laysums(nz+k)))
   enddo
 
 end function global_layer_mean
 
 !> Find the global thickness-weighted mean of a variable. This uses reproducing sums.
-function global_volume_mean(var, h, G, GV, scale)
+function global_volume_mean(var, h, G, GV, scale, tmp_scale)
   type(ocean_grid_type),   intent(in)  :: G    !< The ocean's grid structure
   type(verticalGrid_type), intent(in)  :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
@@ -166,15 +206,19 @@ function global_volume_mean(var, h, G, GV, scale)
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(in)  :: h    !< Layer thicknesses [H ~> m or kg m-2]
   real,          optional, intent(in)  :: scale !< A rescaling factor for the variable
+  real,          optional, intent(in)  :: tmp_scale !< A temporary rescaling factor for the
+                                               !! variable that is reversed in the return value
   real :: global_volume_mean  !< The thickness-weighted average of var
 
+  real :: temp_scale ! A temporary scaling factor
   real :: scalefac  ! A scaling factor for the variable.
   real :: weight_here
   real, dimension(SZI_(G), SZJ_(G)) :: tmpForSumming, sum_weight
   integer :: i, j, k, is, ie, js, je, nz
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
-  scalefac = 1.0 ; if (present(scale)) scalefac = scale
+  temp_scale = 1.0 ; if (present(tmp_scale)) temp_scale = tmp_scale
+  scalefac = temp_scale ; if (present(scale)) scalefac = temp_scale * scale
   tmpForSumming(:,:) = 0. ; sum_weight(:,:) = 0.
 
   do k=1,nz ; do j=js,je ; do i=is,ie
@@ -183,13 +227,13 @@ function global_volume_mean(var, h, G, GV, scale)
     sum_weight(i,j) = sum_weight(i,j) + weight_here
   enddo ; enddo ; enddo
   global_volume_mean = (reproducing_sum(tmpForSumming)) / &
-                       (reproducing_sum(sum_weight))
+                       (temp_scale * reproducing_sum(sum_weight))
 
 end function global_volume_mean
 
 
 !> Find the global mass-weighted integral of a variable. This uses reproducing sums.
-function global_mass_integral(h, G, GV, var, on_PE_only, scale)
+function global_mass_integral(h, G, GV, var, on_PE_only, scale, tmp_scale)
   type(ocean_grid_type),   intent(in)  :: G    !< The ocean's grid structure
   type(verticalGrid_type), intent(in)  :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
@@ -199,16 +243,20 @@ function global_mass_integral(h, G, GV, var, on_PE_only, scale)
   logical,       optional, intent(in)  :: on_PE_only  !< If present and true, the sum is only
                                 !! done on the local PE, and it is _not_ order invariant.
   real,          optional, intent(in)  :: scale !< A rescaling factor for the variable
+  real,          optional, intent(in)  :: tmp_scale !< A temporary rescaling factor for the
+                                               !! variable that is reversed in the return value
   real :: global_mass_integral  !< The mass-weighted integral of var (or 1) in
                                 !! kg times the units of var
 
   real, dimension(SZI_(G), SZJ_(G)) :: tmpForSumming
   real :: scalefac  ! An overall scaling factor for the areas and variable.
+  real :: temp_scale ! A temporary scaling factor.
   logical :: global_sum
   integer :: i, j, k, is, ie, js, je, nz
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
-  scalefac = G%US%L_to_m**2 ; if (present(scale)) scalefac = G%US%L_to_m**2*scale
+  temp_scale = 1.0 ; if (present(tmp_scale)) temp_scale = tmp_scale
+  scalefac = G%US%L_to_m**2*temp_scale ; if (present(scale)) scalefac = scalefac * scale
   tmpForSumming(:,:) = 0.0
 
   if (present(var)) then
@@ -231,6 +279,9 @@ function global_mass_integral(h, G, GV, var, on_PE_only, scale)
       global_mass_integral = global_mass_integral + tmpForSumming(i,j)
     enddo ; enddo
   endif
+
+  if ((temp_scale /= 0.0) .and. (temp_scale /= 1.0)) &
+    global_mass_integral = global_mass_integral / temp_scale
 
 end function global_mass_integral
 
