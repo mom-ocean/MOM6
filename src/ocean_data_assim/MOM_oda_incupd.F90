@@ -142,7 +142,7 @@ subroutine initialize_oda_incupd( G, GV, US, param_file, CS, data_h,nz_data, res
   real    :: nhours_incupd, dt, dt_therm
   type(vardesc) :: vd
   character(len=256) :: mesg
-  character(len=10)  :: remapScheme
+  character(len=64)  :: remapScheme
   if (.not.associated(CS)) then
     call MOM_error(WARNING, "initialize_oda_incupd called without an associated "// &
                             "control structure.")

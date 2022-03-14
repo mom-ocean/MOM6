@@ -753,7 +753,8 @@ end subroutine end_regridding
 
 !------------------------------------------------------------------------------
 !> Dispatching regridding routine for orchestrating regridding & remapping
-subroutine regridding_main( remapCS, CS, G, GV, h, tv, h_new, dzInterface, frac_shelf_h, conv_adjust)
+subroutine regridding_main( remapCS, CS, G, GV, h, tv, h_new, dzInterface, frac_shelf_h, &
+                            conv_adjust, PCM_cell)
 !------------------------------------------------------------------------------
 ! This routine takes care of (1) building a new grid and (2) remapping between
 ! the old grid and the new grid. The creation of the new grid can be based
@@ -783,15 +784,16 @@ subroutine regridding_main( remapCS, CS, G, GV, h, tv, h_new, dzInterface, frac_
   real, dimension(SZI_(G),SZJ_(G),CS%nk+1),   intent(inout) :: dzInterface !< The change in position of each interface
   real, dimension(SZI_(G),SZJ_(G)), optional, intent(in   ) :: frac_shelf_h !< Fractional ice shelf coverage
   logical,                          optional, intent(in   ) :: conv_adjust !< If true, do convective adjustment
+  logical, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
+                                    optional, intent(out  ) :: PCM_cell !< Use PCM remapping in cells where true
+
   ! Local variables
   real :: trickGnuCompiler
-  logical :: use_ice_shelf
   logical :: do_convective_adjustment
 
   do_convective_adjustment = .true.
   if (present(conv_adjust)) do_convective_adjustment = conv_adjust
-
-  use_ice_shelf = present(frac_shelf_h)
+  if (present(PCM_cell)) PCM_cell(:,:,:) = .false.
 
   select case ( CS%regridding_scheme )
 

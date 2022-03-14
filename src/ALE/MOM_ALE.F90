@@ -380,6 +380,7 @@ subroutine ALE_main( G, GV, US, h, u, v, tv, Reg, CS, OBC, dt, frac_shelf_h)
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1) :: dzRegrid ! The change in grid interface positions
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1) :: eta_preale
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: h_new ! New 3D grid obtained after last time step [H ~> m or kg m-2]
+  logical :: PCM_cell(SZI_(G),SZJ_(G),SZK_(GV)) !< If true, PCM remapping should be used in a cell.
   integer :: nk, i, j, k, isc, iec, jsc, jec, ntr
 
   nk = GV%ke; isc = G%isc; iec = G%iec; jsc = G%jsc; jec = G%jec
@@ -405,7 +406,7 @@ subroutine ALE_main( G, GV, US, h, u, v, tv, Reg, CS, OBC, dt, frac_shelf_h)
   ! Build new grid. The new grid is stored in h_new. The old grid is h.
   ! Both are needed for the subsequent remapping of variables.
   call regridding_main( CS%remapCS, CS%regridCS, G, GV, h, tv, h_new, dzRegrid, &
-                        frac_shelf_h )
+                        frac_shelf_h, PCM_cell=PCM_cell)
 
   call check_grid( G, GV, h, 0. )
 
@@ -419,7 +420,7 @@ subroutine ALE_main( G, GV, US, h, u, v, tv, Reg, CS, OBC, dt, frac_shelf_h)
 
   ! Remap all variables from old grid h onto new grid h_new
   call remap_all_state_vars( CS, G, GV, h, h_new, Reg, OBC, dzRegrid, u, v, &
-                             CS%show_call_tree, dt )
+                             CS%show_call_tree, dt, PCM_cell=PCM_cell )
 
   if (CS%show_call_tree) call callTree_waypoint("state remapped (ALE_main)")
 
@@ -776,7 +777,7 @@ end subroutine ALE_regrid_accelerated
 !! remap initial conditions to the model grid.  It is also called during a
 !! time step to update the state.
 subroutine remap_all_state_vars(CS, G, GV, h_old, h_new, Reg, OBC, &
-                                dzInterface, u, v, debug, dt )
+                                dzInterface, u, v, debug, dt, PCM_cell)
   type(ALE_CS),                              intent(in)    :: CS           !< ALE control structure
   type(ocean_grid_type),                     intent(in)    :: G            !< Ocean grid structure
   type(verticalGrid_type),                   intent(in)    :: GV           !< Ocean vertical grid structure
@@ -795,6 +796,8 @@ subroutine remap_all_state_vars(CS, G, GV, h_old, h_new, Reg, OBC, &
                                    optional, intent(inout) :: v      !< Meridional velocity [L T-1 ~> m s-1]
   logical,                         optional, intent(in)    :: debug  !< If true, show the call tree
   real,                            optional, intent(in)    :: dt     !< time step for diagnostics [T ~> s]
+  logical, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
+                                   optional, intent(in)    :: PCM_cell !< Use PCM remapping in cells where true
 
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G)) :: h_tot  ! The vertically summed thicknesses [H ~> m or kg m-2]
@@ -861,8 +864,14 @@ subroutine remap_all_state_vars(CS, G, GV, h_old, h_new, Reg, OBC, &
         ! Build the start and final grids
         h1(:) = h_old(i,j,:)
         h2(:) = h_new(i,j,:)
-        call remapping_core_h(CS%remapCS, nz, h1, Tr%t(i,j,:), nz, h2, tr_column, &
-                              h_neglect, h_neglect_edge)
+        if (present(PCM_cell)) then
+          PCM(:) = PCM_cell(i,j,:)
+          call remapping_core_h(CS%remapCS, nz, h1, Tr%t(i,j,:), nz, h2, tr_column, &
+                                h_neglect, h_neglect_edge, PCM_cell=PCM)
+        else
+          call remapping_core_h(CS%remapCS, nz, h1, Tr%t(i,j,:), nz, h2, tr_column, &
+                                h_neglect, h_neglect_edge)
+        endif
 
         ! Intermediate steps for tendency of tracer concentration and tracer content.
         if (present(dt)) then
