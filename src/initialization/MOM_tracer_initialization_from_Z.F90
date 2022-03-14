@@ -58,7 +58,7 @@ subroutine MOM_initialize_tracer_from_Z(h, tr, G, GV, US, PF, src_file, src_var_
   character(len=200) :: mesg
   real               :: convert
   integer            :: recnum
-  character(len=10)  :: remapScheme
+  character(len=64)  :: remapScheme
   logical            :: homog,useALE
 
   ! This include declares and sets the variable "version".

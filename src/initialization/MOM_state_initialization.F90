@@ -2450,7 +2450,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, depth_tot, G, GV, US, PF, just
                                    ! extrapolating the densities at the bottom of unstable profiles
                                    ! from data when finding the initial interface locations in
                                    ! layered mode from a dataset of T and S.
-  character(len=10) :: remappingScheme
+  character(len=64) :: remappingScheme
   real :: tempAvg, saltAvg
   integer :: nPoints, ans
   integer :: id_clock_routine, id_clock_read, id_clock_interp, id_clock_fill, id_clock_ALE

@@ -360,8 +360,8 @@ subroutine open_boundary_config(G, US, param_file, OBC)
   character(len=128) :: inputdir
   logical :: answers_2018, default_2018_answers
   logical :: check_reconstruction, check_remapping, force_bounds_in_subcell
-  character(len=32)  :: remappingScheme
-! This include declares and sets the variable "version".
+  character(len=64)  :: remappingScheme
+  ! This include declares and sets the variable "version".
 # include "version_variable.h"
 
   allocate(OBC)
