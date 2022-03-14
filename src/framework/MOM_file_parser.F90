@@ -32,11 +32,17 @@ logical, parameter :: complete_doc_default = .true.
 logical, parameter :: minimal_doc_default = .true.
 !>@}
 
+
+!> A simple type to allow lines in an array to be allocated with variable sizes.
+type, private :: file_line_type ; private
+  character(len=:), allocatable :: line !< An allocatable line with content
+end type file_line_type
+
 !> The valid lines extracted from an input parameter file without comments
 type, private :: file_data_type ; private
   integer :: num_lines = 0 !< The number of lines in this type
-  character(len=INPUT_STR_LENGTH), pointer, dimension(:) :: line => NULL() !< The line content
-  logical,                         pointer, dimension(:) :: line_used => NULL() !< If true, the line has been read
+  type(file_line_type), allocatable, dimension(:) :: fln !< Lines with the input content.
+  logical,                  pointer, dimension(:) :: line_used => NULL() !< If true, the line has been read
 end type file_data_type
 
 !> A link in the list of variables that have already had override warnings issued
@@ -264,7 +270,8 @@ subroutine close_param_file(CS, quiet_close, component)
       CS%iounit(i) = -1
       CS%filename(i) = ''
       CS%NetCDF_file(i) = .false.
-      deallocate (CS%param_data(i)%line)
+      do n=1,CS%param_data(i)%num_lines ; deallocate(CS%param_data(i)%fln(n)%line) ; enddo
+      deallocate (CS%param_data(i)%fln)
       deallocate (CS%param_data(i)%line_used)
     enddo
     CS%log_open = .false.
@@ -322,7 +329,7 @@ subroutine close_param_file(CS, quiet_close, component)
           num_unused = num_unused + 1
           if (CS%report_unused) &
             call MOM_error(WARNING, "Unused line in "//trim(CS%filename(i))// &
-                            " : "//trim(CS%param_data(i)%line(n)))
+                            " : "//trim(CS%param_data(i)%fln(n)%line))
         endif
       enddo
     endif
@@ -333,7 +340,8 @@ subroutine close_param_file(CS, quiet_close, component)
     CS%iounit(i) = -1
     CS%filename(i) = ''
     CS%NetCDF_file(i) = .false.
-    deallocate (CS%param_data(i)%line)
+    do n=1,CS%param_data(i)%num_lines ; deallocate(CS%param_data(i)%fln(n)%line) ; enddo
+    deallocate (CS%param_data(i)%fln)
     deallocate (CS%param_data(i)%line_used)
   enddo
   deallocate(CS%blockName)
@@ -356,13 +364,11 @@ subroutine populate_param_data(iounit, filename, param_data)
 
   ! Local variables
   character(len=INPUT_STR_LENGTH) :: line
-  integer :: num_lines
+  character(len=INPUT_STR_LENGTH), allocatable, dimension(:) :: lines_in
+  integer :: n, num_lines
   logical :: inMultiLineComment
 
   ! Find the number of keyword lines in a parameter file
-  ! Allocate the space to hold the lines in param_data%line
-  ! Populate param_data%line with the keyword lines from parameter file
-
   if (all_PEs_read .or. is_root_pe()) then
     ! rewind the parameter file
     rewind(iounit)
@@ -386,7 +392,6 @@ subroutine populate_param_data(iounit, filename, param_data)
       call MOM_error(FATAL, 'MOM_file_parser : A C-style multi-line comment '// &
                       '(/* ... */) was not closed before the end of '//trim(filename))
 
-    ! allocate space to hold contents of the parameter file
     param_data%num_lines = num_lines
   endif  ! (is_root_pe())
 
@@ -397,17 +402,15 @@ subroutine populate_param_data(iounit, filename, param_data)
 
   ! Set up the space for storing the actual lines.
   num_lines = param_data%num_lines
-  allocate (param_data%line(num_lines))
-  allocate (param_data%line_used(num_lines))
-  param_data%line(:) = ' '
-  param_data%line_used(:) = .false.
+  allocate (lines_in(num_lines))
+  lines_in(:) = ' '
 
   ! Read the actual lines.
   if (all_PEs_read .or. is_root_pe()) then
     ! rewind the parameter file
     rewind(iounit)
 
-    ! Populate param_data%line
+    ! Populate param_data%fln%line
     num_lines = 0
     do while(.true.)
       read(iounit, '(a)', end=18) line
@@ -419,7 +422,7 @@ subroutine populate_param_data(iounit, filename, param_data)
           line = removeComments(line)
           line = simplifyWhiteSpace(line(:len_trim(line)))
           num_lines = num_lines + 1
-          param_data%line(num_lines) = line
+          lines_in(num_lines) = line
         endif
         if (openMultiLineComment(line)) inMultiLineComment=.true.
       endif
@@ -431,10 +434,22 @@ subroutine populate_param_data(iounit, filename, param_data)
         // 'reading of '//trim(filename))
   endif  ! (is_root_pe())
 
-  ! Broadcast the populated array param_data%line
+  ! Broadcast the populated array lines_in
   if (.not. all_PEs_read) then
-    call broadcast(param_data%line, INPUT_STR_LENGTH, root_pe())
+    call broadcast(lines_in, INPUT_STR_LENGTH, root_pe())
   endif
+
+  ! Allocate space to hold contents of the parameter file, including the lines in param_data%fln
+  allocate(param_data%fln(num_lines))
+  allocate(param_data%line_used(num_lines))
+  param_data%line_used(:) = .false.
+  ! Populate param_data%fln%line with the keyword lines from parameter file
+  do n=1,num_lines
+    param_data%fln(n)%line = lines_in(n)
+  enddo
+
+  deallocate(lines_in)
+
 end subroutine populate_param_data
 
 
@@ -921,10 +936,10 @@ function max_input_line_length(CS, pf_num) result(max_len)
 
     ! Scan through each line of the file
     do count = 1, CS%param_data(ipf)%num_lines
-      ! line = CS%param_data(ipf)%line(count)
-      last = len_trim(CS%param_data(ipf)%line(count))
+      ! line = CS%param_data(ipf)%fln(count)%line
+      last = len_trim(CS%param_data(ipf)%fln(count)%line)
       last_char = " "
-      if (last > 0) last_char = CS%param_data(ipf)%line(count)(last:last)
+      if (last > 0) last_char = CS%param_data(ipf)%fln(count)%line(last:last)
       ! Check if line ends in continuation character (either & or \)
       ! Note achar(92) is a backslash
       if (last_char == achar(92) .or. last_char == "&") then
@@ -933,7 +948,7 @@ function max_input_line_length(CS, pf_num) result(max_len)
         if (count==CS%param_data(ipf)%num_lines .and. is_root_pe()) &
            call MOM_error(FATAL, "MOM_file_parser : the last line of the file ends in a"// &
                  " continuation character but there are no more lines to read. "// &
-                 " Line: '"//trim(CS%param_data(ipf)%line(count)(:last))//"'"// &
+                 " Line: '"//trim(CS%param_data(ipf)%fln(count)%line(:last))//"'"// &
                  " in file "//trim(filename)//".")
         cycle ! cycle inorder to append the next line of the file
       elseif (continuedLine) then
@@ -999,7 +1014,7 @@ subroutine get_variable_line(CS, varname, found, defined, value_string, paramIsL
 
     ! Scan through each line of the file
     do count = 1, CS%param_data(ipf)%num_lines
-      line = CS%param_data(ipf)%line(count)
+      line = CS%param_data(ipf)%fln(count)%line
       last = len_trim(line)
 
       last1 = max(1,last)
