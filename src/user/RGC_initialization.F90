@@ -1,22 +1,9 @@
+!> Configures the models sponges for the Rotating Gravity Current (RGC) experiment.
 module RGC_initialization
+
+! This file is part of MOM6. See LICENSE.md for the license.
+
 !***********************************************************************
-!*                   GNU General Public License                        *
-!* This file is a part of MOM.                                         *
-!*                                                                     *
-!* MOM is free software; you can redistribute it and/or modify it and  *
-!* are expected to follow the terms of the GNU General Public License  *
-!* as published by the Free Software Foundation; either version 2 of   *
-!* the License, or (at your option) any later version.                 *
-!*                                                                     *
-!* MOM is distributed in the hope that it will be useful, but WITHOUT  *
-!* ANY WARRANTY; without even the implied warranty of MERCHANTABILITY  *
-!* or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public    *
-!* License for more details.                                           *
-!*                                                                     *
-!* For the full text of the GNU General Public License,                *
-!* write to: Free Software Foundation, Inc.,                           *
-!*           675 Mass Ave, Cambridge, MA 02139, USA.                   *
-!* or see:   http://www.gnu.org/licenses/gpl.html                      *
 !* By Elizabeth Yankovsky, May 2018                                    *
 !***********************************************************************
 
@@ -39,8 +26,12 @@ implicit none ; private
 
 #include <MOM_memory.h>
 
-character(len=40) :: mod = "RGC_initialization" ! This module's name.
 public RGC_initialize_sponges
+
+! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
+! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
+! their mks counterparts with notation like "a velocity [Z T-1 ~> m s-1]".  If the units
+! vary with the Boussinesq approximation, the Boussinesq variant is given first.
 
 contains
 
@@ -86,7 +77,7 @@ subroutine RGC_initialize_sponges(G, GV, US, tv, u, v, depth_tot, PF, use_ALE, C
   character(len=40) :: filename, state_file
   character(len=40) :: temp_var, salt_var, eta_var, inputdir, h_var
 
-  character(len=40)  :: mod = "RGC_initialize_sponges" ! This subroutine's name.
+  character(len=40)  :: mdl = "RGC_initialize_sponges" ! This subroutine's name.
   integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz, iscB, iecB, jscB, jecB
 
@@ -95,31 +86,31 @@ subroutine RGC_initialize_sponges(G, GV, US, tv, u, v, depth_tot, PF, use_ALE, C
   iscB = G%iscB ; iecB = G%iecB; jscB = G%jscB ; jecB = G%jecB
 
   ! The variable min_thickness is unused, and can probably be eliminated.
-  call get_param(PF, mod,"MIN_THICKNESS", min_thickness, 'Minimum layer thickness', &
+  call get_param(PF, mdl, "MIN_THICKNESS", min_thickness, 'Minimum layer thickness', &
                  units='m', default=1.e-3, scale=GV%m_to_H)
 
-  call get_param(PF, mod, "RGC_TNUDG", TNUDG, 'Nudging time scale for sponge layers', &
+  call get_param(PF, mdl, "RGC_TNUDG", TNUDG, 'Nudging time scale for sponge layers', &
                  units='days', default=0.0, scale=86400.0*US%s_to_T)
 
-  call get_param(PF, mod, "LENLAT", lenlat, &
+  call get_param(PF, mdl, "LENLAT", lenlat, &
                   "The latitudinal or y-direction length of the domain", &
                  fail_if_missing=.true., do_not_log=.true.)
 
-  call get_param(PF, mod, "LENLON", lenlon, &
+  call get_param(PF, mdl, "LENLON", lenlon, &
                   "The longitudinal or x-direction length of the domain", &
                  fail_if_missing=.true., do_not_log=.true.)
 
-  call get_param(PF, mod, "LENSPONGE", lensponge, &
+  call get_param(PF, mdl, "LENSPONGE", lensponge, &
                  "The length of the sponge layer (km).", &
                  default=10.0)
 
-  call get_param(PF, mod, "SPONGE_UV", sponge_uv, &
+  call get_param(PF, mdl, "SPONGE_UV", sponge_uv, &
                  "Nudge velocities (u and v) towards zero in the sponge layer.", &
                  default=.false., do_not_log=.true.)
 
   T(:,:,:) = 0.0 ; S(:,:,:) = 0.0 ; Idamp(:,:) = 0.0
 
-  call get_param(PF, mod, "MINIMUM_DEPTH", min_depth, &
+  call get_param(PF, mdl, "MINIMUM_DEPTH", min_depth, &
                  "The minimum depth of the ocean.", units="m", default=0.0, scale=US%m_to_Z)
 
   if (associated(CSp)) call MOM_error(FATAL, &
@@ -145,21 +136,21 @@ subroutine RGC_initialize_sponges(G, GV, US, tv, u, v, depth_tot, PF, use_ALE, C
 
 
   ! 1) Read eta, salt and temp from IC file
-  call get_param(PF, mod, "INPUTDIR", inputdir, default=".")
+  call get_param(PF, mdl, "INPUTDIR", inputdir, default=".")
   inputdir = slasher(inputdir)
-  call get_param(PF, mod, "RGC_SPONGE_FILE", state_file, &
+  call get_param(PF, mdl, "RGC_SPONGE_FILE", state_file, &
               "The name of the file with temps., salts. and interfaces to \n"// &
               " damp toward.", fail_if_missing=.true.)
-  call get_param(PF, mod, "SPONGE_PTEMP_VAR", temp_var, &
+  call get_param(PF, mdl, "SPONGE_PTEMP_VAR", temp_var, &
               "The name of the potential temperature variable in \n"//&
               "SPONGE_STATE_FILE.", default="Temp")
-  call get_param(PF, mod, "SPONGE_SALT_VAR", salt_var, &
+  call get_param(PF, mdl, "SPONGE_SALT_VAR", salt_var, &
               "The name of the salinity variable in \n"//&
               "SPONGE_STATE_FILE.", default="Salt")
-  call get_param(PF, mod, "SPONGE_ETA_VAR", eta_var, &
+  call get_param(PF, mdl, "SPONGE_ETA_VAR", eta_var, &
               "The name of the interface height variable in \n"//&
               "SPONGE_STATE_FILE.", default="eta")
-  call get_param(PF, mod, "SPONGE_H_VAR", h_var, &
+  call get_param(PF, mdl, "SPONGE_H_VAR", h_var, &
               "The name of the layer thickness variable in \n"//&
               "SPONGE_STATE_FILE.", default="h")
 
