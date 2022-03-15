@@ -364,9 +364,13 @@ subroutine populate_param_data(iounit, filename, param_data)
 
   ! Local variables
   character(len=INPUT_STR_LENGTH) :: line
-  character(len=INPUT_STR_LENGTH), allocatable, dimension(:) :: lines_in
-  integer :: n, num_lines
+  character(len=1), allocatable, dimension(:) :: char_buf
+  integer, allocatable, dimension(:) :: line_len ! The trimmed length of each processed input line
+  integer :: n, num_lines, total_chars, ch, rsc, llen, int_buf(2)
   logical :: inMultiLineComment
+
+  character(len=80) :: frag1, frag2
+
 
   ! Find the number of keyword lines in a parameter file
   if (all_PEs_read .or. is_root_pe()) then
@@ -375,6 +379,7 @@ subroutine populate_param_data(iounit, filename, param_data)
 
     ! count the number of valid entries in the parameter file
     num_lines = 0
+    total_chars = 0
     inMultiLineComment = .false.
     do while(.true.)
       read(iounit, '(a)', end=8) line
@@ -382,7 +387,12 @@ subroutine populate_param_data(iounit, filename, param_data)
       if (inMultiLineComment) then
         if (closeMultiLineComment(line)) inMultiLineComment=.false.
       else
-        if (lastNonCommentNonBlank(line)>0) num_lines = num_lines + 1
+        if (lastNonCommentNonBlank(line)>0) then
+          line = removeComments(line)
+          line = simplifyWhiteSpace(line(:len_trim(line)))
+          num_lines = num_lines + 1
+          total_chars = total_chars + len_trim(line)
+        endif
         if (openMultiLineComment(line)) inMultiLineComment=.true.
       endif
     enddo ! while (.true.)
@@ -392,18 +402,22 @@ subroutine populate_param_data(iounit, filename, param_data)
       call MOM_error(FATAL, 'MOM_file_parser : A C-style multi-line comment '// &
                       '(/* ... */) was not closed before the end of '//trim(filename))
 
-    param_data%num_lines = num_lines
+
+    int_buf(1) = num_lines
+    int_buf(2) = total_chars
   endif  ! (is_root_pe())
 
   ! Broadcast the number of valid entries in parameter file
   if (.not. all_PEs_read) then
-    call broadcast(param_data%num_lines, root_pe())
+    call broadcast(int_buf, 2, root_pe())
+    num_lines = int_buf(1)
+    total_chars = int_buf(2)
   endif
 
   ! Set up the space for storing the actual lines.
-  num_lines = param_data%num_lines
-  allocate (lines_in(num_lines))
-  lines_in(:) = ' '
+  param_data%num_lines = num_lines
+  allocate (line_len(num_lines), source=0)
+  allocate (char_buf(total_chars), source=" ")
 
   ! Read the actual lines.
   if (all_PEs_read .or. is_root_pe()) then
@@ -412,6 +426,7 @@ subroutine populate_param_data(iounit, filename, param_data)
 
     ! Populate param_data%fln%line
     num_lines = 0
+    rsc = 0
     do while(.true.)
       read(iounit, '(a)', end=18) line
       line = replaceTabs(line)
@@ -422,7 +437,10 @@ subroutine populate_param_data(iounit, filename, param_data)
           line = removeComments(line)
           line = simplifyWhiteSpace(line(:len_trim(line)))
           num_lines = num_lines + 1
-          lines_in(num_lines) = line
+          llen = len_trim(line)
+          line_len(num_lines) = llen
+          do ch=1,llen ; char_buf(rsc+ch)(1:1) = line(ch:ch) ; enddo
+          rsc = rsc + llen
         endif
         if (openMultiLineComment(line)) inMultiLineComment=.true.
       endif
@@ -434,9 +452,10 @@ subroutine populate_param_data(iounit, filename, param_data)
         // 'reading of '//trim(filename))
   endif  ! (is_root_pe())
 
-  ! Broadcast the populated array lines_in
+  ! Broadcast the populated arrays line_len and char_buf
   if (.not. all_PEs_read) then
-    call broadcast(lines_in, INPUT_STR_LENGTH, root_pe())
+    call broadcast(line_len, num_lines, root_pe())
+    call broadcast(char_buf(1:total_chars), 1, root_pe())
   endif
 
   ! Allocate space to hold contents of the parameter file, including the lines in param_data%fln
@@ -444,11 +463,15 @@ subroutine populate_param_data(iounit, filename, param_data)
   allocate(param_data%line_used(num_lines))
   param_data%line_used(:) = .false.
   ! Populate param_data%fln%line with the keyword lines from parameter file
+  rsc = 0
   do n=1,num_lines
-    param_data%fln(n)%line = lines_in(n)
+    line(1:INPUT_STR_LENGTH) = " "
+    do ch=1,line_len(n) ; line(ch:ch) = char_buf(rsc+ch)(1:1) ; enddo
+    param_data%fln(n)%line = trim(line)
+    rsc = rsc + line_len(n)
   enddo
 
-  deallocate(lines_in)
+  deallocate(char_buf) ; deallocate(line_len)
 
 end subroutine populate_param_data
 
