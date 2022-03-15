@@ -16,13 +16,14 @@ use MOM_string_functions, only : left_real, left_reals
 
 implicit none ; private
 
+! These are hard-coded limits that are used in the following code.  They should be set
+! generously enough not to impose any significant limitations.
 integer, parameter, public :: MAX_PARAM_FILES = 5 !< Maximum number of parameter files.
-integer, parameter :: INPUT_STR_LENGTH = 320 !< Maximum line length in parameter file.
-integer, parameter :: FILENAME_LENGTH = 200  !< Maximum number of characters in file names.
+integer, parameter :: INPUT_STR_LENGTH = 1024 !< Maximum line length in parameter file.  Lines that
+                                              !! are combined by ending in '\' or '&' can exceed
+                                              !! this limit after merging.
+integer, parameter :: FILENAME_LENGTH = 200   !< Maximum number of characters in file names.
 
-! The all_PEs_read option should be eliminated with post-riga shared code.
-logical :: all_PEs_read = .false. !< If true, all PEs read the input files
-                                  !! TODO: Eliminate this parameter
 
 !>@{ Default values for parameters
 logical, parameter :: report_unused_default = .true.
@@ -138,7 +139,6 @@ subroutine open_param_file(filename, CS, checkable, component, doc_file_dir)
   logical :: file_exists, unit_in_use, Netcdf_file, may_check, reopened_file
   integer :: ios, iounit, strlen, i
   character(len=240) :: doc_path
-  character(len=16)  :: sub_string
   type(parameter_block), pointer :: block => NULL()
 
   may_check = .true. ; if (present(checkable)) may_check = checkable
@@ -183,11 +183,10 @@ subroutine open_param_file(filename, CS, checkable, component, doc_file_dir)
   if (Netcdf_file) &
     call MOM_error(FATAL,"open_param_file: NetCDF files are not yet supported.")
 
-  if (all_PEs_read .or. is_root_pe()) then
+  if (is_root_pe()) then
     open(newunit=iounit, file=trim(filename), access='SEQUENTIAL', &
          form='FORMATTED', action='READ', position='REWIND', iostat=ios)
-    if (ios /= 0) call MOM_error(FATAL, "open_param_file: Error opening '"// &
-                                 trim(filename)//"'.")
+    if (ios /= 0) call MOM_error(FATAL, "open_param_file: Error opening '"//trim(filename)//"'.")
   else
     iounit = 1
   endif
@@ -202,15 +201,11 @@ subroutine open_param_file(filename, CS, checkable, component, doc_file_dir)
   if (associated(CS%blockName)) deallocate(CS%blockName)
   allocate(block) ; block%name = '' ; CS%blockName => block
 
-  call MOM_mesg("open_param_file: "// trim(filename)// &
-                 " has been opened successfully.", 5)
+  call MOM_mesg("open_param_file: "// trim(filename)//" has been opened successfully.", 5)
 
   call populate_param_data(iounit, filename, CS%param_data(i))
   ! Increment the maximum line length, but always report values in blocks of 4 characters.
   CS%max_line_len = max(CS%max_line_len, 4 + 4*(max_input_line_length(CS, i) - 1) / 4)
-  write (sub_string, '(i4.4)') CS%max_line_len
-  call MOM_mesg("open_param_file: Maximum input line length determined to be "//&
-                trim(adjustl(sub_string))//" characters.", 5)
 
   call read_param(CS,"SEND_LOG_TO_STDOUT",CS%log_to_stdout)
   call read_param(CS,"REPORT_UNUSED_PARAMS",CS%report_unused)
@@ -264,7 +259,7 @@ subroutine close_param_file(CS, quiet_close, component)
 
   if (present(quiet_close)) then ; if (quiet_close) then
     do i = 1, CS%nfiles
-      if (all_PEs_read .or. is_root_pe()) close(CS%iounit(i))
+      if (is_root_pe()) close(CS%iounit(i))
       call MOM_mesg("close_param_file: "// trim(CS%filename(i))// &
                     " has been closed successfully.", 5)
       CS%iounit(i) = -1
@@ -334,9 +329,8 @@ subroutine close_param_file(CS, quiet_close, component)
       enddo
     endif
 
-    if (all_PEs_read .or. is_root_pe()) close(CS%iounit(i))
-    call MOM_mesg("close_param_file: "// trim(CS%filename(i))// &
-                  " has been closed successfully.", 5)
+    if (is_root_pe()) close(CS%iounit(i))
+    call MOM_mesg("close_param_file: "// trim(CS%filename(i))//" has been closed successfully.", 5)
     CS%iounit(i) = -1
     CS%filename(i) = ''
     CS%NetCDF_file(i) = .false.
@@ -369,11 +363,8 @@ subroutine populate_param_data(iounit, filename, param_data)
   integer :: n, num_lines, total_chars, ch, rsc, llen, int_buf(2)
   logical :: inMultiLineComment
 
-  character(len=80) :: frag1, frag2
-
-
   ! Find the number of keyword lines in a parameter file
-  if (all_PEs_read .or. is_root_pe()) then
+  if (is_root_pe()) then
     ! rewind the parameter file
     rewind(iounit)
 
@@ -408,11 +399,9 @@ subroutine populate_param_data(iounit, filename, param_data)
   endif  ! (is_root_pe())
 
   ! Broadcast the number of valid entries in parameter file
-  if (.not. all_PEs_read) then
-    call broadcast(int_buf, 2, root_pe())
-    num_lines = int_buf(1)
-    total_chars = int_buf(2)
-  endif
+  call broadcast(int_buf, 2, root_pe())
+  num_lines = int_buf(1)
+  total_chars = int_buf(2)
 
   ! Set up the space for storing the actual lines.
   param_data%num_lines = num_lines
@@ -420,7 +409,7 @@ subroutine populate_param_data(iounit, filename, param_data)
   allocate (char_buf(total_chars), source=" ")
 
   ! Read the actual lines.
-  if (all_PEs_read .or. is_root_pe()) then
+  if (is_root_pe()) then
     ! rewind the parameter file
     rewind(iounit)
 
@@ -435,6 +424,10 @@ subroutine populate_param_data(iounit, filename, param_data)
       else
         if (lastNonCommentNonBlank(line)>0) then
           line = removeComments(line)
+          if ((len_trim(line) > 1000) .and. is_root_PE()) then
+            call MOM_error(WARNING, "MOM_file_parser: Consider using continuation to split up "//&
+                                    "the excessivley long parameter input line "//trim(line))
+          endif
           line = simplifyWhiteSpace(line(:len_trim(line)))
           num_lines = num_lines + 1
           llen = len_trim(line)
@@ -453,10 +446,8 @@ subroutine populate_param_data(iounit, filename, param_data)
   endif  ! (is_root_pe())
 
   ! Broadcast the populated arrays line_len and char_buf
-  if (.not. all_PEs_read) then
-    call broadcast(line_len, num_lines, root_pe())
-    call broadcast(char_buf(1:total_chars), 1, root_pe())
-  endif
+  call broadcast(line_len, num_lines, root_pe())
+  call broadcast(char_buf(1:total_chars), 1, root_pe())
 
   ! Allocate space to hold contents of the parameter file, including the lines in param_data%fln
   allocate(param_data%fln(num_lines))
@@ -767,8 +758,7 @@ subroutine read_param_char(CS, varname, value, fail_if_missing)
   if (found) then
     value = trim(strip_quotes(value_string(1)))
   elseif (present(fail_if_missing)) then ; if (fail_if_missing) then
-    call MOM_error(FATAL,'Unable to find variable '//trim(varname)// &
-                         ' in any input files.')
+    call MOM_error(FATAL, 'Unable to find variable '//trim(varname)//' in any input files.')
   endif ; endif
 
 end subroutine read_param_char
@@ -805,8 +795,7 @@ subroutine read_param_char_array(CS, varname, value, fail_if_missing)
     endif
     do i=i_out,SIZE(value) ; value(i) = " " ; enddo
   elseif (present(fail_if_missing)) then ; if (fail_if_missing) then
-    call MOM_error(FATAL,'Unable to find variable '//trim(varname)// &
-                         ' in any input files.')
+    call MOM_error(FATAL, 'Unable to find variable '//trim(varname)//' in any input files.')
   endif ; endif
 
 end subroutine read_param_char_array
@@ -829,8 +818,7 @@ subroutine read_param_logical(CS, varname, value, fail_if_missing)
   if (found) then
     value = defined
   elseif (present(fail_if_missing)) then ; if (fail_if_missing) then
-    call MOM_error(FATAL,'Unable to find variable '//trim(varname)// &
-                         ' in any input files.')
+    call MOM_error(FATAL, 'Unable to find variable '//trim(varname)//' in any input files.')
   endif ; endif
 end subroutine read_param_logical
 
@@ -891,11 +879,9 @@ subroutine read_param_time(CS, varname, value, timeunit, fail_if_missing, date_f
   else
     if (present(fail_if_missing)) then ; if (fail_if_missing) then
       if (.not.found) then
-        call MOM_error(FATAL,'Unable to find variable '//trim(varname)// &
-                             ' in any input files.')
+        call MOM_error(FATAL, 'Unable to find variable '//trim(varname)//' in any input files.')
       else
-        call MOM_error(FATAL,'Variable '//trim(varname)// &
-                             ' found but not set in input files.')
+        call MOM_error(FATAL, 'Variable '//trim(varname)//' found but not set in input files.')
       endif
     endif ; endif
   endif
@@ -907,7 +893,7 @@ end subroutine read_param_time
 
 !> This function removes single and double quotes from a character string
 function strip_quotes(val_str)
-  character(len=*) :: val_str !< The character string to work on
+  character(len=*), intent(in) :: val_str !< The character string to work on
   character(len=len(val_str)) :: strip_quotes
   ! Local variables
   integer :: i
@@ -939,7 +925,6 @@ function max_input_line_length(CS, pf_num) result(max_len)
 
   ! Local variables
   character(len=FILENAME_LENGTH) :: filename
-  ! character(len=:), allocatable :: line
   character :: last_char
   integer :: ipf, ipf_s, ipf_e
   integer :: last, last1, line_len, count, contBufSize
@@ -1003,7 +988,8 @@ subroutine get_variable_line(CS, varname, found, defined, value_string, paramIsL
 
   ! Local variables
   character(len=CS%max_line_len) :: val_str, lname, origLine
-  character(len=CS%max_line_len) :: line, continuationBuffer, blockName
+  character(len=CS%max_line_len) :: line, continuationBuffer
+  character(len=240) :: blockName
   character(len=FILENAME_LENGTH) :: filename
   integer            :: is, id, isd, isu, ise, iso, ipf
   integer            :: last, last1, ival, oval, max_vals, count, contBufSize
@@ -1407,7 +1393,7 @@ subroutine log_param_int_array(CS, modulename, varname, value, desc, &
   logical,          optional, intent(in) :: like_default !< If present and true, log this parameter as
                                          !! though it has the default value, even if there is no default.
 
-  character(len=1320) :: mesg
+  character(len=CS%max_line_len+120) :: mesg
   character(len=240) :: myunits
 
   write(mesg, '("  ",a," ",a,": ",A)') trim(modulename), trim(varname), trim(left_ints(value))
@@ -1549,16 +1535,16 @@ subroutine log_param_char(CS, modulename, varname, value, desc, units, &
   logical,          optional, intent(in) :: like_default !< If present and true, log this parameter as
                                          !! though it has the default value, even if there is no default.
 
-  character(len=1024) :: mesg, myunits
+  character(len=:), allocatable :: mesg
+  character(len=240) :: myunits
 
-  write(mesg, '("  ",a," ",a,": ",a)') &
-    trim(modulename), trim(varname), trim(value)
+  mesg = "  " // trim(modulename) // " " // trim(varname) // ": " // trim(value)
   if (is_root_pe()) then
     if (CS%log_open) write(CS%stdlog,'(a)') trim(mesg)
     if (CS%log_to_stdout) write(CS%stdout,'(a)') trim(mesg)
   endif
 
-  myunits=" "; if (present(units)) write(myunits(1:1024),'(A)') trim(units)
+  myunits=" "; if (present(units)) write(myunits(1:240),'(A)') trim(units)
   if (present(desc)) &
     call doc_param(CS%doc, varname, desc, myunits, value, default, &
                    layoutParam=layoutParam, debuggingParam=debuggingParam, like_default=like_default)
@@ -1936,7 +1922,7 @@ subroutine get_param_char_array(CS, modulename, varname, value, desc, units, &
   ! Local variables
   logical :: do_read, do_log
   integer :: i, len_tot, len_val
-  character(len=1024) :: cat_val
+  character(len=:), allocatable :: cat_val
 
   do_read = .true. ; if (present(do_not_read)) do_read = .not.do_not_read
   do_log  = .true. ; if (present(do_not_log))  do_log  = .not.do_not_log
@@ -1947,7 +1933,7 @@ subroutine get_param_char_array(CS, modulename, varname, value, desc, units, &
   endif
 
   if (do_log) then
-    cat_val = trim(value(1)); len_tot = len_trim(value(1))
+    cat_val = trim(value(1)) ; len_tot = len_trim(value(1))
     do i=2,size(value)
       len_val = len_trim(value(i))
       if ((len_val > 0) .and. (len_tot + len_val + 2 < 240)) then
