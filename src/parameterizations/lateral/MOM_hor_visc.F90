@@ -339,8 +339,6 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
                      ! points; these are first interpolated to u or v velocity
                      ! points where masks are applied [H ~> m or kg m-2].
   real :: h_arith_q  ! The arithmetic mean total thickness at q points [Z ~> m]
-  real :: h_harm_q   ! The harmonic mean total thickness at q points [Z ~> m]
-  real :: I_hq       ! The inverse of the arithmetic mean total thickness at q points [Z-1 ~> m-1]
   real :: I_GME_h0   ! The inverse of GME tapering scale [Z-1 ~> m-1]
   real :: h_neglect  ! thickness so small it can be lost in roundoff and so neglected [H ~> m or kg m-2]
   real :: h_neglect3 ! h_neglect^3 [H3 ~> m3 or kg3 m-6]
@@ -501,22 +499,21 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
 
     I_GME_h0 = 1.0 / CS%GME_h0
     do j=Jsq-1,Jeq+2 ; do i=Isq-1,Ieq+2
-      boundary_mask_h = (G%mask2dCu(I,j) * G%mask2dCv(i,J) * G%mask2dCu(I-1,j) * G%mask2dCv(i,J-1))
+      boundary_mask_h = (G%mask2dCu(I,j) * G%mask2dCu(I-1,j)) * (G%mask2dCv(i,J) * G%mask2dCv(i,J-1))
       grad_vel_mag_bt_h = G%mask2dT(I,J) * boundary_mask_h * (dudx_bt(i,j)**2 + dvdy_bt(i,j)**2 + &
             (0.25*((dvdx_bt(I,J)+dvdx_bt(I-1,J-1)) + (dvdx_bt(I,J-1)+dvdx_bt(I-1,J))))**2 + &
             (0.25*((dudy_bt(I,J)+dudy_bt(I-1,J-1)) + (dudy_bt(I,J-1)+dudy_bt(I-1,J))))**2)
       ! Probably the following test could be simplified to
       ! if (boundary_mask_h * G%mask2dT(I,J) > 0.0) then
       if (grad_vel_mag_bt_h > 0.0) then
-        GME_effic_h(i,j) = CS%GME_efficiency * G%mask2dT(I,J) * &
-            (MIN(htot(i,j) * I_GME_h0, 1.0)**2)
+        GME_effic_h(i,j) = CS%GME_efficiency * G%mask2dT(I,J) * (MIN(htot(i,j) * I_GME_h0, 1.0)**2)
       else
         GME_effic_h(i,j) = 0.0
       endif
     enddo ; enddo
 
     do J=js-2,je+1 ; do I=is-2,ie+1
-      boundary_mask_q = (G%mask2dCv(i,J) * G%mask2dCv(i+1,J) * G%mask2dCu(I,j) * G%mask2dCu(I,j+1))
+      boundary_mask_q = (G%mask2dCv(i,J) * G%mask2dCv(i+1,J)) * (G%mask2dCu(I,j) * G%mask2dCu(I,j+1))
       grad_vel_mag_bt_q = G%mask2dBu(I,J) * boundary_mask_q * (dvdx_bt(I,J)**2 + dudy_bt(I,J)**2 + &
             (0.25*((dudx_bt(i,j)+dudx_bt(i+1,j+1)) + (dudx_bt(i,j+1)+dudx_bt(i+1,j))))**2 + &
             (0.25*((dvdy_bt(i,j)+dvdy_bt(i+1,j+1)) + (dvdy_bt(i,j+1)+dvdy_bt(i+1,j))))**2)
@@ -524,12 +521,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
       ! if (boundary_mask_q * G%mask2dBu(I,J) > 0.0) then
       if (grad_vel_mag_bt_q > 0.0) then
         h_arith_q = 0.25 * ((htot(i,j) + htot(i+1,j+1)) + (htot(i+1,j) + htot(i,j+1)))
-        I_hq = 1.0 / h_arith_q
-        h_harm_q = 0.25 * h_arith_q * ((htot(i,j)*I_hq + htot(i+1,j+1)*I_hq) + &
-                                       (htot(i+1,j)*I_hq + htot(i,j+1)*I_hq))
-        !### The two expressions above looks like they simplify to just the arithmetic mean!
-        ! Why not just h_harm_q = 0.25 * ((htot(i,j) + htot(i+1,j+1)) + (htot(i+1,j) + htot(i,j+1))) ?
-        GME_effic_q(I,J) = CS%GME_efficiency * G%mask2dBu(I,J) * (MIN(h_harm_q * I_GME_h0, 1.0)**2)
+        GME_effic_q(I,J) = CS%GME_efficiency * G%mask2dBu(I,J) * (MIN(h_arith_q * I_GME_h0, 1.0)**2)
       else
         GME_effic_q(I,J) = 0.0
       endif
@@ -1536,11 +1528,10 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
                   + (v(i+1,J-1,k)-v(i,J-1,k))*G%IdxBu(I,J-1)) ) ) )
     enddo ; enddo ; endif
 
-    if (CS%use_GME) then
-      do j=js,je ; do i=is,ie
-        ! Diagnose   str_xx_GME*d_x u - str_yy_GME*d_y v + str_xy_GME*(d_y u + d_x v)
-        ! This is the old formulation that includes energy diffusion
-        FrictWork_GME(i,j,k) = GV%H_to_RZ * ( &
+    if (CS%use_GME) then ; do j=js,je ; do i=is,ie
+      ! Diagnose   str_xx_GME*d_x u - str_yy_GME*d_y v + str_xy_GME*(d_y u + d_x v)
+      ! This is the old formulation that includes energy diffusion
+      FrictWork_GME(i,j,k) = GV%H_to_RZ * ( &
               (str_xx_GME(i,j)*(u(I,j,k)-u(I-1,j,k))*G%IdxT(i,j)     &
              - str_xx_GME(i,j)*(v(i,J,k)-v(i,J-1,k))*G%IdyT(i,j))    &
             + 0.25*((str_xy_GME(I,J) *                               &
