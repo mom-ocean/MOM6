@@ -29,6 +29,7 @@ use MOM_open_boundary, only : update_OBC_segment_data
 !use MOM_open_boundary, only : set_3D_OBC_data
 use MOM_grid_initialize, only : initialize_masks, set_grid_metrics
 use MOM_restart, only : restore_state, is_new_run, MOM_restart_CS
+use MOM_restart, only : restart_registry_lock
 use MOM_sponge, only : set_up_sponge_field, set_up_sponge_ML_density
 use MOM_sponge, only : initialize_sponge, sponge_CS
 use MOM_ALE_sponge, only : set_up_ALE_sponge_field, set_up_ALE_sponge_vel_field
@@ -515,7 +516,9 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
                  "If true, oda incremental updates will be applied "//&
                  "everywhere in the domain.", default=.false.)
   if (use_oda_incupd) then
+    call restart_registry_lock(restart_CS, unlocked=.true.)
     call initialize_oda_incupd_fixed(G, GV, US, oda_incupd_CSp, restart_CS)
+    call restart_registry_lock(restart_CS)
   endif
 
   ! This is the end of the block of code that might have initialized fields
@@ -2463,7 +2466,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, depth_tot, G, GV, US, PF, just
                                    ! extrapolating the densities at the bottom of unstable profiles
                                    ! from data when finding the initial interface locations in
                                    ! layered mode from a dataset of T and S.
-  character(len=10) :: remappingScheme
+  character(len=64) :: remappingScheme
   real :: tempAvg, saltAvg
   integer :: nPoints, ans
   integer :: id_clock_routine, id_clock_read, id_clock_interp, id_clock_fill, id_clock_ALE

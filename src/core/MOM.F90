@@ -591,7 +591,7 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
     call homogenize_mech_forcing(forces, G, US, GV%Rho0, CS%update_ustar)
     ! Note the following computes the mean ustar as the mean of ustar rather than
     !  ustar of the mean of tau.
-    call homogenize_forcing(fluxes, G)
+    call homogenize_forcing(fluxes, G, GV, US)
     if (CS%update_ustar) then
       ! These calls corrects the ustar values
       call copy_common_forcing_fields(forces, fluxes, G)
