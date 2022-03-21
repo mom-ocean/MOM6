@@ -14,7 +14,6 @@ use MOM_error_handler, only : MOM_error, FATAL, WARNING, NOTE, MOM_mesg
 use MOM_file_parser,   only : read_param, get_param, log_version, param_file_type
 use MOM_grid,          only : ocean_grid_type
 use MOM_hor_index,     only : hor_index_type
-use MOM_io,            only : vardesc, var_desc
 use MOM_restart,       only : MOM_restart_CS, register_restart_field, query_initialized
 use MOM_unit_scaling,  only : unit_scale_type
 use MOM_variables,     only : vertvisc_type
@@ -1326,16 +1325,16 @@ logical function MEKE_init(Time, G, US, param_file, diag, CS, MEKE, restart_CS)
   ! Account for possible changes in dimensional scaling for variables that have been
   ! read from a restart file.
   I_T_rescale = 1.0
-  if ((US%s_to_T_restart /= 0.0) .and. (US%s_to_T_restart /= US%s_to_T)) &
-    I_T_rescale = US%s_to_T_restart / US%s_to_T
+  if ((US%s_to_T_restart /= 0.0) .and. (US%s_to_T_restart /= 1.0)) &
+    I_T_rescale = US%s_to_T_restart
   L_rescale = 1.0
-  if ((US%m_to_L_restart /= 0.0) .and. (US%m_to_L_restart /= US%m_to_L)) &
-    L_rescale = US%m_to_L / US%m_to_L_restart
+  if ((US%m_to_L_restart /= 0.0) .and. (US%m_to_L_restart /= 1.0)) &
+    L_rescale = 1.0 / US%m_to_L_restart
 
   if (L_rescale*I_T_rescale /= 1.0) then
     if (allocated(MEKE%MEKE)) then ; if (query_initialized(MEKE%MEKE, "MEKE_MEKE", restart_CS)) then
       do j=js,je ; do i=is,ie
-        MEKE%MEKE(i,j) = L_rescale*I_T_rescale * MEKE%MEKE(i,j)
+        MEKE%MEKE(i,j) = (L_rescale*I_T_rescale)**2 * MEKE%MEKE(i,j)
       enddo ; enddo
     endif ; endif
   endif
@@ -1380,15 +1379,17 @@ logical function MEKE_init(Time, G, US, param_file, diag, CS, MEKE, restart_CS)
 end function MEKE_init
 
 !> Allocates memory and register restart fields for the MOM_MEKE module.
-subroutine MEKE_alloc_register_restart(HI, param_file, MEKE, restart_CS)
+subroutine MEKE_alloc_register_restart(HI, US, param_file, MEKE, restart_CS)
 ! Arguments
   type(hor_index_type),  intent(in)    :: HI         !< Horizontal index structure
+  type(unit_scale_type), intent(in)    :: US         !< A dimensional unit scaling type
   type(param_file_type), intent(in)    :: param_file !< Parameter file parser structure.
   type(MEKE_type),       intent(inout) :: MEKE       !< MEKE fields
   type(MOM_restart_CS),  intent(inout) :: restart_CS !< MOM restart control struct
-! Local variables
-  type(vardesc) :: vd
-  real :: MEKE_GMcoeff, MEKE_FrCoeff, MEKE_GMECoeff, MEKE_KHCoeff, MEKE_viscCoeff_Ku, MEKE_viscCoeff_Au
+
+  ! Local variables
+  real :: MEKE_GMcoeff, MEKE_FrCoeff, MEKE_GMECoeff  ! Coefficients for various terms [nondim]
+  real :: MEKE_KHCoeff, MEKE_viscCoeff_Ku, MEKE_viscCoeff_Au  ! Coefficients for various terms [nondim]
   logical :: Use_KH_in_MEKE
   logical :: useMEKE
   integer :: isd, ied, jsd, jed
@@ -1397,13 +1398,13 @@ subroutine MEKE_alloc_register_restart(HI, param_file, MEKE, restart_CS)
   useMEKE = .false.; call read_param(param_file,"USE_MEKE",useMEKE)
 
 ! Read these parameters to determine what should be in the restarts
-  MEKE_GMcoeff =-1.; call read_param(param_file,"MEKE_GMCOEFF",MEKE_GMcoeff)
-  MEKE_FrCoeff =-1.; call read_param(param_file,"MEKE_FRCOEFF",MEKE_FrCoeff)
-  MEKE_GMEcoeff =-1.; call read_param(param_file,"MEKE_GMECOEFF",MEKE_GMEcoeff)
-  MEKE_KhCoeff =1.; call read_param(param_file,"MEKE_KHCOEFF",MEKE_KhCoeff)
-  MEKE_viscCoeff_Ku =0.; call read_param(param_file,"MEKE_VISCOSITY_COEFF_KU",MEKE_viscCoeff_Ku)
-  MEKE_viscCoeff_Au =0.; call read_param(param_file,"MEKE_VISCOSITY_COEFF_AU",MEKE_viscCoeff_Au)
-  Use_KH_in_MEKE = .false.; call read_param(param_file,"USE_KH_IN_MEKE", Use_KH_in_MEKE)
+  MEKE_GMcoeff = -1. ; call read_param(param_file,"MEKE_GMCOEFF",MEKE_GMcoeff)
+  MEKE_FrCoeff = -1. ; call read_param(param_file,"MEKE_FRCOEFF",MEKE_FrCoeff)
+  MEKE_GMEcoeff = -1. ; call read_param(param_file,"MEKE_GMECOEFF",MEKE_GMEcoeff)
+  MEKE_KhCoeff = 1. ; call read_param(param_file,"MEKE_KHCOEFF",MEKE_KhCoeff)
+  MEKE_viscCoeff_Ku = 0. ; call read_param(param_file,"MEKE_VISCOSITY_COEFF_KU",MEKE_viscCoeff_Ku)
+  MEKE_viscCoeff_Au = 0. ; call read_param(param_file,"MEKE_VISCOSITY_COEFF_AU",MEKE_viscCoeff_Au)
+  Use_KH_in_MEKE = .false. ; call read_param(param_file,"USE_KH_IN_MEKE", Use_KH_in_MEKE)
 
   if (.not. useMEKE) return
 
@@ -1411,38 +1412,38 @@ subroutine MEKE_alloc_register_restart(HI, param_file, MEKE, restart_CS)
   call MOM_mesg("MEKE_alloc_register_restart: allocating and registering", 5)
   isd = HI%isd ; ied = HI%ied ; jsd = HI%jsd ; jed = HI%jed
   allocate(MEKE%MEKE(isd:ied,jsd:jed), source=0.0)
-  vd = var_desc("MEKE", "m2 s-2", hor_grid='h', z_grid='1', &
-           longname="Mesoscale Eddy Kinetic Energy")
-  call register_restart_field(MEKE%MEKE, vd, .false., restart_CS)
+  call register_restart_field(MEKE%MEKE, "MEKE", .false., restart_CS, &
+           longname="Mesoscale Eddy Kinetic Energy", units="m2 s-2", conversion=US%L_T_to_m_s**2)
+
   if (MEKE_GMcoeff>=0.) allocate(MEKE%GM_src(isd:ied,jsd:jed), source=0.0)
   if (MEKE_FrCoeff>=0. .or. MEKE_GMECoeff>=0.) &
     allocate(MEKE%mom_src(isd:ied,jsd:jed), source=0.0)
   if (MEKE_GMECoeff>=0.) allocate(MEKE%GME_snk(isd:ied,jsd:jed), source=0.0)
   if (MEKE_KhCoeff>=0.) then
     allocate(MEKE%Kh(isd:ied,jsd:jed), source=0.0)
-    vd = var_desc("MEKE_Kh", "m2 s-1", hor_grid='h', z_grid='1', &
-             longname="Lateral diffusivity from Mesoscale Eddy Kinetic Energy")
-    call register_restart_field(MEKE%Kh, vd, .false., restart_CS)
+    call register_restart_field(MEKE%Kh, "MEKE_Kh", .false., restart_CS, &
+             longname="Lateral diffusivity from Mesoscale Eddy Kinetic Energy", &
+             units="m2 s-1", conversion=US%L_to_m**2*US%s_to_T)
   endif
   allocate(MEKE%Rd_dx_h(isd:ied,jsd:jed), source=0.0)
   if (MEKE_viscCoeff_Ku/=0.) then
     allocate(MEKE%Ku(isd:ied,jsd:jed), source=0.0)
-    vd = var_desc("MEKE_Ku", "m2 s-1", hor_grid='h', z_grid='1', &
-             longname="Lateral viscosity from Mesoscale Eddy Kinetic Energy")
-    call register_restart_field(MEKE%Ku, vd, .false., restart_CS)
+    call register_restart_field(MEKE%Ku, "MEKE_Ku", .false., restart_CS, &
+             longname="Lateral viscosity from Mesoscale Eddy Kinetic Energy", &
+             units="m2 s-1", conversion=US%L_to_m**2*US%s_to_T)
   endif
   if (Use_Kh_in_MEKE) then
     allocate(MEKE%Kh_diff(isd:ied,jsd:jed), source=0.0)
-    vd = var_desc("MEKE_Kh_diff", "m2 s-1",hor_grid='h',z_grid='1', &
-             longname="Copy of thickness diffusivity for diffusing MEKE")
-    call register_restart_field(MEKE%Kh_diff, vd, .false., restart_CS)
+    call register_restart_field(MEKE%Kh_diff, "MEKE_Kh_diff", .false., restart_CS, &
+             longname="Copy of thickness diffusivity for diffusing MEKE", &
+             units="m2 s-1", conversion=US%L_to_m**2*US%s_to_T)
   endif
 
   if (MEKE_viscCoeff_Au/=0.) then
     allocate(MEKE%Au(isd:ied,jsd:jed), source=0.0)
-    vd = var_desc("MEKE_Au", "m4 s-1", hor_grid='h', z_grid='1', &
-             longname="Lateral biharmonic viscosity from Mesoscale Eddy Kinetic Energy")
-    call register_restart_field(MEKE%Au, vd, .false., restart_CS)
+    call register_restart_field(MEKE%Au, "MEKE_Au", .false., restart_CS, &
+             longname="Lateral biharmonic viscosity from Mesoscale Eddy Kinetic Energy", &
+             units="m4 s-1", conversion=US%L_to_m**4*US%s_to_T)
   endif
 
 end subroutine MEKE_alloc_register_restart

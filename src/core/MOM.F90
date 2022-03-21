@@ -2422,7 +2422,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   call restart_init(param_file, restart_CSp)
   call set_restart_fields(GV, US, param_file, CS, restart_CSp)
   if (CS%split) then
-    call register_restarts_dyn_split_RK2(HI, GV, param_file, &
+    call register_restarts_dyn_split_RK2(HI, GV, US, param_file, &
              CS%dyn_split_RK2_CSp, restart_CSp, CS%uh, CS%vh)
   elseif (CS%use_RK2) then
     call register_restarts_dyn_unsplit_RK2(HI, GV, param_file, &
@@ -2437,9 +2437,9 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   call call_tracer_register(HI, GV, US, param_file, CS%tracer_flow_CSp, &
                             CS%tracer_Reg, restart_CSp)
 
-  call MEKE_alloc_register_restart(HI, param_file, CS%MEKE, restart_CSp)
-  call set_visc_register_restarts(HI, GV, param_file, CS%visc, restart_CSp)
-  call mixedlayer_restrat_register_restarts(HI, param_file, &
+  call MEKE_alloc_register_restart(HI, US, param_file, CS%MEKE, restart_CSp)
+  call set_visc_register_restarts(HI, GV, US, param_file, CS%visc, restart_CSp)
+  call mixedlayer_restrat_register_restarts(HI, GV, param_file, &
            CS%mixedlayer_restrat_CSp, restart_CSp)
 
   if (CS%rotate_index .and. associated(OBC_in) .and. use_temperature) then
@@ -2468,7 +2468,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
 
     ! This needs the number of tracers and to have called any code that sets whether
     ! reservoirs are used.
-    call open_boundary_register_restarts(HI, GV, CS%OBC, CS%tracer_Reg, &
+    call open_boundary_register_restarts(HI, GV, US, CS%OBC, CS%tracer_Reg, &
                           param_file, restart_CSp, use_temperature)
   endif
 
@@ -2865,11 +2865,9 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   if (use_frazil) then
     if (query_initialized(CS%tv%frazil, "frazil", restart_CSp)) then
       ! Test whether the dimensional rescaling has changed for heat content.
-      if ((US%kg_m3_to_R_restart*US%m_to_Z_restart*US%J_kg_to_Q_restart /= 0.0) .and. &
-          ((US%J_kg_to_Q*US%kg_m3_to_R*US%m_to_Z) /= &
-           (US%J_kg_to_Q_restart*US%kg_m3_to_R_restart*US%m_to_Z_restart)) ) then
-        QRZ_rescale = (US%J_kg_to_Q*US%kg_m3_to_R*US%m_to_Z) / &
-                      (US%J_kg_to_Q_restart*US%kg_m3_to_R_restart*US%m_to_Z_restart)
+      if ((US%J_kg_to_Q_restart*US%kg_m3_to_R_restart*US%m_to_Z_restart /= 0.0) .and. &
+          (US%J_kg_to_Q_restart*US%kg_m3_to_R_restart*US%m_to_Z_restart /= 1.0) ) then
+        QRZ_rescale = 1.0 / (US%J_kg_to_Q_restart*US%kg_m3_to_R_restart*US%m_to_Z_restart)
         do j=js,je ; do i=is,ie
           CS%tv%frazil(i,j) = QRZ_rescale * CS%tv%frazil(i,j)
         enddo ; enddo
@@ -2885,10 +2883,8 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
     if (CS%p_surf_prev_set) then
       ! Test whether the dimensional rescaling has changed for pressure.
       if ((US%kg_m3_to_R_restart*US%s_to_T_restart*US%m_to_L_restart /= 0.0) .and. &
-          ((US%kg_m3_to_R*(US%m_to_L*US%s_to_T_restart)**2) /= &
-           (US%kg_m3_to_R_restart*(US%m_to_L_restart*US%s_to_T)**2)) ) then
-        RL2_T2_rescale = (US%kg_m3_to_R*(US%m_to_L*US%s_to_T_restart)**2) / &
-                         (US%kg_m3_to_R_restart*(US%m_to_L_restart*US%s_to_T)**2)
+          (US%s_to_T_restart**2 /= US%kg_m3_to_R_restart * US%m_to_L_restart**2) ) then
+        RL2_T2_rescale = US%s_to_T_restart**2 / (US%kg_m3_to_R_restart*US%m_to_L_restart**2)
         do j=js,je ; do i=is,ie
           CS%p_surf_prev(i,j) = RL2_T2_rescale * CS%p_surf_prev(i,j)
         enddo ; enddo
@@ -2901,8 +2897,8 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   if (use_ice_shelf .and. associated(CS%Hml)) then
     if (query_initialized(CS%Hml, "hML", restart_CSp)) then
       ! Test whether the dimensional rescaling has changed for depths.
-      if ((US%m_to_Z_restart /= 0.0) .and. (US%m_to_Z /= US%m_to_Z_restart) ) then
-        Z_rescale = US%m_to_Z / US%m_to_Z_restart
+      if ((US%m_to_Z_restart /= 0.0) .and. (US%m_to_Z_restart /= 1.0) ) then
+        Z_rescale = 1.0 / US%m_to_Z_restart
         do j=js,je ; do i=is,ie
           CS%Hml(i,j) = Z_rescale * CS%Hml(i,j)
         enddo ; enddo
@@ -2911,8 +2907,8 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   endif
 
   if (query_initialized(CS%ave_ssh_ibc,"ave_ssh",restart_CSp)) then
-    if ((US%m_to_Z_restart /= 0.0) .and. (US%m_to_Z /= US%m_to_Z_restart) ) then
-      Z_rescale = US%m_to_Z / US%m_to_Z_restart
+    if ((US%m_to_Z_restart /= 0.0) .and. (US%m_to_Z_restart /= 1.0) ) then
+      Z_rescale = 1.0 / US%m_to_Z_restart
       do j=js,je ; do i=is,ie
         CS%ave_ssh_ibc(i,j) = Z_rescale * CS%ave_ssh_ibc(i,j)
       enddo ; enddo
@@ -2967,7 +2963,6 @@ subroutine finish_MOM_initialization(Time, dirs, CS, restart_CSp)
                                                    ! various unit conversion factors
   type(MOM_restart_CS),    pointer :: restart_CSp_tmp => NULL()
   real, allocatable :: z_interface(:,:,:) ! Interface heights [m]
-  type(vardesc) :: vd
 
   call cpu_clock_begin(id_clock_init)
   call callTree_enter("finish_MOM_initialization()")
@@ -2976,8 +2971,8 @@ subroutine finish_MOM_initialization(Time, dirs, CS, restart_CSp)
   G => CS%G ; GV => CS%GV ; US => CS%US
 
   !### Move to initialize_MOM?
-  call fix_restart_scaling(GV)
-  call fix_restart_unit_scaling(US)
+  call fix_restart_scaling(GV, unscaled=.true.)
+  call fix_restart_unit_scaling(US, unscaled=.true.)
 
 
   if (CS%use_particles) then
@@ -3090,9 +3085,6 @@ subroutine set_restart_fields(GV, US, param_file, CS, restart_CSp)
   thickness_units = get_thickness_units(GV)
   flux_units = get_flux_units(GV)
 
-  u_desc = var_desc("u", "m s-1", "Zonal velocity", hor_grid='Cu')
-  v_desc = var_desc("v", "m s-1", "Meridional velocity", hor_grid='Cv')
-
   if (associated(CS%tv%T)) &
     call register_restart_field(CS%tv%T, "Temp", .true., restart_CSp, &
                                 "Potential Temperature", "degC")
@@ -3101,28 +3093,31 @@ subroutine set_restart_fields(GV, US, param_file, CS, restart_CSp)
                                 "Salinity", "PPT")
 
   call register_restart_field(CS%h, "h", .true., restart_CSp, &
-                              "Layer Thickness", thickness_units)
+                              "Layer Thickness", thickness_units, conversion=GV%H_to_MKS)
 
-  call register_restart_pair(CS%u, CS%v, u_desc, v_desc, .true., restart_CSp)
+  u_desc = var_desc("u", "m s-1", "Zonal velocity", hor_grid='Cu')
+  v_desc = var_desc("v", "m s-1", "Meridional velocity", hor_grid='Cv')
+  call register_restart_pair(CS%u, CS%v, u_desc, v_desc, .true., restart_CSp, conversion=US%L_T_to_m_s)
 
   if (associated(CS%tv%frazil)) &
     call register_restart_field(CS%tv%frazil, "frazil", .false., restart_CSp, &
-                                "Frazil heat flux into ocean", "J m-2")
+                                "Frazil heat flux into ocean", &
+                                "J m-2", conversion=US%Q_to_J_kg*US%RZ_to_kg_m2)
 
   if (CS%interp_p_surf) then
     call register_restart_field(CS%p_surf_prev, "p_surf_prev", .false., restart_CSp, &
-                                "Previous ocean surface pressure", "Pa")
+                                "Previous ocean surface pressure", "Pa", conversion=US%RL2_T2_to_Pa)
   endif
 
   call register_restart_field(CS%ave_ssh_ibc, "ave_ssh", .false., restart_CSp, &
-                              "Time average sea surface height", "meter")
+                              "Time average sea surface height", "meter", conversion=US%Z_to_m)
 
   ! hML is needed when using the ice shelf module
   call get_param(param_file, '', "ICE_SHELF", use_ice_shelf, default=.false., &
                  do_not_log=.true.)
   if (use_ice_shelf .and. associated(CS%Hml)) then
     call register_restart_field(CS%Hml, "hML", .false., restart_CSp, &
-                                "Mixed layer thickness", "meter")
+                                "Mixed layer thickness", "meter", conversion=US%Z_to_m)
   endif
 
   ! Register scalar unit conversion factors.

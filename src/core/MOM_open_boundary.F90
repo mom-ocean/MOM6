@@ -1821,8 +1821,8 @@ subroutine open_boundary_init(G, GV, US, param_file, OBC, restart_CS)
   ! points per timestep, but if this were to be corrected to [L T-1 ~> m s-1] or [T-1 ~> s-1] to
   ! permit timesteps to change between calls to the OBC code, the following would be needed:
 !  if ( OBC%radiation_BCs_exist_globally .and. (US%s_to_T_restart * US%m_to_L_restart /= 0.0) .and. &
-!       ((US%m_to_L * US%s_to_T_restart) /= (US%m_to_L_restart * US%s_to_T)) ) then
-!    vel_rescale = (US%m_to_L * US%s_to_T_restart) /  (US%m_to_L_restart * US%s_to_T)
+!       (US%s_to_T_restart /= US%m_to_L_restart) ) then
+!    vel_rescale = US%s_to_T_restart /  US%m_to_L_restart
 !    if (query_initialized(OBC%rx_normal, "rx_normal", restart_CS)) then
 !      do k=1,nz ; do j=jsd,jed ; do I=IsdB,IedB
 !        OBC%rx_normal(I,j,k) = vel_rescale * OBC%rx_normal(I,j,k)
@@ -1837,8 +1837,8 @@ subroutine open_boundary_init(G, GV, US, param_file, OBC, restart_CS)
 
   ! The oblique boundary condition terms have units of [L2 T-2 ~> m2 s-2] and may need to be rescaled.
   if ( OBC%oblique_BCs_exist_globally .and. (US%s_to_T_restart * US%m_to_L_restart /= 0.0) .and. &
-       ((US%m_to_L * US%s_to_T_restart) /= (US%m_to_L_restart * US%s_to_T)) ) then
-    vel2_rescale = (US%m_to_L * US%s_to_T_restart)**2 /  (US%m_to_L_restart * US%s_to_T)**2
+       (US%s_to_T_restart /= US%m_to_L_restart) ) then
+    vel2_rescale = US%s_to_T_restart**2 /  US%m_to_L_restart**2
     if (query_initialized(OBC%rx_oblique, "rx_oblique", restart_CS)) then
       do k=1,nz ; do j=jsd,jed ; do I=IsdB,IedB
         OBC%rx_oblique(I,j,k) = vel2_rescale * OBC%rx_oblique(I,j,k)
@@ -4910,10 +4910,11 @@ subroutine flood_fill2(G, color, cin, cout, cland)
 end subroutine flood_fill2
 
 !> Register OBC segment data for restarts
-subroutine open_boundary_register_restarts(HI, GV, OBC, Reg, param_file, restart_CS, &
+subroutine open_boundary_register_restarts(HI, GV, US, OBC, Reg, param_file, restart_CS, &
                                            use_temperature)
   type(hor_index_type),    intent(in) :: HI !< Horizontal indices
   type(verticalGrid_type), pointer    :: GV !< Container for vertical grid information
+  type(unit_scale_type),   intent(in) :: US  !< A dimensional unit scaling type
   type(ocean_OBC_type),    pointer    :: OBC !< OBC data structure, data intent(inout)
   type(tracer_registry_type), pointer :: Reg !< pointer to tracer registry
   type(param_file_type),   intent(in) :: param_file !< Parameter file handle
@@ -4922,25 +4923,31 @@ subroutine open_boundary_register_restarts(HI, GV, OBC, Reg, param_file, restart
   ! Local variables
   type(vardesc) :: vd(2)
   integer       :: m, n
-  character(len=100) :: mesg
+  character(len=100) :: mesg, var_name
   type(OBC_segment_type), pointer :: segment=>NULL()
 
   if (.not. associated(OBC)) &
     call MOM_error(FATAL, "open_boundary_register_restarts: Called with "//&
                       "uninitialized OBC control structure")
 
-  ! *** This is a temporary work around for restarts with OBC segments.
+  ! ### This is a temporary work around for restarts with OBC segments.
   ! This implementation uses 3D arrays solely for restarts. We need
   ! to be able to add 2D ( x,z or y,z ) data to restarts to avoid using
-  ! so much memory and disk space. ***
+  ! so much memory and disk space.
   if (OBC%radiation_BCs_exist_globally) then
     allocate(OBC%rx_normal(HI%isdB:HI%iedB,HI%jsd:HI%jed,GV%ke), source=0.0)
     allocate(OBC%ry_normal(HI%isd:HI%ied,HI%jsdB:HI%jedB,GV%ke), source=0.0)
 
-    vd(1) = var_desc("rx_normal", "m s-1", "Normal Phase Speed for EW radiation OBCs", 'u', 'L')
-    vd(2) = var_desc("ry_normal", "m s-1", "Normal Phase Speed for NS radiation OBCs", 'v', 'L')
-    call register_restart_pair(OBC%rx_normal, OBC%ry_normal, vd(1), vd(2), &
-        .false., restart_CS)
+    vd(1) = var_desc("rx_normal", "gridpoint timestep-1", "Normal Phase Speed for EW radiation OBCs", 'u', 'L')
+    vd(2) = var_desc("ry_normal", "gridpoint timestep-1", "Normal Phase Speed for NS radiation OBCs", 'v', 'L')
+    call register_restart_pair(OBC%rx_normal, OBC%ry_normal, vd(1), vd(2), .false., restart_CS)
+    ! The rx_normal and ry_normal arrays used with radiation OBCs are currently in units of grid
+    ! points per timestep, but if this were to be corrected to [L T-1 ~> m s-1] or [T-1 ~> s-1] to
+    ! permit timesteps to change between calls to the OBC code, the following would be needed instead:
+    ! vd(1) = var_desc("rx_normal", "m s-1", "Normal Phase Speed for EW radiation OBCs", 'u', 'L')
+    ! vd(2) = var_desc("ry_normal", "m s-1", "Normal Phase Speed for NS radiation OBCs", 'v', 'L')
+    ! call register_restart_pair(OBC%rx_normal, OBC%ry_normal, vd(1), vd(2), .false., restart_CS, &
+    !                            conversion=US%L_T_to_m_s)
   endif
 
   if (OBC%oblique_BCs_exist_globally) then
@@ -4949,12 +4956,13 @@ subroutine open_boundary_register_restarts(HI, GV, OBC, Reg, param_file, restart
 
     vd(1) = var_desc("rx_oblique", "m2 s-2", "Radiation Speed Squared for EW oblique OBCs", 'u', 'L')
     vd(2) = var_desc("ry_oblique", "m2 s-2", "Radiation Speed Squared for NS oblique OBCs", 'v', 'L')
-    call register_restart_pair(OBC%rx_oblique, OBC%ry_oblique, vd(1), vd(2), &
-        .false., restart_CS)
+    call register_restart_pair(OBC%rx_oblique, OBC%ry_oblique, vd(1), vd(2), .false., &
+                               restart_CS, conversion=US%L_T_to_m_s**2)
 
     allocate(OBC%cff_normal(HI%IsdB:HI%IedB,HI%jsdB:HI%jedB,GV%ke), source=0.0)
-    vd(1) = var_desc("cff_normal", "m2 s-2", "denominator for oblique OBCs", 'q', 'L')
-    call register_restart_field(OBC%cff_normal, vd(1), .false., restart_CS)
+    call register_restart_field(OBC%cff_normal, "cff_normal", .false., restart_CS, &
+             longname="denominator for oblique OBCs", &
+             units="m2 s-2", conversion=US%L_T_to_m_s**2, hor_grid="q")
   endif
 
   if (Reg%ntr == 0) return
@@ -4978,13 +4986,13 @@ subroutine open_boundary_register_restarts(HI, GV, OBC, Reg, param_file, restart
     do m=1,OBC%ntr
       if (OBC%tracer_x_reservoirs_used(m)) then
         if (modulo(HI%turns, 2) /= 0) then
-          write(mesg,'("tres_y_",I3.3)') m
-          vd(1) = var_desc(mesg,"Conc", "Tracer concentration for NS OBCs",'v','L')
-          call register_restart_field(OBC%tres_x(:,:,:,m), vd(1), .false., restart_CS)
+          write(var_name,'("tres_y_",I3.3)') m
+          call register_restart_field(OBC%tres_x(:,:,:,m), var_name, .false., restart_CS, &
+                   longname="Tracer concentration for NS OBCs", units="Conc", hor_grid='v')
         else
-          write(mesg,'("tres_x_",I3.3)') m
-          vd(1) = var_desc(mesg,"Conc", "Tracer concentration for EW OBCs",'u','L')
-          call register_restart_field(OBC%tres_x(:,:,:,m), vd(1), .false., restart_CS)
+          write(var_name,'("tres_x_",I3.3)') m
+          call register_restart_field(OBC%tres_x(:,:,:,m), var_name, .false., restart_CS, &
+                   longname="Tracer concentration for EW OBCs", units="Conc", hor_grid='u')
         endif
       endif
     enddo
@@ -4994,13 +5002,13 @@ subroutine open_boundary_register_restarts(HI, GV, OBC, Reg, param_file, restart
     do m=1,OBC%ntr
       if (OBC%tracer_y_reservoirs_used(m)) then
         if (modulo(HI%turns, 2) /= 0) then
-          write(mesg,'("tres_x_",I3.3)') m
-          vd(1) = var_desc(mesg,"Conc", "Tracer concentration for EW OBCs",'u','L')
-          call register_restart_field(OBC%tres_y(:,:,:,m), vd(1), .false., restart_CS)
+          write(var_name,'("tres_x_",I3.3)') m
+          call register_restart_field(OBC%tres_y(:,:,:,m), var_name, .false., restart_CS, &
+                   longname="Tracer concentration for EW OBCs", units="Conc", hor_grid='u')
         else
-          write(mesg,'("tres_y_",I3.3)') m
-          vd(1) = var_desc(mesg,"Conc", "Tracer concentration for NS OBCs",'v','L')
-          call register_restart_field(OBC%tres_y(:,:,:,m), vd(1), .false., restart_CS)
+          write(var_name,'("tres_y_",I3.3)') m
+          call register_restart_field(OBC%tres_y(:,:,:,m), var_name, .false., restart_CS, &
+                   longname="Tracer concentration for NS OBCs", units="Conc", hor_grid='v')
         endif
       endif
     enddo

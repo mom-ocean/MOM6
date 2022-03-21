@@ -138,7 +138,7 @@ function register_boundary_impulse_tracer(HI, GV, US, param_file, CS, tr_Reg, re
   rem_time_ptr => CS%remaining_source_time
   call register_restart_field(rem_time_ptr, "bir_remain_time", &
                               .not.CS%tracers_may_reinit, restart_CS, &
-                              "Remaining time to apply BIR source", "s")
+                              "Remaining time to apply BIR source", "s", conversion=US%T_to_s)
 
   CS%tr_Reg => tr_Reg
   CS%restart_CSp => restart_CS
@@ -196,8 +196,8 @@ subroutine initialize_boundary_impulse_tracer(restart, day, G, GV, US, h, diag, 
     endif
   enddo ! Tracer loop
 
-  if (restart .and. (US%s_to_T_restart /= 0.0) .and. (US%s_to_T /= US%s_to_T_restart) ) then
-    CS%remaining_source_time = (US%s_to_T / US%s_to_T_restart) * CS%remaining_source_time
+  if (restart .and. (US%s_to_T_restart /= 0.0) .and. (US%s_to_T_restart /= 1.0) ) then
+    CS%remaining_source_time = (1.0 / US%s_to_T_restart) * CS%remaining_source_time
   endif
 
   if (associated(OBC)) then

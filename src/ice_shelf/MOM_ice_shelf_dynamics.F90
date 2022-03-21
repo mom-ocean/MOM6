@@ -224,8 +224,9 @@ end function quad_area
 
 !> This subroutine is used to register any fields related to the ice shelf
 !! dynamics that should be written to or read from the restart file.
-subroutine register_ice_shelf_dyn_restarts(G, param_file, CS, restart_CS)
+subroutine register_ice_shelf_dyn_restarts(G, US, param_file, CS, restart_CS)
   type(ocean_grid_type),  intent(inout) :: G    !< The grid type describing the ice shelf grid.
+  type(unit_scale_type),  intent(in)    :: US   !< A structure containing unit conversion factors
   type(param_file_type),  intent(in)    :: param_file !< A structure to parse for run-time parameters
   type(ice_shelf_dyn_CS), pointer       :: CS !< A pointer to the ice shelf dynamics control structure
   type(MOM_restart_CS),   intent(inout) :: restart_CS !< MOM restart control struct
@@ -275,20 +276,24 @@ subroutine register_ice_shelf_dyn_restarts(G, param_file, CS, restart_CS)
     allocate( CS%h_bdry_val(isd:ied,jsd:jed), source=0.0 )
    ! additional restarts for ice shelf state
     call register_restart_field(CS%u_shelf, "u_shelf", .false., restart_CS, &
-                                "ice sheet/shelf u-velocity", "m s-1", hor_grid='Bu')
+                                "ice sheet/shelf u-velocity", &
+                                units="m s-1", conversion=US%L_T_to_m_s, hor_grid='Bu')
     call register_restart_field(CS%v_shelf, "v_shelf", .false., restart_CS, &
-                                "ice sheet/shelf v-velocity", "m s-1", hor_grid='Bu')
+                                "ice sheet/shelf v-velocity", &
+                                units="m s-1", conversion=US%L_T_to_m_s, hor_grid='Bu')
     call register_restart_field(CS%u_bdry_val, "u_bdry_val", .false., restart_CS, &
-                                "ice sheet/shelf boundary u-velocity", "m s-1", hor_grid='Bu')
+                                "ice sheet/shelf boundary u-velocity", &
+                                units="m s-1", conversion=US%L_T_to_m_s, hor_grid='Bu')
     call register_restart_field(CS%v_bdry_val, "v_bdry_val", .false., restart_CS, &
-                                "ice sheet/shelf boundary v-velocity", "m s-1", hor_grid='Bu')
+                                "ice sheet/shelf boundary v-velocity", &
+                                units="m s-1", conversion=US%L_T_to_m_s, hor_grid='Bu')
     call register_restart_field(CS%u_face_mask_bdry, "u_face_mask_bdry", .false., restart_CS, &
                                 "ice sheet/shelf boundary u-mask", "nondim", hor_grid='Bu')
     call register_restart_field(CS%v_face_mask_bdry, "v_face_mask_bdry", .false., restart_CS, &
                                 "ice sheet/shelf boundary v-mask", "nondim", hor_grid='Bu')
 
     call register_restart_field(CS%OD_av, "OD_av", .true., restart_CS, &
-                                "Average open ocean depth in a cell","m")
+                                "Average open ocean depth in a cell", "m", conversion=US%Z_to_m)
     call register_restart_field(CS%ground_frac, "ground_frac", .true., restart_CS, &
                                 "fractional degree of grounding", "nondim")
     call register_restart_field(CS%C_basal_friction, "C_basal_friction", .true., restart_CS, &
@@ -296,7 +301,7 @@ subroutine register_ice_shelf_dyn_restarts(G, param_file, CS, restart_CS)
     call register_restart_field(CS%AGlen_visc, "AGlen_visc", .true., restart_CS, &
                                 "ice-stiffness parameter", "Pa-3 s-1")
     call register_restart_field(CS%h_bdry_val, "h_bdry_val", .false., restart_CS, &
-                                "ice thickness at the boundary","m")
+                                "ice thickness at the boundary", "m", conversion=US%Z_to_m)
   endif
 
 end subroutine register_ice_shelf_dyn_restarts
@@ -462,16 +467,16 @@ subroutine initialize_ice_shelf_dyn(param_file, Time, ISS, CS, G, US, diag, new_
 
   ! Take additional initialization steps, for example of dependent variables.
   if (active_shelf_dynamics .and. .not.new_sim) then
-    if ((US%m_to_Z_restart /= 0.0) .and. (US%m_to_Z_restart /= US%m_to_Z)) then
-      Z_rescale = US%m_to_Z / US%m_to_Z_restart
+    if ((US%m_to_Z_restart /= 0.0) .and. (US%m_to_Z_restart /= 1.0)) then
+      Z_rescale = 1.0 / US%m_to_Z_restart
       do j=G%jsc,G%jec ; do i=G%isc,G%iec
         CS%OD_av(i,j) = Z_rescale * CS%OD_av(i,j)
       enddo ; enddo
     endif
 
     if ((US%m_to_L_restart*US%s_to_T_restart /= 0.0) .and. &
-        (US%m_to_L_restart /= US%m_s_to_L_T*US%s_to_T_restart)) then
-      vel_rescale = US%m_s_to_L_T*US%s_to_T_restart / US%m_to_L_restart
+        (US%m_to_L_restart /= US%s_to_T_restart)) then
+      vel_rescale = US%s_to_T_restart / US%m_to_L_restart
       do J=G%jsc-1,G%jec ; do I=G%isc-1,G%iec
         CS%u_shelf(I,J) = vel_rescale * CS%u_shelf(I,J)
         CS%v_shelf(I,J) = vel_rescale * CS%v_shelf(I,J)

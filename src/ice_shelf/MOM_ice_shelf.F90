@@ -1634,11 +1634,11 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces_in,
 
   call restart_init(param_file, CS%restart_CSp, "Shelf.res")
   call register_restart_field(ISS%mass_shelf, "shelf_mass", .true., CS%restart_CSp, &
-                              "Ice shelf mass", "kg m-2")
+                              "Ice shelf mass", "kg m-2", conversion=US%RZ_to_kg_m2)
   call register_restart_field(ISS%area_shelf_h, "shelf_area", .true., CS%restart_CSp, &
-                              "Ice shelf area in cell", "m2")
+                              "Ice shelf area in cell", "m2", conversion=US%L_to_m**2)
   call register_restart_field(ISS%h_shelf, "h_shelf", .true., CS%restart_CSp, &
-                              "ice sheet/shelf thickness", "m")
+                              "ice sheet/shelf thickness", "m", conversion=US%Z_to_m)
   if (PRESENT(sfc_state_in)) then
     if (allocated(sfc_state%taux_shelf) .and. allocated(sfc_state%tauy_shelf)) then
       u_desc = var_desc("taux_shelf", "Pa", "the zonal stress on the ocean under ice shelves", &
@@ -1646,7 +1646,7 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces_in,
       v_desc = var_desc("tauy_shelf", "Pa", "the meridional stress on the ocean under ice shelves", &
             hor_grid='Cv',z_grid='1')
       call register_restart_pair(sfc_state%taux_shelf, sfc_state%tauy_shelf, u_desc, v_desc, &
-            .false., CS%restart_CSp)
+            .false., CS%restart_CSp, conversion=US%RZ_T_to_kg_m2s*US%L_T_to_m_s)
     endif
   endif
 
@@ -1663,13 +1663,13 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces_in,
 
   if (CS%active_shelf_dynamics) then
     ! Allocate CS%dCS and specify additional restarts for ice shelf dynamics
-    call register_ice_shelf_dyn_restarts(CS%Grid_in, param_file, CS%dCS, CS%restart_CSp)
+    call register_ice_shelf_dyn_restarts(CS%Grid_in, US, param_file, CS%dCS, CS%restart_CSp)
   endif
 
   !GMM - I think we do not need to save ustar_shelf and iceshelf_melt in the restart file
   !if (.not. CS%solo_ice_sheet) then
   !  call register_restart_field(fluxes%ustar_shelf, "ustar_shelf", .false., CS%restart_CSp, &
-  !                              "Friction velocity under ice shelves", "m s-1")
+  !                              "Friction velocity under ice shelves", "m s-1", conversion=###)
   !endif
 
   CS%restart_output_dir = dirs%restart_output_dir
@@ -1698,23 +1698,23 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces_in,
     call MOM_mesg("MOM_ice_shelf.F90, initialize_ice_shelf: Restoring ice shelf from file.")
     call restore_state(dirs%input_filename, dirs%restart_input_dir, Time, G, CS%restart_CSp)
 
-    if ((US%m_to_Z_restart /= 0.0) .and. (US%m_to_Z_restart /= US%m_to_Z)) then
-      Z_rescale = US%m_to_Z / US%m_to_Z_restart
+    if ((US%m_to_Z_restart /= 0.0) .and. (US%m_to_Z_restart /= 1.0)) then
+      Z_rescale = 1.0 / US%m_to_Z_restart
       do j=G%jsc,G%jec ; do i=G%isc,G%iec
         ISS%h_shelf(i,j) = Z_rescale * ISS%h_shelf(i,j)
       enddo ; enddo
     endif
 
     if ((US%m_to_Z_restart*US%kg_m3_to_R_restart /= 0.0) .and. &
-        (US%m_to_Z*US%kg_m3_to_R /= US%m_to_Z_restart * US%kg_m3_to_R_restart)) then
-      RZ_rescale = US%m_to_Z*US%kg_m3_to_R / (US%m_to_Z_restart * US%kg_m3_to_R_restart)
+        (US%m_to_Z_restart*US%kg_m3_to_R_restart /= 1.0)) then
+      RZ_rescale = 1.0 / (US%m_to_Z_restart * US%kg_m3_to_R_restart)
       do j=G%jsc,G%jec ; do i=G%isc,G%iec
         ISS%mass_shelf(i,j) = RZ_rescale * ISS%mass_shelf(i,j)
       enddo ; enddo
     endif
 
-    if ((US%m_to_L_restart /= 0.0) .and. (US%m_to_L_restart /= US%m_to_L)) then
-      L_rescale = US%m_to_L / US%m_to_L_restart
+    if ((US%m_to_L_restart /= 0.0) .and. (US%m_to_L_restart /= 1.0)) then
+      L_rescale = 1.0 / US%m_to_L_restart
       do j=G%jsc,G%jec ; do i=G%isc,G%iec
         ISS%area_shelf_h(i,j) = L_rescale**2 * ISS%area_shelf_h(i,j)
       enddo ; enddo

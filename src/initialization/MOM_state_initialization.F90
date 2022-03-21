@@ -533,13 +533,13 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
         "MOM6 attempted to restart from a file from a different time than given by Time_in.")
       Time = Time_in
     endif
-    if ((GV%m_to_H_restart /= 0.0) .and. (GV%m_to_H_restart /= GV%m_to_H)) then
-      H_rescale = GV%m_to_H / GV%m_to_H_restart
+    if ((GV%m_to_H_restart /= 0.0) .and. (GV%m_to_H_restart /= 1.0)) then
+      H_rescale = 1.0 / GV%m_to_H_restart
       do k=1,nz ; do j=js,je ; do i=is,ie ; h(i,j,k) = H_rescale * h(i,j,k) ; enddo ; enddo ; enddo
     endif
     if ( (US%s_to_T_restart * US%m_to_L_restart /= 0.0) .and. &
-         ((US%m_to_L * US%s_to_T_restart) /= (US%m_to_L_restart * US%s_to_T)) ) then
-      vel_rescale = (US%m_to_L * US%s_to_T_restart) /  (US%m_to_L_restart * US%s_to_T)
+         (US%s_to_T_restart /= US%m_to_L_restart) ) then
+      vel_rescale = US%s_to_T_restart /  US%m_to_L_restart
       do k=1,nz ; do j=jsd,jed ; do I=IsdB,IeDB ; u(I,j,k) = vel_rescale * u(I,j,k) ; enddo ; enddo ; enddo
       do k=1,nz ; do J=JsdB,JedB ; do i=isd,ied ; v(i,J,k) = vel_rescale * v(i,J,k) ; enddo ; enddo ; enddo
     endif
@@ -2778,7 +2778,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, depth_tot, G, GV, US, PF, just
 
     do k=1,nz
       nPoints = 0 ; tempAvg = 0. ; saltAvg = 0.
-      do j=js,je ; do i=is,ie ; if (G%mask2dT(i,j) >= 1.0) then
+      do j=js,je ; do i=is,ie ; if (G%mask2dT(i,j) > 0.0) then
         nPoints = nPoints + 1
         tempAvg = tempAvg + tv%T(i,j,k)
         saltAvg = saltAvg + tv%S(i,j,k)
@@ -2786,6 +2786,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, depth_tot, G, GV, US, PF, just
 
       ! Horizontally homogenize data to produce perfectly "flat" initial conditions
       if (homogenize) then
+        !### These averages will not reproduce across PE layouts or grid rotation.
         call sum_across_PEs(nPoints)
         call sum_across_PEs(tempAvg)
         call sum_across_PEs(saltAvg)
