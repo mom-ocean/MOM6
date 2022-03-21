@@ -188,10 +188,17 @@ subroutine verticalGridInit( param_file, GV, US )
 end subroutine verticalGridInit
 
 !> Set the scaling factors for restart files to the scaling factors for this run.
-subroutine fix_restart_scaling(GV)
+subroutine fix_restart_scaling(GV, unscaled)
   type(verticalGrid_type), intent(inout) :: GV   !< The ocean's vertical grid structure
+  logical,       optional, intent(in)    :: unscaled !< If true, set the restart factors as though the
+                                             !! model would be unscaled, which is appropriate if the
+                                             !! scaling is undone when writing a restart file.
 
   GV%m_to_H_restart = GV%m_to_H
+  if (present(unscaled)) then ; if (unscaled) then
+    GV%m_to_H_restart = 1.0
+  endif ; endif
+
 end subroutine fix_restart_scaling
 
 !> Returns the model's thickness units, usually m or kg/m^2.
