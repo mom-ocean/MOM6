@@ -332,7 +332,6 @@ subroutine DOME2d_initialize_temperature_salinity ( T, S, h, G, GV, param_file, 
   endif
 
   ! Modify temperature when rho coordinates are used
-  T(G%isc:G%iec,G%jsc:G%jec,1:GV%ke) = 0.0
   if (( coordinateMode(verticalCoordinate) == REGRIDDING_RHO ) .or. &
       ( coordinateMode(verticalCoordinate) == REGRIDDING_LAYER )) then
     do i = G%isc,G%iec ; do j = G%jsc,G%jec
