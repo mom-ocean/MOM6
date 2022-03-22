@@ -395,8 +395,6 @@ end subroutine initialize_ice_shelf_boundary_channel
 
 
 !> Initialize ice shelf flow from file
-!subroutine initialize_ice_flow_from_file(bed_elev,u_shelf, v_shelf,float_cond,&
-!                                         hmask,h_shelf, G, US, PF)
 subroutine initialize_ice_flow_from_file(bed_elev,u_shelf, v_shelf,float_cond,&
                                          G, US, PF)
   type(ocean_grid_type), intent(in)    :: G    !< The ocean's grid structure
@@ -410,12 +408,6 @@ subroutine initialize_ice_flow_from_file(bed_elev,u_shelf, v_shelf,float_cond,&
   real, dimension(SZDI_(G),SZDJ_(G)), &
                          intent(inout)    :: float_cond !< An array indicating where the ice
                                                 !! shelf is floating: 0 if floating, 1 if not.
-!  real, dimension(SZDI_(G),SZDJ_(G)), &
-!                         intent(in) :: hmask !< A mask indicating which tracer points are
-                                             !! partly or fully covered by an ice-shelf
-!  real, dimension(SZDI_(G),SZDJ_(G)), &
-!                         intent(in) :: h_shelf !< A mask indicating which tracer points are
-!                                             !! partly or fully covered by an ice-shelf
   type(unit_scale_type), intent(in)    :: US !< A structure containing unit conversion factors
   type(param_file_type), intent(in)    :: PF !< A structure to parse for run-time parameters
 
@@ -508,7 +500,7 @@ subroutine initialize_ice_shelf_boundary_from_file(u_face_mask_bdry, v_face_mask
   character(len=200) :: filename, bc_file, inputdir, icethick_file ! Strings for file/path
   character(len=200) :: ufcmskbdry_varname, vfcmskbdry_varname, &
                         ubdryv_varname, vbdryv_varname, umask_varname, vmask_varname, &
-                        h_varname,hmsk_varname  ! Variable name in file
+                        hmsk_varname  ! Variable name in file
   character(len=40)  :: mdl = "initialize_ice_shelf_boundary_from_file" ! This subroutine's name.
 
   integer :: i, j, isc, jsc, iec, jec
@@ -526,9 +518,6 @@ subroutine initialize_ice_shelf_boundary_from_file(u_face_mask_bdry, v_face_mask
   call get_param(PF, mdl, "ICE_THICKNESS_FILE", icethick_file, &
                  "The file from which the ice-shelf thickness is read.", &
                  default="ice_shelf_thick.nc")
-!  call get_param(PF, mdl, "ICE_THICKNESS_VARNAME", h_varname, &
-!                 "The name of the thickness variable in ICE_THICKNESS_FILE.", &
-!                 default="h_shelf")
   call get_param(PF, mdl, "ICE_THICKNESS_MASK_VARNAME", hmsk_varname, &
                  "The name of the icethickness mask variable in ICE_THICKNESS_FILE.", &
                  default="h_mask")
@@ -565,7 +554,6 @@ subroutine initialize_ice_shelf_boundary_from_file(u_face_mask_bdry, v_face_mask
  call MOM_read_data(filename,trim(vmask_varname), vmask, G%Domain, position=CORNER,scale=1.)
  filename = trim(inputdir)//trim(icethick_file)
 
-! call MOM_read_data(filename, trim(h_varname), h_shelf, G%Domain, scale=US%m_to_Z)
  call MOM_read_data(filename,trim(hmsk_varname), hmask, G%Domain, scale=1.)
   isc = G%isc ; jsc = G%jsc ; iec = G%iec ; jec = G%jec
 

@@ -895,7 +895,7 @@ end subroutine ice_shelf_advect
   enddo
 
   call calc_shelf_driving_stress(CS, ISS, G, US, taudx, taudy, CS%OD_av)
-!  call pass_vector(taudx, taudy, G%domain, TO_ALL, BGRID_NE)
+  call pass_vector(taudx, taudy, G%domain, TO_ALL, BGRID_NE)
   ! This is to determine which cells contain the grounding line, the criterion being that the cell
   ! is ice-covered, with some nodes floating and some grounded flotation condition is estimated by
   ! assuming topography is cellwise constant and H is bilinear in a cell; floating where
@@ -1816,13 +1816,14 @@ subroutine calc_shelf_driving_stress(CS, ISS, G, US, taudx, taudy, OD)
   real    :: dxh, dyh,Dx,Dy  ! Local grid spacing [L ~> m]
   real    :: grav      ! The gravitational acceleration [L2 Z-1 T-2 ~> m s-2]
 
-  integer :: i, j, iscq, iecq, jscq, jecq, isd, jsd, is, js, iegq, jegq
+  integer :: i, j, iscq, iecq, jscq, jecq, isd, jsd, ied, jed, is, js, iegq, jegq
   integer :: giec, gjec, gisc, gjsc, cnt, isc, jsc, iec, jec
   integer :: i_off, j_off
 
   isc = G%isc ; jsc = G%jsc ; iec = G%iec ; jec = G%jec
   iscq = G%iscB ; iecq = G%iecB ; jscq = G%jscB ; jecq = G%jecB
   isd = G%isd ; jsd = G%jsd
+  isd = G%isd ; jsd = G%jsd ; ied = G%ied ; jed = G%jed
   iegq = G%iegB ; jegq = G%jegB
 !  gisc = G%domain%nihalo+1 ; gjsc = G%domain%njhalo+1
   gisc = 1 ; gjsc = 1
@@ -1842,6 +1843,7 @@ subroutine calc_shelf_driving_stress(CS, ISS, G, US, taudx, taudy, OD)
   BASE(:,:) = -CS%bed_elev(:,:) + OD(:,:)
   S(:,:) = -CS%bed_elev(:,:) + ISS%h_shelf(:,:)
   ! check whether the ice is floating or grounded
+
   do j=jsc-G%domain%njhalo,jec+G%domain%njhalo
     do i=isc-G%domain%nihalo,iec+G%domain%nihalo
       if (rhoi_rhow * ISS%h_shelf(i,j) - CS%bed_elev(i,j) <= 0) then
@@ -1851,6 +1853,13 @@ subroutine calc_shelf_driving_stress(CS, ISS, G, US, taudx, taudy, OD)
       endif
     enddo
   enddo
+
+    call pass_var(S, G%domain)
+   allocate(Phi(1:8,1:4,isd:ied,jsd:jed), source=0.0)
+  do j=jscq,jecq ; do i=iscq,iecq
+    call bilinear_shape_fn_grid(G, i, j, Phi(:,:,i,j))
+  enddo ; enddo
+
   do j=jsc-1,jec+1
     do i=isc-1,iec+1
       cnt = 0
@@ -1996,6 +2005,8 @@ subroutine calc_shelf_driving_stress(CS, ISS, G, US, taudx, taudy, OD)
       endif
     enddo
   enddo
+
+ deallocate(Phi)
 end subroutine calc_shelf_driving_stress
 
 subroutine init_boundary_values(CS, G, time, hmask, input_flux, input_thick, new_sim)
@@ -2592,7 +2603,8 @@ subroutine calc_shelf_visc(CS, ISS, G, US, u_shlf, v_shlf)
 
   allocate(Phi(1:8,1:4,isd:ied,jsd:jed), source=0.0)
 
-  do j=jsc,jec ; do i=isc,iec
+!  do j=jsc,jec ; do i=isc,iec
+  do j=jscq,jecq ; do i=iscq,iecq
     call bilinear_shape_fn_grid(G, i, j, Phi(:,:,i,j))
   enddo ; enddo
 

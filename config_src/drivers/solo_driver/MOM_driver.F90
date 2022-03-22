@@ -26,6 +26,7 @@ program MOM_main
 
   use MOM_cpu_clock,       only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
   use MOM_cpu_clock,       only : CLOCK_COMPONENT
+  use MOM_data_override,   only : data_override_init
   use MOM_diag_mediator,   only : enable_averaging, disable_averaging, diag_mediator_end
   use MOM_diag_mediator,   only : diag_ctrl, diag_mediator_close_registration
   use MOM,                 only : initialize_MOM, step_MOM, MOM_control_struct, MOM_end
@@ -47,6 +48,7 @@ program MOM_main
   use MOM_ice_shelf,       only : initialize_ice_shelf, ice_shelf_end, ice_shelf_CS
   use MOM_ice_shelf,       only : shelf_calc_flux, add_shelf_forces, ice_shelf_save_restart
   use MOM_ice_shelf,       only : initialize_ice_shelf_fluxes, initialize_ice_shelf_forces
+  use MOM_ice_shelf,       only : ice_shelf_query
   use MOM_interpolate,     only : time_interp_external_init
   use MOM_io,              only : file_exists, open_ASCII_file, close_file
   use MOM_io,              only : check_nml_error, io_infra_init, io_infra_end
@@ -176,6 +178,8 @@ program MOM_main
   type(surface_forcing_CS),  pointer :: surface_forcing_CSp => NULL()
   type(write_cputime_CS),    pointer :: write_CPU_CSp => NULL()
   type(ice_shelf_CS),        pointer :: ice_shelf_CSp => NULL()
+  logical                            :: override_shelf_fluxes !< If true, and shelf dynamics are active,
+                                        !! the data_override feature is enabled (only for MOSAIC grid types)
   type(wave_parameters_cs),  pointer :: waves_CSp => NULL()
   type(MOM_restart_CS),      pointer :: &
     restart_CSp => NULL()     !< A pointer to the restart control structure
@@ -302,6 +306,8 @@ program MOM_main
     ! when using an ice shelf
     call initialize_ice_shelf_fluxes(ice_shelf_CSp, grid, US, fluxes)
     call initialize_ice_shelf_forces(ice_shelf_CSp, grid, US, forces)
+    call ice_shelf_query(ice_shelf_CSp, grid, data_override_shelf_fluxes=override_shelf_fluxes)
+    if (override_shelf_fluxes) call data_override_init(Ocean_Domain_in=grid%domain%mpp_domain)
   endif
 
 
