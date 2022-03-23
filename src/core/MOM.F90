@@ -57,7 +57,7 @@ use MOM_ALE_sponge,            only : rotate_ALE_sponge, update_ALE_sponge_field
 use MOM_barotropic,            only : Barotropic_CS
 use MOM_boundary_update,       only : call_OBC_register, OBC_register_end, update_OBC_CS
 use MOM_check_scaling,         only : check_MOM6_scaling_factors
-use MOM_coord_initialization,  only : MOM_initialize_coord
+use MOM_coord_initialization,  only : MOM_initialize_coord, write_vertgrid_file
 use MOM_diabatic_driver,       only : diabatic, diabatic_driver_init, diabatic_CS, extract_diabatic_member
 use MOM_diabatic_driver,       only : adiabatic, adiabatic_driver_init, diabatic_driver_end
 use MOM_stochastics,           only : stochastics_init, update_stochastics, stochastic_CS
@@ -2484,8 +2484,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
 
   ! Initialize dynamically evolving fields, perhaps from restart files.
   call cpu_clock_begin(id_clock_MOM_init)
-  call MOM_initialize_coord(GV, US, param_file, write_geom_files, &
-                            dirs%output_directory, CS%tv, G%max_depth)
+  call MOM_initialize_coord(GV, US, param_file, CS%tv, G%max_depth)
   call callTree_waypoint("returned from MOM_initialize_coord() (initialize_MOM)")
 
   if (CS%use_ALE_algorithm) then
@@ -2648,8 +2647,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
     ! \todo This block exists for legacy reasons and we should phase it out of
     ! all examples. !###
     if (CS%debug) then
-      call uvchksum("Pre ALE adjust init cond [uv]", &
-                    CS%u, CS%v, G%HI, haloshift=1)
+      call uvchksum("Pre ALE adjust init cond [uv]", CS%u, CS%v, G%HI, haloshift=1)
       call hchksum(CS%h,"Pre ALE adjust init cond h", G%HI, haloshift=1, scale=GV%H_to_m)
     endif
     call callTree_waypoint("Calling adjustGridForIntegrity() to remap initial conditions (initialize_MOM)")
@@ -2712,19 +2710,21 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   ! must be defined.
   call set_masks_for_axes(G, diag)
 
-  ! Diagnose static fields AND associate areas/volumes with axes
-  call write_static_fields(G, GV, US, CS%tv, CS%diag)
-  call callTree_waypoint("static fields written (initialize_MOM)")
-
   ! Register the volume cell measure (must be one of first diagnostics)
   call register_cell_measure(G, CS%diag, Time)
 
   call cpu_clock_begin(id_clock_MOM_init)
+  ! Diagnose static fields AND associate areas/volumes with axes
+  call write_static_fields(G, GV, US, CS%tv, CS%diag)
+  call callTree_waypoint("static fields written (initialize_MOM)")
+
   if (CS%use_ALE_algorithm) then
     call ALE_writeCoordinateFile( CS%ALE_CSp, GV, dirs%output_directory )
+    call callTree_waypoint("ALE initialized (initialize_MOM)")
+  elseif (write_geom_files) then
+    call write_vertgrid_file(GV, US, param_file, dirs%output_directory)
   endif
   call cpu_clock_end(id_clock_MOM_init)
-  call callTree_waypoint("ALE initialized (initialize_MOM)")
 
   CS%useMEKE = MEKE_init(Time, G, US, param_file, diag, CS%MEKE_CSp, CS%MEKE, restart_CSp)
 

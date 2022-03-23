@@ -9,8 +9,7 @@ use MOM_error_handler,    only : MOM_mesg, MOM_error, FATAL, WARNING, is_root_pe
 use MOM_error_handler,    only : callTree_enter, callTree_leave, callTree_waypoint
 use MOM_file_parser,      only : get_param, read_param, log_param, param_file_type, log_version
 use MOM_io,               only : close_file, create_file, file_type, fieldtype, file_exists
-use MOM_io,               only : MOM_read_data, MOM_write_field, vardesc, var_desc
-use MOM_io,               only : SINGLE_FILE, MULTIPLE
+use MOM_io,               only : MOM_read_data, MOM_write_field, vardesc, var_desc, SINGLE_FILE
 use MOM_string_functions, only : slasher, uppercase
 use MOM_unit_scaling,     only : unit_scale_type
 use MOM_variables,        only : thermo_var_ptrs
@@ -20,7 +19,7 @@ use BFB_initialization,   only : BFB_set_coord
 
 implicit none ; private
 
-public MOM_initialize_coord
+public MOM_initialize_coord, write_vertgrid_file
 
 ! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
 ! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
@@ -33,13 +32,11 @@ contains
 
 !> MOM_initialize_coord sets up time-invariant quantities related to MOM6's
 !!   vertical coordinate.
-subroutine MOM_initialize_coord(GV, US, PF, write_geom, output_dir, tv, max_depth)
+subroutine MOM_initialize_coord(GV, US, PF, tv, max_depth)
   type(verticalGrid_type), intent(inout) :: GV         !< Ocean vertical grid structure.
   type(unit_scale_type),   intent(in)    :: US         !< A dimensional unit scaling type
   type(param_file_type),   intent(in)    :: PF         !< A structure indicating the open file
                                                        !! to parse for model parameter values.
-  logical,                 intent(in)    :: write_geom !< If true, write grid geometry files.
-  character(len=*),        intent(in)    :: output_dir !< The directory into which to write files.
   type(thermo_var_ptrs),   intent(inout) :: tv         !< The thermodynamic variable structure.
   real,                    intent(in)    :: max_depth  !< The ocean's maximum depth [Z ~> m].
   ! Local
@@ -107,11 +104,8 @@ subroutine MOM_initialize_coord(GV, US, PF, write_geom, output_dir, tv, max_dept
   if (debug) call chksum(US%m_to_Z*US%L_to_m**2*US%s_to_T**2*GV%g_prime(:), "MOM_initialize_coord: g_prime ", 1, nz)
   call setVerticalGridAxes( GV%Rlay, GV, scale=US%R_to_kg_m3 )
 
-! Copy the maximum depth across from the input argument
+  ! Copy the maximum depth across from the input argument
   GV%max_depth = max_depth
-
-! Write out all of the grid data used by this run.
-  if (write_geom) call write_vertgrid_file(GV, US, PF, output_dir)
 
   call callTree_leave('MOM_initialize_coord()')
 

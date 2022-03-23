@@ -6,6 +6,8 @@ module MOM_regridding
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, assert
 use MOM_file_parser,   only : param_file_type, get_param, log_param
 use MOM_io,            only : file_exists, field_exists, field_size, MOM_read_data
+use MOM_io,            only : vardesc, var_desc, fieldtype, SINGLE_FILE
+use MOM_io,            only : create_file, MOM_write_field, close_file, file_type
 use MOM_io,            only : verify_variable_units, slasher
 use MOM_unit_scaling,  only : unit_scale_type
 use MOM_variables,     only : ocean_grid_type, thermo_var_ptrs
@@ -129,9 +131,8 @@ end type
 ! The following routines are visible to the outside world
 public initialize_regridding, end_regridding, regridding_main
 public inflate_vanished_layers_old, check_remapping_grid, check_grid_column
-public set_regrid_params, get_regrid_size
+public set_regrid_params, get_regrid_size, write_regrid_file
 public uniformResolution, setCoordinateResolution
-public build_rho_column
 public set_target_densities_from_GV, set_target_densities
 public set_regrid_max_depths, set_regrid_max_thickness
 public getCoordinateResolution, getCoordinateInterfaces
@@ -2105,6 +2106,37 @@ subroutine set_regrid_max_thickness( CS, max_h, units_to_H )
     call set_slight_params(CS%slight_CS, max_layer_thickness=CS%max_layer_thickness)
   end select
 end subroutine set_regrid_max_thickness
+
+
+!> Write the vertical coordinate information into a file.
+!! This subroutine writes out a file containing any available data related
+!! to the vertical grid used by the MOM ocean model when in ALE mode.
+subroutine write_regrid_file( CS, GV, filepath )
+  type(regridding_CS),     intent(in) :: CS        !< Regridding control structure
+  type(verticalGrid_type), intent(in) :: GV        !< ocean vertical grid structure
+  character(len=*),        intent(in) :: filepath  !< The full path to the file to write
+
+  type(vardesc)      :: vars(2)
+  type(fieldtype)    :: fields(2)
+  type(file_type)    :: IO_handle ! The I/O handle of the fileset
+  real               :: ds(GV%ke), dsi(GV%ke+1)
+
+  ds(:)       = CS%coord_scale * CS%coordinateResolution(:)
+  dsi(1)      = 0.5*ds(1)
+  dsi(2:GV%ke) = 0.5*( ds(1:GV%ke-1) + ds(2:GV%ke) )
+  dsi(GV%ke+1) = 0.5*ds(GV%ke)
+
+  vars(1) = var_desc('ds', getCoordinateUnits( CS ), &
+                     'Layer Coordinate Thickness', '1', 'L', '1')
+  vars(2) = var_desc('ds_interface', getCoordinateUnits( CS ), &
+                     'Layer Center Coordinate Separation', '1', 'i', '1')
+
+  call create_file(IO_handle, trim(filepath), vars, 2, fields, SINGLE_FILE, GV=GV)
+  call MOM_write_field(IO_handle, fields(1), ds)
+  call MOM_write_field(IO_handle, fields(2), dsi)
+  call close_file(IO_handle)
+
+end subroutine write_regrid_file
 
 
 !------------------------------------------------------------------------------

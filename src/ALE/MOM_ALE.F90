@@ -21,8 +21,6 @@ use MOM_error_handler,    only : MOM_error, FATAL, WARNING
 use MOM_error_handler,    only : callTree_showQuery
 use MOM_error_handler,    only : callTree_enter, callTree_leave, callTree_waypoint
 use MOM_file_parser,      only : get_param, param_file_type, log_param
-use MOM_io,               only : vardesc, var_desc, fieldtype, SINGLE_FILE
-use MOM_io,               only : create_file, write_field, close_file, file_type
 use MOM_interface_heights,only : find_eta
 use MOM_open_boundary,    only : ocean_OBC_type, OBC_DIRECTION_E, OBC_DIRECTION_W
 use MOM_open_boundary,    only : OBC_DIRECTION_N, OBC_DIRECTION_S
@@ -34,8 +32,8 @@ use MOM_regridding,       only : regriddingCoordinateModeDoc, DEFAULT_COORDINATE
 use MOM_regridding,       only : regriddingInterpSchemeDoc, regriddingDefaultInterpScheme
 use MOM_regridding,       only : regriddingDefaultBoundaryExtrapolation
 use MOM_regridding,       only : regriddingDefaultMinThickness
-use MOM_regridding,       only : regridding_CS, set_regrid_params
-use MOM_regridding,       only : getCoordinateInterfaces, getCoordinateResolution
+use MOM_regridding,       only : regridding_CS, set_regrid_params, write_regrid_file
+use MOM_regridding,       only : getCoordinateInterfaces
 use MOM_regridding,       only : getCoordinateUnits, getCoordinateShortName
 use MOM_regridding,       only : getStaticThickness
 use MOM_remapping,        only : initialize_remapping, end_remapping
@@ -333,7 +331,7 @@ end subroutine ALE_register_diags
 !! We read the MOM_input file to register the values of different
 !! regridding/remapping parameters.
 subroutine adjustGridForIntegrity( CS, G, GV, h )
-  type(ALE_CS),                              pointer       :: CS  !< Regridding parameters and options
+  type(ALE_CS),                              intent(in)    :: CS  !< Regridding parameters and options
   type(ocean_grid_type),                     intent(in)    :: G   !< Ocean grid informations
   type(verticalGrid_type),                   intent(in)    :: GV  !< Ocean vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(inout) :: h   !< Current 3D grid thickness that
@@ -1413,26 +1411,10 @@ subroutine ALE_writeCoordinateFile( CS, GV, directory )
   character(len=*),        intent(in)  :: directory  !< directory for writing grid info
 
   character(len=240) :: filepath
-  type(vardesc)      :: vars(2)
-  type(fieldtype)    :: fields(2)
-  type(file_type)    :: IO_handle ! The I/O handle of the fileset
-  real               :: ds(GV%ke), dsi(GV%ke+1)
 
-  filepath    = trim(directory) // trim("Vertical_coordinate")
-  ds(:)       = getCoordinateResolution( CS%regridCS, undo_scaling=.true. )
-  dsi(1)      = 0.5*ds(1)
-  dsi(2:GV%ke) = 0.5*( ds(1:GV%ke-1) + ds(2:GV%ke) )
-  dsi(GV%ke+1) = 0.5*ds(GV%ke)
+  filepath = trim(directory) // trim("Vertical_coordinate")
 
-  vars(1) = var_desc('ds', getCoordinateUnits( CS%regridCS ), &
-                    'Layer Coordinate Thickness','1','L','1')
-  vars(2) = var_desc('ds_interface', getCoordinateUnits( CS%regridCS ), &
-                    'Layer Center Coordinate Separation','1','i','1')
-
-  call create_file(IO_handle, trim(filepath), vars, 2, fields, SINGLE_FILE, GV=GV)
-  call write_field(IO_handle, fields(1), ds)
-  call write_field(IO_handle, fields(2), dsi)
-  call close_file(IO_handle)
+  call write_regrid_file(CS%regridCS, GV, filepath)
 
 end subroutine ALE_writeCoordinateFile
 
