@@ -545,8 +545,8 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
       tot_Froude_loss(i,j) = tot_Froude_loss(i,j) + CS%TKE_Froude_loss(i,j,a,fr,m)
     enddo ; enddo ; enddo ; enddo ; enddo
     do j=js,je ; do i=is,ie
-      tot_allprocesses_loss(i,j) = tot_leak_loss(i,j) + tot_quad_loss(i,j) + &
-                          tot_itidal_loss(i,j) + tot_Froude_loss(i,j)
+      tot_allprocesses_loss(i,j) = ((tot_leak_loss(i,j) + tot_quad_loss(i,j)) + &
+                          (tot_itidal_loss(i,j) + tot_Froude_loss(i,j)))
     enddo ; enddo
     CS%tot_leak_loss         = tot_leak_loss
     CS%tot_quad_loss         = tot_quad_loss
@@ -577,8 +577,8 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
       do a=1,CS%nAngle ; do j=js,je ; do i=is,ie
         itidal_loss_mode(i,j)       = itidal_loss_mode(i,j) + CS%TKE_itidal_loss(i,j,a,fr,m)
         allprocesses_loss_mode(i,j) = allprocesses_loss_mode(i,j) + &
-                                 CS%TKE_leak_loss(i,j,a,fr,m) + CS%TKE_quad_loss(i,j,a,fr,m) + &
-                                 CS%TKE_itidal_loss(i,j,a,fr,m) + CS%TKE_Froude_loss(i,j,a,fr,m)
+                                 ((CS%TKE_leak_loss(i,j,a,fr,m) + CS%TKE_quad_loss(i,j,a,fr,m)) + &
+                                 (CS%TKE_itidal_loss(i,j,a,fr,m) + CS%TKE_Froude_loss(i,j,a,fr,m)))
       enddo ; enddo ; enddo
       call post_data(CS%id_itidal_loss_mode(fr,m), itidal_loss_mode, CS%diag)
       call post_data(CS%id_allprocesses_loss_mode(fr,m), allprocesses_loss_mode, CS%diag)
@@ -1056,7 +1056,7 @@ subroutine propagate(En, cn, freq, dt, G, US, CS, NAngle)
     speed(:,:) = 0.0
     do J=jsh-1,jeh ; do I=ish-1,ieh
       f2 = G%CoriolisBu(I,J)**2
-      speed(I,J) = 0.25*(cn(i,j) + cn(i+1,j) + cn(i+1,j+1) + cn(i,j+1)) * &
+      speed(I,J) = 0.25*((cn(i,j) + cn(i+1,j+1)) + (cn(i+1,j) + cn(i,j+1))) * &
                      sqrt(max(freq2 - f2, 0.0)) * Ifreq
     enddo ; enddo
     do a=1,na
@@ -1178,7 +1178,7 @@ subroutine propagate_corner_spread(En, energized_wedge, NAngle, speed, dt, G, CS
 
   do j=jsh,jeh ; do i=ish,ieh
     do m=1,int(Nsubrays)
-      theta = energized_angle - 0.5*Angle_size + real(m - 1)*Angle_size*I_Nsubwedges
+      theta = (energized_angle - 0.5*Angle_size) + real(m - 1)*Angle_size*I_Nsubwedges
       if (theta < 0.0) then
         theta = theta + TwoPi
       elseif (theta > TwoPi) then
@@ -1268,114 +1268,133 @@ subroutine propagate_corner_spread(En, energized_wedge, NAngle, speed, dt, G, CS
       if (0.0 <= theta .and. theta < 0.25*TwoPi) then
           xCrn = x(I-1,J-1); yCrn = y(I-1,J-1)
           ! west area
-          a1 = (yN - yCrn)*(0.5*(xN + xCrn))
-          a2 = (yCrn - yW)*(0.5*(xCrn + xW))
-          a3 = (yW - yNW)*(0.5*(xW + xNW))
-          a4 = (yNW - yN)*(0.5*(xNW + xN))
-          aW = a1 + a2 + a3 + a4
+          !a1 = (yN - yCrn)*(0.5*(xN + xCrn))
+          !a2 = (yCrn - yW)*(0.5*(xCrn + xW))
+          !a3 = (yW - yNW)*(0.5*(xW + xNW))
+          !a4 = (yNW - yN)*(0.5*(xNW + xN))
+          !aW = a1 + a2 + a3 + a4
+          aW = 0.5 * ((yCrn - yNW)*(xW - xN) + (xCrn - xNW)*(yN - yW))
           ! southwest area
-          a1 = (yCrn - yS)*(0.5*(xCrn + xS))
-          a2 = (yS - ySW)*(0.5*(xS + xSW))
-          a3 = (ySW - yW)*(0.5*(xSW + xW))
-          a4 = (yW - yCrn)*(0.5*(xW + xCrn))
-          aSW = a1 + a2 + a3 + a4
+          !a1 = (yCrn - yS)*(0.5*(xCrn + xS))
+          !a2 = (yS - ySW)*(0.5*(xS + xSW))
+          !a3 = (ySW - yW)*(0.5*(xSW + xW))
+          !a4 = (yW - yCrn)*(0.5*(xW + xCrn))
+          !aSW = a1 + a2 + a3 + a4
+          aSW = 0.5 * ((yCrn - ySW)*(xS - xW) + (xCrn - xSW)*(yW - yS))
           ! south area
-          a1 = (yE - ySE)*(0.5*(xE + xSE))
-          a2 = (ySE - yS)*(0.5*(xSE + xS))
-          a3 = (yS - yCrn)*(0.5*(xS + xCrn))
-          a4 = (yCrn - yE)*(0.5*(xCrn + xE))
-          aS = a1 + a2 + a3 + a4
+          !a1 = (yE - ySE)*(0.5*(xE + xSE))
+          !a2 = (ySE - yS)*(0.5*(xSE + xS))
+          !a3 = (yS - yCrn)*(0.5*(xS + xCrn))
+          !a4 = (yCrn - yE)*(0.5*(xCrn + xE))
+          !aS = a1 + a2 + a3 + a4
+          aS = 0.5 * ((yCrn - ySE)*(xE - xS) + (xCrn - xSE)*(yS - yE))
           ! area within cell
-          a1 = (yNE - yE)*(0.5*(xNE + xE))
-          a2 = (yE - yCrn)*(0.5*(xE + xCrn))
-          a3 = (yCrn - yN)*(0.5*(xCrn + xN))
-          a4 = (yN - yNE)*(0.5*(xN + xNE))
-          aC = a1 + a2 + a3 + a4
+          !a1 = (yNE - yE)*(0.5*(xNE + xE))
+          !a2 = (yE - yCrn)*(0.5*(xE + xCrn))
+          !a3 = (yCrn - yN)*(0.5*(xCrn + xN))
+          !a4 = (yN - yNE)*(0.5*(xN + xNE))
+          !aC = a1 + a2 + a3 + a4
+          aC = 0.5 * ((yCrn - yNE)*(xN - xE) + (xCrn - xNE)*(yE - yN))
       elseif (0.25*TwoPi <= theta .and. theta < 0.5*TwoPi) then
           xCrn = x(I,J-1); yCrn = y(I,J-1)
           ! south area
-          a1 = (yCrn - yS)*(0.5*(xCrn + xS))
-          a2 = (yS - ySW)*(0.5*(xS + xSW))
-          a3 = (ySW - yW)*(0.5*(xSW + xW))
-          a4 = (yW - yCrn)*(0.5*(xW + xCrn))
-          aS = a1 + a2 + a3 + a4
+          !a1 = (yCrn - yS)*(0.5*(xCrn + xS))
+          !a2 = (yS - ySW)*(0.5*(xS + xSW))
+          !a3 = (ySW - yW)*(0.5*(xSW + xW))
+          !a4 = (yW - yCrn)*(0.5*(xW + xCrn))
+          !aS = a1 + a2 + a3 + a4
+          aS = 0.5 * ((yCrn - ySW)*(xS - xW) + (xCrn - xSW)*(yW - yS))
           ! southeast area
-          a1 = (yE - ySE)*(0.5*(xE + xSE))
-          a2 = (ySE - yS)*(0.5*(xSE + xS))
-          a3 = (yS - yCrn)*(0.5*(xS + xCrn))
-          a4 = (yCrn - yE)*(0.5*(xCrn + xE))
-          aSE = a1 + a2 + a3 + a4
+          !a1 = (yE - ySE)*(0.5*(xE + xSE))
+          !a2 = (ySE - yS)*(0.5*(xSE + xS))
+          !a3 = (yS - yCrn)*(0.5*(xS + xCrn))
+          !a4 = (yCrn - yE)*(0.5*(xCrn + xE))
+          !aSE = a1 + a2 + a3 + a4
+          aSE = 0.5 * ((yCrn - ySE)*(xE - xS) + (xCrn - xSE)*(yS - yE))
           ! east area
-          a1 = (yNE - yE)*(0.5*(xNE + xE))
-          a2 = (yE - yCrn)*(0.5*(xE + xCrn))
-          a3 = (yCrn - yN)*(0.5*(xCrn + xN))
-          a4 = (yN - yNE)*(0.5*(xN + xNE))
-          aE = a1 + a2 + a3 + a4
+          !a1 = (yNE - yE)*(0.5*(xNE + xE))
+          !a2 = (yE - yCrn)*(0.5*(xE + xCrn))
+          !a3 = (yCrn - yN)*(0.5*(xCrn + xN))
+          !a4 = (yN - yNE)*(0.5*(xN + xNE))
+          !aE = a1 + a2 + a3 + a4
+          aE = 0.5 * ((yCrn - yNE)*(xN - xE) + (xCrn - xNE)*(yE - yN))
           ! area within cell
-          a1 = (yN - yCrn)*(0.5*(xN + xCrn))
-          a2 = (yCrn - yW)*(0.5*(xCrn + xW))
-          a3 = (yW - yNW)*(0.5*(xW + xNW))
-          a4 = (yNW - yN)*(0.5*(xNW + xN))
-          aC = a1 + a2 + a3 + a4
+          !a1 = (yN - yCrn)*(0.5*(xN + xCrn))
+          !a2 = (yCrn - yW)*(0.5*(xCrn + xW))
+          !a3 = (yW - yNW)*(0.5*(xW + xNW))
+          !a4 = (yNW - yN)*(0.5*(xNW + xN))
+          !aC = a1 + a2 + a3 + a4
+          aC = 0.5 * ((yCrn - yNW)*(xW - xN) + (xCrn - xNW)*(yN - yW))
       elseif (0.5*TwoPi <= theta .and. theta < 0.75*TwoPi) then
           xCrn = x(I,J); yCrn = y(I,J)
           ! east area
-          a1 = (yE - ySE)*(0.5*(xE + xSE))
-          a2 = (ySE - yS)*(0.5*(xSE + xS))
-          a3 = (yS - yCrn)*(0.5*(xS + xCrn))
-          a4 = (yCrn - yE)*(0.5*(xCrn + xE))
-          aE = a1 + a2 + a3 + a4
+          !a1 = (yE - ySE)*(0.5*(xE + xSE))
+          !a2 = (ySE - yS)*(0.5*(xSE + xS))
+          !a3 = (yS - yCrn)*(0.5*(xS + xCrn))
+          !a4 = (yCrn - yE)*(0.5*(xCrn + xE))
+          !aE = a1 + a2 + a3 + a4
+          aE = 0.5 * ((yCrn - ySE)*(xE - xS) + (xCrn - xSE)*(yS - yE))
           ! northeast area
-          a1 = (yNE - yE)*(0.5*(xNE + xE))
-          a2 = (yE - yCrn)*(0.5*(xE + xCrn))
-          a3 = (yCrn - yN)*(0.5*(xCrn + xN))
-          a4 = (yN - yNE)*(0.5*(xN + xNE))
-          aNE = a1 + a2 + a3 + a4
+          !a1 = (yNE - yE)*(0.5*(xNE + xE))
+          !a2 = (yE - yCrn)*(0.5*(xE + xCrn))
+          !a3 = (yCrn - yN)*(0.5*(xCrn + xN))
+          !a4 = (yN - yNE)*(0.5*(xN + xNE))
+          !aNE = a1 + a2 + a3 + a4
+          aNE = 0.5 * ((yCrn - yNE)*(xN - xE) + (xCrn - xNE)*(yE - yN))
           ! north area
-          a1 = (yN - yCrn)*(0.5*(xN + xCrn))
-          a2 = (yCrn - yW)*(0.5*(xCrn + xW))
-          a3 = (yW - yNW)*(0.5*(xW + xNW))
-          a4 = (yNW - yN)*(0.5*(xNW + xN))
-          aN = a1 + a2 + a3 + a4
+          !a1 = (yN - yCrn)*(0.5*(xN + xCrn))
+          !a2 = (yCrn - yW)*(0.5*(xCrn + xW))
+          !a3 = (yW - yNW)*(0.5*(xW + xNW))
+          !a4 = (yNW - yN)*(0.5*(xNW + xN))
+          !aN = a1 + a2 + a3 + a4
+          aN = 0.5 * ((yCrn - yNW)*(xW - xN) + (xCrn - xNW)*(yN - yW))
           ! area within cell
-          a1 = (yCrn - yS)*(0.5*(xCrn + xS))
-          a2 = (yS - ySW)*(0.5*(xS + xSW))
-          a3 = (ySW - yW)*(0.5*(xSW + xW))
-          a4 = (yW - yCrn)*(0.5*(xW + xCrn))
-          aC = a1 + a2 + a3 + a4
+          !a1 = (yCrn - yS)*(0.5*(xCrn + xS))
+          !a2 = (yS - ySW)*(0.5*(xS + xSW))
+          !a3 = (ySW - yW)*(0.5*(xSW + xW))
+          !a4 = (yW - yCrn)*(0.5*(xW + xCrn))
+          !aC = a1 + a2 + a3 + a4
+          aC = 0.5 * ((yCrn - ySW)*(xS - xW) + (xCrn - xSW)*(yW - yS))
       elseif (0.75*TwoPi <= theta .and. theta <= 1.00*TwoPi) then
           xCrn = x(I-1,J); yCrn = y(I-1,J)
           ! north area
-          a1 = (yNE - yE)*(0.5*(xNE + xE))
-          a2 = (yE - yCrn)*(0.5*(xE + xCrn))
-          a3 = (yCrn - yN)*(0.5*(xCrn + xN))
-          a4 = (yN - yNE)*(0.5*(xN + xNE))
-          aN = a1 + a2 + a3 + a4
+          !a1 = (yNE - yE)*(0.5*(xNE + xE))
+          !a2 = (yE - yCrn)*(0.5*(xE + xCrn))
+          !a3 = (yCrn - yN)*(0.5*(xCrn + xN))
+          !a4 = (yN - yNE)*(0.5*(xN + xNE))
+          !aN = a1 + a2 + a3 + a4
+          aN = 0.5 * ((yCrn - yNE)*(xN - xE) + (xCrn - xNE)*(yE - yN))
           ! northwest area
-          a1 = (yN - yCrn)*(0.5*(xN + xCrn))
-          a2 = (yCrn - yW)*(0.5*(xCrn + xW))
-          a3 = (yW - yNW)*(0.5*(xW + xNW))
-          a4 = (yNW - yN)*(0.5*(xNW + xN))
-          aNW = a1 + a2 + a3 + a4
+          !a1 = (yN - yCrn)*(0.5*(xN + xCrn))
+          !a2 = (yCrn - yW)*(0.5*(xCrn + xW))
+          !a3 = (yW - yNW)*(0.5*(xW + xNW))
+          !a4 = (yNW - yN)*(0.5*(xNW + xN))
+          !aNW = a1 + a2 + a3 + a4
+          aNW = 0.5 * ((yCrn - yNW)*(xW - xN) + (xCrn - xNW)*(yN - yW))
           ! west area
-          a1 = (yCrn - yS)*(0.5*(xCrn + xS))
-          a2 = (yS - ySW)*(0.5*(xS + xSW))
-          a3 = (ySW - yW)*(0.5*(xSW + xW))
-          a4 = (yW - yCrn)*(0.5*(xW + xCrn))
-          aW = a1 + a2 + a3 + a4
+          !a1 = (yCrn - yS)*(0.5*(xCrn + xS))
+          !a2 = (yS - ySW)*(0.5*(xS + xSW))
+          !a3 = (ySW - yW)*(0.5*(xSW + xW))
+          !a4 = (yW - yCrn)*(0.5*(xW + xCrn))
+          !aW = a1 + a2 + a3 + a4
+          aW = 0.5 * ((yCrn - ySW)*(xS - xW) + (xCrn - xSW)*(yW - yS))
           ! area within cell
-          a1 = (yE - ySE)*(0.5*(xE + xSE))
-          a2 = (ySE - yS)*(0.5*(xSE + xS))
-          a3 = (yS - yCrn)*(0.5*(xS + xCrn))
-          a4 = (yCrn - yE)*(0.5*(xCrn + xE))
-          aC = a1 + a2 + a3 + a4
+          !a1 = (yE - ySE)*(0.5*(xE + xSE))
+          !a2 = (ySE - yS)*(0.5*(xSE + xS))
+          !a3 = (yS - yCrn)*(0.5*(xS + xCrn))
+          !a4 = (yCrn - yE)*(0.5*(xCrn + xE))
+          !aC = a1 + a2 + a3 + a4
+          aC = 0.5 * ((yCrn - ySE)*(xE - xS) + (xCrn - xSE)*(yS - yE))
       endif
 
       ! energy weighting ----------------------------------------
-      a_total = aNE + aN + aNW + aW + aSW + aS + aSE + aE + aC
-      E_new(m) = (aNE*En(i+1,j+1) + aN*En(i,j+1) + aNW*En(i-1,j+1) + &
-                  aW*En(i-1,j) + aSW*En(i-1,j-1) + aS*En(i,j-1) + &
-                  aSE*En(i+1,j-1) + aE*En(i+1,j) + aC*En(i,j)) / (dx(i,j)*dy(i,j))
+      a_total = (((aNE + aSW) + (aNW + aSE)) + ((aN + aS) + (aW + aE))) + aC
+
+      E_new(m) = ( ( ( ( aNE*En(i+1,j+1) + aSW*En(i-1,j-1) )     + &
+                       ( aNW*En(i-1,j+1) + aSE*En(i+1,j-1) ) )   + &
+                     ( ( aN*En(i,j+1)    + aS*En(i,j-1)    )     + &
+                       ( aW*En(i-1,j)    + aE*En(i+1,j)    ) ) ) + &
+                        aC*En(i,j)  ) / ( dx(i,j)*dy(i,j) )
     enddo ! m-loop
     ! update energy in cell
     En(i,j) = sum(E_new)/Nsubrays
@@ -1608,13 +1627,13 @@ subroutine merid_flux_En(v, h, hL, hR, vh, dt, G, US, J, ish, ieh, vol_CFL)
     if (v(i) > 0.0) then
       if (vol_CFL) then ; CFL = (v(i) * dt) * (G%dx_Cv(i,J) * G%IareaT(i,j))
       else ; CFL = v(i) * dt * G%IdyT(i,j) ; endif
-      curv_3 = hL(i,j) + hR(i,j) - 2.0*h(i,j)
+      curv_3 = (hL(i,j) + hR(i,j)) - 2.0*h(i,j)
       vh(i) = G%dx_Cv(i,J) * v(i) * ( hR(i,j) + CFL * &
           (0.5*(hL(i,j) - hR(i,j)) + curv_3*(CFL - 1.5)) )
     elseif (v(i) < 0.0) then
       if (vol_CFL) then ; CFL = (-v(i) * dt) * (G%dx_Cv(i,J) * G%IareaT(i,j+1))
       else ; CFL = -v(i) * dt * G%IdyT(i,j+1) ; endif
-      curv_3 = hL(i,j+1) + hR(i,j+1) - 2.0*h(i,j+1)
+      curv_3 = (hL(i,j+1) + hR(i,j+1)) - 2.0*h(i,j+1)
       vh(i) = G%dx_Cv(i,J) * v(i) * ( hL(i,j+1) + CFL * &
           (0.5*(hR(i,j+1)-hL(i,j+1)) + curv_3*(CFL - 1.5)) )
     else
@@ -1692,12 +1711,12 @@ subroutine reflect(En, NAngle, CS, G, LB)
         angle_wall0 = angle_wall - 1
         ! compute relative angle from wall and use cyclic properties
         ! to ensure it is bounded by 0 -> Nangle-1
-        angle_to_wall = mod(a0 - angle_wall0 + Nangle, Nangle)
+        angle_to_wall = mod((a0 - angle_wall0) + Nangle, Nangle)
 
         if (ridge(i,j)) then
           ! if ray is not incident but in ridge cell, use complementary angle
           if ((Nangle_d2 < angle_to_wall) .and. (angle_to_wall < Nangle)) then
-            angle_wall0 = mod(angle_wall0 + Nangle_d2 + Nangle, Nangle)
+            angle_wall0 = mod(angle_wall0 + (Nangle_d2 + Nangle), Nangle)
           endif
         endif
 
@@ -2057,7 +2076,7 @@ subroutine PPM_limit_pos(h_in, h_L, h_R, h_min, G, iis, iie, jis, jie)
   do j=jis,jie ; do i=iis,iie
     ! This limiter prevents undershooting minima within the domain with
     ! values less than h_min.
-    curv = 3.0*(h_L(i,j) + h_R(i,j) - 2.0*h_in(i,j))
+    curv = 3.0*((h_L(i,j) + h_R(i,j)) - 2.0*h_in(i,j))
     if (curv > 0.0) then ! Only minima are limited.
       dh = h_R(i,j) - h_L(i,j)
       if (abs(dh) < curv) then ! The parabola's minimum is within the cell.
