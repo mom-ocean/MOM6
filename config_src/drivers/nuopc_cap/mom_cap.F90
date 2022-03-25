@@ -654,8 +654,7 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
   ocean_public%is_ocean_pe = .true.
   call ocean_model_init(ocean_public, ocean_state, time0, time_start, input_restart_file=trim(restartfiles))
 
-  ! GMM, this call is not needed for NCAR. Check with EMC.
-  ! If this can be deleted, perhaps we should also delete ocean_model_flux_init
+  ! GMM, this call is not needed in CESM. Check with EMC if it can be deleted.
   call ocean_model_flux_init(ocean_state)
 
   call ocean_model_init_sfc(ocean_state, ocean_public)
@@ -680,9 +679,7 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
              Ice_ocean_boundary% ice_fraction (isc:iec,jsc:jec),    &
              Ice_ocean_boundary% u10_sqr (isc:iec,jsc:jec),         &
              Ice_ocean_boundary% p (isc:iec,jsc:jec),               &
-             Ice_ocean_boundary% lrunoff_hflx (isc:iec,jsc:jec),    &
-             Ice_ocean_boundary% frunoff_hflx (isc:iec,jsc:jec),    &
-             Ice_ocean_boundary% lrunoff (isc:iec,jsc:jec),       &
+             Ice_ocean_boundary% lrunoff (isc:iec,jsc:jec),         &
              Ice_ocean_boundary% frunoff (isc:iec,jsc:jec))
 
   Ice_ocean_boundary%u_flux          = 0.0
@@ -703,10 +700,24 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
   Ice_ocean_boundary%ice_fraction    = 0.0
   Ice_ocean_boundary%u10_sqr         = 0.0
   Ice_ocean_boundary%p               = 0.0
-  Ice_ocean_boundary%lrunoff_hflx    = 0.0
-  Ice_ocean_boundary%frunoff_hflx    = 0.0
   Ice_ocean_boundary%lrunoff         = 0.0
   Ice_ocean_boundary%frunoff         = 0.0
+
+  if (cesm_coupled) then
+    allocate (Ice_ocean_boundary% hrain (isc:iec,jsc:jec),           &
+              Ice_ocean_boundary% hsnow (isc:iec,jsc:jec),           &
+              Ice_ocean_boundary% hrofl (isc:iec,jsc:jec),           &
+              Ice_ocean_boundary% hrofi (isc:iec,jsc:jec),           &
+              Ice_ocean_boundary% hevap (isc:iec,jsc:jec),           &
+              Ice_ocean_boundary% hcond (isc:iec,jsc:jec))
+
+    Ice_ocean_boundary%hrain           = 0.0
+    Ice_ocean_boundary%hsnow           = 0.0
+    Ice_ocean_boundary%hrofl           = 0.0
+    Ice_ocean_boundary%hrofi           = 0.0
+    Ice_ocean_boundary%hevap           = 0.0
+    Ice_ocean_boundary%hcond           = 0.0
+  endif
 
   call query_ocean_state(ocean_state, use_waves=use_waves, wave_method=wave_method)
   if (use_waves) then
@@ -756,9 +767,16 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
   call fld_list_add(fldsToOcn_num, fldsToOcn, "So_duu10n"                  , "will provide") !-> wind^2 at 10m
   call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_fresh_water_to_ocean_rate", "will provide")
   call fld_list_add(fldsToOcn_num, fldsToOcn, "net_heat_flx_to_ocn"        , "will provide")
-  !These are not currently used and changing requires a nuopc dictionary change
-  !call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_runoff_heat_flx"        , "will provide")
-  !call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_calving_heat_flx"       , "will provide")
+
+  if (cesm_coupled) then
+    call fld_list_add(fldsToOcn_num, fldsToOcn, "heat_content_lprec", "will provide")
+    call fld_list_add(fldsToOcn_num, fldsToOcn, "heat_content_fprec", "will provide")
+    call fld_list_add(fldsToOcn_num, fldsToOcn, "heat_content_evap" , "will provide")
+    call fld_list_add(fldsToOcn_num, fldsToOcn, "heat_content_cond" , "will provide")
+    call fld_list_add(fldsToOcn_num, fldsToOcn, "heat_content_rofl" , "will provide")
+    call fld_list_add(fldsToOcn_num, fldsToOcn, "heat_content_rofi" , "will provide")
+  endif
+
   if (use_waves) then
     if (wave_method == "EFACTOR") then
       call fld_list_add(fldsToOcn_num, fldsToOcn, "Sw_lamult"                 , "will provide")
@@ -1663,7 +1681,8 @@ subroutine ModelAdvance(gcomp, rc)
      !---------------
 
      if(profile_memory) call ESMF_VMLogMemInfo("Entering MOM update_ocean_model: ")
-     call update_ocean_model(Ice_ocean_boundary, ocean_state, ocean_public, Time, Time_step_coupled)
+     call update_ocean_model(Ice_ocean_boundary, ocean_state, ocean_public, Time, Time_step_coupled, &
+                             cesm_coupled)
      if(profile_memory) call ESMF_VMLogMemInfo("Leaving MOM update_ocean_model: ")
 
      !---------------
@@ -2388,7 +2407,7 @@ end subroutine shr_file_getLogUnit
 !! infrastructure when it's time for MOM to advance in time. During this subroutine, there is a
 !! call into the MOM update routine:
 !!
-!!      call update_ocean_model(Ice_ocean_boundary, Ocean_state, Ocean_public, Time, Time_step_coupled)
+!!      call update_ocean_model(Ice_ocean_boundary, Ocean_state, Ocean_public, Time, Time_step_coupled, cesm_coupled)
 !!
 !! Priori to the call to `update_ocean_model()`, the cap performs these steps
 !! - the `Time` and `Time_step_coupled` parameters, based on FMS types, are derived from the incoming ESMF clock
@@ -2499,13 +2518,6 @@ end subroutine shr_file_getLogUnit
 !!     <td></td>
 !! </tr>
 !! <tr>
-!!     <td>mean_calving_heat_flx</td>
-!!     <td>W m-2</td>
-!!     <td>calving_hflx</td>
-!!     <td>heat flux, relative to 0C, of frozen land water into ocean</td>
-!!     <td></td>
-!! </tr>
-!! <tr>
 !!     <td>mean_calving_rate</td>
 !!     <td>kg m-2 s-1</td>
 !!     <td>calving</td>
@@ -2576,10 +2588,45 @@ end subroutine shr_file_getLogUnit
 !!     <td></td>
 !! </tr>
 !! <tr>
-!!     <td>mean_runoff_heat_flx</td>
+!!     <td>heat_content_lprec</td>
 !!     <td>W m-2</td>
-!!     <td>runoff_hflx</td>
-!!     <td>heat flux, relative to 0C, of liquid land water into ocean</td>
+!!     <td>hrain</td>
+!!     <td>heat content (enthalpy) of liquid water entering the ocean</td>
+!!     <td></td>
+!! </tr>
+!! <tr>
+!!     <td>heat_content_fprec</td>
+!!     <td>W m-2</td>
+!!     <td>hsnow</td>
+!!     <td>heat content (enthalpy) of frozen water entering the ocean</td>
+!!     <td></td>
+!! </tr>
+!! <tr>
+!!     <td>heat_content_evap</td>
+!!     <td>W m-2</td>
+!!     <td>hevap</td>
+!!     <td>heat content (enthalpy) of water leaving the ocean</td>
+!!     <td></td>
+!! </tr>
+!! <tr>
+!!     <td>heat_content_cond</td>
+!!     <td>W m-2</td>
+!!     <td>hcond</td>
+!!     <td>heat content (enthalpy) of liquid water entering the ocean due to condensation</td>
+!!     <td></td>
+!! </tr>
+!! <tr>
+!!     <td>heat_content_rofl</td>
+!!     <td>W m-2</td>
+!!     <td>hrofl</td>
+!!     <td>heat content (enthalpy) of liquid runoff</td>
+!!     <td></td>
+!! </tr>
+!! <tr>
+!!     <td>heat_content_rofi</td>
+!!     <td>W m-2</td>
+!!     <td>hrofi</td>
+!!     <td>heat content (enthalpy) of frozen runoff</td>
 !!     <td></td>
 !! </tr>
 !! <tr>

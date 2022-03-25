@@ -459,7 +459,7 @@ end subroutine ocean_model_init
 !! storing the new ocean properties in Ocean_state.
 subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
                               time_start_update, Ocean_coupling_time_step, &
-                              update_dyn, update_thermo, Ocn_fluxes_used)
+                              cesm_coupled, update_dyn, update_thermo, Ocn_fluxes_used)
   type(ice_ocean_boundary_type), &
                      intent(in)    :: Ice_ocean_boundary !< A structure containing the
                                               !! various forcing fields coming from the ice.
@@ -474,6 +474,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
   type(time_type),   intent(in)    :: time_start_update  !< The time at the beginning of the update step.
   type(time_type),   intent(in)    :: Ocean_coupling_time_step !< The amount of time over
                                               !! which to advance the ocean.
+  logical,           intent(in)    :: cesm_coupled !< Flag to check if coupled with cesm
   logical, optional, intent(in)    :: update_dyn !< If present and false, do not do updates
                                               !! due to the ocean dynamics.
   logical, optional, intent(in)    :: update_thermo !< If present and false, do not do updates
@@ -523,7 +524,6 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
 
   do_dyn = .true. ; if (present(update_dyn)) do_dyn = update_dyn
   do_thermo = .true. ; if (present(update_thermo)) do_thermo = update_thermo
-
   ! This is benign but not necessary if ocean_model_init_sfc was called or if
   ! OS%sfc_state%tr_fields was spawned in ocean_model_init.  Consider removing it.
   is = OS%grid%isc ; ie = OS%grid%iec ; js = OS%grid%jsc ; je = OS%grid%jec
@@ -690,7 +690,12 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
   call mech_forcing_diags(OS%forces, dt_coupling, OS%grid, OS%Time, OS%diag, OS%forcing_CSp%handles)
 
   if (OS%fluxes%fluxes_used) then
-    call forcing_diagnostics(OS%fluxes, OS%sfc_state, OS%grid, OS%US, OS%Time, OS%diag, OS%forcing_CSp%handles)
+    if (cesm_coupled) then
+      call forcing_diagnostics(OS%fluxes, OS%sfc_state, OS%grid, OS%US, OS%Time, OS%diag, &
+                               OS%forcing_CSp%handles, enthalpy=.true.)
+    else
+      call forcing_diagnostics(OS%fluxes, OS%sfc_state, OS%grid, OS%US, OS%Time, OS%diag, OS%forcing_CSp%handles)
+    endif
   endif
 
 ! Translate state into Ocean.

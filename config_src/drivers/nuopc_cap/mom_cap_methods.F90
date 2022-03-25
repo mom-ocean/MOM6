@@ -217,17 +217,53 @@ subroutine mom_import(ocean_public, ocean_grid, importState, ice_ocean_boundary,
        isc, iec, jsc, jec, ice_ocean_boundary%frunoff, areacor=med2mod_areacor, rc=rc)
   if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
-  ! heat content of lrunoff
-  ice_ocean_boundary%lrunoff_hflx(:,:) = 0._ESMF_KIND_R8
-  call state_getimport(importState, 'mean_runoff_heat_flx',  &
-       isc, iec, jsc, jec, ice_ocean_boundary%lrunoff_hflx, areacor=med2mod_areacor, rc=rc)
-  if (ChkErr(rc,__LINE__,u_FILE_u)) return
+  !----
+  ! Enthalpy terms (only in CESM)
+  !----
+  if (cesm_coupled) then
+    !----
+    ! enthalpy from liquid precipitation (hrain)
+    !----
+    call state_getimport(importState, 'heat_content_lprec', &
+         isc, iec, jsc, jec, ice_ocean_boundary%hrain, areacor=med2mod_areacor, rc=rc)
+    if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
-  ! heat content of frunoff
-  ice_ocean_boundary%frunoff_hflx(:,:) = 0._ESMF_KIND_R8
-  call state_getimport(importState, 'mean_calving_heat_flx',  &
-       isc, iec, jsc, jec, ice_ocean_boundary%frunoff_hflx, areacor=med2mod_areacor, rc=rc)
-  if (ChkErr(rc,__LINE__,u_FILE_u)) return
+    !----
+    ! enthalpy from frozen precipitation (hsnow)
+    !----
+    call state_getimport(importState, 'heat_content_fprec', &
+         isc, iec, jsc, jec, ice_ocean_boundary%hsnow, areacor=med2mod_areacor, rc=rc)
+    if (ChkErr(rc,__LINE__,u_FILE_u)) return
+
+    !----
+    ! enthalpy from liquid runoff (hrofl)
+    !----
+    call state_getimport(importState, 'heat_content_rofl', &
+         isc, iec, jsc, jec, ice_ocean_boundary%hrofl, areacor=med2mod_areacor, rc=rc)
+    if (ChkErr(rc,__LINE__,u_FILE_u)) return
+
+    !----
+    ! enthalpy from frozen runoff (hrofi)
+    !----
+    call state_getimport(importState, 'heat_content_rofi', &
+         isc, iec, jsc, jec, ice_ocean_boundary%hrofi, areacor=med2mod_areacor, rc=rc)
+    if (ChkErr(rc,__LINE__,u_FILE_u)) return
+
+    !----
+    ! enthalpy from evaporation (hevap)
+    !----
+    call state_getimport(importState, 'heat_content_evap', &
+         isc, iec, jsc, jec, ice_ocean_boundary%hevap, areacor=med2mod_areacor, rc=rc)
+    if (ChkErr(rc,__LINE__,u_FILE_u)) return
+
+    !----
+    ! enthalpy from condensation (hcond)
+    !----
+    call state_getimport(importState, 'heat_content_cond', &
+         isc, iec, jsc, jec, ice_ocean_boundary%hcond, areacor=med2mod_areacor, rc=rc)
+    if (ChkErr(rc,__LINE__,u_FILE_u)) return
+
+  endif
 
   !----
   ! salt flux from ice
