@@ -1008,7 +1008,14 @@ subroutine accumulate_net_input(fluxes, sfc_state, tv, dt, G, US, CS)
 !    enddo ; enddo ; endif
 
     ! smg: old code
-    if (associated(tv%TempxPmE)) then
+    if (associated(fluxes%heat_content_evap)) then
+      do j=js,je ; do i=is,ie
+        heat_in(i,j) = heat_in(i,j) + dt * QRZL2_to_J * G%areaT(i,j) * &
+                       (fluxes%heat_content_evap(i,j) + fluxes%heat_content_lprec(i,j) + &
+                        fluxes%heat_content_cond(i,j) + fluxes%heat_content_fprec(i,j) + &
+                        fluxes%heat_content_lrunoff(i,j) + fluxes%heat_content_frunoff(i,j))
+      enddo ; enddo
+    elseif (associated(tv%TempxPmE)) then
       do j=js,je ; do i=is,ie
         heat_in(i,j) = heat_in(i,j) + (fluxes%C_p * QRZL2_to_J*G%areaT(i,j)) * tv%TempxPmE(i,j)
       enddo ; enddo
