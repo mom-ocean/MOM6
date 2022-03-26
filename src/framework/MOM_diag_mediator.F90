@@ -2775,7 +2775,7 @@ end subroutine attach_cell_methods
 function register_scalar_field(module_name, field_name, init_time, diag_cs, &
             long_name, units, missing_value, range, standard_name, &
             do_not_log, err_msg, interp_method, cmor_field_name, &
-            cmor_long_name, cmor_units, cmor_standard_name)
+            cmor_long_name, cmor_units, cmor_standard_name, conversion)
   integer :: register_scalar_field !< An integer handle for a diagnostic array.
   character(len=*), intent(in) :: module_name !< Name of this module, usually "ocean_model"
                                               !! or "ice_shelf_model"
@@ -2796,6 +2796,7 @@ function register_scalar_field(module_name, field_name, init_time, diag_cs, &
   character(len=*), optional, intent(in) :: cmor_long_name !< CMOR long name of a field
   character(len=*), optional, intent(in) :: cmor_units !< CMOR units of a field
   character(len=*), optional, intent(in) :: cmor_standard_name !< CMOR standardized name associated with a field
+  real,             optional, intent(in) :: conversion !< A value to multiply data by before writing to file
 
   ! Local variables
   real :: MOM_missing_value
@@ -2826,6 +2827,7 @@ function register_scalar_field(module_name, field_name, init_time, diag_cs, &
     call assert(associated(diag), 'register_scalar_field: diag allocation failed')
     diag%fms_diag_id = fms_id
     diag%debug_str = trim(module_name)//"-"//trim(field_name)
+    if (present(conversion)) diag%conversion_factor = conversion
   endif
 
   if (present(cmor_field_name)) then
@@ -2856,6 +2858,7 @@ function register_scalar_field(module_name, field_name, init_time, diag_cs, &
       call alloc_diag_with_id(dm_id, diag_cs, cmor_diag)
       cmor_diag%fms_diag_id = fms_id
       cmor_diag%debug_str = trim(module_name)//"-"//trim(cmor_field_name)
+      if (present(conversion)) cmor_diag%conversion_factor = conversion
     endif
   endif
 
