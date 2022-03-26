@@ -133,8 +133,8 @@ subroutine idealized_hurricane_wind_init(Time, G, US, param_file, CS)
                  units='Pa', default=96800., scale=US%m_s_to_L_T**2*US%kg_m3_to_R)
   call get_param(param_file, mdl, "IDL_HURR_RAD_MAX_WIND", &
                  CS%rad_max_wind, "Radius of maximum winds used in the "//&
-                 "idealized hurricane wind profile.", units='m', &
-                 default=50.e3, scale=US%m_to_L)
+                 "idealized hurricane wind profile.", &
+                 units='m', default=50.e3, scale=US%m_to_L)
   call get_param(param_file, mdl, "IDL_HURR_MAX_WIND", CS%max_windspeed, &
                  "Maximum wind speed used in the idealized hurricane"// &
                  "wind profile.", units='m/s', default=65., scale=US%m_s_to_L_T)
@@ -143,8 +143,8 @@ subroutine idealized_hurricane_wind_init(Time, G, US, param_file, CS)
                  "hurricane wind profile.", units='m/s', default=5.0, scale=US%m_s_to_L_T)
   call get_param(param_file, mdl, "IDL_HURR_TRAN_DIR", CS%hurr_translation_dir, &
                  "Translation direction (towards) of hurricane used in the "//&
-                 "idealized hurricane wind profile.", units='degrees', &
-                 default=180.0, scale=CS%Deg2Rad)
+                 "idealized hurricane wind profile.", &
+                 units='degrees', default=180.0, scale=CS%Deg2Rad)
   call get_param(param_file, mdl, "IDL_HURR_X0", CS%Hurr_cen_X0, &
                  "Idealized Hurricane initial X position", &
                  units='m', default=0., scale=US%m_to_L)
@@ -152,19 +152,17 @@ subroutine idealized_hurricane_wind_init(Time, G, US, param_file, CS)
                  "Idealized Hurricane initial Y position", &
                  units='m', default=0., scale=US%m_to_L)
   call get_param(param_file, mdl, "IDL_HURR_TAU_CURR_REL", CS%relative_tau, &
-                 "Current relative stress switch "//&
-                 "used in the idealized hurricane wind profile.", &
-                 units='', default=.false.)
+                 "Current relative stress switch used in the idealized hurricane wind profile.", &
+                 default=.false.)
 
   ! Parameters for SCM mode
   call get_param(param_file, mdl, "IDL_HURR_SCM_BR_BENCH", CS%BR_BENCH, &
                  "Single column mode benchmark case switch, which is "// &
                  "invoking a modification (bug) in the wind profile meant to "//&
-                 "reproduce a previous implementation.", units='', default=.false.)
+                 "reproduce a previous implementation.", default=.false.)
   call get_param(param_file, mdl, "IDL_HURR_SCM", CS%SCM_MODE, &
-                 "Single Column mode switch "//&
-                 "used in the SCM idealized hurricane wind profile.", &
-                 units='', default=.false.)
+                 "Single Column mode switch used in the SCM idealized hurricane wind profile.", &
+                 default=.false.)
   call get_param(param_file, mdl, "IDL_HURR_SCM_LOCY", CS%dy_from_center, &
                  "Y distance of station used in the SCM idealized hurricane "//&
                  "wind profile.", units='m', default=50.e3, scale=US%m_to_L)
@@ -186,8 +184,8 @@ subroutine idealized_hurricane_wind_init(Time, G, US, param_file, CS)
                  "parameters from vertical units of m to kg m-2.", &
                  units="kg m-3", default=1035.0, scale=US%kg_m3_to_R, do_not_log=.true.)
   call get_param(param_file, mdl, "GUST_CONST", CS%gustiness, &
-                 "The background gustiness in the winds.", units="Pa", &
-                 default=0.0, scale=US%kg_m3_to_R*US%m_s_to_L_T**2*US%L_to_Z, do_not_log=.true.)
+                 "The background gustiness in the winds.", &
+                 units="Pa", default=0.0, scale=US%kg_m2s_to_RZ_T*US%m_s_to_L_T, do_not_log=.true.)
 
   if (CS%BR_BENCH) then
     CS%rho_a = 1.2*US%kg_m3_to_R

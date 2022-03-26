@@ -143,48 +143,39 @@ subroutine SCM_CVMix_tests_surface_forcing_init(Time, G, param_file, CS)
 
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mdl, version, "")
-  call get_param(param_file, mdl, "SCM_USE_WIND_STRESS",              &
-                 CS%UseWindStress, "Wind Stress switch "//            &
-                 "used in the SCM CVMix surface forcing.",            &
-                 units='', default=.false.)
-  call get_param(param_file, mdl, "SCM_USE_HEAT_FLUX",                &
-                 CS%UseHeatFlux, "Heat flux switch "//                &
-                 "used in the SCM CVMix test surface forcing.",       &
-                 units='', default=.false.)
-  call get_param(param_file, mdl, "SCM_USE_EVAPORATION",              &
-                 CS%UseEvaporation, "Evaporation switch "//           &
-                 "used in the SCM CVMix test surface forcing.",       &
-                 units='', default=.false.)
-  call get_param(param_file, mdl, "SCM_USE_DIURNAL_SW",               &
-                 CS%UseDiurnalSW, "Diurnal sw radation switch "//     &
-                 "used in the SCM CVMix test surface forcing.",       &
-                 units='', default=.false.)
+  call get_param(param_file, mdl, "SCM_USE_WIND_STRESS", CS%UseWindStress, &
+                 "Wind Stress switch used in the SCM CVMix surface forcing.", &
+                 default=.false.)
+  call get_param(param_file, mdl, "SCM_USE_HEAT_FLUX", CS%UseHeatFlux, &
+                 "Heat flux switch used in the SCM CVMix test surface forcing.", &
+                 default=.false.)
+  call get_param(param_file, mdl, "SCM_USE_EVAPORATION", CS%UseEvaporation, &
+                 "Evaporation switch used in the SCM CVMix test surface forcing.", &
+                 default=.false.)
+  call get_param(param_file, mdl, "SCM_USE_DIURNAL_SW", CS%UseDiurnalSW, &
+                 "Diurnal sw radation switch used in the SCM CVMix test surface forcing.", &
+                 default=.false.)
   if (CS%UseWindStress) then
-    call get_param(param_file, mdl, "SCM_TAU_X",                      &
-                 CS%tau_x, "Constant X-dir wind stress "//            &
-                 "used in the SCM CVMix test surface forcing.",       &
+    call get_param(param_file, mdl, "SCM_TAU_X", CS%tau_x, &
+                 "Constant X-dir wind stress used in the SCM CVMix test surface forcing.", &
                  units='N/m2', scale=US%kg_m2s_to_RZ_T*US%m_s_to_L_T, fail_if_missing=.true.)
-    call get_param(param_file, mdl, "SCM_TAU_Y",                      &
-                 CS%tau_y, "Constant y-dir wind stress "//            &
-                 "used in the SCM CVMix test surface forcing.",       &
+    call get_param(param_file, mdl, "SCM_TAU_Y", CS%tau_y, &
+                 "Constant y-dir wind stress used in the SCM CVMix test surface forcing.", &
                  units='N/m2', scale=US%kg_m2s_to_RZ_T*US%m_s_to_L_T, fail_if_missing=.true.)
   endif
   if (CS%UseHeatFlux) then
-    call get_param(param_file, mdl, "SCM_HEAT_FLUX",                  &
-                 CS%surf_HF, "Constant surface heat flux "//          &
-                 "used in the SCM CVMix test surface forcing.",       &
+    call get_param(param_file, mdl, "SCM_HEAT_FLUX", CS%surf_HF, &
+                 "Constant surface heat flux used in the SCM CVMix test surface forcing.", &
                  units='m K/s', scale=US%m_to_Z*US%T_to_s, fail_if_missing=.true.)
   endif
   if (CS%UseEvaporation) then
-    call get_param(param_file, mdl, "SCM_EVAPORATION",                &
-                 CS%surf_evap, "Constant surface evaporation "//      &
-                 "used in the SCM CVMix test surface forcing.",       &
+    call get_param(param_file, mdl, "SCM_EVAPORATION", CS%surf_evap, &
+                 "Constant surface evaporation used in the SCM CVMix test surface forcing.", &
                  units='m/s', scale=US%m_to_Z*US%T_to_s, fail_if_missing=.true.)
   endif
   if (CS%UseDiurnalSW) then
-    call get_param(param_file, mdl, "SCM_DIURNAL_SW_MAX",             &
-                 CS%Max_sw, "Maximum diurnal sw radiation "//         &
-                 "used in the SCM CVMix test surface forcing.",       &
+    call get_param(param_file, mdl, "SCM_DIURNAL_SW_MAX", CS%Max_sw, &
+                 "Maximum diurnal sw radiation used in the SCM CVMix test surface forcing.", &
                  units='m K/s', scale=US%m_to_Z*US%T_to_s, fail_if_missing=.true.)
   endif
   call get_param(param_file, mdl, "RHO_0", CS%Rho0, &
