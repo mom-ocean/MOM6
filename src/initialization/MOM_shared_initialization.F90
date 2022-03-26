@@ -184,7 +184,7 @@ subroutine apply_topography_edits_from_file(D, G, param_file, US)
   type(unit_scale_type),            intent(in)    :: US !< A dimensional unit scaling type
 
   ! Local variables
-  real, dimension(:), allocatable :: new_depth ! The new values of the depths [m]
+  real, dimension(:), allocatable :: new_depth ! The new values of the depths [Z ~> m]
   integer, dimension(:), allocatable :: ig, jg ! The global indicies of the points to modify
   character(len=200) :: topo_edits_file, inputdir ! Strings for file/path
   character(len=40)  :: mdl = "apply_topography_edits_from_file" ! This subroutine's name.
@@ -247,22 +247,22 @@ subroutine apply_topography_edits_from_file(D, G, param_file, US)
   ! Read iEdit, jEdit and zEdit
   call read_variable(topo_edits_file, 'iEdit', ig, ncid_in=ncid)
   call read_variable(topo_edits_file, 'jEdit', jg, ncid_in=ncid)
-  call read_variable(topo_edits_file, 'zEdit', new_depth, ncid_in=ncid)
+  call read_variable(topo_edits_file, 'zEdit', new_depth, ncid_in=ncid, scale=US%m_to_Z)
   call close_file_to_read(ncid, topo_edits_file)
 
   do n = 1, n_edits
     i = ig(n) - G%isd_global + 2 ! +1 for python indexing and +1 for ig-isd_global+1
     j = jg(n) - G%jsd_global + 2
     if (i>=G%isc .and. i<=G%iec .and. j>=G%jsc .and. j<=G%jec) then
-      if (new_depth(n)*US%m_to_Z /= mask_depth) then
+      if (new_depth(n) /= mask_depth) then
         write(stdout,'(a,3i5,f8.2,a,f8.2,2i4)') &
-          'Ocean topography edit: ', n, ig(n), jg(n), D(i,j)*US%Z_to_m, '->', abs(new_depth(n)), i, j
-        D(i,j) = abs(US%m_to_Z*new_depth(n)) ! Allows for height-file edits (i.e. converts negatives)
+          'Ocean topography edit: ', n, ig(n), jg(n), D(i,j)*US%Z_to_m, '->', abs(US%Z_to_m*new_depth(n)), i, j
+        D(i,j) = abs(new_depth(n)) ! Allows for height-file edits (i.e. converts negatives)
       else
         if (topo_edits_change_mask) then
           write(stdout,'(a,3i5,f8.2,a,f8.2,2i4)') &
-            'Ocean topography edit: ',n,ig(n),jg(n),D(i,j)*US%Z_to_m,'->',abs(new_depth(n)),i,j
-            D(i,j) = abs(US%m_to_Z*new_depth(n)) ! Allows for height-file edits (i.e. converts negatives)
+            'Ocean topography edit: ',n,ig(n),jg(n),D(i,j)*US%Z_to_m,'->',abs(US%Z_to_m*new_depth(n)),i,j
+            D(i,j) = abs(new_depth(n)) ! Allows for height-file edits (i.e. converts negatives)
         else
           call MOM_error(FATAL, ' apply_topography_edits_from_file: '//&
             "A zero depth edit would change the land mask and is not allowed in"//trim(topo_edits_file))
@@ -454,8 +454,8 @@ subroutine set_rotation_planetary(f, G, param_file, US)
   call callTree_enter(trim(mdl)//"(), MOM_shared_initialization.F90")
 
   call get_param(param_file, "set_rotation_planetary", "OMEGA", omega, &
-                 "The rotation rate of the earth.", units="s-1", &
-                 default=7.2921e-5, scale=US%T_to_s)
+                 "The rotation rate of the earth.", &
+                 units="s-1", default=7.2921e-5, scale=US%T_to_s)
   PI = 4.0*atan(1.0)
 
   do I=G%IsdB,G%IedB ; do J=G%JsdB,G%JedB
@@ -893,13 +893,13 @@ subroutine reset_face_lengths_list(G, param_file, US)
     allocate(v_line_used(num_lines), source=0)
     allocate(v_line_no(num_lines), source=0)
 
-    allocate(Dmin_u(num_lines))    ; Dmin_u(:) = 0.0
-    allocate(Dmax_u(num_lines))    ; Dmax_u(:) = 0.0
-    allocate(Davg_u(num_lines))    ; Davg_u(:) = 0.0
+    allocate(Dmin_u(num_lines), source=0.0)
+    allocate(Dmax_u(num_lines), source=0.0)
+    allocate(Davg_u(num_lines), source=0.0)
 
-    allocate(Dmin_v(num_lines))    ; Dmin_v(:) = 0.0
-    allocate(Dmax_v(num_lines))    ; Dmax_v(:) = 0.0
-    allocate(Davg_v(num_lines))    ; Davg_v(:) = 0.0
+    allocate(Dmin_v(num_lines), source=0.0)
+    allocate(Dmax_v(num_lines), source=0.0)
+    allocate(Davg_v(num_lines), source=0.0)
 
     ! Actually read the lines.
     if (is_root_pe()) then
