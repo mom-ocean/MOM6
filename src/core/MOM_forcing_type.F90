@@ -1489,39 +1489,41 @@ subroutine register_forcing_type_diags(Time, diag, US, use_temperature, handles,
   !=========================================================================
   ! area averaged surface mass transport
 
-  handles%id_prcme_ga = register_scalar_field('ocean_model', 'PRCmE_ga', Time, diag,             &
-      long_name='Area averaged net surface water flux (precip+melt+liq runoff+ice calving-evap)',&
-      units='kg m-2 s-1', standard_name='water_flux_into_sea_water_area_averaged',               &
-      cmor_field_name='ave_wfo',                                                                 &
-      cmor_standard_name='rainfall_flux_area_averaged',                                          &
+  handles%id_prcme_ga = register_scalar_field('ocean_model', 'PRCmE_ga', Time, diag, &
+      long_name='Area averaged net surface water flux (precip+melt+liq runoff+ice calving-evap)', &
+      units='kg m-2 s-1', conversion=US%RZ_T_to_kg_m2s, &
+      standard_name='water_flux_into_sea_water_area_averaged', &
+      cmor_field_name='ave_wfo', cmor_standard_name='rainfall_flux_area_averaged', &
       cmor_long_name='Water Transport Into Sea Water Area Averaged')
 
-  handles%id_evap_ga = register_scalar_field('ocean_model', 'evap_ga', Time, diag,&
-      long_name='Area averaged evap/condense at ocean surface',                   &
-      units='kg m-2 s-1', standard_name='water_evaporation_flux_area_averaged',   &
-      cmor_field_name='ave_evs',                                                  &
-      cmor_standard_name='water_evaporation_flux_area_averaged',                  &
+  handles%id_evap_ga = register_scalar_field('ocean_model', 'evap_ga', Time, diag, &
+      long_name='Area averaged evap/condense at ocean surface', &
+      units='kg m-2 s-1', conversion=US%RZ_T_to_kg_m2s, &
+      standard_name='water_evaporation_flux_area_averaged', &
+      cmor_field_name='ave_evs', cmor_standard_name='water_evaporation_flux_area_averaged', &
       cmor_long_name='Evaporation Where Ice Free Ocean over Sea Area Averaged')
 
  handles%id_lprec_ga = register_scalar_field('ocean_model', 'lprec_ga', Time, diag,&
-      long_name='Area integrated liquid precip into ocean', units='kg m-2 s-1',    &
-      standard_name='rainfall_flux_area_averaged',                                 &
-      cmor_field_name='ave_pr',                                                    &
-      cmor_standard_name='rainfall_flux_area_averaged',                            &
+      long_name='Area integrated liquid precip into ocean', &
+      units='kg m-2 s-1', conversion=US%RZ_T_to_kg_m2s, &
+      standard_name='rainfall_flux_area_averaged', &
+      cmor_field_name='ave_pr', cmor_standard_name='rainfall_flux_area_averaged', &
       cmor_long_name='Rainfall Flux where Ice Free Ocean over Sea Area Averaged')
 
- handles%id_fprec_ga = register_scalar_field('ocean_model', 'fprec_ga', Time, diag,&
-      long_name='Area integrated frozen precip into ocean', units='kg m-2 s-1',    &
+ handles%id_fprec_ga = register_scalar_field('ocean_model', 'fprec_ga', Time, diag, &
+      long_name='Area integrated frozen precip into ocean', &
+      units='kg m-2 s-1', conversion=US%RZ_T_to_kg_m2s, &
       standard_name='snowfall_flux_area_averaged',                                 &
-      cmor_field_name='ave_prsn',                                                  &
-      cmor_standard_name='snowfall_flux_area_averaged',                            &
+      cmor_field_name='ave_prsn',cmor_standard_name='snowfall_flux_area_averaged', &
       cmor_long_name='Snowfall Flux where Ice Free Ocean over Sea Area Averaged')
 
   handles%id_precip_ga = register_scalar_field('ocean_model', 'precip_ga', Time, diag, &
-      long_name='Area averaged liquid+frozen precip into ocean', units='kg m-2 s-1')
+      long_name='Area averaged liquid+frozen precip into ocean', &
+      units='kg m-2 s-1', conversion=US%RZ_T_to_kg_m2s)
 
   handles%id_vprec_ga = register_scalar_field('ocean_model', 'vrec_ga', Time, diag, &
-      long_name='Area averaged virtual liquid precip due to SSS restoring', units='kg m-2 s-1')
+      long_name='Area averaged virtual liquid precip due to SSS restoring', &
+      units='kg m-2 s-1', conversion=US%RZ_T_to_kg_m2s)
 
   !===============================================================
   ! surface heat flux maps
@@ -1820,12 +1822,12 @@ subroutine register_forcing_type_diags(Time, diag, US, use_temperature, handles,
   handles%id_net_heat_coupler_ga = register_scalar_field('ocean_model',                       &
       'net_heat_coupler_ga', Time, diag,                                                      &
       long_name='Area averaged surface heat flux from SW+LW+latent+sensible+seaice_melt_heat (via the coupler)',&
-      units='W m-2')
+      units='W m-2', conversion=US%QRZ_T_to_W_m2)
 
   handles%id_net_heat_surface_ga = register_scalar_field('ocean_model',                       &
       'net_heat_surface_ga', Time, diag, long_name=                                                     &
       'Area averaged surface heat flux from SW+LW+lat+sens+mass+frazil+restore+seaice_melt_heat or flux adjustments', &
-      units='W m-2',                                                                          &
+      units='W m-2', conversion=US%QRZ_T_to_W_m2,                                             &
       cmor_field_name='ave_hfds',                                                             &
       cmor_standard_name='surface_downward_heat_flux_in_sea_water_area_averaged',             &
       cmor_long_name=                                                                         &
@@ -1834,7 +1836,7 @@ subroutine register_forcing_type_diags(Time, diag, US, use_temperature, handles,
   handles%id_sw_ga = register_scalar_field('ocean_model',                                 &
       'sw_ga', Time, diag,                                                                &
       long_name='Area averaged net downward shortwave at sea water surface',              &
-      units='W m-2',                                                                      &
+      units='W m-2', conversion=US%QRZ_T_to_W_m2,                                         &
       cmor_field_name='ave_rsntds',                                                       &
       cmor_standard_name='net_downward_shortwave_flux_at_sea_water_surface_area_averaged',&
       cmor_long_name=                                                                     &
@@ -1843,12 +1845,12 @@ subroutine register_forcing_type_diags(Time, diag, US, use_temperature, handles,
   handles%id_LwLatSens_ga = register_scalar_field('ocean_model',&
       'LwLatSens_ga', Time, diag,                               &
       long_name='Area averaged longwave+latent+sensible heating',&
-      units='W m-2')
+      units='W m-2', conversion=US%QRZ_T_to_W_m2)
 
   handles%id_lw_ga = register_scalar_field('ocean_model',                   &
       'lw_ga', Time, diag,                                                  &
       long_name='Area averaged net downward longwave at sea water surface', &
-      units='W m-2',                                                        &
+      units='W m-2', conversion=US%QRZ_T_to_W_m2,                           &
       cmor_field_name='ave_rlntds',                                         &
       cmor_standard_name='surface_net_downward_longwave_flux_area_averaged',&
       cmor_long_name=                                                       &
@@ -1857,7 +1859,7 @@ subroutine register_forcing_type_diags(Time, diag, US, use_temperature, handles,
   handles%id_lat_ga = register_scalar_field('ocean_model',                 &
       'lat_ga', Time, diag,                                                &
       long_name='Area averaged surface downward latent heat flux',         &
-      units='W m-2',                                                       &
+      units='W m-2', conversion=US%QRZ_T_to_W_m2,                          &
       cmor_field_name='ave_hflso',                                         &
       cmor_standard_name='surface_downward_latent_heat_flux_area_averaged',&
       cmor_long_name=                                                      &
@@ -1866,7 +1868,7 @@ subroutine register_forcing_type_diags(Time, diag, US, use_temperature, handles,
   handles%id_sens_ga = register_scalar_field('ocean_model',                  &
       'sens_ga', Time, diag,                                                 &
       long_name='Area averaged downward sensible heat flux',                 &
-      units='W m-2',                                                         &
+      units='W m-2', conversion=US%QRZ_T_to_W_m2,                            &
       cmor_field_name='ave_hfsso',                                           &
       cmor_standard_name='surface_downward_sensible_heat_flux_area_averaged',&
       cmor_long_name=                                                        &
@@ -2347,7 +2349,7 @@ subroutine forcing_diagnostics(fluxes_in, sfc_state, G_in, US, time_end, diag, h
   real, dimension(SZI_(diag%G),SZJ_(diag%G)) :: res ! A temporary array for combinations
                           ! of fluxes [R Z T-1 ~> kg m-2 s-1] or [Q R Z T-1 ~> W m-2]
   real :: total_transport ! for diagnosing integrated boundary transport, in MKS units of [kg s-1] or [W]
-  real :: ave_flux        ! for diagnosing averaged boundary flux, in MKS units of [kg m-2 s-1] or [W m-2]
+  real :: ave_flux        ! for diagnosing averaged boundary flux in [R Z T-1 ~> kg m-2 s-1] or [Q R Z T-1 ~> W m-2]
   real :: I_dt            ! inverse time step [T-1 ~> s-1]
   real :: ppt2mks         ! conversion between ppt and mks units [nondim]
   integer :: turns        ! Number of index quarter turns
@@ -2395,7 +2397,7 @@ subroutine forcing_diagnostics(fluxes_in, sfc_state, G_in, US, time_end, diag, h
         call post_data(handles%id_total_prcme, total_transport, diag)
       endif
       if (handles%id_prcme_ga > 0) then
-        ave_flux = global_area_mean(res, G, scale=US%RZ_T_to_kg_m2s)
+        ave_flux = global_area_mean(res, G, tmp_scale=US%RZ_T_to_kg_m2s)
         call post_data(handles%id_prcme_ga, ave_flux, diag)
       endif
     endif
@@ -2465,7 +2467,7 @@ subroutine forcing_diagnostics(fluxes_in, sfc_state, G_in, US, time_end, diag, h
       call post_data(handles%id_total_evap, total_transport, diag)
     endif
     if ((handles%id_evap_ga > 0) .and. associated(fluxes%evap)) then
-      ave_flux = global_area_mean(fluxes%evap, G, scale=US%RZ_T_to_kg_m2s)
+      ave_flux = global_area_mean(fluxes%evap, G, tmp_scale=US%RZ_T_to_kg_m2s)
       call post_data(handles%id_evap_ga, ave_flux, diag)
     endif
 
@@ -2479,7 +2481,7 @@ subroutine forcing_diagnostics(fluxes_in, sfc_state, G_in, US, time_end, diag, h
         call post_data(handles%id_total_precip, total_transport, diag)
       endif
       if (handles%id_precip_ga > 0) then
-        ave_flux = global_area_mean(res, G, scale=US%RZ_T_to_kg_m2s)
+        ave_flux = global_area_mean(res, G, tmp_scale=US%RZ_T_to_kg_m2s)
         call post_data(handles%id_precip_ga, ave_flux, diag)
       endif
     endif
@@ -2491,7 +2493,7 @@ subroutine forcing_diagnostics(fluxes_in, sfc_state, G_in, US, time_end, diag, h
         call post_data(handles%id_total_lprec, total_transport, diag)
       endif
       if (handles%id_lprec_ga > 0) then
-        ave_flux = global_area_mean(fluxes%lprec, G, scale=US%RZ_T_to_kg_m2s)
+        ave_flux = global_area_mean(fluxes%lprec, G, tmp_scale=US%RZ_T_to_kg_m2s)
         call post_data(handles%id_lprec_ga, ave_flux, diag)
       endif
     endif
@@ -2503,7 +2505,7 @@ subroutine forcing_diagnostics(fluxes_in, sfc_state, G_in, US, time_end, diag, h
         call post_data(handles%id_total_fprec, total_transport, diag)
       endif
       if (handles%id_fprec_ga > 0) then
-        ave_flux = global_area_mean(fluxes%fprec, G, scale=US%RZ_T_to_kg_m2s)
+        ave_flux = global_area_mean(fluxes%fprec, G, tmp_scale=US%RZ_T_to_kg_m2s)
         call post_data(handles%id_fprec_ga, ave_flux, diag)
       endif
     endif
@@ -2515,7 +2517,7 @@ subroutine forcing_diagnostics(fluxes_in, sfc_state, G_in, US, time_end, diag, h
         call post_data(handles%id_total_vprec, total_transport, diag)
       endif
       if (handles%id_vprec_ga > 0) then
-        ave_flux = global_area_mean(fluxes%vprec, G, scale=US%RZ_T_to_kg_m2s)
+        ave_flux = global_area_mean(fluxes%vprec, G, tmp_scale=US%RZ_T_to_kg_m2s)
         call post_data(handles%id_vprec_ga, ave_flux, diag)
       endif
     endif
@@ -2625,7 +2627,7 @@ subroutine forcing_diagnostics(fluxes_in, sfc_state, G_in, US, time_end, diag, h
         call post_data(handles%id_total_net_heat_coupler, total_transport, diag)
       endif
       if (handles%id_net_heat_coupler_ga > 0) then
-        ave_flux = global_area_mean(res, G, scale=US%QRZ_T_to_W_m2)
+        ave_flux = global_area_mean(res, G, tmp_scale=US%QRZ_T_to_W_m2)
         call post_data(handles%id_net_heat_coupler_ga, ave_flux, diag)
       endif
     endif
@@ -2669,7 +2671,7 @@ subroutine forcing_diagnostics(fluxes_in, sfc_state, G_in, US, time_end, diag, h
         call post_data(handles%id_total_net_heat_surface, total_transport, diag)
       endif
       if (handles%id_net_heat_surface_ga > 0) then
-        ave_flux = global_area_mean(res, G, scale=US%QRZ_T_to_W_m2)
+        ave_flux = global_area_mean(res, G, tmp_scale=US%QRZ_T_to_W_m2)
         call post_data(handles%id_net_heat_surface_ga, ave_flux, diag)
       endif
     endif
@@ -2740,7 +2742,7 @@ subroutine forcing_diagnostics(fluxes_in, sfc_state, G_in, US, time_end, diag, h
       do j=js,je ; do i=is,ie
         res(i,j) = ((fluxes%lw(i,j) + fluxes%latent(i,j)) + fluxes%sens(i,j))
       enddo ; enddo
-      ave_flux = global_area_mean(res, G, scale=US%QRZ_T_to_W_m2)
+      ave_flux = global_area_mean(res, G, tmp_scale=US%QRZ_T_to_W_m2)
       call post_data(handles%id_LwLatSens_ga, ave_flux, diag)
     endif
 
@@ -2760,7 +2762,7 @@ subroutine forcing_diagnostics(fluxes_in, sfc_state, G_in, US, time_end, diag, h
       call post_data(handles%id_total_sw, total_transport, diag)
     endif
     if ((handles%id_sw_ga > 0) .and. associated(fluxes%sw)) then
-      ave_flux = global_area_mean(fluxes%sw, G, scale=US%QRZ_T_to_W_m2)
+      ave_flux = global_area_mean(fluxes%sw, G, tmp_scale=US%QRZ_T_to_W_m2)
       call post_data(handles%id_sw_ga, ave_flux, diag)
     endif
 
@@ -2772,7 +2774,7 @@ subroutine forcing_diagnostics(fluxes_in, sfc_state, G_in, US, time_end, diag, h
       call post_data(handles%id_total_lw, total_transport, diag)
     endif
     if ((handles%id_lw_ga > 0) .and. associated(fluxes%lw)) then
-      ave_flux = global_area_mean(fluxes%lw, G, scale=US%QRZ_T_to_W_m2)
+      ave_flux = global_area_mean(fluxes%lw, G, tmp_scale=US%QRZ_T_to_W_m2)
       call post_data(handles%id_lw_ga, ave_flux, diag)
     endif
 
@@ -2784,7 +2786,7 @@ subroutine forcing_diagnostics(fluxes_in, sfc_state, G_in, US, time_end, diag, h
       call post_data(handles%id_total_lat, total_transport, diag)
     endif
     if ((handles%id_lat_ga > 0) .and. associated(fluxes%latent)) then
-      ave_flux = global_area_mean(fluxes%latent, G, scale=US%QRZ_T_to_W_m2)
+      ave_flux = global_area_mean(fluxes%latent, G, tmp_scale=US%QRZ_T_to_W_m2)
       call post_data(handles%id_lat_ga, ave_flux, diag)
     endif
 
@@ -2830,7 +2832,7 @@ subroutine forcing_diagnostics(fluxes_in, sfc_state, G_in, US, time_end, diag, h
       call post_data(handles%id_total_sens, total_transport, diag)
     endif
     if ((handles%id_sens_ga > 0) .and. associated(fluxes%sens)) then
-      ave_flux = global_area_mean(fluxes%sens, G, scale=US%QRZ_T_to_W_m2)
+      ave_flux = global_area_mean(fluxes%sens, G, tmp_scale=US%QRZ_T_to_W_m2)
       call post_data(handles%id_sens_ga, ave_flux, diag)
     endif
 
@@ -3228,7 +3230,7 @@ subroutine myAlloc(array, is, ie, js, je, flag)
   logical, optional, intent(in) :: flag !< Flag to indicate to allocate
 
   if (present(flag)) then ; if (flag) then ; if (.not.associated(array)) then
-    allocate(array(is:ie,js:je)) ; array(is:ie,js:je) = 0.0
+    allocate(array(is:ie,js:je), source=0.0)
   endif ; endif ; endif
 end subroutine myAlloc
 
@@ -3498,14 +3500,14 @@ subroutine homogenize_mech_forcing(forces, G, US, Rho0, UpdateUstar)
   logical, optional,        intent(in) :: UpdateUstar !< A logical to determine if Ustar should be directly averaged
                                                  !! or updated from mean tau.
 
-  real :: tx_mean, ty_mean, avg
-  real :: iRho0
+  real :: tx_mean, ty_mean ! Mean wind stresses [R L Z T-2 ~> Pa]
+  real :: Irho0        ! Inverse of the mean density rescaled to [Z L-1 R-1 ~> m3 kg-1]
   logical :: do_stress, do_ustar, do_shelf, do_press, do_iceberg, tau2ustar
   integer :: i, j, is, ie, js, je, isB, ieB, jsB, jeB
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   isB = G%iscB ; ieB = G%iecB ; jsB = G%jscB ; jeB = G%jecB
 
-  iRho0 = US%L_to_Z / Rho0
+  Irho0 = US%L_to_Z / Rho0
 
   tau2ustar = .false.
   if (present(UpdateUstar)) tau2ustar = UpdateUstar
@@ -3524,7 +3526,7 @@ subroutine homogenize_mech_forcing(forces, G, US, Rho0, UpdateUstar)
     enddo ; enddo
     if (tau2ustar) then
       do j=js,je ; do i=is,ie
-        if (G%mask2dT(i,j) > 0.) forces%ustar(i,j) = US%L_to_Z*sqrt(sqrt(tx_mean**2 + ty_mean**2)*iRho0)
+        if (G%mask2dT(i,j) > 0.) forces%ustar(i,j) = sqrt(sqrt(tx_mean**2 + ty_mean**2)*Irho0)
       enddo ; enddo
     else
       call homogenize_field_t(forces%ustar, G, tmp_scale=US%Z_to_m*US%s_to_T)
@@ -3563,7 +3565,7 @@ subroutine homogenize_forcing(fluxes, G, GV, US)
   type(verticalGrid_type), intent(in)    :: GV     !< ocean vertical grid structure
   type(unit_scale_type),   intent(in)    :: US     !< A dimensional unit scaling type
 
-  real :: avg
+  real :: avg   ! Global average of a variable, in the same units as that variable
   logical :: do_ustar, do_water, do_heat, do_salt, do_press, do_shelf, &
       do_iceberg, do_heat_added, do_buoy
   integer :: i, j, is, ie, js, je, isB, ieB, jsB, jeB
@@ -3681,7 +3683,7 @@ subroutine homogenize_field_t(var, G, tmp_scale)
   real,                   optional, intent(in)    :: tmp_scale !< A temporary rescaling factor for the
                                                          !! variable that is reversed in the return value
 
-  real    :: avg
+  real    :: avg   ! Global average of var, in the same units as var
   integer :: i, j, is, ie, js, je
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
 
@@ -3698,7 +3700,7 @@ subroutine homogenize_field_v(var, G, tmp_scale)
   real,                    optional, intent(in)    :: tmp_scale !< A temporary rescaling factor for the
                                                          !! variable that is reversed in the return value
 
-  real    :: avg
+  real    :: avg   ! Global average of var, in the same units as var
   integer :: i, j, is, ie, jsB, jeB
   is = G%isc ; ie = G%iec ; jsB = G%jscB ; jeB = G%jecB
 
@@ -3715,7 +3717,7 @@ subroutine homogenize_field_u(var, G, tmp_scale)
   real,                    optional, intent(in)    :: tmp_scale !< A temporary rescaling factor for the
                                                          !! variable that is reversed in the return value
 
-  real    :: avg
+  real    :: avg   ! Global average of var, in the same units as var
   integer :: i, j, isB, ieB, js, je
   isB = G%iscB ; ieB = G%iecB ; js = G%jsc ; je = G%jec
 

@@ -1293,32 +1293,27 @@ subroutine post_surface_thermo_diags(IDs, G, GV, US, diag, dt_int, sfc_state, tv
 
   real, dimension(SZI_(G),SZJ_(G)) :: work_2d  ! A 2-d work array
   real, dimension(SZI_(G),SZJ_(G)) :: &
-    zos  ! dynamic sea lev (zero area mean) from inverse-barometer adjusted ssh [m]
+    zos  ! dynamic sea lev (zero area mean) from inverse-barometer adjusted ssh [Z ~> m]
   real :: I_time_int    ! The inverse of the time interval [T-1 ~> s-1].
-  real :: zos_area_mean ! Global area mean sea surface height [m]
+  real :: zos_area_mean ! Global area mean sea surface height [Z ~> m]
   real :: volo          ! Total volume of the ocean [m3]
-  real :: ssh_ga        ! Global ocean area weighted mean sea seaface height [m]
+  real :: ssh_ga        ! Global ocean area weighted mean sea seaface height [Z ~> m]
   integer :: i, j, is, ie, js, je
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
 
   ! area mean SSH
   if (IDs%id_ssh_ga > 0) then
-    ssh_ga = global_area_mean(ssh, G, scale=US%Z_to_m)
+    ssh_ga = global_area_mean(ssh, G, tmp_scale=US%Z_to_m)
     call post_data(IDs%id_ssh_ga, ssh_ga, diag)
   endif
 
   ! post the dynamic sea level, zos, and zossq.
-  ! zos is ave_ssh with sea ice inverse barometer removed,
-  ! and with zero global area mean.
+  ! zos is ave_ssh with sea ice inverse barometer removed, and with zero global area mean.
   if (IDs%id_zos > 0 .or. IDs%id_zossq > 0) then
-    zos(:,:) = 0.0
+    zos_area_mean = global_area_mean(ssh_ibc, G, tmp_scale=US%Z_to_m)
     do j=js,je ; do i=is,ie
-      zos(i,j) = US%Z_to_m*ssh_ibc(i,j)
-    enddo ; enddo
-    zos_area_mean = global_area_mean(zos, G)
-    do j=js,je ; do i=is,ie
-      zos(i,j) = zos(i,j) - G%mask2dT(i,j)*zos_area_mean
+      zos(i,j) = ssh_ibc(i,j) - G%mask2dT(i,j)*zos_area_mean
     enddo ; enddo
     if (IDs%id_zos > 0) call post_data(IDs%id_zos, zos, diag, mask=G%mask2dT)
     if (IDs%id_zossq > 0) then
@@ -1844,14 +1839,14 @@ subroutine register_surface_diags(Time, G, US, IDs, diag, tv)
       standard_name='sea_water_volume')
   IDs%id_zos = register_diag_field('ocean_model', 'zos', diag%axesT1, Time,&
       standard_name = 'sea_surface_height_above_geoid',                   &
-      long_name= 'Sea surface height above geoid', units='m')
+      long_name= 'Sea surface height above geoid', units='m', conversion=US%Z_to_m)
   IDs%id_zossq = register_diag_field('ocean_model', 'zossq', diag%axesT1, Time,&
       standard_name='square_of_sea_surface_height_above_geoid',             &
-      long_name='Square of sea surface height above geoid', units='m2')
+      long_name='Square of sea surface height above geoid', units='m2', conversion=US%Z_to_m**2)
   IDs%id_ssh = register_diag_field('ocean_model', 'SSH', diag%axesT1, Time, &
       'Sea Surface Height', 'm', conversion=US%Z_to_m)
   IDs%id_ssh_ga = register_scalar_field('ocean_model', 'ssh_ga', Time, diag,&
-      long_name='Area averaged sea surface height', units='m',            &
+      long_name='Area averaged sea surface height', units='m', conversion=US%Z_to_m, &
       standard_name='area_averaged_sea_surface_height')
   IDs%id_ssu = register_diag_field('ocean_model', 'SSU', diag%axesCu1, Time, &
       'Sea Surface Zonal Velocity', 'm s-1', conversion=US%L_T_to_m_s)
