@@ -244,9 +244,6 @@ logical function neutral_diffusion_init(Time, G, GV, US, param_file, diag, EOS, 
   ! Store a rescaling factor for use in diagnostic messages.
   CS%R_to_kg_m3 = US%R_to_kg_m3
 
-! call get_param(param_file, mdl, "KHTR", CS%KhTr, &
-!                "The background along-isopycnal tracer diffusivity.", &
-!                units="m2 s-1", default=0.0)
 !  call closeParameterBlock(param_file)
   if (CS%continuous_reconstruction) then
     CS%nsurf = 2*GV%ke+2 ! Continuous reconstruction means that every interface has two connections
@@ -269,17 +266,17 @@ logical function neutral_diffusion_init(Time, G, GV, US, param_file, diag, EOS, 
   allocate(CS%Pint(SZI_(G),SZJ_(G),SZK_(GV)+1), source=0.)
   allocate(CS%stable_cell(SZI_(G),SZJ_(G),SZK_(GV)), source=.true.)
   ! U-points
-  allocate(CS%uPoL(G%isd:G%ied,G%jsd:G%jed, CS%nsurf)); CS%uPoL(G%isc-1:G%iec,G%jsc:G%jec,:)   = 0.
-  allocate(CS%uPoR(G%isd:G%ied,G%jsd:G%jed, CS%nsurf)); CS%uPoR(G%isc-1:G%iec,G%jsc:G%jec,:)   = 0.
-  allocate(CS%uKoL(G%isd:G%ied,G%jsd:G%jed, CS%nsurf)); CS%uKoL(G%isc-1:G%iec,G%jsc:G%jec,:)   = 0
-  allocate(CS%uKoR(G%isd:G%ied,G%jsd:G%jed, CS%nsurf)); CS%uKoR(G%isc-1:G%iec,G%jsc:G%jec,:)   = 0
-  allocate(CS%uHeff(G%isd:G%ied,G%jsd:G%jed,CS%nsurf-1)); CS%uHeff(G%isc-1:G%iec,G%jsc:G%jec,:) = 0
+  allocate(CS%uPoL(G%isd:G%ied,G%jsd:G%jed, CS%nsurf), source=0.)
+  allocate(CS%uPoR(G%isd:G%ied,G%jsd:G%jed, CS%nsurf), source=0.)
+  allocate(CS%uKoL(G%isd:G%ied,G%jsd:G%jed, CS%nsurf), source=0)
+  allocate(CS%uKoR(G%isd:G%ied,G%jsd:G%jed, CS%nsurf), source=0)
+  allocate(CS%uHeff(G%isd:G%ied,G%jsd:G%jed,CS%nsurf-1), source=0.)
   ! V-points
-  allocate(CS%vPoL(G%isd:G%ied,G%jsd:G%jed, CS%nsurf)); CS%vPoL(G%isc:G%iec,G%jsc-1:G%jec,:)   = 0.
-  allocate(CS%vPoR(G%isd:G%ied,G%jsd:G%jed, CS%nsurf)); CS%vPoR(G%isc:G%iec,G%jsc-1:G%jec,:)   = 0.
-  allocate(CS%vKoL(G%isd:G%ied,G%jsd:G%jed, CS%nsurf)); CS%vKoL(G%isc:G%iec,G%jsc-1:G%jec,:)   = 0
-  allocate(CS%vKoR(G%isd:G%ied,G%jsd:G%jed, CS%nsurf)); CS%vKoR(G%isc:G%iec,G%jsc-1:G%jec,:)   = 0
-  allocate(CS%vHeff(G%isd:G%ied,G%jsd:G%jed,CS%nsurf-1)); CS%vHeff(G%isc:G%iec,G%jsc-1:G%jec,:) = 0
+  allocate(CS%vPoL(G%isd:G%ied,G%jsd:G%jed, CS%nsurf), source=0.)
+  allocate(CS%vPoR(G%isd:G%ied,G%jsd:G%jed, CS%nsurf), source=0.)
+  allocate(CS%vKoL(G%isd:G%ied,G%jsd:G%jed, CS%nsurf), source=0)
+  allocate(CS%vKoR(G%isd:G%ied,G%jsd:G%jed, CS%nsurf), source=0)
+  allocate(CS%vHeff(G%isd:G%ied,G%jsd:G%jed,CS%nsurf-1), source=0.)
 
 end function neutral_diffusion_init
 
@@ -577,7 +574,7 @@ subroutine neutral_diffusion(G, GV, h, Coef_x, Coef_y, dt, Reg, US, CS)
 
   integer :: i, j, k, m, ks, nk
   real :: Idt  ! The inverse of the time step [T-1 ~> s-1]
-  real :: h_neglect, h_neglect_edge
+  real :: h_neglect, h_neglect_edge ! Negligible thicknesses [H ~> m or kg m-2]
 
   h_neglect = GV%H_subroundoff ; h_neglect_edge = GV%H_subroundoff
 
