@@ -18,14 +18,12 @@ use MOM_file_parser, only   : read_param, get_param, log_param, log_version, par
 use MOM_grid, only          : ocean_grid_type
 use MOM_io, only            : slasher, MOM_read_data, file_exists
 use MOM_restart, only       : register_restart_field, MOM_restart_CS, restart_init, save_restart
-use MOM_spatial_means, only : global_area_mean
+use MOM_spatial_means, only : global_area_integral
 use MOM_time_manager, only  : time_type, time_type_to_real, operator(+), operator(/), operator(-)
 use MOM_unit_scaling, only  : unit_scale_type
 use MOM_variables, only     : surface, thermo_var_ptrs
 use MOM_verticalGrid, only  : verticalGrid_type
 use MOM_wave_structure, only: wave_structure_init, wave_structure, wave_structure_CS
-
-!use, intrinsic :: IEEE_ARITHMETIC
 
 implicit none ; private
 
@@ -52,11 +50,11 @@ type, public :: int_tide_CS ; private
   logical :: use_PPMang      !< If true, use PPM for advection of energy in angular space.
 
   real, allocatable, dimension(:,:) :: refl_angle
-                        !< local coastline/ridge/shelf angles read from file
+                        !< local coastline/ridge/shelf angles read from file [rad]
                         ! (could be in G control structure)
-  real :: nullangle = -999.9 !< placeholder value in cells with no reflection
+  real :: nullangle = -999.9 !< placeholder value in cells with no reflection [rad]
   real, allocatable, dimension(:,:) :: refl_pref
-                        !< partial reflection coeff for each "coast cell"
+                        !< partial reflection coeff for each "coast cell" [nondim]
                         ! (could be in G control structure)
   logical, allocatable, dimension(:,:) :: refl_pref_logical
                         !< true if reflecting cell with partial reflection
@@ -98,11 +96,11 @@ type, public :: int_tide_CS ; private
   real, allocatable, dimension(:,:) :: tot_allprocesses_loss !< Energy loss rates due to all processes,
                         !! summed over angle, frequency and mode [R Z3 T-3 ~> W m-2]
   real :: q_itides      !< fraction of local dissipation [nondim]
-  real :: En_sum        !< global sum of energy for use in debugging [R Z3 T-2 ~> J m-2]
+  real :: En_sum        !< global sum of energy for use in debugging, in MKS units [J]
   type(time_type), pointer :: Time => NULL() !< A pointer to the model's clock.
   character(len=200) :: inputdir !< directory to look for coastline angle file
   real :: decay_rate    !< A constant rate at which internal tide energy is
-                        !! lost to the interior ocean internal wave field.
+                        !! lost to the interior ocean internal wave field [T-1 ~> s-1].
   real :: cdrag         !< The bottom drag coefficient [nondim].
   real :: drag_min_depth !< The minimum total ocean thickness that will be used in the denominator
                         !! of the quadratic drag terms for internal tides when
@@ -537,7 +535,7 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
 
   ! Check for energy conservation on computational domain.*************************
   do m=1,CS%NMode ; do fr=1,CS%Nfreq
-    call sum_En(G,CS,CS%En(:,:,:,fr,m),'prop_int_tide')
+    call sum_En(G, US, CS, CS%En(:,:,:,fr,m), 'prop_int_tide')
   enddo ; enddo
 
   ! Output diagnostics.************************************************************
@@ -647,25 +645,23 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
 end subroutine propagate_int_tide
 
 !> Checks for energy conservation on computational domain
-subroutine sum_En(G, CS, En, label)
+subroutine sum_En(G, US, CS, En, label)
   type(ocean_grid_type),  intent(in) :: G  !< The ocean's grid structure.
+  type(unit_scale_type),  intent(in) :: US !< A dimensional unit scaling type
   type(int_tide_CS),      intent(inout) :: CS !< Internal tide control struct
   real, dimension(G%isd:G%ied,G%jsd:G%jed,CS%NAngle), &
                           intent(in) :: En !< The energy density of the internal tides [R Z3 T-2 ~> J m-2].
   character(len=*),       intent(in) :: label !< A label to use in error messages
   ! Local variables
-  real :: En_sum   ! The total energy [R Z3 T-2 ~> J m-2]
-  real :: tmpForSumming
+  real :: En_sum   ! The total energy in MKS units for potential output [J]
   integer :: m,fr,a
   ! real :: En_sum_diff, En_sum_pdiff
   ! character(len=160) :: mesg  ! The text of an error message
   ! real :: days
 
   En_sum = 0.0
-  tmpForSumming = 0.0
   do a=1,CS%nAngle
-    tmpForSumming = global_area_mean(En(:,:,a),G)*G%areaT_global
-    En_sum = En_sum + tmpForSumming
+    En_sum = En_sum + global_area_integral(En(:,:,a), G, scale=US%RZ3_T3_to_W_m2*US%T_to_s)
   enddo
   CS%En_sum = En_sum
   !En_sum_diff = En_sum - CS%En_sum
@@ -1143,7 +1139,7 @@ subroutine propagate(En, cn, freq, dt, G, US, CS, NAngle, residual_loss)
     call propagate_x(En, speed_x, Cgx_av, dCgx, dt, G, US, CS%nAngle, CS, LB, residual_loss)
 
     ! Check for energy conservation on computational domain (for debugging)
-    !call sum_En(G, CS, En, 'post-propagate_x')
+    !call sum_En(G, US, CS, En, 'post-propagate_x')
 
     ! Update halos
     call pass_var(En, G%domain)
@@ -1155,7 +1151,7 @@ subroutine propagate(En, cn, freq, dt, G, US, CS, NAngle, residual_loss)
     call propagate_y(En, speed_y, Cgy_av, dCgy, dt, G, US, CS%nAngle, CS, LB, residual_loss)
 
     ! Check for energy conservation on computational domain (for debugging)
-    !call sum_En(G, CS, En, 'post-propagate_y')
+    !call sum_En(G, US, CS, En, 'post-propagate_y')
   endif
 
 end subroutine propagate
@@ -1712,6 +1708,7 @@ subroutine reflect(En, NAngle, CS, G, LB)
                                               !! [R Z3 T-2 ~> J m-2].
   type(int_tide_CS),      intent(in)    :: CS !< Internal tide control struct
   type(loop_bounds_type), intent(in)    :: LB !< A structure with the active energy loop bounds.
+
   ! Local variables
   real, dimension(G%isd:G%ied,G%jsd:G%jed) :: angle_c
                                            ! angle of boundary wrt equator [rad]
@@ -1724,11 +1721,11 @@ subroutine reflect(En, NAngle, CS, G, LB)
 
   real    :: TwoPi                         ! 2*pi = 6.2831853... [nondim]
   real    :: Angle_size                    ! size of beam wedge [rad]
-  integer :: angle_wall                    ! angle of coast/ridge/shelf wrt equator [nondim]
-  integer :: angle_wall0                   ! angle of coast/ridge/shelf wrt equator [nondim]
-  integer :: angle_r                       ! angle of reflected ray wrt equator [nondim]
-  integer :: angle_r0                      ! angle of reflected ray wrt equator [nondim]
-  integer :: angle_to_wall                 ! angle relative to wall [nondim]
+  integer :: angle_wall                    ! angle-bin of coast/ridge/shelf wrt equator
+  integer :: angle_wall0                   ! angle-bin of coast/ridge/shelf wrt equator
+  integer :: angle_r                       ! angle-bin of reflected ray wrt equator
+  integer :: angle_r0                      ! angle-bin of reflected ray wrt equator
+  integer :: angle_to_wall                 ! angle-bin relative to wall
   integer :: a, a0                         ! loop index for angles
   integer :: i, j, i_global
   integer :: Nangle_d2            ! Nangle / 2
