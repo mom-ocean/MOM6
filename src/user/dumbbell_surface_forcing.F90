@@ -215,7 +215,7 @@ subroutine dumbbell_surface_forcing_init(Time, G, US, param_file, diag, CS)
                  units="Pa", default = 10000.0, scale=US%kg_m3_to_R*US%m_s_to_L_T**2)
   call get_param(param_file, mdl, "DUMBBELL_SLP_PERIOD", CS%slp_period, &
                  "Periodicity of SLP forcing in reservoirs.", &
-                 units="days", default = 1.0)
+                 units="days", default=1.0)
   call get_param(param_file, mdl, "DUMBBELL_ROTATION", dbrotate, &
                 'Logical for rotation of dumbbell domain.',&
                  units='nondim', default=.false., do_not_log=.true.)
