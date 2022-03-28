@@ -1220,7 +1220,8 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, restore_salt,
                  default=.false., do_not_log=.true.)
 
   call get_param(param_file, mdl, "ENTHALPY_FROM_COUPLER", CS%enthalpy_cpl, &
-                 default=.false., do_not_log=.true.)
+                 "If True, the heat (enthalpy) associated with mass entering/leaving the "//&
+                 "ocean is provided via coupler.", default=.false.)
 
   if (restore_salt) then
     call get_param(param_file, mdl, "FLUXCONST", CS%Flux_const, &
