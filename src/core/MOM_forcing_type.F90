@@ -3384,14 +3384,17 @@ subroutine rotate_forcing(fluxes_in, fluxes, turns)
 
   if (do_heat .and. do_water) then
     call rotate_array(fluxes_in%heat_content_cond, turns, fluxes%heat_content_cond)
-    call rotate_array(fluxes_in%heat_content_evap, turns, fluxes%heat_content_evap)
     call rotate_array(fluxes_in%heat_content_lprec, turns, fluxes%heat_content_lprec)
     call rotate_array(fluxes_in%heat_content_fprec, turns, fluxes%heat_content_fprec)
     call rotate_array(fluxes_in%heat_content_vprec, turns, fluxes%heat_content_vprec)
     call rotate_array(fluxes_in%heat_content_lrunoff, turns, fluxes%heat_content_lrunoff)
     call rotate_array(fluxes_in%heat_content_frunoff, turns, fluxes%heat_content_frunoff)
-    call rotate_array(fluxes_in%heat_content_massout, turns, fluxes%heat_content_massout)
-    call rotate_array(fluxes_in%heat_content_massin, turns, fluxes%heat_content_massin)
+    if (associated (fluxes_in%heat_content_evap))  then
+      call rotate_array(fluxes_in%heat_content_evap, turns, fluxes%heat_content_evap)
+    else
+      call rotate_array(fluxes_in%heat_content_massout, turns, fluxes%heat_content_massout)
+      call rotate_array(fluxes_in%heat_content_massin, turns, fluxes%heat_content_massin)
+    endif
   endif
 
   if (do_press) then
