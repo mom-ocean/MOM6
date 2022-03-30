@@ -65,8 +65,8 @@ type, public :: oda_incupd_CS ; private
                        !! registered by calls to set_up_oda_incupd_field
 
   type(p3d) :: Inc(MAX_FIELDS_)      !< The increments to be applied to the field
-  type(p3d) :: Inc_u  !< The increments to be applied to the u-velocities
-  type(p3d) :: Inc_v  !< The increments to be applied to the v-velocities
+  type(p3d) :: Inc_u  !< The increments to be applied to the u-velocities, with data in [L T-1 ~> m s-1]
+  type(p3d) :: Inc_v  !< The increments to be applied to the v-velocities, with data in [L T-1 ~> m s-1]
   type(p3d) :: Ref_h  !< Vertical grid on which the increments are provided
 
 
@@ -99,9 +99,6 @@ subroutine initialize_oda_incupd_fixed( G, GV, US, CS, restart_CS)
                                                         !! structure for this module (in/out).
   type(MOM_restart_CS),    intent(inout) :: restart_CS  !< MOM restart control struct
 
-! This include declares and sets the variable "version".
-#include "version_variable.h"
-  character(len=256) :: mesg
   if (associated(CS)) then
     call MOM_error(WARNING, "initialize_oda_incupd_fixed called with an associated "// &
                             "control structure.")
@@ -119,7 +116,7 @@ end subroutine initialize_oda_incupd_fixed
 
 !> This subroutine defined the number of time step for full update, stores the layer pressure
 !! increments and initialize remap structure.
-subroutine initialize_oda_incupd( G, GV, US, param_file, CS, data_h,nz_data, restart_CS)
+subroutine initialize_oda_incupd( G, GV, US, param_file, CS, data_h, nz_data, restart_CS)
   type(ocean_grid_type),      intent(in) :: G           !< The ocean's grid structure.
   type(verticalGrid_type),    intent(in) :: GV          !< ocean vertical grid structure
   type(unit_scale_type),      intent(in) :: US          !< A dimensional unit scaling type
@@ -132,8 +129,8 @@ subroutine initialize_oda_incupd( G, GV, US, param_file, CS, data_h,nz_data, res
                                                                  !! [H ~> m or kg m-2].
   type(MOM_restart_CS),       intent(in) :: restart_CS  !< MOM restart control struct
 
-! This include declares and sets the variable "version".
-#include "version_variable.h"
+  ! This include declares and sets the variable "version".
+# include "version_variable.h"
   character(len=40)  :: mdl = "MOM_oda"  ! This module's name.
   logical :: use_oda_incupd
   logical :: bndExtrapolation = .true.   ! If true, extrapolate boundaries
@@ -231,6 +228,7 @@ subroutine initialize_oda_incupd( G, GV, US, param_file, CS, data_h,nz_data, res
   do j=G%jsc,G%jec; do i=G%isc,G%iec ; do k=1,CS%nz_data
       CS%Ref_h%p(i,j,k) = data_h(i,j,k)
   enddo;  enddo ; enddo
+  !### Doing a halo update here on CS%Ref_h%p would avoid needing halo updates each timestep.
 
   ! Call the constructor for remapping control structure
   call initialize_remapping(CS%remap_cs, remapScheme, boundary_extrapolation=bndExtrapolation, &
@@ -329,16 +327,17 @@ subroutine calc_oda_increments(h, tv, u, v, G, GV, US, CS)
 
   real, dimension(SZK_(GV)) :: tmp_val1          ! data values on the model grid
   real, allocatable, dimension(:) :: tmp_val2    ! data values remapped to increment grid
-  real, allocatable, dimension(:,:,:) :: h_obs   !< h of increments
-  real, allocatable, dimension(:) :: tmp_h       ! temporary array for corrected h_obs
-  real, allocatable, dimension(:) :: hu_obs,hv_obs  ! A column of thicknesses at h points [H ~> m or kg m-2]
-  real, dimension(SZK_(GV)) :: hu, hv            ! A column of thicknesses at h, u or v points [H ~> m or kg m-2]
+  real, allocatable, dimension(:,:,:) :: h_obs !< Layer-thicknesses of increments [H ~> m or kg m-2]
+  real, allocatable, dimension(:) :: tmp_h     ! temporary array for corrected h_obs [H ~> m or kg m-2]
+  real, allocatable, dimension(:) :: hu_obs  ! A column of observation-grid thicknesses at u points [H ~> m or kg m-2]
+  real, allocatable, dimension(:) :: hv_obs  ! A column of observation-grid thicknesses at v points [H ~> m or kg m-2]
+  real, dimension(SZK_(GV)) :: hu, hv        ! A column of thicknesses at u or v points [H ~> m or kg m-2]
 
 
   integer ::  i, j, k, is, ie, js, je, nz, nz_data
   integer :: isB, ieB, jsB, jeB
-  real :: h_neglect, h_neglect_edge
-  real :: sum_h1, sum_h2 !vertical sums of h's
+  real :: h_neglect, h_neglect_edge  ! Negligible thicknesses [H ~> m or kg m-2]
+  real :: sum_h1, sum_h2 ! vertical sums of h's [H ~> m or kg m-2]
   character(len=256) :: mesg
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
@@ -527,23 +526,24 @@ subroutine apply_oda_incupd(h, tv, u, v, dt, G, GV, US, CS)
   real :: m_to_Z                                ! A unit conversion factor from m to Z.
   real, allocatable, dimension(:) :: tmp_val2   ! data values on the increment grid
   real, dimension(SZK_(GV)) :: tmp_val1         ! data values remapped to model grid
-  real, dimension(SZK_(GV)) :: hu, hv           ! A column of thicknesses at h, u or v points [H ~> m or kg m-2]
+  real, dimension(SZK_(GV)) :: hu, hv           ! A column of thicknesses at u or v points [H ~> m or kg m-2]
 
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV))  :: tmp_t  !< A temporary array for t inc.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV))  :: tmp_s  !< A temporary array for s inc.
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)) :: tmp_u  !< A temporary array for u inc.
-  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)) :: tmp_v  !< A temporary array for v inc.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV))  :: tmp_t  !< A temporary array for t increments [degC]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV))  :: tmp_s  !< A temporary array for s increments [ppt]
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)) :: tmp_u  !< A temporary array for u increments [L T-1 ~> m s-1]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)) :: tmp_v  !< A temporary array for v increments [L T-1 ~> m s-1]
 
   real, allocatable, dimension(:,:,:) :: h_obs     !< h of increments
   real, allocatable, dimension(:) :: tmp_h         !< temporary array for corrected h_obs
-  real, allocatable, dimension(:) :: hu_obs,hv_obs  ! A column of thicknesses at h points [H ~> m or kg m-2]
+  real, allocatable, dimension(:) :: hu_obs  ! A column of observation-grid thicknesses at u points [H ~> m or kg m-2]
+  real, allocatable, dimension(:) :: hv_obs  ! A column of observation-grid thicknesses at v points [H ~> m or kg m-2]
 
   integer ::  i, j, k, is, ie, js, je, nz, nz_data
   integer :: isB, ieB, jsB, jeB
 !  integer :: ncount      ! time step counter
-  real :: inc_wt           ! weight of the update for this time-step
-  real :: h_neglect, h_neglect_edge
-  real :: sum_h1, sum_h2 !vertical sums of h's
+  real :: inc_wt           ! weight of the update for this time-step [nondim]
+  real :: h_neglect, h_neglect_edge  ! Negligible thicknesses [H ~> m or kg m-2]
+  real :: sum_h1, sum_h2 ! vertical sums of h's [H ~> m or kg m-2]
   character(len=256) :: mesg
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
@@ -735,7 +735,7 @@ subroutine apply_oda_incupd(h, tv, u, v, dt, G, GV, US, CS)
   deallocate(tmp_h,tmp_val2,hu_obs,hv_obs)
   deallocate(h_obs)
 
-  end subroutine apply_oda_incupd
+end subroutine apply_oda_incupd
 
 !> Output increment if using full fields for the oda_incupd module.
 subroutine output_oda_incupd_inc(Time, G, GV, param_file, CS, US)
@@ -771,12 +771,12 @@ subroutine output_oda_incupd_inc(Time, G, GV, param_file, CS, US)
   call register_restart_field(CS%Inc(2)%p, "S_inc", .true., restart_CSp_tmp, &
                               "Salinity increment", "psu")
   call register_restart_field(CS%Ref_h%p, "h_obs", .true., restart_CSp_tmp, &
-                              "Observational h", "m")
+                              "Observational h", units=get_thickness_units(GV), conversion=GV%H_to_MKS)
   if (CS%uv_inc) then
     u_desc = var_desc("u_inc", "m s-1", "U-vel increment", hor_grid='Cu')
     v_desc = var_desc("v_inc", "m s-1", "V-vel increment", hor_grid='Cv')
     call register_restart_pair(CS%Inc_u%p, CS%Inc_v%p, u_desc, v_desc, &
-              .false., restart_CSp_tmp)
+              .false., restart_CSp_tmp, conversion=US%L_T_to_m_s)
   endif
 
   ! get the name of the output file

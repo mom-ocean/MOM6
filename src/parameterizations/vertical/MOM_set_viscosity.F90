@@ -1807,9 +1807,10 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS)
 end subroutine set_viscous_ML
 
 !> Register any fields associated with the vertvisc_type.
-subroutine set_visc_register_restarts(HI, GV, param_file, visc, restart_CS)
+subroutine set_visc_register_restarts(HI, GV, US, param_file, visc, restart_CS)
   type(hor_index_type),    intent(in)    :: HI         !< A horizontal index type structure.
   type(verticalGrid_type), intent(in)    :: GV         !< The ocean's vertical grid structure.
+  type(unit_scale_type),   intent(in)    :: US         !< A dimensional unit scaling type
   type(param_file_type),   intent(in)    :: param_file !< A structure to parse for run-time
                                                        !! parameters.
   type(vertvisc_type),     intent(inout) :: visc       !< A structure containing vertical
@@ -1849,20 +1850,22 @@ subroutine set_visc_register_restarts(HI, GV, param_file, visc, restart_CS)
   if (use_kappa_shear .or. useKPP .or. useEPBL .or. use_CVMix_shear .or. use_CVMix_conv) then
     call safe_alloc_ptr(visc%Kd_shear, isd, ied, jsd, jed, nz+1)
     call register_restart_field(visc%Kd_shear, "Kd_shear", .false., restart_CS, &
-                  "Shear-driven turbulent diffusivity at interfaces", "m2 s-1", z_grid='i')
+                  "Shear-driven turbulent diffusivity at interfaces", &
+                  units="m2 s-1", conversion=US%Z2_T_to_m2_s, z_grid='i')
   endif
   if (useKPP .or. useEPBL .or. use_CVMix_shear .or. use_CVMix_conv .or. &
       (use_kappa_shear .and. .not.KS_at_vertex )) then
     call safe_alloc_ptr(visc%Kv_shear, isd, ied, jsd, jed, nz+1)
     call register_restart_field(visc%Kv_shear, "Kv_shear", .false., restart_CS, &
-                  "Shear-driven turbulent viscosity at interfaces", "m2 s-1", z_grid='i')
+                  "Shear-driven turbulent viscosity at interfaces", &
+                  units="m2 s-1", conversion=US%Z2_T_to_m2_s, z_grid='i')
   endif
   if (use_kappa_shear .and. KS_at_vertex) then
     call safe_alloc_ptr(visc%TKE_turb, HI%IsdB, HI%IedB, HI%JsdB, HI%JedB, nz+1)
     call safe_alloc_ptr(visc%Kv_shear_Bu, HI%IsdB, HI%IedB, HI%JsdB, HI%JedB, nz+1)
     call register_restart_field(visc%Kv_shear_Bu, "Kv_shear_Bu", .false., restart_CS, &
-                  "Shear-driven turbulent viscosity at vertex interfaces", "m2 s-1", &
-                  hor_grid="Bu", z_grid='i')
+                  "Shear-driven turbulent viscosity at vertex interfaces", &
+                  units="m2 s-1", conversion=US%Z2_T_to_m2_s, hor_grid="Bu", z_grid='i')
   elseif (use_kappa_shear) then
     call safe_alloc_ptr(visc%TKE_turb, isd, ied, jsd, jed, nz+1)
   endif
@@ -1882,7 +1885,7 @@ subroutine set_visc_register_restarts(HI, GV, param_file, visc, restart_CS)
   if (MLE_use_PBL_MLD) then
     call safe_alloc_ptr(visc%MLD, isd, ied, jsd, jed)
     call register_restart_field(visc%MLD, "MLD", .false., restart_CS, &
-                  "Instantaneous active mixing layer depth", "m")
+                  "Instantaneous active mixing layer depth", "m", conversion=US%Z_to_m)
   endif
 
   if (hfreeze >= 0.0 .and. .not.MLE_use_PBL_MLD) then
@@ -2191,9 +2194,9 @@ subroutine set_visc_init(Time, G, GV, US, param_file, diag, visc, CS, restart_CS
     allocate(visc%nkml_visc_u(IsdB:IedB,jsd:jed), source=0.0)
     allocate(visc%nkml_visc_v(isd:ied,JsdB:JedB), source=0.0)
     CS%id_nkml_visc_u = register_diag_field('ocean_model', 'nkml_visc_u', &
-       diag%axesCu1, Time, 'Number of layers in viscous mixed layer at u points', 'm')
+       diag%axesCu1, Time, 'Number of layers in viscous mixed layer at u points', 'nondim')
     CS%id_nkml_visc_v = register_diag_field('ocean_model', 'nkml_visc_v', &
-       diag%axesCv1, Time, 'Number of layers in viscous mixed layer at v points', 'm')
+       diag%axesCv1, Time, 'Number of layers in viscous mixed layer at v points', 'nondim')
   endif
 
   call register_restart_field_as_obsolete('Kd_turb','Kd_shear', restart_CS)
@@ -2202,11 +2205,9 @@ subroutine set_visc_init(Time, G, GV, US, param_file, diag, visc, CS, restart_CS
   ! Account for possible changes in dimensional scaling for variables that have been
   ! read from a restart file.
   Z_rescale = 1.0
-  if ((US%m_to_Z_restart /= 0.0) .and. (US%m_to_Z_restart /= US%m_to_Z)) &
-    Z_rescale = US%m_to_Z / US%m_to_Z_restart
+  if (US%m_to_Z_restart /= 0.0) Z_rescale = 1.0 / US%m_to_Z_restart
   I_T_rescale = 1.0
-  if ((US%s_to_T_restart /= 0.0) .and. (US%s_to_T_restart /= US%s_to_T)) &
-    I_T_rescale = US%s_to_T_restart / US%s_to_T
+  if (US%s_to_T_restart /= 0.0) I_T_rescale = US%s_to_T_restart
   Z2_T_rescale = Z_rescale**2*I_T_rescale
 
   if (Z2_T_rescale /= 1.0) then

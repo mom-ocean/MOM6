@@ -16,7 +16,7 @@ use MOM_domains, only       : group_pass_type, start_group_pass, complete_group_
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, MOM_mesg, is_root_pe
 use MOM_file_parser, only   : read_param, get_param, log_param, log_version, param_file_type
 use MOM_grid, only          : ocean_grid_type
-use MOM_io, only            : slasher, vardesc, MOM_read_data, file_exists
+use MOM_io, only            : slasher, MOM_read_data, file_exists
 use MOM_restart, only       : register_restart_field, MOM_restart_CS, restart_init, save_restart
 use MOM_spatial_means, only : global_area_mean
 use MOM_time_manager, only  : time_type, time_type_to_real, operator(+), operator(/), operator(-)
@@ -2105,7 +2105,6 @@ end subroutine PPM_limit_pos
 !   ! This subroutine is used to allocate and register any fields in this module
 !   ! that should be written to or read from the restart file.
 !   logical :: use_int_tides
-!   type(vardesc) :: vd
 !   integer :: num_freq, num_angle , num_mode, period_1
 !   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, a
 !   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
@@ -2127,10 +2126,9 @@ end subroutine PPM_limit_pos
 !   call read_param(param_file, "INTERNAL_TIDE_ANGLES", num_angle)
 !   allocate(CS%En_restart(isd:ied, jsd:jed, num_angle), source=0.0)
 
-!   vd = vardesc("En_restart", &
-!     "The internal wave energy density as a function of (i,j,angle,frequency,mode)", &
-!     'h','1','1',"J m-2")
-!   call register_restart_field(CS%En_restart, vd, .false., restart_CS)
+!   call register_restart_field(CS%En_restart, "En_restart", .false., restart_CS, &
+!            longname="The internal wave energy density as a function of (i,j,angle,frequency,mode)", &
+!            units="J m-2", conversion=US%RZ3_T3_to_W_m2*US%T_to_s, z_grid='1')
 
 ! end subroutine register_int_tide_restarts
 

@@ -427,8 +427,9 @@ end function
 
 !> This subroutine is used to allocate and register any fields in this module
 !! that should be written to or read from the restart file.
-subroutine register_ctrl_forcing_restarts(G, param_file, CS, restart_CS)
+subroutine register_ctrl_forcing_restarts(G, US, param_file, CS, restart_CS)
   type(ocean_grid_type), intent(in) :: G          !< The ocean's grid structure.
+  type(unit_scale_type), intent(in) :: US         !< A dimensional unit scaling type
   type(param_file_type), intent(in) :: param_file !< A structure indicating the
                                                   !! open file to parse for model
                                                   !! parameter values.
@@ -469,9 +470,11 @@ subroutine register_ctrl_forcing_restarts(G, param_file, CS, restart_CS)
     allocate(CS%precip_0(isd:ied,jsd:jed), source=0.0)
 
     call register_restart_field(CS%heat_0, "Ctrl_heat", .false., restart_CS, &
-                  longname="Control Integrative Heating", units="W m-2", z_grid='1')
+                  longname="Control Integrative Heating", &
+                  units="W m-2", conversion=US%QRZ_T_to_W_m2, z_grid='1')
     call register_restart_field(CS%precip_0, "Ctrl_precip", .false., restart_CS, &
-                  longname="Control Integrative Precipitation", units="kg m-2 s-1", z_grid='1')
+                  longname="Control Integrative Precipitation", &
+                  units="kg m-2 s-1", conversion=US%RZ_T_to_kg_m2s, z_grid='1')
   endif
 
   if (CS%num_cycle > 0) then
@@ -485,13 +488,16 @@ subroutine register_ctrl_forcing_restarts(G, param_file, CS, restart_CS)
     period_str = trim('p ')//trim(adjustl(period_str))
 
     call register_restart_field(CS%heat_cyc, "Ctrl_heat_cycle", .false., restart_CS, &
-                  longname="Cyclical Control Heating", units="W m-2", z_grid='1', t_grid=period_str)
+                  longname="Cyclical Control Heating", &
+                  units="W m-2", conversion=US%QRZ_T_to_W_m2, z_grid='1', t_grid=period_str)
     call register_restart_field(CS%precip_cyc, "Ctrl_precip_cycle", .false., restart_CS, &
-                  longname="Cyclical Control Precipitation", units="kg m-2 s-1", z_grid='1', t_grid=period_str)
+                  longname="Cyclical Control Precipitation", &
+                  units="kg m-2 s-1", conversion=US%RZ_T_to_kg_m2s, z_grid='1', t_grid=period_str)
     call register_restart_field(CS%avg_time, "avg_time", .false., restart_CS, &
-                  longname="Cyclical accumulated averaging time", units="sec", z_grid='1', t_grid=period_str)
+                  longname="Cyclical accumulated averaging time", &
+                  units="sec", conversion=US%T_to_s, z_grid='1', t_grid=period_str)
     call register_restart_field(CS%avg_SST_anom, "avg_SST_anom", .false., restart_CS, &
-                  longname="Cyclical average SST Anomaly", units="deg C", z_grid='1', t_grid=period_str)
+                  longname="Cyclical average SST Anomaly", units="degC", z_grid='1', t_grid=period_str)
     call register_restart_field(CS%avg_SSS_anom, "avg_SSS_anom", .false., restart_CS, &
                   longname="Cyclical average SSS Anomaly", units="g kg-1", z_grid='1', t_grid=period_str)
   endif
@@ -592,11 +598,9 @@ subroutine controlled_forcing_init(Time, G, US, param_file, diag, CS)
   ! Rescale if there are differences between the dimensional scaling of variables in
   ! restart files from those in use for this run.
   if ((US%J_kg_to_Q_restart*US%kg_m3_to_R_restart*US%m_to_Z_restart*US%s_to_T_restart /= 0.0) .and. &
-      ((US%J_kg_to_Q * US%kg_m3_to_R * US%m_to_Z * US%s_to_T_restart) /= &
-       (US%J_kg_to_Q_restart * US%kg_m3_to_R_restart * US%m_to_Z_restart * US%s_to_T)) ) then
+      (US%s_to_T_restart /= US%J_kg_to_Q_restart * US%kg_m3_to_R_restart * US%m_to_Z_restart) ) then
     ! Redo the scaling of the corrective heat fluxes to [Q R Z T-1 ~> W m-2]
-    QRZ_T_rescale = (US%J_kg_to_Q * US%kg_m3_to_R * US%m_to_Z * US%s_to_T_restart) / &
-                    (US%J_kg_to_Q_restart * US%kg_m3_to_R_restart * US%m_to_Z_restart * US%s_to_T)
+    QRZ_T_rescale = US%s_to_T_restart / (US%J_kg_to_Q_restart * US%kg_m3_to_R_restart * US%m_to_Z_restart)
 
     if (associated(CS%heat_0)) then
       do j=jsc,jec ; do i=isc,iec
@@ -612,11 +616,9 @@ subroutine controlled_forcing_init(Time, G, US, param_file, diag, CS)
   endif
 
   if ((US%kg_m3_to_R_restart * US%m_to_Z_restart * US%s_to_T_restart /= 0.0) .and. &
-      ((US%kg_m3_to_R * US%m_to_Z * US%s_to_T_restart) /= &
-       (US%kg_m3_to_R_restart * US%m_to_Z_restart * US%s_to_T)) ) then
+      (US%s_to_T_restart /= US%kg_m3_to_R_restart * US%m_to_Z_restart) ) then
     ! Redo the scaling of the corrective precipitation to [R Z T-1 ~> kg m-2 s-1]
-    RZ_T_rescale = (US%kg_m3_to_R * US%m_to_Z * US%s_to_T_restart) / &
-                   (US%kg_m3_to_R_restart * US%m_to_Z_restart * US%s_to_T)
+    RZ_T_rescale = US%s_to_T_restart / (US%kg_m3_to_R_restart * US%m_to_Z_restart)
 
     if (associated(CS%precip_0)) then
       do j=jsc,jec ; do i=isc,iec
@@ -632,10 +634,10 @@ subroutine controlled_forcing_init(Time, G, US, param_file, diag, CS)
   endif
 
   if ((CS%num_cycle > 0) .and. associated(CS%avg_time) .and. &
-      ((US%s_to_T_restart /= 0.0) .and. ((US%s_to_T_restart) /= US%s_to_T)) ) then
+      ((US%s_to_T_restart /= 0.0) .and. (US%s_to_T_restart /= 1.0)) ) then
     ! Redo the scaling of the accumulated times to [T ~> s]
     do m=1,CS%num_cycle
-      CS%avg_time(m) = (US%s_to_T / US%s_to_T_restart) * CS%avg_time(m)
+      CS%avg_time(m) = (1.0 / US%s_to_T_restart) * CS%avg_time(m)
     enddo
   endif
 

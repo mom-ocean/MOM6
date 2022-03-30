@@ -4748,8 +4748,8 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, US, param_file, diag, CS, 
   dtbt_tmp = -1.0
   if (query_initialized(CS%dtbt, "DTBT", restart_CS)) then
     dtbt_tmp = CS%dtbt
-    if ((US%s_to_T_restart /= 0.0) .and. (US%s_to_T_restart /= US%s_to_T)) &
-      dtbt_tmp = (US%s_to_T / US%s_to_T_restart) * CS%dtbt
+    if ((US%s_to_T_restart /= 0.0) .and. (US%s_to_T_restart /= 1.0)) &
+      dtbt_tmp = (1.0 / US%s_to_T_restart) * CS%dtbt
   endif
 
   ! Estimate the maximum stable barotropic time step.
@@ -4909,8 +4909,8 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, US, param_file, diag, CS, 
       CS%vbtav(i,J) = CS%vbtav(i,J) + CS%frhatv(i,J,k) * v(i,J,k)
     enddo ; enddo ; enddo
   elseif ((US%s_to_T_restart*US%m_to_L_restart /= 0.0) .and. &
-          (US%m_to_L*US%s_to_T_restart) /= (US%m_to_L_restart*US%s_to_T)) then
-    vel_rescale = (US%m_to_L*US%s_to_T_restart) / (US%m_to_L_restart*US%s_to_T)
+          (US%s_to_T_restart /= US%m_to_L_restart)) then
+    vel_rescale = US%s_to_T_restart / US%m_to_L_restart
     do j=js,je ; do I=is-1,ie ; CS%ubtav(I,j) = vel_rescale * CS%ubtav(I,j) ; enddo ; enddo
     do J=js-1,je ; do i=is,ie ; CS%vbtav(i,J) = vel_rescale * CS%vbtav(i,J) ; enddo ; enddo
   endif
@@ -4921,8 +4921,8 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, US, param_file, diag, CS, 
       do j=js,je ; do I=is-1,ie ; CS%ubt_IC(I,j) = CS%ubtav(I,j) ; enddo ; enddo
       do J=js-1,je ; do i=is,ie ; CS%vbt_IC(i,J) = CS%vbtav(i,J) ; enddo ; enddo
     elseif ((US%s_to_T_restart*US%m_to_L_restart /= 0.0) .and. &
-            (US%m_to_L*US%s_to_T_restart) /= (US%m_to_L_restart*US%s_to_T)) then
-      vel_rescale = (US%m_to_L*US%s_to_T_restart) / (US%m_to_L_restart*US%s_to_T)
+            (US%s_to_T_restart /= US%m_to_L_restart)) then
+      vel_rescale = US%s_to_T_restart / US%m_to_L_restart
       do j=js,je ; do I=is-1,ie ; CS%ubt_IC(I,j) = vel_rescale * CS%ubt_IC(I,j) ; enddo ; enddo
       do J=js-1,je ; do i=is,ie ; CS%vbt_IC(i,J) = vel_rescale * CS%vbt_IC(i,J) ; enddo ; enddo
     endif
@@ -5022,11 +5022,12 @@ end subroutine barotropic_end
 
 !> This subroutine is used to register any fields from MOM_barotropic.F90
 !! that should be written to or read from the restart file.
-subroutine register_barotropic_restarts(HI, GV, param_file, CS, restart_CS)
+subroutine register_barotropic_restarts(HI, GV, US, param_file, CS, restart_CS)
   type(hor_index_type),    intent(in) :: HI         !< A horizontal index type structure.
+  type(verticalGrid_type), intent(in) :: GV         !< The ocean's vertical grid structure.
+  type(unit_scale_type),   intent(in) :: US         !< A dimensional unit scaling type
   type(param_file_type),   intent(in) :: param_file !< A structure to parse for run-time parameters.
   type(barotropic_CS),     intent(inout) :: CS      !< Barotropic control structure
-  type(verticalGrid_type), intent(in) :: GV         !< The ocean's vertical grid structure.
   type(MOM_restart_CS),    intent(inout) :: restart_CS !< MOM restart control structure
 
   ! Local variables
@@ -5056,7 +5057,8 @@ subroutine register_barotropic_restarts(HI, GV, param_file, CS, restart_CS)
                 hor_grid='u', z_grid='1')
   vd(3) = var_desc("vbtav","m s-1","Time mean barotropic meridional velocity",&
                 hor_grid='v', z_grid='1')
-  call register_restart_pair(CS%ubtav, CS%vbtav, vd(2), vd(3), .false., restart_CS)
+  call register_restart_pair(CS%ubtav, CS%vbtav, vd(2), vd(3), .false., restart_CS, &
+                             conversion=US%L_T_to_m_s)
 
   if (CS%gradual_BT_ICs) then
     vd(2) = var_desc("ubt_IC", "m s-1", &
@@ -5065,12 +5067,12 @@ subroutine register_barotropic_restarts(HI, GV, param_file, CS, restart_CS)
     vd(3) = var_desc("vbt_IC", "m s-1", &
                 longname="Next initial condition for the barotropic meridional velocity",&
                 hor_grid='v', z_grid='1')
-    call register_restart_pair(CS%ubt_IC, CS%vbt_IC, vd(2), vd(3), .false., restart_CS)
+    call register_restart_pair(CS%ubt_IC, CS%vbt_IC, vd(2), vd(3), .false., restart_CS, &
+                               conversion=US%L_T_to_m_s)
   endif
 
-
   call register_restart_field(CS%dtbt, "DTBT", .false., restart_CS, &
-                              longname="Barotropic timestep", units="seconds")
+                              longname="Barotropic timestep", units="seconds", conversion=US%T_to_s)
 
 end subroutine register_barotropic_restarts
 
