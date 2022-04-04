@@ -3940,7 +3940,8 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
         ! no dz for tidal variables
         if (segment%field(m)%nk_src > 1 .and.&
             (index(segment%field(m)%name, 'phase') <= 0 .and. index(segment%field(m)%name, 'amp') <= 0)) then
-          call time_interp_external(segment%field(m)%fid_dz,Time, tmp_buffer_in)
+          call time_interp_external(segment%field(m)%fid_dz, Time, tmp_buffer_in)
+          tmp_buffer_in(:,:,:) = tmp_buffer_in(:,:,:) * US%m_to_Z
           if (turns /= 0) then
             ! TODO: This is hardcoded for 90 degrees, and needs to be generalized.
             if (segment%is_E_or_W &

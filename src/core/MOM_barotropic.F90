@@ -1246,12 +1246,12 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
         CS%IDatu(I,j) = 0.0
       elseif (integral_BT_cont) then
         CS%IDatu(I,j) = CS%dy_Cu(I,j) / (max(find_duhbt_du(ubt(I,j)*dt, BTCL_u(I,j)), &
-                                             CS%dy_Cu(I,j)*Htot_avg) )
+                                             CS%dy_Cu(I,j)*Htot_avg) ) * GV%Z_to_H
       elseif (use_BT_cont) then ! Reconsider the max and whether there should be some scaling.
         CS%IDatu(I,j) = CS%dy_Cu(I,j) / (max(find_duhbt_du(ubt(I,j), BTCL_u(I,j)), &
-                                             CS%dy_Cu(I,j)*Htot_avg) )
+                                             CS%dy_Cu(I,j)*Htot_avg) ) * GV%Z_to_H
       else
-        CS%IDatu(I,j) = 1.0 / Htot_avg
+        CS%IDatu(I,j) = GV%Z_to_H / Htot_avg
       endif
     endif
 
@@ -1272,12 +1272,12 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
         CS%IDatv(i,J) = 0.0
       elseif (integral_BT_cont) then
         CS%IDatv(i,J) = CS%dx_Cv(i,J) / (max(find_dvhbt_dv(vbt(i,J)*dt, BTCL_v(i,J)), &
-                                             CS%dx_Cv(i,J)*Htot_avg) )
+                                             CS%dx_Cv(i,J)*Htot_avg) ) * GV%Z_to_H
       elseif (use_BT_cont) then ! Reconsider the max and whether there should be some scaling.
         CS%IDatv(i,J) = CS%dx_Cv(i,J) / (max(find_dvhbt_dv(vbt(i,J), BTCL_v(i,J)), &
-                                             CS%dx_Cv(i,J)*Htot_avg) )
+                                             CS%dx_Cv(i,J)*Htot_avg) ) * GV%Z_to_H
       else
-        CS%IDatv(i,J) = 1.0 / Htot_avg
+        CS%IDatv(i,J) = GV%Z_to_H / Htot_avg
       endif
     endif
 
