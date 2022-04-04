@@ -257,7 +257,7 @@ subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, &
       hg2B = h(i,j,k)*h(i+1,j,k) + h_neglect2
       hg2L = h(i,j,k-1)*h(i,j,k) + h_neglect2
       hg2R = h(i+1,j,k-1)*h(i+1,j,k) + h_neglect2
-      haA = 0.5*(h(i,j,k-1) + h(i+1,j,k-1))
+      haA = 0.5*(h(i,j,k-1) + h(i+1,j,k-1)) + h_neglect
       haB = 0.5*(h(i,j,k) + h(i+1,j,k)) + h_neglect
       haL = 0.5*(h(i,j,k-1) + h(i,j,k)) + h_neglect
       haR = 0.5*(h(i+1,j,k-1) + h(i+1,j,k)) + h_neglect
