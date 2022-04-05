@@ -770,8 +770,8 @@ end subroutine end_regridding
 
 !------------------------------------------------------------------------------
 !> Dispatching regridding routine for orchestrating regridding & remapping
-subroutine regridding_main( remapCS, CS, G, GV, h, tv, h_new, dzInterface, frac_shelf_h, &
-                            conv_adjust, PCM_cell)
+subroutine regridding_main( remapCS, CS, G, GV, h, tv, h_new, dzInterface, conv_adjust, &
+                            frac_shelf_h, PCM_cell)
 !------------------------------------------------------------------------------
 ! This routine takes care of (1) building a new grid and (2) remapping between
 ! the old grid and the new grid. The creation of the new grid can be based
@@ -794,22 +794,29 @@ subroutine regridding_main( remapCS, CS, G, GV, h, tv, h_new, dzInterface, frac_
   type(regridding_CS),                        intent(in)    :: CS     !< Regridding control structure
   type(ocean_grid_type),                      intent(in)    :: G      !< Ocean grid structure
   type(verticalGrid_type),                    intent(in)    :: GV     !< Ocean vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(inout) :: h      !< Current 3D grid obtained after
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(in)    :: h      !< Current 3D grid obtained after
                                                                       !! the last time step
-  type(thermo_var_ptrs),                      intent(inout) :: tv     !< Thermodynamical variables (T, S, ...)
+  type(thermo_var_ptrs),                      intent(in)    :: tv     !< Thermodynamical variables (T, S, ...)
   real, dimension(SZI_(G),SZJ_(G),CS%nk),     intent(inout) :: h_new  !< New 3D grid consistent with target coordinate
   real, dimension(SZI_(G),SZJ_(G),CS%nk+1),   intent(inout) :: dzInterface !< The change in position of each interface
+  logical,                                    intent(in   ) :: conv_adjust !< If true, regridding_main should do
+                                                                      !! convective adjustment, but because it no
+                                                                      !! longer does convective adjustment this must
+                                                                      !! be false.  This argument has been retained to
+                                                                      !! trap inconsistent code, but will eventually
+                                                                      !! be eliminated.
   real, dimension(SZI_(G),SZJ_(G)), optional, intent(in   ) :: frac_shelf_h !< Fractional ice shelf coverage
-  logical,                          optional, intent(in   ) :: conv_adjust !< If true, do convective adjustment
   logical, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                                     optional, intent(out  ) :: PCM_cell !< Use PCM remapping in cells where true
 
   ! Local variables
   real :: trickGnuCompiler
-  logical :: do_convective_adjustment
 
-  do_convective_adjustment = .true.
-  if (present(conv_adjust)) do_convective_adjustment = conv_adjust
+  if (conv_adjust) call MOM_error(FATAL, &
+                        "regridding_main: convective adjustment no longer is done inside of regridding_main. "//&
+                        "The code needs to be modified to call regridding_main() with conv_adjust=.false, "//&
+                        "and a call to convective_adjustment added before calling regridding_main() "//&
+                        "if regridding_preadjust_reqs() indicates that this is necessary.")
   if (present(PCM_cell)) PCM_cell(:,:,:) = .false.
 
   select case ( CS%regridding_scheme )
@@ -824,7 +831,6 @@ subroutine regridding_main( remapCS, CS, G, GV, h, tv, h_new, dzInterface, frac_
       call build_sigma_grid( CS, G, GV, h, dzInterface )
       call calc_h_new_by_dz(CS, G, GV, h, dzInterface, h_new)
     case ( REGRIDDING_RHO )
-      if (do_convective_adjustment) call convective_adjustment(G, GV, h, tv)
       call build_rho_grid( G, GV, G%US, h, tv, dzInterface, remapCS, CS, frac_shelf_h )
       call calc_h_new_by_dz(CS, G, GV, h, dzInterface, h_new)
     case ( REGRIDDING_ARBITRARY )

@@ -426,8 +426,8 @@ subroutine ALE_main( G, GV, US, h, u, v, tv, Reg, CS, OBC, dt, frac_shelf_h)
 
   ! Build new grid. The new grid is stored in h_new. The old grid is h.
   ! Both are needed for the subsequent remapping of variables.
-  call regridding_main( CS%remapCS, CS%regridCS, G, GV, h, tv, h_new, dzRegrid, &
-                        frac_shelf_h, conv_adjust=.false., PCM_cell=PCM_cell)
+  call regridding_main( CS%remapCS, CS%regridCS, G, GV, h, tv, h_new, dzRegrid, conv_adjust=.false., &
+                        frac_shelf_h=frac_shelf_h, PCM_cell=PCM_cell)
 
   call check_grid( G, GV, h, 0. )
 

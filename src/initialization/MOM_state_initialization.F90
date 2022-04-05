@@ -2725,8 +2725,8 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, depth_tot, G, GV, US, PF, just
 
       call regridding_preadjust_reqs(regridCS, do_conv_adj, ignore)
       if (do_conv_adj) call convective_adjustment(G, GV_loc, h1, tv_loc)
-      call regridding_main( remapCS, regridCS, G, GV_loc, h1, tv_loc, h, dz_interface, frac_shelf_h, &
-                            conv_adjust=.false. )
+      call regridding_main( remapCS, regridCS, G, GV_loc, h1, tv_loc, h, dz_interface, conv_adjust=.false., &
+                            frac_shelf_h=frac_shelf_h )
 
       deallocate( dz_interface )
     endif
