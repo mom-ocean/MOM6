@@ -270,7 +270,7 @@ subroutine boundary_impulse_tracer_column_physics(h_old, h_new, ea, eb, fluxes, 
 
   ! Set surface conditions
   do m=1,1
-    if (CS%remaining_source_time>0.0) then
+    if (CS%remaining_source_time > 0.0) then
       do k=1,CS%nkml ; do j=js,je ; do i=is,ie
         CS%tr(i,j,k,m) = 1.0
       enddo ; enddo ; enddo

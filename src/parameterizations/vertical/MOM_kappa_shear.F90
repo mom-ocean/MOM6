@@ -197,7 +197,7 @@ subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
 !---------------------------------------
 ! Work on each column.
 !---------------------------------------
-    do i=is,ie ; if (G%mask2dT(i,j) > 0.5) then
+    do i=is,ie ; if (G%mask2dT(i,j) > 0.0) then
     ! call cpu_clock_begin(id_clock_setup)
       ! Store a transposed version of the initial arrays.
       ! Any elimination of massless layers would occur here.

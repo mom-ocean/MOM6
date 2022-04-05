@@ -503,7 +503,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, Kd_i
 
 
     ! This adds the diffusion sustained by the energy extracted from the flow by the bottom drag.
-    if (CS%bottomdraglaw .and. (CS%BBL_effic>0.0)) then
+    if (CS%bottomdraglaw .and. (CS%BBL_effic > 0.0)) then
       if (CS%use_LOTW_BBL_diffusivity) then
         call add_LOTW_BBL_diffusivity(h, u, v, tv, fluxes, visc, j, N2_int, Kd_int_2d, G, GV, US, CS, &
                                       dd%Kd_BBL, Kd_lay_2d)
@@ -812,7 +812,7 @@ subroutine find_TKE_to_Kd(h, tv, dRho_int, N2_lay, j, dt, G, GV, US, CS, &
 
   do i=is,ie
     htot(i) = GV%H_to_Z*(h(i,j,nz) - GV%Angstrom_H) ; maxEnt(i,nz) = 0.0
-    do_i(i) = (G%mask2dT(i,j) > 0.5)
+    do_i(i) = (G%mask2dT(i,j) > 0.0)
   enddo
   do k=nz-1,kb_min,-1
     i_rem = 0
@@ -969,7 +969,7 @@ subroutine find_N2(h, tv, T_f, S_f, fluxes, j, G, GV, US, CS, dRho_int, &
   do i=is,ie
     hb(i) = 0.0 ; dRho_bot(i) = 0.0 ; h_amp(i) = 0.0
     z_from_bot(i) = 0.5*GV%H_to_Z*h(i,j,nz)
-    do_i(i) = (G%mask2dT(i,j) > 0.5)
+    do_i(i) = (G%mask2dT(i,j) > 0.0)
   enddo
   if (CS%use_tidal_mixing) call tidal_mixing_h_amp(h_amp, G, j, CS%tidal_mixing)
 
@@ -1001,7 +1001,7 @@ subroutine find_N2(h, tv, T_f, S_f, fluxes, j, G, GV, US, CS, dRho_int, &
       N2_bot(i) = (G_Rho0 * drho_bot(i)) / hb(i)
     else ;  N2_bot(i) = 0.0 ; endif
     z_from_bot(i) = 0.5*GV%H_to_Z*h(i,j,nz)
-    do_i(i) = (G%mask2dT(i,j) > 0.5)
+    do_i(i) = (G%mask2dT(i,j) > 0.0)
   enddo
 
   do k=nz,2,-1
@@ -1195,7 +1195,7 @@ subroutine add_drag_diffusivity(h, u, v, tv, fluxes, visc, j, TKE_to_Kd, &
 
   do_diag_Kd_BBL = associated(Kd_BBL)
 
-  if (.not.(CS%bottomdraglaw .and. (CS%BBL_effic>0.0))) return
+  if (.not.(CS%bottomdraglaw .and. (CS%BBL_effic > 0.0))) return
 
   cdrag_sqrt = sqrt(CS%cdrag)
   TKE_Ray = 0.0 ; Rayleigh_drag = .false.
@@ -1238,7 +1238,7 @@ subroutine add_drag_diffusivity(h, u, v, tv, fluxes, visc, j, TKE_to_Kd, &
 
     gh_sum_top(i) = R0_g * 400.0 * ustar_h**2
 
-    do_i(i) = (G%mask2dT(i,j) > 0.5)
+    do_i(i) = (G%mask2dT(i,j) > 0.0)
     htot(i) = GV%H_to_Z*h(i,j,nz)
     rho_htot(i) = GV%Rlay(nz)*(GV%H_to_Z*h(i,j,nz))
     Rho_top(i) = GV%Rlay(1)
@@ -1259,7 +1259,7 @@ subroutine add_drag_diffusivity(h, u, v, tv, fluxes, visc, j, TKE_to_Kd, &
     if (.not.domore) exit
   enddo ! k-loop
 
-  do i=is,ie ; do_i(i) = (G%mask2dT(i,j) > 0.5) ; enddo
+  do i=is,ie ; do_i(i) = (G%mask2dT(i,j) > 0.0) ; enddo
   do k=nz-1,kb_min,-1
     i_rem = 0
     do i=is,ie ; if (do_i(i)) then
@@ -1409,7 +1409,7 @@ subroutine add_LOTW_BBL_diffusivity(h, u, v, tv, fluxes, visc, j, N2_int, Kd_int
   real, parameter :: von_karm = 0.41 ! Von Karman constant (http://en.wikipedia.org/wiki/Von_Karman_constant)
   logical :: do_diag_Kd_BBL
 
-  if (.not.(CS%bottomdraglaw .and. (CS%BBL_effic>0.0))) return
+  if (.not.(CS%bottomdraglaw .and. (CS%BBL_effic > 0.0))) return
   do_diag_Kd_BBL = associated(Kd_BBL)
 
   N2_min = 0.
@@ -1568,7 +1568,7 @@ subroutine add_MLrad_diffusivity(h, fluxes, j, Kd_int, G, GV, US, CS, TKE_to_Kd,
 
   if (.not.CS%ML_radiation) return
 
-  do i=is,ie ; h_ml(i) = 0.0 ; do_i(i) = (G%mask2dT(i,j) > 0.5) ; enddo
+  do i=is,ie ; h_ml(i) = 0.0 ; do_i(i) = (G%mask2dT(i,j) > 0.0) ; enddo
   do k=1,kml ; do i=is,ie ; h_ml(i) = h_ml(i) + GV%H_to_Z*h(i,j,k) ; enddo ; enddo
 
   do i=is,ie ; if (do_i(i)) then
@@ -1734,7 +1734,7 @@ subroutine set_BBL_TKE(u, v, h, fluxes, visc, G, GV, US, CS, OBC)
     ! Determine ustar and the square magnitude of the velocity in the
     ! bottom boundary layer. Together these give the TKE source and
     ! vertical decay scale.
-    do i=is,ie ; if ((G%mask2dCv(i,J) > 0.5) .and. (cdrag_sqrt*visc%bbl_thick_v(i,J) > 0.0)) then
+    do i=is,ie ; if ((G%mask2dCv(i,J) > 0.0) .and. (cdrag_sqrt*visc%bbl_thick_v(i,J) > 0.0)) then
       do_i(i) = .true. ; vhtot(i) = 0.0 ; htot(i) = 0.0
       vstar(i,J) = visc%Kv_bbl_v(i,J) / (cdrag_sqrt*visc%bbl_thick_v(i,J))
     else
@@ -1775,7 +1775,7 @@ subroutine set_BBL_TKE(u, v, h, fluxes, visc, G, GV, US, CS, OBC)
       endif ; enddo
       if (.not.domore) exit
     enddo
-    do i=is,ie ; if ((G%mask2dCv(i,J) > 0.5) .and. (htot(i) > 0.0)) then
+    do i=is,ie ; if ((G%mask2dCv(i,J) > 0.0) .and. (htot(i) > 0.0)) then
       v2_bbl(i,J) = (vhtot(i)*vhtot(i))/(htot(i)*htot(i))
     else
       v2_bbl(i,J) = 0.0
@@ -1783,7 +1783,7 @@ subroutine set_BBL_TKE(u, v, h, fluxes, visc, G, GV, US, CS, OBC)
   enddo
   !$OMP do
   do j=js,je
-    do I=is-1,ie ; if ((G%mask2dCu(I,j) > 0.5) .and. (cdrag_sqrt*visc%bbl_thick_u(I,j) > 0.0))  then
+    do I=is-1,ie ; if ((G%mask2dCu(I,j) > 0.0) .and. (cdrag_sqrt*visc%bbl_thick_u(I,j) > 0.0))  then
       do_i(I) = .true. ; uhtot(I) = 0.0 ; htot(I) = 0.0
       ustar(I) = visc%Kv_bbl_u(I,j) / (cdrag_sqrt*visc%bbl_thick_u(I,j))
     else
@@ -1823,7 +1823,7 @@ subroutine set_BBL_TKE(u, v, h, fluxes, visc, G, GV, US, CS, OBC)
       endif ; enddo
       if (.not.domore) exit
     enddo
-    do I=is-1,ie ; if ((G%mask2dCu(I,j) > 0.5) .and. (htot(i) > 0.0)) then
+    do I=is-1,ie ; if ((G%mask2dCu(I,j) > 0.0) .and. (htot(i) > 0.0)) then
       u2_bbl(I) = (uhtot(I)*uhtot(I))/(htot(I)*htot(I))
     else
       u2_bbl(I) = 0.0

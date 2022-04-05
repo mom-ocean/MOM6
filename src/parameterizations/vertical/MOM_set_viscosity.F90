@@ -385,15 +385,13 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, pbv)
       if (j<G%Jsc) cycle
       is = Isq ; ie = Ieq
       do i=is,ie
-        do_i(i) = .false.
-        if (G%mask2dCu(I,j) > 0) do_i(i) = .true.
+        do_i(i) = (G%mask2dCu(I,j) > 0.0)
       enddo
     else
       ! m=2 refers to v-points
       is = G%isc ; ie = G%iec
       do i=is,ie
-        do_i(i) = .false.
-        if (G%mask2dCv(i,J) > 0) do_i(i) = .true.
+        do_i(i) = (G%mask2dCv(i,J) > 0.0)
       enddo
     endif
 

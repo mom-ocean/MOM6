@@ -352,7 +352,7 @@ subroutine ideal_age_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, 
           exp((year-CS%tracer_start_year(m)) * CS%sfc_growth_rate(m))
     endif
     do k=1,CS%nkml ; do j=js,je ; do i=is,ie
-      if (G%mask2dT(i,j) > 0.5) then
+      if (G%mask2dT(i,j) > 0.0) then
         CS%tr(i,j,k,m) = sfc_val
       else
         CS%tr(i,j,k,m) = CS%land_val(m)

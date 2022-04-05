@@ -272,12 +272,12 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
 
     ! From this point, we can work on individual columns without causing memory
     ! to have page faults.
-    do i=is,ie ; if (cn(i,j)>0.0)then
+    do i=is,ie ; if (cn(i,j) > 0.0) then
       !----for debugging, remove later----
       ig = i + G%idg_offset ; jg = j + G%jdg_offset
       !if (ig == CS%int_tide_source_x .and. jg == CS%int_tide_source_y) then
       !-----------------------------------
-      if (G%mask2dT(i,j) > 0.5) then
+      if (G%mask2dT(i,j) > 0.0) then
 
         gprime(:) = 0.0 ! init gprime
         pres(:) = 0.0 ! init pres
@@ -567,7 +567,7 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
       !else     ! if at test point - delete later
       !  return ! if at test point - delete later
       !endif    ! if at test point - delete later
-      endif ! mask2dT > 0.5?
+      endif ! mask2dT > 0.0?
     else
       ! if cn=0.0, default to zero
       nzm                       = nz+1! could use actual values

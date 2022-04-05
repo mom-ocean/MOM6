@@ -290,7 +290,7 @@ subroutine opacity_from_chl(optics, sw_total, sw_vis_dir, sw_vis_dif, sw_nir_dir
   if (present(chl_3d)) then
     do j=js,je ; do i=is,ie ; chl_data(i,j) = chl_3d(i,j,1) ; enddo ; enddo
     do k=1,nz ; do j=js,je ; do i=is,ie
-      if ((G%mask2dT(i,j) > 0.5) .and. (chl_3d(i,j,k) < 0.0)) then
+      if ((G%mask2dT(i,j) > 0.0) .and. (chl_3d(i,j,k) < 0.0)) then
         write(mesg,'(" Negative chl_3d of ",(1pe12.4)," found at i,j,k = ", &
                   & 3(1x,i3), " lon/lat = ",(1pe12.4)," E ", (1pe12.4), " N.")') &
                    chl_3d(i,j,k), i, j, k, G%geoLonT(i,j), G%geoLatT(i,j)
@@ -300,7 +300,7 @@ subroutine opacity_from_chl(optics, sw_total, sw_vis_dir, sw_vis_dif, sw_nir_dir
   elseif (present(chl_2d)) then
     do j=js,je ; do i=is,ie ; chl_data(i,j) = chl_2d(i,j) ; enddo ; enddo
     do j=js,je ; do i=is,ie
-      if ((G%mask2dT(i,j) > 0.5) .and. (chl_2d(i,j) < 0.0)) then
+      if ((G%mask2dT(i,j) > 0.0) .and. (chl_2d(i,j) < 0.0)) then
         write(mesg,'(" Negative chl_2d of ",(1pe12.4)," at i,j = ", &
                   & 2(i3), "lon/lat = ",(1pe12.4)," E ", (1pe12.4), " N.")') &
                    chl_data(i,j), i, j, G%geoLonT(i,j), G%geoLatT(i,j)
@@ -316,7 +316,7 @@ subroutine opacity_from_chl(optics, sw_total, sw_vis_dir, sw_vis_dif, sw_nir_dir
       !$OMP parallel do default(shared) private(SW_vis_tot,SW_nir_tot)
       do j=js,je ; do i=is,ie
         SW_vis_tot = 0.0 ; SW_nir_tot = 0.0
-        if (G%mask2dT(i,j) > 0.5) then
+        if (G%mask2dT(i,j) > 0.0) then
           if (multiband_vis_input) then
             SW_vis_tot = sw_vis_dir(i,j) + sw_vis_dif(i,j)
           elseif (total_sw_input) then
@@ -344,7 +344,7 @@ subroutine opacity_from_chl(optics, sw_total, sw_vis_dir, sw_vis_dif, sw_nir_dir
       !$OMP parallel do default(shared) private(SW_pen_tot)
       do j=js,je ; do i=is,ie
         SW_pen_tot = 0.0
-        if (G%mask2dT(i,j) > 0.5) then
+        if (G%mask2dT(i,j) > 0.0) then
           if (multiband_vis_input) then
             SW_pen_tot = SW_pen_frac_morel(chl_data(i,j)) * (sw_vis_dir(i,j) + sw_vis_dif(i,j))
           elseif (total_sw_input) then
@@ -385,7 +385,7 @@ subroutine opacity_from_chl(optics, sw_total, sw_vis_dir, sw_vis_dif, sw_nir_dir
       case (MOREL_88)
         do j=js,je ; do i=is,ie
           optics%opacity_band(1,i,j,k) = CS%opacity_land_value
-          if (G%mask2dT(i,j) > 0.5) &
+          if (G%mask2dT(i,j) > 0.0) &
             optics%opacity_band(1,i,j,k) = US%Z_to_m * opacity_morel(chl_data(i,j))
 
           do n=2,optics%nbands

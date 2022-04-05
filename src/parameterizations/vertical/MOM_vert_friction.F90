@@ -256,7 +256,7 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
   !$OMP                 private(do_i,surface_stress,zDS,stress,h_a,hfr, &
   !$OMP                         b_denom_1,b1,d1,c1)
   do j=G%jsc,G%jec
-    do I=Isq,Ieq ; do_i(I) = (G%mask2dCu(I,j) > 0) ; enddo
+    do I=Isq,Ieq ; do_i(I) = (G%mask2dCu(I,j) > 0.0) ; enddo
 
     ! When mixing down Eulerian current + Stokes drift add before calling solver
     if (DoStokesMixing) then ; do k=1,nz ; do I=Isq,Ieq
@@ -383,7 +383,7 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
   !$OMP               private(do_i,surface_stress,zDS,stress,h_a,hfr, &
   !$OMP                       b_denom_1,b1,d1,c1)
   do J=Jsq,Jeq
-    do i=is,ie ; do_i(i) = (G%mask2dCv(i,J) > 0) ; enddo
+    do i=is,ie ; do_i(i) = (G%mask2dCv(i,J) > 0.0) ; enddo
 
     ! When mixing down Eulerian current + Stokes drift add before calling solver
     if (DoStokesMixing) then ; do k=1,nz ; do i=is,ie
@@ -593,7 +593,7 @@ subroutine vertvisc_remnant(visc, visc_rem_u, visc_rem_v, dt, G, GV, US, CS)
   ! Find the zonal viscous remnant using a modification of a standard tridagonal solver.
   !$OMP parallel do default(shared) firstprivate(Ray) private(do_i,b_denom_1,b1,d1,c1)
   do j=G%jsc,G%jec
-    do I=Isq,Ieq ; do_i(I) = (G%mask2dCu(I,j) > 0) ; enddo
+    do I=Isq,Ieq ; do_i(I) = (G%mask2dCu(I,j) > 0.0) ; enddo
 
     if (CS%Channel_drag) then ; do k=1,nz ; do I=Isq,Ieq
       Ray(I,k) = visc%Ray_u(I,j,k)
@@ -622,7 +622,7 @@ subroutine vertvisc_remnant(visc, visc_rem_u, visc_rem_v, dt, G, GV, US, CS)
   ! Now find the meridional viscous remnant using the robust tridiagonal solver.
   !$OMP parallel do default(shared) firstprivate(Ray) private(do_i,b_denom_1,b1,d1,c1)
   do J=Jsq,Jeq
-    do i=is,ie ; do_i(i) = (G%mask2dCv(i,J) > 0) ; enddo
+    do i=is,ie ; do_i(i) = (G%mask2dCv(i,J) > 0.0) ; enddo
 
     if (CS%Channel_drag) then ; do k=1,nz ; do i=is,ie
       Ray(i,k) = visc%Ray_v(i,J,k)
@@ -766,7 +766,7 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, US, CS, OBC)
   !$OMP                                     OBC,h_neglect,dt,I_valBL,Kv_u,a_cpl_max) &
   !$OMP                     firstprivate(i_hbbl)
   do j=G%Jsc,G%Jec
-    do I=Isq,Ieq ; do_i(I) = (G%mask2dCu(I,j) > 0) ; enddo
+    do I=Isq,Ieq ; do_i(I) = (G%mask2dCu(I,j) > 0.0) ; enddo
 
     if (CS%bottomdraglaw) then ; do I=Isq,Ieq
       kv_bbl(I) = visc%Kv_bbl_u(I,j)
@@ -931,7 +931,7 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, US, CS, OBC)
   !$OMP                                  OBC,h_neglect,dt,I_valBL,Kv_v,a_cpl_max) &
   !$OMP                     firstprivate(i_hbbl)
   do J=Jsq,Jeq
-    do i=is,ie ; do_i(i) = (G%mask2dCv(i,J) > 0) ; enddo
+    do i=is,ie ; do_i(i) = (G%mask2dCv(i,J) > 0.0) ; enddo
 
     if (CS%bottomdraglaw) then ; do i=is,ie
       kv_bbl(i) = visc%Kv_bbl_v(i,J)

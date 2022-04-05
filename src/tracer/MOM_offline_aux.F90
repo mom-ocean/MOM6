@@ -179,7 +179,7 @@ subroutine limit_mass_flux_3d(G, GV, uh, vh, ea, eb, h_pre)
                  (max(0.0, -vh(i,J-1,k)) + max(0.0, vh(i,J,k)))) + &
                 (max(0.0, top_flux(i,j,k)) + max(0.0, bottom_flux(i,j,k))) * G%areaT(i,j)
 
-    if (pos_flux>hvol .and. pos_flux>0.0) then
+    if ((pos_flux > hvol) .and. (pos_flux > 0.0)) then
       scale_factor = (hvol / pos_flux) * max_off_cfl
     else ! Don't scale
       scale_factor = 1.0
@@ -405,7 +405,7 @@ subroutine distribute_residual_uh_upwards(G, GV, hvol, uh)
       do k=1,nz
         uh_remain = uh2d(I,k)
         uh2d(I,k) = 0.0
-        if (abs(uh_remain)>0.0) then
+        if (abs(uh_remain) > 0.0) then
           do k_rev = k,1,-1
             uh_sum = uh_remain + uh2d(I,k_rev)
             if (uh_sum<0.0) then ! Transport to the left
@@ -436,7 +436,7 @@ subroutine distribute_residual_uh_upwards(G, GV, hvol, uh)
           enddo ! k_rev
         endif
 
-        if (abs(uh_remain)>0.0) then
+        if (abs(uh_remain) > 0.0) then
           if (k<nz) then
             uh2d(I,k+1) = uh2d(I,k+1) + uh_remain
           else
@@ -503,7 +503,7 @@ subroutine distribute_residual_vh_upwards(G, GV, hvol, vh)
       do k=1,nz
         vh_remain = vh2d(J,k)
         vh2d(J,k) = 0.0
-        if (abs(vh_remain)>0.0) then
+        if (abs(vh_remain) > 0.0) then
           do k_rev = k,1,-1
             vh_sum = vh_remain + vh2d(J,k_rev)
             if (vh_sum<0.0) then ! Transport to the left
@@ -535,7 +535,7 @@ subroutine distribute_residual_vh_upwards(G, GV, hvol, vh)
           enddo ! k_rev
         endif
 
-        if (abs(vh_remain)>0.0) then
+        if (abs(vh_remain) > 0.0) then
          if (k<nz) then
             vh2d(J,k+1) = vh2d(J,k+1) + vh_remain
           else

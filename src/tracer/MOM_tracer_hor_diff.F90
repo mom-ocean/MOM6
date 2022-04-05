@@ -728,7 +728,7 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
   ! mixed and buffer layer corresponds to, such that:
   !     GV%Rlay(max_kRho-1) < Rml_max <= GV%Rlay(max_kRho)
   !$OMP parallel do default(shared) private(k_min,k_max,k_test)
-  do j=js-2,je+2 ; do i=is-2,ie+2 ; if (G%mask2dT(i,j) > 0.5) then
+  do j=js-2,je+2 ; do i=is-2,ie+2 ; if (G%mask2dT(i,j) > 0.0) then
     if ((Rml_max(i,j) > GV%Rlay(nz)) .or. (nkmb+1 > nz)) then ; max_kRho(i,j) = nz+1
     elseif ((Rml_max(i,j) <= GV%Rlay(nkmb+1)) .or. (nkmb+2 > nz)) then ; max_kRho(i,j) = nkmb+1
     else
@@ -756,7 +756,7 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
   !$OMP parallel default(shared) private(ns,tmp,itmp)
   !$OMP do
   do j=js-1,je+1
-    do k=1,nkmb ; do i=is-1,ie+1 ; if (G%mask2dT(i,j) > 0.5) then
+    do k=1,nkmb ; do i=is-1,ie+1 ; if (G%mask2dT(i,j) > 0.0) then
       if (h(i,j,k) > h_exclude) then
         num_srt(i,j) = num_srt(i,j) + 1 ; ns = num_srt(i,j)
         k0_srt(i,ns,j) = k
@@ -764,7 +764,7 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
         h_srt(i,ns,j) = h(i,j,k)
       endif
     endif ; enddo ; enddo
-    do k=nkmb+1,PEmax_kRho ; do i=is-1,ie+1 ; if (G%mask2dT(i,j) > 0.5) then
+    do k=nkmb+1,PEmax_kRho ; do i=is-1,ie+1 ; if (G%mask2dT(i,j) > 0.0) then
       if ((k<=k_end_srt(i,j)) .and. (h(i,j,k) > h_exclude)) then
         num_srt(i,j) = num_srt(i,j) + 1 ; ns = num_srt(i,j)
         k0_srt(i,ns,j) = k
@@ -812,7 +812,7 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
 !$OMP                                  kR,kL,nP,rho_pair,kbs_Lp,kbs_Rp,rho_a,rho_b, &
 !$OMP                                  wt_b,left_set,right_set,h_supply_frac_R,     &
 !$OMP                                  h_supply_frac_L)
-  do j=js,je ; do I=is-1,ie ; if (G%mask2dCu(I,j) > 0.5) then
+  do j=js,je ; do I=is-1,ie ; if (G%mask2dCu(I,j) > 0.0) then
     ! Set up the pairings for fluxes through the zonal faces.
 
     do k=1,num_srt(i,j)   ; h_demand_L(k) = 0.0 ; h_used_L(k) = 0.0 ; enddo
@@ -965,7 +965,7 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
 !$OMP                                  kR,kL,nP,rho_pair,kbs_Lp,kbs_Rp,rho_a,rho_b, &
 !$OMP                                  wt_b,left_set,right_set,h_supply_frac_R,     &
 !$OMP                                  h_supply_frac_L)
-  do J=js-1,je ; do i=is,ie ; if (G%mask2dCv(i,J) > 0.5) then
+  do J=js-1,je ; do i=is,ie ; if (G%mask2dCv(i,J) > 0.0) then
     ! Set up the pairings for fluxes through the meridional faces.
 
     do k=1,num_srt(i,j)   ; h_demand_L(k) = 0.0 ; h_used_L(k) = 0.0 ; enddo
@@ -1120,7 +1120,7 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
 !$OMP                          private(Tr_min_face,Tr_max_face,kLa,kLb,kRa,kRb,Tr_La, &
 !$OMP                                     Tr_Lb,Tr_Ra,Tr_Rb,Tr_av_L,wt_b,Tr_av_R,h_L,h_R, &
 !$OMP                                     Tr_flux,Tr_adj_vert,wt_a,vol)
-      do j=js,je ; do I=is-1,ie ; if (G%mask2dCu(I,j) > 0.5) then
+      do j=js,je ; do I=is-1,ie ; if (G%mask2dCu(I,j) > 0.0) then
         ! Determine the fluxes through the zonal faces.
 
         ! Find the acceptable range of tracer concentration around this face.
@@ -1260,7 +1260,7 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
 !$OMP                          private(Tr_min_face,Tr_max_face,kLa,kLb,kRa,kRb,             &
 !$OMP                                  Tr_La,Tr_Lb,Tr_Ra,Tr_Rb,Tr_av_L,wt_b,Tr_av_R,        &
 !$OMP                                  h_L,h_R,Tr_flux,Tr_adj_vert,wt_a,vol)
-      do J=js-1,je ; do i=is,ie ; if (G%mask2dCv(i,J) > 0.5) then
+      do J=js-1,je ; do i=is,ie ; if (G%mask2dCv(i,J) > 0.0) then
         ! Determine the fluxes through the meridional faces.
 
         ! Find the acceptable range of tracer concentration around this face.
@@ -1377,7 +1377,7 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
 !$OMP                                  tr_flux_conv,Tr_flux_3d,k0a_Lv,Tr_adj_vert_L,&
 !$OMP                                  deep_wt_Rv,k0a_Rv,Tr_adj_vert_R) &
 !$OMP                          private(kLa,kLb,kRa,kRb,wt_b,wt_a)
-      do i=is,ie ; do J=js-1,je ; if (G%mask2dCv(i,J) > 0.5) then
+      do i=is,ie ; do J=js-1,je ; if (G%mask2dCv(i,J) > 0.0) then
         do k=1,nPv(i,J)
           kLb = k0b_Lv(J)%p(i,k); kRb = k0b_Rv(J)%p(i,k)
           if (deep_wt_Lv(J)%p(i,k) >= 1.0) then
@@ -1402,7 +1402,7 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
       endif ; enddo ; enddo
 !$OMP parallel do default(none) shared(PEmax_kRho,is,ie,js,je,G,h,Tr,tr_flux_conv,m)
       do k=1,PEmax_kRho ; do j=js,je ; do i=is,ie
-        if ((G%mask2dT(i,j) > 0.5) .and. (h(i,j,k) > 0.0)) then
+        if ((G%mask2dT(i,j) > 0.0) .and. (h(i,j,k) > 0.0)) then
           Tr(m)%t(i,j,k) = Tr(m)%t(i,j,k) + tr_flux_conv(i,j,k) / &
                                             (h(i,j,k)*G%areaT(i,j))
           tr_flux_conv(i,j,k) = 0.0
