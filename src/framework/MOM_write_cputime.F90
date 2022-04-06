@@ -200,7 +200,7 @@ subroutine write_cputime(day, n, CS, nmax, call_end)
                             (CS%startup_cputime / CLOCKS_PER_SEC), num_pes()
       write(CS%fileCPU_ascii,*)"        Day, Step number,     CPU time, CPU time change"
     endif
-    write(CS%fileCPU_ascii,'(F12.3,", "I11,", ", F12.3,", ", F12.3)') &
+    write(CS%fileCPU_ascii,'(F12.3,", ",I11,", ",F12.3,", ",F12.3)') &
            reday, n, (CS%cputime2 / real(CLOCKS_PER_SEC)), &
            d_cputime / real(CLOCKS_PER_SEC)
 

@@ -69,13 +69,13 @@ contains
   subroutine generic_tracer_source(Temp,Salt,rho_dzt,dzt,hblt_depth,ilb,jlb,tau,dtts,&
        grid_dat,model_time,nbands,max_wavelength_band,sw_pen_band,opacity_band,internal_heat,&
        frunoff,grid_ht, current_wave_stress, sosga)
+    integer,                        intent(in) :: ilb    !< Lower bounds of x extent of input arrays on data domain
+    integer,                        intent(in) :: jlb    !< Lower bounds of y extent of input arrays on data domain
     real, dimension(ilb:,jlb:,:),   intent(in) :: Temp   !< Potential temperature [deg C]
     real, dimension(ilb:,jlb:,:),   intent(in) :: Salt   !< Salinity [psu]
     real, dimension(ilb:,jlb:,:),   intent(in) :: rho_dzt !< Mass per unit area of each layer [kg m-2]
     real, dimension(ilb:,jlb:,:),   intent(in) :: dzt    !< Ocean layer thickness [m]
     real, dimension(ilb:,jlb:),     intent(in) :: hblt_depth !< Boundary layer depth [m]
-    integer,                        intent(in) :: ilb    !< Lower bounds of x extent of input arrays on data domain
-    integer,                        intent(in) :: jlb    !< Lower bounds of y extent of input arrays on data domain
     integer,                        intent(in) :: tau    !< Time step index of %field
     real,                           intent(in) :: dtts   !< The time step for this call [s]
     real, dimension(ilb:,jlb:),     intent(in) :: grid_dat !< Grid cell areas [m2]

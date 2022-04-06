@@ -2901,10 +2901,10 @@ end subroutine bilinear_shape_fn_grid
 
 
 subroutine bilinear_shape_functions_subgrid(Phisub, nsub)
+  integer, intent(in)    :: nsub   !< The number of subgridscale quadrature locations in each direction
   real, dimension(nsub,nsub,2,2,2,2), &
            intent(inout) :: Phisub !< Quadrature structure weights at subgridscale
                                    !! locations for finite element calculations [nondim]
-  integer, intent(in)    :: nsub   !< The number of subgridscale quadrature locations in each direction
 
   ! this subroutine is a helper for interpolation of floatation condition
   ! for the purposes of evaluating the terms \int (u,v) \phi_i dx dy in a cell that is

@@ -343,7 +343,7 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
 
   ! Idiot check that fewer PEs than columns have been requested
   if (layout(1)*layout(2) > n_global(1)*n_global(2))  then
-    write(mesg,'(a,2(i5,x,a))') 'You requested to use',layout(1)*layout(2), &
+    write(mesg,'(a,2(i5,1x,a))') 'You requested to use', layout(1)*layout(2), &
       'PEs but there are only', n_global(1)*n_global(2), 'columns in the model'
     call MOM_error(FATAL, mesg)
   endif

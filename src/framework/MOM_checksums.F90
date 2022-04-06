@@ -2196,7 +2196,7 @@ subroutine chk_sum_msg1(fmsg, bc0, mesg, iounit)
   integer,          intent(in) :: iounit !< Checksum logger IO unit
 
   if (is_root_pe()) &
-    write(iounit, '(A,1(A,I10,X),A)') fmsg, " c=", bc0, trim(mesg)
+    write(iounit, '(a,1(a,i10,1x),a)') fmsg, " c=", bc0, trim(mesg)
 end subroutine chk_sum_msg1
 
 !> Write a message including checksums of non-shifted and diagonally shifted arrays
