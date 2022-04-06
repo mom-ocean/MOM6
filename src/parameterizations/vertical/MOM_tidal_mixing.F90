@@ -875,7 +875,7 @@ subroutine calculate_CVMix_tidal(h, j, N2_int, G, GV, US, CS, Kv, Kd_lay, Kd_int
       ! remap from input z coordinate to model coordinate:
       tidal_qe_md = 0.0
       call remapping_core_h(CS%remap_cs, size(CS%h_src), CS%h_src, CS%tidal_qe_3d_in(i,j,:), &
-                            GV%ke, h_m, tidal_qe_md)
+                            GV%ke, h_m, tidal_qe_md, GV%H_subroundoff, GV%H_subroundoff)
 
       ! form the Schmittner coefficient that is based on 3D q*E, which is formed from
       ! summing q_i*TidalConstituent_i over the number of constituents.

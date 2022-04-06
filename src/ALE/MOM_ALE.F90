@@ -753,8 +753,10 @@ subroutine ALE_regrid_accelerated(CS, G, GV, h, tv, n, u, v, OBC, Reg, dt, dzReg
 
     ! remap from original grid onto new grid
     do j = G%jsc-1,G%jec+1 ; do i = G%isc-1,G%iec+1
-      call remapping_core_h(CS%remapCS, nz, h_orig(i,j,:), tv%S(i,j,:), nz, h(i,j,:), tv_local%S(i,j,:))
-      call remapping_core_h(CS%remapCS, nz, h_orig(i,j,:), tv%T(i,j,:), nz, h(i,j,:), tv_local%T(i,j,:))
+      call remapping_core_h(CS%remapCS, nz, h_orig(i,j,:), tv%S(i,j,:), nz, h(i,j,:), tv_local%S(i,j,:), &
+                            GV%H_subroundoff, GV%H_subroundoff)
+      call remapping_core_h(CS%remapCS, nz, h_orig(i,j,:), tv%T(i,j,:), nz, h(i,j,:), tv_local%T(i,j,:), &
+                            GV%H_subroundoff, GV%H_subroundoff)
     enddo ; enddo
 
     ! starting grid for next iteration

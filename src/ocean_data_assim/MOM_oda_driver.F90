@@ -415,9 +415,9 @@ subroutine set_prior_tracer(Time, G, GV, h, tv, CS)
   ! remap temperature and salinity from the ensemble member to the analysis grid
   do j=G%jsc,G%jec ; do i=G%isc,G%iec
     call remapping_core_h(CS%remapCS, GV%ke, h(i,j,:), tv%T(i,j,:), &
-         CS%nk, CS%h(i,j,:), T(i,j,:))
+         CS%nk, CS%h(i,j,:), T(i,j,:), GV%H_subroundoff, GV%H_subroundoff)
     call remapping_core_h(CS%remapCS, GV%ke, h(i,j,:), tv%S(i,j,:), &
-         CS%nk, CS%h(i,j,:), S(i,j,:))
+         CS%nk, CS%h(i,j,:), S(i,j,:), GV%H_subroundoff, GV%H_subroundoff)
   enddo ; enddo
   ! cast ensemble members to the analysis domain
   do m=1,CS%ensemble_size
@@ -671,9 +671,9 @@ subroutine apply_oda_tracer_increments(dt, Time_end, G, GV, tv, h, CS)
   isc=G%isc; iec=G%iec; jsc=G%jsc; jec=G%jec
   do j=jsc,jec; do i=isc,iec
     call remapping_core_h(CS%remapCS, CS%nk, CS%h(i,j,:), T(i,j,:), &
-         G%ke, h(i,j,:), T_inc(i,j,:))
+         G%ke, h(i,j,:), T_inc(i,j,:), GV%H_subroundoff, GV%H_subroundoff)
     call remapping_core_h(CS%remapCS, CS%nk, CS%h(i,j,:), S(i,j,:), &
-         G%ke, h(i,j,:), S_inc(i,j,:))
+         G%ke, h(i,j,:), S_inc(i,j,:), GV%H_subroundoff, GV%H_subroundoff)
   enddo; enddo
 
 

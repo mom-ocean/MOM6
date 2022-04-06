@@ -4007,19 +4007,22 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
                   call remapping_core_h(OBC%remap_CS, &
                        segment%field(m)%nk_src,segment%field(m)%dz_src(I,J,:), &
                        segment%field(m)%buffer_src(I,J,:), &
-                       GV%ke, h_stack, segment%field(m)%buffer_dst(I,J,:))
+                       GV%ke, h_stack, segment%field(m)%buffer_dst(I,J,:), &
+                       GV%H_subroundoff, GV%H_subroundoff)
                 elseif (G%mask2dCu(I,j)>0.) then
                   h_stack(:) = h(i+ishift,j,:)
                   call remapping_core_h(OBC%remap_CS, &
                        segment%field(m)%nk_src,segment%field(m)%dz_src(I,J,:), &
                        segment%field(m)%buffer_src(I,J,:), &
-                       GV%ke, h_stack, segment%field(m)%buffer_dst(I,J,:))
+                       GV%ke, h_stack, segment%field(m)%buffer_dst(I,J,:), &
+                       GV%H_subroundoff, GV%H_subroundoff)
                 elseif (G%mask2dCu(I,j+1)>0.) then
                   h_stack(:) = h(i+ishift,j+1,:)
                   call remapping_core_h(OBC%remap_CS, &
                        segment%field(m)%nk_src,segment%field(m)%dz_src(I,j,:), &
                        segment%field(m)%buffer_src(I,J,:), &
-                       GV%ke, h_stack, segment%field(m)%buffer_dst(I,J,:))
+                       GV%ke, h_stack, segment%field(m)%buffer_dst(I,J,:), &
+                       GV%H_subroundoff, GV%H_subroundoff)
                 endif
               enddo
             else
@@ -4034,7 +4037,8 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
                   call remapping_core_h(OBC%remap_CS, &
                        segment%field(m)%nk_src, scl_fac*segment%field(m)%dz_src(I,j,:), &
                        segment%field(m)%buffer_src(I,j,:), &
-                       GV%ke, h(i+ishift,j,:), segment%field(m)%buffer_dst(I,j,:))
+                       GV%ke, h(i+ishift,j,:), segment%field(m)%buffer_dst(I,j,:), &
+                       GV%H_subroundoff, GV%H_subroundoff)
                 endif
               enddo
             endif
@@ -4053,19 +4057,22 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
                   call remapping_core_h(OBC%remap_CS, &
                        segment%field(m)%nk_src,segment%field(m)%dz_src(I,J,:), &
                        segment%field(m)%buffer_src(I,J,:), &
-                       GV%ke, h_stack, segment%field(m)%buffer_dst(I,J,:))
+                       GV%ke, h_stack, segment%field(m)%buffer_dst(I,J,:), &
+                       GV%H_subroundoff, GV%H_subroundoff)
                 elseif (G%mask2dCv(i,J)>0.) then
                   h_stack(:) = h(i,j+jshift,:)
                   call remapping_core_h(OBC%remap_CS, &
                        segment%field(m)%nk_src,segment%field(m)%dz_src(I,J,:), &
                        segment%field(m)%buffer_src(I,J,:), &
-                       GV%ke, h_stack, segment%field(m)%buffer_dst(I,J,:))
+                       GV%ke, h_stack, segment%field(m)%buffer_dst(I,J,:), &
+                       GV%H_subroundoff, GV%H_subroundoff)
                 elseif (G%mask2dCv(i+1,J)>0.) then
                   h_stack(:) = h(i+1,j+jshift,:)
                   call remapping_core_h(OBC%remap_CS, &
                        segment%field(m)%nk_src,segment%field(m)%dz_src(I,J,:), &
                        segment%field(m)%buffer_src(I,J,:), &
-                       GV%ke, h_stack, segment%field(m)%buffer_dst(I,J,:))
+                       GV%ke, h_stack, segment%field(m)%buffer_dst(I,J,:), &
+                       GV%H_subroundoff, GV%H_subroundoff)
                 endif
               enddo
             else
@@ -4080,7 +4087,8 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
                   call remapping_core_h(OBC%remap_CS, &
                        segment%field(m)%nk_src, scl_fac*segment%field(m)%dz_src(i,J,:), &
                        segment%field(m)%buffer_src(i,J,:), &
-                       GV%ke, h(i,j+jshift,:), segment%field(m)%buffer_dst(i,J,:))
+                       GV%ke, h(i,j+jshift,:), segment%field(m)%buffer_dst(i,J,:), &
+                       GV%H_subroundoff, GV%H_subroundoff)
                 endif
               enddo
             endif
