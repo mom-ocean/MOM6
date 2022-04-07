@@ -1245,11 +1245,11 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
       if (Htot_avg*CS%dy_Cu(I,j) <= 0.0) then
         CS%IDatu(I,j) = 0.0
       elseif (integral_BT_cont) then
-        CS%IDatu(I,j) = CS%dy_Cu(I,j) / (max(find_duhbt_du(ubt(I,j)*dt, BTCL_u(I,j)), &
-                                             CS%dy_Cu(I,j)*Htot_avg) ) * GV%Z_to_H
+        CS%IDatu(I,j) = GV%Z_to_H * CS%dy_Cu(I,j) / (max(find_duhbt_du(ubt(I,j)*dt, BTCL_u(I,j)), &
+                                             CS%dy_Cu(I,j)*Htot_avg) )
       elseif (use_BT_cont) then ! Reconsider the max and whether there should be some scaling.
-        CS%IDatu(I,j) = CS%dy_Cu(I,j) / (max(find_duhbt_du(ubt(I,j), BTCL_u(I,j)), &
-                                             CS%dy_Cu(I,j)*Htot_avg) ) * GV%Z_to_H
+        CS%IDatu(I,j) = GV%Z_to_H * CS%dy_Cu(I,j) / (max(find_duhbt_du(ubt(I,j), BTCL_u(I,j)), &
+                                             CS%dy_Cu(I,j)*Htot_avg) )
       else
         CS%IDatu(I,j) = GV%Z_to_H / Htot_avg
       endif
