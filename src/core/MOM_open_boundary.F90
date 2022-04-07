@@ -310,6 +310,9 @@ type, public :: ocean_OBC_type
   real :: ramp_value                        !< If ramp is True, where we are on the ramp from
                                             !! zero to one [nondim].
   type(time_type) :: ramp_start_time        !< Time when model was started.
+  logical :: answers_2018   !< If true, use the order of arithmetic and expressions for remapping
+                            !! that recover the answers from the end of 2018.  Otherwise, use more
+                            !! robust and accurate forms of mathematically equivalent expressions.
 end type ocean_OBC_type
 
 !> Control structure for open boundaries that read from files.
@@ -358,9 +361,9 @@ subroutine open_boundary_config(G, US, param_file, OBC)
   character(len=200) :: config1          ! String for OBC_USER_CONFIG
   real               :: Lscale_in, Lscale_out ! parameters controlling tracer values at the boundaries [L ~> m]
   character(len=128) :: inputdir
-  logical :: answers_2018, default_2018_answers
   logical :: check_reconstruction, check_remapping, force_bounds_in_subcell
   character(len=64)  :: remappingScheme
+  logical :: default_2018_answers
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
 
@@ -608,7 +611,7 @@ subroutine open_boundary_config(G, US, param_file, OBC)
     call get_param(param_file, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
                  "This sets the default value for the various _2018_ANSWERS parameters.", &
                  default=.false.)
-    call get_param(param_file, mdl, "REMAPPING_2018_ANSWERS", answers_2018, &
+    call get_param(param_file, mdl, "REMAPPING_2018_ANSWERS", OBC%answers_2018, &
                  "If true, use the order of arithmetic and expressions that recover the "//&
                  "answers from the end of 2018.  Otherwise, use updated and more robust "//&
                  "forms of the same expressions.", default=default_2018_answers)
@@ -616,7 +619,7 @@ subroutine open_boundary_config(G, US, param_file, OBC)
     allocate(OBC%remap_CS)
     call initialize_remapping(OBC%remap_CS, remappingScheme, boundary_extrapolation = .false., &
                check_reconstruction=check_reconstruction, check_remapping=check_remapping, &
-               force_bounds_in_subcell=force_bounds_in_subcell, answers_2018=answers_2018)
+               force_bounds_in_subcell=force_bounds_in_subcell, answers_2018=OBC%answers_2018)
 
   endif ! OBC%number_of_segments > 0
 
@@ -3730,6 +3733,7 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
   real, allocatable :: normal_trans_bt(:,:) ! barotropic transport [H L2 T-1 ~> m3 s-1]
   integer :: turns    ! Number of index quarter turns
   real :: time_delta  ! Time since tidal reference date [T ~> s]
+  real :: h_neglect, h_neglect_edge ! Small thicknesses [H ~> m or kg m-2]
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
@@ -3741,6 +3745,14 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
   if (.not. associated(OBC)) return
 
   if (OBC%add_tide_constituents) time_delta = US%s_to_T * time_type_to_real(Time - OBC%time_ref)
+
+  if (.not. OBC%answers_2018) then
+    h_neglect = GV%H_subroundoff ; h_neglect_edge = GV%H_subroundoff
+  elseif (GV%Boussinesq) then
+    h_neglect = GV%m_to_H * 1.0e-30 ; h_neglect_edge = GV%m_to_H * 1.0e-10
+  else
+    h_neglect = GV%kg_m2_to_H * 1.0e-30 ; h_neglect_edge = GV%kg_m2_to_H * 1.0e-10
+  endif
 
   do n = 1, OBC%number_of_segments
     segment => OBC%segment(n)
@@ -4008,21 +4020,21 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
                        segment%field(m)%nk_src,segment%field(m)%dz_src(I,J,:), &
                        segment%field(m)%buffer_src(I,J,:), &
                        GV%ke, h_stack, segment%field(m)%buffer_dst(I,J,:), &
-                       GV%H_subroundoff, GV%H_subroundoff)
+                       h_neglect, h_neglect_edge)
                 elseif (G%mask2dCu(I,j)>0.) then
                   h_stack(:) = h(i+ishift,j,:)
                   call remapping_core_h(OBC%remap_CS, &
                        segment%field(m)%nk_src,segment%field(m)%dz_src(I,J,:), &
                        segment%field(m)%buffer_src(I,J,:), &
                        GV%ke, h_stack, segment%field(m)%buffer_dst(I,J,:), &
-                       GV%H_subroundoff, GV%H_subroundoff)
+                       h_neglect, h_neglect_edge)
                 elseif (G%mask2dCu(I,j+1)>0.) then
                   h_stack(:) = h(i+ishift,j+1,:)
                   call remapping_core_h(OBC%remap_CS, &
                        segment%field(m)%nk_src,segment%field(m)%dz_src(I,j,:), &
                        segment%field(m)%buffer_src(I,J,:), &
                        GV%ke, h_stack, segment%field(m)%buffer_dst(I,J,:), &
-                       GV%H_subroundoff, GV%H_subroundoff)
+                       h_neglect, h_neglect_edge)
                 endif
               enddo
             else
@@ -4038,7 +4050,7 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
                        segment%field(m)%nk_src, scl_fac*segment%field(m)%dz_src(I,j,:), &
                        segment%field(m)%buffer_src(I,j,:), &
                        GV%ke, h(i+ishift,j,:), segment%field(m)%buffer_dst(I,j,:), &
-                       GV%H_subroundoff, GV%H_subroundoff)
+                       h_neglect, h_neglect_edge)
                 endif
               enddo
             endif
@@ -4058,21 +4070,21 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
                        segment%field(m)%nk_src,segment%field(m)%dz_src(I,J,:), &
                        segment%field(m)%buffer_src(I,J,:), &
                        GV%ke, h_stack, segment%field(m)%buffer_dst(I,J,:), &
-                       GV%H_subroundoff, GV%H_subroundoff)
+                       h_neglect, h_neglect_edge)
                 elseif (G%mask2dCv(i,J)>0.) then
                   h_stack(:) = h(i,j+jshift,:)
                   call remapping_core_h(OBC%remap_CS, &
                        segment%field(m)%nk_src,segment%field(m)%dz_src(I,J,:), &
                        segment%field(m)%buffer_src(I,J,:), &
                        GV%ke, h_stack, segment%field(m)%buffer_dst(I,J,:), &
-                       GV%H_subroundoff, GV%H_subroundoff)
+                       h_neglect, h_neglect_edge)
                 elseif (G%mask2dCv(i+1,J)>0.) then
                   h_stack(:) = h(i+1,j+jshift,:)
                   call remapping_core_h(OBC%remap_CS, &
                        segment%field(m)%nk_src,segment%field(m)%dz_src(I,J,:), &
                        segment%field(m)%buffer_src(I,J,:), &
                        GV%ke, h_stack, segment%field(m)%buffer_dst(I,J,:), &
-                       GV%H_subroundoff, GV%H_subroundoff)
+                       h_neglect, h_neglect_edge)
                 endif
               enddo
             else
@@ -4088,7 +4100,7 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
                        segment%field(m)%nk_src, scl_fac*segment%field(m)%dz_src(i,J,:), &
                        segment%field(m)%buffer_src(i,J,:), &
                        GV%ke, h(i,j+jshift,:), segment%field(m)%buffer_dst(i,J,:), &
-                       GV%H_subroundoff, GV%H_subroundoff)
+                       h_neglect, h_neglect_edge)
                 endif
               enddo
             endif

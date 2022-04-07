@@ -1271,11 +1271,11 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
       if (Htot_avg*CS%dx_Cv(i,J) <= 0.0) then
         CS%IDatv(i,J) = 0.0
       elseif (integral_BT_cont) then
-        CS%IDatv(i,J) = CS%dx_Cv(i,J) / (max(find_dvhbt_dv(vbt(i,J)*dt, BTCL_v(i,J)), &
-                                             CS%dx_Cv(i,J)*Htot_avg) ) * GV%Z_to_H
+        CS%IDatv(i,J) = GV%Z_to_H * CS%dx_Cv(i,J) / (max(find_dvhbt_dv(vbt(i,J)*dt, BTCL_v(i,J)), &
+                                             CS%dx_Cv(i,J)*Htot_avg) )
       elseif (use_BT_cont) then ! Reconsider the max and whether there should be some scaling.
-        CS%IDatv(i,J) = CS%dx_Cv(i,J) / (max(find_dvhbt_dv(vbt(i,J), BTCL_v(i,J)), &
-                                             CS%dx_Cv(i,J)*Htot_avg) ) * GV%Z_to_H
+        CS%IDatv(i,J) = GV%Z_to_H * CS%dx_Cv(i,J) / (max(find_dvhbt_dv(vbt(i,J), BTCL_v(i,J)), &
+                                             CS%dx_Cv(i,J)*Htot_avg) )
       else
         CS%IDatv(i,J) = GV%Z_to_H / Htot_avg
       endif
