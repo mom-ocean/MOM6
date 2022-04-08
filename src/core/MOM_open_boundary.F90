@@ -48,6 +48,9 @@ public update_OBC_segment_data
 public open_boundary_test_extern_uv
 public open_boundary_test_extern_h
 public open_boundary_zero_normal_flow
+public parse_segment_str
+public parse_segment_manifest_str
+public parse_segment_data_str
 public register_OBC, OBC_registry_init
 public register_file_OBC, file_OBC_end
 public segment_tracer_registry_init
@@ -61,6 +64,8 @@ public update_OBC_ramp
 public rotate_OBC_config
 public rotate_OBC_init
 public initialize_segment_data
+public flood_fill
+public flood_fill2
 
 integer, parameter, public :: OBC_NONE = 0      !< Indicates the use of no open boundary
 integer, parameter, public :: OBC_DIRECTION_N = 100 !< Indicates the boundary is an effective northern boundary
@@ -1693,88 +1698,6 @@ end subroutine parse_segment_data_str
   return
 
 end subroutine parse_for_tracer_reservoirs
-
-!> Parse an OBC_SEGMENT_%%%_PARAMS string
-subroutine parse_segment_param_real(segment_str, var, param_value, debug )
-  character(len=*),  intent(in)  :: segment_str !< A string in form of
-                                                !! "VAR1=file:foo1.nc(varnam1),VAR2=file:foo2.nc(varnam2),..."
-  character(len=*),  intent(in)  :: var         !< The name of the variable for which parameters are needed
-  real,              intent(out) :: param_value !< The value of the parameter
-  logical, optional, intent(in)  :: debug       !< If present and true, write verbose debugging messages
-  ! Local variables
-  character(len=128) :: word1, word2, word3, method
-  integer :: lword, nfields, n, m
-  logical :: continue,dbg
-  character(len=32), dimension(MAX_OBC_FIELDS) :: flds
-
-  nfields = 0
-  continue = .true.
-  dbg = .false.
-  if (PRESENT(debug)) dbg = debug
-
-  do while (continue)
-    word1 = extract_word(segment_str,',',nfields+1)
-    if (trim(word1) == '') exit
-    nfields = nfields+1
-    word2 = extract_word(word1,'=',1)
-    flds(nfields) = trim(word2)
-  enddo
-
-  ! if (PRESENT(fields)) then
-  !   do n=1,nfields
-  !     fields(n) = flds(n)
-  !   enddo
-  ! endif
-
-  ! if (PRESENT(num_fields)) then
-  !   num_fields = nfields
-  !   return
-  ! endif
-
-  m=0
-! if (PRESENT(var)) then
-    do n=1,nfields
-      if (trim(var)==trim(flds(n))) then
-        m = n
-        exit
-      endif
-    enddo
-    if (m==0) then
-      call abort()
-    endif
-
-    ! Process first word which will start with the fieldname
-    word3 = extract_word(segment_str,',',m)
-!     word1 = extract_word(word3,':',1)
-!     if (trim(word1) == '') exit
-    word2 = extract_word(word1,'=',1)
-    if (trim(word2) == trim(var)) then
-      method=trim(extract_word(word1,'=',2))
-      lword=len_trim(method)
-      read(method(1:lword),*,err=987) param_value
-      ! if (method(lword-3:lword) == 'file') then
-      !   ! raise an error id filename/fieldname not in argument list
-      !   word1 = extract_word(word3,':',2)
-      !   filenam = extract_word(word1,'(',1)
-      !   fieldnam = extract_word(word1,'(',2)
-      !   lword=len_trim(fieldnam)
-      !   fieldnam = fieldnam(1:lword-1)  ! remove trailing parenth
-      !   value=-999.
-      ! elseif (method(lword-4:lword) == 'value') then
-      !   filenam = 'none'
-      !   fieldnam = 'none'
-      !   word1 = extract_word(word3,':',2)
-      !   lword=len_trim(word1)
-      !   read(word1(1:lword),*,end=986,err=987) value
-      ! endif
-    endif
-! endif
-
-  return
-  986 call MOM_error(FATAL,'End of record while parsing segment data specification! '//trim(segment_str))
-  987 call MOM_error(FATAL,'Error while parsing segment parameter specification! '//trim(segment_str))
-
-end subroutine parse_segment_param_real
 
 !> Initialize open boundary control structure and do any necessary rescaling of OBC
 !! fields that have been read from a restart file.
