@@ -182,6 +182,7 @@ subroutine init_oda(Time, G, GV, diag_CS, CS)
   logical :: reentrant_x, reentrant_y, tripolar_N, symmetric
   character(len=80) :: remap_scheme
   character(len=80) :: bias_correction_file, inc_file
+  logical           :: default_2018_answers
 
   if (associated(CS)) call MOM_error(FATAL, 'Calling oda_init with associated control structure')
   allocate(CS)
@@ -238,6 +239,14 @@ subroutine init_oda(Time, G, GV, diag_CS, CS)
                  "for vertical remapping for all variables. "//&
                  "It can be one of the following schemes: "//&
                  trim(remappingSchemesDoc), default="PPM_H4")
+  call get_param(PF, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
+                 "This sets the default value for the various _2018_ANSWERS parameters.", &
+                 default=.false., do_not_log=.true.)
+  call get_param(PF, mdl, "REMAPPING_2018_ANSWERS", CS%answers_2018, &
+                 "If true, use the order of arithmetic and expressions that recover the "//&
+                 "answers from the end of 2018.  Otherwise, use updated and more robust "//&
+                 "forms of the same expressions.", default=default_2018_answers, &
+                 do_not_log=.true.)
   inputdir = slasher(inputdir)
 
   select case(lowercase(trim(assim_method)))
