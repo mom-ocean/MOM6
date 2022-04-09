@@ -54,7 +54,13 @@ FFLAGS = @FCFLAGS@
 LDFLAGS = @LDFLAGS@
 ARFLAGS = @ARFLAGS@
 
+SRC_DIRS = @SRC_DIRS@
+
 # Gather modulefiles
 TMPFILES = $(wildcard *.mod)
 
-include Makefile.mkmf
+-include Makefile.dep
+
+.PHONY: depend
+depend:
+	../../bin/makedep -o Makefile.dep -f '$$(FC) $$(CPPFLAGS) $$(CPPDEFS) $$(FFLAGS) -c $$<' -x libFMS.a -d $(SRC_DIRS)

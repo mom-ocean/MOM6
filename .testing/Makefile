@@ -119,10 +119,6 @@ DIMS ?= t l h z q r
 # Dependencies
 DEPS = deps
 
-# mkmf, list_paths (GFDL build toolchain)
-LIST_PATHS := $(DEPS)/bin/list_paths
-MKMF := $(DEPS)/bin/mkmf
-
 
 #---
 # Test configuration
@@ -295,7 +291,7 @@ build/%/MOM6: build/%/Makefile
 
 # Use autoconf to construct the Makefile for each target
 .PRECIOUS: $(foreach b,$(BUILDS),build/$(b)/Makefile)
-build/%/Makefile: ../ac/configure ../ac/Makefile.in $(DEPS)/lib/libFMS.a $(MKMF) $(LIST_PATHS)
+build/%/Makefile: ../ac/configure ../ac/Makefile.in $(DEPS)/lib/libFMS.a
 	mkdir -p $(@D)
 	cd $(@D) \
 	  && $(MOM_ENV) ../../../ac/configure $(MOM_ACFLAGS) --with-framework=$(FRAMEWORK) \
@@ -308,7 +304,7 @@ build/%/Makefile: ../ac/configure ../ac/Makefile.in $(DEPS)/lib/libFMS.a $(MKMF)
 
 # Fetch the regression target codebase
 build/target/Makefile build/opt_target/Makefile: \
-  $(TARGET_CODEBASE)/ac/configure $(DEPS)/lib/libFMS.a $(MKMF) $(LIST_PATHS)
+  $(TARGET_CODEBASE)/ac/configure $(DEPS)/lib/libFMS.a
 	mkdir -p $(@D)
 	cd $(@D) \
 	  && $(MOM_ENV) ../../$(TARGET_CODEBASE)/ac/configure $(MOM_ACFLAGS) \
@@ -337,7 +333,7 @@ $(DEPS)/lib/libFMS.a: $(DEPS)/fms/build/libFMS.a
 $(DEPS)/fms/build/libFMS.a: $(DEPS)/fms/build/Makefile
 	$(MAKE) -C $(DEPS) fms/build/libFMS.a
 
-$(DEPS)/fms/build/Makefile: $(DEPS)/fms/src/configure $(DEPS)/Makefile.fms.in $(MKMF) $(LIST_PATHS)
+$(DEPS)/fms/build/Makefile: $(DEPS)/fms/src/configure $(DEPS)/Makefile.fms.in
 	$(FMS_ENV) $(MAKE) -C $(DEPS) fms/build/Makefile
 	$(MAKE) -C $(DEPS) fms/build/Makefile
 
@@ -352,13 +348,6 @@ $(DEPS)/fms/src/configure: ../ac/deps/configure.fms.ac $(DEPS)/Makefile $(FMS_SO
 
 $(DEPS)/fms/src: $(DEPS)/Makefile
 	make -C $(DEPS) fms/src
-
-# mkmf
-$(MKMF) $(LIST_PATHS): $(DEPS)/mkmf
-	$(MAKE) -C $(DEPS) bin/$(@F)
-
-$(DEPS)/mkmf: $(DEPS)/Makefile
-	$(MAKE) -C $(DEPS) mkmf
 
 # Dependency init
 $(DEPS)/Makefile: ../ac/deps/Makefile
@@ -693,7 +682,7 @@ test.summary:
 .PHONY: unit.cov
 unit.cov: build/unit/MOM_new_unit_tests.gcov
 
-work/unit/std.out: build/unit/MOM6
+work/unit/std.out: build/unit/MOM_unit_tests
 	if [ $(REPORT_COVERAGE) ]; then \
 	  find build/unit -name *.gcda -exec rm -f '{}' \; ; \
 	fi

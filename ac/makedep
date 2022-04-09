@@ -1,0 +1,225 @@
+#!/bin/bash
+
+usage() {
+    echo "Construct Makfile.dep containing dependencies for F90 source code."
+    echo
+    echo "Syntax:" $0 "[-h|d] [-o FILE] [-x EXEC] PATH [PATH] [...]"
+    echo
+    echo "arguments:"
+    echo "   PATH    Directories containing source code. All subdirectories and"
+    echo "           symbolic links are followed."
+    echo
+    echo "options:"
+    echo "  -h       Print this help message."
+    echo "  -d       Annotate the makefile with extra information."
+    echo "  -o FILE  Construct dependencies in FILE instead of Makefile.dep ."
+    echo "  -x EXEC  Name of executable to build. Fails if more than one"
+    echo "           is found. If EXEC ends in .a then a library is built."
+    echo "  -f CMD   String to use in compile rule. Default is:"
+    echo "             '$(FC) $(FFLAGS) $(CPPFLAGS) -c $<'"
+}
+
+# Defaults
+makefile=Makefile.dep
+debug=0
+executable=""
+librarymode=0
+compile_line='$(FC) $(FFLAGS) $(CPPFLAGS) -c $<'
+
+while getopts dho:x:f: option
+do
+    case "${option}"
+        in
+        d)debug=1;;
+        h)usage; exit;;
+        o)makefile=${OPTARG};;
+        x)executable=${OPTARG};;
+        f)compile_line=${OPTARG};;
+    esac
+done
+SRC_DIRS=${@:$OPTIND}
+
+if [ -z "$SRC_DIRS" ]; then
+    echo "Error: no search path specified on command line!"
+    exit 1
+fi
+
+# Scan everything (Fortran related) (Fortran related)
+A=$(find -L ${SRC_DIRS} \( -name "*.F90" -o -name "*.f90" \) ) # all source files
+I=`find -L ${SRC_DIRS} \( -name "*.h" -o -name "*.inc" \) | xargs dirname | sort | uniq | sed 's:^:-I:'` # include paths to pass to cpp when checking to see which .h files are used
+O=()
+externals=()
+declare -A o2src o2mod o2use o2H o2head o2inc p2o o2p all_modules
+for F in ${A}; do # F is the relative path to source file
+    f=`basename $F` # file name stripped of path
+    o=${f/.?90/}.o # object file name
+    o2src["$o"]=$F
+    m=`egrep -i "^ *module " $F | sed 's/ *!.*//' | grep -vi procedure | tr '[A-Z]' '[a-z]' | sed 's/.*module  *//' | tr -d '\r' | sed 's/$/.mod/' ` # name of module file(s)   #### FAILS IF NO MODULE, DOES IT WORK FOR 2+?
+    u=`sed 's/!.*//' $F | egrep -i "^ *use " | sed 's/\ *[uU][sS][eE]\ *\([a-zA-Z_0-9]*\).*/\1.mod/' | tr '[A-Z]' '[a-z]' | egrep -v "mpi.mod|iso_fortran_env.mod" | sort | uniq ` # list of modules used
+    if [ ${#m} -ne 0 ]; then
+        o2mod["$o"]=$m
+        u=`echo $u | sed s:$m::g`
+    fi
+    if [ ${#u} -ne 0 ]; then o2use["$o"]=$u; fi
+    H=$(/lib/cpp -E -MM $I $F | tr -d '\n' | sed 's:\\::g') # line of form a.o: a.F b.h c.h ...
+    o2H["$o"]=$H
+    h=`echo ${H} | cut -d\  -f3- ` # header files
+    if [ ${#h} -ne 0 ]; then o2head["$o"]=$h; fi
+    i=`dirname _ignore_/ignore ${h} | grep -v _ignore_ | sort | uniq | sed 's:^:-I:'` # includes for compilation
+    if [ ${#i} -ne 0 ]; then o2inc["$o"]=$i; fi
+    p=`egrep -i "^ *program " $F | awk '{print $2}'` # name of program if any
+    if [ $librarymode -eq 0 ]; then
+        O+=($o) # List of all objects
+        if [ ${#p} -ne 0 ]; then p2o["$p"]=$o; o2p["$o"]=$p; fi
+    else
+        if [ ${#p} -eq 0 ]; then O+=($o); fi
+    fi
+    if [ ${#m} -ne 0 ]; then
+        for mm in $m; do all_modules["$mm"]=1; done
+    else
+        if [ ${#p} -eq 0 ]; then
+            externals+=($o)
+        fi
+    fi
+done
+
+# Augment with C files
+A=$(find -L ${SRC_DIRS} -name "*.c" ) # all C source files
+declare -A o2c
+OC=()
+for F in ${A}; do # F is the relative path to source file
+    f=`basename $F` # file name stripped of path
+    o=${f/.c/}.o # object file name
+    o2c["$o"]=$F
+    H=$(/lib/cpp -E -MM $I $F | tr -d '\n' | sed 's:\\::g') # line of form a.o: a.F b.h c.h ...
+    o2H["$o"]=$H
+    h=`echo ${H} | cut -d\  -f3- ` # header files
+    if [ ${#h} -ne 0 ]; then o2head["$o"]=$h; fi
+    i=`dirname _ignore_/ignore ${h} | grep -v _ignore_ | sort | uniq | sed 's:^:-I:'` # includes for compilation
+    if [ ${#i} -ne 0 ]; then o2inc["$o"]=$i; fi
+    OC+=($o) # List of all objects
+    #externals+=($o)
+done
+
+if [[ "$executable" == *\.a ]]; then
+    lib=$executable
+else
+    lib=""
+    if [ -n "$executable" ]; then
+        if [ ${#p2o[@]} -eq 0 ]; then
+            echo 'Error: Option "-p' $executable'"' provided but no programs are present.
+            exit 1
+        elif [ ${#p2o[@]} -eq 1 ]; then # rename executable
+            p="${o2p[@]}"
+            o=${p2o[@]}
+            unset p2o["$p"]
+            p2o["$executable"]=$o
+            o2p["$o"]=$executable
+        else
+            echo 'Error: Option "-p' $executable'"' cannot be used when multiple programs are present.
+            exit 1
+        fi
+    fi
+fi
+
+# Write the new makefile
+rm -f ${makefile}
+echo "#" ${makefile} "created by makedep" >> ${makefile}
+echo >> ${makefile}
+echo "all:" $lib ${!p2o[@]} >> ${makefile}
+echo >> ${makefile}
+
+echo "# SRC_DIRS is usually set in the parent Makefile but in case is it not we" >> ${makefile}
+echo "# record it here from when makedep was previously invoked." >> ${makefile}
+echo "SRC_DIRS ?= ${SRC_DIRS}" >> ${makefile}
+echo >> ${makefile}
+
+# Write rule for each object from Fortran
+for o in ${O[@]}; do
+    F=${o2src["$o"]} # source file
+    m=${o2mod["$o"]} # modules produced with object file
+    u=${o2use["$o"]} # modules used/needed by object file
+    H=${o2H["$o"]}   # basic C-style rule produced by cpp
+    i=${o2inc["$o"]} # -I paths needed at compilation
+    U=()             # modules used that are in source tree
+    NU=()            # modules used that were not found in source tree
+    if [ ${#u} -ne 0 ]; then
+        for uu in ${u}; do
+            if [[ ${all_modules["$uu"]} ]]; then
+                U+=($uu) # source for used module was found
+            else
+                NU+=($uu) # did not find source for module
+            fi
+        done
+    fi
+    if [ $debug -eq 1 ]; then
+        h=${o2head["$o"]}
+        p=${o2p["$o"]}
+        echo "# Source file" $F "produces:" >> ${makefile}
+        echo "#   object:" $o >> ${makefile}
+        echo "#   modules:" $m >> ${makefile}
+        echo "#   uses:" $u >> ${makefile}
+        echo "#   found:" ${U[@]} >> ${makefile}
+        echo "#   missing:" ${NU[@]} >> ${makefile}
+        echo "#   includes:" $h >> ${makefile}
+        echo "#   incpath:" $i >> ${makefile}
+        echo "#   program:" $p >> ${makefile}
+    fi
+
+    if [ ${#m} -ne 0 ]; then
+        if [ ${#NU[@]} -ne 0 ]; then
+            echo "# Note:" $o "uses modules not found the search path:" ${NU[@]} >> ${makefile}
+        fi
+        echo $m":" $o >> ${makefile} # a.mod: a.o
+    fi
+    echo $H ${U[@]} >> ${makefile} # a.mod a.o: a.F b.mod
+    echo -e '\t'$compile_line ${i} >> ${makefile} # compile rule
+done
+
+# Write rule for each object from C
+for o in ${OC[@]}; do
+    F=${o2c["$o"]}   # source file
+    H=${o2H["$o"]}   # basic C-style rule produced by cpp
+    i=${o2inc["$o"]} # -I paths needed at compilation
+    if [ $debug -eq 1 ]; then
+        h=${o2head["$o"]}
+        echo "# Source file" $F "produces:" >> ${makefile}
+        echo "#   object:" $o >> ${makefile}
+        echo "#   includes:" $h >> ${makefile}
+        echo "#   incpath:" $i >> ${makefile}
+    fi
+    echo $H ${U[@]} >> ${makefile} # a.mod a.o: a.F b.mod
+    echo -e '\t$(CC) $(CPPDEFS) $(CPPFLAGS) $(CFLAGS) -c $<' ${i} >> ${makefile} # compile rule
+done
+
+if [ ${#lib} -ne 0 ]; then # rule to build library
+    echo >> ${makefile}
+    echo $lib: ${O[@]} ${OC[@]} >> ${makefile}
+    echo -e '\t$(AR) $(ARFLAGS) $@ $^' >> ${makefile} # archive rule
+fi
+
+if [ ${#p2o[@]} -ne 0 ]; then # write rules for linking executables
+    echo >> ${makefile}
+    echo "# Note: The following object files are not associated with modules so we assume we should link with them:" ${externals[@]} >> ${makefile}
+
+    echo >> ${makefile}
+    for p in ${!p2o[@]}; do # p is the executable name
+        o=${p2o[$p]}
+        l=$(make -f ${makefile} -B -n -t $o | egrep "\.o$" | sed 's:touch ::' | sort)
+        echo $p: $l ${externals[@]} >> ${makefile}
+        echo -e '\t$(LD) -o $@ $^ $(LDFLAGS)' >> ${makefile} # link rule
+    done
+elif [ -z "$lib" ]; then
+    echo "Warning: no library target specified (with -x) and no programs found!"
+    echo "Created target 'obj': use 'make obj' to compile object files."
+    echo >> ${makefile}
+    echo "obj: ${O[@]}" >> ${makefile}
+fi
+
+echo >> ${makefile}
+echo clean: >> ${makefile}
+    echo -e '\trm -rf' ${!p2o[@]} $lib '*.o *.mod' >> ${makefile} # compile rule
+
+echo >> ${makefile}
+echo "remakedep: # re-invoke makedep" >> ${makefile}
+echo -e '\t' $0 -o ${makefile} '$(SRC_DIRS)' >> ${makefile}

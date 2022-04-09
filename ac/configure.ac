@@ -223,46 +223,13 @@ AC_COMPILE_IFELSE(
   ]
 )
 
-
-# Search for mkmf build tools
-AC_PATH_PROG([LIST_PATHS], [list_paths])
-AS_IF([test -z "$LIST_PATHS"], [
-  AC_PATH_PROG([LIST_PATHS], [list_paths], [], ["$PATH:${srcdir}/ac/deps/bin"])
-  AS_IF([test -z "$LIST_PATHS"],
-    [AC_MSG_ERROR([Could not find list_paths.])],
-    [AC_SUBST(PATH, ["$PATH:${srcdir}/ac/deps/bin"])])
-  ]
-)
-
-AC_PATH_PROG([MKMF], [mkmf])
-AS_IF([test -z "$MKMF"], [
-  AC_PATH_PROG([MKMF], [mkmf], [], ["$PATH:${srcdir}/ac/deps/bin"])
-  AS_IF([test -z "$MKMF"],
-    [AC_MSG_ERROR([Could not find mkmf.])],
-    [AC_SUBST(PATH, ["$PATH:${srcdir}/ac/deps/bin"])])
-  ]
-)
-
-
-# NOTE: MEM_LAYOUT unneeded if we shift to MOM_memory.h.in template
-AC_CONFIG_COMMANDS([path_names],
-  [list_paths -l \
-    ${srcdir}/src \
-    ${MODEL_FRAMEWORK} \
-    ${srcdir}/config_src/ext* \
-    ${DRIVER_DIR} \
-    ${MEM_LAYOUT}],
-  [MODEL_FRAMEWORK=$MODEL_FRAMEWORK
-    MEM_LAYOUT=$MEM_LAYOUT
-    DRIVER_DIR=$DRIVER_DIR]
-)
-
-
-AC_CONFIG_COMMANDS([Makefile.mkmf],
-  [mkmf -p MOM6 -m Makefile.mkmf path_names])
-
+SRC_DIRS="${srcdir}/src ${MODEL_FRAMEWORK} ${srcdir}/config_src/external ${DRIVER_DIR} ${MEM_LAYOUT}"
+AC_CONFIG_COMMANDS([Makefile.dep],
+  [make depend])
 
 # Prepare output
 AC_SUBST(CPPFLAGS)
+AC_SUBST(SRC_DIRS)
 AC_CONFIG_FILES([Makefile:${srcdir}/ac/Makefile.in])
 AC_OUTPUT
+

@@ -7,10 +7,6 @@ SHELL = bash
 MAKEFLAGS += -R
 
 
-# mkmf, list_paths (GFDL build toolchain)
-MKMF_URL ?= https://github.com/NOAA-GFDL/mkmf.git
-MKMF_COMMIT ?= master
-
 # FMS framework
 FMS_URL ?= https://github.com/NOAA-GFDL/FMS.git
 FMS_COMMIT ?= 2019.01.03
@@ -30,19 +26,14 @@ FMS_SOURCE = $(call SOURCE,fms/src)
 # Rules
 
 .PHONY: all
-all: bin/mkmf bin/list_paths lib/libFMS.a
+all: bin/makedep lib/libFMS.a
 
 #---
-# mkmf checkout
+# makedep script
 
-bin/mkmf bin/list_paths: mkmf
+bin/makedep: ../../ac/makedep
 	mkdir -p $(@D)
-	cp $^/$@ $@
-
-mkmf:
-	git clone $(MKMF_URL) $@
-	git -C $@ checkout $(MKMF_COMMIT)
-
+	cp $^ $@
 
 #---
 # FMS build
@@ -64,7 +55,7 @@ fms/build/libFMS.a: fms/build/Makefile
 	make -C fms/build libFMS.a
 
 
-fms/build/Makefile: Makefile.fms.in fms/src/configure bin/mkmf bin/list_paths
+fms/build/Makefile: Makefile.fms.in fms/src/configure bin/makedep
 	mkdir -p fms/build
 	cp Makefile.fms.in fms/src/Makefile.in
 	cd $(@D) && ../src/configure --srcdir=../src
@@ -87,4 +78,4 @@ clean:
 
 .PHONY: distclean
 distclean: clean
-	rm -rf fms mkmf
+	rm -rf fms
