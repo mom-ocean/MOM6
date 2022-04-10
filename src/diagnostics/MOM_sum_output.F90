@@ -848,13 +848,13 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, dt_forci
       endif
       do m=1,nTr_stocks
 
-         write(stdout,'("      Total ",a,": ",ES24.16,X,a)') &
+         write(stdout,'("      Total ",a,": ",ES24.16,1X,a)') &
               trim(Tr_names(m)), Tr_stocks(m), trim(Tr_units(m))
 
          if (Tr_minmax_avail(m)) then
-           write(stdout,'(64X,"Global Min:",ES24.16,X,"at: (", f7.2,","f7.2,","f8.2,")"  )') &
+           write(stdout,'(64X,"Global Min:",ES24.16,1X,"at: (",f7.2,",",f7.2,",",f8.2,")"  )') &
                 Tr_min(m),Tr_min_x(m),Tr_min_y(m),Tr_min_z(m)
-           write(stdout,'(64X,"Global Max:",ES24.16,X,"at: (", f7.2,","f7.2,","f8.2,")"  )') &
+           write(stdout,'(64X,"Global Max:",ES24.16,1X,"at: (",f7.2,",",f7.2,",",f8.2,")"  )') &
                 Tr_max(m),Tr_max_x(m),Tr_max_y(m),Tr_max_z(m)
         endif
 

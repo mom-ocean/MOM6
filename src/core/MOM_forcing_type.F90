@@ -704,7 +704,7 @@ subroutine extractFluxes1d(G, GV, US, fluxes, optics, nsw, j, dt, &
         fluxes%num_msg = fluxes%num_msg + 1
         write(mesg,'("Penetrating shortwave of ",1pe17.10, &
                     &" exceeds total shortwave of ",1pe17.10,&
-                    &" at ",1pg11.4,"E, "1pg11.4,"N.")') &
+                    &" at ",1pg11.4,",E,",1pg11.4,"N.")') &
                Pen_SW_tot(i), I_Cp_Hconvert*scale*dt * fluxes%sw(i,j), &
                G%geoLonT(i,j), G%geoLatT(i,j)
         call MOM_error(WARNING,mesg)
@@ -3125,7 +3125,7 @@ subroutine allocate_mech_forcing_by_group(G, forces, stress, ustar, shelf, &
   if (present(waves)) then; if (waves) then;
     if (.not. present(num_stk_bands)) then
       call MOM_error(FATAL,"Requested to &
-      initialize with waves, but no waves are present.")
+      &initialize with waves, but no waves are present.")
     endif
     if (num_stk_bands > 0) then
       if (.not.associated(forces%ustkb)) then

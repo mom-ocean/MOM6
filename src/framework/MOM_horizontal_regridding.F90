@@ -66,7 +66,7 @@ subroutine myStats(array, missing, is, ie, js, je, k, mesg)
   call min_across_PEs(minA)
   call max_across_PEs(maxA)
   if (is_root_pe()) then
-    write(lMesg(1:120),'(2(a,es12.4),a,i3,x,a)') &
+    write(lMesg(1:120),'(2(a,es12.4),a,i3,1x,a)') &
          'init_from_Z: min=',minA,' max=',maxA,' Level=',k,trim(mesg)
     call MOM_mesg(lMesg,2)
   endif

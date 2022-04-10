@@ -3732,7 +3732,7 @@ subroutine log_available_diag(used, module_name, field_name, cell_methods_string
     mesg = '"'//trim(field_name)//'"  [Unused]'
   endif
   if (len(trim((comment)))>0) then
-    write(diag_CS%available_diag_doc_unit, '(a,x,"(",a,")")') trim(mesg),trim(comment)
+    write(diag_CS%available_diag_doc_unit, '(a,1x,"(",a,")")') trim(mesg),trim(comment)
   else
     write(diag_CS%available_diag_doc_unit, '(a)') trim(mesg)
   endif
@@ -3754,7 +3754,7 @@ subroutine log_chksum_diag(docunit, description, chksum)
   character(len=*), intent(in) :: description !< Name of the diagnostic module
   integer,          intent(in) :: chksum      !< chksum of the diagnostic
 
-  write(docunit, '(a,x,i9.8)') description, chksum
+  write(docunit, '(a,1x,i9.8)') description, chksum
   flush(docunit)
 
 end subroutine log_chksum_diag
