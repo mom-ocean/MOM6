@@ -19,8 +19,10 @@ public :: coupler_type_set_diags, coupler_type_send_data, coupler_type_write_chk
 public :: set_coupler_type_data, extract_coupler_type_data, coupler_type_redistribute_data
 public :: coupler_type_copy_data, coupler_type_increment_data, coupler_type_rescale_data
 public :: atmos_ocn_coupler_flux, coupler_type_data_override
-public :: ind_flux, ind_alpha, ind_csurf
 public :: coupler_1d_bc_type, coupler_2d_bc_type, coupler_3d_bc_type
+! These are encoding constant parameters that indicate whether a flux, solubility or
+! surface ocean concentration are being set or accessed with an inquiry.
+public :: ind_flux, ind_alpha, ind_csurf
 
 !> This is the interface to spawn one coupler_bc_type into another.
 interface coupler_type_spawn

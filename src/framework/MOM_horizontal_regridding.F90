@@ -12,8 +12,9 @@ use MOM_error_handler, only : callTree_enter, callTree_leave, callTree_waypoint
 use MOM_error_handler, only : MOM_get_verbosity
 use MOM_file_parser,   only : get_param, log_param, log_version, param_file_type
 use MOM_grid,          only : ocean_grid_type
-use MOM_interpolate,   only : time_interp_external, horiz_interp_init
-use MOM_interpolate,   only : build_horiz_interp_weights, run_horiz_interp, horiz_interp_type
+use MOM_interpolate,   only : time_interp_external
+use MOM_interp_infra,  only : run_horiz_interp, build_horiz_interp_weights
+use MOM_interp_infra,  only : horiz_interp_type, horizontal_interp_init
 use MOM_interp_infra,  only : axistype, get_external_field_info, get_axis_data
 use MOM_time_manager,  only : time_type
 use MOM_io,            only : axis_info, get_axis_info, get_var_axes_info, MOM_read_data
@@ -410,7 +411,7 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
     allocate(tr_in(is:ie,js:je), source=0.0)
     allocate(mask_in(is:ie,js:je), source=0.0)
   else
-    call horiz_interp_init()
+    call horizontal_interp_init()
     lon_in = lon_in*PI_180
     lat_in = lat_in*PI_180
     allocate(x_in(id,jdp), y_in(id,jdp))
@@ -708,7 +709,7 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, t
     else
       jdp = jd
     endif
-    call horiz_interp_init()
+    call horizontal_interp_init()
     lon_in = lon_in*PI_180
     lat_in = lat_in*PI_180
     allocate(x_in(id,jdp), y_in(id,jdp))
