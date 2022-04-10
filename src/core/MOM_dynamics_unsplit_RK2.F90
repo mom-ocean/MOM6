@@ -156,7 +156,7 @@ type, public :: MOM_dyn_unsplit_RK2_CS ; private
   !> A pointer to the set_visc control structure
   type(set_visc_CS), pointer :: set_visc_CSp => NULL()
   !> A pointer to the tidal forcing control structure
-  type(tidal_forcing_CS), pointer :: tides_CSp => NULL()
+  type(tidal_forcing_CS) :: tides_CSp
   !> A pointer to the ALE control structure.
   type(ALE_CS), pointer :: ALE_CSp => NULL()
 

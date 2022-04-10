@@ -88,12 +88,10 @@ use dense_water_initialization, only : dense_water_initialize_sponges
 use dumbbell_initialization, only : dumbbell_initialize_sponges
 use MOM_tracer_Z_init, only : tracer_Z_init_array, determine_temperature
 use MOM_ALE, only : ALE_initRegridding, ALE_CS, ALE_initThicknessToCoord
-use MOM_ALE, only : ALE_remap_scalar, ALE_build_grid, ALE_regrid_accelerated
-use MOM_ALE, only : TS_PLM_edge_values
+use MOM_ALE, only : ALE_remap_scalar, ALE_regrid_accelerated, TS_PLM_edge_values
 use MOM_regridding, only : regridding_CS, set_regrid_params, getCoordinateResolution
-use MOM_regridding, only : regridding_main
-use MOM_remapping, only : remapping_CS, initialize_remapping
-use MOM_remapping, only : remapping_core_h
+use MOM_regridding, only : regridding_main, regridding_preadjust_reqs, convective_adjustment
+use MOM_remapping, only : remapping_CS, initialize_remapping, remapping_core_h
 use MOM_horizontal_regridding, only : horiz_interp_and_extrap_tracer
 use MOM_oda_incupd, only: oda_incupd_CS, initialize_oda_incupd_fixed, initialize_oda_incupd
 use MOM_oda_incupd, only: set_up_oda_incupd_field, set_up_oda_incupd_vel_field
@@ -212,7 +210,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
   use_EOS = associated(tv%eqn_of_state)
   use_OBC = associated(OBC)
   if (use_EOS) eos => tv%eqn_of_state
-  use_ice_shelf=PRESENT(frac_shelf_h)
+  use_ice_shelf = PRESENT(frac_shelf_h)
 
   !====================================================================
   !    Initialize temporally evolving fields, either as initial
@@ -2439,18 +2437,21 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, depth_tot, G, GV, US, PF, just
   ! data arrays
   real, dimension(:), allocatable :: z_edges_in, z_in ! Interface heights [Z ~> m]
   real, dimension(:), allocatable :: Rb  ! Interface densities [R ~> kg m-3]
-  real, dimension(:,:,:), allocatable, target :: temp_z, salt_z, mask_z
+  real, dimension(:,:,:), allocatable, target :: temp_z ! Input temperatures [degC]
+  real, dimension(:,:,:), allocatable, target :: salt_z ! Input salinities [ppt]
+  real, dimension(:,:,:), allocatable, target :: mask_z ! 1 for valid data points [nondim]
   real, dimension(:,:,:), allocatable :: rho_z ! Densities in Z-space [R ~> kg m-3]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1) :: zi   ! Interface heights [Z ~> m].
   real, dimension(SZI_(G),SZJ_(G)) :: Z_bottom   ! The (usually negative) height of the seafloor
                                                  ! relative to the surface [Z ~> m].
-  integer, dimension(SZI_(G),SZJ_(G))  :: nlevs
+  integer, dimension(SZI_(G),SZJ_(G))  :: nlevs  ! The number of levels in each column with valid data
   real, dimension(SZI_(G))   :: press  ! Pressures [R L2 T-2 ~> Pa].
 
   ! Local variables for ALE remapping
   real, dimension(:), allocatable :: hTarget ! Target thicknesses [Z ~> m].
-  real, dimension(:,:,:), allocatable, target :: tmpT1dIn, tmpS1dIn
-  real, dimension(:,:,:), allocatable :: tmp_mask_in
+  real, dimension(:,:,:), allocatable, target :: tmpT1dIn ! Input temperatures on a model-sized grid [degC]
+  real, dimension(:,:,:), allocatable, target :: tmpS1dIn ! Input salinities on a model-sized grid [ppt]
+  real, dimension(:,:,:), allocatable :: tmp_mask_in      ! The valid data mask on a model-sized grid [nondim]
   real, dimension(:,:,:), allocatable :: h1 ! Thicknesses [H ~> m or kg m-2].
   real, dimension(:,:,:), allocatable :: dz_interface ! Change in position of interface due to regridding
   real :: zTopOfCell, zBottomOfCell ! Heights in Z units [Z ~> m].
@@ -2459,7 +2460,6 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, depth_tot, G, GV, US, PF, just
 
   logical :: homogenize, useALEremapping, remap_full_column, remap_general, remap_old_alg
   logical :: answers_2018, default_2018_answers, hor_regrid_answers_2018
-  logical :: use_ice_shelf
   logical :: pre_gridded
   logical :: separate_mixed_layer  ! If true, handle the mixed layers differently.
   logical :: density_extrap_bug    ! If true use an expression with a vertical indexing bug for
@@ -2467,7 +2467,9 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, depth_tot, G, GV, US, PF, just
                                    ! from data when finding the initial interface locations in
                                    ! layered mode from a dataset of T and S.
   character(len=64) :: remappingScheme
-  real :: tempAvg, saltAvg
+  real :: tempAvg  ! Spatially averaged temperatures on a layer [degC]
+  real :: saltAvg  ! Spatially averaged salinities on a layer [ppt]
+  logical :: do_conv_adj, ignore
   integer :: nPoints, ans
   integer :: id_clock_routine, id_clock_read, id_clock_interp, id_clock_fill, id_clock_ALE
 
@@ -2492,8 +2494,6 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, depth_tot, G, GV, US, PF, just
 
   reentrant_x = .false. ; call get_param(PF, mdl, "REENTRANT_X", reentrant_x, default=.true.)
   tripolar_n = .false. ;  call get_param(PF, mdl, "TRIPOLAR_N", tripolar_n, default=.false.)
-
-  use_ice_shelf = present(frac_shelf_h)
 
   call get_param(PF, mdl, "TEMP_SALT_Z_INIT_FILE", filename, &
                  "The name of the z-space input file used to initialize "//&
@@ -2722,11 +2722,12 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, depth_tot, G, GV, US, PF, just
       GV_loc = GV
       GV_loc%ke = nkd
       allocate( dz_interface(isd:ied,jsd:jed,nkd+1) ) ! Need for argument to regridding_main() but is not used
-      if (use_ice_shelf) then
-        call regridding_main( remapCS, regridCS, G, GV_loc, h1, tv_loc, h, dz_interface, frac_shelf_h )
-      else
-        call regridding_main( remapCS, regridCS, G, GV_loc, h1, tv_loc, h, dz_interface )
-      endif
+
+      call regridding_preadjust_reqs(regridCS, do_conv_adj, ignore)
+      if (do_conv_adj) call convective_adjustment(G, GV_loc, h1, tv_loc)
+      call regridding_main( remapCS, regridCS, G, GV_loc, h1, tv_loc, h, dz_interface, conv_adjust=.false., &
+                            frac_shelf_h=frac_shelf_h )
+
       deallocate( dz_interface )
     endif
     call ALE_remap_scalar(remapCS, G, GV, nkd, h1, tmpT1dIn, h, tv%T, all_cells=remap_full_column, &
