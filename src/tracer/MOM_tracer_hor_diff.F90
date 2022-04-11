@@ -174,7 +174,7 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, GV, US, CS, Reg, tv, do_online
 
   if (.not. associated(CS)) call MOM_error(FATAL, "MOM_tracer_hor_diff: "// &
        "register_tracer must be called before tracer_hordiff.")
-  if (LOC(Reg)==0) call MOM_error(FATAL, "MOM_tracer_hor_diff: "// &
+  if (.not. associated(Reg)) call MOM_error(FATAL, "MOM_tracer_hor_diff: "// &
        "register_tracer must be called before tracer_hordiff.")
   if (Reg%ntr == 0 .or. (CS%KhTr <= 0.0 .and. .not. VarMix%use_variable_mixing)) return
 

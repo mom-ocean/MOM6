@@ -181,7 +181,7 @@ subroutine seamount_initialize_thickness (h, depth_tot, G, GV, US, param_file, j
   case ( REGRIDDING_SIGMA )             ! Initial thicknesses for sigma coordinates
     if (just_read) return ! All run-time parameters have been read, so return.
     do j=js,je ; do i=is,ie
-      h(i,j,:) = GV%Z_to_H * depth_tot(i,j) / dfloat(nz)
+      h(i,j,:) = GV%Z_to_H * depth_tot(i,j) / real(nz)
     enddo ; enddo
 
 end select

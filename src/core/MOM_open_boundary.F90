@@ -1741,7 +1741,7 @@ subroutine parse_segment_param_real(segment_str, var, param_value, debug )
       endif
     enddo
     if (m==0) then
-      call abort()
+      error stop
     endif
 
     ! Process first word which will start with the fieldname

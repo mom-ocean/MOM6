@@ -232,7 +232,7 @@ subroutine ISOMIP_initialize_thickness ( h, depth_tot, G, GV, US, param_file, tv
   case ( REGRIDDING_SIGMA )             ! Initial thicknesses for sigma coordinates
     if (just_read) return ! All run-time parameters have been read, so return.
     do j=js,je ; do i=is,ie
-      h(i,j,:) = GV%Z_to_H * depth_tot(i,j) / dfloat(nz)
+      h(i,j,:) = GV%Z_to_H * depth_tot(i,j) / real(nz)
     enddo ; enddo
 
   case default
@@ -574,7 +574,7 @@ subroutine ISOMIP_initialize_sponges(G, GV, US, tv, depth_tot, PF, use_ALE, CSp,
 
       case ( REGRIDDING_SIGMA )             ! Initial thicknesses for sigma coordinates
         do j=js,je ; do i=is,ie
-          h(i,j,:) = GV%Z_to_H * (depth_tot(i,j) / dfloat(nz))
+          h(i,j,:) = GV%Z_to_H * (depth_tot(i,j) / real(nz))
         enddo ; enddo
 
       case default
