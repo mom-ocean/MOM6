@@ -531,7 +531,6 @@ subroutine chksum_pair_B_3d(mesg, arrayA, arrayB, HI, haloshift, symmetric, &
   logical,                   optional, intent(in) :: scalar_pair !< If true, then the arrays describe
                                                               !! a scalar, rather than vector
 
-  logical :: sym
   logical :: vector_pair
   integer :: turns
   type(hor_index_type), pointer :: HI_in

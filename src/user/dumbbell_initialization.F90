@@ -48,7 +48,7 @@ subroutine dumbbell_initialize_topography( D, G, param_file, max_depth )
 
   ! Local variables
   integer   :: i, j
-  real      :: x, y, delta, dblen, dbfrac
+  real      :: x, y, dblen, dbfrac
   logical   :: dbrotate
 
   call get_param(param_file, mdl, "DUMBBELL_LEN",dblen, &
@@ -217,10 +217,9 @@ subroutine dumbbell_initialize_temperature_salinity ( T, S, h, G, GV, param_file
                                                       !! only read parameters without changing h.
 
   ! Local variables
-  integer :: i, j, k, is, ie, js, je, nz, k_light
-  real    :: xi0, xi1, dxi, r, S_surf, T_surf, S_range, T_range
-  real    :: x, y, dblen
-  real    :: T_ref, T_Light, T_Dense, S_ref, S_Light, S_Dense, a1, frac_dense, k_frac, res_rat
+  integer :: i, j, k, is, ie, js, je, nz
+  real    :: S_surf, T_surf, S_range
+  real    :: x, dblen
   logical :: dbrotate     ! If true, rotate the domain.
   character(len=20) :: verticalCoordinate, density_profile
 
@@ -293,12 +292,12 @@ subroutine dumbbell_initialize_sponges(G, GV, US, tv, depth_tot, param_file, use
   real :: sponge_time_scale  ! The damping time scale [T ~> s]
 
   real, dimension(SZI_(G),SZJ_(G)) :: Idamp ! inverse damping timescale [T-1 ~> s-1]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: h, T, S ! sponge thicknesses, temp and salt
-  real, dimension(SZK_(GV)+1) :: e0, eta1D ! interface positions for ALE sponge
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: h, S ! sponge thicknesses, temp and salt
+  real, dimension(SZK_(GV)+1) :: eta1D ! interface positions for ALE sponge
 
   integer :: i, j, k, nz
-  real :: x, zi, zmid, dist, min_thickness, dblen
-  real :: mld, S_ref, S_range, S_dense, T_ref, sill_height
+  real :: x, min_thickness, dblen
+  real :: S_ref, S_range
   logical :: dbrotate    ! If true, rotate the domain.
 
   call get_param(param_file, mdl,"DUMBBELL_LEN",dblen, &

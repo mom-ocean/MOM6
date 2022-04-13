@@ -94,7 +94,7 @@ function register_oil_tracer(HI, GV, US, param_file, CS, tr_Reg, restart_CS)
                             ! kg(oil) s-1 or kg(oil) m-3 kg(water) s-1.
   real, pointer :: tr_ptr(:,:,:) => NULL()
   logical :: register_oil_tracer
-  integer :: isd, ied, jsd, jed, nz, m, i, j
+  integer :: isd, ied, jsd, jed, nz, m
   isd = HI%isd ; ied = HI%ied ; jsd = HI%jsd ; jed = HI%jed ; nz = GV%ke
 
   if (associated(CS)) then
@@ -220,10 +220,6 @@ subroutine initialize_oil_tracer(restart, day, G, GV, US, h, diag, OBC, CS, &
 
   ! Local variables
   character(len=16) :: name     ! A variable's name in a NetCDF file.
-  character(len=72) :: longname ! The long name of that variable.
-  character(len=48) :: units    ! The dimensions of the variable.
-  character(len=48) :: flux_units ! The units for age tracer fluxes, either
-                                ! years m3 s-1 or years kg s-1.
   logical :: OK
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz, m
   integer :: IsdB, IedB, JsdB, JedB
@@ -479,7 +475,6 @@ end subroutine oil_tracer_surface_state
 subroutine oil_tracer_end(CS)
   type(oil_tracer_CS), pointer :: CS !< The control structure returned by a previous
                                      !! call to register_oil_tracer.
-  integer :: m
 
   if (associated(CS)) then
     if (associated(CS%tr)) deallocate(CS%tr)

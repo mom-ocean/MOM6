@@ -508,10 +508,7 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
                           ! if it is not to be calculated anew [T ~> s].
   real :: rel_time = 0.0  ! relative time since start of this call [T ~> s].
 
-  logical :: calc_dtbt                 ! Indicates whether the dynamically adjusted
-                                       ! barotropic time step needs to be updated.
   logical :: do_advection              ! If true, it is time to advect tracers.
-  logical :: do_calc_bbl               ! If true, calculate the boundary layer properties.
   logical :: thermo_does_span_coupling ! If true, thermodynamic forcing spans
                                        ! multiple dynamic timesteps.
   logical :: do_dyn     ! If true, dynamics are updated with this call.
@@ -533,7 +530,7 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
     p_surf => NULL() ! A pointer to the ocean surface pressure [R L2 T-2 ~> Pa].
   real :: I_wt_ssh  ! The inverse of the time weights [T-1 ~> s-1]
 
-  type(time_type) :: Time_local, end_time_thermo, Time_temp
+  type(time_type) :: Time_local, end_time_thermo
   type(group_pass_type) :: pass_tau_ustar_psurf
   logical :: showCallTree
 
@@ -966,7 +963,7 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
   if (cycle_end) then
     if (CS%rotate_index) then
       allocate(sfc_state_diag)
-      call rotate_surface_state(sfc_state, G_in, sfc_state_diag, G, turns)
+      call rotate_surface_state(sfc_state, sfc_state_diag, G, turns)
     else
       sfc_state_diag => sfc_state
     endif
@@ -1050,7 +1047,7 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_thermo, &
                         ! barotropic time step needs to be updated.
   logical :: showCallTree
 
-  integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
+  integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
 
   real, dimension(SZI_(CS%G),SZJ_(CS%G),SZK_(CS%G)+1) :: eta_por ! layer interface heights
@@ -1331,7 +1328,7 @@ subroutine step_MOM_thermo(CS, G, GV, US, u, v, h, tv, fluxes, dtdia, &
   integer :: dynamics_stencil  ! The computational stencil for the calculations
                                ! in the dynamic core.
   integer :: halo_sz ! The size of a halo where data must be valid.
-  integer :: i, j, k, is, ie, js, je, nz
+  integer :: is, ie, js, je, nz
 
   real, dimension(SZI_(CS%G),SZJ_(CS%G),SZK_(CS%G)+1) :: eta_por ! layer interface heights
                                                     !! for porous topo. [Z ~> m or 1/eta_to_m]
@@ -1532,11 +1529,9 @@ subroutine step_offline(forces, fluxes, sfc_state, Time_start, time_interval, CS
   real :: dt_offline          ! The offline timestep for advection [T ~> s]
   real :: dt_offline_vertical ! The offline timestep for vertical fluxes and remapping [T ~> s]
   logical :: skip_diffusion
-  integer :: id_eta_diff_end
 
   type(time_type), pointer :: accumulated_time => NULL()
   type(time_type), pointer :: vertical_time => NULL()
-  integer :: i,j,k
   integer :: is, ie, js, je, isd, ied, jsd, jed
 
   ! 3D pointers
@@ -1762,20 +1757,16 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
 
-  integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz
+  integer :: i, j, is, ie, js, je, isd, ied, jsd, jed, nz
   integer :: IsdB, IedB, JsdB, JedB
   real    :: dtbt              ! If negative, this specifies the barotropic timestep as a fraction
                                ! of the maximum stable value [nondim].
 
   real, allocatable, dimension(:,:)   :: eta ! free surface height or column mass [H ~> m or kg m-2]
-  real, allocatable, dimension(:,:)   :: area_shelf_in ! area occupied by ice shelf [L2 ~> m2]
-!  real, dimension(:,:), pointer :: shelf_area => NULL()
-  type(MOM_restart_CS),  pointer      :: restart_CSp_tmp => NULL()
   type(group_pass_type) :: tmp_pass_uv_T_S_h, pass_uv_T_S_h
 
   real    :: default_val       ! default value for a parameter
   logical :: write_geom_files  ! If true, write out the grid geometry files.
-  logical :: ensemble_ocean    ! If true, perform an ensemble gather at the end of step_MOM
   logical :: new_sim           ! If true, this has been determined to be a new simulation
   logical :: use_geothermal    ! If true, apply geothermal heating.
   logical :: use_EOS           ! If true, density calculated from T & S using an equation of state.
@@ -1816,12 +1807,11 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
                                ! fluxes [J m-2 H-1 degC-1 ~> J m-3 degC-1 or J kg-1 degC-1]
   real :: conv2salt            ! A conversion factor for salt fluxes [m H-1 ~> 1] or [kg m-2 H-1 ~> 1]
   real :: RL2_T2_rescale, Z_rescale, QRZ_rescale ! Unit conversion factors
-  character(len=48) :: flux_units, S_flux_units
+  character(len=48) :: S_flux_units
 
   type(vardesc) :: vd_T, vd_S  ! Structures describing temperature and salinity variables.
   type(time_type)                 :: Start_time
   type(ocean_internal_state)      :: MOM_internal_state
-  character(len=200) :: area_varname, ice_shelf_file, inputdir, filename
 
   CS%Time => Time
 
@@ -3587,7 +3577,7 @@ subroutine extract_surface_state(CS, sfc_state_in)
 
   ! Rotate sfc_state back onto the input grid, sfc_state_in
   if (CS%rotate_index) then
-    call rotate_surface_state(sfc_state, G, sfc_state_in, G_in, -turns)
+    call rotate_surface_state(sfc_state, sfc_state_in, G_in, -turns)
     call deallocate_surface_state(sfc_state)
   endif
 

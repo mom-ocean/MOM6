@@ -295,13 +295,13 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
   real, dimension(:,:),  allocatable   :: mask_in    ! A 2-d mask for extended input grid.
 
   real :: PI_180
-  integer :: rcode, ncid, varid, ndims, id, jd, kd, jdp
+  integer :: id, jd, kd, jdp
   integer :: i, j, k
-  integer, dimension(4) :: start, count, dims, dim_id
+  integer, dimension(4) :: start, count
   real, dimension(:,:), allocatable :: x_in, y_in
   real, dimension(:), allocatable  :: lon_in, lat_in ! The longitude and latitude in the input file
   real, dimension(:), allocatable  :: lat_inp ! The input file latitudes expanded to the pole
-  real :: max_lat, min_lat, pole, max_depth, npole
+  real :: max_lat, pole, max_depth, npole
   real :: roundoff  ! The magnitude of roundoff, usually ~2e-16.
   real :: add_offset, scale_factor
   logical :: found_attr
@@ -311,11 +311,9 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
   type(horiz_interp_type) :: Interp
   type(axis_info), dimension(4) :: axes_info ! Axis information used for regridding
   integer :: is, ie, js, je     ! compute domain indices
-  integer :: isc, iec, jsc, jec ! global compute domain indices
   integer :: isg, ieg, jsg, jeg ! global extent
   integer :: isd, ied, jsd, jed ! data domain indices
   integer :: id_clock_read
-  character(len=12)  :: dim_name(4)
   logical :: debug=.false.
   real :: npoints, varAvg
   real, dimension(SZI_(G),SZJ_(G)) :: lon_out, lat_out ! The longitude and latitude of points on the model grid
@@ -618,25 +616,22 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, t
   real, dimension(:,:),  allocatable   :: mask_in    !< A 2-d mask for extended input grid.
 
   real :: PI_180
-  integer :: rcode, ncid, varid, ndims, id, jd, kd, jdp
+  integer :: id, jd, kd, jdp
   integer :: i,j,k
-  integer, dimension(4) :: start, count, dims, dim_id
   real, dimension(:,:), allocatable :: x_in, y_in
   real, dimension(:), allocatable :: lon_in, lat_in ! The longitude and latitude in the input file
   real, dimension(:), allocatable :: lat_inp ! The input file latitudes expanded to the pole
-  real :: max_lat, min_lat, pole, max_depth, npole
+  real :: max_lat, pole, max_depth, npole
   real :: roundoff  ! The magnitude of roundoff, usually ~2e-16.
   logical :: add_np
   character(len=8)  :: laynum
   type(horiz_interp_type) :: Interp
   type(axistype), dimension(4) :: axes_data
   integer :: is, ie, js, je     ! compute domain indices
-  integer :: isc,iec,jsc,jec    ! global compute domain indices
   integer :: isg, ieg, jsg, jeg ! global extent
   integer :: isd, ied, jsd, jed ! data domain indices
   integer :: id_clock_read
   integer, dimension(4) :: fld_sz
-  character(len=12)  :: dim_name(4)
   logical :: debug=.false.
   logical :: spongeDataOngrid
   logical :: ans_2018

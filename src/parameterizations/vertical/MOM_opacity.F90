@@ -110,9 +110,7 @@ subroutine set_opacity(optics, sw_total, sw_vis_dir, sw_vis_dif, sw_nir_dir, sw_
   real :: inv_sw_pen_scale  ! The inverse of the e-folding scale [Z-1 ~> m-1].
   real :: Inv_nbands        ! The inverse of the number of bands of penetrating
                             ! shortwave radiation [nondim]
-  logical :: call_for_surface  ! if horizontal slice is the surface layer
   real :: tmp(SZI_(G),SZJ_(G),SZK_(GV)) ! A 3-d temporary array for diagnosing opacity [Z-1 ~> m-1]
-  real :: chl(SZI_(G),SZJ_(G),SZK_(GV)) ! The concentration of chlorophyll-A [mg m-3].
   real :: Pen_SW_tot(SZI_(G),SZJ_(G))   ! The penetrating shortwave radiation
                                         ! summed across all bands [Q R Z T-1 ~> W m-2].
   real :: op_diag_len       ! A tiny lengthscale [Z ~> m] used to remap diagnostics of opacity
@@ -245,7 +243,6 @@ subroutine opacity_from_chl(optics, sw_total, sw_vis_dir, sw_vis_dif, sw_nir_dir
                             ! radiation [Q R Z T-1 ~> W m-2].
   real :: SW_nir_tot        ! The sum across the near infrared bands of shortwave
                             ! radiation [Q R Z T-1 ~> W m-2].
-  type(time_type) :: day
   character(len=128) :: mesg
   integer :: i, j, k, n, is, ie, js, je, nz, nbands
   logical :: multiband_vis_input, multiband_nir_input, total_sw_input
@@ -845,7 +842,7 @@ subroutine sumSWoverBands(G, GV, US, h, nsw, optics, j, dt, &
   logical :: SW_Remains   ! If true, some column has shortwave radiation that
                           ! was not entirely absorbed.
 
-  integer :: is, ie, nz, i, k, ks, n
+  integer :: is, ie, nz, i, k, n
   SW_Remains = .false.
 
   I_Habs = 1e3*GV%H_to_m ! optics%PenSW_absorb_Invlen
@@ -962,7 +959,6 @@ subroutine opacity_init(Time, G, GV, US, param_file, diag, CS, optics)
                                 ! flux when that flux drops below PEN_SW_FLUX_ABSORB [H ~> m or kg m-2]
   real :: PenSW_minthick_dflt ! The default for PenSW_absorb_minthick [m]
   logical :: default_2018_answers
-  logical :: use_scheme
   integer :: isd, ied, jsd, jed, nz, n
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nz = GV%ke
 

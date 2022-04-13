@@ -267,7 +267,6 @@ subroutine hybgen_weno_coefs(s, h_src, edges, nk, ns, thin, PCM_lay)
   real :: seh1, seh2  ! Tracer slopes at the cell edges times the cell grid spacing [A]
   real :: q01, q02    ! Various tracer differences between a cell average and the edge values [A]
   real :: q001, q002  ! Tracer slopes at the cell edges times the cell grid spacing [A]
-  real :: ds2a, ds2b  ! Squared tracer differences between a cell average and the edge values [A2]
   logical :: PCM_layer(nk) ! True for layers that should use PCM remapping, either because they are
                       ! very thin, or because this is specified by PCM_lay.
   real :: dp(nk)      ! Input grid layer thicknesses, but with a minimum thickness given by thin [H ~> m or kg m-2]

@@ -126,7 +126,6 @@ logical function neutral_diffusion_init(Time, G, GV, US, param_file, diag, EOS, 
   type(neutral_diffusion_CS), pointer       :: CS         !< Neutral diffusion control structure
 
   ! Local variables
-  character(len=256) :: mesg    ! Message for error messages.
   character(len=80)  :: string  ! Temporary strings
   logical :: default_2018_answers
   logical :: boundary_extrap
@@ -302,7 +301,6 @@ subroutine neutral_diffusion_calc_coeffs(G, GV, US, h, T, S, CS, p_surf)
   real, dimension(SZI_(G),SZJ_(G))  :: hbl      ! Boundary layer depth [H ~> m or kg m-2]
   integer :: iMethod
   real, dimension(SZI_(G)) :: ref_pres ! Reference pressure used to calculate alpha/beta [R L2 T-2 ~> Pa]
-  real, dimension(SZI_(G)) :: rho_tmp  ! Routine to calculate drho_dp, returns density which is not used [R ~> kg m-3]
   real :: h_neglect, h_neglect_edge    ! Negligible thicknesses [H ~> m or kg m-2]
   integer, dimension(SZI_(G), SZJ_(G)) :: k_top  ! Index of the first layer within the boundary
   real,    dimension(SZI_(G), SZJ_(G)) :: zeta_top ! Distance from the top of a layer to the intersection of the
@@ -1251,7 +1249,6 @@ subroutine find_neutral_surface_positions_discontinuous(CS, nk, &
   logical :: searching_left_column  ! True if searching for the position of a right interface in the left column
   logical :: searching_right_column ! True if searching for the position of a left interface in the right column
   logical :: reached_bottom         ! True if one of the bottom-most interfaces has been used as the target
-  logical :: search_layer
   logical :: fail_heff              ! Fail if negative thickness are encountered.  By default this
                                     ! is true, but it can take its value from hard_fail_heff.
   real    :: dRho                   ! A density difference between columns [R ~> kg m-3]
@@ -1446,7 +1443,7 @@ subroutine mark_unstable_cells(CS, nk, T, S, P, stable_cell)
   real, dimension(nk,2),  intent(in)    :: P           !< Pressure at interfaces [R L2 T-2 ~> Pa]
   logical, dimension(nk), intent(  out) :: stable_cell !< True if this cell is unstably stratified
 
-  integer :: k, first_stable, prev_stable
+  integer :: k
   real :: delta_rho ! A density difference [R ~> kg m-3]
 
   do k = 1,nk
@@ -1533,7 +1530,6 @@ subroutine increment_interface(nk, kl, ki, reached_bottom, searching_this_column
   logical, intent(inout)                :: reached_bottom         !< Updated when kl == nk and ki == 2
   logical, intent(inout)                :: searching_this_column  !< Updated when kl == nk and ki == 2
   logical, intent(inout)                :: searching_other_column !< Updated when kl == nk and ki == 2
-  integer :: k
 
   reached_bottom = .false.
   if (ki == 2) then ! At the bottom interface
@@ -1596,7 +1592,6 @@ function find_neutral_pos_linear( CS, z0, T_ref, S_ref, dRdT_ref, dRdS_ref, &
   real :: S_z, dS_dz ! Salinity at a point and its derivative with fractional position [ppt]
   real :: drho_min, drho_max ! Bounds on density differences [R ~> kg m-3]
   real :: ztest, zmin, zmax ! Fractional positions in the cell [nondim]
-  real :: dz         ! Change in position in the cell [nondim]
   real :: a1, a2     ! Fractional weights of the top and bottom values [nondim]
   integer :: iter
   integer :: nterm
@@ -1793,7 +1788,6 @@ subroutine calc_delta_rho_and_derivs(CS, T1, S1, p1_in, T2, S2, p2_in, drho, &
   real :: p1, p2, pmid ! Pressures [R L2 T-2 ~> Pa]
   real :: drdt1, drdt2 ! Partial derivatives of density with temperature [R degC-1 ~> kg m-3 degC-1]
   real :: drds1, drds2 ! Partial derivatives of density with salinity [R ppt-1 ~> kg m-3 ppt-1]
-  real :: drdp1, drdp2 ! Partial derivatives of density with pressure [T2 L-2 ~> s2 m-2]
 
   ! Use the same reference pressure or the in-situ pressure
   if (CS%ref_pres > 0.) then
@@ -1886,7 +1880,7 @@ function absolute_positions(n,ns,Pint,Karr,NParr)
                                    !! or other units following Pint
 
   ! Local variables
-  integer :: k_surface, k
+  integer :: k_surface
 
   do k_surface = 1, ns
     absolute_positions(k_surface) = absolute_position(n,ns,Pint,Karr,NParr,k_surface)
@@ -1921,7 +1915,7 @@ subroutine neutral_surface_flux(nk, nsurf, deg, hl, hr, Tl, Tr, PiL, PiR, KoL, K
   real,               optional, intent(in)    :: h_neglect_edge !< A negligibly small width used for
                                              !! edge value calculations if continuous is false [H ~> m or kg m-2]
   ! Local variables
-  integer :: k_sublayer, klb, klt, krb, krt, k
+  integer :: k_sublayer, klb, klt, krb, krt
   real :: T_right_top, T_right_bottom, T_right_layer, T_right_sub, T_right_top_int, T_right_bot_int
   real :: T_left_top, T_left_bottom, T_left_layer, T_left_sub, T_left_top_int, T_left_bot_int
   real :: dT_top, dT_bottom, dT_layer, dT_ave, dT_sublayer, dT_top_int, dT_bot_int
@@ -2112,15 +2106,11 @@ logical function ndiff_unit_tests_continuous(verbose)
   logical, intent(in) :: verbose !< If true, write results to stdout
   ! Local variables
   integer, parameter         :: nk = 4
-  real, dimension(nk+1)      :: TiL, TiR1, TiR2, TiR4, Tio ! Test interface temperatures
-  real, dimension(nk)        :: TL                         ! Test layer temperatures
-  real, dimension(nk+1)      :: SiL                        ! Test interface salinities
-  real, dimension(nk+1)      :: PiL, PiR4                  ! Test interface positions
-  real, dimension(2*nk+2)    :: PiLRo, PiRLo               ! Test positions
-  integer, dimension(2*nk+2) :: KoL, KoR                   ! Test indexes
-  real, dimension(2*nk+1)    :: hEff                       ! Test positions
-  real, dimension(2*nk+1)    :: Flx                        ! Test flux
-  integer :: k
+  real, dimension(nk+1)      :: Tio           ! Test interface temperatures
+  real, dimension(2*nk+2)    :: PiLRo, PiRLo  ! Test positions
+  integer, dimension(2*nk+2) :: KoL, KoR      ! Test indexes
+  real, dimension(2*nk+1)    :: hEff          ! Test positions
+  real, dimension(2*nk+1)    :: Flx           ! Test flux
   logical :: v
   real :: h_neglect
 
@@ -2378,24 +2368,17 @@ logical function ndiff_unit_tests_discontinuous(verbose)
   ! Local variables
   integer, parameter          :: nk = 3
   integer, parameter          :: ns = nk*4
-  real, dimension(nk)         :: Sl, Sr, Tl, Tr ! Salinities [ppt] and temperatures [degC]
+  real, dimension(nk)         :: Sl, Sr    ! Salinities [ppt] and temperatures [degC]
   real, dimension(nk)         :: hl, hr    ! Thicknesses in pressure units [R L2 T-2 ~> Pa]
   real, dimension(nk,2)       :: TiL, SiL, TiR, SiR ! Cell edge salinities [ppt] and temperatures [degC]
   real, dimension(nk,2)       :: Pres_l, Pres_r ! Interface pressures [R L2 T-2 ~> Pa]
   integer, dimension(ns)      :: KoL, KoR
   real, dimension(ns)         :: PoL, PoR
-  real, dimension(ns-1)       :: hEff, Flx
+  real, dimension(ns-1)       :: hEff
   type(neutral_diffusion_CS)  :: CS        !< Neutral diffusion control structure
-  type(remapping_CS), pointer :: remap_CS  !< Remapping control structure (PLM)
   real, dimension(nk,2)       :: ppoly_T_l, ppoly_T_r ! Linear reconstruction for T
   real, dimension(nk,2)       :: ppoly_S_l, ppoly_S_r ! Linear reconstruction for S
-  real, dimension(nk,2)       :: dRdT      !< Partial derivative of density with temperature at
-                                           !! cell edges [R degC-1 ~> kg m-3 degC-1]
-  real, dimension(nk,2)       :: dRdS      !< Partial derivative of density with salinity at
-                                           !! cell edges [R ppt-1 ~> kg m-3 ppt-1]
   logical, dimension(nk)      :: stable_l, stable_r
-  integer                     :: iMethod
-  integer                     :: ns_l, ns_r
   integer :: k
   logical :: v
 

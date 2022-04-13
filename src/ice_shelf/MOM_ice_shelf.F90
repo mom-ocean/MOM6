@@ -312,7 +312,6 @@ subroutine shelf_calc_flux(sfc_state_in, fluxes_in, Time, time_step, CS)
   logical :: update_ice_vel ! If true, it is time to update the ice shelf velocities.
   logical :: coupled_GL     ! If true, the grouding line position is determined based on
                             ! coupled ice-ocean dynamics.
-  logical :: use_temperature = .true. !
 
   real, parameter :: c2_3 = 2.0/3.0
   character(len=160) :: mesg  ! The text of an error message
@@ -333,7 +332,7 @@ subroutine shelf_calc_flux(sfc_state_in, fluxes_in, Time, time_step, CS)
 
   if (CS%rotate_index) then
     allocate(sfc_state)
-    call rotate_surface_state(sfc_state_in, CS%Grid_in, sfc_state, CS%Grid, CS%turns)
+    call rotate_surface_state(sfc_state_in, sfc_state, CS%Grid, CS%turns)
     allocate(fluxes)
     call allocate_forcing_type(fluxes_in, G, fluxes)
     call rotate_forcing(fluxes_in, fluxes, CS%turns)
@@ -793,7 +792,7 @@ subroutine shelf_calc_flux(sfc_state_in, fluxes_in, Time, time_step, CS)
   call cpu_clock_end(id_clock_shelf)
 
   if (CS%rotate_index) then
-!   call rotate_surface_state(sfc_state,CS%Grid, sfc_state_in,CS%Grid_in,-CS%turns)
+!   call rotate_surface_state(sfc_state, sfc_state_in, CS%Grid_in, -CS%turns)
     call rotate_forcing(fluxes,fluxes_in,-CS%turns)
   endif
 
@@ -972,8 +971,7 @@ subroutine add_shelf_pressure(Ocn_grid, US, CS, fluxes)
 
   type(ocean_grid_type), pointer :: G => NULL()  ! A pointer to  ocean's grid structure.
   real :: press_ice       !< The pressure of the ice shelf per unit area of ocean (not ice) [R L2 T-2 ~> Pa].
-  integer :: i, j, is, ie, js, je, isd, ied, jsd, jed
-
+  integer :: i, j, is, ie, js, je
 
   G=>CS%Grid
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
@@ -1222,7 +1220,6 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces_in,
                                           !! the ice-shelf state
   type(directories)  :: dirs
   type(dyn_horgrid_type), pointer :: dG => NULL()
-  type(dyn_horgrid_type), pointer :: dG_in => NULL()
   real    :: Z_rescale  ! A rescaling factor for heights from the representation in
                         ! a restart file to the internal representation in this run.
   real    :: RZ_rescale ! A rescaling factor for mass loads from the representation in
@@ -1233,11 +1230,10 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces_in,
   real :: dz_ocean_min_float ! The minimum ocean thickness above which the ice shelf is considered
                         ! to be floating when CONST_SEA_LEVEL = True [Z ~> m].
   real :: cdrag, drag_bg_vel
-  logical :: new_sim, save_IC, var_force
+  logical :: new_sim, save_IC
   !This include declares and sets the variable "version".
 # include "version_variable.h"
-  character(len=200) :: config
-  character(len=200) :: IC_file,filename,inputdir
+  character(len=200) :: IC_file, inputdir
   character(len=40)  :: mdl = "MOM_ice_shelf"  ! This module's name.
   integer :: i, j, is, ie, js, je, isd, ied, jsd, jed, Isdq, Iedq, Jsdq, Jedq
   integer :: wd_halos(2)
@@ -1249,8 +1245,6 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces_in,
                                    ! does not occur [Z ~> m]
   real, allocatable, dimension(:,:) :: tmp2d ! Temporary array for storing ice shelf input data
 
-  type(mech_forcing), pointer :: forces => NULL()
-  type(forcing), pointer :: fluxes =>  NULL()
   type(surface), pointer :: sfc_state => NULL()
   type(vardesc) :: u_desc, v_desc
 
@@ -1530,7 +1524,7 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces_in,
     call allocate_surface_state(sfc_state_in, CS%Grid_in, use_temperature=.true., &
           do_integrals=.true., omit_frazil=.false., use_iceshelves=.true.)
     if (CS%rotate_index) then
-      call rotate_surface_state(sfc_state_in, CS%Grid_in, sfc_state,CS%Grid,CS%turns)
+      call rotate_surface_state(sfc_state_in, sfc_state,CS%Grid, CS%turns)
     else
       sfc_state=>sfc_state_in
     endif
@@ -2200,7 +2194,7 @@ subroutine solo_step_ice_shelf(CS, time_interval, nsteps, Time, min_time_step_in
   logical :: update_ice_vel ! If true, it is time to update the ice shelf velocities.
   logical :: coupled_GL     ! If true the grouding line position is determined based on
                             ! coupled ice-ocean dynamics.
-  integer :: is, iec, js, jec, i, j
+  integer :: is, iec, js, jec
 
   G => CS%grid
   US => CS%US

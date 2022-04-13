@@ -45,7 +45,6 @@ subroutine initialize_ice_thickness(h_shelf, area_shelf_h, hmask, G, G_in, US, P
   logical, intent(in), optional        :: rotate_index !< If true, this is a rotation test
   integer, intent(in), optional        :: turns !< Number of turns for rotation test
 
-  integer :: i, j
   character(len=40)  :: mdl = "initialize_ice_thickness" ! This subroutine's name.
   character(len=200) :: config
   logical :: rotate = .false.
@@ -105,7 +104,7 @@ subroutine initialize_ice_thickness_from_file(h_shelf, area_shelf_h, hmask, G, U
   character(len=40)  :: mdl = "initialize_ice_thickness_from_file" ! This subroutine's name.
   integer :: i, j, isc, jsc, iec, jec
   logical :: hmask_set
-  real :: len_sidestress, mask, udh
+  real :: len_sidestress, udh
 
   call MOM_mesg("Initialize_ice_thickness_from_file: reading thickness")
 
@@ -196,7 +195,7 @@ subroutine initialize_ice_thickness_channel(h_shelf, area_shelf_h, hmask, G, US,
 
   character(len=40)  :: mdl = "initialize_ice_shelf_thickness_channel" ! This subroutine's name.
   real :: max_draft, min_draft, flat_shelf_width, c1, slope_pos
-  real :: edge_pos, shelf_slope_scale, Rho_ocean
+  real :: edge_pos, shelf_slope_scale
   integer :: i, j, jsc, jec, jsd, jed, jedg, nyh, isc, iec, isd, ied
   integer :: j_off
 
@@ -314,11 +313,10 @@ subroutine initialize_ice_shelf_boundary_channel(u_face_mask_bdry, v_face_mask_b
   type(param_file_type), intent(in)    :: PF !< A structure to parse for run-time parameters
 
   character(len=40)  :: mdl = "initialize_ice_shelf_boundary_channel" ! This subroutine's name.
-  integer :: i, j, isd, jsd, is, js, iegq, jegq, giec, gjec, gisc, gjsc,gisd,gjsd, isc, jsc, iec, jec, ied, jed
+  integer :: i, j, isd, jsd, giec, gjec, gisc, gjsc,gisd,gjsd, isc, jsc, iec, jec, ied, jed
   real    :: input_thick ! The input ice shelf thickness [Z ~> m]
   real    :: input_vel  ! The input ice velocity per  [L Z T-1 ~> m s-1]
   real    :: lenlat, len_stress, westlon, lenlon, southlat ! The input positions of the channel boundarises
-
 
   call get_param(PF, mdl, "LENLAT", lenlat, fail_if_missing=.true.)
 
@@ -417,8 +415,7 @@ subroutine initialize_ice_flow_from_file(bed_elev,u_shelf, v_shelf,float_cond,&
   character(len=200) :: ushelf_varname, vshelf_varname, &
                         ice_visc_varname, floatfr_varname, bed_varname  ! Variable name in file
   character(len=40)  :: mdl = "initialize_ice_velocity_from_file" ! This subroutine's name.
-  integer :: i, j, isc, jsc, iec, jec
-  real :: len_sidestress, mask, udh
+  real :: len_sidestress
 
   call MOM_mesg("  MOM_ice_shelf_init_profile.F90, initialize_velocity_from_file: reading velocity")
 
@@ -461,7 +458,6 @@ subroutine initialize_ice_flow_from_file(bed_elev,u_shelf, v_shelf,float_cond,&
 
   filename = trim(inputdir)//trim(bed_topo_file)
   call MOM_read_data(filename,trim(bed_varname), bed_elev, G%Domain, scale=1.)
-!  isc = G%isc ; jsc = G%jsc ; iec = G%iec ; jec = G%jec
 
 
 end subroutine initialize_ice_flow_from_file

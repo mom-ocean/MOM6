@@ -79,7 +79,6 @@ logical function lateral_boundary_diffusion_init(Time, G, GV, param_file, diag, 
 
   ! local variables
   character(len=80)  :: string ! Temporary strings
-  integer :: ke, nk            ! Number of levels in the LBD and native grids, respectively
   logical :: boundary_extrap   ! controls if boundary extrapolation is used in the LBD code
 
   if (ASSOCIATED(CS)) then
@@ -167,7 +166,6 @@ subroutine lateral_boundary_diffusion(G, GV, US, h, Coef_x, Coef_y, dt, Reg, CS)
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV))  :: tendency    !< tendency array for diagnostic [conc T-1 ~> conc s-1]
   real, dimension(SZI_(G),SZJ_(G))           :: tendency_2d !< depth integrated content tendency for diagn
   type(tracer_type), pointer                 :: tracer => NULL() !< Pointer to the current tracer
-  real, dimension(SZK_(GV)) :: tracer_1d                    !< 1d-array used to remap tracer change to native grid
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV))  :: tracer_old  !< local copy of the initial tracer concentration,
                                                             !! only used to compute tendencies.
   real :: tracer_int_prev !< Globally integrated tracer before LBD is applied, in mks units [conc kg]
@@ -584,13 +582,14 @@ subroutine fluxes_layer_method(boundary, ke, hbl_L, hbl_R, h_L, h_R, phi_L, phi_
   real, allocatable :: F_layer_z(:)  !< Diffusive flux at U/V-point in the ztop grid    [H L2 conc ~> m3 conc]
   real              :: h_vel(ke)     !< Thicknesses at u- and v-points in the native grid
                                      !! The harmonic mean is used to avoid zero values      [H ~> m or kg m-2]
-  real    :: khtr_avg                !< Thickness-weighted diffusivity at the velocity-point [L2 T-1 ~> m2 s-1]
-                                     !! This is just to remind developers that khtr_avg should be
-                                     !! computed once khtr is 3D.
   real    :: htot                    !< Total column thickness                              [H ~> m or kg m-2]
-  integer :: k, k_bot_min, k_top_max !< k-indices, min and max for bottom and top, respectively
-  integer :: k_bot_max, k_top_min    !< k-indices, max and min for bottom and top, respectively
-  integer :: k_bot_diff, k_top_diff  !< different between left and right k-indices for bottom and top, respectively
+  integer :: k
+  integer :: k_bot_min               !< Minimum k-index for the bottom
+  integer :: k_bot_max               !< Maximum k-index for the bottom
+  integer :: k_bot_diff              !< Difference between bottom left and right k-indices
+  !integer :: k_top_max              !< Minimum k-index for the top
+  !integer :: k_top_min              !< Maximum k-index for the top
+  !integer :: k_top_diff             !< Difference between top left and right k-indices
   integer :: k_top_L, k_bot_L        !< k-indices left native grid
   integer :: k_top_R, k_bot_R        !< k-indices right native grid
   real    :: zeta_top_L, zeta_top_R  !< distance from the top of a layer to the boundary

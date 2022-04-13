@@ -386,7 +386,7 @@ subroutine hybgen_regrid(G, GV, US, dp, tv, CS, dzInterface, PCM_cell)
                             ! each target layer, in the unusual case where the the input grid is
                             ! larger than the new grid.  This situation only occurs during certain
                             ! types of initialization or when generating output diagnostics.
-  integer :: i, j, k, nk, m, k2, nk_in
+  integer :: i, j, k, nk, k2, nk_in
 
   nk = CS%nk
 
@@ -532,8 +532,6 @@ subroutine hybgen_column_init(nk, nsigma, dp0k, ds0k, dp00i, topiso_i_j, &
   ! --- --------------------------------------------------------------
 
   ! Local variables
-  character(len=256) :: mesg  ! A string for output messages
-  real :: hybrlx  ! The relaxation rate in the hybrid region [timestep-1]?
   real :: qdep    ! Total water column thickness as a fraction of dp0k (vs ds0k) [nondim]
   real :: q       ! A portion of the thickness that contributes to the new cell [H ~> m or kg m-2]
   real :: p_int(nk+1)  ! Interface depths [H ~> m or kg m-2]
@@ -641,8 +639,6 @@ real function cushn(delp, dp0)
   real, intent(in) :: delp  ! A thickness change [H ~> m or kg m-2]
   real, intent(in) :: dp0   ! A non-negative reference thickness [H ~> m or kg m-2]
 
-  real :: qq  ! A limited ratio of delp/dp0 [nondim]
-
   ! These are the nondimensional parameters that define the cushion function.
   real, parameter :: qqmn=-4.0, qqmx=2.0  ! shifted range for cushn [nondim]
 ! real, parameter :: qqmn=-2.0, qqmx=4.0  ! traditional range for cushn [nondim]
@@ -705,7 +701,6 @@ subroutine hybgen_column_regrid(CS, nk, thkbot, onem, epsil, Rcv_tgt, &
   real :: h_hat0 ! A first guess at thickness movement upward across the interface
                  ! between layers k and k-1 [H ~> m or kg m-2]
   real :: dh_cor ! Thickness changes [H ~> m or kg m-2]
-  real :: h1_tgt ! A target thickness for the top layer [H ~> m or kg m-2]
   real :: tenm   ! ten m  in pressure units [H ~> m or kg m-2]
   real :: onemm  ! one mm in pressure units [H ~> m or kg m-2]
   logical :: trap_errors

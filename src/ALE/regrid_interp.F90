@@ -283,7 +283,6 @@ subroutine interpolate_grid( n0, h0, x0, ppoly0_E, ppoly0_coefs, &
   logical,      optional, intent(in)    :: answers_2018  !< If true use older, less acccurate expressions.
 
   ! Local variables
-  logical   :: use_2018_answers  ! If true use older, less acccurate expressions.
   integer        :: k ! loop index
   real           :: t ! current interface target density
 

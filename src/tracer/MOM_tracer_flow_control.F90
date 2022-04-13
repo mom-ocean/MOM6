@@ -124,7 +124,7 @@ subroutine call_tracer_flux_init(verbosity)
 
   type(param_file_type) :: param_file ! A structure to parse for run-time parameters
   character(len=40)  :: mdl = "call_tracer_flux_init"  ! This module's name.
-  logical :: use_OCMIP_CFCs, use_MOM_generic_tracer, use_CFC_caps
+  logical :: use_OCMIP_CFCs, use_MOM_generic_tracer
 
   ! Determine which tracer routines with tracer fluxes are to be called.  Note
   ! that not every tracer package is required to have a flux_init call.
@@ -615,7 +615,7 @@ subroutine call_tracer_stocks(h, stock_values, G, GV, US, CS, stock_names, stock
   ! real, dimension(MAX_FIELDS_) :: values
   type(EFP_type), dimension(MAX_FIELDS_) :: values_EFP
   type(EFP_type), dimension(MAX_FIELDS_) :: stock_val_EFP
-  integer :: max_ns, ns_tot, ns, index, pkg, max_pkgs, nn, n
+  integer :: max_ns, ns_tot, ns, index, nn, n
 
   if (.not. associated(CS)) call MOM_error(FATAL, "call_tracer_stocks: "// &
        "Module must be initialized via call_tracer_register before it is used.")

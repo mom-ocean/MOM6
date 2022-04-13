@@ -802,7 +802,7 @@ subroutine reset_face_lengths_list(G, param_file, US)
   ! Local variables
   character(len=120), pointer, dimension(:) :: lines => NULL()
   character(len=120) :: line
-  character(len=200) :: filename, chan_file, inputdir, mesg ! Strings for file/path
+  character(len=200) :: filename, chan_file, inputdir   ! Strings for file/path
   character(len=40)  :: mdl = "reset_face_lengths_list" ! This subroutine's name.
   real, allocatable, dimension(:,:) :: &
     u_lat, u_lon, v_lat, v_lon ! The latitude and longitude ranges of faces [degrees]
@@ -826,7 +826,7 @@ subroutine reset_face_lengths_list(G, param_file, US)
   logical :: fatal_unused_lengths
   integer :: unused
   integer :: ios, iounit, isu, isv
-  integer :: last, num_lines, nl_read, ln, npt, u_pt, v_pt
+  integer :: num_lines, nl_read, ln, npt, u_pt, v_pt
   integer :: i, j, isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
   integer :: isu_por, isv_por
   logical :: found_u_por, found_v_por
@@ -1124,7 +1124,7 @@ subroutine read_face_length_list(iounit, filename, num_lines, lines)
   ! list file, after removing comments.
   character(len=120) :: line, line_up
   logical :: found_u, found_v
-  integer :: isu, isv, icom, verbose
+  integer :: isu, isv, icom
   integer :: last
 
   num_lines = 0

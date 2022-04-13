@@ -58,7 +58,6 @@ subroutine stochastics_init(dt, grid, GV, CS, param_file, diag, Time)
   integer :: mom_comm          ! list of pes for this instance of the ocean
   integer :: num_procs         ! number of processors to pass to stochastic physics
   integer :: iret              ! return code from stochastic physics
-  integer :: me                !  my pe
   integer :: pe_zero           !  root pe
   integer :: nx                ! number of x-points including halo
   integer :: ny                ! number of x-points including halo

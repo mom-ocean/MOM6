@@ -357,7 +357,6 @@ subroutine open_boundary_config(G, US, param_file, OBC)
   character(len=1024) :: segment_str      ! The contents (rhs) for parameter "segment_param_str"
   character(len=200) :: config1          ! String for OBC_USER_CONFIG
   real               :: Lscale_in, Lscale_out ! parameters controlling tracer values at the boundaries [L ~> m]
-  character(len=128) :: inputdir
   logical :: answers_2018, default_2018_answers
   logical :: check_reconstruction, check_remapping, force_bounds_in_subcell
   character(len=64)  :: remappingScheme
@@ -651,7 +650,7 @@ subroutine initialize_segment_data(G, OBC, PF)
   character(len=1024) :: segstr
   character(len=256) :: filename
   character(len=20)  :: segnam, suffix
-  character(len=32)  :: varnam, fieldname
+  character(len=32)  :: fieldname
   real               :: value  ! A value that is parsed from the segment data string [various units]
   character(len=32), dimension(MAX_OBC_FIELDS) :: fields  ! segment field names
   character(len=128) :: inputdir
@@ -1640,11 +1639,10 @@ subroutine parse_for_tracer_reservoirs(OBC, PF, use_temperature)
   character(len=1024) :: segstr
   character(len=256) :: filename
   character(len=20)  :: segnam, suffix
-  character(len=32)  :: varnam, fieldname
+  character(len=32)  :: fieldname
   real               :: value  ! A value that is parsed from the segment data string [various units]
   character(len=32), dimension(MAX_OBC_FIELDS) :: fields  ! segment field names
   type(OBC_segment_type), pointer :: segment => NULL() ! pointer to segment type list
-  character(len=256) :: mesg    ! Message for error messages.
 
   do n=1, OBC%number_of_segments
     segment => OBC%segment(n)
@@ -3490,7 +3488,6 @@ subroutine allocate_OBC_segment_data(OBC, segment)
   integer :: isd, ied, jsd, jed
   integer :: IsdB, IedB, JsdB, JedB
   integer :: IscB, IecB, JscB, JecB
-  character(len=40)  :: mdl = "allocate_OBC_segment_data" ! This subroutine's name.
 
   isd = segment%HI%isd ; ied = segment%HI%ied
   jsd = segment%HI%jsd ; jed = segment%HI%jed
@@ -3576,8 +3573,6 @@ end subroutine allocate_OBC_segment_data
 !> Deallocate segment data fields
 subroutine deallocate_OBC_segment_data(segment)
   type(OBC_segment_type), intent(inout) :: segment !< Open boundary segment
-  ! Local variables
-  character(len=40)  :: mdl = "deallocate_OBC_segment_data" ! This subroutine's name.
 
   if (.not. segment%on_pe) return
 
@@ -3709,14 +3704,11 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
   ! Local variables
   integer :: c, i, j, k, is, ie, js, je, isd, ied, jsd, jed
   integer :: IsdB, IedB, JsdB, JedB, n, m, nz
-  character(len=40)  :: mdl = "update_OBC_segment_data" ! This subroutine's name.
-  character(len=200) :: filename, OBC_file, inputdir ! Strings for file/path
   type(OBC_segment_type), pointer :: segment => NULL()
   integer, dimension(4) :: siz
   real, dimension(:,:,:), pointer :: tmp_buffer_in => NULL()  ! Unrotated input [various units]
   integer :: ni_seg, nj_seg  ! number of src gridpoints along the segments
   integer :: ni_buf, nj_buf  ! Number of filled values in tmp_buffer
-  integer :: i2, j2          ! indices for referencing local domain array
   integer :: is_obc, ie_obc, js_obc, je_obc  ! segment indices within local domain
   integer :: ishift, jshift  ! offsets for staggered locations
   real, dimension(:,:,:), allocatable, target :: tmp_buffer ! A buffer for input data [various units]
@@ -4413,7 +4405,6 @@ subroutine OBC_registry_init(param_file, Reg)
   integer, save :: init_calls = 0
 
 # include "version_variable.h"
-  character(len=40)  :: mdl = "MOM_open_boundary" ! This module's name.
   character(len=256) :: mesg    ! Message for error messages.
 
   if (.not.associated(Reg)) then ; allocate(Reg)
@@ -4472,7 +4463,7 @@ subroutine segment_tracer_registry_init(param_file, segment)
 ! This include declares and sets the variable "version".
 # include "version_variable.h"
   character(len=40)  :: mdl = "segment_tracer_registry_init" ! This routine's name.
-  character(len=256) :: mesg    ! Message for error messages.
+  !character(len=256) :: mesg    ! Message for error messages.
 
   if (.not.associated(segment%tr_Reg)) then
     allocate(segment%tr_Reg)
@@ -4579,11 +4570,10 @@ subroutine register_temp_salt_segments(GV, OBC, tr_Reg, param_file)
   type(param_file_type),      intent(in)    :: param_file !< file to parse for  model parameter values
 
 ! Local variables
-  integer :: isd, ied, IsdB, IedB, jsd, jed, JsdB, JedB, nz, nf
-  integer :: i, j, k, n
-  character(len=32)  :: name
+  integer :: n
+  character(len=32) :: name
   type(OBC_segment_type), pointer :: segment => NULL() ! pointer to segment type list
-  type(tracer_type), pointer      :: tr_ptr => NULL()
+  type(tracer_type), pointer :: tr_ptr => NULL()
 
   if (.not. associated(OBC)) return
 
@@ -4675,14 +4665,12 @@ subroutine mask_outside_OBCs(G, US, param_file, OBC)
   type(unit_scale_type),        intent(in)    :: US         !< A dimensional unit scaling type
 
   ! Local variables
-  integer :: isd, ied, IsdB, IedB, jsd, jed, JsdB, JedB, n
   integer :: i, j
   integer :: l_seg
   logical :: fatal_error = .False.
   real    :: min_depth ! The minimum depth for ocean points [Z ~> m]
   integer, parameter :: cin = 3, cout = 4, cland = -1, cedge = -2
   character(len=256) :: mesg    ! Message for error messages.
-  type(OBC_segment_type), pointer :: segment => NULL() ! pointer to segment type list
   real, allocatable, dimension(:,:) :: color, color2  ! For sorting inside from outside,
                                                       ! two different ways
 
@@ -4922,9 +4910,8 @@ subroutine open_boundary_register_restarts(HI, GV, US, OBC, Reg, param_file, res
   logical,                 intent(in) :: use_temperature !< If true, T and S are used
   ! Local variables
   type(vardesc) :: vd(2)
-  integer       :: m, n
+  integer       :: m
   character(len=100) :: mesg, var_name
-  type(OBC_segment_type), pointer :: segment=>NULL()
 
   if (.not. associated(OBC)) &
     call MOM_error(FATAL, "open_boundary_register_restarts: Called with "//&
@@ -5112,11 +5099,10 @@ subroutine adjustSegmentEtaToFitBathymetry(G, GV, US, segment,fld)
   integer,                 intent(in)    :: fld  !< field index to adjust thickness
 
   integer :: i, j, k, is, ie, js, je, nz, contractions, dilations
-  integer :: n
   real, allocatable, dimension(:,:,:) :: eta ! Segment source data interface heights [Z ~> m]
   real :: hTolerance = 0.1 !<  Tolerance to exceed adjustment criteria [Z ~> m]
   ! real :: dilate      ! A factor by which to dilate the water column [nondim]
-  character(len=100) :: mesg
+  !character(len=100) :: mesg
 
   hTolerance = 0.1*US%m_to_Z
 
@@ -5450,7 +5436,6 @@ subroutine rotate_OBC_segment_data(segment_in, segment, turns)
   integer, intent(in) :: turns
 
   integer :: n
-  integer :: is, ie, js, je, nk
   integer :: num_fields
 
 

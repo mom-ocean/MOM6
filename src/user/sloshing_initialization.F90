@@ -78,7 +78,7 @@ subroutine sloshing_initialize_thickness ( h, depth_tot, G, GV, US, param_file, 
 # include "version_variable.h"
   character(len=40)  :: mdl = "sloshing_initialization" !< This module's name.
 
-  integer :: i, j, k, is, ie, js, je, nx, nz
+  integer :: i, j, k, is, ie, js, je, nz
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
@@ -189,7 +189,7 @@ subroutine sloshing_initialize_temperature_salinity ( T, S, h, G, GV, param_file
                                                       !! only read parameters without changing T & S.
 
   integer :: i, j, k, is, ie, js, je, nz
-  real    :: delta_S, delta_T
+  real    :: delta_T
   real    :: S_ref, T_ref;      ! Reference salinity and temerature within
                                 ! surface layer
   real    :: S_range, T_range;  ! Range of salinities and temperatures over the

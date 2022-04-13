@@ -434,8 +434,7 @@ subroutine initialize_ALE_sponge_varying(Iresttime, G, GV, param_file, CS, Irest
   logical :: use_sponge
   logical :: bndExtrapolation = .true. ! If true, extrapolate boundaries
   logical :: default_2018_answers
-  logical :: spongeDataOngrid = .false.
-  integer :: i, j, k, col, total_sponge_cols, total_sponge_cols_u, total_sponge_cols_v
+  integer :: i, j, col, total_sponge_cols, total_sponge_cols_u, total_sponge_cols_v
 
   if (associated(CS)) then
     call MOM_error(WARNING, "initialize_ALE_sponge_varying called with an associated "// &
@@ -628,7 +627,7 @@ subroutine set_up_ALE_sponge_field_fixed(sp_val, G, GV, f_ptr, CS)
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                    target, intent(in) :: f_ptr !< Pointer to the field to be damped
 
-  integer :: j, k, col
+  integer :: k, col
   character(len=256) :: mesg ! String for error messages
 
   if (.not.associated(CS)) return
@@ -670,19 +669,11 @@ subroutine set_up_ALE_sponge_field_varying(filename, fieldname, Time, G, GV, US,
   type(ALE_sponge_CS),     pointer    :: CS    !< Sponge control structure (in/out).
 
   ! Local variables
-  real, allocatable, dimension(:,:,:) :: sp_val !< Field to be used in the sponge
-  real, allocatable, dimension(:,:,:) :: mask_z !< Field mask for the sponge data
-  real, allocatable, dimension(:), target :: z_in, z_edges_in ! Heights [Z ~> m].
-  real :: missing_value
-  integer :: j, k, col
-  integer :: isd,ied,jsd,jed
-  integer :: nPoints
+  integer :: isd, ied, jsd, jed
   integer, dimension(4) :: fld_sz
   integer :: nz_data !< the number of vertical levels in this input field
   character(len=256) :: mesg ! String for error messages
   ! Local variables for ALE remapping
-  real :: zTopOfCell, zBottomOfCell ! Heights [Z ~> m].
-  type(remapping_CS) :: remapCS ! Remapping parameters and work arrays
 
   if (.not.associated(CS)) return
   ! initialize time interpolator module
@@ -731,8 +722,7 @@ subroutine set_up_ALE_sponge_vel_field_fixed(u_val, v_val, G, GV, u_ptr, v_ptr, 
   real, target, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), intent(in) :: u_ptr !< u-field to be damped [L T-1 ~> m s-1]
   real, target, dimension(SZI_(G),SZJB_(G),SZK_(GV)), intent(in) :: v_ptr !< v-field to be damped [L T-1 ~> m s-1]
 
-  integer :: j, k, col, fld_sz(4)
-  character(len=256) :: mesg ! String for error messages
+  integer :: k, col
 
   if (.not.associated(CS)) return
 
@@ -771,19 +761,10 @@ subroutine set_up_ALE_sponge_vel_field_varying(filename_u, fieldname_u, filename
   real, target, dimension(SZI_(G),SZJB_(G),SZK_(GV)), intent(in) :: v_ptr !< v-field to be damped [L T-1 ~> m s-1]
 
   ! Local variables
-  real, allocatable, dimension(:,:,:) :: u_val !< U field to be used in the sponge [L T-1 ~> m s-1].
-  real, allocatable, dimension(:,:,:) :: v_val !< V field to be used in the sponge [L T-1 ~> m s-1].
-
-  real, allocatable, dimension(:), target :: z_in, z_edges_in
-  real :: missing_value
   logical :: override
-
-  integer :: j, k, col
   integer :: isd, ied, jsd, jed
   integer :: isdB, iedB, jsdB, jedB
   integer, dimension(4) :: fld_sz
-  character(len=256) :: mesg ! String for error messages
-  integer :: tmp
   if (.not.associated(CS)) return
 
   override =.true.
@@ -838,7 +819,6 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
 
   real :: damp                                  ! The timestep times the local damping coefficient [nondim].
   real :: I1pdamp                               ! I1pdamp is 1/(1 + damp). [nondim].
-  real :: m_to_Z                                ! A unit conversion factor from m to Z.
   real, allocatable, dimension(:) :: tmp_val2   ! data values on the original grid
   real, dimension(SZK_(GV)) :: tmp_val1         ! data values remapped to model grid
   real, dimension(SZK_(GV)) :: h_col            ! A column of thicknesses at h, u or v points [H ~> m or kg m-2]
@@ -852,8 +832,7 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
   real, dimension(:), allocatable :: hsrc       ! Source thicknesses [Z ~> m].
   ! Local variables for ALE remapping
   real, dimension(:), allocatable :: tmpT1d
-  integer :: c, m, nkmb, i, j, k, is, ie, js, je, nz, nz_data
-  integer :: col, total_sponge_cols
+  integer :: c, m, i, j, k, is, ie, js, je, nz, nz_data
   real, allocatable, dimension(:), target :: z_in  ! The depths (positive downward) in the input file [Z ~> m]
   real, allocatable, dimension(:), target :: z_edges_in ! The depths (positive downward) of the
                                                         ! edges in the input file [Z ~> m]

@@ -58,8 +58,6 @@ subroutine dumbbell_buoyancy_forcing(sfc_state, fluxes, day, dt, G, US, CS)
   type(dumbbell_surface_forcing_CS),  pointer  :: CS     !< A control structure returned by a previous
                                                          !! call to dumbbell_surface_forcing_init
   ! Local variables
-  real :: Temp_restore   ! The temperature that is being restored toward [degC].
-  real :: Salin_restore  ! The salinity that is being restored toward [ppt].
   integer :: i, j, is, ie, js, je
   integer :: isd, ied, jsd, jed
 
@@ -182,7 +180,7 @@ subroutine dumbbell_surface_forcing_init(Time, G, US, param_file, diag, CS)
   ! Local variables
   real :: S_surf  ! Initial surface salinity [ppt]
   real :: S_range ! Range of the initial vertical distribution of salinity [ppt]
-  real :: x, y    ! Latitude and longitude normalized by the domain size [nondim]
+  real :: x       ! Latitude normalized by the domain size [nondim]
   integer :: i, j
   logical :: dbrotate    ! If true, rotate the domain.
 # include "version_variable.h"

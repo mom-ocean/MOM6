@@ -70,8 +70,7 @@ subroutine tidal_bay_set_OBC_data(OBC, CS, G, GV, US, h, Time)
   real :: PI
   real :: flux_scale  ! A scaling factor for the areas [m2 H-1 L-1 ~> nondim or m3 kg-1]
   real, allocatable :: my_area(:,:) ! The total OBC inflow area [m2]
-  character(len=40)  :: mdl = "tidal_bay_set_OBC_data" ! This subroutine's name.
-  integer :: i, j, k, itt, is, ie, js, je, isd, ied, jsd, jed, nz, n
+  integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz, n
   integer :: IsdB, IedB, JsdB, JedB
   type(OBC_segment_type), pointer :: segment => NULL()
 

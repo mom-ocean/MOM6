@@ -949,7 +949,6 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV, num_
   integer :: num_files                  ! The number of restart files that will be used.
   integer :: seconds, days, year, month, hour, minute
   character(len=8) :: hor_grid, z_grid, t_grid ! Variable grid info.
-  character(len=64) :: var_name         ! A variable's name.
   real :: conv                          ! Shorthand for the conversion factor
   real :: restart_time
   character(len=32) :: filename_appendix = '' ! Appendix to filename for ensemble runs
@@ -1131,17 +1130,12 @@ subroutine restore_state(filename, directory, day, G, CS)
   ! Local variables
   real :: scale  ! A scaling factor for reading a field
   real :: conv   ! The output conversion factor for writing a field
-  character(len=200) :: filepath  ! The path (dir/file) to the file being opened.
-  character(len=80) :: fname      ! The name of the current file.
-  character(len=8)  :: suffix     ! A suffix (like "_2") that is added to any
-                                  ! additional restart files.
   character(len=512) :: mesg      ! A message for warnings.
   character(len=80) :: varname    ! A variable's name.
   integer :: num_file        ! The number of files (restart files and others
                              ! explicitly in filename) that are open.
   integer :: i, n, m, missing_fields
-  integer :: isL, ieL, jsL, jeL, is0, js0
-  integer :: sizes(7)
+  integer :: isL, ieL, jsL, jeL
   integer :: nvar, ntime, pos
 
   type(file_type) :: IO_handles(CS%max_fields) ! The I/O units of all open files.

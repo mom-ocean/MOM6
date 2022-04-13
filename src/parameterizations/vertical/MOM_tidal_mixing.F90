@@ -1026,9 +1026,7 @@ subroutine add_int_tide_diffusivity(h, j, N2_bot, N2_lay, TKE_to_Kd, max_TKE, &
   real :: TKE_lowmode_tot ! TKE from all low modes [R Z3 T-3 ~> W m-2] (BDM)
 
   logical :: use_Polzin, use_Simmons
-  character(len=160) :: mesg  ! The text of an error message
   integer :: i, k, is, ie, nz
-  integer :: a, fr, m
 
   is = G%isc ; ie = G%iec ; nz = GV%ke
 

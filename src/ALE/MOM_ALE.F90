@@ -162,7 +162,6 @@ subroutine ALE_init( param_file, GV, US, max_depth, CS)
   type(ALE_CS),            pointer    :: CS         !< Module control structure
 
   ! Local variables
-  real, allocatable :: dz(:)
   character(len=40) :: mdl = "MOM_ALE" ! This module's name.
   character(len=80) :: string, vel_string ! Temporary strings
   real              :: filter_shallow_depth, filter_deep_depth
@@ -1427,7 +1426,7 @@ subroutine ALE_initThicknessToCoord( CS, G, GV, h )
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: h   !< layer thickness [H ~> m or kg m-2]
 
   ! Local variables
-  integer :: i, j, k
+  integer :: i, j
 
   do j = G%jsd,G%jed ; do i = G%isd,G%ied
     h(i,j,:) = GV%Z_to_H * getStaticThickness( CS%regridCS, 0., G%bathyT(i,j)+G%Z_ref )

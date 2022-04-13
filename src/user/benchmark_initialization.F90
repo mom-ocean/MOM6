@@ -238,7 +238,6 @@ subroutine benchmark_init_temperature_salinity(T, S, G, GV, US, param_file, &
   real :: rho_guess(SZK_(GV)) ! Potential density at T0 & S0 [R ~> kg m-3]
   real :: PI                 ! 3.1415926... calculated as 4*atan(1)
   real :: SST                !  The initial sea surface temperature [degC]
-  character(len=40)  :: mdl = "benchmark_init_temperature_salinity" ! This subroutine's name.
   integer :: i, j, k, k1, is, ie, js, je, nz, itt
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke

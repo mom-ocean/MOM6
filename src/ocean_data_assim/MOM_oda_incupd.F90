@@ -1,6 +1,6 @@
 !> This module contains the routines used to apply incremental updates
 !! from data assimilation.
-!!
+!
 !! Applying incremental updates requires the following:
 !! 1. initialize_oda_incupd_fixed and initialize_oda_incupd
 !! 2. set_up_oda_incupd_field (tracers) and set_up_oda_incupd_vel_field (vel)
@@ -137,7 +137,6 @@ subroutine initialize_oda_incupd( G, GV, US, param_file, CS, data_h, nz_data, re
   logical :: reset_ncount
   integer :: i, j, k
   real    :: nhours_incupd, dt, dt_therm
-  type(vardesc) :: vd
   character(len=256) :: mesg
   character(len=64)  :: remapScheme
   if (.not.associated(CS)) then
@@ -338,7 +337,6 @@ subroutine calc_oda_increments(h, tv, u, v, G, GV, US, CS)
   integer :: isB, ieB, jsB, jeB
   real :: h_neglect, h_neglect_edge  ! Negligible thicknesses [H ~> m or kg m-2]
   real :: sum_h1, sum_h2 ! vertical sums of h's [H ~> m or kg m-2]
-  character(len=256) :: mesg
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   isB = G%iscB ; ieB = G%iecB ; jsB = G%jscB ; jeB = G%jecB
@@ -523,7 +521,6 @@ subroutine apply_oda_incupd(h, tv, u, v, dt, G, GV, US, CS)
   type(oda_incupd_CS),       pointer       :: CS !< A pointer to the control structure for this module
                                                  !! that is set by a previous call to initialize_oda_incupd (in).
 
-  real :: m_to_Z                                ! A unit conversion factor from m to Z.
   real, allocatable, dimension(:) :: tmp_val2   ! data values on the increment grid
   real, dimension(SZK_(GV)) :: tmp_val1         ! data values remapped to model grid
   real, dimension(SZK_(GV)) :: hu, hv           ! A column of thicknesses at u or v points [H ~> m or kg m-2]

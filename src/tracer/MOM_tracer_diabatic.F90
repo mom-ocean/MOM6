@@ -465,7 +465,7 @@ subroutine applyTracerBoundaryFluxesInOut(G, GV, Tr, dt, fluxes, h, evap_CFL_lim
   real :: hGrounding(maxGroundings) ! The remaining fresh water flux that was not able to be
                                ! supplied from a column that grounded out [H ~> m or kg m-2]
   logical :: update_h
-  integer :: i, j, is, ie, js, je, k, nz, n, nsw
+  integer :: i, j, is, ie, js, je, k, nz
   character(len=45) :: mesg
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke

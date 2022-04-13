@@ -393,7 +393,6 @@ subroutine Calc_kappa_shear_vertex(u_in, v_in, h, T_in, S_in, tv, p_surf, kappa_
   real :: I_Prandtl     ! The inverse of the turbulent Prandtl number [nondim].
   logical :: use_temperature  !  If true, temperature and salinity have been
                         ! allocated and are being used as state variables.
-  logical :: do_i       ! If true, work on this column.
 
   integer, dimension(SZK_(GV)+1) :: kc ! The index map between the original
                         ! interfaces and the interfaces with massless layers
@@ -704,9 +703,6 @@ subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, dz, &
   logical :: use_temperature  !  If true, temperature and salinity have been
                         ! allocated and are being used as state variables.
   integer :: ks_kappa, ke_kappa  ! The k-range with nonzero kappas.
-  integer :: dt_halvings   ! The number of times that the time-step is halved
-                           ! in seeking an acceptable timestep.  If none is
-                           ! found, dt_rem*0.5^dt_halvings is used.
   integer :: dt_refinements ! The number of 2-fold refinements that will be used
                            ! to estimate the maximum permitted time step.  I.e.,
                            ! the resolution is 1/2^dt_refinements.
@@ -1269,7 +1265,7 @@ subroutine find_kappa_tke(N2, S2, kappa_in, Idz, dz_Int, I_L2_bdry, f2, &
 
   ! These variables are used only for debugging.
   logical, parameter :: debug_soln = .false.
-  real :: K_err_lin, Q_err_lin, TKE_src_norm
+  real :: K_err_lin, Q_err_lin
   real, dimension(nz+1) :: &
     I_Ld2_debug, & ! A separate version of I_Ld2 for debugging [Z-2 ~> m-2].
     kappa_prev, & ! The value of kappa at the start of the current iteration [Z2 T-1 ~> m2 s-1].

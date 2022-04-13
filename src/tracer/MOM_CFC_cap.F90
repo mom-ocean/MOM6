@@ -88,7 +88,7 @@ function register_CFC_cap(HI, GV, param_file, CS, tr_Reg, restart_CS)
   real, dimension(:,:,:), pointer :: tr_ptr => NULL()
   character(len=200) :: dummy      ! Dummy variable to store params that need to be logged here.
   logical :: register_CFC_cap
-  integer :: isd, ied, jsd, jed, nz, m
+  integer :: isd, ied, jsd, jed, nz
 
   isd = HI%isd ; ied = HI%ied ; jsd = HI%jsd ; jed = HI%jed ; nz = GV%ke
 
@@ -192,9 +192,6 @@ subroutine initialize_CFC_cap(restart, day, G, GV, US, h, diag, OBC, CS)
                                                            !! open boundary conditions are used.
   type(CFC_cap_CS),              pointer    :: CS          !< The control structure returned by a
                                                            !! previous call to register_CFC_cap.
-
-  ! local variables
-  logical :: from_file = .false.
 
   if (.not.associated(CS)) return
 
@@ -307,7 +304,7 @@ subroutine CFC_cap_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, US, C
 
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: h_work ! Used so that h can be modified [H ~> m or kg m-2]
-  integer :: i, j, k, m, is, ie, js, je, nz
+  integer :: i, j, k, is, ie, js, je, nz
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
@@ -434,7 +431,7 @@ subroutine CFC_cap_fluxes(fluxes, sfc_state, G, US, Rho0, Time, id_cfc11_atm, id
   real :: kw_coeff     ! A coefficient used to compute the piston velocity [Z T-1 T2 L-2 = Z T L-2 ~> s / m]
   real, parameter :: pa_to_atm = 9.8692316931427e-6 ! factor for converting from Pa to atm [atm Pa-1].
   real :: press_to_atm ! converts from model pressure units to atm [atm T2 R-1 L-2 ~> atm Pa-1]
-  integer :: i, j, m, is, ie, js, je
+  integer :: i, j, is, ie, js, je
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
 
@@ -577,8 +574,6 @@ end subroutine comp_CFC_schmidt
 subroutine CFC_cap_end(CS)
   type(CFC_cap_CS), pointer :: CS !< The control structure returned by a
                                   !! previous call to register_CFC_cap.
-  ! local variables
-  integer :: m
 
   if (associated(CS)) then
     if (associated(CS%CFC11)) deallocate(CS%CFC11)

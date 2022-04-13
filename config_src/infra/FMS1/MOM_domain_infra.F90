@@ -241,8 +241,8 @@ subroutine pass_var_2d(array, MOM_dom, sideflag, complete, position, halo, inner
   ! Local variables
   real, allocatable, dimension(:,:) :: tmp
   integer :: pos, i_halo, j_halo
-  integer :: isc, iec, jsc, jec, isd, ied, jsd, jed, IscB, IecB, JscB, JecB
-  integer :: inner, i, j, isfw, iefw, isfe, iefe, jsfs, jefs, jsfn, jefn
+  integer :: isc, iec, jsc, jec, isd, ied, jsd, jed
+  integer :: i, j, isfw, iefw, isfe, iefe, jsfs, jefs, jsfn, jefn
   integer :: dirflag
   logical :: block_til_complete
 
@@ -593,7 +593,6 @@ subroutine fill_vector_symmetric_edges_2d(u_cmpt, v_cmpt, MOM_dom, stagger, scal
   integer :: dirflag
   integer :: i, j, isc, iec, jsc, jec, isd, ied, jsd, jed, IscB, IecB, JscB, JecB
   real, allocatable, dimension(:) :: sbuff_x, sbuff_y, wbuff_x, wbuff_y
-  logical :: block_til_complete
 
   if (.not. MOM_dom%symmetric) then
       return
@@ -1328,10 +1327,8 @@ subroutine create_MOM_domain(MOM_dom, n_global, n_halo, reentrant, tripolar_N, l
                                                       !! nonblocking halo updates, or false if missing.
 
   ! local variables
-  integer, dimension(4) :: global_indices ! The lower and upper global i- and j-index bounds
   integer :: X_FLAGS  ! A combination of integers encoding the x-direction grid connectivity.
   integer :: Y_FLAGS  ! A combination of integers encoding the y-direction grid connectivity.
-  integer :: xhalo_d2, yhalo_d2
   character(len=200) :: mesg    ! A string for use in error messages
   logical :: mask_table_exists  ! Mask_table is present and the file it points to exists
 
@@ -1516,7 +1513,6 @@ subroutine clone_MD_to_MD(MD_in, MOM_dom, min_halo, halo_size, symmetric, domain
   integer, optional, intent(in) :: extra_halo !< An extra number of points in the halos
                                   !! compared with MD_in
 
-  integer :: global_indices(4)
   logical :: mask_table_exists
   integer, dimension(:), allocatable :: exni ! The extents of the grid for each i-row of the layout.
                                              ! The sum of exni must equal MOM_dom%niglobal.
@@ -1819,7 +1815,7 @@ subroutine get_domain_extent_d2D(Domain, isc, iec, jsc, jec, isd, ied, jsd, jed)
   integer, optional, intent(out) :: jed    !< The end j-index of the data domain
 
   ! Local variables
-  integer :: isd_, ied_, jsd_, jed_, jsg_, jeg_, isg_, ieg_
+  integer :: isd_, ied_, jsd_, jed_
 
   call mpp_get_compute_domain(Domain, isc, iec, jsc, jec)
   call mpp_get_data_domain(Domain, isd_, ied_, jsd_, jed_)

@@ -607,7 +607,7 @@ subroutine set_pen_shortwave(optics, fluxes, G, GV, US, CS, opacity, tracer_flow
   real, dimension(SZI_(G),SZJ_(G))          :: chl_2d !< Vertically uniform chlorophyll-A concentractions [mg m-3]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: chl_3d !< The chlorophyll-A concentractions of each layer [mg m-3]
   character(len=128) :: mesg
-  integer :: i, j, k, is, ie, js, je
+  integer :: i, j, is, ie, js, je
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
 
   if (.not.associated(optics)) return
@@ -820,7 +820,6 @@ subroutine diagnoseMLDbyEnergy(id_MLD, h, tv, G, GV, US, Mixing_Energy, diagPtr)
   real, dimension(SZK_(GV)) :: Z_L, Z_U, dZ, Rho_c, pRef_MLD
   real, dimension(3) :: PE_threshold
 
-  real :: ig, E_g
   real :: PE_Threshold_fraction, PE, PE_Mixed, PE_Mixed_TST
   real :: RhoDZ_ML, H_ML, RhoDZ_ML_TST, H_ML_TST
   real :: Rho_ML
@@ -1078,7 +1077,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
   logical :: calculate_energetics
   logical :: calculate_buoyancy
   integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state
-  integer :: i, j, is, ie, js, je, k, nz, n, nb
+  integer :: i, j, is, ie, js, je, k, nz, nb
   character(len=45) :: mesg
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
@@ -1558,14 +1557,13 @@ subroutine diabatic_aux_init(Time, G, GV, US, param_file, diag, CS, useALEalgori
 ! This "include" declares and sets the variable "version".
 #include "version_variable.h"
   character(len=40)  :: mdl  = "MOM_diabatic_aux" ! This module's name.
-  character(len=48)  :: thickness_units
   character(len=200) :: inputdir   ! The directory where NetCDF input files
   character(len=240) :: chl_filename ! A file from which chl_a concentrations are to be read.
   character(len=128) :: chl_file ! Data containing chl_a concentrations. Used
                                  ! when var_pen_sw is defined and reading from file.
   character(len=32)  :: chl_varname ! Name of chl_a variable in chl_file.
   logical :: use_temperature     ! True if thermodynamics are enabled.
-  integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, nz, nbands
+  integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, nz
   isd  = G%isd  ; ied  = G%ied  ; jsd  = G%jsd  ; jed  = G%jed ; nz = GV%ke
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 

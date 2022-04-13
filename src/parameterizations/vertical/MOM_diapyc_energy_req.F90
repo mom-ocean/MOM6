@@ -70,7 +70,7 @@ subroutine diapyc_energy_req_test(h_3d, dt, tv, G, GV, US, CS, Kd_int)
   real :: ustar, absf, htot
   real :: energy_Kd ! The energy used by diapycnal mixing [R Z L2 T-3 ~> W m-2].
   real :: tmp1  ! A temporary array.
-  integer :: i, j, k, is, ie, js, je, nz, itt
+  integer :: i, j, k, is, ie, js, je, nz
   logical :: may_print
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
@@ -159,8 +159,6 @@ subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, &
     Te_b, Se_b, & ! Running incomplete estimates of the new temperatures and salinities [degC] and [ppt].
     Tf, Sf, &   ! New final values of the temperatures and salinities [degC] and [ppt].
     dTe, dSe, & ! Running (1-way) estimates of temperature and salinity change [degC] and [ppt].
-    dTe_a, dSe_a, & ! Running (1-way) estimates of temperature and salinity change [degC] and [ppt].
-    dTe_b, dSe_b, & ! Running (1-way) estimates of temperature and salinity change [degC] and [ppt].
     Th_a, &     ! An effective temperature times a thickness in the layer above, including implicit
                 ! mixing effects with other yet higher layers [degC H ~> degC m or degC kg m-2].
     Sh_a, &     ! An effective salinity times a thickness in the layer above, including implicit
@@ -218,10 +216,7 @@ subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, &
                     ! accumulating the diffusivities [R Z L2 T-2 ~> J m-2].
     ColHt_cor_k     ! The correction to the potential energy change due to
                     ! changes in the net column height [R Z L2 T-2 ~> J m-2].
-  real :: &
-    b1              ! b1 is used by the tridiagonal solver [H-1 ~> m-1 or m2 kg-1].
-  real :: &
-    I_b1            ! The inverse of b1 [H ~> m or kg m-2].
+  real :: b1        ! b1 is used by the tridiagonal solver [H-1 ~> m-1 or m2 kg-1].
   real :: Kd0       ! The value of Kddt_h that has already been applied [H ~> m or kg m-2].
   real :: dKd       ! The change in the value of Kddt_h [H ~> m or kg m-2].
   real :: h_neglect ! A thickness that is so small it is usually lost
@@ -233,10 +228,6 @@ subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, &
   real :: Kddt_h_guess ! A guess of the final value of Kddt_h [H ~> m or kg m-2].
   real :: dMass     ! The mass per unit area within a layer [R Z ~> kg m-2].
   real :: dPres     ! The hydrostatic pressure change across a layer [R L2 T-2 ~> Pa].
-  real :: dMKE_max  ! The maximum amount of mean kinetic energy that could be
-                    ! converted to turbulent kinetic energy if the velocity in
-                    ! the layer below an interface were homogenized with all of
-                    ! the water above the interface [R Z L2 T-2 ~> J m-2 = kg s-2].
   real :: rho_here  ! The in-situ density [R ~> kg m-3].
   real :: PE_change ! The change in column potential energy from applying Kddt_h at the
                     ! present interface [R L2 Z T-2 ~> J m-2].
@@ -259,9 +250,8 @@ subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, &
   real :: PE_chg_tot1D, PE_chg_tot2D, T_chg_totD
   real, dimension(GV%ke+1)  :: dPEchg_dKd
   real :: PE_chg(6)
-  real, dimension(6) :: dT_k_itt, dS_k_itt, dT_km1_itt, dS_km1_itt
 
-  integer :: k, nz, itt, max_itt, k_cent
+  integer :: k, nz, itt, k_cent
   logical :: surface_BL, bottom_BL, central, halves, debug
   logical :: old_PE_calc
   nz = GV%ke
@@ -1281,11 +1271,9 @@ subroutine diapyc_energy_req_init(Time, G, GV, US, param_file, diag, CS)
   type(diag_ctrl),    target, intent(inout) :: diag        !< structure to regulate diagnostic output
   type(diapyc_energy_req_CS), pointer       :: CS          !< module control structure
 
-  integer, save :: init_calls = 0
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
   character(len=40)  :: mdl = "MOM_diapyc_energy_req" ! This module's name.
-  character(len=256) :: mesg    ! Message for error messages.
 
   if (.not.associated(CS)) then ; allocate(CS)
   else ; return ; endif

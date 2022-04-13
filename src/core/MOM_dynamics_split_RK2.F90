@@ -997,7 +997,6 @@ subroutine register_restarts_dyn_split_RK2(HI, GV, US, param_file, CS, restart_C
                          target, intent(inout) :: vh !< merid volume or mass transport [H L2 T-1 ~> m3 s-1 or kg s-1]
 
   type(vardesc)      :: vd(2)
-  character(len=40)  :: mdl = "MOM_dynamics_split_RK2" ! This module's name.
   character(len=48)  :: thickness_units, flux_units
 
   integer :: isd, ied, jsd, jed, nz, IsdB, IedB, JsdB, JedB

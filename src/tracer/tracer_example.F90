@@ -160,10 +160,6 @@ subroutine USER_initialize_tracer(restart, day, G, GV, US, h, diag, OBC, CS, &
 ! Local variables
   real, allocatable :: temp(:,:,:)
   character(len=32) :: name     ! A variable's name in a NetCDF file.
-  character(len=72) :: longname ! The long name of that variable.
-  character(len=48) :: units    ! The dimensions of the variable.
-  character(len=48) :: flux_units ! The units for tracer fluxes, usually
-                            ! kg(tracer) kg(water)-1 m3 s-1 or kg(tracer) s-1.
   real, pointer :: tr_ptr(:,:,:) => NULL()
   real :: PI     ! 3.1415926... calculated as 4*atan(1)
   real :: tr_y   ! Initial zonally uniform tracer concentrations.
@@ -249,7 +245,8 @@ subroutine USER_initialize_tracer(restart, day, G, GV, US, h, diag, OBC, CS, &
     endif
     ! All tracers but the first have 0 concentration in their inflows. As this
     ! is the default value, the following calls are unnecessary.
-    do m=2,lntr
+    !do m=2,lntr
+    do m=2,ntr
       call query_vardesc(CS%tr_desc(m), name, caller="USER_initialize_tracer")
       ! Steal from updated DOME in the fullness of time.
     enddo
@@ -435,7 +432,6 @@ end subroutine USER_tracer_surface_state
 subroutine USER_tracer_example_end(CS)
   type(USER_tracer_example_CS), pointer :: CS !< The control structure returned by a previous
                                               !! call to register_USER_tracer.
-  integer :: m
 
   if (associated(CS)) then
     if (associated(CS%tr)) deallocate(CS%tr)

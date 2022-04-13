@@ -907,7 +907,6 @@ subroutine find_N2(h, tv, T_f, S_f, fluxes, j, G, GV, US, CS, dRho_int, &
     hb,        &  ! The thickness of the bottom layer [Z ~> m].
     z_from_bot    ! The hieght above the bottom [Z ~> m].
 
-  real :: Rml_base  ! density of the deepest variable density layer
   real :: dz_int    ! thickness associated with an interface [Z ~> m].
   real :: G_Rho0    ! gravitation acceleration divided by Bouss reference density
                     ! times some unit conversion factors [Z T-2 R-1 ~> m4 s-2 kg-1].
@@ -1984,7 +1983,7 @@ subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, int_tide_
   logical :: use_regridding  ! If true, use the ALE algorithm rather than layered
                              ! isopycnal or stacked shallow water mode.
   logical :: TKE_to_Kd_used  ! If true, TKE_to_Kd and maxTKE need to be calculated.
-  integer :: i, j, is, ie, js, je
+  integer :: is, ie, js, je
   integer :: isd, ied, jsd, jed
 
   if (associated(CS)) then

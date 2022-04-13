@@ -58,10 +58,8 @@ logical function register_nw2_tracers(HI, GV, US, param_file, CS, tr_Reg, restar
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
   character(len=40)  :: mdl = "nw2_tracers" ! This module's name.
-  character(len=200) :: inputdir ! The directory where the input files are.
   character(len=8)  :: var_name ! The variable's name.
   real, pointer :: tr_ptr(:,:,:) => NULL()
-  logical :: do_nw2
   integer :: isd, ied, jsd, jed, nz, m, ig
   integer :: n_groups ! Number of groups of three tracers (i.e. # tracers/3)
   real, allocatable, dimension(:) :: timescale_in_days ! Damping timescale [days]
@@ -300,8 +298,6 @@ end function nw2_tracer_dist
 subroutine nw2_tracers_end(CS)
   type(nw2_tracers_CS), pointer :: CS !< The control structure returned by a previous
                                       !! call to register_nw2_tracers.
-
-  integer :: m
 
   if (associated(CS)) then
     if (associated(CS%tr)) deallocate(CS%tr)

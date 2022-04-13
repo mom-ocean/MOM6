@@ -1925,17 +1925,16 @@ subroutine set_visc_init(Time, G, GV, US, param_file, diag, visc, CS, restart_CS
                            ! to the representation in a restart file.
   real    :: Z2_T_rescale  ! A rescaling factor for vertical diffusivities and viscosities from the
                            ! representation in a restart file to the internal representation in this run.
-  integer :: i, j, k, is, ie, js, je, n
+  integer :: i, j, k, is, ie, js, je
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, nz
   logical :: default_2018_answers
-  logical :: use_kappa_shear, adiabatic, use_omega, MLE_use_PBL_MLD
+  logical :: adiabatic, use_omega, MLE_use_PBL_MLD
   logical :: use_KPP
   logical :: use_regridding  ! If true, use the ALE algorithm rather than layered
                              ! isopycnal or stacked shallow water mode.
   logical :: use_temperature ! If true, temperature and salinity are used as state variables.
   logical :: use_EOS         ! If true, density calculated from T & S using an equation of state.
   character(len=200) :: filename, tideamp_file
-  type(OBC_segment_type), pointer :: segment => NULL() ! pointer to OBC segment type
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
   character(len=40)  :: mdl = "MOM_set_visc"  ! This module's name.

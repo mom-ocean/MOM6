@@ -103,7 +103,7 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, mono_
     Rc, &         ! A column of layer densities after convective istabilities are removed [R ~> kg m-3]
     Hc_H          ! Hc(:) rescaled from Z to thickness units [H ~> m or kg m-2]
   real :: I_Htot  ! The inverse of the total filtered thicknesses [Z ~> m]
-  real :: det, ddet, detKm1, detKm2, ddetKm1, ddetKm2
+  real :: det, ddet
   real :: lam     ! The eigenvalue [T2 L-2 ~> s2 m-2]
   real :: dlam    ! The change in estimates of the eigenvalue [T2 L-2 ~> s2 m-2]
   real :: lam0    ! The first guess of the eigenvalue [T2 L-2 ~> s2 m-2]
@@ -207,7 +207,7 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, mono_
 !$OMP                                  Rc,speed2_tot,Igl,Igu,lam0,lam,lam_it,dlam, &
 !$OMP                                  mode_struct,sum_hc,N2min,gp,hw,                 &
 !$OMP                                  ms_min,ms_max,ms_sq,H_top,H_bot,I_Htot,merge,   &
-!$OMP                                  det,ddet,detKm1,ddetKm1,detKm2,ddetKm2,det_it,ddet_it)
+!$OMP                                  det,ddet,det_it,ddet_it)
   do j=js,je
     !   First merge very thin layers with the one above (or below if they are
     ! at the top).  This also transposes the row order so that columns can
@@ -722,7 +722,7 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, full_halos)
   logical :: sub_rootfound ! if true, subdivision has located root
   integer :: kc         ! The number of layers in the column after merging
   integer :: sub, sub_it
-  integer :: i, j, k, k2, itt, is, ie, js, je, nz, row, iint, m, ig, jg
+  integer :: i, j, k, k2, itt, is, ie, js, je, nz, iint, m
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 

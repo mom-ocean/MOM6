@@ -409,8 +409,6 @@ subroutine CT_set_data(array_in, bc_index, field_index, var, &
                                                          !! the second dimension of the output array
                                                          !! in a non-decreasing list
 
-  integer :: subfield ! An integer indicating which field to set.
-
   call coupler_type_set_data(array_in, bc_index, field_index, var, scale_factor, halo_size, idim, jdim)
 
 end subroutine CT_set_data

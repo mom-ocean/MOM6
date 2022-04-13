@@ -1985,8 +1985,8 @@ subroutine fluxes_accumulate(flux_tmp, fluxes, G, wt2, forces)
   ! applied based on the time interval stored in flux_tmp.
 
   real :: wt1  ! The relative weight of the previous fluxes [nondim]
-  integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq, i0, j0
-  integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, isr, ier, jsr, jer
+  integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq
+  integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
   is   = G%isc   ; ie   = G%iec    ; js   = G%jsc   ; je   = G%jec
   Isq  = G%IscB  ; Ieq  = G%IecB   ; Jsq  = G%JscB  ; Jeq  = G%JecB
   isd  = G%isd   ; ied  = G%ied    ; jsd  = G%jsd   ; jed  = G%jed
@@ -2284,7 +2284,7 @@ subroutine mech_forcing_diags(forces_in, dt, G, time_end, diag, handles)
   type(diag_ctrl),       intent(inout) :: diag     !< diagnostic type
   type(forcing_diags),   intent(inout) :: handles  !< diagnostic id for diag_manager
 
-  integer :: i,j,is,ie,js,je
+  integer :: is, ie, js, je
 
   type(mech_forcing), pointer :: forces
   integer :: turns
@@ -2958,7 +2958,6 @@ subroutine allocate_forcing_by_group(G, fluxes, water, heat, ustar, press, &
 
   ! Local variables
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
-  logical :: heat_water
   logical :: shelf_sfc_acc
 
   isd  = G%isd   ; ied  = G%ied    ; jsd  = G%jsd   ; jed  = G%jed
@@ -3096,7 +3095,6 @@ subroutine allocate_mech_forcing_by_group(G, forces, stress, ustar, shelf, &
 
   ! Local variables
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
-  logical :: heat_water
 
   isd  = G%isd   ; ied  = G%ied    ; jsd  = G%jsd   ; jed  = G%jed
   IsdB = G%IsdB  ; IedB = G%IedB   ; JsdB = G%JsdB  ; JedB = G%JedB
@@ -3565,12 +3563,8 @@ subroutine homogenize_forcing(fluxes, G, GV, US)
   type(verticalGrid_type), intent(in)    :: GV     !< ocean vertical grid structure
   type(unit_scale_type),   intent(in)    :: US     !< A dimensional unit scaling type
 
-  real :: avg   ! Global average of a variable, in the same units as that variable
   logical :: do_ustar, do_water, do_heat, do_salt, do_press, do_shelf, &
       do_iceberg, do_heat_added, do_buoy
-  integer :: i, j, is, ie, js, je, isB, ieB, jsB, jeB
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
-  isB = G%iscB ; ieB = G%iecB ; jsB = G%jscB ; jeB = G%jecB
 
   call get_forcing_groups(fluxes, do_water, do_heat, do_ustar, do_press, &
       do_shelf, do_iceberg, do_salt, do_heat_added, do_buoy)

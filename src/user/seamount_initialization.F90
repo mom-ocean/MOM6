@@ -201,7 +201,7 @@ subroutine seamount_initialize_temperature_salinity(T, S, h, G, GV, param_file, 
 
   ! Local variables
   integer :: i, j, k, is, ie, js, je, nz, k_light
-  real    :: xi0, xi1, dxi, r, S_surf, T_surf, S_range, T_range
+  real    :: xi0, xi1, r, S_surf, T_surf, S_range, T_range
   real    :: T_ref, T_Light, T_Dense, S_ref, S_Light, S_Dense, a1, frac_dense, k_frac, res_rat
   character(len=20) :: verticalCoordinate, density_profile
 

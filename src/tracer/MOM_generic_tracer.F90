@@ -109,7 +109,7 @@ contains
     character(len=200) :: inputdir ! The directory where NetCDF input files are.
     ! These can be overridden later in via the field manager?
 
-    integer :: ntau, k,i,j,axes(3)
+    integer :: ntau, axes(3)
     type(g_tracer_type), pointer      :: g_tracer,g_tracer_next
     character(len=fm_string_len)      :: g_tracer_name,longname,units
     real, dimension(:,:,:,:), pointer   :: tr_field
@@ -657,7 +657,7 @@ contains
     real, dimension(:,:,:),pointer :: grid_tmask
     integer :: isc,iec,jsc,jec,isd,ied,jsd,jed,nk,ntau
 
-    integer :: i, j, k, is, ie, js, je, m
+    integer :: k, is, ie, js, je, m
     real, allocatable, dimension(:) :: geo_z
 
     is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
@@ -747,7 +747,6 @@ contains
     real    :: tmax, tmin   ! Maximum and minimum tracer values, in the same units as tr_array
     real    :: tmax0, tmin0 ! First-guest values of tmax and tmin.
     integer :: itmax, jtmax, ktmax, itmin, jtmin, ktmin
-    integer :: igmax, jgmax, kgmax, igmin, jgmin, kgmin
     real    :: fudge ! A factor that is close to 1 that is used to find the location of the extrema.
 
      ! arrays to enable vectorization
@@ -851,7 +850,6 @@ contains
     character(len=128), parameter :: sub_name = 'MOM_generic_tracer_surface_state'
     real, dimension(G%isd:G%ied,G%jsd:G%jed,1:GV%ke,1) :: rho0
     real, dimension(G%isd:G%ied,G%jsd:G%jed,1:GV%ke) ::  dzt
-    type(g_tracer_type), pointer :: g_tracer
 
     !Set coupler values
     !nnz: fake rho0
@@ -884,9 +882,6 @@ contains
   subroutine MOM_generic_flux_init(verbosity)
     integer, optional, intent(in) :: verbosity  !< A 0-9 integer indicating a level of verbosity.
 
-    integer :: ind
-    character(len=fm_string_len)   :: g_tracer_name,longname, package,units,old_package,file_in,file_out
-    real :: const_init_value
     character(len=128), parameter :: sub_name = 'MOM_generic_flux_init'
     type(g_tracer_type), pointer :: g_tracer_list,g_tracer,g_tracer_next
 

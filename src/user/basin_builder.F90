@@ -218,7 +218,6 @@ real function dist_line_fixed_y(x, y, x0, x1, y0)
   real, intent(in) :: x0      !< x-position of line segment end[nondim]
   real, intent(in) :: x1      !< x-position of line segment end[nondim]
   real, intent(in) :: y0      !< y-position of line segment [nondim]
-  real :: dx, yr, dy
 
   dist_line_fixed_y = dist_line_fixed_x(y, x, y0, x0, x1)
 end function dist_line_fixed_y

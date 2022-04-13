@@ -78,7 +78,6 @@ function register_dye_tracer(HI, GV, US, param_file, CS, tr_Reg, restart_CS)
 
   ! Local variables
   character(len=40)  :: mdl = "regional_dyes" ! This module's name.
-  character(len=200) :: inputdir ! The directory where the input files are.
   character(len=48)  :: var_name ! The variable's name.
   character(len=48)  :: desc_name ! The variable's descriptor.
   ! This include declares and sets the variable "version".
@@ -200,14 +199,8 @@ subroutine initialize_dye_tracer(restart, day, G, GV, h, diag, OBC, CS, sponge_C
                                                                   !! for the sponges, if they are in use.
 
 ! Local variables
-  character(len=24) :: name     ! A variable's name in a NetCDF file.
-  character(len=72) :: longname ! The long name of that variable.
-  character(len=48) :: units    ! The dimensions of the variable.
-  character(len=48) :: flux_units ! The units for age tracer fluxes, either
-                                ! years m3 s-1 or years kg s-1.
   real    :: z_bot    ! Height of the bottom of the layer relative to the sea surface [Z ~> m]
   real    :: z_center ! Height of the center of the layer relative to the sea surface [Z ~> m]
-  logical :: OK
   integer :: i, j, k, m
 
   if (.not.associated(CS)) return
@@ -273,12 +266,8 @@ subroutine dye_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, US
 
 ! Local variables
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: h_work ! Used so that h can be modified
-  real :: sfc_val  ! The surface value for the tracers.
-  real :: Isecs_per_year  ! The number of seconds in a year.
-  real :: year            ! The time in years.
   real    :: z_bot    ! Height of the bottom of the layer relative to the sea surface [Z ~> m]
   real    :: z_center ! Height of the center of the layer relative to the sea surface [Z ~> m]
-  integer :: secs, days   ! Integer components of the time type.
   integer :: i, j, k, is, ie, js, je, nz, m
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
@@ -402,7 +391,6 @@ end subroutine dye_tracer_surface_state
 subroutine regional_dyes_end(CS)
   type(dye_tracer_CS), pointer :: CS !< The control structure returned by a previous
                                      !! call to register_dye_tracer.
-  integer :: m
 
   if (associated(CS)) then
     if (associated(CS%tr)) deallocate(CS%tr)

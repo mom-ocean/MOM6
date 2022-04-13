@@ -145,12 +145,11 @@ subroutine ISOMIP_initialize_thickness ( h, depth_tot, G, GV, US, param_file, tv
                           !  usually negative because it is positive upward.
   real :: eta1D(SZK_(GV)+1) ! Interface height relative to the sea surface
                             ! positive upward, in depth units [Z ~> m].
-  integer :: i, j, k, is, ie, js, je, nz, tmp1
-  real    :: x
+  integer :: i, j, k, is, ie, js, je, nz
   real    :: min_thickness, s_sur, s_bot, t_sur, t_bot
   real    :: rho_sur, rho_bot  ! Surface and bottom densities [R ~> kg m-3]
   real    :: rho_range    ! The range of densities [R ~> kg m-3]
-  character(len=256) :: mesg  ! The text of an error message
+  !character(len=256) :: mesg  ! The text of an error message
   character(len=40) :: verticalCoordinate
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
@@ -260,17 +259,15 @@ subroutine ISOMIP_initialize_temperature_salinity ( T, S, h, depth_tot, G, GV, U
                                                       !! only read parameters without changing T & S.
   ! Local variables
   integer   :: i, j, k, is, ie, js, je, nz, itt
-  real      :: x, ds, dt
   real      :: rho_sur, rho_bot  ! Surface and bottom densities [R ~> kg m-3]
   real      :: xi0, xi1 ! Heights in depth units [Z ~> m].
   real      :: S_sur, S_bot ! Salinity at the surface and bottom [ppt]
   real      :: T_sur, T_bot ! Temperature at the bottom [degC]
   real      :: dT_dz  ! Vertical gradient of temperature [degC Z-1 ~> degC m-1].
   real      :: dS_dz  ! Vertical gradient of salinity [ppt Z-1 ~> ppt m-1].
-  real      :: z            ! vertical position in z space [Z ~> m]
-  character(len=256) :: mesg ! The text of an error message
-  character(len=40) :: verticalCoordinate, density_profile
-  real :: rho_tmp
+  !character(len=256) :: mesg ! The text of an error message
+  character(len=40) :: verticalCoordinate
+  !real :: rho_tmp
   logical :: fit_salin       ! If true, accept the prescribed temperature and fit the salinity.
   real :: T0(SZK_(GV))       ! A profile of temperatures [degC]
   real :: S0(SZK_(GV))       ! A profile of salinities [ppt]
@@ -450,8 +447,9 @@ subroutine ISOMIP_initialize_sponges(G, GV, US, tv, depth_tot, PF, use_ALE, CSp,
                                     ! negative because it is positive upward.
   real :: eta1D(SZK_(GV)+1)         ! Interface height relative to the sea surface, positive upward [Z ~> m].
   real :: eta(SZI_(G),SZJ_(G),SZK_(GV)+1) ! A temporary array for interface heights [Z ~> m].
-  real :: min_depth, dummy1, z
-  real :: rho_dummy, min_thickness, rho_tmp, xi0
+  real :: min_depth, dummy1
+  real :: min_thickness, xi0
+  !real :: rho_tmp
   character(len=40) :: verticalCoordinate, filename, state_file
   character(len=40) :: temp_var, salt_var, eta_var, inputdir
 

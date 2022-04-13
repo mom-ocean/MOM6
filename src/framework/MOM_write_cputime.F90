@@ -138,7 +138,6 @@ subroutine write_cputime(day, n, CS, nmax, call_end)
                            ! this subroutine.
   integer :: new_cputime   ! The CPU time returned by SYSTEM_CLOCK
   real    :: reday         ! A real version of day.
-  character(len=256) :: mesg  ! The text of an error message
   integer :: start_of_day, num_days
 
   if (.not.associated(CS)) call MOM_error(FATAL, &
