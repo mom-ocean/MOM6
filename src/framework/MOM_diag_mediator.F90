@@ -41,7 +41,6 @@ implicit none ; private
 public set_axes_info, post_data, register_diag_field, time_type
 public post_product_u, post_product_sum_u, post_product_v, post_product_sum_v
 public set_masks_for_axes
-public post_data_1d_k
 public safe_alloc_ptr, safe_alloc_alloc
 public enable_averaging, enable_averages, disable_averaging, query_averaging_enabled
 public diag_mediator_init, diag_mediator_end, set_diag_mediator_grid
@@ -3732,7 +3731,7 @@ subroutine log_available_diag(used, module_name, field_name, cell_methods_string
     mesg = '"'//trim(field_name)//'"  [Unused]'
   endif
   if (len(trim((comment)))>0) then
-    write(diag_CS%available_diag_doc_unit, '(a,x,"(",a,")")') trim(mesg),trim(comment)
+    write(diag_CS%available_diag_doc_unit, '(a,1x,"(",a,")")') trim(mesg),trim(comment)
   else
     write(diag_CS%available_diag_doc_unit, '(a)') trim(mesg)
   endif
@@ -3754,7 +3753,7 @@ subroutine log_chksum_diag(docunit, description, chksum)
   character(len=*), intent(in) :: description !< Name of the diagnostic module
   integer,          intent(in) :: chksum      !< chksum of the diagnostic
 
-  write(docunit, '(a,x,i9.8)') description, chksum
+  write(docunit, '(a,1x,i9.8)') description, chksum
   flush(docunit)
 
 end subroutine log_chksum_diag

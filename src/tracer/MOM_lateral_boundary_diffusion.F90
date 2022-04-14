@@ -343,8 +343,8 @@ end subroutine swap
 
 !> Receives a 1D array x and sorts it into ascending order.
 subroutine sort(x, n)
-  real, dimension(n),  intent(inout) :: x        !< 1D array to be sorted
   integer,             intent(in   ) :: n        !< # of pts in the array
+  real, dimension(n),  intent(inout) :: x        !< 1D array to be sorted
 
   ! local variables
   integer :: i, location
@@ -1014,8 +1014,8 @@ logical function test_boundary_k_range(k_top, zeta_top, k_bot, zeta_bot, k_top_a
     write(stdout,30) "zeta_bot", zeta_bot, "zeta_bot_ans", zeta_bot_ans
   endif
 
-  20 format(A,"=",i3,X,A,"=",i3)
-  30 format(A,"=",f20.16,X,A,"=",f20.16)
+  20 format(A,"=",i3,1X,A,"=",i3)
+  30 format(A,"=",f20.16,1X,A,"=",f20.16)
 
 
 end function test_boundary_k_range

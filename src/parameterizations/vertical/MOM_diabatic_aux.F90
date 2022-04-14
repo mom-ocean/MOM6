@@ -527,7 +527,7 @@ subroutine find_uv_at_h(u, v, h, u_h, v_h, G, GV, US, ea, eb, zero_mix)
   do j=js,je
     do i=is,ie
       sum_area = G%areaCu(I-1,j) + G%areaCu(I,j)
-      if (sum_area>0.0) then
+      if (sum_area > 0.0) then
         Idenom = sqrt(0.5*G%IareaT(i,j) / sum_area)
         a_w(i) = G%areaCu(I-1,j) * Idenom
         a_e(i) = G%areaCu(I,j) * Idenom
@@ -536,7 +536,7 @@ subroutine find_uv_at_h(u, v, h, u_h, v_h, G, GV, US, ea, eb, zero_mix)
       endif
 
       sum_area = G%areaCv(i,J-1) + G%areaCv(i,J)
-      if (sum_area>0.0) then
+      if (sum_area > 0.0) then
         Idenom = sqrt(0.5*G%IareaT(i,j) / sum_area)
         a_s(i) = G%areaCv(i,J-1) * Idenom
         a_n(i) = G%areaCv(i,J) * Idenom
@@ -618,7 +618,7 @@ subroutine set_pen_shortwave(optics, fluxes, G, GV, US, CS, opacity, tracer_flow
       ! same value is assumed for all layers.
       call time_interp_external(CS%sbc_chl, CS%Time, chl_2d)
       do j=js,je ; do i=is,ie
-        if ((G%mask2dT(i,j) > 0.5) .and. (chl_2d(i,j) < 0.0)) then
+        if ((G%mask2dT(i,j) > 0.0) .and. (chl_2d(i,j) < 0.0)) then
           write(mesg,'(" Time_interp negative chl of ",(1pe12.4)," at i,j = ",&
                     & 2(i3), "lon/lat = ",(1pe12.4)," E ", (1pe12.4), " N.")') &
                      chl_2d(i,j), i, j, G%geoLonT(i,j), G%geoLatT(i,j)
@@ -768,7 +768,7 @@ subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, GV, US,
       ! endif
       call calculate_density(T_subML, S_subML, pRef_N2, rho_subML, tv%eqn_of_state, EOSdom)
       call calculate_density(T_deeper, S_deeper, pRef_N2, rho_deeper, tv%eqn_of_state, EOSdom)
-      do i=is,ie ; if ((G%mask2dT(i,j)>0.5) .and. N2_region_set(i)) then
+      do i=is,ie ; if ((G%mask2dT(i,j) > 0.0) .and. N2_region_set(i)) then
         subMLN2(i,j) =  gE_rho0 * (rho_deeper(i) - rho_subML(i)) / (GV%H_to_z * dH_N2(i))
       endif ; enddo
     endif
@@ -1227,7 +1227,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
       else
         netMassIn(i) = netMassInOut(i) - netMassOut(i)
       endif
-      if (G%mask2dT(i,j)>0.0) then
+      if (G%mask2dT(i,j) > 0.0) then
         fluxes%netMassOut(i,j) = netMassOut(i)
         fluxes%netMassIn(i,j) = netMassIn(i)
       else

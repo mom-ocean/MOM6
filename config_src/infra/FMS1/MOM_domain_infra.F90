@@ -27,7 +27,7 @@ use fms_io_mod,      only : file_exist, parse_mask_table
 use fms_affinity_mod, only : fms_affinity_init, fms_affinity_set, fms_affinity_get
 
 ! This subroutine is not in MOM6/src but may be required by legacy drivers
-use mpp_domains_mod, only : global_field_sum => mpp_global_sum
+! use mpp_domains_mod, only : global_field_sum => mpp_global_sum
 
 ! The `group_pass_type` fields are never accessed, so we keep it as an FMS type
 use mpp_domains_mod, only : group_pass_type => mpp_group_update_type
@@ -45,13 +45,13 @@ public :: create_group_pass, do_group_pass, start_group_pass, complete_group_pas
 public :: redistribute_array, broadcast_domain, same_domain, global_field
 public :: get_simple_array_i_ind, get_simple_array_j_ind
 public :: MOM_thread_affinity_set, set_MOM_thread_affinity
-! These are encoding constant parmeters.
+! These are encoding constant parmeters with self-explanatory names.
 public :: To_East, To_West, To_North, To_South, To_All, Omit_Corners
 public :: AGRID, BGRID_NE, CGRID_NE, SCALAR_PAIR
 public :: CORNER, CENTER, NORTH_FACE, EAST_FACE
 ! These are no longer used by MOM6 because the reproducing sum works so well, but they are
 ! still referenced by some of the non-GFDL couplers.
-public :: global_field_sum, BITWISE_EXACT_SUM
+! public :: global_field_sum, BITWISE_EXACT_SUM
 
 !> Do a halo update on an array
 interface pass_var

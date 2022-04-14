@@ -265,9 +265,9 @@ build/openmp/Makefile: MOM_ACFLAGS=--enable-openmp
 build/target/Makefile: MOM_ACFLAGS=
 build/opt/Makefile: MOM_ACFLAGS=
 build/opt_target/Makefile: MOM_ACFLAGS=
-build/coupled/Makefile: MOM_ACFLAGS=--with-driver=coupled_driver
-build/nuopc/Makefile: MOM_ACFLAGS=--with-driver=nuopc_driver
-build/mct/Makefile: MOM_ACFLAGS=--with-driver=mct_driver
+build/coupled/Makefile: MOM_ACFLAGS=--with-driver=FMS_cap
+build/nuopc/Makefile: MOM_ACFLAGS=--with-driver=nuopc_cap
+build/mct/Makefile: MOM_ACFLAGS=--with-driver=mct_cap
 
 # Fetch regression target source code
 build/target/Makefile: | $(TARGET_CODEBASE)

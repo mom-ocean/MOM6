@@ -262,7 +262,7 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, mono_
     endif
 
     ! From this point, we can work on individual columns without causing memory to have page faults.
-    do i=is,ie ; if (G%mask2dT(i,j) > 0.5) then
+    do i=is,ie ; if (G%mask2dT(i,j) > 0.0) then
       if (use_EOS) then
         pres(1) = 0.0 ; H_top(1) = 0.0
         do K=2,kf(i)
@@ -815,7 +815,7 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, full_halos)
 
     ! From this point, we can work on individual columns without causing memory to have page faults.
     do i=is,ie
-      if (G%mask2dT(i,j) > 0.5) then
+      if (G%mask2dT(i,j) > 0.0) then
         if (use_EOS) then
           pres(1) = 0.0 ; H_top(1) = 0.0
           do K=2,kf(i)

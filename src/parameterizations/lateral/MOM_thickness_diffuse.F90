@@ -25,7 +25,6 @@ implicit none ; private
 #include <MOM_memory.h>
 
 public thickness_diffuse, thickness_diffuse_init, thickness_diffuse_end
-! public vert_fill_TS
 public thickness_diffuse_get_KH
 
 ! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional

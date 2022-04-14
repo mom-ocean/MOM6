@@ -234,9 +234,6 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
   ! This value is roughly (pi / (the age of the universe) )^2.
   absurdly_small_freq2 = 1e-34*US%T_to_s**2
 
-  if (loc(CS)==0) call MOM_error(FATAL, &
-         "calculate_diagnostic_fields: Module must be initialized before used.")
-
   if (.not. CS%initialized) call MOM_error(FATAL, &
          "calculate_diagnostic_fields: Module must be initialized before used.")
 

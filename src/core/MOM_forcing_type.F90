@@ -704,7 +704,7 @@ subroutine extractFluxes1d(G, GV, US, fluxes, optics, nsw, j, dt, &
         fluxes%num_msg = fluxes%num_msg + 1
         write(mesg,'("Penetrating shortwave of ",1pe17.10, &
                     &" exceeds total shortwave of ",1pe17.10,&
-                    &" at ",1pg11.4,"E, "1pg11.4,"N.")') &
+                    &" at ",1pg11.4,",E,",1pg11.4,"N.")') &
                Pen_SW_tot(i), I_Cp_Hconvert*scale*dt * fluxes%sw(i,j), &
                G%geoLonT(i,j), G%geoLatT(i,j)
         call MOM_error(WARNING,mesg)
@@ -2184,12 +2184,12 @@ subroutine set_derived_forcing_fields(forces, fluxes, G, US, Rho0)
       associated(fluxes%ustar_gustless)) then
     do j=js,je ; do i=is,ie
       taux2 = 0.0
-      if ((G%mask2dCu(I-1,j) + G%mask2dCu(I,j)) > 0) &
+      if ((G%mask2dCu(I-1,j) + G%mask2dCu(I,j)) > 0.0) &
         taux2 = (G%mask2dCu(I-1,j) * forces%taux(I-1,j)**2 + &
                  G%mask2dCu(I,j) * forces%taux(I,j)**2) / &
                 (G%mask2dCu(I-1,j) + G%mask2dCu(I,j))
       tauy2 = 0.0
-      if ((G%mask2dCv(i,J-1) + G%mask2dCv(i,J)) > 0) &
+      if ((G%mask2dCv(i,J-1) + G%mask2dCv(i,J)) > 0.0) &
         tauy2 = (G%mask2dCv(i,J-1) * forces%tauy(i,J-1)**2 + &
                  G%mask2dCv(i,J) * forces%tauy(i,J)**2) / &
                 (G%mask2dCv(i,J-1) + G%mask2dCv(i,J))
@@ -3125,7 +3125,7 @@ subroutine allocate_mech_forcing_by_group(G, forces, stress, ustar, shelf, &
   if (present(waves)) then; if (waves) then;
     if (.not. present(num_stk_bands)) then
       call MOM_error(FATAL,"Requested to &
-      initialize with waves, but no waves are present.")
+      &initialize with waves, but no waves are present.")
     endif
     if (num_stk_bands > 0) then
       if (.not.associated(forces%ustkb)) then
@@ -3518,15 +3518,15 @@ subroutine homogenize_mech_forcing(forces, G, US, Rho0, UpdateUstar)
   if (do_stress) then
     tx_mean = global_area_mean_u(forces%taux, G, tmp_scale=US%Z_to_L*US%RL2_T2_to_Pa)
     do j=js,je ; do i=isB,ieB
-      if (G%mask2dCu(I,j) > 0.) forces%taux(I,j) = tx_mean
+      if (G%mask2dCu(I,j) > 0.0) forces%taux(I,j) = tx_mean
     enddo ; enddo
     ty_mean = global_area_mean_v(forces%tauy, G, tmp_scale=US%Z_to_L*US%RL2_T2_to_Pa)
     do j=jsB,jeB ; do i=is,ie
-      if (G%mask2dCv(i,J) > 0.) forces%tauy(i,J) = ty_mean
+      if (G%mask2dCv(i,J) > 0.0) forces%tauy(i,J) = ty_mean
     enddo ; enddo
     if (tau2ustar) then
       do j=js,je ; do i=is,ie
-        if (G%mask2dT(i,j) > 0.) forces%ustar(i,j) = sqrt(sqrt(tx_mean**2 + ty_mean**2)*Irho0)
+        if (G%mask2dT(i,j) > 0.0) forces%ustar(i,j) = sqrt(sqrt(tx_mean**2 + ty_mean**2)*Irho0)
       enddo ; enddo
     else
       call homogenize_field_t(forces%ustar, G, tmp_scale=US%Z_to_m*US%s_to_T)
@@ -3689,7 +3689,7 @@ subroutine homogenize_field_t(var, G, tmp_scale)
 
   avg = global_area_mean(var, G, tmp_scale=tmp_scale)
   do j=js,je ; do i=is,ie
-    if (G%mask2dT(i,j) > 0.) var(i,j) = avg
+    if (G%mask2dT(i,j) > 0.0) var(i,j) = avg
   enddo ; enddo
 
 end subroutine homogenize_field_t
@@ -3706,7 +3706,7 @@ subroutine homogenize_field_v(var, G, tmp_scale)
 
   avg = global_area_mean_v(var, G, tmp_scale=tmp_scale)
   do J=jsB,jeB ; do i=is,ie
-    if (G%mask2dCv(i,J) > 0.) var(i,J) = avg
+    if (G%mask2dCv(i,J) > 0.0) var(i,J) = avg
   enddo ; enddo
 
 end subroutine homogenize_field_v
@@ -3723,7 +3723,7 @@ subroutine homogenize_field_u(var, G, tmp_scale)
 
   avg = global_area_mean_u(var, G, tmp_scale=tmp_scale)
   do j=js,je ; do I=isB,ieB
-    if (G%mask2dCu(I,j) > 0.) var(I,j) = avg
+    if (G%mask2dCu(I,j) > 0.0) var(I,j) = avg
   enddo ; enddo
 
 end subroutine homogenize_field_u

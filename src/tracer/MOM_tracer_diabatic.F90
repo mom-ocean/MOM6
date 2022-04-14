@@ -147,14 +147,14 @@ subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, GV, &
       enddo
 
       ! Now solve the tridiagonal equation for the tracer concentrations.
-      do i=is,ie ; if (G%mask2dT(i,j) > 0.5) then
+      do i=is,ie ; if (G%mask2dT(i,j) > 0.0) then
         b_denom_1 = h_minus_dsink(i,1) + ea(i,j,1) + h_neglect
         b1(i) = 1.0 / (b_denom_1 + eb(i,j,1))
         d1(i) = b_denom_1 * b1(i)
         h_tr = h_old(i,j,1) + h_neglect
         tr(i,j,1) = (b1(i)*h_tr)*tr(i,j,1) + b1(i)*sfc_src(i,j)
       endif ; enddo
-      do k=2,nz-1 ; do i=is,ie ; if (G%mask2dT(i,j) > 0.5) then
+      do k=2,nz-1 ; do i=is,ie ; if (G%mask2dT(i,j) > 0.0) then
         c1(i,k) = eb(i,j,k-1) * b1(i)
         b_denom_1 = h_minus_dsink(i,k) + d1(i) * (ea(i,j,k) + sink(i,K)) + &
                     h_neglect
@@ -164,7 +164,7 @@ subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, GV, &
         tr(i,j,k) = b1(i) * (h_tr * tr(i,j,k) + &
                              (ea(i,j,k) + sink(i,K)) * tr(i,j,k-1))
       endif ; enddo ; enddo
-      do i=is,ie ; if (G%mask2dT(i,j) > 0.5) then
+      do i=is,ie ; if (G%mask2dT(i,j) > 0.0) then
         c1(i,nz) = eb(i,j,nz-1) * b1(i)
         b_denom_1 = h_minus_dsink(i,nz) + d1(i) * (ea(i,j,nz) + sink(i,nz)) + &
                     h_neglect
@@ -173,25 +173,25 @@ subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, GV, &
         tr(i,j,nz) = b1(i) * ((h_tr * tr(i,j,nz) + btm_src(i,j)) + &
                               (ea(i,j,nz) + sink(i,nz)) * tr(i,j,nz-1))
       endif ; enddo
-      if (present(btm_reservoir)) then ; do i=is,ie ; if (G%mask2dT(i,j)>0.5) then
+      if (present(btm_reservoir)) then ; do i=is,ie ; if (G%mask2dT(i,j) > 0.0) then
         btm_reservoir(i,j) = btm_reservoir(i,j) + (sink(i,nz+1)*tr(i,j,nz)) * GV%H_to_RZ
       endif ; enddo ; endif
 
-      do k=nz-1,1,-1 ; do i=is,ie ; if (G%mask2dT(i,j) > 0.5) then
+      do k=nz-1,1,-1 ; do i=is,ie ; if (G%mask2dT(i,j) > 0.0) then
         tr(i,j,k) = tr(i,j,k) + c1(i,k+1)*tr(i,j,k+1)
       endif ; enddo ; enddo
     enddo
   else
     !$OMP do
     do j=js,je
-      do i=is,ie ; if (G%mask2dT(i,j) > 0.5) then
+      do i=is,ie ; if (G%mask2dT(i,j) > 0.0) then
         h_tr = h_old(i,j,1) + h_neglect
         b_denom_1 = h_tr + ea(i,j,1)
         b1(i) = 1.0 / (b_denom_1 + eb(i,j,1))
         d1(i) = h_tr * b1(i)
         tr(i,j,1) = (b1(i)*h_tr)*tr(i,j,1) + b1(i)*sfc_src(i,j)
       endif ; enddo
-      do k=2,nz-1 ; do i=is,ie ; if (G%mask2dT(i,j) > 0.5) then
+      do k=2,nz-1 ; do i=is,ie ; if (G%mask2dT(i,j) > 0.0) then
         c1(i,k) = eb(i,j,k-1) * b1(i)
         h_tr = h_old(i,j,k) + h_neglect
         b_denom_1 = h_tr + d1(i) * ea(i,j,k)
@@ -199,7 +199,7 @@ subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, GV, &
         d1(i) = b_denom_1 * b1(i)
         tr(i,j,k) = b1(i) * (h_tr * tr(i,j,k) + ea(i,j,k) * tr(i,j,k-1))
       endif ; enddo ; enddo
-      do i=is,ie ; if (G%mask2dT(i,j) > 0.5) then
+      do i=is,ie ; if (G%mask2dT(i,j) > 0.0) then
         c1(i,nz) = eb(i,j,nz-1) * b1(i)
         h_tr = h_old(i,j,nz) + h_neglect
         b_denom_1 = h_tr + d1(i)*ea(i,j,nz)
@@ -207,7 +207,7 @@ subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, GV, &
         tr(i,j,nz) = b1(i) * (( h_tr * tr(i,j,nz) + btm_src(i,j)) + &
                               ea(i,j,nz) * tr(i,j,nz-1))
       endif ; enddo
-      do k=nz-1,1,-1 ; do i=is,ie ; if (G%mask2dT(i,j) > 0.5) then
+      do k=nz-1,1,-1 ; do i=is,ie ; if (G%mask2dT(i,j) > 0.0) then
         tr(i,j,k) = tr(i,j,k) + c1(i,k+1)*tr(i,j,k+1)
       endif ; enddo ; enddo
     enddo
@@ -345,14 +345,14 @@ subroutine tracer_vertdiff_Eulerian(h_old, ent, dt, tr, G, GV, &
       enddo
 
       ! Now solve the tridiagonal equation for the tracer concentrations.
-      do i=is,ie ; if (G%mask2dT(i,j) > 0.5) then
+      do i=is,ie ; if (G%mask2dT(i,j) > 0.0) then
         b_denom_1 = h_minus_dsink(i,1) + ent(i,j,1) + h_neglect
         b1(i) = 1.0 / (b_denom_1 + ent(i,j,2))
         d1(i) = b_denom_1 * b1(i)
         h_tr = h_old(i,j,1) + h_neglect
         tr(i,j,1) = (b1(i)*h_tr)*tr(i,j,1) + b1(i)*sfc_src(i,j)
       endif ; enddo
-      do k=2,nz-1 ; do i=is,ie ; if (G%mask2dT(i,j) > 0.5) then
+      do k=2,nz-1 ; do i=is,ie ; if (G%mask2dT(i,j) > 0.0) then
         c1(i,k) = ent(i,j,K) * b1(i)
         b_denom_1 = h_minus_dsink(i,k) + d1(i) * (ent(i,j,K) + sink(i,K)) + &
                     h_neglect
@@ -362,7 +362,7 @@ subroutine tracer_vertdiff_Eulerian(h_old, ent, dt, tr, G, GV, &
         tr(i,j,k) = b1(i) * (h_tr * tr(i,j,k) + &
                              (ent(i,j,K) + sink(i,K)) * tr(i,j,k-1))
       endif ; enddo ; enddo
-      do i=is,ie ; if (G%mask2dT(i,j) > 0.5) then
+      do i=is,ie ; if (G%mask2dT(i,j) > 0.0) then
         c1(i,nz) = ent(i,j,nz) * b1(i)
         b_denom_1 = h_minus_dsink(i,nz) + d1(i) * (ent(i,j,nz) + sink(i,nz)) + &
                     h_neglect
@@ -371,25 +371,25 @@ subroutine tracer_vertdiff_Eulerian(h_old, ent, dt, tr, G, GV, &
         tr(i,j,nz) = b1(i) * ((h_tr * tr(i,j,nz) + btm_src(i,j)) + &
                               (ent(i,j,nz) + sink(i,nz)) * tr(i,j,nz-1))
       endif ; enddo
-      if (present(btm_reservoir)) then ; do i=is,ie ; if (G%mask2dT(i,j)>0.5) then
+      if (present(btm_reservoir)) then ; do i=is,ie ; if (G%mask2dT(i,j) > 0.0) then
         btm_reservoir(i,j) = btm_reservoir(i,j) + (sink(i,nz+1)*tr(i,j,nz)) * GV%H_to_RZ
       endif ; enddo ; endif
 
-      do k=nz-1,1,-1 ; do i=is,ie ; if (G%mask2dT(i,j) > 0.5) then
+      do k=nz-1,1,-1 ; do i=is,ie ; if (G%mask2dT(i,j) > 0.0) then
         tr(i,j,k) = tr(i,j,k) + c1(i,k+1)*tr(i,j,k+1)
       endif ; enddo ; enddo
     enddo
   else
     !$OMP do
     do j=js,je
-      do i=is,ie ; if (G%mask2dT(i,j) > 0.5) then
+      do i=is,ie ; if (G%mask2dT(i,j) > 0.0) then
         h_tr = h_old(i,j,1) + h_neglect
         b_denom_1 = h_tr + ent(i,j,1)
         b1(i) = 1.0 / (b_denom_1 + ent(i,j,2))
         d1(i) = h_tr * b1(i)
         tr(i,j,1) = (b1(i)*h_tr)*tr(i,j,1) + b1(i)*sfc_src(i,j)
       endif ; enddo
-      do k=2,nz-1 ; do i=is,ie ; if (G%mask2dT(i,j) > 0.5) then
+      do k=2,nz-1 ; do i=is,ie ; if (G%mask2dT(i,j) > 0.0) then
         c1(i,k) = ent(i,j,K) * b1(i)
         h_tr = h_old(i,j,k) + h_neglect
         b_denom_1 = h_tr + d1(i) * ent(i,j,K)
@@ -397,7 +397,7 @@ subroutine tracer_vertdiff_Eulerian(h_old, ent, dt, tr, G, GV, &
         d1(i) = b_denom_1 * b1(i)
         tr(i,j,k) = b1(i) * (h_tr * tr(i,j,k) + ent(i,j,K) * tr(i,j,k-1))
       endif ; enddo ; enddo
-      do i=is,ie ; if (G%mask2dT(i,j) > 0.5) then
+      do i=is,ie ; if (G%mask2dT(i,j) > 0.0) then
         c1(i,nz) = ent(i,j,nz) * b1(i)
         h_tr = h_old(i,j,nz) + h_neglect
         b_denom_1 = h_tr + d1(i)*ent(i,j,nz)
@@ -405,7 +405,7 @@ subroutine tracer_vertdiff_Eulerian(h_old, ent, dt, tr, G, GV, &
         tr(i,j,nz) = b1(i) * (( h_tr * tr(i,j,nz) + btm_src(i,j)) + &
                               ent(i,j,nz) * tr(i,j,nz-1))
       endif ; enddo
-      do k=nz-1,1,-1 ; do i=is,ie ; if (G%mask2dT(i,j) > 0.5) then
+      do k=nz-1,1,-1 ; do i=is,ie ; if (G%mask2dT(i,j) > 0.0) then
         tr(i,j,k) = tr(i,j,k) + c1(i,k+1)*tr(i,j,k+1)
       endif ; enddo ; enddo
     enddo

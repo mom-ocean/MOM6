@@ -10,14 +10,14 @@ use MOM_domain_infra,     only : MOM_domain_type, domain2D, domain1D, group_pass
 use MOM_domain_infra,     only : create_MOM_domain, clone_MOM_domain, deallocate_MOM_domain
 use MOM_domain_infra,     only : get_domain_extent, get_domain_components, same_domain
 use MOM_domain_infra,     only : compute_block_extent, get_global_shape
-use MOM_domain_infra,     only : pass_var, pass_vector, fill_symmetric_edges, global_field_sum
+use MOM_domain_infra,     only : pass_var, pass_vector, fill_symmetric_edges
 use MOM_domain_infra,     only : pass_var_start, pass_var_complete
 use MOM_domain_infra,     only : pass_vector_start, pass_vector_complete
 use MOM_domain_infra,     only : create_group_pass, do_group_pass
 use MOM_domain_infra,     only : start_group_pass, complete_group_pass
 use MOM_domain_infra,     only : rescale_comp_data, global_field, redistribute_array, broadcast_domain
 use MOM_domain_infra,     only : MOM_thread_affinity_set, set_MOM_thread_affinity
-use MOM_domain_infra,     only : AGRID, BGRID_NE, CGRID_NE, SCALAR_PAIR, BITWISE_EXACT_SUM
+use MOM_domain_infra,     only : AGRID, BGRID_NE, CGRID_NE, SCALAR_PAIR
 use MOM_domain_infra,     only : CORNER, CENTER, NORTH_FACE, EAST_FACE
 use MOM_domain_infra,     only : To_East, To_West, To_North, To_South, To_All, Omit_Corners
 use MOM_error_handler,    only : MOM_error, MOM_mesg, NOTE, WARNING, FATAL
@@ -54,9 +54,6 @@ public :: AGRID, BGRID_NE, CGRID_NE, SCALAR_PAIR
 public :: CORNER, CENTER, NORTH_FACE, EAST_FACE
 !> These encoding constants indicate communication patterns.  In practice they can be added.
 public :: To_East, To_West, To_North, To_South, To_All, Omit_Corners
-! These are no longer used by MOM6 because the reproducing sum works so well, but they are
-! still referenced by some of the non-GFDL couplers.
-public :: global_field_sum, BITWISE_EXACT_SUM
 
 contains
 
@@ -343,7 +340,7 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
 
   ! Idiot check that fewer PEs than columns have been requested
   if (layout(1)*layout(2) > n_global(1)*n_global(2))  then
-    write(mesg,'(a,2(i5,x,a))') 'You requested to use',layout(1)*layout(2), &
+    write(mesg,'(a,2(i5,1x,a))') 'You requested to use', layout(1)*layout(2), &
       'PEs but there are only', n_global(1)*n_global(2), 'columns in the model'
     call MOM_error(FATAL, mesg)
   endif

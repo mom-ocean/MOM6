@@ -230,7 +230,7 @@ subroutine initialize_ALE_sponge_fixed(Iresttime, G, GV, param_file, CS, data_h,
   ! number of columns to be restored
   CS%num_col = 0 ; CS%fldno = 0
   do j=G%jsc,G%jec ; do i=G%isc,G%iec
-    if ((Iresttime(i,j)>0.0) .and. (G%mask2dT(i,j)>0)) &
+    if ((Iresttime(i,j) > 0.0) .and. (G%mask2dT(i,j) > 0.0)) &
       CS%num_col = CS%num_col + 1
   enddo ; enddo
 
@@ -241,7 +241,7 @@ subroutine initialize_ALE_sponge_fixed(Iresttime, G, GV, param_file, CS, data_h,
     ! pass indices, restoring time to the CS structure
     col = 1
     do j=G%jsc,G%jec ; do i=G%isc,G%iec
-      if ((Iresttime(i,j)>0.0) .and. (G%mask2dT(i,j)>0)) then
+      if ((Iresttime(i,j) > 0.0) .and. (G%mask2dT(i,j) > 0.0)) then
         CS%col_i(col) = i ; CS%col_j(col) = j
         CS%Iresttime_col(col) = Iresttime(i,j)
         col = col +1
@@ -282,7 +282,7 @@ subroutine initialize_ALE_sponge_fixed(Iresttime, G, GV, param_file, CS, data_h,
       enddo ; enddo
     endif
     do j=G%jsc,G%jec ; do I=G%iscB,G%iecB
-       if ((Iresttime_u(I,j)>0.0) .and. (G%mask2dCu(I,j)>0)) &
+       if ((Iresttime_u(I,j) > 0.0) .and. (G%mask2dCu(I,j) > 0.0)) &
           CS%num_col_u = CS%num_col_u + 1
     enddo ; enddo
 
@@ -295,7 +295,7 @@ subroutine initialize_ALE_sponge_fixed(Iresttime, G, GV, param_file, CS, data_h,
       ! Store the column indices and restoring rates in the CS structure
       col = 1
       do j=G%jsc,G%jec ; do I=G%iscB,G%iecB
-        if ((Iresttime_u(I,j)>0.0) .and. (G%mask2dCu(I,j)>0)) then
+        if ((Iresttime_u(I,j) > 0.0) .and. (G%mask2dCu(I,j) > 0.0)) then
           CS%col_i_u(col) = I ; CS%col_j_u(col) = j
           CS%Iresttime_col_u(col) = Iresttime_u(I,j)
           col = col + 1
@@ -326,7 +326,7 @@ subroutine initialize_ALE_sponge_fixed(Iresttime, G, GV, param_file, CS, data_h,
       enddo ; enddo
     endif
     do J=G%jscB,G%jecB; do i=G%isc,G%iec
-      if ((Iresttime_v(i,J)>0.0) .and. (G%mask2dCv(i,J)>0)) &
+      if ((Iresttime_v(i,J) > 0.0) .and. (G%mask2dCv(i,J) > 0.0)) &
         CS%num_col_v = CS%num_col_v + 1
     enddo ; enddo
 
@@ -339,7 +339,7 @@ subroutine initialize_ALE_sponge_fixed(Iresttime, G, GV, param_file, CS, data_h,
       ! pass indices, restoring time to the CS structure
       col = 1
       do J=G%jscB,G%jecB ; do i=G%isc,G%iec
-        if ((Iresttime_v(i,J)>0.0) .and. (G%mask2dCv(i,J)>0)) then
+        if ((Iresttime_v(i,J) > 0.0) .and. (G%mask2dCv(i,J) > 0.0)) then
           CS%col_i_v(col) = i ; CS%col_j_v(col) = j
           CS%Iresttime_col_v(col) = Iresttime_v(i,j)
           col = col + 1
@@ -492,7 +492,7 @@ subroutine initialize_ALE_sponge_varying(Iresttime, G, GV, param_file, CS, Irest
   ! number of columns to be restored
   CS%num_col = 0 ; CS%fldno = 0
   do j=G%jsc,G%jec ; do i=G%isc,G%iec
-    if ((Iresttime(i,j)>0.0) .and. (G%mask2dT(i,j)>0)) &
+    if ((Iresttime(i,j) > 0.0) .and. (G%mask2dT(i,j) > 0.0)) &
       CS%num_col = CS%num_col + 1
   enddo ; enddo
   if (CS%num_col > 0) then
@@ -502,7 +502,7 @@ subroutine initialize_ALE_sponge_varying(Iresttime, G, GV, param_file, CS, Irest
     ! pass indices, restoring time to the CS structure
     col = 1
     do j=G%jsc,G%jec ; do i=G%isc,G%iec
-      if ((Iresttime(i,j)>0.0) .and. (G%mask2dT(i,j)>0)) then
+      if ((Iresttime(i,j) > 0.0) .and. (G%mask2dT(i,j) > 0.0)) then
         CS%col_i(col) = i ; CS%col_j(col) = j
         CS%Iresttime_col(col) = Iresttime(i,j)
         col = col + 1
@@ -532,7 +532,7 @@ subroutine initialize_ALE_sponge_varying(Iresttime, G, GV, param_file, CS, Irest
     endif
     CS%num_col_u = 0 ;
     do j=G%jsc,G%jec; do I=G%iscB,G%iecB
-      if ((Iresttime_u(I,j)>0.0) .and. (G%mask2dCu(I,j)>0)) &
+      if ((Iresttime_u(I,j) > 0.0) .and. (G%mask2dCu(I,j) > 0.0)) &
         CS%num_col_u = CS%num_col_u + 1
     enddo ; enddo
     if (CS%num_col_u > 0) then
@@ -542,7 +542,7 @@ subroutine initialize_ALE_sponge_varying(Iresttime, G, GV, param_file, CS, Irest
       ! pass indices, restoring time to the CS structure
       col = 1
       do j=G%jsc,G%jec ; do I=G%iscB,G%iecB
-        if ((Iresttime_u(I,j)>0.0) .and. (G%mask2dCu(I,j)>0)) then
+        if ((Iresttime_u(I,j) > 0.0) .and. (G%mask2dCu(I,j) > 0.0)) then
           CS%col_i_u(col) = i ; CS%col_j_u(col) = j
           CS%Iresttime_col_u(col) = Iresttime_u(i,j)
           col = col + 1
@@ -564,7 +564,7 @@ subroutine initialize_ALE_sponge_varying(Iresttime, G, GV, param_file, CS, Irest
     endif
     CS%num_col_v = 0 ;
     do J=G%jscB,G%jecB; do i=G%isc,G%iec
-      if ((Iresttime_v(i,J)>0.0) .and. (G%mask2dCv(i,J)>0)) &
+      if ((Iresttime_v(i,J) > 0.0) .and. (G%mask2dCv(i,J) > 0.0)) &
         CS%num_col_v = CS%num_col_v + 1
     enddo ; enddo
     if (CS%num_col_v > 0) then
@@ -574,7 +574,7 @@ subroutine initialize_ALE_sponge_varying(Iresttime, G, GV, param_file, CS, Irest
       ! pass indices, restoring time to the CS structure
       col = 1
       do J=G%jscB,G%jecB ; do i=G%isc,G%iec
-        if ((Iresttime_v(i,J)>0.0) .and. (G%mask2dCv(i,J)>0)) then
+        if ((Iresttime_v(i,J) > 0.0) .and. (G%mask2dCv(i,J) > 0.0)) then
           CS%col_i_v(col) = i ; CS%col_j_v(col) = j
           CS%Iresttime_col_v(col) = Iresttime_v(i,j)
           col = col + 1
@@ -691,7 +691,7 @@ subroutine set_up_ALE_sponge_field_varying(filename, fieldname, Time, G, GV, US,
   CS%fldno = CS%fldno + 1
   if (CS%fldno > MAX_FIELDS_) then
     write(mesg, '("Increase MAX_FIELDS_ to at least ",I3," in MOM_memory.h or decrease "//&
-           "the number of fields to be damped in the call to initialize_ALE_sponge." )') CS%fldno
+        &"the number of fields to be damped in the call to initialize_ALE_sponge." )') CS%fldno
     call MOM_error(FATAL,"set_up_ALE_sponge_field: "//mesg)
   endif
   ! get a unique time interp id for this field. If sponge data is on-grid, then setup

@@ -81,7 +81,6 @@ public diabatic_driver_end
 public extract_diabatic_member
 public adiabatic
 public adiabatic_driver_init
-! public legacy_diabatic
 
 ! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
 ! consistency testing. These are noted in comments with units like Z, H, L, and T, along with

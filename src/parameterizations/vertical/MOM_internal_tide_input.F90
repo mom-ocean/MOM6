@@ -253,7 +253,7 @@ subroutine find_N2_bottom(h, tv, T_f, S_f, h2, fluxes, G, GV, US, N2_bot)
     do i=is,ie
       hb(i) = 0.0 ; dRho_bot(i) = 0.0
       z_from_bot(i) = 0.5*GV%H_to_Z*h(i,j,nz)
-      do_i(i) = (G%mask2dT(i,j) > 0.5)
+      do_i(i) = (G%mask2dT(i,j) > 0.0)
       h_amp(i) = sqrt(h2(i,j))
     enddo
 

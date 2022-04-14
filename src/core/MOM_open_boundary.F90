@@ -4717,7 +4717,7 @@ subroutine mask_outside_OBCs(G, US, param_file, OBC)
     if (color(i,j) /= color2(i,j)) then
       fatal_error = .True.
       write(mesg,'("MOM_open_boundary: problem with OBC segments specification at ",I5,",",I5," during\n", &
-          "the masking of the outside grid points.")') i, j
+          &"the masking of the outside grid points.")') i, j
       call MOM_error(WARNING,"MOM register_tracer: "//mesg, all_print=.true.)
     endif
     if (color(i,j) == cout) G%bathyT(i,j) = min_depth

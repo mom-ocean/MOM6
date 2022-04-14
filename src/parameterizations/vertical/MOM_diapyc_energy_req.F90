@@ -81,7 +81,7 @@ subroutine diapyc_energy_req_test(h_3d, dt, tv, G, GV, US, CS, Kd_int)
          "Module must be initialized before it is used.")
 
 !$OMP do
-  do j=js,je ; do i=is,ie ; if (G%mask2dT(i,j) > 0.5) then
+  do j=js,je ; do i=is,ie ; if (G%mask2dT(i,j) > 0.0) then
     if (present(Kd_int) .and. .not.CS%use_test_Kh_profile) then
       do k=1,nz+1 ; Kd(K) = CS%test_Kh_scaling*Kd_int(i,j,K) ; enddo
     else

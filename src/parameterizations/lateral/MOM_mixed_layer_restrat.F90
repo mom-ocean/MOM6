@@ -178,7 +178,7 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, forces, dt, MLD_in, Var
   real, dimension(SZI_(G)) :: dK, dKm1 ! Depths of layer centers [H ~> m or kg m-2].
   real, dimension(SZI_(G)) :: pRef_MLD ! A reference pressure for calculating the mixed layer
                                        ! densities [R L2 T-2 ~> Pa].
- real :: aFac, bFac ! Nondimensional ratios [nondim]
+  real :: aFac, bFac ! Nondimensional ratios [nondim]
   real :: ddRho     ! A density difference [R ~> kg m-3]
   real :: hAtVel    ! Thickness at the velocity points [H ~> m or kg m-2]
   real :: zpa       ! Fractional position within the mixed layer of the interface above a layer [nondim]
@@ -189,15 +189,6 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, forces, dt, MLD_in, Var
   logical :: line_is_empty, keep_going, res_upscale
   integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
-
-  real :: PSI, PSI1, z, BOTTOP, XP, DD ! For the following statement functions [nondim]
-  ! Stream function as a function of non-dimensional position within mixed-layer (F77 statement function)
-  !PSI1(z) = max(0., (1. - (2.*z+1.)**2 ) )
-  PSI1(z) = max(0., (1. - (2.*z+1.)**2 ) * (1. + (5./21.)*(2.*z+1.)**2) )
-  BOTTOP(z) = 0.5*(1.-SIGN(1.,z+0.5)) ! =0 for z>-0.5, =1 for z<-0.5
-  XP(z) = max(0., min(1., (-z-0.5)*2./(1.+2.*CS%MLE_tail_dh) ) )
-  DD(z) = (1.-3.*(XP(z)**2)+2.*(XP(z)**3))**(1.+2.*CS%MLE_tail_dh)
-  PSI(z) = max( PSI1(z), DD(z)*BOTTOP(z) ) ! Combines original PSI1 with tail
 
   is  = G%isc  ; ie  = G%iec  ; js  = G%jsc  ; je  = G%jec ; nz = GV%ke
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
@@ -556,6 +547,22 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, forces, dt, MLD_in, Var
   ! for vertical remapping may need to be regenerated.
   ! This needs to happen after the H update and before the next post_data.
   call diag_update_remap_grids(CS%diag)
+
+contains
+  !> Stream function as a function of non-dimensional position within mixed-layer
+  real function psi(z)
+    real, intent(in) :: z           !< Fractional mixed layer depth [nondim]
+    real :: psi1, bottop, xp, dd
+
+    !psi1 = max(0., (1. - (2.*z + 1.)**2))
+    psi1 = max(0., (1. - (2.*z + 1.)**2) * (1. + (5./21.)*(2.*z + 1.)**2))
+
+    xp = max(0., min(1., (-z - 0.5)*2. / (1. + 2.*CS%MLE_tail_dh)))
+    dd = (1. - 3.*(xp**2) + 2.*(xp**3))**(1. + 2.*CS%MLE_tail_dh)
+    bottop = 0.5*(1. - sign(1., z + 0.5))  ! =0 for z>-0.5, =1 for z<-0.5
+
+    psi = max(psi1, dd*bottop)  ! Combines original psi1 with tail
+  end function psi
 
 end subroutine mixedlayer_restrat_general
 

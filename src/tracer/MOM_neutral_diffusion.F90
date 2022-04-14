@@ -325,7 +325,7 @@ subroutine neutral_diffusion_calc_coeffs(G, GV, US, h, T, S, CS, p_surf)
     call pass_var(hbl,G%Domain)
     ! get k-indices and zeta
     do j=G%jsc-1, G%jec+1 ; do i=G%isc-1,G%iec+1
-      if (G%mask2dT(i,j) > 0.) then
+      if (G%mask2dT(i,j) > 0.0) then
         call boundary_k_range(SURFACE, G%ke, h(i,j,:), hbl(i,j), k_top(i,j), zeta_top(i,j), k_bot(i,j), zeta_bot(i,j))
       endif
     enddo; enddo
@@ -463,7 +463,7 @@ subroutine neutral_diffusion_calc_coeffs(G, GV, US, h, T, S, CS, p_surf)
 
   ! Neutral surface factors at U points
   do j = G%jsc, G%jec ; do I = G%isc-1, G%iec
-    if (G%mask2dCu(I,j) > 0.) then
+    if (G%mask2dCu(I,j) > 0.0) then
       if (CS%continuous_reconstruction) then
         call find_neutral_surface_positions_continuous(GV%ke,                                    &
                 CS%Pint(i,j,:), CS%Tint(i,j,:), CS%Sint(i,j,:), CS%dRdT(i,j,:), CS%dRdS(i,j,:),            &
@@ -484,7 +484,7 @@ subroutine neutral_diffusion_calc_coeffs(G, GV, US, h, T, S, CS, p_surf)
 
   ! Neutral surface factors at V points
   do J = G%jsc-1, G%jec ; do i = G%isc, G%iec
-    if (G%mask2dCv(i,J) > 0.) then
+    if (G%mask2dCv(i,J) > 0.0) then
       if (CS%continuous_reconstruction) then
         call find_neutral_surface_positions_continuous(GV%ke,                                              &
                 CS%Pint(i,j,:), CS%Tint(i,j,:), CS%Sint(i,j,:), CS%dRdT(i,j,:), CS%dRdS(i,j,:),           &
@@ -519,10 +519,10 @@ subroutine neutral_diffusion_calc_coeffs(G, GV, US, h, T, S, CS, p_surf)
       enddo ; enddo ; enddo
     else
       do k = 1, CS%nsurf-1 ; do j = G%jsc, G%jec ; do I = G%isc-1, G%iec
-        if (G%mask2dCu(I,j) > 0.) CS%uhEff(I,j,k) = CS%uhEff(I,j,k) * pa_to_H
+        if (G%mask2dCu(I,j) > 0.0) CS%uhEff(I,j,k) = CS%uhEff(I,j,k) * pa_to_H
       enddo ; enddo ; enddo
       do k = 1, CS%nsurf-1 ; do J = G%jsc-1, G%jec ; do i = G%isc, G%iec
-        if (G%mask2dCv(i,J) > 0.) CS%vhEff(i,J,k) = CS%vhEff(i,J,k) * pa_to_H
+        if (G%mask2dCv(i,J) > 0.0) CS%vhEff(i,J,k) = CS%vhEff(i,J,k) * pa_to_H
       enddo ; enddo ; enddo
     endif
   endif
@@ -1364,7 +1364,7 @@ subroutine find_neutral_surface_positions_discontinuous(CS, nk, &
 
         if (CS%debug) then
           write(stdout,'(A,I2)') "Searching left layer ", kl_left
-          write(stdout,'(A,I2,X,I2)') "Searching from right: ", kl_right, ki_right
+          write(stdout,'(A,I2,1X,I2)') "Searching from right: ", kl_right, ki_right
           write(stdout,*) "Temp/Salt Reference: ", Tr(kl_right,ki_right), Sr(kl_right,ki_right)
           write(stdout,*) "Temp/Salt Top L: ", Tl(kl_left,1), Sl(kl_left,1)
           write(stdout,*) "Temp/Salt Bot L: ", Tl(kl_left,2), Sl(kl_left,2)
@@ -1387,7 +1387,7 @@ subroutine find_neutral_surface_positions_discontinuous(CS, nk, &
 
         if (CS%debug) then
           write(stdout,'(A,I2)') "Searching right layer ", kl_right
-          write(stdout,'(A,I2,X,I2)') "Searching from left: ", kl_left, ki_left
+          write(stdout,'(A,I2,1X,I2)') "Searching from left: ", kl_left, ki_left
           write(stdout,*) "Temp/Salt Reference: ", Tl(kl_left,ki_left), Sl(kl_left,ki_left)
           write(stdout,*) "Temp/Salt Top L: ", Tr(kl_right,1), Sr(kl_right,1)
           write(stdout,*) "Temp/Salt Bot L: ", Tr(kl_right,2), Sr(kl_right,2)
@@ -2651,9 +2651,9 @@ logical function test_fv_diff(verbose, hkm1, hk, hkp1, Skm1, Sk, Skp1, Ptrue, ti
     if (test_fv_diff) stdunit = stderr ! In case of wrong results, write to error stream
     write(stdunit,'(a)') title
     if (test_fv_diff) then
-      write(stdunit,'(2(x,a,f20.16),x,a)') 'pRet=',Pret,'pTrue=',Ptrue,'WRONG!'
+      write(stdunit,'(2(1x,a,f20.16),1x,a)') 'pRet=',Pret,'pTrue=',Ptrue,'WRONG!'
     else
-      write(stdunit,'(2(x,a,f20.16))') 'pRet=',Pret,'pTrue=',Ptrue
+      write(stdunit,'(2(1x,a,f20.16))') 'pRet=',Pret,'pTrue=',Ptrue
     endif
   endif
 
@@ -2683,9 +2683,9 @@ logical function test_fvlsq_slope(verbose, hkm1, hk, hkp1, Skm1, Sk, Skp1, Ptrue
     if (test_fvlsq_slope) stdunit = stderr ! In case of wrong results, write to error stream
     write(stdunit,'(a)') title
     if (test_fvlsq_slope) then
-      write(stdunit,'(2(x,a,f20.16),x,a)') 'pRet=',Pret,'pTrue=',Ptrue,'WRONG!'
+      write(stdunit,'(2(1x,a,f20.16),1x,a)') 'pRet=',Pret,'pTrue=',Ptrue,'WRONG!'
     else
-      write(stdunit,'(2(x,a,f20.16))') 'pRet=',Pret,'pTrue=',Ptrue
+      write(stdunit,'(2(1x,a,f20.16))') 'pRet=',Pret,'pTrue=',Ptrue
     endif
   endif
 
@@ -2713,10 +2713,10 @@ logical function test_ifndp(verbose, rhoNeg, Pneg, rhoPos, Ppos, Ptrue, title)
     if (test_ifndp) stdunit = stderr ! In case of wrong results, write to error stream
     write(stdunit,'(a)') title
     if (test_ifndp) then
-      write(stdunit,'(4(x,a,f20.16),2(x,a,1pe22.15),x,a)') &
+      write(stdunit,'(4(1x,a,f20.16),2(1x,a,1pe22.15),1x,a)') &
             'r1=',rhoNeg,'p1=',Pneg,'r2=',rhoPos,'p2=',Ppos,'pRet=',Pret,'pTrue=',Ptrue,'WRONG!'
     else
-      write(stdunit,'(4(x,a,f20.16),2(x,a,1pe22.15))') &
+      write(stdunit,'(4(1x,a,f20.16),2(1x,a,1pe22.15))') &
             'r1=',rhoNeg,'p1=',Pneg,'r2=',rhoPos,'p2=',Ppos,'pRet=',Pret,'pTrue=',Ptrue
     endif
   endif
@@ -2746,11 +2746,11 @@ logical function test_data1d(verbose, nk, Po, Ptrue, title)
     do k = 1,nk
       if (Po(k) /= Ptrue(k)) then
         test_data1d = .true.
-        write(stdunit,'(a,i2,2(x,a,f20.16),x,a,1pe22.15,x,a)') &
+        write(stdunit,'(a,i2,2(1x,a,f20.16),1x,a,1pe22.15,1x,a)') &
               'k=',k,'Po=',Po(k),'Ptrue=',Ptrue(k),'err=',Po(k)-Ptrue(k),'WRONG!'
       else
         if (verbose) &
-          write(stdunit,'(a,i2,2(x,a,f20.16),x,a,1pe22.15)') &
+          write(stdunit,'(a,i2,2(1x,a,f20.16),1x,a,1pe22.15)') &
                 'k=',k,'Po=',Po(k),'Ptrue=',Ptrue(k),'err=',Po(k)-Ptrue(k)
       endif
     enddo
@@ -2781,10 +2781,10 @@ logical function test_data1di(verbose, nk, Po, Ptrue, title)
     do k = 1,nk
       if (Po(k) /= Ptrue(k)) then
         test_data1di = .true.
-        write(stdunit,'(a,i2,2(x,a,i5),x,a)') 'k=',k,'Io=',Po(k),'Itrue=',Ptrue(k),'WRONG!'
+        write(stdunit,'(a,i2,2(1x,a,i5),1x,a)') 'k=',k,'Io=',Po(k),'Itrue=',Ptrue(k),'WRONG!'
       else
         if (verbose) &
-          write(stdunit,'(a,i2,2(x,a,i5))') 'k=',k,'Io=',Po(k),'Itrue=',Ptrue(k)
+          write(stdunit,'(a,i2,2(1x,a,i5))') 'k=',k,'Io=',Po(k),'Itrue=',Ptrue(k)
       endif
     enddo
   endif

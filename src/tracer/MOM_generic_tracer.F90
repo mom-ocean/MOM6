@@ -361,7 +361,7 @@ contains
     grid_tmask(:,:,:) = 0.0
     grid_kmt(:,:) = 0
     do j = G%jsd, G%jed ; do i = G%isd, G%ied
-      if (G%mask2dT(i,j) > 0) then
+      if (G%mask2dT(i,j) > 0.0) then
         grid_tmask(i,j,:) = 1.0
         grid_kmt(i,j) = GV%ke ! Tell the code that a layer thicker than 1m is the bottom layer.
       endif
