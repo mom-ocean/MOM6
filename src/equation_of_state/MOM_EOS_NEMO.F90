@@ -259,7 +259,7 @@ subroutine calculate_density_array_nemo(T, S, pressure, rho, start, npts, rho_re
       rho(j) =  ( zn + zr0 ) ! density
     endif
 
- enddo
+  enddo
 end subroutine calculate_density_array_nemo
 
 !> For a given thermodynamic state, calculate the derivatives of density with conservative
@@ -391,7 +391,7 @@ subroutine calculate_compress_nemo(T, S, pressure, rho, drho_dp, start, npts)
     zt = T(j) !gsw_ct_from_pt(S(j),T(j))  !Convert potantial temp to conservative temp
     zp = pressure(j)* Pa2db         !Convert pressure from Pascal to decibar
     call gsw_rho_first_derivatives(zs,zt,zp, drho_dp=drho_dp(j))
- enddo
+  enddo
 end subroutine calculate_compress_nemo
 
 end module MOM_EOS_NEMO

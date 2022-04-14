@@ -249,7 +249,7 @@ subroutine fill_miss_2d(aout, good, fill, prev, G, smooth, num_pass, relc, crit,
       call MOM_error(FATAL,"MOM_initialize: "// &
            "fill is true and good is false after fill_miss, how did this happen? ")
     endif
- enddo ; enddo
+  enddo ; enddo
 
 end subroutine fill_miss_2d
 

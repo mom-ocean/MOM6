@@ -1905,14 +1905,14 @@ end subroutine get_simple_array_j_ind
 
 !> Invert the contents of a 1-d array
 subroutine invert(array)
- integer, dimension(:), intent(inout) :: array !< The 1-d array to invert
- integer :: i, ni, swap
- ni = size(array)
- do i=1,ni
-   swap = array(i)
-   array(i) = array(ni+1-i)
-   array(ni+1-i) = swap
- enddo
+  integer, dimension(:), intent(inout) :: array !< The 1-d array to invert
+  integer :: i, ni, swap
+  ni = size(array)
+  do i=1,ni
+    swap = array(i)
+    array(i) = array(ni+1-i)
+    array(ni+1-i) = swap
+  enddo
 end subroutine invert
 
 !> Returns the global shape of h-point arrays

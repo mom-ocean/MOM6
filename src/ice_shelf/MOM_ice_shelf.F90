@@ -327,8 +327,8 @@ subroutine shelf_calc_flux(sfc_state_in, fluxes_in, Time, time_step, CS)
   ISS => CS%ISS
 
   if (CS%data_override_shelf_fluxes .and. CS%active_shelf_dynamics) then
-       call data_override(G%Domain, 'shelf_sfc_mass_flux', fluxes_in%shelf_sfc_mass_flux, CS%Time, &
-                          scale=US%kg_m2s_to_RZ_T)
+    call data_override(G%Domain, 'shelf_sfc_mass_flux', fluxes_in%shelf_sfc_mass_flux, CS%Time, &
+                       scale=US%kg_m2s_to_RZ_T)
   endif
 
   if (CS%rotate_index) then
@@ -741,13 +741,13 @@ subroutine shelf_calc_flux(sfc_state_in, fluxes_in, Time, time_step, CS)
                    scale=US%RZ_to_kg_m2)
     endif
 
-   call change_thickness_using_precip(CS, ISS, G, US, fluxes,US%s_to_T*time_step, Time)
+    call change_thickness_using_precip(CS, ISS, G, US, fluxes, US%s_to_T*time_step, Time)
 
-   if (CS%debug) then
-     call hchksum(ISS%h_shelf, "h_shelf after change thickness using surf acc", G%HI, haloshift=0, scale=US%Z_to_m)
-     call hchksum(ISS%mass_shelf, "mass_shelf after change thickness using surf acc", G%HI, haloshift=0, &
-                  scale=US%RZ_to_kg_m2)
-   endif
+    if (CS%debug) then
+      call hchksum(ISS%h_shelf, "h_shelf after change thickness using surf acc", G%HI, haloshift=0, scale=US%Z_to_m)
+      call hchksum(ISS%mass_shelf, "mass_shelf after change thickness using surf acc", G%HI, haloshift=0, &
+                   scale=US%RZ_to_kg_m2)
+    endif
 
   endif
 
@@ -2136,8 +2136,8 @@ subroutine ice_shelf_query(CS, G, frac_shelf_h, mass_shelf, data_override_shelf_
   endif
 
   if (present(data_override_shelf_fluxes)) then
-     data_override_shelf_fluxes=.false.
-     if (CS%active_shelf_dynamics) data_override_shelf_fluxes = CS%data_override_shelf_fluxes
+    data_override_shelf_fluxes=.false.
+    if (CS%active_shelf_dynamics) data_override_shelf_fluxes = CS%data_override_shelf_fluxes
   endif
 
 end subroutine ice_shelf_query

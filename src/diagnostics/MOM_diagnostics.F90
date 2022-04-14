@@ -452,7 +452,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
   ! area mean SSS
   if (CS%id_sosga > 0) then
     do j=js,je ; do i=is,ie
-       surface_field(i,j) = tv%S(i,j,1)
+      surface_field(i,j) = tv%S(i,j,1)
     enddo ; enddo
     sosga = global_area_mean(surface_field, G)
     call post_data(CS%id_sosga, sosga, CS%diag)

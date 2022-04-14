@@ -275,15 +275,15 @@ subroutine initialize_ALE_sponge_fixed(Iresttime, G, GV, param_file, CS, data_h,
     ! u points
     CS%num_col_u = 0 ;
     if (present(Iresttime_u_in)) then
-       Iresttime_u(:,:) = Iresttime_u_in(:,:)
+      Iresttime_u(:,:) = Iresttime_u_in(:,:)
     else
       do j=G%jsc,G%jec ; do I=G%iscB,G%iecB
         Iresttime_u(I,j) = 0.5 * (Iresttime(i,j) + Iresttime(i+1,j))
       enddo ; enddo
     endif
     do j=G%jsc,G%jec ; do I=G%iscB,G%iecB
-       if ((Iresttime_u(I,j) > 0.0) .and. (G%mask2dCu(I,j) > 0.0)) &
-          CS%num_col_u = CS%num_col_u + 1
+      if ((Iresttime_u(I,j) > 0.0) .and. (G%mask2dCu(I,j) > 0.0)) &
+        CS%num_col_u = CS%num_col_u + 1
     enddo ; enddo
 
     if (CS%num_col_u > 0) then
