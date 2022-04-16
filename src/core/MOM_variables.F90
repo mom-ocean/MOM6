@@ -309,15 +309,16 @@ type, public :: BT_cont_type
   type(group_pass_type) :: pass_FA_uv !< Structure for face area group halo updates
 end type BT_cont_type
 
-
-!> pointers to grids modifying cell metric at porous barriers
+!> Container for grids modifying cell metric at porous barriers
+! TODO: rename porous_barrier_ptrs to porous_barrier_type
 type, public :: porous_barrier_ptrs
-  real, pointer, dimension(:,:,:) :: por_face_areaU => NULL() !< fractional open area of U-faces [nondim]
-  real, pointer, dimension(:,:,:) :: por_face_areaV => NULL() !< fractional open area of V-faces [nondim]
-  real, pointer, dimension(:,:,:) :: por_layer_widthU => NULL() !< fractional open width of U-faces [nondim]
-  real, pointer, dimension(:,:,:) :: por_layer_widthV => NULL() !< fractional open width of V-faces [nondim]
+  ! Each of the following fields has nz layers.
+  real, allocatable :: por_face_areaU(:,:,:) !< fractional open area of U-faces [nondim]
+  real, allocatable :: por_face_areaV(:,:,:) !< fractional open area of V-faces [nondim]
+  ! Each of the following fields is found at nz+1 interfaces.
+  real, allocatable :: por_layer_widthU(:,:,:) !< fractional open width of U-faces [nondim]
+  real, allocatable :: por_layer_widthV(:,:,:) !< fractional open width of V-faces [nondim]
 end type porous_barrier_ptrs
-
 
 contains
 
