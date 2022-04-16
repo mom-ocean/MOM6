@@ -10,22 +10,30 @@ use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : thermo_var_ptrs, porous_barrier_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
 use MOM_interface_heights, only : find_eta
+use MOM_time_manager,         only : time_type
+use MOM_diag_mediator,        only : register_diag_field, diag_ctrl, post_data
+use MOM_file_parser,          only : param_file_type, get_param
+use MOM_unit_scaling,         only : unit_scale_type
+use MOM_debugging,            only : hchksum, uvchksum
 
 implicit none ; private
 
+public porous_widths, porous_barriers_init
+
 #include <MOM_memory.h>
 
-public porous_widths
-
-!> Calculates curve fit from D_min, D_max, D_avg
-interface porous_widths
-  module procedure por_widths, calc_por_layer
-end interface porous_widths
+type, public :: porous_barrier_CS; private
+  logical :: initialized = .false.  !< True if this control structure has been initialized.
+  type(diag_ctrl), pointer :: diag => Null()   !< A structure to regulate diagnostic output timing
+  logical :: debug  !< If true, write verbose checksums for debugging purposes.
+  real :: mask_depth  !< The depth below which porous barrier is not applied.
+  integer :: id_por_layer_widthU = -1, id_por_layer_widthV = -1, id_por_face_areaU = -1, id_por_face_areaV = -1
+end type porous_barrier_CS
 
 contains
 
 !> subroutine to assign cell face areas and layer widths for porous topography
-subroutine por_widths(h, tv, G, GV, US, eta, pbv, eta_bt, halo_size, eta_to_m)
+subroutine porous_widths(h, tv, G, GV, US, eta, pbv, CS, eta_bt, halo_size, eta_to_m)
   !eta_bt, halo_size, eta_to_m not currently used
   !variables needed to call find_eta
   type(ocean_grid_type),                      intent(in)  :: G   !< The ocean's grid structure.
@@ -46,6 +54,7 @@ subroutine por_widths(h, tv, G, GV, US, eta, pbv, eta_bt, halo_size, eta_to_m)
   real,                             optional, intent(in)  :: eta_to_m  !< The conversion factor from
              !! the units of eta to m; by default this is US%Z_to_m.
   type(porous_barrier_ptrs),           intent(inout) :: pbv  !< porous barrier fractional cell metrics
+  type(porous_barrier_CS), intent(in) :: CS
 
   !local variables
   integer i, j, k, nk, isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
@@ -54,6 +63,10 @@ subroutine por_widths(h, tv, G, GV, US, eta, pbv, eta_bt, halo_size, eta_to_m)
        A_layer_prev, & ! integral of fractional open width from bottom to previous layer [Z ~> m]
        eta_s, & ! layer height used for fit [Z ~> m]
        eta_prev ! interface height of previous layer [Z ~> m]
+
+  if (.not.CS%initialized) call MOM_error(FATAL, &
+      "MOM_Porous_barrier: Module must be initialized before it is used.")
+
   isd = G%isd; ied = G%ied; jsd = G%jsd; jed = G%jed
   IsdB = G%IsdB; IedB = G%IedB; JsdB = G%JsdB; JedB = G%JedB
 
@@ -118,7 +131,19 @@ subroutine por_widths(h, tv, G, GV, US, eta, pbv, eta_bt, halo_size, eta_to_m)
     endif
   enddo; enddo
 
-end subroutine por_widths
+  if (CS%debug) then
+    call hchksum(eta, "Interface height used by porous barrier", G%HI, haloshift=0, scale=GV%H_to_m)
+    call uvchksum("Porous barrier weights at the layer-interface: por_layer_width[UV]", &
+                   pbv%por_layer_widthU, pbv%por_layer_widthV, G%HI, haloshift=0)
+    call uvchksum("Porous barrier layer-averaged weights: por_face_area[UV]", &
+                   pbv%por_face_areaU, pbv%por_face_areaV, G%HI, haloshift=0)
+  endif
+
+  if (CS%id_por_layer_widthU > 0) call post_data(CS%id_por_layer_widthU, pbv%por_layer_widthU, CS%diag)
+  if (CS%id_por_layer_widthV > 0) call post_data(CS%id_por_layer_widthV, pbv%por_layer_widthV, CS%diag)
+  if (CS%id_por_face_areaU > 0) call post_data(CS%id_por_face_areaU, pbv%por_face_areaU, CS%diag)
+  if (CS%id_por_face_areaV > 0) call post_data(CS%id_por_face_areaV, pbv%por_face_areaV, CS%diag)
+end subroutine porous_widths
 
 !> subroutine to calculate the profile fit for a single layer in a column
 subroutine calc_por_layer(D_min, D_max, D_avg, eta_layer, w_layer, A_layer)
@@ -164,5 +189,32 @@ subroutine calc_por_layer(D_min, D_max, D_avg, eta_layer, w_layer, A_layer)
 
 
 end subroutine calc_por_layer
+
+subroutine porous_barriers_init(Time, US, param_file, diag, CS)
+  type(porous_barrier_CS), intent(inout) :: CS
+  type(param_file_type),   intent(in)    :: param_file  !< structure indicating parameter file to parse
+  type(time_type),         intent(in)    :: Time !< Current model time
+  type(diag_ctrl), target, intent(inout) :: diag !< Diagnostics control structure
+  type(unit_scale_type),   intent(in)    :: US
+
+  character(len=40)  :: mdl = "MOM_porous_barriers"  ! This module's name.
+  CS%initialized = .true.
+  CS%diag => diag
+
+  call get_param(param_file, mdl, "DEBUG", CS%debug, default=.false.)
+  call get_param(param_file, mdl, "POROUS_BARRIER_MASKING_DEPTH", CS%mask_depth,  &
+                 "The depth below which porous barrier is not applied.  "//&
+                 "This criterion is tested against TOPO_AT_VEL_VARNAME_U_AVE and TOPO_AT_VEL_VARNAME_V_AVE.", &
+                 units="m", default=0.0, scale=US%m_to_Z)
+
+  CS%id_por_layer_widthU = register_diag_field('ocean_model', 'por_layer_widthU', diag%axesCui, Time, &
+     'Porous barrier open width fraction (at the layer interfaces) of the u-faces', 'nondim')
+  CS%id_por_layer_widthV = register_diag_field('ocean_model', 'por_layer_widthV', diag%axesCvi, Time, &
+     'Porous barrier open width fraction (at the layer interfaces) of the v-faces', 'nondim')
+  CS%id_por_face_areaU = register_diag_field('ocean_model', 'por_face_areaU', diag%axesCuL, Time, &
+     'Porous barrier open area fraction (layer averaged) of U-faces', 'nondim')
+  CS%id_por_face_areaV = register_diag_field('ocean_model', 'por_face_areaV', diag%axesCvL, Time, &
+     'Porous barrier open area fraction (layer averaged) of V-faces', 'nondim')
+end subroutine
 
 end module MOM_porous_barriers

@@ -103,6 +103,7 @@ use MOM_open_boundary,         only : register_temp_salt_segments
 use MOM_open_boundary,         only : open_boundary_register_restarts
 use MOM_open_boundary,         only : update_segment_tracer_reservoirs
 use MOM_open_boundary,         only : rotate_OBC_config, rotate_OBC_init
+use MOM_porous_barriers,       only : porous_barrier_CS, porous_widths, porous_barriers_init
 use MOM_set_visc,              only : set_viscous_BBL, set_viscous_ML
 use MOM_set_visc,              only : set_visc_register_restarts, set_visc_CS
 use MOM_set_visc,              only : set_visc_init, set_visc_end
@@ -140,8 +141,6 @@ use MOM_verticalGrid,          only : fix_restart_scaling
 use MOM_verticalGrid,          only : get_thickness_units, get_flux_units, get_tr_flux_units
 use MOM_wave_interface,        only : wave_parameters_CS, waves_end, waves_register_restarts
 use MOM_wave_interface,        only : Update_Stokes_Drift
-
-use MOM_porous_barriers,      only : porous_widths
 
 ! Database client used for machine-learning interface
 use MOM_database_comms,       only : dbcomms_CS_type, database_comms_init, dbclient_type
@@ -403,6 +402,8 @@ type, public :: MOM_control_struct ; private
     !< Pointer to the MOM diagnostics control structure
   type(offline_transport_CS),    pointer :: offline_CSp => NULL()
     !< Pointer to the offline tracer transport control structure
+  type(porous_barrier_CS)                :: por_bar_CS
+    !< Control structure for porous barrier
 
   logical               :: ensemble_ocean !< if true, this run is part of a
                                 !! larger ensemble for the purpose of data assimilation
@@ -1089,8 +1090,10 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_thermo, &
     call diag_update_remap_grids(CS%diag)
   endif
 
-  !update porous barrier fractional cell metrics
-  call porous_widths(h, CS%tv, G, GV, US, eta_por, CS%pbv)
+  ! Update porous barrier fractional cell metrics
+  call enable_averages(dt, Time_local, CS%diag)
+  call porous_widths(h, CS%tv, G, GV, US, eta_por, CS%pbv, CS%por_bar_CS)
+  call disable_averaging(CS%diag)
 
   ! The bottom boundary layer properties need to be recalculated.
   if (bbl_time_int > 0.0) then
@@ -1417,7 +1420,7 @@ subroutine step_MOM_thermo(CS, G, GV, US, u, v, h, tv, fluxes, dtdia, &
     ! and set_viscous_BBL is called as a part of the dynamic stepping.
     call cpu_clock_begin(id_clock_BBL_visc)
     !update porous barrier fractional cell metrics
-    call porous_widths(h, CS%tv, G, GV, US, eta_por, CS%pbv)
+    call porous_widths(h, CS%tv, G, GV, US, eta_por, CS%pbv, CS%por_bar_CS)
     call set_viscous_BBL(u, v, h, tv, CS%visc, G, GV, US, CS%set_visc_CSp, CS%pbv)
     call cpu_clock_end(id_clock_BBL_visc)
     if (showCallTree) call callTree_wayPoint("done with set_viscous_BBL (step_MOM_thermo)")
@@ -2815,6 +2818,8 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
 
   new_sim = is_new_run(restart_CSp)
   call MOM_stoch_eos_init(G,Time,param_file,CS%stoch_eos_CS,restart_CSp,diag)
+  call porous_barriers_init(Time, US, param_file, diag, CS%por_bar_CS)
+
   if (CS%split) then
     allocate(eta(SZI_(G),SZJ_(G)), source=0.0)
     call initialize_dyn_split_RK2(CS%u, CS%v, CS%h, CS%uh, CS%vh, eta, Time, &
