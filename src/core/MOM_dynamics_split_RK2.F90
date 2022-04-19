@@ -177,6 +177,7 @@ type, public :: MOM_dyn_split_RK2_CS ; private
   integer :: id_hf_CAu_2d = -1, id_hf_CAv_2d = -1
   integer :: id_intz_CAu_2d = -1, id_intz_CAv_2d = -1
   integer :: id_CAu_visc_rem = -1, id_CAv_visc_rem = -1
+  integer :: id_deta_dt = -1
 
   ! Split scheme only.
   integer :: id_uav        = -1, id_vav        = -1
@@ -315,6 +316,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
     ! obtained using the initial velocities [H L2 T-1 ~> m3 s-1 or kg s-1].
 
   real, dimension(SZI_(G),SZJ_(G)) :: eta_pred
+  real, dimension(SZI_(G),SZJ_(G)) :: deta_dt
     ! eta_pred is the predictor value of the free surface height or column mass,
     ! [H ~> m or kg m-2].
 
@@ -347,6 +349,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
     h_av    ! The layer thickness time-averaged over a time step [H ~> m or kg m-2].
 
   real :: dt_pred   ! The time step for the predictor part of the baroclinic time stepping [T ~> s].
+  real :: Idt_bc    ! Inverse of the baroclinic timestep
 
   logical :: dyn_p_surf
   logical :: BT_cont_BT_thick ! If true, use the BT_cont_type to estimate the
@@ -357,9 +360,12 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
 
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
   integer :: cont_stencil
+
   is  = G%isc  ; ie  = G%iec  ; js  = G%jsc  ; je  = G%jec ; nz = GV%ke
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   u_av => CS%u_av ; v_av => CS%v_av ; h_av => CS%h_av ; eta => CS%eta
+
+  Idt_bc = 1./dt
 
   sym=.false.;if (G%Domain%symmetric) sym=.true.  ! switch to include symmetric domain in checksums
 
@@ -760,6 +766,9 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
               CS%u_accel_bt, CS%v_accel_bt, eta_pred, CS%uhbt, CS%vhbt, G, GV, US, &
               CS%barotropic_CSp, CS%visc_rem_u, CS%visc_rem_v, CS%ADp, CS%OBC, CS%BT_cont, &
               eta_PF_start, taux_bot, tauy_bot, uh_ptr, vh_ptr, u_ptr, v_ptr, etaav=eta_av)
+  if (CS%id_deta_dt>0) then
+    do j=js,je ; do i=is,ie ; deta_dt(i,j) = (eta_pred(i,j) - eta(i,j))*Idt_bc ; enddo ; enddo
+  endif
   do j=js,je ; do i=is,ie ; eta(i,j) = eta_pred(i,j) ; enddo ; enddo
 
   call cpu_clock_end(id_clock_btstep)
@@ -957,6 +966,9 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
     call post_product_u(CS%id_u_BT_accel_visc_rem, CS%u_accel_bt, CS%ADp%visc_rem_u, G, nz, CS%diag)
   if (CS%id_v_BT_accel_visc_rem > 0) &
     call post_product_v(CS%id_v_BT_accel_visc_rem, CS%v_accel_bt, CS%ADp%visc_rem_v, G, nz, CS%diag)
+
+  ! Diagnostics related to changes in eta
+  if (CS%id_deta_dt > 0) call post_data(CS%id_deta_dt, deta_dt, CS%diag)
 
   if (CS%debug) then
     call MOM_state_chksum("Corrector ", u, v, h, uh, vh, G, GV, US, symmetric=sym)
@@ -1334,6 +1346,14 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, US, param
   CS%id_veffA = register_diag_field('ocean_model', 'veffA', diag%axesCvL, Time, &
        'Effective V-Face Area', 'm^2', conversion = GV%H_to_m*US%L_to_m, &
        x_cell_method='sum', v_extensive=.true.)
+  if (GV%Boussinesq) then
+    CS%id_deta_dt = register_diag_field('ocean_model', 'deta_dt', diag%axesT1, Time, &
+      'Barotropic SSH tendency due to dynamics', trim(thickness_units)//' s-1', conversion=GV%H_to_MKS*US%s_to_T)
+  else
+    CS%id_deta_dt = register_diag_field('ocean_model', 'deta_dt', diag%axesT1, Time, &
+      'Barotropic column-mass tendency due to dynamics', trim(thickness_units)//' s-1', &
+      conversion=GV%H_to_mks*US%s_to_T)
+  endif
 
   !CS%id_hf_PFu = register_diag_field('ocean_model', 'hf_PFu', diag%axesCuL, Time, &
   !    'Fractional Thickness-weighted Zonal Pressure Force Acceleration', &
