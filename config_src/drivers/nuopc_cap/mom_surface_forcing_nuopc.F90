@@ -544,23 +544,25 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
                      fluxes%sw_nir_dir(i,j) + fluxes%sw_nir_dif(i,j)
 
     ! enthalpy terms
-    if (associated(IOB%hrofl)) &
-      fluxes%heat_content_lrunoff(i,j) = US%W_m2_to_QRZ_T * IOB%hrofl(i-i0,j-j0) * G%mask2dT(i,j)
+    if (CS%enthalpy_cpl) then
+      if (associated(IOB%hrofl)) &
+        fluxes%heat_content_lrunoff(i,j) = US%W_m2_to_QRZ_T * IOB%hrofl(i-i0,j-j0) * G%mask2dT(i,j)
 
-    if (associated(IOB%hrofi)) &
-      fluxes%heat_content_frunoff(i,j) = US%W_m2_to_QRZ_T * IOB%hrofi(i-i0,j-j0) * G%mask2dT(i,j)
+      if (associated(IOB%hrofi)) &
+        fluxes%heat_content_frunoff(i,j) = US%W_m2_to_QRZ_T * IOB%hrofi(i-i0,j-j0) * G%mask2dT(i,j)
 
-    if (associated(IOB%hrain)) &
-      fluxes%heat_content_lprec(i,j)   = US%W_m2_to_QRZ_T * IOB%hrain(i-i0,j-j0) * G%mask2dT(i,j)
+      if (associated(IOB%hrain)) &
+        fluxes%heat_content_lprec(i,j)   = US%W_m2_to_QRZ_T * IOB%hrain(i-i0,j-j0) * G%mask2dT(i,j)
 
-    if (associated(IOB%hsnow)) &
-      fluxes%heat_content_fprec(i,j)   = US%W_m2_to_QRZ_T * IOB%hsnow(i-i0,j-j0) * G%mask2dT(i,j)
+      if (associated(IOB%hsnow)) &
+        fluxes%heat_content_fprec(i,j)   = US%W_m2_to_QRZ_T * IOB%hsnow(i-i0,j-j0) * G%mask2dT(i,j)
 
-     if (associated(IOB%hevap)) &
-      fluxes%heat_content_evap(i,j)    = US%W_m2_to_QRZ_T * IOB%hevap(i-i0,j-j0) * G%mask2dT(i,j)
+       if (associated(IOB%hevap)) &
+        fluxes%heat_content_evap(i,j)    = US%W_m2_to_QRZ_T * IOB%hevap(i-i0,j-j0) * G%mask2dT(i,j)
 
-     if (associated(IOB%hcond)) &
-      fluxes%heat_content_cond(i,j)    = US%W_m2_to_QRZ_T * IOB%hcond(i-i0,j-j0) * G%mask2dT(i,j)
+       if (associated(IOB%hcond)) &
+        fluxes%heat_content_cond(i,j)    = US%W_m2_to_QRZ_T * IOB%hcond(i-i0,j-j0) * G%mask2dT(i,j)
+    endif
 
     ! sea ice fraction [nondim]
     if (associated(IOB%ice_fraction) .and. associated(fluxes%ice_fraction)) &
