@@ -326,9 +326,9 @@ logical function CVMix_shear_is_used(param_file)
   ! Local variables
   logical :: LMD94, PP81
   call get_param(param_file, mdl, "USE_LMD94", LMD94, &
-       default=.false., do_not_log = .true.)
+       default=.false., do_not_log=.true.)
   call get_param(param_file, mdl, "Use_PP81", PP81, &
-       default=.false., do_not_log = .true.)
+       default=.false., do_not_log=.true.)
   CVMix_shear_is_used = (LMD94 .or. PP81)
 end function CVMix_shear_is_used
 

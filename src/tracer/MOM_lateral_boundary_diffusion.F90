@@ -126,7 +126,7 @@ logical function lateral_boundary_diffusion_init(Time, G, GV, param_file, diag, 
                  "It can be one of the following schemes: "//&
                  trim(remappingSchemesDoc), default=remappingDefaultScheme)
   call initialize_remapping( CS%remap_CS, string, boundary_extrapolation = boundary_extrap ,&
-       check_reconstruction = .false., check_remapping = .false., answers_2018 = .false.)
+       check_reconstruction=.false., check_remapping=.false., answers_2018=.false.)
   call extract_member_remapping_CS(CS%remap_CS, degree=CS%deg)
   call get_param(param_file, mdl, "LBD_DEBUG", CS%debug, &
                  "If true, write out verbose debugging data in the LBD module.", &
@@ -382,9 +382,9 @@ subroutine unique(val, n, val_unique, val_max)
   max_val = MAXVAL(val)
   i = 0
   do while (min_val<max_val)
-      i = i+1
-      min_val = MINVAL(val, mask=val>min_val)
-      tmp(i) = min_val
+    i = i+1
+    min_val = MINVAL(val, mask=val>min_val)
+    tmp(i) = min_val
   enddo
   ii = i
   if (limit) then
@@ -745,8 +745,8 @@ logical function near_boundary_unit_tests( verbose )
   allocate(CS)
   ! fill required fields in CS
   CS%linear=.false.
-  call initialize_remapping( CS%remap_CS, 'PLM', boundary_extrapolation = .true. ,&
-       check_reconstruction = .true., check_remapping = .true.)
+  call initialize_remapping( CS%remap_CS, 'PLM', boundary_extrapolation=.true. ,&
+       check_reconstruction=.true., check_remapping=.true.)
   call extract_member_remapping_CS(CS%remap_CS, degree=CS%deg)
   CS%H_subroundoff = 1.0E-20
   CS%debug=.false.

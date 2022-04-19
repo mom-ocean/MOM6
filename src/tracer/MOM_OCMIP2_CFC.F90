@@ -288,14 +288,14 @@ subroutine flux_init_OCMIP2_CFC(CS, verbosity)
   ! These calls obtain the indices for the CFC11 and CFC12 flux coupling.  They
   ! can safely be called multiple times.
   ind_flux(1) = atmos_ocn_coupler_flux('cfc_11_flux', &
-       flux_type = 'air_sea_gas_flux', implementation='ocmip2', &
+       flux_type='air_sea_gas_flux', implementation='ocmip2', &
        param=(/ 9.36e-07, 9.7561e-06 /), &
-       ice_restart_file = default_ice_restart_file, &
-       ocean_restart_file = default_ocean_restart_file, &
-       caller = "register_OCMIP2_CFC", verbosity=verbosity)
+       ice_restart_file=default_ice_restart_file, &
+       ocean_restart_file=default_ocean_restart_file, &
+       caller="register_OCMIP2_CFC", verbosity=verbosity)
   ind_flux(2) = atmos_ocn_coupler_flux('cfc_12_flux', &
        flux_type='air_sea_gas_flux', implementation='ocmip2', &
-       param = (/ 9.36e-07, 9.7561e-06 /), &
+       param=(/ 9.36e-07, 9.7561e-06 /), &
        ice_restart_file=default_ice_restart_file, &
        ocean_restart_file=default_ocean_restart_file, &
        caller="register_OCMIP2_CFC", verbosity=verbosity)

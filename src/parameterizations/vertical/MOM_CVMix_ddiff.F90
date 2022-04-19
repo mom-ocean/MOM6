@@ -274,7 +274,7 @@ end subroutine compute_ddiff_coeffs
 logical function CVMix_ddiff_is_used(param_file)
   type(param_file_type), intent(in) :: param_file !< A structure to parse for run-time parameters
   call get_param(param_file, mdl, "USE_CVMIX_DDIFF", CVMix_ddiff_is_used, &
-                 default=.false., do_not_log = .true.)
+                 default=.false., do_not_log=.true.)
 
 end function CVMix_ddiff_is_used
 

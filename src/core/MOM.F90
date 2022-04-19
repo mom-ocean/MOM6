@@ -1908,7 +1908,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
                  "If False, T/S are registered for advection. "//&
                  "This is intended only to be used in offline tracer mode "//&
                  "and is by default false in that case.", &
-                 do_not_log = .true., default=.true. )
+                 do_not_log=.true., default=.true.)
   if (present(offline_tracer_mode)) then ! Only read this parameter in enabled modes
     call get_param(param_file, "MOM", "OFFLINE_TRACER_MODE", CS%offline_tracer_mode, &
                  "If true, barotropic and baroclinic dynamics, thermodynamics "//&

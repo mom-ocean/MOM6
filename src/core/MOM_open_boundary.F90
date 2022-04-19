@@ -1630,7 +1630,7 @@ end subroutine parse_segment_data_str
 
 !> Parse all the OBC_SEGMENT_%%%_DATA strings again
 !! to see which need tracer reservoirs (all pes need to know).
- subroutine parse_for_tracer_reservoirs(OBC, PF, use_temperature)
+subroutine parse_for_tracer_reservoirs(OBC, PF, use_temperature)
   type(ocean_OBC_type), target, intent(inout) :: OBC !< Open boundary control structure
   type(param_file_type),  intent(in) :: PF  !< Parameter file handle
   logical,                intent(in) :: use_temperature !< If true, T and S are used

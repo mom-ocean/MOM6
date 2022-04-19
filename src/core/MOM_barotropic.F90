@@ -3053,7 +3053,7 @@ end subroutine apply_velocity_OBCs
 !! boundary conditions, as developed by Mehmet Ilicak.
 subroutine set_up_BT_OBC(OBC, eta, BT_OBC, BT_Domain, G, GV, US, MS, halo, use_BT_cont, &
                          integral_BT_cont, dt_baroclinic, Datu, Datv, BTCL_u, BTCL_v)
- type(ocean_OBC_type), target,          intent(inout) :: OBC    !< An associated pointer to an OBC type.
+  type(ocean_OBC_type), target,          intent(inout) :: OBC    !< An associated pointer to an OBC type.
   type(memory_size_type),                intent(in)    :: MS     !< A type that describes the memory sizes of the
                                                                  !! argument arrays.
   real, dimension(SZIW_(MS),SZJW_(MS)),  intent(in)    :: eta    !< The barotropic free surface height anomaly or

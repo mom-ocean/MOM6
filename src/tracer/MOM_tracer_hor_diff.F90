@@ -1498,7 +1498,7 @@ subroutine tracer_hor_diff_init(Time, G, GV, US, param_file, diag, EOS, diabatic
   call get_param(param_File, mdl, "RECALC_NEUTRAL_SURF", CS%recalc_neutral_surf, &
                  "If true, then recalculate the neutral surfaces if the \n"//&
                  "diffusive CFL is exceeded. If false, assume that the  \n"//&
-                 "positions of the surfaces do not change \n", default = .false.)
+                 "positions of the surfaces do not change \n", default=.false.)
   CS%ML_KhTR_scale = 1.0
   if (CS%Diffuse_ML_interior) then
     call get_param(param_file, mdl, "ML_KHTR_SCALE", CS%ML_KhTR_scale, &

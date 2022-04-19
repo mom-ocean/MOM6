@@ -167,11 +167,11 @@ logical function neutral_diffusion_init(Time, G, GV, US, param_file, diag, EOS, 
   call get_param(param_file, mdl, "NDIFF_INTERIOR_ONLY", CS%interior_only, &
                  "If true, only applies neutral diffusion in the ocean interior."//&
                  "That is, the algorithm will exclude the surface and bottom"//&
-                 "boundary layers.", default = .false.)
+                 "boundary layers.", default=.false.)
   call get_param(param_file, mdl, "NDIFF_USE_UNMASKED_TRANSPORT_BUG", CS%use_unmasked_transport_bug, &
                  "If true, use an older form for the accumulation of neutral-diffusion "//&
                  "transports that were unmasked, as used prior to Jan 2018. This is not "//&
-                 "recommended.", default = .false.)
+                 "recommended.", default=.false.)
 
   ! Initialize and configure remapping
   if ( .not.CS%continuous_reconstruction ) then

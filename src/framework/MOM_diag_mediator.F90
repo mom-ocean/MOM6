@@ -2234,7 +2234,7 @@ integer function register_diag_field(module_name, field_name, axes_in, init_time
 
     ! Register the native diagnostic
     if (associated(axes_d2)) then
-       active = register_diag_field_expand_cmor(dm_id, new_module_name, field_name, axes_d2, &
+      active = register_diag_field_expand_cmor(dm_id, new_module_name, field_name, axes_d2, &
                 init_time, long_name=long_name, units=units, missing_value=MOM_missing_value, &
                 range=range, mask_variant=mask_variant, standard_name=standard_name, &
                 verbose=verbose, do_not_log=do_not_log, err_msg=err_msg, &

@@ -265,15 +265,15 @@ type, public :: mech_forcing
                                 !! ice needs to be accumulated, and the rigidity explicitly
                                 !! reset to zero at the driver level when appropriate.
   real, pointer, dimension(:,:) :: &
-       ustk0 => NULL(), &       !< Surface Stokes drift, zonal [m s-1]
-       vstk0 => NULL()          !< Surface Stokes drift, meridional [m s-1]
+    ustk0 => NULL(), &          !< Surface Stokes drift, zonal [m s-1]
+    vstk0 => NULL()             !< Surface Stokes drift, meridional [m s-1]
   real, pointer, dimension(:) :: &
-       stk_wavenumbers => NULL() !< The central wave number of Stokes bands [rad m-1]
+    stk_wavenumbers => NULL()   !< The central wave number of Stokes bands [rad m-1]
   real, pointer, dimension(:,:,:) :: &
-       ustkb => NULL(), &       !< Stokes Drift spectrum, zonal [m s-1]
+    ustkb => NULL(), &          !< Stokes Drift spectrum, zonal [m s-1]
                                 !! Horizontal - u points
                                 !! 3rd dimension - wavenumber
-       vstkb => NULL()          !< Stokes Drift spectrum, meridional [m s-1]
+    vstkb => NULL()             !< Stokes Drift spectrum, meridional [m s-1]
                                 !! Horizontal - v points
                                 !! 3rd dimension - wavenumber
 
@@ -1503,14 +1503,14 @@ subroutine register_forcing_type_diags(Time, diag, US, use_temperature, handles,
       cmor_field_name='ave_evs', cmor_standard_name='water_evaporation_flux_area_averaged', &
       cmor_long_name='Evaporation Where Ice Free Ocean over Sea Area Averaged')
 
- handles%id_lprec_ga = register_scalar_field('ocean_model', 'lprec_ga', Time, diag,&
+  handles%id_lprec_ga = register_scalar_field('ocean_model', 'lprec_ga', Time, diag,&
       long_name='Area integrated liquid precip into ocean', &
       units='kg m-2 s-1', conversion=US%RZ_T_to_kg_m2s, &
       standard_name='rainfall_flux_area_averaged', &
       cmor_field_name='ave_pr', cmor_standard_name='rainfall_flux_area_averaged', &
       cmor_long_name='Rainfall Flux where Ice Free Ocean over Sea Area Averaged')
 
- handles%id_fprec_ga = register_scalar_field('ocean_model', 'fprec_ga', Time, diag, &
+  handles%id_fprec_ga = register_scalar_field('ocean_model', 'fprec_ga', Time, diag, &
       long_name='Area integrated frozen precip into ocean', &
       units='kg m-2 s-1', conversion=US%RZ_T_to_kg_m2s, &
       standard_name='snowfall_flux_area_averaged',                                 &

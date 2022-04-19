@@ -223,7 +223,7 @@ subroutine BFB_surface_forcing_init(Time, G, US, param_file, diag, CS)
   call get_param(param_file, mdl, "RESTOREBUOY", CS%restorebuoy, &
                  "If true, the buoyancy fluxes drive the model back "//&
                  "toward some specified surface state with a rate "//&
-                 "given by FLUXCONST.", default= .false.)
+                 "given by FLUXCONST.", default=.false.)
   if (CS%restorebuoy) then
     call get_param(param_file, mdl, "FLUXCONST", CS%Flux_const, &
                  "The constant that relates the restoring surface fluxes to the relative "//&

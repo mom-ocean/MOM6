@@ -205,7 +205,7 @@ subroutine remapping_core_h(CS, n0, h0, u0, n1, h1, u1, h_neglect, h_neglect_edg
   real, optional,      intent(in)  :: h_neglect_edge !< A negligibly small width
                                          !! for the purpose of edge value
                                          !! calculations in the same units as h0 [H]
-   logical, dimension(n0), optional, intent(in) :: PCM_cell !< If present, use PCM remapping for
+  logical, dimension(n0), optional, intent(in) :: PCM_cell !< If present, use PCM remapping for
                                          !! cells in the source grid where this is true.
 
   ! Local variables

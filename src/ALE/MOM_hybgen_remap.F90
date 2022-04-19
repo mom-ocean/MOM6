@@ -192,7 +192,7 @@ subroutine hybgen_ppm_coefs(s, h_src, edges, nk, ns, thin, PCM_lay)
             + I_h0123(K)*( 2.*dp(k)*dp(k-1)*I_h12(K)*(s(k,i)-s(k-1,i)) * &
                            ( h01_h112(K) - h23_h122(K) ) &
                     + (dp(k)*as(k-1)*h23_h122(K) - dp(k-1)*as(k)*h01_h112(K)) )
-     ar(k-1) = al(k)
+      ar(k-1) = al(k)
     enddo !k
     ar(nk-1) = s(nk,i) ! last layer PCM
     al(nk)  = s(nk,i)  ! last layer PCM

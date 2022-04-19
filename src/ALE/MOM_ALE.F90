@@ -334,7 +334,7 @@ subroutine ALE_register_diags(Time, G, GV, US, diag, CS)
       'm', conversion=GV%H_to_m, v_extensive=.true.)
   cs%id_vert_remap_h_tendency = register_diag_field('ocean_model','vert_remap_h_tendency',diag%axestl,time, &
       'Layer thicknesses tendency due to ALE regridding and remapping', &
-      'm s-1', conversion=GV%H_to_m*US%s_to_T, v_extensive = .true.)
+      'm s-1', conversion=GV%H_to_m*US%s_to_T, v_extensive=.true.)
 
 end subroutine ALE_register_diags
 

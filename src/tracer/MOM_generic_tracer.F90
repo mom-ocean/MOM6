@@ -129,8 +129,8 @@ contains
     !Register all the generic tracers used and create the list of them.
     !This can be called by ALL PE's. No array fields allocated.
     if (.not. g_registered) then
-       call generic_tracer_register()
-       g_registered = .true.
+      call generic_tracer_register()
+      g_registered = .true.
     endif
 
 
@@ -188,29 +188,29 @@ contains
 
     g_tracer=>CS%g_tracer_list
     do
-       call g_tracer_get_alias(g_tracer,g_tracer_name)
+      call g_tracer_get_alias(g_tracer,g_tracer_name)
 
-       call g_tracer_get_pointer(g_tracer,g_tracer_name,'field',tr_field)
-       call g_tracer_get_values(g_tracer,g_tracer_name,'longname', longname)
-       call g_tracer_get_values(g_tracer,g_tracer_name,'units',units )
+      call g_tracer_get_pointer(g_tracer,g_tracer_name,'field',tr_field)
+      call g_tracer_get_values(g_tracer,g_tracer_name,'longname', longname)
+      call g_tracer_get_values(g_tracer,g_tracer_name,'units',units )
 
-       !!nnz: MOM field is 3D. Does this affect performance? Need it be override field?
-       tr_ptr => tr_field(:,:,:,1)
-       ! Register prognastic tracer for horizontal advection, diffusion, and restarts.
-       if (g_tracer_is_prog(g_tracer)) then
-         call register_tracer(tr_ptr, tr_Reg, param_file, HI, GV, &
-                              name=g_tracer_name, longname=longname, units=units, &
-                              registry_diags=.false., &   !### CHANGE TO TRUE?
-                              restart_CS=restart_CS, mandatory=.not.CS%tracers_may_reinit)
-       else
-         call register_restart_field(tr_ptr, g_tracer_name, .not.CS%tracers_may_reinit, &
-                                     restart_CS, longname=longname, units=units)
-       endif
+      !!nnz: MOM field is 3D. Does this affect performance? Need it be override field?
+      tr_ptr => tr_field(:,:,:,1)
+      ! Register prognastic tracer for horizontal advection, diffusion, and restarts.
+      if (g_tracer_is_prog(g_tracer)) then
+        call register_tracer(tr_ptr, tr_Reg, param_file, HI, GV, &
+                             name=g_tracer_name, longname=longname, units=units, &
+                             registry_diags=.false., &   !### CHANGE TO TRUE?
+                             restart_CS=restart_CS, mandatory=.not.CS%tracers_may_reinit)
+      else
+        call register_restart_field(tr_ptr, g_tracer_name, .not.CS%tracers_may_reinit, &
+                                    restart_CS, longname=longname, units=units)
+      endif
 
-       !traverse the linked list till hit NULL
-       call g_tracer_get_next(g_tracer, g_tracer_next)
-       if (.NOT. associated(g_tracer_next)) exit
-       g_tracer=>g_tracer_next
+      !traverse the linked list till hit NULL
+      call g_tracer_get_next(g_tracer, g_tracer_next)
+      if (.NOT. associated(g_tracer_next)) exit
+      g_tracer=>g_tracer_next
 
     enddo
 
@@ -281,70 +281,70 @@ contains
       if (.not.restart .or. (CS%tracers_may_reinit .and. &
           .not.query_initialized(tr_ptr, g_tracer_name, CS%restart_CSp))) then
 
-       if (g_tracer%requires_src_info ) then
-         call MOM_error(NOTE,"initialize_MOM_generic_tracer: "//&
-                             "initializing generic tracer "//trim(g_tracer_name)//&
-                             " using MOM_initialize_tracer_from_Z ")
+        if (g_tracer%requires_src_info ) then
+          call MOM_error(NOTE,"initialize_MOM_generic_tracer: "//&
+                              "initializing generic tracer "//trim(g_tracer_name)//&
+                              " using MOM_initialize_tracer_from_Z ")
 
-         call MOM_initialize_tracer_from_Z(h, tr_ptr, G, GV, US, param_file,               &
-                                src_file = g_tracer%src_file,                              &
-                                src_var_nam = g_tracer%src_var_name,                       &
-                                src_var_unit_conversion = g_tracer%src_var_unit_conversion,&
-                                src_var_record = g_tracer%src_var_record,                  &
-                                src_var_gridspec = g_tracer%src_var_gridspec               )
+          call MOM_initialize_tracer_from_Z(h, tr_ptr, G, GV, US, param_file,               &
+                                 src_file = g_tracer%src_file,                              &
+                                 src_var_nam = g_tracer%src_var_name,                       &
+                                 src_var_unit_conversion = g_tracer%src_var_unit_conversion,&
+                                 src_var_record = g_tracer%src_var_record,                  &
+                                 src_var_gridspec = g_tracer%src_var_gridspec               )
 
-         !Check/apply the bounds for each g_tracer
-         do k=1,nk ; do j=jsc,jec ; do i=isc,iec
-           if (tr_ptr(i,j,k) /= CS%tracer_land_val) then
-             if (tr_ptr(i,j,k) < g_tracer%src_var_valid_min) tr_ptr(i,j,k) = g_tracer%src_var_valid_min
-             !Jasmin does not want to apply the maximum for now
-             !if (tr_ptr(i,j,k) > g_tracer%src_var_valid_max) tr_ptr(i,j,k) = g_tracer%src_var_valid_max
-           endif
-         enddo ; enddo ; enddo
+          !Check/apply the bounds for each g_tracer
+          do k=1,nk ; do j=jsc,jec ; do i=isc,iec
+            if (tr_ptr(i,j,k) /= CS%tracer_land_val) then
+              if (tr_ptr(i,j,k) < g_tracer%src_var_valid_min) tr_ptr(i,j,k) = g_tracer%src_var_valid_min
+              !Jasmin does not want to apply the maximum for now
+              !if (tr_ptr(i,j,k) > g_tracer%src_var_valid_max) tr_ptr(i,j,k) = g_tracer%src_var_valid_max
+            endif
+          enddo ; enddo ; enddo
 
-         !jgj: Reset CASED to 0 below K=1
-         if ( (trim(g_tracer_name) == 'cased') .or. (trim(g_tracer_name) == 'ca13csed') ) then
-           do k=2,nk ; do j=jsc,jec ; do i=isc,iec
-             if (tr_ptr(i,j,k) /= CS%tracer_land_val) then
-               tr_ptr(i,j,k) = 0.0
-             endif
-           enddo ; enddo ; enddo
-         endif
-       elseif(.not. g_tracer%requires_restart) then
+          !jgj: Reset CASED to 0 below K=1
+          if ( (trim(g_tracer_name) == 'cased') .or. (trim(g_tracer_name) == 'ca13csed') ) then
+            do k=2,nk ; do j=jsc,jec ; do i=isc,iec
+              if (tr_ptr(i,j,k) /= CS%tracer_land_val) then
+                tr_ptr(i,j,k) = 0.0
+              endif
+            enddo ; enddo ; enddo
+          endif
+        elseif(.not. g_tracer%requires_restart) then
          !Do nothing for this tracer, it is initialized by the tracer package
           call MOM_error(NOTE,"initialize_MOM_generic_tracer: "//&
                             "skip initialization of generic tracer "//trim(g_tracer_name))
-       else !Do it old way if the tracer is not registered to start from a specific source file.
+        else !Do it old way if the tracer is not registered to start from a specific source file.
             !This path should be deprecated if all generic tracers are required to start from specified sources.
-        if (len_trim(CS%IC_file) > 0) then
-        !  Read the tracer concentrations from a netcdf file.
-          if (.not.file_exists(CS%IC_file)) call MOM_error(FATAL, &
-                  "initialize_MOM_Generic_tracer: Unable to open "//CS%IC_file)
-          if (CS%Z_IC_file) then
-            OK = tracer_Z_init(tr_ptr, h, CS%IC_file, g_tracer_name, G, GV, US)
-            if (.not.OK) then
-              OK = tracer_Z_init(tr_ptr, h, CS%IC_file, trim(g_tracer_name), G, GV, US)
-              if (.not.OK) call MOM_error(FATAL,"initialize_MOM_Generic_tracer: "//&
-                      "Unable to read "//trim(g_tracer_name)//" from "//&
-                      trim(CS%IC_file)//".")
+          if (len_trim(CS%IC_file) > 0) then
+          !  Read the tracer concentrations from a netcdf file.
+            if (.not.file_exists(CS%IC_file)) call MOM_error(FATAL, &
+                    "initialize_MOM_Generic_tracer: Unable to open "//CS%IC_file)
+            if (CS%Z_IC_file) then
+              OK = tracer_Z_init(tr_ptr, h, CS%IC_file, g_tracer_name, G, GV, US)
+              if (.not.OK) then
+                OK = tracer_Z_init(tr_ptr, h, CS%IC_file, trim(g_tracer_name), G, GV, US)
+                if (.not.OK) call MOM_error(FATAL,"initialize_MOM_Generic_tracer: "//&
+                        "Unable to read "//trim(g_tracer_name)//" from "//&
+                        trim(CS%IC_file)//".")
+              endif
+              call MOM_error(NOTE,"initialize_MOM_generic_tracer: "//&
+                              "initialized generic tracer "//trim(g_tracer_name)//&
+                              " using Generic Tracer File on Z: "//CS%IC_file)
+            else
+              ! native grid
+              call MOM_error(NOTE,"initialize_MOM_generic_tracer: "//&
+                    "Using Generic Tracer IC file on native grid "//trim(CS%IC_file)//&
+                    " for tracer "//trim(g_tracer_name))
+              call MOM_read_data(CS%IC_file, trim(g_tracer_name), tr_ptr, G%Domain)
             endif
-            call MOM_error(NOTE,"initialize_MOM_generic_tracer: "//&
-                            "initialized generic tracer "//trim(g_tracer_name)//&
-                            " using Generic Tracer File on Z: "//CS%IC_file)
           else
-            ! native grid
-            call MOM_error(NOTE,"initialize_MOM_generic_tracer: "//&
-                  "Using Generic Tracer IC file on native grid "//trim(CS%IC_file)//&
-                  " for tracer "//trim(g_tracer_name))
-            call MOM_read_data(CS%IC_file, trim(g_tracer_name), tr_ptr, G%Domain)
+            call MOM_error(FATAL,"initialize_MOM_generic_tracer: "//&
+                    "check Generic Tracer IC filename "//trim(CS%IC_file)//&
+                    " for tracer "//trim(g_tracer_name))
           endif
-        else
-          call MOM_error(FATAL,"initialize_MOM_generic_tracer: "//&
-                  "check Generic Tracer IC filename "//trim(CS%IC_file)//&
-                  " for tracer "//trim(g_tracer_name))
-        endif
 
-       endif
+        endif
       endif
 
       !traverse the linked list till hit NULL
@@ -459,21 +459,21 @@ contains
     !
     g_tracer=>CS%g_tracer_list
     do
-       if (_ALLOCATED(g_tracer%trunoff)) then
-          call g_tracer_get_alias(g_tracer,g_tracer_name)
-          call g_tracer_get_pointer(g_tracer,g_tracer_name,'stf',   stf_array)
-          call g_tracer_get_pointer(g_tracer,g_tracer_name,'trunoff',trunoff_array)
-          call g_tracer_get_pointer(g_tracer,g_tracer_name,'runoff_tracer_flux',runoff_tracer_flux_array)
-          !nnz: Why is fluxes%river = 0?
-          runoff_tracer_flux_array(:,:) = trunoff_array(:,:) * &
-                   US%RZ_T_to_kg_m2s*fluxes%lrunoff(:,:)
-          stf_array = stf_array + runoff_tracer_flux_array
-       endif
+      if (_ALLOCATED(g_tracer%trunoff)) then
+        call g_tracer_get_alias(g_tracer,g_tracer_name)
+        call g_tracer_get_pointer(g_tracer,g_tracer_name,'stf',   stf_array)
+        call g_tracer_get_pointer(g_tracer,g_tracer_name,'trunoff',trunoff_array)
+        call g_tracer_get_pointer(g_tracer,g_tracer_name,'runoff_tracer_flux',runoff_tracer_flux_array)
+        !nnz: Why is fluxes%river = 0?
+        runoff_tracer_flux_array(:,:) = trunoff_array(:,:) * &
+                 US%RZ_T_to_kg_m2s*fluxes%lrunoff(:,:)
+        stf_array = stf_array + runoff_tracer_flux_array
+      endif
 
-       !traverse the linked list till hit NULL
-       call g_tracer_get_next(g_tracer, g_tracer_next)
-       if (.NOT. associated(g_tracer_next)) exit
-       g_tracer=>g_tracer_next
+      !traverse the linked list till hit NULL
+      call g_tracer_get_next(g_tracer, g_tracer_next)
+      if (.NOT. associated(g_tracer_next)) exit
+      g_tracer => g_tracer_next
 
     enddo
 

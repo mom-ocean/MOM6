@@ -3370,7 +3370,7 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
     CS%id_boundary_forcing_heat_tend = register_diag_field('ocean_model',&
         'boundary_forcing_heat_tendency', diag%axesTL, Time,             &
         'Boundary forcing heat tendency', &
-        'W m-2', conversion=US%QRZ_T_to_W_m2, v_extensive = .true.)
+        'W m-2', conversion=US%QRZ_T_to_W_m2, v_extensive=.true.)
     if (CS%id_boundary_forcing_heat_tend > 0) then
       CS%boundary_forcing_tendency_diag = .true.
     endif

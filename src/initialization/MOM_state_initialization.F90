@@ -1947,7 +1947,7 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, u, v, depth_t
                    "The name of the inverse damping rate variable in "//&
                    "SPONGE_UV_DAMPING_FILE for the velocities.", default=Idamp_var)
   endif
-  call get_param(param_file, mdl, "USE_REGRIDDING", use_ALE, do_not_log = .true.)
+  call get_param(param_file, mdl, "USE_REGRIDDING", use_ALE, do_not_log=.true.)
 
   !### NEW_SPONGES should be obsoleted properly, rather than merely deprecated, at which
   !    point only the else branch of the new_sponge_param block would be retained.
@@ -2000,18 +2000,18 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, u, v, depth_t
 
       call MOM_read_vector(filename, Idamp_u_var,Idamp_v_var,Idamp_u(:,:),Idamp_v(:,:), G%Domain, scale=US%T_to_s)
     else
-       !      call MOM_error(FATAL, "Must provide SPONGE_IDAMP_U_var and SPONGE_IDAMP_V_var")
-       call pass_var(Idamp,G%Domain)
-       do j=G%jsc,G%jec
-         do i=G%iscB,G%iecB
-           Idamp_u(I,j) = 0.5*(Idamp(i,j)+Idamp(i+1,j))
-         enddo
-       enddo
-       do j=G%jscB,G%jecB
-         do i=G%isc,G%iec
-           Idamp_v(i,J) = 0.5*(Idamp(i,j)+Idamp(i,j+1))
-         enddo
-       enddo
+      !      call MOM_error(FATAL, "Must provide SPONGE_IDAMP_U_var and SPONGE_IDAMP_V_var")
+      call pass_var(Idamp,G%Domain)
+      do j=G%jsc,G%jec
+        do i=G%iscB,G%iecB
+          Idamp_u(I,j) = 0.5*(Idamp(i,j)+Idamp(i+1,j))
+        enddo
+      enddo
+      do j=G%jscB,G%jecB
+        do i=G%isc,G%iec
+          Idamp_v(i,J) = 0.5*(Idamp(i,j)+Idamp(i,j+1))
+        enddo
+      enddo
     endif
   endif
 
@@ -2255,7 +2255,7 @@ subroutine initialize_oda_incupd_file(G, GV, US, use_temperature, tv, h, u, v, p
                  "The name of the meridional vel. inc. variable in "//&
                  "ODA_INCUPD_FILE.", default="v_inc")
 
-!  call get_param(param_file, mdl, "USE_REGRIDDING", use_ALE, do_not_log = .true.)
+!  call get_param(param_file, mdl, "USE_REGRIDDING", use_ALE, do_not_log=.true.)
 
   ! Read in incremental update for tracers
   filename = trim(inputdir)//trim(inc_file)

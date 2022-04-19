@@ -523,7 +523,7 @@ end subroutine calculate_bkgnd_mixing
 logical function CVMix_bkgnd_is_used(param_file)
   type(param_file_type), intent(in) :: param_file !< A structure to parse for run-time parameters
   call get_param(param_file, mdl, "USE_CVMix_BACKGROUND", CVMix_bkgnd_is_used, &
-                 default=.false., do_not_log = .true.)
+                 default=.false., do_not_log=.true.)
 
 end function CVMix_bkgnd_is_used
 

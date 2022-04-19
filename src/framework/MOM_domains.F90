@@ -182,7 +182,7 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
   !$              "The number of OpenMP threads that MOM6 will use.", &
   !$              default = 1, layoutParam=.true.)
   !$   call get_param(param_file, mdl, "OCEAN_OMP_HYPER_THREAD", ocean_omp_hyper_thread, &
-  !$              "If True, use hyper-threading.", default = .false., layoutParam=.true.)
+  !$              "If True, use hyper-threading.", default=.false., layoutParam=.true.)
   !$   call set_MOM_thread_affinity(ocean_nthreads, ocean_omp_hyper_thread)
   !$ endif
 # endif

@@ -72,36 +72,36 @@ contains
 !> Initialize a diagnostic axis
 integer function MOM_diag_axis_init(name, data, units, cart_name, long_name, MOM_domain, position, &
           & direction, edges, set_name, coarsen, null_axis)
-   character(len=*),   intent(in) :: name      !< The name of this axis
-   real, dimension(:), intent(in) :: data      !< The array of coordinate values
-   character(len=*),   intent(in) :: units     !< The units for the axis data
-   character(len=*),   intent(in) :: cart_name !< Cartesian axis ("X", "Y", "Z", "T", or "N" for none)
-   character(len=*), &
-             optional, intent(in) :: long_name !< The long name of this axis
-   type(MOM_domain_type), &
-             optional, intent(in) :: MOM_Domain !< A MOM_Domain that describes the decomposition
-   integer,  optional, intent(in) :: position  !< This indicates the relative position of this
-                                               !! axis.  The default is CENTER, but EAST and NORTH
-                                               !! are common options.
-   integer,  optional, intent(in) :: direction !< This indicates the direction along which this
-                                               !! axis increases: 1 for upward, -1 for downward, or
-                                               !! 0 for non-vertical axes (the default)
-   integer,  optional, intent(in) :: edges     !< The axis_id of the complementary axis that
-                                               !! describes the edges of this axis
-   character(len=*), &
-             optional, intent(in) :: set_name  !< A name to use for this set of axes.
-   integer,  optional, intent(in) :: coarsen   !< An optional degree of coarsening for the grid, 1
-                                               !! by default.
-   logical,  optional, intent(in) :: null_axis !< If present and true, return the special null axis
-                                               !! id for use with scalars.
+  character(len=*),   intent(in) :: name      !< The name of this axis
+  real, dimension(:), intent(in) :: data      !< The array of coordinate values
+  character(len=*),   intent(in) :: units     !< The units for the axis data
+  character(len=*),   intent(in) :: cart_name !< Cartesian axis ("X", "Y", "Z", "T", or "N" for none)
+  character(len=*), &
+            optional, intent(in) :: long_name !< The long name of this axis
+  type(MOM_domain_type), &
+            optional, intent(in) :: MOM_Domain !< A MOM_Domain that describes the decomposition
+  integer,  optional, intent(in) :: position  !< This indicates the relative position of this
+                                              !! axis.  The default is CENTER, but EAST and NORTH
+                                              !! are common options.
+  integer,  optional, intent(in) :: direction !< This indicates the direction along which this
+                                              !! axis increases: 1 for upward, -1 for downward, or
+                                              !! 0 for non-vertical axes (the default)
+  integer,  optional, intent(in) :: edges     !< The axis_id of the complementary axis that
+                                              !! describes the edges of this axis
+  character(len=*), &
+            optional, intent(in) :: set_name  !< A name to use for this set of axes.
+  integer,  optional, intent(in) :: coarsen   !< An optional degree of coarsening for the grid, 1
+                                              !! by default.
+  logical,  optional, intent(in) :: null_axis !< If present and true, return the special null axis
+                                              !! id for use with scalars.
 
-   integer :: coarsening ! The degree of grid coarsening
+  integer :: coarsening ! The degree of grid coarsening
 
-   if (present(null_axis)) then ; if (null_axis) then
-     ! Return the special null axis id for scalars
-     MOM_diag_axis_init = null_axis_id
-     return
-   endif ; endif
+  if (present(null_axis)) then ; if (null_axis) then
+    ! Return the special null axis id for scalars
+    MOM_diag_axis_init = null_axis_id
+    return
+  endif ; endif
 
   if (present(MOM_domain)) then
     coarsening = 1 ; if (present(coarsen)) coarsening = coarsen
