@@ -1324,6 +1324,7 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, US, param
   call cpu_clock_end(id_clock_pass_init)
 
   flux_units = get_flux_units(GV)
+  thickness_units = get_thickness_units(GV)
   CS%id_uh = register_diag_field('ocean_model', 'uh', diag%axesCuL, Time, &
       'Zonal Thickness Flux', flux_units, conversion=GV%H_to_MKS*US%L_to_m**2*US%s_to_T, &
       y_cell_method='sum', v_extensive=.true.)
