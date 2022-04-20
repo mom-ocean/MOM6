@@ -59,8 +59,6 @@ subroutine init_hybgen_unmix(CS, GV, US, param_file, hybgen_regridCS)
   type(param_file_type),   intent(in) :: param_file !< Parameter file
   type(hybgen_regrid_CS),  pointer    :: hybgen_regridCS !< Control structure for hybgen
                                              !! regridding for sharing parameters.
-
-  character(len=40)               :: mdl = "MOM_hybgen" ! This module's name.
   integer :: k
 
   if (associated(CS)) call MOM_error(FATAL, "init_hybgen_unmix: CS already associated!")
@@ -315,7 +313,6 @@ subroutine hybgen_column_unmix(CS, nk, Rcv_tgt, temp, saln, Rcv, eqn_of_state, &
                       ! used for updating the concentration of passive tracers [nondim]
   real :: swap_T      ! A swap variable for temperature [degC]
   real :: swap_S      ! A swap variable for salinity [ppt]
-  real :: swap_R      ! A swap variable for the coordinate potential density [R ~> kg m-3]
   real :: swap_tr     ! A temporary swap variable for the tracers [conc]
   logical, parameter :: lunmix=.true.     ! unmix a too light deepest layer
   integer :: k, ka, kp, kt, m

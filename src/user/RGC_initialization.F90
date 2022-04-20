@@ -79,7 +79,7 @@ subroutine RGC_initialize_sponges(G, GV, US, tv, u, v, depth_tot, PF, use_ALE, C
 
   character(len=40)  :: mdl = "RGC_initialize_sponges" ! This subroutine's name.
   integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state
-  integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz, iscB, iecB, jscB, jecB
+  integer :: i, j, is, ie, js, je, isd, ied, jsd, jed, nz, iscB, iecB, jscB, jecB
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed

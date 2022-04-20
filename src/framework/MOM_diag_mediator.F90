@@ -348,7 +348,7 @@ subroutine set_axes_info(G, GV, US, param_file, diag_cs, set_vertical)
   ! Local variables
   integer :: id_xq, id_yq, id_zl, id_zi, id_xh, id_yh, id_null
   integer :: id_zl_native, id_zi_native
-  integer :: i, j, k, nz
+  integer :: i, j, nz
   real :: zlev(GV%ke), zinter(GV%ke+1)
   logical :: set_vert
   real, allocatable, dimension(:) :: IaxB,iax
@@ -586,7 +586,7 @@ subroutine set_axes_info_dsamp(G, GV, param_file, diag_cs, id_zl_native, id_zi_n
 
   ! Local variables
   integer :: id_xq, id_yq, id_zl, id_zi, id_xh, id_yh
-  integer :: i, j, k, nz, dl
+  integer :: i, j, nz, dl
   real, dimension(:), pointer :: gridLonT_dsamp =>NULL()
   real, dimension(:), pointer :: gridLatT_dsamp =>NULL()
   real, dimension(:), pointer :: gridLonB_dsamp =>NULL()
@@ -754,7 +754,7 @@ subroutine set_masks_for_axes(G, diag_cs)
   type(diag_ctrl),               pointer    :: diag_cs !< A pointer to a type with many variables
                                                        !! used for diagnostics
   ! Local variables
-  integer :: c, nk, i, j, k, ii, jj
+  integer :: c, nk, i, j, k
   type(axes_grp), pointer :: axes => NULL(), h_axes => NULL() ! Current axes, for convenience
 
   do c=1, diag_cs%num_diag_coords
@@ -852,9 +852,8 @@ subroutine set_masks_for_axes_dsamp(G, diag_cs)
   type(diag_ctrl),               pointer    :: diag_cs !< A pointer to a type with many variables
                                                        !! used for diagnostics
   ! Local variables
-  integer :: c, nk, i, j, k, ii, jj
-  integer :: dl
-  type(axes_grp), pointer :: axes => NULL(), h_axes => NULL() ! Current axes, for convenience
+  integer :: c, dl
+  type(axes_grp), pointer :: axes => NULL() ! Current axes, for convenience
 
   !Each downsampled axis needs both downsampled and non-downsampled mask
   !The downsampled mask is needed for sending out the diagnostics output via diag_manager
@@ -1377,7 +1376,7 @@ subroutine post_data_2d_low(diag, field, diag_cs, is_static, mask)
   character(len=300) :: mesg
   logical :: used, is_stat
   integer :: cszi, cszj, dszi, dszj
-  integer :: isv, iev, jsv, jev, i, j, chksum, isv_o,jsv_o
+  integer :: isv, iev, jsv, jev, i, j, isv_o,jsv_o
   real, dimension(:,:), allocatable, target :: locfield_dsamp
   real, dimension(:,:), allocatable, target :: locmask_dsamp
   integer :: dl
@@ -1522,7 +1521,6 @@ subroutine post_data_3d(diag_field_id, field, diag_cs, is_static, mask, alt_h)
 
   ! Local variables
   type(diag_type), pointer :: diag => null()
-  integer :: nz, i, j, k
   real, dimension(:,:,:), allocatable :: remapped_field
   logical :: staggered_in_x, staggered_in_y
   real, dimension(:,:,:), pointer :: h_diag => NULL()
@@ -1647,7 +1645,6 @@ subroutine post_data_3d_low(diag, field, diag_cs, is_static, mask)
   logical :: is_stat
   integer :: cszi, cszj, dszi, dszj
   integer :: isv, iev, jsv, jev, ks, ke, i, j, k, isv_c, jsv_c, isv_o,jsv_o
-  integer :: chksum
   real, dimension(:,:,:), allocatable, target :: locfield_dsamp
   real, dimension(:,:,:), allocatable, target :: locmask_dsamp
   integer :: dl
@@ -2914,7 +2911,7 @@ function register_static_field(module_name, field_name, axes, &
   real :: MOM_missing_value
   type(diag_ctrl), pointer :: diag_cs => null()
   type(diag_type), pointer :: diag => null(), cmor_diag => null()
-  integer :: dm_id, fms_id, cmor_id
+  integer :: dm_id, fms_id
   character(len=256) :: posted_cmor_units, posted_cmor_standard_name, posted_cmor_long_name
   character(len=9) :: axis_name
 
@@ -3858,7 +3855,7 @@ end subroutine diag_restore_grids
 subroutine diag_grid_storage_end(grid_storage)
   type(diag_grid_storage), intent(inout) :: grid_storage !< Structure containing a snapshot of the target grids
   ! Local variables
-  integer :: m, nz
+  integer :: m
 
   ! Don't do anything else if there are no remapped coordinates
   if (grid_storage%num_diag_coords < 1) return
@@ -3881,7 +3878,7 @@ subroutine downsample_diag_masks_set(G, nz, diag_cs)
   type(diag_ctrl),               pointer    :: diag_cs !< A pointer to a type with many variables
                                                        !! used for diagnostics
   ! Local variables
-  integer :: i,j,k,ii,jj,dl
+  integer :: k, dl
 
 !print*,'original c extents ',G%isc,G%iec,G%jsc,G%jec
 !print*,'original c extents ',G%iscb,G%iecb,G%jscb,G%jecb
@@ -4297,7 +4294,6 @@ subroutine downsample_field_2d(field_in, field_out, dl, method, mask, diag_cs, d
   character(len=240) :: mesg
   integer :: i,j,ii,jj,i0,j0,f1,f2,f_in1,f_in2
   real :: ave, total_weight, weight
-  real :: epsilon = 1.0e-20  ! A negligibly small count of weights [nondim]
   real :: eps_area  ! A negligibly small area [L2 ~> m2]
   real :: eps_len   ! A negligibly small horizontal length [L ~> m]
 

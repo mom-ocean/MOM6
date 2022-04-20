@@ -566,7 +566,7 @@ subroutine initialize_dyn_unsplit_RK2(u, v, h, Time, G, GV, US, param_file, diag
 
   ! Local variables
   character(len=40) :: mdl = "MOM_dynamics_unsplit_RK2" ! This module's name.
-  character(len=48) :: thickness_units, flux_units
+  character(len=48) :: flux_units
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
   logical :: use_tides

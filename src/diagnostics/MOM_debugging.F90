@@ -435,7 +435,7 @@ subroutine check_redundant_sT2d(mesg, array, G, is, ie, js, je)
   character(len=128) :: mesg2
 
   integer :: i, j, is_ch, ie_ch, js_ch, je_ch
-  integer :: Isq, Ieq, Jsq, Jeq, isd, ied, jsd, jed
+  integer :: isd, ied, jsd, jed
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
   is_ch = G%isc ; ie_ch = G%iec ; js_ch = G%jsc ; je_ch = G%jec

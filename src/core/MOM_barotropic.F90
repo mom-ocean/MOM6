@@ -2776,7 +2776,6 @@ subroutine set_dtbt(G, GV, US, CS, eta, pbce, BT_cont, gtot_est, SSH_add)
   logical :: use_BT_cont
   type(memory_size_type) :: MS
 
-  character(len=200) :: mesg
   integer :: i, j, k, is, ie, js, je, nz
 
   if (.not.CS%module_is_initialized) call MOM_error(FATAL, &
@@ -3086,10 +3085,9 @@ subroutine set_up_BT_OBC(OBC, eta, BT_OBC, BT_Domain, G, GV, US, MS, halo, use_B
 
   ! Local variables
   real :: I_dt      ! The inverse of the time interval of this call [T-1 ~> s-1].
-  integer :: i, j, k, is, ie, js, je, n, nz, Isq, Ieq, Jsq, Jeq
+  integer :: i, j, k, is, ie, js, je, n, nz
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
   integer :: isdw, iedw, jsdw, jedw
-  logical :: OBC_used
   type(OBC_segment_type), pointer  :: segment !< Open boundary segment
 
   is = G%isc-halo ; ie = G%iec+halo ; js = G%jsc-halo ; je = G%jec+halo
@@ -3306,7 +3304,6 @@ subroutine btcalc(h, G, GV, CS, h_u, h_v, may_use_default, OBC)
                                ! in roundoff and can be neglected [H ~> m or kg m-2].
   real :: wt_arith             ! The weight for the arithmetic mean thickness [nondim].
                                ! The harmonic mean uses a weight of (1 - wt_arith).
-  real :: Rh                   ! A ratio of summed thicknesses [nondim]
   real :: e_u(SZIB_(G),SZK_(GV)+1) ! The interface heights at u-velocity points [H ~> m or kg m-2]
   real :: e_v(SZI_(G),SZK_(GV)+1)  ! The interface heights at v-velocity points [H ~> m or kg m-2]
   real :: D_shallow_u(SZI_(G)) ! The height of the shallower of the adjacent bathymetric depths
@@ -3622,8 +3619,6 @@ function uhbt_to_ubt(uhbt, BTC) result(ubt)
   real :: uherr_min, uherr_max   ! The bounding values of the transport error [H L2 T-1 ~> m3 s-1 or kg s-1]
                                  ! or [H L2 ~> m3 or kg].
   real, parameter :: tol = 1.0e-10 ! A fractional match tolerance [nondim]
-  real :: dvel  ! Temporary variable used in the limiting the velocity [L T-1 ~> m s-1] or [L ~> m].
-  real :: vsr   ! Temporary variable used in the limiting the velocity [nondim].
   real, parameter :: vs1 = 1.25  ! Nondimensional parameters used in limiting
   real, parameter :: vs2 = 2.0   ! the velocity, starting at vs1, with the
                                  ! maximum increase of vs2, both [nondim].
@@ -3757,8 +3752,6 @@ function vhbt_to_vbt(vhbt, BTC) result(vbt)
   real :: vherr_min, vherr_max   ! The bounding values of the transport error [H L2 T-1 ~> m3 s-1 or kg s-1]
                                  ! or [H L2 ~> m3 or kg].
   real, parameter :: tol = 1.0e-10 ! A fractional match tolerance [nondim]
-  real :: dvel  ! Temporary variable used in the limiting the velocity [L T-1 ~> m s-1] or [L ~> m].
-  real :: vsr   ! Temporary variable used in the limiting the velocity [nondim].
   real, parameter :: vs1 = 1.25  ! Nondimensional parameters used in limiting
   real, parameter :: vs2 = 2.0   ! the velocity, starting at vs1, with the
                                  ! maximum increase of vs2, both [nondim].
@@ -4295,8 +4288,6 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, US, param_file, diag, CS, 
                                        ! name in wave_drag_file.
   real :: vel_rescale ! A rescaling factor for horizontal velocity from the representation in
                       ! a restart file to the internal representation in this run.
-  real :: uH_rescale  ! A rescaling factor for thickness transports from the representation in
-                      ! a restart file to the internal representation in this run.
   real :: mean_SL     ! The mean sea level that is used along with the bathymetry to estimate the
                       ! geometry when LINEARIZED_BT_CORIOLIS is true or BT_NONLIN_STRESS is false [Z ~> m].
   real :: det_de      ! The partial derivative due to self-attraction and loading of the reference
@@ -4309,7 +4300,7 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, US, param_file, diag, CS, 
   type(group_pass_type) :: pass_static_data, pass_q_D_Cor
   type(group_pass_type) :: pass_bt_hbt_btav, pass_a_polarity
   logical :: default_2018_answers ! The default setting for the various 2018_ANSWERS flags.
-  logical :: apply_bt_drag, use_BT_cont_type
+  logical :: use_BT_cont_type
   character(len=48) :: thickness_units, flux_units
   character*(40) :: hvel_str
   integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz

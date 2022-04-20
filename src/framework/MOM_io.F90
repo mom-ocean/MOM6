@@ -603,7 +603,7 @@ function num_timelevels(filename, varname, min_dims) result(n_time)
   integer :: n_time                           !< number of time levels varname has in filename
 
   character(len=256) :: msg
-  integer :: ncid, status, varid, ndims
+  integer :: ndims
   integer :: sizes(8)
 
   n_time = -1
@@ -926,7 +926,6 @@ subroutine read_variable_2d(filename, varname, var, start, nread, ncid_in)
   integer, allocatable :: field_start(:), field_nread(:)
   integer :: i, rc
   character(len=*), parameter :: hdr = "read_variable_2d: "
-  character(len=128) :: msg
 
   ! Validate shape of start and nread
   if (present(start)) then
@@ -2108,7 +2107,6 @@ subroutine MOM_write_field_4d(IO_handle, field_md, MOM_domain, field, tstamp, ti
   real, allocatable :: field_rot(:,:,:,:)  ! A rotated version of field, with the same units or rescaled
   real :: scale_fac ! A scaling factor to use before writing the array
   integer :: qturns ! The number of quarter turns through which to rotate field
-  integer :: is, ie, js, je ! The extent of the computational domain
 
   qturns = 0 ; if (present(turns)) qturns = modulo(turns, 4)
   scale_fac = 1.0 ; if (present(scale)) scale_fac = scale
@@ -2143,7 +2141,6 @@ subroutine MOM_write_field_3d(IO_handle, field_md, MOM_domain, field, tstamp, ti
   real, allocatable :: field_rot(:,:,:)  ! A rotated version of field, with the same units or rescaled
   real :: scale_fac ! A scaling factor to use before writing the array
   integer :: qturns ! The number of quarter turns through which to rotate field
-  integer :: is, ie, js, je ! The extent of the computational domain
 
   qturns = 0 ; if (present(turns)) qturns = modulo(turns, 4)
   scale_fac = 1.0 ; if (present(scale)) scale_fac = scale
@@ -2178,7 +2175,6 @@ subroutine MOM_write_field_2d(IO_handle, field_md, MOM_domain, field, tstamp, ti
   real, allocatable :: field_rot(:,:)  ! A rotated version of field, with the same units
   real :: scale_fac ! A scaling factor to use before writing the array
   integer :: qturns ! The number of quarter turns through which to rotate field
-  integer :: is, ie, js, je ! The extent of the computational domain
 
   qturns = 0 ; if (present(turns)) qturns = modulo(turns, 4)
   scale_fac = 1.0 ; if (present(scale)) scale_fac = scale
@@ -2307,7 +2303,7 @@ function ensembler(name, ens_no_in) result(en_nm)
   character(10) :: ens_num_char
   character(3)  :: code_str
   integer :: ens_no
-  integer :: n, is, ie
+  integer :: n, is
 
   en_nm = trim(name)
   if (index(name,"%") == 0) return
@@ -2408,7 +2404,6 @@ subroutine get_var_axes_info(filename, fieldname, axes_info)
   integer ::  ncid, varid, ndims
   integer :: id, jd, kd
   integer, dimension(4) :: dims, dim_id
-  real :: missing_value
   character(len=128)  :: dim_name(4)
   integer, dimension(1) :: start, count
   !! cartesian axis data

@@ -105,8 +105,7 @@ subroutine set_IS_axes_info(G, param_file, diag_cs, axes_set_name)
 !   This subroutine sets up the grid and axis information for use by the ice shelf model.
 
   ! Local variables
-  integer :: id_xq, id_yq, id_zl, id_zi, id_xh, id_yh, id_ct, id_ct0
-  integer :: k
+  integer :: id_xq, id_yq, id_xh, id_yh
   logical :: Cartesian_grid
   character(len=80) :: grid_config, units_temp, set_name
 ! This include declares and sets the variable "version".
@@ -531,7 +530,6 @@ integer function register_MOM_IS_static_field(module_name, field_name, axes, &
   integer,          optional, intent(in) :: tile_count   !< no clue (not used in MOM_IS?)
 
   ! Local variables
-  character(len=240) :: mesg
   real :: MOM_missing_value
   integer :: primary_id, fms_id
   type(diag_ctrl), pointer :: diag_cs !< A structure that is used to regulate diagnostic output
@@ -564,7 +562,7 @@ subroutine describe_option(opt_name, value, diag_CS)
 
   ! Local variables
   character(len=240) :: mesg
-  integer :: start_ind = 1, end_ind, len_ind
+  integer :: len_ind
 
   len_ind = len_trim(value)
 

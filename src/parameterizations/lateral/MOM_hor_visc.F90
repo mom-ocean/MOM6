@@ -291,8 +291,6 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
     str_xy_GME, & ! smoothed cross term in the stress tensor from GME [H L2 T-2 ~> m3 s-2 or kg s-2]
     bhstr_xy, &   ! A copy of str_xy that only contains the biharmonic contribution [H L2 T-2 ~> m3 s-2 or kg s-2]
     vort_xy, &    ! Vertical vorticity (dv/dx - du/dy) including metric terms [T-1 ~> s-1]
-    Leith_Kh_q, & ! Leith Laplacian viscosity at q-points [L2 T-1 ~> m2 s-1]
-    Leith_Ah_q, & ! Leith bi-harmonic viscosity at q-points [L4 T-1 ~> m4 s-1]
     grad_vort_mag_q, & ! Magnitude of vorticity gradient at q-points [L-1 T-1 ~> m-1 s-1]
     grad_vort_mag_q_2d, & ! Magnitude of 2d vorticity gradient at q-points [L-1 T-1 ~> m-1 s-1]
     Del2vort_q, & ! Laplacian of vorticity at q-points [L-2 T-1 ~> m-2 s-1]
@@ -328,9 +326,6 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
     GME_coeff_h      ! GME coeff. at h-points [L2 T-1 ~> m2 s-1]
   real :: AhSm       ! Smagorinsky biharmonic viscosity [L4 T-1 ~> m4 s-1]
   real :: AhLth      ! 2D Leith biharmonic viscosity [L4 T-1 ~> m4 s-1]
-  real :: mod_Leith  ! nondimensional coefficient for divergence part of modified Leith
-                     ! viscosity. Here set equal to nondimensional Laplacian Leith constant.
-                     ! This is set equal to zero if modified Leith is not used.
   real :: Shear_mag_bc  ! Shear_mag value in backscatter [T-1 ~> s-1]
   real :: sh_xx_sq   ! Square of tension (sh_xx) [T-2 ~> s-2]
   real :: sh_xy_sq   ! Square of shearing strain (sh_xy) [T-2 ~> s-2]
@@ -343,23 +338,16 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
   real :: h_neglect  ! thickness so small it can be lost in roundoff and so neglected [H ~> m or kg m-2]
   real :: h_neglect3 ! h_neglect^3 [H3 ~> m3 or kg3 m-6]
   real :: h_min      ! Minimum h at the 4 neighboring velocity points [H ~> m]
-  real :: Kh_scale  ! A factor between 0 and 1 by which the horizontal
-                    ! Laplacian viscosity is rescaled [nondim]
   real :: RoScl     ! The scaling function for MEKE source term [nondim]
   real :: FatH      ! abs(f) at h-point for MEKE source term [T-1 ~> s-1]
   real :: local_strain ! Local variable for interpolating computed strain rates [T-1 ~> s-1].
   real :: meke_res_fn ! A copy of the resolution scaling factor if being applied to MEKE. Otherwise =1.
   real :: GME_coeff ! The GME (negative) viscosity coefficient [L2 T-1 ~> m2 s-1]
-  real :: GME_coeff_limiter ! Maximum permitted value of the GME coefficient [L2 T-1 ~> m2 s-1]
-  real :: FWfrac    ! Fraction of maximum theoretical energy transfer to use when scaling GME coefficient [nondim]
   real :: DY_dxBu   ! Ratio of meridional over zonal grid spacing at vertices [nondim]
   real :: DX_dyBu   ! Ratio of zonal over meridiononal grid spacing at vertices [nondim]
-  real :: DY_dxCv   ! Ratio of meridional over zonal grid spacing at faces [nondim]
-  real :: DX_dyCu   ! Ratio of zonal over meridional grid spacing at faces [nondim]
   real :: Sh_F_pow  ! The ratio of shear over the absolute value of f raised to some power and rescaled [nondim]
   real :: backscat_subround ! The ratio of f over Shear_mag that is so small that the backscatter
                     ! calculation gives the same value as if f were 0 [nondim].
-  real :: H0_GME    ! Depth used to scale down GME coefficient in shallow areas [Z ~> m]
   real :: KE        ! Local kinetic energy [L2 T-2 ~> m2 s-2]
   real :: d_del2u   ! dy-weighted Laplacian(u) diff in x [L-2 T-1 ~> m-2 s-1]
   real :: d_del2v   ! dx-weighted Laplacian(v) diff in y [L-2 T-1 ~> m-2 s-1]
@@ -391,14 +379,6 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
     vert_vort_mag, &  ! magnitude of the vertical vorticity gradient (h or q) [L-1 T-1 ~> m-1 s-1]
     hrat_min, &     ! h_min divided by the thickness at the stress point (h or q) [nondim]
     visc_bound_rem  ! fraction of overall viscous bounds that remain to be applied (h or q) [nondim]
-
-  real, dimension(SZIB_(G),SZJ_(G)) :: &
-    hf_diffu_2d, &    ! Depth sum of hf_diffu, hf_diffv [L T-2 ~> m s-2]
-    intz_diffu_2d     ! Depth-integral of diffu [H L T-2 ~> m2 s-2]
-
-  real, dimension(SZI_(G),SZJB_(G)) :: &
-    hf_diffv_2d, &    ! Depth sum of hf_diffu, hf_diffv [L T-2 ~> m s-2]
-    intz_diffv_2d     ! Depth-integral of diffv [H L T-2 ~> m2 s-2]
 
   is  = G%isc  ; ie  = G%iec  ; js  = G%jsc  ; je  = G%jec ; nz = GV%ke
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
@@ -542,8 +522,8 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
   !$OMP   is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, &
   !$OMP   apply_OBC, rescale_Kh, legacy_bound, find_FrictWork, &
   !$OMP   use_MEKE_Ku, use_MEKE_Au, &
-  !$OMP   backscat_subround, GME_coeff_limiter, GME_effic_h, GME_effic_q, &
-  !$OMP   h_neglect, h_neglect3, FWfrac, inv_PI3, inv_PI6, H0_GME, &
+  !$OMP   backscat_subround, GME_effic_h, GME_effic_q, &
+  !$OMP   h_neglect, h_neglect3, inv_PI3, inv_PI6, &
   !$OMP   diffu, diffv, Kh_h, Kh_q, Ah_h, Ah_q, FrictWork, FrictWork_GME, &
   !$OMP   div_xx_h, sh_xx_h, vort_xy_q, sh_xy_q, GME_coeff_h, GME_coeff_q, &
   !$OMP   KH_u_GME, KH_v_GME, grid_Re_Kh, grid_Re_Ah, NoSt, ShSt &
@@ -560,7 +540,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
   !$OMP   meke_res_fn, Shear_mag, Shear_mag_bc, vert_vort_mag, h_min, hrat_min, visc_bound_rem, &
   !$OMP   grid_Ah, grid_Kh, d_Del2u, d_Del2v, d_str, &
   !$OMP   Kh, Ah, AhSm, AhLth, local_strain, Sh_F_pow, &
-  !$OMP   dDel2vdx, dDel2udy, DY_dxCv, DX_dyCu, Del2vort_q, Del2vort_h, KE, &
+  !$OMP   dDel2vdx, dDel2udy, Del2vort_q, Del2vort_h, KE, &
   !$OMP   h2uq, h2vq, hu, hv, hq, FatH, RoScl, GME_coeff &
   !$OMP )
   do k=1,nz
@@ -2553,7 +2533,7 @@ subroutine smooth_GME(CS, G, GME_flux_h, GME_flux_q)
   real, dimension(SZI_(G),SZJ_(G)) :: GME_flux_h_original
   real, dimension(SZIB_(G),SZJB_(G)) :: GME_flux_q_original
   real :: wc, ww, we, wn, ws ! averaging weights for smoothing
-  integer :: i, j, k, s, halosz
+  integer :: i, j, s, halosz
   integer :: xh, xq  ! The number of valid extra halo points for h and q points.
   integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq
 

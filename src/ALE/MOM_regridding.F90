@@ -202,10 +202,10 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
   character(len=200) :: inputdir, fileName
   character(len=320) :: message ! Temporary strings
   character(len=12) :: expected_units, alt_units ! Temporary strings
-  logical :: tmpLogical, fix_haloclines, set_max, do_sum, main_parameters
+  logical :: tmpLogical, fix_haloclines, do_sum, main_parameters
   logical :: coord_is_state_dependent, ierr
   logical :: default_2018_answers, remap_answers_2018
-  real :: filt_len, strat_tol, index_scale, tmpReal, P_Ref
+  real :: filt_len, strat_tol, tmpReal, P_Ref
   real :: maximum_depth ! The maximum depth of the ocean [m] (not in Z).
   real :: dz_fixed_sfc, Rho_avg_depth, nlay_sfc_int
   real :: adaptTimeRatio, adaptZoom, adaptZoomCoeff, adaptBuoyCoeff, adaptAlpha
@@ -1152,7 +1152,10 @@ subroutine build_zstar_grid( CS, G, GV, h, dzInterface, frac_shelf_h)
   real, dimension(SZI_(G),SZJ_(G)), optional,intent(in)    :: frac_shelf_h !< Fractional
                                                                  !! ice shelf coverage [nondim].
   ! Local variables
-  real    :: nominalDepth, minThickness, totalThickness, dh  ! Depths and thicknesses [H ~> m or kg m-2]
+  real   :: nominalDepth, minThickness, totalThickness  ! Depths and thicknesses [H ~> m or kg m-2]
+#ifdef __DO_SAFETY_CHECKS__
+  real :: dh                                            ! [H ~> m or kg m-2]
+#endif
   real, dimension(SZK_(GV)+1) :: zOld    ! Previous coordinate interface heights [H ~> m or kg m-2]
   real, dimension(CS%nk+1)    :: zNew    ! New coordinate interface heights [H ~> m or kg m-2]
   integer :: i, j, k, nz
@@ -1165,7 +1168,10 @@ subroutine build_zstar_grid( CS, G, GV, h, dzInterface, frac_shelf_h)
 !$OMP parallel do default(none) shared(G,GV,dzInterface,CS,nz,h,frac_shelf_h, &
 !$OMP                                  ice_shelf,minThickness) &
 !$OMP                          private(nominalDepth,totalThickness, &
-!$OMP                                  zNew,dh,zOld)
+#ifdef __DO_SAFETY_CHECKS__
+!$OMP                                  dh, &
+#endif
+!$OMP                                  zNew,zOld)
   do j = G%jsc-1,G%jec+1
     do i = G%isc-1,G%iec+1
 
@@ -1257,7 +1263,10 @@ subroutine build_sigma_grid( CS, G, GV, h, dzInterface )
   ! Local variables
   integer :: i, j, k
   integer :: nz
-  real    :: nominalDepth, totalThickness, dh
+  real    :: nominalDepth, totalThickness
+#ifdef __DO_SAFETY_CHECKS__
+  real :: dh
+#endif
   real, dimension(SZK_(GV)+1) :: zOld    ! Previous coordinate interface heights [H ~> m or kg m-2]
   real, dimension(CS%nk+1)    :: zNew    ! New coordinate interface heights [H ~> m or kg m-2]
 
@@ -1503,7 +1512,7 @@ subroutine build_grid_HyCOM1( G, GV, US, h, tv, h_new, dzInterface, CS, frac_she
   real, dimension(CS%nk+1) :: z_col_new ! New interface positions relative to the surface [H ~> m or kg m-2]
   real, dimension(CS%nk+1) :: dz_col    ! The realized change in z_col [H ~> m or kg m-2]
   integer   :: i, j, k, nki
-  real :: depth, nominalDepth
+  real :: nominalDepth
   real :: h_neglect, h_neglect_edge
   real :: z_top_col, totalThickness
   logical :: ice_shelf

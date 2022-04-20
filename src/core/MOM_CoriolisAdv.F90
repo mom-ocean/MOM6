@@ -178,11 +178,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv)
     dvdx, dudy, & ! Contributions to the circulation around q-points [L2 T-1 ~> m2 s-1]
     rel_vort, & ! Relative vorticity at q-points [T-1 ~> s-1].
     abs_vort, & ! Absolute vorticity at q-points [T-1 ~> s-1].
-    q2, &       ! Relative vorticity over thickness [H-1 T-1 ~> m-1 s-1 or m2 kg-1 s-1].
-    max_fvq, &  ! The maximum of the adjacent values of (-u) times absolute vorticity [L T-2 ~> m s-2].
-    min_fvq, &  ! The minimum of the adjacent values of (-u) times absolute vorticity [L T-2 ~> m s-2].
-    max_fuq, &  ! The maximum of the adjacent values of u times absolute vorticity [L T-2 ~> m s-2].
-    min_fuq     ! The minimum of the adjacent values of u times absolute vorticity [L T-2 ~> m s-2].
+    q2          ! Relative vorticity over thickness [H-1 T-1 ~> m-1 s-1 or m2 kg-1 s-1].
   real, dimension(SZIB_(G),SZJB_(G),SZK_(GV)) :: &
     PV, &       ! A diagnostic array of the potential vorticities [H-1 T-1 ~> m-1 s-1 or m2 kg-1 s-1].
     RV          ! A diagnostic array of the relative vorticities [T-1 ~> s-1].
@@ -193,9 +189,6 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv)
 
   real, parameter :: C1_12=1.0/12.0 ! C1_12 = 1/12
   real, parameter :: C1_24=1.0/24.0 ! C1_24 = 1/24
-  real :: absolute_vorticity     ! Absolute vorticity [T-1 ~> s-1].
-  real :: relative_vorticity     ! Relative vorticity [T-1 ~> s-1].
-  real :: Ih                     ! Inverse of thickness [H-1 ~> m-1 or m2 kg-1].
   real :: max_Ihq, min_Ihq       ! The maximum and minimum of the nearby Ihq [H-1 ~> m-1 or m2 kg-1].
   real :: hArea_q                ! The sum of area times thickness of the cells
                                  ! surrounding a q point [H L2 ~> m3 or kg].

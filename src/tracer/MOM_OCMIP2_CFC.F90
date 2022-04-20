@@ -108,7 +108,7 @@ function register_OCMIP2_CFC(HI, GV, param_file, CS, tr_Reg, restart_CS)
   real :: e11_dflt(3), e12_dflt(3) ! Schmidt numbers [various units by element].
   character(len=48) :: flux_units ! The units for tracer fluxes.
   logical :: register_OCMIP2_CFC
-  integer :: isd, ied, jsd, jed, nz, m
+  integer :: isd, ied, jsd, jed, nz
 
   isd = HI%isd ; ied = HI%ied ; jsd = HI%jsd ; jed = HI%jed ; nz = GV%ke
 
@@ -438,7 +438,7 @@ subroutine OCMIP2_CFC_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, US
     CFC11_flux, &    ! The fluxes of CFC11 and CFC12 into the ocean, in unscaled units of
     CFC12_flux       ! CFC concentrations times meters per second [CU R Z T-1 ~> CU kg m-2 s-1]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: h_work ! Used so that h can be modified [H ~> m or kg m-2]
-  integer :: i, j, k, m, is, ie, js, je, nz, idim(4), jdim(4)
+  integer :: i, j, k, is, ie, js, je, nz, idim(4), jdim(4)
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   idim(:) = (/G%isd, is, ie, G%ied/) ; jdim(:) = (/G%jsd, js, je, G%jed/)
@@ -543,7 +543,7 @@ subroutine OCMIP2_CFC_surface_state(sfc_state, h, G, GV, CS)
   real :: alpha_12  ! The solubility of CFC 12 [mol m-3 pptv-1].
   real :: sc_11, sc_12 ! The Schmidt numbers of CFC 11 and CFC 12.
   real :: sc_no_term   ! A term related to the Schmidt number.
-  integer :: i, j, m, is, ie, js, je, idim(4), jdim(4)
+  integer :: i, j, is, ie, js, je, idim(4), jdim(4)
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   idim(:) = (/G%isd, is, ie, G%ied/) ; jdim(:) = (/G%jsd, js, je, G%jed/)
@@ -599,7 +599,6 @@ subroutine OCMIP2_CFC_end(CS)
 !   This subroutine deallocates the memory owned by this module.
 ! Argument: CS - The control structure returned by a previous call to
 !                register_OCMIP2_CFC.
-  integer :: m
 
   if (associated(CS)) then
     if (associated(CS%CFC11)) deallocate(CS%CFC11)

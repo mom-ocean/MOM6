@@ -1626,7 +1626,6 @@ subroutine vertvisc_init(MIS, Time, G, GV, US, param_file, diag, ADp, dirs, &
 
   ! Local variables
 
-  real :: hmix_str_dflt
   real :: Kv_dflt ! A default viscosity [m2 s-1].
   real :: Hmix_m  ! A boundary layer thickness [m].
   logical :: default_2018_answers

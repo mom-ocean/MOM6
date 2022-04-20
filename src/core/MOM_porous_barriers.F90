@@ -48,7 +48,7 @@ subroutine por_widths(h, tv, G, GV, US, eta, pbv, eta_bt, halo_size, eta_to_m)
   type(porous_barrier_ptrs),           intent(inout) :: pbv  !< porous barrier fractional cell metrics
 
   !local variables
-  integer ii, i, j, k, nk, isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
+  integer i, j, k, nk, isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
   real w_layer, & ! fractional open width of layer interface [nondim]
        A_layer, & ! integral of fractional open width from bottom to current layer[Z ~> m]
        A_layer_prev, & ! integral of fractional open width from bottom to previous layer [Z ~> m]

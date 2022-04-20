@@ -312,7 +312,7 @@ subroutine set_coord_from_TS_range(Rlay, g_prime, GV, US, param_file, eqn_of_sta
   real :: a1, frac_dense, k_frac  ! Nondimensional temporary variables [nondim]
   integer :: k, nz, k_light
   character(len=40)  :: mdl = "set_coord_from_TS_range" ! This subroutine's name.
-  character(len=200) :: filename, coord_file, inputdir ! Strings for file/path
+
   nz = GV%ke
 
   call callTree_enter(trim(mdl)//"(), MOM_coord_initialization.F90")

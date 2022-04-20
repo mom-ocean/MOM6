@@ -458,7 +458,7 @@ subroutine Update_Surface_Waves(G, GV, US, Day, dt, CS, forces)
   type(time_type),         intent(in)  :: dt  !< Timestep as a time-type
   type(mech_forcing),      intent(in), optional  :: forces !< MOM_forcing_type
   ! Local variables
-  integer :: ii, jj, kk, b
+  integer :: ii, jj, b
   type(time_type) :: Day_Center
 
   ! Computing central time of time step
@@ -1108,9 +1108,9 @@ subroutine get_StokesSL_LiFoxKemper(ustar, hbl, GV, US, CS, UStokes_SL, LA)
   real :: z0       ! The boundary layer depth [Z ~> m]
   real :: z0i      ! The inverse of theboundary layer depth [Z-1 ~> m-1]
   real :: r1, r2, r3, r4  ! Nondimensional ratios [nondim]
-  real :: r5       ! A single expression that combines r3 and r4 [nondim]
-  real :: root_2kz ! The square root of twice the peak wavenumber times the
-                   ! boundary layer depth [nondim]
+  ! real :: r5       ! A single expression that combines r3 and r4 [nondim]
+  ! real :: root_2kz ! The square root of twice the peak wavenumber times the
+  !                  ! boundary layer depth [nondim]
   real :: u10      ! The 10 m wind speed [L T-1 ~> m s-1]
   real :: PI       ! 3.1415926535...
 

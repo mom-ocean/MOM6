@@ -154,7 +154,6 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
     htot          ! The sum of the total layer thicknesses [H ~> m or kg m-2]
   real :: Khth_Loc_u(SZIB_(G),SZJ_(G))
   real :: Khth_Loc_v(SZI_(G),SZJB_(G))
-  real :: Khth_Loc(SZIB_(G),SZJB_(G))  ! locally calculated thickness diffusivity [L2 T-1 ~> m2 s-1]
   real :: h_neglect ! A thickness that is so small it is usually lost
                     ! in roundoff and can be neglected [H ~> m or kg m-2].
   real, dimension(:,:), pointer :: cg1 => null() !< Wave speed [L T-1 ~> m s-1]

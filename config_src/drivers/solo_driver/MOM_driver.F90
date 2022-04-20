@@ -129,7 +129,6 @@ program MOM_main
                                   ! representation of dt_forcing.
   real :: dt_forcing              ! The coupling time step [s].
   real :: dt                      ! The nominal baroclinic dynamics time step [s].
-  real :: dt_off                  ! Offline time step [s].
   integer :: ntstep               ! The number of baroclinic dynamics time steps
                                   ! within dt_forcing.
   real :: dt_therm                ! The thermodynamic timestep [s]

@@ -161,22 +161,14 @@ subroutine init_oda(Time, G, GV, diag_CS, CS)
   type(directories) :: dirs
 
   type(grid_type), pointer :: T_grid !< global tracer grid
-  real, dimension(:,:), allocatable :: global2D, global2D_old
-  real, dimension(:), allocatable :: lon1D, lat1D, glon1D, glat1D
   type(param_file_type) :: PF
-  integer :: n, m, k, i, j, nk
-  integer :: is,ie,js,je,isd,ied,jsd,jed
-  integer :: isg,ieg,jsg,jeg
-  integer :: idg_offset, jdg_offset
-  integer :: stdout_unit
+  integer :: n
+  integer :: isd, ied, jsd, jed
   integer, dimension(4) :: fld_sz
   character(len=32) :: assim_method
-  integer :: npes_pm, ens_info(6), ni, nj
-  character(len=128) :: mesg
-  character(len=32) :: fldnam
+  integer :: npes_pm, ens_info(6)
   character(len=30) :: coord_mode
   character(len=200) :: inputdir, basin_file
-  logical :: reentrant_x, reentrant_y, tripolar_N, symmetric
   character(len=80) :: remap_scheme
   character(len=80) :: bias_correction_file, inc_file
 
@@ -388,14 +380,8 @@ subroutine set_prior_tracer(Time, G, GV, h, tv, CS)
 
   type(ODA_CS), pointer :: CS !< ocean DA control structure
   real, dimension(SZI_(G),SZJ_(G),CS%nk) :: T, S
-  type(ocean_grid_type), pointer :: Grid=>NULL()
-  integer :: i,j, m, n, ss
-  integer :: is, ie, js, je
+  integer :: i, j, m
   integer :: isc, iec, jsc, jec
-  integer :: isd, ied, jsd, jed
-  integer :: isg, ieg, jsg, jeg, idg_offset, jdg_offset
-  integer :: id
-  logical :: used, symmetric
 
   ! return if not time for analysis
   if (Time < CS%Time) return
@@ -449,8 +435,8 @@ subroutine get_posterior_tracer(Time, CS, h, tv, increment)
   logical, optional, intent(in) :: increment !< True if returning increment only
 
   type(ocean_control_struct), pointer :: Ocean_increment=>NULL()
-  integer :: i, j, m
-  logical :: used, get_inc
+  integer :: m
+  logical :: get_inc
   integer :: seconds_per_hour = 3600.
 
   ! return if not analysis time (retain pointers for h and tv)
@@ -506,10 +492,6 @@ end subroutine get_posterior_tracer
 subroutine oda(Time, CS)
   type(time_type), intent(in) :: Time !< the current model time
   type(oda_CS), pointer :: CS !< A pointer the ocean DA control structure
-
-  integer :: i, j
-  integer :: m
-  integer :: yr, mon, day, hr, min, sec
 
   if ( Time >= CS%Time ) then
 
@@ -581,7 +563,7 @@ subroutine init_ocean_ensemble(CS,Grid,GV,ens_size)
   type(verticalGrid_type), pointer :: GV !< Pointer to DA vertical grid
   integer, intent(in) :: ens_size !< ensemble size
 
-  integer :: n,is,ie,js,je,nk
+  integer :: is, ie, js, je, nk
 
   nk=GV%ke
   is=Grid%isd;ie=Grid%ied
@@ -642,8 +624,7 @@ subroutine apply_oda_tracer_increments(dt, Time_end, G, GV, tv, h, CS)
   type(ODA_CS), pointer                   :: CS !< the data assimilation structure
 
   !! local variables
-  integer :: yr, mon, day, hr, min, sec
-  integer :: i, j, k
+  integer :: i, j
   integer :: isc, iec, jsc, jec
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: T_inc !< an adjustment to the temperature
                                                     !! tendency [degC T-1 -> degC s-1]
@@ -651,7 +632,6 @@ subroutine apply_oda_tracer_increments(dt, Time_end, G, GV, tv, h, CS)
                                                     !! tendency [g kg-1 T-1 -> g kg-1 s-1]
   real, dimension(SZI_(G),SZJ_(G),SZK_(CS%Grid)) :: T !< The updated temperature [degC]
   real, dimension(SZI_(G),SZJ_(G),SZK_(CS%Grid)) :: S !< The updated salinity [g kg-1]
-  real :: missing_value
 
   if (.not. associated(CS)) return
   if (CS%assim_method == NO_ASSIM .and. (.not. CS%do_bias_adjustment)) return

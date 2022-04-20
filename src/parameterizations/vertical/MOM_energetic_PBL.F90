@@ -721,7 +721,6 @@ subroutine ePBL_column(h, u, v, T0, S0, dSV_dT, dSV_dS, TKE_forcing, B_flux, abs
                     !    can improve this.
   real :: dMLD_min  ! The change in diagnosed mixed layer depth when the guess is min_MLD [Z ~> m]
   real :: dMLD_max  ! The change in diagnosed mixed layer depth when the guess is max_MLD [Z ~> m]
-  logical :: FIRST_OBL     ! Flag for computing "found" Mixing layer depth
   logical :: OBL_converged ! Flag for convergence of MLD
   integer :: OBL_it        ! Iteration counter
 
@@ -730,7 +729,7 @@ subroutine ePBL_column(h, u, v, T0, S0, dSV_dT, dSV_dS, TKE_forcing, B_flux, abs
   logical :: debug      ! This is used as a hard-coded value for debugging.
 
   !  The following arrays are used only for debugging purposes.
-  real :: dPE_debug, mixing_debug, taux2, tauy2
+  real :: dPE_debug, mixing_debug
   real, dimension(20) :: TKE_left_itt, PE_chg_itt, Kddt_h_itt, dPEa_dKd_itt, MKE_src_itt
   real, dimension(SZK_(GV)) :: mech_TKE_k, conv_PErel_k, nstar_k
   real, dimension(SZK_(GV)) :: dT_expect !< Expected temperature changes [degC]

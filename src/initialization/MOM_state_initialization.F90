@@ -151,8 +151,6 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
                                                                !! ice shelf [ R Z ~> kg m-2 ]
   ! Local variables
   real :: depth_tot(SZI_(G),SZJ_(G))  ! The nominal total depth of the ocean [Z ~> m]
-  character(len=200) :: filename   ! The name of an input file.
-  character(len=200) :: filename2  ! The name of an input files.
   character(len=200) :: inputdir   ! The directory where NetCDF input files are.
   character(len=200) :: config
   real :: H_rescale   ! A rescaling factor for thicknesses from the representation in
@@ -163,7 +161,6 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
 
   logical :: from_Z_file, useALE
   logical :: new_sim
-  integer :: write_geom
   logical :: use_temperature, use_sponge, use_OBC, use_oda_incupd
   logical :: verify_restart_time
   logical :: use_EOS     ! If true, density is calculated from T & S using an equation of state.
@@ -1792,10 +1789,10 @@ subroutine initialize_temp_salt_linear(T, S, G, GV, param_file, just_read)
                                                                !! without changing T or S.
 
   integer :: k
-  real  :: delta_S, delta_T
   real  :: S_top, T_top ! Reference salinity and temperature within surface layer
   real  :: S_range, T_range ! Range of salinities and temperatures over the vertical
-  real  :: delta
+  !real  :: delta_S, delta_T
+  !real  :: delta
   character(len=40)  :: mdl = "initialize_temp_salt_linear" ! This subroutine's name.
 
   if (.not.just_read) call callTree_enter(trim(mdl)//"(), MOM_state_initialization.F90")
@@ -1815,24 +1812,24 @@ subroutine initialize_temp_salt_linear(T, S, G, GV, param_file, just_read)
   if (just_read) return ! All run-time parameters have been read, so return.
 
   ! Prescribe salinity
-! delta_S = S_range / ( GV%ke - 1.0 )
-! S(:,:,1) = S_top
-! do k=2,GV%ke
-!   S(:,:,k) = S(:,:,k-1) + delta_S
-! enddo
+  !delta_S = S_range / ( GV%ke - 1.0 )
+  !S(:,:,1) = S_top
+  !do k=2,GV%ke
+  !  S(:,:,k) = S(:,:,k-1) + delta_S
+  !enddo
   do k=1,GV%ke
     S(:,:,k) = S_top - S_range*((real(k)-0.5)/real(GV%ke))
     T(:,:,k) = T_top - T_range*((real(k)-0.5)/real(GV%ke))
   enddo
 
   ! Prescribe temperature
-! delta_T = T_range / ( GV%ke - 1.0 )
-! T(:,:,1) = T_top
-! do k=2,GV%ke
-!   T(:,:,k) = T(:,:,k-1) + delta_T
-! enddo
-! delta = 1
-! T(:,:,GV%ke/2 - (delta-1):GV%ke/2 + delta) = 1.0
+  !delta_T = T_range / ( GV%ke - 1.0 )
+  !T(:,:,1) = T_top
+  !do k=2,GV%ke
+  !  T(:,:,k) = T(:,:,k-1) + delta_T
+  !enddo
+  !delta = 1
+  !T(:,:,GV%ke/2 - (delta-1):GV%ke/2 + delta) = 1.0
 
   call callTree_leave(trim(mdl)//'()')
 end subroutine initialize_temp_salt_linear
@@ -2192,7 +2189,7 @@ subroutine initialize_oda_incupd_file(G, GV, US, use_temperature, tv, h, u, v, p
   real, allocatable, dimension(:,:,:) :: tmp_tr ! A temporary array for reading oda fields
   real, allocatable, dimension(:,:,:) :: tmp_u,tmp_v ! A temporary array for reading oda fields
 
-  integer :: i, j, k, is, ie, js, je, nz
+  integer :: is, ie, js, je, nz
   integer :: isd, ied, jsd, jed
 
   integer, dimension(4) :: siz
@@ -2392,9 +2389,8 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, depth_tot, G, GV, US, PF, just
                                    !! and salinity in z-space; by default it is also used for ice shelf area.
   character(len=200) :: tfilename  !< The name of an input file containing temperature in z-space.
   character(len=200) :: sfilename  !< The name of an input file containing salinity in z-space.
-  character(len=200) :: shelf_file !< The name of an input file used for  ice shelf area.
   character(len=200) :: inputdir   !! The directory where NetCDF input files are.
-  character(len=200) :: mesg, area_varname, ice_shelf_file
+  character(len=200) :: mesg
 
   type(EOS_type), pointer :: eos => NULL()
   type(thermo_var_ptrs) :: tv_loc   ! A temporary thermo_var container
@@ -2405,11 +2401,10 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, depth_tot, G, GV, US, PF, just
 
   integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state
   integer :: is, ie, js, je, nz ! compute domain indices
-  integer :: isc,iec,jsc,jec    ! global compute domain indices
   integer :: isg, ieg, jsg, jeg ! global extent
   integer :: isd, ied, jsd, jed ! data domain indices
 
-  integer :: i, j, k, ks, np, ni, nj
+  integer :: i, j, k, ks
   integer :: nkml     ! The number of layers in the mixed layer.
 
   integer :: kd, inconsistent
@@ -2419,20 +2414,17 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, depth_tot, G, GV, US, PF, just
   real    :: PI_180   ! for conversion from degrees to radians
   real    :: Hmix_default ! The default initial mixed layer depth [m].
   real    :: Hmix_depth   ! The mixed layer depth in the initial condition [Z ~> m].
-  real    :: dilate       ! A dilation factor to match topography [nondim]
   real    :: missing_value_temp, missing_value_salt
   logical :: correct_thickness
   real    :: h_tolerance ! A parameter that controls the tolerance when adjusting the
                          ! thickness to fit the bathymetry [Z ~> m].
   character(len=40) :: potemp_var, salin_var
-  character(len=8)  :: laynum
 
   integer, parameter :: niter=10   ! number of iterations for t/s adjustment to layer density
   logical            :: adjust_temperature = .true.  ! fit t/s to target densities
   real, parameter    :: missing_value = -1.e20
   real, parameter    :: temp_land_fill = 0.0, salt_land_fill = 35.0
-  logical :: reentrant_x, tripolar_n,dbg
-  logical :: debug = .false.  ! manually set this to true for verbose output
+  logical :: reentrant_x, tripolar_n
 
   ! data arrays
   real, dimension(:), allocatable :: z_edges_in, z_in ! Interface heights [Z ~> m]
@@ -2470,8 +2462,8 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, depth_tot, G, GV, US, PF, just
   real :: tempAvg  ! Spatially averaged temperatures on a layer [degC]
   real :: saltAvg  ! Spatially averaged salinities on a layer [ppt]
   logical :: do_conv_adj, ignore
-  integer :: nPoints, ans
-  integer :: id_clock_routine, id_clock_read, id_clock_interp, id_clock_fill, id_clock_ALE
+  integer :: nPoints
+  integer :: id_clock_routine, id_clock_ALE
 
   id_clock_routine = cpu_clock_id('(Initialize from Z)', grain=CLOCK_ROUTINE)
   id_clock_ALE = cpu_clock_id('(Initialize from Z) ALE', grain=CLOCK_LOOP)

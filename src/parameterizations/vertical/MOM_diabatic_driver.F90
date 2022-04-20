@@ -578,8 +578,6 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
   real :: h_neglect2   ! h_neglect^2 [H2 ~> m2 or kg2 m-4]
   real :: add_ent      ! Entrainment that needs to be added when mixing tracers [H ~> m or kg m-2]
   real :: I_hval       ! The inverse of the thicknesses averaged to interfaces [H-1 ~> m-1 or m2 kg-1]
-  real :: h_tr         ! h_tr is h at tracer points with a tiny thickness
-                       ! added to ensure positive definiteness [H ~> m or kg m-2]
   real :: Tr_ea_BBL    ! The diffusive tracer thickness in the BBL that is
                        ! coupled to the bottom within a timestep [H ~> m or kg m-2]
   real :: Kd_add_here    ! An added diffusivity [Z2 T-1 ~> m2 s-1].
@@ -588,11 +586,8 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
   real :: Ent_int ! The diffusive entrainment rate at an interface [H ~> m or kg m-2]
   real :: Idt     ! The inverse time step [T-1 ~> s-1]
 
-  integer :: dir_flag     ! An integer encoding the directions in which to do halo updates.
   logical :: showCallTree ! If true, show the call tree
-  integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, m
-
-  integer :: ig, jg      ! global indices for testing testing itide point source (BDM)
+  integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
 
   is   = G%isc  ; ie  = G%iec  ; js  = G%jsc  ; je  = G%jec ; nz = GV%ke
   Isq  = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
@@ -1164,17 +1159,14 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
   real :: h_neglect2   ! h_neglect^2 [H2 ~> m2 or kg2 m-4]
   real :: add_ent      ! Entrainment that needs to be added when mixing tracers [H ~> m or kg m-2]
   real :: I_hval       ! The inverse of the thicknesses averaged to interfaces [H-1 ~> m-1 or m2 kg-1]
-  real :: h_tr         ! h_tr is h at tracer points with a tiny thickness
-                       ! added to ensure positive definiteness [H ~> m or kg m-2]
   real :: Tr_ea_BBL    ! The diffusive tracer thickness in the BBL that is
                        ! coupled to the bottom within a timestep [H ~> m or kg m-2]
   real :: htot(SZIB_(G)) ! The summed thickness from the bottom [H ~> m or kg m-2].
   real :: Kd_add_here    ! An added diffusivity [Z2 T-1 ~> m2 s-1].
   real :: Idt     ! The inverse time step [T-1 ~> s-1]
 
-  integer :: dir_flag     ! An integer encoding the directions in which to do halo updates.
   logical :: showCallTree ! If true, show the call tree
-  integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, m
+  integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
 
   is   = G%isc  ; ie  = G%iec  ; js  = G%jsc  ; je  = G%jec ; nz = GV%ke
   Isq  = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
@@ -1643,15 +1635,12 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
     h_orig, &    ! initial layer thicknesses [H ~> m or kg m-2]
     hold,   &    ! layer thickness before diapycnal entrainment, and later the initial
                  ! layer thicknesses (if a mixed layer is used) [H ~> m or kg m-2]
-    dSV_dT, &    ! The partial derivative of specific volume with temperature [R-1 degC-1 ~> m3 kg-1 degC-1]
-    dSV_dS, &    ! The partial derivative of specific volume with salinity [R-1 ppt-1 ~> m3 kg-1 ppt-1].
     u_h,    &    ! Zonal velocities at thickness points after entrainment [L T-1 ~> m s-1]
     v_h,    &    ! Meridional velocities at thickness points after entrainment [L T-1 ~> m s-1]
     temp_diag, & ! Diagnostic array of previous temperatures [degC]
     saln_diag    ! Diagnostic array of previous salinity [ppt]
   real, dimension(SZI_(G),SZJ_(G)) :: &
-    Rcv_ml, &    ! Coordinate density of mixed layer [R ~> kg m-3], used for applying sponges
-    SkinBuoyFlux ! 2d surface buoyancy flux [Z2 T-3 ~> m2 s-3], used by ePBL
+    Rcv_ml       ! Coordinate density of mixed layer [R ~> kg m-3], used for applying sponges
 
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), target :: &
              ! These are targets so that the space can be shared with eaml & ebml.
@@ -1671,9 +1660,6 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
     Tadv_flx, & ! advective diapycnal heat flux across interfaces [degC H T-1 ~> degC m s-1 or degC kg m-2 s-1]
     Sdif_flx, & ! diffusive diapycnal salt flux across interfaces [ppt H T-1 ~> ppt m s-1 or ppt kg m-2 s-1]
     Sadv_flx    ! advective diapycnal salt flux across interfaces [ppt H T-1 ~> ppt m s-1 or ppt kg m-2 s-1]
-
-  real, allocatable, dimension(:,:) :: &
-    hf_dudt_dia_2d, hf_dvdt_dia_2d ! Depth sum of diapycnal mixing accelaration * fract. thickness [L T-2 ~> m s-2].
 
   ! The following 3 variables are only used with a bulk mixed layer.
   real, pointer, dimension(:,:,:) :: &
@@ -1717,7 +1703,7 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
   integer :: dir_flag     ! An integer encoding the directions in which to do halo updates.
   logical :: showCallTree ! If true, show the call tree
   integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state
-  integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, nkmb, m, halo
+  integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, nkmb, halo
 
   is   = G%isc  ; ie  = G%iec  ; js  = G%jsc  ; je  = G%jec ; nz = GV%ke
   Isq  = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
@@ -2932,7 +2918,6 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
 
   ! Local variables
   real    :: Kd  ! A diffusivity used in the default for other tracer diffusivities, in MKS units [m2 s-1]
-  integer :: num_mode
   logical :: use_temperature
   character(len=20) :: EN1, EN2, EN3
 

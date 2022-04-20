@@ -273,7 +273,6 @@ subroutine set_up_sponge_ML_density(sp_val, G, CS, sp_val_i_mean)
                                             !! layer density [R ~> kg m-3], for use if Iresttime_i_mean > 0.
 
   integer :: j, col
-  character(len=256) :: mesg ! String for error messages
 
   if (.not.associated(CS)) return
 

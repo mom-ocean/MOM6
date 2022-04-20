@@ -213,8 +213,6 @@ subroutine remapping_core_h(CS, n0, h0, u0, n1, h1, u1, h_neglect, h_neglect_edg
   real, dimension(n0,2)           :: ppoly_r_E     ! Edge value of polynomial
   real, dimension(n0,2)           :: ppoly_r_S     ! Edge slope of polynomial
   real, dimension(n0,CS%degree+1) :: ppoly_r_coefs ! Coefficients of polynomial
-  real :: edges(n0,2)  ! Interpolation edge values [A]
-  real :: slope(n0)    ! Interpolation slopes per cell width [A]
   real :: h0tot, h0err ! Sum of source cell widths and round-off error in this sum [H]
   real :: h1tot, h1err ! Sum of target cell widths and round-off error in this sum [H]
   real :: u0tot, u0err ! Integrated values on the source grid and round-off error in this sum [H A]
@@ -298,7 +296,7 @@ subroutine remapping_core_w( CS, n0, h0, u0, n1, dx, u1, h_neglect, h_neglect_ed
   real, dimension(n0,2)           :: ppoly_r_S            !Edge slope of polynomial
   real, dimension(n0,CS%degree+1) :: ppoly_r_coefs !Coefficients of polynomial
   integer :: k
-  real :: eps, h0tot, h0err, h1tot, h1err
+  real :: h0tot, h0err, h1tot, h1err
   real :: u0tot, u0err, u0min, u0max, u1tot, u1err, u1min, u1max, uh_err
   real, dimension(n1) :: h1 !< Cell widths on target grid
   real :: hNeglect, hNeglect_edge
@@ -389,8 +387,6 @@ subroutine build_reconstructions_1d( CS, n0, h0, u0, ppoly_r_coefs, &
 
   ! Local variables
   integer :: local_remapping_scheme
-  integer :: remapping_scheme !< Remapping scheme
-  logical :: boundary_extrapolation !< Extrapolate at boundaries if true
   integer :: k, n
 
   ! Reset polynomial

@@ -136,7 +136,7 @@ subroutine open_param_file(filename, CS, checkable, component, doc_file_dir)
                                          !! the documentation files.  The default is effectively './'.
 
   ! Local variables
-  logical :: file_exists, unit_in_use, Netcdf_file, may_check, reopened_file
+  logical :: file_exists, Netcdf_file, may_check, reopened_file
   integer :: ios, iounit, strlen, i
   character(len=240) :: doc_path
   type(parameter_block), pointer :: block => NULL()
@@ -927,7 +927,7 @@ function max_input_line_length(CS, pf_num) result(max_len)
   character(len=FILENAME_LENGTH) :: filename
   character :: last_char
   integer :: ipf, ipf_s, ipf_e
-  integer :: last, last1, line_len, count, contBufSize
+  integer :: last, line_len, count, contBufSize
   logical :: continuedLine
 
   max_len = 0
@@ -1580,7 +1580,7 @@ subroutine log_param_time(CS, modulename, varname, value, desc, units, &
   logical :: use_timeunit, date_format
   character(len=240) :: mesg, myunits
   character(len=80) :: date_string, default_string
-  integer :: days, secs, ticks, ticks_per_sec
+  integer :: days, secs, ticks
 
   use_timeunit = .false.
   date_format = .false. ; if (present(log_date)) date_format = log_date
@@ -2021,7 +2021,7 @@ subroutine get_param_time(CS, modulename, varname, value, desc, units, &
   logical,          optional, intent(in)    :: log_as_date  !< If true, log the time_type in date
                                          !! format. The default is false.
 
-  logical :: do_read, do_log, date_format, log_date
+  logical :: do_read, do_log, log_date
 
   do_read = .true. ; if (present(do_not_read)) do_read = .not.do_not_read
   do_log  = .true. ; if (present(do_not_log))  do_log  = .not.do_not_log

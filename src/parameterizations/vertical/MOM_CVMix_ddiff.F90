@@ -174,7 +174,6 @@ subroutine compute_ddiff_coeffs(h, tv, G, GV, US, j, Kd_T, Kd_S, CS, R_rho)
     Kd1_S          !< Diapycanal diffusivity of salinity [m2 s-1].
 
   real, dimension(SZK_(GV)+1) :: iFaceHeight !< Height of interfaces [m]
-  integer :: kOBL                        !< level of OBL extent
   real :: dh, hcorr
   integer :: i, k
 

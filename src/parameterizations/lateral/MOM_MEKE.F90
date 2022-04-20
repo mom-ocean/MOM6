@@ -705,8 +705,6 @@ subroutine MEKE_equilibrium(CS, MEKE, G, GV, US, SN_u, SN_v, drag_rate_visc, I_m
   real :: tolerance ! Width of EKE bracket [L2 T-2 ~> m2 s-2].
   logical :: useSecant, debugIteration
 
-  real :: Lgrid, Ldeform, Lfrict
-
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
 
   debugIteration = .false.
@@ -1036,7 +1034,7 @@ logical function MEKE_init(Time, G, US, param_file, diag, CS, MEKE, restart_CS)
   real    :: MEKE_restoring_timescale ! The timescale used to nudge MEKE toward its equilibrium value.
   real :: cdrag            ! The default bottom drag coefficient [nondim].
   integer :: i, j, is, ie, js, je, isd, ied, jsd, jed
-  logical :: laplacian, biharmonic, useVarMix, coldStart
+  logical :: laplacian, biharmonic, coldStart
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
   character(len=40)  :: mdl = "MOM_MEKE" ! This module's name.

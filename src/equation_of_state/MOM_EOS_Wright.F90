@@ -351,7 +351,7 @@ subroutine calculate_specvol_derivs_wright(T, S, pressure, dSV_dT, dSV_dS, start
   integer, intent(in)                  :: npts     !< The number of values to calculate.
 
   ! Local variables
-  real :: al0, p0, lambda, I_denom
+  real :: p0, lambda, I_denom
   integer :: j
 
   do j=start,start+npts-1

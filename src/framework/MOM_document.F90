@@ -389,7 +389,6 @@ subroutine doc_openBlock(doc, blockName, desc)
   character(len=*), optional, intent(in) :: desc !< A description of the parameter block being opened
 ! This subroutine handles documentation for opening a parameter block.
   character(len=mLen) :: mesg
-  character(len=doc%commentColumn) :: valstring
 
   if (.not. (is_root_pe() .and. associated(doc))) return
   call open_doc_file(doc)
@@ -413,7 +412,6 @@ subroutine doc_closeBlock(doc, blockName)
   character(len=*), intent(in) :: blockName !< The name of the parameter block being closed
 ! This subroutine handles documentation for closing a parameter block.
   character(len=mLen) :: mesg
-  character(len=doc%commentColumn) :: valstring
   integer :: i
 
   if (.not. (is_root_pe() .and. associated(doc))) return

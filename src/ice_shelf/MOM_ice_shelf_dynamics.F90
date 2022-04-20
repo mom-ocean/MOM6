@@ -309,7 +309,6 @@ end subroutine register_ice_shelf_dyn_restarts
 !> Initializes shelf model data, parameters and diagnostics
 subroutine initialize_ice_shelf_dyn(param_file, Time, ISS, CS, G, US, diag, new_sim, solo_ice_sheet_in)
   type(param_file_type),   intent(in)    :: param_file !< A structure to parse for run-time parameters
-  type(ocean_grid_type),   pointer       :: ocn_grid   !< The calling ocean model's horizontal grid structure
   type(time_type),         intent(inout) :: Time !< The clock that that will indicate the model time
   type(ice_shelf_state),   intent(in)    :: ISS  !< A structure with elements that describe
                                                  !! the ice-shelf state
@@ -329,13 +328,12 @@ subroutine initialize_ice_shelf_dyn(param_file, Time, ISS, CS, G, US, diag, new_
                         ! in a restart file to the internal representation in this run.
   !This include declares and sets the variable "version".
 # include "version_variable.h"
-  character(len=200) :: config
   character(len=200) :: IC_file,filename,inputdir
   character(len=40)  :: var_name
   character(len=40)  :: mdl = "MOM_ice_shelf_dyn"  ! This module's name.
   logical :: shelf_mass_is_dynamic, override_shelf_movement, active_shelf_dynamics
   logical :: debug
-  integer :: i, j, is, ie, js, je, isd, ied, jsd, jed, Isdq, Iedq, Jsdq, Jedq, iters
+  integer :: i, j, isd, ied, jsd, jed, Isdq, Iedq, Jsdq, Jedq, iters
 
   Isdq = G%isdB ; Iedq = G%iedB ; Jsdq = G%jsdB ; Jedq = G%jedB
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
@@ -856,7 +854,6 @@ subroutine ice_shelf_solve_outer(CS, ISS, G, US, u_shlf, v_shlf, taudx, taudy, i
   real, dimension(SZDIB_(G),SZDJB_(G)) :: u_bdry_cont ! Boundary u-stress contribution [R L3 Z T-2 ~> kg m s-2]
   real, dimension(SZDIB_(G),SZDJB_(G)) :: v_bdry_cont ! Boundary v-stress contribution [R L3 Z T-2 ~> kg m s-2]
   real, dimension(SZDIB_(G),SZDJB_(G)) :: Au, Av ! The retarding lateral stress contributions [R L3 Z T-2 ~> kg m s-2]
-  real, dimension(SZDIB_(G),SZDJB_(G)) :: err_u, err_v
   real, dimension(SZDIB_(G),SZDJB_(G)) :: u_last, v_last ! Previous velocities [L T-1 ~> m s-1]
   real, dimension(SZDIB_(G),SZDJB_(G)) :: H_node ! Ice shelf thickness at corners [Z ~> m].
   real, dimension(SZDI_(G),SZDJ_(G)) :: float_cond ! An array indicating where the ice
@@ -864,14 +861,12 @@ subroutine ice_shelf_solve_outer(CS, ISS, G, US, u_shlf, v_shlf, taudx, taudy, i
   character(len=160) :: mesg  ! The text of an error message
   integer :: conv_flag, i, j, k,l, iter
   integer :: isdq, iedq, jsdq, jedq, isd, ied, jsd, jed, nodefloat, nsub
-  real    :: err_max, err_tempu, err_tempv, err_init, area, max_vel, tempu, tempv
+  real    :: err_max, err_tempu, err_tempv, err_init, max_vel, tempu, tempv
   real    :: rhoi_rhow ! The density of ice divided by a typical water density [nondim]
   real, pointer, dimension(:,:,:,:) :: Phi => NULL() ! The gradients of bilinear basis elements at Gaussian
                                                 ! quadrature points surrounding the cell vertices [m-1].
   real, pointer, dimension(:,:,:,:,:,:) :: Phisub => NULL() ! Quadrature structure weights at subgridscale
                                                 !  locations for finite element calculations [nondim]
-  character(2)                :: iternum
-  character(2)                :: numproc
 
   ! for GL interpolation
   nsub = CS%n_sub_regularize
@@ -1106,7 +1101,6 @@ subroutine ice_shelf_solve_inner(CS, ISS, G, US, u_shlf, v_shlf, taudx, taudy, H
                                            !! iterations have converged to the specified tolerance
   integer,                intent(out)   :: iters !< The number of iterations used in the solver.
   type(time_type),        intent(in)    :: Time !< The current model time
-  character(len=160) :: mesg  ! The text of an error message
   real, dimension(8,4,SZDI_(G),SZDJ_(G)), &
                           intent(in)    :: Phi !< The gradients of bilinear basis elements at Gaussian
                                              !! quadrature points surrounding the cell vertices [L-1 ~> m-1].
@@ -1133,8 +1127,7 @@ subroutine ice_shelf_solve_inner(CS, ISS, G, US, u_shlf, v_shlf, taudx, taudy, H
                         Au, Av, & ! The retarding lateral stress contributions [R L3 Z T-2 ~> kg m s-2]
                         Du, Dv, & ! Velocity changes [L T-1 ~> m s-1]
                         sum_vec, sum_vec_2
-  real    :: tol, beta_k, area, dot_p1, resid0, cg_halo
-  real    :: num, denom
+  real    :: beta_k, dot_p1, resid0, cg_halo
   real    :: alpha_k     ! A scaling factor for iterative corrections [nondim]
   real    :: resid_scale ! A scaling factor for redimensionalizing the global residuals [m2 L-2 ~> 1]
                          ! [m2 L-2 ~> 1] [R L3 Z T-2 ~> m kg s-2]
@@ -1580,7 +1573,7 @@ subroutine shelf_advance_front(CS, ISS, G, hmask, uh_ice, vh_ice)
   !        o--- (3) ---o
   !
 
-  integer :: i, j, isc, iec, jsc, jec, n_flux, k, l, iter_count
+  integer :: i, j, isc, iec, jsc, jec, n_flux, k, iter_count
   integer :: i_off, j_off
   integer :: iter_flag
 
@@ -2034,7 +2027,7 @@ subroutine init_boundary_values(CS, G, time, hmask, input_flux, input_thick, new
 !               computational domain -- if this function gets moves to another module,
 !               DO NOT TAKE THE RESTARTING BIT WITH IT
   integer :: i, j , isd, jsd, ied, jed
-  integer :: gjec, gisc, gjsc, cnt, isc, jsc, iec, jec
+  integer :: isc, jsc, iec, jec
   integer :: i_off, j_off
 
   isc = G%isc ; jsc = G%jsc ; iec = G%iec ; jec = G%jec
@@ -2319,7 +2312,7 @@ subroutine matrix_diagonal(CS, G, US, float_cond, H_node, ice_visc, basal_trac, 
   real, dimension(8,4) :: Phi ! Weight gradients [L-1 ~> m-1]
   real, dimension(2)   :: xquad
   real, dimension(2,2) :: Hcell, sub_ground
-  integer :: i, j, is, js, cnt, isc, jsc, iec, jec, iphi, jphi, iq, jq, ilq, jlq, Itgt, Jtgt
+  integer :: i, j, isc, jsc, iec, jec, iphi, jphi, iq, jq, ilq, jlq, Itgt, Jtgt
 
   isc = G%isc ; jsc = G%jsc ; iec = G%iec ; jec = G%jec
 
@@ -2403,7 +2396,7 @@ subroutine CG_diagonal_subgrid_basal (Phisub, H_node, bathyT, dens_ratio, sub_gr
 
   real    :: subarea ! The fractional sub-cell area [nondim]
   real    :: hloc    ! The local sub-region thickness [Z ~> m]
-  integer :: nsub, i, j, k, l, qx, qy, m, n
+  integer :: nsub, i, j, qx, qy, m, n
 
   nsub = size(Phisub,1)
   subarea = 1.0 / (nsub**2)
@@ -2465,7 +2458,6 @@ subroutine apply_boundary_values(CS, ISS, G, US, time, Phisub, H_node, ice_visc,
   real, dimension(2) :: xquad
   real :: ux, uy, vx, vy ! Components of velocity shears or divergence [T-1 ~> s-1]
   real :: uq, vq  ! Interpolated velocities [L T-1 ~> m s-1]
-  real :: area
   real, dimension(2,2) :: Ucell,Vcell,Hcell,Usubcontr,Vsubcontr
   integer :: i, j, isc, jsc, iec, jec, iq, jq, iphi, jphi, ilq, jlq, Itgt, Jtgt
 
@@ -2589,12 +2581,11 @@ subroutine calc_shelf_visc(CS, ISS, G, US, u_shlf, v_shlf)
 ! this may be subject to change later... to make it "hybrid"
 !  real, dimension(SZDIB_(G),SZDJB_(G)) ::  eII, ux, uy, vx, vy
   integer :: i, j, iscq, iecq, jscq, jecq, isd, jsd, ied, jed, iegq, jegq, iq, jq
-  integer :: giec, gjec, gisc, gjsc, cnt, isc, jsc, iec, jec, is, js, i_off, j_off
+  integer :: giec, gjec, gisc, gjsc, isc, jsc, iec, jec, is, js, i_off, j_off
   real :: Visc_coef, n_g
   real :: ux, uy, vx, vy
-  real :: eps_min, dxh, dyh ! Velocity shears [T-1 ~> s-1]
+  real :: eps_min   ! Velocity shears [T-1 ~> s-1]
 !  real, dimension(8,4)  :: Phi
-  real, dimension(2) :: xquad
 !  real :: umid, vmid, unorm ! Velocities [L T-1 ~> m s-1]
 
   isc = G%isc ; jsc = G%jsc ; iec = G%iec ; jec = G%jec
@@ -2667,7 +2658,7 @@ subroutine calc_shelf_taub(CS, ISS, G, US, u_shlf, v_shlf)
 ! this may be subject to change later... to make it "hybrid"
 
   integer :: i, j, iscq, iecq, jscq, jecq, isd, jsd, ied, jed, iegq, jegq
-  integer :: giec, gjec, gisc, gjsc, cnt, isc, jsc, iec, jec, is, js
+  integer :: giec, gjec, gisc, gjsc, isc, jsc, iec, jec, is, js
   real :: umid, vmid, unorm, eps_min ! Velocities [L T-1 ~> m s-1]
 
   isc = G%isc ; jsc = G%jsc ; iec = G%iec ; jec = G%jec
@@ -2741,7 +2732,7 @@ subroutine update_OD_ffrac_uncoupled(CS, G, h_shelf)
   real, dimension(SZDI_(G),SZDJ_(G)), &
                           intent(in)    :: h_shelf !< the thickness of the ice shelf [Z ~> m].
 
-  integer :: i, j, iters, isd, ied, jsd, jed
+  integer :: i, j, isd, ied, jsd, jed
   real    :: rhoi_rhow, OD
 
   rhoi_rhow = CS%density_ice / CS%density_ocean_avg
@@ -2793,7 +2784,7 @@ subroutine bilinear_shape_functions (X, Y, Phi, area)
   real, dimension(4) :: xquad, yquad ! [nondim]
   real :: a,b,c,d  ! Various lengths [L ~> m]
   real :: xexp, yexp ! [nondim]
-  integer :: node, qpoint, xnode, xq, ynode, yq
+  integer :: node, qpoint, xnode, ynode
 
   xquad(1:3:2) = .5 * (1-sqrt(1./3)) ; yquad(1:2) = .5 * (1-sqrt(1./3))
   xquad(2:4:2) = .5 * (1+sqrt(1./3)) ; yquad(3:4) = .5 * (1+sqrt(1./3))
@@ -2855,7 +2846,7 @@ subroutine bilinear_shape_fn_grid(G, i, j, Phi)
   real, dimension(4) :: xquad, yquad ! [nondim]
   real :: a, d       ! Interpolated grid spacings [L ~> m]
   real :: xexp, yexp ! [nondim]
-  integer :: node, qpoint, xnode, xq, ynode, yq
+  integer :: node, qpoint, xnode, ynode
 
   xquad(1:3:2) = .5 * (1-sqrt(1./3)) ; yquad(1:2) = .5 * (1-sqrt(1./3))
   xquad(2:4:2) = .5 * (1+sqrt(1./3)) ; yquad(3:4) = .5 * (1+sqrt(1./3))
@@ -2927,9 +2918,9 @@ subroutine bilinear_shape_functions_subgrid(Phisub, nsub)
     !  |   |
     !  1 - 2
 
-  integer :: i, j, k, l, qx, qy, indx, indy
+  integer :: i, j, qx, qy
   real,dimension(2)    :: xquad
-  real                 :: x0, y0, x, y, val, fracx
+  real                 :: x0, y0, x, y, fracx
 
   xquad(1) = .5 * (1-sqrt(1./3)) ; xquad(2) = .5 * (1+sqrt(1./3))
   fracx = 1.0/real(nsub)
@@ -3265,15 +3256,12 @@ subroutine ice_shelf_advect_temp_x(CS, G, time_step, hmask, h0, h_after_uflux)
   ! use will be made of ISS%hmask here - its value at the boundary will be zero, just like uncovered cells
   ! if there is an input bdry condition, the thickness there will be set in initialization
 
-  integer :: i, j, is, ie, js, je, isd, ied, jsd, jed, gjed, gied
+  integer :: i, j, is, ie, js, je, isd, ied, jsd, jed
   integer :: i_off, j_off
-  logical :: at_east_bdry, at_west_bdry, one_off_west_bdry, one_off_east_bdry
+  logical :: at_east_bdry, at_west_bdry
   real, dimension(-2:2) :: stencil
   real :: u_face     ! Zonal velocity at a face, positive if out {L T-1 ~> m s-1]
   real :: flux_diff, phi
-
-  character (len=1)        :: debug_str
-
 
   is = G%isc-2 ; ie = G%iec+2 ; js = G%jsc ; je = G%jec ; isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   i_off = G%idg_offset ; j_off = G%jdg_offset
@@ -3435,13 +3423,12 @@ subroutine ice_shelf_advect_temp_y(CS, G, time_step, hmask, h_after_uflux, h_aft
   ! use will be made of ISS%hmask here - its value at the boundary will be zero, just like uncovered cells
   ! if there is an input bdry condition, the thickness there will be set in initialization
 
-  integer :: i, j, is, ie, js, je, isd, ied, jsd, jed, gjed, gied
+  integer :: i, j, is, ie, js, je, isd, ied, jsd, jed
   integer :: i_off, j_off
-  logical :: at_north_bdry, at_south_bdry, one_off_west_bdry, one_off_east_bdry
+  logical :: at_north_bdry, at_south_bdry
   real, dimension(-2:2) :: stencil
   real :: v_face     ! Pseudo-meridional velocity at a cell face, positive if out {L T-1 ~> m s-1]
   real :: flux_diff, phi
-  character(len=1)        :: debug_str
 
   is = G%isc ; ie = G%iec ; js = G%jsc-1 ; je = G%jec+1 ; isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   i_off = G%idg_offset ; j_off = G%jdg_offset

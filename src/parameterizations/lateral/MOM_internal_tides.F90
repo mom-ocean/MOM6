@@ -188,9 +188,6 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
     tot_En_mode, & ! energy summed over angles only [R Z3 T-2 ~> J m-2]
     Ub, &          ! near-bottom horizontal velocity of wave (modal) [L T-1 ~> m s-1]
     Umax           ! Maximum horizontal velocity of wave (modal) [L T-1 ~> m s-1]
-  real, dimension(SZI_(G),SZJB_(G)) :: &
-    flux_heat_y, &
-    flux_prec_y
   real, dimension(SZI_(G),SZJ_(G)) :: &
     tot_En, &      ! energy summed over angles, modes, frequencies [R Z3 T-2 ~> J m-2]
     tot_leak_loss, tot_quad_loss, tot_itidal_loss, tot_Froude_loss, tot_residual_loss, tot_allprocesses_loss, &
@@ -654,7 +651,7 @@ subroutine sum_En(G, US, CS, En, label)
   character(len=*),       intent(in) :: label !< A label to use in error messages
   ! Local variables
   real :: En_sum   ! The total energy in MKS units for potential output [J]
-  integer :: m,fr,a
+  integer :: a
   ! real :: En_sum_diff, En_sum_pdiff
   ! character(len=160) :: mesg  ! The text of an error message
   ! real :: days
@@ -708,7 +705,6 @@ subroutine itidal_lowmode_loss(G, US, CS, Nb, Ub, En, TKE_loss_fixed, TKE_loss, 
   integer :: j,i,m,fr,a, is, ie, js, je
   real    :: En_tot          ! energy for a given mode, frequency, and point summed over angles [R Z3 T-2 ~> J m-2]
   real    :: TKE_loss_tot    ! dissipation for a given mode, frequency, and point summed over angles [R Z3 T-3 ~> W m-2]
-  real    :: TKE_sum_check   ! temporary for check summing
   real    :: frac_per_sector ! fraction of energy in each wedge
   real    :: q_itides        ! fraction of energy actually lost to mixing (remainder, 1-q, is
                              ! assumed to stay in propagating mode for now - BDM)
@@ -957,7 +953,6 @@ subroutine PPM_angular_advect(En2d, CFL_ang, Flux_En, NAngle, dt, halo_ang)
   real :: I_Angle_size ! The inverse of the the orientation wedges [Rad-1]
   real :: I_dt         ! The inverse of the timestep [T-1 ~> s-1]
   real :: aR, aL       ! Left and right edge estimates of energy density [R Z3 T-2 rad-1 ~> J m-2 rad-1]
-  real :: dMx, dMn
   real :: Ep, Ec, Em   ! Mean angular energy density for three successive wedges in angular
                        ! orientation [R Z3 T-2 rad-1 ~> J m-2 rad-1]
   real :: dA, curv_3   ! Difference and curvature of energy density [R Z3 T-2 rad-1 ~> J m-2 rad-1]
@@ -1174,7 +1169,7 @@ subroutine propagate_corner_spread(En, energized_wedge, NAngle, speed, dt, G, CS
   type(int_tide_CS),      intent(in)    :: CS    !< Internal tide control struct
   type(loop_bounds_type), intent(in)    :: LB    !< A structure with the active energy loop bounds.
   ! Local variables
-  integer :: i, j, k, ish, ieh, jsh, jeh, m
+  integer :: i, j, ish, ieh, jsh, jeh, m
   real :: TwoPi, Angle_size
   real :: energized_angle ! angle through center of current wedge
   real :: theta ! angle at edge of wedge
@@ -1191,7 +1186,7 @@ subroutine propagate_corner_spread(En, energized_wedge, NAngle, speed, dt, G, CS
   real :: slopeN,slopeW,slopeS,slopeE, bN,bW,bS,bE ! parameters defining parcel sides
   real :: aNE,aN,aNW,aW,aSW,aS,aSE,aE,aC ! sub-areas of advected parcel
   real :: a_total ! total area of advected parcel
-  real :: a1,a2,a3,a4 ! areas used in calculating polygon areas (sub-areas) of advected parcel
+  ! real :: a1,a2,a3,a4 ! areas used in calculating polygon areas (sub-areas) of advected parcel
   real, dimension(G%IsdB:G%IedB,G%Jsd:G%Jed) :: x,y ! coordinates of cell corners
   real, dimension(G%IsdB:G%IedB,G%Jsd:G%Jed) :: Idx,Idy ! inverse of dx,dy at cell corners
   real, dimension(G%IsdB:G%IedB,G%Jsd:G%Jed) :: dx,dy ! dx,dy at cell corners
@@ -1468,11 +1463,11 @@ subroutine propagate_x(En, speed_x, Cgx_av, dCgx, dt, G, US, Nangle, CS, LB, res
   real, dimension(SZIB_(G),SZJ_(G)) :: &
     flux_x      ! The internal wave energy flux [R Z3 L2 T-3 ~> J s-1].
   real, dimension(SZIB_(G)) :: &
-    cg_p, cg_m, flux1, flux2
+    cg_p, flux1
   !real, dimension(SZI_(G),SZJB_(G),Nangle) :: En_m, En_p
   real, dimension(G%isd:G%ied,G%jsd:G%jed,Nangle) :: &
     Fdt_m, Fdt_p! Left and right energy fluxes [R Z3 L2 T-2 ~> J]
-  integer :: i, j, k, ish, ieh, jsh, jeh, a
+  integer :: i, j, ish, ieh, jsh, jeh, a
 
   ish = LB%ish ; ieh = LB%ieh ; jsh = LB%jsh ; jeh = LB%jeh
   do a=1,Nangle
@@ -1548,13 +1543,11 @@ subroutine propagate_y(En, speed_y, Cgy_av, dCgy, dt, G, US, Nangle, CS, LB, res
     EnL, EnR    ! South and north face energy densities [R Z3 T-2 ~> J m-2].
   real, dimension(SZI_(G),SZJB_(G)) :: &
     flux_y      ! The internal wave energy flux [R Z3 L2 T-3 ~> J s-1].
-  real, dimension(SZI_(G)) :: &
-    cg_p, cg_m, flux1, flux2
+  real, dimension(SZI_(G)) :: cg_p, flux1
   !real, dimension(SZI_(G),SZJB_(G),Nangle) :: En_m, En_p
   real, dimension(G%isd:G%ied,G%jsd:G%jed,Nangle) :: &
     Fdt_m, Fdt_p! South and north energy fluxes [R Z3 L2 T-2 ~> J]
-  character(len=160) :: mesg  ! The text of an error message
-  integer :: i, j, k, ish, ieh, jsh, jeh, a
+  integer :: i, j, ish, ieh, jsh, jeh, a
 
   ish = LB%ish ; ieh = LB%ieh ; jsh = LB%jsh ; jeh = LB%jeh
   do a=1,Nangle
@@ -1727,7 +1720,7 @@ subroutine reflect(En, NAngle, CS, G, LB)
   integer :: angle_r0                      ! angle-bin of reflected ray wrt equator
   integer :: angle_to_wall                 ! angle-bin relative to wall
   integer :: a, a0                         ! loop index for angles
-  integer :: i, j, i_global
+  integer :: i, j
   integer :: Nangle_d2            ! Nangle / 2
   integer :: isc, iec, jsc, jec   ! start and end local indices on PE
                                   ! (values exclude halos)
@@ -1977,7 +1970,6 @@ subroutine PPM_reconstruction_x(h_in, h_l, h_r, G, LB, simple_2nd)
   real, parameter :: oneSixth = 1./6.
   real :: h_ip1, h_im1
   real :: dMx, dMn
-  logical :: use_CW84
   character(len=256) :: mesg  ! The text of an error message
   integer :: i, j, isl, iel, jsl, jel, stencil
 
@@ -2126,7 +2118,6 @@ subroutine PPM_limit_pos(h_in, h_L, h_R, h_min, G, iis, iie, jis, jie)
   integer,                          intent(in)     :: jie   !< End j-index for computations
   ! Local variables
   real    :: curv, dh, scale
-  character(len=256) :: mesg  ! The text of an error message
   integer :: i,j
 
   do j=jis,jie ; do i=iis,iie
@@ -2222,10 +2213,11 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
   character(len=40)  :: var_name
   character(len=160) :: var_descript
   character(len=200) :: filename
-  character(len=200) :: refl_angle_file, land_mask_file
+  character(len=200) :: refl_angle_file
   character(len=200) :: refl_pref_file, refl_dbl_file, trans_file
-  character(len=200) :: dy_Cu_file, dx_Cv_file
   character(len=200) :: h2_file
+  !character(len=200) :: land_mask_file
+  !character(len=200) :: dy_Cu_file, dx_Cv_file
 
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 

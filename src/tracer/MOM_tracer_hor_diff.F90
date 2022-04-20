@@ -154,7 +154,6 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, GV, US, CS, Reg, tv, do_online
   real :: khdt_max ! The local limiting value of khdt_x or khdt_y [L2 ~> m2].
   real :: max_CFL ! The global maximum of the diffusive CFL number.
   logical :: use_VarMix, Resoln_scaled, do_online, use_Eady
-  integer :: S_idx, T_idx ! Indices for temperature and salinity if needed
   integer :: i, j, k, m, is, ie, js, je, nz, ntr, itt, num_itts
   real :: I_numitts  ! The inverse of the number of iterations, num_itts.
   real :: scale      ! The fraction of khdt_x or khdt_y that is applied in this
@@ -692,7 +691,6 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
   integer :: isd, ied, jsd, jed, IsdB, IedB, k_size
   integer :: kL, kR, kLa, kLb, kRa, kRb, nP, itt, ns, max_itt
   integer :: PEmax_kRho
-  integer :: isv, iev, jsv, jev ! The valid range of the indices.
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
@@ -1444,7 +1442,6 @@ subroutine tracer_hor_diff_init(Time, G, GV, US, param_file, diag, EOS, diabatic
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
   character(len=40)  :: mdl = "MOM_tracer_hor_diff" ! This module's name.
-  character(len=256) :: mesg    ! Message for error messages.
 
   if (associated(CS)) then
     call MOM_error(WARNING, "tracer_hor_diff_init called with associated control structure.")

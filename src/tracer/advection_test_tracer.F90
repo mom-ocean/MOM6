@@ -182,23 +182,12 @@ subroutine initialize_advection_test_tracer(restart, day, G, GV, h,diag, OBC, CS
   type(sponge_CS),                    pointer    :: sponge_CSp !< Pointer to the control structure for the sponges.
 
   ! Local variables
-  real, allocatable :: temp(:,:,:)
-  real, pointer, dimension(:,:,:) :: &
-    OBC_tr1_u => NULL(), & ! These arrays should be allocated and set to
-    OBC_tr1_v => NULL()    ! specify the values of tracer 1 that should come
-                           ! in through u- and v- points through the open
-                           ! boundary conditions, in the same units as tr.
   character(len=16) :: name     ! A variable's name in a NetCDF file.
-  character(len=72) :: longname ! The long name of that variable.
-  character(len=48) :: units    ! The dimensions of the variable.
-  character(len=48) :: flux_units ! The units for tracer fluxes, usually
-                            ! kg(tracer) kg(water)-1 m3 s-1 or kg(tracer) s-1.
-  real, pointer :: tr_ptr(:,:,:) => NULL()
   real :: h_neglect         ! A thickness that is so small it is usually lost
                             ! in roundoff and can be neglected [H ~> m or kg m-2].
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz, m
   integer :: IsdB, IedB, JsdB, JedB
-  real :: tmpx, tmpy, locx, locy
+  real :: locx, locy
 
   if (.not.associated(CS)) return
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
@@ -360,7 +349,7 @@ function advection_test_stock(h, stocks, G, GV, CS, names, units, stock_index)
   integer                                           :: advection_test_stock !< the number of stocks calculated here.
 
   ! Local variables
-  integer :: i, j, k, is, ie, js, je, nz, m
+  integer :: is, ie, js, je, nz, m
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
   advection_test_stock = 0
@@ -386,8 +375,6 @@ end function advection_test_stock
 subroutine advection_test_tracer_end(CS)
   type(advection_test_tracer_CS), pointer :: CS !< The control structure returned by a previous
                                               !! call to register_advection_test_tracer.
-  integer :: m
-
   if (associated(CS)) then
     if (associated(CS%tr)) deallocate(CS%tr)
     deallocate(CS)

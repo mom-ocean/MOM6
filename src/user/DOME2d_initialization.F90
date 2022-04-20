@@ -110,7 +110,6 @@ subroutine DOME2d_initialize_thickness ( h, depth_tot, G, GV, US, param_file, ju
                            ! positive upward, in depth units [Z ~> m].
   integer :: i, j, k, is, ie, js, je, nz
   real    :: x
-  real    :: delta_h
   real    :: min_thickness
   real    :: dome2d_width_bay, dome2d_width_bottom, dome2d_depth_bay
   character(len=40) :: verticalCoordinate
@@ -233,7 +232,7 @@ subroutine DOME2d_initialize_temperature_salinity ( T, S, h, G, GV, param_file, 
   integer   :: i, j, k, is, ie, js, je, nz
   real      :: x
   integer   :: index_bay_z
-  real      :: delta_S, delta_T
+  real      :: delta_S
   real      :: S_ref, T_ref         ! Reference salinity and temperature within surface layer
   real      :: S_range, T_range     ! Range of salinities and temperatures over the vertical
   real      :: xi0, xi1

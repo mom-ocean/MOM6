@@ -100,7 +100,6 @@ subroutine DOME_initialize_thickness(h, depth_tot, G, GV, param_file, just_read)
                             ! negative because it is positive upward [Z ~> m].
   real :: eta1D(SZK_(GV)+1) ! Interface height relative to the sea surface
                             ! positive upward [Z ~> m].
-  character(len=40)  :: mdl = "DOME_initialize_thickness" ! This subroutine's name.
   integer :: i, j, k, is, ie, js, je, nz
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
@@ -163,7 +162,6 @@ subroutine DOME_initialize_sponges(G, GV, US, tv, depth_tot, PF, CSp)
   real :: peak_damping ! The maximum sponge damping rates as the edges [days-1]
   real :: edge_dist    ! The distance to an edge, in the same units as longitude [km]
   real :: sponge_width ! The width of the sponges, in the same units as longitude [km]
-  real :: e_dense      ! The depth of the densest interfaces [Z ~> m]
   character(len=40)  :: mdl = "DOME_initialize_sponges" ! This subroutine's name.
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz
 
@@ -301,7 +299,6 @@ subroutine DOME_set_OBC_data(OBC, tv, G, GV, US, param_file, tr_Reg)
                             ! in the same units as G%geoLon [km]
   real :: Ri_trans          ! The shear Richardson number in the transition
                             ! region of the specified shear profile [nondim]
-  character(len=40)  :: mdl = "DOME_set_OBC_data" ! This subroutine's name.
   character(len=32)  :: name ! The name of a tracer field.
   integer :: i, j, k, itt, is, ie, js, je, isd, ied, jsd, jed, m, nz, ntherm
   integer :: IsdB, IedB, JsdB, JedB

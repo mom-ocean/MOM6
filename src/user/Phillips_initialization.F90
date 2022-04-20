@@ -250,7 +250,7 @@ subroutine Phillips_initialize_sponges(G, GV, US, tv, param_file, CSp, h)
   logical :: reentrant_y  ! If true, model is re-entrant in the y direction
   character(len=40)  :: mdl = "Phillips_initialize_sponges" ! This subroutine's name.
 
-  integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz
+  integer :: j, k, is, ie, js, je, isd, ied, jsd, jed, nz
   logical, save :: first_call = .true.
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke

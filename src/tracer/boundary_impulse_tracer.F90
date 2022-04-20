@@ -75,9 +75,7 @@ function register_boundary_impulse_tracer(HI, GV, US, param_file, CS, tr_Reg, re
 
   ! Local variables
   character(len=40)  :: mdl = "boundary_impulse_tracer" ! This module's name.
-  character(len=200) :: inputdir ! The directory where the input files are.
   character(len=48)  :: var_name ! The variable's name.
-  character(len=3)   :: name_tag ! String for creating identifying boundary_impulse
   character(len=48)  :: flux_units ! The units for tracer fluxes, usually
                             ! kg(tracer) kg(water)-1 m3 s-1 or kg(tracer) s-1.
   ! This include declares and sets the variable "version".
@@ -85,7 +83,7 @@ function register_boundary_impulse_tracer(HI, GV, US, param_file, CS, tr_Reg, re
   real, pointer :: tr_ptr(:,:,:) => NULL()
   real, pointer :: rem_time_ptr => NULL()
   logical :: register_boundary_impulse_tracer
-  integer :: isd, ied, jsd, jed, nz, m, i, j
+  integer :: isd, ied, jsd, jed, nz, m
   isd = HI%isd ; ied = HI%ied ; jsd = HI%jsd ; jed = HI%jed ; nz = GV%ke
 
   if (associated(CS)) then
@@ -169,11 +167,6 @@ subroutine initialize_boundary_impulse_tracer(restart, day, G, GV, US, h, diag, 
                                                          !! thermodynamic variables
   ! Local variables
   character(len=16) :: name     ! A variable's name in a NetCDF file.
-  character(len=72) :: longname ! The long name of that variable.
-  character(len=48) :: units    ! The dimensions of the variable.
-  character(len=48) :: flux_units ! The units for age tracer fluxes, either
-                                ! years m3 s-1 or years kg s-1.
-  logical :: OK
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz, m
   integer :: IsdB, IedB, JsdB, JedB
 
@@ -245,10 +238,7 @@ subroutine boundary_impulse_tracer_column_physics(h_old, h_new, ea, eb, fluxes, 
 !     h_new(k) = h_old(k) + ea(k) - eb(k-1) + eb(k) - ea(k+1)
 
   ! Local variables
-  real :: Isecs_per_year = 1.0 / (365.0*86400.0)
-  real :: year, h_total, scale, htot, Ih_limit
-  integer :: secs, days
-  integer :: i, j, k, is, ie, js, je, nz, m, k_max
+  integer :: i, j, k, is, ie, js, je, nz, m
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: h_work ! Used so that h can be modified
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
@@ -364,8 +354,6 @@ end subroutine boundary_impulse_tracer_surface_state
 subroutine boundary_impulse_tracer_end(CS)
   type(boundary_impulse_tracer_CS), pointer :: CS   !< The control structure returned by a previous
                                                     !! call to register_boundary_impulse_tracer.
-  integer :: m
-
   if (associated(CS)) then
     if (associated(CS%tr)) deallocate(CS%tr)
     deallocate(CS)

@@ -85,7 +85,6 @@ subroutine disable_fatal_errors(env)
   type(sigjmp_buf), intent(in) :: env
     !> Process recovery state after FATAL errors
 
-  integer :: rc
   integer :: sig
 
   ignore_fatal = .true.
@@ -110,7 +109,6 @@ end subroutine disable_fatal_errors
 
 !> Disable the error handler and abort on FATAL
 subroutine enable_fatal_errors()
-  integer :: rc
   integer :: sig
   procedure(handler_interface), pointer :: dummy
 

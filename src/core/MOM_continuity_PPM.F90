@@ -269,7 +269,6 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, GV, US, CS, LB, OBC, por_face_are
   integer :: l_seg
   logical :: local_specified_BC, use_visc_rem, set_BT_cont, any_simple_OBC
   logical :: local_Flather_OBC, local_open_BC, is_simple
-  type(OBC_segment_type), pointer :: segment => NULL()
 
   use_visc_rem = present(visc_rem_u)
   local_specified_BC = .false. ; set_BT_cont = .false. ; local_Flather_OBC = .false.
@@ -1097,7 +1096,6 @@ subroutine meridional_mass_flux(v, h_in, vh, dt, G, GV, US, CS, LB, OBC, por_fac
   integer :: l_seg
   logical :: local_specified_BC, use_visc_rem, set_BT_cont, any_simple_OBC
   logical :: local_Flather_OBC, is_simple, local_open_BC
-  type(OBC_segment_type), pointer :: segment => NULL()
 
   use_visc_rem = present(visc_rem_v)
   local_specified_BC = .false. ; set_BT_cont = .false. ; local_Flather_OBC = .false.
