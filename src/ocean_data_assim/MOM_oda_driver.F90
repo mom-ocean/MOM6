@@ -242,10 +242,10 @@ subroutine init_oda(Time, G, GV, diag_CS, CS)
   call get_param(PF, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
                  "This sets the default value for the various _2018_ANSWERS parameters.", &
                  default=.false., do_not_log=.true.)
-  call get_param(PF, mdl, "REMAPPING_2018_ANSWERS", CS%answers_2018, &
+  call get_param(PF, mdl, "ODA_2018_ANSWERS", CS%answers_2018, &
                  "If true, use the order of arithmetic and expressions that recover the "//&
-                 "answers from the end of 2018.  Otherwise, use updated and more robust "//&
-                 "forms of the same expressions.", default=default_2018_answers, &
+                 "answers from original version of the ODA driver.  Otherwise, use updated and "//&
+                 "more robust forms of the same expressions.", default=default_2018_answers, &
                  do_not_log=.true.)
   inputdir = slasher(inputdir)
 
