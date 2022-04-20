@@ -33,17 +33,15 @@ end type porous_barrier_CS
 contains
 
 !> subroutine to assign cell face areas and layer widths for porous topography
-subroutine porous_widths(h, tv, G, GV, US, eta, pbv, CS, eta_bt, halo_size, eta_to_m)
+subroutine porous_widths(h, tv, G, GV, US, pbv, CS, eta_bt, halo_size, eta_to_m)
   !eta_bt, halo_size, eta_to_m not currently used
   !variables needed to call find_eta
   type(ocean_grid_type),                      intent(in)  :: G   !< The ocean's grid structure.
   type(verticalGrid_type),                    intent(in)  :: GV     !< The ocean's vertical grid structure.
   type(unit_scale_type),                      intent(in)  :: US     !< A dimensional unit scaling type
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)  :: h      !< Layer thicknesses [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(in)  :: h      !< Layer thicknesses [H ~> m or kg m-2]
   type(thermo_var_ptrs),                      intent(in)  :: tv     !< A structure pointing to various
                                                                     !! thermodynamic variables.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(out) :: eta    !< layer interface heights
-                                                                    !! [Z ~> m] or 1/eta_to_m m).
   real, dimension(SZI_(G),SZJ_(G)), optional, intent(in)  :: eta_bt !< optional barotropic
              !! variable that gives the "correct" free surface height (Boussinesq) or total water
              !! column mass per unit area (non-Boussinesq).  This is used to dilate the layer.
@@ -57,30 +55,31 @@ subroutine porous_widths(h, tv, G, GV, US, eta, pbv, CS, eta_bt, halo_size, eta_
   type(porous_barrier_CS), intent(in) :: CS
 
   !local variables
-  integer i, j, k, nk, isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
-  real w_layer, & ! fractional open width of layer interface [nondim]
-       A_layer, & ! integral of fractional open width from bottom to current layer[Z ~> m]
-       A_layer_prev, & ! integral of fractional open width from bottom to previous layer [Z ~> m]
-       eta_s, & ! layer height used for fit [Z ~> m]
-       eta_prev ! interface height of previous layer [Z ~> m]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1):: eta    !< layer interface heights [Z ~> m or 1/eta_to_m].
+  integer :: i, j, k, nk, is, ie, js, je, Isq, Ieq, Jsq, Jeq
+  real :: dmask
+  real :: w_layer, & ! fractional open width of layer interface [nondim]
+          A_layer, & ! integral of fractional open width from bottom to current layer[Z ~> m]
+          A_layer_prev, & ! integral of fractional open width from bottom to previous layer [Z ~> m]
+          eta_s, & ! layer height used for fit [Z ~> m]
+          eta_prev ! interface height of previous layer [Z ~> m]
 
   if (.not.CS%initialized) call MOM_error(FATAL, &
       "MOM_Porous_barrier: Module must be initialized before it is used.")
 
-  isd = G%isd; ied = G%ied; jsd = G%jsd; jed = G%jed
-  IsdB = G%IsdB; IedB = G%IedB; JsdB = G%JsdB; JedB = G%JedB
+  is = G%isc; ie = G%iec; js = G%jsc; je = G%jec; nk = GV%ke
+  Isq = G%IscB; Ieq = G%IecB; Jsq = G%JscB; Jeq = G%JecB
+
+  dmask = CS%mask_depth
 
   !eta is zero at surface and decreases downward
-
-  nk = SZK_(G)
-
   !currently no treatment for using optional find_eta arguments if present
-  call find_eta(h, tv, G, GV, US, eta)
+  call find_eta(h, tv, G, GV, US, eta, halo_size=1)
 
-  do j=jsd,jed; do I=IsdB,IedB
-    if (G%porous_DavgU(I,j) < 0.) then
+  do j=js,je; do I=Isq,Ieq
+    if (G%porous_DavgU(I,j) < dmask) then
       do K = nk+1,1,-1
-        eta_s = max(eta(I,j,K), eta(I+1,j,K)) !take shallower layer height
+        eta_s = max(eta(i,j,K), eta(i+1,j,K)) !take shallower layer height
         if (eta_s <= G%porous_DminU(I,j)) then
           pbv%por_layer_widthU(I,j,K) = 0.0
           A_layer_prev = 0.0
@@ -104,10 +103,10 @@ subroutine porous_widths(h, tv, G, GV, US, eta, pbv, CS, eta_bt, halo_size, eta_
     endif
   enddo; enddo
 
-  do J=JsdB,JedB; do i=isd,ied
-    if (G%porous_DavgV(i,J) < 0.) then
+  do J=Jsq,Jeq; do i=is,ie
+    if (G%porous_DavgV(i,J) < dmask) then
       do K = nk+1,1,-1
-        eta_s = max(eta(i,J,K), eta(i,J+1,K)) !take shallower layer height
+        eta_s = max(eta(i,j,K), eta(i,j+1,K)) !take shallower layer height
         if (eta_s <= G%porous_DminV(i,J)) then
           pbv%por_layer_widthV(i,J,K) = 0.0
           A_layer_prev = 0.0
