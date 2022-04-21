@@ -205,6 +205,7 @@ subroutine porous_barriers_init(Time, US, param_file, diag, CS)
                  "The depth below which porous barrier is not applied.  "//&
                  "This criterion is tested against TOPO_AT_VEL_VARNAME_U_AVE and TOPO_AT_VEL_VARNAME_V_AVE.", &
                  units="m", default=0.0, scale=US%m_to_Z)
+  CS%mask_depth = -CS%mask_depth
 
   CS%id_por_layer_widthU = register_diag_field('ocean_model', 'por_layer_widthU', diag%axesCui, Time, &
      'Porous barrier open width fraction (at the layer interfaces) of the u-faces', 'nondim')
