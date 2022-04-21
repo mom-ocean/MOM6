@@ -1,16 +1,12 @@
 !> Dummy interfaces for writing ODA data
 module write_ocean_obs_mod
 
+use ocean_da_types_mod, only : ocean_profile_type
+use MOM_time_manager, only : time_type, get_time, set_date
 
- use ocean_da_types_mod, only : ocean_profile_type
- use MOM_time_manager, only : time_type, get_time, set_date
+implicit none ; private
 
- implicit none
-
- private
-
- public :: open_profile_file, write_profile, close_profile_file, &
-            write_ocean_obs_init
+public :: open_profile_file, write_profile, close_profile_file, write_ocean_obs_init
 
 contains
 
