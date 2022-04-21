@@ -134,6 +134,9 @@ type, public :: ODA_CS ; private
   type(INC_CS) :: INC_CS !< A Structure containing integer file handles for bias adjustment
   integer :: id_inc_t !< A diagnostic handle for the temperature climatological adjustment
   integer :: id_inc_s !< A diagnostic handle for the salinity climatological adjustment
+  logical :: answers_2018   !< If true, use the order of arithmetic and expressions for remapping
+                            !! that recover the answers from the end of 2018.  Otherwise, use more
+                            !! robust and accurate forms of mathematically equivalent expressions.
 end type ODA_CS
 
 
@@ -171,6 +174,7 @@ subroutine init_oda(Time, G, GV, diag_CS, CS)
   character(len=200) :: inputdir, basin_file
   character(len=80) :: remap_scheme
   character(len=80) :: bias_correction_file, inc_file
+  logical           :: default_2018_answers
 
   if (associated(CS)) call MOM_error(FATAL, 'Calling oda_init with associated control structure')
   allocate(CS)
@@ -227,6 +231,14 @@ subroutine init_oda(Time, G, GV, diag_CS, CS)
                  "for vertical remapping for all variables. "//&
                  "It can be one of the following schemes: "//&
                  trim(remappingSchemesDoc), default="PPM_H4")
+  call get_param(PF, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
+                 "This sets the default value for the various _2018_ANSWERS parameters.", &
+                 default=.false., do_not_log=.true.)
+  call get_param(PF, mdl, "ODA_2018_ANSWERS", CS%answers_2018, &
+                 "If true, use the order of arithmetic and expressions that recover the "//&
+                 "answers from original version of the ODA driver.  Otherwise, use updated and "//&
+                 "more robust forms of the same expressions.", default=default_2018_answers, &
+                 do_not_log=.true.)
   inputdir = slasher(inputdir)
 
   select case(lowercase(trim(assim_method)))
@@ -364,8 +376,8 @@ subroutine init_oda(Time, G, GV, diag_CS, CS)
   call cpu_clock_end(id_clock_oda_init)
 
 !  if (CS%write_obs) then
-!     temp_fid = open_profile_file("temp_"//trim(obs_file))
-!     salt_fid = open_profile_file("salt_"//trim(obs_file))
+!    temp_fid = open_profile_file("temp_"//trim(obs_file))
+!    salt_fid = open_profile_file("salt_"//trim(obs_file))
 !  end if
 
 end subroutine init_oda
@@ -382,6 +394,7 @@ subroutine set_prior_tracer(Time, G, GV, h, tv, CS)
   real, dimension(SZI_(G),SZJ_(G),CS%nk) :: T, S
   integer :: i, j, m
   integer :: isc, iec, jsc, jec
+  real :: h_neglect, h_neglect_edge                 ! small thicknesses [H ~> m or kg m-2]
 
   ! return if not time for analysis
   if (Time < CS%Time) return
@@ -393,6 +406,14 @@ subroutine set_prior_tracer(Time, G, GV, h, tv, CS)
   call set_PElist(CS%filter_pelist)
   !call MOM_mesg('Setting prior')
 
+  if (.not. CS%answers_2018) then
+    h_neglect = GV%H_subroundoff ; h_neglect_edge = GV%H_subroundoff
+  elseif (GV%Boussinesq) then
+    h_neglect = GV%m_to_H * 1.0e-30 ; h_neglect_edge = GV%m_to_H * 1.0e-10
+  else
+    h_neglect = GV%kg_m2_to_H * 1.0e-30 ; h_neglect_edge = GV%kg_m2_to_H * 1.0e-10
+  endif
+
   ! computational domain for the analysis grid
   isc=CS%Grid%isc;iec=CS%Grid%iec;jsc=CS%Grid%jsc;jec=CS%Grid%jec
   ! array extents for the ensemble member
@@ -401,9 +422,9 @@ subroutine set_prior_tracer(Time, G, GV, h, tv, CS)
   ! remap temperature and salinity from the ensemble member to the analysis grid
   do j=G%jsc,G%jec ; do i=G%isc,G%iec
     call remapping_core_h(CS%remapCS, GV%ke, h(i,j,:), tv%T(i,j,:), &
-         CS%nk, CS%h(i,j,:), T(i,j,:))
+         CS%nk, CS%h(i,j,:), T(i,j,:), h_neglect, h_neglect_edge)
     call remapping_core_h(CS%remapCS, GV%ke, h(i,j,:), tv%S(i,j,:), &
-         CS%nk, CS%h(i,j,:), S(i,j,:))
+         CS%nk, CS%h(i,j,:), S(i,j,:), h_neglect, h_neglect_edge)
   enddo ; enddo
   ! cast ensemble members to the analysis domain
   do m=1,CS%ensemble_size
@@ -632,6 +653,7 @@ subroutine apply_oda_tracer_increments(dt, Time_end, G, GV, tv, h, CS)
                                                     !! tendency [g kg-1 T-1 -> g kg-1 s-1]
   real, dimension(SZI_(G),SZJ_(G),SZK_(CS%Grid)) :: T !< The updated temperature [degC]
   real, dimension(SZI_(G),SZJ_(G),SZK_(CS%Grid)) :: S !< The updated salinity [g kg-1]
+  real :: h_neglect, h_neglect_edge                 ! small thicknesses [H ~> m or kg m-2]
 
   if (.not. associated(CS)) return
   if (CS%assim_method == NO_ASSIM .and. (.not. CS%do_bias_adjustment)) return
@@ -648,12 +670,20 @@ subroutine apply_oda_tracer_increments(dt, Time_end, G, GV, tv, h, CS)
     S = S + CS%tv_bc%S
   endif
 
+  if (.not. CS%answers_2018) then
+    h_neglect = GV%H_subroundoff ; h_neglect_edge = GV%H_subroundoff
+  elseif (GV%Boussinesq) then
+    h_neglect = GV%m_to_H * 1.0e-30 ; h_neglect_edge = GV%m_to_H * 1.0e-10
+  else
+    h_neglect = GV%kg_m2_to_H * 1.0e-30 ; h_neglect_edge = GV%kg_m2_to_H * 1.0e-10
+  endif
+
   isc=G%isc; iec=G%iec; jsc=G%jsc; jec=G%jec
   do j=jsc,jec; do i=isc,iec
     call remapping_core_h(CS%remapCS, CS%nk, CS%h(i,j,:), T(i,j,:), &
-         G%ke, h(i,j,:), T_inc(i,j,:))
+         G%ke, h(i,j,:), T_inc(i,j,:), h_neglect, h_neglect_edge)
     call remapping_core_h(CS%remapCS, CS%nk, CS%h(i,j,:), S(i,j,:), &
-         G%ke, h(i,j,:), S_inc(i,j,:))
+         G%ke, h(i,j,:), S_inc(i,j,:), h_neglect, h_neglect_edge)
   enddo; enddo
 
 

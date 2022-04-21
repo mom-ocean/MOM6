@@ -7,7 +7,7 @@ use MOM_dyn_horgrid,    only : dyn_horgrid_type
 use MOM_error_handler,  only : MOM_mesg, MOM_error, FATAL, is_root_pe
 use MOM_file_parser,    only : get_param, log_version, param_file_type
 use MOM_grid,           only : ocean_grid_type
-use MOM_open_boundary,  only : ocean_OBC_type, OBC_NONE, OBC_SIMPLE, OBC_segment_type
+use MOM_open_boundary,  only : ocean_OBC_type, OBC_NONE, OBC_segment_type
 use MOM_time_manager,   only : time_type, time_type_to_real
 use MOM_unit_scaling,   only : unit_scale_type
 use MOM_verticalGrid,   only : verticalGrid_type

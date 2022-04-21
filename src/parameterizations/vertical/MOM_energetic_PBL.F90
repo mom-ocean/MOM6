@@ -1075,7 +1075,7 @@ subroutine ePBL_column(h, u, v, T0, S0, dSV_dT, dSV_dS, TKE_forcing, B_flux, abs
             if (CS%wT_scheme==wT_from_cRoot_TKE) then
               vstar = CS%vstar_scale_fac * vstar_unit_scale * (I_dtrho*TKE_here)**C1_3
             elseif (CS%wT_scheme==wT_from_RH18) then
-              Surface_Scale = max(0.05, 1.0 - htot/MLD_guess)
+              Surface_Scale = max(0.05, 1.0 - htot * GV%H_to_Z / MLD_guess)
               vstar = CS%vstar_scale_fac * Surface_Scale * (CS%vstar_surf_fac*u_star + &
                         vstar_unit_scale * (CS%wstar_ustar_coef*conv_PErel*I_dtrho)**C1_3)
             endif
@@ -1124,7 +1124,7 @@ subroutine ePBL_column(h, u, v, T0, S0, dSV_dT, dSV_dS, TKE_forcing, B_flux, abs
                 if (CS%wT_scheme==wT_from_cRoot_TKE) then
                   vstar = CS%vstar_scale_fac * vstar_unit_scale * (I_dtrho*TKE_here)**C1_3
                 elseif (CS%wT_scheme==wT_from_RH18) then
-                  Surface_Scale = max(0.05, 1. - htot/MLD_guess)
+                  Surface_Scale = max(0.05, 1. - htot * GV%H_to_Z / MLD_guess)
                   vstar = CS%vstar_scale_fac * Surface_Scale * (CS%vstar_surf_fac*u_star + &
                                   vstar_unit_scale * (CS%wstar_ustar_coef*conv_PErel*I_dtrho)**C1_3)
                 endif
