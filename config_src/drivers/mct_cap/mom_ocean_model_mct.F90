@@ -689,34 +689,34 @@ subroutine ocean_model_restart(OS, timestamp, restartname)
       "restart files can only be created after the buoyancy forcing is applied.")
 
   if (present(restartname)) then
-     call save_restart(OS%dirs%restart_output_dir, OS%Time, OS%grid, &
+    call save_restart(OS%dirs%restart_output_dir, OS%Time, OS%grid, &
           OS%restart_CSp, GV=OS%GV, filename=restartname)
-     call forcing_save_restart(OS%forcing_CSp, OS%grid, OS%Time, &
+    call forcing_save_restart(OS%forcing_CSp, OS%grid, OS%Time, &
           OS%dirs%restart_output_dir) ! Is this needed?
-     if (OS%use_ice_shelf) then
-        call ice_shelf_save_restart(OS%Ice_shelf_CSp, OS%Time, &
+    if (OS%use_ice_shelf) then
+      call ice_shelf_save_restart(OS%Ice_shelf_CSp, OS%Time, &
              OS%dirs%restart_output_dir)
-     endif
+    endif
   else
-     if (BTEST(OS%Restart_control,1)) then
-        call save_restart(OS%dirs%restart_output_dir, OS%Time, OS%grid, &
-             OS%restart_CSp, .true., GV=OS%GV)
-        call forcing_save_restart(OS%forcing_CSp, OS%grid, OS%Time, &
-             OS%dirs%restart_output_dir, .true.)
-        if (OS%use_ice_shelf) then
-           call ice_shelf_save_restart(OS%Ice_shelf_CSp, OS%Time, OS%dirs%restart_output_dir, .true.)
-        endif
-     endif
-     if (BTEST(OS%Restart_control,0)) then
-        call save_restart(OS%dirs%restart_output_dir, OS%Time, OS%grid, &
-             OS%restart_CSp, GV=OS%GV)
-        call forcing_save_restart(OS%forcing_CSp, OS%grid, OS%Time, &
-             OS%dirs%restart_output_dir)
-        if (OS%use_ice_shelf) then
-           call ice_shelf_save_restart(OS%Ice_shelf_CSp, OS%Time, OS%dirs%restart_output_dir)
-        endif
-     endif
-  end if
+    if (BTEST(OS%Restart_control,1)) then
+      call save_restart(OS%dirs%restart_output_dir, OS%Time, OS%grid, &
+           OS%restart_CSp, .true., GV=OS%GV)
+      call forcing_save_restart(OS%forcing_CSp, OS%grid, OS%Time, &
+           OS%dirs%restart_output_dir, .true.)
+      if (OS%use_ice_shelf) then
+        call ice_shelf_save_restart(OS%Ice_shelf_CSp, OS%Time, OS%dirs%restart_output_dir, .true.)
+      endif
+    endif
+    if (BTEST(OS%Restart_control,0)) then
+      call save_restart(OS%dirs%restart_output_dir, OS%Time, OS%grid, &
+           OS%restart_CSp, GV=OS%GV)
+      call forcing_save_restart(OS%forcing_CSp, OS%grid, OS%Time, &
+           OS%dirs%restart_output_dir)
+      if (OS%use_ice_shelf) then
+        call ice_shelf_save_restart(OS%Ice_shelf_CSp, OS%Time, OS%dirs%restart_output_dir)
+      endif
+    endif
+  endif
 
 end subroutine ocean_model_restart
 ! </SUBROUTINE> NAME="ocean_model_restart"
@@ -1033,7 +1033,7 @@ subroutine Ocean_stock_pe(OS, index, value, time_index)
     case (ISTOCK_HEAT)  ! Return the heat content of the ocean in J.
       call get_ocean_stocks(OS%MOM_CSp, heat=value, on_PE_only=.true.)
     case (ISTOCK_SALT)  ! Return the mass of the salt in the ocean in kg.
-       call get_ocean_stocks(OS%MOM_CSp, salt=value, on_PE_only=.true.)
+      call get_ocean_stocks(OS%MOM_CSp, salt=value, on_PE_only=.true.)
     case default ; value = 0.0
   end select
   ! If the FMS coupler is changed so that Ocean_stock_PE is only called on

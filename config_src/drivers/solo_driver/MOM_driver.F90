@@ -184,7 +184,7 @@ program MOM_main
     restart_CSp => NULL()     !< A pointer to the restart control structure
                               !! that will be used for MOM restart files.
   type(diag_ctrl),           pointer :: &
-       diag => NULL()         !< A pointer to the diagnostic regulatory structure
+    diag => NULL()            !< A pointer to the diagnostic regulatory structure
   !-----------------------------------------------------------------------
 
   character(len=4), parameter :: vers_num = 'v2.0'
