@@ -617,8 +617,10 @@ subroutine fluxes_layer_method(boundary, ke, hbl_L, hbl_R, h_L, h_R, phi_L, phi_
   allocate(F_layer_z(nk), source=0.0)
 
   ! remap tracer to dz_top
-  call remapping_core_h(CS%remap_cs, ke, h_L(:), phi_L(:), nk, dz_top(:), phi_L_z(:))
-  call remapping_core_h(CS%remap_cs, ke, h_R(:), phi_R(:), nk, dz_top(:), phi_R_z(:))
+  call remapping_core_h(CS%remap_cs, ke, h_L(:), phi_L(:), nk, dz_top(:), phi_L_z(:), &
+                        CS%H_subroundoff, CS%H_subroundoff)
+  call remapping_core_h(CS%remap_cs, ke, h_R(:), phi_R(:), nk, dz_top(:), phi_R_z(:), &
+                        CS%H_subroundoff, CS%H_subroundoff)
 
   ! Calculate vertical indices containing the boundary layer in dz_top
   call boundary_k_range(boundary, nk, dz_top, hbl_L, k_top_L, zeta_top_L, k_bot_L, zeta_bot_L)

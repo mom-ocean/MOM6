@@ -143,7 +143,7 @@ contains
 
 !> This subroutine determines the number of points which are within sponges in this computational
 !! domain.  Only points that have positive values of Iresttime and which mask2dT indicates are ocean
-!! points are included in the sponges.  It also stores the target interface heights. This
+!! points are included in the sponges.  It also stores the target interface heights.
 subroutine initialize_ALE_sponge_fixed(Iresttime, G, GV, param_file, CS, data_h, nz_data, &
                                         Iresttime_u_in, Iresttime_v_in)
 
@@ -944,7 +944,7 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
     if (CS%time_varying_sponges) then
       nz_data = CS%Ref_val_u%nz_data
       ! Interpolate from the external horizontal grid and in time
-      call horiz_interp_and_extrap_tracer(CS%Ref_val_u%id, Time, 1.0, G, sp_val, mask_z, z_in, &
+      call horiz_interp_and_extrap_tracer(CS%Ref_val_u%id, Time, US%m_s_to_L_T, G, sp_val, mask_z, z_in, &
                                           z_edges_in, missing_value, CS%reentrant_x, CS%tripolar_N, .false., &
                                           spongeOnGrid=CS%SpongeDataOngrid, m_to_Z=US%m_to_Z,&
                                           answers_2018=CS%hor_regrid_answers_2018)
@@ -993,7 +993,7 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
       deallocate(sp_val, mask_u, mask_z, hsrc)
       nz_data = CS%Ref_val_v%nz_data
       ! Interpolate from the external horizontal grid and in time
-      call horiz_interp_and_extrap_tracer(CS%Ref_val_v%id, Time, 1.0, G, sp_val, mask_z, z_in, &
+      call horiz_interp_and_extrap_tracer(CS%Ref_val_v%id, Time, US%m_s_to_L_T, G, sp_val, mask_z, z_in, &
                                           z_edges_in, missing_value, CS%reentrant_x, CS%tripolar_N, .false., &
                                           spongeOnGrid=CS%SpongeDataOngrid, m_to_Z=US%m_to_Z,&
                                           answers_2018=CS%hor_regrid_answers_2018)

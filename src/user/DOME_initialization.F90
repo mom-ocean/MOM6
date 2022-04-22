@@ -10,7 +10,7 @@ use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, WARNING, is_root_pe
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_get_input, only : directories
 use MOM_grid, only : ocean_grid_type
-use MOM_open_boundary, only : ocean_OBC_type, OBC_NONE, OBC_SIMPLE
+use MOM_open_boundary, only : ocean_OBC_type, OBC_NONE
 use MOM_open_boundary,   only : OBC_segment_type, register_segment_tracer
 use MOM_tracer_registry, only : tracer_registry_type, tracer_type
 use MOM_tracer_registry, only : tracer_name_lookup

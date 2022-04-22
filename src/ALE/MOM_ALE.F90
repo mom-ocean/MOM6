@@ -718,6 +718,7 @@ subroutine ALE_regrid_accelerated(CS, G, GV, h, tv, n_itt, u, v, OBC, Reg, dt, d
   ! we have to keep track of the total dzInterface if for some reason
   ! we're using the old remapping algorithm for u/v
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1) :: dzInterface, dzIntTotal
+  real :: h_neglect, h_neglect_edge ! small thicknesses [H ~> m or kg m-2]
 
   nz = GV%ke
 
@@ -743,7 +744,17 @@ subroutine ALE_regrid_accelerated(CS, G, GV, h, tv, n_itt, u, v, OBC, Reg, dt, d
   if (present(dt)) &
     call ALE_update_regrid_weights(dt, CS)
 
+  if (.not. CS%answers_2018) then
+    h_neglect = GV%H_subroundoff ; h_neglect_edge = GV%H_subroundoff
+  elseif (GV%Boussinesq) then
+    h_neglect = GV%m_to_H * 1.0e-30 ; h_neglect_edge = GV%m_to_H * 1.0e-10
+  else
+    h_neglect = GV%kg_m2_to_H * 1.0e-30 ; h_neglect_edge = GV%kg_m2_to_H * 1.0e-10
+  endif
+
+
   do itt = 1, n_itt
+
     call do_group_pass(pass_T_S_h, G%domain)
 
     ! generate new grid
@@ -753,8 +764,10 @@ subroutine ALE_regrid_accelerated(CS, G, GV, h, tv, n_itt, u, v, OBC, Reg, dt, d
 
     ! remap from original grid onto new grid
     do j = G%jsc-1,G%jec+1 ; do i = G%isc-1,G%iec+1
-      call remapping_core_h(CS%remapCS, nz, h_orig(i,j,:), tv%S(i,j,:), nz, h(i,j,:), tv_local%S(i,j,:))
-      call remapping_core_h(CS%remapCS, nz, h_orig(i,j,:), tv%T(i,j,:), nz, h(i,j,:), tv_local%T(i,j,:))
+      call remapping_core_h(CS%remapCS, nz, h_orig(i,j,:), tv%S(i,j,:), nz, h(i,j,:), tv_local%S(i,j,:), &
+                            h_neglect, h_neglect_edge)
+      call remapping_core_h(CS%remapCS, nz, h_orig(i,j,:), tv%T(i,j,:), nz, h(i,j,:), tv_local%T(i,j,:), &
+                            h_neglect, h_neglect_edge)
     enddo ; enddo
 
     ! starting grid for next iteration

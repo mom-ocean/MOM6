@@ -856,7 +856,7 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, t
       do k=1,kd
         do j=js,je
           do i=is,ie
-            tr_z(i,j,k)=data_in(i,j,k)
+            tr_z(i,j,k)=data_in(i,j,k) * conversion
             if (.not. ans_2018) mask_z(i,j,k) = 1.
             if (abs(tr_z(i,j,k)-missing_value) < abs(roundoff*missing_value)) mask_z(i,j,k) = 0.
           enddo

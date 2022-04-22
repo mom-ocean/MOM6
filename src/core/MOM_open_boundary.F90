@@ -48,6 +48,9 @@ public update_OBC_segment_data
 public open_boundary_test_extern_uv
 public open_boundary_test_extern_h
 public open_boundary_zero_normal_flow
+public parse_segment_str
+public parse_segment_manifest_str
+public parse_segment_data_str
 public register_OBC, OBC_registry_init
 public register_file_OBC, file_OBC_end
 public segment_tracer_registry_init
@@ -61,12 +64,10 @@ public update_OBC_ramp
 public rotate_OBC_config
 public rotate_OBC_init
 public initialize_segment_data
+public flood_fill
+public flood_fill2
 
 integer, parameter, public :: OBC_NONE = 0      !< Indicates the use of no open boundary
-integer, parameter, public :: OBC_SIMPLE = 1    !< Indicates the use of a simple inflow open boundary
-integer, parameter, public :: OBC_WALL = 2      !< Indicates the use of a closed wall
-integer, parameter, public :: OBC_FLATHER =  3  !< Indicates the use of a Flather open boundary
-integer, parameter, public :: OBC_RADIATION = 4 !< Indicates the use of a radiation open boundary
 integer, parameter, public :: OBC_DIRECTION_N = 100 !< Indicates the boundary is an effective northern boundary
 integer, parameter, public :: OBC_DIRECTION_S = 200 !< Indicates the boundary is an effective southern boundary
 integer, parameter, public :: OBC_DIRECTION_E = 300 !< Indicates the boundary is an effective eastern boundary
@@ -310,6 +311,9 @@ type, public :: ocean_OBC_type
   real :: ramp_value                        !< If ramp is True, where we are on the ramp from
                                             !! zero to one [nondim].
   type(time_type) :: ramp_start_time        !< Time when model was started.
+  logical :: answers_2018   !< If true, use the order of arithmetic and expressions for remapping
+                            !! that recover the answers from the end of 2018.  Otherwise, use more
+                            !! robust and accurate forms of mathematically equivalent expressions.
 end type ocean_OBC_type
 
 !> Control structure for open boundaries that read from files.
@@ -607,7 +611,7 @@ subroutine open_boundary_config(G, US, param_file, OBC)
     call get_param(param_file, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
                  "This sets the default value for the various _2018_ANSWERS parameters.", &
                  default=.false.)
-    call get_param(param_file, mdl, "REMAPPING_2018_ANSWERS", answers_2018, &
+    call get_param(param_file, mdl, "REMAPPING_2018_ANSWERS", OBC%answers_2018, &
                  "If true, use the order of arithmetic and expressions that recover the "//&
                  "answers from the end of 2018.  Otherwise, use updated and more robust "//&
                  "forms of the same expressions.", default=default_2018_answers)
@@ -615,7 +619,7 @@ subroutine open_boundary_config(G, US, param_file, OBC)
     allocate(OBC%remap_CS)
     call initialize_remapping(OBC%remap_CS, remappingScheme, boundary_extrapolation = .false., &
                check_reconstruction=check_reconstruction, check_remapping=check_remapping, &
-               force_bounds_in_subcell=force_bounds_in_subcell, answers_2018=answers_2018)
+               force_bounds_in_subcell=force_bounds_in_subcell, answers_2018=OBC%answers_2018)
 
   endif ! OBC%number_of_segments > 0
 
@@ -1692,88 +1696,6 @@ subroutine parse_for_tracer_reservoirs(OBC, PF, use_temperature)
   return
 
 end subroutine parse_for_tracer_reservoirs
-
-!> Parse an OBC_SEGMENT_%%%_PARAMS string
-subroutine parse_segment_param_real(segment_str, var, param_value, debug )
-  character(len=*),  intent(in)  :: segment_str !< A string in form of
-                                                !! "VAR1=file:foo1.nc(varnam1),VAR2=file:foo2.nc(varnam2),..."
-  character(len=*),  intent(in)  :: var         !< The name of the variable for which parameters are needed
-  real,              intent(out) :: param_value !< The value of the parameter
-  logical, optional, intent(in)  :: debug       !< If present and true, write verbose debugging messages
-  ! Local variables
-  character(len=128) :: word1, word2, word3, method
-  integer :: lword, nfields, n, m
-  logical :: continue,dbg
-  character(len=32), dimension(MAX_OBC_FIELDS) :: flds
-
-  nfields = 0
-  continue = .true.
-  dbg = .false.
-  if (PRESENT(debug)) dbg = debug
-
-  do while (continue)
-    word1 = extract_word(segment_str,',',nfields+1)
-    if (trim(word1) == '') exit
-    nfields = nfields+1
-    word2 = extract_word(word1,'=',1)
-    flds(nfields) = trim(word2)
-  enddo
-
-  ! if (PRESENT(fields)) then
-  !   do n=1,nfields
-  !     fields(n) = flds(n)
-  !   enddo
-  ! endif
-
-  ! if (PRESENT(num_fields)) then
-  !   num_fields = nfields
-  !   return
-  ! endif
-
-  m=0
-! if (PRESENT(var)) then
-    do n=1,nfields
-      if (trim(var)==trim(flds(n))) then
-        m = n
-        exit
-      endif
-    enddo
-    if (m==0) then
-      error stop
-    endif
-
-    ! Process first word which will start with the fieldname
-    word3 = extract_word(segment_str,',',m)
-!     word1 = extract_word(word3,':',1)
-!     if (trim(word1) == '') exit
-    word2 = extract_word(word1,'=',1)
-    if (trim(word2) == trim(var)) then
-      method=trim(extract_word(word1,'=',2))
-      lword=len_trim(method)
-      read(method(1:lword),*,err=987) param_value
-      ! if (method(lword-3:lword) == 'file') then
-      !   ! raise an error id filename/fieldname not in argument list
-      !   word1 = extract_word(word3,':',2)
-      !   filenam = extract_word(word1,'(',1)
-      !   fieldnam = extract_word(word1,'(',2)
-      !   lword=len_trim(fieldnam)
-      !   fieldnam = fieldnam(1:lword-1)  ! remove trailing parenth
-      !   value=-999.
-      ! elseif (method(lword-4:lword) == 'value') then
-      !   filenam = 'none'
-      !   fieldnam = 'none'
-      !   word1 = extract_word(word3,':',2)
-      !   lword=len_trim(word1)
-      !   read(word1(1:lword),*,end=986,err=987) value
-      ! endif
-    endif
-! endif
-
-  return
-  986 call MOM_error(FATAL,'End of record while parsing segment data specification! '//trim(segment_str))
-  987 call MOM_error(FATAL,'Error while parsing segment parameter specification! '//trim(segment_str))
-
-end subroutine parse_segment_param_real
 
 !> Initialize open boundary control structure and do any necessary rescaling of OBC
 !! fields that have been read from a restart file.
@@ -3722,6 +3644,7 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
   real, allocatable :: normal_trans_bt(:,:) ! barotropic transport [H L2 T-1 ~> m3 s-1]
   integer :: turns    ! Number of index quarter turns
   real :: time_delta  ! Time since tidal reference date [T ~> s]
+  real :: h_neglect, h_neglect_edge ! Small thicknesses [H ~> m or kg m-2]
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
@@ -3733,6 +3656,14 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
   if (.not. associated(OBC)) return
 
   if (OBC%add_tide_constituents) time_delta = US%s_to_T * time_type_to_real(Time - OBC%time_ref)
+
+  if (.not. OBC%answers_2018) then
+    h_neglect = GV%H_subroundoff ; h_neglect_edge = GV%H_subroundoff
+  elseif (GV%Boussinesq) then
+    h_neglect = GV%m_to_H * 1.0e-30 ; h_neglect_edge = GV%m_to_H * 1.0e-10
+  else
+    h_neglect = GV%kg_m2_to_H * 1.0e-30 ; h_neglect_edge = GV%kg_m2_to_H * 1.0e-10
+  endif
 
   do n = 1, OBC%number_of_segments
     segment => OBC%segment(n)
@@ -3932,7 +3863,8 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
         ! no dz for tidal variables
         if (segment%field(m)%nk_src > 1 .and.&
             (index(segment%field(m)%name, 'phase') <= 0 .and. index(segment%field(m)%name, 'amp') <= 0)) then
-          call time_interp_external(segment%field(m)%fid_dz,Time, tmp_buffer_in)
+          call time_interp_external(segment%field(m)%fid_dz, Time, tmp_buffer_in)
+          tmp_buffer_in(:,:,:) = tmp_buffer_in(:,:,:) * US%m_to_Z
           if (turns /= 0) then
             ! TODO: This is hardcoded for 90 degrees, and needs to be generalized.
             if (segment%is_E_or_W &
@@ -3998,19 +3930,22 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
                   call remapping_core_h(OBC%remap_CS, &
                        segment%field(m)%nk_src,segment%field(m)%dz_src(I,J,:), &
                        segment%field(m)%buffer_src(I,J,:), &
-                       GV%ke, h_stack, segment%field(m)%buffer_dst(I,J,:))
+                       GV%ke, h_stack, segment%field(m)%buffer_dst(I,J,:), &
+                       h_neglect, h_neglect_edge)
                 elseif (G%mask2dCu(I,j)>0.) then
                   h_stack(:) = h(i+ishift,j,:)
                   call remapping_core_h(OBC%remap_CS, &
                        segment%field(m)%nk_src,segment%field(m)%dz_src(I,J,:), &
                        segment%field(m)%buffer_src(I,J,:), &
-                       GV%ke, h_stack, segment%field(m)%buffer_dst(I,J,:))
+                       GV%ke, h_stack, segment%field(m)%buffer_dst(I,J,:), &
+                       h_neglect, h_neglect_edge)
                 elseif (G%mask2dCu(I,j+1)>0.) then
                   h_stack(:) = h(i+ishift,j+1,:)
                   call remapping_core_h(OBC%remap_CS, &
                        segment%field(m)%nk_src,segment%field(m)%dz_src(I,j,:), &
                        segment%field(m)%buffer_src(I,J,:), &
-                       GV%ke, h_stack, segment%field(m)%buffer_dst(I,J,:))
+                       GV%ke, h_stack, segment%field(m)%buffer_dst(I,J,:), &
+                       h_neglect, h_neglect_edge)
                 endif
               enddo
             else
@@ -4025,7 +3960,8 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
                   call remapping_core_h(OBC%remap_CS, &
                        segment%field(m)%nk_src, scl_fac*segment%field(m)%dz_src(I,j,:), &
                        segment%field(m)%buffer_src(I,j,:), &
-                       GV%ke, h(i+ishift,j,:), segment%field(m)%buffer_dst(I,j,:))
+                       GV%ke, h(i+ishift,j,:), segment%field(m)%buffer_dst(I,j,:), &
+                       h_neglect, h_neglect_edge)
                 endif
               enddo
             endif
@@ -4044,19 +3980,22 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
                   call remapping_core_h(OBC%remap_CS, &
                        segment%field(m)%nk_src,segment%field(m)%dz_src(I,J,:), &
                        segment%field(m)%buffer_src(I,J,:), &
-                       GV%ke, h_stack, segment%field(m)%buffer_dst(I,J,:))
+                       GV%ke, h_stack, segment%field(m)%buffer_dst(I,J,:), &
+                       h_neglect, h_neglect_edge)
                 elseif (G%mask2dCv(i,J)>0.) then
                   h_stack(:) = h(i,j+jshift,:)
                   call remapping_core_h(OBC%remap_CS, &
                        segment%field(m)%nk_src,segment%field(m)%dz_src(I,J,:), &
                        segment%field(m)%buffer_src(I,J,:), &
-                       GV%ke, h_stack, segment%field(m)%buffer_dst(I,J,:))
+                       GV%ke, h_stack, segment%field(m)%buffer_dst(I,J,:), &
+                       h_neglect, h_neglect_edge)
                 elseif (G%mask2dCv(i+1,J)>0.) then
                   h_stack(:) = h(i+1,j+jshift,:)
                   call remapping_core_h(OBC%remap_CS, &
                        segment%field(m)%nk_src,segment%field(m)%dz_src(I,J,:), &
                        segment%field(m)%buffer_src(I,J,:), &
-                       GV%ke, h_stack, segment%field(m)%buffer_dst(I,J,:))
+                       GV%ke, h_stack, segment%field(m)%buffer_dst(I,J,:), &
+                       h_neglect, h_neglect_edge)
                 endif
               enddo
             else
@@ -4071,7 +4010,8 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
                   call remapping_core_h(OBC%remap_CS, &
                        segment%field(m)%nk_src, scl_fac*segment%field(m)%dz_src(i,J,:), &
                        segment%field(m)%buffer_src(i,J,:), &
-                       GV%ke, h(i,j+jshift,:), segment%field(m)%buffer_dst(i,J,:))
+                       GV%ke, h(i,j+jshift,:), segment%field(m)%buffer_dst(i,J,:), &
+                       h_neglect, h_neglect_edge)
                 endif
               enddo
             endif
