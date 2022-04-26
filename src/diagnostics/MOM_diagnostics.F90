@@ -326,7 +326,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
       work_3d(i,j,k) = GV%H_to_kg_m2*h(i,j,k)
     enddo ; enddo ; enddo
     call post_data(CS%id_masscello, work_3d, CS%diag)
-    !### If the registration call has conversion=GV%H_to_kg, the mathematically equivalent form would be:
+    !### If the registration call has conversion=GV%H_to_kg_m2, the mathematically equivalent form would be:
     ! call post_data(CS%id_masscello, h, CS%diag)
   endif
 
@@ -628,7 +628,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
         do k=1,nz
           pressure_1d(:) =  pressure_1d(:) + 0.5 * h(:,j,k) * (GV%H_to_RZ*GV%g_Earth) ! Pressure in middle of layer k
           call calculate_density(tv%T(:,j,k), tv%S(:,j,k), pressure_1d, Rcv(:,j,k), &
-                                tv%eqn_of_state, EOSdom)
+                                 tv%eqn_of_state, EOSdom)
           pressure_1d(:) =  pressure_1d(:) + 0.5 * h(:,j,k) * (GV%H_to_RZ*GV%g_Earth) ! Pressure at bottom of layer k
         enddo
       enddo
@@ -640,11 +640,11 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
       do j=js,je
         pressure_1d(:) = 0. ! Start at p=0 Pa at surface
         do k=1,nz
-          pressure_1d(:) =  pressure_1d(:) + 0.5 * h(:,j,k) * GV%H_to_Pa ! Pressure in middle of layer k
+          pressure_1d(:) =  pressure_1d(:) + 0.5 * h(:,j,k) * (GV%H_to_RZ*GV%g_Earth) ! Pressure in middle of layer k
           ! To avoid storing more arrays, put drho_dT into Rcv, and drho_dS into work3d
-          call calculate_density_derivs(tv%T(:,j,k),tv%S(:,j,k),pressure_1d, &
-                                 Rcv(:,j,k),work_3d(:,j,k),is,ie-is+1, tv%eqn_of_state)
-          pressure_1d(:) =  pressure_1d(:) + 0.5 * h(:,j,k) * GV%H_to_Pa ! Pressure at bottom of layer k
+          call calculate_density_derivs(tv%T(:,j,k), tv%S(:,j,k), pressure_1d, &
+                                        Rcv(:,j,k), work_3d(:,j,k), tv%eqn_of_state, EOSdom)
+          pressure_1d(:) =  pressure_1d(:) + 0.5 * h(:,j,k) * (GV%H_to_RZ*GV%g_Earth) ! Pressure at bottom of layer k
         enddo
       enddo
       if (CS%id_drho_dT > 0) call post_data(CS%id_drho_dT, Rcv, CS%diag)
@@ -1669,9 +1669,11 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, US, param_file, diag
   CS%id_rhoinsitu = register_diag_field('ocean_model', 'rhoinsitu', diag%axesTL, Time, &
       'In situ density', 'kg m-3', conversion=US%R_to_kg_m3)
   CS%id_drho_dT = register_diag_field('ocean_model', 'drho_dT', diag%axesTL, Time, &
-      'Partial derivative of rhoinsitu with respect to temperature (alpha)', 'kg m-3 degC-1')
+      'Partial derivative of rhoinsitu with respect to temperature (alpha)', &
+      'kg m-3 degC-1', conversion=US%R_to_kg_m3)
   CS%id_drho_dS = register_diag_field('ocean_model', 'drho_dS', diag%axesTL, Time, &
-      'Partial derivative of rhoinsitu with respect to salinity (beta)', 'kg^2 g-1 m-3')
+      'Partial derivative of rhoinsitu with respect to salinity (beta)', &
+      'kg^2 g-1 m-3', conversion=US%R_to_kg_m3)
 
   CS%id_du_dt = register_diag_field('ocean_model', 'dudt', diag%axesCuL, Time, &
       'Zonal Acceleration', 'm s-2', conversion=US%L_T2_to_m_s2)
