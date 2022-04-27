@@ -855,7 +855,6 @@ subroutine calculate_density_second_derivs_1d(T, S, pressure, drho_dS_dS, drho_d
   ! Local variables
   real, dimension(size(pressure)) :: pres  ! Pressure converted to [Pa]
   real :: rho_scale ! A factor to convert density from kg m-3 to the desired units [R m3 kg-1 ~> 1]
-  real :: I_p_scale ! The inverse of the factor to convert pressure to units of Pa [R L2 T-2 Pa-1 ~> 1]
   integer :: i, is, ie, npts
 
   if (present(dom)) then
@@ -905,13 +904,10 @@ subroutine calculate_density_second_derivs_1d(T, S, pressure, drho_dS_dS, drho_d
     drho_dT_dP(i) = rho_scale * drho_dT_dP(i)
   enddo ; endif
 
-  if (EOS%RL2_T2_to_Pa /= 1.0) then
-    I_p_scale = 1.0 / EOS%RL2_T2_to_Pa
-    do i=is,ie
-      drho_dS_dP(i) = I_p_scale * drho_dS_dP(i)
-      drho_dT_dP(i) = I_p_scale * drho_dT_dP(i)
-    enddo
-  endif
+  if (EOS%RL2_T2_to_Pa /= 1.0) then ; do i=is,ie
+    drho_dS_dP(i) = EOS%RL2_T2_to_Pa * drho_dS_dP(i)
+    drho_dT_dP(i) = EOS%RL2_T2_to_Pa * drho_dT_dP(i)
+  enddo ; endif
 
 end subroutine calculate_density_second_derivs_1d
 
@@ -937,7 +933,6 @@ subroutine calculate_density_second_derivs_scalar(T, S, pressure, drho_dS_dS, dr
   ! Local variables
   real :: rho_scale ! A factor to convert density from kg m-3 to the desired units [R m3 kg-1 ~> 1]
   real :: p_scale   ! A factor to convert pressure to units of Pa [Pa T2 R-1 L-2 ~> 1]
-  real :: I_p_scale ! The inverse of the factor to convert pressure to units of Pa [R L2 T-2 Pa-1 ~> 1]
 
   p_scale = EOS%RL2_T2_to_Pa
 
@@ -966,9 +961,8 @@ subroutine calculate_density_second_derivs_scalar(T, S, pressure, drho_dS_dS, dr
   endif
 
   if (p_scale /= 1.0) then
-    I_p_scale = 1.0 / p_scale
-    drho_dS_dP = I_p_scale * drho_dS_dP
-    drho_dT_dP = I_p_scale * drho_dT_dP
+    drho_dS_dP = p_scale * drho_dS_dP
+    drho_dT_dP = p_scale * drho_dT_dP
   endif
 
 end subroutine calculate_density_second_derivs_scalar
