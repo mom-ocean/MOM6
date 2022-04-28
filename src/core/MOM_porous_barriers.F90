@@ -4,17 +4,18 @@ module MOM_porous_barriers
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-use MOM_error_handler, only : MOM_error, FATAL
-use MOM_grid, only : ocean_grid_type
-use MOM_unit_scaling, only : unit_scale_type
-use MOM_variables, only : thermo_var_ptrs, porous_barrier_ptrs
-use MOM_verticalGrid, only : verticalGrid_type
+use MOM_cpu_clock,         only : cpu_clock_id, cpu_clock_begin, cpu_clock_end, CLOCK_MODULE
+use MOM_error_handler,     only : MOM_error, FATAL
+use MOM_grid,              only : ocean_grid_type
+use MOM_unit_scaling,      only : unit_scale_type
+use MOM_variables,         only : thermo_var_ptrs, porous_barrier_ptrs
+use MOM_verticalGrid,      only : verticalGrid_type
 use MOM_interface_heights, only : find_eta
-use MOM_time_manager,         only : time_type
-use MOM_diag_mediator,        only : register_diag_field, diag_ctrl, post_data
-use MOM_file_parser,          only : param_file_type, get_param
-use MOM_unit_scaling,         only : unit_scale_type
-use MOM_debugging,            only : hchksum, uvchksum
+use MOM_time_manager,      only : time_type
+use MOM_diag_mediator,     only : register_diag_field, diag_ctrl, post_data
+use MOM_file_parser,       only : param_file_type, get_param
+use MOM_unit_scaling,      only : unit_scale_type
+use MOM_debugging,         only : hchksum, uvchksum
 
 implicit none ; private
 
@@ -29,6 +30,8 @@ type, public :: porous_barrier_CS; private
   real :: mask_depth  !< The depth below which porous barrier is not applied.
   integer :: id_por_layer_widthU = -1, id_por_layer_widthV = -1, id_por_face_areaU = -1, id_por_face_areaV = -1
 end type porous_barrier_CS
+
+integer :: id_clock_porous_barrier !< CPU clock for porous barrier
 
 contains
 
@@ -66,6 +69,8 @@ subroutine porous_widths(h, tv, G, GV, US, pbv, CS, eta_bt, halo_size, eta_to_m)
 
   if (.not.CS%initialized) call MOM_error(FATAL, &
       "MOM_Porous_barrier: Module must be initialized before it is used.")
+
+  call cpu_clock_begin(id_clock_porous_barrier)
 
   is = G%isc; ie = G%iec; js = G%jsc; je = G%jec; nk = GV%ke
   Isq = G%IscB; Ieq = G%IecB; Jsq = G%JscB; Jeq = G%JecB
@@ -142,24 +147,26 @@ subroutine porous_widths(h, tv, G, GV, US, pbv, CS, eta_bt, halo_size, eta_to_m)
   if (CS%id_por_layer_widthV > 0) call post_data(CS%id_por_layer_widthV, pbv%por_layer_widthV, CS%diag)
   if (CS%id_por_face_areaU > 0) call post_data(CS%id_por_face_areaU, pbv%por_face_areaU, CS%diag)
   if (CS%id_por_face_areaV > 0) call post_data(CS%id_por_face_areaV, pbv%por_face_areaV, CS%diag)
+
+  call cpu_clock_end(id_clock_porous_barrier)
 end subroutine porous_widths
 
 !> subroutine to calculate the profile fit for a single layer in a column
 subroutine calc_por_layer(D_min, D_max, D_avg, eta_layer, w_layer, A_layer)
+  real, intent(in)  :: D_min !< minimum topographic height [Z ~> m]
+  real, intent(in)  :: D_max !< maximum topographic height [Z ~> m]
+  real, intent(in)  :: D_avg !< mean topographic height [Z ~> m]
+  real, intent(in)  :: eta_layer !< height of interface [Z ~> m]
+  real, intent(out) :: w_layer !< frac. open interface width of current layer [nondim]
+  real, intent(out) :: A_layer !< frac. open face area of current layer [Z ~> m]
 
-  real,            intent(in)  :: D_min !< minimum topographic height [Z ~> m]
-  real,            intent(in)  :: D_max !< maximum topographic height [Z ~> m]
-  real,            intent(in)  :: D_avg !< mean topographic height [Z ~> m]
-  real,            intent(in)  :: eta_layer !< height of interface [Z ~> m]
-  real,            intent(out) :: w_layer !< frac. open interface width of current layer [nondim]
-  real,            intent(out) :: A_layer !< frac. open face area of current layer [Z ~> m]
-  !local variables
-  real m, a, &             !convenience constant for fit [nondim]
-       zeta, &             !normalized vertical coordinate [nondim]
-       psi, &              !fractional width of layer between D_min and D_max [nondim]
-       psi_int             !integral of psi from 0 to zeta
+  ! local variables
+  real :: m, a, &  ! convenience constant for fit [nondim]
+          zeta, &  ! normalized vertical coordinate [nondim]
+          psi, &   ! fractional width of layer between D_min and D_max [nondim]
+          psi_int  ! integral of psi from 0 to zeta
 
-  !three parameter fit from Adcroft 2013
+  ! three parameter fit from Adcroft 2013
   m = (D_avg - D_min)/(D_max - D_min)
   a = (1. - m)/m
 
@@ -185,18 +192,18 @@ subroutine calc_por_layer(D_min, D_max, D_avg, eta_layer, w_layer, A_layer)
     w_layer = psi
     A_layer = (D_max - D_min)*psi_int
   endif
-
-
 end subroutine calc_por_layer
 
 subroutine porous_barriers_init(Time, US, param_file, diag, CS)
-  type(porous_barrier_CS), intent(inout) :: CS
+  type(porous_barrier_CS), intent(inout) :: CS !< Module control structure
   type(param_file_type),   intent(in)    :: param_file  !< structure indicating parameter file to parse
   type(time_type),         intent(in)    :: Time !< Current model time
   type(diag_ctrl), target, intent(inout) :: diag !< Diagnostics control structure
-  type(unit_scale_type),   intent(in)    :: US
+  type(unit_scale_type),   intent(in)    :: US !< A dimensional unit scaling type
 
+  ! local variables
   character(len=40)  :: mdl = "MOM_porous_barriers"  ! This module's name.
+
   CS%initialized = .true.
   CS%diag => diag
 
@@ -215,6 +222,8 @@ subroutine porous_barriers_init(Time, US, param_file, diag, CS)
      'Porous barrier open area fraction (layer averaged) of U-faces', 'nondim')
   CS%id_por_face_areaV = register_diag_field('ocean_model', 'por_face_areaV', diag%axesCvL, Time, &
      'Porous barrier open area fraction (layer averaged) of V-faces', 'nondim')
+
+  id_clock_porous_barrier = cpu_clock_id('(Ocean porous barrier)', grain=CLOCK_MODULE)
 end subroutine
 
 end module MOM_porous_barriers
