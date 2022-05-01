@@ -711,7 +711,7 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
   ! Determine which layers the mixed- and buffer-layers map into...
   !$OMP parallel do default(shared)
   do k=1,nkmb ; do j=js-2,je+2
-    call calculate_density(tv%T(:,j,k),tv%S(:,j,k), p_ref_cv, rho_coord(:,j,k), &
+    call calculate_density(tv%T(:,j,k), tv%S(:,j,k), p_ref_cv, rho_coord(:,j,k), &
                            tv%eqn_of_state, EOSdom)
   enddo ; enddo
 
