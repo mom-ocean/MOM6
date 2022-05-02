@@ -13,7 +13,7 @@ use MOM_verticalGrid,      only : verticalGrid_type
 use MOM_interface_heights, only : find_eta
 use MOM_time_manager,      only : time_type
 use MOM_diag_mediator,     only : register_diag_field, diag_ctrl, post_data
-use MOM_file_parser,       only : param_file_type, get_param
+use MOM_file_parser,       only : param_file_type, get_param, log_version
 use MOM_unit_scaling,      only : unit_scale_type
 use MOM_debugging,         only : hchksum, uvchksum
 
@@ -28,10 +28,24 @@ type, public :: porous_barrier_CS; private
   type(diag_ctrl), pointer :: diag => Null()   !< A structure to regulate diagnostic output timing
   logical :: debug  !< If true, write verbose checksums for debugging purposes.
   real :: mask_depth  !< The depth below which porous barrier is not applied.
+  integer :: eta_interp !< An integer indicating how the interface heights at the velocity points
+                        !! are calculated. Valid values are given by the parameters defined below:
+                        !! MAX, MIN, ARITHMETIC and HARMONIC.
   integer :: id_por_layer_widthU = -1, id_por_layer_widthV = -1, id_por_face_areaU = -1, id_por_face_areaV = -1
 end type porous_barrier_CS
 
 integer :: id_clock_porous_barrier !< CPU clock for porous barrier
+
+!>@{ Enumeration values for eta interpolation schemes
+integer, parameter :: ETA_INTERP_MAX   = 1
+integer, parameter :: ETA_INTERP_MIN   = 2
+integer, parameter :: ETA_INTERP_ARITH = 3
+integer, parameter :: ETA_INTERP_HARM  = 4
+character(len=20), parameter :: ETA_INTERP_MAX_STRING = "MAX"
+character(len=20), parameter :: ETA_INTERP_MIN_STRING = "MIN"
+character(len=20), parameter :: ETA_INTERP_ARITH_STRING = "ARITHMETIC"
+character(len=20), parameter :: ETA_INTERP_HARM_STRING = "HARMONIC"
+!>@}
 
 contains
 
@@ -66,6 +80,9 @@ subroutine porous_widths(h, tv, G, GV, US, pbv, CS, eta_bt, halo_size, eta_to_m)
           A_layer_prev, & ! integral of fractional open width from bottom to previous layer [Z ~> m]
           eta_s, & ! layer height used for fit [Z ~> m]
           eta_prev ! interface height of previous layer [Z ~> m]
+  real :: Z_to_eta, H_to_eta ! Unit conversion factors for eta.
+  real :: h_neglect, & ! ! Negligible thicknesses, often [Z ~> m]
+          h_min ! ! The minimum layer thickness, often [Z ~> m]
 
   if (.not.CS%initialized) call MOM_error(FATAL, &
       "MOM_Porous_barrier: Module must be initialized before it is used.")
@@ -81,10 +98,26 @@ subroutine porous_widths(h, tv, G, GV, US, pbv, CS, eta_bt, halo_size, eta_to_m)
   !currently no treatment for using optional find_eta arguments if present
   call find_eta(h, tv, G, GV, US, eta, halo_size=1)
 
+  Z_to_eta = 1.0 ; if (present(eta_to_m)) Z_to_eta = US%Z_to_m / eta_to_m
+  H_to_eta = GV%H_to_m * US%m_to_Z * Z_to_eta
+  h_neglect = GV%H_subroundoff * H_to_eta
+  h_min = GV%Angstrom_H * H_to_eta
+
   do j=js,je; do I=Isq,Ieq
     if (G%porous_DavgU(I,j) < dmask) then
       do K = nk+1,1,-1
-        eta_s = max(eta(i,j,K), eta(i+1,j,K)) !take shallower layer height
+        select case (CS%eta_interp)
+          case (ETA_INTERP_MAX) !take shallower layer height
+            eta_s = max(eta(i,j,K), eta(i+1,j,K))
+          case (ETA_INTERP_MIN) !take deeper layer height
+            eta_s = min(eta(i,j,K), eta(i+1,j,K))
+          case (ETA_INTERP_ARITH) !take arithmetic mean layer height
+            eta_s = 0.5 * (eta(i,j,K) + eta(i+1,j,K))
+          case (ETA_INTERP_HARM) !take harmonic mean layer height
+            eta_s = 2.0 * eta(i,j,K) * eta(i+1,j,K) / (eta(i,j,K) + eta(i+1,j,K) + h_neglect)
+          case default
+            call MOM_error(FATAL, "porous_widths: invalid value for eta interpolation method.")
+        end select
         if (eta_s <= G%porous_DminU(I,j)) then
           pbv%por_layer_widthU(I,j,K) = 0.0
           A_layer_prev = 0.0
@@ -111,7 +144,18 @@ subroutine porous_widths(h, tv, G, GV, US, pbv, CS, eta_bt, halo_size, eta_to_m)
   do J=Jsq,Jeq; do i=is,ie
     if (G%porous_DavgV(i,J) < dmask) then
       do K = nk+1,1,-1
-        eta_s = max(eta(i,j,K), eta(i,j+1,K)) !take shallower layer height
+        select case (CS%eta_interp)
+          case (ETA_INTERP_MAX) !take shallower layer height
+            eta_s = max(eta(i,j,K), eta(i,j+1,K))
+          case (ETA_INTERP_MIN) !take deeper layer height
+            eta_s = min(eta(i,j,K), eta(i,j+1,K))
+          case (ETA_INTERP_ARITH) !take arithmetic mean layer height
+            eta_s = 0.5 * (eta(i,j,K) + eta(i,j+1,K))
+          case (ETA_INTERP_HARM) !take harmonic mean layer height
+            eta_s = 2.0 * eta(i,j,K) * eta(i,j+1,K) / (eta(i,j,K) + eta(i,j+1,K) + h_neglect)
+          case default
+            call MOM_error(FATAL, "porous_widths: invalid value for eta interpolation method.")
+        end select
         if (eta_s <= G%porous_DminV(i,J)) then
           pbv%por_layer_widthV(i,J,K) = 0.0
           A_layer_prev = 0.0
@@ -201,18 +245,42 @@ subroutine porous_barriers_init(Time, US, param_file, diag, CS)
   type(diag_ctrl), target, intent(inout) :: diag !< Diagnostics control structure
   type(unit_scale_type),   intent(in)    :: US !< A dimensional unit scaling type
 
+  !> This include declares and sets the variable "version".
+# include "version_variable.h"
   ! local variables
-  character(len=40)  :: mdl = "MOM_porous_barriers"  ! This module's name.
+  character(len=40) :: mdl = "MOM_porous_barriers"  ! This module's name.
+  character(len=20) :: interp_method ! String storing eta interpolation method
 
   CS%initialized = .true.
   CS%diag => diag
 
+  call log_version(param_file, mdl, version, "", log_to_all=.true., layout=.false., &
+                   debugging=.false.)
   call get_param(param_file, mdl, "DEBUG", CS%debug, default=.false.)
-  call get_param(param_file, mdl, "POROUS_BARRIER_MASKING_DEPTH", CS%mask_depth,  &
+  call get_param(param_file, mdl, "PORBAR_MASKING_DEPTH", CS%mask_depth, &
                  "The depth below which porous barrier is not applied.  "//&
-                 "This criterion is tested against TOPO_AT_VEL_VARNAME_U_AVE and TOPO_AT_VEL_VARNAME_V_AVE.", &
-                 units="m", default=0.0, scale=US%m_to_Z)
+                 "The effective average depths at the velocity cells are used "//&
+                 "to test against this criterion.", units="m", default=0.0, &
+                 scale=US%m_to_Z)
   CS%mask_depth = -CS%mask_depth
+  call get_param(param_file, mdl, "PORBAR_ETA_INTERP", interp_method, &
+                 "A string describing the method that decicdes how the "//&
+                 "interface heights at the velocity points are calculated. "//&
+                 "Valid values are:\n"//&
+                 "\t MAX (the default) - maximum of the adjacent cells \n"//&
+                 "\t MIN - minimum of the adjacent cells \n"//&
+                 "\t ARITHMETIC - arithmetic mean of the adjacent cells \n"//&
+                 "\t HARMOINIC - harmonic mean of the adjacent cells \n", &
+                 default=ETA_INTERP_MAX_STRING) ! do_not_log=.not.CS%use_por_bar)
+  select case (interp_method)
+    case (ETA_INTERP_MAX_STRING) ; CS%eta_interp = ETA_INTERP_MAX
+    case (ETA_INTERP_MIN_STRING) ; CS%eta_interp = ETA_INTERP_MIN
+    case (ETA_INTERP_ARITH_STRING) ; CS%eta_interp = ETA_INTERP_ARITH
+    case (ETA_INTERP_HARM_STRING) ; CS%eta_interp = ETA_INTERP_HARM
+    case default
+      call MOM_error(FATAL, "porous_barriers_init: Unrecognized setting "// &
+            "#define PORBAR_ETA_INTERP "//trim(interp_method)//" found in input file.")
+  end select
 
   CS%id_por_layer_widthU = register_diag_field('ocean_model', 'por_layer_widthU', diag%axesCui, Time, &
      'Porous barrier open width fraction (at the layer interfaces) of the u-faces', 'nondim')
