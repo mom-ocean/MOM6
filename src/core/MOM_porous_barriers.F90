@@ -72,17 +72,18 @@ subroutine porous_widths(h, tv, G, GV, US, pbv, CS, eta_bt, halo_size, eta_to_m)
   type(porous_barrier_CS), intent(in) :: CS
 
   !local variables
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1):: eta    !< layer interface heights [Z ~> m or 1/eta_to_m].
-  integer :: i, j, k, nk, is, ie, js, je, Isq, Ieq, Jsq, Jeq
-  real :: dmask
-  real :: w_layer, & ! fractional open width of layer interface [nondim]
-          A_layer, & ! integral of fractional open width from bottom to current layer[Z ~> m]
-          A_layer_prev, & ! integral of fractional open width from bottom to previous layer [Z ~> m]
-          eta_s, & ! layer height used for fit [Z ~> m]
-          eta_prev ! interface height of previous layer [Z ~> m]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1):: eta ! Layer interface heights [Z ~> m or 1/eta_to_m].
+  real, dimension(SZIB_(G),SZJB_(G)) :: A_layer_prev ! Integral of fractional open width from the bottom
+                                                     ! to the previous layer at u or v points [Z ~> m]
+  real, dimension(SZIB_(G),SZJB_(G)) :: eta_prev ! Layter interface height of the previous layer
+                                                 ! at u or v points [Z ~> m]
+  real :: A_layer, & ! Integral of fractional open width from bottom to current layer [Z ~> m]
+          eta_s ! Layer height used for fit [Z ~> m]
   real :: Z_to_eta, H_to_eta ! Unit conversion factors for eta.
   real :: h_neglect, & ! ! Negligible thicknesses, often [Z ~> m]
           h_min ! ! The minimum layer thickness, often [Z ~> m]
+  real :: dmask ! The depth below which porous barrier is not applied.
+  integer :: i, j, k, nk, is, ie, js, je, Isq, Ieq, Jsq, Jeq
 
   if (.not.CS%initialized) call MOM_error(FATAL, &
       "MOM_Porous_barrier: Module must be initialized before it is used.")
@@ -103,81 +104,49 @@ subroutine porous_widths(h, tv, G, GV, US, pbv, CS, eta_bt, halo_size, eta_to_m)
   h_neglect = GV%H_subroundoff * H_to_eta
   h_min = GV%Angstrom_H * H_to_eta
 
-  do j=js,je; do I=Isq,Ieq
-    if (G%porous_DavgU(I,j) < dmask) then
-      do K = nk+1,1,-1
-        select case (CS%eta_interp)
-          case (ETA_INTERP_MAX) !take shallower layer height
-            eta_s = max(eta(i,j,K), eta(i+1,j,K))
-          case (ETA_INTERP_MIN) !take deeper layer height
-            eta_s = min(eta(i,j,K), eta(i+1,j,K))
-          case (ETA_INTERP_ARITH) !take arithmetic mean layer height
-            eta_s = 0.5 * (eta(i,j,K) + eta(i+1,j,K))
-          case (ETA_INTERP_HARM) !take harmonic mean layer height
-            eta_s = 2.0 * eta(i,j,K) * eta(i+1,j,K) / (eta(i,j,K) + eta(i+1,j,K) + h_neglect)
-          case default
-            call MOM_error(FATAL, "porous_widths: invalid value for eta interpolation method.")
-        end select
-        if (eta_s <= G%porous_DminU(I,j)) then
-          pbv%por_layer_widthU(I,j,K) = 0.0
-          A_layer_prev = 0.0
-          if (K < nk+1) then
-            pbv%por_face_areaU(I,j,k) = 0.0; endif
-        else
-          call calc_por_layer(G%porous_DminU(I,j), G%porous_DmaxU(I,j), &
-            G%porous_DavgU(I,j), eta_s, w_layer, A_layer)
-          pbv%por_layer_widthU(I,j,K) = w_layer
-          if (k <= nk) then
-            if ((eta_s - eta_prev) > 0.0) then
-              pbv%por_face_areaU(I,j,k) = (A_layer - A_layer_prev)/&
-                   (eta_s-eta_prev)
-            else
-              pbv%por_face_areaU(I,j,k) = 0.0; endif
-          endif
-          eta_prev = eta_s
-          A_layer_prev = A_layer
-        endif
-      enddo
-    endif
-  enddo; enddo
+  ! u-points
+  do j=js,je ; do I=Isq,Ieq ; if (G%porous_DavgU(I,j) < dmask) then
+    eta_prev(I,j) = eta_at_uv(eta(i,j,nk+1), eta(i+1,j,nk+1), CS%eta_interp, h_neglect)
+    ! eta_prev(I,j) = max(eta(i,j,nk+1), eta(i+1,j,nk+1))
+    call calc_por_layer(G%porous_DminU(I,j), G%porous_DmaxU(I,j), G%porous_DavgU(I,j), &
+                       eta_prev(I,j), pbv%por_layer_widthU(I,j,nk+1), A_layer_prev(I,j))
+  endif ; enddo ; enddo
 
-  do J=Jsq,Jeq; do i=is,ie
-    if (G%porous_DavgV(i,J) < dmask) then
-      do K = nk+1,1,-1
-        select case (CS%eta_interp)
-          case (ETA_INTERP_MAX) !take shallower layer height
-            eta_s = max(eta(i,j,K), eta(i,j+1,K))
-          case (ETA_INTERP_MIN) !take deeper layer height
-            eta_s = min(eta(i,j,K), eta(i,j+1,K))
-          case (ETA_INTERP_ARITH) !take arithmetic mean layer height
-            eta_s = 0.5 * (eta(i,j,K) + eta(i,j+1,K))
-          case (ETA_INTERP_HARM) !take harmonic mean layer height
-            eta_s = 2.0 * eta(i,j,K) * eta(i,j+1,K) / (eta(i,j,K) + eta(i,j+1,K) + h_neglect)
-          case default
-            call MOM_error(FATAL, "porous_widths: invalid value for eta interpolation method.")
-        end select
-        if (eta_s <= G%porous_DminV(i,J)) then
-          pbv%por_layer_widthV(i,J,K) = 0.0
-          A_layer_prev = 0.0
-          if (K < nk+1) then
-            pbv%por_face_areaV(i,J,k) = 0.0; endif
-        else
-          call calc_por_layer(G%porous_DminV(i,J), G%porous_DmaxV(i,J), &
-            G%porous_DavgV(i,J), eta_s, w_layer, A_layer)
-          pbv%por_layer_widthV(i,J,K) = w_layer
-          if (k <= nk) then
-            if ((eta_s - eta_prev) > 0.0) then
-              pbv%por_face_areaV(i,J,k) = (A_layer - A_layer_prev)/&
-                   (eta_s-eta_prev)
-            else
-              pbv%por_face_areaU(I,j,k) = 0.0; endif
-          endif
-          eta_prev = eta_s
-          A_layer_prev = A_layer
-        endif
-      enddo
+  do k = nk,1,-1; do j=js,je; do I=Isq,Ieq ; if (G%porous_DavgU(I,j) < dmask) then
+    eta_s = eta_at_uv(eta(i,j,K), eta(i+1,j,K), CS%eta_interp, h_neglect)
+    ! eta_s = max(eta(i,j,K), eta(i+1,j,K))
+    if ((eta_s - eta_prev(I,j)) > 0.0) then
+      call calc_por_layer(G%porous_DminU(I,j), G%porous_DmaxU(I,j), G%porous_DavgU(I,j), &
+                          eta_s, pbv%por_layer_widthU(I,j,K), A_layer)
+      pbv%por_face_areaU(I,j,k) = (A_layer - A_layer_prev(I,j)) / (eta_s - eta_prev(I,j))
+    else
+      pbv%por_face_areaU(I,j,k) = 0.0
     endif
-  enddo; enddo
+    eta_prev(I,j) = eta_s
+    A_layer_prev(I,j) = A_layer
+  endif ; enddo ; enddo ; enddo
+
+  ! v-points
+  do J=Jsq,Jeq ; do i=is,ie ; if (G%porous_DavgV(i,J) < dmask) then
+    eta_prev(i,J) = eta_at_uv(eta(i,j,nk+1), eta(i,j+1,nk+1), CS%eta_interp, h_neglect)
+    ! eta_prev(i,J) = max(eta(i,j,nk+1), eta(i,j+1,nk+1))
+    call calc_por_layer(G%porous_DminV(i,J), G%porous_DmaxV(i,J), G%porous_DavgV(i,J), &
+                        eta_prev(i,J), pbv%por_layer_widthV(i,J,nk+1), A_layer_prev(i,J))
+  endif ; enddo ; enddo
+
+  do k = nk,1,-1; do J=Jsq,Jeq ; do i=is,ie ;if (G%porous_DavgV(i,J) < dmask) then
+    eta_s = eta_at_uv(eta(i,j,K), eta(i,j+1,K), CS%eta_interp, h_neglect)
+    ! eta_s = max(eta(i,j,K), eta(i,j+1,K))
+    if ((eta_s - eta_prev(i,J)) > 0.0) then
+      call calc_por_layer(G%porous_DminV(i,J), G%porous_DmaxV(i,J), G%porous_DavgV(i,J), &
+                         eta_s, pbv%por_layer_widthV(i,J,K), A_layer)
+      pbv%por_face_areaV(i,J,k) = (A_layer - A_layer_prev(i,J)) / (eta_s - eta_prev(i,J))
+    else
+      pbv%por_face_areaV(i,J,k) = 0.0
+    endif
+    eta_prev(i,J) = eta_s
+    A_layer_prev(i,J) = A_layer
+  endif ; enddo ; enddo ; enddo
 
   if (CS%debug) then
     call hchksum(eta, "Interface height used by porous barrier", G%HI, haloshift=0, scale=GV%H_to_m)
@@ -195,7 +164,8 @@ subroutine porous_widths(h, tv, G, GV, US, pbv, CS, eta_bt, halo_size, eta_to_m)
   call cpu_clock_end(id_clock_porous_barrier)
 end subroutine porous_widths
 
-!> subroutine to calculate the profile fit for a single layer in a column
+!> subroutine to calculate the profile fit (the three parameter fit from Adcroft 2013)
+! for a single layer in a column
 subroutine calc_por_layer(D_min, D_max, D_avg, eta_layer, w_layer, A_layer)
   real, intent(in)  :: D_min !< minimum topographic height [Z ~> m]
   real, intent(in)  :: D_max !< maximum topographic height [Z ~> m]
@@ -210,33 +180,51 @@ subroutine calc_por_layer(D_min, D_max, D_avg, eta_layer, w_layer, A_layer)
           psi, &   ! fractional width of layer between D_min and D_max [nondim]
           psi_int  ! integral of psi from 0 to zeta
 
-  ! three parameter fit from Adcroft 2013
-  m = (D_avg - D_min)/(D_max - D_min)
-  a = (1. - m)/m
-
-  zeta = (eta_layer - D_min)/(D_max - D_min)
-
   if (eta_layer <= D_min) then
     w_layer = 0.0
     A_layer = 0.0
-  elseif (eta_layer >= D_max) then
+  elseif (eta_layer > D_max) then
     w_layer = 1.0
     A_layer = eta_layer - D_avg
   else
+    m = (D_avg - D_min) / (D_max - D_min)
+    a = (1.0 - m) / m
+    zeta = (eta_layer - D_min) / (D_max - D_min)
     if (m < 0.5) then
-      psi = zeta**(1./a)
-      psi_int = (1.-m)*zeta**(1./(1.-m))
+      psi = zeta**(1.0 / a)
+      psi_int = (1.0 - m) * zeta**(1.0 / (1.0 - m))
     elseif (m == 0.5) then
       psi = zeta
-      psi_int = 0.5*zeta*zeta
+      psi_int = 0.5 * zeta * zeta
     else
-      psi = 1. - (1. - zeta)**a
-      psi_int = zeta - m + m*((1-zeta)**(1/m))
+      psi = 1.0 - (1.0 - zeta)**a
+      psi_int = zeta - m + m * ((1.0 - zeta)**(1 / m))
     endif
     w_layer = psi
     A_layer = (D_max - D_min)*psi_int
   endif
 end subroutine calc_por_layer
+
+function eta_at_uv(e1, e2, interp, h_neglect) result(eatuv)
+  real, intent(in) :: e1, e2 ! Interface heights at the adjacent tracer cells [Z ~> m]
+  real, intent(in) :: h_neglect ! Negligible thicknesses, often [Z ~> m]
+  integer, intent(in) :: interp ! Interpolation method coded by an integer
+  real :: eatuv
+
+  select case (interp)
+    case (ETA_INTERP_MAX)   ! The shallower interface height
+      eatuv = max(e1, e2)
+    case (ETA_INTERP_MIN)   ! The deeper interface height
+      eatuv = min(e1, e2)
+    case (ETA_INTERP_ARITH) ! Arithmetic mean
+      eatuv = 0.5 * (e1 + e2)
+    case (ETA_INTERP_HARM)  ! Harmonic mean
+      eatuv = 2.0 * e1 * e2 / (e1 + e2 + h_neglect)
+    case default
+      call MOM_error(FATAL, "porous_widths::eta_at_uv: "//&
+                     "invalid value for eta interpolation method.")
+  end select
+end function eta_at_uv
 
 subroutine porous_barriers_init(Time, US, param_file, diag, CS)
   type(porous_barrier_CS), intent(inout) :: CS !< Module control structure
