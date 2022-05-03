@@ -407,14 +407,14 @@ end subroutine calculate_compress_wright
 !! pressure anomalies across layers, which are required for calculating the
 !! finite-volume form pressure accelerations in a Boussinesq model.
 subroutine int_density_dz_wright(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
-                                 dpa, intz_dpa, intx_dpa, inty_dpa, &
-                                 bathyT, dz_neglect, useMassWghtInterp, rho_scale, pres_scale, Z_0p)
+                                 dpa, intz_dpa, intx_dpa, inty_dpa, bathyT, dz_neglect, &
+                                 useMassWghtInterp, rho_scale, pres_scale, temp_scale, saln_scale, Z_0p)
   type(hor_index_type), intent(in)  :: HI       !< The horizontal index type for the arrays.
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
                         intent(in)  :: T        !< Potential temperature relative to the surface
-                                                !! [degC].
+                                                !! [C ~> degC].
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
-                        intent(in)  :: S        !< Salinity [PSU].
+                        intent(in)  :: S        !< Salinity [S ~> PSU].
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
                         intent(in)  :: z_t      !< Height at the top of the layer in depth units [Z ~> m].
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
@@ -451,19 +451,29 @@ subroutine int_density_dz_wright(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
                                                  !! from kg m-3 to the desired units [R m3 kg-1 ~> 1]
   real,       optional, intent(in)  :: pres_scale !< A multiplicative factor to convert pressure
                                                  !! into Pa [Pa T2 R-1 L-2 ~> 1].
+  real,       optional, intent(in)  :: temp_scale  !< A multiplicative factor by which to scale
+                            !! temperature into degC [degC C-1 ~> 1]
+  real,       optional, intent(in)  :: saln_scale !< A multiplicative factor to convert pressure
+                            !! into ppt [ppt S-1 ~> 1].
   real,       optional, intent(in)  :: Z_0p      !< The height at which the pressure is 0 [Z ~> m]
 
   ! Local variables
-  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed) :: al0_2d, p0_2d, lambda_2d
-  real :: al0, p0, lambda
+  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed) :: al0_2d ! A term in the Wright EOS [m3 kg-1]
+  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed) :: p0_2d  ! A term in the Wright EOS [Pa]
+  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed) :: lambda_2d ! A term in the Wright EOS [m2 s-2]
+  real :: al0        ! A term in the Wright EOS [m3 kg-1]
+  real :: p0         ! A term in the Wright EOS [Pa]
+  real :: lambda     ! A term in the Wright EOS [m2 s-2]
   real :: rho_anom   ! The density anomaly from rho_ref [kg m-3].
-  real :: eps, eps2, rem
+  real :: eps, eps2  ! A nondimensional ratio and its square [nondim]
+  real :: rem        ! [kg m-1 s-2]
   real :: GxRho      ! The gravitational acceleration times density and unit conversion factors [Pa Z-1 ~> kg m-2 s-2]
   real :: g_Earth    ! The gravitational acceleration [m2 Z-1 s-2 ~> m s-2]
   real :: I_Rho      ! The inverse of the Boussinesq density [m3 kg-1]
-  real :: rho_ref_mks ! The reference density in MKS units, never rescaled from kg m-3 [kg m-3]
+  real :: rho_ref_mks ! The reference density in MKS units [kg m-3]
   real :: p_ave      ! The layer averaged pressure [Pa]
-  real :: I_al0, I_Lzz
+  real :: I_al0      ! The inverse of al0 [kg m-3]
+  real :: I_Lzz      ! The inverse of the denominator [Pa-1]
   real :: dz         ! The layer thickness [Z ~> m].
   real :: hWght      ! A pressure-thickness below topography [Z ~> m].
   real :: hL, hR     ! Pressure-thicknesses of the columns to the left and right [Z ~> m].
@@ -477,6 +487,18 @@ subroutine int_density_dz_wright(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
   real :: Pa_to_RL2_T2 ! A conversion factor of pressures from Pa to the output units indicated by
                        ! pres_scale [R L2 T-2 Pa-1 ~> 1].
   real :: z0pres     ! The height at which the pressure is zero [Z ~> m]
+  real :: a1s        ! Partly rescaled version of a1 [m3 kg-1 C-1 ~> m3 kg-1 degC-1]
+  real :: a2s        ! Partly rescaled version of a2 [m3 kg-1 S-1 ~> m3 kg-1 ppt-1]
+  real :: b1s        ! Partly rescaled version of b1 [Pa C-1 ~> Pa degC-1]
+  real :: b2s        ! Partly rescaled version of b2 [Pa C-2 ~> Pa degC-2]
+  real :: b3s        ! Partly rescaled version of b3 [Pa C-3 ~> Pa degC-3]
+  real :: b4s        ! Partly rescaled version of b4 [Pa S-1 ~> Pa ppt-1]
+  real :: b5s        ! Partly rescaled version of b5 [Pa C-1 S-1 ~> Pa degC-1 ppt-1]
+  real :: c1s        ! Partly rescaled version of c1 [m2 s-2 C-1 ~> m2 s-2 degC-1]
+  real :: c2s        ! Partly rescaled version of c2 [m2 s-2 C-2 ~> m2 s-2 degC-2]
+  real :: c3s        ! Partly rescaled version of c3 [m2 s-2 C-3 ~> m2 s-2 degC-3]
+  real :: c4s        ! Partly rescaled version of c4 [m2 s-2 S-1 ~> m2 s-2 ppt-1]
+  real :: c5s        ! Partly rescaled version of c5 [m2 s-2 C-1 S-1 ~> m2 s-2 degC-1 ppt-1]
   logical :: do_massWeight ! Indicates whether to do mass weighting.
   real, parameter :: C1_3 = 1.0/3.0, C1_7 = 1.0/7.0    ! Rational constants.
   real, parameter :: C1_9 = 1.0/9.0, C1_90 = 1.0/90.0  ! Rational constants.
@@ -504,6 +526,24 @@ subroutine int_density_dz_wright(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
   endif
   z0pres = 0.0 ; if (present(Z_0p)) z0pres = Z_0p
 
+  a1s = a1 ; a2s = a2
+  b1s = b1 ; b2s = b2 ; b3s = b3 ; b4s = b4 ; b5s = b5
+  c1s = c1 ; c2s = c2 ; c3s = c3 ; c4s = c4 ; c5s = c5
+
+  if (present(temp_scale)) then ; if (temp_scale /= 1.0) then
+    a1s = a1s * temp_scale
+    b1s = b1s * temp_scale    ; b2s = b2s * temp_scale**2
+    b3s = b3s * temp_scale**3 ; b5s = b5s * temp_scale
+    c1s = c1s * temp_scale    ; c2s = c2s * temp_scale**2
+    c3s = c3s * temp_scale**3 ; c5s = c5s * temp_scale
+  endif ; endif
+
+  if (present(saln_scale)) then ; if (saln_scale /= 1.0) then
+    a2s = a2s * saln_scale
+    b4s = b4s * saln_scale ; b5s = b5s * saln_scale
+    c4s = c4s * saln_scale ; c5s = c5s * saln_scale
+  endif ; endif
+
   do_massWeight = .false.
   if (present(useMassWghtInterp)) then ; if (useMassWghtInterp) then
     do_massWeight = .true.
@@ -514,9 +554,9 @@ subroutine int_density_dz_wright(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
   endif ; endif
 
   do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-    al0_2d(i,j) = (a0 + a1*T(i,j)) + a2*S(i,j)
-    p0_2d(i,j) = (b0 + b4*S(i,j)) + T(i,j) * (b1 + T(i,j)*((b2 + b3*T(i,j))) + b5*S(i,j))
-    lambda_2d(i,j) = (c0 +c4*S(i,j)) + T(i,j) * (c1 + T(i,j)*((c2 + c3*T(i,j))) + c5*S(i,j))
+    al0_2d(i,j) = (a0 + a1s*T(i,j)) + a2s*S(i,j)
+    p0_2d(i,j) = (b0 + b4s*S(i,j)) + T(i,j) * (b1s + T(i,j)*((b2s + b3s*T(i,j))) + b5s*S(i,j))
+    lambda_2d(i,j) = (c0 +c4s*S(i,j)) + T(i,j) * (c1s + T(i,j)*((c2s + c3s*T(i,j))) + c5s*S(i,j))
 
     al0 = al0_2d(i,j) ; p0 = p0_2d(i,j) ; lambda = lambda_2d(i,j)
 
@@ -628,14 +668,14 @@ end subroutine int_density_dz_wright
 !! Boole's rule to do the horizontal integrals, and from a truncation in the
 !! series for log(1-eps/1+eps) that assumes that |eps| < 0.34.
 subroutine int_spec_vol_dp_wright(T, S, p_t, p_b, spv_ref, HI, dza, &
-                                  intp_dza, intx_dza, inty_dza, halo_size, &
-                                  bathyP, dP_neglect, useMassWghtInterp, SV_scale, pres_scale)
+                                  intp_dza, intx_dza, inty_dza, halo_size, bathyP, dP_neglect, &
+                                  useMassWghtInterp, SV_scale, pres_scale, temp_scale, saln_scale)
   type(hor_index_type), intent(in)  :: HI        !< The ocean's horizontal index type.
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
                         intent(in)  :: T         !< Potential temperature relative to the surface
-                                                 !! [degC].
+                                                 !! [C ~> degC].
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
-                        intent(in)  :: S         !< Salinity [PSU].
+                        intent(in)  :: S         !< Salinity [S ~> PSU].
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
                         intent(in)  :: p_t       !< Pressure at the top of the layer [R L2 T-2 ~> Pa]
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
@@ -673,9 +713,15 @@ subroutine int_spec_vol_dp_wright(T, S, p_t, p_b, spv_ref, HI, dza, &
                             !! volume from m3 kg-1 to the desired units [kg m-3 R-1 ~> 1]
   real,       optional, intent(in)  :: pres_scale !< A multiplicative factor to convert pressure
                             !! into Pa [Pa T2 R-1 L-2 ~> 1].
+  real,       optional, intent(in)  :: temp_scale  !< A multiplicative factor by which to scale
+                            !! temperature into degC [degC C-1 ~> 1]
+  real,       optional, intent(in)  :: saln_scale !< A multiplicative factor to convert pressure
+                            !! into ppt [ppt S-1 ~> 1].
 
   ! Local variables
-  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed) :: al0_2d, p0_2d, lambda_2d
+  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed) :: al0_2d ! A term in the Wright EOS [R-1 ~> m3 kg-1]
+  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed) :: p0_2d  ! A term in the Wright EOS [R L2 T-2 ~> Pa]
+  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed) :: lambda_2d ! A term in the Wright EOS [L2 T-2 ~> m2 s-2]
   real :: al0        ! A term in the Wright EOS [R-1 ~> m3 kg-1]
   real :: p0         ! A term in the Wright EOS [R L2 T-2 ~> Pa]
   real :: lambda     ! A term in the Wright EOS [L2 T-2 ~> m2 s-2]
@@ -696,6 +742,18 @@ subroutine int_spec_vol_dp_wright(T, S, p_t, p_b, spv_ref, HI, dza, &
   real :: wtT_L, wtT_R ! The weights for tracers from the left and right columns [nondim].
   real :: intp(5)    ! The integrals of specific volume with pressure at the
                      ! 5 sub-column locations [L2 T-2 ~> m2 s-2].
+  real :: a1s        ! Partly rescaled version of a1 [m3 kg-1 C-1 ~> m3 kg-1 degC-1]
+  real :: a2s        ! Partly rescaled version of a2 [m3 kg-1 S-1 ~> m3 kg-1 ppt-1]
+  real :: b1s        ! Partly rescaled version of b1 [Pa C-1 ~> Pa degC-1]
+  real :: b2s        ! Partly rescaled version of b2 [Pa C-2 ~> Pa degC-2]
+  real :: b3s        ! Partly rescaled version of b3 [Pa C-3 ~> Pa degC-3]
+  real :: b4s        ! Partly rescaled version of b4 [Pa S-1 ~> Pa ppt-1]
+  real :: b5s        ! Partly rescaled version of b5 [Pa C-1 S-1 ~> Pa degC-1 ppt-1]
+  real :: c1s        ! Partly rescaled version of c1 [m2 s-2 C-1 ~> m2 s-2 degC-1]
+  real :: c2s        ! Partly rescaled version of c2 [m2 s-2 C-2 ~> m2 s-2 degC-2]
+  real :: c3s        ! Partly rescaled version of c3 [m2 s-2 C-3 ~> m2 s-2 degC-3]
+  real :: c4s        ! Partly rescaled version of c4 [m2 s-2 S-1 ~> m2 s-2 ppt-1]
+  real :: c5s        ! Partly rescaled version of c5 [m2 s-2 C-1 S-1 ~> m2 s-2 degC-1 ppt-1]
   logical :: do_massWeight ! Indicates whether to do mass weighting.
   real, parameter :: C1_3 = 1.0/3.0, C1_7 = 1.0/7.0    ! Rational constants.
   real, parameter :: C1_9 = 1.0/9.0, C1_90 = 1.0/90.0  ! Rational constants.
@@ -715,6 +773,24 @@ subroutine int_spec_vol_dp_wright(T, S, p_t, p_b, spv_ref, HI, dza, &
   endif ; endif
   lam_scale = al0_scale * p0_scale
 
+  a1s = a1 ; a2s = a2
+  b1s = b1 ; b2s = b2 ; b3s = b3 ; b4s = b4 ; b5s = b5
+  c1s = c1 ; c2s = c2 ; c3s = c3 ; c4s = c4 ; c5s = c5
+
+  if (present(temp_scale)) then ; if (temp_scale /= 1.0) then
+    a1s = a1s * temp_scale
+    b1s = b1s * temp_scale    ; b2s = b2s * temp_scale**2
+    b3s = b3s * temp_scale**3 ; b5s = b5s * temp_scale
+    c1s = c1s * temp_scale    ; c2s = c2s * temp_scale**2
+    c3s = c3s * temp_scale**3 ; c5s = c5s * temp_scale
+  endif ; endif
+
+  if (present(saln_scale)) then ; if (saln_scale /= 1.0) then
+    a2s = a2s * saln_scale
+    b4s = b4s * saln_scale ; b5s = b5s * saln_scale
+    c4s = c4s * saln_scale ; c5s = c5s * saln_scale
+  endif ; endif
+
   do_massWeight = .false.
   if (present(useMassWghtInterp)) then ; if (useMassWghtInterp) then
     do_massWeight = .true.
@@ -726,9 +802,9 @@ subroutine int_spec_vol_dp_wright(T, S, p_t, p_b, spv_ref, HI, dza, &
 
   !  alpha(j) = (lambda + al0*(pressure(j) + p0)) / (pressure(j) + p0)
   do j=jsh,jeh ; do i=ish,ieh
-    al0_2d(i,j) = al0_scale * ( (a0 + a1*T(i,j)) + a2*S(i,j) )
-    p0_2d(i,j) = p0_scale * ( (b0 + b4*S(i,j)) + T(i,j) * (b1 + T(i,j)*((b2 + b3*T(i,j))) + b5*S(i,j)) )
-    lambda_2d(i,j) = lam_scale * ( (c0 + c4*S(i,j)) + T(i,j) * (c1 + T(i,j)*((c2 + c3*T(i,j))) + c5*S(i,j)) )
+    al0_2d(i,j) = al0_scale * ( (a0 + a1s*T(i,j)) + a2s*S(i,j) )
+    p0_2d(i,j) = p0_scale * ( (b0 + b4s*S(i,j)) + T(i,j) * (b1s + T(i,j)*((b2s + b3s*T(i,j))) + b5s*S(i,j)) )
+    lambda_2d(i,j) = lam_scale * ( (c0 + c4s*S(i,j)) + T(i,j) * (c1s + T(i,j)*((c2s + c3s*T(i,j))) + c5s*S(i,j)) )
 
     al0 = al0_2d(i,j) ; p0 = p0_2d(i,j) ; lambda = lambda_2d(i,j)
     dp = p_b(i,j) - p_t(i,j)
