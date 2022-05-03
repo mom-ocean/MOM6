@@ -162,8 +162,8 @@ subroutine make_frazil(h, tv, G, GV, US, CS, p_surf, halo)
       T_fr_set = .false.
       do i=is,ie ; if (tv%frazil(i,j) > 0.0) then
         if (.not.T_fr_set) then
-          call calculate_TFreeze(tv%S(i:,j,1), pressure(i:,1), T_freeze(i:), &
-                                 1, ie-i+1, tv%eqn_of_state, pres_scale=US%RL2_T2_to_Pa)
+          call calculate_TFreeze(tv%S(i:ie,j,1), pressure(i:ie,1), T_freeze(i:ie), &
+                                 tv%eqn_of_state)
           T_fr_set = .true.
         endif
 
@@ -188,8 +188,8 @@ subroutine make_frazil(h, tv, G, GV, US, CS, p_surf, halo)
         if ((G%mask2dT(i,j) > 0.0) .and. &
             ((tv%T(i,j,k) < 0.0) .or. (fraz_col(i) > 0.0))) then
           if (.not.T_fr_set) then
-            call calculate_TFreeze(tv%S(i:,j,k), pressure(i:,k), T_freeze(i:), &
-                                   1, ie-i+1, tv%eqn_of_state, pres_scale=US%RL2_T2_to_Pa)
+            call calculate_TFreeze(tv%S(i:ie,j,k), pressure(i:ie,k), T_freeze(i:ie), &
+                                   tv%eqn_of_state)
             T_fr_set = .true.
           endif
 
@@ -1284,10 +1284,10 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
           ! Diagnostics of heat content associated with mass fluxes
           if (associated(fluxes%heat_content_massin))                             &
             fluxes%heat_content_massin(i,j) = fluxes%heat_content_massin(i,j) +   &
-                         T2d(i,k) * max(0.,dThickness) * GV%H_to_RZ * fluxes%C_p * Idt
+                         T2d(i,k) * max(0.,dThickness) * GV%H_to_RZ * tv%C_p * Idt
           if (associated(fluxes%heat_content_massout))                            &
             fluxes%heat_content_massout(i,j) = fluxes%heat_content_massout(i,j) + &
-                         T2d(i,k) * min(0.,dThickness) * GV%H_to_RZ * fluxes%C_p * Idt
+                         T2d(i,k) * min(0.,dThickness) * GV%H_to_RZ * tv%C_p * Idt
           if (associated(tv%TempxPmE)) tv%TempxPmE(i,j) = tv%TempxPmE(i,j) + &
                          T2d(i,k) * dThickness * GV%H_to_RZ
 
@@ -1367,10 +1367,10 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
           ! Diagnostics of heat content associated with mass fluxes
           if (associated(fluxes%heat_content_massin)) &
             fluxes%heat_content_massin(i,j) = fluxes%heat_content_massin(i,j) + &
-                         T2d(i,k) * max(0.,dThickness) * GV%H_to_RZ * fluxes%C_p * Idt
+                         T2d(i,k) * max(0.,dThickness) * GV%H_to_RZ * tv%C_p * Idt
           if (associated(fluxes%heat_content_massout)) &
             fluxes%heat_content_massout(i,j) = fluxes%heat_content_massout(i,j) + &
-                         T2d(i,k) * min(0.,dThickness) * GV%H_to_RZ * fluxes%C_p * Idt
+                         T2d(i,k) * min(0.,dThickness) * GV%H_to_RZ * tv%C_p * Idt
           if (associated(tv%TempxPmE)) tv%TempxPmE(i,j) = tv%TempxPmE(i,j) + &
                          T2d(i,k) * dThickness * GV%H_to_RZ
 

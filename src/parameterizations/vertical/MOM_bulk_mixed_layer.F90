@@ -1061,7 +1061,7 @@ subroutine mixedlayer_convection(h, d_eb, htot, Ttot, Stot, uhtot, vhtot,      &
     Conv_En(i) = 0.0 ; dKE_FC(i) = 0.0
     if (associated(fluxes%heat_content_massin)) &
       fluxes%heat_content_massin(i,j) = fluxes%heat_content_massin(i,j) + &
-                         T_precip * netMassIn(i) * GV%H_to_RZ * fluxes%C_p * Idt
+                         T_precip * netMassIn(i) * GV%H_to_RZ * tv%C_p * Idt
     if (associated(tv%TempxPmE)) tv%TempxPmE(i,j) = tv%TempxPmE(i,j) + &
                          T_precip * netMassIn(i) * GV%H_to_RZ
   else  ! This is a massless column, but zero out the summed variables anyway for safety.
@@ -1112,12 +1112,12 @@ subroutine mixedlayer_convection(h, d_eb, htot, Ttot, Stot, uhtot, vhtot,      &
         d_eb(i,k) = d_eb(i,k) - h_evap
 
         ! smg: when resolve the A=B code, we will set
-        ! heat_content_massout = heat_content_massout - T(i,k)*h_evap*GV%H_to_RZ*fluxes%C_p*Idt
+        ! heat_content_massout = heat_content_massout - T(i,k)*h_evap*GV%H_to_RZ*tv%C_p*Idt
         ! by uncommenting the lines here.
         ! we will also then completely remove TempXpme from the model.
         if (associated(fluxes%heat_content_massout)) &
           fluxes%heat_content_massout(i,j) = fluxes%heat_content_massout(i,j) - &
-                                      T(i,k)*h_evap*GV%H_to_RZ * fluxes%C_p * Idt
+                                      T(i,k)*h_evap*GV%H_to_RZ * tv%C_p * Idt
         if (associated(tv%TempxPmE)) tv%TempxPmE(i,j) = tv%TempxPmE(i,j) - &
                                       T(i,k)*h_evap*GV%H_to_RZ
 

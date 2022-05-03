@@ -3194,12 +3194,13 @@ subroutine extract_surface_state(CS, sfc_state_in)
                              !! layer properties [Z ~> m] or [H ~> m or kg m-2]
   real :: dh                 !< Thickness of a layer within the mixed layer [Z ~> m] or [H ~> m or kg m-2]
   real :: mass               !< Mass per unit area of a layer [R Z ~> kg m-2]
-  real :: T_freeze           !< freezing temperature [degC]
   real :: I_depth            !< The inverse of depth [Z-1 ~> m-1] or [H-1 ~> m-1 or m2 kg-1]
   real :: missing_depth      !< The portion of depth_ml that can not be found in a column [H ~> m or kg m-2]
   real :: H_rescale          !< A conversion factor from thickness units to the units used in the
                              !! calculation of properties of the uppermost ocean [nondim] or [Z H-1 ~> 1 or m3 kg-1]
                              !  After the ANSWERS_2018 flag has been obsoleted, H_rescale will be 1.
+  real :: T_freeze(SZI_(CS%G)) !< freezing temperature [C]
+  real :: pres(SZI_(CS%G))   !< Pressure to use for the freezing temperature calculation [R L2 T-2 ~> Pa]
   real :: delT(SZI_(CS%G))   !< Depth integral of T-T_freeze [Z degC ~> m degC]
   logical :: use_temperature !< If true, temperature and salinity are used as state variables.
   integer :: i, j, k, is, ie, js, je, nz, numberOfErrors, ig, jg
@@ -3408,28 +3409,37 @@ subroutine extract_surface_state(CS, sfc_state_in)
 
 
   if (allocated(sfc_state%melt_potential)) then
-    !$OMP parallel do default(shared) private(depth_ml, dh, T_freeze, depth, delT)
+    !$OMP parallel do default(shared) private(depth_ml, dh, T_freeze, depth, pres, delT)
     do j=js,je
       do i=is,ie
         depth(i) = 0.0
         delT(i) = 0.0
+        pres(i) = 0.0
+        ! Here it is assumed that p=0 is OK, since HFrz ~ 10 to 20m, but under ice-shelves this
+        ! can be a very bad assumption.  ###To fix this, uncomment the following...
+        !   pres(i) = p_surface(i) + 0.5*(GV%g_Earth*GV%H_to_RZ)*h(i,j,1)
       enddo
 
-      do k=1,nz ; do i=is,ie
-        depth_ml = min(CS%HFrz, CS%visc%MLD(i,j))
-        if (depth(i) + h(i,j,k)*GV%H_to_Z < depth_ml) then
-          dh = h(i,j,k)*GV%H_to_Z
-        elseif (depth(i) < depth_ml) then
-          dh = depth_ml - depth(i)
-        else
-          dh = 0.0
-        endif
+      do k=1,nz
+        call calculate_TFreeze(CS%tv%S(is:ie,j,k), pres(is:ie), T_freeze(is:ie), CS%tv%eqn_of_state)
+        do i=is,ie
+          depth_ml = min(CS%HFrz, CS%visc%MLD(i,j))
+          if (depth(i) + h(i,j,k)*GV%H_to_Z < depth_ml) then
+            dh = h(i,j,k)*GV%H_to_Z
+          elseif (depth(i) < depth_ml) then
+            dh = depth_ml - depth(i)
+          else
+            dh = 0.0
+          endif
 
-        ! p=0 OK, HFrz ~ 10 to 20m
-        call calculate_TFreeze(CS%tv%S(i,j,k), 0.0, T_freeze, CS%tv%eqn_of_state)
-        depth(i) = depth(i) + dh
-        delT(i) =  delT(i) + dh * (CS%tv%T(i,j,k) - T_freeze)
-      enddo ; enddo
+          depth(i) = depth(i) + dh
+          delT(i) =  delT(i) + dh * (CS%tv%T(i,j,k) - T_freeze(i))
+        enddo
+      ! If there is a pressure-dependent freezing point calculation uncomment the following.
+      ! if (k<nz) then ; do i=is,ie
+      !   pres(i) = pres(i) + 0.5*(GV%g_Earth*GV%H_to_RZ) * (h(i,j,k) + h(i,j,k+1))
+      ! enddo ; endif
+      enddo
 
       do i=is,ie
         ! set melt_potential to zero to avoid passing previous values
