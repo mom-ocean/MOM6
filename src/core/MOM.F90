@@ -103,7 +103,8 @@ use MOM_open_boundary,         only : register_temp_salt_segments
 use MOM_open_boundary,         only : open_boundary_register_restarts
 use MOM_open_boundary,         only : update_segment_tracer_reservoirs
 use MOM_open_boundary,         only : rotate_OBC_config, rotate_OBC_init
-use MOM_porous_barriers,       only : porous_barrier_CS, porous_widths, porous_barriers_init
+use MOM_porous_barriers,       only : porous_widths_layer, porous_widths_interface, porous_barriers_init
+use MOM_porous_barriers,       only : porous_barrier_CS
 use MOM_set_visc,              only : set_viscous_BBL, set_viscous_ML
 use MOM_set_visc,              only : set_visc_register_restarts, set_visc_CS
 use MOM_set_visc,              only : set_visc_init, set_visc_end
@@ -1090,7 +1091,7 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_thermo, &
 
   ! Update porous barrier fractional cell metrics
   call enable_averages(dt, Time_local, CS%diag)
-  call porous_widths(h, CS%tv, G, GV, US, CS%pbv, CS%por_bar_CS)
+  call porous_widths_layer(h, CS%tv, G, GV, US, CS%pbv, CS%por_bar_CS)
   call disable_averaging(CS%diag)
   call pass_vector(CS%pbv%por_face_areaU, CS%pbv%por_face_areaV, &
                    G%Domain, direction=To_All+SCALAR_PAIR, clock=id_clock_pass, halo=CS%cont_stencil)
@@ -1419,7 +1420,7 @@ subroutine step_MOM_thermo(CS, G, GV, US, u, v, h, tv, fluxes, dtdia, &
     ! and set_viscous_BBL is called as a part of the dynamic stepping.
     call cpu_clock_begin(id_clock_BBL_visc)
     !update porous barrier fractional cell metrics
-    call porous_widths(h, CS%tv, G, GV, US, CS%pbv, CS%por_bar_CS)
+    call porous_widths_interface(h, CS%tv, G, GV, US, CS%pbv, CS%por_bar_CS)
     call pass_vector(CS%pbv%por_layer_widthU, CS%pbv%por_layer_widthV, &
                      G%Domain, direction=To_ALL+SCALAR_PAIR, clock=id_clock_pass, halo=CS%cont_stencil)
     call set_viscous_BBL(u, v, h, tv, CS%visc, G, GV, US, CS%set_visc_CSp, CS%pbv)
