@@ -50,8 +50,8 @@ type, public :: PointAccel_CS ; private
     v_av => NULL(), &       !< Time average velocity [L T-1 ~> m s-1]
     u_prev => NULL(), &     !< Previous u-velocity [L T-1 ~> m s-1]
     v_prev => NULL(), &     !< Previous v-velocity [L T-1 ~> m s-1]
-    T => NULL(), &          !< Temperature [degC]
-    S => NULL(), &          !< Salinity [ppt]
+    T => NULL(), &          !< Temperature [C ~> degC]
+    S => NULL(), &          !< Salinity [S ~> ppt]
     u_accel_bt => NULL(), & !< Barotropic u-accelerations [L T-2 ~> m s-2]
     v_accel_bt => NULL()    !< Barotropic v-accelerations [L T-2 ~> m s-2]
 end type PointAccel_CS
@@ -94,6 +94,8 @@ subroutine write_u_accel(I, j, um, hin, ADp, CDp, dt, G, GV, US, CS, vel_rpt, st
   real    :: h_scale          ! A scaling factor for thicknesses [m H-1 ~> 1 or m3 kg-1]
   real    :: vel_scale        ! A scaling factor for velocities [m T s-1 L-1 ~> 1]
   real    :: uh_scale         ! A scaling factor for transport per unit length [m2 T s-1 L-1 H-1 ~> 1 or m3 kg-1]
+  real    :: temp_scale       ! A scaling factor for temperatures [degC C-1 ~> 1]
+  real    :: saln_scale       ! A scaling factor for salinities [ppt S-1 ~> 1]
   integer :: yr, mo, day, hr, minute, sec, yearday
   integer :: k, ks, ke
   integer :: nz
@@ -103,6 +105,7 @@ subroutine write_u_accel(I, j, um, hin, ADp, CDp, dt, G, GV, US, CS, vel_rpt, st
 
   Angstrom = GV%Angstrom_H + GV%H_subroundoff
   h_scale = GV%H_to_m ; vel_scale = US%L_T_to_m_s ; uh_scale = GV%H_to_m*US%L_T_to_m_s
+  temp_scale = US%C_to_degC ; saln_scale = US%S_to_ppt
 
 !  if (.not.associated(CS)) return
   nz = GV%ke
@@ -257,15 +260,15 @@ subroutine write_u_accel(I, j, um, hin, ADp, CDp, dt, G, GV, US, CS, vel_rpt, st
     do K=ks+1,ke+1 ; if (do_k(k-1)) write(file,'(ES10.3," ")', advance='no') e(K) ; enddo
     if (associated(CS%T)) then
       write(file,'(/,"T-:    ")', advance='no')
-      do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ")', advance='no') CS%T(i,j,k) ; enddo
+      do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ")', advance='no') temp_scale*CS%T(i,j,k) ; enddo
       write(file,'(/,"T+:    ")', advance='no')
-      do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ")', advance='no') CS%T(i+1,j,k) ; enddo
+      do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ")', advance='no') temp_scale*CS%T(i+1,j,k) ; enddo
     endif
     if (associated(CS%S)) then
       write(file,'(/,"S-:    ")', advance='no')
-      do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ")', advance='no') CS%S(i,j,k) ; enddo
+      do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ")', advance='no') saln_scale*CS%S(i,j,k) ; enddo
       write(file,'(/,"S+:    ")', advance='no')
-      do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ")', advance='no') CS%S(i+1,j,k) ; enddo
+      do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ")', advance='no') saln_scale*CS%S(i+1,j,k) ; enddo
     endif
 
     if (prev_avail) then
@@ -426,6 +429,8 @@ subroutine write_v_accel(i, J, vm, hin, ADp, CDp, dt, G, GV, US, CS, vel_rpt, st
   real    :: h_scale          ! A scaling factor for thicknesses [m H-1 ~> 1 or m3 kg-1]
   real    :: vel_scale        ! A scaling factor for velocities [m T s-1 L-1 ~> 1]
   real    :: uh_scale         ! A scaling factor for transport per unit length [m2 T s-1 L-1 H-1 ~> 1 or m3 kg-1]
+  real    :: temp_scale       ! A scaling factor for temperatures [degC C-1 ~> 1]
+  real    :: saln_scale       ! A scaling factor for salinities [ppt S-1 ~> 1]
   integer :: yr, mo, day, hr, minute, sec, yearday
   integer :: k, ks, ke
   integer :: nz
@@ -435,6 +440,7 @@ subroutine write_v_accel(i, J, vm, hin, ADp, CDp, dt, G, GV, US, CS, vel_rpt, st
 
   Angstrom = GV%Angstrom_H + GV%H_subroundoff
   h_scale = GV%H_to_m ; vel_scale = US%L_T_to_m_s ; uh_scale = GV%H_to_m*US%L_T_to_m_s
+  temp_scale = US%C_to_degC ; saln_scale = US%S_to_ppt
 
 !  if (.not.associated(CS)) return
   nz = GV%ke
@@ -592,15 +598,15 @@ subroutine write_v_accel(i, J, vm, hin, ADp, CDp, dt, G, GV, US, CS, vel_rpt, st
     do K=ks+1,ke+1 ; if (do_k(k-1)) write(file,'(ES10.3," ")', advance='no') e(K) ; enddo
     if (associated(CS%T)) then
       write(file,'(/,"T-:    ")', advance='no')
-      do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ")', advance='no') CS%T(i,j,k) ; enddo
+      do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ")', advance='no') temp_scale*CS%T(i,j,k) ; enddo
       write(file,'(/,"T+:    ")', advance='no')
-      do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ")', advance='no') CS%T(i,j+1,k) ; enddo
+      do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ")', advance='no') temp_scale*CS%T(i,j+1,k) ; enddo
     endif
     if (associated(CS%S)) then
       write(file,'(/,"S-:    ")', advance='no')
-      do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ")', advance='no') CS%S(i,j,k) ; enddo
+      do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ")', advance='no') saln_scale*CS%S(i,j,k) ; enddo
       write(file,'(/,"S+:    ")', advance='no')
-      do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ")', advance='no') CS%S(i,j+1,k) ; enddo
+      do k=ks,ke ; if (do_k(k)) write(file,'(ES10.3," ")', advance='no') saln_scale*CS%S(i,j+1,k) ; enddo
     endif
 
     if (prev_avail) then

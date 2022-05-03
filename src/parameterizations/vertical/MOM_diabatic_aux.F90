@@ -106,7 +106,7 @@ subroutine make_frazil(h, tv, G, GV, US, CS, p_surf, halo)
                            intent(in)    :: h  !< Layer thicknesses [H ~> m or kg m-2]
   type(thermo_var_ptrs),   intent(inout) :: tv !< Structure containing pointers to any available
                                                !! thermodynamic fields.
-  type(unit_scale_type),   intent(in)    :: US   !< A dimensional unit scaling type
+  type(unit_scale_type),   intent(in)    :: US !< A dimensional unit scaling type
   type(diabatic_aux_CS),   intent(in)    :: CS !< The control structure returned by a previous
                                                !! call to diabatic_aux_init.
   real, dimension(SZI_(G),SZJ_(G)), &
@@ -116,12 +116,12 @@ subroutine make_frazil(h, tv, G, GV, US, CS, p_surf, halo)
   ! Local variables
   real, dimension(SZI_(G)) :: &
     fraz_col, & ! The accumulated heat requirement due to frazil [Q R Z ~> J m-2].
-    T_freeze, & ! The freezing potential temperature at the current salinity [degC].
+    T_freeze, & ! The freezing potential temperature at the current salinity [C ~> degC].
     ps          ! Surface pressure [R L2 T-2 ~> Pa]
   real, dimension(SZI_(G),SZK_(GV)) :: &
     pressure    ! The pressure at the middle of each layer [R L2 T-2 ~> Pa].
   real :: H_to_RL2_T2  ! A conversion factor from thicknesses in H to pressure [R L2 T-2 H-1 ~> Pa m-1 or Pa m2 kg-1]
-  real :: hc    ! A layer's heat capacity [Q R Z degC-1 ~> J m-2 degC-1].
+  real :: hc    ! A layer's heat capacity [Q R Z C-1 ~> J m-2 degC-1].
   logical :: T_fr_set  ! True if the freezing point has been calculated for a
                        ! row of points.
   integer :: i, j, k, is, ie, js, je, nz
@@ -228,9 +228,9 @@ subroutine differential_diffuse_T_S(h, T, S, Kd_T, Kd_S, dt, G, GV)
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(in)    :: h    !< Layer thicknesses [H ~> m or kg m-2]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
-                           intent(inout) :: T    !< Potential temperature [degC].
+                           intent(inout) :: T    !< Potential temperature [C ~> degC].
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
-                           intent(inout) :: S    !< Salinity [PSU] or [gSalt/kg], generically [ppt].
+                           intent(inout) :: S    !< Salinity [PSU] or [gSalt/kg], generically [S ~> ppt].
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), &
                            intent(inout)    :: Kd_T !< The extra diffusivity of temperature due to
                                                  !! double diffusion relative to the diffusivity of
@@ -329,8 +329,8 @@ subroutine adjust_salt(h, tv, G, GV, CS)
                                                  !! call to diabatic_aux_init.
 
   ! local variables
-  real :: salt_add_col(SZI_(G),SZJ_(G)) !< The accumulated salt requirement [ppt R Z ~> gSalt m-2]
-  real :: S_min      !< The minimum salinity [ppt].
+  real :: salt_add_col(SZI_(G),SZJ_(G)) !< The accumulated salt requirement [S R Z ~> gSalt m-2]
+  real :: S_min      !< The minimum salinity [S ~> ppt].
   real :: mc         !< A layer's mass [R Z ~> kg m-2].
   integer :: i, j, k, is, ie, js, je, nz
 
@@ -386,8 +386,8 @@ subroutine triDiagTS(G, GV, is, ie, js, je, hold, ea, eb, T, S)
                                                                  !! above within this time step [H ~> m or kg m-2]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)    :: eb !< The amount of fluid entrained from the layer
                                                                  !! below within this time step [H ~> m or kg m-2]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(inout) :: T  !< Layer potential temperatures [degC].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(inout) :: S  !< Layer salinities [ppt].
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(inout) :: T  !< Layer potential temperatures [C ~> degC].
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(inout) :: S  !< Layer salinities [S ~> ppt].
 
   ! Local variables
   real :: b1(SZIB_(G))          ! A variable used by the tridiagonal solver [H-1 ~> m-1 or m2 kg-1].
@@ -434,8 +434,8 @@ subroutine triDiagTS_Eulerian(G, GV, is, ie, js, je, hold, ent, T, S)
                                                                    !! [H ~> m or kg m-2].
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), intent(in)  :: ent  !< The amount of fluid mixed across an interface
                                                                    !! within this time step [H ~> m or kg m-2]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(inout) :: T    !< Layer potential temperatures [degC].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(inout) :: S    !< Layer salinities [ppt].
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(inout) :: T    !< Layer potential temperatures [C ~> degC].
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(inout) :: S    !< Layer salinities [S ~> ppt].
 
   ! Local variables
   real :: b1(SZIB_(G))          ! A variable used by the tridiagonal solver [H-1 ~> m-1 or m2 kg-1].
@@ -672,8 +672,8 @@ subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, GV, US,
   real, dimension(SZI_(G)) :: deltaRhoAtKm1, deltaRhoAtK ! Density differences [R ~> kg m-3].
   real, dimension(SZI_(G)) :: pRef_MLD, pRef_N2 ! Reference pressures [R L2 T-2 ~> Pa].
   real, dimension(SZI_(G)) :: H_subML, dH_N2    ! Summed thicknesses used in N2 calculation [H ~> m].
-  real, dimension(SZI_(G)) :: T_subML, T_deeper ! Temperatures used in the N2 calculation [degC].
-  real, dimension(SZI_(G)) :: S_subML, S_deeper ! Salinities used in the N2 calculation [ppt].
+  real, dimension(SZI_(G)) :: T_subML, T_deeper ! Temperatures used in the N2 calculation [C ~> degC].
+  real, dimension(SZI_(G)) :: S_subML, S_deeper ! Salinities used in the N2 calculation [S ~> ppt].
   real, dimension(SZI_(G)) :: rho_subML, rho_deeper ! Densities used in the N2 calculation [R ~> kg m-3].
   real, dimension(SZI_(G)) :: dK, dKm1          ! Depths [Z ~> m].
   real, dimension(SZI_(G)) :: rhoSurf          ! Density used in finding the mixed layer depth [R ~> kg m-3].
@@ -1036,10 +1036,10 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
                                                !! forcing through each layer [R Z3 T-2 ~> J m-2]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                  optional, intent(out)   :: dSV_dT !< Partial derivative of specific volume with
-                                               !! potential temperature [R-1 degC-1 ~> m3 kg-1 degC-1].
+                                               !! potential temperature [R-1 C-1 ~> m3 kg-1 degC-1].
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                  optional, intent(out)   :: dSV_dS !< Partial derivative of specific volume with
-                                               !! salinity [R-1 ppt-1 ~> m3 kg-1 ppt-1].
+                                               !! salinity [R-1 S-1 ~> m3 kg-1 ppt-1].
   real, dimension(SZI_(G),SZJ_(G)), &
                  optional, intent(out)   :: SkinBuoyFlux !< Buoyancy flux at surface [Z2 T-3 ~> m2 s-3].
 
@@ -1061,32 +1061,32 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
     netMassIn,    &  ! mass entering ocean surface [H ~> m or kg m-2] over a time step
     netMassOut,   &  ! mass leaving ocean surface [H ~> m or kg m-2] over a time step
     netHeat,      &  ! heat via surface fluxes excluding Pen_SW_bnd and netMassOut
-                     ! [degC H ~> degC m or degC kg m-2]
+                     ! [C H ~> degC m or degC kg m-2]
     netSalt,      &  ! surface salt flux ( g(salt)/m2 for non-Bouss and ppt*H for Bouss )
-                     ! [ppt H ~> ppt m or ppt kg m-2]
+                     ! [S H ~> ppt m or ppt kg m-2]
     nonpenSW,     &  ! non-downwelling SW, which is absorbed at ocean surface
-                     ! [degC H ~> degC m or degC kg m-2]
+                     ! [C H ~> degC m or degC kg m-2]
     SurfPressure, &  ! Surface pressure (approximated as 0.0) [R L2 T-2 ~> Pa]
-    dRhodT,       &  ! change in density per change in temperature [R degC-1 ~> kg m-3 degC-1]
-    dRhodS,       &  ! change in density per change in salinity [R ppt-1 ~> kg m-3 ppt-1]
-    netheat_rate, &  ! netheat but for dt=1 [degC H T-1 ~> degC m s-1 or degC kg m-2 s-1]
+    dRhodT,       &  ! change in density per change in temperature [R C-1 ~> kg m-3 degC-1]
+    dRhodS,       &  ! change in density per change in salinity [R S-1 ~> kg m-3 ppt-1]
+    netheat_rate, &  ! netheat but for dt=1 [C H T-1 ~> degC m s-1 or degC kg m-2 s-1]
     netsalt_rate, &  ! netsalt but for dt=1 (e.g. returns a rate)
-                     ! [ppt H T-1 ~> ppt m s-1 or ppt kg m-2 s-1]
+                     ! [S H T-1 ~> ppt m s-1 or ppt kg m-2 s-1]
     netMassInOut_rate! netmassinout but for dt=1 [H T-1 ~> m s-1 or kg m-2 s-1]
   real, dimension(SZI_(G), SZK_(GV)) :: &
     h2d, &           ! A 2-d copy of the thicknesses [H ~> m or kg m-2]
-    T2d, &           ! A 2-d copy of the layer temperatures [degC]
+    T2d, &           ! A 2-d copy of the layer temperatures [C ~> degC]
     pen_TKE_2d, &    ! The TKE required to homogenize the heating by shortwave radiation within
                      ! a layer [R Z3 T-2 ~> J m-2]
-    dSV_dT_2d        ! The partial derivative of specific volume with temperature [R-1 degC-1 ~> m3 kg-1 degC-1]
+    dSV_dT_2d        ! The partial derivative of specific volume with temperature [R-1 C-1 ~> m3 kg-1 degC-1]
   real, dimension(SZI_(G)) :: &
     netPen_rate      ! The surface penetrative shortwave heating rate summed over all bands
-                     ! [degC H T-1 ~> degC m s-1 or degC kg m-2 s-1]
+                     ! [C H T-1 ~> degC m s-1 or degC kg m-2 s-1]
   real, dimension(max(nsw,1),SZI_(G)) :: &
     Pen_SW_bnd, &    ! The penetrative shortwave heating integrated over a timestep by band
-                     ! [degC H ~> degC m or degC kg m-2]
+                     ! [C H ~> degC m or degC kg m-2]
     Pen_SW_bnd_rate  ! The penetrative shortwave heating rate by band
-                     ! [degC H T-1 ~> degC m s-1 or degC kg m-2 s-1]
+                     ! [C H T-1 ~> degC m s-1 or degC kg m-2 s-1]
   real, dimension(max(nsw,1),SZI_(G),SZK_(GV)) :: &
     opacityBand      ! The opacity (inverse of the exponential absorption length) of each frequency
                      ! band of shortwave radiation in each layer [H-1 ~> m-1 or m2 kg-1]
@@ -1190,9 +1190,9 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
     !                note that lprec generally has sea ice melt/form included.
     ! netMassOut   = net mass leaving ocean surface [H ~> m or kg m-2] over a time step.
     !                netMassOut < 0 means mass leaves ocean.
-    ! netHeat      = heat via surface fluxes [degC H ~> degC m or degC kg m-2], excluding the part
+    ! netHeat      = heat via surface fluxes [C H ~> degC m or degC kg m-2], excluding the part
     !                contained in Pen_SW_bnd; and excluding heat_content of netMassOut < 0.
-    ! netSalt      = surface salt fluxes [ppt H ~> ppt m or gSalt m-2]
+    ! netSalt      = surface salt fluxes [S H ~> ppt m or gSalt m-2]
     ! Pen_SW_bnd   = components to penetrative shortwave radiation split according to bands.
     !                This field provides that portion of SW from atmosphere that in fact
     !                enters to the ocean and participates in penetrative SW heating.
@@ -1395,8 +1395,10 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
           elseif (h2d(i,k) < 0.0) then ! h2d==0 is a special limit that needs no extra handling
             call forcing_SinglePointPrint(fluxes,G,i,j,'applyBoundaryFluxesInOut (h<0)')
             write(0,*) 'applyBoundaryFluxesInOut(): lon,lat=',G%geoLonT(i,j),G%geoLatT(i,j)
-            write(0,*) 'applyBoundaryFluxesInOut(): netT,netS,netH=',netHeat(i),netSalt(i),netMassInOut(i)
-            write(0,*) 'applyBoundaryFluxesInOut(): dT,dS,dH=',dTemp,dSalt,dThickness
+            write(0,*) 'applyBoundaryFluxesInOut(): netT,netS,netH=', &
+                US%C_to_degC*netHeat(i), US%S_to_ppt*netSalt(i), netMassInOut(i)
+            write(0,*) 'applyBoundaryFluxesInOut(): dT,dS,dH=', &
+                US%C_to_degC*dTemp, US%S_to_ppt*dSalt, dThickness
             write(0,*) 'applyBoundaryFluxesInOut(): h(n),h(n+1),k=',hOld,h2d(i,k),k
             call MOM_error(FATAL, "MOM_diabatic_aux.F90, applyBoundaryFluxesInOut(): "//&
                            "Complete mass loss in column!")
@@ -1411,7 +1413,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
            call forcing_SinglePointPrint(fluxes,G,i,j,'applyBoundaryFluxesInOut (land)')
            write(0,*) 'applyBoundaryFluxesInOut(): lon,lat=',G%geoLonT(i,j),G%geoLatT(i,j)
            write(0,*) 'applyBoundaryFluxesInOut(): netHeat,netSalt,netMassIn,netMassOut=',&
-                   netHeat(i),netSalt(i),netMassIn(i),netMassOut(i)
+               US%C_to_degC*netHeat(i), US%S_to_ppt*netSalt(i), netMassIn(i), netMassOut(i)
 
            call MOM_error(FATAL, "MOM_diabatic_aux.F90, applyBoundaryFluxesInOut(): "//&
                                  "Mass loss over land?")
@@ -1476,6 +1478,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
 
       ! convergence of SW into a layer
       do k=1,nz ; do i=is,ie
+        ! Note that the units of penSW_diag change here, from [C ~> degC] to [Q R Z T-1 ~> W m-2].
         CS%penSW_diag(i,j,k) = (T2d(i,k)-CS%penSW_diag(i,j,k))*h(i,j,k) * Idt * tv%C_p * GV%H_to_RZ
       enddo ; enddo
 

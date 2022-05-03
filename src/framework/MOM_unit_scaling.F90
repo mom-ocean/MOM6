@@ -30,6 +30,10 @@ type, public :: unit_scale_type
   real :: kg_m3_to_R !< A constant that translates kilograms per meter cubed to the units of density  [R m3 kg-1 ~> 1]
   real :: Q_to_J_kg  !< A constant that translates the units of enthalpy to Joules per kilogram      [J kg-1 Q-1 ~> 1]
   real :: J_kg_to_Q  !< A constant that translates Joules per kilogram to the units of enthalpy        [Q kg J-1 ~> 1]
+  real :: C_to_degC  !< A constant that translates the units of temperature to degrees Celsius    [degC C-1 ~> 1]
+  real :: degC_to_C  !< A constant that translates degrees Celsius to the units of temperature    [C degC-1 ~> 1]
+  real :: S_to_ppt   !< A constant that translates the units of salinity to parts per thousand     [ppt S-1 ~> 1]
+  real :: ppt_to_S   !< A constant that translates parts per thousand to the units of salinity     [S ppt-1 ~> 1]
 
   ! These are useful combinations of the fundamental scale conversion factors above.
   real :: Z_to_L          !< Convert vertical distances to lateral lengths                                [L Z-1 ~> 1]
@@ -68,8 +72,9 @@ subroutine unit_scaling_init( param_file, US )
   ! This routine initializes a unit_scale_type structure (US).
 
   ! Local variables
-  integer :: Z_power, L_power, T_power, R_power, Q_power
+  integer :: Z_power, L_power, T_power, R_power, Q_power, C_power, S_power
   real    :: Z_rescale_factor, L_rescale_factor, T_rescale_factor, R_rescale_factor, Q_rescale_factor
+  real    :: C_rescale_factor, S_rescale_factor
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
   character(len=16) :: mdl = "MOM_unit_scaling"
@@ -99,8 +104,16 @@ subroutine unit_scaling_init( param_file, US )
                units="nondim", default=0, debuggingParam=.true.)
   call get_param(param_file, mdl, "Q_RESCALE_POWER", Q_power, &
                "An integer power of 2 that is used to rescale the model's "//&
-                 "internal units of heat content.  Valid values range from -300 to 300.", &
-                 units="nondim", default=0, debuggingParam=.true.)
+               "internal units of heat content.  Valid values range from -300 to 300.", &
+               units="nondim", default=0, debuggingParam=.true.)
+  call get_param(param_file, mdl, "C_RESCALE_POWER", C_power, &
+               "An integer power of 2 that is used to rescale the model's "//&
+               "internal units of temperature.  Valid values range from -300 to 300.", &
+               units="nondim", default=0, debuggingParam=.true.)
+  call get_param(param_file, mdl, "S_RESCALE_POWER", S_power, &
+               "An integer power of 2 that is used to rescale the model's "//&
+               "internal units of salinity.  Valid values range from -300 to 300.", &
+               units="nondim", default=0, debuggingParam=.true.)
 
   if (abs(Z_power) > 300) call MOM_error(FATAL, "unit_scaling_init: "//&
                  "Z_RESCALE_POWER is outside of the valid range of -300 to 300.")
@@ -112,6 +125,10 @@ subroutine unit_scaling_init( param_file, US )
                  "R_RESCALE_POWER is outside of the valid range of -300 to 300.")
   if (abs(Q_power) > 300) call MOM_error(FATAL, "unit_scaling_init: "//&
                  "Q_RESCALE_POWER is outside of the valid range of -300 to 300.")
+  if (abs(C_power) > 300) call MOM_error(FATAL, "unit_scaling_init: "//&
+                 "C_RESCALE_POWER is outside of the valid range of -300 to 300.")
+  if (abs(S_power) > 300) call MOM_error(FATAL, "unit_scaling_init: "//&
+                 "S_RESCALE_POWER is outside of the valid range of -300 to 300.")
 
   Z_rescale_factor = 1.0
   if (Z_power /= 0) Z_rescale_factor = 2.0**Z_power
@@ -138,6 +155,16 @@ subroutine unit_scaling_init( param_file, US )
   US%Q_to_J_kg = 1.0 * Q_Rescale_factor
   US%J_kg_to_Q = 1.0 / Q_Rescale_factor
 
+  C_Rescale_factor = 1.0
+  if (C_power /= 0) C_Rescale_factor = 2.0**C_power
+  US%C_to_degC = 1.0 * C_Rescale_factor
+  US%degC_to_C = 1.0 / C_Rescale_factor
+
+  S_Rescale_factor = 1.0
+  if (S_power /= 0) S_Rescale_factor = 2.0**S_power
+  US%S_to_ppt = 1.0 * S_Rescale_factor
+  US%ppt_to_S = 1.0 / S_Rescale_factor
+
   call set_unit_scaling_combos(US)
 end subroutine unit_scaling_init
 
@@ -154,6 +181,8 @@ subroutine unit_no_scaling_init(US)
   US%T_to_s = 1.0 ; US%s_to_T = 1.0
   US%R_to_kg_m3 = 1.0 ; US%kg_m3_to_R = 1.0
   US%Q_to_J_kg = 1.0 ; US%J_kg_to_Q = 1.0
+  US%C_to_degC = 1.0 ; US%degC_to_C = 1.0
+  US%S_to_ppt = 1.0 ; US%ppt_to_S = 1.0
 
   call set_unit_scaling_combos(US)
 end subroutine unit_no_scaling_init

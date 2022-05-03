@@ -98,14 +98,14 @@ subroutine PressureForce_FV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1) :: p ! Interface pressure [R L2 T-2 ~> Pa].
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), target :: &
     T_tmp, &    ! Temporary array of temperatures where layers that are lighter
-                ! than the mixed layer have the mixed layer's properties [degC].
+                ! than the mixed layer have the mixed layer's properties [C ~> degC].
     S_tmp       ! Temporary array of salinities where layers that are lighter
-                ! than the mixed layer have the mixed layer's properties [ppt].
+                ! than the mixed layer have the mixed layer's properties [S ~> ppt].
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: &
     S_t, &      ! Top and bottom edge values for linear reconstructions
-    S_b, &      ! of salinity within each layer [ppt].
+    S_b, &      ! of salinity within each layer [S ~> ppt].
     T_t, &      ! Top and bottom edge values for linear reconstructions
-    T_b         ! of temperature within each layer [degC].
+    T_b         ! of temperature within each layer [C ~> degC].
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: &
     dza, &      ! The change in geopotential anomaly between the top and bottom
                 ! of a layer [L2 T-2 ~> m2 s-2].
@@ -467,12 +467,14 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm
 
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), target :: &
     T_tmp, &    ! Temporary array of temperatures where layers that are lighter
-                ! than the mixed layer have the mixed layer's properties [degC].
+                ! than the mixed layer have the mixed layer's properties [C ~> degC].
     S_tmp       ! Temporary array of salinities where layers that are lighter
-                ! than the mixed layer have the mixed layer's properties [ppt].
+                ! than the mixed layer have the mixed layer's properties [S ~> ppt].
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: &
-    S_t, S_b, T_t, T_b ! Top and bottom edge values for linear reconstructions
-                       ! of salinity and temperature within each layer.
+    S_t, &      ! Top and bottom edge values for linear reconstructions
+    S_b, &      ! of salinity within each layer [S ~> ppt].
+    T_t, &      ! Top and bottom edge values for linear reconstructions
+    T_b         ! of temperature within each layer [C ~> degC].
   real :: rho_in_situ(SZI_(G)) ! The in situ density [R ~> kg m-3].
   real :: p_ref(SZI_(G))     !   The pressure used to calculate the coordinate
                              ! density, [R L2 T-2 ~> Pa] (usually 2e7 Pa = 2000 dbar).
@@ -487,9 +489,9 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm
   logical :: use_ALE         ! If true, use an ALE pressure reconstruction.
   logical :: use_EOS         ! If true, density is calculated from T & S using an equation of state.
   type(thermo_var_ptrs) :: tv_tmp! A structure of temporary T & S.
-  real :: Tl(5)              ! copy and T in local stencil [degC]
-  real :: mn_T               ! mean of T in local stencil [degC]
-  real :: mn_T2              ! mean of T**2 in local stencil [degC2]
+  real :: Tl(5)              ! copy and T in local stencil [C ~> degC]
+  real :: mn_T               ! mean of T in local stencil [C ~> degC]
+  real :: mn_T2              ! mean of T**2 in local stencil [C2 ~> degC2]
   real :: hl(5)              ! Copy of local stencil of H [H ~> m]
   real :: r_sm_H             ! Reciprocal of sum of H in local stencil [H-1 ~> m-1]
   real, parameter :: C1_6 = 1.0/6.0
@@ -699,7 +701,7 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm
       ! where the layers are located.
       if ( use_ALE .and. CS%Recon_Scheme > 0 ) then
         if ( CS%Recon_Scheme == 1 ) then
-          call int_density_dz_generic_plm(k, tv,  T_t, T_b, S_t, S_b, e, &
+          call int_density_dz_generic_plm(k, tv, T_t, T_b, S_t, S_b, e, &
                     rho_ref, CS%Rho0, GV%g_Earth, dz_neglect, G%bathyT, &
                     G%HI, GV, tv%eqn_of_state, US, dpa, intz_dpa, intx_dpa, inty_dpa, &
                     useMassWghtInterp=CS%useMassWghtInterp, &
@@ -866,7 +868,7 @@ subroutine PressureForce_FV_init(Time, G, GV, US, param_file, diag, CS, tides_CS
                  "Negative values disable the scheme.", units="nondim", default=-1.0)
   if (CS%Stanley_T2_det_coeff>=0.) then
     CS%id_tvar_sgs = register_diag_field('ocean_model', 'tvar_sgs_pgf', diag%axesTL, &
-        Time, 'SGS temperature variance used in PGF', 'degC2')
+        Time, 'SGS temperature variance used in PGF', 'degC2', conversion=US%C_to_degC**2)
   endif
   if (CS%tides) then
     CS%id_e_tidal = register_diag_field('ocean_model', 'e_tidal', diag%axesT1, &

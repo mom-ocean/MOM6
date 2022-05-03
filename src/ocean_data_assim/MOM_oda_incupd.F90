@@ -324,8 +324,10 @@ subroutine calc_oda_increments(h, tv, u, v, G, GV, US, CS)
                                                  !! that is set by a previous call to initialize_oda_incupd (in).
 
 
-  real, dimension(SZK_(GV)) :: tmp_val1          ! data values on the model grid
-  real, allocatable, dimension(:) :: tmp_val2    ! data values remapped to increment grid
+  real, dimension(SZK_(GV)) :: tmp_val1        ! data values on the model grid, in rescaled units
+                                               ! like [S ~> ppt] for salinity.
+  real, allocatable, dimension(:) :: tmp_val2  ! data values remapped to increment grid, in rescaled units
+                                               ! like [S ~> ppt] for salinity.
   real, allocatable, dimension(:,:,:) :: h_obs !< Layer-thicknesses of increments [H ~> m or kg m-2]
   real, allocatable, dimension(:) :: tmp_h     ! temporary array for corrected h_obs [H ~> m or kg m-2]
   real, allocatable, dimension(:) :: hu_obs  ! A column of observation-grid thicknesses at u points [H ~> m or kg m-2]
@@ -764,9 +766,9 @@ subroutine output_oda_incupd_inc(Time, G, GV, param_file, CS, US)
 
   ! register the variables to write
   call register_restart_field(CS%Inc(1)%p, "T_inc", .true., restart_CSp_tmp, &
-                              "Pot. T. increment", "degC")
+                              "Pot. T. increment", "degC", conversion=US%C_to_degC)
   call register_restart_field(CS%Inc(2)%p, "S_inc", .true., restart_CSp_tmp, &
-                              "Salinity increment", "psu")
+                              "Salinity increment", "psu", conversion=US%S_to_ppt)
   call register_restart_field(CS%Ref_h%p, "h_obs", .true., restart_CSp_tmp, &
                               "Observational h", units=get_thickness_units(GV), conversion=GV%H_to_MKS)
   if (CS%uv_inc) then

@@ -127,7 +127,7 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
   real, dimension(SZK_(GV)) :: &
     Hc, &         !< A column of layer thicknesses after convective instabilities are removed [Z ~> m]
     Tc, &         !< A column of layer temperatures after convective instabilities are removed [C ~> degC]
-    Sc, &         !< A column of layer salinites after convective instabilities are removed [S ~> ppt]
+    Sc, &         !< A column of layer salinities after convective instabilities are removed [S ~> ppt]
     Rc            !< A column of layer densities after convective instabilities are removed [R ~> kg m-3]
   real, dimension(SZI_(G),SZJ_(G)) :: &
     htot              !< The vertical sum of the thicknesses [Z ~> m]
