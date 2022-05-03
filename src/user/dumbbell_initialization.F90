@@ -122,7 +122,7 @@ subroutine dumbbell_initialize_thickness ( h, depth_tot, G, GV, US, param_file, 
   if (.not.just_read) call log_version(param_file, mdl, version, "")
   call get_param(param_file, mdl,"MIN_THICKNESS", min_thickness, &
                 'Minimum thickness for layer',&
-                 units='m', default=1.0e-3, do_not_log=just_read, scale=US%m_to_Z)
+                 units='m', default=1.0e-3, scale=US%m_to_Z, do_not_log=just_read)
   call get_param(param_file, mdl,"REGRIDDING_COORDINATE_MODE", verticalCoordinate, &
                  default=DEFAULT_COORDINATE_MODE, do_not_log=just_read)
 
@@ -205,12 +205,13 @@ end select
 end subroutine dumbbell_initialize_thickness
 
 !> Initial values for temperature and salinity for the dumbbell test case
-subroutine dumbbell_initialize_temperature_salinity ( T, S, h, G, GV, param_file, just_read)
+subroutine dumbbell_initialize_temperature_salinity ( T, S, h, G, GV, US, param_file, just_read)
   type(ocean_grid_type),                     intent(in)  :: G !< Ocean grid structure
-  type(verticalGrid_type),                   intent(in) :: GV !< Vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: T !< Potential temperature [degC]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: S !< Salinity [ppt]
+  type(verticalGrid_type),                   intent(in)  :: GV !< Vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: T !< Potential temperature [C ~> degC]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: S !< Salinity [S ~> ppt]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)  :: h !< Layer thickness [H ~> m or kg m-2]
+  type(unit_scale_type),                     intent(in)  :: US !< A dimensional unit scaling type
   type(param_file_type),                     intent(in)  :: param_file !< Parameter file structure
   logical,                                   intent(in)  :: just_read !< If true, this call will
                                                       !! only read parameters without changing h.
@@ -224,7 +225,7 @@ subroutine dumbbell_initialize_temperature_salinity ( T, S, h, G, GV, param_file
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
-  T_surf = 20.0
+  T_surf = 20.0*US%degC_to_C
 
   call get_param(param_file, mdl, "REGRIDDING_COORDINATE_MODE", verticalCoordinate, &
                  default=DEFAULT_COORDINATE_MODE, do_not_log=just_read)
@@ -232,10 +233,11 @@ subroutine dumbbell_initialize_temperature_salinity ( T, S, h, G, GV, param_file
                  'Initial profile shape. Valid values are "linear", "parabolic" '// &
                  'and "exponential".', default='linear', do_not_log=just_read)
   call get_param(param_file, mdl, "DUMBBELL_SREF", S_surf, &
-                 'DUMBBELL REFERENCE SALINITY', units='1e-3', default=34., do_not_log=just_read)
+                 'DUMBBELL REFERENCE SALINITY', &
+                 units='1e-3', default=34., scale=US%ppt_to_S, do_not_log=just_read)
   call get_param(param_file, mdl, "DUMBBELL_S_RANGE", S_range, &
-                 'DUMBBELL salinity range (right-left)', units='1e-3', default=2., &
-                 do_not_log=just_read)
+                 'DUMBBELL salinity range (right-left)', &
+                 units='1e-3', default=2., scale=US%ppt_to_S, do_not_log=just_read)
   call get_param(param_file, mdl, "DUMBBELL_LEN", dblen, &
                 'Lateral Length scale for dumbbell ', &
                  units='km', default=600., do_not_log=just_read)
@@ -296,7 +298,7 @@ subroutine dumbbell_initialize_sponges(G, GV, US, tv, depth_tot, param_file, use
 
   integer :: i, j, k, nz
   real :: x, min_thickness, dblen
-  real :: S_ref, S_range
+  real :: S_ref, S_range ! Salinities [S ~> ppt]
   logical :: dbrotate    ! If true, rotate the domain.
 
   call get_param(param_file, mdl,"DUMBBELL_LEN",dblen, &
@@ -315,11 +317,15 @@ subroutine dumbbell_initialize_sponges(G, GV, US, tv, depth_tot, param_file, use
   call get_param(param_file, mdl, "DUMBBELL_SPONGE_TIME_SCALE", sponge_time_scale, &
        "The time scale in the reservoir for restoring. If zero, the sponge is disabled.", &
        units="s", default=0., scale=US%s_to_T)
-  call get_param(param_file, mdl, "DUMBBELL_SREF", S_ref, do_not_log=.true.)
-  call get_param(param_file, mdl, "DUMBBELL_S_RANGE", S_range, do_not_log=.true.)
+  call get_param(param_file, mdl, "DUMBBELL_SREF", S_ref, &
+                 'DUMBBELL REFERENCE SALINITY', &
+                 units='1e-3', default=34., scale=US%ppt_to_S, do_not_log=.true.)
+  call get_param(param_file, mdl, "DUMBBELL_S_RANGE", S_range, &
+                 'DUMBBELL salinity range (right-left)', &
+                 units='1e-3', default=2., scale=US%ppt_to_S, do_not_log=.true.)
   call get_param(param_file, mdl,"MIN_THICKNESS", min_thickness, &
                 'Minimum thickness for layer',&
-                 units='m', default=1.0e-3, do_not_log=.true., scale=US%m_to_Z)
+                 units='m', default=1.0e-3, scale=US%m_to_Z, do_not_log=.true.)
 
   ! no active sponges
   if (sponge_time_scale <= 0.) return

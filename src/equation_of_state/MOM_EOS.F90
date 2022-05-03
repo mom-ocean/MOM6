@@ -1536,10 +1536,10 @@ subroutine EOS_init(param_file, EOS, US)
   EOS%R_to_kg_m3 = 1. ; if (present(US)) EOS%R_to_kg_m3 = US%R_to_kg_m3
   EOS%RL2_T2_to_Pa = 1. ; if (present(US)) EOS%RL2_T2_to_Pa = US%RL2_T2_to_Pa
   EOS%L_T_to_m_s = 1. ; if (present(US)) EOS%L_T_to_m_s = US%L_T_to_m_s
-  EOS%degC_to_C = 1. !### ; if (present(US)) EOS%degC_to_C = US%degC_to_C
-  EOS%C_to_degC = 1. !### ; if (present(US)) EOS%C_to_degC = US%C_to_degC
-  EOS%ppt_to_S = 1. !### ; if (present(US)) EOS%ppt_to_S = US%ppt_to_S
-  EOS%S_to_ppt = 1. !### ; if (present(US)) EOS%S_to_ppt = US%S_to_ppt
+  EOS%degC_to_C = 1. ; if (present(US)) EOS%degC_to_C = US%degC_to_C
+  EOS%C_to_degC = 1. ; if (present(US)) EOS%C_to_degC = US%C_to_degC
+  EOS%ppt_to_S = 1. ; if (present(US)) EOS%ppt_to_S = US%ppt_to_S
+  EOS%S_to_ppt = 1. ; if (present(US)) EOS%S_to_ppt = US%S_to_ppt
 
 end subroutine EOS_init
 

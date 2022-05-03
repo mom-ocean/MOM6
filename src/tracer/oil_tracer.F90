@@ -362,7 +362,8 @@ subroutine oil_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, US
       if (CS%oil_decay_rate(m)>0.) then
         CS%tr(i,j,k,m) = G%mask2dT(i,j)*max(1. - dt*CS%oil_decay_rate(m),0.)*CS%tr(i,j,k,m) ! Safest
       elseif (CS%oil_decay_rate(m)<0.) then
-        decay_timescale = (12.*(3.0**(-(tv%T(i,j,k)-20.)/10.))) * (86400.*US%s_to_T) ! Timescale [s ~> T]
+        decay_timescale = (12.0 * (3.0**(-(tv%T(i,j,k)-20.0*US%degC_to_C)/10.0*US%degC_to_C))) * &
+                          (86400.0*US%s_to_T) ! Timescale [s ~> T]
         ldecay = 1. / decay_timescale ! Rate [T-1 ~> s-1]
         CS%tr(i,j,k,m) = G%mask2dT(i,j)*max(1. - dt*ldecay,0.)*CS%tr(i,j,k,m)
       endif

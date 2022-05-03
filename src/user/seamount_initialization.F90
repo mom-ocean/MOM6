@@ -188,12 +188,13 @@ end select
 end subroutine seamount_initialize_thickness
 
 !> Initial values for temperature and salinity
-subroutine seamount_initialize_temperature_salinity(T, S, h, G, GV, param_file, just_read)
+subroutine seamount_initialize_temperature_salinity(T, S, h, G, GV, US, param_file, just_read)
   type(ocean_grid_type),                     intent(in)  :: G !< Ocean grid structure
   type(verticalGrid_type),                   intent(in)  :: GV !< Vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: T !< Potential temperature [degC]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: S !< Salinity [ppt]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)  :: h !< Layer thickness [H ~> m or kg m-2]
+  type(unit_scale_type),                     intent(in)  :: US !< A dimensional unit scaling type
   type(param_file_type),                     intent(in)  :: param_file !< Parameter file structure
   logical,                                   intent(in)  :: just_read !< If true, this call will
                                                       !! only read parameters without changing T & S.
@@ -212,25 +213,31 @@ subroutine seamount_initialize_temperature_salinity(T, S, h, G, GV, param_file, 
                  'Initial profile shape. Valid values are "linear", "parabolic" '//&
                  'and "exponential".', default='linear', do_not_log=just_read)
   call get_param(param_file, mdl,"INITIAL_SSS", S_surf, &
-                 'Initial surface salinity', units='1e-3', default=34., do_not_log=just_read)
+                 'Initial surface salinity', &
+                 units='1e-3', default=34., scale=US%ppt_to_S, do_not_log=just_read)
   call get_param(param_file, mdl,"INITIAL_SST", T_surf, &
-                 'Initial surface temperature', units='C', default=0., do_not_log=just_read)
+                 'Initial surface temperature', &
+                 units='C', default=0., scale=US%degC_to_C, do_not_log=just_read)
   call get_param(param_file, mdl,"INITIAL_S_RANGE", S_range, &
-                 'Initial salinity range (bottom - surface)', units='1e-3', &
-                 default=2., do_not_log=just_read)
+                 'Initial salinity range (bottom - surface)', &
+                 units='1e-3', default=2., scale=US%ppt_to_S, do_not_log=just_read)
   call get_param(param_file, mdl,"INITIAL_T_RANGE", T_range, &
-                 'Initial temperature range (bottom - surface)', units='C', &
-                 default=0., do_not_log=just_read)
+                 'Initial temperature range (bottom - surface)', &
+                 units='C', default=0., scale=US%degC_to_C, do_not_log=just_read)
 
   select case ( coordinateMode(verticalCoordinate) )
     case ( REGRIDDING_LAYER ) ! Initial thicknesses for layer isopycnal coordinates
       ! These parameters are used in MOM_fixed_initialization.F90 when CONFIG_COORD="ts_range"
       call get_param(param_file, mdl, "T_REF", T_ref, default=10.0, do_not_log=.true.)
-      call get_param(param_file, mdl, "TS_RANGE_T_LIGHT", T_light, default=T_Ref, do_not_log=.true.)
-      call get_param(param_file, mdl, "TS_RANGE_T_DENSE", T_dense, default=T_Ref, do_not_log=.true.)
+      call get_param(param_file, mdl, "TS_RANGE_T_LIGHT", T_light, &
+                 default=T_Ref, scale=US%degC_to_C, do_not_log=.true.)
+      call get_param(param_file, mdl, "TS_RANGE_T_DENSE", T_dense, &
+                 default=T_Ref, scale=US%degC_to_C, do_not_log=.true.)
       call get_param(param_file, mdl, "S_REF", S_ref, default=35.0, do_not_log=.true.)
-      call get_param(param_file, mdl, "TS_RANGE_S_LIGHT", S_light, default = S_Ref, do_not_log=.true.)
-      call get_param(param_file, mdl, "TS_RANGE_S_DENSE", S_dense, default = S_Ref, do_not_log=.true.)
+      call get_param(param_file, mdl, "TS_RANGE_S_LIGHT", S_light, &
+                 default = S_Ref, scale=US%ppt_to_S, do_not_log=.true.)
+      call get_param(param_file, mdl, "TS_RANGE_S_DENSE", S_dense, &
+                 default = S_Ref, scale=US%ppt_to_S, do_not_log=.true.)
       call get_param(param_file, mdl, "TS_RANGE_RESOLN_RATIO", res_rat, default=1.0, do_not_log=.true.)
       if (just_read) return ! All run-time parameters have been read, so return.
 
