@@ -76,7 +76,7 @@ type, public :: energetic_PBL_CS ; private
                              !! boundary layer thickness.  The default is 0, but a
                              !! value of 0.1 might be better justified by observations.
   real    :: MLD_tol         !< A tolerance for determining the boundary layer thickness when
-                             !! Use_MLD_iteration is true [Z ~> m].
+                             !! Use_MLD_iteration is true [H ~> m or kg m-2].
   real    :: min_mix_len     !< The minimum mixing length scale that will be used by ePBL [Z ~> m].
                              !! The default (0) does not set a minimum.
 
@@ -634,9 +634,9 @@ subroutine ePBL_column(h, u, v, T0, S0, dSV_dT, dSV_dS, TKE_forcing, B_flux, abs
   real :: dt_h      ! The timestep divided by the averages of the thicknesses around
                     ! a layer, times a thickness conversion factor [H T Z-2 ~> s m-1 or kg s m-4].
   real :: h_bot     ! The distance from the bottom [H ~> m or kg m-2].
-  real :: h_rsum    ! The running sum of h from the top [Z ~> m].
+  real :: h_rsum    ! The running sum of h from the top [H ~> m or kg m-2].
   real :: I_hs      ! The inverse of h_sum [H-1 ~> m-1 or m2 kg-1].
-  real :: I_MLD     ! The inverse of the current value of MLD [Z-1 ~> m-1].
+  real :: I_MLD     ! The inverse of the current value of MLD [H-1 ~> m-1 or m2 kg-1].
   real :: h_tt      ! The distance from the surface or up to the next interface
                     ! that did not exhibit turbulent mixing from this scheme plus
                     ! a surface mixing roughness length given by h_tt_min [H ~> m or kg m-2].
@@ -648,7 +648,7 @@ subroutine ePBL_column(h, u, v, T0, S0, dSV_dT, dSV_dS, TKE_forcing, B_flux, abs
   real :: vstar     ! An in-situ turbulent velocity [Z T-1 ~> m s-1].
   real :: mstar_total ! The value of mstar used in ePBL [nondim]
   real :: mstar_LT  ! An addition to mstar due to Langmuir turbulence [nondim] (output for diagnostic)
-  real :: MLD_output ! The mixed layer depth output from this routine [Z ~> m].
+  real :: MLD_output ! The mixed layer depth output from this routine [H ~> m or kg m-2].
   real :: LA        ! The value of the Langmuir number [nondim]
   real :: LAmod     ! The modified Langmuir number by convection [nondim]
   real :: hbs_here  ! The local minimum of hb_hs and MixLen_shape, times a
@@ -706,8 +706,9 @@ subroutine ePBL_column(h, u, v, T0, S0, dSV_dT, dSV_dS, TKE_forcing, B_flux, abs
   !----------------------------------------------------------------------
   !/BGR added Aug24,2016 for adding iteration to get boundary layer depth
   !    - needed to compute new mixing length.
-  real :: MLD_guess, MLD_found ! Mixing Layer depth guessed/found for iteration [Z ~> m].
-  real :: min_MLD   ! Iteration bounds [Z ~> m], which are adjusted at each step
+  real :: MLD_guess, MLD_found ! Mixing Layer depth guessed/found for iteration [H ~> m or kg m-2].
+  real :: MLD_guess_Z  ! A guessed mixed layer depth, converted to height units [Z ~> m]
+  real :: min_MLD   ! Iteration bounds [H ~> m or kg m-2], which are adjusted at each step
   real :: max_MLD   !  - These are initialized based on surface/bottom
                     !  1. The iteration guesses a value (possibly from prev step or neighbor).
                     !  2. The iteration checks if value is converged, too shallow, or too deep.
@@ -720,8 +721,8 @@ subroutine ePBL_column(h, u, v, T0, S0, dSV_dT, dSV_dS, TKE_forcing, B_flux, abs
                     !    manner giving a usable guess. When it does fail, it is due to convection
                     !    within the boundary layer.  Likely, a new method e.g. surface_disconnect,
                     !    can improve this.
-  real :: dMLD_min  ! The change in diagnosed mixed layer depth when the guess is min_MLD [Z ~> m]
-  real :: dMLD_max  ! The change in diagnosed mixed layer depth when the guess is max_MLD [Z ~> m]
+  real :: dMLD_min  ! The change in diagnosed mixed layer depth when the guess is min_MLD [H ~> m or kg m-2]
+  real :: dMLD_max  ! The change in diagnosed mixed layer depth when the guess is max_MLD [H ~> m or kg m-2]
   logical :: OBL_converged ! Flag for convergence of MLD
   integer :: OBL_it        ! Iteration counter
 
@@ -754,7 +755,7 @@ subroutine ePBL_column(h, u, v, T0, S0, dSV_dT, dSV_dS, TKE_forcing, B_flux, abs
   I_dtrho = 0.0 ; if (dt*GV%Rho0 > 0.0) I_dtrho = (US%Z_to_m**3*US%s_to_T**3) / (dt*GV%Rho0)
   vstar_unit_scale = US%m_to_Z * US%T_to_s
 
-  MLD_guess = MLD_io
+  MLD_guess = MLD_io*GV%Z_to_H
 
 !   Determine the initial mech_TKE and conv_PErel, including the energy required
 ! to mix surface heating through the topmost cell, the energy released by mixing
@@ -787,15 +788,15 @@ subroutine ePBL_column(h, u, v, T0, S0, dSV_dT, dSV_dS, TKE_forcing, B_flux, abs
     hb_hs(K) = h_bot * I_hs
   enddo
 
-  MLD_output = h(1)*GV%H_to_Z
+  MLD_output = h(1)
 
   !/The following lines are for the iteration over MLD
   ! max_MLD will initialized as ocean bottom depth
-  max_MLD = 0.0 ; do k=1,nz ; max_MLD = max_MLD + h(k)*GV%H_to_Z ; enddo
+  max_MLD = 0.0 ; do k=1,nz ; max_MLD = max_MLD + h(k) ; enddo
   ! min_MLD will be initialized to 0.
   min_MLD = 0.0
   ! Set values of the wrong signs to indicate that these changes are not based on valid estimates
-  dMLD_min = -1.0*US%m_to_Z ; dMLD_max = 1.0*US%m_to_Z
+  dMLD_min = -1.0*GV%m_to_H ; dMLD_max = 1.0*GV%m_to_H
 
   ! If no first guess is provided for MLD, try the middle of the water column
   if (MLD_guess <= min_MLD) MLD_guess = 0.5 * (min_MLD + max_MLD)
@@ -811,18 +812,19 @@ subroutine ePBL_column(h, u, v, T0, S0, dSV_dT, dSV_dS, TKE_forcing, B_flux, abs
       if (debug) then ; mech_TKE_k(:) = 0.0 ; conv_PErel_k(:) = 0.0 ; endif
 
       ! Reset ML_depth
-      MLD_output = h(1)*GV%H_to_Z
+      MLD_output = h(1)
       sfc_connected = .true.
 
       !/ Here we get MStar, which is the ratio of convective TKE driven mixing to UStar**3
+      MLD_guess_z = GV%H_to_Z*MLD_guess  ! Convert MLD from thickness to height coordinates for these calls
       if (CS%Use_LT) then
-        call get_Langmuir_Number(LA, G, GV, US, abs(MLD_guess), u_star_mean, i, j, h, Waves, &
+        call get_Langmuir_Number(LA, G, GV, US, abs(MLD_guess_z), u_star_mean, i, j, h, Waves, &
                                  U_H=u, V_H=v)
-        call find_mstar(CS, US, B_flux, u_star, u_star_Mean, MLD_Guess, absf, &
+        call find_mstar(CS, US, B_flux, u_star, u_star_Mean, MLD_guess_z, absf, &
                         MStar_total, Langmuir_Number=La, Convect_Langmuir_Number=LAmod,&
                         mstar_LT=mstar_LT)
       else
-        call find_mstar(CS, US, B_flux, u_star, u_star_mean, MLD_guess, absf, mstar_total)
+        call find_mstar(CS, US, B_flux, u_star, u_star_mean, MLD_guess_z, absf, mstar_total)
       endif
 
       !/ Apply MStar to get mech_TKE
@@ -879,7 +881,7 @@ subroutine ePBL_column(h, u, v, T0, S0, dSV_dT, dSV_dS, TKE_forcing, B_flux, abs
         h_rsum = 0.0
         MixLen_shape(1) = 1.0
         do K=2,nz+1
-          h_rsum = h_rsum + h(k-1)*GV%H_to_Z
+          h_rsum = h_rsum + h(k-1)
           if (CS%MixLenExponent==2.0) then
             MixLen_shape(K) = CS%transLay_scale + (1.0 - CS%transLay_scale) * &
                  (max(0.0, (MLD_guess - h_rsum)*I_MLD) )**2 ! CS%MixLenExponent
@@ -1076,7 +1078,7 @@ subroutine ePBL_column(h, u, v, T0, S0, dSV_dT, dSV_dS, TKE_forcing, B_flux, abs
             if (CS%wT_scheme==wT_from_cRoot_TKE) then
               vstar = CS%vstar_scale_fac * vstar_unit_scale * (I_dtrho*TKE_here)**C1_3
             elseif (CS%wT_scheme==wT_from_RH18) then
-              Surface_Scale = max(0.05, 1.0 - htot * GV%H_to_Z / MLD_guess)
+              Surface_Scale = max(0.05, 1.0 - htot / MLD_guess)
               vstar = CS%vstar_scale_fac * Surface_Scale * (CS%vstar_surf_fac*u_star + &
                         vstar_unit_scale * (CS%wstar_ustar_coef*conv_PErel*I_dtrho)**C1_3)
             endif
@@ -1125,7 +1127,7 @@ subroutine ePBL_column(h, u, v, T0, S0, dSV_dT, dSV_dS, TKE_forcing, B_flux, abs
                 if (CS%wT_scheme==wT_from_cRoot_TKE) then
                   vstar = CS%vstar_scale_fac * vstar_unit_scale * (I_dtrho*TKE_here)**C1_3
                 elseif (CS%wT_scheme==wT_from_RH18) then
-                  Surface_Scale = max(0.05, 1. - htot * GV%H_to_Z / MLD_guess)
+                  Surface_Scale = max(0.05, 1. - htot / MLD_guess)
                   vstar = CS%vstar_scale_fac * Surface_Scale * (CS%vstar_surf_fac*u_star + &
                                   vstar_unit_scale * (CS%wstar_ustar_coef*conv_PErel*I_dtrho)**C1_3)
                 endif
@@ -1178,7 +1180,7 @@ subroutine ePBL_column(h, u, v, T0, S0, dSV_dT, dSV_dS, TKE_forcing, B_flux, abs
               eCD%dTKE_MKE = eCD%dTKE_MKE + MKE_src * I_dtdiag
             endif
             if (sfc_connected) then
-              MLD_output = MLD_output + GV%H_to_Z * h(k)
+              MLD_output = MLD_output + h(k)
             endif
 
             Kddt_h(K) = Kd(K) * dt_h
@@ -1202,7 +1204,7 @@ subroutine ePBL_column(h, u, v, T0, S0, dSV_dT, dSV_dS, TKE_forcing, B_flux, abs
             mech_TKE = TKE_reduc*(mech_TKE + MKE_src)
             conv_PErel = TKE_reduc*conv_PErel
             if (sfc_connected) then
-              MLD_output = MLD_output + GV%H_to_Z * h(k)
+              MLD_output = MLD_output + h(k)
             endif
 
           elseif (tot_TKE == 0.0) then
@@ -1303,7 +1305,7 @@ subroutine ePBL_column(h, u, v, T0, S0, dSV_dT, dSV_dS, TKE_forcing, B_flux, abs
             endif
 
             if (sfc_connected) MLD_output = MLD_output + &
-                 (PE_chg / (PE_chg_g0)) * GV%H_to_Z * h(k)
+                 (PE_chg / (PE_chg_g0)) * h(k)
 
             tot_TKE = 0.0 ; mech_TKE = 0.0 ; conv_PErel = 0.0
             sfc_disconnect = .true.
@@ -1422,7 +1424,7 @@ subroutine ePBL_column(h, u, v, T0, S0, dSV_dT, dSV_dS, TKE_forcing, B_flux, abs
     eCD%LA = 0.0 ; eCD%LAmod = 0.0 ; eCD%mstar = mstar_total ; eCD%mstar_LT = 0.0
   endif
 
-  MLD_io = MLD_output
+  MLD_io = GV%H_to_Z*MLD_output
 
 end subroutine ePBL_column
 
@@ -2125,7 +2127,7 @@ subroutine energetic_PBL_init(Time, G, GV, US, param_file, diag, CS)
   call get_param(param_file, mdl, "EPBL_MLD_TOLERANCE", CS%MLD_tol, &
                  "The tolerance for the iteratively determined mixed "//&
                  "layer depth.  This is only used with USE_MLD_ITERATION.", &
-                 units="meter", default=1.0, scale=US%m_to_Z, do_not_log=.not.CS%Use_MLD_iteration)
+                 units="meter", default=1.0, scale=GV%m_to_H, do_not_log=.not.CS%Use_MLD_iteration)
   call get_param(param_file, mdl, "EPBL_MLD_BISECTION", CS%MLD_bisection, &
                  "If true, use bisection with the iterative determination of the self-consistent "//&
                  "mixed layer depth.  Otherwise use the false position after a maximum and minimum "//&

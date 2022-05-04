@@ -1046,7 +1046,8 @@ subroutine find_PE_chg(Kddt_h0, dKddt_h, hp_a, hp_b, Th_a, Sh_a, Th_b, Sh_b, &
   real :: ColHt_core ! The diffusivity-independent core term in the expressions
                      ! for the column height changes [R L2 T-2 ~> J m-3].
   real :: ColHt_chg  ! The change in the column height [Z ~> m].
-  real :: y1   ! A local temporary term, in [H-3] or [H-4] in various contexts.
+  real :: y1_3 ! A local temporary term in [H-3 ~> m-3 or m6 kg-3].
+  real :: y1_4 ! A local temporary term in [H-4 ~> m-4 or m8 kg-4].
 
   !   The expression for the change in potential energy used here is derived
   ! from the expression for the final estimates of the changes in temperature
@@ -1068,37 +1069,37 @@ subroutine find_PE_chg(Kddt_h0, dKddt_h, hp_a, hp_b, Th_a, Sh_a, Th_b, Sh_b, &
   if (present(PE_chg)) then
     ! Find the change in column potential energy due to the change in the
     ! diffusivity at this interface by dKddt_h.
-    y1 = dKddt_h / (bdt1 * (bdt1 + dKddt_h * hps))
-    PE_chg = PEc_core * y1
-    ColHt_chg = ColHt_core * y1
+    y1_3 = dKddt_h / (bdt1 * (bdt1 + dKddt_h * hps))
+    PE_chg = PEc_core * y1_3
+    ColHt_chg = ColHt_core * y1_3
     if (ColHt_chg < 0.0) PE_chg = PE_chg - pres_Z * ColHt_chg
     if (present(ColHt_cor)) ColHt_cor = -pres_Z * min(ColHt_chg, 0.0)
   elseif (present(ColHt_cor)) then
-    y1 = dKddt_h / (bdt1 * (bdt1 + dKddt_h * hps))
-    ColHt_cor = -pres_Z * min(ColHt_core * y1, 0.0)
+    y1_3 = dKddt_h / (bdt1 * (bdt1 + dKddt_h * hps))
+    ColHt_cor = -pres_Z * min(ColHt_core * y1_3, 0.0)
   endif
 
   if (present(dPEc_dKd)) then
     ! Find the derivative of the potential energy change with dKddt_h.
-    y1 = 1.0 / (bdt1 + dKddt_h * hps)**2
-    dPEc_dKd = PEc_core * y1
-    ColHt_chg = ColHt_core * y1
+    y1_4 = 1.0 / (bdt1 + dKddt_h * hps)**2
+    dPEc_dKd = PEc_core * y1_4
+    ColHt_chg = ColHt_core * y1_4
     if (ColHt_chg < 0.0) dPEc_dKd = dPEc_dKd - pres_Z * ColHt_chg
   endif
 
   if (present(dPE_max)) then
     ! This expression is the limit of PE_chg for infinite dKddt_h.
-    y1 = 1.0 / (bdt1 * hps)
-    dPE_max = PEc_core * y1
-    ColHt_chg = ColHt_core * y1
+    y1_3 = 1.0 / (bdt1 * hps)
+    dPE_max = PEc_core * y1_3
+    ColHt_chg = ColHt_core * y1_3
     if (ColHt_chg < 0.0) dPE_max = dPE_max - pres_Z * ColHt_chg
   endif
 
   if (present(dPEc_dKd_0)) then
     ! This expression is the limit of dPEc_dKd for dKddt_h = 0.
-    y1 = 1.0 / bdt1**2
-    dPEc_dKd_0 = PEc_core * y1
-    ColHt_chg = ColHt_core * y1
+    y1_4 = 1.0 / bdt1**2
+    dPEc_dKd_0 = PEc_core * y1_4
+    ColHt_chg = ColHt_core * y1_4
     if (ColHt_chg < 0.0) dPEc_dKd_0 = dPEc_dKd_0 - pres_Z * ColHt_chg
   endif
 

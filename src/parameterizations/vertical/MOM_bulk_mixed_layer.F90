@@ -230,7 +230,7 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, GV, US, C
   integer, dimension(SZI_(G),SZK_(GV)) :: &
     ksort       !   The sorted k-index that each original layer goes to.
   real, dimension(SZI_(G),SZJ_(G)) :: &
-    h_miss      !   The summed absolute mismatch [Z ~> m].
+    h_miss      !   The summed absolute mismatch [H ~> m or kg m-2].
   real, dimension(SZI_(G)) :: &
     TKE, &      !   The turbulent kinetic energy available for mixing over a
                 ! time step [Z L2 T-2 ~> m3 s-2].
@@ -299,12 +299,12 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, GV, US, C
                 ! adjustment [Z L2 T-2 ~> m3 s-2].
   real, dimension(SZI_(G),SZJ_(G)) :: &
     Hsfc_max, & ! The thickness of the surface region (mixed and buffer layers)
-                ! after entrainment but before any buffer layer detrainment [Z ~> m].
+                ! after entrainment but before any buffer layer detrainment [H ~> m or kg m-2].
     Hsfc_used, & ! The thickness of the surface region after buffer layer
-                ! detrainment [Z ~> m].
+                ! detrainment [H ~> m or kg m-2].
     Hsfc_min, & ! The minimum thickness of the surface region based on the
                 ! new mixed layer depth and the previous thickness of the
-                ! neighboring water columns [Z ~> m].
+                ! neighboring water columns [H ~> m or kg m-2].
     h_sum, &    ! The total thickness of the water column [H ~> m or kg m-2].
     hmbl_prev   ! The previous thickness of the mixed and buffer layers [H ~> m or kg m-2].
   real, dimension(SZI_(G)) :: &
@@ -538,7 +538,7 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, GV, US, C
       h(i,0) = htot(i)
     endif ; enddo
     if (write_diags .and. allocated(CS%ML_depth)) then ; do i=is,ie
-      CS%ML_depth(i,j) = h(i,0) * GV%H_to_m  ! Rescale the diagnostic.
+      CS%ML_depth(i,j) = h(i,0)  ! Store the diagnostic.
     enddo ; endif
     if (associated(Hml)) then ; do i=is,ie
       Hml(i,j) = G%mask2dT(i,j) * (h(i,0) * GV%H_to_Z) ! Rescale the diagnostic for output.
@@ -573,14 +573,14 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, GV, US, C
                           hmbl_prev(i,j-1) - dHD*min(h_sum(i,j),h_sum(i,j-1)), &
                           hmbl_prev(i,j+1) - dHD*min(h_sum(i,j),h_sum(i,j+1))) )
 
-          Hsfc_min(i,j) = GV%H_to_Z * max(h(i,0), min(Hsfc(i), H_nbr))
+          Hsfc_min(i,j) = max(h(i,0), min(Hsfc(i), H_nbr))
 
           if (CS%limit_det) max_BL_det(i) = max(0.0, Hsfc(i)-H_nbr)
         enddo
       endif
 
       if (CS%id_Hsfc_max > 0) then ; do i=is,ie
-        Hsfc_max(i,j) = GV%H_to_Z * Hsfc(i)
+        Hsfc_max(i,j) = Hsfc(i)
       enddo ; endif
     endif
 
@@ -601,9 +601,9 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, GV, US, C
     endif
 
     if (CS%id_Hsfc_used > 0) then
-      do i=is,ie ; Hsfc_used(i,j) = GV%H_to_Z * h(i,0) ; enddo
+      do i=is,ie ; Hsfc_used(i,j) = h(i,0) ; enddo
       do k=CS%nkml+1,nkmb ; do i=is,ie
-        Hsfc_used(i,j) = Hsfc_used(i,j) + GV%H_to_Z * h(i,k)
+        Hsfc_used(i,j) = Hsfc_used(i,j) + h(i,k)
       enddo ; enddo
     endif
 
@@ -686,15 +686,15 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, GV, US, C
 
     if (CS%id_h_mismatch > 0) then
       do i=is,ie
-        h_miss(i,j) = GV%H_to_Z * abs(h_3d(i,j,1) - (h_orig(i,1) + &
+        h_miss(i,j) = abs(h_3d(i,j,1) - (h_orig(i,1) + &
           (eaml(i,1) + (ebml(i,1) - eaml(i,1+1)))))
       enddo
       do k=2,nz-1 ; do i=is,ie
-        h_miss(i,j) = h_miss(i,j) + GV%H_to_Z * abs(h_3d(i,j,k) - (h_orig(i,k) + &
+        h_miss(i,j) = h_miss(i,j) + abs(h_3d(i,j,k) - (h_orig(i,k) + &
           ((eaml(i,k) - ebml(i,k-1)) + (ebml(i,k) - eaml(i,k+1)))))
       enddo ; enddo
       do i=is,ie
-        h_miss(i,j) = h_miss(i,j) + GV%H_to_Z * abs(h_3d(i,j,nz) - (h_orig(i,nz) + &
+        h_miss(i,j) = h_miss(i,j) + abs(h_3d(i,j,nz) - (h_orig(i,nz) + &
           ((eaml(i,nz) - ebml(i,nz-1)) + ebml(i,nz))))
       enddo
     endif
@@ -3501,7 +3501,7 @@ subroutine bulkmixedlayer_init(Time, G, GV, US, param_file, diag, CS)
                  "during mixedlayer convection.", default=.false.)
 
   CS%id_ML_depth = register_diag_field('ocean_model', 'h_ML', diag%axesT1, &
-      Time, 'Surface mixed layer depth', 'm')
+      Time, 'Surface mixed layer depth', 'm', conversion=GV%H_to_m)
   CS%id_TKE_wind = register_diag_field('ocean_model', 'TKE_wind', diag%axesT1, &
       Time, 'Wind-stirring source of mixed layer TKE', &
       'm3 s-3', conversion=US%Z_to_m*(US%L_to_m**2)*(US%s_to_T**3))
@@ -3533,13 +3533,13 @@ subroutine bulkmixedlayer_init(Time, G, GV, US, param_file, diag, CS)
       Time, 'Spurious source of potential energy from mixed layer only detrainment', &
       'W m-2', conversion=US%RZ3_T3_to_W_m2*US%L_to_Z**2)
   CS%id_h_mismatch = register_diag_field('ocean_model', 'h_miss_ML', diag%axesT1, &
-      Time, 'Summed absolute mismatch in entrainment terms', 'm', conversion=US%Z_to_m)
+      Time, 'Summed absolute mismatch in entrainment terms', 'm', conversion=GV%H_to_m)
   CS%id_Hsfc_used = register_diag_field('ocean_model', 'Hs_used', diag%axesT1, &
-      Time, 'Surface region thickness that is used', 'm', conversion=US%Z_to_m)
+      Time, 'Surface region thickness that is used', 'm', conversion=GV%H_to_m)
   CS%id_Hsfc_max = register_diag_field('ocean_model', 'Hs_max', diag%axesT1, &
-      Time, 'Maximum surface region thickness', 'm', conversion=US%Z_to_m)
+      Time, 'Maximum surface region thickness', 'm', conversion=GV%H_to_m)
   CS%id_Hsfc_min = register_diag_field('ocean_model', 'Hs_min', diag%axesT1, &
-      Time, 'Minimum surface region thickness', 'm', conversion=US%Z_to_m)
+      Time, 'Minimum surface region thickness', 'm', conversion=GV%H_to_m)
  !CS%lim_det_dH_sfc = 0.5 ; CS%lim_det_dH_bathy = 0.2 ! Technically these should not get used if limit_det is false?
   if (CS%limit_det .or. (CS%id_Hsfc_min > 0)) then
     call get_param(param_file, mdl, "LIMIT_BUFFER_DET_DH_SFC", CS%lim_det_dH_sfc, &
