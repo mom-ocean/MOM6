@@ -882,6 +882,11 @@ subroutine remap_all_state_vars(CS, G, GV, h_old, h_new, Reg, OBC, &
                                 h_neglect, h_neglect_edge)
         endif
 
+        ! Possibly underflow any very tiny tracer concentrations to 0.  Note that this is not conservative!
+        if (Tr%conc_underflow > 0.0) then ; do k=1,GV%ke
+          if (abs(tr_column(k)) < Tr%conc_underflow) tr_column(k) = 0.0
+        enddo ; endif
+
         ! Intermediate steps for tendency of tracer concentration and tracer content.
         if (present(dt)) then
           if (Tr%id_remap_conc > 0) then
@@ -895,6 +900,7 @@ subroutine remap_all_state_vars(CS, G, GV, h_old, h_new, Reg, OBC, &
             enddo
           endif
         endif
+
         ! update tracer concentration
         Tr%t(i,j,:) = tr_column(:)
       endif ; enddo ; enddo

@@ -1799,6 +1799,8 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   integer :: nkml, nkbl, verbosity, write_geom
   integer :: dynamics_stencil  ! The computational stencil for the calculations
                                ! in the dynamic core.
+  real :: salin_underflow      ! A tiny value of salinity below which the it is set to 0 [S ~> ppt]
+  real :: temp_underflow       ! A tiny magnitude of temperatures below which they are set to 0 [C ~> degC]
   real :: conv2watt            ! A conversion factor from temperature fluxes to heat
                                ! fluxes [J m-2 H-1 degC-1 ~> J m-3 degC-1 or J kg-1 degC-1]
   real :: conv2salt            ! A conversion factor for salt fluxes [m H-1 ~> 1] or [kg m-2 H-1 ~> 1]
@@ -2022,6 +2024,13 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
     call get_param(param_file, "MOM", "MIN_SALINITY", CS%tv%min_salinity, &
                  "The minimum value of salinity when BOUND_SALINITY=True.", &
                  units="PPT", default=0.0, scale=US%ppt_to_S, do_not_log=.not.bound_salinity)
+    call get_param(param_file, "MOM", "SALINITY_UNDERFLOW", salin_underflow, &
+                 "A tiny value of salinity below which the it is set to 0.  For reference, "//&
+                 "one molecule of salt per square meter of ocean is of order 1e-29 ppt.", &
+                 units="PPT", default=0.0, scale=US%ppt_to_S)
+    call get_param(param_file, "MOM", "TEMPERATURE_UNDERFLOW", temp_underflow, &
+                 "A tiny magnitude of temperatures below which they are set to 0.", &
+                 units="degC", default=0.0, scale=US%degC_to_C)
     call get_param(param_file, "MOM", "C_P", CS%tv%C_p, &
                  "The heat capacity of sea water, approximated as a "//&
                  "constant. This is only used if ENABLE_THERMODYNAMICS is "//&
@@ -2324,12 +2333,14 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
                            tr_desc=vd_T, registry_diags=.true., conc_scale=US%C_to_degC, &
                            flux_nameroot='T', flux_units='W', flux_longname='Heat', &
                            flux_scale=conv2watt, convergence_units='W m-2', &
-                           convergence_scale=conv2watt, CMOR_tendprefix="opottemp", diag_form=2)
+                           convergence_scale=conv2watt, CMOR_tendprefix="opottemp", &
+                           diag_form=2, underflow_conc=temp_underflow)
       call register_tracer(CS%tv%S, CS%tracer_Reg, param_file, HI, GV, &
                            tr_desc=vd_S, registry_diags=.true., conc_scale=US%S_to_ppt, &
                            flux_nameroot='S', flux_units=S_flux_units, flux_longname='Salt', &
                            flux_scale=conv2salt, convergence_units='kg m-2 s-1', &
-                           convergence_scale=0.001*US%S_to_ppt*GV%H_to_kg_m2, CMOR_tendprefix="osalt", diag_form=2)
+                           convergence_scale=0.001*US%S_to_ppt*GV%H_to_kg_m2, CMOR_tendprefix="osalt", &
+                           diag_form=2, underflow_conc=salin_underflow)
     endif
   endif
 
