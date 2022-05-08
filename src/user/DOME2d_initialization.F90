@@ -357,8 +357,8 @@ subroutine DOME2d_initialize_sponges(G, GV, US, tv, depth_tot, param_file, use_A
   type(sponge_CS),         pointer    :: CSp !< Layer-mode sponge structure
   type(ALE_sponge_CS),     pointer    :: ACSp !< ALE-mode sponge structure
   ! Local variables
-  real :: T(SZI_(G),SZJ_(G),SZK_(GV))  ! A temporary array for temp [degC]
-  real :: S(SZI_(G),SZJ_(G),SZK_(GV))  ! A temporary array for salt [ppt]
+  real :: T(SZI_(G),SZJ_(G),SZK_(GV))  ! A temporary array for temp [C ~> degC]
+  real :: S(SZI_(G),SZJ_(G),SZK_(GV))  ! A temporary array for salt [S ~> ppt]
   real :: h(SZI_(G),SZJ_(G),SZK_(GV))  ! A temporary array for thickness [H ~> m or kg m-2].
   real :: eta(SZI_(G),SZJ_(G),SZK_(GV)+1) ! A temporary array for interface heights [Z ~> m]
   real :: Idamp(SZI_(G),SZJ_(G))       ! The sponge damping rate [T-1 ~> s-1]

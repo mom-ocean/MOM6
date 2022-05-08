@@ -568,7 +568,7 @@ subroutine absorbRemainingSW(G, GV, US, h, opacity_band, nsw, optics, j, dt, H_l
   real, dimension(SZI_(G)), optional, intent(inout) :: Ttot !< Depth integrated mixed layer
                                                            !! temperature [C H ~> degC m or degC kg m-2]
   real, dimension(SZI_(G),SZK_(GV)), optional, intent(in) :: dSV_dT !< The partial derivative of specific volume
-                                                           !! with temperature [R-1 degC-1 ~> m3 kg-1 degC-1]
+                                                           !! with temperature [R-1 C-1 ~> m3 kg-1 degC-1]
   real, dimension(SZI_(G),SZK_(GV)), optional, intent(inout) :: TKE !< The TKE sink from mixing the heating
                                                            !! throughout a layer [R Z3 T-2 ~> J m-2].
 

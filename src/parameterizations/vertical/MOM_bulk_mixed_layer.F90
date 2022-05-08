@@ -761,7 +761,7 @@ subroutine convective_adjustment(h, u, v, R0, Rcv, T, S, eps, d_eb, &
   real, dimension(SZI_(G),SZK0_(GV)), intent(inout) :: Rcv !< The coordinate defining potential
                                                            !! density [R ~> kg m-3].
   real, dimension(SZI_(G),SZK0_(GV)), intent(inout) :: T   !< Layer temperatures [C ~> degC].
-  real, dimension(SZI_(G),SZK0_(GV)), intent(inout) :: S   !< Layer salinities [ppt].
+  real, dimension(SZI_(G),SZK0_(GV)), intent(inout) :: S   !< Layer salinities [S ~> ppt].
   real, dimension(SZI_(G),SZK_(GV)),  intent(in)    :: eps !< The negligibly small amount of water
                                                            !! that will be left in each layer [H ~> m or kg m-2].
   real, dimension(SZI_(G),SZK_(GV)),  intent(inout) :: d_eb !< The downward increase across a layer
@@ -908,7 +908,7 @@ subroutine mixedlayer_convection(h, d_eb, htot, Ttot, Stot, uhtot, vhtot,      &
   real, dimension(SZI_(G),SZK0_(GV)), &
                             intent(in)    :: T     !< Layer temperatures [C ~> degC].
   real, dimension(SZI_(G),SZK0_(GV)), &
-                            intent(in)    :: S     !< Layer salinities [ppt].
+                            intent(in)    :: S     !< Layer salinities [C ~> ppt].
   real, dimension(SZI_(G),SZK0_(GV)), &
                             intent(in)    :: R0    !< Potential density referenced to
                                                    !! surface pressure [R ~> kg m-3].
@@ -940,7 +940,7 @@ subroutine mixedlayer_convection(h, d_eb, htot, Ttot, Stot, uhtot, vhtot,      &
                                                    !! shortwave radiation.
   real, dimension(max(nsw,1),SZI_(G)), intent(inout) :: Pen_SW_bnd !< The penetrating shortwave
                                                    !! heating at the sea surface in each penetrating
-                                                   !! band [degC H ~> C m or degC kg m-2].
+                                                   !! band [C H ~> degC m or degC kg m-2].
   real, dimension(max(nsw,1),SZI_(G),SZK_(GV)), intent(in) :: opacity_band !< The opacity in each band of
                                                    !! penetrating shortwave radiation [H-1 ~> m-1 or m2 kg-1].
   real, dimension(SZI_(G)), intent(out)   :: Conv_En !< The buoyant turbulent kinetic energy source
@@ -1465,9 +1465,9 @@ subroutine mechanical_entrainment(h, d_eb, htot, Ttot, Stot, uhtot, vhtot, &
   real, dimension(SZI_(G),SZK_(GV)), &
                             intent(in)    :: v     !< Zonal velocities interpolated to h points [L T-1 ~> m s-1].
   real, dimension(SZI_(G),SZK0_(GV)), &
-                            intent(in)    :: T     !< Layer temperatures [degC].
+                            intent(in)    :: T     !< Layer temperatures [C ~> degC].
   real, dimension(SZI_(G),SZK0_(GV)), &
-                            intent(in)    :: S     !< Layer salinities [ppt].
+                            intent(in)    :: S     !< Layer salinities [S ~> ppt].
   real, dimension(SZI_(G),SZK0_(GV)), &
                             intent(in)    :: R0    !< Potential density referenced to
                                                    !! surface pressure [R ~> kg m-3].
@@ -1478,7 +1478,7 @@ subroutine mechanical_entrainment(h, d_eb, htot, Ttot, Stot, uhtot, vhtot, &
                             intent(in)    :: eps   !< The negligibly small amount of water
                                                    !! that will be left in each layer [H ~> m or kg m-2].
   real, dimension(SZI_(G)), intent(in)    :: dR0_dT  !< The partial derivative of R0 with respect to
-                                                   !! temperature [R degC-1 ~> kg m-3 degC-1].
+                                                   !! temperature [R C-1 ~> kg m-3 degC-1].
   real, dimension(SZI_(G)), intent(in)    :: dRcv_dT !< The partial derivative of Rcv with respect to
                                                    !! temperature [R C-1 ~> kg m-3 degC-1].
   real, dimension(2,SZI_(G)), intent(in)  :: cMKE  !< Coefficients of HpE and HpE^2 used in calculating the
@@ -1832,8 +1832,8 @@ subroutine resort_ML(h, T, S, R0, Rcv, RcvTgt, eps, d_ea, d_eb, ksort, G, GV, CS
                                                                  !! structure.
   real, dimension(SZI_(G),SZK0_(GV)),   intent(inout) :: h       !< Layer thickness [H ~> m or kg m-2].
                                                                  !! Layer 0 is the new mixed layer.
-  real, dimension(SZI_(G),SZK0_(GV)),   intent(inout) :: T       !< Layer temperatures [degC].
-  real, dimension(SZI_(G),SZK0_(GV)),   intent(inout) :: S       !< Layer salinities [ppt].
+  real, dimension(SZI_(G),SZK0_(GV)),   intent(inout) :: T       !< Layer temperatures [C ~> degC].
+  real, dimension(SZI_(G),SZK0_(GV)),   intent(inout) :: S       !< Layer salinities [S ~> ppt].
   real, dimension(SZI_(G),SZK0_(GV)),   intent(inout) :: R0      !< Potential density referenced to
                                                                  !! surface pressure [R ~> kg m-3].
   real, dimension(SZI_(G),SZK0_(GV)),   intent(inout) :: Rcv     !< The coordinate defining
@@ -2151,8 +2151,8 @@ subroutine mixedlayer_detrain_2(h, T, S, R0, Rcv, RcvTgt, dt, dt_diag, d_ea, j, 
   type(verticalGrid_type),            intent(in)    :: GV   !< The ocean's vertical grid structure.
   real, dimension(SZI_(G),SZK0_(GV)), intent(inout) :: h    !< Layer thickness [H ~> m or kg m-2].
                                                             !!  Layer 0 is the new mixed layer.
-  real, dimension(SZI_(G),SZK0_(GV)), intent(inout) :: T    !< Potential temperature [degC].
-  real, dimension(SZI_(G),SZK0_(GV)), intent(inout) :: S    !< Salinity [ppt].
+  real, dimension(SZI_(G),SZK0_(GV)), intent(inout) :: T    !< Potential temperature [C ~> degC].
+  real, dimension(SZI_(G),SZK0_(GV)), intent(inout) :: S    !< Salinity [S ~> ppt].
   real, dimension(SZI_(G),SZK0_(GV)), intent(inout) :: R0   !< Potential density referenced to
                                                             !! surface pressure [R ~> kg m-3].
   real, dimension(SZI_(G),SZK0_(GV)), intent(inout) :: Rcv  !< The coordinate defining potential
@@ -3040,8 +3040,8 @@ subroutine mixedlayer_detrain_1(h, T, S, R0, Rcv, RcvTgt, dt, dt_diag, d_ea, d_e
   type(verticalGrid_type),            intent(in)    :: GV   !< The ocean's vertical grid structure.
   real, dimension(SZI_(G),SZK0_(GV)), intent(inout) :: h    !< Layer thickness [H ~> m or kg m-2].
                                                             !! Layer 0 is the new mixed layer.
-  real, dimension(SZI_(G),SZK0_(GV)), intent(inout) :: T    !< Potential temperature [degC].
-  real, dimension(SZI_(G),SZK0_(GV)), intent(inout) :: S    !< Salinity [ppt].
+  real, dimension(SZI_(G),SZK0_(GV)), intent(inout) :: T    !< Potential temperature [C ~> degC].
+  real, dimension(SZI_(G),SZK0_(GV)), intent(inout) :: S    !< Salinity [S ~> ppt].
   real, dimension(SZI_(G),SZK0_(GV)), intent(inout) :: R0   !< Potential density referenced to
                                                             !! surface pressure [R ~> kg m-3].
   real, dimension(SZI_(G),SZK0_(GV)), intent(inout) :: Rcv  !< The coordinate defining potential

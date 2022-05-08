@@ -182,7 +182,7 @@ type, public :: MOM_control_struct ; private
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_,NKMEM_) :: &
     h, &            !< layer thickness [H ~> m or kg m-2]
     T, &            !< potential temperature [C ~> degC]
-    S               !< salinity [ppt]
+    S               !< salinity [S ~> ppt]
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_,NKMEM_) :: &
     u,  &           !< zonal velocity component [L T-1 ~> m s-1]
     uh, &           !< uh = u * h * dy at u grid points [H L2 T-1 ~> m3 s-1 or kg s-1]
@@ -286,10 +286,6 @@ type, public :: MOM_control_struct ; private
   real, dimension(:,:), pointer :: frac_shelf_h => NULL() !< fraction of total area occupied
   !! by ice shelf [nondim]
   real, dimension(:,:), pointer :: mass_shelf => NULL() !< Mass of ice shelf [R Z ~> kg m-2]
-  real, dimension(:,:,:), pointer :: &
-    h_pre_dyn => NULL(), &      !< The thickness before the transports [H ~> m or kg m-2].
-    T_pre_dyn => NULL(), &      !< Temperature before the transports [degC].
-    S_pre_dyn => NULL()         !< Salinity before the transports [ppt].
   type(accel_diag_ptrs) :: ADp  !< structure containing pointers to accelerations,
                                 !! for derived diagnostics (e.g., energy budgets)
   type(cont_diag_ptrs)  :: CDp  !< structure containing pointers to continuity equation
@@ -3600,15 +3596,15 @@ subroutine rotate_initial_state(u_in, v_in, h_in, T_in, S_in, &
   real, dimension(:,:,:), intent(in)  :: u_in  !< Zonal velocity on the initial grid [L T-1 ~> m s-1]
   real, dimension(:,:,:), intent(in)  :: v_in  !< Meridional velocity on the initial grid [L T-1 ~> m s-1]
   real, dimension(:,:,:), intent(in)  :: h_in  !< Layer thickness on the initial grid [H ~> m or kg m-2]
-  real, dimension(:,:,:), intent(in)  :: T_in  !< Temperature on the initial grid [degC]
-  real, dimension(:,:,:), intent(in)  :: S_in  !< Salinity on the initial grid [ppt]
+  real, dimension(:,:,:), intent(in)  :: T_in  !< Temperature on the initial grid [C ~> degC]
+  real, dimension(:,:,:), intent(in)  :: S_in  !< Salinity on the initial grid [S ~> ppt]
   logical,                intent(in)  :: use_temperature !< If true, temperature and salinity are active
   integer,                intent(in)  :: turns !< The number quarter-turns to apply
   real, dimension(:,:,:), intent(out) :: u     !< Zonal velocity on the rotated grid [L T-1 ~> m s-1]
   real, dimension(:,:,:), intent(out) :: v     !< Meridional velocity on the rotated grid [L T-1 ~> m s-1]
   real, dimension(:,:,:), intent(out) :: h     !< Layer thickness on the rotated grid [H ~> m or kg m-2]
-  real, dimension(:,:,:), intent(out) :: T     !< Temperature on the rotated grid [degC]
-  real, dimension(:,:,:), intent(out) :: S     !< Salinity on the rotated grid [ppt]
+  real, dimension(:,:,:), intent(out) :: T     !< Temperature on the rotated grid [C ~> degC]
+  real, dimension(:,:,:), intent(out) :: S     !< Salinity on the rotated grid [S ~> ppt]
 
   call rotate_vector(u_in, v_in, turns, u, v)
   call rotate_array(h_in, turns, h)

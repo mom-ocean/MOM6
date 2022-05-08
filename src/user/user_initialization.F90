@@ -238,8 +238,8 @@ end subroutine write_user_log
 !!  - GV%g_prime - The reduced gravity at each interface [L2 Z-1 T-2 ~> m s-2].
 !!  - GV%Rlay - Layer potential density (coordinate variable) [R ~> kg m-3].
 !!  If ENABLE_THERMODYNAMICS is defined:
-!!  - T - Temperature [degC].
-!!  - S - Salinity [ppt].
+!!  - T - Temperature [C ~> degC].
+!!  - S - Salinity [S ~> ppt].
 !!  If BULKMIXEDLAYER is defined:
 !!  - Rml - Mixed layer and buffer layer potential densities [R ~> kg m-3].
 !!  If SPONGE is defined:

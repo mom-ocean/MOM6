@@ -1394,12 +1394,12 @@ subroutine KPP_NonLocalTransport_temp(CS, G, GV, h, nonLocalTrans, surfFlux, &
   real, dimension(SZI_(G),SZJ_(G)),           intent(in)    :: surfFlux  !< Surface flux of temperature
                                                                       !! [C H T-1 ~> degC m s-1 or degC kg m-2 s-1]
   real,                                       intent(in)    :: dt     !< Time-step [T ~> s]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(inout) :: scalar !< temperature [degC]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(inout) :: scalar !< temperature [C ~> degC]
   real,                                       intent(in)    :: C_p    !< Seawater specific heat capacity
                                                                       !! [Q C-1 ~> J kg-1 degC-1]
 
   integer :: i, j, k
-  real, dimension( SZI_(G), SZJ_(G),SZK_(GV) ) :: dtracer ! Rate of tracer change [degC T-1 ~> degC s-1]
+  real, dimension( SZI_(G), SZJ_(G),SZK_(GV) ) :: dtracer ! Rate of tracer change [C T-1 ~> degC s-1]
 
 
   dtracer(:,:,:) = 0.0
@@ -1458,10 +1458,10 @@ subroutine KPP_NonLocalTransport_saln(CS, G, GV, h, nonLocalTrans, surfFlux, dt,
   real, dimension(SZI_(G),SZJ_(G)),           intent(in)    :: surfFlux    !< Surface flux of salt
                                                                            !! [S H T-1 ~> ppt m s-1 or ppt kg m-2 s-1]
   real,                                       intent(in)    :: dt          !< Time-step [T ~> s]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(inout) :: scalar      !< Salinity [ppt]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(inout) :: scalar      !< Salinity [S ~> ppt]
 
   integer :: i, j, k
-  real, dimension( SZI_(G), SZJ_(G),SZK_(GV) ) :: dtracer  ! Rate of tracer change [ppt T-1 ~> ppt s-1]
+  real, dimension( SZI_(G), SZJ_(G),SZK_(GV) ) :: dtracer  ! Rate of tracer change [S T-1 ~> ppt s-1]
 
 
   dtracer(:,:,:) = 0.0
