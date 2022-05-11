@@ -1,12 +1,15 @@
 !> Dummy data structures and methods for drifters package
 module particles_types_mod
 
-use MOM_grid, only : ocean_grid_type
-use mpp_domains_mod, only: domain2D
+! This file is part of MOM6. See LICENSE.md for the license.
 
+use MOM_grid, only : ocean_grid_type
+use MOM_domains, only: domain2D
+
+implicit none ; private
 
 !> Container for gridded fields
-type :: particles_gridded
+type, public :: particles_gridded
   type(domain2D), pointer :: domain !< MPP parallel domain
   integer :: halo !< Nominal halo width
   integer :: isc !< Start i-index of computational domain
@@ -60,7 +63,7 @@ end type particles_gridded
 
 
 !>xyt is a data structure containing particle position and velocity fields.
-type :: xyt
+type, public :: xyt
   real :: lon !< Longitude of particle (degree N or unit of grid coordinate)
   real :: lat !< Latitude of particle (degree N or unit of grid coordinate)
   real :: day      !< Day of this record (days)
@@ -77,7 +80,7 @@ type :: xyt
 end type xyt
 
 !>particle types are data structures describing a tracked particle
-type :: particle
+type, public :: particle
   type(particle), pointer :: prev=>null() !< Previous link in list
   type(particle), pointer :: next=>null() !< Next link in list
 ! State variables (specific to the particles, needed for restarts)
@@ -109,19 +112,19 @@ end type particle
 
 
 !>A buffer structure for message passing
-type :: buffer
+type, public :: buffer
   integer :: size=0 !< Size of buffer
   real, dimension(:,:), pointer :: data !< Buffer memory
 end type buffer
 
 !> A wrapper for the particle linked list (since an array of pointers is not allowed)
-type :: linked_list
+type, public :: linked_list
   type(particle), pointer :: first=>null() !< Pointer to the beginning of a linked list of parts
 end type linked_list
 
 
 !> A grand data structure for the particles in the local MOM domain
-type :: particles !; private
+type, public :: particles !; private
   type(particles_gridded) :: grd !< Container with all gridded data
   type(linked_list), dimension(:,:), allocatable :: list !< Linked list of particles
   type(xyt), pointer :: trajectories=>null() !< A linked list for detached segments of trajectories

@@ -184,7 +184,7 @@ type, public :: diabatic_CS ; private
   integer :: id_MLD_003 = -1, id_MLD_0125 = -1, id_MLD_user = -1, id_mlotstsq = -1
   integer :: id_MLD_EN1 = -1, id_MLD_EN2  = -1, id_MLD_EN3  = -1, id_subMLN2  = -1
 
-  ! These are handles to diatgnostics that are only available in non-ALE layered mode.
+  ! These are handles to diagnostics that are only available in non-ALE layered mode.
   integer :: id_wd       = -1
   integer :: id_dudt_dia = -1, id_dvdt_dia = -1
   integer :: id_hf_dudt_dia_2d = -1, id_hf_dvdt_dia_2d = -1
@@ -302,27 +302,9 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
   integer :: i, j, k, m, is, ie, js, je, nz
   logical :: showCallTree ! If true, show the call tree
 
-  real, allocatable, dimension(:,:,:)    :: h_in  ! thickness before thermodynamics
-  real, allocatable, dimension(:,:,:)    :: t_in  ! temperature before thermodynamics
-  real, allocatable, dimension(:,:,:)    :: s_in  ! salinity before thermodynamics
-  real :: t_tend,s_tend,h_tend                  ! holder for tendencey needed for SPPT
-  real :: t_pert,s_pert,h_pert                  ! holder for perturbations needed for SPPT
-
-  if (G%ke == 1) return
-
-   ! save  copy of the date for SPPT if active
-  if (stoch_CS%do_sppt) then
-    allocate(h_in(G%isd:G%ied, G%jsd:G%jed,G%ke))
-    allocate(t_in(G%isd:G%ied, G%jsd:G%jed,G%ke))
-    allocate(s_in(G%isd:G%ied, G%jsd:G%jed,G%ke))
-    h_in(:,:,:)=h(:,:,:)
-    t_in(:,:,:)=tv%T(:,:,:)
-    s_in(:,:,:)=tv%S(:,:,:)
-
-    if (stoch_CS%id_sppt_wts > 0) then
-      call post_data(stoch_CS%id_sppt_wts, stoch_CS%sppt_wts, CS%diag)
-    endif
-  endif
+  real, allocatable, dimension(:,:,:)    :: h_in  ! thickness before thermodynamics [H ~> m or kg m-2]
+  real, allocatable, dimension(:,:,:)    :: t_in  ! temperature before thermodynamics [degC]
+  real, allocatable, dimension(:,:,:)    :: s_in  ! salinity before thermodynamics [ppt]
 
   if (GV%ke == 1) return
 
@@ -341,7 +323,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
 
   showCallTree = callTree_showQuery()
 
-  ! Offer diagnostics of various state varables at the start of diabatic
+  ! Offer diagnostics of various state variables at the start of diabatic
   ! these are mostly for debugging purposes.
   if (CS%id_u_predia > 0) call post_data(CS%id_u_predia, u, CS%diag)
   if (CS%id_v_predia > 0) call post_data(CS%id_v_predia, v, CS%diag)
@@ -351,6 +333,13 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
   if (CS%id_e_predia > 0) then
     call find_eta(h, tv, G, GV, US, eta, dZref=G%Z_ref)
     call post_data(CS%id_e_predia, eta, CS%diag)
+  endif
+
+  ! Save a copy of the initial state if stochastic perturbations are active.
+  if (stoch_CS%do_sppt) then
+    allocate(h_in(G%isd:G%ied, G%jsd:G%jed, GV%ke)) ; h_in(:,:,:) = h(:,:,:)
+    allocate(t_in(G%isd:G%ied, G%jsd:G%jed, GV%ke)) ; t_in(:,:,:) = tv%T(:,:,:)
+    allocate(s_in(G%isd:G%ied, G%jsd:G%jed, GV%ke)) ; s_in(:,:,:) = tv%S(:,:,:)
   endif
 
   if (CS%debug) then
@@ -455,6 +444,16 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
 
   endif  ! endif for frazil
 
+  if (stoch_CS%do_sppt) then
+    ! perturb diabatic tendencies.
+    ! These stochastic perturbations do not conserve heat, salt or mass.
+    do k=1,nz ; do j=js,je ; do i=is,ie
+      h(i,j,k) = max(h_in(i,j,k) + (h(i,j,k)-h_in(i,j,k)) * stoch_CS%sppt_wts(i,j), GV%Angstrom_H)
+      tv%T(i,j,k) = t_in(i,j,k) + (tv%T(i,j,k)-t_in(i,j,k)) * stoch_CS%sppt_wts(i,j)
+      tv%S(i,j,k) = max(s_in(i,j,k) + (tv%S(i,j,k)-s_in(i,j,k)) * stoch_CS%sppt_wts(i,j), 0.0)
+    enddo ; enddo ; enddo
+    deallocate(h_in, t_in, s_in)
+  endif
 
   ! Diagnose mixed layer depths.
   call enable_averages(dt, Time_end, CS%diag)
@@ -476,37 +475,13 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
     if (CS%id_cg1 > 0) call post_data(CS%id_cg1, cn_IGW(:,:,1),CS%diag)
     do m=1,CS%nMode ; if (CS%id_cn(m) > 0) call post_data(CS%id_cn(m), cn_IGW(:,:,m), CS%diag) ; enddo
   endif
+
+  if (stoch_CS%do_sppt .and. stoch_CS%id_sppt_wts > 0) &
+    call post_data(stoch_CS%id_sppt_wts, stoch_CS%sppt_wts, CS%diag)
+
   call disable_averaging(CS%diag)
 
   if (CS%debugConservation) call MOM_state_stats('leaving diabatic', u, v, h, tv%T, tv%S, G, GV, US)
-
-  if (stoch_CS%do_sppt) then
-  ! perturb diabatic tendecies
-    do k=1,nz
-      do j=js,je
-        do i=is,ie
-          h_tend = (h(i,j,k)-h_in(i,j,k))*stoch_CS%sppt_wts(i,j)
-          t_tend = (tv%T(i,j,k)-t_in(i,j,k))*stoch_CS%sppt_wts(i,j)
-          s_tend = (tv%S(i,j,k)-s_in(i,j,k))*stoch_CS%sppt_wts(i,j)
-          h_pert=h_tend+h_in(i,j,k)
-          t_pert=t_tend+t_in(i,j,k)
-          s_pert=s_tend+s_in(i,j,k)
-          if (h_pert > GV%Angstrom_H) then
-            h(i,j,k) = h_pert
-          else
-            h(i,j,k) = GV%Angstrom_H
-          endif
-          tv%T(i,j,k) = t_pert
-          if (s_pert > 0.0) then
-            tv%S(i,j,k) = s_pert
-          endif
-        enddo
-      enddo
-    enddo
-    deallocate(h_in)
-    deallocate(t_in)
-    deallocate(s_in)
-  endif
 
 end subroutine diabatic
 
@@ -2205,7 +2180,7 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
       endif
 
       ! diagnose temperature, salinity, heat, and salt tendencies
-      ! Note: hold here refers to the thicknesses from before the dual-entraintment when using
+      ! Note: hold here refers to the thicknesses from before the dual-entrainment when using
       ! the bulk mixed layer scheme, so tendencies should be posted on hold.
       if (CS%diabatic_diff_tendency_diag) then
         call diagnose_diabatic_diff_tendency(tv, hold, temp_diag, saln_diag, dt, G, GV, US, CS)
@@ -2625,7 +2600,7 @@ subroutine diagnose_diabatic_diff_tendency(tv, h, temp_old, saln_old, dt, G, GV,
   real :: Idt  ! The inverse of the timestep [T-1 ~> s-1]
   real :: ppt2mks = 0.001  ! Conversion factor from g/kg to kg/kg.
   integer :: i, j, k, is, ie, js, je, nz
-  logical :: do_saln_tend   ! Calculate salinity-based tendency diagnosics
+  logical :: do_saln_tend   ! Calculate salinity-based tendency diagnostics
 
   is  = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   Idt = 0.0 ; if (dt > 0.0) Idt = 1. / dt
@@ -3409,7 +3384,7 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
     CS%frazil_tendency_diag = .true.
   endif
 
-  ! if all is working propertly, this diagnostic should equal to hfsifrazil
+  ! If all is working properly, this diagnostic should equal to hfsifrazil.
   CS%id_frazil_heat_tend_2d = register_diag_field('ocean_model',&
       'frazil_heat_tendency_2d', diag%axesT1, Time,             &
       'Depth integrated heat tendency due to frazil formation', &
