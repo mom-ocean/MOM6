@@ -298,7 +298,7 @@ subroutine set_forcing(sfc_state, forces, fluxes, day_start, day_interval, G, US
       call MOM_error(FATAL, &
        "MOM_surface_forcing: Variable winds defined with no wind config")
     else
-       call MOM_error(FATAL, &
+      call MOM_error(FATAL, &
        "MOM_surface_forcing:Unrecognized wind config "//trim(CS%wind_config))
     endif
   endif
@@ -338,7 +338,7 @@ subroutine set_forcing(sfc_state, forces, fluxes, day_start, day_interval, G, US
       call MOM_error(FATAL, &
        "MOM_surface_forcing: Variable buoy defined with no buoy config.")
     else
-       call MOM_error(FATAL, &
+      call MOM_error(FATAL, &
        "MOM_surface_forcing: Unrecognized buoy config "//trim(CS%buoy_config))
     endif
   endif
