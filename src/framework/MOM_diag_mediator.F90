@@ -306,8 +306,8 @@ type, public :: diag_ctrl
 
   ! Pointer to H, G and T&S needed for remapping
   real, dimension(:,:,:), pointer :: h => null() !< The thicknesses needed for remapping [H ~> m or kg m-2]
-  real, dimension(:,:,:), pointer :: T => null() !< The temperatures needed for remapping [degC]
-  real, dimension(:,:,:), pointer :: S => null() !< The salinities needed for remapping [ppt]
+  real, dimension(:,:,:), pointer :: T => null() !< The temperatures needed for remapping [C ~> degC]
+  real, dimension(:,:,:), pointer :: S => null() !< The salinities needed for remapping [S ~> ppt]
   type(EOS_type),  pointer :: eqn_of_state => null() !< The equation of state type
   type(ocean_grid_type), pointer :: G => null()  !< The ocean grid type
   type(verticalGrid_type), pointer :: GV => null()  !< The model's vertical ocean grid

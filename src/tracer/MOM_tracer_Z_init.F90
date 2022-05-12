@@ -42,7 +42,7 @@ function tracer_Z_init(tr, h, filename, tr_name, G, GV, US, missing_val, land_va
   real,        optional, intent(in)    :: land_val !< A value to use to fill in land points
 
 ! This include declares and sets the variable "version".
-#include "version_variable.h"
+# include "version_variable.h"
 
   real, allocatable, dimension(:,:,:) :: &
     tr_in   ! The z-space array of tracer concentrations that is read in.
@@ -283,7 +283,7 @@ subroutine tracer_z_init_array(tr_in, z_edges, nk_data, e, land_fill, G, nlay, n
   integer,                    intent(in)  :: nlay  !< The number of vertical layers in the target grid
   real, dimension(SZI_(G),SZJ_(G),nlay+1), &
                               intent(in)  :: e     !< The depths of the target layer interfaces [Z ~> m] or [m]
-  real,                       intent(in)  :: land_fill !< fill in data over land [A]
+  real,                       intent(in)  :: land_fill !< fill in data over land [B]
   integer, dimension(SZI_(G),SZJ_(G)), &
                               intent(in)  :: nlevs !< The number of input levels with valid data
   real,                       intent(in)  :: eps_z !< A negligibly thin layer thickness [Z ~> m].
@@ -293,18 +293,21 @@ subroutine tracer_z_init_array(tr_in, z_edges, nk_data, e, land_fill, G, nlay, n
                                                    !! input tracers [B A-1 ~> 1]
 
   ! Local variables
-  real :: tr_1d(nk_data) ! A copy of the input tracer concentrations in a column [A]
+  real :: tr_1d(nk_data) ! A copy of the input tracer concentrations in a column [B]
   real :: e_1d(nlay+1)   ! A 1-d column of interface heights, in the same units as e [Z ~> m] or [m]
-  real :: sl_tr          ! The tracer concentration slope times the layer thickness, in tracer units [A]
+  real :: sl_tr          ! The tracer concentration slope times the layer thickness, in tracer units [B]
   real :: wt(nk_data)    ! The fractional weight for each layer in the range between z1 and z2 [nondim]
   real :: z1(nk_data)    ! z1 and z2 are the fractional depths of the top and bottom
   real :: z2(nk_data)    ! limits of the part of a z-cell that contributes to a layer, relative
                          ! to the cell center and normalized by the cell thickness [nondim].
                          ! Note that -1/2 <= z1 <= z2 <= 1/2.
+  real :: scale_fac      ! A factor by which to scale the output tracers from the input tracers [B A-1 ~> 1]
   integer :: k_top, k_bot, k_bot_prev, kstart
   integer :: i, j, k, kz, is, ie, js, je
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
+
+  scale_fac = 1.0 ; if (present(scale)) then ; scale_fac = scale ; endif
 
   do j=js,je
     i_loop: do i=is,ie
@@ -314,7 +317,7 @@ subroutine tracer_z_init_array(tr_in, z_edges, nk_data, e, land_fill, G, nlay, n
       endif
 
       do k=1,nk_data
-        tr_1d(k) = tr_in(i,j,k)
+        tr_1d(k) = scale_fac*tr_in(i,j,k)
       enddo
 
       do k=1,nlay+1
@@ -371,12 +374,6 @@ subroutine tracer_z_init_array(tr_in, z_edges, nk_data, e, land_fill, G, nlay, n
 
     enddo i_loop
   enddo
-
-  if (present(scale)) then ; if (scale /= 1.0) then
-    do k=1,nlay ; do j=js,je ; do i=is,ie
-      tr(i,j,k) = scale*tr(i,j,k)
-    enddo ; enddo ; enddo
-  endif ; endif
 
 end subroutine tracer_z_init_array
 
@@ -559,7 +556,7 @@ end function find_limited_slope
 
 !> This subroutine determines the potential temperature and salinity that
 !! is consistent with the target density using provided initial guess
-subroutine determine_temperature(temp, salt, R_tgt, p_ref, niter, land_fill, h, k_start, G, GV, US, &
+subroutine determine_temperature(temp, salt, R_tgt, p_ref, niter, h, k_start, G, GV, US, &
                                  EOS, h_massless)
   type(ocean_grid_type),         intent(in)    :: G    !< The ocean's grid structure
   type(verticalGrid_type),       intent(in)    :: GV   !< The ocean's vertical grid structure.
@@ -571,7 +568,6 @@ subroutine determine_temperature(temp, salt, R_tgt, p_ref, niter, land_fill, h, 
   real,                          intent(in)    :: p_ref !< reference pressure [R L2 T-2 ~> Pa].
   integer,                       intent(in)    :: niter !< maximum number of iterations
   integer,                       intent(in)    :: k_start !< starting index (i.e. below the buffer layer)
-  real,                          intent(in)    :: land_fill !< land fill value
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                                  intent(in)    :: h   !< layer thickness, used only to avoid working on
                                                       !! massless layers [H ~> m or kg m-2]

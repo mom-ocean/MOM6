@@ -1783,9 +1783,9 @@ subroutine initialize_temp_salt_linear(T, S, G, GV, US, param_file, just_read)
   type(ocean_grid_type),                     intent(in)  :: G  !< The ocean's grid structure
   type(verticalGrid_type),                   intent(in)  :: GV !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: T  !< The potential temperature that is
-                                                               !! being initialized [degC]
+                                                               !! being initialized [C ~> degC]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: S  !< The salinity that is
-                                                               !! being initialized [ppt]
+                                                               !! being initialized [S ~> ppt]
   type(unit_scale_type),                     intent(in)  :: US !< A dimensional unit scaling type
   type(param_file_type),                     intent(in)  :: param_file !< A structure to parse for
                                                                !! run-time parameters
@@ -2419,7 +2419,8 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, depth_tot, G, GV, US, PF, just
   real    :: PI_180   ! for conversion from degrees to radians
   real    :: Hmix_default ! The default initial mixed layer depth [m].
   real    :: Hmix_depth   ! The mixed layer depth in the initial condition [Z ~> m].
-  real    :: missing_value_temp, missing_value_salt
+  real    :: missing_value_temp  ! The missing value in the input temperature field
+  real    :: missing_value_salt  ! The missing value in the input salinity field
   logical :: correct_thickness
   real    :: h_tolerance ! A parameter that controls the tolerance when adjusting the
                          ! thickness to fit the bathymetry [Z ~> m].
@@ -2427,15 +2428,15 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, depth_tot, G, GV, US, PF, just
 
   integer, parameter :: niter=10   ! number of iterations for t/s adjustment to layer density
   logical            :: adjust_temperature = .true.  ! fit t/s to target densities
-  real, parameter    :: missing_value = -1.e20
-  real, parameter    :: temp_land_fill = 0.0, salt_land_fill = 35.0
+  real    :: temp_land_fill  ! A temperature value to use for land points [C ~> degC]
+  real    :: salt_land_fill  ! A salinity value to use for land points [C ~> degC]
   logical :: reentrant_x, tripolar_n
 
   ! data arrays
   real, dimension(:), allocatable :: z_edges_in, z_in ! Interface heights [Z ~> m]
   real, dimension(:), allocatable :: Rb  ! Interface densities [R ~> kg m-3]
-  real, dimension(:,:,:), allocatable, target :: temp_z ! Input temperatures [degC]
-  real, dimension(:,:,:), allocatable, target :: salt_z ! Input salinities [ppt]
+  real, dimension(:,:,:), allocatable, target :: temp_z ! Input temperatures [C ~> degC]
+  real, dimension(:,:,:), allocatable, target :: salt_z ! Input salinities [S ~> ppt]
   real, dimension(:,:,:), allocatable, target :: mask_z ! 1 for valid data points [nondim]
   real, dimension(:,:,:), allocatable :: rho_z ! Densities in Z-space [R ~> kg m-3]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1) :: zi   ! Interface heights [Z ~> m].
@@ -2464,8 +2465,8 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, depth_tot, G, GV, US, PF, just
                                    ! from data when finding the initial interface locations in
                                    ! layered mode from a dataset of T and S.
   character(len=64) :: remappingScheme
-  real :: tempAvg  ! Spatially averaged temperatures on a layer [degC]
-  real :: saltAvg  ! Spatially averaged salinities on a layer [ppt]
+  real :: tempAvg  ! Spatially averaged temperatures on a layer [C ~> degC]
+  real :: saltAvg  ! Spatially averaged salinities on a layer [S ~> ppt]
   logical :: do_conv_adj, ignore
   integer :: nPoints
   integer :: id_clock_routine, id_clock_ALE
@@ -2592,6 +2593,10 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, depth_tot, G, GV, US, PF, just
     return ! All run-time parameters have been read, so return.
   endif
 
+  !### These hard-coded constants should be made into runtime parameters
+  temp_land_fill = 0.0*US%degC_to_C
+  salt_land_fill = 35.0*US%ppt_to_S
+
   eps_z = GV%Angstrom_Z
   eps_rho = 1.0e-10*US%kg_m3_to_R
 
@@ -2610,34 +2615,23 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, depth_tot, G, GV, US, PF, just
   ! to the North/South Pole past the limits of the input data, they are extrapolated using the average
   ! value at the northernmost/southernmost latitude.
 
-  call horiz_interp_and_extrap_tracer(tfilename, potemp_var, 1.0, 1, &
+  call horiz_interp_and_extrap_tracer(tfilename, potemp_var, US%degC_to_C, 1, &
        G, temp_z, mask_z, z_in, z_edges_in, missing_value_temp, reentrant_x, &
-       tripolar_n, homogenize, m_to_Z=US%m_to_Z, answers_2018=hor_regrid_answers_2018, ongrid=pre_gridded)
+       tripolar_n, homogenize, m_to_Z=US%m_to_Z, answers_2018=hor_regrid_answers_2018, &
+       ongrid=pre_gridded, tr_iter_tol=1.0e-3*US%degC_to_C)
 
-  call horiz_interp_and_extrap_tracer(sfilename, salin_var, 1.0, 1, &
+  call horiz_interp_and_extrap_tracer(sfilename, salin_var, US%ppt_to_S, 1, &
        G, salt_z, mask_z, z_in, z_edges_in, missing_value_salt, reentrant_x, &
-       tripolar_n, homogenize, m_to_Z=US%m_to_Z, answers_2018=hor_regrid_answers_2018, ongrid=pre_gridded)
+       tripolar_n, homogenize, m_to_Z=US%m_to_Z, answers_2018=hor_regrid_answers_2018, &
+       ongrid=pre_gridded, tr_iter_tol=1.0e-3*US%ppt_to_S)
 
   kd = size(z_in,1)
 
   ! Convert the sign convention of Z_edges_in.
   do k=1,size(Z_edges_in,1) ; Z_edges_in(k) = -Z_edges_in(k) ; enddo
 
-  allocate(rho_z(isd:ied,jsd:jed,kd))
-
   ! Convert T&S to Absolute Salinity and Conservative Temperature if using TEOS10 or NEMO
   call convert_temp_salt_for_TEOS10(temp_z, salt_z, G%HI, kd, mask_z, eos)
-
-  press(:) = tv%P_Ref
-  EOSdom(:) = EOS_domain(G%HI)
-  do k=1,kd ; do j=js,je
-    call calculate_density(US%degC_to_C*temp_z(:,j,k), US%ppt_to_S*salt_z(:,j,k), press, rho_z(:,j,k), eos, EOSdom)
-  enddo ; enddo
-
-  call pass_var(temp_z,G%Domain)
-  call pass_var(salt_z,G%Domain)
-  call pass_var(mask_z,G%Domain)
-  call pass_var(rho_z,G%Domain)
 
   do j=js,je ; do i=is,ie
     Z_bottom(i,j) = -depth_tot(i,j)
@@ -2661,15 +2655,15 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, depth_tot, G, GV, US, PF, just
         do k = 1, nkd
           if (tmp_mask_in(i,j,k)>0. .and. k<=kd) then
             zBottomOfCell = max( z_edges_in(k+1), Z_bottom(i,j))
-            tmpT1dIn(i,j,k) = US%degC_to_C*temp_z(i,j,k)
-            tmpS1dIn(i,j,k) = US%ppt_to_S*salt_z(i,j,k)
+            tmpT1dIn(i,j,k) = temp_z(i,j,k)
+            tmpS1dIn(i,j,k) = salt_z(i,j,k)
           elseif (k>1) then
             zBottomOfCell = Z_bottom(i,j)
             tmpT1dIn(i,j,k) = tmpT1dIn(i,j,k-1)
             tmpS1dIn(i,j,k) = tmpS1dIn(i,j,k-1)
           else ! This next block should only ever be reached over land
-            tmpT1dIn(i,j,k) = -99.9*US%degC_to_C
-            tmpS1dIn(i,j,k) = -99.9*US%ppt_to_S
+            tmpT1dIn(i,j,k) = -99.9*US%degC_to_C ! Change to temp_land_fill
+            tmpS1dIn(i,j,k) = -99.9*US%ppt_to_S  ! Change to salt_land_fill
           endif
           h1(i,j,k) = GV%Z_to_H * (zTopOfCell - zBottomOfCell)
           zTopOfCell = zBottomOfCell ! Bottom becomes top for next value of k
@@ -2679,9 +2673,6 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, depth_tot, G, GV, US, PF, just
       endif ! mask2dT
     enddo ; enddo
     deallocate( tmp_mask_in )
-    call pass_var(h1, G%Domain)
-    call pass_var(tmpT1dIn, G%Domain)
-    call pass_var(tmpS1dIn, G%Domain)
 
     ! Build the target grid (and set the model thickness to it)
     ! This call can be more general but is hard-coded for z* coordinates...  ????
@@ -2705,7 +2696,6 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, depth_tot, G, GV, US, PF, just
           h(i,j,:) = 0.
         endif ! mask2dT
       enddo ; enddo
-      call pass_var(h, G%Domain)
       deallocate( hTarget )
     endif
 
@@ -2756,8 +2746,17 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, depth_tot, G, GV, US, PF, just
 
     nkml = 0 ; if (separate_mixed_layer) nkml = GV%nkml
 
+    press(:) = tv%P_Ref
+    EOSdom(:) = EOS_domain(G%HI)
+    allocate(rho_z(isd:ied,jsd:jed,kd))
+    do k=1,kd ; do j=js,je
+      call calculate_density(temp_z(:,j,k), salt_z(:,j,k), press, rho_z(:,j,k), eos, EOSdom)
+    enddo ; enddo
+
     call find_interfaces(rho_z, z_in, kd, Rb, Z_bottom, zi, G, GV, US, nlevs, nkml, &
                          Hmix_depth, eps_z, eps_rho, density_extrap_bug)
+
+    deallocate(rho_z)
 
     if (correct_thickness) then
       call adjustEtaToFitBathymetry(G, GV, US, zi, h, h_tolerance, dZ_ref_eta=G%Z_ref)
@@ -2784,21 +2783,21 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, depth_tot, G, GV, US, PF, just
       endif
     endif
 
-    call tracer_z_init_array(temp_z, z_edges_in, kd, zi, missing_value, G, nz, nlevs, eps_z, &
-                             tv%T, scale=US%degC_to_C)
-    call tracer_z_init_array(salt_z, z_edges_in, kd, zi, missing_value, G, nz, nlevs, eps_z, &
-                             tv%S, scale=US%ppt_to_S)
+    call tracer_z_init_array(temp_z, z_edges_in, kd, zi, temp_land_fill, G, nz, nlevs, eps_z, &
+                             tv%T)
+    call tracer_z_init_array(salt_z, z_edges_in, kd, zi, salt_land_fill, G, nz, nlevs, eps_z, &
+                             tv%S)
 
-    do k=1,nz
-      nPoints = 0 ; tempAvg = 0. ; saltAvg = 0.
-      do j=js,je ; do i=is,ie ; if (G%mask2dT(i,j) > 0.0) then
-        nPoints = nPoints + 1
-        tempAvg = tempAvg + US%C_to_degC*tv%T(i,j,k)
-        saltAvg = saltAvg + US%S_to_ppt*tv%S(i,j,k)
-      endif ; enddo ; enddo
-
+    if (homogenize) then
       ! Horizontally homogenize data to produce perfectly "flat" initial conditions
-      if (homogenize) then
+      do k=1,nz
+        nPoints = 0 ; tempAvg = 0. ; saltAvg = 0.
+        do j=js,je ; do i=is,ie ; if (G%mask2dT(i,j) > 0.0) then
+          nPoints = nPoints + 1
+          tempAvg = tempAvg + tv%T(i,j,k)
+          saltAvg = saltAvg + tv%S(i,j,k)
+        endif ; enddo ; enddo
+
         !### These averages will not reproduce across PE layouts or grid rotation.
         call sum_across_PEs(nPoints)
         call sum_across_PEs(tempAvg)
@@ -2807,32 +2806,21 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, depth_tot, G, GV, US, PF, just
           tempAvg = tempAvg / real(nPoints)
           saltAvg = saltAvg / real(nPoints)
         endif
-        tv%T(:,:,k) = US%degC_to_C*tempAvg
-        tv%S(:,:,k) = US%ppt_to_S*saltAvg
-      endif
-    enddo
+        tv%T(:,:,k) = tempAvg
+        tv%S(:,:,k) = saltAvg
+      enddo
+    endif
+
+    if (adjust_temperature) then
+      ! Finally adjust to target density
+      ks = 1 ; if (separate_mixed_layer) ks = GV%nk_rho_varies + 1
+      call determine_temperature(tv%T, tv%S, GV%Rlay(1:nz), tv%P_Ref, niter, &
+                                 h, ks, G, GV, US, eos)
+    endif
 
   endif ! useALEremapping
 
-  ! Fill land values
-  do k=1,nz ; do j=js,je ; do i=is,ie
-    if (tv%T(i,j,k) == US%degC_to_C*missing_value) then
-      tv%T(i,j,k) = US%degC_to_C*temp_land_fill
-      tv%S(i,j,k) = US%ppt_to_S*salt_land_fill
-    endif
-  enddo ; enddo ; enddo
-
-
-  if (adjust_temperature .and. .not. useALEremapping) then
-    ! Finally adjust to target density
-    ks = 1 ; if (separate_mixed_layer) ks = GV%nk_rho_varies + 1
-    call determine_temperature(tv%T, tv%S, GV%Rlay(1:nz), tv%P_Ref, niter, &
-                               missing_value, h, ks, G, GV, US, eos)
-  endif
-
   deallocate(z_in, z_edges_in, temp_z, salt_z, mask_z)
-  deallocate(rho_z)
-
 
   call pass_var(h, G%Domain)
   call pass_var(tv%T, G%Domain)
@@ -2984,7 +2972,7 @@ subroutine MOM_state_init_tests(G, GV, US, tv)
   ! Local variables
   integer, parameter :: nk=5
   real, dimension(nk) :: T, T_t, T_b ! Temperatures [C ~> degC]
-  real, dimension(nk) :: S, S_t, S_b ! Salinities [ppt]
+  real, dimension(nk) :: S, S_t, S_b ! Salinities [S ~> ppt]
   real, dimension(nk) :: rho ! Layer density [R ~> kg m-3]
   real, dimension(nk) :: h   ! Layer thicknesses [H ~> m or kg m-2]
   real, dimension(nk) :: z   ! Height of layer center [Z ~> m]
