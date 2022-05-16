@@ -1556,7 +1556,7 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces_in,
     CS%utide(:,:) = utide
   endif
 
-  call EOS_init(param_file, CS%eqn_of_state)
+  call EOS_init(param_file, CS%eqn_of_state, US)
 
   !! new parameters that need to be in MOM_input
 
@@ -1768,10 +1768,7 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces_in,
     call hchksum(ISS%area_shelf_h, "IS init: area_shelf_h", G%HI, haloshift=0, scale=US%L_to_m*US%L_to_m)
   endif
 
-
-
   CS%Time = Time
-
 
   if (CS%active_shelf_dynamics .and. .not.CS%isthermo) then
     ISS%water_flux(:,:) = 0.0
@@ -1780,7 +1777,7 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces_in,
   if (shelf_mass_is_dynamic) &
     call initialize_ice_shelf_dyn(param_file, Time, ISS, CS%dCS, G, US, CS%diag, new_sim, solo_ice_sheet_in)
 
-  call fix_restart_unit_scaling(US)
+  call fix_restart_unit_scaling(US, unscaled=.true.)
 
   call get_param(param_file, mdl, "SAVE_INITIAL_CONDS", save_IC, &
                  "If true, save the ice shelf initial conditions.", default=.false.)
@@ -1793,7 +1790,6 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces_in,
     call save_restart(dirs%output_directory, CS%Time, CS%Grid_in, CS%restart_CSp, &
                       filename=IC_file, write_ic=.true.)
   endif
-
 
   CS%id_area_shelf_h = register_diag_field('ice_shelf_model', 'area_shelf_h', CS%diag%axesT1, CS%Time, &
       'Ice Shelf Area in cell', 'meter-2', conversion=US%L_to_m**2)
