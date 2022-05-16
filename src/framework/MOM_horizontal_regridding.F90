@@ -437,7 +437,7 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
     if (is_ongrid) then
       start(1) = is+G%HI%idg_offset ; start(2) = js+G%HI%jdg_offset ; start(3) = k
       count(1) = ie-is+1 ; count(2) = je-js+1; count(3) = 1; start(4) = 1; count(4) = 1
-      call MOM_read_data(trim(filename), trim(varnam), tr_in, G%Domain, timelevel=1)
+      call MOM_read_data(trim(filename), trim(varnam), tr_in, start, count, G%Domain)
       do j=js,je
         do i=is,ie
           if (abs(tr_in(i,j)-missing_value) > abs(roundoff*missing_value)) then
