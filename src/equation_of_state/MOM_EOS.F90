@@ -53,6 +53,8 @@ public calculate_specific_vol_derivs
 public calculate_TFreeze
 public convert_temp_salt_for_TEOS10
 public extract_member_EOS
+public cons_temp_to_pot_temp
+public abs_saln_to_prac_saln
 public gsw_sp_from_sr
 public gsw_pt_from_ct
 public query_compressible
@@ -162,7 +164,7 @@ contains
 
 !> Calls the appropriate subroutine to calculate density of sea water for scalar inputs.
 !! If rho_ref is present, the anomaly with respect to rho_ref is returned.  The pressure and
-!! density can be rescaled with the US.  If both the US and scale arguments are present the density
+!! density can be rescaled with the values stored in EOS.  If the scale argument is present the density
 !! scaling uses the product of the two scaling factors.
 subroutine calculate_density_scalar(T, S, pressure, rho, EOS, rho_ref, scale)
   real,           intent(in)  :: T        !< Potential temperature referenced to the surface [C ~> degC]
@@ -172,7 +174,7 @@ subroutine calculate_density_scalar(T, S, pressure, rho, EOS, rho_ref, scale)
   type(EOS_type), intent(in)  :: EOS      !< Equation of state structure
   real, optional, intent(in)  :: rho_ref  !< A reference density [R ~> kg m-3]
   real, optional, intent(in)  :: scale    !< A multiplicative factor by which to scale output density in
-                                          !! combination with scaling given by US [various]
+                                          !! combination with scaling stored in EOS [various]
 
   real :: Ta(1)      ! An array of temperatures [degC]
   real :: Sa(1)      ! An array of salinities [ppt]
@@ -212,7 +214,7 @@ subroutine calculate_stanley_density_scalar(T, S, pressure, Tvar, TScov, Svar, r
   type(EOS_type), intent(in)  :: EOS      !< Equation of state structure
   real, optional, intent(in)  :: rho_ref  !< A reference density [R ~> kg m-3].
   real, optional, intent(in)  :: scale    !< A multiplicative factor by which to scale output density in
-                                          !! combination with scaling given by US [various]
+                                          !! combination with scaling stored in EOS [various]
   ! Local variables
   real :: d2RdTT, d2RdST, d2RdSS, d2RdSp, d2RdTp ! Second derivatives of density wrt T,S,p
   real :: p_scale  ! A factor to convert pressure to units of Pa [Pa T2 R-1 L-2 ~> 1]
@@ -350,7 +352,7 @@ subroutine calculate_density_1d(T, S, pressure, rho, EOS, dom, rho_ref, scale)
                                                        !! into account that arrays start at 1.
   real,                  optional, intent(in) :: rho_ref !< A reference density [R ~> kg m-3]
   real,                  optional, intent(in) :: scale !< A multiplicative factor by which to scale density
-                                                   !! in combination with scaling given by US [various]
+                                                   !! in combination with scaling stored in EOS [various]
   ! Local variables
   real :: rho_scale ! A factor to convert density from kg m-3 to the desired units [R m3 kg-1 ~> 1]
   real, dimension(size(rho)) :: pres  ! Pressure converted to [Pa]
@@ -407,7 +409,7 @@ subroutine calculate_stanley_density_1d(T, S, pressure, Tvar, TScov, Svar, rho, 
                                                        !! into account that arrays start at 1.
   real,                  optional, intent(in) :: rho_ref !< A reference density [R ~> kg m-3]
   real,                  optional, intent(in) :: scale !< A multiplicative factor by which to scale density
-                                                   !! in combination with scaling given by US [various]
+                                                   !! in combination with scaling stored in EOS [various]
   ! Local variables
   real :: rho_scale ! A factor to convert density from kg m-3 to the desired units [R m3 kg-1 ~> 1]
   real :: T2_scale  ! A factor to convert temperature variance to units of degC2 [degC2 C-2 ~> 1]
@@ -486,7 +488,7 @@ subroutine calculate_spec_vol_array(T, S, pressure, specvol, start, npts, EOS, s
   type(EOS_type),     intent(in)    :: EOS      !< Equation of state structure
   real,     optional, intent(in)    :: spv_ref  !< A reference specific volume [m3 kg-1]
   real,     optional, intent(in)    :: scale    !< A multiplicative factor by which to scale specific
-                                                !! volume in combination with scaling given by US [various]
+                                                !! volume in combination with scaling stored in EOS [various]
 
   real, dimension(size(specvol))  :: rho   ! Density [kg m-3]
   integer :: j
@@ -529,7 +531,7 @@ subroutine calc_spec_vol_scalar(T, S, pressure, specvol, EOS, spv_ref, scale)
   type(EOS_type), intent(in)  :: EOS      !< Equation of state structure
   real, optional, intent(in)  :: spv_ref  !< A reference specific volume [R-1 ~> m3 kg-1]
   real, optional, intent(in)  :: scale    !< A multiplicative factor by which to scale specific
-                                          !! volume in combination with scaling given by US [various]
+                                          !! volume in combination with scaling stored in EOS [various]
 
   real, dimension(1) :: Ta   ! Rescaled single element array version of temperature [degC]
   real, dimension(1) :: Sa   ! Rescaled single element array version of salinity [ppt]
@@ -568,7 +570,7 @@ subroutine calc_spec_vol_1d(T, S, pressure, specvol, EOS, dom, spv_ref, scale)
   real,                  optional, intent(in) :: spv_ref !< A reference specific volume [R-1 ~> m3 kg-1]
   real,                  optional, intent(in) :: scale !< A multiplicative factor by which to scale
                                                        !! output specific volume in combination with
-                                                       !! scaling given by US [various]
+                                                       !! scaling stored in EOS [various]
   ! Local variables
   real, dimension(size(T)) :: pres  ! Pressure converted to [Pa]
   real, dimension(size(T)) :: Ta    ! Temperature converted to [degC]
@@ -610,31 +612,44 @@ end subroutine calc_spec_vol_1d
 
 
 !> Calls the appropriate subroutine to calculate the freezing point for scalar inputs.
-subroutine calculate_TFreeze_scalar(S, pressure, T_fr, EOS, pres_scale)
-  real,           intent(in)  :: S !< Salinity [ppt]
-  real,           intent(in)  :: pressure !< Pressure, in [Pa] or [R L2 T-2 ~> Pa] depending on pres_scale
-  real,           intent(out) :: T_fr !< Freezing point potential temperature referenced
-                                      !! to the surface [degC]
-  type(EOS_type), intent(in)  :: EOS !< Equation of state structure
+subroutine calculate_TFreeze_scalar(S, pressure, T_fr, EOS, pres_scale, scale_from_EOS)
+  real,           intent(in)  :: S    !< Salinity, [ppt] or [Z ~> ppt] depending on scale_from_EOS
+  real,           intent(in)  :: pressure !< Pressure, in [Pa] or [R L2 T-2 ~> Pa] depending on
+                                      !! pres_scale or scale_from_EOS
+  real,           intent(out) :: T_fr !< Freezing point potential temperature referenced to the
+                                      !! surface [degC] or [degC ~> C] depending on scale_from_EOS
+  type(EOS_type), intent(in)  :: EOS  !< Equation of state structure
   real, optional, intent(in)  :: pres_scale  !< A multiplicative factor to convert pressure
-                                             !! into Pa [Pa T2 R-1 L-2 ~> 1].
+                                      !! into Pa [Pa T2 R-1 L-2 ~> 1].
+  logical, optional, intent(in)  :: scale_from_EOS !< If present true use the dimensional scaling
+                                      !! factors stored in EOS.  Omission is the same .false.
 
   ! Local variables
-  real :: p_scale ! A factor to convert pressure to units of Pa.
+  real :: p_scale ! A factor to convert pressure to units of Pa [Pa T2 R-1 L-2 ~> 1]
+  real :: S_scale ! A factor to convert salinity to units of ppt [ppt S-1 ~> 1]
 
-  p_scale = 1.0 ; if (present(pres_scale)) p_scale = pres_scale
+  p_scale = 1.0 ; S_scale = 1.0
+  if (present(pres_scale)) p_scale = pres_scale
+  if (present(scale_from_EOS)) then ; if (scale_from_EOS) then
+    p_scale = EOS%RL2_T2_to_Pa
+    S_scale = EOS%S_to_ppt
+  endif ; endif
 
   select case (EOS%form_of_TFreeze)
     case (TFREEZE_LINEAR)
-      call calculate_TFreeze_linear(S, p_scale*pressure, T_fr, EOS%TFr_S0_P0, &
+      call calculate_TFreeze_linear(S_scale*S, p_scale*pressure, T_fr, EOS%TFr_S0_P0, &
                                     EOS%dTFr_dS, EOS%dTFr_dp)
     case (TFREEZE_MILLERO)
-      call calculate_TFreeze_Millero(S, p_scale*pressure, T_fr)
+      call calculate_TFreeze_Millero(S_scale*S, p_scale*pressure, T_fr)
     case (TFREEZE_TEOS10)
-      call calculate_TFreeze_teos10(S, p_scale*pressure, T_fr)
+      call calculate_TFreeze_teos10(S_scale*S, p_scale*pressure, T_fr)
     case default
       call MOM_error(FATAL, "calculate_TFreeze_scalar: form_of_TFreeze is not valid.")
   end select
+
+  if (present(scale_from_EOS)) then ; if (scale_from_EOS) then
+    T_fr = EOS%degC_to_C * T_fr
+  endif ; endif
 
 end subroutine calculate_TFreeze_scalar
 
@@ -760,7 +775,7 @@ subroutine calculate_density_derivs_array(T, S, pressure, drho_dT, drho_dS, star
   integer,            intent(in)    :: npts     !< The number of values to calculate
   type(EOS_type),     intent(in)    :: EOS      !< Equation of state structure
   real,     optional, intent(in)    :: scale    !< A multiplicative factor by which to scale density
-                                                !! in combination with scaling given by US [various]
+                                                !! in combination with scaling stored in EOS [various]
 
   ! Local variables
   integer :: j
@@ -802,7 +817,7 @@ subroutine calculate_density_derivs_1d(T, S, pressure, drho_dT, drho_dS, EOS, do
   integer, dimension(2), optional, intent(in) :: dom   !< The domain of indices to work on, taking
                                                        !! into account that arrays start at 1.
   real,                  optional, intent(in) :: scale !< A multiplicative factor by which to scale density
-                                                       !! in combination with scaling given by US [various]
+                                                       !! in combination with scaling stored in EOS [various]
   ! Local variables
   real, dimension(size(drho_dT)) :: pres  ! Pressure converted to [Pa]
   real, dimension(size(drho_dT)) :: Ta    ! Temperature converted to [degC]
@@ -855,7 +870,7 @@ subroutine calculate_density_derivs_scalar(T, S, pressure, drho_dT, drho_dS, EOS
                                          !! determined by the optional scale argument
   type(EOS_type), intent(in)  :: EOS     !< Equation of state structure
   real, optional, intent(in)  :: scale   !< A multiplicative factor by which to scale density
-                                         !! in combination with scaling given by US [various]
+                                         !! in combination with scaling stored in EOS [various]
   ! Local variables
   real :: rho_scale ! A factor to convert density from kg m-3 to the desired units [R m3 kg-1 ~> 1]
   real :: dRdT_scale ! A factor to convert drho_dT to the desired units [R degC m3 C-1 kg-1 ~> 1]
@@ -911,7 +926,7 @@ subroutine calculate_density_second_derivs_1d(T, S, pressure, drho_dS_dS, drho_d
   integer, dimension(2), optional, intent(in) :: dom   !< The domain of indices to work on, taking
                                                   !! into account that arrays start at 1.
   real,     optional, intent(in)    :: scale      !< A multiplicative factor by which to scale density
-                                                  !! in combination with scaling given by US [various]
+                                                  !! in combination with scaling stored in EOS [various]
   ! Local variables
   real, dimension(size(T)) :: pres  ! Pressure converted to [Pa]
   real, dimension(size(T)) :: Ta    ! Temperature converted to [degC]
@@ -1007,7 +1022,7 @@ subroutine calculate_density_second_derivs_scalar(T, S, pressure, drho_dS_dS, dr
                                   !! [T2 C-1 L-2 ~> kg m-3 degC-1 Pa-1]
   type(EOS_type), intent(in) :: EOS !< Equation of state structure
   real, optional, intent(in) :: scale !< A multiplicative factor by which to scale density
-                                  !! in combination with scaling given by US [various]
+                                  !! in combination with scaling stored in EOS [various]
   ! Local variables
   real :: rho_scale ! A factor to convert density from kg m-3 to the desired units [R m3 kg-1 ~> 1]
   real :: p_scale   ! A factor to convert pressure to units of Pa [Pa T2 R-1 L-2 ~> 1]
@@ -1123,7 +1138,7 @@ subroutine calc_spec_vol_derivs_1d(T, S, pressure, dSV_dT, dSV_dS, EOS, dom, sca
   integer, dimension(2), optional, intent(in) :: dom   !< The domain of indices to work on, taking
                                                        !! into account that arrays start at 1.
   real,                  optional, intent(in) :: scale !< A multiplicative factor by which to scale specific
-                                                !! volume in combination with scaling given by US [various]
+                                                !! volume in combination with scaling stored in EOS [various]
 
   ! Local variables
   real, dimension(size(T)) :: pres  ! Pressure converted to [Pa]
@@ -1433,7 +1448,8 @@ logical function query_compressible(EOS)
   query_compressible = EOS%compressible
 end function query_compressible
 
-!> Initializes EOS_type by allocating and reading parameters
+!> Initializes EOS_type by allocating and reading parameters.  The scaling factors in
+!! US are stored in EOS for later use.
 subroutine EOS_init(param_file, EOS, US)
   type(param_file_type), intent(in) :: param_file !< Parameter file structure
   type(EOS_type), intent(inout)     :: EOS !< Equation of state structure
@@ -1629,6 +1645,95 @@ subroutine convert_temp_salt_for_TEOS10(T, S, HI, kd, mask_z, EOS)
     endif
   enddo ; enddo ; enddo
 end subroutine convert_temp_salt_for_TEOS10
+
+
+!> Converts an array of conservative temperatures to potential temperatures.  The input arguments
+!! use the dimesionally rescaling as specified within the EOS type.  The output potential
+!! temperature uses this same scaling, but this can be replaced by the factor given by scale.
+subroutine cons_temp_to_pot_temp(T, S, poTemp, EOS, dom, scale)
+  real, dimension(:), intent(in)    :: T        !< Conservative temperature [C ~> degC]
+  real, dimension(:), intent(in)    :: S        !< Absolute salinity [S ~> ppt]
+  real, dimension(:), intent(inout) :: poTemp   !< The potential temperature with a reference pressure
+                                                !! of 0 Pa, [C ~> degC]
+  type(EOS_type),     intent(in)    :: EOS      !< Equation of state structure
+  integer, dimension(2), optional, intent(in) :: dom  !< The domain of indices to work on, taking
+                                                !! into account that arrays start at 1.
+  real,     optional, intent(in)    :: scale    !< A multiplicative factor by which to scale the output
+                                                !! potential temperature in place of with scaling stored
+                                                !! in EOS.  A value of 1.0 returns temperatures in [degC],
+                                                !! while the default is equivalent to EOS%degC_to_C.
+
+  ! Local variables
+  real, dimension(size(T)) :: Ta    ! Temperature converted to [degC]
+  real, dimension(size(S)) :: Sa    ! Salinity converted to [ppt]
+  real :: T_scale ! A factor to convert potential temperature from degC to the desired units [C degC-1 ~> 1]
+  integer :: i, is, ie
+
+  if (present(dom)) then
+    is = dom(1) ; ie = dom(2)
+  else
+    is = 1 ; ie = size(T)
+  endif
+
+  if ((EOS%C_to_degC == 1.0) .and. (EOS%S_to_ppt == 1.0)) then
+    poTemp(is:ie) = gsw_pt_from_ct(S(is:ie), T(is:ie))
+  else
+    do i=is,ie
+      Ta(i) = EOS%C_to_degC * T(i)
+      Sa(i) = EOS%S_to_ppt * S(i)
+    enddo
+    poTemp(is:ie) = gsw_pt_from_ct(Sa(is:ie), Ta(is:ie))
+  endif
+
+  T_scale = EOS%degC_to_C
+  if (present(scale)) T_scale = scale
+  if (T_scale /= 1.0) then ; do i=is,ie
+    poTemp(i) = T_scale * poTemp(i)
+  enddo ; endif
+
+end subroutine cons_temp_to_pot_temp
+
+
+!> Converts an array of absolute salinity to practical salinity.  The input arguments
+!! use the dimesionally rescaling as specified within the EOS type.  The output potential
+!! temperature uses this same scaling, but this can be replaced by the factor given by scale.
+subroutine abs_saln_to_prac_saln(S, prSaln, EOS, dom, scale)
+  real, dimension(:), intent(in)    :: S        !< Absolute salinity [S ~> ppt]
+  real, dimension(:), intent(inout) :: prSaln   !< Practical salinity [S ~> ppt]
+  type(EOS_type),     intent(in)    :: EOS      !< Equation of state structure
+  integer, dimension(2), optional, intent(in) :: dom  !< The domain of indices to work on, taking
+                                                !! into account that arrays start at 1.
+  real,     optional, intent(in)    :: scale    !< A multiplicative factor by which to scale the output
+                                                !! practical in place of with scaling stored
+                                                !! in EOS.  A value of 1.0 returns salinities in [PSU],
+                                                !! while the default is equivalent to EOS%ppt_to_S.
+
+  ! Local variables
+  real, dimension(size(S)) :: Sa    ! Salinity converted to [ppt]
+  real :: S_scale ! A factor to convert practical salnity from ppt to the desired units [S ppt-1 ~> 1]
+  integer :: i, is, ie
+
+  if (present(dom)) then
+    is = dom(1) ; ie = dom(2)
+  else
+    is = 1 ; ie = size(S)
+  endif
+
+  if ((EOS%C_to_degC == 1.0) .and. (EOS%S_to_ppt == 1.0)) then
+    prSaln(is:ie) = gsw_sp_from_sr(Sa(is:ie))
+  else
+    do i=is,ie ; Sa(i) = EOS%S_to_ppt * S(i) ; enddo
+    prSaln(is:ie) = gsw_sp_from_sr(Sa(is:ie))
+  endif
+
+  S_scale = EOS%ppt_to_S
+  if (present(scale)) S_scale = scale
+  if (S_scale /= 1.0) then ; do i=is,ie
+    prSaln(i) = S_scale * prSaln(i)
+  enddo ; endif
+
+end subroutine abs_saln_to_prac_saln
+
 
 !> Return value of EOS_quadrature
 logical function EOS_quadrature(EOS)
