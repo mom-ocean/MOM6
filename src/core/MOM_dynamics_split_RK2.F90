@@ -362,7 +362,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
 
   real, dimension(SZI_(G),SZJ_(G)) :: hbl           ! Boundary layer depth from Cvmix
   real :: dt_pred   ! The time step for the predictor part of the baroclinic time stepping [T ~> s].
-  logical :: LU_pred ! Controls if it is predictor step or not
+  logical :: L_diag ! Controls if diagostics are posted in the vertFPmix
   logical :: dyn_p_surf
   logical :: BT_cont_BT_thick ! If true, use the BT_cont_type to estimate the
                               ! relative weightings of the layers in calculating
@@ -666,12 +666,12 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
                 GV, US, CS%vertvisc_CSp, CS%taux_bot, CS%tauy_bot, waves=waves)
 
   if (CS%fpmix) then
-    LU_pred  = .true.
+    L_diag  = .false.
     hbl(:,:) = 0.0
     if (ASSOCIATED(CS%KPP_CSp)) call KPP_get_BLD(CS%KPP_CSp, hbl, G, US, m_to_BLD_units=GV%m_to_H)
     if (ASSOCIATED(CS%energetic_PBL_CSp)) &
       call energetic_PBL_get_MLD(CS%energetic_PBL_CSp, hbl, G, US, m_to_MLD_units=GV%m_to_H)
-    call vertFPmix(LU_pred, up, vp, uold, vold, hbl, h, forces, &
+    call vertFPmix(L_diag, up, vp, uold, vold, hbl, h, forces, &
                    dt_pred, G, GV, US, CS%vertvisc_CSp, CS%OBC)
     call vertvisc(up, vp, h, forces, visc, dt_pred, CS%OBC, CS%ADp, CS%CDp, G, &
                 GV, US, CS%vertvisc_CSp, CS%taux_bot, CS%tauy_bot, waves=waves)
@@ -914,8 +914,8 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
                 CS%vertvisc_CSp, CS%taux_bot, CS%tauy_bot,waves=waves)
 
   if (CS%fpmix) then
-    LU_pred = .false.
-    call vertFPmix(LU_pred, u, v, uold, vold, hbl, h, forces, dt, &
+    L_diag = .true.
+    call vertFPmix(L_diag, u, v, uold, vold, hbl, h, forces, dt, &
                    G, GV, US, CS%vertvisc_CSp, CS%OBC)
     call vertvisc(u, v, h, forces, visc, dt, CS%OBC, CS%ADp, CS%CDp, G, GV, US, &
                   CS%vertvisc_CSp, CS%taux_bot, CS%tauy_bot, waves=waves)
