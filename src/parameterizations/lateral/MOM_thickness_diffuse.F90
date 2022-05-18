@@ -761,11 +761,11 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
   if (use_Stanley) then
     !$OMP do
     do k=1, nz ; do j=js-1,je+1 ; do i=is-1,ie+1
-      !! SGS variance in i-direction [degC2]
+      !! SGS variance in i-direction [C2 ~> degC2]
       !dTdi2 = ( ( G%mask2dCu(I  ,j) * G%IdxCu(I  ,j) * ( T(i+1,j,k) - T(i,j,k) ) &
       !          + G%mask2dCu(I-1,j) * G%IdxCu(I-1,j) * ( T(i,j,k) - T(i-1,j,k) ) &
       !          ) * G%dxT(i,j) * 0.5 )**2
-      !! SGS variance in j-direction [degC2]
+      !! SGS variance in j-direction [C2 ~> degC2]
       !dTdj2 = ( ( G%mask2dCv(i,J  ) * G%IdyCv(i,J  ) * ( T(i,j+1,k) - T(i,j,k) ) &
       !          + G%mask2dCv(i,J-1) * G%IdyCv(i,J-1) * ( T(i,j,k) - T(i,j-1,k) ) &
       !          ) * G%dyT(i,j) * 0.5 )**2

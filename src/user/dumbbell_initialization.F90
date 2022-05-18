@@ -107,7 +107,10 @@ subroutine dumbbell_initialize_thickness ( h, depth_tot, G, GV, US, param_file, 
   real :: eta1D(SZK_(GV)+1) ! Interface height relative to the sea surface
                           ! positive upward [Z ~> m].
   real :: min_thickness   ! The minimum layer thicknesses [Z ~> m].
-  real :: S_surf, S_range, S_ref, S_light, S_dense ! Various salinities [ppt].
+  real :: S_ref           ! A default value for salinities [ppt].
+  real :: S_surf          ! The surface salinity [S ~> ppt]
+  real :: S_range         ! The range of salinities in this test case [S ~> ppt]
+  real :: S_light, S_dense ! The lightest and densest salinities in the sponges [S ~> ppt].
   real :: eta_IC_quanta   ! The granularity of quantization of intial interface heights [Z-1 ~> m-1].
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
@@ -140,11 +143,15 @@ subroutine dumbbell_initialize_thickness ( h, depth_tot, G, GV, US, param_file, 
   select case ( coordinateMode(verticalCoordinate) )
 
   case ( REGRIDDING_LAYER, REGRIDDING_RHO ) ! Initial thicknesses for isopycnal coordinates
-    call get_param(param_file, mdl, "INITIAL_SSS", S_surf, default=34., do_not_log=.true.)
-    call get_param(param_file, mdl, "INITIAL_S_RANGE", S_range, default=2., do_not_log=.true.)
+    call get_param(param_file, mdl, "INITIAL_SSS", S_surf, &
+                   units='1e-3', default=34., scale=US%ppt_to_S, do_not_log=.true.)
+    call get_param(param_file, mdl, "INITIAL_S_RANGE", S_range, &
+                   units='1e-3', default=2., scale=US%ppt_to_S, do_not_log=.true.)
     call get_param(param_file, mdl, "S_REF", S_ref, default=35.0, do_not_log=.true.)
-    call get_param(param_file, mdl, "TS_RANGE_S_LIGHT", S_light, default = S_Ref, do_not_log=.true.)
-    call get_param(param_file, mdl, "TS_RANGE_S_DENSE", S_dense, default = S_Ref, do_not_log=.true.)
+    call get_param(param_file, mdl, "TS_RANGE_S_LIGHT", S_light, &
+                   units='1e-3', default=S_Ref, scale=US%ppt_to_S, do_not_log=.true.)
+    call get_param(param_file, mdl, "TS_RANGE_S_DENSE", S_dense, &
+                   units='1e-3', default=S_Ref, scale=US%ppt_to_S, do_not_log=.true.)
     call get_param(param_file, mdl, "INTERFACE_IC_QUANTA", eta_IC_quanta, &
                    "The granularity of initial interface height values "//&
                    "per meter, to avoid sensivity to order-of-arithmetic changes.", &
@@ -218,9 +225,12 @@ subroutine dumbbell_initialize_temperature_salinity ( T, S, h, G, GV, US, param_
 
   ! Local variables
   integer :: i, j, k, is, ie, js, je, nz
-  real    :: S_surf, T_surf, S_range
-  real    :: x, dblen
-  logical :: dbrotate     ! If true, rotate the domain.
+  real    :: S_surf    ! The surface salinity [S ~> ppt]
+  real    :: S_range   ! The range of salinities in this test case [S ~> ppt]
+  real    :: T_surf    ! The surface temperature [C ~> degC]
+  real    :: x         ! The fractional position in the domain [nondim]
+  real    :: dblen     ! The size of the dumbbell test case [axis_units]
+  logical :: dbrotate  ! If true, rotate the domain.
   character(len=20) :: verticalCoordinate, density_profile
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
@@ -293,12 +303,15 @@ subroutine dumbbell_initialize_sponges(G, GV, US, tv, depth_tot, param_file, use
   real :: sponge_time_scale  ! The damping time scale [T ~> s]
 
   real, dimension(SZI_(G),SZJ_(G)) :: Idamp ! inverse damping timescale [T-1 ~> s-1]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: h, S ! sponge thicknesses, temp and salt
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: h ! sponge thicknesses [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: S ! sponge salinities [S ~> ppt]
   real, dimension(SZK_(GV)+1) :: eta1D ! interface positions for ALE sponge
 
   integer :: i, j, k, nz
-  real :: x, min_thickness, dblen
-  real :: S_ref, S_range ! Salinities [S ~> ppt]
+  real :: x              ! The fractional position in the domain [nondim]
+  real :: dblen          ! The size of the dumbbell test case [axis_units]
+  real :: min_thickness  ! The minimum layer thickness [Z ~> m]
+  real :: S_ref, S_range ! A reference salinity and the range of salinities in this test case [S ~> ppt]
   logical :: dbrotate    ! If true, rotate the domain.
 
   call get_param(param_file, mdl,"DUMBBELL_LEN",dblen, &

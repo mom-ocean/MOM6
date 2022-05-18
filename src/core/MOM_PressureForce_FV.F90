@@ -522,11 +522,11 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm
 
       ! This block calculates a simple |delta T| along coordinates and does
       ! not allow vanishing layer thicknesses or layers tracking topography
-      !! SGS variance in i-direction [degC2]
+      !! SGS variance in i-direction [C2 ~> degC2]
       !dTdi2 = ( ( G%mask2dCu(I  ,j) * G%IdxCu(I  ,j) * ( tv%T(i+1,j,k) - tv%T(i,j,k) ) &
       !          + G%mask2dCu(I-1,j) * G%IdxCu(I-1,j) * ( tv%T(i,j,k) - tv%T(i-1,j,k) ) &
       !          ) * G%dxT(i,j) * 0.5 )**2
-      !! SGS variance in j-direction [degC2]
+      !! SGS variance in j-direction [C2 ~> degC2]
       !dTdj2 = ( ( G%mask2dCv(i,J  ) * G%IdyCv(i,J  ) * ( tv%T(i,j+1,k) - tv%T(i,j,k) ) &
       !          + G%mask2dCv(i,J-1) * G%IdyCv(i,J-1) * ( tv%T(i,j,k) - tv%T(i,j-1,k) ) &
       !          ) * G%dyT(i,j) * 0.5 )**2
