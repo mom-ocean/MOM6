@@ -171,7 +171,7 @@ type, public :: diabatic_CS ; private
   real    :: MLDdensityDifference    !< Density difference used to determine MLD_user [R ~> kg m-3]
   real    :: dz_subML_N2             !< The distance over which to calculate a diagnostic of the
                                      !! average stratification at the base of the mixed layer [Z ~> m].
-  real    :: MLD_EN_VALS(3)          !< Energy values for energy mixed layer diagnostics
+  real    :: MLD_EN_VALS(3)          !< Energy values for energy mixed layer diagnostics [R Z L2 T-2 ~> J m-2]
 
   !>@{ Diagnostic IDs
   integer :: id_cg1      = -1                 ! diag handle for mode-1 speed

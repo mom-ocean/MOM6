@@ -419,17 +419,17 @@ subroutine int_density_dz_wright(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
                         intent(in)  :: z_t      !< Height at the top of the layer in depth units [Z ~> m].
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
                         intent(in)  :: z_b      !< Height at the top of the layer [Z ~> m].
-  real,                 intent(in)  :: rho_ref  !< A mean density [R ~> kg m-3] or [kg m-3], that is subtracted
+  real,                 intent(in)  :: rho_ref  !< A mean density [R ~> kg m-3], that is subtracted
                                                 !! out to reduce the magnitude of each of the integrals.
                                                 !! (The pressure is calucated as p~=-z*rho_0*G_e.)
-  real,                 intent(in)  :: rho_0    !< Density [R ~> kg m-3] or [kg m-3], that is used
+  real,                 intent(in)  :: rho_0    !< Density [R ~> kg m-3], that is used
                                                 !! to calculate the pressure (as p~=-z*rho_0*G_e)
                                                 !! used in the equation of state.
   real,                 intent(in)  :: G_e      !< The Earth's gravitational acceleration
-                                                !! [L2 Z-1 T-2 ~> m s-2] or [m2 Z-1 s-2 ~> m s-2].
+                                                !! [L2 Z-1 T-2 ~> m s-2].
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
                         intent(inout) :: dpa    !< The change in the pressure anomaly across the
-                                                !! layer [R L2 T-2 ~> Pa] or [Pa].
+                                                !! layer [R L2 T-2 ~> Pa].
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
               optional, intent(inout) :: intz_dpa !< The integral through the thickness of the layer
                                                 !! of the pressure anomaly relative to the anomaly
@@ -473,9 +473,9 @@ subroutine int_density_dz_wright(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
   real :: wt_L, wt_R ! The linear weights of the left and right columns [nondim].
   real :: wtT_L, wtT_R ! The weights for tracers from the left and right columns [nondim].
   real :: intz(5)    ! The gravitational acceleration times the integrals of density
-                     ! with height at the 5 sub-column locations [R L2 T-2 ~> Pa] or [Pa].
+                     ! with height at the 5 sub-column locations [R L2 T-2 ~> Pa].
   real :: Pa_to_RL2_T2 ! A conversion factor of pressures from Pa to the output units indicated by
-                       ! pres_scale [R L2 T-2 Pa-1 ~> 1] or [1].
+                       ! pres_scale [R L2 T-2 Pa-1 ~> 1].
   real :: z0pres     ! The height at which the pressure is zero [Z ~> m]
   logical :: do_massWeight ! Indicates whether to do mass weighting.
   real, parameter :: C1_3 = 1.0/3.0, C1_7 = 1.0/7.0    ! Rational constants.
@@ -637,37 +637,36 @@ subroutine int_spec_vol_dp_wright(T, S, p_t, p_b, spv_ref, HI, dza, &
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
                         intent(in)  :: S         !< Salinity [PSU].
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
-                        intent(in)  :: p_t       !< Pressure at the top of the layer [R L2 T-2 ~> Pa] or [Pa].
+                        intent(in)  :: p_t       !< Pressure at the top of the layer [R L2 T-2 ~> Pa]
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
-                        intent(in)  :: p_b       !< Pressure at the top of the layer [R L2 T-2 ~> Pa] or [Pa].
+                        intent(in)  :: p_b       !< Pressure at the top of the layer [R L2 T-2 ~> Pa]
   real,                 intent(in)  :: spv_ref   !< A mean specific volume that is subtracted out
                             !! to reduce the magnitude of each of the integrals [R-1 ~> m3 kg-1].
                             !! The calculation is mathematically identical with different values of
                             !! spv_ref, but this reduces the effects of roundoff.
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
                         intent(inout) :: dza     !< The change in the geopotential anomaly across
-                                                 !! the layer [T-2 ~> m2 s-2] or [m2 s-2].
+                                                 !! the layer [L2 T-2 ~> m2 s-2].
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
               optional, intent(inout) :: intp_dza !< The integral in pressure through the layer of
                                                  !! the geopotential anomaly relative to the anomaly
                                                  !! at the bottom of the layer [R L4 T-4 ~> Pa m2 s-2]
-                                                 !! or [Pa m2 s-2].
   real, dimension(HI%IsdB:HI%IedB,HI%jsd:HI%jed), &
               optional, intent(inout) :: intx_dza !< The integral in x of the difference between the
                                                  !! geopotential anomaly at the top and bottom of
                                                  !! the layer divided by the x grid spacing
-                                                 !! [L2 T-2 ~> m2 s-2] or [m2 s-2].
+                                                 !! [L2 T-2 ~> m2 s-2].
   real, dimension(HI%isd:HI%ied,HI%JsdB:HI%JedB), &
               optional, intent(inout) :: inty_dza !< The integral in y of the difference between the
                                                  !! geopotential anomaly at the top and bottom of
                                                  !! the layer divided by the y grid spacing
-                                                 !! [L2 T-2 ~> m2 s-2] or [m2 s-2].
+                                                 !! [L2 T-2 ~> m2 s-2].
   integer,    optional, intent(in)  :: halo_size !< The width of halo points on which to calculate
                                                  !! dza.
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
-              optional, intent(in)  :: bathyP    !< The pressure at the bathymetry [R L2 T-2 ~> Pa] or [Pa]
+              optional, intent(in)  :: bathyP    !< The pressure at the bathymetry [R L2 T-2 ~> Pa]
   real,       optional, intent(in)  :: dP_neglect !< A miniscule pressure change with
-                                                 !! the same units as p_t [R L2 T-2 ~> Pa] or [Pa]
+                                                 !! the same units as p_t [R L2 T-2 ~> Pa]
   logical,    optional, intent(in)  :: useMassWghtInterp !< If true, uses mass weighting
                             !! to interpolate T/S for top and bottom integrals.
   real,       optional, intent(in)  :: SV_scale  !< A multiplicative factor by which to scale specific

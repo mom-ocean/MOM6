@@ -13,7 +13,7 @@ use MOM_grid, only : ocean_grid_type
 use MOM_unit_scaling,  only : unit_scale_type
 use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
-use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_domain
+use MOM_EOS, only : calculate_density, EOS_domain
 
 implicit none ; private
 
@@ -227,8 +227,6 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, GV, US, CS)
   !$OMP                                     e,I_dtol,h,tv,debug,h_neglect,p_ref_cv,ea, &
   !$OMP                                     eb,nkml,EOSdom)
   do j=js,je ; if (do_j(j)) then
-
-!  call calculate_density_derivs(T(:,1), S(:,1), p_ref_cv, dRcv_dT, dRcv_dS, tv%eqn_of_state, EOSdom)
 
     do k=1,nz ; do i=is,ie ; d_ea(i,k) = 0.0 ; d_eb(i,k) = 0.0 ; enddo ; enddo
     kmax_d_ea = 0

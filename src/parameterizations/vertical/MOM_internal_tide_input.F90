@@ -19,7 +19,7 @@ use MOM_time_manager,     only : time_type, set_time, operator(+), operator(<=)
 use MOM_unit_scaling,     only : unit_scale_type
 use MOM_variables,        only : thermo_var_ptrs, vertvisc_type, p3d
 use MOM_verticalGrid,     only : verticalGrid_type
-use MOM_EOS,              only : calculate_density, calculate_density_derivs, EOS_domain
+use MOM_EOS,              only : calculate_density_derivs, EOS_domain
 
 implicit none ; private
 

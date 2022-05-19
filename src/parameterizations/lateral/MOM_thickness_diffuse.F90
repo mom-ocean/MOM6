@@ -858,8 +858,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
         ! The second line below would correspond to arguments
         !            drho_dS_dS, drho_dS_dT, drho_dT_dT, drho_dS_dP, drho_dT_dP, &
         call calculate_density_second_derivs(T_u, S_u, pres_u, &
-                     scrap, scrap, drho_dT_dT_u, scrap, scrap, &
-                     (is-IsdB+1)-1, ie-is+2, tv%eqn_of_state)
+                     scrap, scrap, drho_dT_dT_u, scrap, scrap, tv%eqn_of_state, EOSdom_u)
       endif
 
       do I=is-1,ie
@@ -1125,8 +1124,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
         ! The second line below would correspond to arguments
         !            drho_dS_dS, drho_dS_dT, drho_dT_dT, drho_dS_dP, drho_dT_dP, &
         call calculate_density_second_derivs(T_v, S_v, pres_v, &
-                     scrap, scrap, drho_dT_dT_v, scrap, scrap, &
-                     is, ie-is+1, tv%eqn_of_state)
+                     scrap, scrap, drho_dT_dT_v, scrap, scrap, tv%eqn_of_state, EOSdom_v)
       endif
       do i=is,ie
         if (calc_derivatives) then

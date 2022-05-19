@@ -220,7 +220,7 @@ subroutine make_frazil(h, tv, G, GV, US, CS, p_surf, halo)
 
 end subroutine make_frazil
 
-!> This subroutine applies double diffusion to T & S, assuming no diapycal mass
+!> This subroutine applies double diffusion to T & S, assuming no diapycnal mass
 !! fluxes, using a simple triadiagonal solver.
 subroutine differential_diffuse_T_S(h, T, S, Kd_T, Kd_S, dt, G, GV)
   type(ocean_grid_type),   intent(in)    :: G    !< The ocean's grid structure
@@ -604,8 +604,8 @@ subroutine set_pen_shortwave(optics, fluxes, G, GV, US, CS, opacity, tracer_flow
                                                    !! organizing the tracer modules.
 
   ! Local variables
-  real, dimension(SZI_(G),SZJ_(G))          :: chl_2d !< Vertically uniform chlorophyll-A concentractions [mg m-3]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: chl_3d !< The chlorophyll-A concentractions of each layer [mg m-3]
+  real, dimension(SZI_(G),SZJ_(G))          :: chl_2d !< Vertically uniform chlorophyll-A concentrations [mg m-3]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: chl_3d !< The chlorophyll-A concentrations of each layer [mg m-3]
   character(len=128) :: mesg
   integer :: i, j, is, ie, js, je
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
@@ -676,7 +676,7 @@ subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, GV, US,
   real, dimension(SZI_(G)) :: S_subML, S_deeper ! Salinities used in the N2 calculation [ppt].
   real, dimension(SZI_(G)) :: rho_subML, rho_deeper ! Densities used in the N2 calculation [R ~> kg m-3].
   real, dimension(SZI_(G)) :: dK, dKm1          ! Depths [Z ~> m].
-  real, dimension(SZI_(G)) :: rhoSurf          ! Density used in finding the mixedlayer depth [R ~> kg m-3].
+  real, dimension(SZI_(G)) :: rhoSurf          ! Density used in finding the mixed layer depth [R ~> kg m-3].
   real, dimension(SZI_(G), SZJ_(G)) :: MLD     ! Diagnosed mixed layer depth [Z ~> m].
   real, dimension(SZI_(G), SZJ_(G)) :: subMLN2 ! Diagnosed stratification below ML [T-2 ~> s-2].
   real, dimension(SZI_(G), SZJ_(G)) :: MLD2    ! Diagnosed MLD^2 [Z2 ~> m2].
@@ -801,14 +801,14 @@ subroutine diagnoseMLDbyEnergy(id_MLD, h, tv, G, GV, US, Mixing_Energy, diagPtr)
   ! density in the mixed layer as well as in the remaining part of the present layer that is
   ! not mixed.
   ! To solve for X in this equation a Newton's method iteration is employed, which
-  ! converges extremely quickly (usually 1 guess) since this equation turns out being rather
-  ! lienar for PE change with increasing X.
+  ! converges extremely quickly (usually 1 guess) since this equation turns out to be rather
+  ! linear for PE change with increasing X.
   ! Input parameters:
   integer, dimension(3),   intent(in) :: id_MLD      !< Energy output diag IDs
   type(ocean_grid_type),   intent(in) :: G           !< Grid type
   type(verticalGrid_type), intent(in) :: GV          !< ocean vertical grid structure
   type(unit_scale_type),   intent(in) :: US          !< A dimensional unit scaling type
-  real, dimension(3),      intent(in) :: Mixing_Energy !< Energy values for up to 3 MLDs
+  real, dimension(3),      intent(in) :: Mixing_Energy !< Energy values for up to 3 MLDs [R Z L2 T-2 ~> J m-2]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(in) :: h           !< Layer thickness [H ~> m or kg m-2]
   type(thermo_var_ptrs),   intent(in) :: tv          !< Structure containing pointers to any
@@ -816,17 +816,44 @@ subroutine diagnoseMLDbyEnergy(id_MLD, h, tv, G, GV, US, Mixing_Energy, diagPtr)
   type(diag_ctrl),         pointer    :: diagPtr     !< Diagnostics structure
 
   ! Local variables
-  real, dimension(SZI_(G), SZJ_(G),3) :: MLD     ! Diagnosed mixed layer depth [Z ~> m].
-  real, dimension(SZK_(GV)) :: Z_L, Z_U, dZ, Rho_c, pRef_MLD
-  real, dimension(3) :: PE_threshold
+  real, dimension(SZI_(G),SZJ_(G),3) :: MLD  ! Diagnosed mixed layer depth [Z ~> m].
+  real, dimension(SZK_(GV)+1) :: Z_int    ! Depths of the interfaces from the surface [Z ~> m]
+  real, dimension(SZK_(GV)) :: dZ         ! Layer thicknesses in depth units [Z ~> m]
+  real, dimension(SZK_(GV)) :: Rho_c      ! A column of layer densities [R ~> kg m-3]
+  real, dimension(SZK_(GV)) :: pRef_MLD   ! The reference pressure for the mixed layer
+                                          ! depth calculation [R L2 T-2 ~> Pa]
+  real, dimension(3) :: PE_threshold      ! The energy threshold divided by g [R Z2 ~> kg m-1]
 
-  real :: PE_Threshold_fraction, PE, PE_Mixed, PE_Mixed_TST
-  real :: RhoDZ_ML, H_ML, RhoDZ_ML_TST, H_ML_TST
-  real :: Rho_ML
+  real :: PE_Threshold_fraction   ! The fractional tolerance of the specified energy
+                                  ! for the energy used to mix to the diagnosed depth [nondim]
+  real :: H_ML                    ! The accumulated depth of the mixed layer [Z ~> m]
+  real :: PE                      ! The cumulative potential energy of the unmixed water column to a depth
+                                  ! of H_ML, divided by the gravitational acceleration [R Z2 ~> kg m-1]
+  real :: PE_Mixed                ! The potential energy of the completely mixed water column to a depth
+                                  ! of H_ML, divided by the gravitational acceleration [R Z2 ~> kg m-1]
+  real :: RhoDZ_ML                ! The depth integrated density of the mixed layer [R Z ~> kg m-2]
+  real :: H_ML_TST                ! A new test value for the depth of the mixed layer [Z ~> m]
+  real :: PE_Mixed_TST            ! The potential energy of the completely mixed water column to a depth
+                                  ! of H_ML_TST, divided by the gravitational acceleration [R Z2 ~> kg m-1]
+  real :: RhoDZ_ML_TST            ! A test value of the new depth integrated density of the mixed layer [R Z ~> kg m-2]
+  real :: Rho_ML                  ! The average density of the mixed layer [R ~> kg m-3]
 
-  real :: R1, D1, R2, D2
-  real :: Ca, Cb,D ,Cc, Cd, Ca2, Cb2, C, Cc2
-  real :: Gx, Gpx, Hx, iHx, Hpx, Ix, Ipx, Fgx, Fpx, X, X2
+  ! These are all temporary variables used to shorten the expressions in the iterations.
+  real :: R1, R2, Ca, Ca2 ! Some densities [R ~> kg m-3]
+  real :: D1, D2, X, X2   ! Some thicknesses [Z ~> m]
+  real :: Cb, Cb2    ! A depth integrated density [R Z ~> kg m-2]
+  real :: C, D       ! A depth squared [Z2 ~> m2]
+  real :: Cc, Cc2    ! A density times a depth squared [R Z2 ~> kg m-1]
+  real :: Cd         ! A density times a depth cubed [R Z3 ~> kg]
+  real :: Gx         ! A triple integral in depth of density [R Z3 ~> kg]
+  real :: Gpx        ! The derivative of Gx with x  [R Z2 ~> kg m-1]
+  real :: Hx         ! The vertical integral depth [Z ~> m]
+  real :: iHx        ! The inverse of Hx [Z-1 ~> m-1]
+  real :: Hpx        ! The derivative of Hx with x, hard coded to 1.  Why? [nondim]
+  real :: Ix         ! A double integral in depth of density [R Z2 ~> kg m-1]
+  real :: Ipx        ! The derivative of Ix with x [R Z ~> kg m-2]
+  real :: Fgx        ! The mixing energy difference from the target [R Z2 ~> kg m-1]
+  real :: Fpx        ! The derivative of Fgx with x  [R Z ~> kg m-2]
 
   integer :: IT, iM
   integer :: i, j, is, ie, js, je, k, nz
@@ -844,17 +871,12 @@ subroutine diagnoseMLDbyEnergy(id_MLD, h, tv, G, GV, US, Mixing_Energy, diagPtr)
   do j=js,je ; do i=is,ie
     if (G%mask2dT(i,j) > 0.0) then
 
-      call calculate_density(tv%T(i,j,:), tv%S(i,j,:), pRef_MLD, rho_c, 1, nz, &
-                             tv%eqn_of_state, scale=US%kg_m3_to_R)
+      call calculate_density(tv%T(i,j,:), tv%S(i,j,:), pRef_MLD, rho_c, tv%eqn_of_state)
 
+      Z_int(1) = 0.0
       do k=1,nz
         DZ(k) = h(i,j,k) * GV%H_to_Z
-      enddo
-      Z_U(1) = 0.0
-      Z_L(1) = -DZ(1)
-      do k=2,nz
-        Z_U(k) = Z_L(k-1)
-        Z_L(k) = Z_L(k-1)-DZ(k)
+        Z_int(K+1) = Z_int(K) - DZ(k)
       enddo
 
       do iM=1,3
@@ -870,7 +892,7 @@ subroutine diagnoseMLDbyEnergy(id_MLD, h, tv, G, GV, US, Mixing_Energy, diagPtr)
         do k=1,nz
 
           ! This is the unmixed PE cumulative sum from top down
-          PE = PE + 0.5 * rho_c(k) * (Z_U(k)**2 - Z_L(k)**2)
+          PE = PE + 0.5 * rho_c(k) * (Z_int(K)**2 - Z_int(K+1)**2)
 
           ! This is the depth and integral of density
           H_ML_TST = H_ML + DZ(k)
@@ -1067,7 +1089,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
                      ! [degC H T-1 ~> degC m s-1 or degC kg m-2 s-1]
   real, dimension(max(nsw,1),SZI_(G),SZK_(GV)) :: &
     opacityBand      ! The opacity (inverse of the exponential absorption length) of each frequency
-                     ! band of shortwave radation in each layer [H-1 ~> m-1 or m2 kg-1]
+                     ! band of shortwave radiation in each layer [H-1 ~> m-1 or m2 kg-1]
   real, dimension(maxGroundings) :: hGrounding ! Thickness added by each grounding event [H ~> m or kg m-2]
   real    :: Temp_in, Salin_in
   real    :: g_Hconv2 ! A conversion factor for use in the TKE calculation
@@ -1173,7 +1195,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
     ! netSalt      = surface salt fluxes [ppt H ~> ppt m or gSalt m-2]
     ! Pen_SW_bnd   = components to penetrative shortwave radiation split according to bands.
     !                This field provides that portion of SW from atmosphere that in fact
-    !                enters to the ocean and participates in pentrative SW heating.
+    !                enters to the ocean and participates in penetrative SW heating.
     ! nonpenSW     = non-downwelling SW flux, which is absorbed in ocean surface
     !                (in tandem w/ LW,SENS,LAT); saved only for diagnostic purposes.
 
@@ -1201,7 +1223,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
     !     For all these reasons we compute additional values of <_rate> which are preserved
     !     for the buoyancy flux calculation and reproduce the old answers.
     !   In the future this needs more detailed investigation to make sure everything is
-    !   consistent and correct. These details shouldnt significantly effect climate,
+    !   consistent and correct. These details should not significantly effect climate,
     !   but do change answers.
     !-----------------------------------------------------------------------------------------
     if (calculate_buoyancy) then
