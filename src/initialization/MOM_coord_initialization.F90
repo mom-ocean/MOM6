@@ -42,8 +42,8 @@ subroutine MOM_initialize_coord(GV, US, PF, tv, max_depth)
   ! Local
   character(len=200) :: config
   logical :: debug
-! This include declares and sets the variable "version".
-#include "version_variable.h"
+  ! This include declares and sets the variable "version".
+# include "version_variable.h"
   integer :: nz
 
   nz = GV%ke
@@ -414,10 +414,9 @@ subroutine set_coord_from_file(Rlay, g_prime, GV, US, param_file)
   if (.not.file_exists(filename)) call MOM_error(FATAL, &
       " set_coord_from_file: Unable to open "//trim(filename))
 
-  call MOM_read_data(filename, coord_var, Rlay)
-  do k=1,nz ; Rlay(k) = US%kg_m3_to_R*Rlay(k) ; enddo
+  call MOM_read_data(filename, coord_var, Rlay, scale=US%kg_m3_to_R)
   g_prime(1) = g_fs
-  do k=2,nz ; g_prime(k) = (GV%g_Earth/(GV%Rho0)) * (Rlay(k) - Rlay(k-1)) ; enddo
+  do k=2,nz ; g_prime(k) = (GV%g_Earth/GV%Rho0) * (Rlay(k) - Rlay(k-1)) ; enddo
   do k=1,nz ; if (g_prime(k) <= 0.0) then
     call MOM_error(FATAL, "MOM_initialization set_coord_from_file: "//&
        "Zero or negative g_primes read from variable "//"Layer"//" in file "//&
@@ -442,7 +441,8 @@ subroutine set_coord_linear(Rlay, g_prime, GV, US, param_file)
 
   ! Local variables
   character(len=40)  :: mdl = "set_coord_linear" ! This subroutine
-  real :: Rlay_ref, Rlay_range, g_fs
+  real :: Rlay_ref, Rlay_range ! A reference density and its range [R ~> kg m-3]
+  real :: g_fs  ! The reduced gravity across the free surface [L2 Z-1 T-2 ~> m s-2]
   integer :: k, nz
   nz = GV%ke
 
