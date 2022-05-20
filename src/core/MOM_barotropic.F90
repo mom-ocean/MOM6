@@ -6,7 +6,7 @@ module MOM_barotropic
 use MOM_debugging, only : hchksum, uvchksum
 use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end, CLOCK_ROUTINE
 use MOM_diag_mediator, only : post_data, query_averaging_enabled, register_diag_field
-use MOM_diag_mediator, only : diag_ctrl, enable_averaging
+use MOM_diag_mediator, only : diag_ctrl, enable_averaging, enable_averages
 use MOM_domains, only : min_across_PEs, clone_MOM_domain, deallocate_MOM_domain
 use MOM_domains, only : To_All, Scalar_Pair, AGRID, CORNER, MOM_domain_type
 use MOM_domains, only : create_group_pass, do_group_pass, group_pass_type
@@ -2351,7 +2351,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
 
     if (do_hifreq_output) then
       time_step_end = time_bt_start + real_to_time(n*US%T_to_s*dtbt)
-      call enable_averaging(US%T_to_s*dtbt, time_step_end, CS%diag)
+      call enable_averages(dtbt, time_step_end, CS%diag)
       if (CS%id_ubt_hifreq > 0) call post_data(CS%id_ubt_hifreq, ubt(IsdB:IedB,jsd:jed), CS%diag)
       if (CS%id_vbt_hifreq > 0) call post_data(CS%id_vbt_hifreq, vbt(isd:ied,JsdB:JedB), CS%diag)
       if (CS%id_eta_hifreq > 0) call post_data(CS%id_eta_hifreq, eta(isd:ied,jsd:jed), CS%diag)
@@ -2711,7 +2711,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
       ADp%visc_rem_u(I,j,k) = visc_rem_u(I,j,k)
     enddo ; enddo ; enddo
   endif
-  if (associated(ADp%visc_rem_u)) then
+  if (associated(ADp%visc_rem_v)) then
     do k=1,nz ; do J=js-1,je ; do i=is,ie
       ADp%visc_rem_v(i,J,k) = visc_rem_v(i,J,k)
     enddo ; enddo ; enddo
