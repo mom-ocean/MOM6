@@ -14,7 +14,7 @@ use fms_mod, only : fms_end, fms_init
 
 implicit none ; private
 
-public :: PE_here, root_PE, num_PEs, set_rootPE, Set_PElist, Get_PElist
+public :: PE_here, root_PE, num_PEs, set_rootPE, Set_PElist, Get_PElist, sync_PEs
 public :: broadcast, sum_across_PEs, min_across_PEs, max_across_PEs
 public :: any_across_PEs, all_across_PEs
 public :: field_chksum, MOM_infra_init, MOM_infra_end
@@ -107,6 +107,13 @@ subroutine Get_PEList(pelist, name, commID)
 
   call mpp_get_current_pelist(pelist, name, commiD)
 end subroutine Get_PEList
+
+!> Sync the PEs at a defined point in the model
+subroutine sync_PEs(pelist)
+  integer, optional, intent(in) :: pelist(:)  !< The list of PEs to be synced
+
+  call mpp_sync(pelist)
+end subroutine sync_PEs
 
 !> Communicate a 1-D array of character strings from one PE to others
 subroutine broadcast_char(dat, length, from_PE, PElist, blocking)
