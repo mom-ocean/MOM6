@@ -130,8 +130,8 @@ end subroutine USER_initialize_velocity
 subroutine USER_init_temperature_salinity(T, S, G, GV, param_file, just_read)
   type(ocean_grid_type),                     intent(in)  :: G !< Ocean grid structure.
   type(verticalGrid_type),                   intent(in)  :: GV !< The ocean's vertical grid structure.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: T !< Potential temperature [degC].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: S !< Salinity [ppt].
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: T !< Potential temperature [C ~> degC].
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: S !< Salinity [S ~> ppt].
   type(param_file_type),                     intent(in)  :: param_file !< A structure indicating the
                                                             !! open file to parse for model
                                                             !! parameter values.
@@ -238,8 +238,8 @@ end subroutine write_user_log
 !!  - GV%g_prime - The reduced gravity at each interface [L2 Z-1 T-2 ~> m s-2].
 !!  - GV%Rlay - Layer potential density (coordinate variable) [R ~> kg m-3].
 !!  If ENABLE_THERMODYNAMICS is defined:
-!!  - T - Temperature [degC].
-!!  - S - Salinity [ppt].
+!!  - T - Temperature [C ~> degC].
+!!  - S - Salinity [S ~> ppt].
 !!  If BULKMIXEDLAYER is defined:
 !!  - Rml - Mixed layer and buffer layer potential densities [R ~> kg m-3].
 !!  If SPONGE is defined:

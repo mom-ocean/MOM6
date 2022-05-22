@@ -37,8 +37,8 @@ public tracer_name_lookup
 !> The tracer type
 type, public :: tracer_type
 
-  real, dimension(:,:,:), pointer :: t              => NULL() !< tracer concentration array [conc]
-! real                            :: OBC_inflow_conc=  0.0    !< tracer concentration for generic inflows [conc]
+  real, dimension(:,:,:), pointer :: t              => NULL() !< tracer concentration array [CU ~> conc]
+! real                            :: OBC_inflow_conc=  0.0    !< tracer concentration for generic inflows [CU ~> conc]
 ! real, dimension(:,:,:), pointer :: OBC_in_u       => NULL() !< structured values for flow into the domain
 !                                                             !! specified in OBCs through u-face of cell
 ! real, dimension(:,:,:), pointer :: OBC_in_v       => NULL() !< structured values for flow into the domain
@@ -87,10 +87,10 @@ type, public :: tracer_type
 !                                                              !! expressed as a change in concentration
 !                                                              !! [conc T-1 ~> conc s-1]
   real, dimension(:,:,:), pointer :: t_prev         => NULL() !< tracer concentration array at a previous
-                                                              !! timestep used for diagnostics [conc]
+                                                              !! timestep used for diagnostics [CU ~> conc]
   real, dimension(:,:,:), pointer :: Trxh_prev      => NULL() !< layer integrated tracer concentration array
                                                               !! at a previous timestep used for diagnostics
-                                                              !! [conc H ~> conc m or conc kg m-2]
+                                                              !! [CU ~> H ~> conc m or conc kg m-2]
 
   character(len=32)               :: name                     !< tracer name used for diagnostics and error messages
   character(len=64)               :: units                    !< Physical dimensions of the tracer concentration
@@ -98,6 +98,8 @@ type, public :: tracer_type
 !  type(vardesc), pointer          :: vd             => NULL() !< metadata describing the tracer
   logical                         :: registry_diags = .false. !< If true, use the registry to set up the
                                                               !! diagnostics associated with this tracer.
+  real                            :: conc_scale = 1.0         !< A scaling factor used to convert the concentrations
+                                                              !! of this tracer to its desired units.
   character(len=64)               :: cmor_name                !< CMOR name of this tracer
   character(len=64)               :: cmor_units               !< CMOR physical dimensions of the tracer
   character(len=240)              :: cmor_longname            !< CMOR long name of the tracer
@@ -157,7 +159,7 @@ subroutine register_tracer(tr_ptr, Reg, param_file, HI, GV, name, longname, unit
                            cmor_name, cmor_units, cmor_longname, tr_desc, &
                            OBC_inflow, OBC_in_u, OBC_in_v, ad_x, ad_y, df_x, df_y, &
                            ad_2d_x, ad_2d_y, df_2d_x, df_2d_y, advection_xy, registry_diags, &
-                           flux_nameroot, flux_longname, flux_units, flux_scale, &
+                           conc_scale, flux_nameroot, flux_longname, flux_units, flux_scale, &
                            convergence_units, convergence_scale, cmor_tendprefix, diag_form, &
                            restart_CS, mandatory)
   type(hor_index_type),           intent(in)    :: HI           !< horizontal index type
@@ -202,6 +204,8 @@ subroutine register_tracer(tr_ptr, Reg, param_file, HI, GV, name, longname, unit
   real, dimension(:,:,:), optional, pointer     :: advection_xy !< convergence of lateral advective tracer fluxes
   logical,              optional, intent(in)    :: registry_diags !< If present and true, use the registry for
                                                                 !! the diagnostics of this tracer.
+  real,                 optional, intent(in)    :: conc_scale   !< A scaling factor used to convert the concentration
+                                                                !! of this tracer to its desired units.
   character(len=*),     optional, intent(in)    :: flux_nameroot !< Short tracer name snippet used construct the
                                                                 !! names of flux diagnostics.
   character(len=*),     optional, intent(in)    :: flux_longname !< A word or phrase used construct the long
@@ -267,6 +271,9 @@ subroutine register_tracer(tr_ptr, Reg, param_file, HI, GV, name, longname, unit
       "MOM register_tracer was called for variable "//trim(Tr%name)//&
       " with a locked tracer registry.")
 
+  Tr%conc_scale = 1.0
+  if (present(conc_scale)) Tr%conc_scale = conc_scale
+
   Tr%flux_nameroot = Tr%name
   if (present(flux_nameroot)) then
     if (len_trim(flux_nameroot) > 0) Tr%flux_nameroot = flux_nameroot
@@ -280,7 +287,7 @@ subroutine register_tracer(tr_ptr, Reg, param_file, HI, GV, name, longname, unit
   Tr%flux_units = ""
   if (present(flux_units)) Tr%flux_units = flux_units
 
-  Tr%flux_scale = GV%H_to_MKS
+  Tr%flux_scale = GV%H_to_MKS*Tr%conc_scale
   if (present(flux_scale)) Tr%flux_scale = flux_scale
 
   Tr%conv_units = ""
@@ -289,7 +296,7 @@ subroutine register_tracer(tr_ptr, Reg, param_file, HI, GV, name, longname, unit
   Tr%cmor_tendprefix = ""
   if (present(cmor_tendprefix)) Tr%cmor_tendprefix = cmor_tendprefix
 
-  Tr%conv_scale = GV%H_to_MKS
+  Tr%conv_scale = GV%H_to_MKS*Tr%conc_scale
   if (present(convergence_scale)) then
     Tr%conv_scale = convergence_scale
   elseif (present(flux_scale)) then
@@ -321,7 +328,7 @@ subroutine register_tracer(tr_ptr, Reg, param_file, HI, GV, name, longname, unit
     mand = .true. ; if (present(mandatory)) mand = mandatory
 
     call register_restart_field(tr_ptr, Tr%name, mand, restart_CS, &
-                                longname=Tr%longname, units=Tr%units)
+                                longname=Tr%longname, units=Tr%units, conversion=conc_scale)
   endif
 end subroutine register_tracer
 
@@ -400,17 +407,17 @@ subroutine register_tracer_diagnostics(Reg, h, Time, diag, G, GV, US, use_ALE)
 
     if (len_trim(cmorname) == 0) then
       Tr%id_tr = register_diag_field("ocean_model", trim(name), diag%axesTL, &
-          Time, trim(longname), trim(units))
+          Time, trim(longname), trim(units), conversion=Tr%conc_scale)
     else
       Tr%id_tr = register_diag_field("ocean_model", trim(name), diag%axesTL, &
-          Time, trim(longname), trim(units), cmor_field_name=cmorname, &
-          cmor_long_name=cmor_longname, cmor_units=Tr%cmor_units, &
-          cmor_standard_name=cmor_long_std(cmor_longname))
+          Time, trim(longname), trim(units), conversion=Tr%conc_scale, &
+          cmor_field_name=cmorname, cmor_long_name=cmor_longname, &
+          cmor_units=Tr%cmor_units, cmor_standard_name=cmor_long_std(cmor_longname))
     endif
     Tr%id_tr_post_horzn = register_diag_field("ocean_model", &
         trim(name)//"_post_horzn", diag%axesTL, Time, &
         trim(longname)//" after horizontal transport (advection/diffusion) has occurred", &
-        trim(units))
+        trim(units), conversion=Tr%conc_scale)
     if (Tr%diag_form == 1) then
       Tr%id_adx = register_diag_field("ocean_model", trim(shortnm)//"_adx", &
           diag%axesCuL, Time, trim(flux_longname)//" advective zonal flux" , &
@@ -526,7 +533,8 @@ subroutine register_tracer_diagnostics(Reg, h, Time, diag, G, GV, US, use_ALE)
 
     Tr%id_tendency = register_diag_field('ocean_model', trim(shortnm)//'_tendency', &
         diag%axesTL, Time, &
-        'Net time tendency for '//trim(lowercase(longname)), trim(units)//' s-1', conversion=US%s_to_T)
+        'Net time tendency for '//trim(lowercase(longname)), &
+        trim(units)//' s-1', conversion=Tr%conc_scale*US%s_to_T)
 
     if (Tr%id_tendency > 0) then
       call safe_alloc_ptr(Tr%t_prev,isd,ied,jsd,jed,nz)
@@ -584,11 +592,11 @@ subroutine register_tracer_diagnostics(Reg, h, Time, diag, G, GV, US, use_ALE)
     endif
     Tr%id_dfxy_conc = register_diag_field("ocean_model", trim(shortnm)//'_dfxy_conc_tendency', &
         diag%axesTL, Time, "Neutral diffusion tracer concentration tendency for "//trim(shortnm), &
-        trim(units)//' s-1', conversion=US%s_to_T)
+        trim(units)//' s-1', conversion=Tr%conc_scale*US%s_to_T)
 
     Tr%id_lbdxy_conc = register_diag_field("ocean_model", trim(shortnm)//'_lbdxy_conc_tendency', &
         diag%axesTL, Time, "Lateral diffusion tracer concentration tendency for "//trim(shortnm), &
-        trim(units)//' s-1', conversion=US%s_to_T)
+        trim(units)//' s-1', conversion=Tr%conc_scale*US%s_to_T)
 
     var_lname = "Net time tendency for "//lowercase(flux_longname)
     if (len_trim(Tr%cmor_tendprefix) == 0) then
@@ -625,7 +633,7 @@ subroutine register_tracer_diagnostics(Reg, h, Time, diag, G, GV, US, use_ALE)
       var_lname = "Vertical remapping tracer concentration tendency for "//trim(Reg%Tr(m)%name)
       Tr%id_remap_conc= register_diag_field('ocean_model', &
           trim(Tr%flux_nameroot)//'_tendency_vert_remap', diag%axesTL, Time, var_lname, &
-          trim(units)//' s-1', conversion=US%s_to_T)
+          trim(units)//' s-1', conversion=Tr%conc_scale*US%s_to_T)
 
       var_lname = "Vertical remapping tracer content tendency for "//trim(Reg%Tr(m)%flux_longname)
       Tr%id_remap_cont = register_diag_field('ocean_model', &
@@ -644,7 +652,8 @@ subroutine register_tracer_diagnostics(Reg, h, Time, diag, G, GV, US, use_ALE)
       unit2 = trim(units)//"2"
       if (index(units(1:len_trim(units))," ") > 0) unit2 = "("//trim(units)//")2"
       Tr%id_tr_vardec = register_diag_field('ocean_model', trim(shortnm)//"_vardec", diag%axesTL, &
-          Time, "ALE variance decay for "//lowercase(longname), trim(unit2)//" s-1", conversion=US%s_to_T)
+          Time, "ALE variance decay for "//lowercase(longname), &
+          trim(unit2)//" s-1", conversion=Tr%conc_scale**2*US%s_to_T)
       if (Tr%id_tr_vardec > 0) then
         ! Set up a new tracer for this tracer squared
         m2 = Reg%ntr+1
@@ -811,7 +820,7 @@ subroutine MOM_tracer_chksum(mesg, Tr, ntr, G)
   integer :: m
 
   do m=1,ntr
-    call hchksum(Tr(m)%t, mesg//trim(Tr(m)%name), G%HI)
+    call hchksum(Tr(m)%t, mesg//trim(Tr(m)%name), G%HI, scale=Tr(m)%conc_scale)
   enddo
 
 end subroutine MOM_tracer_chksum
@@ -836,7 +845,7 @@ subroutine MOM_tracer_chkinv(mesg, G, GV, h, Tr, ntr)
   vol_scale = GV%H_to_m*G%US%L_to_m**2
   do m=1,ntr
     do k=1,nz ; do j=js,je ; do i=is,ie
-      tr_inv(i,j,k) = Tr(m)%t(i,j,k) * (vol_scale * h(i,j,k) * G%areaT(i,j)*G%mask2dT(i,j))
+      tr_inv(i,j,k) = Tr(m)%conc_scale*Tr(m)%t(i,j,k) * (vol_scale * h(i,j,k) * G%areaT(i,j)*G%mask2dT(i,j))
     enddo ; enddo ; enddo
     total_inv = reproducing_sum(tr_inv, is+(1-G%isd), ie+(1-G%isd), js+(1-G%jsd), je+(1-G%jsd))
     if (is_root_pe()) write(0,'(A,1X,A5,1X,ES25.16,1X,A)') "h-point: inventory", Tr(m)%name, total_inv, mesg

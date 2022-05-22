@@ -110,24 +110,24 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
                                                               !! over the entire computational domain.
   ! Local variables
   real, dimension(SZK_(GV)+1) :: &
-    dRho_dT, &    !< Partial derivative of density with temperature [R degC-1 ~> kg m-3 degC-1]
-    dRho_dS, &    !< Partial derivative of density with salinity [R ppt-1 ~> kg m-3 ppt-1]
+    dRho_dT, &    !< Partial derivative of density with temperature [R C-1 ~> kg m-3 degC-1]
+    dRho_dS, &    !< Partial derivative of density with salinity [R S-1 ~> kg m-3 ppt-1]
     pres, &       !< Interface pressure [R L2 T-2 ~> Pa]
-    T_int, &      !< Temperature interpolated to interfaces [degC]
-    S_int, &      !< Salinity interpolated to interfaces [ppt]
+    T_int, &      !< Temperature interpolated to interfaces [C ~> degC]
+    S_int, &      !< Salinity interpolated to interfaces [S ~> ppt]
     gprime        !< The reduced gravity across each interface [L2 Z-1 T-2 ~> m s-2].
   real, dimension(SZK_(GV)) :: &
     Igl, Igu      !< The inverse of the reduced gravity across an interface times
                   !< the thickness of the layer below (Igl) or above (Igu) it [T2 L-2 ~> s2 m-2].
   real, dimension(SZK_(GV),SZI_(G)) :: &
     Hf, &         !< Layer thicknesses after very thin layers are combined [Z ~> m]
-    Tf, &         !< Layer temperatures after very thin layers are combined [degC]
-    Sf, &         !< Layer salinities after very thin layers are combined [ppt]
+    Tf, &         !< Layer temperatures after very thin layers are combined [C ~> degC]
+    Sf, &         !< Layer salinities after very thin layers are combined [S ~> ppt]
     Rf            !< Layer densities after very thin layers are combined [R ~> kg m-3]
   real, dimension(SZK_(GV)) :: &
     Hc, &         !< A column of layer thicknesses after convective instabilities are removed [Z ~> m]
-    Tc, &         !< A column of layer temperatures after convective instabilities are removed [degC]
-    Sc, &         !< A column of layer salinites after convective instabilities are removed [ppt]
+    Tc, &         !< A column of layer temperatures after convective instabilities are removed [C ~> degC]
+    Sc, &         !< A column of layer salinities after convective instabilities are removed [S ~> ppt]
     Rc            !< A column of layer densities after convective instabilities are removed [R ~> kg m-3]
   real, dimension(SZI_(G),SZJ_(G)) :: &
     htot              !< The vertical sum of the thicknesses [Z ~> m]
@@ -137,8 +137,8 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
   real, dimension(SZI_(G)) :: &
     hmin, &        !< Thicknesses [Z ~> m]
     H_here, &      !< A thickness [Z ~> m]
-    HxT_here, &    !< A layer integrated temperature [degC Z ~> degC m]
-    HxS_here, &    !< A layer integrated salinity [ppt Z ~> ppt m]
+    HxT_here, &    !< A layer integrated temperature [C Z ~> degC m]
+    HxS_here, &    !< A layer integrated salinity [S Z ~> ppt m]
     HxR_here       !< A layer integrated density [R Z ~> kg m-2]
   real :: I_Hnew   !< The inverse of a new layer thickness [Z-1 ~> m-1]
   real :: drxh_sum !< The sum of density diffrences across interfaces times thicknesses [R Z ~> kg m-2]

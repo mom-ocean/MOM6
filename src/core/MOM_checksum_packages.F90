@@ -124,12 +124,12 @@ subroutine MOM_thermo_chksum(mesg, tv, G, US, haloshift)
   integer :: hs
   hs=1 ; if (present(haloshift)) hs=haloshift
 
-  if (associated(tv%T)) call hchksum(tv%T, mesg//" T", G%HI, haloshift=hs)
-  if (associated(tv%S)) call hchksum(tv%S, mesg//" S", G%HI, haloshift=hs)
+  if (associated(tv%T)) call hchksum(tv%T, mesg//" T", G%HI, haloshift=hs, scale=US%C_to_degC)
+  if (associated(tv%S)) call hchksum(tv%S, mesg//" S", G%HI, haloshift=hs, scale=US%S_to_ppt)
   if (associated(tv%frazil)) call hchksum(tv%frazil, mesg//" frazil", G%HI, haloshift=hs, &
                                           scale=US%Q_to_J_kg*US%R_to_kg_m3*US%Z_to_m)
-  if (associated(tv%salt_deficit)) &
-    call hchksum(tv%salt_deficit, mesg//" salt deficit", G%HI, haloshift=hs, scale=US%RZ_to_kg_m2)
+  if (associated(tv%salt_deficit)) call hchksum(tv%salt_deficit, mesg//" salt deficit", G%HI, haloshift=hs, &
+                                                scale=US%S_to_ppt*US%RZ_to_kg_m2)
 
 end subroutine MOM_thermo_chksum
 
@@ -240,9 +240,9 @@ subroutine MOM_state_stats(mesg, u, v, h, Temp, Salt, G, GV, US, allowChange, pe
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  &
                            intent(in) :: h    !< Layer thicknesses [H ~> m or kg m-2].
   real, pointer, dimension(:,:,:),           &
-                           intent(in) :: Temp !< Temperature [degC].
+                           intent(in) :: Temp !< Temperature [C ~> degC].
   real, pointer, dimension(:,:,:),           &
-                           intent(in) :: Salt !< Salinity [ppt].
+                           intent(in) :: Salt !< Salinity [S ~> ppt].
   type(unit_scale_type),   intent(in) :: US    !< A dimensional unit scaling type
   logical,       optional, intent(in) :: allowChange !< do not flag an error
                                                      !! if the statistics change.
@@ -258,8 +258,11 @@ subroutine MOM_state_stats(mesg, u, v, h, Temp, Salt, G, GV, US, allowChange, pe
   real :: Vol, dV    ! The total ocean volume and its change [m3] (unscaled to permit reproducing sum).
   real :: Area       ! The total ocean surface area [m2] (unscaled to permit reproducing sum).
   real :: h_minimum  ! The minimum layer thicknesses [H ~> m or kg m-2]
+  real :: T_scale    ! The scaling conversion factor for temperatures [degC C-1 ~> 1]
+  real :: S_scale    ! The scaling conversion factor for salinities [ppt S-1 ~> 1]
   logical :: do_TS   ! If true, evaluate statistics for temperature and salinity
-  type(stats) :: T, S, delT, delS
+  type(stats) :: T, delT ! Temperature statistics in unscaled units [degC]
+  type(stats) :: S, delS ! Salinity statistics in unscaled units [ppt]
 
   ! NOTE: save data is not normally allowed but we use it for debugging purposes here on the
   !       assumption we will not turn this on with threads
@@ -278,6 +281,8 @@ subroutine MOM_state_stats(mesg, u, v, h, Temp, Salt, G, GV, US, allowChange, pe
   tmp_T(:,:) = 0.0
   tmp_S(:,:) = 0.0
 
+  T_scale = US%C_to_degC ; S_scale = US%S_to_ppt
+
   ! First collect local stats
   do j=js,je ; do i=is,ie
     tmp_A(i,j) = tmp_A(i,j) + US%L_to_m**2*G%areaT(i,j)
@@ -290,12 +295,12 @@ subroutine MOM_state_stats(mesg, u, v, h, Temp, Salt, G, GV, US, allowChange, pe
       dV = US%L_to_m**2*G%areaT(i,j)*GV%H_to_m*h(i,j,k)
       tmp_V(i,j) = tmp_V(i,j) + dV
       if (do_TS .and. h(i,j,k)>0.) then
-        T%minimum = min( T%minimum, Temp(i,j,k) ) ; T%maximum = max( T%maximum, Temp(i,j,k) )
-        T%average = T%average + dV*Temp(i,j,k)
-        S%minimum = min( S%minimum, Salt(i,j,k) ) ; S%maximum = max( S%maximum, Salt(i,j,k) )
-        S%average = S%average + dV*Salt(i,j,k)
-        tmp_T(i,j) = tmp_T(i,j) + dV*Temp(i,j,k)
-        tmp_S(i,j) = tmp_S(i,j) + dV*Salt(i,j,k)
+        T%minimum = min( T%minimum, T_scale*Temp(i,j,k) ) ; T%maximum = max( T%maximum, T_scale*Temp(i,j,k) )
+        T%average = T%average + dV*T_scale*Temp(i,j,k)
+        S%minimum = min( S%minimum, S_scale*Salt(i,j,k) ) ; S%maximum = max( S%maximum, S_scale*Salt(i,j,k) )
+        S%average = S%average + dV*S_scale*Salt(i,j,k)
+        tmp_T(i,j) = tmp_T(i,j) + dV*T_scale*Temp(i,j,k)
+        tmp_S(i,j) = tmp_S(i,j) + dV*S_scale*Salt(i,j,k)
       endif
       if (h_minimum > h(i,j,k)) h_minimum = h(i,j,k)
     endif
@@ -343,11 +348,11 @@ subroutine MOM_state_stats(mesg, u, v, h, Temp, Salt, G, GV, US, allowChange, pe
 
   if (do_TS .and. T%minimum<-5.0) then
     do j=js,je ; do i=is,ie
-      if (minval(Temp(i,j,:)) == T%minimum) then
+      if (minval(T_scale*Temp(i,j,:)) == T%minimum) then
         write(0,'(a,2f12.5)') 'x,y=', G%geoLonT(i,j), G%geoLatT(i,j)
         write(0,'(a3,3a12)') 'k','h','Temp','Salt'
         do k = 1, nz
-          write(0,'(i3,3es12.4)') k, h(i,j,k), Temp(i,j,k), Salt(i,j,k)
+          write(0,'(i3,3es12.4)') k, h(i,j,k), T_scale*Temp(i,j,k), S_scale*Salt(i,j,k)
         enddo
         stop 'Extremum detected'
       endif
@@ -360,7 +365,7 @@ subroutine MOM_state_stats(mesg, u, v, h, Temp, Salt, G, GV, US, allowChange, pe
         write(0,'(a,2f12.5)') 'x,y=',G%geoLonT(i,j),G%geoLatT(i,j)
         write(0,'(a3,3a12)') 'k','h','Temp','Salt'
         do k = 1, nz
-          write(0,'(i3,3es12.4)') k, h(i,j,k), Temp(i,j,k), Salt(i,j,k)
+          write(0,'(i3,3es12.4)') k, h(i,j,k), T_scale*Temp(i,j,k), S_scale*Salt(i,j,k)
         enddo
         stop 'Negative thickness detected'
       endif

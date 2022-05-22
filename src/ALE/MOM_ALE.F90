@@ -318,9 +318,9 @@ subroutine ALE_register_diags(Time, G, GV, US, diag, CS)
       'Layer Thickness before remapping', get_thickness_units(GV), conversion=GV%H_to_MKS, &
       v_extensive=.true.)
   CS%id_T_preale = register_diag_field('ocean_model', 'T_preale', diag%axesTL, Time, &
-      'Temperature before remapping', 'degC')
+      'Temperature before remapping', 'degC', conversion=US%C_to_degC)
   CS%id_S_preale = register_diag_field('ocean_model', 'S_preale', diag%axesTL, Time, &
-      'Salinity before remapping', 'PSU')
+      'Salinity before remapping', 'PSU', conversion=US%S_to_ppt)
   CS%id_e_preale = register_diag_field('ocean_model', 'e_preale', diag%axesTi, Time, &
       'Interface Heights before remapping', 'm', conversion=US%Z_to_m)
 
@@ -451,8 +451,8 @@ subroutine ALE_main( G, GV, US, h, u, v, tv, Reg, CS, OBC, dt, frac_shelf_h)
 
   if (CS%debug) then
     call hchksum(h,    "Post-ALE_main h", G%HI, haloshift=0, scale=GV%H_to_m)
-    call hchksum(tv%T, "Post-ALE_main T", G%HI, haloshift=0)
-    call hchksum(tv%S, "Post-ALE_main S", G%HI, haloshift=0)
+    call hchksum(tv%T, "Post-ALE_main T", G%HI, haloshift=0, scale=US%C_to_degC)
+    call hchksum(tv%S, "Post-ALE_main S", G%HI, haloshift=0, scale=US%S_to_ppt)
     call uvchksum("Post-ALE_main [uv]", u, v, G%HI, haloshift=0, scale=US%L_T_to_m_s)
   endif
 
@@ -1160,13 +1160,13 @@ subroutine TS_PLM_edge_values( CS, S_t, S_b, T_t, T_b, G, GV, tv, h, bdry_extrap
   type(verticalGrid_type), intent(in)    :: GV   !< Ocean vertical grid structure
   type(ALE_CS),            intent(inout) :: CS   !< module control structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
-                           intent(inout) :: S_t  !< Salinity at the top edge of each layer
+                           intent(inout) :: S_t  !< Salinity at the top edge of each layer [S ~> ppt]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
-                           intent(inout) :: S_b  !< Salinity at the bottom edge of each layer
+                           intent(inout) :: S_b  !< Salinity at the bottom edge of each layer [S ~> ppt]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
-                           intent(inout) :: T_t  !< Temperature at the top edge of each layer
+                           intent(inout) :: T_t  !< Temperature at the top edge of each layer [C ~> degC]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
-                           intent(inout) :: T_b  !< Temperature at the bottom edge of each layer
+                           intent(inout) :: T_b  !< Temperature at the bottom edge of each layer [C ~> degC]
   type(thermo_var_ptrs),   intent(in)    :: tv   !< thermodynamics structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(in)    :: h    !< layer thickness [H ~> m or kg m-2]

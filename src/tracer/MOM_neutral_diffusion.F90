@@ -74,18 +74,18 @@ type, public :: neutral_diffusion_CS ; private
   real,    allocatable, dimension(:,:,:,:) :: ppoly_coeffs_T !< Polynomial coefficients for temperature
   real,    allocatable, dimension(:,:,:,:) :: ppoly_coeffs_S !< Polynomial coefficients for salinity
   ! Variables needed for continuous reconstructions
-  real,    allocatable, dimension(:,:,:) :: dRdT !< dRho/dT [R degC-1 ~> kg m-3 degC-1] at interfaces
-  real,    allocatable, dimension(:,:,:) :: dRdS !< dRho/dS [R ppt-1 ~> kg m-3 ppt-1] at interfaces
-  real,    allocatable, dimension(:,:,:) :: Tint !< Interface T [degC]
-  real,    allocatable, dimension(:,:,:) :: Sint !< Interface S [ppt]
+  real,    allocatable, dimension(:,:,:) :: dRdT !< dRho/dT [R C-1 ~> kg m-3 degC-1] at interfaces
+  real,    allocatable, dimension(:,:,:) :: dRdS !< dRho/dS [R S-1 ~> kg m-3 ppt-1] at interfaces
+  real,    allocatable, dimension(:,:,:) :: Tint !< Interface T [C ~> degC]
+  real,    allocatable, dimension(:,:,:) :: Sint !< Interface S [S ~> ppt]
   real,    allocatable, dimension(:,:,:) :: Pint !< Interface pressure [R L2 T-2 ~> Pa]
   ! Variables needed for discontinuous reconstructions
-  real,    allocatable, dimension(:,:,:,:) :: T_i    !< Top edge reconstruction of temperature [degC]
-  real,    allocatable, dimension(:,:,:,:) :: S_i    !< Top edge reconstruction of salinity [ppt]
+  real,    allocatable, dimension(:,:,:,:) :: T_i    !< Top edge reconstruction of temperature [C ~> degC]
+  real,    allocatable, dimension(:,:,:,:) :: S_i    !< Top edge reconstruction of salinity [S ~> ppt]
   real,    allocatable, dimension(:,:,:,:) :: P_i    !< Interface pressures [R L2 T-2 ~> Pa]
-  real,    allocatable, dimension(:,:,:,:) :: dRdT_i !< dRho/dT [R degC-1 ~> kg m-3 degC-1] at top edge
-  real,    allocatable, dimension(:,:,:,:) :: dRdS_i !< dRho/dS [R ppt-1 ~> kg m-3 ppt-1] at top edge
-  integer, allocatable, dimension(:,:)     :: ns     !< Number of interfacs in a column
+  real,    allocatable, dimension(:,:,:,:) :: dRdT_i !< dRho/dT [R C-1 ~> kg m-3 degC-1] at top edge
+  real,    allocatable, dimension(:,:,:,:) :: dRdS_i !< dRho/dS [R S-1 ~> kg m-3 ppt-1] at top edge
+  integer, allocatable, dimension(:,:)     :: ns     !< Number of interfaces in a column
   logical, allocatable, dimension(:,:,:) :: stable_cell !< True if the cell is stably stratified wrt to the next cell
   real :: R_to_kg_m3 = 1.0                   !< A rescaling factor translating density to kg m-3 for
                                              !! use in diagnostic messages [kg m-3 R-1 ~> 1].
@@ -286,8 +286,8 @@ subroutine neutral_diffusion_calc_coeffs(G, GV, US, h, T, S, CS, p_surf)
   type(verticalGrid_type),                   intent(in) :: GV  !< ocean vertical grid structure
   type(unit_scale_type),                     intent(in) :: US  !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in) :: h   !< Layer thickness [H ~> m or kg m-2]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in) :: T   !< Potential temperature [degC]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in) :: S   !< Salinity [ppt]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in) :: T   !< Potential temperature [C ~> degC]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in) :: S   !< Salinity [S ~> ppt]
   type(neutral_diffusion_CS),                pointer    :: CS  !< Neutral diffusion control structure
   real, dimension(SZI_(G),SZJ_(G)), optional, intent(in) :: p_surf !< Surface pressure to include in pressures used
                                                               !! for equation of state calculations [R L2 T-2 ~> Pa]
@@ -372,7 +372,7 @@ subroutine neutral_diffusion_calc_coeffs(G, GV, US, h, T, S, CS, p_surf)
   enddo ; enddo ; enddo
 
   ! Pressures at the interfaces, this is redundant as P_i(k,1) = P_i(k-1,2) however retain this
-  ! for now to ensure consitency of indexing for diiscontinuous reconstructions
+  ! for now to ensure consistency of indexing for discontinuous reconstructions
   if (.not. CS%continuous_reconstruction) then
     if (present(p_surf)) then
       do j=G%jsc-1,G%jec+1 ; do i=G%isc-1,G%iec+1
@@ -805,9 +805,9 @@ real function ppm_ave(xL, xR, aL, aR, aMean)
   a6 = 3. * a6o3
 
   if (dx<0.) then
-    stop 'ppm_ave: dx<0 should not happend!'
+    stop 'ppm_ave: dx<0 should not happened!'
   elseif (dx>1.) then
-    stop 'ppm_ave: dx>1 should not happend!'
+    stop 'ppm_ave: dx>1 should not happened!'
   elseif (dx==0.) then
     ppm_ave = aL + ( aR - aL ) * xR + a6 * xR * ( 1. - xR )
   else
@@ -954,15 +954,15 @@ subroutine find_neutral_surface_positions_continuous(nk, Pl, Tl, Sl, dRdTl, dRdS
                                                      dRdTr, dRdSr, PoL, PoR, KoL, KoR, hEff, bl_kl, bl_kr, bl_zl, bl_zr)
   integer,                    intent(in)    :: nk    !< Number of levels
   real, dimension(nk+1),      intent(in)    :: Pl    !< Left-column interface pressure [R L2 T-2 ~> Pa] or other units
-  real, dimension(nk+1),      intent(in)    :: Tl    !< Left-column interface potential temperature [degC]
-  real, dimension(nk+1),      intent(in)    :: Sl    !< Left-column interface salinity [ppt]
-  real, dimension(nk+1),      intent(in)    :: dRdTl !< Left-column dRho/dT [R degC-1 ~> kg m-3 degC-1]
-  real, dimension(nk+1),      intent(in)    :: dRdSl !< Left-column dRho/dS [R ppt-1 ~> kg m-3 ppt-1]
+  real, dimension(nk+1),      intent(in)    :: Tl    !< Left-column interface potential temperature [C ~> degC]
+  real, dimension(nk+1),      intent(in)    :: Sl    !< Left-column interface salinity [S ~> ppt]
+  real, dimension(nk+1),      intent(in)    :: dRdTl !< Left-column dRho/dT [R C-1 ~> kg m-3 degC-1]
+  real, dimension(nk+1),      intent(in)    :: dRdSl !< Left-column dRho/dS [R S-1 ~> kg m-3 ppt-1]
   real, dimension(nk+1),      intent(in)    :: Pr    !< Right-column interface pressure [R L2 T-2 ~> Pa] or other units
-  real, dimension(nk+1),      intent(in)    :: Tr    !< Right-column interface potential temperature [degC]
-  real, dimension(nk+1),      intent(in)    :: Sr    !< Right-column interface salinity [ppt]
-  real, dimension(nk+1),      intent(in)    :: dRdTr !< Left-column dRho/dT [R degC-1 ~> kg m-3 degC-1]
-  real, dimension(nk+1),      intent(in)    :: dRdSr !< Left-column dRho/dS [R ppt-1 ~> kg m-3 ppt-1]
+  real, dimension(nk+1),      intent(in)    :: Tr    !< Right-column interface potential temperature [C ~> degC]
+  real, dimension(nk+1),      intent(in)    :: Sr    !< Right-column interface salinity [S ~> ppt]
+  real, dimension(nk+1),      intent(in)    :: dRdTr !< Left-column dRho/dT [R C-1 ~> kg m-3 degC-1]
+  real, dimension(nk+1),      intent(in)    :: dRdSr !< Left-column dRho/dS [R S-1 ~> kg m-3 ppt-1]
   real, dimension(2*nk+2),    intent(inout) :: PoL   !< Fractional position of neutral surface within
                                                      !! layer KoL of left column [nondim]
   real, dimension(2*nk+2),    intent(inout) :: PoR   !< Fractional position of neutral surface within
@@ -1199,7 +1199,7 @@ real function interpolate_for_nondim_position(dRhoNeg, Pneg, dRhoPos, Ppos)
 end function interpolate_for_nondim_position
 
 !> Higher order version of find_neutral_surface_positions. Returns positions within left/right columns
-!! of combined interfaces using intracell reconstructions of T/S. Note that the polynomial reconstrcutions
+!! of combined interfaces using intracell reconstructions of T/S. Note that the polynomial reconstructions
 !! of T and S are optional to aid with unit testing, but will always be passed otherwise
 subroutine find_neutral_surface_positions_discontinuous(CS, nk, &
                    Pres_l, hcol_l, Tl, Sl, ppoly_T_l, ppoly_S_l, stable_l, &
@@ -1211,18 +1211,21 @@ subroutine find_neutral_surface_positions_discontinuous(CS, nk, &
   real, dimension(nk,2),          intent(in)    :: Pres_l    !< Left-column interface pressure [R L2 T-2 ~> Pa]
   real, dimension(nk),            intent(in)    :: hcol_l    !< Left-column layer thicknesses [H ~> m or kg m-2]
                                                              !! or other units
-  real, dimension(nk,2),          intent(in)    :: Tl        !< Left-column top interface potential temperature [degC]
-  real, dimension(nk,2),          intent(in)    :: Sl        !< Left-column top interface salinity [ppt]
-  real, dimension(:,:),           intent(in)    :: ppoly_T_l !< Left-column coefficients of T reconstruction [degC]
-  real, dimension(:,:),           intent(in)    :: ppoly_S_l !< Left-column coefficients of S reconstruction [ppt]
+  real, dimension(nk,2),          intent(in)    :: Tl        !< Left-column top interface potential
+                                                             !! temperature [C ~> degC]
+  real, dimension(nk,2),          intent(in)    :: Sl        !< Left-column top interface salinity [S ~> ppt]
+  real, dimension(:,:),           intent(in)    :: ppoly_T_l !< Left-column coefficients of T reconstruction [C ~> degC]
+  real, dimension(:,:),           intent(in)    :: ppoly_S_l !< Left-column coefficients of S reconstruction [S ~> ppt]
   logical, dimension(nk),         intent(in)    :: stable_l  !< True where the left-column is stable
   real, dimension(nk,2),          intent(in)    :: Pres_r    !< Right-column interface pressure [R L2 T-2 ~> Pa]
   real, dimension(nk),            intent(in)    :: hcol_r    !< Left-column layer thicknesses [H ~> m or kg m-2]
                                                              !! or other units
-  real, dimension(nk,2),          intent(in)    :: Tr        !< Right-column top interface potential temperature [degC]
-  real, dimension(nk,2),          intent(in)    :: Sr        !< Right-column top interface salinity [ppt]
-  real, dimension(:,:),           intent(in)    :: ppoly_T_r !< Right-column coefficients of T reconstruction [degC]
-  real, dimension(:,:),           intent(in)    :: ppoly_S_r !< Right-column coefficients of S reconstruction [ppt]
+  real, dimension(nk,2),          intent(in)    :: Tr        !< Right-column top interface potential
+                                                             !! temperature [C ~> degC]
+  real, dimension(nk,2),          intent(in)    :: Sr        !< Right-column top interface salinity [S ~> ppt]
+  real, dimension(:,:),           intent(in)    :: ppoly_T_r !< Right-column coefficients of T
+                                                             !! reconstruction [C ~> degC]
+  real, dimension(:,:),           intent(in)    :: ppoly_S_r !< Right-column coefficients of S reconstruction [S ~> ppt]
   logical, dimension(nk),         intent(in)    :: stable_r  !< True where the right-column is stable
   real, dimension(4*nk),          intent(inout) :: PoL       !< Fractional position of neutral surface within
                                                              !! layer KoL of left column [nondim]
@@ -1233,9 +1236,9 @@ subroutine find_neutral_surface_positions_discontinuous(CS, nk, &
   real, dimension(4*nk-1),        intent(inout) :: hEff      !< Effective thickness between two neutral surfaces
                                                              !! [H ~> m or kg m-2] or other units taken from hcol_l
   real, optional,                 intent(in)    :: zeta_bot_L!< Non-dimensional distance to where the boundary layer
-                                                             !! intersetcs the cell (left) [nondim]
+                                                             !! intersects the cell (left) [nondim]
   real, optional,                 intent(in)    :: zeta_bot_R!< Non-dimensional distance to where the boundary layer
-                                                             !! intersetcs the cell (right) [nondim]
+                                                             !! intersects the cell (right) [nondim]
 
   integer, optional,              intent(in)    :: k_bot_L   !< k-index for the boundary layer (left) [nondim]
   integer, optional,              intent(in)    :: k_bot_R   !< k-index for the boundary layer (right) [nondim]
@@ -1438,8 +1441,8 @@ end subroutine find_neutral_surface_positions_discontinuous
 subroutine mark_unstable_cells(CS, nk, T, S, P, stable_cell)
   type(neutral_diffusion_CS), intent(inout) :: CS      !< Neutral diffusion control structure
   integer,                intent(in)    :: nk          !< Number of levels in a column
-  real, dimension(nk,2),  intent(in)    :: T           !< Temperature at interfaces [degC]
-  real, dimension(nk,2),  intent(in)    :: S           !< Salinity at interfaces [ppt]
+  real, dimension(nk,2),  intent(in)    :: T           !< Temperature at interfaces [C ~> degC]
+  real, dimension(nk,2),  intent(in)    :: S           !< Salinity at interfaces [S ~> ppt]
   real, dimension(nk,2),  intent(in)    :: P           !< Pressure at interfaces [R L2 T-2 ~> Pa]
   logical, dimension(nk), intent(  out) :: stable_cell !< True if this cell is unstably stratified
 
@@ -1460,25 +1463,27 @@ real function search_other_column(CS, ksurf, pos_last, T_from, S_from, P_from, T
   integer,                    intent(in   ) :: ksurf    !< Current index of neutral surface
   real,                       intent(in   ) :: pos_last !< Last position within the current layer, used as the lower
                                                         !! bound in the root finding algorithm [nondim]
-  real,                       intent(in   ) :: T_from   !< Temperature at the searched from interface [degC]
-  real,                       intent(in   ) :: S_from   !< Salinity    at the searched from interface [ppt]
+  real,                       intent(in   ) :: T_from   !< Temperature at the searched from interface [C ~> degC]
+  real,                       intent(in   ) :: S_from   !< Salinity    at the searched from interface [S ~> ppt]
   real,                       intent(in   ) :: P_from   !< Pressure at the searched from interface [R L2 T-2 ~> Pa]
-  real,                       intent(in   ) :: T_top    !< Temperature at the searched to top interface [degC]
-  real,                       intent(in   ) :: S_top    !< Salinity    at the searched to top interface [ppt]
+  real,                       intent(in   ) :: T_top    !< Temperature at the searched to top interface [C ~> degC]
+  real,                       intent(in   ) :: S_top    !< Salinity    at the searched to top interface [S ~> ppt]
   real,                       intent(in   ) :: P_top    !< Pressure at the searched to top interface [R L2 T-2 ~> Pa]
                                                         !! interface [R L2 T-2 ~> Pa]
-  real,                       intent(in   ) :: T_bot    !< Temperature at the searched to bottom interface [degC]
-  real,                       intent(in   ) :: S_bot    !< Salinity    at the searched to bottom interface [ppt]
+  real,                       intent(in   ) :: T_bot    !< Temperature at the searched to bottom interface [C ~> degC]
+  real,                       intent(in   ) :: S_bot    !< Salinity    at the searched to bottom interface [S ~> ppt]
   real,                       intent(in   ) :: P_bot    !< Pressure at the searched to bottom
                                                         !! interface [R L2 T-2 ~> Pa]
-  real, dimension(:),         intent(in   ) :: T_poly   !< Temperature polynomial reconstruction coefficients [degC]
-  real, dimension(:),         intent(in   ) :: S_poly   !< Salinity    polynomial reconstruction coefficients [ppt]
+  real, dimension(:),         intent(in   ) :: T_poly   !< Temperature polynomial reconstruction
+                                                        !! coefficients [C ~> degC]
+  real, dimension(:),         intent(in   ) :: S_poly   !< Salinity    polynomial reconstruction
+                                                        !! coefficients [S ~> ppt]
   ! Local variables
   real :: dRhotop, dRhobot ! Density differences [R ~> kg m-3]
-  real :: dRdT_top, dRdT_bot, dRdT_from ! Partial derivatives of density with temperature [R degC-1 ~> kg m-3 degC-1]
-  real :: dRdS_top, dRdS_bot, dRdS_from ! Partial derivatives of density with salinity [R ppt-1 ~> kg m-3 ppt-1]
+  real :: dRdT_top, dRdT_bot, dRdT_from ! Partial derivatives of density with temperature [R C-1 ~> kg m-3 degC-1]
+  real :: dRdS_top, dRdS_bot, dRdS_from ! Partial derivatives of density with salinity [R S-1 ~> kg m-3 ppt-1]
 
-  ! Calculate the differencei in density at the tops or the bottom
+  ! Calculate the difference in density at the tops or the bottom
   if (CS%neutral_pos_method == 1 .or. CS%neutral_pos_method == 3) then
     call calc_delta_rho_and_derivs(CS, T_top, S_top, P_top, T_from, S_from, P_from, dRhoTop)
     call calc_delta_rho_and_derivs(CS, T_bot, S_bot, P_bot, T_from, S_from, P_from, dRhoBot)
@@ -1511,7 +1516,7 @@ real function search_other_column(CS, ksurf, pos_last, T_from, S_from, P_from, T
 
   if (CS%neutral_pos_method==1) then
     pos = interpolate_for_nondim_position( dRhoTop, P_top, dRhoBot, P_bot )
-  ! For the 'Linear' case of finding the neutral position, the fromerence pressure to use is the average
+  ! For the 'Linear' case of finding the neutral position, the reference pressure to use is the average
   ! of the midpoint of the layer being searched and the interface being searched from
   elseif (CS%neutral_pos_method == 2) then
     pos = find_neutral_pos_linear( CS, pos_last, T_from, S_from, dRdT_from, dRdS_from, &
@@ -1561,35 +1566,35 @@ function find_neutral_pos_linear( CS, z0, T_ref, S_ref, dRdT_ref, dRdS_ref, &
   type(neutral_diffusion_CS),intent(in) :: CS        !< Control structure with parameters for this module
   real,                      intent(in) :: z0        !< Lower bound of position, also serves as the
                                                      !! initial guess [nondim]
-  real,                      intent(in) :: T_ref     !< Temperature at the searched from interface [degC]
-  real,                      intent(in) :: S_ref     !< Salinity at the searched from interface [ppt]
+  real,                      intent(in) :: T_ref     !< Temperature at the searched from interface [C ~> degC]
+  real,                      intent(in) :: S_ref     !< Salinity at the searched from interface [S ~> ppt]
   real,                      intent(in) :: dRdT_ref  !< dRho/dT at the searched from interface
-                                                     !! [R degC-1 ~> kg m-3 degC-1]
+                                                     !! [R C-1 ~> kg m-3 degC-1]
   real,                      intent(in) :: dRdS_ref  !< dRho/dS at the searched from interface
-                                                     !! [R ppt-1 ~> kg m-3 ppt-1]
+                                                     !! [R S-1 ~> kg m-3 ppt-1]
   real,                      intent(in) :: dRdT_top  !< dRho/dT at top of layer being searched
-                                                     !! [R degC-1 ~> kg m-3 degC-1]
+                                                     !! [R C-1 ~> kg m-3 degC-1]
   real,                      intent(in) :: dRdS_top  !< dRho/dS at top of layer being searched
-                                                     !! [R ppt-1 ~> kg m-3 ppt-1]
+                                                     !! [R S-1 ~> kg m-3 ppt-1]
   real,                      intent(in) :: dRdT_bot  !< dRho/dT at bottom of layer being searched
-                                                     !! [R degC-1 ~> kg m-3 degC-1]
+                                                     !! [R C-1 ~> kg m-3 degC-1]
   real,                      intent(in) :: dRdS_bot  !< dRho/dS at bottom of layer being searched
-                                                     !! [R ppt-1 ~> kg m-3 ppt-1]
+                                                     !! [R S-1 ~> kg m-3 ppt-1]
   real, dimension(:),        intent(in) :: ppoly_T   !< Coefficients of the polynomial reconstruction of T within
-                                                     !! the layer to be searched [degC].
+                                                     !! the layer to be searched [C ~> degC].
   real, dimension(:),        intent(in) :: ppoly_S   !< Coefficients of the polynomial reconstruction of S within
-                                                     !! the layer to be searched [ppt].
+                                                     !! the layer to be searched [S ~> ppt].
   real                                  :: z         !< Position where drho = 0 [nondim]
   ! Local variables
   real :: dRdT_diff  ! Difference in the partial derivative of density with temperature across the
-                     ! layer [R degC-1 ~> kg m-3 degC-1]
+                     ! layer [R C-1 ~> kg m-3 degC-1]
   real :: dRdS_diff  ! Difference in the partial derivative of density with salinity across the
-                     ! layer [R ppt-1 ~> kg m-3 ppt-1]
-  real :: drho, drho_dz ! Density anomaly and its derivative with fracitonal position [R ~> kg m-3]
-  real :: dRdT_z     ! Partial derivative of density with temperature at a point [R degC-1 ~> kg m-3 degC-1]
-  real :: dRdS_z     ! Partial derivative of density with salinity at a point [R ppt-1 ~> kg m-3 ppt-1]
-  real :: T_z, dT_dz ! Temperature at a point and its derivative with fractional position [degC]
-  real :: S_z, dS_dz ! Salinity at a point and its derivative with fractional position [ppt]
+                     ! layer [R S-1 ~> kg m-3 ppt-1]
+  real :: drho, drho_dz ! Density anomaly and its derivative with fractional position [R ~> kg m-3]
+  real :: dRdT_z     ! Partial derivative of density with temperature at a point [R C-1 ~> kg m-3 degC-1]
+  real :: dRdS_z     ! Partial derivative of density with salinity at a point [R S-1 ~> kg m-3 ppt-1]
+  real :: T_z, dT_dz ! Temperature at a point and its derivative with fractional position [C ~> degC]
+  real :: S_z, dS_dz ! Salinity at a point and its derivative with fractional position [S ~> ppt]
   real :: drho_min, drho_max ! Bounds on density differences [R ~> kg m-3]
   real :: ztest, zmin, zmax ! Fractional positions in the cell [nondim]
   real :: a1, a2     ! Fractional weights of the top and bottom values [nondim]
@@ -1680,15 +1685,15 @@ function find_neutral_pos_full( CS, z0, T_ref, S_ref, P_ref, P_top, P_bot, ppoly
   type(neutral_diffusion_CS),intent(in) :: CS        !< Control structure with parameters for this module
   real,                      intent(in) :: z0        !< Lower bound of position, also serves as the
                                                      !! initial guess [nondim]
-  real,                      intent(in) :: T_ref     !< Temperature at the searched from interface [degC]
-  real,                      intent(in) :: S_ref     !< Salinity at the searched from interface [ppt]
+  real,                      intent(in) :: T_ref     !< Temperature at the searched from interface [C ~> degC]
+  real,                      intent(in) :: S_ref     !< Salinity at the searched from interface [S ~> ppt]
   real,                      intent(in) :: P_ref     !< Pressure at the searched from interface [R L2 T-2 ~> Pa]
   real,                      intent(in) :: P_top     !< Pressure at top of layer being searched [R L2 T-2 ~> Pa]
   real,                      intent(in) :: P_bot     !< Pressure at bottom of layer being searched [R L2 T-2 ~> Pa]
   real, dimension(:),        intent(in) :: ppoly_T   !< Coefficients of the polynomial reconstruction of T within
-                                                     !! the layer to be searched [degC]
+                                                     !! the layer to be searched [C ~> degC]
   real, dimension(:),        intent(in) :: ppoly_S   !< Coefficients of the polynomial reconstruction of T within
-                                                     !! the layer to be searched [ppt]
+                                                     !! the layer to be searched [S ~> ppt]
   real                                  :: z         !< Position where drho = 0 [nondim]
   ! Local variables
   integer :: iter
@@ -1696,8 +1701,8 @@ function find_neutral_pos_full( CS, z0, T_ref, S_ref, P_ref, P_top, P_bot, ppoly
 
   real :: drho_a, drho_b, drho_c ! Density differences [R ~> kg m-3]
   real :: a, b, c     ! Fractional positions [nondim]
-  real :: Ta, Tb, Tc  ! Temperatures [degC]
-  real :: Sa, Sb, Sc  ! Salinities [ppt]
+  real :: Ta, Tb, Tc  ! Temperatures [C ~> degC]
+  real :: Sa, Sb, Sc  ! Salinities [S ~> ppt]
   real :: Pa, Pb, Pc  ! Pressures [R L2 T-2 ~> Pa]
   integer :: side
 
@@ -1772,22 +1777,22 @@ end function find_neutral_pos_full
 subroutine calc_delta_rho_and_derivs(CS, T1, S1, p1_in, T2, S2, p2_in, drho, &
                                      drdt1_out, drds1_out, drdt2_out, drds2_out )
   type(neutral_diffusion_CS)    :: CS        !< Neutral diffusion control structure
-  real,           intent(in   ) :: T1        !< Temperature at point 1 [degC]
-  real,           intent(in   ) :: S1        !< Salinity at point 1 [ppt]
+  real,           intent(in   ) :: T1        !< Temperature at point 1 [C ~> degC]
+  real,           intent(in   ) :: S1        !< Salinity at point 1 [S ~> ppt]
   real,           intent(in   ) :: p1_in     !< Pressure at point 1 [R L2 T-2 ~> Pa]
-  real,           intent(in   ) :: T2        !< Temperature at point 2 [degC]
-  real,           intent(in   ) :: S2        !< Salinity at point 2 [ppt]
+  real,           intent(in   ) :: T2        !< Temperature at point 2 [C ~> degC]
+  real,           intent(in   ) :: S2        !< Salinity at point 2 [S ~> ppt]
   real,           intent(in   ) :: p2_in     !< Pressure at point 2 [R L2 T-2 ~> Pa]
   real,           intent(  out) :: drho      !< Difference in density between the two points [R ~> kg m-3]
-  real, optional, intent(  out) :: dRdT1_out !< drho_dt at point 1 [R degC-1 ~> kg m-3 degC-1]
-  real, optional, intent(  out) :: dRdS1_out !< drho_ds at point 1 [R ppt-1 ~> kg m-3 ppt-1]
-  real, optional, intent(  out) :: dRdT2_out !< drho_dt at point 2 [R degC-1 ~> kg m-3 degC-1]
-  real, optional, intent(  out) :: dRdS2_out !< drho_ds at point 2 [R ppt-1 ~> kg m-3 ppt-1]
+  real, optional, intent(  out) :: dRdT1_out !< drho_dt at point 1 [R C-1 ~> kg m-3 degC-1]
+  real, optional, intent(  out) :: dRdS1_out !< drho_ds at point 1 [R S-1 ~> kg m-3 ppt-1]
+  real, optional, intent(  out) :: dRdT2_out !< drho_dt at point 2 [R C-1 ~> kg m-3 degC-1]
+  real, optional, intent(  out) :: dRdS2_out !< drho_ds at point 2 [R S-1 ~> kg m-3 ppt-1]
   ! Local variables
   real :: rho1, rho2   ! Densities [R ~> kg m-3]
   real :: p1, p2, pmid ! Pressures [R L2 T-2 ~> Pa]
-  real :: drdt1, drdt2 ! Partial derivatives of density with temperature [R degC-1 ~> kg m-3 degC-1]
-  real :: drds1, drds2 ! Partial derivatives of density with salinity [R ppt-1 ~> kg m-3 ppt-1]
+  real :: drdt1, drdt2 ! Partial derivatives of density with temperature [R C-1 ~> kg m-3 degC-1]
+  real :: drds1, drds2 ! Partial derivatives of density with salinity [R S-1 ~> kg m-3 ppt-1]
 
   ! Use the same reference pressure or the in-situ pressure
   if (CS%ref_pres > 0.) then
@@ -1801,10 +1806,10 @@ subroutine calc_delta_rho_and_derivs(CS, T1, S1, p1_in, T2, S2, p2_in, drho, &
   ! Use the full linear equation of state to calculate the difference in density (expensive!)
   if     (TRIM(CS%delta_rho_form) == 'full') then
     pmid = 0.5 * (p1 + p2)
-    call calculate_density( T1, S1, pmid, rho1, CS%EOS)
-    call calculate_density( T2, S2, pmid, rho2, CS%EOS)
+    call calculate_density(T1, S1, pmid, rho1, CS%EOS)
+    call calculate_density(T2, S2, pmid, rho2, CS%EOS)
     drho = rho1 - rho2
-  ! Use the density derivatives at the average of pressures and the differentces int temperature
+  ! Use the density derivatives at the average of pressures and the differences in temperature
   elseif (TRIM(CS%delta_rho_form) == 'mid_pressure') then
     pmid = 0.5 * (p1 + p2)
     if (CS%ref_pres>=0) pmid = CS%ref_pres
@@ -1832,16 +1837,16 @@ end subroutine calc_delta_rho_and_derivs
 !!                                   (\gamma^{-1}_1 + \gamma^{-1}_2)*(P_1-P_2) \right] \f$
 function delta_rho_from_derivs( T1, S1, P1, dRdT1, dRdS1, &
                                 T2, S2, P2, dRdT2, dRdS2  ) result (drho)
-  real :: T1    !< Temperature at point 1 [degC]
-  real :: S1    !< Salinity at point 1 [ppt]
+  real :: T1    !< Temperature at point 1 [C ~> degC]
+  real :: S1    !< Salinity at point 1 [S ~> ppt]
   real :: P1    !< Pressure at point 1 [R L2 T-2 ~> Pa]
-  real :: dRdT1 !< The partial derivative of density with temperature at point 1 [R degC-1 ~> kg m-3 degC-1]
-  real :: dRdS1 !< The partial derivative of density with salinity at point 1 [R ppt-1 ~> kg m-3 ppt-1]
-  real :: T2    !< Temperature at point 2 [degC]
-  real :: S2    !< Salinity at point 2 [ppt]
+  real :: dRdT1 !< The partial derivative of density with temperature at point 1 [R C-1 ~> kg m-3 degC-1]
+  real :: dRdS1 !< The partial derivative of density with salinity at point 1 [R S-1 ~> kg m-3 ppt-1]
+  real :: T2    !< Temperature at point 2 [C ~> degC]
+  real :: S2    !< Salinity at point 2 [S ~> ppt]
   real :: P2    !< Pressure at point 2 [R L2 T-2 ~> Pa]
-  real :: dRdT2 !< The partial derivative of density with temperature at point 2 [R degC-1 ~> kg m-3 degC-1]
-  real :: dRdS2 !< The partial derivative of density with salinity at point 2 [R ppt-1 ~> kg m-3 ppt-1]
+  real :: dRdT2 !< The partial derivative of density with temperature at point 2 [R C-1 ~> kg m-3 degC-1]
+  real :: dRdS2 !< The partial derivative of density with salinity at point 2 [R S-1 ~> kg m-3 ppt-1]
   ! Local variables
   real :: drho  ! The density difference [R ~> kg m-3]
 
@@ -2015,10 +2020,10 @@ subroutine neutral_surface_flux(nk, nsurf, deg, hl, hr, Tl, Tr, PiL, PiR, KoL, K
 
 end subroutine neutral_surface_flux
 
-!> Evaluate various parts of the reconstructions to calculate gradient-based flux limter
+!> Evaluate various parts of the reconstructions to calculate gradient-based flux limiter
 subroutine neutral_surface_T_eval(nk, ns, k_sub, Ks, Ps, T_mean, T_int, deg, iMethod, T_poly, &
                                   T_top, T_bot, T_sub, T_top_int, T_bot_int, T_layer)
-  integer,                   intent(in   ) :: nk        !< Number of cell everages
+  integer,                   intent(in   ) :: nk        !< Number of cell averages
   integer,                   intent(in   ) :: ns        !< Number of neutral surfaces
   integer,                   intent(in   ) :: k_sub     !< Index of current neutral layer
   integer, dimension(ns),    intent(in   ) :: Ks        !< List of the layers associated with each neutral surface
@@ -2033,7 +2038,7 @@ subroutine neutral_surface_T_eval(nk, ns, k_sub, Ks, Ps, T_mean, T_int, deg, iMe
   real,                      intent(  out) :: T_sub     !< Average of the tracer value over the sublayer
   real,                      intent(  out) :: T_top_int !< Tracer value at top interface of neutral layer
   real,                      intent(  out) :: T_bot_int !< Tracer value at bottom interface of neutral layer
-  real,                      intent(  out) :: T_layer   !< Cell-average that the the reconstruction belongs to
+  real,                      intent(  out) :: T_layer   !< Cell-average that the reconstruction belongs to
 
   integer :: kl, ks_top, ks_bot
 
@@ -2376,8 +2381,8 @@ logical function ndiff_unit_tests_discontinuous(verbose)
   real, dimension(ns)         :: PoL, PoR
   real, dimension(ns-1)       :: hEff
   type(neutral_diffusion_CS)  :: CS        !< Neutral diffusion control structure
-  real, dimension(nk,2)       :: ppoly_T_l, ppoly_T_r ! Linear reconstruction for T
-  real, dimension(nk,2)       :: ppoly_S_l, ppoly_S_r ! Linear reconstruction for S
+  real, dimension(nk,2)       :: ppoly_T_l, ppoly_T_r ! Linear reconstruction for T [degC]
+  real, dimension(nk,2)       :: ppoly_S_l, ppoly_S_r ! Linear reconstruction for S [ppt]
   logical, dimension(nk)      :: stable_l, stable_r
   integer :: k
   logical :: v

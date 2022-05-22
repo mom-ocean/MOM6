@@ -244,9 +244,9 @@ subroutine shelf_calc_flux(sfc_state_in, fluxes_in, Time, time_step, CS)
   real, dimension(SZI_(CS%grid)) :: &
     Rhoml, &   !< Ocean mixed layer density [R ~> kg m-3].
     dR0_dT, &  !< Partial derivative of the mixed layer density
-               !< with temperature [R degC-1 ~> kg m-3 degC-1].
+               !< with temperature [R C-1 ~> kg m-3 degC-1].
     dR0_dS, &  !< Partial derivative of the mixed layer density
-               !< with salinity [R ppt-1 ~> kg m-3 ppt-1].
+               !< with salinity [R S-1 ~> kg m-3 ppt-1].
     p_int      !< The pressure at the ice-ocean interface [R L2 T-2 ~> Pa].
 
   real, dimension(SZI_(CS%grid),SZJ_(CS%grid)) :: &
@@ -426,10 +426,10 @@ subroutine shelf_calc_flux(sfc_state_in, fluxes_in, Time, time_step, CS)
     do i=is,ie ; p_int(i) = CS%g_Earth * ISS%mass_shelf(i,j) ; enddo
 
     ! Calculate insitu densities and expansion coefficients
-    call calculate_density(sfc_state%sst(:,j), sfc_state%sss(:,j), p_int, Rhoml(:), &
+    call calculate_density(US%degC_to_C*sfc_state%sst(:,j), US%ppt_to_S*sfc_state%sss(:,j), p_int, Rhoml(:), &
                                  CS%eqn_of_state, EOSdom)
-    call calculate_density_derivs(sfc_state%sst(:,j), sfc_state%sss(:,j), p_int, dR0_dT, dR0_dS, &
-                                 CS%eqn_of_state, EOSdom)
+    call calculate_density_derivs(US%degC_to_C*sfc_state%sst(:,j), US%ppt_to_S*sfc_state%sss(:,j), p_int, &
+                                  dR0_dT, dR0_dS, CS%eqn_of_state, EOSdom)
 
     do i=is,ie
       if ((sfc_state%ocean_mass(i,j) > CS%col_mass_melt_threshold) .and. &
@@ -451,8 +451,8 @@ subroutine shelf_calc_flux(sfc_state_in, fluxes_in, Time, time_step, CS)
           hBL_neut_h_molec = ZETA_N * ((hBL_neut * ustar_h) / (5.0 * CS%kv_molec))
 
           ! Determine the mixed layer buoyancy flux, wB_flux.
-          dB_dS = (US%L_to_Z**2*CS%g_Earth / Rhoml(i)) * dR0_dS(i)
-          dB_dT = (US%L_to_Z**2*CS%g_Earth / Rhoml(i)) * dR0_dT(i)
+          dB_dS = (US%L_to_Z**2*CS%g_Earth / Rhoml(i)) * US%ppt_to_S*dR0_dS(i)
+          dB_dT = (US%L_to_Z**2*CS%g_Earth / Rhoml(i)) * US%degC_to_C*dR0_dT(i)
           ln_neut = 0.0 ; if (hBL_neut_h_molec > 1.0) ln_neut = log(hBL_neut_h_molec)
 
           if (CS%find_salt_root) then

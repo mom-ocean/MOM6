@@ -243,7 +243,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, Kd_i
   type(diffusivity_diags)  :: dd ! structure with arrays of available diags
 
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: &
-    T_f, S_f      ! Temperature and salinity [degC] and [ppt] with properties in massless layers
+    T_f, S_f      ! Temperature and salinity [C ~> degC] and [S ~> ppt] with properties in massless layers
                   ! filled vertically by diffusion or the properties after full convective adjustment.
 
   real, dimension(SZI_(G),SZK_(GV)) :: &
@@ -375,14 +375,14 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, Kd_i
   ! Smooth the properties through massless layers.
   if (use_EOS) then
     if (CS%debug) then
-      call hchksum(tv%T, "before vert_fill_TS tv%T",G%HI)
-      call hchksum(tv%S, "before vert_fill_TS tv%S",G%HI)
+      call hchksum(tv%T, "before vert_fill_TS tv%T", G%HI, scale=US%C_to_degC)
+      call hchksum(tv%S, "before vert_fill_TS tv%S", G%HI, scale=US%S_to_ppt)
       call hchksum(h, "before vert_fill_TS h",G%HI, scale=GV%H_to_m)
     endif
     call vert_fill_TS(h, tv%T, tv%S, kappa_dt_fill, T_f, S_f, G, GV, larger_h_denom=.true.)
     if (CS%debug) then
-      call hchksum(tv%T, "after vert_fill_TS tv%T",G%HI)
-      call hchksum(tv%S, "after vert_fill_TS tv%S",G%HI)
+      call hchksum(tv%T, "after vert_fill_TS tv%T", G%HI, scale=US%C_to_degC)
+      call hchksum(tv%S, "after vert_fill_TS tv%S", G%HI, scale=US%S_to_ppt)
       call hchksum(h, "after vert_fill_TS h",G%HI, scale=GV%H_to_m)
     endif
   endif
@@ -877,10 +877,10 @@ subroutine find_N2(h, tv, T_f, S_f, fluxes, j, G, GV, US, CS, dRho_int, &
                                                 !! thermodynamic fields.
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                             intent(in)  :: T_f  !< layer temperature with the values in massless layers
-                                                !! filled vertically by diffusion [degC].
+                                                !! filled vertically by diffusion [C ~> degC].
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                             intent(in)  :: S_f  !< Layer salinities with values in massless
-                                                !! layers filled vertically by diffusion [ppt].
+                                                !! layers filled vertically by diffusion [S ~> ppt].
   type(forcing),            intent(in)  :: fluxes !< A structure of thermodynamic surface fluxes
   integer,                  intent(in)  :: j    !< j-index of row to work on
   type(set_diffusivity_CS), pointer     :: CS   !< Diffusivity control structure
@@ -895,13 +895,13 @@ subroutine find_N2(h, tv, T_f, S_f, fluxes, j, G, GV, US, CS, dRho_int, &
   ! Local variables
   real, dimension(SZI_(G),SZK_(GV)+1) :: &
     dRho_int_unfilt, & ! unfiltered density differences across interfaces [R ~> kg m-3]
-    dRho_dT,         & ! partial derivative of density wrt temp [R degC-1 ~> kg m-3 degC-1]
-    dRho_dS            ! partial derivative of density wrt saln [R ppt-1 ~> kg m-3 ppt-1]
+    dRho_dT,         & ! partial derivative of density wrt temp [R C-1 ~> kg m-3 degC-1]
+    dRho_dS            ! partial derivative of density wrt saln [R S-1 ~> kg m-3 ppt-1]
 
   real, dimension(SZI_(G)) :: &
     pres,      &  ! pressure at each interface [R L2 T-2 ~> Pa]
-    Temp_int,  &  ! temperature at each interface [degC]
-    Salin_int, &  ! salinity at each interface [ppt]
+    Temp_int,  &  ! temperature at each interface [C ~>degC]
+    Salin_int, &  ! salinity at each interface [S ~> ppt]
     drho_bot,  &  ! A density difference [R ~> kg m-3]
     h_amp,     &  ! The topographic roughness amplitude [Z ~> m].
     hb,        &  ! The thickness of the bottom layer [Z ~> m].
@@ -1047,10 +1047,10 @@ subroutine double_diffusion(tv, h, T_f, S_f, j, G, GV, US, CS, Kd_T_dd, Kd_S_dd)
                             intent(in)  :: h   !< Layer thicknesses [H ~> m or kg m-2].
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                             intent(in)  :: T_f !< layer temperatures with the values in massless layers
-                                               !! filled vertically by diffusion [degC].
+                                               !! filled vertically by diffusion [C ~> degC].
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                             intent(in)  :: S_f !< Layer salinities with values in massless
-                                               !! layers filled vertically by diffusion [ppt].
+                                               !! layers filled vertically by diffusion [S ~> ppt].
   integer,                  intent(in)  :: j   !< Meridional index upon which to work.
   type(set_diffusivity_CS), pointer     :: CS  !< Module control structure.
   real, dimension(SZI_(G),SZK_(GV)+1),       &
@@ -1061,11 +1061,11 @@ subroutine double_diffusion(tv, h, T_f, S_f, j, G, GV, US, CS, Kd_T_dd, Kd_S_dd)
                                                !! diffusivity for saln [Z2 T-1 ~> m2 s-1].
 
   real, dimension(SZI_(G)) :: &
-    dRho_dT,  &    ! partial derivatives of density wrt temp [R degC-1 ~> kg m-3 degC-1]
-    dRho_dS,  &    ! partial derivatives of density wrt saln [R ppt-1 ~> kg m-3 ppt-1]
+    dRho_dT,  &    ! partial derivatives of density wrt temp [R C-1 ~> kg m-3 degC-1]
+    dRho_dS,  &    ! partial derivatives of density wrt saln [R S-1 ~> kg m-3 ppt-1]
     pres,     &    ! pressure at each interface [R L2 T-2 ~> Pa]
-    Temp_int, &    ! temperature at interfaces [degC]
-    Salin_int      ! Salinity at interfaces [ppt]
+    Temp_int, &    ! temperature at interfaces [C ~> degC]
+    Salin_int      ! Salinity at interfaces [S ~> ppt]
 
   real ::  alpha_dT ! density difference between layers due to temp diffs [R ~> kg m-3]
   real ::  beta_dS  ! density difference between layers due to saln diffs [R ~> kg m-3]

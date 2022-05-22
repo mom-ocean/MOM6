@@ -329,9 +329,9 @@ subroutine int_density_dz_linear(T, S, z_t, z_b, rho_ref, rho_0_pres, G_e, HI, &
   type(hor_index_type), intent(in)  :: HI        !< The horizontal index type for the arrays.
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
                         intent(in)  :: T         !< Potential temperature relative to the surface
-                                                 !! [degC].
+                                                 !! [C ~> degC].
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
-                        intent(in)  :: S         !< Salinity [PSU].
+                        intent(in)  :: S         !< Salinity [S ?~> PSU].
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
                         intent(in)  :: z_t       !< Height at the top of the layer in depth units [Z ~> m].
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
@@ -346,9 +346,9 @@ subroutine int_density_dz_linear(T, S, z_t, z_b, rho_ref, rho_0_pres, G_e, HI, &
                                                  !! [L2 Z-1 T-2 ~> m s-2]
   real,                 intent(in)  :: Rho_T0_S0 !< The density at T=0, S=0 [R ~> kg m-3]
   real,                 intent(in)  :: dRho_dT   !< The derivative of density with temperature,
-                                                 !! [R degC-1 ~> kg m-3 degC-1]
+                                                 !! [R C-1 ~> kg m-3 degC-1]
   real,                 intent(in)  :: dRho_dS   !< The derivative of density with salinity,
-                                                 !! in [R ppt-1 ~> kg m-3 ppt-1]
+                                                 !! in [R S-1 ~> kg m-3 ppt-1]
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
                         intent(out) :: dpa       !< The change in the pressure anomaly across the
                                                  !! layer [R L2 T-2 ~> Pa]
@@ -500,9 +500,9 @@ subroutine int_spec_vol_dp_linear(T, S, p_t, p_b, alpha_ref, HI, Rho_T0_S0, &
   type(hor_index_type), intent(in)  :: HI        !< The ocean's horizontal index type.
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed),  &
                         intent(in)  :: T         !< Potential temperature relative to the surface
-                                                 !! [degC].
+                                                 !! [C ~> degC].
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed),  &
-                        intent(in)  :: S         !< Salinity [PSU].
+                        intent(in)  :: S         !< Salinity [S ~> PSU].
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed),  &
                         intent(in)  :: p_t       !< Pressure at the top of the layer [R L2 T-2 ~> Pa]
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed),  &
@@ -513,9 +513,9 @@ subroutine int_spec_vol_dp_linear(T, S, p_t, p_b, alpha_ref, HI, Rho_T0_S0, &
                             !! alpha_ref, but this reduces the effects of roundoff.
   real,                 intent(in)  :: Rho_T0_S0 !< The density at T=0, S=0 [R ~> kg m-3]
   real,                 intent(in)  :: dRho_dT   !< The derivative of density with temperature
-                                                 !! [R degC-1 ~> kg m-3 degC-1]
+                                                 !! [R C-1 ~> kg m-3 degC-1]
   real,                 intent(in)  :: dRho_dS   !< The derivative of density with salinity,
-                                                 !! in [R ppt-1 ~> kg m-3 ppt-1]
+                                                 !! in [R S-1 ~> kg m-3 ppt-1]
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
                         intent(out) :: dza       !< The change in the geopotential anomaly across
                                                  !! the layer [L2 T-2 ~> m2 s-2]

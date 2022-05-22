@@ -37,7 +37,7 @@ type, public :: p2d
 end type p2d
 
 !> Pointers to various fields which may be used describe the surface state of MOM, and which
-!! will be returned to a the calling program
+!! will be returned to the calling program
 type, public :: surface
   real, allocatable, dimension(:,:) :: &
     SST, &         !< The sea surface temperature [degC].
@@ -81,8 +81,8 @@ end type surface
 !! potential temperature, salinity, heat capacity, and the equation of state control structure.
 type, public :: thermo_var_ptrs
   ! If allocated, the following variables have nz layers.
-  real, pointer :: T(:,:,:) => NULL() !< Potential temperature [degC].
-  real, pointer :: S(:,:,:) => NULL() !< Salinity [PSU] or [gSalt/kg], generically [ppt].
+  real, pointer :: T(:,:,:) => NULL() !< Potential temperature [C ~> degC].
+  real, pointer :: S(:,:,:) => NULL() !< Salinity [PSU] or [gSalt/kg], generically [S ~> ppt].
   real, pointer :: p_surf(:,:) => NULL() !< Ocean surface pressure used in equation of state
                          !! calculations [R L2 T-2 ~> Pa]
   type(EOS_type), pointer :: eqn_of_state => NULL() !< Type that indicates the
@@ -90,15 +90,14 @@ type, public :: thermo_var_ptrs
   real :: P_Ref          !<   The coordinate-density reference pressure [R L2 T-2 ~> Pa].
                          !! This is the pressure used to calculate Rml from
                          !! T and S when eqn_of_state is associated.
-  real :: C_p            !<   The heat capacity of seawater [Q degC-1 ~> J degC-1 kg-1].
+  real :: C_p            !<   The heat capacity of seawater [Q C-1 ~> J degC-1 kg-1].
                          !! When conservative temperature is used, this is
                          !! constant and exactly 3991.86795711963 J degC-1 kg-1.
   logical :: T_is_conT = .false. !< If true, the temperature variable tv%T is
                          !! actually the conservative temperature [degC].
   logical :: S_is_absS = .false. !< If true, the salinity variable tv%S is
                          !! actually the absolute salinity in units of [gSalt kg-1].
-  real :: min_salinity = 0.01 !< The minimum value of salinity when BOUND_SALINITY=True [ppt].
-                         !! The default is 0.01 for backward compatibility but should be 0.
+  real :: min_salinity   !< The minimum value of salinity when BOUND_SALINITY=True [S ~> ppt].
   ! These arrays are accumulated fluxes for communication with other components.
   real, dimension(:,:), pointer :: frazil => NULL()
                          !< The energy needed to heat the ocean column to the
@@ -111,19 +110,19 @@ type, public :: thermo_var_ptrs
   real, dimension(:,:), pointer :: TempxPmE => NULL()
                          !<   The net inflow of water into the ocean times the
                          !! temperature at which this inflow occurs since the
-                         !! last call to calculate_surface_state [degC R Z ~> degC kg m-2].
+                         !! last call to calculate_surface_state [C R Z ~> degC kg m-2].
                          !! This should be prescribed in the forcing fields, but
                          !! as it often is not, this is a useful heat budget diagnostic.
   real, dimension(:,:), pointer :: internal_heat => NULL()
                          !< Any internal or geothermal heat sources that
                          !! have been applied to the ocean since the last call to
-                         !! calculate_surface_state [degC R Z ~> degC kg m-2].
+                         !! calculate_surface_state [C R Z ~> degC kg m-2].
   ! The following variables are most normally not used but when they are they
   ! will be either set by parameterizations or prognostic.
-  real, pointer :: varT(:,:,:) => NULL() !< SGS variance of potential temperature [degC2].
-  real, pointer :: varS(:,:,:) => NULL() !< SGS variance of salinity [ppt2].
+  real, pointer :: varT(:,:,:) => NULL() !< SGS variance of potential temperature [C2 ~> degC2].
+  real, pointer :: varS(:,:,:) => NULL() !< SGS variance of salinity [S2 ~> ppt2].
   real, pointer :: covarTS(:,:,:) => NULL() !< SGS covariance of salinity and potential
-                                  !! temperature [degC ppt].
+                                  !! temperature [C S ~> degC ppt].
 end type thermo_var_ptrs
 
 !> Pointers to all of the prognostic variables allocated in MOM_variables.F90 and MOM.F90.
@@ -133,8 +132,8 @@ end type thermo_var_ptrs
 !! they refer to in MOM.F90.
 type, public :: ocean_internal_state
   real, pointer, dimension(:,:,:) :: &
-    T => NULL(), & !< Pointer to the temperature state variable [degC]
-    S => NULL(), & !< Pointer to the salinity state variable [ppt ~> PSU or g/kg]
+    T => NULL(), & !< Pointer to the temperature state variable [C ~> degC]
+    S => NULL(), & !< Pointer to the salinity state variable [S ~> ppt] (i.e., PSU or g/kg)
     u => NULL(), & !< Pointer to the zonal velocity [L T-1 ~> m s-1]
     v => NULL(), & !< Pointer to the meridional velocity [L T-1 ~> m s-1]
     h => NULL()    !< Pointer to the layer thicknesses [H ~> m or kg m-2]
@@ -580,15 +579,15 @@ subroutine MOM_thermovar_chksum(mesg, tv, G, US)
   ! counts, there must be no redundant points, so all variables use is..ie
   ! and js...je as their extent.
   if (associated(tv%T)) &
-    call hchksum(tv%T, mesg//" tv%T", G%HI)
+    call hchksum(tv%T, mesg//" tv%T", G%HI, scale=US%C_to_degC)
   if (associated(tv%S)) &
-    call hchksum(tv%S, mesg//" tv%S", G%HI)
+    call hchksum(tv%S, mesg//" tv%S", G%HI, scale=US%S_to_ppt)
   if (associated(tv%frazil)) &
     call hchksum(tv%frazil, mesg//" tv%frazil", G%HI, scale=US%Q_to_J_kg*US%RZ_to_kg_m2)
   if (associated(tv%salt_deficit)) &
-    call hchksum(tv%salt_deficit, mesg//" tv%salt_deficit", G%HI, scale=US%RZ_to_kg_m2)
+    call hchksum(tv%salt_deficit, mesg//" tv%salt_deficit", G%HI, scale=US%RZ_to_kg_m2*US%S_to_ppt)
   if (associated(tv%TempxPmE)) &
-    call hchksum(tv%TempxPmE, mesg//" tv%TempxPmE", G%HI, scale=US%RZ_to_kg_m2)
+    call hchksum(tv%TempxPmE, mesg//" tv%TempxPmE", G%HI, scale=US%RZ_to_kg_m2*US%C_to_degC)
 end subroutine MOM_thermovar_chksum
 
 end module MOM_variables

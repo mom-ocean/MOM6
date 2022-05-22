@@ -383,8 +383,8 @@ end subroutine Phillips_initialize_topography
 !!    D - Basin depth [Z ~> m] (positive downward)
 !!    f - The Coriolis parameter [T-1 ~> s-1].
 !!  If ENABLE_THERMODYNAMICS is defined:
-!!    T - Temperature [degC].
-!!    S - Salinity [ppt].
+!!    T - Temperature [C ~> degC].
+!!    S - Salinity [S ~> ppt].
 !!  If SPONGE is defined:
 !!    A series of subroutine calls are made to set up the damping
 !!    rates and reference profiles for all variables that are damped

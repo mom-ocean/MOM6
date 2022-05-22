@@ -40,9 +40,9 @@ subroutine int_density_dz(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, EOS, US, dpa,
                           intz_dpa, intx_dpa, inty_dpa, bathyT, dz_neglect, useMassWghtInterp, Z_0p)
   type(hor_index_type), intent(in)  :: HI  !< Ocean horizontal index structures for the arrays
   real, dimension(SZI_(HI),SZJ_(HI)), &
-                        intent(in)  :: T   !< Potential temperature referenced to the surface [degC]
+                        intent(in)  :: T   !< Potential temperature referenced to the surface [C ~> degC]
   real, dimension(SZI_(HI),SZJ_(HI)), &
-                        intent(in)  :: S   !< Salinity [ppt]
+                        intent(in)  :: S   !< Salinity [S ~> ppt]
   real, dimension(SZI_(HI),SZJ_(HI)), &
                         intent(in)  :: z_t !< Height at the top of the layer in depth units [Z ~> m]
   real, dimension(SZI_(HI),SZJ_(HI)), &
@@ -97,9 +97,9 @@ subroutine int_density_dz_generic_pcm(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
                                       dz_neglect, useMassWghtInterp, use_inaccurate_form, Z_0p)
   type(hor_index_type), intent(in)  :: HI  !< Horizontal index type for input variables.
   real, dimension(SZI_(HI),SZJ_(HI)), &
-                        intent(in)  :: T  !< Potential temperature of the layer [degC]
+                        intent(in)  :: T  !< Potential temperature of the layer [C ~> degC]
   real, dimension(SZI_(HI),SZJ_(HI)), &
-                        intent(in)  :: S  !< Salinity of the layer [ppt]
+                        intent(in)  :: S  !< Salinity of the layer [S ~> ppt]
   real, dimension(SZI_(HI),SZJ_(HI)), &
                         intent(in)  :: z_t !< Height at the top of the layer in depth units [Z ~> m]
   real, dimension(SZI_(HI),SZJ_(HI)), &
@@ -139,7 +139,7 @@ subroutine int_density_dz_generic_pcm(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
   real,       optional, intent(in)  :: Z_0p !< The height at which the pressure is 0 [Z ~> m]
 
   ! Local variables
-  real :: T5(5), S5(5) ! Temperatures and salinities at five quadrature points [degC] and [ppt]
+  real :: T5(5), S5(5) ! Temperatures and salinities at five quadrature points [C ~> degC] and [S ~> ppt]
   real :: p5(5)      ! Pressures at five quadrature points [R L2 T-2 ~> Pa]
   real :: r5(5)      ! Densities at five quadrature points [R ~> kg m-3]
   real :: rho_anom   ! The depth averaged density anomaly [R ~> kg m-3]
@@ -317,13 +317,13 @@ subroutine int_density_dz_generic_plm(k, tv, T_t, T_b, S_t, S_b, e, rho_ref, &
   type(verticalGrid_type), intent(in) :: GV !< Vertical grid structure
   type(thermo_var_ptrs), intent(in) :: tv  !< Thermodynamic variables
   real, dimension(SZI_(HI),SZJ_(HI),SZK_(GV)), &
-                        intent(in)  :: T_t !< Potential temperature at the cell top [degC]
+                        intent(in)  :: T_t !< Potential temperature at the cell top [C ~> degC]
   real, dimension(SZI_(HI),SZJ_(HI),SZK_(GV)), &
-                        intent(in)  :: T_b !< Potential temperature at the cell bottom [degC]
+                        intent(in)  :: T_b !< Potential temperature at the cell bottom [C ~> degC]
   real, dimension(SZI_(HI),SZJ_(HI),SZK_(GV)), &
-                        intent(in)  :: S_t !< Salinity at the cell top [ppt]
+                        intent(in)  :: S_t !< Salinity at the cell top [S ~> ppt]
   real, dimension(SZI_(HI),SZJ_(HI),SZK_(GV)), &
-                        intent(in)  :: S_b !< Salinity at the cell bottom [ppt]
+                        intent(in)  :: S_b !< Salinity at the cell bottom [S ~> ppt]
   real, dimension(SZI_(HI),SZJ_(HI),SZK_(GV)+1), &
                         intent(in)  :: e   !< Height of interfaces [Z ~> m]
   real,                 intent(in)  :: rho_ref !< A mean density [R ~> kg m-3], that is subtracted
@@ -368,21 +368,26 @@ subroutine int_density_dz_generic_plm(k, tv, T_t, T_b, S_t, S_b, e, rho_ref, &
 ! a linear interpolation is used to compute intermediate values.
 
   ! Local variables
-  real :: T5((5*HI%iscB+1):(5*(HI%iecB+2)))  ! Temperatures along a line of subgrid locations [degC]
-  real :: S5((5*HI%iscB+1):(5*(HI%iecB+2)))  ! Salinities along a line of subgrid locations [ppt]
-  real :: T25((5*HI%iscB+1):(5*(HI%iecB+2))) ! SGS temperature variance along a line of subgrid locations [degC2]
-  real :: TS5((5*HI%iscB+1):(5*(HI%iecB+2))) ! SGS temp-salt covariance along a line of subgrid locations [degC ppt]
-  real :: S25((5*HI%iscB+1):(5*(HI%iecB+2))) ! SGS salinity variance along a line of subgrid locations [ppt2]
+  real :: T5((5*HI%iscB+1):(5*(HI%iecB+2)))  ! Temperatures along a line of subgrid locations [C ~> degC]
+  real :: S5((5*HI%iscB+1):(5*(HI%iecB+2)))  ! Salinities along a line of subgrid locations [S ~> ppt]
+  real :: T25((5*HI%iscB+1):(5*(HI%iecB+2))) ! SGS temperature variance along a line of subgrid
+                                             ! locations [C2 ~> degC2]
+  real :: TS5((5*HI%iscB+1):(5*(HI%iecB+2))) ! SGS temp-salt covariance along a line of subgrid
+                                             ! locations [C S ~> degC ppt]
+  real :: S25((5*HI%iscB+1):(5*(HI%iecB+2))) ! SGS salinity variance along a line of subgrid locations [S2 ~> ppt2]
   real :: p5((5*HI%iscB+1):(5*(HI%iecB+2)))  ! Pressures along a line of subgrid locations [R L2 T-2 ~> Pa]
   real :: r5((5*HI%iscB+1):(5*(HI%iecB+2)))  ! Densities anomalies along a line of subgrid
                                              ! locations [R ~> kg m-3]
   real :: u5((5*HI%iscB+1):(5*(HI%iecB+2)))  ! Densities anomalies along a line of subgrid locations
                                              ! (used for inaccurate form) [R ~> kg m-3]
-  real :: T15((15*HI%iscB+1):(15*(HI%iecB+1))) ! Temperatures at an array of subgrid locations [degC]
-  real :: S15((15*HI%iscB+1):(15*(HI%iecB+1))) ! Salinities at an array of subgrid locations [ppt]
-  real :: T215((15*HI%iscB+1):(15*(HI%iecB+1))) ! SGS temperature variance along a line of subgrid locations [degC2]
-  real :: TS15((15*HI%iscB+1):(15*(HI%iecB+1))) ! SGS temp-salt covariance along a line of subgrid locations [degC ppt]
-  real :: S215((15*HI%iscB+1):(15*(HI%iecB+1))) ! SGS salinity variance along a line of subgrid locations [ppt2]
+  real :: T15((15*HI%iscB+1):(15*(HI%iecB+1))) ! Temperatures at an array of subgrid locations [C ~> degC]
+  real :: S15((15*HI%iscB+1):(15*(HI%iecB+1))) ! Salinities at an array of subgrid locations [S ~> ppt]
+  real :: T215((15*HI%iscB+1):(15*(HI%iecB+1))) ! SGS temperature variance along a line of subgrid
+                                                ! locations [C2 ~> degC2]
+  real :: TS15((15*HI%iscB+1):(15*(HI%iecB+1))) ! SGS temp-salt covariance along a line of subgrid
+                                                ! locations [C S ~> degC ppt]
+  real :: S215((15*HI%iscB+1):(15*(HI%iecB+1))) ! SGS salinity variance along a line of subgrid
+                                                ! locations [S2 ~> ppt2]
   real :: p15((15*HI%iscB+1):(15*(HI%iecB+1))) ! Pressures at an array of subgrid locations [R L2 T-2 ~> Pa]
   real :: r15((15*HI%iscB+1):(15*(HI%iecB+1))) ! Densities at an array of subgrid locations [R ~> kg m-3]
   real :: wt_t(5), wt_b(5)          ! Top and bottom weights [nondim]
@@ -397,8 +402,8 @@ subroutine int_density_dz_generic_plm(k, tv, T_t, T_b, S_t, S_b, e, rho_ref, &
   real :: dz_x(5,HI%iscB:HI%iecB) ! Layer thicknesses along an x-line of subgrid locations [Z ~> m]
   real :: dz_y(5,HI%isc:HI%iec)   ! Layer thicknesses along a y-line of subgrid locations [Z ~> m]
   real :: massWeightToggle          ! A non-dimensional toggle factor (0 or 1) [nondim]
-  real :: Ttl, Tbl, Ttr, Tbr        ! Temperatures at the velocity cell corners [degC]
-  real :: Stl, Sbl, Str, Sbr        ! Salinities at the velocity cell corners [ppt]
+  real :: Ttl, Tbl, Ttr, Tbr        ! Temperatures at the velocity cell corners [C ~> degC]
+  real :: Stl, Sbl, Str, Sbr        ! Salinities at the velocity cell corners [S ~> ppt]
   real :: z0pres                    ! The height at which the pressure is zero [Z ~> m]
   real :: hWght                     ! A topographically limited thickness weight [Z ~> m]
   real :: hL, hR                    ! Thicknesses to the left and right [Z ~> m]
@@ -712,13 +717,13 @@ subroutine int_density_dz_generic_ppm(k, tv, T_t, T_b, S_t, S_b, e, &
   type(verticalGrid_type), intent(in) :: GV !< Vertical grid structure
   type(thermo_var_ptrs), intent(in) :: tv  !< Thermodynamic variables
   real, dimension(SZI_(HI),SZJ_(HI),SZK_(GV)), &
-                        intent(in)  :: T_t !< Potential temperature at the cell top [degC]
+                        intent(in)  :: T_t !< Potential temperature at the cell top [C ~> degC]
   real, dimension(SZI_(HI),SZJ_(HI),SZK_(GV)), &
-                        intent(in)  :: T_b !< Potential temperature at the cell bottom [degC]
+                        intent(in)  :: T_b !< Potential temperature at the cell bottom [C ~> degC]
   real, dimension(SZI_(HI),SZJ_(HI),SZK_(GV)), &
-                        intent(in)  :: S_t !< Salinity at the cell top [ppt]
+                        intent(in)  :: S_t !< Salinity at the cell top [S ~> ppt]
   real, dimension(SZI_(HI),SZJ_(HI),SZK_(GV)), &
-                        intent(in)  :: S_b !< Salinity at the cell bottom [ppt]
+                        intent(in)  :: S_b !< Salinity at the cell bottom [S ~> ppt]
   real, dimension(SZI_(HI),SZJ_(HI),SZK_(GV)+1), &
                         intent(in)  :: e   !< Height of interfaces [Z ~> m]
   real,                 intent(in)  :: rho_ref !< A mean density [R ~> kg m-3], that is
@@ -761,11 +766,11 @@ subroutine int_density_dz_generic_ppm(k, tv, T_t, T_b, S_t, S_b, e, &
 ! a parabolic interpolation is used to compute intermediate values.
 
   ! Local variables
-  real :: T5(5) ! Temperatures along a line of subgrid locations [degC]
-  real :: S5(5) ! Salinities along a line of subgrid locations [ppt]
-  real :: T25(5) ! SGS temperature variance along a line of subgrid locations [degC2]
-  real :: TS5(5) ! SGS temperature-salinity covariance along a line of subgrid locations [degC ppt]
-  real :: S25(5) ! SGS salinity variance along a line of subgrid locations [ppt2]
+  real :: T5(5) ! Temperatures along a line of subgrid locations [C ~> degC]
+  real :: S5(5) ! Salinities along a line of subgrid locations [S ~> ppt]
+  real :: T25(5) ! SGS temperature variance along a line of subgrid locations [C2 ~> degC2]
+  real :: TS5(5) ! SGS temperature-salinity covariance along a line of subgrid locations [C S ~> degC ppt]
+  real :: S25(5) ! SGS salinity variance along a line of subgrid locations [S2 ~> ppt2]
   real :: p5(5) ! Pressures at five quadrature points [R L2 T-2 ~> Pa]
   real :: r5(5) ! Density anomalies from rho_ref at quadrature points [R ~> kg m-3]
   real :: wt_t(5), wt_b(5) ! Top and bottom weights [nondim]
@@ -778,12 +783,12 @@ subroutine int_density_dz_generic_ppm(k, tv, T_t, T_b, S_t, S_b, e, &
   real :: I_Rho ! The inverse of the Boussinesq density [R-1 ~> m3 kg-1]
   real :: dz ! Layer thicknesses at tracer points [Z ~> m]
   real :: massWeightToggle ! A non-dimensional toggle factor (0 or 1) [nondim]
-  real :: Ttl, Tbl, Tml, Ttr, Tbr, Tmr ! Temperatures at the velocity cell corners [degC]
-  real :: Stl, Sbl, Sml, Str, Sbr, Smr ! Salinities at the velocity cell corners [ppt]
-  real :: s6 ! PPM curvature coefficient for S [ppt]
-  real :: t6 ! PPM curvature coefficient for T [degC]
-  real :: T_top, T_mn, T_bot ! Left edge, cell mean and right edge values used in PPM reconstructions of T
-  real :: S_top, S_mn, S_bot ! Left edge, cell mean and right edge values used in PPM reconstructions of S
+  real :: Ttl, Tbl, Tml, Ttr, Tbr, Tmr ! Temperatures at the velocity cell corners [C ~> degC]
+  real :: Stl, Sbl, Sml, Str, Sbr, Smr ! Salinities at the velocity cell corners [S ~> ppt]
+  real :: s6 ! PPM curvature coefficient for S [S ~> ppt]
+  real :: t6 ! PPM curvature coefficient for T [C ~> degC]
+  real :: T_top, T_mn, T_bot ! Left edge, cell mean and right edge values used in PPM reconstructions of T [C ~> degC]
+  real :: S_top, S_mn, S_bot ! Left edge, cell mean and right edge values used in PPM reconstructions of S [S ~> ppt]
   real :: z0pres ! The height at which the pressure is zero [Z ~> m]
   real :: hWght  ! A topographically limited thickness weight [Z ~> m]
   real :: hL, hR ! Thicknesses to the left and right [Z ~> m]
@@ -1042,9 +1047,9 @@ subroutine int_specific_vol_dp(T, S, p_t, p_b, alpha_ref, HI, EOS, US, &
                                bathyP, dP_tiny, useMassWghtInterp)
   type(hor_index_type), intent(in)  :: HI  !< The horizontal index structure
   real, dimension(SZI_(HI),SZJ_(HI)), &
-                        intent(in)  :: T   !< Potential temperature referenced to the surface [degC]
+                        intent(in)  :: T   !< Potential temperature referenced to the surface [C ~> degC]
   real, dimension(SZI_(HI),SZJ_(HI)), &
-                        intent(in)  :: S   !< Salinity [ppt]
+                        intent(in)  :: S   !< Salinity [S ~> ppt]
   real, dimension(SZI_(HI),SZJ_(HI)), &
                         intent(in)  :: p_t !< Pressure at the top of the layer [R L2 T-2 ~> Pa]
   real, dimension(SZI_(HI),SZJ_(HI)), &
@@ -1100,9 +1105,9 @@ subroutine int_spec_vol_dp_generic_pcm(T, S, p_t, p_b, alpha_ref, HI, EOS, US, d
                                        bathyP, dP_neglect, useMassWghtInterp)
   type(hor_index_type), intent(in)  :: HI !< A horizontal index type structure.
   real, dimension(SZI_(HI),SZJ_(HI)), &
-                        intent(in)  :: T  !< Potential temperature of the layer [degC]
+                        intent(in)  :: T  !< Potential temperature of the layer [C ~> degC]
   real, dimension(SZI_(HI),SZJ_(HI)), &
-                        intent(in)  :: S  !< Salinity of the layer [ppt]
+                        intent(in)  :: S  !< Salinity of the layer [S ~> ppt]
   real, dimension(SZI_(HI),SZJ_(HI)), &
                         intent(in)  :: p_t !< Pressure atop the layer [R L2 T-2 ~> Pa]
   real, dimension(SZI_(HI),SZJ_(HI)), &
@@ -1145,8 +1150,8 @@ subroutine int_spec_vol_dp_generic_pcm(T, S, p_t, p_b, alpha_ref, HI, EOS, US, d
 ! series for log(1-eps/1+eps) that assumes that |eps| < 0.34.
 
   ! Local variables
-  real :: T5(5)      ! Temperatures at five quadrature points [degC]
-  real :: S5(5)      ! Salinities at five quadrature points [ppt]
+  real :: T5(5)      ! Temperatures at five quadrature points [C ~> degC]
+  real :: S5(5)      ! Salinities at five quadrature points [S ~> ppt]
   real :: p5(5)      ! Pressures at five quadrature points [R L2 T-2 ~> Pa]
   real :: a5(5)      ! Specific volumes at five quadrature points [R-1 ~> m3 kg-1]
   real :: alpha_anom ! The depth averaged specific density anomaly [R-1 ~> m3 kg-1]
@@ -1295,13 +1300,13 @@ subroutine int_spec_vol_dp_generic_plm(T_t, T_b, S_t, S_b, p_t, p_b, alpha_ref, 
                              intp_dza, intx_dza, inty_dza, useMassWghtInterp)
   type(hor_index_type), intent(in)  :: HI !< A horizontal index type structure.
   real, dimension(SZI_(HI),SZJ_(HI)), &
-                        intent(in)  :: T_t  !< Potential temperature at the top of the layer [degC]
+                        intent(in)  :: T_t  !< Potential temperature at the top of the layer [C ~> degC]
   real, dimension(SZI_(HI),SZJ_(HI)), &
-                        intent(in)  :: T_b  !< Potential temperature at the bottom of the layer [degC]
+                        intent(in)  :: T_b  !< Potential temperature at the bottom of the layer [C ~> degC]
   real, dimension(SZI_(HI),SZJ_(HI)), &
-                        intent(in)  :: S_t  !< Salinity at the top the layer [ppt]
+                        intent(in)  :: S_t  !< Salinity at the top the layer [S ~> ppt]
   real, dimension(SZI_(HI),SZJ_(HI)), &
-                        intent(in)  :: S_b  !< Salinity at the bottom the layer [ppt]
+                        intent(in)  :: S_b  !< Salinity at the bottom the layer [S ~> ppt]
   real, dimension(SZI_(HI),SZJ_(HI)), &
                         intent(in)  :: p_t !< Pressure atop the layer [R L2 T-2 ~> Pa]
   real, dimension(SZI_(HI),SZJ_(HI)), &
@@ -1342,17 +1347,17 @@ subroutine int_spec_vol_dp_generic_plm(T_t, T_b, S_t, S_b, p_t, p_b, alpha_ref, 
 ! Boole's rule to do the horizontal integrals, and from a truncation in the
 ! series for log(1-eps/1+eps) that assumes that |eps| < 0.34.
 
-  real :: T5(5)      ! Temperatures at five quadrature points [degC]
-  real :: S5(5)      ! Salinities at five quadrature points [ppt]
+  real :: T5(5)      ! Temperatures at five quadrature points [C ~> degC]
+  real :: S5(5)      ! Salinities at five quadrature points [S ~> ppt]
   real :: p5(5)      ! Pressures at five quadrature points [R L2 T-2 ~> Pa]
   real :: a5(5)      ! Specific volumes at five quadrature points [R-1 ~> m3 kg-1]
-  real :: T15(15)    ! Temperatures at fifteen interior quadrature points [degC]
-  real :: S15(15)    ! Salinities at fifteen interior quadrature points [ppt]
+  real :: T15(15)    ! Temperatures at fifteen interior quadrature points [C ~> degC]
+  real :: S15(15)    ! Salinities at fifteen interior quadrature points [S ~> ppt]
   real :: p15(15)    ! Pressures at fifteen quadrature points [R L2 T-2 ~> Pa]
   real :: a15(15)    ! Specific volumes at fifteen quadrature points [R-1 ~> m3 kg-1]
   real :: wt_t(5), wt_b(5) ! Weights of top and bottom values at quadrature points [nondim]
-  real :: T_top, T_bot ! Horizontally interpolated temperature at the cell top and bottom [degC]
-  real :: S_top, S_bot ! Horizontally interpolated salinity at the cell top and bottom [ppt]
+  real :: T_top, T_bot ! Horizontally interpolated temperature at the cell top and bottom [C ~> degC]
+  real :: S_top, S_bot ! Horizontally interpolated salinity at the cell top and bottom [S ~> ppt]
   real :: P_top, P_bot ! Horizontally interpolated pressure at the cell top and bottom [R L2 T-2 ~> Pa]
 
   real :: alpha_anom ! The depth averaged specific density anomaly [R-1 ~> m3 kg-1]
@@ -1522,10 +1527,10 @@ end subroutine int_spec_vol_dp_generic_plm
 !> Find the depth at which the reconstructed pressure matches P_tgt
 subroutine find_depth_of_pressure_in_cell(T_t, T_b, S_t, S_b, z_t, z_b, P_t, P_tgt, &
                        rho_ref, G_e, EOS, US, P_b, z_out, z_tol)
-  real,                  intent(in)  :: T_t !< Potential temperature at the cell top [degC]
-  real,                  intent(in)  :: T_b !< Potential temperature at the cell bottom [degC]
-  real,                  intent(in)  :: S_t !< Salinity at the cell top [ppt]
-  real,                  intent(in)  :: S_b !< Salinity at the cell bottom [ppt]
+  real,                  intent(in)  :: T_t !< Potential temperature at the cell top [C ~> degC]
+  real,                  intent(in)  :: T_b !< Potential temperature at the cell bottom [C ~> degC]
+  real,                  intent(in)  :: S_t !< Salinity at the cell top [S ~> ppt]
+  real,                  intent(in)  :: S_b !< Salinity at the cell bottom [S ~> ppt]
   real,                  intent(in)  :: z_t !< Absolute height of top of cell [Z ~> m]   (Boussinesq ????)
   real,                  intent(in)  :: z_b !< Absolute height of bottom of cell [Z ~> m]
   real,                  intent(in)  :: P_t !< Anomalous pressure of top of cell, relative
@@ -1604,10 +1609,10 @@ end subroutine find_depth_of_pressure_in_cell
 !> Returns change in anomalous pressure change from top to non-dimensional
 !! position pos between z_t and z_b [R L2 T-2 ~> Pa]
 real function frac_dp_at_pos(T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, G_e, pos, EOS)
-  real,           intent(in)  :: T_t !< Potential temperature at the cell top [degC]
-  real,           intent(in)  :: T_b !< Potential temperature at the cell bottom [degC]
-  real,           intent(in)  :: S_t !< Salinity at the cell top [ppt]
-  real,           intent(in)  :: S_b !< Salinity at the cell bottom [ppt]
+  real,           intent(in)  :: T_t !< Potential temperature at the cell top [C ~> degC]
+  real,           intent(in)  :: T_b !< Potential temperature at the cell bottom [C ~> degC]
+  real,           intent(in)  :: S_t !< Salinity at the cell top [S ~> ppt]
+  real,           intent(in)  :: S_b !< Salinity at the cell bottom [S ~> ppt]
   real,           intent(in)  :: z_t !< The geometric height at the top of the layer [Z ~> m]
   real,           intent(in)  :: z_b !< The geometric height at the bottom of the layer [Z ~> m]
   real,           intent(in)  :: rho_ref !< A mean density [R ~> kg m-3], that is subtracted out to
@@ -1621,8 +1626,8 @@ real function frac_dp_at_pos(T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, G_e, pos, EO
   real :: dz                 ! Distance from the layer top [Z ~> m]
   real :: top_weight, bottom_weight ! Fractional weights at quadrature points [nondim]
   real :: rho_ave            ! Average density [R ~> kg m-3]
-  real, dimension(5) :: T5   ! Temperatures at quadrature points [degC]
-  real, dimension(5) :: S5   ! Salinities at quadrature points [ppt]
+  real, dimension(5) :: T5   ! Temperatures at quadrature points [C ~> degC]
+  real, dimension(5) :: S5   ! Salinities at quadrature points [S ~> ppt]
   real, dimension(5) :: p5   ! Pressures at quadrature points [R L2 T-2 ~> Pa]
   real, dimension(5) :: rho5 ! Densities at quadrature points [R ~> kg m-3]
   integer :: n
