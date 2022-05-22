@@ -94,18 +94,19 @@ end subroutine USER_initialize_shelf_mass
 subroutine USER_init_ice_thickness(h_shelf, area_shelf_h, hmask, G, US, param_file)
   type(ocean_grid_type),   intent(in)  :: G    !< The ocean's grid structure
   real, dimension(SZDI_(G),SZDJ_(G)), &
-                           intent(out) :: h_shelf !< The ice shelf thickness [m].
+                           intent(out) :: h_shelf !< The ice shelf thickness [Z ~> m].
   real, dimension(SZDI_(G),SZDJ_(G)), &
                            intent(out) :: area_shelf_h !< The area per cell covered by the ice shelf [L2 ~> m2].
   real, dimension(SZDI_(G),SZDJ_(G)), &
                            intent(out) :: hmask !< A mask indicating which tracer points are
-                                                !! partly or fully covered by an ice-shelf
+                                                !! partly or fully covered by an ice-shelf [nondim]
   type(unit_scale_type),   intent(in)  :: US    !< A structure containing unit conversion factors
   type(param_file_type),   intent(in)  :: param_file !< A structure to parse for run-time parameters
 
   ! This subroutine initializes the ice shelf thickness.  Currently it does so
   ! calling USER_initialize_shelf_mass, but this can be revised as needed.
-  real, dimension(SZI_(G),SZJ_(G)) :: mass_shelf
+  real, dimension(SZI_(G),SZJ_(G)) :: mass_shelf ! The ice shelf mass per unit area averaged
+                                                 ! over the full ocean cell [R Z ~> kg m-2].
   type(user_ice_shelf_CS), pointer :: CS => NULL()
 
   call USER_initialize_shelf_mass(mass_shelf, area_shelf_h, h_shelf, hmask, G, US, CS, param_file, .true.)
@@ -124,7 +125,7 @@ subroutine USER_update_shelf_mass(mass_shelf, area_shelf_h, h_shelf, hmask, G, C
                            intent(inout) :: h_shelf !< The ice shelf thickness [Z ~> m].
   real, dimension(SZDI_(G),SZDJ_(G)), &
                            intent(inout) :: hmask !< A mask indicating which tracer points are
-                                                !! partly or fully covered by an ice-shelf
+                                                  !! partly or fully covered by an ice-shelf [nondim]
   type(user_ice_shelf_CS), pointer       :: CS   !< A pointer to the user ice shelf control structure
   type(time_type),         intent(in)    :: Time !< The current model time
   logical,                 intent(in)    :: new_sim !< If true, this the start of a new run.
