@@ -1359,7 +1359,7 @@ subroutine get_depth_list_checksums(G, US, depth_chksum, area_chksum)
 
   ! Depth checksum
   do j=G%jsc,G%jec ; do i=G%isc,G%iec
-    field(i,j) = G%bathyT(i,j) + G%Z_ref
+    field(i,j) = US%Z_to_m*(G%bathyT(i,j) + G%Z_ref)
   enddo ; enddo
   write(depth_chksum, '(Z16)') field_chksum(field(:,:))
 
