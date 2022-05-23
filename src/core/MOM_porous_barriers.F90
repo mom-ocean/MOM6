@@ -67,17 +67,18 @@ subroutine porous_widths_layer(h, tv, G, GV, US, pbv, CS, eta_bt)
   type(porous_barrier_CS),                    intent(in) :: CS      !< Control structure for porous barrier
 
   !local variables
-  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)+1) :: eta_u ! Layer interface heights at u points [Z ~> m]
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)+1) :: eta_v ! Layer interface heights at v points [Z ~> m]
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)+1) :: eta_u ! Layer interface heights at u points [Z ~> m]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)+1) :: eta_v ! Layer interface heights at v points [Z ~> m]
   real, dimension(SZIB_(G),SZJB_(G)) :: A_layer_prev ! Integral of fractional open width from the bottom
                                                      ! to the previous layer at u or v points [Z ~> m]
+  logical, dimension(SZIB_(G),SZJB_(G)) :: do_I ! Booleans for calculation at u or v points
+                                                ! updated while moving up layers
   real :: A_layer ! Integral of fractional open width from bottom to current layer [Z ~> m]
   real :: Z_to_eta, H_to_eta ! Unit conversion factors for eta.
   real :: h_neglect, & ! Negligible thicknesses, often [Z ~> m]
           h_min ! ! The minimum layer thickness, often [Z ~> m]
   real :: dmask ! The depth below which porous barrier is not applied [Z ~> m]
   integer :: i, j, k, nk, is, ie, js, je, Isq, Ieq, Jsq, Jeq
-  logical :: do_next
 
   if (.not.CS%initialized) call MOM_error(FATAL, &
       "MOM_Porous_barrier: Module must be initialized before it is used.")
@@ -96,35 +97,39 @@ subroutine porous_widths_layer(h, tv, G, GV, US, pbv, CS, eta_bt)
   h_min = GV%Angstrom_H * H_to_eta
 
   ! u-points
+  do j=js,je ; do I=Isq,Ieq ; do_I(I,j) = .False. ; enddo ; enddo
+
   do j=js,je ; do I=Isq,Ieq ; if (G%porous_DavgU(I,j) < dmask) then
     call calc_por_layer(G%porous_DminU(I,j), G%porous_DmaxU(I,j), G%porous_DavgU(I,j), &
-                        eta_u(I,j,nk+1), A_layer_prev(I,j), do_next)
+                        eta_u(I,j,nk+1), A_layer_prev(I,j), do_I(I,j))
   endif ; enddo ; enddo
 
-  do k=nk,1,-1 ; do j=js,je ; do I=Isq,Ieq ; if (G%porous_DavgU(I,j) < dmask) then
-    if ((eta_u(I,j,K) - eta_u(I,j,K+1)) > 0.0) then
-      call calc_por_layer(G%porous_DminU(I,j), G%porous_DmaxU(I,j), G%porous_DavgU(I,j), &
-                          eta_u(I,j,K), A_layer, do_next)
-      pbv%por_face_areaU(I,j,k) = (A_layer - A_layer_prev(I,j)) / (eta_u(I,j,K) - eta_u(I,j,K+1))
+  do k=nk,1,-1 ; do j=js,je ; do I=Isq,Ieq ; if (do_I(I,j)) then
+    call calc_por_layer(G%porous_DminU(I,j), G%porous_DmaxU(I,j), G%porous_DavgU(I,j), &
+                        eta_u(I,j,K), A_layer, do_I(I,j))
+    if (eta_u(I,j,K) - (eta_u(I,j,K+1)+h_min) > 0.0) then
+      pbv%por_face_areaU(I,j,k) = min(1.0, (A_layer - A_layer_prev(I,j)) / (eta_u(I,j,K) - eta_u(I,j,K+1)))
     else
-      pbv%por_face_areaU(I,j,k) = 0.0
+      pbv%por_face_areaU(I,j,k) = 0.0 ! use calc_por_interface() might be a better choice
     endif
     A_layer_prev(I,j) = A_layer
   endif ; enddo ; enddo ; enddo
 
   ! v-points
+  do J=Jsq,Jeq ; do i=is,ie; do_I(i,J) = .False. ; enddo ; enddo
+
   do J=Jsq,Jeq ; do i=is,ie ; if (G%porous_DavgV(i,J) < dmask) then
     call calc_por_layer(G%porous_DminV(i,J), G%porous_DmaxV(i,J), G%porous_DavgV(i,J), &
-                        eta_v(i,J,nk+1), A_layer_prev(i,J), do_next)
+                        eta_v(i,J,nk+1), A_layer_prev(i,J), do_I(i,J))
   endif ; enddo ; enddo
 
-  do k=nk,1,-1 ; do J=Jsq,Jeq ; do i=is,ie ; if (G%porous_DavgV(i,J) < dmask) then
-    if ((eta_v(i,J,K) - eta_v(i,J,K+1)) > 0.0) then
-      call calc_por_layer(G%porous_DminV(i,J), G%porous_DmaxV(i,J), G%porous_DavgV(i,J), &
-                          eta_v(i,J,K), A_layer, do_next)
-      pbv%por_face_areaV(i,J,k) = (A_layer - A_layer_prev(i,J)) / (eta_v(i,J,K) - eta_v(i,J,K+1))
+  do k=nk,1,-1 ; do J=Jsq,Jeq ; do i=is,ie ; if (do_I(i,J)) then
+    call calc_por_layer(G%porous_DminV(i,J), G%porous_DmaxV(i,J), G%porous_DavgV(i,J), &
+                        eta_v(i,J,K), A_layer, do_I(i,J))
+    if (eta_v(i,J,K) - (eta_v(i,J,K+1)+h_min) > 0.0) then
+      pbv%por_face_areaV(i,J,k) = min(1.0, (A_layer - A_layer_prev(i,J)) / (eta_v(i,J,K) - eta_v(i,J,K+1)))
     else
-      pbv%por_face_areaV(i,J,k) = 0.0
+      pbv%por_face_areaV(i,J,k) = 0.0 ! use calc_por_interface() might be a better choice
     endif
     A_layer_prev(i,J) = A_layer
   endif ; enddo ; enddo ; enddo
@@ -159,13 +164,14 @@ subroutine porous_widths_interface(h, tv, G, GV, US, pbv, CS, eta_bt)
   type(porous_barrier_CS),                    intent(in) :: CS !< Control structure for porous barrier
 
   !local variables
-  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)+1) :: eta_u ! Layer interface height at u points [Z ~> m]
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)+1) :: eta_v ! Layer interface height at v points [Z ~> m]
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)+1) :: eta_u ! Layer interface height at u points [Z ~> m]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)+1) :: eta_v ! Layer interface height at v points [Z ~> m]
+  logical, dimension(SZIB_(G),SZJB_(G)) :: do_I ! Booleans for calculation at u or v points
+                                                ! updated while moving up layers
   real :: Z_to_eta, H_to_eta ! Unit conversion factors for eta.
   real :: h_neglect ! Negligible thicknesses, often [Z ~> m]
   real :: dmask ! The depth below which porous barrier is not applied [Z ~> m]
   integer :: i, j, k, nk, is, ie, js, je, Isq, Ieq, Jsq, Jeq
-  logical :: do_next
 
   if (.not.CS%initialized) call MOM_error(FATAL, &
       "MOM_Porous_barrier: Module must be initialized before it is used.")
@@ -180,15 +186,25 @@ subroutine porous_widths_interface(h, tv, G, GV, US, pbv, CS, eta_bt)
   call calc_eta_at_uv(eta_u, eta_v, CS%eta_interp, dmask, h, tv, G, GV, US)
 
   ! u-points
-  do K=1,nk+1 ; do j=js,je ; do I=Isq,Ieq ; if (G%porous_DavgU(I,j) < dmask) then
+  do j=js,je ; do I=Isq,Ieq
+    do_I(I,j) = .False.
+    if (G%porous_DavgU(I,j) < dmask) do_I(I,j) = .True.
+  enddo ; enddo
+
+  do K=1,nk+1 ; do j=js,je ; do I=Isq,Ieq ; if (do_I(I,j)) then
      call calc_por_interface(G%porous_DminU(I,j), G%porous_DmaxU(I,j), G%porous_DavgU(I,j), &
-                             eta_u(I,j,K), pbv%por_layer_widthU(I,j,K), do_next)
+                             eta_u(I,j,K), pbv%por_layer_widthU(I,j,K), do_I(I,j))
   endif ; enddo ; enddo ; enddo
 
   ! v-points
-  do K=1,nk+1 ; do J=Jsq,Jeq ; do i=is,ie ; if (G%porous_DavgV(i,J) < dmask) then
+  do J=Jsq,Jeq ; do i=is,ie
+    do_I(i,J) = .False.
+    if (G%porous_DavgV(i,J) < dmask) do_I(i,J) = .True.
+  enddo ; enddo
+
+  do K=1,nk+1 ; do J=Jsq,Jeq ; do i=is,ie ; if (do_I(i,J)) then
     call calc_por_interface(G%porous_DminV(i,J), G%porous_DmaxV(i,J), G%porous_DavgV(i,J), &
-                            eta_v(i,J,K), pbv%por_layer_widthV(i,J,K), do_next)
+                            eta_v(i,J,K), pbv%por_layer_widthV(i,J,K), do_I(i,J))
   endif ; enddo ; enddo ; enddo
 
   if (CS%debug) then
@@ -218,8 +234,8 @@ subroutine calc_eta_at_uv(eta_u, eta_v, interp, dmask, h, tv, G, GV, US, eta_bt)
   real,                                         intent(in) :: dmask !< The depth below which
                                                                     !! porous barrier is not applied [Z ~> m]
   integer,                                      intent(in) :: interp !< eta interpolation method
-  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)+1), intent(out) :: eta_u !< Layer interface heights at u points [Z ~> m]
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)+1), intent(out) :: eta_v !< Layer interface heights at v points [Z ~> m]
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)+1), intent(out) :: eta_u !< Layer interface heights at u points [Z ~> m]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)+1), intent(out) :: eta_v !< Layer interface heights at v points [Z ~> m]
 
   ! local variables
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1) :: eta ! Layer interface heights [Z ~> m or 1/eta_to_m].

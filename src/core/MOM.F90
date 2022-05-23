@@ -413,6 +413,7 @@ type, public :: MOM_control_struct ; private
                                 !! ensemble model state vectors and data assimilation
                                 !! increments and priors
   type(dbcomms_CS_type)   :: dbcomms_CS !< Control structure for database client used for online ML/AI
+  logical :: use_porbar
   type(porous_barrier_ptrs) :: pbv !< porous barrier fractional cell metrics
   type(particles), pointer :: particles => NULL() !<Lagrangian particles
   type(stochastic_CS), pointer :: stoch_CS => NULL() !< a pointer to the stochastics control structure
@@ -1090,13 +1091,13 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_thermo, &
   endif
 
   ! Update porous barrier fractional cell metrics
-  call enable_averages(dt, Time_local, CS%diag)
-  call porous_widths_layer(h, CS%tv, G, GV, US, CS%pbv, CS%por_bar_CS)
-  call disable_averaging(CS%diag)
-  call pass_vector(CS%pbv%por_face_areaU, CS%pbv%por_face_areaV, &
-                   G%Domain, direction=To_All+SCALAR_PAIR, clock=id_clock_pass, halo=CS%cont_stencil)
-  ! call pass_vector(CS%pbv%por_layer_widthU, CS%pbv%por_layer_widthV, &
-  !                  G%Domain, direction=To_All+SCALAR_PAIR clock=id_clock_pass, halo=CS%cont_stencil)
+  if (CS%use_porbar) then
+    call enable_averages(dt, Time_local, CS%diag)
+    call porous_widths_layer(h, CS%tv, G, GV, US, CS%pbv, CS%por_bar_CS)
+    call disable_averaging(CS%diag)
+    call pass_vector(CS%pbv%por_face_areaU, CS%pbv%por_face_areaV, &
+                     G%Domain, direction=To_All+SCALAR_PAIR, clock=id_clock_pass, halo=CS%cont_stencil)
+  endif
 
   ! The bottom boundary layer properties need to be recalculated.
   if (bbl_time_int > 0.0) then
@@ -1420,9 +1421,11 @@ subroutine step_MOM_thermo(CS, G, GV, US, u, v, h, tv, fluxes, dtdia, &
     ! and set_viscous_BBL is called as a part of the dynamic stepping.
     call cpu_clock_begin(id_clock_BBL_visc)
     !update porous barrier fractional cell metrics
-    call porous_widths_interface(h, CS%tv, G, GV, US, CS%pbv, CS%por_bar_CS)
-    call pass_vector(CS%pbv%por_layer_widthU, CS%pbv%por_layer_widthV, &
-                     G%Domain, direction=To_ALL+SCALAR_PAIR, clock=id_clock_pass, halo=CS%cont_stencil)
+    if (CS%use_porbar) then
+      call porous_widths_interface(h, CS%tv, G, GV, US, CS%pbv, CS%por_bar_CS)
+      call pass_vector(CS%pbv%por_layer_widthU, CS%pbv%por_layer_widthV, &
+                      G%Domain, direction=To_ALL+SCALAR_PAIR, clock=id_clock_pass, halo=CS%cont_stencil)
+    endif
     call set_viscous_BBL(u, v, h, tv, CS%visc, G, GV, US, CS%set_visc_CSp, CS%pbv)
     call cpu_clock_end(id_clock_BBL_visc)
     if (showCallTree) call callTree_wayPoint("done with set_viscous_BBL (step_MOM_thermo)")
@@ -1997,6 +2000,10 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
                  "This is only used if THICKNESSDIFFUSE is true.", &
                  default=.false.)
   if (.not.CS%thickness_diffuse) CS%thickness_diffuse_first = .false.
+  call get_param(param_file, "MOM", "USE_POROUS_BARRIER", CS%use_porbar, &
+                 "If true, use porous barrier to constrain the widths "//&
+                 " and face areas at the edges of the grid cells. ", &
+                 default=.true.) ! The default should be false after tests.
   call get_param(param_file, "MOM", "BATHYMETRY_AT_VEL", bathy_at_vel, &
                  "If true, there are separate values for the basin depths "//&
                  "at velocity points.  Otherwise the effects of topography "//&
@@ -2820,7 +2827,9 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
 
   new_sim = is_new_run(restart_CSp)
   call MOM_stoch_eos_init(G,Time,param_file,CS%stoch_eos_CS,restart_CSp,diag)
-  call porous_barriers_init(Time, US, param_file, diag, CS%por_bar_CS)
+
+  if (CS%use_porbar) &
+    call porous_barriers_init(Time, US, param_file, diag, CS%por_bar_CS)
 
   if (CS%split) then
     allocate(eta(SZI_(G),SZJ_(G)), source=0.0)
