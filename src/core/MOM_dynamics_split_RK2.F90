@@ -64,7 +64,7 @@ use MOM_tidal_forcing,         only : tidal_forcing_init, tidal_forcing_end
 use MOM_unit_scaling,          only : unit_scale_type
 use MOM_vert_friction,         only : vertvisc, vertvisc_coef, vertvisc_remnant
 use MOM_vert_friction,         only : vertvisc_init, vertvisc_end, vertvisc_CS
-use MOM_vert_friction,         only : updateCFLtruncationValue
+use MOM_vert_friction,         only : updateCFLtruncationValue, vertFPmix
 use MOM_verticalGrid,          only : verticalGrid_type, get_thickness_units
 use MOM_verticalGrid,          only : get_flux_units, get_tr_flux_units
 use MOM_wave_interface,        only: wave_parameters_CS, Stokes_PGF
