@@ -25,6 +25,7 @@ use MOM_variables,     only : cont_diag_ptrs, accel_diag_ptrs
 use MOM_variables,     only : ocean_internal_state
 use MOM_verticalGrid,  only : verticalGrid_type
 use MOM_wave_interface, only : wave_parameters_CS
+use MOM_set_visc,      only : set_v_at_u, set_u_at_v
 implicit none ; private
 
 #include <MOM_memory.h>
