@@ -17,7 +17,7 @@ use MOM_tracer_registry, only : tracer_name_lookup
 use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
-use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_type
+use MOM_EOS, only : calculate_density, calculate_density_derivs
 
 implicit none ; private
 
@@ -275,11 +275,11 @@ subroutine DOME_set_OBC_data(OBC, tv, G, GV, US, param_file, tr_Reg)
   type(tracer_registry_type), pointer    :: tr_Reg !< Tracer registry.
 
   ! Local variables
-  real :: T0(SZK_(GV))       ! A profile of target temperatures [degC]
-  real :: S0(SZK_(GV))       ! A profile of target salinities [ppt]
+  real :: T0(SZK_(GV))       ! A profile of target temperatures [C ~> degC]
+  real :: S0(SZK_(GV))       ! A profile of target salinities [S ~> ppt]
   real :: pres(SZK_(GV))     ! An array of the reference pressure [R L2 T-2 ~> Pa].
-  real :: drho_dT(SZK_(GV))  ! Derivative of density with temperature [R degC-1 ~> kg m-3 degC-1].
-  real :: drho_dS(SZK_(GV))  ! Derivative of density with salinity [R ppt-1 ~> kg m-3 ppt-1].
+  real :: drho_dT(SZK_(GV))  ! Derivative of density with temperature [R C-1 ~> kg m-3 degC-1].
+  real :: drho_dS(SZK_(GV))  ! Derivative of density with salinity [R S-1 ~> kg m-3 ppt-1].
   real :: rho_guess(SZK_(GV)) ! Potential density at T0 & S0 [R ~> kg m-3].
   ! The following variables are used to set up the transport in the DOME example.
   real :: tr_0              ! The total integrated inflow transport [H L2 T-1 ~> m3 s-1 or kg s-1]
@@ -370,13 +370,13 @@ subroutine DOME_set_OBC_data(OBC, tv, G, GV, US, param_file, tr_Reg)
     ! In this example, all S inflows have values of 35 psu.
     name = 'salt'
     call tracer_name_lookup(tr_Reg, tr_ptr, name)
-    call register_segment_tracer(tr_ptr, param_file, GV, segment, OBC_scalar=35.0)
+    call register_segment_tracer(tr_ptr, param_file, GV, segment, OBC_scalar=35.0*US%ppt_to_S, scale=US%ppt_to_S)
   endif
   if (associated(tv%T)) then
     ! In this example, the T values are set to be consistent with the layer
     ! target density and a salinity of 35 psu.  This code is taken from
     ! USER_initialize_temp_sal.
-    pres(:) = tv%P_Ref ; S0(:) = 35.0 ; T0(1) = 25.0
+    pres(:) = tv%P_Ref ; S0(:) = 35.0*US%ppt_to_S ; T0(1) = 25.0*US%degC_to_C
     call calculate_density(T0(1), S0(1), pres(1), rho_guess(1), tv%eqn_of_state)
     call calculate_density_derivs(T0, S0, pres, drho_dT, drho_dS, tv%eqn_of_state, (/1,1/) )
 
@@ -390,11 +390,13 @@ subroutine DOME_set_OBC_data(OBC, tv, G, GV, US, param_file, tr_Reg)
     ! Temperature is tracer 1 for the OBCs.
     allocate(segment%field(1)%buffer_src(segment%HI%isd:segment%HI%ied,segment%HI%JsdB:segment%HI%JedB,nz))
     do k=1,nz ; do J=JsdB,JedB ; do i=isd,ied
-      segment%field(1)%buffer_src(i,j,k) = T0(k)
+      ! Because of the challenges in rescaling the data as it is being read in when using certain
+      ! modes, buffer_src keeps the data in unscaled (mks) units.  They will be rescaled later.
+      segment%field(1)%buffer_src(i,j,k) = US%C_to_degC*T0(k)
     enddo ; enddo ; enddo
     name = 'temp'
     call tracer_name_lookup(tr_Reg, tr_ptr, name)
-    call register_segment_tracer(tr_ptr, param_file, GV, segment, OBC_array=.true.)
+    call register_segment_tracer(tr_ptr, param_file, GV, segment, OBC_array=.true., scale=US%degC_to_C)
   endif
 
   ! Set up dye tracers

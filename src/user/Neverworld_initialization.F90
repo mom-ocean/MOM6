@@ -13,7 +13,6 @@ use MOM_tracer_registry, only : tracer_registry_type
 use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
-use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_type
 
 use random_numbers_mod, only: initializeRandomNumberStream, getRandomNumbers, randomNumberStream
 

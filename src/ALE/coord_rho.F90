@@ -93,8 +93,8 @@ subroutine build_rho_column(CS, nz, depth, h, T, S, eqn_of_state, z_interface, &
   integer,             intent(in)    :: nz !< Number of levels on source grid (i.e. length of  h, T, S)
   real,                intent(in)    :: depth !< Depth of ocean bottom (positive downward) [H ~> m or kg m-2]
   real, dimension(nz), intent(in)    :: h  !< Layer thicknesses [H ~> m or kg m-2]
-  real, dimension(nz), intent(in)    :: T  !< Temperature for source column [degC]
-  real, dimension(nz), intent(in)    :: S  !< Salinity for source column [ppt]
+  real, dimension(nz), intent(in)    :: T  !< Temperature for source column [C ~> degC]
+  real, dimension(nz), intent(in)    :: S  !< Salinity for source column [S ~> ppt]
   type(EOS_type),      intent(in)    :: eqn_of_state !< Equation of state structure
   real, dimension(CS%nk+1), &
                        intent(inout) :: z_interface !< Absolute positions of interfaces
@@ -206,8 +206,8 @@ subroutine build_rho_column_iteratively(CS, remapCS, nz, depth, h, T, S, eqn_of_
   integer,               intent(in)    :: nz !< Number of levels
   real,                  intent(in)    :: depth !< Depth of ocean bottom [Z ~> m]
   real, dimension(nz),   intent(in)    :: h  !< Layer thicknesses in Z coordinates [Z ~> m]
-  real, dimension(nz),   intent(in)    :: T  !< T for column [degC]
-  real, dimension(nz),   intent(in)    :: S  !< S for column [ppt]
+  real, dimension(nz),   intent(in)    :: T  !< T for column [C ~> degC]
+  real, dimension(nz),   intent(in)    :: S  !< S for column [S ~> ppt]
   type(EOS_type),        intent(in)    :: eqn_of_state !< Equation of state structure
   real, dimension(nz+1), intent(inout) :: zInterface !< Absolute positions of interfaces
   real,        optional, intent(in)    :: h_neglect !< A negligibly small width for the
@@ -224,7 +224,7 @@ subroutine build_rho_column_iteratively(CS, remapCS, nz, depth, h, T, S, eqn_of_
   real, dimension(nz+1) :: x0, x1, xTmp ! Temporary interface heights [Z ~> m]
   real, dimension(nz) :: pres       ! The pressure used in the equation of state [R L2 T-2 ~> Pa].
   real, dimension(nz) :: densities  ! Layer densities [R ~> kg m-3]
-  real, dimension(nz) :: T_tmp, S_tmp ! A temporary profile of temperature [degC] and salinity [ppt].
+  real, dimension(nz) :: T_tmp, S_tmp ! A temporary profile of temperature [C ~> degC] and salinity [S ~> ppt].
   real, dimension(nz) :: Tmp        ! A temporary variable holding a remapped variable.
   real, dimension(nz) :: h0, h1, hTmp ! Temporary thicknesses [Z ~> m]
   real :: deviation            ! When iterating to determine the final grid, this is the
@@ -263,7 +263,7 @@ subroutine build_rho_column_iteratively(CS, remapCS, nz, depth, h, T, S, eqn_of_
     enddo
 
     ! Compute densities within current water column
-    call calculate_density( T_tmp, S_tmp, pres, densities, eqn_of_state)
+    call calculate_density(T_tmp, S_tmp, pres, densities, eqn_of_state)
 
     do k = 1,count_nonzero_layers
       densities(k) = densities(mapping(k))

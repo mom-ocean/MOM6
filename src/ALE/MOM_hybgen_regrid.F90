@@ -361,8 +361,8 @@ subroutine hybgen_regrid(G, GV, US, dp, tv, CS, dzInterface, PCM_cell)
 
   ! These arrays work with the input column
   real :: p_col(GV%ke)      ! A column of reference pressures [R L2 T-2 ~> Pa]
-  real :: temp_in(GV%ke)    ! A column of input potential temperatures [degC]
-  real :: saln_in(GV%ke)    ! A column of input layer salinities [ppt]
+  real :: temp_in(GV%ke)    ! A column of input potential temperatures [C ~> degC]
+  real :: saln_in(GV%ke)    ! A column of input layer salinities [S ~> ppt]
   real :: Rcv_in(GV%ke)     ! An input column of coordinate potential density [R ~> kg m-3]
   real :: dp_in(GV%ke)      ! The input column of layer thicknesses [H ~> m or kg m-2]
   logical :: PCM_lay(GV%ke) ! If true for a layer, use PCM remapping for that layer

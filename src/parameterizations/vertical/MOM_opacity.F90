@@ -554,11 +554,11 @@ subroutine absorbRemainingSW(G, GV, US, h, opacity_band, nsw, optics, j, dt, H_l
                                                            !! shortwave that should be absorbed by
                                                            !! each layer.
   real, dimension(SZI_(G),SZK_(GV)), intent(inout) :: T    !< Layer potential/conservative
-                                                           !! temperatures [degC]
+                                                           !! temperatures [C ~> degC]
   real, dimension(max(1,nsw),SZI_(G)), intent(inout) :: Pen_SW_bnd !< Penetrating shortwave heating in
                                                            !! each band that hits the bottom and will
                                                            !! will be redistributed through the water
-                                                           !! column [degC H ~> degC m or degC kg m-2],
+                                                           !! column [C H ~> degC m or degC kg m-2],
                                                            !! size nsw x SZI_(G).
   real, dimension(SZI_(G),SZK_(GV)), optional, intent(in) :: eps !< Small thickness that must remain in
                                                            !! each layer, and which will not be
@@ -566,16 +566,16 @@ subroutine absorbRemainingSW(G, GV, US, h, opacity_band, nsw, optics, j, dt, H_l
   integer, dimension(SZI_(G),SZK_(GV)), optional, intent(in) :: ksort !< Density-sorted k-indices.
   real, dimension(SZI_(G)), optional, intent(in)    :: htot !< Total mixed layer thickness [H ~> m or kg m-2].
   real, dimension(SZI_(G)), optional, intent(inout) :: Ttot !< Depth integrated mixed layer
-                                                           !! temperature [degC H ~> degC m or degC kg m-2]
+                                                           !! temperature [C H ~> degC m or degC kg m-2]
   real, dimension(SZI_(G),SZK_(GV)), optional, intent(in) :: dSV_dT !< The partial derivative of specific volume
-                                                           !! with temperature [R-1 degC-1 ~> m3 kg-1 degC-1]
+                                                           !! with temperature [R-1 C-1 ~> m3 kg-1 degC-1]
   real, dimension(SZI_(G),SZK_(GV)), optional, intent(inout) :: TKE !< The TKE sink from mixing the heating
                                                            !! throughout a layer [R Z3 T-2 ~> J m-2].
 
   ! Local variables
   real, dimension(SZI_(G),SZK_(GV)) :: &
     T_chg_above    ! A temperature change that will be applied to all the thick
-                   ! layers above a given layer [degC].  This is only nonzero if
+                   ! layers above a given layer [C ~> degC].  This is only nonzero if
                    ! adjustAbsorptionProfile is true, in which case the net
                    ! change in the temperature of a layer is the sum of the
                    ! direct heating of that layer plus T_chg_above from all of
@@ -585,10 +585,10 @@ subroutine absorbRemainingSW(G, GV, US, h, opacity_band, nsw, optics, j, dt, H_l
     h_heat, &      ! The thickness of the water column that will be heated by
                    ! any remaining shortwave radiation [H ~> m or kg m-2].
     T_chg, &       ! The temperature change of thick layers due to the remaining
-                   ! shortwave radiation and contributions from T_chg_above [degC].
+                   ! shortwave radiation and contributions from T_chg_above [C ~> degC].
     Pen_SW_rem     ! The sum across all wavelength bands of the penetrating shortwave
                    ! heating that hits the bottom and will be redistributed through
-                   ! the water column [degC H ~> degC m or degC kg m-2]
+                   ! the water column [C H ~> degC m or degC kg m-2]
   real :: SW_trans          ! fraction of shortwave radiation that is not
                             ! absorbed in a layer [nondim]
   real :: unabsorbed        ! fraction of the shortwave radiation that
@@ -600,13 +600,13 @@ subroutine absorbRemainingSW(G, GV, US, h, opacity_band, nsw, optics, j, dt, H_l
   real :: exp_OD            ! exp(-opt_depth) [nondim]
   real :: heat_bnd          ! heating due to absorption in the current
                             ! layer by the current band, including any piece that
-                            ! is moved upward [degC H ~> degC m or degC kg m-2]
+                            ! is moved upward [C H ~> degC m or degC kg m-2]
   real :: SWa               ! fraction of the absorbed shortwave that is
                             ! moved to layers above with adjustAbsorptionProfile [nondim]
   real :: coSWa_frac        ! The fraction of SWa that is actually moved upward.
   real :: min_SW_heat       ! A minimum remaining shortwave heating within a timestep that will be simply
                             ! absorbed in the next layer for computational efficiency, instead of
-                            ! continuing to penetrate [degC H ~> degC m or degC kg m-2].
+                            ! continuing to penetrate [C H ~> degC m or degC kg m-2].
   real :: I_Habs            ! The inverse of the absorption length for a minimal flux [H-1 ~> m-1 or m2 kg-1]
   real :: epsilon           ! A small thickness that must remain in each
                             ! layer, and which will not be subject to heating [H ~> m or kg m-2]
@@ -811,21 +811,21 @@ subroutine sumSWoverBands(G, GV, US, h, nsw, optics, j, dt, &
                                                  !! radiation is absorbed in the ocean water column.
   real, dimension(max(nsw,1),SZI_(G)), intent(in) :: iPen_SW_bnd !< The incident penetrating shortwave
                                                  !! in each band at the sea surface; size nsw x SZI_(G)
-                                                 !! [degC H ~> degC m or degC kg m-2].
+                                                 !! [C H ~> degC m or degC kg m-2].
   real, dimension(SZI_(G),SZK_(GV)+1), &
                              intent(inout) :: netPen !< Net penetrating shortwave heat flux at each
                                                  !! interface, summed across all bands
-                                                 !! [degC H ~> degC m or degC kg m-2].
+                                                 !! [C H ~> degC m or degC kg m-2].
   ! Local variables
   real :: h_heat(SZI_(G))     ! thickness of the water column that receives
                               ! remaining shortwave radiation [H ~> m or kg m-2].
   real :: Pen_SW_rem(SZI_(G)) ! sum across all wavelength bands of the
                               ! penetrating shortwave heating that hits the bottom
                               ! and will be redistributed through the water column
-                              ! [degC H ~> degC m or degC kg m-2]
+                              ! [C H ~> degC m or degC kg m-2]
 
   real, dimension(max(nsw,1),SZI_(G)) :: Pen_SW_bnd ! The remaining penetrating shortwave radiation
-                          ! in each band, initially iPen_SW_bnd [degC H ~> degC m or degC kg m-2]
+                          ! in each band, initially iPen_SW_bnd [C H ~> degC m or degC kg m-2]
   real :: SW_trans        ! fraction of shortwave radiation not
                           ! absorbed in a layer [nondim]
   real :: unabsorbed      ! fraction of the shortwave radiation
@@ -834,7 +834,7 @@ subroutine sumSWoverBands(G, GV, US, h, nsw, optics, j, dt, &
                           ! surface fluxes start to be limited [H-1 ~> m-1 or m2 kg-1]
   real :: min_SW_heat     ! A minimum remaining shortwave heating within a timestep that will be simply
                           ! absorbed in the next layer for computational efficiency, instead of
-                          ! continuing to penetrate [degC H ~> degC m or degC kg m-2].
+                          ! continuing to penetrate [C H ~> degC m or degC kg m-2].
   real :: I_Habs            ! The inverse of the absorption length for a minimal flux [H-1 ~> m-1 or m2 kg-1]
   real :: h_min_heat      ! minimum thickness layer that should get heated [H ~> m or kg m-2]
   real :: opt_depth       ! optical depth of a layer [nondim]
@@ -1070,7 +1070,7 @@ subroutine opacity_init(Time, G, GV, US, param_file, diag, CS, optics)
                  "the next sufficiently thick layers for computational efficiency, instead of "//&
                  "continuing to penetrate.  The default, 2.5e-11 degC m s-1, is about 1e-4 W m-2 "//&
                  "or 0.08 degC m century-1, but 0 is also a valid value.", &
-                 default=2.5e-11, units="degC m s-1", scale=GV%m_to_H*US%T_to_s)
+                 default=2.5e-11, units="degC m s-1", scale=US%degC_to_C*GV%m_to_H*US%T_to_s)
 
   if (optics%answers_2018) then ; PenSW_minthick_dflt = 0.001 ; else ; PenSW_minthick_dflt = 1.0 ; endif
   call get_param(param_file, mdl, "PEN_SW_ABSORB_MINTHICK", PenSW_absorb_minthick, &

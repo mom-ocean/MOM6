@@ -8,7 +8,6 @@ module MOM_bkgnd_mixing
 use MOM_debugging,       only : hchksum
 use MOM_diag_mediator,   only : diag_ctrl, time_type, register_diag_field
 use MOM_diag_mediator,   only : post_data
-use MOM_EOS,             only : calculate_density, calculate_density_derivs
 use MOM_error_handler,   only : MOM_error, FATAL, WARNING, NOTE
 use MOM_file_parser,     only : get_param, log_version, param_file_type
 use MOM_file_parser,     only : openParameterBlock, closeParameterBlock

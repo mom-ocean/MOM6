@@ -1594,7 +1594,7 @@ subroutine build_grid_adaptive(G, GV, US, h, tv, dzInterface, remapCS, CS)
 
   ! local variables
   integer :: i, j, k, nz ! indices and dimension lengths
-  ! temperature, salinity and pressure on interfaces
+  ! temperature [C ~> degC], salinity [S ~> ppt] and pressure on interfaces
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1) :: tInt, sInt
   ! current interface positions and after tendency term is applied
   ! positive downward
@@ -1936,8 +1936,8 @@ subroutine convective_adjustment(G, GV, h, tv)
 !------------------------------------------------------------------------------
 
   ! Local variables
-  real      :: T0, T1       ! temperatures of two layers [degC]
-  real      :: S0, S1       ! salinities of two layers [ppt]
+  real      :: T0, T1       ! temperatures of two layers [C ~> degC]
+  real      :: S0, S1       ! salinities of two layers [S ~> ppt]
   real      :: r0, r1       ! densities of two layers [R ~> kg m-3]
   real      :: h0, h1       ! Layer thicknesses  [H ~> m or kg m-2]
   real, dimension(GV%ke) :: p_col  ! A column of zero pressures [R L2 T-2 ~> Pa]
@@ -1953,7 +1953,7 @@ subroutine convective_adjustment(G, GV, h, tv)
   do j = G%jsc-1,G%jec+1 ; do i = G%isc-1,G%iec+1
 
     ! Compute densities within current water column
-    call calculate_density( tv%T(i,j,:), tv%S(i,j,:), p_col, densities, tv%eqn_of_state)
+    call calculate_density(tv%T(i,j,:), tv%S(i,j,:), p_col, densities, tv%eqn_of_state)
 
     ! Repeat restratification until complete
     do
@@ -1972,8 +1972,8 @@ subroutine convective_adjustment(G, GV, h, tv)
           tv%S(i,j,k) = S1 ; tv%S(i,j,k+1) = S0
           h(i,j,k)    = h1 ; h(i,j,k+1)    = h0
           ! Recompute densities at levels k and k+1
-          call calculate_density( tv%T(i,j,k), tv%S(i,j,k), p_col(k), densities(k), tv%eqn_of_state)
-          call calculate_density( tv%T(i,j,k+1), tv%S(i,j,k+1), p_col(k+1), &
+          call calculate_density(tv%T(i,j,k), tv%S(i,j,k), p_col(k), densities(k), tv%eqn_of_state)
+          call calculate_density(tv%T(i,j,k+1), tv%S(i,j,k+1), p_col(k+1), &
                                   densities(k+1), tv%eqn_of_state )
           ! Because p_col is has uniform values, these calculate_density calls are equivalent to
           ! densities(k) = r1 ; densities(k+1) = r0

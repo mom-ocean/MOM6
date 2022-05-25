@@ -177,8 +177,8 @@ type, public :: offline_transport_CS ; private
   real, allocatable, dimension(:,:,:,:) :: uhtr_all !< Entire field of zonal transport [H L2 ~> m3 or kg]
   real, allocatable, dimension(:,:,:,:) :: vhtr_all !< Entire field of meridional transport [H L2 ~> m3 or kg]
   real, allocatable, dimension(:,:,:,:) :: hend_all !< Entire field of layer thicknesses [H ~> m or kg m-2]
-  real, allocatable, dimension(:,:,:,:) :: temp_all !< Entire field of temperatures [degC]
-  real, allocatable, dimension(:,:,:,:) :: salt_all !< Entire field of salinities [ppt]
+  real, allocatable, dimension(:,:,:,:) :: temp_all !< Entire field of temperatures [C ~> degC]
+  real, allocatable, dimension(:,:,:,:) :: salt_all !< Entire field of salinities [S ~> ppt]
 
 end type offline_transport_CS
 
@@ -1015,8 +1015,8 @@ subroutine update_offline_fields(CS, G, GV, US, h, fluxes, do_ale)
     call uvchksum("[uv]htr before update_offline_fields", CS%uhtr, CS%vhtr, G%HI, &
                   scale=US%L_to_m**2*GV%H_to_kg_m2)
     call hchksum(CS%h_end, "h_end before update_offline_fields", G%HI, scale=GV%H_to_m)
-    call hchksum(CS%tv%T, "Temp before update_offline_fields", G%HI)
-    call hchksum(CS%tv%S, "Salt before update_offline_fields", G%HI)
+    call hchksum(CS%tv%T, "Temp before update_offline_fields", G%HI, scale=US%C_to_degC)
+    call hchksum(CS%tv%S, "Salt before update_offline_fields", G%HI, scale=US%S_to_ppt)
   endif
 
   ! Store a copy of the layer thicknesses before ALE regrid/remap
@@ -1036,8 +1036,8 @@ subroutine update_offline_fields(CS, G, GV, US, h, fluxes, do_ale)
   if (CS%debug) then
     call uvchksum("[uv]h after update offline from files and arrays", CS%uhtr, CS%vhtr, G%HI, &
                   scale=US%L_to_m**2*GV%H_to_kg_m2)
-    call hchksum(CS%tv%T, "Temp after update offline from files and arrays", G%HI)
-    call hchksum(CS%tv%S, "Salt after update offline from files and arrays", G%HI)
+    call hchksum(CS%tv%T, "Temp after update offline from files and arrays", G%HI, scale=US%C_to_degC)
+    call hchksum(CS%tv%S, "Salt after update offline from files and arrays", G%HI, scale=US%S_to_ppt)
   endif
 
   ! If using an ALE-dependent vertical coordinate, fields will need to be remapped
@@ -1099,8 +1099,8 @@ subroutine update_offline_fields(CS, G, GV, US, h, fluxes, do_ale)
     call uvchksum("[uv]htr after update_offline_fields", CS%uhtr, CS%vhtr, G%HI, &
                   scale=US%L_to_m**2*GV%H_to_kg_m2)
     call hchksum(CS%h_end, "h_end after update_offline_fields", G%HI, scale=GV%H_to_m)
-    call hchksum(CS%tv%T, "Temp after update_offline_fields", G%HI)
-    call hchksum(CS%tv%S, "Salt after update_offline_fields", G%HI)
+    call hchksum(CS%tv%T, "Temp after update_offline_fields", G%HI, scale=US%C_to_degC)
+    call hchksum(CS%tv%S, "Salt after update_offline_fields", G%HI, scale=US%S_to_ppt)
   endif
 
   call callTree_leave("update_offline_fields")
@@ -1170,9 +1170,11 @@ subroutine register_diags_offline_transport(Time, diag, CS, GV, US)
                                           'Meridional mass transport regridded/remapped onto offline grid', &
                                           'kg', conversion=US%L_to_m**2*GV%H_to_kg_m2)
   CS%id_temp_regrid = register_diag_field('ocean_model', 'temp_regrid', diag%axesTL, Time, &
-                                          'Temperature regridded/remapped onto offline grid','C')
+                                          'Temperature regridded/remapped onto offline grid',&
+                                          'C', conversion=US%C_to_degC)
   CS%id_salt_regrid = register_diag_field('ocean_model', 'salt_regrid', diag%axesTL, Time, &
-                                          'Salinity regridded/remapped onto offline grid','g kg-1')
+                                          'Salinity regridded/remapped onto offline grid', &
+                                          'g kg-1', conversion=US%S_to_ppt)
   CS%id_h_regrid = register_diag_field('ocean_model', 'h_regrid', diag%axesTL, Time, &
                                           'Layer thicknesses regridded/remapped onto offline grid', &
                                           'm', conversion=GV%H_to_m)
@@ -1498,9 +1500,9 @@ subroutine read_all_input(CS, G, GV, US)
       call MOM_read_data(CS%snap_file,'h_end', CS%hend_all(:,:,1:CS%nk_input,t), G%Domain, &
                        timelevel=t, position=CENTER, scale=GV%kg_m2_to_H)
       call MOM_read_data(CS%mean_file,'temp', CS%temp_all(:,:,1:CS%nk_input,t), G%Domain, &
-                       timelevel=t, position=CENTER)
+                       timelevel=t, position=CENTER, scale=US%degC_to_C)
       call MOM_read_data(CS%mean_file,'salt', CS%salt_all(:,:,1:CS%nk_input,t), G%Domain, &
-                       timelevel=t, position=CENTER)
+                       timelevel=t, position=CENTER, scale=US%ppt_to_S)
     enddo
   endif
 

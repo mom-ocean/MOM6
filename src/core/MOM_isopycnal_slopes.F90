@@ -63,26 +63,26 @@ subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, &
   !  (This argument has been tested but for now serves no purpose.)  !! of eta to m; US%Z_to_m by default.
   ! Local variables
   real, dimension(SZI_(G), SZJ_(G), SZK_(GV)) :: &
-    T, &          ! The temperature [degC], with the values in
+    T, &          ! The temperature [C ~> degC], with the values in
                   ! in massless layers filled vertically by diffusion.
-    S !, &          ! The filled salinity [ppt], with the values in
+    S !, &          ! The filled salinity [S ~> ppt], with the values in
                   ! in massless layers filled vertically by diffusion.
 !    Rho           ! Density itself, when a nonlinear equation of state is not in use [R ~> kg m-3].
   real, dimension(SZI_(G), SZJ_(G),SZK_(GV)+1) :: &
     pres          ! The pressure at an interface [R L2 T-2 ~> Pa].
   real, dimension(SZIB_(G)) :: &
-    drho_dT_u, &  ! The derivative of density with temperature at u points [R degC-1 ~> kg m-3 degC-1].
-    drho_dS_u     ! The derivative of density with salinity at u points [R ppt-1 ~> kg m-3 ppt-1].
+    drho_dT_u, &  ! The derivative of density with temperature at u points [R C-1 ~> kg m-3 degC-1].
+    drho_dS_u     ! The derivative of density with salinity at u points [R S-1 ~> kg m-3 ppt-1].
   real, dimension(SZI_(G)) :: &
-    drho_dT_v, &  ! The derivative of density with temperature at v points [R degC-1 ~> kg m-3 degC-1].
-    drho_dS_v     ! The derivative of density with salinity at v points [R ppt-1 ~> kg m-3 ppt-1].
+    drho_dT_v, &  ! The derivative of density with temperature at v points [R C-1 ~> kg m-3 degC-1].
+    drho_dS_v     ! The derivative of density with salinity at v points [R S-1 ~> kg m-3 ppt-1].
   real, dimension(SZIB_(G)) :: &
-    T_u, &        ! Temperature on the interface at the u-point [degC].
-    S_u, &        ! Salinity on the interface at the u-point [ppt].
+    T_u, &        ! Temperature on the interface at the u-point [C ~> degC].
+    S_u, &        ! Salinity on the interface at the u-point [S ~> ppt].
     pres_u        ! Pressure on the interface at the u-point [R L2 T-2 ~> Pa].
   real, dimension(SZI_(G)) :: &
-    T_v, &        ! Temperature on the interface at the v-point [degC].
-    S_v, &        ! Salinity on the interface at the v-point [ppt].
+    T_v, &        ! Temperature on the interface at the v-point [C ~> degC].
+    S_v, &        ! Salinity on the interface at the v-point [S ~> ppt].
     pres_v        ! Pressure on the interface at the v-point [R L2 T-2 ~> Pa].
   real :: drdiA, drdiB  ! Along layer zonal- and meridional- potential density
   real :: drdjA, drdjB  ! gradients in the layers above (A) and below (B) the
@@ -341,8 +341,8 @@ subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, &
         T_v(i) = 0.25*((T(i,j,k) + T(i,j+1,k)) + (T(i,j,k-1) + T(i,j+1,k-1)))
         S_v(i) = 0.25*((S(i,j,k) + S(i,j+1,k)) + (S(i,j,k-1) + S(i,j+1,k-1)))
       enddo
-      call calculate_density_derivs(T_v, S_v, pres_v, drho_dT_v, drho_dS_v, tv%eqn_of_state, &
-                                    EOSdom_v)
+      call calculate_density_derivs(T_v, S_v, pres_v, drho_dT_v, drho_dS_v, &
+                                    tv%eqn_of_state, EOSdom_v)
     endif
     do i=is,ie
       if (use_EOS) then
@@ -435,12 +435,12 @@ subroutine vert_fill_TS(h, T_in, S_in, kappa_dt, T_f, S_f, G, GV, halo_here, lar
   type(ocean_grid_type),                     intent(in)  :: G    !< The ocean's grid structure
   type(verticalGrid_type),                   intent(in)  :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)  :: h    !< Layer thicknesses [H ~> m or kg m-2]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)  :: T_in !< Input temperature [degC]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)  :: S_in !< Input salinity [ppt]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)  :: T_in !< Input temperature [C ~> degC]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)  :: S_in !< Input salinity [S ~> ppt]
   real,                                      intent(in)  :: kappa_dt !< A vertical diffusivity to use for smoothing
                                                                  !! times a smoothing timescale [Z2 ~> m2].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: T_f  !< Filled temperature [degC]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: S_f  !< Filled salinity [ppt]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: T_f  !< Filled temperature [C ~> degC]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: S_f  !< Filled salinity [S ~> ppt]
   integer,                         optional, intent(in)  :: halo_here !< Number of halo points to work on,
                                                                  !! 0 by default
   logical,                         optional, intent(in)  :: larger_h_denom !< Present and true, add a large

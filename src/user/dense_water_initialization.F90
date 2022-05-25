@@ -95,12 +95,13 @@ subroutine dense_water_initialize_topography(D, G, param_file, max_depth)
 end subroutine dense_water_initialize_topography
 
 !> Initialize the temperature and salinity for the dense water experiment
-subroutine dense_water_initialize_TS(G, GV, param_file, T, S, h, just_read)
+subroutine dense_water_initialize_TS(G, GV, US, param_file, T, S, h, just_read)
   type(ocean_grid_type),                     intent(in)  :: G !< Horizontal grid control structure
   type(verticalGrid_type),                   intent(in)  :: GV !< Vertical grid control structure
+  type(unit_scale_type),                     intent(in)  :: US !< A dimensional unit scaling type
   type(param_file_type),                     intent(in)  :: param_file !< Parameter file structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: T !< Output temperature [degC]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: S !< Output salinity [ppt]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: T !< Output temperature [C ~> degC]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: S !< Output salinity [S ~> ppt]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)  :: h !< Layer thicknesses [H ~> m or kg m-2]
   logical,                                   intent(in)  :: just_read !< If true, this call will
                                                       !! only read parameters without changing T & S.
@@ -115,11 +116,11 @@ subroutine dense_water_initialize_TS(G, GV, param_file, T, S, h, just_read)
        "Depth of unstratified mixed layer as a fraction of the water column.", &
        units="nondim", default=default_mld, do_not_log=just_read)
   call get_param(param_file, mdl, "S_REF", S_ref, 'Reference salinity', &
-                 default=35.0, units='1e-3', do_not_log=just_read)
-  call get_param(param_file, mdl,"T_REF", T_ref, 'Reference temperature', units='degC', &
-                fail_if_missing=.not.just_read, do_not_log=just_read)
+                 default=35.0, units='1e-3', scale=US%ppt_to_S, do_not_log=just_read)
+  call get_param(param_file, mdl,"T_REF", T_ref, 'Reference temperature', &
+                units='degC', scale=US%degC_to_C, fail_if_missing=.not.just_read, do_not_log=just_read)
   call get_param(param_file, mdl,"S_RANGE", S_range, 'Initial salinity range', &
-                units='1e-3', default=2.0, do_not_log=just_read)
+                units='1e-3', default=2.0, scale=US%ppt_to_S, do_not_log=just_read)
 
   if (just_read) return ! All run-time parameters have been read, so return.
 
@@ -165,8 +166,8 @@ subroutine dense_water_initialize_sponges(G, GV, US, tv, depth_tot, param_file, 
 
   real, dimension(SZI_(G),SZJ_(G)) :: Idamp ! inverse damping timescale [T-1 ~> s-1]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: h  ! sponge thicknesses [H ~> m or kg m-2]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: T  ! sponge temperature [degC]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: S  ! sponge salinity [ppt]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: T  ! sponge temperature [C ~> degC]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: S  ! sponge salinity [S ~> ppt]
   real, dimension(SZK_(GV)+1) :: e0, eta1D ! interface positions for ALE sponge [Z ~> m]
 
   integer :: i, j, k, nz
@@ -195,9 +196,9 @@ subroutine dense_water_initialize_sponges(G, GV, US, tv, depth_tot, param_file, 
   call get_param(param_file, mdl, "DENSE_WATER_MLD", mld, default=default_mld, do_not_log=.true.)
   call get_param(param_file, mdl, "DENSE_WATER_SILL_HEIGHT", sill_height, default=default_sill, do_not_log=.true.)
 
-  call get_param(param_file, mdl, "S_REF", S_ref, default=35.0, do_not_log=.true.)
-  call get_param(param_file, mdl, "S_RANGE", S_range, do_not_log=.true.)
-  call get_param(param_file, mdl, "T_REF", T_ref, do_not_log=.true.)
+  call get_param(param_file, mdl, "S_REF", S_ref, default=35.0, scale=US%ppt_to_S, do_not_log=.true.)
+  call get_param(param_file, mdl, "S_RANGE", S_range, scale=US%ppt_to_S, do_not_log=.true.)
+  call get_param(param_file, mdl, "T_REF", T_ref, scale=US%degC_to_C, do_not_log=.true.)
 
   ! no active sponges
   if (west_sponge_time_scale <= 0. .and. east_sponge_time_scale <= 0.) return
