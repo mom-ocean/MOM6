@@ -2010,6 +2010,7 @@ subroutine setup_OBC_tracer_reservoirs(G, GV, OBC)
       if (segment%is_E_or_W) then
         I = segment%HI%IsdB
         do m=1,OBC%ntr
+          I_scale = 1.0 ; if (segment%tr_Reg%Tr(m)%scale /= 0.0) I_scale = 1.0 / segment%tr_Reg%Tr(m)%scale
           if (allocated(segment%tr_Reg%Tr(m)%tres)) then
             do k=1,GV%ke
               do j=segment%HI%jsd,segment%HI%jed
@@ -5013,7 +5014,7 @@ subroutine update_segment_tracer_reservoirs(G, GV, uhr, vhr, h, OBC, dt, Reg)
             segment%tr_Reg%Tr(m)%tres(I,j,k) = (1.0/fac1)*(segment%tr_Reg%Tr(m)%tres(I,j,k) + &
                               (u_L_out*Reg%Tr(m)%t(I+ishift,j,k) - &
                                u_L_in*segment%tr_Reg%Tr(m)%t(I,j,k)))
-            if (allocated(OBC%tres_x)) OBC%tres_x(I,j,k,m) = segment%tr_Reg%Tr(m)%tres(I,j,k)
+            if (allocated(OBC%tres_x)) OBC%tres_x(I,j,k,m) = I_scale * segment%tr_Reg%Tr(m)%tres(I,j,k)
           enddo ; endif
         enddo
       enddo
