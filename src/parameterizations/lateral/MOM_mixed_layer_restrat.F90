@@ -27,6 +27,7 @@ implicit none ; private
 public mixedlayer_restrat
 public mixedlayer_restrat_init
 public mixedlayer_restrat_register_restarts
+public mixedlayer_restrat_unit_tests
 
 ! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
 ! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
@@ -408,9 +409,9 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, forces, dt, MLD_in, Var
       ! The sum of a(k) through the mixed layers must be 0.
       do k=1,nz
         hAtVel = 0.5*(h(i,j,k) + h(i+1,j,k))
-        a(k) = PSI(zpa)                     ! Psi(z/MLD) for upper interface
-        zpa = zpa - (hAtVel * IhTot)        ! z/H for lower interface
-        a(k) = a(k) - PSI(zpa)              ! Transport profile
+        a(k) = mu(zpa, CS%MLE_tail_dh)        ! mu(z/MLD) for upper interface
+        zpa = zpa - (hAtVel * IhTot)          ! z/H for lower interface
+        a(k) = a(k) - mu(zpa, CS%MLE_tail_dh) ! Transport profile
         ! Limit magnitude (uDml) if it would violate CFL
         if (a(k)*uDml(I) > 0.0) then
           if (a(k)*uDml(I) > h_avail(i,j,k)) uDml(I) = h_avail(i,j,k) / a(k)
@@ -421,9 +422,9 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, forces, dt, MLD_in, Var
       do k=1,nz
         ! Transport for slow-filtered MLD
         hAtVel = 0.5*(h(i,j,k) + h(i+1,j,k))
-        b(k) = PSI(zpb)                     ! Psi(z/MLD) for upper interface
-        zpb = zpb - (hAtVel * IhTot_slow)   ! z/H for lower interface
-        b(k) = b(k) - PSI(zpb)              ! Transport profile
+        b(k) = mu(zpb, CS%MLE_tail_dh)        ! mu(z/MLD) for upper interface
+        zpb = zpb - (hAtVel * IhTot_slow)     ! z/H for lower interface
+        b(k) = b(k) - mu(zpb, CS%MLE_tail_dh) ! Transport profile
         ! Limit magnitude (uDml_slow) if it would violate CFL when added to uDml
         if (b(k)*uDml_slow(I) > 0.0) then
           if (b(k)*uDml_slow(I) > h_avail(i,j,k) - a(k)*uDml(I)) &
@@ -476,9 +477,9 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, forces, dt, MLD_in, Var
       ! The sum of a(k) through the mixed layers must be 0.
       do k=1,nz
         hAtVel = 0.5*(h(i,j,k) + h(i,j+1,k))
-        a(k) = PSI( zpa )                   ! Psi(z/MLD) for upper interface
-        zpa = zpa - (hAtVel * IhTot)        ! z/H for lower interface
-        a(k) = a(k) - PSI( zpa )            ! Transport profile
+        a(k) = mu(zpa, CS%MLE_tail_dh)        ! mu(z/MLD) for upper interface
+        zpa = zpa - (hAtVel * IhTot)          ! z/H for lower interface
+        a(k) = a(k) - mu(zpa, CS%MLE_tail_dh) ! Transport profile
         ! Limit magnitude (vDml) if it would violate CFL
         if (a(k)*vDml(i) > 0.0) then
           if (a(k)*vDml(i) > h_avail(i,j,k)) vDml(i) = h_avail(i,j,k) / a(k)
@@ -489,9 +490,9 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, forces, dt, MLD_in, Var
       do k=1,nz
         ! Transport for slow-filtered MLD
         hAtVel = 0.5*(h(i,j,k) + h(i,j+1,k))
-        b(k) = PSI(zpb)                     ! Psi(z/MLD) for upper interface
-        zpb = zpb - (hAtVel * IhTot_slow)   ! z/H for lower interface
-        b(k) = b(k) - PSI(zpb)              ! Transport profile
+        b(k) = mu(zpb, CS%MLE_tail_dh)        ! mu(z/MLD) for upper interface
+        zpb = zpb - (hAtVel * IhTot_slow)     ! z/H for lower interface
+        b(k) = b(k) - mu(zpb, CS%MLE_tail_dh) ! Transport profile
         ! Limit magnitude (vDml_slow) if it would violate CFL when added to vDml
         if (b(k)*vDml_slow(i) > 0.0) then
           if (b(k)*vDml_slow(i) > h_avail(i,j,k) - a(k)*vDml(i)) &
@@ -540,14 +541,14 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, forces, dt, MLD_in, Var
     if (CS%id_uml > 0) then
       do J=js,je ; do i=is-1,ie
         h_vel = 0.5*((htot_fast(i,j) + htot_fast(i+1,j)) + h_neglect)
-        uDml_diag(I,j) = uDml_diag(I,j) / (0.01*h_vel) * G%IdyCu(I,j) * (PSI(0.)-PSI(-.01))
+        uDml_diag(I,j) = uDml_diag(I,j) / (0.01*h_vel) * G%IdyCu(I,j) * (mu(0.,0.)-mu(-.01,0.))
       enddo ; enddo
       call post_data(CS%id_uml, uDml_diag, CS%diag)
     endif
     if (CS%id_vml > 0) then
       do J=js-1,je ; do i=is,ie
         h_vel = 0.5*((htot_fast(i,j) + htot_fast(i,j+1)) + h_neglect)
-        vDml_diag(i,J) = vDml_diag(i,J) / (0.01*h_vel) * G%IdxCv(i,J) * (PSI(0.)-PSI(-.01))
+        vDml_diag(i,J) = vDml_diag(i,J) / (0.01*h_vel) * G%IdxCv(i,J) * (mu(0.,0.)-mu(-.01,0.))
       enddo ; enddo
       call post_data(CS%id_vml, vDml_diag, CS%diag)
     endif
@@ -557,25 +558,44 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, forces, dt, MLD_in, Var
   ! This needs to happen after the H update and before the next post_data.
   call diag_update_remap_grids(CS%diag)
 
-contains
-  !> Stream function [nondim] as a function of non-dimensional position within mixed-layer
-  real function psi(z)
-    real, intent(in) :: z           !< Fractional mixed layer depth [nondim]
-    real :: psi1  ! The streamfunction structure without the tail [nondim]
-    real :: bottop, xp, dd ! Local work variables used to generate the streamfunction tail [nondim]
-
-    !psi1 = max(0., (1. - (2.*z + 1.)**2))
-    psi1 = max(0., (1. - (2.*z + 1.)**2) * (1. + (5./21.)*(2.*z + 1.)**2))
-
-    xp = max(0., min(1., (-z - 0.5)*2. / (1. + 2.*CS%MLE_tail_dh)))
-    dd = (1. - 3.*(xp**2) + 2.*(xp**3))**(1. + 2.*CS%MLE_tail_dh)
-    bottop = 0.5*(1. - sign(1., z + 0.5))  ! =0 for z>-0.5, =1 for z<-0.5
-
-    psi = max(psi1, dd*bottop)  ! Combines original psi1 with tail
-  end function psi
-
 end subroutine mixedlayer_restrat_general
 
+!> Stream function shape as a function of non-dimensional position within mixed-layer [nondim]
+real function mu(sigma, dh)
+  real, intent(in) :: sigma !< Fractional position within mixed layer [nondim]
+                            !! z=0 is surface, z=-1 is the bottom of the mixed layer
+  real, intent(in) :: dh    !< Non-dimensional distance over which to extend stream
+                            !! function to smooth transport at base [nondim]
+  ! Local variables
+  real :: xp            !< A linear function from mid-point of the mixed-layer
+                        !! to the extended mixed-layer bottom [nondim]
+  real :: bottop        !< A mask, 0 in upper half of mixed layer, 1 otherwise [nondim]
+  real :: dd            !< A cubic(-ish) profile in lower half of extended mixed
+                        !! layer to smooth out the parameterized transport [nondim]
+
+  ! Lower order shape (not used), see eq 10 from FK08b.
+  ! Apparently used in CM2G, see eq 14 of FK11.
+  !mu = max(0., (1. - (2.*sigma + 1.)**2))
+
+  ! Second order, in Rossby number, shape. See eq 21 from FK08a, eq 9 from FK08b, eq 5 FK11
+  mu = max(0., (1. - (2.*sigma + 1.)**2) * (1. + (5./21.)*(2.*sigma + 1.)**2))
+
+  ! -0.5    < sigma           : xp(sigma)=0      (upper half of mixed layer)
+  ! -1.0+dh < sigma < -0.5    : xp(sigma)=linear (lower half +dh of mixed layer)
+  !           sigma < -1.0+dh : xp(sigma)=1      (below mixed layer + dh)
+  xp = max(0., min(1., (-sigma - 0.5)*2. / (1. + 2.*dh)))
+
+  ! -0.5    < sigma           : dd(sigma)=1      (upper half of mixed layer)
+  ! -1.0+dh < sigma < -0.5    : dd(sigma)=cubic  (lower half +dh of mixed layer)
+  !           sigma < -1.0+dh : dd(sigma)=0      (below mixed layer + dh)
+  dd = (1. - 3.*(xp**2) + 2.*(xp**3))**(1. + 2.*dh)
+
+  ! -0.5    < sigma           : bottop(sigma)=0  (upper half of mixed layer)
+  !           sigma < -0.5    : bottop(sigma)=1  (below upper half)
+  bottop = 0.5*(1. - sign(1., sigma + 0.5))  ! =0 for sigma>-0.5, =1 for sigma<-0.5
+
+  mu = max(mu, dd*bottop)  ! Combines original psi1 with tail
+end function mu
 
 !> Calculates a restratifying flow assuming a 2-layer bulk mixed layer.
 subroutine mixedlayer_restrat_BML(h, uhtr, vhtr, tv, forces, dt, G, GV, US, CS)
@@ -1056,6 +1076,65 @@ subroutine mixedlayer_restrat_register_restarts(HI, GV, US, param_file, CS, rest
   endif
 
 end subroutine mixedlayer_restrat_register_restarts
+
+logical function mixedlayer_restrat_unit_tests(verbose)
+  logical, intent(in) :: verbose !< If true, write results to stdout
+  ! Local variables
+  type(mixedlayer_restrat_CS) :: CS ! Control structure
+  logical :: this_test
+
+  print *,'===== mixedlayer_restrat: mixedlayer_restrat_unit_tests =================='
+
+  ! Tests of the shape function mu(z)
+  this_test = &
+    test_answer(verbose, mu(3.,0.), 0., 'mu(3)=0')
+  this_test = this_test .or. &
+    test_answer(verbose, mu(0.,0.), 0., 'mu(0)=0')
+  this_test = this_test .or. &
+    test_answer(verbose, mu(-0.25,0.), 0.7946428571428572, 'mu(-0.25)=0.7946...', tol=epsilon(1.))
+  this_test = this_test .or. &
+    test_answer(verbose, mu(-0.5,0.), 1., 'mu(-0.5)=1')
+  this_test = this_test .or. &
+    test_answer(verbose, mu(-0.75,0.), 0.7946428571428572, 'mu(-0.75)=0.7946...', tol=epsilon(1.))
+  this_test = this_test .or. &
+    test_answer(verbose, mu(-1.,0.), 0., 'mu(-1)=0')
+  this_test = this_test .or. &
+    test_answer(verbose, mu(-3.,0.), 0., 'mu(-3)=0')
+  this_test = this_test .or. &
+    test_answer(verbose, mu(-0.5,0.5), 1., 'mu(-0.5,0.5)=1')
+  this_test = this_test .or. &
+    test_answer(verbose, mu(-1.,0.5), 0.25, 'mu(-1,0.5)=0.25')
+  this_test = this_test .or. &
+    test_answer(verbose, mu(-1.5,0.5), 0., 'mu(-1.5,0.5)=0')
+  if (.not. this_test) print '(a)','  Passed tests of mu(z)'
+  mixedlayer_restrat_unit_tests = this_test
+
+end function mixedlayer_restrat_unit_tests
+
+!> Returns true if any cell of u and u_true are not identical. Returns false otherwise.
+logical function test_answer(verbose, u, u_true, label, tol)
+  logical,            intent(in) :: verbose !< If true, write results to stdout
+  real,               intent(in) :: u      !< Values to test
+  real,               intent(in) :: u_true !< Values to test against (correct answer)
+  character(len=*),   intent(in) :: label  !< Message
+  real, optional,     intent(in) :: tol    !< The tolerance for differences between u and u_true
+  ! Local variables
+  real :: tolerance ! The tolerance for differences between u and u_true
+  integer :: k
+
+  tolerance = 0.0 ; if (present(tol)) tolerance = tol
+  test_answer = .false.
+
+  if (abs(u - u_true) > tolerance) test_answer = .true.
+  if (test_answer .or. verbose) then
+    if (test_answer) then
+      print '(1p2e24.16,a,1pe24.16,a,x,a)',u,u_true,' err=',u-u_true,' < wrong',label
+    else
+      print '(2(a,1pe24.16),x,a)','computed =',u,' correct =',u_true,label
+    endif
+  endif
+
+end function test_answer
 
 !> \namespace mom_mixed_layer_restrat
 !!
