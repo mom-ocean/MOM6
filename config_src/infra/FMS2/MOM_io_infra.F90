@@ -659,10 +659,10 @@ subroutine get_field_size(filename, fieldname, sizes, field_found, no_domain)
 
             ! Currently no z-test is supported, so disable assignment with 0
             size_indices = [ &
-                find_index(is_x, .true.), &
-                find_index(is_y, .true.), &
+                find_index(is_x), &
+                find_index(is_y), &
                 0, &
-                find_index(is_t, .true.) &
+                find_index(is_t) &
             ]
 
             do i = 1, size(size_indices)
@@ -690,13 +690,13 @@ end subroutine get_field_size
 !> Return the index of the first True element of a logical array.
 !!
 !! If all elements are false, return zero.
-integer function find_index(vec) result(idx)
+function find_index(vec) result(loc)
   ! NOTE:  This function acts as a replacement for findloc() F2008 intrinsic,
   !   which is not available on some compilers, or may not support logicals.
-  integer, intent(in) :: vec(:)
-  integer :: idx
-
+  logical, intent(in) :: vec(:)
   integer :: loc
+
+  integer :: i
 
   loc = 0
   do i = 1, size(vec)
