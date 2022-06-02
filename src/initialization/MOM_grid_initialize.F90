@@ -172,10 +172,6 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
   type(param_file_type),  intent(in)    :: param_file  !< Parameter file structure
   type(unit_scale_type),  intent(in)    :: US    !< A dimensional unit scaling type
   ! Local variables
-  real, dimension(G%isd :G%ied ,G%jsd :G%jed ) :: tempH1, tempH2, tempH3, tempH4
-  real, dimension(G%IsdB:G%IedB,G%JsdB:G%JedB) :: tempQ1, tempQ2, tempQ3, tempQ4
-  real, dimension(G%IsdB:G%IedB,G%jsd :G%jed ) :: tempE1, tempE2
-  real, dimension(G%isd :G%ied ,G%JsdB:G%JedB) :: tempN1, tempN2
   ! These arrays are a holdover from earlier code in which the arrays in G were
   ! macros and may have had reduced dimensions.
   real, dimension(G%isd :G%ied ,G%jsd :G%jed ) :: dxT, dyT, areaT
@@ -527,7 +523,7 @@ subroutine set_grid_metrics_spherical(G, param_file, US)
   integer :: i_offset, j_offset
   real :: grid_latT(G%jsd:G%jed), grid_latB(G%JsdB:G%JedB)
   real :: grid_lonT(G%isd:G%ied), grid_lonB(G%IsdB:G%IedB)
-  real :: dLon,dLat,latitude,longitude,dL_di
+  real :: dLon, dLat, latitude, dL_di
   character(len=48)  :: mdl  = "MOM_grid_init set_grid_metrics_spherical"
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
@@ -661,7 +657,6 @@ subroutine set_grid_metrics_mercator(G, param_file, US)
   integer :: i, j, isd, ied, jsd, jed
   integer :: I_off, J_off
   type(GPS) :: GP
-  character(len=128) :: warnmesg
   character(len=48)  :: mdl = "MOM_grid_init set_grid_metrics_mercator"
   real :: PI, PI_2! PI = 3.1415926... as 4*atan(1), PI_2 = (PI) /2.0
   real :: y_q, y_h, jd, x_q, x_h, id
@@ -677,7 +672,7 @@ subroutine set_grid_metrics_mercator(G, param_file, US)
                           ! Int_dj_dy at a latitude or longitude that is
   real :: jRef, iRef      ! being set to be at grid index jRef or iRef.
   integer :: itt1, itt2
-  logical :: debug = .FALSE., simple_area = .true.
+  logical, parameter :: simple_area = .true.
   integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, IsdB, IedB, JsdB, JedB
 
   !   All of the metric terms should be defined over the domain from

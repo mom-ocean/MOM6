@@ -288,7 +288,7 @@ subroutine entrainment_diffusive(h, tv, fluxes, dt, G, GV, US, CS, ea, eb, &
       enddo ; enddo
     endif
 
-    do i=is,ie ; do_i(i) = (G%mask2dT(i,j) > 0.5) ; enddo
+    do i=is,ie ; do_i(i) = (G%mask2dT(i,j) > 0.0) ; enddo
     do i=is,ie ; ds_dsp1(i,nz) = 0.0 ; enddo
     do i=is,ie ; dsp1_ds(i,nz) = 0.0 ; enddo
 

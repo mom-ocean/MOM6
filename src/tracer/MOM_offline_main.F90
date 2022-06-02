@@ -233,10 +233,9 @@ subroutine offline_advection_ale(fluxes, Time_start, time_interval, G, GV, US, C
   integer :: niter, iter
   real    :: Inum_iter    ! The inverse of the number of iterations [nondim]
   character(len=256) :: mesg  ! The text of an error message
-  integer :: i, j, k, m, is, ie, js, je, isd, ied, jsd, jed, nz
-  integer :: isv, iev, jsv, jev ! The valid range of the indices.
+  integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz
   integer :: IsdB, IedB, JsdB, JedB
-  logical :: z_first, x_before_y
+  logical :: x_before_y
   real :: evap_CFL_limit  ! Limit on the fraction of the water that can be fluxed out of the
                           ! top layer in a timestep [nondim]
   real :: minimum_forcing_depth ! The smallest depth over which fluxes can be applied [H ~> m or kg m-2]
@@ -432,7 +431,7 @@ subroutine offline_redistribute_residual(CS, G, GV, US, h_pre, uhtr, vhtr, conve
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)) :: vhr  !< Remaining meridional mass transport [H L2 ~> m3 or kg]
 
   character(len=256) :: mesg  ! The text of an error message
-  integer :: i, j, k, m, is, ie, js, je, isd, ied, jsd, jed, nz, iter
+  integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz, iter
   real :: HL2_to_kg_scale ! Unit conversion factors to cell mass [kg H-1 L-2 ~> kg m-3 or 1]
   real :: prev_tot_residual, tot_residual ! The absolute value of the remaining transports [H L2 ~> m3 or kg]
 
@@ -599,7 +598,7 @@ real function remaining_transport_sum(G, GV, US, uhtr, vhtr, h_new)
                               intent(in   ) :: uhtr  !< Zonal mass transport [H L2 ~> m3 or kg]
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
                               intent(in   ) :: vhtr  !< Meridional mass transport [H L2 ~> m3 or kg]
-  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                               intent(in   ) :: h_new !< Layer thicknesses [H ~> m or kg m-2]
 
   ! Local variables
@@ -862,16 +861,11 @@ subroutine offline_advection_layer(fluxes, Time_start, time_interval, G, GV, US,
       h_new, &  ! Updated thicknesses [H ~> m or kg m-2]
       h_vol     ! Cell volumes [H L2 ~> m3 or kg]
   ! Work arrays for temperature and salinity
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: &
-      temp_old, temp_mean, &  ! Temperatures [degC]
-      salt_old, salt_mean     ! Salinities [ppt]
-  integer :: niter, iter
+  integer :: iter
   real    :: dt_iter  ! The timestep of each iteration [T ~> s]
   real    :: HL2_to_kg_scale ! Unit conversion factors to cell mass [kg H-1 L-2 ~> kg m-3 or 1]
-  logical :: converged
   character(len=160) :: mesg  ! The text of an error message
-  integer :: i, j, k, m, is, ie, js, je, isd, ied, jsd, jed, nz
-  integer :: isv, iev, jsv, jev ! The valid range of the indices.
+  integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz
   integer :: IsdB, IedB, JsdB, JedB
   logical :: z_first, x_before_y
 
@@ -1317,7 +1311,7 @@ subroutine offline_transport_init(param_file, CS, diabatic_CSp, G, GV, US)
   character(len=20)  :: redistribute_method
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
-  integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz
+  integer :: is, ie, js, je, isd, ied, jsd, jed, nz
   integer :: IsdB, IedB, JsdB, JedB
 
   is   = G%isc   ; ie   = G%iec  ; js   = G%jsc  ; je   = G%jec ; nz = GV%ke
@@ -1475,7 +1469,7 @@ subroutine read_all_input(CS, G, GV, US)
   type(verticalGrid_type),    intent(in)    :: GV    !< Vertical grid structure
   type(unit_scale_type),      intent(in)    :: US    !< A dimensional unit scaling type
 
-  integer :: is, ie, js, je, isd, ied, jsd, jed, nz, t, ntime
+  integer :: isd, ied, jsd, jed, nz, t, ntime
   integer :: IsdB, IedB, JsdB, JedB
 
   nz = GV%ke ; ntime = CS%numtime

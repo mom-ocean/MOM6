@@ -127,7 +127,6 @@ subroutine Kelvin_initialize_topography(D, G, param_file, max_depth, US)
   ! Local variables
   character(len=40)  :: mdl = "Kelvin_initialize_topography" ! This subroutine's name.
   real :: min_depth ! The minimum and maximum depths [Z ~> m].
-  real :: PI ! 3.1415...
   real :: coast_offset1, coast_offset2, coast_angle, right_angle
   integer :: i, j
 

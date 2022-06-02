@@ -196,7 +196,7 @@ subroutine check_redundant_vC2d(mesg, u_comp, v_comp, G, is, ie, js, je, &
     if (v_resym(i,j) /= v_comp(i,j) .and. &
         redundant_prints(3) < max_redundant_prints) then
       write(mesg2,'(" redundant v-comps",2(1pe12.4)," differ by ", &
-                    & 1pe12.4," at i,j = ",2i4," x,y = ",2(1pe12.4)" on pe ",i4)') &
+                    & 1pe12.4," at i,j = ",2i4," x,y = ",2(1pe12.4)," on pe ",i4)') &
            v_comp(i,j), v_resym(i,j),v_comp(i,j)-v_resym(i,j),i,j, &
            G%geoLonBu(i,j), G%geoLatBu(i,j), pe_here()
       write(0,'(A155)') trim(mesg)//trim(mesg2)
@@ -386,7 +386,7 @@ subroutine check_redundant_vB2d(mesg, u_comp, v_comp, G, is, ie, js, je, &
     if (v_resym(i,j) /= v_comp(i,j) .and. &
         redundant_prints(2) < max_redundant_prints) then
       write(mesg2,'(" redundant v-comps",2(1pe12.4)," differ by ", &
-                    & 1pe12.4," at i,j = ",2i4," x,y = ",2(1pe12.4)" on pe ",i4)') &
+                    & 1pe12.4," at i,j = ",2i4," x,y = ",2(1pe12.4)," on pe ",i4)') &
            v_comp(i,j), v_resym(i,j),v_comp(i,j)-v_resym(i,j),i,j, &
            G%geoLonBu(i,j), G%geoLatBu(i,j), pe_here()
       write(0,'(A155)') trim(mesg)//trim(mesg2)
@@ -435,7 +435,7 @@ subroutine check_redundant_sT2d(mesg, array, G, is, ie, js, je)
   character(len=128) :: mesg2
 
   integer :: i, j, is_ch, ie_ch, js_ch, je_ch
-  integer :: Isq, Ieq, Jsq, Jeq, isd, ied, jsd, jed
+  integer :: isd, ied, jsd, jed
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
   is_ch = G%isc ; ie_ch = G%iec ; js_ch = G%jsc ; je_ch = G%jec
@@ -549,7 +549,7 @@ subroutine check_redundant_vT2d(mesg, u_comp, v_comp, G, is, ie, js, je, &
     if (v_nonsym(i,j) /= v_comp(i,j) .and. &
         redundant_prints(1) < max_redundant_prints) then
       write(mesg2,'(" redundant v-comps",2(1pe12.4)," differ by ", &
-                    & 1pe12.4," at i,j = ",2i4," x,y = ",2(1pe12.4)" on pe ",i4)') &
+                    & 1pe12.4," at i,j = ",2i4," x,y = ",2(1pe12.4)," on pe ",i4)') &
            v_comp(i,j), v_nonsym(i,j),v_comp(i,j)-v_nonsym(i,j),i,j, &
            G%geoLonBu(i,j), G%geoLatBu(i,j), pe_here()
       write(0,'(A155)') trim(mesg)//trim(mesg2)

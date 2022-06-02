@@ -56,7 +56,8 @@ use MOM_ALE,                   only : ALE_updateVerticalGridType, ALE_remap_init
 use MOM_ALE_sponge,            only : rotate_ALE_sponge, update_ALE_sponge_field
 use MOM_barotropic,            only : Barotropic_CS
 use MOM_boundary_update,       only : call_OBC_register, OBC_register_end, update_OBC_CS
-use MOM_coord_initialization,  only : MOM_initialize_coord
+use MOM_check_scaling,         only : check_MOM6_scaling_factors
+use MOM_coord_initialization,  only : MOM_initialize_coord, write_vertgrid_file
 use MOM_diabatic_driver,       only : diabatic, diabatic_driver_init, diabatic_CS, extract_diabatic_member
 use MOM_diabatic_driver,       only : adiabatic, adiabatic_driver_init, diabatic_driver_end
 use MOM_stochastics,           only : stochastics_init, update_stochastics, stochastic_CS
@@ -507,10 +508,7 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
                           ! if it is not to be calculated anew [T ~> s].
   real :: rel_time = 0.0  ! relative time since start of this call [T ~> s].
 
-  logical :: calc_dtbt                 ! Indicates whether the dynamically adjusted
-                                       ! barotropic time step needs to be updated.
   logical :: do_advection              ! If true, it is time to advect tracers.
-  logical :: do_calc_bbl               ! If true, calculate the boundary layer properties.
   logical :: thermo_does_span_coupling ! If true, thermodynamic forcing spans
                                        ! multiple dynamic timesteps.
   logical :: do_dyn     ! If true, dynamics are updated with this call.
@@ -532,7 +530,7 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
     p_surf => NULL() ! A pointer to the ocean surface pressure [R L2 T-2 ~> Pa].
   real :: I_wt_ssh  ! The inverse of the time weights [T-1 ~> s-1]
 
-  type(time_type) :: Time_local, end_time_thermo, Time_temp
+  type(time_type) :: Time_local, end_time_thermo
   type(group_pass_type) :: pass_tau_ustar_psurf
   logical :: showCallTree
 
@@ -590,7 +588,7 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
     call homogenize_mech_forcing(forces, G, US, GV%Rho0, CS%update_ustar)
     ! Note the following computes the mean ustar as the mean of ustar rather than
     !  ustar of the mean of tau.
-    call homogenize_forcing(fluxes, G)
+    call homogenize_forcing(fluxes, G, GV, US)
     if (CS%update_ustar) then
       ! These calls corrects the ustar values
       call copy_common_forcing_fields(forces, fluxes, G)
@@ -965,7 +963,7 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
   if (cycle_end) then
     if (CS%rotate_index) then
       allocate(sfc_state_diag)
-      call rotate_surface_state(sfc_state, G_in, sfc_state_diag, G, turns)
+      call rotate_surface_state(sfc_state, sfc_state_diag, G, turns)
     else
       sfc_state_diag => sfc_state
     endif
@@ -1049,7 +1047,7 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_thermo, &
                         ! barotropic time step needs to be updated.
   logical :: showCallTree
 
-  integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
+  integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
 
   real, dimension(SZI_(CS%G),SZJ_(CS%G),SZK_(CS%G)+1) :: eta_por ! layer interface heights
@@ -1330,7 +1328,7 @@ subroutine step_MOM_thermo(CS, G, GV, US, u, v, h, tv, fluxes, dtdia, &
   integer :: dynamics_stencil  ! The computational stencil for the calculations
                                ! in the dynamic core.
   integer :: halo_sz ! The size of a halo where data must be valid.
-  integer :: i, j, k, is, ie, js, je, nz
+  integer :: is, ie, js, je, nz
 
   real, dimension(SZI_(CS%G),SZJ_(CS%G),SZK_(CS%G)+1) :: eta_por ! layer interface heights
                                                     !! for porous topo. [Z ~> m or 1/eta_to_m]
@@ -1531,11 +1529,9 @@ subroutine step_offline(forces, fluxes, sfc_state, Time_start, time_interval, CS
   real :: dt_offline          ! The offline timestep for advection [T ~> s]
   real :: dt_offline_vertical ! The offline timestep for vertical fluxes and remapping [T ~> s]
   logical :: skip_diffusion
-  integer :: id_eta_diff_end
 
   type(time_type), pointer :: accumulated_time => NULL()
   type(time_type), pointer :: vertical_time => NULL()
-  integer :: i,j,k
   integer :: is, ie, js, je, isd, ied, jsd, jed
 
   ! 3D pointers
@@ -1761,20 +1757,16 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
 
-  integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz
+  integer :: i, j, is, ie, js, je, isd, ied, jsd, jed, nz
   integer :: IsdB, IedB, JsdB, JedB
   real    :: dtbt              ! If negative, this specifies the barotropic timestep as a fraction
                                ! of the maximum stable value [nondim].
 
   real, allocatable, dimension(:,:)   :: eta ! free surface height or column mass [H ~> m or kg m-2]
-  real, allocatable, dimension(:,:)   :: area_shelf_in ! area occupied by ice shelf [L2 ~> m2]
-!  real, dimension(:,:), pointer :: shelf_area => NULL()
-  type(MOM_restart_CS),  pointer      :: restart_CSp_tmp => NULL()
   type(group_pass_type) :: tmp_pass_uv_T_S_h, pass_uv_T_S_h
 
   real    :: default_val       ! default value for a parameter
   logical :: write_geom_files  ! If true, write out the grid geometry files.
-  logical :: ensemble_ocean    ! If true, perform an ensemble gather at the end of step_MOM
   logical :: new_sim           ! If true, this has been determined to be a new simulation
   logical :: use_geothermal    ! If true, apply geothermal heating.
   logical :: use_EOS           ! If true, density calculated from T & S using an equation of state.
@@ -1815,12 +1807,11 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
                                ! fluxes [J m-2 H-1 degC-1 ~> J m-3 degC-1 or J kg-1 degC-1]
   real :: conv2salt            ! A conversion factor for salt fluxes [m H-1 ~> 1] or [kg m-2 H-1 ~> 1]
   real :: RL2_T2_rescale, Z_rescale, QRZ_rescale ! Unit conversion factors
-  character(len=48) :: flux_units, S_flux_units
+  character(len=48) :: S_flux_units
 
   type(vardesc) :: vd_T, vd_S  ! Structures describing temperature and salinity variables.
   type(time_type)                 :: Start_time
   type(ocean_internal_state)      :: MOM_internal_state
-  character(len=200) :: area_varname, ice_shelf_file, inputdir, filename
 
   CS%Time => Time
 
@@ -1907,7 +1898,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
                  "If False, T/S are registered for advection. "//&
                  "This is intended only to be used in offline tracer mode "//&
                  "and is by default false in that case.", &
-                 do_not_log = .true., default=.true. )
+                 do_not_log=.true., default=.true.)
   if (present(offline_tracer_mode)) then ! Only read this parameter in enabled modes
     call get_param(param_file, "MOM", "OFFLINE_TRACER_MODE", CS%offline_tracer_mode, &
                  "If true, barotropic and baroclinic dynamics, thermodynamics "//&
@@ -2285,6 +2276,8 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   endif
   ! dG_in is retained for now so that it can be used with write_ocean_geometry_file() below.
 
+  if (is_root_PE()) call check_MOM6_scaling_factors(CS%GV, US)
+
   call callTree_waypoint("grids initialized (initialize_MOM)")
 
   call MOM_timing_init(CS)
@@ -2419,7 +2412,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   call restart_init(param_file, restart_CSp)
   call set_restart_fields(GV, US, param_file, CS, restart_CSp)
   if (CS%split) then
-    call register_restarts_dyn_split_RK2(HI, GV, param_file, &
+    call register_restarts_dyn_split_RK2(HI, GV, US, param_file, &
              CS%dyn_split_RK2_CSp, restart_CSp, CS%uh, CS%vh)
   elseif (CS%use_RK2) then
     call register_restarts_dyn_unsplit_RK2(HI, GV, param_file, &
@@ -2434,9 +2427,9 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   call call_tracer_register(HI, GV, US, param_file, CS%tracer_flow_CSp, &
                             CS%tracer_Reg, restart_CSp)
 
-  call MEKE_alloc_register_restart(HI, param_file, CS%MEKE, restart_CSp)
-  call set_visc_register_restarts(HI, GV, param_file, CS%visc, restart_CSp)
-  call mixedlayer_restrat_register_restarts(HI, param_file, &
+  call MEKE_alloc_register_restart(HI, US, param_file, CS%MEKE, restart_CSp)
+  call set_visc_register_restarts(HI, GV, US, param_file, CS%visc, restart_CSp)
+  call mixedlayer_restrat_register_restarts(HI, GV, param_file, &
            CS%mixedlayer_restrat_CSp, restart_CSp)
 
   if (CS%rotate_index .and. associated(OBC_in) .and. use_temperature) then
@@ -2465,7 +2458,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
 
     ! This needs the number of tracers and to have called any code that sets whether
     ! reservoirs are used.
-    call open_boundary_register_restarts(HI, GV, CS%OBC, CS%tracer_Reg, &
+    call open_boundary_register_restarts(HI, GV, US, CS%OBC, CS%tracer_Reg, &
                           param_file, restart_CSp, use_temperature)
   endif
 
@@ -2481,8 +2474,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
 
   ! Initialize dynamically evolving fields, perhaps from restart files.
   call cpu_clock_begin(id_clock_MOM_init)
-  call MOM_initialize_coord(GV, US, param_file, write_geom_files, &
-                            dirs%output_directory, CS%tv, G%max_depth)
+  call MOM_initialize_coord(GV, US, param_file, CS%tv, G%max_depth)
   call callTree_waypoint("returned from MOM_initialize_coord() (initialize_MOM)")
 
   if (CS%use_ALE_algorithm) then
@@ -2645,8 +2637,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
     ! \todo This block exists for legacy reasons and we should phase it out of
     ! all examples. !###
     if (CS%debug) then
-      call uvchksum("Pre ALE adjust init cond [uv]", &
-                    CS%u, CS%v, G%HI, haloshift=1)
+      call uvchksum("Pre ALE adjust init cond [uv]", CS%u, CS%v, G%HI, haloshift=1)
       call hchksum(CS%h,"Pre ALE adjust init cond h", G%HI, haloshift=1, scale=GV%H_to_m)
     endif
     call callTree_waypoint("Calling adjustGridForIntegrity() to remap initial conditions (initialize_MOM)")
@@ -2709,19 +2700,21 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   ! must be defined.
   call set_masks_for_axes(G, diag)
 
-  ! Diagnose static fields AND associate areas/volumes with axes
-  call write_static_fields(G, GV, US, CS%tv, CS%diag)
-  call callTree_waypoint("static fields written (initialize_MOM)")
-
   ! Register the volume cell measure (must be one of first diagnostics)
   call register_cell_measure(G, CS%diag, Time)
 
   call cpu_clock_begin(id_clock_MOM_init)
+  ! Diagnose static fields AND associate areas/volumes with axes
+  call write_static_fields(G, GV, US, CS%tv, CS%diag)
+  call callTree_waypoint("static fields written (initialize_MOM)")
+
   if (CS%use_ALE_algorithm) then
     call ALE_writeCoordinateFile( CS%ALE_CSp, GV, dirs%output_directory )
+    call callTree_waypoint("ALE initialized (initialize_MOM)")
+  elseif (write_geom_files) then
+    call write_vertgrid_file(GV, US, param_file, dirs%output_directory)
   endif
   call cpu_clock_end(id_clock_MOM_init)
-  call callTree_waypoint("ALE initialized (initialize_MOM)")
 
   CS%useMEKE = MEKE_init(Time, G, US, param_file, diag, CS%MEKE_CSp, CS%MEKE, restart_CSp)
 
@@ -2862,11 +2855,9 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   if (use_frazil) then
     if (query_initialized(CS%tv%frazil, "frazil", restart_CSp)) then
       ! Test whether the dimensional rescaling has changed for heat content.
-      if ((US%kg_m3_to_R_restart*US%m_to_Z_restart*US%J_kg_to_Q_restart /= 0.0) .and. &
-          ((US%J_kg_to_Q*US%kg_m3_to_R*US%m_to_Z) /= &
-           (US%J_kg_to_Q_restart*US%kg_m3_to_R_restart*US%m_to_Z_restart)) ) then
-        QRZ_rescale = (US%J_kg_to_Q*US%kg_m3_to_R*US%m_to_Z) / &
-                      (US%J_kg_to_Q_restart*US%kg_m3_to_R_restart*US%m_to_Z_restart)
+      if ((US%J_kg_to_Q_restart*US%kg_m3_to_R_restart*US%m_to_Z_restart /= 0.0) .and. &
+          (US%J_kg_to_Q_restart*US%kg_m3_to_R_restart*US%m_to_Z_restart /= 1.0) ) then
+        QRZ_rescale = 1.0 / (US%J_kg_to_Q_restart*US%kg_m3_to_R_restart*US%m_to_Z_restart)
         do j=js,je ; do i=is,ie
           CS%tv%frazil(i,j) = QRZ_rescale * CS%tv%frazil(i,j)
         enddo ; enddo
@@ -2882,10 +2873,8 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
     if (CS%p_surf_prev_set) then
       ! Test whether the dimensional rescaling has changed for pressure.
       if ((US%kg_m3_to_R_restart*US%s_to_T_restart*US%m_to_L_restart /= 0.0) .and. &
-          ((US%kg_m3_to_R*(US%m_to_L*US%s_to_T_restart)**2) /= &
-           (US%kg_m3_to_R_restart*(US%m_to_L_restart*US%s_to_T)**2)) ) then
-        RL2_T2_rescale = (US%kg_m3_to_R*(US%m_to_L*US%s_to_T_restart)**2) / &
-                         (US%kg_m3_to_R_restart*(US%m_to_L_restart*US%s_to_T)**2)
+          (US%s_to_T_restart**2 /= US%kg_m3_to_R_restart * US%m_to_L_restart**2) ) then
+        RL2_T2_rescale = US%s_to_T_restart**2 / (US%kg_m3_to_R_restart*US%m_to_L_restart**2)
         do j=js,je ; do i=is,ie
           CS%p_surf_prev(i,j) = RL2_T2_rescale * CS%p_surf_prev(i,j)
         enddo ; enddo
@@ -2898,8 +2887,8 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   if (use_ice_shelf .and. associated(CS%Hml)) then
     if (query_initialized(CS%Hml, "hML", restart_CSp)) then
       ! Test whether the dimensional rescaling has changed for depths.
-      if ((US%m_to_Z_restart /= 0.0) .and. (US%m_to_Z /= US%m_to_Z_restart) ) then
-        Z_rescale = US%m_to_Z / US%m_to_Z_restart
+      if ((US%m_to_Z_restart /= 0.0) .and. (US%m_to_Z_restart /= 1.0) ) then
+        Z_rescale = 1.0 / US%m_to_Z_restart
         do j=js,je ; do i=is,ie
           CS%Hml(i,j) = Z_rescale * CS%Hml(i,j)
         enddo ; enddo
@@ -2908,8 +2897,8 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   endif
 
   if (query_initialized(CS%ave_ssh_ibc,"ave_ssh",restart_CSp)) then
-    if ((US%m_to_Z_restart /= 0.0) .and. (US%m_to_Z /= US%m_to_Z_restart) ) then
-      Z_rescale = US%m_to_Z / US%m_to_Z_restart
+    if ((US%m_to_Z_restart /= 0.0) .and. (US%m_to_Z_restart /= 1.0) ) then
+      Z_rescale = 1.0 / US%m_to_Z_restart
       do j=js,je ; do i=is,ie
         CS%ave_ssh_ibc(i,j) = Z_rescale * CS%ave_ssh_ibc(i,j)
       enddo ; enddo
@@ -2964,7 +2953,6 @@ subroutine finish_MOM_initialization(Time, dirs, CS, restart_CSp)
                                                    ! various unit conversion factors
   type(MOM_restart_CS),    pointer :: restart_CSp_tmp => NULL()
   real, allocatable :: z_interface(:,:,:) ! Interface heights [m]
-  type(vardesc) :: vd
 
   call cpu_clock_begin(id_clock_init)
   call callTree_enter("finish_MOM_initialization()")
@@ -2973,8 +2961,8 @@ subroutine finish_MOM_initialization(Time, dirs, CS, restart_CSp)
   G => CS%G ; GV => CS%GV ; US => CS%US
 
   !### Move to initialize_MOM?
-  call fix_restart_scaling(GV)
-  call fix_restart_unit_scaling(US)
+  call fix_restart_scaling(GV, unscaled=.true.)
+  call fix_restart_unit_scaling(US, unscaled=.true.)
 
 
   if (CS%use_particles) then
@@ -3087,9 +3075,6 @@ subroutine set_restart_fields(GV, US, param_file, CS, restart_CSp)
   thickness_units = get_thickness_units(GV)
   flux_units = get_flux_units(GV)
 
-  u_desc = var_desc("u", "m s-1", "Zonal velocity", hor_grid='Cu')
-  v_desc = var_desc("v", "m s-1", "Meridional velocity", hor_grid='Cv')
-
   if (associated(CS%tv%T)) &
     call register_restart_field(CS%tv%T, "Temp", .true., restart_CSp, &
                                 "Potential Temperature", "degC")
@@ -3098,28 +3083,31 @@ subroutine set_restart_fields(GV, US, param_file, CS, restart_CSp)
                                 "Salinity", "PPT")
 
   call register_restart_field(CS%h, "h", .true., restart_CSp, &
-                              "Layer Thickness", thickness_units)
+                              "Layer Thickness", thickness_units, conversion=GV%H_to_MKS)
 
-  call register_restart_pair(CS%u, CS%v, u_desc, v_desc, .true., restart_CSp)
+  u_desc = var_desc("u", "m s-1", "Zonal velocity", hor_grid='Cu')
+  v_desc = var_desc("v", "m s-1", "Meridional velocity", hor_grid='Cv')
+  call register_restart_pair(CS%u, CS%v, u_desc, v_desc, .true., restart_CSp, conversion=US%L_T_to_m_s)
 
   if (associated(CS%tv%frazil)) &
     call register_restart_field(CS%tv%frazil, "frazil", .false., restart_CSp, &
-                                "Frazil heat flux into ocean", "J m-2")
+                                "Frazil heat flux into ocean", &
+                                "J m-2", conversion=US%Q_to_J_kg*US%RZ_to_kg_m2)
 
   if (CS%interp_p_surf) then
     call register_restart_field(CS%p_surf_prev, "p_surf_prev", .false., restart_CSp, &
-                                "Previous ocean surface pressure", "Pa")
+                                "Previous ocean surface pressure", "Pa", conversion=US%RL2_T2_to_Pa)
   endif
 
   call register_restart_field(CS%ave_ssh_ibc, "ave_ssh", .false., restart_CSp, &
-                              "Time average sea surface height", "meter")
+                              "Time average sea surface height", "meter", conversion=US%Z_to_m)
 
   ! hML is needed when using the ice shelf module
   call get_param(param_file, '', "ICE_SHELF", use_ice_shelf, default=.false., &
                  do_not_log=.true.)
   if (use_ice_shelf .and. associated(CS%Hml)) then
     call register_restart_field(CS%Hml, "hML", .false., restart_CSp, &
-                                "Mixed layer thickness", "meter")
+                                "Mixed layer thickness", "meter", conversion=US%Z_to_m)
   endif
 
   ! Register scalar unit conversion factors.
@@ -3553,7 +3541,7 @@ subroutine extract_surface_state(CS, sfc_state_in)
             ig = i + G%HI%idg_offset ! Global i-index
             jg = j + G%HI%jdg_offset ! Global j-index
             if (use_temperature) then
-              write(msg(1:240),'(2(a,i4,x),4(a,f8.3,x),8(a,es11.4,x))') &
+              write(msg(1:240),'(2(a,i4,1x),4(a,f8.3,1x),8(a,es11.4,1x))') &
                 'Extreme surface sfc_state detected: i=',ig,'j=',jg, &
                 'lon=',G%geoLonT(i,j), 'lat=',G%geoLatT(i,j), &
                 'x=',G%gridLonT(ig), 'y=',G%gridLatT(jg), &
@@ -3562,7 +3550,7 @@ subroutine extract_surface_state(CS, sfc_state_in)
                 'U-=',US%L_T_to_m_s*sfc_state%u(I-1,j), 'U+=',US%L_T_to_m_s*sfc_state%u(I,j), &
                 'V-=',US%L_T_to_m_s*sfc_state%v(i,J-1), 'V+=',US%L_T_to_m_s*sfc_state%v(i,J)
             else
-              write(msg(1:240),'(2(a,i4,x),4(a,f8.3,x),6(a,es11.4))') &
+              write(msg(1:240),'(2(a,i4,1x),4(a,f8.3,1x),6(a,es11.4))') &
                 'Extreme surface sfc_state detected: i=',ig,'j=',jg, &
                 'lon=',G%geoLonT(i,j), 'lat=',G%geoLatT(i,j), &
                 'x=',G%gridLonT(i), 'y=',G%gridLatT(j), &
@@ -3579,7 +3567,7 @@ subroutine extract_surface_state(CS, sfc_state_in)
     enddo ; enddo
     call sum_across_PEs(numberOfErrors)
     if (numberOfErrors>0) then
-      write(msg(1:240),'(3(a,i9,x))') 'There were a total of ',numberOfErrors, &
+      write(msg(1:240),'(3(a,i9,1x))') 'There were a total of ',numberOfErrors, &
           'locations detected with extreme surface values!'
       call MOM_error(FATAL, trim(msg))
     endif
@@ -3589,7 +3577,7 @@ subroutine extract_surface_state(CS, sfc_state_in)
 
   ! Rotate sfc_state back onto the input grid, sfc_state_in
   if (CS%rotate_index) then
-    call rotate_surface_state(sfc_state, G, sfc_state_in, G_in, -turns)
+    call rotate_surface_state(sfc_state, sfc_state_in, G_in, -turns)
     call deallocate_surface_state(sfc_state)
   endif
 

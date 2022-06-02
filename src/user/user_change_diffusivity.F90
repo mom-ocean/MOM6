@@ -77,8 +77,6 @@ subroutine user_change_diff(h, tv, G, GV, US, CS, Kd_lay, Kd_int, T_f, S_f, Kd_i
   integer :: i, j, k, is, ie, js, je, nz
   integer :: isd, ied, jsd, jed
 
-  real :: kappa_fill  ! diffusivity used to fill massless layers
-  real :: dt_fill     ! timestep used to fill massless layers
   character(len=200) :: mesg
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
@@ -205,11 +203,10 @@ subroutine user_change_diff_init(Time, G, GV, US, param_file, diag, CS)
                                                          !! point to the control
                                                          !! structure for this module.
 
-! This include declares and sets the variable "version".
-#include "version_variable.h"
+  ! This include declares and sets the variable "version".
+# include "version_variable.h"
   character(len=40)  :: mdl = "user_set_diffusivity"  ! This module's name.
   character(len=200) :: mesg
-  integer :: i, j, is, ie, js, je
 
   if (associated(CS)) then
     call MOM_error(WARNING, "diabatic_entrain_init called with an associated "// &
@@ -219,17 +216,13 @@ subroutine user_change_diff_init(Time, G, GV, US, param_file, diag, CS)
   allocate(CS)
 
   CS%initialized = .true.
-
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
-
   CS%diag => diag
 
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mdl, version, "")
   call get_param(param_file, mdl, "USER_KD_ADD", CS%Kd_add, &
                  "A user-specified additional diffusivity over a range of "//&
-                 "latitude and density.", default=0.0, units="m2 s-1", &
-                 scale=US%m2_s_to_Z2_T)
+                 "latitude and density.", default=0.0, units="m2 s-1", scale=US%m2_s_to_Z2_T)
   if (CS%Kd_add /= 0.0) then
     call get_param(param_file, mdl, "USER_KD_ADD_LAT_RANGE", CS%lat_range(:), &
                  "Four successive values that define a range of latitudes "//&

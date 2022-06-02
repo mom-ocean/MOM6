@@ -172,11 +172,11 @@ contains
       ind%x2o_qsw_fracr_col(ncol)   = mct_avect_indexra(x2o,'Foxx_swnet_afracr')
 
       do ncat = 1, ice_ncat
-          write(cncat,'(i2.2)') ncat
-          ncol = ncat+1
-          ind%x2o_frac_col(ncol)      = mct_avect_indexra(x2o,'Si_ifrac_'//cncat)
-          ind%x2o_fracr_col(ncol)     = ind%x2o_frac_col(ncol)
-          ind%x2o_qsw_fracr_col(ncol) = mct_avect_indexra(x2o,'PFioi_swpen_ifrac_'//cncat)
+        write(cncat,'(i2.2)') ncat
+        ncol = ncat+1
+        ind%x2o_frac_col(ncol)      = mct_avect_indexra(x2o,'Si_ifrac_'//cncat)
+        ind%x2o_fracr_col(ncol)     = ind%x2o_frac_col(ncol)
+        ind%x2o_qsw_fracr_col(ncol) = mct_avect_indexra(x2o,'PFioi_swpen_ifrac_'//cncat)
       enddo
     else
       mcog_ncols = 1

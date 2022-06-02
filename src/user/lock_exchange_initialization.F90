@@ -34,9 +34,6 @@ subroutine lock_exchange_initialize_thickness(h, G, GV, US, param_file, just_rea
   logical,                 intent(in)  :: just_read   !< If true, this call will only read
                                                       !! parameters without changing h.
 
-  real :: e0(SZK_(GV))     ! The resting interface heights [Z ~> m], usually
-                           ! negative because it is positive upward.
-  real :: e_pert(SZK_(GV)) ! Interface height perturbations, positive upward [Z ~> m].
   real :: eta1D(SZK_(GV)+1)! Interface height relative to the sea surface
                            ! positive upward [Z ~> m].
   real :: front_displacement ! Vertical displacement acrodd front

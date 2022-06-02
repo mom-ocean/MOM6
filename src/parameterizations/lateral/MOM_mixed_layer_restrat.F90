@@ -13,12 +13,11 @@ use MOM_file_parser,   only : get_param, log_version, param_file_type
 use MOM_forcing_type,  only : mech_forcing
 use MOM_grid,          only : ocean_grid_type
 use MOM_hor_index,     only : hor_index_type
-use MOM_io,            only : vardesc, var_desc
 use MOM_lateral_mixing_coeffs, only : VarMix_CS
 use MOM_restart,       only : register_restart_field, query_initialized, MOM_restart_CS
 use MOM_unit_scaling,  only : unit_scale_type
 use MOM_variables,     only : thermo_var_ptrs
-use MOM_verticalGrid,  only : verticalGrid_type
+use MOM_verticalGrid,  only : verticalGrid_type, get_thickness_units
 use MOM_EOS,           only : calculate_density, EOS_domain
 
 implicit none ; private
@@ -156,15 +155,16 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, forces, dt, MLD_in, Var
   real :: u_star          ! surface friction velocity, interpolated to velocity points [Z T-1 ~> m s-1].
   real :: mom_mixrate     ! rate at which momentum is homogenized within mixed layer [T-1 ~> s-1]
   real :: timescale       ! mixing growth timescale [T ~> s]
+  real :: h_min           ! The minimum layer thickness [H ~> m or kg m-2].  h_min could be 0.
   real :: h_neglect       ! tiny thickness usually lost in roundoff so can be neglected [H ~> m or kg m-2]
   real :: dz_neglect      ! A tiny thickness that is usually lost in roundoff so can be neglected [Z ~> m]
   real :: I4dt            ! 1/(4 dt) [T-1 ~> s-1]
   real :: Ihtot,Ihtot_slow! Inverses of the total mixed layer thickness [H-1 ~> m-1 or m2 kg-1]
   real :: a(SZK_(GV))     ! A non-dimensional value relating the overall flux
                           ! magnitudes (uDml & vDml) to the realized flux in a
-                          ! layer.  The vertical sum of a() through the pieces of
+                          ! layer [nondim].  The vertical sum of a() through the pieces of
                           ! the mixed layer must be 0.
-  real :: b(SZK_(GV))     ! As for a(k) but for the slow-filtered MLD
+  real :: b(SZK_(GV))     ! As for a(k) but for the slow-filtered MLD [nondim]
   real :: uDml(SZIB_(G))  ! The zonal and meridional volume fluxes in the upper
   real :: vDml(SZI_(G))   ! half of the mixed layer [H L2 T-1 ~> m3 s-1 or kg s-1].
   real :: uDml_slow(SZIB_(G))  ! The zonal and meridional volume fluxes in the upper
@@ -172,31 +172,28 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, forces, dt, MLD_in, Var
   real :: utimescale_diag(SZIB_(G),SZJ_(G)) ! restratification timescales in the zonal and
   real :: vtimescale_diag(SZI_(G),SZJB_(G)) ! meridional directions [T ~> s], stored in 2-D arrays
                                             ! for diagnostic purposes.
-  real :: uDml_diag(SZIB_(G),SZJ_(G)), vDml_diag(SZI_(G),SZJB_(G))
+  real :: uDml_diag(SZIB_(G),SZJ_(G))  ! A 2D copy of uDml for diagnostics [H L2 T-1 ~> m3 s-1 or kg s-1]
+  real :: vDml_diag(SZI_(G),SZJB_(G))  ! A 2D copy of vDml for diagnostics [H L2 T-1 ~> m3 s-1 or kg s-1]
   real, dimension(SZI_(G)) :: rhoSurf, deltaRhoAtKm1, deltaRhoAtK ! Densities [R ~> kg m-3]
   real, dimension(SZI_(G)) :: dK, dKm1 ! Depths of layer centers [H ~> m or kg m-2].
   real, dimension(SZI_(G)) :: pRef_MLD ! A reference pressure for calculating the mixed layer
                                        ! densities [R L2 T-2 ~> Pa].
-  real, dimension(SZI_(G)) :: rhoAtK, rho1, d1, pRef_N2 ! Used for N2
   real :: aFac, bFac ! Nondimensional ratios [nondim]
-  real :: ddRho    ! A density difference [R ~> kg m-3]
-  real :: hAtVel, zpa, zpb, dh, res_scaling_fac
+  real :: ddRho     ! A density difference [R ~> kg m-3]
+  real :: hAtVel    ! Thickness at the velocity points [H ~> m or kg m-2]
+  real :: zpa       ! Fractional position within the mixed layer of the interface above a layer [nondim]
+  real :: zpb       ! Fractional position within the mixed layer of the interface below a layer [nondim]
+  real :: dh        ! Portion of the layer thickness that is in the mixed layer [H ~> m or kg m-2]
+  real :: res_scaling_fac ! The resolution-dependent scaling factor [nondim]
   real :: I_LFront ! The inverse of the frontal length scale [L-1 ~> m-1]
   logical :: line_is_empty, keep_going, res_upscale
   integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
 
-  real :: PSI, PSI1, z, BOTTOP, XP, DD ! For the following statement functions
-  ! Stream function as a function of non-dimensional position within mixed-layer (F77 statement function)
-  !PSI1(z) = max(0., (1. - (2.*z+1.)**2 ) )
-  PSI1(z) = max(0., (1. - (2.*z+1.)**2 ) * (1. + (5./21.)*(2.*z+1.)**2) )
-  BOTTOP(z) = 0.5*(1.-SIGN(1.,z+0.5)) ! =0 for z>-0.5, =1 for z<-0.5
-  XP(z) = max(0., min(1., (-z-0.5)*2./(1.+2.*CS%MLE_tail_dh) ) )
-  DD(z) = (1.-3.*(XP(z)**2)+2.*(XP(z)**3))**(1.+2.*CS%MLE_tail_dh)
-  PSI(z) = max( PSI1(z), DD(z)*BOTTOP(z) ) ! Combines original PSI1 with tail
-
   is  = G%isc  ; ie  = G%iec  ; js  = G%jsc  ; je  = G%jec ; nz = GV%ke
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
+
+  h_min = 0.5*GV%Angstrom_H ! This should be GV%Angstrom_H, but that value would change answers.
 
   if (.not.associated(tv%eqn_of_state)) call MOM_error(FATAL, "MOM_mixedlayer_restrat: "// &
          "An equation of state must be used with this module.")
@@ -299,16 +296,11 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, forces, dt, MLD_in, Var
 
   p0(:) = 0.0
   EOSdom(:) = EOS_domain(G%HI, halo=1)
-!$OMP parallel default(none) shared(is,ie,js,je,G,GV,US,htot_fast,Rml_av_fast,tv,p0,h,h_avail,&
-!$OMP                               h_neglect,g_Rho0,I4dt,CS,uhml,uhtr,dt,vhml,vhtr,EOSdom,   &
-!$OMP                               utimescale_diag,vtimescale_diag,forces,dz_neglect, &
-!$OMP                               htot_slow,MLD_slow,Rml_av_slow,VarMix,I_LFront,    &
-!$OMP                               res_upscale, nz,MLD_fast,uDml_diag,vDml_diag)      &
-!$OMP                       private(rho_ml,h_vel,u_star,absf,mom_mixrate,timescale,    &
-!$OMP                               line_is_empty, keep_going,res_scaling_fac,         &
-!$OMP                               a,IhTot,b,Ihtot_slow,zpb,hAtVel,zpa,dh)            &
-!$OMP                       firstprivate(uDml,vDml,uDml_slow,vDml_slow)
-!$OMP do
+  !$OMP parallel default(shared) private(rho_ml,h_vel,u_star,absf,mom_mixrate,timescale, &
+  !$OMP                                line_is_empty, keep_going,res_scaling_fac,      &
+  !$OMP                                a,IhTot,b,Ihtot_slow,zpb,hAtVel,zpa,dh)         &
+  !$OMP                        firstprivate(uDml,vDml,uDml_slow,vDml_slow)
+  !$OMP do
   do j=js-1,je+1
     do i=is-1,ie+1
       htot_fast(i,j) = 0.0 ; Rml_av_fast(i,j) = 0.0
@@ -359,7 +351,7 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, forces, dt, MLD_in, Var
 !   2. Add exponential tail to stream-function?
 
 !   U - Component
-!$OMP do
+  !$OMP do
   do j=js,je ; do I=is-1,ie
     u_star = 0.5*(forces%ustar(i,j) + forces%ustar(i+1,j))
     absf = 0.5*(abs(G%CoriolisBu(I,J-1)) + abs(G%CoriolisBu(I,J)))
@@ -435,7 +427,7 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, forces, dt, MLD_in, Var
   enddo ; enddo
 
 !  V- component
-!$OMP do
+  !$OMP do
   do J=js-1,je ; do i=is,ie
     u_star = 0.5*(forces%ustar(i,j) + forces%ustar(i,j+1))
     absf = 0.5*(abs(G%CoriolisBu(I-1,J)) + abs(G%CoriolisBu(I,J)))
@@ -510,12 +502,13 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, forces, dt, MLD_in, Var
     vDml_diag(i,J) = vDml(i)
   enddo ; enddo
 
-!$OMP do
+  !$OMP do
   do j=js,je ; do k=1,nz ; do i=is,ie
     h(i,j,k) = h(i,j,k) - dt*G%IareaT(i,j) * &
         ((uhml(I,j,k) - uhml(I-1,j,k)) + (vhml(i,J,k) - vhml(i,J-1,k)))
+    if (h(i,j,k) < h_min) h(i,j,k) = h_min
   enddo ; enddo ; enddo
-!$OMP end parallel
+  !$OMP end parallel
 
   ! Whenever thickness changes let the diag manager know, target grids
   ! for vertical remapping may need to be regenerated.
@@ -555,6 +548,22 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, forces, dt, MLD_in, Var
   ! This needs to happen after the H update and before the next post_data.
   call diag_update_remap_grids(CS%diag)
 
+contains
+  !> Stream function as a function of non-dimensional position within mixed-layer
+  real function psi(z)
+    real, intent(in) :: z           !< Fractional mixed layer depth [nondim]
+    real :: psi1, bottop, xp, dd
+
+    !psi1 = max(0., (1. - (2.*z + 1.)**2))
+    psi1 = max(0., (1. - (2.*z + 1.)**2) * (1. + (5./21.)*(2.*z + 1.)**2))
+
+    xp = max(0., min(1., (-z - 0.5)*2. / (1. + 2.*CS%MLE_tail_dh)))
+    dd = (1. - 3.*(xp**2) + 2.*(xp**3))**(1. + 2.*CS%MLE_tail_dh)
+    bottop = 0.5*(1. - sign(1., z + 0.5))  ! =0 for z>-0.5, =1 for z<-0.5
+
+    psi = max(psi1, dd*bottop)  ! Combines original psi1 with tail
+  end function psi
+
 end subroutine mixedlayer_restrat_general
 
 
@@ -590,23 +599,23 @@ subroutine mixedlayer_restrat_BML(h, uhtr, vhtr, tv, forces, dt, G, GV, US, CS)
   real :: u_star          ! surface friction velocity, interpolated to velocity points [Z T-1 ~> m s-1].
   real :: mom_mixrate     ! rate at which momentum is homogenized within mixed layer [T-1 ~> s-1]
   real :: timescale       ! mixing growth timescale [T ~> s]
+  real :: h_min           ! The minimum layer thickness [H ~> m or kg m-2].  h_min could be 0.
   real :: h_neglect       ! tiny thickness usually lost in roundoff and can be neglected [H ~> m or kg m-2]
   real :: dz_neglect      ! tiny thickness that usually lost in roundoff and can be neglected [Z ~> m]
   real :: I4dt            ! 1/(4 dt) [T-1 ~> s-1]
   real :: I2htot          ! Twice the total mixed layer thickness at velocity points [H ~> m or kg m-2]
   real :: z_topx2         ! depth of the top of a layer at velocity points [H ~> m or kg m-2]
   real :: hx2             ! layer thickness at velocity points [H ~> m or kg m-2]
-  real :: a(SZK_(GV))     ! A non-dimensional value relating the overall flux
-                          ! magnitudes (uDml & vDml) to the realized flux in a
-                          ! layer.  The vertical sum of a() through the pieces of
-                          ! the mixed layer must be 0.
+  real :: a(SZK_(GV))     ! A non-dimensional value relating the overall flux magnitudes (uDml & vDml)
+                          ! to the realized flux in a layer [nondim].  The vertical sum of a()
+                          ! through the pieces of the mixed layer must be 0.
   real :: uDml(SZIB_(G))  ! The zonal and meridional volume fluxes in the upper
   real :: vDml(SZI_(G))   ! half of the mixed layer [H L2 T-1 ~> m3 s-1 or kg s-1].
-  real :: utimescale_diag(SZIB_(G),SZJ_(G)) ! The restratification timescales
-  real :: vtimescale_diag(SZI_(G),SZJB_(G)) ! in the zonal and meridional
-                                            ! directions [T ~> s], stored in 2-D
+  real :: utimescale_diag(SZIB_(G),SZJ_(G)) ! The restratification timescales in the zonal and
+  real :: vtimescale_diag(SZI_(G),SZJB_(G)) ! meridional directions [T ~> s], stored in 2-D
                                             ! arrays for diagnostic purposes.
-  real :: uDml_diag(SZIB_(G),SZJ_(G)), vDml_diag(SZI_(G),SZJB_(G))
+  real :: uDml_diag(SZIB_(G),SZJ_(G))  ! A 2D copy of uDml for diagnostics [H L2 T-1 ~> m3 s-1 or kg s-1]
+  real :: vDml_diag(SZI_(G),SZJB_(G))  ! A 2D copy of vDml for diagnostics [H L2 T-1 ~> m3 s-1 or kg s-1]
   logical :: use_EOS    ! If true, density is calculated from T & S using an equation of state.
 
   integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state
@@ -619,6 +628,7 @@ subroutine mixedlayer_restrat_BML(h, uhtr, vhtr, tv, forces, dt, G, GV, US, CS)
 
   if ((nkml<2) .or. (CS%ml_restrat_coef<=0.0)) return
 
+  h_min = 0.5*GV%Angstrom_H ! This should be GV%Angstrom_H, but that value would change answers.
   uDml(:)    = 0.0 ; vDml(:) = 0.0
   I4dt       = 0.25 / dt
   g_Rho0     = GV%g_Earth / GV%Rho0
@@ -633,14 +643,10 @@ subroutine mixedlayer_restrat_BML(h, uhtr, vhtr, tv, forces, dt, G, GV, US, CS)
 
   p0(:) = 0.0
   EOSdom(:) = EOS_domain(G%HI, halo=1)
-!$OMP parallel default(none) shared(is,ie,js,je,G,GV,US,htot,Rml_av,tv,p0,h,h_avail,EOSdom, &
-!$OMP                               h_neglect,g_Rho0,I4dt,CS,uhml,uhtr,dt,vhml,vhtr,   &
-!$OMP                               utimescale_diag,vtimescale_diag,forces,dz_neglect, &
-!$OMP                               uDml_diag,vDml_diag,nkml)                          &
-!$OMP                       private(Rho0,h_vel,u_star,absf,mom_mixrate,timescale,      &
-!$OMP                               I2htot,z_topx2,hx2,a)                              &
-!$OMP                       firstprivate(uDml,vDml)
-!$OMP do
+  !$OMP parallel default(shared) private(Rho0,h_vel,u_star,absf,mom_mixrate,timescale, &
+  !$OMP                               I2htot,z_topx2,hx2,a)                            &
+  !$OMP                       firstprivate(uDml,vDml)
+  !$OMP do
   do j=js-1,je+1
     do i=is-1,ie+1
       htot(i,j) = 0.0 ; Rml_av(i,j) = 0.0
@@ -664,7 +670,7 @@ subroutine mixedlayer_restrat_BML(h, uhtr, vhtr, tv, forces, dt, G, GV, US, CS)
 !   2. Add exponential tail to stream-function?
 
 !   U - Component
-!$OMP do
+  !$OMP do
   do j=js,je ; do I=is-1,ie
     h_vel = 0.5*(htot(i,j) + htot(i+1,j)) * GV%H_to_Z
 
@@ -711,7 +717,7 @@ subroutine mixedlayer_restrat_BML(h, uhtr, vhtr, tv, forces, dt, G, GV, US, CS)
   enddo ; enddo
 
 !  V- component
-!$OMP do
+  !$OMP do
   do J=js-1,je ; do i=is,ie
     h_vel = 0.5*(htot(i,j) + htot(i,j+1)) * GV%H_to_Z
 
@@ -756,12 +762,13 @@ subroutine mixedlayer_restrat_BML(h, uhtr, vhtr, tv, forces, dt, G, GV, US, CS)
     vDml_diag(i,J) = vDml(i)
   enddo ; enddo
 
-!$OMP do
+  !$OMP do
   do j=js,je ; do k=1,nkml ; do i=is,ie
     h(i,j,k) = h(i,j,k) - dt*G%IareaT(i,j) * &
         ((uhml(I,j,k) - uhml(I-1,j,k)) + (vhml(i,J,k) - vhml(i,J-1,k)))
+    if (h(i,j,k) < h_min) h(i,j,k) = h_min
   enddo ; enddo ; enddo
-!$OMP end parallel
+  !$OMP end parallel
 
   ! Whenever thickness changes let the diag manager know, target grids
   ! for vertical remapping may need to be regenerated.
@@ -921,8 +928,8 @@ logical function mixedlayer_restrat_init(Time, G, GV, US, param_file, diag, CS, 
   ! Rescale variables from restart files if the internal dimensional scalings have changed.
   if (CS%MLE_MLD_decay_time>0. .or. CS%MLE_MLD_decay_time2>0.) then
     if (query_initialized(CS%MLD_filtered, "MLD_MLE_filtered", restart_CS) .and. &
-        (GV%m_to_H_restart /= 0.0) .and. (GV%m_to_H_restart /= GV%m_to_H)) then
-      H_rescale = GV%m_to_H / GV%m_to_H_restart
+        (GV%m_to_H_restart /= 0.0) .and. (GV%m_to_H_restart /= 1.0)) then
+      H_rescale = 1.0 / GV%m_to_H_restart
       do j=G%jsc,G%jec ; do i=G%isc,G%iec
         CS%MLD_filtered(i,j) = H_rescale * CS%MLD_filtered(i,j)
       enddo ; enddo
@@ -930,8 +937,8 @@ logical function mixedlayer_restrat_init(Time, G, GV, US, param_file, diag, CS, 
   endif
   if (CS%MLE_MLD_decay_time2>0.) then
     if (query_initialized(CS%MLD_filtered_slow, "MLD_MLE_filtered_slow", restart_CS) .and. &
-        (GV%m_to_H_restart /= 0.0) .and. (GV%m_to_H_restart /= GV%m_to_H)) then
-      H_rescale = GV%m_to_H / GV%m_to_H_restart
+        (GV%m_to_H_restart /= 0.0) .and. (GV%m_to_H_restart /= 1.0)) then
+      H_rescale = 1.0 / GV%m_to_H_restart
       do j=G%jsc,G%jec ; do i=G%isc,G%iec
         CS%MLD_filtered_slow(i,j) = H_rescale * CS%MLD_filtered_slow(i,j)
       enddo ; enddo
@@ -944,14 +951,15 @@ logical function mixedlayer_restrat_init(Time, G, GV, US, param_file, diag, CS, 
 end function mixedlayer_restrat_init
 
 !> Allocate and register fields in the mixed layer restratification structure for restarts
-subroutine mixedlayer_restrat_register_restarts(HI, param_file, CS, restart_CS)
+subroutine mixedlayer_restrat_register_restarts(HI, GV, param_file, CS, restart_CS)
   ! Arguments
   type(hor_index_type),        intent(in)    :: HI         !< Horizontal index structure
+  type(verticalGrid_type),     intent(in)    :: GV         !< Ocean vertical grid structure
   type(param_file_type),       intent(in)    :: param_file !< Parameter file to parse
   type(mixedlayer_restrat_CS), intent(inout) :: CS         !< Module control structure
   type(MOM_restart_CS),        intent(inout) :: restart_CS !< MOM restart control struct
+
   ! Local variables
-  type(vardesc) :: vd
   logical :: mixedlayer_restrat_init
 
   ! Check to see if this module will be used
@@ -966,16 +974,16 @@ subroutine mixedlayer_restrat_register_restarts(HI, param_file, CS, restart_CS)
   if (CS%MLE_MLD_decay_time>0. .or. CS%MLE_MLD_decay_time2>0.) then
     ! CS%MLD_filtered is used to keep a running mean of the PBL's actively mixed MLD.
     allocate(CS%MLD_filtered(HI%isd:HI%ied,HI%jsd:HI%jed), source=0.)
-    vd = var_desc("MLD_MLE_filtered","m","Time-filtered MLD for use in MLE", &
-                  hor_grid='h', z_grid='1')
-    call register_restart_field(CS%MLD_filtered, vd, .false., restart_CS)
+    call register_restart_field(CS%MLD_filtered, "MLD_MLE_filtered", .false., restart_CS, &
+                                longname="Time-filtered MLD for use in MLE", &
+                                units=get_thickness_units(GV), conversion=GV%H_to_MKS)
   endif
   if (CS%MLE_MLD_decay_time2>0.) then
     ! CS%MLD_filtered_slow is used to keep a running mean of the PBL's seasonal or winter MLD.
     allocate(CS%MLD_filtered_slow(HI%isd:HI%ied,HI%jsd:HI%jed), source=0.)
-    vd = var_desc("MLD_MLE_filtered_slow","m","c Slower time-filtered MLD for use in MLE", &
-                  hor_grid='h', z_grid='1')
-    call register_restart_field(CS%MLD_filtered_slow, vd, .false., restart_CS)
+    call register_restart_field(CS%MLD_filtered, "MLD_MLE_filtered_slow", .false., restart_CS, &
+                                longname="Slower time-filtered MLD for use in MLE", &
+                                units=get_thickness_units(GV), conversion=GV%H_to_MKS)
   endif
 
 end subroutine mixedlayer_restrat_register_restarts

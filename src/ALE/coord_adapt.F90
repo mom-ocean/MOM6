@@ -154,7 +154,7 @@ subroutine build_adapt_column(CS, G, GV, US, tv, i, j, zInt, tInt, sInt, h, zNex
   ! TODO: this needs to be adjusted to account for vanished layers near topography
 
   ! up (j-1)
-  if (G%mask2dT(i,j-1) > 0.) then
+  if (G%mask2dT(i,j-1) > 0.0) then
     call calculate_density_derivs( &
          0.5 * (tInt(i,j,2:nz) + tInt(i,j-1,2:nz)), &
          0.5 * (sInt(i,j,2:nz) + sInt(i,j-1,2:nz)), &
@@ -166,7 +166,7 @@ subroutine build_adapt_column(CS, G, GV, US, tv, i, j, zInt, tInt, sInt, h, zNex
           beta(2:nz)  * (sInt(i,j-1,2:nz) - sInt(i,j,2:nz)))
   endif
   ! down (j+1)
-  if (G%mask2dT(i,j+1) > 0.) then
+  if (G%mask2dT(i,j+1) > 0.0) then
     call calculate_density_derivs( &
          0.5 * (tInt(i,j,2:nz) + tInt(i,j+1,2:nz)), &
          0.5 * (sInt(i,j,2:nz) + sInt(i,j+1,2:nz)), &
@@ -178,7 +178,7 @@ subroutine build_adapt_column(CS, G, GV, US, tv, i, j, zInt, tInt, sInt, h, zNex
           beta(2:nz)  * (sInt(i,j+1,2:nz) - sInt(i,j,2:nz)))
   endif
   ! left (i-1)
-  if (G%mask2dT(i-1,j) > 0.) then
+  if (G%mask2dT(i-1,j) > 0.0) then
     call calculate_density_derivs( &
          0.5 * (tInt(i,j,2:nz) + tInt(i-1,j,2:nz)), &
          0.5 * (sInt(i,j,2:nz) + sInt(i-1,j,2:nz)), &
@@ -190,7 +190,7 @@ subroutine build_adapt_column(CS, G, GV, US, tv, i, j, zInt, tInt, sInt, h, zNex
           beta(2:nz)  * (sInt(i-1,j,2:nz) - sInt(i,j,2:nz)))
   endif
   ! right (i+1)
-  if (G%mask2dT(i+1,j) > 0.) then
+  if (G%mask2dT(i+1,j) > 0.0) then
     call calculate_density_derivs( &
          0.5 * (tInt(i,j,2:nz) + tInt(i+1,j,2:nz)), &
          0.5 * (sInt(i,j,2:nz) + sInt(i+1,j,2:nz)), &

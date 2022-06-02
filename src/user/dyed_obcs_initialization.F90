@@ -8,7 +8,7 @@ use MOM_error_handler,   only : MOM_mesg, MOM_error, FATAL, WARNING, is_root_pe
 use MOM_file_parser,     only : get_param, log_version, param_file_type
 use MOM_get_input,       only : directories
 use MOM_grid,            only : ocean_grid_type
-use MOM_open_boundary,   only : ocean_OBC_type, OBC_NONE, OBC_SIMPLE
+use MOM_open_boundary,   only : ocean_OBC_type, OBC_NONE
 use MOM_open_boundary,   only : OBC_segment_type, register_segment_tracer
 use MOM_tracer_registry, only : tracer_registry_type, tracer_name_lookup
 use MOM_tracer_registry, only : tracer_type
@@ -39,10 +39,9 @@ subroutine dyed_obcs_set_OBC_data(OBC, G, GV, param_file, tr_Reg)
   ! Local variables
   character(len=40)  :: mdl = "dyed_obcs_set_OBC_data" ! This subroutine's name.
   character(len=80)  :: name, longname
-  integer :: i, j, k, itt, is, ie, js, je, isd, ied, jsd, jed, m, n, nz
+  integer :: is, ie, js, je, isd, ied, jsd, jed, m, n, nz
   integer :: IsdB, IedB, JsdB, JedB
   real :: dye
-  type(OBC_segment_type), pointer :: segment => NULL()
   type(tracer_type), pointer      :: tr_ptr => NULL()
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke

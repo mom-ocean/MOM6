@@ -14,8 +14,8 @@ use time_interp_external_mod, only : get_external_field_axes, get_external_field
 
 implicit none ; private
 
-public :: horiz_interp_type, horiz_interp_init
-public :: time_interp_extern, init_extern_field, time_interp_external_init
+public :: horiz_interp_type, horizontal_interp_init
+public :: time_interp_extern, init_extern_field, time_interp_extern_init
 public :: get_external_field_info, axistype, get_axis_data
 public :: run_horiz_interp, build_horiz_interp_weights
 
@@ -38,6 +38,16 @@ interface build_horiz_interp_weights
 end interface build_horiz_interp_weights
 
 contains
+
+!> Do any initialization for the horizontal interpolation
+subroutine horizontal_interp_init()
+  call horiz_interp_init()
+end subroutine horizontal_interp_init
+
+!> Do any initialization for the time and space interpolation infrastructure
+subroutine time_interp_extern_init()
+  call time_interp_external_init()
+end subroutine time_interp_extern_init
 
 !> perform horizontal interpolation of a 2d field using pre-computed weights
 !! source and destination coordinates are 2d

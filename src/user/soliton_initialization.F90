@@ -40,7 +40,6 @@ subroutine soliton_initialize_thickness(h, depth_tot, G, GV, US)
   integer :: i, j, k, is, ie, js, je, nz
   real    :: x, y, x0, y0
   real    :: val1, val2, val3, val4
-  character(len=40) :: verticalCoordinate
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 

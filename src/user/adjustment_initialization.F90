@@ -205,12 +205,11 @@ subroutine adjustment_initialize_temperature_salinity(T, S, h, depth_tot, G, GV,
 
   integer   :: i, j, k, is, ie, js, je, nz
   real      :: x, y, yy
-  integer   :: index_bay_z
   real      :: S_ref, T_ref         ! Reference salinity and temerature within
                                     ! surface layer
   real      :: S_range, T_range     ! Range of salinities and temperatures over the
                                     ! vertical
-  real      :: xi0, xi1, dSdz, delta_S, delta_S_strat
+  real      :: dSdz, delta_S, delta_S_strat
   real      :: adjustment_width, adjustment_deltaS
   real       :: front_wave_amp, front_wave_length, front_wave_asym
   real      :: eta1d(SZK_(GV)+1)

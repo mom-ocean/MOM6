@@ -250,7 +250,7 @@ subroutine Phillips_initialize_sponges(G, GV, US, tv, param_file, CSp, h)
   logical :: reentrant_y  ! If true, model is re-entrant in the y direction
   character(len=40)  :: mdl = "Phillips_initialize_sponges" ! This subroutine's name.
 
-  integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz
+  integer :: j, k, is, ie, js, je, isd, ied, jsd, jed, nz
   logical, save :: first_call = .true.
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
@@ -265,8 +265,8 @@ subroutine Phillips_initialize_sponges(G, GV, US, tv, param_file, CSp, h)
                  "The fractional depth where the stratificaiton is centered.", &
                  units="nondim", default = 0.5)
   call get_param(param_file, mdl, "SPONGE_RATE", damp_rate, &
-                 "The rate at which the zonal-mean sponges damp.", units="s-1", &
-                 default = 1.0/(10.0*86400.0), scale=US%T_to_s)
+                 "The rate at which the zonal-mean sponges damp.", &
+                 units="s-1", default = 1.0/(10.0*86400.0), scale=US%T_to_s)
 
   call get_param(param_file, mdl, "JET_WIDTH", jet_width, &
                  "The width of the zonal-mean jet.", units="km", &
