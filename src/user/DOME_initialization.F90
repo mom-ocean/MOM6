@@ -390,9 +390,8 @@ subroutine DOME_set_OBC_data(OBC, tv, G, GV, US, param_file, tr_Reg)
     ! Temperature is tracer 1 for the OBCs.
     allocate(segment%field(1)%buffer_src(segment%HI%isd:segment%HI%ied,segment%HI%JsdB:segment%HI%JedB,nz))
     do k=1,nz ; do J=JsdB,JedB ; do i=isd,ied
-      ! Because of the challenges in rescaling the data as it is being read in when using certain
-      ! modes, buffer_src keeps the data in unscaled (mks) units.  They will be rescaled later.
-      segment%field(1)%buffer_src(i,j,k) = US%C_to_degC*T0(k)
+      ! With the revised OBC code, buffer_src uses the same rescaled units as for tracers.
+      segment%field(1)%buffer_src(i,j,k) = T0(k)
     enddo ; enddo ; enddo
     name = 'temp'
     call tracer_name_lookup(tr_Reg, tr_ptr, name)
