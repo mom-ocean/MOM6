@@ -176,8 +176,9 @@ subroutine marine_ice_init(Time, G, param_file, diag, CS)
   type(param_file_type),   intent(in)    :: param_file !< Runtime parameter handles
   type(diag_ctrl), target, intent(inout) :: diag !< Diagnostics control structure
   type(marine_ice_CS),     pointer       :: CS   !< Pointer to the control structure for MOM_marine_ice
-! This include declares and sets the variable "version".
-#include "version_variable.h"
+
+  ! This include declares and sets the variable "version".
+# include "version_variable.h"
   character(len=40)  :: mdl = "MOM_marine_ice"  ! This module's name.
 
   if (associated(CS)) then
@@ -197,8 +198,8 @@ subroutine marine_ice_init(Time, G, param_file, diag, CS)
                  "The latent heat of fusion.", units="J/kg", default=hlf, scale=G%US%J_kg_to_Q)
   call get_param(param_file, mdl, "BERG_AREA_THRESHOLD", CS%berg_area_threshold, &
                  "Fraction of grid cell which iceberg must occupy, so that fluxes "//&
-                 "below berg are set to zero. Not applied for negative "//&
-                 "values.", units="non-dim", default=-1.0)
+                 "below berg are set to zero. Not applied for negative values.", &
+                 units="nondim", default=-1.0)
 
 end subroutine marine_ice_init
 

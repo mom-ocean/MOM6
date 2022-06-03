@@ -311,9 +311,6 @@ subroutine rotate_dyn_horgrid(G_in, G, US, turns)
   type(unit_scale_type),  intent(in)    :: US     !< A dimensional unit scaling type
   integer, intent(in) :: turns                    !< Number of quarter turns
 
-  integer :: jsc, jec, jscB, jecB
-  integer :: qturn
-
   ! Center point
   call rotate_array(G_in%geoLonT, turns, G%geoLonT)
   call rotate_array(G_in%geoLatT, turns, G%geoLatT)

@@ -83,7 +83,6 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, GV, US, CS, Reg, x_first
                  optional, intent(out)   :: vhr_out !< Remaining accumulated volume or mass fluxes
                                                   !! through the meridional faces [H L2 ~> m3 or kg]
 
-  type(tracer_type) :: Tr(MAX_FIELDS_) ! The array of registered tracers
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: &
     hprev           ! cell volume at the end of previous tracer change [H L2 ~> m3 or kg]
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)) :: &
@@ -127,7 +126,6 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, GV, US, CS, Reg, x_first
   if (CS%usePPM .and. .not. CS%useHuynh) stencil = 3
 
   ntr = Reg%ntr
-  do m=1,ntr ; Tr(m) = Reg%Tr(m) ; enddo
   Idt = 1.0 / dt
 
   max_iter = 2*INT(CEILING(dt/CS%dt)) + 1
@@ -138,7 +136,7 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, GV, US, CS, Reg, x_first
   call create_group_pass(CS%pass_uhr_vhr_t_hprev, uhr, vhr, G%Domain)
   call create_group_pass(CS%pass_uhr_vhr_t_hprev, hprev, G%Domain)
   do m=1,ntr
-    call create_group_pass(CS%pass_uhr_vhr_t_hprev, Tr(m)%t, G%Domain)
+    call create_group_pass(CS%pass_uhr_vhr_t_hprev, Reg%Tr(m)%t, G%Domain)
   enddo
   call cpu_clock_end(id_clock_pass)
 
@@ -188,27 +186,11 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, GV, US, CS, Reg, x_first
   ! initialize diagnostic fluxes and tendencies
   !$OMP do
   do m=1,ntr
-    if (associated(Tr(m)%ad_x)) then
-      do k=1,nz ; do j=jsd,jed ; do i=isd,ied
-        Tr(m)%ad_x(I,j,k) = 0.0
-      enddo ; enddo ; enddo
-    endif
-    if (associated(Tr(m)%ad_y)) then
-      do k=1,nz ; do J=jsd,jed ; do i=isd,ied
-        Tr(m)%ad_y(i,J,k) = 0.0
-      enddo ; enddo ; enddo
-    endif
-    if (associated(Tr(m)%advection_xy)) then
-      do k=1,nz ; do j=jsd,jed ; do i=isd,ied
-        Tr(m)%advection_xy(i,j,k) = 0.0
-      enddo ; enddo ; enddo
-    endif
-    if (associated(Tr(m)%ad2d_x)) then
-      do j=jsd,jed ; do i=isd,ied ; Tr(m)%ad2d_x(I,j) = 0.0 ; enddo ; enddo
-    endif
-    if (associated(Tr(m)%ad2d_y)) then
-      do J=jsd,jed ; do i=isd,ied ; Tr(m)%ad2d_y(i,J) = 0.0 ; enddo ; enddo
-    endif
+    if (associated(Reg%Tr(m)%ad_x)) Reg%Tr(m)%ad_x(:,:,:) = 0.0
+    if (associated(Reg%Tr(m)%ad_y)) Reg%Tr(m)%ad_y(:,:,:) = 0.0
+    if (associated(Reg%Tr(m)%advection_xy)) Reg%Tr(m)%advection_xy(:,:,:) = 0.0
+    if (associated(Reg%Tr(m)%ad2d_x)) Reg%Tr(m)%ad2d_x(:,:) = 0.0
+    if (associated(Reg%Tr(m)%ad2d_y)) Reg%Tr(m)%ad2d_y(:,:) = 0.0
   enddo
   !$OMP end parallel
 
@@ -265,14 +247,14 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, GV, US, CS, Reg, x_first
       !$OMP do ordered
       do k=1,nz ; if (domore_k(k) > 0) then
         ! First, advect zonally.
-        call advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
+        call advect_x(Reg%Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
                       isv, iev, jsv-stencil, jev+stencil, k, G, GV, US, CS%usePPM, CS%useHuynh)
       endif ; enddo
 
       !$OMP do ordered
       do k=1,nz ; if (domore_k(k) > 0) then
         !  Next, advect meridionally.
-        call advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
+        call advect_y(Reg%Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
                       isv, iev, jsv, jev, k, G, GV, US, CS%usePPM, CS%useHuynh)
 
         ! Update domore_k(k) for the next iteration
@@ -287,14 +269,14 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, GV, US, CS, Reg, x_first
       !$OMP do ordered
       do k=1,nz ; if (domore_k(k) > 0) then
         ! First, advect meridionally.
-        call advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
+        call advect_y(Reg%Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
                       isv-stencil, iev+stencil, jsv, jev, k, G, GV, US, CS%usePPM, CS%useHuynh)
       endif ; enddo
 
       !$OMP do ordered
       do k=1,nz ; if (domore_k(k) > 0) then
         ! Next, advect zonally.
-        call advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
+        call advect_x(Reg%Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
                       isv, iev, jsv, jev, k, G, GV, US, CS%usePPM, CS%useHuynh)
 
         ! Update domore_k(k) for the next iteration
@@ -344,6 +326,7 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
                     is, ie, js, je, k, G, GV, US, usePPM, useHuynh)
   type(ocean_grid_type),                     intent(inout) :: G    !< The ocean's grid structure
   type(verticalGrid_type),                   intent(in)    :: GV   !< The ocean's vertical grid structure
+  integer,                                   intent(in)    :: ntr  !< The number of tracers
   type(tracer_type), dimension(ntr),         intent(inout) :: Tr   !< The array of registered tracers to work on
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(inout) :: hprev !< cell volume at the end of previous
                                                                   !! tracer change [H L2 ~> m3 or kg]
@@ -355,7 +338,6 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
   logical, dimension(SZJ_(G),SZK_(GV)),      intent(inout) :: domore_u !< If true, there is more advection to be
                                                                   !! done in this u-row
   real,                                      intent(in)    :: Idt !< The inverse of dt [T-1 ~> s-1]
-  integer,                                   intent(in)    :: ntr !< The number of tracers
   integer,                                   intent(in)    :: is  !< The starting tracer i-index to work on
   integer,                                   intent(in)    :: ie  !< The ending tracer i-index to work on
   integer,                                   intent(in)    :: js  !< The starting tracer j-index to work on
@@ -373,8 +355,6 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
   real, dimension(SZI_(G),ntr) :: &
     T_tmp               ! The copy of the tracer concentration at constant i,k [conc].
 
-  real :: maxslope      ! The maximum concentration slope per grid point
-                        ! consistent with monotonicity [conc].
   real :: hup, hlos     ! hup is the upwind volume, hlos is the
                         ! part of that volume that might be lost
                         ! due to advection out the other side of
@@ -390,13 +370,19 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
   real :: tiny_h        ! The smallest numerically invertible thickness [H ~> m or kg m-2].
   real :: h_neglect     ! A thickness that is so small it is usually lost
                         ! in roundoff and can be neglected [H ~> m or kg m-2].
+  real :: aR, aL        ! Reconstructed tracer concentrations at the right and left edges [conc]
+  real :: dMx           ! Difference between the maximum of the surrounding cell concentrations and
+                        ! the value in the cell whose reconstruction is being found [conc]
+  real :: dMn           ! Difference between the tracer concentration in the cell whose reconstruction
+                        ! is being found and the minimum of the surrounding values [conc]
+  real :: Tp, Tc, Tm    ! Tracer concentrations around the upstream cell [conc]
+  real :: dA            ! Difference between the reconstruction tracer edge values [conc]
+  real :: mA            ! Average of the reconstruction tracer edge values [conc]
+  real :: a6            ! Curvature of the reconstruction tracer values [conc]
   logical :: do_i(SZIB_(G),SZJ_(G))     ! If true, work on given points.
-  logical :: do_any_i
-  integer :: i, j, m, n, i_up, stencil
-  real :: aR, aL, dMx, dMn, Tp, Tc, Tm, dA, mA, a6
-  real :: fac1,u_L_in,u_L_out  ! terms used for time-stepping OBC reservoirs
-  type(OBC_segment_type), pointer :: segment=>NULL()
   logical :: usePLMslope
+  integer :: i, j, m, n, i_up, stencil
+  type(OBC_segment_type), pointer :: segment=>NULL()
   logical, dimension(SZJ_(G),SZK_(GV)) :: domore_u_initial
 
   ! keep a local copy of the initial values of domore_u, which is to be used when computing ad2d_x
@@ -547,7 +533,7 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
 
         dA = aR - aL ; mA = 0.5*( aR + aL )
         if (G%mask2dCu(I_up,j)*G%mask2dCu(I_up-1,j)*(Tp-Tc)*(Tc-Tm) <= 0.) then
-          aL = Tc ; aR = Tc ! PCM for local extremum and bounadry cells
+          aL = Tc ; aR = Tc ! PCM for local extrema and boundary cells
         elseif ( dA*(Tc-mA) > (dA*dA)/6. ) then
           aL = 3.*Tc - 2.*aR
         elseif ( dA*(Tc-mA) < - (dA*dA)/6. ) then
@@ -709,6 +695,7 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
                     is, ie, js, je, k, G, GV, US, usePPM, useHuynh)
   type(ocean_grid_type),                     intent(inout) :: G    !< The ocean's grid structure
   type(verticalGrid_type),                   intent(in)    :: GV   !< The ocean's vertical grid structure
+  integer,                                   intent(in)    :: ntr !< The number of tracers
   type(tracer_type), dimension(ntr),         intent(inout) :: Tr   !< The array of registered tracers to work on
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(inout) :: hprev !< cell volume at the end of previous
                                                                   !! tracer change [H L2 ~> m3 or kg]
@@ -720,7 +707,6 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
   logical, dimension(SZJB_(G),SZK_(GV)),     intent(inout) :: domore_v !< If true, there is more advection to be
                                                                   !! done in this v-row
   real,                                      intent(in)    :: Idt !< The inverse of dt [T-1 ~> s-1]
-  integer,                                   intent(in)    :: ntr !< The number of tracers
   integer,                                   intent(in)    :: is  !< The starting tracer i-index to work on
   integer,                                   intent(in)    :: ie  !< The ending tracer i-index to work on
   integer,                                   intent(in)    :: js  !< The starting tracer j-index to work on
@@ -737,8 +723,6 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
     flux_y                      ! The tracer flux across a boundary [H L2 conc ~> m3 conc or kg conc].
   real, dimension(SZI_(G),ntr,SZJB_(G)) :: &
     T_tmp               ! The copy of the tracer concentration at constant i,k [conc].
-  real :: maxslope              ! The maximum concentration slope per grid point
-                                ! consistent with monotonicity [conc].
   real :: vhh(SZI_(G),SZJB_(G)) ! The meridional flux that occurs during the
                                 ! current iteration [H L2 ~> m3 or kg].
   real :: hup, hlos             ! hup is the upwind volume, hlos is the
@@ -754,14 +738,20 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
   real :: tiny_h        ! The smallest numerically invertible thickness [H ~> m or kg m-2].
   real :: h_neglect     ! A thickness that is so small it is usually lost
                         ! in roundoff and can be neglected [H ~> m or kg m-2].
+  real :: aR, aL        ! Reconstructed tracer concentrations at the right and left edges [conc]
+  real :: dMx           ! Difference between the maximum of the surrounding cell concentrations and
+                        ! the value in the cell whose reconstruction is being found [conc]
+  real :: dMn           ! Difference between the tracer average in the cell whose reconstruction
+                        ! is being found and the minimum of the surrounding values [conc]
+  real :: Tp, Tc, Tm    ! Tracer concentrations around the upstream cell [conc]
+  real :: dA            ! Difference between the reconstruction tracer edge values [conc]
+  real :: mA            ! Average of the reconstruction tracer edge values [conc]
+  real :: a6            ! Curvature of the reconstruction tracer values [conc]
   logical :: do_j_tr(SZJ_(G))   ! If true, calculate the tracer profiles.
   logical :: do_i(SZIB_(G), SZJ_(G))     ! If true, work on given points.
-  logical :: do_any_i
-  integer :: i, j, j2, m, n, j_up, stencil
-  real :: aR, aL, dMx, dMn, Tp, Tc, Tm, dA, mA, a6
-  real :: fac1,v_L_in,v_L_out  ! terms used for time-stepping OBC reservoirs
-  type(OBC_segment_type), pointer :: segment=>NULL()
   logical :: usePLMslope
+  integer :: i, j, j2, m, n, j_up, stencil
+  type(OBC_segment_type), pointer :: segment=>NULL()
 
   usePLMslope = .not. (usePPM .and. useHuynh)
   ! stencil for calculating slope values
@@ -919,7 +909,7 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
 
         dA = aR - aL ; mA = 0.5*( aR + aL )
         if (G%mask2dCv(i,J_up)*G%mask2dCv(i,J_up-1)*(Tp-Tc)*(Tc-Tm) <= 0.) then
-          aL = Tc ; aR = Tc ! PCM for local extremum and bounadry cells
+          aL = Tc ; aR = Tc ! PCM for local extrema and boundary cells
         elseif ( dA*(Tc-mA) > (dA*dA)/6. ) then
           aL = 3.*Tc - 2.*aR
         elseif ( dA*(Tc-mA) < - (dA*dA)/6. ) then
@@ -1079,8 +1069,6 @@ subroutine tracer_advect_init(Time, G, US, param_file, diag, CS)
   type(param_file_type),   intent(in)    :: param_file  !< open file to parse for model parameters
   type(diag_ctrl), target, intent(inout) :: diag        !< regulates diagnostic output
   type(tracer_advect_CS),  pointer       :: CS          !< module control structure
-
-  integer, save :: init_calls = 0
 
   ! This include declares and sets the variable "version".
 # include "version_variable.h"

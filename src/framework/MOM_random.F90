@@ -7,6 +7,7 @@ use MOM_hor_index,    only : hor_index_type
 use MOM_time_manager, only : time_type, set_date, get_date
 
 use iso_fortran_env,  only : stdout=>output_unit, stderr=>error_unit
+use iso_fortran_env, only : int32
 
 implicit none ; private
 
@@ -20,11 +21,13 @@ public :: random_2d_norm
 public :: random_unit_tests
 
 ! Private period parameters for the Mersenne Twister
-integer, parameter :: blockSize = 624,           & !< Size of the state vector
-                      M         = 397,           & !< Pivot element in state vector
-                      MATRIX_A  = -1727483681,   & !< constant vector a         (0x9908b0dfUL)
-                      UMASK     = -2147483648_8, & !< most significant w-r bits (0x80000000UL)
-                      LMASK     =  2147483647      !< least significant r bits  (0x7fffffffUL)
+integer, parameter :: &
+    blockSize = 624,          & !< Size of the state vector
+    M         = 397,          & !< Pivot element in state vector
+    MATRIX_A  = -1727483681,  & !< constant vector a (0x9908b0dfUL)
+    UMASK     = ibset(0, 31),  & !< most significant w-r bits (0x80000000UL)
+    LMASK     = 2147483647      !< least significant r bits (0x7fffffffUL)
+
 ! Private tempering parameters for the Mersenne Twister
 integer, parameter :: TMASKB= -1658038656, & !< (0x9d2c5680UL)
                       TMASKC= -272236544     !< (0xefc60000UL)
@@ -190,7 +193,7 @@ integer function seed_from_index(HI, i, j)
   integer,              intent(in) :: i !< i-index (of h-cell)
   integer,              intent(in) :: j !< j-index (of h-cell)
   ! Local variables
-  integer :: ig, jg, ni, nj, ij
+  integer :: ig, jg, ni, nj
 
   ni = HI%niglobal
   nj = HI%njglobal

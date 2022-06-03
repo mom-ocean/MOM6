@@ -112,7 +112,7 @@ subroutine geothermal_entraining(h, tv, dt, ea, eb, G, GV, US, CS, halo)
 
   logical :: do_i(SZI_(G))
   logical :: compute_h_old, compute_T_old
-  integer :: i, j, k, is, ie, js, je, nz, k2, i2
+  integer :: i, j, k, is, ie, js, je, nz, k2
   integer :: isj, iej, num_left, nkmb, k_tgt
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
@@ -388,7 +388,7 @@ subroutine geothermal_in_place(h, tv, dt, G, GV, US, CS, halo)
   real :: Idt           ! inverse of the timestep [T-1 ~> s-1]
   logical :: do_any     ! True if there is more to be done on the current j-row.
   logical :: calc_diags ! True if diagnostic tendencies are needed.
-  integer :: i, j, k, is, ie, js, je, nz, i2, isj, iej
+  integer :: i, j, k, is, ie, js, je, nz, isj, iej
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   if (present(halo)) then

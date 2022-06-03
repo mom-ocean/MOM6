@@ -17,7 +17,6 @@ public extract_integer
 public extract_real
 public remove_spaces
 public slasher
-public append_substring
 
 contains
 
@@ -248,7 +247,6 @@ integer function extract_integer(string, separators, n, missing_value)
   integer,            intent(in) :: n          !< Number of word to extract
   integer, optional,  intent(in) :: missing_value !< Value to assign if word is missing
   ! Local variables
-  integer :: ns, i, b, e, nw
   character(len=20) :: word
 
   word = extract_word(string, separators, n)
@@ -272,7 +270,6 @@ real function extract_real(string, separators, n, missing_value)
   integer,          intent(in) :: n          !< Number of word to extract
   real, optional,   intent(in) :: missing_value !< Value to assign if word is missing
   ! Local variables
-  integer :: ns, i, b, e, nw
   character(len=20) :: word
 
   word = extract_word(string, separators, n)
@@ -418,34 +415,6 @@ function slasher(dir)
     slasher = trim(dir)//"/"
   endif
 end function slasher
-
-!> append a string (substring) to another string (string_in) and return the
-!! concatenated string (string_out)
-function append_substring(string_in, substring) result(string_out)
-   character(len=*), intent(in) :: string_in !< input string
-   character(len=*), intent(in) :: substring !< string to append string_in
-   ! local
-   character(len=1024) :: string_out
-   character(len=1024) :: string_joined
-   integer :: string_in_length
-   integer :: substring_length
-
-   string_out = ''
-   string_joined = ''
-   string_in_length = 0
-   substring_length = 0
-
-   string_in_length = len_trim(string_in)
-   substring_length = len_trim(substring)
-
-   if (string_in_length > 0) then
-     if (substring_length > 0) then
-         string_joined = trim(string_in)//trim(substring)
-         string_out(1:len_trim(string_joined)) = trim(string_joined)
-     endif
-   endif
-
-end function append_substring
 
 !> \namespace mom_string_functions
 !!

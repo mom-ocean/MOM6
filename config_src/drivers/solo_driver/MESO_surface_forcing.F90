@@ -77,8 +77,6 @@ subroutine MESO_buoyancy_forcing(sfc_state, fluxes, day, dt, G, US, CS)
 !  are in W m-2 and positive for heat going into the ocean.  All fresh water
 !  fluxes are in kg m-2 s-1 and positive for water moving into the ocean.
 
-  real :: Temp_restore   ! The temperature that is being restored toward [degC].
-  real :: Salin_restore  ! The salinity that is being restored toward [ppt]
   real :: density_restore  ! The potential density that is being restored toward [R ~> kg m-3].
   real :: rhoXcp ! The mean density times the heat capacity [Q R degC-1 ~> J m-3 degC-1].
   real :: buoy_rest_const  ! A constant relating density anomalies to the
@@ -172,7 +170,7 @@ subroutine MESO_buoyancy_forcing(sfc_state, fluxes, day, dt, G, US, CS)
       do j=js,je ; do i=is,ie
         !   Set Temp_restore and Salin_restore to the temperature (in degC) and
         ! salinity (in ppt or PSU) that are being restored toward.
-        if (G%mask2dT(i,j) > 0) then
+        if (G%mask2dT(i,j) > 0.0) then
           fluxes%heat_added(i,j) = G%mask2dT(i,j) * &
               ((CS%T_Restore(i,j) - sfc_state%SST(i,j)) * rhoXcp * CS%Flux_const)
           fluxes%vprec(i,j) = - (CS%Rho0 * CS%Flux_const) * &

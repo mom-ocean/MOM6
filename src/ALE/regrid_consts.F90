@@ -21,6 +21,7 @@ integer, parameter :: REGRIDDING_SLIGHT    = 7      !< Identifier for stretched 
 integer, parameter :: REGRIDDING_SIGMA_SHELF_ZSTAR = 8 !< Identifiered for z* coordinates at the bottom,
                                                     !!  sigma-near the top
 integer, parameter :: REGRIDDING_ADAPTIVE = 9       !< Adaptive coordinate mode identifier
+integer, parameter :: REGRIDDING_HYBGEN    = 10     !< Hybgen coordinates identifier
 
 character(len=*), parameter :: REGRIDDING_LAYER_STRING = "LAYER"   !< Layer string
 character(len=*), parameter :: REGRIDDING_ZSTAR_STRING_OLD = "Z*"  !< z* string (legacy name)
@@ -29,6 +30,7 @@ character(len=*), parameter :: REGRIDDING_RHO_STRING   = "RHO"     !< Rho string
 character(len=*), parameter :: REGRIDDING_SIGMA_STRING = "SIGMA"   !< Sigma string
 character(len=*), parameter :: REGRIDDING_ARBITRARY_STRING = "ARB" !< Arbitrary coordinates
 character(len=*), parameter :: REGRIDDING_HYCOM1_STRING = "HYCOM1" !< Hycom string
+character(len=*), parameter :: REGRIDDING_HYBGEN_STRING = "HYBGEN" !< Hybgen string
 character(len=*), parameter :: REGRIDDING_SLIGHT_STRING = "SLIGHT" !< Hybrid S-rho string
 character(len=*), parameter :: REGRIDDING_SIGMA_SHELF_ZSTAR_STRING = "SIGMA_SHELF_ZSTAR" !< Hybrid z*/sigma
 character(len=*), parameter :: REGRIDDING_ADAPTIVE_STRING = "ADAPTIVE" !< Adaptive coordinate string
@@ -60,6 +62,7 @@ function coordinateMode(string)
     case (trim(REGRIDDING_RHO_STRING));   coordinateMode = REGRIDDING_RHO
     case (trim(REGRIDDING_SIGMA_STRING)); coordinateMode = REGRIDDING_SIGMA
     case (trim(REGRIDDING_HYCOM1_STRING)); coordinateMode = REGRIDDING_HYCOM1
+    case (trim(REGRIDDING_HYBGEN_STRING)); coordinateMode = REGRIDDING_HYBGEN
     case (trim(REGRIDDING_SLIGHT_STRING)); coordinateMode = REGRIDDING_SLIGHT
     case (trim(REGRIDDING_ARBITRARY_STRING)); coordinateMode = REGRIDDING_ARBITRARY
     case (trim(REGRIDDING_SIGMA_SHELF_ZSTAR_STRING)); coordinateMode = REGRIDDING_SIGMA_SHELF_ZSTAR
@@ -81,6 +84,7 @@ function coordinateUnitsI(coordMode)
     case (REGRIDDING_RHO);   coordinateUnitsI = "kg m^-3"
     case (REGRIDDING_SIGMA); coordinateUnitsI = "Non-dimensional"
     case (REGRIDDING_HYCOM1); coordinateUnitsI = "m"
+    case (REGRIDDING_HYBGEN); coordinateUnitsI = "m"
     case (REGRIDDING_SLIGHT); coordinateUnitsI = "m"
     case (REGRIDDING_ADAPTIVE); coordinateUnitsI = "m"
     case default ; call MOM_error(FATAL, "coordinateUnts: "//&
@@ -116,6 +120,7 @@ logical function state_dependent_int(mode)
     case (REGRIDDING_RHO);   state_dependent_int = .true.
     case (REGRIDDING_SIGMA); state_dependent_int = .false.
     case (REGRIDDING_HYCOM1); state_dependent_int = .true.
+    case (REGRIDDING_HYBGEN); state_dependent_int = .true.
     case (REGRIDDING_SLIGHT); state_dependent_int = .true.
     case (REGRIDDING_ADAPTIVE); state_dependent_int = .true.
     case default ; call MOM_error(FATAL, "state_dependent: "//&

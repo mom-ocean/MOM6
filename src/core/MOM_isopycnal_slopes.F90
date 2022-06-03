@@ -110,7 +110,6 @@ subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, use_stan
   real :: slope         ! The slope of density surfaces, calculated in a way
                         ! that is always between -1 and 1. [Z L-1 ~> nondim]
   real :: mag_grad2     ! The squared magnitude of the 3-d density gradient [R2 Z-2 ~> kg2 m-8].
-  real :: slope2_Ratio  ! The ratio of the slope squared to slope_max squared.
   real :: h_neglect     ! A thickness that is so small it is usually lost
                         ! in roundoff and can be neglected [H ~> m or kg m-2].
   real :: h_neglect2    ! h_neglect^2 [H2 ~> m2 or kg2 m-4].
@@ -232,7 +231,7 @@ subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, use_stan
   !$OMP                                  drho_dT_u,drho_dS_u,hg2A,hg2B,hg2L,hg2R,haA, &
   !$OMP                                  drho_dT_dT_h,scrap,pres_h,T_h,S_h,           &
   !$OMP                                  haB,haL,haR,dzaL,dzaR,wtA,wtB,wtL,wtR,drdz,  &
-  !$OMP                                  drdx,mag_grad2,slope,slope2_Ratio,l_seg)
+  !$OMP                                  drdx,mag_grad2,slope,l_seg)
   do j=js,je ; do K=nz,2,-1
     if (.not.(use_EOS)) then
       drdiA = 0.0 ; drdiB = 0.0
@@ -290,7 +289,7 @@ subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, use_stan
       hg2B = h(i,j,k)*h(i+1,j,k) + h_neglect2
       hg2L = h(i,j,k-1)*h(i,j,k) + h_neglect2
       hg2R = h(i+1,j,k-1)*h(i+1,j,k) + h_neglect2
-      haA = 0.5*(h(i,j,k-1) + h(i+1,j,k-1))
+      haA = 0.5*(h(i,j,k-1) + h(i+1,j,k-1)) + h_neglect
       haB = 0.5*(h(i,j,k) + h(i+1,j,k)) + h_neglect
       haL = 0.5*(h(i,j,k-1) + h(i,j,k)) + h_neglect
       haR = 0.5*(h(i+1,j,k-1) + h(i+1,j,k)) + h_neglect
@@ -364,7 +363,7 @@ subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, use_stan
   !$OMP                                  drho_dT_dT_h,scrap,pres_h,T_h,S_h,           &
   !$OMP                                  drho_dT_dT_hr,pres_hr,T_hr,S_hr,             &
   !$OMP                                  haB,haL,haR,dzaL,dzaR,wtA,wtB,wtL,wtR,drdz,  &
-  !$OMP                                  drdy,mag_grad2,slope,slope2_Ratio,l_seg)
+  !$OMP                                  drdy,mag_grad2,slope,l_seg)
   do j=js-1,je ; do K=nz,2,-1
     if (.not.(use_EOS)) then
       drdjA = 0.0 ; drdjB = 0.0

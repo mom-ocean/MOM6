@@ -143,7 +143,6 @@ subroutine int_density_dz_generic_pcm(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
   real :: p5(5)      ! Pressures at five quadrature points, never rescaled from Pa [Pa]
   real :: r5(5)      ! Densities at five quadrature points [R ~> kg m-3] or [kg m-3]
   real :: rho_anom   ! The depth averaged density anomaly [R ~> kg m-3] or [kg m-3]
-  real :: w_left, w_right ! Left and right weights [nondim]
   real, parameter :: C1_90 = 1.0/90.0  ! Rational constants.
   real :: GxRho      ! The gravitational acceleration times density and unit conversion factors [Pa Z-1 ~> kg m-2 s-2]
   real :: I_Rho      ! The inverse of the Boussinesq density [R-1 ~> m3 kg-1] or [m3 kg-1]
@@ -1735,7 +1734,7 @@ end subroutine find_depth_of_pressure_in_cell
 
 
 !> Returns change in anomalous pressure change from top to non-dimensional
-!! position pos between z_t and z_b
+!! position pos between z_t and z_b [R L2 T-2 ~> Pa]
 real function frac_dp_at_pos(T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, G_e, pos, EOS)
   real,           intent(in)  :: T_t !< Potential temperature at the cell top [degC]
   real,           intent(in)  :: T_b !< Potential temperature at the cell bottom [degC]
@@ -1748,8 +1747,7 @@ real function frac_dp_at_pos(T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, G_e, pos, EO
   real,           intent(in)  :: G_e !< The Earth's gravitational acceleration [L2 Z-1 T-2 ~> m s-2]
   real,           intent(in)  :: pos !< The fractional vertical position, 0 to 1 [nondim]
   type(EOS_type), intent(in)  :: EOS !< Equation of state structure
-  real                        :: fract_dp_at_pos !< The change in pressure from the layer top to
-                                     !! fractional position pos [R L2 T-2 ~> Pa]
+
   ! Local variables
   real, parameter :: C1_90 = 1.0/90.0  ! A rational constant [nondim]
   real :: dz                 ! Distance from the layer top [Z ~> m]

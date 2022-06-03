@@ -217,7 +217,7 @@ subroutine calc_resoln_function(h, tv, G, GV, US, CS)
   real :: dx_term ! A term in the denominator [L2 T-2 ~> m2 s-2] or [m2 s-2]
   integer :: power_2
   integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
-  integer :: i, j, k
+  integer :: i, j
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
 
@@ -527,7 +527,7 @@ subroutine calc_Visbeck_coeffs_old(h, slope_x, slope_y, N2_u, N2_v, G, GV, US, C
   real :: Hup, Hdn      ! Thickness from above, below [H ~> m or kg m-2]
   real :: H_geom        ! The geometric mean of Hup*Hdn [H ~> m or kg m-2].
   integer :: is, ie, js, je, nz
-  integer :: i, j, k, kb_max
+  integer :: i, j, k
   integer :: l_seg
   real :: S2max, wNE, wSE, wSW, wNW
   real :: H_u(SZIB_(G)), H_v(SZI_(G))
@@ -877,7 +877,7 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, US, CS, e, calculate_slop
   real :: H_geom        ! The geometric mean of Hup*Hdn [H ~> m or kg m-2].
   real :: one_meter     ! One meter in thickness units [H ~> m or kg m-2].
   integer :: is, ie, js, je, nz
-  integer :: i, j, k, kb_max
+  integer :: i, j, k
   integer :: l_seg
   real    :: S2N2_u_local(SZIB_(G), SZJ_(G),SZK_(GV))
   real    :: S2N2_v_local(SZI_(G), SZJB_(G),SZK_(GV))

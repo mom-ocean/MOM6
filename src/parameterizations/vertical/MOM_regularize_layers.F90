@@ -87,11 +87,6 @@ subroutine regularize_layers(h, tv, dt, ea, eb, G, GV, US, CS)
   type(unit_scale_type),      intent(in)    :: US !< A dimensional unit scaling type
   type(regularize_layers_CS), intent(in)    :: CS !< Regularize layer control struct
 
-  ! Local variables
-  integer :: i, j, k, is, ie, js, je, nz
-
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
-
   if (.not. CS%initialized) call MOM_error(FATAL, "MOM_regularize_layers: "//&
          "Module must be initialized before it is used.")
 
@@ -163,7 +158,6 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, GV, US, CS)
     h_prev_1d     ! The previous thicknesses [H ~> m or kg m-2].
   real :: I_dtol  ! The inverse of the tolerance changes [nondim].
   real :: I_dtol34 ! The inverse of the tolerance changes [nondim].
-  real :: h1, h2  ! Temporary thicknesses [H ~> m or kg m-2].
   real :: e_e, e_w, e_n, e_s  ! Temporary interface heights [H ~> m or kg m-2].
   real :: wt    ! The weight of the filted interfaces in setting the targets [nondim].
   real :: scale ! A scaling factor [nondim].
@@ -184,7 +178,7 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, GV, US, CS)
 
   logical :: cols_left, ent_any, more_ent_i(SZI_(G)), ent_i(SZI_(G))
   logical :: det_any, det_i(SZI_(G))
-  logical :: do_j(SZJ_(G)), do_i(SZI_(G)), find_i(SZI_(G))
+  logical :: do_j(SZJ_(G)), do_i(SZI_(G))
   logical :: debug = .false.
   logical :: fatal_error
   character(len=256) :: mesg    ! Message for error messages.
@@ -717,7 +711,6 @@ subroutine regularize_layers_init(Time, G, GV, param_file, diag, CS)
 
 #include "version_variable.h"
   character(len=40)  :: mdl = "MOM_regularize_layers"  ! This module's name.
-  logical :: use_temperature
   logical :: default_2018_answers
   logical :: just_read
   integer :: isd, ied, jsd, jed

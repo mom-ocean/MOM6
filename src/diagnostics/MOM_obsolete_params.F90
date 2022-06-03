@@ -23,8 +23,8 @@ subroutine find_obsolete_params(param_file)
   character(len=40)  :: mdl = "find_obsolete_params" ! This module's name.
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
-  integer :: test_int, l_seg, nseg
-  logical :: test_logic, test_logic2, test_logic3, split
+  integer :: l_seg, nseg
+  logical :: test_logic, split
   character(len=40)  :: temp_string
 
   if (.not.is_root_pe()) return
@@ -92,6 +92,9 @@ subroutine find_obsolete_params(param_file)
   call obsolete_logical(param_file, "LARGE_FILE_SUPPORT", .true.)
   call obsolete_real(param_file, "MIN_Z_DIAG_INTERVAL")
   call obsolete_char(param_file, "Z_OUTPUT_GRID_FILE")
+
+  ! This parameter is on the to-do list to be obsoleted.
+  ! call obsolete_logical(param_file, "NEW_SPONGES", hint="Use INTERPOLATE_SPONGE_TIME_SPACE instead.")
 
   ! Write the file version number to the model log.
   call log_version(param_file, mdl, version)

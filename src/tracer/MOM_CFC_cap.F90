@@ -4,6 +4,7 @@ module MOM_CFC_cap
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
+use MOM_coms,            only : EFP_type
 use MOM_diag_mediator,   only : diag_ctrl, register_diag_field, post_data
 use MOM_error_handler,   only : MOM_error, FATAL, WARNING
 use MOM_file_parser,     only : get_param, log_param, log_version, param_file_type
@@ -16,6 +17,7 @@ use MOM_io,              only : vardesc, var_desc, query_vardesc, stdout
 use MOM_tracer_registry, only : tracer_type
 use MOM_open_boundary,   only : ocean_OBC_type
 use MOM_restart,         only : query_initialized, MOM_restart_CS
+use MOM_spatial_means,   only : global_mass_int_EFP
 use MOM_time_manager,    only : time_type
 use time_interp_external_mod, only : init_external_field, time_interp_external
 use MOM_tracer_registry, only : register_tracer
@@ -192,7 +194,6 @@ subroutine initialize_CFC_cap(restart, day, G, GV, US, h, diag, OBC, CS)
                                                            !! previous call to register_CFC_cap.
 
   ! local variables
-  logical :: from_file = .false.
   integer :: m
   character :: m2char
 
@@ -306,7 +307,7 @@ subroutine CFC_cap_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, US, C
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: h_work ! Used so that h can be modified [H ~> m or kg m-2]
   real :: flux_scale
-  integer :: i, j, k, m, is, ie, js, je, nz
+  integer :: i, j, k, is, ie, js, je, nz
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
@@ -361,14 +362,13 @@ end subroutine CFC_cap_column_physics
 !> Calculates the mass-weighted integral of all tracer stocks,
 !! returning the number of stocks it has calculated.  If the stock_index
 !! is present, only the stock corresponding to that coded index is returned.
-function CFC_cap_stock(h, stocks, G, GV, US, CS, names, units, stock_index)
+function CFC_cap_stock(h, stocks, G, GV, CS, names, units, stock_index)
   type(ocean_grid_type),           intent(in)    :: G      !< The ocean's grid structure.
   type(verticalGrid_type),         intent(in)    :: GV     !< The ocean's vertical grid structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                                    intent(in)    :: h      !< Layer thicknesses [H ~> m or kg m-2].
-  real, dimension(:),              intent(out)   :: stocks !< the mass-weighted integrated amount of each
-                                                           !! tracer, in kg times concentration units [kg conc].
-  type(unit_scale_type),           intent(in)    :: US     !< A dimensional unit scaling type
+  type(EFP_type), dimension(:),    intent(out)   :: stocks !< The mass-weighted integrated amount of each
+                                                           !! tracer, in kg times concentration units [kg conc]
   type(CFC_cap_CS),                pointer       :: CS     !< The control structure returned by a
                                                            !! previous call to register_CFC_cap.
   character(len=*), dimension(:),  intent(out)   :: names  !< The names of the stocks calculated.
@@ -393,17 +393,10 @@ function CFC_cap_stock(h, stocks, G, GV, US, CS, names, units, stock_index)
     return
   endif ; endif
 
-  stock_scale = US%L_to_m**2 * GV%H_to_kg_m2
   do m=1,2
     call query_vardesc(CS%CFC_data(m)%desc, name=names(m), units=units(m), caller="CFC_cap_stock")
     units(m) = trim(units(m))//" kg"
-
-    stocks(m) = 0.0
-    do k=1,nz ; do j=js,je ; do i=is,ie
-      mass = G%mask2dT(i,j) * G%areaT(i,j) * h(i,j,k)
-      stocks(m) = stocks(m) + CS%CFC_data(m)%conc(i,j,k) * mass
-    enddo ; enddo ; enddo
-    stocks(m) = stock_scale * stocks(m)
+    stocks(m) = global_mass_int_EFP(h, G, GV, CS%CFC_data(m)%conc, on_PE_only=.true.)
   enddo
 
   CFC_cap_stock = 2
@@ -464,7 +457,7 @@ subroutine CFC_cap_fluxes(fluxes, sfc_state, G, US, Rho0, Time, id_cfc11_atm, id
   real :: kw_coeff     ! A coefficient used to compute the piston velocity [Z T-1 T2 L-2 = Z T L-2 ~> s / m]
   real, parameter :: pa_to_atm = 9.8692316931427e-6 ! factor for converting from Pa to atm [atm Pa-1].
   real :: press_to_atm ! converts from model pressure units to atm [atm T2 R-1 L-2 ~> atm Pa-1]
-  integer :: i, j, m, is, ie, js, je
+  integer :: i, j, is, ie, js, je
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
 
@@ -607,6 +600,7 @@ end subroutine comp_CFC_schmidt
 subroutine CFC_cap_end(CS)
   type(CFC_cap_CS), pointer :: CS !< The control structure returned by a
                                   !! previous call to register_CFC_cap.
+
   ! local variables
   integer :: m
 

@@ -64,8 +64,6 @@ logical function diag_found(diag, varName, newVarName)
   type(diag_ctrl),            intent(in) :: diag       !< A structure used to control diagnostics.
   character(len=*),           intent(in) :: varName    !< The obsolete diagnostic name
   character(len=*), optional, intent(in) :: newVarName !< The valid name of this diagnostic
-  ! Local
-  integer :: handle ! Integer handle returned from diag_manager
 
   diag_found = found_in_diagtable(diag, varName)
 

@@ -163,18 +163,7 @@ subroutine initialize_ISOMIP_tracer(restart, day, G, GV, h, diag, OBC, CS, &
                                                        !! the sponges, if they are in use.  Otherwise this
                                                        !! may be unassociated.
 
-  real, allocatable :: temp(:,:,:)
-  real, pointer, dimension(:,:,:) :: &
-    OBC_tr1_u => NULL(), & ! These arrays should be allocated and set to
-    OBC_tr1_v => NULL()    ! specify the values of tracer 1 that should come
-                           ! in through u- and v- points through the open
-                           ! boundary conditions, in the same units as tr.
   character(len=16) :: name     ! A variable's name in a NetCDF file.
-  character(len=72) :: longname ! The long name of that variable.
-  character(len=48) :: units    ! The dimensions of the variable.
-  character(len=48) :: flux_units ! The units for tracer fluxes, usually
-                            ! kg(tracer) kg(water)-1 m3 s-1 or kg(tracer) s-1.
-  real, pointer :: tr_ptr(:,:,:) => NULL()
   real :: h_neglect         ! A thickness that is so small it is usually lost
                             ! in roundoff and can be neglected [H ~> m or kg m-2].
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz, m
@@ -276,7 +265,6 @@ subroutine ISOMIP_tracer_column_physics(h_old, h_new,  ea,  eb, fluxes, dt, G, G
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: h_work ! Used so that h can be modified [H ~> m or kg m-2]
   real :: melt(SZI_(G),SZJ_(G)) ! melt water (positive for melting, negative for freezing) [R Z T-1 ~> kg m-2 s-1]
   real :: mmax                ! The global maximum melting rate [R Z T-1 ~> kg m-2 s-1]
-  character(len=256) :: mesg  ! The text of an error message
   integer :: i, j, k, is, ie, js, je, nz, m
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
@@ -354,7 +342,6 @@ end subroutine ISOMIP_tracer_surface_state
 subroutine ISOMIP_tracer_end(CS)
   type(ISOMIP_tracer_CS), pointer :: CS !< The control structure returned by a previous
                                         !! call to ISOMIP_register_tracer.
-  integer :: m
 
   if (associated(CS)) then
     if (associated(CS%tr)) deallocate(CS%tr)

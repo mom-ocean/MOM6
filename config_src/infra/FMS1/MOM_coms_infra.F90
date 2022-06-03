@@ -16,6 +16,7 @@ implicit none ; private
 
 public :: PE_here, root_PE, num_PEs, set_rootPE, Set_PElist, Get_PElist
 public :: broadcast, sum_across_PEs, min_across_PEs, max_across_PEs
+public :: any_across_PEs, all_across_PEs
 public :: field_chksum, MOM_infra_init, MOM_infra_end
 
 ! This module provides interfaces to the non-domain-oriented communication
@@ -437,6 +438,36 @@ subroutine min_across_PEs_real_1d(field, length, pelist)
 
   call mpp_min(field, length, pelist)
 end subroutine min_across_PEs_real_1d
+
+!> Implementation of any() intrinsic across PEs
+function any_across_PEs(field, pelist)
+  logical, intent(in)           :: field      !< Local PE value
+  integer, optional, intent(in) :: pelist(:)  !< List of PEs to work with
+  logical :: any_across_PEs
+
+  integer :: field_flag
+
+  ! FMS1 does not support logical collectives, so integer flags are used.
+  field_flag = 0
+  if (field) field_flag = 1
+  call max_across_PEs(field_flag, pelist)
+  any_across_PEs = (field_flag > 0)
+end function any_across_PEs
+
+!> Implementation of all() intrinsic across PEs
+function all_across_PEs(field, pelist)
+  logical, intent(in)           :: field      !< Local PE value
+  integer, optional, intent(in) :: pelist(:)  !< List of PEs to work with
+  logical :: all_across_PEs
+
+  integer :: field_flag
+
+  ! FMS1 does not support logical collectives, so integer flags are used.
+  field_flag = 0
+  if (field) field_flag = 1
+  call min_across_PEs(field_flag, pelist)
+  all_across_PEs = (field_flag > 0)
+end function all_across_PEs
 
 !> Initialize the model framework, including PE communication over a designated communicator.
 !! If no communicator ID is provided, the framework's default communicator is used.

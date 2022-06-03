@@ -181,7 +181,7 @@ subroutine seamount_initialize_thickness (h, depth_tot, G, GV, US, param_file, j
   case ( REGRIDDING_SIGMA )             ! Initial thicknesses for sigma coordinates
     if (just_read) return ! All run-time parameters have been read, so return.
     do j=js,je ; do i=is,ie
-      h(i,j,:) = GV%Z_to_H * depth_tot(i,j) / dfloat(nz)
+      h(i,j,:) = GV%Z_to_H * depth_tot(i,j) / real(nz)
     enddo ; enddo
 
 end select
@@ -201,7 +201,7 @@ subroutine seamount_initialize_temperature_salinity(T, S, h, G, GV, param_file, 
 
   ! Local variables
   integer :: i, j, k, is, ie, js, je, nz, k_light
-  real    :: xi0, xi1, dxi, r, S_surf, T_surf, S_range, T_range
+  real    :: xi0, xi1, r, S_surf, T_surf, S_range, T_range
   real    :: T_ref, T_Light, T_Dense, S_ref, S_Light, S_Dense, a1, frac_dense, k_frac, res_rat
   character(len=20) :: verticalCoordinate, density_profile
 

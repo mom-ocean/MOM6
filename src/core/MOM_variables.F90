@@ -444,9 +444,8 @@ subroutine deallocate_surface_state(sfc_state)
 end subroutine deallocate_surface_state
 
 !> Rotate the surface state fields from the input to the model indices.
-subroutine rotate_surface_state(sfc_state_in, G_in, sfc_state, G, turns)
+subroutine rotate_surface_state(sfc_state_in, sfc_state, G, turns)
   type(surface), intent(in) :: sfc_state_in
-  type(ocean_grid_type), intent(in) :: G_in
   type(surface), intent(inout) :: sfc_state
   type(ocean_grid_type), intent(in) :: G
   integer, intent(in) :: turns

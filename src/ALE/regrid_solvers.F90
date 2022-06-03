@@ -119,7 +119,6 @@ subroutine linear_solver( N, A, R, X )
   real    :: factor       ! The factor that eliminates the leading nonzero element in a row.
   real    :: I_pivot      ! The reciprocal of the pivot value [inverse of the input units of a row of A]
   real    :: swap
-  logical :: found_pivot  ! If true, a pivot has been found
   integer :: i, j, k
 
   ! Loop on rows to transform the problem into multiplication by an upper-right matrix.

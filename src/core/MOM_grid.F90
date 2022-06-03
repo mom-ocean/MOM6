@@ -207,7 +207,7 @@ subroutine MOM_grid_init(G, param_file, US, HI, global_indexing, bathymetry_at_v
 
   ! Local variables
   real :: mean_SeaLev_scale ! A scaling factor for the reference height variable [1] or [Z m-1 ~> 1]
-  integer :: isd, ied, jsd, jed, nk
+  integer :: isd, ied, jsd, jed
   integer :: IsdB, IedB, JsdB, JedB
   integer :: ied_max, jed_max
   integer :: niblock, njblock, nihalo, njhalo, nblocks, n, i, j

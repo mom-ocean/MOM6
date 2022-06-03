@@ -27,7 +27,7 @@ use fms_io_mod,      only : file_exist, parse_mask_table
 use fms_affinity_mod, only : fms_affinity_init, fms_affinity_set, fms_affinity_get
 
 ! This subroutine is not in MOM6/src but may be required by legacy drivers
-use mpp_domains_mod, only : global_field_sum => mpp_global_sum
+! use mpp_domains_mod, only : global_field_sum => mpp_global_sum
 
 ! The `group_pass_type` fields are never accessed, so we keep it as an FMS type
 use mpp_domains_mod, only : group_pass_type => mpp_group_update_type
@@ -45,13 +45,13 @@ public :: create_group_pass, do_group_pass, start_group_pass, complete_group_pas
 public :: redistribute_array, broadcast_domain, same_domain, global_field
 public :: get_simple_array_i_ind, get_simple_array_j_ind
 public :: MOM_thread_affinity_set, set_MOM_thread_affinity
-! These are encoding constant parmeters.
+! These are encoding constant parmeters with self-explanatory names.
 public :: To_East, To_West, To_North, To_South, To_All, Omit_Corners
 public :: AGRID, BGRID_NE, CGRID_NE, SCALAR_PAIR
 public :: CORNER, CENTER, NORTH_FACE, EAST_FACE
 ! These are no longer used by MOM6 because the reproducing sum works so well, but they are
 ! still referenced by some of the non-GFDL couplers.
-public :: global_field_sum, BITWISE_EXACT_SUM
+! public :: global_field_sum, BITWISE_EXACT_SUM
 
 !> Do a halo update on an array
 interface pass_var
@@ -241,8 +241,8 @@ subroutine pass_var_2d(array, MOM_dom, sideflag, complete, position, halo, inner
   ! Local variables
   real, allocatable, dimension(:,:) :: tmp
   integer :: pos, i_halo, j_halo
-  integer :: isc, iec, jsc, jec, isd, ied, jsd, jed, IscB, IecB, JscB, JecB
-  integer :: inner, i, j, isfw, iefw, isfe, iefe, jsfs, jefs, jsfn, jefn
+  integer :: isc, iec, jsc, jec, isd, ied, jsd, jed
+  integer :: i, j, isfw, iefw, isfe, iefe, jsfs, jefs, jsfn, jefn
   integer :: dirflag
   logical :: block_til_complete
 
@@ -593,7 +593,6 @@ subroutine fill_vector_symmetric_edges_2d(u_cmpt, v_cmpt, MOM_dom, stagger, scal
   integer :: dirflag
   integer :: i, j, isc, iec, jsc, jec, isd, ied, jsd, jed, IscB, IecB, JscB, JecB
   real, allocatable, dimension(:) :: sbuff_x, sbuff_y, wbuff_x, wbuff_y
-  logical :: block_til_complete
 
   if (.not. MOM_dom%symmetric) then
       return
@@ -1328,10 +1327,8 @@ subroutine create_MOM_domain(MOM_dom, n_global, n_halo, reentrant, tripolar_N, l
                                                       !! nonblocking halo updates, or false if missing.
 
   ! local variables
-  integer, dimension(4) :: global_indices ! The lower and upper global i- and j-index bounds
   integer :: X_FLAGS  ! A combination of integers encoding the x-direction grid connectivity.
   integer :: Y_FLAGS  ! A combination of integers encoding the y-direction grid connectivity.
-  integer :: xhalo_d2, yhalo_d2
   character(len=200) :: mesg    ! A string for use in error messages
   logical :: mask_table_exists  ! Mask_table is present and the file it points to exists
 
@@ -1516,7 +1513,6 @@ subroutine clone_MD_to_MD(MD_in, MOM_dom, min_halo, halo_size, symmetric, domain
   integer, optional, intent(in) :: extra_halo !< An extra number of points in the halos
                                   !! compared with MD_in
 
-  integer :: global_indices(4)
   logical :: mask_table_exists
   integer, dimension(:), allocatable :: exni ! The extents of the grid for each i-row of the layout.
                                              ! The sum of exni must equal MOM_dom%niglobal.
@@ -1819,7 +1815,7 @@ subroutine get_domain_extent_d2D(Domain, isc, iec, jsc, jec, isd, ied, jsd, jed)
   integer, optional, intent(out) :: jed    !< The end j-index of the data domain
 
   ! Local variables
-  integer :: isd_, ied_, jsd_, jed_, jsg_, jeg_, isg_, ieg_
+  integer :: isd_, ied_, jsd_, jed_
 
   call mpp_get_compute_domain(Domain, isc, iec, jsc, jec)
   call mpp_get_data_domain(Domain, isd_, ied_, jsd_, jed_)
@@ -1906,14 +1902,14 @@ end subroutine get_simple_array_j_ind
 
 !> Invert the contents of a 1-d array
 subroutine invert(array)
- integer, dimension(:), intent(inout) :: array !< The 1-d array to invert
- integer :: i, ni, swap
- ni = size(array)
- do i=1,ni
-   swap = array(i)
-   array(i) = array(ni+1-i)
-   array(ni+1-i) = swap
- enddo
+  integer, dimension(:), intent(inout) :: array !< The 1-d array to invert
+  integer :: i, ni, swap
+  ni = size(array)
+  do i=1,ni
+    swap = array(i)
+    array(i) = array(ni+1-i)
+    array(ni+1-i) = swap
+  enddo
 end subroutine invert
 
 !> Returns the global shape of h-point arrays

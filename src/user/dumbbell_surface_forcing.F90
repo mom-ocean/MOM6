@@ -58,8 +58,6 @@ subroutine dumbbell_buoyancy_forcing(sfc_state, fluxes, day, dt, G, US, CS)
   type(dumbbell_surface_forcing_CS),  pointer  :: CS     !< A control structure returned by a previous
                                                          !! call to dumbbell_surface_forcing_init
   ! Local variables
-  real :: Temp_restore   ! The temperature that is being restored toward [degC].
-  real :: Salin_restore  ! The salinity that is being restored toward [ppt].
   integer :: i, j, is, ie, js, je
   integer :: isd, ied, jsd, jed
 
@@ -182,7 +180,7 @@ subroutine dumbbell_surface_forcing_init(Time, G, US, param_file, diag, CS)
   ! Local variables
   real :: S_surf  ! Initial surface salinity [ppt]
   real :: S_range ! Range of the initial vertical distribution of salinity [ppt]
-  real :: x, y    ! Latitude and longitude normalized by the domain size [nondim]
+  real :: x       ! Latitude normalized by the domain size [nondim]
   integer :: i, j
   logical :: dbrotate    ! If true, rotate the domain.
 # include "version_variable.h"
@@ -215,7 +213,7 @@ subroutine dumbbell_surface_forcing_init(Time, G, US, param_file, diag, CS)
                  units="Pa", default = 10000.0, scale=US%kg_m3_to_R*US%m_s_to_L_T**2)
   call get_param(param_file, mdl, "DUMBBELL_SLP_PERIOD", CS%slp_period, &
                  "Periodicity of SLP forcing in reservoirs.", &
-                 units="days", default = 1.0)
+                 units="days", default=1.0)
   call get_param(param_file, mdl, "DUMBBELL_ROTATION", dbrotate, &
                 'Logical for rotation of dumbbell domain.',&
                  units='nondim', default=.false., do_not_log=.true.)
@@ -228,7 +226,7 @@ subroutine dumbbell_surface_forcing_init(Time, G, US, param_file, diag, CS)
   call get_param(param_file, mdl, "RESTOREBUOY", CS%restorebuoy, &
                  "If true, the buoyancy fluxes drive the model back "//&
                  "toward some specified surface state with a rate "//&
-                 "given by FLUXCONST.", default= .false.)
+                 "given by FLUXCONST.", default=.false.)
   if (CS%restorebuoy) then
     call get_param(param_file, mdl, "FLUXCONST", CS%Flux_const, &
                  "The constant that relates the restoring surface fluxes to the relative "//&

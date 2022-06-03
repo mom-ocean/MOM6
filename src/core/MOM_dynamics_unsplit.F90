@@ -154,7 +154,7 @@ type, public :: MOM_dyn_unsplit_CS ; private
   !> A pointer to the set_visc control structure
   type(set_visc_CS), pointer :: set_visc_CSp => NULL()
   !> A pointer to the tidal forcing control structure
-  type(tidal_forcing_CS), pointer :: tides_CSp => NULL()
+  type(tidal_forcing_CS) :: tides_CSp
   !> A pointer to the ALE control structure.
   type(ALE_CS), pointer :: ALE_CSp => NULL()
 
@@ -536,7 +536,6 @@ subroutine register_restarts_dyn_unsplit(HI, GV, param_file, CS)
   type(MOM_dyn_unsplit_CS),  pointer    :: CS         !< The control structure set up by
                                                       !! initialize_dyn_unsplit.
 
-  character(len=40)  :: mdl = "MOM_dynamics_unsplit" ! This module's name.
   character(len=48) :: thickness_units, flux_units
   integer :: isd, ied, jsd, jed, nz, IsdB, IedB, JsdB, JedB
   isd = HI%isd ; ied = HI%ied ; jsd = HI%jsd ; jed = HI%jed ; nz = GV%ke
@@ -619,7 +618,7 @@ subroutine initialize_dyn_unsplit(u, v, h, Time, G, GV, US, param_file, diag, CS
 
   ! Local variables
   character(len=40) :: mdl = "MOM_dynamics_unsplit" ! This module's name.
-  character(len=48) :: thickness_units, flux_units
+  character(len=48) :: flux_units
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
   logical :: use_tides
@@ -694,10 +693,10 @@ subroutine initialize_dyn_unsplit(u, v, h, Time, G, GV, US, param_file, diag, CS
       'Meridional Pressure Force Acceleration', 'm s-2', conversion=US%L_T2_to_m_s2)
   CS%id_ueffA = register_diag_field('ocean_model', 'ueffA', diag%axesCuL, Time, &
        'Effective U Face Area', 'm^2', conversion = GV%H_to_m*US%L_to_m, &
-       y_cell_method='sum', v_extensive = .true.)
+       y_cell_method='sum', v_extensive=.true.)
   CS%id_veffA = register_diag_field('ocean_model', 'veffA', diag%axesCvL, Time, &
        'Effective V Face Area', 'm^2', conversion = GV%H_to_m*US%L_to_m, &
-       x_cell_method='sum', v_extensive = .true.)
+       x_cell_method='sum', v_extensive=.true.)
 
   id_clock_Cor = cpu_clock_id('(Ocean Coriolis & mom advection)', grain=CLOCK_MODULE)
   id_clock_continuity = cpu_clock_id('(Ocean continuity equation)', grain=CLOCK_MODULE)

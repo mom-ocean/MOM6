@@ -128,8 +128,7 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
     Hc, &         !< A column of layer thicknesses after convective instabilities are removed [Z ~> m]
     Tc, &         !< A column of layer temperatures after convective instabilities are removed [degC]
     Sc, &         !< A column of layer salinites after convective instabilities are removed [ppt]
-    Rc, &         !< A column of layer densities after convective instabilities are removed [R ~> kg m-3]
-    det, ddet
+    Rc            !< A column of layer densities after convective instabilities are removed [R ~> kg m-3]
   real, dimension(SZI_(G),SZJ_(G)) :: &
     htot              !< The vertical sum of the thicknesses [Z ~> m]
   real :: lam         !< inverse of wave speed squared [T2 L-2 ~> s2 m-2]
@@ -141,7 +140,6 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
     HxT_here, &    !< A layer integrated temperature [degC Z ~> degC m]
     HxS_here, &    !< A layer integrated salinity [ppt Z ~> ppt m]
     HxR_here       !< A layer integrated density [R Z ~> kg m-2]
-  real :: speed2_tot
   real :: I_Hnew   !< The inverse of a new layer thickness [Z-1 ~> m-1]
   real :: drxh_sum !< The sum of density diffrences across interfaces times thicknesses [R Z ~> kg m-2]
   real, parameter :: tol1  = 0.0001, tol2 = 0.001
@@ -272,12 +270,12 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
 
     ! From this point, we can work on individual columns without causing memory
     ! to have page faults.
-    do i=is,ie ; if (cn(i,j)>0.0)then
+    do i=is,ie ; if (cn(i,j) > 0.0) then
       !----for debugging, remove later----
       ig = i + G%idg_offset ; jg = j + G%jdg_offset
       !if (ig == CS%int_tide_source_x .and. jg == CS%int_tide_source_y) then
       !-----------------------------------
-      if (G%mask2dT(i,j) > 0.5) then
+      if (G%mask2dT(i,j) > 0.0) then
 
         gprime(:) = 0.0 ! init gprime
         pres(:) = 0.0 ! init pres
@@ -567,7 +565,7 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
       !else     ! if at test point - delete later
       !  return ! if at test point - delete later
       !endif    ! if at test point - delete later
-      endif ! mask2dT > 0.5?
+      endif ! mask2dT > 0.0?
     else
       ! if cn=0.0, default to zero
       nzm                       = nz+1! could use actual values
@@ -613,7 +611,6 @@ subroutine tridiag_solver(a, b, c, h, y, method, x)
                                           ! intermediate values for solvers
   real    :: Q_prime, beta                ! intermediate values for solver
   integer :: k                            ! row (e.g. interface) index
-  integer :: i,j
 
   nrow = size(y)
   allocate(c_prime(nrow))

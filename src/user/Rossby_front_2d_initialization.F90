@@ -120,9 +120,8 @@ subroutine Rossby_front_initialize_temperature_salinity(T, S, h, G, GV, &
   integer   :: i, j, k, is, ie, js, je, nz
   real      :: T_ref, S_ref ! Reference salinity and temerature within surface layer
   real      :: T_range      ! Range of salinities and temperatures over the vertical
-  real      :: y, zc, zi, dTdz
+  real      :: zc, zi, dTdz
   character(len=40) :: verticalCoordinate
-  real      :: PI                   ! 3.1415926... calculated as 4*atan(1)
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
@@ -170,7 +169,6 @@ subroutine Rossby_front_initialize_velocity(u, v, h, G, GV, US, param_file, just
   logical,                    intent(in)  :: just_read !< If present and true, this call will only
                                                 !! read parameters without setting u & v.
 
-  real    :: y            ! Non-dimensional coordinate across channel, 0..pi
   real    :: T_range      ! Range of salinities and temperatures over the vertical
   real    :: dUdT         ! Factor to convert dT/dy into dU/dz, g*alpha/f [L2 Z-1 T-1 degC-1 ~> m s-1 degC-1]
   real    :: dRho_dT      ! The partial derivative of density with temperature [R degC-1 ~> kg m-3 degC-1]
@@ -219,7 +217,7 @@ real function yPseudo( G, lat )
   type(ocean_grid_type), intent(in) :: G   !< Grid structure
   real,                  intent(in) :: lat !< Latitude
   ! Local
-  real :: y, PI
+  real :: PI
 
   PI = 4.0 * atan(1.0)
   yPseudo = ( ( lat - G%south_lat ) / G%len_lat ) - 0.5 ! -1/2 .. 1/.2

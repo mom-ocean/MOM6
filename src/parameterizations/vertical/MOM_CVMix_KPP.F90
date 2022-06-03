@@ -79,8 +79,8 @@ type, public :: KPP_CS ; private
   real    :: cs2                       !< Parameter for multiplying by non-local term
                                        !   This is active for NLT_SHAPE_CUBIC_LMD only
   logical :: enhance_diffusion         !< If True, add enhanced diffusivity at base of boundary layer.
-  character(len=10) :: interpType      !< Type of interpolation to compute bulk Richardson number
-  character(len=10) :: interpType2     !< Type of interpolation to compute diff and visc at OBL_depth
+  character(len=32) :: interpType      !< Type of interpolation to compute bulk Richardson number
+  character(len=32) :: interpType2     !< Type of interpolation to compute diff and visc at OBL_depth
   logical :: computeEkman              !< If True, compute Ekman depth limit for OBLdepth
   logical :: computeMoninObukhov       !< If True, compute Monin-Obukhov limit for OBLdepth
   logical :: passiveMode               !< If True, makes KPP passive meaning it does NOT alter the diffusivity
@@ -196,7 +196,6 @@ logical function KPP_init(paramFile, G, GV, US, diag, Time, CS, passive)
   character(len=20) :: string          !< local temporary string
   character(len=20) :: langmuir_mixing_opt = 'NONE' !< langmuir mixing opt to be passed to CVMix, e.g., LWF16
   character(len=20) :: langmuir_entrainment_opt = 'NONE' !< langmuir entrainment opt to be passed to CVMix, e.g., LWF16
-  character(len=20) :: wave_method
   logical :: CS_IS_ONE=.false.         !< Logical for setting Cs based on Non-local
   logical :: lnoDGat1=.false.          !< True => G'(1) = 0 (shape function)
                                        !! False => compute G'(1) as in LMD94
@@ -928,7 +927,7 @@ subroutine KPP_compute_BLD(CS, G, GV, US, h, Temp, Salt, u, v, tv, uStar, buoyFl
   real :: surfFricVel, surfBuoyFlux, Coriolis
   real :: GoRho  ! Gravitational acceleration divided by density in MKS units [m R-1 s-2 ~> m4 kg-1 s-2]
   real :: pRef   ! The interface pressure [R L2 T-2 ~> Pa]
-  real :: rho1, rhoK, Uk, Vk, sigma, sigmaRatio
+  real :: Uk, Vk
 
   real :: zBottomMinusOffset   ! Height of bottom plus a little bit [m]
   real :: SLdepth_0d           ! Surface layer depth = surf_layer_ext*OBLdepth.
@@ -947,11 +946,7 @@ subroutine KPP_compute_BLD(CS, G, GV, US, h, Temp, Salt, u, v, tv, uStar, buoyFl
   real :: LangEnhVt2   ! Langmuir enhancement for unresolved shear
   real, dimension(GV%ke) :: U_H, V_H
   real :: MLD_GUESS, LA
-  real :: surfHuS, surfHvS, surfUs, surfVs, wavedir, currentdir
-  real :: VarUp, VarDn, M, VarLo, VarAvg
-  real :: H10pct, H20pct,CMNFACT, USx20pct, USy20pct, enhvt2
-  integer :: B
-  real :: WST
+  real :: surfHuS, surfHvS, surfUs, surfVs
 
   if (CS%Stokes_Mixing .and. .not.associated(Waves)) call MOM_error(FATAL, &
       "KPP_compute_BLD: The Waves control structure must be associated if STOKES_MIXING is True.")
@@ -976,7 +971,7 @@ subroutine KPP_compute_BLD(CS, G, GV, US, h, Temp, Salt, u, v, tv, uStar, buoyFl
   !$OMP                           surfHvS, hTot, delH, surftemp, surfsalt, surfu, surfv,    &
   !$OMP                           surfUs, surfVs, Uk, Vk, deltaU2, km1, kk, pres_1D,        &
   !$OMP                           Temp_1D, salt_1D, surfBuoyFlux2, MLD_GUESS, LA, rho_1D,   &
-  !$OMP                           deltarho, N2_1d, ws_1d, LangEnhVT2, enhvt2, wst,          &
+  !$OMP                           deltarho, N2_1d, ws_1d, LangEnhVT2,                       &
   !$OMP                           BulkRi_1d, zBottomMinusOffset) &
   !$OMP                           shared(G, GV, CS, US, uStar, h, buoy_scale, buoyFlux,     &
   !$OMP                           Temp, Salt, waves, tv, GoRho, u, v, lamult)

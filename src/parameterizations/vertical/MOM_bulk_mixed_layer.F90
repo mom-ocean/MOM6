@@ -321,7 +321,7 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, GV, US, C
   logical :: write_diags  ! If true, write out diagnostics with this step.
   logical :: reset_diags  ! If true, zero out the accumulated diagnostics.
   integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state
-  integer :: i, j, k, is, ie, js, je, nz, nkmb, n
+  integer :: i, j, k, is, ie, js, je, nz, nkmb
   integer :: nsw    ! The number of bands of penetrating shortwave radiation.
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
@@ -783,8 +783,6 @@ subroutine convective_adjustment(h, u, v, R0, Rcv, T, S, eps, d_eb, &
 
   ! Local variables
   real, dimension(SZI_(G)) :: &
-    htot, &     !   The total depth of the layers being considered for
-                ! entrainment [H ~> m or kg m-2].
     R0_tot, &   !   The integrated potential density referenced to the surface
                 ! of the layers which are fully entrained [H R ~> kg m-2 or kg2 m-5].
     Rcv_tot, &  !   The integrated coordinate value potential density of the
@@ -1001,7 +999,6 @@ subroutine mixedlayer_convection(h, d_eb, htot, Ttot, Stot, uhtot, vhtot,      &
                        ! shortwave radiation, integrated over a layer
                        ! [H R ~> kg m-2 or kg2 m-5].
   real :: Idt          ! 1.0/dt [T-1 ~> s-1]
-  real :: netHeatOut   ! accumulated heat content of mass leaving ocean
   integer :: is, ie, nz, i, k, ks, itt, n
   real, dimension(max(nsw,1)) :: &
     C2, &              ! Temporary variable R H-1 ~> kg m-4 or m-1].
@@ -2297,7 +2294,6 @@ subroutine mixedlayer_detrain_2(h, T, S, R0, Rcv, RcvTgt, dt, dt_diag, d_ea, j, 
   real :: Angstrom                ! The minumum layer thickness [H ~> m or kg m-2].
 
   real :: h2_to_k1_lim, T_new, S_new, T_max, T_min, S_max, S_min
-  character(len=200) :: mesg
 
   integer :: i, k, k0, k1, is, ie, nz, kb1, kb2, nkmb
   is = G%isc ; ie = G%iec ; nz = GV%ke

@@ -277,7 +277,6 @@ subroutine register_tracer_diagnostics(Reg, h, Time, diag, G, GV, US, use_ALE, u
   character(len=120) :: cmor_longname ! The CMOR long name of that variable.
   character(len=120) :: var_lname      ! A temporary longname for a diagnostic.
   character(len=120) :: cmor_var_lname ! The temporary CMOR long name for a diagnostic
-  character(len=72)  :: cmor_varname ! The temporary CMOR name for a diagnostic
   real :: conversion ! Temporary term while we address a bug
   type(tracer_type), pointer :: Tr=>NULL()
   integer :: i, j, k, is, ie, js, je, nz, m, m2, nTr_in

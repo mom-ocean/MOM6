@@ -293,7 +293,7 @@ end subroutine calculate_CVMix_conv
 logical function CVMix_conv_is_used(param_file)
   type(param_file_type), intent(in) :: param_file !< A structure to parse for run-time parameters
   call get_param(param_file, mdl, "USE_CVMix_CONVECTION", CVMix_conv_is_used, &
-                 default=.false., do_not_log = .true.)
+                 default=.false., do_not_log=.true.)
 
 end function CVMix_conv_is_used
 
