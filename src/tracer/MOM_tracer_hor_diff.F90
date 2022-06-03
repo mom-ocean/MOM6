@@ -507,11 +507,18 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, GV, US, CS, Reg, tv, do_online
           enddo ; enddo ; endif
           do j=js,je ; do i=is,ie
             Reg%Tr(m)%t(i,j,k) = Reg%Tr(m)%t(i,j,k) + dTr(i,j)
-            if (abs(Reg%Tr(m)%t(i,j,k)) < Reg%Tr(m)%conc_underflow) Reg%Tr(m)%t(i,j,k) = 0.0
           enddo ; enddo
         enddo
 
       enddo ! End of k loop.
+
+      ! Do user controlled underflow of the tracer concentrations.
+      do m=1,ntr ; if (Reg%Tr(m)%conc_underflow > 0.0) then
+        !$OMP parallel do default(shared)
+        do k=1,nz ; do j=js,je ; do i=is,ie
+          if (abs(Reg%Tr(m)%t(i,j,k)) < Reg%Tr(m)%conc_underflow) Reg%Tr(m)%t(i,j,k) = 0.0
+        enddo ; enddo ; enddo
+      endif ; enddo
 
     enddo ! End of "while" loop.
 
@@ -1399,15 +1406,22 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
           endif
         enddo
       endif ; enddo ; enddo
-!$OMP parallel do default(none) shared(PEmax_kRho,is,ie,js,je,G,h,Tr,tr_flux_conv,m)
+      !$OMP parallel do default(shared)
       do k=1,PEmax_kRho ; do j=js,je ; do i=is,ie
         if ((G%mask2dT(i,j) > 0.0) .and. (h(i,j,k) > 0.0)) then
           Tr(m)%t(i,j,k) = Tr(m)%t(i,j,k) + tr_flux_conv(i,j,k) / &
                                             (h(i,j,k)*G%areaT(i,j))
-          if (abs(Tr(m)%t(i,j,k)) < Tr(m)%conc_underflow) Tr(m)%t(i,j,k) = 0.0
           tr_flux_conv(i,j,k) = 0.0
         endif
       enddo ; enddo ; enddo
+
+      ! Do user controlled underflow of the tracer concentrations.
+      if (Tr(m)%conc_underflow > 0.0) then
+        !$OMP parallel do default(shared)
+        do k=1,nz ; do j=js,je ; do i=is,ie
+          if (abs(Tr(m)%t(i,j,k)) < Tr(m)%conc_underflow) Tr(m)%t(i,j,k) = 0.0
+        enddo ; enddo ; enddo
+      endif
 
     enddo ! Loop over tracers
   enddo ! Loop over iterations

@@ -650,7 +650,6 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
           if (Ihnew(i) > 0.0) then
             Tr(m)%t(i,j,k) = (Tr(m)%t(i,j,k) * hlst(i) - &
                               (flux_x(I,j,m) - flux_x(I-1,j,m))) * Ihnew(i)
-            if (abs(Tr(m)%t(i,j,k)) < Tr(m)%conc_underflow) Tr(m)%t(i,j,k) = 0.0
           endif
         endif
       enddo
@@ -671,10 +670,14 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
 
     enddo
 
-  endif
+  endif ; enddo ! End of j-loop.
 
-
-  enddo ! End of j-loop.
+  ! Do user controlled underflow of the tracer concentrations.
+  do m=1,ntr ; if (Tr(m)%conc_underflow > 0.0) then
+    do j=js,je ; do i=is,ie
+      if (abs(Tr(m)%t(i,j,k)) < Tr(m)%conc_underflow) Tr(m)%t(i,j,k) = 0.0
+    enddo ; enddo
+  endif ; enddo
 
   ! compute ad2d_x diagnostic outside above j-loop so as to make the summation ordered when OMP is active.
 
@@ -1029,7 +1032,6 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
       do i=is,ie ; if (do_i(i,j)) then
         Tr(m)%t(i,j,k) = (Tr(m)%t(i,j,k) * hlst(i) - &
                           (flux_y(i,m,J) - flux_y(i,m,J-1))) * Ihnew(i)
-        if (abs(Tr(m)%t(i,j,k)) < Tr(m)%conc_underflow) Tr(m)%t(i,j,k) = 0.0
       endif ; enddo
 
       ! diagnostics
@@ -1048,6 +1050,13 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
 
     enddo
   endif ; enddo ! End of j-loop.
+
+  ! Do user controlled underflow of the tracer concentrations.
+  do m=1,ntr ; if (Tr(m)%conc_underflow > 0.0) then
+    do j=js,je ; do i=is,ie
+      if (abs(Tr(m)%t(i,j,k)) < Tr(m)%conc_underflow) Tr(m)%t(i,j,k) = 0.0
+    enddo ; enddo
+  endif ; enddo
 
   ! compute ad2d_y diagnostic outside above j-loop so as to make the summation ordered when OMP is active.
 

@@ -223,7 +223,6 @@ subroutine lateral_boundary_diffusion(G, GV, US, h, Coef_x, Coef_y, dt, Reg, CS)
       if (G%mask2dT(i,j)>0.) then
         tracer%t(i,j,k) = tracer%t(i,j,k) + (( (uFlx(I-1,j,k)-uFlx(I,j,k)) ) + ( (vFlx(i,J-1,k)-vFlx(i,J,k) ) ))* &
                           G%IareaT(i,j) / ( h(i,j,k) + GV%H_subroundoff )
-        if (abs(tracer%t(i,j,k)) < tracer%conc_underflow) tracer%t(i,j,k) = 0.0
 
         if (tracer%id_lbdxy_conc > 0  .or. tracer%id_lbdxy_cont > 0 .or. tracer%id_lbdxy_cont_2d > 0 ) then
           tendency(i,j,k) = ((uFlx(I-1,j,k)-uFlx(I,j,k)) + (vFlx(i,J-1,k)-vFlx(i,J,k)))  * &
@@ -231,6 +230,13 @@ subroutine lateral_boundary_diffusion(G, GV, US, h, Coef_x, Coef_y, dt, Reg, CS)
         endif
       endif
     enddo ; enddo ; enddo
+
+    ! Do user controlled underflow of the tracer concentrations.
+    if (tracer%conc_underflow > 0.0) then
+      do k=1,GV%ke ; do j=G%jsc,G%jec ; do i=G%isc,G%iec
+        if (abs(tracer%t(i,j,k)) < tracer%conc_underflow) tracer%t(i,j,k) = 0.0
+      enddo ; enddo ; enddo
+    endif
 
     if (CS%debug) then
       call hchksum(tracer%t, "after LBD "//tracer%name,G%HI)
