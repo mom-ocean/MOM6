@@ -266,6 +266,8 @@ integer function non_unique_scales(scales, list, descs, weights, silent)
   integer :: ndim           ! The number of dimensional scaling factors to work with
   integer :: i, n, m, ns
 
+  non_unique_scales = -9999 ! Set return value to a _dummy_ value
+
   verbose = .true. ; if (present(silent)) verbose = .not.silent
 
   ndim = size(scales)
