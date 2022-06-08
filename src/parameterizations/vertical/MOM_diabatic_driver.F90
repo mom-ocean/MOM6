@@ -712,6 +712,10 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
       ! If visc%MLD exists, copy KPP's BLD into it
       if (associated(visc%MLD)) visc%MLD(:,:) = Hml(:,:)
     endif
+    if (associated(visc%sfc_buoy_flx)) then
+      visc%sfc_buoy_flx(:,:) = CS%KPP_buoy_flux(:,:,1)
+      call pass_var(visc%sfc_buoy_flx, G%domain, halo=1)
+    endif
 
     if (.not.CS%KPPisPassive) then
       !$OMP parallel do default(shared)
@@ -853,6 +857,10 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
     elseif (associated(visc%MLD)) then
       call energetic_PBL_get_MLD(CS%ePBL, visc%MLD, G, US)
       call pass_var(visc%MLD, G%domain, halo=1)
+    endif
+    if (associated(visc%sfc_buoy_flx)) then
+      visc%sfc_buoy_flx(:,:) = SkinBuoyFlux(:,:)
+      call pass_var(visc%sfc_buoy_flx, G%domain, halo=1)
     endif
 
     ! Augment the diffusivities and viscosity due to those diagnosed in energetic_PBL.
@@ -1306,6 +1314,10 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
       ! If visc%MLD exists, copy KPP's BLD into it
       if (associated(visc%MLD)) visc%MLD(:,:) = Hml(:,:)
     endif
+    if (associated(visc%sfc_buoy_flx)) then
+      visc%sfc_buoy_flx(:,:) = CS%KPP_buoy_flux(:,:,1)
+      call pass_var(visc%sfc_buoy_flx, G%domain, halo=1)
+    endif
 
     if (showCallTree) call callTree_waypoint("done with KPP_calculate (diabatic)")
     if (CS%debug) then
@@ -1390,6 +1402,10 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
     elseif (associated(visc%MLD)) then
       call energetic_PBL_get_MLD(CS%ePBL, visc%MLD, G, US)
       call pass_var(visc%MLD, G%domain, halo=1)
+    endif
+    if (associated(visc%sfc_buoy_flx)) then
+      visc%sfc_buoy_flx(:,:) = SkinBuoyFlux(:,:)
+      call pass_var(visc%sfc_buoy_flx, G%domain, halo=1)
     endif
 
     ! Augment the diffusivities and viscosity due to those diagnosed in energetic_PBL.
@@ -1899,6 +1915,10 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
       call pass_var(Hml, G%domain, halo=1)
       ! If visc%MLD exists, copy KPP's BLD into it
       if (associated(visc%MLD)) visc%MLD(:,:) = Hml(:,:)
+    endif
+    if (associated(visc%sfc_buoy_flx)) then
+      visc%sfc_buoy_flx(:,:) = CS%KPP_buoy_flux(:,:,1)
+      call pass_var(visc%sfc_buoy_flx, G%domain, halo=1)
     endif
 
     if (.not. CS%KPPisPassive) then
