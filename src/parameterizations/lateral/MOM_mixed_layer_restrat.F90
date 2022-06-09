@@ -179,7 +179,8 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, forces, dt, MLD_in, Var
   real, dimension(SZI_(G)) :: dK, dKm1 ! Depths of layer centers [H ~> m or kg m-2].
   real, dimension(SZI_(G)) :: pRef_MLD ! A reference pressure for calculating the mixed layer
                                        ! densities [R L2 T-2 ~> Pa].
-  real, dimension(SZI_(G)) :: covTS, varS !SGS TS covariance, S variance in Stanley param; currently 0
+  real, dimension(SZI_(G)) :: covTS, & !SGS TS covariance in Stanley param; currently 0 [degC ppt]
+                              varS     !SGS S variance in Stanley param; currently 0    [ppt2]
   real :: aFac, bFac ! Nondimensional ratios [nondim]
   real :: ddRho     ! A density difference [R ~> kg m-3]
   real :: hAtVel    ! Thickness at the velocity points [H ~> m or kg m-2]
