@@ -753,7 +753,7 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
   ! Calculate vertical mixing due to convection (computed via CVMix)
   if (CS%use_CVMix_conv) then
     ! Increment vertical diffusion and viscosity due to convection
-    call calculate_CVMix_conv(h, tv, G, GV, US, CS%CVMix_conv, Hml, Kd_int, visc%Kv_slow)
+    call calculate_CVMix_conv(h, tv, G, GV, US, CS%CVMix_conv, Hml, Kd_int, visc%Kv_shear)
   endif
 
   ! This block sets ent_t and ent_s from h and Kd_int.
@@ -1307,11 +1307,7 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
   ! Calculate vertical mixing due to convection (computed via CVMix)
   if (CS%use_CVMix_conv) then
     ! Increment vertical diffusion and viscosity due to convection
-    if (CS%useKPP) then
-      call calculate_CVMix_conv(h, tv, G, GV, US, CS%CVMix_conv, Hml, Kd_heat, visc%Kv_shear, Kd_aux=Kd_salt)
-    else
-      call calculate_CVMix_conv(h, tv, G, GV, US, CS%CVMix_conv, Hml, Kd_heat, visc%Kv_slow, Kd_aux=Kd_salt)
-    endif
+    call calculate_CVMix_conv(h, tv, G, GV, US, CS%CVMix_conv, Hml, Kd_heat, visc%Kv_shear, Kd_aux=Kd_salt)
   endif
 
   ! Save fields before boundary forcing is applied for tendency diagnostics
