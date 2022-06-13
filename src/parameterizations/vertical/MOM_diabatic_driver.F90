@@ -1890,7 +1890,7 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
 
   ! Add vertical diff./visc. due to convection (computed via CVMix)
   if (CS%use_CVMix_conv) then
-    call calculate_CVMix_conv(h, tv, G, GV, US, CS%CVMix_conv, Hml, Kd_int, visc%Kv_slow)
+    call calculate_CVMix_conv(h, tv, G, GV, US, CS%CVMix_conv, Hml, Kd_int, visc%Kv_shear)
   endif
 
   if (CS%useKPP) then
