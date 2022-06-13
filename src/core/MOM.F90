@@ -3460,25 +3460,6 @@ subroutine extract_surface_state(CS, sfc_state_in)
     enddo ! end of j loop
   endif   ! melt_potential
 
-  if (allocated(sfc_state%salt_deficit) .and. associated(CS%tv%salt_deficit)) then
-    !$OMP parallel do default(shared)
-    do j=js,je ; do i=is,ie
-      ! Convert from gSalt to kgSalt
-      sfc_state%salt_deficit(i,j) = 0.001 * US%S_to_ppt*CS%tv%salt_deficit(i,j)
-    enddo ; enddo
-  endif
-  if (allocated(sfc_state%TempxPmE) .and. associated(CS%tv%TempxPmE)) then
-    !$OMP parallel do default(shared)
-    do j=js,je ; do i=is,ie
-      sfc_state%TempxPmE(i,j) = US%C_to_degC*CS%tv%TempxPmE(i,j)
-    enddo ; enddo
-  endif
-  if (allocated(sfc_state%internal_heat) .and. associated(CS%tv%internal_heat)) then
-    !$OMP parallel do default(shared)
-    do j=js,je ; do i=is,ie
-      sfc_state%internal_heat(i,j) = US%C_to_degC*CS%tv%internal_heat(i,j)
-    enddo ; enddo
-  endif
   if (allocated(sfc_state%taux_shelf) .and. associated(CS%visc%taux_shelf)) then
     !$OMP parallel do default(shared)
     do j=js,je ; do I=is-1,ie
