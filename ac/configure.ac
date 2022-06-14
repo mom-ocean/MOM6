@@ -223,13 +223,20 @@ AC_COMPILE_IFELSE(
   ]
 )
 
-SRC_DIRS="${srcdir}/src ${MODEL_FRAMEWORK} ${srcdir}/config_src/external ${DRIVER_DIR} ${MEM_LAYOUT}"
-AC_CONFIG_COMMANDS([Makefile.dep],
-  [make depend])
+
+# Verify that makedep is available
+AC_PATH_PROG([MAKEDEP], [makedep], [${srcdir}/ac/makedep])
+AC_SUBST([MAKEDEP])
+
+
+# Generate source list and configure dependency command
+AC_SUBST([SRC_DIRS],
+    ["${srcdir}/src ${MODEL_FRAMEWORK} ${srcdir}/config_src/external ${DRIVER_DIR} ${MEM_LAYOUT}"]
+)
+AC_CONFIG_COMMANDS([Makefile.dep], [make depend])
 
 # Prepare output
-AC_SUBST(CPPFLAGS)
-AC_SUBST(SRC_DIRS)
+AC_SUBST([CPPFLAGS])
 AC_CONFIG_FILES([Makefile:${srcdir}/ac/Makefile.in])
 AC_OUTPUT
 

@@ -16,7 +16,7 @@ usage() {
     echo "  -x EXEC  Name of executable to build. Fails if more than one"
     echo "           is found. If EXEC ends in .a then a library is built."
     echo "  -f CMD   String to use in compile rule. Default is:"
-    echo "             '$(FC) $(FFLAGS) $(CPPFLAGS) -c $<'"
+    echo "             '$(FC) $(DEFS) $(FCFLAGS) $(CPPFLAGS) -c $<'"
 }
 
 # Defaults
@@ -24,7 +24,7 @@ makefile=Makefile.dep
 debug=0
 executable=""
 librarymode=0
-compile_line='$(FC) $(FFLAGS) $(CPPFLAGS) -c $<'
+compile_line='$(FC) $(DEFS) $(FCFLAGS) $(CPPFLAGS) -c $<'
 
 while getopts dho:x:f: option
 do
@@ -61,7 +61,7 @@ for F in ${A}; do # F is the relative path to source file
         u=`echo $u | sed s:$m::g`
     fi
     if [ ${#u} -ne 0 ]; then o2use["$o"]=$u; fi
-    H=$(/lib/cpp -E -MM $I $F | tr -d '\n' | sed 's:\\::g') # line of form a.o: a.F b.h c.h ...
+    H=$(cpp -E -MM $I $F | tr -d '\n' | sed 's:\\::g') # line of form a.o: a.F b.h c.h ...
     o2H["$o"]=$H
     h=`echo ${H} | cut -d\  -f3- ` # header files
     if [ ${#h} -ne 0 ]; then o2head["$o"]=$h; fi
@@ -91,7 +91,7 @@ for F in ${A}; do # F is the relative path to source file
     f=`basename $F` # file name stripped of path
     o=${f/.c/}.o # object file name
     o2c["$o"]=$F
-    H=$(/lib/cpp -E -MM $I $F | tr -d '\n' | sed 's:\\::g') # line of form a.o: a.F b.h c.h ...
+    H=$(cpp -E -MM $I $F | tr -d '\n' | sed 's:\\::g') # line of form a.o: a.F b.h c.h ...
     o2H["$o"]=$H
     h=`echo ${H} | cut -d\  -f3- ` # header files
     if [ ${#h} -ne 0 ]; then o2head["$o"]=$h; fi
@@ -189,7 +189,7 @@ for o in ${OC[@]}; do
         echo "#   incpath:" $i >> ${makefile}
     fi
     echo $H ${U[@]} >> ${makefile} # a.mod a.o: a.F b.mod
-    echo -e '\t$(CC) $(CPPDEFS) $(CPPFLAGS) $(CFLAGS) -c $<' ${i} >> ${makefile} # compile rule
+    echo -e '\t$(CC) $(DEFS) $(CPPFLAGS) $(CFLAGS) -c $<' ${i} >> ${makefile} # compile rule
 done
 
 if [ ${#lib} -ne 0 ]; then # rule to build library
@@ -207,7 +207,7 @@ if [ ${#p2o[@]} -ne 0 ]; then # write rules for linking executables
         o=${p2o[$p]}
         l=$(make -f ${makefile} -B -n -t $o | egrep "\.o$" | sed 's:touch ::' | sort)
         echo $p: $l ${externals[@]} >> ${makefile}
-        echo -e '\t$(LD) -o $@ $^ $(LDFLAGS)' >> ${makefile} # link rule
+        echo -e '\t$(LD) $(LDFLAGS) -o $@ $^ $(LIBS)' >> ${makefile} # link rule
     done
 elif [ -z "$lib" ]; then
     echo "Warning: no library target specified (with -x) and no programs found!"

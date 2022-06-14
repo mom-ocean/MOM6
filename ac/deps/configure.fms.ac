@@ -158,20 +158,26 @@ AX_FC_ALLOW_ARG_MISMATCH
 FCFLAGS="$FCFLAGS $ALLOW_ARG_MISMATCH_FCFLAGS"
 
 
+# Verify makedep
+AC_PATH_PROGS([MAKEDEP], [makedep], [], ["${PATH}:${srcdir}/../../.."])
+AS_IF([test -n "${MAKEDEP}"], [
+  AC_SUBST([MAKEDEP])
+], [
+  AC_MSG_ERROR(["Could not find makedep."])
+])
+
 
 # Autoconf does not configure the archiver (ar), as it is handled by Automake.
 # TODO: Properly configure this tool.  For now, we hard-set this to `ar`.
 AR=ar
 ARFLAGS=rv
-AC_SUBST(AR)
-AC_SUBST(ARFLAGS)
+AC_SUBST([AR])
+AC_SUBST([ARFLAGS])
 
-SRC_DIRS="../src"
-AC_CONFIG_COMMANDS([Makefile.dep],
-  [make depend])
+AC_CONFIG_COMMANDS([Makefile.dep], [make depend])
+
+AC_SUBST([CPPFLAGS])
 
 # Prepare output
-AC_SUBST(CPPFLAGS)
-AC_SUBST(SRC_DIRS)
-AC_CONFIG_FILES(Makefile)
+AC_CONFIG_FILES([Makefile])
 AC_OUTPUT

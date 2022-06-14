@@ -324,7 +324,7 @@ $(TARGET_CODEBASE):
 # FMS
 
 # Set up the FMS build environment variables
-FMS_ENV = PATH="${PATH}:../../bin" FCFLAGS="$(FCFLAGS_DEBUG)"
+FMS_ENV = PATH="${PATH}:$(realpath ../ac)" FCFLAGS="$(FCFLAGS_DEBUG)"
 
 # TODO: *.mod dependencies?
 $(DEPS)/lib/libFMS.a: $(DEPS)/fms/build/libFMS.a
@@ -335,7 +335,6 @@ $(DEPS)/fms/build/libFMS.a: $(DEPS)/fms/build/Makefile
 
 $(DEPS)/fms/build/Makefile: $(DEPS)/fms/src/configure $(DEPS)/Makefile.fms.in
 	$(FMS_ENV) $(MAKE) -C $(DEPS) fms/build/Makefile
-	$(MAKE) -C $(DEPS) fms/build/Makefile
 
 $(DEPS)/Makefile.fms.in: ../ac/deps/Makefile.fms.in $(DEPS)/Makefile
 	cp $< $(DEPS)
