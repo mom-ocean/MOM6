@@ -67,6 +67,9 @@ type, public :: set_visc_CS ; private
                             !! actual velocity in the bottommost `HBBL`, depending
                             !! on whether linear_drag is true.
                             !! Runtime parameter `BOTTOMDRAGLAW`.
+  logical :: body_force_drag !< If true, the bottom stress is imposed as an explicit body force
+                            !! applied over a fixed distance from the bottom, rather than as an
+                            !! implicit calculation based on an enhanced near-bottom viscosity.
   logical :: BBL_use_EOS    !< If true, use the equation of state in determining
                             !! the properties of the bottom boundary layer.
   logical :: linear_drag    !< If true, the drag law is cdrag*`DRAG_BG_VEL`*u.
@@ -146,7 +149,9 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, pbv)
                 ! layer with temperature [R C-1 ~> kg m-3 degC-1].
     dR_dS, &    !   Partial derivative of the density in the bottom boundary
                 ! layer with salinity [R S-1 ~> kg m-3 ppt-1].
-    press       !   The pressure at which dR_dT and dR_dS are evaluated [R L2 T-2 ~> Pa].
+    press, &    !   The pressure at which dR_dT and dR_dS are evaluated [R L2 T-2 ~> Pa].
+    umag_avg, & ! The average magnitude of velocities in the bottom boundary layer [L T-1 ~> m s-1].
+    h_bbl_drag  ! The thickness over which to apply drag as a body force [H ~> m or kg m-2].
   real :: htot      ! Sum of the layer thicknesses up to some point [H ~> m or kg m-2].
   real :: htot_vel  ! Sum of the layer thicknesses up to some point [H ~> m or kg m-2].
 
@@ -199,6 +204,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, pbv)
                            ! quadratic bottom drag [L2 T-2 ~> m2 s-2].
   real :: hwtot            ! Sum of the thicknesses used to calculate
                            ! the near-bottom velocity magnitude [H ~> m or kg m-2].
+  real :: I_hwtot          ! The Adcroft reciprocal of hwtot [H-1 ~> m-1 or m2 kg-1].
   real :: hutot            ! Running sum of thicknesses times the velocity
                            ! magnitudes [H L T-1 ~> m2 s-1 or kg m-1 s-1].
   real :: Thtot            ! Running sum of thickness times temperature [C H ~> degC m or degC kg m-2].
@@ -265,6 +271,9 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, pbv)
                            ! viscous bottom boundary layer [nondim].
   real :: BBL_visc_frac    ! The fraction of all the drag that is expressed as
                            ! a viscous bottom boundary layer [nondim].
+  real :: h_bbl_fr         ! The fraction of the bottom boundary layer in a layer [nondim].
+  real :: h_sum            ! The sum of the thicknesses of the layers below the one being
+                           ! worked on [H ~> m or kg m-2].
   real, parameter :: C1_3 = 1.0/3.0, C1_6 = 1.0/6.0, C1_12 = 1.0/12.0
   real :: C2pi_3           ! An irrational constant, 2/3 pi.
   real :: tmp              ! A temporary variable.
@@ -508,7 +517,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, pbv)
       endif
     endif ; endif
 
-    if (use_BBL_EOS .or. .not.CS%linear_drag) then
+    if (use_BBL_EOS .or. CS%body_force_drag .or. .not.CS%linear_drag) then
       ! Calculate the mean velocity magnitude over the bottommost CS%Hbbl of
       ! the water column for determining the quadratic bottom drag.
       ! Used in ustar(i)
@@ -553,6 +562,12 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, pbv)
         else
           ustar(i) = cdrag_sqrt_Z*CS%drag_bg_vel
         endif
+
+        ! Find the Adcroft reciprocal of the total thickness weights
+        I_hwtot = 0.0 ; if (hwtot > 0.0) I_hwtot = 1.0 / hwtot
+
+        umag_avg(i) = hutot * I_hwtot
+        h_bbl_drag(i) = hwtot
 
         if (use_BBL_EOS) then ; if (hwtot > 0.0) then
           T_EOS(i) = Thtot/hwtot ; S_EOS(i) = Shtot/hwtot
@@ -993,6 +1008,24 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, pbv)
         else
           kv_bbl = cdrag_sqrt*ustar(i)*bbl_thick_Z
         endif
+      endif
+
+      if (CS%body_force_drag .and. (h_bbl_drag(i) > 0.0)) then
+        ! Increment the Rayleigh drag as a way introduce the bottom drag as a body force.
+        h_sum = 0.0
+        I_hwtot = 1.0 / h_bbl_drag(i)
+        do k=nz,1,-1
+          h_bbl_fr = min(h_bbl_drag(i) - h_sum, h_at_vel(i,k)) * I_hwtot
+          if (m==1) then
+            visc%Ray_u(I,j,k) = visc%Ray_u(I,j,k) + (CS%cdrag*US%L_to_Z*umag_avg(I)) * h_bbl_fr
+          else
+            visc%Ray_v(i,J,k) = visc%Ray_v(i,J,k) + (CS%cdrag*US%L_to_Z*umag_avg(i)) * h_bbl_fr
+          endif
+          h_sum = h_sum + h_at_vel(i,k)
+          if (h_sum >= bbl_thick) exit ! The top of this layer is above the drag zone.
+        enddo
+        ! Do not enhance the near-bottom viscosity in this case.
+        Kv_bbl = CS%Kv_BBL_min
       endif
 
       kv_bbl = max(CS%Kv_BBL_min, kv_bbl)
@@ -1967,6 +2000,11 @@ subroutine set_visc_init(Time, G, GV, US, param_file, diag, visc, CS, restart_CS
                  "may be an assumed value or it may be based on the "//&
                  "actual velocity in the bottommost HBBL, depending on "//&
                  "LINEAR_DRAG.", default=.true.)
+  call get_param(param_file, mdl, "DRAG_AS_BODY_FORCE", CS%body_force_drag, &
+                 "If true, the bottom stress is imposed as an explicit body force "//&
+                 "applied over a fixed distance from the bottom, rather than as an "//&
+                 "implicit calculation based on an enhanced near-bottom viscosity", &
+                 default=.false., do_not_log=.not.CS%bottomdraglaw)
   call get_param(param_file, mdl, "CHANNEL_DRAG", CS%Channel_drag, &
                  "If true, the bottom drag is exerted directly on each "//&
                  "layer proportional to the fraction of the bottom it "//&
@@ -2178,7 +2216,7 @@ subroutine set_visc_init(Time, G, GV, US, param_file, diag, visc, CS, restart_CS
       call pass_var(CS%tideamp,G%domain)
     endif
   endif
-  if (CS%Channel_drag) then
+  if (CS%Channel_drag .or. CS%body_force_drag) then
     allocate(visc%Ray_u(IsdB:IedB,jsd:jed,nz), source=0.0)
     allocate(visc%Ray_v(isd:ied,JsdB:JedB,nz), source=0.0)
     CS%id_Ray_u = register_diag_field('ocean_model', 'Rayleigh_u', diag%axesCuL, &
