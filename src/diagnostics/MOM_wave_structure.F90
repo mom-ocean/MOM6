@@ -464,8 +464,8 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
               !call tridiag_solver(a_diag(1:kc-1),b_diag(1:kc-1),c_diag(1:kc-1), &
               !                    -lam_z(1:kc-1),e_guess(1:kc-1),"TDMA_T",e_itt)
 
-              call solve_diag_dominant_tridiag( a_diag(1:kc-1), -lam_z(1:kc-1), &
-                                                c_diag(1:kc-1), e_guess(1:kc-1), &
+              call solve_diag_dominant_tridiag( c_diag(1:kc-1), b_diag(1:kc-1) - (a_diag(1:kc-1)+c_diag(1:kc-1)), &
+                                                a_diag(1:kc-1), e_guess(1:kc-1), &
                                                 e_itt, kc-1 )
               e_guess(1:kc-1) = e_itt(1:kc-1) / sqrt(sum(e_itt(1:kc-1)**2))
             enddo ! itt-loop
