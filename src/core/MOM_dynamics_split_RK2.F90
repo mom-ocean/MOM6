@@ -164,7 +164,7 @@ type, public :: MOM_dyn_split_RK2_CS ; private
                      !! Euler (1) [nondim].  0 is often used.
   logical :: debug   !< If true, write verbose checksums for debugging purposes.
   logical :: debug_OBC !< If true, do debugging calls for open boundary conditions.
-  logical :: fpmix   !< If true, apply profiles of MTM flux magnitude and direction.
+  logical :: fpmix   !< If true, applies profiles of momentum flux magnitude and direction.
 
   logical :: module_is_initialized = .false. !< Record whether this module has been initialized.
 
@@ -327,6 +327,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
     ! eta_pred is the predictor value of the free surface height or column mass,
     ! [H ~> m or kg m-2].
 
+    ! GMM, TODO: make these allocatable?
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)) :: uold
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)) :: vold
     ! uold and vold are the velocities before vert_visc is applied. These arrays
@@ -1278,6 +1279,9 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, US, param
                  "If true, use the summed layered fluxes plus an "//&
                  "adjustment due to the change in the barotropic velocity "//&
                  "in the barotropic continuity equation.", default=.true.)
+  call get_param(param_file, mdl, "FPMIX", CS%fpmix, &
+                 "If true, apply profiles of momentum flux magnitude and "//&
+                 " direction", default=.false.)
   call get_param(param_file, mdl, "DEBUG", CS%debug, &
                  "If true, write out verbose debugging data.", &
                  default=.false., debuggingParam=.true.)
