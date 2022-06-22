@@ -18,6 +18,8 @@ jobs:
       with:
         submodules: recursive
 
+    - uses: ./.github/actions/ubuntu-setup
+
     - uses: ./.github/actions/testing-setup
 
     - name: Compile unit testing
