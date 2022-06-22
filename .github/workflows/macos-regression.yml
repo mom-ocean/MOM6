@@ -1,11 +1,16 @@
-name: Regression
+name: MacOS regression
 
 on: [pull_request]
 
 jobs:
-  build-test-regression:
+  test-macos-regression:
 
-    runs-on: ubuntu-latest
+    runs-on: macOS-latest
+
+    env:
+      CC: gcc-11
+      FC: gfortran-11
+
     defaults:
       run:
         working-directory: .testing
@@ -15,7 +20,7 @@ jobs:
       with:
         submodules: recursive
 
-    - uses: ./.github/actions/ubuntu-setup
+    - uses: ./.github/actions/macos-setup
 
     - uses: ./.github/actions/testing-setup
 

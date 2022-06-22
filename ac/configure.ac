@@ -137,9 +137,7 @@ AC_LANG_POP([C])
 
 # NOTE: We test for nf_create, rather than nf90_create, because AX_FC_CHECK_LIB
 #   is currently not yet able to properly probe inside modules.
-#   Testing of the nf90_* functions will require a macro update.
-# NOTE: nf-config does not have a --libdir flag, so we use --prefix and assume
-#   that libraries are in the $prefix/lib directory.
+# NOTE: nf-config does not have --libdir, so we use the first term of flibs.
 
 # Link to Fortran netCDF library, netcdff
 AX_FC_CHECK_LIB([netcdff], [nf_create], [], [], [
@@ -147,9 +145,9 @@ AX_FC_CHECK_LIB([netcdff], [nf_create], [], [], [
   AC_PATH_PROG([NF_CONFIG], [nf-config])
   AS_IF([test -n "$NF_CONFIG"], [
     AC_SUBST([LDFLAGS],
-      ["$LDFLAGS -L$($NF_CONFIG --prefix)/lib"]
+      ["$LDFLAGS $($NF_CONFIG --flibs | cut -f1 -d" ")"]
     )
-    ], [AC_MSG_ERROR([Could not find nf-config.])]
+    ], [AC_MSG_ERROR([Could not find nf_create.])]
   )
   AX_FC_CHECK_LIB([netcdff], [nf_create], [], [], [
     AC_MSG_ERROR([Could not find libnetcdff.])
@@ -234,6 +232,30 @@ AC_SUBST([SRC_DIRS],
     ["${srcdir}/src ${MODEL_FRAMEWORK} ${srcdir}/config_src/external ${DRIVER_DIR} ${MEM_LAYOUT}"]
 )
 AC_CONFIG_COMMANDS([Makefile.dep], [make depend])
+
+
+# setjmp verification
+AC_LANG_PUSH([C])
+
+# Verify that either sigsetjmp (POSIX) or __sigsetjmp (glibc) are available.
+AC_CHECK_FUNC([sigsetjmp])
+AS_IF([test "$ac_cv_func_sigsetjmp" == "yes"], [
+  SIGSETJMP_NAME="sigsetjmp"
+], [
+  AC_CHECK_FUNC([__sigsetjmp], [
+    SIGSETJMP_NAME="__sigsetjmp"
+  ], [
+    AC_MSG_ERROR([Could not find a symbol for sigsetjmp.])
+  ])
+])
+AC_DEFINE_UNQUOTED([SIGSETJMP_NAME], ["$SIGSETJMP_NAME"])
+
+# Determine the size of jmp_buf and sigjmp_buf
+AC_CHECK_SIZEOF([jmp_buf], [], [#include <setjmp.h>])
+AC_CHECK_SIZEOF([sigjmp_buf], [], [#include <setjmp.h>])
+
+AC_LANG_POP([C])
+
 
 # Prepare output
 AC_SUBST([CPPFLAGS])
