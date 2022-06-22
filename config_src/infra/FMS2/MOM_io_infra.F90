@@ -607,13 +607,16 @@ subroutine get_field_size(filename, fieldname, sizes, field_found, no_domain)
                                                     !! is a fatal error if the field is not found.
   logical,     optional, intent(in)    :: no_domain !< If present and true, do not check for file
                                                     !! names with an appended tile number
-
   ! Local variables
   type(FmsNetcdfFile_t) :: fileobj_read ! A handle to a non-domain-decomposed file for obtaining information
-                                              ! about the exiting time axis entries in append mode.
+                                        ! about the exiting time axis entries in append mode.
   logical :: success         ! If true, the file was opened successfully
   logical :: field_exists    ! True if filename exists and field_name is in filename
   integer :: i, ndims
+  character(len=512), allocatable :: dimnames(:)  ! Field dimension names
+  logical, allocatable :: is_x(:), is_y(:), is_t(:)     ! True if index matches axis type
+  integer :: size_indices(4)        ! Mapping of size index to FMS1 convention
+  integer :: idx, swap
 
   if (FMS2_reads) then
     field_exists = .false.
@@ -626,7 +629,54 @@ subroutine get_field_size(filename, fieldname, sizes, field_found, no_domain)
           if (ndims > size(sizes)) call MOM_error(FATAL, &
             "get_field_size called with too few sizes for "//trim(fieldname)//" in "//trim(filename))
           call get_variable_size(fileobj_read, fieldname, sizes(1:ndims))
+
           do i=ndims+1,size(sizes) ; sizes(i) = 0 ; enddo
+
+          ! If sizes exceeds ndims, then we fallback to the FMS1 convention
+          ! where sizes has at least 4 dimension, and try to position values.
+          if (size(sizes) > ndims)  then
+            ! Assume FMS1 positioning rules: (nx, ny, nz, nt, ...)
+            if (size(sizes) < 4) &
+              call MOM_error(FATAL, "If sizes(:) exceeds field dimensions, "&
+                  &"then its length must be at least 4.")
+
+            ! Fall back to the FMS1 default values of 1 (from mpp field%size)
+            sizes(ndims+1:) = 1
+
+            ! Gather the field dimension names
+            allocate(dimnames(ndims))
+            dimnames(:) = ""
+            call get_variable_dimension_names(fileObj_read, trim(fieldname), &
+                                              dimnames)
+
+            ! Test the dimensions against standard (x,y,t) names and attributes
+            allocate(is_x(ndims), is_y(ndims), is_t(ndims))
+            is_x(:) = .false.
+            is_y(:) = .false.
+            is_t(:) = .false.
+            call categorize_axes(fileObj_read, filename, ndims, dimnames, &
+                                 is_x, is_y, is_t)
+
+            ! Currently no z-test is supported, so disable assignment with 0
+            size_indices = [ &
+                findloc(is_x, .true.), &
+                findloc(is_y, .true.), &
+                0, &
+                findloc(is_t, .true.) &
+            ]
+
+            do i = 1, size(size_indices)
+              idx = size_indices(i)
+              if (idx > 0) then
+                swap = sizes(i)
+                sizes(i) = sizes(idx)
+                sizes(idx) = swap
+              endif
+            enddo
+
+            deallocate(is_x, is_y, is_t)
+            deallocate(dimnames)
+          endif
         endif
       endif
     endif
@@ -1477,7 +1527,7 @@ end subroutine MOM_register_variable_axes
 !> Determine whether a variable's axes are associated with x-, y- or time-dimensions.  Other
 !! unlimited dimensions are also labeled as time axes for these purposes.
 subroutine categorize_axes(fileObj, filename, ndims, dim_names, is_x, is_y, is_t)
-  type(FmsNetcdfDomainFile_t), intent(in)  :: fileObj  !< Handle to an open FMS2 netCDF file object
+  class(FmsNetcdfFile_t), intent(in) :: fileObj    !< Handle to an open FMS2 netCDF file object
   character(len=*),            intent(in)  :: filename !< The name of the file to read
   integer,                     intent(in)  :: ndims    !< The number of dimensions associated with a variable
   character(len=*), dimension(ndims), intent(in) :: dim_names !< Names of the dimensions associated with a variable
@@ -1524,8 +1574,10 @@ subroutine categorize_axes(fileObj, filename, ndims, dim_names, is_x, is_y, is_t
   if (.not.(x_found .and. y_found)) then
     ! Look for hints from CF-compliant axis units for uncharacterized axes
     do i=1,ndims ; if (.not.(is_x(i) .or. is_y(i) .or. is_t(i))) then
-      call get_variable_units(fileobj, trim(dim_names(i)), units)
-      call categorize_axis_from_units(units, is_x(i), is_y(i))
+      if (variable_exists(fileobj, trim(dim_names(i)))) then
+        call get_variable_units(fileobj, trim(dim_names(i)), units)
+        call categorize_axis_from_units(units, is_x(i), is_y(i))
+      endif
       if (is_x(i)) x_found = .true.
       if (is_y(i)) y_found = .true.
     endif ; enddo

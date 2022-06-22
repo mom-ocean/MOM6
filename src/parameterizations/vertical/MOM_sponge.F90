@@ -131,7 +131,7 @@ subroutine initialize_sponge(Iresttime, int_height, G, param_file, CS, GV, &
 
   CS%num_col = 0 ; CS%fldno = 0
   do j=G%jsc,G%jec ; do i=G%isc,G%iec
-    if ((Iresttime(i,j)>0.0) .and. (G%mask2dT(i,j)>0)) &
+    if ((Iresttime(i,j) > 0.0) .and. (G%mask2dT(i,j) > 0.0)) &
       CS%num_col = CS%num_col + 1
   enddo ; enddo
 
@@ -143,7 +143,7 @@ subroutine initialize_sponge(Iresttime, int_height, G, param_file, CS, GV, &
 
     col = 1
     do j=G%jsc,G%jec ; do i=G%isc,G%iec
-      if ((Iresttime(i,j)>0.0) .and. (G%mask2dT(i,j)>0)) then
+      if ((Iresttime(i,j) > 0.0) .and. (G%mask2dT(i,j) > 0.0)) then
         CS%col_i(col) = i ; CS%col_j(col) = j
         CS%Iresttime_col(col) = Iresttime(i,j)
         col = col +1
@@ -273,7 +273,6 @@ subroutine set_up_sponge_ML_density(sp_val, G, CS, sp_val_i_mean)
                                             !! layer density [R ~> kg m-3], for use if Iresttime_i_mean > 0.
 
   integer :: j, col
-  character(len=256) :: mesg ! String for error messages
 
   if (.not.associated(CS)) return
 

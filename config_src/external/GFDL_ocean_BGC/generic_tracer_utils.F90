@@ -185,7 +185,6 @@ contains
     integer, optional,        intent(in) :: ntau !< Unknown
     logical, optional,        intent(in) :: positive !< Unknown
     real, dimension(isd:,jsd:,:), intent(out):: array !< Unknown
-    integer :: tau
     character(len=fm_string_len), parameter :: sub_name = 'g_tracer_get_3D_val'
   end subroutine g_tracer_get_3D_val
 
@@ -257,7 +256,6 @@ contains
 
   subroutine g_tracer_send_diag(g_tracer_list,model_time,tau)
     type(g_tracer_type), pointer    :: g_tracer_list !< pointer to the head of the generic tracer list
-    type(g_tracer_type), pointer    :: g_tracer !< Pointer to tracer node
     type(time_type),     intent(in) :: model_time !< Time
     integer,             intent(in) :: tau !< The time step for the %field 4D field to be reported
   end subroutine g_tracer_send_diag

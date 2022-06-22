@@ -715,9 +715,8 @@ subroutine read_field_4d(filename, fieldname, data, MOM_Domain, &
   ! Local variables
   character(len=80)  :: varname             ! The name of a variable in the file
   type(fieldtype), allocatable :: fields(:) ! An array of types describing all the variables in the file
-  logical :: use_fms_read_data, file_is_global
+  logical :: file_is_global
   integer :: n, unit, ndim, nvar, natt, ntime
-  integer :: is, ie, js, je
 
   ! This single call does not work for a 4-d array due to FMS limitations, so multiple calls are
   ! needed.

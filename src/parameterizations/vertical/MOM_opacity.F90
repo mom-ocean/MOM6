@@ -110,9 +110,7 @@ subroutine set_opacity(optics, sw_total, sw_vis_dir, sw_vis_dif, sw_nir_dir, sw_
   real :: inv_sw_pen_scale  ! The inverse of the e-folding scale [Z-1 ~> m-1].
   real :: Inv_nbands        ! The inverse of the number of bands of penetrating
                             ! shortwave radiation [nondim]
-  logical :: call_for_surface  ! if horizontal slice is the surface layer
   real :: tmp(SZI_(G),SZJ_(G),SZK_(GV)) ! A 3-d temporary array for diagnosing opacity [Z-1 ~> m-1]
-  real :: chl(SZI_(G),SZJ_(G),SZK_(GV)) ! The concentration of chlorophyll-A [mg m-3].
   real :: Pen_SW_tot(SZI_(G),SZJ_(G))   ! The penetrating shortwave radiation
                                         ! summed across all bands [Q R Z T-1 ~> W m-2].
   real :: op_diag_len       ! A tiny lengthscale [Z ~> m] used to remap diagnostics of opacity
@@ -245,7 +243,6 @@ subroutine opacity_from_chl(optics, sw_total, sw_vis_dir, sw_vis_dif, sw_nir_dir
                             ! radiation [Q R Z T-1 ~> W m-2].
   real :: SW_nir_tot        ! The sum across the near infrared bands of shortwave
                             ! radiation [Q R Z T-1 ~> W m-2].
-  type(time_type) :: day
   character(len=128) :: mesg
   integer :: i, j, k, n, is, ie, js, je, nz, nbands
   logical :: multiband_vis_input, multiband_nir_input, total_sw_input
@@ -290,7 +287,7 @@ subroutine opacity_from_chl(optics, sw_total, sw_vis_dir, sw_vis_dif, sw_nir_dir
   if (present(chl_3d)) then
     do j=js,je ; do i=is,ie ; chl_data(i,j) = chl_3d(i,j,1) ; enddo ; enddo
     do k=1,nz ; do j=js,je ; do i=is,ie
-      if ((G%mask2dT(i,j) > 0.5) .and. (chl_3d(i,j,k) < 0.0)) then
+      if ((G%mask2dT(i,j) > 0.0) .and. (chl_3d(i,j,k) < 0.0)) then
         write(mesg,'(" Negative chl_3d of ",(1pe12.4)," found at i,j,k = ", &
                   & 3(1x,i3), " lon/lat = ",(1pe12.4)," E ", (1pe12.4), " N.")') &
                    chl_3d(i,j,k), i, j, k, G%geoLonT(i,j), G%geoLatT(i,j)
@@ -300,7 +297,7 @@ subroutine opacity_from_chl(optics, sw_total, sw_vis_dir, sw_vis_dif, sw_nir_dir
   elseif (present(chl_2d)) then
     do j=js,je ; do i=is,ie ; chl_data(i,j) = chl_2d(i,j) ; enddo ; enddo
     do j=js,je ; do i=is,ie
-      if ((G%mask2dT(i,j) > 0.5) .and. (chl_2d(i,j) < 0.0)) then
+      if ((G%mask2dT(i,j) > 0.0) .and. (chl_2d(i,j) < 0.0)) then
         write(mesg,'(" Negative chl_2d of ",(1pe12.4)," at i,j = ", &
                   & 2(i3), "lon/lat = ",(1pe12.4)," E ", (1pe12.4), " N.")') &
                    chl_data(i,j), i, j, G%geoLonT(i,j), G%geoLatT(i,j)
@@ -316,7 +313,7 @@ subroutine opacity_from_chl(optics, sw_total, sw_vis_dir, sw_vis_dif, sw_nir_dir
       !$OMP parallel do default(shared) private(SW_vis_tot,SW_nir_tot)
       do j=js,je ; do i=is,ie
         SW_vis_tot = 0.0 ; SW_nir_tot = 0.0
-        if (G%mask2dT(i,j) > 0.5) then
+        if (G%mask2dT(i,j) > 0.0) then
           if (multiband_vis_input) then
             SW_vis_tot = sw_vis_dir(i,j) + sw_vis_dif(i,j)
           elseif (total_sw_input) then
@@ -344,7 +341,7 @@ subroutine opacity_from_chl(optics, sw_total, sw_vis_dir, sw_vis_dif, sw_nir_dir
       !$OMP parallel do default(shared) private(SW_pen_tot)
       do j=js,je ; do i=is,ie
         SW_pen_tot = 0.0
-        if (G%mask2dT(i,j) > 0.5) then
+        if (G%mask2dT(i,j) > 0.0) then
           if (multiband_vis_input) then
             SW_pen_tot = SW_pen_frac_morel(chl_data(i,j)) * (sw_vis_dir(i,j) + sw_vis_dif(i,j))
           elseif (total_sw_input) then
@@ -385,7 +382,7 @@ subroutine opacity_from_chl(optics, sw_total, sw_vis_dir, sw_vis_dif, sw_nir_dir
       case (MOREL_88)
         do j=js,je ; do i=is,ie
           optics%opacity_band(1,i,j,k) = CS%opacity_land_value
-          if (G%mask2dT(i,j) > 0.5) &
+          if (G%mask2dT(i,j) > 0.0) &
             optics%opacity_band(1,i,j,k) = US%Z_to_m * opacity_morel(chl_data(i,j))
 
           do n=2,optics%nbands
@@ -845,7 +842,7 @@ subroutine sumSWoverBands(G, GV, US, h, nsw, optics, j, dt, &
   logical :: SW_Remains   ! If true, some column has shortwave radiation that
                           ! was not entirely absorbed.
 
-  integer :: is, ie, nz, i, k, ks, n
+  integer :: is, ie, nz, i, k, n
   SW_Remains = .false.
 
   I_Habs = 1e3*GV%H_to_m ! optics%PenSW_absorb_Invlen
@@ -962,7 +959,6 @@ subroutine opacity_init(Time, G, GV, US, param_file, diag, CS, optics)
                                 ! flux when that flux drops below PEN_SW_FLUX_ABSORB [H ~> m or kg m-2]
   real :: PenSW_minthick_dflt ! The default for PenSW_absorb_minthick [m]
   logical :: default_2018_answers
-  logical :: use_scheme
   integer :: isd, ied, jsd, jed, nz, n
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nz = GV%ke
 

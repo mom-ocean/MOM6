@@ -174,7 +174,6 @@ subroutine compute_ddiff_coeffs(h, tv, G, GV, US, j, Kd_T, Kd_S, CS, R_rho)
     Kd1_S          !< Diapycanal diffusivity of salinity [m2 s-1].
 
   real, dimension(SZK_(GV)+1) :: iFaceHeight !< Height of interfaces [m]
-  integer :: kOBL                        !< level of OBL extent
   real :: dh, hcorr
   integer :: i, k
 
@@ -274,7 +273,7 @@ end subroutine compute_ddiff_coeffs
 logical function CVMix_ddiff_is_used(param_file)
   type(param_file_type), intent(in) :: param_file !< A structure to parse for run-time parameters
   call get_param(param_file, mdl, "USE_CVMIX_DDIFF", CVMix_ddiff_is_used, &
-                 default=.false., do_not_log = .true.)
+                 default=.false., do_not_log=.true.)
 
 end function CVMix_ddiff_is_used
 

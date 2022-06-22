@@ -197,11 +197,9 @@ subroutine PLM_reconstruction( N, h, u, edge_values, ppoly_coef, h_neglect )
 
   ! Local variables
   integer       :: k                    ! loop index
-  real          :: u_l, u_c, u_r        ! left, center and right cell averages
-  real          :: h_l, h_c, h_r, h_cn  ! left, center and right cell widths
+  real          :: u_l, u_r             ! left and right cell averages
   real          :: slope                ! retained PLM slope
-  real          :: a, b                 ! auxiliary variables
-  real          :: u_min, u_max, e_l, e_r, edge
+  real          :: e_r, edge
   real          :: almost_one
   real, dimension(N) :: slp, mslp
   real    :: hNeglect

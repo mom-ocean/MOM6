@@ -831,7 +831,7 @@ subroutine PressureForce_Mont_init(Time, G, GV, US, param_file, diag, CS, tides_
   type(tidal_forcing_CS), intent(in), target, optional :: tides_CSp !< Tides control structure
 
   ! Local variables
-  logical :: use_temperature, use_EOS
+  logical :: use_EOS
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
   character(len=40)  :: mdl   ! This module's name.

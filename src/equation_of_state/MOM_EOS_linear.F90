@@ -117,8 +117,6 @@ subroutine calculate_spec_vol_scalar_linear(T, S, pressure, specvol, &
   real,    intent(in)  :: dRho_dT  !< The derivatives of density with temperature [kg m-3 degC-1].
   real,    intent(in)  :: dRho_dS  !< The derivatives of density with salinity [kg m-3 ppt-1].
   real, optional, intent(in)  :: spv_ref  !< A reference specific volume [m3 kg-1].
-  ! Local variables
-  integer :: j
 
   if (present(spv_ref)) then
     specvol = ((1.0 - Rho_T0_S0*spv_ref) + spv_ref*(dRho_dT*T + dRho_dS*S)) / &

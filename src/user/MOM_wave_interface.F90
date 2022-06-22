@@ -241,10 +241,10 @@ subroutine MOM_wave_interface_init(time, G, GV, US, param_file, CS, diag )
   call log_version(param_file, mdl, version)
 
   ! Langmuir number Options
-  call get_param(param_file, mdl, "LA_DEPTH_RATIO", CS%LA_FracHBL,              &
-       "The depth (normalized by BLD) to average Stokes drift over in "//&
-       "Langmuir number calculation, where La = sqrt(ust/Stokes).",       &
-       units="nondim", default=0.04)
+  call get_param(param_file, mdl, "LA_DEPTH_RATIO", CS%LA_FracHBL, &
+                "The depth (normalized by BLD) to average Stokes drift over in "//&
+                "Langmuir number calculation, where La = sqrt(ust/Stokes).", &
+                units="nondim", default=0.04)
 
   if (StatisticalWaves) then
     CS%WaveMethod = LF17
@@ -256,25 +256,25 @@ subroutine MOM_wave_interface_init(time, G, GV, US, param_file, CS, diag )
   ! Wave modified physics
   !  Presently these are all in research mode
   call get_param(param_file, mdl, "LAGRANGIAN_MIXING", CS%LagrangianMixing, &
-       "Flag to use Lagrangian Mixing of momentum", units="", &
-       Default=.false., do_not_log=.not.use_waves)
+                 "Flag to use Lagrangian Mixing of momentum", default=.false., &
+                 do_not_log=.not.use_waves)
   if (CS%LagrangianMixing) then
     ! Force Code Intervention
     call MOM_error(FATAL,"Should you be enabling Lagrangian Mixing? Code not ready.")
   endif
   call get_param(param_file, mdl, "STOKES_MIXING", CS%StokesMixing, &
-       "Flag to use Stokes Mixing of momentum", units="", &
-       Default=.false., do_not_log=.not.use_waves)
+                 "Flag to use Stokes Mixing of momentum", default=.false., &
+                 do_not_log=.not.use_waves)
   if (CS%StokesMixing) then
     ! Force Code Intervention
-    call MOM_error(FATAL,"Should you be enabling Stokes Mixing? Code not ready.")
+    call MOM_error(FATAL, "Should you be enabling Stokes Mixing? Code not ready.")
   endif
   call get_param(param_file, mdl, "CORIOLIS_STOKES", CS%CoriolisStokes, &
-       "Flag to use Coriolis Stokes acceleration", units="", &
-       Default=.false., do_not_log=.not.use_waves)
+                 "Flag to use Coriolis Stokes acceleration", default=.false., &
+                 do_not_log=.not.use_waves)
   if (CS%CoriolisStokes) then
     ! Force Code Intervention
-    call MOM_error(FATAL,"Should you be enabling Coriolis-Stokes? Code not ready.")
+    call MOM_error(FATAL, "Should you be enabling Coriolis-Stokes? Code not ready.")
   endif
 
   ! Get Wave Method and write to integer WaveMethod
@@ -293,7 +293,7 @@ subroutine MOM_wave_interface_init(time, G, GV, US, param_file, CS, diag )
        "                 directly from WW3 and is based on the \n"//  &
        "                 surface layer and projected Langmuir \n"//   &
        "                 number (Li 2016)\n", &
-       units='', default=NULL_STRING)
+       default=NULL_STRING)
   select case (TRIM(TMPSTRING1))
   case (NULL_STRING)! No Waves
     call MOM_error(FATAL, "wave_interface_init called with no specified "//&
@@ -311,12 +311,11 @@ subroutine MOM_wave_interface_init(time, G, GV, US, param_file, CS, diag )
          units='m', default=50.0, scale=US%m_to_Z)
   case (SURFBANDS_STRING)! Surface Stokes Drift Bands
     CS%WaveMethod = SURFBANDS
-    call get_param(param_file, mdl, "SURFBAND_SOURCE", TMPSTRING2,      &
-       "Choice of SURFACE_BANDS data mode, valid options include: \n"// &
-       " DATAOVERRIDE  - Read from NetCDF using FMS DataOverride. \n"// &
-       " COUPLER       - Look for variables from coupler pass \n"//     &
-       " INPUT         - Testing with fixed values.",                   &
-       units='', default=NULL_STRING)
+    call get_param(param_file, mdl, "SURFBAND_SOURCE", TMPSTRING2, &
+                 "Choice of SURFACE_BANDS data mode, valid options include: \n"//&
+                 " DATAOVERRIDE  - Read from NetCDF using FMS DataOverride. \n"//&
+                 " COUPLER       - Look for variables from coupler pass \n"//&
+                 " INPUT         - Testing with fixed values.", default=NULL_STRING)
     select case (TRIM(TMPSTRING2))
     case (NULL_STRING)! Default
       call MOM_error(FATAL, "wave_interface_init called with SURFACE_BANDS"//&
@@ -328,10 +327,10 @@ subroutine MOM_wave_interface_init(time, G, GV, US, param_file, CS, diag )
     case (COUPLER_STRING)! Reserved for coupling
       CS%DataSource = COUPLER
       ! This is just to make something work, but it needs to be read from the wavemodel.
-      call get_param(param_file,mdl,"STK_BAND_COUPLER",CS%NumBands,                &
-         "STK_BAND_COUPLER is the number of Stokes drift bands in the coupler. "// &
-         "This has to be consistent with the number of Stokes drift bands in WW3, "//&
-         "or the model will fail.",units='', default=1)
+      call get_param(param_file, mdl, "STK_BAND_COUPLER",CS%NumBands, &
+                 "STK_BAND_COUPLER is the number of Stokes drift bands in the coupler. "//&
+                 "This has to be consistent with the number of Stokes drift bands in WW3, "//&
+                 "or the model will fail.", default=1)
       allocate( CS%WaveNum_Cen(CS%NumBands), source=0.0 )
       allocate( CS%STKx0(G%isdB:G%iedB,G%jsd:G%jed,CS%NumBands), source=0.0 )
       allocate( CS%STKy0(G%isdB:G%iedB,G%jsd:G%jed,CS%NumBands), source=0.0 )
@@ -341,11 +340,10 @@ subroutine MOM_wave_interface_init(time, G, GV, US, param_file, CS, diag )
            units='rad/m', default=0.12566, scale=US%Z_to_m)
     case (INPUT_STRING)! A method to input the Stokes band (globally uniform)
       CS%DataSource = INPUT
-      call get_param(param_file,mdl,"SURFBAND_NB",CS%NumBands,              &
-         "Prescribe number of wavenumber bands for Stokes drift. "//      &
-         "Make sure this is consistnet w/ WAVENUMBERS, STOKES_X, and "// &
-         "STOKES_Y, there are no safety checks in the code.",              &
-         units='', default=1)
+      call get_param(param_file, mdl, "SURFBAND_NB", CS%NumBands, &
+                 "Prescribe number of wavenumber bands for Stokes drift. "//&
+                 "Make sure this is consistnet w/ WAVENUMBERS, STOKES_X, and "//&
+                 "STOKES_Y, there are no safety checks in the code.", default=1)
       allocate( CS%WaveNum_Cen(1:CS%NumBands), source=0.0 )
       allocate( CS%PrescribedSurfStkX(1:CS%NumBands), source=0.0 )
       allocate( CS%PrescribedSurfStkY(1:CS%NumBands), source=0.0 )
@@ -370,17 +368,15 @@ subroutine MOM_wave_interface_init(time, G, GV, US, param_file, CS, diag )
     call MOM_error(WARNING,"DHH85 only ever set-up for uniform cases w/"//&
                            " Stokes drift in x-direction.")
     call get_param(param_file, mdl, "DHH85_AGE_FP", CS%WaveAgePeakFreq, &
-         "Choose true to use waveage in peak frequency.", &
-         units='', default=.false.)
+         "Choose true to use waveage in peak frequency.", default=.false.)
     call get_param(param_file, mdl, "DHH85_AGE", CS%WaveAge, &
          "Wave Age for DHH85 spectrum.", &
          units='', default=1.2)
-    call get_param(param_file,mdl,"DHH85_WIND", CS%WaveWind, &
+    call get_param(param_file, mdl, "DHH85_WIND", CS%WaveWind, &
          "Wind speed for DHH85 spectrum.", &
          units='m s-1', default=10.0, scale=US%m_s_to_L_T)
-    call get_param(param_file,mdl,"STATIC_DHH85", CS%StaticWaves, &
-         "Flag to disable updating DHH85 Stokes drift.", &
-          default=.false.)
+    call get_param(param_file, mdl, "STATIC_DHH85", CS%StaticWaves, &
+         "Flag to disable updating DHH85 Stokes drift.", default=.false.)
   case (LF17_STRING)!Li and Fox-Kemper 17 wind-sea Langmuir number
     CS%WaveMethod = LF17
   case (EFACTOR_STRING)!Li and Fox-Kemper 16
@@ -462,7 +458,7 @@ subroutine Update_Surface_Waves(G, GV, US, Day, dt, CS, forces)
   type(time_type),         intent(in)  :: dt  !< Timestep as a time-type
   type(mech_forcing),      intent(in), optional  :: forces !< MOM_forcing_type
   ! Local variables
-  integer :: ii, jj, kk, b
+  integer :: ii, jj, b
   type(time_type) :: Day_Center
 
   ! Computing central time of time step
@@ -1112,9 +1108,9 @@ subroutine get_StokesSL_LiFoxKemper(ustar, hbl, GV, US, CS, UStokes_SL, LA)
   real :: z0       ! The boundary layer depth [Z ~> m]
   real :: z0i      ! The inverse of theboundary layer depth [Z-1 ~> m-1]
   real :: r1, r2, r3, r4  ! Nondimensional ratios [nondim]
-  real :: r5       ! A single expression that combines r3 and r4 [nondim]
-  real :: root_2kz ! The square root of twice the peak wavenumber times the
-                   ! boundary layer depth [nondim]
+  ! real :: r5       ! A single expression that combines r3 and r4 [nondim]
+  ! real :: root_2kz ! The square root of twice the peak wavenumber times the
+  !                  ! boundary layer depth [nondim]
   real :: u10      ! The 10 m wind speed [L T-1 ~> m s-1]
   real :: PI       ! 3.1415926535...
 

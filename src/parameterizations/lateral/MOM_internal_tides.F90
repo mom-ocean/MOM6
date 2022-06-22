@@ -16,16 +16,14 @@ use MOM_domains, only       : group_pass_type, start_group_pass, complete_group_
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, MOM_mesg, is_root_pe
 use MOM_file_parser, only   : read_param, get_param, log_param, log_version, param_file_type
 use MOM_grid, only          : ocean_grid_type
-use MOM_io, only            : slasher, vardesc, MOM_read_data, file_exists
+use MOM_io, only            : slasher, MOM_read_data, file_exists
 use MOM_restart, only       : register_restart_field, MOM_restart_CS, restart_init, save_restart
-use MOM_spatial_means, only : global_area_mean
+use MOM_spatial_means, only : global_area_integral
 use MOM_time_manager, only  : time_type, time_type_to_real, operator(+), operator(/), operator(-)
 use MOM_unit_scaling, only  : unit_scale_type
 use MOM_variables, only     : surface, thermo_var_ptrs
 use MOM_verticalGrid, only  : verticalGrid_type
 use MOM_wave_structure, only: wave_structure_init, wave_structure, wave_structure_CS
-
-!use, intrinsic :: IEEE_ARITHMETIC
 
 implicit none ; private
 
@@ -52,11 +50,11 @@ type, public :: int_tide_CS ; private
   logical :: use_PPMang      !< If true, use PPM for advection of energy in angular space.
 
   real, allocatable, dimension(:,:) :: refl_angle
-                        !< local coastline/ridge/shelf angles read from file
+                        !< local coastline/ridge/shelf angles read from file [rad]
                         ! (could be in G control structure)
-  real :: nullangle = -999.9 !< placeholder value in cells with no reflection
+  real :: nullangle = -999.9 !< placeholder value in cells with no reflection [rad]
   real, allocatable, dimension(:,:) :: refl_pref
-                        !< partial reflection coeff for each "coast cell"
+                        !< partial reflection coeff for each "coast cell" [nondim]
                         ! (could be in G control structure)
   logical, allocatable, dimension(:,:) :: refl_pref_logical
                         !< true if reflecting cell with partial reflection
@@ -65,6 +63,10 @@ type, public :: int_tide_CS ; private
                         !< identifies reflection cells where double reflection
                         !! is possible (i.e. ridge cells)
                         ! (could be in G control structure)
+  real, allocatable, dimension(:,:) :: trans
+                        !< partial transmission coeff for each "coast cell"
+  real, allocatable, dimension(:,:) :: residual
+                        !< residual of reflection and transmission coeff for each "coast cell"
   real, allocatable, dimension(:,:,:,:) :: cp
                         !< horizontal phase speed [L T-1 ~> m s-1]
   real, allocatable, dimension(:,:,:,:,:) :: TKE_leak_loss
@@ -79,6 +81,8 @@ type, public :: int_tide_CS ; private
                         !! the energy losses in [R Z3 T-3 ~> W m-2]
   real, allocatable, dimension(:,:,:,:,:) :: TKE_itidal_loss
                         !< energy lost due to small-scale wave drag [R Z3 T-3 ~> W m-2]
+  real, allocatable, dimension(:,:,:,:,:) :: TKE_residual_loss
+                        !< internal tide energy loss due to the residual at slopes [R Z3 T-3 ~> W m-2]
   real, allocatable, dimension(:,:) :: tot_leak_loss !< Energy loss rates due to misc bakground processes,
                         !! summed over angle, frequency and mode [R Z3 T-3 ~> W m-2]
   real, allocatable, dimension(:,:) :: tot_quad_loss !< Energy loss rates due to quadratic bottom drag,
@@ -87,14 +91,16 @@ type, public :: int_tide_CS ; private
                         !! summed over angle, frequency and mode [R Z3 T-3 ~> W m-2]
   real, allocatable, dimension(:,:) :: tot_Froude_loss !< Energy loss rates due to wave breaking,
                         !! summed over angle, frequency and mode [R Z3 T-3 ~> W m-2]
+  real, allocatable, dimension(:,:) :: tot_residual_loss !< Energy loss rates due to residual on slopes,
+                        !! summed over angle, frequency and mode [R Z3 T-3 ~> W m-2]
   real, allocatable, dimension(:,:) :: tot_allprocesses_loss !< Energy loss rates due to all processes,
                         !! summed over angle, frequency and mode [R Z3 T-3 ~> W m-2]
   real :: q_itides      !< fraction of local dissipation [nondim]
-  real :: En_sum        !< global sum of energy for use in debugging [R Z3 T-2 ~> J m-2]
+  real :: En_sum        !< global sum of energy for use in debugging, in MKS units [J]
   type(time_type), pointer :: Time => NULL() !< A pointer to the model's clock.
   character(len=200) :: inputdir !< directory to look for coastline angle file
   real :: decay_rate    !< A constant rate at which internal tide energy is
-                        !! lost to the interior ocean internal wave field.
+                        !! lost to the interior ocean internal wave field [T-1 ~> s-1].
   real :: cdrag         !< The bottom drag coefficient [nondim].
   real :: drag_min_depth !< The minimum total ocean thickness that will be used in the denominator
                         !! of the quadratic drag terms for internal tides when
@@ -107,6 +113,8 @@ type, public :: int_tide_CS ; private
                         !< If true, apply scattering due to small-scale roughness as a sink.
   logical :: apply_Froude_drag
                         !< If true, apply wave breaking as a sink.
+  logical :: apply_residual_drag
+                        !< If true, apply sink from residual term of reflection/transmission.
   real, allocatable :: En(:,:,:,:,:)
                         !< The internal wave energy density as a function of (i,j,angle,frequency,mode)
                         !! integrated within an angular and frequency band [R Z3 T-2 ~> J m-2]
@@ -122,10 +130,11 @@ type, public :: int_tide_CS ; private
   ! Diag handles relevant to all modes, frequencies, and angles
   integer :: id_tot_En = -1, id_TKE_itidal_input = -1, id_itide_drag = -1
   integer :: id_refl_pref = -1, id_refl_ang = -1, id_land_mask = -1
+  integer :: id_trans = -1, id_residual = -1
   integer :: id_dx_Cv = -1, id_dy_Cu = -1
   ! Diag handles considering: sums over all modes, frequencies, and angles
   integer :: id_tot_leak_loss = -1, id_tot_quad_loss = -1, id_tot_itidal_loss = -1
-  integer :: id_tot_Froude_loss = -1, id_tot_allprocesses_loss = -1
+  integer :: id_tot_Froude_loss = -1, id_tot_residual_loss = -1, id_tot_allprocesses_loss = -1
   ! Diag handles considering: all modes & freqs; summed over angles
   integer, allocatable, dimension(:,:) :: &
              id_En_mode, &
@@ -179,12 +188,9 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
     tot_En_mode, & ! energy summed over angles only [R Z3 T-2 ~> J m-2]
     Ub, &          ! near-bottom horizontal velocity of wave (modal) [L T-1 ~> m s-1]
     Umax           ! Maximum horizontal velocity of wave (modal) [L T-1 ~> m s-1]
-  real, dimension(SZI_(G),SZJB_(G)) :: &
-    flux_heat_y, &
-    flux_prec_y
   real, dimension(SZI_(G),SZJ_(G)) :: &
     tot_En, &      ! energy summed over angles, modes, frequencies [R Z3 T-2 ~> J m-2]
-    tot_leak_loss, tot_quad_loss, tot_itidal_loss, tot_Froude_loss, tot_allprocesses_loss, &
+    tot_leak_loss, tot_quad_loss, tot_itidal_loss, tot_Froude_loss, tot_residual_loss, tot_allprocesses_loss, &
                    ! energy loss rates summed over angle, freq, and mode [R Z3 T-3 ~> W m-2]
     htot, &        ! The vertical sum of the layer thicknesses [H ~> m or kg m-2]
     drag_scale, &  ! bottom drag scale [T-1 ~> s-1]
@@ -198,6 +204,7 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
   real :: loss_rate  ! An energy loss rate [T-1 ~> s-1]
   real :: Fr2_max
   real :: cn_subRO        ! A tiny wave speed to prevent division by zero [L T-1 ~> m s-1]
+  real :: en_subRO        ! A tiny energy to prevent division by zero [R Z3 T-2 ~> J m-2]
   real :: En_new, En_check                           ! Energies for debugging [R Z3 T-2 ~> J m-2]
   real :: En_initial, Delta_E_check                  ! Energies for debugging [R Z3 T-2 ~> J m-2]
   real :: TKE_Froude_loss_check, TKE_Froude_loss_tot ! Energy losses for debugging [R Z3 T-3 ~> W m-2]
@@ -211,7 +218,8 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nAngle = CS%NAngle
   I_rho0 = 1.0 / GV%Rho0
-  cn_subRO = 1e-100*US%m_s_to_L_T  ! The hard-coded value here might need to increase.
+  cn_subRO = 1e-30*US%m_s_to_L_T
+  en_subRO = 1e-30*US%W_m2_to_RZ3_T3*US%s_to_T
 
   ! init local arrays
   drag_scale(:,:) = 0.
@@ -286,8 +294,11 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
 
   ! Propagate the waves.
   do m=1,CS%NMode ; do fr=1,CS%Nfreq
+
+    CS%TKE_residual_loss(:,:,:,fr,m) = 0.
+
     call propagate(CS%En(:,:,:,fr,m), cn(:,:,m), CS%frequency(fr), dt, &
-                   G, US, CS, CS%NAngle)
+                   G, US, CS, CS%NAngle, CS%TKE_residual_loss(:,:,:,fr,m))
   enddo ; enddo
 
   ! Check for En<0 - for debugging, delete later
@@ -502,9 +513,26 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
     enddo ; enddo
   enddo ; enddo ; enddo
 
+  ! loss from residual of reflection/transmission coefficients
+  if (CS%apply_residual_drag) then
+
+    do m=1,CS%nMode ; do fr=1,CS%nFreq ; do a=1,CS%nAngle ; do j=jsd,jed ; do i=isd,ied
+      ! implicit form
+      !CS%En(i,j,a,fr,m) = CS%En(i,j,a,fr,m) / (1.0 + dt * CS%TKE_residual_loss(i,j,a,fr,m) / &
+      !                                        (CS%En(i,j,a,fr,m) + en_subRO))
+      ! rewritten to minimize number of divisions:
+      CS%En(i,j,a,fr,m) = (CS%En(i,j,a,fr,m) * (CS%En(i,j,a,fr,m) + en_subRO)) / &
+                         ((CS%En(i,j,a,fr,m) + en_subRO) + dt * CS%TKE_residual_loss(i,j,a,fr,m))
+
+      ! explicit form
+      !CS%En(i,j,a,fr,m) = CS%En(i,j,a,fr,m) - dt * CS%TKE_residual_loss(i,j,a,fr,m)
+    enddo ; enddo ; enddo ; enddo ; enddo
+  endif
+
+
   ! Check for energy conservation on computational domain.*************************
   do m=1,CS%NMode ; do fr=1,CS%Nfreq
-    call sum_En(G,CS,CS%En(:,:,:,fr,m),'prop_int_tide')
+    call sum_En(G, US, CS, CS%En(:,:,:,fr,m), 'prop_int_tide')
   enddo ; enddo
 
   ! Output diagnostics.************************************************************
@@ -537,21 +565,25 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
     tot_quad_loss(:,:)   = 0.0
     tot_itidal_loss(:,:) = 0.0
     tot_Froude_loss(:,:) = 0.0
+    tot_residual_loss(:,:) = 0.0
     tot_allprocesses_loss(:,:) = 0.0
     do m=1,CS%NMode ; do fr=1,CS%Nfreq ; do a=1,CS%nAngle ; do j=js,je ; do i=is,ie
       tot_leak_loss(i,j)   = tot_leak_loss(i,j)   + CS%TKE_leak_loss(i,j,a,fr,m)
       tot_quad_loss(i,j)   = tot_quad_loss(i,j)   + CS%TKE_quad_loss(i,j,a,fr,m)
       tot_itidal_loss(i,j) = tot_itidal_loss(i,j) + CS%TKE_itidal_loss(i,j,a,fr,m)
       tot_Froude_loss(i,j) = tot_Froude_loss(i,j) + CS%TKE_Froude_loss(i,j,a,fr,m)
+      tot_residual_loss(i,j) = tot_residual_loss(i,j) + CS%TKE_residual_loss(i,j,a,fr,m)
     enddo ; enddo ; enddo ; enddo ; enddo
     do j=js,je ; do i=is,ie
-      tot_allprocesses_loss(i,j) = tot_leak_loss(i,j) + tot_quad_loss(i,j) + &
-                          tot_itidal_loss(i,j) + tot_Froude_loss(i,j)
+      tot_allprocesses_loss(i,j) = ((((tot_leak_loss(i,j) + tot_quad_loss(i,j)) + &
+                          tot_itidal_loss(i,j)) + tot_Froude_loss(i,j)) + &
+                          tot_residual_loss(i,j))
     enddo ; enddo
     CS%tot_leak_loss         = tot_leak_loss
     CS%tot_quad_loss         = tot_quad_loss
     CS%tot_itidal_loss       = tot_itidal_loss
     CS%tot_Froude_loss       = tot_Froude_loss
+    CS%tot_residual_loss     = tot_residual_loss
     CS%tot_allprocesses_loss = tot_allprocesses_loss
     if (CS%id_tot_leak_loss > 0) then
       call post_data(CS%id_tot_leak_loss, tot_leak_loss, CS%diag)
@@ -565,6 +597,9 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
     if (CS%id_tot_Froude_loss > 0) then
       call post_data(CS%id_tot_Froude_loss, tot_Froude_loss, CS%diag)
     endif
+    if (CS%id_tot_residual_loss > 0) then
+      call post_data(CS%id_tot_residual_loss, tot_residual_loss, CS%diag)
+    endif
     if (CS%id_tot_allprocesses_loss > 0) then
       call post_data(CS%id_tot_allprocesses_loss, tot_allprocesses_loss, CS%diag)
     endif
@@ -577,8 +612,9 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
       do a=1,CS%nAngle ; do j=js,je ; do i=is,ie
         itidal_loss_mode(i,j)       = itidal_loss_mode(i,j) + CS%TKE_itidal_loss(i,j,a,fr,m)
         allprocesses_loss_mode(i,j) = allprocesses_loss_mode(i,j) + &
-                                 CS%TKE_leak_loss(i,j,a,fr,m) + CS%TKE_quad_loss(i,j,a,fr,m) + &
-                                 CS%TKE_itidal_loss(i,j,a,fr,m) + CS%TKE_Froude_loss(i,j,a,fr,m)
+                                 ((((CS%TKE_leak_loss(i,j,a,fr,m) + CS%TKE_quad_loss(i,j,a,fr,m)) + &
+                                 CS%TKE_itidal_loss(i,j,a,fr,m)) + CS%TKE_Froude_loss(i,j,a,fr,m)) + &
+                                 CS%TKE_residual_loss(i,j,a,fr,m))
       enddo ; enddo ; enddo
       call post_data(CS%id_itidal_loss_mode(fr,m), itidal_loss_mode, CS%diag)
       call post_data(CS%id_allprocesses_loss_mode(fr,m), allprocesses_loss_mode, CS%diag)
@@ -606,25 +642,23 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
 end subroutine propagate_int_tide
 
 !> Checks for energy conservation on computational domain
-subroutine sum_En(G, CS, En, label)
+subroutine sum_En(G, US, CS, En, label)
   type(ocean_grid_type),  intent(in) :: G  !< The ocean's grid structure.
+  type(unit_scale_type),  intent(in) :: US !< A dimensional unit scaling type
   type(int_tide_CS),      intent(inout) :: CS !< Internal tide control struct
   real, dimension(G%isd:G%ied,G%jsd:G%jed,CS%NAngle), &
                           intent(in) :: En !< The energy density of the internal tides [R Z3 T-2 ~> J m-2].
   character(len=*),       intent(in) :: label !< A label to use in error messages
   ! Local variables
-  real :: En_sum   ! The total energy [R Z3 T-2 ~> J m-2]
-  real :: tmpForSumming
-  integer :: m,fr,a
+  real :: En_sum   ! The total energy in MKS units for potential output [J]
+  integer :: a
   ! real :: En_sum_diff, En_sum_pdiff
   ! character(len=160) :: mesg  ! The text of an error message
   ! real :: days
 
   En_sum = 0.0
-  tmpForSumming = 0.0
   do a=1,CS%nAngle
-    tmpForSumming = global_area_mean(En(:,:,a),G)*G%areaT_global
-    En_sum = En_sum + tmpForSumming
+    En_sum = En_sum + global_area_integral(En(:,:,a), G, scale=US%RZ3_T3_to_W_m2*US%T_to_s)
   enddo
   CS%En_sum = En_sum
   !En_sum_diff = En_sum - CS%En_sum
@@ -671,7 +705,6 @@ subroutine itidal_lowmode_loss(G, US, CS, Nb, Ub, En, TKE_loss_fixed, TKE_loss, 
   integer :: j,i,m,fr,a, is, ie, js, je
   real    :: En_tot          ! energy for a given mode, frequency, and point summed over angles [R Z3 T-2 ~> J m-2]
   real    :: TKE_loss_tot    ! dissipation for a given mode, frequency, and point summed over angles [R Z3 T-3 ~> W m-2]
-  real    :: TKE_sum_check   ! temporary for check summing
   real    :: frac_per_sector ! fraction of energy in each wedge
   real    :: q_itides        ! fraction of energy actually lost to mixing (remainder, 1-q, is
                              ! assumed to stay in propagating mode for now - BDM)
@@ -920,7 +953,6 @@ subroutine PPM_angular_advect(En2d, CFL_ang, Flux_En, NAngle, dt, halo_ang)
   real :: I_Angle_size ! The inverse of the the orientation wedges [Rad-1]
   real :: I_dt         ! The inverse of the timestep [T-1 ~> s-1]
   real :: aR, aL       ! Left and right edge estimates of energy density [R Z3 T-2 rad-1 ~> J m-2 rad-1]
-  real :: dMx, dMn
   real :: Ep, Ec, Em   ! Mean angular energy density for three successive wedges in angular
                        ! orientation [R Z3 T-2 rad-1 ~> J m-2 rad-1]
   real :: dA, curv_3   ! Difference and curvature of energy density [R Z3 T-2 rad-1 ~> J m-2 rad-1]
@@ -992,7 +1024,7 @@ subroutine PPM_angular_advect(En2d, CFL_ang, Flux_En, NAngle, dt, halo_ang)
 end subroutine PPM_angular_advect
 
 !> Propagates internal waves at a single frequency.
-subroutine propagate(En, cn, freq, dt, G, US, CS, NAngle)
+subroutine propagate(En, cn, freq, dt, G, US, CS, NAngle, residual_loss)
   type(ocean_grid_type), intent(inout) :: G    !< The ocean's grid structure.
   integer,               intent(in)    :: NAngle !< The number of wave orientations in the
                                                !! discretized wave energy spectrum.
@@ -1006,7 +1038,9 @@ subroutine propagate(En, cn, freq, dt, G, US, CS, NAngle)
   real,                  intent(in)    :: dt   !< Time step [T ~> s].
   type(unit_scale_type), intent(in)    :: US   !< A dimensional unit scaling type
   type(int_tide_CS),     intent(in)    :: CS   !< Internal tide control struct
-
+  real, dimension(G%isd:G%ied,G%jsd:G%jed,NAngle), &
+                         intent(inout) :: residual_loss !< internal tide energy loss due
+                                                        !! to the residual at slopes [R Z3 T-3 ~> W m-2].
   ! Local variables
   real, dimension(G%IsdB:G%IedB,G%JsdB:G%JedB) :: &
     speed  ! The magnitude of the group velocity at the q points for corner adv [L T-1 ~> m s-1].
@@ -1056,7 +1090,7 @@ subroutine propagate(En, cn, freq, dt, G, US, CS, NAngle)
     speed(:,:) = 0.0
     do J=jsh-1,jeh ; do I=ish-1,ieh
       f2 = G%CoriolisBu(I,J)**2
-      speed(I,J) = 0.25*(cn(i,j) + cn(i+1,j) + cn(i+1,j+1) + cn(i,j+1)) * &
+      speed(I,J) = 0.25*((cn(i,j) + cn(i+1,j+1)) + (cn(i+1,j) + cn(i,j+1))) * &
                      sqrt(max(freq2 - f2, 0.0)) * Ifreq
     enddo ; enddo
     do a=1,na
@@ -1097,21 +1131,22 @@ subroutine propagate(En, cn, freq, dt, G, US, CS, NAngle)
 
     ! Apply propagation in x-direction (reflection included)
     LB%jsh = jsh ; LB%jeh = jeh ; LB%ish = ish ; LB%ieh = ieh
-    call propagate_x(En, speed_x, Cgx_av, dCgx, dt, G, US, CS%nAngle, CS, LB)
+    call propagate_x(En, speed_x, Cgx_av, dCgx, dt, G, US, CS%nAngle, CS, LB, residual_loss)
 
     ! Check for energy conservation on computational domain (for debugging)
-    !call sum_En(G, CS, En, 'post-propagate_x')
+    !call sum_En(G, US, CS, En, 'post-propagate_x')
 
     ! Update halos
     call pass_var(En, G%domain)
+    call pass_var(residual_loss, G%domain)
 
     ! Apply propagation in y-direction (reflection included)
     ! LB%jsh = js ; LB%jeh = je ; LB%ish = is ; LB%ieh = ie ! Use if no teleport
     LB%jsh = jsh ; LB%jeh = jeh ; LB%ish = ish ; LB%ieh = ieh
-    call propagate_y(En, speed_y, Cgy_av, dCgy, dt, G, US, CS%nAngle, CS, LB)
+    call propagate_y(En, speed_y, Cgy_av, dCgy, dt, G, US, CS%nAngle, CS, LB, residual_loss)
 
     ! Check for energy conservation on computational domain (for debugging)
-    !call sum_En(G, CS, En, 'post-propagate_y')
+    !call sum_En(G, US, CS, En, 'post-propagate_y')
   endif
 
 end subroutine propagate
@@ -1134,7 +1169,7 @@ subroutine propagate_corner_spread(En, energized_wedge, NAngle, speed, dt, G, CS
   type(int_tide_CS),      intent(in)    :: CS    !< Internal tide control struct
   type(loop_bounds_type), intent(in)    :: LB    !< A structure with the active energy loop bounds.
   ! Local variables
-  integer :: i, j, k, ish, ieh, jsh, jeh, m
+  integer :: i, j, ish, ieh, jsh, jeh, m
   real :: TwoPi, Angle_size
   real :: energized_angle ! angle through center of current wedge
   real :: theta ! angle at edge of wedge
@@ -1151,7 +1186,7 @@ subroutine propagate_corner_spread(En, energized_wedge, NAngle, speed, dt, G, CS
   real :: slopeN,slopeW,slopeS,slopeE, bN,bW,bS,bE ! parameters defining parcel sides
   real :: aNE,aN,aNW,aW,aSW,aS,aSE,aE,aC ! sub-areas of advected parcel
   real :: a_total ! total area of advected parcel
-  real :: a1,a2,a3,a4 ! areas used in calculating polygon areas (sub-areas) of advected parcel
+  ! real :: a1,a2,a3,a4 ! areas used in calculating polygon areas (sub-areas) of advected parcel
   real, dimension(G%IsdB:G%IedB,G%Jsd:G%Jed) :: x,y ! coordinates of cell corners
   real, dimension(G%IsdB:G%IedB,G%Jsd:G%Jed) :: Idx,Idy ! inverse of dx,dy at cell corners
   real, dimension(G%IsdB:G%IedB,G%Jsd:G%Jed) :: dx,dy ! dx,dy at cell corners
@@ -1178,7 +1213,7 @@ subroutine propagate_corner_spread(En, energized_wedge, NAngle, speed, dt, G, CS
 
   do j=jsh,jeh ; do i=ish,ieh
     do m=1,int(Nsubrays)
-      theta = energized_angle - 0.5*Angle_size + real(m - 1)*Angle_size*I_Nsubwedges
+      theta = (energized_angle - 0.5*Angle_size) + real(m - 1)*Angle_size*I_Nsubwedges
       if (theta < 0.0) then
         theta = theta + TwoPi
       elseif (theta > TwoPi) then
@@ -1268,114 +1303,133 @@ subroutine propagate_corner_spread(En, energized_wedge, NAngle, speed, dt, G, CS
       if (0.0 <= theta .and. theta < 0.25*TwoPi) then
           xCrn = x(I-1,J-1); yCrn = y(I-1,J-1)
           ! west area
-          a1 = (yN - yCrn)*(0.5*(xN + xCrn))
-          a2 = (yCrn - yW)*(0.5*(xCrn + xW))
-          a3 = (yW - yNW)*(0.5*(xW + xNW))
-          a4 = (yNW - yN)*(0.5*(xNW + xN))
-          aW = a1 + a2 + a3 + a4
+          !a1 = (yN - yCrn)*(0.5*(xN + xCrn))
+          !a2 = (yCrn - yW)*(0.5*(xCrn + xW))
+          !a3 = (yW - yNW)*(0.5*(xW + xNW))
+          !a4 = (yNW - yN)*(0.5*(xNW + xN))
+          !aW = a1 + a2 + a3 + a4
+          aW = 0.5 * ((yCrn - yNW)*(xW - xN) + (xCrn - xNW)*(yN - yW))
           ! southwest area
-          a1 = (yCrn - yS)*(0.5*(xCrn + xS))
-          a2 = (yS - ySW)*(0.5*(xS + xSW))
-          a3 = (ySW - yW)*(0.5*(xSW + xW))
-          a4 = (yW - yCrn)*(0.5*(xW + xCrn))
-          aSW = a1 + a2 + a3 + a4
+          !a1 = (yCrn - yS)*(0.5*(xCrn + xS))
+          !a2 = (yS - ySW)*(0.5*(xS + xSW))
+          !a3 = (ySW - yW)*(0.5*(xSW + xW))
+          !a4 = (yW - yCrn)*(0.5*(xW + xCrn))
+          !aSW = a1 + a2 + a3 + a4
+          aSW = 0.5 * ((yCrn - ySW)*(xS - xW) + (xCrn - xSW)*(yW - yS))
           ! south area
-          a1 = (yE - ySE)*(0.5*(xE + xSE))
-          a2 = (ySE - yS)*(0.5*(xSE + xS))
-          a3 = (yS - yCrn)*(0.5*(xS + xCrn))
-          a4 = (yCrn - yE)*(0.5*(xCrn + xE))
-          aS = a1 + a2 + a3 + a4
+          !a1 = (yE - ySE)*(0.5*(xE + xSE))
+          !a2 = (ySE - yS)*(0.5*(xSE + xS))
+          !a3 = (yS - yCrn)*(0.5*(xS + xCrn))
+          !a4 = (yCrn - yE)*(0.5*(xCrn + xE))
+          !aS = a1 + a2 + a3 + a4
+          aS = 0.5 * ((yCrn - ySE)*(xE - xS) + (xCrn - xSE)*(yS - yE))
           ! area within cell
-          a1 = (yNE - yE)*(0.5*(xNE + xE))
-          a2 = (yE - yCrn)*(0.5*(xE + xCrn))
-          a3 = (yCrn - yN)*(0.5*(xCrn + xN))
-          a4 = (yN - yNE)*(0.5*(xN + xNE))
-          aC = a1 + a2 + a3 + a4
+          !a1 = (yNE - yE)*(0.5*(xNE + xE))
+          !a2 = (yE - yCrn)*(0.5*(xE + xCrn))
+          !a3 = (yCrn - yN)*(0.5*(xCrn + xN))
+          !a4 = (yN - yNE)*(0.5*(xN + xNE))
+          !aC = a1 + a2 + a3 + a4
+          aC = 0.5 * ((yCrn - yNE)*(xN - xE) + (xCrn - xNE)*(yE - yN))
       elseif (0.25*TwoPi <= theta .and. theta < 0.5*TwoPi) then
           xCrn = x(I,J-1); yCrn = y(I,J-1)
           ! south area
-          a1 = (yCrn - yS)*(0.5*(xCrn + xS))
-          a2 = (yS - ySW)*(0.5*(xS + xSW))
-          a3 = (ySW - yW)*(0.5*(xSW + xW))
-          a4 = (yW - yCrn)*(0.5*(xW + xCrn))
-          aS = a1 + a2 + a3 + a4
+          !a1 = (yCrn - yS)*(0.5*(xCrn + xS))
+          !a2 = (yS - ySW)*(0.5*(xS + xSW))
+          !a3 = (ySW - yW)*(0.5*(xSW + xW))
+          !a4 = (yW - yCrn)*(0.5*(xW + xCrn))
+          !aS = a1 + a2 + a3 + a4
+          aS = 0.5 * ((yCrn - ySW)*(xS - xW) + (xCrn - xSW)*(yW - yS))
           ! southeast area
-          a1 = (yE - ySE)*(0.5*(xE + xSE))
-          a2 = (ySE - yS)*(0.5*(xSE + xS))
-          a3 = (yS - yCrn)*(0.5*(xS + xCrn))
-          a4 = (yCrn - yE)*(0.5*(xCrn + xE))
-          aSE = a1 + a2 + a3 + a4
+          !a1 = (yE - ySE)*(0.5*(xE + xSE))
+          !a2 = (ySE - yS)*(0.5*(xSE + xS))
+          !a3 = (yS - yCrn)*(0.5*(xS + xCrn))
+          !a4 = (yCrn - yE)*(0.5*(xCrn + xE))
+          !aSE = a1 + a2 + a3 + a4
+          aSE = 0.5 * ((yCrn - ySE)*(xE - xS) + (xCrn - xSE)*(yS - yE))
           ! east area
-          a1 = (yNE - yE)*(0.5*(xNE + xE))
-          a2 = (yE - yCrn)*(0.5*(xE + xCrn))
-          a3 = (yCrn - yN)*(0.5*(xCrn + xN))
-          a4 = (yN - yNE)*(0.5*(xN + xNE))
-          aE = a1 + a2 + a3 + a4
+          !a1 = (yNE - yE)*(0.5*(xNE + xE))
+          !a2 = (yE - yCrn)*(0.5*(xE + xCrn))
+          !a3 = (yCrn - yN)*(0.5*(xCrn + xN))
+          !a4 = (yN - yNE)*(0.5*(xN + xNE))
+          !aE = a1 + a2 + a3 + a4
+          aE = 0.5 * ((yCrn - yNE)*(xN - xE) + (xCrn - xNE)*(yE - yN))
           ! area within cell
-          a1 = (yN - yCrn)*(0.5*(xN + xCrn))
-          a2 = (yCrn - yW)*(0.5*(xCrn + xW))
-          a3 = (yW - yNW)*(0.5*(xW + xNW))
-          a4 = (yNW - yN)*(0.5*(xNW + xN))
-          aC = a1 + a2 + a3 + a4
+          !a1 = (yN - yCrn)*(0.5*(xN + xCrn))
+          !a2 = (yCrn - yW)*(0.5*(xCrn + xW))
+          !a3 = (yW - yNW)*(0.5*(xW + xNW))
+          !a4 = (yNW - yN)*(0.5*(xNW + xN))
+          !aC = a1 + a2 + a3 + a4
+          aC = 0.5 * ((yCrn - yNW)*(xW - xN) + (xCrn - xNW)*(yN - yW))
       elseif (0.5*TwoPi <= theta .and. theta < 0.75*TwoPi) then
           xCrn = x(I,J); yCrn = y(I,J)
           ! east area
-          a1 = (yE - ySE)*(0.5*(xE + xSE))
-          a2 = (ySE - yS)*(0.5*(xSE + xS))
-          a3 = (yS - yCrn)*(0.5*(xS + xCrn))
-          a4 = (yCrn - yE)*(0.5*(xCrn + xE))
-          aE = a1 + a2 + a3 + a4
+          !a1 = (yE - ySE)*(0.5*(xE + xSE))
+          !a2 = (ySE - yS)*(0.5*(xSE + xS))
+          !a3 = (yS - yCrn)*(0.5*(xS + xCrn))
+          !a4 = (yCrn - yE)*(0.5*(xCrn + xE))
+          !aE = a1 + a2 + a3 + a4
+          aE = 0.5 * ((yCrn - ySE)*(xE - xS) + (xCrn - xSE)*(yS - yE))
           ! northeast area
-          a1 = (yNE - yE)*(0.5*(xNE + xE))
-          a2 = (yE - yCrn)*(0.5*(xE + xCrn))
-          a3 = (yCrn - yN)*(0.5*(xCrn + xN))
-          a4 = (yN - yNE)*(0.5*(xN + xNE))
-          aNE = a1 + a2 + a3 + a4
+          !a1 = (yNE - yE)*(0.5*(xNE + xE))
+          !a2 = (yE - yCrn)*(0.5*(xE + xCrn))
+          !a3 = (yCrn - yN)*(0.5*(xCrn + xN))
+          !a4 = (yN - yNE)*(0.5*(xN + xNE))
+          !aNE = a1 + a2 + a3 + a4
+          aNE = 0.5 * ((yCrn - yNE)*(xN - xE) + (xCrn - xNE)*(yE - yN))
           ! north area
-          a1 = (yN - yCrn)*(0.5*(xN + xCrn))
-          a2 = (yCrn - yW)*(0.5*(xCrn + xW))
-          a3 = (yW - yNW)*(0.5*(xW + xNW))
-          a4 = (yNW - yN)*(0.5*(xNW + xN))
-          aN = a1 + a2 + a3 + a4
+          !a1 = (yN - yCrn)*(0.5*(xN + xCrn))
+          !a2 = (yCrn - yW)*(0.5*(xCrn + xW))
+          !a3 = (yW - yNW)*(0.5*(xW + xNW))
+          !a4 = (yNW - yN)*(0.5*(xNW + xN))
+          !aN = a1 + a2 + a3 + a4
+          aN = 0.5 * ((yCrn - yNW)*(xW - xN) + (xCrn - xNW)*(yN - yW))
           ! area within cell
-          a1 = (yCrn - yS)*(0.5*(xCrn + xS))
-          a2 = (yS - ySW)*(0.5*(xS + xSW))
-          a3 = (ySW - yW)*(0.5*(xSW + xW))
-          a4 = (yW - yCrn)*(0.5*(xW + xCrn))
-          aC = a1 + a2 + a3 + a4
+          !a1 = (yCrn - yS)*(0.5*(xCrn + xS))
+          !a2 = (yS - ySW)*(0.5*(xS + xSW))
+          !a3 = (ySW - yW)*(0.5*(xSW + xW))
+          !a4 = (yW - yCrn)*(0.5*(xW + xCrn))
+          !aC = a1 + a2 + a3 + a4
+          aC = 0.5 * ((yCrn - ySW)*(xS - xW) + (xCrn - xSW)*(yW - yS))
       elseif (0.75*TwoPi <= theta .and. theta <= 1.00*TwoPi) then
           xCrn = x(I-1,J); yCrn = y(I-1,J)
           ! north area
-          a1 = (yNE - yE)*(0.5*(xNE + xE))
-          a2 = (yE - yCrn)*(0.5*(xE + xCrn))
-          a3 = (yCrn - yN)*(0.5*(xCrn + xN))
-          a4 = (yN - yNE)*(0.5*(xN + xNE))
-          aN = a1 + a2 + a3 + a4
+          !a1 = (yNE - yE)*(0.5*(xNE + xE))
+          !a2 = (yE - yCrn)*(0.5*(xE + xCrn))
+          !a3 = (yCrn - yN)*(0.5*(xCrn + xN))
+          !a4 = (yN - yNE)*(0.5*(xN + xNE))
+          !aN = a1 + a2 + a3 + a4
+          aN = 0.5 * ((yCrn - yNE)*(xN - xE) + (xCrn - xNE)*(yE - yN))
           ! northwest area
-          a1 = (yN - yCrn)*(0.5*(xN + xCrn))
-          a2 = (yCrn - yW)*(0.5*(xCrn + xW))
-          a3 = (yW - yNW)*(0.5*(xW + xNW))
-          a4 = (yNW - yN)*(0.5*(xNW + xN))
-          aNW = a1 + a2 + a3 + a4
+          !a1 = (yN - yCrn)*(0.5*(xN + xCrn))
+          !a2 = (yCrn - yW)*(0.5*(xCrn + xW))
+          !a3 = (yW - yNW)*(0.5*(xW + xNW))
+          !a4 = (yNW - yN)*(0.5*(xNW + xN))
+          !aNW = a1 + a2 + a3 + a4
+          aNW = 0.5 * ((yCrn - yNW)*(xW - xN) + (xCrn - xNW)*(yN - yW))
           ! west area
-          a1 = (yCrn - yS)*(0.5*(xCrn + xS))
-          a2 = (yS - ySW)*(0.5*(xS + xSW))
-          a3 = (ySW - yW)*(0.5*(xSW + xW))
-          a4 = (yW - yCrn)*(0.5*(xW + xCrn))
-          aW = a1 + a2 + a3 + a4
+          !a1 = (yCrn - yS)*(0.5*(xCrn + xS))
+          !a2 = (yS - ySW)*(0.5*(xS + xSW))
+          !a3 = (ySW - yW)*(0.5*(xSW + xW))
+          !a4 = (yW - yCrn)*(0.5*(xW + xCrn))
+          !aW = a1 + a2 + a3 + a4
+          aW = 0.5 * ((yCrn - ySW)*(xS - xW) + (xCrn - xSW)*(yW - yS))
           ! area within cell
-          a1 = (yE - ySE)*(0.5*(xE + xSE))
-          a2 = (ySE - yS)*(0.5*(xSE + xS))
-          a3 = (yS - yCrn)*(0.5*(xS + xCrn))
-          a4 = (yCrn - yE)*(0.5*(xCrn + xE))
-          aC = a1 + a2 + a3 + a4
+          !a1 = (yE - ySE)*(0.5*(xE + xSE))
+          !a2 = (ySE - yS)*(0.5*(xSE + xS))
+          !a3 = (yS - yCrn)*(0.5*(xS + xCrn))
+          !a4 = (yCrn - yE)*(0.5*(xCrn + xE))
+          !aC = a1 + a2 + a3 + a4
+          aC = 0.5 * ((yCrn - ySE)*(xE - xS) + (xCrn - xSE)*(yS - yE))
       endif
 
       ! energy weighting ----------------------------------------
-      a_total = aNE + aN + aNW + aW + aSW + aS + aSE + aE + aC
-      E_new(m) = (aNE*En(i+1,j+1) + aN*En(i,j+1) + aNW*En(i-1,j+1) + &
-                  aW*En(i-1,j) + aSW*En(i-1,j-1) + aS*En(i,j-1) + &
-                  aSE*En(i+1,j-1) + aE*En(i+1,j) + aC*En(i,j)) / (dx(i,j)*dy(i,j))
+      a_total = (((aNE + aSW) + (aNW + aSE)) + ((aN + aS) + (aW + aE))) + aC
+
+      E_new(m) = ( ( ( ( aNE*En(i+1,j+1) + aSW*En(i-1,j-1) )     + &
+                       ( aNW*En(i-1,j+1) + aSE*En(i+1,j-1) ) )   + &
+                     ( ( aN*En(i,j+1)    + aS*En(i,j-1)    )     + &
+                       ( aW*En(i-1,j)    + aE*En(i+1,j)    ) ) ) + &
+                        aC*En(i,j)  ) / ( dx(i,j)*dy(i,j) )
     enddo ! m-loop
     ! update energy in cell
     En(i,j) = sum(E_new)/Nsubrays
@@ -1383,7 +1437,7 @@ subroutine propagate_corner_spread(En, energized_wedge, NAngle, speed, dt, G, CS
 end subroutine propagate_corner_spread
 
 !> Propagates the internal wave energy in the logical x-direction.
-subroutine propagate_x(En, speed_x, Cgx_av, dCgx, dt, G, US, Nangle, CS, LB)
+subroutine propagate_x(En, speed_x, Cgx_av, dCgx, dt, G, US, Nangle, CS, LB, residual_loss)
   type(ocean_grid_type),   intent(in)    :: G  !< The ocean's grid structure.
   integer,                 intent(in)    :: NAngle !< The number of wave orientations in the
                                                !! discretized wave energy spectrum.
@@ -1400,17 +1454,20 @@ subroutine propagate_x(En, speed_x, Cgx_av, dCgx, dt, G, US, Nangle, CS, LB)
   type(unit_scale_type),   intent(in)    :: US !< A dimensional unit scaling type
   type(int_tide_CS),       intent(in)    :: CS !< Internal tide control struct
   type(loop_bounds_type),  intent(in)    :: LB !< A structure with the active energy loop bounds.
+  real, dimension(G%isd:G%ied,G%jsd:G%jed,Nangle),   &
+                           intent(inout) :: residual_loss !< internal tide energy loss due
+                                                          !! to the residual at slopes [R Z3 T-3 ~> W m-2].
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G)) :: &
     EnL, EnR    ! Left and right face energy densities [R Z3 T-2 ~> J m-2].
   real, dimension(SZIB_(G),SZJ_(G)) :: &
     flux_x      ! The internal wave energy flux [R Z3 L2 T-3 ~> J s-1].
   real, dimension(SZIB_(G)) :: &
-    cg_p, cg_m, flux1, flux2
+    cg_p, flux1
   !real, dimension(SZI_(G),SZJB_(G),Nangle) :: En_m, En_p
   real, dimension(G%isd:G%ied,G%jsd:G%jed,Nangle) :: &
     Fdt_m, Fdt_p! Left and right energy fluxes [R Z3 L2 T-2 ~> J]
-  integer :: i, j, k, ish, ieh, jsh, jeh, a
+  integer :: i, j, ish, ieh, jsh, jeh, a
 
   ish = LB%ish ; ieh = LB%ieh ; jsh = LB%jsh ; jeh = LB%jeh
   do a=1,Nangle
@@ -1436,6 +1493,10 @@ subroutine propagate_x(En, speed_x, Cgx_av, dCgx, dt, G, US, Nangle, CS, LB)
     do j=jsh,jeh ; do i=ish,ieh
       Fdt_m(i,j,a) = dt*flux_x(I-1,j) ! left face influx  [R Z3 L2 T-2 ~> J]
       Fdt_p(i,j,a) = -dt*flux_x(I,j)  ! right face influx [R Z3 L2 T-2 ~> J]
+
+      residual_loss(i,j,a) = residual_loss(i,j,a) + &
+                            (abs(flux_x(I-1,j)) * CS%residual(i,j) * G%IareaT(i,j) + &
+                             abs(flux_x(I,j)) * CS%residual(i,j) * G%IareaT(i,j))
     enddo ; enddo
 
   enddo ! a-loop
@@ -1457,7 +1518,7 @@ subroutine propagate_x(En, speed_x, Cgx_av, dCgx, dt, G, US, Nangle, CS, LB)
 end subroutine propagate_x
 
 !> Propagates the internal wave energy in the logical y-direction.
-subroutine propagate_y(En, speed_y, Cgy_av, dCgy, dt, G, US, Nangle, CS, LB)
+subroutine propagate_y(En, speed_y, Cgy_av, dCgy, dt, G, US, Nangle, CS, LB, residual_loss)
   type(ocean_grid_type),   intent(in)    :: G  !< The ocean's grid structure.
   integer,                 intent(in)    :: NAngle !< The number of wave orientations in the
                                                !! discretized wave energy spectrum.
@@ -1474,18 +1535,19 @@ subroutine propagate_y(En, speed_y, Cgy_av, dCgy, dt, G, US, Nangle, CS, LB)
   type(unit_scale_type),   intent(in)    :: US !< A dimensional unit scaling type
   type(int_tide_CS),       intent(in)    :: CS !< Internal tide control struct
   type(loop_bounds_type),  intent(in)    :: LB !< A structure with the active energy loop bounds.
+  real, dimension(G%isd:G%ied,G%jsd:G%jed,Nangle),   &
+                           intent(inout) :: residual_loss !< internal tide energy loss due
+                                                          !! to the residual at slopes [R Z3 T-3 ~> W m-2].
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G)) :: &
     EnL, EnR    ! South and north face energy densities [R Z3 T-2 ~> J m-2].
   real, dimension(SZI_(G),SZJB_(G)) :: &
     flux_y      ! The internal wave energy flux [R Z3 L2 T-3 ~> J s-1].
-  real, dimension(SZI_(G)) :: &
-    cg_p, cg_m, flux1, flux2
+  real, dimension(SZI_(G)) :: cg_p, flux1
   !real, dimension(SZI_(G),SZJB_(G),Nangle) :: En_m, En_p
   real, dimension(G%isd:G%ied,G%jsd:G%jed,Nangle) :: &
     Fdt_m, Fdt_p! South and north energy fluxes [R Z3 L2 T-2 ~> J]
-  character(len=160) :: mesg  ! The text of an error message
-  integer :: i, j, k, ish, ieh, jsh, jeh, a
+  integer :: i, j, ish, ieh, jsh, jeh, a
 
   ish = LB%ish ; ieh = LB%ieh ; jsh = LB%jsh ; jeh = LB%jeh
   do a=1,Nangle
@@ -1511,6 +1573,11 @@ subroutine propagate_y(En, speed_y, Cgy_av, dCgy, dt, G, US, Nangle, CS, LB)
     do j=jsh,jeh ; do i=ish,ieh
       Fdt_m(i,j,a) = dt*flux_y(i,J-1) ! south face influx [R Z3 L2 T-2 ~> J]
       Fdt_p(i,j,a) = -dt*flux_y(i,J)  ! north face influx [R Z3 L2 T-2 ~> J]
+
+      residual_loss(i,j,a) = residual_loss(i,j,a) + &
+                            (abs(flux_y(i,J-1)) * CS%residual(i,j) * G%IareaT(i,j) + &
+                             abs(flux_y(i,J)) * CS%residual(i,j) * G%IareaT(i,j))
+
       !if ((En(i,j,a) + G%IareaT(i,j)*(Fdt_m(i,j,a) + Fdt_p(i,j,a))) < 0.0) then ! for debugging
       !  call MOM_error(WARNING, "propagate_y: OutFlux>Available prior to reflection", .true.)
       !  write(mesg,*) "flux_y_south=",flux_y(i,J-1),"flux_y_north=",flux_y(i,J),"En=",En(i,j,a), &
@@ -1608,13 +1675,13 @@ subroutine merid_flux_En(v, h, hL, hR, vh, dt, G, US, J, ish, ieh, vol_CFL)
     if (v(i) > 0.0) then
       if (vol_CFL) then ; CFL = (v(i) * dt) * (G%dx_Cv(i,J) * G%IareaT(i,j))
       else ; CFL = v(i) * dt * G%IdyT(i,j) ; endif
-      curv_3 = hL(i,j) + hR(i,j) - 2.0*h(i,j)
+      curv_3 = (hL(i,j) + hR(i,j)) - 2.0*h(i,j)
       vh(i) = G%dx_Cv(i,J) * v(i) * ( hR(i,j) + CFL * &
           (0.5*(hL(i,j) - hR(i,j)) + curv_3*(CFL - 1.5)) )
     elseif (v(i) < 0.0) then
       if (vol_CFL) then ; CFL = (-v(i) * dt) * (G%dx_Cv(i,J) * G%IareaT(i,j+1))
       else ; CFL = -v(i) * dt * G%IdyT(i,j+1) ; endif
-      curv_3 = hL(i,j+1) + hR(i,j+1) - 2.0*h(i,j+1)
+      curv_3 = (hL(i,j+1) + hR(i,j+1)) - 2.0*h(i,j+1)
       vh(i) = G%dx_Cv(i,J) * v(i) * ( hL(i,j+1) + CFL * &
           (0.5*(hR(i,j+1)-hL(i,j+1)) + curv_3*(CFL - 1.5)) )
     else
@@ -1634,6 +1701,7 @@ subroutine reflect(En, NAngle, CS, G, LB)
                                               !! [R Z3 T-2 ~> J m-2].
   type(int_tide_CS),      intent(in)    :: CS !< Internal tide control struct
   type(loop_bounds_type), intent(in)    :: LB !< A structure with the active energy loop bounds.
+
   ! Local variables
   real, dimension(G%isd:G%ied,G%jsd:G%jed) :: angle_c
                                            ! angle of boundary wrt equator [rad]
@@ -1646,13 +1714,13 @@ subroutine reflect(En, NAngle, CS, G, LB)
 
   real    :: TwoPi                         ! 2*pi = 6.2831853... [nondim]
   real    :: Angle_size                    ! size of beam wedge [rad]
-  integer :: angle_wall                    ! angle of coast/ridge/shelf wrt equator [nondim]
-  integer :: angle_wall0                   ! angle of coast/ridge/shelf wrt equator [nondim]
-  integer :: angle_r                       ! angle of reflected ray wrt equator [nondim]
-  integer :: angle_r0                      ! angle of reflected ray wrt equator [nondim]
-  integer :: angle_to_wall                 ! angle relative to wall [nondim]
+  integer :: angle_wall                    ! angle-bin of coast/ridge/shelf wrt equator
+  integer :: angle_wall0                   ! angle-bin of coast/ridge/shelf wrt equator
+  integer :: angle_r                       ! angle-bin of reflected ray wrt equator
+  integer :: angle_r0                      ! angle-bin of reflected ray wrt equator
+  integer :: angle_to_wall                 ! angle-bin relative to wall
   integer :: a, a0                         ! loop index for angles
-  integer :: i, j, i_global
+  integer :: i, j
   integer :: Nangle_d2            ! Nangle / 2
   integer :: isc, iec, jsc, jec   ! start and end local indices on PE
                                   ! (values exclude halos)
@@ -1692,12 +1760,12 @@ subroutine reflect(En, NAngle, CS, G, LB)
         angle_wall0 = angle_wall - 1
         ! compute relative angle from wall and use cyclic properties
         ! to ensure it is bounded by 0 -> Nangle-1
-        angle_to_wall = mod(a0 - angle_wall0 + Nangle, Nangle)
+        angle_to_wall = mod((a0 - angle_wall0) + Nangle, Nangle)
 
         if (ridge(i,j)) then
           ! if ray is not incident but in ridge cell, use complementary angle
           if ((Nangle_d2 < angle_to_wall) .and. (angle_to_wall < Nangle)) then
-            angle_wall0 = mod(angle_wall0 + Nangle_d2 + Nangle, Nangle)
+            angle_wall0 = mod(angle_wall0 + (Nangle_d2 + Nangle), Nangle)
           endif
         endif
 
@@ -1902,7 +1970,6 @@ subroutine PPM_reconstruction_x(h_in, h_l, h_r, G, LB, simple_2nd)
   real, parameter :: oneSixth = 1./6.
   real :: h_ip1, h_im1
   real :: dMx, dMn
-  logical :: use_CW84
   character(len=256) :: mesg  ! The text of an error message
   integer :: i, j, isl, iel, jsl, jel, stencil
 
@@ -2051,13 +2118,12 @@ subroutine PPM_limit_pos(h_in, h_L, h_R, h_min, G, iis, iie, jis, jie)
   integer,                          intent(in)     :: jie   !< End j-index for computations
   ! Local variables
   real    :: curv, dh, scale
-  character(len=256) :: mesg  ! The text of an error message
   integer :: i,j
 
   do j=jis,jie ; do i=iis,iie
     ! This limiter prevents undershooting minima within the domain with
     ! values less than h_min.
-    curv = 3.0*(h_L(i,j) + h_R(i,j) - 2.0*h_in(i,j))
+    curv = 3.0*((h_L(i,j) + h_R(i,j)) - 2.0*h_in(i,j))
     if (curv > 0.0) then ! Only minima are limited.
       dh = h_R(i,j) - h_L(i,j)
       if (abs(dh) < curv) then ! The parabola's minimum is within the cell.
@@ -2086,7 +2152,6 @@ end subroutine PPM_limit_pos
 !   ! This subroutine is used to allocate and register any fields in this module
 !   ! that should be written to or read from the restart file.
 !   logical :: use_int_tides
-!   type(vardesc) :: vd
 !   integer :: num_freq, num_angle , num_mode, period_1
 !   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, a
 !   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
@@ -2108,10 +2173,9 @@ end subroutine PPM_limit_pos
 !   call read_param(param_file, "INTERNAL_TIDE_ANGLES", num_angle)
 !   allocate(CS%En_restart(isd:ied, jsd:jed, num_angle), source=0.0)
 
-!   vd = vardesc("En_restart", &
-!     "The internal wave energy density as a function of (i,j,angle,frequency,mode)", &
-!     'h','1','1',"J m-2")
-!   call register_restart_field(CS%En_restart, vd, .false., restart_CS)
+!   call register_restart_field(CS%En_restart, "En_restart", .false., restart_CS, &
+!            longname="The internal wave energy density as a function of (i,j,angle,frequency,mode)", &
+!            units="J m-2", conversion=US%RZ3_T3_to_W_m2*US%T_to_s, z_grid='1')
 
 ! end subroutine register_int_tide_restarts
 
@@ -2149,10 +2213,11 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
   character(len=40)  :: var_name
   character(len=160) :: var_descript
   character(len=200) :: filename
-  character(len=200) :: refl_angle_file, land_mask_file
-  character(len=200) :: refl_pref_file, refl_dbl_file
-  character(len=200) :: dy_Cu_file, dx_Cv_file
+  character(len=200) :: refl_angle_file
+  character(len=200) :: refl_pref_file, refl_dbl_file, trans_file
   character(len=200) :: h2_file
+  !character(len=200) :: land_mask_file
+  !character(len=200) :: dy_Cu_file, dx_Cv_file
 
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
@@ -2269,6 +2334,9 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
   call get_param(param_file, mdl, "INTERNAL_TIDE_WAVE_DRAG", CS%apply_wave_drag, &
                  "If true, apply scattering due to small-scale roughness as a sink.", &
                  default=.false.)
+  call get_param(param_file, mdl, "INTERNAL_TIDE_RESIDUAL_DRAG", CS%apply_residual_drag, &
+                 "If true, TBD", &
+                 default=.false.)
   call get_param(param_file, mdl, "INTERNAL_TIDE_DRAG_MIN_DEPTH", CS%drag_min_depth, &
                  "The minimum total ocean thickness that will be used in the denominator "//&
                  "of the quadratic drag terms for internal tides.", &
@@ -2307,10 +2375,12 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
   allocate(CS%TKE_quad_loss(isd:ied,jsd:jed,num_angle,num_freq,num_mode), source=0.0)
   allocate(CS%TKE_itidal_loss(isd:ied,jsd:jed,num_angle,num_freq,num_mode), source=0.0)
   allocate(CS%TKE_Froude_loss(isd:ied,jsd:jed,num_angle,num_freq,num_mode), source=0.0)
+  allocate(CS%TKE_residual_loss(isd:ied,jsd:jed,num_angle,num_freq,num_mode), source=0.0)
   allocate(CS%tot_leak_loss(isd:ied,jsd:jed), source=0.0)
   allocate(CS%tot_quad_loss(isd:ied,jsd:jed), source=0.0)
   allocate(CS%tot_itidal_loss(isd:ied,jsd:jed), source=0.0)
   allocate(CS%tot_Froude_loss(isd:ied,jsd:jed), source=0.0)
+  allocate(CS%tot_residual_loss(isd:ied,jsd:jed), source=0.0)
 
   ! Compute the fixed part of the bottom drag loss from baroclinic modes
   call get_param(param_file, mdl, "H2_FILE", h2_file, &
@@ -2406,6 +2476,32 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
     else ; CS%refl_dbl(i,j) = .false. ; endif
   enddo ; enddo
 
+  ! Read in the transmission coefficient and infer the residual
+  call get_param(param_file, mdl, "TRANS_FILE", trans_file, &
+               "The path to the file containing the transmission coefficent for internal tides.", &
+               fail_if_missing=.false., default='')
+  filename = trim(CS%inputdir) // trim(trans_file)
+  allocate(CS%trans(isd:ied,jsd:jed), source=0.0)
+  if (file_exists(filename, G%domain)) then
+    call log_param(param_file, mdl, "INPUTDIR/TRANS_FILE", filename)
+    call MOM_read_data(filename, 'trans', CS%trans, G%domain)
+  else
+    if (trim(trans_file) /= '' ) call MOM_error(FATAL, &
+                                                "TRANS_FILE: "//trim(filename)//" not found")
+  endif
+
+  call pass_var(CS%trans,G%domain)
+  ! residual
+  allocate(CS%residual(isd:ied,jsd:jed), source=0.0)
+  do j=jsd,jed
+    do i=isd,ied
+      if (CS%refl_pref_logical(i,j)) then
+        CS%residual(i,j) = 1. - CS%refl_pref(i,j) - CS%trans(i,j)
+      endif
+    enddo
+  enddo
+  call pass_var(CS%residual,G%domain)
+
   ! Read in prescribed land mask from file (if overwriting -BDM).
   ! This should be done in MOM_initialize_topography subroutine
   ! defined in MOM_fixed_initialization.F90 (BDM)
@@ -2445,6 +2541,10 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
                  Time, 'Local angle of coastline/ridge/shelf with respect to equator', 'rad')
   CS%id_refl_pref = register_diag_field('ocean_model', 'refl_pref', diag%axesT1, &
                  Time, 'Partial reflection coefficients', '')
+  CS%id_trans = register_diag_field('ocean_model', 'trans', diag%axesT1, &
+                 Time, 'Partial transmission coefficients', '')
+  CS%id_residual = register_diag_field('ocean_model', 'residual', diag%axesT1, &
+                 Time, 'Residual of reflection and transmission coefficients', '')
   CS%id_dx_Cv = register_diag_field('ocean_model', 'dx_Cv', diag%axesT1, &
                  Time, 'North face unblocked width', 'm', conversion=US%L_to_m)
   CS%id_dy_Cu = register_diag_field('ocean_model', 'dy_Cu', diag%axesT1, &
@@ -2454,6 +2554,8 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
   ! Output reflection parameters as diags here (not needed every timestep)
   if (CS%id_refl_ang > 0)   call post_data(CS%id_refl_ang, CS%refl_angle, CS%diag)
   if (CS%id_refl_pref > 0)  call post_data(CS%id_refl_pref, CS%refl_pref, CS%diag)
+  if (CS%id_trans > 0)      call post_data(CS%id_trans, CS%trans, CS%diag)
+  if (CS%id_residual > 0)   call post_data(CS%id_residual, CS%residual, CS%diag)
   if (CS%id_dx_Cv > 0)      call post_data(CS%id_dx_Cv, G%dx_Cv, CS%diag)
   if (CS%id_dy_Cu > 0)      call post_data(CS%id_dy_Cu, G%dy_Cu, CS%diag)
   if (CS%id_land_mask > 0)  call post_data(CS%id_land_mask, G%mask2dT, CS%diag)
@@ -2482,6 +2584,9 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
                 'W m-2', conversion=US%RZ3_T3_to_W_m2)
   CS%id_tot_Froude_loss = register_diag_field('ocean_model', 'ITide_tot_Froude_loss', diag%axesT1, &
                 Time, 'Internal tide energy loss to wave breaking', &
+                'W m-2', conversion=US%RZ3_T3_to_W_m2)
+  CS%id_tot_residual_loss = register_diag_field('ocean_model', 'ITide_tot_residual_loss', diag%axesT1, &
+                Time, 'Internal tide energy loss to residual on slopes', &
                 'W m-2', conversion=US%RZ3_T3_to_W_m2)
   CS%id_tot_allprocesses_loss = register_diag_field('ocean_model', 'ITide_tot_allprocesses_loss', diag%axesT1, &
                 Time, 'Internal tide energy loss summed over all processes', &

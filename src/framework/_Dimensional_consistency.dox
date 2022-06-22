@@ -1,0 +1,85 @@
+/*! \page Dimensional_consistency Dimensional Consistency Testing
+
+\section section_Dimensional_consistency Dimensional Consistency Testing
+
+  MOM6 uses a unique system for testing the dimensional consistency of all of
+its expressions.  The internal representations of dimensional variables are
+rescaled by integer powers of 2 that depend on their units, with all input and
+output being rescaled back to their original MKS units.  By choosing different
+powers of 2 for different units, the internal representations with different
+units scale differently, so dimensionally inconsistent expressions will not
+reproduce, but dimensionally inconsistent expressions give bitwise identical
+results.  So, for example, if horizontal lengths scale by a factor of 2^6=64,
+and time is scaled by a factor of 2^4=16, horizontal velocities will scale by a
+factor of 2^(6-4)=4.  In this case, expressions that combine velocities, all
+terms would scale by the same factor of 4.  By contrast, if there were an
+expression where a variable with units of length were added to one with the
+units of a velocity, the results would scale inconsistently, and answers would
+change with different scaling factors.
+
+  What makes these integer powers of 2 special is the way that floating point
+numbers are written as an O(1) mantissa times 2 raised to an integer exponent
+between +/-1024.  Multiplication by an integer power of 2 is just an integer
+shift in the exponent, so as long as the model is not rescaled by an overly
+large factor to encounter overflows and the model is not relying on automatic
+underflows being converted to 0, all floating point operations can be carried
+with one scale, and then rescaled to obtain identical answers.  MOM6 has the
+option to explicitly handle all relevant cases of underflows, and it can be
+demonstrated to give identical answers when each of its units are scaled by
+factors ranging from 2^-140 ~= 7.2e-43 to 2^140 ~= 1.4e42.
+
+  When running with rescaling factors other than 2^0 = 1, there are some extra
+array copies and multiplies of input fields or diagnostic output, so it is
+slightly more efficient not to actively use the dimensional rescaling.  For
+production runs, we typically set all of the rescaling powers to 0, but for
+debugging code problems, this rescaling can be an invaluable tool, especially
+when combined with the very verbose runtime setting DEBUG=True in a MOM_input or
+MOM_override file.  Diffs of the output from runs with different scaling factors
+readily highlights the earliest instances of differences, which can be used to
+track down any dimensionally inconsistent expressions.  Similarly, dimensional
+inconsistencies in diagnostics is easily tracked down by comparing the output
+from a pair of runs.
+
+  All real variables in MOM6 should have comments describing their purpose,
+along with their rescaled units and their mks counterparts with notation like
+"! A velocity [L T-1 ~> m s-1]".  If the units vary with the Boussinesq
+approximation, the Boussinesq variant is given first.  When variables are read
+in, their dimensions are usually specified with a 'scale=' optional argument on
+the MOM_get_param or MOM_read_data call, while the unscaling of diagnostics is
+specified with a 'conversion=' factor.  In both cases, these arguments it next
+to a text string specifying the variable's units, which can then be check easily
+for self-consistency.
+
+  Currently in MOM6, the following dimensions have unique scaling, along with
+the notation used to describe these variables in comments:
+
+\li Time, scaled by 2^T_RESCALE_POWER, denoted as [T ~> s]
+\li Horizontal length, scaled by 2^L_RESCALE_POWER, denoted as [L ~> m]
+\li Vertical height, scaled by 2^Z_RESCALE_POWER, denoted as [Z ~> m]
+\li Vertical thickness, scaled by 2^H_RESCALE_POWER, denoted as [H ~> m or kg m-2]
+\li Density, scaled by 2^R_RESCALE_POWER, denoted as [R ~> kg m-3]
+\li Enthalpy (or heat content), scaled by 2^Q_RESCALE_POWER, denoted as [Q ~> J kg-1]
+
+  These rescaling capabilities are also used by the SIS2 sea ice model, but it
+does uses a non-Boussinesq mass scale of [R Z ~> kg m-2] for ice thicknesses,
+rather than having a separate scaling factor (of [H ~> m or kg m-2]) that varies
+between the Boussinesq and non-Boussinesq modes like MOM6 does.  The actual
+powers used in the scaling are specified separately for MOM6 and SIS2 and
+need not be the same.
+
+  Each of these units can be scaled in separate test runs, or all of them can be
+rescaled simultaneously.  In the latter case, MOM_unique_scales.F90 provides
+tools to evaluate whether the specific combinations of units used by a model
+scale by unique powers, and it can suggest scaling factors that provides unique
+combinations of rescaling factors for the dimensions being tested, using a
+cost-function based on the frequency with which units are used in the model (and
+specified inside of MOM_check_scaling.F90), with a cost going as the product of
+the frequency of units that resolve to the same scaling factor.
+
+  A separate set of scaling factors could also be used for different chemical
+tracer concentrations, for example.  In this case, the tools in
+MOM_unique_scales.F90 could still be used, but there would need to be a separate
+equivalent of the unit_scaling_type with variables that are appropriate to the
+units of the tracers.
+
+*/

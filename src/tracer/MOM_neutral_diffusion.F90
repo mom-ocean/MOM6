@@ -126,7 +126,6 @@ logical function neutral_diffusion_init(Time, G, GV, US, param_file, diag, EOS, 
   type(neutral_diffusion_CS), pointer       :: CS         !< Neutral diffusion control structure
 
   ! Local variables
-  character(len=256) :: mesg    ! Message for error messages.
   character(len=80)  :: string  ! Temporary strings
   logical :: default_2018_answers
   logical :: boundary_extrap
@@ -167,11 +166,11 @@ logical function neutral_diffusion_init(Time, G, GV, US, param_file, diag, EOS, 
   call get_param(param_file, mdl, "NDIFF_INTERIOR_ONLY", CS%interior_only, &
                  "If true, only applies neutral diffusion in the ocean interior."//&
                  "That is, the algorithm will exclude the surface and bottom"//&
-                 "boundary layers.", default = .false.)
+                 "boundary layers.", default=.false.)
   call get_param(param_file, mdl, "NDIFF_USE_UNMASKED_TRANSPORT_BUG", CS%use_unmasked_transport_bug, &
                  "If true, use an older form for the accumulation of neutral-diffusion "//&
                  "transports that were unmasked, as used prior to Jan 2018. This is not "//&
-                 "recommended.", default = .false.)
+                 "recommended.", default=.false.)
 
   ! Initialize and configure remapping
   if ( .not.CS%continuous_reconstruction ) then
@@ -244,9 +243,6 @@ logical function neutral_diffusion_init(Time, G, GV, US, param_file, diag, EOS, 
   ! Store a rescaling factor for use in diagnostic messages.
   CS%R_to_kg_m3 = US%R_to_kg_m3
 
-! call get_param(param_file, mdl, "KHTR", CS%KhTr, &
-!                "The background along-isopycnal tracer diffusivity.", &
-!                units="m2 s-1", default=0.0)
 !  call closeParameterBlock(param_file)
   if (CS%continuous_reconstruction) then
     CS%nsurf = 2*GV%ke+2 ! Continuous reconstruction means that every interface has two connections
@@ -269,17 +265,17 @@ logical function neutral_diffusion_init(Time, G, GV, US, param_file, diag, EOS, 
   allocate(CS%Pint(SZI_(G),SZJ_(G),SZK_(GV)+1), source=0.)
   allocate(CS%stable_cell(SZI_(G),SZJ_(G),SZK_(GV)), source=.true.)
   ! U-points
-  allocate(CS%uPoL(G%isd:G%ied,G%jsd:G%jed, CS%nsurf)); CS%uPoL(G%isc-1:G%iec,G%jsc:G%jec,:)   = 0.
-  allocate(CS%uPoR(G%isd:G%ied,G%jsd:G%jed, CS%nsurf)); CS%uPoR(G%isc-1:G%iec,G%jsc:G%jec,:)   = 0.
-  allocate(CS%uKoL(G%isd:G%ied,G%jsd:G%jed, CS%nsurf)); CS%uKoL(G%isc-1:G%iec,G%jsc:G%jec,:)   = 0
-  allocate(CS%uKoR(G%isd:G%ied,G%jsd:G%jed, CS%nsurf)); CS%uKoR(G%isc-1:G%iec,G%jsc:G%jec,:)   = 0
-  allocate(CS%uHeff(G%isd:G%ied,G%jsd:G%jed,CS%nsurf-1)); CS%uHeff(G%isc-1:G%iec,G%jsc:G%jec,:) = 0
+  allocate(CS%uPoL(G%isd:G%ied,G%jsd:G%jed, CS%nsurf), source=0.)
+  allocate(CS%uPoR(G%isd:G%ied,G%jsd:G%jed, CS%nsurf), source=0.)
+  allocate(CS%uKoL(G%isd:G%ied,G%jsd:G%jed, CS%nsurf), source=0)
+  allocate(CS%uKoR(G%isd:G%ied,G%jsd:G%jed, CS%nsurf), source=0)
+  allocate(CS%uHeff(G%isd:G%ied,G%jsd:G%jed,CS%nsurf-1), source=0.)
   ! V-points
-  allocate(CS%vPoL(G%isd:G%ied,G%jsd:G%jed, CS%nsurf)); CS%vPoL(G%isc:G%iec,G%jsc-1:G%jec,:)   = 0.
-  allocate(CS%vPoR(G%isd:G%ied,G%jsd:G%jed, CS%nsurf)); CS%vPoR(G%isc:G%iec,G%jsc-1:G%jec,:)   = 0.
-  allocate(CS%vKoL(G%isd:G%ied,G%jsd:G%jed, CS%nsurf)); CS%vKoL(G%isc:G%iec,G%jsc-1:G%jec,:)   = 0
-  allocate(CS%vKoR(G%isd:G%ied,G%jsd:G%jed, CS%nsurf)); CS%vKoR(G%isc:G%iec,G%jsc-1:G%jec,:)   = 0
-  allocate(CS%vHeff(G%isd:G%ied,G%jsd:G%jed,CS%nsurf-1)); CS%vHeff(G%isc:G%iec,G%jsc-1:G%jec,:) = 0
+  allocate(CS%vPoL(G%isd:G%ied,G%jsd:G%jed, CS%nsurf), source=0.)
+  allocate(CS%vPoR(G%isd:G%ied,G%jsd:G%jed, CS%nsurf), source=0.)
+  allocate(CS%vKoL(G%isd:G%ied,G%jsd:G%jed, CS%nsurf), source=0)
+  allocate(CS%vKoR(G%isd:G%ied,G%jsd:G%jed, CS%nsurf), source=0)
+  allocate(CS%vHeff(G%isd:G%ied,G%jsd:G%jed,CS%nsurf-1), source=0.)
 
 end function neutral_diffusion_init
 
@@ -305,7 +301,6 @@ subroutine neutral_diffusion_calc_coeffs(G, GV, US, h, T, S, CS, p_surf)
   real, dimension(SZI_(G),SZJ_(G))  :: hbl      ! Boundary layer depth [H ~> m or kg m-2]
   integer :: iMethod
   real, dimension(SZI_(G)) :: ref_pres ! Reference pressure used to calculate alpha/beta [R L2 T-2 ~> Pa]
-  real, dimension(SZI_(G)) :: rho_tmp  ! Routine to calculate drho_dp, returns density which is not used [R ~> kg m-3]
   real :: h_neglect, h_neglect_edge    ! Negligible thicknesses [H ~> m or kg m-2]
   integer, dimension(SZI_(G), SZJ_(G)) :: k_top  ! Index of the first layer within the boundary
   real,    dimension(SZI_(G), SZJ_(G)) :: zeta_top ! Distance from the top of a layer to the intersection of the
@@ -328,7 +323,7 @@ subroutine neutral_diffusion_calc_coeffs(G, GV, US, h, T, S, CS, p_surf)
     call pass_var(hbl,G%Domain)
     ! get k-indices and zeta
     do j=G%jsc-1, G%jec+1 ; do i=G%isc-1,G%iec+1
-      if (G%mask2dT(i,j) > 0.) then
+      if (G%mask2dT(i,j) > 0.0) then
         call boundary_k_range(SURFACE, G%ke, h(i,j,:), hbl(i,j), k_top(i,j), zeta_top(i,j), k_bot(i,j), zeta_bot(i,j))
       endif
     enddo; enddo
@@ -466,7 +461,7 @@ subroutine neutral_diffusion_calc_coeffs(G, GV, US, h, T, S, CS, p_surf)
 
   ! Neutral surface factors at U points
   do j = G%jsc, G%jec ; do I = G%isc-1, G%iec
-    if (G%mask2dCu(I,j) > 0.) then
+    if (G%mask2dCu(I,j) > 0.0) then
       if (CS%continuous_reconstruction) then
         call find_neutral_surface_positions_continuous(GV%ke,                                    &
                 CS%Pint(i,j,:), CS%Tint(i,j,:), CS%Sint(i,j,:), CS%dRdT(i,j,:), CS%dRdS(i,j,:),            &
@@ -487,7 +482,7 @@ subroutine neutral_diffusion_calc_coeffs(G, GV, US, h, T, S, CS, p_surf)
 
   ! Neutral surface factors at V points
   do J = G%jsc-1, G%jec ; do i = G%isc, G%iec
-    if (G%mask2dCv(i,J) > 0.) then
+    if (G%mask2dCv(i,J) > 0.0) then
       if (CS%continuous_reconstruction) then
         call find_neutral_surface_positions_continuous(GV%ke,                                              &
                 CS%Pint(i,j,:), CS%Tint(i,j,:), CS%Sint(i,j,:), CS%dRdT(i,j,:), CS%dRdS(i,j,:),           &
@@ -522,10 +517,10 @@ subroutine neutral_diffusion_calc_coeffs(G, GV, US, h, T, S, CS, p_surf)
       enddo ; enddo ; enddo
     else
       do k = 1, CS%nsurf-1 ; do j = G%jsc, G%jec ; do I = G%isc-1, G%iec
-        if (G%mask2dCu(I,j) > 0.) CS%uhEff(I,j,k) = CS%uhEff(I,j,k) * pa_to_H
+        if (G%mask2dCu(I,j) > 0.0) CS%uhEff(I,j,k) = CS%uhEff(I,j,k) * pa_to_H
       enddo ; enddo ; enddo
       do k = 1, CS%nsurf-1 ; do J = G%jsc-1, G%jec ; do i = G%isc, G%iec
-        if (G%mask2dCv(i,J) > 0.) CS%vhEff(i,J,k) = CS%vhEff(i,J,k) * pa_to_H
+        if (G%mask2dCv(i,J) > 0.0) CS%vhEff(i,J,k) = CS%vhEff(i,J,k) * pa_to_H
       enddo ; enddo ; enddo
     endif
   endif
@@ -577,7 +572,7 @@ subroutine neutral_diffusion(G, GV, h, Coef_x, Coef_y, dt, Reg, US, CS)
 
   integer :: i, j, k, m, ks, nk
   real :: Idt  ! The inverse of the time step [T-1 ~> s-1]
-  real :: h_neglect, h_neglect_edge
+  real :: h_neglect, h_neglect_edge ! Negligible thicknesses [H ~> m or kg m-2]
 
   h_neglect = GV%H_subroundoff ; h_neglect_edge = GV%H_subroundoff
 
@@ -1254,7 +1249,6 @@ subroutine find_neutral_surface_positions_discontinuous(CS, nk, &
   logical :: searching_left_column  ! True if searching for the position of a right interface in the left column
   logical :: searching_right_column ! True if searching for the position of a left interface in the right column
   logical :: reached_bottom         ! True if one of the bottom-most interfaces has been used as the target
-  logical :: search_layer
   logical :: fail_heff              ! Fail if negative thickness are encountered.  By default this
                                     ! is true, but it can take its value from hard_fail_heff.
   real    :: dRho                   ! A density difference between columns [R ~> kg m-3]
@@ -1367,7 +1361,7 @@ subroutine find_neutral_surface_positions_discontinuous(CS, nk, &
 
         if (CS%debug) then
           write(stdout,'(A,I2)') "Searching left layer ", kl_left
-          write(stdout,'(A,I2,X,I2)') "Searching from right: ", kl_right, ki_right
+          write(stdout,'(A,I2,1X,I2)') "Searching from right: ", kl_right, ki_right
           write(stdout,*) "Temp/Salt Reference: ", Tr(kl_right,ki_right), Sr(kl_right,ki_right)
           write(stdout,*) "Temp/Salt Top L: ", Tl(kl_left,1), Sl(kl_left,1)
           write(stdout,*) "Temp/Salt Bot L: ", Tl(kl_left,2), Sl(kl_left,2)
@@ -1390,7 +1384,7 @@ subroutine find_neutral_surface_positions_discontinuous(CS, nk, &
 
         if (CS%debug) then
           write(stdout,'(A,I2)') "Searching right layer ", kl_right
-          write(stdout,'(A,I2,X,I2)') "Searching from left: ", kl_left, ki_left
+          write(stdout,'(A,I2,1X,I2)') "Searching from left: ", kl_left, ki_left
           write(stdout,*) "Temp/Salt Reference: ", Tl(kl_left,ki_left), Sl(kl_left,ki_left)
           write(stdout,*) "Temp/Salt Top L: ", Tr(kl_right,1), Sr(kl_right,1)
           write(stdout,*) "Temp/Salt Bot L: ", Tr(kl_right,2), Sr(kl_right,2)
@@ -1449,7 +1443,7 @@ subroutine mark_unstable_cells(CS, nk, T, S, P, stable_cell)
   real, dimension(nk,2),  intent(in)    :: P           !< Pressure at interfaces [R L2 T-2 ~> Pa]
   logical, dimension(nk), intent(  out) :: stable_cell !< True if this cell is unstably stratified
 
-  integer :: k, first_stable, prev_stable
+  integer :: k
   real :: delta_rho ! A density difference [R ~> kg m-3]
 
   do k = 1,nk
@@ -1536,7 +1530,6 @@ subroutine increment_interface(nk, kl, ki, reached_bottom, searching_this_column
   logical, intent(inout)                :: reached_bottom         !< Updated when kl == nk and ki == 2
   logical, intent(inout)                :: searching_this_column  !< Updated when kl == nk and ki == 2
   logical, intent(inout)                :: searching_other_column !< Updated when kl == nk and ki == 2
-  integer :: k
 
   reached_bottom = .false.
   if (ki == 2) then ! At the bottom interface
@@ -1599,7 +1592,6 @@ function find_neutral_pos_linear( CS, z0, T_ref, S_ref, dRdT_ref, dRdS_ref, &
   real :: S_z, dS_dz ! Salinity at a point and its derivative with fractional position [ppt]
   real :: drho_min, drho_max ! Bounds on density differences [R ~> kg m-3]
   real :: ztest, zmin, zmax ! Fractional positions in the cell [nondim]
-  real :: dz         ! Change in position in the cell [nondim]
   real :: a1, a2     ! Fractional weights of the top and bottom values [nondim]
   integer :: iter
   integer :: nterm
@@ -1796,7 +1788,6 @@ subroutine calc_delta_rho_and_derivs(CS, T1, S1, p1_in, T2, S2, p2_in, drho, &
   real :: p1, p2, pmid ! Pressures [R L2 T-2 ~> Pa]
   real :: drdt1, drdt2 ! Partial derivatives of density with temperature [R degC-1 ~> kg m-3 degC-1]
   real :: drds1, drds2 ! Partial derivatives of density with salinity [R ppt-1 ~> kg m-3 ppt-1]
-  real :: drdp1, drdp2 ! Partial derivatives of density with pressure [T2 L-2 ~> s2 m-2]
 
   ! Use the same reference pressure or the in-situ pressure
   if (CS%ref_pres > 0.) then
@@ -1889,7 +1880,7 @@ function absolute_positions(n,ns,Pint,Karr,NParr)
                                    !! or other units following Pint
 
   ! Local variables
-  integer :: k_surface, k
+  integer :: k_surface
 
   do k_surface = 1, ns
     absolute_positions(k_surface) = absolute_position(n,ns,Pint,Karr,NParr,k_surface)
@@ -1924,7 +1915,7 @@ subroutine neutral_surface_flux(nk, nsurf, deg, hl, hr, Tl, Tr, PiL, PiR, KoL, K
   real,               optional, intent(in)    :: h_neglect_edge !< A negligibly small width used for
                                              !! edge value calculations if continuous is false [H ~> m or kg m-2]
   ! Local variables
-  integer :: k_sublayer, klb, klt, krb, krt, k
+  integer :: k_sublayer, klb, klt, krb, krt
   real :: T_right_top, T_right_bottom, T_right_layer, T_right_sub, T_right_top_int, T_right_bot_int
   real :: T_left_top, T_left_bottom, T_left_layer, T_left_sub, T_left_top_int, T_left_bot_int
   real :: dT_top, dT_bottom, dT_layer, dT_ave, dT_sublayer, dT_top_int, dT_bot_int
@@ -2115,15 +2106,11 @@ logical function ndiff_unit_tests_continuous(verbose)
   logical, intent(in) :: verbose !< If true, write results to stdout
   ! Local variables
   integer, parameter         :: nk = 4
-  real, dimension(nk+1)      :: TiL, TiR1, TiR2, TiR4, Tio ! Test interface temperatures
-  real, dimension(nk)        :: TL                         ! Test layer temperatures
-  real, dimension(nk+1)      :: SiL                        ! Test interface salinities
-  real, dimension(nk+1)      :: PiL, PiR4                  ! Test interface positions
-  real, dimension(2*nk+2)    :: PiLRo, PiRLo               ! Test positions
-  integer, dimension(2*nk+2) :: KoL, KoR                   ! Test indexes
-  real, dimension(2*nk+1)    :: hEff                       ! Test positions
-  real, dimension(2*nk+1)    :: Flx                        ! Test flux
-  integer :: k
+  real, dimension(nk+1)      :: Tio           ! Test interface temperatures
+  real, dimension(2*nk+2)    :: PiLRo, PiRLo  ! Test positions
+  integer, dimension(2*nk+2) :: KoL, KoR      ! Test indexes
+  real, dimension(2*nk+1)    :: hEff          ! Test positions
+  real, dimension(2*nk+1)    :: Flx           ! Test flux
   logical :: v
   real :: h_neglect
 
@@ -2381,24 +2368,17 @@ logical function ndiff_unit_tests_discontinuous(verbose)
   ! Local variables
   integer, parameter          :: nk = 3
   integer, parameter          :: ns = nk*4
-  real, dimension(nk)         :: Sl, Sr, Tl, Tr ! Salinities [ppt] and temperatures [degC]
+  real, dimension(nk)         :: Sl, Sr    ! Salinities [ppt] and temperatures [degC]
   real, dimension(nk)         :: hl, hr    ! Thicknesses in pressure units [R L2 T-2 ~> Pa]
   real, dimension(nk,2)       :: TiL, SiL, TiR, SiR ! Cell edge salinities [ppt] and temperatures [degC]
   real, dimension(nk,2)       :: Pres_l, Pres_r ! Interface pressures [R L2 T-2 ~> Pa]
   integer, dimension(ns)      :: KoL, KoR
   real, dimension(ns)         :: PoL, PoR
-  real, dimension(ns-1)       :: hEff, Flx
+  real, dimension(ns-1)       :: hEff
   type(neutral_diffusion_CS)  :: CS        !< Neutral diffusion control structure
-  type(remapping_CS), pointer :: remap_CS  !< Remapping control structure (PLM)
   real, dimension(nk,2)       :: ppoly_T_l, ppoly_T_r ! Linear reconstruction for T
   real, dimension(nk,2)       :: ppoly_S_l, ppoly_S_r ! Linear reconstruction for S
-  real, dimension(nk,2)       :: dRdT      !< Partial derivative of density with temperature at
-                                           !! cell edges [R degC-1 ~> kg m-3 degC-1]
-  real, dimension(nk,2)       :: dRdS      !< Partial derivative of density with salinity at
-                                           !! cell edges [R ppt-1 ~> kg m-3 ppt-1]
   logical, dimension(nk)      :: stable_l, stable_r
-  integer                     :: iMethod
-  integer                     :: ns_l, ns_r
   integer :: k
   logical :: v
 
@@ -2654,9 +2634,9 @@ logical function test_fv_diff(verbose, hkm1, hk, hkp1, Skm1, Sk, Skp1, Ptrue, ti
     if (test_fv_diff) stdunit = stderr ! In case of wrong results, write to error stream
     write(stdunit,'(a)') title
     if (test_fv_diff) then
-      write(stdunit,'(2(x,a,f20.16),x,a)') 'pRet=',Pret,'pTrue=',Ptrue,'WRONG!'
+      write(stdunit,'(2(1x,a,f20.16),1x,a)') 'pRet=',Pret,'pTrue=',Ptrue,'WRONG!'
     else
-      write(stdunit,'(2(x,a,f20.16))') 'pRet=',Pret,'pTrue=',Ptrue
+      write(stdunit,'(2(1x,a,f20.16))') 'pRet=',Pret,'pTrue=',Ptrue
     endif
   endif
 
@@ -2686,9 +2666,9 @@ logical function test_fvlsq_slope(verbose, hkm1, hk, hkp1, Skm1, Sk, Skp1, Ptrue
     if (test_fvlsq_slope) stdunit = stderr ! In case of wrong results, write to error stream
     write(stdunit,'(a)') title
     if (test_fvlsq_slope) then
-      write(stdunit,'(2(x,a,f20.16),x,a)') 'pRet=',Pret,'pTrue=',Ptrue,'WRONG!'
+      write(stdunit,'(2(1x,a,f20.16),1x,a)') 'pRet=',Pret,'pTrue=',Ptrue,'WRONG!'
     else
-      write(stdunit,'(2(x,a,f20.16))') 'pRet=',Pret,'pTrue=',Ptrue
+      write(stdunit,'(2(1x,a,f20.16))') 'pRet=',Pret,'pTrue=',Ptrue
     endif
   endif
 
@@ -2716,10 +2696,10 @@ logical function test_ifndp(verbose, rhoNeg, Pneg, rhoPos, Ppos, Ptrue, title)
     if (test_ifndp) stdunit = stderr ! In case of wrong results, write to error stream
     write(stdunit,'(a)') title
     if (test_ifndp) then
-      write(stdunit,'(4(x,a,f20.16),2(x,a,1pe22.15),x,a)') &
+      write(stdunit,'(4(1x,a,f20.16),2(1x,a,1pe22.15),1x,a)') &
             'r1=',rhoNeg,'p1=',Pneg,'r2=',rhoPos,'p2=',Ppos,'pRet=',Pret,'pTrue=',Ptrue,'WRONG!'
     else
-      write(stdunit,'(4(x,a,f20.16),2(x,a,1pe22.15))') &
+      write(stdunit,'(4(1x,a,f20.16),2(1x,a,1pe22.15))') &
             'r1=',rhoNeg,'p1=',Pneg,'r2=',rhoPos,'p2=',Ppos,'pRet=',Pret,'pTrue=',Ptrue
     endif
   endif
@@ -2749,11 +2729,11 @@ logical function test_data1d(verbose, nk, Po, Ptrue, title)
     do k = 1,nk
       if (Po(k) /= Ptrue(k)) then
         test_data1d = .true.
-        write(stdunit,'(a,i2,2(x,a,f20.16),x,a,1pe22.15,x,a)') &
+        write(stdunit,'(a,i2,2(1x,a,f20.16),1x,a,1pe22.15,1x,a)') &
               'k=',k,'Po=',Po(k),'Ptrue=',Ptrue(k),'err=',Po(k)-Ptrue(k),'WRONG!'
       else
         if (verbose) &
-          write(stdunit,'(a,i2,2(x,a,f20.16),x,a,1pe22.15)') &
+          write(stdunit,'(a,i2,2(1x,a,f20.16),1x,a,1pe22.15)') &
                 'k=',k,'Po=',Po(k),'Ptrue=',Ptrue(k),'err=',Po(k)-Ptrue(k)
       endif
     enddo
@@ -2784,10 +2764,10 @@ logical function test_data1di(verbose, nk, Po, Ptrue, title)
     do k = 1,nk
       if (Po(k) /= Ptrue(k)) then
         test_data1di = .true.
-        write(stdunit,'(a,i2,2(x,a,i5),x,a)') 'k=',k,'Io=',Po(k),'Itrue=',Ptrue(k),'WRONG!'
+        write(stdunit,'(a,i2,2(1x,a,i5),1x,a)') 'k=',k,'Io=',Po(k),'Itrue=',Ptrue(k),'WRONG!'
       else
         if (verbose) &
-          write(stdunit,'(a,i2,2(x,a,i5))') 'k=',k,'Io=',Po(k),'Itrue=',Ptrue(k)
+          write(stdunit,'(a,i2,2(1x,a,i5))') 'k=',k,'Io=',Po(k),'Itrue=',Ptrue(k)
       endif
     enddo
   endif

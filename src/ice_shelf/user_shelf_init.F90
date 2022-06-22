@@ -57,12 +57,7 @@ subroutine USER_initialize_shelf_mass(mass_shelf, area_shelf_h, h_shelf, hmask, 
                                                    !! being started from a restart file.
 
 ! This subroutine sets up the initial mass and area covered by the ice shelf.
-  real :: max_draft  ! The maximum ocean draft of the ice shelf [Z ~> m].
-  real :: min_draft  ! The minimum ocean draft of the ice shelf [Z ~> m].
-  real :: flat_shelf_width ! The range over which the shelf is min_draft thick.
-  real :: c1 ! The maximum depths in m.
   character(len=40) :: mdl = "USER_initialize_shelf_mass" ! This subroutine's name.
-  integer :: i, j
 
   ! call MOM_error(FATAL, "USER_shelf_init.F90, USER_set_shelf_mass: " // &
   !  "Unmodified user routine called - you must edit the routine to use it")

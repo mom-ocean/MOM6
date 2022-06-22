@@ -8,16 +8,17 @@ module MOM_lateral_boundary_diffusion
 use MOM_cpu_clock,             only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock,             only : CLOCK_MODULE
 use MOM_checksums,             only : hchksum
-use MOM_domains,               only : pass_var, sum_across_PEs
+use MOM_domains,               only : pass_var
 use MOM_diag_mediator,         only : diag_ctrl, time_type
 use MOM_diag_mediator,         only : post_data, register_diag_field
 use MOM_diag_vkernels,         only : reintegrate_column
-use MOM_error_handler,         only : MOM_error, FATAL, is_root_pe
+use MOM_error_handler,         only : MOM_error, MOM_mesg, FATAL, is_root_pe
 use MOM_file_parser,           only : get_param, log_version, param_file_type
 use MOM_grid,                  only : ocean_grid_type
 use MOM_remapping,             only : remapping_CS, initialize_remapping
 use MOM_remapping,             only : extract_member_remapping_CS, remapping_core_h
 use MOM_remapping,             only : remappingSchemesDoc, remappingDefaultScheme
+use MOM_spatial_means,         only : global_mass_integral
 use MOM_tracer_registry,       only : tracer_registry_type, tracer_type
 use MOM_unit_scaling,          only : unit_scale_type
 use MOM_verticalGrid,          only : verticalGrid_type
@@ -78,7 +79,6 @@ logical function lateral_boundary_diffusion_init(Time, G, GV, param_file, diag, 
 
   ! local variables
   character(len=80)  :: string ! Temporary strings
-  integer :: ke, nk            ! Number of levels in the LBD and native grids, respectively
   logical :: boundary_extrap   ! controls if boundary extrapolation is used in the LBD code
 
   if (ASSOCIATED(CS)) then
@@ -125,7 +125,7 @@ logical function lateral_boundary_diffusion_init(Time, G, GV, param_file, diag, 
                  "It can be one of the following schemes: "//&
                  trim(remappingSchemesDoc), default=remappingDefaultScheme)
   call initialize_remapping( CS%remap_CS, string, boundary_extrapolation = boundary_extrap ,&
-       check_reconstruction = .false., check_remapping = .false., answers_2018 = .false.)
+       check_reconstruction=.false., check_remapping=.false., answers_2018=.false.)
   call extract_member_remapping_CS(CS%remap_CS, degree=CS%deg)
   call get_param(param_file, mdl, "LBD_DEBUG", CS%debug, &
                  "If true, write out verbose debugging data in the LBD module.", &
@@ -166,16 +166,13 @@ subroutine lateral_boundary_diffusion(G, GV, US, h, Coef_x, Coef_y, dt, Reg, CS)
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV))  :: tendency    !< tendency array for diagnostic [conc T-1 ~> conc s-1]
   real, dimension(SZI_(G),SZJ_(G))           :: tendency_2d !< depth integrated content tendency for diagn
   type(tracer_type), pointer                 :: tracer => NULL() !< Pointer to the current tracer
-  real, dimension(SZK_(GV)) :: tracer_1d                    !< 1d-array used to remap tracer change to native grid
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV))  :: tracer_old  !< local copy of the initial tracer concentration,
                                                             !! only used to compute tendencies.
-  real, dimension(SZI_(G),SZJ_(G))           :: tracer_int  !< integrated tracer before LBD is applied
-                                                            !! [conc H L2 ~> conc m3 or conc kg]
-  real, dimension(SZI_(G),SZJ_(G))           :: tracer_end  !< integrated tracer after LBD is applied.
-                                                            !! [conc H L2 ~> conc m3 or conc kg]
-  integer :: i, j, k, m   !< indices to loop over
+  real :: tracer_int_prev !< Globally integrated tracer before LBD is applied, in mks units [conc kg]
+  real :: tracer_int_end  !< Integrated tracer after LBD is applied, in mks units [conc kg]
   real    :: Idt          !< inverse of the time step [T-1 ~> s-1]
-  real    :: tmp1, tmp2   !< temporary variables [conc H L2 ~> conc m3 or conc kg]
+  character(len=256) :: mesg !< Message for error messages.
+  integer :: i, j, k, m   !< indices to loop over
 
   call cpu_clock_begin(id_clock_lbd)
   Idt = 1./dt
@@ -236,22 +233,11 @@ subroutine lateral_boundary_diffusion(G, GV, US, h, Coef_x, Coef_y, dt, Reg, CS)
 
     if (CS%debug) then
       call hchksum(tracer%t, "after LBD "//tracer%name,G%HI)
-      tracer_int(:,:) = 0.0; tracer_end(:,:) = 0.0
-      ! tracer (native grid) before and after LBD
-      do j=G%jsc,G%jec ; do i=G%isc,G%iec
-        do k=1,GV%ke
-          tracer_int(i,j) = tracer_int(i,j) + tracer_old(i,j,k) * &
-                    (h(i,j,k)*(G%mask2dT(i,j)*G%areaT(i,j)))
-          tracer_end(i,j) = tracer_end(i,j) + tracer%t(i,j,k) * &
-                      (h(i,j,k)*(G%mask2dT(i,j)*G%areaT(i,j)))
-        enddo
-      enddo; enddo
-
-      tmp1 = SUM(tracer_int)
-      tmp2 = SUM(tracer_end)
-      call sum_across_PEs(tmp1)
-      call sum_across_PEs(tmp2)
-      if (is_root_pe()) write(*,*)'Total '//tracer%name//' before/after LBD:', tmp1, tmp2
+      ! tracer (native grid) integrated tracer amounts before and after LBD
+      tracer_int_prev = global_mass_integral(h, G, GV, tracer_old)
+      tracer_int_end = global_mass_integral(h, G, GV, tracer%t)
+      write(mesg,*) 'Total '//tracer%name//' before/after LBD:', tracer_int_prev, tracer_int_end
+      call MOM_mesg(mesg)
     endif
 
     ! Post the tracer diagnostics
@@ -355,8 +341,8 @@ end subroutine swap
 
 !> Receives a 1D array x and sorts it into ascending order.
 subroutine sort(x, n)
-  real, dimension(n),  intent(inout) :: x        !< 1D array to be sorted
   integer,             intent(in   ) :: n        !< # of pts in the array
+  real, dimension(n),  intent(inout) :: x        !< 1D array to be sorted
 
   ! local variables
   integer :: i, location
@@ -394,9 +380,9 @@ subroutine unique(val, n, val_unique, val_max)
   max_val = MAXVAL(val)
   i = 0
   do while (min_val<max_val)
-      i = i+1
-      min_val = MINVAL(val, mask=val>min_val)
-      tmp(i) = min_val
+    i = i+1
+    min_val = MINVAL(val, mask=val>min_val)
+    tmp(i) = min_val
   enddo
   ii = i
   if (limit) then
@@ -596,13 +582,14 @@ subroutine fluxes_layer_method(boundary, ke, hbl_L, hbl_R, h_L, h_R, phi_L, phi_
   real, allocatable :: F_layer_z(:)  !< Diffusive flux at U/V-point in the ztop grid    [H L2 conc ~> m3 conc]
   real              :: h_vel(ke)     !< Thicknesses at u- and v-points in the native grid
                                      !! The harmonic mean is used to avoid zero values      [H ~> m or kg m-2]
-  real    :: khtr_avg                !< Thickness-weighted diffusivity at the velocity-point [L2 T-1 ~> m2 s-1]
-                                     !! This is just to remind developers that khtr_avg should be
-                                     !! computed once khtr is 3D.
   real    :: htot                    !< Total column thickness                              [H ~> m or kg m-2]
-  integer :: k, k_bot_min, k_top_max !< k-indices, min and max for bottom and top, respectively
-  integer :: k_bot_max, k_top_min    !< k-indices, max and min for bottom and top, respectively
-  integer :: k_bot_diff, k_top_diff  !< different between left and right k-indices for bottom and top, respectively
+  integer :: k
+  integer :: k_bot_min               !< Minimum k-index for the bottom
+  integer :: k_bot_max               !< Maximum k-index for the bottom
+  integer :: k_bot_diff              !< Difference between bottom left and right k-indices
+  !integer :: k_top_max              !< Minimum k-index for the top
+  !integer :: k_top_min              !< Maximum k-index for the top
+  !integer :: k_top_diff             !< Difference between top left and right k-indices
   integer :: k_top_L, k_bot_L        !< k-indices left native grid
   integer :: k_top_R, k_bot_R        !< k-indices right native grid
   real    :: zeta_top_L, zeta_top_R  !< distance from the top of a layer to the boundary
@@ -630,8 +617,10 @@ subroutine fluxes_layer_method(boundary, ke, hbl_L, hbl_R, h_L, h_R, phi_L, phi_
   allocate(F_layer_z(nk), source=0.0)
 
   ! remap tracer to dz_top
-  call remapping_core_h(CS%remap_cs, ke, h_L(:), phi_L(:), nk, dz_top(:), phi_L_z(:))
-  call remapping_core_h(CS%remap_cs, ke, h_R(:), phi_R(:), nk, dz_top(:), phi_R_z(:))
+  call remapping_core_h(CS%remap_cs, ke, h_L(:), phi_L(:), nk, dz_top(:), phi_L_z(:), &
+                        CS%H_subroundoff, CS%H_subroundoff)
+  call remapping_core_h(CS%remap_cs, ke, h_R(:), phi_R(:), nk, dz_top(:), phi_R_z(:), &
+                        CS%H_subroundoff, CS%H_subroundoff)
 
   ! Calculate vertical indices containing the boundary layer in dz_top
   call boundary_k_range(boundary, nk, dz_top, hbl_L, k_top_L, zeta_top_L, k_bot_L, zeta_bot_L)
@@ -757,8 +746,8 @@ logical function near_boundary_unit_tests( verbose )
   allocate(CS)
   ! fill required fields in CS
   CS%linear=.false.
-  call initialize_remapping( CS%remap_CS, 'PLM', boundary_extrapolation = .true. ,&
-       check_reconstruction = .true., check_remapping = .true.)
+  call initialize_remapping( CS%remap_CS, 'PLM', boundary_extrapolation=.true. ,&
+       check_reconstruction=.true., check_remapping=.true.)
   call extract_member_remapping_CS(CS%remap_CS, degree=CS%deg)
   CS%H_subroundoff = 1.0E-20
   CS%debug=.false.
@@ -1024,8 +1013,8 @@ logical function test_boundary_k_range(k_top, zeta_top, k_bot, zeta_bot, k_top_a
     write(stdout,30) "zeta_bot", zeta_bot, "zeta_bot_ans", zeta_bot_ans
   endif
 
-  20 format(A,"=",i3,X,A,"=",i3)
-  30 format(A,"=",f20.16,X,A,"=",f20.16)
+  20 format(A,"=",i3,1X,A,"=",i3)
+  30 format(A,"=",f20.16,1X,A,"=",f20.16)
 
 
 end function test_boundary_k_range

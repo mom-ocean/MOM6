@@ -3,7 +3,12 @@ module MOM_error_handler
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
+use MOM_coms_infra, only : num_PEs
 use MOM_error_infra, only : MOM_err, is_root_pe, stdlog, stdout, NOTE, WARNING, FATAL
+use posix, only : getpid, getppid, handler_interface
+use posix, only : signal, kill, SIGUSR1
+use posix, only : sigjmp_buf, siglongjmp
+use posix, only : sleep
 
 implicit none ; private
 
@@ -15,6 +20,7 @@ public :: callTree_showQuery, callTree_enter, callTree_leave, callTree_waypoint
 public :: is_root_pe, stdlog, stdout
 !> Integer parameters encoding the severity of an error message
 public :: NOTE, WARNING, FATAL
+public :: disable_fatal_errors, enable_fatal_errors
 
 integer :: verbosity = 6
 !< Verbosity level:
@@ -40,6 +46,19 @@ integer :: verbosity = 6
 integer :: callTreeIndentLevel = 0
 !< The level of calling within the call tree
 
+! Error handling
+
+logical :: ignore_fatal = .false.
+  !< If true, ignore FATAL errors and jump to a prior state.
+integer, parameter :: err_signal = SIGUSR1
+  !< Signal used to trigger the error handler
+integer :: err_pid
+  !< Process ID for the error handler (either self or MPI launcher)
+procedure(handler_interface), pointer :: prior_handler
+  !< The default signal handler used before signal() setup (usually SIG_DFT)
+type(sigjmp_buf) :: prior_env
+  !< Buffer containing the program state to be recovered by longjmp
+
 contains
 
 !> This provides a convenient interface for writing an informative comment, depending
@@ -61,6 +80,47 @@ subroutine MOM_mesg(message, verb, all_print)
 
 end subroutine MOM_mesg
 
+!> Enable error handling, replacing FATALs in MOM_error with err_handler.
+subroutine disable_fatal_errors(env)
+  type(sigjmp_buf), intent(in) :: env
+    !> Process recovery state after FATAL errors
+
+  integer :: sig
+
+  ignore_fatal = .true.
+
+  ! TODO: Only need to call this once; move to an init() function?
+  if (num_PEs() > 1) then
+    err_pid = getppid()
+  else
+    err_pid = getpid()
+  endif
+
+  ! Store the program state
+  prior_env = env
+
+  ! Setup the signal handler
+  ! NOTE: Passing parameters to signal() in GFortran causes a compiler error.
+  !   We avert this by copying err_signal to a variable.
+  sig = err_signal
+  ! TODO: Use sigaction() in place of signal()
+  prior_handler => signal(sig, err_handler)
+end subroutine disable_fatal_errors
+
+!> Disable the error handler and abort on FATAL
+subroutine enable_fatal_errors()
+  integer :: sig
+  procedure(handler_interface), pointer :: dummy
+
+  ignore_fatal = .false.
+  err_pid = -1    ! NOTE: 0 might be safer, since it's unusable.
+
+  ! Restore the original signal handler (usually SIG_DFT).
+  sig = err_signal
+  ! NOTE: As above, we copy the err_signal to accommodate GFortran.
+  dummy => signal(sig, prior_handler)
+end subroutine enable_fatal_errors
+
 !> This provides a convenient interface for writing an error message
 !! with run-time filter based on a verbosity and the severity of the error.
 subroutine MOM_error(level, message, all_print)
@@ -71,6 +131,7 @@ subroutine MOM_error(level, message, all_print)
   ! This provides a convenient interface for writing an error message
   ! with run-time filter based on a verbosity.
   logical :: write_msg
+  integer :: rc
 
   write_msg = is_root_pe()
   if (present(all_print)) write_msg = write_msg .or. all_print
@@ -81,6 +142,15 @@ subroutine MOM_error(level, message, all_print)
     case (WARNING)
       if (write_msg.and.verbosity>=1) call MOM_err(WARNING, message)
     case (FATAL)
+      if (ignore_fatal) then
+        print *, "(FATAL): " // message
+        rc = kill(err_pid, err_signal)
+        ! NOTE: MPI launchers require, in their words, "a few seconds" to
+        !   propagate the signal to the nodes, so we wait here to avoid
+        !   anomalous FATAL calls.
+        ! In practice, the signal will take control before sleep() completes.
+        rc = sleep(3)
+      endif
       if (verbosity>=0) call MOM_err(FATAL, message)
     case default
       call MOM_err(level, message)
@@ -180,7 +250,13 @@ subroutine assert(logical_arg, msg)
   if (.not. logical_arg) then
     call MOM_error(FATAL, msg)
   endif
-
 end subroutine assert
+
+!> Restore the process state via longjmp after receiving a signal.
+subroutine err_handler(sig)
+  integer, intent(in) :: sig
+    !< Signal passed to the handler (unused)
+  call siglongjmp(prior_env, 1)
+end subroutine
 
 end module MOM_error_handler

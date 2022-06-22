@@ -98,12 +98,11 @@ subroutine reintegrate_column(nsrc, h_src, uh_src, ndest, h_dest, missing_value,
   real, dimension(ndest), intent(in)    :: h_dest !< Thickness of destination cells
   real,                   intent(in)    :: missing_value !< Value to assign in vanished cells
   real, dimension(ndest), intent(inout) :: uh_dest !< Interpolated value at destination cell interfaces
+
   ! Local variables
-  real :: x_dest ! Relative position of target interface
   real :: h_src_rem, h_dest_rem, dh ! Incremental thicknesses
-  real :: uh_src_rem, uh_dest_rem, duh ! Incremental amounts of stuff
+  real :: uh_src_rem, duh ! Incremental amounts of stuff
   integer :: k_src, k_dest ! Index of cell in src and dest columns
-  integer :: iter
   logical :: src_ran_out, src_exists
 
   uh_dest(:) = missing_value
@@ -294,7 +293,6 @@ logical function test_interp(verbose, missing_value, msg, nsrc, h_src, u_src, nd
   real, dimension(ndest+1) :: u_dest ! Interpolated value at destination cell interfaces
   integer :: k
   real :: error
-  logical :: print_results
 
   ! Interpolate from src to dest
   call interpolate_column(nsrc, h_src, u_src, ndest, h_dest, missing_value, u_dest)
@@ -311,8 +309,8 @@ logical function test_interp(verbose, missing_value, msg, nsrc, h_src, u_src, nd
       if (error==0.) then
         write(stdout,'(i3,3(1pe24.16))') k,u_dest(k),u_true(k),u_dest(k)-u_true(k)
       else
-        write(stdout,'(i3,3(1pe24.16),x,a)') k,u_dest(k),u_true(k),u_dest(k)-u_true(k),'<--- WRONG!'
-        write(stderr,'(i3,3(1pe24.16),x,a)') k,u_dest(k),u_true(k),u_dest(k)-u_true(k),'<--- WRONG!'
+        write(stdout,'(i3,3(1pe24.16),1x,a)') k,u_dest(k),u_true(k),u_dest(k)-u_true(k),'<--- WRONG!'
+        write(stderr,'(i3,3(1pe24.16),1x,a)') k,u_dest(k),u_true(k),u_dest(k)-u_true(k),'<--- WRONG!'
       endif
     enddo
   endif
@@ -333,7 +331,6 @@ logical function test_reintegrate(verbose, missing_value, msg, nsrc, h_src, uh_s
   real, dimension(ndest) :: uh_dest ! Reintegrated value on destination cells
   integer :: k
   real :: error
-  logical :: print_results
 
   ! Interpolate from src to dest
   call reintegrate_column(nsrc, h_src, uh_src, ndest, h_dest, missing_value, uh_dest)
@@ -350,8 +347,8 @@ logical function test_reintegrate(verbose, missing_value, msg, nsrc, h_src, uh_s
       if (error==0.) then
         write(stdout,'(i3,3(1pe24.16))') k,uh_dest(k),uh_true(k),uh_dest(k)-uh_true(k)
       else
-        write(stdout,'(i3,3(1pe24.16),x,a)') k,uh_dest(k),uh_true(k),uh_dest(k)-uh_true(k),'<--- WRONG!'
-        write(stderr,'(i3,3(1pe24.16),x,a)') k,uh_dest(k),uh_true(k),uh_dest(k)-uh_true(k),'<--- WRONG!'
+        write(stdout,'(i3,3(1pe24.16),1x,a)') k,uh_dest(k),uh_true(k),uh_dest(k)-uh_true(k),'<--- WRONG!'
+        write(stderr,'(i3,3(1pe24.16),1x,a)') k,uh_dest(k),uh_true(k),uh_dest(k)-uh_true(k),'<--- WRONG!'
       endif
     enddo
   endif

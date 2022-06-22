@@ -53,8 +53,8 @@ subroutine external_gwave_initialize_thickness(h, G, GV, US, param_file, just_re
 
   if (.not.just_read) call log_version(param_file, mdl, version, "")
   call get_param(param_file, mdl, "SSH_ANOMALY_HEIGHT", ssh_anomaly_height, &
-                 "The vertical displacement of the SSH anomaly. ", units="m", &
-                 fail_if_missing=.not.just_read, do_not_log=just_read, scale=US%m_to_Z)
+                 "The vertical displacement of the SSH anomaly. ", units="m", scale=US%m_to_Z, &
+                 fail_if_missing=.not.just_read, do_not_log=just_read)
   call get_param(param_file, mdl, "SSH_ANOMALY_WIDTH", ssh_anomaly_width, &
                  "The lateral width of the SSH anomaly. ", units="coordinate", &
                  fail_if_missing=.not.just_read, do_not_log=just_read)

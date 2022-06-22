@@ -246,11 +246,9 @@ subroutine tidal_forcing_init(Time, G, US, param_file, CS)
   real, dimension(MAX_CONSTITUENTS) :: amp_def  ! Default amplitude for each tidal constituent [m]
   real, dimension(MAX_CONSTITUENTS) :: love_def ! Default love number for each constituent [nondim]
   integer, dimension(3) :: tide_ref_date !< Reference date (t = 0) for tidal forcing.
-  logical :: use_const  ! True if a constituent is being used.
   logical :: use_M2, use_S2, use_N2, use_K2, use_K1, use_O1, use_P1, use_Q1
   logical :: use_MF, use_MM
   logical :: tides      ! True if a tidal forcing is to be used.
-  logical :: FAIL_IF_MISSING = .true.
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
   character(len=40)  :: mdl = "MOM_tidal_forcing" ! This module's name.
