@@ -159,6 +159,7 @@ subroutine random_2d_constructor(CS, HI, Time, seed)
   if (.not. allocated(CS%stream2d)) allocate( CS%stream2d(HI%isd:HI%ied,HI%jsd:HI%jed) )
 
   tseed = seed_from_time(Time)
+
   tseed = ieor(tseed*9007, seed)
   do j = HI%jsd,HI%jed
     do i = HI%isd,HI%ied

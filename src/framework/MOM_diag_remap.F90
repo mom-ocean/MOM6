@@ -217,7 +217,7 @@ subroutine diag_remap_configure_axes(remap_cs, GV, US, param_file)
   allocate(interfaces(remap_cs%nz+1))
   allocate(layers(remap_cs%nz))
 
-  interfaces(:) = getCoordinateInterfaces(remap_cs%regrid_cs)
+  interfaces(:) = getCoordinateInterfaces(remap_cs%regrid_cs, undo_scaling=.true.)
   layers(:) = 0.5 * ( interfaces(1:remap_cs%nz) + interfaces(2:remap_cs%nz+1) )
 
   remap_cs%interface_axes_id = MOM_diag_axis_init(lowercase(trim(remap_cs%diag_coord_name))//'_i', &
