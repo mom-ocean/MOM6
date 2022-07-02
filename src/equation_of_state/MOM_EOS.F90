@@ -66,8 +66,11 @@ public query_compressible
 
 !> Calculates density of sea water from T, S and P
 interface calculate_density
-  module procedure calculate_density_scalar, calculate_density_1d, calculate_density_array
-  module procedure calculate_stanley_density_scalar, calculate_stanley_density_array
+  module procedure calculate_density_scalar
+  module procedure calculate_density_array
+  module procedure calculate_density_1d
+  module procedure calculate_stanley_density_scalar
+  module procedure calculate_stanley_density_array
   module procedure calculate_stanley_density_1d
 end interface calculate_density
 
@@ -448,15 +451,15 @@ subroutine calculate_stanley_density_1d(T, S, pressure, Tvar, TScov, Svar, rho, 
       call calculate_density_linear(Ta, Sa, pres, rho, is, npts, &
                                     EOS%Rho_T0_S0, EOS%dRho_dT, EOS%dRho_dS, rho_reference)
       call calculate_density_second_derivs_linear(Ta, Sa, pres, d2RdSS, d2RdST, &
-                                                  d2RdTT, d2RdSp, d2RdTP, 1, npts)
+                                                  d2RdTT, d2RdSp, d2RdTP, is, npts)
     case (EOS_WRIGHT)
       call calculate_density_wright(Ta, Sa, pres, rho, is, npts, rho_reference)
       call calculate_density_second_derivs_wright(Ta, Sa, pres, d2RdSS, d2RdST, &
-                                                  d2RdTT, d2RdSp, d2RdTP, 1, npts)
+                                                  d2RdTT, d2RdSp, d2RdTP, is, npts)
     case (EOS_TEOS10)
       call calculate_density_teos10(Ta, Sa, pres, rho, is, npts, rho_reference)
       call calculate_density_second_derivs_teos10(Ta, Sa, pres, d2RdSS, d2RdST, &
-                                                  d2RdTT, d2RdSp, d2RdTP, 1, npts)
+                                                  d2RdTT, d2RdSp, d2RdTP, is, npts)
     case default
       call MOM_error(FATAL, "calculate_stanley_density_scalar: EOS is not valid.")
   end select

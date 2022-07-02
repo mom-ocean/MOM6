@@ -1052,7 +1052,9 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
   real :: dThickness, dTemp, dSalt
   real :: fractionOfForcing, hOld, Ithickness
   real :: RivermixConst  ! A constant used in implementing river mixing [R Z2 T-1 ~> Pa s].
-
+  real :: EnthalpyConst  ! A constant used to control the enthalpy calculation
+                         ! By default EnthalpyConst = 1.0. If fluxes%heat_content_evap
+                         ! is associated enthalpy is provided via coupler and EnthalpyConst = 0.0.
   real, dimension(SZI_(G)) :: &
     d_pres,       &  ! pressure change across a layer [R L2 T-2 ~> Pa]
     p_lay,        &  ! average pressure in a layer [R L2 T-2 ~> Pa]
@@ -1116,6 +1118,9 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
   ! Only apply forcing if fluxes%sw is associated.
   if (.not.associated(fluxes%sw) .and. .not.calculate_energetics) return
 
+  EnthalpyConst = 1.0
+  if (associated(fluxes%heat_content_evap)) EnthalpyConst = 0.0
+
   if (calculate_buoyancy) then
     SurfPressure(:) = 0.0
     GoRho = US%L_to_Z**2*GV%g_Earth / GV%Rho0
@@ -1137,7 +1142,8 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
   !$OMP                                  nonPenSW,hGrounding,CS,Idt,aggregate_FW_forcing,  &
   !$OMP                                  minimum_forcing_depth,evap_CFL_limit,dt,EOSdom,   &
   !$OMP                                  calculate_buoyancy,netPen_rate,SkinBuoyFlux,GoRho, &
-  !$OMP                                  calculate_energetics,dSV_dT,dSV_dS,cTKE,g_Hconv2) &
+  !$OMP                                  calculate_energetics,dSV_dT,dSV_dS,cTKE,g_Hconv2, &
+  !$OMP                                  EnthalpyConst)                  &
   !$OMP                          private(opacityBand,h2d,T2d,netMassInOut,netMassOut,      &
   !$OMP                                  netHeat,netSalt,Pen_SW_bnd,fractionOfForcing,     &
   !$OMP                                  IforcingDepthScale,                               &
@@ -1279,17 +1285,19 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
           ! This line accounts for the temperature of the mass exchange
           Temp_in = T2d(i,k)
           Salin_in = 0.0
-          dTemp = dTemp + dThickness*Temp_in
+          dTemp = dTemp + dThickness*Temp_in*EnthalpyConst
 
           ! Diagnostics of heat content associated with mass fluxes
-          if (associated(fluxes%heat_content_massin))                             &
-            fluxes%heat_content_massin(i,j) = fluxes%heat_content_massin(i,j) +   &
-                         T2d(i,k) * max(0.,dThickness) * GV%H_to_RZ * tv%C_p * Idt
-          if (associated(fluxes%heat_content_massout))                            &
-            fluxes%heat_content_massout(i,j) = fluxes%heat_content_massout(i,j) + &
-                         T2d(i,k) * min(0.,dThickness) * GV%H_to_RZ * tv%C_p * Idt
-          if (associated(tv%TempxPmE)) tv%TempxPmE(i,j) = tv%TempxPmE(i,j) + &
-                         T2d(i,k) * dThickness * GV%H_to_RZ
+          if (.not. associated(fluxes%heat_content_evap)) then
+            if (associated(fluxes%heat_content_massin)) &
+              fluxes%heat_content_massin(i,j) = fluxes%heat_content_massin(i,j) + &
+                           T2d(i,k) * max(0.,dThickness) * GV%H_to_RZ * tv%C_p * Idt
+            if (associated(fluxes%heat_content_massout)) &
+              fluxes%heat_content_massout(i,j) = fluxes%heat_content_massout(i,j) + &
+                           T2d(i,k) * min(0.,dThickness) * GV%H_to_RZ * tv%C_p * Idt
+            if (associated(tv%TempxPmE)) tv%TempxPmE(i,j) = tv%TempxPmE(i,j) + &
+                           T2d(i,k) * dThickness * GV%H_to_RZ
+          endif
 
           ! Determine the energetics of river mixing before updating the state.
           if (calculate_energetics .and. associated(fluxes%lrunoff) .and. CS%do_rivermix) then
@@ -1362,17 +1370,19 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
           netSalt(i) = netSalt(i) - dSalt
 
           ! This line accounts for the temperature of the mass exchange
-          dTemp = dTemp + dThickness*T2d(i,k)
+          dTemp = dTemp + dThickness*T2d(i,k)*EnthalpyConst
 
           ! Diagnostics of heat content associated with mass fluxes
-          if (associated(fluxes%heat_content_massin)) &
-            fluxes%heat_content_massin(i,j) = fluxes%heat_content_massin(i,j) + &
-                         T2d(i,k) * max(0.,dThickness) * GV%H_to_RZ * tv%C_p * Idt
-          if (associated(fluxes%heat_content_massout)) &
-            fluxes%heat_content_massout(i,j) = fluxes%heat_content_massout(i,j) + &
-                         T2d(i,k) * min(0.,dThickness) * GV%H_to_RZ * tv%C_p * Idt
-          if (associated(tv%TempxPmE)) tv%TempxPmE(i,j) = tv%TempxPmE(i,j) + &
-                         T2d(i,k) * dThickness * GV%H_to_RZ
+          if (.not. associated(fluxes%heat_content_evap)) then
+            if (associated(fluxes%heat_content_massin)) &
+              fluxes%heat_content_massin(i,j) = fluxes%heat_content_massin(i,j) + &
+                           T2d(i,k) * max(0.,dThickness) * GV%H_to_RZ * tv%C_p * Idt
+            if (associated(fluxes%heat_content_massout)) &
+              fluxes%heat_content_massout(i,j) = fluxes%heat_content_massout(i,j) + &
+                           T2d(i,k) * min(0.,dThickness) * GV%H_to_RZ * tv%C_p * Idt
+            if (associated(tv%TempxPmE)) tv%TempxPmE(i,j) = tv%TempxPmE(i,j) + &
+                           T2d(i,k) * dThickness * GV%H_to_RZ
+          endif
 
           ! Update state by the appropriate increment.
           hOld     = h2d(i,k)               ! Keep original thickness in hand

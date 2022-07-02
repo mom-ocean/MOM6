@@ -596,12 +596,15 @@ logical function tidal_mixing_init(Time, G, GV, US, param_file, int_tide_CSp, di
       CS%id_N2_int = register_diag_field('ocean_model','N2_int',diag%axesTi,Time, &
           'Bouyancy frequency squared, at interfaces', 's-2', conversion=US%s_to_T**2)
       !> TODO: add units
-      CS%id_Simmons_coeff = register_diag_field('ocean_model','Simmons_coeff',diag%axesT1,Time, &
-           'time-invariant portion of the tidal mixing coefficient using the Simmons', '')
-      CS%id_Schmittner_coeff = register_diag_field('ocean_model','Schmittner_coeff',diag%axesTL,Time, &
-           'time-invariant portion of the tidal mixing coefficient using the Schmittner', '')
-      CS%id_tidal_qe_md = register_diag_field('ocean_model','tidal_qe_md',diag%axesTL,Time, &
-           'input tidal energy dissipated locally interpolated to model vertical coordinates', '')
+      if (CS%CVMix_tidal_scheme .eq. SIMMONS) then
+        CS%id_Simmons_coeff = register_diag_field('ocean_model','Simmons_coeff',diag%axesT1,Time, &
+             'time-invariant portion of the tidal mixing coefficient using the Simmons', '')
+      else if (CS%CVMix_tidal_scheme .eq. SCHMITTNER) then
+        CS%id_Schmittner_coeff = register_diag_field('ocean_model','Schmittner_coeff',diag%axesTL,Time, &
+             'time-invariant portion of the tidal mixing coefficient using the Schmittner', '')
+        CS%id_tidal_qe_md = register_diag_field('ocean_model','tidal_qe_md',diag%axesTL,Time, &
+             'input tidal energy dissipated locally interpolated to model vertical coordinates', '')
+      endif
       CS%id_vert_dep = register_diag_field('ocean_model','vert_dep',diag%axesTi,Time, &
            'vertical deposition function needed for Simmons et al tidal  mixing', '')
 

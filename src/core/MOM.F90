@@ -109,6 +109,7 @@ use MOM_set_visc,              only : set_visc_init, set_visc_end
 use MOM_shared_initialization, only : write_ocean_geometry_file
 use MOM_sponge,                only : init_sponge_diags, sponge_CS
 use MOM_state_initialization,  only : MOM_initialize_state
+use MOM_stoch_eos,             only : MOM_stoch_eos_init,MOM_stoch_eos_run,MOM_stoch_eos_CS,mom_calc_varT
 use MOM_sum_output,            only : write_energy, accumulate_net_input
 use MOM_sum_output,            only : MOM_sum_output_init, MOM_sum_output_end
 use MOM_sum_output,            only : sum_output_CS
@@ -137,7 +138,7 @@ use MOM_variables,             only : rotate_surface_state
 use MOM_verticalGrid,          only : verticalGrid_type, verticalGridInit, verticalGridEnd
 use MOM_verticalGrid,          only : fix_restart_scaling
 use MOM_verticalGrid,          only : get_thickness_units, get_flux_units, get_tr_flux_units
-use MOM_wave_interface,        only : wave_parameters_CS, waves_end
+use MOM_wave_interface,        only : wave_parameters_CS, waves_end, waves_register_restarts
 use MOM_wave_interface,        only : Update_Stokes_Drift
 
 use MOM_porous_barriers,      only : porous_widths
@@ -243,6 +244,7 @@ type, public :: MOM_control_struct ; private
   logical :: use_ALE_algorithm  !< If true, use the ALE algorithm rather than layered
                     !! isopycnal/stacked shallow water mode. This logical is set by calling the
                     !! function useRegridding() from the MOM_regridding module.
+  type(MOM_stoch_eos_CS) :: stoch_eos_CS !< structure containing random pattern for stoch EOS
   logical :: alternate_first_direction !< If true, alternate whether the x- or y-direction
                     !! updates occur first in directionally split parts of the calculation.
   real    :: first_dir_restart = -1.0 !< A real copy of G%first_direction for use in restart files
@@ -441,6 +443,8 @@ integer :: id_clock_ALE
 integer :: id_clock_other
 integer :: id_clock_offline_tracer
 integer :: id_clock_unit_tests
+integer :: id_clock_stoch
+integer :: id_clock_varT
 !>@}
 
 contains
@@ -687,16 +691,16 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
     else
       CS%p_surf_end  => forces%p_surf
     endif
-
     if (CS%UseWaves) then
       ! Update wave information, which is presently kept static over each call to step_mom
       call enable_averages(time_interval, Time_start + real_to_time(US%T_to_s*time_interval), CS%diag)
-      call Update_Stokes_Drift(G, GV, US, Waves, h, forces%ustar)
+      call Update_Stokes_Drift(G, GV, US, Waves, h, forces%ustar, time_interval, do_dyn)
       call disable_averaging(CS%diag)
     endif
   else ! not do_dyn.
-    if (CS%UseWaves) & ! Diagnostics are not enabled in this call.
-      call Update_Stokes_Drift(G, GV, US, Waves, h, fluxes%ustar)
+    if (CS%UseWaves) then ! Diagnostics are not enabled in this call.
+      call Update_Stokes_Drift(G, GV, US, Waves, h, fluxes%ustar, time_interval, do_dyn)
+    endif
   endif
 
   if (CS%debug) then
@@ -1043,7 +1047,7 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_thermo, &
                         ! barotropic time step needs to be updated.
   logical :: showCallTree
 
-  integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
+  integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
 
   real, dimension(SZI_(CS%G),SZJ_(CS%G),SZK_(CS%G)+1) :: eta_por ! layer interface heights
@@ -1057,6 +1061,15 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_thermo, &
   showCallTree = callTree_showQuery()
 
   call cpu_clock_begin(id_clock_dynamics)
+  call cpu_clock_begin(id_clock_stoch)
+  if (CS%stoch_eos_CS%use_stoch_eos) call MOM_stoch_eos_run(G,u,v,dt,Time_local,CS%stoch_eos_CS,CS%diag)
+  call cpu_clock_end(id_clock_stoch)
+  call cpu_clock_begin(id_clock_varT)
+  if (CS%stoch_eos_CS%stanley_coeff >= 0.0) then
+    call MOM_calc_varT(G,GV,h,CS%tv,CS%stoch_eos_CS,dt)
+    call pass_var(CS%tv%varT, G%Domain,clock=id_clock_pass,halo=1)
+  endif
+  call cpu_clock_end(id_clock_varT)
 
   if ((CS%t_dyn_rel_adv == 0.0) .and. CS%thickness_diffuse .and. CS%thickness_diffuse_first) then
 
@@ -1132,6 +1145,30 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_thermo, &
 
   endif ! -------------------------------------------------- end SPLIT
 
+  ! Update the model's current to reflect wind-wave growth
+  if (Waves%Stokes_DDT .and. (.not.Waves%Passive_Stokes_DDT)) then
+    do J=jsq,jeq ; do i=is,ie
+      v(i,J,:) = v(i,J,:) + Waves%ddt_us_y(i,J,:)*dt
+    enddo; enddo
+    do j=js,je ; do I=isq,ieq
+      u(I,j,:) = u(I,j,:) + Waves%ddt_us_x(I,j,:)*dt
+    enddo; enddo
+    call pass_vector(u,v,G%Domain)
+  endif
+  ! Added an additional output to track Stokes drift time tendency.
+  ! It is mostly for debugging, and perhaps doesn't need to hang
+  ! around permanently.
+  if (Waves%Stokes_DDT .and. (Waves%id_3dstokes_y_from_ddt>0)) then
+    do J=jsq,jeq ; do i=is,ie
+      Waves%us_y_from_ddt(i,J,:) = Waves%us_y_from_ddt(i,J,:) + Waves%ddt_us_y(i,J,:)*dt
+    enddo; enddo
+  endif
+  if (Waves%Stokes_DDT .and. (Waves%id_3dstokes_x_from_ddt>0)) then
+    do j=js,je ; do I=isq,ieq
+      Waves%us_x_from_ddt(I,j,:) = Waves%us_x_from_ddt(I,j,:) + Waves%ddt_us_x(I,j,:)*dt
+    enddo; enddo
+  endif
+
   if (CS%use_particles .and. CS%do_dynamics) then ! Run particles whether or not stepping is split
     call particles_run(CS%particles, Time_local, CS%u, CS%v, CS%h, CS%tv) ! Run the particles model
   endif
@@ -1199,6 +1236,9 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_thermo, &
   if (IDs%id_u > 0) call post_data(IDs%id_u, u, CS%diag)
   if (IDs%id_v > 0) call post_data(IDs%id_v, v, CS%diag)
   if (IDs%id_h > 0) call post_data(IDs%id_h, h, CS%diag)
+  if (CS%stoch_eos_CS%id_stoch_eos > 0) call post_data(CS%stoch_eos_CS%id_stoch_eos, CS%stoch_eos_CS%pattern, CS%diag)
+  if (CS%stoch_eos_CS%id_stoch_phi > 0) call post_data(CS%stoch_eos_CS%id_stoch_phi, CS%stoch_eos_CS%phi, CS%diag)
+  if (CS%stoch_eos_CS%id_tvar_sgs > 0) call post_data(CS%stoch_eos_CS%id_tvar_sgs, CS%tv%varT, CS%diag)
   call disable_averaging(CS%diag)
   call cpu_clock_end(id_clock_diagnostics) ; call cpu_clock_end(id_clock_other)
 
@@ -1699,7 +1739,7 @@ end subroutine step_offline
 !! initializing the ocean state variables, and initializing subsidiary modules
 subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
                           Time_in, offline_tracer_mode, input_restart_file, diag_ptr, &
-                          count_calls, tracer_flow_CSp,  ice_shelf_CSp)
+                          count_calls, tracer_flow_CSp,  ice_shelf_CSp, waves_CSp)
   type(time_type), target,   intent(inout) :: Time        !< model time, set in this routine
   type(time_type),           intent(in)    :: Time_init   !< The start time for the coupled model's calendar
   type(param_file_type),     intent(out)   :: param_file  !< structure indicating parameter file to parse
@@ -1721,6 +1761,8 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
                                                           !! calls to step_MOM instead of the number of
                                                           !! dynamics timesteps.
   type(ice_shelf_CS), optional,     pointer :: ice_shelf_CSp !< A pointer to an ice shelf control structure
+  type(Wave_parameters_CS), &
+                   optional, pointer       :: Waves_CSp       !< An optional pointer to a wave property CS
   ! local variables
   type(ocean_grid_type),  pointer :: G => NULL()    ! A pointer to the metric grid use for the run
   type(ocean_grid_type),  pointer :: G_in => NULL() ! Pointer to the input grid
@@ -1796,6 +1838,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   integer :: first_direction   ! An integer that indicates which direction is to be
                                ! updated first in directionally split parts of the
                                ! calculation.
+  logical :: use_KPP           ! If true, diabatic is using KPP vertical mixing
   integer :: nkml, nkbl, verbosity, write_geom
   integer :: dynamics_stencil  ! The computational stencil for the calculations
                                ! in the dynamic core.
@@ -2332,15 +2375,18 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
       call register_tracer(CS%tv%T, CS%tracer_Reg, param_file, HI, GV, &
                            tr_desc=vd_T, registry_diags=.true., conc_scale=US%C_to_degC, &
                            flux_nameroot='T', flux_units='W', flux_longname='Heat', &
+                           net_surfflux_name='KPP_QminusSW', NLT_budget_name='KPP_NLT_temp_budget', &
+                           net_surfflux_longname='Net temperature flux ignoring short-wave, as used by [CVMix] KPP', &
                            flux_scale=conv2watt, convergence_units='W m-2', &
                            convergence_scale=conv2watt, CMOR_tendprefix="opottemp", &
-                           diag_form=2, underflow_conc=temp_underflow)
+                           diag_form=2, underflow_conc=temp_underflow, Tr_out=CS%tv%tr_T)
       call register_tracer(CS%tv%S, CS%tracer_Reg, param_file, HI, GV, &
                            tr_desc=vd_S, registry_diags=.true., conc_scale=US%S_to_ppt, &
                            flux_nameroot='S', flux_units=S_flux_units, flux_longname='Salt', &
+                           net_surfflux_name='KPP_netSalt', NLT_budget_name='KPP_NLT_saln_budget', &
                            flux_scale=conv2salt, convergence_units='kg m-2 s-1', &
                            convergence_scale=0.001*US%S_to_ppt*GV%H_to_kg_m2, CMOR_tendprefix="osalt", &
-                           diag_form=2, underflow_conc=salin_underflow)
+                           diag_form=2, underflow_conc=salin_underflow, Tr_out=CS%tv%tr_S)
     endif
   endif
 
@@ -2467,6 +2513,10 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
     ! reservoirs are used.
     call open_boundary_register_restarts(HI, GV, US, CS%OBC, CS%tracer_Reg, &
                           param_file, restart_CSp, use_temperature)
+  endif
+
+  if (present(waves_CSp)) then
+    call waves_register_restarts(waves_CSp, HI, GV, param_file, restart_CSp)
   endif
 
   call callTree_waypoint("restart registration complete (initialize_MOM)")
@@ -2729,6 +2779,8 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   call set_visc_init(Time, G, GV, US, param_file, diag, CS%visc, CS%set_visc_CSp, restart_CSp, CS%OBC)
   call thickness_diffuse_init(Time, G, GV, US, param_file, diag, CS%CDp, CS%thickness_diffuse_CSp)
 
+  new_sim = is_new_run(restart_CSp)
+  call MOM_stoch_eos_init(G,Time,param_file,CS%stoch_eos_CS,restart_CSp,diag)
   if (CS%split) then
     allocate(eta(SZI_(G),SZJ_(G)), source=0.0)
     call initialize_dyn_split_RK2(CS%u, CS%v, CS%h, CS%uh, CS%vh, eta, Time, &
@@ -2810,14 +2862,14 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   call register_surface_diags(Time, G, US, CS%sfc_IDs, CS%diag, CS%tv)
   call register_diags(Time, G, GV, US, CS%IDs, CS%diag)
   call register_transport_diags(Time, G, GV, US, CS%transport_IDs, CS%diag)
+  call extract_diabatic_member(CS%diabatic_CSp, use_KPP=use_KPP)
   call register_tracer_diagnostics(CS%tracer_Reg, CS%h, Time, diag, G, GV, US, &
-                                   CS%use_ALE_algorithm)
+                                   CS%use_ALE_algorithm, use_KPP)
   if (CS%use_ALE_algorithm) then
     call ALE_register_diags(Time, G, GV, US, diag, CS%ALE_CSp)
   endif
 
   ! This subroutine initializes any tracer packages.
-  new_sim = is_new_run(restart_CSp)
   call tracer_flow_control_init(.not.new_sim, Time, G, GV, US, CS%h, param_file, &
              CS%diag, CS%OBC, CS%tracer_flow_CSp, CS%sponge_CSp, &
              CS%ALE_sponge_CSp, CS%tv)
@@ -3023,6 +3075,7 @@ subroutine register_diags(Time, G, GV, US, IDs, diag)
       v_extensive=.true.)
   IDs%id_ssh_inst = register_diag_field('ocean_model', 'SSH_inst', diag%axesT1, &
       Time, 'Instantaneous Sea Surface Height', 'm', conversion=US%Z_to_m)
+
 end subroutine register_diags
 
 !> Set up CPU clock IDs for timing various subroutines.
@@ -3055,6 +3108,8 @@ subroutine MOM_timing_init(CS)
   if (CS%offline_tracer_mode) then
     id_clock_offline_tracer = cpu_clock_id('Ocean offline tracers', grain=CLOCK_SUBCOMPONENT)
   endif
+  id_clock_stoch = cpu_clock_id('(Stochastic EOS)', grain=CLOCK_MODULE)
+  id_clock_varT = cpu_clock_id('(SGS Temperature Variance)', grain=CLOCK_MODULE)
 
 end subroutine MOM_timing_init
 

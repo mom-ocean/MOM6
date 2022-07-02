@@ -106,6 +106,8 @@ type, public :: diagnostics_CS ; private
   integer :: id_rhopot0        = -1, id_rhopot2        = -1
   integer :: id_drho_dT        = -1, id_drho_dS        = -1
   integer :: id_h_pre_sync     = -1
+  integer :: id_tosq           = -1, id_sosq           = -1
+
   !>@}
   type(wave_speed_CS) :: wave_speed  !< Wave speed control struct
 
@@ -398,16 +400,28 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
     ! Internal T&S variables are conservative temperature & absolute salinity,
     ! so they need to converted to potential temperature and practical salinity
     ! for some diagnostics using TEOS-10 function calls.
-    if ((CS%id_Tpot > 0) .or. (CS%id_tob > 0)) then
+    if ((CS%id_Tpot > 0) .or. (CS%id_tob > 0) .or. (CS%id_tosq > 0)) then
       do k=1,nz ; do j=js,je ; do i=is,ie
         work_3d(i,j,k) = US%degC_to_C*gsw_pt_from_ct(US%S_to_ppt*tv%S(i,j,k),US%C_to_degC*tv%T(i,j,k))
       enddo ; enddo ; enddo
       if (CS%id_Tpot > 0) call post_data(CS%id_Tpot, work_3d, CS%diag)
       if (CS%id_tob > 0) call post_data(CS%id_tob, work_3d(:,:,nz), CS%diag, mask=G%mask2dT)
+      if (CS%id_tosq > 0) then
+         do k=1,nz ; do j=js,je ; do i=is,ie
+           work_3d(i,j,k) = work_3d(i,j,k)*work_3d(i,j,k)
+         enddo ; enddo ; enddo
+         call post_data(CS%id_tosq, work_3d, CS%diag)
+      endif
     endif
   else
     ! Internal T&S variables are potential temperature & practical salinity
     if (CS%id_tob > 0) call post_data(CS%id_tob, tv%T(:,:,nz), CS%diag, mask=G%mask2dT)
+    if (CS%id_tosq > 0) then
+      do k=1,nz ; do j=js,je ; do i=is,ie
+        work_3d(i,j,k) = tv%T(i,j,k)*tv%T(i,j,k)
+      enddo ; enddo ; enddo
+      call post_data(CS%id_tosq, work_3d, CS%diag)
+    endif
   endif
 
   ! Calculate additional, potentially derived salinity diagnostics
@@ -415,16 +429,28 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
     ! Internal T&S variables are conservative temperature & absolute salinity,
     ! so they need to converted to potential temperature and practical salinity
     ! for some diagnostics using TEOS-10 function calls.
-    if ((CS%id_Sprac > 0) .or. (CS%id_sob > 0)) then
+    if ((CS%id_Sprac > 0) .or. (CS%id_sob > 0) .or. (CS%id_sosq >0)) then
       do k=1,nz ; do j=js,je ; do i=is,ie
         work_3d(i,j,k) = US%ppt_to_S*gsw_sp_from_sr(US%S_to_ppt*tv%S(i,j,k))
       enddo ; enddo ; enddo
       if (CS%id_Sprac > 0) call post_data(CS%id_Sprac, work_3d, CS%diag)
       if (CS%id_sob > 0) call post_data(CS%id_sob, work_3d(:,:,nz), CS%diag, mask=G%mask2dT)
+      if (CS%id_sosq > 0) then
+        do k=1,nz ; do j=js,je ; do i=is,ie
+           work_3d(i,j,k) = work_3d(i,j,k)*work_3d(i,j,k)
+        enddo ; enddo ; enddo
+        call post_data(CS%id_sosq, work_3d, CS%diag)
+      endif
     endif
   else
     ! Internal T&S variables are potential temperature & practical salinity
     if (CS%id_sob > 0) call post_data(CS%id_sob, tv%S(:,:,nz), CS%diag, mask=G%mask2dT)
+    if (CS%id_sosq > 0) then
+      do k=1,nz ; do j=js,je ; do i=is,ie
+        work_3d(i,j,k) = tv%S(i,j,k)*tv%S(i,j,k)
+      enddo ; enddo ; enddo
+      call post_data(CS%id_sosq, work_3d, CS%diag)
+    endif
   endif
 
   ! volume mean potential temperature
@@ -1605,6 +1631,13 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, US, param_file, diag
         long_name='Sea Water Salinity at Sea Floor', &
         standard_name='sea_water_salinity_at_sea_floor', &
         units='psu', conversion=US%S_to_ppt)
+
+    CS%id_tosq = register_diag_field('ocean_model', 'tosq', diag%axesTL,&
+      Time, 'Square of Potential Temperature', 'degc2',           &
+      standard_name='Potential Temperature Squared')
+    CS%id_sosq = register_diag_field('ocean_model', 'sosq', diag%axesTL,&
+      Time, 'Square of Salinity', 'psu2',           &
+      standard_name='Salinity Squared')
 
     CS%id_temp_layer_ave = register_diag_field('ocean_model', 'temp_layer_ave', &
         diag%axesZL, Time, 'Layer Average Ocean Temperature', 'degC')
