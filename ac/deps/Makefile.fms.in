@@ -22,4 +22,4 @@ ARFLAGS = @ARFLAGS@
 .PHONY: depend
 depend: Makefile.dep
 Makefile.dep:
-	$(MAKEDEP) -o Makefile.dep -x libFMS.a @srcdir@
+	$(MAKEDEP) -o Makefile.dep -e -x libFMS.a @srcdir@

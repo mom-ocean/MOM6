@@ -28,7 +28,7 @@ Makefile: @srcdir@/ac/Makefile.in config.status
 .PHONY: depend
 depend: Makefile.dep
 Makefile.dep:
-	$(MAKEDEP) -o Makefile.dep $(SRC_DIRS)
+	$(MAKEDEP) -o Makefile.dep -e $(SRC_DIRS)
 
 
 # Delete any files associated with configuration (including the Makefile).
