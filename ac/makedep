@@ -126,7 +126,7 @@ def create_deps(src_dirs, makefile, debug, exec_target, fc_rule, link_externals,
         for o in sorted( o2F90.keys() ):
             found_mods = [m for m in o2uses[o] if m in all_modules]
             missing_mods = [m for m in o2uses[o] if m not in all_modules]
-            incs = nested_h( o2h[o], f2F )
+            incs = nested_inc( o2h[o] + o2inc[o], f2F )
             incdeps = includes_in_path(incs, f2F, f2dir, all_files, o2F90[o])
             incargs = sorted( set( [ '-I'+os.path.dirname(f) for f in incdeps ] ) )
             if debug:
@@ -212,8 +212,8 @@ def link_obj(obj, o2uses, mod2o, all_modules):
     recur(obj)
     return sorted( set( olst) )
 
-def nested_h(hfiles, f2F):
-    """List of all headers included by "hfiles","""
+def nested_inc(inc_files, f2F):
+    """List of all files included by "inc_files", either by #include or F90 include."""
     def recur(hfile):
         if hfile not in f2F.keys():
             return
@@ -226,9 +226,9 @@ def nested_h(hfiles, f2F):
             return
         return
     hlst = []
-    for h in hfiles:
+    for h in inc_files:
         recur(h)
-    return hfiles + sorted( set( hlst ) )
+    return inc_files + sorted( set( hlst ) )
 
 def scan_fortran_file(src_file):
     """Scan the Fortran file "src_file" and return lists of module defined, module used, and files included."""
