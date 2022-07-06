@@ -309,7 +309,7 @@ end subroutine int_density_dz_generic_pcm
 !> Compute pressure gradient force integrals by quadrature for the case where
 !! T and S are linear profiles.
 subroutine int_density_dz_generic_plm(k, tv, T_t, T_b, S_t, S_b, e, rho_ref, &
-                                      rho_0, G_e, dz_subroundoff, bathyT, HI, GV, EOS, US, dpa, &
+                                      rho_0, G_e, dz_subroundoff, bathyT, HI, GV, EOS, US, use_stanley_eos, dpa, &
                                       intz_dpa, intx_dpa, inty_dpa, useMassWghtInterp, &
                                       use_inaccurate_form, Z_0p)
   integer,              intent(in)  :: k   !< Layer index to calculate integrals for
@@ -336,6 +336,7 @@ subroutine int_density_dz_generic_plm(k, tv, T_t, T_b, S_t, S_b, e, rho_ref, &
                         intent(in)  :: bathyT !< The depth of the bathymetry [Z ~> m]
   type(EOS_type),       intent(in)  :: EOS !< Equation of state structure
   type(unit_scale_type), intent(in) :: US !< A dimensional unit scaling type
+  logical,              intent(in) :: use_stanley_eos !< If true, turn on Stanley SGS T variance parameterization
   real, dimension(SZI_(HI),SZJ_(HI)), &
                         intent(inout) :: dpa !< The change in the pressure anomaly across the layer [R L2 T-2 ~> Pa]
   real, dimension(SZI_(HI),SZJ_(HI)), &
@@ -408,7 +409,6 @@ subroutine int_density_dz_generic_plm(k, tv, T_t, T_b, S_t, S_b, e, rho_ref, &
   real :: hWght                     ! A topographically limited thickness weight [Z ~> m]
   real :: hL, hR                    ! Thicknesses to the left and right [Z ~> m]
   real :: iDenom                    ! The denominator of the thickness weight expressions [Z-2 ~> m-2]
-  logical :: use_stanley_eos ! True is SGS variance fields exist in tv.
   logical :: use_rho_ref ! Pass rho_ref to the equation of state for more accurate calculation
                          ! of density anomalies.
   logical :: use_varT, use_varS, use_covarTS ! Logicals for SGS variances fields
@@ -432,10 +432,15 @@ subroutine int_density_dz_generic_plm(k, tv, T_t, T_b, S_t, S_b, e, rho_ref, &
     if (use_inaccurate_form) use_rho_ref = .not. use_inaccurate_form
   endif
 
-  use_varT = associated(tv%varT)
-  use_covarTS = associated(tv%covarTS)
-  use_varS = associated(tv%varS)
-  use_stanley_eos = use_varT .or. use_covarTS .or. use_varS
+  use_varT = .false. !ensure initialized
+  use_covarTS = .false.
+  use_varS = .false.
+  if (use_stanley_eos) then
+    use_varT = associated(tv%varT)
+    use_covarTS = associated(tv%covarTS)
+    use_varS = associated(tv%varS)
+  endif
+
   T25(:) = 0.
   TS5(:) = 0.
   S25(:) = 0.
@@ -710,7 +715,7 @@ end subroutine int_density_dz_generic_plm
 !> Compute pressure gradient force integrals for layer "k" and the case where T and S
 !! are parabolic profiles
 subroutine int_density_dz_generic_ppm(k, tv, T_t, T_b, S_t, S_b, e, &
-                                      rho_ref, rho_0, G_e, dz_subroundoff, bathyT, HI, GV, EOS, US, &
+                                      rho_ref, rho_0, G_e, dz_subroundoff, bathyT, HI, GV, EOS, US, use_stanley_eos, &
                                       dpa, intz_dpa, intx_dpa, inty_dpa, useMassWghtInterp, Z_0p)
   integer,              intent(in)  :: k   !< Layer index to calculate integrals for
   type(hor_index_type), intent(in)  :: HI  !< Ocean horizontal index structures for the input arrays
@@ -736,6 +741,7 @@ subroutine int_density_dz_generic_ppm(k, tv, T_t, T_b, S_t, S_b, e, &
                         intent(in)  :: bathyT !< The depth of the bathymetry [Z ~> m]
   type(EOS_type),       intent(in)  :: EOS !< Equation of state structure
   type(unit_scale_type), intent(in) :: US  !< A dimensional unit scaling type
+  logical,              intent(in)  :: use_stanley_eos !< If true, turn on Stanley SGS T variance parameterization
   real, dimension(SZI_(HI),SZJ_(HI)), &
                         intent(inout) :: dpa !< The change in the pressure anomaly across the layer [R L2 T-2 ~> Pa]
   real, dimension(SZI_(HI),SZJ_(HI)), &
@@ -795,7 +801,6 @@ subroutine int_density_dz_generic_ppm(k, tv, T_t, T_b, S_t, S_b, e, &
   real :: iDenom ! The denominator of the thickness weight expressions [Z-2 ~> m-2]
   integer :: Isq, Ieq, Jsq, Jeq, i, j, m, n
   logical :: use_PPM ! If false, assume zero curvature in reconstruction, i.e. PLM
-  logical :: use_stanley_eos ! True is SGS variance fields exist in tv.
   logical :: use_varT, use_varS, use_covarTS
 
   Isq = HI%IscB ; Ieq = HI%IecB ; Jsq = HI%JscB ; Jeq = HI%JecB
@@ -813,10 +818,15 @@ subroutine int_density_dz_generic_ppm(k, tv, T_t, T_b, S_t, S_b, e, &
   t6 = 0.
   use_PPM = .true. ! This is a place-holder to allow later re-use of this function
 
-  use_varT = associated(tv%varT)
-  use_covarTS = associated(tv%covarTS)
-  use_varS = associated(tv%varS)
-  use_stanley_eos = use_varT .or. use_covarTS .or. use_varS
+  use_varT = .false. !ensure initialized
+  use_covarTS = .false.
+  use_varS = .false.
+  if (use_stanley_eos) then
+     use_varT = associated(tv%varT)
+     use_covarTS = associated(tv%covarTS)
+     use_varS = associated(tv%varS)
+  endif
+
   T25(:) = 0.
   TS5(:) = 0.
   S25(:) = 0.
@@ -927,7 +937,6 @@ subroutine int_density_dz_generic_ppm(k, tv, T_t, T_b, S_t, S_b, e, &
         S5(n) = wt_t(n) * S_top + wt_b(n) * ( S_bot + s6 * wt_t(n) )
         T5(n) = wt_t(n) * T_top + wt_b(n) * ( T_bot + t6 * wt_t(n) )
       enddo
-
       if (use_stanley_eos) then
         if (use_varT) T25(:) = w_left*tv%varT(i,j,k) + w_right*tv%varT(i+1,j,k)
         if (use_covarTS) TS5(:) = w_left*tv%covarTS(i,j,k) + w_right*tv%covarTS(i+1,j,k)

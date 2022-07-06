@@ -162,8 +162,6 @@ subroutine MOM_surface_chksum(mesg, sfc_state, G, US, haloshift, symmetric)
   if (allocated(sfc_state%u) .and. allocated(sfc_state%v)) &
     call uvchksum(mesg//" SSU", sfc_state%u, sfc_state%v, G%HI, haloshift=hs, symmetric=sym, &
                   scale=US%L_T_to_m_s)
-!  if (allocated(sfc_state%salt_deficit)) &
-!    call hchksum(sfc_state%salt_deficit, mesg//" salt deficit", G%HI, haloshift=hs, scale=US%RZ_to_kg_m2)
   if (allocated(sfc_state%frazil)) call hchksum(sfc_state%frazil, mesg//" frazil", G%HI, &
                                                 haloshift=hs, scale=US%Q_to_J_kg*US%RZ_to_kg_m2)
 
