@@ -5,24 +5,25 @@ module MOM_MEKE
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-use MOM_debugging,     only : hchksum, uvchksum
-use MOM_cpu_clock,     only : cpu_clock_id, cpu_clock_begin, cpu_clock_end, CLOCK_ROUTINE
-use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_ptr
-use MOM_diag_mediator, only : diag_ctrl, time_type
-use MOM_domains,       only : create_group_pass, do_group_pass, group_pass_type
-use MOM_error_handler, only : MOM_error, FATAL, WARNING, NOTE, MOM_mesg
-use MOM_file_parser,   only : read_param, get_param, log_version, param_file_type
-use MOM_grid,          only : ocean_grid_type
-use MOM_hor_index,     only : hor_index_type
-<<<<<<< HEAD
-=======
-use MOM_io,            only : vardesc, var_desc, slasher
->>>>>>> 0986bc3ca (Add option to read EKE via file)
-use MOM_restart,       only : MOM_restart_CS, register_restart_field, query_initialized
-use MOM_unit_scaling,  only : unit_scale_type
-use MOM_variables,     only : vertvisc_type
-use MOM_verticalGrid,  only : verticalGrid_type
-use MOM_MEKE_types,    only : MEKE_type
+use MOM_debugging,        only : hchksum, uvchksum
+use MOM_cpu_clock,        only : cpu_clock_id, cpu_clock_begin, cpu_clock_end, CLOCK_ROUTINE
+use MOM_diag_mediator,    only : post_data, register_diag_field, safe_alloc_ptr
+use MOM_diag_mediator,    only : diag_ctrl, time_type
+use MOM_domains,          only : create_group_pass, do_group_pass, group_pass_type
+use MOM_domains,          only : pass_vector
+use MOM_error_handler,    only : MOM_error, FATAL, WARNING, NOTE, MOM_mesg
+use MOM_file_parser,      only : read_param, get_param, log_version, param_file_type
+use MOM_grid,             only : ocean_grid_type
+use MOM_hor_index,        only : hor_index_type
+use MOM_io,               only : vardesc, var_desc, slasher
+use MOM_smartredis_MEKE,  only : smartredis_meke_CS_type, smartredis_meke_init, infer_meke
+use MOM_restart,          only : MOM_restart_CS, register_restart_field, query_initialized
+use MOM_smartredis,       only : client_type, smartredis_CS_type
+use MOM_string_functions, only : lowercase
+use MOM_unit_scaling,     only : unit_scale_type
+use MOM_variables,        only : vertvisc_type, thermo_var_ptrs
+use MOM_verticalGrid,     only : verticalGrid_type
+use MOM_MEKE_types,       only : MEKE_type
 
 use time_interp_external_mod, only : init_external_field, time_interp_external
 use time_interp_external_mod, only : time_interp_external_init
@@ -32,6 +33,13 @@ implicit none ; private
 #include <MOM_memory.h>
 
 public step_forward_MEKE, MEKE_init, MEKE_alloc_register_restart, MEKE_end
+
+!> Private enum to define the source of the EKE used in MEKE
+enum, bind(c)
+  enumerator :: EKE_PROG !< Use prognostic equation to calcualte EKE
+  enumerator :: EKE_FILE !< Read in EKE from a file
+  enumerator :: EKE_SMARTREDIS !< Infer EKE using a neural network
+end enum
 
 !> Control structure that contains MEKE parameters and diagnostics handles
 type, public :: MEKE_CS ; private
@@ -50,7 +58,6 @@ type, public :: MEKE_CS ; private
   logical :: visc_drag  !< If true use the vertvisc_type to calculate bottom drag.
   logical :: MEKE_GEOMETRIC !< If true, uses the GM coefficient formulation from the GEOMETRIC
                         !! framework (Marshall et al., 2012)
-  logical :: MEKE_from_file !< If true, reads EKE from a netCDF file
   real    :: MEKE_GEOMETRIC_alpha !< The nondimensional coefficient governing the efficiency of the
                         !! GEOMETRIC thickness diffusion.
   logical :: MEKE_equilibrium_alt !< If true, use an alternative calculation for the
@@ -98,9 +105,8 @@ type, public :: MEKE_CS ; private
   logical :: kh_flux_enabled !< If true, lateral diffusive MEKE flux is enabled.
   logical :: initialize !< If True, invokes a steady state solver to calculate MEKE.
   logical :: debug      !< If true, write out checksums of data for debugging
-  character(len=200)  :: inputdir !< directory where NetCDF input files are
-  character(len=200)       :: eke_file !< filename for eke data
-  character(len=30)        :: eke_var_name !< name of variable in ncfile
+  integer :: eke_src !< Enum specifying whether EKE is stepped forward prognostically (default),
+                     !! read in from a file, or inferred via a neural network
   type(diag_ctrl), pointer :: diag => NULL() !< A type that regulates diagnostics output
   !>@{ Diagnostic handles
   integer :: id_MEKE = -1, id_Ue = -1, id_Kh = -1, id_src = -1
@@ -111,19 +117,22 @@ type, public :: MEKE_CS ; private
   integer :: id_Lrhines = -1, id_Leady = -1
   integer :: id_MEKE_equilibrium = -1
   !>@}
-  integer :: id_eke = -1
+  integer :: id_eke = -1 !< Handle for reading in EKE from a file
   ! Infrastructure
   integer :: id_clock_pass !< Clock for group pass calls
   type(group_pass_type) :: pass_MEKE !< Group halo pass handle for MEKE%MEKE and maybe MEKE%Kh_diff
   type(group_pass_type) :: pass_Kh   !< Group halo pass handle for MEKE%Kh, MEKE%Ku, and/or MEKE%Au
+  type(smartredis_meke_cs_type) :: smartredis_meke_CS !< Control structure for the inferring EKE via
+                                                      !! ML using using the SmartRedis interface
+
 end type MEKE_CS
 
 contains
 
 !> Integrates forward-in-time the MEKE eddy energy equation.
 !! See \ref section_MEKE_equations.
-subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, hv, Time)
-  type(MEKE_type),                          pointer       :: MEKE !< MEKE data.
+subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, hv, u, v, tv, Time)
+  type(MEKE_type),                          intent(inout) :: MEKE !< MEKE data.
   type(ocean_grid_type),                    intent(inout) :: G    !< Ocean grid.
   type(verticalGrid_type),                  intent(in)    :: GV   !< Ocean vertical grid structure.
   type(unit_scale_type),                    intent(in)    :: US   !< A dimensional unit scaling type
@@ -132,9 +141,12 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
   real, dimension(SZI_(G),SZJB_(G)),        intent(in)    :: SN_v !< Eady growth rate at v-points [T-1 ~> s-1].
   type(vertvisc_type),                      intent(in)    :: visc !< The vertical viscosity type.
   real,                                     intent(in)    :: dt   !< Model(baroclinic) time-step [T ~> s].
-  type(MEKE_CS),                            pointer       :: CS   !< MEKE control structure.
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)   :: hu   !< Accumlated zonal mass flux [H L2 ~> m3 or kg].
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)   :: hv   !< Accumlated meridional mass flux [H L2 ~> m3 or kg]
+  type(MEKE_CS),                            intent(inout) :: CS   !< MEKE control structure.
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), intent(in)  :: hu   !< Accumlated zonal mass flux [H L2 ~> m3 or kg].
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), intent(in)  :: hv   !< Accumlated meridional mass flux [H L2 ~> m3 or kg]
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), intent(inout)  :: u    !< Zonal velocity
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), intent(inout)  :: v    !< Meridional velocity
+  type(thermo_var_ptrs),                    intent(in)    :: tv   !< Type containing thermodynamic variables
   type(time_type),                          intent(in)    :: Time !< The time used for interpolating EKE
 
   ! Local variables
@@ -203,8 +215,8 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
     return
   endif
 
-  if (.not. CS%MEKE_from_file) then
-
+  select case(CS%eke_src)
+  case(EKE_PROG)
     if (CS%debug) then
       if (allocated(MEKE%mom_src)) &
         call hchksum(MEKE%mom_src, 'MEKE mom_src', G%HI, scale=US%RZ3_T3_to_W_m2*US%L_to_Z**2)
@@ -259,7 +271,6 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
         enddo ; enddo
       endif
     endif
-
 
     ! Calculate drag_rate_visc(i,j) which accounts for the model bottom mean flow
     if (CS%visc_drag .and. allocated(visc%Kv_bbl_u) .and. allocated(visc%Kv_bbl_v)) then
@@ -583,12 +594,19 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
       call hchksum(MEKE%MEKE, "MEKE post-update MEKE", G%HI, haloshift=0, scale=US%L_T_to_m_s**2)
     endif
 
-  else ! read MEKE from file
+  case(EKE_FILE)
     call time_interp_external(CS%id_eke,Time,data_eke)
     do j=js,je ; do i=is,ie
       MEKE%MEKE(i,j) = data_eke(i,j) * G%mask2dT(i,j)
     enddo; enddo
-  endif
+    call MEKE_lengthScales(CS, MEKE, G, GV, US, SN_u, SN_v, MEKE%MEKE, depth_tot, bottomFac2, barotrFac2, LmixScale)
+  case(EKE_SMARTREDIS)
+    call pass_vector(u, v, G%Domain)
+    call MEKE_lengthScales(CS, MEKE, G, GV, US, SN_u, SN_v, MEKE%MEKE, depth_tot, bottomFac2, barotrFac2, LmixScale)
+    call infer_meke(G, GV, US, CS%smartredis_meke_CS, Time, MEKE%MEKE, MEKE%Rd_dx_h, u, v, tv, h, dt)
+  case default
+    call MOM_error(FATAL,"Invalid method specified for calculating EKE")
+  end select
 
   call cpu_clock_begin(CS%id_clock_pass)
   call do_group_pass(CS%pass_MEKE, G%Domain)
@@ -635,7 +653,7 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
     enddo ; enddo
   endif
 
-  if (associated(MEKE%Kh) .or. associated(MEKE%Ku) .or. associated(MEKE%Au)) then
+  if (allocated(MEKE%Kh) .or. allocated(MEKE%Ku) .or. allocated(MEKE%Au)) then
     call cpu_clock_begin(CS%id_clock_pass)
     call do_group_pass(CS%pass_Kh, G%Domain)
     call cpu_clock_end(CS%id_clock_pass)
@@ -1037,15 +1055,18 @@ end subroutine MEKE_lengthScales_0d
 
 !> Initializes the MOM_MEKE module and reads parameters.
 !! Returns True if module is to be used, otherwise returns False.
-logical function MEKE_init(Time, G, US, param_file, diag, CS, MEKE, restart_CS)
+logical function MEKE_init(Time, G, US, param_file, diag, smartredis_CS, CS, MEKE, restart_CS, meke_in_dynamics)
   type(time_type),         intent(in)    :: Time       !< The current model time.
   type(ocean_grid_type),   intent(inout) :: G          !< The ocean's grid structure.
   type(unit_scale_type),   intent(in)    :: US         !< A dimensional unit scaling type
   type(param_file_type),   intent(in)    :: param_file !< Parameter file parser structure.
+  type(smartredis_CS_type),intent(in)    :: smartredis_CS !< SmartRedis client
   type(diag_ctrl), target, intent(inout) :: diag       !< Diagnostics structure.
   type(MEKE_CS),           intent(inout) :: CS         !< MEKE control structure.
   type(MEKE_type),         intent(inout) :: MEKE       !< MEKE fields
   type(MOM_restart_CS),    intent(in)    :: restart_CS !< MOM restart control struct
+  logical,                 intent(  out) :: meke_in_dynamics !< If true, MEKE is stepped forward in dynamics
+                                                             !! otherwise in tracer dynamics
 
   ! Local variables
   real    :: I_T_rescale   ! A rescaling factor for time from the internal representation in this
@@ -1054,7 +1075,8 @@ logical function MEKE_init(Time, G, US, param_file, diag, CS, MEKE, restart_CS)
                            ! run to the representation in a restart file.
   real    :: MEKE_restoring_timescale ! The timescale used to nudge MEKE toward its equilibrium value.
   real :: cdrag            ! The default bottom drag coefficient [nondim].
-  character(len=200) :: eke_file
+  character(len=200) :: eke_filename, eke_varname, inputdir
+  character(len=16) :: eke_source_str
   integer :: i, j, is, ie, js, je, isd, ied, jsd, jed
   logical :: laplacian, biharmonic, coldStart
   ! This include declares and sets the variable "version".
@@ -1073,29 +1095,39 @@ logical function MEKE_init(Time, G, US, param_file, diag, CS, MEKE, restart_CS)
                  default=.false.)
   if (.not. MEKE_init) return
   CS%initialized = .true.
+  call get_param(param_file, mdl, "MEKE_IN_DYNAMICS", meke_in_dynamics, &
+                 "If true, step MEKE forward with the dynamics"// &
+                 "otherwise with the tracer timestep.", &
+                 default=.true.)
+
+  call get_param(param_file, mdl, "EKE_SOURCE", eke_source_str, &
+                 "Determine the where EKE comes from:\n" // &
+                 "  'prog': Calculated solving EKE equation\n"// &
+                 "  'file': Read in from a file\n"            // &
+                 "  'smartredis': Retrieved from SMARTREDIS", default='prog')
 
   call MOM_mesg("MEKE_init: reading parameters ", 5)
 
-  call get_param(param_file, mdl, "MEKE_FROM_FILE", CS%MEKE_from_file, &
-                 "If true, reads EKE from a netCDF file.", default=.false.)
-  if (CS%MEKE_from_file) then
+  select case (lowercase(eke_source_str))
+  case("file")
+    CS%eke_src = EKE_FILE
     call time_interp_external_init
-    call get_param(param_file, mdl, "EKE_FILE", CS%eke_file, &
-                 "A file in which to find the surface salinity to use for restoring.", &
+    call get_param(param_file, mdl, "EKE_FILE", eke_filename, &
+                 "A file in which to find the eddy kineteic energy variable.", &
                  default="eke_file.nc")
-    call get_param(param_file, mdl, "EKE_VARIABLE", CS%eke_var_name, &
-                 "The name of the surface salinity variable to read from "//&
-                 "SALT_RESTORE_FILE for restoring salinity.", &
+    call get_param(param_file, mdl, "EKE_VARIABLE", eke_varname, &
+                 "The name of the eddy kinetic energy variable to read from "//&
+                 "EKE_FILE to use in MEKE.", &
                  default="eke")
-    call get_param(param_file, mdl, "INPUTDIR", CS%inputdir, &
+    call get_param(param_file, mdl, "INPUTDIR", inputdir, &
                  "The directory in which all input files are found.", &
                  default=".", do_not_log=.true.)
-    CS%inputdir = slasher(CS%inputdir)
+    inputdir = slasher(inputdir)
 
-    eke_file = trim(CS%inputdir) // trim(CS%eke_file)
-    CS%id_eke = init_external_field(eke_file, CS%eke_var_name, domain=G%Domain%mpp_domain)
-
-  else
+    eke_filename = trim(inputdir) // trim(eke_filename)
+    CS%id_eke = init_external_field(eke_filename, eke_varname, domain=G%Domain%mpp_domain)
+  case("prog")
+    CS%eke_src = EKE_PROG
     ! Read all relevant parameters and write them to the model log.
     call get_param(param_file, mdl, "MEKE_DAMPING", CS%MEKE_damping, &
                    "The local depth-independent MEKE dissipation rate.", &
@@ -1136,7 +1168,7 @@ logical function MEKE_init(Time, G, US, param_file, diag, CS, MEKE, restart_CS)
     if (CS%MEKE_equilibrium_restoring) then
       call get_param(param_file, mdl, "MEKE_RESTORING_TIMESCALE", MEKE_restoring_timescale, &
                      "The timescale used to nudge MEKE toward its equilibrium value.", units="s", &
-                     default=1e6, scale=US%T_to_s)
+                     default=1e6, scale=US%s_to_T)
       CS%MEKE_restoring_rate = 1.0 / MEKE_restoring_timescale
     endif
 
@@ -1162,7 +1194,12 @@ logical function MEKE_init(Time, G, US, param_file, diag, CS, MEKE, restart_CS)
     call get_param(param_file, mdl, "MEKE_DTSCALE", CS%MEKE_dtScale, &
                    "A scaling factor to accelerate the time evolution of MEKE.", &
                    units="nondim", default=1.0)
-  endif ! MEKE_from_file
+  case("smartredis")
+    CS%eke_src = EKE_SMARTREDIS
+    call smartredis_meke_init(diag, G, US, Time, param_file, smartredis_CS, CS%smartredis_meke_CS)
+  case default
+    call MOM_error(FATAL, "Invalid method selected for calculating EKE")
+  end select
   ! GMM, make sure all params used to calculated MEKE are within the above if
 
   call get_param(param_file, mdl, "MEKE_KHCOEFF", CS%MEKE_KhCoeff, &

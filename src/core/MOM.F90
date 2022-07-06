@@ -143,6 +143,9 @@ use MOM_wave_interface,        only : Update_Stokes_Drift
 
 use MOM_porous_barriers,      only : porous_widths
 
+! SmartRedis machine-learning interface
+use MOM_smartredis,            only : smartredis_CS_type, smartredis_init, client_type
+
 ! ODA modules
 use MOM_oda_driver_mod,        only : ODA_CS, oda, init_oda, oda_end
 use MOM_oda_driver_mod,        only : set_prior_tracer, set_analysis_time, apply_oda_tracer_increments
@@ -251,6 +254,8 @@ type, public :: MOM_control_struct ; private
   logical :: offline_tracer_mode = .false.
                     !< If true, step_offline() is called instead of step_MOM().
                     !! This is intended for running MOM6 in offline tracer mode
+  logical :: MEKE_in_dynamics !< If .true. (default), MEKE is called in the dynamics routine otherwise
+                              !! it is called during the tracer dynamics
 
   type(time_type), pointer :: Time   !< pointer to the ocean clock
   real    :: dt                      !< (baroclinic) dynamics time step [T ~> s]
@@ -404,15 +409,14 @@ type, public :: MOM_control_struct ; private
   type(ODA_CS), pointer :: odaCS => NULL() !< a pointer to the control structure for handling
                                 !! ensemble model state vectors and data assimilation
                                 !! increments and priors
+  type(smartredis_CS_type)  :: smartredis_CS !< SmartRedis control structure for online ML/AI
   type(porous_barrier_ptrs) :: pbv !< porous barrier fractional cell metrics
-  real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_,NKMEM_) &
-                            :: por_face_areaU !< fractional open area of U-faces [nondim]
-  real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_,NKMEM_) &
-                            :: por_face_areaV !< fractional open area of V-faces [nondim]
-  real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_,NK_INTERFACE_) &
-                            :: por_layer_widthU !< fractional open width of U-faces [nondim]
-  real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_,NK_INTERFACE_) &
-                            :: por_layer_widthV !< fractional open width of V-faces [nondim]
+  real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_,NKMEM_) :: por_face_areaU !< fractional open area of U-faces [nondim]
+  real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_,NKMEM_) :: por_face_areaV !< fractional open area of V-faces [nondim]
+  real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_,NK_INTERFACE_) :: por_layer_widthU !< fractional open width
+                                                                                   !! of U-faces [nondim]
+  real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_,NK_INTERFACE_) :: por_layer_widthV !< fractional open width
+                                                                                   !! of V-faces [nondim]
   type(particles), pointer :: particles => NULL() !<Lagrangian particles
   type(stochastic_CS), pointer :: stoch_CS => NULL() !< a pointer to the stochastics control structure
 end type MOM_control_struct
@@ -1214,8 +1218,11 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_thermo, &
   ! for vertical remapping may need to be regenerated.
   call diag_update_remap_grids(CS%diag)
 
-  if (CS%useMEKE) call step_forward_MEKE(CS%MEKE, h, CS%VarMix%SN_u, CS%VarMix%SN_v, &
-                                CS%visc, dt, G, GV, US, CS%MEKE_CSp, CS%uhtr, CS%vhtr, Time_local)
+  if (CS%useMEKE .and. CS%MEKE_in_dynamics) then
+    call step_forward_MEKE(CS%MEKE, h, CS%VarMix%SN_u, CS%VarMix%SN_v, &
+                           CS%visc, dt, G, GV, US, CS%MEKE_CSp, CS%uhtr, CS%vhtr, &
+                           CS%u, CS%v, CS%tv, Time_local)
+  endif
   call disable_averaging(CS%diag)
 
   ! Advance the dynamics time by dt.
@@ -1319,6 +1326,12 @@ subroutine step_MOM_tracer_dyn(CS, G, GV, US, h, Time_local)
   CS%n_dyn_steps_in_adv = 0
   CS%t_dyn_rel_adv = 0.0
   call cpu_clock_end(id_clock_tracer) ; call cpu_clock_end(id_clock_thermo)
+
+  if (CS%useMEKE .and. (.not. CS%MEKE_in_dynamics)) then
+    call step_forward_MEKE(CS%MEKE, h, CS%VarMix%SN_u, CS%VarMix%SN_v, &
+                           CS%visc, CS%t_dyn_rel_adv, G, GV, US, CS%MEKE_CSp, CS%uhtr, CS%vhtr, &
+                           CS%u, CS%v, CS%tv, Time_local)
+  endif
 
   if (associated(CS%tv%T)) then
     call extract_diabatic_member(CS%diabatic_CSp, diabatic_halo=halo_sz)
@@ -1799,7 +1812,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
 
-  integer :: i, j, is, ie, js, je, isd, ied, jsd, jed, nz
+  integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz
   integer :: IsdB, IedB, JsdB, JedB
   real    :: dtbt              ! If negative, this specifies the barotropic timestep as a fraction
                                ! of the maximum stable value [nondim].
@@ -2794,7 +2807,9 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   endif
   call cpu_clock_end(id_clock_MOM_init)
 
-  CS%useMEKE = MEKE_init(Time, G, US, param_file, diag, CS%MEKE_CSp, CS%MEKE, restart_CSp)
+  call smartredis_init(param_file, CS%smartredis_CS)
+  CS%useMEKE = MEKE_init(Time, G, US, param_file, diag, CS%smartredis_CS, CS%MEKE_CSp, CS%MEKE, &
+                         restart_CSp, CS%MEKE_in_dynamics)
 
   call VarMix_init(Time, G, GV, US, param_file, diag, CS%VarMix)
   call set_visc_init(Time, G, GV, US, param_file, diag, CS%visc, CS%set_visc_CSp, restart_CSp, CS%OBC)
