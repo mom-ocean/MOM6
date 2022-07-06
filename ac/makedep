@@ -127,7 +127,7 @@ def create_deps(src_dirs, makefile, debug, exec_target, fc_rule, link_externals,
             found_mods = [m for m in o2uses[o] if m in all_modules]
             missing_mods = [m for m in o2uses[o] if m not in all_modules]
             incs = nested_inc( o2h[o] + o2inc[o], f2F )
-            incdeps = includes_in_path(incs, f2F, f2dir, all_files, o2F90[o])
+            incdeps = sorted( set( [ f2F[f] for f in incs if f in f2F ] ) )
             incargs = sorted( set( [ '-I'+os.path.dirname(f) for f in incdeps ] ) )
             if debug:
                 print("# Source file %s produces:"%(o2F90[o]), file=file)
@@ -147,7 +147,7 @@ def create_deps(src_dirs, makefile, debug, exec_target, fc_rule, link_externals,
 
         # Write rule for each object from C
         for o in sorted( o2c.keys() ):
-            incdeps = includes_in_path(o2h[o], f2F, f2dir, all_files, o2c[o])
+            incdeps = sorted( set( [ f2F[h] for h in o2h[o] if h in f2F ] ) )
             incargs = sorted( set( [ '-I'+os.path.dirname(f) for f in incdeps ] ) )
             if debug:
                 print("# Source file %s produces:"%(o2c[o]), file=file)
@@ -276,14 +276,6 @@ def find_files(src_dirs):
 def add_suff(lst, suff):
     """Add "suff" to each item in the list"""
     return [ f+suff for f in lst ]
-
-def includes_in_path(inc_files, f2F, f2dir, all_files, this_src):
-    """Return full path list of files in inc_files that can be found."""
-    incs = []
-    for i in inc_files:
-        if i in f2F:
-            incs.append( f2F[i] )
-    return sorted( set(incs) )
 
 # Parse arguments
 parser = argparse.ArgumentParser(
