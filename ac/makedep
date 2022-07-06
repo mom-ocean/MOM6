@@ -38,7 +38,7 @@ def create_deps(src_dirs, makefile, debug, exec_target, fc_rule, link_externals,
         a = []
         for f in all_files:
             if os.path.basename(f) in a:
-                raise ValueError('File %s was found twice!'%(os.path.basename(f)))
+                print('Warning: File %s was found twice! One is being ignored but which is undefined.'%(os.path.basename(f)))
             a.append( os.path.basename(f) )
 
     # maps object file to F90 source
