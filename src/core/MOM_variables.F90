@@ -220,39 +220,39 @@ end type cont_diag_ptrs
 type, public :: vertvisc_type
   real :: Prandtl_turb       !< The Prandtl number for the turbulent diffusion
                              !! that is captured in Kd_shear [nondim].
-  real, pointer, dimension(:,:) :: &
-    bbl_thick_u => NULL(), & !< The bottom boundary layer thickness at the u-points [Z ~> m].
-    bbl_thick_v => NULL(), & !< The bottom boundary layer thickness at the v-points [Z ~> m].
-    kv_bbl_u => NULL(), &    !< The bottom boundary layer viscosity at the u-points [Z2 T-1 ~> m2 s-1].
-    kv_bbl_v => NULL(), &    !< The bottom boundary layer viscosity at the v-points [Z2 T-1 ~> m2 s-1].
-    ustar_BBL => NULL()      !< The turbulence velocity in the bottom boundary layer at h points [Z T-1 ~> m s-1].
-  real, pointer, dimension(:,:) :: TKE_BBL => NULL()
-                             !< A term related to the bottom boundary layer source of turbulent kinetic
-                             !! energy, currently in [Z3 T-3 ~> m3 s-3], but may at some time be changed
-                             !! to [R Z3 T-3 ~> W m-2].
-  real, pointer, dimension(:,:) :: &
-    taux_shelf => NULL(), &  !< The zonal stresses on the ocean under shelves [R Z L T-2 ~> Pa].
-    tauy_shelf => NULL()     !< The meridional stresses on the ocean under shelves [R Z L T-2 ~> Pa].
-  real, pointer, dimension(:,:) :: tbl_thick_shelf_u => NULL()
+  real, allocatable, dimension(:,:) :: &
+    bbl_thick_u, & !< The bottom boundary layer thickness at the u-points [Z ~> m].
+    bbl_thick_v, & !< The bottom boundary layer thickness at the v-points [Z ~> m].
+    kv_bbl_u, &    !< The bottom boundary layer viscosity at the u-points [Z2 T-1 ~> m2 s-1].
+    kv_bbl_v, &    !< The bottom boundary layer viscosity at the v-points [Z2 T-1 ~> m2 s-1].
+    ustar_BBL, &   !< The turbulence velocity in the bottom boundary layer at h points [Z T-1 ~> m s-1].
+    TKE_BBL, &     !< A term related to the bottom boundary layer source of turbulent kinetic
+                   !! energy, currently in [Z3 T-3 ~> m3 s-3], but may at some time be changed
+                   !! to [R Z3 T-3 ~> W m-2].
+    taux_shelf, &  !< The zonal stresses on the ocean under shelves [R Z L T-2 ~> Pa].
+    tauy_shelf     !< The meridional stresses on the ocean under shelves [R Z L T-2 ~> Pa].
+  real, allocatable, dimension(:,:) :: tbl_thick_shelf_u
                 !< Thickness of the viscous top boundary layer under ice shelves at u-points [Z ~> m].
-  real, pointer, dimension(:,:) :: tbl_thick_shelf_v => NULL()
+  real, allocatable, dimension(:,:) :: tbl_thick_shelf_v
                 !< Thickness of the viscous top boundary layer under ice shelves at v-points [Z ~> m].
-  real, pointer, dimension(:,:) :: kv_tbl_shelf_u => NULL()
+  real, allocatable, dimension(:,:) :: kv_tbl_shelf_u
                 !< Viscosity in the viscous top boundary layer under ice shelves at u-points [Z2 T-1 ~> m2 s-1].
-  real, pointer, dimension(:,:) :: kv_tbl_shelf_v => NULL()
+  real, allocatable, dimension(:,:) :: kv_tbl_shelf_v
                 !< Viscosity in the viscous top boundary layer under ice shelves at v-points [Z2 T-1 ~> m2 s-1].
-  real, pointer, dimension(:,:) :: nkml_visc_u => NULL()
+  real, allocatable, dimension(:,:) :: nkml_visc_u
                 !< The number of layers in the viscous surface mixed layer at u-points [nondim].
                 !! This is not an integer because there may be fractional layers, and it is stored in
                 !! terms of layers, not depth, to facilitate the movement of the viscous boundary layer
                 !! with the flow.
-  real, pointer, dimension(:,:) :: nkml_visc_v => NULL()
+  real, allocatable, dimension(:,:) :: nkml_visc_v
                 !< The number of layers in the viscous surface mixed layer at v-points [nondim].
+  real, allocatable, dimension(:,:,:) :: &
+    Ray_u, &    !< The Rayleigh drag velocity to be applied to each layer at u-points [Z T-1 ~> m s-1].
+    Ray_v       !< The Rayleigh drag velocity to be applied to each layer at v-points [Z T-1 ~> m s-1].
+
+  ! The following elements are pointers so they can be used as targets for pointers in the restart registry.
   real, pointer, dimension(:,:) :: &
-    MLD => NULL()      !< Instantaneous active mixing layer depth [Z ~> m].
-  real, pointer, dimension(:,:,:) :: &
-    Ray_u => NULL(), & !< The Rayleigh drag velocity to be applied to each layer at u-points [Z T-1 ~> m s-1].
-    Ray_v => NULL()    !< The Rayleigh drag velocity to be applied to each layer at v-points [Z T-1 ~> m s-1].
+    MLD => NULL()  !< Instantaneous active mixing layer depth [Z ~> m].
   real, pointer, dimension(:,:,:) :: Kd_shear => NULL()
                 !< The shear-driven turbulent diapycnal diffusivity at the interfaces between layers
                 !! in tracer columns [Z2 T-1 ~> m2 s-1].

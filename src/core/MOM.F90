@@ -3515,13 +3515,13 @@ subroutine extract_surface_state(CS, sfc_state_in)
     enddo ! end of j loop
   endif   ! melt_potential
 
-  if (allocated(sfc_state%taux_shelf) .and. associated(CS%visc%taux_shelf)) then
+  if (allocated(sfc_state%taux_shelf) .and. allocated(CS%visc%taux_shelf)) then
     !$OMP parallel do default(shared)
     do j=js,je ; do I=is-1,ie
       sfc_state%taux_shelf(I,j) = CS%visc%taux_shelf(I,j)
     enddo ; enddo
   endif
-  if (allocated(sfc_state%tauy_shelf) .and. associated(CS%visc%tauy_shelf)) then
+  if (allocated(sfc_state%tauy_shelf) .and. allocated(CS%visc%tauy_shelf)) then
     !$OMP parallel do default(shared)
     do J=js-1,je ; do i=is,ie
       sfc_state%tauy_shelf(i,J) = CS%visc%tauy_shelf(i,J)
