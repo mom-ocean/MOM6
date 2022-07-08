@@ -23,6 +23,7 @@ use MOM_time_manager,  only : time_type
 use MOM_unit_scaling,  only : unit_scale_type
 use MOM_verticalGrid,  only : verticalGrid_type
 use MOM_tracer_types,  only : tracer_type, tracer_registry_type
+
 implicit none ; private
 
 #include <MOM_memory.h>
@@ -34,6 +35,16 @@ public preALE_tracer_diagnostics, postALE_tracer_diagnostics
 public tracer_registry_init, lock_tracer_registry, tracer_registry_end
 public tracer_name_lookup
 public tracer_type, tracer_registry_type
+
+!> Write out checksums for registered tracers
+interface MOM_tracer_chksum
+  module procedure tracer_array_chksum, tracer_Reg_chksum
+end interface MOM_tracer_chksum
+
+!> Calculate and print the global inventories of registered tracers
+interface MOM_tracer_chkinv
+  module procedure tracer_array_chkinv, tracer_Reg_chkinv
+end interface MOM_tracer_chkinv
 
 contains
 
@@ -746,8 +757,8 @@ subroutine post_tracer_transport_diagnostics(G, GV, Reg, h_diag, diag)
 
 end subroutine post_tracer_transport_diagnostics
 
-!> This subroutine writes out chksums for tracers.
-subroutine MOM_tracer_chksum(mesg, Tr, ntr, G)
+!> This subroutine writes out chksums for the first ntr registered tracers.
+subroutine tracer_array_chksum(mesg, Tr, ntr, G)
   character(len=*),         intent(in) :: mesg   !< message that appears on the chksum lines
   type(tracer_type),        intent(in) :: Tr(:)  !< array of all of registered tracers
   integer,                  intent(in) :: ntr    !< number of registered tracers
@@ -759,10 +770,26 @@ subroutine MOM_tracer_chksum(mesg, Tr, ntr, G)
     call hchksum(Tr(m)%t, mesg//trim(Tr(m)%name), G%HI, scale=Tr(m)%conc_scale)
   enddo
 
-end subroutine MOM_tracer_chksum
+end subroutine tracer_array_chksum
 
-!> Calculates and prints the global inventory of all tracers in the registry.
-subroutine MOM_tracer_chkinv(mesg, G, GV, h, Tr, ntr)
+!> This subroutine writes out chksums for all the registered tracers.
+subroutine tracer_Reg_chksum(mesg, Reg, G)
+  character(len=*),           intent(in) :: mesg !< message that appears on the chksum lines
+  type(tracer_registry_type), pointer    :: Reg  !< pointer to the tracer registry
+  type(ocean_grid_type),      intent(in) :: G    !< ocean grid structure
+
+  integer :: m
+
+  if (.not.associated(Reg)) return
+
+  do m=1,Reg%ntr
+    call hchksum(Reg%Tr(m)%t, mesg//trim(Reg%Tr(m)%name), G%HI, scale=Reg%Tr(m)%conc_scale)
+  enddo
+
+end subroutine tracer_Reg_chksum
+
+!> Calculates and prints the global inventory of the first ntr tracers in the registry.
+subroutine tracer_array_chkinv(mesg, G, GV, h, Tr, ntr)
   character(len=*),                          intent(in) :: mesg !< message that appears on the chksum lines
   type(ocean_grid_type),                     intent(in) :: G    !< ocean grid structure
   type(verticalGrid_type),                   intent(in) :: GV   !< The ocean's vertical grid structure
@@ -787,7 +814,38 @@ subroutine MOM_tracer_chkinv(mesg, G, GV, h, Tr, ntr)
     if (is_root_pe()) write(0,'(A,1X,A5,1X,ES25.16,1X,A)') "h-point: inventory", Tr(m)%name, total_inv, mesg
   enddo
 
-end subroutine MOM_tracer_chkinv
+end subroutine tracer_array_chkinv
+
+
+!> Calculates and prints the global inventory of all tracers in the registry.
+subroutine tracer_Reg_chkinv(mesg, G, GV, h, Reg)
+  character(len=*),                          intent(in) :: mesg !< message that appears on the chksum lines
+  type(ocean_grid_type),                     intent(in) :: G    !< ocean grid structure
+  type(verticalGrid_type),                   intent(in) :: GV   !< The ocean's vertical grid structure
+  type(tracer_registry_type),                pointer    :: Reg  !< pointer to the tracer registry
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in) :: h    !< Layer thicknesses [H ~> m or kg m-2]
+
+  ! Local variables
+  real :: vol_scale ! The dimensional scaling factor to convert volumes to m3 [m3 H-1 L-2 ~> 1 or m3 kg-1]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: tr_inv ! Volumetric tracer inventory in each cell [conc m3]
+  real :: total_inv ! The total amount of tracer [conc m3]
+  integer :: is, ie, js, je, nz
+  integer :: i, j, k, m
+
+  if (.not.associated(Reg)) return
+
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
+  vol_scale = GV%H_to_m*G%US%L_to_m**2
+  do m=1,Reg%ntr
+    do k=1,nz ; do j=js,je ; do i=is,ie
+      tr_inv(i,j,k) = Reg%Tr(m)%conc_scale*Reg%Tr(m)%t(i,j,k) * (vol_scale * h(i,j,k) * G%areaT(i,j)*G%mask2dT(i,j))
+    enddo ; enddo ; enddo
+    total_inv = reproducing_sum(tr_inv, is+(1-G%isd), ie+(1-G%isd), js+(1-G%jsd), je+(1-G%jsd))
+    if (is_root_pe()) write(0,'(A,1X,A5,1X,ES25.16,1X,A)') "h-point: inventory", Reg%Tr(m)%name, total_inv, mesg
+  enddo
+
+end subroutine tracer_Reg_chkinv
+
 
 !> Find a tracer in the tracer registry by name.
 subroutine tracer_name_lookup(Reg, tr_ptr, name)
