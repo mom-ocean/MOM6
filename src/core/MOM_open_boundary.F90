@@ -19,7 +19,7 @@ use MOM_io,                   only : vardesc, query_vardesc, var_desc
 use MOM_restart,              only : register_restart_field, register_restart_pair
 use MOM_restart,              only : query_initialized, MOM_restart_CS
 use MOM_obsolete_params,      only : obsolete_logical, obsolete_int, obsolete_real, obsolete_char
-use MOM_string_functions,     only : extract_word, remove_spaces
+use MOM_string_functions,     only : extract_word, remove_spaces, uppercase
 use MOM_tidal_forcing,        only : astro_longitudes, astro_longitudes_init, eq_phase, nodal_fu, tidal_frequency
 use MOM_time_manager,         only : set_date, time_type, time_type_to_real, operator(-)
 use MOM_tracer_registry,      only : tracer_type, tracer_registry_type, tracer_name_lookup
@@ -309,6 +309,7 @@ type, public :: ocean_OBC_type
   real, allocatable :: cff_normal(:,:,:) !< Array storage for oblique boundary condition restarts [L2 T-2 ~> m2 s-2]
   real, allocatable :: tres_x(:,:,:,:)   !< Array storage of tracer reservoirs for restarts, in unscaled units [conc]
   real, allocatable :: tres_y(:,:,:,:)   !< Array storage of tracer reservoirs for restarts, in unscaled units [conc]
+  logical :: debug                       !< If true, write verbose checksums for debugging purposes.
   real :: silly_h  !< A silly value of thickness outside of the domain that can be used to test
                    !! the independence of the OBCs to this external data [H ~> m or kg m-2].
   real :: silly_u  !< A silly value of velocity outside of the domain that can be used to test
@@ -365,7 +366,7 @@ subroutine open_boundary_config(G, US, param_file, OBC)
 
   ! Local variables
   integer :: l ! For looping over segments
-  logical :: debug_OBC, debug, mask_outside, reentrant_x, reentrant_y
+  logical :: debug_OBC, mask_outside, reentrant_x, reentrant_y
   character(len=15) :: segment_param_str ! The run-time parameter name for each segment
   character(len=1024) :: segment_str      ! The contents (rhs) for parameter "segment_param_str"
   character(len=200) :: config1          ! String for OBC_USER_CONFIG
@@ -467,9 +468,9 @@ subroutine open_boundary_config(G, US, param_file, OBC)
       OBC%add_tide_constituents = .false.
     endif
 
-    call get_param(param_file, mdl, "DEBUG", debug, default=.false.)
+    call get_param(param_file, mdl, "DEBUG", OBC%debug, default=.false.)
     call get_param(param_file, mdl, "DEBUG_OBC", debug_OBC, default=.false.)
-    if (debug_OBC .or. debug) &
+    if (debug_OBC .or. OBC%debug) &
       call log_param(param_file, mdl, "DEBUG_OBC", debug_OBC, &
                  "If true, do additional calls to help debug the performance "//&
                  "of the open boundary condition code.", default=.false., &
@@ -751,7 +752,9 @@ subroutine initialize_segment_data(G, GV, US, OBC, PF)
         OBC%needs_IO_for_data = .true. ! At least one segment is using I/O for OBC data
 !       segment%values_needed = .true. ! Indicates that i/o will be needed for this segment
         segment%field(m)%name = trim(fields(m))
-        segment%field(m)%scale = scale_factor_from_name(fields(m), GV, US)
+        ! The scale factor for tracers may also be set in register_segment_tracer, and a constant input
+        ! value is rescaled there.
+        segment%field(m)%scale = scale_factor_from_name(fields(m), GV, US, segment%tr_Reg)
         if (segment%field(m)%name == 'TEMP') then
           segment%temp_segment_data_exists = .true.
           segment%t_values_needed = .false.
@@ -908,9 +911,9 @@ subroutine initialize_segment_data(G, GV, US, OBC, PF)
       else
         segment%field(m)%fid = -1
         segment%field(m)%name = trim(fields(m))
-        ! The scale factor for tracers is set in register_segment_tracer, and value is
-        ! rescaled there.  scale_factor_from_name returns 1 for tracers.
-        segment%field(m)%scale = scale_factor_from_name(fields(m), GV, US)
+        ! The scale factor for tracers may also be set in register_segment_tracer, and a constant input
+        ! value is rescaled there.
+        segment%field(m)%scale = scale_factor_from_name(fields(m), GV, US, segment%tr_Reg)
         segment%field(m)%value = segment%field(m)%scale * value
 
         ! Check if this is a tidal field. If so, the number
@@ -969,10 +972,15 @@ end subroutine initialize_segment_data
 
 !> Return an appropriate dimensional scaling factor for input data based on an OBC segment data
 !! name, or 1 for tracers or other fields that do not match one of the specified names.
-real function scale_factor_from_name(name, GV, US)
+!! Note that calls to register_segment_tracer can come before or after calls to scale_factor_from_name.
+
+real function scale_factor_from_name(name, GV, US, Tr_Reg)
   character(len=*),        intent(in) :: name  !< The OBC segment data name to interpret
   type(verticalGrid_type), intent(in) :: GV  !< Container for vertical grid information
   type(unit_scale_type),   intent(in) :: US  !< A dimensional unit scaling type
+  type(segment_tracer_registry_type), pointer :: Tr_Reg  !< pointer to tracer registry for this segment
+
+  integer :: m
 
   select case (trim(name))
     case ('U') ; scale_factor_from_name = US%m_s_to_L_T
@@ -985,6 +993,16 @@ real function scale_factor_from_name(name, GV, US)
     case ('SSHamp') ; scale_factor_from_name = GV%m_to_H
     case default ; scale_factor_from_name = 1.0
   end select
+
+  if (associated(Tr_Reg) .and. (scale_factor_from_name == 1.0)) then
+    ! Check for name matches with previously registered tracers.
+    do m=1,Tr_Reg%ntseg
+      if (uppercase(name) == uppercase(Tr_Reg%Tr(m)%name)) then
+        scale_factor_from_name = Tr_Reg%Tr(m)%scale
+        exit
+      endif
+    enddo
+  endif
 
 end function scale_factor_from_name
 
@@ -4519,8 +4537,9 @@ subroutine register_segment_tracer(tr_ptr, param_file, GV, segment, &
     segment%tr_Reg%Tr(ntseg)%scale = scale
     do m=1,segment%num_fields
       ! Store the scaling factor for fields with exactly matching names, and possibly
-      ! rescale the previously stonred input values.
-      if (trim(segment%field(m)%name) == trim(segment%tr_Reg%Tr(ntseg)%name)) then
+      ! rescale the previously stored input values.  Note that calls to register_segment_tracer
+      ! can come before or after calls to initialize_segment_data.
+      if (uppercase(segment%field(m)%name) == uppercase(segment%tr_Reg%Tr(ntseg)%name)) then
         if (segment%field(m)%fid == -1) then
           rescale = scale
           if ((segment%field(m)%scale /= 0.0) .and. (segment%field(m)%scale /= 1.0)) &
@@ -5005,6 +5024,7 @@ subroutine open_boundary_register_restarts(HI, GV, US, OBC, Reg, param_file, res
       endif
     enddo
   endif
+
 end subroutine open_boundary_register_restarts
 
 !> Update the OBC tracer reservoirs after the tracers have been updated.
@@ -5022,8 +5042,10 @@ subroutine update_segment_tracer_reservoirs(G, GV, uhr, vhr, h, OBC, dt, Reg)
   type(tracer_registry_type),                 pointer    :: Reg !< pointer to tracer registry
 
   type(OBC_segment_type), pointer :: segment=>NULL()
-  real :: u_L_in, u_L_out ! The zonal distance moved in or out of a cell [L ~> m]
-  real :: v_L_in, v_L_out ! The meridional distance moved in or out of a cell [L ~> m]
+  real :: u_L_in, u_L_out ! The zonal distance moved in or out of a cell, normalized by the reservoir
+                          ! length scale [nondim]
+  real :: v_L_in, v_L_out ! The meridional distance moved in or out of a cell, normalized by the reservoir
+                          ! length scale [nondim]
   real :: fac1            ! The denominator of the expression for tracer updates [nondim]
   real :: I_scale         ! The inverse of the scaling factor for the tracers.
                           ! For salinity the units would be [ppt S-1 ~> 1]
@@ -5032,6 +5054,7 @@ subroutine update_segment_tracer_reservoirs(G, GV, uhr, vhr, h, OBC, dt, Reg)
 
   nz = GV%ke
   ntr = Reg%ntr
+
   if (associated(OBC)) then ; if (OBC%OBC_pe) then ; do n=1,OBC%number_of_segments
     segment=>OBC%segment(n)
     if (.not. associated(segment%tr_Reg)) cycle
