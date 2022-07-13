@@ -54,13 +54,13 @@ subroutine DOME2d_initialize_topography( D, G, param_file, max_depth )
   call log_version(param_file, mdl, version, "")
   call get_param(param_file, mdl, "DOME2D_SHELF_WIDTH", dome2d_width_bay, &
                  'Width of shelf, as fraction of domain, in 2d DOME configuration.', &
-                 units='nondim',default=0.1)
+                 units='nondim', default=0.1)
   call get_param(param_file, mdl, "DOME2D_BASIN_WIDTH", dome2d_width_bottom, &
                  'Width of deep ocean basin, as fraction of domain, in 2d DOME configuration.', &
-                 units='nondim',default=0.3)
+                 units='nondim', default=0.3)
   call get_param(param_file, mdl, "DOME2D_SHELF_DEPTH", dome2d_depth_bay, &
                  'Depth of shelf, as fraction of basin depth, in 2d DOME configuration.', &
-                 units='nondim',default=0.2)
+                 units='nondim', default=0.2)
 
   ! location where downslope starts
   l1 = dome2d_width_bay
@@ -241,7 +241,7 @@ subroutine DOME2d_initialize_temperature_salinity ( T, S, h, G, GV, US, param_fi
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
-  call get_param(param_file, mdl,"REGRIDDING_COORDINATE_MODE", verticalCoordinate, &
+  call get_param(param_file, mdl, "REGRIDDING_COORDINATE_MODE", verticalCoordinate, &
                  default=DEFAULT_COORDINATE_MODE, do_not_log=.true.)
   call get_param(param_file, mdl, "DOME2D_SHELF_WIDTH", dome2d_width_bay, &
                  default=0.1, do_not_log=.true.)
@@ -331,7 +331,6 @@ subroutine DOME2d_initialize_temperature_salinity ( T, S, h, G, GV, US, param_fi
   endif
 
   ! Modify temperature when rho coordinates are used
-  T(G%isc:G%iec,G%jsc:G%jec,1:GV%ke) = 0.0
   if (( coordinateMode(verticalCoordinate) == REGRIDDING_RHO ) .or. &
       ( coordinateMode(verticalCoordinate) == REGRIDDING_LAYER )) then
     do i = G%isc,G%iec ; do j = G%jsc,G%jec
