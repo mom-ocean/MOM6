@@ -90,11 +90,11 @@ subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, use_stan
     S_v, &        ! Salinity on the interface at the v-point [S ~> ppt].
     pres_v        ! Pressure on the interface at the v-point [R L2 T-2 ~> Pa].
   real, dimension(SZI_(G)) :: &
-    T_h, &        ! Temperature on the interface at the h-point [degC].
-    S_h, &        ! Salinity on the interface at the h-point [ppt]
+    T_h, &        ! Temperature on the interface at the h-point [C ~> degC].
+    S_h, &        ! Salinity on the interface at the h-point [S ~> ppt]
     pres_h, &     ! Pressure on the interface at the h-point [R L2 T-2 ~> Pa].
-    T_hr, &       ! Temperature on the interface at the h (+1) point [degC].
-    S_hr, &       ! Salinity on the interface at the h (+1) point [ppt]
+    T_hr, &       ! Temperature on the interface at the h (+1) point [C ~> degC].
+    S_hr, &       ! Salinity on the interface at the h (+1) point [S ~> ppt]
     pres_hr       ! Pressure on the interface at the h (+1) point [R L2 T-2 ~> Pa].
   real :: drdiA, drdiB  ! Along layer zonal- and meridional- potential density
   real :: drdjA, drdjB  ! gradients in the layers above (A) and below (B) the

@@ -1632,11 +1632,11 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, US, param_file, diag
         standard_name='sea_water_salinity_at_sea_floor', &
         units='psu', conversion=US%S_to_ppt)
 
-    CS%id_tosq = register_diag_field('ocean_model', 'tosq', diag%axesTL,&
-      Time, 'Square of Potential Temperature', 'degc2',           &
+    CS%id_tosq = register_diag_field('ocean_model', 'tosq', diag%axesTL, &
+      Time, 'Square of Potential Temperature', 'degC2', conversion=US%C_to_degC**2, &
       standard_name='Potential Temperature Squared')
-    CS%id_sosq = register_diag_field('ocean_model', 'sosq', diag%axesTL,&
-      Time, 'Square of Salinity', 'psu2',           &
+    CS%id_sosq = register_diag_field('ocean_model', 'sosq', diag%axesTL, &
+      Time, 'Square of Salinity', 'psu2', conversion=US%S_to_ppt**2, &
       standard_name='Salinity Squared')
 
     CS%id_temp_layer_ave = register_diag_field('ocean_model', 'temp_layer_ave', &

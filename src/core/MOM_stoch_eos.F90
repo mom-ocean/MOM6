@@ -53,7 +53,7 @@ end type MOM_stoch_eos_CS
 contains
 
 !> Initializes MOM_stoch_eos module.
-subroutine MOM_stoch_eos_init(G,Time,param_file,CS,restart_CS,diag)
+subroutine MOM_stoch_eos_init(G, Time, param_file, CS, restart_CS, diag)
   type(param_file_type),  intent(in)    :: param_file   !< structure indicating parameter file to parse
   type(ocean_grid_type),  intent(in)    :: G            !< The ocean's grid structure.
   type(time_type),        intent(in)    :: Time         !< Time for stochastic process
@@ -123,7 +123,7 @@ subroutine MOM_stoch_eos_init(G,Time,param_file,CS,restart_CS,diag)
 end subroutine MOM_stoch_eos_init
 
 !> Generates a pattern in space and time for the ocean stochastic equation of state
-subroutine MOM_stoch_eos_run(G,u,v,delt,Time,CS,diag)
+subroutine MOM_stoch_eos_run(G, u, v, delt, Time, CS, diag)
   type(ocean_grid_type),   intent(in)    :: G    !< The ocean's grid structure.
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
                            intent(in)    :: u    !< The zonal velocity [L T-1 ~> m s-1].
@@ -156,7 +156,7 @@ subroutine MOM_stoch_eos_run(G,u,v,delt,Time,CS,diag)
 end subroutine MOM_stoch_eos_run
 
 !> Computes a parameterization of the SGS temperature variance
-subroutine MOM_calc_varT(G,GV,h,tv,CS,dt)
+subroutine MOM_calc_varT(G, GV, h, tv, CS, dt)
   type(ocean_grid_type),   intent(in)   :: G   !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)   :: GV  !< Vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
@@ -167,13 +167,13 @@ subroutine MOM_calc_varT(G,GV,h,tv,CS,dt)
 
   ! local variables
   real, dimension(SZI_(G), SZJ_(G), SZK_(GV)) :: &
-    T, &          !> The temperature (or density) [degC], with the values in
+    T, &          !> The temperature (or density) [C ~> degC], with the values in
                   !! in massless layers filled vertically by diffusion.
-    S             !> The filled salinity [ppt], with the values in
+    S             !> The filled salinity [S ~> ppt], with the values in
                   !! in massless layers filled vertically by diffusion.
-  integer                                ::  i,j,k
+  integer :: i, j, k
   real :: hl(5)              !> Copy of local stencil of H [H ~> m]
-  real :: dTdi2, dTdj2       !> Differences in T variance [degC2]
+  real :: dTdi2, dTdj2       !> Differences in T variance [C2 ~> degC2]
 
   ! This block does a thickness weighted variance calculation and helps control for
   ! extreme gradients along layers which are vanished against topography. It is
@@ -191,11 +191,11 @@ subroutine MOM_calc_varT(G,GV,h,tv,CS,dt)
         hl(4) = h(i,j-1,k) * G%mask2dCv(i,J-1)
         hl(5) = h(i,j+1,k) * G%mask2dCv(i,J)
 
-        ! SGS variance in i-direction [degC2]
+        ! SGS variance in i-direction [C2 ~> degC2]
         dTdi2 = ( ( G%mask2dCu(I  ,j) * G%IdxCu(I  ,j) * ( T(i+1,j,k) - T(i,j,k) ) &
               + G%mask2dCu(I-1,j) * G%IdxCu(I-1,j) * ( T(i,j,k) - T(i-1,j,k) ) &
               ) * G%dxT(i,j) * 0.5 )**2
-        ! SGS variance in j-direction [degC2]
+        ! SGS variance in j-direction [C2 ~> degC2]
         dTdj2 = ( ( G%mask2dCv(i,J  ) * G%IdyCv(i,J  ) * ( T(i,j+1,k) - T(i,j,k) ) &
               + G%mask2dCv(i,J-1) * G%IdyCv(i,J-1) * ( T(i,j,k) - T(i,j-1,k) ) &
               ) * G%dyT(i,j) * 0.5 )**2
