@@ -449,8 +449,8 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
     ! These stochastic perturbations do not conserve heat, salt or mass.
     do k=1,nz ; do j=js,je ; do i=is,ie
       h(i,j,k) = max(h_in(i,j,k) + (h(i,j,k)-h_in(i,j,k)) * stoch_CS%sppt_wts(i,j), GV%Angstrom_H)
-      tv%T(i,j,k) = t_in(i,j,k) + (tv%T(i,j,k)-t_in(i,j,k)) * stoch_CS%sppt_wts(i,j)
       tv%S(i,j,k) = max(s_in(i,j,k) + (tv%S(i,j,k)-s_in(i,j,k)) * stoch_CS%sppt_wts(i,j), 0.0)
+      tv%T(i,j,k) = max(t_in(i,j,k) + (tv%T(i,j,k)-t_in(i,j,k)) * stoch_CS%sppt_wts(i,j), -0.054*tv%S(i,j,k))
     enddo ; enddo ; enddo
     deallocate(h_in, t_in, s_in)
   endif
