@@ -20,7 +20,7 @@ use MOM_time_manager,  only : time_type, operator(+), operator(/)
 use MOM_unit_scaling,  only : unit_scale_type
 use MOM_variables,     only : thermo_var_ptrs, surface
 use MOM_verticalgrid,  only : verticalGrid_type
-use MOM_restart,       only : register_restart_field, MOM_restart_CS, query_initialized
+use MOM_restart,       only : register_restart_field, MOM_restart_CS
 
 implicit none ; private
 

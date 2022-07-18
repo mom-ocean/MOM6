@@ -14,7 +14,7 @@ use MOM_hor_index,       only : hor_index_type
 use MOM_io,              only : file_exists, MOM_read_data, slasher
 use MOM_io,              only : vardesc, var_desc, query_vardesc
 use MOM_open_boundary,   only : ocean_OBC_type
-use MOM_restart,         only : query_initialized, MOM_restart_CS
+use MOM_restart,         only : query_initialized, set_initialized, MOM_restart_CS
 use MOM_spatial_means,   only : global_mass_int_EFP
 use MOM_sponge,          only : set_up_sponge_field, sponge_CS
 use MOM_time_manager,    only : time_type, time_type_to_real
@@ -278,7 +278,7 @@ subroutine initialize_oil_tracer(restart, day, G, GV, US, h, diag, OBC, CS, &
           endif
         enddo ; enddo ; enddo
       endif
-
+      call set_initialized(CS%tr(:,:,:,m), name, CS%restart_CSp)
     endif ! restart
   enddo ! Tracer loop
 

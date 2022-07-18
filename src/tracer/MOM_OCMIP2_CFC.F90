@@ -15,7 +15,7 @@ use MOM_grid,            only : ocean_grid_type
 use MOM_io,              only : file_exists, MOM_read_data, slasher
 use MOM_io,              only : vardesc, var_desc, query_vardesc
 use MOM_open_boundary,   only : ocean_OBC_type
-use MOM_restart,         only : query_initialized, MOM_restart_CS
+use MOM_restart,         only : query_initialized, set_initialized, MOM_restart_CS
 use MOM_spatial_means,   only : global_mass_int_EFP
 use MOM_sponge,          only : set_up_sponge_field, sponge_CS
 use MOM_time_manager,    only : time_type
@@ -335,14 +335,18 @@ subroutine initialize_OCMIP2_CFC(restart, day, G, GV, US, h, diag, OBC, CS, &
   CS%diag => diag
 
   if (.not.restart .or. (CS%tracers_may_reinit .and. &
-      .not.query_initialized(CS%CFC11, CS%CFC11_name, CS%restart_CSp))) &
+      .not.query_initialized(CS%CFC11, CS%CFC11_name, CS%restart_CSp))) then
     call init_tracer_CFC(h, CS%CFC11, CS%CFC11_name, CS%CFC11_land_val, &
                          CS%CFC11_IC_val, G, GV, US, CS)
+    call set_initialized(CS%CFC11, CS%CFC11_name, CS%restart_CSp)
+  endif
 
   if (.not.restart .or. (CS%tracers_may_reinit .and. &
-      .not.query_initialized(CS%CFC12, CS%CFC12_name, CS%restart_CSp))) &
+      .not.query_initialized(CS%CFC12, CS%CFC12_name, CS%restart_CSp))) then
     call init_tracer_CFC(h, CS%CFC12, CS%CFC12_name, CS%CFC12_land_val, &
                          CS%CFC12_IC_val, G, GV, US, CS)
+    call set_initialized(CS%CFC12, CS%CFC12_name, CS%restart_CSp)
+  endif
 
   if (associated(OBC)) then
   ! Steal from updated DOME in the fullness of time.

@@ -13,7 +13,7 @@ use MOM_grid,            only : ocean_grid_type
 use MOM_hor_index,       only : hor_index_type
 use MOM_io,              only : vardesc, var_desc, query_vardesc
 use MOM_open_boundary,   only : ocean_OBC_type
-use MOM_restart,         only : register_restart_field, query_initialized, MOM_restart_CS
+use MOM_restart,         only : register_restart_field, query_initialized, set_initialized, MOM_restart_CS
 use MOM_spatial_means,   only : global_mass_int_EFP
 use MOM_sponge,          only : set_up_sponge_field, sponge_CS
 use MOM_time_manager,    only : time_type
@@ -186,6 +186,7 @@ subroutine initialize_boundary_impulse_tracer(restart, day, G, GV, US, h, diag, 
       do k=1,CS%nkml ; do j=jsd,jed ; do i=isd,ied
         CS%tr(i,j,k,m) = 1.0
       enddo ; enddo ; enddo
+      call set_initialized(CS%tr(:,:,:,m), name, CS%restart_CSp)
     endif
   enddo ! Tracer loop
 

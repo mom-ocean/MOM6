@@ -40,8 +40,8 @@ use MOM_get_input,            only : Get_MOM_Input, directories
 use MOM_io,                   only : MOM_io_init, vardesc, var_desc
 use MOM_io,                   only : slasher, file_exists, MOM_read_data
 use MOM_obsolete_params,      only : find_obsolete_params
-use MOM_restart,              only : register_restart_field, register_restart_pair
-use MOM_restart,              only : query_initialized, save_restart, restart_registry_lock
+use MOM_restart,              only : register_restart_field, register_restart_pair, save_restart
+use MOM_restart,              only : query_initialized, set_initialized, restart_registry_lock
 use MOM_restart,              only : restart_init, is_new_run, determine_is_new_run, MOM_restart_CS
 use MOM_spatial_means,        only : global_mass_integral
 use MOM_time_manager,         only : time_type, real_to_time, time_type_to_real, operator(+)
@@ -2926,11 +2926,12 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
       endif
     else
       CS%tv%frazil(:,:) = 0.0
+      call set_initialized(CS%tv%frazil, "frazil", restart_CSp)
     endif
   endif
 
   if (CS%interp_p_surf) then
-    CS%p_surf_prev_set = query_initialized(CS%p_surf_prev,"p_surf_prev",restart_CSp)
+    CS%p_surf_prev_set = query_initialized(CS%p_surf_prev, "p_surf_prev", restart_CSp)
 
     if (CS%p_surf_prev_set) then
       ! Test whether the dimensional rescaling has changed for pressure.
@@ -2958,7 +2959,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
     endif
   endif
 
-  if (query_initialized(CS%ave_ssh_ibc,"ave_ssh",restart_CSp)) then
+  if (query_initialized(CS%ave_ssh_ibc, "ave_ssh", restart_CSp)) then
     if ((US%m_to_Z_restart /= 0.0) .and. (US%m_to_Z_restart /= 1.0) ) then
       Z_rescale = 1.0 / US%m_to_Z_restart
       do j=js,je ; do i=is,ie
@@ -2971,6 +2972,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
     else
       call find_eta(CS%h, CS%tv, G, GV, US, CS%ave_ssh_ibc, dZref=G%Z_ref)
     endif
+    call set_initialized(CS%ave_ssh_ibc, "ave_ssh", restart_CSp)
   endif
   if (CS%split) deallocate(eta)
 

@@ -16,7 +16,7 @@ use MOM_io,              only : file_exists, MOM_read_data, slasher
 use MOM_io,              only : vardesc, var_desc, query_vardesc, stdout
 use MOM_tracer_registry, only : tracer_type
 use MOM_open_boundary,   only : ocean_OBC_type
-use MOM_restart,         only : query_initialized, MOM_restart_CS
+use MOM_restart,         only : query_initialized, set_initialized, MOM_restart_CS
 use MOM_spatial_means,   only : global_mass_int_EFP
 use MOM_time_manager,    only : time_type
 use time_interp_external_mod, only : init_external_field, time_interp_external
@@ -204,9 +204,11 @@ subroutine initialize_CFC_cap(restart, day, G, GV, US, h, diag, OBC, CS)
 
   do m=1,2
     if (.not.restart .or. (CS%tracers_may_reinit .and. &
-        .not.query_initialized(CS%CFC_data(m)%conc, CS%CFC_data(m)%name, CS%restart_CSp))) &
+        .not.query_initialized(CS%CFC_data(m)%conc, CS%CFC_data(m)%name, CS%restart_CSp))) then
       call init_tracer_CFC(h, CS%CFC_data(m)%conc, CS%CFC_data(m)%name, CS%CFC_data(m)%land_val, &
                           CS%CFC_data(m)%IC_val, G, GV, US, CS)
+      call set_initialized(CS%CFC_data(m)%conc, CS%CFC_data(m)%name, CS%restart_CSp)
+    endif
 
     ! cmor diagnostics
     ! CFC11 cmor conventions: http://clipc-services.ceda.ac.uk/dreq/u/42625c97b8fe75124a345962c4430982.html
