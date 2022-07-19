@@ -916,7 +916,7 @@ subroutine buoyancy_forcing_from_files(sfc_state, fluxes, day, dt, G, US, CS)
 !#CTRL#    SSS_mean      ! A (mean?) salinity about which to normalize local salinity
 !#CTRL#                  ! anomalies when calculating restorative precipitation anomalies [ppt].
 
-  real :: rhoXcp ! reference density times heat capacity [Q R degC-1 ~> J m-3 degC-1]
+  real :: rhoXcp ! reference density times heat capacity [Q R C-1 ~> J m-3 degC-1]
 
   integer :: time_lev_daily     ! time levels to read for fields with daily cycle
   integer :: time_lev_monthly   ! time levels to read for fields with monthly cycle
@@ -1127,7 +1127,7 @@ subroutine buoyancy_forcing_from_files(sfc_state, fluxes, day, dt, G, US, CS)
       do j=js,je ; do i=is,ie
         if (G%mask2dT(i,j) > 0.0) then
           fluxes%heat_added(i,j) = G%mask2dT(i,j) * &
-              ((CS%T_Restore(i,j) - sfc_state%SST(i,j)) * rhoXcp * CS%Flux_const_T)
+              ((CS%T_Restore(i,j) - sfc_state%SST(i,j)) * US%degC_to_C*rhoXcp * CS%Flux_const_T)
           fluxes%vprec(i,j) = - (CS%Rho0*CS%Flux_const_S) * &
               (CS%S_Restore(i,j) - sfc_state%SSS(i,j)) / &
               (0.5*(sfc_state%SSS(i,j) + CS%S_Restore(i,j)))
@@ -1188,7 +1188,7 @@ subroutine buoyancy_forcing_from_data_override(sfc_state, fluxes, day, dt, G, US
 !#CTRL#                  ! (observed) value [ppt].
 !#CTRL#    SSS_mean      ! A (mean?) salinity about which to normalize local salinity
 !#CTRL#                  ! anomalies when calculating restorative precipitation anomalies [ppt].
-  real :: rhoXcp ! The mean density times the heat capacity [Q R degC-1 ~> J m-3 degC-1].
+  real :: rhoXcp ! The mean density times the heat capacity [Q R C-1 ~> J m-3 degC-1].
   integer :: i, j, is, ie, js, je, isd, ied, jsd, jed
 
   call callTree_enter("buoyancy_forcing_from_data_override, MOM_surface_forcing.F90")
@@ -1233,7 +1233,7 @@ subroutine buoyancy_forcing_from_data_override(sfc_state, fluxes, day, dt, G, US
       do j=js,je ; do i=is,ie
         if (G%mask2dT(i,j) > 0.0) then
           fluxes%heat_added(i,j) = G%mask2dT(i,j) * &
-              ((CS%T_Restore(i,j) - sfc_state%SST(i,j)) * rhoXcp * CS%Flux_const_T)
+              ((CS%T_Restore(i,j) - sfc_state%SST(i,j)) * US%degC_to_C*rhoXcp * CS%Flux_const_T)
           fluxes%vprec(i,j) = - (CS%Rho0*CS%Flux_const_S) * &
               (CS%S_Restore(i,j) - sfc_state%SSS(i,j)) / &
               (0.5*(sfc_state%SSS(i,j) + CS%S_Restore(i,j)))
@@ -1433,7 +1433,7 @@ subroutine buoyancy_forcing_linear(sfc_state, fluxes, day, dt, G, US, CS)
         S_restore = CS%S_south + (CS%S_north-CS%S_south)*y
         if (G%mask2dT(i,j) > 0.0) then
           fluxes%heat_added(i,j) = G%mask2dT(i,j) * &
-              ((T_Restore - sfc_state%SST(i,j)) * ((CS%Rho0 * fluxes%C_p) * CS%Flux_const))
+              ((T_Restore - sfc_state%SST(i,j)) * ((CS%Rho0 * US%degC_to_C*fluxes%C_p) * CS%Flux_const))
           fluxes%vprec(i,j) = - (CS%Rho0*CS%Flux_const) * &
               (S_Restore - sfc_state%SSS(i,j)) / &
               (0.5*(sfc_state%SSS(i,j) + S_Restore))

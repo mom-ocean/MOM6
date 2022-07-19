@@ -188,8 +188,8 @@ type, public :: forcing
                                   !! type variable has not yet been initialized.
   logical :: gustless_accum_bug = .true. !< If true, use an incorrect expression in the time
                                   !! average of the gustless wind stress.
-  real :: C_p                !< heat capacity of seawater [Q degC-1 ~> J kg-1 degC-1].
-                             !! C_p is is the same value as in thermovar_ptrs_type.
+  real :: C_p                   !< heat capacity of seawater [Q C-1 ~> J kg-1 degC-1].
+                                !! C_p is is the same value as in thermovar_ptrs_type.
 
   ! CFC-related arrays needed in the MOM_CFC_cap module
   real, pointer, dimension(:,:) :: &
@@ -2719,17 +2719,17 @@ subroutine forcing_diagnostics(fluxes_in, sfc_state, G_in, US, time_end, diag, h
     if (handles%id_heat_content_surfwater > 0 .or. handles%id_total_heat_content_surfwater > 0) then
       do j=js,je ; do i=is,ie
         res(i,j) = 0.0
-      if (associated(fluxes%heat_content_lrunoff)) res(i,j) = res(i,j) + fluxes%heat_content_lrunoff(i,j)
-      if (associated(fluxes%heat_content_frunoff)) res(i,j) = res(i,j) + fluxes%heat_content_frunoff(i,j)
-      if (associated(fluxes%heat_content_lprec))   res(i,j) = res(i,j) + fluxes%heat_content_lprec(i,j)
-      if (associated(fluxes%heat_content_fprec))   res(i,j) = res(i,j) + fluxes%heat_content_fprec(i,j)
-      if (associated(fluxes%heat_content_vprec))   res(i,j) = res(i,j) + fluxes%heat_content_vprec(i,j)
-      if (associated(fluxes%heat_content_cond))    res(i,j) = res(i,j) + fluxes%heat_content_cond(i,j)
-      if (mom_enthalpy) then
-        if (associated(fluxes%heat_content_massout)) res(i,j) = res(i,j) + fluxes%heat_content_massout(i,j)
-      else
-        if (associated(fluxes%heat_content_evap))    res(i,j) = res(i,j) + fluxes%heat_content_evap(i,j)
-      endif
+        if (associated(fluxes%heat_content_lrunoff)) res(i,j) = res(i,j) + fluxes%heat_content_lrunoff(i,j)
+        if (associated(fluxes%heat_content_frunoff)) res(i,j) = res(i,j) + fluxes%heat_content_frunoff(i,j)
+        if (associated(fluxes%heat_content_lprec))   res(i,j) = res(i,j) + fluxes%heat_content_lprec(i,j)
+        if (associated(fluxes%heat_content_fprec))   res(i,j) = res(i,j) + fluxes%heat_content_fprec(i,j)
+        if (associated(fluxes%heat_content_vprec))   res(i,j) = res(i,j) + fluxes%heat_content_vprec(i,j)
+        if (associated(fluxes%heat_content_cond))    res(i,j) = res(i,j) + fluxes%heat_content_cond(i,j)
+        if (mom_enthalpy) then
+          if (associated(fluxes%heat_content_massout)) res(i,j) = res(i,j) + fluxes%heat_content_massout(i,j)
+        else
+          if (associated(fluxes%heat_content_evap))    res(i,j) = res(i,j) + fluxes%heat_content_evap(i,j)
+        endif
       enddo ; enddo
       if (handles%id_heat_content_surfwater > 0) call post_data(handles%id_heat_content_surfwater, res, diag)
       if (handles%id_total_heat_content_surfwater > 0) then
