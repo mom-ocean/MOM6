@@ -56,8 +56,8 @@ type, public :: surface
     melt_potential, & !< Instantaneous amount of heat that can be used to melt sea ice [Q R Z ~> J m-2].
                       !! This is computed w.r.t. surface freezing temperature.
     ocean_mass, &  !< The total mass of the ocean [R Z ~> kg m-2].
-    ocean_heat, &  !< The total heat content of the ocean in [degC R Z ~> degC kg m-2].
-    ocean_salt, &  !< The total salt content of the ocean in [kgSalt kg-1 R Z ~> kgSalt m-2].
+    ocean_heat, &  !< The total heat content of the ocean in [C R Z ~> degC kg m-2].
+    ocean_salt, &  !< The total salt content of the ocean in [1e-3 S R Z ~> kgSalt m-2].
     taux_shelf, &  !< The zonal stresses on the ocean under shelves [R L Z T-2 ~> Pa].
     tauy_shelf     !< The meridional stresses on the ocean under shelves [R L Z T-2 ~> Pa].
   logical :: T_is_conT = .false. !< If true, the temperature variable SST is actually the
