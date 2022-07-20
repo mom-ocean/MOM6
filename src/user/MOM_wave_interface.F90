@@ -571,16 +571,16 @@ subroutine Update_Surface_Waves(G, GV, US, Time_present, dt, CS, forces)
       endif
 
       do b=1,CS%NumBands
-        CS%WaveNum_Cen(b) = US%Z_to_m * forces%stk_wavenumbers(b)
+        CS%WaveNum_Cen(b) = forces%stk_wavenumbers(b)
         !Interpolate from a grid to c grid
         do jj=G%jsc,G%jec
           do II=G%iscB,G%iecB
-            CS%STKx0(II,jj,b) = US%m_s_to_L_T*0.5*(forces%UStkb(ii,jj,b)+forces%UStkb(ii+1,jj,b))
+            CS%STKx0(II,jj,b) = 0.5*(forces%UStkb(ii,jj,b)+forces%UStkb(ii+1,jj,b))
           enddo
         enddo
         do JJ=G%jscB, G%jecB
           do ii=G%isc,G%iec
-            CS%STKY0(ii,JJ,b) = US%m_s_to_L_T*0.5*(forces%VStkb(ii,jj,b)+forces%VStkb(ii,jj+1,b))
+            CS%STKY0(ii,JJ,b) = 0.5*(forces%VStkb(ii,jj,b)+forces%VStkb(ii,jj+1,b))
           enddo
         enddo
         call pass_vector(CS%STKx0(:,:,b),CS%STKy0(:,:,b), G%Domain)
@@ -915,8 +915,8 @@ subroutine Surface_Bands_by_data_override(Time, G, GV, US, CS)
   type(unit_scale_type),    intent(in) :: US         !< A dimensional unit scaling type
 
   ! Local variables
-  real    :: temp_x(SZI_(G),SZJ_(G)) ! Pseudo-zonal Stokes drift of band at h-points [m s-1]
-  real    :: temp_y(SZI_(G),SZJ_(G)) ! Psuedo-meridional Stokes drift of band at h-points [m s-1]
+  real    :: temp_x(SZI_(G),SZJ_(G)) ! Pseudo-zonal Stokes drift of band at h-points [L T-1 ~> m s-1]
+  real    :: temp_y(SZI_(G),SZJ_(G)) ! Psuedo-meridional Stokes drift of band at h-points [L T-1 ~> m s-1]
   integer, dimension(4) :: sizes    ! The sizes of the various dimensions of the variable.
   character(len=48) :: dim_name(4)  ! The names of the dimensions of the variable.
   character(len=20) :: varname      ! The name of an input variable for data override.
@@ -985,16 +985,16 @@ subroutine Surface_Bands_by_data_override(Time, G, GV, US, CS)
     temp_y(:,:) = 0.0
     varname = '                    '
     write(varname, "(A3,I0)") 'Usx', b
-    call data_override('OCN', trim(varname), temp_x, Time)
+    call data_override(G%Domain, trim(varname), temp_x, Time, scale=US%m_s_to_L_T)
     varname = '                    '
     write(varname, "(A3,I0)") 'Usy', b
-    call data_override('OCN', trim(varname), temp_y, Time)
+    call data_override(G%Domain, trim(varname), temp_y, Time, scale=US%m_s_to_L_T)
     ! Update halo on h-grid
     call pass_vector(temp_x, temp_y, G%Domain, To_All, AGRID)
     ! Filter land values
     do j = G%jsd,G%jed
       do i = G%Isd,G%Ied
-        if (abs(temp_x(i,j)) > 10. .or. abs(temp_y(i,j)) > 10.) then
+        if ((abs(temp_x(i,j)) > 10.0*US%m_s_to_L_T) .or. (abs(temp_y(i,j)) > 10.0*US%m_s_to_L_T)) then
           ! Assume land-mask and zero out
           temp_x(i,j) = 0.0
           temp_y(i,j) = 0.0
@@ -1005,12 +1005,12 @@ subroutine Surface_Bands_by_data_override(Time, G, GV, US, CS)
     ! Interpolate to u/v grids
     do j = G%jsc,G%jec
       do I = G%IscB,G%IecB
-        CS%STKx0(I,j,b) = 0.5 * US%m_s_to_L_T*(temp_x(i,j) + temp_x(i+1,j))
+        CS%STKx0(I,j,b) = 0.5 * (temp_x(i,j) + temp_x(i+1,j))
       enddo
     enddo
     do J = G%JscB,G%JecB
       do i = G%isc,G%iec
-        CS%STKy0(i,J,b) = 0.5 * US%m_s_to_L_T*(temp_y(i,j) + temp_y(i,j+1))
+        CS%STKy0(i,J,b) = 0.5 * (temp_y(i,j) + temp_y(i,j+1))
       enddo
     enddo
   enddo !Closes b-loop

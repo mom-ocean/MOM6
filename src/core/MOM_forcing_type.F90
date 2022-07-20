@@ -265,12 +265,12 @@ type, public :: mech_forcing
                                 !! ice needs to be accumulated, and the rigidity explicitly
                                 !! reset to zero at the driver level when appropriate.
   real, pointer, dimension(:) :: &
-    stk_wavenumbers => NULL()   !< The central wave number of Stokes bands [rad m-1]
+    stk_wavenumbers => NULL()   !< The central wave number of Stokes bands [rad Z-1 ~> rad m-1]
   real, pointer, dimension(:,:,:) :: &
-    ustkb => NULL(), &          !< Stokes Drift spectrum, zonal [m s-1]
+    ustkb => NULL(), &          !< Stokes Drift spectrum, zonal [L T-1 ~> m s-1]
                                 !! Horizontal - u points
                                 !! 3rd dimension - wavenumber
-    vstkb => NULL()             !< Stokes Drift spectrum, meridional [m s-1]
+    vstkb => NULL()             !< Stokes Drift spectrum, meridional [L T-1 ~> m s-1]
                                 !! Horizontal - v points
                                 !! 3rd dimension - wavenumber
 

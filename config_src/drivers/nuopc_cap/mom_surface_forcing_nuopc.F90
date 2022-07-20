@@ -903,11 +903,11 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, US, CS)
   ! wave to ocean coupling
   if ( associated(IOB%ustkb) ) then
 
-    forces%stk_wavenumbers(:) = IOB%stk_wavenumbers
+    forces%stk_wavenumbers(:) = IOB%stk_wavenumbers * US%Z_to_m
     do istk = 1,IOB%num_stk_bands
       do j=js,je; do i=is,ie
-        forces%ustkb(i,j,istk) = IOB%ustkb(i-I0,j-J0,istk)
-        forces%vstkb(i,j,istk) = IOB%vstkb(i-I0,j-J0,istk)
+        forces%ustkb(i,j,istk) = IOB%ustkb(i-I0,j-J0,istk) * US%m_s_to_L_T
+        forces%vstkb(i,j,istk) = IOB%vstkb(i-I0,j-J0,istk) * US%m_s_to_L_T
       enddo; enddo
       call pass_var(forces%ustkb(:,:,istk), G%domain )
       call pass_var(forces%vstkb(:,:,istk), G%domain )
