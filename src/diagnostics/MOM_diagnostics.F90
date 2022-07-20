@@ -20,7 +20,7 @@ use MOM_diag_mediator,     only : diag_save_grids, diag_restore_grids, diag_copy
 use MOM_domains,           only : create_group_pass, do_group_pass, group_pass_type
 use MOM_domains,           only : To_North, To_East
 use MOM_EOS,               only : calculate_density, calculate_density_derivs, EOS_domain
-use MOM_EOS,               only : gsw_sp_from_sr, gsw_pt_from_ct
+use MOM_EOS,               only : cons_temp_to_pot_temp, abs_saln_to_prac_saln
 use MOM_error_handler,     only : MOM_error, FATAL, WARNING
 use MOM_file_parser,       only : get_param, log_version, param_file_type
 use MOM_grid,              only : ocean_grid_type
@@ -401,9 +401,10 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
     ! so they need to converted to potential temperature and practical salinity
     ! for some diagnostics using TEOS-10 function calls.
     if ((CS%id_Tpot > 0) .or. (CS%id_tob > 0) .or. (CS%id_tosq > 0)) then
-      do k=1,nz ; do j=js,je ; do i=is,ie
-        work_3d(i,j,k) = US%degC_to_C*gsw_pt_from_ct(US%S_to_ppt*tv%S(i,j,k),US%C_to_degC*tv%T(i,j,k))
-      enddo ; enddo ; enddo
+      EOSdom(:) = EOS_domain(G%HI)
+      do k=1,nz ; do j=js,je
+        call cons_temp_to_pot_temp(tv%T(:,j,k), tv%S(:,j,k), work_3d(:,j,k), tv%eqn_of_state, EOSdom)
+      enddo ; enddo
       if (CS%id_Tpot > 0) call post_data(CS%id_Tpot, work_3d, CS%diag)
       if (CS%id_tob > 0) call post_data(CS%id_tob, work_3d(:,:,nz), CS%diag, mask=G%mask2dT)
       if (CS%id_tosq > 0) then
@@ -430,9 +431,10 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
     ! so they need to converted to potential temperature and practical salinity
     ! for some diagnostics using TEOS-10 function calls.
     if ((CS%id_Sprac > 0) .or. (CS%id_sob > 0) .or. (CS%id_sosq >0)) then
-      do k=1,nz ; do j=js,je ; do i=is,ie
-        work_3d(i,j,k) = US%ppt_to_S*gsw_sp_from_sr(US%S_to_ppt*tv%S(i,j,k))
-      enddo ; enddo ; enddo
+      EOSdom(:) = EOS_domain(G%HI)
+      do k=1,nz ; do j=js,je
+        call abs_saln_to_prac_saln(tv%S(:,j,k), work_3d(:,j,k), tv%eqn_of_state, EOSdom)
+      enddo ; enddo
       if (CS%id_Sprac > 0) call post_data(CS%id_Sprac, work_3d, CS%diag)
       if (CS%id_sob > 0) call post_data(CS%id_sob, work_3d(:,:,nz), CS%diag, mask=G%mask2dT)
       if (CS%id_sosq > 0) then
@@ -1314,6 +1316,7 @@ subroutine post_surface_thermo_diags(IDs, G, GV, US, diag, dt_int, sfc_state, tv
   real :: zos_area_mean ! Global area mean sea surface height [Z ~> m]
   real :: volo          ! Total volume of the ocean [m3]
   real :: ssh_ga        ! Global ocean area weighted mean sea seaface height [Z ~> m]
+  integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state
   integer :: i, j, is, ie, js, je
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
@@ -1389,9 +1392,10 @@ subroutine post_surface_thermo_diags(IDs, G, GV, US, diag, dt_int, sfc_state, tv
     if (IDs%id_sstcon > 0) call post_data(IDs%id_sstcon, sfc_state%SST, diag, mask=G%mask2dT)
     ! Use TEOS-10 function calls convert T&S diagnostics from conservative temp
     ! to potential temperature.
-    do j=js,je ; do i=is,ie
-      work_2d(i,j) = US%degC_to_C*gsw_pt_from_ct(US%S_to_ppt*sfc_state%SSS(i,j), US%C_to_degC*sfc_state%SST(i,j))
-    enddo ; enddo
+    EOSdom(:) = EOS_domain(G%HI)
+    do j=js,je
+      call cons_temp_to_pot_temp(sfc_state%SST(:,j), sfc_state%SSS(:,j), work_2d(:,j), tv%eqn_of_state, EOSdom)
+    enddo
     if (IDs%id_sst > 0) call post_data(IDs%id_sst, work_2d, diag, mask=G%mask2dT)
   else
     ! Internal T&S variables are potential temperature & practical salinity
@@ -1403,9 +1407,10 @@ subroutine post_surface_thermo_diags(IDs, G, GV, US, diag, dt_int, sfc_state, tv
     if (IDs%id_sssabs > 0) call post_data(IDs%id_sssabs, sfc_state%SSS, diag, mask=G%mask2dT)
     ! Use TEOS-10 function calls convert T&S diagnostics from absolute salinity
     ! to practical salinity.
-    do j=js,je ; do i=is,ie
-      work_2d(i,j) = US%ppt_to_S*gsw_sp_from_sr(US%S_to_ppt*sfc_state%SSS(i,j))
-    enddo ; enddo
+    EOSdom(:) = EOS_domain(G%HI)
+    do j=js,je
+      call abs_saln_to_prac_saln(sfc_state%SSS(:,j), work_2d(:,j), tv%eqn_of_state, EOSdom)
+    enddo
     if (IDs%id_sss > 0) call post_data(IDs%id_sss, work_2d, diag, mask=G%mask2dT)
   else
     ! Internal T&S variables are potential temperature & practical salinity
