@@ -860,15 +860,23 @@ contains
 
     dzt(:,:,:) = GV%H_to_m * h(:,:,:)
 
-    sosga = global_area_mean(sfc_state%SSS, G)
+    sosga = global_area_mean(sfc_state%SSS, G, scale=G%US%S_to_ppt)
 
-    call generic_tracer_coupler_set(sfc_state%tr_fields,&
-         ST=sfc_state%SST,&
-         SS=sfc_state%SSS,&
-         rho=rho0,& !nnz: required for MOM5 and previous versions.
-         ilb=G%isd, jlb=G%jsd,&
-         dzt=dzt,& !This is needed for the Mocsy method of carbonate system vars
-         tau=1,sosga=sosga,model_time=get_diag_time_end(CS%diag))
+    if ((G%US%C_to_degC == 1.0) .and. (G%US%S_to_ppt == 1.0)) then
+      call generic_tracer_coupler_set(sfc_state%tr_fields, &
+              ST=sfc_state%SST, SS=sfc_state%SSS, &
+              rho=rho0, & !nnz: required for MOM5 and previous versions.
+              ilb=G%isd, jlb=G%jsd, &
+              dzt=dzt,& !This is needed for the Mocsy method of carbonate system vars
+              tau=1, sosga=sosga, model_time=get_diag_time_end(CS%diag))
+    else
+      call generic_tracer_coupler_set(sfc_state%tr_fields, &
+              ST=G%US%C_to_degC*sfc_state%SST, SS=G%US%S_to_ppt*sfc_state%SSS, &
+              rho=rho0, & !nnz: required for MOM5 and previous versions.
+              ilb=G%isd, jlb=G%jsd, &
+              dzt=dzt,& !This is needed for the Mocsy method of carbonate system vars
+              tau=1, sosga=sosga, model_time=get_diag_time_end(CS%diag))
+    endif
 
     !Output diagnostics via diag_manager for all tracers in this module
 !    if (.NOT. associated(CS%g_tracer_list)) call MOM_error(FATAL, trim(sub_name)//&

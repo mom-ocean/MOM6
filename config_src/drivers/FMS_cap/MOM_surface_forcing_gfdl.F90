@@ -114,7 +114,8 @@ type, public :: surface_forcing_CS ; private
   real    :: Flux_const_salt                !< Piston velocity for surface salt restoring [Z T-1 ~> m s-1]
   real    :: Flux_const_temp                !< Piston velocity for surface temp restoring [Z T-1 ~> m s-1]
   logical :: trestore_SPEAR_ECDA            !< If true, modify restoring data wrt local SSS
-  real    :: SPEAR_dTf_dS                   !< The derivative of the freezing temperature with salinity.
+  real    :: SPEAR_dTf_dS                   !< The derivative of the freezing temperature with
+                                            !! salinity [C S-1 ~> degC ppt-1].
   logical :: salt_restore_as_sflux          !< If true, SSS restore as salt flux instead of water flux
   logical :: adjust_net_srestore_to_zero    !< Adjust srestore to zero (for both salt_flux or vprec)
   logical :: adjust_net_srestore_by_scaling !< Adjust srestore w/o moving zero contour
@@ -125,8 +126,8 @@ type, public :: surface_forcing_CS ; private
                                             !! for salinity restoring.
   real    :: ice_salt_concentration         !< Salt concentration for sea ice [kg/kg]
   logical :: mask_srestore_marginal_seas    !< If true, then mask SSS restoring in marginal seas
-  real    :: max_delta_srestore             !< Maximum delta salinity used for restoring
-  real    :: max_delta_trestore             !< Maximum delta sst used for restoring
+  real    :: max_delta_srestore             !< Maximum delta salinity used for restoring [S ~> ppt]
+  real    :: max_delta_trestore             !< Maximum delta sst used for restoring [C ~> degC]
   real, pointer, dimension(:,:) :: basin_mask => NULL() !< Mask for surface salinity restoring by basin
   logical :: answers_2018       !< If true, use the order of arithmetic and expressions that recover
                                 !! the answers from the end of 2018.  Otherwise, use a simpler
@@ -228,11 +229,11 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
                                                    !! surface state of the ocean.
 
   real, dimension(SZI_(G),SZJ_(G)) :: &
-    data_restore,  & ! The surface value toward which to restore [ppt] or [degC]
-    SST_anom,      & ! Instantaneous sea surface temperature anomalies from a target value [degC]
-    SSS_anom,      & ! Instantaneous sea surface salinity anomalies from a target value [ppt]
+    data_restore,  & ! The surface value toward which to restore [S ~> ppt] or [C ~> degC]
+    SST_anom,      & ! Instantaneous sea surface temperature anomalies from a target value [C ~> degC]
+    SSS_anom,      & ! Instantaneous sea surface salinity anomalies from a target value [S ~> ppt]
     SSS_mean,      & ! A (mean?) salinity about which to normalize local salinity
-                     ! anomalies when calculating restorative precipitation anomalies [ppt]
+                     ! anomalies when calculating restorative precipitation anomalies [S ~> ppt]
     net_FW,        & ! The area integrated net freshwater flux into the ocean [kg s-1]
     net_FW2,       & ! The net freshwater flux into the ocean [kg m-2 s-1]
     work_sum,      & ! A 2-d array that is used as the work space for global sums [m2] or [kg s-1]
@@ -242,8 +243,8 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, isr, ier, jsr, jer
   integer :: isc_bnd, iec_bnd, jsc_bnd, jec_bnd
 
-  real :: delta_sss           ! temporary storage for sss diff from restoring value [ppt]
-  real :: delta_sst           ! temporary storage for sst diff from restoring value [degC]
+  real :: delta_sss           ! temporary storage for sss diff from restoring value [S ~> ppt]
+  real :: delta_sst           ! temporary storage for sst diff from restoring value [C ~> degC]
 
   real :: kg_m2_s_conversion  ! A combination of unit conversion factors for rescaling
                               ! mass fluxes [R Z s m2 kg-1 T-1 ~> 1]
@@ -343,7 +344,7 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
 
   ! Salinity restoring logic
   if (CS%restore_salt) then
-    call time_interp_external(CS%id_srestore, Time, data_restore)
+    call time_interp_external(CS%id_srestore, Time, data_restore, scale=US%ppt_to_S)
     ! open_ocn_mask indicates where to restore salinity (1 means restore, 0 does not)
     open_ocn_mask(:,:) = 1.0
     if (CS%mask_srestore_under_ice) then ! Do not restore under sea-ice
@@ -353,10 +354,10 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
     endif
     if (CS%salt_restore_as_sflux) then
       do j=js,je ; do i=is,ie
-        delta_sss = data_restore(i,j)- sfc_state%SSS(i,j)
-        delta_sss = sign(1.0,delta_sss)*min(abs(delta_sss),CS%max_delta_srestore)
-        fluxes%salt_flux(i,j) = 1.e-3*G%mask2dT(i,j) * (CS%Rho0*CS%Flux_const_salt)* &
-             (CS%basin_mask(i,j)*open_ocn_mask(i,j)*CS%srestore_mask(i,j)) *delta_sss  ! R Z T-1 ~> kg Salt m-2 s-1
+        delta_sss = data_restore(i,j) - sfc_state%SSS(i,j)
+        delta_sss = sign(1.0,delta_sss) * min(abs(delta_sss), CS%max_delta_srestore)
+        fluxes%salt_flux(i,j) = 1.e-3*US%S_to_ppt*G%mask2dT(i,j) * (CS%Rho0*CS%Flux_const_salt)* &
+             (CS%basin_mask(i,j)*open_ocn_mask(i,j)*CS%srestore_mask(i,j)) * delta_sss  ! R Z T-1 ~> kg Salt m-2 s-1
       enddo ; enddo
       if (CS%adjust_net_srestore_to_zero) then
         if (CS%adjust_net_srestore_by_scaling) then
@@ -376,7 +377,7 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
       do j=js,je ; do i=is,ie
         if (G%mask2dT(i,j) > 0.0) then
           delta_sss = sfc_state%SSS(i,j) - data_restore(i,j)
-          delta_sss = sign(1.0,delta_sss)*min(abs(delta_sss),CS%max_delta_srestore)
+          delta_sss = sign(1.0,delta_sss) * min(abs(delta_sss), CS%max_delta_srestore)
           fluxes%vprec(i,j) = (CS%basin_mask(i,j)*open_ocn_mask(i,j)*CS%srestore_mask(i,j))* &
                       (CS%Rho0*CS%Flux_const_salt) * &
                       delta_sss / (0.5*(sfc_state%SSS(i,j) + data_restore(i,j)))
@@ -401,20 +402,20 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
 
   ! SST restoring logic
   if (CS%restore_temp) then
-    call time_interp_external(CS%id_trestore, Time, data_restore)
+    call time_interp_external(CS%id_trestore, Time, data_restore, scale=US%degC_to_C)
     if ( CS%trestore_SPEAR_ECDA ) then
       do j=js,je ; do i=is,ie
-        if (abs(data_restore(i,j)+1.8)<0.0001) then
+        if (abs(data_restore(i,j)+1.8*US%degC_to_C) < 0.0001*US%degC_to_C) then
           data_restore(i,j) = CS%SPEAR_dTf_dS*sfc_state%SSS(i,j)
         endif
       enddo ; enddo
     endif
 
     do j=js,je ; do i=is,ie
-      delta_sst = data_restore(i,j)- sfc_state%SST(i,j)
-      delta_sst = sign(1.0,delta_sst)*min(abs(delta_sst),CS%max_delta_trestore)
+      delta_sst = data_restore(i,j) - sfc_state%SST(i,j)
+      delta_sst = sign(1.0,delta_sst) * min(abs(delta_sst), CS%max_delta_trestore)
       fluxes%heat_added(i,j) = G%mask2dT(i,j) * CS%trestore_mask(i,j) * &
-                               US%degC_to_C*rhoXcp * delta_sst * CS%Flux_const_temp  ! [Q R Z T-1 ~> W m-2]
+                               rhoXcp * delta_sst * CS%Flux_const_temp  ! [Q R Z T-1 ~> W m-2]
     enddo ; enddo
   endif
 
@@ -1404,9 +1405,8 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, wind_stagger)
                  "flux instead of as a freshwater flux.", default=.false.)
     call get_param(param_file, mdl, "MAX_DELTA_SRESTORE", CS%max_delta_srestore, &
                  "The maximum salinity difference used in restoring terms.", &
-                 units="PSU or g kg-1", default=999.0)
-    call get_param(param_file, mdl, "MASK_SRESTORE_UNDER_ICE", &
-                 CS%mask_srestore_under_ice, &
+                 units="PSU or g kg-1", default=999.0, scale=US%ppt_to_S)
+    call get_param(param_file, mdl, "MASK_SRESTORE_UNDER_ICE", CS%mask_srestore_under_ice, &
                  "If true, disables SSS restoring under sea-ice based on a frazil "//&
                  "criteria (SST<=Tf). Only used when RESTORE_SALINITY is True.",      &
                  default=.false.)
@@ -1453,7 +1453,7 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, wind_stagger)
 
     call get_param(param_file, mdl, "MAX_DELTA_TRESTORE", CS%max_delta_trestore, &
                  "The maximum sst difference used in restoring terms.", &
-                 units="degC ", default=999.0)
+                 units="degC ", default=999.0, scale=US%degC_to_C)
     call get_param(param_file, mdl, "MASK_TRESTORE", CS%mask_trestore, &
                  "If true, read a file (temp_restore_mask) containing "//&
                  "a mask for SST restoring.", default=.false.)
@@ -1466,7 +1466,8 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, wind_stagger)
   endif
   call get_param(param_file, mdl, "SPEAR_DTFREEZE_DS", CS%SPEAR_dTf_dS, &
                  "The derivative of the freezing temperature with salinity.", &
-                 units="deg C PSU-1", default=-0.054, do_not_log=.not.CS%trestore_SPEAR_ECDA)
+                 units="deg C PSU-1", default=-0.054, scale=US%degC_to_C*US%S_to_ppt, &
+                 do_not_log=.not.CS%trestore_SPEAR_ECDA)
 
   ! Optionally read tidal amplitude from input file [Z T-1 ~> m s-1] on model grid.
   ! Otherwise use default tidal amplitude for bottom frictionally-generated

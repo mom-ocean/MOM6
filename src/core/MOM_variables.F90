@@ -41,8 +41,8 @@ end type p2d
 !! will be returned to the calling program
 type, public :: surface
   real, allocatable, dimension(:,:) :: &
-    SST, &         !< The sea surface temperature [degC].
-    SSS, &         !< The sea surface salinity [ppt ~> psu or gSalt/kg].
+    SST, &         !< The sea surface temperature [C ~> degC].
+    SSS, &         !< The sea surface salinity [S ~> psu or gSalt/kg].
     sfc_density, & !< The mixed layer density [R ~> kg m-3].
     sfc_cfc11,   & !< Sea surface concentration of CFC11 [mol kg-1].
     sfc_cfc12,   & !< Sea surface concentration of CFC12 [mol kg-1].
@@ -61,9 +61,9 @@ type, public :: surface
     taux_shelf, &  !< The zonal stresses on the ocean under shelves [R L Z T-2 ~> Pa].
     tauy_shelf     !< The meridional stresses on the ocean under shelves [R L Z T-2 ~> Pa].
   logical :: T_is_conT = .false. !< If true, the temperature variable SST is actually the
-                   !! conservative temperature in [degC].
+                   !! conservative temperature in [C ~> degC].
   logical :: S_is_absS = .false. !< If true, the salinity variable SSS is actually the
-                   !! absolute salinity in [gSalt kg-1].
+                   !! absolute salinity in [S ~> gSalt kg-1].
   type(coupler_2d_bc_type) :: tr_fields !< A structure that may contain an
                 !! array of named fields describing tracer-related quantities.
        !### NOTE: ALL OF THE ARRAYS IN TR_FIELDS USE THE COUPLER'S INDEXING CONVENTION AND HAVE NO

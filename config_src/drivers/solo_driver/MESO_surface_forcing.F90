@@ -33,8 +33,8 @@ type, public :: MESO_surface_forcing_CS ; private
   real :: gust_const         !< A constant unresolved background gustiness
                              !! that contributes to ustar [R L Z T-1 ~> Pa]
   real, dimension(:,:), pointer :: &
-    T_Restore(:,:) => NULL(), & !< The temperature to restore the SST toward [degC].
-    S_Restore(:,:) => NULL(), & !< The salinity to restore the sea surface salnity toward [ppt]
+    T_Restore(:,:) => NULL(), & !< The temperature to restore the SST toward [C ~> degC].
+    S_Restore(:,:) => NULL(), & !< The salinity to restore the sea surface salnity toward [S ~> ppt]
     PmE(:,:) => NULL(), &       !< The prescribed precip minus evap [Z T-1 ~> m s-1].
     Solar(:,:) => NULL()        !< The shortwave forcing into the ocean [Q R Z T-1 ~> W m-2].
   real, dimension(:,:), pointer :: Heat(:,:) => NULL() !< The prescribed longwave, latent and sensible
@@ -120,9 +120,9 @@ subroutine MESO_buoyancy_forcing(sfc_state, fluxes, day, dt, G, US, CS)
     call safe_alloc_ptr(CS%Solar, isd, ied, jsd, jed)
 
     call MOM_read_data(trim(CS%inputdir)//trim(CS%SSTrestore_file), "SST", &
-             CS%T_Restore(:,:), G%Domain)
+             CS%T_Restore(:,:), G%Domain, scale=US%degC_to_C)
     call MOM_read_data(trim(CS%inputdir)//trim(CS%salinityrestore_file), "SAL", &
-             CS%S_Restore(:,:), G%Domain)
+             CS%S_Restore(:,:), G%Domain, scale=US%ppt_to_S)
     call MOM_read_data(trim(CS%inputdir)//trim(CS%heating_file), "Heat", &
              CS%Heat(:,:), G%Domain, scale=US%W_m2_to_QRZ_T)
     call MOM_read_data(trim(CS%inputdir)//trim(CS%PmE_file), "PmE", &
@@ -172,7 +172,7 @@ subroutine MESO_buoyancy_forcing(sfc_state, fluxes, day, dt, G, US, CS)
         ! salinity (in ppt or PSU) that are being restored toward.
         if (G%mask2dT(i,j) > 0.0) then
           fluxes%heat_added(i,j) = G%mask2dT(i,j) * &
-              ((CS%T_Restore(i,j) - sfc_state%SST(i,j)) * US%degC_to_C*rhoXcp * CS%Flux_const)
+              ((CS%T_Restore(i,j) - sfc_state%SST(i,j)) * rhoXcp * CS%Flux_const)
           fluxes%vprec(i,j) = - (CS%Rho0 * CS%Flux_const) * &
               (CS%S_Restore(i,j) - sfc_state%SSS(i,j)) / &
               (0.5*(sfc_state%SSS(i,j) + CS%S_Restore(i,j)))

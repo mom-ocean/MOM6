@@ -1390,7 +1390,7 @@ subroutine post_surface_thermo_diags(IDs, G, GV, US, diag, dt_int, sfc_state, tv
     ! Use TEOS-10 function calls convert T&S diagnostics from conservative temp
     ! to potential temperature.
     do j=js,je ; do i=is,ie
-      work_2d(i,j) = gsw_pt_from_ct(sfc_state%SSS(i,j), sfc_state%SST(i,j))
+      work_2d(i,j) = US%degC_to_C*gsw_pt_from_ct(US%S_to_ppt*sfc_state%SSS(i,j), US%C_to_degC*sfc_state%SST(i,j))
     enddo ; enddo
     if (IDs%id_sst > 0) call post_data(IDs%id_sst, work_2d, diag, mask=G%mask2dT)
   else
@@ -1404,7 +1404,7 @@ subroutine post_surface_thermo_diags(IDs, G, GV, US, diag, dt_int, sfc_state, tv
     ! Use TEOS-10 function calls convert T&S diagnostics from absolute salinity
     ! to practical salinity.
     do j=js,je ; do i=is,ie
-      work_2d(i,j) = gsw_sp_from_sr(sfc_state%SSS(i,j))
+      work_2d(i,j) = US%ppt_to_S*gsw_sp_from_sr(US%S_to_ppt*sfc_state%SSS(i,j))
     enddo ; enddo
     if (IDs%id_sss > 0) call post_data(IDs%id_sss, work_2d, diag, mask=G%mask2dT)
   else
@@ -1633,11 +1633,11 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, US, param_file, diag
         units='psu', conversion=US%S_to_ppt)
 
     CS%id_tosq = register_diag_field('ocean_model', 'tosq', diag%axesTL, &
-      Time, 'Square of Potential Temperature', 'degC2', conversion=US%C_to_degC**2, &
-      standard_name='Potential Temperature Squared')
+        Time, 'Square of Potential Temperature', 'degC2', conversion=US%C_to_degC**2, &
+        standard_name='Potential Temperature Squared')
     CS%id_sosq = register_diag_field('ocean_model', 'sosq', diag%axesTL, &
-      Time, 'Square of Salinity', 'psu2', conversion=US%S_to_ppt**2, &
-      standard_name='Salinity Squared')
+        Time, 'Square of Salinity', 'psu2', conversion=US%S_to_ppt**2, &
+        standard_name='Salinity Squared')
 
     CS%id_temp_layer_ave = register_diag_field('ocean_model', 'temp_layer_ave', &
         diag%axesZL, Time, 'Layer Average Ocean Temperature', 'degC')
@@ -1645,7 +1645,7 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, US, param_file, diag
         diag%axesZL, Time, 'Layer Average Ocean Salinity', 'psu')
 
     CS%id_thetaoga = register_scalar_field('ocean_model', 'thetaoga', &
-        Time, diag, 'Global Mean Ocean Potential Temperature', 'degC',&
+        Time, diag, 'Global Mean Ocean Potential Temperature', 'degC', &
         standard_name='sea_water_potential_temperature')
     CS%id_soga = register_scalar_field('ocean_model', 'soga', &
         Time, diag, 'Global Mean Ocean Salinity', 'psu', &
@@ -1886,28 +1886,28 @@ subroutine register_surface_diags(Time, G, US, IDs, diag, tv)
 
   if (associated(tv%T)) then
     IDs%id_sst = register_diag_field('ocean_model', 'SST', diag%axesT1, Time,     &
-        'Sea Surface Temperature', 'degC', cmor_field_name='tos', &
-        cmor_long_name='Sea Surface Temperature',                                &
+        'Sea Surface Temperature', 'degC', conversion=US%C_to_degC, &
+        cmor_field_name='tos', cmor_long_name='Sea Surface Temperature', &
         cmor_standard_name='sea_surface_temperature')
     IDs%id_sst_sq = register_diag_field('ocean_model', 'SST_sq', diag%axesT1, Time, &
-        'Sea Surface Temperature Squared', 'degC2', cmor_field_name='tossq', &
-        cmor_long_name='Square of Sea Surface Temperature ',                      &
+        'Sea Surface Temperature Squared', 'degC2', conversion=US%C_to_degC**2, &
+        cmor_field_name='tossq', cmor_long_name='Square of Sea Surface Temperature ', &
         cmor_standard_name='square_of_sea_surface_temperature')
     IDs%id_sss = register_diag_field('ocean_model', 'SSS', diag%axesT1, Time, &
-        'Sea Surface Salinity', 'psu', cmor_field_name='sos', &
-        cmor_long_name='Sea Surface Salinity',                            &
+        'Sea Surface Salinity', 'psu', conversion=US%S_to_ppt, &
+        cmor_field_name='sos', cmor_long_name='Sea Surface Salinity', &
         cmor_standard_name='sea_surface_salinity')
     IDs%id_sss_sq = register_diag_field('ocean_model', 'SSS_sq', diag%axesT1, Time, &
-        'Sea Surface Salinity Squared', 'psu', cmor_field_name='sossq', &
-        cmor_long_name='Square of Sea Surface Salinity ',                     &
+        'Sea Surface Salinity Squared', 'psu2', conversion=US%S_to_ppt**2, &
+        cmor_field_name='sossq', cmor_long_name='Square of Sea Surface Salinity ', &
         cmor_standard_name='square_of_sea_surface_salinity')
     if (tv%T_is_conT) then
       IDs%id_sstcon = register_diag_field('ocean_model', 'conSST', diag%axesT1, Time,     &
-          'Sea Surface Conservative Temperature', 'Celsius')
+          'Sea Surface Conservative Temperature', 'Celsius', conversion=US%C_to_degC)
     endif
     if (tv%S_is_absS) then
       IDs%id_sssabs = register_diag_field('ocean_model', 'absSSS', diag%axesT1, Time,     &
-          'Sea Surface Absolute Salinity', 'g kg-1')
+          'Sea Surface Absolute Salinity', 'g kg-1', conversion=US%S_to_ppt)
     endif
     if (associated(tv%frazil)) then
       IDs%id_fraz = register_diag_field('ocean_model', 'frazil', diag%axesT1, Time, &

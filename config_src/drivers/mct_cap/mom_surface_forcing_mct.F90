@@ -113,8 +113,8 @@ type, public :: surface_forcing_CS ; private
 
   real    :: ice_salt_concentration         !< salt concentration for sea ice [kg/kg]
   logical :: mask_srestore_marginal_seas    !< if true, then mask SSS restoring in marginal seas
-  real    :: max_delta_srestore             !< maximum delta salinity used for restoring
-  real    :: max_delta_trestore             !< maximum delta sst used for restoring
+  real    :: max_delta_srestore             !< maximum delta salinity used for restoring [S ~> ppt]
+  real    :: max_delta_trestore             !< maximum delta sst used for restoring [C ~> degC]
   real, pointer, dimension(:,:) :: basin_mask => NULL() !< mask for SSS restoring by basin
   logical :: fix_ustar_gustless_bug         !< If true correct a bug in the time-averaging of the
                                             !! gustless wind friction velocity.
@@ -218,11 +218,7 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
 
   ! local variables
   real, dimension(SZI_(G),SZJ_(G)) :: &
-    data_restore,  & !< The surface value toward which to restore [g/kg or degC]
-    SST_anom,      & !< Instantaneous sea surface temperature anomalies from a target value [deg C]
-    SSS_anom,      & !< Instantaneous sea surface salinity anomalies from a target value [g/kg]
-    SSS_mean,      & !< A (mean?) salinity about which to normalize local salinity
-                     !! anomalies when calculating restorative precipitation anomalies [g/kg]
+    data_restore,  & !< The surface value toward which to restore [S ~> ppt] or [C ~> degC]
     PmE_adj,       & !< The adjustment to PminusE that will cause the salinity
                      !! to be restored toward its target value [kg/(m^2 * s)]
     net_FW,        & !< The area integrated net freshwater flux into the ocean [kg/s]
@@ -239,8 +235,8 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
                               !! is present, or false (no restoring) otherwise.
   logical :: restore_sst      !< local copy of the argument restore_temp, if it
                               !! is present, or false (no restoring) otherwise.
-  real :: delta_sss           !< temporary storage for sss diff from restoring value
-  real :: delta_sst           !< temporary storage for sst diff from restoring value
+  real :: delta_sss           !< temporary storage for sss diff from restoring value [S ~> ppt]
+  real :: delta_sst           !< temporary storage for sst diff from restoring value [C ~> degC]
 
   real :: kg_m2_s_conversion  !< A combination of unit conversion factors for rescaling
                               !! mass fluxes [R Z s m2 kg-1 T-1 ~> 1].
@@ -352,19 +348,19 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
 
   ! Salinity restoring logic
   if (restore_salinity) then
-    call time_interp_external(CS%id_srestore,Time,data_restore)
+    call time_interp_external(CS%id_srestore, Time, data_restore, scale=US%ppt_to_S)
     ! open_ocn_mask indicates where to restore salinity (1 means restore, 0 does not)
     open_ocn_mask(:,:) = 1.0
     if (CS%mask_srestore_under_ice) then ! Do not restore under sea-ice
       do j=js,je ; do i=is,ie
-        if (sfc_state%SST(i,j) <= -0.0539*sfc_state%SSS(i,j)) open_ocn_mask(i,j)=0.0
+        if (sfc_state%SST(i,j) <= -0.0539*US%degC_to_C*US%S_to_ppt*sfc_state%SSS(i,j)) open_ocn_mask(i,j)=0.0
       enddo ; enddo
     endif
     if (CS%salt_restore_as_sflux) then
       do j=js,je ; do i=is,ie
-        delta_sss = data_restore(i,j)- sfc_state%SSS(i,j)
+        delta_sss = data_restore(i,j) - sfc_state%SSS(i,j)
         delta_sss = sign(1.0,delta_sss)*min(abs(delta_sss),CS%max_delta_srestore)
-        fluxes%salt_flux(i,j) = 1.e-3*G%mask2dT(i,j) * (CS%Rho0*CS%Flux_const)* &
+        fluxes%salt_flux(i,j) = 1.e-3*US%S_to_ppt*G%mask2dT(i,j) * (CS%Rho0*CS%Flux_const)* &
              (CS%basin_mask(i,j)*open_ocn_mask(i,j)*CS%srestore_mask(i,j)) *delta_sss  ! R Z T-1 ~> kg Salt m-2 s-1
       enddo ; enddo
       if (CS%adjust_net_srestore_to_zero) then
@@ -409,12 +405,12 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
 
   ! SST restoring logic
   if (restore_sst) then
-    call time_interp_external(CS%id_trestore,Time,data_restore)
+    call time_interp_external(CS%id_trestore, Time, data_restore, scale=US%degC_to_C)
     do j=js,je ; do i=is,ie
-      delta_sst = data_restore(i,j)- sfc_state%SST(i,j)
+      delta_sst = data_restore(i,j) - sfc_state%SST(i,j)
       delta_sst = sign(1.0,delta_sst)*min(abs(delta_sst),CS%max_delta_trestore)
       fluxes%heat_added(i,j) = G%mask2dT(i,j) * CS%trestore_mask(i,j) * &
-                      (CS%Rho0*US%degC_to_C*fluxes%C_p) * delta_sst * CS%Flux_const   ! W m-2
+                      (CS%Rho0*fluxes%C_p) * delta_sst * CS%Flux_const   ! W m-2
     enddo ; enddo
   endif
 
@@ -1143,7 +1139,7 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, restore_salt,
                  "flux instead of as a freshwater flux.", default=.false.)
     call get_param(param_file, mdl, "MAX_DELTA_SRESTORE", CS%max_delta_srestore, &
                  "The maximum salinity difference used in restoring terms.", &
-                 units="PSU or g kg-1", default=999.0)
+                 units="PSU or g kg-1", default=999.0, scale=US%ppt_to_S)
     call get_param(param_file, mdl, "MASK_SRESTORE_UNDER_ICE", &
                  CS%mask_srestore_under_ice, &
                  "If true, disables SSS restoring under sea-ice based on a frazil "//&
@@ -1185,7 +1181,7 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, restore_salt,
 
     call get_param(param_file, mdl, "MAX_DELTA_TRESTORE", CS%max_delta_trestore, &
                  "The maximum sst difference used in restoring terms.", &
-                 units="degC ", default=999.0)
+                 units="degC ", default=999.0, scale=US%degC_to_C)
 
     call get_param(param_file, mdl, "MASK_TRESTORE", CS%mask_trestore, &
                  "If true, read a file (temp_restore_mask) containing "//&

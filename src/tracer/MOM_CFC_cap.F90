@@ -497,15 +497,15 @@ subroutine CFC_cap_fluxes(fluxes, sfc_state, G, US, Rho0, Time, id_cfc11_atm, id
 
   do j=js,je ; do i=is,ie
     ! ta in hectoKelvin
-    ta = max(0.01, (sfc_state%SST(i,j) + 273.15) * 0.01)
-    sal = sfc_state%SSS(i,j)
+    ta = max(0.01, (US%C_to_degC*sfc_state%SST(i,j) + 273.15) * 0.01)
+    sal = US%S_to_ppt*sfc_state%SSS(i,j)
 
     ! Calculate solubilities
     call get_solubility(alpha_11, alpha_12, ta, sal , G%mask2dT(i,j))
 
     ! Calculate Schmidt numbers using coefficients given by
     ! Wanninkhof (2014); doi:10.4319/lom.2014.12.351.
-    call comp_CFC_schmidt(sfc_state%SST(i,j), sc_11, sc_12)
+    call comp_CFC_schmidt(US%C_to_degC*sfc_state%SST(i,j), sc_11, sc_12)
 
     kw_wo_sc_no_term(i,j) = kw_coeff * ((1.0 - fluxes%ice_fraction(i,j))*fluxes%u10_sqr(i,j))
 

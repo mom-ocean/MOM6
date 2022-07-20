@@ -93,8 +93,8 @@ type, public :: surface_forcing_CS ; private
   real, pointer :: gust(:,:) => NULL()  !< spatially varying unresolved background gustiness [R L Z T-1 ~> Pa]
                                         !! gust is used when read_gust_2d is true.
 
-  real, pointer :: T_Restore(:,:)    => NULL()  !< temperature to damp (restore) the SST to [degC]
-  real, pointer :: S_Restore(:,:)    => NULL()  !< salinity to damp (restore) the SSS [ppt]
+  real, pointer :: T_Restore(:,:)    => NULL()  !< temperature to damp (restore) the SST to [C ~> degC]
+  real, pointer :: S_Restore(:,:)    => NULL()  !< salinity to damp (restore) the SSS [S ~> ppt]
   real, pointer :: Dens_Restore(:,:) => NULL()  !< density to damp (restore) surface density [R ~> kg m-3]
 
   integer :: buoy_last_lev_read = -1 !< The last time level read from buoyancy input files
@@ -115,10 +115,10 @@ type, public :: surface_forcing_CS ; private
   real :: scurves_ydata(20) = 90. !< Latitudes of scurve nodes [degreesN]
   real :: scurves_taux(20) = 0.   !< Zonal wind stress values at scurve nodes [R L Z T-1 ~> Pa]
 
-  real :: T_north   !< Target temperatures at north used in buoyancy_forcing_linear [degC]
-  real :: T_south   !< Target temperatures at south used in buoyancy_forcing_linear [degC]
-  real :: S_north   !< Target salinity at north used in buoyancy_forcing_linear [ppt]
-  real :: S_south   !< Target salinity at south used in buoyancy_forcing_linear [ppt]
+  real :: T_north   !< Target temperatures at north used in buoyancy_forcing_linear [C ~> degC]
+  real :: T_south   !< Target temperatures at south used in buoyancy_forcing_linear [C ~> degC]
+  real :: S_north   !< Target salinity at north used in buoyancy_forcing_linear [S ~> ppt]
+  real :: S_south   !< Target salinity at south used in buoyancy_forcing_linear [S ~> ppt]
 
   logical :: first_call_set_forcing = .true. !< True until after the first call to set_forcing
   logical :: archaic_OMIP_file = .true. !< If true use the variable names and data fields from
@@ -910,11 +910,11 @@ subroutine buoyancy_forcing_from_files(sfc_state, fluxes, day, dt, G, US, CS)
                   ! [R Z T-1 ~> kg m-2 s-1]
 !#CTRL#  real, dimension(SZI_(G),SZJ_(G)) :: &
 !#CTRL#    SST_anom, &   ! Instantaneous sea surface temperature anomalies from a
-!#CTRL#                  ! target (observed) value [degC].
+!#CTRL#                  ! target (observed) value [C ~> degC].
 !#CTRL#    SSS_anom, &   ! Instantaneous sea surface salinity anomalies from a target
-!#CTRL#                  ! (observed) value [ppt].
+!#CTRL#                  ! (observed) value [S ~> ppt].
 !#CTRL#    SSS_mean      ! A (mean?) salinity about which to normalize local salinity
-!#CTRL#                  ! anomalies when calculating restorative precipitation anomalies [ppt].
+!#CTRL#                  ! anomalies when calculating restorative precipitation anomalies [S ~> ppt].
 
   real :: rhoXcp ! reference density times heat capacity [Q R C-1 ~> J m-3 degC-1]
 
@@ -1081,7 +1081,7 @@ subroutine buoyancy_forcing_from_files(sfc_state, fluxes, day, dt, G, US, CS)
         case default ; time_lev = 1
       end select
       call MOM_read_data(CS%SSTrestore_file, CS%SST_restore_var, &
-               CS%T_Restore(:,:), G%Domain, timelevel=time_lev)
+               CS%T_Restore(:,:), G%Domain, timelevel=time_lev, scale=US%degC_to_C)
       CS%SST_last_lev = time_lev
 
       select case (CS%SSS_nlev)
@@ -1090,7 +1090,7 @@ subroutine buoyancy_forcing_from_files(sfc_state, fluxes, day, dt, G, US, CS)
         case default ; time_lev = 1
       end select
       call MOM_read_data(CS%salinityrestore_file, CS%SSS_restore_var, &
-               CS%S_Restore(:,:), G%Domain, timelevel=time_lev)
+               CS%S_Restore(:,:), G%Domain, timelevel=time_lev, scale=US%ppt_to_S)
       CS%SSS_last_lev = time_lev
     endif
     CS%buoy_last_lev_read = time_lev_daily
@@ -1127,7 +1127,7 @@ subroutine buoyancy_forcing_from_files(sfc_state, fluxes, day, dt, G, US, CS)
       do j=js,je ; do i=is,ie
         if (G%mask2dT(i,j) > 0.0) then
           fluxes%heat_added(i,j) = G%mask2dT(i,j) * &
-              ((CS%T_Restore(i,j) - sfc_state%SST(i,j)) * US%degC_to_C*rhoXcp * CS%Flux_const_T)
+              ((CS%T_Restore(i,j) - sfc_state%SST(i,j)) * rhoXcp * CS%Flux_const_T)
           fluxes%vprec(i,j) = - (CS%Rho0*CS%Flux_const_S) * &
               (CS%S_Restore(i,j) - sfc_state%SSS(i,j)) / &
               (0.5*(sfc_state%SSS(i,j) + CS%S_Restore(i,j)))
@@ -1183,11 +1183,11 @@ subroutine buoyancy_forcing_from_data_override(sfc_state, fluxes, day, dt, G, US
   ! Local variables
 !#CTRL#  real, dimension(SZI_(G),SZJ_(G)) :: &
 !#CTRL#    SST_anom, &   ! Instantaneous sea surface temperature anomalies from a
-!#CTRL#                  ! target (observed) value [degC].
+!#CTRL#                  ! target (observed) value [C ~> degC].
 !#CTRL#    SSS_anom, &   ! Instantaneous sea surface salinity anomalies from a target
-!#CTRL#                  ! (observed) value [ppt].
+!#CTRL#                  ! (observed) value [S ~> ppt].
 !#CTRL#    SSS_mean      ! A (mean?) salinity about which to normalize local salinity
-!#CTRL#                  ! anomalies when calculating restorative precipitation anomalies [ppt].
+!#CTRL#                  ! anomalies when calculating restorative precipitation anomalies [S ~> ppt].
   real :: rhoXcp ! The mean density times the heat capacity [Q R C-1 ~> J m-3 degC-1].
   integer :: i, j, is, ie, js, je, isd, ied, jsd, jed
 
@@ -1223,8 +1223,8 @@ subroutine buoyancy_forcing_from_data_override(sfc_state, fluxes, day, dt, G, US
 
 !     Read the SST and SSS fields for damping.
   if (CS%restorebuoy) then !#CTRL# .or. associated(CS%ctrl_forcing_CSp)) then
-    call data_override(G%Domain, 'SST_restore', CS%T_restore, day)
-    call data_override(G%Domain, 'SSS_restore', CS%S_restore, day)
+    call data_override(G%Domain, 'SST_restore', CS%T_restore, day, scale=US%degC_to_C)
+    call data_override(G%Domain, 'SSS_restore', CS%S_restore, day, scale=US%ppt_to_S)
   endif
 
   ! restoring boundary fluxes
@@ -1233,7 +1233,7 @@ subroutine buoyancy_forcing_from_data_override(sfc_state, fluxes, day, dt, G, US
       do j=js,je ; do i=is,ie
         if (G%mask2dT(i,j) > 0.0) then
           fluxes%heat_added(i,j) = G%mask2dT(i,j) * &
-              ((CS%T_Restore(i,j) - sfc_state%SST(i,j)) * US%degC_to_C*rhoXcp * CS%Flux_const_T)
+              ((CS%T_Restore(i,j) - sfc_state%SST(i,j)) * rhoXcp * CS%Flux_const_T)
           fluxes%vprec(i,j) = - (CS%Rho0*CS%Flux_const_S) * &
               (CS%S_Restore(i,j) - sfc_state%SSS(i,j)) / &
               (0.5*(sfc_state%SSS(i,j) + CS%S_Restore(i,j)))
@@ -1395,8 +1395,8 @@ subroutine buoyancy_forcing_linear(sfc_state, fluxes, day, dt, G, US, CS)
                                                !! a previous surface_forcing_init call
   ! Local variables
   real :: y             ! The latitude relative to the south normalized by the domain extent [nondim]
-  real :: T_restore     ! The temperature towards which to restore [degC]
-  real :: S_restore     ! The salinity towards which to restore [ppt]
+  real :: T_restore     ! The temperature towards which to restore [C ~> degC]
+  real :: S_restore     ! The salinity towards which to restore [S ~> ppt]
   integer :: i, j, is, ie, js, je
 
   call callTree_enter("buoyancy_forcing_linear, MOM_surface_forcing.F90")
@@ -1433,7 +1433,7 @@ subroutine buoyancy_forcing_linear(sfc_state, fluxes, day, dt, G, US, CS)
         S_restore = CS%S_south + (CS%S_north-CS%S_south)*y
         if (G%mask2dT(i,j) > 0.0) then
           fluxes%heat_added(i,j) = G%mask2dT(i,j) * &
-              ((T_Restore - sfc_state%SST(i,j)) * ((CS%Rho0 * US%degC_to_C*fluxes%C_p) * CS%Flux_const))
+              ((T_Restore - sfc_state%SST(i,j)) * ((CS%Rho0 * fluxes%C_p) * CS%Flux_const))
           fluxes%vprec(i,j) = - (CS%Rho0*CS%Flux_const) * &
               (S_Restore - sfc_state%SSS(i,j)) / &
               (0.5*(sfc_state%SSS(i,j) + S_Restore))
@@ -1807,19 +1807,19 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, tracer_flow_C
       call get_param(param_file, mdl, "SST_NORTH", CS%T_north, &
                  "With buoy_config linear, the sea surface temperature "//&
                  "at the northern end of the domain toward which to "//&
-                 "to restore.", units="deg C", default=0.0)
+                 "to restore.", units="deg C", default=0.0, scale=US%degC_to_C)
       call get_param(param_file, mdl, "SST_SOUTH", CS%T_south, &
                  "With buoy_config linear, the sea surface temperature "//&
                  "at the southern end of the domain toward which to "//&
-                 "to restore.", units="deg C", default=0.0)
+                 "to restore.", units="deg C", default=0.0, scale=US%degC_to_C)
       call get_param(param_file, mdl, "SSS_NORTH", CS%S_north, &
                  "With buoy_config linear, the sea surface salinity "//&
                  "at the northern end of the domain toward which to "//&
-                 "to restore.", units="PSU", default=35.0)
+                 "to restore.", units="PSU", default=35.0, scale=US%ppt_to_S)
       call get_param(param_file, mdl, "SSS_SOUTH", CS%S_south, &
                  "With buoy_config linear, the sea surface salinity "//&
                  "at the southern end of the domain toward which to "//&
-                 "to restore.", units="PSU", default=35.0)
+                 "to restore.", units="PSU", default=35.0, scale=US%ppt_to_S)
     endif
   endif
   call get_param(param_file, mdl, "G_EARTH", CS%G_Earth, &
