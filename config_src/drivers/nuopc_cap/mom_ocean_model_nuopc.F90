@@ -40,21 +40,20 @@ use MOM_time_manager,        only : time_type, get_time, set_time, operator(>)
 use MOM_time_manager,        only : operator(+), operator(-), operator(*), operator(/)
 use MOM_time_manager,        only : operator(/=), operator(<=), operator(>=)
 use MOM_time_manager,        only : operator(<), real_to_time_type, time_type_to_real
-use time_interp_external_mod,only : time_interp_external_init
+use MOM_interpolate,         only : time_interp_external_init
 use MOM_tracer_flow_control, only : call_tracer_flux_init
 use MOM_unit_scaling,        only : unit_scale_type
 use MOM_variables,           only : surface
 use MOM_verticalGrid,        only : verticalGrid_type
 use MOM_ice_shelf,           only : initialize_ice_shelf, shelf_calc_flux, ice_shelf_CS
 use MOM_ice_shelf,           only : add_shelf_forces, ice_shelf_end, ice_shelf_save_restart
-use coupler_types_mod,       only : coupler_1d_bc_type, coupler_2d_bc_type
-use coupler_types_mod,       only : coupler_type_spawn, coupler_type_write_chksums
-use coupler_types_mod,       only : coupler_type_initialized, coupler_type_copy_data
-use coupler_types_mod,       only : coupler_type_set_diags, coupler_type_send_data
+use MOM_coupler_types,       only : coupler_1d_bc_type, coupler_2d_bc_type
+use MOM_coupler_types,       only : coupler_type_spawn, coupler_type_write_chksums
+use MOM_coupler_types,       only : coupler_type_initialized, coupler_type_copy_data
+use MOM_coupler_types,       only : coupler_type_set_diags, coupler_type_send_data
 use mpp_domains_mod,         only : domain2d, mpp_get_layout, mpp_get_global_domain
 use mpp_domains_mod,         only : mpp_define_domains, mpp_get_compute_domain, mpp_get_data_domain
 use fms_mod,                 only : stdout
-use mpp_mod,                 only : mpp_chksum
 use MOM_EOS,                 only : gsw_sp_from_sr, gsw_pt_from_ct
 use MOM_wave_interface,      only : wave_parameters_CS, MOM_wave_interface_init
 use MOM_wave_interface,      only : Update_Surface_Waves, query_wave_properties
