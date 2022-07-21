@@ -1,7 +1,7 @@
-!> This module contains the tracer_registry_type and the subroutines
-!! that handle registration of tracers and related subroutines.
-!! The primary subroutine, register_tracer, is called to indicate the
-!! tracers advected and diffused.
+!> This module contains subroutines that handle registration of tracers
+!! and related subroutines. The primary subroutine, register_tracer, is
+!! called to indicate the tracers advected and diffused.
+!! It also makes public the types defined in MOM_tracer_types.
 module MOM_tracer_registry
 
 ! This file is part of MOM6. See LICENSE.md for the license.
@@ -22,7 +22,7 @@ use MOM_string_functions, only : lowercase
 use MOM_time_manager,  only : time_type
 use MOM_unit_scaling,  only : unit_scale_type
 use MOM_verticalGrid,  only : verticalGrid_type
-
+use MOM_tracer_types,  only : tracer_type, tracer_registry_type
 implicit none ; private
 
 #include <MOM_memory.h>
@@ -34,132 +34,19 @@ public preALE_tracer_diagnostics, postALE_tracer_diagnostics
 public tracer_registry_init, lock_tracer_registry, tracer_registry_end
 public tracer_name_lookup
 
-!> The tracer type
-type, public :: tracer_type
-
-  real, dimension(:,:,:), pointer :: t              => NULL() !< tracer concentration array [conc]
-! real                            :: OBC_inflow_conc=  0.0    !< tracer concentration for generic inflows [conc]
-! real, dimension(:,:,:), pointer :: OBC_in_u       => NULL() !< structured values for flow into the domain
-!                                                             !! specified in OBCs through u-face of cell
-! real, dimension(:,:,:), pointer :: OBC_in_v       => NULL() !< structured values for flow into the domain
-!                                                             !! specified in OBCs through v-face of cell
-
-  real, dimension(:,:,:), pointer :: ad_x           => NULL() !< diagnostic array for x-advective tracer flux
-                                                              !! [conc H L2 T-1 ~> conc m3 s-1 or conc kg s-1]
-  real, dimension(:,:,:), pointer :: ad_y           => NULL() !< diagnostic array for y-advective tracer flux
-                                                              !! [conc H L2 T-1 ~> conc m3 s-1 or conc kg s-1]
-  real, dimension(:,:),   pointer :: ad2d_x         => NULL() !< diagnostic vertical sum x-advective tracer flux
-                                                              !! [conc H L2 T-1 ~> conc m3 s-1 or conc kg s-1]
-  real, dimension(:,:),   pointer :: ad2d_y         => NULL() !< diagnostic vertical sum y-advective tracer flux
-                                                              !! [conc H L2 T-1 ~> conc m3 s-1 or conc kg s-1]
-
-  real, dimension(:,:,:), pointer :: df_x           => NULL() !< diagnostic array for x-diffusive tracer flux
-                                                              !! [conc H L2 T-1 ~> conc m3 s-1 or conc kg s-1]
-  real, dimension(:,:,:), pointer :: df_y           => NULL() !< diagnostic array for y-diffusive tracer flux
-                                                              !! [conc H L2 T-1 ~> conc m3 s-1 or conc kg s-1]
-  real, dimension(:,:,:), pointer :: lbd_dfx       => NULL()  !< diagnostic array for x-diffusive tracer flux
-                                                              !! [conc H L2 T-1 ~> conc m3 s-1 or conc kg s-1]
-  real, dimension(:,:,:), pointer :: lbd_dfy       => NULL()  !< diagnostic array for y-diffusive tracer flux
-                                                              !! [conc H L2 T-1 ~> conc m3 s-1 or conc kg s-1]
-  real, dimension(:,:), pointer :: lbd_dfx_2d       => NULL() !< diagnostic array for x-diffusive tracer flux
-                                                              !! [conc H L2 T-1 ~> conc m3 s-1 or conc kg s-1]
-  real, dimension(:,:), pointer :: lbd_dfy_2d       => NULL() !< diagnostic array for y-diffusive tracer flux
-                                                              !! [conc H L2 T-1 ~> conc m3 s-1 or conc kg s-1]
-  !### These two arrays may be allocated but are never used.
-  real, dimension(:,:), pointer :: lbd_bulk_df_x       => NULL() !< diagnostic array for x-diffusive tracer flux
-                                                              !! [conc H L2 T-1 ~> conc m3 s-1 or conc kg s-1]
-  real, dimension(:,:), pointer :: lbd_bulk_df_y       => NULL() !< diagnostic array for y-diffusive tracer flux
-                                                              !! [conc H L2 T-1 ~> conc m3 s-1 or conc kg s-1]
-  real, dimension(:,:),   pointer :: df2d_x         => NULL() !< diagnostic vertical sum x-diffusive flux
-                                                              !! [conc H L2 T-1 ~> conc m3 s-1 or conc kg s-1]
-  real, dimension(:,:),   pointer :: df2d_y         => NULL() !< diagnostic vertical sum y-diffusive flux
-                                                              !! [conc H L2 T-1 ~> conc m3 s-1 or conc kg s-1]
-!  real, dimension(:,:),   pointer :: df2d_conc_x    => NULL() !< diagnostic vertical sum x-diffusive content flux
-!                                                              !! [conc H L2 T-1 ~> conc m3 s-1 or conc kg s-1]
-!  real, dimension(:,:),   pointer :: df2d_conc_y    => NULL() !< diagnostic vertical sum y-diffusive content flux
-!                                                              !! [conc H L2 T-1 ~> conc m3 s-1 or conc kg s-1]
-
-  real, dimension(:,:,:), pointer :: advection_xy   => NULL() !< convergence of lateral advective tracer fluxes
-                                                              !! [conc H T-1 ~> conc m s-1 or conc kg m-2 s-1]
-!  real, dimension(:,:,:), pointer :: diff_cont_xy   => NULL() !< convergence of lateral diffusive tracer fluxes
-!                                                              !! [conc H T-1 ~> conc m s-1 or conc kg m-2 s-1]
-!  real, dimension(:,:,:), pointer :: diff_conc_xy   => NULL() !< convergence of lateral diffusive tracer fluxes
-!                                                              !! expressed as a change in concentration
-!                                                              !! [conc T-1 ~> conc s-1]
-  real, dimension(:,:,:), pointer :: t_prev         => NULL() !< tracer concentration array at a previous
-                                                              !! timestep used for diagnostics [conc]
-  real, dimension(:,:,:), pointer :: Trxh_prev      => NULL() !< layer integrated tracer concentration array
-                                                              !! at a previous timestep used for diagnostics
-                                                              !! [conc H ~> conc m or conc kg m-2]
-
-  character(len=32)               :: name                     !< tracer name used for diagnostics and error messages
-  character(len=64)               :: units                    !< Physical dimensions of the tracer concentration
-  character(len=240)              :: longname                 !< Long name of the variable
-!  type(vardesc), pointer          :: vd             => NULL() !< metadata describing the tracer
-  logical                         :: registry_diags = .false. !< If true, use the registry to set up the
-                                                              !! diagnostics associated with this tracer.
-  character(len=64)               :: cmor_name                !< CMOR name of this tracer
-  character(len=64)               :: cmor_units               !< CMOR physical dimensions of the tracer
-  character(len=240)              :: cmor_longname            !< CMOR long name of the tracer
-  character(len=32)               :: flux_nameroot = ""       !< Short tracer name snippet used construct the
-                                                              !! names of flux diagnostics.
-  character(len=64)               :: flux_longname = ""       !< A word or phrase used construct the long
-                                                              !! names of flux diagnostics.
-  real                            :: flux_scale = 1.0         !< A scaling factor used to convert the fluxes
-                                                              !! of this tracer to its desired units,
-                                                              !! including a factor compensating for H scaling.
-  character(len=48)               :: flux_units = ""          !< The units for fluxes of this variable.
-  character(len=48)               :: conv_units = ""          !< The units for the flux convergence of this tracer.
-  real                            :: conv_scale = 1.0         !< A scaling factor used to convert the flux
-                                                              !! convergence of this tracer to its desired units,
-                                                              !! including a factor compensating for H scaling.
-  character(len=48)               :: cmor_tendprefix = ""     !< The CMOR variable prefix for tendencies of this
-                                                              !! tracer, required because CMOR does not follow any
-                                                              !! discernable pattern for these names.
-  integer :: ind_tr_squared = -1 !< The tracer registry index for the square of this tracer
-
-  !### THESE CAPABILITIES HAVE NOT YET BEEN IMPLEMENTED.
-  ! logical :: advect_tr = .true.     !< If true, this tracer should be advected
-  ! logical :: hordiff_tr = .true.    !< If true, this tracer should experience epineutral diffusion
-  logical :: remap_tr = .true.      !< If true, this tracer should be vertically remapped
-
-  integer :: diag_form = 1  !< An integer indicating which template is to be used to label diagnostics.
-  !>@{ Diagnostic IDs
-  integer :: id_tr = -1, id_tr_post_horzn = -1
-  integer :: id_adx = -1, id_ady = -1, id_dfx = -1, id_dfy = -1
-  integer :: id_lbd_bulk_dfx = -1, id_lbd_bulk_dfy = -1, id_lbd_dfx = -1, id_lbd_dfy = -1
-  integer :: id_lbd_dfx_2d = -1  , id_lbd_dfy_2d = -1
-  integer :: id_adx_2d = -1, id_ady_2d = -1, id_dfx_2d = -1, id_dfy_2d = -1
-  integer :: id_adv_xy = -1, id_adv_xy_2d = -1
-  integer :: id_dfxy_cont = -1, id_dfxy_cont_2d = -1, id_dfxy_conc = -1
-  integer :: id_lbdxy_cont = -1, id_lbdxy_cont_2d = -1, id_lbdxy_conc = -1
-  integer :: id_remap_conc = -1, id_remap_cont = -1, id_remap_cont_2d = -1
-  integer :: id_tendency = -1, id_trxh_tendency = -1, id_trxh_tendency_2d = -1
-  integer :: id_tr_vardec = -1
-  !>@}
-end type tracer_type
-
-!> Type to carry basic tracer information
-type, public :: tracer_registry_type
-  integer                  :: ntr = 0           !< number of registered tracers
-  type(tracer_type)        :: Tr(MAX_FIELDS_)   !< array of registered tracers
-! type(diag_ctrl), pointer :: diag              !< structure to regulate timing of diagnostics
-  logical                  :: locked = .false.  !< New tracers may be registered if locked=.false.
-                                                !! When locked=.true., no more tracers can be registered,
-                                                !! at which point common diagnostics can be set up
-                                                !! for the registered tracers
-end type tracer_registry_type
+! These types come from MOM_tracer_types
+public tracer_type, tracer_registry_type
 
 contains
 
 !> This subroutine registers a tracer to be advected and laterally diffused.
 subroutine register_tracer(tr_ptr, Reg, param_file, HI, GV, name, longname, units, &
-                           cmor_name, cmor_units, cmor_longname, tr_desc, &
-                           OBC_inflow, OBC_in_u, OBC_in_v, ad_x, ad_y, df_x, df_y, &
-                           ad_2d_x, ad_2d_y, df_2d_x, df_2d_y, advection_xy, registry_diags, &
+                           cmor_name, cmor_units, cmor_longname, net_surfflux_name, NLT_budget_name, &
+                           net_surfflux_longname, tr_desc, OBC_inflow, OBC_in_u, OBC_in_v, ad_x, ad_y, &
+                           df_x, df_y, ad_2d_x, ad_2d_y, df_2d_x, df_2d_y, advection_xy, registry_diags, &
                            flux_nameroot, flux_longname, flux_units, flux_scale, &
                            convergence_units, convergence_scale, cmor_tendprefix, diag_form, &
-                           restart_CS, mandatory)
+                           restart_CS, mandatory, Tr_out)
   type(hor_index_type),           intent(in)    :: HI           !< horizontal index type
   type(verticalGrid_type),        intent(in)    :: GV           !< ocean vertical grid structure
   type(tracer_registry_type),     pointer       :: Reg          !< pointer to the tracer registry
@@ -172,6 +59,9 @@ subroutine register_tracer(tr_ptr, Reg, param_file, HI, GV, name, longname, unit
   character(len=*),     optional, intent(in)    :: cmor_name    !< CMOR name
   character(len=*),     optional, intent(in)    :: cmor_units   !< CMOR physical dimensions of variable
   character(len=*),     optional, intent(in)    :: cmor_longname !< CMOR long name
+  character(len=*),     optional, intent(in)    :: net_surfflux_name     !< Name for net_surfflux diag
+  character(len=*),     optional, intent(in)    :: NLT_budget_name       !< Name for NLT_budget diag
+  character(len=*),     optional, intent(in)    :: net_surfflux_longname !< Long name for net_surfflux diag
   type(vardesc),        optional, intent(in)    :: tr_desc      !< A structure with metadata about the tracer
 
   real,                 optional, intent(in)    :: OBC_inflow   !< the tracer for all inflows via OBC for which OBC_in_u
@@ -221,6 +111,7 @@ subroutine register_tracer(tr_ptr, Reg, param_file, HI, GV, name, longname, unit
   type(MOM_restart_CS), optional, intent(inout) :: restart_CS   !< MOM restart control struct
   logical,              optional, intent(in)    :: mandatory    !< If true, this tracer must be read
                                                                 !! from a restart file.
+  type(tracer_type),    optional, pointer       :: Tr_out       !< If present, returns pointer into registry
 
   logical :: mand
   type(tracer_type), pointer :: Tr=>NULL()
@@ -236,6 +127,7 @@ subroutine register_tracer(tr_ptr, Reg, param_file, HI, GV, name, longname, unit
   Reg%ntr = Reg%ntr + 1
 
   Tr => Reg%Tr(Reg%ntr)
+  if (present(Tr_out)) Tr_out => Reg%Tr(Reg%ntr)
 
   if (present(name)) then
     Tr%name = name
@@ -275,6 +167,22 @@ subroutine register_tracer(tr_ptr, Reg, param_file, HI, GV, name, longname, unit
   Tr%flux_longname = Tr%longname
   if (present(flux_longname)) then
     if (len_trim(flux_longname) > 0) Tr%flux_longname = flux_longname
+  endif
+
+  Tr%net_surfflux_name = "KPP_net"//trim(Tr%name)
+  if (present(net_surfflux_name)) then
+    Tr%net_surfflux_name = net_surfflux_name
+  endif
+
+  Tr%NLT_budget_name = 'KPP_NLT_'//trim(Tr%flux_nameroot)//'_budget'
+  if (present(NLT_budget_name)) then
+    Tr%NLT_budget_name = NLT_budget_name
+  endif
+
+  Tr%net_surfflux_longname = 'Effective net surface '//trim(lowercase(Tr%flux_longname))//&
+                             ' flux, as used by [CVMix] KPP'
+  if (present(net_surfflux_longname)) then
+    Tr%net_surfflux_longname = net_surfflux_longname
   endif
 
   Tr%flux_units = ""
@@ -340,7 +248,7 @@ end subroutine lock_tracer_registry
 
 !> register_tracer_diagnostics does a set of register_diag_field calls for any previously
 !! registered in a tracer registry with a value of registry_diags set to .true.
-subroutine register_tracer_diagnostics(Reg, h, Time, diag, G, GV, US, use_ALE)
+subroutine register_tracer_diagnostics(Reg, h, Time, diag, G, GV, US, use_ALE, use_KPP)
   type(ocean_grid_type),      intent(in) :: G    !< The ocean's grid structure
   type(verticalGrid_type),    intent(in) :: GV   !< The ocean's vertical grid structure
   type(unit_scale_type),      intent(in) :: US   !< A dimensional unit scaling type
@@ -351,22 +259,25 @@ subroutine register_tracer_diagnostics(Reg, h, Time, diag, G, GV, US, use_ALE)
   type(diag_ctrl),            intent(in) :: diag !< structure to regulate diagnostic output
   logical,                    intent(in) :: use_ALE !< If true active diagnostics that only
                                                  !! apply to ALE configurations
+  logical,                    intent(in) :: use_KPP !< If true active diagnostics that only
+                                                 !! apply to CVMix KPP mixings
 
-  character(len=24) :: name     ! A variable's name in a NetCDF file.
-  character(len=24) :: shortnm  ! A shortened version of a variable's name for
-                                ! creating additional diagnostics.
-  character(len=72) :: longname ! The long name of that tracer variable.
-  character(len=72) :: flux_longname ! The tracer name in the long names of fluxes.
-  character(len=48) :: units    ! The dimensions of the tracer.
-  character(len=48) :: flux_units ! The units for fluxes, either
-                                ! [units] m3 s-1 or [units] kg s-1.
-  character(len=48) :: conv_units ! The units for flux convergences, either
-                                ! [units] m2 s-1 or [units] kg s-1.
-  character(len=48) :: unit2    ! The dimensions of the tracer squared
+  character(len=24)  :: name     ! A variable's name in a NetCDF file.
+  character(len=24)  :: shortnm  ! A shortened version of a variable's name for
+                                 ! creating additional diagnostics.
+  character(len=72)  :: longname ! The long name of that tracer variable.
+  character(len=72)  :: flux_longname ! The tracer name in the long names of fluxes.
+  character(len=48)  :: units    ! The dimensions of the tracer.
+  character(len=48)  :: flux_units ! The units for fluxes, either
+                                 ! [units] m3 s-1 or [units] kg s-1.
+  character(len=48)  :: conv_units ! The units for flux convergences, either
+                                 ! [units] m2 s-1 or [units] kg s-1.
+  character(len=48)  :: unit2    ! The dimensions of the tracer squared
   character(len=72)  :: cmorname ! The CMOR name of this tracer.
   character(len=120) :: cmor_longname ! The CMOR long name of that variable.
   character(len=120) :: var_lname      ! A temporary longname for a diagnostic.
   character(len=120) :: cmor_var_lname ! The temporary CMOR long name for a diagnostic
+  real :: conversion ! Temporary term while we address a bug
   type(tracer_type), pointer :: Tr=>NULL()
   integer :: i, j, k, is, ie, js, je, nz, m, m2, nTr_in
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
@@ -658,6 +569,30 @@ subroutine register_tracer_diagnostics(Reg, h, Time, diag, G, GV, US, use_ALE)
         ! Augment the total number of tracers, including the squared tracers.
         Reg%ntr = Reg%ntr + 1
       endif
+    endif
+
+    ! KPP nonlocal term diagnostics
+    if (use_KPP) then
+      Tr%id_net_surfflux = register_diag_field('ocean_model', Tr%net_surfflux_name, diag%axesT1, Time, &
+          Tr%net_surfflux_longname, trim(units)//' m s-1', conversion=GV%H_to_m*US%s_to_T)
+      Tr%id_NLT_tendency = register_diag_field('ocean_model', "KPP_NLT_d"//trim(shortnm)//"dt", &
+          diag%axesTL, Time, &
+          trim(longname)//' tendency due to non-local transport of '//trim(lowercase(flux_longname))//&
+          ', as calculated by [CVMix] KPP', trim(units)//' s-1', conversion=US%s_to_T)
+      if (Tr%conv_scale == 0.001*GV%H_to_kg_m2) then
+        conversion = GV%H_to_kg_m2
+      else
+        conversion = Tr%conv_scale
+      end if
+      ! We actually want conversion=Tr%conv_scale for all tracers, but introducing the local variable
+      ! 'conversion' and setting it to GV%H_to_kg_m2 instead of 0.001*GV%H_to_kg_m2 for salt tracers
+      ! keeps changes introduced by this refactoring limited to round-off level; as it turns out,
+      ! there is a bug in the code and the NLT budget term for salinity is off by a factor of 10^3
+      ! so introducing the 0.001 here will fix that bug.
+      Tr%id_NLT_budget = register_diag_field('ocean_model', Tr%NLT_budget_name, &
+          diag%axesTL, Time, &
+          trim(flux_longname)//' content change due to non-local transport, as calculated by [CVMix] KPP', &
+          conv_units, conversion=conversion*US%s_to_T, v_extensive=.true.)
     endif
 
   endif ; enddo
