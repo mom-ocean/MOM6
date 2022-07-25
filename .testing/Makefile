@@ -121,7 +121,7 @@ TIME ?= time
 
 
 # Experiment configuration
-BUILDS ?= symmetric asymmetric openmp
+BUILDS ?= symmetric/MOM6 asymmetric/MOM6 openmp/MOM6
 CONFIGS ?= $(wildcard tc*)
 TESTS ?= grid layout rotate restart openmp nan $(foreach d,$(DIMS),dim.$(d))
 DIMS ?= t l h z q r
@@ -134,26 +134,29 @@ DIMS ?= t l h z q r
 # the DEBUG results in older GCCs and vendor compilers, so we can optionally
 # disable them.
 ifeq ($(DO_REPRO_TESTS), true)
-  BUILDS += repro
+  BUILDS += repro/MOM6
   TESTS += repro
 endif
 
 # Profiling
 ifeq ($(DO_PROFILE), true)
-  BUILDS += opt opt_target
+  BUILDS += opt/MOM6 opt_target/MOM6
 endif
 
 # Unit testing
+UNIT_EXECS ?= MOM_unit_tests
 ifeq ($(DO_COVERAGE), true)
-  BUILDS += cov unit
+  BUILDS += cov/MOM6 $(foreach e, $(UNIT_EXECS), unit/$(e))
 endif
-CODECOV_UPLOADER_URL ?= https://uploader.codecov.io/latest/linux/codecov
+
+ifeq ($(DO_PROFILE), false)
+  BUILDS += opt/MOM6 opt_target/MOM6
+endif
 
 
 DO_REGRESSION_TESTS ?=
-
 ifeq ($(DO_REGRESSION_TESTS), true)
-  BUILDS += target
+  BUILDS += target/MOM6
   TESTS += regression
 
   MOM_TARGET_SLUG ?= NOAA-GFDL/MOM6
@@ -214,13 +217,12 @@ endif
 # Rules
 
 .PHONY: all build.regressions build.prof
-all: $(foreach b,$(BUILDS),build/$(b)/MOM6) $(VENV_PATH)
+all: $(foreach b,$(BUILDS),build/$(b)) $(VENV_PATH)
 build.regressions: $(foreach b,symmetric target,build/$(b)/MOM6)
 build.prof: $(foreach b,opt opt_target,build/$(b)/MOM6)
 
 # Executable
-BUILD_TARGETS = MOM6 Makefile path_names
-.PRECIOUS: $(foreach b,$(BUILDS),$(foreach f,$(BUILD_TARGETS),build/$(b)/$(f)))
+.PRECIOUS: $(foreach b,$(BUILDS),build/$(b))
 
 
 # Compiler flags
@@ -283,18 +285,18 @@ build/opt_target/Makefile: | $(TARGET_CODEBASE)
 # NOTE: ./configure is too much, but Makefile is not enough!
 #   Ideally we only want to re-run both Makefile and mkmf, but the mkmf call
 #   is inside ./configure, so we must re-run ./configure as well.
-$(foreach b,$(filter-out target,$(BUILDS)),build/$(b)/Makefile): $(MOM_SOURCE)
 build/target_codebase/configure: $(TARGET_SOURCE)
 
 
-# Build MOM6
-.PRECIOUS: $(foreach b,$(BUILDS),build/$(b)/MOM6)
-build/%/MOM6: build/%/Makefile
+# Build executables
+$(foreach e,$(UNIT_EXECS),build/unit/$(e)): build/unit/Makefile $(MOM_SOURCE)
+	cd $(@D) && $(TIME) $(MAKE) -j
+build/%/MOM6: build/%/Makefile $(MOM_SOURCE)
 	cd $(@D) && $(TIME) $(MAKE) -j
 
 
 # Use autoconf to construct the Makefile for each target
-.PRECIOUS: $(foreach b,$(BUILDS),build/$(b)/Makefile)
+.PRECIOUS: build/%/Makefile
 build/%/Makefile: ../ac/configure ../ac/Makefile.in deps/lib/libFMS.a
 	mkdir -p $(@D)
 	cd $(@D) \
@@ -577,12 +579,12 @@ work/%/$(1)/ocean.stats work/%/$(1)/chksum_diag: build/$(2)/MOM6 $(VENV_PATH)
 	  cd build/$(2) ; \
 	  gcov -b *.gcda > gcov.$$*.$(1).out ; \
 	  find -name "*.gcov" -exec sed -i -r 's/^( *[0-9]*)\*:/ \1:/g' {} \; ; \
-	  curl -s $(CODECOV_UPLOADER_URL) -o codecov ; \
 	fi
 endef
 
 
 # Upload coverage reports
+CODECOV_UPLOADER_URL ?= https://uploader.codecov.io/latest/linux/codecov
 codecov:
 	curl -s $(CODECOV_UPLOADER_URL) -o $@
 	chmod +x codecov
@@ -693,7 +695,7 @@ test.summary:
 
 
 #---
-# unit test
+# Unit test
 
 # NOTE: Using file parser gcov report as a proxy for test completion
 .PHONY: run.cov.unit
@@ -718,8 +720,8 @@ work/unit/std.out: build/unit/MOM_unit_tests
 	    cat p2.std.err | tail -n 100 ; \
 	  )
 
-# Use driver coverage file as a proxy for the run
 # NOTE: .gcov actually depends on .gcda, but .gcda is produced with std.out
+# TODO: Replace work/unit/std.out with *.gcda?
 build/unit/MOM_file_parser_tests.F90.gcov: work/unit/std.out
 	cd $(@D) \
 	  && gcov -b *.gcda > gcov.unit.out
@@ -733,7 +735,7 @@ report.cov.unit: build/unit/MOM_file_parser_tests.F90.gcov codecov
 	  && echo -e "${MAGENTA}Report uploaded to codecov.${RESET}" \
 	  || { \
 	    echo -e "${RED}Failed to upload report.${RESET}" ; \
-		if [ $(REQUIRE_COVERAGE_UPLOAD) = "true" ] ; then false ; fi ; \
+		if [ "$(REQUIRE_COVERAGE_UPLOAD)" = true ] ; then false ; fi ; \
 	  }
 
 

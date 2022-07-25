@@ -10,9 +10,6 @@ jobs:
       run:
         working-directory: .testing
 
-    #env:
-    #  REQUIRE_COVERAGE_UPLOAD: true
-
     steps:
     - uses: actions/checkout@v2
       with:
@@ -23,7 +20,7 @@ jobs:
     - uses: ./.github/actions/testing-setup
 
     - name: Compile unit testing
-      run: make -j build/unit/MOM6
+      run: make -j build/unit/MOM_unit_tests
 
     - name: Run unit tests
       run: make run.cov.unit
