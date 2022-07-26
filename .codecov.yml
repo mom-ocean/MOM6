@@ -8,7 +8,3 @@ coverage:
             default:
                 threshold: 100%
                 base: parent
-comment:
-    # This is set to the number of TCs, plus unit, but can be removed
-    # (i.e. set to 1) when reporting is separated from coverage.
-    after_n_builds: 9
