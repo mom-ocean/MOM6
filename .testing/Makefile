@@ -576,6 +576,7 @@ work/%/$(1)/ocean.stats work/%/$(1)/chksum_diag: build/$(2)/MOM6 $(VENV_PATH)
 	  mkdir -p results/$$* ; \
 	  cd build/$(2) ; \
 	  gcov -b *.gcda > gcov.$$*.$(1).out ; \
+	  find -name "*.gcov" -exec sed -i -r 's/^( *[0-9]*)\*:/ \1:/g' {} \; ; \
 	  curl -s $(CODECOV_UPLOADER_URL) -o codecov ; \
 	fi
 endef
@@ -722,6 +723,7 @@ work/unit/std.out: build/unit/MOM_unit_tests
 build/unit/MOM_file_parser_tests.F90.gcov: work/unit/std.out
 	cd $(@D) \
 	  && gcov -b *.gcda > gcov.unit.out
+	find $(@D) -name "*.gcov" -exec sed -i -r 's/^( *[0-9]*)\*:/ \1:/g' {} \;
 
 .PHONY: report.cov.unit
 report.cov.unit: build/unit/MOM_file_parser_tests.F90.gcov codecov
