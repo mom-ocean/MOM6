@@ -3696,6 +3696,7 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
   real, dimension(:,:,:), allocatable, target :: tmp_buffer ! A buffer for input data [various units]
   real, dimension(:), allocatable :: h_stack  ! Thicknesses at corner points [H ~> m or kg m-2]
   integer :: is_obc2, js_obc2
+  integer :: i_seg_offset, j_seg_offset
   real :: net_H_src   ! Total thickness of the incoming flow in the source field [H ~> m or kg m-2]
   real :: net_H_int   ! Total thickness of the incoming flow in the model [H ~> m or kg m-2]
   real :: scl_fac     ! A scaling factor to compensate for differences in total thicknesses [nondim]
@@ -3737,6 +3738,8 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
     ie_obc = min(segment%ie_obc,ied)
     js_obc = max(segment%js_obc,jsd-1)
     je_obc = min(segment%je_obc,jed)
+    i_seg_offset = G%idg_offset - segment%HI%Isgb
+    j_seg_offset = G%jdg_offset - segment%HI%Jsgb
 
 ! Calculate auxiliary fields at staggered locations.
 ! Segment indices are on q points:
@@ -3890,19 +3893,19 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
             if (segment%field(m)%name == 'V' .or. segment%field(m)%name == 'DVDX' .or. &
                 segment%field(m)%name == 'Vamp' .or. segment%field(m)%name == 'Vphase') then
               segment%field(m)%buffer_src(is_obc,:,:) = &
-                  tmp_buffer(1,2*(js_obc+G%jdg_offset-segment%HI%Jsgb)+1:2*(je_obc+G%jdg_offset-segment%HI%Jsgb)+1:2,:)
+                  tmp_buffer(1,2*(js_obc+j_seg_offset)+1:2*(je_obc+j_seg_offset)+1:2,:)
             else
               segment%field(m)%buffer_src(is_obc,:,:) = &
-                  tmp_buffer(1,2*(js_obc+G%jdg_offset-segment%HI%Jsgb)+1:2*(je_obc+G%jdg_offset-segment%HI%Jsgb):2,:)
+                  tmp_buffer(1,2*(js_obc+j_seg_offset)+1:2*(je_obc+j_seg_offset):2,:)
             endif
           else
             if (segment%field(m)%name == 'U' .or. segment%field(m)%name == 'DUDY' .or. &
                 segment%field(m)%name == 'Uamp' .or. segment%field(m)%name == 'Uphase') then
               segment%field(m)%buffer_src(:,js_obc,:) = &
-                  tmp_buffer(2*(is_obc+G%idg_offset-segment%HI%Isgb)+1:2*(ie_obc+G%idg_offset-segment%HI%Isgb)+1:2,1,:)
+                  tmp_buffer(2*(is_obc+i_seg_offset)+1:2*(ie_obc+i_seg_offset)+1:2,1,:)
             else
               segment%field(m)%buffer_src(:,js_obc,:) = &
-                  tmp_buffer(2*(is_obc+G%idg_offset-segment%HI%Isgb)+1:2*(ie_obc+G%idg_offset-segment%HI%Isgb):2,1,:)
+                  tmp_buffer(2*(is_obc+i_seg_offset)+1:2*(ie_obc+i_seg_offset):2,1,:)
             endif
           endif
         else
@@ -3910,19 +3913,19 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
             if (segment%field(m)%name == 'V' .or. segment%field(m)%name == 'DVDX' .or. &
                 segment%field(m)%name == 'Vamp' .or. segment%field(m)%name == 'Vphase') then
               segment%field(m)%buffer_src(is_obc,:,:) = &
-                   tmp_buffer(1,js_obc+G%jdg_offset-segment%HI%Jsgb+1:je_obc+G%jdg_offset-segment%HI%Jsgb+1,:)
+                   tmp_buffer(1,js_obc+j_seg_offset+1:je_obc+j_seg_offset+1,:)
             else
               segment%field(m)%buffer_src(is_obc,:,:) = &
-                   tmp_buffer(1,js_obc+G%jdg_offset-segment%HI%Jsgb+1:je_obc+G%jdg_offset-segment%HI%Jsgb,:)
+                   tmp_buffer(1,js_obc+j_seg_offset+1:je_obc+j_seg_offset,:)
             endif
           else
             if (segment%field(m)%name == 'U' .or. segment%field(m)%name == 'DUDY' .or. &
                 segment%field(m)%name == 'Uamp' .or. segment%field(m)%name == 'Uphase') then
               segment%field(m)%buffer_src(:,js_obc,:) = &
-                   tmp_buffer(is_obc+G%idg_offset-segment%HI%Isgb+1:ie_obc+G%idg_offset-segment%HI%Isgb+1,1,:)
+                   tmp_buffer(is_obc+i_seg_offset+1:ie_obc+i_seg_offset+1,1,:)
             else
               segment%field(m)%buffer_src(:,js_obc,:) = &
-                   tmp_buffer(is_obc+G%idg_offset-segment%HI%Isgb+1:ie_obc+G%idg_offset-segment%HI%Isgb,1,:)
+                   tmp_buffer(is_obc+i_seg_offset+1:ie_obc+i_seg_offset,1,:)
             endif
           endif
         endif
@@ -3949,40 +3952,36 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
             if (segment%is_E_or_W) then
               if (segment%field(m)%name == 'V' .or. segment%field(m)%name == 'DVDX') then
                 segment%field(m)%dz_src(is_obc,:,:) = &
-                    tmp_buffer(1,2*(js_obc+G%jdg_offset-segment%HI%Jsgb)+1:2*(je_obc+G%jdg_offset- &
-                    segment%HI%Jsgb)+1:2,:)
+                    tmp_buffer(1,2*(js_obc+j_seg_offset)+1:2*(je_obc+j_seg_offset)+1:2,:)
               else
                 segment%field(m)%dz_src(is_obc,:,:) = &
-                    tmp_buffer(1,2*(js_obc+G%jdg_offset-segment%HI%Jsgb)+1:2*(je_obc+G%jdg_offset- &
-                    segment%HI%Jsgb):2,:)
+                    tmp_buffer(1,2*(js_obc+j_seg_offset)+1:2*(je_obc+j_seg_offset):2,:)
               endif
             else
               if (segment%field(m)%name == 'U' .or. segment%field(m)%name == 'DUDY') then
                 segment%field(m)%dz_src(:,js_obc,:) = &
-                    tmp_buffer(2*(is_obc+G%idg_offset-segment%HI%Isgb)+1:2*(ie_obc+G%idg_offset- &
-                    segment%HI%Isgb)+1:2,1,:)
+                    tmp_buffer(2*(is_obc+i_seg_offset)+1:2*(ie_obc+i_seg_offset)+1:2,1,:)
               else
                 segment%field(m)%dz_src(:,js_obc,:) = &
-                    tmp_buffer(2*(is_obc+G%idg_offset-segment%HI%Isgb)+1:2*(ie_obc+G%idg_offset- &
-                    segment%HI%Isgb):2,1,:)
+                    tmp_buffer(2*(is_obc+i_seg_offset)+1:2*(ie_obc+i_seg_offset):2,1,:)
               endif
             endif
           else
             if (segment%is_E_or_W) then
               if (segment%field(m)%name == 'V' .or. segment%field(m)%name == 'DVDX') then
                 segment%field(m)%dz_src(is_obc,:,:) = &
-                    tmp_buffer(1,js_obc+G%jdg_offset-segment%HI%Jsgb+1:je_obc+G%jdg_offset-segment%HI%Jsgb+1,:)
+                    tmp_buffer(1,js_obc+j_seg_offset+1:je_obc+j_seg_offset+1,:)
               else
                 segment%field(m)%dz_src(is_obc,:,:) = &
-                    tmp_buffer(1,js_obc+G%jdg_offset-segment%HI%Jsgb+1:je_obc+G%jdg_offset-segment%HI%Jsgb,:)
+                    tmp_buffer(1,js_obc+j_seg_offset+1:je_obc+j_seg_offset,:)
               endif
             else
               if (segment%field(m)%name == 'U' .or. segment%field(m)%name == 'DUDY') then
                 segment%field(m)%dz_src(:,js_obc,:) = &
-                    tmp_buffer(is_obc+G%idg_offset-segment%HI%Isgb+1:ie_obc+G%idg_offset-segment%HI%Isgb+1,1,:)
+                    tmp_buffer(is_obc+i_seg_offset+1:ie_obc+i_seg_offset+1,1,:)
               else
                 segment%field(m)%dz_src(:,js_obc,:) = &
-                    tmp_buffer(is_obc+G%idg_offset-segment%HI%Isgb+1:ie_obc+G%idg_offset-segment%HI%Isgb,1,:)
+                    tmp_buffer(is_obc+i_seg_offset+1:ie_obc+i_seg_offset,1,:)
               endif
             endif
           endif
