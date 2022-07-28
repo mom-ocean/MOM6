@@ -143,8 +143,8 @@ use MOM_wave_interface,        only : Update_Stokes_Drift
 
 use MOM_porous_barriers,      only : porous_widths
 
-! SmartRedis machine-learning interface
-use MOM_smartredis,            only : smartredis_CS_type, smartredis_init, client_type
+! Database client used for machine-learning interface
+use MOM_dbclient,             only : dbclient_CS_type, dbclient_init, dbclient_type
 
 ! ODA modules
 use MOM_oda_driver_mod,        only : ODA_CS, oda, init_oda, oda_end
@@ -343,6 +343,7 @@ type, public :: MOM_control_struct ; private
                                 !! higher values use more appropriate expressions that differ at
                                 !! roundoff for non-Boussinesq cases.
   logical :: use_particles      !< Turns on the particles package
+  logical :: use_dbclient       !< Turns on the database client used for ML inference/analysis
   character(len=10) :: particle_type !< Particle types include: surface(default), profiling and sail drone.
 
   type(MOM_diag_IDs)       :: IDs      !<  Handles used for diagnostics.
@@ -409,7 +410,7 @@ type, public :: MOM_control_struct ; private
   type(ODA_CS), pointer :: odaCS => NULL() !< a pointer to the control structure for handling
                                 !! ensemble model state vectors and data assimilation
                                 !! increments and priors
-  type(smartredis_CS_type)  :: smartredis_CS !< SmartRedis control structure for online ML/AI
+  type(dbclient_CS_type)   :: dbclient_CS !< Control structure for database client used for online ML/AI
   type(porous_barrier_ptrs) :: pbv !< porous barrier fractional cell metrics
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_,NKMEM_) :: por_face_areaU !< fractional open area of U-faces [nondim]
   real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_,NKMEM_) :: por_face_areaV !< fractional open area of V-faces [nondim]
@@ -1812,7 +1813,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
 
-  integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz
+  integer :: i, j, is, ie, js, je, isd, ied, jsd, jed, nz
   integer :: IsdB, IedB, JsdB, JedB
   real    :: dtbt              ! If negative, this specifies the barotropic timestep as a fraction
                                ! of the maximum stable value [nondim].
@@ -2203,6 +2204,10 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
                  "vertical grid files. Other values are invalid.", default=1)
   if (write_geom<0 .or. write_geom>2) call MOM_error(FATAL,"MOM: "//&
          "WRITE_GEOM must be equal to 0, 1 or 2.")
+  call get_param(param_file, "MOM", "USE_DBCLIENT", CS%use_dbclient, &
+                 "If true, initialize a client to a remote database that can "//&
+                 "be used for online analysis and machine-learning inference.",&
+                 default=.false.)
 
   ! Check for inconsistent parameter settings.
   if (CS%use_ALE_algorithm .and. bulkmixedlayer) call MOM_error(FATAL, &
@@ -2807,8 +2812,8 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   endif
   call cpu_clock_end(id_clock_MOM_init)
 
-  call smartredis_init(param_file, CS%smartredis_CS)
-  CS%useMEKE = MEKE_init(Time, G, US, param_file, diag, CS%smartredis_CS, CS%MEKE_CSp, CS%MEKE, &
+  if (CS%use_dbclient) call dbclient_init(param_file, CS%dbclient_CS)
+  CS%useMEKE = MEKE_init(Time, G, US, param_file, diag, CS%dbclient_CS, CS%MEKE_CSp, CS%MEKE, &
                          restart_CSp, CS%MEKE_in_dynamics)
 
   call VarMix_init(Time, G, GV, US, param_file, diag, CS%VarMix)
