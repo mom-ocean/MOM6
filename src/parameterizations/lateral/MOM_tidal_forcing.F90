@@ -12,10 +12,9 @@ use MOM_grid,          only : ocean_grid_type
 use MOM_io,            only : field_exists, file_exists, MOM_read_data
 use MOM_time_manager,  only : set_date, time_type, time_type_to_real, operator(-)
 use MOM_unit_scaling,  only : unit_scale_type
-use MOM_spherical_harmonics, only : spherical_harmonics_init, spherical_harmonics_end
-use MOM_spherical_harmonics, only : associatedLegendrePolynomials, SHOrderDegreeToIndex
+use MOM_spherical_harmonics, only : spherical_harmonics_init, spherical_harmonics_end, calc_lmax
+use MOM_spherical_harmonics, only : spherical_harmonics_forward, spherical_harmonics_inverse, SHOrderDegreeToIndex
 use MOM_spherical_harmonics, only : sht_CS
-use MOM_coms_infra, only : sum_across_PEs
 
 implicit none ; private
 
@@ -76,6 +75,7 @@ type, public :: tidal_forcing_CS ; private
     sinphase_prev(:,:,:), & !< amphidromes in the previous tidal solutions.
     amp_prev(:,:,:)         !< The amplitude of the previous tidal solution [Z ~> m].
   type(sht_CS) :: sht
+  integer :: sal_sht_Nd
 end type tidal_forcing_CS
 
 integer :: id_clock_tides !< CPU clock for tides
@@ -530,6 +530,10 @@ subroutine tidal_forcing_init(Time, G, US, param_file, CS)
   endif
 
   if (CS%tidal_sal_sht) then
+    call get_param(param_file, mdl, "TIDAL_SAL_SHT_DEGREE", CS%sal_sht_Nd, &
+                   "The maximum degree of the spherical harmonics transformation used for "// &
+                   "calculating the self-attraction and loading term for tides.", &
+                   default=0, do_not_log=.not. CS%tidal_sal_sht)
     call spherical_harmonics_init(G, param_file, CS%sht)
     id_clock_SAL = cpu_clock_id('(Ocean SAL)', grain=CLOCK_MODULE)
   endif
@@ -2157,7 +2161,7 @@ subroutine calc_tidal_forcing(Time, eta, eta_tidal, G, US, CS)
 
   if (CS%TIDAL_SAL_SHT) then
     eta_sal = 0.0
-    call calc_tidal_SAL(eta, eta_sal, G, CS%sht)
+    call calc_SAL_sht(eta, eta_sal, G, CS)
     call pass_var(eta_sal, G%domain)
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
       eta_tidal(i,j) = eta_tidal(i,j) + eta_sal(i,j)
@@ -2167,237 +2171,44 @@ subroutine calc_tidal_forcing(Time, eta, eta_tidal, G, US, CS)
 
 end subroutine calc_tidal_forcing
 
-subroutine calc_tidal_SAL(eta, eta_sal, G, sht)
+subroutine calc_SAL_sht(eta, eta_sal, G, CS)
   type(ocean_grid_type),   intent(in) :: G    !< The ocean's grid structure.
   real, dimension(SZI_(G),SZJ_(G)), intent(in)  :: eta       !< The sea surface height anomaly from
                                                              !! a time-mean geoid [Z ~> m].
   real, dimension(SZI_(G),SZJ_(G)), intent(out) :: eta_sal   !< The sea surface height anomaly from
                                                              !! a time-mean geoid [Z ~> m].
-  type(sht_CS), intent(inout) :: sht
-  real, allocatable :: SnmRe_local(:), SnmIm_local(:)
-  real, allocatable :: SnmRe_local_reproSum(:), SnmIm_local_reproSum(:)
+  ! type(sht_CS), intent(in) :: sht
+  type(tidal_forcing_CS), intent(in) :: CS   !< Tidal forcing control struct
   real, allocatable :: SnmRe(:), SnmIm(:)
-  real, allocatable :: Snm_local(:), Snm_local_reproSum(:), Snm(:)
   real, allocatable :: LoveScaling(:)
 
-  integer :: i, j
-  integer :: is, ie, js, je
   integer :: n, m, l
-  real :: mFac
-
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
+  integer :: lmax
+  lmax = calc_lmax(CS%sal_sht_Nd)
 
   call cpu_clock_begin(id_clock_SAL)
 
-  allocate(Snm(2*sht%lmax)); Snm = 0.0
-  allocate(SnmRe(sht%lmax)); SnmRe = 0.0
-  allocate(SnmIm(sht%lmax)); SnmIm = 0.0
-
-  if (sht%bfb) then
-    allocate(Snm_local_reproSum(2*sht%lmax)); Snm_local_reproSum = 0.0
-    allocate(SnmRe_local_reproSum(sht%lmax)); SnmRe_local_reproSum = 0.0
-    allocate(SnmIm_local_reproSum(sht%lmax)); SnmIm_local_reproSum = 0.0
-  else
-    allocate(Snm_local(2*sht%lmax)); Snm_local = 0.0
-    allocate(SnmRe_local(sht%lmax)); SnmRe_local = 0.0
-    allocate(SnmIm_local(sht%lmax)); SnmIm_local = 0.0
-  endif
+  allocate(SnmRe(lmax)); SnmRe = 0.0
+  allocate(SnmIm(lmax)); SnmIm = 0.0
 
   ! Get SAL scaling factors
-  ALLOC_(LoveScaling(sht%lmax))
-  call getloadLoveNums(sht%nOrder, LoveScaling)
+  ALLOC_(LoveScaling(lmax))
+  call getloadLoveNums(CS%sal_sht_Nd, LoveScaling)
 
-  !!!!!!!!!!!!!!!!!!!!!
-  ! Forward Transform
-  !!!!!!!!!!!!!!!!!!!!!
+  call spherical_harmonics_forward(G, CS%sht, eta, SnmRe, SnmIm, CS%sal_sht_Nd)
 
-  do m = 0, sht%nOrder
-    !------------
-    ! n = m
-    !------------
-    n = m
-    ! Calculate associated Legendre polynomial for n=m (output pmnm2)
-    ! call associatedLegendrePolynomials(n, m, l, sht%pmnm2, sht%pmnm1, sht%pmn)
-    call associatedLegendrePolynomials(n, m, l, sht, G)
-
-    ! Compute local integral contribution
-    if (sht%bfb) then
-      ! do iCell = endIdx, startIdx, -1
-      !     SnmRe_local_reproSum(iCell,l) = SnmRe_local_reproSum(iCell,l) + sshSmoothed(iCell)*pmnm2(iCell)*complexFactorRe(iCell,m+1)
-      !     SnmIm_local_reproSum(iCell,l) = SnmIm_local_reproSum(iCell,l) + sshSmoothed(iCell)*pmnm2(iCell)*complexFactorIm(iCell,m+1)
-      ! enddo
-    else
-      do j = js,je ; do i = is,ie
-        SnmRe_local(l) = SnmRe_local(l) + eta(i,j) * sht%pmnm2(i,j) * sht%complexFactorRe(i,j,m+1)
-        SnmIm_local(l) = SnmIm_local(l) + eta(i,j) * sht%pmnm2(i,j) * sht%complexFactorIm(i,j,m+1)
-      enddo ; enddo
-    endif
-
-    !------------
-    ! n = m+1
-    !------------
-    n = m+1
-    if (n <= sht%nOrder) then
-      ! Calculate associated Legendre polynomial for n = m+1 using recurrence relationship
-      ! call associatedLegendrePolynomials(n, m, l, sht%pmnm2, sht%pmnm1, sht%pmn)
-      call associatedLegendrePolynomials(n, m, l, sht, G)
-
-      ! Compute local integral contribution
-      if (sht%bfb) then
-        ! do iCell = endIdx, startIdx, -1
-        !     SnmRe_local_reproSum(iCell,l) = SnmRe_local_reproSum(iCell,l) + sshSmoothed(iCell)*pmnm1(iCell)*complexFactorRe(iCell,m+1)
-        !     SnmIm_local_reproSum(iCell,l) = SnmIm_local_reproSum(iCell,l) + sshSmoothed(iCell)*pmnm1(iCell)*complexFactorIm(iCell,m+1)
-        ! enddo
-      else
-        do j = js,je ; do i = is,ie
-          SnmRe_local(l) = SnmRe_local(l) + eta(i,j) * sht%pmnm1(i,j) * sht%complexFactorRe(i,j,m+1)
-          SnmIm_local(l) = SnmIm_local(l) + eta(i,j) * sht%pmnm1(i,j) * sht%complexFactorIm(i,j,m+1)
-        enddo ; enddo
-      endif
-    endif
-
-    !------------
-    ! n > m+1
-    !------------
-    do n = m+2,sht%nOrder
-      ! Calculate associated Legendre polynomial using recurrence relationship
-      ! call associatedLegendrePolynomials(n, m, l, sht%pmnm2, sht%pmnm1, sht%pmn)
-      call associatedLegendrePolynomials(n, m, l, sht, G)
-
-      ! Update associated Ledgendre polynomial values for next recurrence
-      do j = js,je ; do i = is,ie
-        sht%pmnm2(i,j) = sht%pmnm1(i,j)
-        sht%pmnm1(i,j) = sht%pmn(i,j)
-      enddo ; enddo
-
-      ! Compute local integral contribution
-      if (sht%bfb) then
-        ! do iCell = endIdx, startIdx, -1
-        !     SnmRe_local_reproSum(iCell,l) = SnmRe_local_reproSum(iCell,l) + sshSmoothed(iCell)*pmn(iCell)*complexFactorRe(iCell,m+1)
-        !     SnmIm_local_reproSum(iCell,l) = SnmIm_local_reproSum(iCell,l) + sshSmoothed(iCell)*pmn(iCell)*complexFactorIm(iCell,m+1)
-        ! enddo
-      else
-        do j = js,je ; do i = is,ie
-          SnmRe_local(l) = SnmRe_local(l) + eta(i,j) * sht%pmn(i,j) * sht%complexFactorRe(i,j,m+1)
-          SnmIm_local(l) = SnmIm_local(l) + eta(i,j) * sht%pmn(i,j) * sht%complexFactorIm(i,j,m+1)
-        enddo ; enddo
-      endif
-    enddo ! n loop
-  enddo ! m loop
-
-  ! call mpas_timer_stop('Parallel SAL: Forward Transform')
-
-  ! call mpas_timer_start('Parallel SAL: Communication')
-  if (sht%bfb) then
-    ! do m = 1,lmax
-    !     do iCell = 1,nCellsOwned 
-    !       Snm_local_reproSum(iCell,m) = SnmRe_local_reproSum(iCell,m)
-    !       Snm_local_reproSum(iCell,lmax+m) = SnmIm_local_reproSum(iCell,m)
-    !     enddo
-    ! enddo
-  else
-    do m = 1,sht%lmax
-      Snm_local(m) = SnmRe_local(m)
-      Snm_local(sht%lmax+m) = SnmIm_local(m)
-    enddo
-  endif
-
-  ! Compute global integral by summing local contributions
-  if (sht%bfb) then
-     !threadNum = mpas_threading_get_thread_num()
-     !if ( threadNum == 0 ) then
-        !  Snm = mpas_global_sum_nfld(Snm_local_reproSum,dminfo%comm)
-     !endif
-  else
-    call sum_across_PEs(Snm_local, 2*sht%lmax)
-  endif
-
-  do m = 1,sht%lmax
-    SnmRe(m) = Snm_local(m)
-    SnmIm(m) = Snm_local(sht%lmax+m)
-  enddo
-
-  ! call mpas_timer_stop('Parallel SAL: Communication')
-
-  ! call mpas_timer_start('Parallel SAL: Inverse Transform')
-
-  !!!!!!!!!!!!!!!!!!!!!
-  ! Apply SAL scaling
-  !!!!!!!!!!!!!!!!!!!!!
-
-  do m = 0,sht%nOrder
-    do n = m,sht%nOrder
-      l = SHOrderDegreeToIndex(n,m,sht%norder)
+  do m = 0,CS%sal_sht_Nd
+    do n = m,CS%sal_sht_Nd
+      l = SHOrderDegreeToIndex(n,m,CS%sal_sht_Nd)
       SnmRe(l) = SnmRe(l)*LoveScaling(l)
       SnmIm(l) = SnmIm(l)*LoveScaling(l)
     enddo
   enddo
 
-  !!!!!!!!!!!!!!!!!!!!
-  ! Inverse transform
-  !!!!!!!!!!!!!!!!!!!!
-
-  do m = 0,sht%nOrder
-    if (m>0) then
-      mFac = 2.0
-    else
-      mFac = 1.0
-    endif
-
-    !------------
-    ! n = m
-    !------------
-    n = m
-    ! Calculate associated Legendre polynomial using recurrence relationship
-    ! call associatedLegendrePolynomials(n, m, l, sht%pmnm2, sht%pmnm1, sht%pmn)
-    call associatedLegendrePolynomials(n, m, l, sht, G)
-
-    ! Sum together product of spherical harmonic functions and coefficients
-    do j = js,je ; do i = is,ie
-      eta_sal(i,j) = eta_sal(i,j) &
-        + mFac * sht%pmnm2(i,j) * (SnmRe(l) * sht%complexExpRe(i,j,m+1) + SnmIm(l) * sht%complexExpIm(i,j,m+1))
-    enddo ; enddo
-
-    !------------
-    ! n = m+1
-    !------------
-    n = m+1
-    if (n <= sht%nOrder) then
-      ! Calculate associated Legendre polynomial using recurrence relationship
-      ! call associatedLegendrePolynomials(n, m, l, sht%pmnm2, sht%pmnm1, sht%pmn)
-      call associatedLegendrePolynomials(n, m, l, sht, G)
-
-      ! Sum together product of spherical harmonic functions and coefficients
-      do j = js,je ; do i = is,ie
-        eta_sal(i,j) = eta_sal(i,j) &
-          + mFac * sht%pmnm1(i,j) * (SnmRe(l) * sht%complexExpRe(i,j,m+1) + SnmIm(l) * sht%complexExpIm(i,j,m+1))
-      enddo ; enddo
-    endif
-
-    !------------
-    ! n > m+1
-    !------------
-    do n = m+2,sht%nOrder
-      ! Calculate associated Legendre polynomial using recurrence relationship
-      ! call associatedLegendrePolynomials(n, m, l, sht%pmnm2, sht%pmnm1, sht%pmn)
-      call associatedLegendrePolynomials(n, m, l, sht, G)
-
-      ! Update associated Ledgendre polynomial values for next recurrence
-      do j = js,je ; do i = is,ie
-        sht%pmnm2(i,j) = sht%pmnm1(i,j)
-        sht%pmnm1(i,j) = sht%pmn(i,j)
-      enddo ; enddo
-
-      ! Sum together product of spherical harmonic functions and coefficients
-      do j = js,je ; do i = is,ie
-        eta_sal(i,j) = eta_sal(i,j) &
-          + mFac * sht%pmn(i,j) * (SnmRe(l) * sht%complexExpRe(i,j,m+1) + SnmIm(l) * sht%complexExpIm(i,j,m+1))
-      enddo ; enddo
-    enddo ! n loop
-  enddo ! m loop
+  call spherical_harmonics_inverse(G, CS%sht, SnmRe, SnmIm, eta_sal, CS%sal_sht_Nd)
 
   call cpu_clock_end(id_clock_SAL)
-end subroutine calc_tidal_SAL
+end subroutine calc_SAL_sht
 
 !> This subroutine deallocates memory associated with the tidal forcing module.
 subroutine tidal_forcing_end(CS)
