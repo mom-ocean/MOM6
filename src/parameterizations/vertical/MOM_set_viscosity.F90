@@ -741,6 +741,9 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, pbv)
       ! bbl_thick.
       if ((bbl_thick > 0.5*CS%Hbbl) .and. (CS%RiNo_mix)) bbl_thick = 0.5*CS%Hbbl
 
+      ! If drag is a body force, bbl_thick is HBBL
+      if (CS%body_force_drag) bbl_thick = h_bbl_drag(i)
+
       if (CS%Channel_drag) then
         ! The drag within the bottommost bbl_thick is applied as a part of
         ! an enhanced bottom viscosity, while above this the drag is applied
@@ -1022,7 +1025,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, pbv)
             visc%Ray_v(i,J,k) = visc%Ray_v(i,J,k) + (CS%cdrag*US%L_to_Z*umag_avg(i)) * h_bbl_fr
           endif
           h_sum = h_sum + h_at_vel(i,k)
-          if (h_sum >= bbl_thick) exit ! The top of this layer is above the drag zone.
+          if (h_sum >= h_bbl_drag(i)) exit ! The top of this layer is above the drag zone.
         enddo
         ! Do not enhance the near-bottom viscosity in this case.
         Kv_bbl = CS%Kv_BBL_min
@@ -2003,7 +2006,8 @@ subroutine set_visc_init(Time, G, GV, US, param_file, diag, visc, CS, restart_CS
   call get_param(param_file, mdl, "DRAG_AS_BODY_FORCE", CS%body_force_drag, &
                  "If true, the bottom stress is imposed as an explicit body force "//&
                  "applied over a fixed distance from the bottom, rather than as an "//&
-                 "implicit calculation based on an enhanced near-bottom viscosity", &
+                 "implicit calculation based on an enhanced near-bottom viscosity. "//&
+                 "The thickness of the bottom boundary layer is HBBL.", &
                  default=.false., do_not_log=.not.CS%bottomdraglaw)
   call get_param(param_file, mdl, "CHANNEL_DRAG", CS%Channel_drag, &
                  "If true, the bottom drag is exerted directly on each "//&
