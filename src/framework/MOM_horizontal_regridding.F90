@@ -81,7 +81,7 @@ end subroutine myStats
 !> Use ICE-9 algorithm to populate points (fill=1) with valid data (good=1).  If no information
 !! is available, use a previous guess (prev). Optionally (smooth) blend the filled points to
 !! achieve a more desirable result.
-subroutine fill_miss_2d(aout, good, fill, prev, G, acrit, num_pass, relc, debug, answers_2018)
+subroutine fill_miss_2d(aout, good, fill, prev, G, acrit, num_pass, relc, debug, answer_date)
   type(ocean_grid_type), intent(inout) :: G    !< The ocean's grid structure.
   real, dimension(SZI_(G),SZJ_(G)), &
                          intent(inout) :: aout !< The array with missing values to fill [A]
@@ -98,8 +98,9 @@ subroutine fill_miss_2d(aout, good, fill, prev, G, acrit, num_pass, relc, debug,
   integer,     optional, intent(in)    :: num_pass !< The maximum number of iterations
   real,        optional, intent(in)    :: relc !< A relaxation coefficient for Laplacian [nondim]
   logical,     optional, intent(in)    :: debug !< If true, write verbose debugging messages.
-  logical,     optional, intent(in)    :: answers_2018 !< If true, use expressions that give the same
-                                                !! answers as the code did in late 2018.  Otherwise
+  integer,     optional, intent(in)    :: answer_date !< The vintage of the expressions in the code.
+                                                !! Dates before 20190101 give the same  answers
+                                                !! as the code did in late 2018, while later versions
                                                 !! add parentheses for rotational symmetry.
 
   real, dimension(SZI_(G),SZJ_(G)) :: a_filled ! The aout with missing values filled in [A]
@@ -135,7 +136,7 @@ subroutine fill_miss_2d(aout, good, fill, prev, G, acrit, num_pass, relc, debug,
   relax_coeff = relc_default
   if (PRESENT(relc)) relax_coeff = relc
 
-  ans_2018 = .true. ; if (PRESENT(answers_2018)) ans_2018 = answers_2018
+  ans_2018 = .true. ; if (PRESENT(answer_date)) ans_2018 = (answer_date < 20190101)
 
   fill_pts(:,:) = fill(:,:)
 
@@ -251,7 +252,7 @@ end subroutine fill_miss_2d
 !> Extrapolate and interpolate from a file record
 subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, recnum, G, tr_z, mask_z, &
                                                  z_in, z_edges_in, missing_value, reentrant_x, tripolar_n, &
-                                                 homogenize, m_to_Z, answers_2018, ongrid, tr_iter_tol)
+                                                 homogenize, m_to_Z, answers_2018, ongrid, tr_iter_tol, answer_date)
 
   character(len=*),      intent(in)    :: filename   !< Path to file containing tracer to be
                                                      !! interpolated.
@@ -287,6 +288,10 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
   real,        optional, intent(in)    :: tr_iter_tol !< The tolerance for changes in tracer concentrations
                                                      !! between smoothing iterations that determines when to
                                                      !! stop iterating [CU ~> conc]
+  integer,     optional, intent(in)    :: answer_date !< The vintage of the expressions in the code.
+                                                     !! Dates before 20190101 give the same  answers
+                                                     !! as the code did in late 2018, while later versions
+                                                     !! add parentheses for rotational symmetry.
 
   ! Local variables
   real, dimension(:,:),  allocatable   :: tr_in      !< A 2-d array for holding input data on its
@@ -313,6 +318,7 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
   real :: missing_val_in ! The missing value in the input field [conc]
   real :: roundoff  ! The magnitude of roundoff, usually ~2e-16 [nondim]
   real :: add_offset, scale_factor  ! File-specific conversion factors.
+  integer :: ans_date           ! The vintage of the expressions and order of arithmetic to use
   logical :: found_attr
   logical :: add_np
   logical :: is_ongrid
@@ -355,6 +361,10 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
   I_scale = 1.0 / conversion
 
   PI_180 = atan(1.0)/45.
+
+  ans_date = 20181231
+  if (present(answers_2018)) then ; if (.not.answers_2018) ans_date = 20190101 ; endif
+  if (present(answer_date)) ans_date = answer_date
 
   ! Open NetCDF file and if present, extract data and spatial coordinate information
   ! The convention adopted here requires that the data be written in (i,j,k) ordering.
@@ -565,8 +575,7 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
     good2(:,:) = good(:,:)
     fill2(:,:) = fill(:,:)
 
-    call fill_miss_2d(tr_outf, good2, fill2, tr_prev, G, dtr_iter_stop, &
-                      answers_2018=answers_2018)
+    call fill_miss_2d(tr_outf, good2, fill2, tr_prev, G, dtr_iter_stop, answer_date=ans_date)
     if (debug) then
       call myStats(tr_outf, missing_value, is, ie, js, je, k, 'field from fill_miss_2d()', scale=I_scale)
     endif
@@ -589,7 +598,8 @@ end subroutine horiz_interp_and_extrap_tracer_record
 !> Extrapolate and interpolate using a FMS time interpolation handle
 subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, tr_z, mask_z, &
                                                  z_in, z_edges_in, missing_value, reentrant_x, tripolar_n, &
-                                                 homogenize, spongeOngrid, m_to_Z, answers_2018, tr_iter_tol)
+                                                 homogenize, spongeOngrid, m_to_Z, &
+                                                 answers_2018, tr_iter_tol, answer_date)
 
   integer,               intent(in)    :: fms_id     !< A unique id used by the FMS time interpolator
   type(time_type),       intent(in)    :: Time       !< A FMS time type
@@ -621,6 +631,10 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, t
   real,        optional, intent(in)    :: tr_iter_tol !< The tolerance for changes in tracer concentrations
                                                      !! between smoothing iterations that determines when to
                                                      !! stop iterating [CU ~> conc]
+  integer,     optional, intent(in)    :: answer_date !< The vintage of the expressions in the code.
+                                                     !! Dates before 20190101 give the same  answers
+                                                     !! as the code did in late 2018, while later versions
+                                                     !! add parentheses for rotational symmetry.
 
   ! Local variables
   real, dimension(:,:),  allocatable   :: tr_in      !< A 2-d array for holding input data on its
@@ -658,7 +672,7 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, t
   integer, dimension(4) :: fld_sz
   logical :: debug=.false.
   logical :: is_ongrid
-  logical :: ans_2018
+  integer :: ans_date           ! The vintage of the expressions and order of arithmetic to use
   real :: I_scale               ! The inverse of the conversion factor for diagnostic output [conc CU-1 ~> 1]
   real :: dtr_iter_stop         ! The tolerance for changes in tracer concentrations between smoothing
                                 ! iterations that determines when to stop iterating [CU ~> conc]
@@ -692,7 +706,9 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, t
 
   PI_180 = atan(1.0)/45.
 
-  ans_2018 = .true.;if (present(answers_2018)) ans_2018 = answers_2018
+  ans_date = 20181231
+  if (present(answers_2018)) then ; if (.not.answers_2018) ans_date = 20190101 ; endif
+  if (present(answer_date)) ans_date = answer_date
 
   ! Open NetCDF file and if present, extract data and spatial coordinate information
   ! The convention adopted here requires that the data be written in (i,j,k) ordering.
@@ -872,8 +888,7 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, t
       good2(:,:) = good(:,:)
       fill2(:,:) = fill(:,:)
 
-      call fill_miss_2d(tr_outf, good2, fill2, tr_prev, G, dtr_iter_stop, &
-                        answers_2018=answers_2018)
+      call fill_miss_2d(tr_outf, good2, fill2, tr_prev, G, dtr_iter_stop, answer_date=ans_date)
 
 !     if (debug) then
 !       call hchksum(tr_outf, 'field from fill_miss_2d ', G%HI, scale=I_scale)
@@ -895,7 +910,7 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, t
       do j=js,je
         do i=is,ie
           tr_z(i,j,k) = data_in(i,j,k) * conversion
-          if (.not. ans_2018) mask_z(i,j,k) = 1.
+          if (ans_date >= 20190101) mask_z(i,j,k) = 1.
           if (abs(tr_z(i,j,k)-missing_value) < abs(roundoff*missing_value)) mask_z(i,j,k) = 0.
         enddo
       enddo

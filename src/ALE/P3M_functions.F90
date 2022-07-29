@@ -25,7 +25,7 @@ contains
 !!
 !! It is assumed that the size of the array 'u' is equal to the number of cells
 !! defining 'grid' and 'ppoly'. No consistency check is performed here.
-subroutine P3M_interpolation( N, h, u, edge_values, ppoly_S, ppoly_coef, h_neglect, answers_2018 )
+subroutine P3M_interpolation( N, h, u, edge_values, ppoly_S, ppoly_coef, h_neglect, answers_2018, answer_date )
   integer,              intent(in)    :: N !< Number of cells
   real, dimension(:),   intent(in)    :: h !< cell widths (size N) [H]
   real, dimension(:),   intent(in)    :: u !< cell averages (size N) in arbitrary units [A]
@@ -35,13 +35,15 @@ subroutine P3M_interpolation( N, h, u, edge_values, ppoly_S, ppoly_coef, h_negle
   real,       optional, intent(in)    :: h_neglect !< A negligibly small width for the
                                           !! purpose of cell reconstructions [H]
   logical,    optional, intent(in)    :: answers_2018 !< If true use older, less acccurate expressions.
+  integer,    optional, intent(in)    :: answer_date  !< The vintage of the expressions to use
 
   ! Call the limiter for p3m, which takes care of everything from
   ! computing the coefficients of the cubic to monotonizing it.
   ! This routine could be called directly instead of having to call
   ! 'P3M_interpolation' first but we do that to provide an homogeneous
   ! interface.
-  call P3M_limiter( N, h, u, edge_values, ppoly_S, ppoly_coef, h_neglect, answers_2018 )
+  call P3M_limiter( N, h, u, edge_values, ppoly_S, ppoly_coef, h_neglect, &
+                    answers_2018=answers_2018, answer_date=answer_date )
 
 end subroutine P3M_interpolation
 
@@ -58,7 +60,7 @@ end subroutine P3M_interpolation
 !!    c. If not, monotonize cubic curve and rebuild it
 !!
 !! Step 3 of the monotonization process leaves all edge values unchanged.
-subroutine P3M_limiter( N, h, u, edge_values, ppoly_S, ppoly_coef, h_neglect, answers_2018 )
+subroutine P3M_limiter( N, h, u, edge_values, ppoly_S, ppoly_coef, h_neglect, answers_2018, answer_date )
   integer,              intent(in)    :: N !< Number of cells
   real, dimension(:),   intent(in)    :: h !< cell widths (size N) [H]
   real, dimension(:),   intent(in)    :: u !< cell averages (size N) in arbitrary units [A]
@@ -68,6 +70,7 @@ subroutine P3M_limiter( N, h, u, edge_values, ppoly_S, ppoly_coef, h_neglect, an
   real,       optional, intent(in)    :: h_neglect !< A negligibly small width for
                                            !! the purpose of cell reconstructions [H]
   logical,    optional, intent(in)    :: answers_2018 !< If true use older, less acccurate expressions.
+  integer,    optional, intent(in)    :: answer_date  !< The vintage of the expressions to use
 
   ! Local variables
   integer :: k            ! loop index
@@ -86,7 +89,7 @@ subroutine P3M_limiter( N, h, u, edge_values, ppoly_S, ppoly_coef, h_neglect, an
   eps = 1e-10
 
   ! 1. Bound edge values (boundary cells are assumed to be local extrema)
-  call bound_edge_values( N, h, u, edge_values, hNeglect, answers_2018 )
+  call bound_edge_values( N, h, u, edge_values, hNeglect, answers_2018=answers_2018, answer_date=answer_date )
 
   ! 2. Systematically average discontinuous edge values
   call average_discontinuous_edge_values( N, edge_values )

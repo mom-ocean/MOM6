@@ -24,7 +24,7 @@ contains
 !!
 !! It is assumed that the size of the array 'u' is equal to the number of cells
 !! defining 'grid' and 'ppoly'. No consistency check is performed here.
-subroutine P1M_interpolation( N, h, u, edge_values, ppoly_coef, h_neglect, answers_2018 )
+subroutine P1M_interpolation( N, h, u, edge_values, ppoly_coef, h_neglect, answers_2018, answer_date )
   integer,              intent(in)    :: N !< Number of cells
   real, dimension(:),   intent(in)    :: h !< cell widths (size N) [H]
   real, dimension(:),   intent(in)    :: u !< cell average properties (size N) [A]
@@ -33,13 +33,15 @@ subroutine P1M_interpolation( N, h, u, edge_values, ppoly_coef, h_neglect, answe
                                            !! piecewise polynomial coefficients, mainly [A]
   real,       optional, intent(in)    :: h_neglect !< A negligibly small width [H]
   logical,    optional, intent(in)    :: answers_2018 !< If true use older, less acccurate expressions.
+  integer,    optional, intent(in)    :: answer_date  !< The vintage of the expressions to use
 
   ! Local variables
   integer   :: k            ! loop index
   real      :: u0_l, u0_r   ! edge values (left and right)
 
   ! Bound edge values (routine found in 'edge_values.F90')
-  call bound_edge_values( N, h, u, edge_values, h_neglect, answers_2018 )
+  call bound_edge_values( N, h, u, edge_values, h_neglect, &
+                          answers_2018=answers_2018, answer_date=answer_date )
 
   ! Systematically average discontinuous edge values (routine found in
   ! 'edge_values.F90')

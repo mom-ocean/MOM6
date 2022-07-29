@@ -17,7 +17,7 @@ contains
 !!
 !! It is assumed that the dimension of 'u' is equal to the number of cells
 !! defining 'grid' and 'ppoly'. No consistency check is performed.
-subroutine PQM_reconstruction( N, h, u, edge_values, edge_slopes, ppoly_coef, h_neglect, answers_2018 )
+subroutine PQM_reconstruction( N, h, u, edge_values, edge_slopes, ppoly_coef, h_neglect, answers_2018, answer_date )
   integer,              intent(in)    :: N !< Number of cells
   real, dimension(:),   intent(in)    :: h !< cell widths (size N) [H]
   real, dimension(:),   intent(in)    :: u !< cell averages (size N) [A]
@@ -27,6 +27,7 @@ subroutine PQM_reconstruction( N, h, u, edge_values, edge_slopes, ppoly_coef, h_
   real,       optional, intent(in)    :: h_neglect  !< A negligibly small width for
                                            !! the purpose of cell reconstructions [H]
   logical,    optional, intent(in)    :: answers_2018 !< If true use older, less acccurate expressions.
+  integer,    optional, intent(in)    :: answer_date  !< The vintage of the expressions to use
 
   ! Local variables
   integer   :: k                ! loop index
@@ -36,7 +37,7 @@ subroutine PQM_reconstruction( N, h, u, edge_values, edge_slopes, ppoly_coef, h_
   real      :: a, b, c, d, e    ! parabola coefficients
 
   ! PQM limiter
-  call PQM_limiter( N, h, u, edge_values, edge_slopes, h_neglect, answers_2018 )
+  call PQM_limiter( N, h, u, edge_values, edge_slopes, h_neglect, answers_2018=answers_2018, answer_date=answer_date )
 
   ! Loop on cells to construct the cubic within each cell
   do k = 1,N
@@ -72,7 +73,7 @@ end subroutine PQM_reconstruction
 !!
 !! It is assumed that the dimension of 'u' is equal to the number of cells
 !! defining 'grid' and 'ppoly'. No consistency check is performed.
-subroutine PQM_limiter( N, h, u, edge_values, edge_slopes, h_neglect, answers_2018 )
+subroutine PQM_limiter( N, h, u, edge_values, edge_slopes, h_neglect, answers_2018, answer_date )
   integer,              intent(in)    :: N !< Number of cells
   real, dimension(:),   intent(in)    :: h !< cell widths (size N) [H]
   real, dimension(:),   intent(in)    :: u !< cell average properties (size N) [A]
@@ -81,6 +82,7 @@ subroutine PQM_limiter( N, h, u, edge_values, edge_slopes, h_neglect, answers_20
   real,       optional, intent(in)    :: h_neglect !< A negligibly small width for
                                            !! the purpose of cell reconstructions [H]
   logical,    optional, intent(in)    :: answers_2018 !< If true use older, less acccurate expressions.
+  integer,    optional, intent(in)    :: answer_date  !< The vintage of the expressions to use
 
   ! Local variables
   integer :: k            ! loop index
@@ -102,7 +104,7 @@ subroutine PQM_limiter( N, h, u, edge_values, edge_slopes, h_neglect, answers_20
   hNeglect = hNeglect_dflt ; if (present(h_neglect)) hNeglect = h_neglect
 
   ! Bound edge values
-  call bound_edge_values( N, h, u, edge_values, hNeglect, answers_2018 )
+  call bound_edge_values( N, h, u, edge_values, hNeglect, answers_2018=answers_2018, answer_date=answer_date )
 
   ! Make discontinuous edge values monotonic (thru averaging)
   call check_discontinuous_edge_values( N, u, edge_values )
