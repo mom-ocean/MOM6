@@ -1,4 +1,4 @@
-program MOM_main
+program MOM6
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
@@ -693,4 +693,4 @@ subroutine initialize_ocean_only_ensembles()
   endif
 end subroutine initialize_ocean_only_ensembles
 
-end program MOM_main
+end program MOM6

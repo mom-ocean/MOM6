@@ -41,6 +41,9 @@ implicit none ; private
 public set_axes_info, post_data, register_diag_field, time_type
 public post_product_u, post_product_sum_u, post_product_v, post_product_sum_v
 public set_masks_for_axes
+! post_data_1d_k is a deprecated interface that can be replaced by a call to post_data, but
+! it is being retained for backward compatibility to older versions of the ocean_BGC code.
+public post_data_1d_k
 public safe_alloc_ptr, safe_alloc_alloc
 public enable_averaging, enable_averages, disable_averaging, query_averaging_enabled
 public diag_mediator_init, diag_mediator_end, set_diag_mediator_grid
@@ -306,8 +309,8 @@ type, public :: diag_ctrl
 
   ! Pointer to H, G and T&S needed for remapping
   real, dimension(:,:,:), pointer :: h => null() !< The thicknesses needed for remapping [H ~> m or kg m-2]
-  real, dimension(:,:,:), pointer :: T => null() !< The temperatures needed for remapping [degC]
-  real, dimension(:,:,:), pointer :: S => null() !< The salinities needed for remapping [ppt]
+  real, dimension(:,:,:), pointer :: T => null() !< The temperatures needed for remapping [C ~> degC]
+  real, dimension(:,:,:), pointer :: S => null() !< The salinities needed for remapping [S ~> ppt]
   type(EOS_type),  pointer :: eqn_of_state => null() !< The equation of state type
   type(ocean_grid_type), pointer :: G => null()  !< The ocean grid type
   type(verticalGrid_type), pointer :: GV => null()  !< The model's vertical ocean grid
@@ -3335,8 +3338,8 @@ end subroutine diag_mediator_init
 !> Set pointers to the default state fields used to remap diagnostics.
 subroutine diag_set_state_ptrs(h, T, S, eqn_of_state, diag_cs)
   real, dimension(:,:,:), target, intent(in   ) :: h !< the model thickness array [H ~> m or kg m-2]
-  real, dimension(:,:,:), target, intent(in   ) :: T !< the model temperature array
-  real, dimension(:,:,:), target, intent(in   ) :: S !< the model salinity array
+  real, dimension(:,:,:), target, intent(in   ) :: T !< the model temperature array [C ~> degC]
+  real, dimension(:,:,:), target, intent(in   ) :: S !< the model salinity array [S ~> ppt]
   type(EOS_type),         target, intent(in   ) :: eqn_of_state !< Equation of state structure
   type(diag_ctrl),                intent(inout) :: diag_cs !< diag mediator control structure
 
@@ -3356,9 +3359,9 @@ subroutine diag_update_remap_grids(diag_cs, alt_h, alt_T, alt_S, update_intensiv
   real, target, optional, intent(in   ) :: alt_h(:,:,:) !< Used if remapped grids should be something other than
                                                         !! the current thicknesses [H ~> m or kg m-2]
   real, target, optional, intent(in   ) :: alt_T(:,:,:) !< Used if remapped grids should be something other than
-                                                        !! the current temperatures
+                                                        !! the current temperatures [C ~> degC]
   real, target, optional, intent(in   ) :: alt_S(:,:,:) !< Used if remapped grids should be something other than
-                                                        !! the current salinity
+                                                        !! the current salinity [S ~> ppt]
   logical, optional,      intent(in   ) :: update_intensive !< If true (default), update the grids used for
                                                             !! intensive diagnostics
   logical, optional,      intent(in   ) :: update_extensive !< If true (not default), update the grids used for
@@ -3366,7 +3369,8 @@ subroutine diag_update_remap_grids(diag_cs, alt_h, alt_T, alt_S, update_intensiv
   ! Local variables
   integer :: i
   real, dimension(:,:,:), pointer :: h_diag => NULL() ! The layer thickneses for diagnostics [H ~> m or kg m-2]
-  real, dimension(:,:,:), pointer :: T_diag => NULL(), S_diag => NULL()
+  real, dimension(:,:,:), pointer :: T_diag => NULL() ! The layer temperatures for diagnostics [C ~> degC]
+  real, dimension(:,:,:), pointer :: S_diag => NULL() ! The layer salinities for diagnostics [S ~> ppt]
   logical :: update_intensive_local, update_extensive_local
 
   ! Set values based on optional input arguments

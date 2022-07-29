@@ -324,8 +324,10 @@ subroutine calc_oda_increments(h, tv, u, v, G, GV, US, CS)
                                                  !! that is set by a previous call to initialize_oda_incupd (in).
 
 
-  real, dimension(SZK_(GV)) :: tmp_val1          ! data values on the model grid
-  real, allocatable, dimension(:) :: tmp_val2    ! data values remapped to increment grid
+  real, dimension(SZK_(GV)) :: tmp_val1        ! data values on the model grid, in rescaled units
+                                               ! like [S ~> ppt] for salinity.
+  real, allocatable, dimension(:) :: tmp_val2  ! data values remapped to increment grid, in rescaled units
+                                               ! like [S ~> ppt] for salinity.
   real, allocatable, dimension(:,:,:) :: h_obs !< Layer-thicknesses of increments [H ~> m or kg m-2]
   real, allocatable, dimension(:) :: tmp_h     ! temporary array for corrected h_obs [H ~> m or kg m-2]
   real, allocatable, dimension(:) :: hu_obs  ! A column of observation-grid thicknesses at u points [H ~> m or kg m-2]
@@ -525,8 +527,8 @@ subroutine apply_oda_incupd(h, tv, u, v, dt, G, GV, US, CS)
   real, dimension(SZK_(GV)) :: tmp_val1         ! data values remapped to model grid
   real, dimension(SZK_(GV)) :: hu, hv           ! A column of thicknesses at u or v points [H ~> m or kg m-2]
 
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV))  :: tmp_t  !< A temporary array for t increments [degC]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV))  :: tmp_s  !< A temporary array for s increments [ppt]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV))  :: tmp_t  !< A temporary array for t increments [C ~> degC]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV))  :: tmp_s  !< A temporary array for s increments [S ~> ppt]
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)) :: tmp_u  !< A temporary array for u increments [L T-1 ~> m s-1]
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)) :: tmp_v  !< A temporary array for v increments [L T-1 ~> m s-1]
 
@@ -724,6 +726,7 @@ subroutine apply_oda_incupd(h, tv, u, v, dt, G, GV, US, CS)
     if (CS%id_u_oda_inc > 0) call post_data(CS%id_u_oda_inc, tmp_u, CS%diag)
     if (CS%id_v_oda_inc > 0) call post_data(CS%id_v_oda_inc, tmp_v, CS%diag)
   endif
+  !### The argument here seems wrong.
   if (CS%id_h_oda_inc > 0) call post_data(CS%id_h_oda_inc, h    , CS%diag)
   if (CS%id_T_oda_inc > 0) call post_data(CS%id_T_oda_inc, tmp_t, CS%diag)
   if (CS%id_S_oda_inc > 0) call post_data(CS%id_S_oda_inc, tmp_s, CS%diag)
@@ -764,9 +767,9 @@ subroutine output_oda_incupd_inc(Time, G, GV, param_file, CS, US)
 
   ! register the variables to write
   call register_restart_field(CS%Inc(1)%p, "T_inc", .true., restart_CSp_tmp, &
-                              "Pot. T. increment", "degC")
+                              "Pot. T. increment", "degC", conversion=US%C_to_degC)
   call register_restart_field(CS%Inc(2)%p, "S_inc", .true., restart_CSp_tmp, &
-                              "Salinity increment", "psu")
+                              "Salinity increment", "psu", conversion=US%S_to_ppt)
   call register_restart_field(CS%Ref_h%p, "h_obs", .true., restart_CSp_tmp, &
                               "Observational h", units=get_thickness_units(GV), conversion=GV%H_to_MKS)
   if (CS%uv_inc) then
@@ -793,7 +796,7 @@ end subroutine output_oda_incupd_inc
 subroutine init_oda_incupd_diags(Time, G, GV, diag, CS, US)
   type(time_type), target, intent(in)    :: Time !< The current model time
   type(ocean_grid_type),   intent(in)    :: G    !< The ocean's grid structure
-  type(verticalGrid_type),   intent(in)  :: GV !< ocean vertical grid structure
+  type(verticalGrid_type), intent(in)    :: GV !< ocean vertical grid structure
   type(diag_ctrl), target, intent(inout) :: diag !< A structure that is used to regulate diagnostic
                                                  !! output.
   type(oda_incupd_CS),     pointer       :: CS   !< ALE sponge control structure
@@ -802,18 +805,17 @@ subroutine init_oda_incupd_diags(Time, G, GV, diag, CS, US)
   if (.not.associated(CS)) return
 
   CS%diag => diag
-  ! These diagnostics of the state variables increments,useful for debugging the
-  ! ODA code.
+  ! These diagnostics of the state variables increments are useful for debugging the ODA code.
   CS%id_u_oda_inc = register_diag_field('ocean_model', 'u_oda_inc', diag%axesCuL, Time, &
-      'Zonal velocity ODA inc.', 'm s-1')
+      'Zonal velocity ODA inc.', 'm s-1', conversion=US%L_T_to_m_s)
   CS%id_v_oda_inc = register_diag_field('ocean_model', 'v_oda_inc', diag%axesCvL, Time, &
-      'Meridional velocity ODA inc.', 'm s-1')
+      'Meridional velocity ODA inc.', 'm s-1', conversion=US%L_T_to_m_s)
   CS%id_h_oda_inc = register_diag_field('ocean_model', 'h_oda_inc', diag%axesTL, Time, &
-      'Layer Thickness ODA inc.', get_thickness_units(GV))
+      'Layer Thickness ODA inc.', get_thickness_units(GV), conversion=GV%H_to_mks)
   CS%id_T_oda_inc = register_diag_field('ocean_model', 'T_oda_inc', diag%axesTL, Time, &
-      'Temperature ODA inc.', 'degC')
+      'Temperature ODA inc.', 'degC', conversion=US%C_to_degC)
   CS%id_S_oda_inc = register_diag_field('ocean_model', 'S_oda_inc', diag%axesTL, Time, &
-      'Salinity ODA inc.', 'PSU')
+      'Salinity ODA inc.', 'PSU', conversion=US%S_to_ppt)
 
 end subroutine init_oda_incupd_diags
 

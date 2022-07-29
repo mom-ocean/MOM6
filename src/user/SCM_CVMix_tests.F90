@@ -55,8 +55,8 @@ contains
 subroutine SCM_CVMix_tests_TS_init(T, S, h, G, GV, US, param_file, just_read)
   type(ocean_grid_type),                     intent(in)  :: G  !< Grid structure
   type(verticalGrid_type),                   intent(in)  :: GV !< Vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: T  !< Potential temperature [degC]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: S  !< Salinity [ppt]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: T  !< Potential temperature [C ~> degC]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: S  !< Salinity [S ~> ppt]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)  :: h  !< Layer thickness [H ~> m or kg m-2]
   type(unit_scale_type),                     intent(in)  :: US !< A dimensional unit scaling type
   type(param_file_type),                     intent(in)  :: param_file !< Input parameter structure
@@ -65,13 +65,13 @@ subroutine SCM_CVMix_tests_TS_init(T, S, h, G, GV, US, param_file, just_read)
   ! Local variables
   real :: UpperLayerTempMLD !< Upper layer Temp MLD thickness [Z ~> m].
   real :: UpperLayerSaltMLD !< Upper layer Salt MLD thickness [Z ~> m].
-  real :: UpperLayerTemp !< Upper layer temperature (SST if thickness 0) [degC]
-  real :: UpperLayerSalt !< Upper layer salinity (SSS if thickness 0) [ppt]
-  real :: LowerLayerTemp !< Temp at top of lower layer [degC]
-  real :: LowerLayerSalt !< Salt at top of lower layer [ppt]
-  real :: LowerLayerdTdz !< Temp gradient in lower layer [degC Z-1 ~> degC m-1].
-  real :: LowerLayerdSdz !< Salt gradient in lower layer [ppt Z-1 ~> ppt m-1].
-  real :: LowerLayerMinTemp !< Minimum temperature in lower layer [degC]
+  real :: UpperLayerTemp !< Upper layer temperature (SST if thickness 0) [C ~> degC]
+  real :: UpperLayerSalt !< Upper layer salinity (SSS if thickness 0) [S ~> ppt]
+  real :: LowerLayerTemp !< Temp at top of lower layer [C ~> degC]
+  real :: LowerLayerSalt !< Salt at top of lower layer [S ~> ppt]
+  real :: LowerLayerdTdz !< Temp gradient in lower layer [C Z-1 ~> degC m-1].
+  real :: LowerLayerdSdz !< Salt gradient in lower layer [S Z-1 ~> ppt m-1].
+  real :: LowerLayerMinTemp !< Minimum temperature in lower layer [C ~> degC]
   real :: zC, DZ, top, bottom ! Depths and thicknesses [Z ~> m].
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz
 
@@ -86,21 +86,21 @@ subroutine SCM_CVMix_tests_TS_init(T, S, h, G, GV, US, param_file, just_read)
                  'Initial salt mixed layer depth', &
                  units='m', default=0.0, scale=US%m_to_Z, do_not_log=just_read)
   call get_param(param_file, mdl, "SCM_L1_SALT", UpperLayerSalt, &
-                 'Layer 2 surface salinity', units='1e-3', default=35.0, do_not_log=just_read)
+                 'Layer 2 surface salinity', units='1e-3', default=35.0, scale=US%ppt_to_S, do_not_log=just_read)
   call get_param(param_file, mdl, "SCM_L1_TEMP", UpperLayerTemp, &
-                 'Layer 1 surface temperature', units='C', default=20.0, do_not_log=just_read)
+                 'Layer 1 surface temperature', units='C', default=20.0, scale=US%degC_to_C, do_not_log=just_read)
   call get_param(param_file, mdl, "SCM_L2_SALT", LowerLayerSalt, &
-                 'Layer 2 surface salinity', units='1e-3', default=35.0, do_not_log=just_read)
+                 'Layer 2 surface salinity', units='1e-3', default=35.0, scale=US%ppt_to_S, do_not_log=just_read)
   call get_param(param_file, mdl, "SCM_L2_TEMP", LowerLayerTemp, &
-                 'Layer 2 surface temperature', units='C', default=20.0, do_not_log=just_read)
+                 'Layer 2 surface temperature', units='C', default=20.0, scale=US%degC_to_C, do_not_log=just_read)
   call get_param(param_file, mdl, "SCM_L2_DTDZ", LowerLayerdTdZ,     &
                  'Initial temperature stratification in layer 2', &
-                 units='C/m', default=0.0, scale=US%Z_to_m, do_not_log=just_read)
+                 units='C/m', default=0.0, scale=US%degC_to_C*US%Z_to_m, do_not_log=just_read)
   call get_param(param_file, mdl, "SCM_L2_DSDZ", LowerLayerdSdZ,  &
                  'Initial salinity stratification in layer 2', &
-                 units='PPT/m', default=0.0, scale=US%Z_to_m, do_not_log=just_read)
+                 units='PPT/m', default=0.0, scale=US%ppt_to_S*US%Z_to_m, do_not_log=just_read)
   call get_param(param_file, mdl, "SCM_L2_MINTEMP",LowerLayerMinTemp, &
-                 'Layer 2 minimum temperature', units='C', default=4.0, do_not_log=just_read)
+                 'Layer 2 minimum temperature', units='C', default=4.0, scale=US%degC_to_C, do_not_log=just_read)
 
   if (just_read) return ! All run-time parameters have been read, so return.
 

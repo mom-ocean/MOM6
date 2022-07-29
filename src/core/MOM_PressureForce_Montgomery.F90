@@ -91,9 +91,9 @@ subroutine PressureForce_Mont_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm, pb
                 ! in seawater, but p will still be close to the pressure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), target :: &
     T_tmp, &    ! Temporary array of temperatures where layers that are lighter
-                ! than the mixed layer have the mixed layer's properties [degC].
+                ! than the mixed layer have the mixed layer's properties [C ~> degC].
     S_tmp       ! Temporary array of salinities where layers that are lighter
-                ! than the mixed layer have the mixed layer's properties [ppt].
+                ! than the mixed layer have the mixed layer's properties [S ~> ppt].
 
   real, dimension(SZI_(G)) :: Rho_cv_BL  ! The coordinate potential density in the
                   ! deepest variable density near-surface layer [R ~> kg m-3].
@@ -386,9 +386,9 @@ subroutine PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm, pbce,
                 ! in seawater, but e will still be close to the interface depth.
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), target :: &
     T_tmp, &    ! Temporary array of temperatures where layers that are lighter
-                ! than the mixed layer have the mixed layer's properties [degC].
+                ! than the mixed layer have the mixed layer's properties [C ~> degC].
     S_tmp       ! Temporary array of salinities where layers that are lighter
-                ! than the mixed layer have the mixed layer's properties [ppt].
+                ! than the mixed layer have the mixed layer's properties [S ~> ppt].
 
   real :: Rho_cv_BL(SZI_(G)) !   The coordinate potential density in
                 ! the deepest variable density near-surface layer [R ~> kg m-3].
@@ -626,10 +626,10 @@ subroutine Set_pbce_Bouss(e, tv, G, GV, US, Rho0, GFS_scale, pbce, rho_star)
   ! Local variables
   real :: Ihtot(SZI_(G))     ! The inverse of the sum of the layer thicknesses [H-1 ~> m-1 or m2 kg-1].
   real :: press(SZI_(G))     ! Interface pressure [R L2 T-2 ~> Pa].
-  real :: T_int(SZI_(G))     ! Interface temperature [degC].
-  real :: S_int(SZI_(G))     ! Interface salinity [ppt].
-  real :: dR_dT(SZI_(G))     ! Partial derivative of density with temperature [R degC-1 ~> kg m-3 degC-1].
-  real :: dR_dS(SZI_(G))     ! Partial derivative of density with salinity [R ppt-1 ~> kg m-3 ppt-1].
+  real :: T_int(SZI_(G))     ! Interface temperature [C ~> degC]
+  real :: S_int(SZI_(G))     ! Interface salinity [S ~> ppt]
+  real :: dR_dT(SZI_(G))     ! Partial derivative of density with temperature [R C-1 ~> kg m-3 degC-1]
+  real :: dR_dS(SZI_(G))     ! Partial derivative of density with salinity [R S-1 ~> kg m-3 ppt-1].
   real :: rho_in_situ(SZI_(G)) ! In-situ density at the top of a layer [R ~> kg m-3].
   real :: G_Rho0             ! A scaled version of g_Earth / Rho0 [L2 Z-1 T-2 R-1 ~> m4 s-2 kg-1]
   real :: Rho0xG             ! g_Earth * Rho0 [R L2 Z-1 T-2 ~> kg s-2 m-2]
@@ -727,10 +727,10 @@ subroutine Set_pbce_nonBouss(p, tv, G, GV, US, GFS_scale, pbce, alpha_star)
     dpbce, &      !   A barotropic correction to the pbce to enable the use of
                   ! a reduced gravity form of the equations [L2 H-1 T-2 ~> m4 kg-1 s-2].
     C_htot        ! dP_dH divided by the total ocean pressure [H-1 ~> m2 kg-1].
-  real :: T_int(SZI_(G))     ! Interface temperature [degC].
-  real :: S_int(SZI_(G))     ! Interface salinity [ppt].
-  real :: dR_dT(SZI_(G))     ! Partial derivative of density with temperature [R degC-1 ~> kg m-3 degC-1].
-  real :: dR_dS(SZI_(G))     ! Partial derivative of density with salinity [R ppt-1 ~> kg m-3 ppt-1].
+  real :: T_int(SZI_(G))     ! Interface temperature [C ~> degC]
+  real :: S_int(SZI_(G))     ! Interface salinity [S ~> ppt]
+  real :: dR_dT(SZI_(G))     ! Partial derivative of density with temperature [R C-1 ~> kg m-3 degC-1]
+  real :: dR_dS(SZI_(G))     ! Partial derivative of density with salinity [R S-1 ~> kg m-3 ppt-1].
   real :: rho_in_situ(SZI_(G)) ! In-situ density at an interface [R ~> kg m-3].
   real :: alpha_Lay(SZK_(GV)) ! The specific volume of each layer [R-1 ~> m3 kg-1].
   real :: dalpha_int(SZK_(GV)+1) ! The change in specific volume across each interface [R-1 ~> m3 kg-1].

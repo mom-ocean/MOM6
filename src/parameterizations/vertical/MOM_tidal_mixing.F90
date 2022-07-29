@@ -6,7 +6,6 @@ module MOM_tidal_mixing
 use MOM_diag_mediator,      only : diag_ctrl, time_type, register_diag_field
 use MOM_diag_mediator,      only : safe_alloc_ptr, post_data
 use MOM_debugging,          only : hchksum
-use MOM_EOS,                only : calculate_density
 use MOM_error_handler,      only : MOM_error, is_root_pe, FATAL, WARNING, NOTE
 use MOM_file_parser,        only : openParameterBlock, closeParameterBlock
 use MOM_file_parser,        only : get_param, log_param, log_version, param_file_type

@@ -9,10 +9,12 @@ use MOM_coms_infra,    only : broadcast, field_chksum, MOM_infra_init, MOM_infra
 use MOM_coms_infra,    only : sum_across_PEs, max_across_PEs, min_across_PEs
 use MOM_coms_infra,    only : all_across_PEs, any_across_PEs
 use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, WARNING
+use MOM_coms_infra,    only : sync_PEs
 
 implicit none ; private
 
 public :: PE_here, root_PE, num_PEs, MOM_infra_init, MOM_infra_end
+public :: sync_PEs
 public :: broadcast, sum_across_PEs, min_across_PEs, max_across_PEs, field_chksum
 public :: all_across_PEs, any_across_PEs
 public :: set_PElist, Get_PElist, Set_rootPE

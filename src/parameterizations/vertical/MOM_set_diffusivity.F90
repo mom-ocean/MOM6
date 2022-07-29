@@ -243,7 +243,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, Kd_i
   type(diffusivity_diags)  :: dd ! structure with arrays of available diags
 
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: &
-    T_f, S_f      ! Temperature and salinity [degC] and [ppt] with properties in massless layers
+    T_f, S_f      ! Temperature and salinity [C ~> degC] and [S ~> ppt] with properties in massless layers
                   ! filled vertically by diffusion or the properties after full convective adjustment.
 
   real, dimension(SZI_(G),SZK_(GV)) :: &
@@ -375,14 +375,14 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, Kd_i
   ! Smooth the properties through massless layers.
   if (use_EOS) then
     if (CS%debug) then
-      call hchksum(tv%T, "before vert_fill_TS tv%T",G%HI)
-      call hchksum(tv%S, "before vert_fill_TS tv%S",G%HI)
+      call hchksum(tv%T, "before vert_fill_TS tv%T", G%HI, scale=US%C_to_degC)
+      call hchksum(tv%S, "before vert_fill_TS tv%S", G%HI, scale=US%S_to_ppt)
       call hchksum(h, "before vert_fill_TS h",G%HI, scale=GV%H_to_m)
     endif
     call vert_fill_TS(h, tv%T, tv%S, kappa_dt_fill, T_f, S_f, G, GV, larger_h_denom=.true.)
     if (CS%debug) then
-      call hchksum(tv%T, "after vert_fill_TS tv%T",G%HI)
-      call hchksum(tv%S, "after vert_fill_TS tv%S",G%HI)
+      call hchksum(tv%T, "after vert_fill_TS tv%T", G%HI, scale=US%C_to_degC)
+      call hchksum(tv%S, "after vert_fill_TS tv%S", G%HI, scale=US%S_to_ppt)
       call hchksum(h, "after vert_fill_TS h",G%HI, scale=GV%H_to_m)
     endif
   endif
@@ -588,19 +588,19 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, Kd_i
       call hchksum(Kd_extra_S, "MOM_set_diffusivity: Kd_extra_S", G%HI, haloshift=0, scale=US%Z2_T_to_m2_s)
     endif
 
-    if (associated(visc%kv_bbl_u) .and. associated(visc%kv_bbl_v)) then
+    if (allocated(visc%kv_bbl_u) .and. allocated(visc%kv_bbl_v)) then
       call uvchksum("BBL Kv_bbl_[uv]", visc%kv_bbl_u, visc%kv_bbl_v, G%HI, &
                     haloshift=0, symmetric=.true., scale=US%Z2_T_to_m2_s, &
                     scalar_pair=.true.)
     endif
 
-    if (associated(visc%bbl_thick_u) .and. associated(visc%bbl_thick_v)) then
+    if (allocated(visc%bbl_thick_u) .and. allocated(visc%bbl_thick_v)) then
       call uvchksum("BBL bbl_thick_[uv]", visc%bbl_thick_u, visc%bbl_thick_v, &
                     G%HI, haloshift=0, symmetric=.true., scale=US%Z_to_m, &
                     scalar_pair=.true.)
     endif
 
-    if (associated(visc%Ray_u) .and. associated(visc%Ray_v)) then
+    if (allocated(visc%Ray_u) .and. allocated(visc%Ray_v)) then
       call uvchksum("Ray_[uv]", visc%Ray_u, visc%Ray_v, G%HI, 0, symmetric=.true., scale=US%Z_to_m*US%s_to_T)
     endif
 
@@ -877,10 +877,10 @@ subroutine find_N2(h, tv, T_f, S_f, fluxes, j, G, GV, US, CS, dRho_int, &
                                                 !! thermodynamic fields.
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                             intent(in)  :: T_f  !< layer temperature with the values in massless layers
-                                                !! filled vertically by diffusion [degC].
+                                                !! filled vertically by diffusion [C ~> degC].
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                             intent(in)  :: S_f  !< Layer salinities with values in massless
-                                                !! layers filled vertically by diffusion [ppt].
+                                                !! layers filled vertically by diffusion [S ~> ppt].
   type(forcing),            intent(in)  :: fluxes !< A structure of thermodynamic surface fluxes
   integer,                  intent(in)  :: j    !< j-index of row to work on
   type(set_diffusivity_CS), pointer     :: CS   !< Diffusivity control structure
@@ -895,13 +895,13 @@ subroutine find_N2(h, tv, T_f, S_f, fluxes, j, G, GV, US, CS, dRho_int, &
   ! Local variables
   real, dimension(SZI_(G),SZK_(GV)+1) :: &
     dRho_int_unfilt, & ! unfiltered density differences across interfaces [R ~> kg m-3]
-    dRho_dT,         & ! partial derivative of density wrt temp [R degC-1 ~> kg m-3 degC-1]
-    dRho_dS            ! partial derivative of density wrt saln [R ppt-1 ~> kg m-3 ppt-1]
+    dRho_dT,         & ! partial derivative of density wrt temp [R C-1 ~> kg m-3 degC-1]
+    dRho_dS            ! partial derivative of density wrt saln [R S-1 ~> kg m-3 ppt-1]
 
   real, dimension(SZI_(G)) :: &
     pres,      &  ! pressure at each interface [R L2 T-2 ~> Pa]
-    Temp_int,  &  ! temperature at each interface [degC]
-    Salin_int, &  ! salinity at each interface [ppt]
+    Temp_int,  &  ! temperature at each interface [C ~>degC]
+    Salin_int, &  ! salinity at each interface [S ~> ppt]
     drho_bot,  &  ! A density difference [R ~> kg m-3]
     h_amp,     &  ! The topographic roughness amplitude [Z ~> m].
     hb,        &  ! The thickness of the bottom layer [Z ~> m].
@@ -1047,10 +1047,10 @@ subroutine double_diffusion(tv, h, T_f, S_f, j, G, GV, US, CS, Kd_T_dd, Kd_S_dd)
                             intent(in)  :: h   !< Layer thicknesses [H ~> m or kg m-2].
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                             intent(in)  :: T_f !< layer temperatures with the values in massless layers
-                                               !! filled vertically by diffusion [degC].
+                                               !! filled vertically by diffusion [C ~> degC].
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                             intent(in)  :: S_f !< Layer salinities with values in massless
-                                               !! layers filled vertically by diffusion [ppt].
+                                               !! layers filled vertically by diffusion [S ~> ppt].
   integer,                  intent(in)  :: j   !< Meridional index upon which to work.
   type(set_diffusivity_CS), pointer     :: CS  !< Module control structure.
   real, dimension(SZI_(G),SZK_(GV)+1),       &
@@ -1061,11 +1061,11 @@ subroutine double_diffusion(tv, h, T_f, S_f, j, G, GV, US, CS, Kd_T_dd, Kd_S_dd)
                                                !! diffusivity for saln [Z2 T-1 ~> m2 s-1].
 
   real, dimension(SZI_(G)) :: &
-    dRho_dT,  &    ! partial derivatives of density wrt temp [R degC-1 ~> kg m-3 degC-1]
-    dRho_dS,  &    ! partial derivatives of density wrt saln [R ppt-1 ~> kg m-3 ppt-1]
+    dRho_dT,  &    ! partial derivatives of density wrt temp [R C-1 ~> kg m-3 degC-1]
+    dRho_dS,  &    ! partial derivatives of density wrt saln [R S-1 ~> kg m-3 ppt-1]
     pres,     &    ! pressure at each interface [R L2 T-2 ~> Pa]
-    Temp_int, &    ! temperature at interfaces [degC]
-    Salin_int      ! Salinity at interfaces [ppt]
+    Temp_int, &    ! temperature at interfaces [C ~> degC]
+    Salin_int      ! Salinity at interfaces [S ~> ppt]
 
   real ::  alpha_dT ! density difference between layers due to temp diffs [R ~> kg m-3]
   real ::  beta_dS  ! density difference between layers due to saln diffs [R ~> kg m-3]
@@ -1198,7 +1198,7 @@ subroutine add_drag_diffusivity(h, u, v, tv, fluxes, visc, j, TKE_to_Kd, &
 
   cdrag_sqrt = sqrt(CS%cdrag)
   TKE_Ray = 0.0 ; Rayleigh_drag = .false.
-  if (associated(visc%Ray_u) .and. associated(visc%Ray_v)) Rayleigh_drag = .true.
+  if (allocated(visc%Ray_u) .and. allocated(visc%Ray_v)) Rayleigh_drag = .true.
 
   I_Rho0 = 1.0 / (GV%Rho0)
   R0_g = GV%Rho0 / (US%L_to_Z**2 * GV%g_Earth)
@@ -1416,7 +1416,7 @@ subroutine add_LOTW_BBL_diffusivity(h, u, v, tv, fluxes, visc, j, N2_int, Kd_int
 
   ! Determine whether to add Rayleigh drag contribution to TKE
   Rayleigh_drag = .false.
-  if (associated(visc%Ray_u) .and. associated(visc%Ray_v)) Rayleigh_drag = .true.
+  if (allocated(visc%Ray_u) .and. allocated(visc%Ray_v)) Rayleigh_drag = .true.
   I_Rho0 = 1.0 / (GV%Rho0)
   cdrag_sqrt = sqrt(CS%cdrag)
 
@@ -1668,7 +1668,7 @@ subroutine set_BBL_TKE(u, v, h, fluxes, visc, G, GV, US, CS, OBC)
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                             intent(in)    :: h    !< Layer thicknesses [H ~> m or kg m-2]
   type(forcing),            intent(in)    :: fluxes !< A structure of thermodynamic surface fluxes
-  type(vertvisc_type),      intent(in)    :: visc !< Structure containing vertical viscosities, bottom
+  type(vertvisc_type),      intent(inout) :: visc !< Structure containing vertical viscosities, bottom
                                                   !! boundary layer properties and related fields.
   type(set_diffusivity_CS), pointer       :: CS   !< Diffusivity control structure
   type(ocean_OBC_type),     pointer       :: OBC  !< Open boundaries control structure.
@@ -1692,6 +1692,7 @@ subroutine set_BBL_TKE(u, v, h, fluxes, visc, G, GV, US, CS, OBC)
     v2_bbl   ! square of average meridional velocity in BBL [L2 T-2 ~> m2 s-2]
 
   real :: cdrag_sqrt  ! square root of the drag coefficient [nondim]
+  real :: I_cdrag_sqrt  ! The inverse of the square root of the drag coefficient [nondim]
   real :: hvel        ! thickness at velocity points [Z ~> m].
 
   logical :: domore, do_i(SZI_(G))
@@ -1716,29 +1717,34 @@ subroutine set_BBL_TKE(u, v, h, fluxes, visc, G, GV, US, CS, OBC)
          "Module must be initialized before it is used.")
 
   if (.not.CS%bottomdraglaw .or. (CS%BBL_effic<=0.0)) then
-    if (associated(visc%ustar_BBL)) then
+    if (allocated(visc%ustar_BBL)) then
       do j=js,je ; do i=is,ie ; visc%ustar_BBL(i,j) = 0.0 ; enddo ; enddo
     endif
-    if (associated(visc%TKE_BBL)) then
+    if (allocated(visc%TKE_BBL)) then
       do j=js,je ; do i=is,ie ; visc%TKE_BBL(i,j) = 0.0 ; enddo ; enddo
     endif
     return
   endif
 
   cdrag_sqrt = sqrt(CS%cdrag)
+  I_cdrag_sqrt = 0.0 ; if (cdrag_sqrt > 0.0) I_cdrag_sqrt = 1.0 / cdrag_sqrt
 
   !$OMP parallel default(shared) private(do_i,vhtot,htot,domore,hvel,uhtot,ustar,u2_bbl)
   !$OMP do
   do J=js-1,je
-    ! Determine ustar and the square magnitude of the velocity in the
-    ! bottom boundary layer. Together these give the TKE source and
-    ! vertical decay scale.
-    do i=is,ie ; if ((G%mask2dCv(i,J) > 0.0) .and. (cdrag_sqrt*visc%bbl_thick_v(i,J) > 0.0)) then
-      do_i(i) = .true. ; vhtot(i) = 0.0 ; htot(i) = 0.0
-      vstar(i,J) = visc%Kv_bbl_v(i,J) / (cdrag_sqrt*visc%bbl_thick_v(i,J))
-    else
-      do_i(i) = .false. ; vstar(i,J) = 0.0 ; htot(i) = 0.0
-    endif ; enddo
+    ! Determine ustar and the square magnitude of the velocity in the bottom boundary layer.
+    ! Together these give the TKE source and vertical decay scale.
+    do i=is,ie
+      do_i(i) = .false. ; vstar(i,J) = 0.0 ; vhtot(i) = 0.0 ; htot(i) = 0.0
+    enddo
+    if (allocated(visc%Kv_bbl_v)) then
+      do i=is,ie ; if ((G%mask2dCv(i,J) > 0.0) .and. (cdrag_sqrt*visc%bbl_thick_v(i,J) > 0.0)) then
+        do_i(i) = .true.
+        vstar(i,J) = visc%Kv_bbl_v(i,J) / (cdrag_sqrt*visc%bbl_thick_v(i,J))
+      endif ; enddo
+    endif
+    !### What about terms from visc%Ray?
+
     do k=nz,1,-1
       domore = .false.
       do i=is,ie ; if (do_i(i)) then
@@ -1782,12 +1788,16 @@ subroutine set_BBL_TKE(u, v, h, fluxes, visc, G, GV, US, CS, OBC)
   enddo
   !$OMP do
   do j=js,je
-    do I=is-1,ie ; if ((G%mask2dCu(I,j) > 0.0) .and. (cdrag_sqrt*visc%bbl_thick_u(I,j) > 0.0))  then
-      do_i(I) = .true. ; uhtot(I) = 0.0 ; htot(I) = 0.0
-      ustar(I) = visc%Kv_bbl_u(I,j) / (cdrag_sqrt*visc%bbl_thick_u(I,j))
-    else
-      do_i(I) = .false. ; ustar(I) = 0.0 ; htot(I) = 0.0
-    endif ; enddo
+    do I=is-1,ie
+      do_i(I) = .false. ; ustar(I) = 0.0 ; uhtot(I) = 0.0 ; htot(I) = 0.0
+    enddo
+    if (allocated(visc%bbl_thick_u)) then
+      do I=is-1,ie ; if ((G%mask2dCu(I,j) > 0.0) .and. (cdrag_sqrt*visc%bbl_thick_u(I,j) > 0.0))  then
+        do_i(I) = .true.
+        ustar(I) = visc%Kv_bbl_u(I,j) / (cdrag_sqrt*visc%bbl_thick_u(I,j))
+      endif ; enddo
+    endif
+
     do k=nz,1,-1 ; domore = .false.
       do I=is-1,ie ; if (do_i(I)) then
         ! Determine if grid point is an OBC

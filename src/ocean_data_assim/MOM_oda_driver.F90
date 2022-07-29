@@ -149,11 +149,12 @@ contains
 
 !> initialize First_guess (prior) and Analysis grid
 !! information for all ensemble members
-subroutine init_oda(Time, G, GV, diag_CS, CS)
+subroutine init_oda(Time, G, GV, US, diag_CS, CS)
 
   type(time_type), intent(in) :: Time !< The current model time.
   type(ocean_grid_type), pointer :: G !< domain and grid information for ocean model
   type(verticalGrid_type), intent(in) :: GV   !< The ocean's vertical grid structure
+  type(unit_scale_type),   intent(in) :: US   !< A dimensional unit scaling type
   type(diag_ctrl), target, intent(inout) :: diag_CS !< A pointer to a diagnostic control structure
   type(ODA_CS), pointer, intent(inout) :: CS  !< The DA control structure
 
@@ -341,9 +342,9 @@ subroutine init_oda(Time, G, GV, diag_CS, CS)
   ! set up diag variables for analysis increments
   CS%diag_CS => diag_CS
   CS%id_inc_t=register_diag_field('ocean_model','temp_increment',diag_CS%axesTL,&
-       Time,'ocean potential temperature increments','degC')
+       Time, 'ocean potential temperature increments', 'degC', conversion=US%C_to_degC)
   CS%id_inc_s=register_diag_field('ocean_model','salt_increment',diag_CS%axesTL,&
-       Time,'ocean salinity increments','psu')
+       Time, 'ocean salinity increments', 'psu', conversion=US%S_to_ppt)
 
   !!  get global grid information from ocean model needed for ODA initialization
   T_grid=>NULL()
@@ -391,7 +392,8 @@ subroutine set_prior_tracer(Time, G, GV, h, tv, CS)
   type(thermo_var_ptrs),                 intent(in) :: tv   !< A structure pointing to various thermodynamic variables
 
   type(ODA_CS), pointer :: CS !< ocean DA control structure
-  real, dimension(SZI_(G),SZJ_(G),CS%nk) :: T, S
+  real, dimension(SZI_(G),SZJ_(G),CS%nk) :: T  ! Temperature on the analysis grid [C ~> degC]
+  real, dimension(SZI_(G),SZJ_(G),CS%nk) :: S  ! Salinity on the analysis grid [S ~> ppt]
   integer :: i, j, m
   integer :: isc, iec, jsc, jec
   real :: h_neglect, h_neglect_edge                 ! small thicknesses [H ~> m or kg m-2]
@@ -478,6 +480,8 @@ subroutine get_posterior_tracer(Time, CS, h, tv, increment)
     Ocean_increment%T = CS%Ocean_posterior%T - CS%Ocean_prior%T
     Ocean_increment%S = CS%Ocean_posterior%S - CS%Ocean_prior%S
   endif
+  ! It may be necessary to check whether the increment and ocean state have the
+  ! same dimensionally rescaled units.
   do m=1,CS%ensemble_size
     if (get_inc) then
       call redistribute_array(CS%mpp_domain, Ocean_increment%T(:,:,:,m),&
@@ -525,29 +529,31 @@ subroutine oda(Time, CS)
     !! switch back to ensemble member pelist
     call set_PElist(CS%ensemble_pelist(CS%ensemble_id,:))
     call get_posterior_tracer(Time, CS, increment=.true.)
-    if (CS%do_bias_adjustment) call get_bias_correction_tracer(Time, CS)
+    if (CS%do_bias_adjustment) call get_bias_correction_tracer(Time, CS%US, CS)
 
   endif
 
   return
 end subroutine oda
 
-subroutine get_bias_correction_tracer(Time, CS)
+subroutine get_bias_correction_tracer(Time, US, CS)
   type(time_type), intent(in) :: Time !< the current model time
+  type(unit_scale_type), intent(in) :: US !< A dimensional unit scaling type
   type(ODA_CS), pointer :: CS !< ocean DA control structure
 
   integer :: i,j,k
-  real, allocatable, dimension(:,:,:) :: T_bias, S_bias
+  real, allocatable, dimension(:,:,:) :: T_bias ! Temperature biases [C ~> degC]
+  real, allocatable, dimension(:,:,:) :: S_bias ! Salinity biases [C ~> degC]
   real, allocatable, dimension(:,:,:) :: mask_z
   real, allocatable, dimension(:), target :: z_in, z_edges_in
   real :: missing_value
   integer,dimension(3) :: fld_sz
 
   call cpu_clock_begin(id_clock_bias_adjustment)
-  call horiz_interp_and_extrap_tracer(CS%INC_CS%T_id,Time,1.0,CS%G,T_bias,&
-          mask_z,z_in,z_edges_in,missing_value,.true.,.false.,.false.,.true.)
-  call horiz_interp_and_extrap_tracer(CS%INC_CS%S_id,Time,1.0,CS%G,S_bias,&
-          mask_z,z_in,z_edges_in,missing_value,.true.,.false.,.false.,.true.)
+  call horiz_interp_and_extrap_tracer(CS%INC_CS%T_id, Time, US%degC_to_C, CS%G, T_bias, &
+          mask_z, z_in, z_edges_in, missing_value, .true., .false., .false., .true.)
+  call horiz_interp_and_extrap_tracer(CS%INC_CS%S_id, Time, US%ppt_to_S, CS%G, S_bias, &
+          mask_z, z_in, z_edges_in, missing_value, .true., .false., .false., .true.)
 
   ! This should be replaced to use mask_z instead of the following lines
   ! which are intended to zero land values using an arbitrary limit.
@@ -555,8 +561,8 @@ subroutine get_bias_correction_tracer(Time, CS)
   do i=1,fld_sz(1)
     do j=1,fld_sz(2)
       do k=1,fld_sz(3)
-        if (T_bias(i,j,k) > 1.0E-3) T_bias(i,j,k) = 0.0
-        if (S_bias(i,j,k) > 1.0E-3) S_bias(i,j,k) = 0.0
+        if (T_bias(i,j,k) > 1.0E-3*US%degC_to_C) T_bias(i,j,k) = 0.0
+        if (S_bias(i,j,k) > 1.0E-3*US%ppt_to_S) S_bias(i,j,k) = 0.0
       enddo
     enddo
   enddo
@@ -648,11 +654,11 @@ subroutine apply_oda_tracer_increments(dt, Time_end, G, GV, tv, h, CS)
   integer :: i, j
   integer :: isc, iec, jsc, jec
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: T_inc !< an adjustment to the temperature
-                                                    !! tendency [degC T-1 -> degC s-1]
+                                                    !! tendency [C T-1 -> degC s-1]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: S_inc !< an adjustment to the salinity
-                                                    !! tendency [g kg-1 T-1 -> g kg-1 s-1]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(CS%Grid)) :: T !< The updated temperature [degC]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(CS%Grid)) :: S !< The updated salinity [g kg-1]
+                                                    !! tendency [S T-1 -> ppt s-1]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(CS%Grid)) :: T !< The updated temperature [C ~> degC]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(CS%Grid)) :: S !< The updated salinity [S ~> ppt]
   real :: h_neglect, h_neglect_edge                 ! small thicknesses [H ~> m or kg m-2]
 
   if (.not. associated(CS)) return
@@ -690,8 +696,8 @@ subroutine apply_oda_tracer_increments(dt, Time_end, G, GV, tv, h, CS)
   call pass_var(T_inc, G%Domain)
   call pass_var(S_inc, G%Domain)
 
-  tv%T(isc:iec,jsc:jec,:)=tv%T(isc:iec,jsc:jec,:)+T_inc(isc:iec,jsc:jec,:)*dt
-  tv%S(isc:iec,jsc:jec,:)=tv%S(isc:iec,jsc:jec,:)+S_inc(isc:iec,jsc:jec,:)*dt
+  tv%T(isc:iec,jsc:jec,:) = tv%T(isc:iec,jsc:jec,:) + T_inc(isc:iec,jsc:jec,:)*dt
+  tv%S(isc:iec,jsc:jec,:) = tv%S(isc:iec,jsc:jec,:) + S_inc(isc:iec,jsc:jec,:)*dt
 
   call pass_var(tv%T, G%Domain)
   call pass_var(tv%S, G%Domain)

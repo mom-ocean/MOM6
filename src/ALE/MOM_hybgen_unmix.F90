@@ -139,8 +139,8 @@ subroutine hybgen_unmix(G, GV, US, CS, tv, Reg, ntr, h)
   real :: dp0cum(GV%ke+1)   ! minimum interface depth [H ~> m or kg m-2]
 
   real :: Rcv_tgt(GV%ke)    ! Target potential density [R ~> kg m-3]
-  real :: temp(GV%ke)       ! A column of potential temperature [degC]
-  real :: saln(GV%ke)       ! A column of salinity [ppt]
+  real :: temp(GV%ke)       ! A column of potential temperature [C ~> degC]
+  real :: saln(GV%ke)       ! A column of salinity [S ~> ppt]
   real :: Rcv(GV%ke)        ! A column of coordinate potential density [R ~> kg m-3]
   real :: h_col(GV%ke)      ! A column of layer thicknesses [H ~> m or kg m-2]
   real :: p_col(GV%ke)      ! A column of reference pressures [R L2 T-2 ~> Pa]
@@ -151,8 +151,8 @@ subroutine hybgen_unmix(G, GV, US, CS, tv, Reg, ntr, h)
                             ! vanished layers [H ~> m or kg m-2]
   real :: dilate            ! A factor by which to dilate the target positions from z to z* [nondim]
 
-  real :: Th_tot_in, Th_tot_out ! Column integrated temperature [degC H ~> degC m or degC kg m-2]
-  real :: Sh_tot_in, Sh_tot_out ! Column integrated salinity [ppt H ~> ppt m or ppt kg m-2]
+  real :: Th_tot_in, Th_tot_out ! Column integrated temperature [C H ~> degC m or degC kg m-2]
+  real :: Sh_tot_in, Sh_tot_out ! Column integrated salinity [S H ~> ppt m or ppt kg m-2]
   real :: Trh_tot_in(max(ntr,1))  ! Initial column integrated tracer amounts [conc H ~> conc m or conc kg m-2]
   real :: Trh_tot_out(max(ntr,1)) ! Final column integrated tracer amounts [conc H ~> conc m or conc kg m-2]
 
@@ -280,8 +280,8 @@ subroutine hybgen_column_unmix(CS, nk, Rcv_tgt, temp, saln, Rcv, eqn_of_state, &
   integer,        intent(in)    :: fixlay       !< deepest fixed coordinate layer
   real,           intent(in)    :: qhrlx(nk+1)  !< Relaxation fraction per timestep [nondim], < 1.
   real,           intent(in)    :: Rcv_tgt(nk)  !< Target potential density [R ~> kg m-3]
-  real,           intent(inout) :: temp(nk)     !< A column of potential temperature [degC]
-  real,           intent(inout) :: saln(nk)     !< A column of salinity [ppt]
+  real,           intent(inout) :: temp(nk)     !< A column of potential temperature [C ~> degC]
+  real,           intent(inout) :: saln(nk)     !< A column of salinity [S ~> ppt]
   real,           intent(inout) :: Rcv(nk)      !< Coordinate potential density [R ~> kg m-3]
   type(EOS_type), intent(in)    :: eqn_of_state !< Equation of state structure
   integer,        intent(in)    :: ntr          !< The number of registered passive tracers
@@ -299,20 +299,20 @@ subroutine hybgen_column_unmix(CS, nk, Rcv_tgt, temp, saln, Rcv, eqn_of_state, &
 !
   ! Local variables
   real :: h_hat       ! A portion of a layer to move across an interface [H ~> m or kg m-2]
-  real :: delt, deltm ! Temperature differences between successive layers [degC]
-  real :: dels, delsm ! Salinity differences between successive layers [ppt]
+  real :: delt, deltm ! Temperature differences between successive layers [C ~> degC]
+  real :: dels, delsm ! Salinity differences between successive layers [S ~> ppt]
   real :: abs_dRdT    ! The absolute value of the derivative of the coordinate density
-                      ! with temperature [R degC-1 ~> kg m-3 degC-1]
+                      ! with temperature [R C-1 ~> kg m-3 degC-1]
   real :: abs_dRdS    ! The absolute value of the derivative of the coordinate density
-                      ! with salinity [R ppt-1 ~> kg m-3 ppt-1]
+                      ! with salinity [R S-1 ~> kg m-3 ppt-1]
   real :: q, qts      ! Nondimensional fractions in the range of 0 to 1 [nondim]
   real :: frac_dts    ! The fraction of the temperature or salinity difference between successive
                       ! layers by which the source layer's property changes by the loss of water
                       ! that matches the destination layers properties via unmixing [nondim].
   real :: qtr         ! The fraction of the water that will come from the layer below,
                       ! used for updating the concentration of passive tracers [nondim]
-  real :: swap_T      ! A swap variable for temperature [degC]
-  real :: swap_S      ! A swap variable for salinity [ppt]
+  real :: swap_T      ! A swap variable for temperature [C ~> degC]
+  real :: swap_S      ! A swap variable for salinity [S ~> ppt]
   real :: swap_tr     ! A temporary swap variable for the tracers [conc]
   logical, parameter :: lunmix=.true.     ! unmix a too light deepest layer
   integer :: k, ka, kp, kt, m

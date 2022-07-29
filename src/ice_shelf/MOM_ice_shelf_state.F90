@@ -46,7 +46,7 @@ type, public :: ice_shelf_state
                                !! shelf at the ice-ocean interface [Q R Z T-1 ~> W m-2].
 
     tfreeze => NULL()          !< The freezing point potential temperature
-                               !! an the ice-ocean interface [degC].
+                               !! at the ice-ocean interface [C ~> degC].
 
 end type ice_shelf_state
 

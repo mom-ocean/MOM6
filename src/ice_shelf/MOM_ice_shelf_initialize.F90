@@ -484,7 +484,6 @@ subroutine initialize_ice_shelf_boundary_from_file(u_face_mask_bdry, v_face_mask
                          intent(inout) :: vmask !< A mask for ice shelf velocity [nondim]
   real, dimension(SZDI_(G),SZDJ_(G)), &
                          intent(inout) :: thickness_bdry_val !< The ice shelf thickness at open boundaries [Z ~> m]
-                                                         !! boundary vertices [L T-1 ~> m s-1].
   real, dimension(SZDI_(G),SZDJ_(G)), &
                          intent(inout) :: h_bdry_val !< The ice shelf thickness at open boundaries [Z ~> m]
   real, dimension(SZDI_(G),SZDJ_(G)), &
