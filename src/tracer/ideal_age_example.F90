@@ -404,7 +404,8 @@ subroutine ideal_age_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, 
           if (G%mask2dT(i,j) > 0.0) then
             layer_frac = ML_layers(i,j)-nk
             layer_frac = 0.9
-            CS%tr(i,j,k,m) = layer_frac * (CS%tr(i,j,k,m) + G%mask2dT(i,j)*dt*Isecs_per_year) + (1.-layer_frac) * young_val
+            CS%tr(i,j,k,m) = layer_frac * (CS%tr(i,j,k,m) + G%mask2dT(i,j)*dt &
+                             *Isecs_per_year) + (1.-layer_frac) * young_val
           else
             CS%tr(i,j,k,m) = CS%land_val(m)
           endif
@@ -456,7 +457,8 @@ subroutine ideal_age_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, 
           k = MIN(nk+1,nz)
           if (G%mask2dT(i,j) > 0.0) then
             layer_frac = ML_layers(i,j)-nk
-            CS%tr(i,j,k,m) = (1.-layer_frac) * (CS%tr(i,j,k,m) + G%mask2dT(i,j)*dt*Isecs_per_year) + layer_frac * young_val
+            CS%tr(i,j,k,m) = (1.-layer_frac) * (CS%tr(i,j,k,m) + G%mask2dT(i,j)*dt &
+                             *Isecs_per_year) + layer_frac * young_val
           else
             CS%tr(i,j,k,m) = CS%land_val(m)
           endif
