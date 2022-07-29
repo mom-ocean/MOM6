@@ -342,7 +342,8 @@ subroutine ideal_age_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
   if (CS%use_real_BL_depth .and. .not. present(Hml)) then
-    call MOM_error(FATAL,"Attempting to use real boundary layer depth for ideal age tracers, but no valid boundary layer scheme was found")
+    call MOM_error(FATAL,"Attempting to use real boundary layer depth for ideal age tracers, &
+         but no valid boundary layer scheme was found")
   endif
 
   if (CS%use_real_BL_depth .and. present(Hml)) then
@@ -599,7 +600,7 @@ subroutine count_ML_layers(G, GV, h, Hml, ML_layers)
     do k=1,nz
       current_depth = current_depth + h(i,j,k)*GV%H_to_Z
       if (Hml(i,j) <= current_depth) then
-        ML_layers(i,j) = ML_layers(i,j) + (1.0 - (current_depth - Hml(i,j)) / (h(i,j,k)*GV%H_to_Z))        
+        ML_layers(i,j) = ML_layers(i,j) + (1.0 - (current_depth - Hml(i,j)) / (h(i,j,k)*GV%H_to_Z))
 !          write(msg,*) TRIM("ML_layers(i,j) found = "),ML_layers(i,j)
 !          call MOM_error(NOTE,msg)
         exit
