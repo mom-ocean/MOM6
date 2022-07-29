@@ -100,9 +100,10 @@ type, public :: neutral_diffusion_CS ; private
 
   type(EOS_type), pointer :: EOS => NULL()  !< Equation of state parameters
   type(remapping_CS) :: remap_CS   !< Remapping control structure used to create sublayers
-  logical :: remap_answers_2018    !< If true, use the order of arithmetic and expressions that
-                                   !! recover the answers for remapping from the end of 2018.
-                                   !! Otherwise, use more robust forms of the same expressions.
+  integer :: remap_answer_date     !< The vintage of the order of arithmetic and expressions to use
+                                   !! for remapping.  Values below 20190101 recover the remapping
+                                   !! answers from 2018, while higher values use more robust
+                                   !! forms of the same remapping expressions.
   type(KPP_CS),           pointer :: KPP_CSp => NULL()          !< KPP control structure needed to get BLD
   type(energetic_PBL_CS), pointer :: energetic_PBL_CSp => NULL()!< ePBL control structure needed to get MLD
 end type neutral_diffusion_CS
@@ -127,7 +128,11 @@ logical function neutral_diffusion_init(Time, G, GV, US, param_file, diag, EOS, 
 
   ! Local variables
   character(len=80)  :: string  ! Temporary strings
-  logical :: default_2018_answers
+  integer :: default_answer_date  ! The default setting for the various ANSWER_DATE flags.
+  logical :: default_2018_answers ! The default setting for the various 2018_ANSWERS flags.
+  logical :: remap_answers_2018    ! If true, use the order of arithmetic and expressions that
+                                   ! recover the answers for remapping from the end of 2018.
+                                   ! Otherwise, use more robust forms of the same expressions.
   logical :: boundary_extrap
 
   if (associated(CS)) then
@@ -183,15 +188,23 @@ logical function neutral_diffusion_init(Time, G, GV, US, param_file, diag, EOS, 
                    "for vertical remapping for all variables. "//&
                    "It can be one of the following schemes: "//&
                    trim(remappingSchemesDoc), default=remappingDefaultScheme)
+    call get_param(param_file, mdl, "DEFAULT_ANSWER_DATE", default_answer_date, &
+                 "This sets the default value for the various _ANSWER_DATE parameters.", &
+                 default=99991231, do_not_log=.true.)
     call get_param(param_file, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
                  "This sets the default value for the various _2018_ANSWERS parameters.", &
-                 default=.false.)
-    call get_param(param_file, mdl, "REMAPPING_2018_ANSWERS", CS%remap_answers_2018, &
+                 default=(default_answer_date<20190101))
+    call get_param(param_file, mdl, "REMAPPING_2018_ANSWERS", remap_answers_2018, &
                  "If true, use the order of arithmetic and expressions that recover the "//&
                  "answers from the end of 2018.  Otherwise, use updated and more robust "//&
                  "forms of the same expressions.", default=default_2018_answers)
+    if (remap_answers_2018) then
+      CS%remap_answer_date = 20181231
+    else
+      CS%remap_answer_date = 20190101
+    endif
     call initialize_remapping( CS%remap_CS, string, boundary_extrapolation=boundary_extrap, &
-                               answers_2018=CS%remap_answers_2018 )
+                               answer_date=CS%remap_answer_date )
     call extract_member_remapping_CS(CS%remap_CS, degree=CS%deg)
     call get_param(param_file, mdl, "NEUTRAL_POS_METHOD", CS%neutral_pos_method,   &
                    "Method used to find the neutral position                 \n"// &
@@ -333,7 +346,7 @@ subroutine neutral_diffusion_calc_coeffs(G, GV, US, h, T, S, CS, p_surf)
   h_neglect = GV%H_subroundoff ; h_neglect_edge = GV%H_subroundoff
 
   if (.not. CS%continuous_reconstruction) then
-    if (CS%remap_answers_2018) then
+    if (CS%remap_answer_date < 20190101) then
       if (GV%Boussinesq) then
         h_neglect = GV%m_to_H*1.0e-30 ; h_neglect_edge = GV%m_to_H*1.0e-10
       else
@@ -577,7 +590,7 @@ subroutine neutral_diffusion(G, GV, h, Coef_x, Coef_y, dt, Reg, US, CS)
   h_neglect = GV%H_subroundoff ; h_neglect_edge = GV%H_subroundoff
 
   if (.not. CS%continuous_reconstruction) then
-    if (CS%remap_answers_2018) then
+    if (CS%remap_answer_date < 20190101) then
       h_neglect = GV%m_to_H*1.0e-30 ; h_neglect_edge = GV%m_to_H*1.0e-10
     endif
   endif

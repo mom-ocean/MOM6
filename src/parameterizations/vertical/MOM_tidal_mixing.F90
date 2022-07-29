@@ -139,9 +139,11 @@ type, public :: tidal_mixing_cs ; private
   real                            :: tidal_diss_lim_tc  !< CVMix-specific dissipation limit depth for
                                                         !! tidal-energy-constituent data [Z ~> m].
   type(remapping_CS)              :: remap_CS           !< The control structure for remapping
-  logical :: remap_answers_2018 = .true.  !< If true, use the order of arithmetic and expressions that
-                                       !! recover the remapping answers from 2018.  If false, use more
-                                       !! robust forms of the same remapping expressions.
+  integer :: remap_answer_date = 20181231 !< The vintage of the order of arithmetic and expressions to use
+                                       !! for remapping.  Values below 20190101 recover the remapping
+                                       !! answers from 2018, while higher values use more robust
+                                       !! forms of the same remapping expressions.
+                      !### Change to 99991231?
 
   type(int_tide_CS), pointer    :: int_tide_CSp=> NULL() !< Control structure for a child module
 
@@ -222,7 +224,11 @@ logical function tidal_mixing_init(Time, G, GV, US, param_file, int_tide_CSp, di
   logical :: use_CVMix_tidal
   logical :: int_tide_dissipation
   logical :: read_tideamp
-  logical :: default_2018_answers
+  integer :: default_answer_date  ! The default setting for the various ANSWER_DATE flags.
+  logical :: default_2018_answers ! The default setting for the various 2018_ANSWERS flags.
+  logical :: remap_answers_2018   ! If true, use the order of arithmetic and expressions that
+                                  ! recover the remapping answers from 2018.  If false, use more
+                                  ! robust forms of the same remapping expressions.
   character(len=20)  :: tmpstr, int_tide_profile_str
   character(len=20)  :: CVMix_tidal_scheme_str, tidal_energy_type
   character(len=200) :: filename, h2_file, Niku_TKE_input_file
@@ -271,17 +277,25 @@ logical function tidal_mixing_init(Time, G, GV, US, param_file, int_tide_CSp, di
   call get_param(param_file, mdl, "INPUTDIR", CS%inputdir, default=".",do_not_log=.true.)
   CS%inputdir = slasher(CS%inputdir)
 
+  call get_param(param_file, mdl, "DEFAULT_ANSWER_DATE", default_answer_date, &
+                 "This sets the default value for the various _ANSWER_DATE parameters.", &
+                 default=99991231, do_not_log=.true.)
   call get_param(param_file, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
                  "This sets the default value for the various _2018_ANSWERS parameters.", &
-                 default=.false.)
+                 default=(default_answer_date<20190101))
   call get_param(param_file, mdl, "TIDAL_MIXING_2018_ANSWERS", CS%answers_2018, &
                  "If true, use the order of arithmetic and expressions that recover the "//&
                  "answers from the end of 2018.  Otherwise, use updated and more robust "//&
                  "forms of the same expressions.", default=default_2018_answers)
-  call get_param(param_file, mdl, "REMAPPING_2018_ANSWERS", CS%remap_answers_2018, &
+  call get_param(param_file, mdl, "REMAPPING_2018_ANSWERS", remap_answers_2018, &
                  "If true, use the order of arithmetic and expressions that recover the "//&
                  "answers from the end of 2018.  Otherwise, use updated and more robust "//&
                  "forms of the same expressions.", default=default_2018_answers)
+  if (remap_answers_2018) then
+    CS%remap_answer_date = 20181231
+  else
+    CS%remap_answer_date = 20190101
+  endif
 
   if (CS%int_tide_dissipation) then
 
@@ -1651,7 +1665,7 @@ subroutine read_tidal_constituents(G, US, tidal_energy_file, CS)
   ! initialize input remapping:
   call initialize_remapping(CS%remap_cs, remapping_scheme="PLM", &
                             boundary_extrapolation=.false., check_remapping=CS%debug, &
-                            answers_2018=CS%remap_answers_2018)
+                            answer_date=CS%remap_answer_date)
 
   deallocate(tc_m2)
   deallocate(tc_s2)

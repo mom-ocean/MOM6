@@ -46,9 +46,11 @@ type, public :: wave_speed_CS ; private
                                        !! speeds [nondim]
   type(remapping_CS) :: remapping_CS   !< Used for vertical remapping when calculating equivalent barotropic
                                        !! mode structure.
-  logical :: remap_answers_2018 = .true.  !< If true, use the order of arithmetic and expressions that
-                                       !! recover the remapping answers from 2018.  If false, use more
-                                       !! robust forms of the same remapping expressions.
+  integer :: remap_answer_date = 20181231 !< The vintage of the order of arithmetic and expressions to use
+                                       !! for remapping.  Values below 20190101 recover the remapping
+                                       !! answers from 2018, while higher values use more robust
+                                       !! forms of the same remapping expressions.
+                      !### Change to 99991231?
   type(diag_ctrl), pointer :: diag     !< Diagnostics control structure
 end type wave_speed_CS
 
@@ -558,7 +560,7 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, mono_
             do k = 1,kc
               Hc_H(k) = GV%Z_to_H * Hc(k)
             enddo
-            if (CS%remap_answers_2018) then
+            if (CS%remap_answer_date < 20190101) then
               call remapping_core_h(CS%remapping_CS, kc, Hc_H(:), mode_struct, &
                                     nz, h(i,j,:), modal_structure(i,j,:), &
                                     1.0e-30*GV%m_to_H, 1.0e-10*GV%m_to_H)
@@ -1168,7 +1170,7 @@ end subroutine tridiag_det
 
 !> Initialize control structure for MOM_wave_speed
 subroutine wave_speed_init(CS, use_ebt_mode, mono_N2_column_fraction, mono_N2_depth, remap_answers_2018, &
-                           better_speed_est, min_speed, wave_speed_tol)
+                           remap_answer_date, better_speed_est, min_speed, wave_speed_tol)
   type(wave_speed_CS), intent(inout) :: CS  !< Wave speed control struct
   logical, optional, intent(in) :: use_ebt_mode  !< If true, use the equivalent
                                      !! barotropic mode instead of the first baroclinic mode.
@@ -1181,6 +1183,10 @@ subroutine wave_speed_init(CS, use_ebt_mode, mono_N2_column_fraction, mono_N2_de
   logical, optional, intent(in) :: remap_answers_2018 !< If true, use the order of arithmetic and expressions
                                      !! that recover the remapping answers from 2018.  Otherwise
                                      !! use more robust but mathematically equivalent expressions.
+  integer, optional, intent(in) :: remap_answer_date  !< The vintage of the order of arithmetic and expressions
+                                      !! to use for remapping.  Values below 20190101 recover the remapping
+                                      !! answers from 2018, while higher values use more robust
+                                      !! forms of the same remapping expressions.
   logical, optional, intent(in) :: better_speed_est !< If true, use a more robust estimate of the first
                                      !! mode speed as the starting point for iterations.
   real,    optional, intent(in) :: min_speed !< If present, set a floor in the first mode speed
@@ -1199,15 +1205,17 @@ subroutine wave_speed_init(CS, use_ebt_mode, mono_N2_column_fraction, mono_N2_de
 
   call wave_speed_set_param(CS, use_ebt_mode=use_ebt_mode, mono_N2_column_fraction=mono_N2_column_fraction, &
                             better_speed_est=better_speed_est, min_speed=min_speed, wave_speed_tol=wave_speed_tol)
+  !### Uncomment this?      remap_answers_2018=remap_answers_2018, remap_answer_date=remap_answer_date)
 
+  !### The remap_answers_2018 argument is irrelevant, because remapping is hard-coded to use PLM.
   call initialize_remapping(CS%remapping_CS, 'PLM', boundary_extrapolation=.false., &
-                            answers_2018=CS%remap_answers_2018)
+                            answer_date=CS%remap_answer_date)
 
 end subroutine wave_speed_init
 
 !> Sets internal parameters for MOM_wave_speed
 subroutine wave_speed_set_param(CS, use_ebt_mode, mono_N2_column_fraction, mono_N2_depth, remap_answers_2018, &
-                                better_speed_est, min_speed, wave_speed_tol)
+                                remap_answer_date, better_speed_est, min_speed, wave_speed_tol)
   type(wave_speed_CS), intent(inout)  :: CS
                                       !< Control structure for MOM_wave_speed
   logical, optional, intent(in) :: use_ebt_mode  !< If true, use the equivalent
@@ -1221,6 +1229,10 @@ subroutine wave_speed_set_param(CS, use_ebt_mode, mono_N2_column_fraction, mono_
   logical, optional, intent(in) :: remap_answers_2018 !< If true, use the order of arithmetic and expressions
                                       !! that recover the remapping answers from 2018.  Otherwise
                                       !! use more robust but mathematically equivalent expressions.
+  integer, optional, intent(in) :: remap_answer_date  !< The vintage of the order of arithmetic and expressions
+                                      !! to use for remapping.  Values below 20190101 recover the remapping
+                                      !! answers from 2018, while higher values use more robust
+                                      !! forms of the same remapping expressions.
   logical, optional, intent(in) :: better_speed_est !< If true, use a more robust estimate of the first
                                      !! mode speed as the starting point for iterations.
   real,    optional, intent(in) :: min_speed !< If present, set a floor in the first mode speed
@@ -1231,7 +1243,14 @@ subroutine wave_speed_set_param(CS, use_ebt_mode, mono_N2_column_fraction, mono_
   if (present(use_ebt_mode)) CS%use_ebt_mode = use_ebt_mode
   if (present(mono_N2_column_fraction)) CS%mono_N2_column_fraction = mono_N2_column_fraction
   if (present(mono_N2_depth)) CS%mono_N2_depth = mono_N2_depth
-  if (present(remap_answers_2018)) CS%remap_answers_2018 = remap_answers_2018
+  if (present(remap_answers_2018)) then
+    if (remap_answers_2018) then
+      CS%remap_answer_date = 20181231
+    else
+      CS%remap_answer_date = 20190101
+    endif
+  endif
+  if (present(remap_answer_date)) CS%remap_answer_date = remap_answer_date
   if (present(better_speed_est)) CS%better_cg1_est = better_speed_est
   if (present(min_speed)) CS%min_speed2 = min_speed**2
   if (present(wave_speed_tol)) CS%wave_speed_tol = wave_speed_tol

@@ -1156,17 +1156,26 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
   type(param_file_type),      intent(in) :: param_file !< Parameter file handles
   type(diag_ctrl), target, intent(inout) :: diag !< Diagnostics control structure
   type(VarMix_CS),         intent(inout) :: CS   !< Variable mixing coefficients
+
   ! Local variables
   real :: KhTr_Slope_Cff, KhTh_Slope_Cff, oneOrTwo
   real :: N2_filter_depth  ! A depth below which stratification is treated as monotonic when
                            ! calculating the first-mode wave speed [Z ~> m]
-  real :: KhTr_passivity_coeff
+  real :: KhTr_passivity_coeff ! Coefficient setting the ratio between along-isopycnal tracer
+                               ! mixing and interface height mixing [nondim]
   real :: absurdly_small_freq  ! A miniscule frequency that is used to avoid division by 0 [T-1 ~> s-1].  The
              ! default value is roughly (pi / (the age of the universe)).
   logical :: Gill_equatorial_Ld, use_FGNV_streamfn, use_MEKE, in_use
-  logical :: default_2018_answers, remap_answers_2018
-  real :: MLE_front_length
-  real :: Leith_Lap_const      ! The non-dimensional coefficient in the Leith viscosity
+  integer :: default_answer_date  ! The default setting for the various ANSWER_DATE flags.
+  logical :: default_2018_answers ! The default setting for the various 2018_ANSWERS flags.
+  logical :: remap_answers_2018
+  integer :: remap_answer_date    ! The vintage of the order of arithmetic and expressions to use
+                                  ! for remapping.  Values below 20190101 recover the remapping
+                                  ! answers from 2018, while higher values use more robust
+                                  ! forms of the same remapping expressions.
+  real :: MLE_front_length        ! The frontal-length scale used to calculate the upscaling of
+                                  ! buoyancy gradients in boundary layer parameterizations [L ~> m]
+  real :: Leith_Lap_const      ! The non-dimensional coefficient in the Leith viscosity [nondim]
   real :: grid_sp_u2, grid_sp_v2 ! Intermediate quantities for Leith metrics [L2 ~> m2]
   real :: grid_sp_u3, grid_sp_v3 ! Intermediate quantities for Leith metrics [L3 ~> m3]
   real :: wave_speed_min      ! A floor in the first mode speed below which 0 is returned [L T-1 ~> m s-1]
@@ -1175,7 +1184,7 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
                                   ! scaled by the resolution function.
   logical :: better_speed_est ! If true, use a more robust estimate of the first
                               ! mode wave speed as the starting point for iterations.
-! This include declares and sets the variable "version".
+  ! This include declares and sets the variable "version".
 # include "version_variable.h"
   character(len=40)  :: mdl = "MOM_lateral_mixing_coeffs" ! This module's name.
   integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, i, j
@@ -1263,7 +1272,7 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
                  default=0., do_not_log=.true.)
   CS%calculate_Rd_dx = CS%calculate_Rd_dx .or. (KhTr_passivity_coeff>0.)
   call get_param(param_file, mdl, "MLE_FRONT_LENGTH", MLE_front_length, &
-                 default=0., do_not_log=.true.)
+                 units="m", default=0.0, scale=US%m_to_L, do_not_log=.true.)
   CS%calculate_Rd_dx = CS%calculate_Rd_dx .or. (MLE_front_length>0.)
 
   call get_param(param_file, mdl, "DEBUG", CS%debug, default=.false., do_not_log=.true.)
@@ -1532,13 +1541,21 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
   if (CS%calculate_cg1) then
     in_use = .true.
     allocate(CS%cg1(isd:ied,jsd:jed), source=0.0)
+    call get_param(param_file, mdl, "DEFAULT_ANSWER_DATE", default_answer_date, &
+                 "This sets the default value for the various _ANSWER_DATE parameters.", &
+                 default=99991231, do_not_log=.true.)
     call get_param(param_file, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
                  "This sets the default value for the various _2018_ANSWERS parameters.", &
-                 default=.false.)
+                 default=(default_answer_date<20190101))
     call get_param(param_file, mdl, "REMAPPING_2018_ANSWERS", remap_answers_2018, &
                  "If true, use the order of arithmetic and expressions that recover the "//&
                  "answers from the end of 2018.  Otherwise, use updated and more robust "//&
                  "forms of the same expressions.", default=default_2018_answers)
+    if (remap_answers_2018) then
+      remap_answer_date = 20181231
+    else
+      remap_answer_date = 20190101
+    endif
     call get_param(param_file, mdl, "INTERNAL_WAVE_SPEED_TOL", wave_speed_tol, &
                  "The fractional tolerance for finding the wave speeds.", &
                  units="nondim", default=0.001)
@@ -1550,7 +1567,7 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
                  "If true, use a more robust estimate of the first mode wave speed as the "//&
                  "starting point for iterations.", default=.true.)
     call wave_speed_init(CS%wave_speed, use_ebt_mode=CS%Resoln_use_ebt, &
-                         mono_N2_depth=N2_filter_depth, remap_answers_2018=remap_answers_2018, &
+                         mono_N2_depth=N2_filter_depth, remap_answer_date=remap_answer_date, &
                          better_speed_est=better_speed_est, min_speed=wave_speed_min, &
                          wave_speed_tol=wave_speed_tol)
   endif

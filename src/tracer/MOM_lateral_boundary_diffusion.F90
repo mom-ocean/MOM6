@@ -124,8 +124,9 @@ logical function lateral_boundary_diffusion_init(Time, G, GV, param_file, diag, 
                  "for vertical remapping for all variables. "//&
                  "It can be one of the following schemes: "//&
                  trim(remappingSchemesDoc), default=remappingDefaultScheme)
+  !### Revisit this hard-coded answer_date.
   call initialize_remapping( CS%remap_CS, string, boundary_extrapolation = boundary_extrap ,&
-       check_reconstruction=.false., check_remapping=.false., answers_2018=.false.)
+       check_reconstruction=.false., check_remapping=.false., answer_date=20190101)
   call extract_member_remapping_CS(CS%remap_CS, degree=CS%deg)
   call get_param(param_file, mdl, "LBD_DEBUG", CS%debug, &
                  "If true, write out verbose debugging data in the LBD module.", &

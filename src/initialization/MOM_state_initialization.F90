@@ -1167,7 +1167,15 @@ subroutine trim_for_ice(PF, G, GV, US, ALE_CSp, tv, h, just_read)
   real :: scale_factor   ! A file-dependent scaling factor for the input pressure.
   real :: min_thickness  ! The minimum layer thickness, recast into Z units [Z ~> m].
   integer :: i, j, k
-  logical :: default_2018_answers, remap_answers_2018
+  integer :: default_answer_date  ! The default setting for the various ANSWER_DATE flags.
+  logical :: default_2018_answers ! The default setting for the various 2018_ANSWERS flags.
+  logical :: remap_answers_2018   ! If true, use the order of arithmetic and expressions that
+                                  ! recover the remapping answers from 2018.  If false, use more
+                                  ! robust forms of the same remapping expressions.
+  integer :: remap_answer_date    ! The vintage of the order of arithmetic and expressions to use
+                                  ! for remapping.  Values below 20190101 recover the remapping
+                                  ! answers from 2018, while higher values use more robust
+                                  ! forms of the same remapping expressions.
   logical :: use_remapping ! If true, remap the initial conditions.
   type(remapping_CS), pointer :: remap_CS => NULL()
 
@@ -1192,14 +1200,18 @@ subroutine trim_for_ice(PF, G, GV, US, ALE_CSp, tv, h, just_read)
                  default=.false., do_not_log=just_read)
   remap_answers_2018 = .true.
   if (use_remapping) then
+    call get_param(PF, mdl, "DEFAULT_ANSWER_DATE", default_answer_date, &
+                 "This sets the default value for the various _ANSWER_DATE parameters.", &
+                 default=99991231, do_not_log=.true.)
     call get_param(PF, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
                  "This sets the default value for the various _2018_ANSWERS parameters.", &
-                 default=.false.)
+                 default=(default_answer_date<20190101))
     call get_param(PF, mdl, "REMAPPING_2018_ANSWERS", remap_answers_2018, &
                  "If true, use the order of arithmetic and expressions that recover the "//&
                  "answers from the end of 2018.  Otherwise, use updated and more robust "//&
                  "forms of the same expressions.", default=default_2018_answers)
   endif
+  remap_answer_date = 20190101 ; if (remap_answers_2018) remap_answer_date = 20181231
 
   if (just_read) return ! All run-time parameters have been read, so return.
 
@@ -1226,7 +1238,7 @@ subroutine trim_for_ice(PF, G, GV, US, ALE_CSp, tv, h, just_read)
     call cut_off_column_top(GV%ke, tv, GV, US, GV%g_Earth, G%bathyT(i,j)+G%Z_ref, &
                min_thickness, tv%T(i,j,:), T_t(i,j,:), T_b(i,j,:), &
                tv%S(i,j,:), S_t(i,j,:), S_b(i,j,:), p_surf(i,j), h(i,j,:), remap_CS, &
-               z_tol=1.0e-5*US%m_to_Z, remap_answers_2018=remap_answers_2018)
+               z_tol=1.0e-5*US%m_to_Z, remap_answer_date=remap_answer_date)
   enddo ; enddo
 
 end subroutine trim_for_ice
@@ -1317,7 +1329,7 @@ end subroutine calc_sfc_displacement
 !> Adjust the layer thicknesses by removing the top of the water column above the
 !! depth where the hydrostatic pressure matches p_surf
 subroutine cut_off_column_top(nk, tv, GV, US, G_earth, depth, min_thickness, T, T_t, T_b, &
-                              S, S_t, S_b, p_surf, h, remap_CS, z_tol, remap_answers_2018)
+                              S, S_t, S_b, p_surf, h, remap_CS, z_tol, remap_answer_date)
   integer,               intent(in)    :: nk  !< Number of layers
   type(thermo_var_ptrs), intent(in)    :: tv  !< Thermodynamics structure
   type(verticalGrid_type), intent(in)  :: GV  !< The ocean's vertical grid structure.
@@ -1337,10 +1349,10 @@ subroutine cut_off_column_top(nk, tv, GV, US, G_earth, depth, min_thickness, T, 
                                                    !! if associated
   real,        optional, intent(in)    :: z_tol !< The tolerance with which to find the depth
                                                 !! matching the specified pressure [Z ~> m].
-  logical,     optional, intent(in)    :: remap_answers_2018 !< If true, use the order of arithmetic
-                                                !! and expressions that recover the answers for remapping
-                                                !! from the end of 2018. Otherwise, use more robust
-                                                !! forms of the same expressions.
+  integer,     optional, intent(in)    :: remap_answer_date !< The vintage of the order of arithmetic and
+                                                !! expressions to use for remapping.  Values below 20190101
+                                                !! recover the remapping answers from 2018, while higher
+                                                !! values use more robust forms of the same remapping expressions.
 
   ! Local variables
   real, dimension(nk+1) :: e ! Top and bottom edge values for reconstructions [Z ~> m]
@@ -1350,7 +1362,7 @@ subroutine cut_off_column_top(nk, tv, GV, US, G_earth, depth, min_thickness, T, 
   logical :: answers_2018
   integer :: k
 
-  answers_2018 = .true. ; if (present(remap_answers_2018)) answers_2018 = remap_answers_2018
+  answers_2018 = .true. ; if (present(remap_answer_date)) answers_2018 = (remap_answer_date < 20190101)
 
   ! Calculate original interface positions
   e(nk+1) = -depth
@@ -2458,7 +2470,20 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, depth_tot, G, GV, US, PF, just
   type(remapping_CS) :: remapCS ! Remapping parameters and work arrays
 
   logical :: homogenize, useALEremapping, remap_full_column, remap_general, remap_old_alg
-  logical :: answers_2018, default_2018_answers, hor_regrid_answers_2018
+  integer :: default_answer_date  ! The default setting for the various ANSWER_DATE flags.
+  logical :: default_2018_answers ! The default setting for the various 2018_ANSWERS flags.
+  logical :: remap_answers_2018   ! If true, use the order of arithmetic and expressions that
+                                  ! recover the remapping answers from 2018.  If false, use more
+                                  ! robust forms of the same remapping expressions.
+  integer :: remap_answer_date    ! The vintage of the order of arithmetic and expressions to use
+                                  ! for remapping.  Values below 20190101 recover the remapping
+                                  ! answers from 2018, while higher values use more robust
+                                  ! forms of the same remapping expressions.
+  logical :: hor_regrid_answers_2018
+  integer :: hor_regrid_answer_date  ! The vintage of the order of arithmetic and expressions to use
+                                  ! for horizontal regridding.  Values below 20190101 recover the
+                                  ! answers from 2018, while higher values use expressions that have
+                                  ! been rearranged for rotational invariance.
   logical :: pre_gridded
   logical :: separate_mixed_layer  ! If true, handle the mixed layers differently.
   logical :: density_extrap_bug    ! If true use an expression with a vertical indexing bug for
@@ -2535,24 +2560,29 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, depth_tot, G, GV, US, PF, just
                  "If false, uses the preferred remapping algorithm for initialization. "//&
                  "If true, use an older, less robust algorithm for remapping.", &
                  default=.false., do_not_log=just_read)
+  call get_param(PF, mdl, "DEFAULT_ANSWER_DATE", default_answer_date, &
+                 "This sets the default value for the various _ANSWER_DATE parameters.", &
+                 default=99991231, do_not_log=.true.)
   call get_param(PF, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
                  "This sets the default value for the various _2018_ANSWERS parameters.", &
-                 default=.false.)
+                 default=(default_answer_date<20190101))
   call get_param(PF, mdl, "TEMP_SALT_INIT_VERTICAL_REMAP_ONLY", pre_gridded, &
                  "If true, initial conditions are on the model horizontal grid. " //&
                  "Extrapolation over missing ocean values is done using an ICE-9 "//&
                  "procedure with vertical ALE remapping .", &
                  default=.false.)
   if (useALEremapping) then
-    call get_param(PF, mdl, "REMAPPING_2018_ANSWERS", answers_2018, &
+    call get_param(PF, mdl, "REMAPPING_2018_ANSWERS", remap_answers_2018, &
                  "If true, use the order of arithmetic and expressions that recover the "//&
                  "answers from the end of 2018.  Otherwise, use updated and more robust "//&
                  "forms of the same expressions.", default=default_2018_answers)
+    remap_answer_date = 20190101 ; if (remap_answers_2018) remap_answer_date = 20181231
   endif
   call get_param(PF, mdl, "HOR_REGRID_2018_ANSWERS", hor_regrid_answers_2018, &
                  "If true, use the order of arithmetic for horizonal regridding that recovers "//&
                  "the answers from the end of 2018.  Otherwise, use rotationally symmetric "//&
                  "forms of the same expressions.", default=default_2018_answers)
+  hor_regrid_answer_date = 20190101 ; if (hor_regrid_answers_2018) hor_regrid_answer_date = 20181231
   if (.not.useALEremapping) then
     call get_param(PF, mdl, "ADJUST_THICKNESS", correct_thickness, &
                  "If true, all mass below the bottom removed if the "//&
@@ -2618,12 +2648,12 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, depth_tot, G, GV, US, PF, just
 
   call horiz_interp_and_extrap_tracer(tfilename, potemp_var, US%degC_to_C, 1, &
        G, temp_z, mask_z, z_in, z_edges_in, missing_value_temp, reentrant_x, &
-       tripolar_n, homogenize, m_to_Z=US%m_to_Z, answers_2018=hor_regrid_answers_2018, &
+       tripolar_n, homogenize, m_to_Z=US%m_to_Z, answer_date=hor_regrid_answer_date, &
        ongrid=pre_gridded, tr_iter_tol=1.0e-3*US%degC_to_C)
 
   call horiz_interp_and_extrap_tracer(sfilename, salin_var, US%ppt_to_S, 1, &
        G, salt_z, mask_z, z_in, z_edges_in, missing_value_salt, reentrant_x, &
-       tripolar_n, homogenize, m_to_Z=US%m_to_Z, answers_2018=hor_regrid_answers_2018, &
+       tripolar_n, homogenize, m_to_Z=US%m_to_Z, answer_date=hor_regrid_answer_date, &
        ongrid=pre_gridded, tr_iter_tol=1.0e-3*US%ppt_to_S)
 
   kd = size(z_in,1)
@@ -2701,7 +2731,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, depth_tot, G, GV, US, PF, just
     endif
 
     ! Now remap from source grid to target grid, first setting reconstruction parameters
-    call initialize_remapping( remapCS, remappingScheme, boundary_extrapolation=.false., answers_2018=answers_2018 )
+    call initialize_remapping( remapCS, remappingScheme, boundary_extrapolation=.false., answer_date=remap_answer_date )
     if (remap_general) then
       call set_regrid_params( regridCS, min_thickness=0. )
       tv_loc = tv
@@ -2719,9 +2749,9 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, depth_tot, G, GV, US, PF, just
       deallocate( dz_interface )
     endif
     call ALE_remap_scalar(remapCS, G, GV, nkd, h1, tmpT1dIn, h, tv%T, all_cells=remap_full_column, &
-                          old_remap=remap_old_alg, answers_2018=answers_2018 )
+                          old_remap=remap_old_alg, answer_date=remap_answer_date )
     call ALE_remap_scalar(remapCS, G, GV, nkd, h1, tmpS1dIn, h, tv%S, all_cells=remap_full_column, &
-                          old_remap=remap_old_alg, answers_2018=answers_2018 )
+                          old_remap=remap_old_alg, answer_date=remap_answer_date )
 
     deallocate( h1 )
     deallocate( tmpT1dIn )
