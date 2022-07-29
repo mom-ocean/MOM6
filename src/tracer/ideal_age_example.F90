@@ -55,7 +55,7 @@ type, public :: ideal_age_tracer_CS ; private
                                               !! surface value equals young_val, in years.
   logical :: use_real_BL_depth   !< If true, uses the BL scheme to determine the number of
                                  !! layers above the BL depth instead of the fixed nkml value.
-  integer :: ML_residence_num    !! The tracer number assigned to the ML residence tracer in this module
+  integer :: ML_residence_num    !< The tracer number assigned to the ML residence tracer in this module
   logical :: tracers_may_reinit  !< If true, these tracers be set up via the initialization code if
                                  !! they are not found in the restart files.
   logical :: tracer_ages(NTR_MAX) !< Indicates whether each tracer ages.
