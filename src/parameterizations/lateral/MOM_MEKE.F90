@@ -4,10 +4,10 @@
 module MOM_MEKE
 
 ! This file is part of MOM6. See LICENSE.md for the license.
-use iso_c_binding,         only : c_float
+use iso_fortran_env,       only : real32
 
 use MOM_coms,              only : PE_here
-use MOM_dbclient,          only : dbclient_type, dbclient_CS_type
+use MOM_database_comms,    only : dbclient_type, dbcomms_CS_type
 use MOM_debugging,         only : hchksum, uvchksum
 use MOM_cpu_clock,         only : cpu_clock_id, cpu_clock_begin, cpu_clock_end, CLOCK_ROUTINE
 use MOM_diag_mediator,     only : post_data, register_diag_field, safe_alloc_ptr
@@ -38,19 +38,16 @@ implicit none ; private
 
 public step_forward_MEKE, MEKE_init, MEKE_alloc_register_restart, MEKE_end
 
-!> Private enum to define the source of the EKE used in MEKE
-enum, bind(c)
-  enumerator :: EKE_PROG !< Use prognostic equation to calcualte EKE
-  enumerator :: EKE_FILE !< Read in EKE from a file
-  enumerator :: EKE_DBCLIENT !< Infer EKE using a neural network
-end enum
-
 ! Constants for this module
 integer, parameter :: NUM_FEATURES = 4 !< How many features used to predict EKE
 integer, parameter :: MKE_IDX = 1     !< Index of mean kinetic energy in the feature array
 integer, parameter :: SLOPE_Z_IDX = 2 !< Index of vertically averaged isopycnal slope in the feature array
 integer, parameter :: RV_IDX = 3      !< Index of surface relative vorticity in the feature array
 integer, parameter :: RD_DX_Z_IDX = 4 !< Index of the radius of deformation over the grid size in the feature array
+
+integer, parameter :: EKE_PROG = 1     !< Use prognostic equation to calcualte EKE
+integer, parameter :: EKE_FILE = 2     !< Read in EKE from a file
+integer, parameter :: EKE_DBCLIENT = 3 !< Infer EKE using a neural network
 
 !> Control structure that contains MEKE parameters and diagnostics handles
 type, public :: MEKE_CS ; private
@@ -226,7 +223,7 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
   real :: sdt_damp  ! dt for damping [T ~> s] (sdt could be split).
   logical :: use_drag_rate ! Flag to indicate drag_rate is finite
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
-  real(kind=c_float), dimension(size(MEKE%MEKE),NUM_FEATURES) :: features_array
+  real(kind=real32), dimension(size(MEKE%MEKE),NUM_FEATURES) :: features_array
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
@@ -1087,12 +1084,12 @@ end subroutine MEKE_lengthScales_0d
 
 !> Initializes the MOM_MEKE module and reads parameters.
 !! Returns True if module is to be used, otherwise returns False.
-logical function MEKE_init(Time, G, US, param_file, diag, dbclient_CS, CS, MEKE, restart_CS, meke_in_dynamics)
+logical function MEKE_init(Time, G, US, param_file, diag, dbcomms_CS, CS, MEKE, restart_CS, meke_in_dynamics)
   type(time_type),         intent(in)    :: Time       !< The current model time.
   type(ocean_grid_type),   intent(inout) :: G          !< The ocean's grid structure.
   type(unit_scale_type),   intent(in)    :: US         !< A dimensional unit scaling type
   type(param_file_type),   intent(in)    :: param_file !< Parameter file parser structure.
-  type(dbclient_CS_type),  intent(in)    :: dbclient_CS !< client
+  type(dbcomms_CS_type),  intent(in)     :: dbcomms_CS !< Database communications control structure
   type(diag_ctrl), target, intent(inout) :: diag       !< Diagnostics structure.
   type(MEKE_CS),           intent(inout) :: CS         !< MEKE control structure.
   type(MEKE_type),         intent(inout) :: MEKE       !< MEKE fields
@@ -1228,7 +1225,7 @@ logical function MEKE_init(Time, G, US, param_file, diag, dbclient_CS, CS, MEKE,
                    units="nondim", default=1.0)
   case("dbclient")
     CS%eke_src = EKE_DBCLIENT
-    call ML_MEKE_init(diag, G, US, Time, param_file, dbclient_CS, CS)
+    call ML_MEKE_init(diag, G, US, Time, param_file, dbcomms_CS, CS)
   case default
     call MOM_error(FATAL, "Invalid method selected for calculating EKE")
   end select
@@ -1491,13 +1488,13 @@ logical function MEKE_init(Time, G, US, param_file, diag, dbclient_CS, CS, MEKE,
 end function MEKE_init
 
 !> Initializer for the variant of MEKE that uses ML to predict eddy kinetic energy
-subroutine ML_MEKE_init(diag, G, US, Time, param_file, dbclient_CS, CS)
+subroutine ML_MEKE_init(diag, G, US, Time, param_file, dbcomms_CS, CS)
   type(diag_ctrl), target, intent(inout) :: diag       !< Diagnostics structure.
   type(ocean_grid_type),         intent(inout) :: G           !< The ocean's grid structure.
   type(unit_scale_type),         intent(in)    :: US          !< A dimensional unit scaling type
   type(time_type),               intent(in)    :: Time        !< The current model time.
   type(param_file_type),         intent(in)    :: param_file  !< Parameter file parser structure.
-  type(dbclient_CS_type),        intent(in)    :: dbclient_CS !< Control structure for the database client
+  type(dbcomms_CS_type),         intent(in)    :: dbcomms_CS  !< Control structure for database communication
   type(MEKE_CS),                 intent(inout) :: CS          !< Control structure for this module
 
   character(len=200)  :: inputdir, backend, model_filename
@@ -1528,8 +1525,8 @@ subroutine ML_MEKE_init(diag, G, US, Time, param_file, dbclient_CS, CS)
                  "Maximum value of EKE allowed when inferring EKE", default=2., scale=US%L_T_to_m_s**2)
 
   ! Set the machine learning model
-  if (dbclient_CS%colocated) then
-    if (modulo(PE_here(),dbclient_CS%colocated_stride) == 0) then
+  if (dbcomms_CS%colocated) then
+    if (modulo(PE_here(),dbcomms_CS%colocated_stride) == 0) then
       db_return_code = CS%client%set_model_from_file(CS%model_key, trim(inputdir)//trim(model_filename), &
                                                   "TORCH", backend, batch_size=batch_size)
     endif
@@ -1579,7 +1576,7 @@ subroutine ML_MEKE_calculate_features(G, GV, US, CS, Rd_dx_h, u, v, tv, h, dt, f
   type(thermo_var_ptrs),                     intent(in)    :: tv !< Type containing thermodynamic variables
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)    :: h  !< Layer thickness [H ~> m or kg m-2].
   real,                                      intent(in)    :: dt   !< Model(baroclinic) time-step [T ~> s].
-  real(kind=c_float), dimension(SIZE(h),num_features), intent(  out) :: features_array
+  real(kind=real32), dimension(SIZE(h),num_features), intent(  out) :: features_array
                                                                           !< The array of features needed for machine
                                                                           !! learning inference
 
@@ -1687,14 +1684,14 @@ subroutine predict_MEKE(G, CS, npts, Time, features_array, MEKE)
   integer,                                               intent(in   ) :: npts !< Number of T-grid cells on the local
                                                                                !! domain
   type(time_type),                                       intent(in   ) :: Time !< The current model time
-  real(kind=c_float), dimension(npts,num_features),      intent(in   ) :: features_array
+  real(kind=real32), dimension(npts,num_features),       intent(in   ) :: features_array
                                                                           !< The array of features needed for machine
                                                                           !! learning inference
   real, dimension(SZI_(G),SZJ_(G)),                      intent(  out) :: MEKE !< Eddy kinetic energy [L2 T-2 ~> m2 s-2]
   integer :: db_return_code
   character(len=255), dimension(1) :: model_out, model_in
   character(len=255) :: time_suffix
-  real(kind=c_float), dimension(SIZE(MEKE)) :: MEKE_vec
+  real(kind=real32), dimension(SIZE(MEKE)) :: MEKE_vec
 
   integer :: i, j, is, ie, js, je
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec

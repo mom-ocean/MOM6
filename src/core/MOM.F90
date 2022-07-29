@@ -144,7 +144,7 @@ use MOM_wave_interface,        only : Update_Stokes_Drift
 use MOM_porous_barriers,      only : porous_widths
 
 ! Database client used for machine-learning interface
-use MOM_dbclient,             only : dbclient_CS_type, dbclient_init, dbclient_type
+use MOM_database_comms,       only : dbcomms_CS_type, database_comms_init, dbclient_type
 
 ! ODA modules
 use MOM_oda_driver_mod,        only : ODA_CS, oda, init_oda, oda_end
@@ -410,7 +410,7 @@ type, public :: MOM_control_struct ; private
   type(ODA_CS), pointer :: odaCS => NULL() !< a pointer to the control structure for handling
                                 !! ensemble model state vectors and data assimilation
                                 !! increments and priors
-  type(dbclient_CS_type)   :: dbclient_CS !< Control structure for database client used for online ML/AI
+  type(dbcomms_CS_type)   :: dbcomms_CS !< Control structure for database client used for online ML/AI
   type(porous_barrier_ptrs) :: pbv !< porous barrier fractional cell metrics
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_,NKMEM_) :: por_face_areaU !< fractional open area of U-faces [nondim]
   real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_,NKMEM_) :: por_face_areaV !< fractional open area of V-faces [nondim]
@@ -2812,8 +2812,8 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   endif
   call cpu_clock_end(id_clock_MOM_init)
 
-  if (CS%use_dbclient) call dbclient_init(param_file, CS%dbclient_CS)
-  CS%useMEKE = MEKE_init(Time, G, US, param_file, diag, CS%dbclient_CS, CS%MEKE_CSp, CS%MEKE, &
+  if (CS%use_dbclient) call database_comms_init(param_file, CS%dbcomms_CS)
+  CS%useMEKE = MEKE_init(Time, G, US, param_file, diag, CS%dbcomms_CS, CS%MEKE_CSp, CS%MEKE, &
                          restart_CSp, CS%MEKE_in_dynamics)
 
   call VarMix_init(Time, G, GV, US, param_file, diag, CS%VarMix)
