@@ -180,6 +180,7 @@ subroutine initialize_ALE_sponge_fixed(Iresttime, G, GV, param_file, CS, data_h,
   logical :: remap_answers_2018   ! If true, use the order of arithmetic and expressions that
                                   ! recover the remapping answers from 2018.  If false, use more
                                   ! robust forms of the same remapping expressions.
+  integer :: default_remap_ans_date ! The default setting for remap_answer_date
   logical :: hor_regrid_answers_2018 ! If true, use the order of arithmetic for horizontal regridding
                                   ! that recovers the answers from the end of 2018.  Otherwise, use
                                   ! rotationally symmetric forms of the same expressions.
@@ -219,7 +220,7 @@ subroutine initialize_ALE_sponge_fixed(Iresttime, G, GV, param_file, CS, data_h,
                  default=.false., do_not_log=.true.)
   call get_param(param_file, mdl, "DEFAULT_ANSWER_DATE", default_answer_date, &
                  "This sets the default value for the various _ANSWER_DATE parameters.", &
-                 default=99991231, do_not_log=.true.)
+                 default=99991231)
   call get_param(param_file, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
                  "This sets the default value for the various _2018_ANSWERS parameters.", &
                  default=(default_answer_date<20190101))
@@ -227,7 +228,17 @@ subroutine initialize_ALE_sponge_fixed(Iresttime, G, GV, param_file, CS, data_h,
                  "If true, use the order of arithmetic and expressions that recover the "//&
                  "answers from the end of 2018.  Otherwise, use updated and more robust "//&
                  "forms of the same expressions.", default=default_2018_answers)
-  CS%remap_answer_date = 20190101 ; if (remap_answers_2018) CS%remap_answer_date = 20181231
+  ! Revise inconsistent default answer dates for remapping.
+  default_remap_ans_date = default_answer_date
+  if (remap_answers_2018 .and. (default_remap_ans_date >= 20190101)) default_remap_ans_date = 20181231
+  if (.not.remap_answers_2018 .and. (default_remap_ans_date < 20190101)) default_remap_ans_date = 20190101
+  call get_param(param_file, mdl, "REMAPPING_ANSWER_DATE", CS%remap_answer_date, &
+                 "The vintage of the expressions and order of arithmetic to use for remapping.  "//&
+                 "Values below 20190101 result in the use of older, less accurate expressions "//&
+                 "that were in use at the end of 2018.  Higher values result in the use of more "//&
+                 "robust and accurate forms of mathematically equivalent expressions.  "//&
+                 "If both REMAPPING_2018_ANSWERS and REMAPPING_ANSWER_DATE are specified, the "//&
+                 "latter takes precedence.", default=default_remap_ans_date)
   call get_param(param_file, mdl, "HOR_REGRID_2018_ANSWERS", hor_regrid_answers_2018, &
                  "If true, use the order of arithmetic for horizontal regridding that recovers "//&
                  "the answers from the end of 2018.  Otherwise, use rotationally symmetric "//&
@@ -453,6 +464,7 @@ subroutine initialize_ALE_sponge_varying(Iresttime, G, GV, param_file, CS, Irest
   logical :: remap_answers_2018   ! If true, use the order of arithmetic and expressions that
                                   ! recover the remapping answers from 2018.  If false, use more
                                   ! robust forms of the same remapping expressions.
+  integer :: default_remap_ans_date ! The default setting for remap_answer_date
   logical :: hor_regrid_answers_2018 ! If true, use the order of arithmetic for horizontal regridding
                                   ! that recovers the answers from the end of 2018.  Otherwise, use
                                   ! rotationally symmetric forms of the same expressions.
@@ -486,7 +498,7 @@ subroutine initialize_ALE_sponge_varying(Iresttime, G, GV, param_file, CS, Irest
                  default=.false., do_not_log=.true.)
   call get_param(param_file, mdl, "DEFAULT_ANSWER_DATE", default_answer_date, &
                  "This sets the default value for the various _ANSWER_DATE parameters.", &
-                 default=99991231, do_not_log=.true.)
+                 default=99991231)
   call get_param(param_file, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
                  "This sets the default value for the various _2018_ANSWERS parameters.", &
                  default=(default_answer_date<20190101))
@@ -494,7 +506,17 @@ subroutine initialize_ALE_sponge_varying(Iresttime, G, GV, param_file, CS, Irest
                  "If true, use the order of arithmetic and expressions that recover the "//&
                  "answers from the end of 2018.  Otherwise, use updated and more robust "//&
                  "forms of the same expressions.", default=default_2018_answers)
-  CS%remap_answer_date = 20190101 ; if (remap_answers_2018) CS%remap_answer_date = 20181231
+  ! Revise inconsistent default answer dates for remapping.
+  default_remap_ans_date = default_answer_date
+  if (remap_answers_2018 .and. (default_remap_ans_date >= 20190101)) default_remap_ans_date = 20181231
+  if (.not.remap_answers_2018 .and. (default_remap_ans_date < 20190101)) default_remap_ans_date = 20190101
+  call get_param(param_file, mdl, "REMAPPING_ANSWER_DATE", CS%remap_answer_date, &
+                 "The vintage of the expressions and order of arithmetic to use for remapping.  "//&
+                 "Values below 20190101 result in the use of older, less accurate expressions "//&
+                 "that were in use at the end of 2018.  Higher values result in the use of more "//&
+                 "robust and accurate forms of mathematically equivalent expressions.  "//&
+                 "If both REMAPPING_2018_ANSWERS and REMAPPING_ANSWER_DATE are specified, the "//&
+                 "latter takes precedence.", default=default_remap_ans_date)
   call get_param(param_file, mdl, "HOR_REGRID_2018_ANSWERS", hor_regrid_answers_2018, &
                  "If true, use the order of arithmetic for horizontal regridding that recovers "//&
                  "the answers from the end of 2018 and retain a bug in the 3-dimensional mask "//&

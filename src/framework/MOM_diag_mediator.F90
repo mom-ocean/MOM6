@@ -3181,7 +3181,7 @@ subroutine diag_mediator_init(G, GV, US, nz, param_file, diag_cs, doc_file_dir)
                  default=1)
   call get_param(param_file, mdl, "DEFAULT_ANSWER_DATE", default_answer_date, &
                  "This sets the default value for the various _ANSWER_DATE parameters.", &
-                 default=99991231, do_not_log=.true.)
+                 default=99991231)
   call get_param(param_file, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
                  "This sets the default value for the various _2018_ANSWERS parameters.", &
                  default=(default_answer_date<20190101))
@@ -3189,11 +3189,16 @@ subroutine diag_mediator_init(G, GV, US, nz, param_file, diag_cs, doc_file_dir)
                  "If true, use the order of arithmetic and expressions that recover the "//&
                  "answers from the end of 2018.  Otherwise, use updated and more robust "//&
                  "forms of the same expressions.", default=default_2018_answers)
-  if (remap_answers_2018) then
-    remap_answer_date = 20181231
-  else
-    remap_answer_date = 20190101
-  endif
+  ! Revise inconsistent default answer dates for remapping.
+  if (remap_answers_2018 .and. (default_answer_date >= 20190101)) default_answer_date = 20181231
+  if (.not.remap_answers_2018 .and. (default_answer_date < 20190101)) default_answer_date = 20190101
+  call get_param(param_file, mdl, "REMAPPING_ANSWER_DATE", remap_answer_date, &
+                 "The vintage of the expressions and order of arithmetic to use for remapping.  "//&
+                 "Values below 20190101 result in the use of older, less accurate expressions "//&
+                 "that were in use at the end of 2018.  Higher values result in the use of more "//&
+                 "robust and accurate forms of mathematically equivalent expressions.  "//&
+                 "If both REMAPPING_2018_ANSWERS and REMAPPING_ANSWER_DATE are specified, the "//&
+                 "latter takes precedence.", default=default_answer_date)
   call get_param(param_file, mdl, 'USE_GRID_SPACE_DIAGNOSTIC_AXES', diag_cs%grid_space_axes, &
                  'If true, use a grid index coordinate convention for diagnostic axes. ',&
                  default=.false.)

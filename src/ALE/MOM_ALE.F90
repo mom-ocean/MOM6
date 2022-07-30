@@ -94,7 +94,7 @@ type, public :: ALE_CS ; private
   integer :: answer_date    !< The vintage of the expressions and order of arithmetic to use for
                             !! remapping. Values below 20190101 result in the use of older, less
                             !! accurate expressions that were in use at the end of 2018.  Higher
-                            !! values result inthe use of more robust and accurate forms of
+                            !! values result in the use of more robust and accurate forms of
                             !! mathematically equivalent expressions.
 
   logical :: debug   !< If true, write verbose checksums for debugging purposes.
@@ -226,7 +226,7 @@ subroutine ALE_init( param_file, GV, US, max_depth, CS)
                  "extrapolated instead of piecewise constant", default=.false.)
   call get_param(param_file, mdl, "DEFAULT_ANSWER_DATE", default_answer_date, &
                  "This sets the default value for the various _ANSWER_DATE parameters.", &
-                 default=99991231, do_not_log=.true.)
+                 default=99991231)
   call get_param(param_file, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
                  "This sets the default value for the various _2018_ANSWERS parameters.", &
                  default=(default_answer_date<20190101))
@@ -234,11 +234,17 @@ subroutine ALE_init( param_file, GV, US, max_depth, CS)
                  "If true, use the order of arithmetic and expressions that recover the "//&
                  "answers from the end of 2018.  Otherwise, use updated and more robust "//&
                  "forms of the same expressions.", default=default_2018_answers)
-  if (answers_2018) then
-    CS%answer_date = 20181231
-  else
-    CS%answer_date = 20190101
-  endif
+  ! Revise inconsistent default answer dates for remapping.
+  if (answers_2018 .and. (default_answer_date >= 20190101)) default_answer_date = 20181231
+  if (.not.answers_2018 .and. (default_answer_date < 20190101)) default_answer_date = 20190101
+  call get_param(param_file, mdl, "REMAPPING_ANSWER_DATE", CS%answer_date, &
+                 "The vintage of the expressions and order of arithmetic to use for remapping.  "//&
+                 "Values below 20190101 result in the use of older, less accurate expressions "//&
+                 "that were in use at the end of 2018.  Higher values result in the use of more "//&
+                 "robust and accurate forms of mathematically equivalent expressions.  "//&
+                 "If both REMAPPING_2018_ANSWERS and REMAPPING_ANSWER_DATE are specified, the "//&
+                 "latter takes precedence.", default=default_answer_date)
+
   call initialize_remapping( CS%remapCS, string, &
                              boundary_extrapolation=remap_boundary_extrap, &
                              check_reconstruction=check_reconstruction, &

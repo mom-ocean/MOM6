@@ -229,6 +229,7 @@ logical function tidal_mixing_init(Time, G, GV, US, param_file, int_tide_CSp, di
   logical :: remap_answers_2018   ! If true, use the order of arithmetic and expressions that
                                   ! recover the remapping answers from 2018.  If false, use more
                                   ! robust forms of the same remapping expressions.
+  integer :: default_remap_ans_date ! The default setting for remap_answer_date
   character(len=20)  :: tmpstr, int_tide_profile_str
   character(len=20)  :: CVMix_tidal_scheme_str, tidal_energy_type
   character(len=200) :: filename, h2_file, Niku_TKE_input_file
@@ -279,7 +280,7 @@ logical function tidal_mixing_init(Time, G, GV, US, param_file, int_tide_CSp, di
 
   call get_param(param_file, mdl, "DEFAULT_ANSWER_DATE", default_answer_date, &
                  "This sets the default value for the various _ANSWER_DATE parameters.", &
-                 default=99991231, do_not_log=.true.)
+                 default=99991231)
   call get_param(param_file, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
                  "This sets the default value for the various _2018_ANSWERS parameters.", &
                  default=(default_answer_date<20190101))
@@ -291,11 +292,17 @@ logical function tidal_mixing_init(Time, G, GV, US, param_file, int_tide_CSp, di
                  "If true, use the order of arithmetic and expressions that recover the "//&
                  "answers from the end of 2018.  Otherwise, use updated and more robust "//&
                  "forms of the same expressions.", default=default_2018_answers)
-  if (remap_answers_2018) then
-    CS%remap_answer_date = 20181231
-  else
-    CS%remap_answer_date = 20190101
-  endif
+  ! Revise inconsistent default answer dates for remapping.
+  default_remap_ans_date = default_answer_date
+  if (remap_answers_2018 .and. (default_remap_ans_date >= 20190101)) default_remap_ans_date = 20181231
+  if (.not.remap_answers_2018 .and. (default_remap_ans_date < 20190101)) default_remap_ans_date = 20190101
+  call get_param(param_file, mdl, "REMAPPING_ANSWER_DATE", CS%remap_answer_date, &
+                 "The vintage of the expressions and order of arithmetic to use for remapping.  "//&
+                 "Values below 20190101 result in the use of older, less accurate expressions "//&
+                 "that were in use at the end of 2018.  Higher values result in the use of more "//&
+                 "robust and accurate forms of mathematically equivalent expressions.  "//&
+                 "If both REMAPPING_2018_ANSWERS and REMAPPING_ANSWER_DATE are specified, the "//&
+                 "latter takes precedence.", default=default_remap_ans_date)
 
   if (CS%int_tide_dissipation) then
 
