@@ -1,0 +1,17 @@
+name: 'install-macos-prerequisites'
+
+description: 'Install prerequisites for Mac OS compilation'
+
+runs:
+  using: 'composite'
+
+  steps:
+    - name: Install macOS packages
+      shell: bash
+      run: |
+        echo "::group::Install packages"
+        brew update
+        brew install automake
+        brew install netcdf
+        brew install mpich
+        echo "::endgroup::"

@@ -659,10 +659,10 @@ subroutine get_field_size(filename, fieldname, sizes, field_found, no_domain)
 
             ! Currently no z-test is supported, so disable assignment with 0
             size_indices = [ &
-                findloc(is_x, .true.), &
-                findloc(is_y, .true.), &
+                find_index(is_x), &
+                find_index(is_y), &
                 0, &
-                findloc(is_t, .true.) &
+                find_index(is_t) &
             ]
 
             do i = 1, size(size_indices)
@@ -684,8 +684,29 @@ subroutine get_field_size(filename, fieldname, sizes, field_found, no_domain)
   else
     call field_size(filename, fieldname, sizes, field_found=field_found, no_domain=no_domain)
   endif
-
 end subroutine get_field_size
+
+
+!> Return the index of the first True element of a logical array.
+!!
+!! If all elements are false, return zero.
+function find_index(vec) result(loc)
+  ! NOTE:  This function acts as a replacement for findloc() F2008 intrinsic,
+  !   which is not available on some compilers, or may not support logicals.
+  logical, intent(in) :: vec(:)
+  integer :: loc
+
+  integer :: i
+
+  loc = 0
+  do i = 1, size(vec)
+    if (vec(i)) then
+      loc = i
+      exit
+    endif
+  enddo
+end function find_index
+
 
 !> Extracts and returns the axis data stored in an axistype.
 subroutine get_axis_data( axis, dat )

@@ -637,9 +637,9 @@ subroutine update_offline_from_files(G, GV, US, nk_input, mean_file, sum_file, s
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
                            intent(inout) :: vhtr      !< Meridional mass fluxes [H L2 ~> m3 or kg]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
-                           intent(inout) :: temp_mean !< Averaged temperature [degC]
+                           intent(inout) :: temp_mean !< Averaged temperature [C ~> degC]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
-                           intent(inout) :: salt_mean !< Averaged salinity [ppt]
+                           intent(inout) :: salt_mean !< Averaged salinity [S ~> ppt]
   real, dimension(SZI_(G),SZJ_(G)),          &
                            intent(inout) :: mld       !< Averaged mixed layer depth [Z ~> m]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), &
@@ -682,9 +682,9 @@ subroutine update_offline_from_files(G, GV, US, nk_input, mean_file, sum_file, s
     call MOM_read_data(snap_file, 'h_end', h_end(:,:,1:nk_input), G%Domain, &
                        timelevel=ridx_snap, position=CENTER, scale=convert_to_H)
     call MOM_read_data(mean_file, 'temp', temp_mean(:,:,1:nk_input), G%Domain, &
-                       timelevel=ridx_sum,position=CENTER)
+                       timelevel=ridx_sum, position=CENTER, scale=US%degC_to_C)
     call MOM_read_data(mean_file, 'salt', salt_mean(:,:,1:nk_input), G%Domain, &
-                       timelevel=ridx_sum,position=CENTER)
+                       timelevel=ridx_sum, position=CENTER, scale=US%ppt_to_S)
 
     ! Fill temperature and salinity downward from the deepest input data.
     do k=nk_input+1,nz ; do j=js,je ; do i=is,ie
@@ -777,10 +777,10 @@ subroutine update_offline_from_arrays(G, GV, nk_input, ridx_sum, mean_file, sum_
   real, dimension(:,:,:,:), allocatable,     intent(inout) :: vhtr_all  !< Meridional mass fluxes [H L2 ~> m3 or kg]
   real, dimension(:,:,:,:), allocatable,     intent(inout) :: hend_all  !< End of timestep layer thickness
                                                                         !! [H ~> m or kg m-2]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(inout) :: temp      !< Temperature array
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(inout) :: salt      !< Salinity array
-  real, dimension(:,:,:,:), allocatable,     intent(inout) :: temp_all  !< Temperature array
-  real, dimension(:,:,:,:), allocatable,     intent(inout) :: salt_all  !< Salinity array
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(inout) :: temp      !< Temperature array [C ~> degC]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(inout) :: salt      !< Salinity array [ppt ~> S]
+  real, dimension(:,:,:,:), allocatable,     intent(inout) :: temp_all  !< Temperature array [C ~> degC]
+  real, dimension(:,:,:,:), allocatable,     intent(inout) :: salt_all  !< Salinity array [ppt ~> S]
 
   integer :: i, j, k, is, ie, js, je, nz
   real, parameter :: fill_value = 0.

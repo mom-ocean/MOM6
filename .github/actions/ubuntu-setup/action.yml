@@ -1,0 +1,19 @@
+name: 'install-ubuntu-prerequisites'
+
+description: 'Install prerequisites for Ubuntu Linux compilation'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Install Ubuntu Linux packages
+      shell: bash
+      run: |
+        echo "::group::Install linux packages"
+        sudo apt-get update
+        sudo apt-get install netcdf-bin
+        sudo apt-get install libnetcdf-dev
+        sudo apt-get install libnetcdff-dev
+        sudo apt-get install mpich
+        sudo apt-get install libmpich-dev
+        sudo apt-get install linux-tools-common
+        echo "::endgroup::"

@@ -97,11 +97,8 @@ subroutine set_grid_metrics(G, param_file, US)
   end select
   if (G%Rad_Earth_L <= 0.0) then
     ! The grid metrics were set with an option that does not explicitly initialize Rad_Earth.
-    ! ### Rad_Earth should be read as in:
-    !   call get_param(param_file, mdl, "RAD_EARTH", G%Rad_Earth_L, &
-    !               "The radius of the Earth.", units="m", default=6.378e6, scale=US%m_to_L)
-    ! but for now it is being set via a hard-coded value to reproduce current behavior.
-    G%Rad_Earth_L = 6.378e6*US%m_to_L
+    call get_param(param_file, "MOM_grid_init", "RAD_EARTH", G%Rad_Earth_L, &
+                   "The radius of the Earth.", units="m", default=6.378e6, scale=US%m_to_L)
   endif
   G%Rad_Earth = US%L_to_m*G%Rad_Earth_L
 
@@ -170,20 +167,15 @@ end subroutine grid_metrics_chksum
 subroutine set_grid_metrics_from_mosaic(G, param_file, US)
   type(dyn_horgrid_type), intent(inout) :: G           !< The dynamic horizontal grid type
   type(param_file_type),  intent(in)    :: param_file  !< Parameter file structure
-  type(unit_scale_type),  intent(in)    :: US    !< A dimensional unit scaling type
+  type(unit_scale_type),  intent(in)    :: US          !< A dimensional unit scaling type
+
   ! Local variables
-  ! These arrays are a holdover from earlier code in which the arrays in G were
-  ! macros and may have had reduced dimensions.
-  real, dimension(G%isd :G%ied ,G%jsd :G%jed ) :: dxT, dyT, areaT
-  real, dimension(G%IsdB:G%IedB,G%jsd :G%jed ) :: dxCu, dyCu
-  real, dimension(G%isd :G%ied ,G%JsdB:G%JedB) :: dxCv, dyCv
-  real, dimension(G%IsdB:G%IedB,G%JsdB:G%JedB) :: dxBu, dyBu, areaBu
-  ! This are symmetric arrays, corresponding to the data in the mosaic file
-  real, dimension(2*G%isd-2:2*G%ied+1,2*G%jsd-2:2*G%jed+1) :: tmpT
-  real, dimension(2*G%isd-3:2*G%ied+1,2*G%jsd-2:2*G%jed+1) :: tmpU
-  real, dimension(2*G%isd-2:2*G%ied+1,2*G%jsd-3:2*G%jed+1) :: tmpV
-  real, dimension(2*G%isd-3:2*G%ied+1,2*G%jsd-3:2*G%jed+1) :: tmpZ
-  real, dimension(:,:), allocatable :: tmpGlbl
+  ! These are symmetric arrays, corresponding to the data in the mosaic file
+  real, dimension(2*G%isd-2:2*G%ied+1,2*G%jsd-2:2*G%jed+1) :: tmpT ! Areas [L2 ~> m2]
+  real, dimension(2*G%isd-3:2*G%ied+1,2*G%jsd-2:2*G%jed+1) :: tmpU ! East face supergrid spacing [L ~> m]
+  real, dimension(2*G%isd-2:2*G%ied+1,2*G%jsd-3:2*G%jed+1) :: tmpV ! North face supergrid spacing [L ~> m]
+  real, dimension(2*G%isd-3:2*G%ied+1,2*G%jsd-3:2*G%jed+1) :: tmpZ ! Corner latitudes or longitudes [degN] or [degE]
+  real, dimension(:,:), allocatable :: tmpGlbl ! A global array of axis labels
   character(len=200) :: filename, grid_file, inputdir
   character(len=64)  :: mdl = "MOM_grid_init set_grid_metrics_from_mosaic"
   type(MOM_domain_type), pointer :: SGdom => NULL() ! Supergrid domain
@@ -207,11 +199,6 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
   if (.not.file_exists(filename)) &
     call MOM_error(FATAL," set_grid_metrics_from_mosaic: Unable to open "//&
                            trim(filename))
-
-  ! Initialize everything to 0.
-  dxCu(:,:) = 0.0 ; dyCu(:,:) = 0.0
-  dxCv(:,:) = 0.0 ; dyCv(:,:) = 0.0
-  dxBu(:,:) = 0.0 ; dyBu(:,:) = 0.0 ; areaBu(:,:) = 0.0
 
   !<MISSING CODE TO READ REFINEMENT LEVEL>
 
@@ -264,69 +251,56 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
 
   ! Read DX,DY from the supergrid
   tmpU(:,:) = 0. ; tmpV(:,:) = 0.
-  call MOM_read_data(filename,'dx',tmpV,SGdom,position=NORTH_FACE)
-  call MOM_read_data(filename,'dy',tmpU,SGdom,position=EAST_FACE)
+  call MOM_read_data(filename, 'dx', tmpV, SGdom, position=NORTH_FACE, scale=US%m_to_L)
+  call MOM_read_data(filename, 'dy', tmpU, SGdom, position=EAST_FACE, scale=US%m_to_L)
   call pass_vector(tmpU, tmpV, SGdom, To_All+Scalar_Pair, CGRID_NE)
   call extrapolate_metric(tmpV, 2*(G%jsc-G%jsd)+2, missing=0.)
   call extrapolate_metric(tmpU, 2*(G%jsc-G%jsd)+2, missing=0.)
 
   do j=G%jsd,G%jed ; do i=G%isd,G%ied ; i2 = 2*i ; j2 = 2*j
-    dxT(i,j) = tmpV(i2-1,j2-1) + tmpV(i2,j2-1)
-    dyT(i,j) = tmpU(i2-1,j2-1) + tmpU(i2-1,j2)
+    G%dxT(i,j) = tmpV(i2-1,j2-1) + tmpV(i2,j2-1)
+    G%dyT(i,j) = tmpU(i2-1,j2-1) + tmpU(i2-1,j2)
   enddo ; enddo
 
   do j=G%jsd,G%jed ; do I=G%IsdB,G%IedB ; i2 = 2*i ; j2 = 2*j
-    dxCu(I,j) = tmpV(i2,j2-1) + tmpV(i2+1,j2-1)
-    dyCu(I,j) = tmpU(i2,j2-1) + tmpU(i2,j2)
+    G%dxCu(I,j) = tmpV(i2,j2-1) + tmpV(i2+1,j2-1)
+    G%dyCu(I,j) = tmpU(i2,j2-1) + tmpU(i2,j2)
   enddo ; enddo
 
   do J=G%JsdB,G%JedB ; do i=G%isd,G%ied ; i2 = 2*i ; j2 = 2*j
-    dxCv(i,J) = tmpV(i2-1,j2) + tmpV(i2,j2)
-    dyCv(i,J) = tmpU(i2-1,j2) + tmpU(i2-1,j2+1)
+    G%dxCv(i,J) = tmpV(i2-1,j2) + tmpV(i2,j2)
+    G%dyCv(i,J) = tmpU(i2-1,j2) + tmpU(i2-1,j2+1)
   enddo ; enddo
 
   do J=G%JsdB,G%JedB ; do I=G%IsdB,G%IedB ; i2 = 2*i ; j2 = 2*j
-    dxBu(I,J) = tmpV(i2,j2) + tmpV(i2+1,j2)
-    dyBu(I,J) = tmpU(i2,j2) + tmpU(i2,j2+1)
+    G%dxBu(I,J) = tmpV(i2,j2) + tmpV(i2+1,j2)
+    G%dyBu(I,J) = tmpU(i2,j2) + tmpU(i2,j2+1)
   enddo ; enddo
 
   ! Read AREA from the supergrid
   tmpT(:,:) = 0.
-  call MOM_read_data(filename, 'area', tmpT, SGdom)
+  call MOM_read_data(filename, 'area', tmpT, SGdom, scale=US%m_to_L**2)
   call pass_var(tmpT, SGdom)
   call extrapolate_metric(tmpT, 2*(G%jsc-G%jsd)+2, missing=0.)
 
   do j=G%jsd,G%jed ; do i=G%isd,G%ied ; i2 = 2*i ; j2 = 2*j
-    areaT(i,j) = (tmpT(i2-1,j2-1) + tmpT(i2,j2)) + &
-                 (tmpT(i2-1,j2) + tmpT(i2,j2-1))
+    G%areaT(i,j) = (tmpT(i2-1,j2-1) + tmpT(i2,j2)) + &
+                   (tmpT(i2-1,j2) + tmpT(i2,j2-1))
   enddo ; enddo
   do J=G%JsdB,G%JedB ; do I=G%IsdB,G%IedB ; i2 = 2*i ; j2 = 2*j
-    areaBu(I,J) = (tmpT(i2,j2) + tmpT(i2+1,j2+1)) + &
-                  (tmpT(i2,j2+1) + tmpT(i2+1,j2))
+    G%areaBu(I,J) = (tmpT(i2,j2) + tmpT(i2+1,j2+1)) + &
+                    (tmpT(i2,j2+1) + tmpT(i2+1,j2))
   enddo ; enddo
 
   ni = SGdom%niglobal
   nj = SGdom%njglobal
   call deallocate_MOM_domain(SGdom)
 
-  call pass_vector(dyCu, dxCv, G%Domain, To_All+Scalar_Pair, CGRID_NE)
-  call pass_vector(dxCu, dyCv, G%Domain, To_All+Scalar_Pair, CGRID_NE)
-  call pass_vector(dxBu, dyBu, G%Domain, To_All+Scalar_Pair, BGRID_NE)
-  call pass_var(areaT, G%Domain)
-  call pass_var(areaBu, G%Domain, position=CORNER)
-
-  do i=G%isd,G%ied ; do j=G%jsd,G%jed
-    G%dxT(i,j) = US%m_to_L*dxT(i,j) ; G%dyT(i,j) = US%m_to_L*dyT(i,j) ; G%areaT(i,j) = US%m_to_L**2*areaT(i,j)
-  enddo ; enddo
-  do I=G%IsdB,G%IedB ; do j=G%jsd,G%jed
-    G%dxCu(I,j) = US%m_to_L*dxCu(I,j) ; G%dyCu(I,j) = US%m_to_L*dyCu(I,j)
-  enddo ; enddo
-  do i=G%isd,G%ied ; do J=G%JsdB,G%JedB
-    G%dxCv(i,J) = US%m_to_L*dxCv(i,J) ; G%dyCv(i,J) = US%m_to_L*dyCv(i,J)
-  enddo ; enddo
-  do I=G%IsdB,G%IedB ; do J=G%JsdB,G%JedB
-    G%dxBu(I,J) = US%m_to_L*dxBu(I,J) ; G%dyBu(I,J) = US%m_to_L*dyBu(I,J) ; G%areaBu(I,J) = US%m_to_L**2*areaBu(I,J)
-  enddo ; enddo
+  call pass_vector(G%dyCu, G%dxCv, G%Domain, To_All+Scalar_Pair, CGRID_NE)
+  call pass_vector(G%dxCu, G%dyCv, G%Domain, To_All+Scalar_Pair, CGRID_NE)
+  call pass_vector(G%dxBu, G%dyBu, G%Domain, To_All+Scalar_Pair, BGRID_NE)
+  call pass_var(G%areaT, G%Domain)
+  call pass_var(G%areaBu, G%Domain, position=CORNER)
 
   ! Construct axes for diagnostic output (only necessary because "ferret" uses
   ! broken convention for interpretting netCDF files).

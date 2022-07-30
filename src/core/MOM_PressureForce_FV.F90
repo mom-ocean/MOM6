@@ -99,14 +99,14 @@ subroutine PressureForce_FV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1) :: p ! Interface pressure [R L2 T-2 ~> Pa].
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), target :: &
     T_tmp, &    ! Temporary array of temperatures where layers that are lighter
-                ! than the mixed layer have the mixed layer's properties [degC].
+                ! than the mixed layer have the mixed layer's properties [C ~> degC].
     S_tmp       ! Temporary array of salinities where layers that are lighter
-                ! than the mixed layer have the mixed layer's properties [ppt].
+                ! than the mixed layer have the mixed layer's properties [S ~> ppt].
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: &
     S_t, &      ! Top and bottom edge values for linear reconstructions
-    S_b, &      ! of salinity within each layer [ppt].
+    S_b, &      ! of salinity within each layer [S ~> ppt].
     T_t, &      ! Top and bottom edge values for linear reconstructions
-    T_b         ! of temperature within each layer [degC].
+    T_b         ! of temperature within each layer [C ~> degC].
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: &
     dza, &      ! The change in geopotential anomaly between the top and bottom
                 ! of a layer [L2 T-2 ~> m2 s-2].
@@ -468,12 +468,14 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm
 
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), target :: &
     T_tmp, &    ! Temporary array of temperatures where layers that are lighter
-                ! than the mixed layer have the mixed layer's properties [degC].
+                ! than the mixed layer have the mixed layer's properties [C ~> degC].
     S_tmp       ! Temporary array of salinities where layers that are lighter
-                ! than the mixed layer have the mixed layer's properties [ppt].
+                ! than the mixed layer have the mixed layer's properties [S ~> ppt].
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: &
-    S_t, S_b, T_t, T_b ! Top and bottom edge values for linear reconstructions
-                       ! of salinity and temperature within each layer.
+    S_t, &      ! Top and bottom edge values for linear reconstructions
+    S_b, &      ! of salinity within each layer [S ~> ppt].
+    T_t, &      ! Top and bottom edge values for linear reconstructions
+    T_b         ! of temperature within each layer [C ~> degC].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
     rho_pgf, rho_stanley_pgf ! Density [kg m-3] from EOS with and without SGS T variance
                                         ! in Stanley parameterization.
@@ -658,7 +660,7 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm
       ! where the layers are located.
       if ( use_ALE .and. CS%Recon_Scheme > 0 ) then
         if ( CS%Recon_Scheme == 1 ) then
-          call int_density_dz_generic_plm(k, tv,  T_t, T_b, S_t, S_b, e, &
+          call int_density_dz_generic_plm(k, tv, T_t, T_b, S_t, S_b, e, &
                     rho_ref, CS%Rho0, GV%g_Earth, dz_neglect, G%bathyT, &
                     G%HI, GV, tv%eqn_of_state, US, CS%use_stanley_pgf, dpa, intz_dpa, intx_dpa, inty_dpa, &
                     useMassWghtInterp=CS%useMassWghtInterp, &
