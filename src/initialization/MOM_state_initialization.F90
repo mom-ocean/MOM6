@@ -2491,6 +2491,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, depth_tot, G, GV, US, PF, just
                                   ! answers from 2018, while higher values use more robust
                                   ! forms of the same remapping expressions.
   logical :: hor_regrid_answers_2018
+  integer :: default_hor_reg_ans_date ! The default setting for hor_regrid_answer_date
   integer :: hor_regrid_answer_date  ! The vintage of the order of arithmetic and expressions to use
                                   ! for horizontal regridding.  Values below 20190101 recover the
                                   ! answers from 2018, while higher values use expressions that have
@@ -2603,7 +2604,17 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, depth_tot, G, GV, US, PF, just
                  "If true, use the order of arithmetic for horizonal regridding that recovers "//&
                  "the answers from the end of 2018.  Otherwise, use rotationally symmetric "//&
                  "forms of the same expressions.", default=default_2018_answers)
-  hor_regrid_answer_date = 20190101 ; if (hor_regrid_answers_2018) hor_regrid_answer_date = 20181231
+  ! Revise inconsistent default answer dates for horizontal regridding.
+  default_hor_reg_ans_date = default_answer_date
+  if (hor_regrid_answers_2018 .and. (default_hor_reg_ans_date >= 20190101)) default_hor_reg_ans_date = 20181231
+  if (.not.hor_regrid_answers_2018 .and. (default_hor_reg_ans_date < 20190101)) default_hor_reg_ans_date = 20190101
+  call get_param(PF, mdl, "HOR_REGRID_ANSWER_DATE", hor_regrid_answer_date, &
+                 "The vintage of the order of arithmetic for horizontal regridding.  "//&
+                 "Dates before 20190101 give the same answers as the code did in late 2018, "//&
+                 "while later versions add parentheses for rotational symmetry.  "//&
+                 "If both HOR_REGRID_2018_ANSWERS and HOR_REGRID_ANSWER_DATE are specified, the "//&
+                 "latter takes precedence.", default=default_hor_reg_ans_date)
+
   if (.not.useALEremapping) then
     call get_param(PF, mdl, "ADJUST_THICKNESS", correct_thickness, &
                  "If true, all mass below the bottom removed if the "//&
