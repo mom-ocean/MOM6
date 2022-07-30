@@ -41,9 +41,10 @@ type, public :: optics_type
                         !! sufficiently thick layer [H degC T-1 ~> degC m s-1 or degC kg m-2 s-1].
   real :: PenSW_absorb_Invlen !< The inverse of the thickness that is used to absorb the remaining
                         !! shortwave heat flux when it drops below PEN_SW_FLUX_ABSORB [H ~> m or kg m-2].
-  logical :: answers_2018    !< If true, use the order of arithmetic and expressions that recover the
-                             !! answers from the end of 2018.  Otherwise, use updated and more robust
-                             !! forms of the same expressions.
+  integer :: answer_date  !< The vintage of the order of arithmetic and expressions in the optics
+                          !! calculations.  Values below 20190101 recover the answers from the
+                          !! end of 2018, while higher values use updated and more robust
+                          !! forms of the same expressions.
 
 end type optics_type
 
@@ -631,7 +632,7 @@ subroutine absorbRemainingSW(G, GV, US, h, opacity_band, nsw, optics, j, dt, H_l
 
   TKE_calc = (present(TKE) .and. present(dSV_dT))
 
-  if (optics%answers_2018) then
+  if (optics%answer_date < 20190101) then
     g_Hconv2 = (US%L_to_Z**2*GV%g_Earth * GV%H_to_RZ) * GV%H_to_RZ
   else
     g_Hconv2 = US%L_to_Z**2*GV%g_Earth * GV%H_to_RZ**2
@@ -661,7 +662,7 @@ subroutine absorbRemainingSW(G, GV, US, h, opacity_band, nsw, optics, j, dt, H_l
 
         ! Heating at a very small rate can be absorbed by a sufficiently thick layer or several
         ! thin layers without further penetration.
-        if (optics%answers_2018) then
+        if (optics%answer_date < 20190101) then
           if (nsw*Pen_SW_bnd(n,i)*SW_trans < min_SW_heat*min(1.0, I_Habs*h(i,k)) ) SW_trans = 0.0
         elseif ((nsw*Pen_SW_bnd(n,i)*SW_trans < min_SW_heat) .and. (h(i,k) > h_min_heat)) then
           if (nsw*Pen_SW_bnd(n,i) <= min_SW_heat * (I_Habs*(h(i,k) - h_min_heat))) then
@@ -881,7 +882,7 @@ subroutine sumSWoverBands(G, GV, US, h, nsw, optics, j, dt, &
 
           ! Heating at a very small rate can be absorbed by a sufficiently thick layer or several
           ! thin layers without further penetration.
-          if (optics%answers_2018) then
+          if (optics%answer_date < 20190101) then
             if (nsw*Pen_SW_bnd(n,i)*SW_trans < min_SW_heat*min(1.0, I_Habs*h(i,k)) ) SW_trans = 0.0
           elseif ((nsw*Pen_SW_bnd(n,i)*SW_trans < min_SW_heat) .and. (h(i,k) > h_min_heat)) then
             if (nsw*Pen_SW_bnd(n,i) <= min_SW_heat * (I_Habs*(h(i,k) - h_min_heat))) then
@@ -958,7 +959,11 @@ subroutine opacity_init(Time, G, GV, US, param_file, diag, CS, optics)
   real :: PenSW_absorb_minthick ! A thickness that is used to absorb the remaining shortwave heat
                                 ! flux when that flux drops below PEN_SW_FLUX_ABSORB [H ~> m or kg m-2]
   real :: PenSW_minthick_dflt ! The default for PenSW_absorb_minthick [m]
-  logical :: default_2018_answers
+  logical :: answers_2018     ! If true, use the order of arithmetic and expressions that recover the
+                              ! answers from the end of 2018.  Otherwise, use updated and more robust
+                              ! forms of the same expressions.
+  integer :: default_answer_date  ! The default setting for the various ANSWER_DATE flags
+  logical :: default_2018_answers ! The default setting for the various 2018_ANSWERS flags
   integer :: isd, ied, jsd, jed, nz, n
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nz = GV%ke
 
@@ -1056,14 +1061,27 @@ subroutine opacity_init(Time, G, GV, US, param_file, diag, CS, optics)
         "set_opacity: \Cannot use a single_exp opacity scheme with nbands!=1.")
   endif
 
+  call get_param(param_file, mdl, "DEFAULT_ANSWER_DATE", default_answer_date, &
+                 "This sets the default value for the various _ANSWER_DATE parameters.", &
+                 default=99991231)
   call get_param(param_file, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
                  "This sets the default value for the various _2018_ANSWERS parameters.", &
-                 default=.false.)
-  call get_param(param_file, mdl, "OPTICS_2018_ANSWERS", optics%answers_2018, &
+                 default=(default_answer_date<20190101))
+  call get_param(param_file, mdl, "OPTICS_2018_ANSWERS", answers_2018, &
                  "If true, use the order of arithmetic and expressions that recover the "//&
                  "answers from the end of 2018.  Otherwise, use updated expressions for "//&
                  "handling the absorption of small remaining shortwave fluxes.", &
                  default=default_2018_answers)
+  ! Revise inconsistent default answer dates for optics.
+  if (answers_2018 .and. (default_answer_date >= 20190101)) default_answer_date = 20181231
+  if (.not.answers_2018 .and. (default_answer_date < 20190101)) default_answer_date = 20190101
+  call get_param(param_file, mdl, "OPTICS_ANSWER_DATE", optics%answer_date, &
+                 "The vintage of the order of arithmetic and expressions in the optics calculations.  "//&
+                 "Values below 20190101 recover the answers from the end of 2018, while "//&
+                 "higher values use updated and more robust forms of the same expressions.  "//&
+                 "If both OPTICS_2018_ANSWERS and OPTICS_ANSWER_DATE are "//&
+                 "specified, the latter takes precedence.", default=default_answer_date)
+
 
   call get_param(param_file, mdl, "PEN_SW_FLUX_ABSORB", optics%PenSW_flux_absorb, &
                  "A minimum remaining shortwave heating rate that will be simply absorbed in "//&
@@ -1072,7 +1090,7 @@ subroutine opacity_init(Time, G, GV, US, param_file, diag, CS, optics)
                  "or 0.08 degC m century-1, but 0 is also a valid value.", &
                  default=2.5e-11, units="degC m s-1", scale=US%degC_to_C*GV%m_to_H*US%T_to_s)
 
-  if (optics%answers_2018) then ; PenSW_minthick_dflt = 0.001 ; else ; PenSW_minthick_dflt = 1.0 ; endif
+  if (optics%answer_date < 20190101) then ; PenSW_minthick_dflt = 0.001 ; else ; PenSW_minthick_dflt = 1.0 ; endif
   call get_param(param_file, mdl, "PEN_SW_ABSORB_MINTHICK", PenSW_absorb_minthick, &
                  "A thickness that is used to absorb the remaining penetrating shortwave heat "//&
                  "flux when it drops below PEN_SW_FLUX_ABSORB.", &

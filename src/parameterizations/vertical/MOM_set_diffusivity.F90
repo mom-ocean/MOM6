@@ -151,9 +151,10 @@ type, public :: set_diffusivity_CS ; private
   real    :: Max_salt_diff_salt_fingers !< max salt diffusivity for salt fingers [Z2 T-1 ~> m2 s-1]
   real    :: Kv_molecular               !< molecular visc for double diff convect [Z2 T-1 ~> m2 s-1]
 
-  logical :: answers_2018   !< If true, use the order of arithmetic and expressions that recover the
-                            !! answers from the end of 2018.  Otherwise, use updated and more robust
-                            !! forms of the same expressions.
+  integer :: answer_date      !< The vintage of the order of arithmetic and expressions in this module's
+                              !! calculations.  Values below 20190101 recover the answers from the
+                              !! end of 2018, while higher values use updated and more robust forms
+                              !! of the same expressions.
 
   character(len=200) :: inputdir !< The directory in which input files are found
   type(user_change_diff_CS), pointer :: user_change_diff_CSp => NULL() !< Control structure for a child module
@@ -286,7 +287,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, Kd_i
   if (.not.CS%initialized) call MOM_error(FATAL,"set_diffusivity: "//&
          "Module must be initialized before it is used.")
 
-  if (CS%answers_2018) then
+  if (CS%answer_date < 20190101) then
     ! These hard-coded dimensional parameters are being replaced.
     kappa_dt_fill = US%m_to_Z**2 * 1.e-3 * 7200.
   else
@@ -719,7 +720,7 @@ subroutine find_TKE_to_Kd(h, tv, dRho_int, N2_lay, j, dt, G, GV, US, CS, &
   Omega2    = CS%omega**2
   H_neglect = GV%H_subroundoff
   G_Rho0    = (US%L_to_Z**2 * GV%g_Earth) / (GV%Rho0)
-  if (CS%answers_2018) then
+  if (CS%answer_date < 20190101) then
     I_Rho0    = 1.0 / (GV%Rho0)
     G_IRho0 = (US%L_to_Z**2 * GV%g_Earth) * I_Rho0
   else
@@ -801,7 +802,7 @@ subroutine find_TKE_to_Kd(h, tv, dRho_int, N2_lay, j, dt, G, GV, US, CS, &
     if (k == kb(i)) then
       maxEnt(i,kb(i)) = mFkb(i)
     elseif (k > kb(i)) then
-      if (CS%answers_2018) then
+      if (CS%answer_date < 20190101) then
         maxEnt(i,k) = (1.0/dsp1_ds(i,k))*(maxEnt(i,k-1) + htot(i))
       else
         maxEnt(i,k) = ds_dsp1(i,k)*(maxEnt(i,k-1) + htot(i))
@@ -1981,7 +1982,11 @@ subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, int_tide_
   ! Local variables
   real :: decay_length
   logical :: ML_use_omega
-  logical :: default_2018_answers
+  integer :: default_answer_date  ! The default setting for the various ANSWER_DATE flags.
+  logical :: default_2018_answers ! The default setting for the various 2018_ANSWERS flags.
+  logical :: answers_2018  ! If true, use the order of arithmetic and expressions that recover the
+                           ! answers from the end of 2018.  Otherwise, use updated and more robust
+                           ! forms of the same expressions.
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
   character(len=40)  :: mdl = "MOM_set_diffusivity"  ! This module's name.
@@ -2029,13 +2034,25 @@ subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, int_tide_
   call get_param(param_file, mdl, "OMEGA", CS%omega, &
                  "The rotation rate of the earth.", units="s-1", default=7.2921e-5, scale=US%T_to_s)
 
+  call get_param(param_file, mdl, "DEFAULT_ANSWER_DATE", default_answer_date, &
+                 "This sets the default value for the various _ANSWER_DATE parameters.", &
+                 default=99991231)
   call get_param(param_file, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
                  "This sets the default value for the various _2018_ANSWERS parameters.", &
-                 default=.false.)
-  call get_param(param_file, mdl, "SET_DIFF_2018_ANSWERS", CS%answers_2018, &
+                 default=(default_answer_date<20190101))
+  call get_param(param_file, mdl, "SET_DIFF_2018_ANSWERS", answers_2018, &
                  "If true, use the order of arithmetic and expressions that recover the "//&
                  "answers from the end of 2018.  Otherwise, use updated and more robust "//&
                  "forms of the same expressions.", default=default_2018_answers)
+  ! Revise inconsistent default answer dates.
+  if (answers_2018 .and. (default_answer_date >= 20190101)) default_answer_date = 20181231
+  if (.not.answers_2018 .and. (default_answer_date < 20190101)) default_answer_date = 20190101
+  call get_param(param_file, mdl, "SET_DIFF_ANSWER_DATE", CS%answer_date, &
+               "The vintage of the order of arithmetic and expressions in the set diffusivity "//&
+               "calculations.  Values below 20190101 recover the answers from the end of 2018, "//&
+               "while higher values use updated and more robust forms of the same expressions.  "//&
+               "If both SET_DIFF_2018_ANSWERS and SET_DIFF_ANSWER_DATE are specified, the "//&
+               "latter takes precedence.", default=default_answer_date)
 
   ! CS%use_tidal_mixing is set to True if an internal tidal dissipation scheme is to be used.
   CS%use_tidal_mixing = tidal_mixing_init(Time, G, GV, US, param_file, &

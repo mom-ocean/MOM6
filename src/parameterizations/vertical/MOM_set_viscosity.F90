@@ -93,8 +93,9 @@ type, public :: set_visc_CS ; private
   real    :: omega_frac     !<   When setting the decay scale for turbulence, use
                             !! this fraction of the absolute rotation rate blended
                             !! with the local value of f, as sqrt((1-of)*f^2 + of*4*omega^2).
-  logical :: answers_2018   !< If true, use the order of arithmetic and expressions that recover the
-                            !! answers from the end of 2018.  Otherwise, use updated and more robust
+  integer :: answer_date    !< The vintage of the order of arithmetic and expressions in the set
+                            !! viscosity calculations.  Values below 20190101 recover the answers
+                            !! from the end of 2018, while higher values use updated and more robust
                             !! forms of the same expressions.
   logical :: debug          !< If true, write verbose checksums for debugging purposes.
   logical :: BBL_use_tidal_bg !< If true, use a tidal background amplitude for the bottom velocity
@@ -867,7 +868,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, pbv)
 
               use_L0 = .false.
               do_one_L_iter = .false.
-              if (CS%answers_2018) then
+              if (CS%answer_date < 20190101) then
                 curv_tol = GV%Angstrom_H*dV_dL2**2 &
                            * (0.25 * dV_dL2 * GV%Angstrom_H - a * L0 * dVol)
                 do_one_L_iter = (a * a * dVol**3) < curv_tol
@@ -1964,7 +1965,11 @@ subroutine set_visc_init(Time, G, GV, US, param_file, diag, visc, CS, restart_CS
                            ! representation in a restart file to the internal representation in this run.
   integer :: i, j, k, is, ie, js, je
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, nz
-  logical :: default_2018_answers
+  integer :: default_answer_date  ! The default setting for the various ANSWER_DATE flags.
+  logical :: default_2018_answers ! The default setting for the various 2018_ANSWERS flags.
+  logical :: answers_2018  ! If true, use the order of arithmetic and expressions that recover the
+                           ! answers from the end of 2018.  Otherwise, use updated and more robust
+                           ! forms of the same expressions.
   logical :: adiabatic, use_omega, MLE_use_PBL_MLD
   logical :: use_KPP
   logical :: use_regridding  ! If true, use the ALE algorithm rather than layered
@@ -1990,13 +1995,25 @@ subroutine set_visc_init(Time, G, GV, US, param_file, diag, visc, CS, restart_CS
   CS%RiNo_mix = .false.
   call get_param(param_file, mdl, "INPUTDIR", CS%inputdir, default=".")
   CS%inputdir = slasher(CS%inputdir)
+  call get_param(param_file, mdl, "DEFAULT_ANSWER_DATE", default_answer_date, &
+                 "This sets the default value for the various _ANSWER_DATE parameters.", &
+                 default=99991231)
   call get_param(param_file, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
                  "This sets the default value for the various _2018_ANSWERS parameters.", &
-                 default=.false.)
-  call get_param(param_file, mdl, "SET_VISC_2018_ANSWERS", CS%answers_2018, &
+                 default=(default_answer_date<20190101))
+  call get_param(param_file, mdl, "SET_VISC_2018_ANSWERS", answers_2018, &
                  "If true, use the order of arithmetic and expressions that recover the "//&
                  "answers from the end of 2018.  Otherwise, use updated and more robust "//&
                  "forms of the same expressions.", default=default_2018_answers)
+  ! Revise inconsistent default answer dates.
+  if (answers_2018 .and. (default_answer_date >= 20190101)) default_answer_date = 20181231
+  if (.not.answers_2018 .and. (default_answer_date < 20190101)) default_answer_date = 20190101
+  call get_param(param_file, mdl, "SET_VISC_ANSWER_DATE", CS%answer_date, &
+                 "The vintage of the order of arithmetic and expressions in the set viscosity "//&
+                 "calculations.  Values below 20190101 recover the answers from the end of 2018, "//&
+                 "while higher values use updated and more robust forms of the same expressions.  "//&
+                 "If both SET_VISC_2018_ANSWERS and SET_VISC_ANSWER_DATE are specified, "//&
+                 "the latter takes precedence.", default=default_answer_date)
   call get_param(param_file, mdl, "BOTTOMDRAGLAW", CS%bottomdraglaw, &
                  "If true, the bottom stress is calculated with a drag "//&
                  "law of the form c_drag*|u|*u. The velocity magnitude "//&
