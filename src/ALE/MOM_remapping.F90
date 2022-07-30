@@ -1896,7 +1896,7 @@ logical function remapping_unit_tests(verbose)
 
   call edge_values_explicit_h4( 5, (/1.,1.,1.,1.,1./), (/1.,1.,7.,19.,37./), ppoly0_E, &
                                 h_neglect=1e-10, answer_date=answer_date )
-  ! The next two tests are now passing when answers_2018 = .false., but otherwise only work to roundoff.
+  ! The next two tests are now passing when answer_date >= 20190101, but otherwise only work to roundoff.
   thisTest = test_answer(v, 5, ppoly0_E(:,1), (/3.,0.,3.,12.,27./), 'Parabola H4: left edges', tol=2.7e-14)
   remapping_unit_tests = remapping_unit_tests .or. thisTest
   thisTest = test_answer(v, 5, ppoly0_E(:,2), (/0.,3.,12.,27.,48./), 'Parabola H4: right edges', tol=4.8e-14)
