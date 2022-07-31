@@ -1194,21 +1194,21 @@ subroutine trim_for_ice(PF, G, GV, US, ALE_CSp, tv, h, just_read)
                  "file SURFACE_PRESSURE_FILE into a surface pressure.", &
                  units="file dependent", default=1., do_not_log=just_read)
   call get_param(PF, mdl, "MIN_THICKNESS", min_thickness, 'Minimum layer thickness', &
-                 units='m', default=1.e-3, do_not_log=just_read, scale=US%m_to_Z)
+                 units='m', default=1.e-3, scale=US%m_to_Z, do_not_log=just_read)
   call get_param(PF, mdl, "TRIMMING_USES_REMAPPING", use_remapping, &
                  'When trimming the column, also remap T and S.', &
                  default=.false., do_not_log=just_read)
   if (use_remapping) then
     call get_param(PF, mdl, "DEFAULT_ANSWER_DATE", default_answer_date, &
                  "This sets the default value for the various _ANSWER_DATE parameters.", &
-                 default=99991231)
+                 default=99991231, do_not_log=just_read)
     call get_param(PF, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
                  "This sets the default value for the various _2018_ANSWERS parameters.", &
-                 default=(default_answer_date<20190101))
+                 default=(default_answer_date<20190101), do_not_log=just_read)
     call get_param(PF, mdl, "REMAPPING_2018_ANSWERS", remap_answers_2018, &
                  "If true, use the order of arithmetic and expressions that recover the "//&
                  "answers from the end of 2018.  Otherwise, use updated and more robust "//&
-                 "forms of the same expressions.", default=default_2018_answers)
+                 "forms of the same expressions.", default=default_2018_answers, do_not_log=just_read)
     ! Revise inconsistent default answer dates for remapping.
     if (remap_answers_2018 .and. (default_answer_date >= 20190101)) default_answer_date = 20181231
     if (.not.remap_answers_2018 .and. (default_answer_date < 20190101)) default_answer_date = 20190101
@@ -1218,7 +1218,7 @@ subroutine trim_for_ice(PF, G, GV, US, ALE_CSp, tv, h, just_read)
                  "that were in use at the end of 2018.  Higher values result in the use of more "//&
                  "robust and accurate forms of mathematically equivalent expressions.  "//&
                  "If both REMAPPING_2018_ANSWERS and REMAPPING_ANSWER_DATE are specified, the "//&
-                 "latter takes precedence.", default=default_answer_date)
+                 "latter takes precedence.", default=default_answer_date, do_not_log=just_read)
   else
     remap_answer_date = 20181231
   endif
@@ -2574,20 +2574,20 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, depth_tot, G, GV, US, PF, just
                  default=.false., do_not_log=just_read)
   call get_param(PF, mdl, "DEFAULT_ANSWER_DATE", default_answer_date, &
                  "This sets the default value for the various _ANSWER_DATE parameters.", &
-                 default=99991231)
+                 default=99991231, do_not_log=just_read)
   call get_param(PF, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
                  "This sets the default value for the various _2018_ANSWERS parameters.", &
-                 default=(default_answer_date<20190101))
+                 default=(default_answer_date<20190101), do_not_log=just_read)
   call get_param(PF, mdl, "TEMP_SALT_INIT_VERTICAL_REMAP_ONLY", pre_gridded, &
                  "If true, initial conditions are on the model horizontal grid. " //&
                  "Extrapolation over missing ocean values is done using an ICE-9 "//&
                  "procedure with vertical ALE remapping .", &
-                 default=.false.)
+                 default=.false., do_not_log=just_read)
   if (useALEremapping) then
     call get_param(PF, mdl, "REMAPPING_2018_ANSWERS", remap_answers_2018, &
                  "If true, use the order of arithmetic and expressions that recover the "//&
                  "answers from the end of 2018.  Otherwise, use updated and more robust "//&
-                 "forms of the same expressions.", default=default_2018_answers)
+                 "forms of the same expressions.", default=default_2018_answers, do_not_log=just_read)
     ! Revise inconsistent default answer dates for remapping.
     default_remap_ans_date = default_answer_date
     if (remap_answers_2018 .and. (default_remap_ans_date >= 20190101)) default_remap_ans_date = 20181231
@@ -2598,12 +2598,12 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, depth_tot, G, GV, US, PF, just
                  "that were in use at the end of 2018.  Higher values result in the use of more "//&
                  "robust and accurate forms of mathematically equivalent expressions.  "//&
                  "If both REMAPPING_2018_ANSWERS and REMAPPING_ANSWER_DATE are specified, the "//&
-                 "latter takes precedence.", default=default_remap_ans_date)
+                 "latter takes precedence.", default=default_remap_ans_date, do_not_log=just_read)
   endif
   call get_param(PF, mdl, "HOR_REGRID_2018_ANSWERS", hor_regrid_answers_2018, &
                  "If true, use the order of arithmetic for horizonal regridding that recovers "//&
                  "the answers from the end of 2018.  Otherwise, use rotationally symmetric "//&
-                 "forms of the same expressions.", default=default_2018_answers)
+                 "forms of the same expressions.", default=default_2018_answers, do_not_log=just_read)
   ! Revise inconsistent default answer dates for horizontal regridding.
   default_hor_reg_ans_date = default_answer_date
   if (hor_regrid_answers_2018 .and. (default_hor_reg_ans_date >= 20190101)) default_hor_reg_ans_date = 20181231
@@ -2613,7 +2613,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, depth_tot, G, GV, US, PF, just
                  "Dates before 20190101 give the same answers as the code did in late 2018, "//&
                  "while later versions add parentheses for rotational symmetry.  "//&
                  "If both HOR_REGRID_2018_ANSWERS and HOR_REGRID_ANSWER_DATE are specified, the "//&
-                 "latter takes precedence.", default=default_hor_reg_ans_date)
+                 "latter takes precedence.", default=default_hor_reg_ans_date, do_not_log=just_read)
 
   if (.not.useALEremapping) then
     call get_param(PF, mdl, "ADJUST_THICKNESS", correct_thickness, &
