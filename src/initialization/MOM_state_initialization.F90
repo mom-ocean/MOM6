@@ -1087,11 +1087,11 @@ subroutine depress_surface(h, G, GV, US, param_file, tv, just_read, z_top_shelf)
 
     call get_param(param_file, mdl, "INPUTDIR", inputdir, default=".")
     inputdir = slasher(inputdir)
-    call get_param(param_file, mdl, "SURFACE_HEIGHT_IC_FILE", eta_srf_file,&
+    call get_param(param_file, mdl, "SURFACE_HEIGHT_IC_FILE", eta_srf_file, &
                    "The initial condition file for the surface height.", &
                    fail_if_missing=.not.just_read, do_not_log=just_read)
     call get_param(param_file, mdl, "SURFACE_HEIGHT_IC_VAR", eta_srf_var, &
-                   "The initial condition variable for the surface height.",&
+                   "The initial condition variable for the surface height.", &
                    default="SSH", do_not_log=just_read)
     filename = trim(inputdir)//trim(eta_srf_file)
     if (.not.just_read) &
@@ -1263,7 +1263,7 @@ subroutine calc_sfc_displacement(PF, G, GV, US, mass_shelf, tv, h)
 
   call get_param(PF, mdl, "ICE_SHELF_INITIALIZATION_Z_TOLERANCE", tol, &
                 "A initialization tolerance for the calculation of the static "// &
-                "ice shelf displacement (m) using initial temperature and salinity profile.",&
+                "ice shelf displacement (m) using initial temperature and salinity profile.", &
                  default=0.001, units="m", scale=US%m_to_Z)
   max_iter = 1e3
   call MOM_mesg("Started calculating initial interface position under ice shelf ")
@@ -1949,13 +1949,13 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, u, v, depth_t
                    "The name of the inverse damping rate variable in "//&
                    "SPONGE_UV_DAMPING_FILE for the velocities.", default=Idamp_var)
   endif
-  call get_param(param_file, mdl, "USE_REGRIDDING", use_ALE, do_not_log=.true.)
+  call get_param(param_file, mdl, "USE_REGRIDDING", use_ALE, default=.false., do_not_log=.true.)
 
   !### NEW_SPONGES should be obsoleted properly, rather than merely deprecated, at which
   !    point only the else branch of the new_sponge_param block would be retained.
   call get_param(param_file, mdl, "NEW_SPONGES", new_sponge_param, &
                  "Set True if using the newer sponging code which "//&
-                 "performs on-the-fly regridding in lat-lon-time.",&
+                 "performs on-the-fly regridding in lat-lon-time"//&
                  "of sponge restoring data.", default=.false., do_not_log=.true.)
   if (new_sponge_param) then
     call get_param(param_file, mdl, "INTERPOLATE_SPONGE_TIME_SPACE", time_space_interp_sponge, &
@@ -2230,7 +2230,7 @@ subroutine initialize_oda_incupd_file(G, GV, US, use_temperature, tv, h, u, v, p
                    default=.false.)
   endif
   call get_param(param_file, mdl, "ODA_INCUPD_RESET_NCOUNT", reset_ncount, &
-                 "If True, reinitialize number of updates already done, ncount.",&
+                 "If True, reinitialize number of updates already done, ncount.", &
                  default=.true.)
   if (.not.oda_inc .and. .not.reset_ncount) &
     call MOM_error(FATAL, " initialize_oda_incupd: restarting during update "// &
@@ -2258,7 +2258,7 @@ subroutine initialize_oda_incupd_file(G, GV, US, use_temperature, tv, h, u, v, p
                  "The name of the meridional vel. inc. variable in "//&
                  "ODA_INCUPD_FILE.", default="v_inc")
 
-!  call get_param(param_file, mdl, "USE_REGRIDDING", use_ALE, do_not_log=.true.)
+!  call get_param(param_file, mdl, "USE_REGRIDDING", use_ALE, default=.false., do_not_log=.true.)
 
   ! Read in incremental update for tracers
   filename = trim(inputdir)//trim(inc_file)
@@ -2486,7 +2486,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, depth_tot, G, GV, US, PF, just
   if (.not.just_read) call callTree_enter(trim(mdl)//"(), MOM_state_initialization.F90")
   if (.not.just_read) call log_version(PF, mdl, version, "")
 
-  inputdir = "." ;  call get_param(PF, mdl, "INPUTDIR", inputdir)
+  call get_param(PF, mdl, "INPUTDIR", inputdir, default=".")
   inputdir = slasher(inputdir)
 
   eos => tv%eqn_of_state
@@ -2525,7 +2525,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, depth_tot, G, GV, US, PF, just
                  "is True.", default="PPM_IH4", do_not_log=just_read)
   call get_param(PF, mdl, "Z_INIT_REMAP_GENERAL", remap_general, &
                  "If false, only initializes to z* coordinates. "//&
-                 "If true, allows initialization directly to general coordinates.",&
+                 "If true, allows initialization directly to general coordinates.", &
                  default=.false., do_not_log=just_read)
   call get_param(PF, mdl, "Z_INIT_REMAP_FULL_COLUMN", remap_full_column, &
                  "If false, only reconstructs profiles for valid data points. "//&

@@ -1388,7 +1388,7 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, wind_stagger)
     call get_param(param_file, mdl, "FLUXCONST_SALT", CS%Flux_const_salt, &
                  "The constant that relates the restoring surface salt fluxes to the relative "//&
                  "surface anomalies (akin to a piston velocity).  Note the non-MKS units.", &
-                 fail_if_missing=.false.,default=unscaled_fluxconst, units="m day-1", scale=US%m_to_Z*US%T_to_s)
+                 fail_if_missing=.false., default=unscaled_fluxconst, units="m day-1", scale=US%m_to_Z*US%T_to_s)
     ! Finish converting CS%Flux_const from m day-1 to [Z T-1 ~> m s-1].
     CS%Flux_const = CS%Flux_const / 86400.0
     CS%Flux_const_salt = CS%Flux_const_salt / 86400.0
@@ -1435,11 +1435,11 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, wind_stagger)
     call get_param(param_file, mdl, "FLUXCONST", CS%Flux_const, &
                  "The constant that relates the restoring surface fluxes to the relative "//&
                  "surface anomalies (akin to a piston velocity).  Note the non-MKS units.", &
-                 default=0.0, units="m day-1", scale=US%m_to_Z*US%T_to_s,unscaled=unscaled_fluxconst)
+                 default=0.0, units="m day-1", scale=US%m_to_Z*US%T_to_s, unscaled=unscaled_fluxconst)
     call get_param(param_file, mdl, "FLUXCONST_TEMP", CS%Flux_const_temp, &
                  "The constant that relates the restoring surface temperature fluxes to the relative "//&
                  "surface anomalies (akin to a piston velocity).  Note the non-MKS units.", &
-                 fail_if_missing=.false.,default=unscaled_fluxconst, units="m day-1", scale=US%m_to_Z*US%T_to_s)
+                 fail_if_missing=.false., default=unscaled_fluxconst, units="m day-1", scale=US%m_to_Z*US%T_to_s)
     ! Convert CS%Flux_const from m day-1 to m s-1.
     CS%Flux_const = CS%Flux_const / 86400.0
     CS%Flux_const_temp = CS%Flux_const_temp / 86400.0
@@ -1524,7 +1524,7 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, wind_stagger)
   if (CS%read_gust_2d) then
     call get_param(param_file, mdl, "GUST_2D_FILE", gust_file, &
                  "The file in which the wind gustiness is found in "//&
-                 "variable gustiness.")
+                 "variable gustiness.", fail_if_missing=.true.)
 
     call safe_alloc_ptr(CS%gust,isd,ied,jsd,jed)
     gust_file = trim(CS%inputdir) // trim(gust_file)
@@ -1550,7 +1550,7 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, wind_stagger)
   if (CS%rigid_sea_ice) then
     call get_param(param_file, mdl, "G_EARTH", CS%g_Earth, &
                  "The gravitational acceleration of the Earth.", &
-                 units="m s-2", default = 9.80, scale=US%Z_to_m*US%m_s_to_L_T**2)
+                 units="m s-2", default=9.80, scale=US%Z_to_m*US%m_s_to_L_T**2)
     call get_param(param_file, mdl, "SEA_ICE_MEAN_DENSITY", CS%density_sea_ice, &
                  "A typical density of sea ice, used with the kinematic "//&
                  "viscosity, when USE_RIGID_SEA_ICE is true.", &
