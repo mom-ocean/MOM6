@@ -469,12 +469,12 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
             ! Perform inverse iteration with tri-diag solver
             do itt=1,max_itt
               ! this solver becomes unstable very quickly
-              ! b_diag(1:kc-1) = b_dom(1:kc-1) + (a_diag(1:kc-1) + c_diag(1:kc-1))
+              ! b_diag(1:kc-1) = b_dom(1:kc-1) - (a_diag(1:kc-1) + c_diag(1:kc-1))
               !call tridiag_solver(a_diag(1:kc-1),b_diag(1:kc-1),c_diag(1:kc-1), &
               !                    -lam_z(1:kc-1),e_guess(1:kc-1),"TDMA_T",e_itt)
 
               call solve_diag_dominant_tridiag( c_diag, b_dom, a_diag, e_guess, e_itt, kc-1 )
-              ! Renormalize the guesses of the structure.
+              ! Renormalize the guesses of the structure.-
               emag2 = 0.0
               do K=2,kc ; emag2 = emag2 + e_itt(K-1)**2 ; enddo
               renorm = 1.0 / sqrt(emag2)
