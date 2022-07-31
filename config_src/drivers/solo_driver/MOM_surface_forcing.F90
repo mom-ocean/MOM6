@@ -105,10 +105,11 @@ type, public :: surface_forcing_CS ; private
   real :: gyres_taux_sin_amp !< The amplitude of cosine wind stress gyres [R L Z T-1 ~> Pa], if WIND_CONFIG=='gyres'
   real :: gyres_taux_cos_amp !< The amplitude of cosine wind stress gyres [R L Z T-1 ~> Pa], if WIND_CONFIG=='gyres'
   real :: gyres_taux_n_pis   !< The number of sine lobes in the basin if WIND_CONFIG=='gyres'
-  logical :: answers_2018    !< If true, use the order of arithmetic and expressions that recover
-                             !! the answers from the end of 2018.  Otherwise, use a form of the gyre
-                             !! wind stresses that are rotationally invariant and more likely to be
-                             !! the same between compilers.
+  integer :: answer_date     !< This 8-digit integer gives the approximate date with which the order
+                             !! of arithmetic and and expressions were added to the code.
+                             !! Dates before 20190101 use original answers.
+                             !! Dates after 20190101 use a form of the gyre wind stresses that are
+                             !! rotationally invariant and more likely to be the same between compilers.
   logical :: fix_ustar_gustless_bug         !< If true correct a bug in the time-averaging of the
                                             !! gustless wind friction velocity.
   ! if WIND_CONFIG=='scurves' then use the following to define a piecewise scurve profile
@@ -522,7 +523,7 @@ subroutine wind_forcing_gyres(sfc_state, forces, day, G, US, CS)
   enddo ; enddo
 
   ! set the friction velocity
-  if (CS%answers_2018) then
+  if (CS%answer_date < 20190101) then
     do j=js,je ; do i=is,ie
       forces%ustar(i,j) = sqrt(US%L_to_Z * ((CS%gust_const/CS%Rho0) + &
               sqrt(0.5*(forces%tauy(i,j-1)*forces%tauy(i,j-1) + forces%tauy(i,j)*forces%tauy(i,j) + &
@@ -1504,7 +1505,12 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, tracer_flow_C
   real :: flux_const_default ! The unscaled value of FLUXCONST [m day-1]
   real :: Pa_to_RLZ_T2       ! A unit conversion factor from Pa to the internal units
                              ! for wind stresses [R Z L T-2 Pa-1 ~> 1]
-  logical :: default_2018_answers
+  integer :: default_answer_date  ! The default setting for the various ANSWER_DATE flags.
+  logical :: default_2018_answers ! The default setting for the various 2018_ANSWERS flags.
+  logical :: answers_2018    ! If true, use the order of arithmetic and expressions that recover
+                             ! the answers from the end of 2018.  Otherwise, use a form of the gyre
+                             ! wind stresses that are rotationally invariant and more likely to be
+                             ! the same between compilers.
   character(len=40)  :: mdl = "MOM_surface_forcing" ! This module's name.
   character(len=200) :: filename, gust_file ! The name of the gustiness input file.
 
@@ -1736,16 +1742,29 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, tracer_flow_C
                  "the zonal wind stress profile: "//&
                  "  n in taux = A + B*sin(n*pi*y/L) + C*cos(n*pi*y/L).", &
                  units="nondim", default=0.0)
+    call get_param(param_file, mdl, "DEFAULT_ANSWER_DATE", default_answer_date, &
+                 "This sets the default value for the various _ANSWER_DATE parameters.", &
+                 default=99991231)
     call get_param(param_file, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
                  "This sets the default value for the various _2018_ANSWERS parameters.", &
-                 default=.false.)
-    call get_param(param_file, mdl, "WIND_GYRES_2018_ANSWERS", CS%answers_2018, &
+                 default=(default_answer_date<20190101))
+    call get_param(param_file, mdl, "WIND_GYRES_2018_ANSWERS", answers_2018, &
                  "If true, use the order of arithmetic and expressions that recover the answers "//&
                  "from the end of 2018.  Otherwise, use expressions for the gyre friction velocities "//&
                  "that are rotationally invariant and more likely to be the same between compilers.", &
                  default=default_2018_answers)
+    ! Revise inconsistent default answer dates.
+    if (answers_2018 .and. (default_answer_date >= 20190101)) default_answer_date = 20181231
+    if (.not.answers_2018 .and. (default_answer_date < 20190101)) default_answer_date = 20190101
+    call get_param(param_file, mdl, "WIND_GYRES_ANSWER_DATE", CS%answer_date, &
+                 "The vintage of the expressions used to set gyre wind stresses. "//&
+                 "Values below 20190101 recover the answers from the end of 2018, "//&
+                 "while higher values use a form of the gyre wind stresses that are "//&
+                 "rotationally invariant and more likely to be the same between compilers.  "//&
+                 "If both WIND_GYRES_2018_ANSWERS and WIND_GYRES_ANSWER_DATE are specified, "//&
+                 "the latter takes precedence.", default=default_answer_date)
   else
-    CS%answers_2018 = .false.
+    CS%answer_date = 20190101
   endif
   if (trim(CS%wind_config) == "scurves") then
     call get_param(param_file, mdl, "WIND_SCURVES_LATS", CS%scurves_ydata, &

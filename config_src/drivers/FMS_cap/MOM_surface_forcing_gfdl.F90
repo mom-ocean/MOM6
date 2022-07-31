@@ -129,9 +129,10 @@ type, public :: surface_forcing_CS ; private
   real    :: max_delta_srestore             !< Maximum delta salinity used for restoring [S ~> ppt]
   real    :: max_delta_trestore             !< Maximum delta sst used for restoring [C ~> degC]
   real, pointer, dimension(:,:) :: basin_mask => NULL() !< Mask for surface salinity restoring by basin
-  logical :: answers_2018       !< If true, use the order of arithmetic and expressions that recover
-                                !! the answers from the end of 2018.  Otherwise, use a simpler
-                                !! expression to calculate gustiness.
+  integer :: answer_date        !< The vintage of the order of arithmetic and expressions in the
+                                !! gustiness calculations.  Values below 20190101 recover the answers
+                                !! from the end of 2018, while higher values use a simpler expression
+                                !! to calculate gustiness.
   logical :: fix_ustar_gustless_bug         !< If true correct a bug in the time-averaging of the
                                             !! gustless wind friction velocity.
   logical :: check_no_land_fluxes           !< Return warning if IOB flux over land is non-zero
@@ -533,7 +534,7 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
       if (CS%check_no_land_fluxes) &
         call check_mask_val_consistency(IOB%sw_flux_nir_dif(i-i0,j-j0), G%mask2dT(i,j), i, j, 'sw_flux_nir_dif', G)
     endif
-    if (CS%answers_2018) then
+    if (CS%answer_date < 20190101) then
       fluxes%sw(i,j) = fluxes%sw_vis_dir(i,j) + fluxes%sw_vis_dif(i,j) + &
                        fluxes%sw_nir_dir(i,j) + fluxes%sw_nir_dif(i,j)
     else
@@ -1038,7 +1039,7 @@ subroutine extract_IOB_stresses(IOB, index_bounds, Time, G, US, CS, taux, tauy, 
         endif
         ustar(i,j) = sqrt(gustiness*IRho0 + IRho0*Pa_conversion*IOB%stress_mag(i-i0,j-j0))
       enddo ; enddo ; endif
-      if (CS%answers_2018) then
+      if (CS%answer_date < 20190101) then
         if (do_gustless) then ; do j=js,je ; do i=is,ie
           gustless_ustar(i,j) = sqrt(Pa_conversion*US%L_to_Z*IOB%stress_mag(i-i0,j-j0) / CS%Rho0)
         enddo ; enddo ; endif
@@ -1060,7 +1061,7 @@ subroutine extract_IOB_stresses(IOB, index_bounds, Time, G, US, CS, taux, tauy, 
           if (CS%read_gust_2d) gustiness = CS%gust(i,j)
         endif
         if (do_ustar) ustar(i,j) = sqrt(gustiness*IRho0 + IRho0 * tau_mag)
-        if (CS%answers_2018) then
+        if (CS%answer_date < 20190101) then
           if (do_gustless) gustless_ustar(i,j) = sqrt(US%L_to_Z*tau_mag / CS%Rho0)
         else
           if (do_gustless) gustless_ustar(i,j) = sqrt(IRho0 * tau_mag)
@@ -1072,7 +1073,7 @@ subroutine extract_IOB_stresses(IOB, index_bounds, Time, G, US, CS, taux, tauy, 
         gustiness = CS%gust_const
         if (CS%read_gust_2d .and. (G%mask2dT(i,j) > 0.0)) gustiness = CS%gust(i,j)
         if (do_ustar) ustar(i,j) = sqrt(gustiness*IRho0 + IRho0 * tau_mag)
-        if (CS%answers_2018) then
+        if (CS%answer_date < 20190101) then
           if (do_gustless) gustless_ustar(i,j) = sqrt(US%L_to_Z*tau_mag / CS%Rho0)
         else
           if (do_gustless) gustless_ustar(i,j) = sqrt(IRho0 * tau_mag)
@@ -1093,7 +1094,7 @@ subroutine extract_IOB_stresses(IOB, index_bounds, Time, G, US, CS, taux, tauy, 
         if (CS%read_gust_2d) gustiness = CS%gust(i,j)
 
         if (do_ustar) ustar(i,j) = sqrt(gustiness*IRho0 + IRho0 * tau_mag)
-        if (CS%answers_2018) then
+        if (CS%answer_date < 20190101) then
           if (do_gustless) gustless_ustar(i,j) = sqrt(US%L_to_Z*tau_mag / CS%Rho0)
         else
           if (do_gustless) gustless_ustar(i,j) = sqrt(IRho0 * tau_mag)
@@ -1250,7 +1251,11 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, wind_stagger)
   real :: utide  ! The RMS tidal velocity [Z T-1 ~> m s-1].
   type(directories)  :: dirs
   logical            :: new_sim, iceberg_flux_diags
-  logical            :: default_2018_answers
+  integer :: default_answer_date  ! The default setting for the various ANSWER_DATE flags.
+  logical :: default_2018_answers ! The default setting for the various 2018_ANSWERS flags.
+  logical :: answers_2018         ! If true, use the order of arithmetic and expressions that recover
+                                  ! the answers from the end of 2018.  Otherwise, use a simpler
+                                  ! expression to calculate gustiness.
   type(time_type)    :: Time_frc
   character(len=200) :: TideAmp_file, gust_file, salt_file, temp_file ! Input file names.
   ! This include declares and sets the variable "version".
@@ -1531,13 +1536,26 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, wind_stagger)
     call MOM_read_data(gust_file, 'gustiness', CS%gust, G%domain, timelevel=1, &
                scale=US%kg_m3_to_R*US%m_s_to_L_T**2*US%L_to_Z) ! units in file should be Pa
   endif
+  call get_param(param_file, mdl, "DEFAULT_ANSWER_DATE", default_answer_date, &
+                 "This sets the default value for the various _ANSWER_DATE parameters.", &
+                 default=99991231)
   call get_param(param_file, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
                  "This sets the default value for the various _2018_ANSWERS parameters.", &
-                 default=.false.)
-  call get_param(param_file, mdl, "SURFACE_FORCING_2018_ANSWERS", CS%answers_2018, &
+                 default=(default_answer_date<20190101))
+  call get_param(param_file, mdl, "SURFACE_FORCING_2018_ANSWERS", answers_2018, &
                  "If true, use the order of arithmetic and expressions that recover the answers "//&
                  "from the end of 2018.  Otherwise, use a simpler expression to calculate gustiness.", &
                  default=default_2018_answers)
+                 ! Revise inconsistent default answer dates.
+  if (answers_2018 .and. (default_answer_date >= 20190101)) default_answer_date = 20181231
+  if (.not.answers_2018 .and. (default_answer_date < 20190101)) default_answer_date = 20190101
+  call get_param(param_file, mdl, "SURFACE_FORCING_ANSWER_DATE", CS%answer_date, &
+                 "The vintage of the order of arithmetic and expressions in the gustiness "//&
+                 "calculations.  Values below 20190101 recover the answers from the end "//&
+                 "of 2018, while higher values use a simpler expression to calculate gustiness.  "//&
+                 "If both SURFACE_FORCING_2018_ANSWERS and SURFACE_FORCING_ANSWER_DATE are "//&
+                 "specified, the latter takes precedence.", default=default_answer_date)
+
   call get_param(param_file, mdl, "FIX_USTAR_GUSTLESS_BUG", CS%fix_ustar_gustless_bug, &
                  "If true correct a bug in the time-averaging of the gustless wind friction velocity", &
                  default=.true.)

@@ -333,9 +333,10 @@ type, public :: MOM_control_struct ; private
   real    :: bad_val_sst_min    !< Minimum SST before triggering bad value message [C ~> degC]
   real    :: bad_val_sss_max    !< Maximum SSS before triggering bad value message [S ~> ppt]
   real    :: bad_val_col_thick  !< Minimum column thickness before triggering bad value message [Z ~> m]
-  logical :: answers_2018       !< If true, use expressions for the surface properties that recover
-                                !! the answers from the end of 2018. Otherwise, use more appropriate
-                                !! expressions that differ at roundoff for non-Boussinesq cases.
+  integer :: answer_date        !< The vintage of the expressions for the surface properties.  Values
+                                !! below 20190101 recover the answers from the end of 2018, while
+                                !! higher values use more appropriate expressions that differ at
+                                !! roundoff for non-Boussinesq cases.
   logical :: use_particles      !< Turns on the particles package
   character(len=10) :: particle_type !< Particle types include: surface(default), profiling and sail drone.
 
@@ -1823,7 +1824,11 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
                                ! with accumulated heat deficit returned to surface ocean.
   logical :: bound_salinity    ! If true, salt is added to keep salinity above
                                ! a minimum value, and the deficit is reported.
+  integer :: default_answer_date  ! The default setting for the various ANSWER_DATE flags.
   logical :: default_2018_answers ! The default setting for the various 2018_ANSWERS flags.
+  logical :: answers_2018      ! If true, use expressions for the surface properties that recover
+                               ! the answers from the end of 2018. Otherwise, use more appropriate
+                               ! expressions that differ at roundoff for non-Boussinesq cases.
   logical :: use_conT_absS     ! If true, the prognostics T & S are conservative temperature
                                ! and absolute salinity. Care should be taken to convert them
                                ! to potential temperature and practical salinity before
@@ -2147,13 +2152,26 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
                  "triggered, if CHECK_BAD_SURFACE_VALS is true.", &
                  units="m", default=0.0, scale=US%m_to_Z)
   endif
+  call get_param(param_file, "MOM", "DEFAULT_ANSWER_DATE", default_answer_date, &
+                 "This sets the default value for the various _ANSWER_DATE parameters.", &
+                 default=99991231)
   call get_param(param_file, "MOM", "DEFAULT_2018_ANSWERS", default_2018_answers, &
                  "This sets the default value for the various _2018_ANSWERS parameters.", &
-                 default=.false.)
-  call get_param(param_file, "MOM", "SURFACE_2018_ANSWERS", CS%answers_2018, &
+                 default=(default_answer_date<20190101))
+  call get_param(param_file, "MOM", "SURFACE_2018_ANSWERS", answers_2018, &
                  "If true, use expressions for the surface properties that recover the answers "//&
                  "from the end of 2018. Otherwise, use more appropriate expressions that differ "//&
                  "at roundoff for non-Boussinesq cases.", default=default_2018_answers)
+  ! Revise inconsistent default answer dates.
+  if (answers_2018 .and. (default_answer_date >= 20190101)) default_answer_date = 20181231
+  if (.not.answers_2018 .and. (default_answer_date < 20190101)) default_answer_date = 20190101
+  call get_param(param_file, "MOM", "SURFACE_ANSWER_DATE", CS%answer_date, &
+               "The vintage of the expressions for the surface properties.  Values below "//&
+               "20190101 recover the answers from the end of 2018, while higher values "//&
+               "use updated and more robust forms of the same expressions.  "//&
+               "If both SURFACE_2018_ANSWERS and SURFACE_ANSWER_DATE are specified, the "//&
+               "latter takes precedence.", default=default_answer_date)
+
   call get_param(param_file, "MOM", "USE_DIABATIC_TIME_BUG", CS%use_diabatic_time_bug, &
                  "If true, uses the wrong calendar time for diabatic processes, as was "//&
                  "done in MOM6 versions prior to February 2018. This is not recommended.", &
@@ -3343,9 +3361,9 @@ subroutine extract_surface_state(CS, sfc_state_in)
     enddo ; enddo
 
   else  ! (CS%Hmix >= 0.0)
-    H_rescale = 1.0 ; if (CS%answers_2018) H_rescale = GV%H_to_Z
+    H_rescale = 1.0 ; if (CS%answer_date < 20190101) H_rescale = GV%H_to_Z
     depth_ml = CS%Hmix
-    if (.not.CS%answers_2018) depth_ml = CS%Hmix*GV%Z_to_H
+    if (CS%answer_date >= 20190101) depth_ml = CS%Hmix*GV%Z_to_H
     ! Determine the mean tracer properties of the uppermost depth_ml fluid.
 
     !$OMP parallel do default(shared) private(depth,dh)
@@ -3377,7 +3395,7 @@ subroutine extract_surface_state(CS, sfc_state_in)
       enddo ; enddo
   ! Calculate the average properties of the mixed layer depth.
       do i=is,ie
-        if (CS%answers_2018) then
+        if (CS%answer_date < 20190101) then
           if (depth(i) < GV%H_subroundoff*H_rescale) &
               depth(i) = GV%H_subroundoff*H_rescale
           if (use_temperature) then
@@ -3416,7 +3434,7 @@ subroutine extract_surface_state(CS, sfc_state_in)
     !       This assumes that u and v halos have already been updated.
     if (CS%Hmix_UV>0.) then
       depth_ml = CS%Hmix_UV
-      if (.not.CS%answers_2018) depth_ml = CS%Hmix_UV*GV%Z_to_H
+      if (CS%answer_date >= 20190101) depth_ml = CS%Hmix_UV*GV%Z_to_H
       !$OMP parallel do default(shared) private(depth,dh,hv)
       do J=js-1,ie
         do i=is,ie
