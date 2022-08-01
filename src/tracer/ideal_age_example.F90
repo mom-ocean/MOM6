@@ -249,7 +249,7 @@ subroutine initialize_ideal_age_tracer(restart, day, G, GV, US, h, diag, OBC, CS
 
   CS%Time => day
   CS%diag => diag
-  CS%nkbl = max(GV%nkbl,1)
+  CS%nkbl = max(GV%nkml,1)
 
   do m=1,CS%ntr
     call query_vardesc(CS%tr_desc(m), name=name, &
