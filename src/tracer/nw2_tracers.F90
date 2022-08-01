@@ -55,8 +55,8 @@ logical function register_nw2_tracers(HI, GV, US, param_file, CS, tr_Reg, restar
                                                   !! diffusion module
   type(MOM_restart_CS), target, intent(inout) :: restart_CS !< MOM restart control struct
 
-! This include declares and sets the variable "version".
-#include "version_variable.h"
+  ! This include declares and sets the variable "version".
+# include "version_variable.h"
   character(len=40)  :: mdl = "nw2_tracers" ! This module's name.
   character(len=8)  :: var_name ! The variable's name.
   real, pointer :: tr_ptr(:,:,:) => NULL()
@@ -69,7 +69,6 @@ logical function register_nw2_tracers(HI, GV, US, param_file, CS, tr_Reg, restar
   if (associated(CS)) then
     call MOM_error(FATAL, "register_nw2_tracer called with an "// &
                           "associated control structure.")
-    return
   endif
   allocate(CS)
 

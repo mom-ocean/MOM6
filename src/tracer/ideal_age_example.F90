@@ -92,9 +92,8 @@ function register_ideal_age_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
   isd = HI%isd ; ied = HI%ied ; jsd = HI%jsd ; jed = HI%jed ; nz = GV%ke
 
   if (associated(CS)) then
-    call MOM_error(WARNING, "register_ideal_age_tracer called with an "// &
-                             "associated control structure.")
-    return
+    call MOM_error(FATAL, "register_ideal_age_tracer called with an "// &
+                          "associated control structure.")
   endif
   allocate(CS)
 

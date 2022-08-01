@@ -79,10 +79,8 @@ function register_pseudo_salt_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
   isd = HI%isd ; ied = HI%ied ; jsd = HI%jsd ; jed = HI%jed ; nz = GV%ke
 
   if (associated(CS)) then
-    call MOM_error(WARNING, "register_pseudo_salt_tracer called with an "// &
-                             "associated control structure.")
-    register_pseudo_salt_tracer = .false.
-    return
+    call MOM_error(FATAL, "register_pseudo_salt_tracer called with an "// &
+                          "associated control structure.")
   endif
   allocate(CS)
 

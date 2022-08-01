@@ -83,7 +83,7 @@ function register_CFC_cap(HI, GV, param_file, CS, tr_Reg, restart_CS)
   character(len=40)  :: mdl = "MOM_CFC_cap" ! This module's name.
   character(len=200) :: inputdir ! The directory where NetCDF input files are.
   ! This include declares and sets the variable "version".
-#include "version_variable.h"
+# include "version_variable.h"
   real, dimension(:,:,:), pointer :: tr_ptr => NULL()
   character(len=200) :: dummy      ! Dummy variable to store params that need to be logged here.
   character :: m2char
@@ -93,9 +93,8 @@ function register_CFC_cap(HI, GV, param_file, CS, tr_Reg, restart_CS)
   isd = HI%isd ; ied = HI%ied ; jsd = HI%jsd ; jed = HI%jed ; nz = GV%ke
 
   if (associated(CS)) then
-    call MOM_error(WARNING, "register_CFC_cap called with an "// &
-                            "associated control structure.")
-    return
+    call MOM_error(FATAL, "register_CFC_cap called with an "// &
+                          "associated control structure.")
   endif
   allocate(CS)
 

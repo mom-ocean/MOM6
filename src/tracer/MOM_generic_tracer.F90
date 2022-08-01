@@ -119,9 +119,8 @@ contains
 
     register_MOM_generic_tracer = .false.
     if (associated(CS)) then
-      call MOM_error(WARNING, "register_MOM_generic_tracer called with an "// &
-            "associated control structure.")
-      return
+      call MOM_error(FATAL, "register_MOM_generic_tracer called with an "// &
+                            "associated control structure.")
     endif
     allocate(CS)
 
