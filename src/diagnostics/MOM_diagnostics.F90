@@ -31,7 +31,7 @@ use MOM_tracer_registry,   only : tracer_registry_type, post_tracer_transport_di
 use MOM_unit_scaling,      only : unit_scale_type
 use MOM_variables,         only : thermo_var_ptrs, ocean_internal_state, p3d
 use MOM_variables,         only : accel_diag_ptrs, cont_diag_ptrs, surface
-use MOM_verticalGrid,      only : verticalGrid_type, get_thickness_units
+use MOM_verticalGrid,      only : verticalGrid_type, get_thickness_units, get_flux_units
 use MOM_wave_speed,        only : wave_speed, wave_speed_CS, wave_speed_init
 
 implicit none ; private
@@ -1593,11 +1593,9 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, US, param_file, diag
                  "forms of the same expressions.", default=default_2018_answers)
   call get_param(param_file, mdl, "SPLIT", split, default=.true., do_not_log=.true.)
 
-  if (GV%Boussinesq) then
-    thickness_units = "m" ; flux_units = "m3 s-1" ; convert_H = GV%H_to_m
-  else
-    thickness_units = "kg m-2" ; flux_units = "kg s-1" ; convert_H = GV%H_to_kg_m2
-  endif
+  thickness_units = get_thickness_units(GV)
+  flux_units = get_flux_units(GV)
+  convert_H = GV%H_to_MKS
 
   CS%id_masscello = register_diag_field('ocean_model', 'masscello', diag%axesTL,&
       Time, 'Mass per unit area of liquid ocean grid cell', 'kg m-2', & !### , conversion=GV%H_to_kg_m2, &
@@ -1607,11 +1605,11 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, US, param_file, diag
       diag, 'Mass of liquid ocean', 'kg', standard_name='sea_water_mass')
 
   CS%id_thkcello = register_diag_field('ocean_model', 'thkcello', diag%axesTL, Time, &
-      long_name = 'Cell Thickness', standard_name='cell_thickness', &
+      long_name='Cell Thickness', standard_name='cell_thickness', &
       units='m', conversion=US%Z_to_m, v_extensive=.true.)
   CS%id_h_pre_sync = register_diag_field('ocean_model', 'h_pre_sync', diag%axesTL, Time, &
-      long_name = 'Cell thickness from the previous timestep', &
-      units='m', conversion=GV%H_to_m, v_extensive=.true.)
+      long_name='Cell thickness from the previous timestep', &
+      units=thickness_units, conversion=GV%H_to_MKS, v_extensive=.true.)
 
   ! Note that CS%id_volcello would normally be registered here but because it is a "cell measure" and
   ! must be registered first. We earlier stored the handle of volcello but need it here for posting
@@ -1948,10 +1946,11 @@ subroutine register_transport_diags(Time, G, GV, US, IDs, diag)
   character(len=48) :: thickness_units, accum_flux_units
 
   thickness_units = get_thickness_units(GV)
+  H_convert = GV%H_to_MKS
   if (GV%Boussinesq) then
-    H_convert = GV%H_to_m ; accum_flux_units = "m3"
+    accum_flux_units = "m3"
   else
-    H_convert = GV%H_to_kg_m2 ; accum_flux_units = "kg"
+    accum_flux_units = "kg"
   endif
 
   ! Diagnostics related to tracer and mass transport
@@ -1979,10 +1978,10 @@ subroutine register_transport_diags(Time, G, GV, US, IDs, diag)
       standard_name='ocean_mass_y_transport_vertical_sum', x_cell_method='sum')
   IDs%id_dynamics_h = register_diag_field('ocean_model','dynamics_h',  &
       diag%axesTl, Time, 'Layer thicknesses prior to horizontal dynamics', &
-      'm', v_extensive=.true., conversion=GV%H_to_m)
+      thickness_units, conversion=GV%H_to_MKS, v_extensive=.true.)
   IDs%id_dynamics_h_tendency = register_diag_field('ocean_model','dynamics_h_tendency',  &
       diag%axesTl, Time, 'Change in layer thicknesses due to horizontal dynamics', &
-      'm s-1', v_extensive=.true., conversion=GV%H_to_m*US%s_to_T)
+      trim(thickness_units)//" s-1", conversion=GV%H_to_MKS*US%s_to_T, v_extensive=.true.)
 
 end subroutine register_transport_diags
 
