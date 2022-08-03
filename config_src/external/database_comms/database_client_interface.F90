@@ -107,7 +107,7 @@ module database_client_interface
     procedure :: use_model_ensemble_prefix
     !> If true, preprend the ensemble id for dataset list-related keys
     procedure :: use_list_ensemble_prefix
-    !> Specify a specific source of data (e.g. another ensemble member)
+    !> Specify a specific source of data
     procedure :: set_data_source
 
     !> Append a dataset to a list for aggregation
@@ -126,22 +126,34 @@ module database_client_interface
     procedure :: poll_list_length_gte
     !> Repeatedly check the length of the list until it less than or equal to the given size
     procedure :: poll_list_length_lte
-    !> Retrieve vector of datasetes from the list
+    !> Retrieve vector of datasets from the list
     procedure :: get_datasets_from_list
 
     ! Private procedures
-    procedure, private :: put_tensor_i8     !< Put 8-bit integer tensor into database
-    procedure, private :: put_tensor_i16    !< Put 16-bit integer tensor into database
-    procedure, private :: put_tensor_i32    !< Put 32-bit integer tensor into database
-    procedure, private :: put_tensor_i64    !< Put 64-bit tensor into database
-    procedure, private :: put_tensor_float  !< Put 32-bit real tensor into database
-    procedure, private :: put_tensor_double !< Put 64-bit real tensor into database
-    procedure, private :: unpack_tensor_i8     !< Unpack a 8-bit integer tensor into memory
-    procedure, private :: unpack_tensor_i16    !< Unpack a 16-bit integer tensor into memory
-    procedure, private :: unpack_tensor_i32    !< Unpack a 32-bit integer tensor into memory
-    procedure, private :: unpack_tensor_i64    !< Unpack a 64-bit integer tensor into memory
-    procedure, private :: unpack_tensor_float  !< Unpack a 32-bit real tensor into memory
-    procedure, private :: unpack_tensor_double !< Unpack a 64-bit real tensor into memory
+    !> Put 8-bit integer tensor into database
+    procedure, private :: put_tensor_i8
+    !> Put 16-bit integer tensor into database
+    procedure, private :: put_tensor_i16
+    !> Put 32-bit integer tensor into database
+    procedure, private :: put_tensor_i32
+    !> Put 64-bit tensor into database
+    procedure, private :: put_tensor_i64
+    !> Put 32-bit real tensor into database
+    procedure, private :: put_tensor_float
+    !> Put 64-bit real tensor into database
+    procedure, private :: put_tensor_double
+    !> Unpack a 8-bit integer tensor into memory
+    procedure, private :: unpack_tensor_i8
+    !> Unpack a 16-bit integer tensor into memory
+    procedure, private :: unpack_tensor_i16
+    !> Unpack a 32-bit integer tensor into memory
+    procedure, private :: unpack_tensor_i32
+    !> Unpack a 64-bit integer tensor into memory
+    procedure, private :: unpack_tensor_i64
+    !> Unpack a 32-bit real tensor into memory
+    procedure, private :: unpack_tensor_float
+    !> Unpack a 64-bit real tensor into memory
+    procedure, private :: unpack_tensor_double
 
   end type dbclient_type
 
