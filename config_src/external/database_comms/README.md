@@ -14,9 +14,9 @@ code in the new implementation is part of `MOM_MEKE.F90`.
 
 # File description
 
-- `MOM_smartredis.F90` contains just method signatures and elements of the
+- `MOM_database_comms` contains just method signatures and elements of the
   control structure that are imported elsewhere within the primary MOM6
-  code. This includes: `dbclient_CS_type`, `dbclient_type`, and `dbclient_init`
+  code. This includes: `dbcomms_CS_type`, `dbclient_type`, and `database_comms_init`
 
 - `smartredis_client.F90` is a skeleton of the actual SmartRedis library
   used to ensure that the interfaces to the library are maintained without

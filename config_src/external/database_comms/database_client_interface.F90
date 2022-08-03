@@ -1,15 +1,9 @@
 module database_client_interface
 
 ! This file is part of MOM6. See LICENSE.md for the license.
-  use iso_c_binding, only : c_ptr, c_bool, c_null_ptr, c_char, c_int
-  use iso_c_binding, only : c_int8_t, c_int16_t, c_int32_t, c_int64_t, c_float, c_double, c_size_t
-  use iso_c_binding, only : c_loc, c_f_pointer
-
-  use, intrinsic :: iso_fortran_env, only: stderr => error_unit
+  use iso_fortran_env, only : int8, int16, int32, int64, real32, real64
 
   implicit none; private
-
-  integer, parameter, public :: enum_kind = c_int
 
   !> Dummy type for dataset
   type, public :: dataset_type
@@ -20,9 +14,6 @@ module database_client_interface
   type, public :: dbclient_type
     private
 
-    logical(kind=c_bool) :: cluster = .false.        !< True if a database cluster is being used
-    type(c_ptr)          :: client_ptr = c_null_ptr !< Pointer to the initialized communicationClient
-    logical              :: is_initialized = .false.    !< True if client is initialized
     contains
 
     ! Public procedures
@@ -159,7 +150,7 @@ module database_client_interface
   !> Decode a response code from an API function
   function SR_error_parser(self, response_code) result(is_error)
     class(dbclient_type),       intent(in) :: self    !< Receives the initialized client
-    integer (kind=enum_kind), intent(in) :: response_code !< The response code to decode
+    integer, intent(in) :: response_code !< The response code to decode
     logical                              :: is_error      !< Indicates whether this is an error response
 
     is_error = .true.
@@ -167,7 +158,7 @@ module database_client_interface
 
   !> Initializes a new instance of a communication client
   function initialize_client(self, cluster)
-    integer(kind=enum_kind)           :: initialize_client
+    integer           :: initialize_client
     class(dbclient_type), intent(inout) :: self    !< Receives the initialized client
     logical, optional,  intent(in   ) :: cluster !< If true, client uses a database cluster (Default: .false.)
 
@@ -182,7 +173,7 @@ module database_client_interface
 
   !> A destructor for the communication client
   function destructor(self)
-    integer(kind=enum_kind)           :: destructor
+    integer           :: destructor
     class(dbclient_type), intent(inout) :: self
 
     destructor = -1
@@ -192,8 +183,8 @@ module database_client_interface
   function key_exists(self, key, exists)
     class(dbclient_type),   intent(in)  :: self   !< The client
     character(len=*),     intent(in)  :: key    !< The key to check
-    logical(kind=c_bool), intent(out) :: exists !< Receives whether the key exists
-    integer(kind=enum_kind)           :: key_exists
+    logical, intent(out) :: exists !< Receives whether the key exists
+    integer           :: key_exists
 
     key_exists = -1
   end function key_exists
@@ -202,8 +193,8 @@ module database_client_interface
   function model_exists(self, model_name, exists) result(code)
     class(dbclient_type),   intent(in)  :: self       !< The client
     character(len=*),     intent(in)  :: model_name !< The model to check
-    logical(kind=c_bool), intent(out) :: exists     !< Receives whether the model exists
-    integer(kind=enum_kind)           :: code
+    logical, intent(out) :: exists     !< Receives whether the model exists
+    integer           :: code
 
     code = -1
   end function model_exists
@@ -212,8 +203,8 @@ module database_client_interface
   function tensor_exists(self, tensor_name, exists) result(code)
     class(dbclient_type),   intent(in)  :: self        !< The client
     character(len=*),     intent(in)  :: tensor_name !< The tensor to check
-    logical(kind=c_bool), intent(out) :: exists      !< Receives whether the model exists
-    integer(kind=enum_kind)           :: code
+    logical, intent(out) :: exists      !< Receives whether the model exists
+    integer           :: code
 
     code = -1
   end function tensor_exists
@@ -222,8 +213,8 @@ module database_client_interface
   function dataset_exists(this, dataset_name, exists) result(code)
     class(dbclient_type),   intent(in)  :: this          !< The client
     character(len=*),     intent(in)  :: dataset_name  !< The dataset to check
-    logical(kind=c_bool), intent(out) :: exists        !< Receives whether the model exists
-    integer(kind=enum_kind)           :: code
+    logical, intent(out) :: exists        !< Receives whether the model exists
+    integer           :: code
 
     code = -1
   end function dataset_exists
@@ -234,20 +225,20 @@ module database_client_interface
     character(len=*),     intent(in)  :: tensor_name       !< name in the database to poll
     integer,              intent(in)  :: poll_frequency_ms !< Frequency at which to poll the database (ms)
     integer,              intent(in)  :: num_tries         !< Number of times to poll the database before failing
-    logical(kind=c_bool), intent(out) :: exists            !< Receives whether the tensor exists
-    integer(kind=enum_kind)           :: code
+    logical, intent(out) :: exists            !< Receives whether the tensor exists
+    integer           :: code
 
     code = -1
   end function poll_tensor
 
   !> Repeatedly poll the database until the dataset exists or the number of tries is exceeded
   function poll_dataset(self, dataset_name, poll_frequency_ms, num_tries, exists)
-    integer(kind=enum_kind)           :: poll_dataset
+    integer           :: poll_dataset
     class(dbclient_type),   intent(in)  :: self              !< The client
     character(len=*),     intent(in)  :: dataset_name      !< Name in the database to poll
     integer,              intent(in)  :: poll_frequency_ms !< Frequency at which to poll the database (ms)
     integer,              intent(in)  :: num_tries         !< Number of times to poll the database before failing
-    logical(kind=c_bool), intent(out) :: exists            !< Receives whether the tensor exists
+    logical, intent(out) :: exists            !< Receives whether the tensor exists
 
     poll_dataset = -1
   end function poll_dataset
@@ -258,8 +249,8 @@ module database_client_interface
     character(len=*),     intent(in)  :: model_name        !< Name in the database to poll
     integer,              intent(in)  :: poll_frequency_ms !< Frequency at which to poll the database (ms)
     integer,              intent(in)  :: num_tries         !< Number of times to poll the database before failing
-    logical(kind=c_bool), intent(out) :: exists            !< Receives whether the model exists
-    integer(kind=enum_kind)           :: code
+    logical, intent(out) :: exists            !< Receives whether the model exists
+    integer           :: code
 
     code = -1
   end function poll_model
@@ -270,140 +261,140 @@ module database_client_interface
     character(len=*),     intent(in)  :: key                !< Key in the database to poll
     integer,              intent(in)  :: poll_frequency_ms  !< Frequency at which to poll the database (ms)
     integer,              intent(in)  :: num_tries          !< Number of times to poll the database before failing
-    logical(kind=c_bool), intent(out) :: exists             !< Receives whether the key exists
-    integer(kind=enum_kind)           :: code
+    logical, intent(out) :: exists             !< Receives whether the key exists
+    integer           :: code
 
     code = -1
   end function poll_key
 
   !> Put a tensor whose Fortran type is the equivalent 'int8' C-type
   function put_tensor_i8(self, name, data, dims) result(code)
-    integer(kind=c_int8_t), dimension(..), target, intent(in) :: data !< Data to be sent
+    integer(kind=int8), dimension(..), target, intent(in) :: data !< Data to be sent
     class(dbclient_type),                    intent(in) :: self !< Fortran communication client
     character(len=*),                      intent(in) :: name !< The unique name used to store in the database
     integer, dimension(:),                 intent(in) :: dims !< The length of each dimension
-    integer(kind=enum_kind)                           :: code
+    integer                           :: code
 
     code = -1
   end function put_tensor_i8
 
   !> Put a tensor whose Fortran type is the equivalent 'int16' C-type
   function put_tensor_i16(self, name, data, dims) result(code)
-    integer(kind=c_int16_t), dimension(..), target, intent(in) :: data !< Data to be sent
+    integer(kind=int16), dimension(..), target, intent(in) :: data !< Data to be sent
     class(dbclient_type),                    intent(in) :: self !< Fortran communication client
     character(len=*),                      intent(in) :: name !< The unique name used to store in the database
     integer, dimension(:),                 intent(in) :: dims !< The length of each dimension
-    integer(kind=enum_kind)                           :: code
+    integer                           :: code
 
     code = -1
   end function put_tensor_i16
 
   !> Put a tensor whose Fortran type is the equivalent 'int32' C-type
   function put_tensor_i32(self, name, data, dims) result(code)
-    integer(kind=c_int32_t), dimension(..), target, intent(in) :: data !< Data to be sent
+    integer(kind=int32), dimension(..), target, intent(in) :: data !< Data to be sent
     class(dbclient_type),                    intent(in) :: self !< Fortran communication client
     character(len=*),                      intent(in) :: name !< The unique name used to store in the database
     integer, dimension(:),                 intent(in) :: dims !< The length of each dimension
-    integer(kind=enum_kind)                           :: code
+    integer                           :: code
 
     code = -1
   end function put_tensor_i32
 
   !> Put a tensor whose Fortran type is the equivalent 'int64' C-type
   function put_tensor_i64(self, name, data, dims) result(code)
-    integer(kind=c_int64_t), dimension(..), target, intent(in) :: data !< Data to be sent
+    integer(kind=int64), dimension(..), target, intent(in) :: data !< Data to be sent
     class(dbclient_type),                    intent(in) :: self !< Fortran communication client
     character(len=*),                      intent(in) :: name !< The unique name used to store in the database
     integer, dimension(:),                 intent(in) :: dims !< The length of each dimension
-    integer(kind=enum_kind)                           :: code
+    integer                           :: code
 
     code = -1
   end function put_tensor_i64
 
   !> Put a tensor whose Fortran type is the equivalent 'float' C-type
   function put_tensor_float(self, name, data, dims) result(code)
-    real(kind=c_float), dimension(..), target, intent(in) :: data !< Data to be sent
+    real(kind=real32), dimension(..), target, intent(in) :: data !< Data to be sent
     class(dbclient_type),                    intent(in) :: self !< Fortran communication client
     character(len=*),                      intent(in) :: name !< The unique name used to store in the database
     integer, dimension(:),                 intent(in) :: dims !< The length of each dimension
-    integer(kind=enum_kind)                           :: code
+    integer                           :: code
 
     code = -1
   end function put_tensor_float
 
   !> Put a tensor whose Fortran type is the equivalent 'double' C-type
   function put_tensor_double(self, name, data, dims) result(code)
-    real(kind=c_double), dimension(..), target, intent(in) :: data !< Data to be sent
+    real(kind=real64), dimension(..), target, intent(in) :: data !< Data to be sent
     class(dbclient_type),                    intent(in) :: self !< Fortran communication client
     character(len=*),                      intent(in) :: name !< The unique name used to store in the database
     integer, dimension(:),                 intent(in) :: dims !< The length of each dimension
-    integer(kind=enum_kind)                           :: code
+    integer                           :: code
 
     code = -1
   end function put_tensor_double
 
   !> Put a tensor whose Fortran type is the equivalent 'int8' C-type
   function unpack_tensor_i8(self, name, result, dims) result(code)
-    integer(kind=c_int8_t), dimension(..), target, intent(out) :: result !< Data to be sent
+    integer(kind=int8), dimension(..), target, intent(out) :: result !< Data to be sent
     class(dbclient_type),                   intent(in) :: self  !< Pointer to the initialized client
     character(len=*),                     intent(in) :: name  !< The name to use to place the tensor
     integer, dimension(:),                intent(in) :: dims  !< Length along each dimension of the tensor
-    integer(kind=enum_kind)                          :: code
+    integer                          :: code
 
     code = -1
   end function unpack_tensor_i8
 
   !> Put a tensor whose Fortran type is the equivalent 'int16' C-type
   function unpack_tensor_i16(self, name, result, dims) result(code)
-    integer(kind=c_int16_t), dimension(..), target, intent(out) :: result !< Data to be sent
+    integer(kind=int16), dimension(..), target, intent(out) :: result !< Data to be sent
     class(dbclient_type),                   intent(in) :: self  !< Pointer to the initialized client
     character(len=*),                     intent(in) :: name  !< The name to use to place the tensor
     integer, dimension(:),                intent(in) :: dims  !< Length along each dimension of the tensor
-    integer(kind=enum_kind)                          :: code
+    integer                          :: code
 
     code = -1
   end function unpack_tensor_i16
 
   !> Put a tensor whose Fortran type is the equivalent 'int32' C-type
   function unpack_tensor_i32(self, name, result, dims) result(code)
-    integer(kind=c_int32_t), dimension(..), target, intent(out) :: result !< Data to be sent
+    integer(kind=int32), dimension(..), target, intent(out) :: result !< Data to be sent
     class(dbclient_type),                   intent(in) :: self  !< Pointer to the initialized client
     character(len=*),                     intent(in) :: name  !< The name to use to place the tensor
     integer, dimension(:),                intent(in) :: dims  !< Length along each dimension of the tensor
-    integer(kind=enum_kind)                          :: code
+    integer                          :: code
 
     code = -1
   end function unpack_tensor_i32
 
   !> Put a tensor whose Fortran type is the equivalent 'int64' C-type
   function unpack_tensor_i64(self, name, result, dims) result(code)
-    integer(kind=c_int64_t), dimension(..), target, intent(out) :: result !< Data to be sent
+    integer(kind=int64), dimension(..), target, intent(out) :: result !< Data to be sent
     class(dbclient_type),                   intent(in) :: self  !< Pointer to the initialized client
     character(len=*),                     intent(in) :: name  !< The name to use to place the tensor
     integer, dimension(:),                intent(in) :: dims  !< Length along each dimension of the tensor
-    integer(kind=enum_kind)                          :: code
+    integer                          :: code
 
     code = -1
   end function unpack_tensor_i64
 
   !> Put a tensor whose Fortran type is the equivalent 'float' C-type
   function unpack_tensor_float(self, name, result, dims) result(code)
-    real(kind=c_float), dimension(..), target, intent(out) :: result !< Data to be sent
+    real(kind=real32), dimension(..), target, intent(out) :: result !< Data to be sent
     class(dbclient_type),                   intent(in) :: self  !< Pointer to the initialized client
     character(len=*),                     intent(in) :: name  !< The name to use to place the tensor
     integer, dimension(:),                intent(in) :: dims  !< Length along each dimension of the tensor
-    integer(kind=enum_kind)                          :: code
+    integer                          :: code
 
     code = -1
   end function unpack_tensor_float
 
   !> Put a tensor whose Fortran type is the equivalent 'double' C-type
   function unpack_tensor_double(self, name, result, dims) result(code)
-    real(kind=c_double), dimension(..), target, intent(out) :: result !< Data to be sent
+    real(kind=real64), dimension(..), target, intent(out) :: result !< Data to be sent
     class(dbclient_type),                   intent(in) :: self  !< Pointer to the initialized client
     character(len=*),                     intent(in) :: name  !< The name to use to place the tensor
     integer, dimension(:),                intent(in) :: dims  !< Length along each dimension of the tensor
-    integer(kind=enum_kind)                          :: code
+    integer                          :: code
 
     code = -1
   end function unpack_tensor_double
@@ -414,7 +405,7 @@ module database_client_interface
     character(len=*),   intent(in) :: old_name !< The current name for the tensor
                                                !! excluding null terminating character
     character(len=*),   intent(in) :: new_name !< The new tensor name
-    integer(kind=enum_kind)        :: code
+    integer        :: code
 
     code = -1
   end function rename_tensor
@@ -423,7 +414,7 @@ module database_client_interface
   function delete_tensor(self, name) result(code)
     class(dbclient_type), intent(in) :: self !< The initialized Fortran communication client
     character(len=*),   intent(in) :: name !< The name associated with the tensor
-    integer(kind=enum_kind)        :: code
+    integer        :: code
 
     code = -1
   end function delete_tensor
@@ -434,7 +425,7 @@ module database_client_interface
     character(len=*),   intent(in) :: src_name  !< The name associated with the tensor
                                                 !! excluding null terminating character
     character(len=*),   intent(in) :: dest_name !< The new tensor name
-    integer(kind=enum_kind)        :: code
+    integer        :: code
 
     code = -1
   end function copy_tensor
@@ -444,7 +435,7 @@ module database_client_interface
     class(dbclient_type),               intent(in  ) :: self  !< An initialized communication client
     character(len=*),                 intent(in  ) :: name  !< The name associated with the model
     character(len=*),                 intent( out) :: model !< The model as a continuous buffer
-    integer(kind=enum_kind)                        :: code
+    integer                        :: code
 
     code = -1
   end function get_model
@@ -467,7 +458,7 @@ module database_client_interface
                                                                            !! input nodes (TF models)
     character(len=*), dimension(:), optional, intent(in) :: outputs        !< One or more names of model
                                                                            !! output nodes (TF models)
-    integer(kind=enum_kind)                              :: code
+    integer                              :: code
 
     code = -1
   end function set_model_from_file
@@ -491,7 +482,7 @@ module database_client_interface
                                                                            !! input nodes (TF models)
     character(len=*), dimension(:), optional, intent(in) :: outputs        !< One or more names of model
                                                                            !! output nodes (TF models)
-    integer(kind=enum_kind)                              :: code
+    integer                              :: code
 
     code = -1
   end function set_model_from_file_multigpu
@@ -510,7 +501,7 @@ module database_client_interface
                                                                  !! information purposes
     character(len=*), dimension(:), intent(in) :: inputs         !< One or more names of model input nodes (TF models)
     character(len=*), dimension(:), intent(in) :: outputs        !< One or more names of model output nodes (TF models)
-    integer(kind=enum_kind)                    :: code
+    integer                    :: code
 
     code = -1
   end function set_model
@@ -530,7 +521,7 @@ module database_client_interface
                                                                  !! information purposes
     character(len=*), dimension(:), intent(in) :: inputs         !< One or more names of model input nodes (TF models)
     character(len=*), dimension(:), intent(in) :: outputs        !< One or more names of model output nodes (TF models)
-    integer(kind=enum_kind)                    :: code
+    integer                    :: code
 
     code = -1
   end function set_model_multigpu
@@ -541,7 +532,7 @@ module database_client_interface
     character(len=*),               intent(in) :: name    !< The name to use to place the model
     character(len=*), dimension(:), intent(in) :: inputs  !< One or more names of model input nodes (TF models)
     character(len=*), dimension(:), intent(in) :: outputs !< One or more names of model output nodes (TF models)
-    integer(kind=enum_kind)                    :: code
+    integer                    :: code
 
     code = -1
   end function run_model
@@ -556,7 +547,7 @@ module database_client_interface
                                                           !! or MPI rank
     integer,                        intent(in) :: first_gpu !< The first GPU (zero-based) to use with the model
     integer,                        intent(in) :: num_gpus  !< The number of GPUs to use with the model
-    integer(kind=enum_kind)                    :: code
+    integer                    :: code
 
     code = -1
   end function run_model_multigpu
@@ -565,7 +556,7 @@ module database_client_interface
   function delete_model(self, name) result(code)
     class(dbclient_type),             intent(in) :: self    !< An initialized communication client
     character(len=*),               intent(in) :: name    !< The name to use to remove the model
-    integer(kind=enum_kind)                    :: code
+    integer                    :: code
 
     code = -1
   end function delete_model
@@ -576,7 +567,7 @@ module database_client_interface
     character(len=*),               intent(in) :: name    !< The name to use to remove the model
     integer,                        intent(in) :: first_gpu !< The first GPU (zero-based) to use with the model
     integer,                        intent(in) :: num_gpus !< The number of GPUs to use with the model
-    integer(kind=enum_kind)                    :: code
+    integer                    :: code
 
     code = -1
   end function delete_model_multigpu
@@ -586,7 +577,7 @@ module database_client_interface
     class(dbclient_type), intent(in  ) :: self   !< An initialized communication client
     character(len=*),   intent(in  ) :: name   !< The name to use to place the script
     character(len=*),   intent( out) :: script !< The script as a continuous buffer
-    integer(kind=enum_kind)          :: code
+    integer          :: code
 
     code = -1
   end function get_script
@@ -597,7 +588,7 @@ module database_client_interface
     character(len=*),   intent(in) :: name        !< The name to use to place the script
     character(len=*),   intent(in) :: device      !< The name of the device (CPU, GPU, GPU:0, GPU:1...)
     character(len=*),   intent(in) :: script_file !< The file storing the script
-    integer(kind=enum_kind)        :: code
+    integer        :: code
 
     code = -1
   end function set_script_from_file
@@ -609,7 +600,7 @@ module database_client_interface
     character(len=*),   intent(in) :: script_file !< The file storing the script
     integer,            intent(in) :: first_gpu   !< The first GPU (zero-based) to use with the model
     integer,            intent(in) :: num_gpus    !< The number of GPUs to use with the model
-    integer(kind=enum_kind)        :: code
+    integer        :: code
 
     code = -1
   end function set_script_from_file_multigpu
@@ -620,7 +611,7 @@ module database_client_interface
     character(len=*),   intent(in) :: name   !< The name to use to place the script
     character(len=*),   intent(in) :: device !< The name of the device (CPU, GPU, GPU:0, GPU:1...)
     character(len=*),   intent(in) :: script !< The file storing the script
-    integer(kind=enum_kind)        :: code
+    integer        :: code
 
     code = -1
   end function set_script
@@ -632,7 +623,7 @@ module database_client_interface
     character(len=*),   intent(in) :: script !< The file storing the script
     integer,            intent(in) :: first_gpu !< The first GPU (zero-based) to use with the model
     integer,            intent(in) :: num_gpus  !< The number of GPUs to use with the model
-    integer(kind=enum_kind)        :: code
+    integer        :: code
 
     code = -1
   end function set_script_multigpu
@@ -645,7 +636,7 @@ module database_client_interface
                                                                  !! input nodes (TF scripts)
     character(len=*), dimension(:), intent(in) :: outputs        !< One or more names of script
                                                                  !! output nodes (TF scripts)
-    integer(kind=enum_kind)                    :: code
+    integer                    :: code
 
     code = -1
   end function run_script
@@ -662,7 +653,7 @@ module database_client_interface
                                                           !! or MPI rank
     integer,                        intent(in) :: first_gpu !< The first GPU (zero-based) to use with the model
     integer,                        intent(in) :: num_gpus  !< The number of GPUs to use with the model
-    integer(kind=enum_kind)                    :: code
+    integer                    :: code
 
     code = -1
   end function run_script_multigpu
@@ -671,7 +662,7 @@ module database_client_interface
   function delete_script(self, name) result(code)
     class(dbclient_type),             intent(in) :: self    !< An initialized communication client
     character(len=*),               intent(in) :: name    !< The name to use to delete the script
-    integer(kind=enum_kind)                    :: code
+    integer                    :: code
 
     code = -1
   end function delete_script
@@ -682,7 +673,7 @@ module database_client_interface
     character(len=*),               intent(in) :: name    !< The name to use to delete the script_multigpu
     integer,                        intent(in) :: first_gpu !< The first GPU (zero-based) to use with the model
     integer,                        intent(in) :: num_gpus !< The number of GPUs to use with the model
-    integer(kind=enum_kind)                    :: code
+    integer                    :: code
 
     code = -1
   end function delete_script_multigpu
@@ -691,7 +682,7 @@ module database_client_interface
   function put_dataset(self, dataset) result(code)
     class(dbclient_type), intent(in) :: self    !< An initialized communication client
     type(dataset_type), intent(in) :: dataset !< Dataset to store in the dataset
-    integer(kind=enum_kind)        :: code
+    integer        :: code
 
     code = -1
   end function put_dataset
@@ -701,7 +692,7 @@ module database_client_interface
     class(dbclient_type), intent(in )  :: self    !< An initialized communication client
     character(len=*),   intent(in )  :: name    !< Name of the dataset to get
     type(dataset_type), intent( out) :: dataset !< receives the dataset
-    integer(kind=enum_kind)          :: code
+    integer          :: code
 
     code = -1
   end function get_dataset
@@ -711,7 +702,7 @@ module database_client_interface
     class(dbclient_type), intent(in) :: self     !< An initialized communication client
     character(len=*),   intent(in) :: name     !< Original name of the dataset
     character(len=*),   intent(in) :: new_name !< New name of the dataset
-    integer(kind=enum_kind)        :: code
+    integer        :: code
 
     code = -1
   end function rename_dataset
@@ -721,7 +712,7 @@ module database_client_interface
     class(dbclient_type), intent(in) :: self     !< An initialized communication client
     character(len=*),   intent(in) :: name     !< Source name of the dataset
     character(len=*),   intent(in) :: new_name !< Name of the new dataset
-    integer(kind=enum_kind)        :: code
+    integer        :: code
 
     code = -1
   end function copy_dataset
@@ -730,7 +721,7 @@ module database_client_interface
   function delete_dataset(self, name) result(code)
     class(dbclient_type), intent(in) :: self !< An initialized communication client
     character(len=*),   intent(in) :: name !< Name of the dataset to delete
-    integer(kind=enum_kind)        :: code
+    integer        :: code
 
     code = -1
   end function delete_dataset
@@ -739,7 +730,7 @@ module database_client_interface
   function set_data_source(self, source_id) result(code)
     class(dbclient_type), intent(in) :: self      !< An initialized communication client
     character(len=*),   intent(in) :: source_id !< The name prefix
-    integer(kind=enum_kind)        :: code
+    integer        :: code
 
     code = -1
   end function set_data_source
@@ -751,7 +742,7 @@ module database_client_interface
   function use_model_ensemble_prefix(self, use_prefix) result(code)
     class(dbclient_type),   intent(in) :: self       !< An initialized communication client
     logical,              intent(in) :: use_prefix !< The prefix setting
-    integer(kind=enum_kind)          :: code
+    integer          :: code
 
     code = -1
   end function use_model_ensemble_prefix
@@ -764,7 +755,7 @@ module database_client_interface
   function use_tensor_ensemble_prefix(self, use_prefix) result(code)
     class(dbclient_type),   intent(in) :: self       !< An initialized communication client
     logical,              intent(in) :: use_prefix !< The prefix setting
-    integer(kind=enum_kind)          :: code
+    integer          :: code
 
     code = -1
   end function use_tensor_ensemble_prefix
@@ -773,7 +764,7 @@ module database_client_interface
   function use_list_ensemble_prefix(self, use_prefix) result(code)
     class(dbclient_type),   intent(in) :: self       !< An initialized communication client
     logical,              intent(in) :: use_prefix !< The prefix setting
-    integer(kind=enum_kind)          :: code
+    integer          :: code
 
     code = -1
   end function use_list_ensemble_prefix
@@ -787,13 +778,8 @@ module database_client_interface
     class(dbclient_type), intent(in) :: self       !< An initialized communication client
     character(len=*),   intent(in) :: list_name  !< Name of the dataset to get
     type(dataset_type), intent(in) :: dataset    !< Dataset to append to the list
-    integer(kind=enum_kind)        :: code
+    integer        :: code
 
-    integer(kind=c_size_t) :: list_name_length
-    character(kind=c_char,len=len_trim(list_name)) :: list_name_c
-
-    list_name_c = trim(list_name)
-    list_name_length = len_trim(list_name)
     code = -1
   end function append_to_list
 
@@ -801,13 +787,7 @@ module database_client_interface
   function delete_list(self, list_name) result(code)
     class(dbclient_type),   intent(in) :: self       !< An initialized communication client
     character(len=*),     intent(in) :: list_name  !< Name of the aggregated dataset list to delete
-    integer(kind=enum_kind)          :: code
-
-    integer(kind=c_size_t) :: list_name_length
-    character(kind=c_char,len=len_trim(list_name)) :: list_name_c
-
-    list_name_c = trim(list_name)
-    list_name_length = len_trim(list_name)
+    integer          :: code
 
     code = -1
   end function delete_list
@@ -817,7 +797,7 @@ module database_client_interface
     class(dbclient_type),   intent(in) :: self      !< An initialized communication client
     character(len=*),     intent(in) :: src_name  !< Name of the dataset to copy
     character(len=*),     intent(in) :: dest_name !< The new list name
-    integer(kind=enum_kind)          :: code
+    integer          :: code
 
     code = -1
   end function copy_list
@@ -827,7 +807,7 @@ module database_client_interface
     class(dbclient_type),   intent(in) :: self      !< An initialized communication client
     character(len=*),     intent(in) :: src_name  !< Name of the dataset to rename
     character(len=*),     intent(in) :: dest_name !< The new list name
-    integer(kind=enum_kind)          :: code
+    integer          :: code
 
     code = -1
   end function rename_list
@@ -837,7 +817,7 @@ module database_client_interface
     class(dbclient_type),   intent(in   ) :: self           !< An initialized communication client
     character(len=*),     intent(in   ) :: list_name      !< Name of the dataset to get
     integer,              intent(  out) :: result_length  !< The length of the list
-    integer(kind=enum_kind)             :: code
+    integer             :: code
 
     code = -1
   end function get_list_length
@@ -849,9 +829,9 @@ module database_client_interface
     integer,              intent(in   ) :: list_length        !< The desired length of the list
     integer,              intent(in   ) :: poll_frequency_ms  !< Frequency at which to poll the database (ms)
     integer,              intent(in   ) :: num_tries          !< Number of times to poll the database before failing
-    logical(kind=c_bool), intent(  out) :: poll_result        !< True if the list is the requested length,
+    logical, intent(  out) :: poll_result        !< True if the list is the requested length,
                                                               !! False if not after num_tries.
-    integer(kind=enum_kind)             :: code
+    integer             :: code
 
     code = -1
   end function poll_list_length
@@ -863,9 +843,9 @@ module database_client_interface
     integer,              intent(in   ) :: list_length        !< The desired length of the list
     integer,              intent(in   ) :: poll_frequency_ms  !< Frequency at which to poll the database (ms)
     integer,              intent(in   ) :: num_tries          !< Number of times to poll the database before failing
-    logical(kind=c_bool), intent(  out) :: poll_result        !< True if the list is the requested length,
+    logical, intent(  out) :: poll_result        !< True if the list is the requested length,
                                                               !! False if not after num_tries.
-    integer(kind=enum_kind)          :: code
+    integer          :: code
 
     code = -1
   end function poll_list_length_gte
@@ -877,10 +857,10 @@ module database_client_interface
     integer,              intent(in)  :: list_length        !< The desired length of the list
     integer,              intent(in)  :: poll_frequency_ms  !< Frequency at which to poll the database (ms)
     integer,              intent(in)  :: num_tries          !< Number of times to poll the database before failing
-    logical(kind=c_bool), intent(  out) :: poll_result        !< True if the list is the requested length,
+    logical, intent(  out) :: poll_result        !< True if the list is the requested length,
                                                               !! False if not after num_tries.
 
-    integer(kind=enum_kind)          :: code
+    integer          :: code
 
     code = -1
   end function poll_list_length_lte
@@ -893,7 +873,7 @@ module database_client_interface
     class(dbclient_type),   intent(in) :: self       !< An initialized communication client
     character(len=*),     intent(in) :: list_name  !< Name of the dataset to get
     type(dataset_type), dimension(:), allocatable, intent(  out) :: datasets !< The array of datasets included
-    integer(kind=enum_kind)          :: code
+    integer          :: code
                                                                              !! in the list
     integer,              intent(out) :: num_datasets !< The numbr of datasets returned
 
@@ -916,7 +896,7 @@ module database_client_interface
                                                     !! the last element of the list.
 
     type(dataset_type), dimension(:), allocatable, intent(  out) :: datasets !< The array of datasets included
-    integer(kind=enum_kind)          :: code
+    integer          :: code
                                                                              !! in the list
 
     code = -1
