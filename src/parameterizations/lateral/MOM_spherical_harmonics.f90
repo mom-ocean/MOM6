@@ -10,7 +10,7 @@ use MOM_coms_infra, only : sum_across_PEs
 
 implicit none ; private
 
-public spherical_harmonics_init, spherical_harmonics_end, SHOrderDegreeToIndex, calc_lmax
+public spherical_harmonics_init, spherical_harmonics_end, order2index, calc_lmax
 public spherical_harmonics_forward, spherical_harmonics_inverse
 
 #include <MOM_memory.h>
@@ -63,7 +63,7 @@ subroutine spherical_harmonics_forward(G, CS, var, SnmRe, SnmIm, Nd)
   endif
 
   do m=0,Nmax
-    l = SHOrderDegreeToIndex(m, m, Nmax)
+    l = order2index(m, Nmax)
 
     do j=js,je ; do i=is,ie
       pmn = CS%Pmm(i,j,m+1)
@@ -140,7 +140,7 @@ subroutine spherical_harmonics_inverse(G, CS, SnmRe, SnmIm, var, Nd)
   var = 0.0
   do m=0,Nmax
     mFac = sign(1.0, m-0.5)*0.5 + 1.5
-    l = SHOrderDegreeToIndex(m, m, Nmax)
+    l = order2index(m, Nmax)
 
     do j=js,je ; do i=is,ie
       pmn = CS%Pmm(i,j,m+1)
@@ -252,22 +252,23 @@ subroutine spherical_harmonics_end(CS)
   deallocate(CS%aRecurrenceCoeff, CS%bRecurrenceCoeff)
 end subroutine spherical_harmonics_end
 
+!> The function calc_lmax returns the number of real elements (cosine) of the spherical harmonics,
+!! given the maximum degree,
 function calc_lmax(Nd) result(lmax)
-  integer :: Nd
   integer :: lmax
+  integer, intent(in) :: Nd
 
   lmax = (Nd+2) * (Nd+1) / 2
 end function calc_lmax
 
-function SHOrderDegreeToIndex(n,m, nOrder) result(l)!{{{
-
+!> The function returns the one-dimension index number at (n=0, m=m), given order (m) and maximum degree (Nd)
+!! The one-dimensional array is organized following degree being the faster moving dimension.
+function order2index(m, Nd) result(l)
   integer :: l
-  integer :: n
-  integer :: m
-  integer :: nOrder
+  integer, intent(in) :: m
+  integer, intent(in) :: Nd
 
-  l = (nOrder+1)*m - m*(m+1)/2 + n+1
-
-end function SHOrderDegreeToIndex
+  l = ((Nd+1) + (Nd+1-(m-1)))*m/2 + 1
+end function order2index
 
 end module MOM_spherical_harmonics
