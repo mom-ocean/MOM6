@@ -1,12 +1,13 @@
-!> Laplace's spherical harmonics transforms (SHT)
+!> Laplace's spherical harmonic transforms (SHT)
 module MOM_spherical_harmonics
 use MOM_cpu_clock,     only : cpu_clock_id, cpu_clock_begin, cpu_clock_end, &
-  CLOCK_MODULE
+                              CLOCK_MODULE, CLOCK_ROUTINE, CLOCK_LOOP
 use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, WARNING
 use MOM_file_parser,   only : get_param, log_version, param_file_type
 use MOM_grid,          only : ocean_grid_type
 use MOM_unit_scaling,  only : unit_scale_type
-use MOM_coms_infra, only : sum_across_PEs
+use MOM_coms_infra,    only : sum_across_PEs
+use MOM_coms,          only : reproducing_sum
 
 implicit none ; private
 
@@ -24,8 +25,13 @@ type, public :: sht_CS ; private
   real, allocatable :: complexFactorRe(:,:,:), complexFactorIm(:,:,:), & !< Precomputed exponential factors
                        complexExpRe(:,:,:), complexExpIm(:,:,:)          !! at the t-cells [nondim].
   real, allocatable :: aRecurrenceCoeff(:,:), bRecurrenceCoeff(:,:) !< Precomputed recurrennce coefficients [nondim].
-  logical :: bfb !< True if use reproducable global sums
+  logical :: reprod_sum !< True if use reproducable global sums
 end type sht_CS
+
+integer :: id_clock_sht=-1 !< CPU clock for SHT [MODULE]
+integer :: id_clock_sht_forward=-1 !< CPU clock for forward transforms [ROUTINE]
+integer :: id_clock_sht_inverse=-1  !< CPU clock for inverse transforms [ROUTINE]
+integer :: id_clock_sht_global_sum=-1  !< CPU clock for global summation in forward transforms [LOOP]
 
 contains
 subroutine spherical_harmonics_forward(G, CS, var, SnmRe, SnmIm, Nd)
@@ -41,6 +47,7 @@ subroutine spherical_harmonics_forward(G, CS, var, SnmRe, SnmIm, Nd)
   integer :: is, ie, js, je
   integer :: m, n, l
   real, allocatable :: Snm_local(:), SnmRe_local(:), SnmIm_local(:)
+  real, allocatable :: SnmRe_local_reproSum(:,:,:), SnmIm_local_reproSum(:,:,:)
   real :: pmn,   & ! Current associated Legendre polynomials of degree n and order m
           pmnm1, & ! Associated Legendre polynomials of degree n-1 and order m
           pmnm2    ! Associated Legendre polynomials of degree n-2 and order m
@@ -48,69 +55,79 @@ subroutine spherical_harmonics_forward(G, CS, var, SnmRe, SnmIm, Nd)
   if (.not.CS%initialized) call MOM_error(FATAL, "MOM_spherical_harmonics " // &
     "spherical_harmonics_forward: Module must be initialized before it is used.")
 
+  if (id_clock_sht>0) call cpu_clock_begin(id_clock_sht)
+  if (id_clock_sht_forward>0) call cpu_clock_begin(id_clock_sht_forward)
+
   Nmax = CS%nOrder; if (present(Nd)) Nmax = Nd
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
 
-  if (CS%bfb) then
-    ! allocate(Snm_local_reproSum(2*CS%lmax)); Snm_local_reproSum = 0.0
-    ! allocate(SnmRe_local_reproSum(CS%lmax)); SnmRe_local_reproSum = 0.0
-    ! allocate(SnmIm_local_reproSum(CS%lmax)); SnmIm_local_reproSum = 0.0
+  if (CS%reprod_sum) then
+    allocate(SnmRe_local_reproSum(is:ie, js:je, CS%lmax)); SnmRe_local_reproSum = 0.0
+    allocate(SnmIm_local_reproSum(is:ie, js:je, CS%lmax)); SnmIm_local_reproSum = 0.0
+
+    do m=0,Nmax
+      l = order2index(m, Nmax)
+      do j=js,je ; do i=is,ie
+        pmn = CS%Pmm(i,j,m+1)
+        SnmRe_local_reproSum(i,j,l) = var(i,j) * pmn * CS%complexFactorRe(i,j,m+1)
+        SnmIm_local_reproSum(i,j,l) = var(i,j) * pmn * CS%complexFactorIm(i,j,m+1)
+
+        pmnm2 = 0.0; pmnm1 = pmn
+        do n = m+1, Nmax
+          pmn =  CS%aRecurrenceCoeff(n+1,m+1) * CS%cosCoLatT(i,j) * pmnm1 - CS%bRecurrenceCoeff(n+1,m+1) * pmnm2
+          SnmRe_local_reproSum(i,j,l+n-m) = var(i,j) * pmn * CS%complexFactorRe(i,j,m+1)
+          SnmIm_local_reproSum(i,j,l+n-m) = var(i,j) * pmn * CS%complexFactorIm(i,j,m+1)
+          pmnm2 = pmnm1; pmnm1 = pmn
+        enddo
+      enddo ; enddo
+    enddo
   else
     allocate(Snm_local(2*CS%lmax)); Snm_local = 0.0
     allocate(SnmRe_local(CS%lmax)); SnmRe_local = 0.0
     allocate(SnmIm_local(CS%lmax)); SnmIm_local = 0.0
-  endif
 
-  do m=0,Nmax
-    l = order2index(m, Nmax)
+    do m=0,Nmax
+      l = order2index(m, Nmax)
+      do j=js,je ; do i=is,ie
+        pmn = CS%Pmm(i,j,m+1)
+        SnmRe_local(l) = SnmRe_local(l) + var(i,j) * pmn * CS%complexFactorRe(i,j,m+1)
+        SnmIm_local(l) = SnmIm_local(l) + var(i,j) * pmn * CS%complexFactorIm(i,j,m+1)
 
-    do j=js,je ; do i=is,ie
-      pmn = CS%Pmm(i,j,m+1)
-      SnmRe_local(l) = SnmRe_local(l) + var(i,j) * pmn * CS%complexFactorRe(i,j,m+1)
-      SnmIm_local(l) = SnmIm_local(l) + var(i,j) * pmn * CS%complexFactorIm(i,j,m+1)
-
-      pmnm2 = 0.0; pmnm1 = pmn
-      do n = m+1, Nmax
-        pmn =  CS%aRecurrenceCoeff(n+1,m+1) * CS%cosCoLatT(i,j) * pmnm1 - CS%bRecurrenceCoeff(n+1,m+1) * pmnm2
-        SnmRe_local(l+n-m) = SnmRe_local(l+n-m) + var(i,j) * pmn * CS%complexFactorRe(i,j,m+1)
-        SnmIm_local(l+n-m) = SnmIm_local(l+n-m) + var(i,j) * pmn * CS%complexFactorIm(i,j,m+1)
-        pmnm2 = pmnm1; pmnm1 = pmn
-      enddo
-    enddo ; enddo
-  enddo
-
-  ! call mpas_timer_stop('Parallel SAL: Forward Transform')
-
-  ! call mpas_timer_start('Parallel SAL: Communication')
-  if (CS%bfb) then
-    ! do m = 1,lmax
-    !     do iCell = 1,nCellsOwned 
-    !       Snm_local_reproSum(iCell,m) = SnmRe_local_reproSum(iCell,m)
-    !       Snm_local_reproSum(iCell,lmax+m) = SnmIm_local_reproSum(iCell,m)
-    !     enddo
-    ! enddo
-  else
-    do m = 1,CS%lmax
-      Snm_local(m) = SnmRe_local(m)
-      Snm_local(CS%lmax+m) = SnmIm_local(m)
+        pmnm2 = 0.0; pmnm1 = pmn
+        do n = m+1, Nmax
+          pmn =  CS%aRecurrenceCoeff(n+1,m+1) * CS%cosCoLatT(i,j) * pmnm1 - CS%bRecurrenceCoeff(n+1,m+1) * pmnm2
+          SnmRe_local(l+n-m) = SnmRe_local(l+n-m) + var(i,j) * pmn * CS%complexFactorRe(i,j,m+1)
+          SnmIm_local(l+n-m) = SnmIm_local(l+n-m) + var(i,j) * pmn * CS%complexFactorIm(i,j,m+1)
+          pmnm2 = pmnm1; pmnm1 = pmn
+        enddo
+      enddo ; enddo
     enddo
   endif
 
-  ! Compute global integral by summing local contributions
-  if (CS%bfb) then
-     !threadNum = mpas_threading_get_thread_num()
-     !if ( threadNum == 0 ) then
-        !  Snm = mpas_global_sum_nfld(Snm_local_reproSum,dminfo%comm)
-     !endif
+  if (id_clock_sht_global_sum>0) call cpu_clock_begin(id_clock_sht_global_sum)
+
+  if (CS%reprod_sum) then
+    do m=1,CS%lmax
+      SnmRe(m) = reproducing_sum(SnmRe_local_reproSum(:,:,m))
+      SnmIm(m) = reproducing_sum(SnmIm_local_reproSum(:,:,m))
+    enddo
   else
+    do m=1,CS%lmax
+      Snm_local(m) = SnmRe_local(m)
+      Snm_local(CS%lmax+m) = SnmIm_local(m)
+    enddo
     call sum_across_PEs(Snm_local, 2*CS%lmax)
+
+    do m=1,CS%lmax
+      SnmRe(m) = Snm_local(m)
+      SnmIm(m) = Snm_local(CS%lmax+m)
+    enddo
   endif
 
-  do m=1,CS%lmax
-    SnmRe(m) = Snm_local(m)
-    SnmIm(m) = Snm_local(CS%lmax+m)
-  enddo
+  if (id_clock_sht_global_sum>0) call cpu_clock_end(id_clock_sht_global_sum)
+  if (id_clock_sht_forward>0) call cpu_clock_end(id_clock_sht_forward)
+  if (id_clock_sht>0) call cpu_clock_end(id_clock_sht)
 end subroutine spherical_harmonics_forward
 
 subroutine spherical_harmonics_inverse(G, CS, SnmRe, SnmIm, var, Nd)
@@ -133,9 +150,13 @@ subroutine spherical_harmonics_inverse(G, CS, SnmRe, SnmIm, var, Nd)
 
   if (.not.CS%initialized) call MOM_error(FATAL, "MOM_spherical_harmonics " // &
     "spherical_harmonics_inverse: Module must be initialized before it is used.")
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
+
+  if (id_clock_sht>0) call cpu_clock_begin(id_clock_sht)
+  if (id_clock_sht_inverse>0) call cpu_clock_begin(id_clock_sht_inverse)
 
   Nmax = CS%nOrder; if (present(Nd)) Nmax = Nd
+
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
 
   var = 0.0
   do m=0,Nmax
@@ -156,6 +177,9 @@ subroutine spherical_harmonics_inverse(G, CS, SnmRe, SnmIm, var, Nd)
       enddo
     enddo ; enddo
   enddo
+
+  if (id_clock_sht_inverse>0) call cpu_clock_end(id_clock_sht_inverse)
+  if (id_clock_sht>0) call cpu_clock_end(id_clock_sht)
 end subroutine spherical_harmonics_inverse
 
 subroutine spherical_harmonics_init(G, param_file, CS)
@@ -176,20 +200,21 @@ subroutine spherical_harmonics_init(G, param_file, CS)
 # include "version_variable.h"
   character(len=40) :: mdl = "MOM_spherical_harmonics" ! This module's name.
 
+  if (CS%initialized) return
   CS%initialized = .True.
 
-  call log_version(param_file, mdl, version, "")
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
 
+  call log_version(param_file, mdl, version, "")
   call get_param(param_file, mdl, "TIDAL_SAL_SHT_DEGREE", Nd_tidal_SAL, &
                  "The maximum degree of the spherical harmonics transformation used for "// &
                  "calculating the self-attraction and loading term for tides.", &
                  default=0, do_not_log=.true.)
   CS%nOrder = Nd_tidal_SAL
   CS%lmax = calc_lmax(CS%nOrder)
-  call get_param(param_file, mdl, "SHT_BFB", CS%bfb, &
-                 "If true, use bfb sum. Default is False.", default=.False.)
-
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
+  call get_param(param_file, mdl, "SHT_REPRODUCING_SUM", CS%reprod_sum, &
+                 "If true, use reproducing sums (invariant to PE layout) in inverse transform "// &
+                 "of spherical harmonics. Otherwise use a simple sum of floationg point numbers. ", default=.False.)
 
   ! Recurrence relationship coefficients
   !  a has an additional row of zero to accommodate the nonexistent element P(m+2,m+1) when m=n=CS%nOrder
@@ -241,6 +266,12 @@ subroutine spherical_harmonics_init(G, param_file, CS)
       enddo
     enddo ; enddo
   enddo
+
+  id_clock_sht = cpu_clock_id('(Ocean spherical harmonics)', grain=CLOCK_MODULE)
+  id_clock_sht_forward = cpu_clock_id('(Ocean SHT forward)', grain=CLOCK_ROUTINE)
+  id_clock_sht_inverse = cpu_clock_id('(Ocean SHT inverse)', grain=CLOCK_ROUTINE)
+  id_clock_sht_global_sum = cpu_clock_id('(Ocean SHT global sum)', grain=CLOCK_LOOP)
+
 end subroutine spherical_harmonics_init
 
 subroutine spherical_harmonics_end(CS)

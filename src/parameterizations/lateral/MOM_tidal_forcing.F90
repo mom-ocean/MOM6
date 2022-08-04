@@ -4,7 +4,7 @@ module MOM_tidal_forcing
 ! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_cpu_clock,     only : cpu_clock_id, cpu_clock_begin, cpu_clock_end, &
-                              CLOCK_MODULE
+                              CLOCK_MODULE, CLOCK_ROUTINE
 use MOM_domains,       only : pass_var
 use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, WARNING
 use MOM_file_parser,   only : get_param, log_version, param_file_type
@@ -541,7 +541,7 @@ subroutine tidal_forcing_init(Time, G, US, param_file, CS)
     allocate(CS%LoveScaling(lmax))
     call calc_love_scaling(CS%sal_sht_Nd, CS%LoveScaling)
     call spherical_harmonics_init(G, param_file, CS%sht)
-    id_clock_SAL = cpu_clock_id('(Ocean SAL)', grain=CLOCK_MODULE)
+    id_clock_SAL = cpu_clock_id('(Ocean SAL)', grain=CLOCK_ROUTINE)
   endif
 
   id_clock_tides = cpu_clock_id('(Ocean tides)', grain=CLOCK_MODULE)
