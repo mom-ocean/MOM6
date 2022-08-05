@@ -8,60 +8,60 @@ implicit none ; private
 !> The tracer type
 type, public :: tracer_type
 
-  real, dimension(:,:,:), pointer :: t              => NULL() !< tracer concentration array [conc]
-! real                            :: OBC_inflow_conc=  0.0    !< tracer concentration for generic inflows [conc]
+  real, dimension(:,:,:), pointer :: t              => NULL() !< tracer concentration array [CU ~> conc]
+! real                            :: OBC_inflow_conc=  0.0    !< tracer concentration for generic inflows [CU ~> conc]
 ! real, dimension(:,:,:), pointer :: OBC_in_u       => NULL() !< structured values for flow into the domain
 !                                                             !! specified in OBCs through u-face of cell
 ! real, dimension(:,:,:), pointer :: OBC_in_v       => NULL() !< structured values for flow into the domain
 !                                                             !! specified in OBCs through v-face of cell
 
   real, dimension(:,:,:), pointer :: ad_x           => NULL() !< diagnostic array for x-advective tracer flux
-                                                              !! [conc H L2 T-1 ~> conc m3 s-1 or conc kg s-1]
+                                                              !! [CU H L2 T-1 ~> conc m3 s-1 or conc kg s-1]
   real, dimension(:,:,:), pointer :: ad_y           => NULL() !< diagnostic array for y-advective tracer flux
-                                                              !! [conc H L2 T-1 ~> conc m3 s-1 or conc kg s-1]
+                                                              !! [CU H L2 T-1 ~> conc m3 s-1 or conc kg s-1]
   real, dimension(:,:),   pointer :: ad2d_x         => NULL() !< diagnostic vertical sum x-advective tracer flux
-                                                              !! [conc H L2 T-1 ~> conc m3 s-1 or conc kg s-1]
+                                                              !! [CU H L2 T-1 ~> conc m3 s-1 or conc kg s-1]
   real, dimension(:,:),   pointer :: ad2d_y         => NULL() !< diagnostic vertical sum y-advective tracer flux
-                                                              !! [conc H L2 T-1 ~> conc m3 s-1 or conc kg s-1]
+                                                              !! [CU H L2 T-1 ~> conc m3 s-1 or conc kg s-1]
 
   real, dimension(:,:,:), pointer :: df_x           => NULL() !< diagnostic array for x-diffusive tracer flux
-                                                              !! [conc H L2 T-1 ~> conc m3 s-1 or conc kg s-1]
+                                                              !! [CU H L2 T-1 ~> conc m3 s-1 or conc kg s-1]
   real, dimension(:,:,:), pointer :: df_y           => NULL() !< diagnostic array for y-diffusive tracer flux
-                                                              !! [conc H L2 T-1 ~> conc m3 s-1 or conc kg s-1]
+                                                              !! [CU H L2 T-1 ~> conc m3 s-1 or conc kg s-1]
   real, dimension(:,:,:), pointer :: lbd_dfx       => NULL()  !< diagnostic array for x-diffusive tracer flux
-                                                              !! [conc H L2 T-1 ~> conc m3 s-1 or conc kg s-1]
+                                                              !! [CU H L2 T-1 ~> conc m3 s-1 or conc kg s-1]
   real, dimension(:,:,:), pointer :: lbd_dfy       => NULL()  !< diagnostic array for y-diffusive tracer flux
-                                                              !! [conc H L2 T-1 ~> conc m3 s-1 or conc kg s-1]
+                                                              !! [CU H L2 T-1 ~> conc m3 s-1 or conc kg s-1]
   real, dimension(:,:), pointer :: lbd_dfx_2d       => NULL() !< diagnostic array for x-diffusive tracer flux
-                                                              !! [conc H L2 T-1 ~> conc m3 s-1 or conc kg s-1]
+                                                              !! [CU H L2 T-1 ~> conc m3 s-1 or conc kg s-1]
   real, dimension(:,:), pointer :: lbd_dfy_2d       => NULL() !< diagnostic array for y-diffusive tracer flux
-                                                              !! [conc H L2 T-1 ~> conc m3 s-1 or conc kg s-1]
+                                                              !! [CU H L2 T-1 ~> conc m3 s-1 or conc kg s-1]
   !### These two arrays may be allocated but are never used.
   real, dimension(:,:), pointer :: lbd_bulk_df_x       => NULL() !< diagnostic array for x-diffusive tracer flux
-                                                              !! [conc H L2 T-1 ~> conc m3 s-1 or conc kg s-1]
+                                                              !! [CU H L2 T-1 ~> conc m3 s-1 or conc kg s-1]
   real, dimension(:,:), pointer :: lbd_bulk_df_y       => NULL() !< diagnostic array for y-diffusive tracer flux
-                                                              !! [conc H L2 T-1 ~> conc m3 s-1 or conc kg s-1]
+                                                              !! [CU H L2 T-1 ~> conc m3 s-1 or conc kg s-1]
   real, dimension(:,:),   pointer :: df2d_x         => NULL() !< diagnostic vertical sum x-diffusive flux
-                                                              !! [conc H L2 T-1 ~> conc m3 s-1 or conc kg s-1]
+                                                              !! [CU H L2 T-1 ~> conc m3 s-1 or conc kg s-1]
   real, dimension(:,:),   pointer :: df2d_y         => NULL() !< diagnostic vertical sum y-diffusive flux
-                                                              !! [conc H L2 T-1 ~> conc m3 s-1 or conc kg s-1]
+                                                              !! [CU H L2 T-1 ~> conc m3 s-1 or conc kg s-1]
 !  real, dimension(:,:),   pointer :: df2d_conc_x    => NULL() !< diagnostic vertical sum x-diffusive content flux
-!                                                              !! [conc H L2 T-1 ~> conc m3 s-1 or conc kg s-1]
+!                                                              !! [CU H L2 T-1 ~> conc m3 s-1 or conc kg s-1]
 !  real, dimension(:,:),   pointer :: df2d_conc_y    => NULL() !< diagnostic vertical sum y-diffusive content flux
-!                                                              !! [conc H L2 T-1 ~> conc m3 s-1 or conc kg s-1]
+!                                                              !! [CU H L2 T-1 ~> conc m3 s-1 or conc kg s-1]
 
   real, dimension(:,:,:), pointer :: advection_xy   => NULL() !< convergence of lateral advective tracer fluxes
-                                                              !! [conc H T-1 ~> conc m s-1 or conc kg m-2 s-1]
+                                                              !! [CU H T-1 ~> conc m s-1 or conc kg m-2 s-1]
 !  real, dimension(:,:,:), pointer :: diff_cont_xy   => NULL() !< convergence of lateral diffusive tracer fluxes
-!                                                              !! [conc H T-1 ~> conc m s-1 or conc kg m-2 s-1]
+!                                                              !! [CU H T-1 ~> conc m s-1 or conc kg m-2 s-1]
 !  real, dimension(:,:,:), pointer :: diff_conc_xy   => NULL() !< convergence of lateral diffusive tracer fluxes
 !                                                              !! expressed as a change in concentration
-                                                               !! [conc T-1 ~> conc s-1]
+!                                                              !! [CU T-1 ~> conc s-1]
   real, dimension(:,:,:), pointer :: t_prev         => NULL() !< tracer concentration array at a previous
-                                                              !! timestep used for diagnostics [conc]
+                                                              !! timestep used for diagnostics [CU ~> conc]
   real, dimension(:,:,:), pointer :: Trxh_prev      => NULL() !< layer integrated tracer concentration array
                                                               !! at a previous timestep used for diagnostics
-                                                              !! [conc H ~> conc m or conc kg m-2]
+                                                              !! [CU H ~> conc m or conc kg m-2]
 
   character(len=32)               :: name                     !< tracer name used for diagnostics and error messages
   character(len=64)               :: units                    !< Physical dimensions of the tracer concentration
@@ -69,6 +69,10 @@ type, public :: tracer_type
 !  type(vardesc), pointer          :: vd             => NULL() !< metadata describing the tracer
   logical                         :: registry_diags = .false. !< If true, use the registry to set up the
                                                               !! diagnostics associated with this tracer.
+  real                            :: conc_underflow = 0.0     !< A magnitude of tracer concentrations below
+                                                              !! which values should be set to 0. [CU ~> conc]
+  real                            :: conc_scale = 1.0         !< A scaling factor used to convert the concentrations
+                                                              !! of this tracer to its desired units.
   character(len=64)               :: cmor_name                !< CMOR name of this tracer
   character(len=64)               :: cmor_units               !< CMOR physical dimensions of the tracer
   character(len=240)              :: cmor_longname            !< CMOR long name of the tracer

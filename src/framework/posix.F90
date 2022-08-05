@@ -19,7 +19,7 @@ implicit none
 !! and any information required to restore the process state.
 type, bind(c) :: jmp_buf
   private
-  character(kind=c_char) :: state(JMP_BUF_SIZE)
+  character(kind=c_char) :: state(SIZEOF_JMP_BUF)
     !< Unstructured array of bytes used to store the process state
 end type jmp_buf
 
@@ -28,7 +28,7 @@ end type jmp_buf
 !! In addition to the content stored by `jmp_buf`, it also stores signal state.
 type, bind(c) :: sigjmp_buf
   private
-  character(kind=c_char) :: state(SIGJMP_BUF_SIZE)
+  character(kind=c_char) :: state(SIZEOF_SIGJMP_BUF)
     !< Unstructured array of bytes used to store the process state
 end type sigjmp_buf
 

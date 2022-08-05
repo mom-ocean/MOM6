@@ -1,0 +1,34 @@
+name: MacOS stencil tests
+
+on: [push, pull_request]
+
+jobs:
+  test-macos-stencil:
+
+    runs-on: macOS-latest
+
+    env:
+      CC: gcc-11
+      FC: gfortran-11
+
+    defaults:
+      run:
+        working-directory: .testing
+
+    steps:
+    - uses: actions/checkout@v2
+      with:
+        submodules: recursive
+
+    - uses: ./.github/actions/macos-setup
+
+    - uses: ./.github/actions/testing-setup
+
+    - name: Compile MOM6 in asymmetric memory mode
+      run: make build/asymmetric/MOM6 -j
+
+    - name: Create validation data
+      run: make run.symmetric -k -s
+
+    - name: Run tests
+      run: make test.grid test.layout test.rotate -k -s

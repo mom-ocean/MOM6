@@ -109,13 +109,14 @@ function register_pseudo_salt_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
 end function register_pseudo_salt_tracer
 
 !> Initialize the pseudo-salt tracer
-subroutine initialize_pseudo_salt_tracer(restart, day, G, GV, h, diag, OBC, CS, &
+subroutine initialize_pseudo_salt_tracer(restart, day, G, GV, US, h, diag, OBC, CS, &
                                   sponge_CSp, tv)
   logical,                            intent(in) :: restart !< .true. if the fields have already
                                                          !! been read from a restart file.
   type(time_type),            target, intent(in) :: day  !< Time of the start of the run
   type(ocean_grid_type),              intent(in) :: G    !< The ocean's grid structure
   type(verticalGrid_type),            intent(in) :: GV   !< The ocean's vertical grid structure
+  type(unit_scale_type),              intent(in) :: US    !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                                       intent(in) :: h    !< Layer thicknesses [H ~> m or kg m-2]
   type(diag_ctrl),            target, intent(in) :: diag !< A structure that is used to regulate
@@ -145,7 +146,7 @@ subroutine initialize_pseudo_salt_tracer(restart, day, G, GV, h, diag, OBC, CS, 
   call query_vardesc(CS%tr_desc, name=name, caller="initialize_pseudo_salt_tracer")
   if ((.not.restart) .or. (.not.query_initialized(CS%ps, name, CS%restart_CSp))) then
     do k=1,nz ; do j=jsd,jed ; do i=isd,ied
-      CS%ps(i,j,k) = tv%S(i,j,k)
+      CS%ps(i,j,k) = US%S_to_ppt*tv%S(i,j,k)
     enddo ; enddo ; enddo
   endif
 
@@ -212,7 +213,7 @@ subroutine pseudo_salt_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G
   if (.not.associated(CS%ps)) return
 
   if (debug) then
-    call hchksum(tv%S,"salt pre pseudo-salt vertdiff", G%HI)
+    call hchksum(tv%S,"salt pre pseudo-salt vertdiff", G%HI, scale=US%S_to_ppt)
     call hchksum(CS%ps,"pseudo_salt pre pseudo-salt vertdiff", G%HI)
   endif
 
@@ -251,13 +252,13 @@ subroutine pseudo_salt_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G
   endif
 
   if (debug) then
-    call hchksum(tv%S, "salt post pseudo-salt vertdiff", G%HI)
+    call hchksum(tv%S, "salt post pseudo-salt vertdiff", G%HI, scale=US%S_to_ppt)
     call hchksum(CS%ps, "pseudo_salt post pseudo-salt vertdiff", G%HI)
   endif
 
   if (allocated(CS%diff)) then
     do k=1,nz ; do j=js,je ; do i=is,ie
-      CS%diff(i,j,k) = CS%ps(i,j,k) - tv%S(i,j,k)
+      CS%diff(i,j,k) = CS%ps(i,j,k) - US%S_to_ppt*tv%S(i,j,k)
     enddo ; enddo ; enddo
     if (CS%id_psd>0) call post_data(CS%id_psd, CS%diff, CS%diag)
   endif

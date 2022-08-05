@@ -441,8 +441,8 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
                     G%HI, haloshift=0, scale=US%Z_to_L)
     endif
     if (associated(tv%eqn_of_state)) then
-      call hchksum(tv%T, "thickness_diffuse T", G%HI, haloshift=1)
-      call hchksum(tv%S, "thickness_diffuse S", G%HI, haloshift=1)
+      call hchksum(tv%T, "thickness_diffuse T", G%HI, haloshift=1, scale=US%C_to_degC)
+      call hchksum(tv%S, "thickness_diffuse S", G%HI, haloshift=1, scale=US%S_to_ppt)
     endif
   endif
 
@@ -595,9 +595,9 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
 
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: &
-    T, &          ! The temperature [degC], with the values in
+    T, &          ! The temperature [C ~> degC], with the values in
                   ! in massless layers filled vertically by diffusion.
-    S, &          ! The filled salinity [ppt], with the values in
+    S, &          ! The filled salinity [S ~> ppt], with the values in
                   ! in massless layers filled vertically by diffusion.
     h_avail, &    ! The mass available for diffusion out of each face, divided
                   ! by dt [H L2 T-1 ~> m3 s-1 or kg s-1].
@@ -615,32 +615,32 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
     pres, &       ! The pressure at an interface [R L2 T-2 ~> Pa].
     h_avail_rsum  ! The running sum of h_avail above an interface [H L2 T-1 ~> m3 s-1 or kg s-1].
   real, dimension(SZIB_(G)) :: &
-    drho_dT_u, &  ! The derivative of density with temperature at u points [R degC-1 ~> kg m-3 degC-1]
-    drho_dS_u     ! The derivative of density with salinity at u points [R ppt-1 ~> kg m-3 ppt-1].
-  real, dimension(SZI_(G)) :: scrap ! An array to pass to calculate_density_second_derivs() that will be ingored.
+    drho_dT_u, &  ! The derivative of density with temperature at u points [R C-1 ~> kg m-3 degC-1]
+    drho_dS_u     ! The derivative of density with salinity at u points [R S-1 ~> kg m-3 ppt-1].
+  real, dimension(SZIB_(G)) :: scrap ! An array to pass to calculate_density_second_derivs() that will be ignored.
   real, dimension(SZI_(G)) :: &
-    drho_dT_v, &  ! The derivative of density with temperature at v points [R degC-1 ~> kg m-3 degC-1]
-    drho_dS_v, &  ! The derivative of density with salinity at v points [R ppt-1 ~> kg m-3 ppt-1].
-    drho_dT_dT_h, & ! The second derivative of density with temperature at h points [R degC-2 ~> kg m-3 degC-2]
-    drho_dT_dT_hr ! The second derivative of density with temperature at h (+1) points [R degC-2 ~> kg m-3 degC-2]
-  real :: uhtot(SZIB_(G), SZJ_(G))  ! The vertical sum of uhD [H L2 T-1 ~> m3 s-1 or kg s-1].
-  real :: vhtot(SZI_(G), SZJB_(G))  ! The vertical sum of vhD [H L2 T-1 ~> m3 s-1 or kg s-1].
+    drho_dT_v, &  ! The derivative of density with temperature at v points [R C-1 ~> kg m-3 degC-1]
+    drho_dS_v, &  ! The derivative of density with salinity at v points [R S-1 ~> kg m-3 ppt-1].
+    drho_dT_dT_h, & ! The second derivative of density with temperature at h points [R C-2 ~> kg m-3 degC-2]
+    drho_dT_dT_hr ! The second derivative of density with temperature at h (+1) points [R C-2 ~> kg m-3 degC-2]
+  real :: uhtot(SZIB_(G),SZJ_(G))  ! The vertical sum of uhD [H L2 T-1 ~> m3 s-1 or kg s-1].
+  real :: vhtot(SZI_(G),SZJB_(G))  ! The vertical sum of vhD [H L2 T-1 ~> m3 s-1 or kg s-1].
   real, dimension(SZIB_(G)) :: &
-    T_u, &        ! Temperature on the interface at the u-point [degC].
-    S_u, &        ! Salinity on the interface at the u-point [ppt].
+    T_u, &        ! Temperature on the interface at the u-point [C ~> degC].
+    S_u, &        ! Salinity on the interface at the u-point [S ~> ppt].
     pres_u        ! Pressure on the interface at the u-point [R L2 T-2 ~> Pa].
   real, dimension(SZI_(G)) :: &
-    T_v, &        ! Temperature on the interface at the v-point [degC].
-    S_v, &        ! Salinity on the interface at the v-point [ppt].
+    T_v, &        ! Temperature on the interface at the v-point [C ~> degC].
+    S_v, &        ! Salinity on the interface at the v-point [S ~> ppt].
     pres_v, &     ! Pressure on the interface at the v-point [R L2 T-2 ~> Pa].
-    T_h, &        ! Temperature on the interface at the h-point [degC].
-    S_h, &        ! Salinity on the interface at the h-point [ppt].
+    T_h, &        ! Temperature on the interface at the h-point [C ~> degC].
+    S_h, &        ! Salinity on the interface at the h-point [S ~> ppt].
     pres_h, &     ! Pressure on the interface at the h-point [R L2 T-2 ~> Pa].
-    T_hr, &       ! Temperature on the interface at the h (+1) point [degC].
-    S_hr, &       ! Salinity on the interface at the h (+1) point [ppt].
+    T_hr, &       ! Temperature on the interface at the h (+1) point [C ~> degC].
+    S_hr, &       ! Salinity on the interface at the h (+1) point [S ~> ppt].
     pres_hr       ! Pressure on the interface at the h (+1) point [R L2 T-2 ~> Pa].
-  real :: Work_u(SZIB_(G), SZJ_(G)) ! The work being done by the thickness
-  real :: Work_v(SZI_(G), SZJB_(G)) ! diffusion integrated over a cell [R Z L4 T-3  ~> W ]
+  real :: Work_u(SZIB_(G),SZJ_(G)) ! The work being done by the thickness
+  real :: Work_v(SZI_(G),SZJB_(G)) ! diffusion integrated over a cell [R Z L4 T-3  ~> W ]
   real :: Work_h        ! The work averaged over an h-cell [R Z L2 T-3 ~> W m-2].
   real :: PE_release_h  ! The amount of potential energy released by GM averaged over an h-cell [L4 Z-1 T-3 ~> m3 s-3]
                         ! The calculation is equal to h * S^2 * N^2 * kappa_GM.
@@ -694,12 +694,12 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
   real :: G_rho0        ! g/Rho0 [L2 R-1 Z-1 T-2 ~> m4 kg-1 s-2].
   real :: N2_floor      ! A floor for N2 to avoid degeneracy in the elliptic solver
                         ! times unit conversion factors [T-2 L2 Z-2 ~> s-2]
-  real :: Tl(5)         ! copy of T in local stencil [degC]
-  real :: mn_T          ! mean of T in local stencil [degC]
-  real :: mn_T2         ! mean of T**2 in local stencil [degC2]
+  real :: Tl(5)         ! copy of T in local stencil [C ~> degC]
+  real :: mn_T          ! mean of T in local stencil [C ~> degC]
+  real :: mn_T2         ! mean of T**2 in local stencil [C2 ~> degC2]
   real :: hl(5)         ! Copy of local stencil of H [H ~> m]
   real :: r_sm_H        ! Reciprocal of sum of H in local stencil [H-1 ~> m-1]
-  real :: Tsgs2(SZI_(G),SZJ_(G),SZK_(GV)) ! Sub-grid temperature variance [degC2]
+  real :: Tsgs2(SZI_(G),SZJ_(G),SZK_(GV)) ! Sub-grid temperature variance [C2 ~> degC2]
   real :: diag_sfn_x(SZIB_(G),SZJ_(G),SZK_(GV)+1)       ! Diagnostic of the x-face streamfunction
                                                         ! [H L2 T-1 ~> m3 s-1 or kg s-1]
   real :: diag_sfn_unlim_x(SZIB_(G),SZJ_(G),SZK_(GV)+1) ! Diagnostic of the x-face streamfunction before
@@ -830,11 +830,12 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
           T_h(i) = 0.5*(T(i,j,k) + T(i,j,k-1))
           S_h(i) = 0.5*(S(i,j,k) + S(i,j,k-1))
         enddo
+
         ! The second line below would correspond to arguments
         !            drho_dS_dS, drho_dS_dT, drho_dT_dT, drho_dS_dP, drho_dT_dP, &
         call calculate_density_second_derivs(T_h, S_h, pres_h, &
                      scrap, scrap, drho_dT_dT_h, scrap, scrap, &
-                     is-1, ie-is+3, tv%eqn_of_state)
+                     tv%eqn_of_state, dom=[is-1,ie-is+3])
       endif
 
       do I=is-1,ie
@@ -1108,14 +1109,15 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
           T_hr(i) = 0.5*(T(i,j+1,k) + T(i,j+1,k-1))
           S_hr(i) = 0.5*(S(i,j+1,k) + S(i,j+1,k-1))
         enddo
+
         ! The second line below would correspond to arguments
         !            drho_dS_dS, drho_dS_dT, drho_dT_dT, drho_dS_dP, drho_dT_dP, &
         call calculate_density_second_derivs(T_h, S_h, pres_h, &
                      scrap, scrap, drho_dT_dT_h, scrap, scrap, &
-                     is, ie-is+1, tv%eqn_of_state)
+                     tv%eqn_of_state, dom=[is,ie-is+1])
         call calculate_density_second_derivs(T_hr, S_hr, pres_hr, &
                      scrap, scrap, drho_dT_dT_hr, scrap, scrap, &
-                     is, ie-is+1, tv%eqn_of_state)
+                     tv%eqn_of_state, dom=[is,ie-is+1])
       endif
       do i=is,ie
         if (calc_derivatives) then

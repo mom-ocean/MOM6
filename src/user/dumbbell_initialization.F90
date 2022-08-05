@@ -14,10 +14,9 @@ use MOM_tracer_registry, only : tracer_registry_type
 use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
-use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_type
 use regrid_consts, only : coordinateMode, DEFAULT_COORDINATE_MODE
 use regrid_consts, only : REGRIDDING_LAYER, REGRIDDING_ZSTAR
-use regrid_consts, only : REGRIDDING_RHO, REGRIDDING_SIGMA
+use regrid_consts, only : REGRIDDING_RHO, REGRIDDING_SIGMA, REGRIDDING_HYCOM1
 use MOM_ALE_sponge,    only : ALE_sponge_CS, set_up_ALE_sponge_field, initialize_ALE_sponge
 
 implicit none ; private
@@ -108,12 +107,19 @@ subroutine dumbbell_initialize_thickness ( h, depth_tot, G, GV, US, param_file, 
   real :: eta1D(SZK_(GV)+1) ! Interface height relative to the sea surface
                           ! positive upward [Z ~> m].
   real :: min_thickness   ! The minimum layer thicknesses [Z ~> m].
-  real :: S_surf, S_range, S_ref, S_light, S_dense ! Various salinities [ppt].
+  real :: S_ref           ! A default value for salinities [ppt].
+  real :: S_surf          ! The surface salinity [S ~> ppt]
+  real :: S_range         ! The range of salinities in this test case [S ~> ppt]
+  real :: S_light, S_dense ! The lightest and densest salinities in the sponges [S ~> ppt].
   real :: eta_IC_quanta   ! The granularity of quantization of intial interface heights [Z-1 ~> m-1].
+  logical :: dbrotate     ! If true, rotate the domain.
+  logical :: use_ALE      ! True if ALE is being used, False if in layered mode
+
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
   character(len=20) :: verticalCoordinate
   integer :: i, j, k, is, ie, js, je, nz
+  real :: x, y
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
@@ -123,9 +129,11 @@ subroutine dumbbell_initialize_thickness ( h, depth_tot, G, GV, US, param_file, 
   if (.not.just_read) call log_version(param_file, mdl, version, "")
   call get_param(param_file, mdl,"MIN_THICKNESS", min_thickness, &
                 'Minimum thickness for layer',&
-                 units='m', default=1.0e-3, do_not_log=just_read, scale=US%m_to_Z)
+                 units='m', default=1.0e-3, scale=US%m_to_Z, do_not_log=just_read)
   call get_param(param_file, mdl,"REGRIDDING_COORDINATE_MODE", verticalCoordinate, &
                  default=DEFAULT_COORDINATE_MODE, do_not_log=just_read)
+  call get_param(param_file, mdl, "USE_REGRIDDING", use_ALE, do_not_log = .true.)
+  if (.not. use_ALE) verticalCoordinate = "LAYER"
 
   ! WARNING: this routine specifies the interface heights so that the last layer
   !          is vanished, even at maximum depth. In order to have a uniform
@@ -139,13 +147,45 @@ subroutine dumbbell_initialize_thickness ( h, depth_tot, G, GV, US, param_file, 
   !enddo
 
   select case ( coordinateMode(verticalCoordinate) )
+  case ( REGRIDDING_LAYER) ! Initial thicknesses for isopycnal coordinates
+    call get_param(param_file, mdl, "DUMBBELL_ROTATION", dbrotate, &
+                'Logical for rotation of dumbbell domain.',&
+                 units='nondim', default=.false., do_not_log=just_read)
+    do j=js,je
+      do i=is,ie
+       ! Compute normalized zonal coordinates (x,y=0 at center of domain)
+        if (dbrotate) then
+          ! This is really y in the rotated case
+          x = G%geoLatT(i,j)
+        else
+          x = G%geoLonT(i,j)
+        endif
+        eta1D(1) = 0.0
+        eta1D(nz+1) = -depth_tot(i,j)
+        if (x<0.0) then
+          do k=nz,2, -1
+            eta1D(k) =  eta1D(k+1) + min_thickness
+          enddo
+        else
+          do k=2,nz
+            eta1D(k) =  eta1D(k-1) - min_thickness
+          enddo
+        endif
+        do k=1,nz
+          h(i,j,k) = GV%Z_to_H * (eta1D(k) - eta1D(k+1))
+        enddo
+    enddo; enddo
 
-  case ( REGRIDDING_LAYER, REGRIDDING_RHO ) ! Initial thicknesses for isopycnal coordinates
-    call get_param(param_file, mdl, "INITIAL_SSS", S_surf, default=34., do_not_log=.true.)
-    call get_param(param_file, mdl, "INITIAL_S_RANGE", S_range, default=2., do_not_log=.true.)
+  case ( REGRIDDING_RHO, REGRIDDING_HYCOM1) ! Initial thicknesses for isopycnal coordinates
+    call get_param(param_file, mdl, "INITIAL_SSS", S_surf, &
+                   units='1e-3', default=34., scale=US%ppt_to_S, do_not_log=.true.)
+    call get_param(param_file, mdl, "INITIAL_S_RANGE", S_range, &
+                   units='1e-3', default=2., scale=US%ppt_to_S, do_not_log=.true.)
     call get_param(param_file, mdl, "S_REF", S_ref, default=35.0, do_not_log=.true.)
-    call get_param(param_file, mdl, "TS_RANGE_S_LIGHT", S_light, default = S_Ref, do_not_log=.true.)
-    call get_param(param_file, mdl, "TS_RANGE_S_DENSE", S_dense, default = S_Ref, do_not_log=.true.)
+    call get_param(param_file, mdl, "TS_RANGE_S_LIGHT", S_light, &
+                   units='1e-3', default=S_Ref, scale=US%ppt_to_S, do_not_log=.true.)
+    call get_param(param_file, mdl, "TS_RANGE_S_DENSE", S_dense, &
+                   units='1e-3', default=S_Ref, scale=US%ppt_to_S, do_not_log=.true.)
     call get_param(param_file, mdl, "INTERFACE_IC_QUANTA", eta_IC_quanta, &
                    "The granularity of initial interface height values "//&
                    "per meter, to avoid sensivity to order-of-arithmetic changes.", &
@@ -206,26 +246,36 @@ end select
 end subroutine dumbbell_initialize_thickness
 
 !> Initial values for temperature and salinity for the dumbbell test case
-subroutine dumbbell_initialize_temperature_salinity ( T, S, h, G, GV, param_file, just_read)
+subroutine dumbbell_initialize_temperature_salinity ( T, S, h, G, GV, US, param_file, just_read)
   type(ocean_grid_type),                     intent(in)  :: G !< Ocean grid structure
-  type(verticalGrid_type),                   intent(in) :: GV !< Vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: T !< Potential temperature [degC]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: S !< Salinity [ppt]
+  type(verticalGrid_type),                   intent(in)  :: GV !< Vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: T !< Potential temperature [C ~> degC]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: S !< Salinity [S ~> ppt]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)  :: h !< Layer thickness [H ~> m or kg m-2]
+  type(unit_scale_type),                     intent(in)  :: US !< A dimensional unit scaling type
   type(param_file_type),                     intent(in)  :: param_file !< Parameter file structure
   logical,                                   intent(in)  :: just_read !< If true, this call will
                                                       !! only read parameters without changing h.
 
   ! Local variables
   integer :: i, j, k, is, ie, js, je, nz
-  real    :: S_surf, T_surf, S_range
-  real    :: x, dblen
-  logical :: dbrotate     ! If true, rotate the domain.
+  real    :: S_surf    ! The surface salinity [S ~> ppt]
+  real    :: S_range   ! The range of salinities in this test case [S ~> ppt]
+  real    :: T_surf    ! The surface temperature [C ~> degC]
+  real    :: x         ! The fractional position in the domain [nondim]
+  real    :: dblen     ! The size of the dumbbell test case [axis_units]
+  logical :: dbrotate  ! If true, rotate the domain.
+  logical :: use_ALE     ! If false, use layer mode.
   character(len=20) :: verticalCoordinate, density_profile
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
-  T_surf = 20.0
+  T_surf = 20.0*US%degC_to_C
+
+  ! layer mode
+  call get_param(param_file, mdl, "USE_REGRIDDING", use_ALE, do_not_log = .true.)
+  if (.not. use_ALE) call MOM_error(FATAL,  "dumbbell_initialize_temperature_salinity: "//&
+               "Please use 'fit' for 'TS_CONFIG' in the LAYER mode.")
 
   call get_param(param_file, mdl, "REGRIDDING_COORDINATE_MODE", verticalCoordinate, &
                  default=DEFAULT_COORDINATE_MODE, do_not_log=just_read)
@@ -233,10 +283,11 @@ subroutine dumbbell_initialize_temperature_salinity ( T, S, h, G, GV, param_file
                  'Initial profile shape. Valid values are "linear", "parabolic" '// &
                  'and "exponential".', default='linear', do_not_log=just_read)
   call get_param(param_file, mdl, "DUMBBELL_SREF", S_surf, &
-                 'DUMBBELL REFERENCE SALINITY', units='1e-3', default=34., do_not_log=just_read)
+                 'DUMBBELL REFERENCE SALINITY', &
+                 units='1e-3', default=34., scale=US%ppt_to_S, do_not_log=just_read)
   call get_param(param_file, mdl, "DUMBBELL_S_RANGE", S_range, &
-                 'DUMBBELL salinity range (right-left)', units='1e-3', default=2., &
-                 do_not_log=just_read)
+                 'DUMBBELL salinity range (right-left)', &
+                 units='1e-3', default=2., scale=US%ppt_to_S, do_not_log=just_read)
   call get_param(param_file, mdl, "DUMBBELL_LEN", dblen, &
                 'Lateral Length scale for dumbbell ', &
                  units='km', default=600., do_not_log=just_read)
@@ -277,11 +328,12 @@ subroutine dumbbell_initialize_temperature_salinity ( T, S, h, G, GV, param_file
 end subroutine dumbbell_initialize_temperature_salinity
 
 !> Initialize the restoring sponges for the dumbbell test case
-subroutine dumbbell_initialize_sponges(G, GV, US, tv, depth_tot, param_file, use_ALE, CSp, ACSp)
+subroutine dumbbell_initialize_sponges(G, GV, US, tv, h_in, depth_tot, param_file, use_ALE, CSp, ACSp)
   type(ocean_grid_type),   intent(in) :: G !< Horizontal grid control structure
   type(verticalGrid_type), intent(in) :: GV !< Vertical grid control structure
   type(unit_scale_type),   intent(in) :: US !< A dimensional unit scaling type
   type(thermo_var_ptrs),   intent(in) :: tv !< Thermodynamic variables
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)  :: h_in !< Layer thickness [H ~> m or kg m-2]
   real, dimension(SZI_(G),SZJ_(G)), &
                            intent(in) :: depth_tot  !< The nominal total depth of the ocean [Z ~> m]
   type(param_file_type),   intent(in) :: param_file !< Parameter file structure
@@ -292,12 +344,16 @@ subroutine dumbbell_initialize_sponges(G, GV, US, tv, depth_tot, param_file, use
   real :: sponge_time_scale  ! The damping time scale [T ~> s]
 
   real, dimension(SZI_(G),SZJ_(G)) :: Idamp ! inverse damping timescale [T-1 ~> s-1]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: h, S ! sponge thicknesses, temp and salt
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: h ! sponge thicknesses [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: S ! sponge salinities [S ~> ppt]
   real, dimension(SZK_(GV)+1) :: eta1D ! interface positions for ALE sponge
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1) :: eta ! A temporary array for interface heights [Z ~> m].
 
   integer :: i, j, k, nz
-  real :: x, min_thickness, dblen
-  real :: S_ref, S_range
+  real :: x              ! The fractional position in the domain [nondim]
+  real :: dblen          ! The size of the dumbbell test case [axis_units]
+  real :: min_thickness  ! The minimum layer thickness [Z ~> m]
+  real :: S_ref, S_range ! A reference salinity and the range of salinities in this test case [S ~> ppt]
   logical :: dbrotate    ! If true, rotate the domain.
 
   call get_param(param_file, mdl,"DUMBBELL_LEN",dblen, &
@@ -316,11 +372,15 @@ subroutine dumbbell_initialize_sponges(G, GV, US, tv, depth_tot, param_file, use
   call get_param(param_file, mdl, "DUMBBELL_SPONGE_TIME_SCALE", sponge_time_scale, &
        "The time scale in the reservoir for restoring. If zero, the sponge is disabled.", &
        units="s", default=0., scale=US%s_to_T)
-  call get_param(param_file, mdl, "DUMBBELL_SREF", S_ref, do_not_log=.true.)
-  call get_param(param_file, mdl, "DUMBBELL_S_RANGE", S_range, do_not_log=.true.)
+  call get_param(param_file, mdl, "DUMBBELL_SREF", S_ref, &
+                 'DUMBBELL REFERENCE SALINITY', &
+                 units='1e-3', default=34., scale=US%ppt_to_S, do_not_log=.true.)
+  call get_param(param_file, mdl, "DUMBBELL_S_RANGE", S_range, &
+                 'DUMBBELL salinity range (right-left)', &
+                 units='1e-3', default=2., scale=US%ppt_to_S, do_not_log=.true.)
   call get_param(param_file, mdl,"MIN_THICKNESS", min_thickness, &
                 'Minimum thickness for layer',&
-                 units='m', default=1.0e-3, do_not_log=.true., scale=US%m_to_Z)
+                 units='m', default=1.0e-3, scale=US%m_to_Z, do_not_log=.true.)
 
   ! no active sponges
   if (sponge_time_scale <= 0.) return
@@ -386,9 +446,26 @@ subroutine dumbbell_initialize_sponges(G, GV, US, tv, depth_tot, param_file, use
         enddo
       endif
     enddo ; enddo
-  endif
-
   if (associated(tv%S)) call set_up_ALE_sponge_field(S, G, GV, tv%S, ACSp)
+ else
+    do j=G%jsc,G%jec ; do i=G%isc,G%iec
+      eta(i,j,1) = 0.0
+      do k=2,nz
+        eta(i,j,k) = eta(i,j,k-1)- GV%H_to_Z * h_in(i,j,k-1)
+      enddo
+      eta(i,j,nz+1) = -depth_tot(i,j)
+      do k=1,nz
+        S(i,j,k)= tv%S(i,j,k)
+      enddo
+    enddo ; enddo
+
+    !  This call sets up the damping rates and interface heights.
+    !  This sets the inverse damping timescale fields in the sponges.    !
+    call initialize_sponge(Idamp, eta, G, param_file, CSp, GV)
+
+    !  The remaining calls to set_up_sponge_field can be in any order. !
+    if ( associated(tv%S) ) call set_up_sponge_field(S, tv%S, G, GV, nz, CSp)
+ endif
 
 end subroutine dumbbell_initialize_sponges
 

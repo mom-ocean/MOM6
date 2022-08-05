@@ -1,4 +1,4 @@
-program MOM_main
+program MOM_sum_driver
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
@@ -215,4 +215,4 @@ subroutine benchmark_init_topog_local(D, G, param_file, max_depth)
 
 end subroutine benchmark_init_topog_local
 
-end program MOM_main
+end program MOM_sum_driver

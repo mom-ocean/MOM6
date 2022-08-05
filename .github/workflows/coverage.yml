@@ -18,7 +18,18 @@ jobs:
       with:
         submodules: recursive
 
+    - uses: ./.github/actions/ubuntu-setup
+
     - uses: ./.github/actions/testing-setup
 
+    - name: Compile unit testing
+      run: make -j build/unit/MOM6
+
+    - name: Run unit tests
+      run: make unit.cov.upload
+
+    - name: Compile MOM6 with code coverage
+      run: make -j build/cov/MOM6
+
     - name: Run and post coverage
-      run: make run.symmetric -k -s
+      run: make run.cov -k -s

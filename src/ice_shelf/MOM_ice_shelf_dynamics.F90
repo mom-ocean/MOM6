@@ -76,7 +76,7 @@ type, public :: ice_shelf_dyn_CS ; private
   real, pointer, dimension(:,:) :: calve_mask => NULL() !< a mask to prevent the ice shelf front from
                                           !! advancing past its initial position (but it may retreat)
   real, pointer, dimension(:,:) :: t_shelf => NULL() !< Vertically integrated temperature in the ice shelf/stream,
-                                                     !! on corner-points (B grid) [degC]
+                                                     !! on corner-points (B grid) [C ~> degC]
   real, pointer, dimension(:,:) :: tmask => NULL()   !< A mask on tracer points that is 1 where there is ice.
   real, pointer, dimension(:,:) :: ice_visc => NULL()   !< Glen's law ice viscosity, often in [R L4 Z T-1 ~> kg m2 s-1].
   real, pointer, dimension(:,:) :: AGlen_visc => NULL() !< Ice-stiffness parameter in Glen's law ice viscosity,
@@ -86,8 +86,8 @@ type, public :: ice_shelf_dyn_CS ; private
                                        !! [L yr-1 ~> m yr-1]
   real, pointer, dimension(:,:) :: v_bdry_val => NULL() !< The meridional ice velocity at inflowing boundaries
                                        !! [L yr-1 ~> m yr-1]
-  real, pointer, dimension(:,:) :: h_bdry_val => NULL() !< The ice thickness at inflowing boundaries [m].
-  real, pointer, dimension(:,:) :: t_bdry_val => NULL() !< The ice temperature at inflowing boundaries [degC].
+  real, pointer, dimension(:,:) :: h_bdry_val => NULL() !< The ice thickness at inflowing boundaries [Z ~> m].
+  real, pointer, dimension(:,:) :: t_bdry_val => NULL() !< The ice temperature at inflowing boundaries [C ~> degC].
 
   real, pointer, dimension(:,:) :: bed_elev => NULL()  !< The bed elevation used for ice dynamics [Z ~> m],
                                                        !! relative to mean sea-level.  This is
@@ -99,7 +99,7 @@ type, public :: ice_shelf_dyn_CS ; private
                 !!  The exact form depends on basal law exponent and/or whether flow is "hybridized" a la Goldberg 2011
   real, pointer, dimension(:,:) :: C_basal_friction => NULL()!< Coefficient in sliding law tau_b = C u^(n_basal_fric),
                                                             !!  units= Pa (m yr-1)-(n_basal_fric)
-  real, pointer, dimension(:,:) :: OD_rt => NULL()         !< A running total for calculating OD_av.
+  real, pointer, dimension(:,:) :: OD_rt => NULL()         !< A running total for calculating OD_av [Z ~> m].
   real, pointer, dimension(:,:) :: ground_frac_rt => NULL() !< A running total for calculating ground_frac.
   real, pointer, dimension(:,:) :: OD_av => NULL()         !< The time average open ocean depth [Z ~> m].
   real, pointer, dimension(:,:) :: ground_frac => NULL()   !< Fraction of the time a cell is "exposed", i.e. the column
@@ -131,11 +131,11 @@ type, public :: ice_shelf_dyn_CS ; private
                             !! should be exclusive)
 
   real    :: CFL_factor     !< A factor used to limit subcycled advective timestep in uncoupled runs
-                            !! i.e. dt <= CFL_factor * min(dx / u)
+                            !! i.e. dt <= CFL_factor * min(dx / u) [nondim]
 
-  real :: n_glen            !< Nonlinearity exponent in Glen's Law
-  real :: eps_glen_min      !< Min. strain rate to avoid infinite Glen's law viscosity, [year-1].
-  real :: n_basal_fric      !< Exponent in sliding law tau_b = C u^(m_slide)
+  real :: n_glen            !< Nonlinearity exponent in Glen's Law [nondim]
+  real :: eps_glen_min      !< Min. strain rate to avoid infinite Glen's law viscosity, [T-1 ~> s-1].
+  real :: n_basal_fric      !< Exponent in sliding law tau_b = C u^(m_slide) [nondim]
   real :: density_ocean_avg !< A typical ocean density [R ~> kg m-3].  This does not affect ocean
                             !! circulation or thermodynamics.  It is used to estimate the
                             !! gravitational driving force at the shelf front (until we think of
@@ -259,9 +259,9 @@ subroutine register_ice_shelf_dyn_restarts(G, US, param_file, CS, restart_CS)
   if (active_shelf_dynamics) then
     allocate( CS%u_shelf(IsdB:IedB,JsdB:JedB), source=0.0 )
     allocate( CS%v_shelf(IsdB:IedB,JsdB:JedB), source=0.0 )
-    allocate( CS%t_shelf(isd:ied,jsd:jed), source=-10.0 ) ! [degC]
+    allocate( CS%t_shelf(isd:ied,jsd:jed), source=-10.0*US%degC_to_C ) ! [C ~> degC]
     allocate( CS%ice_visc(isd:ied,jsd:jed), source=0.0 )
-    allocate( CS%AGlen_visc(isd:ied,jsd:jed), source=2.261e-25 ) ! [Pa-3s-1]
+    allocate( CS%AGlen_visc(isd:ied,jsd:jed), source=2.261e-25 ) ! [Pa-3 s-1]
     allocate( CS%basal_traction(isd:ied,jsd:jed), source=0.0 )
     allocate( CS%C_basal_friction(isd:ied,jsd:jed), source=5.0e10 ) ! [Pa (m-1 s)^n_sliding]
     allocate( CS%OD_av(isd:ied,jsd:jed), source=0.0 )
@@ -440,7 +440,7 @@ subroutine initialize_ice_shelf_dyn(param_file, Time, ISS, CS, G, US, diag, new_
   ! previously allocated for registration for restarts.
 
   if (active_shelf_dynamics) then
-    allocate( CS%t_bdry_val(isd:ied,jsd:jed), source=-15.0) ! [degC]
+    allocate( CS%t_bdry_val(isd:ied,jsd:jed), source=-15.0*US%degC_to_C) ! [C ~> degC]
     allocate( CS%thickness_bdry_val(isd:ied,jsd:jed), source=0.0)
     allocate( CS%u_face_mask(Isdq:Iedq,Jsdq:Jedq), source=0.0)
     allocate( CS%v_face_mask(Isdq:Iedq,Jsdq:Jedq), source=0.0)
@@ -864,7 +864,7 @@ subroutine ice_shelf_solve_outer(CS, ISS, G, US, u_shlf, v_shlf, taudx, taudy, i
   real    :: err_max, err_tempu, err_tempv, err_init, max_vel, tempu, tempv
   real    :: rhoi_rhow ! The density of ice divided by a typical water density [nondim]
   real, pointer, dimension(:,:,:,:) :: Phi => NULL() ! The gradients of bilinear basis elements at Gaussian
-                                                ! quadrature points surrounding the cell vertices [m-1].
+                                                ! quadrature points surrounding the cell vertices [L-1 ~> m-1].
   real, pointer, dimension(:,:,:,:,:,:) :: Phisub => NULL() ! Quadrature structure weights at subgridscale
                                                 !  locations for finite element calculations [nondim]
 
@@ -1805,7 +1805,7 @@ subroutine calc_shelf_driving_stress(CS, ISS, G, US, taudx, taudy, OD)
   real, dimension(SIZE(OD,1),SIZE(OD,2))  :: S, &     ! surface elevation [Z ~> m].
                             BASE     ! basal elevation of shelf/stream [Z ~> m].
   real, pointer, dimension(:,:,:,:) :: Phi => NULL() ! The gradients of bilinear basis elements at Gaussian
-                                                ! quadrature points surrounding the cell vertices [m-1].
+                                                ! quadrature points surrounding the cell vertices [L-1 ~> m-1].
 
 
   real    :: rho, rhow, rhoi_rhow ! Ice and ocean densities [R ~> kg m-3]
@@ -2573,7 +2573,7 @@ subroutine calc_shelf_visc(CS, ISS, G, US, u_shlf, v_shlf)
   real, dimension(G%IsdB:G%IedB,G%JsdB:G%JedB), &
                           intent(inout) :: v_shlf !< The meridional ice shelf velocity [L T-1 ~> m s-1].
   real, pointer, dimension(:,:,:,:) :: Phi => NULL() ! The gradients of bilinear basis elements at Gaussian
-                                                ! quadrature points surrounding the cell vertices [m-1].
+                                                ! quadrature points surrounding the cell vertices [L-1 ~> m-1].
 ! update DEPTH_INTEGRATED viscosity, based on horizontal strain rates - this is for bilinear FEM solve
 
 ! also this subroutine updates the nonlinear part of the basal traction
@@ -2691,7 +2691,7 @@ subroutine update_OD_ffrac(CS, G, US, ocean_mass, find_avg)
   type(ocean_grid_type),  intent(inout) :: G  !< The grid structure used by the ice shelf.
   type(unit_scale_type), intent(in)     :: US !< A structure containing unit conversion factors
   real, dimension(SZDI_(G),SZDJ_(G)), &
-                          intent(in)    :: ocean_mass !< The mass per unit area of the ocean [kg m-2].
+                          intent(in)    :: ocean_mass !< The mass per unit area of the ocean [R Z ~> kg m-2].
   logical,                intent(in)    :: find_avg !< If true, find the average of OD and ffrac, and
                                               !! reset the underlying running sums to 0.
 
@@ -3170,16 +3170,16 @@ subroutine ice_shelf_temp(CS, ISS, G, US, time_step, melt_rate, Time)
 !    The flux overflows are included here. That is because they will be used to advect 3D scalars
 !    into partial cells
 
-  real, dimension(SZDI_(G),SZDJ_(G))   :: th_after_uflux, th_after_vflux, TH
+  real, dimension(SZDI_(G),SZDJ_(G))   :: th_after_uflux, th_after_vflux, TH ! Integrated temperatures [C Z ~> degC m]
   integer                           :: isd, ied, jsd, jed, i, j, isc, iec, jsc, jec
-  real :: Tsurf ! Surface air temperature.  This is hard coded but should be an input argument.
+  real :: Tsurf ! Surface air temperature [C ~> degC].  This is hard coded but should be an input argument.
   real :: adot  ! A surface heat exchange coefficient divided by the heat capacity of
                 ! ice [R Z T-1 degC-1 ~> kg m-2 s-1 degC-1].
 
 
   ! For now adot and Tsurf are defined here adot=surf acc 0.1m/yr, Tsurf=-20oC, vary them later
   adot = (0.1/(365.0*86400.0))*US%m_to_Z*US%T_to_s * CS%density_ice
-  Tsurf = -20.0
+  Tsurf = -20.0*US%degC_to_C
 
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   isc = G%isc ; iec = G%iec ; jsc = G%jsc ; jec = G%jec
@@ -3209,7 +3209,7 @@ subroutine ice_shelf_temp(CS, ISS, G, US, time_step, melt_rate, Time)
     if (ISS%h_shelf(i,j) > 0.0) then
       CS%t_shelf(i,j) = th_after_vflux(i,j) / ISS%h_shelf(i,j)
     else
-      CS%t_shelf(i,j) = -10.0
+      CS%t_shelf(i,j) = -10.0*US%degC_to_C
     endif
 !   endif
 
@@ -3220,11 +3220,11 @@ subroutine ice_shelf_temp(CS, ISS, G, US, time_step, melt_rate, Time)
       else
         ! the ice is about to melt away in this case set thickness, area, and mask to zero
         ! NOTE: not mass conservative, should maybe scale salt & heat flux for this cell
-        CS%t_shelf(i,j) = -10.0
+        CS%t_shelf(i,j) = -10.0*US%degC_to_C
         CS%tmask(i,j) = 0.0
       endif
     elseif (ISS%hmask(i,j) == 0) then
-      CS%t_shelf(i,j) = -10.0
+      CS%t_shelf(i,j) = -10.0*US%degC_to_C
     elseif ((ISS%hmask(i,j) == 3) .or. (ISS%hmask(i,j) == -2)) then
       CS%t_shelf(i,j) = CS%t_bdry_val(i,j)
     endif
@@ -3234,7 +3234,7 @@ subroutine ice_shelf_temp(CS, ISS, G, US, time_step, melt_rate, Time)
   call pass_var(CS%tmask, G%domain)
 
   if (CS%debug) then
-    call hchksum(CS%t_shelf, "temp after front", G%HI, haloshift=3)
+    call hchksum(CS%t_shelf, "temp after front", G%HI, haloshift=3, scale=US%C_to_degC)
   endif
 
 end subroutine ice_shelf_temp
@@ -3248,10 +3248,10 @@ subroutine ice_shelf_advect_temp_x(CS, G, time_step, hmask, h0, h_after_uflux)
                           intent(in)    :: hmask !< A mask indicating which tracer points are
                                              !! partly or fully covered by an ice-shelf
   real, dimension(SZDI_(G),SZDJ_(G)), &
-                          intent(in)    :: h0 !< The initial ice shelf thicknesses [Z ~> m].
+                          intent(in)    :: h0 !< The initial ice shelf thicknesses times temperature [C Z ~> degC m]
   real, dimension(SZDI_(G),SZDJ_(G)), &
-                          intent(inout) :: h_after_uflux !< The ice shelf thicknesses after
-                                              !! the zonal mass fluxes [Z ~> m].
+                          intent(inout) :: h_after_uflux !< The ice shelf thicknesses times temperature after
+                                              !! the zonal mass fluxes [C Z ~> degC m]
 
   ! use will be made of ISS%hmask here - its value at the boundary will be zero, just like uncovered cells
   ! if there is an input bdry condition, the thickness there will be set in initialization
@@ -3259,9 +3259,10 @@ subroutine ice_shelf_advect_temp_x(CS, G, time_step, hmask, h0, h_after_uflux)
   integer :: i, j, is, ie, js, je, isd, ied, jsd, jed
   integer :: i_off, j_off
   logical :: at_east_bdry, at_west_bdry
-  real, dimension(-2:2) :: stencil
-  real :: u_face     ! Zonal velocity at a face, positive if out {L T-1 ~> m s-1]
-  real :: flux_diff, phi
+  real, dimension(-2:2) :: stencil ! A copy of the neighboring thicknesses times temperatures [C Z ~> degC m]
+  real :: u_face     ! Zonal velocity at a face, positive if out [L T-1 ~> m s-1]
+  real :: flux_diff  ! The difference in fluxes [C Z ~> degC m]
+  real :: phi        ! A limiting ratio [nondim]
 
   is = G%isc-2 ; ie = G%iec+2 ; js = G%jsc ; je = G%jec ; isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   i_off = G%idg_offset ; j_off = G%jdg_offset
@@ -3270,7 +3271,7 @@ subroutine ice_shelf_advect_temp_x(CS, G, time_step, hmask, h0, h_after_uflux)
     if (((j+j_off) <= G%domain%njglobal+G%domain%njhalo) .AND. &
         ((j+j_off) >= G%domain%njhalo+1)) then ! based on mehmet's code - only if btw north & south boundaries
 
-      stencil(:) = -1
+      stencil(:) = 0.0 ! This is probably unnecessary, as the code is written
 !     if (i+i_off == G%domain%nihalo+G%domain%nihalo)
       do i=is,ie
 
@@ -3414,11 +3415,11 @@ subroutine ice_shelf_advect_temp_y(CS, G, time_step, hmask, h_after_uflux, h_aft
                           intent(in)    :: hmask !< A mask indicating which tracer points are
                                              !! partly or fully covered by an ice-shelf
   real, dimension(SZDI_(G),SZDJ_(G)), &
-                          intent(in)    :: h_after_uflux !< The ice shelf thicknesses after
-                                              !! the zonal mass fluxes [Z ~> m].
+                          intent(in)    :: h_after_uflux !< The ice shelf thicknesses times temperature after
+                                              !! the zonal mass fluxes [C Z ~> degC m].
   real, dimension(SZDI_(G),SZDJ_(G)), &
-                          intent(inout) :: h_after_vflux !< The ice shelf thicknesses after
-                                              !! the meridional mass fluxes [Z ~> m].
+                          intent(inout) :: h_after_vflux !< The ice shelf thicknesses times temperature after
+                                              !! the meridional mass fluxes [C Z ~> degC m]
 
   ! use will be made of ISS%hmask here - its value at the boundary will be zero, just like uncovered cells
   ! if there is an input bdry condition, the thickness there will be set in initialization
@@ -3426,9 +3427,10 @@ subroutine ice_shelf_advect_temp_y(CS, G, time_step, hmask, h_after_uflux, h_aft
   integer :: i, j, is, ie, js, je, isd, ied, jsd, jed
   integer :: i_off, j_off
   logical :: at_north_bdry, at_south_bdry
-  real, dimension(-2:2) :: stencil
-  real :: v_face     ! Pseudo-meridional velocity at a cell face, positive if out {L T-1 ~> m s-1]
-  real :: flux_diff, phi
+  real, dimension(-2:2) :: stencil ! A copy of the neighboring thicknesses times temperatures [C Z ~> degC m]
+  real :: v_face     ! Pseudo-meridional velocity at a cell face, positive if out [L T-1 ~> m s-1]
+  real :: flux_diff  ! The difference in fluxes [C Z ~> degC m]
+  real :: phi
 
   is = G%isc ; ie = G%iec ; js = G%jsc-1 ; je = G%jec+1 ; isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   i_off = G%idg_offset ; j_off = G%jdg_offset
@@ -3437,7 +3439,7 @@ subroutine ice_shelf_advect_temp_y(CS, G, time_step, hmask, h_after_uflux, h_aft
     if (((i+i_off) <= G%domain%niglobal+G%domain%nihalo) .AND. &
        ((i+i_off) >= G%domain%nihalo+1)) then  ! based on mehmet's code - only if btw east & west boundaries
 
-      stencil(:) = -1
+      stencil(:) = 0.0 ! This is probably unnecessary, as the code is written
 
       do j=js,je
 

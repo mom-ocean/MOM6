@@ -101,15 +101,15 @@ subroutine benchmark_initialize_thickness(h, depth_tot, G, GV, US, param_file, e
                              ! in depth units [Z ~> m].
   real :: eta1D(SZK_(GV)+1)  ! Interface height relative to the sea surface
                              ! positive upward, in depth units [Z ~> m].
-  real :: SST       !  The initial sea surface temperature [degC].
-  real :: T_int     !  The initial temperature of an interface [degC].
+  real :: SST       !  The initial sea surface temperature [C ~> degC].
+  real :: T_int     !  The initial temperature of an interface [C ~> degC].
   real :: ML_depth  !  The specified initial mixed layer depth, in depth units [Z ~> m].
   real :: thermocline_scale ! The e-folding scale of the thermocline, in depth units [Z ~> m].
   real, dimension(SZK_(GV)) :: &
-    T0, S0, &       ! Profiles of temperature [degC] and salinity [ppt]
+    T0, S0, &       ! Profiles of temperature [C ~> degC] and salinity [S ~> ppt]
     rho_guess, &    ! Potential density at T0 & S0 [R ~> kg m-3].
-    drho_dT, &      ! Derivative of density with temperature [R degC-1 ~> kg m-3 degC-1].
-    drho_dS         ! Derivative of density with salinity [R ppt-1 ~> kg m-3 ppt-1].
+    drho_dT, &      ! Derivative of density with temperature [R C-1 ~> kg m-3 degC-1].
+    drho_dS         ! Derivative of density with salinity [R S-1 ~> kg m-3 ppt-1].
   real :: pres(SZK_(GV))  ! Reference pressure [R L2 T-2 ~> Pa].
   real :: a_exp     ! The fraction of the overall stratification that is exponential.
   real :: I_ts, I_md ! Inverse lengthscales [Z-1 ~> m-1].
@@ -147,9 +147,9 @@ subroutine benchmark_initialize_thickness(h, depth_tot, G, GV, US, param_file, e
 ! This block calculates T0(k) for the purpose of diagnosing where the
 ! interfaces will be found.
   do k=1,nz
-    pres(k) = P_Ref ; S0(k) = 35.0
+    pres(k) = P_Ref ; S0(k) = 35.0*US%ppt_to_S
   enddo
-  T0(k1) = 29.0
+  T0(k1) = 29.0*US%degC_to_C
   call calculate_density(T0(k1), S0(k1), pres(k1), rho_guess(k1), eqn_of_state)
   call calculate_density_derivs(T0(k1), S0(k1), pres(k1), drho_dT(k1), drho_dS(k1), eqn_of_state)
 
@@ -217,9 +217,9 @@ subroutine benchmark_init_temperature_salinity(T, S, G, GV, US, param_file, &
   type(ocean_grid_type),               intent(in)  :: G            !< The ocean's grid structure
   type(verticalGrid_type),             intent(in)  :: GV           !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: T      !< The potential temperature
-                                                                   !! that is being initialized [degC]
+                                                                   !! that is being initialized [C ~> degC]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: S      !< The salinity that is being
-                                                                   !! initialized [ppt]
+                                                                   !! initialized [S ~> ppt]
   type(unit_scale_type),               intent(in)  :: US           !< A dimensional unit scaling type
   type(param_file_type),               intent(in)  :: param_file   !< A structure indicating the
                                                                    !! open file to parse for
@@ -230,14 +230,14 @@ subroutine benchmark_init_temperature_salinity(T, S, G, GV, US, param_file, &
   logical,                             intent(in)  :: just_read    !< If true, this call will only read
                                                                    !! parameters without changing T & S.
   ! Local variables
-  real :: T0(SZK_(GV))       ! A profile of temperatures [degC]
-  real :: S0(SZK_(GV))       ! A profile of salinities [ppt]
+  real :: T0(SZK_(GV))       ! A profile of temperatures [C ~> degC]
+  real :: S0(SZK_(GV))       ! A profile of salinities [S ~> ppt]
   real :: pres(SZK_(GV))     ! Reference pressure [R L2 T-2 ~> Pa]
-  real :: drho_dT(SZK_(GV))  ! Derivative of density with temperature [R degC-1 ~> kg m-3 degC-1]
-  real :: drho_dS(SZK_(GV))  ! Derivative of density with salinity [R ppt-1 ~> kg m-3 ppt-1]
+  real :: drho_dT(SZK_(GV))  ! Derivative of density with temperature [R C-1 ~> kg m-3 degC-1]
+  real :: drho_dS(SZK_(GV))  ! Derivative of density with salinity [R S-1 ~> kg m-3 ppt-1]
   real :: rho_guess(SZK_(GV)) ! Potential density at T0 & S0 [R ~> kg m-3]
   real :: PI                 ! 3.1415926... calculated as 4*atan(1)
-  real :: SST                !  The initial sea surface temperature [degC]
+  real :: SST                !  The initial sea surface temperature [C ~> degC]
   integer :: i, j, k, k1, is, ie, js, je, nz, itt
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
@@ -247,10 +247,10 @@ subroutine benchmark_init_temperature_salinity(T, S, G, GV, US, param_file, &
   k1 = GV%nk_rho_varies + 1
 
   do k=1,nz
-    pres(k) = P_Ref ; S0(k) = 35.0
+    pres(k) = P_Ref ; S0(k) = 35.0*US%ppt_to_S
   enddo
 
-  T0(k1) = 29.0
+  T0(k1) = 29.0*US%degC_to_C
   call calculate_density(T0(k1), S0(k1), pres(k1), rho_guess(k1), eqn_of_state)
   call calculate_density_derivs(T0, S0, pres, drho_dT, drho_dS, eqn_of_state, (/k1,k1/) )
 

@@ -142,7 +142,7 @@ subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
   real, dimension(SZI_(G),SZK_(GV)) :: &
     h_2d, &             ! A 2-D version of h, but converted to [Z ~> m].
     u_2d, v_2d, &       ! 2-D versions of u_in and v_in, converted to [L T-1 ~> m s-1].
-    T_2d, S_2d, rho_2d  ! 2-D versions of T [degC], S [ppt], and rho [R ~> kg m-3].
+    T_2d, S_2d, rho_2d  ! 2-D versions of T [C ~> degC], S [S ~> ppt], and rho [R ~> kg m-3].
   real, dimension(SZI_(G),SZK_(GV)+1) :: &
     kappa_2d, & ! 2-D version of kappa_io [Z2 T-1 ~> m2 s-1].
     tke_2d      ! 2-D version tke_io [Z2 T-2 ~> m2 s-2].
@@ -151,8 +151,8 @@ subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
     dz, &       ! The layer thickness [Z ~> m].
     u0xdz, &    ! The initial zonal velocity times dz [Z L T-1 ~> m2 s-1].
     v0xdz, &    ! The initial meridional velocity times dz [Z L T-1 ~> m2 s-1].
-    T0xdz, &    ! The initial temperature times dz [degC Z ~> degC m].
-    S0xdz       ! The initial salinity times dz [ppt Z ~> ppt m].
+    T0xdz, &    ! The initial temperature times dz [C Z ~> degC m].
+    S0xdz       ! The initial salinity times dz [S Z ~> ppt m].
   real, dimension(SZK_(GV)+1) :: &
     kappa, &    ! The shear-driven diapycnal diffusivity at an interface [Z2 T-1 ~> m2 s-1].
     tke, &      ! The Turbulent Kinetic Energy per unit mass at an interface [Z2 T-2 ~> m2 s-2].
@@ -270,7 +270,7 @@ subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
 
     ! Set the initial guess for kappa, here defined at interfaces.
     ! ----------------------------------------------------
-      do K=1,nzc+1 ; kappa(K) = US%m2_s_to_Z2_T*1.0 ; enddo
+      do K=1,nzc+1 ; kappa(K) = 1.0*US%m2_s_to_Z2_T ; enddo
 
       call kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
                               dz, u0xdz, v0xdz, T0xdz, S0xdz, kappa_avg, &
@@ -339,9 +339,9 @@ subroutine Calc_kappa_shear_vertex(u_in, v_in, h, T_in, S_in, tv, p_surf, kappa_
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),   &
                            intent(in)    :: h      !< Layer thicknesses [H ~> m or kg m-2].
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),   &
-                           intent(in)    :: T_in   !< Layer potential temperatures [degC]
+                           intent(in)    :: T_in   !< Layer potential temperatures [C ~> degC]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),   &
-                           intent(in)    :: S_in   !< Layer salinities in ppt.
+                           intent(in)    :: S_in   !< Layer salinities [S ~> ppt]
   type(thermo_var_ptrs),   intent(in)    :: tv     !< A structure containing pointers to any
                                                    !! available thermodynamic fields. Absent fields
                                                    !! have NULL ptrs.
@@ -366,7 +366,7 @@ subroutine Calc_kappa_shear_vertex(u_in, v_in, h, T_in, S_in, tv, p_surf, kappa_
   real, dimension(SZIB_(G),SZK_(GV)) :: &
     h_2d, &             ! A 2-D version of h, but converted to [Z ~> m].
     u_2d, v_2d, &       ! 2-D versions of u_in and v_in, converted to [L T-1 ~> m s-1].
-    T_2d, S_2d, rho_2d  ! 2-D versions of T [degC], S [ppt], and rho [R ~> kg m-3].
+    T_2d, S_2d, rho_2d  ! 2-D versions of T [C ~> degC], S [S ~> ppt], and rho [R ~> kg m-3].
   real, dimension(SZIB_(G),SZK_(GV)+1,2) :: &
     kappa_2d    ! Quasi 2-D versions of kappa_io [Z2 T-1 ~> m2 s-1].
   real, dimension(SZIB_(G),SZK_(GV)+1) :: &
@@ -376,8 +376,8 @@ subroutine Calc_kappa_shear_vertex(u_in, v_in, h, T_in, S_in, tv, p_surf, kappa_
     dz, &       ! The layer thickness [Z ~> m].
     u0xdz, &    ! The initial zonal velocity times dz [L Z T-1 ~> m2 s-1].
     v0xdz, &    ! The initial meridional velocity times dz [L Z T-1 ~> m2 s-1].
-    T0xdz, &    ! The initial temperature times dz [degC Z ~> degC m].
-    S0xdz       ! The initial salinity times dz [ppt Z ~> ppt m].
+    T0xdz, &    ! The initial temperature times dz [C Z ~> degC m].
+    S0xdz       ! The initial salinity times dz [S Z ~> ppt m].
   real, dimension(SZK_(GV)+1) :: &
     kappa, &    ! The shear-driven diapycnal diffusivity at an interface [Z2 T-1 ~> m2 s-1].
     tke, &      ! The Turbulent Kinetic Energy per unit mass at an interface [Z2 T-2 ~> m2 s-2].
@@ -537,7 +537,7 @@ subroutine Calc_kappa_shear_vertex(u_in, v_in, h, T_in, S_in, tv, p_surf, kappa_
     ! ----------------------------------------------------
     ! Set the initial guess for kappa, here defined at interfaces.
     ! ----------------------------------------------------
-      do K=1,nzc+1 ; kappa(K) = US%m2_s_to_Z2_T*1.0 ; enddo
+      do K=1,nzc+1 ; kappa(K) = 1.0*US%m2_s_to_Z2_T ; enddo
 
       call kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
                               dz, u0xdz, v0xdz, T0xdz, S0xdz, kappa_avg, &
@@ -614,9 +614,9 @@ subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, dz, &
   real, dimension(SZK_(GV)), &
                      intent(in)    :: v0xdz !< The initial meridional velocity times dz [Z L T-1 ~> m2 s-1].
   real, dimension(SZK_(GV)), &
-                     intent(in)    :: T0xdz !< The initial temperature times dz [degC Z ~> degC m].
+                     intent(in)    :: T0xdz !< The initial temperature times dz [C Z ~> degC m].
   real, dimension(SZK_(GV)), &
-                     intent(in)    :: S0xdz !< The initial salinity times dz [ppt Z ~> ppt m].
+                     intent(in)    :: S0xdz !< The initial salinity times dz [S Z ~> ppt m].
   real, dimension(SZK_(GV)+1), &
                      intent(out)   :: kappa_avg !< The time-weighted average of kappa [Z2 T-1 ~> m2 s-1].
   real, dimension(SZK_(GV)+1), &
@@ -634,10 +634,10 @@ subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, dz, &
     u, &        ! The zonal velocity after a timestep of mixing [L T-1 ~> m s-1].
     v, &        ! The meridional velocity after a timestep of mixing [L T-1 ~> m s-1].
     Idz, &      ! The inverse of the distance between TKE points [Z-1 ~> m-1].
-    T, &        ! The potential temperature after a timestep of mixing [degC].
-    Sal, &      ! The salinity after a timestep of mixing [ppt].
+    T, &        ! The potential temperature after a timestep of mixing [C ~> degC].
+    Sal, &      ! The salinity after a timestep of mixing [S ~> ppt].
     u_test, v_test, & ! Temporary velocities [L T-1 ~> m s-1].
-    T_test, S_test ! Temporary temperatures [degC] and salinities [ppt].
+    T_test, S_test ! Temporary temperatures [C ~> degC] and salinities [S ~> ppt].
 
   real, dimension(nzc+1) :: &
     N2, &       ! The squared buoyancy frequency at an interface [T-2 ~> s-2].
@@ -658,10 +658,10 @@ subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, dz, &
     tke_pred, & ! The value of TKE from a predictor step [Z2 T-2 ~> m2 s-2].
     kappa_pred, & ! The value of kappa from a predictor step [Z2 T-1 ~> m2 s-1].
     pressure, & ! The pressure at an interface [R L2 T-2 ~> Pa].
-    T_int, &    ! The temperature interpolated to an interface [degC].
-    Sal_int, &  ! The salinity interpolated to an interface [ppt].
+    T_int, &    ! The temperature interpolated to an interface [C ~> degC].
+    Sal_int, &  ! The salinity interpolated to an interface [S ~> ppt].
     dbuoy_dT, & ! The partial derivatives of buoyancy with changes in temperature
-    dbuoy_dS, & ! and salinity, [Z T-2 degC-1 ~> m s-2 degC-1] and [Z T-2 ppt-1 ~> m s-2 ppt-1].
+    dbuoy_dS, & ! and salinity, [Z T-2 C-1 ~> m s-2 degC-1] and [Z T-2 S-1 ~> m s-2 ppt-1].
     I_L2_bdry, &   ! The inverse of the square of twice the harmonic mean
                    ! distance to the top and bottom boundaries [Z-2 ~> m-2].
     K_Q, &         ! Diffusivity divided by TKE [T ~> s].
@@ -1035,22 +1035,22 @@ subroutine calculate_projected_state(kappa, u0, v0, T0, S0, dt, nz, dz, I_dz_int
                                               !! [Z2 T-1 ~> m2 s-1].
   real, dimension(nz),   intent(in)    :: u0  !< The initial zonal velocity [L T-1 ~> m s-1].
   real, dimension(nz),   intent(in)    :: v0  !< The initial meridional velocity [L T-1 ~> m s-1].
-  real, dimension(nz),   intent(in)    :: T0  !< The initial temperature [degC].
-  real, dimension(nz),   intent(in)    :: S0  !< The initial salinity [ppt].
+  real, dimension(nz),   intent(in)    :: T0  !< The initial temperature [C ~> degC].
+  real, dimension(nz),   intent(in)    :: S0  !< The initial salinity [S ~> ppt].
   real,                  intent(in)    :: dt  !< The time step [T ~> s].
   real, dimension(nz),   intent(in)    :: dz  !< The grid spacing of layers [Z ~> m].
   real, dimension(nz+1), intent(in)    :: I_dz_int !< The inverse of the layer's thicknesses
                                               !! [Z-1 ~> m-1].
   real, dimension(nz+1), intent(in)    :: dbuoy_dT !< The partial derivative of buoyancy with
-                                              !! temperature [Z T-2 degC-1 ~> m s-2 degC-1].
+                                              !! temperature [Z T-2 C-1 ~> m s-2 degC-1].
   real, dimension(nz+1), intent(in)    :: dbuoy_dS !< The partial derivative of buoyancy with
-                                              !! salinity [Z T-2 ppt-1 ~> m s-2 ppt-1].
+                                              !! salinity [Z T-2 S-1 ~> m s-2 ppt-1].
   real,                  intent(in)    :: vel_under !< Any velocities that are smaller in magnitude
                                               !! than this value are set to 0 [L T-1 ~> m s-1].
   real, dimension(nz),   intent(inout) :: u   !< The zonal velocity after dt [L T-1 ~> m s-1].
   real, dimension(nz),   intent(inout) :: v   !< The meridional velocity after dt [L T-1 ~> m s-1].
-  real, dimension(nz),   intent(inout) :: T   !< The temperature after dt [degC].
-  real, dimension(nz),   intent(inout) :: Sal !< The salinity after dt [ppt].
+  real, dimension(nz),   intent(inout) :: T   !< The temperature after dt [C ~> degC].
+  real, dimension(nz),   intent(inout) :: Sal !< The salinity after dt [S ~> ppt].
   real, dimension(nz+1), intent(inout) :: N2  !< The buoyancy frequency squared at interfaces [T-2 ~> s-2].
   real, dimension(nz+1), intent(inout) :: S2  !< The squared shear at interfaces [T-2 ~> s-2].
   type(verticalGrid_type), intent(in)  :: GV  !< The ocean's vertical grid structure.

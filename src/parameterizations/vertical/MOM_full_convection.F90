@@ -21,15 +21,15 @@ contains
 subroutine full_convection(G, GV, US, h, tv, T_adj, S_adj, p_surf, Kddt_smooth, halo)
   type(ocean_grid_type),   intent(in)    :: G     !< The ocean's grid structure
   type(verticalGrid_type), intent(in)    :: GV    !< The ocean's vertical grid structure
-  type(unit_scale_type),   intent(in)    :: US   !< A dimensional unit scaling type
+  type(unit_scale_type),   intent(in)    :: US    !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(in)    :: h     !< Layer thicknesses [H ~> m or kg m-2]
   type(thermo_var_ptrs),   intent(in)    :: tv    !< A structure pointing to various
                                                   !! thermodynamic variables
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
-                           intent(out)   :: T_adj !< Adjusted potential temperature [degC].
+                           intent(out)   :: T_adj !< Adjusted potential temperature [C ~> degC].
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
-                           intent(out)   :: S_adj !< Adjusted salinity [ppt].
+                           intent(out)   :: S_adj !< Adjusted salinity [S ~> ppt].
   real, dimension(:,:),    pointer       :: p_surf !< The pressure at the ocean surface [R L2 T-2 ~> Pa] (or NULL).
   real,                    intent(in)    :: Kddt_smooth  !< A smoothing vertical
                                                   !! diffusivity times a timestep [H2 ~> m2 or kg2 m-4].
@@ -37,27 +37,27 @@ subroutine full_convection(G, GV, US, h, tv, T_adj, S_adj, p_surf, Kddt_smooth, 
 
   ! Local variables
   real, dimension(SZI_(G),SZK_(GV)+1) :: &
-    dRho_dT, &  ! The derivative of density with temperature [R degC-1 ~> kg m-3 degC-1]
-    dRho_dS     ! The derivative of density with salinity [R ppt-1 ~> kg m-3 ppt-1].
+    dRho_dT, &  ! The derivative of density with temperature [R C-1 ~> kg m-3 degC-1]
+    dRho_dS     ! The derivative of density with salinity [R S-1 ~> kg m-3 ppt-1].
   real :: h_neglect, h0 ! A thickness that is so small it is usually lost
                         ! in roundoff and can be neglected [H ~> m or kg m-2].
 ! logical :: use_EOS    ! If true, density is calculated from T & S using an equation of state.
   real, dimension(SZI_(G),SZK0_(G)) :: &
     Te_a, & ! A partially updated temperature estimate including the influence from
-            ! mixing with layers above rescaled by a factor of d_a [degC].
+            ! mixing with layers above rescaled by a factor of d_a [C ~> degC].
             ! This array is discretized on tracer cells, but contains an extra
             ! layer at the top for algorithmic convenience.
     Se_a    ! A partially updated salinity estimate including the influence from
-            ! mixing with layers above rescaled by a factor of d_a [ppt].
+            ! mixing with layers above rescaled by a factor of d_a [S ~> ppt].
             ! This array is discretized on tracer cells, but contains an extra
             ! layer at the top for algorithmic convenience.
   real, dimension(SZI_(G),SZK_(GV)+1) :: &
     Te_b, & ! A partially updated temperature estimate including the influence from
-            ! mixing with layers below rescaled by a factor of d_b [degC].
+            ! mixing with layers below rescaled by a factor of d_b [C ~> degC].
             ! This array is discretized on tracer cells, but contains an extra
             ! layer at the bottom for algorithmic convenience.
     Se_b    ! A partially updated salinity estimate including the influence from
-            ! mixing with layers below rescaled by a factor of d_b [ppt].
+            ! mixing with layers below rescaled by a factor of d_b [S ~> ppt].
             ! This array is discretized on tracer cells, but contains an extra
             ! layer at the bottom for algorithmic convenience.
   real, dimension(SZI_(G),SZK_(GV)+1) :: &
@@ -270,22 +270,22 @@ end subroutine full_convection
 !! above and below, including partial calculations from a tridiagonal solver.
 function is_unstable(dRho_dT, dRho_dS, h_a, h_b, mix_A, mix_B, T_a, T_b, S_a, S_b, &
                      Te_aa, Te_bb, Se_aa, Se_bb, d_A, d_B)
-  real, intent(in) :: dRho_dT !< The derivative of in situ density with temperature [R degC-1 ~> kg m-3 degC-1]
-  real, intent(in) :: dRho_dS !< The derivative of in situ density with salinity [R ppt-1 ~> kg m-3 ppt-1]
+  real, intent(in) :: dRho_dT !< The derivative of in situ density with temperature [R C-1 ~> kg m-3 degC-1]
+  real, intent(in) :: dRho_dS !< The derivative of in situ density with salinity [R S-1 ~> kg m-3 ppt-1]
   real, intent(in) :: h_a     !< The thickness of the layer above [H ~> m or kg m-2]
   real, intent(in) :: h_b     !< The thickness of the layer below [H ~> m or kg m-2]
   real, intent(in) :: mix_A   !< The time integrated mixing rate of the interface above [H ~> m or kg m-2]
   real, intent(in) :: mix_B   !< The time integrated mixing rate of the interface below [H ~> m or kg m-2]
-  real, intent(in) :: T_a     !< The initial temperature of the layer above [degC]
-  real, intent(in) :: T_b     !< The initial temperature of the layer below [degC]
-  real, intent(in) :: S_a     !< The initial salinity of the layer below [ppt]
-  real, intent(in) :: S_b     !< The initial salinity of the layer below [ppt]
-  real, intent(in) :: Te_aa   !< The estimated temperature two layers above rescaled by d_A [degC]
-  real, intent(in) :: Te_bb   !< The estimated temperature two layers below rescaled by d_B [degC]
-  real, intent(in) :: Se_aa   !< The estimated salinity two layers above rescaled by d_A [ppt]
-  real, intent(in) :: Se_bb   !< The estimated salinity two layers below rescaled by d_B [ppt]
-  real, intent(in) :: d_A     !< The rescaling dependency across the interface above, nondim.
-  real, intent(in) :: d_B     !< The rescaling dependency across the interface below, nondim.
+  real, intent(in) :: T_a     !< The initial temperature of the layer above [C ~> degC]
+  real, intent(in) :: T_b     !< The initial temperature of the layer below [C ~> degC]
+  real, intent(in) :: S_a     !< The initial salinity of the layer below [S ~> ppt]
+  real, intent(in) :: S_b     !< The initial salinity of the layer below [S ~> ppt]
+  real, intent(in) :: Te_aa   !< The estimated temperature two layers above rescaled by d_A [C ~> degC]
+  real, intent(in) :: Te_bb   !< The estimated temperature two layers below rescaled by d_B [C ~> degC]
+  real, intent(in) :: Se_aa   !< The estimated salinity two layers above rescaled by d_A [S ~> ppt]
+  real, intent(in) :: Se_bb   !< The estimated salinity two layers below rescaled by d_B [S ~> ppt]
+  real, intent(in) :: d_A     !< The rescaling dependency across the interface above [nondim]
+  real, intent(in) :: d_B     !< The rescaling dependency across the interface below [nondim]
   logical :: is_unstable !< The return value, true if the profile is statically unstable
                          !! around the interface in question.
 
@@ -316,10 +316,10 @@ subroutine smoothed_dRdT_dRdS(h, tv, Kddt, dR_dT, dR_dS, G, GV, US, j, p_surf, h
   real,                    intent(in)  :: Kddt !< A diffusivity times a time increment [H2 ~> m2 or kg2 m-4].
   real, dimension(SZI_(G),SZK_(GV)+1), &
                            intent(out) :: dR_dT !< Derivative of locally referenced
-                                               !! potential density with temperature [R degC-1 ~> kg m-3 degC-1]
+                                               !! potential density with temperature [R C-1 ~> kg m-3 degC-1]
   real, dimension(SZI_(G),SZK_(GV)+1), &
                            intent(out) :: dR_dS !< Derivative of locally referenced
-                                               !! potential density with salinity [R ppt-1 ~> kg m-3 ppt-1]
+                                               !! potential density with salinity [R S-1 ~> kg m-3 ppt-1]
   type(unit_scale_type),   intent(in)  :: US   !< A dimensional unit scaling type
   integer,                 intent(in)  :: j    !< The j-point to work on.
   real, dimension(:,:),    pointer     :: p_surf !< The pressure at the ocean surface [R L2 T-2 ~> Pa].
@@ -331,11 +331,11 @@ subroutine smoothed_dRdT_dRdS(h, tv, Kddt, dR_dT, dR_dS, G, GV, US, j, p_surf, h
   real :: b1(SZI_(G))              ! A tridiagonal solver variable [H-1 ~> m-1 or m2 kg-1]
   real :: d1(SZI_(G))              ! A tridiagonal solver variable [nondim]
   real :: c1(SZI_(G),SZK_(GV))     ! A tridiagonal solver variable [nondim]
-  real :: T_f(SZI_(G),SZK_(GV))    ! Filtered temperatures [degC]
-  real :: S_f(SZI_(G),SZK_(GV))    ! Filtered salinities [ppt]
+  real :: T_f(SZI_(G),SZK_(GV))    ! Filtered temperatures [C ~> degC]
+  real :: S_f(SZI_(G),SZK_(GV))    ! Filtered salinities [S ~> ppt]
   real :: pres(SZI_(G))            ! Interface pressures [R L2 T-2 ~> Pa].
-  real :: T_EOS(SZI_(G))           ! Filtered and vertically averaged temperatures [degC]
-  real :: S_EOS(SZI_(G))           ! Filtered and vertically averaged salinities [ppt]
+  real :: T_EOS(SZI_(G))           ! Filtered and vertically averaged temperatures [C ~> degC]
+  real :: S_EOS(SZI_(G))           ! Filtered and vertically averaged salinities [S ~> ppt]
   real :: kap_dt_x2                ! The product of 2*kappa*dt [H2 ~> m2 or kg2 m-4].
   real :: h_neglect, h0            ! Negligible thicknesses to allow for zero thicknesses,
                                    ! [H ~> m or kg m-2].
