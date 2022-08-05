@@ -18,6 +18,8 @@ code in the new implementation is part of `MOM_MEKE.F90`.
   control structure that are imported elsewhere within the primary MOM6
   code. This includes: `dbcomms_CS_type`, `dbclient_type`, and `database_comms_init`
 
-- `smartredis_client.F90` is a skeleton of the actual SmartRedis library
-  used to ensure that the interfaces to the library are maintained without
-  requiring MOM6 users to compile in the the full library
+- `database_client_interface.F90` contains the methods for a communication client
+  to transfer data and/or commands between MOM6 and a remote database. This is
+  roughly based on the SmartRedis library, though only the methods that are most
+  likely to be used with MOM6 are retained. This is to ensure that the API can be
+  tested without requiring MOM6 users to compile in the the full library.
