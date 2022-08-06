@@ -116,6 +116,9 @@ DO_COVERAGE ?=
 # Report failure if coverage report is not uploaded
 REQUIRE_COVERAGE_UPLOAD ?=
 
+# Print logs if an error is encountered
+REPORT_ERROR_LOGS ?=
+
 # Time measurement (configurable by the CI)
 TIME ?= time
 
@@ -330,7 +333,10 @@ $(TARGET_CODEBASE):
 # FMS
 
 # Set up the FMS build environment variables
-FMS_ENV = PATH="${PATH}:$(realpath ../ac)" FCFLAGS="$(FCFLAGS_FMS)"
+FMS_ENV = \
+  PATH="${PATH}:$(realpath ../ac)" \
+  FCFLAGS="$(FCFLAGS_FMS)" \
+  REPORT_ERROR_LOGS="$(REPORT_ERROR_LOGS)"
 
 deps/lib/libFMS.a: deps/fms/build/libFMS.a
 	$(MAKE) -C deps lib/libFMS.a
