@@ -134,7 +134,7 @@ use MOM_transcribe_grid,       only : copy_dyngrid_to_MOM_grid, copy_MOM_grid_to
 use MOM_unit_scaling,          only : unit_scale_type, unit_scaling_init
 use MOM_unit_scaling,          only : unit_scaling_end, fix_restart_unit_scaling
 use MOM_variables,             only : surface, allocate_surface_state, deallocate_surface_state
-use MOM_variables,             only : thermo_var_ptrs, vertvisc_type, porous_barrier_ptrs
+use MOM_variables,             only : thermo_var_ptrs, vertvisc_type, porous_barrier_type
 use MOM_variables,             only : accel_diag_ptrs, cont_diag_ptrs, ocean_internal_state
 use MOM_variables,             only : rotate_surface_state
 use MOM_verticalGrid,          only : verticalGrid_type, verticalGridInit, verticalGridEnd
@@ -414,7 +414,7 @@ type, public :: MOM_control_struct ; private
                                 !! increments and priors
   type(dbcomms_CS_type)   :: dbcomms_CS !< Control structure for database client used for online ML/AI
   logical :: use_porbar
-  type(porous_barrier_ptrs) :: pbv !< porous barrier fractional cell metrics
+  type(porous_barrier_type) :: pbv !< porous barrier fractional cell metrics
   type(particles), pointer :: particles => NULL() !<Lagrangian particles
   type(stochastic_CS), pointer :: stoch_CS => NULL() !< a pointer to the stochastics control structure
 end type MOM_control_struct
@@ -2002,7 +2002,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   if (.not.CS%thickness_diffuse) CS%thickness_diffuse_first = .false.
   call get_param(param_file, "MOM", "USE_POROUS_BARRIER", CS%use_porbar, &
                  "If true, use porous barrier to constrain the widths "//&
-                 " and face areas at the edges of the grid cells. ", &
+                 "and face areas at the edges of the grid cells. ", &
                  default=.true.) ! The default should be false after tests.
   call get_param(param_file, "MOM", "BATHYMETRY_AT_VEL", bathy_at_vel, &
                  "If true, there are separate values for the basin depths "//&

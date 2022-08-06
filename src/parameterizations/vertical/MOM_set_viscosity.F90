@@ -23,7 +23,7 @@ use MOM_restart, only : register_restart_field, query_initialized, MOM_restart_C
 use MOM_restart, only : register_restart_field_as_obsolete
 use MOM_safe_alloc, only : safe_alloc_ptr, safe_alloc_alloc
 use MOM_unit_scaling, only : unit_scale_type
-use MOM_variables, only : thermo_var_ptrs, vertvisc_type, porous_barrier_ptrs
+use MOM_variables, only : thermo_var_ptrs, vertvisc_type, porous_barrier_type
 use MOM_verticalGrid, only : verticalGrid_type
 use MOM_EOS, only : calculate_density, calculate_density_derivs
 use MOM_open_boundary, only : ocean_OBC_type, OBC_NONE, OBC_DIRECTION_E
@@ -139,7 +139,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, pbv)
                                                   !! related fields.
   type(set_visc_CS),        intent(inout) :: CS   !< The control structure returned by a previous
                                                   !! call to set_visc_init.
-  type(porous_barrier_ptrs),intent(in)    :: pbv  !< porous barrier fractional cell metrics
+  type(porous_barrier_type),intent(in)    :: pbv  !< porous barrier fractional cell metrics
 
   ! Local variables
   real, dimension(SZIB_(G)) :: &

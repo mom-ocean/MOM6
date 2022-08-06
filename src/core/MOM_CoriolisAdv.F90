@@ -16,7 +16,7 @@ use MOM_open_boundary, only : ocean_OBC_type, OBC_DIRECTION_E, OBC_DIRECTION_W
 use MOM_open_boundary, only : OBC_DIRECTION_N, OBC_DIRECTION_S
 use MOM_string_functions, only : uppercase
 use MOM_unit_scaling,  only : unit_scale_type
-use MOM_variables,     only : accel_diag_ptrs, porous_barrier_ptrs
+use MOM_variables,     only : accel_diag_ptrs, porous_barrier_type
 use MOM_verticalGrid,  only : verticalGrid_type
 use MOM_wave_interface, only : wave_parameters_CS
 
@@ -140,7 +140,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
   type(accel_diag_ptrs),                      intent(inout) :: AD  !< Storage for acceleration diagnostics
   type(unit_scale_type),                      intent(in)    :: US  !< A dimensional unit scaling type
   type(CoriolisAdv_CS),                       intent(in)    :: CS  !< Control structure for MOM_CoriolisAdv
-  type(porous_barrier_ptrs),                  intent(in)    :: pbv !< porous barrier fractional cell metrics
+  type(porous_barrier_type),                  intent(in)    :: pbv !< porous barrier fractional cell metrics
   type(Wave_parameters_CS),         optional, pointer       :: Waves !< An optional pointer to Stokes drift CS
 
   ! Local variables

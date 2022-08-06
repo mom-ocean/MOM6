@@ -1171,12 +1171,16 @@ end subroutine read_face_length_list
 !! for the use of porous barrier.
 !! Note that we assume the depth values in the sub-grid bathymetry file of the same
 !! convention as in-cell bathymetry file, i.e. positive below the sea surface and
-!! increasing downward. This is the opposite of the convention in subroutine
-!! porous_widths. Therefore, all signs of the variable are reverted here.
+!! increasing downward; while in subroutine reset_face_lengths_list, it is implied
+!! that read-in fields min_bathy, max_bathy and avg_bathy from the input file
+!! CHANNEL_LIST_FILE all have negative values below the surface. Therefore, to ensure
+!! backward compatibility, all signs of the variable are inverted here.
+!! And porous_Dmax[UV] = shallowest point, porous_Dmin[UV] = deepest point
 subroutine set_subgrid_topo_at_vel_from_file(G, param_file, US)
-  type(dyn_horgrid_type), intent(inout) :: G !< The dynamic horizontal grid type
+  type(dyn_horgrid_type), intent(inout) :: G          !< The dynamic horizontal grid type
   type(param_file_type),  intent(in)    :: param_file !< Parameter file structure
-  type(unit_scale_type),  intent(in)    :: US !< A dimensional unit scaling type
+  type(unit_scale_type),  intent(in)    :: US         !< A dimensional unit scaling type
+
   ! Local variables
   character(len=200) :: filename, topo_file, inputdir ! Strings for file/path
   character(len=200) :: varname_uhi, varname_ulo, varname_uav, &
@@ -1225,8 +1229,8 @@ subroutine set_subgrid_topo_at_vel_from_file(G, param_file, US)
   call MOM_read_vector(filename, trim(varname_uav), trim(varname_vav), &
                        G%porous_DavgU, G%porous_DavgV, G%Domain, stagger=CGRID_NE, scale=US%m_to_Z)
 
-  ! The signs of the depth parameters need to be reverted to comply with subroutine calc_por_layer,
-  ! which assumes depth is negative below the sea surface.
+  ! The signs of the depth parameters need to be inverted to be backward compatible with input files
+  ! used by subroutine reset_face_lengths_list, which assumes depth is negative below the sea surface.
   G%porous_DmaxU = -G%porous_DmaxU; G%porous_DminU = -G%porous_DminU; G%porous_DavgU = -G%porous_DavgU
   G%porous_DmaxV = -G%porous_DmaxV; G%porous_DminV = -G%porous_DminV; G%porous_DavgV = -G%porous_DavgV
 

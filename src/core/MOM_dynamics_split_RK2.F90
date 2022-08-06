@@ -3,7 +3,7 @@ module MOM_dynamics_split_RK2
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-use MOM_variables,    only : vertvisc_type, thermo_var_ptrs, porous_barrier_ptrs
+use MOM_variables,    only : vertvisc_type, thermo_var_ptrs, porous_barrier_type
 use MOM_variables,    only : BT_cont_type, alloc_bt_cont_type, dealloc_bt_cont_type
 use MOM_variables,    only : accel_diag_ptrs, ocean_internal_state, cont_diag_ptrs
 use MOM_forcing_type, only : mech_forcing
@@ -297,7 +297,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
   type(MEKE_type),                   intent(inout) :: MEKE         !< MEKE fields
   type(thickness_diffuse_CS),        intent(inout) :: thickness_diffuse_CSp !< Pointer to a structure containing
                                                                    !! interface height diffusivities
-  type(porous_barrier_ptrs),         intent(in)    :: pbv          !< porous barrier fractional cell metrics
+  type(porous_barrier_type),         intent(in)    :: pbv          !< porous barrier fractional cell metrics
   type(wave_parameters_CS), optional, pointer      :: Waves        !< A pointer to a structure containing
                                                                    !! fields related to the surface wave conditions
 
@@ -1152,7 +1152,7 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, US, param
                                                                 !! the number of times the velocity is
                                                                 !! truncated (this should be 0).
   logical,                          intent(out)   :: calc_dtbt  !< If true, recalculate the barotropic time step
-  type(porous_barrier_ptrs),        intent(in)    :: pbv        !< porous barrier fractional cell metrics
+  type(porous_barrier_type),        intent(in)    :: pbv        !< porous barrier fractional cell metrics
   integer,                          intent(out)   :: cont_stencil !< The stencil for thickness
                                                                 !! from the continuity solver.
 

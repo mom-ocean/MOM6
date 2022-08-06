@@ -11,7 +11,7 @@ use MOM_grid, only : ocean_grid_type
 use MOM_open_boundary, only : ocean_OBC_type, OBC_segment_type, OBC_NONE
 use MOM_open_boundary, only : OBC_DIRECTION_E, OBC_DIRECTION_W, OBC_DIRECTION_N, OBC_DIRECTION_S
 use MOM_unit_scaling, only : unit_scale_type
-use MOM_variables, only : BT_cont_type, porous_barrier_ptrs
+use MOM_variables, only : BT_cont_type, porous_barrier_type
 use MOM_verticalGrid, only : verticalGrid_type
 
 implicit none ; private
@@ -90,7 +90,7 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, US, CS, OBC, pbv, uhb
   type(unit_scale_type),   intent(in)    :: US  !< A dimensional unit scaling type
   type(continuity_PPM_CS), intent(in)    :: CS  !< Module's control structure.
   type(ocean_OBC_type),    pointer       :: OBC !< Open boundaries control structure.
-  type(porous_barrier_ptrs), intent(in)  :: pbv !< pointers to porous barrier fractional cell metrics
+  type(porous_barrier_type), intent(in)  :: pbv !< pointers to porous barrier fractional cell metrics
   real, dimension(SZIB_(G),SZJ_(G)), &
                  optional, intent(in)    :: uhbt !< The summed volume flux through zonal faces
                                                  !! [H L2 T-1 ~> m3 s-1 or kg s-1].

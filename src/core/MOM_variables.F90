@@ -310,15 +310,15 @@ type, public :: BT_cont_type
 end type BT_cont_type
 
 !> Container for grids modifying cell metric at porous barriers
-! TODO: rename porous_barrier_ptrs to porous_barrier_type
-type, public :: porous_barrier_ptrs
+! TODO: rename porous_barrier_type to porous_barrier_type
+type, public :: porous_barrier_type
   ! Each of the following fields has nz layers.
   real, allocatable :: por_face_areaU(:,:,:) !< fractional open area of U-faces [nondim]
   real, allocatable :: por_face_areaV(:,:,:) !< fractional open area of V-faces [nondim]
   ! Each of the following fields is found at nz+1 interfaces.
   real, allocatable :: por_layer_widthU(:,:,:) !< fractional open width of U-faces [nondim]
   real, allocatable :: por_layer_widthV(:,:,:) !< fractional open width of V-faces [nondim]
-end type porous_barrier_ptrs
+end type porous_barrier_type
 
 contains
 
