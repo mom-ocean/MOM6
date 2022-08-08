@@ -23,6 +23,7 @@ public porous_widths_layer, porous_widths_interface, porous_barriers_init
 
 #include <MOM_memory.h>
 
+!> The control structure for the MOM_porous_barriers module
 type, public :: porous_barrier_CS; private
   logical :: initialized = .false.  !< True if this control structure has been initialized.
   type(diag_ctrl), pointer :: &
@@ -35,8 +36,10 @@ type, public :: porous_barrier_CS; private
   integer :: answer_date            !< The vintage of the porous barrier weight function calculations.
                                     !! Values below 20220806 recover the old answers in which the layer
                                     !! averaged weights are not strictly limited by an upper-bound of 1.0 .
+  !>@{ Diagnostic IDs
   integer :: id_por_layer_widthU = -1, id_por_layer_widthV = -1, &
              id_por_face_areaU = -1, id_por_face_areaV = -1
+  !>@}
 end type porous_barrier_CS
 
 integer :: id_clock_porous_barrier !< CPU clock for porous barrier
@@ -302,6 +305,11 @@ subroutine calc_eta_at_uv(eta_u, eta_v, interp, dmask, h, tv, G, GV, US, eta_bt)
   Z_to_eta = 1.0
   H_to_eta = GV%H_to_m * US%m_to_Z * Z_to_eta
   h_neglect = GV%H_subroundoff * H_to_eta
+
+  do K=1,nk+1
+    do j=js,je ; do I=Isq,Ieq ; eta_u(I,j,K) = dmask ; enddo ; enddo
+    do J=Jsq,Jeq ; do i=is,ie ; eta_v(i,J,K) = dmask ; enddo ; enddo
+  enddo
 
   select case (interp)
     case (ETA_INTERP_MAX)   ! The shallower interface height
