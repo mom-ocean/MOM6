@@ -8,7 +8,8 @@ jobs:
     runs-on: macOS-latest
 
     env:
-      FC: gfortran
+      CC: gcc-11
+      FC: gfortran-11
 
     defaults:
       run:
