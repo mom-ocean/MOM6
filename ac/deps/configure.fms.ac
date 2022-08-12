@@ -158,48 +158,26 @@ AX_FC_ALLOW_ARG_MISMATCH
 FCFLAGS="$FCFLAGS $ALLOW_ARG_MISMATCH_FCFLAGS"
 
 
-# Search for mkmf build tools
-AC_PATH_PROG([LIST_PATHS], [list_paths])
-AS_IF([test -z "$LIST_PATHS"], [
-  AC_PATH_PROG([LIST_PATHS], [list_paths], [], ["$PATH:${srcdir}/../../bin"])
-  AS_IF([test -z "$LIST_PATHS"],
-    [AC_MSG_ERROR([Could not find list_paths.])],
-    [AC_SUBST(PATH, ["$PATH:${srcdir}/../../bin"])])
-  ]
-)
-
-AC_PATH_PROG([MKMF], [mkmf])
-AS_IF([test -z "$MKMF"], [
-  AC_PATH_PROG([MKMF], [mkmf], [], ["$PATH:${srcdir}/../../bin"])
-  AS_IF([test -z "$MKMF"],
-    [AC_MSG_ERROR([Could not find mkmf.])],
-    [AC_SUBST(PATH, ["$PATH:${srcdir}/../../bin"])])
-  ]
-)
-
-
-# MKMF commands
-AC_CONFIG_COMMANDS([path_names],
-  [${LIST_PATHS} -l ${srcdir}],
-  [LIST_PATHS=${LIST_PATHS}]
-)
-
-
-AC_CONFIG_COMMANDS([mkmf],
-  [${MKMF} -p libFMS.a -m Makefile.mkmf path_names],
-  [MKMF=${MKMF}]
-)
+# Verify makedep
+AC_PATH_PROGS([MAKEDEP], [makedep], [], ["${PATH}:${srcdir}/../../.."])
+AS_IF([test -n "${MAKEDEP}"], [
+  AC_SUBST([MAKEDEP])
+], [
+  AC_MSG_ERROR(["Could not find makedep."])
+])
 
 
 # Autoconf does not configure the archiver (ar), as it is handled by Automake.
 # TODO: Properly configure this tool.  For now, we hard-set this to `ar`.
 AR=ar
 ARFLAGS=rv
-AC_SUBST(AR)
-AC_SUBST(ARFLAGS)
+AC_SUBST([AR])
+AC_SUBST([ARFLAGS])
 
+AC_CONFIG_COMMANDS([Makefile.dep], [make depend])
+
+AC_SUBST([CPPFLAGS])
 
 # Prepare output
-AC_SUBST(CPPFLAGS)
-AC_CONFIG_FILES(Makefile)
+AC_CONFIG_FILES([Makefile])
 AC_OUTPUT

@@ -136,6 +136,13 @@ interface query_initialized
   module procedure query_initialized_4d, query_initialized_4d_name
 end interface
 
+!> Specify that a field has been initialized, even if it was not read from a restart file
+interface set_initialized
+  module procedure set_initialized_name, set_initialized_0d_name
+  module procedure set_initialized_1d_name, set_initialized_2d_name
+  module procedure set_initialized_3d_name, set_initialized_4d_name
+end interface
+
 contains
 
 !> Register a restart field as obsolete
@@ -571,7 +578,7 @@ end subroutine register_restart_field_0d
 
 
 !> query_initialized_name determines whether a named field has been successfully
-!! read from a restart file yet.
+!! read from a restart file or has otherwise been recored as being initialzed.
 function query_initialized_name(name, CS) result(query_initialized)
   character(len=*),     intent(in) :: name  !< The name of the field that is being queried
   type(MOM_restart_CS), intent(in) :: CS    !< MOM restart control struct
@@ -592,8 +599,6 @@ function query_initialized_name(name, CS) result(query_initialized)
       n = m ; exit
     endif
   enddo
-  ! Assume that you are going to initialize it now, so set flag to initialized if queried again.
-  if (n<=CS%novars) CS%restart_field(n)%initialized = .true.
   if ((n==CS%novars+1) .and. (is_root_pe())) &
     call MOM_error(NOTE,"MOM_restart: Unknown restart variable "//name// &
                         " queried for initialization.")
@@ -625,8 +630,6 @@ function query_initialized_0d(f_ptr, CS) result(query_initialized)
       n = m ; exit
     endif
   enddo
-  ! Assume that you are going to initialize it now, so set flag to initialized if queried again.
-  if (n<=CS%novars) CS%restart_field(n)%initialized = .true.
 
 end function query_initialized_0d
 
@@ -651,8 +654,6 @@ function query_initialized_1d(f_ptr, CS) result(query_initialized)
       n = m ; exit
     endif
   enddo
-  ! Assume that you are going to initialize it now, so set flag to initialized if queried again.
-  if (n<=CS%novars) CS%restart_field(n)%initialized = .true.
 
 end function query_initialized_1d
 
@@ -678,8 +679,6 @@ function query_initialized_2d(f_ptr, CS) result(query_initialized)
       n = m ; exit
     endif
   enddo
-  ! Assume that you are going to initialize it now, so set flag to initialized if queried again.
-  if (n<=CS%novars) CS%restart_field(n)%initialized = .true.
 
 end function query_initialized_2d
 
@@ -705,8 +704,6 @@ function query_initialized_3d(f_ptr, CS) result(query_initialized)
       n = m ; exit
     endif
   enddo
-  ! Assume that you are going to initialize it now, so set flag to initialized if queried again.
-  if (n<=CS%novars) CS%restart_field(n)%initialized = .true.
 
 end function query_initialized_3d
 
@@ -732,15 +729,13 @@ function query_initialized_4d(f_ptr, CS) result(query_initialized)
       n = m ; exit
     endif
   enddo
-  ! Assume that you are going to initialize it now, so set flag to initialized if queried again.
-  if (n<=CS%novars) CS%restart_field(n)%initialized = .true.
 
 end function query_initialized_4d
 
-!> Indicate whether the field pointed to by f_ptr or with the specified variable
+!> Indicate whether the field stored in f_ptr or with the specified variable
 !! name has been initialized from a restart file.
 function query_initialized_0d_name(f_ptr, name, CS) result(query_initialized)
-  real,         target, intent(in) :: f_ptr !< A pointer to the field that is being queried
+  real,         target, intent(in) :: f_ptr !< The field that is being queried
   character(len=*),     intent(in) :: name  !< The name of the field that is being queried
   type(MOM_restart_CS), intent(in) :: CS    !< MOM restart control struct
   logical :: query_initialized
@@ -760,8 +755,6 @@ function query_initialized_0d_name(f_ptr, name, CS) result(query_initialized)
       n = m ; exit
     endif
   enddo
-  ! Assume that you are going to initialize it now, so set flag to initialized if queried again.
-  if (n<=CS%novars) CS%restart_field(n)%initialized = .true.
   if (n==CS%novars+1) then
     if (is_root_pe()) &
       call MOM_error(NOTE,"MOM_restart: Unable to find "//name//" queried by pointer, "//&
@@ -771,11 +764,11 @@ function query_initialized_0d_name(f_ptr, name, CS) result(query_initialized)
 
 end function query_initialized_0d_name
 
-!> Indicate whether the field pointed to by f_ptr or with the specified variable
+!> Indicate whether the field stored in f_ptr or with the specified variable
 !! name has been initialized from a restart file.
 function query_initialized_1d_name(f_ptr, name, CS) result(query_initialized)
   real, dimension(:),  &
-                target, intent(in) :: f_ptr !< A pointer to the field that is being queried
+                target, intent(in) :: f_ptr !< The field that is being queried
   character(len=*),     intent(in) :: name  !< The name of the field that is being queried
   type(MOM_restart_CS), intent(in) :: CS    !< MOM restart control struct
   logical :: query_initialized
@@ -795,8 +788,6 @@ function query_initialized_1d_name(f_ptr, name, CS) result(query_initialized)
       n = m ; exit
     endif
   enddo
-  ! Assume that you are going to initialize it now, so set flag to initialized if queried again.
-  if (n<=CS%novars) CS%restart_field(n)%initialized = .true.
   if (n==CS%novars+1) then
     if (is_root_pe()) &
       call MOM_error(NOTE,"MOM_restart: Unable to find "//name//" queried by pointer, "//&
@@ -806,11 +797,11 @@ function query_initialized_1d_name(f_ptr, name, CS) result(query_initialized)
 
 end function query_initialized_1d_name
 
-!> Indicate whether the field pointed to by f_ptr or with the specified variable
+!> Indicate whether the field stored in f_ptr or with the specified variable
 !! name has been initialized from a restart file.
 function query_initialized_2d_name(f_ptr, name, CS) result(query_initialized)
   real, dimension(:,:),  &
-                target, intent(in) :: f_ptr !< A pointer to the field that is being queried
+                target, intent(in) :: f_ptr !< The field that is being queried
   character(len=*),     intent(in) :: name  !< The name of the field that is being queried
   type(MOM_restart_CS), intent(in) :: CS    !< MOM restart control struct
   logical :: query_initialized
@@ -830,8 +821,6 @@ function query_initialized_2d_name(f_ptr, name, CS) result(query_initialized)
       n = m ; exit
     endif
   enddo
-  ! Assume that you are going to initialize it now, so set flag to initialized if queried again.
-  if (n<=CS%novars) CS%restart_field(n)%initialized = .true.
   if (n==CS%novars+1) then
     if (is_root_pe()) &
       call MOM_error(NOTE,"MOM_restart: Unable to find "//name//" queried by pointer, "//&
@@ -841,11 +830,11 @@ function query_initialized_2d_name(f_ptr, name, CS) result(query_initialized)
 
 end function query_initialized_2d_name
 
-!> Indicate whether the field pointed to by f_ptr or with the specified variable
+!> Indicate whether the field stored in f_ptr or with the specified variable
 !! name has been initialized from a restart file.
 function query_initialized_3d_name(f_ptr, name, CS) result(query_initialized)
   real, dimension(:,:,:),  &
-                target, intent(in) :: f_ptr !< A pointer to the field that is being queried
+                target, intent(in) :: f_ptr !< The field that is being queried
   character(len=*),     intent(in) :: name  !< The name of the field that is being queried
   type(MOM_restart_CS), intent(in) :: CS    !< MOM restart control struct
   logical :: query_initialized
@@ -865,8 +854,6 @@ function query_initialized_3d_name(f_ptr, name, CS) result(query_initialized)
       n = m ; exit
     endif
   enddo
-  ! Assume that you are going to initialize it now, so set flag to initialized if queried again.
-  if (n<=CS%novars) CS%restart_field(n)%initialized = .true.
   if (n==CS%novars+1) then
     if (is_root_pe()) &
       call MOM_error(NOTE, "MOM_restart: Unable to find "//name//" queried by pointer, "//&
@@ -876,11 +863,11 @@ function query_initialized_3d_name(f_ptr, name, CS) result(query_initialized)
 
 end function query_initialized_3d_name
 
-!> Indicate whether the field pointed to by f_ptr or with the specified variable
+!> Indicate whether the field stored in f_ptr or with the specified variable
 !! name has been initialized from a restart file.
 function query_initialized_4d_name(f_ptr, name, CS) result(query_initialized)
   real, dimension(:,:,:,:),  &
-                target, intent(in) :: f_ptr !< A pointer to the field that is being queried
+                target, intent(in) :: f_ptr !< The field that is being queried
   character(len=*),     intent(in) :: name  !< The name of the field that is being queried
   type(MOM_restart_CS), intent(in) :: CS    !< MOM restart control struct
   logical :: query_initialized
@@ -900,8 +887,6 @@ function query_initialized_4d_name(f_ptr, name, CS) result(query_initialized)
       n = m ; exit
     endif
   enddo
-  ! Assume that you are going to initialize it now, so set flag to initialized if queried again.
-  if (n<=CS%novars) CS%restart_field(n)%initialized = .true.
   if (n==CS%novars+1) then
     if (is_root_pe()) &
       call MOM_error(NOTE, "MOM_restart: Unable to find "//name//" queried by pointer, "//&
@@ -910,6 +895,151 @@ function query_initialized_4d_name(f_ptr, name, CS) result(query_initialized)
   endif
 
 end function query_initialized_4d_name
+
+!> set_initialized_name records that a named field has been initialized.
+subroutine set_initialized_name(name, CS)
+  character(len=*),     intent(in)    :: name  !< The name of the field that is being set
+  type(MOM_restart_CS), intent(inout) :: CS    !< MOM restart control struct
+
+  integer :: m
+
+  if (.not.CS%initialized) call MOM_error(FATAL, "MOM_restart " // &
+      "set_initialized: Module must be initialized before it is used.")
+
+  do m=1,CS%novars ; if (trim(name) == trim(CS%restart_field(m)%var_name)) then
+    CS%restart_field(m)%initialized = .true. ; exit
+  endif ; enddo
+
+  if ((m==CS%novars+1) .and. (is_root_pe())) &
+    call MOM_error(NOTE,"MOM_restart: Unknown restart variable "//name// &
+                        " used in set_initialized call.")
+
+end subroutine set_initialized_name
+
+!> Record that the array in f_ptr with the given name has been initialized.
+subroutine set_initialized_0d_name(f_ptr, name, CS)
+  real,         target, intent(in)    :: f_ptr !< The variable that has been initialized
+  character(len=*),     intent(in)    :: name  !< The name of the field that has been initialized
+  type(MOM_restart_CS), intent(inout) :: CS    !< MOM restart control struct
+
+  integer :: m
+
+  if (.not.CS%initialized) call MOM_error(FATAL, "MOM_restart " // &
+      "set_initialized: Module must be initialized before it is used.")
+
+  do m=1,CS%novars ; if (associated(CS%var_ptr0d(m)%p,f_ptr)) then
+    CS%restart_field(m)%initialized = .true. ; exit
+  endif ; enddo
+
+  if (m==CS%novars+1) then
+    if (is_root_pe()) &
+      call MOM_error(NOTE,"MOM_restart: Unable to find "//name//" queried by pointer, "//&
+        "probably because of the suspect comparison of pointers by ASSOCIATED.")
+    call set_initialized_name(name, CS)
+  endif
+
+end subroutine set_initialized_0d_name
+
+!> Record that the array in f_ptr with the given name has been initialized.
+subroutine set_initialized_1d_name(f_ptr, name, CS)
+  real, dimension(:),  &
+                target, intent(in)    :: f_ptr !< The array that has been initialized
+  character(len=*),     intent(in)    :: name  !< The name of the field that has been initialized
+  type(MOM_restart_CS), intent(inout) :: CS    !< MOM restart control struct
+
+  integer :: m
+
+  if (.not.CS%initialized) call MOM_error(FATAL, "MOM_restart " // &
+      "set_initialized: Module must be initialized before it is used.")
+
+  do m=1,CS%novars ; if (associated(CS%var_ptr1d(m)%p,f_ptr)) then
+    CS%restart_field(m)%initialized = .true. ; exit
+  endif ; enddo
+
+  if (m==CS%novars+1) then
+    if (is_root_pe()) &
+      call MOM_error(NOTE,"MOM_restart: Unable to find "//name//" queried by pointer, "//&
+        "probably because of the suspect comparison of pointers by ASSOCIATED.")
+    call set_initialized_name(name, CS)
+  endif
+
+end subroutine set_initialized_1d_name
+
+!> Record that the array in f_ptr with the given name has been initialized.
+subroutine set_initialized_2d_name(f_ptr, name, CS)
+  real, dimension(:,:),  &
+                target, intent(in)    :: f_ptr !< The array that has been initialized
+  character(len=*),     intent(in)    :: name  !< The name of the field that has been initialized
+  type(MOM_restart_CS), intent(inout) :: CS    !< MOM restart control struct
+
+  integer :: m
+
+  if (.not.CS%initialized) call MOM_error(FATAL, "MOM_restart " // &
+      "set_initialized: Module must be initialized before it is used.")
+
+  do m=1,CS%novars ; if (associated(CS%var_ptr2d(m)%p,f_ptr)) then
+    CS%restart_field(m)%initialized = .true. ; exit
+  endif ; enddo
+
+  if (m==CS%novars+1) then
+    if (is_root_pe()) &
+      call MOM_error(NOTE,"MOM_restart: Unable to find "//name//" queried by pointer, "//&
+        "probably because of the suspect comparison of pointers by ASSOCIATED.")
+    call set_initialized_name(name, CS)
+  endif
+
+end subroutine set_initialized_2d_name
+
+!> Record that the array in f_ptr with the given name has been initialized.
+subroutine set_initialized_3d_name(f_ptr, name, CS)
+  real, dimension(:,:,:),  &
+                target, intent(in)    :: f_ptr !< The array that has been initialized
+  character(len=*),     intent(in)    :: name  !< The name of the field that has been initialized
+  type(MOM_restart_CS), intent(inout) :: CS    !< MOM restart control struct
+
+  integer :: m
+
+  if (.not.CS%initialized) call MOM_error(FATAL, "MOM_restart " // &
+      "set_initialized: Module must be initialized before it is used.")
+
+  do m=1,CS%novars ; if (associated(CS%var_ptr3d(m)%p,f_ptr)) then
+    CS%restart_field(m)%initialized = .true. ; exit
+  endif ; enddo
+
+  if (m==CS%novars+1) then
+    if (is_root_pe()) &
+      call MOM_error(NOTE,"MOM_restart: Unable to find "//name//" queried by pointer, "//&
+        "probably because of the suspect comparison of pointers by ASSOCIATED.")
+    call set_initialized_name(name, CS)
+  endif
+
+end subroutine set_initialized_3d_name
+
+!> Record that the array in f_ptr with the given name has been initialized.
+subroutine set_initialized_4d_name(f_ptr, name, CS)
+  real, dimension(:,:,:,:),  &
+                target, intent(in)    :: f_ptr !< The array that has been initialized
+  character(len=*),     intent(in)    :: name  !< The name of the field that has been initialized
+  type(MOM_restart_CS), intent(inout) :: CS    !< MOM restart control struct
+
+  integer :: m
+
+  if (.not.CS%initialized) call MOM_error(FATAL, "MOM_restart " // &
+      "set_initialized: Module must be initialized before it is used.")
+
+  do m=1,CS%novars ; if (associated(CS%var_ptr4d(m)%p,f_ptr)) then
+    CS%restart_field(m)%initialized = .true. ; exit
+  endif ; enddo
+
+  if (m==CS%novars+1) then
+    if (is_root_pe()) &
+      call MOM_error(NOTE,"MOM_restart: Unable to find "//name//" queried by pointer, "//&
+        "probably because of the suspect comparison of pointers by ASSOCIATED.")
+    call set_initialized_name(name, CS)
+  endif
+
+end subroutine set_initialized_4d_name
+
 
 !> save_restart saves all registered variables to restart files.
 subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV, num_rest_files, write_IC)

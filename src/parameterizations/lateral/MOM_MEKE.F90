@@ -248,7 +248,7 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
 
 
     ! Calculate drag_rate_visc(i,j) which accounts for the model bottom mean flow
-    if (CS%visc_drag) then
+    if (CS%visc_drag .and. allocated(visc%Kv_bbl_u) .and. allocated(visc%Kv_bbl_v)) then
       !$OMP parallel do default(shared)
       do j=js,je ; do I=is-1,ie
         drag_vel_u(I,j) = 0.0

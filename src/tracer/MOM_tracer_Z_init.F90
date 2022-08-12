@@ -42,7 +42,7 @@ function tracer_Z_init(tr, h, filename, tr_name, G, GV, US, missing_val, land_va
   real,        optional, intent(in)    :: land_val !< A value to use to fill in land points
 
 ! This include declares and sets the variable "version".
-#include "version_variable.h"
+# include "version_variable.h"
 
   real, allocatable, dimension(:,:,:) :: &
     tr_in   ! The z-space array of tracer concentrations that is read in.
@@ -272,36 +272,42 @@ end function tracer_Z_init
 !> Layer model routine for remapping tracers from pseudo-z coordinates into layers defined
 !! by target interface positions.
 subroutine tracer_z_init_array(tr_in, z_edges, nk_data, e, land_fill, G, nlay, nlevs, &
-                               eps_z, tr)
+                               eps_z, tr, scale)
   type(ocean_grid_type),      intent(in)  :: G     !< The ocean's grid structure
   integer,                    intent(in)  :: nk_data !< The number of levels in the input data
   real, dimension(SZI_(G),SZJ_(G),nk_data), &
-                              intent(in)  :: tr_in !< The z-space array of tracer concentrations that is read in.
+                              intent(in)  :: tr_in !< The z-space array of tracer concentrations
+                                                   !! that is read in [A]
   real, dimension(nk_data+1), intent(in)  :: z_edges !< The depths of the cell edges in the input z* data
-                                                          !! [Z ~> m or m]
-  integer,                    intent(in)  :: nlay !< The number of vertical layers in the target grid
+                                                   !! [Z ~> m or m]
+  integer,                    intent(in)  :: nlay  !< The number of vertical layers in the target grid
   real, dimension(SZI_(G),SZJ_(G),nlay+1), &
-                              intent(in)  :: e !< The depths of the target layer interfaces [Z ~> m or m]
-  real,                       intent(in)  :: land_fill !< fill in data over land (1)
+                              intent(in)  :: e     !< The depths of the target layer interfaces [Z ~> m] or [m]
+  real,                       intent(in)  :: land_fill !< fill in data over land [B]
   integer, dimension(SZI_(G),SZJ_(G)), &
                               intent(in)  :: nlevs !< The number of input levels with valid data
   real,                       intent(in)  :: eps_z !< A negligibly thin layer thickness [Z ~> m].
   real, dimension(SZI_(G),SZJ_(G),nlay), &
-                              intent(out) :: tr !< tracers in layer space
+                              intent(out) :: tr    !< tracers in model space [B]
+  real,             optional, intent(in)  :: scale !< A factor by which to scale the output tracers from the
+                                                   !! input tracers [B A-1 ~> 1]
 
   ! Local variables
-  real, dimension(nk_data) :: tr_1d !< a copy of the input tracer concentrations in a column.
-  real, dimension(nlay+1)  :: e_1d  ! A 1-d column of intreface heights, in the same units as e.
+  real :: tr_1d(nk_data) ! A copy of the input tracer concentrations in a column [B]
+  real :: e_1d(nlay+1)   ! A 1-d column of interface heights, in the same units as e [Z ~> m] or [m]
+  real :: sl_tr          ! The tracer concentration slope times the layer thickness, in tracer units [B]
+  real :: wt(nk_data)    ! The fractional weight for each layer in the range between z1 and z2 [nondim]
+  real :: z1(nk_data)    ! z1 and z2 are the fractional depths of the top and bottom
+  real :: z2(nk_data)    ! limits of the part of a z-cell that contributes to a layer, relative
+                         ! to the cell center and normalized by the cell thickness [nondim].
+                         ! Note that -1/2 <= z1 <= z2 <= 1/2.
+  real :: scale_fac      ! A factor by which to scale the output tracers from the input tracers [B A-1 ~> 1]
   integer :: k_top, k_bot, k_bot_prev, kstart
-  real    :: sl_tr    ! The tracer concentration slope times the layer thickness, in tracer units.
-  real, dimension(nk_data) :: wt !< The fractional weight for each layer in the range between z1 and z2
-  real, dimension(nk_data) :: z1, z2 ! z1 and z2 are the fractional depths of the top and bottom
-                                  ! limits of the part of a z-cell that contributes to a layer, relative
-                                  ! to the cell center and normalized by the cell thickness [nondim].
-                                  ! Note that -1/2 <= z1 <= z2 <= 1/2.
   integer :: i, j, k, kz, is, ie, js, je
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
+
+  scale_fac = 1.0 ; if (present(scale)) then ; scale_fac = scale ; endif
 
   do j=js,je
     i_loop: do i=is,ie
@@ -311,7 +317,7 @@ subroutine tracer_z_init_array(tr_in, z_edges, nk_data, e, land_fill, G, nlay, n
       endif
 
       do k=1,nk_data
-        tr_1d(k) = tr_in(i,j,k)
+        tr_1d(k) = scale_fac*tr_in(i,j,k)
       enddo
 
       do k=1,nlay+1
@@ -550,19 +556,18 @@ end function find_limited_slope
 
 !> This subroutine determines the potential temperature and salinity that
 !! is consistent with the target density using provided initial guess
-subroutine determine_temperature(temp, salt, R_tgt, p_ref, niter, land_fill, h, k_start, G, GV, US, &
+subroutine determine_temperature(temp, salt, R_tgt, p_ref, niter, h, k_start, G, GV, US, &
                                  EOS, h_massless)
   type(ocean_grid_type),         intent(in)    :: G    !< The ocean's grid structure
   type(verticalGrid_type),       intent(in)    :: GV   !< The ocean's vertical grid structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
-                                 intent(inout) :: temp !< potential temperature [degC]
+                                 intent(inout) :: temp !< potential temperature [C ~> degC]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
-                                 intent(inout) :: salt !< salinity [ppt]
+                                 intent(inout) :: salt !< salinity [S ~> ppt]
   real, dimension(SZK_(GV)),     intent(in)    :: R_tgt !< desired potential density [R ~> kg m-3].
   real,                          intent(in)    :: p_ref !< reference pressure [R L2 T-2 ~> Pa].
   integer,                       intent(in)    :: niter !< maximum number of iterations
   integer,                       intent(in)    :: k_start !< starting index (i.e. below the buffer layer)
-  real,                          intent(in)    :: land_fill !< land fill value
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                                  intent(in)    :: h   !< layer thickness, used only to avoid working on
                                                       !! massless layers [H ~> m or kg m-2]
@@ -571,35 +576,47 @@ subroutine determine_temperature(temp, salt, R_tgt, p_ref, niter, land_fill, h, 
   real,                optional, intent(in)    :: h_massless !< A threshold below which a layer is
                                                       !! determined to be massless [H ~> m or kg m-2]
 
-  real, parameter :: T_max = 31.0, T_min = -2.0
   ! Local variables (All of which need documentation!)
   real, dimension(SZI_(G),SZK_(GV)) :: &
-    T, S, dT, dS, &
-    rho, & ! Layer densities [R ~> kg m-3]
-    hin, & ! Input layer thicknesses [H ~> m or kg m-2]
-    drho_dT, & ! Partial derivative of density with temperature [R degC-1 ~> kg m-3 degC-1]
-    drho_dS    ! Partial derivative of density with salinity [R ppt-1 ~> kg m-3 ppt-1]
+    T, &   ! A 2-d working copy of the layer temperatures [C ~> degC]
+    S, &   ! A 2-d working copy of the layer salinities [S ~> ppt]
+    dT, &  ! An estimated change in temperature before bounding [C ~> degC]
+    dS, &  ! An estimated change in salinity before bounding [S ~> ppt]
+    rho, & ! Layer densities with the current estimate of temperature and salinity [R ~> kg m-3]
+    hin, & ! A 2D copy of the layer thicknesses [H ~> m or kg m-2]
+    drho_dT, & ! Partial derivative of density with temperature [R C-1 ~> kg m-3 degC-1]
+    drho_dS    ! Partial derivative of density with salinity [R S-1 ~> kg m-3 ppt-1]
   real, dimension(SZI_(G)) :: press ! Reference pressures [R L2 T-2 ~> Pa]
-  real    :: dT_dS_gauge  ! The relative penalizing of temperature to salinity changes when
-                          ! minimizing property changes while correcting density [degC ppt-1].
-  real    :: I_denom      ! The inverse of the magnitude squared of the density gradient in
-                          ! T-S space streched with dT_dS_gauge [ppt2 R-2 ~> ppt2 m6 kg-2]
+  real :: dT_dS_gauge   ! The relative penalizing of temperature to salinity changes when
+                        ! minimizing property changes while correcting density [C S-1 ~> degC ppt-1].
+  real :: I_denom       ! The inverse of the magnitude squared of the density gradient in
+                        ! T-S space when stretched with dT_dS_gauge [S2 R-2 ~> ppt2 m6 kg-2]
+  real :: T_min, T_max  ! The minimum and maximum temperatures [C ~> degC]
+  real :: S_min, S_max  ! Minimum and maximum salinities [S ~> ppt]
+  real :: tol_T     ! The tolerance for temperature matches [C ~> degC]
+  real :: tol_S     ! The tolerance for salinity matches [S ~> ppt]
+  real :: tol_rho   ! The tolerance for density matches [R ~> kg m-3]
+  real :: max_t_adj ! The largest permitted temperature changes with each iteration
+                    ! when old_fit is true [C ~> degC]
+  real :: max_s_adj ! The largest permitted salinity changes with each iteration
+                    ! when old_fit is true [S ~> ppt]
   logical :: adjust_salt, old_fit
-  real :: S_min, S_max
-  real :: tol_T    ! The tolerance for temperature matches [degC]
-  real :: tol_S    ! The tolerance for salinity matches [ppt]
-  real :: tol_rho  ! The tolerance for density matches [R ~> kg m-3]
-  real :: max_t_adj, max_s_adj
   integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state
   integer :: i, j, k, is, ie, js, je, nz, itt
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
   ! These hard coded parameters need to be set properly.
-  S_min = 0.5 ; S_max = 65.0
-  max_t_adj = 1.0 ; max_s_adj = 0.5
-  tol_T=1.e-4 ; tol_S=1.e-4 ; tol_rho = 1.e-4*US%kg_m3_to_R
+  S_min = 0.5*US%ppt_to_S ; S_max = 65.0*US%ppt_to_S
+  T_max = 31.0*US%degC_to_C ; T_min = -2.0*US%degC_to_C
+  max_t_adj = 1.0*US%degC_to_C
+  max_s_adj = 0.5*US%ppt_to_S
+  tol_T = 1.0e-4*US%degC_to_C
+  tol_S = 1.0e-4*US%ppt_to_S
+  tol_rho = 1.0e-4*US%kg_m3_to_R
   old_fit = .true.   ! reproduces siena behavior
+
+  dT_dS_gauge = 10.0*US%degC_to_C*US%S_to_ppt  ! 10 degC is weighted equivalently to 1 ppt.
 
   ! ### The whole determine_temperature subroutine needs to be reexamined, both the algorithms
   !     and the extensive use of hard-coded dimensional parameters.
@@ -630,7 +647,6 @@ subroutine determine_temperature(temp, salt, R_tgt, p_ref, niter, land_fill, h, 
             dT(i,k) = max(min((R_tgt(k)-rho(i,k)) / drho_dT(i,k), max_t_adj), -max_t_adj)
             T(i,k) = max(min(T(i,k)+dT(i,k), T_max), T_min)
           else
-            dT_dS_gauge = 10.0  ! 10 degC is weighted equivalently to 1 ppt.
             I_denom = 1.0 / (drho_dS(i,k)**2 + dT_dS_gauge**2*drho_dT(i,k)**2)
             dS(i,k) = (R_tgt(k)-rho(i,k)) * drho_dS(i,k) * I_denom
             dT(i,k) = (R_tgt(k)-rho(i,k)) * dT_dS_gauge**2*drho_dT(i,k) * I_denom

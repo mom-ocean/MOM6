@@ -175,9 +175,9 @@ subroutine entrainment_diffusive(h, tv, fluxes, dt, G, GV, US, CS, ea, eb, &
   real, dimension(SZI_(G)) :: &
     pressure, &      ! The pressure at an interface [R L2 T-2 ~> Pa].
     T_eos, S_eos, &  ! The potential temperature and salinity at which to
-                     ! evaluate dRho_dT and dRho_dS [degC] and [ppt].
+                     ! evaluate dRho_dT and dRho_dS [C ~> degC] and [S ~> ppt].
     dRho_dT, dRho_dS ! The partial derivatives of potential density with temperature and
-                     ! salinity, [R degC-1 ~> kg m-3 degC-1] and [R ppt-1 ~> kg m-3 ppt-1].
+                     ! salinity, [R C-1 ~> kg m-3 degC-1] and [R S-1 ~> kg m-3 ppt-1].
 
   real :: tolerance  ! The tolerance within which E must be converged [H ~> m or kg m-2].
   real :: Angstrom   ! The minimum layer thickness [H ~> m or kg m-2].
@@ -848,7 +848,7 @@ subroutine entrainment_diffusive(h, tv, fluxes, dt, G, GV, US, CS, ea, eb, &
               S_eos(i) = 0.5*(tv%S(i,j,k-1) + tv%S(i,j,k))
             endif
           enddo
-          call calculate_density_derivs(T_eos, S_eos, pressure, dRho_dT, dRho_dS, &
+          call calculate_density_derivs(T_EOS, S_EOS, pressure, dRho_dT, dRho_dS, &
                                         tv%eqn_of_state, EOSdom)
           do i=is,ie
             if ((k>kmb) .and. (k<kb(i))) then ; diff_work(i,j,K) = 0.0

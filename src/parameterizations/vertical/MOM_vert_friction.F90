@@ -86,9 +86,6 @@ type, public :: vertvisc_CS ; private
                             !! may be an assumed value or it may be based on the
                             !! actual velocity in the bottommost HBBL, depending
                             !! on whether linear_drag is true.
-  logical :: Channel_drag   !< If true, the drag is exerted directly on each
-                            !! layer according to what fraction of the bottom
-                            !! they overlie.
   logical :: harmonic_visc  !< If true, the harmonic mean thicknesses are used
                             !! to calculate the viscous coupling between layers
                             !! except near the bottom.  Otherwise the arithmetic
@@ -280,7 +277,7 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
         zDS = 0.0
         stress = dt_Rho0 * forces%taux(I,j)
         do k=1,nz
-          h_a = 0.5 * (h(I,j,k) + h(I+1,j,k)) + h_neglect
+          h_a = 0.5 * (h(i,j,k) + h(i+1,j,k)) + h_neglect
           hfr = 1.0 ; if ((zDS+h_a) > Hmix) hfr = (Hmix - zDS) / h_a
           u(I,j,k) = u(I,j,k) + I_Hmix * hfr * stress
           if (associated(ADp%du_dt_str)) ADp%du_dt_str(i,J,k) = (I_Hmix * hfr * stress) * Idt
@@ -291,7 +288,7 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
       surface_stress(I) = dt_Rho0 * (G%mask2dCu(I,j)*forces%taux(I,j))
     enddo ; endif ! direct_stress
 
-    if (CS%Channel_drag) then ; do k=1,nz ; do I=Isq,Ieq
+    if (allocated(visc%Ray_u)) then ; do k=1,nz ; do I=Isq,Ieq
       Ray(I,k) = visc%Ray_u(I,j,k)
     enddo ; enddo ; endif
 
@@ -309,7 +306,10 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
     ! calculate c'_k = - c_k                / (b_k + a_k c'_(k-1))
     ! and       d'_k = (d_k - a_k d'_(k-1)) / (b_k + a_k c'_(k-1))
     ! where c'_1 = c_1/b_1 and d'_1 = d_1/b_1
-    ! (see Thomas' tridiagonal matrix algorithm)
+    !
+    ! This form is mathematically equivalent to Thomas' tridiagonal matrix algorithm, but it
+    ! does not suffer from the acute sensitivity to truncation errors of the Thomas algorithm
+    ! because it involves no subtraction, as discussed by Schopf & Loughe, MWR, 1995.
     !
     ! b1 is the denominator term 1 / (b_k + a_k c'_(k-1))
     ! b_denom_1 is (b_k + a_k + c_k) - a_k(1 - c'_(k-1))
@@ -357,7 +357,7 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
       if (abs(ADp%du_dt_visc(I,j,k)) < accel_underflow) ADp%du_dt_visc(I,j,k) = 0.0
     enddo ; enddo ; endif
 
-    if (associated(visc%taux_shelf)) then ; do I=Isq,Ieq
+    if (allocated(visc%taux_shelf)) then ; do I=Isq,Ieq
       visc%taux_shelf(I,j) = -GV%Rho0*CS%a1_shelf_u(I,j)*u(I,j,1) ! - u_shelf?
     enddo ; endif
 
@@ -365,7 +365,7 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
       do I=Isq,Ieq
         taux_bot(I,j) = GV%Rho0 * (u(I,j,nz)*CS%a_u(I,j,nz+1))
       enddo
-      if (CS%Channel_drag) then ; do k=1,nz ; do I=Isq,Ieq
+      if (allocated(visc%Ray_u)) then ; do k=1,nz ; do I=Isq,Ieq
         taux_bot(I,j) = taux_bot(I,j) + GV%Rho0 * (Ray(I,k)*u(I,j,k))
       enddo ; enddo ; endif
     endif
@@ -418,7 +418,7 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
       surface_stress(i) = dt_Rho0 * (G%mask2dCv(i,J)*forces%tauy(i,J))
     enddo ; endif ! direct_stress
 
-    if (CS%Channel_drag) then ; do k=1,nz ; do i=is,ie
+    if (allocated(visc%Ray_v)) then ; do k=1,nz ; do i=is,ie
       Ray(i,k) = visc%Ray_v(i,J,k)
     enddo ; enddo ; endif
 
@@ -457,7 +457,7 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
       if (abs(ADp%dv_dt_visc(i,J,k)) < accel_underflow) ADp%dv_dt_visc(i,J,k) = 0.0
     enddo ; enddo ; endif
 
-    if (associated(visc%tauy_shelf)) then ; do i=is,ie
+    if (allocated(visc%tauy_shelf)) then ; do i=is,ie
       visc%tauy_shelf(i,J) = -GV%Rho0*CS%a1_shelf_v(i,J)*v(i,J,1) ! - v_shelf?
     enddo ; endif
 
@@ -465,7 +465,7 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
       do i=is,ie
         tauy_bot(i,J) = GV%Rho0 * (v(i,J,nz)*CS%a_v(i,J,nz+1))
       enddo
-      if (CS%Channel_drag) then ; do k=1,nz ; do i=is,ie
+      if (allocated(visc%Ray_v)) then ; do k=1,nz ; do i=is,ie
         tauy_bot(i,J) = tauy_bot(i,J) + GV%Rho0 * (Ray(i,k)*v(i,J,k))
       enddo ; enddo ; endif
     endif
@@ -595,7 +595,7 @@ subroutine vertvisc_remnant(visc, visc_rem_u, visc_rem_v, dt, G, GV, US, CS)
   do j=G%jsc,G%jec
     do I=Isq,Ieq ; do_i(I) = (G%mask2dCu(I,j) > 0.0) ; enddo
 
-    if (CS%Channel_drag) then ; do k=1,nz ; do I=Isq,Ieq
+    if (allocated(visc%Ray_u)) then ; do k=1,nz ; do I=Isq,Ieq
       Ray(I,k) = visc%Ray_u(I,j,k)
     enddo ; enddo ; endif
 
@@ -624,7 +624,7 @@ subroutine vertvisc_remnant(visc, visc_rem_u, visc_rem_v, dt, G, GV, US, CS)
   do J=Jsq,Jeq
     do i=is,ie ; do_i(i) = (G%mask2dCv(i,J) > 0.0) ; enddo
 
-    if (CS%Channel_drag) then ; do k=1,nz ; do i=is,ie
+    if (allocated(visc%Ray_v)) then ; do k=1,nz ; do i=is,ie
       Ray(i,k) = visc%Ray_v(i,J,k)
     enddo ; enddo ; endif
 
@@ -753,11 +753,11 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, US, CS, OBC)
   if (CS%debug .or. (CS%id_hML_u > 0)) allocate(hML_u(G%IsdB:G%IedB,G%jsd:G%jed), source=0.0)
   if (CS%debug .or. (CS%id_hML_v > 0)) allocate(hML_v(G%isd:G%ied,G%JsdB:G%JedB), source=0.0)
 
-  if ((associated(visc%taux_shelf) .or. associated(forces%frac_shelf_u)) .and. &
+  if ((allocated(visc%taux_shelf) .or. associated(forces%frac_shelf_u)) .and. &
       .not.associated(CS%a1_shelf_u)) then
     allocate(CS%a1_shelf_u(G%IsdB:G%IedB,G%jsd:G%jed), source=0.0)
   endif
-  if ((associated(visc%tauy_shelf) .or. associated(forces%frac_shelf_v)) .and. &
+  if ((allocated(visc%tauy_shelf) .or. associated(forces%frac_shelf_v)) .and. &
       .not.associated(CS%a1_shelf_v)) then
     allocate(CS%a1_shelf_v(G%isd:G%ied,G%JsdB:G%JedB), source=0.0)
   endif
@@ -1420,8 +1420,8 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, forces, visc, dt, G, GV, US, CS
 
   real :: maxvel           ! Velocities components greater than maxvel
   real :: truncvel         ! are truncated to truncvel, both [L T-1 ~> m s-1].
-  real :: CFL              ! The local CFL number.
-  real :: H_report         ! A thickness below which not to report truncations.
+  real :: CFL              ! The local CFL number [nondim]
+  real :: H_report         ! A thickness below which not to report truncations [H ~> m or kg m-2]
   real :: vel_report(SZIB_(G),SZJB_(G))   ! The velocity to report [L T-1 ~> m s-1]
   real :: u_old(SZIB_(G),SZJ_(G),SZK_(GV)) ! The previous u-velocity [L T-1 ~> m s-1]
   real :: v_old(SZI_(G),SZJB_(G),SZK_(GV)) ! The previous v-velocity [L T-1 ~> m s-1]
@@ -1512,10 +1512,9 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, forces, visc, dt, G, GV, US, CS
 
   if (len_trim(CS%u_trunc_file) > 0) then
     do j=js,je ; do I=Isq,Ieq ; if (dowrite(I,j)) then
-!   Here the diagnostic reporting subroutines are called if
-! unphysically large values were found.
+      ! Call a diagnostic reporting subroutines are called if unphysically large values are found.
       call write_u_accel(I, j, u_old, h, ADp, CDp, dt, G, GV, US, CS%PointAccel_CSp, &
-               vel_report(I,j), forces%taux(I,j), a=CS%a_u, hv=CS%h_u)
+                         vel_report(I,j), forces%taux(I,j), a=CS%a_u, hv=CS%h_u)
     endif ; enddo ; enddo
   endif
 
@@ -1597,10 +1596,9 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, forces, visc, dt, G, GV, US, CS
 
   if (len_trim(CS%v_trunc_file) > 0) then
     do J=Jsq,Jeq ; do i=is,ie ; if (dowrite(i,J)) then
-!   Here the diagnostic reporting subroutines are called if
-! unphysically large values were found.
+      ! Call a diagnostic reporting subroutines are called if unphysically large values are found.
       call write_v_accel(i, J, v_old, h, ADp, CDp, dt, G, GV, US, CS%PointAccel_CSp, &
-               vel_report(i,J), forces%tauy(i,J), a=CS%a_v, hv=CS%h_v)
+                         vel_report(i,J), forces%tauy(i,J), a=CS%a_v, hv=CS%h_v)
     endif ; enddo ; enddo
   endif
 
@@ -1668,10 +1666,6 @@ subroutine vertvisc_init(MIS, Time, G, GV, US, param_file, diag, ADp, dirs, &
                  "may be an assumed value or it may be based on the "//&
                  "actual velocity in the bottommost HBBL, depending on "//&
                  "LINEAR_DRAG.", default=.true.)
-  call get_param(param_file, mdl, "CHANNEL_DRAG", CS%Channel_drag, &
-                 "If true, the bottom drag is exerted directly on each "//&
-                 "layer proportional to the fraction of the bottom it "//&
-                 "overlies.", default=.false.)
   call get_param(param_file, mdl, "DIRECT_STRESS", CS%direct_stress, &
                  "If true, the wind stress is distributed over the "//&
                  "topmost HMIX_STRESS of fluid (like in HYCOM), and KVML "//&

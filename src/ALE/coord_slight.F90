@@ -187,8 +187,8 @@ subroutine build_slight_column(CS, eqn_of_state, H_to_pres, H_subroundoff, &
   real,                  intent(in)    :: H_subroundoff !< GV%H_subroundoff
   integer,               intent(in)    :: nz    !< Number of levels
   real,                  intent(in)    :: depth !< Depth of ocean bottom (positive [H ~> m or kg m-2])
-  real, dimension(nz),   intent(in)    :: T_col !< T for column
-  real, dimension(nz),   intent(in)    :: S_col !< S for column
+  real, dimension(nz),   intent(in)    :: T_col !< T for column [C ~> degC]
+  real, dimension(nz),   intent(in)    :: S_col !< S for column [S ~> ppt]
   real, dimension(nz),   intent(in)    :: h_col !< Layer thicknesses [H ~> m or kg m-2]
   real, dimension(nz),   intent(in)    :: p_col !< Layer center pressure [R L2 T-2 ~> Pa]
   real, dimension(nz+1), intent(in)    :: z_col !< Interface positions relative to the surface [H ~> m or kg m-2]
@@ -199,20 +199,20 @@ subroutine build_slight_column(CS, eqn_of_state, H_to_pres, H_subroundoff, &
                                                 !! of edge value calculations [H ~> m or kg m-2].
   ! Local variables
   real, dimension(nz) :: rho_col        ! Layer densities [R ~> kg m-3]
-  real, dimension(nz) :: T_f, S_f       ! Filtered layer temperature [degC] and salinity [ppt]
+  real, dimension(nz) :: T_f, S_f       ! Filtered layer temperature [C ~> degC] and salinity [S ~> ppt]
   logical, dimension(nz+1) :: reliable  ! If true, this interface is in a reliable position.
-  real, dimension(nz+1) :: T_int, S_int ! Temperature [degC] and salinity [ppt] interpolated to interfaces.
+  real, dimension(nz+1) :: T_int, S_int ! Temperature [C ~> degC] and salinity [S ~> ppt] interpolated to interfaces.
   real, dimension(nz+1) :: rho_tmp      ! A temporary density [R ~> kg m-3]
   real, dimension(nz+1) :: drho_dp      ! The partial derivative of density with pressure [T2 L-2 ~> kg m-3 Pa-1]
   real, dimension(nz+1) :: p_IS, p_R    ! Pressures [R L2 T-2 ~> Pa]
   real, dimension(nz+1) :: drhoIS_dT    ! The partial derivative of in situ density with temperature
-                                        ! in [R degC-1 ~> kg m-3 degC-1]
+                                        ! in [R C-1 ~> kg m-3 degC-1]
   real, dimension(nz+1) :: drhoIS_dS    ! The partial derivative of in situ density with salinity
-                                        ! in [R ppt-1 ~> kg m-3 ppt-1]
+                                        ! in [R S-1 ~> kg m-3 ppt-1]
   real, dimension(nz+1) :: drhoR_dT     ! The partial derivative of reference density with temperature
-                                        ! in [R degC-1 ~> kg m-3 degC-1]
+                                        ! in [R C-1 ~> kg m-3 degC-1]
   real, dimension(nz+1) :: drhoR_dS     ! The partial derivative of reference density with salinity
-                                        ! in [R ppt-1 ~> kg m-3 ppt-1]
+                                        ! in [R S-1 ~> kg m-3 ppt-1]
   real, dimension(nz+1) :: strat_rat
   real :: H_to_cPa    ! A conversion factor from thicknesses to the compressibility fraction times
                       ! the units of pressure [R L2 T-2 H-1 ~> Pa m-1 or Pa m2 kg-1]
@@ -375,7 +375,7 @@ subroutine build_slight_column(CS, eqn_of_state, H_to_pres, H_subroundoff, &
       call calculate_density_derivs(T_int, S_int, p_R, drhoR_dT, drhoR_dS, &
                                     eqn_of_state, (/2,nz/) )
       if (CS%compressibility_fraction > 0.0) then
-        call calculate_compress(T_int, S_int, p_R(:), rho_tmp, drho_dp, 2, nz-1, eqn_of_state)
+        call calculate_compress(T_int, S_int, p_R(:), rho_tmp, drho_dp, eqn_of_state, (/2,nz/))
       else
         do K=2,nz ; drho_dp(K) = 0.0 ; enddo
       endif

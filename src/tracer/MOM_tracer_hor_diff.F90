@@ -195,7 +195,7 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, GV, US, CS, Reg, tv, do_online
   endif ; endif
   CS%first_call = .false.
 
-  if (CS%debug) call MOM_tracer_chksum("Before tracer diffusion ", Reg%Tr, ntr, G)
+  if (CS%debug) call MOM_tracer_chksum("Before tracer diffusion ", Reg, G)
 
   use_VarMix = .false. ; Resoln_scaled = .false. ; use_Eady = .false.
   if (VarMix%use_variable_mixing) then
@@ -512,6 +512,14 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, GV, US, CS, Reg, tv, do_online
 
       enddo ! End of k loop.
 
+      ! Do user controlled underflow of the tracer concentrations.
+      do m=1,ntr ; if (Reg%Tr(m)%conc_underflow > 0.0) then
+        !$OMP parallel do default(shared)
+        do k=1,nz ; do j=js,je ; do i=is,ie
+          if (abs(Reg%Tr(m)%t(i,j,k)) < Reg%Tr(m)%conc_underflow) Reg%Tr(m)%t(i,j,k) = 0.0
+        enddo ; enddo ; enddo
+      endif ; enddo
+
     enddo ! End of "while" loop.
 
   endif   ! endif for CS%use_neutral_diffusion
@@ -520,7 +528,7 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, GV, US, CS, Reg, tv, do_online
 
   if (CS%Diffuse_ML_interior) then
     if (CS%show_call_tree) call callTree_waypoint("Calling epipycnal_ML_diff (tracer_hordiff)")
-    if (CS%debug) call MOM_tracer_chksum("Before epipycnal diff ", Reg%Tr, ntr, G)
+    if (CS%debug) call MOM_tracer_chksum("Before epipycnal diff ", Reg, G)
 
     call cpu_clock_begin(id_clock_epimix)
     call tracer_epipycnal_ML_diff(h, dt, Reg%Tr, ntr, khdt_x, khdt_y, G, GV, US, &
@@ -528,7 +536,7 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, GV, US, CS, Reg, tv, do_online
     call cpu_clock_end(id_clock_epimix)
   endif
 
-  if (CS%debug) call MOM_tracer_chksum("After tracer diffusion ", Reg%Tr, ntr, G)
+  if (CS%debug) call MOM_tracer_chksum("After tracer diffusion ", Reg, G)
 
   ! post diagnostics for 2d tracer diffusivity
   if (CS%id_KhTr_u > 0) then
@@ -711,7 +719,7 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
   ! Determine which layers the mixed- and buffer-layers map into...
   !$OMP parallel do default(shared)
   do k=1,nkmb ; do j=js-2,je+2
-    call calculate_density(tv%T(:,j,k),tv%S(:,j,k), p_ref_cv, rho_coord(:,j,k), &
+    call calculate_density(tv%T(:,j,k), tv%S(:,j,k), p_ref_cv, rho_coord(:,j,k), &
                            tv%eqn_of_state, EOSdom)
   enddo ; enddo
 
@@ -1398,7 +1406,7 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
           endif
         enddo
       endif ; enddo ; enddo
-!$OMP parallel do default(none) shared(PEmax_kRho,is,ie,js,je,G,h,Tr,tr_flux_conv,m)
+      !$OMP parallel do default(shared)
       do k=1,PEmax_kRho ; do j=js,je ; do i=is,ie
         if ((G%mask2dT(i,j) > 0.0) .and. (h(i,j,k) > 0.0)) then
           Tr(m)%t(i,j,k) = Tr(m)%t(i,j,k) + tr_flux_conv(i,j,k) / &
@@ -1406,6 +1414,14 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
           tr_flux_conv(i,j,k) = 0.0
         endif
       enddo ; enddo ; enddo
+
+      ! Do user controlled underflow of the tracer concentrations.
+      if (Tr(m)%conc_underflow > 0.0) then
+        !$OMP parallel do default(shared)
+        do k=1,nz ; do j=js,je ; do i=is,ie
+          if (abs(Tr(m)%t(i,j,k)) < Tr(m)%conc_underflow) Tr(m)%t(i,j,k) = 0.0
+        enddo ; enddo ; enddo
+      endif
 
     enddo ! Loop over tracers
   enddo ! Loop over iterations

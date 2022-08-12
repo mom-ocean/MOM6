@@ -3,18 +3,16 @@
 
 ! JMP_BUF_SIZE should be set to sizeof(jmp_buf).
 ! If unset, then use a typical glibc value (25 long ints)
-#ifndef JMP_BUF_SIZE
-#define JMP_BUF_SIZE 200
+#ifndef SIZEOF_JMP_BUF
+#define SIZEOF_JMP_BUF 200
 #endif
 
 ! If unset, assume jmp_buf and sigjmp_buf are equivalent (as in glibc).
-#ifndef SIGJMP_BUF_SIZE
-#define SIGJMP_BUF_SIZE JMP_BUF_SIZE
+#ifndef SIZEOF_SIGJMP_BUF
+#define SIZEOF_SIGJMP_BUF SIZEOF_JMP_BUF
 #endif
 
 ! glibc defines sigsetjmp as __sigsetjmp via macro readable from <setjmp.h>.
-! Perhaps autoconf can configure this one...
-! TODO: Need a solution here!
 #ifndef SIGSETJMP_NAME
 #define SIGSETJMP_NAME "__sigsetjmp"
 #endif

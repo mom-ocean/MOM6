@@ -273,8 +273,8 @@ subroutine diag_remap_update(remap_cs, G, GV, US, h, T, S, eqn_of_state, h_targe
   type(verticalGrid_type), intent(in) :: GV !< ocean vertical grid structure
   type(unit_scale_type),   intent(in) :: US !< A dimensional unit scaling type
   real, dimension(:,:,:),  intent(in) :: h  !< New thickness [H ~> m or kg m-2]
-  real, dimension(:,:,:),  intent(in) :: T  !< New temperatures [degC]
-  real, dimension(:,:,:),  intent(in) :: S  !< New salinities [ppt]
+  real, dimension(:,:,:),  intent(in) :: T  !< New temperatures [C ~> degC]
+  real, dimension(:,:,:),  intent(in) :: S  !< New salinities [S ~> ppt]
   type(EOS_type),          intent(in) :: eqn_of_state !< A pointer to the equation of state
   real, dimension(:,:,:),  intent(inout) :: h_target  !< The new diagnostic thicknesses [H ~> m or kg m-2]
 
