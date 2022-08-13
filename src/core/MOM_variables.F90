@@ -208,6 +208,8 @@ type, public :: cont_diag_ptrs
   real, pointer, dimension(:,:,:) :: &
     uh => NULL(), &   !< Resolved zonal layer thickness fluxes, [H L2 T-1 ~> m3 s-1 or kg s-1]
     vh => NULL(), &   !< Resolved meridional layer thickness fluxes, [H L2 T-1 ~> m3 s-1 or kg s-1]
+    uh_smooth => NULL(), & !< Interface height smoothing induced zonal volume fluxes [H L2 T-1 ~> m3 s-1 or kg s-1]
+    vh_smooth => NULL(), & !< Interface height smoothing induced meridional volume fluxes [H L2 T-1 ~> m3 s-1 or kg s-1]
     uhGM => NULL(), & !< Isopycnal height diffusion induced zonal volume fluxes [H L2 T-1 ~> m3 s-1 or kg s-1]
     vhGM => NULL()    !< Isopycnal height diffusion induced meridional volume fluxes [H L2 T-1 ~> m3 s-1 or kg s-1]
 
