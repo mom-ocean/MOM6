@@ -78,9 +78,9 @@ subroutine interface_filter(h, uhtr, vhtr, tv, dt, G, GV, US, CDp, CS)
   real :: vhD(SZI_(G),SZJB_(G),SZK_(GV)) ! Smoothing v*h fluxes within a timestep [L2 H ~> m3 or kg]
 
   real, dimension(SZIB_(G),SZJ_(G)) :: &
-    KH_u          ! Interface height squared smoothing lengths per timestep at u-points [L2 ~> m2]
+    Lsm2_u        ! Interface height squared smoothing lengths per timestep at u-points [L2 ~> m2]
   real, dimension(SZI_(G),SZJB_(G)) :: &
-    KH_v          ! Interface height squared smoothing lengths per timestep at v-points [L2 ~> m2]
+    Lsm2_v        ! Interface height squared smoothing lengths per timestep at v-points [L2 ~> m2]
 
   real :: diag_sfn_x(SZIB_(G),SZJ_(G),SZK_(GV)+1)       ! Diagnostic of the x-face streamfunction
                                                         ! [H L2 T-1 ~> m3 s-1 or kg s-1]
@@ -123,32 +123,32 @@ subroutine interface_filter(h, uhtr, vhtr, tv, dt, G, GV, US, CDp, CS)
   if (CS%isotropic_filter) then
     !$OMP parallel do default(shared)
     do j=js-hs,je+hs ; do I=is-(hs+1),ie+hs
-      Kh_u(I,j) = (0.25*filter_strength) / (G%IdxCu(I,j)**2 + G%IdyCu(I,j)**2)
+      Lsm2_u(I,j) = (0.25*filter_strength) / (G%IdxCu(I,j)**2 + G%IdyCu(I,j)**2)
     enddo ; enddo
     !$OMP parallel do default(shared)
     do J=js-(hs+1),je+hs ; do i=is-hs,ie+hs
-      KH_v(i,J) = (0.25*filter_strength) / (G%IdxCv(i,J)**2 + G%IdyCv(i,J)**2)
+      Lsm2_v(i,J) = (0.25*filter_strength) / (G%IdxCv(i,J)**2 + G%IdyCv(i,J)**2)
     enddo ; enddo
   else
     !$OMP parallel do default(shared)
     do j=js-hs,je+hs ; do I=is-(hs+1),ie+hs
-      Kh_u(I,j) = (0.125*filter_strength) *  (min(G%areaT(i,j), G%areaT(i+1,j)) * G%IdyCu(I,j))**2
+      Lsm2_u(I,j) = (0.125*filter_strength) *  (min(G%areaT(i,j), G%areaT(i+1,j)) * G%IdyCu(I,j))**2
     enddo ; enddo
     !$OMP parallel do default(shared)
     do J=js-(hs+1),je+hs ; do i=is-hs,ie+hs
-      Kh_v(i,J) = (0.125*filter_strength) *  (min(G%areaT(i,j), G%areaT(i,j+1)) * G%IdxCv(i,J))**2
+      Lsm2_v(i,J) = (0.125*filter_strength) *  (min(G%areaT(i,j), G%areaT(i,j+1)) * G%IdxCv(i,J))**2
     enddo ; enddo
   endif
 
   if (CS%debug) then
-    call uvchksum("Kh_[uv]", Kh_u, Kh_v, G%HI, haloshift=hs, &
+    call uvchksum("Kh_[uv]", Lsm2_u, Lsm2_v, G%HI, haloshift=hs, &
                   scale=US%L_to_m**2, scalar_pair=.true.)
     call hchksum(h, "interface_filter_1 h", G%HI, haloshift=hs+1, scale=GV%H_to_m)
     call hchksum(e, "interface_filter_1 e", G%HI, haloshift=hs+1, scale=US%Z_to_m)
   endif
 
-  ! Calculate uhD, vhD from h, e, KH_u, KH_v
-  call filter_interface(h, e, Kh_u, Kh_v, uhD, vhD, G, GV, US, halo_size=filter_itts-1)
+  ! Calculate uhD, vhD from h, e, Lsm2_u, Lsm2_v
+  call filter_interface(h, e, Lsm2_u, Lsm2_v, uhD, vhD, G, GV, US, halo_size=filter_itts-1)
 
 
   do itt=2,filter_itts
@@ -162,8 +162,8 @@ subroutine interface_filter(h, uhtr, vhtr, tv, dt, G, GV, US, CDp, CS)
       enddo ; enddo
     enddo
 
-    ! Calculate uhD, vhD from h, de_smooth, KH_u, KH_v
-    call filter_interface(h, de_smooth, Kh_u, Kh_v, uhD, vhD, G, GV, US, halo_size=filter_itts-itt)
+    ! Calculate uhD, vhD from h, de_smooth, Lsm2_u, Lsm2_v
+    call filter_interface(h, de_smooth, Lsm2_u, Lsm2_v, uhD, vhD, G, GV, US, halo_size=filter_itts-itt)
   enddo
 
   ! Offer diagnostic fields for averaging. This must occur before updating the layer thicknesses
@@ -185,8 +185,8 @@ subroutine interface_filter(h, uhtr, vhtr, tv, dt, G, GV, US, CDp, CS)
     endif
     if (CS%id_uh_sm > 0) call post_data(CS%id_uh_sm, Idt*uhD(:,:,:), CS%diag)
     if (CS%id_vh_sm > 0) call post_data(CS%id_vh_sm, Idt*vhD(:,:,:), CS%diag)
-    if (CS%id_L2_u > 0) call post_data(CS%id_L2_u, KH_u, CS%diag)
-    if (CS%id_L2_v > 0) call post_data(CS%id_L2_v, KH_v, CS%diag)
+    if (CS%id_L2_u > 0) call post_data(CS%id_L2_u, Lsm2_u, CS%diag)
+    if (CS%id_L2_v > 0) call post_data(CS%id_L2_v, Lsm2_v, CS%diag)
   endif
 
   ! Update the layer thicknesses, and store the transports that will be needed for the tracers.
@@ -227,22 +227,22 @@ end subroutine interface_filter
 !> Calculates parameterized layer transports for use in the continuity equation.
 !! Fluxes are limited to give positive definite thicknesses.
 !! Called by interface_filter().
-subroutine filter_interface(h, e, Kh_u, Kh_v, uhD, vhD, G, GV, US, halo_size)
+subroutine filter_interface(h, e, Lsm2_u, Lsm2_v, uhD, vhD, G, GV, US, halo_size)
   type(ocean_grid_type),                       intent(in)  :: G     !< Ocean grid structure
   type(verticalGrid_type),                     intent(in)  :: GV    !< Vertical grid structure
   type(unit_scale_type),                       intent(in)  :: US    !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),   intent(in)  :: h     !< Layer thickness [H ~> m or kg m-2]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), intent(in)  :: e     !< Interface positions [Z ~> m]
-  real, dimension(SZIB_(G),SZJ_(G)),           intent(in)  :: Kh_u  !< Interface smoothing lengths squared
+  real, dimension(SZIB_(G),SZJ_(G)),           intent(in)  :: Lsm2_u !< Interface smoothing lengths squared
                                                                     !! at u points [L2 ~> m2]
-  real, dimension(SZI_(G),SZJB_(G)),           intent(in)  :: Kh_v  !< Interface smoothing lengths squared
+  real, dimension(SZI_(G),SZJB_(G)),           intent(in)  :: Lsm2_v !< Interface smoothing lengths squared
                                                                     !! at v points [L2 ~> m2]
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)),  intent(out) :: uhD   !< Zonal mass fluxes
                                                                     !! [H L2 ~> m3 or kg]
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)),  intent(out) :: vhD   !< Meridional mass fluxes
                                                                     !! [H L2 ~> m3 or kg]
   integer,                           optional, intent(in)  :: halo_size !< The size of the halo to work on,
-                                                                     !! 0 by default.
+                                                                    !! 0 by default.
 
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: &
@@ -286,7 +286,7 @@ subroutine filter_interface(h, e, Kh_u, Kh_v, uhD, vhD, G, GV, US, halo_size)
       do I=is-1,ie
         Slope = ((e(i,j,K)-e(i+1,j,K))*G%IdxCu(I,j)) * G%mask2dCu(I,j)
 
-        Sfn_est = (KH_u(I,j)*G%dy_Cu(I,j)) * (GV%Z_to_H * Slope)
+        Sfn_est = (Lsm2_u(I,j)*G%dy_Cu(I,j)) * (GV%Z_to_H * Slope)
 
         ! Make sure that there is enough mass above to allow the streamfunction
         ! to satisfy the boundary condition of 0 at the surface.
@@ -318,7 +318,7 @@ subroutine filter_interface(h, e, Kh_u, Kh_v, uhD, vhD, G, GV, US, halo_size)
       do i=is,ie
         Slope = ((e(i,j,K)-e(i,j+1,K))*G%IdyCv(i,J)) * G%mask2dCv(i,J)
 
-        Sfn_est = (KH_v(i,J)*G%dx_Cv(i,J)) * (GV%Z_to_H * Slope)
+        Sfn_est = (Lsm2_v(i,J)*G%dx_Cv(i,J)) * (GV%Z_to_H * Slope)
 
         ! Make sure that there is enough mass above to allow the streamfunction
         ! to satisfy the boundary condition of 0 at the surface.
@@ -435,7 +435,7 @@ end subroutine interface_filter_end
 
 !> \namespace mom_interface_filter
 !!
-!! \section section_gm Interface height filtering
+!! \section section_interface_filter Interface height filtering
 !!
 !! Interface height filtering is implemented via along-layer mass fluxes
 !! \f[
@@ -447,22 +447,25 @@ end subroutine interface_filter_end
 !! \vec{uh}^* = \delta_k \vec{\psi} .
 !! \f]
 !!
-!! The streamfunction is proportional to the interface slope in the difference between
-!! unsmoothed interface heights and those smoothed with one pass of a Laplacian filter.
+!! The streamfunction is proportional to the slope in the difference between
+!! unsmoothed interface heights and those smoothed with one (or more) passes of a Laplacian
+!! filter, depending on the order of the filter, or to the slope for a Laplacian
+!! filter
 !! \f[
-!! \vec{\psi} = - \kappa_h \frac{\nabla_z \rho}{\partial_z \rho}
-!! = \frac{g\kappa_h}{\rho_o} \frac{\nabla \rho}{N^2} = \kappa_h \frac{M^2}{N^2}
+!! \vec{\psi} = - \kappa_h {\nabla \eta - \eta_smooth}
 !! \f]
 !!
-!! The result of the above expression is subsequently bounded by minimum and maximum values, including an upper
-!! diffusivity consistent with numerical stability (\f$ \kappa_{cfl} \f$ is calculated internally).
+!! The result of the above expression is subsequently bounded by minimum and maximum values, including a
+!! maximum smoothing rate for numerical stability (\f$ \kappa_{h} \f$ is calculated internally).
 !!
 !! \subsection section_filter_module_parameters Module mom_interface_filter parameters
 !!
 !! | Symbol                | Module parameter |
 !! | ------                | --------------- |
-!! | -                     | <code>Interface_filter</code> |
-!! | -                     | <code>Smoothing_MAX_CFL</code> |
+!! | -                     | <code>APPLY_INTERFACE_FILTER</code> |
+!! | -                     | <code>INTERFACE_FILTER_TIME</code> |
+!! | -                     | <code>INTERFACE_FILTER_MAX_CFL</code> |
+!! | -                     | <code>INTERFACE_FILTER_ORDER</code> |
 !!
 
 end module MOM_interface_filter
