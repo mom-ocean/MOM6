@@ -626,12 +626,11 @@ subroutine ISOMIP_initialize_sponges(G, GV, US, tv, depth_tot, PF, use_ALE, CSp,
     ! momentum is typically not damped within the sponge.                !
 
     !  The remaining calls to set_up_sponge_field can be in any order. !
-    if ( associated(tv%T) ) then
-      call set_up_ALE_sponge_field(T, G, GV, tv%T, ACSp)
-    endif
-    if ( associated(tv%S) ) then
-      call set_up_ALE_sponge_field(S, G, GV, tv%S, ACSp)
-    endif
+    if ( associated(tv%T) ) call set_up_ALE_sponge_field(T, G, GV, tv%T, ACSp, 'temp', &
+        sp_long_name='temperature', sp_unit='degC s-1')
+    if ( associated(tv%S) ) call set_up_ALE_sponge_field(S, G, GV, tv%S, ACSp, 'salt', &
+        sp_long_name='salinity', sp_unit='g kg-1 s-1')
+
 
   else ! layer mode
     ! 1) Read eta, salt and temp from IC file
