@@ -125,13 +125,13 @@ subroutine USER_buoyancy_forcing(sfc_state, fluxes, day, dt, G, US, CS)
 !  fluxes are in [R Z T-1 ~> kg m-2 s-1] and positive for water moving into the ocean.
 
   ! Local variables
-  real :: Temp_restore   ! The temperature that is being restored toward [degC].
-  real :: Salin_restore  ! The salinity that is being restored toward [ppt]
+  real :: Temp_restore   ! The temperature that is being restored toward [C ~> degC].
+  real :: Salin_restore  ! The salinity that is being restored toward [S ~> ppt]
   real :: density_restore  ! The potential density that is being restored
                          ! toward [R ~> kg m-3].
-  real :: rhoXcp         ! The mean density times the heat capacity [Q R degC-1 ~> J m-3 degC-1].
+  real :: rhoXcp         ! The mean density times the heat capacity [Q R C-1 ~> J m-3 degC-1].
   real :: buoy_rest_const  ! A constant relating density anomalies to the
-                           ! restoring buoyancy flux [L2 m3 T-3 kg-1 ~> m5 s-3 kg-1].
+                           ! restoring buoyancy flux [L2 T-3 R-1 ~> m5 s-3 kg-1].
 
   integer :: i, j, is, ie, js, je
   integer :: isd, ied, jsd, jed
@@ -201,8 +201,8 @@ subroutine USER_buoyancy_forcing(sfc_state, fluxes, day, dt, G, US, CS)
 
       rhoXcp = CS%Rho0 * fluxes%C_p
       do j=js,je ; do i=is,ie
-        !   Set Temp_restore and Salin_restore to the temperature (in degC) and
-        ! salinity (in PSU or ppt) that are being restored toward.
+        !   Set Temp_restore and Salin_restore to the temperature (in [C ~> degC]) and
+        ! salinity (in [S ~> ppt]) that are being restored toward.
         Temp_restore = 0.0
         Salin_restore = 0.0
 

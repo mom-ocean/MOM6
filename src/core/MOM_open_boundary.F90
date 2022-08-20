@@ -321,9 +321,10 @@ type, public :: ocean_OBC_type
   real :: ramp_value                        !< If ramp is True, where we are on the ramp from
                                             !! zero to one [nondim].
   type(time_type) :: ramp_start_time        !< Time when model was started.
-  logical :: answers_2018   !< If true, use the order of arithmetic and expressions for remapping
-                            !! that recover the answers from the end of 2018.  Otherwise, use more
-                            !! robust and accurate forms of mathematically equivalent expressions.
+  integer :: remap_answer_date  !< The vintage of the order of arithmetic and expressions to use
+                                !! for remapping.  Values below 20190101 recover the remapping
+                                !! answers from 2018, while higher values use more robust
+                                !! forms of the same remapping expressions.
 end type ocean_OBC_type
 
 !> Control structure for open boundaries that read from files.
@@ -371,7 +372,11 @@ subroutine open_boundary_config(G, US, param_file, OBC)
   character(len=1024) :: segment_str      ! The contents (rhs) for parameter "segment_param_str"
   character(len=200) :: config1          ! String for OBC_USER_CONFIG
   real               :: Lscale_in, Lscale_out ! parameters controlling tracer values at the boundaries [L ~> m]
-  logical :: answers_2018, default_2018_answers
+  logical :: answers_2018   ! If true, use the order of arithmetic and expressions for remapping
+                            ! that recover the answers from the end of 2018.  Otherwise, use more
+                            ! robust and accurate forms of mathematically equivalent expressions.
+  integer :: default_answer_date  ! The default setting for the various ANSWER_DATE flags.
+  logical :: default_2018_answers ! The default setting for the various 2018_ANSWERS flags.
   logical :: check_reconstruction, check_remapping, force_bounds_in_subcell
   character(len=64)  :: remappingScheme
   ! This include declares and sets the variable "version".
@@ -618,18 +623,31 @@ subroutine open_boundary_config(G, US, param_file, OBC)
           "If true, the values on the intermediate grid used for remapping "//&
           "are forced to be bounded, which might not be the case due to "//&
           "round off.", default=.false.,do_not_log=.true.)
+    call get_param(param_file, mdl, "DEFAULT_ANSWER_DATE", default_answer_date, &
+                 "This sets the default value for the various _ANSWER_DATE parameters.", &
+                 default=99991231)
     call get_param(param_file, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
                  "This sets the default value for the various _2018_ANSWERS parameters.", &
-                 default=.false.)
-    call get_param(param_file, mdl, "REMAPPING_2018_ANSWERS", OBC%answers_2018, &
+                 default=(default_answer_date<20190101))
+    call get_param(param_file, mdl, "REMAPPING_2018_ANSWERS", answers_2018, &
                  "If true, use the order of arithmetic and expressions that recover the "//&
                  "answers from the end of 2018.  Otherwise, use updated and more robust "//&
                  "forms of the same expressions.", default=default_2018_answers)
+    ! Revise inconsistent default answer dates for remapping.
+    if (answers_2018 .and. (default_answer_date >= 20190101)) default_answer_date = 20181231
+    if (.not.answers_2018 .and. (default_answer_date < 20190101)) default_answer_date = 20190101
+    call get_param(param_file, mdl, "REMAPPING_ANSWER_DATE", OBC%remap_answer_date, &
+                 "The vintage of the expressions and order of arithmetic to use for remapping.  "//&
+                 "Values below 20190101 result in the use of older, less accurate expressions "//&
+                 "that were in use at the end of 2018.  Higher values result in the use of more "//&
+                 "robust and accurate forms of mathematically equivalent expressions.  "//&
+                 "If both REMAPPING_2018_ANSWERS and REMAPPING_ANSWER_DATE are specified, the "//&
+                 "latter takes precedence.", default=default_answer_date)
 
     allocate(OBC%remap_CS)
     call initialize_remapping(OBC%remap_CS, remappingScheme, boundary_extrapolation = .false., &
                check_reconstruction=check_reconstruction, check_remapping=check_remapping, &
-               force_bounds_in_subcell=force_bounds_in_subcell, answers_2018=OBC%answers_2018)
+               force_bounds_in_subcell=force_bounds_in_subcell, answer_date=OBC%remap_answer_date)
 
   endif ! OBC%number_of_segments > 0
 
@@ -3696,6 +3714,7 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
   real, dimension(:,:,:), allocatable, target :: tmp_buffer ! A buffer for input data [various units]
   real, dimension(:), allocatable :: h_stack  ! Thicknesses at corner points [H ~> m or kg m-2]
   integer :: is_obc2, js_obc2
+  integer :: i_seg_offset, j_seg_offset
   real :: net_H_src   ! Total thickness of the incoming flow in the source field [H ~> m or kg m-2]
   real :: net_H_int   ! Total thickness of the incoming flow in the model [H ~> m or kg m-2]
   real :: scl_fac     ! A scaling factor to compensate for differences in total thicknesses [nondim]
@@ -3717,7 +3736,7 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
 
   if (OBC%add_tide_constituents) time_delta = US%s_to_T * time_type_to_real(Time - OBC%time_ref)
 
-  if (.not. OBC%answers_2018) then
+  if (OBC%remap_answer_date >= 20190101) then
     h_neglect = GV%H_subroundoff ; h_neglect_edge = GV%H_subroundoff
   elseif (GV%Boussinesq) then
     h_neglect = GV%m_to_H * 1.0e-30 ; h_neglect_edge = GV%m_to_H * 1.0e-10
@@ -3737,6 +3756,8 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
     ie_obc = min(segment%ie_obc,ied)
     js_obc = max(segment%js_obc,jsd-1)
     je_obc = min(segment%je_obc,jed)
+    i_seg_offset = G%idg_offset - segment%HI%Isgb
+    j_seg_offset = G%jdg_offset - segment%HI%Jsgb
 
 ! Calculate auxiliary fields at staggered locations.
 ! Segment indices are on q points:
@@ -3890,19 +3911,19 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
             if (segment%field(m)%name == 'V' .or. segment%field(m)%name == 'DVDX' .or. &
                 segment%field(m)%name == 'Vamp' .or. segment%field(m)%name == 'Vphase') then
               segment%field(m)%buffer_src(is_obc,:,:) = &
-                  tmp_buffer(1,2*(js_obc+G%jdg_offset-segment%HI%Jsgb)+1:2*(je_obc+G%jdg_offset-segment%HI%Jsgb)+1:2,:)
+                  tmp_buffer(1,2*(js_obc+j_seg_offset)+1:2*(je_obc+j_seg_offset)+1:2,:)
             else
               segment%field(m)%buffer_src(is_obc,:,:) = &
-                  tmp_buffer(1,2*(js_obc+G%jdg_offset-segment%HI%Jsgb)+1:2*(je_obc+G%jdg_offset-segment%HI%Jsgb):2,:)
+                  tmp_buffer(1,2*(js_obc+j_seg_offset)+1:2*(je_obc+j_seg_offset):2,:)
             endif
           else
             if (segment%field(m)%name == 'U' .or. segment%field(m)%name == 'DUDY' .or. &
                 segment%field(m)%name == 'Uamp' .or. segment%field(m)%name == 'Uphase') then
               segment%field(m)%buffer_src(:,js_obc,:) = &
-                  tmp_buffer(2*(is_obc+G%idg_offset-segment%HI%Isgb)+1:2*(ie_obc+G%idg_offset-segment%HI%Isgb)+1:2,1,:)
+                  tmp_buffer(2*(is_obc+i_seg_offset)+1:2*(ie_obc+i_seg_offset)+1:2,1,:)
             else
               segment%field(m)%buffer_src(:,js_obc,:) = &
-                  tmp_buffer(2*(is_obc+G%idg_offset-segment%HI%Isgb)+1:2*(ie_obc+G%idg_offset-segment%HI%Isgb):2,1,:)
+                  tmp_buffer(2*(is_obc+i_seg_offset)+1:2*(ie_obc+i_seg_offset):2,1,:)
             endif
           endif
         else
@@ -3910,19 +3931,19 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
             if (segment%field(m)%name == 'V' .or. segment%field(m)%name == 'DVDX' .or. &
                 segment%field(m)%name == 'Vamp' .or. segment%field(m)%name == 'Vphase') then
               segment%field(m)%buffer_src(is_obc,:,:) = &
-                   tmp_buffer(1,js_obc+G%jdg_offset-segment%HI%Jsgb+1:je_obc+G%jdg_offset-segment%HI%Jsgb+1,:)
+                   tmp_buffer(1,js_obc+j_seg_offset+1:je_obc+j_seg_offset+1,:)
             else
               segment%field(m)%buffer_src(is_obc,:,:) = &
-                   tmp_buffer(1,js_obc+G%jdg_offset-segment%HI%Jsgb+1:je_obc+G%jdg_offset-segment%HI%Jsgb,:)
+                   tmp_buffer(1,js_obc+j_seg_offset+1:je_obc+j_seg_offset,:)
             endif
           else
             if (segment%field(m)%name == 'U' .or. segment%field(m)%name == 'DUDY' .or. &
                 segment%field(m)%name == 'Uamp' .or. segment%field(m)%name == 'Uphase') then
               segment%field(m)%buffer_src(:,js_obc,:) = &
-                   tmp_buffer(is_obc+G%idg_offset-segment%HI%Isgb+1:ie_obc+G%idg_offset-segment%HI%Isgb+1,1,:)
+                   tmp_buffer(is_obc+i_seg_offset+1:ie_obc+i_seg_offset+1,1,:)
             else
               segment%field(m)%buffer_src(:,js_obc,:) = &
-                   tmp_buffer(is_obc+G%idg_offset-segment%HI%Isgb+1:ie_obc+G%idg_offset-segment%HI%Isgb,1,:)
+                   tmp_buffer(is_obc+i_seg_offset+1:ie_obc+i_seg_offset,1,:)
             endif
           endif
         endif
@@ -3949,40 +3970,36 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
             if (segment%is_E_or_W) then
               if (segment%field(m)%name == 'V' .or. segment%field(m)%name == 'DVDX') then
                 segment%field(m)%dz_src(is_obc,:,:) = &
-                    tmp_buffer(1,2*(js_obc+G%jdg_offset-segment%HI%Jsgb)+1:2*(je_obc+G%jdg_offset- &
-                    segment%HI%Jsgb)+1:2,:)
+                    tmp_buffer(1,2*(js_obc+j_seg_offset)+1:2*(je_obc+j_seg_offset)+1:2,:)
               else
                 segment%field(m)%dz_src(is_obc,:,:) = &
-                    tmp_buffer(1,2*(js_obc+G%jdg_offset-segment%HI%Jsgb)+1:2*(je_obc+G%jdg_offset- &
-                    segment%HI%Jsgb):2,:)
+                    tmp_buffer(1,2*(js_obc+j_seg_offset)+1:2*(je_obc+j_seg_offset):2,:)
               endif
             else
               if (segment%field(m)%name == 'U' .or. segment%field(m)%name == 'DUDY') then
                 segment%field(m)%dz_src(:,js_obc,:) = &
-                    tmp_buffer(2*(is_obc+G%idg_offset-segment%HI%Isgb)+1:2*(ie_obc+G%idg_offset- &
-                    segment%HI%Isgb)+1:2,1,:)
+                    tmp_buffer(2*(is_obc+i_seg_offset)+1:2*(ie_obc+i_seg_offset)+1:2,1,:)
               else
                 segment%field(m)%dz_src(:,js_obc,:) = &
-                    tmp_buffer(2*(is_obc+G%idg_offset-segment%HI%Isgb)+1:2*(ie_obc+G%idg_offset- &
-                    segment%HI%Isgb):2,1,:)
+                    tmp_buffer(2*(is_obc+i_seg_offset)+1:2*(ie_obc+i_seg_offset):2,1,:)
               endif
             endif
           else
             if (segment%is_E_or_W) then
               if (segment%field(m)%name == 'V' .or. segment%field(m)%name == 'DVDX') then
                 segment%field(m)%dz_src(is_obc,:,:) = &
-                    tmp_buffer(1,js_obc+G%jdg_offset-segment%HI%Jsgb+1:je_obc+G%jdg_offset-segment%HI%Jsgb+1,:)
+                    tmp_buffer(1,js_obc+j_seg_offset+1:je_obc+j_seg_offset+1,:)
               else
                 segment%field(m)%dz_src(is_obc,:,:) = &
-                    tmp_buffer(1,js_obc+G%jdg_offset-segment%HI%Jsgb+1:je_obc+G%jdg_offset-segment%HI%Jsgb,:)
+                    tmp_buffer(1,js_obc+j_seg_offset+1:je_obc+j_seg_offset,:)
               endif
             else
               if (segment%field(m)%name == 'U' .or. segment%field(m)%name == 'DUDY') then
                 segment%field(m)%dz_src(:,js_obc,:) = &
-                    tmp_buffer(is_obc+G%idg_offset-segment%HI%Isgb+1:ie_obc+G%idg_offset-segment%HI%Isgb+1,1,:)
+                    tmp_buffer(is_obc+i_seg_offset+1:ie_obc+i_seg_offset+1,1,:)
               else
                 segment%field(m)%dz_src(:,js_obc,:) = &
-                    tmp_buffer(is_obc+G%idg_offset-segment%HI%Isgb+1:ie_obc+G%idg_offset-segment%HI%Isgb,1,:)
+                    tmp_buffer(is_obc+i_seg_offset+1:ie_obc+i_seg_offset,1,:)
               endif
             endif
           endif

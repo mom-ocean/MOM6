@@ -50,9 +50,10 @@ type, public :: regularize_layers_CS ; private
   type(time_type), pointer :: Time => NULL() !< A pointer to the ocean model's clock.
   type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to
                              !! regulate the timing of diagnostic output.
-  logical :: answers_2018    !< If true, use the order of arithmetic and expressions that recover the
-                             !! answers from the end of 2018.  Otherwise, use updated and more robust
-                             !! forms of the same expressions.
+  integer :: answer_date     !< The vintage of the order of arithmetic and expressions in this module's
+                             !! calculations.  Values below 20190101 recover the answers from the
+                             !! end of 2018, while higher values use updated and more robust forms
+                             !! of the same expressions.
   logical :: debug           !< If true, do more thorough checks for debugging purposes.
 
   integer :: id_def_rat = -1 !< A diagnostic ID
@@ -303,7 +304,7 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, GV, US, CS)
             else
               h_add = e_2d(i,nkmb+1) - e_filt(i,nkmb+1)
               h_2d(i,k) = h_2d(i,k) - h_add
-              if (CS%answers_2018) then
+              if (CS%answer_date < 20190101) then
                 e_2d(i,nkmb+1) = e_2d(i,nkmb+1) - h_add
               else
                 e_2d(i,nkmb+1) = e_filt(i,nkmb+1)
@@ -709,9 +710,13 @@ subroutine regularize_layers_init(Time, G, GV, param_file, diag, CS)
                                                  !! diagnostic output.
   type(regularize_layers_CS), intent(inout) :: CS !< Regularize layer control struct
 
-#include "version_variable.h"
+# include "version_variable.h"
   character(len=40)  :: mdl = "MOM_regularize_layers"  ! This module's name.
-  logical :: default_2018_answers
+  integer :: default_answer_date  ! The default setting for the various ANSWER_DATE flags
+  logical :: default_2018_answers ! The default setting for the various 2018_ANSWERS flags
+  logical :: answers_2018  ! If true, use the order of arithmetic and expressions that recover the
+                           ! answers from the end of 2018.  Otherwise, use updated and more robust
+                           ! forms of the same expressions.
   logical :: just_read
   integer :: isd, ied, jsd, jed
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
@@ -741,13 +746,26 @@ subroutine regularize_layers_init(Time, G, GV, param_file, diag, CS)
                  "densities during detrainment when regularizing the near-surface layers.  The "//&
                  "default of 0.6 gives 20% overlaps in density", &
                  units="nondim", default=0.6, do_not_log=just_read)
+    call get_param(param_file, mdl, "DEFAULT_ANSWER_DATE", default_answer_date, &
+                 "This sets the default value for the various _ANSWER_DATE parameters.", &
+                 default=99991231, do_not_log=just_read)
     call get_param(param_file, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
                  "This sets the default value for the various _2018_ANSWERS parameters.", &
-                 default=.false., do_not_log=just_read)
-    call get_param(param_file, mdl, "REGULARIZE_LAYERS_2018_ANSWERS", CS%answers_2018, &
+                 default=(default_answer_date<20190101), do_not_log=just_read)
+    call get_param(param_file, mdl, "REGULARIZE_LAYERS_2018_ANSWERS", answers_2018, &
                  "If true, use the order of arithmetic and expressions that recover the answers "//&
                  "from the end of 2018.  Otherwise, use updated and more robust forms of the "//&
                  "same expressions.", default=default_2018_answers, do_not_log=just_read)
+    ! Revise inconsistent default answer dates.
+    if (answers_2018 .and. (default_answer_date >= 20190101)) default_answer_date = 20181231
+    if (.not.answers_2018 .and. (default_answer_date < 20190101)) default_answer_date = 20190101
+    call get_param(param_file, mdl, "REGULARIZE_LAYERS_ANSWER_DATE", CS%answer_date, &
+                 "The vintage of the order of arithmetic and expressions in the regularize "//&
+                 "layers calculations.  Values below 20190101 recover the answers from the "//&
+                 "end of 2018, while higher values use updated and more robust forms of the "//&
+                 "same expressions.  If both REGULARIZE_LAYERS_2018_ANSWERS and "//&
+                 "REGULARIZE_LAYERS_ANSWER_DATE are specified, the latter takes precedence.", &
+                 default=default_answer_date)
   endif
 
   call get_param(param_file, mdl, "HMIX_MIN", CS%Hmix_min, &

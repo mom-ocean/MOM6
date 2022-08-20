@@ -51,15 +51,12 @@ use MOM_ocean_model_mct,     only: convert_state_to_ocean_type
 use MOM_surface_forcing_mct, only: surface_forcing_CS, forcing_save_restart, ice_ocean_boundary_type
 use ocn_cap_methods,      only: ocn_import, ocn_export
 
-! FMS modules
-use time_interp_external_mod, only : time_interp_external
-
 ! MCT indices structure and import and export routines that access mom data
 use ocn_cpl_indices,   only : cpl_indices_type, cpl_indices_init
 
 ! GFDL coupler modules
-use coupler_types_mod,   only : coupler_type_spawn
-use coupler_types_mod,   only : coupler_type_initialized, coupler_type_copy_data
+use MOM_coupler_types,   only : coupler_type_spawn
+use MOM_coupler_types,   only : coupler_type_initialized, coupler_type_copy_data
 
 ! By default make data private
 implicit none; private

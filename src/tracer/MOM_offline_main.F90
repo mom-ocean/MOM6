@@ -35,7 +35,7 @@ use MOM_tracer_flow_control,  only : tracer_flow_control_CS, call_tracer_column_
 use MOM_tracer_registry,      only : tracer_registry_type, MOM_tracer_chksum, MOM_tracer_chkinv
 use MOM_unit_scaling,         only : unit_scale_type
 use MOM_variables,            only : thermo_var_ptrs
-use MOM_verticalGrid,         only : verticalGrid_type
+use MOM_verticalGrid,         only : verticalGrid_type, get_thickness_units
 
 implicit none ; private
 
@@ -1160,7 +1160,7 @@ subroutine register_diags_offline_transport(Time, diag, CS, GV, US)
     'at the end of the offline timestep', 'm', conversion=GV%H_to_m)
   CS%id_h_redist = register_diag_field('ocean_model','h_redist', diag%axesTL, Time, &
     'Layer thicknesses before redistribution of mass fluxes', &
-    'm', conversion=GV%H_to_m)
+    get_thickness_units(GV), conversion=GV%H_to_MKS)
 
   ! Regridded/remapped input fields
   CS%id_uhtr_regrid = register_diag_field('ocean_model', 'uhtr_regrid', diag%axesCuL, Time, &

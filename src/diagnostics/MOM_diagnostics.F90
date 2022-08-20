@@ -20,7 +20,7 @@ use MOM_diag_mediator,     only : diag_save_grids, diag_restore_grids, diag_copy
 use MOM_domains,           only : create_group_pass, do_group_pass, group_pass_type
 use MOM_domains,           only : To_North, To_East
 use MOM_EOS,               only : calculate_density, calculate_density_derivs, EOS_domain
-use MOM_EOS,               only : gsw_sp_from_sr, gsw_pt_from_ct
+use MOM_EOS,               only : cons_temp_to_pot_temp, abs_saln_to_prac_saln
 use MOM_error_handler,     only : MOM_error, FATAL, WARNING
 use MOM_file_parser,       only : get_param, log_version, param_file_type
 use MOM_grid,              only : ocean_grid_type
@@ -31,7 +31,7 @@ use MOM_tracer_registry,   only : tracer_registry_type, post_tracer_transport_di
 use MOM_unit_scaling,      only : unit_scale_type
 use MOM_variables,         only : thermo_var_ptrs, ocean_internal_state, p3d
 use MOM_variables,         only : accel_diag_ptrs, cont_diag_ptrs, surface
-use MOM_verticalGrid,      only : verticalGrid_type, get_thickness_units
+use MOM_verticalGrid,      only : verticalGrid_type, get_thickness_units, get_flux_units
 use MOM_wave_speed,        only : wave_speed, wave_speed_CS, wave_speed_init
 
 implicit none ; private
@@ -401,9 +401,10 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
     ! so they need to converted to potential temperature and practical salinity
     ! for some diagnostics using TEOS-10 function calls.
     if ((CS%id_Tpot > 0) .or. (CS%id_tob > 0) .or. (CS%id_tosq > 0)) then
-      do k=1,nz ; do j=js,je ; do i=is,ie
-        work_3d(i,j,k) = US%degC_to_C*gsw_pt_from_ct(US%S_to_ppt*tv%S(i,j,k),US%C_to_degC*tv%T(i,j,k))
-      enddo ; enddo ; enddo
+      EOSdom(:) = EOS_domain(G%HI)
+      do k=1,nz ; do j=js,je
+        call cons_temp_to_pot_temp(tv%T(:,j,k), tv%S(:,j,k), work_3d(:,j,k), tv%eqn_of_state, EOSdom)
+      enddo ; enddo
       if (CS%id_Tpot > 0) call post_data(CS%id_Tpot, work_3d, CS%diag)
       if (CS%id_tob > 0) call post_data(CS%id_tob, work_3d(:,:,nz), CS%diag, mask=G%mask2dT)
       if (CS%id_tosq > 0) then
@@ -430,9 +431,10 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
     ! so they need to converted to potential temperature and practical salinity
     ! for some diagnostics using TEOS-10 function calls.
     if ((CS%id_Sprac > 0) .or. (CS%id_sob > 0) .or. (CS%id_sosq >0)) then
-      do k=1,nz ; do j=js,je ; do i=is,ie
-        work_3d(i,j,k) = US%ppt_to_S*gsw_sp_from_sr(US%S_to_ppt*tv%S(i,j,k))
-      enddo ; enddo ; enddo
+      EOSdom(:) = EOS_domain(G%HI)
+      do k=1,nz ; do j=js,je
+        call abs_saln_to_prac_saln(tv%S(:,j,k), work_3d(:,j,k), tv%eqn_of_state, EOSdom)
+      enddo ; enddo
       if (CS%id_Sprac > 0) call post_data(CS%id_Sprac, work_3d, CS%diag)
       if (CS%id_sob > 0) call post_data(CS%id_sob, work_3d(:,:,nz), CS%diag, mask=G%mask2dT)
       if (CS%id_sosq > 0) then
@@ -1314,6 +1316,7 @@ subroutine post_surface_thermo_diags(IDs, G, GV, US, diag, dt_int, sfc_state, tv
   real :: zos_area_mean ! Global area mean sea surface height [Z ~> m]
   real :: volo          ! Total volume of the ocean [m3]
   real :: ssh_ga        ! Global ocean area weighted mean sea seaface height [Z ~> m]
+  integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state
   integer :: i, j, is, ie, js, je
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
@@ -1389,9 +1392,10 @@ subroutine post_surface_thermo_diags(IDs, G, GV, US, diag, dt_int, sfc_state, tv
     if (IDs%id_sstcon > 0) call post_data(IDs%id_sstcon, sfc_state%SST, diag, mask=G%mask2dT)
     ! Use TEOS-10 function calls convert T&S diagnostics from conservative temp
     ! to potential temperature.
-    do j=js,je ; do i=is,ie
-      work_2d(i,j) = gsw_pt_from_ct(sfc_state%SSS(i,j), sfc_state%SST(i,j))
-    enddo ; enddo
+    EOSdom(:) = EOS_domain(G%HI)
+    do j=js,je
+      call cons_temp_to_pot_temp(sfc_state%SST(:,j), sfc_state%SSS(:,j), work_2d(:,j), tv%eqn_of_state, EOSdom)
+    enddo
     if (IDs%id_sst > 0) call post_data(IDs%id_sst, work_2d, diag, mask=G%mask2dT)
   else
     ! Internal T&S variables are potential temperature & practical salinity
@@ -1403,9 +1407,10 @@ subroutine post_surface_thermo_diags(IDs, G, GV, US, diag, dt_int, sfc_state, tv
     if (IDs%id_sssabs > 0) call post_data(IDs%id_sssabs, sfc_state%SSS, diag, mask=G%mask2dT)
     ! Use TEOS-10 function calls convert T&S diagnostics from absolute salinity
     ! to practical salinity.
-    do j=js,je ; do i=is,ie
-      work_2d(i,j) = gsw_sp_from_sr(sfc_state%SSS(i,j))
-    enddo ; enddo
+    EOSdom(:) = EOS_domain(G%HI)
+    do j=js,je
+      call abs_saln_to_prac_saln(sfc_state%SSS(:,j), work_2d(:,j), tv%eqn_of_state, EOSdom)
+    enddo
     if (IDs%id_sss > 0) call post_data(IDs%id_sss, work_2d, diag, mask=G%mask2dT)
   else
     ! Internal T&S variables are potential temperature & practical salinity
@@ -1551,7 +1556,13 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, US, param_file, diag
   character(len=40)  :: mdl = "MOM_diagnostics" ! This module's name.
   character(len=48) :: thickness_units, flux_units
   logical :: use_temperature, adiabatic
-  logical :: default_2018_answers, remap_answers_2018
+  integer :: default_answer_date  ! The default setting for the various ANSWER_DATE flags.
+  logical :: default_2018_answers ! The default setting for the various 2018_ANSWERS flags.
+  integer :: remap_answer_date    ! The vintage of the order of arithmetic and expressions to use
+                                  ! for remapping.  Values below 20190101 recover the remapping
+                                  ! answers from 2018, while higher values use more robust
+                                  ! forms of the same remapping expressions.
+  logical :: remap_answers_2018
 
   CS%initialized = .true.
 
@@ -1579,20 +1590,32 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, US, param_file, diag
   call get_param(param_file, mdl, "INTERNAL_WAVE_SPEED_BETTER_EST", better_speed_est, &
                  "If true, use a more robust estimate of the first mode wave speed as the "//&
                  "starting point for iterations.", default=.true.)
+  call get_param(param_file, mdl, "DEFAULT_ANSWER_DATE", default_answer_date, &
+                 "This sets the default value for the various _ANSWER_DATE parameters.", &
+                 default=99991231)
   call get_param(param_file, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
                  "This sets the default value for the various _2018_ANSWERS parameters.", &
-                 default=.false.)
+                 default=(default_answer_date<20190101))
   call get_param(param_file, mdl, "REMAPPING_2018_ANSWERS", remap_answers_2018, &
                  "If true, use the order of arithmetic and expressions that recover the "//&
                  "answers from the end of 2018.  Otherwise, use updated and more robust "//&
                  "forms of the same expressions.", default=default_2018_answers)
+  ! Revise inconsistent default answer dates for remapping.
+  if (remap_answers_2018 .and. (default_answer_date >= 20190101)) default_answer_date = 20181231
+  if (.not.remap_answers_2018 .and. (default_answer_date < 20190101)) default_answer_date = 20190101
+  call get_param(param_file, mdl, "REMAPPING_ANSWER_DATE", remap_answer_date, &
+                 "The vintage of the expressions and order of arithmetic to use for remapping.  "//&
+                 "Values below 20190101 result in the use of older, less accurate expressions "//&
+                 "that were in use at the end of 2018.  Higher values result in the use of more "//&
+                 "robust and accurate forms of mathematically equivalent expressions.  "//&
+                 "If both REMAPPING_2018_ANSWERS and REMAPPING_ANSWER_DATE are specified, the "//&
+                 "latter takes precedence.", default=default_answer_date)
+
   call get_param(param_file, mdl, "SPLIT", split, default=.true., do_not_log=.true.)
 
-  if (GV%Boussinesq) then
-    thickness_units = "m" ; flux_units = "m3 s-1" ; convert_H = GV%H_to_m
-  else
-    thickness_units = "kg m-2" ; flux_units = "kg s-1" ; convert_H = GV%H_to_kg_m2
-  endif
+  thickness_units = get_thickness_units(GV)
+  flux_units = get_flux_units(GV)
+  convert_H = GV%H_to_MKS
 
   CS%id_masscello = register_diag_field('ocean_model', 'masscello', diag%axesTL,&
       Time, 'Mass per unit area of liquid ocean grid cell', 'kg m-2', & !### , conversion=GV%H_to_kg_m2, &
@@ -1602,11 +1625,11 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, US, param_file, diag
       diag, 'Mass of liquid ocean', 'kg', standard_name='sea_water_mass')
 
   CS%id_thkcello = register_diag_field('ocean_model', 'thkcello', diag%axesTL, Time, &
-      long_name = 'Cell Thickness', standard_name='cell_thickness', &
+      long_name='Cell Thickness', standard_name='cell_thickness', &
       units='m', conversion=US%Z_to_m, v_extensive=.true.)
   CS%id_h_pre_sync = register_diag_field('ocean_model', 'h_pre_sync', diag%axesTL, Time, &
-      long_name = 'Cell thickness from the previous timestep', &
-      units='m', conversion=GV%H_to_m, v_extensive=.true.)
+      long_name='Cell thickness from the previous timestep', &
+      units=thickness_units, conversion=GV%H_to_MKS, v_extensive=.true.)
 
   ! Note that CS%id_volcello would normally be registered here but because it is a "cell measure" and
   ! must be registered first. We earlier stored the handle of volcello but need it here for posting
@@ -1633,11 +1656,11 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, US, param_file, diag
         units='psu', conversion=US%S_to_ppt)
 
     CS%id_tosq = register_diag_field('ocean_model', 'tosq', diag%axesTL, &
-      Time, 'Square of Potential Temperature', 'degC2', conversion=US%C_to_degC**2, &
-      standard_name='Potential Temperature Squared')
+        Time, 'Square of Potential Temperature', 'degC2', conversion=US%C_to_degC**2, &
+        standard_name='Potential Temperature Squared')
     CS%id_sosq = register_diag_field('ocean_model', 'sosq', diag%axesTL, &
-      Time, 'Square of Salinity', 'psu2', conversion=US%S_to_ppt**2, &
-      standard_name='Salinity Squared')
+        Time, 'Square of Salinity', 'psu2', conversion=US%S_to_ppt**2, &
+        standard_name='Salinity Squared')
 
     CS%id_temp_layer_ave = register_diag_field('ocean_model', 'temp_layer_ave', &
         diag%axesZL, Time, 'Layer Average Ocean Temperature', 'degC')
@@ -1645,7 +1668,7 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, US, param_file, diag
         diag%axesZL, Time, 'Layer Average Ocean Salinity', 'psu')
 
     CS%id_thetaoga = register_scalar_field('ocean_model', 'thetaoga', &
-        Time, diag, 'Global Mean Ocean Potential Temperature', 'degC',&
+        Time, diag, 'Global Mean Ocean Potential Temperature', 'degC', &
         standard_name='sea_water_potential_temperature')
     CS%id_soga = register_scalar_field('ocean_model', 'soga', &
         Time, diag, 'Global Mean Ocean Salinity', 'psu', &
@@ -1813,7 +1836,7 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, US, param_file, diag
   if ((CS%id_cg1>0) .or. (CS%id_Rd1>0) .or. (CS%id_cfl_cg1>0) .or. &
       (CS%id_cfl_cg1_x>0) .or. (CS%id_cfl_cg1_y>0) .or. &
       (CS%id_cg_ebt>0) .or. (CS%id_Rd_ebt>0) .or. (CS%id_p_ebt>0)) then
-    call wave_speed_init(CS%wave_speed, remap_answers_2018=remap_answers_2018, &
+    call wave_speed_init(CS%wave_speed, remap_answer_date=remap_answer_date, &
                          better_speed_est=better_speed_est, min_speed=wave_speed_min, &
                          wave_speed_tol=wave_speed_tol)
   endif
@@ -1886,28 +1909,28 @@ subroutine register_surface_diags(Time, G, US, IDs, diag, tv)
 
   if (associated(tv%T)) then
     IDs%id_sst = register_diag_field('ocean_model', 'SST', diag%axesT1, Time,     &
-        'Sea Surface Temperature', 'degC', cmor_field_name='tos', &
-        cmor_long_name='Sea Surface Temperature',                                &
+        'Sea Surface Temperature', 'degC', conversion=US%C_to_degC, &
+        cmor_field_name='tos', cmor_long_name='Sea Surface Temperature', &
         cmor_standard_name='sea_surface_temperature')
     IDs%id_sst_sq = register_diag_field('ocean_model', 'SST_sq', diag%axesT1, Time, &
-        'Sea Surface Temperature Squared', 'degC2', cmor_field_name='tossq', &
-        cmor_long_name='Square of Sea Surface Temperature ',                      &
+        'Sea Surface Temperature Squared', 'degC2', conversion=US%C_to_degC**2, &
+        cmor_field_name='tossq', cmor_long_name='Square of Sea Surface Temperature ', &
         cmor_standard_name='square_of_sea_surface_temperature')
     IDs%id_sss = register_diag_field('ocean_model', 'SSS', diag%axesT1, Time, &
-        'Sea Surface Salinity', 'psu', cmor_field_name='sos', &
-        cmor_long_name='Sea Surface Salinity',                            &
+        'Sea Surface Salinity', 'psu', conversion=US%S_to_ppt, &
+        cmor_field_name='sos', cmor_long_name='Sea Surface Salinity', &
         cmor_standard_name='sea_surface_salinity')
     IDs%id_sss_sq = register_diag_field('ocean_model', 'SSS_sq', diag%axesT1, Time, &
-        'Sea Surface Salinity Squared', 'psu', cmor_field_name='sossq', &
-        cmor_long_name='Square of Sea Surface Salinity ',                     &
+        'Sea Surface Salinity Squared', 'psu2', conversion=US%S_to_ppt**2, &
+        cmor_field_name='sossq', cmor_long_name='Square of Sea Surface Salinity ', &
         cmor_standard_name='square_of_sea_surface_salinity')
     if (tv%T_is_conT) then
       IDs%id_sstcon = register_diag_field('ocean_model', 'conSST', diag%axesT1, Time,     &
-          'Sea Surface Conservative Temperature', 'Celsius')
+          'Sea Surface Conservative Temperature', 'Celsius', conversion=US%C_to_degC)
     endif
     if (tv%S_is_absS) then
       IDs%id_sssabs = register_diag_field('ocean_model', 'absSSS', diag%axesT1, Time,     &
-          'Sea Surface Absolute Salinity', 'g kg-1')
+          'Sea Surface Absolute Salinity', 'g kg-1', conversion=US%S_to_ppt)
     endif
     if (associated(tv%frazil)) then
       IDs%id_fraz = register_diag_field('ocean_model', 'frazil', diag%axesT1, Time, &
@@ -1943,10 +1966,11 @@ subroutine register_transport_diags(Time, G, GV, US, IDs, diag)
   character(len=48) :: thickness_units, accum_flux_units
 
   thickness_units = get_thickness_units(GV)
+  H_convert = GV%H_to_MKS
   if (GV%Boussinesq) then
-    H_convert = GV%H_to_m ; accum_flux_units = "m3"
+    accum_flux_units = "m3"
   else
-    H_convert = GV%H_to_kg_m2 ; accum_flux_units = "kg"
+    accum_flux_units = "kg"
   endif
 
   ! Diagnostics related to tracer and mass transport
@@ -1974,10 +1998,10 @@ subroutine register_transport_diags(Time, G, GV, US, IDs, diag)
       standard_name='ocean_mass_y_transport_vertical_sum', x_cell_method='sum')
   IDs%id_dynamics_h = register_diag_field('ocean_model','dynamics_h',  &
       diag%axesTl, Time, 'Layer thicknesses prior to horizontal dynamics', &
-      'm', v_extensive=.true., conversion=GV%H_to_m)
+      thickness_units, conversion=GV%H_to_MKS, v_extensive=.true.)
   IDs%id_dynamics_h_tendency = register_diag_field('ocean_model','dynamics_h_tendency',  &
       diag%axesTl, Time, 'Change in layer thicknesses due to horizontal dynamics', &
-      'm s-1', v_extensive=.true., conversion=GV%H_to_m*US%s_to_T)
+      trim(thickness_units)//" s-1", conversion=GV%H_to_MKS*US%s_to_T, v_extensive=.true.)
 
 end subroutine register_transport_diags
 

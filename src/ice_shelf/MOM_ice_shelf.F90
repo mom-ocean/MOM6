@@ -34,7 +34,7 @@ use user_initialization, only : user_initialize_topography
 use MOM_io, only : field_exists, file_exists, MOM_read_data, write_version_number
 use MOM_io, only : slasher, fieldtype, vardesc, var_desc
 use MOM_io, only : write_field, close_file, SINGLE_FILE, MULTIPLE
-use MOM_restart, only : register_restart_field, query_initialized, save_restart
+use MOM_restart, only : register_restart_field, save_restart
 use MOM_restart, only : restart_init, restore_state, MOM_restart_CS, register_restart_pair
 use MOM_time_manager, only : time_type, time_type_to_real, real_to_time, operator(>), operator(-)
 use MOM_transcribe_grid, only : copy_dyngrid_to_MOM_grid, copy_MOM_grid_to_dyngrid
@@ -365,7 +365,7 @@ subroutine shelf_calc_flux(sfc_state_in, fluxes_in, Time, time_step_in, CS)
   ISS%salt_flux(:,:) = 0.0 ; ISS%tflux_ocn(:,:) = 0.0 ; ISS%tfreeze(:,:) = 0.0
   ! define Sbdry to avoid Run-Time Check Failure, when melt is not computed.
   haline_driving(:,:) = 0.0
-  Sbdry(:,:) = US%ppt_to_S*sfc_state%sss(:,:)
+  Sbdry(:,:) = sfc_state%sss(:,:)
 
   !update time
   CS%Time = Time
@@ -378,9 +378,9 @@ subroutine shelf_calc_flux(sfc_state_in, fluxes_in, Time, time_step_in, CS)
 
   if (CS%debug) then
     call hchksum(fluxes_in%frac_shelf_h, "frac_shelf_h before apply melting", CS%Grid_in%HI, haloshift=0)
-    call hchksum(sfc_state_in%sst, "sst before apply melting", CS%Grid_in%HI, haloshift=0)
-    call hchksum(sfc_state_in%sss, "sss before apply melting", CS%Grid_in%HI, haloshift=0)
-    call uvchksum("[uv]_ml before apply melting",sfc_state_in%u, sfc_state_in%v, &
+    call hchksum(sfc_state_in%sst, "sst before apply melting", CS%Grid_in%HI, haloshift=0, scale=US%C_to_degC)
+    call hchksum(sfc_state_in%sss, "sss before apply melting", CS%Grid_in%HI, haloshift=0, scale=US%S_to_ppt)
+    call uvchksum("[uv]_ml before apply melting", sfc_state_in%u, sfc_state_in%v, &
                   CS%Grid_in%HI, haloshift=0, scale=US%L_T_to_m_s)
     call hchksum(sfc_state_in%ocean_mass, "ocean_mass before apply melting", CS%Grid_in%HI, haloshift=0, &
                  scale=US%RZ_to_kg_m2)
@@ -429,9 +429,9 @@ subroutine shelf_calc_flux(sfc_state_in, fluxes_in, Time, time_step_in, CS)
     do i=is,ie ; p_int(i) = CS%g_Earth * ISS%mass_shelf(i,j) ; enddo
 
     ! Calculate insitu densities and expansion coefficients
-    call calculate_density(US%degC_to_C*sfc_state%sst(:,j), US%ppt_to_S*sfc_state%sss(:,j), p_int, Rhoml(:), &
+    call calculate_density(sfc_state%sst(:,j), sfc_state%sss(:,j), p_int, Rhoml(:), &
                                  CS%eqn_of_state, EOSdom)
-    call calculate_density_derivs(US%degC_to_C*sfc_state%sst(:,j), US%ppt_to_S*sfc_state%sss(:,j), p_int, &
+    call calculate_density_derivs(sfc_state%sst(:,j), sfc_state%sss(:,j), p_int, &
                                   dR0_dT, dR0_dS, CS%eqn_of_state, EOSdom)
 
     do i=is,ie
@@ -466,9 +466,9 @@ subroutine shelf_calc_flux(sfc_state_in, fluxes_in, Time, time_step_in, CS)
 
             ! S_a is always < 0.0 with a realistic expression for the freezing point.
             S_a = CS%dTFr_dS * CS%Gamma_T_3EQ * CS%Cp
-            S_b = CS%Gamma_T_3EQ*CS%Cp*(CS%TFr_0_0 + CS%dTFr_dp*p_int(i) - US%degC_to_C*sfc_state%sst(i,j)) - &
+            S_b = CS%Gamma_T_3EQ*CS%Cp*(CS%TFr_0_0 + CS%dTFr_dp*p_int(i) - sfc_state%sst(i,j)) - &
                   CS%Lat_fusion * CS%Gamma_S_3EQ    ! S_b Can take either sign, but is usually negative.
-            S_c = CS%Lat_fusion * CS%Gamma_S_3EQ * US%ppt_to_S*sfc_state%sss(i,j) ! Always >= 0
+            S_c = CS%Lat_fusion * CS%Gamma_S_3EQ * sfc_state%sss(i,j) ! Always >= 0
 
             if (S_c == 0.0) then  ! The solution for fresh water.
               Sbdry(i,j) = 0.0
@@ -486,14 +486,14 @@ subroutine shelf_calc_flux(sfc_state_in, fluxes_in, Time, time_step_in, CS)
 
             ! Safety check
             if (Sbdry(i,j) < 0.) then
-              write(mesg,*) 'sfc_state%sss(i,j) = ',sfc_state%sss(i,j), &
+              write(mesg,*) 'sfc_state%sss(i,j) = ',US%S_to_ppt*sfc_state%sss(i,j), &
                             'S_a, S_b, S_c', US%ppt_to_S*S_a, S_b, US%S_to_ppt*S_c
               call MOM_error(WARNING, mesg, .true.)
               call MOM_error(FATAL, "shelf_calc_flux: Negative salinity (Sbdry).")
             endif
           else
             ! Guess sss as the iteration starting point for the boundary salinity.
-            Sbdry(i,j) = US%ppt_to_S*sfc_state%sss(i,j) ; Sb_max_set = .false.
+            Sbdry(i,j) = sfc_state%sss(i,j) ; Sb_max_set = .false.
             Sb_min_set = .false.
           endif !find_salt_root
 
@@ -503,8 +503,8 @@ subroutine shelf_calc_flux(sfc_state_in, fluxes_in, Time, time_step_in, CS)
             ! call calculate_TFreeze(Sbdry(i,j), p_int(i), ISS%tfreeze(i,j), CS%eqn_of_state, scale_from_EOS=.true.)
             call calculate_TFreeze(Sbdry(i:i,j), p_int(i:i), ISS%tfreeze(i:i,j), CS%eqn_of_state)
 
-            dT_ustar = (ISS%tfreeze(i,j) - US%degC_to_C*sfc_state%sst(i,j)) * ustar_h
-            dS_ustar = (Sbdry(i,j) - US%ppt_to_S*sfc_state%sss(i,j)) * ustar_h
+            dT_ustar = (ISS%tfreeze(i,j) - sfc_state%sst(i,j)) * ustar_h
+            dS_ustar = (Sbdry(i,j) - sfc_state%sss(i,j)) * ustar_h
 
             ! First, determine the buoyancy flux assuming no effects of stability
             ! on the turbulence.  Following H & J '99, this limit also applies
@@ -610,11 +610,10 @@ subroutine shelf_calc_flux(sfc_state_in, fluxes_in, Time, time_step_in, CS)
             else
 
               mass_exch = exch_vel_s(i,j) * CS%Rho_ocn
-              Sbdry_it = (US%ppt_to_S*sfc_state%sss(i,j) * mass_exch + CS%Salin_ice * ISS%water_flux(i,j)) / &
+              Sbdry_it = (sfc_state%sss(i,j) * mass_exch + CS%Salin_ice * ISS%water_flux(i,j)) / &
                          (mass_exch + ISS%water_flux(i,j))
               dS_it = Sbdry_it - Sbdry(i,j)
-              if (abs(dS_it) < 1.0e-4*(0.5*(US%ppt_to_S*sfc_state%sss(i,j) + Sbdry(i,j) + 1.0e-10*US%ppt_to_S))) exit
-
+              if (abs(dS_it) < 1.0e-4*(0.5*(sfc_state%sss(i,j) + Sbdry(i,j) + 1.0e-10*US%ppt_to_S))) exit
 
               if (dS_it < 0.0) then ! Sbdry is now the upper bound.
                 if (Sb_max_set) then
@@ -649,10 +648,10 @@ subroutine shelf_calc_flux(sfc_state_in, fluxes_in, Time, time_step_in, CS)
           ! is about the same as the boundary layer salinity.
           ! The following two lines are equivalent:
           ! call calculate_TFreeze(Sbdry(i,j), p_int(i), ISS%tfreeze(i,j), CS%eqn_of_state, scale_from_EOS=.true.)
-          call calculate_TFreeze(US%ppt_to_S*sfc_state%SSS(i:i,j), p_int(i:i), ISS%tfreeze(i:i,j), CS%eqn_of_state)
+          call calculate_TFreeze(sfc_state%SSS(i:i,j), p_int(i:i), ISS%tfreeze(i:i,j), CS%eqn_of_state)
 
           exch_vel_t(i,j) = CS%gamma_t
-          ISS%tflux_ocn(i,j) = RhoCp * exch_vel_t(i,j) * (ISS%tfreeze(i,j) - US%degC_to_C*sfc_state%sst(i,j))
+          ISS%tflux_ocn(i,j) = RhoCp * exch_vel_t(i,j) * (ISS%tfreeze(i,j) - sfc_state%sst(i,j))
           ISS%tflux_shelf(i,j) = 0.0
           ISS%water_flux(i,j) = -I_LF * ISS%tflux_ocn(i,j)
           Sbdry(i,j) = 0.0
@@ -663,7 +662,7 @@ subroutine shelf_calc_flux(sfc_state_in, fluxes_in, Time, time_step_in, CS)
         ISS%tflux_ocn(i,j) = 0.0
       endif
 
-!      haline_driving(i,j) = US%ppt_to_S*sfc_state%sss(i,j) - Sbdry(i,j)
+!      haline_driving(i,j) = sfc_state%sss(i,j) - Sbdry(i,j)
 
     enddo ! i-loop
   enddo ! j-loop
@@ -687,11 +686,11 @@ subroutine shelf_calc_flux(sfc_state_in, fluxes_in, Time, time_step_in, CS)
 
       !!!!!!!!!!!!!!!!!!!!!!!!!!!!Safety checks !!!!!!!!!!!!!!!!!!!!!!!!!
       !1)Check if haline_driving computed above is consistent with
-      ! haline_driving = US%ppt_to_S*sfc_state%sss - Sbdry
+      ! haline_driving = sfc_state%sss - Sbdry
       !if (fluxes%iceshelf_melt(i,j) /= 0.0) then
-      !   if (haline_driving(i,j) /= (US%ppt_to_S*sfc_state%sss(i,j) - Sbdry(i,j))) then
+      !   if (haline_driving(i,j) /= (sfc_state%sss(i,j) - Sbdry(i,j))) then
       !     write(mesg,*) 'at i,j=',i,j,' haline_driving, sss-Sbdry',US%S_to_ppt*haline_driving(i,j), &
-      !                   US%S_to_ppt*(US%ppt_to_S*sfc_state%sss(i,j) - Sbdry(i,j))
+      !                   US%S_to_ppt*(sfc_state%sss(i,j) - Sbdry(i,j))
       !     call MOM_error(FATAL, &
       !            "shelf_calc_flux: Inconsistency in melt and haline_driving"//trim(mesg))
       !   endif
@@ -777,7 +776,7 @@ subroutine shelf_calc_flux(sfc_state_in, fluxes_in, Time, time_step_in, CS)
   if (CS%id_shelf_sfc_mass_flux > 0) call post_data(CS%id_shelf_sfc_mass_flux, fluxes%shelf_sfc_mass_flux, CS%diag)
 
   if (CS%id_melt > 0) call post_data(CS%id_melt, fluxes%iceshelf_melt, CS%diag)
-  if (CS%id_thermal_driving > 0) call post_data(CS%id_thermal_driving,(US%degC_to_C*sfc_state%sst-ISS%tfreeze), CS%diag)
+  if (CS%id_thermal_driving > 0) call post_data(CS%id_thermal_driving, (sfc_state%sst-ISS%tfreeze), CS%diag)
   if (CS%id_Sbdry > 0) call post_data(CS%id_Sbdry, Sbdry, CS%diag)
   if (CS%id_haline_driving > 0) call post_data(CS%id_haline_driving, haline_driving, CS%diag)
   if (CS%id_mass_flux > 0) call post_data(CS%id_mass_flux, mass_flux, CS%diag)

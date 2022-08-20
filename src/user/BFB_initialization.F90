@@ -93,7 +93,11 @@ subroutine BFB_initialize_sponges_southonly(G, GV, US, use_temperature, tv, dept
   real :: Idamp(SZI_(G),SZJ_(G))    ! The sponge damping rate [T-1 ~> s-1]
   real :: H0(SZK_(GV))              ! Resting layer thicknesses in depth units [Z ~> m].
   real :: min_depth                 ! The minimum ocean depth in depth units [Z ~> m].
-  real :: slat, wlon, lenlat, lenlon, nlat
+  real :: slat                      ! The southern latitude of the domain [degrees_N]
+  real :: wlon                      ! The western longitude of the domain [degrees_E]
+  real :: lenlat                    ! The latitudinal length of the domain [degrees_N]
+  real :: lenlon                    ! The longitudinal length of the domain [degrees_E]
+  real :: nlat                      ! The northern latitude of the domain [degrees_N]
   real :: max_damping               ! The maximum damping rate [T-1 ~> s-1]
   character(len=40)  :: mdl = "BFB_initialize_sponges_southonly" ! This subroutine's name.
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz
@@ -112,14 +116,10 @@ subroutine BFB_initialize_sponges_southonly(G, GV, US, use_temperature, tv, dept
   call get_param(param_file, mdl, "MINIMUM_DEPTH", min_depth, &
                  "The minimum depth of the ocean.", units="m", default=0.0, scale=US%m_to_Z)
 
-  call get_param(param_file, mdl, "SOUTHLAT", slat, &
-                 "The southern latitude of the domain.", units="degrees")
-  call get_param(param_file, mdl, "LENLAT", lenlat, &
-                 "The latitudinal length of the domain.", units="degrees")
-  call get_param(param_file, mdl, "WESTLON", wlon, &
-                 "The western longitude of the domain.", units="degrees", default=0.0)
-  call get_param(param_file, mdl, "LENLON", lenlon, &
-                 "The longitudinal length of the domain.", units="degrees")
+  slat = G%south_lat
+  lenlat = G%len_lat
+  wlon = G%west_lon
+  lenlon = G%len_lon
   nlat = slat + lenlat
   do k=1,nz ; H0(k) = -G%max_depth * real(k-1) / real(nz) ; enddo
 

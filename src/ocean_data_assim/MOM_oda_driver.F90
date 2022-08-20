@@ -134,9 +134,10 @@ type, public :: ODA_CS ; private
   type(INC_CS) :: INC_CS !< A Structure containing integer file handles for bias adjustment
   integer :: id_inc_t !< A diagnostic handle for the temperature climatological adjustment
   integer :: id_inc_s !< A diagnostic handle for the salinity climatological adjustment
-  logical :: answers_2018   !< If true, use the order of arithmetic and expressions for remapping
-                            !! that recover the answers from the end of 2018.  Otherwise, use more
-                            !! robust and accurate forms of mathematically equivalent expressions.
+  integer :: answer_date    !< The vintage of the order of arithmetic and expressions in the
+                            !! remapping invoked by the ODA driver.  Values below 20190101 recover
+                            !! the answers from the end of 2018, while higher values use updated
+                            !! and more robust forms of the same expressions.
 end type ODA_CS
 
 
@@ -175,7 +176,11 @@ subroutine init_oda(Time, G, GV, US, diag_CS, CS)
   character(len=200) :: inputdir, basin_file
   character(len=80) :: remap_scheme
   character(len=80) :: bias_correction_file, inc_file
-  logical           :: default_2018_answers
+  logical :: answers_2018  ! If true, use the order of arithmetic and expressions that recover the
+                           ! answers from the end of 2018.  Otherwise, use updated and more robust
+                           ! forms of the same expressions.
+  integer :: default_answer_date  ! The default setting for the various ANSWER_DATE flags.
+  logical :: default_2018_answers ! The default setting for the various 2018_ANSWERS flags.
 
   if (associated(CS)) call MOM_error(FATAL, 'Calling oda_init with associated control structure')
   allocate(CS)
@@ -232,14 +237,25 @@ subroutine init_oda(Time, G, GV, US, diag_CS, CS)
                  "for vertical remapping for all variables. "//&
                  "It can be one of the following schemes: "//&
                  trim(remappingSchemesDoc), default="PPM_H4")
+  call get_param(PF, mdl, "DEFAULT_ANSWER_DATE", default_answer_date, &
+                 "This sets the default value for the various _ANSWER_DATE parameters.", &
+                 default=99991231)
   call get_param(PF, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
                  "This sets the default value for the various _2018_ANSWERS parameters.", &
-                 default=.false., do_not_log=.true.)
-  call get_param(PF, mdl, "ODA_2018_ANSWERS", CS%answers_2018, &
+                 default=(default_answer_date<20190101))
+  call get_param(PF, mdl, "ODA_2018_ANSWERS", answers_2018, &
                  "If true, use the order of arithmetic and expressions that recover the "//&
                  "answers from original version of the ODA driver.  Otherwise, use updated and "//&
-                 "more robust forms of the same expressions.", default=default_2018_answers, &
-                 do_not_log=.true.)
+                 "more robust forms of the same expressions.", default=default_2018_answers)
+  ! Revise inconsistent default answer dates.
+  if (answers_2018 .and. (default_answer_date >= 20190101)) default_answer_date = 20181231
+  if (.not.answers_2018 .and. (default_answer_date < 20190101)) default_answer_date = 20190101
+  call get_param(PF, mdl, "ODA_ANSWER_DATE", CS%answer_date, &
+               "The vintage of the order of arithmetic and expressions used by the ODA driver "//&
+               "Values below 20190101 recover the answers from the end of 2018, while higher "//&
+               "values use updated and more robust forms of the same expressions.  "//&
+               "If both ODA_2018_ANSWERS and ODA_ANSWER_DATE are specified, the "//&
+               "latter takes precedence.", default=default_answer_date)
   inputdir = slasher(inputdir)
 
   select case(lowercase(trim(assim_method)))
@@ -408,7 +424,7 @@ subroutine set_prior_tracer(Time, G, GV, h, tv, CS)
   call set_PElist(CS%filter_pelist)
   !call MOM_mesg('Setting prior')
 
-  if (.not. CS%answers_2018) then
+  if (CS%answer_date >= 20190101) then
     h_neglect = GV%H_subroundoff ; h_neglect_edge = GV%H_subroundoff
   elseif (GV%Boussinesq) then
     h_neglect = GV%m_to_H * 1.0e-30 ; h_neglect_edge = GV%m_to_H * 1.0e-10
@@ -676,7 +692,7 @@ subroutine apply_oda_tracer_increments(dt, Time_end, G, GV, tv, h, CS)
     S = S + CS%tv_bc%S
   endif
 
-  if (.not. CS%answers_2018) then
+  if (CS%answer_date >= 20190101) then
     h_neglect = GV%H_subroundoff ; h_neglect_edge = GV%H_subroundoff
   elseif (GV%Boussinesq) then
     h_neglect = GV%m_to_H * 1.0e-30 ; h_neglect_edge = GV%m_to_H * 1.0e-10

@@ -66,9 +66,10 @@ type, public :: idealized_hurricane_CS ; private
                                   !! for the Holland prorfile calculation [R L2 T-2 ~> Pa]
   logical :: relative_tau         !< A logical to take difference between wind
                                   !! and surface currents to compute the stress
-  logical :: answers_2018         !< If true, use expressions driving the idealized hurricane test
-                                  !! case that recover the answers from the end of 2018.  Otherwise use
-                                  !! expressions that are rescalable and respect rotational symmetry.
+  integer :: answer_date          !< The vintage of the expressions in the idealized hurricane
+                                  !! test case.  Values below 20190101 recover the answers
+                                  !! from the end of 2018, while higher values use expressions
+                                  !! that are rescalable and respect rotational symmetry.
 
   ! Parameters used if in SCM (single column model) mode
   logical :: SCM_mode        !< If true this being used in Single Column Model mode
@@ -102,7 +103,11 @@ subroutine idealized_hurricane_wind_init(Time, G, US, param_file, CS)
   ! Local variables
   real :: dP  ! The pressure difference across the hurricane [R L2 T-2 ~> Pa]
   real :: C
+  integer :: default_answer_date  ! The default setting for the various ANSWER_DATE flags.
   logical :: default_2018_answers ! The default setting for the various 2018_ANSWERS flags.
+  logical :: answers_2018         ! If true, use expressions driving the idealized hurricane test
+                                  ! case that recover the answers from the end of 2018.  Otherwise use
+                                  ! expressions that are rescalable and respect rotational symmetry.
 
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
@@ -166,13 +171,26 @@ subroutine idealized_hurricane_wind_init(Time, G, US, param_file, CS)
   call get_param(param_file, mdl, "IDL_HURR_SCM_LOCY", CS%dy_from_center, &
                  "Y distance of station used in the SCM idealized hurricane "//&
                  "wind profile.", units='m', default=50.e3, scale=US%m_to_L)
+  call get_param(param_file, mdl, "DEFAULT_ANSWER_DATE", default_answer_date, &
+                 "This sets the default value for the various _ANSWER_DATE parameters.", &
+                 default=99991231)
   call get_param(param_file, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
                  "This sets the default value for the various _2018_ANSWERS parameters.", &
-                 default=.false.)
-  call get_param(param_file, mdl, "IDL_HURR_2018_ANSWERS", CS%answers_2018, &
+                 default=(default_answer_date<20190101))
+  call get_param(param_file, mdl, "IDL_HURR_2018_ANSWERS", answers_2018, &
                  "If true, use expressions driving the idealized hurricane test case that recover "//&
                  "the answers from the end of 2018.  Otherwise use expressions that are rescalable "//&
                  "and respect rotational symmetry.", default=default_2018_answers)
+
+  ! Revise inconsistent default answer dates.
+  if (answers_2018 .and. (default_answer_date >= 20190101)) default_answer_date = 20181231
+  if (.not.answers_2018 .and. (default_answer_date < 20190101)) default_answer_date = 20190101
+  call get_param(param_file, mdl, "IDL_HURR_ANSWER_DATE", CS%answer_date, &
+                 "The vintage of the expressions in the idealized hurricane test case.  "//&
+                 "Values below 20190101 recover the answers from the end of 2018, while higher "//&
+                 "values use expressions that are rescalable and respect rotational symmetry.  "//&
+                 "If both IDL_HURR_2018_ANSWERS and IDL_HURR_ANSWER_DATE are specified, "//&
+                 "the latter takes precedence.", default=default_answer_date)
 
   ! The following parameters are model run-time parameters which are used
   ! and logged elsewhere and so should not be logged here. The default
@@ -191,7 +209,7 @@ subroutine idealized_hurricane_wind_init(Time, G, US, param_file, CS)
     CS%rho_a = 1.2*US%kg_m3_to_R
   endif
   dP = CS%pressure_ambient - CS%pressure_central
-  if (CS%answers_2018) then
+  if (CS%answer_date < 20190101) then
     C = CS%max_windspeed / sqrt( US%R_to_kg_m3 * dP )
     CS%Holland_B = C**2 * US%R_to_kg_m3*CS%rho_a * exp(1.0)
   else
@@ -261,7 +279,7 @@ subroutine idealized_hurricane_wind_forcing(sfc_state, forces, day, G, US, CS)
   do j=js,je
     do I=is-1,Ieq
       Uocn = sfc_state%u(I,j) * REL_TAU_FAC
-      if (CS%answers_2018) then
+      if (CS%answer_date < 20190101) then
         Vocn = 0.25*(sfc_state%v(i,J)+sfc_state%v(i+1,J-1)&
                     +sfc_state%v(i+1,J)+sfc_state%v(i,J-1))*REL_TAU_FAC
       else
@@ -284,7 +302,7 @@ subroutine idealized_hurricane_wind_forcing(sfc_state, forces, day, G, US, CS)
   !> Computes tauy
   do J=js-1,Jeq
     do i=is,ie
-      if (CS%answers_2018) then
+      if (CS%answer_date < 20190101) then
         Uocn = 0.25*(sfc_state%u(I,j)+sfc_state%u(I-1,j+1) + &
                      sfc_state%u(I-1,j)+sfc_state%u(I,j+1))*REL_TAU_FAC
       else
@@ -381,7 +399,7 @@ subroutine idealized_hurricane_wind_profile(CS, US, absf, YY, XX, UOCN, VOCN, Tx
   !/
   ! Calculate U10 in the interior (inside of 10x radius of maximum wind),
   ! while adjusting U10 to 0 outside of 12x radius of maximum wind.
-  if (CS%answers_2018) then
+  if (CS%answer_date < 20190101) then
     if ( (radius > 0.001*CS%rad_max_wind) .and. (radius < 10.*CS%rad_max_wind) ) then
       U10 = sqrt(CS%Holland_AxBxDP*exp(-CS%Holland_A/radiusB) / (CS%rho_a*radiusB) + &
                  0.25*(radius_km*absf)**2) - 0.5*radius_km*absf
@@ -449,7 +467,7 @@ subroutine idealized_hurricane_wind_profile(CS, US, absf, YY, XX, UOCN, VOCN, Tx
   if (dU10 < 11.0*US%m_s_to_L_T) then
     Cd = 1.2e-3
   elseif (dU10 < 20.0*US%m_s_to_L_T) then
-    if (CS%answers_2018) then
+    if (CS%answer_date < 20190101) then
       Cd = (0.49 + 0.065*US%L_T_to_m_s*U10)*1.e-3
     else
       Cd = (0.49 + 0.065*US%L_T_to_m_s*dU10)*1.e-3
@@ -514,7 +532,7 @@ subroutine SCM_idealized_hurricane_wind_forcing(sfc_state, forces, day, G, US, C
   transdir = pie      !translation direction (-x)        |
   !------------------------------------------------------|
   dP = CS%pressure_ambient - CS%pressure_central
-  if (CS%answers_2018) then
+  if (CS%answer_date < 20190101) then
     C = CS%max_windspeed / sqrt( US%R_to_kg_m3*dP )
     B = C**2 * US%R_to_kg_m3*CS%rho_a * exp(1.0)
     if (BR_Bench) then ! rho_a reset to value used in generated wind for benchmark test
@@ -617,7 +635,7 @@ subroutine SCM_idealized_hurricane_wind_forcing(sfc_state, forces, day, G, US, C
     if (dU10 < 11.0*US%m_s_to_L_T) then
       Cd = 1.2e-3
     elseif (dU10 < 20.0*US%m_s_to_L_T) then
-      if (CS%answers_2018) then
+      if (CS%answer_date < 20190101) then
         Cd = (0.49 + 0.065 * US%L_T_to_m_s*U10 )*0.001
       else
         Cd = (0.49 + 0.065 * US%L_T_to_m_s*dU10 )*0.001
@@ -639,7 +657,7 @@ subroutine SCM_idealized_hurricane_wind_forcing(sfc_state, forces, day, G, US, C
     if (dU10 < 11.0*US%m_s_to_L_T) then
       Cd = 1.2e-3
     elseif (dU10 < 20.0*US%m_s_to_L_T) then
-      if (CS%answers_2018) then
+      if (CS%answer_date < 20190101) then
         Cd = (0.49 + 0.065 * US%L_T_to_m_s*U10 )*0.001
       else
         Cd = (0.49 + 0.065 * US%L_T_to_m_s*dU10 )*0.001

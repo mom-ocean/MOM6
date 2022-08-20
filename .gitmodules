@@ -1,6 +1,6 @@
 [submodule "pkg/CVMix-src"]
 	path = pkg/CVMix-src
-	url = https://github.com/CVMix/CVMix-src.git
+	url = https://github.com/mom-ocean/CVMix-src.git
 [submodule "pkg/GSW-Fortran"]
 	path = pkg/GSW-Fortran
-	url = https://github.com/TEOS-10/GSW-Fortran.git
+	url = https://github.com/mom-ocean/GSW-Fortran.git
