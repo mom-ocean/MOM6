@@ -1,4 +1,4 @@
-!> Edge value estimation for high-order resconstruction
+!> Edge value estimation for high-order reconstruction
 module regrid_edge_values
 
 ! This file is part of MOM6. See LICENSE.md for the license.
@@ -40,23 +40,24 @@ contains
 !!
 !! Both boundary edge values are set equal to the boundary cell averages.
 !! Any extrapolation scheme is applied after this routine has been called.
-!! Therefore, boundary cells are treated as if they were local extrama.
-subroutine bound_edge_values( N, h, u, edge_val, h_neglect, answers_2018 )
+!! Therefore, boundary cells are treated as if they were local extrema.
+subroutine bound_edge_values( N, h, u, edge_val, h_neglect, answer_date )
   integer,              intent(in)    :: N !< Number of cells
   real, dimension(N),   intent(in)    :: h !< cell widths [H]
   real, dimension(N),   intent(in)    :: u !< cell average properties in arbitrary units [A]
   real, dimension(N,2), intent(inout) :: edge_val !< Potentially modified edge values [A]; the
                                            !! second index is for the two edges of each cell.
   real,       optional, intent(in)    :: h_neglect !< A negligibly small width [H]
-  logical,    optional, intent(in)    :: answers_2018 !< If true use older, less acccurate expressions.
+  integer,    optional, intent(in)    :: answer_date  !< The vintage of the expressions to use
+
   ! Local variables
   real    :: sigma_l, sigma_c, sigma_r    ! left, center and right van Leer slopes [A H-1] or [A]
   real    :: slope_x_h     ! retained PLM slope times  half grid step [A]
   real    :: hNeglect      ! A negligible thickness [H].
-  logical :: use_2018_answers  ! If true use older, less acccurate expressions.
+  logical :: use_2018_answers  ! If true use older, less accurate expressions.
   integer :: k, km1, kp1   ! Loop index and the values to either side.
 
-  use_2018_answers = .true. ; if (present(answers_2018)) use_2018_answers = answers_2018
+  use_2018_answers = .true. ; if (present(answer_date)) use_2018_answers = (answer_date < 20190101)
   if (use_2018_answers) then
     hNeglect = hNeglect_dflt ; if (present(h_neglect)) hNeglect = h_neglect
   endif
@@ -218,22 +219,22 @@ end subroutine edge_values_explicit_h2
 !! available interpolant.
 !!
 !! For this fourth-order scheme, at least four cells must exist.
-subroutine edge_values_explicit_h4( N, h, u, edge_val, h_neglect, answers_2018 )
+subroutine edge_values_explicit_h4( N, h, u, edge_val, h_neglect, answer_date )
   integer,              intent(in)    :: N !< Number of cells
   real, dimension(N),   intent(in)    :: h !< cell widths [H]
   real, dimension(N),   intent(in)    :: u !< cell average properties in arbitrary units [A]
   real, dimension(N,2), intent(inout) :: edge_val !< Returned edge values [A]; the second index
                                            !! is for the two edges of each cell.
   real,       optional, intent(in)    :: h_neglect !< A negligibly small width [H]
-  logical,    optional, intent(in)    :: answers_2018 !< If true use older, less acccurate expressions.
+  integer,    optional, intent(in)    :: answer_date  !< The vintage of the expressions to use
 
   ! Local variables
   real :: h0, h1, h2, h3        ! temporary thicknesses [H]
   real :: h_min                 ! A minimal cell width [H]
   real :: f1, f2, f3            ! auxiliary variables with various units
-  real :: et1, et2, et3         ! terms the expresson for edge values [A H]
+  real :: et1, et2, et3         ! terms the expression for edge values [A H]
   real :: I_h12                 ! The inverse of the sum of the two central thicknesses [H-1]
-  real :: I_h012, I_h123        ! Inverses of sums of three succesive thicknesses [H-1]
+  real :: I_h012, I_h123        ! Inverses of sums of three successive thicknesses [H-1]
   real :: I_den_et2, I_den_et3  ! Inverses of denominators in edge value terms [H-2]
   real, dimension(5)    :: x          ! Coordinate system with 0 at edges [H]
   real, dimension(4)    :: dz               ! A temporary array of limited layer thicknesses [H]
@@ -244,9 +245,9 @@ subroutine edge_values_explicit_h4( N, h, u, edge_val, h_neglect, answers_2018 )
   real, dimension(4)    :: B, C
   real      :: hNeglect ! A negligible thickness in the same units as h.
   integer               :: i, j
-  logical   :: use_2018_answers  ! If true use older, less acccurate expressions.
+  logical   :: use_2018_answers  ! If true use older, less accurate expressions.
 
-  use_2018_answers = .true. ; if (present(answers_2018)) use_2018_answers = answers_2018
+  use_2018_answers = .true. ; if (present(answer_date)) use_2018_answers = (answer_date < 20190101)
   if (use_2018_answers) then
     hNeglect = hNeglect_edge_dflt ; if (present(h_neglect)) hNeglect = h_neglect
   else
@@ -382,14 +383,14 @@ end subroutine edge_values_explicit_h4
 !!
 !! There are N+1 unknowns and we are able to write N-1 equations. The
 !! boundary conditions close the system.
-subroutine edge_values_implicit_h4( N, h, u, edge_val, h_neglect, answers_2018 )
+subroutine edge_values_implicit_h4( N, h, u, edge_val, h_neglect, answer_date )
   integer,              intent(in)    :: N !< Number of cells
   real, dimension(N),   intent(in)    :: h !< cell widths [H]
   real, dimension(N),   intent(in)    :: u !< cell average properties in arbitrary units [A]
   real, dimension(N,2), intent(inout) :: edge_val !< Returned edge values [A]; the second index
                                            !! is for the two edges of each cell.
   real,       optional, intent(in)    :: h_neglect !< A negligibly small width [H]
-  logical,    optional, intent(in)    :: answers_2018 !< If true use older, less acccurate expressions.
+  integer,    optional, intent(in)    :: answer_date  !< The vintage of the expressions to use
 
   ! Local variables
   integer               :: i, j                 ! loop indexes
@@ -415,9 +416,9 @@ subroutine edge_values_implicit_h4( N, h, u, edge_val, h_neglect, answers_2018 )
                            tri_b, &     ! tridiagonal system (right hand side) [A]
                            tri_x        ! tridiagonal system (solution vector) [A]
   real      :: hNeglect          ! A negligible thickness [H]
-  logical   :: use_2018_answers  ! If true use older, less acccurate expressions.
+  logical   :: use_2018_answers  ! If true use older, less accurate expressions.
 
-  use_2018_answers = .true. ; if (present(answers_2018)) use_2018_answers = answers_2018
+  use_2018_answers = .true. ; if (present(answer_date)) use_2018_answers = (answer_date < 20190101)
   if (use_2018_answers) then
     hNeglect = hNeglect_edge_dflt ; if (present(h_neglect)) hNeglect = h_neglect
   else
@@ -583,7 +584,7 @@ subroutine end_value_h4(dz, u, Csys)
  !   Csys(4) = ((u(2)-u(1)) - 2.0 * (u(3)-u(2)) + (u(4)-u(3))) * (0.5*C1_3)
  ! else
 
-  ! Express the coefficients as sums of the differences between properties of succesive layers.
+  ! Express the coefficients as sums of the differences between properties of successive layers.
 
   h1 = dz(1) ; h2 = dz(2) ; h3 = dz(3) ; h4 = dz(4)
   ! Some of the weights used below are proportional to (h1/(h2+h3))**2 or (h1/(h2+h3))*(h2/(h3+h4))
@@ -690,14 +691,15 @@ end subroutine end_value_h4
 !!
 !! There are N+1 unknowns and we are able to write N-1 equations. The
 !! boundary conditions close the system.
-subroutine edge_slopes_implicit_h3( N, h, u, edge_slopes, h_neglect, answers_2018 )
+subroutine edge_slopes_implicit_h3( N, h, u, edge_slopes, h_neglect, answer_date )
   integer,              intent(in)    :: N !< Number of cells
   real, dimension(N),   intent(in)    :: h !< cell widths [H]
   real, dimension(N),   intent(in)    :: u !< cell average properties in arbitrary units [A]
   real, dimension(N,2), intent(inout) :: edge_slopes !< Returned edge slopes [A H-1]; the
                                            !! second index is for the two edges of each cell.
   real,       optional, intent(in)    :: h_neglect !< A negligibly small width [H]
-  logical,    optional, intent(in)    :: answers_2018 !< If true use older, less acccurate expressions.
+  integer,    optional, intent(in)    :: answer_date  !< The vintage of the expressions to use
+
   ! Local variables
   integer               :: i, j                 ! loop indexes
   real                  :: h0, h1               ! cell widths [H or nondim]
@@ -724,11 +726,11 @@ subroutine edge_slopes_implicit_h3( N, h, u, edge_slopes, h_neglect, answers_201
                            tri_x        ! tridiagonal system (solution vector) [A H-1]
   real      :: hNeglect  ! A negligible thickness [H].
   real      :: hNeglect3 ! hNeglect^3 [H3].
-  logical   :: use_2018_answers  ! If true use older, less acccurate expressions.
+  logical   :: use_2018_answers  ! If true use older, less accurate expressions.
 
   hNeglect = hNeglect_dflt ; if (present(h_neglect))  hNeglect = h_neglect
   hNeglect3 = hNeglect**3
-  use_2018_answers = .true. ; if (present(answers_2018)) use_2018_answers = answers_2018
+  use_2018_answers = .true. ; if (present(answer_date)) use_2018_answers = (answer_date < 20190101)
 
   ! Loop on cells (except last one)
   do i = 1,N-1
@@ -859,14 +861,15 @@ end subroutine edge_slopes_implicit_h3
 
 !------------------------------------------------------------------------------
 !> Compute ih5 edge slopes (implicit fifth order accurate)
-subroutine edge_slopes_implicit_h5( N, h, u, edge_slopes, h_neglect, answers_2018 )
+subroutine edge_slopes_implicit_h5( N, h, u, edge_slopes, h_neglect, answer_date )
   integer,              intent(in)    :: N !< Number of cells
   real, dimension(N),   intent(in)    :: h !< cell widths [H]
   real, dimension(N),   intent(in)    :: u !< cell average properties in arbitrary units [A]
   real, dimension(N,2), intent(inout) :: edge_slopes !< Returned edge slopes [A H-1]; the
                                            !! second index is for the two edges of each cell.
   real, optional,       intent(in)    :: h_neglect !< A negligibly small width [H]
-  logical,    optional, intent(in)    :: answers_2018 !< If true use older, less acccurate expressions.
+  integer,    optional, intent(in)    :: answer_date  !< The vintage of the expressions to use
+
 ! -----------------------------------------------------------------------------
 ! Fifth-order implicit estimates of edge slopes are based on a four-cell,
 ! three-edge stencil. A tridiagonal system is set up and is based on
@@ -1129,14 +1132,14 @@ end subroutine edge_slopes_implicit_h5
 !!          become computationally expensive if regridding is carried out
 !!          often. Figuring out closed-form expressions for these coefficients
 !!          on nonuniform meshes turned out to be intractable.
-subroutine edge_values_implicit_h6( N, h, u, edge_val, h_neglect, answers_2018 )
+subroutine edge_values_implicit_h6( N, h, u, edge_val, h_neglect, answer_date )
   integer,              intent(in)    :: N !< Number of cells
   real, dimension(N),   intent(in)    :: h !< cell widths [H]
   real, dimension(N),   intent(in)    :: u !< cell average properties (size N) in arbitrary units [A]
   real, dimension(N,2), intent(inout) :: edge_val  !< Returned edge values [A]; the second index
                                            !! is for the two edges of each cell.
   real,       optional, intent(in)    :: h_neglect !< A negligibly small width [H]
-  logical,    optional, intent(in)    :: answers_2018 !< If true use older, less acccurate expressions.
+  integer,    optional, intent(in)    :: answer_date  !< The vintage of the expressions to use
 
   ! Local variables
   real :: h0, h1, h2, h3       ! cell widths [H]

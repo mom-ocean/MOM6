@@ -79,9 +79,8 @@ function USER_register_tracer_example(HI, GV, param_file, CS, tr_Reg, restart_CS
   isd = HI%isd ; ied = HI%ied ; jsd = HI%jsd ; jed = HI%jed ; nz = GV%ke
 
   if (associated(CS)) then
-    call MOM_error(WARNING, "USER_register_tracer_example called with an "// &
-                            "associated control structure.")
-    return
+    call MOM_error(FATAL, "USER_register_tracer_example called with an "// &
+                          "associated control structure.")
   endif
   allocate(CS)
 

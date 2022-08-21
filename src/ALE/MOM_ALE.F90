@@ -91,9 +91,11 @@ type, public :: ALE_CS ; private
 
   logical :: remap_after_initialization !< Indicates whether to regrid/remap after initializing the state.
 
-  logical :: answers_2018   !< If true, use the order of arithmetic and expressions for remapping
-                            !! that recover the answers from the end of 2018.  Otherwise, use more
-                            !! robust and accurate forms of mathematically equivalent expressions.
+  integer :: answer_date    !< The vintage of the expressions and order of arithmetic to use for
+                            !! remapping. Values below 20190101 result in the use of older, less
+                            !! accurate expressions that were in use at the end of 2018.  Higher
+                            !! values result in the use of more robust and accurate forms of
+                            !! mathematically equivalent expressions.
 
   logical :: debug   !< If true, write verbose checksums for debugging purposes.
   logical :: show_call_tree !< For debugging
@@ -163,7 +165,11 @@ subroutine ALE_init( param_file, GV, US, max_depth, CS)
   character(len=40) :: mdl = "MOM_ALE" ! This module's name.
   character(len=80) :: string, vel_string ! Temporary strings
   real              :: filter_shallow_depth, filter_deep_depth
-  logical           :: default_2018_answers
+  integer :: default_answer_date  ! The default setting for the various ANSWER_DATE flags.
+  logical :: default_2018_answers ! The default setting for the various 2018_ANSWERS flags.
+  logical :: answers_2018   ! If true, use the order of arithmetic and expressions for remapping
+                            ! that recover the answers from the end of 2018.  Otherwise, use more
+                            ! robust and accurate forms of mathematically equivalent expressions.
   logical           :: check_reconstruction
   logical           :: check_remapping
   logical           :: force_bounds_in_subcell
@@ -218,25 +224,39 @@ subroutine ALE_init( param_file, GV, US, max_depth, CS)
   call get_param(param_file, mdl, "REMAP_BOUNDARY_EXTRAP", remap_boundary_extrap, &
                  "If true, values at the interfaces of boundary cells are "//&
                  "extrapolated instead of piecewise constant", default=.false.)
+  call get_param(param_file, mdl, "DEFAULT_ANSWER_DATE", default_answer_date, &
+                 "This sets the default value for the various _ANSWER_DATE parameters.", &
+                 default=99991231)
   call get_param(param_file, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
                  "This sets the default value for the various _2018_ANSWERS parameters.", &
-                 default=.false.)
-  call get_param(param_file, mdl, "REMAPPING_2018_ANSWERS", CS%answers_2018, &
+                 default=(default_answer_date<20190101))
+  call get_param(param_file, mdl, "REMAPPING_2018_ANSWERS", answers_2018, &
                  "If true, use the order of arithmetic and expressions that recover the "//&
                  "answers from the end of 2018.  Otherwise, use updated and more robust "//&
                  "forms of the same expressions.", default=default_2018_answers)
+  ! Revise inconsistent default answer dates for remapping.
+  if (answers_2018 .and. (default_answer_date >= 20190101)) default_answer_date = 20181231
+  if (.not.answers_2018 .and. (default_answer_date < 20190101)) default_answer_date = 20190101
+  call get_param(param_file, mdl, "REMAPPING_ANSWER_DATE", CS%answer_date, &
+                 "The vintage of the expressions and order of arithmetic to use for remapping.  "//&
+                 "Values below 20190101 result in the use of older, less accurate expressions "//&
+                 "that were in use at the end of 2018.  Higher values result in the use of more "//&
+                 "robust and accurate forms of mathematically equivalent expressions.  "//&
+                 "If both REMAPPING_2018_ANSWERS and REMAPPING_ANSWER_DATE are specified, the "//&
+                 "latter takes precedence.", default=default_answer_date)
+
   call initialize_remapping( CS%remapCS, string, &
                              boundary_extrapolation=remap_boundary_extrap, &
                              check_reconstruction=check_reconstruction, &
                              check_remapping=check_remapping, &
                              force_bounds_in_subcell=force_bounds_in_subcell, &
-                             answers_2018=CS%answers_2018)
+                             answer_date=CS%answer_date)
   call initialize_remapping( CS%vel_remapCS, vel_string, &
                              boundary_extrapolation=remap_boundary_extrap, &
                              check_reconstruction=check_reconstruction, &
                              check_remapping=check_remapping, &
                              force_bounds_in_subcell=force_bounds_in_subcell, &
-                             answers_2018=CS%answers_2018)
+                             answer_date=CS%answer_date)
 
   call get_param(param_file, mdl, "PARTIAL_CELL_VELOCITY_REMAP", CS%partial_cell_vel_remap, &
                  "If true, use partial cell thicknesses at velocity points that are masked out "//&
@@ -306,7 +326,11 @@ subroutine ALE_register_diags(Time, G, GV, US, diag, CS)
   type(diag_ctrl), target,    intent(in)  :: diag  !< Diagnostics control structure
   type(ALE_CS), pointer                   :: CS    !< Module control structure
 
+  ! Local variables
+  character(len=48)  :: thickness_units
+
   CS%diag => diag
+  thickness_units = get_thickness_units(GV)
 
   ! These diagnostics of the state variables before ALE are useful for
   ! debugging the ALE code.
@@ -315,7 +339,7 @@ subroutine ALE_register_diags(Time, G, GV, US, diag, CS)
   CS%id_v_preale = register_diag_field('ocean_model', 'v_preale', diag%axesCvL, Time, &
       'Meridional velocity before remapping', 'm s-1', conversion=US%L_T_to_m_s)
   CS%id_h_preale = register_diag_field('ocean_model', 'h_preale', diag%axesTL, Time, &
-      'Layer Thickness before remapping', get_thickness_units(GV), conversion=GV%H_to_MKS, &
+      'Layer Thickness before remapping', thickness_units, conversion=GV%H_to_MKS, &
       v_extensive=.true.)
   CS%id_T_preale = register_diag_field('ocean_model', 'T_preale', diag%axesTL, Time, &
       'Temperature before remapping', 'degC', conversion=US%C_to_degC)
@@ -324,14 +348,15 @@ subroutine ALE_register_diags(Time, G, GV, US, diag, CS)
   CS%id_e_preale = register_diag_field('ocean_model', 'e_preale', diag%axesTi, Time, &
       'Interface Heights before remapping', 'm', conversion=US%Z_to_m)
 
-  CS%id_dzRegrid = register_diag_field('ocean_model','dzRegrid',diag%axesTi,Time, &
+  CS%id_dzRegrid = register_diag_field('ocean_model', 'dzRegrid', diag%axesTi, Time, &
       'Change in interface height due to ALE regridding', 'm', conversion=GV%H_to_m)
-  cs%id_vert_remap_h = register_diag_field('ocean_model', 'vert_remap_h', &
-      diag%axestl, time, 'layer thicknesses after ALE regridding and remapping', &
-      'm', conversion=GV%H_to_m, v_extensive=.true.)
-  cs%id_vert_remap_h_tendency = register_diag_field('ocean_model','vert_remap_h_tendency',diag%axestl,time, &
+  cs%id_vert_remap_h = register_diag_field('ocean_model', 'vert_remap_h', diag%axestl, Time, &
+      'layer thicknesses after ALE regridding and remapping', &
+      thickness_units, conversion=GV%H_to_MKS, v_extensive=.true.)
+  cs%id_vert_remap_h_tendency = register_diag_field('ocean_model', &
+      'vert_remap_h_tendency', diag%axestl, Time, &
       'Layer thicknesses tendency due to ALE regridding and remapping', &
-      'm s-1', conversion=GV%H_to_m*US%s_to_T, v_extensive=.true.)
+      trim(thickness_units)//" s-1", conversion=GV%H_to_MKS*US%s_to_T, v_extensive=.true.)
 
 end subroutine ALE_register_diags
 
@@ -590,8 +615,8 @@ subroutine ALE_offline_inputs(CS, G, GV, h, tv, Reg, uhtr, vhtr, Kd, debug, OBC)
     endif
   enddo ; enddo
 
-  call ALE_remap_scalar(CS%remapCS, G, GV, nk, h, tv%T, h_new, tv%T, answers_2018=CS%answers_2018)
-  call ALE_remap_scalar(CS%remapCS, G, GV, nk, h, tv%S, h_new, tv%S, answers_2018=CS%answers_2018)
+  call ALE_remap_scalar(CS%remapCS, G, GV, nk, h, tv%T, h_new, tv%T, answer_date=CS%answer_date)
+  call ALE_remap_scalar(CS%remapCS, G, GV, nk, h, tv%S, h_new, tv%S, answer_date=CS%answer_date)
 
   if (debug) call MOM_tracer_chkinv("After ALE_offline_inputs", G, GV, h_new, Reg%Tr, Reg%ntr)
 
@@ -742,7 +767,7 @@ subroutine ALE_regrid_accelerated(CS, G, GV, h, tv, n_itt, u, v, OBC, Reg, dt, d
   if (present(dt)) &
     call ALE_update_regrid_weights(dt, CS)
 
-  if (.not. CS%answers_2018) then
+  if (CS%answer_date >= 20190101) then
     h_neglect = GV%H_subroundoff ; h_neglect_edge = GV%H_subroundoff
   elseif (GV%Boussinesq) then
     h_neglect = GV%m_to_H * 1.0e-30 ; h_neglect_edge = GV%m_to_H * 1.0e-10
@@ -843,7 +868,7 @@ subroutine remap_all_state_vars(CS, G, GV, h_old, h_new, Reg, OBC, &
                           "and u/v are to be remapped")
   endif
 
-  if (.not.CS%answers_2018) then
+  if (CS%answer_date >= 20190101) then
     h_neglect = GV%H_subroundoff ; h_neglect_edge = GV%H_subroundoff
   elseif (GV%Boussinesq) then
     h_neglect = GV%m_to_H*1.0e-30 ; h_neglect_edge = GV%m_to_H*1.0e-10
@@ -1092,7 +1117,8 @@ end subroutine mask_near_bottom_vel
 !> Remaps a single scalar between grids described by thicknesses h_src and h_dst.
 !! h_dst must be dimensioned as a model array with GV%ke layers while h_src can
 !! have an arbitrary number of layers specified by nk_src.
-subroutine ALE_remap_scalar(CS, G, GV, nk_src, h_src, s_src, h_dst, s_dst, all_cells, old_remap, answers_2018 )
+subroutine ALE_remap_scalar(CS, G, GV, nk_src, h_src, s_src, h_dst, s_dst, all_cells, old_remap, &
+                            answers_2018, answer_date )
   type(remapping_CS),                      intent(in)    :: CS        !< Remapping control structure
   type(ocean_grid_type),                   intent(in)    :: G         !< Ocean grid structure
   type(verticalGrid_type),                 intent(in)    :: GV        !< Ocean vertical grid structure
@@ -1112,6 +1138,8 @@ subroutine ALE_remap_scalar(CS, G, GV, nk_src, h_src, s_src, h_dst, s_dst, all_c
                                                                       !! and expressions that recover the answers for
                                                                       !! remapping from the end of 2018. Otherwise,
                                                                       !! use more robust forms of the same expressions.
+  integer,                       optional, intent(in)    :: answer_date !< The vintage of the expressions to use
+                                                                      !! for remapping
   ! Local variables
   integer :: i, j, k, n_points
   real :: dx(GV%ke+1)
@@ -1124,6 +1152,7 @@ subroutine ALE_remap_scalar(CS, G, GV, nk_src, h_src, s_src, h_dst, s_dst, all_c
   if (present(old_remap)) use_remapping_core_w = old_remap
   n_points = nk_src
   use_2018_remap = .true. ; if (present(answers_2018)) use_2018_remap = answers_2018
+  if (present(answer_date)) use_2018_remap = (answer_date < 20190101)
 
   if (.not.use_2018_remap) then
     h_neglect = GV%H_subroundoff ; h_neglect_edge = GV%H_subroundoff
@@ -1206,7 +1235,7 @@ subroutine ALE_PLM_edge_values( CS, G, GV, h, Q, bdry_extrap, Q_t, Q_b )
   real :: mslp
   real :: h_neglect
 
-  if (.not.CS%answers_2018) then
+  if (CS%answer_date >= 20190101) then
     h_neglect = GV%H_subroundoff
   elseif (GV%Boussinesq) then
     h_neglect = GV%m_to_H*1.0e-30
@@ -1275,7 +1304,7 @@ subroutine TS_PPM_edge_values( CS, S_t, S_b, T_t, T_b, G, GV, tv, h, bdry_extrap
       ppol_coefs        ! Coefficients of polynomial, all in [degC] or [ppt]
   real :: h_neglect, h_neglect_edge ! Tiny thicknesses [H ~> m or kg m-2]
 
-  if (.not.CS%answers_2018) then
+  if (CS%answer_date >= 20190101) then
     h_neglect = GV%H_subroundoff ; h_neglect_edge = GV%H_subroundoff
   elseif (GV%Boussinesq) then
     h_neglect = GV%m_to_H*1.0e-30 ; h_neglect_edge = GV%m_to_H*1.0e-10
@@ -1295,9 +1324,9 @@ subroutine TS_PPM_edge_values( CS, S_t, S_b, T_t, T_b, G, GV, tv, h, bdry_extrap
     ppol_E(:,:) = 0.0
     ppol_coefs(:,:) = 0.0
     call edge_values_implicit_h4( GV%ke, hTmp, tmp, ppol_E, h_neglect=h_neglect_edge, &
-                                  answers_2018=CS%answers_2018 )
+                                  answer_date=CS%answer_date )
     call PPM_reconstruction( GV%ke, hTmp, tmp, ppol_E, ppol_coefs, h_neglect, &
-                                  answers_2018=CS%answers_2018 )
+                                  answer_date=CS%answer_date )
     if (bdry_extrap) &
       call PPM_boundary_extrapolation( GV%ke, hTmp, tmp, ppol_E, ppol_coefs, h_neglect )
 
@@ -1310,15 +1339,15 @@ subroutine TS_PPM_edge_values( CS, S_t, S_b, T_t, T_b, G, GV, tv, h, bdry_extrap
     ppol_E(:,:) = 0.0
     ppol_coefs(:,:) = 0.0
     tmp(:) = tv%T(i,j,:)
-    if (CS%answers_2018) then
+    if (CS%answer_date < 20190101) then
       call edge_values_implicit_h4( GV%ke, hTmp, tmp, ppol_E, h_neglect=1.0e-10*GV%m_to_H, &
-                                  answers_2018=CS%answers_2018 )
+                                  answer_date=CS%answer_date )
     else
       call edge_values_implicit_h4( GV%ke, hTmp, tmp, ppol_E, h_neglect=GV%H_subroundoff, &
-                                  answers_2018=CS%answers_2018 )
+                                  answer_date=CS%answer_date )
     endif
     call PPM_reconstruction( GV%ke, hTmp, tmp, ppol_E, ppol_coefs, h_neglect, &
-                                  answers_2018=CS%answers_2018 )
+                                  answer_date=CS%answer_date )
     if (bdry_extrap) &
       call PPM_boundary_extrapolation(GV%ke, hTmp, tmp, ppol_E, ppol_coefs, h_neglect )
 

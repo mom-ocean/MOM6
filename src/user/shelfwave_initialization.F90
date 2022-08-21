@@ -66,7 +66,7 @@ function register_shelfwave_OBC(param_file, CS, US, OBC_Reg)
   call get_param(param_file, mdl, "F_0", CS%f0, &
                  default=0.0, units="s-1", scale=US%T_to_s, do_not_log=.true.)
   call get_param(param_file, mdl, "LENLAT", len_lat, &
-                 do_not_log=.true.)
+                 do_not_log=.true., fail_if_missing=.true.)
   call get_param(param_file, mdl,"SHELFWAVE_X_WAVELENGTH",CS%Lx, &
                  "Length scale of shelfwave in x-direction.",&
                  units="Same as x,y", default=100.)

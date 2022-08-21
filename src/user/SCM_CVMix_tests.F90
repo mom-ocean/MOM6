@@ -38,9 +38,9 @@ type SCM_CVMix_tests_CS ; private
   logical :: UseDiurnalSW   !< True to use diurnal sw radiation
   real :: tau_x !< (Constant) Wind stress, X [R L Z T-2 ~> Pa]
   real :: tau_y !< (Constant) Wind stress, Y [R L Z T-2 ~> Pa]
-  real :: surf_HF !< (Constant) Heat flux [degC Z T-1 ~> m degC s-1]
+  real :: surf_HF !< (Constant) Heat flux [C Z T-1 ~> m degC s-1]
   real :: surf_evap !< (Constant) Evaporation rate [Z T-1 ~> m s-1]
-  real :: Max_sw !< maximum of diurnal sw radiation [degC Z T-1 ~> degC m s-1]
+  real :: Max_sw !< maximum of diurnal sw radiation [C Z T-1 ~> degC m s-1]
   real :: Rho0 !< reference density [R ~> kg m-3]
 end type
 
@@ -166,7 +166,7 @@ subroutine SCM_CVMix_tests_surface_forcing_init(Time, G, param_file, CS)
   if (CS%UseHeatFlux) then
     call get_param(param_file, mdl, "SCM_HEAT_FLUX", CS%surf_HF, &
                  "Constant surface heat flux used in the SCM CVMix test surface forcing.", &
-                 units='m K/s', scale=US%m_to_Z*US%T_to_s, fail_if_missing=.true.)
+                 units='m K/s', scale=US%m_to_Z*US%degC_to_C*US%T_to_s, fail_if_missing=.true.)
   endif
   if (CS%UseEvaporation) then
     call get_param(param_file, mdl, "SCM_EVAPORATION", CS%surf_evap, &
@@ -176,7 +176,7 @@ subroutine SCM_CVMix_tests_surface_forcing_init(Time, G, param_file, CS)
   if (CS%UseDiurnalSW) then
     call get_param(param_file, mdl, "SCM_DIURNAL_SW_MAX", CS%Max_sw, &
                  "Maximum diurnal sw radiation used in the SCM CVMix test surface forcing.", &
-                 units='m K/s', scale=US%m_to_Z*US%T_to_s, fail_if_missing=.true.)
+                 units='m K/s', scale=US%m_to_Z*US%degC_to_C*US%T_to_s, fail_if_missing=.true.)
   endif
   call get_param(param_file, mdl, "RHO_0", CS%Rho0, &
                  "The mean ocean density used with BOUSSINESQ true to "//&
@@ -242,8 +242,8 @@ subroutine SCM_CVMix_tests_buoyancy_forcing(sfc_state, fluxes, day, G, US, CS)
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
   if (CS%UseHeatFlux) then
-    ! Note CVMix test inputs give Heat flux in [m K/s]
-    ! therefore must convert to W/m2 by multiplying
+    ! Note CVMix test inputs give Heat flux in [Z C T-1 ~> m K/s]
+    ! therefore must convert to [Q R Z T-1 ~> W m-2] by multiplying
     ! by Rho0*Cp
     do J=Jsq,Jeq ; do i=is,ie
       fluxes%sens(i,J) = CS%surf_HF * CS%Rho0 * fluxes%C_p
@@ -252,7 +252,7 @@ subroutine SCM_CVMix_tests_buoyancy_forcing(sfc_state, fluxes, day, G, US, CS)
 
   if (CS%UseEvaporation) then
     do J=Jsq,Jeq ; do i=is,ie
-    ! Note CVMix test inputs give evaporation in [m s-1]
+    ! Note CVMix test inputs give evaporation in [Z T-1 ~> m s-1]
     ! This therefore must be converted to mass flux in [R Z T-1 ~> kg m-2 s-1]
     ! by multiplying by density and some unit conversion factors.
       fluxes%evap(i,J) = CS%surf_evap * CS%Rho0
@@ -261,8 +261,8 @@ subroutine SCM_CVMix_tests_buoyancy_forcing(sfc_state, fluxes, day, G, US, CS)
 
   if (CS%UseDiurnalSW) then
     do J=Jsq,Jeq ; do i=is,ie
-    ! Note CVMix test inputs give max sw rad in [m degC/s]
-    ! therefore must convert to W/m2 by multiplying by Rho0*Cp
+    ! Note CVMix test inputs give max sw rad in [Z C T-1 ~> m degC s-1]
+    ! therefore must convert to [Q R Z T-1 ~> W m-2] by multiplying by Rho0*Cp
     ! Note diurnal cycle peaks at Noon.
       fluxes%sw(i,J) = CS%Max_sw *  max(0.0, cos(2*PI*(time_type_to_real(DAY)/86400.0 - 0.5))) * CS%RHO0 * fluxes%C_p
     enddo ; enddo

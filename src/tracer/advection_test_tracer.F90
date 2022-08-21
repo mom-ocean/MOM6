@@ -13,7 +13,7 @@ use MOM_grid, only : ocean_grid_type
 use MOM_hor_index, only : hor_index_type
 use MOM_io, only : slasher, vardesc, var_desc, query_vardesc
 use MOM_open_boundary, only : ocean_OBC_type
-use MOM_restart, only : query_initialized, MOM_restart_CS
+use MOM_restart, only : query_initialized, set_initialized, MOM_restart_CS
 use MOM_spatial_means, only : global_mass_int_EFP
 use MOM_sponge, only : set_up_sponge_field, sponge_CS
 use MOM_time_manager, only : time_type
@@ -89,9 +89,8 @@ function register_advection_test_tracer(HI, GV, param_file, CS, tr_Reg, restart_
   isd = HI%isd ; ied = HI%ied ; jsd = HI%jsd ; jed = HI%jed ; nz = GV%ke
 
   if (associated(CS)) then
-    call MOM_error(WARNING, "register_advection_test_tracer called with an "// &
-                            "associated control structure.")
-    return
+    call MOM_error(FATAL, "register_advection_test_tracer called with an "// &
+                          "associated control structure.")
   endif
   allocate(CS)
 
@@ -235,6 +234,8 @@ subroutine initialize_advection_test_tracer(restart, day, G, GV, h,diag, OBC, CS
         if (locx**2+locy**2<=1.0) CS%tr(i,j,k,m) = 1.0
         if (locx>0.0.and.abs(locy)<0.2) CS%tr(i,j,k,m) = 0.0
       enddo ; enddo
+
+      call set_initialized(CS%tr(:,:,:,m), name, CS%restart_CSp)
     endif ! restart
   enddo
 

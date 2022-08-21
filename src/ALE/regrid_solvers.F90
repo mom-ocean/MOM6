@@ -16,12 +16,12 @@ contains
 !! This routine uses Gauss's algorithm to transform the system's original
 !! matrix into an upper triangular matrix. Back substitution yields the answer.
 !! The matrix A must be square, with the first index varing down the column.
-subroutine solve_linear_system( A, R, X, N, answers_2018 )
+subroutine solve_linear_system( A, R, X, N, answer_date )
   integer,              intent(in)    :: N  !< The size of the system
   real, dimension(N,N), intent(inout) :: A  !< The matrix being inverted [nondim]
   real, dimension(N),   intent(inout) :: R  !< system right-hand side [A]
   real, dimension(N),   intent(inout) :: X  !< solution vector [A]
-  logical,    optional, intent(in)    :: answers_2018 !< If true or absent use older, less efficient expressions.
+  integer,    optional, intent(in)    :: answer_date  !< The vintage of the expressions to use
   ! Local variables
   real, parameter       :: eps = 0.0        ! Minimum pivot magnitude allowed
   real    :: factor       ! The factor that eliminates the leading nonzero element in a row.
@@ -31,7 +31,7 @@ subroutine solve_linear_system( A, R, X, N, answers_2018 )
   logical :: old_answers  ! If true, use expressions that give the original (2008 through 2018) MOM6 answers
   integer :: i, j, k
 
-  old_answers = .true. ; if (present(answers_2018)) old_answers = answers_2018
+  old_answers = .true. ; if (present(answer_date)) old_answers = (answer_date < 20190101)
 
   ! Loop on rows to transform the problem into multiplication by an upper-right matrix.
   do i = 1,N-1
@@ -173,14 +173,14 @@ end subroutine linear_solver
 !!
 !! This routine uses Thomas's algorithm to solve the tridiagonal system AX = R.
 !! (A is made up of lower, middle and upper diagonals)
-subroutine solve_tridiagonal_system( Al, Ad, Au, R, X, N, answers_2018 )
+subroutine solve_tridiagonal_system( Al, Ad, Au, R, X, N, answer_date )
   integer,            intent(in)  :: N   !< The size of the system
   real, dimension(N), intent(in)  :: Ad  !< Matrix center diagonal
   real, dimension(N), intent(in)  :: Al  !< Matrix lower diagonal
   real, dimension(N), intent(in)  :: Au  !< Matrix upper diagonal
   real, dimension(N), intent(in)  :: R   !< system right-hand side
   real, dimension(N), intent(out) :: X   !< solution vector
-  logical,  optional, intent(in)  :: answers_2018 !< If true use older, less acccurate expressions.
+  integer,  optional, intent(in)  :: answer_date  !< The vintage of the expressions to use
   ! Local variables
   real, dimension(N) :: pivot, Al_piv
   real, dimension(N) :: c1       ! Au / pivot for the backward sweep
@@ -188,7 +188,7 @@ subroutine solve_tridiagonal_system( Al, Ad, Au, R, X, N, answers_2018 )
   integer :: k        ! Loop index
   logical :: old_answers  ! If true, use expressions that give the original (2008 through 2018) MOM6 answers
 
-  old_answers = .true. ; if (present(answers_2018)) old_answers = answers_2018
+  old_answers = .true. ; if (present(answer_date)) old_answers = (answer_date < 20190101)
 
   if (old_answers) then
     ! This version gives the same answers as the original (2008 through 2018) MOM6 code

@@ -153,8 +153,10 @@ subroutine MOM_surface_chksum(mesg, sfc_state, G, US, haloshift, symmetric)
   sym = .false. ; if (present(symmetric)) sym = symmetric
   hs = 1 ; if (present(haloshift)) hs = haloshift
 
-  if (allocated(sfc_state%SST)) call hchksum(sfc_state%SST, mesg//" SST", G%HI, haloshift=hs)
-  if (allocated(sfc_state%SSS)) call hchksum(sfc_state%SSS, mesg//" SSS", G%HI, haloshift=hs)
+  if (allocated(sfc_state%SST)) call hchksum(sfc_state%SST, mesg//" SST", G%HI, haloshift=hs, &
+                                             scale=US%C_to_degC)
+  if (allocated(sfc_state%SSS)) call hchksum(sfc_state%SSS, mesg//" SSS", G%HI, haloshift=hs, &
+                                             scale=US%S_to_ppt)
   if (allocated(sfc_state%sea_lev)) call hchksum(sfc_state%sea_lev, mesg//" sea_lev", G%HI, &
                                                  haloshift=hs, scale=US%Z_to_m)
   if (allocated(sfc_state%Hml)) call hchksum(sfc_state%Hml, mesg//" Hml", G%HI, haloshift=hs, &

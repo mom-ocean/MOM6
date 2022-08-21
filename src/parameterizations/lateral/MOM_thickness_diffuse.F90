@@ -72,9 +72,10 @@ type, public :: thickness_diffuse_CS ; private
                                  !! the GEOMETRIC thickness diffusion [nondim]
   real    :: MEKE_GEOMETRIC_epsilon !< Minimum Eady growth rate for the GEOMETRIC thickness
                                  !! diffusivity [T-1 ~> s-1].
-  logical :: MEKE_GEOM_answers_2018  !< If true, use expressions in the MEKE_GEOMETRIC calculation
-                                 !! that recover the answers from the original implementation.
-                                 !! Otherwise, use expressions that satisfy rotational symmetry.
+  integer :: MEKE_GEOM_answer_date  !< The vintage of the expressions in the MEKE_GEOMETRIC
+                                 !! calculation.  Values below 20190101 recover the answers from the
+                                 !! original implementation, while higher values use expressions that
+                                 !! satisfy rotational symmetry.
   logical :: Use_KH_in_MEKE      !< If true, uses the thickness diffusivity calculated here to diffuse MEKE.
   logical :: GM_src_alt          !< If true, use the GM energy conversion form S^2*N^2*kappa rather
                                  !! than the streamfunction for the GM source term.
@@ -392,7 +393,7 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
 
   if (allocated(MEKE%Kh)) then
     if (CS%MEKE_GEOMETRIC) then
-      if (CS%MEKE_GEOM_answers_2018) then
+      if (CS%MEKE_GEOM_answer_date < 20190101) then
         !$OMP do
         do j=js,je ; do I=is,ie
           ! This does not give bitwise rotational symmetry.
@@ -1950,7 +1951,11 @@ subroutine thickness_diffuse_init(Time, G, GV, US, param_file, diag, CDp, CS)
   real :: strat_floor  ! A floor for buoyancy frequency in the Ferrari et al. 2010,
                        ! streamfunction formulation, expressed as a fraction of planetary
                        ! rotation [nondim].
+  integer :: default_answer_date  ! The default setting for the various ANSWER_DATE flags.
   logical :: default_2018_answers ! The default setting for the various 2018_ANSWERS flags.
+  logical :: MEKE_GEOM_answers_2018  ! If true, use expressions in the MEKE_GEOMETRIC calculation
+                                  ! that recover the answers from the original implementation.
+                                  ! Otherwise, use expressions that satisfy rotational symmetry.
   integer :: i, j
 
   CS%initialized = .true.
@@ -2068,13 +2073,25 @@ subroutine thickness_diffuse_init(Time, G, GV, US, param_file, diag, CDp, CS)
                  "The nondimensional coefficient governing the efficiency of the GEOMETRIC "//&
                  "thickness diffusion.", units="nondim", default=0.05)
 
+    call get_param(param_file, mdl, "DEFAULT_ANSWER_DATE", default_answer_date, &
+                 "This sets the default value for the various _ANSWER_DATE parameters.", &
+                 default=99991231)
     call get_param(param_file, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
                  "This sets the default value for the various _2018_ANSWERS parameters.", &
-                 default=.false.)
-    call get_param(param_file, mdl, "MEKE_GEOMETRIC_2018_ANSWERS", CS%MEKE_GEOM_answers_2018, &
+                 default=(default_answer_date<20190101))
+    call get_param(param_file, mdl, "MEKE_GEOMETRIC_2018_ANSWERS", MEKE_GEOM_answers_2018, &
                  "If true, use expressions in the MEKE_GEOMETRIC calculation that recover the "//&
                  "answers from the original implementation.  Otherwise, use expressions that "//&
                  "satisfy rotational symmetry.", default=default_2018_answers)
+    ! Revise inconsistent default answer dates for MEKE_geometric.
+    if (MEKE_GEOM_answers_2018 .and. (default_answer_date >= 20190101)) default_answer_date = 20181231
+    if (.not.MEKE_GEOM_answers_2018 .and. (default_answer_date < 20190101)) default_answer_date = 20190101
+    call get_param(param_file, mdl, "MEKE_GEOMETRIC_ANSWER_DATE", CS%MEKE_GEOM_answer_date, &
+                 "The vintage of the expressions in the MEKE_GEOMETRIC calculation.  "//&
+                 "Values below 20190101 recover the answers from the original implementation, "//&
+                 "while higher values use expressions that satisfy rotational symmetry.  "//&
+                 "If both MEKE_GEOMETRIC_2018_ANSWERS and MEKE_GEOMETRIC_ANSWER_DATE are "//&
+                 "specified, the latter takes precedence.", default=default_answer_date)
   endif
 
   call get_param(param_file, mdl, "USE_KH_IN_MEKE", CS%Use_KH_in_MEKE, &

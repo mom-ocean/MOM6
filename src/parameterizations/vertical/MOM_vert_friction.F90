@@ -100,9 +100,10 @@ type, public :: vertvisc_CS ; private
                             !! calculation, perhaps based on a bulk Richardson
                             !! number criterion, to determine the mixed layer
                             !! thickness for viscosity.
-  logical :: answers_2018   !< If true, use the order of arithmetic and expressions that recover the
-                            !! answers from the end of 2018.  Otherwise, use expressions that do not
-                            !! use an arbitrary and hard-coded maximum viscous coupling coefficient
+  integer :: answer_date    !< The vintage of the order of arithmetic and expressions in the viscous
+                            !! calculations.  Values below 20190101 recover the answers from the end
+                            !! of 2018, while higher values use expressions that do not use an
+                            !! arbitrary and hard-coded maximum viscous coupling coefficient
                             !! between layers.
   logical :: debug          !< If true, write verbose checksums for debugging purposes.
   integer :: nkml           !< The number of layers in the mixed layer.
@@ -1192,7 +1193,7 @@ subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i,
   nz = GV%ke
   h_neglect = GV%H_subroundoff
 
-  if (CS%answers_2018) then
+  if (CS%answer_date < 20190101) then
     !   The maximum coupling coefficient was originally introduced to avoid
     ! truncation error problems in the tridiagonal solver. Effectively, the 1e-10
     ! sets the maximum coupling coefficient increment to 1e10 m per timestep.
@@ -1626,10 +1627,15 @@ subroutine vertvisc_init(MIS, Time, G, GV, US, param_file, diag, ADp, dirs, &
 
   real :: Kv_dflt ! A default viscosity [m2 s-1].
   real :: Hmix_m  ! A boundary layer thickness [m].
-  logical :: default_2018_answers
+  integer :: default_answer_date  ! The default setting for the various ANSWER_DATE flags.
+  logical :: default_2018_answers ! The default setting for the various 2018_ANSWERS flags.
+  logical :: answers_2018   !< If true, use the order of arithmetic and expressions that recover the
+                            !! answers from the end of 2018.  Otherwise, use expressions that do not
+                            !! use an arbitrary and hard-coded maximum viscous coupling coefficient
+                            !! between layers.
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, nz
-! This include declares and sets the variable "version".
-#include "version_variable.h"
+  ! This include declares and sets the variable "version".
+# include "version_variable.h"
   character(len=40)  :: mdl = "MOM_vert_friction" ! This module's name.
   character(len=40)  :: thickness_units
 
@@ -1652,14 +1658,28 @@ subroutine vertvisc_init(MIS, Time, G, GV, US, param_file, diag, ADp, dirs, &
 
 ! Default, read and log parameters
   call log_version(param_file, mdl, version, "", log_to_all=.true., debugging=.true.)
+  call get_param(param_file, mdl, "DEFAULT_ANSWER_DATE", default_answer_date, &
+                 "This sets the default value for the various _ANSWER_DATE parameters.", &
+                 default=99991231)
   call get_param(param_file, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
                  "This sets the default value for the various _2018_ANSWERS parameters.", &
-                 default=.false.)
-  call get_param(param_file, mdl, "VERT_FRICTION_2018_ANSWERS", CS%answers_2018, &
+                 default=(default_answer_date<20190101))
+  call get_param(param_file, mdl, "VERT_FRICTION_2018_ANSWERS", answers_2018, &
                  "If true, use the order of arithmetic and expressions that recover the answers "//&
                  "from the end of 2018.  Otherwise, use expressions that do not use an arbitrary "//&
                  "hard-coded maximum viscous coupling coefficient between layers.", &
                  default=default_2018_answers)
+  ! Revise inconsistent default answer dates.
+  if (answers_2018 .and. (default_answer_date >= 20190101)) default_answer_date = 20181231
+  if (.not.answers_2018 .and. (default_answer_date < 20190101)) default_answer_date = 20190101
+  call get_param(param_file, mdl, "VERT_FRICTION_ANSWER_DATE", CS%answer_date, &
+                 "The vintage of the order of arithmetic and expressions in the viscous "//&
+                 "calculations.  Values below 20190101 recover the answers from the end of 2018, "//&
+                 "while higher values use expressions that do not use an arbitrary hard-coded "//&
+                 "maximum viscous coupling coefficient  between layers.  "//&
+                 "If both VERT_FRICTION_2018_ANSWERS and VERT_FRICTION_ANSWER_DATE are "//&
+                 "specified, the latter takes precedence.", default=default_answer_date)
+
   call get_param(param_file, mdl, "BOTTOMDRAGLAW", CS%bottomdraglaw, &
                  "If true, the bottom stress is calculated with a drag "//&
                  "law of the form c_drag*|u|*u. The velocity magnitude "//&

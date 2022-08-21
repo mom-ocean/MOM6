@@ -92,9 +92,10 @@ type, public :: hor_visc_CS ; private
   logical :: res_scale_MEKE  !< If true, the viscosity contribution from MEKE is scaled by
                              !! the resolution function.
   logical :: use_GME         !< If true, use GME backscatter scheme.
-  logical :: answers_2018    !< If true, use the order of arithmetic and expressions that recover the
-                             !! answers from the end of 2018.  Otherwise, use updated and more robust
-                             !! forms of the same expressions.
+  integer :: answer_date     !< The vintage of the order of arithmetic and expressions in the
+                             !! horizontal viscosity calculations.  Values below 20190101 recover
+                             !! the answers from the end of 2018, while higher values use updated
+                             !! and more robust forms of the same expressions.
   real    :: GME_h0          !< The strength of GME tapers quadratically to zero when the bathymetric
                              !! depth is shallower than GME_H0 [Z ~> m]
   real    :: GME_efficiency  !< The nondimensional prefactor multiplying the GME coefficient [nondim]
@@ -1549,7 +1550,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
           Shear_mag_bc = sqrt(sh_xx(i,j) * sh_xx(i,j) + &
             0.25*((sh_xy(I-1,J-1)*sh_xy(I-1,J-1) + sh_xy(I,J)*sh_xy(I,J)) + &
                   (sh_xy(I-1,J)*sh_xy(I-1,J) + sh_xy(I,J-1)*sh_xy(I,J-1))))
-          if (CS%answers_2018) then
+          if (CS%answer_date > 20190101) then
             FatH = (US%s_to_T*FatH)**MEKE%backscatter_Ro_pow ! f^n
             ! Note the hard-coded dimensional constant in the following line that can not
             ! be rescaled for dimensional consistency.
@@ -1724,7 +1725,11 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, ADp)
   logical :: split         ! If true, use the split time stepping scheme.
                            ! If false and USE_GME = True, issue a FATAL error.
   logical :: use_MEKE      ! If true, the MEKE parameterization is in use.
-  logical :: default_2018_answers
+  logical :: answers_2018  ! If true, use the order of arithmetic and expressions that recover the
+                           ! answers from the end of 2018.  Otherwise, use updated and more robust
+                           ! forms of the same expressions.
+  integer :: default_answer_date  ! The default setting for the various ANSWER_DATE flags
+  logical :: default_2018_answers ! The default setting for the various 2018_ANSWERS flags
   character(len=64) :: inputdir, filename
   real    :: deg2rad       ! Converts degrees to radians
   real    :: slat_fn       ! sin(lat)**Kh_pwr_of_sine
@@ -1748,13 +1753,26 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, ADp)
   call log_version(param_file, mdl, version, "")
 
   ! All parameters are read in all cases to enable parameter spelling checks.
+  call get_param(param_file, mdl, "DEFAULT_ANSWER_DATE", default_answer_date, &
+                 "This sets the default value for the various _ANSWER_DATE parameters.", &
+                 default=99991231)
   call get_param(param_file, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
                  "This sets the default value for the various _2018_ANSWERS parameters.", &
-                 default=.false.)
-  call get_param(param_file, mdl, "HOR_VISC_2018_ANSWERS", CS%answers_2018, &
+                 default=(default_answer_date<20190101))
+  call get_param(param_file, mdl, "HOR_VISC_2018_ANSWERS", answers_2018, &
                  "If true, use the order of arithmetic and expressions that recover the "//&
                  "answers from the end of 2018.  Otherwise, use updated and more robust "//&
                  "forms of the same expressions.", default=default_2018_answers)
+  ! Revise inconsistent default answer dates for horizontal viscosity.
+  if (answers_2018 .and. (default_answer_date >= 20190101)) default_answer_date = 20181231
+  if (.not.answers_2018 .and. (default_answer_date < 20190101)) default_answer_date = 20190101
+  call get_param(param_file, mdl, "HOR_VISC_ANSWER_DATE", CS%answer_date, &
+                 "The vintage of the order of arithmetic and expressions in the horizontal "//&
+                 "viscosity calculations.  Values below 20190101 recover the answers from the "//&
+                 "end of 2018, while higher values use updated and more robust forms of the "//&
+                 "same expressions.  If both HOR_VISC_2018_ANSWERS and HOR_VISC_ANSWER_DATE are "//&
+                 "specified, the latter takes precedence.", default=default_answer_date)
+
   call get_param(param_file, mdl, "DEBUG", CS%debug, default=.false.)
   call get_param(param_file, mdl, "LAPLACIAN", CS%Laplacian, &
                  "If true, use a Laplacian horizontal viscosity.", &
