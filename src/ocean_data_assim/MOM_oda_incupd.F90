@@ -230,8 +230,9 @@ subroutine initialize_oda_incupd( G, GV, US, param_file, CS, data_h, nz_data, re
   !### Doing a halo update here on CS%Ref_h%p would avoid needing halo updates each timestep.
 
   ! Call the constructor for remapping control structure
+  !### Revisit this hard-coded answer_date.
   call initialize_remapping(CS%remap_cs, remapScheme, boundary_extrapolation=bndExtrapolation, &
-                            answers_2018=.false.)
+                            answer_date=20190101)
 end subroutine initialize_oda_incupd
 
 

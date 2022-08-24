@@ -210,9 +210,9 @@ type, public :: barotropic_CS ; private
                              !! the barotropic acclerations.  Otherwise use the depth based on bathyT.
   real    :: BT_Coriolis_scale !< A factor by which the barotropic Coriolis acceleration anomaly
                              !! terms are scaled [nondim].
-  logical :: answers_2018    !< If true, use expressions for the barotropic solver that recover
-                             !! the answers from the end of 2018.  Otherwise, use more efficient
-                             !! or general expressions.
+  integer :: answer_date     !< The vintage of the expressions in the barotropic solver.
+                             !! Values below 20190101 recover the answers from the end of 2018,
+                             !! while higher values use more efficient or general expressions.
 
   logical :: dynamic_psurf   !< If true, add a dynamic pressure due to a viscous
                              !! ice shelf, for instance.
@@ -1724,7 +1724,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   I_sum_wt_eta = 1.0 / sum_wt_eta ; I_sum_wt_trans = 1.0 / sum_wt_trans
   do n=1,nstep+nfilter
     wt_vel(n) = wt_vel(n) * I_sum_wt_vel
-    if (CS%answers_2018) then
+    if (CS%answer_date < 20190101) then
       wt_accel2(n) = wt_accel(n)
      ! wt_trans(n) = wt_trans(n) * I_sum_wt_trans
     else
@@ -2394,7 +2394,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   ! Reset the time information in the diag type.
   if (do_hifreq_output) call enable_averaging(time_int_in, time_end_in, CS%diag)
 
-  if (CS%answers_2018) then
+  if (CS%answer_date < 20190101) then
     I_sum_wt_vel = 1.0 / sum_wt_vel ; I_sum_wt_eta = 1.0 / sum_wt_eta
     I_sum_wt_accel = 1.0 / sum_wt_accel ; I_sum_wt_trans = 1.0 / sum_wt_trans
   else
@@ -2462,7 +2462,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   if (id_clock_pass_post > 0) call cpu_clock_end(id_clock_pass_post)
   if (id_clock_calc_post > 0) call cpu_clock_begin(id_clock_calc_post)
 
-  if (CS%answers_2018) then
+  if (CS%answer_date < 20190101) then
     do j=js,je ; do I=is-1,ie
       CS%ubtav(I,j) = ubt_sum(I,j) * I_sum_wt_trans
       uhbtav(I,j) = uhbt_sum(I,j) * I_sum_wt_trans
@@ -4299,7 +4299,11 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, US, param_file, diag, CS, 
   type(memory_size_type) :: MS
   type(group_pass_type) :: pass_static_data, pass_q_D_Cor
   type(group_pass_type) :: pass_bt_hbt_btav, pass_a_polarity
+  integer :: default_answer_date  ! The default setting for the various ANSWER_DATE flags.
   logical :: default_2018_answers ! The default setting for the various 2018_ANSWERS flags.
+  logical :: answers_2018    ! If true, use expressions for the barotropic solver that recover
+                             ! the answers from the end of 2018.  Otherwise, use more efficient
+                             ! or general expressions.
   logical :: use_BT_cont_type
   character(len=48) :: thickness_units, flux_units
   character*(40) :: hvel_str
@@ -4439,13 +4443,25 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, US, param_file, diag, CS, 
   call get_param(param_file, mdl, "BT_CORIOLIS_SCALE", CS%BT_Coriolis_scale, &
                  "A factor by which the barotropic Coriolis anomaly terms are scaled.", &
                  units="nondim", default=1.0)
+  call get_param(param_file, mdl, "DEFAULT_ANSWER_DATE", default_answer_date, &
+                 "This sets the default value for the various _ANSWER_DATE parameters.", &
+                 default=99991231)
   call get_param(param_file, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
                  "This sets the default value for the various _2018_ANSWERS parameters.", &
-                 default=.false.)
-  call get_param(param_file, mdl, "BAROTROPIC_2018_ANSWERS", CS%answers_2018, &
+                 default=(default_answer_date<20190101))
+  call get_param(param_file, mdl, "BAROTROPIC_2018_ANSWERS", answers_2018, &
                  "If true, use expressions for the barotropic solver that recover the answers "//&
                  "from the end of 2018.  Otherwise, use more efficient or general expressions.", &
                  default=default_2018_answers)
+  ! Revise inconsistent default answer dates.
+  if (answers_2018 .and. (default_answer_date >= 20190101)) default_answer_date = 20181231
+  if (.not.answers_2018 .and. (default_answer_date < 20190101)) default_answer_date = 20190101
+  call get_param(param_file, mdl, "BAROTROPIC_ANSWER_DATE", CS%answer_date, &
+                 "The vintage of the expressions in the barotropic solver. "//&
+                 "Values below 20190101 recover the answers from the end of 2018, "//&
+                 "while higher values uuse more efficient or general expressions.  "//&
+                 "If both BAROTROPIC_2018_ANSWERS and BAROTROPIC_ANSWER_DATE are specified, the "//&
+                 "latter takes precedence.", default=default_answer_date)
 
   call get_param(param_file, mdl, "TIDES", CS%tides, &
                  "If true, apply tidal momentum forcing.", default=.false.)

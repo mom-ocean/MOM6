@@ -30,7 +30,7 @@ use MOM_file_parser,       only : get_param, log_version, param_file_type
 use MOM_get_input,         only : directories
 use MOM_io,                only : vardesc, var_desc
 use MOM_restart,           only : register_restart_field, register_restart_pair
-use MOM_restart,           only : query_initialized, save_restart
+use MOM_restart,           only : query_initialized, set_initialized, save_restart
 use MOM_restart,           only : restart_init, is_new_run, MOM_restart_CS
 use MOM_time_manager,      only : time_type, time_type_to_real, operator(+)
 use MOM_time_manager,      only : operator(-), operator(>), operator(*), operator(/)
@@ -1131,7 +1131,7 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, US, param
   type(param_file_type),            intent(in)    :: param_file !< parameter file for parsing
   type(diag_ctrl),          target, intent(inout) :: diag       !< to control diagnostics
   type(MOM_dyn_split_RK2_CS),       pointer       :: CS         !< module control structure
-  type(MOM_restart_CS),             intent(in)    :: restart_CS !< MOM restart control structure
+  type(MOM_restart_CS),             intent(inout) :: restart_CS !< MOM restart control structure
   real,                             intent(in)    :: dt         !< time step [T ~> s]
   type(accel_diag_ptrs),    target, intent(inout) :: Accel_diag !< points to momentum equation terms for
                                                                 !! budget analysis
@@ -1304,6 +1304,7 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, US, param
     do k=1,nz ; do j=js,je ; do i=is,ie
       CS%eta(i,j) = CS%eta(i,j) + h(i,j,k)
     enddo ; enddo ; enddo
+    call set_initialized(CS%eta, trim(eta_rest_name), restart_CS)
   elseif ((GV%m_to_H_restart /= 0.0) .and. (GV%m_to_H_restart /= 1.0)) then
     H_rescale = 1.0 / GV%m_to_H_restart
     do j=js,je ; do i=is,ie ; CS%eta(i,j) = H_rescale * CS%eta(i,j) ; enddo ; enddo
@@ -1315,10 +1316,12 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, US, param
                        CS%barotropic_CSp, restart_CS, calc_dtbt, CS%BT_cont, &
                        CS%tides_CSp)
 
-  if (.not. query_initialized(CS%diffu,"diffu",restart_CS) .or. &
-      .not. query_initialized(CS%diffv,"diffv",restart_CS)) then
+  if (.not. query_initialized(CS%diffu, "diffu", restart_CS) .or. &
+      .not. query_initialized(CS%diffv, "diffv", restart_CS)) then
     call horizontal_viscosity(u, v, h, CS%diffu, CS%diffv, MEKE, VarMix, G, GV, US, CS%hor_visc, &
                               OBC=CS%OBC, BT=CS%barotropic_CSp, TD=thickness_diffuse_CSp)
+    call set_initialized(CS%diffu, "diffu", restart_CS)
+    call set_initialized(CS%diffv, "diffv", restart_CS)
   else
     if ( (US%s_to_T_restart * US%m_to_L_restart /= 0.0) .and. &
          (US%s_to_T_restart**2 /= US%m_to_L_restart) ) then
@@ -1332,10 +1335,12 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, US, param
     endif
   endif
 
-  if (.not. query_initialized(CS%u_av,"u2", restart_CS) .or. &
-      .not. query_initialized(CS%u_av,"v2", restart_CS)) then
+  if (.not. query_initialized(CS%u_av, "u2", restart_CS) .or. &
+      .not. query_initialized(CS%v_av, "v2", restart_CS)) then
     do k=1,nz ; do j=jsd,jed ; do I=IsdB,IedB ; CS%u_av(I,j,k) = u(I,j,k) ; enddo ; enddo ; enddo
     do k=1,nz ; do J=JsdB,JedB ; do i=isd,ied ; CS%v_av(i,J,k) = v(i,J,k) ; enddo ; enddo ; enddo
+    call set_initialized(CS%u_av, "u2", restart_CS)
+    call set_initialized(CS%v_av, "v2", restart_CS)
   elseif ( (US%s_to_T_restart * US%m_to_L_restart /= 0.0) .and. &
            (US%s_to_T_restart /= US%m_to_L_restart) ) then
     vel_rescale = US%s_to_T_restart / US%m_to_L_restart
@@ -1344,17 +1349,21 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, US, param
   endif
 
   ! This call is just here to initialize uh and vh.
-  if (.not. query_initialized(uh,"uh",restart_CS) .or. &
-      .not. query_initialized(vh,"vh",restart_CS)) then
+  if (.not. query_initialized(uh, "uh", restart_CS) .or. &
+      .not. query_initialized(vh, "vh", restart_CS)) then
     do k=1,nz ; do j=jsd,jed ; do i=isd,ied ; h_tmp(i,j,k) = h(i,j,k) ; enddo ; enddo ; enddo
     call continuity(u, v, h, h_tmp, uh, vh, dt, G, GV, US, CS%continuity_CSp, CS%OBC, pbv)
     call pass_var(h_tmp, G%Domain, clock=id_clock_pass_init)
     do k=1,nz ; do j=jsd,jed ; do i=isd,ied
       CS%h_av(i,j,k) = 0.5*(h(i,j,k) + h_tmp(i,j,k))
     enddo ; enddo ; enddo
+    call set_initialized(uh, "uh", restart_CS)
+    call set_initialized(vh, "vh", restart_CS)
+    call set_initialized(CS%h_av, "h2", restart_CS)
   else
-    if (.not. query_initialized(CS%h_av,"h2",restart_CS)) then
+    if (.not. query_initialized(CS%h_av, "h2", restart_CS)) then
       CS%h_av(:,:,:) = h(:,:,:)
+      call set_initialized(CS%h_av, "h2", restart_CS)
     elseif ((GV%m_to_H_restart /= 0.0) .and. (GV%m_to_H_restart /= 1.0)) then
       H_rescale = 1.0 / GV%m_to_H_restart
       do k=1,nz ; do j=js,je ; do i=is,ie ; CS%h_av(i,j,k) = H_rescale * CS%h_av(i,j,k) ; enddo ; enddo ; enddo

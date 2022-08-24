@@ -36,7 +36,7 @@ type, public :: dumbbell_surface_forcing_CS ; private
   real, dimension(:,:), allocatable :: &
     forcing_mask             !< A mask regulating where forcing occurs
   real, dimension(:,:), allocatable :: &
-    S_restore                !< The surface salinity field toward which to restore [ppt].
+    S_restore                !< The surface salinity field toward which to restore [S ~> ppt].
   type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to regulate the
                              !! timing of diagnostic output.
 end type dumbbell_surface_forcing_CS
@@ -178,8 +178,8 @@ subroutine dumbbell_surface_forcing_init(Time, G, US, param_file, diag, CS)
   type(dumbbell_surface_forcing_CS), &
                                 pointer    :: CS   !< A pointer to the control structure for this module
   ! Local variables
-  real :: S_surf  ! Initial surface salinity [ppt]
-  real :: S_range ! Range of the initial vertical distribution of salinity [ppt]
+  real :: S_surf  ! Initial surface salinity [S ~> ppt]
+  real :: S_range ! Range of the initial vertical distribution of salinity [S ~> ppt]
   real :: x       ! Latitude normalized by the domain size [nondim]
   integer :: i, j
   logical :: dbrotate    ! If true, rotate the domain.
@@ -218,10 +218,11 @@ subroutine dumbbell_surface_forcing_init(Time, G, US, param_file, diag, CS)
                 'Logical for rotation of dumbbell domain.',&
                  units='nondim', default=.false., do_not_log=.true.)
   call get_param(param_file, mdl,"INITIAL_SSS", S_surf, &
-                 "Initial surface salinity", units="1e-3", default=34.0, do_not_log=.true.)
+                 "Initial surface salinity", &
+                 units="1e-3", default=34.0, scale=US%ppt_to_S, do_not_log=.true.)
   call get_param(param_file, mdl,"INITIAL_S_RANGE", S_range, &
-                 "Initial salinity range (bottom - surface)", units="1e-3", &
-                 default=2., do_not_log=.true.)
+                 "Initial salinity range (bottom - surface)", &
+                 units="1e-3", default=2., scale=US%ppt_to_S, do_not_log=.true.)
 
   call get_param(param_file, mdl, "RESTOREBUOY", CS%restorebuoy, &
                  "If true, the buoyancy fluxes drive the model back "//&
