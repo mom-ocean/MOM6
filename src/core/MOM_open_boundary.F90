@@ -5070,6 +5070,7 @@ subroutine update_segment_tracer_reservoirs(G, GV, uhr, vhr, h, OBC, dt, Reg)
   real,                                       intent(in) :: dt  !< time increment [T ~> s]
   type(tracer_registry_type),                 pointer    :: Reg !< pointer to tracer registry
 
+  ! Local variable
   type(OBC_segment_type), pointer :: segment=>NULL()
   real :: u_L_in, u_L_out ! The zonal distance moved in or out of a cell, normalized by the reservoir
                           ! length scale [nondim]
@@ -5080,6 +5081,12 @@ subroutine update_segment_tracer_reservoirs(G, GV, uhr, vhr, h, OBC, dt, Reg)
                           ! For salinity the units would be [ppt S-1 ~> 1]
   integer :: i, j, k, m, n, ntr, nz
   integer :: ishift, idir, jshift, jdir
+  real :: b_in, b_out     ! The 0 and 1 switch for tracer reservoirs
+                          ! 1 if the length scale of reservoir is zero [nodim]
+  real :: a_in, a_out     ! The 0 and 1(-1) switch for reservoir source weights
+                          ! e.g. a_in is -1 only if b_in ==1 and uhr or vhr is inward
+                          ! e.g. a_out is 1 only if b_out==1 and uhr or vhr is outward
+                          ! It's clear that a_in and a_out cannot be both non-zero [nodim]
 
   nz = GV%ke
   ntr = Reg%ntr
@@ -5087,6 +5094,8 @@ subroutine update_segment_tracer_reservoirs(G, GV, uhr, vhr, h, OBC, dt, Reg)
   if (associated(OBC)) then ; if (OBC%OBC_pe) then ; do n=1,OBC%number_of_segments
     segment=>OBC%segment(n)
     if (.not. associated(segment%tr_Reg)) cycle
+    b_in  = 0.0; if (segment%Tr_InvLscale_in  == 0.0) b_in  = 1.0
+    b_out = 0.0; if (segment%Tr_InvLscale_out == 0.0) b_out = 1.0
     if (segment%is_E_or_W) then
       I = segment%HI%IsdB
       do j=segment%HI%jsd,segment%HI%jed
@@ -5103,14 +5112,21 @@ subroutine update_segment_tracer_reservoirs(G, GV, uhr, vhr, h, OBC, dt, Reg)
         do m=1,ntr
           I_scale = 1.0 ; if (segment%tr_Reg%Tr(m)%scale /= 0.0) I_scale = 1.0 / segment%tr_Reg%Tr(m)%scale
           if (allocated(segment%tr_Reg%Tr(m)%tres)) then ; do k=1,nz
+            ! Calculate weights. Both a and u_L are nodim. Adding them together has no meaning.
+            ! However, since they cannot be both non-zero, adding them works like a switch.
+            ! When InvLscale_out is 0 and outflow, only interior data is applied to reservoirs
+            ! When InvLscale_in is 0 and inflow, only nudged data is applied to reservoirs
+            a_out = b_out * max(0.0, sign(1.0, idir*uhr(I,j,k)))
+            a_in  = b_in  * min(0.0, sign(1.0, idir*uhr(I,j,k)))
             u_L_out = max(0.0, (idir*uhr(I,j,k))*segment%Tr_InvLscale_out / &
                       ((h(i+ishift,j,k) + GV%H_subroundoff)*G%dyCu(I,j)))
             u_L_in  = min(0.0, (idir*uhr(I,j,k))*segment%Tr_InvLscale_in  / &
                       ((h(i+ishift,j,k) + GV%H_subroundoff)*G%dyCu(I,j)))
-            fac1 = 1.0 + (u_L_out-u_L_in)
-            segment%tr_Reg%Tr(m)%tres(I,j,k) = (1.0/fac1)*(segment%tr_Reg%Tr(m)%tres(I,j,k) + &
-                              (u_L_out*Reg%Tr(m)%t(I+ishift,j,k) - &
-                               u_L_in*segment%tr_Reg%Tr(m)%t(I,j,k)))
+            fac1 = (1.0 - (a_out - a_in)) + ((u_L_out + a_out) - (u_L_in + a_in))
+            segment%tr_Reg%Tr(m)%tres(I,j,k) = (1.0/fac1) * &
+                              ((1.0-a_out+a_in)*segment%tr_Reg%Tr(m)%tres(I,j,k)+ &
+                              ((u_L_out+a_out)*Reg%Tr(m)%t(I+ishift,j,k) - &
+                               (u_L_in+a_in)*segment%tr_Reg%Tr(m)%t(I,j,k)))
             if (allocated(OBC%tres_x)) OBC%tres_x(I,j,k,m) = I_scale * segment%tr_Reg%Tr(m)%tres(I,j,k)
           enddo ; endif
         enddo
@@ -5131,14 +5147,18 @@ subroutine update_segment_tracer_reservoirs(G, GV, uhr, vhr, h, OBC, dt, Reg)
         do m=1,ntr
           I_scale = 1.0 ; if (segment%tr_Reg%Tr(m)%scale /= 0.0) I_scale = 1.0 / segment%tr_Reg%Tr(m)%scale
           if (allocated(segment%tr_Reg%Tr(m)%tres)) then ; do k=1,nz
+            a_out = b_out * max(0.0, sign(1.0, jdir*vhr(i,J,k)))
+            a_in  = b_in  * min(0.0, sign(1.0, jdir*vhr(i,J,k)))
             v_L_out = max(0.0, (jdir*vhr(i,J,k))*segment%Tr_InvLscale_out / &
                       ((h(i,j+jshift,k) + GV%H_subroundoff)*G%dxCv(i,J)))
             v_L_in  = min(0.0, (jdir*vhr(i,J,k))*segment%Tr_InvLscale_in  / &
                       ((h(i,j+jshift,k) + GV%H_subroundoff)*G%dxCv(i,J)))
             fac1 = 1.0 + (v_L_out-v_L_in)
-            segment%tr_Reg%Tr(m)%tres(i,J,k) = (1.0/fac1)*(segment%tr_Reg%Tr(m)%tres(i,J,k) + &
-                              (v_L_out*Reg%Tr(m)%t(i,J+jshift,k) - &
-                               v_L_in*segment%tr_Reg%Tr(m)%t(i,J,k)))
+            fac1 = (1.0 - (a_out - a_in)) + ((v_L_out + a_out) - (v_L_in + a_in))
+            segment%tr_Reg%Tr(m)%tres(i,J,k) = (1.0/fac1) * &
+                              ((1.0-a_out+a_in)*segment%tr_Reg%Tr(m)%tres(i,J,k) + &
+                              ((v_L_out+a_out)*Reg%Tr(m)%t(i,J+jshift,k) - &
+                               (v_L_in+a_in)*segment%tr_Reg%Tr(m)%t(i,J,k)))
             if (allocated(OBC%tres_y)) OBC%tres_y(i,J,k,m) = I_scale * segment%tr_Reg%Tr(m)%tres(i,J,k)
           enddo ; endif
         enddo
