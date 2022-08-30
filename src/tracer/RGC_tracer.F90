@@ -75,8 +75,8 @@ function register_RGC_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
   type(MOM_restart_CS),    intent(inout) :: restart_CS !< MOM restart control struct
 
   character(len=80)  :: name, longname
-! This include declares and sets the variable "version".
-#include "version_variable.h"
+  ! This include declares and sets the variable "version".
+# include "version_variable.h"
   character(len=40)  :: mdl = "RGC_tracer" ! This module's name.
   character(len=200) :: inputdir
   real, pointer :: tr_ptr(:,:,:) => NULL()
@@ -85,9 +85,8 @@ function register_RGC_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
   isd = HI%isd ; ied = HI%ied ; jsd = HI%jsd ; jed = HI%jed ; nz = GV%ke
 
   if (associated(CS)) then
-    call MOM_error(WARNING, "RGC_register_tracer called with an "// &
-                            "associated control structure.")
-    return
+    call MOM_error(FATAL, "RGC_register_tracer called with an "// &
+                          "associated control structure.")
   endif
   allocate(CS)
 

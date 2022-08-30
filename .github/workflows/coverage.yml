@@ -3,15 +3,12 @@ name: Code coverage
 on: [push, pull_request]
 
 jobs:
-  build-test-nans:
+  build-coverage:
 
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: .testing
-
-    env:
-      REPORT_COVERAGE: true
 
     steps:
     - uses: actions/checkout@v2
@@ -23,13 +20,29 @@ jobs:
     - uses: ./.github/actions/testing-setup
 
     - name: Compile unit testing
-      run: make -j build/unit/MOM6
+      run: make -j build/unit/MOM_unit_tests
 
     - name: Run unit tests
-      run: make unit.cov.upload
+      run: make run.cov.unit
 
-    - name: Compile MOM6 with code coverage
+    - name: Report unit test coverage to CI (PR)
+      if: github.event_name == 'pull_request'
+      run: make report.cov.unit REQUIRE_COVERAGE_UPLOAD=true
+
+    - name: Report unit test coverage to CI (Push)
+      if: github.event_name != 'pull_request'
+      run: make report.cov.unit
+
+    - name: Compile ocean-only MOM6 with code coverage
       run: make -j build/cov/MOM6
 
-    - name: Run and post coverage
-      run: make run.cov -k -s
+    - name: Run coverage tests
+      run: make -j -k run.cov
+
+    - name: Report coverage to CI (PR)
+      if: github.event_name == 'pull_request'
+      run: make report.cov REQUIRE_COVERAGE_UPLOAD=true
+
+    - name: Report coverage to CI (Push)
+      if: github.event_name != 'pull_request'
+      run: make report.cov

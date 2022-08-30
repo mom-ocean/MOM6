@@ -78,7 +78,22 @@ subroutine MOM_initialize_tracer_from_Z(h, tr, G, GV, US, PF, src_file, src_var_
   real :: missing_value
   integer :: nPoints
   integer :: id_clock_routine, id_clock_ALE
-  logical :: answers_2018, default_2018_answers, hor_regrid_answers_2018
+  integer :: default_answer_date  ! The default setting for the various ANSWER_DATE flags.
+  logical :: default_2018_answers ! The default setting for the various 2018_ANSWERS flags.
+  logical :: remap_answers_2018   ! If true, use the order of arithmetic and expressions that
+                                  ! recover the remapping answers from 2018.  If false, use more
+                                  ! robust forms of the same remapping expressions.
+  integer :: default_remap_ans_date ! The default setting for remap_answer_date
+  integer :: remap_answer_date    ! The vintage of the order of arithmetic and expressions to use
+                                  ! for remapping.  Values below 20190101 recover the remapping
+                                  ! answers from 2018, while higher values use more robust
+                                  ! forms of the same remapping expressions.
+  logical :: hor_regrid_answers_2018
+  integer :: default_hor_reg_ans_date ! The default setting for hor_regrid_answer_date
+  integer :: hor_regrid_answer_date  ! The vintage of the order of arithmetic and expressions to use
+                                  ! for horizontal regridding.  Values below 20190101 recover the
+                                  ! answers from 2018, while higher values use expressions that have
+                                  ! been rearranged for rotational invariance.
   logical :: reentrant_x, tripolar_n
 
   id_clock_routine = cpu_clock_id('(Initialize tracer from Z)', grain=CLOCK_ROUTINE)
@@ -100,19 +115,43 @@ subroutine MOM_initialize_tracer_from_Z(h, tr, G, GV, US, PF, src_file, src_var_
   call get_param(PF, mdl, "Z_INIT_REMAPPING_SCHEME", remapScheme, &
                  "The remapping scheme to use if using Z_INIT_ALE_REMAPPING is True.", &
                  default="PLM")
+  call get_param(PF, mdl, "DEFAULT_ANSWER_DATE", default_answer_date, &
+                 "This sets the default value for the various _ANSWER_DATE parameters.", &
+                 default=99991231)
   call get_param(PF, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
                  "This sets the default value for the various _2018_ANSWERS parameters.", &
-                 default=.false.)
+                 default=(default_answer_date<20190101))
   if (useALE) then
-    call get_param(PF, mdl, "REMAPPING_2018_ANSWERS", answers_2018, &
+    call get_param(PF, mdl, "REMAPPING_2018_ANSWERS", remap_answers_2018, &
                  "If true, use the order of arithmetic and expressions that recover the "//&
                  "answers from the end of 2018.  Otherwise, use updated and more robust "//&
                  "forms of the same expressions.", default=default_2018_answers)
+    ! Revise inconsistent default answer dates for remapping.
+    default_remap_ans_date = default_answer_date
+    if (remap_answers_2018 .and. (default_remap_ans_date >= 20190101)) default_remap_ans_date = 20181231
+    if (.not.remap_answers_2018 .and. (default_remap_ans_date < 20190101)) default_remap_ans_date = 20190101
+    call get_param(PF, mdl, "REMAPPING_ANSWER_DATE", remap_answer_date, &
+                 "The vintage of the expressions and order of arithmetic to use for remapping.  "//&
+                 "Values below 20190101 result in the use of older, less accurate expressions "//&
+                 "that were in use at the end of 2018.  Higher values result in the use of more "//&
+                 "robust and accurate forms of mathematically equivalent expressions.  "//&
+                 "If both REMAPPING_2018_ANSWERS and REMAPPING_ANSWER_DATE are specified, the "//&
+                 "latter takes precedence.", default=default_remap_ans_date)
   endif
   call get_param(PF, mdl, "HOR_REGRID_2018_ANSWERS", hor_regrid_answers_2018, &
                  "If true, use the order of arithmetic for horizonal regridding that recovers "//&
                  "the answers from the end of 2018.  Otherwise, use rotationally symmetric "//&
                  "forms of the same expressions.", default=default_2018_answers)
+  ! Revise inconsistent default answer dates for horizontal regridding.
+  default_hor_reg_ans_date = default_answer_date
+  if (hor_regrid_answers_2018 .and. (default_hor_reg_ans_date >= 20190101)) default_hor_reg_ans_date = 20181231
+  if (.not.hor_regrid_answers_2018 .and. (default_hor_reg_ans_date < 20190101)) default_hor_reg_ans_date = 20190101
+  call get_param(PF, mdl, "HOR_REGRID_ANSWER_DATE", hor_regrid_answer_date, &
+                 "The vintage of the order of arithmetic for horizontal regridding.  "//&
+                 "Dates before 20190101 give the same answers as the code did in late 2018, "//&
+                 "while later versions add parentheses for rotational symmetry.  "//&
+                 "If both HOR_REGRID_2018_ANSWERS and HOR_REGRID_ANSWER_DATE are specified, the "//&
+                 "latter takes precedence.", default=default_hor_reg_ans_date)
 
   ! These are model grid properties, but being applied to the data grid for now.
   ! need to revisit this (mjh)
@@ -129,7 +168,7 @@ subroutine MOM_initialize_tracer_from_Z(h, tr, G, GV, US, PF, src_file, src_var_
 
   call horiz_interp_and_extrap_tracer(src_file, src_var_nam, convert, recnum, &
        G, tr_z, mask_z, z_in, z_edges_in, missing_value, reentrant_x, tripolar_n, &
-       homog, m_to_Z=US%m_to_Z, answers_2018=hor_regrid_answers_2018)
+       homog, m_to_Z=US%m_to_Z, answer_date=hor_regrid_answer_date)
 
   kd = size(z_edges_in,1)-1
   call pass_var(tr_z,G%Domain)
@@ -143,7 +182,7 @@ subroutine MOM_initialize_tracer_from_Z(h, tr, G, GV, US, PF, src_file, src_var_
     allocate( h1(kd) )
     allocate( hSrc(isd:ied,jsd:jed,kd) )
     ! Set parameters for reconstructions
-    call initialize_remapping( remapCS, remapScheme, boundary_extrapolation=.false., answers_2018=answers_2018 )
+    call initialize_remapping( remapCS, remapScheme, boundary_extrapolation=.false., answer_date=remap_answer_date )
     ! Next we initialize the regridding package so that it knows about the target grid
 
     do j = js, je ; do i = is, ie
@@ -168,7 +207,7 @@ subroutine MOM_initialize_tracer_from_Z(h, tr, G, GV, US, PF, src_file, src_var_
       hSrc(i,j,:) = GV%Z_to_H * h1(:)
     enddo ; enddo
 
-    call ALE_remap_scalar(remapCS, G, GV, kd, hSrc, tr_z, h, tr, all_cells=.false., answers_2018=answers_2018 )
+    call ALE_remap_scalar(remapCS, G, GV, kd, hSrc, tr_z, h, tr, all_cells=.false., answer_date=remap_answer_date )
 
     deallocate( hSrc )
     deallocate( h1 )

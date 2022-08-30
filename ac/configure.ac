@@ -231,7 +231,7 @@ AC_SUBST([MAKEDEP])
 AC_SUBST([SRC_DIRS],
     ["${srcdir}/src ${MODEL_FRAMEWORK} ${srcdir}/config_src/external ${DRIVER_DIR} ${MEM_LAYOUT}"]
 )
-AC_CONFIG_COMMANDS([Makefile.dep], [make depend])
+AC_CONFIG_COMMANDS(Makefile.dep, [make depend])
 
 
 # setjmp verification

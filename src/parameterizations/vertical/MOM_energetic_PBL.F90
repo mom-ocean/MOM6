@@ -158,9 +158,10 @@ type, public :: energetic_PBL_CS ; private
   type(time_type), pointer :: Time=>NULL() !< A pointer to the ocean model's clock.
 
   logical :: TKE_diagnostics = .false. !< If true, diagnostics of the TKE budget are being calculated.
-  logical :: answers_2018    !< If true, use the order of arithmetic and expressions that recover the
-                             !! answers from the end of 2018.  Otherwise, use updated and more robust
-                             !! forms of the same expressions.
+  integer :: answer_date     !< The vintage of the order of arithmetic and expressions in the ePBL
+                             !! calculations.  Values below 20190101 recover the answers from the
+                             !! end of 2018, while higher values use updated and more robust forms
+                             !! of the same expressions.
   logical :: orig_PE_calc    !< If true, the ePBL code uses the original form of the
                              !! potential energy change code.  Otherwise, it uses a newer version
                              !! that can work with successive increments to the diffusivity in
@@ -828,7 +829,7 @@ subroutine ePBL_column(h, u, v, T0, S0, dSV_dT, dSV_dS, TKE_forcing, B_flux, abs
       endif
 
       !/ Apply MStar to get mech_TKE
-      if ((CS%answers_2018) .and. (CS%mstar_scheme==Use_Fixed_MStar)) then
+      if ((CS%answer_date < 20190101) .and. (CS%mstar_scheme==Use_Fixed_MStar)) then
         mech_TKE = (dt*MSTAR_total*GV%Rho0) * u_star**3
       else
         mech_TKE = MSTAR_total * (dt*GV%Rho0* u_star**3)
@@ -1760,7 +1761,7 @@ subroutine find_mstar(CS, US, Buoyancy_Flux, UStar, UStar_Mean,&
   !/ 1. Get mstar
   elseif (CS%mstar_scheme == MStar_from_Ekman) then
 
-    if (CS%answers_2018) then
+    if (CS%answer_date < 20190101) then
       ! The limit for the balance of rotation and stabilizing is f(L_Ekman,L_Obukhov)
       MStar_S = CS%MStar_coef*sqrt(max(0.0,Buoyancy_Flux) / UStar**2 / &
                     (Abs_Coriolis + 1.e-10*US%T_to_s) )
@@ -1778,7 +1779,7 @@ subroutine find_mstar(CS, US, Buoyancy_Flux, UStar, UStar_Mean,&
     MStar = max(MStar_S, min(1.25, MStar_N))
     if (CS%MStar_Cap > 0.0) MStar = min( CS%MStar_Cap,MStar )
   elseif ( CS%mstar_scheme == MStar_from_RH18 ) then
-    if (CS%answers_2018) then
+    if (CS%answer_date < 20190101) then
       MStar_N = CS%RH18_MStar_cn1 * ( 1.0 - 1.0 / ( 1. + CS%RH18_MStar_cn2 * &
                 exp( CS%RH18_mstar_CN3 * BLD * Abs_Coriolis / UStar) ) )
     else
@@ -1791,7 +1792,7 @@ subroutine find_mstar(CS, US, Buoyancy_Flux, UStar, UStar_Mean,&
   endif
 
   !/ 2. Adjust mstar to account for convective turbulence
-  if (CS%answers_2018) then
+  if (CS%answer_date < 20190101) then
     MStar_Conv_Red = 1. - CS%MStar_Convect_coef * (-min(0.0,Buoyancy_Flux) + 1.e-10*US%T_to_s**3*US%m_to_Z**2) / &
                          ( (-min(0.0,Buoyancy_Flux) + 1.e-10*US%T_to_s**3*US%m_to_Z**2) + &
                          2.0 *MStar * UStar**3 / BLD )
@@ -1851,7 +1852,7 @@ subroutine Mstar_Langmuir(CS, US, Abs_Coriolis, Buoyancy_Flux, UStar, BLD, Langm
 
   if (CS%LT_Enhance_Form /= No_Langmuir) then
     ! a. Get parameters for modified LA
-    if (CS%answers_2018) then
+    if (CS%answer_date < 20190101) then
       iL_Ekman   = Abs_Coriolis / Ustar
       iL_Obukhov = Buoyancy_Flux*CS%vonkar / Ustar**3
       Ekman_Obukhov_stab = abs(max(0., iL_Obukhov / (iL_Ekman + 1.e-10*US%Z_to_m)))
@@ -1942,7 +1943,11 @@ subroutine energetic_PBL_init(Time, G, GV, US, param_file, diag, CS)
   real :: omega_frac_dflt
   integer :: isd, ied, jsd, jed
   integer :: mstar_mode, LT_enhance, wT_mode
-  logical :: default_2018_answers
+  integer :: default_answer_date  ! The default setting for the various ANSWER_DATE flags.
+  logical :: default_2018_answers ! The default setting for the various 2018_ANSWERS flags.
+  logical :: answers_2018  ! If true, use the order of arithmetic and expressions that recover the
+                           ! answers from the end of 2018.  Otherwise, use updated and more robust
+                           ! forms of the same expressions.
   logical :: use_temperature, use_omega
   logical :: use_la_windsea
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
@@ -1977,13 +1982,25 @@ subroutine energetic_PBL_init(Time, G, GV, US, param_file, diag, CS)
                  "A nondimensional scaling factor controlling the inhibition "//&
                  "of the diffusive length scale by rotation. Making this larger "//&
                  "decreases the PBL diffusivity.", units="nondim", default=1.0)
+  call get_param(param_file, mdl, "DEFAULT_ANSWER_DATE", default_answer_date, &
+                 "This sets the default value for the various _ANSWER_DATE parameters.", &
+                 default=99991231)
   call get_param(param_file, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
                  "This sets the default value for the various _2018_ANSWERS parameters.", &
-                 default=.false.)
-  call get_param(param_file, mdl, "EPBL_2018_ANSWERS", CS%answers_2018, &
+                 default=(default_answer_date<20190101))
+  call get_param(param_file, mdl, "EPBL_2018_ANSWERS", answers_2018, &
                  "If true, use the order of arithmetic and expressions that recover the "//&
                  "answers from the end of 2018.  Otherwise, use updated and more robust "//&
                  "forms of the same expressions.", default=default_2018_answers)
+  ! Revise inconsistent default answer dates for horizontal viscosity.
+  if (answers_2018 .and. (default_answer_date >= 20190101)) default_answer_date = 20181231
+  if (.not.answers_2018 .and. (default_answer_date < 20190101)) default_answer_date = 20190101
+  call get_param(param_file, mdl, "EPBL_ANSWER_DATE", CS%answer_date, &
+                 "The vintage of the order of arithmetic and expressions in the energetic "//&
+                 "PBL calculations.  Values below 20190101 recover the answers from the "//&
+                 "end of 2018, while higher values use updated and more robust forms of the "//&
+                 "same expressions.  If both EPBL_2018_ANSWERS and EPBL_ANSWER_DATE are "//&
+                 "specified, the latter takes precedence.", default=default_answer_date)
 
 
   call get_param(param_file, mdl, "EPBL_ORIGINAL_PE_CALC", CS%orig_PE_calc, &

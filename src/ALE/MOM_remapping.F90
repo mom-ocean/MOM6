@@ -34,8 +34,9 @@ type, public :: remapping_CS
   logical :: check_remapping = .false.
   !> If true, the intermediate values used in remapping are forced to be bounded.
   logical :: force_bounds_in_subcell = .false.
-  !> If true use older, less acccurate expressions.
-  logical :: answers_2018 = .true.
+  !> The vintage of the expressions to use for remapping. Values below 20190101 result
+  !! in the use of older, less accurate expressions.
+  integer :: answer_date = 20181231  !### Change to 99991231?
 end type
 
 ! The following routines are visible to the outside world
@@ -93,7 +94,7 @@ contains
 
 !> Set parameters within remapping object
 subroutine remapping_set_param(CS, remapping_scheme, boundary_extrapolation,  &
-               check_reconstruction, check_remapping, force_bounds_in_subcell, answers_2018)
+               check_reconstruction, check_remapping, force_bounds_in_subcell, answers_2018, answer_date)
   type(remapping_CS),         intent(inout) :: CS !< Remapping control structure
   character(len=*), optional, intent(in)    :: remapping_scheme !< Remapping scheme to use
   logical, optional,          intent(in)    :: boundary_extrapolation !< Indicate to extrapolate in boundary cells
@@ -101,6 +102,7 @@ subroutine remapping_set_param(CS, remapping_scheme, boundary_extrapolation,  &
   logical, optional,          intent(in)    :: check_remapping !< Indicate to check results of remapping
   logical, optional,          intent(in)    :: force_bounds_in_subcell !< Force subcells values to be bounded
   logical, optional,          intent(in)    :: answers_2018 !< If true use older, less acccurate expressions.
+  integer, optional,          intent(in)    :: answer_date  !< The vintage of the expressions to use
 
   if (present(remapping_scheme)) then
     call setReconstructionType( remapping_scheme, CS )
@@ -118,8 +120,16 @@ subroutine remapping_set_param(CS, remapping_scheme, boundary_extrapolation,  &
     CS%force_bounds_in_subcell = force_bounds_in_subcell
   endif
   if (present(answers_2018)) then
-    CS%answers_2018 = answers_2018
+    if (answers_2018) then
+      CS%answer_date = 20181231
+    else
+      CS%answer_date = 20190101
+    endif
   endif
+  if (present(answer_date)) then
+    CS%answer_date = answer_date
+  endif
+
 end subroutine remapping_set_param
 
 subroutine extract_member_remapping_CS(CS, remapping_scheme, degree, boundary_extrapolation, check_reconstruction, &
@@ -424,46 +434,46 @@ subroutine build_reconstructions_1d( CS, n0, h0, u0, ppoly_r_coefs, &
         call PLM_boundary_extrapolation( n0, h0, u0, ppoly_r_E, ppoly_r_coefs, h_neglect )
       iMethod = INTEGRATION_PLM
     case ( REMAPPING_PPM_H4 )
-      call edge_values_explicit_h4( n0, h0, u0, ppoly_r_E, h_neglect_edge, answers_2018=CS%answers_2018 )
-      call PPM_reconstruction( n0, h0, u0, ppoly_r_E, ppoly_r_coefs, h_neglect, answers_2018=CS%answers_2018 )
+      call edge_values_explicit_h4( n0, h0, u0, ppoly_r_E, h_neglect_edge, answer_date=CS%answer_date )
+      call PPM_reconstruction( n0, h0, u0, ppoly_r_E, ppoly_r_coefs, h_neglect, answer_date=CS%answer_date )
       if ( CS%boundary_extrapolation ) then
         call PPM_boundary_extrapolation( n0, h0, u0, ppoly_r_E, ppoly_r_coefs, h_neglect )
       endif
       iMethod = INTEGRATION_PPM
     case ( REMAPPING_PPM_IH4 )
-      call edge_values_implicit_h4( n0, h0, u0, ppoly_r_E, h_neglect_edge, answers_2018=CS%answers_2018 )
-      call PPM_reconstruction( n0, h0, u0, ppoly_r_E, ppoly_r_coefs, h_neglect, answers_2018=CS%answers_2018 )
+      call edge_values_implicit_h4( n0, h0, u0, ppoly_r_E, h_neglect_edge, answer_date=CS%answer_date )
+      call PPM_reconstruction( n0, h0, u0, ppoly_r_E, ppoly_r_coefs, h_neglect, answer_date=CS%answer_date )
       if ( CS%boundary_extrapolation ) then
         call PPM_boundary_extrapolation( n0, h0, u0, ppoly_r_E, ppoly_r_coefs, h_neglect )
       endif
       iMethod = INTEGRATION_PPM
     case ( REMAPPING_PPM_HYBGEN )
       call hybgen_PPM_coefs(u0, h0, ppoly_r_E, n0, 1, h_neglect)
-      call PPM_reconstruction( n0, h0, u0, ppoly_r_E, ppoly_r_coefs, h_neglect, answers_2018=.false. )
+      call PPM_reconstruction( n0, h0, u0, ppoly_r_E, ppoly_r_coefs, h_neglect, answer_date=99991231 )
       if ( CS%boundary_extrapolation ) &
         call PPM_boundary_extrapolation( n0, h0, u0, ppoly_r_E, ppoly_r_coefs, h_neglect )
       iMethod = INTEGRATION_PPM
     case ( REMAPPING_WENO_HYBGEN )
       call hybgen_weno_coefs(u0, h0, ppoly_r_E, n0, 1, h_neglect)
-      call PPM_reconstruction( n0, h0, u0, ppoly_r_E, ppoly_r_coefs, h_neglect, answers_2018=.false. )
+      call PPM_reconstruction( n0, h0, u0, ppoly_r_E, ppoly_r_coefs, h_neglect, answer_date=99991231 )
       if ( CS%boundary_extrapolation ) &
         call PPM_boundary_extrapolation( n0, h0, u0, ppoly_r_E, ppoly_r_coefs, h_neglect )
       iMethod = INTEGRATION_PPM
     case ( REMAPPING_PQM_IH4IH3 )
-      call edge_values_implicit_h4( n0, h0, u0, ppoly_r_E, h_neglect_edge, answers_2018=CS%answers_2018 )
-      call edge_slopes_implicit_h3( n0, h0, u0, ppoly_r_S, h_neglect, answers_2018=CS%answers_2018 )
+      call edge_values_implicit_h4( n0, h0, u0, ppoly_r_E, h_neglect_edge, answer_date=CS%answer_date )
+      call edge_slopes_implicit_h3( n0, h0, u0, ppoly_r_S, h_neglect, answer_date=CS%answer_date )
       call PQM_reconstruction( n0, h0, u0, ppoly_r_E, ppoly_r_S, ppoly_r_coefs, h_neglect, &
-                               answers_2018=CS%answers_2018 )
+                               answer_date=CS%answer_date )
       if ( CS%boundary_extrapolation ) then
         call PQM_boundary_extrapolation_v1( n0, h0, u0, ppoly_r_E, ppoly_r_S, &
                                             ppoly_r_coefs, h_neglect )
       endif
       iMethod = INTEGRATION_PQM
     case ( REMAPPING_PQM_IH6IH5 )
-      call edge_values_implicit_h6( n0, h0, u0, ppoly_r_E, h_neglect_edge, answers_2018=CS%answers_2018 )
-      call edge_slopes_implicit_h5( n0, h0, u0, ppoly_r_S, h_neglect, answers_2018=CS%answers_2018 )
+      call edge_values_implicit_h6( n0, h0, u0, ppoly_r_E, h_neglect_edge, answer_date=CS%answer_date )
+      call edge_slopes_implicit_h5( n0, h0, u0, ppoly_r_S, h_neglect, answer_date=CS%answer_date )
       call PQM_reconstruction( n0, h0, u0, ppoly_r_E, ppoly_r_S, ppoly_r_coefs, h_neglect, &
-                               answers_2018=CS%answers_2018 )
+                               answer_date=CS%answer_date )
       if ( CS%boundary_extrapolation ) then
         call PQM_boundary_extrapolation_v1( n0, h0, u0, ppoly_r_E, ppoly_r_S, &
                                             ppoly_r_coefs, h_neglect )
@@ -1593,7 +1603,7 @@ end subroutine dzFromH1H2
 
 !> Constructor for remapping control structure
 subroutine initialize_remapping( CS, remapping_scheme, boundary_extrapolation, &
-                check_reconstruction, check_remapping, force_bounds_in_subcell, answers_2018)
+                check_reconstruction, check_remapping, force_bounds_in_subcell, answers_2018, answer_date)
   ! Arguments
   type(remapping_CS), intent(inout) :: CS !< Remapping control structure
   character(len=*),   intent(in)    :: remapping_scheme !< Remapping scheme to use
@@ -1602,11 +1612,12 @@ subroutine initialize_remapping( CS, remapping_scheme, boundary_extrapolation, &
   logical, optional,  intent(in)    :: check_remapping !< Indicate to check results of remapping
   logical, optional,  intent(in)    :: force_bounds_in_subcell !< Force subcells values to be bounded
   logical, optional,  intent(in)    :: answers_2018 !< If true use older, less acccurate expressions.
+  integer, optional,  intent(in)    :: answer_date  !< The vintage of the expressions to use
 
   ! Note that remapping_scheme is mandatory for initialize_remapping()
   call remapping_set_param(CS, remapping_scheme=remapping_scheme, boundary_extrapolation=boundary_extrapolation,  &
                check_reconstruction=check_reconstruction, check_remapping=check_remapping, &
-               force_bounds_in_subcell=force_bounds_in_subcell, answers_2018=answers_2018)
+               force_bounds_in_subcell=force_bounds_in_subcell, answers_2018=answers_2018, answer_date=answer_date)
 
 end subroutine initialize_remapping
 
@@ -1681,15 +1692,15 @@ logical function remapping_unit_tests(verbose)
   data h2 /6*0.5/  ! 6 uniform layers with total depth of 3
   type(remapping_CS) :: CS !< Remapping control structure
   real, allocatable, dimension(:,:) :: ppoly0_E, ppoly0_S, ppoly0_coefs
-  logical :: answers_2018 !  If true use older, less acccurate expressions.
+  integer :: answer_date  ! The vintage of the expressions to test
   integer :: i
   real :: err, h_neglect, h_neglect_edge
   logical :: thisTest, v
 
   v = verbose
-  answers_2018 = .false. ! .true.
+  answer_date = 20190101 ! 20181231
   h_neglect = hNeglect_dflt
-  h_neglect_edge = hNeglect_dflt ; if (answers_2018) h_neglect_edge = 1.0e-10
+  h_neglect_edge = hNeglect_dflt ; if (answer_date < 20190101) h_neglect_edge = 1.0e-10
 
   write(stdout,*) '==== MOM_remapping: remapping_unit_tests ================='
   remapping_unit_tests = .false. ! Normally return false
@@ -1711,7 +1722,7 @@ logical function remapping_unit_tests(verbose)
   remapping_unit_tests = remapping_unit_tests .or. thisTest
 
   thisTest = .false.
-  call initialize_remapping(CS, 'PPM_H4', answers_2018=answers_2018)
+  call initialize_remapping(CS, 'PPM_H4', answer_date=answer_date)
   if (verbose) write(stdout,*) 'h0 (test data)'
   if (verbose) call dumpGrid(n0,h0,x0,u0)
 
@@ -1735,8 +1746,8 @@ logical function remapping_unit_tests(verbose)
   ppoly0_S(:,:) = 0.0
   ppoly0_coefs(:,:) = 0.0
 
-  call edge_values_explicit_h4( n0, h0, u0, ppoly0_E, h_neglect=1e-10, answers_2018=answers_2018 )
-  call PPM_reconstruction( n0, h0, u0, ppoly0_E, ppoly0_coefs, h_neglect, answers_2018=answers_2018 )
+  call edge_values_explicit_h4( n0, h0, u0, ppoly0_E, h_neglect=1e-10, answer_date=answer_date )
+  call PPM_reconstruction( n0, h0, u0, ppoly0_E, ppoly0_coefs, h_neglect, answer_date=answer_date )
   call PPM_boundary_extrapolation( n0, h0, u0, ppoly0_E, ppoly0_coefs, h_neglect )
   u1(:) = 0.
   call remapByProjection( n0, h0, u0, ppoly0_E, ppoly0_coefs, &
@@ -1866,7 +1877,7 @@ logical function remapping_unit_tests(verbose)
     test_answer(v, 3, ppoly0_coefs(:,2), (/0.,4.,0./), 'Non-uniform line PLM: P1')
 
   call edge_values_explicit_h4( 5, (/1.,1.,1.,1.,1./), (/1.,3.,5.,7.,9./), ppoly0_E, &
-                                h_neglect=1e-10, answers_2018=answers_2018 )
+                                h_neglect=1e-10, answer_date=answer_date )
   ! The next two tests currently fail due to roundoff, but pass when given a reasonable tolerance.
   thisTest = test_answer(v, 5, ppoly0_E(:,1), (/0.,2.,4.,6.,8./), 'Line H4: left edges', tol=8.0e-15)
   remapping_unit_tests = remapping_unit_tests .or. thisTest
@@ -1875,7 +1886,7 @@ logical function remapping_unit_tests(verbose)
   ppoly0_E(:,1) = (/0.,2.,4.,6.,8./)
   ppoly0_E(:,2) = (/2.,4.,6.,8.,10./)
   call PPM_reconstruction(5, (/1.,1.,1.,1.,1./), (/1.,3.,5.,7.,9./), ppoly0_E(1:5,:), &
-                              ppoly0_coefs(1:5,:), h_neglect, answers_2018=answers_2018 )
+                              ppoly0_coefs(1:5,:), h_neglect, answer_date=answer_date )
   remapping_unit_tests = remapping_unit_tests .or. &
     test_answer(v, 5, ppoly0_coefs(:,1), (/1.,2.,4.,6.,9./), 'Line PPM: P0')
   remapping_unit_tests = remapping_unit_tests .or. &
@@ -1884,8 +1895,8 @@ logical function remapping_unit_tests(verbose)
     test_answer(v, 5, ppoly0_coefs(:,3), (/0.,0.,0.,0.,0./), 'Line PPM: P2')
 
   call edge_values_explicit_h4( 5, (/1.,1.,1.,1.,1./), (/1.,1.,7.,19.,37./), ppoly0_E, &
-                                h_neglect=1e-10, answers_2018=answers_2018 )
-  ! The next two tests are now passing when answers_2018 = .false., but otherwise only work to roundoff.
+                                h_neglect=1e-10, answer_date=answer_date )
+  ! The next two tests are now passing when answer_date >= 20190101, but otherwise only work to roundoff.
   thisTest = test_answer(v, 5, ppoly0_E(:,1), (/3.,0.,3.,12.,27./), 'Parabola H4: left edges', tol=2.7e-14)
   remapping_unit_tests = remapping_unit_tests .or. thisTest
   thisTest = test_answer(v, 5, ppoly0_E(:,2), (/0.,3.,12.,27.,48./), 'Parabola H4: right edges', tol=4.8e-14)
@@ -1893,7 +1904,7 @@ logical function remapping_unit_tests(verbose)
   ppoly0_E(:,1) = (/0.,0.,3.,12.,27./)
   ppoly0_E(:,2) = (/0.,3.,12.,27.,48./)
   call PPM_reconstruction(5, (/1.,1.,1.,1.,1./), (/0.,1.,7.,19.,37./), ppoly0_E(1:5,:), &
-                          ppoly0_coefs(1:5,:), h_neglect, answers_2018=answers_2018 )
+                          ppoly0_coefs(1:5,:), h_neglect, answer_date=answer_date )
   remapping_unit_tests = remapping_unit_tests .or. &
     test_answer(v, 5, ppoly0_E(:,1), (/0.,0.,3.,12.,37./), 'Parabola PPM: left edges')
   remapping_unit_tests = remapping_unit_tests .or. &
@@ -1908,7 +1919,7 @@ logical function remapping_unit_tests(verbose)
   ppoly0_E(:,1) = (/0.,0.,6.,10.,15./)
   ppoly0_E(:,2) = (/0.,6.,12.,17.,15./)
   call PPM_reconstruction(5, (/1.,1.,1.,1.,1./), (/0.,5.,7.,16.,15./), ppoly0_E(1:5,:), &
-                          ppoly0_coefs(1:5,:), h_neglect, answers_2018=answers_2018 )
+                          ppoly0_coefs(1:5,:), h_neglect, answer_date=answer_date )
   remapping_unit_tests = remapping_unit_tests .or. &
     test_answer(v, 5, ppoly0_E(:,1), (/0.,3.,6.,16.,15./), 'Limits PPM: left edges')
   remapping_unit_tests = remapping_unit_tests .or. &

@@ -16,7 +16,7 @@ use MOM_io,              only : file_exists, MOM_read_data, slasher
 use MOM_io,              only : vardesc, var_desc, query_vardesc, stdout
 use MOM_tracer_registry, only : tracer_type
 use MOM_open_boundary,   only : ocean_OBC_type
-use MOM_restart,         only : query_initialized, MOM_restart_CS
+use MOM_restart,         only : query_initialized, set_initialized, MOM_restart_CS
 use MOM_spatial_means,   only : global_mass_int_EFP
 use MOM_time_manager,    only : time_type
 use time_interp_external_mod, only : init_external_field, time_interp_external
@@ -83,7 +83,7 @@ function register_CFC_cap(HI, GV, param_file, CS, tr_Reg, restart_CS)
   character(len=40)  :: mdl = "MOM_CFC_cap" ! This module's name.
   character(len=200) :: inputdir ! The directory where NetCDF input files are.
   ! This include declares and sets the variable "version".
-#include "version_variable.h"
+# include "version_variable.h"
   real, dimension(:,:,:), pointer :: tr_ptr => NULL()
   character(len=200) :: dummy      ! Dummy variable to store params that need to be logged here.
   character :: m2char
@@ -93,9 +93,8 @@ function register_CFC_cap(HI, GV, param_file, CS, tr_Reg, restart_CS)
   isd = HI%isd ; ied = HI%ied ; jsd = HI%jsd ; jed = HI%jed ; nz = GV%ke
 
   if (associated(CS)) then
-    call MOM_error(WARNING, "register_CFC_cap called with an "// &
-                            "associated control structure.")
-    return
+    call MOM_error(FATAL, "register_CFC_cap called with an "// &
+                          "associated control structure.")
   endif
   allocate(CS)
 
@@ -204,9 +203,11 @@ subroutine initialize_CFC_cap(restart, day, G, GV, US, h, diag, OBC, CS)
 
   do m=1,2
     if (.not.restart .or. (CS%tracers_may_reinit .and. &
-        .not.query_initialized(CS%CFC_data(m)%conc, CS%CFC_data(m)%name, CS%restart_CSp))) &
+        .not.query_initialized(CS%CFC_data(m)%conc, CS%CFC_data(m)%name, CS%restart_CSp))) then
       call init_tracer_CFC(h, CS%CFC_data(m)%conc, CS%CFC_data(m)%name, CS%CFC_data(m)%land_val, &
                           CS%CFC_data(m)%IC_val, G, GV, US, CS)
+      call set_initialized(CS%CFC_data(m)%conc, CS%CFC_data(m)%name, CS%restart_CSp)
+    endif
 
     ! cmor diagnostics
     ! CFC11 cmor conventions: http://clipc-services.ceda.ac.uk/dreq/u/42625c97b8fe75124a345962c4430982.html
@@ -495,15 +496,15 @@ subroutine CFC_cap_fluxes(fluxes, sfc_state, G, US, Rho0, Time, id_cfc11_atm, id
 
   do j=js,je ; do i=is,ie
     ! ta in hectoKelvin
-    ta = max(0.01, (sfc_state%SST(i,j) + 273.15) * 0.01)
-    sal = sfc_state%SSS(i,j)
+    ta = max(0.01, (US%C_to_degC*sfc_state%SST(i,j) + 273.15) * 0.01)
+    sal = US%S_to_ppt*sfc_state%SSS(i,j)
 
     ! Calculate solubilities
     call get_solubility(alpha_11, alpha_12, ta, sal , G%mask2dT(i,j))
 
     ! Calculate Schmidt numbers using coefficients given by
     ! Wanninkhof (2014); doi:10.4319/lom.2014.12.351.
-    call comp_CFC_schmidt(sfc_state%SST(i,j), sc_11, sc_12)
+    call comp_CFC_schmidt(US%C_to_degC*sfc_state%SST(i,j), sc_11, sc_12)
 
     kw_wo_sc_no_term(i,j) = kw_coeff * ((1.0 - fluxes%ice_fraction(i,j))*fluxes%u10_sqr(i,j))
 

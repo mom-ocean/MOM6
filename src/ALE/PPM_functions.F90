@@ -25,21 +25,21 @@ real, parameter :: hNeglect_dflt = 1.E-30
 contains
 
 !> Builds quadratic polynomials coefficients from cell mean and edge values.
-subroutine PPM_reconstruction( N, h, u, edge_values, ppoly_coef, h_neglect, answers_2018)
+subroutine PPM_reconstruction( N, h, u, edge_values, ppoly_coef, h_neglect, answer_date)
   integer,              intent(in)    :: N !< Number of cells
   real, dimension(N),   intent(in)    :: h !< Cell widths [H]
   real, dimension(N),   intent(in)    :: u !< Cell averages [A]
   real, dimension(N,2), intent(inout) :: edge_values !< Edge values [A]
   real, dimension(N,3), intent(inout) :: ppoly_coef !< Polynomial coefficients, mainly [A]
   real,       optional, intent(in)    :: h_neglect !< A negligibly small width [H]
-  logical,    optional, intent(in)    :: answers_2018 !< If true use older, less acccurate expressions.
+  integer,    optional, intent(in)    :: answer_date  !< The vintage of the expressions to use
 
   ! Local variables
   integer   :: k              ! Loop index
   real      :: edge_l, edge_r ! Edge values (left and right)
 
   ! PPM limiter
-  call PPM_limiter_standard( N, h, u, edge_values, h_neglect, answers_2018 )
+  call PPM_limiter_standard( N, h, u, edge_values, h_neglect, answer_date=answer_date )
 
   ! Loop over all cells
   do k = 1,N
@@ -59,13 +59,13 @@ end subroutine PPM_reconstruction
 !> Adjusts edge values using the standard PPM limiter (Colella & Woodward, JCP 1984)
 !! after first checking that the edge values are bounded by neighbors cell averages
 !! and that the edge values are monotonic between cell averages.
-subroutine PPM_limiter_standard( N, h, u, edge_values, h_neglect, answers_2018 )
+subroutine PPM_limiter_standard( N, h, u, edge_values, h_neglect, answer_date )
   integer,              intent(in)    :: N !< Number of cells
   real, dimension(:),   intent(in)    :: h !< cell widths (size N) [H]
   real, dimension(:),   intent(in)    :: u !< cell average properties (size N) [A]
   real, dimension(:,:), intent(inout) :: edge_values !< Potentially modified edge values [A]
   real,       optional, intent(in)    :: h_neglect !< A negligibly small width [H]
-  logical,    optional, intent(in)    :: answers_2018 !< If true use older, less acccurate expressions.
+  integer,    optional, intent(in)    :: answer_date  !< The vintage of the expressions to use
 
   ! Local variables
   integer   :: k              ! Loop index
@@ -74,7 +74,7 @@ subroutine PPM_limiter_standard( N, h, u, edge_values, h_neglect, answers_2018 )
   real      :: expr1, expr2
 
   ! Bound edge values
-  call bound_edge_values( N, h, u, edge_values, h_neglect, answers_2018 )
+  call bound_edge_values( N, h, u, edge_values, h_neglect, answer_date=answer_date )
 
   ! Make discontinuous edge values monotonic
   call check_discontinuous_edge_values( N, u, edge_values )
@@ -110,7 +110,7 @@ subroutine PPM_limiter_standard( N, h, u, edge_values, h_neglect, answers_2018 )
     endif
     ! This checks that the difference in edge values is representable
     ! and avoids overshoot problems due to round off.
-    !### The 1.e-60 needs to have units of [A], so this dimensionally inconsisent.
+    !### The 1.e-60 needs to have units of [A], so this dimensionally inconsistent.
     if ( abs( edge_r - edge_l )<max(1.e-60,epsilon(u_c)*abs(u_c)) ) then
       edge_l = u_c
       edge_r = u_c

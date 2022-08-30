@@ -42,11 +42,11 @@ type, public :: ctrl_forcing_CS ; private
   real    :: Len2           !< The square of the length scale over which the anomalies
                             !! are smoothed via a Laplacian filter [L2 ~> m2]
   real    :: lam_heat       !< A constant of proportionality between SST anomalies
-                            !! and heat fluxes [Q R Z T-1 degC-1 ~> W m-2 degC-1]
+                            !! and heat fluxes [Q R Z T-1 C-1 ~> W m-2 degC-1]
   real    :: lam_prec       !< A constant of proportionality between SSS anomalies
                             !! (normalised by mean SSS) and precipitation [R Z T-1 ~> kg m-2 s-1]
   real    :: lam_cyc_heat   !< A constant of proportionality between cyclical SST
-                            !! anomalies and corrective heat fluxes [Q R Z T-1 degC-1 ~> W m-2 degC-1]
+                            !! anomalies and corrective heat fluxes [Q R Z T-1 C-1 ~> W m-2 degC-1]
   real    :: lam_cyc_prec   !< A constant of proportionality between cyclical SSS
                             !! anomalies (normalised by mean SSS) and corrective
                             !! precipitation [R Z T-1 ~> kg m-2 s-1]
@@ -71,17 +71,17 @@ type, public :: ctrl_forcing_CS ; private
                             !! the actual averages, and not time integrals.
                             !! The dimension is the periodic bins.
   real, pointer, dimension(:,:,:) :: &
-    avg_SST_anom => NULL(), & !< The time-averaged periodic sea surface temperature anomalies [degC],
+    avg_SST_anom => NULL(), & !< The time-averaged periodic sea surface temperature anomalies [C ~> degC],
                               !! or (at some points in the code), the time-integrated periodic
-                              !! temperature anomalies [T degC ~> s degC].
+                              !! temperature anomalies [T C ~> s degC].
                               !! The third dimension is the periodic bins.
-    avg_SSS_anom => NULL(), & !< The time-averaged periodic sea surface salinity anomalies [ppt],
+    avg_SSS_anom => NULL(), & !< The time-averaged periodic sea surface salinity anomalies [S ~> ppt],
                               !! or (at some points in the code), the time-integrated periodic
-                              !! salinity anomalies [T ppt ~> s ppt].
+                              !! salinity anomalies [T S ~> s ppt].
                               !! The third dimension is the periodic bins.
-    avg_SSS => NULL()         !< The time-averaged periodic sea surface salinities [ppt], or (at
+    avg_SSS => NULL()         !< The time-averaged periodic sea surface salinities [S ~> ppt], or (at
                               !! some points in the code), the time-integrated periodic
-                              !! salinities [T ppt ~> s ppt].
+                              !! salinities [T S ~> s ppt].
                               !! The third dimension is the periodic bins.
 
   type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to
@@ -96,9 +96,9 @@ contains
 subroutine apply_ctrl_forcing(SST_anom, SSS_anom, SSS_mean, virt_heat, virt_precip, &
                               day_start, dt, G, US, CS)
   type(ocean_grid_type), intent(inout) :: G         !< The ocean's grid structure
-  real, dimension(SZI_(G),SZJ_(G)), intent(in)    :: SST_anom  !< The sea surface temperature anomalies [degC]
-  real, dimension(SZI_(G),SZJ_(G)), intent(in)    :: SSS_anom  !< The sea surface salinity anomlies [ppt]
-  real, dimension(SZI_(G),SZJ_(G)), intent(in)    :: SSS_mean  !< The mean sea surface salinity [ppt]
+  real, dimension(SZI_(G),SZJ_(G)), intent(in)    :: SST_anom  !< The sea surface temperature anomalies [C ~> degC]
+  real, dimension(SZI_(G),SZJ_(G)), intent(in)    :: SSS_anom  !< The sea surface salinity anomlies [S ~> ppt]
+  real, dimension(SZI_(G),SZJ_(G)), intent(in)    :: SSS_mean  !< The mean sea surface salinity [S ~> ppt]
   real, dimension(SZI_(G),SZJ_(G)), intent(inout) :: virt_heat !< Virtual (corrective) heat
                                                     !! fluxes that are augmented in this
                                                     !! subroutine [Q R Z T-1 ~> W m-2]
@@ -483,6 +483,7 @@ subroutine register_ctrl_forcing_restarts(G, US, param_file, CS, restart_CS)
     allocate(CS%avg_time(CS%num_cycle), source=0.0)
     allocate(CS%avg_SST_anom(isd:ied,jsd:jed,CS%num_cycle), source=0.0)
     allocate(CS%avg_SSS_anom(isd:ied,jsd:jed,CS%num_cycle), source=0.0)
+    allocate(CS%avg_SSS(isd:ied,jsd:jed,CS%num_cycle), source=0.0)
 
     write (period_str, '(i8)') CS%num_cycle
     period_str = trim('p ')//trim(adjustl(period_str))
@@ -497,9 +498,14 @@ subroutine register_ctrl_forcing_restarts(G, US, param_file, CS, restart_CS)
                   longname="Cyclical accumulated averaging time", &
                   units="sec", conversion=US%T_to_s, z_grid='1', t_grid=period_str)
     call register_restart_field(CS%avg_SST_anom, "avg_SST_anom", .false., restart_CS, &
-                  longname="Cyclical average SST Anomaly", units="degC", z_grid='1', t_grid=period_str)
+                  longname="Cyclical average SST Anomaly", &
+                  units="degC", conversion=US%C_to_degC, z_grid='1', t_grid=period_str)
     call register_restart_field(CS%avg_SSS_anom, "avg_SSS_anom", .false., restart_CS, &
-                  longname="Cyclical average SSS Anomaly", units="g kg-1", z_grid='1', t_grid=period_str)
+                  longname="Cyclical average SSS Anomaly", &
+                  units="g kg-1", conversion=US%S_to_ppt, z_grid='1', t_grid=period_str)
+    call register_restart_field(CS%avg_SSS_anom, "avg_SSS", .false., restart_CS, &
+                  longname="Cyclical average SSS", &
+                  units="g kg-1", conversion=US%S_to_ppt, z_grid='1', t_grid=period_str)
   endif
 
 end subroutine register_ctrl_forcing_restarts
@@ -572,7 +578,7 @@ subroutine controlled_forcing_init(Time, G, US, param_file, diag, CS)
   call get_param(param_file, mdl, "CTRL_FORCE_LAMDA_HEAT", CS%lam_heat, &
                  "A constant of proportionality between SST anomalies "//&
                  "and controlling heat fluxes", &
-                 units="W m-2 K-1", default=0.0, scale=US%W_m2_to_QRZ_T)
+                 units="W m-2 K-1", default=0.0, scale=US%W_m2_to_QRZ_T*US%C_to_degC)
   call get_param(param_file, mdl, "CTRL_FORCE_LAMDA_PREC", CS%lam_prec, &
                  "A constant of proportionality between SSS anomalies "//&
                  "(normalised by mean SSS) and controlling precipitation.", &
@@ -580,7 +586,7 @@ subroutine controlled_forcing_init(Time, G, US, param_file, diag, CS)
   call get_param(param_file, mdl, "CTRL_FORCE_LAMDA_CYC_HEAT", CS%lam_cyc_heat, &
                  "A constant of proportionality between SST anomalies "//&
                  "and cyclical controlling heat fluxes", &
-                 units="W m-2 K-1", default=0.0, scale=US%W_m2_to_QRZ_T)
+                 units="W m-2 K-1", default=0.0, scale=US%W_m2_to_QRZ_T*US%C_to_degC)
   call get_param(param_file, mdl, "CTRL_FORCE_LAMDA_CYC_PREC", CS%lam_cyc_prec, &
                  "A constant of proportionality between SSS anomalies "//&
                  "(normalised by mean SSS) and cyclical controlling precipitation.", &

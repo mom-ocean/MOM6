@@ -3253,8 +3253,9 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
   ! available only for ALE algorithm.
   ! diagnostics for tendencies of temp and heat due to frazil
   CS%id_diabatic_diff_h = register_diag_field('ocean_model', 'diabatic_diff_h', diag%axesTL, Time, &
-      long_name='Cell thickness used during diabatic diffusion', &
-      units='m', conversion=GV%H_to_m, v_extensive=.true.)
+      'Cell thickness used during diabatic diffusion', &
+      thickness_units, conversion=GV%H_to_MKS, v_extensive=.true.)
+
   if (CS%useALEalgorithm) then
     CS%id_diabatic_diff_temp_tend = register_diag_field('ocean_model', &
         'diabatic_diff_temp_tendency', diag%axesTL, Time,              &
@@ -3326,12 +3327,12 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
     ! available only for ALE algorithm.
   ! diagnostics for tendencies of temp and heat due to frazil
     CS%id_boundary_forcing_h = register_diag_field('ocean_model', 'boundary_forcing_h', diag%axesTL, Time, &
-        long_name='Cell thickness after applying boundary forcing', &
-        units='m', conversion=GV%H_to_m, v_extensive=.true.)
+        'Cell thickness after applying boundary forcing', &
+        thickness_units, conversion=GV%H_to_MKS, v_extensive=.true.)
     CS%id_boundary_forcing_h_tendency = register_diag_field('ocean_model',   &
         'boundary_forcing_h_tendency', diag%axesTL, Time,                &
         'Cell thickness tendency due to boundary forcing', &
-        'm s-1', conversion=GV%H_to_m*US%s_to_T, v_extensive=.true.)
+        trim(thickness_units)//" s-1", conversion=GV%H_to_MKS*US%s_to_T, v_extensive=.true.)
     if (CS%id_boundary_forcing_h_tendency > 0) then
       CS%boundary_forcing_tendency_diag = .true.
     endif
@@ -3388,7 +3389,7 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
   ! diagnostics for tendencies of temp and heat due to frazil
   CS%id_frazil_h = register_diag_field('ocean_model', 'frazil_h', diag%axesTL, Time, &
       long_name='Cell Thickness', standard_name='cell_thickness', &
-      units='m', conversion=GV%H_to_m, v_extensive=.true.)
+      units=thickness_units, conversion=GV%H_to_MKS, v_extensive=.true.)
 
   ! diagnostic for tendency of temp due to frazil
   CS%id_frazil_temp_tend = register_diag_field('ocean_model',&

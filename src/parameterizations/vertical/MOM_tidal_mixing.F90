@@ -139,9 +139,14 @@ type, public :: tidal_mixing_cs ; private
   real                            :: tidal_diss_lim_tc  !< CVMix-specific dissipation limit depth for
                                                         !! tidal-energy-constituent data [Z ~> m].
   type(remapping_CS)              :: remap_CS           !< The control structure for remapping
-  logical :: remap_answers_2018 = .true.  !< If true, use the order of arithmetic and expressions that
-                                       !! recover the remapping answers from 2018.  If false, use more
-                                       !! robust forms of the same remapping expressions.
+  integer :: remap_answer_date  !< The vintage of the order of arithmetic and expressions to use
+                                !! for remapping.  Values below 20190101 recover the remapping
+                                !! answers from 2018, while higher values use more robust
+                                !! forms of the same remapping expressions.
+  integer :: tidal_answer_date  !< The vintage of the order of arithmetic and expressions in the tidal
+                                !! mixing calculations.  Values below 20190101 recover the answers
+                                !! from the end of 2018, while higher values use updated and more robust
+                                !! forms of the same expressions.
 
   type(int_tide_CS), pointer    :: int_tide_CSp=> NULL() !< Control structure for a child module
 
@@ -161,9 +166,6 @@ type, public :: tidal_mixing_cs ; private
                                         !! TODO: make this E(x,y) only
   real, allocatable :: tidal_qe_3d_in(:,:,:)  !< q*E(x,y,z) with the Schmittner parameterization [W m-3?]
 
-  logical :: answers_2018   !< If true, use the order of arithmetic and expressions that recover the
-                            !! answers from the end of 2018.  Otherwise, use updated and more robust
-                            !! forms of the same expressions.
 
   ! Diagnostics
   type(diag_ctrl),          pointer :: diag => NULL() !< structure to regulate diagnostic output timing
@@ -222,7 +224,16 @@ logical function tidal_mixing_init(Time, G, GV, US, param_file, int_tide_CSp, di
   logical :: use_CVMix_tidal
   logical :: int_tide_dissipation
   logical :: read_tideamp
-  logical :: default_2018_answers
+  integer :: default_answer_date  ! The default setting for the various ANSWER_DATE flags.
+  logical :: default_2018_answers ! The default setting for the various 2018_ANSWERS flags.
+  logical :: remap_answers_2018   ! If true, use the order of arithmetic and expressions that
+                                  ! recover the remapping answers from 2018.  If false, use more
+                                  ! robust forms of the same remapping expressions.
+  integer :: default_remap_ans_date ! The default setting for remap_answer_date
+  integer :: default_tide_ans_date  ! The default setting for tides_answer_date
+  logical :: tide_answers_2018    ! If true, use the order of arithmetic and expressions that recover the
+                                  ! answers from the end of 2018.  Otherwise, use updated and more robust
+                                  ! forms of the same expressions.
   character(len=20)  :: tmpstr, int_tide_profile_str
   character(len=20)  :: CVMix_tidal_scheme_str, tidal_energy_type
   character(len=200) :: filename, h2_file, Niku_TKE_input_file
@@ -271,17 +282,42 @@ logical function tidal_mixing_init(Time, G, GV, US, param_file, int_tide_CSp, di
   call get_param(param_file, mdl, "INPUTDIR", CS%inputdir, default=".",do_not_log=.true.)
   CS%inputdir = slasher(CS%inputdir)
 
+  call get_param(param_file, mdl, "DEFAULT_ANSWER_DATE", default_answer_date, &
+                 "This sets the default value for the various _ANSWER_DATE parameters.", &
+                 default=99991231)
   call get_param(param_file, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
                  "This sets the default value for the various _2018_ANSWERS parameters.", &
-                 default=.false.)
-  call get_param(param_file, mdl, "TIDAL_MIXING_2018_ANSWERS", CS%answers_2018, &
+                 default=(default_answer_date<20190101))
+  call get_param(param_file, mdl, "TIDAL_MIXING_2018_ANSWERS", tide_answers_2018, &
                  "If true, use the order of arithmetic and expressions that recover the "//&
                  "answers from the end of 2018.  Otherwise, use updated and more robust "//&
                  "forms of the same expressions.", default=default_2018_answers)
-  call get_param(param_file, mdl, "REMAPPING_2018_ANSWERS", CS%remap_answers_2018, &
+  ! Revise inconsistent default answer dates for the tidal mixing.
+  default_tide_ans_date = default_answer_date
+  if (tide_answers_2018 .and. (default_tide_ans_date >= 20190101)) default_tide_ans_date = 20181231
+  if (.not.tide_answers_2018 .and. (default_tide_ans_date < 20190101)) default_tide_ans_date = 20190101
+  call get_param(param_file, mdl, "TIDAL_MIXING_ANSWER_DATE", CS%tidal_answer_date, &
+                 "The vintage of the order of arithmetic and expressions in the tidal mixing "//&
+                 "calculations.  Values below 20190101 recover the answers from the end of 2018, "//&
+                 "while higher values use updated and more robust forms of the same expressions.  "//&
+                 "If both TIDAL_MIXING_2018_ANSWERS and TIDAL_MIXING_ANSWER_DATE are specified, "//&
+                 "the latter takes precedence.", default=default_tide_ans_date)
+
+  call get_param(param_file, mdl, "REMAPPING_2018_ANSWERS", remap_answers_2018, &
                  "If true, use the order of arithmetic and expressions that recover the "//&
                  "answers from the end of 2018.  Otherwise, use updated and more robust "//&
                  "forms of the same expressions.", default=default_2018_answers)
+  ! Revise inconsistent default answer dates for remapping.
+  default_remap_ans_date = default_answer_date
+  if (remap_answers_2018 .and. (default_remap_ans_date >= 20190101)) default_remap_ans_date = 20181231
+  if (.not.remap_answers_2018 .and. (default_remap_ans_date < 20190101)) default_remap_ans_date = 20190101
+  call get_param(param_file, mdl, "REMAPPING_ANSWER_DATE", CS%remap_answer_date, &
+                 "The vintage of the expressions and order of arithmetic to use for remapping.  "//&
+                 "Values below 20190101 result in the use of older, less accurate expressions "//&
+                 "that were in use at the end of 2018.  Higher values result in the use of more "//&
+                 "robust and accurate forms of mathematically equivalent expressions.  "//&
+                 "If both REMAPPING_2018_ANSWERS and REMAPPING_ANSWER_DATE are specified, the "//&
+                 "latter takes precedence.", default=default_remap_ans_date)
 
   if (CS%int_tide_dissipation) then
 
@@ -481,7 +517,7 @@ logical function tidal_mixing_init(Time, G, GV, US, param_file, int_tide_CSp, di
       CS%tideamp(i,j) = CS%tideamp(i,j) * CS%mask_itidal(i,j) * G%mask2dT(i,j)
 
       ! Restrict rms topo to a fraction (often 10 percent) of the column depth.
-      if (CS%answers_2018 .and. (max_frac_rough >= 0.0)) then
+      if ((CS%tidal_answer_date < 20190101) .and. (max_frac_rough >= 0.0)) then
         hamp = min(max_frac_rough*(G%bathyT(i,j)+G%Z_ref), sqrt(CS%h2(i,j)))
         CS%h2(i,j) = hamp*hamp
       else
@@ -1100,7 +1136,7 @@ subroutine add_int_tide_diffusivity(h, j, N2_bot, N2_lay, TKE_to_Kd, max_TKE, &
 
     do i=is,ie
       CS%Nb(i,j) = sqrt(N2_bot(i))
-      if (CS%answers_2018) then
+      if (CS%tidal_answer_date < 20190101) then
         if ((CS%tideamp(i,j) > 0.0) .and. &
             (CS%kappa_itides**2 * CS%h2(i,j) * CS%Nb(i,j)**3 > 1.0e-14*US%T_to_s**3) ) then
           z0_polzin(i) = CS%Polzin_decay_scale_factor * CS%Nu_Polzin * &
@@ -1145,7 +1181,7 @@ subroutine add_int_tide_diffusivity(h, j, N2_bot, N2_lay, TKE_to_Kd, max_TKE, &
       if (allocated(CS%dd%N2_bot)) &
         CS%dd%N2_bot(i,j) = CS%Nb(i,j)*CS%Nb(i,j)
 
-      if (CS%answers_2018) then
+      if (CS%tidal_answer_date < 20190101) then
         ! These expressions use dimensional constants to avoid NaN values.
         if ( CS%Int_tide_dissipation .and. (CS%int_tide_profile == POLZIN_09) ) then
           if (htot_WKB(i) > 1.0e-14*US%m_to_Z) &
@@ -1178,7 +1214,7 @@ subroutine add_int_tide_diffusivity(h, j, N2_bot, N2_lay, TKE_to_Kd, max_TKE, &
 
       z_from_bot(i) = GV%H_to_Z*h(i,j,nz)
       ! Use the new formulation for WKB scaling.  N2 is referenced to its vertical mean.
-      if (CS%answers_2018) then
+      if (CS%tidal_answer_date < 20190101) then
         if (N2_meanz(i) > 1.0e-14*US%T_to_s**2 ) then
           z_from_bot_WKB(i) = GV%H_to_Z*h(i,j,nz) * N2_lay(i,nz) / N2_meanz(i)
         else ; z_from_bot_WKB(i) = 0 ; endif
@@ -1310,7 +1346,7 @@ subroutine add_int_tide_diffusivity(h, j, N2_bot, N2_lay, TKE_to_Kd, max_TKE, &
     do k=nz-1,2,-1 ; do i=is,ie
       if (max_TKE(i,k) <= 0.0) cycle
       z_from_bot(i) = z_from_bot(i) + GV%H_to_Z*h(i,j,k)
-      if (CS%answers_2018) then
+      if (CS%tidal_answer_date < 20190101) then
         if (N2_meanz(i) > 1.0e-14*US%T_to_s**2 ) then
           z_from_bot_WKB(i) = z_from_bot_WKB(i) &
               + GV%H_to_Z * h(i,j,k) * N2_lay(i,k) / N2_meanz(i)
@@ -1651,7 +1687,7 @@ subroutine read_tidal_constituents(G, US, tidal_energy_file, CS)
   ! initialize input remapping:
   call initialize_remapping(CS%remap_cs, remapping_scheme="PLM", &
                             boundary_extrapolation=.false., check_remapping=CS%debug, &
-                            answers_2018=CS%remap_answers_2018)
+                            answer_date=CS%remap_answer_date)
 
   deallocate(tc_m2)
   deallocate(tc_s2)

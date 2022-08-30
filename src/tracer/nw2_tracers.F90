@@ -10,7 +10,7 @@ use MOM_forcing_type, only : forcing
 use MOM_grid, only : ocean_grid_type
 use MOM_hor_index, only : hor_index_type
 use MOM_io, only : file_exists, MOM_read_data, slasher, vardesc, var_desc
-use MOM_restart, only : query_initialized, MOM_restart_CS
+use MOM_restart, only : query_initialized, set_initialized, MOM_restart_CS
 use MOM_time_manager, only : time_type, time_type_to_real
 use MOM_tracer_registry, only : register_tracer, tracer_registry_type
 use MOM_tracer_diabatic, only : tracer_vertdiff, applyTracerBoundaryFluxesInOut
@@ -55,8 +55,8 @@ logical function register_nw2_tracers(HI, GV, US, param_file, CS, tr_Reg, restar
                                                   !! diffusion module
   type(MOM_restart_CS), target, intent(inout) :: restart_CS !< MOM restart control struct
 
-! This include declares and sets the variable "version".
-#include "version_variable.h"
+  ! This include declares and sets the variable "version".
+# include "version_variable.h"
   character(len=40)  :: mdl = "nw2_tracers" ! This module's name.
   character(len=8)  :: var_name ! The variable's name.
   real, pointer :: tr_ptr(:,:,:) => NULL()
@@ -69,7 +69,6 @@ logical function register_nw2_tracers(HI, GV, US, param_file, CS, tr_Reg, restar
   if (associated(CS)) then
     call MOM_error(FATAL, "register_nw2_tracer called with an "// &
                           "associated control structure.")
-    return
   endif
   allocate(CS)
 
@@ -162,10 +161,11 @@ subroutine initialize_nw2_tracers(restart, day, G, GV, US, h, tv, diag, CS)
     ! in which the tracers were not present
     write(var_name(1:8),'(a6,i2.2)') 'tracer',m
     if ((.not.restart) .or. &
-        (.not. query_initialized(CS%tr(:,:,:,m),var_name,CS%restart_CSp))) then
+        (.not. query_initialized(CS%tr(:,:,:,m), var_name, CS%restart_CSp))) then
       do k=1,GV%ke ; do j=G%jsc,G%jec ; do i=G%isc,G%iec
           CS%tr(i,j,k,m) = nw2_tracer_dist(m, G, GV, eta, i, j, k)
       enddo ; enddo ; enddo
+      call set_initialized(CS%tr(:,:,:,m), var_name, CS%restart_CSp)
     endif ! restart
   enddo ! Tracer loop
 

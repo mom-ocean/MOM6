@@ -24,10 +24,14 @@ Makefile: @srcdir@/ac/Makefile.in config.status
 	./config.status
 
 
+# Recursive wildcard (finds all files in $1 with suffixes in $2)
+rwildcard=$(foreach d,$(wildcard $(1:=/*)),$(call rwildcard,$d,$2) $(filter $(subst *,%,$2),$d))
+
+
 # Generate dependencies
 .PHONY: depend
 depend: Makefile.dep
-Makefile.dep:
+Makefile.dep: $(MAKEDEP) $(call rwildcard,$(SRC_DIRS),*.h *.c *.inc *.F90)
 	$(MAKEDEP) -o Makefile.dep -e $(SRC_DIRS)
 
 
