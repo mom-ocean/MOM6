@@ -16,8 +16,7 @@ use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, WARNING, is_root_pe
 use MOM_file_parser, only : read_param, get_param, log_param, log_version, param_file_type
 use MOM_grid, only : MOM_grid_init, ocean_grid_type
 use MOM_io, only : file_exists, slasher, MOM_read_data
-use MOM_restart, only : register_restart_field, query_initialized
-use MOM_restart, only : MOM_restart_CS
+use MOM_restart, only : register_restart_field, MOM_restart_CS
 use MOM_time_manager, only : time_type, set_time
 use MOM_unit_scaling, only : unit_scale_type, unit_scaling_init
 !MJH use MOM_ice_shelf_initialize, only : initialize_ice_shelf_boundary

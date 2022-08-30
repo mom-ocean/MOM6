@@ -118,12 +118,14 @@ type, public :: ALE_sponge_CS ; private
                                    !! timing of diagnostic output.
 
   type(remapping_cs) :: remap_cs   !< Remapping parameters and work arrays
-  logical :: remap_answers_2018    !< If true, use the order of arithmetic and expressions that
-                                   !! recover the answers for remapping from the end of 2018.
-                                   !! Otherwise, use more robust forms of the same expressions.
-  logical :: hor_regrid_answers_2018 !< If true, use the order of arithmetic for horizontal regridding
-                                   !! that recovers the answers from the end of 2018.  Otherwise, use
-                                   !! rotationally symmetric forms of the same expressions.
+  integer :: remap_answer_date     !< The vintage of the order of arithmetic and expressions to use
+                                   !! for remapping.  Values below 20190101 recover the remapping
+                                   !! answers from 2018, while higher values use more robust
+                                   !! forms of the same remapping expressions.
+  integer :: hor_regrid_answer_date !< The vintage of the order of arithmetic and expressions to use
+                                   !! for horizontal regridding.  Values below 20190101 recover the
+                                   !! answers from 2018, while higher values use expressions that have
+                                   !! been rearranged for rotational invariance.
 
   logical :: time_varying_sponges  !< True if using newer sponge code
   logical :: spongeDataOngrid !< True if the sponge data are on the model horizontal grid
@@ -173,7 +175,16 @@ subroutine initialize_ALE_sponge_fixed(Iresttime, G, GV, param_file, CS, data_h,
   character(len=64)  :: remapScheme
   logical :: use_sponge
   logical :: bndExtrapolation = .true. ! If true, extrapolate boundaries
-  logical :: default_2018_answers
+  integer :: default_answer_date  ! The default setting for the various ANSWER_DATE flags.
+  logical :: default_2018_answers ! The default setting for the various 2018_ANSWERS flags.
+  logical :: remap_answers_2018   ! If true, use the order of arithmetic and expressions that
+                                  ! recover the remapping answers from 2018.  If false, use more
+                                  ! robust forms of the same remapping expressions.
+  integer :: default_remap_ans_date ! The default setting for remap_answer_date
+  logical :: hor_regrid_answers_2018 ! If true, use the order of arithmetic for horizontal regridding
+                                  ! that recovers the answers from the end of 2018.  Otherwise, use
+                                  ! rotationally symmetric forms of the same expressions.
+  integer :: default_hor_reg_ans_date ! The default setting for hor_regrid_answer_date
   integer :: i, j, k, col, total_sponge_cols, total_sponge_cols_u, total_sponge_cols_v
 
   if (associated(CS)) then
@@ -208,17 +219,41 @@ subroutine initialize_ALE_sponge_fixed(Iresttime, G, GV, param_file, CS, data_h,
                  "than PCM. E.g., if PPM is used for remapping, a "//&
                  "PPM reconstruction will also be used within boundary cells.", &
                  default=.false., do_not_log=.true.)
+  call get_param(param_file, mdl, "DEFAULT_ANSWER_DATE", default_answer_date, &
+                 "This sets the default value for the various _ANSWER_DATE parameters.", &
+                 default=99991231)
   call get_param(param_file, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
                  "This sets the default value for the various _2018_ANSWERS parameters.", &
-                 default=.false.)
-  call get_param(param_file, mdl, "REMAPPING_2018_ANSWERS", CS%remap_answers_2018, &
+                 default=(default_answer_date<20190101))
+  call get_param(param_file, mdl, "REMAPPING_2018_ANSWERS", remap_answers_2018, &
                  "If true, use the order of arithmetic and expressions that recover the "//&
                  "answers from the end of 2018.  Otherwise, use updated and more robust "//&
                  "forms of the same expressions.", default=default_2018_answers)
-  call get_param(param_file, mdl, "HOR_REGRID_2018_ANSWERS", CS%hor_regrid_answers_2018, &
+  ! Revise inconsistent default answer dates for remapping.
+  default_remap_ans_date = default_answer_date
+  if (remap_answers_2018 .and. (default_remap_ans_date >= 20190101)) default_remap_ans_date = 20181231
+  if (.not.remap_answers_2018 .and. (default_remap_ans_date < 20190101)) default_remap_ans_date = 20190101
+  call get_param(param_file, mdl, "REMAPPING_ANSWER_DATE", CS%remap_answer_date, &
+                 "The vintage of the expressions and order of arithmetic to use for remapping.  "//&
+                 "Values below 20190101 result in the use of older, less accurate expressions "//&
+                 "that were in use at the end of 2018.  Higher values result in the use of more "//&
+                 "robust and accurate forms of mathematically equivalent expressions.  "//&
+                 "If both REMAPPING_2018_ANSWERS and REMAPPING_ANSWER_DATE are specified, the "//&
+                 "latter takes precedence.", default=default_remap_ans_date)
+  call get_param(param_file, mdl, "HOR_REGRID_2018_ANSWERS", hor_regrid_answers_2018, &
                  "If true, use the order of arithmetic for horizontal regridding that recovers "//&
                  "the answers from the end of 2018.  Otherwise, use rotationally symmetric "//&
                  "forms of the same expressions.", default=default_2018_answers)
+  ! Revise inconsistent default answer dates for horizontal regridding.
+  default_hor_reg_ans_date = default_answer_date
+  if (hor_regrid_answers_2018 .and. (default_hor_reg_ans_date >= 20190101)) default_hor_reg_ans_date = 20181231
+  if (.not.hor_regrid_answers_2018 .and. (default_hor_reg_ans_date < 20190101)) default_hor_reg_ans_date = 20190101
+  call get_param(param_file, mdl, "HOR_REGRID_ANSWER_DATE", CS%hor_regrid_answer_date, &
+                 "The vintage of the order of arithmetic for horizontal regridding.  "//&
+                 "Dates before 20190101 give the same answers as the code did in late 2018, "//&
+                 "while later versions add parentheses for rotational symmetry.  "//&
+                 "If both HOR_REGRID_2018_ANSWERS and HOR_REGRID_ANSWER_DATE are specified, the "//&
+                 "latter takes precedence.", default=default_hor_reg_ans_date)
   call get_param(param_file, mdl, "REENTRANT_X", CS%reentrant_x, &
                  "If true, the domain is zonally reentrant.", default=.true.)
   call get_param(param_file, mdl, "TRIPOLAR_N", CS%tripolar_N, &
@@ -261,7 +296,7 @@ subroutine initialize_ALE_sponge_fixed(Iresttime, G, GV, param_file, CS, data_h,
 
 ! Call the constructor for remapping control structure
   call initialize_remapping(CS%remap_cs, remapScheme, boundary_extrapolation=bndExtrapolation, &
-                            answers_2018=CS%remap_answers_2018)
+                            answer_date=CS%remap_answer_date)
 
   call log_param(param_file, mdl, "!Total sponge columns at h points", total_sponge_cols, &
                  "The total number of columns where sponges are applied at h points.", like_default=.true.)
@@ -434,7 +469,16 @@ subroutine initialize_ALE_sponge_varying(Iresttime, G, GV, param_file, CS, Irest
   character(len=64)  :: remapScheme
   logical :: use_sponge
   logical :: bndExtrapolation = .true. ! If true, extrapolate boundaries
-  logical :: default_2018_answers
+  integer :: default_answer_date  ! The default setting for the various ANSWER_DATE flags.
+  logical :: default_2018_answers ! The default setting for the various 2018_ANSWERS flags.
+  logical :: remap_answers_2018   ! If true, use the order of arithmetic and expressions that
+                                  ! recover the remapping answers from 2018.  If false, use more
+                                  ! robust forms of the same remapping expressions.
+  integer :: default_remap_ans_date ! The default setting for remap_answer_date
+  logical :: hor_regrid_answers_2018 ! If true, use the order of arithmetic for horizontal regridding
+                                  ! that recovers the answers from the end of 2018.  Otherwise, use
+                                  ! rotationally symmetric forms of the same expressions.
+  integer :: default_hor_reg_ans_date ! The default setting for hor_regrid_answer_date
   integer :: i, j, col, total_sponge_cols, total_sponge_cols_u, total_sponge_cols_v
 
   if (associated(CS)) then
@@ -463,19 +507,43 @@ subroutine initialize_ALE_sponge_varying(Iresttime, G, GV, param_file, CS, Irest
                  "than PCM. E.g., if PPM is used for remapping, a "//&
                  "PPM reconstruction will also be used within boundary cells.", &
                  default=.false., do_not_log=.true.)
+  call get_param(param_file, mdl, "DEFAULT_ANSWER_DATE", default_answer_date, &
+                 "This sets the default value for the various _ANSWER_DATE parameters.", &
+                 default=99991231)
   call get_param(param_file, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
                  "This sets the default value for the various _2018_ANSWERS parameters.", &
-                 default=.false.)
-  call get_param(param_file, mdl, "REMAPPING_2018_ANSWERS", CS%remap_answers_2018, &
+                 default=(default_answer_date<20190101))
+  call get_param(param_file, mdl, "REMAPPING_2018_ANSWERS", remap_answers_2018, &
                  "If true, use the order of arithmetic and expressions that recover the "//&
                  "answers from the end of 2018.  Otherwise, use updated and more robust "//&
                  "forms of the same expressions.", default=default_2018_answers)
-  call get_param(param_file, mdl, "HOR_REGRID_2018_ANSWERS", CS%hor_regrid_answers_2018, &
+  ! Revise inconsistent default answer dates for remapping.
+  default_remap_ans_date = default_answer_date
+  if (remap_answers_2018 .and. (default_remap_ans_date >= 20190101)) default_remap_ans_date = 20181231
+  if (.not.remap_answers_2018 .and. (default_remap_ans_date < 20190101)) default_remap_ans_date = 20190101
+  call get_param(param_file, mdl, "REMAPPING_ANSWER_DATE", CS%remap_answer_date, &
+                 "The vintage of the expressions and order of arithmetic to use for remapping.  "//&
+                 "Values below 20190101 result in the use of older, less accurate expressions "//&
+                 "that were in use at the end of 2018.  Higher values result in the use of more "//&
+                 "robust and accurate forms of mathematically equivalent expressions.  "//&
+                 "If both REMAPPING_2018_ANSWERS and REMAPPING_ANSWER_DATE are specified, the "//&
+                 "latter takes precedence.", default=default_remap_ans_date)
+  call get_param(param_file, mdl, "HOR_REGRID_2018_ANSWERS", hor_regrid_answers_2018, &
                  "If true, use the order of arithmetic for horizontal regridding that recovers "//&
                  "the answers from the end of 2018 and retain a bug in the 3-dimensional mask "//&
                  "returned in certain cases.  Otherwise, use rotationally symmetric "//&
                  "forms of the same expressions and initialize the mask properly.", &
                  default=default_2018_answers)
+  ! Revise inconsistent default answer dates for horizontal regridding.
+  default_hor_reg_ans_date = default_answer_date
+  if (hor_regrid_answers_2018 .and. (default_hor_reg_ans_date >= 20190101)) default_hor_reg_ans_date = 20181231
+  if (.not.hor_regrid_answers_2018 .and. (default_hor_reg_ans_date < 20190101)) default_hor_reg_ans_date = 20190101
+  call get_param(param_file, mdl, "HOR_REGRID_ANSWER_DATE", CS%hor_regrid_answer_date, &
+                 "The vintage of the order of arithmetic for horizontal regridding.  "//&
+                 "Dates before 20190101 give the same answers as the code did in late 2018, "//&
+                 "while later versions add parentheses for rotational symmetry.  "//&
+                 "If both HOR_REGRID_2018_ANSWERS and HOR_REGRID_ANSWER_DATE are specified, the "//&
+                 "latter takes precedence.", default=default_hor_reg_ans_date)
   call get_param(param_file, mdl, "SPONGE_DATA_ONGRID", CS%spongeDataOngrid, &
                  "When defined, the incoming sponge data are "//&
                  "assumed to be on the model grid " , &
@@ -514,7 +582,7 @@ subroutine initialize_ALE_sponge_varying(Iresttime, G, GV, param_file, CS, Irest
 
 ! Call the constructor for remapping control structure
   call initialize_remapping(CS%remap_cs, remapScheme, boundary_extrapolation=bndExtrapolation, &
-                            answers_2018=CS%remap_answers_2018)
+                            answer_date=CS%remap_answer_date)
   call log_param(param_file, mdl, "!Total sponge columns at h points", total_sponge_cols, &
                  "The total number of columns where sponges are applied at h points.", like_default=.true.)
   if (CS%sponge_uv) then
@@ -868,7 +936,7 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
 
   Idt = 1.0/dt
 
-  if (.not.CS%remap_answers_2018) then
+  if (CS%remap_answer_date >= 20190101) then
     h_neglect = GV%H_subroundoff ; h_neglect_edge = GV%H_subroundoff
   elseif (GV%Boussinesq) then
     h_neglect = GV%m_to_H*1.0e-30 ; h_neglect_edge = GV%m_to_H*1.0e-10
@@ -882,7 +950,7 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
       call horiz_interp_and_extrap_tracer(CS%Ref_val(m)%id, Time, CS%Ref_val(m)%scale, G, sp_val, &
                      mask_z, z_in, z_edges_in,  missing_value, CS%reentrant_x, CS%tripolar_N, .false., &
                      spongeOnGrid=CS%SpongeDataOngrid, m_to_Z=US%m_to_Z, &
-                     answers_2018=CS%hor_regrid_answers_2018)
+                     answer_date=CS%hor_regrid_answer_date)
       allocate( hsrc(nz_data) )
       allocate( tmpT1d(nz_data) )
       do c=1,CS%num_col
@@ -966,7 +1034,7 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
       call horiz_interp_and_extrap_tracer(CS%Ref_val_u%id, Time, CS%Ref_val_u%scale, G, sp_val, &
                           mask_z, z_in, z_edges_in, missing_value, CS%reentrant_x, CS%tripolar_N, .false., &
                           spongeOnGrid=CS%SpongeDataOngrid, m_to_Z=US%m_to_Z,&
-                          answers_2018=CS%hor_regrid_answers_2018)
+                          answer_date=CS%hor_regrid_answer_date)
 
       ! Initialize mask_z halos to zero before pass_var, in case of no update
       mask_z(G%isc-1, G%jsc:G%jec, :) = 0.
@@ -1015,7 +1083,7 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
       call horiz_interp_and_extrap_tracer(CS%Ref_val_v%id, Time, CS%Ref_val_v%scale, G, sp_val, &
                           mask_z, z_in, z_edges_in, missing_value, CS%reentrant_x, CS%tripolar_N, .false., &
                           spongeOnGrid=CS%SpongeDataOngrid, m_to_Z=US%m_to_Z,&
-                          answers_2018=CS%hor_regrid_answers_2018)
+                          answer_date=CS%hor_regrid_answer_date)
       ! Initialize mask_z halos to zero before pass_var, in case of no update
       mask_z(G%isc:G%iec, G%jsc-1, :) = 0.
       mask_z(G%isc:G%iec, G%jec+1, :) = 0.

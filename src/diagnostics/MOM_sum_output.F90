@@ -1008,7 +1008,7 @@ subroutine accumulate_net_input(fluxes, sfc_state, tv, dt, G, US, CS)
       enddo ; enddo
     elseif (associated(fluxes%evap)) then
       do j=js,je ; do i=is,ie
-        heat_in(i,j) = heat_in(i,j) + (US%Q_to_J_kg*tv%C_p * US%degC_to_C*sfc_state%SST(i,j)) * FW_in(i,j)
+        heat_in(i,j) = heat_in(i,j) + (US%Q_to_J_kg*tv%C_p * sfc_state%SST(i,j)) * FW_in(i,j)
       enddo ; enddo
     endif
 

@@ -42,7 +42,7 @@ end subroutine PCM_reconstruction
 !! Date of creation: 2008.06.06
 !! L. White
 !!
-!! This module contains routines that handle one-dimensionnal finite volume
+!! This module contains routines that handle one-dimensional finite volume
 !! reconstruction using the piecewise constant method (PCM).
 
 end module PCM_functions

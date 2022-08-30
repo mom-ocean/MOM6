@@ -29,11 +29,11 @@ type, public :: BFB_surface_forcing_CS ; private
   real :: Rho0               !< The density used in the Boussinesq approximation [R ~> kg m-3].
   real :: G_Earth            !< The gravitational acceleration [L2 Z-1 T-2 ~> m s-2]
   real :: Flux_const         !< The restoring rate at the surface [Z T-1 ~> m s-1].
-  real :: SST_s              !< SST at the southern edge of the linear forcing ramp [degC]
-  real :: SST_n              !< SST at the northern edge of the linear forcing ramp [degC]
+  real :: SST_s              !< SST at the southern edge of the linear forcing ramp [C ~> degC]
+  real :: SST_n              !< SST at the northern edge of the linear forcing ramp [C ~> degC]
   real :: lfrslat            !< Southern latitude where the linear forcing ramp begins [degLat]
   real :: lfrnlat            !< Northern latitude where the linear forcing ramp ends [degLat]
-  real :: drho_dt            !< Rate of change of density with temperature [R degC-1 ~> kg m-3 degC-1].
+  real :: drho_dt            !< Rate of change of density with temperature [R C-1 ~> kg m-3 degC-1].
                              !!   Note that temperature is being used as a dummy variable here.
                              !! All temperatures are converted into density.
 
@@ -59,12 +59,12 @@ subroutine BFB_buoyancy_forcing(sfc_state, fluxes, day, dt, G, US, CS)
                                                       !! returned by a previous call to
                                                       !! BFB_surface_forcing_init.
   ! Local variables
-  real :: Temp_restore   ! The temperature that is being restored toward [degC].
-  real :: Salin_restore  ! The salinity that is being restored toward [ppt].
+  real :: Temp_restore   ! The temperature that is being restored toward [C ~> degC].
+  real :: Salin_restore  ! The salinity that is being restored toward [S ~> ppt].
   real :: density_restore  ! The potential density that is being restored
                          ! toward [R ~> kg m-3].
   real :: rhoXcp           ! Reference density times heat capacity times unit scaling
-                           ! factors [Q R degC-1 ~> J m-3 degC-1]
+                           ! factors [Q R C-1 ~> J m-3 degC-1]
   real :: buoy_rest_const  ! A constant relating density anomalies to the
                            ! restoring buoyancy flux [L2 T-3 R-1 ~> m5 s-3 kg-1].
   integer :: i, j, is, ie, js, je
@@ -127,8 +127,8 @@ subroutine BFB_buoyancy_forcing(sfc_state, fluxes, day, dt, G, US, CS)
 
       rhoXcp = CS%Rho0 * fluxes%C_p
       do j=js,je ; do i=is,ie
-        !   Set Temp_restore and Salin_restore to the temperature (in degC) and
-        ! salinity (in ppt) that are being restored toward.
+        !   Set Temp_restore and Salin_restore to the temperature (in [C ~> degC]) and
+        ! salinity (in [S ~> ppt]) that are being restored toward.
         Temp_restore = 0.0
         Salin_restore = 0.0
 
@@ -150,12 +150,12 @@ subroutine BFB_buoyancy_forcing(sfc_state, fluxes, day, dt, G, US, CS)
        !   Set density_restore to an expression for the surface potential
        ! density [R ~> kg m-3] that is being restored toward.
         if (G%geoLatT(i,j) < CS%lfrslat) then
-            Temp_restore = CS%SST_s
+          Temp_restore = CS%SST_s
         elseif (G%geoLatT(i,j) > CS%lfrnlat) then
-            Temp_restore = CS%SST_n
+          Temp_restore = CS%SST_n
         else
-            Temp_restore = (CS%SST_s - CS%SST_n)/(CS%lfrslat - CS%lfrnlat) * &
-                    (G%geoLatT(i,j) - CS%lfrslat) + CS%SST_s
+          Temp_restore = (CS%SST_s - CS%SST_n)/(CS%lfrslat - CS%lfrnlat) * &
+                  (G%geoLatT(i,j) - CS%lfrslat) + CS%SST_s
         endif
 
         density_restore = Temp_restore*CS%drho_dt + CS%Rho0
@@ -212,13 +212,13 @@ subroutine BFB_surface_forcing_init(Time, G, US, param_file, diag, CS)
                  units="degrees", default=40.0)
   call get_param(param_file, mdl, "SST_S", CS%SST_s, &
                  "SST at the southern edge of the linear forcing ramp.", &
-                 units="C", default=20.0)
+                 units="C", default=20.0, scale=US%degC_to_C)
   call get_param(param_file, mdl, "SST_N", CS%SST_n, &
                  "SST at the northern edge of the linear forcing ramp.", &
-                 units="C", default=10.0)
+                 units="C", default=10.0, scale=US%degC_to_C)
   call get_param(param_file, mdl, "DRHO_DT", CS%drho_dt, &
                  "The rate of change of density with temperature.", &
-                 units="kg m-3 K-1", default=-0.2, scale=US%kg_m3_to_R)
+                 units="kg m-3 K-1", default=-0.2, scale=US%kg_m3_to_R*US%C_to_degC)
 
   call get_param(param_file, mdl, "RESTOREBUOY", CS%restorebuoy, &
                  "If true, the buoyancy fluxes drive the model back "//&

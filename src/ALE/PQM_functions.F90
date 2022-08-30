@@ -17,7 +17,7 @@ contains
 !!
 !! It is assumed that the dimension of 'u' is equal to the number of cells
 !! defining 'grid' and 'ppoly'. No consistency check is performed.
-subroutine PQM_reconstruction( N, h, u, edge_values, edge_slopes, ppoly_coef, h_neglect, answers_2018 )
+subroutine PQM_reconstruction( N, h, u, edge_values, edge_slopes, ppoly_coef, h_neglect, answer_date )
   integer,              intent(in)    :: N !< Number of cells
   real, dimension(:),   intent(in)    :: h !< cell widths (size N) [H]
   real, dimension(:),   intent(in)    :: u !< cell averages (size N) [A]
@@ -26,7 +26,7 @@ subroutine PQM_reconstruction( N, h, u, edge_values, edge_slopes, ppoly_coef, h_
   real, dimension(:,:), intent(inout) :: ppoly_coef !< Coefficients of polynomial, mainly [A]
   real,       optional, intent(in)    :: h_neglect  !< A negligibly small width for
                                            !! the purpose of cell reconstructions [H]
-  logical,    optional, intent(in)    :: answers_2018 !< If true use older, less acccurate expressions.
+  integer,    optional, intent(in)    :: answer_date  !< The vintage of the expressions to use
 
   ! Local variables
   integer   :: k                ! loop index
@@ -36,7 +36,7 @@ subroutine PQM_reconstruction( N, h, u, edge_values, edge_slopes, ppoly_coef, h_
   real      :: a, b, c, d, e    ! parabola coefficients
 
   ! PQM limiter
-  call PQM_limiter( N, h, u, edge_values, edge_slopes, h_neglect, answers_2018 )
+  call PQM_limiter( N, h, u, edge_values, edge_slopes, h_neglect, answer_date=answer_date )
 
   ! Loop on cells to construct the cubic within each cell
   do k = 1,N
@@ -72,7 +72,7 @@ end subroutine PQM_reconstruction
 !!
 !! It is assumed that the dimension of 'u' is equal to the number of cells
 !! defining 'grid' and 'ppoly'. No consistency check is performed.
-subroutine PQM_limiter( N, h, u, edge_values, edge_slopes, h_neglect, answers_2018 )
+subroutine PQM_limiter( N, h, u, edge_values, edge_slopes, h_neglect, answer_date )
   integer,              intent(in)    :: N !< Number of cells
   real, dimension(:),   intent(in)    :: h !< cell widths (size N) [H]
   real, dimension(:),   intent(in)    :: u !< cell average properties (size N) [A]
@@ -80,7 +80,7 @@ subroutine PQM_limiter( N, h, u, edge_values, edge_slopes, h_neglect, answers_20
   real, dimension(:,:), intent(inout) :: edge_slopes !< Potentially modified edge slopes [A H-1]
   real,       optional, intent(in)    :: h_neglect !< A negligibly small width for
                                            !! the purpose of cell reconstructions [H]
-  logical,    optional, intent(in)    :: answers_2018 !< If true use older, less acccurate expressions.
+  integer,    optional, intent(in)    :: answer_date  !< The vintage of the expressions to use
 
   ! Local variables
   integer :: k            ! loop index
@@ -102,7 +102,7 @@ subroutine PQM_limiter( N, h, u, edge_values, edge_slopes, h_neglect, answers_20
   hNeglect = hNeglect_dflt ; if (present(h_neglect)) hNeglect = h_neglect
 
   ! Bound edge values
-  call bound_edge_values( N, h, u, edge_values, hNeglect, answers_2018 )
+  call bound_edge_values( N, h, u, edge_values, hNeglect, answer_date=answer_date )
 
   ! Make discontinuous edge values monotonic (thru averaging)
   call check_discontinuous_edge_values( N, u, edge_values )
@@ -158,7 +158,7 @@ subroutine PQM_limiter( N, h, u, edge_values, edge_slopes, h_neglect, answers_20
 
     ! Edge values are bounded and averaged when discontinuous and not
     ! monotonic, edge slopes are consistent and the cell is not an extremum.
-    ! We now need to check and encorce the monotonicity of the quartic within
+    ! We now need to check and enforce the monotonicity of the quartic within
     ! the cell
     if ( (inflexion_l == 0) .AND. (inflexion_r == 0) ) then
 
@@ -833,7 +833,7 @@ end subroutine PQM_boundary_extrapolation_v1
 !! Date of creation: 2008.06.06
 !! L. White
 !!
-!! This module contains routines that handle one-dimensionnal finite volume
+!! This module contains routines that handle one-dimensional finite volume
 !! reconstruction using the piecewise quartic method (PQM).
 
 end module PQM_functions

@@ -789,13 +789,14 @@ end subroutine store_stocks
 
 !> This subroutine calls all registered tracer packages to enable them to
 !! add to the surface state returned to the coupler. These routines are optional.
-subroutine call_tracer_surface_state(sfc_state, h, G, GV, CS)
+subroutine call_tracer_surface_state(sfc_state, h, G, GV, US, CS)
   type(surface),                intent(inout) :: sfc_state !< A structure containing fields that
                                                        !! describe the surface state of the ocean.
   type(ocean_grid_type),        intent(in)    :: G     !< The ocean's grid structure.
   type(verticalGrid_type),      intent(in)    :: GV    !< The ocean's vertical grid structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                                 intent(in)    :: h     !< Layer thicknesses [H ~> m or kg m-2]
+  type(unit_scale_type),        intent(in)    :: US    !< A dimensional unit scaling type
   type(tracer_flow_control_CS), pointer       :: CS    !< The control structure returned by a
                                                        !! previous call to call_tracer_register.
 
@@ -818,7 +819,7 @@ subroutine call_tracer_surface_state(sfc_state, h, G, GV, CS)
   if (CS%use_advection_test_tracer) &
     call advection_test_tracer_surface_state(sfc_state, h, G, GV, CS%advection_test_tracer_CSp)
   if (CS%use_OCMIP2_CFC) &
-    call OCMIP2_CFC_surface_state(sfc_state, h, G, GV, CS%OCMIP2_CFC_CSp)
+    call OCMIP2_CFC_surface_state(sfc_state, h, G, GV, US, CS%OCMIP2_CFC_CSp)
   if (CS%use_CFC_cap) &
     call CFC_cap_surface_state(sfc_state, G, CS%CFC_cap_CSp)
   if (CS%use_MOM_generic_tracer) &

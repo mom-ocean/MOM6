@@ -42,7 +42,8 @@ type, public :: wave_structure_CS ; !private
   real, allocatable, dimension(:,:,:) :: w_strct
                                    !< Vertical structure of vertical velocity (normalized) [nondim].
   real, allocatable, dimension(:,:,:) :: u_strct
-                                   !< Vertical structure of horizontal velocity (normalized) [nondim].
+                                   !< Vertical structure of horizontal velocity (normalized and
+                                   !! divided by layer thicknesses) [Z-1 ~> m-1].
   real, allocatable, dimension(:,:,:) :: W_profile
                                    !< Vertical profile of w_hat(z), where
                                    !! w(x,y,z,t) = w_hat(z)*exp(i(kx+ly-freq*t)) is the full time-
@@ -141,7 +142,7 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
     HxS_here, &    !< A layer integrated salinity [S Z ~> ppt m]
     HxR_here       !< A layer integrated density [R Z ~> kg m-2]
   real :: I_Hnew   !< The inverse of a new layer thickness [Z-1 ~> m-1]
-  real :: drxh_sum !< The sum of density diffrences across interfaces times thicknesses [R Z ~> kg m-2]
+  real :: drxh_sum !< The sum of density differences across interfaces times thicknesses [R Z ~> kg m-2]
   real, parameter :: tol1  = 0.0001, tol2 = 0.001
   real :: g_Rho0  !< G_Earth/Rho0 in [L2 Z-1 T-2 R-1 ~> m4 s-2 kg-1].
   ! real :: rescale, I_rescale
@@ -152,40 +153,47 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
   real               :: I_a_int     !< inverse of a_int [nondim]
   real               :: f2          !< squared Coriolis frequency [T-2 ~> s-2]
   real               :: Kmag2       !< magnitude of horizontal wave number squared [L-2 ~> m-2]
+  real               :: emag2       ! The sum of the squared magnitudes of the guesses [nondim]
+  real               :: pi_htot     ! The gravest vertical wavenumber in this column [Z-1 ~> m-1]
+  real               :: renorm      ! A renormalization factor [nondim]
   logical            :: use_EOS     !< If true, density is calculated from T & S using an
                                     !! equation of state.
 
   ! local representations of variables in CS; note,
   ! not all rows will be filled if layers get merged!
   real, dimension(SZK_(GV)+1) :: w_strct      !< Vertical structure of vertical velocity (normalized) [nondim].
-  real, dimension(SZK_(GV)+1) :: u_strct      !< Vertical structure of horizontal velocity (normalized) [nondim].
+  real, dimension(SZK_(GV)+1) :: u_strct      !< Vertical structure of horizontal velocity (normalized and
+                                              !! divided by layer thicknesses) [Z-1 ~> m-1].
   real, dimension(SZK_(GV)+1) :: W_profile    !< Vertical profile of w_hat(z) = W0*w_strct(z) [Z T-1 ~> m s-1].
   real, dimension(SZK_(GV)+1) :: Uavg_profile !< Vertical profile of the magnitude of
-                                             !! horizontal velocity [L T-1 ~> m s-1].
+                                              !! horizontal velocity [L T-1 ~> m s-1].
   real, dimension(SZK_(GV)+1) :: z_int        !< Integrated depth [Z ~> m]
   real, dimension(SZK_(GV)+1) :: N2           !< Squared buoyancy frequency at each interface [T-2 ~> s-2].
   real, dimension(SZK_(GV)+1) :: w_strct2     !< squared values [nondim]
-  real, dimension(SZK_(GV)+1) :: u_strct2     !< squared values [nondim]
+  real, dimension(SZK_(GV)+1) :: u_strct2     !< squared values [Z-2 ~> m-2]
   real, dimension(SZK_(GV))   :: dz           !< thicknesses of merged layers (same as Hc I hope) [Z ~> m]
-  ! real, dimension(SZK_(GV)+1) :: dWdz_profile !< profile of dW/dz
-  real                        :: w2avg   !< average of squared vertical velocity structure funtion [Z ~> m]
-  real                        :: int_dwdz2 !< Vertical integral of the square of u_strct [Z ~> m]
+  ! real, dimension(SZK_(GV)+1) :: dWdz_profile !< profile of dW/dz times total depth [Z T-1 ~> m s-1]
+  real                        :: w2avg   !< average of squared vertical velocity structure function [Z ~> m]
+  real                        :: int_dwdz2 !< Vertical integral of the square of u_strct [Z-1 ~> m-1]
   real                        :: int_w2   !< Vertical integral of the square of w_strct [Z ~> m]
   real                        :: int_N2w2 !< Vertical integral of N2 [Z T-2 ~> m s-2]
   real                        :: KE_term !< terms in vertically averaged energy equation [R Z ~> kg m-2]
   real                        :: PE_term !< terms in vertically averaged energy equation [R Z ~> kg m-2]
   real                        :: W0      !< A vertical velocity magnitude [Z T-1 ~> m s-1]
-  real                        :: gp_unscaled !< A version of gprime rescaled to [L T-2 ~> m s-2].
+  real                        :: U_mag   !< A horizontal velocity magnitude times the depth of the
+                                         !! ocean [Z L T-1 ~> m2 s-1]
   real, dimension(SZK_(GV)-1) :: lam_z   !< product of eigen value and gprime(k); one value for each
-                                         !< interface (excluding surface and bottom)
-  real, dimension(SZK_(GV)-1) :: a_diag, b_diag, c_diag
-                                         !< diagonals of tridiagonal matrix; one value for each
-                                         !< interface (excluding surface and bottom)
+                                         !< interface (excluding surface and bottom) [Z-1 ~> m-1]
+  real, dimension(SZK_(GV)-1) :: a_diag  !< upper diagonal of tridiagonal matrix; one value for each
+                                         !< interface (excluding surface and bottom) [Z-1 ~> m-1]
+  real, dimension(SZK_(GV)-1) :: c_diag  !< lower diagonal of tridiagonal matrix; one value for each
+                                         !< interface (excluding surface and bottom) [Z-1 ~> m-1]
+  real, dimension(SZK_(GV)-1) :: b_dom   !< Matrix center diagonal offset from a_diag + c_diag; one value
+                                         !< for each interface (excluding surface and bottom) [Z-1 ~> m-1]
   real, dimension(SZK_(GV)-1) :: e_guess !< guess at eigen vector with unit amplitude (for TDMA) [nondim]
   real, dimension(SZK_(GV)-1) :: e_itt   !< improved guess at eigen vector (from TDMA) [nondim]
-  real    :: Pi
-  integer :: kc
-  integer :: i, j, k, k2, itt, is, ie, js, je, nz, nzm, row, ig, jg, ig_stop, jg_stop
+  real    :: Pi   ! 3.1415926535... [nondim]
+  integer :: i, j, k, k2, kc, itt, is, ie, js, je, nz, nzm, row, ig, jg, ig_stop, jg_stop
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   I_a_int = 1/a_int
@@ -409,78 +417,85 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
               call MOM_error(FATAL, "wave_structure: mismatch in total depths")
             endif
 
-            ! Note that many of the calcluation from here on revert to using vertical
-            ! distances in m, not Z.
-
             ! Populate interior rows of tridiagonal matrix; must multiply through by
             ! gprime to get tridiagonal matrix to the symmetrical form:
             ! [-1/H(k-1)]e(k-1) + [1/H(k-1)+1/H(k)-lam_z]e(k) + [-1/H(k)]e(k+1) = 0,
             ! where lam_z = lam*gprime is now a function of depth.
-            ! Frist, populate interior rows
+            ! First, populate interior rows
 
-            ! init the values in matrix: since number of layers is variable, values need
-            ! to be reset
+            ! init the values in matrix: since number of layers is variable, values need to be reset
             lam_z(:) = 0.0
             a_diag(:) = 0.0
-            b_diag(:) = 0.0
+            b_dom(:) = 0.0
             c_diag(:) = 0.0
             e_guess(:) = 0.0
             e_itt(:) = 0.0
             w_strct(:) = 0.0
             do K=3,kc-1
               row = K-1 ! indexing for TD matrix rows
-              gp_unscaled = gprime(K)
-              lam_z(row) = lam*gp_unscaled
-              a_diag(row) = gp_unscaled*(-Igu(K))
-              b_diag(row) = gp_unscaled*(Igu(K)+Igl(K)) - lam_z(row)
-              c_diag(row) = gp_unscaled*(-Igl(K))
+              lam_z(row) = lam*gprime(K)
+              a_diag(row) = gprime(K)*(-Igu(K))
+              b_dom(row) = 2.0*gprime(K)*(Igu(K)+Igl(K)) - lam_z(row)
+              c_diag(row) = gprime(K)*(-Igl(K))
+            enddo
+            if (CS%debug) then ; do row=2,kc-2
               if (isnan(lam_z(row)))then  ; print *, "Wave_structure: lam_z(row) is NAN" ; endif
               if (isnan(a_diag(row)))then ; print *, "Wave_structure: a(k) is NAN" ; endif
-              if (isnan(b_diag(row)))then ; print *, "Wave_structure: b(k) is NAN" ; endif
               if (isnan(c_diag(row)))then ; print *, "Wave_structure: c(k) is NAN" ; endif
-            enddo
+            enddo ; endif
             ! Populate top row of tridiagonal matrix
             K=2 ; row = K-1 ;
-            gp_unscaled = gprime(K)
-            lam_z(row) = lam*gp_unscaled
+            lam_z(row) = lam*gprime(K)
             a_diag(row) = 0.0
-            b_diag(row) = gp_unscaled*(Igu(K)+Igl(K)) - lam_z(row)
-            c_diag(row) = gp_unscaled*(-Igl(K))
+            b_dom(row) = gprime(K)*(Igu(K)+2.0*Igl(K)) - lam_z(row)
+            c_diag(row) = gprime(K)*(-Igl(K))
             ! Populate bottom row of tridiagonal matrix
             K=kc ; row = K-1
-            gp_unscaled = gprime(K)
-            lam_z(row) = lam*gp_unscaled
-            a_diag(row) = gp_unscaled*(-Igu(K))
-            b_diag(row) = gp_unscaled*(Igu(K)+Igl(K)) - lam_z(row)
+            lam_z(row) = lam*gprime(K)
+            a_diag(row) = gprime(K)*(-Igu(K))
+            b_dom(row) = gprime(K)*(2.0*Igu(K) + Igl(K)) - lam_z(row)
             c_diag(row) = 0.0
 
-            ! Guess a vector shape to start with (excludes surface and bottom)
-            e_guess(1:kc-1) = sin((z_int(2:kc)/htot(i,j)) *Pi)
-            e_guess(1:kc-1) = e_guess(1:kc-1)/sqrt(sum(e_guess(1:kc-1)**2))
+            ! Guess a normalized vector shape to start with (excludes surface and bottom)
+            emag2 = 0.0
+            pi_htot = Pi / htot(i,j)
+            do K=2,kc
+              e_guess(K-1) = sin(pi_htot * z_int(K))
+              emag2 = emag2 + e_guess(K-1)**2
+            enddo
+            renorm = 1.0 / sqrt(emag2)
+            do K=2,kc ; e_guess(K-1) = renorm*e_guess(K-1) ; enddo
 
             ! Perform inverse iteration with tri-diag solver
             do itt=1,max_itt
               ! this solver becomes unstable very quickly
+              ! b_diag(1:kc-1) = b_dom(1:kc-1) - (a_diag(1:kc-1) + c_diag(1:kc-1))
               !call tridiag_solver(a_diag(1:kc-1),b_diag(1:kc-1),c_diag(1:kc-1), &
               !                    -lam_z(1:kc-1),e_guess(1:kc-1),"TDMA_T",e_itt)
 
-              call solve_diag_dominant_tridiag( c_diag(1:kc-1), b_diag(1:kc-1) - (a_diag(1:kc-1)+c_diag(1:kc-1)), &
-                                                a_diag(1:kc-1), e_guess(1:kc-1), &
-                                                e_itt, kc-1 )
-              e_guess(1:kc-1) = e_itt(1:kc-1) / sqrt(sum(e_itt(1:kc-1)**2))
+              call solve_diag_dominant_tridiag( c_diag, b_dom, a_diag, e_guess, e_itt, kc-1 )
+              ! Renormalize the guesses of the structure.-
+              emag2 = 0.0
+              do K=2,kc ; emag2 = emag2 + e_itt(K-1)**2 ; enddo
+              renorm = 1.0 / sqrt(emag2)
+              do K=2,kc ; e_guess(K-1) = renorm*e_itt(K-1) ; enddo
+
+              ! A test should be added here to evaluate convergence.
             enddo ! itt-loop
-            w_strct(2:kc) = e_guess(1:kc-1)
+            do K=2,kc ; w_strct(K) = e_guess(K-1) ; enddo
             w_strct(1)    = 0.0 ! rigid lid at surface
             w_strct(kc+1) = 0.0 ! zero-flux at bottom
 
             ! Check to see if solver worked
-            ig_stop = 0 ; jg_stop = 0
-            if (isnan(sum(w_strct(1:kc+1))))then
-              print *, "Wave_structure: w_strct has a NAN at ig=", ig, ", jg=", jg
-              if (i<G%isc .or. i>G%iec .or. j<G%jsc .or. j>G%jec)then
-                print *, "This is occuring at a halo point."
+            if (CS%debug) then
+              ig_stop = 0 ; jg_stop = 0
+              if (isnan(sum(w_strct(1:kc+1)))) then
+                print *, "Wave_structure: w_strct has a NAN at ig=", ig, ", jg=", jg
+                if (i<G%isc .or. i>G%iec .or. j<G%jsc .or. j>G%jec)then
+                  print *, "This is occuring at a halo point."
+                endif
+                ig_stop = ig ; jg_stop = jg
               endif
-              ig_stop = ig ; jg_stop = jg
             endif
 
             ! Normalize vertical structure function of w such that
@@ -493,7 +508,8 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
               w2avg = w2avg + 0.5*(w_strct(K)**2+w_strct(K+1)**2)*dz(k)
             enddo
             ! correct renormalization:
-            w_strct(:) = w_strct(:) * sqrt(htot(i,j)*a_int/w2avg)
+            renorm = sqrt(htot(i,j)*a_int/w2avg)
+            do K=1,kc+1 ; w_strct(K) = renorm * w_strct(K) ; enddo
 
             ! Calculate vertical structure function of u (i.e. dw/dz)
             do K=2,nzm-1
@@ -510,8 +526,10 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
 
             ! Calculate terms in vertically integrated energy equation
             int_dwdz2 = 0.0 ; int_w2 = 0.0 ; int_N2w2 = 0.0
-            u_strct2(1:nzm) = u_strct(1:nzm)**2
-            w_strct2(1:nzm) = w_strct(1:nzm)**2
+            do K=1,nzm
+              u_strct2(K) = u_strct(K)**2
+              w_strct2(K) = w_strct(K)**2
+            enddo
             ! vertical integration with Trapezoidal rule
             do k=1,nzm-1
               int_dwdz2 = int_dwdz2 + 0.5*(u_strct2(K)+u_strct2(K+1)) * dz(k)
@@ -522,7 +540,7 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
             ! Back-calculate amplitude from energy equation
             if (present(En) .and. (freq**2*Kmag2 > 0.0)) then
               ! Units here are [R Z ~> kg m-2]
-              KE_term = 0.25*GV%Rho0*( ((freq**2 + f2) / (freq**2*Kmag2))*int_dwdz2 + int_w2 )
+              KE_term = 0.25*GV%Rho0*( ((freq**2 + f2) / (freq**2*Kmag2))*US%L_to_Z**2*int_dwdz2 + int_w2 )
               PE_term = 0.25*GV%Rho0*( int_N2w2 / freq**2 )
               if (En(i,j) >= 0.0) then
                 W0 = sqrt( En(i,j) / (KE_term + PE_term) )
@@ -532,34 +550,43 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
                 W0 = 0.0
               endif
               ! Calculate actual vertical velocity profile and derivative
-              W_profile(:)    = W0*w_strct(:)
-              ! dWdz_profile(:) = W0*u_strct(:)
-              ! Calculate average magnitude of actual horizontal velocity over a period
-              Uavg_profile(:) = abs(W0*u_strct(:)) * sqrt((freq**2 + f2) / (2.0*freq**2*Kmag2))
+              U_mag = W0 * sqrt((freq**2 + f2) / (2.0*freq**2*Kmag2))
+              do K=1,nzm
+                W_profile(K) = W0*w_strct(K)
+                ! dWdz_profile(K) = W0*u_strct(K)
+                ! Calculate average magnitude of actual horizontal velocity over a period
+                Uavg_profile(K) = abs(U_mag * u_strct(K))
+              enddo
             else
-              W_profile(:)    = 0.0
-              ! dWdz_profile(:) = 0.0
-              Uavg_profile(:) = 0.0
+              do K=1,nzm
+                W_profile(K)    = 0.0
+                ! dWdz_profile(K) = 0.0
+                Uavg_profile(K) = 0.0
+              enddo
             endif
 
             ! Store values in control structure
-            CS%w_strct(i,j,1:nzm)     = w_strct(1:nzm)
-            CS%u_strct(i,j,1:nzm)     = u_strct(1:nzm)
-            CS%W_profile(i,j,1:nzm)   = W_profile(1:nzm)
-            CS%Uavg_profile(i,j,1:nzm)= Uavg_profile(1:nzm)
-            CS%z_depths(i,j,1:nzm)    = z_int(1:nzm)
-            CS%N2(i,j,1:nzm)          = N2(1:nzm)
-            CS%num_intfaces(i,j)      = nzm
+            do K=1,nzm
+              CS%w_strct(i,j,K)      = w_strct(K)
+              CS%u_strct(i,j,K)      = u_strct(K)
+              CS%W_profile(i,j,K)    = W_profile(K)
+              CS%Uavg_profile(i,j,K) = Uavg_profile(K)
+              CS%z_depths(i,j,K)     = z_int(K)
+              CS%N2(i,j,K)           = N2(K)
+            enddo
+            CS%num_intfaces(i,j) = nzm
           else
             ! If not enough layers, default to zero
             nzm = kc+1
-            CS%w_strct(i,j,1:nzm)     = 0.0
-            CS%u_strct(i,j,1:nzm)     = 0.0
-            CS%W_profile(i,j,1:nzm)   = 0.0
-            CS%Uavg_profile(i,j,1:nzm)= 0.0
-            CS%z_depths(i,j,1:nzm)    = 0.0 ! could use actual values
-            CS%N2(i,j,1:nzm)          = 0.0 ! could use with actual values
-            CS%num_intfaces(i,j)       = nzm
+            do K=1,nzm
+              CS%w_strct(i,j,K)      = 0.0
+              CS%u_strct(i,j,K)      = 0.0
+              CS%W_profile(i,j,K)    = 0.0
+              CS%Uavg_profile(i,j,K) = 0.0
+              CS%z_depths(i,j,K)     = 0.0 ! could use actual values
+              CS%N2(i,j,K)           = 0.0 ! could use with actual values
+            enddo
+            CS%num_intfaces(i,j) = nzm
           endif  ! kc >= 3 and kc > ModeNum + 1?
         endif ! drxh_sum >= 0?
       !else     ! if at test point - delete later
@@ -568,14 +595,16 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
       endif ! mask2dT > 0.0?
     else
       ! if cn=0.0, default to zero
-      nzm                       = nz+1! could use actual values
-      CS%w_strct(i,j,1:nzm)     = 0.0
-      CS%u_strct(i,j,1:nzm)     = 0.0
-      CS%W_profile(i,j,1:nzm)   = 0.0
-      CS%Uavg_profile(i,j,1:nzm)= 0.0
-      CS%z_depths(i,j,1:nzm)    = 0.0 ! could use actual values
-      CS%N2(i,j,1:nzm)          = 0.0 ! could use with actual values
-      CS%num_intfaces(i,j)       = nzm
+      nzm                       = nz+1 ! could use actual values
+      do K=1,nzm
+        CS%w_strct(i,j,K)      = 0.0
+        CS%u_strct(i,j,K)      = 0.0
+        CS%W_profile(i,j,K)    = 0.0
+        CS%Uavg_profile(i,j,K) = 0.0
+        CS%z_depths(i,j,K)     = 0.0 ! could use actual values
+        CS%N2(i,j,K)           = 0.0 ! could use with actual values
+      enddo
+      CS%num_intfaces(i,j) = nzm
     endif ; enddo ! if cn>0.0? ; i-loop
   enddo ! j-loop
 
@@ -585,6 +614,8 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
   if (CS%debug) call hchksum(CS%Uavg_profile, 'Uavg_profile in wave_struct', G%HI, scale=US%L_T_to_m_s)
 
 end subroutine wave_structure
+
+! The subroutine tridiag_solver is never used and could perhaps be deleted.
 
 !> Solves a tri-diagonal system Ax=y using either the standard
 !! Thomas algorithm (TDMA_T) or its more stable variant that invokes the
@@ -722,8 +753,8 @@ subroutine wave_structure_init(Time, G, GV, param_file, diag, CS)
                                               !! diagnostic output.
   type(wave_structure_CS), intent(inout) :: CS  !< Wave structure control struct
 
-! This include declares and sets the variable "version".
-#include "version_variable.h"
+  ! This include declares and sets the variable "version".
+# include "version_variable.h"
   character(len=40)  :: mdl = "MOM_wave_structure"  ! This module's name.
   integer :: isd, ied, jsd, jed, nz
 
