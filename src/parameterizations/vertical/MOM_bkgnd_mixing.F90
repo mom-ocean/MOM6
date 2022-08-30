@@ -255,7 +255,7 @@ subroutine bkgnd_mixing_init(Time, G, GV, US, param_file, diag, CS)
   call get_param(param_file, mdl, "HENYEY_IGW_BACKGROUND_NEW", CS%Henyey_IGW_background_new, &
                  "If true, use a better latitude-dependent scaling for the "//&
                  "background diffusivity, as described in "//&
-                 "Harrison & Hallberg, JPO 2008.", default=.false.)
+                 "Harrison & Hallberg, JPO 2008. This option is obsolete.", default=.false.)
   if (CS%Henyey_IGW_background_new) call check_bkgnd_scheme(CS, "HENYEY_IGW_BACKGROUND_NEW")
 
   if (CS%Kd>0.0 .and. (trim(CS%bkgnd_scheme_str)=="BRYAN_LEWIS_DIFFUSIVITY" .or.&
