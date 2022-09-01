@@ -9,7 +9,7 @@ use MOM_diag_mediator, only : post_product_v, post_product_sum_v
 use MOM_diag_mediator, only : diag_ctrl
 use MOM_debugging,     only : uvchksum, hchksum
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, NOTE
-use MOM_file_parser,   only : get_param, log_version, param_file_type
+use MOM_file_parser,   only : get_param, log_param, log_version, param_file_type
 use MOM_forcing_type,  only : mech_forcing
 use MOM_get_input,     only : directories
 use MOM_grid,          only : ocean_grid_type
@@ -43,11 +43,14 @@ type, public :: vertvisc_CS ; private
   real    :: Hmix            !< The mixed layer thickness in thickness units [H ~> m or kg m-2].
   real    :: Hmix_stress     !< The mixed layer thickness over which the wind
                              !! stress is applied with direct_stress [H ~> m or kg m-2].
-  real    :: Kvml            !< The mixed layer vertical viscosity [Z2 T-1 ~> m2 s-1].
+  real    :: Kvml_inv2       !< The extra vertical viscosity scale in [Z2 T-1 ~> m2 s-1] in a
+                             !! surface mixed layer with a characteristic thickness given by Hmix,
+                             !! and scaling proportional to (Hmix/z)^2, where z is the distance
+                             !! from the surface; this can get very large with thin layers.
   real    :: Kv              !< The interior vertical viscosity [Z2 T-1 ~> m2 s-1].
   real    :: Hbbl            !< The static bottom boundary layer thickness [H ~> m or kg m-2].
-  real    :: Kvbbl           !< The vertical viscosity in the bottom boundary
-                             !! layer [Z2 T-1 ~> m2 s-1].
+  real    :: Kv_extra_bbl    !< An extra vertical viscosity in the bottom boundary layer of thickness
+                             !! Hbbl when there is not a bottom drag law in use [Z2 T-1 ~> m2 s-1].
 
   real    :: maxvel          !< Velocity components greater than maxvel are truncated [L T-1 ~> m s-1].
   real    :: vel_underflow   !< Velocity components smaller than vel_underflow
@@ -94,8 +97,9 @@ type, public :: vertvisc_CS ; private
                             !! layers based solely on harmonic mean thicknesses
                             !! for the purpose of determining the extent to which
                             !! the thicknesses used in the viscosities are upwinded.
-  logical :: direct_stress  !< If true, the wind stress is distributed over the
-                            !! topmost Hmix_stress of fluid and KVML may be very small.
+  logical :: direct_stress  !< If true, the wind stress is distributed over the topmost Hmix_stress
+                            !! of fluid, and the added mixed layer viscosity from KVML or a more
+                            !! realistic viscosity parameterization is not needed for stability.
   logical :: dynamic_viscous_ML  !< If true, use the results from a dynamic
                             !! calculation, perhaps based on a bulk Richardson
                             !! number criterion, to determine the mixed layer
@@ -1140,7 +1144,7 @@ subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i,
   real, dimension(SZIB_(G)), intent(in)  :: kv_bbl !< Bottom boundary layer viscosity [Z2 T-1 ~> m2 s-1].
   real, dimension(SZIB_(G),SZK_(GV)+1), &
                              intent(in)  :: z_i  !< Estimate of interface heights above the bottom,
-                                                 !! normalized by the bottom boundary layer thickness
+                                                 !! normalized by the bottom boundary layer thickness [nondim]
   real, dimension(SZIB_(G)), intent(out) :: h_ml !< Mixed layer depth [H ~> m or kg m-2]
   integer,                   intent(in)  :: j    !< j-index to find coupling coefficient for
   real,                      intent(in)  :: dt   !< Time increment [T ~> s]
@@ -1210,14 +1214,14 @@ subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i,
 !    The following loop calculates the vertical average velocity and
 !  surface mixed layer contributions to the vertical viscosity.
   do i=is,ie ; Kv_tot(i,1) = 0.0 ; enddo
-  if ((GV%nkml>0) .or. do_shelf) then ; do k=2,nz ; do i=is,ie
+  if ((GV%nkml>0) .or. do_shelf .or. (CS%Kvml_inv2 <= 0.0) ) then ; do k=2,nz ; do i=is,ie
     if (do_i(i)) Kv_tot(i,K) = CS%Kv
   enddo ; enddo ; else
     I_Hmix = 1.0 / (CS%Hmix + h_neglect)
     do i=is,ie ; z_t(i) = h_neglect*I_Hmix ; enddo
     do K=2,nz ; do i=is,ie ; if (do_i(i)) then
       z_t(i) = z_t(i) + h_harm(i,k-1)*I_Hmix
-      Kv_tot(i,K) = CS%Kv + CS%Kvml / ((z_t(i)*z_t(i)) *  &
+      Kv_tot(i,K) = CS%Kv + CS%Kvml_inv2 / ((z_t(i)*z_t(i)) *  &
                (1.0 + 0.09*z_t(i)*z_t(i)*z_t(i)*z_t(i)*z_t(i)*z_t(i)))
     endif ; enddo ; enddo
   endif
@@ -1231,7 +1235,8 @@ subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i,
         a_cpl(i,nz+1) = kv_bbl(i) / (I_amax*kv_bbl(i) + (bbl_thick(i)+h_neglect)*GV%H_to_Z)
       endif
     else
-      a_cpl(i,nz+1) = CS%Kvbbl / ((0.5*hvel(i,nz)+h_neglect)*GV%H_to_Z + I_amax*CS%Kvbbl)
+      a_cpl(i,nz+1) = (CS%Kv + CS%Kv_extra_bbl) / &
+                      ((0.5*hvel(i,nz)+h_neglect)*GV%H_to_Z + I_amax*(CS%Kv+CS%Kv_extra_bbl))
     endif
   endif ; enddo
 
@@ -1299,7 +1304,7 @@ subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i,
         h_shear = r + h_neglect
       endif
     else
-      Kv_tot(i,K) = Kv_tot(i,K) + (CS%Kvbbl-CS%Kv)*botfn
+      Kv_tot(i,K) = Kv_tot(i,K) + CS%Kv_extra_bbl*botfn
       h_shear = 0.5*(hvel(i,k) + hvel(i,k-1) + h_neglect)
     endif
 
@@ -1626,6 +1631,7 @@ subroutine vertvisc_init(MIS, Time, G, GV, US, param_file, diag, ADp, dirs, &
   ! Local variables
 
   real :: Kv_dflt ! A default viscosity [m2 s-1].
+  real :: Kv_BBL  ! A viscosity in the bottom boundary layer with a simple scheme [Z2 T-1 ~> m2 s-1].
   real :: Hmix_m  ! A boundary layer thickness [m].
   integer :: default_answer_date  ! The default setting for the various ANSWER_DATE flags.
   logical :: default_2018_answers ! The default setting for the various 2018_ANSWERS flags.
@@ -1687,9 +1693,9 @@ subroutine vertvisc_init(MIS, Time, G, GV, US, param_file, diag, ADp, dirs, &
                  "actual velocity in the bottommost HBBL, depending on "//&
                  "LINEAR_DRAG.", default=.true.)
   call get_param(param_file, mdl, "DIRECT_STRESS", CS%direct_stress, &
-                 "If true, the wind stress is distributed over the "//&
-                 "topmost HMIX_STRESS of fluid (like in HYCOM), and KVML "//&
-                 "may be set to a very small value.", default=.false.)
+                 "If true, the wind stress is distributed over the topmost HMIX_STRESS of fluid "//&
+                 "(like in HYCOM), and the added mixed layer viscosity from KVML or another "//&
+                 "more realistic parameterization is not needed for stability.", default=.false.)
   call get_param(param_file, mdl, "DYNAMIC_VISCOUS_ML", CS%dynamic_viscous_ML, &
                  "If true, use a bulk Richardson number criterion to "//&
                  "determine the mixed layer thickness for viscosity.", &
@@ -1724,12 +1730,12 @@ subroutine vertvisc_init(MIS, Time, G, GV, US, param_file, diag, ADp, dirs, &
   if (CS%direct_stress) then
     if (GV%nkml < 1) then
       call get_param(param_file, mdl, "HMIX_STRESS", CS%Hmix_stress, &
-                 "The depth over which the wind stress is applied if "//&
-                 "DIRECT_STRESS is true.", units="m", default=Hmix_m, scale=GV%m_to_H)
+                 "The depth over which the wind stress is applied if DIRECT_STRESS is true.", &
+                 units="m", default=Hmix_m, scale=GV%m_to_H)
     else
       call get_param(param_file, mdl, "HMIX_STRESS", CS%Hmix_stress, &
-                 "The depth over which the wind stress is applied if "//&
-                 "DIRECT_STRESS is true.", units="m", fail_if_missing=.true., scale=GV%m_to_H)
+                 "The depth over which the wind stress is applied if DIRECT_STRESS is true.", &
+                 units="m", fail_if_missing=.true., scale=GV%m_to_H)
     endif
     if (CS%Hmix_stress <= 0.0) call MOM_error(FATAL, "vertvisc_init: " // &
        "HMIX_STRESS must be set to a positive value if DIRECT_STRESS is true.")
@@ -1739,28 +1745,46 @@ subroutine vertvisc_init(MIS, Time, G, GV, US, param_file, diag, ADp, dirs, &
                  "The molecular value, ~1e-6 m2 s-1, may be used.", &
                  units="m2 s-1", fail_if_missing=.true., scale=US%m2_s_to_Z2_T, unscaled=Kv_dflt)
 
-  if (GV%nkml < 1) call get_param(param_file, mdl, "KVML", CS%Kvml, &
-                 "The kinematic viscosity in the mixed layer.  A typical "//&
-                 "value is ~1e-2 m2 s-1. KVML is not used if "//&
-                 "BULKMIXEDLAYER is true.  The default is set by KV.", &
-                 units="m2 s-1", default=Kv_dflt, scale=US%m2_s_to_Z2_T)
-  if (.not.CS%bottomdraglaw) call get_param(param_file, mdl, "KVBBL", CS%Kvbbl, &
-                 "The kinematic viscosity in the benthic boundary layer. "//&
-                 "A typical value is ~1e-2 m2 s-1. KVBBL is not used if "//&
-                 "BOTTOMDRAGLAW is true.  The default is set by KV.", &
-                 units="m2 s-1", default=Kv_dflt, scale=US%m2_s_to_Z2_T)
+  if (GV%nkml < 1) call get_param(param_file, mdl, "KVML", CS%Kvml_inv2, &
+                 "The extra kinematic viscosity in a mixed layer of thickness HMIX_FIXED, "//&
+                 "with the actual viscosity scaling as 1/(z*HMIX_FIXED)^2 to allow for finite "//&
+                 "wind stresses to be transmitted through infinitessimally thin surface layers.  "//&
+                 "This is an older option for numerical convenience without a strong physical "//&
+                 "basis, and its use is now discouraged.  KVML is not used if BULKMIXEDLAYER "//&
+                 "is true.", &
+                 units="m2 s-1", default=Kv_dflt, scale=US%m2_s_to_Z2_T, do_not_log=(GV%nkml>0))
+  if (.not.CS%bottomdraglaw) then
+    call get_param(param_file, mdl, "KV_EXTRA_BBL", CS%Kv_extra_bbl, &
+                 "An extra kinematic viscosity in the benthic boundary layer. "//&
+                 "KV_EXTRA_BBL is not used if BOTTOMDRAGLAW is true.", &
+                 units="m2 s-1", default=0.0, scale=US%m2_s_to_Z2_T, do_not_log=.true.)
+    if (CS%Kv_extra_bbl == 0.0) then
+      call get_param(param_file, mdl, "KVBBL", Kv_BBL, &
+                 "An extra kinematic viscosity in the benthic boundary layer. "//&
+                 "KV_EXTRA_BBL is not used if BOTTOMDRAGLAW is true.", &
+                 units="m2 s-1", default=US%Z2_T_to_m2_s*CS%Kv, scale=US%m2_s_to_Z2_T, do_not_log=.true.)
+      if (abs(Kv_BBL - CS%Kv) > 1.0e-15*abs(CS%Kv)) then
+        call MOM_error(WARNING, "KVBBL is a depricated parameter. Use KV_EXTRA_BBL instead.")
+        CS%Kv_extra_bbl = Kv_BBL - CS%Kv
+      endif
+    endif
+    call log_param(param_file, mdl, "KV_EXTRA_BBL", US%Z2_T_to_m2_s*CS%Kv_extra_bbl, &
+                 "An extra kinematic viscosity in the benthic boundary layer. "//&
+                 "KV_EXTRA_BBL is not used if BOTTOMDRAGLAW is true.", &
+                 units="m2 s-1", default=0.0)
+  endif
   call get_param(param_file, mdl, "HBBL", CS%Hbbl, &
-                 "The thickness of a bottom boundary layer with a "//&
-                 "viscosity of KVBBL if BOTTOMDRAGLAW is not defined, or "//&
-                 "the thickness over which near-bottom velocities are "//&
-                 "averaged for the drag law if BOTTOMDRAGLAW is defined "//&
-                 "but LINEAR_DRAG is not.", units="m", fail_if_missing=.true., scale=GV%m_to_H)
+                 "The thickness of a bottom boundary layer with a viscosity increased by "//&
+                 "KV_EXTRA_BBL if BOTTOMDRAGLAW is not defined, or the thickness over which "//&
+                 "near-bottom velocities are averaged for the drag law if BOTTOMDRAGLAW is "//&
+                 "defined but LINEAR_DRAG is not.", &
+                 units="m", fail_if_missing=.true., scale=GV%m_to_H)
   call get_param(param_file, mdl, "MAXVEL", CS%maxvel, &
-                 "The maximum velocity allowed before the velocity "//&
-                 "components are truncated.", units="m s-1", default=3.0e8, scale=US%m_s_to_L_T)
+                 "The maximum velocity allowed before the velocity components are truncated.", &
+                 units="m s-1", default=3.0e8, scale=US%m_s_to_L_T)
   call get_param(param_file, mdl, "CFL_BASED_TRUNCATIONS", CS%CFL_based_trunc, &
-                 "If true, base truncations on the CFL number, and not an "//&
-                 "absolute speed.", default=.true.)
+                 "If true, base truncations on the CFL number, and not an absolute speed.", &
+                 default=.true.)
   call get_param(param_file, mdl, "CFL_TRUNCATE", CS%CFL_trunc, &
                  "The value of the CFL number that will cause velocity "//&
                  "components to be truncated; instability can occur past 0.5.", &
