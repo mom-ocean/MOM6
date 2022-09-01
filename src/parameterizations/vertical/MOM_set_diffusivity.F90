@@ -1963,7 +1963,7 @@ subroutine set_density_ratios(h, tv, kb, G, GV, US, CS, j, ds_dsp1, rho_0)
 end subroutine set_density_ratios
 
 subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, int_tide_CSp, halo_TS, &
-                                double_diffuse)
+                                double_diffuse, physical_OBL_scheme)
   type(time_type),          intent(in)    :: Time !< The current model time
   type(ocean_grid_type),    intent(inout) :: G    !< The ocean's grid structure.
   type(verticalGrid_type),  intent(in)    :: GV   !< The ocean's vertical grid structure.
@@ -1974,10 +1974,15 @@ subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, int_tide_
   type(set_diffusivity_CS), pointer       :: CS   !< pointer set to point to the module control
                                                   !! structure.
   type(int_tide_CS),        intent(in), target :: int_tide_CSp !< Internal tide control struct
-  integer,        optional, intent(out)   :: halo_TS !< The halo size of tracer points that must be
+  integer,                  intent(out)   :: halo_TS !< The halo size of tracer points that must be
                                                   !! valid for the calculations in set_diffusivity.
   logical,                  intent(out)   :: double_diffuse !< This indicates whether some version
                                                   !! of double diffusion is being used.
+  logical,                  intent(in)    :: physical_OBL_scheme !< If true, a physically based
+                                                  !! parameterization (like KPP or ePBL or a bulk mixed
+                                                  !! layer) is used outside of set_diffusivity to
+                                                  !! specify the mixing that occurs in the ocean's
+                                                  !! surface boundary layer.
 
   ! Local variables
   real :: decay_length
@@ -2164,7 +2169,7 @@ subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, int_tide_
                  default=.false., do_not_log=.not.TKE_to_Kd_used)
 
   ! set params related to the background mixing
-  call bkgnd_mixing_init(Time, G, GV, US, param_file, CS%diag, CS%bkgnd_mixing_csp)
+  call bkgnd_mixing_init(Time, G, GV, US, param_file, CS%diag, CS%bkgnd_mixing_csp, physical_OBL_scheme)
 
   call get_param(param_file, mdl, "KV", CS%Kv, &
                  "The background kinematic viscosity in the interior. "//&
