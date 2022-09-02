@@ -299,6 +299,11 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
   real, dimension(SZI_(G),SZJ_(G),CS%nMode) :: &
     cn_IGW   ! baroclinic internal gravity wave speeds [L T-1 ~> m s-1]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: temp_diag  ! Previous temperature for diagnostics [C ~> degC]
+  real, dimension(SZI_(G)) :: T_freeze, & ! The freezing potential temperature at the current salinity [C ~> degC].
+                              ps          ! Surface pressure [R L2 T-2 ~> Pa]
+  real, dimension(SZI_(G),SZK_(GV)) :: &
+    pressure    ! The pressure at the middle of each layer [R L2 T-2 ~> Pa].
+  real :: H_to_RL2_T2  ! A conversion factor from thicknesses in H to pressure [R L2 T-2 H-1 ~> Pa m-1 or Pa m2 kg-1]
   integer :: i, j, k, m, is, ie, js, je, nz
   logical :: showCallTree ! If true, show the call tree
 
@@ -447,11 +452,36 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
   if (stoch_CS%do_sppt) then
     ! perturb diabatic tendencies.
     ! These stochastic perturbations do not conserve heat, salt or mass.
-    do k=1,nz ; do j=js,je ; do i=is,ie
+    do k=1,nz; do j=js,je; do i=is,ie
       h(i,j,k) = max(h_in(i,j,k) + (h(i,j,k)-h_in(i,j,k)) * stoch_CS%sppt_wts(i,j), GV%Angstrom_H)
-      tv%T(i,j,k) = t_in(i,j,k) + (tv%T(i,j,k)-t_in(i,j,k)) * stoch_CS%sppt_wts(i,j)
       tv%S(i,j,k) = max(s_in(i,j,k) + (tv%S(i,j,k)-s_in(i,j,k)) * stoch_CS%sppt_wts(i,j), 0.0)
-    enddo ; enddo ; enddo
+    enddo; enddo; enddo
+    ! now that we have updated thickness and salinity, calculate freeing point
+    H_to_RL2_T2 = GV%H_to_RZ * GV%g_Earth
+    do j=js,je
+      ps(:) = 0.0
+      if (associated(fluxes%p_surf)) then
+        do i=is,ie
+          ps(i) = fluxes%p_surf(i,j)
+        enddo
+      endif
+
+      do i=is,ie
+        pressure(i,1) = ps(i) + (0.5*H_to_RL2_T2)*h(i,j,1)
+      enddo
+      do k=2,nz ; do i=is,ie
+        pressure(i,k) = pressure(i,k-1) + &
+                       (0.5*H_to_RL2_T2) * (h(i,j,k) + h(i,j,k-1))
+      enddo ; enddo
+      do k=1,nz
+        call calculate_TFreeze(tv%S(is:ie,j,k), pressure(is:ie,k), T_freeze(is:ie), &
+                               tv%eqn_of_state)
+        do i=is,ie
+          tv%T(i,j,k) = max(t_in(i,j,k) + (tv%T(i,j,k)-t_in(i,j,k)) * stoch_CS%sppt_wts(i,j), T_freeze(i))
+        enddo
+      enddo
+    enddo
+
     deallocate(h_in, t_in, s_in)
   endif
 
