@@ -43,7 +43,7 @@ type, public :: vertvisc_CS ; private
   real    :: Hmix            !< The mixed layer thickness in thickness units [H ~> m or kg m-2].
   real    :: Hmix_stress     !< The mixed layer thickness over which the wind
                              !! stress is applied with direct_stress [H ~> m or kg m-2].
-  real    :: Kvml_inv2       !< The extra vertical viscosity scale in [Z2 T-1 ~> m2 s-1] in a
+  real    :: Kvml_invZ2      !< The extra vertical viscosity scale in [Z2 T-1 ~> m2 s-1] in a
                              !! surface mixed layer with a characteristic thickness given by Hmix,
                              !! and scaling proportional to (Hmix/z)^2, where z is the distance
                              !! from the surface; this can get very large with thin layers.
@@ -1141,7 +1141,9 @@ subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i,
                              intent(in)  :: h_harm !< Harmonic mean of thicknesses around a velocity
                                                    !! grid point [H ~> m or kg m-2]
   real, dimension(SZIB_(G)), intent(in)  :: bbl_thick !< Bottom boundary layer thickness [H ~> m or kg m-2]
-  real, dimension(SZIB_(G)), intent(in)  :: kv_bbl !< Bottom boundary layer viscosity [Z2 T-1 ~> m2 s-1].
+  real, dimension(SZIB_(G)), intent(in)  :: kv_bbl !< Bottom boundary layer viscosity, exclusive of
+                                                   !! any depth-dependent contributions from
+                                                   !! visc%Kv_shear [Z2 T-1 ~> m2 s-1].
   real, dimension(SZIB_(G),SZK_(GV)+1), &
                              intent(in)  :: z_i  !< Estimate of interface heights above the bottom,
                                                  !! normalized by the bottom boundary layer thickness [nondim]
@@ -1163,7 +1165,6 @@ subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i,
     u_star, &   ! ustar at a velocity point [Z T-1 ~> m s-1].
     absf, &     ! The average of the neighboring absolute values of f [T-1 ~> s-1].
 !      h_ml, &  ! The mixed layer depth [H ~> m or kg m-2].
-    nk_visc, &  ! The (real) interface index of the base of mixed layer [nondim].
     z_t, &      ! The distance from the top, sometimes normalized
                 ! by Hmix, [H ~> m or kg m-2] or [nondim].
     kv_TBL, &   ! The viscosity in a top boundary layer under ice [Z2 T-1 ~> m2 s-1].
@@ -1171,21 +1172,25 @@ subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i,
   real, dimension(SZIB_(G),SZK_(GV)+1) :: &
     Kv_tot, &   ! The total viscosity at an interface [Z2 T-1 ~> m2 s-1].
     Kv_add      ! A viscosity to add [Z2 T-1 ~> m2 s-1].
+  integer, dimension(SZIB_(G)) :: &
+    nk_in_ml      ! The index of the deepest interface in the mixed layer.
   real :: h_shear ! The distance over which shears occur [H ~> m or kg m-2].
-  real :: r       ! A thickness to compare with Hbbl [H ~> m or kg m-2].
+  real :: dhc     ! The distance between the center of adjacent layers [H ~> m or kg m-2].
   real :: visc_ml ! The mixed layer viscosity [Z2 T-1 ~> m2 s-1].
   real :: I_Hmix  ! The inverse of the mixed layer thickness [H-1 ~> m-1 or m2 kg-1].
   real :: a_ml    ! The layer coupling coefficient across an interface in
                   ! the mixed layer [Z T-1 ~> m s-1].
+  real :: a_floor ! A lower bound on the layer coupling coefficient across an interface in
+                  ! the mixed layer [Z T-1 ~> m s-1].
   real :: I_amax  ! The inverse of the maximum coupling coefficient [T Z-1 ~> s m-1].
   real :: temp1   ! A temporary variable [H Z ~> m2 or kg m-1]
-  real :: h_neglect   ! A thickness that is so small it is usually lost
-                      ! in roundoff and can be neglected [H ~> m or kg m-2].
+  real :: h_neglect ! A thickness that is so small it is usually lost
+                  ! in roundoff and can be neglected [H ~> m or kg m-2].
   real :: z2      ! A copy of z_i [nondim]
   real :: botfn   ! A function that is 1 at the bottom and small far from it [nondim]
   real :: topfn   ! A function that is 1 at the top and small far from it [nondim]
   real :: kv_top  ! A viscosity associated with the top boundary layer [Z2 T-1 ~> m2 s-1]
-  logical :: do_shelf, do_OBCs
+  logical :: do_shelf, do_OBCs, can_exit
   integer :: i, k, is, ie, max_nk
   integer :: nz
 
@@ -1211,37 +1216,33 @@ subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i,
   if (associated(OBC)) then ; do_OBCS = (OBC%number_of_segments > 0) ; endif
   h_ml(:) = 0.0
 
-!    The following loop calculates the vertical average velocity and
-!  surface mixed layer contributions to the vertical viscosity.
+  ! This top boundary condition is appropriate when the wind stress is determined
+  ! externally and does not change within a timestep due to the surface velocity.
   do i=is,ie ; Kv_tot(i,1) = 0.0 ; enddo
-  if ((GV%nkml>0) .or. do_shelf .or. (CS%Kvml_inv2 <= 0.0) ) then ; do k=2,nz ; do i=is,ie
-    if (do_i(i)) Kv_tot(i,K) = CS%Kv
-  enddo ; enddo ; else
+  do K=2,nz+1 ; do i=is,ie
+    Kv_tot(i,K) = CS%Kv
+  enddo ; enddo
+
+  if ((CS%Kvml_invZ2 > 0.0) .and. .not.do_shelf) then
+    ! This is an older (vintage ~1997) way to prevent wind stresses from driving very
+    ! large flows in nearly massless near-surface layers when there is not a physically-
+    ! based surface boundary layer parameterization.  It does not have a plausible
+    ! physical basis, and probably should not be used.
     I_Hmix = 1.0 / (CS%Hmix + h_neglect)
     do i=is,ie ; z_t(i) = h_neglect*I_Hmix ; enddo
     do K=2,nz ; do i=is,ie ; if (do_i(i)) then
       z_t(i) = z_t(i) + h_harm(i,k-1)*I_Hmix
-      Kv_tot(i,K) = CS%Kv + CS%Kvml_inv2 / ((z_t(i)*z_t(i)) *  &
+      Kv_tot(i,K) = CS%Kv + CS%Kvml_invZ2 / ((z_t(i)*z_t(i)) *  &
                (1.0 + 0.09*z_t(i)*z_t(i)*z_t(i)*z_t(i)*z_t(i)*z_t(i)))
     endif ; enddo ; enddo
   endif
 
-  do i=is,ie ; if (do_i(i)) then
-    if (CS%bottomdraglaw) then
-      r = hvel(i,nz)*0.5
-      if (r < bbl_thick(i)) then
-        a_cpl(i,nz+1) = kv_bbl(i) / (I_amax*kv_bbl(i) + (r+h_neglect)*GV%H_to_Z)
-      else
-        a_cpl(i,nz+1) = kv_bbl(i) / (I_amax*kv_bbl(i) + (bbl_thick(i)+h_neglect)*GV%H_to_Z)
-      endif
-    else
-      a_cpl(i,nz+1) = (CS%Kv + CS%Kv_extra_bbl) / &
-                      ((0.5*hvel(i,nz)+h_neglect)*GV%H_to_Z + I_amax*(CS%Kv+CS%Kv_extra_bbl))
-    endif
-  endif ; enddo
-
   if (associated(visc%Kv_shear)) then
-    ! The factor of 2 that used to be required in the viscosities is no longer needed.
+    ! Add in viscosities that are determined by physical processes that are handled in
+    ! other modules, and which do not respond immediately to the changing layer thicknesses.
+    ! These processes may include shear-driven mixing or contributions from some boundary
+    ! layer turbulence schemes.  Other viscosity contributions that respond to the evolving
+    ! layer thicknesses or the surface wind stresses are added later.
     if (work_on_u) then
       do K=2,nz ; do i=is,ie ; if (do_i(i)) then
         Kv_add(i,K) = 0.5*(visc%Kv_shear(i,j,k) + visc%Kv_shear(i+1,j,k))
@@ -1278,6 +1279,9 @@ subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i,
   endif
 
   if (associated(visc%Kv_shear_Bu)) then
+    ! This is similar to what was done above, but for contributions coming from the corner
+    ! (vorticity) points.  Because OBCs run through the faces and corners there is no need
+    ! to further modify these viscosities here to take OBCs into account.
     if (work_on_u) then
       do K=2,nz ; do I=Is,Ie ; If (do_i(I)) then
         Kv_tot(I,K) = Kv_tot(I,K) + (0.5)*(visc%Kv_shear_Bu(I,J-1,k) + visc%Kv_shear_Bu(I,J,k))
@@ -1289,29 +1293,71 @@ subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i,
     endif
   endif
 
-  do K=nz,2,-1 ; do i=is,ie ; if (do_i(i)) then
-    !    botfn determines when a point is within the influence of the bottom
-    !  boundary layer, going from 1 at the bottom to 0 in the interior.
-    z2 = z_i(i,k)
-    botfn = 1.0 / (1.0 + 0.09*z2*z2*z2*z2*z2*z2)
-
-    if (CS%bottomdraglaw) then
-      Kv_tot(i,K) = Kv_tot(i,K) + (kv_bbl(i) - CS%Kv)*botfn
-      r = 0.5*(hvel(i,k) + hvel(i,k-1))
-      if (r > bbl_thick(i)) then
-        h_shear = ((1.0 - botfn) * r + botfn*bbl_thick(i)) + h_neglect
+  ! Set the viscous coupling coefficients, excluding surface mixed layer contributions
+  ! for now, but including viscous bottom drag, working up from the bottom.
+  if (CS%bottomdraglaw) then
+    do i=is,ie ; if (do_i(i)) then
+      dhc = hvel(i,nz)*0.5
+      ! These expressions assume that Kv_tot(i,nz+1) = CS%Kv, consistent with
+      ! the suppression of turbulent mixing by the presence of a solid boundary.
+      if (dhc < bbl_thick(i)) then
+        a_cpl(i,nz+1) = kv_bbl(i) / (I_amax*kv_bbl(i) + (dhc+h_neglect)*GV%H_to_Z)
       else
-        h_shear = r + h_neglect
+        a_cpl(i,nz+1) = kv_bbl(i) / (I_amax*kv_bbl(i) + (bbl_thick(i)+h_neglect)*GV%H_to_Z)
       endif
-    else
+    endif ; enddo
+    do K=nz,2,-1 ; do i=is,ie ; if (do_i(i)) then
+      !    botfn determines when a point is within the influence of the bottom
+      !  boundary layer, going from 1 at the bottom to 0 in the interior.
+      z2 = z_i(i,k)
+      botfn = 1.0 / (1.0 + 0.09*z2*z2*z2*z2*z2*z2)
+
+      Kv_tot(i,K) = Kv_tot(i,K) + (kv_bbl(i) - CS%Kv)*botfn
+      dhc = 0.5*(hvel(i,k) + hvel(i,k-1))
+      if (dhc > bbl_thick(i)) then
+        h_shear = ((1.0 - botfn) * dhc + botfn*bbl_thick(i)) + h_neglect
+      else
+        h_shear = dhc + h_neglect
+      endif
+
+      ! Calculate the coupling coefficients from the viscosities.
+      a_cpl(i,K) = Kv_tot(i,K) / (h_shear*GV%H_to_Z + I_amax*Kv_tot(i,K))
+    endif ; enddo ; enddo ! i & k loops
+  elseif (abs(CS%Kv_extra_bbl) > 0.0) then
+    ! There is a simple enhancement of the near-bottom viscosities, but no adjustment
+    ! of the viscous coupling length scales to give a particular bottom stress.
+    do i=is,ie ; if (do_i(i)) then
+      a_cpl(i,nz+1) = (Kv_tot(i,nz+1) + CS%Kv_extra_bbl) / &
+                      ((0.5*hvel(i,nz)+h_neglect)*GV%H_to_Z + I_amax*(Kv_tot(i,nz+1)+CS%Kv_extra_bbl))
+    endif ; enddo
+    do K=nz,2,-1 ; do i=is,ie ; if (do_i(i)) then
+      !    botfn determines when a point is within the influence of the bottom
+      !  boundary layer, going from 1 at the bottom to 0 in the interior.
+      z2 = z_i(i,k)
+      botfn = 1.0 / (1.0 + 0.09*z2*z2*z2*z2*z2*z2)
+
       Kv_tot(i,K) = Kv_tot(i,K) + CS%Kv_extra_bbl*botfn
       h_shear = 0.5*(hvel(i,k) + hvel(i,k-1) + h_neglect)
-    endif
 
-    ! Calculate the coupling coefficients from the viscosities.
-    a_cpl(i,K) = Kv_tot(i,K) / (h_shear*GV%H_to_Z + I_amax*Kv_tot(i,K))
-  endif ; enddo ; enddo ! i & k loops
+      ! Calculate the coupling coefficients from the viscosities.
+      a_cpl(i,K) = Kv_tot(i,K) / (h_shear*GV%H_to_Z + I_amax*Kv_tot(i,K))
+    endif ; enddo ; enddo ! i & k loops
+  else
+    ! Any near-bottom viscous enhancements were already incorporated into Kv_tot, and there is
+    ! no adjustment of the viscous coupling length scales to give a particular bottom stress.
+    do i=is,ie ; if (do_i(i)) then
+      a_cpl(i,nz+1) = Kv_tot(i,nz+1) / ((0.5*hvel(i,nz)+h_neglect)*GV%H_to_Z + I_amax*Kv_tot(i,nz+1))
+    endif ; enddo
+    do K=nz,2,-1 ; do i=is,ie ; if (do_i(i)) then
+      h_shear = 0.5*(hvel(i,k) + hvel(i,k-1) + h_neglect)
+      ! Calculate the coupling coefficients from the viscosities.
+      a_cpl(i,K) = Kv_tot(i,K) / (h_shear*GV%H_to_Z + I_amax*Kv_tot(i,K))
+    endif ; enddo ; enddo ! i & k loops
+  endif
 
+  ! Add surface intensified viscous coupling, either as a no-slip boundary condition under a
+  ! rigid ice-shelf, or due to wind-stress driven surface boundary layer mixing that has not
+  ! already been added via visc%Kv_shear.
   if (do_shelf) then
     ! Set the coefficients to include the no-slip surface stress.
     do i=is,ie ; if (do_i(i)) then
@@ -1336,68 +1382,110 @@ subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i,
       z_t(i) = z_t(i) + hvel(i,k-1) / tbl_thick(i)
       topfn = 1.0 / (1.0 + 0.09 * z_t(i)**6)
 
-      r = 0.5*(hvel(i,k)+hvel(i,k-1))
-      if (r > tbl_thick(i)) then
-        h_shear = ((1.0 - topfn) * r + topfn*tbl_thick(i)) + h_neglect
+      dhc = 0.5*(hvel(i,k)+hvel(i,k-1))
+      if (dhc > tbl_thick(i)) then
+        h_shear = ((1.0 - topfn) * dhc + topfn*tbl_thick(i)) + h_neglect
       else
-        h_shear = r + h_neglect
+        h_shear = dhc + h_neglect
       endif
 
       kv_top = topfn * kv_TBL(i)
       a_cpl(i,K) = a_cpl(i,K) + kv_top / (h_shear*GV%H_to_Z + I_amax*kv_top)
     endif ; enddo ; enddo
+
   elseif (CS%dynamic_viscous_ML .or. (GV%nkml>0)) then
-    max_nk = 0
-    do i=is,ie ; if (do_i(i)) then
-      if (GV%nkml>0) nk_visc(i) = real(GV%nkml+1)
-      if (work_on_u) then
+
+    ! Find the friction velocity and the absolute value of the Coriolis parameter at this point.
+    u_star(:) = 0.0  ! Zero out the friction velocity on land points.
+    if (work_on_u) then
+      do I=is,ie ; if (do_i(I)) then
         u_star(I) = 0.5*(forces%ustar(i,j) + forces%ustar(i+1,j))
         absf(I) = 0.5*(abs(G%CoriolisBu(I,J-1)) + abs(G%CoriolisBu(I,J)))
-        if (CS%dynamic_viscous_ML) nk_visc(I) = visc%nkml_visc_u(I,j) + 1
-      else
-        u_star(i) = 0.5*(forces%ustar(i,j) + forces%ustar(i,j+1))
-        absf(i) = 0.5*(abs(G%CoriolisBu(I-1,J)) + abs(G%CoriolisBu(I,J)))
-        if (CS%dynamic_viscous_ML) nk_visc(i) = visc%nkml_visc_v(i,J) + 1
-      endif
-      h_ml(i) = h_neglect ; z_t(i) = 0.0
-      max_nk = max(max_nk,ceiling(nk_visc(i) - 1.0))
-    endif ; enddo
-
-    if (do_OBCS) then ; if (work_on_u) then
-      do I=is,ie ; if (do_i(I) .and. (OBC%segnum_u(I,j) /= OBC_NONE)) then
+      endif ; enddo
+      if (do_OBCs) then ; do I=is,ie ; if (do_i(I) .and. (OBC%segnum_u(I,j) /= OBC_NONE)) then
         if (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_E) &
           u_star(I) = forces%ustar(i,j)
         if (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_W) &
           u_star(I) = forces%ustar(i+1,j)
-      endif ; enddo
+      endif ; enddo ; endif
     else
-      do i=is,ie ; if (do_i(i) .and. (OBC%segnum_v(i,J) /= OBC_NONE)) then
+      do i=is,ie ; if (do_i(i)) then
+        u_star(i) = 0.5*(forces%ustar(i,j) + forces%ustar(i,j+1))
+        absf(i) = 0.5*(abs(G%CoriolisBu(I-1,J)) + abs(G%CoriolisBu(I,J)))
+      endif ; enddo
+      if (do_OBCs) then ; do i=is,ie ; if (do_i(i) .and. (OBC%segnum_v(i,J) /= OBC_NONE)) then
         if (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_N) &
           u_star(i) = forces%ustar(i,j)
         if (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_S) &
           u_star(i) = forces%ustar(i,j+1)
-      endif ; enddo
-    endif ; endif
+      endif ; enddo ; endif
+    endif
 
-    do k=1,max_nk ; do i=is,ie ; if (do_i(i)) then
-      if (k+1 <= nk_visc(i)) then ! This layer is all in the ML.
-        h_ml(i) = h_ml(i) + hvel(i,k)
-      elseif (k < nk_visc(i)) then ! Part of this layer is in the ML.
-        h_ml(i) = h_ml(i) + (nk_visc(i) - k) * hvel(i,k)
+    ! Determine the thickness of the surface ocean boundary layer and its extent in index space.
+    nk_in_ml(:) = 0
+    if (CS%dynamic_viscous_ML) then
+      ! The fractional number of layers that are within the viscous boundary layer were
+      ! previously stored in visc%nkml_visc_[uv].
+      h_ml(:) = h_neglect
+      max_nk = 0
+      if (work_on_u) then
+        do i=is,ie ; if (do_i(i)) then
+          nk_in_ml(I) = ceiling(visc%nkml_visc_u(I,j))
+          max_nk = max(max_nk, nk_in_ml(I))
+        endif ; enddo
+        do k=1,max_nk ; do i=is,ie ; if (do_i(i)) then
+          if (k <= visc%nkml_visc_u(I,j)) then ! This layer is all in the ML.
+            h_ml(i) = h_ml(i) + hvel(i,k)
+          elseif (k < visc%nkml_visc_u(I,j) + 1.0) then ! Part of this layer is in the ML.
+            h_ml(i) = h_ml(i) + ((visc%nkml_visc_u(I,j) + 1.0) - k) * hvel(i,k)
+          endif
+        endif ; enddo ; enddo
+      else
+        do i=is,ie ; if (do_i(i)) then
+          nk_in_ml(i) = ceiling(visc%nkml_visc_v(i,J))
+          max_nk = max(max_nk, nk_in_ml(i))
+        endif ; enddo
+        do k=1,max_nk ; do i=is,ie ; if (do_i(i)) then
+          if (k <= visc%nkml_visc_v(i,J)) then ! This layer is all in the ML.
+            h_ml(i) = h_ml(i) + hvel(i,k)
+          elseif (k < visc%nkml_visc_v(i,J) + 1.0) then ! Part of this layer is in the ML.
+            h_ml(i) = h_ml(i) + ((visc%nkml_visc_v(i,J) + 1.0) - k) * hvel(i,k)
+          endif
+        endif ; enddo ; enddo
       endif
-    endif ; enddo ; enddo
 
-    do K=2,max_nk ; do i=is,ie ; if (do_i(i)) then ; if (k < nk_visc(i)) then
-      ! Set the viscosity at the interfaces.
+    elseif (GV%nkml>0) then
+      ! This is a simple application of a refined-bulk mixed layer with GV%nkml sublayers.
+      max_nk = GV%nkml
+      do i=is,ie ; if (do_i(i)) then
+        nk_in_ml(i) = GV%nkml
+      endif ; enddo
+
+      h_ml(:) = h_neglect
+      do k=1,GV%nkml ; do i=is,ie ; if (do_i(i)) then
+        h_ml(i) = h_ml(i) + hvel(i,k)
+      endif ; enddo ; enddo
+    endif
+
+    ! Avoid working on land or on columns where the viscous coupling could not be increased.
+    do i=is,ie ; if ((u_star(i)<=0.0) .or. (.not.do_i(i))) nk_in_ml(i) = 0 ; enddo
+
+    ! Set the viscous coupling at the interfaces as the larger of what was previously
+    ! set and the contributions from the surface boundary layer.
+    z_t(:) = 0.0
+    do K=2,max_nk ; do i=is,ie ; if (k <= nk_in_ml(i)) then
       z_t(i) = z_t(i) + hvel(i,k-1)
+
       temp1 = (z_t(i)*h_ml(i) - z_t(i)*z_t(i))*GV%H_to_Z
       !   This viscosity is set to go to 0 at the mixed layer top and bottom (in a log-layer)
       ! and be further limited by rotation to give the natural Ekman length.
       visc_ml = u_star(i) * 0.41 * (temp1*u_star(i)) / (absf(i)*temp1 + (h_ml(i)+h_neglect)*u_star(i))
       a_ml = visc_ml / (0.25*(hvel(i,k)+hvel(i,k-1) + h_neglect) * GV%H_to_Z + 0.5*I_amax*visc_ml)
-      ! Choose the largest estimate of a.
-      if (a_ml > a_cpl(i,K)) a_cpl(i,K) = a_ml
-    endif ; endif ; enddo ; enddo
+
+      ! Choose the largest estimate of a_cpl, but these could be changed to be additive.
+      a_cpl(i,K) = max(a_cpl(i,K), a_ml)
+      ! An option could be added to change this to: a_cpl(i,K) = a_cpl(i,K) + a_ml
+    endif ; enddo ; enddo
   endif
 
 end subroutine find_coupling_coef
@@ -1704,13 +1792,13 @@ subroutine vertvisc_init(MIS, Time, G, GV, US, param_file, diag, ADp, dirs, &
   call get_param(param_file, mdl, "U_TRUNC_FILE", CS%u_trunc_file, &
                  "The absolute path to a file into which the accelerations "//&
                  "leading to zonal velocity truncations are written. "//&
-                 "Undefine this for efficiency if this diagnostic is not "//&
-                 "needed.", default=" ", debuggingParam=.true.)
+                 "Undefine this for efficiency if this diagnostic is not needed.", &
+                 default=" ", debuggingParam=.true.)
   call get_param(param_file, mdl, "V_TRUNC_FILE", CS%v_trunc_file, &
                  "The absolute path to a file into which the accelerations "//&
                  "leading to meridional velocity truncations are written. "//&
-                 "Undefine this for efficiency if this diagnostic is not "//&
-                 "needed.", default=" ", debuggingParam=.true.)
+                 "Undefine this for efficiency if this diagnostic is not needed.", &
+                 default=" ", debuggingParam=.true.)
   call get_param(param_file, mdl, "HARMONIC_VISC", CS%harmonic_visc, &
                  "If true, use the harmonic mean thicknesses for "//&
                  "calculating the vertical viscosity.", default=.false.)
@@ -1746,8 +1834,9 @@ subroutine vertvisc_init(MIS, Time, G, GV, US, param_file, diag, ADp, dirs, &
                  "The molecular value, ~1e-6 m2 s-1, may be used.", &
                  units="m2 s-1", fail_if_missing=.true., scale=US%m2_s_to_Z2_T, unscaled=Kv_dflt)
 
+  CS%Kvml_invZ2 = 0.0
   if (GV%nkml < 1) then
-    call get_param(param_file, mdl, "KV_ML_INVZ2", CS%Kvml_inv2, &
+    call get_param(param_file, mdl, "KV_ML_INVZ2", CS%Kvml_invZ2, &
                  "An extra kinematic viscosity in a mixed layer of thickness HMIX_FIXED, "//&
                  "with the actual viscosity scaling as 1/(z*HMIX_FIXED)^2, where z is the "//&
                  "distance from the surface, to allow for finite wind stresses to be "//&
@@ -1755,15 +1844,15 @@ subroutine vertvisc_init(MIS, Time, G, GV, US, param_file, diag, ADp, dirs, &
                  "older option for numerical convenience without a strong physical basis, "//&
                  "and its use is now discouraged.", &
                  units="m2 s-1", default=-1.0, scale=US%m2_s_to_Z2_T, do_not_log=.true.)
-    if (CS%Kvml_inv2 < 0.0) then
-      call get_param(param_file, mdl, "KVML", CS%Kvml_inv2, &
+    if (CS%Kvml_invZ2 < 0.0) then
+      call get_param(param_file, mdl, "KVML", CS%Kvml_invZ2, &
                  "The scale for an extra kinematic viscosity in the mixed layer", &
                  units="m2 s-1", default=Kv_dflt, scale=US%m2_s_to_Z2_T, do_not_log=.true.)
-      if (CS%Kvml_inv2 >= 0.0) &
+      if (CS%Kvml_invZ2 >= 0.0) &
         call MOM_error(WARNING, "KVML is a deprecated parameter. Use KV_ML_INVZ2 instead.")
     endif
-    if (CS%Kvml_inv2 < 0.0) CS%Kvml_inv2 = CS%Kv  ! Change this default later to 0.0.
-    call log_param(param_file, mdl, "KV_ML_INVZ2", US%Z2_T_to_m2_s*CS%Kvml_inv2, &
+    if (CS%Kvml_invZ2 < 0.0) CS%Kvml_invZ2 = CS%Kv  ! Change this default later to 0.0.
+    call log_param(param_file, mdl, "KV_ML_INVZ2", US%Z2_T_to_m2_s*CS%Kvml_invZ2, &
                  "An extra kinematic viscosity in a mixed layer of thickness HMIX_FIXED, "//&
                  "with the actual viscosity scaling as 1/(z*HMIX_FIXED)^2, where z is the "//&
                  "distance from the surface, to allow for finite wind stresses to be "//&
@@ -1826,7 +1915,7 @@ subroutine vertvisc_init(MIS, Time, G, GV, US, param_file, diag, ADp, dirs, &
                  "Flag to use Stokes drift Mixing via the Lagrangian "//&
                  " current (Eulerian plus Stokes drift). "//&
                  " Still needs work and testing, so not recommended for use.",&
-                 Default=.false.)
+                 default=.false.)
   !BGR 04/04/2018{
   ! StokesMixing is required for MOM6 for some Langmuir mixing parameterization.
   !   The code used here has not been developed for vanishing layers or in
