@@ -96,10 +96,10 @@ type, public :: vertvisc_CS ; private
   real    :: harm_BL_val    !< A scale to determine when water is in the boundary
                             !! layers based solely on harmonic mean thicknesses
                             !! for the purpose of determining the extent to which
-                            !! the thicknesses used in the viscosities are upwinded.
+                            !! the thicknesses used in the viscosities are upwinded [nondim].
   logical :: direct_stress  !< If true, the wind stress is distributed over the topmost Hmix_stress
-                            !! of fluid, and the added mixed layer viscosity from KVML or a more
-                            !! realistic viscosity parameterization is not needed for stability.
+                            !! of fluid, and an added mixed layer viscosity or a physically based
+                            !! boundary layer turbulence parameterization is not needed for stability.
   logical :: dynamic_viscous_ML  !< If true, use the results from a dynamic
                             !! calculation, perhaps based on a bulk Richardson
                             !! number criterion, to determine the mixed layer
@@ -154,7 +154,7 @@ contains
 !! is the <em>interfacial coupling thickness per time step</em>,
 !! encompassing background viscosity as well as contributions from
 !! enhanced mixed and bottom layer viscosities.
-!! $r_k$ is a Rayleight drag term due to channel drag.
+!! $r_k$ is a Rayleigh drag term due to channel drag.
 !! There is an additional stress term on the right-hand side
 !! if DIRECT_STRESS is true, applied to the surface layer.
 
@@ -302,7 +302,7 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
     ! denote the diagonal of the system as b_k, the subdiagonal as a_k
     ! and the superdiagonal as c_k. The right-hand side terms are d_k.
     !
-    ! ignoring the rayleigh drag contribution,
+    ! ignoring the Rayleigh drag contribution,
     ! we have a_k = -dt_Z_to_H * a_u(k)
     !         b_k = h_u(k) + dt_Z_to_H * (a_u(k) + a_u(k+1))
     !         c_k = -dt_Z_to_H * a_u(k+1)
@@ -717,11 +717,11 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, US, CS, OBC)
   real, allocatable, dimension(:,:,:) :: Kv_v !< Total vertical viscosity at v-points [Z2 T-1 ~> m2 s-1].
   real :: zcol(SZI_(G)) ! The height of an interface at h-points [H ~> m or kg m-2].
   real :: botfn   ! A function which goes from 1 at the bottom to 0 much more
-                  ! than Hbbl into the interior.
+                  ! than Hbbl into the interior [nondim].
   real :: topfn   ! A function which goes from 1 at the top to 0 much more
-                  ! than Htbl into the interior.
+                  ! than Htbl into the interior [nondim].
   real :: z2      ! The distance from the bottom, normalized by Hbbl [nondim]
-  real :: z2_wt   ! A nondimensional (0-1) weight used when calculating z2.
+  real :: z2_wt   ! A nondimensional (0-1) weight used when calculating z2 [nondim].
   real :: z_clear ! The clearance of an interface above the surrounding topography [H ~> m or kg m-2].
   real :: a_cpl_max  ! The maximum drag coefficient across interfaces, set so that it will be
                      ! representable as a 32-bit float in MKS units  [Z T-1 ~> m s-1]
@@ -730,7 +730,7 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, US, CS, OBC)
 
   real :: I_valBL ! The inverse of a scaling factor determining when water is
                   ! still within the boundary layer, as determined by the sum
-                  ! of the harmonic mean thicknesses.
+                  ! of the harmonic mean thicknesses [nondim].
   logical, dimension(SZIB_(G)) :: do_i, do_i_shelf
   logical :: do_any_shelf
   integer, dimension(SZIB_(G)) :: &
@@ -1163,7 +1163,7 @@ subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i,
     u_star, &   ! ustar at a velocity point [Z T-1 ~> m s-1].
     absf, &     ! The average of the neighboring absolute values of f [T-1 ~> s-1].
 !      h_ml, &  ! The mixed layer depth [H ~> m or kg m-2].
-    nk_visc, &  ! The (real) interface index of the base of mixed layer.
+    nk_visc, &  ! The (real) interface index of the base of mixed layer [nondim].
     z_t, &      ! The distance from the top, sometimes normalized
                 ! by Hmix, [H ~> m or kg m-2] or [nondim].
     kv_TBL, &   ! The viscosity in a top boundary layer under ice [Z2 T-1 ~> m2 s-1].
@@ -1694,8 +1694,9 @@ subroutine vertvisc_init(MIS, Time, G, GV, US, param_file, diag, ADp, dirs, &
                  "LINEAR_DRAG.", default=.true.)
   call get_param(param_file, mdl, "DIRECT_STRESS", CS%direct_stress, &
                  "If true, the wind stress is distributed over the topmost HMIX_STRESS of fluid "//&
-                 "(like in HYCOM), and the added mixed layer viscosity from KVML or another "//&
-                 "more realistic parameterization is not needed for stability.", default=.false.)
+                 "(like in HYCOM), and an added mixed layer viscosity or a physically based "//&
+                 "boundary layer turbulence parameterization is not needed for stability.", &
+                 default=.false.)
   call get_param(param_file, mdl, "DYNAMIC_VISCOUS_ML", CS%dynamic_viscous_ML, &
                  "If true, use a bulk Richardson number criterion to "//&
                  "determine the mixed layer thickness for viscosity.", &
@@ -1745,14 +1746,33 @@ subroutine vertvisc_init(MIS, Time, G, GV, US, param_file, diag, ADp, dirs, &
                  "The molecular value, ~1e-6 m2 s-1, may be used.", &
                  units="m2 s-1", fail_if_missing=.true., scale=US%m2_s_to_Z2_T, unscaled=Kv_dflt)
 
-  if (GV%nkml < 1) call get_param(param_file, mdl, "KVML", CS%Kvml_inv2, &
-                 "The extra kinematic viscosity in a mixed layer of thickness HMIX_FIXED, "//&
-                 "with the actual viscosity scaling as 1/(z*HMIX_FIXED)^2 to allow for finite "//&
-                 "wind stresses to be transmitted through infinitessimally thin surface layers.  "//&
-                 "This is an older option for numerical convenience without a strong physical "//&
-                 "basis, and its use is now discouraged.  KVML is not used if BULKMIXEDLAYER "//&
-                 "is true.", &
-                 units="m2 s-1", default=Kv_dflt, scale=US%m2_s_to_Z2_T, do_not_log=(GV%nkml>0))
+  if (GV%nkml < 1) then
+    call get_param(param_file, mdl, "KV_ML_INVZ2", CS%Kvml_inv2, &
+                 "An extra kinematic viscosity in a mixed layer of thickness HMIX_FIXED, "//&
+                 "with the actual viscosity scaling as 1/(z*HMIX_FIXED)^2, where z is the "//&
+                 "distance from the surface, to allow for finite wind stresses to be "//&
+                 "transmitted through infinitesimally thin surface layers.  This is an "//&
+                 "older option for numerical convenience without a strong physical basis, "//&
+                 "and its use is now discouraged.", &
+                 units="m2 s-1", default=-1.0, scale=US%m2_s_to_Z2_T, do_not_log=.true.)
+    if (CS%Kvml_inv2 < 0.0) then
+      call get_param(param_file, mdl, "KVML", CS%Kvml_inv2, &
+                 "The scale for an extra kinematic viscosity in the mixed layer", &
+                 units="m2 s-1", default=Kv_dflt, scale=US%m2_s_to_Z2_T, do_not_log=.true.)
+      if (CS%Kvml_inv2 >= 0.0) &
+        call MOM_error(WARNING, "KVML is a deprecated parameter. Use KV_ML_INVZ2 instead.")
+    endif
+    if (CS%Kvml_inv2 < 0.0) CS%Kvml_inv2 = CS%Kv  ! Change this default later to 0.0.
+    call log_param(param_file, mdl, "KV_ML_INVZ2", US%Z2_T_to_m2_s*CS%Kvml_inv2, &
+                 "An extra kinematic viscosity in a mixed layer of thickness HMIX_FIXED, "//&
+                 "with the actual viscosity scaling as 1/(z*HMIX_FIXED)^2, where z is the "//&
+                 "distance from the surface, to allow for finite wind stresses to be "//&
+                 "transmitted through infinitesimally thin surface layers.  This is an "//&
+                 "older option for numerical convenience without a strong physical basis, "//&
+                 "and its use is now discouraged.", &
+                 units="m2 s-1", default=Kv_dflt)
+  endif
+
   if (.not.CS%bottomdraglaw) then
     call get_param(param_file, mdl, "KV_EXTRA_BBL", CS%Kv_extra_bbl, &
                  "An extra kinematic viscosity in the benthic boundary layer. "//&
@@ -1764,7 +1784,7 @@ subroutine vertvisc_init(MIS, Time, G, GV, US, param_file, diag, ADp, dirs, &
                  "KV_EXTRA_BBL is not used if BOTTOMDRAGLAW is true.", &
                  units="m2 s-1", default=US%Z2_T_to_m2_s*CS%Kv, scale=US%m2_s_to_Z2_T, do_not_log=.true.)
       if (abs(Kv_BBL - CS%Kv) > 1.0e-15*abs(CS%Kv)) then
-        call MOM_error(WARNING, "KVBBL is a depricated parameter. Use KV_EXTRA_BBL instead.")
+        call MOM_error(WARNING, "KVBBL is a deprecated parameter. Use KV_EXTRA_BBL instead.")
         CS%Kv_extra_bbl = Kv_BBL - CS%Kv
       endif
     endif
