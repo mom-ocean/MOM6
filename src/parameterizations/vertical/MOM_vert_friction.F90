@@ -104,6 +104,15 @@ type, public :: vertvisc_CS ; private
                             !! calculation, perhaps based on a bulk Richardson
                             !! number criterion, to determine the mixed layer
                             !! thickness for viscosity.
+  logical :: fixed_LOTW_ML  !< If true, use a Law-of-the-wall prescription for the mixed layer
+                            !! viscosity within a boundary layer that is the lesser of Hmix and the
+                            !! total depth of the ocean in a column.
+  logical :: apply_LOTW_floor !< If true, use a Law-of-the-wall prescription to set a lower bound
+                            !! on the viscous coupling between layers within the surface boundary
+                            !! layer, based the distance of interfaces from the surface.  This only
+                            !! acts when there are large changes in the thicknesses of successive
+                            !! layers or when the viscosity is set externally and the wind stress
+                            !! has subsequently increased.
   integer :: answer_date    !< The vintage of the order of arithmetic and expressions in the viscous
                             !! calculations.  Values below 20190101 recover the answers from the end
                             !! of 2018, while higher values use expressions that do not use an
@@ -1184,6 +1193,8 @@ subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i,
                   ! the mixed layer [Z T-1 ~> m s-1].
   real :: I_amax  ! The inverse of the maximum coupling coefficient [T Z-1 ~> s m-1].
   real :: temp1   ! A temporary variable [H Z ~> m2 or kg m-1]
+  real :: ustar2_denom ! A temporary variable in the surface boundary layer turbulence
+                  ! calculations [Z H-1 T-1 ~> s-1 or m3 kg-1 s-1]
   real :: h_neglect ! A thickness that is so small it is usually lost
                   ! in roundoff and can be neglected [H ~> m or kg m-2].
   real :: z2      ! A copy of z_i [nondim]
@@ -1393,7 +1404,7 @@ subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i,
       a_cpl(i,K) = a_cpl(i,K) + kv_top / (h_shear*GV%H_to_Z + I_amax*kv_top)
     endif ; enddo ; enddo
 
-  elseif (CS%dynamic_viscous_ML .or. (GV%nkml>0)) then
+  elseif (CS%dynamic_viscous_ML .or. (GV%nkml>0) .or. CS%fixed_LOTW_ML .or. CS%apply_LOTW_floor) then
 
     ! Find the friction velocity and the absolute value of the Coriolis parameter at this point.
     u_star(:) = 0.0  ! Zero out the friction velocity on land points.
@@ -1465,6 +1476,25 @@ subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i,
       do k=1,GV%nkml ; do i=is,ie ; if (do_i(i)) then
         h_ml(i) = h_ml(i) + hvel(i,k)
       endif ; enddo ; enddo
+    elseif (CS%fixed_LOTW_ML .or. CS%apply_LOTW_floor) then
+      ! Determine which interfaces are within CS%Hmix of the surface, and set the viscous
+      ! boundary layer thickness to the the smaller of CS%Hmix and the depth of the ocean.
+      h_ml(:) = 0.0
+      do k=1,nz
+        can_exit = .true.
+        do i=is,ie ; if (do_i(i) .and. (h_ml(i) < CS%Hmix)) then
+          nk_in_ml(i) = k
+          if (h_ml(i) + hvel(i,k) < CS%Hmix) then
+            h_ml(i) = h_ml(i) + hvel(i,k)
+            can_exit = .false.  ! Part of the next deeper layer is also in the mixed layer.
+          else
+            h_ml(i) = CS%Hmix
+          endif
+        endif ; enddo
+        if (can_exit) exit  ! All remaining layers in this row are below the mixed layer depth.
+      enddo
+      max_nk = 0
+      do i=is,ie ; max_nk = max(max_nk, nk_in_ml(i)) ; enddo
     endif
 
     ! Avoid working on land or on columns where the viscous coupling could not be increased.
@@ -1473,19 +1503,55 @@ subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i,
     ! Set the viscous coupling at the interfaces as the larger of what was previously
     ! set and the contributions from the surface boundary layer.
     z_t(:) = 0.0
-    do K=2,max_nk ; do i=is,ie ; if (k <= nk_in_ml(i)) then
-      z_t(i) = z_t(i) + hvel(i,k-1)
+    if (CS%apply_LOTW_floor .and. &
+        (CS%dynamic_viscous_ML .or. (GV%nkml>0) .or. CS%fixed_LOTW_ML)) then
+      do K=2,max_nk ; do i=is,ie ; if (k <= nk_in_ml(i)) then
+        z_t(i) = z_t(i) + hvel(i,k-1)
 
-      temp1 = (z_t(i)*h_ml(i) - z_t(i)*z_t(i))*GV%H_to_Z
-      !   This viscosity is set to go to 0 at the mixed layer top and bottom (in a log-layer)
-      ! and be further limited by rotation to give the natural Ekman length.
-      visc_ml = u_star(i) * 0.41 * (temp1*u_star(i)) / (absf(i)*temp1 + (h_ml(i)+h_neglect)*u_star(i))
-      a_ml = visc_ml / (0.25*(hvel(i,k)+hvel(i,k-1) + h_neglect) * GV%H_to_Z + 0.5*I_amax*visc_ml)
+        !   The viscosity in visc_ml is set to go to 0 at the mixed layer top and bottom
+        ! (in a log-layer) and be further limited by rotation to give the natural Ekman length.
+        temp1 = (z_t(i)*h_ml(i) - z_t(i)*z_t(i))*GV%H_to_Z
+        ustar2_denom = (0.41 * u_star(i)**2) / (absf(i)*temp1 + (h_ml(i)+h_neglect)*u_star(i))
+        visc_ml = temp1 * ustar2_denom
+        ! Set the viscous coupling based on the model's vertical resolution.  The omission of
+        ! the I_amax factor here is consistent with answer dates above 20190101.
+        a_ml = visc_ml / (0.25*(hvel(i,k)+hvel(i,k-1) + h_neglect) * GV%H_to_Z)
 
-      ! Choose the largest estimate of a_cpl, but these could be changed to be additive.
-      a_cpl(i,K) = max(a_cpl(i,K), a_ml)
-      ! An option could be added to change this to: a_cpl(i,K) = a_cpl(i,K) + a_ml
-    endif ; enddo ; enddo
+        ! As a floor on the viscous coupling, assume that the length scale in the denominator can
+        ! not be larger than the distance from the surface, consistent with a logarithmic velocity
+        ! profile.  This is consistent with visc_ml, but cancels out common factors of z_t.
+        a_floor = (h_ml(i) - z_t(i)) * ustar2_denom
+
+        ! Choose the largest estimate of a_cpl.
+        a_cpl(i,K) = max(a_cpl(i,K), a_ml, a_floor)
+        ! An option could be added to change this to: a_cpl(i,K) = max(a_cpl(i,K) + a_ml, a_floor)
+      endif ; enddo ; enddo
+    elseif (CS%apply_LOTW_floor) then
+      do K=2,max_nk ; do i=is,ie ; if (k <= nk_in_ml(i)) then
+        z_t(i) = z_t(i) + hvel(i,k-1)
+
+        temp1 = (z_t(i)*h_ml(i) - z_t(i)*z_t(i))*GV%H_to_Z
+        ustar2_denom = (0.41 * u_star(i)**2) / (absf(i)*temp1 + (h_ml(i)+h_neglect)*u_star(i))
+
+        ! As a floor on the viscous coupling, assume that the length scale in the denominator can not
+        ! be larger than the distance from the surface, consistent with a logarithmic velocity profile.
+        a_cpl(i,K) = max(a_cpl(i,K), (h_ml(i) - z_t(i)) * ustar2_denom)
+      endif ; enddo ; enddo
+    else
+      do K=2,max_nk ; do i=is,ie ; if (k <= nk_in_ml(i)) then
+        z_t(i) = z_t(i) + hvel(i,k-1)
+
+        temp1 = (z_t(i)*h_ml(i) - z_t(i)*z_t(i))*GV%H_to_Z
+        !   This viscosity is set to go to 0 at the mixed layer top and bottom (in a log-layer)
+        ! and be further limited by rotation to give the natural Ekman length.
+        visc_ml = u_star(i) * 0.41 * (temp1*u_star(i)) / (absf(i)*temp1 + (h_ml(i)+h_neglect)*u_star(i))
+        a_ml = visc_ml / (0.25*(hvel(i,k)+hvel(i,k-1) + h_neglect) * GV%H_to_Z + 0.5*I_amax*visc_ml)
+
+        ! Choose the largest estimate of a_cpl, but these could be changed to be additive.
+        a_cpl(i,K) = max(a_cpl(i,K), a_ml)
+        ! An option could be added to change this to: a_cpl(i,K) = a_cpl(i,K) + a_ml
+      endif ; enddo ; enddo
+    endif
   endif
 
 end subroutine find_coupling_coef
@@ -1788,6 +1854,17 @@ subroutine vertvisc_init(MIS, Time, G, GV, US, param_file, diag, ADp, dirs, &
   call get_param(param_file, mdl, "DYNAMIC_VISCOUS_ML", CS%dynamic_viscous_ML, &
                  "If true, use a bulk Richardson number criterion to "//&
                  "determine the mixed layer thickness for viscosity.", &
+                 default=.false.)
+  call get_param(param_file, mdl, "FIXED_DEPTH_LOTW_ML", CS%fixed_LOTW_ML, &
+                 "If true, use a Law-of-the-wall prescription for the mixed layer viscosity "//&
+                 "within a boundary layer that is the lesser of HMIX_FIXED and the total "//&
+                 "depth of the ocean in a column.", default=.false.)
+  call get_param(param_file, mdl, "LOTW_VISCOUS_ML_FLOOR", CS%apply_LOTW_floor, &
+                 "If true, use a Law-of-the-wall prescription to set a lower bound on the "//&
+                 "viscous coupling between layers within the surface boundary layer, based "//&
+                 "the distance of interfaces from the surface.  This only acts when there "//&
+                 "are large changes in the thicknesses of successive layers or when the "//&
+                 "viscosity is set externally and the wind stress has subsequently increased.", &
                  default=.false.)
   call get_param(param_file, mdl, "U_TRUNC_FILE", CS%u_trunc_file, &
                  "The absolute path to a file into which the accelerations "//&
