@@ -51,6 +51,7 @@ type, public :: vertvisc_CS ; private
   real    :: Hbbl            !< The static bottom boundary layer thickness [H ~> m or kg m-2].
   real    :: Kv_extra_bbl    !< An extra vertical viscosity in the bottom boundary layer of thickness
                              !! Hbbl when there is not a bottom drag law in use [Z2 T-1 ~> m2 s-1].
+  real    :: vonKar          !< The von Karman constant as used for mixed layer viscosity [nomdim]
 
   real    :: maxvel          !< Velocity components greater than maxvel are truncated [L T-1 ~> m s-1].
   real    :: vel_underflow   !< Velocity components smaller than vel_underflow
@@ -1511,7 +1512,7 @@ subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i,
         !   The viscosity in visc_ml is set to go to 0 at the mixed layer top and bottom
         ! (in a log-layer) and be further limited by rotation to give the natural Ekman length.
         temp1 = (z_t(i)*h_ml(i) - z_t(i)*z_t(i))*GV%H_to_Z
-        ustar2_denom = (0.41 * u_star(i)**2) / (absf(i)*temp1 + (h_ml(i)+h_neglect)*u_star(i))
+        ustar2_denom = (CS%vonKar * u_star(i)**2) / (absf(i)*temp1 + (h_ml(i)+h_neglect)*u_star(i))
         visc_ml = temp1 * ustar2_denom
         ! Set the viscous coupling based on the model's vertical resolution.  The omission of
         ! the I_amax factor here is consistent with answer dates above 20190101.
@@ -1531,7 +1532,7 @@ subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i,
         z_t(i) = z_t(i) + hvel(i,k-1)
 
         temp1 = (z_t(i)*h_ml(i) - z_t(i)*z_t(i))*GV%H_to_Z
-        ustar2_denom = (0.41 * u_star(i)**2) / (absf(i)*temp1 + (h_ml(i)+h_neglect)*u_star(i))
+        ustar2_denom = (CS%vonKar * u_star(i)**2) / (absf(i)*temp1 + (h_ml(i)+h_neglect)*u_star(i))
 
         ! As a floor on the viscous coupling, assume that the length scale in the denominator can not
         ! be larger than the distance from the surface, consistent with a logarithmic velocity profile.
@@ -1544,7 +1545,7 @@ subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i,
         temp1 = (z_t(i)*h_ml(i) - z_t(i)*z_t(i))*GV%H_to_Z
         !   This viscosity is set to go to 0 at the mixed layer top and bottom (in a log-layer)
         ! and be further limited by rotation to give the natural Ekman length.
-        visc_ml = u_star(i) * 0.41 * (temp1*u_star(i)) / (absf(i)*temp1 + (h_ml(i)+h_neglect)*u_star(i))
+        visc_ml = u_star(i) * CS%vonKar * (temp1*u_star(i)) / (absf(i)*temp1 + (h_ml(i)+h_neglect)*u_star(i))
         a_ml = visc_ml / (0.25*(hvel(i,k)+hvel(i,k-1) + h_neglect) * GV%H_to_Z + 0.5*I_amax*visc_ml)
 
         ! Choose the largest estimate of a_cpl, but these could be changed to be additive.
@@ -1866,6 +1867,9 @@ subroutine vertvisc_init(MIS, Time, G, GV, US, param_file, diag, ADp, dirs, &
                  "are large changes in the thicknesses of successive layers or when the "//&
                  "viscosity is set externally and the wind stress has subsequently increased.", &
                  default=.false.)
+  call get_param(param_file, mdl, 'VON_KARMAN_CONST', CS%vonKar, &
+                 'The value the von Karman constant as used for mixed layer viscosity.', &
+                 units='nondim', default=0.41)
   call get_param(param_file, mdl, "U_TRUNC_FILE", CS%u_trunc_file, &
                  "The absolute path to a file into which the accelerations "//&
                  "leading to zonal velocity truncations are written. "//&
