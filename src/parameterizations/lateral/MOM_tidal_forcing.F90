@@ -78,6 +78,7 @@ type, public :: tidal_forcing_CS ; private
   type(sht_CS) :: sht
   integer :: sal_sht_Nd
   real, allocatable :: LoveScaling(:)
+  real, allocatable :: SnmRe(:), SnmIm(:)
 end type tidal_forcing_CS
 
 integer :: id_clock_tides !< CPU clock for tides
@@ -538,6 +539,9 @@ subroutine tidal_forcing_init(Time, G, US, param_file, CS)
                    "calculating the self-attraction and loading term for tides.", &
                    default=0, do_not_log=.not. CS%tidal_sal_sht)
     lmax = calc_lmax(CS%sal_sht_Nd)
+    allocate(CS%SnmRe(lmax)); CS%SnmRe = 0.0
+    allocate(CS%SnmIm(lmax)); CS%SnmIm = 0.0
+
     allocate(CS%LoveScaling(lmax))
     call calc_love_scaling(CS%sal_sht_Nd, CS%LoveScaling)
     call spherical_harmonics_init(G, param_file, CS%sht)
@@ -730,30 +734,25 @@ subroutine calc_SAL_sht(eta, eta_sal, G, CS)
   real, dimension(SZI_(G),SZJ_(G)), intent(out) :: eta_sal   !< The sea surface height anomaly from
                                                              !! a time-mean geoid [Z ~> m].
   ! type(sht_CS), intent(in) :: sht
-  type(tidal_forcing_CS), intent(in) :: CS   !< Tidal forcing control struct
-  real, allocatable :: SnmRe(:), SnmIm(:)
+  type(tidal_forcing_CS), intent(inout) :: CS   !< Tidal forcing control struct
   real, allocatable :: LoveScaling(:)
 
   integer :: n, m, l
-  integer :: lmax
-  lmax = calc_lmax(CS%sal_sht_Nd)
 
   call cpu_clock_begin(id_clock_SAL)
 
-  allocate(SnmRe(lmax)); SnmRe = 0.0
-  allocate(SnmIm(lmax)); SnmIm = 0.0
+  call spherical_harmonics_forward(G, CS%sht, eta, CS%SnmRe, CS%SnmIm, CS%sal_sht_Nd)
 
-  call spherical_harmonics_forward(G, CS%sht, eta, SnmRe, SnmIm, CS%sal_sht_Nd)
-
+  ! Multiply scaling to each mode
   do m = 0,CS%sal_sht_Nd
     l = order2index(m,CS%sal_sht_Nd)
     do n = m,CS%sal_sht_Nd
-      SnmRe(l+n-m) = SnmRe(l+n-m)*CS%LoveScaling(l+n-m)
-      SnmIm(l+n-m) = SnmIm(l+n-m)*CS%LoveScaling(l+n-m)
+      CS%SnmRe(l+n-m) = CS%SnmRe(l+n-m)*CS%LoveScaling(l+n-m)
+      CS%SnmIm(l+n-m) = CS%SnmIm(l+n-m)*CS%LoveScaling(l+n-m)
     enddo
   enddo
 
-  call spherical_harmonics_inverse(G, CS%sht, SnmRe, SnmIm, eta_sal, CS%sal_sht_Nd)
+  call spherical_harmonics_inverse(G, CS%sht, CS%SnmRe, CS%SnmIm, eta_sal, CS%sal_sht_Nd)
 
   call cpu_clock_end(id_clock_SAL)
 end subroutine calc_SAL_sht
@@ -776,6 +775,8 @@ subroutine tidal_forcing_end(CS)
 
   if (CS%tidal_sal_sht) then
     if (allocated(CS%LoveScaling)) deallocate(CS%LoveScaling)
+    if (allocated(CS%SnmRe)) deallocate(CS%SnmRe)
+    if (allocated(CS%SnmIm)) deallocate(CS%SnmIm)
     call spherical_harmonics_end(CS%sht)
   endif
 end subroutine tidal_forcing_end

@@ -25,6 +25,7 @@ type, public :: sht_CS ; private
   real, allocatable :: complexFactorRe(:,:,:), complexFactorIm(:,:,:), & !< Precomputed exponential factors
                        complexExpRe(:,:,:), complexExpIm(:,:,:)          !! at the t-cells [nondim].
   real, allocatable :: aRecurrenceCoeff(:,:), bRecurrenceCoeff(:,:) !< Precomputed recurrennce coefficients [nondim].
+  real, allocatable :: SnmRe_reproSum(:,:,:), SnmIm_reproSum(:,:,:)
   logical :: reprod_sum !< True if use reproducable global sums
 end type sht_CS
 
@@ -36,9 +37,9 @@ integer :: id_clock_sht_global_sum=-1  !< CPU clock for global summation in forw
 contains
 subroutine spherical_harmonics_forward(G, CS, var, SnmRe, SnmIm, Nd)
   type(ocean_grid_type), intent(in)  :: G           !< The ocean's grid structure.
-  type(sht_CS),          intent(in)  :: CS          !< Control structure for SHT
+  type(sht_CS),          intent(inout)  :: CS          !< Control structure for SHT
   real, dimension(SZI_(G),SZJ_(G)), &
-                         intent(in)  :: var(:,:)    !< Input 2-D variable
+                         intent(in)  :: var         !< Input 2-D variable
   real,                  intent(out) :: SnmRe(:), & !< Output real and imaginary SHT coefficients
                                         SnmIm(:)    !! [nondim]
   integer,     optional, intent(in)  :: Nd          !< Maximum degree of the spherical harmonics
@@ -50,10 +51,10 @@ subroutine spherical_harmonics_forward(G, CS, var, SnmRe, SnmIm, Nd)
     pmn,   & ! Current associated Legendre polynomials of degree n and order m
     pmnm1, & ! Associated Legendre polynomials of degree n-1 and order m
     pmnm2    ! Associated Legendre polynomials of degree n-2 and order m
-  real, allocatable :: SnmRe_reproSum(:,:,:), SnmIm_reproSum(:,:,:)
   integer :: i, j, k
   integer :: is, ie, js, je
   integer :: m, n, l
+  ! real, dimension(SZI_(G),SZJ_(G), CS%lmax) :: SnmRe_reproSum, SnmIm_reproSum
 
   if (.not.CS%initialized) call MOM_error(FATAL, "MOM_spherical_harmonics " // &
     "spherical_harmonics_forward: Module must be initialized before it is used.")
@@ -69,23 +70,20 @@ subroutine spherical_harmonics_forward(G, CS, var, SnmRe, SnmIm, Nd)
   do l=1,Ltot ; SnmRe(l) = 0.0; SnmIm(l) = 0.0 ; enddo
 
   if (CS%reprod_sum) then
-    allocate(SnmRe_reproSum(is:ie, js:je, CS%lmax)); SnmRe_reproSum = 0.0
-    allocate(SnmIm_reproSum(is:ie, js:je, CS%lmax)); SnmIm_reproSum = 0.0
-
     do m=0,Nmax
       l = order2index(m, Nmax)
 
       do j=js,je ; do i=is,ie
-        SnmRe_reproSum(i,j,l) = var(i,j) * CS%Pmm(i,j,m+1) * CS%complexFactorRe(i,j,m+1)
-        SnmIm_reproSum(i,j,l) = var(i,j) * CS%Pmm(i,j,m+1) * CS%complexFactorIm(i,j,m+1)
+        CS%SnmRe_reproSum(i,j,l) = var(i,j) * CS%Pmm(i,j,m+1) * CS%complexFactorRe(i,j,m+1)
+        CS%SnmIm_reproSum(i,j,l) = var(i,j) * CS%Pmm(i,j,m+1) * CS%complexFactorIm(i,j,m+1)
         pmnm2(i,j) = 0.0
         pmnm1(i,j) = CS%Pmm(i,j,m+1)
       enddo ; enddo
 
       do n = m+1, Nmax ; do j=js,je ; do i=is,ie
         pmn(i,j) = CS%aRecurrenceCoeff(n+1,m+1) * CS%cosCoLatT(i,j) * pmnm1(i,j) - CS%bRecurrenceCoeff(n+1,m+1) * pmnm2(i,j)
-        SnmRe_reproSum(i,j,l+n-m) = var(i,j) * pmn(i,j) * CS%complexFactorRe(i,j,m+1)
-        SnmIm_reproSum(i,j,l+n-m) = var(i,j) * pmn(i,j) * CS%complexFactorIm(i,j,m+1)
+        CS%SnmRe_reproSum(i,j,l+n-m) = var(i,j) * pmn(i,j) * CS%complexFactorRe(i,j,m+1)
+        CS%SnmIm_reproSum(i,j,l+n-m) = var(i,j) * pmn(i,j) * CS%complexFactorIm(i,j,m+1)
         pmnm2(i,j) = pmnm1(i,j)
         pmnm1(i,j) = pmn(i,j)
       enddo ; enddo ; enddo
@@ -115,8 +113,8 @@ subroutine spherical_harmonics_forward(G, CS, var, SnmRe, SnmIm, Nd)
 
   if (CS%reprod_sum) then
     do l=1,Ltot
-      SnmRe(l) = reproducing_sum(SnmRe_reproSum(:,:,l))
-      SnmIm(l) = reproducing_sum(SnmIm_reproSum(:,:,l))
+      SnmRe(l) = reproducing_sum(CS%SnmRe_reproSum(:,:,l))
+      SnmIm(l) = reproducing_sum(CS%SnmIm_reproSum(:,:,l))
     enddo
   else
     call sum_across_PEs(SnmRe, Ltot)
@@ -134,7 +132,7 @@ subroutine spherical_harmonics_inverse(G, CS, SnmRe, SnmIm, var, Nd)
   real,                  intent(in)  :: SnmRe(:), & !< Real and imaginary SHT coefficients with
                                         SnmIm(:)    !! any scaling factors such as Love numbers [nondim]
   real, dimension(SZI_(G),SZJ_(G)), &
-                         intent(out) :: var(:,:)    !< Output 2-D variable
+                         intent(out) :: var         !< Output 2-D variable
   integer,     optional, intent(in)  :: Nd          !< Maximum degree of the spherical harmonics
                                                     !! overriding nOrder in the CS [nondim]
   ! local variables
@@ -268,6 +266,11 @@ subroutine spherical_harmonics_init(G, param_file, CS)
     enddo ; enddo
   enddo
 
+  if (CS%reprod_sum) then
+    allocate(CS%SnmRe_reproSum(is:ie, js:je, CS%lmax)); CS%SnmRe_reproSum = 0.0
+    allocate(CS%SnmIm_reproSum(is:ie, js:je, CS%lmax)); CS%SnmIm_reproSum = 0.0
+  endif
+
   id_clock_sht = cpu_clock_id('(Ocean spherical harmonics)', grain=CLOCK_MODULE)
   id_clock_sht_forward = cpu_clock_id('(Ocean SHT forward)', grain=CLOCK_ROUTINE)
   id_clock_sht_inverse = cpu_clock_id('(Ocean SHT inverse)', grain=CLOCK_ROUTINE)
@@ -282,6 +285,8 @@ subroutine spherical_harmonics_end(CS)
   deallocate(CS%Pmm)
   deallocate(CS%complexFactorRe, CS%complexFactorIm, CS%complexExpRe, CS%complexExpIm)
   deallocate(CS%aRecurrenceCoeff, CS%bRecurrenceCoeff)
+  if (CS%reprod_sum) &
+    deallocate(CS%SnmRe_reproSum, CS%SnmIm_reproSum)
 end subroutine spherical_harmonics_end
 
 !> The function calc_lmax returns the number of real elements (cosine) of the spherical harmonics,
