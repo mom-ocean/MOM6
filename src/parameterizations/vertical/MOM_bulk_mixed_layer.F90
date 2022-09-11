@@ -49,6 +49,7 @@ type, public :: bulkmixedlayer_CS ; private
                              !! the mixed layer is converted to TKE [nondim].
   real    :: bulk_Ri_convective !< The efficiency with which convectively
                              !! released mean kinetic energy becomes TKE [nondim].
+  real    :: vonKar          !< The von Karman constant as used for mixed layer viscosity [nomdim]
   real    :: Hmix_min        !< The minimum mixed layer thickness [H ~> m or kg m-2].
   real    :: H_limit_fluxes  !< When the total ocean depth is less than this
                              !! value [H ~> m or kg m-2], scale away all surface forcing to
@@ -316,7 +317,7 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, GV, US, C
   real :: H_nbr ! A minimum thickness based on neighboring thicknesses [H ~> m or kg m-2].
 
   real :: absf_x_H  ! The absolute value of f times the mixed layer thickness [Z T-1 ~> m s-1].
-  real :: kU_star   ! Ustar times the Von Karmen constant [Z T-1 ~> m s-1].
+  real :: kU_star   ! Ustar times the Von Karman constant [Z T-1 ~> m s-1].
   real :: dt__diag  ! A recaled copy of dt_diag (if present) or dt [T ~> s].
   logical :: write_diags  ! If true, write out diagnostics with this step.
   logical :: reset_diags  ! If true, zero out the accumulated diagnostics.
@@ -618,12 +619,12 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, GV, US, C
       ! as the third piece will then optimally describe mixed layer
       ! restratification.  For nkml>=4 the whole strategy should be revisited.
       do i=is,ie
-        kU_star = 0.41*fluxes%ustar(i,j) ! Maybe could be replaced with u*+w*?
+        kU_star = CS%vonKar*fluxes%ustar(i,j) ! Maybe could be replaced with u*+w*?
         if (associated(fluxes%ustar_shelf) .and. &
             associated(fluxes%frac_shelf_h)) then
           if (fluxes%frac_shelf_h(i,j) > 0.0) &
             kU_star = (1.0 - fluxes%frac_shelf_h(i,j)) * kU_star + &
-                      fluxes%frac_shelf_h(i,j) * (0.41*fluxes%ustar_shelf(i,j))
+                      fluxes%frac_shelf_h(i,j) * (CS%vonKar*fluxes%ustar_shelf(i,j))
         endif
         absf_x_H = 0.25 * GV%H_to_Z * h(i,0) * &
             ((abs(G%CoriolisBu(I,J)) + abs(G%CoriolisBu(I-1,J-1))) + &
@@ -1344,11 +1345,11 @@ subroutine find_starting_TKE(htot, h_CA, fluxes, Conv_En, cTKE, dKE_FC, dKE_CA, 
 !  the equatorial areas.  Although it is not cast as a parameter, it should
 !  be considered an empirical parameter, and it might depend strongly on the
 !  number of sublayers in the mixed layer and their locations.
-!  The 0.41 is VonKarman's constant.  This equation assumes that small & large
-!  scales contribute to mixed layer deepening at similar rates, even though
-!  small scales are dissipated more rapidly (implying they are less efficient).
-!     Ih = 1.0/(16.0*0.41*U_star*dt)
-    Ih = GV%H_to_Z/(3.0*0.41*U_star*dt)
+!    This equation assumes that small & large scales contribute to mixed layer
+!  deepening at similar rates, even though small scales are dissipated more
+!  rapidly (implying they are less efficient).
+!     Ih = 1.0/(16.0*CS%vonKar*U_star*dt)
+    Ih = GV%H_to_Z/(3.0*CS%vonKar*U_star*dt)
     cMKE(1,i) = 4.0 * Ih ; cMKE(2,i) = (absf_Ustar*GV%H_to_Z) * Ih
 
     if (Idecay_len_TKE(i) > 0.0) then
@@ -3387,6 +3388,9 @@ subroutine bulkmixedlayer_init(Time, G, GV, US, param_file, diag, CS)
                  "kinetic energy is converted to turbulent kinetic "//&
                  "energy.  By default BULK_RI_CONVECTIVE=BULK_RI_ML.", &
                  units="nondim", default=CS%bulk_Ri_ML)
+  call get_param(param_file, mdl, 'VON_KARMAN_CONST', CS%vonKar, &
+                 'The value the von Karman constant as used for mixed layer viscosity.', &
+                 units='nondim', default=0.41)
   call get_param(param_file, mdl, "HMIX_MIN", CS%Hmix_min, &
                  "The minimum mixed layer depth if the mixed layer depth "//&
                  "is determined dynamically.", units="m", default=0.0, scale=GV%m_to_H, &

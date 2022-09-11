@@ -284,7 +284,7 @@ subroutine calc_eta_at_uv(eta_u, eta_v, interp, dmask, h, tv, G, GV, US, eta_bt)
   real, dimension(SZI_(G),SZJ_(G)), optional,   intent(in) :: eta_bt !< optional barotropic variable
                                                                    !! used to dilate the layer thicknesses
                                                                    !! [H ~> m or kg m-2].
-  real,                                         intent(in) :: dmask !< The depth shaller than which
+  real,                                         intent(in) :: dmask !< The depth shallower than which
                                                                     !! porous barrier is not applied [Z ~> m]
   integer,                                      intent(in) :: interp !< eta interpolation method
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)+1), intent(out) :: eta_u !< Layer interface heights at u points [Z ~> m]
@@ -456,13 +456,13 @@ subroutine porous_barriers_init(Time, US, param_file, diag, CS)
   ! The sign needs to be inverted to be consistent with the sign convention of Davg_[UV]
   CS%mask_depth = -CS%mask_depth
   call get_param(param_file, mdl, "PORBAR_ETA_INTERP", interp_method, &
-                 "A string describing the method that decicdes how the "//&
+                 "A string describing the method that decides how the "//&
                  "interface heights at the velocity points are calculated. "//&
                  "Valid values are:\n"//&
                  "\t MAX (the default) - maximum of the adjacent cells \n"//&
                  "\t MIN - minimum of the adjacent cells \n"//&
                  "\t ARITHMETIC - arithmetic mean of the adjacent cells \n"//&
-                 "\t HARMOINIC - harmonic mean of the adjacent cells \n", &
+                 "\t HARMONIC - harmonic mean of the adjacent cells \n", &
                  default=ETA_INTERP_MAX_STRING)
   select case (interp_method)
     case (ETA_INTERP_MAX_STRING) ; CS%eta_interp = ETA_INTERP_MAX

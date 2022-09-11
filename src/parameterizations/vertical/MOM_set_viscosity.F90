@@ -2050,10 +2050,9 @@ subroutine set_visc_init(Time, G, GV, US, param_file, diag, visc, CS, restart_CS
                  do_not_log=.true.)
   if (adiabatic) then
     call log_param(param_file, mdl, "ADIABATIC",adiabatic, &
-                 "There are no diapycnal mass fluxes if ADIABATIC is "//&
-                 "true. This assumes that KD = KDML = 0.0 and that "//&
-                 "there is no buoyancy forcing, but makes the model "//&
-                 "faster by eliminating subroutine calls.", default=.false.)
+                 "There are no diapycnal mass fluxes if ADIABATIC is true.  "//&
+                 "This assumes that KD = 0.0 and that there is no buoyancy forcing, "//&
+                 "but makes the model faster by eliminating subroutine calls.", default=.false.)
   endif
 
   if (.not.adiabatic) then
@@ -2111,11 +2110,11 @@ subroutine set_visc_init(Time, G, GV, US, param_file, diag, visc, CS, restart_CS
   endif
 
   call get_param(param_file, mdl, "HBBL", CS%Hbbl, &
-                 "The thickness of a bottom boundary layer with a "//&
-                 "viscosity of KVBBL if BOTTOMDRAGLAW is not defined, or "//&
-                 "the thickness over which near-bottom velocities are "//&
-                 "averaged for the drag law if BOTTOMDRAGLAW is defined "//&
-                 "but LINEAR_DRAG is not.", units="m", fail_if_missing=.true.) ! Rescaled later
+                 "The thickness of a bottom boundary layer with a viscosity increased by "//&
+                 "KV_EXTRA_BBL if BOTTOMDRAGLAW is not defined, or the thickness over which "//&
+                 "near-bottom velocities are averaged for the drag law if BOTTOMDRAGLAW is "//&
+                 "defined but LINEAR_DRAG is not.", &
+                 units="m", fail_if_missing=.true.) ! Rescaled later
   if (CS%bottomdraglaw) then
     call get_param(param_file, mdl, "CDRAG", CS%cdrag, &
                  "CDRAG is the drag coefficient relating the magnitude of "//&

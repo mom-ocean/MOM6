@@ -602,6 +602,7 @@ report.cov: run.cov codecov
 	  2> build/cov/codecov.err \
 	  && echo -e "${MAGENTA}Report uploaded to codecov.${RESET}" \
 	  || { \
+	    cat build/cov/codecov.err ; \
 	    echo -e "${RED}Failed to upload report.${RESET}" ; \
 		if [ "$(REQUIRE_COVERAGE_UPLOAD)" = true ] ; then false ; fi ; \
 	  }
@@ -740,6 +741,7 @@ report.cov.unit: build/unit/MOM_file_parser_tests.F90.gcov codecov
 	    2> build/unit/codecov.err \
 	  && echo -e "${MAGENTA}Report uploaded to codecov.${RESET}" \
 	  || { \
+	    cat build/unit/codecov.err ; \
 	    echo -e "${RED}Failed to upload report.${RESET}" ; \
 		if [ "$(REQUIRE_COVERAGE_UPLOAD)" = true ] ; then false ; fi ; \
 	  }

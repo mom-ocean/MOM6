@@ -90,6 +90,8 @@ use MOM_grid,                  only : set_first_direction, rescale_grid_bathymet
 use MOM_hor_index,             only : hor_index_type, hor_index_init
 use MOM_hor_index,             only : rotate_hor_index
 use MOM_interface_heights,     only : find_eta
+use MOM_interface_filter,      only : interface_filter, interface_filter_init, interface_filter_end
+use MOM_interface_filter,      only : interface_filter_CS
 use MOM_lateral_mixing_coeffs, only : calc_slope_functions, VarMix_init, VarMix_end
 use MOM_lateral_mixing_coeffs, only : calc_resoln_function, calc_depth_function, VarMix_CS
 use MOM_MEKE,                  only : MEKE_alloc_register_restart, step_forward_MEKE
@@ -276,6 +278,8 @@ type, public :: MOM_control_struct ; private
   logical :: split                   !< If true, use the split time stepping scheme.
   logical :: use_RK2                 !< If true, use RK2 instead of RK3 in unsplit mode
                                      !! (i.e., no split between barotropic and baroclinic).
+  logical :: interface_filter        !< If true, apply an interface height filter immediately
+                                     !! after any calls to thickness_diffuse.
   logical :: thickness_diffuse       !< If true, diffuse interface height w/ a diffusivity KHTH.
   logical :: thickness_diffuse_first !< If true, diffuse thickness before dynamics.
   logical :: mixedlayer_restrat      !< If true, use submesoscale mixed layer restratifying scheme.
@@ -363,6 +367,8 @@ type, public :: MOM_control_struct ; private
   type(thickness_diffuse_CS) :: thickness_diffuse_CSp
     !< Pointer to the control structure used for the isopycnal height diffusive transport.
     !! This is also common referred to as Gent-McWilliams diffusion
+  type(interface_filter_CS) :: interface_filter_CSp
+    !< Control structure used for the interface height smoothing operator.
   type(mixedlayer_restrat_CS) :: mixedlayer_restrat_CSp
     !< Pointer to the control structure used for the mixed layer restratification
   type(set_visc_CS)           :: set_visc_CSp
@@ -435,6 +441,7 @@ integer :: id_clock_diabatic
 integer :: id_clock_adiabatic
 integer :: id_clock_continuity  ! also in dynamics s/r
 integer :: id_clock_thick_diff
+integer :: id_clock_int_filter
 integer :: id_clock_BBL_visc
 integer :: id_clock_ml_restrat
 integer :: id_clock_diagnostics
@@ -1073,19 +1080,31 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_thermo, &
   endif
   call cpu_clock_end(id_clock_varT)
 
-  if ((CS%t_dyn_rel_adv == 0.0) .and. CS%thickness_diffuse .and. CS%thickness_diffuse_first) then
+  if ((CS%t_dyn_rel_adv == 0.0) .and. CS%thickness_diffuse_first .and. &
+      (CS%thickness_diffuse .or. CS%interface_filter)) then
 
     call enable_averages(dt_thermo, Time_local+real_to_time(US%T_to_s*(dt_thermo-dt)), CS%diag)
-    call cpu_clock_begin(id_clock_thick_diff)
-    if (CS%VarMix%use_variable_mixing) &
-      call calc_slope_functions(h, CS%tv, dt, G, GV, US, CS%VarMix, OBC=CS%OBC)
-    call thickness_diffuse(h, CS%uhtr, CS%vhtr, CS%tv, dt_thermo, G, GV, US, &
-                           CS%MEKE, CS%VarMix, CS%CDp, CS%thickness_diffuse_CSp)
-    call cpu_clock_end(id_clock_thick_diff)
-    call pass_var(h, G%Domain, clock=id_clock_pass, halo=max(2,CS%cont_stencil))
-    call disable_averaging(CS%diag)
-    if (showCallTree) call callTree_waypoint("finished thickness_diffuse_first (step_MOM)")
+    if (CS%thickness_diffuse) then
+      call cpu_clock_begin(id_clock_thick_diff)
+      if (CS%VarMix%use_variable_mixing) &
+        call calc_slope_functions(h, CS%tv, dt, G, GV, US, CS%VarMix, OBC=CS%OBC)
+      call thickness_diffuse(h, CS%uhtr, CS%vhtr, CS%tv, dt_thermo, G, GV, US, &
+                             CS%MEKE, CS%VarMix, CS%CDp, CS%thickness_diffuse_CSp)
+      call cpu_clock_end(id_clock_thick_diff)
+      call pass_var(h, G%Domain, clock=id_clock_pass, halo=max(2,CS%cont_stencil))
+      if (showCallTree) call callTree_waypoint("finished thickness_diffuse_first (step_MOM)")
+    endif
 
+    if (CS%interface_filter) then
+      call cpu_clock_begin(id_clock_int_filter)
+      call interface_filter(h, CS%uhtr, CS%vhtr, CS%tv, dt_thermo, G, GV, US, &
+                            CS%CDp, CS%interface_filter_CSp)
+      call cpu_clock_end(id_clock_int_filter)
+      call pass_var(h, G%Domain, clock=id_clock_pass, halo=max(2,CS%cont_stencil))
+      if (showCallTree) call callTree_waypoint("finished interface_filter_first (step_MOM)")
+    endif
+
+    call disable_averaging(CS%diag)
     ! Whenever thickness changes let the diag manager know, target grids
     ! for vertical remapping may need to be regenerated.
     call diag_update_remap_grids(CS%diag)
@@ -1182,20 +1201,32 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_thermo, &
   endif
 
 
-  if (CS%thickness_diffuse .and. .not.CS%thickness_diffuse_first) then
-    call cpu_clock_begin(id_clock_thick_diff)
+  if ((CS%thickness_diffuse .or. CS%interface_filter) .and. &
+      .not.CS%thickness_diffuse_first) then
 
     if (CS%debug) call hchksum(h,"Pre-thickness_diffuse h", G%HI, haloshift=0, scale=GV%H_to_m)
 
-    if (CS%VarMix%use_variable_mixing) &
-      call calc_slope_functions(h, CS%tv, dt, G, GV, US, CS%VarMix, OBC=CS%OBC)
-    call thickness_diffuse(h, CS%uhtr, CS%vhtr, CS%tv, dt, G, GV, US, &
-                           CS%MEKE, CS%VarMix, CS%CDp, CS%thickness_diffuse_CSp)
+    if (CS%thickness_diffuse) then
+      call cpu_clock_begin(id_clock_thick_diff)
+      if (CS%VarMix%use_variable_mixing) &
+        call calc_slope_functions(h, CS%tv, dt, G, GV, US, CS%VarMix, OBC=CS%OBC)
+      call thickness_diffuse(h, CS%uhtr, CS%vhtr, CS%tv, dt, G, GV, US, &
+                             CS%MEKE, CS%VarMix, CS%CDp, CS%thickness_diffuse_CSp)
 
-    if (CS%debug) call hchksum(h,"Post-thickness_diffuse h", G%HI, haloshift=1, scale=GV%H_to_m)
-    call cpu_clock_end(id_clock_thick_diff)
-    call pass_var(h, G%Domain, clock=id_clock_pass, halo=max(2,CS%cont_stencil))
-    if (showCallTree) call callTree_waypoint("finished thickness_diffuse (step_MOM)")
+      if (CS%debug) call hchksum(h,"Post-thickness_diffuse h", G%HI, haloshift=1, scale=GV%H_to_m)
+      call cpu_clock_end(id_clock_thick_diff)
+      call pass_var(h, G%Domain, clock=id_clock_pass, halo=max(2,CS%cont_stencil))
+      if (showCallTree) call callTree_waypoint("finished thickness_diffuse (step_MOM)")
+    endif
+
+    if (CS%interface_filter) then
+      call cpu_clock_begin(id_clock_int_filter)
+      call interface_filter(h, CS%uhtr, CS%vhtr, CS%tv, dt_thermo, G, GV, US, &
+                            CS%CDp, CS%interface_filter_CSp)
+      call cpu_clock_end(id_clock_int_filter)
+      call pass_var(h, G%Domain, clock=id_clock_pass, halo=max(2,CS%cont_stencil))
+      if (showCallTree) call callTree_waypoint("finished interface_filter (step_MOM)")
+    endif
   endif
 
   ! apply the submesoscale mixed layer restratification parameterization
@@ -1951,10 +1982,9 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
                  default=.false.)
   CS%tv%T_is_conT = use_conT_absS ; CS%tv%S_is_absS = use_conT_absS
   call get_param(param_file, "MOM", "ADIABATIC", CS%adiabatic, &
-                 "There are no diapycnal mass fluxes if ADIABATIC is "//&
-                 "true. This assumes that KD = KDML = 0.0 and that "//&
-                 "there is no buoyancy forcing, but makes the model "//&
-                 "faster by eliminating subroutine calls.", default=.false.)
+                 "There are no diapycnal mass fluxes if ADIABATIC is true.  "//&
+                 "This assumes that KD = 0.0 and that there is no buoyancy forcing, "//&
+                 "but makes the model faster by eliminating subroutine calls.", default=.false.)
   call get_param(param_file, "MOM", "DO_DYNAMICS", CS%do_dynamics, &
                  "If False, skips the dynamics calls that update u & v, as well as "//&
                  "the gravity wave adjustment to h. This may be a fragile feature, "//&
@@ -1993,14 +2023,15 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
                  "The default is influenced by ENABLE_THERMODYNAMICS.", &
                  default=use_temperature .and. .not.CS%use_ALE_algorithm)
   call get_param(param_file, "MOM", "THICKNESSDIFFUSE", CS%thickness_diffuse, &
-                 "If true, interface heights are diffused with a "//&
+                 "If true, isopycnal surfaces are diffused with a Laplacian "//&
                  "coefficient of KHTH.", default=.false.)
-  call get_param(param_file, "MOM",  "THICKNESSDIFFUSE_FIRST", &
-                                      CS%thickness_diffuse_first, &
-                 "If true, do thickness diffusion before dynamics. "//&
-                 "This is only used if THICKNESSDIFFUSE is true.", &
-                 default=.false.)
-  if (.not.CS%thickness_diffuse) CS%thickness_diffuse_first = .false.
+  call get_param(param_file, "MOM", "APPLY_INTERFACE_FILTER", CS%interface_filter, &
+                 "If true, model interface heights are subjected to a grid-scale "//&
+                 "dependent spatial smoothing, often with biharmonic filter.", default=.false.)
+  call get_param(param_file, "MOM", "THICKNESSDIFFUSE_FIRST", CS%thickness_diffuse_first, &
+                 "If true, do thickness diffusion or interface height smoothing before dynamics.  "//&
+                 "This is only used if THICKNESSDIFFUSE or APPLY_INTERFACE_FILTER is true.", &
+                 default=.false., do_not_log=.not.(CS%thickness_diffuse.or.CS%interface_filter))
   call get_param(param_file, "MOM", "USE_POROUS_BARRIER", CS%use_porbar, &
                  "If true, use porous barrier to constrain the widths "//&
                  "and face areas at the edges of the grid cells. ", &
@@ -2825,6 +2856,8 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   call VarMix_init(Time, G, GV, US, param_file, diag, CS%VarMix)
   call set_visc_init(Time, G, GV, US, param_file, diag, CS%visc, CS%set_visc_CSp, restart_CSp, CS%OBC)
   call thickness_diffuse_init(Time, G, GV, US, param_file, diag, CS%CDp, CS%thickness_diffuse_CSp)
+  if (CS%interface_filter) &
+    call interface_filter_init(Time, G, GV, US, param_file, diag, CS%CDp, CS%interface_filter_CSp)
 
   new_sim = is_new_run(restart_CSp)
   call MOM_stoch_eos_init(G,Time,param_file,CS%stoch_eos_CS,restart_CSp,diag)
@@ -3153,6 +3186,8 @@ subroutine MOM_timing_init(CS)
   id_clock_pass_init  = cpu_clock_id('(Ocean init message passing *)', grain=CLOCK_ROUTINE)
   if (CS%thickness_diffuse) &
     id_clock_thick_diff = cpu_clock_id('(Ocean thickness diffusion *)', grain=CLOCK_MODULE)
+  if (CS%interface_filter) &
+    id_clock_int_filter = cpu_clock_id('(Ocean interface height filter *)', grain=CLOCK_MODULE)
  !if (CS%mixedlayer_restrat) &
     id_clock_ml_restrat = cpu_clock_id('(Ocean mixed layer restrat)', grain=CLOCK_MODULE)
   id_clock_diagnostics  = cpu_clock_id('(Ocean collective diagnostics)', grain=CLOCK_MODULE)
@@ -3819,6 +3854,7 @@ subroutine MOM_end(CS)
   endif
 
   call thickness_diffuse_end(CS%thickness_diffuse_CSp, CS%CDp)
+  if (CS%interface_filter) call interface_filter_end(CS%interface_filter_CSp, CS%CDp)
   call VarMix_end(CS%VarMix)
   call set_visc_end(CS%visc, CS%set_visc_CSp)
   call MEKE_end(CS%MEKE)
