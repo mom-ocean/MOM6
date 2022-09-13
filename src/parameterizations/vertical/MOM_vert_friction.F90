@@ -6,7 +6,7 @@ use MOM_domains,       only : pass_var, To_All, Omit_corners
 use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_ptr
 use MOM_diag_mediator, only : post_product_u, post_product_sum_u
 use MOM_diag_mediator, only : post_product_v, post_product_sum_v
-use MOM_diag_mediator, only : diag_ctrl
+use MOM_diag_mediator, only : diag_ctrl, query_averaging_enabled
 use MOM_debugging,     only : uvchksum, hchksum
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, NOTE
 use MOM_file_parser,   only : get_param, log_param, log_version, param_file_type
@@ -514,49 +514,51 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
   endif
 
   ! Offer diagnostic fields for averaging.
-  if (CS%id_du_dt_visc > 0) &
-    call post_data(CS%id_du_dt_visc, ADp%du_dt_visc, CS%diag)
-  if (CS%id_dv_dt_visc > 0) &
-    call post_data(CS%id_dv_dt_visc, ADp%dv_dt_visc, CS%diag)
-  if (present(taux_bot) .and. (CS%id_taux_bot > 0)) &
-    call post_data(CS%id_taux_bot, taux_bot, CS%diag)
-  if (present(tauy_bot) .and. (CS%id_tauy_bot > 0)) &
-    call post_data(CS%id_tauy_bot, tauy_bot, CS%diag)
-  if (CS%id_du_dt_str > 0) &
-    call post_data(CS%id_du_dt_str, ADp%du_dt_str, CS%diag)
-  if (CS%id_dv_dt_str > 0) &
-    call post_data(CS%id_dv_dt_str, ADp%dv_dt_str, CS%diag)
+  if (query_averaging_enabled(CS%diag)) then
+    if (CS%id_du_dt_visc > 0) &
+      call post_data(CS%id_du_dt_visc, ADp%du_dt_visc, CS%diag)
+    if (CS%id_dv_dt_visc > 0) &
+      call post_data(CS%id_dv_dt_visc, ADp%dv_dt_visc, CS%diag)
+    if (present(taux_bot) .and. (CS%id_taux_bot > 0)) &
+      call post_data(CS%id_taux_bot, taux_bot, CS%diag)
+    if (present(tauy_bot) .and. (CS%id_tauy_bot > 0)) &
+      call post_data(CS%id_tauy_bot, tauy_bot, CS%diag)
+    if (CS%id_du_dt_str > 0) &
+      call post_data(CS%id_du_dt_str, ADp%du_dt_str, CS%diag)
+    if (CS%id_dv_dt_str > 0) &
+      call post_data(CS%id_dv_dt_str, ADp%dv_dt_str, CS%diag)
 
-  if (associated(ADp%du_dt_visc) .and. associated(ADp%du_dt_visc)) then
-    ! Diagnostics of the fractional thicknesses times momentum budget terms
-    ! 3D diagnostics of hf_du(dv)_dt_visc are commented because there is no clarity on proper remapping grid option.
-    ! The code is retained for debugging purposes in the future.
-    !if (CS%id_hf_du_dt_visc > 0) &
-    !  call post_product_u(CS%id_hf_du_dt_visc, ADp%du_dt_visc, ADp%diag_hfrac_u, G, nz, CS%diag)
-    !if (CS%id_hf_dv_dt_visc > 0) &
-    !  call post_product_v(CS%id_hf_dv_dt_visc, ADp%dv_dt_visc, ADp%diag_hfrac_v, G, nz, CS%diag)
+    if (associated(ADp%du_dt_visc) .and. associated(ADp%du_dt_visc)) then
+      ! Diagnostics of the fractional thicknesses times momentum budget terms
+      ! 3D diagnostics of hf_du(dv)_dt_visc are commented because there is no clarity on proper remapping grid option.
+      ! The code is retained for debugging purposes in the future.
+      !if (CS%id_hf_du_dt_visc > 0) &
+      !  call post_product_u(CS%id_hf_du_dt_visc, ADp%du_dt_visc, ADp%diag_hfrac_u, G, nz, CS%diag)
+      !if (CS%id_hf_dv_dt_visc > 0) &
+      !  call post_product_v(CS%id_hf_dv_dt_visc, ADp%dv_dt_visc, ADp%diag_hfrac_v, G, nz, CS%diag)
 
-    ! Diagnostics for thickness-weighted vertically averaged viscous accelerations
-    if (CS%id_hf_du_dt_visc_2d > 0) &
-      call post_product_sum_u(CS%id_hf_du_dt_visc_2d, ADp%du_dt_visc, ADp%diag_hfrac_u, G, nz, CS%diag)
-    if (CS%id_hf_dv_dt_visc_2d > 0) &
-      call post_product_sum_v(CS%id_hf_dv_dt_visc_2d, ADp%dv_dt_visc, ADp%diag_hfrac_v, G, nz, CS%diag)
+      ! Diagnostics for thickness-weighted vertically averaged viscous accelerations
+      if (CS%id_hf_du_dt_visc_2d > 0) &
+        call post_product_sum_u(CS%id_hf_du_dt_visc_2d, ADp%du_dt_visc, ADp%diag_hfrac_u, G, nz, CS%diag)
+      if (CS%id_hf_dv_dt_visc_2d > 0) &
+        call post_product_sum_v(CS%id_hf_dv_dt_visc_2d, ADp%dv_dt_visc, ADp%diag_hfrac_v, G, nz, CS%diag)
 
-    ! Diagnostics for thickness x viscous accelerations
-    if (CS%id_h_du_dt_visc > 0) call post_product_u(CS%id_h_du_dt_visc, ADp%du_dt_visc, ADp%diag_hu, G, nz, CS%diag)
-    if (CS%id_h_dv_dt_visc > 0) call post_product_v(CS%id_h_dv_dt_visc, ADp%dv_dt_visc, ADp%diag_hv, G, nz, CS%diag)
-  endif
+      ! Diagnostics for thickness x viscous accelerations
+      if (CS%id_h_du_dt_visc > 0) call post_product_u(CS%id_h_du_dt_visc, ADp%du_dt_visc, ADp%diag_hu, G, nz, CS%diag)
+      if (CS%id_h_dv_dt_visc > 0) call post_product_v(CS%id_h_dv_dt_visc, ADp%dv_dt_visc, ADp%diag_hv, G, nz, CS%diag)
+    endif
 
-  if (associated(ADp%du_dt_str) .and.  associated(ADp%dv_dt_str)) then
-    ! Diagnostics for thickness x wind stress accelerations
-    if (CS%id_h_du_dt_str > 0) call post_product_u(CS%id_h_du_dt_str, ADp%du_dt_str, ADp%diag_hu, G, nz, CS%diag)
-    if (CS%id_h_dv_dt_str > 0) call post_product_v(CS%id_h_dv_dt_str, ADp%dv_dt_str, ADp%diag_hv, G, nz, CS%diag)
+    if (associated(ADp%du_dt_str) .and.  associated(ADp%dv_dt_str)) then
+      ! Diagnostics for thickness x wind stress accelerations
+      if (CS%id_h_du_dt_str > 0) call post_product_u(CS%id_h_du_dt_str, ADp%du_dt_str, ADp%diag_hu, G, nz, CS%diag)
+      if (CS%id_h_dv_dt_str > 0) call post_product_v(CS%id_h_dv_dt_str, ADp%dv_dt_str, ADp%diag_hv, G, nz, CS%diag)
 
-    ! Diagnostics for wind stress accelerations multiplied by visc_rem_[uv],
-    if (CS%id_du_dt_str_visc_rem > 0) &
-      call post_product_u(CS%id_du_dt_str_visc_rem, ADp%du_dt_str, ADp%visc_rem_u, G, nz, CS%diag)
-    if (CS%id_dv_dt_str_visc_rem > 0) &
-      call post_product_v(CS%id_dv_dt_str_visc_rem, ADp%dv_dt_str, ADp%visc_rem_v, G, nz, CS%diag)
+      ! Diagnostics for wind stress accelerations multiplied by visc_rem_[uv],
+      if (CS%id_du_dt_str_visc_rem > 0) &
+        call post_product_u(CS%id_du_dt_str_visc_rem, ADp%du_dt_str, ADp%visc_rem_u, G, nz, CS%diag)
+      if (CS%id_dv_dt_str_visc_rem > 0) &
+        call post_product_v(CS%id_dv_dt_str_visc_rem, ADp%dv_dt_str, ADp%visc_rem_v, G, nz, CS%diag)
+    endif
   endif
 
 end subroutine vertvisc
@@ -1117,16 +1119,18 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, US, CS, OBC)
   endif
 
 ! Offer diagnostic fields for averaging.
-  if (associated(visc%Kv_slow) .and. (CS%id_Kv_slow > 0)) &
-      call post_data(CS%id_Kv_slow, visc%Kv_slow, CS%diag)
-  if (CS%id_Kv_u > 0) call post_data(CS%id_Kv_u, Kv_u, CS%diag)
-  if (CS%id_Kv_v > 0) call post_data(CS%id_Kv_v, Kv_v, CS%diag)
-  if (CS%id_au_vv > 0) call post_data(CS%id_au_vv, CS%a_u, CS%diag)
-  if (CS%id_av_vv > 0) call post_data(CS%id_av_vv, CS%a_v, CS%diag)
-  if (CS%id_h_u > 0) call post_data(CS%id_h_u, CS%h_u, CS%diag)
-  if (CS%id_h_v > 0) call post_data(CS%id_h_v, CS%h_v, CS%diag)
-  if (CS%id_hML_u > 0) call post_data(CS%id_hML_u, hML_u, CS%diag)
-  if (CS%id_hML_v > 0) call post_data(CS%id_hML_v, hML_v, CS%diag)
+  if (query_averaging_enabled(CS%diag)) then
+    if (associated(visc%Kv_slow) .and. (CS%id_Kv_slow > 0)) &
+        call post_data(CS%id_Kv_slow, visc%Kv_slow, CS%diag)
+    if (CS%id_Kv_u > 0) call post_data(CS%id_Kv_u, Kv_u, CS%diag)
+    if (CS%id_Kv_v > 0) call post_data(CS%id_Kv_v, Kv_v, CS%diag)
+    if (CS%id_au_vv > 0) call post_data(CS%id_au_vv, CS%a_u, CS%diag)
+    if (CS%id_av_vv > 0) call post_data(CS%id_av_vv, CS%a_v, CS%diag)
+    if (CS%id_h_u > 0) call post_data(CS%id_h_u, CS%h_u, CS%diag)
+    if (CS%id_h_v > 0) call post_data(CS%id_h_v, CS%h_v, CS%diag)
+    if (CS%id_hML_u > 0) call post_data(CS%id_hML_u, hML_u, CS%diag)
+    if (CS%id_hML_v > 0) call post_data(CS%id_hML_v, hML_v, CS%diag)
+  endif
 
   if (allocated(hML_u)) deallocate(hML_u)
   if (allocated(hML_v)) deallocate(hML_v)
