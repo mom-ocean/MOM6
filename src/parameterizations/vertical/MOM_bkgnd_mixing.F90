@@ -280,7 +280,7 @@ subroutine bkgnd_mixing_init(Time, G, GV, US, param_file, diag, CS, physical_OBL
   call get_param(param_file, mdl, "HENYEY_IGW_BACKGROUND_NEW", CS%Henyey_IGW_background_new, &
                  "If true, use a better latitude-dependent scaling for the "//&
                  "background diffusivity, as described in "//&
-                 "Harrison & Hallberg, JPO 2008.", default=.false.)
+                 "Harrison & Hallberg, JPO 2008. This option is obsolete.", default=.false.)
   if (CS%Henyey_IGW_background_new) call check_bkgnd_scheme(CS, "HENYEY_IGW_BACKGROUND_NEW")
 
   if (CS%Kd>0.0 .and. (trim(CS%bkgnd_scheme_str)=="BRYAN_LEWIS_DIFFUSIVITY" .or.&
@@ -316,7 +316,7 @@ subroutine bkgnd_mixing_init(Time, G, GV, US, param_file, diag, CS, physical_OBL
 
   CS%Kd_via_Kdml_bug = .false.
   if ((CS%Kd /= CS%Kd_tot_ml) .and. .not.(CS%Kd_tanh_lat_fn .or. CS%physical_OBL_scheme .or. &
-                                     CS%Henyey_IGW_background .or. CS%Henyey_IGW_background_new .or. &
+                                     CS%Henyey_IGW_background .or. &
                                      CS%horiz_varying_background .or. CS%Bryan_Lewis_diffusivity)) then
     call get_param(param_file, mdl, "KD_BACKGROUND_VIA_KDML_BUG", CS%Kd_via_Kdml_bug, &
                  "If true and KDML /= KD and several other conditions apply, the background "//&
@@ -453,25 +453,6 @@ subroutine calculate_bkgnd_mixing(h, tv, N2_lay, Kd_lay, Kd_int, Kv_bkgnd, j, G,
       Kd_lay(i,k) = Kd_int(i,1)
     enddo ; enddo
 
-  elseif (CS%Henyey_IGW_background_new) then
-    I_x30 = 2.0 / invcosh(CS%N0_2Omega*2.0) ! This is evaluated at 30 deg.
-    I_2Omega = 0.5 / CS%omega
-    do k=1,nz ; do i=is,ie
-      abs_sinlat = max(min_sinlat, abs(sin(G%geoLatT(i,j)*deg_to_rad)))
-      N_2Omega = max(abs_sinlat, sqrt(N2_lay(i,k))*I_2Omega)
-      N02_N2 = (CS%N0_2Omega/N_2Omega)**2
-      Kd_lay(i,k) = max(CS%Kd_min, CS%Kd * &
-           ((abs_sinlat * invcosh(N_2Omega/abs_sinlat)) * I_x30)*N02_N2)
-    enddo ; enddo
-    ! Update Kd_int and Kv_bkgnd, based on Kd_lay.  These might be just used for diagnostic purposes.
-    do i=is,ie
-      Kd_int(i,1) = 0.0; Kv_bkgnd(i,1) = 0.0
-      Kd_int(i,nz+1) = 0.0; Kv_bkgnd(i,nz+1) = 0.0
-    enddo
-    do K=2,nz ; do i=is,ie
-      Kd_int(i,K) = 0.5*(Kd_lay(i,k-1) + Kd_lay(i,k))
-      Kv_bkgnd(i,K) = Kd_int(i,K) * CS%prandtl_bkgnd
-    enddo ; enddo
   else
     ! Set a potentially spatially varying surface value of diffusivity.
     if (CS%Henyey_IGW_background) then
