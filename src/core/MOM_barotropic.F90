@@ -398,6 +398,10 @@ character*(20), parameter :: ARITHMETIC_STRING = "ARITHMETIC"
 character*(20), parameter :: BT_CONT_STRING = "FROM_BT_CONT"
 !>@}
 
+!> A negligible parameter which avoids division by zero, but is too small to
+!! modify physical values.
+real, parameter :: subroundoff = 1e-30
+
 contains
 
 !> This subroutine time steps the barotropic equations explicitly.
@@ -1001,23 +1005,23 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
 
   !$OMP parallel do default(shared) private(visc_rem)
   do k=1,nz ; do j=js,je ; do I=is-1,ie
-    ! rem needs greater than visc_rem_u and 1-Instep/visc_rem_u.
+    ! rem needs to be greater than visc_rem_u and 1-Instep/visc_rem_u.
     ! The 0.5 below is just for safety.
-    if (visc_rem_u(I,j,k) <= 0.0) then ; visc_rem = 0.0
-    elseif (visc_rem_u(I,j,k) >= 1.0) then ; visc_rem = 1.0
-    elseif (visc_rem_u(I,j,k)**2 > visc_rem_u(I,j,k) - 0.5*Instep) then
-      visc_rem = visc_rem_u(I,j,k)
-    else ; visc_rem = 1.0 - 0.5*Instep/visc_rem_u(I,j,k) ; endif
+    ! NOTE: subroundoff is a neglible value used to prevent division by zero.
+    ! When 1-0.5*Instep/visc_rem exceeds visc_rem, the subroundoff is too small
+    ! to modify the significand.  When visc_rem is small, the max() operators
+    ! select visc_rem or 0.  So subroundoff cannot impact the final value.
+    visc_rem = min(visc_rem_u(I,j,k), 1.)
+    visc_rem = max(visc_rem, 1. - 0.5 * Instep / (visc_rem + subroundoff))
+    visc_rem = max(visc_rem, 0.)
     wt_u(I,j,k) = CS%frhatu(I,j,k) * visc_rem
   enddo ; enddo ; enddo
   !$OMP parallel do default(shared) private(visc_rem)
   do k=1,nz ; do J=js-1,je ; do i=is,ie
-    ! rem needs greater than visc_rem_v and 1-Instep/visc_rem_v.
-    if (visc_rem_v(i,J,k) <= 0.0) then ; visc_rem = 0.0
-    elseif (visc_rem_v(i,J,k) >= 1.0) then ; visc_rem = 1.0
-    elseif (visc_rem_v(i,J,k)**2 > visc_rem_v(i,J,k) - 0.5*Instep) then
-      visc_rem = visc_rem_v(i,J,k)
-    else ; visc_rem = 1.0 - 0.5*Instep/visc_rem_v(i,J,k) ; endif
+    ! As above, rem must be greater than visc_rem_v and 1-Instep/visc_rem_v.
+    visc_rem = min(visc_rem_v(I,j,k), 1.)
+    visc_rem = max(visc_rem, 1. - 0.5 * Instep / (visc_rem + subroundoff))
+    visc_rem = max(visc_rem, 0.)
     wt_v(i,J,k) = CS%frhatv(i,J,k) * visc_rem
   enddo ; enddo ; enddo
 
