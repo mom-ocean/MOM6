@@ -71,12 +71,12 @@ subroutine continuity(u, v, hin, h, uh, vh, dt, G, GV, US, CS, OBC, pbv, uhbt, v
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
                  optional, intent(in)    :: visc_rem_u !< Both the fraction of
           !! zonal momentum that remains after a time-step of viscosity, and the fraction of a time-step's
-          !! worth of a barotropic acceleration that a layer experiences after viscosity is applied.
+          !! worth of a barotropic acceleration that a layer experiences after viscosity is applied [nondim].
           !! Non-dimensional between 0 (at the bottom) and 1 (far above the bottom).
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
                  optional, intent(in)    :: visc_rem_v !< Both the fraction of
           !! meridional momentum that remains after a time-step of viscosity, and the fraction of a time-step's
-          !! worth of a barotropic acceleration that a layer experiences after viscosity is applied.
+          !! worth of a barotropic acceleration that a layer experiences after viscosity is applied [nondim].
           !! Non-dimensional between 0 (at the bottom) and 1 (far above the bottom).
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
                  optional, intent(out)   :: u_cor !< The zonal velocities that
