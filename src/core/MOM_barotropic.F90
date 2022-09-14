@@ -4476,7 +4476,7 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, US, param_file, diag, CS, 
                  "If true, the tidal self-attraction and loading anomaly in the barotropic "//&
                  "solver has the wrong sign, replicating a long-standing bug with a scalar "//&
                  "self-attraction and loading term or the SAL term from a previous simulation.", &
-                 default=.true., do_not_log=(det_de==0.0))
+                 default=.false., do_not_log=(det_de==0.0))
   call get_param(param_file, mdl, "SADOURNY", CS%Sadourny, &
                  "If true, the Coriolis terms are discretized with the "//&
                  "Sadourny (1975) energy conserving scheme, otherwise "//&

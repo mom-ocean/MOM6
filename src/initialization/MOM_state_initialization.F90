@@ -2651,7 +2651,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, depth_tot, G, GV, US, PF, just
                  "If true use an expression with a vertical indexing bug for extrapolating the "//&
                  "densities at the bottom of unstable profiles from data when finding the "//&
                  "initial interface locations in layered mode from a dataset of T and S.", &
-                 default=.true., do_not_log=just_read)
+                 default=.false., do_not_log=just_read)
     ! Reusing MINIMUM_DEPTH for the default mixed layer depth may be a strange choice, but
     ! it reproduces previous answers.
   endif

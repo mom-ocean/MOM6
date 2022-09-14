@@ -80,20 +80,6 @@ type, public :: bkgnd_mixing_cs ; private
              !! Henyey et al, JGR (1986) latitudinal scaling for the background diapycnal diffusivity,
              !! which gives a marked decrease in the diffusivity near the equator.  The simplification
              !! here is to assume that the in-situ stratification is the same as the reference stratificaiton.
-  logical :: Henyey_IGW_background_new !< same as Henyey_IGW_background
-             !! but incorporate the effect of stratification on TKE dissipation,
-             !! e = f/f_0 * acosh(N/f) / acosh(N_0/f_0) * e_0
-             !! where e is the TKE dissipation, and N_0 and f_0
-             !! are the reference buoyancy frequency and inertial frequencies respectively.
-             !! e_0 is the reference dissipation at (N_0,f_0). In the previous version, N=N_0.
-             !! Additionally, the squared inverse relationship between  diapycnal diffusivities
-             !! and stratification is included:
-             !!
-             !! kd = e/N^2
-             !!
-             !! where kd is the diapycnal diffusivity. This approach assumes that work done
-             !! against gravity is uniformly distributed throughout the column. Whereas, kd=kd_0*e,
-             !! as in the original version, concentrates buoyancy work in regions of strong stratification.
   logical :: physical_OBL_scheme !< If true, a physically-based scheme is used to determine mixing in the
                    !! ocean's surface boundary layer, such as ePBL, KPP, or a refined bulk mixed layer scheme.
   logical :: Kd_via_Kdml_bug !< If true and KDML /= KD and a number of other higher precedence
@@ -276,13 +262,6 @@ subroutine bkgnd_mixing_init(Time, G, GV, US, param_file, diag, CS, physical_OBL
                  "Harrison & Hallberg, JPO 2008.", default=.false.)
   if (CS%Henyey_IGW_background) call check_bkgnd_scheme(CS, "HENYEY_IGW_BACKGROUND")
 
-
-  call get_param(param_file, mdl, "HENYEY_IGW_BACKGROUND_NEW", CS%Henyey_IGW_background_new, &
-                 "If true, use a better latitude-dependent scaling for the "//&
-                 "background diffusivity, as described in "//&
-                 "Harrison & Hallberg, JPO 2008. This option is obsolete.", default=.false.)
-  if (CS%Henyey_IGW_background_new) call check_bkgnd_scheme(CS, "HENYEY_IGW_BACKGROUND_NEW")
-
   if (CS%Kd>0.0 .and. (trim(CS%bkgnd_scheme_str)=="BRYAN_LEWIS_DIFFUSIVITY" .or.&
                           trim(CS%bkgnd_scheme_str)=="HORIZ_VARYING_BACKGROUND" )) then
     call MOM_error(WARNING, "bkgnd_mixing_init: a nonzero constant background "//&
@@ -321,7 +300,7 @@ subroutine bkgnd_mixing_init(Time, G, GV, US, param_file, diag, CS, physical_OBL
     call get_param(param_file, mdl, "KD_BACKGROUND_VIA_KDML_BUG", CS%Kd_via_Kdml_bug, &
                  "If true and KDML /= KD and several other conditions apply, the background "//&
                  "diffusivity is set incorrectly using a bug that was introduced in March, 2018.", &
-                 default=.false.)  ! The default should be changed to false and this parameter obsoleted.
+                 default=.false.)  ! This parameter should be obsoleted.
   endif
 
 !  call closeParameterBlock(param_file)
