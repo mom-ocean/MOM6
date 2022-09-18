@@ -4396,13 +4396,6 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, US, param_file, diag, CS, 
 #else
   wd_halos(1) = bt_halo_sz; wd_halos(2) =  bt_halo_sz
 #endif
-  call log_param(param_file, mdl, "!BT x-halo", wd_halos(1), &
-                 "The barotropic x-halo size that is actually used.", &
-                 layoutParam=.true.)
-  call log_param(param_file, mdl, "!BT y-halo", wd_halos(2), &
-                 "The barotropic y-halo size that is actually used.", &
-                 layoutParam=.true.)
-
   call get_param(param_file, mdl, "NONLINEAR_BT_CONTINUITY", CS%Nonlinear_continuity, &
                  "If true, use nonlinear transports in the barotropic "//&
                  "continuity equation.  This does not apply if "//&
@@ -4623,6 +4616,12 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, US, param_file, diag, CS, 
       call MOM_mesg("barotropic_init: barotropic y-halo size increased.", 3)
   endif
 #endif
+  call log_param(param_file, mdl, "!BT x-halo", wd_halos(1), &
+                 "The barotropic x-halo size that is actually used.", &
+                 layoutParam=.true.)
+  call log_param(param_file, mdl, "!BT y-halo", wd_halos(2), &
+                 "The barotropic y-halo size that is actually used.", &
+                 layoutParam=.true.)
 
   CS%isdw = G%isc-wd_halos(1) ; CS%iedw = G%iec+wd_halos(1)
   CS%jsdw = G%jsc-wd_halos(2) ; CS%jedw = G%jec+wd_halos(2)
