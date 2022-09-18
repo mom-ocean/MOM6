@@ -680,18 +680,18 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   real, allocatable :: wt_vel(:)    ! The raw or relative weights of each of the barotropic timesteps
                                     ! in determining the average velocities [nondim]
   real, allocatable :: wt_eta(:)    ! The raw or relative weights of each of the barotropic timesteps
-                                    ! in determining the average the average of eta [nondim]
+                                    ! in determining the average eta [nondim]
   real, allocatable :: wt_accel(:)  ! The raw or relative weights of each of the barotropic timesteps
                                     ! in determining the average accelerations [nondim]
   real, allocatable :: wt_trans(:)  ! The raw or relative weights of each of the barotropic timesteps
                                     ! in determining the average transports [nondim]
   real, allocatable :: wt_accel2(:) ! A potentially un-normalized copy of wt_accel [nondim]
   real :: sum_wt_vel     ! The sum of the raw weights used to find average velocities [nondim]
-  real :: sum_wt_eta     ! The sum of the raw weights used to find average the average of eta [nondim]
+  real :: sum_wt_eta     ! The sum of the raw weights used to find average eta [nondim]
   real :: sum_wt_accel   ! The sum of the raw weights used to find average accelerations [nondim]
   real :: sum_wt_trans   ! The sum of the raw weights used to find average transports [nondim]
   real :: I_sum_wt_vel   ! The inverse of the sum of the raw weights used to find average velocities [nondim]
-  real :: I_sum_wt_eta   ! The inverse of the sum of the raw weights used to find the average of eta [nondim]
+  real :: I_sum_wt_eta   ! The inverse of the sum of the raw weights used to find eta [nondim]
   real :: I_sum_wt_accel ! The inverse of the sum of the raw weights used to find average accelerations [nondim]
   real :: I_sum_wt_trans ! The inverse of the sum of the raw weights used to find average transports [nondim]
   real :: dt_filt     ! The half-width of the barotropic filter [T ~> s].
@@ -4788,7 +4788,7 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, US, param_file, diag, CS, 
   endif
 
   CS%id_PFu_bt = register_diag_field('ocean_model', 'PFuBT', diag%axesCu1, Time, &
-      'Zonal Anomalous Barotropic Pressure Force Force Acceleration', 'm s-2', conversion=US%L_T2_to_m_s2)
+      'Zonal Anomalous Barotropic Pressure Force Acceleration', 'm s-2', conversion=US%L_T2_to_m_s2)
   CS%id_PFv_bt = register_diag_field('ocean_model', 'PFvBT', diag%axesCv1, Time, &
       'Meridional Anomalous Barotropic Pressure Force Acceleration', 'm s-2', conversion=US%L_T2_to_m_s2)
   CS%id_Coru_bt = register_diag_field('ocean_model', 'CoruBT', diag%axesCu1, Time, &
