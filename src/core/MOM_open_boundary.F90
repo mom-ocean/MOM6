@@ -116,7 +116,8 @@ type, public :: segment_tracer_registry_type
                                                      !! Not sure who should lock it or when...
 end type segment_tracer_registry_type
 
-!> Open boundary segment data structure.
+!> Open boundary segment data structure.  Unless otherwise noted, 2-d and 3-d arrays are discretized
+!! at the same position as normal velocity points in the middle of the OBC segments.
 type, public :: OBC_segment_type
   logical :: Flather        !< If true, applies Flather + Chapman radiation of barotropic gravity waves.
   logical :: radiation      !< If true, 1D Orlanksi radiation boundary conditions are applied.
@@ -178,10 +179,10 @@ type, public :: OBC_segment_type
   real, allocatable :: h(:,:,:)   !< The cell thickness [H ~> m or kg m-2] at OBC-points.
   real, allocatable :: normal_vel(:,:,:)      !< The layer velocity normal to the OB
                                               !! segment [L T-1 ~> m s-1].
-  real, allocatable :: tangential_vel(:,:,:)  !< The layer velocity tangential to the
-                                              !! OB segment [L T-1 ~> m s-1].
-  real, allocatable :: tangential_grad(:,:,:) !< The gradient of the velocity tangential
-                                              !! to the OB segment [T-1 ~> s-1].
+  real, allocatable :: tangential_vel(:,:,:)  !< The layer velocity tangential to the OB segment
+                                              !! [L T-1 ~> m s-1], discretized at the corner points.
+  real, allocatable :: tangential_grad(:,:,:) !< The gradient of the velocity tangential to the OB
+                                              !! segment [T-1 ~> s-1], discretized at the corner points.
   real, allocatable :: normal_trans(:,:,:)    !< The layer transport normal to the OB
                                               !! segment [H L2 T-1 ~> m3 s-1].
   real, allocatable :: normal_vel_bt(:,:)     !< The barotropic velocity normal to
@@ -189,25 +190,38 @@ type, public :: OBC_segment_type
   real, allocatable :: eta(:,:)               !< The sea-surface elevation along the
                                               !! segment [H ~> m or kg m-2].
   real, allocatable :: grad_normal(:,:,:)     !< The gradient of the normal flow along the
-                                              !! segment times the grid spacing [L T-1 ~> m s-1]
+                                              !! segment times the grid spacing [L T-1 ~> m s-1],
+                                              !! with the first index being the corner-point index
+                                              !! along the segment, and the second index being 1 (for
+                                              !! values one point into the domain) or 2 (for values
+                                              !! along the OBC itself)
   real, allocatable :: grad_tan(:,:,:)        !< The gradient of the tangential flow along the
-                                              !! segment times the grid spacing [L T-1 ~> m s-1]
-  real, allocatable :: grad_gradient(:,:,:)   !< The gradient of the gradient of tangential flow along
-                                              !! the segment times the grid spacing [T-1 ~> s-1]
+                                              !! segment times the grid spacing [L T-1 ~> m s-1], with the
+                                              !! first index being the velocity/tracer point index along the
+                                              !! segment, and the second being 1 for the value 1.5 points
+                                              !! inside the domain and 2 for the value half a point
+                                              !! inside the domain.
+  real, allocatable :: grad_gradient(:,:,:)   !< The gradient normal to the segment of the gradient
+                                              !! tangetial to the segment of tangential flow along the segment
+                                              !! times the grid spacing [T-1 ~> s-1], with the first
+                                              !! index being the velocity/tracer point index along the segment,
+                                              !! and the second being 1 for the value 2 points into the domain
+                                              !! and 2 for the value 1 point into the domain.
   real, allocatable :: rx_norm_rad(:,:,:)     !< The previous normal phase speed use for EW radiation
                                               !! OBC, in grid points per timestep [nondim]
   real, allocatable :: ry_norm_rad(:,:,:)     !< The previous normal phase speed use for NS radiation
                                               !! OBC, in grid points per timestep [nondim]
-  real, allocatable :: rx_norm_obl(:,:,:)     !< The previous normal radiation coefficient for EW
-                                              !! oblique OBCs [L2 T-2 ~> m2 s-2]
-  real, allocatable :: ry_norm_obl(:,:,:)     !< The previous normal radiation coefficient for NS
-                                              !! oblique OBCs [L2 T-2 ~> m2 s-2]
-  real, allocatable :: cff_normal(:,:,:)      !< The denominator for oblique radiation
-                                              !! for normal velocity [L2 T-2 ~> m2 s-2]
+  real, allocatable :: rx_norm_obl(:,:,:)     !< The previous x-direction normalized radiation coefficient
+                                              !! for either EW or NS oblique OBCs [L2 T-2 ~> m2 s-2]
+  real, allocatable :: ry_norm_obl(:,:,:)     !< The previous y-direction normalized radiation coefficient
+                                              !! for either EW or NS oblique OBCs [L2 T-2 ~> m2 s-2]
+  real, allocatable :: cff_normal(:,:,:)      !< The denominator for oblique radiation of the normal
+                                              !! velocity [L2 T-2 ~> m2 s-2]
   real, allocatable :: nudged_normal_vel(:,:,:) !< The layer velocity normal to the OB segment
                                               !! that values should be nudged towards [L T-1 ~> m s-1].
   real, allocatable :: nudged_tangential_vel(:,:,:) !< The layer velocity tangential to the OB segment
-                                              !! that values should be nudged towards [L T-1 ~> m s-1].
+                                              !! that values should be nudged towards [L T-1 ~> m s-1],
+                                              !! discretized at the corner (PV) points.
   real, allocatable :: nudged_tangential_grad(:,:,:)  !< The layer dvdx or dudy towards which nudging
                                               !! can occur [T-1 ~> s-1].
   type(segment_tracer_registry_type), pointer  :: tr_Reg=> NULL()!< A pointer to the tracer registry for the segment.
@@ -304,9 +318,18 @@ type, public :: ocean_OBC_type
                                          !! grid points per timestep [nondim]
   real, allocatable :: ry_normal(:,:,:)  !< Array storage for normal phase speed for NS radiation OBCs in units of
                                          !! grid points per timestep [nondim]
-  real, allocatable :: rx_oblique(:,:,:) !< Array storage for oblique boundary condition restarts [L2 T-2 ~> m2 s-2]
-  real, allocatable :: ry_oblique(:,:,:) !< Array storage for oblique boundary condition restarts [L2 T-2 ~> m2 s-2]
-  real, allocatable :: cff_normal(:,:,:) !< Array storage for oblique boundary condition restarts [L2 T-2 ~> m2 s-2]
+  real, allocatable :: rx_oblique_u(:,:,:) !< X-direction oblique boundary condition radiation speeds squared
+                                           !! at u points for restarts [L2 T-2 ~> m2 s-2]
+  real, allocatable :: ry_oblique_u(:,:,:) !< Y-direction oblique boundary condition radiation speeds squared
+                                           !! at u points for restarts [L2 T-2 ~> m2 s-2]
+  real, allocatable :: rx_oblique_v(:,:,:) !< X-direction oblique boundary condition radiation speeds squared
+                                           !! at v points for restarts [L2 T-2 ~> m2 s-2]
+  real, allocatable :: ry_oblique_v(:,:,:) !< Y-direction oblique boundary condition radiation speeds squared
+                                           !! at v points for restarts [L2 T-2 ~> m2 s-2]
+  real, allocatable :: cff_normal_u(:,:,:) !< Denominator for normalizing EW oblique boundary condition radiation
+                                           !! rates at u points for restarts [L2 T-2 ~> m2 s-2]
+  real, allocatable :: cff_normal_v(:,:,:) !< Denominator for normalizing NS oblique boundary condition radiation
+                                           !! rates at v points for restarts [L2 T-2 ~> m2 s-2]
   real, allocatable :: tres_x(:,:,:,:)   !< Array storage of tracer reservoirs for restarts, in unscaled units [conc]
   real, allocatable :: tres_y(:,:,:,:)   !< Array storage of tracer reservoirs for restarts, in unscaled units [conc]
   logical :: debug                       !< If true, write verbose checksums for debugging purposes.
@@ -1794,9 +1817,11 @@ subroutine open_boundary_init(G, GV, US, param_file, OBC, restart_CS)
   id_clock_pass = cpu_clock_id('(Ocean OBC halo updates)', grain=CLOCK_ROUTINE)
   if (OBC%radiation_BCs_exist_globally) call pass_vector(OBC%rx_normal, OBC%ry_normal, G%Domain, &
                      To_All+Scalar_Pair)
-  if (OBC%oblique_BCs_exist_globally) call pass_vector(OBC%rx_oblique, OBC%ry_oblique, G%Domain, &
-                     To_All+Scalar_Pair)
-  if (allocated(OBC%cff_normal)) call pass_var(OBC%cff_normal, G%Domain, position=CORNER)
+  if (OBC%oblique_BCs_exist_globally) then
+    call pass_vector(OBC%rx_oblique_u, OBC%ry_oblique_v, G%Domain, To_All+Scalar_Pair)
+    call pass_vector(OBC%ry_oblique_u, OBC%rx_oblique_v, G%Domain, To_All+Scalar_Pair)
+    call pass_vector(OBC%cff_normal_u, OBC%cff_normal_v, G%Domain, To_All+Scalar_Pair)
+  endif
   if (allocated(OBC%tres_x) .and. allocated(OBC%tres_y)) then
     do m=1,OBC%ntr
       call pass_vector(OBC%tres_x(:,:,:,m), OBC%tres_y(:,:,:,m), G%Domain, To_All+Scalar_Pair)
@@ -1809,45 +1834,6 @@ subroutine open_boundary_init(G, GV, US, param_file, OBC, restart_CS)
     do m=1,OBC%ntr
       call pass_var(OBC%tres_y(:,:,:,m), G%Domain, position=NORTH_FACE)
     enddo
-  endif
-
-  ! The rx_normal and ry_normal arrays used with radiation OBCs are currently in units of grid
-  ! points per timestep, but if this were to be corrected to [L T-1 ~> m s-1] or [T-1 ~> s-1] to
-  ! permit timesteps to change between calls to the OBC code, the following would be needed:
-!  if ( OBC%radiation_BCs_exist_globally .and. (US%s_to_T_restart * US%m_to_L_restart /= 0.0) .and. &
-!       (US%s_to_T_restart /= US%m_to_L_restart) ) then
-!    vel_rescale = US%s_to_T_restart /  US%m_to_L_restart
-!    if (query_initialized(OBC%rx_normal, "rx_normal", restart_CS)) then
-!      do k=1,nz ; do j=jsd,jed ; do I=IsdB,IedB
-!        OBC%rx_normal(I,j,k) = vel_rescale * OBC%rx_normal(I,j,k)
-!      enddo ; enddo ; enddo
-!    endif
-!    if (query_initialized(OBC%ry_normal, "ry_normal", restart_CS)) then
-!      do k=1,nz ; do J=JsdB,JedB ; do i=isd,ied
-!        OBC%ry_normal(i,J,k) = vel_rescale * OBC%ry_normal(i,J,k)
-!      enddo ; enddo ; enddo
-!    endif
-!  endif
-
-  ! The oblique boundary condition terms have units of [L2 T-2 ~> m2 s-2] and may need to be rescaled.
-  if ( OBC%oblique_BCs_exist_globally .and. (US%s_to_T_restart * US%m_to_L_restart /= 0.0) .and. &
-       (US%s_to_T_restart /= US%m_to_L_restart) ) then
-    vel2_rescale = US%s_to_T_restart**2 /  US%m_to_L_restart**2
-    if (query_initialized(OBC%rx_oblique, "rx_oblique", restart_CS)) then
-      do k=1,nz ; do j=jsd,jed ; do I=IsdB,IedB
-        OBC%rx_oblique(I,j,k) = vel2_rescale * OBC%rx_oblique(I,j,k)
-      enddo ; enddo ; enddo
-    endif
-    if (query_initialized(OBC%ry_oblique, "ry_oblique", restart_CS)) then
-      do k=1,nz ; do J=JsdB,JedB ; do i=isd,ied
-        OBC%ry_oblique(i,J,k) = vel2_rescale * OBC%ry_oblique(i,J,k)
-      enddo ; enddo ; enddo
-    endif
-    if (query_initialized(OBC%cff_normal, "cff_normal", restart_CS)) then
-      do k=1,nz ; do J=JsdB,JedB ; do I=IsdB,IedB
-        OBC%cff_normal(I,J,k) = vel2_rescale * OBC%cff_normal(I,J,k)
-      enddo ; enddo ; enddo
-    endif
   endif
 
 end subroutine open_boundary_init
@@ -1891,9 +1877,12 @@ subroutine open_boundary_dealloc(OBC)
   if (allocated(OBC%segnum_v)) deallocate(OBC%segnum_v)
   if (allocated(OBC%rx_normal)) deallocate(OBC%rx_normal)
   if (allocated(OBC%ry_normal)) deallocate(OBC%ry_normal)
-  if (allocated(OBC%rx_oblique)) deallocate(OBC%rx_oblique)
-  if (allocated(OBC%ry_oblique)) deallocate(OBC%ry_oblique)
-  if (allocated(OBC%cff_normal)) deallocate(OBC%cff_normal)
+  if (allocated(OBC%rx_oblique_u)) deallocate(OBC%rx_oblique_u)
+  if (allocated(OBC%ry_oblique_u)) deallocate(OBC%ry_oblique_u)
+  if (allocated(OBC%rx_oblique_v)) deallocate(OBC%rx_oblique_v)
+  if (allocated(OBC%ry_oblique_v)) deallocate(OBC%ry_oblique_v)
+  if (allocated(OBC%cff_normal_u)) deallocate(OBC%cff_normal_u)
+  if (allocated(OBC%cff_normal_v)) deallocate(OBC%cff_normal_v)
   if (allocated(OBC%tres_x)) deallocate(OBC%tres_x)
   if (allocated(OBC%tres_y)) deallocate(OBC%tres_y)
   deallocate(OBC)
@@ -2129,12 +2118,17 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, GV, US,
   real :: cff_new, cff_avg ! denominator in oblique [L2 T-2 ~> m2 s-2]
   real, allocatable, dimension(:,:,:) :: &
     rx_tang_rad, & ! The phase speed at u-points for tangential oblique OBCs
-                   ! in units of grid points per timestep [nondim]
+                   ! in units of grid points per timestep [nondim],
+                   ! discretized at the corner (PV) points.
     ry_tang_rad, & ! The phase speed at v-points for tangential oblique OBCs
-                   ! in units of grid points per timestep [nondim]
-    rx_tang_obl, & ! The x-coefficient for tangential oblique OBCs [L2 T-2 ~> m2 s-2]
-    ry_tang_obl, & ! The y-coefficient for tangential oblique OBCs [L2 T-2 ~> m2 s-2]
-    cff_tangential ! The denominator for tangential oblique OBCs [L2 T-2 ~> m2 s-2]
+                   ! in units of grid points per timestep [nondim],
+                   ! discretized at the corner (PV) points.
+    rx_tang_obl, & ! The x-coefficient for tangential oblique OBCs [L2 T-2 ~> m2 s-2],
+                   ! discretized at the corner (PV) points.
+    ry_tang_obl, & ! The y-coefficient for tangential oblique OBCs [L2 T-2 ~> m2 s-2],
+                   ! discretized at the corner (PV) points.
+    cff_tangential ! The denominator for tangential oblique OBCs [L2 T-2 ~> m2 s-2],
+                   ! discretized at the corner (PV) points.
   real :: eps      ! A small velocity squared [L2 T-2 ~> m2 s-2]
   type(OBC_segment_type), pointer :: segment => NULL()
   integer :: i, j, k, is, ie, js, je, m, nz, n
@@ -2175,18 +2169,18 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, GV, US,
         do k=1,GV%ke
           I=segment%HI%IsdB
           do j=segment%HI%jsd,segment%HI%jed
-            segment%rx_norm_obl(I,j,k) = OBC%rx_oblique(I,j,k)
-            segment%ry_norm_obl(I,j,k) = OBC%ry_oblique(I,j,k)
-            segment%cff_normal(I,j,k) = OBC%cff_normal(I,j,k)
+            segment%rx_norm_obl(I,j,k) = OBC%rx_oblique_u(I,j,k)
+            segment%ry_norm_obl(I,j,k) = OBC%ry_oblique_u(I,j,k)
+            segment%cff_normal(I,j,k) = OBC%cff_normal_u(I,j,k)
           enddo
         enddo
       elseif (segment%is_N_or_S .and. segment%oblique) then
         do k=1,GV%ke
           J=segment%HI%JsdB
           do i=segment%HI%isd,segment%HI%ied
-            segment%rx_norm_obl(i,J,k) = OBC%rx_oblique(i,J,k)
-            segment%ry_norm_obl(i,J,k) = OBC%ry_oblique(i,J,k)
-            segment%cff_normal(i,J,k) = OBC%cff_normal(i,J,k)
+            segment%rx_norm_obl(i,J,k) = OBC%rx_oblique_v(i,J,k)
+            segment%ry_norm_obl(i,J,k) = OBC%ry_oblique_v(i,J,k)
+            segment%cff_normal(i,J,k) = OBC%cff_normal_v(i,J,k)
           enddo
         enddo
       endif
@@ -2269,16 +2263,16 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, GV, US,
           ry_new = min(cff_new,max(dhdt*dhdy,-cff_new))
           if (gamma_u < 1.0) then
             rx_avg = (1.0-gamma_u)*segment%rx_norm_obl(I,j,k) + gamma_u*rx_new
-            ry_avg = (1.0-gamma_u)*segment%ry_norm_obl(i,J,k) + gamma_u*ry_new
-            cff_avg = (1.0-gamma_u)*segment%cff_normal(i,J,k) + gamma_u*cff_new
+            ry_avg = (1.0-gamma_u)*segment%ry_norm_obl(I,j,k) + gamma_u*ry_new
+            cff_avg = (1.0-gamma_u)*segment%cff_normal(I,j,k) + gamma_u*cff_new
           else
             rx_avg = rx_new
             ry_avg = ry_new
             cff_avg = cff_new
           endif
           segment%rx_norm_obl(I,j,k) = rx_avg
-          segment%ry_norm_obl(i,J,k) = ry_avg
-          segment%cff_normal(i,J,k) = cff_avg
+          segment%ry_norm_obl(I,j,k) = ry_avg
+          segment%cff_normal(I,j,k) = cff_avg
           segment%normal_vel(I,j,k) = ((cff_avg*u_new(I,j,k) + rx_avg*u_new(I-1,j,k)) - &
                              (max(ry_avg,0.0)*segment%grad_normal(J-1,2,k) + &
                               min(ry_avg,0.0)*segment%grad_normal(J,2,k))) / &
@@ -2286,9 +2280,9 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, GV, US,
           if (gamma_u < 1.0) then
             ! Copy restart fields into 3-d arrays. This is an inefficient and temporary
             ! implementation as a work-around to limitations in restart capability
-            OBC%rx_oblique(I,j,k) = segment%rx_norm_obl(I,j,k)
-            OBC%ry_oblique(i,J,k) = segment%ry_norm_obl(i,J,k)
-            OBC%cff_normal(I,j,k) = segment%cff_normal(I,j,k)
+            OBC%rx_oblique_u(I,j,k) = segment%rx_norm_obl(I,j,k)
+            OBC%ry_oblique_u(I,j,k) = segment%ry_norm_obl(I,j,k)
+            OBC%cff_normal_u(I,j,k) = segment%cff_normal(I,j,k)
           endif
         elseif (segment%gradient) then
           segment%normal_vel(I,j,k) = u_new(I-1,j,k)
@@ -2409,9 +2403,9 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, GV, US,
               cff_new = max(dhdx*dhdx + dhdy*dhdy, eps)
               rx_new = min(dhdt*dhdx, cff_new*rx_max)
               ry_new = min(cff_new,max(dhdt*dhdy,-cff_new))
-              rx_tang_obl(I,j,k) = rx_new
-              ry_tang_obl(i,J,k) = ry_new
-              cff_tangential(i,J,k) = cff_new
+              rx_tang_obl(I,J,k) = rx_new
+              ry_tang_obl(I,J,k) = ry_new
+              cff_tangential(I,J,k) = cff_new
             enddo
           endif
         enddo
@@ -2514,7 +2508,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, GV, US,
           ry_new = min(cff_new,max(dhdt*dhdy,-cff_new))
           if (gamma_u < 1.0) then
             rx_avg = (1.0-gamma_u)*segment%rx_norm_obl(I,j,k) + gamma_u*rx_new
-            ry_avg = (1.0-gamma_u)*segment%ry_norm_obl(i,J,k) + gamma_u*ry_new
+            ry_avg = (1.0-gamma_u)*segment%ry_norm_obl(I,j,k) + gamma_u*ry_new
             cff_avg = (1.0-gamma_u)*segment%cff_normal(I,j,k) + gamma_u*cff_new
           else
             rx_avg = rx_new
@@ -2522,8 +2516,8 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, GV, US,
             cff_avg = cff_new
           endif
           segment%rx_norm_obl(I,j,k) = rx_avg
-          segment%ry_norm_obl(i,J,k) = ry_avg
-          segment%cff_normal(i,J,k) = cff_avg
+          segment%ry_norm_obl(I,j,k) = ry_avg
+          segment%cff_normal(I,j,k) = cff_avg
           segment%normal_vel(I,j,k) = ((cff_avg*u_new(I,j,k) + rx_avg*u_new(I+1,j,k)) - &
                                        (max(ry_avg,0.0)*segment%grad_normal(J-1,2,k) + &
                                         min(ry_avg,0.0)*segment%grad_normal(J,2,k))) / &
@@ -2531,9 +2525,9 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, GV, US,
           if (gamma_u < 1.0) then
             ! Copy restart fields into 3-d arrays. This is an inefficient and temporary issues
             ! implemented as a work-around to limitations in restart capability
-            OBC%rx_oblique(I,j,k) = segment%rx_norm_obl(I,j,k)
-            OBC%ry_oblique(i,J,k) = segment%ry_norm_obl(i,J,k)
-            OBC%cff_normal(I,j,k) = segment%cff_normal(I,j,k)
+            OBC%rx_oblique_u(I,j,k) = segment%rx_norm_obl(I,j,k)
+            OBC%ry_oblique_u(I,j,k) = segment%ry_norm_obl(I,j,k)
+            OBC%cff_normal_u(I,j,k) = segment%cff_normal(I,j,k)
           endif
         elseif (segment%gradient) then
           segment%normal_vel(I,j,k) = u_new(I+1,j,k)
@@ -2654,9 +2648,9 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, GV, US,
               cff_new = max(dhdx*dhdx + dhdy*dhdy, eps)
               rx_new = min(dhdt*dhdx, cff_new*rx_max)
               ry_new = min(cff_new,max(dhdt*dhdy,-cff_new))
-              rx_tang_obl(I,j,k) = rx_new
-              ry_tang_obl(i,J,k) = ry_new
-              cff_tangential(i,J,k) = cff_new
+              rx_tang_obl(I,J,k) = rx_new
+              ry_tang_obl(I,J,k) = ry_new
+              cff_tangential(I,J,k) = cff_new
             enddo
           endif
         enddo
@@ -2765,7 +2759,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, GV, US,
             ry_avg = ry_new
             cff_avg = cff_new
           endif
-          segment%rx_norm_obl(I,j,k) = rx_avg
+          segment%rx_norm_obl(i,J,k) = rx_avg
           segment%ry_norm_obl(i,J,k) = ry_avg
           segment%cff_normal(i,J,k) = cff_avg
           segment%normal_vel(i,J,k) = ((cff_avg*v_new(i,J,k) + ry_avg*v_new(i,J-1,k)) - &
@@ -2775,9 +2769,9 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, GV, US,
           if (gamma_u < 1.0) then
             ! Copy restart fields into 3-d arrays. This is an inefficient and temporary issues
             ! implemented as a work-around to limitations in restart capability
-            OBC%rx_oblique(I,j,k) = segment%rx_norm_obl(I,j,k)
-            OBC%ry_oblique(i,J,k) = segment%ry_norm_obl(i,J,k)
-            OBC%cff_normal(i,J,k) = segment%cff_normal(i,J,k)
+            OBC%rx_oblique_v(i,J,k) = segment%rx_norm_obl(i,J,k)
+            OBC%ry_oblique_v(i,J,k) = segment%ry_norm_obl(i,J,k)
+            OBC%cff_normal_v(i,J,k) = segment%cff_normal(i,J,k)
           endif
         elseif (segment%gradient) then
           segment%normal_vel(i,J,k) = v_new(i,J-1,k)
@@ -2898,9 +2892,9 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, GV, US,
               cff_new = max(dhdx*dhdx + dhdy*dhdy, eps)
               ry_new = min(dhdt*dhdy, cff_new*ry_max)
               rx_new = min(cff_new,max(dhdt*dhdx,-cff_new))
-              rx_tang_obl(I,j,k) = rx_new
-              ry_tang_obl(i,J,k) = ry_new
-              cff_tangential(i,J,k) = cff_new
+              rx_tang_obl(I,J,k) = rx_new
+              ry_tang_obl(I,J,k) = ry_new
+              cff_tangential(I,J,k) = cff_new
             enddo
           endif
         enddo
@@ -3002,7 +2996,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, GV, US,
           ry_new = min(dhdt*dhdy, cff_new*ry_max)
           rx_new = min(cff_new,max(dhdt*dhdx,-cff_new))
           if (gamma_u < 1.0) then
-            rx_avg = (1.0-gamma_u)*segment%rx_norm_obl(I,j,k) + gamma_u*rx_new
+            rx_avg = (1.0-gamma_u)*segment%rx_norm_obl(i,J,k) + gamma_u*rx_new
             ry_avg = (1.0-gamma_u)*segment%ry_norm_obl(i,J,k) + gamma_u*ry_new
             cff_avg = (1.0-gamma_u)*segment%cff_normal(i,J,k) + gamma_u*cff_new
           else
@@ -3010,7 +3004,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, GV, US,
             ry_avg = ry_new
             cff_avg = cff_new
           endif
-          segment%rx_norm_obl(I,j,k) = rx_avg
+          segment%rx_norm_obl(i,J,k) = rx_avg
           segment%ry_norm_obl(i,J,k) = ry_avg
           segment%cff_normal(i,J,k) = cff_avg
           segment%normal_vel(i,J,k) = ((cff_avg*v_new(i,J,k) + ry_avg*v_new(i,J+1,k)) - &
@@ -3020,9 +3014,9 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, GV, US,
           if (gamma_u < 1.0) then
             ! Copy restart fields into 3-d arrays. This is an inefficient and temporary issues
             ! implemented as a work-around to limitations in restart capability
-            OBC%rx_oblique(I,j,k) = segment%rx_norm_obl(I,j,k)
-            OBC%ry_oblique(i,J,k) = segment%ry_norm_obl(i,J,k)
-            OBC%cff_normal(i,J,k) = segment%cff_normal(i,J,k)
+            OBC%rx_oblique_v(i,J,k) = segment%rx_norm_obl(i,J,k)
+            OBC%ry_oblique_v(i,J,k) = segment%ry_norm_obl(i,J,k)
+            OBC%cff_normal_v(i,J,k) = segment%cff_normal(i,J,k)
           endif
         elseif (segment%gradient) then
           segment%normal_vel(i,J,k) = v_new(i,J+1,k)
@@ -3143,9 +3137,9 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, GV, US,
               cff_new = max(dhdx*dhdx + dhdy*dhdy, eps)
               ry_new = min(dhdt*dhdy, cff_new*ry_max)
               rx_new = min(cff_new,max(dhdt*dhdx,-cff_new))
-              rx_tang_obl(I,j,k) = rx_new
-              ry_tang_obl(i,J,k) = ry_new
-              cff_tangential(i,J,k) = cff_new
+              rx_tang_obl(I,J,k) = rx_new
+              ry_tang_obl(I,J,k) = ry_new
+              cff_tangential(I,J,k) = cff_new
             enddo
           endif
         enddo
@@ -4991,18 +4985,28 @@ subroutine open_boundary_register_restarts(HI, GV, US, OBC, Reg, param_file, res
   endif
 
   if (OBC%oblique_BCs_exist_globally) then
-    allocate(OBC%rx_oblique(HI%isdB:HI%iedB,HI%jsd:HI%jed,GV%ke), source=0.0)
-    allocate(OBC%ry_oblique(HI%isd:HI%ied,HI%jsdB:HI%jedB,GV%ke), source=0.0)
+    allocate(OBC%rx_oblique_u(HI%isdB:HI%iedB,HI%jsd:HI%jed,GV%ke), source=0.0)
+    allocate(OBC%ry_oblique_u(HI%isdB:HI%iedB,HI%jsd:HI%jed,GV%ke), source=0.0)
+    allocate(OBC%cff_normal_u(HI%IsdB:HI%IedB,HI%jsd:HI%jed,GV%ke), source=0.0)
+    allocate(OBC%rx_oblique_v(HI%isd:HI%ied,HI%jsdB:HI%jedB,GV%ke), source=0.0)
+    allocate(OBC%ry_oblique_v(HI%isd:HI%ied,HI%jsdB:HI%jedB,GV%ke), source=0.0)
+    allocate(OBC%cff_normal_v(HI%isd:HI%ied,HI%jsdB:HI%jedB,GV%ke), source=0.0)
 
-    vd(1) = var_desc("rx_oblique", "m2 s-2", "Radiation Speed Squared for EW oblique OBCs", 'u', 'L')
-    vd(2) = var_desc("ry_oblique", "m2 s-2", "Radiation Speed Squared for NS oblique OBCs", 'v', 'L')
-    call register_restart_pair(OBC%rx_oblique, OBC%ry_oblique, vd(1), vd(2), .false., &
+    vd(1) = var_desc("rx_oblique_u", "m2 s-2", "X-Direction Radiation Speed Squared for EW oblique OBCs", 'u', 'L')
+    vd(2) = var_desc("ry_oblique_v", "m2 s-2", "Y-Direction Radiation Speed Squared for NS oblique OBCs", 'v', 'L')
+    call register_restart_pair(OBC%rx_oblique_u, OBC%ry_oblique_v, vd(1), vd(2), .false., &
+                               restart_CS, conversion=US%L_T_to_m_s**2)
+    vd(1) = var_desc("ry_oblique_u", "m2 s-2", "Y-Direction Radiation Speed Squared for EW oblique OBCs", 'u', 'L')
+    vd(2) = var_desc("rx_oblique_v", "m2 s-2", "X-Direction Radiation Speed Squared for NS oblique OBCs", 'v', 'L')
+    call register_restart_pair(OBC%ry_oblique_u, OBC%rx_oblique_v, vd(1), vd(2), .false., &
                                restart_CS, conversion=US%L_T_to_m_s**2)
 
-    allocate(OBC%cff_normal(HI%IsdB:HI%IedB,HI%jsdB:HI%jedB,GV%ke), source=0.0)
-    call register_restart_field(OBC%cff_normal, "cff_normal", .false., restart_CS, &
-             longname="denominator for oblique OBCs", &
-             units="m2 s-2", conversion=US%L_T_to_m_s**2, hor_grid="q")
+    vd(1) = var_desc("norm_oblique_u", "m2 s-2", "Denominator for normalizing EW oblique OBC radiation rates", &
+                     'u', 'L')
+    vd(2) = var_desc("norm_oblique_v", "m2 s-2", "Denominator for normalizing NS oblique OBC radiation rates", &
+                     'v', 'L')
+    call register_restart_pair(OBC%cff_normal_u, OBC%cff_normal_v, vd(1), vd(2), .false., &
+                               restart_CS, conversion=US%L_T_to_m_s**2)
   endif
 
   if (Reg%ntr == 0) return
