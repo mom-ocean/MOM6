@@ -630,6 +630,8 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   real :: visc_rem    ! A work variable that may equal visc_rem_[uv] [nondim]
   real :: vel_prev    ! The previous velocity [L T-1 ~> m s-1].
   real :: dtbt        ! The barotropic time step [T ~> s].
+  real :: dtbt_diag   ! The nominal barotropic time step used in hifreq diagnostics [T ~> s].
+                      ! dtbt_diag = dt/(nstep+nfilter)
   real :: bebt        ! A copy of CS%bebt [nondim].
   real :: be_proj     ! The fractional amount by which velocities are projected
                       ! when project_velocity is true [nondim]. For now be_proj is set
@@ -1694,6 +1696,8 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   if (nstep+nfilter==0 ) call MOM_error(FATAL, &
       "btstep: number of barotropic step (nstep+nfilter) is 0")
 
+  dtbt_diag = dt/(nstep+nfilter)
+
   ! Set up the normalized weights for the filtered velocity.
   sum_wt_vel = 0.0 ; sum_wt_eta = 0.0 ; sum_wt_accel = 0.0 ; sum_wt_trans = 0.0
   allocate(wt_vel(nstep+nfilter)) ; allocate(wt_eta(nstep+nfilter))
@@ -2354,7 +2358,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
     !$OMP end parallel
 
     if (do_hifreq_output) then
-      time_step_end = time_bt_start + real_to_time(n*US%T_to_s*dtbt)
+      time_step_end = time_bt_start + real_to_time(n*US%T_to_s*dtbt_diag)
       call enable_averages(dtbt, time_step_end, CS%diag)
       if (CS%id_ubt_hifreq > 0) call post_data(CS%id_ubt_hifreq, ubt(IsdB:IedB,jsd:jed), CS%diag)
       if (CS%id_vbt_hifreq > 0) call post_data(CS%id_vbt_hifreq, vbt(isd:ied,JsdB:JedB), CS%diag)
