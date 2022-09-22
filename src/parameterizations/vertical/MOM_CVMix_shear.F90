@@ -31,7 +31,7 @@ public calculate_CVMix_shear, CVMix_shear_init, CVMix_shear_is_used, CVMix_shear
 type, public :: CVMix_shear_cs ! TODO: private
   logical :: use_LMD94                      !< Flags to use the LMD94 scheme
   logical :: use_PP81                       !< Flags to use Pacanowski and Philander (JPO 1981)
-  logical :: smooth_ri                      !< If true, smooth Ri using a 1-2-1 filter
+  integer :: n_smooth_ri                    !< Number of times to smooth Ri using a 1-2-1 filter
   real    :: Ri_zero                        !< LMD94 critical Richardson number
   real    :: Nu_zero                        !< LMD94 maximum interior diffusivity
   real    :: KPP_exp                        !< Exponent of unitless factor of diff.
@@ -147,7 +147,7 @@ subroutine calculate_CVMix_shear(u_H, v_H, h, tv, kd, kv, G, GV, US, CS )
 
       if (CS%id_ri_grad > 0) CS%ri_grad(i,j,:) = Ri_Grad(:)
 
-      if (CS%smooth_ri) then
+      if (CS%n_smooth_ri) then
         ! 1) fill Ri_grad in vanished layers with adjacent value
         do k = 2, GV%ke
           if (h(i,j,k) <= epsln) Ri_grad(k) = Ri_grad(k-1)
@@ -274,10 +274,10 @@ logical function CVMix_shear_init(Time, G, GV, US, param_file, diag, CS)
                  "Exponent of unitless factor of diffusivities, "// &
                  "for KPP internal shear mixing scheme." &
                  ,units="nondim", default=3.0)
-  call get_param(param_file, mdl, "SMOOTH_RI", CS%smooth_ri, &
-                 "If true, vertically smooth the Richardson "// &
-                 "number by applying a 1-2-1 filter once.", &
-                 default = .false.)
+  call get_param(param_file, mdl, "N_SMOOTH_RI", CS%n_smooth_ri, &
+                 "If > 0, vertically smooth the Richardson "// &
+                 "number by applying a 1-2-1 filter N_SMOOTH_RI times.", &
+                 default = 0)
   call cvmix_init_shear(mix_scheme=CS%Mix_Scheme, &
                         KPP_nu_zero=CS%Nu_Zero,   &
                         KPP_Ri_zero=CS%Ri_zero,   &
