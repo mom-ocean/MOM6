@@ -72,7 +72,7 @@ subroutine calculate_CVMix_shear(u_H, v_H, h, tv, kd, kv, G, GV, US, CS )
   type(CVMix_shear_cs),                       pointer     :: CS  !< The control structure returned by a previous
                                                                  !! call to CVMix_shear_init.
   ! Local variables
-  integer :: i, j, k, kk, km1
+  integer :: i, j, k, kk, km1, s
   real :: GoRho  ! Gravitational acceleration divided by density [Z T-2 R-1 ~> m4 s-2 kg-1]
   real :: pref   ! Interface pressures [R L2 T-2 ~> Pa]
   real :: DU, DV ! Velocity differences [L T-1 ~> m s-1]
@@ -85,7 +85,8 @@ subroutine calculate_CVMix_shear(u_H, v_H, h, tv, kd, kv, G, GV, US, CS )
   real, dimension(2*(GV%ke)) :: temp_1d ! A column of temperatures [C ~> degC]
   real, dimension(2*(GV%ke)) :: salt_1d ! A column of salinities [S ~> ppt]
   real, dimension(2*(GV%ke)) :: rho_1d  ! A column of densities at interface pressures [R ~> kg m-3]
-  real, dimension(GV%ke+1) :: Ri_Grad !< Gradient Richardson number [nondim]
+  real, dimension(GV%ke+1) :: Ri_Grad   !< Gradient Richardson number [nondim]
+  real, dimension(GV%ke+1) :: Ri_Grad_prev !< Gradient Richardson number before s.th smoothing iteration [nondim]
   real, dimension(GV%ke+1) :: Kvisc   !< Vertical viscosity at interfaces [m2 s-1]
   real, dimension(GV%ke+1) :: Kdiff   !< Diapycnal diffusivity at interfaces [m2 s-1]
   real :: epsln  !< Threshold to identify vanished layers [H ~> m or kg m-2]
@@ -145,9 +146,10 @@ subroutine calculate_CVMix_shear(u_H, v_H, h, tv, kd, kv, G, GV, US, CS )
 
       Ri_grad(GV%ke+1) = Ri_grad(GV%ke)
 
-      if (CS%id_ri_grad_orig > 0) CS%ri_grad_orig(i,j,:) = Ri_Grad(:)
-
       if (CS%n_smooth_ri > 0) then
+
+        if (CS%id_ri_grad_orig > 0) CS%ri_grad_orig(i,j,:) = Ri_Grad(:)
+
         ! 1) fill Ri_grad in vanished layers with adjacent value
         do k = 2, GV%ke
           if (h(i,j,k) <= epsln) Ri_grad(k) = Ri_grad(k-1)
@@ -155,16 +157,23 @@ subroutine calculate_CVMix_shear(u_H, v_H, h, tv, kd, kv, G, GV, US, CS )
 
         Ri_grad(GV%ke+1) = Ri_grad(GV%ke)
 
-        ! 2) vertically smooth Ri with 1-2-1 filter
-        dummy =  0.25 * Ri_grad(2)
-        Ri_grad(GV%ke+1) = Ri_grad(GV%ke)
-        do k = 3, GV%ke
-          Ri_Grad(k) = dummy + 0.5 * Ri_Grad(k) + 0.25 * Ri_grad(k+1)
-          dummy = 0.25 * Ri_grad(k)
+        do s=1,CS%n_smooth_ri
+
+          Ri_Grad_prev(:) = Ri_Grad(:)
+
+          ! 2) vertically smooth Ri with 1-2-1 filter
+          dummy =  0.25 * Ri_grad_prev(2)
+          do k = 3, GV%ke
+            Ri_Grad(k) = dummy + 0.5 * Ri_Grad_prev(k) + 0.25 * Ri_grad_prev(k+1)
+            dummy = 0.25 * Ri_grad(k)
+          enddo
         enddo
 
-        if (CS%id_ri_grad > 0) CS%ri_grad(i,j,:) = Ri_Grad(:)
+        Ri_grad(GV%ke+1) = Ri_grad(GV%ke)
+
       endif
+
+      if (CS%id_ri_grad > 0) CS%ri_grad(i,j,:) = Ri_Grad(:)
 
       do K=1,GV%ke+1
         Kvisc(K) = US%Z2_T_to_m2_s * kv(i,j,K)
@@ -304,10 +313,12 @@ logical function CVMix_shear_init(Time, G, GV, US, param_file, diag, CS)
     allocate( CS%ri_grad( SZI_(G), SZJ_(G), SZK_(GV)+1 ), source=1.e8 )
   endif
 
-  CS%id_ri_grad_orig = register_diag_field('ocean_model', 'ri_grad_shear_orig', &
-       diag%axesTi, Time, &
-      'Original gradient Richarson number, before smoothing was applied. This is '//&
-      'part of the MOM_CVMix_shear module and only available when N_SMOOTH_RI > 0','nondim')
+  if (CS%n_smooth_ri > 0) then
+    CS%id_ri_grad_orig = register_diag_field('ocean_model', 'ri_grad_shear_orig', &
+         diag%axesTi, Time, &
+        'Original gradient Richarson number, before smoothing was applied. This is '//&
+        'part of the MOM_CVMix_shear module and only available when N_SMOOTH_RI > 0','nondim')
+  endif
   if (CS%id_ri_grad_orig > 0 .or. CS%n_smooth_ri > 0) then !Initialize w/ large Richardson value
     allocate( CS%ri_grad_orig( SZI_(G), SZJ_(G), SZK_(GV)+1 ), source=1.e8 )
   endif
