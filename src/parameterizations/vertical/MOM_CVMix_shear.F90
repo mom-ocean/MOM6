@@ -39,14 +39,14 @@ type, public :: CVMix_shear_cs ! TODO: private
   real, allocatable, dimension(:,:,:) :: N2 !< Squared Brunt-Vaisala frequency [T-2 ~> s-2]
   real, allocatable, dimension(:,:,:) :: S2 !< Squared shear frequency [T-2 ~> s-2]
   real, allocatable, dimension(:,:,:) :: ri_grad !< Gradient Richardson number
-  real, allocatable, dimension(:,:,:) :: ri_grad_smooth !< Gradient Richardson number
-                                                        !! after smoothing
+  real, allocatable, dimension(:,:,:) :: ri_grad_orig !< Gradient Richardson number
+                                                        !! before smoothing
   character(10) :: Mix_Scheme               !< Mixing scheme name (string)
 
   type(diag_ctrl), pointer :: diag => NULL() !< Pointer to the diagnostics control structure
   !>@{ Diagnostic handles
   integer :: id_N2 = -1, id_S2 = -1, id_ri_grad = -1, id_kv = -1, id_kd = -1
-  integer :: id_ri_grad_smooth = -1
+  integer :: id_ri_grad_orig = -1
   !>@}
 
 end type CVMix_shear_cs
@@ -145,9 +145,9 @@ subroutine calculate_CVMix_shear(u_H, v_H, h, tv, kd, kv, G, GV, US, CS )
 
       Ri_grad(GV%ke+1) = Ri_grad(GV%ke)
 
-      if (CS%id_ri_grad > 0) CS%ri_grad(i,j,:) = Ri_Grad(:)
+      if (CS%id_ri_grad_orig > 0) CS%ri_grad_orig(i,j,:) = Ri_Grad(:)
 
-      if (CS%n_smooth_ri) then
+      if (CS%n_smooth_ri > 0) then
         ! 1) fill Ri_grad in vanished layers with adjacent value
         do k = 2, GV%ke
           if (h(i,j,k) <= epsln) Ri_grad(k) = Ri_grad(k-1)
@@ -163,7 +163,7 @@ subroutine calculate_CVMix_shear(u_H, v_H, h, tv, kd, kv, G, GV, US, CS )
           dummy = 0.25 * Ri_grad(k)
         enddo
 
-        if (CS%id_ri_grad_smooth > 0) CS%ri_grad_smooth(i,j,:) = Ri_Grad(:)
+        if (CS%id_ri_grad > 0) CS%ri_grad(i,j,:) = Ri_Grad(:)
       endif
 
       do K=1,GV%ke+1
@@ -190,7 +190,7 @@ subroutine calculate_CVMix_shear(u_H, v_H, h, tv, kd, kv, G, GV, US, CS )
   if (CS%id_N2 > 0) call post_data(CS%id_N2, CS%N2, CS%diag)
   if (CS%id_S2 > 0) call post_data(CS%id_S2, CS%S2, CS%diag)
   if (CS%id_ri_grad > 0) call post_data(CS%id_ri_grad, CS%ri_grad, CS%diag)
-  if (CS%id_ri_grad_smooth > 0) call post_data(CS%id_ri_grad_smooth ,CS%ri_grad_smooth, CS%diag)
+  if (CS%id_ri_grad_orig > 0) call post_data(CS%id_ri_grad_orig ,CS%ri_grad_orig, CS%diag)
 
 end subroutine calculate_CVMix_shear
 
@@ -304,11 +304,12 @@ logical function CVMix_shear_init(Time, G, GV, US, param_file, diag, CS)
     allocate( CS%ri_grad( SZI_(G), SZJ_(G), SZK_(GV)+1 ), source=1.e8 )
   endif
 
-  CS%id_ri_grad_smooth = register_diag_field('ocean_model', 'ri_grad_shear_smooth', &
+  CS%id_ri_grad_orig = register_diag_field('ocean_model', 'ri_grad_shear_orig', &
        diag%axesTi, Time, &
-      'Smoothed gradient Richarson number used by MOM_CVMix_shear module','nondim')
-  if (CS%id_ri_grad_smooth > 0) then !Initialize w/ large Richardson value
-    allocate( CS%ri_grad_smooth( SZI_(G), SZJ_(G), SZK_(GV)+1 ), source=1.e8 )
+      'Original gradient Richarson number, before smoothing was applied. This is '//&
+      'part of the MOM_CVMix_shear module and only available when N_SMOOTH_RI > 0','nondim')
+  if (CS%id_ri_grad_orig > 0 .or. CS%n_smooth_ri > 0) then !Initialize w/ large Richardson value
+    allocate( CS%ri_grad_orig( SZI_(G), SZJ_(G), SZK_(GV)+1 ), source=1.e8 )
   endif
 
   CS%id_kd = register_diag_field('ocean_model', 'kd_shear_CVMix', diag%axesTi, Time, &
