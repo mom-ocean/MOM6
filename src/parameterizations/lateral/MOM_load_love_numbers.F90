@@ -3,11 +3,11 @@ module MOM_load_love_numbers
 
 implicit none ; private
 
-public LoveDat
+public Love_Data
 
 integer, parameter :: lmax = 1440
 real, dimension(4, lmax+1), parameter :: &
-  LoveDat = &
+  Love_Data = &
     reshape((/   0.0,  0.0000000000, 0.0000000000   , -1.0000000000   , &
                  1.0, -1.2858777580,-8.9608179370e-1, -1.0000000000   , &
                  2.0, -0.9907994900, 2.3286695000e-2, -3.0516104000e-1, &
@@ -1449,5 +1449,36 @@ real, dimension(4, lmax+1), parameter :: &
               1438.0, -6.1360887000, 1.2760962000e-3, -1.8346203000e-3, &
               1439.0, -6.1363475000, 1.2753368000e-3, -1.8334492000e-3, &
               1440.0, -6.1366054000, 1.2745781000e-3, -1.8322792000e-3  &
-            /), (/4, lmax+1/))
+            /), (/4, lmax+1/)) !< Load Love numbers
+
+!> \namespace mom_load_love_numbers
+!! This module serves the sole purpose of storing load Love number. The Love numbers are used for the self-attraction
+!! and loading (SAL) calculation, which is currently embedded in MOM_tidal_forcing module. This separate module ensures
+!! the readability of the tidal module.
+!!
+!! Variable Love_Data stores the Love numbers up to degree 1440. From left to right: degree, h, l, and k. Data in this
+!! module is imported from SAL calculation in Model for Prediction Across Scales (MPAS)-Ocean developed by Los Alamos
+!! National Laboratory and University of Michigan (Barton et al. (2022) and Brus et al. (2022)). The load Love numbers
+!! are from Wang et al. (2012), which are in the center of mass of total Earth system reference frame (CM). When used,
+!! Love numbers with degree<2 should be converted to center of mass solid Earth reference frame (CF) (Blewitt (2003)),
+!! as in subroutine calc_love_scaling in MOM_tidal_forcing module.
+!!
+!! References:
+!!
+!! Barton, K.N., Nairita, P., Brus, S.R., Petersen, M.R., Arbic, B.K., Engwirda, D., Roberts, A.F., Westerink, J.,
+!! Wirasaet, D., and Schindelegger, M., 2022: Performance of Model for Prediction Across Scales (MPAS) Ocean as a
+!! Global Barotropic Tide Model. Journal of Advances in Modeling Earth Systems, in review.
+!!
+!! Blewitt, G., 2003. Self‐consistency in reference frames, geocenter definition, and surface loading of the solid
+!! Earth. Journal of geophysical research: solid earth, 108(B2).
+!! https://doi.org/10.1029/2002JB002082
+!!
+!! Brus, S.R., Barton, K.N., Nairita, P., Roberts, A.F., Engwirda, D., Petersen, M.R., Arbic, B.K., Wirasaet, D.,
+!! Westerink, J., and Schindelegger, M., 2022: Scalable self attraction and loading calculations for unstructured ocean
+!! models. Ocean Modelling, in review.
+!!
+!! Wang, H., Xiang, L., Jia, L., Jiang, L., Wang, Z., Hu, B. and Gao, P., 2012. Load Love numbers and Green's functions
+!! for elastic Earth models PREM, iasp91, ak135, and modified models with refined crustal structure from Crust 2.0.
+!! Computers & Geosciences, 49, pp.190-199.
+!! https://doi.org/10.1016/j.cageo.2012.06.022
 end module MOM_load_love_numbers
