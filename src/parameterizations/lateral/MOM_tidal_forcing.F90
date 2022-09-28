@@ -79,7 +79,7 @@ type, public :: tidal_forcing_CS ; private
   integer :: sal_sht_Nd     !< Maximum degree for SHT [nodim]
   real, allocatable :: Love_Scaling(:)      !< Love number for each SHT mode [nodim]
   real, allocatable :: Snm_Re(:), & !< Real and imaginary SHT coefficient for SHT SAL
-                       Snm_Im(:)    !! [Z ~> m]
+                       Snm_Im(:)    !< [Z ~> m]
 end type tidal_forcing_CS
 
 integer :: id_clock_tides !< CPU clock for tides
@@ -601,8 +601,7 @@ subroutine calc_love_scaling(nlm, rhoW, rhoE, Love_Scaling)
 
   do m=0,nlm ; do n=m,nlm
     l = order2index(m,nlm)
-    ! Love_Scaling(l+n-m) = (3.0 / real(2*n+1)) * (rhoW / rhoE) * (1.0 + KDat(n+1) - HDat(n+1))
-    Love_Scaling(l+n-m) = (1.0 + KDat(n+1) - HDat(n+1)) / real(2*n+1) * 3.0 * rhoW / rhoE
+    Love_Scaling(l+n-m) = (3.0 / real(2*n+1)) * (rhoW / rhoE) * (1.0 + KDat(n+1) - HDat(n+1))
   enddo ; enddo
 end subroutine calc_love_scaling
 

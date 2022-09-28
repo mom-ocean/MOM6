@@ -5,7 +5,7 @@ implicit none ; private
 
 public Love_Data
 
-integer, parameter :: lmax = 1440
+integer, parameter :: lmax = 1440 !< Maximum degree of the stored Love numbers
 real, dimension(4, lmax+1), parameter :: &
   Love_Data = &
     reshape((/   0.0,  0.0000000000, 0.0000000000   , -1.0000000000   , &

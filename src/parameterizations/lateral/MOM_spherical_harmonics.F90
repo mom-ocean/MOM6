@@ -23,12 +23,14 @@ type, public :: sht_CS ; private
                   !! [lmax=(ndegree+1)*(ndegree+2)/2] [nodim].
   real, allocatable :: cos_clatT(:,:) !< Precomputed cosine of colatitude at the t-cells [nondim].
   real, allocatable :: Pmm(:,:,:) !< Precomputed associated Legendre polynomials (m=n) at the t-cells [nondim].
-  real, allocatable :: cos_lonT(:,:,:), sin_lonT(:,:,:) !< Precomputed exponential factors at the t-cells [nondim].
-  real, allocatable :: cos_lonT_wtd(:,:,:), & !< Precomputed exponential factors at the t-cells weighted by a
-                       sin_lonT_wtd(:,:,:)    !! nondimensionalized cell area [nondim]
-  real, allocatable :: a_recur(:,:), b_recur(:,:) !< Precomputed recurrence coefficients [nondim].
-  real, allocatable :: Snm_Re_raw(:,:,:), & !< 3D array to store un-summed SHT coefficients
-                       Snm_Im_raw(:,:,:)    !! at the t-cells for reproducing sums [same as input variable]
+  real, allocatable :: cos_lonT(:,:,:), & !< Precomputed cosine factors at the t-cells [nondim].
+                       sin_lonT(:,:,:)    !< Precomputed sine factors at the t-cells [nondim].
+  real, allocatable :: cos_lonT_wtd(:,:,:), & !< Precomputed area-weighted cosine factors at the t-cells [nondim]
+                       sin_lonT_wtd(:,:,:)    !< Precomputed area-weighted sine factors at the t-cells [nondim]
+  real, allocatable :: a_recur(:,:), & !< Precomputed recurrence coefficients a [nondim].
+                       b_recur(:,:)    !< Precomputed recurrence coefficients b [nondim].
+  real, allocatable :: Snm_Re_raw(:,:,:), & !< Array to store un-summed SHT coefficients
+                       Snm_Im_raw(:,:,:)    !< at the t-cells for reproducing sums [same as input variable]
   logical :: reprod_sum !< True if use reproducible global sums
 end type sht_CS
 
@@ -45,8 +47,8 @@ subroutine spherical_harmonics_forward(G, CS, var, Snm_Re, Snm_Im, Nd)
   type(sht_CS),          intent(inout) :: CS           !< Control structure for SHT
   real, dimension(SZI_(G),SZJ_(G)), &
                          intent(in)    :: var          !< Input 2-D variable []
-  real,                  intent(out)   :: Snm_Re(:), & !< Output real and imaginary SHT coefficients
-                                          Snm_Im(:)    !! [same as input variable]
+  real,                  intent(out)   :: Snm_Re(:)    !< SHT coefficients for the real modes (cosine)
+  real,                  intent(out)   :: Snm_Im(:)    !< SHT coefficients for the imaginary modes (sine)
   integer,     optional, intent(in)    :: Nd           !< Maximum degree of the spherical harmonics
                                                        !! overriding ndegree in the CS [nondim]
   ! local variables
@@ -141,8 +143,8 @@ end subroutine spherical_harmonics_forward
 subroutine spherical_harmonics_inverse(G, CS, Snm_Re, Snm_Im, var, Nd)
   type(ocean_grid_type), intent(in)  :: G            !< The ocean's grid structure.
   type(sht_CS),          intent(in)  :: CS           !< Control structure for SHT
-  real,                  intent(in)  :: Snm_Re(:), & !< Real and imaginary SHT coefficients with
-                                        Snm_Im(:)    !! any scaling factors such as Love numbers []
+  real,                  intent(in)  :: Snm_Re(:)    !< SHT coefficients for the real modes (cosine)
+  real,                  intent(in)  :: Snm_Im(:)    !< SHT coefficients for the imaginary modes (sine)
   real, dimension(SZI_(G),SZJ_(G)), &
                          intent(out) :: var          !< Output 2-D variable []
   integer,     optional, intent(in)  :: Nd           !< Maximum degree of the spherical harmonics
@@ -269,17 +271,11 @@ subroutine spherical_harmonics_init(G, param_file, CS)
   ! Calculate the diagonal elements of the associated Legendre polynomials (n=m)
   allocate(CS%Pmm(is:ie,js:je,m+1)); CS%Pmm(:,:,:) = 0.0
   do m=0,CS%ndegree
-    ! Pmm_coef = 1.0/(4.0*PI)
-    ! do k=1,m ; Pmm_coef = Pmm_coef * real(2*k+1)/real(2*k); enddo
-    ! Pmm_coef = sqrt(Pmm_coef)
-    ! do j=js,je ; do i=is,ie
-    !   CS%Pmm(i,j,m+1) = Pmm_coef * sin_clatT(i,j)**m
-    ! enddo ; enddo
+    Pmm_coef = 1.0/(4.0*PI)
+    do k=1,m ; Pmm_coef = Pmm_coef * (real(2*k+1) / real(2*k)); enddo
+    Pmm_coef = sqrt(Pmm_coef)
     do j=js,je ; do i=is,ie
-      CS%Pmm(i,j,m+1) = sqrt(1.0/(4.0*PI)) * sin_clatT(i,j)**m
-      do k = 1, m
-        CS%Pmm(i,j,m+1) = CS%Pmm(i,j,m+1) * sqrt(real(2*k+1)/real(2*k))
-      enddo
+      CS%Pmm(i,j,m+1) = Pmm_coef * (sin_clatT(i,j)**m)
     enddo ; enddo
   enddo
 
@@ -338,7 +334,7 @@ end function order2index
 !! for forward and inverse transforms loosely follows Schaeffer (2013).
 !!
 !! In forward transform, a two-dimensional physical field can be projected into a series of spherical harmonics. The
-!! spherical harmonic coefficient of degree n and order m for a field $f(\theta, \phi)$ is calculated as follows:
+!! spherical harmonic coefficient of degree n and order m for a field \f$f(\theta, \phi)\f$ is calculated as follows:
 !! \f[
 !!   f^m_n = \int^{2\pi}_{0}\int^{\pi}_{0}f(\theta,\phi)Y^m_n(\theta,\phi)\sin\theta d\theta d\phi
 !! \f]
@@ -346,8 +342,8 @@ end function order2index
 !! \f[
 !!  Y^m_n(\theta,\phi) = P^m_n(\cos\theta)\exp(im\phi)
 !! \f]
-!! where $P^m_n(\cos \theta)$ is the normalized associated Legendre polynomial of degree n and order m. $\phi$ is the
-!! longitude and $\theta$ is the colatitude.
+!! where \f$P^m_n(\cos \theta)\f$ is the normalized associated Legendre polynomial of degree n and order m. \f$\phi\f$
+!! is the longitude and \f$\theta\f$ is the colatitude.
 !! Or, written in the discretized form:
 !! \f[
 !!  f^m_n = \sum^{Nj}_{0}\sum^{Ni}_{0}f(i,j)Y^m_n(i,j)A(i,j)/r_e^2
