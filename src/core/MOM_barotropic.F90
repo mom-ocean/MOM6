@@ -1061,6 +1061,30 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
     enddo ; enddo
   enddo
 
+  if (apply_OBCs) then
+    do n=1,OBC%number_of_segments
+      if (.not. OBC%segment(n)%on_pe) cycle
+      I = OBC%segment(n)%HI%IsdB ; J = OBC%segment(n)%HI%JsdB
+      if (OBC%segment(n)%is_N_or_S .and. (J >= Jsq-1) .and. (J <= Jeq+1)) then
+        do i = max(Isq-1,OBC%segment(n)%HI%isd), min(Ieq+2,OBC%segment(n)%HI%ied)
+          if (OBC%segment(n)%direction == OBC_DIRECTION_N) then
+            gtot_S(i,j+1) = gtot_S(i,j)
+          else ! (OBC%segment(n)%direction == OBC_DIRECTION_S)
+            gtot_N(i,j) = gtot_N(i,j+1)
+          endif
+        enddo
+      elseif (OBC%segment(n)%is_E_or_W .and. (I >= Isq-1) .and. (I <= Ieq+1)) then
+        do j = max(Jsq-1,OBC%segment(n)%HI%jsd), min(Jeq+2,OBC%segment(n)%HI%jed)
+          if (OBC%segment(n)%direction == OBC_DIRECTION_E) then
+            gtot_W(i+1,j) = gtot_W(i,j)
+          else ! (OBC%segment(n)%direction == OBC_DIRECTION_W)
+            gtot_E(i,j) = gtot_E(i+1,j)
+          endif
+        enddo
+      endif
+    enddo
+  endif
+
   if (CS%tides) then
     call tidal_forcing_sensitivity(G, CS%tides_CSp, det_de)
     if (CS%tidal_sal_bug) then
