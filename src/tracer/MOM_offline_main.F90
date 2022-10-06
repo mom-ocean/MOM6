@@ -5,6 +5,7 @@ module MOM_offline_main
 ! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_ALE,                  only : ALE_CS, ALE_main_offline, ALE_offline_inputs
+use MOM_ALE,                  only : pre_ALE_adjustments, ALE_update_regrid_weights
 use MOM_checksums,            only : hchksum, uvchksum
 use MOM_coms,                 only : reproducing_sum
 use MOM_cpu_clock,            only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
@@ -229,7 +230,10 @@ subroutine offline_advection_ale(fluxes, Time_start, time_interval, G, GV, US, C
   ! Variables used to keep track of layer thicknesses at various points in the code
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: &
       h_new, &   ! Updated layer thicknesses [H ~> m or kg m-2]
+      h_post_remap, &   ! Layer thicknesses after remapping [H ~> m or kg m-2]
       h_vol      ! Layer volumes [H L2 ~> m3 or kg]
+  real :: dzRegrid(SZI_(G),SZJ_(G),SZK_(GV)+1) ! The change in grid interface positions due to regridding,
+                                               ! in the same units as thicknesses [H ~> m or kg m-2]
   integer :: niter, iter
   real    :: Inum_iter    ! The inverse of the number of iterations [nondim]
   character(len=256) :: mesg  ! The text of an error message
@@ -347,7 +351,17 @@ subroutine offline_advection_ale(fluxes, Time_start, time_interval, G, GV, US, C
         call MOM_tracer_chkinv(debug_msg, G, GV, h_new, CS%tracer_reg)
       endif
       call cpu_clock_begin(id_clock_ALE)
-      call ALE_main_offline(G, GV, h_new, CS%tv, CS%tracer_Reg, CS%ALE_CSp, CS%OBC, CS%dt_offline)
+
+      call ALE_update_regrid_weights(CS%dt_offline, CS%ALE_CSp)
+      call pre_ALE_adjustments(G, GV, US, h_new, CS%tv, CS%tracer_Reg, CS%ALE_CSp)
+      ! Adjust the target grids for diagnostics, in case there have been thickness adjustments.
+      ! call diag_update_remap_grids(CS%diag, alt_h=h_new)
+
+      call ALE_main_offline(G, GV, h_new, h_post_remap, dzRegrid, CS%tv, CS%tracer_Reg, &
+                            CS%ALE_CSp, CS%OBC, CS%dt_offline)
+      do k=1,nz ; do j=js-1,je+1 ; do i=is-1,ie+1
+        h_new(i,j,k) = h_post_remap(i,j,k)
+      enddo ; enddo ; enddo
       call cpu_clock_end(id_clock_ALE)
 
       if (CS%debug) then

@@ -52,7 +52,7 @@ use MOM_unit_tests,           only : unit_tests
 ! MOM core modules
 use MOM_ALE,                   only : ALE_init, ALE_end, ALE_main, ALE_CS, adjustGridForIntegrity
 use MOM_ALE,                   only : ALE_getCoordinate, ALE_getCoordinateUnits, ALE_writeCoordinateFile
-use MOM_ALE,                   only : ALE_updateVerticalGridType, ALE_remap_init_conds
+use MOM_ALE,                   only : ALE_updateVerticalGridType, ALE_remap_init_conds, pre_ALE_adjustments
 use MOM_ALE,                   only : ALE_update_regrid_weights, pre_ALE_diagnostics, ALE_register_diags
 use MOM_ALE_sponge,            only : rotate_ALE_sponge, update_ALE_sponge_field
 use MOM_barotropic,            only : Barotropic_CS
@@ -161,7 +161,7 @@ use MOM_offline_main,          only : register_diags_offline_transport, offline_
 use MOM_offline_main,          only : offline_redistribute_residual, offline_diabatic_ale
 use MOM_offline_main,          only : offline_fw_fluxes_into_ocean, offline_fw_fluxes_out_ocean
 use MOM_offline_main,          only : offline_advection_layer, offline_transport_end
-use MOM_ALE,                   only : ale_offline_tracer_final, ALE_main_offline
+use MOM_ALE,                   only : ale_offline_tracer_final
 use MOM_ice_shelf,             only : ice_shelf_CS, ice_shelf_query, initialize_ice_shelf
 use MOM_particles_mod,         only : particles, particles_init, particles_run, particles_save_restart, particles_end
 
@@ -1410,13 +1410,17 @@ subroutine step_MOM_thermo(CS, G, GV, US, u, v, h, tv, fluxes, dtdia, &
                   optional, pointer       :: Waves  !< Container for wave related parameters
                                                     !! the fields in Waves are intent in here.
 
+  real :: h_new(SZI_(G),SZJ_(G),SZK_(GV))      ! Layer thicknesses after regridding [H ~> m or kg m-2]
+  real :: dzRegrid(SZI_(G),SZJ_(G),SZK_(GV)+1) ! The change in grid interface positions due to regridding,
+                                               ! in the same units as thicknesses [H ~> m or kg m-2]
+  logical :: PCM_cell(SZI_(G),SZJ_(G),SZK_(GV)) ! If true, PCM remapping should be used in a cell.
   logical :: use_ice_shelf ! Needed for selecting the right ALE interface.
   logical :: showCallTree
   type(group_pass_type) :: pass_T_S, pass_T_S_h, pass_uv_T_S_h
   integer :: dynamics_stencil  ! The computational stencil for the calculations
                                ! in the dynamic core.
   integer :: halo_sz ! The size of a halo where data must be valid.
-  integer :: is, ie, js, je, nz
+  integer :: i, j, k, is, ie, js, je, nz
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   showCallTree = callTree_showQuery()
@@ -1510,15 +1514,25 @@ subroutine step_MOM_thermo(CS, G, GV, US, u, v, h, tv, fluxes, dtdia, &
       endif
       call cpu_clock_begin(id_clock_ALE)
 
-      call pre_ALE_diagnostics( G, GV, US, h, u, v, tv, CS%ALE_CSp)
+      call pre_ALE_diagnostics(G, GV, US, h, u, v, tv, CS%ALE_CSp)
       call ALE_update_regrid_weights(dtdia, CS%ALE_CSp)
+      call pre_ALE_adjustments(G, GV, US, h, tv, CS%tracer_Reg, CS%ALE_CSp, u, v)
+      ! Adjust the target grids for diagnostics, in case there have been thickness adjustments.
+      call diag_update_remap_grids(CS%diag)
 
       if (use_ice_shelf) then
-        call ALE_main(G, GV, US, h, u, v, tv, CS%tracer_Reg, CS%ALE_CSp, CS%OBC, &
-                      dtdia, CS%frac_shelf_h)
+        call ALE_main(G, GV, US, h, h_new, dzRegrid, u, v, tv, CS%tracer_Reg, CS%ALE_CSp, CS%OBC, &
+                      dtdia, CS%frac_shelf_h, PCM_cell=PCM_cell)
       else
-        call ALE_main(G, GV, US, h, u, v, tv, CS%tracer_Reg, CS%ALE_CSp, CS%OBC, dtdia)
+        call ALE_main(G, GV, US, h, h_new, dzRegrid, u, v, tv, CS%tracer_Reg, CS%ALE_CSp, CS%OBC, &
+                      dtdia, PCM_cell=PCM_cell)
       endif
+
+      ! Replace the old grid with new one.  All remapping must be done by this point in the code.
+      !$OMP parallel do default(shared)
+      do k=1,nz ; do j=js-1,je+1 ; do i=is-1,ie+1
+        h(i,j,k) = h_new(i,j,k)
+      enddo ; enddo ; enddo
 
       if (showCallTree) call callTree_waypoint("finished ALE_main (step_MOM_thermo)")
       call cpu_clock_end(id_clock_ALE)
@@ -1852,12 +1866,16 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
 
-  integer :: i, j, is, ie, js, je, isd, ied, jsd, jed, nz
+  integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz
   integer :: IsdB, IedB, JsdB, JedB
   real    :: dtbt              ! If negative, this specifies the barotropic timestep as a fraction
                                ! of the maximum stable value [nondim].
 
   real, allocatable, dimension(:,:)   :: eta ! free surface height or column mass [H ~> m or kg m-2]
+  real, allocatable, dimension(:,:,:) :: h_new ! Layer thicknesses after regridding [H ~> m or kg m-2]
+  real, allocatable, dimension(:,:,:) :: dzRegrid ! The change in grid interface positions due to regridding,
+                                                ! in the same units as thicknesses [H ~> m or kg m-2]
+  logical, allocatable, dimension(:,:,:) :: PCM_cell ! If true, PCM remapping should be used in a cell.
   type(group_pass_type) :: tmp_pass_uv_T_S_h, pass_uv_T_S_h
 
   real    :: default_val       ! default value for a parameter
@@ -2780,13 +2798,26 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
     endif
     call callTree_waypoint("Calling adjustGridForIntegrity() to remap initial conditions (initialize_MOM)")
     call adjustGridForIntegrity(CS%ALE_CSp, G, GV, CS%h )
+    call pre_ALE_adjustments(G, GV, US, CS%h, CS%tv, CS%tracer_Reg, CS%ALE_CSp, CS%u, CS%v)
+
     call callTree_waypoint("Calling ALE_main() to remap initial conditions (initialize_MOM)")
+    allocate(h_new(isd:ied, jsd:jed, nz), source=0.0)
+    allocate(dzRegrid(isd:ied, jsd:jed, nz+1), source=0.0)
+    allocate(PCM_cell(isd:ied, jsd:jed, nz), source=.false.)
     if (use_ice_shelf) then
-      call ALE_main(G, GV, US, CS%h, CS%u, CS%v, CS%tv, CS%tracer_Reg, CS%ALE_CSp, &
-                    CS%OBC, frac_shelf_h=CS%frac_shelf_h)
+      call ALE_main(G, GV, US, CS%h, h_new, dzRegrid, CS%u, CS%v, CS%tv, CS%tracer_Reg, CS%ALE_CSp, &
+                    CS%OBC, frac_shelf_h=CS%frac_shelf_h, PCM_cell=PCM_cell)
     else
-      call ALE_main( G, GV, US, CS%h, CS%u, CS%v, CS%tv, CS%tracer_Reg, CS%ALE_CSp, CS%OBC)
+      call ALE_main(G, GV, US, CS%h, h_new, dzRegrid, CS%u, CS%v, CS%tv, CS%tracer_Reg, CS%ALE_CSp, &
+                    CS%OBC, PCM_cell=PCM_cell)
     endif
+
+    ! Replace the old grid with new one.  All remapping must be done at this point.
+    !$OMP parallel do default(shared)
+    do k=1,nz ; do j=js-1,je+1 ; do i=is-1,ie+1
+      CS%h(i,j,k) = h_new(i,j,k)
+    enddo ; enddo ; enddo
+    deallocate(h_new, dzRegrid, PCM_cell)
 
     call cpu_clock_begin(id_clock_pass_init)
     call create_group_pass(tmp_pass_uv_T_S_h, CS%u, CS%v, G%Domain)
