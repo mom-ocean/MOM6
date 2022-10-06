@@ -123,12 +123,12 @@ end type
 ! Publicly available functions
 public ALE_init
 public ALE_end
-public ALE_main
-public ALE_main_offline
+public ALE_regrid
 public ALE_offline_inputs
-public ALE_offline_tracer_final
 public ALE_regrid_accelerated
 public ALE_remap_scalar
+public ALE_remap_tracers
+public ALE_remap_velocities
 public ALE_PLM_edge_values
 public TS_PLM_edge_values
 public TS_PPM_edge_values
@@ -166,7 +166,7 @@ subroutine ALE_init( param_file, GV, US, max_depth, CS)
   ! Local variables
   character(len=40) :: mdl = "MOM_ALE" ! This module's name.
   character(len=80) :: string, vel_string ! Temporary strings
-  real              :: filter_shallow_depth, filter_deep_depth
+  real              :: filter_shallow_depth, filter_deep_depth ! Depth ranges of filtering [H ~> m or kg m-2]
   integer :: default_answer_date  ! The default setting for the various ANSWER_DATE flags.
   logical :: default_2018_answers ! The default setting for the various 2018_ANSWERS flags.
   logical :: answers_2018   ! If true, use the order of arithmetic and expressions for remapping
@@ -452,11 +452,9 @@ subroutine pre_ALE_adjustments(G, GV, US, h, tv, Reg, CS, u, v)
 
 end subroutine pre_ALE_adjustments
 
-!> Takes care of (1) building a new grid and (2) remapping all variables between
-!! the old grid and the new grid. The creation of the new grid can be based
-!! on z coordinates, target interface densities, sigma coordinates or any
-!! arbitrary coordinate system.
-subroutine ALE_main( G, GV, US, h, h_new, dzRegrid, u, v, tv, Reg, CS, OBC, dt, frac_shelf_h, PCM_cell)
+!> Takes care of building a new grid. The creation of the new grid can be based on z coordinates,
+!! target interface densities, sigma coordinates or any arbitrary coordinate system.
+subroutine ALE_regrid( G, GV, US, h, h_new, dzRegrid, tv, CS, frac_shelf_h, PCM_cell)
   type(ocean_grid_type),                      intent(in)    :: G   !< Ocean grid informations
   type(verticalGrid_type),                    intent(in)    :: GV  !< Ocean vertical grid structure
   type(unit_scale_type),                      intent(in)    :: US  !< A dimensional unit scaling type
@@ -467,13 +465,8 @@ subroutine ALE_main( G, GV, US, h, h_new, dzRegrid, u, v, tv, Reg, CS, OBC, dt, 
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), intent(out)  :: dzRegrid !< The change in grid interface positions
                                                                    !! due to regridding, in the same units as
                                                                    !! thicknesses [H ~> m or kg m-2]
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), intent(inout) :: u   !< Zonal velocity field [L T-1 ~> m s-1]
-  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), intent(inout) :: v   !< Meridional velocity field [L T-1 ~> m s-1]
   type(thermo_var_ptrs),                      intent(inout) :: tv  !< Thermodynamic variable structure
-  type(tracer_registry_type),                 pointer       :: Reg !< Tracer registry structure
   type(ALE_CS),                               pointer       :: CS  !< Regridding parameters and options
-  type(ocean_OBC_type),                       pointer       :: OBC !< Open boundary structure
-  real,                             optional, intent(in)    :: dt  !< Time step between calls to ALE_main [T ~> s]
   real, dimension(SZI_(G),SZJ_(G)), optional, intent(in)    :: frac_shelf_h !< Fractional ice shelf coverage [nondim]
   logical, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                                     optional, intent(out)   :: PCM_cell !< If true, use PCM remapping in a cell.
@@ -483,7 +476,7 @@ subroutine ALE_main( G, GV, US, h, h_new, dzRegrid, u, v, tv, Reg, CS, OBC, dt, 
 
   showCallTree = callTree_showQuery()
 
-  if (showCallTree) call callTree_enter("ALE_main(), MOM_ALE.F90")
+  if (showCallTree) call callTree_enter("ALE_regrid(), MOM_ALE.F90")
 
   ! Build the new grid and store it in h_new. The old grid is retained as h.
   ! Both are needed for the subsequent remapping of variables.
@@ -495,61 +488,9 @@ subroutine ALE_main( G, GV, US, h, h_new, dzRegrid, u, v, tv, Reg, CS, OBC, dt, 
     call post_data(CS%id_dzRegrid, dzRegrid, CS%diag, alt_h=h_new)
   endif ; endif
 
-  if (showCallTree) call callTree_waypoint("new grid generated (ALE_main)")
+  if (showCallTree) call callTree_leave("ALE_regrid()")
 
-  ! Remap all variables from the old grid h onto the new grid h_new
-  call remap_tracers(CS, G, GV, h, h_new, Reg, showCallTree, dt, PCM_cell=PCM_cell)
-  call remap_velocities(CS, G, GV, h, h_new, u, v, OBC, dzRegrid, debug=showCallTree, dt=dt)
-
-  if (showCallTree) call callTree_leave("ALE_main()")
-
-end subroutine ALE_main
-
-!> Takes care of (1) building a new grid and (2) remapping all variables between
-!! the old grid and the new grid. The creation of the new grid can be based
-!! on z coordinates, target interface densities, sigma coordinates or any
-!! arbitrary coordinate system.
-subroutine ALE_main_offline( G, GV, h, h_new, dzRegrid, tv, Reg, CS, OBC, dt)
-  type(ocean_grid_type),                      intent(in)    :: G   !< Ocean grid informations
-  type(verticalGrid_type),                    intent(in)    :: GV  !< Ocean vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(inout) :: h   !< Current 3D grid obtained after the
-                                                                   !! last time step [H ~> m or kg m-2]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(out)   :: h_new !< Layer thicknesses in 3D grid after
-                                                                   !! regridding [H ~> m or kg m-2]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), intent(out)  :: dzRegrid !< The change in grid interface positions
-                                                                   !! due to regridding, in the same units as
-                                                                   !! thicknesses [H ~> m or kg m-2]
-  type(thermo_var_ptrs),                      intent(inout) :: tv  !< Thermodynamic variable structure
-  type(tracer_registry_type),                 pointer       :: Reg !< Tracer registry structure
-  type(ALE_CS),                               pointer       :: CS  !< Regridding parameters and options
-  type(ocean_OBC_type),                       pointer       :: OBC !< Open boundary structure
-  real,                             optional, intent(in)    :: dt  !< Time step between calls to ALE_main [T ~> s]
-
-  ! Local variables
-  logical :: showCallTree
-
-  showCallTree = callTree_showQuery()
-
-  if (showCallTree) call callTree_enter("ALE_main_offline(), MOM_ALE.F90")
-
-  ! Build new grid. The new grid is stored in h_new. The old grid is h.
-  ! Both are needed for the subsequent remapping of variables.
-  dzRegrid(:,:,:) = 0.0
-  call regridding_main( CS%remapCS, CS%regridCS, G, GV, h, tv, h_new, dzRegrid)
-
-  if (CS%id_dzRegrid>0) then ; if (query_averaging_enabled(CS%diag)) then
-    call post_data(CS%id_dzRegrid, dzRegrid, CS%diag, alt_h=h_new)
-  endif ; endif
-
-  if (showCallTree) call callTree_waypoint("new grid generated (ALE_main)")
-
-  ! Remap all tracers from old grid h onto new grid h_new
-
-  call remap_tracers(CS, G, GV, h, h_new, Reg, debug=CS%show_call_tree, dt=dt)
-
-  if (showCallTree) call callTree_leave("ALE_main_offline()")
-
-end subroutine ALE_main_offline
+end subroutine ALE_regrid
 
 !> Regrid/remap stored fields used for offline tracer integrations. These input fields are assumed to have
 !! the same layer thicknesses at the end of the last offline interval (which should be a Zstar grid). This
@@ -563,7 +504,7 @@ subroutine ALE_offline_inputs(CS, G, GV, h, tv, Reg, uhtr, vhtr, Kd, debug, OBC)
   type(tracer_registry_type),                   pointer       :: Reg   !< Tracer registry structure
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)),   intent(inout) :: uhtr  !< Zonal mass fluxes [H L2 ~> m3 or kg]
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)),   intent(inout) :: vhtr  !< Meridional mass fluxes [H L2 ~> m3 or kg]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1),  intent(inout) :: Kd    !< Input diffusivites [Z2 T-1 ~> m2 s-1]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1),  intent(inout) :: Kd    !< Input diffusivities [Z2 T-1 ~> m2 s-1]
   logical,                                      intent(in   ) :: debug !< If true, then turn checksums
   type(ocean_OBC_type),                         pointer       :: OBC   !< Open boundary structure
   ! Local variables
@@ -571,7 +512,7 @@ subroutine ALE_offline_inputs(CS, G, GV, h, tv, Reg, uhtr, vhtr, Kd, debug, OBC)
   real, dimension(SZI_(G), SZJ_(G), SZK_(GV))   :: h_new    ! Layer thicknesses after regridding [H ~> m or kg m-2]
   real, dimension(SZI_(G), SZJ_(G), SZK_(GV)+1) :: dzRegrid ! The change in grid interface positions [H ~> m or kg m-2]
   real, dimension(SZK_(GV)) :: h_src   ! Source grid thicknesses at velocity points [H ~> m or kg m-2]
-  real, dimension(SZK_(GV)) :: h_dest  ! Destination grid  thicknesses at velocity points [H ~> m or kg m-2]
+  real, dimension(SZK_(GV)) :: h_dest  ! Destination grid thicknesses at velocity points [H ~> m or kg m-2]
   real, dimension(SZK_(GV)) :: temp_vec ! Transports on the destination grid [H L2 ~> m3 or kg]
 
   isc = G%isc ; iec = G%iec ; jsc = G%jsc ; jec = G%jec ; nk = GV%ke
@@ -587,7 +528,7 @@ subroutine ALE_offline_inputs(CS, G, GV, h, tv, Reg, uhtr, vhtr, Kd, debug, OBC)
   if (CS%show_call_tree) call callTree_waypoint("new grid generated (ALE_offline_inputs)")
 
   ! Remap all variables from old grid h onto new grid h_new
-  call remap_tracers(CS, G, GV, h, h_new, Reg, debug=CS%show_call_tree)
+  call ALE_remap_tracers(CS, G, GV, h, h_new, Reg, debug=CS%show_call_tree)
   if (CS%show_call_tree) call callTree_waypoint("state remapped (ALE_inputs)")
 
   ! Reintegrate mass transports from Zstar to the offline vertical coordinate
@@ -624,60 +565,11 @@ subroutine ALE_offline_inputs(CS, G, GV, h, tv, Reg, uhtr, vhtr, Kd, debug, OBC)
 
   ! Copy over the new layer thicknesses
   do k = 1,nk  ; do j = jsc-1,jec+1 ; do i = isc-1,iec+1
-      h(i,j,k) = h_new(i,j,k)
+    h(i,j,k) = h_new(i,j,k)
   enddo ; enddo ; enddo
 
   if (CS%show_call_tree) call callTree_leave("ALE_offline_inputs()")
 end subroutine ALE_offline_inputs
-
-
-!> Remaps all tracers from h onto h_target. This is intended to be called when tracers
-!! are done offline. In the case where transports don't quite conserve, we still want to
-!! make sure that layer thicknesses offline do not drift too far away from the online model
-subroutine ALE_offline_tracer_final( G, GV, h, tv, h_target, Reg, CS, OBC)
-  type(ocean_grid_type),                      intent(in)    :: G   !< Ocean grid informations
-  type(verticalGrid_type),                    intent(in)    :: GV  !< Ocean vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(inout) :: h   !< Current 3D grid obtained after the
-                                                                   !! last time step [H ~> m or kg m-2]
-  type(thermo_var_ptrs),                      intent(inout) :: tv  !< Thermodynamic variable structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(inout) :: h_target !< Current 3D grid obtained after
-                                                                        !! last time step  [H ~> m or kg m-2]
-  type(tracer_registry_type),                 pointer       :: Reg !< Tracer registry structure
-  type(ALE_CS),                               pointer       :: CS  !< Regridding parameters and options
-  type(ocean_OBC_type),                       pointer       :: OBC !< Open boundary structure
-  ! Local variables
-
-  real, dimension(SZI_(G), SZJ_(G), SZK_(GV)+1) :: dzRegrid !< The change in grid interface positions
-  real, dimension(SZI_(G), SZJ_(G), SZK_(GV))   :: h_new    !< Regridded target thicknesses
-  integer :: i, j, k, isc, iec, jsc, jec, nk
-
-  isc = G%isc ; iec = G%iec ; jsc = G%jsc ; jec = G%jec ; nk = GV%ke
-
-  if (CS%show_call_tree) call callTree_enter("ALE_offline_tracer_final(), MOM_ALE.F90")
-
-  ! Need to make sure that h_target is consistent with the current offline ALE confiuration
-  call pre_ALE_adjustments(G, GV, G%US, h_target, tv, Reg, CS)
-
-  call regridding_main( CS%remapCS, CS%regridCS, G, GV, h_target, tv, h_new, dzRegrid)
-
-  if (CS%show_call_tree) call callTree_waypoint("Source and target grids checked (ALE_offline_tracer_final)")
-
-  ! Remap all variables from old grid h onto new grid h_new
-
-  call remap_tracers(CS, G, GV, h, h_new, Reg, debug=CS%show_call_tree)
-
-  if (CS%show_call_tree) call callTree_waypoint("state remapped (ALE_offline_tracer_final)")
-
-  ! Override old grid with new one. The new grid 'h_new' is built in
-  ! one of the 'build_...' routines above.
-  !$OMP parallel do default(shared)
-  do k = 1,nk
-    do j = jsc-1,jec+1 ; do i = isc-1,iec+1
-      h(i,j,k) = h_new(i,j,k)
-    enddo ; enddo
-  enddo
-  if (CS%show_call_tree) call callTree_leave("ALE_offline_tracer_final()")
-end subroutine ALE_offline_tracer_final
 
 
 !> For a state-based coordinate, accelerate the process of regridding by
@@ -707,11 +599,15 @@ subroutine ALE_regrid_accelerated(CS, G, GV, h, tv, n_itt, u, v, OBC, Reg, dt, d
   integer :: i, j, itt, nz
   type(thermo_var_ptrs) :: tv_local ! local/intermediate temp/salt
   type(group_pass_type) :: pass_T_S_h ! group pass if the coordinate has a stencil
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV))         :: h_loc, h_orig ! A working copy of layer thicknesses
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), target :: T, S ! local temporary state
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV))         :: h_loc  ! A working copy of layer thicknesses [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV))         :: h_orig ! The original layer thicknesses [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), target :: T      ! local temporary temperatures [C ~> degC]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), target :: S      ! local temporary salinities [S ~> ppt]
   ! we have to keep track of the total dzInterface if for some reason
   ! we're using the old remapping algorithm for u/v
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1) :: dzInterface, dzIntTotal
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1) :: dzInterface ! Interface height changes within
+                                                             ! an iteration [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1) :: dzIntTotal  ! Cumulative interface position changes [H ~> m or kg m-2]
   real :: h_neglect, h_neglect_edge ! small thicknesses [H ~> m or kg m-2]
 
   nz = GV%ke
@@ -746,7 +642,6 @@ subroutine ALE_regrid_accelerated(CS, G, GV, h, tv, n_itt, u, v, OBC, Reg, dt, d
     h_neglect = GV%kg_m2_to_H * 1.0e-30 ; h_neglect_edge = GV%kg_m2_to_H * 1.0e-10
   endif
 
-
   do itt = 1, n_itt
 
     call do_group_pass(pass_T_S_h, G%domain)
@@ -770,8 +665,8 @@ subroutine ALE_regrid_accelerated(CS, G, GV, h, tv, n_itt, u, v, OBC, Reg, dt, d
   enddo
 
   ! remap all state variables (including those that weren't needed for regridding)
-  call remap_tracers(CS, G, GV, h_orig, h, Reg)
-  call remap_velocities(CS, G, GV, h_orig, h, u, v, OBC, dzIntTotal)
+  call ALE_remap_tracers(CS, G, GV, h_orig, h, Reg)
+  call ALE_remap_velocities(CS, G, GV, h_orig, h, u, v, OBC, dzIntTotal)
 
   ! save total dzregrid for diags if needed?
   if (present(dzRegrid)) dzRegrid(:,:,:) = dzIntTotal(:,:,:)
@@ -781,7 +676,7 @@ end subroutine ALE_regrid_accelerated
 !! new grids. This routine is called during initialization of the model at time=0, to
 !! remap initial conditions to the model grid.  It is also called during a
 !! time step to update the state.
-subroutine remap_tracers(CS, G, GV, h_old, h_new, Reg, debug, dt, PCM_cell)
+subroutine ALE_remap_tracers(CS, G, GV, h_old, h_new, Reg, debug, dt, PCM_cell)
   type(ALE_CS),                              intent(in)    :: CS           !< ALE control structure
   type(ocean_grid_type),                     intent(in)    :: G            !< Ocean grid structure
   type(verticalGrid_type),                   intent(in)    :: GV           !< Ocean vertical grid structure
@@ -823,7 +718,7 @@ subroutine remap_tracers(CS, G, GV, h_old, h_new, Reg, debug, dt, PCM_cell)
     h_neglect = GV%kg_m2_to_H*1.0e-30 ; h_neglect_edge = GV%kg_m2_to_H*1.0e-10
   endif
 
-  if (show_call_tree) call callTree_enter("remap_tracers(), MOM_ALE.F90")
+  if (show_call_tree) call callTree_enter("ALE_remap_tracers(), MOM_ALE.F90")
 
   nz = GV%ke
 
@@ -837,7 +732,7 @@ subroutine remap_tracers(CS, G, GV, h_old, h_new, Reg, debug, dt, PCM_cell)
 
   ! Remap all registered tracers, including temperature and salinity.
   if (ntr>0) then
-    if (show_call_tree) call callTree_waypoint("remapping tracers (remap_tracers)")
+    if (show_call_tree) call callTree_waypoint("remapping tracers (ALE_remap_tracers)")
     !$OMP parallel do default(shared) private(h1,h2,tr_column,Tr,PCM,work_conc,work_cont,work_2d)
     do m=1,ntr ! For each tracer
       Tr => Reg%Tr(m)
@@ -885,7 +780,6 @@ subroutine remap_tracers(CS, G, GV, h_old, h_new, Reg, debug, dt, PCM_cell)
         if (Tr%id_remap_cont > 0) then
           call post_data(Tr%id_remap_cont, work_cont, CS%diag)
         endif
-  nz = GV%ke
 
         if (Tr%id_remap_cont_2d > 0) then
           do j = G%jsc,G%jec ; do i = G%isc,G%iec
@@ -910,16 +804,16 @@ subroutine remap_tracers(CS, G, GV, h_old, h_new, Reg, debug, dt, PCM_cell)
     call post_data(CS%id_vert_remap_h_tendency, work_cont, CS%diag)
   endif
 
-  if (show_call_tree) call callTree_leave("remap_tracers(), MOM_ALE.F90")
+  if (show_call_tree) call callTree_leave("ALE_remap_tracers(), MOM_ALE.F90")
 
-end subroutine remap_tracers
+end subroutine ALE_remap_tracers
 
 !> This routine remaps velocity components between the old and the new grids,
 !! with thicknesses at velocity points taken to be arithmetic averages of tracer thicknesses.
 !! This routine may be called during initialization of the model at time=0, to
 !! remap initial conditions to the model grid.  It is also called during a
 !! time step to update the state.
-subroutine remap_velocities(CS, G, GV, h_old, h_new, u, v, OBC, dzInterface, debug, dt)
+subroutine ALE_remap_velocities(CS, G, GV, h_old, h_new, u, v, OBC, dzInterface, debug, dt)
   type(ALE_CS),                              intent(in)    :: CS           !< ALE control structure
   type(ocean_grid_type),                     intent(in)    :: G            !< Ocean grid structure
   type(verticalGrid_type),                   intent(in)    :: GV           !< Ocean vertical grid structure
@@ -956,12 +850,12 @@ subroutine remap_velocities(CS, G, GV, h_old, h_new, u, v, OBC, dzInterface, deb
 
   show_call_tree = .false.
   if (present(debug)) show_call_tree = debug
-  if (show_call_tree) call callTree_enter("remap_velocities()")
+  if (show_call_tree) call callTree_enter("ALE_remap_velocities()")
 
   ! If remap_uv_using_old_alg is .true. and u or v is requested, then we must have dzInterface. Otherwise,
   ! u and v can be remapped without dzInterface
   if (CS%remap_uv_using_old_alg .and. .not.present(dzInterface) )  call MOM_error(FATAL, &
-        "remap_velocities: dzInterface must be present if using old algorithm.")
+        "ALE_remap_velocities: dzInterface must be present if using old algorithm.")
 
   if (CS%answer_date >= 20190101) then
     h_neglect = GV%H_subroundoff ; h_neglect_edge = GV%H_subroundoff
@@ -1028,7 +922,7 @@ subroutine remap_velocities(CS, G, GV, h_old, h_new, u, v, OBC, dzInterface, deb
     endif ; enddo ; enddo
   endif
 
-  if (show_call_tree) call callTree_waypoint("u remapped (remap_velocities)")
+  if (show_call_tree) call callTree_waypoint("u remapped (ALE_remap_velocities)")
 
   ! Remap v velocity component
   if ( .true. ) then
@@ -1075,13 +969,13 @@ subroutine remap_velocities(CS, G, GV, h_old, h_new, u, v, OBC, dzInterface, deb
     endif ; enddo ; enddo
   endif
 
-  if (show_call_tree) call callTree_waypoint("v remapped (remap_velocities)")
-  if (show_call_tree) call callTree_leave("remap_velocities()")
+  if (show_call_tree) call callTree_waypoint("v remapped (ALE_remap_velocities)")
+  if (show_call_tree) call callTree_leave("ALE_remap_velocities()")
 
-end subroutine remap_velocities
+end subroutine ALE_remap_velocities
 
 
-!> Mask out thicknesses to 0 when their runing sum exceeds a specified value.
+!> Mask out thicknesses to 0 when their running sum exceeds a specified value.
 subroutine apply_partial_cell_mask(h1, h_mask)
   real, dimension(:), intent(inout) :: h1 !< A column of thicknesses to be masked out after their
                                           !! running vertical sum exceeds h_mask [H ~> m or kg m-2]
@@ -1141,10 +1035,11 @@ subroutine ALE_remap_scalar(CS, G, GV, nk_src, h_src, s_src, h_dst, s_dst, all_c
   integer,                                 intent(in)    :: nk_src    !< Number of levels on source grid
   real, dimension(SZI_(G),SZJ_(G),nk_src), intent(in)    :: h_src     !< Level thickness of source grid
                                                                       !! [H ~> m or kg m-2]
-  real, dimension(SZI_(G),SZJ_(G),nk_src), intent(in)    :: s_src     !< Scalar on source grid
+  real, dimension(SZI_(G),SZJ_(G),nk_src), intent(in)    :: s_src     !< Scalar on source grid, in arbitrary units [A]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),intent(in)   :: h_dst     !< Level thickness of destination grid
                                                                       !! [H ~> m or kg m-2]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),intent(inout) :: s_dst    !< Scalar on destination grid
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),intent(inout) :: s_dst    !< Scalar on destination grid, in the same
+                                                                      !! arbitrary units as s_src [A]
   logical, optional,                       intent(in)    :: all_cells !< If false, only reconstruct for
                                                                       !! non-vanished cells. Use all vanished
                                                                       !! layers otherwise (default).
@@ -1158,8 +1053,8 @@ subroutine ALE_remap_scalar(CS, G, GV, nk_src, h_src, s_src, h_dst, s_dst, all_c
                                                                       !! for remapping
   ! Local variables
   integer :: i, j, k, n_points
-  real :: dx(GV%ke+1)
-  real :: h_neglect, h_neglect_edge
+  real :: dx(GV%ke+1) ! Change in interface position [H ~> m or kg m-2]
+  real :: h_neglect, h_neglect_edge  ! Tiny thicknesses used in remapping [H ~> m or kg m-2]
   logical :: ignore_vanished_layers, use_remapping_core_w, use_2018_remap
 
   ignore_vanished_layers = .false.
@@ -1238,18 +1133,18 @@ subroutine ALE_PLM_edge_values( CS, G, GV, h, Q, bdry_extrap, Q_t, Q_b )
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(in)    :: h    !< layer thickness [H ~> m or kg m-2]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
-                           intent(in)    :: Q    !< 3d scalar array
+                           intent(in)    :: Q    !< 3d scalar array, in arbitrary units [A]
   logical,                 intent(in)    :: bdry_extrap !< If true, use high-order boundary
                                                  !! extrapolation within boundary cells
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
-                           intent(inout) :: Q_t  !< Scalar at the top edge of each layer
+                           intent(inout) :: Q_t  !< Scalar at the top edge of each layer [A]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
-                           intent(inout) :: Q_b  !< Scalar at the bottom edge of each layer
+                           intent(inout) :: Q_b  !< Scalar at the bottom edge of each layer [A]
   ! Local variables
   integer :: i, j, k
-  real :: slp(GV%ke)
-  real :: mslp
-  real :: h_neglect
+  real :: slp(GV%ke) ! Tracer slope times the cell width [A]
+  real :: mslp       ! Monotonized tracer slope times the cell width [A]
+  real :: h_neglect  ! Tiny thicknesses used in remapping [H ~> m or kg m-2]
 
   if (CS%answer_date >= 20190101) then
     h_neglect = GV%H_subroundoff
@@ -1297,13 +1192,13 @@ subroutine TS_PPM_edge_values( CS, S_t, S_b, T_t, T_b, G, GV, tv, h, bdry_extrap
   type(verticalGrid_type), intent(in)    :: GV   !< Ocean vertical grid structure
   type(ALE_CS),            intent(inout) :: CS   !< module control structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
-                           intent(inout) :: S_t  !< Salinity at the top edge of each layer
+                           intent(inout) :: S_t  !< Salinity at the top edge of each layer [S ~> ppt]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
-                           intent(inout) :: S_b  !< Salinity at the bottom edge of each layer
+                           intent(inout) :: S_b  !< Salinity at the bottom edge of each layer [S ~> ppt]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
-                           intent(inout) :: T_t  !< Temperature at the top edge of each layer
+                           intent(inout) :: T_t  !< Temperature at the top edge of each layer [C ~> degC]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
-                           intent(inout) :: T_b  !< Temperature at the bottom edge of each layer
+                           intent(inout) :: T_b  !< Temperature at the bottom edge of each layer [C ~> degC]
   type(thermo_var_ptrs),   intent(in)    :: tv   !< thermodynamics structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(in)    :: h    !< layer thicknesses [H ~> m or kg m-2]
@@ -1402,7 +1297,9 @@ end subroutine ALE_initRegridding
 function ALE_getCoordinate( CS )
   type(ALE_CS), pointer    :: CS                  !< module control structure
 
-  real, dimension(CS%nk+1) :: ALE_getCoordinate
+  real, dimension(CS%nk+1) :: ALE_getCoordinate !< The coordinate positions, in the appropriate units
+                                                !! of the target coordinate, e.g. [Z ~> m] for z*,
+                                                !! non-dimensional for sigma, etc.
   ALE_getCoordinate(:) = getCoordinateInterfaces( CS%regridCS, undo_scaling=.true. )
 
 end function ALE_getCoordinate
@@ -1432,7 +1329,7 @@ subroutine ALE_update_regrid_weights( dt, CS )
   real,         intent(in) :: dt !< Time-step used between ALE calls [T ~> s]
   type(ALE_CS), pointer    :: CS !< ALE control structure
   ! Local variables
-  real :: w  ! An implicit weighting estimate.
+  real :: w  ! An implicit weighting estimate [nondim]
 
   if (associated(CS)) then
     w = 0.0
@@ -1459,7 +1356,7 @@ subroutine ALE_updateVerticalGridType(CS, GV)
   GV%zAxisUnits = getCoordinateUnits( CS%regridCS )
   GV%zAxisLongName = getCoordinateShortName( CS%regridCS )
   GV%direction = -1 ! Because of ferret in z* mode. Need method to set
-                    ! as function of coordinae mode.
+                    ! as function of coordinate mode.
 
 end subroutine ALE_updateVerticalGridType
 

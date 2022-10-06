@@ -50,9 +50,10 @@ use MOM_time_manager,         only : operator(>=), operator(==), increment_date
 use MOM_unit_tests,           only : unit_tests
 
 ! MOM core modules
-use MOM_ALE,                   only : ALE_init, ALE_end, ALE_main, ALE_CS, adjustGridForIntegrity
+use MOM_ALE,                   only : ALE_init, ALE_end, ALE_regrid, ALE_CS, adjustGridForIntegrity
 use MOM_ALE,                   only : ALE_getCoordinate, ALE_getCoordinateUnits, ALE_writeCoordinateFile
 use MOM_ALE,                   only : ALE_updateVerticalGridType, ALE_remap_init_conds, pre_ALE_adjustments
+use MOM_ALE,                   only : ALE_remap_tracers, ALE_remap_velocities
 use MOM_ALE,                   only : ALE_update_regrid_weights, pre_ALE_diagnostics, ALE_register_diags
 use MOM_ALE_sponge,            only : rotate_ALE_sponge, update_ALE_sponge_field
 use MOM_barotropic,            only : Barotropic_CS
@@ -161,7 +162,6 @@ use MOM_offline_main,          only : register_diags_offline_transport, offline_
 use MOM_offline_main,          only : offline_redistribute_residual, offline_diabatic_ale
 use MOM_offline_main,          only : offline_fw_fluxes_into_ocean, offline_fw_fluxes_out_ocean
 use MOM_offline_main,          only : offline_advection_layer, offline_transport_end
-use MOM_ALE,                   only : ale_offline_tracer_final
 use MOM_ice_shelf,             only : ice_shelf_CS, ice_shelf_query, initialize_ice_shelf
 use MOM_particles_mod,         only : particles, particles_init, particles_run, particles_save_restart, particles_end
 
@@ -1388,7 +1388,7 @@ subroutine step_MOM_tracer_dyn(CS, G, GV, US, h, Time_local)
 end subroutine step_MOM_tracer_dyn
 
 !> MOM_step_thermo orchestrates the thermodynamic time stepping and vertical
-!! remapping, via calls to diabatic (or adiabatic) and ALE_main.
+!! remapping, via calls to diabatic (or adiabatic) and ALE_regrid.
 subroutine step_MOM_thermo(CS, G, GV, US, u, v, h, tv, fluxes, dtdia, &
                            Time_end_thermo, update_BBL, Waves)
   type(MOM_control_struct), intent(inout) :: CS     !< Master MOM control structure
@@ -1491,7 +1491,7 @@ subroutine step_MOM_thermo(CS, G, GV, US, u, v, h, tv, fluxes, dtdia, &
 
     ! Regridding/remapping is done here, at end of thermodynamics time step
     ! (that may comprise several dynamical time steps)
-    ! The routine 'ALE_main' can be found in 'MOM_ALE.F90'.
+    ! The routine 'ALE_regrid' can be found in 'MOM_ALE.F90'.
     if ( CS%use_ALE_algorithm ) then
       call enable_averages(dtdia, Time_end_thermo, CS%diag)
 !         call pass_vector(u, v, G%Domain)
@@ -1516,17 +1516,21 @@ subroutine step_MOM_thermo(CS, G, GV, US, u, v, h, tv, fluxes, dtdia, &
 
       call pre_ALE_diagnostics(G, GV, US, h, u, v, tv, CS%ALE_CSp)
       call ALE_update_regrid_weights(dtdia, CS%ALE_CSp)
+      ! Do any necessary adjustments ot the state prior to remapping.
       call pre_ALE_adjustments(G, GV, US, h, tv, CS%tracer_Reg, CS%ALE_CSp, u, v)
       ! Adjust the target grids for diagnostics, in case there have been thickness adjustments.
       call diag_update_remap_grids(CS%diag)
 
       if (use_ice_shelf) then
-        call ALE_main(G, GV, US, h, h_new, dzRegrid, u, v, tv, CS%tracer_Reg, CS%ALE_CSp, CS%OBC, &
-                      dtdia, CS%frac_shelf_h, PCM_cell=PCM_cell)
+        call ALE_regrid(G, GV, US, h, h_new, dzRegrid, tv, CS%ALE_CSp, CS%frac_shelf_h, PCM_cell)
       else
-        call ALE_main(G, GV, US, h, h_new, dzRegrid, u, v, tv, CS%tracer_Reg, CS%ALE_CSp, CS%OBC, &
-                      dtdia, PCM_cell=PCM_cell)
+        call ALE_regrid(G, GV, US, h, h_new, dzRegrid, tv, CS%ALE_CSp, PCM_cell=PCM_cell)
       endif
+
+      if (showCallTree) call callTree_waypoint("new grid generated")
+      ! Remap all variables from the old grid h onto the new grid h_new
+      call ALE_remap_tracers(CS%ALE_CSp, G, GV, h, h_new, CS%tracer_Reg, showCallTree, dtdia, PCM_cell)
+      call ALE_remap_velocities(CS%ALE_CSp, G, GV, h, h_new, u, v, CS%OBC, dzRegrid, showCallTree, dtdia)
 
       ! Replace the old grid with new one.  All remapping must be done by this point in the code.
       !$OMP parallel do default(shared)
@@ -1534,7 +1538,7 @@ subroutine step_MOM_thermo(CS, G, GV, US, u, v, h, tv, fluxes, dtdia, &
         h(i,j,k) = h_new(i,j,k)
       enddo ; enddo ; enddo
 
-      if (showCallTree) call callTree_waypoint("finished ALE_main (step_MOM_thermo)")
+      if (showCallTree) call callTree_waypoint("finished ALE_regrid (step_MOM_thermo)")
       call cpu_clock_end(id_clock_ALE)
     endif   ! endif for the block "if ( CS%use_ALE_algorithm )"
 
@@ -1633,13 +1637,16 @@ subroutine step_offline(forces, fluxes, sfc_state, Time_start, time_interval, CS
   logical :: do_vertical   !< If enough time has elapsed, do the diabatic tracer sources/sinks
   logical :: adv_converged !< True if all the horizontal fluxes have been used
 
+  real, allocatable, dimension(:,:,:) :: h_new    ! Layer thicknesses after regridding [H ~> m or kg m-2]
+  real, allocatable, dimension(:,:,:) :: dzRegrid ! The change in grid interface positions due to regridding,
+                                                  ! in the same units as thicknesses [H ~> m or kg m-2]
   real :: dt_offline          ! The offline timestep for advection [T ~> s]
   real :: dt_offline_vertical ! The offline timestep for vertical fluxes and remapping [T ~> s]
   logical :: skip_diffusion
 
   type(time_type), pointer :: accumulated_time => NULL()
   type(time_type), pointer :: vertical_time => NULL()
-  integer :: is, ie, js, je, isd, ied, jsd, jed
+  integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz
 
   ! 3D pointers
   real, dimension(:,:,:), pointer :: &
@@ -1654,7 +1661,7 @@ subroutine step_offline(forces, fluxes, sfc_state, Time_start, time_interval, CS
   ! Grid-related pointer assignments
   G => CS%G ; GV => CS%GV ; US => CS%US
 
-  is  = G%isc  ; ie  = G%iec  ; js  = G%jsc  ; je  = G%jec
+  is  = G%isc  ; ie  = G%iec  ; js  = G%jsc  ; je  = G%jec ; nz = GV%ke
   isd = G%isd  ; ied = G%ied  ; jsd = G%jsd  ; jed = G%jed
 
   call cpu_clock_begin(id_clock_offline_tracer)
@@ -1665,19 +1672,11 @@ subroutine step_offline(forces, fluxes, sfc_state, Time_start, time_interval, CS
   call enable_averaging(time_interval, Time_end, CS%diag)
 
   ! Check to see if this is the first iteration of the offline interval
-  if (accumulated_time == real_to_time(0.0)) then
-    first_iter = .true.
-  else ! This is probably unnecessary but is used to guard against unwanted behavior
-    first_iter = .false.
-  endif
+  first_iter = (accumulated_time == real_to_time(0.0))
 
   ! Check to see if vertical tracer functions should be done
-  if (first_iter .or. (accumulated_time >= vertical_time)) then
-    do_vertical = .true.
-    vertical_time = accumulated_time + real_to_time(US%T_to_s*dt_offline_vertical)
-  else
-    do_vertical = .false.
-  endif
+  do_vertical = (first_iter .or. (accumulated_time >= vertical_time))
+  if (do_vertical) vertical_time = accumulated_time + real_to_time(US%T_to_s*dt_offline_vertical)
 
   ! Increment the amount of time elapsed since last read and check if it's time to roll around
   accumulated_time = accumulated_time + real_to_time(time_interval)
@@ -1756,7 +1755,28 @@ subroutine step_offline(forces, fluxes, sfc_state, Time_start, time_interval, CS
       ! Call ALE one last time to make sure that tracers are remapped onto the layer thicknesses
       ! stored from the forward run
       call cpu_clock_begin(id_clock_ALE)
-      call ALE_offline_tracer_final( G, GV, CS%h, CS%tv, h_end, CS%tracer_Reg, CS%ALE_CSp, CS%OBC)
+
+      ! Do any necessary adjustments ot the state prior to remapping.
+      call pre_ALE_adjustments(G, GV, US, h_end, CS%tv, CS%tracer_Reg, CS%ALE_CSp)
+
+      allocate(h_new(isd:ied, jsd:jed, nz), source=0.0)
+      allocate(dzRegrid(isd:ied, jsd:jed, nz+1), source=0.0)
+
+      ! Generate the new grid based on the tracer grid at the end of the interval.
+      call ALE_regrid(G, GV, US, h_end, h_new, dzRegrid, CS%tv, CS%ALE_CSp)
+
+      ! Remap the tracers from the previous tracer grid onto the new grid.  The thicknesses that
+      ! are used are intended to ensure that in the case where transports don't quite conserve,
+      ! the offline layer thicknesses do not drift too far away from the online model.
+      call ALE_remap_tracers(CS%ALE_CSp, G, GV, CS%h, h_new, CS%tracer_Reg, debug=CS%debug)
+
+      ! Update the tracer grid.
+      do k=1,nz ; do j=js-1,je+1 ; do i=is-1,ie+1
+        CS%h(i,j,k) = h_new(i,j,k)
+      enddo ; enddo ; enddo
+
+      deallocate(h_new, dzRegrid)
+
       call cpu_clock_end(id_clock_ALE)
       call pass_var(CS%h, G%Domain)
     endif
@@ -1872,9 +1892,9 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
                                ! of the maximum stable value [nondim].
 
   real, allocatable, dimension(:,:)   :: eta ! free surface height or column mass [H ~> m or kg m-2]
-  real, allocatable, dimension(:,:,:) :: h_new ! Layer thicknesses after regridding [H ~> m or kg m-2]
+  real, allocatable, dimension(:,:,:) :: h_new    ! Layer thicknesses after regridding [H ~> m or kg m-2]
   real, allocatable, dimension(:,:,:) :: dzRegrid ! The change in grid interface positions due to regridding,
-                                                ! in the same units as thicknesses [H ~> m or kg m-2]
+                                                  ! in the same units as thicknesses [H ~> m or kg m-2]
   logical, allocatable, dimension(:,:,:) :: PCM_cell ! If true, PCM remapping should be used in a cell.
   type(group_pass_type) :: tmp_pass_uv_T_S_h, pass_uv_T_S_h
 
@@ -2800,17 +2820,20 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
     call adjustGridForIntegrity(CS%ALE_CSp, G, GV, CS%h )
     call pre_ALE_adjustments(G, GV, US, CS%h, CS%tv, CS%tracer_Reg, CS%ALE_CSp, CS%u, CS%v)
 
-    call callTree_waypoint("Calling ALE_main() to remap initial conditions (initialize_MOM)")
+    call callTree_waypoint("Calling ALE_regrid() to remap initial conditions (initialize_MOM)")
     allocate(h_new(isd:ied, jsd:jed, nz), source=0.0)
     allocate(dzRegrid(isd:ied, jsd:jed, nz+1), source=0.0)
     allocate(PCM_cell(isd:ied, jsd:jed, nz), source=.false.)
     if (use_ice_shelf) then
-      call ALE_main(G, GV, US, CS%h, h_new, dzRegrid, CS%u, CS%v, CS%tv, CS%tracer_Reg, CS%ALE_CSp, &
-                    CS%OBC, frac_shelf_h=CS%frac_shelf_h, PCM_cell=PCM_cell)
+      call ALE_regrid(G, GV, US, CS%h, h_new, dzRegrid, CS%tv, CS%ALE_CSp, CS%frac_shelf_h, PCM_cell)
     else
-      call ALE_main(G, GV, US, CS%h, h_new, dzRegrid, CS%u, CS%v, CS%tv, CS%tracer_Reg, CS%ALE_CSp, &
-                    CS%OBC, PCM_cell=PCM_cell)
+      call ALE_regrid(G, GV, US, CS%h, h_new, dzRegrid, CS%tv, CS%ALE_CSp, PCM_cell=PCM_cell)
     endif
+
+    if (callTree_showQuery()) call callTree_waypoint("new grid generated")
+    ! Remap all variables from the old grid h onto the new grid h_new
+    call ALE_remap_tracers(CS%ALE_CSp, G, GV, CS%h, h_new, CS%tracer_Reg, CS%debug, PCM_cell=PCM_cell)
+    call ALE_remap_velocities(CS%ALE_CSp, G, GV, CS%h, h_new, CS%u, CS%v, CS%OBC, dzRegrid, debug=CS%debug)
 
     ! Replace the old grid with new one.  All remapping must be done at this point.
     !$OMP parallel do default(shared)
