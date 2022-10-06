@@ -12,7 +12,7 @@ module MOM_ALE
 
 use MOM_debugging,        only : check_column_integrals
 use MOM_diag_mediator,    only : register_diag_field, post_data, diag_ctrl
-use MOM_diag_mediator,    only : time_type, diag_update_remap_grids
+use MOM_diag_mediator,    only : time_type, diag_update_remap_grids, query_averaging_enabled
 use MOM_diag_vkernels,    only : interpolate_column, reintegrate_column
 use MOM_domains,          only : create_group_pass, do_group_pass, group_pass_type
 use MOM_error_handler,    only : MOM_error, FATAL, WARNING
@@ -491,13 +491,15 @@ subroutine ALE_main( G, GV, US, h, h_new, dzRegrid, u, v, tv, Reg, CS, OBC, dt, 
   call regridding_main( CS%remapCS, CS%regridCS, G, GV, h, tv, h_new, dzRegrid, &
                         frac_shelf_h=frac_shelf_h, PCM_cell=PCM_cell)
 
+  if (CS%id_dzRegrid>0) then ; if (query_averaging_enabled(CS%diag)) then
+    call post_data(CS%id_dzRegrid, dzRegrid, CS%diag, alt_h=h_new)
+  endif ; endif
+
   if (showCallTree) call callTree_waypoint("new grid generated (ALE_main)")
 
   ! Remap all variables from the old grid h onto the new grid h_new
   call remap_tracers(CS, G, GV, h, h_new, Reg, showCallTree, dt, PCM_cell=PCM_cell)
   call remap_velocities(CS, G, GV, h, h_new, u, v, OBC, dzRegrid, debug=showCallTree, dt=dt)
-
-  if (CS%id_dzRegrid>0 .and. present(dt)) call post_data(CS%id_dzRegrid, dzRegrid, CS%diag, alt_h=h_new)
 
   if (showCallTree) call callTree_leave("ALE_main()")
 
@@ -535,13 +537,15 @@ subroutine ALE_main_offline( G, GV, h, h_new, dzRegrid, tv, Reg, CS, OBC, dt)
   dzRegrid(:,:,:) = 0.0
   call regridding_main( CS%remapCS, CS%regridCS, G, GV, h, tv, h_new, dzRegrid)
 
+  if (CS%id_dzRegrid>0) then ; if (query_averaging_enabled(CS%diag)) then
+    call post_data(CS%id_dzRegrid, dzRegrid, CS%diag, alt_h=h_new)
+  endif ; endif
+
   if (showCallTree) call callTree_waypoint("new grid generated (ALE_main)")
 
   ! Remap all tracers from old grid h onto new grid h_new
 
   call remap_tracers(CS, G, GV, h, h_new, Reg, debug=CS%show_call_tree, dt=dt)
-
-  if (CS%id_dzRegrid>0 .and. present(dt)) call post_data(CS%id_dzRegrid, dzRegrid, CS%diag, alt_h=h_new)
 
   if (showCallTree) call callTree_leave("ALE_main_offline()")
 
