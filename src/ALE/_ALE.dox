@@ -1,6 +1,6 @@
 /*! \page ALE Vertical Lagrangian method: conceptual
 
-\section section_ALE Lagrangian and ALE
+\subsection section_ALE Lagrangian and ALE
 
 As discussed by Adcroft and Hallberg (2008) \cite adcroft2006 and
 Griffies, Adcroft and Hallberg (2020) \cite Griffies_Adcroft_Hallberg2020,
@@ -48,7 +48,7 @@ state is represented. However, any numerical realization incurs
 interpolation inaccuracies that lead to unphysical (spurious) state
 changes.
 
-\section section_ALE_MOM Vertical Lagrangian regrid/remap method
+\subsection section_ALE_MOM Vertical Lagrangian regrid/remap method
 
 We now get a bit more specific to the vertical Lagrangian method.
 For this purpose, recall recall the basic dynamical equations (those
@@ -113,7 +113,7 @@ spurious mixing, the remapping step makes use of the high order
 accurate methods developed by \cite white2008 and \cite white2009.
 
 
-\section section_ALE_MOM_numerics Outlining the numerical algorithm
+\subsection section_ALE_MOM_numerics Outlining the numerical algorithm
 
 The underlying algorithm for treatment of the vertical can be related
 to operator-splitting of the underbraced terms in the above equations.

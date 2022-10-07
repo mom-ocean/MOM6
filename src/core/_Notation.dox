@@ -1,6 +1,6 @@
 /*! \page Notation Notation for equations
 
-\section Symbols Symbols for variables
+\subsubsection Symbols Symbols for variables
 
 \f$z\f$ refers to geopotential elevation (or height), increasing
 upward and with \f$z=0\f$ defining the resting ocean surface.  Much of
@@ -39,7 +39,7 @@ used in the Boussinesq equation of state.
 
 
 
-\section vector_notation Vector notation
+\subsubsection vector_notation Vector notation
 
 The three-dimensional velocity vector is denoted \f$\boldsymbol{v}\f$
 and it is decomposed into its horizontal and vertical components according to
