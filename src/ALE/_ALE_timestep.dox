@@ -1,6 +1,6 @@
 /*! \page ALE_Timestep Vertical Lagrangian method in pictures
 
-\subsection section_ALE_remap Graphical explanation of vertical Lagrangian method
+\section section_ALE_remap Graphical explanation of vertical Lagrangian method 
 
 Vertical Lagrangian regridding/remapping is not a timestep method in
 the traditional sense. Rather, it is a sequence of operations
