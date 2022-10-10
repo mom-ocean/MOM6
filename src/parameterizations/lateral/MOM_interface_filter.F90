@@ -284,7 +284,7 @@ subroutine filter_interface(h, e, Lsm2_u, Lsm2_v, uhD, vhD, G, GV, US, halo_size
     do I=is-1,ie ; uhtot(I,j) = 0.0 ; enddo
     do K=nz,2,-1
       do I=is-1,ie
-        Slope = ((e(i,j,K)-e(i+1,j,K))*G%IdxCu(I,j)) * G%mask2dCu(I,j)
+        Slope = ((e(i,j,K)-e(i+1,j,K))*G%IdxCu(I,j)) * G%OBCmaskCu(I,j)
 
         Sfn_est = (Lsm2_u(I,j)*G%dy_Cu(I,j)) * (GV%Z_to_H * Slope)
 
@@ -316,7 +316,7 @@ subroutine filter_interface(h, e, Lsm2_u, Lsm2_v, uhD, vhD, G, GV, US, halo_size
     do i=is,ie ; vhtot(i,J) = 0.0 ; enddo
     do K=nz,2,-1
       do i=is,ie
-        Slope = ((e(i,j,K)-e(i,j+1,K))*G%IdyCv(i,J)) * G%mask2dCv(i,J)
+        Slope = ((e(i,j,K)-e(i,j+1,K))*G%IdyCv(i,J)) * G%OBCmaskCv(i,J)
 
         Sfn_est = (Lsm2_v(i,J)*G%dx_Cv(i,J)) * (GV%Z_to_H * Slope)
 

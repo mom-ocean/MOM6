@@ -137,7 +137,8 @@ type, public :: OBC_segment_type
   logical :: specified      !< Boundary normal velocity fixed to external value.
   logical :: specified_tan  !< Boundary tangential velocity fixed to external value.
   logical :: specified_grad !< Boundary gradient of tangential velocity fixed to external value.
-  logical :: open           !< Boundary is open for continuity solver.
+  logical :: open           !< Boundary is open for continuity solver, and there are no other
+                            !! parameterized mass fluxes at the open boundary.
   logical :: gradient       !< Zero gradient at boundary.
   logical :: values_needed  !< Whether or not any external OBC fields are needed.
   logical :: u_values_needed      !< Whether or not external u OBC fields are needed.
@@ -1963,16 +1964,16 @@ subroutine open_boundary_impose_land_mask(OBC, G, areaCu, areaCv, US)
       do j=segment%HI%jsd,segment%HI%jed
         if (G%mask2dCu(I,j) == 0) OBC%segnum_u(I,j) = OBC_NONE
         if (segment%direction == OBC_DIRECTION_W) then
-          G%mask2dT(i,j) = 0
+          G%mask2dT(i,j) = 0.0
         else
-          G%mask2dT(i+1,j) = 0
+          G%mask2dT(i+1,j) = 0.0
         endif
       enddo
       do J=segment%HI%JsdB+1,segment%HI%JedB-1
         if (segment%direction == OBC_DIRECTION_W) then
-          G%mask2dCv(i,J) = 0
+          G%mask2dCv(i,J) = 0 ; G%OBCmaskCv(i,J) = 0.0
         else
-          G%mask2dCv(i+1,J) = 0
+          G%mask2dCv(i+1,J) = 0.0 ; G%OBCmaskCv(i+1,J) = 0.0
         endif
       enddo
     else
@@ -1981,17 +1982,34 @@ subroutine open_boundary_impose_land_mask(OBC, G, areaCu, areaCv, US)
       do i=segment%HI%isd,segment%HI%ied
         if (G%mask2dCv(i,J) == 0) OBC%segnum_v(i,J) = OBC_NONE
         if (segment%direction == OBC_DIRECTION_S) then
-          G%mask2dT(i,j) = 0
+          G%mask2dT(i,j) = 0.0
         else
-          G%mask2dT(i,j+1) = 0
+          G%mask2dT(i,j+1) = 0.0
         endif
       enddo
       do I=segment%HI%IsdB+1,segment%HI%IedB-1
         if (segment%direction == OBC_DIRECTION_S) then
-          G%mask2dCu(I,j) = 0
+          G%mask2dCu(I,j) = 0.0 ; G%OBCmaskCu(I,j) = 0.0
         else
-          G%mask2dCu(I,j+1) = 0
+          G%mask2dCu(I,j+1) = 0.0 ; G%OBCmaskCu(I,j+1) = 0.0
         endif
+      enddo
+    endif
+  enddo
+
+  do n=1,OBC%number_of_segments
+    segment=>OBC%segment(n)
+    if (.not. (segment%on_pe .and. segment%open)) cycle
+    ! Set the OBCmask values to help eliminate certain terms at u- or v- OBC points.
+    if (segment%is_E_or_W) then
+      I=segment%HI%IsdB
+      do j=segment%HI%jsd,segment%HI%jed
+        G%OBCmaskCu(I,j) = 0.0
+      enddo
+    else
+      J=segment%HI%JsdB
+      do i=segment%HI%isd,segment%HI%ied
+        G%OBCmaskCv(i,J) = 0.0
       enddo
     endif
   enddo
