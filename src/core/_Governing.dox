@@ -59,7 +59,7 @@ potential temperature and salinity equations, fluxes due to diabatic
 processes are indicated by \f$J^{(z)}\f$. Tendencies due to the
 convergence of fluxes oriented along neutral directions are indicated
 by \f$\mathbf{\mathcal{N}}^\gamma\f$, with our implementation of
-<em>neutral diffusion</em> detailed in Shao et al (2020) 
+<em>neutral diffusion</em> detailed in Shao et al (2020)
 \cite Shao_etal_2020.
 
 The total or material time derivative operator is given by
@@ -154,7 +154,7 @@ geopotential coordinates
    + (f + \zeta) \hat{\mathbf{z}} \times \mathbf{u}
    \right]
   &= -\nabla_{z} (p + K) - \rho \, \nabla_{z} \Phi +  \rho_{o} \, \mathbf{\mathcal{F}}
- &\mbox{vector-invariant horz velocity}
+ &\mbox{vector-inv horz velocity}
 \\
   \rho \, \partial_{z} \Phi + \partial_{z} p &= 0 &\mbox{hydrostatic}
 \\
@@ -164,7 +164,7 @@ geopotential coordinates
   \\
   \partial_t \theta + \nabla_z \cdotp ( \mathbf{u} \, \theta ) + \partial_z ( w \, \theta )
    &= \mathbf{\mathcal{N}}_\theta^\gamma - \partial_{z} J_\theta^{(z)}
-   &\mbox{potential/Conservative temp}
+   &\mbox{potential/Cons temp}
   \\
   \partial_t S + \nabla_z \cdotp ( \mathbf{u} \, S ) + \partial_z (w \, S)
    &= \mathbf{\mathcal{N}}_S^\gamma - \partial_{z} J_S^{(z)}

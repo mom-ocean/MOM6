@@ -1,6 +1,6 @@
 /*! \page ALE Vertical Lagrangian method: conceptual
 
-\section section_ALE Lagrangian and ALE 
+\section section_ALE Lagrangian and ALE
 
 As discussed by Adcroft and Hallberg (2008) \cite adcroft2006 and
 Griffies, Adcroft and Hallberg (2020) \cite Griffies_Adcroft_Hallberg2020,
@@ -127,14 +127,14 @@ tracer equation (\f$C\f$ is an arbitrary tracer) can be summarized as
 \\
  \delta_{r} w^{\scriptstyle{\mathrm{grid}}}
  &= -\nabla_{r} \cdot [h \, \mathbf{u}]^{(n)}
- &\mbox{layer motion via convergence of horz advection}
+ &\mbox{layer motion via horz conv}
 \\
  h^{\dagger} &= h^{(n)} + \Delta t \, \delta_{r} w^{\scriptstyle{\mathrm{grid}}}
 = h^{(n)} - \Delta t \, \nabla_{r} \cdot [h \, \mathbf{u}]^{(n)}
- &\mbox{horz advection thickness update}
+ &\mbox{update thickness via horz advect}
 \\
  [h \, C]^{\dagger} &= [h \, C]^{(n)} -\Delta t \, \nabla_{r} \cdot [ h \, C \, \mathbf{u} ]^{(n)}
- &\mbox{horz advection tracer update}
+ &\mbox{update tracer via horz advect}
 \\
  h^{(n+1)} &=  h^{\scriptstyle{\mathrm{target}}}
  &\mbox{regrid to the target grid}
@@ -143,11 +143,11 @@ tracer equation (\f$C\f$ is an arbitrary tracer) can be summarized as
  &\mbox{diagnose dia-surface transport}
 \\
  [h \, C]^{(n+1)} &= [h \, C]^{\dagger}  - \Delta t  \, \delta_{r} ( w^{(\dot{r})} \, C^{\dagger})
- &\mbox{remap tracer using dia-surface transport}
+ &\mbox{remap tracer via dia-surface transport}
 \f}
 The first three equations constitute the Lagrangian portion of the
 algorithm.  In particular, the second equation provides an
-intermediate or ``predictor'' value for the updated thickness,
+intermediate or predictor value for the updated thickness,
 \f$h^{\dagger}\f$, resulting from the vertical Lagrangian update.
 Similarly, the third equation performs a Lagrangian update of the
 thickness-weighted tracer to intermediate values, again operationally
@@ -166,8 +166,8 @@ dia-surface velocity according to
 \f}
 This step, and the remaining step for tracers, constitute the
 remapping portion of the algorithm.  For example, if the prescribed
-coordinate surfaces are geopotentials, then \f$w^{(\dot{r})} = w\f$
-and \f$h^{\scriptstyle{\mathrm{target}}} = h^{(n)}\f$, in which case the
+coordinate surfaces are geopotentials, then \f$w^{(\dot{r})}\f$ and
+\f$h^{\scriptstyle{\mathrm{target}}} = h^{(n)}\f$, in which case the
 remap step reduces to Cartesian vertical advection.
 
 Within the above framework for evolving the ocean state, we make use

@@ -41,21 +41,23 @@ used in the Boussinesq equation of state.
 
 \section vector_notation Vector notation
 
-The three-dimensional velocity vector is denoted \f$\boldsymbol{v}\f$
+The three-dimensional velocity vector is denoted \f$\mathbf{v}\f$
 and it is decomposed into its horizontal and vertical components according to
-  \f[\boldsymbol{v}
-  = \boldsymbol{u} + \hat{\boldsymbol{z}} w
-  = \hat{\boldsymbol{x}} u + \hat{\boldsymbol{y}} v + \hat{\boldsymbol{z}} w,
- \f]
-where \f$\hat{\boldsymbol{z}}\f$ is the unit vector pointed in the
-upward vertical direction and \f$\boldsymbol{u} = (u, v, 0)\f$ is the
+\f{align}
+\mathbf{v}
+  = \mathbf{u} + \hat{\mathbf{z}} \, w
+  = \hat{\mathbf{x}} \, u + \hat{\mathbf{y}} \, v + \hat{\mathbf{z}} \, w,
+ \f}
+where \f$\hat{\mathbf{z}}\f$ is the unit vector pointed in the
+upward vertical direction and \f$\mathbf{u} = (u, v, 0)\f$ is the
 horizontal component of velocity normal to the vertical.
 
 The three-dimensional gradient operator is denoted \f$\nabla\f$, and it is decomposed into
 its horizontal and vertical components according to
-  \f[\nabla
-   = \nabla_z + \hat{\boldsymbol{z}} \partial_z
-   = \hat{\boldsymbol{x}} \partial_x + \hat{\boldsymbol{y}} \partial_y + \hat{\boldsymbol{z}} \partial_z.
-  \f]
+\f{align}
+\nabla
+   = \nabla_z + \hat{\mathbf{z}} \, \partial_z
+   = \hat{\mathbf{x}} \, \partial_x + \hat{\mathbf{y}} \, \partial_y + \hat{\mathbf{z}} \, \partial_z.
+  \f}
 
 */

@@ -1,6 +1,6 @@
 /*! \page ALE_Timestep Vertical Lagrangian method in pictures
 
-\section section_ALE_remap Graphical explanation of vertical Lagrangian method 
+\section section_ALE_remap Graphical explanation of vertical Lagrangian method
 
 Vertical Lagrangian regridding/remapping is not a timestep method in
 the traditional sense. Rather, it is a sequence of operations
@@ -49,15 +49,14 @@ deformed coordinate grid has been deleted:
 The new layer thicknesses, \f$h_k\f$, are computed and then the layers
 are populated with the new velocities and tracers
 \f{align}
-  % h_k^{\mbox{new}} %= \nabla_k z_{\mbox{coord}} \\
-  \sum h_k^{\mbox{new}} &= \sum h_k^{\mbox{old}}
+  \sum h_k^{\scriptstyle{\mathrm{new}}} &= \sum h_k^{\scriptstyle{\mathrm{old}}}
 \\
-  \mathbf{u}_k^{\mbox{new}}
+  \mathbf{u}_k^{\scriptstyle{\mathrm{new}}}
   &= \frac{1}{h_k}
-  \int_{z_{k + \frac{1}{2}}}^{z_{k + \frac{1}{2}} + h_k} \mathbf{u}^{\mbox{old}}(z') \, \mathrm{d}z'
+  \int_{z_{k + 1/2}}^{z_{k + 1/2} + h_k} \mathbf{u}^{\scriptstyle{\mathrm{old}}}(z') \, \mathrm{d}z'
 \\
-  \theta^{\mbox{new}} &= \frac{1}{h_k}
-  \int_{z_{k + \frac{1}{2}}}^{z_{k + \frac{1}{2}} + h_k} \theta^{\mbox{old}}(z') \, \mathrm{d}z'
+  \theta_k^{\scriptstyle{\mathrm{new}}}  &= \frac{1}{h_k}
+  \int_{z_{k + 1/2}}^{z_{k + 1/2} + h_k} \theta^{\scriptstyle{\mathrm{old}}}(z') \, \mathrm{d}z'
 \f}
 
 */
