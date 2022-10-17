@@ -1686,6 +1686,12 @@ subroutine categorize_axes(fileObj, filename, ndims, dim_names, is_x, is_y, is_t
           if ((index(cartesian, "X") == 1) .or. (index(cartesian, "x") == 1)) is_x(i) = .true.
           if ((index(cartesian, "Y") == 1) .or. (index(cartesian, "y") == 1)) is_y(i) = .true.
           if ((index(cartesian, "T") == 1) .or. (index(cartesian, "t") == 1)) is_t(i) = .true.
+        elseif (variable_att_exists(fileobj, trim(dim_names(i)), "axis")) then
+          call get_variable_attribute(fileobj, trim(dim_names(i)), "axis", cartesian)
+          cartesian = adjustl(cartesian)
+          if ((index(cartesian, "X") == 1) .or. (index(cartesian, "x") == 1)) is_x(i) = .true.
+          if ((index(cartesian, "Y") == 1) .or. (index(cartesian, "y") == 1)) is_y(i) = .true.
+          if ((index(cartesian, "T") == 1) .or. (index(cartesian, "t") == 1)) is_t(i) = .true.
         endif
       endif
     endif
