@@ -1910,6 +1910,8 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   type(time_type)                 :: Start_time
   type(ocean_internal_state)      :: MOM_internal_state
 
+  print, "Welcome to MOM6!"
+
   CS%Time => Time
 
   id_clock_init = cpu_clock_id('Ocean Initialization', grain=CLOCK_SUBCOMPONENT)
