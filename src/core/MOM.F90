@@ -1910,7 +1910,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   type(time_type)                 :: Start_time
   type(ocean_internal_state)      :: MOM_internal_state
 
-  print, "Welcome to MOM6!"
+  print,"Welcome to MOM6!"
 
   CS%Time => Time
 
