@@ -179,6 +179,9 @@ logical, parameter, public :: regriddingDefaultBoundaryExtrapolation = .false.
 !> Default minimum thickness for some coordinate generation modes
 real, parameter, public :: regriddingDefaultMinThickness = 1.e-3
 
+!> Maximum length of parameters
+integer, parameter :: MAX_PARAM_LENGTH = 120
+
 #undef __DO_SAFETY_CHECKS__
 
 contains
@@ -199,7 +202,8 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
   ! Local variables
   integer :: ke ! Number of levels
   character(len=80)  :: string, string2, varName ! Temporary strings
-  character(len=40)  :: coord_units, param_name, coord_res_param ! Temporary strings
+  character(len=40)  :: coord_units, coord_res_param ! Temporary strings
+  character(len=MAX_PARAM_LENGTH) :: param_name
   character(len=200) :: inputdir, fileName
   character(len=320) :: message ! Temporary strings
   character(len=12) :: expected_units, alt_units ! Temporary strings
@@ -256,7 +260,7 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
       param_name = "INTERPOLATION_SCHEME"
       string2 = regriddingDefaultInterpScheme
     else
-      param_name = trim(param_prefix)//"_INTERP_SCHEME_"//trim(param_suffix)
+      param_name = create_coord_param(param_prefix, "INTERP_SCHEME", param_suffix)
       string2 = 'PPM_H4' ! Default for diagnostics
     endif
     call get_param(param_file, mdl, "INTERPOLATION_SCHEME", string, &
@@ -309,8 +313,8 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
     coord_res_param = "ALE_RESOLUTION"
     string2 = 'UNIFORM'
   else
-    param_name = trim(param_prefix)//"_DEF_"//trim(param_suffix)
-    coord_res_param = trim(param_prefix)//"_RES_"//trim(param_suffix)
+    param_name = create_coord_param(param_prefix, "DEF", param_suffix)
+    coord_res_param = create_coord_param(param_prefix, "RES", param_suffix)
     string2 = 'UNIFORM'
     if (maximum_depth>3000.) string2='WOA09' ! For convenience
   endif
@@ -545,13 +549,14 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
   ! initialise coordinate-specific control structure
   call initCoord(CS, GV, US, coord_mode, param_file)
 
-  if (main_parameters .and. coord_is_state_dependent) then
-    call get_param(param_file, mdl, "P_REF", P_Ref, &
+  if (coord_is_state_dependent) then
+    call get_param(param_file, mdl, create_coord_param(param_prefix, "P_REF", param_suffix), P_Ref, &
                  "The pressure that is used for calculating the coordinate "//&
                  "density.  (1 Pa = 1e4 dbar, so 2e7 is commonly used.) "//&
                  "This is only used if USE_EOS and ENABLE_THERMODYNAMICS are true.", &
                  units="Pa", default=2.0e7, scale=US%kg_m3_to_R*US%m_s_to_L_T**2)
-    call get_param(param_file, mdl, "REGRID_COMPRESSIBILITY_FRACTION", tmpReal, &
+    call get_param(param_file, mdl, create_coord_param(param_prefix, "REGRID_COMPRESSIBILITY_FRACTION", param_suffix), &
+                 tmpReal, &
                  "When interpolating potential density profiles we can add "//&
                  "some artificial compressibility solely to make homogeneous "//&
                  "regions appear stratified.", units="nondim", default=0.)
@@ -2563,6 +2568,29 @@ subroutine dz_function1( string, dz )
   dz(:) = dz(:) + dz_min ! Finally add in the constant dz_min
 
 end subroutine dz_function1
+
+!> Construct the name of a parameter for a specific coordinate based on param_prefix and param_suffix. For the main,
+!! prognostic coordinate this will simply return the parameter name (e.g. P_REF)
+function create_coord_param(param_prefix, param_name, param_suffix) result(coord_param)
+  character(len=*) :: param_name   !< The base name of the parameter (e.g. the one used for the main coordinate)
+  character(len=*) :: param_prefix !< String to prefix to parameter names.
+  character(len=*) :: param_suffix !< String to append to parameter names.
+  character(len=MAX_PARAM_LENGTH) :: coord_param  !< Parameter name prepended by param_prefix
+                                                  !! and appended with param_suffix
+  integer :: out_length
+
+  if (len_trim(param_prefix) + len_trim(param_suffix) == 0) then
+    coord_param = param_name
+  else
+    ! Note the +2 is because of two underscores
+    out_length = len_trim(param_name)+len_trim(param_prefix)+len_trim(param_suffix)+2
+    if (out_length > MAX_PARAM_LENGTH) then
+      call MOM_error(FATAL,"Coordinate parameter is too long; increase MAX_PARAM_LENGTH")
+    endif
+    coord_param = TRIM(param_prefix)//"_"//TRIM(param_name)//"_"//TRIM(param_suffix)
+  endif
+
+end function create_coord_param
 
 !> Parses a string and generates a rho_target(:) profile with refined resolution downward
 !! and returns the number of levels
