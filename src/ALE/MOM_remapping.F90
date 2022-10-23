@@ -172,17 +172,12 @@ subroutine remapping_core_h(CS, n0, h0, u0, n1, h1, u1, h_neglect, h_neglect_edg
                                          !! cells in the source grid where this is true.
 
   ! Local variables
-  integer :: iMethod
   real, dimension(n0,2)           :: ppoly_r_E     ! Edge value of polynomial [A]
   real, dimension(n0,2)           :: ppoly_r_S     ! Edge slope of polynomial [A H-1]
-  real, dimension(n0,CS%degree+1) :: ppoly_r_coefs ! Coefficients of polynomial [A]
-  real :: h0tot, h0err ! Sum of source cell widths and round-off error in this sum [H]
-  real :: h1tot, h1err ! Sum of target cell widths and round-off error in this sum [H]
-  real :: u0tot, u0err ! Integrated values on the source grid and round-off error in this sum [H A]
-  real :: u1tot, u1err ! Integrated values on the target grid and round-off error in this sum [H A]
-  real :: u0min, u0max, u1min, u1max ! Extrema of values on the two grids [A]
-  real :: uh_err       ! Difference in the total amounts on the two grids [H A]
+  real, dimension(n0,CS%degree+1) :: ppoly_r_coefs ! Coefficients of polynomial reconstructions [A]
+  real :: uh_err       ! A bound on the error in the sum of u*h, as estimated by the remapping code [A H]
   real :: hNeglect, hNeglect_edge ! Negligibly small cell widths in the same units as h0 [H]
+  integer :: iMethod   ! An integer indicating the integration method used
   integer :: k
 
   hNeglect = 1.0e-30 ; if (present(h_neglect)) hNeglect = h_neglect
@@ -197,43 +192,8 @@ subroutine remapping_core_h(CS, n0, h0, u0, n1, h1, u1, h_neglect, h_neglect_edg
   call remap_via_sub_cells( n0, h0, u0, ppoly_r_E, ppoly_r_coefs, n1, h1, iMethod, &
                           CS%force_bounds_in_subcell, u1, uh_err )
 
-  if (CS%check_remapping) then
-    ! Check errors and bounds
-    call measure_input_bounds( n0, h0, u0, ppoly_r_E, h0tot, h0err, u0tot, u0err, u0min, u0max )
-    call measure_output_bounds( n1, h1, u1, h1tot, h1err, u1tot, u1err, u1min, u1max )
-    if (iMethod<5) then ! We except PQM until we've debugged it
-    if ( (abs(u1tot-u0tot)>(u0err+u1err)+uh_err .and. abs(h1tot-h0tot)<h0err+h1err) &
-        .or. (u1min<u0min .or. u1max>u0max) ) then
-      write(0,*) 'iMethod = ',iMethod
-      write(0,*) 'H: h0tot=',h0tot,'h1tot=',h1tot,'dh=',h1tot-h0tot,'h0err=',h0err,'h1err=',h1err
-      if (abs(h1tot-h0tot)>h0err+h1err) &
-        write(0,*) 'H non-conservation difference=',h1tot-h0tot,'allowed err=',h0err+h1err,' <-----!'
-      write(0,*) 'UH: u0tot=',u0tot,'u1tot=',u1tot,'duh=',u1tot-u0tot,'u0err=',u0err,'u1err=',u1err,'uh_err=',uh_err
-      if (abs(u1tot-u0tot)>(u0err+u1err)+uh_err) &
-        write(0,*) 'U non-conservation difference=',u1tot-u0tot,'allowed err=',u0err+u1err+uh_err,' <-----!'
-      write(0,*) 'U: u0min=',u0min,'u1min=',u1min
-      if (u1min<u0min) write(0,*) 'U minimum overshoot=',u1min-u0min,' <-----!'
-      write(0,*) 'U: u0max=',u0max,'u1max=',u1max
-      if (u1max>u0max) write(0,*) 'U maximum overshoot=',u1max-u0max,' <-----!'
-      write(0,'(a3,6a24)') 'k','h0','left edge','u0','right edge','h1','u1'
-      do k = 1, max(n0,n1)
-        if (k<=min(n0,n1)) then
-          write(0,'(i3,1p6e24.16)') k,h0(k),ppoly_r_E(k,1),u0(k),ppoly_r_E(k,2),h1(k),u1(k)
-        elseif (k>n0) then
-          write(0,'(i3,96x,1p2e24.16)') k,h1(k),u1(k)
-        else
-          write(0,'(i3,1p4e24.16)') k,h0(k),ppoly_r_E(k,1),u0(k),ppoly_r_E(k,2)
-        endif
-      enddo
-      write(0,'(a3,2a24)') 'k','u0','Polynomial coefficients'
-      do k = 1, n0
-        write(0,'(i3,1p6e24.16)') k,u0(k),ppoly_r_coefs(k,:)
-      enddo
-      call MOM_error( FATAL, 'MOM_remapping, remapping_core_h: '//&
-             'Remapping result is inconsistent!' )
-    endif
-    endif ! method<5
-  endif
+  if (CS%check_remapping) call check_remapped_values(n0, h0, u0, ppoly_r_E, CS%degree, ppoly_r_coefs, &
+                                                     n1, h1, u1, iMethod, uh_err, "remapping_core_h")
 
 end subroutine remapping_core_h
 
@@ -256,16 +216,11 @@ subroutine remapping_core_w( CS, n0, h0, u0, n1, dx, u1, h_neglect, h_neglect_ed
   ! Local variables
   real, dimension(n0,2)           :: ppoly_r_E     ! Edge value of polynomial [A]
   real, dimension(n0,2)           :: ppoly_r_S     ! Edge slope of polynomial [A H-1]
-  real, dimension(n0,CS%degree+1) :: ppoly_r_coefs ! Coefficients of polynomial [A]
-  real :: h0tot, h1tot ! The total thicknesses of the source and target grids [H]
-  real :: h0err, h1err ! Magnitude of round-off errors in h0tot and h1tot [H]
-  real :: u0tot, u1tot ! Column integrated values on the source and target grids [H A]
-  real :: u0err, u1err ! Magnitude of round-off errors in u0tot and u1tot [H A]
-  real :: u0min, u0max, u1min, u1max ! Extrema of values on the source and target grids [A]
-  real :: uh_err       ! Estimate of bound on error in sum of u*h [A H]
+  real, dimension(n0,CS%degree+1) :: ppoly_r_coefs ! Coefficients of polynomial reconstructions [A]
   real, dimension(n1) :: h1 !< Cell widths on target grid [H]
+  real :: uh_err       ! A bound on the error in the sum of u*h, as estimated by the remapping code [A H]
   real :: hNeglect, hNeglect_edge  ! Negligibly small thicknesses [H]
-  integer :: iMethod
+  integer :: iMethod   ! An integer indicating the integration method used
   integer :: k
 
   hNeglect = 1.0e-30 ; if (present(h_neglect)) hNeglect = h_neglect
@@ -290,43 +245,8 @@ subroutine remapping_core_w( CS, n0, h0, u0, n1, dx, u1, h_neglect, h_neglect_ed
 ! call remapByDeltaZ( n0, h0, u0, ppoly_r_E, ppoly_r_coefs, n1, dx, iMethod, u1, hNeglect )
 ! call remapByProjection( n0, h0, u0, CS%ppoly_r, n1, h1, iMethod, u1, hNeglect )
 
-  if (CS%check_remapping) then
-    ! Check errors and bounds
-    call measure_input_bounds( n0, h0, u0, ppoly_r_E, h0tot, h0err, u0tot, u0err, u0min, u0max )
-    call measure_output_bounds( n1, h1, u1, h1tot, h1err, u1tot, u1err, u1min, u1max )
-    if (iMethod<5) then ! We except PQM until we've debugged it
-    if ( (abs(u1tot-u0tot)>(u0err+u1err)+uh_err .and. abs(h1tot-h0tot)<h0err+h1err) &
-        .or. (u1min<u0min .or. u1max>u0max) ) then
-      write(0,*) 'iMethod = ',iMethod
-      write(0,*) 'H: h0tot=',h0tot,'h1tot=',h1tot,'dh=',h1tot-h0tot,'h0err=',h0err,'h1err=',h1err
-      if (abs(h1tot-h0tot)>h0err+h1err) &
-        write(0,*) 'H non-conservation difference=',h1tot-h0tot,'allowed err=',h0err+h1err,' <-----!'
-      write(0,*) 'UH: u0tot=',u0tot,'u1tot=',u1tot,'duh=',u1tot-u0tot,'u0err=',u0err,'u1err=',u1err,'uh_err=',uh_err
-      if (abs(u1tot-u0tot)>(u0err+u1err)+uh_err) &
-        write(0,*) 'U non-conservation difference=',u1tot-u0tot,'allowed err=',u0err+u1err+uh_err,' <-----!'
-      write(0,*) 'U: u0min=',u0min,'u1min=',u1min
-      if (u1min<u0min) write(0,*) 'U minimum overshoot=',u1min-u0min,' <-----!'
-      write(0,*) 'U: u0max=',u0max,'u1max=',u1max
-      if (u1max>u0max) write(0,*) 'U maximum overshoot=',u1max-u0max,' <-----!'
-      write(0,'(a3,6a24)') 'k','h0','left edge','u0','right edge','h1','u1'
-      do k = 1, max(n0,n1)
-        if (k<=min(n0,n1)) then
-          write(0,'(i3,1p6e24.16)') k,h0(k),ppoly_r_E(k,1),u0(k),ppoly_r_E(k,2),h1(k),u1(k)
-        elseif (k>n0) then
-          write(0,'(i3,96x,1p2e24.16)') k,h1(k),u1(k)
-        else
-          write(0,'(i3,1p4e24.16)') k,h0(k),ppoly_r_E(k,1),u0(k),ppoly_r_E(k,2)
-        endif
-      enddo
-      write(0,'(a3,2a24)') 'k','u0','Polynomial coefficients'
-      do k = 1, n0
-        write(0,'(i3,1p6e24.16)') k,u0(k),ppoly_r_coefs(k,:)
-      enddo
-      call MOM_error( FATAL, 'MOM_remapping, remapping_core_w: '//&
-             'Remapping result is inconsistent!' )
-    endif
-    endif ! method<5
-  endif
+  if (CS%check_remapping) call check_remapped_values(n0, h0, u0, ppoly_r_E, CS%degree, ppoly_r_coefs, &
+                                                     n1, h1, u1, iMethod, uh_err, "remapping_core_w")
 
 end subroutine remapping_core_w
 
@@ -1170,6 +1090,72 @@ real function average_value_ppoly( n0, u0, ppoly0_E, ppoly0_coefs, method, i0, x
   average_value_ppoly = u_ave
 
 end function average_value_ppoly
+
+!> This subroutine checks for sufficient consistence in the extrema and total amounts on the old
+!! and new grids.
+subroutine check_remapped_values(n0, h0, u0, ppoly_r_E, deg, ppoly_r_coefs, &
+                                 n1, h1, u1, iMethod, uh_err, caller)
+  integer,               intent(in) :: n0 !< Number of cells on source grid
+  real, dimension(n0),   intent(in) :: h0 !< Cell widths on source grid [H]
+  real, dimension(n0),   intent(in) :: u0 !< Cell averages on source grid [A]
+  real, dimension(n0,2), intent(in) :: ppoly_r_E  !< Edge values of polynomial fits [A]
+  integer,               intent(in) :: deg !< Degree of the piecewise polynomial reconstrution
+  real, dimension(n0,deg+1), intent(in) :: ppoly_r_coefs !< Coefficients of the piecewise
+                                          !! polynomial reconstructions [A]
+  integer,               intent(in) :: n1 !< Number of cells on target grid
+  real, dimension(n1),   intent(in) :: h1 !< Cell widths on target grid [H]
+  real, dimension(n1),   intent(in) :: u1 !< Cell averages on target grid [A]
+  integer,               intent(in) :: iMethod !< An integer indicating the integration method used
+  real,                  intent(in) :: uh_err  !< A bound on the error in the sum of u*h as
+                                               !! estimated by the remapping code [H A]
+  character(len=*),      intent(in) :: caller  !< The name of the calling routine.
+
+  ! Local variables
+  real :: h0tot, h0err ! Sum of source cell widths and round-off error in this sum [H]
+  real :: h1tot, h1err ! Sum of target cell widths and round-off error in this sum [H]
+  real :: u0tot, u0err ! Integrated values on the source grid and round-off error in this sum [H A]
+  real :: u1tot, u1err ! Integrated values on the target grid and round-off error in this sum [H A]
+  real :: u0min, u0max, u1min, u1max ! Extrema of values on the two grids [A]
+  integer :: k
+
+  ! Check errors and bounds
+  call measure_input_bounds( n0, h0, u0, ppoly_r_E, h0tot, h0err, u0tot, u0err, u0min, u0max )
+  call measure_output_bounds( n1, h1, u1, h1tot, h1err, u1tot, u1err, u1min, u1max )
+
+  if (iMethod<5) return ! We except PQM until we've debugged it
+
+  if ( (abs(u1tot-u0tot)>(u0err+u1err)+uh_err .and. abs(h1tot-h0tot)<h0err+h1err) &
+      .or. (u1min<u0min .or. u1max>u0max) ) then
+    write(0,*) 'iMethod = ',iMethod
+    write(0,*) 'H: h0tot=',h0tot,'h1tot=',h1tot,'dh=',h1tot-h0tot,'h0err=',h0err,'h1err=',h1err
+    if (abs(h1tot-h0tot)>h0err+h1err) &
+      write(0,*) 'H non-conservation difference=',h1tot-h0tot,'allowed err=',h0err+h1err,' <-----!'
+    write(0,*) 'UH: u0tot=',u0tot,'u1tot=',u1tot,'duh=',u1tot-u0tot,'u0err=',u0err,'u1err=',u1err,'uh_err=',uh_err
+    if (abs(u1tot-u0tot)>(u0err+u1err)+uh_err) &
+      write(0,*) 'U non-conservation difference=',u1tot-u0tot,'allowed err=',u0err+u1err+uh_err,' <-----!'
+    write(0,*) 'U: u0min=',u0min,'u1min=',u1min
+    if (u1min<u0min) write(0,*) 'U minimum overshoot=',u1min-u0min,' <-----!'
+    write(0,*) 'U: u0max=',u0max,'u1max=',u1max
+    if (u1max>u0max) write(0,*) 'U maximum overshoot=',u1max-u0max,' <-----!'
+    write(0,'(a3,6a24)') 'k','h0','left edge','u0','right edge','h1','u1'
+    do k = 1, max(n0,n1)
+      if (k<=min(n0,n1)) then
+        write(0,'(i3,1p6e24.16)') k,h0(k),ppoly_r_E(k,1),u0(k),ppoly_r_E(k,2),h1(k),u1(k)
+      elseif (k>n0) then
+        write(0,'(i3,96x,1p2e24.16)') k,h1(k),u1(k)
+      else
+        write(0,'(i3,1p4e24.16)') k,h0(k),ppoly_r_E(k,1),u0(k),ppoly_r_E(k,2)
+      endif
+    enddo
+    write(0,'(a3,2a24)') 'k','u0','Polynomial coefficients'
+    do k = 1, n0
+      write(0,'(i3,1p6e24.16)') k,u0(k),ppoly_r_coefs(k,:)
+    enddo
+    call MOM_error( FATAL, 'MOM_remapping, '//trim(caller)//': '//&
+           'Remapping result is inconsistent!' )
+  endif
+
+end subroutine check_remapped_values
 
 !> Measure totals and bounds on source grid
 subroutine measure_input_bounds( n0, h0, u0, edge_values, h0tot, h0err, u0tot, u0err, u0min, u0max )
