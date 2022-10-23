@@ -536,7 +536,7 @@ subroutine ALE_offline_inputs(CS, G, GV, h, tv, Reg, uhtr, vhtr, Kd, debug, OBC)
     if (G%mask2dCu(i,j)>0.) then
       h_src(:) = 0.5 * (h(i,j,:) + h(i+1,j,:))
       h_dest(:) = 0.5 * (h_new(i,j,:) + h_new(i+1,j,:))
-      call reintegrate_column(nk, h_src, uhtr(I,j,:), nk, h_dest, 0., temp_vec)
+      call reintegrate_column(nk, h_src, uhtr(I,j,:), nk, h_dest, temp_vec)
       uhtr(I,j,:) = temp_vec
     endif
   enddo ; enddo
@@ -544,7 +544,7 @@ subroutine ALE_offline_inputs(CS, G, GV, h, tv, Reg, uhtr, vhtr, Kd, debug, OBC)
     if (G%mask2dCv(i,j)>0.) then
       h_src(:) = 0.5 * (h(i,j,:) + h(i,j+1,:))
       h_dest(:) = 0.5 * (h_new(i,j,:) + h_new(i,j+1,:))
-      call reintegrate_column(nk, h_src, vhtr(I,j,:), nk, h_dest, 0., temp_vec)
+      call reintegrate_column(nk, h_src, vhtr(I,j,:), nk, h_dest, temp_vec)
       vhtr(I,j,:) = temp_vec
     endif
   enddo ; enddo
@@ -554,7 +554,7 @@ subroutine ALE_offline_inputs(CS, G, GV, h, tv, Reg, uhtr, vhtr, Kd, debug, OBC)
       if (check_column_integrals(nk, h_src, nk, h_dest)) then
         call MOM_error(FATAL, "ALE_offline_inputs: Kd interpolation columns do not match")
       endif
-      call interpolate_column(nk, h(i,j,:), Kd(i,j,:), nk, h_new(i,j,:), 0., Kd(i,j,:))
+      call interpolate_column(nk, h(i,j,:), Kd(i,j,:), nk, h_new(i,j,:), Kd(i,j,:))
     endif
   enddo ; enddo
 

@@ -13,7 +13,6 @@ use MOM_forcing_type,     only : forcing
 use MOM_grid,             only : ocean_grid_type
 use MOM_io,               only : MOM_read_data, MOM_read_vector, CENTER
 use MOM_opacity,          only : optics_type
-use MOM_remapping,        only : reintegrate_column
 use MOM_time_manager,     only : time_type, operator(-)
 use MOM_unit_scaling,     only : unit_scale_type
 use MOM_variables,        only : vertvisc_type

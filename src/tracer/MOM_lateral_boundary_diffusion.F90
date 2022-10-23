@@ -697,7 +697,7 @@ subroutine fluxes_layer_method(boundary, ke, hbl_L, hbl_R, h_L, h_R, phi_L, phi_
   enddo
 
   ! remap flux to h_vel (native grid)
-  call reintegrate_column(nk, dz_top(:), F_layer_z(:), ke, h_vel(:), 0.0, F_layer(:))
+  call reintegrate_column(nk, dz_top(:), F_layer_z(:), ke, h_vel(:), F_layer(:))
 
   ! used to avoid fluxes below hbl
   if (CS%linear) then

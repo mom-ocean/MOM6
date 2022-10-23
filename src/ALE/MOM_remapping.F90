@@ -920,19 +920,19 @@ subroutine remap_via_sub_cells( n0, h0, u0, ppoly0_E, ppoly0_coefs, n1, h1, meth
 end subroutine remap_via_sub_cells
 
 !> Linearly interpolate interface data, u_src, from grid h_src to a grid h_dest
-subroutine interpolate_column(nsrc, h_src, u_src, ndest, h_dest, missing_value, u_dest)
-  integer,                  intent(in)    :: nsrc !< Number of source cells
-  real, dimension(nsrc),    intent(in)    :: h_src !< Thickness of source cells
-  real, dimension(nsrc+1),  intent(in)    :: u_src !< Values at source cell interfaces
-  integer,                  intent(in)    :: ndest !< Number of destination cells
-  real, dimension(ndest),   intent(in)    :: h_dest !< Thickness of destination cells
-  real,                     intent(in)    :: missing_value !< Value to assign in vanished cells
-  real, dimension(ndest+1), intent(inout) :: u_dest !< Interpolated value at destination cell interfaces
+subroutine interpolate_column(nsrc, h_src, u_src, ndest, h_dest, u_dest)
+  integer,                  intent(in)    :: nsrc   !< Number of source cells
+  real, dimension(nsrc),    intent(in)    :: h_src  !< Thickness of source cells [H]
+  real, dimension(nsrc+1),  intent(in)    :: u_src  !< Values at source cell interfaces [A]
+  integer,                  intent(in)    :: ndest  !< Number of destination cells
+  real, dimension(ndest),   intent(in)    :: h_dest !< Thickness of destination cells [H]
+  real, dimension(ndest+1), intent(inout) :: u_dest !< Interpolated value at destination cell interfaces [A]
+
   ! Local variables
-  real :: x_dest ! Relative position of target interface
-  real :: dh ! Source cell thickness
-  real :: u1, u2 ! Values to interpolate between
-  real :: weight_a, weight_b ! Weights for interpolation
+  real :: x_dest ! Relative position of target interface [H]
+  real :: dh ! Source cell thickness [H]
+  real :: u1, u2 ! Values to interpolate between [A]
+  real :: weight_a, weight_b ! Weights for interpolation [nondim]
   integer :: k_src, k_dest ! Index of cell in src and dest columns
   logical :: still_vanished ! Used for figuring out what to mask as missing
 
@@ -972,7 +972,7 @@ subroutine interpolate_column(nsrc, h_src, u_src, ndest, h_dest, missing_value, 
       if (still_vanished .and. h_dest(k_dest)==0.) then
         ! When the layer k_dest is vanished and all layers above are also vanished, the k_dest
         ! interface value should be missing.
-        u_dest(k_dest) = missing_value
+        u_dest(k_dest) = 0.0
       else
         still_vanished = .false.
       endif
@@ -986,7 +986,7 @@ subroutine interpolate_column(nsrc, h_src, u_src, ndest, h_dest, missing_value, 
     if (still_vanished .and. h_dest(k_dest)==0.) then
       ! When the layer k_dest is vanished and all layers below are also vanished, the k_dest+1
       ! interface value should be missing.
-      u_dest(k_dest+1) = missing_value
+      u_dest(k_dest+1) = 0.0
     else
       exit
     endif
@@ -995,29 +995,27 @@ subroutine interpolate_column(nsrc, h_src, u_src, ndest, h_dest, missing_value, 
 end subroutine interpolate_column
 
 !> Conservatively calculate integrated data, uh_dest, on grid h_dest, from layer-integrated data, uh_src, on grid h_src
-subroutine reintegrate_column(nsrc, h_src, uh_src, ndest, h_dest, missing_value, uh_dest)
-  integer,                intent(in)    :: nsrc !< Number of source cells
-  real, dimension(nsrc),  intent(in)    :: h_src !< Thickness of source cells
-  real, dimension(nsrc),  intent(in)    :: uh_src !< Values at source cell interfaces
-  integer,                intent(in)    :: ndest !< Number of destination cells
-  real, dimension(ndest), intent(in)    :: h_dest !< Thickness of destination cells
-  real,                   intent(in)    :: missing_value !< Value to assign in vanished cells
-  real, dimension(ndest), intent(inout) :: uh_dest !< Interpolated value at destination cell interfaces
+subroutine reintegrate_column(nsrc, h_src, uh_src, ndest, h_dest, uh_dest)
+  integer,                intent(in)    :: nsrc    !< Number of source cells
+  real, dimension(nsrc),  intent(in)    :: h_src   !< Thickness of source cells [H]
+  real, dimension(nsrc),  intent(in)    :: uh_src  !< Values at source cell interfaces [A H]
+  integer,                intent(in)    :: ndest   !< Number of destination cells
+  real, dimension(ndest), intent(in)    :: h_dest  !< Thickness of destination cells [H]
+  real, dimension(ndest), intent(inout) :: uh_dest !< Interpolated value at destination cell interfaces [A H]
 
   ! Local variables
-  real :: h_src_rem, h_dest_rem, dh ! Incremental thicknesses
-  real :: uh_src_rem, duh ! Incremental amounts of stuff
+  real :: h_src_rem, h_dest_rem, dh ! Incremental thicknesses [H]
+  real :: uh_src_rem, duh  ! Incremental amounts of stuff [A H]
   integer :: k_src, k_dest ! Index of cell in src and dest columns
-  logical :: src_ran_out, src_exists
+  logical :: src_ran_out
 
-  uh_dest(:) = missing_value
+  uh_dest(:) = 0.0
 
   k_src = 0
   k_dest = 0
   h_dest_rem = 0.
   h_src_rem = 0.
   src_ran_out = .false.
-  src_exists = .false.
 
   do while(.true.)
     if (h_src_rem==0. .and. k_src<nsrc) then
@@ -1026,7 +1024,6 @@ subroutine reintegrate_column(nsrc, h_src, uh_src, ndest, h_dest, missing_value,
       h_src_rem = h_src(k_src)
       uh_src_rem = uh_src(k_src)
       if (h_src_rem==0.) cycle
-      src_exists = .true. ! This stops us masking out the entire column
     endif
     if (h_dest_rem==0. .and. k_dest<ndest) then
       ! Sink has no capacity so move to the next destination cell
@@ -1065,8 +1062,6 @@ subroutine reintegrate_column(nsrc, h_src, uh_src, ndest, h_dest, missing_value,
     uh_dest(k_dest) = uh_dest(k_dest) + duh
     if (k_dest==ndest .and. (k_src==nsrc .or. h_dest_rem==0.)) exit
   enddo
-
-  if (.not. src_exists) uh_dest(1:ndest) = missing_value
 
 end subroutine reintegrate_column
 
@@ -1349,23 +1344,26 @@ logical function remapping_unit_tests(verbose)
   logical, intent(in) :: verbose !< If true, write results to stdout
   ! Local variables
   integer, parameter :: n0 = 4, n1 = 3, n2 = 6
-  real :: h0(n0), x0(n0+1), u0(n0)
-  real :: h1(n1), x1(n1+1), u1(n1), dx1(n1+1)
-  real :: h2(n2), x2(n2+1), u2(n2)
-  data u0 /9., 3., -3., -9./   ! Linear profile, 4 at surface to -4 at bottom
-  data h0 /4*0.75/ ! 4 uniform layers with total depth of 3
-  data h1 /3*1./   ! 3 uniform layers with total depth of 3
-  data h2 /6*0.5/  ! 6 uniform layers with total depth of 3
+  real :: h0(n0), x0(n0+1), u0(n0)  ! Thicknesses [H], interface heights [H] and values [A] for profile 0
+  real :: h1(n1), x1(n1+1), u1(n1)  ! Thicknesses [H], interface heights [H] and values [A] for profile 1
+  real :: dx1(n1+1)                 ! Interface height changes for profile 1 [H]
+  real :: h2(n2), x2(n2+1), u2(n2)  ! Thicknesses [H], interface heights [H] and values [A] for profile 2
+  data u0 /9., 3., -3., -9./   ! Linear profile, 4 at surface to -4 at bottom [A]
+  data h0 /4*0.75/ ! 4 uniform layers with total depth of 3 [H]
+  data h1 /3*1./   ! 3 uniform layers with total depth of 3 [H]
+  data h2 /6*0.5/  ! 6 uniform layers with total depth of 3 [H]
   type(remapping_CS) :: CS !< Remapping control structure
-  real, allocatable, dimension(:,:) :: ppoly0_E, ppoly0_S, ppoly0_coefs
+  real, allocatable, dimension(:,:) :: ppoly0_E     ! Edge values of polynomials [A]
+  real, allocatable, dimension(:,:) :: ppoly0_S     ! Edge slopes of polynomials [A H-1]
+  real, allocatable, dimension(:,:) :: ppoly0_coefs ! Coefficients of polynomials [A]
   integer :: answer_date  ! The vintage of the expressions to test
   integer :: i
-  real, parameter :: mv=-9.999999999E9 ! Value to use for vanished layers in interpolation tests.
   real, parameter :: hNeglect_dflt = 1.0e-30 ! A thickness [H ~> m or kg m-2] that can be
                                       ! added to thicknesses in a denominator without
                                       ! changing the numerical result, except where
                                       ! a division by zero would otherwise occur.
-  real :: err, h_neglect, h_neglect_edge
+  real :: err                         ! Errors in the remapped thicknesses [H] or values [A]
+  real :: h_neglect, h_neglect_edge   ! Tiny thicknesses used in remapping [H]
   logical :: thisTest, v, fail
 
   v = verbose
@@ -1584,101 +1582,101 @@ logical function remapping_unit_tests(verbose)
   write(stdout,*) '=== MOM_remapping: interpolation and reintegration unit tests ==='
   if (verbose) write(stdout,*) '- - - - - - - - - - interpolation tests  - - - - - - - - -'
 
-  fail = test_interp(v,mv,'Identity: 3 layer', &
+  fail = test_interp(verbose, 'Identity: 3 layer', &
                      3, (/1.,2.,3./), (/1.,2.,3.,4./), &
                      3, (/1.,2.,3./), (/1.,2.,3.,4./) )
   remapping_unit_tests = remapping_unit_tests .or. fail
 
-  fail = test_interp(v,mv,'A: 3 layer to 2', &
+  fail = test_interp(verbose, 'A: 3 layer to 2', &
                      3, (/1.,1.,1./), (/1.,2.,3.,4./), &
                      2, (/1.5,1.5/), (/1.,2.5,4./) )
   remapping_unit_tests = remapping_unit_tests .or. fail
 
-  fail = test_interp(v,mv,'B: 2 layer to 3', &
+  fail = test_interp(verbose, 'B: 2 layer to 3', &
                      2, (/1.5,1.5/), (/1.,4.,7./), &
                      3, (/1.,1.,1./), (/1.,3.,5.,7./) )
   remapping_unit_tests = remapping_unit_tests .or. fail
 
-  fail = test_interp(v,mv,'C: 3 layer (vanished middle) to 2', &
+  fail = test_interp(verbose, 'C: 3 layer (vanished middle) to 2', &
                      3, (/1.,0.,2./), (/1.,2.,2.,3./), &
                      2, (/1.,2./), (/1.,2.,3./) )
   remapping_unit_tests = remapping_unit_tests .or. fail
 
-  fail = test_interp(v,mv,'D: 3 layer (deep) to 3', &
+  fail = test_interp(verbose, 'D: 3 layer (deep) to 3', &
                      3, (/1.,2.,3./), (/1.,2.,4.,7./), &
                      2, (/2.,2./), (/1.,3.,5./) )
   remapping_unit_tests = remapping_unit_tests .or. fail
 
-  fail = test_interp(v,mv,'E: 3 layer to 3 (deep)', &
+  fail = test_interp(verbose, 'E: 3 layer to 3 (deep)', &
                      3, (/1.,2.,4./), (/1.,2.,4.,8./), &
                      3, (/2.,3.,4./), (/1.,3.,6.,8./) )
   remapping_unit_tests = remapping_unit_tests .or. fail
 
-  fail = test_interp(v,mv,'F: 3 layer to 4 with vanished top/botton', &
+  fail = test_interp(verbose, 'F: 3 layer to 4 with vanished top/botton', &
                      3, (/1.,2.,4./), (/1.,2.,4.,8./), &
-                     4, (/0.,2.,5.,0./), (/mv,1.,3.,8.,mv/) )
+                     4, (/0.,2.,5.,0./), (/0.,1.,3.,8.,0./) )
   remapping_unit_tests = remapping_unit_tests .or. fail
 
-  fail = test_interp(v,mv,'Fs: 3 layer to 4 with vanished top/botton (shallow)', &
+  fail = test_interp(verbose, 'Fs: 3 layer to 4 with vanished top/botton (shallow)', &
                      3, (/1.,2.,4./), (/1.,2.,4.,8./), &
-                     4, (/0.,2.,4.,0./), (/mv,1.,3.,7.,mv/) )
+                     4, (/0.,2.,4.,0./), (/0.,1.,3.,7.,0./) )
   remapping_unit_tests = remapping_unit_tests .or. fail
 
-  fail = test_interp(v,mv,'Fd: 3 layer to 4 with vanished top/botton (deep)', &
+  fail = test_interp(verbose, 'Fd: 3 layer to 4 with vanished top/botton (deep)', &
                      3, (/1.,2.,4./), (/1.,2.,4.,8./), &
-                     4, (/0.,2.,6.,0./), (/mv,1.,3.,8.,mv/) )
+                     4, (/0.,2.,6.,0./), (/0.,1.,3.,8.,0./) )
   remapping_unit_tests = remapping_unit_tests .or. fail
 
   if (verbose) write(stdout,*) '- - - - - - - - - - reintegration tests  - - - - - - - - -'
 
-  fail = test_reintegrate(v,mv,'Identity: 3 layer', &
+  fail = test_reintegrate(verbose, 'Identity: 3 layer', &
                      3, (/1.,2.,3./), (/-5.,2.,1./), &
                      3, (/1.,2.,3./), (/-5.,2.,1./) )
   remapping_unit_tests = remapping_unit_tests .or. fail
 
-  fail = test_reintegrate(v,mv,'A: 3 layer to 2', &
+  fail = test_reintegrate(verbose, 'A: 3 layer to 2', &
                      3, (/2.,2.,2./), (/-5.,2.,1./), &
                      2, (/3.,3./), (/-4.,2./) )
   remapping_unit_tests = remapping_unit_tests .or. fail
 
-  fail = test_reintegrate(v,mv,'A: 3 layer to 2 (deep)', &
+  fail = test_reintegrate(verbose, 'A: 3 layer to 2 (deep)', &
                      3, (/2.,2.,2./), (/-5.,2.,1./), &
                      2, (/3.,4./), (/-4.,2./) )
   remapping_unit_tests = remapping_unit_tests .or. fail
 
-  fail = test_reintegrate(v,mv,'A: 3 layer to 2 (shallow)', &
+  fail = test_reintegrate(verbose, 'A: 3 layer to 2 (shallow)', &
                      3, (/2.,2.,2./), (/-5.,2.,1./), &
                      2, (/3.,2./), (/-4.,1.5/) )
   remapping_unit_tests = remapping_unit_tests .or. fail
 
-  fail = test_reintegrate(v,mv,'B: 3 layer to 4 with vanished top/bottom', &
+  fail = test_reintegrate(verbose, 'B: 3 layer to 4 with vanished top/bottom', &
                      3, (/2.,2.,2./), (/-5.,2.,1./), &
                      4, (/0.,3.,3.,0./), (/0.,-4.,2.,0./) )
   remapping_unit_tests = remapping_unit_tests .or. fail
 
-  fail = test_reintegrate(v,mv,'C: 3 layer to 4 with vanished top//middle/bottom', &
+  fail = test_reintegrate(verbose, 'C: 3 layer to 4 with vanished top//middle/bottom', &
                      3, (/2.,2.,2./), (/-5.,2.,1./), &
                      5, (/0.,3.,0.,3.,0./), (/0.,-4.,0.,2.,0./) )
   remapping_unit_tests = remapping_unit_tests .or. fail
 
-  fail = test_reintegrate(v,mv,'D: 3 layer to 3 (vanished)', &
+  fail = test_reintegrate(verbose, 'D: 3 layer to 3 (vanished)', &
                      3, (/2.,2.,2./), (/-5.,2.,1./), &
                      3, (/0.,0.,0./), (/0.,0.,0./) )
   remapping_unit_tests = remapping_unit_tests .or. fail
 
-  fail = test_reintegrate(v,mv,'D: 3 layer (vanished) to 3', &
+  fail = test_reintegrate(verbose, 'D: 3 layer (vanished) to 3', &
                      3, (/0.,0.,0./), (/-5.,2.,1./), &
-                     3, (/2.,2.,2./), (/mv, mv, mv/) )
+                     3, (/2.,2.,2./), (/0., 0., 0./) )
   remapping_unit_tests = remapping_unit_tests .or. fail
 
-  fail = test_reintegrate(v,mv,'D: 3 layer (vanished) to 3 (vanished)', &
+  fail = test_reintegrate(verbose, 'D: 3 layer (vanished) to 3 (vanished)', &
                      3, (/0.,0.,0./), (/-5.,2.,1./), &
-                     3, (/0.,0.,0./), (/mv, mv, mv/) )
+                     3, (/0.,0.,0./), (/0., 0., 0./) )
   remapping_unit_tests = remapping_unit_tests .or. fail
 
-  fail = test_reintegrate(v,mv,'D: 3 layer (vanished) to 3 (vanished)', &
+  fail = test_reintegrate(verbose, 'D: 3 layer (vanished) to 3 (vanished)', &
                      3, (/0.,0.,0./), (/0.,0.,0./), &
-                     3, (/0.,0.,0./), (/mv, mv, mv/) )
+                     3, (/0.,0.,0./), (/0., 0., 0./) )
   remapping_unit_tests = remapping_unit_tests .or. fail
 
   if (.not. remapping_unit_tests) write(stdout,*) 'Pass'
@@ -1717,11 +1715,10 @@ logical function test_answer(verbose, n, u, u_true, label, tol)
 end function test_answer
 
 !> Returns true if a test of interpolate_column() produces the wrong answer
-logical function test_interp(verbose, missing_value, msg, nsrc, h_src, u_src, ndest, h_dest, u_true)
+logical function test_interp(verbose, msg, nsrc, h_src, u_src, ndest, h_dest, u_true)
   logical,                  intent(in) :: verbose !< If true, write results to stdout
-  real,                     intent(in) :: missing_value !< Value to indicate missing data
-  character(len=*),         intent(in) :: msg !< Message to label test
-  integer,                  intent(in) :: nsrc !< Number of source cells
+  character(len=*),         intent(in) :: msg   !< Message to label test
+  integer,                  intent(in) :: nsrc  !< Number of source cells
   real, dimension(nsrc),    intent(in) :: h_src !< Thickness of source cells [H]
   real, dimension(nsrc+1),  intent(in) :: u_src !< Values at source cell interfaces [A]
   integer,                  intent(in) :: ndest !< Number of destination cells
@@ -1733,7 +1730,7 @@ logical function test_interp(verbose, missing_value, msg, nsrc, h_src, u_src, nd
   real :: error
 
   ! Interpolate from src to dest
-  call interpolate_column(nsrc, h_src, u_src, ndest, h_dest, missing_value, u_dest)
+  call interpolate_column(nsrc, h_src, u_src, ndest, h_dest, u_dest)
 
   test_interp = .false.
   do k=1,ndest+1
@@ -1755,9 +1752,8 @@ logical function test_interp(verbose, missing_value, msg, nsrc, h_src, u_src, nd
 end function test_interp
 
 !> Returns true if a test of reintegrate_column() produces the wrong answer
-logical function test_reintegrate(verbose, missing_value, msg, nsrc, h_src, uh_src, ndest, h_dest, uh_true)
+logical function test_reintegrate(verbose, msg, nsrc, h_src, uh_src, ndest, h_dest, uh_true)
   logical,                intent(in) :: verbose !< If true, write results to stdout
-  real,                   intent(in) :: missing_value !< Value to indicate missing data [A H]
   character(len=*),       intent(in) :: msg   !< Message to label test
   integer,                intent(in) :: nsrc  !< Number of source cells
   real, dimension(nsrc),  intent(in) :: h_src !< Thickness of source cells [H]
@@ -1771,7 +1767,7 @@ logical function test_reintegrate(verbose, missing_value, msg, nsrc, h_src, uh_s
   real :: error
 
   ! Interpolate from src to dest
-  call reintegrate_column(nsrc, h_src, uh_src, ndest, h_dest, missing_value, uh_dest)
+  call reintegrate_column(nsrc, h_src, uh_src, ndest, h_dest, uh_dest)
 
   test_reintegrate = .false.
   do k=1,ndest
