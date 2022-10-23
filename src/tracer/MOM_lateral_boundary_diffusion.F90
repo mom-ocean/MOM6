@@ -11,11 +11,10 @@ use MOM_checksums,             only : hchksum
 use MOM_domains,               only : pass_var
 use MOM_diag_mediator,         only : diag_ctrl, time_type
 use MOM_diag_mediator,         only : post_data, register_diag_field
-use MOM_diag_vkernels,         only : reintegrate_column
 use MOM_error_handler,         only : MOM_error, MOM_mesg, FATAL, is_root_pe
 use MOM_file_parser,           only : get_param, log_version, param_file_type
 use MOM_grid,                  only : ocean_grid_type
-use MOM_remapping,             only : remapping_CS, initialize_remapping
+use MOM_remapping,             only : remapping_CS, initialize_remapping, reintegrate_column
 use MOM_remapping,             only : extract_member_remapping_CS, remapping_core_h
 use MOM_remapping,             only : remappingSchemesDoc, remappingDefaultScheme
 use MOM_spatial_means,         only : global_mass_integral

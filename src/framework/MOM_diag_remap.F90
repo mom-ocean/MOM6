@@ -62,15 +62,14 @@ use MOM_coms,             only : EFP_type, assignment(=), EFP_sum_across_PEs
 use MOM_error_handler,    only : MOM_error, FATAL, assert, WARNING
 use MOM_debugging,        only : check_column_integrals
 use MOM_diag_manager_infra,only : MOM_diag_axis_init
-use MOM_diag_vkernels,    only : interpolate_column, reintegrate_column
 use MOM_file_parser,      only : get_param, log_param, param_file_type
 use MOM_string_functions, only : lowercase, extractWord
 use MOM_grid,             only : ocean_grid_type
 use MOM_unit_scaling,     only : unit_scale_type
 use MOM_verticalGrid,     only : verticalGrid_type
 use MOM_EOS,              only : EOS_type
-use MOM_remapping,        only : remapping_CS, initialize_remapping
-use MOM_remapping,        only : remapping_core_h
+use MOM_remapping,        only : remapping_CS, initialize_remapping, remapping_core_h
+use MOM_remapping,        only : interpolate_column, reintegrate_column
 use MOM_regridding,       only : regridding_CS, initialize_regridding
 use MOM_regridding,       only : end_regridding
 use MOM_regridding,       only : set_regrid_params, get_regrid_size

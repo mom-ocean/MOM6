@@ -7,13 +7,13 @@ module MOM_offline_aux
 use MOM_debugging,        only : check_column_integrals
 use MOM_domains,          only : pass_var, pass_vector, To_All
 use MOM_diag_mediator,    only : post_data
-use MOM_diag_vkernels,    only : reintegrate_column
 use MOM_error_handler,    only : callTree_enter, callTree_leave, MOM_error, FATAL, WARNING, is_root_pe
 use MOM_file_parser,      only : get_param, log_version, param_file_type
 use MOM_forcing_type,     only : forcing
 use MOM_grid,             only : ocean_grid_type
 use MOM_io,               only : MOM_read_data, MOM_read_vector, CENTER
 use MOM_opacity,          only : optics_type
+use MOM_remapping,        only : reintegrate_column
 use MOM_time_manager,     only : time_type, operator(-)
 use MOM_unit_scaling,     only : unit_scale_type
 use MOM_variables,        only : vertvisc_type
