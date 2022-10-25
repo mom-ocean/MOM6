@@ -608,7 +608,7 @@ subroutine vertically_interpolate_diag_field(remap_cs, G, h, staggered_in_x, sta
         h_src(:) = 0.5 * (h(i_lo,j,:) + h(i_hi,j,:))
         h_dest(:) = 0.5 * (remap_cs%h(i_lo,j,:) + remap_cs%h(i_hi,j,:))
         call interpolate_column(nz_src, h_src, field(I1,j,:), &
-                                nz_dest, h_dest, interpolated_field(I1,j,:))
+                                nz_dest, h_dest, interpolated_field(I1,j,:), .true.)
       enddo
     enddo
   elseif (staggered_in_y .and. .not. staggered_in_x) then
@@ -623,7 +623,7 @@ subroutine vertically_interpolate_diag_field(remap_cs, G, h, staggered_in_x, sta
         h_src(:) = 0.5 * (h(i,j_lo,:) + h(i,j_hi,:))
         h_dest(:) = 0.5 * (remap_cs%h(i,j_lo,:) + remap_cs%h(i,j_hi,:))
         call interpolate_column(nz_src, h_src, field(i,J1,:), &
-                                nz_dest, h_dest, interpolated_field(i,J1,:))
+                                nz_dest, h_dest, interpolated_field(i,J1,:), .true.)
       enddo
     enddo
   elseif ((.not. staggered_in_x) .and. (.not. staggered_in_y)) then
@@ -636,7 +636,7 @@ subroutine vertically_interpolate_diag_field(remap_cs, G, h, staggered_in_x, sta
         h_src(:) = h(i,j,:)
         h_dest(:) = remap_cs%h(i,j,:)
         call interpolate_column(nz_src, h_src, field(i,j,:), &
-                                nz_dest, h_dest, interpolated_field(i,j,:))
+                                nz_dest, h_dest, interpolated_field(i,j,:), .true.)
       enddo
     enddo
   else

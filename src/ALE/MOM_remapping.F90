@@ -840,78 +840,72 @@ subroutine remap_via_sub_cells( n0, h0, u0, ppoly0_E, ppoly0_coefs, n1, h1, meth
 end subroutine remap_via_sub_cells
 
 !> Linearly interpolate interface data, u_src, from grid h_src to a grid h_dest
-subroutine interpolate_column(nsrc, h_src, u_src, ndest, h_dest, u_dest)
+subroutine interpolate_column(nsrc, h_src, u_src, ndest, h_dest, u_dest, mask_edges)
   integer,                  intent(in)    :: nsrc   !< Number of source cells
   real, dimension(nsrc),    intent(in)    :: h_src  !< Thickness of source cells [H]
   real, dimension(nsrc+1),  intent(in)    :: u_src  !< Values at source cell interfaces [A]
   integer,                  intent(in)    :: ndest  !< Number of destination cells
   real, dimension(ndest),   intent(in)    :: h_dest !< Thickness of destination cells [H]
   real, dimension(ndest+1), intent(inout) :: u_dest !< Interpolated value at destination cell interfaces [A]
+  logical,                  intent(in)    :: mask_edges !< If true, mask the values outside of massless
+                                                    !! layers at the top and bottom of the column.
 
   ! Local variables
-  real :: x_dest ! Relative position of target interface [H]
-  real :: dh ! Source cell thickness [H]
-  real :: u1, u2 ! Values to interpolate between [A]
-  real :: weight_a, weight_b ! Weights for interpolation [nondim]
-  integer :: k_src, k_dest ! Index of cell in src and dest columns
-  logical :: still_vanished ! Used for figuring out what to mask as missing
-
-  ! Initial values for the loop
-  still_vanished = .true.
+  real :: x_dest            ! Relative position of target interface [H]
+  real :: dh                ! Source cell thickness [H]
+  real :: frac_pos(ndest+1) ! Fractional position of the destination interface
+                            ! within the source layer [nondim], 0 <= frac_pos <= 1.
+  integer :: k_src(ndest+1) ! Source grid layer index of destination interface, 1 <= k_src <= ndest.
+  integer :: ks, k_dest     ! Index of cell in src and dest columns
 
   ! The following forces the "do while" loop to do one cycle that will set u1, u2, dh.
-  k_src = 0
+  ks = 0
   dh = 0.
   x_dest = 0.
 
-  do k_dest=1, ndest+1
-    do while (dh<=x_dest .and. k_src<nsrc)
+  ! Find the layer index and fractional position of the interfaces of the target
+  ! grid on the source grid.
+  do k_dest=1,ndest+1
+    do while (dh<=x_dest .and. ks<nsrc)
       ! Move positions pointers forward until the interval 0 .. dh spans x_dest.
       x_dest = x_dest - dh
-      k_src = k_src + 1
-      dh = h_src(k_src) ! Thickness of layer k_src
-
-      ! Values that will be used for the interpolation.
-      u1 = u_src(k_src) ! Value on left of source cell
-      u2 = u_src(k_src+1) ! Value on right of source cell
+      ks = ks + 1
+      dh = h_src(ks) ! Thickness of layer ks
     enddo
+    k_src(k_dest) = ks
 
     if (dh>0.) then
-      weight_b = max(0., min(1., x_dest / dh)) ! Weight of u2
+      frac_pos(k_dest) = max(0., min(1., x_dest / dh)) ! Weight of u2
     else  ! For a vanished source layer we need to do something reasonable...
-      weight_b = 0.5
+      frac_pos(k_dest) = 0.5
     endif
-    weight_a = 1.0 - weight_b   ! Weight of u1
-    ! Linear interpolation between u1 and u2
-    u_dest(k_dest) = weight_a * u1 + weight_b * u2
 
-    ! Mask vanished layers at the surface which would be under an ice-shelf.
-    ! TODO: Need to figure out what to do for an isopycnal coordinate diagnostic that could
-    !       also have vanished layers at the surface.
-    if (k_dest<=ndest) then
+    if (k_dest <= ndest) then
       x_dest = x_dest + h_dest(k_dest) ! Position of interface k_dest+1
-      if (still_vanished .and. h_dest(k_dest)==0.) then
-        ! When the layer k_dest is vanished and all layers above are also vanished, the k_dest
-        ! interface value should be missing.
-        u_dest(k_dest) = 0.0
-      else
-        still_vanished = .false.
-      endif
     endif
-
   enddo
 
-  ! Mask vanished layers on topography
-  still_vanished = .true.
-  do k_dest=ndest, 1, -1
-    if (still_vanished .and. h_dest(k_dest)==0.) then
-      ! When the layer k_dest is vanished and all layers below are also vanished, the k_dest+1
-      ! interface value should be missing.
+  do k_dest=1,ndest+1
+    ! Linear interpolation between surrounding edge values.
+    ks = k_src(k_dest)
+    u_dest(k_dest) = (1.0 - frac_pos(k_dest)) * u_src(ks) + frac_pos(k_dest) * u_src(ks+1)
+  enddo
+
+  if (mask_edges) then
+    ! Mask vanished layers at the surface which would be under an ice-shelf.
+    ! When the layer k_dest is vanished and all layers above are also vanished,
+    ! the k_dest interface value should be missing.
+    do k_dest=1,ndest
+      if (h_dest(k_dest) > 0.) exit
+      u_dest(k_dest) = 0.0
+    enddo
+
+    ! Mask interfaces below vanished layers at the bottom
+    do k_dest=ndest,1,-1
+      if (h_dest(k_dest) > 0.) exit
       u_dest(k_dest+1) = 0.0
-    else
-      exit
-    endif
-  enddo
+    enddo
+  endif
 
 end subroutine interpolate_column
 
@@ -1717,7 +1711,7 @@ logical function test_interp(verbose, msg, nsrc, h_src, u_src, ndest, h_dest, u_
   real :: error
 
   ! Interpolate from src to dest
-  call interpolate_column(nsrc, h_src, u_src, ndest, h_dest, u_dest)
+  call interpolate_column(nsrc, h_src, u_src, ndest, h_dest, u_dest, .true.)
 
   test_interp = .false.
   do k=1,ndest+1

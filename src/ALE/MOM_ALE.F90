@@ -554,7 +554,7 @@ subroutine ALE_offline_inputs(CS, G, GV, h, tv, Reg, uhtr, vhtr, Kd, debug, OBC)
       if (check_column_integrals(nk, h_src, nk, h_dest)) then
         call MOM_error(FATAL, "ALE_offline_inputs: Kd interpolation columns do not match")
       endif
-      call interpolate_column(nk, h(i,j,:), Kd(i,j,:), nk, h_new(i,j,:), Kd(i,j,:))
+      call interpolate_column(nk, h(i,j,:), Kd(i,j,:), nk, h_new(i,j,:), Kd(i,j,:), .true.)
     endif
   enddo ; enddo
 
