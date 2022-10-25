@@ -877,12 +877,13 @@ subroutine interpolate_column(nsrc, h_src, u_src, ndest, h_dest, u_dest)
     enddo
 
     if (dh>0.) then
-      weight_a = max(0., ( dh - x_dest ) / dh) ! Weight of u1
-      weight_b = min(1., x_dest / dh) ! Weight of u2
-      u_dest(k_dest) = weight_a * u1 + weight_b * u2 ! Linear interpolation between u1 and u2
-    else
-      u_dest(k_dest) = 0.5 * ( u1 + u2 ) ! For a vanished layer we need to do something reasonable...
+      weight_b = max(0., min(1., x_dest / dh)) ! Weight of u2
+    else  ! For a vanished source layer we need to do something reasonable...
+      weight_b = 0.5
     endif
+    weight_a = 1.0 - weight_b   ! Weight of u1
+    ! Linear interpolation between u1 and u2
+    u_dest(k_dest) = weight_a * u1 + weight_b * u2
 
     ! Mask vanished layers at the surface which would be under an ice-shelf.
     ! TODO: Need to figure out what to do for an isopycnal coordinate diagnostic that could
