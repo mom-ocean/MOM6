@@ -11,7 +11,8 @@ use MOM_dyn_horgrid, only : dyn_horgrid_type
 use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, WARNING, is_root_pe
 use MOM_error_handler, only : callTree_enter, callTree_leave, callTree_waypoint
 use MOM_file_parser, only : get_param, log_param, param_file_type, log_version
-use MOM_io, only : close_file, create_file, file_type, fieldtype, file_exists, field_size
+use MOM_io, only : create_MOM_file, file_exists, field_size
+use MOM_io, only : MOM_infra_file, MOM_field
 use MOM_io, only : MOM_read_data, MOM_read_vector, read_variable, stdout
 use MOM_io, only : open_file_to_read, close_file_to_read, SINGLE_FILE, MULTIPLE
 use MOM_io, only : slasher, vardesc, MOM_write_field, var_desc
@@ -1346,9 +1347,9 @@ subroutine write_ocean_geometry_file(G, param_file, directory, US, geom_file)
   character(len=40)  :: mdl = "write_ocean_geometry_file"
   type(vardesc),   dimension(:), allocatable :: &
     vars     ! Types with metadata about the variables and their staggering
-  type(fieldtype), dimension(:), allocatable :: &
+  type(MOM_field), dimension(:), allocatable :: &
     fields   ! Opaque types used by MOM_io to store variable metadata information
-  type(file_type) :: IO_handle ! The I/O handle of the fileset
+  type(MOM_infra_file) :: IO_handle ! The I/O handle of the fileset
   integer :: nFlds ! The number of variables in this file
   integer :: file_threading
   logical :: multiple_files
@@ -1412,7 +1413,8 @@ subroutine write_ocean_geometry_file(G, param_file, directory, US, geom_file)
   file_threading = SINGLE_FILE
   if (multiple_files) file_threading = MULTIPLE
 
-  call create_file(IO_handle, trim(filepath), vars, nFlds, fields, file_threading, dG=G)
+  call create_MOM_file(IO_handle, trim(filepath), vars, nFlds, fields, &
+      file_threading, dG=G)
 
   call MOM_write_field(IO_handle, fields(1), G%Domain, G%geoLatBu)
   call MOM_write_field(IO_handle, fields(2), G%Domain, G%geoLonBu)
@@ -1445,7 +1447,7 @@ subroutine write_ocean_geometry_file(G, param_file, directory, US, geom_file)
     call MOM_write_field(IO_handle, fields(23), G%Domain, G%Dopen_v, scale=US%Z_to_m)
   endif
 
-  call close_file(IO_handle)
+  call IO_handle%close()
 
   deallocate(vars, fields)
 

@@ -8,9 +8,9 @@ use MOM_domains, only : PE_here, num_PEs, AGRID, BGRID_NE, CGRID_NE
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, NOTE, is_root_pe
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_grid, only : ocean_grid_type
-use MOM_io, only : create_file, file_type, fieldtype, file_exists, open_file, close_file
-use MOM_io, only : MOM_read_data, read_data, MOM_write_field, read_field_chksum, field_exists
-use MOM_io, only : get_file_info, get_file_fields, get_field_atts, get_file_times
+use MOM_io, only : create_MOM_file, file_exists
+use MOM_io, only : MOM_infra_file, MOM_field
+use MOM_io, only : MOM_read_data, read_data, MOM_write_field, field_exists
 use MOM_io, only : vardesc, var_desc, query_vardesc, modify_vardesc, get_filename_appendix
 use MOM_io, only : MULTIPLE, READONLY_FILE, SINGLE_FILE
 use MOM_io, only : CENTER, CORNER, NORTH_FACE, EAST_FACE
@@ -1258,7 +1258,7 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV, num_
   ! Local variables
   type(vardesc) :: vars(CS%max_fields)  ! Descriptions of the fields that
                                         ! are to be read from the restart file.
-  type(fieldtype) :: fields(CS%max_fields) ! Opaque types containing metadata describing
+  type(MOM_field) :: fields(CS%max_fields) ! Opaque types containing metadata describing
                                         ! each variable that will be written.
   character(len=512) :: restartpath     ! The restart file path (dir/file).
   character(len=256) :: restartname     ! The restart file name (no dir).
@@ -1272,7 +1272,7 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV, num_
                                         ! versions of NetCDF, the value was 2147483647_8.
   integer :: start_var, next_var        ! The starting variables of the
                                         ! current and next files.
-  type(file_type) :: IO_handle          ! The I/O handle of the open fileset
+  type(MOM_infra_file) :: IO_handle     ! The I/O handle of the open fileset
   integer :: m, nz
   integer :: num_files                  ! The number of restart files that will be used.
   integer :: seconds, days, year, month, hour, minute
@@ -1408,11 +1408,11 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV, num_
     enddo
 
     if (CS%parallel_restartfiles) then
-      call create_file(IO_handle, trim(restartpath), vars, (next_var-start_var), &
-                       fields, MULTIPLE, G=G, GV=GV, checksums=check_val)
+      call create_MOM_file(IO_handle, trim(restartpath), vars, next_var-start_var, &
+          fields, MULTIPLE, G=G, GV=GV, checksums=check_val)
     else
-      call create_file(IO_handle, trim(restartpath), vars, (next_var-start_var), &
-                       fields, SINGLE_FILE, G=G, GV=GV, checksums=check_val)
+      call create_MOM_file(IO_handle, trim(restartpath), vars, next_var-start_var, &
+          fields, SINGLE_FILE, G=G, GV=GV, checksums=check_val)
     endif
 
     do m=start_var,next_var-1
@@ -1434,7 +1434,7 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV, num_
       endif
     enddo
 
-    call close_file(IO_handle)
+    call IO_handle%close()
 
     num_files = num_files+1
 
@@ -1466,14 +1466,14 @@ subroutine restore_state(filename, directory, day, G, CS)
   integer :: isL, ieL, jsL, jeL
   integer :: nvar, ntime, pos
 
-  type(file_type) :: IO_handles(CS%max_fields) ! The I/O units of all open files.
+  type(MOM_infra_file) :: IO_handles(CS%max_fields) ! The I/O units of all open files.
   character(len=200) :: unit_path(CS%max_fields) ! The file names.
   logical :: unit_is_global(CS%max_fields) ! True if the file is global.
 
   character(len=8)   :: hor_grid ! Variable grid info.
   real    :: t1, t2 ! Two times.
   real, allocatable :: time_vals(:)
-  type(fieldtype), allocatable :: fields(:)
+  type(MOM_field), allocatable :: fields(:)
   logical            :: is_there_a_checksum ! Is there a valid checksum that should be checked.
   integer(kind=8)    :: checksum_file  ! The checksum value recorded in the input file.
   integer(kind=8)    :: checksum_data  ! The checksum value for the data that was read in.
@@ -1500,7 +1500,7 @@ subroutine restore_state(filename, directory, day, G, CS)
 
   ! Get the time from the first file in the list that has one.
   do n=1,num_file
-    call get_file_times(IO_handles(n), time_vals, ntime)
+    call IO_handles(n)%get_file_times(time_vals, ntime)
     if (ntime < 1) cycle
 
     t1 = time_vals(1)
@@ -1516,7 +1516,7 @@ subroutine restore_state(filename, directory, day, G, CS)
   ! Check the remaining files for different times and issue a warning
   ! if they differ from the first time.
     do m = n+1,num_file
-      call get_file_times(IO_handles(n), time_vals, ntime)
+      call IO_handles(n)%get_file_times(time_vals, ntime)
       if (ntime < 1) cycle
 
       t2 = time_vals(1)
@@ -1532,13 +1532,13 @@ subroutine restore_state(filename, directory, day, G, CS)
 
   ! Read each variable from the first file in which it is found.
   do n=1,num_file
-    call get_file_info(IO_handles(n), nvar=nvar)
+    call IO_handles(n)%get_file_info(nvar=nvar)
 
     allocate(fields(nvar))
-    call get_file_fields(IO_handles(n), fields(1:nvar))
+    call IO_handles(n)%get_file_fields(fields(1:nvar))
 
     do m=1, nvar
-      call get_field_atts(fields(m), name=varname)
+      call IO_handles(n)%get_field_atts(fields(m), name=varname)
       do i=1,CS%num_obsolete_vars
         if (adjustl(lowercase(trim(varname))) == adjustl(lowercase(trim(CS%restart_obsolete(i)%field_name)))) then
             call MOM_error(FATAL, "MOM_restart restore_state: Attempting to use obsolete restart field "//&
@@ -1571,11 +1571,11 @@ subroutine restore_state(filename, directory, day, G, CS)
 
       call get_checksum_loop_ranges(G, pos, isL, ieL, jsL, jeL)
       do i=1, nvar
-        call get_field_atts(fields(i), name=varname)
+        call IO_handles(n)%get_field_atts(fields(i), name=varname)
         if (lowercase(trim(varname)) == lowercase(trim(CS%restart_field(m)%var_name))) then
           checksum_data = -1
           if (CS%checksum_required) then
-            call read_field_chksum(fields(i), checksum_file, is_there_a_checksum)
+            call IO_handles(n)%read_field_chksum(fields(i), checksum_file, is_there_a_checksum)
           else
             checksum_file = -1
             is_there_a_checksum = .false. ! Do not need to do data checksumming.
@@ -1643,7 +1643,7 @@ subroutine restore_state(filename, directory, day, G, CS)
   enddo
 
   do n=1,num_file
-    call close_file(IO_handles(n))
+    call IO_handles(n)%close()
   enddo
 
   ! Check whether any mandatory fields have not been found.
@@ -1745,7 +1745,7 @@ function open_restart_units(filename, directory, G, CS, IO_handles, file_paths, 
   type(ocean_grid_type), intent(in)  :: G         !< The ocean's grid structure
   type(MOM_restart_CS),  intent(in)  :: CS        !< MOM restart control struct
 
-  type(file_type), dimension(:), &
+  type(MOM_infra_file), dimension(:), &
                optional, intent(out) :: IO_handles !< The I/O handles of all opened files
   character(len=*), dimension(:), &
                optional, intent(out) :: file_paths   !< The full paths to open files
@@ -1822,7 +1822,7 @@ function open_restart_units(filename, directory, G, CS, IO_handles, file_paths, 
         if (fexists) then
           nf = nf + 1
           if (present(IO_handles)) &
-            call open_file(IO_handles(nf), trim(filepath), READONLY_FILE, &
+            call IO_handles(nf)%open(trim(filepath), READONLY_FILE, &
                            threading=MULTIPLE, fileset=SINGLE_FILE)
           if (present(global_files)) global_files(nf) = .true.
           if (present(file_paths)) file_paths(nf) = filepath
@@ -1832,7 +1832,7 @@ function open_restart_units(filename, directory, G, CS, IO_handles, file_paths, 
           if (fexists) then
             nf = nf + 1
             if (present(IO_handles)) &
-              call open_file(IO_handles(nf), trim(filepath), READONLY_FILE, MOM_domain=G%Domain)
+              call IO_handles(nf)%open(trim(filepath), READONLY_FILE, MOM_domain=G%Domain)
             if (present(global_files)) global_files(nf) = .false.
             if (present(file_paths)) file_paths(nf) = filepath
           endif
@@ -1854,7 +1854,7 @@ function open_restart_units(filename, directory, G, CS, IO_handles, file_paths, 
       if (fexists) then
         nf = nf + 1
         if (present(IO_handles)) &
-          call open_file(IO_handles(nf), trim(filepath), READONLY_FILE, &
+          call IO_handles(nf)%open(trim(filepath), READONLY_FILE, &
                        threading=MULTIPLE, fileset=SINGLE_FILE)
         if (present(global_files)) global_files(nf) = .true.
         if (present(file_paths)) file_paths(nf) = filepath

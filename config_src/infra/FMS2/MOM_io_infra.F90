@@ -509,8 +509,8 @@ subroutine open_ASCII_file(unit, file, action, threading, fileset)
   ! This checks if open() failed but did not raise a runtime error.
   inquire(unit, opened=is_open)
   if (.not. is_open) &
-    call MOM_error(FATAL, 'open_ASCII_file: File ' // trim(filename) // &
-                          ' failed to open.')
+    call MOM_error(FATAL, &
+        'open_ASCII_file: File "' // trim(filename) // '" failed to open.')
 
   ! NOTE: There are two possible mpp_write_meta functions in FMS1:
   ! - call mpp_write_meta( unit, 'filename', cval=mpp_file(unit)%name)

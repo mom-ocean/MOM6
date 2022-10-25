@@ -6,8 +6,9 @@ module MOM_regridding
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, assert
 use MOM_file_parser,   only : param_file_type, get_param, log_param
 use MOM_io,            only : file_exists, field_exists, field_size, MOM_read_data
-use MOM_io,            only : vardesc, var_desc, fieldtype, SINGLE_FILE
-use MOM_io,            only : create_file, MOM_write_field, close_file, file_type
+use MOM_io,            only : vardesc, var_desc, SINGLE_FILE
+use MOM_io,            only : MOM_infra_file, MOM_field
+use MOM_io,            only : create_MOM_file, MOM_write_field
 use MOM_io,            only : verify_variable_units, slasher
 use MOM_unit_scaling,  only : unit_scale_type
 use MOM_variables,     only : ocean_grid_type, thermo_var_ptrs
@@ -2212,8 +2213,8 @@ subroutine write_regrid_file( CS, GV, filepath )
   character(len=*),        intent(in) :: filepath  !< The full path to the file to write
 
   type(vardesc)      :: vars(2)
-  type(fieldtype)    :: fields(2)
-  type(file_type)    :: IO_handle ! The I/O handle of the fileset
+  type(MOM_field)    :: fields(2)
+  type(MOM_infra_file) :: IO_handle ! The I/O handle of the fileset
   real               :: ds(GV%ke), dsi(GV%ke+1)
 
   if (CS%regridding_scheme == REGRIDDING_HYBGEN) then
@@ -2231,10 +2232,11 @@ subroutine write_regrid_file( CS, GV, filepath )
   vars(2) = var_desc('ds_interface', getCoordinateUnits( CS ), &
                      'Layer Center Coordinate Separation', '1', 'i', '1')
 
-  call create_file(IO_handle, trim(filepath), vars, 2, fields, SINGLE_FILE, GV=GV)
+  call create_MOM_file(IO_handle, trim(filepath), vars, 2, fields, &
+      SINGLE_FILE, GV=GV)
   call MOM_write_field(IO_handle, fields(1), ds)
   call MOM_write_field(IO_handle, fields(2), dsi)
-  call close_file(IO_handle)
+  call IO_handle%close()
 
 end subroutine write_regrid_file
 

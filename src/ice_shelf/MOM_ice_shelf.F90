@@ -33,7 +33,7 @@ use MOM_fixed_initialization, only : MOM_initialize_rotation
 use user_initialization, only : user_initialize_topography
 use MOM_io, only : field_exists, file_exists, MOM_read_data, write_version_number
 use MOM_io, only : slasher, fieldtype, vardesc, var_desc
-use MOM_io, only : write_field, close_file, SINGLE_FILE, MULTIPLE
+use MOM_io, only : close_file, SINGLE_FILE, MULTIPLE
 use MOM_restart, only : register_restart_field, save_restart
 use MOM_restart, only : restart_init, restore_state, MOM_restart_CS, register_restart_pair
 use MOM_time_manager, only : time_type, time_type_to_real, real_to_time, operator(>), operator(-)

@@ -13,8 +13,9 @@ use MOM_file_parser,   only : get_param, log_param, log_version, param_file_type
 use MOM_forcing_type,  only : forcing
 use MOM_grid,          only : ocean_grid_type
 use MOM_interface_heights, only : find_eta
-use MOM_io,            only : create_file, file_type, fieldtype, flush_file, reopen_file, close_file
-use MOM_io,            only : file_exists, slasher, vardesc, var_desc, write_field, MOM_write_field
+use MOM_io,            only : create_MOM_file, reopen_MOM_file
+use MOM_io,            only : MOM_infra_file, MOM_netcdf_file, MOM_field
+use MOM_io,            only : file_exists, slasher, vardesc, var_desc, MOM_write_field
 use MOM_io,            only : field_size, read_variable, read_attribute, open_ASCII_file, stdout
 use MOM_io,            only : axis_info, set_axis_info, delete_axis_info, get_filename_appendix
 use MOM_io,            only : attribute_info, set_attribute_info, delete_attribute_info
@@ -125,9 +126,9 @@ type, public :: sum_output_CS ; private
                                 !! to stdout when the energy files are written.
   integer :: previous_calls = 0 !< The number of times write_energy has been called.
   integer :: prev_n = 0         !< The value of n from the last call.
-  type(file_type) :: fileenergy_nc !< The file handle for the netCDF version of the energy file.
+  type(MOM_netcdf_file) :: fileenergy_nc !< The file handle for the netCDF version of the energy file.
   integer :: fileenergy_ascii   !< The unit number of the ascii version of the energy file.
-  type(fieldtype), dimension(NUM_FIELDS+MAX_FIELDS_) :: &
+  type(MOM_field), dimension(NUM_FIELDS+MAX_FIELDS_) :: &
              fields             !< fieldtype variables for the output fields.
   character(len=200) :: energyfile  !< The name of the energy file with path.
 end type sum_output_CS
@@ -603,13 +604,11 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, dt_forci
 
     energypath_nc = trim(CS%energyfile) // ".nc"
     if (day > CS%Start_time) then
-      call reopen_file(CS%fileenergy_nc, trim(energypath_nc), vars, &
-                       num_nc_fields, CS%fields, SINGLE_FILE, CS%timeunit, &
-                       G=G, GV=GV)
+      call reopen_MOM_file(CS%fileenergy_nc, trim(energypath_nc), vars, &
+          num_nc_fields, CS%fields, SINGLE_FILE, CS%timeunit, G=G, GV=GV)
     else
-      call create_file(CS%fileenergy_nc, trim(energypath_nc), vars, &
-                       num_nc_fields, CS%fields, SINGLE_FILE, CS%timeunit, &
-                       G=G, GV=GV)
+      call create_MOM_file(CS%fileenergy_nc, trim(energypath_nc), vars, &
+          num_nc_fields, CS%fields, SINGLE_FILE, CS%timeunit, G=G, GV=GV)
     endif
   endif
 
@@ -863,35 +862,35 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, dt_forci
     endif
   endif
 
-  call write_field(CS%fileenergy_nc, CS%fields(1), real(CS%ntrunc), reday)
-  call write_field(CS%fileenergy_nc, CS%fields(2), toten, reday)
-  call write_field(CS%fileenergy_nc, CS%fields(3), PE, reday)
-  call write_field(CS%fileenergy_nc, CS%fields(4), KE, reday)
-  call write_field(CS%fileenergy_nc, CS%fields(5), H_0APE, reday)
-  call write_field(CS%fileenergy_nc, CS%fields(6), mass_lay, reday)
+  call CS%fileenergy_nc%write_field(CS%fields(1), real(CS%ntrunc), reday)
+  call CS%fileenergy_nc%write_field(CS%fields(2), toten, reday)
+  call CS%fileenergy_nc%write_field(CS%fields(3), PE, reday)
+  call CS%fileenergy_nc%write_field(CS%fields(4), KE, reday)
+  call CS%fileenergy_nc%write_field(CS%fields(5), H_0APE, reday)
+  call CS%fileenergy_nc%write_field(CS%fields(6), mass_lay, reday)
 
-  call write_field(CS%fileenergy_nc, CS%fields(7), mass_tot, reday)
-  call write_field(CS%fileenergy_nc, CS%fields(8), mass_chg, reday)
-  call write_field(CS%fileenergy_nc, CS%fields(9), mass_anom, reday)
-  call write_field(CS%fileenergy_nc, CS%fields(10), max_CFL(1), reday)
-  call write_field(CS%fileenergy_nc, CS%fields(11), max_CFL(2), reday)
+  call CS%fileenergy_nc%write_field(CS%fields(7), mass_tot, reday)
+  call CS%fileenergy_nc%write_field(CS%fields(8), mass_chg, reday)
+  call CS%fileenergy_nc%write_field(CS%fields(9), mass_anom, reday)
+  call CS%fileenergy_nc%write_field(CS%fields(10), max_CFL(1), reday)
+  call CS%fileenergy_nc%write_field(CS%fields(11), max_CFL(2), reday)
   if (CS%use_temperature) then
-    call write_field(CS%fileenergy_nc, CS%fields(12), 0.001*Salt, reday)
-    call write_field(CS%fileenergy_nc, CS%fields(13), 0.001*salt_chg, reday)
-    call write_field(CS%fileenergy_nc, CS%fields(14), 0.001*salt_anom, reday)
-    call write_field(CS%fileenergy_nc, CS%fields(15), Heat, reday)
-    call write_field(CS%fileenergy_nc, CS%fields(16), heat_chg, reday)
-    call write_field(CS%fileenergy_nc, CS%fields(17), heat_anom, reday)
+    call CS%fileenergy_nc%write_field(CS%fields(12), 0.001*Salt, reday)
+    call CS%fileenergy_nc%write_field(CS%fields(13), 0.001*salt_chg, reday)
+    call CS%fileenergy_nc%write_field(CS%fields(14), 0.001*salt_anom, reday)
+    call CS%fileenergy_nc%write_field(CS%fields(15), Heat, reday)
+    call CS%fileenergy_nc%write_field(CS%fields(16), heat_chg, reday)
+    call CS%fileenergy_nc%write_field(CS%fields(17), heat_anom, reday)
     do m=1,nTr_stocks
-      call write_field(CS%fileenergy_nc, CS%fields(17+m), Tr_stocks(m), reday)
+      call CS%fileenergy_nc%write_field(CS%fields(17+m), Tr_stocks(m), reday)
     enddo
   else
     do m=1,nTr_stocks
-      call write_field(CS%fileenergy_nc, CS%fields(11+m), Tr_stocks(m), reday)
+      call CS%fileenergy_nc%write_field(CS%fields(11+m), Tr_stocks(m), reday)
     enddo
   endif
 
-  call flush_file(CS%fileenergy_nc)
+  call CS%fileenergy_nc%flush()
 
   if (is_NaN(En_mass)) then
     call MOM_error(FATAL, "write_energy : NaNs in total model energy forced model termination.")
@@ -1233,13 +1232,13 @@ subroutine write_depth_list(G, US, DL, filename)
   ! Local variables
   type(vardesc), dimension(:), allocatable :: &
     vars          ! Types that described the staggering and metadata for the fields
-  type(fieldtype), dimension(:), allocatable :: &
+  type(MOM_field), dimension(:), allocatable :: &
     fields        ! Types with metadata about the variables that will be written
   type(axis_info), dimension(:), allocatable :: &
     extra_axes    ! Descriptors for extra axes that might be used
   type(attribute_info), dimension(:), allocatable :: &
     global_atts   ! Global attributes and their values
-  type(file_type)   :: IO_handle     ! The I/O handle of the fileset
+  type(MOM_netcdf_file) :: IO_handle   ! The I/O handle of the fileset
   character(len=16) :: depth_chksum, area_chksum
 
   ! All ranks are required to compute the global checksum
@@ -1259,8 +1258,8 @@ subroutine write_depth_list(G, US, DL, filename)
   call set_attribute_info(global_atts(1), depth_chksum_attr, depth_chksum)
   call set_attribute_info(global_atts(2), area_chksum_attr, area_chksum)
 
-  call create_file(IO_handle, filename, vars, 3, fields, SINGLE_FILE, extra_axes=extra_axes, &
-                   global_atts=global_atts)
+  call create_MOM_file(IO_handle, filename, vars, 3, fields, SINGLE_FILE, &
+      extra_axes=extra_axes, global_atts=global_atts)
   call MOM_write_field(IO_handle, fields(1), DL%depth, scale=US%Z_to_m)
   call MOM_write_field(IO_handle, fields(2), DL%area, scale=US%L_to_m**2)
   call MOM_write_field(IO_handle, fields(3), DL%vol_below, scale=US%Z_to_m*US%L_to_m**2)
@@ -1268,8 +1267,7 @@ subroutine write_depth_list(G, US, DL, filename)
   call delete_axis_info(extra_axes)
   call delete_attribute_info(global_atts)
   deallocate(vars, extra_axes, fields, global_atts)
-  call close_file(IO_handle)
-
+  call IO_handle%close()
 end subroutine write_depth_list
 
 !> This subroutine reads in the depth list from the specified file
