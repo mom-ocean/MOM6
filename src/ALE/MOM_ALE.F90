@@ -129,6 +129,8 @@ public ALE_regrid_accelerated
 public ALE_remap_scalar
 public ALE_remap_tracers
 public ALE_remap_velocities
+public ALE_remap_interface_vals
+public ALE_remap_vertex_vals
 public ALE_PLM_edge_values
 public TS_PLM_edge_values
 public TS_PPM_edge_values
@@ -289,10 +291,10 @@ subroutine ALE_init( param_file, GV, US, max_depth, CS)
   call set_regrid_params(CS%regridCS, depth_of_time_filter_shallow=filter_shallow_depth, &
                          depth_of_time_filter_deep=filter_deep_depth)
   call get_param(param_file, mdl, "REGRID_USE_OLD_DIRECTION", local_logical, &
-                 "If true, the regridding ntegrates upwards from the bottom for "//&
+                 "If true, the regridding integrates upwards from the bottom for "//&
                  "interface positions, much as the main model does. If false "//&
-                 "regridding integrates downward, consistant with the remapping "//&
-                 "code.", default=.true., do_not_log=.true.)
+                 "regridding integrates downward, consistent with the remapping code.", &
+                 default=.true., do_not_log=.true.)
   call set_regrid_params(CS%regridCS, integrate_downward_for_e=.not.local_logical)
 
   call get_param(param_file, mdl, "REMAP_VEL_MASK_BBL_THICK", CS%BBL_h_vel_mask, &
@@ -549,7 +551,7 @@ subroutine ALE_offline_inputs(CS, G, GV, h, tv, Reg, uhtr, vhtr, Kd, debug, OBC)
     endif
   enddo ; enddo
 
-  do j = jsc,jec ; do i=isc,iec
+  do j=jsc,jec ; do i=isc,iec
     if (G%mask2dT(i,j)>0.) then
       if (check_column_integrals(nk, h_src, nk, h_dest)) then
         call MOM_error(FATAL, "ALE_offline_inputs: Kd interpolation columns do not match")
@@ -974,6 +976,89 @@ subroutine ALE_remap_velocities(CS, G, GV, h_old, h_new, u, v, OBC, dzInterface,
 
 end subroutine ALE_remap_velocities
 
+!> Interpolate to find an updated array of values at interfaces after remapping.
+subroutine ALE_remap_interface_vals(CS, G, GV, h_old, h_new, int_val)
+  type(ALE_CS),                              intent(in)    :: CS       !< ALE control structure
+  type(ocean_grid_type),                     intent(in)    :: G        !< Ocean grid structure
+  type(verticalGrid_type),                   intent(in)    :: GV       !< Ocean vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)    :: h_old    !< Thickness of source grid
+                                                                       !! [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)    :: h_new    !< Thickness of destination grid
+                                                                       !! [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), &
+                                             intent(inout) :: int_val  !< The interface values to interpolate [A]
+
+  real :: val_src(GV%ke+1)  ! A column of interface values on the source grid [A]
+  real :: val_tgt(GV%ke+1)  ! A column of interface values on the target grid [A]
+  real :: h_src(GV%ke)      ! A column of source grid layer thicknesses [H ~> m or kg m-2]
+  real :: h_tgt(GV%ke)      ! A column of target grid layer thicknesses [H ~> m or kg m-2]
+  integer :: i, j, k, nz
+
+  nz = GV%ke
+
+  do j=G%jsc,G%jec ; do i=G%isc,G%iec ; if (G%mask2dT(i,j)>0.) then
+    do k=1,nz
+      h_src(k) = h_old(i,j,k)
+      h_tgt(k) = h_new(i,j,k)
+    enddo
+
+    do K=1,nz+1
+      val_src(K) = int_val(i,j,K)
+    enddo
+
+    call interpolate_column(nz, h_src, val_src, nz, h_tgt, val_tgt, .false.)
+
+    do K=1,nz+1
+      int_val(i,j,K) = val_tgt(K)
+    enddo
+  endif ; enddo ; enddo
+
+end subroutine ALE_remap_interface_vals
+
+!> Interpolate to find an updated array of values at vertices of tracer cells after remapping.
+subroutine ALE_remap_vertex_vals(CS, G, GV, h_old, h_new, vert_val)
+  type(ALE_CS),                              intent(in)    :: CS       !< ALE control structure
+  type(ocean_grid_type),                     intent(in)    :: G        !< Ocean grid structure
+  type(verticalGrid_type),                   intent(in)    :: GV       !< Ocean vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)    :: h_old    !< Thickness of source grid
+                                                                       !! [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)    :: h_new    !< Thickness of destination grid
+                                                                       !! [H ~> m or kg m-2]
+  real, dimension(SZIB_(G),SZJB_(G),SZK_(GV)+1), &
+                                             intent(inout) :: vert_val  !< The interface values to interpolate [A]
+
+  real :: val_src(GV%ke+1)  ! A column of interface values on the source grid [A]
+  real :: val_tgt(GV%ke+1)  ! A column of interface values on the target grid [A]
+  real :: h_src(GV%ke)      ! A column of source grid layer thicknesses [H ~> m or kg m-2]
+  real :: h_tgt(GV%ke)      ! A column of target grid layer thicknesses [H ~> m or kg m-2]
+  real :: I_mask_sum        ! The inverse of the tracer point masks surrounding a corner [nondim]
+  integer :: i, j, k, nz
+
+  nz = GV%ke
+
+  do J=G%JscB,G%JecB ; do I=G%IscB,G%IecB
+    if ((G%mask2dT(i,j) + G%mask2dT(i+1,j+1)) + (G%mask2dT(i+1,j) + G%mask2dT(i,j+1)) > 0.0 ) then
+      I_mask_sum = 1.0 / ((G%mask2dT(i,j) + G%mask2dT(i+1,j+1)) + (G%mask2dT(i+1,j) + G%mask2dT(i,j+1)))
+
+    do k=1,nz
+      h_src(k) = ((G%mask2dT(i,j) * h_old(i,j,k) + G%mask2dT(i+1,j+1) * h_old(i+1,j+1,k)) + &
+                  (G%mask2dT(i+1,j) * h_old(i+1,j,k) + G%mask2dT(i,j+1) * h_old(i,j+1,k)) ) * I_mask_sum
+      h_tgt(k) = ((G%mask2dT(i,j) * h_new(i,j,k) + G%mask2dT(i+1,j+1) * h_new(i+1,j+1,k)) + &
+                  (G%mask2dT(i+1,j) * h_new(i+1,j,k) + G%mask2dT(i,j+1) * h_new(i,j+1,k)) ) * I_mask_sum
+    enddo
+
+    do K=1,nz+1
+      val_src(K) = vert_val(I,J,K)
+    enddo
+
+    call interpolate_column(nz, h_src, val_src, nz, h_tgt, val_tgt, .false.)
+
+    do K=1,nz+1
+      vert_val(I,J,K) = val_tgt(K)
+    enddo
+  endif ; enddo ; enddo
+
+end subroutine ALE_remap_vertex_vals
 
 !> Mask out thicknesses to 0 when their running sum exceeds a specified value.
 subroutine apply_partial_cell_mask(h1, h_mask)
