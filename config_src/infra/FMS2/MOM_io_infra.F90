@@ -1680,6 +1680,7 @@ subroutine categorize_axes(fileObj, filename, ndims, dim_names, is_x, is_y, is_t
     ! First look for indicative variable attributes
     if (.not.is_t(i)) then
       if (variable_exists(fileobj, trim(dim_names(i)))) then
+        cartesian = ""
         if (variable_att_exists(fileobj, trim(dim_names(i)), "cartesian_axis")) then
           call get_variable_attribute(fileobj, trim(dim_names(i)), "cartesian_axis", cartesian)
         elseif (variable_att_exists(fileobj, trim(dim_names(i)), "axis")) then
