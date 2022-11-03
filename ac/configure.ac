@@ -105,7 +105,7 @@ AX_FC_CHECK_MODULE([mpi],
 
 # netCDF configuration
 
-# Search for the Fortran netCDF module, fallback to nf-config.
+# Search for the Fortran netCDF module.
 AX_FC_CHECK_MODULE([netcdf], [], [
   AS_UNSET([ax_fc_cv_mod_netcdf])
   AC_PATH_PROG([NF_CONFIG], [nf-config])
@@ -118,39 +118,37 @@ AX_FC_CHECK_MODULE([netcdf], [], [
   ])
 ])
 
-# FMS may invoke netCDF C calls, so we link to libnetcdf.
-AC_LANG_PUSH([C])
-AC_CHECK_LIB([netcdf], [nc_create], [], [
-  AS_UNSET([ac_cv_lib_netcdf_nc_create])
+# Confirm that the Fortran compiler can link the netCDF C library
+AX_FC_CHECK_C_LIB([netcdf], [nc_create], [], [
+  AS_UNSET([ax_fc_cv_c_lib_netcdf_nc_create])
   AC_PATH_PROG([NC_CONFIG], [nc-config])
   AS_IF([test -n "$NC_CONFIG"], [
-    AC_SUBST([LDFLAGS],
-      ["$LDFLAGS -L$($NC_CONFIG --libdir)"]
-    )
-    ], [AC_MSG_ERROR([Could not find nc-config.])]
-  )
-  AC_CHECK_LIB([netcdf], [nc_create], [], [
-    AC_MSG_ERROR([Could not find libnetcdf.])
+    AC_SUBST([LDFLAGS], ["$LDFLAGS -L$($NC_CONFIG --libdir)"])
+  ], [
+    AC_MSG_ERROR([Could not find nc-config.])
+  ])
+  AX_FC_CHECK_C_LIB([netcdf], [nc_create], [], [
+    AC_MSG_ERROR([Could not find netCDF C library.])
   ])
 ])
-AC_LANG_POP([C])
 
-# NOTE: We test for nf_create, rather than nf90_create, because AX_FC_CHECK_LIB
-#   is currently not yet able to properly probe inside modules.
-# NOTE: nf-config does not have --libdir, so we use the first term of flibs.
-
-# Link to Fortran netCDF library, netcdff
+# Confirm that the Fortran compiler can link to the netCDF Fortran library.
+# NOTE:
+#   - We test nf_create, rather than nf90_create, since AX_FC_CHECK_LIB can
+#     not currently probe the Fortran 90 interfaces.
+#   - nf-config does not have --libdir, so we parse the --flibs output.
 AX_FC_CHECK_LIB([netcdff], [nf_create], [], [], [
   AS_UNSET([ax_fc_cv_lib_netcdff_nf_create])
   AC_PATH_PROG([NF_CONFIG], [nf-config])
   AS_IF([test -n "$NF_CONFIG"], [
     AC_SUBST([LDFLAGS],
-      ["$LDFLAGS $($NF_CONFIG --flibs | cut -f1 -d" ")"]
+      ["$LDFLAGS $($NF_CONFIG --flibs | xargs -n1 | grep "^-L" | sort -u | xargs)"]
     )
-    ], [AC_MSG_ERROR([Could not find nf_create.])]
-  )
+  ], [
+    AC_MSG_ERROR([Could not find nf-config.])
+  ])
   AX_FC_CHECK_LIB([netcdff], [nf_create], [], [], [
-    AC_MSG_ERROR([Could not find libnetcdff.])
+    AC_MSG_ERROR([Could not find netCDF Fortran library.])
   ])
 ])
 
@@ -268,4 +266,3 @@ AC_LANG_POP([C])
 AC_SUBST([CPPFLAGS])
 AC_CONFIG_FILES([Makefile:${srcdir}/ac/Makefile.in])
 AC_OUTPUT
-
