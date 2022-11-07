@@ -1665,8 +1665,8 @@ subroutine read_tidal_constituents(G, US, tidal_energy_file, param_file, CS)
   call MOM_read_data(tidal_energy_file, 'K1', tc_k1, G%domain)
   call MOM_read_data(tidal_energy_file, 'O1', tc_o1, G%domain)
   ! Note the hard-coded assumption that z_t and z_w in the file are in centimeters.
-  call MOM_read_data(tidal_energy_file, 'z_t', z_t, scale=100.0*US%m_to_Z)
-  call MOM_read_data(tidal_energy_file, 'z_w', z_w, scale=100.0*US%m_to_Z)
+  call MOM_read_data(tidal_energy_file, 'z_t', z_t, scale=0.01*US%m_to_Z)
+  call MOM_read_data(tidal_energy_file, 'z_w', z_w, scale=0.01*US%m_to_Z)
 
   do j=js,je ; do i=is,ie
     if (abs(G%geoLatT(i,j)) < 30.0) then
