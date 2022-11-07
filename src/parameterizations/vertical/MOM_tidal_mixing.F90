@@ -48,7 +48,7 @@ type, public :: tidal_mixing_diags ; private
   real, allocatable :: Kd_Niku_work(:,:,:)    !< layer integrated work by lee-wave driven mixing [R Z3 T-3 ~> W m-2]
   real, allocatable :: Kd_Itidal_Work(:,:,:)  !< layer integrated work by int tide driven mixing [R Z3 T-3 ~> W m-2]
   real, allocatable :: Kd_Lowmode_Work(:,:,:) !< layer integrated work by low mode driven mixing [R Z3 T-3 ~> W m-2]
-  real, allocatable :: N2_int(:,:,:)          !< Bouyancy frequency squared at interfaces [T-2 ~> s-2]
+  real, allocatable :: N2_int(:,:,:)          !< Buoyancy frequency squared at interfaces [T-2 ~> s-2]
   real, allocatable :: vert_dep_3d(:,:,:)     !< The 3-d mixing energy deposition [W m-3]
   real, allocatable :: Schmittner_coeff_3d(:,:,:) !< The coefficient in the Schmittner et al mixing scheme, in UNITS?
   real, allocatable :: tidal_qe_md(:,:,:)     !< Input tidal energy dissipated locally,
@@ -61,7 +61,7 @@ type, public :: tidal_mixing_diags ; private
   real, allocatable :: N2_bot(:,:)            !< bottom squared buoyancy frequency [T-2 ~> s-2]
   real, allocatable :: N2_meanz(:,:)          !< vertically averaged buoyancy frequency [T-2 ~> s-2]
   real, allocatable :: Polzin_decay_scale_scaled(:,:) !< vertical scale of decay for tidal dissipation [Z ~> m]
-  real, allocatable :: Polzin_decay_scale(:,:)  !< vertical decay scale for tidal diss with Polzin [Z ~> m]
+  real, allocatable :: Polzin_decay_scale(:,:)  !< vertical decay scale for tidal dissipation with Polzin [Z ~> m]
   real, allocatable :: Simmons_coeff_2d(:,:)  !< The Simmons et al mixing coefficient
 end type
 
@@ -154,7 +154,7 @@ type, public :: tidal_mixing_cs ; private
   real, allocatable :: TKE_Niku(:,:)    !< Lee wave driven Turbulent Kinetic Energy input
                                         !! [R Z3 T-3 ~> W m-2]
   real, allocatable :: TKE_itidal(:,:)  !< The internal Turbulent Kinetic Energy input divided
-                                        !! by the bottom stratfication [R Z3 T-2 ~> J m-2].
+                                        !! by the bottom stratification [R Z3 T-2 ~> J m-2].
   real, allocatable :: Nb(:,:)          !< The near bottom buoyancy frequency [T-1 ~> s-1].
   real, allocatable :: mask_itidal(:,:) !< A mask of where internal tide energy is input
   real, allocatable :: h2(:,:)          !< Squared bottom depth variance [Z2 ~> m2].
@@ -236,8 +236,9 @@ logical function tidal_mixing_init(Time, G, GV, US, param_file, int_tide_CSp, di
                                   ! forms of the same expressions.
   character(len=20)  :: tmpstr, int_tide_profile_str
   character(len=20)  :: CVMix_tidal_scheme_str, tidal_energy_type
-  character(len=200) :: filename, h2_file, Niku_TKE_input_file
-  character(len=200) :: tidal_energy_file, tideamp_file
+  character(len=200) :: filename, h2_file, Niku_TKE_input_file  ! Input file names
+  character(len=200) :: tideamp_file  ! Input file names or paths
+  character(len=80)  :: tideamp_var, rough_var, TKE_input_var ! Input file variable names
   real :: utide, hamp, prandtl_tidal, max_frac_rough
   real :: Niku_scale ! local variable for scaling the Nikurashin TKE flux data
   integer :: i, j, is, ie, js, je
@@ -496,7 +497,10 @@ logical function tidal_mixing_init(Time, G, GV, US, param_file, int_tide_CSp, di
                  "tidal amplitudes with INT_TIDE_DISSIPATION.", default="tideamp.nc")
       filename = trim(CS%inputdir) // trim(tideamp_file)
       call log_param(param_file, mdl, "INPUTDIR/TIDEAMP_FILE", filename)
-      call MOM_read_data(filename, 'tideamp', CS%tideamp, G%domain, scale=US%m_to_Z*US%T_to_s)
+      call get_param(param_file, mdl, "TIDEAMP_VARNAME", tideamp_var, &
+                 "The name of the tidal amplitude variable in the input file.", &
+                 default="tideamp")
+      call MOM_read_data(filename, tideamp_var, CS%tideamp, G%domain, scale=US%m_to_Z*US%T_to_s)
     endif
 
     call get_param(param_file, mdl, "H2_FILE", h2_file, &
@@ -505,7 +509,10 @@ logical function tidal_mixing_init(Time, G, GV, US, param_file, int_tide_CSp, di
                  fail_if_missing=(.not.CS%use_CVMix_tidal))
     filename = trim(CS%inputdir) // trim(h2_file)
     call log_param(param_file, mdl, "INPUTDIR/H2_FILE", filename)
-    call MOM_read_data(filename, 'h2', CS%h2, G%domain, scale=US%m_to_Z**2)
+    call get_param(param_file, mdl, "ROUGHNESS_VARNAME", rough_var, &
+                 "The name in the input file of the squared sub-grid-scale "//&
+                 "topographic roughness amplitude variable.", default="h2")
+    call MOM_read_data(filename, rough_var, CS%h2, G%domain, scale=US%m_to_Z**2)
 
     call get_param(param_file, mdl, "FRACTIONAL_ROUGHNESS_MAX", max_frac_rough, &
                  "The maximum topographic roughness amplitude as a fraction of the mean depth, "//&
@@ -546,10 +553,13 @@ logical function tidal_mixing_init(Time, G, GV, US, param_file, int_tide_CSp, di
                  units="nondim", default=1.0)
 
     filename = trim(CS%inputdir) // trim(Niku_TKE_input_file)
-    call log_param(param_file, mdl, "INPUTDIR/NIKURASHIN_TKE_INPUT_FILE", &
-                   filename)
+    call log_param(param_file, mdl, "INPUTDIR/NIKURASHIN_TKE_INPUT_FILE", filename)
+    call get_param(param_file, mdl, "TKE_INPUT_VAR", TKE_input_var, &
+                 "The name in the input file of the turbulent kinetic energy input variable.", &
+                 default="TKE_input")
     allocate(CS%TKE_Niku(is:ie,js:je), source=0.)
-    call MOM_read_data(filename, 'TKE_input', CS%TKE_Niku, G%domain, timelevel=1, &  ! ??? timelevel -aja
+
+    call MOM_read_data(filename, TKE_input_var, CS%TKE_Niku, G%domain, timelevel=1, &  ! ??? timelevel -aja
                        scale=Niku_scale*US%W_m2_to_RZ3_T3)
 
     call get_param(param_file, mdl, "GAMMA_NIKURASHIN",CS%Gamma_lee, &
@@ -557,8 +567,8 @@ logical function tidal_mixing_init(Time, G, GV, US, param_file, int_tide_CSp, di
                  "locally with LEE_WAVE_DISSIPATION.", units="nondim", &
                  default=0.3333)
     call get_param(param_file, mdl, "DECAY_SCALE_FACTOR_LEE",CS%Decay_scale_factor_lee, &
-                 "Scaling for the vertical decay scaleof the local "//&
-                 "dissipation of lee waves dissipation.", units="nondim", &
+                 "Scaling for the vertical decay scale of the local "//&
+                 "dissipation of lee wave dissipation.", units="nondim", &
                  default=1.0)
   else
     CS%Decay_scale_factor_lee = -9.e99 ! This should never be used if CS%Lee_wave_dissipation = False
@@ -576,10 +586,6 @@ logical function tidal_mixing_init(Time, G, GV, US, param_file, int_tide_CSp, di
                    "Min allowable depth for dissipation for tidal-energy-constituent data. "//&
                    "No dissipation contribution is applied above TIDAL_DISS_LIM_TC.", &
                    units="m", default=0.0, scale=US%m_to_Z)
-    call get_param(param_file, mdl, "TIDAL_ENERGY_FILE",tidal_energy_file, &
-                 "The path to the file containing tidal energy "//&
-                 "dissipation. Used with CVMix tidal mixing schemes.", &
-                 fail_if_missing=.true.)
     call get_param(param_file, mdl, 'MIN_THICKNESS', CS%min_thickness, default=0.001, &
                    do_not_log=.True.)
     call get_param(param_file, mdl, "PRANDTL_TIDAL", prandtl_tidal, &
@@ -589,7 +595,6 @@ logical function tidal_mixing_init(Time, G, GV, US, param_file, int_tide_CSp, di
                    do_not_log=.true.)
     call CVMix_put(CS%CVMix_glb_params,'Prandtl',prandtl_tidal)
 
-    tidal_energy_file = trim(CS%inputdir) // trim(tidal_energy_file)
     call get_param(param_file, mdl, "TIDAL_ENERGY_TYPE",tidal_energy_type, &
                  "The type of input tidal energy flux dataset. Valid values are"//&
                    "\t Jayne\n"//&
@@ -614,7 +619,7 @@ logical function tidal_mixing_init(Time, G, GV, US, param_file, int_tide_CSp, di
                           local_mixing_frac       = CS%Gamma_itides,          &
                           depth_cutoff            = CS%min_zbot_itides*US%Z_to_m)
 
-    call read_tidal_energy(G, US, tidal_energy_type, tidal_energy_file, CS)
+    call read_tidal_energy(G, US, tidal_energy_type, param_file, CS)
 
     !call closeParameterBlock(param_file)
 
@@ -1572,29 +1577,41 @@ end subroutine tidal_mixing_h_amp
 
 ! TODO: move this subroutine to MOM_internal_tide_input module (?)
 !> This subroutine read tidal energy inputs from a file.
-subroutine read_tidal_energy(G, US, tidal_energy_type, tidal_energy_file, CS)
+subroutine read_tidal_energy(G, US, tidal_energy_type, param_file, CS)
   type(ocean_grid_type),   intent(in) :: G    !< The ocean's grid structure
   type(unit_scale_type),   intent(in) :: US   !< A dimensional unit scaling type
   character(len=20),       intent(in) :: tidal_energy_type !< The type of tidal energy inputs to read
-  character(len=200),      intent(in) :: tidal_energy_file !< The file from which to read tidalinputs
+  type(param_file_type),   intent(in)    :: param_file !< Run-time parameter file handle
   type(tidal_mixing_cs),   intent(inout) :: CS   !< The control structure for this module
-  ! local
+
+  ! local variables
+  character(len=200) :: tidal_energy_file  ! Input file names or paths
+  character(len=200) :: tidal_input_var    ! Input file variable name
+  character(len=40)  :: mdl = "MOM_tidal_mixing"     !< This module's name.
   integer :: i, j, isd, ied, jsd, jed
   real, allocatable, dimension(:,:) :: tidal_energy_flux_2d ! input tidal energy flux at T-grid points [W m-2]
 
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
+  call get_param(param_file, mdl, "TIDAL_ENERGY_FILE", tidal_energy_file, &
+                 "The path to the file containing tidal energy dissipation. "//&
+                 "Used with CVMix tidal mixing schemes.", fail_if_missing=.true.)
+  tidal_energy_file = trim(CS%inputdir) // trim(tidal_energy_file)
+
   select case (uppercase(tidal_energy_type(1:4)))
   case ('JAYN') ! Jayne 2009
     if (.not. allocated(CS%tidal_qe_2d)) allocate(CS%tidal_qe_2d(isd:ied,jsd:jed))
     allocate(tidal_energy_flux_2d(isd:ied,jsd:jed))
-    call MOM_read_data(tidal_energy_file,'wave_dissipation',tidal_energy_flux_2d, G%domain)
+    call get_param(param_file, mdl, "TIDAL_DISSIPATION_VAR", tidal_input_var, &
+                 "The name in the input file of the tidal energy source for mixing.", &
+                 default="wave_dissipation")
+    call MOM_read_data(tidal_energy_file, tidal_input_var, tidal_energy_flux_2d, G%domain)
     do j=G%jsc,G%jec ; do i=G%isc,G%iec
       CS%tidal_qe_2d(i,j) = CS%Gamma_itides * tidal_energy_flux_2d(i,j)
     enddo ; enddo
     deallocate(tidal_energy_flux_2d)
   case ('ER03') ! Egbert & Ray 2003
-    call read_tidal_constituents(G, US, tidal_energy_file, CS)
+    call read_tidal_constituents(G, US, tidal_energy_file, param_file, CS)
   case default
     call MOM_error(FATAL, "read_tidal_energy: Unknown tidal energy file type.")
   end select
@@ -1602,10 +1619,11 @@ subroutine read_tidal_energy(G, US, tidal_energy_type, tidal_energy_file, CS)
 end subroutine read_tidal_energy
 
 !> This subroutine reads tidal input energy from a file by constituent.
-subroutine read_tidal_constituents(G, US, tidal_energy_file, CS)
+subroutine read_tidal_constituents(G, US, tidal_energy_file, param_file, CS)
   type(ocean_grid_type), intent(in) :: G    !< The ocean's grid structure
   type(unit_scale_type), intent(in) :: US   !< A dimensional unit scaling type
   character(len=200),    intent(in) :: tidal_energy_file !< The file from which to read tidal energy inputs
+  type(param_file_type), intent(in)    :: param_file !< Run-time parameter file handle
   type(tidal_mixing_cs), intent(inout) :: CS   !< The control structure for this module
 
   ! local variables

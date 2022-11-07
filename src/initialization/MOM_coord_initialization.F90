@@ -261,6 +261,8 @@ subroutine set_coord_from_TS_profile(Rlay, g_prime, GV, US, param_file, eqn_of_s
   integer :: k, nz
   character(len=40)  :: mdl = "set_coord_from_TS_profile" ! This subroutine's name.
   character(len=200) :: filename, coord_file, inputdir ! Strings for file/path
+  character(len=64)  :: temp_var, salt_var ! Temperature and salinity names in files
+
   nz = GV%ke
 
   call callTree_enter(trim(mdl)//"(), MOM_coord_initialization.F90")
@@ -269,15 +271,21 @@ subroutine set_coord_from_TS_profile(Rlay, g_prime, GV, US, param_file, eqn_of_s
                  "The reduced gravity at the free surface.", units="m s-2", &
                  default=GV%g_Earth*US%L_T_to_m_s**2*US%m_to_Z, scale=US%m_s_to_L_T**2*US%Z_to_m)
   call get_param(param_file, mdl, "COORD_FILE", coord_file, &
-                 "The file from which the coordinate temperatures and "//&
-                 "salinities are read.", fail_if_missing=.true.)
+                 "The file from which the coordinate temperatures and salinities are read.", &
+                 fail_if_missing=.true.)
+  call get_param(param_file, mdl, "TEMP_COORD_VAR", temp_var, &
+                 "The coordinate reference profile variable name for potential temperature.", &
+                 default="PTEMP")
+  call get_param(param_file, mdl, "SALT_COORD_VAR", salt_var, &
+                 "The coordinate reference profile variable name for salinity.", &
+                 default="SALT")
 
   call get_param(param_file,  mdl, "INPUTDIR", inputdir, default=".")
   filename = trim(slasher(inputdir))//trim(coord_file)
   call log_param(param_file, mdl, "INPUTDIR/COORD_FILE", filename)
 
-  call MOM_read_data(filename, "PTEMP", T0(:), scale=US%degC_to_C)
-  call MOM_read_data(filename, "SALT", S0(:), scale=US%ppt_to_S)
+  call MOM_read_data(filename, temp_var, T0(:), scale=US%degC_to_C)
+  call MOM_read_data(filename, salt_var, S0(:), scale=US%ppt_to_S)
 
   if (.not.file_exists(filename)) call MOM_error(FATAL, &
       " set_coord_from_TS_profile: Unable to open " //trim(filename))
@@ -357,7 +365,7 @@ subroutine set_coord_from_TS_range(Rlay, g_prime, GV, US, param_file, eqn_of_sta
 
   k_light = GV%nk_rho_varies + 1
 
-  ! Set T0(k) to range from T_LIGHT to T_DENSE, and simliarly for S0(k).
+  ! Set T0(k) to range from T_LIGHT to T_DENSE, and similarly for S0(k).
   T0(k_light) = T_Light ; S0(k_light) = S_Light
   a1 = 2.0 * res_rat / (1.0 + res_rat)
   do k=k_light+1,nz
@@ -458,7 +466,7 @@ subroutine set_coord_linear(Rlay, g_prime, GV, US, param_file)
                  "The reduced gravity at the free surface.", units="m s-2", &
                  default=GV%g_Earth*US%L_T_to_m_s**2*US%m_to_Z, scale=US%m_s_to_L_T**2*US%Z_to_m)
 
-  ! This following sets the target layer densities such that a the
+  ! This following sets the target layer densities such that the
   ! surface interface has density Rlay_ref and the bottom
   ! is Rlay_range larger
   do k=1,nz

@@ -77,7 +77,7 @@ type, public :: set_visc_CS ; private
   logical :: Channel_drag   !< If true, the drag is exerted directly on each layer
                             !! according to what fraction of the bottom they overlie.
   real    :: Chan_drag_max_vol !< The maximum bottom boundary layer volume within which the
-                            !! channel drag is applied, normalized by the the full cell area,
+                            !! channel drag is applied, normalized by the full cell area,
                             !! or a negative value to apply no maximum [H ~> m or kg m-2].
   logical :: correct_BBL_bounds !< If true, uses the correct bounds on the BBL thickness and
                             !! viscosity so that the bottom layer feels the intended drag.
@@ -134,7 +134,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, pbv)
                             intent(in)    :: h    !< Layer thicknesses [H ~> m or kg m-2].
   type(thermo_var_ptrs),    intent(in)    :: tv   !< A structure containing pointers to any
                                                   !! available thermodynamic fields. Absent fields
-                                                  !! have NULL ptrs.
+                                                  !! have NULL pointers.
   type(vertvisc_type),      intent(inout) :: visc !< A structure containing vertical viscosities and
                                                   !! related fields.
   type(set_visc_CS),        intent(inout) :: CS   !< The control structure returned by a previous
@@ -1192,7 +1192,7 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS)
                            intent(in)    :: h    !< Layer thicknesses [H ~> m or kg m-2].
   type(thermo_var_ptrs),   intent(in)    :: tv   !< A structure containing pointers to any available
                                                  !! thermodynamic fields. Absent fields have
-                                                 !! NULL ptrs.
+                                                 !! NULL pointers.
   type(mech_forcing),      intent(in)    :: forces !< A structure with the driving mechanical forces
   type(vertvisc_type),     intent(inout) :: visc !< A structure containing vertical viscosities and
                                                  !! related fields.
@@ -1236,7 +1236,7 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS)
                 ! viscous mixed layer.
   real :: Uh2   ! The squared magnitude of the difference between the velocity
                 ! integrated through the mixed layer and the velocity of the
-                ! interior layer layer times the depth of the the mixed layer
+                ! interior layer layer times the depth of the mixed layer
                 ! [H2 L2 T-2 ~> m4 s-2 or kg2 m-2 s-2].
   real :: htot_vel  ! Sum of the layer thicknesses up to some point [H ~> m or kg m-2].
   real :: hwtot     ! Sum of the thicknesses used to calculate
@@ -1253,8 +1253,8 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS)
   real :: S_lay     ! The layer salinity at velocity points [S ~> ppt].
   real :: Rlay      ! The layer potential density at velocity points [R ~> kg m-3].
   real :: Rlb       ! The potential density of the layer below [R ~> kg m-3].
-  real :: v_at_u    ! The meridonal velocity at a zonal velocity point [L T-1 ~> m s-1].
-  real :: u_at_v    ! The zonal velocity at a meridonal velocity point [L T-1 ~> m s-1].
+  real :: v_at_u    ! The meridional velocity at a zonal velocity point [L T-1 ~> m s-1].
+  real :: u_at_v    ! The zonal velocity at a meridional velocity point [L T-1 ~> m s-1].
   real :: gHprime   ! The mixed-layer internal gravity wave speed squared, based
                     ! on the mixed layer thickness and density difference across
                     ! the base of the mixed layer [L2 T-2 ~> m2 s-2].
@@ -1863,7 +1863,7 @@ subroutine set_visc_register_restarts(HI, GV, US, param_file, visc, restart_CS)
   type(vertvisc_type),     intent(inout) :: visc       !< A structure containing vertical
                                                        !! viscosities and related fields.
                                                        !! Allocated here.
-  type(MOM_restart_CS),    intent(inout) :: restart_CS !< MOM restart control struct
+  type(MOM_restart_CS),    intent(inout) :: restart_CS !< MOM restart control structure
   ! Local variables
   logical :: use_kappa_shear, KS_at_vertex
   logical :: adiabatic, useKPP, useEPBL
@@ -1954,14 +1954,14 @@ subroutine set_visc_init(Time, G, GV, US, param_file, diag, visc, CS, restart_CS
                                                  !! output.
   type(vertvisc_type),     intent(inout) :: visc !< A structure containing vertical viscosities and
                                                  !! related fields.  Allocated here.
-  type(set_visc_CS),       intent(inout) :: CS   !< Vertical viscosity control struct
-  type(MOM_restart_CS),    intent(inout) :: restart_CS !< MOM restart control struct
+  type(set_visc_CS),       intent(inout) :: CS   !< Vertical viscosity control structure
+  type(MOM_restart_CS),    intent(inout) :: restart_CS !< MOM restart control structure
   type(ocean_OBC_type),    pointer       :: OBC  !< A pointer to an open boundary condition structure
 
   ! Local variables
   real    :: Csmag_chan_dflt ! The default value for SMAG_CONST_CHANNEL [nondim]
   real    :: smag_const1     ! The default value for the Smagorinsky Laplacian coefficient [nondim]
-  real    :: TKE_decay_dflt  ! The default value of a coeficient scaling the vertical decay
+  real    :: TKE_decay_dflt  ! The default value of a coefficient scaling the vertical decay
                              ! rate of TKE [nondim]
   real    :: bulk_Ri_ML_dflt ! The default bulk Richardson number for a bulk mixed layer [nondim]
   real    :: Kv_background   ! The background kinematic viscosity in the interior [m2 s-1]
@@ -1989,7 +1989,8 @@ subroutine set_visc_init(Time, G, GV, US, param_file, diag, visc, CS, restart_CS
                              ! isopycnal or stacked shallow water mode.
   logical :: use_temperature ! If true, temperature and salinity are used as state variables.
   logical :: use_EOS         ! If true, density calculated from T & S using an equation of state.
-  character(len=200) :: filename, tideamp_file
+  character(len=200) :: filename, tideamp_file ! Input file names or paths
+  character(len=80)  :: tideamp_var ! Input file variable names
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
   character(len=40)  :: mdl = "MOM_set_visc"  ! This module's name.
@@ -2090,7 +2091,7 @@ subroutine set_visc_init(Time, G, GV, US, param_file, diag, visc, CS, restart_CS
                    "scale for turbulence.", default=.false., do_not_log=.true.)
     omega_frac_dflt = 0.0
     if (use_omega) then
-      call MOM_error(WARNING, "ML_USE_OMEGA is depricated; use ML_OMEGA_FRAC=1.0 instead.")
+      call MOM_error(WARNING, "ML_USE_OMEGA is deprecated; use ML_OMEGA_FRAC=1.0 instead.")
       omega_frac_dflt = 1.0
     endif
     call get_param(param_file, mdl, "ML_OMEGA_FRAC", CS%omega_frac, &
@@ -2130,6 +2131,9 @@ subroutine set_visc_init(Time, G, GV, US, param_file, diag, visc, CS, restart_CS
       call get_param(param_file, mdl, "TIDEAMP_FILE", tideamp_file, &
                    "The path to the file containing the spatially varying "//&
                    "tidal amplitudes with INT_TIDE_DISSIPATION.", default="tideamp.nc")
+      call get_param(param_file, mdl, "TIDEAMP_VARNAME", tideamp_var, &
+                   "The name of the tidal amplitude variable in the input file.", &
+                   default="tideamp")
     else
       call get_param(param_file, mdl, "DRAG_BG_VEL", CS%drag_bg_vel, &
                    "DRAG_BG_VEL is either the assumed bottom velocity (with "//&
@@ -2223,7 +2227,7 @@ subroutine set_visc_init(Time, G, GV, US, param_file, diag, visc, CS, restart_CS
   CS%BBL_thick_min = CS%BBL_thick_min * GV%m_to_H ! Rescale
 
   if (CS%RiNo_mix .and. kappa_shear_at_vertex(param_file)) then
-    ! This is necessary for reproduciblity across restarts in non-symmetric mode.
+    ! This is necessary for reproducibility across restarts in non-symmetric mode.
     call pass_var(visc%Kv_shear_Bu, G%Domain, position=CORNER, complete=.true.)
   endif
 
@@ -2257,7 +2261,7 @@ subroutine set_visc_init(Time, G, GV, US, param_file, diag, visc, CS, restart_CS
       allocate(CS%tideamp(isd:ied,jsd:jed), source=0.0)
       filename = trim(CS%inputdir) // trim(tideamp_file)
       call log_param(param_file, mdl, "INPUTDIR/TIDEAMP_FILE", filename)
-      call MOM_read_data(filename, 'tideamp', CS%tideamp, G%domain, scale=US%m_to_Z*US%T_to_s)
+      call MOM_read_data(filename, tideamp_var, CS%tideamp, G%domain, scale=US%m_to_Z*US%T_to_s)
       call pass_var(CS%tideamp,G%domain)
     endif
   endif

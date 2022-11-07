@@ -135,7 +135,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
                                                     !! for model parameter values.
   type(directories),          intent(in)    :: dirs !< A structure containing several relevant
                                                     !! directory paths.
-  type(MOM_restart_CS),       intent(inout) :: restart_CS !< MOM restart control struct
+  type(MOM_restart_CS),       intent(inout) :: restart_CS !< MOM restart control structure
   type(ALE_CS),               pointer       :: ALE_CSp !< The ALE control structure for remapping
   type(tracer_registry_type), pointer       :: tracer_Reg !< A pointer to the tracer registry
   type(sponge_CS),            pointer       :: sponge_CSp !< The layerwise sponge control structure.
@@ -342,7 +342,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
     ! Initialize temperature and salinity (T and S).
     if ( use_temperature ) then
       call get_param(PF, mdl, "TS_CONFIG", config, &
-             "A string that determines how the initial tempertures "//&
+             "A string that determines how the initial temperatures "//&
              "and salinities are specified for a new run: \n"//&
              " \t file - read velocities from the file specified \n"//&
              " \t\t by (TS_FILE). \n"//&
@@ -471,7 +471,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
                "file is read.", default=.not.GV%Boussinesq, do_not_log=just_read)
 
   if (new_sim .and. convert .and. .not.GV%Boussinesq) &
-    ! Convert thicknesses from geomtric distances to mass-per-unit-area.
+    ! Convert thicknesses from geometric distances to mass-per-unit-area.
     call convert_thickness(h, G, GV, US, tv)
 
   ! Remove the mass that would be displaced by an ice shelf or inverse barometer.
@@ -684,12 +684,18 @@ subroutine initialize_thickness_from_file(h, depth_tot, G, GV, US, param_file, f
 
   ! Local variables
   real :: eta(SZI_(G),SZJ_(G),SZK_(GV)+1) ! Interface heights, in depth units [Z ~> m].
+  real :: h_rescale   ! A factor by which to rescale the initial thickness variable in the input
+                      ! file to convert it to units of m [various]
+  real :: eta_rescale ! A factor by which to rescale the initial interface heights to convert
+                      ! them to units of m or correct sign conventions to positive upward [various]
+  real :: h_tolerance ! A parameter that controls the tolerance when adjusting the
+                      ! thickness to fit the bathymetry [Z ~> m].
   integer :: inconsistent = 0
   logical :: correct_thickness
-  real    :: h_tolerance ! A parameter that controls the tolerance when adjusting the
-                         ! thickness to fit the bathymetry [Z ~> m].
   character(len=40)  :: mdl = "initialize_thickness_from_file" ! This subroutine's name.
   character(len=200) :: filename, thickness_file, inputdir, mesg ! Strings for file/path
+  character(len=80)  :: eta_var ! The interface height variable name in the input file
+  character(len=80)  :: h_var   ! The thickness variable name in the input file
   integer :: i, j, k, is, ie, js, je, nz
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
@@ -710,9 +716,16 @@ subroutine initialize_thickness_from_file(h, depth_tot, G, GV, US, param_file, f
          " initialize_thickness_from_file: Unable to open "//trim(filename))
 
   if (file_has_thickness) then
-    !### Consider adding a parameter to use to rescale h.
+    call get_param(param_file, mdl, "THICKNESS_IC_VAR", h_var, &
+                 "The variable name for layer thickness initial conditions.", &
+                 default="h", do_not_log=just_read)
+    call get_param(param_file, mdl, "THICKNESS_IC_RESCALE", h_rescale, &
+                 "A factor by which to rescale the initial thicknesses in the input "//&
+                 "file to convert them to units of m.", &
+                 default=1.0, units="various", do_not_log=just_read)
     if (just_read) return ! All run-time parameters have been read, so return.
-    call MOM_read_data(filename, "h", h(:,:,:), G%Domain, scale=GV%m_to_H)
+
+    call MOM_read_data(filename, h_var, h(:,:,:), G%Domain, scale=h_rescale*GV%m_to_H)
   else
     call get_param(param_file, mdl, "ADJUST_THICKNESS", correct_thickness, &
                  "If true, all mass below the bottom removed if the "//&
@@ -724,9 +737,17 @@ subroutine initialize_thickness_from_file(h, depth_tot, G, GV, US, param_file, f
                  "thickness to fit the bathymetry. Used when ADJUST_THICKNESS=True.", &
                  units="m", default=0.1, scale=US%m_to_Z, do_not_log=just_read)
     endif
+    call get_param(param_file, mdl, "INTERFACE_IC_VAR", eta_var, &
+                 "The variable name for initial conditions for interface heights "//&
+                 "relative to mean sea level, positive upward unless otherwise rescaled.", &
+                 default="eta", do_not_log=just_read)
+    call get_param(param_file, mdl, "INTERFACE_IC_RESCALE", eta_rescale, &
+                 "A factor by which to rescale the initial interface heights to convert "//&
+                 "them to units of m or correct sign conventions to positive upward.", &
+                 default=1.0, units="various", do_not_log=just_read)
     if (just_read) return ! All run-time parameters have been read, so return.
 
-    call MOM_read_data(filename, "eta", eta(:,:,:), G%Domain, scale=US%m_to_Z)
+    call MOM_read_data(filename, eta_var, eta(:,:,:), G%Domain, scale=US%m_to_Z*eta_rescale)
 
     if (correct_thickness) then
       call adjustEtaToFitBathymetry(G, GV, US, eta, h, h_tolerance, dZ_ref_eta=G%Z_ref)
@@ -868,7 +889,7 @@ subroutine initialize_thickness_uniform(h, depth_tot, G, GV, param_file, just_re
   call callTree_enter(trim(mdl)//"(), MOM_state_initialization.F90")
 
   if (G%max_depth<=0.) call MOM_error(FATAL,"initialize_thickness_uniform: "// &
-      "MAXIMUM_DEPTH has a non-sensical value! Was it set?")
+      "MAXIMUM_DEPTH has a nonsensical value! Was it set?")
 
   do k=1,nz
     e0(K) = -G%max_depth * real(k-1) / real(nz)
@@ -915,7 +936,7 @@ subroutine initialize_thickness_list(h, depth_tot, G, GV, US, param_file, just_r
   real :: eta1D(SZK_(GV)+1)! Interface height relative to the sea surface
                           ! positive upward, in depth units [Z ~> m].
   character(len=200) :: filename, eta_file, inputdir ! Strings for file/path
-  character(len=72)  :: eta_var
+  character(len=72)  :: eta_var ! The interface height variable name in the input file
   integer :: i, j, k, is, ie, js, je, nz
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
@@ -1681,13 +1702,20 @@ subroutine initialize_temp_salt_from_profile(T, S, G, GV, US, param_file, just_r
   real, dimension(SZK_(GV)) :: T0, S0
   integer :: i, j, k
   character(len=200) :: filename, ts_file, inputdir ! Strings for file/path
+  character(len=64)  :: temp_var, salt_var ! Temperature and salinity names in files
   character(len=40)  :: mdl = "initialize_temp_salt_from_profile"
 
   if (.not.just_read) call callTree_enter(trim(mdl)//"(), MOM_state_initialization.F90")
 
   call get_param(param_file, mdl, "TS_FILE", ts_file, &
-                 "The file with the reference profiles for temperature "//&
-                 "and salinity.", fail_if_missing=.not.just_read, do_not_log=just_read)
+                 "The file with the reference profiles for temperature and salinity.", &
+                 fail_if_missing=.not.just_read, do_not_log=just_read)
+  call get_param(param_file, mdl, "TEMP_IC_VAR", temp_var, &
+                 "The initial condition variable for potential temperature.", &
+                 default="PTEMP", do_not_log=just_read)
+  call get_param(param_file, mdl, "SALT_IC_VAR", salt_var, &
+                 "The initial condition variable for salinity.", &
+                 default="SALT", do_not_log=just_read)
 
   if (just_read) return ! All run-time parameters have been read, so return.
 
@@ -1695,12 +1723,12 @@ subroutine initialize_temp_salt_from_profile(T, S, G, GV, US, param_file, just_r
   inputdir = slasher(inputdir)
   filename = trim(inputdir)//trim(ts_file)
   call log_param(param_file, mdl, "INPUTDIR/TS_FILE", filename)
-  if (.not.file_exists(filename)) call MOM_error(FATAL, &
+   if (.not.file_exists(filename)) call MOM_error(FATAL, &
      " initialize_temp_salt_from_profile: Unable to open "//trim(filename))
 
   ! Read the temperatures and salinities from a netcdf file.
-  call MOM_read_data(filename, "PTEMP", T0(:), scale=US%degC_to_C)
-  call MOM_read_data(filename, "SALT",  S0(:), scale=US%ppt_to_S)
+  call MOM_read_data(filename, temp_var, T0(:), scale=US%degC_to_C)
+  call MOM_read_data(filename, salt_var, S0(:), scale=US%ppt_to_S)
 
   do k=1,GV%ke ; do j=G%jsc,G%jec ; do i=G%isc,G%iec
     T(i,j,k) = T0(k) ; S(i,j,k) = S0(k)
@@ -2212,14 +2240,14 @@ subroutine initialize_oda_incupd_file(G, GV, US, use_temperature, tv, h, u, v, p
   type(param_file_type),   intent(in) :: param_file !< A structure to parse for run-time parameters.
   type(oda_incupd_CS),     pointer    :: oda_incupd_CSp  !< A pointer that is set to point to the control
                                                   !! structure for this module.
-  type(MOM_restart_CS),    intent(in) :: restart_CS !< MOM restart control struct
+  type(MOM_restart_CS),    intent(in) :: restart_CS !< MOM restart control structure
   type(time_type),         intent(in) :: Time !< Time at the start of the run segment. Time_in
                                               !! overrides any value set for
                                               !Time.
   ! Local variables
   real, allocatable, dimension(:,:,:) :: hoda ! The layer thk inc. and oda layer thk [H ~> m or kg m-2].
   real, allocatable, dimension(:,:,:) :: tmp_tr ! A temporary array for reading oda fields
-  real, allocatable, dimension(:,:,:) :: tmp_u,tmp_v ! A temporary array for reading oda fields
+  real, allocatable, dimension(:,:,:) :: tmp_u, tmp_v ! Temporary arrays for reading oda fields
 
   integer :: is, ie, js, je, nz
   integer :: isd, ied, jsd, jed
@@ -2605,7 +2633,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, depth_tot, G, GV, US, PF, just
                  "latter takes precedence.", default=default_remap_ans_date, do_not_log=just_read)
   endif
   call get_param(PF, mdl, "HOR_REGRID_2018_ANSWERS", hor_regrid_answers_2018, &
-                 "If true, use the order of arithmetic for horizonal regridding that recovers "//&
+                 "If true, use the order of arithmetic for horizontal regridding that recovers "//&
                  "the answers from the end of 2018.  Otherwise, use rotationally symmetric "//&
                  "forms of the same expressions.", default=default_2018_answers, do_not_log=just_read)
   ! Revise inconsistent default answer dates for horizontal regridding.

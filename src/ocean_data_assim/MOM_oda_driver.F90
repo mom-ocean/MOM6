@@ -174,6 +174,7 @@ subroutine init_oda(Time, G, GV, US, diag_CS, CS)
   integer :: npes_pm, ens_info(6)
   character(len=30) :: coord_mode
   character(len=200) :: inputdir, basin_file
+  character(len=80) :: basin_var
   character(len=80) :: remap_scheme
   character(len=80) :: bias_correction_file, inc_file
   logical :: answers_2018  ! If true, use the order of arithmetic and expressions that recover the
@@ -348,27 +349,28 @@ subroutine init_oda(Time, G, GV, US, diag_CS, CS)
 
   if (CS%use_basin_mask) then
     call get_param(PF, 'oda_driver', "BASIN_FILE", basin_file, &
-          "A file in which to find the basin masks, in variable 'basin'.", &
-          default="basin.nc")
+          "A file in which to find the basin masks.", default="basin.nc")
     basin_file = trim(inputdir) // trim(basin_file)
+    call get_param(PF, 'oda_driver', "BASIN_VAR", basin_var, &
+          "The basin mask variable in BASIN_FILE.", default="basin")
     allocate(CS%oda_grid%basin_mask(isd:ied,jsd:jed), source=0.0)
-    call MOM_read_data(basin_file,'basin',CS%oda_grid%basin_mask,CS%Grid%domain, timelevel=1)
+    call MOM_read_data(basin_file, basin_var, CS%oda_grid%basin_mask, CS%Grid%domain, timelevel=1)
   endif
 
   ! set up diag variables for analysis increments
   CS%diag_CS => diag_CS
-  CS%id_inc_t=register_diag_field('ocean_model','temp_increment',diag_CS%axesTL,&
+  CS%id_inc_t = register_diag_field('ocean_model', 'temp_increment', diag_CS%axesTL, &
        Time, 'ocean potential temperature increments', 'degC', conversion=US%C_to_degC)
-  CS%id_inc_s=register_diag_field('ocean_model','salt_increment',diag_CS%axesTL,&
+  CS%id_inc_s = register_diag_field('ocean_model', 'salt_increment', diag_CS%axesTL, &
        Time, 'ocean salinity increments', 'psu', conversion=US%S_to_ppt)
 
   !!  get global grid information from ocean model needed for ODA initialization
-  T_grid=>NULL()
+  T_grid => NULL()
   call set_up_global_tgrid(T_grid, CS, G)
 
   call ocean_da_core_init(CS%mpp_domain, T_grid, CS%Profiles, Time)
   deallocate(T_grid)
-  CS%Time=Time
+  CS%Time = Time
   !! switch back to ensemble member pelist
   call set_PElist(CS%ensemble_pelist(CS%ensemble_id,:))
 
