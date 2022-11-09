@@ -2,11 +2,11 @@ dnl AX_FC_CHECK_C_LIB(LIBRARY, FUNCTION,
 dnl                   [ACTION-IF-FOUND], [ACTION-IF-NOT-FOUND],
 dnl                   [OTHER-LDFLAGS], [OTHER-LIBS])
 dnl
-dnl This macro checks if a C binding is available to the compiler.
-dnl
-dnl Equivalently, it checks if the Fortran compiler can see a C function.
+dnl This macro checks if a C library can be referenced by a Fortran compiler.
 dnl
 dnl Results are cached in `ax_fc_cv_c_lib_LIBRARY_FUNCTION`.
+dnl
+dnl NOTE: Might be possible to rewrite this to use `AX_FC_CHECK_BIND_C`.
 dnl
 AC_DEFUN([AX_FC_CHECK_C_LIB], [
   AS_VAR_PUSHDEF([ax_fc_C_Lib], [ax_fc_cv_c_lib_$1_$2])

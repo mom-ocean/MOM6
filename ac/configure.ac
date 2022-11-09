@@ -88,8 +88,9 @@ AC_FC_SRCEXT(f90)
 # - This can cause standard AC_PROG_FC tests to fail if FCFLAGS is configured
 #   with flags from another compiler.
 # - I do not yet know how to resolve this possible issue.
-AX_MPI([],
-  [AC_MSG_ERROR([Could not find MPI launcher.])])
+AX_MPI([], [
+  AC_MSG_ERROR([Could not find MPI launcher.])
+])
 
 
 # Explicitly replace FC and LD with MPI wrappers
@@ -233,13 +234,13 @@ AC_CONFIG_COMMANDS(Makefile.dep, [make depend])
 
 
 # POSIX verification tests
-AC_LANG_PUSH([C])
 
 # These symbols may be defined as macros, making them inaccessible by Fortran.
-# The following exist in BSD and Linux, so we just test for them.
-AC_CHECK_FUNC([setjmp], [], [AC_MSG_ERROR([Could not find setjmp.])])
-AC_CHECK_FUNC([longjmp], [], [AC_MSG_ERROR([Could not find longjmp.])])
-AC_CHECK_FUNC([siglongjmp], [], [AC_MSG_ERROR([Could not find siglongjmp.])])
+# These three exist in modern BSD and Linux libc, so we just confirm them.
+# But one day, we many need to handle them more carefully.
+AX_FC_CHECK_BIND_C([setjmp], [], [AC_MSG_ERROR([Could not find setjmp.])])
+AX_FC_CHECK_BIND_C([longjmp], [], [AC_MSG_ERROR([Could not find longjmp.])])
+AX_FC_CHECK_BIND_C([siglongjmp], [], [AC_MSG_ERROR([Could not find siglongjmp.])])
 
 # Determine the sigsetjmp symbol.  If missing, then point to sigsetjmp_missing.
 #
@@ -248,14 +249,20 @@ AC_CHECK_FUNC([siglongjmp], [], [AC_MSG_ERROR([Could not find siglongjmp.])])
 #   __sigsetjmp     glibc (Linux)
 SIGSETJMP="sigsetjmp_missing"
 for sigsetjmp_fn in sigsetjmp __sigsetjmp; do
-  AC_CHECK_FUNC([${sigsetjmp_fn}], [
+  AX_FC_CHECK_BIND_C([${sigsetjmp_fn}], [
     SIGSETJMP=${sigsetjmp_fn}
     break
   ])
 done
 AC_DEFINE_UNQUOTED([SIGSETJMP_NAME], ["${SIGSETJMP}"])
 
-# Determine the size of jmp_buf and sigjmp_buf
+# Verify the size of nonlocal jump buffer structs
+# NOTE: This requires C compiler, but can it be done with a Fortran compiler?
+AC_LANG_PUSH([C])
+
+AX_MPI([], [AC_MSG_ERROR([Could not find MPI launcher.])])
+AC_SUBST([CC], [$MPICC])
+
 AC_CHECK_SIZEOF([jmp_buf], [], [#include <setjmp.h>])
 AC_CHECK_SIZEOF([sigjmp_buf], [], [#include <setjmp.h>])
 
