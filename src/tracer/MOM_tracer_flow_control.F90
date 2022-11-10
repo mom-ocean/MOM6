@@ -60,6 +60,7 @@ use MOM_generic_tracer, only : register_MOM_generic_tracer, initialize_MOM_gener
 use MOM_generic_tracer, only : MOM_generic_tracer_column_physics, MOM_generic_tracer_surface_state
 use MOM_generic_tracer, only : end_MOM_generic_tracer, MOM_generic_tracer_get, MOM_generic_flux_init
 use MOM_generic_tracer, only : MOM_generic_tracer_stock, MOM_generic_tracer_min_max, MOM_generic_tracer_CS
+use MOM_generic_tracer, only : register_MOM_generic_tracer_segments
 use pseudo_salt_tracer, only : register_pseudo_salt_tracer, initialize_pseudo_salt_tracer
 use pseudo_salt_tracer, only : pseudo_salt_tracer_column_physics, pseudo_salt_tracer_surface_state
 use pseudo_salt_tracer, only : pseudo_salt_stock, pseudo_salt_tracer_end, pseudo_salt_tracer_CS
@@ -75,6 +76,7 @@ implicit none ; private
 public call_tracer_register, tracer_flow_control_init, call_tracer_set_forcing
 public call_tracer_column_fns, call_tracer_surface_state, call_tracer_stocks
 public call_tracer_flux_init, get_chl_from_model, tracer_flow_control_end
+public call_tracer_register_obc_segments
 
 !> The control structure for orchestrating the calling of tracer packages
 type, public :: tracer_flow_control_CS ; private
@@ -113,6 +115,7 @@ type, public :: tracer_flow_control_CS ; private
 end type tracer_flow_control_CS
 
 contains
+
 
 !> This subroutine carries out a series of calls to initialize the air-sea
 !! tracer fluxes, but it does not record the generated indicies, and it may
@@ -162,7 +165,6 @@ subroutine call_tracer_register(HI, GV, US, param_file, CS, tr_Reg, restart_CS)
                                                          !! advection and diffusion module.
   type(MOM_restart_CS), intent(inout) :: restart_CS !< A pointer to the restart control
                                                          !! structure.
-
 
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
@@ -357,6 +359,26 @@ subroutine tracer_flow_control_init(restart, day, G, GV, US, h, param_file, diag
 
 end subroutine tracer_flow_control_init
 
+!> This subroutine calls all registered tracers to register their OBC segments
+!! similar to register_temp_salt_segments for T&S
+subroutine call_tracer_register_obc_segments(GV, param_file, CS, tr_Reg, OBC)
+  type(verticalGrid_type),      intent(in) :: GV         !< The ocean's vertical grid structure.
+  type(param_file_type),        intent(in) :: param_file !< A structure to parse for run-time
+                                                         !! parameters.
+  type(tracer_flow_control_CS), pointer    :: CS         !< A pointer that is set to point to the
+                                                         !! control structure for this module.
+  type(tracer_registry_type),   pointer    :: tr_Reg     !< A pointer that is set to point to the
+                                                         !! control structure for the tracer
+                                                         !! advection and diffusion module.
+  type(ocean_OBC_type),      pointer       :: OBC        !< This open boundary condition
+                                                         !! type specifies whether, where,
+                                                         !! and what open boundary
+                                                         !! conditions are used.
+
+  if (CS%use_MOM_generic_tracer) &
+      call register_MOM_generic_tracer_segments(CS%MOM_generic_tracer_CSp, GV, OBC, tr_Reg, param_file)
+
+end subroutine call_tracer_register_obc_segments
 !> This subroutine extracts the chlorophyll concentrations from the model state, if possible
 subroutine get_chl_from_model(Chl_array, G, GV, CS)
   type(ocean_grid_type),        intent(in)  :: G         !< The ocean's grid structure.
