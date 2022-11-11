@@ -13,6 +13,7 @@ use MOM_EOS,                   only : calculate_density, calculate_density_deriv
 use MOM_EOS,                   only : calculate_density_second_derivs
 use MOM_file_parser,           only : get_param, log_version, param_file_type
 use MOM_grid,                  only : ocean_grid_type
+use MOM_io,                    only : MOM_read_data
 use MOM_interface_heights,     only : find_eta
 use MOM_isopycnal_slopes,      only : vert_fill_TS
 use MOM_lateral_mixing_coeffs, only : VarMix_CS
@@ -84,6 +85,8 @@ type, public :: thickness_diffuse_CS ; private
   real :: Stanley_det_coeff      !< The coefficient correlating SGS temperature variance with the mean
                                  !! temperature gradient in the deterministic part of the Stanley parameterization.
                                  !! Negative values disable the scheme. [nondim]
+  logical :: read_khth           !< If true, read a file containing the spatially varying horizontal
+                                 !! thickness diffusivity
   logical :: use_stanley_gm      !< If true, also use the Stanley parameterization in MOM_thickness_diffuse
 
   type(diag_ctrl), pointer :: diag => NULL() !< structure used to regulate timing of diagnostics
@@ -94,8 +97,9 @@ type, public :: thickness_diffuse_CS ; private
   real, allocatable :: Kh_eta_u(:,:)    !< Interface height diffusivities at u points [L2 T-1 ~> m2 s-1]
   real, allocatable :: Kh_eta_v(:,:)    !< Interface height diffusivities in v points [L2 T-1 ~> m2 s-1]
 
-  real, allocatable :: KH_u_GME(:,:,:)  !< Isopycnal height diffusivities in u-columns [L2 T-1 ~> m2 s-1]
-  real, allocatable :: KH_v_GME(:,:,:)  !< Isopycnal height diffusivities in v-columns [L2 T-1 ~> m2 s-1]
+  real, allocatable :: KH_u_GME(:,:,:)         !< Isopycnal height diffusivities in u-columns [L2 T-1 ~> m2 s-1]
+  real, allocatable :: KH_v_GME(:,:,:)         !< Isopycnal height diffusivities in v-columns [L2 T-1 ~> m2 s-1]
+  real, allocatable, dimension(:,:) :: khth2d  !< 2D thickness diffusivity at h-points [L2 T-1 ~> m2 s-1]
 
   !>@{
   !! Diagnostic identifier
@@ -171,7 +175,8 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
          "Module must be initialized before it is used.")
 
   if ((.not.CS%thickness_diffuse) &
-      .or. .not. (CS%Khth > 0.0 .or. VarMix%use_variable_mixing)) return
+      .or. .not. (CS%Khth > 0.0 .or. CS%read_khth &
+      .or. VarMix%use_variable_mixing)) return
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   h_neglect = GV%H_subroundoff
@@ -214,10 +219,17 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
 
   ! Set the diffusivities.
   !$OMP parallel default(shared)
-  !$OMP do
-  do j=js,je ; do I=is-1,ie
-    Khth_loc_u(I,j) = CS%Khth
-  enddo ; enddo
+  if (.not. CS%read_khth) then
+    !$OMP do
+    do j=js,je ; do I=is-1,ie
+      Khth_loc_u(I,j) = CS%Khth
+    enddo ; enddo
+  else ! use 2d KHTH that was read in from file
+    !$OMP do
+    do j=js,je ; do I=is-1,ie
+      Khth_loc_u(I,j) = 0.5 * (CS%khth2d(i,j) + CS%khth2d(i+1,j))
+    enddo ; enddo
+  endif
 
   if (use_VarMix) then
     if (use_Visbeck) then
@@ -302,10 +314,17 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
     enddo ; enddo ; enddo
   endif
 
-  !$OMP do
-  do J=js-1,je ; do i=is,ie
-    Khth_loc_v(i,J) = CS%Khth
-  enddo ; enddo
+  if (.not. CS%read_khth) then
+   !$OMP do
+    do J=js-1,je ; do i=is,ie
+      Khth_loc_v(i,J) = CS%Khth
+    enddo ; enddo
+  else ! read KHTH from file
+   !$OMP do
+    do J=js-1,je ; do i=is,ie
+      Khth_loc_v(i,J) = 0.5 * (CS%khth2d(i,j) + CS%khth2d(i,j+1))
+    enddo ; enddo
+  endif
 
   if (use_VarMix) then
     if (use_Visbeck) then
@@ -1944,6 +1963,7 @@ subroutine thickness_diffuse_init(Time, G, GV, US, param_file, diag, CDp, CS)
 
   ! Local variables
   character(len=40)  :: mdl = "MOM_thickness_diffuse" ! This module's name.
+  character(len=200) :: khth_file ! file containing 2d KHTH
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
   real :: grid_sp      ! The local grid spacing [L ~> m]
@@ -1969,6 +1989,22 @@ subroutine thickness_diffuse_init(Time, G, GV, US, param_file, diag, CDp, CS)
   call get_param(param_file, mdl, "KHTH", CS%Khth, &
                  "The background horizontal thickness diffusivity.", &
                  default=0.0, units="m2 s-1", scale=US%m_to_L**2*US%T_to_s)
+  call get_param(param_file, mdl, "READ_KHTH", CS%read_khth, &
+                 "If true, read a file (given by KHTH_FILE) containing the "//&
+                 "spatially varying horizontal thickness diffusivity.", default=.false.)
+  if (CS%read_khth) then
+    if (CS%Khth > 0) then
+        call MOM_error(FATAL, "thickness_diffuse_init: KHTH > 0 is not "// &
+              "compatible with READ_KHTH = TRUE. ")
+    endif
+    call get_param(param_file, mdl, "KHTH_FILE", khth_file, &
+                 "The file containing the spatially varying horizontal "//&
+                 "thickness diffusivity.", default="INPUT/khth.nc")
+
+    allocate(CS%khth2d(G%isd:G%ied, G%jsd:G%jed), source=0.0)
+    call MOM_read_data(khth_file, 'khth', CS%khth2d(:,:), G%domain, scale=US%m_to_L**2*US%T_to_s)
+    call pass_var(CS%khth2d, G%domain)
+  endif
   call get_param(param_file, mdl, "KHTH_SLOPE_CFF", CS%KHTH_Slope_Cff, &
                  "The nondimensional coefficient in the Visbeck formula "//&
                  "for the interface depth diffusivity", units="nondim", &
@@ -2219,6 +2255,8 @@ subroutine thickness_diffuse_end(CS, CDp)
     deallocate(CS%KH_u_GME)
     deallocate(CS%KH_v_GME)
   endif
+
+  if (allocated(CS%khth2d)) deallocate(CS%khth2d)
 end subroutine thickness_diffuse_end
 
 !> \namespace mom_thickness_diffuse
