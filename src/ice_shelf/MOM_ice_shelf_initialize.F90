@@ -395,6 +395,8 @@ end subroutine initialize_ice_shelf_boundary_channel
 !> Initialize ice shelf flow from file
 subroutine initialize_ice_flow_from_file(bed_elev,u_shelf, v_shelf,float_cond,&
                                          G, US, PF)
+!subroutine initialize_ice_flow_from_file(bed_elev,u_shelf, v_shelf,float_cond,ice_visc,&
+!                                         G, US, PF)
   type(ocean_grid_type), intent(in)    :: G    !< The ocean's grid structure
   real, dimension(SZDI_(G),SZDJ_(G)), &
                          intent(inout) :: bed_elev !< The bed elevation   [Z ~> m].
@@ -402,7 +404,6 @@ subroutine initialize_ice_flow_from_file(bed_elev,u_shelf, v_shelf,float_cond,&
                          intent(inout) :: u_shelf !< The zonal ice shelf velocity  [L T-1 ~> m s-1].
   real, dimension(SZIB_(G),SZJB_(G)), &
                          intent(inout) :: v_shelf !< The meridional ice shelf velocity  [L T-1 ~> m s-1].
-
   real, dimension(SZDI_(G),SZDJ_(G)), &
                          intent(inout)    :: float_cond !< An array indicating where the ice
                                                 !! shelf is floating: 0 if floating, 1 if not. [nondim]
@@ -450,14 +451,12 @@ subroutine initialize_ice_flow_from_file(bed_elev,u_shelf, v_shelf,float_cond,&
 
   floatfr_varname = "float_frac"
 
-  !### I think that the following two lines should have ..., scale=US%m_s_to_L_T
-  call MOM_read_data(filename, trim(ushelf_varname), u_shelf, G%Domain, position=CORNER, scale=1.0)
-  call MOM_read_data(filename, trim(vshelf_varname), v_shelf, G%Domain, position=CORNER, scale=1.0)
-! call MOM_read_data(filename, trim(ice_visc_varname), ice_visc, G%Domain,position=CORNER,scale=1.0)
+  call MOM_read_data(filename, trim(ushelf_varname), u_shelf, G%Domain, position=CORNER, scale=US%m_s_to_L_T)
+  call MOM_read_data(filename, trim(vshelf_varname), v_shelf, G%Domain, position=CORNER, scale=US%m_s_to_L_T)
   call MOM_read_data(filename, trim(floatfr_varname), float_cond, G%Domain, scale=1.)
 
   filename = trim(inputdir)//trim(bed_topo_file)
-  call MOM_read_data(filename,trim(bed_varname), bed_elev, G%Domain, scale=1.)
+  call MOM_read_data(filename,trim(bed_varname), bed_elev, G%Domain, scale=1.0)
 
 
 end subroutine initialize_ice_flow_from_file
@@ -543,11 +542,12 @@ subroutine initialize_ice_shelf_boundary_from_file(u_face_mask_bdry, v_face_mask
        " initialize_ice_shelf_velocity_from_file: Unable to open "//trim(filename))
 
 
-  call MOM_read_data(filename, trim(ufcmskbdry_varname), u_face_mask_bdry, G%Domain, position=CORNER, scale=1.0)
-  call MOM_read_data(filename, trim(vfcmskbdry_varname), v_face_mask_bdry, G%Domain, position=CORNER, scale=1.0)
-  !### I think that the following two lines should have ..., scale=US%m_s_to_L_T
-  call MOM_read_data(filename, trim(ubdryv_varname), u_bdry_val, G%Domain, position=CORNER, scale=1.0)
-  call MOM_read_data(filename, trim(vbdryv_varname), v_bdry_val, G%Domain, position=CORNER, scale=1.)
+  call MOM_read_data(filename, trim(ufcmskbdry_varname), u_face_mask_bdry, G%Domain, position=CORNER, &
+                     scale=US%m_s_to_L_T)
+  call MOM_read_data(filename, trim(vfcmskbdry_varname), v_face_mask_bdry, G%Domain, position=CORNER, &
+                     scale=US%m_s_to_L_T)
+  call MOM_read_data(filename, trim(ubdryv_varname), u_bdry_val, G%Domain, position=CORNER, scale=US%m_s_to_L_T)
+  call MOM_read_data(filename, trim(vbdryv_varname), v_bdry_val, G%Domain, position=CORNER, scale=US%m_s_to_L_T)
   call MOM_read_data(filename, trim(umask_varname), umask, G%Domain, position=CORNER, scale=1.)
   call MOM_read_data(filename, trim(vmask_varname), vmask, G%Domain, position=CORNER, scale=1.)
   filename = trim(inputdir)//trim(icethick_file)
@@ -615,7 +615,7 @@ subroutine initialize_ice_C_basal_friction(C_basal_friction, G, US, PF)
 end subroutine
 
 
-!> Initialize ice basal friction
+!> Initialize ice-stiffness parameter
 subroutine initialize_ice_AGlen(AGlen, G, US, PF)
   type(ocean_grid_type), intent(in)    :: G    !< The ocean's grid structure
   real, dimension(SZDI_(G),SZDJ_(G)), &
