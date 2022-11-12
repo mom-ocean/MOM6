@@ -90,6 +90,7 @@ type, public :: ocean_grid_type
 
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_) :: &
     mask2dCu, &  !< 0 for boundary points and 1 for ocean points on the u grid [nondim].
+    OBCmaskCu, & !< 0 for boundary or OBC points and 1 for ocean points on the u grid [nondim].
     geoLatCu, &  !< The geographic latitude at u points in degrees of latitude or m.
     geoLonCu, &  !< The geographic longitude at u points in degrees of longitude or m.
     dxCu, &      !< dxCu is delta x at u points [L ~> m].
@@ -102,6 +103,7 @@ type, public :: ocean_grid_type
 
   real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_) :: &
     mask2dCv, &  !< 0 for boundary points and 1 for ocean points on the v grid [nondim].
+    OBCmaskCv, & !< 0 for boundary or OBC points and 1 for ocean points on the v grid [nondim].
     geoLatCv, &  !< The geographic latitude at v points in degrees of latitude or m.
     geoLonCv, &  !< The geographic longitude at v points in degrees of longitude or m.
     dxCv, &      !< dxCv is delta x at v points [L ~> m].
@@ -113,13 +115,13 @@ type, public :: ocean_grid_type
     areaCv       !< The areas of the v-grid cells [L2 ~> m2].
 
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_) :: &
-    porous_DminU, & !< minimum topographic height of U-face [Z ~> m]
-    porous_DmaxU, & !< maximum topographic height of U-face [Z ~> m]
+    porous_DminU, & !< minimum topographic height (deepest) of U-face [Z ~> m]
+    porous_DmaxU, & !< maximum topographic height (shallowest) of U-face [Z ~> m]
     porous_DavgU    !< average topographic height of U-face [Z ~> m]
 
   real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_) :: &
-    porous_DminV, & !< minimum topographic height of V-face [Z ~> m]
-    porous_DmaxV, & !< maximum topographic height of V-face [Z ~> m]
+    porous_DminV, & !< minimum topographic height (deepest) of V-face [Z ~> m]
+    porous_DmaxV, & !< maximum topographic height (shallowest) of V-face [Z ~> m]
     porous_DavgV    !< average topographic height of V-face [Z ~> m]
 
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEMB_PTR_) :: &
@@ -573,7 +575,9 @@ subroutine allocate_metrics(G)
 
   ALLOC_(G%mask2dT(isd:ied,jsd:jed))      ; G%mask2dT(:,:) = 0.0
   ALLOC_(G%mask2dCu(IsdB:IedB,jsd:jed))   ; G%mask2dCu(:,:) = 0.0
+  ALLOC_(G%OBCmaskCu(IsdB:IedB,jsd:jed))  ; G%OBCmaskCu(:,:) = 0.0
   ALLOC_(G%mask2dCv(isd:ied,JsdB:JedB))   ; G%mask2dCv(:,:) = 0.0
+  ALLOC_(G%OBCmaskCv(isd:ied,JsdB:JedB))  ; G%OBCmaskCv(:,:) = 0.0
   ALLOC_(G%mask2dBu(IsdB:IedB,JsdB:JedB)) ; G%mask2dBu(:,:) = 0.0
   ALLOC_(G%geoLatT(isd:ied,jsd:jed))      ; G%geoLatT(:,:) = 0.0
   ALLOC_(G%geoLatCu(IsdB:IedB,jsd:jed))   ; G%geoLatCu(:,:) = 0.0
@@ -637,8 +641,8 @@ subroutine MOM_grid_end(G)
   DEALLOC_(G%areaCu) ; DEALLOC_(G%IareaCu)
   DEALLOC_(G%areaCv)  ; DEALLOC_(G%IareaCv)
 
-  DEALLOC_(G%mask2dT)  ; DEALLOC_(G%mask2dCu)
-  DEALLOC_(G%mask2dCv) ; DEALLOC_(G%mask2dBu)
+  DEALLOC_(G%mask2dT)  ; DEALLOC_(G%mask2dCu) ; DEALLOC_(G%OBCmaskCu)
+  DEALLOC_(G%mask2dCv) ; DEALLOC_(G%OBCmaskCv) ; DEALLOC_(G%mask2dBu)
 
   DEALLOC_(G%geoLatT)  ; DEALLOC_(G%geoLatCu)
   DEALLOC_(G%geoLatCv) ; DEALLOC_(G%geoLatBu)
@@ -686,6 +690,7 @@ end subroutine MOM_grid_end
 !!
 !! Each location also has a 2D mask indicating whether the entire column is land or ocean.
 !! `mask2dT` is 1 if the column is wet or 0 if the T-cell is land.
-!! `mask2dCu` is 1 if both neighboring column are ocean, and 0 if either is land.
+!! `mask2dCu` is 1 if both neighboring columns are ocean, and 0 if either is land.
+!! `OBCmasku` is 1 if both neighboring columns are ocean, and 0 if either is land of if this is OBC point.
 
 end module MOM_grid

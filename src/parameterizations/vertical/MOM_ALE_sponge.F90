@@ -81,6 +81,9 @@ type :: p2d
   real :: scale = 1.0  !< A multiplicative factor by which to rescale input data
   real, dimension(:,:), pointer :: p => NULL() !< pointer the data.
   real, dimension(:,:), pointer :: h => NULL() !< pointer the data grid.
+  character(len=:), allocatable  :: name  !< The name of the input field
+  character(len=:), allocatable  :: long_name !< The long name of the input field
+  character(len=:), allocatable  :: unit !< The unit of the input field
 end type p2d
 
 !> ALE sponge control structure
@@ -134,7 +137,7 @@ type, public :: ALE_sponge_CS ; private
   logical :: tripolar_N !< grid is folded at its north edge
 
   !>@{ Diagnostic IDs
-  integer, dimension(2) :: id_sp_tendency      !< Diagnostic ids for temperature and salinity
+  integer, dimension(MAX_FIELDS_) :: id_sp_tendency      !< Diagnostic ids for tracers
                                                !! tendency due to sponges
   integer :: id_sp_u_tendency                  !< Diagnostic id for zonal momentum tendency due to
                                                !! Rayleigh damping
@@ -666,15 +669,19 @@ subroutine init_ALE_sponge_diags(Time, G, diag, CS, US)
                                                  !! output.
   type(ALE_sponge_CS),     intent(inout) :: CS   !< ALE sponge control structure
   type(unit_scale_type),   intent(in)    :: US   !< A dimensional unit scaling type
+  ! Local Variables
+  integer :: m
 
   CS%diag => diag
 
-  CS%id_sp_tendency(1) = -1
-  CS%id_sp_tendency(1) = register_diag_field('ocean_model', 'sp_tendency_temp', diag%axesTL, Time, &
-       'Time tendency due to temperature restoring', 'degC s-1', conversion=US%s_to_T)
-  CS%id_sp_tendency(2) = -1
-  CS%id_sp_tendency(2) = register_diag_field('ocean_model', 'sp_tendency_salt', diag%axesTL, Time, &
-       'Time tendency due to salinity restoring', 'g kg-1 s-1', conversion=US%s_to_T)
+  do m=1,CS%fldno
+    CS%id_sp_tendency(m) = -1
+    CS%id_sp_tendency(m) = register_diag_field('ocean_model', &
+      'sp_tendency_' // CS%Ref_val(m)%name, diag%axesTL, Time, &
+      'Time tendency due to restoring ' // CS%Ref_val(m)%long_name, &
+      CS%Ref_val(m)%unit, conversion=US%s_to_T)
+  enddo
+
   CS%id_sp_u_tendency = -1
   CS%id_sp_u_tendency = register_diag_field('ocean_model', 'sp_tendency_u', diag%axesCuL, Time, &
        'Zonal acceleration due to sponges', 'm s-2', conversion=US%L_T2_to_m_s2)
@@ -686,7 +693,8 @@ end subroutine init_ALE_sponge_diags
 
 !> This subroutine stores the reference profile at h points for the variable
 !! whose address is given by f_ptr.
-subroutine set_up_ALE_sponge_field_fixed(sp_val, G, GV, f_ptr, CS, scale)
+subroutine set_up_ALE_sponge_field_fixed(sp_val, G, GV, f_ptr, CS,  &
+                                           sp_name, sp_long_name, sp_unit, scale)
   type(ocean_grid_type),   intent(in) :: G  !< Grid structure
   type(verticalGrid_type), intent(in) :: GV !< ocean vertical grid structure
   type(ALE_sponge_CS),     pointer    :: CS !< ALE sponge control structure (in/out).
@@ -695,16 +703,27 @@ subroutine set_up_ALE_sponge_field_fixed(sp_val, G, GV, f_ptr, CS, scale)
                                             !! arbitrary number of layers.
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                    target, intent(in) :: f_ptr !< Pointer to the field to be damped
+  character(len=*),        intent(in) :: sp_name  !< The name of the tracer field
+  character(len=*),        optional, &
+                           intent(in) :: sp_long_name !< The long name of the tracer field
+                                                      !! if not given, use the sp_name
+  character(len=*),        optional, &
+                           intent(in) :: sp_unit !< The unit of the tracer field
+                                                 !! if not given, use the none
   real,          optional, intent(in) :: scale !< A factor by which to rescale the input data, including any
                                                !! contributions due to dimensional rescaling.  The default is 1.
 
   real :: scale_fac  ! A factor by which to scale sp_val before storing it.
   integer :: k, col
   character(len=256) :: mesg ! String for error messages
+  character(len=256) :: long_name ! The long name of the tracer field
+  character(len=256) :: unit ! The unit of the tracer field
 
   if (.not.associated(CS)) return
 
   scale_fac = 1.0 ; if (present(scale)) scale_fac = scale
+  long_name = sp_name; if (present(sp_long_name)) long_name = sp_long_name
+  unit = 'none'; if (present(sp_unit)) unit = sp_unit
 
   CS%fldno = CS%fldno + 1
   if (CS%fldno > MAX_FIELDS_) then
@@ -716,6 +735,9 @@ subroutine set_up_ALE_sponge_field_fixed(sp_val, G, GV, f_ptr, CS, scale)
 
   ! stores the reference profile
   CS%Ref_val(CS%fldno)%nz_data = CS%nz_data
+  CS%Ref_val(CS%fldno)%name = sp_name
+  CS%Ref_val(CS%fldno)%long_name = long_name
+  CS%Ref_val(CS%fldno)%unit = unit
   allocate(CS%Ref_val(CS%fldno)%p(CS%nz_data,CS%num_col), source=0.0)
   do col=1,CS%num_col
     do k=1,CS%nz_data
@@ -729,7 +751,8 @@ end subroutine set_up_ALE_sponge_field_fixed
 
 !> This subroutine stores the reference profile at h points for the variable
 !! whose address is given by filename and fieldname.
-subroutine set_up_ALE_sponge_field_varying(filename, fieldname, Time, G, GV, US, f_ptr, CS, scale)
+subroutine set_up_ALE_sponge_field_varying(filename, fieldname, Time, G, GV, US, f_ptr, CS,  &
+                                             sp_name, sp_long_name, sp_unit, scale)
   character(len=*),        intent(in) :: filename !< The name of the file with the
                                                   !! time varying field data
   character(len=*),        intent(in) :: fieldname !< The name of the field in the file
@@ -741,6 +764,13 @@ subroutine set_up_ALE_sponge_field_varying(filename, fieldname, Time, G, GV, US,
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                    target, intent(in) :: f_ptr !< Pointer to the field to be damped (in).
   type(ALE_sponge_CS),     pointer    :: CS    !< Sponge control structure (in/out).
+  character(len=*),        intent(in) :: sp_name  !< The name of the tracer field
+  character(len=*),        optional,  &
+                           intent(in) :: sp_long_name !< The long name of the tracer field
+                                                      !! if not given, use the sp_name
+  character(len=*),        optional,  &
+                           intent(in) :: sp_unit !< The unit of the tracer field
+                                                 !! if not given, use 'none'
   real,          optional, intent(in) :: scale !< A factor by which to rescale the input data, including any
                                                !! contributions due to dimensional rescaling.  The default is 1.
 
@@ -749,6 +779,11 @@ subroutine set_up_ALE_sponge_field_varying(filename, fieldname, Time, G, GV, US,
   integer, dimension(4) :: fld_sz
   integer :: nz_data !< the number of vertical levels in this input field
   character(len=256) :: mesg ! String for error messages
+  character(len=256) :: long_name ! The long name of the tracer field
+  character(len=256) :: unit ! The unit of the tracer field
+  long_name = sp_name; if (present(sp_long_name)) long_name = sp_long_name
+  unit = 'none'; if (present(sp_unit)) unit = sp_unit
+
   ! Local variables for ALE remapping
 
   if (.not.associated(CS)) return
@@ -768,6 +803,9 @@ subroutine set_up_ALE_sponge_field_varying(filename, fieldname, Time, G, GV, US,
   else
     CS%Ref_val(CS%fldno)%id = init_external_field(filename, fieldname)
   endif
+  CS%Ref_val(CS%fldno)%name = sp_name
+  CS%Ref_val(CS%fldno)%long_name = long_name
+  CS%Ref_val(CS%fldno)%unit = unit
   fld_sz(1:4) = -1
   call get_external_field_info(CS%Ref_val(CS%fldno)%id, size=fld_sz)
   nz_data = fld_sz(3)
@@ -1290,7 +1328,8 @@ subroutine rotate_ALE_sponge(sponge_in, G_in, sponge, G, GV, turns, param_file)
       call rotate_array(sp_val_in, turns, sp_val)
 
       ! NOTE: This points sp_val with the unrotated field.  See note below.
-      call set_up_ALE_sponge_field(sp_val, G, GV, sp_ptr, sponge)
+      call set_up_ALE_sponge_field(sp_val, G, GV, sp_ptr, sponge, &
+             sponge_in%Ref_val(n)%name, sp_long_name=sponge_in%Ref_val(n)%long_name, sp_unit=sponge_in%Ref_val(n)%unit)
 
       deallocate(sp_val_in)
     else

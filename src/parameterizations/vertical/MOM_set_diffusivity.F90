@@ -73,6 +73,8 @@ type, public :: set_diffusivity_CS ; private
                              !! added.
   logical :: use_LOTW_BBL_diffusivity !< If true, use simpler/less precise, BBL diffusivity.
   logical :: LOTW_BBL_use_omega !< If true, use simpler/less precise, BBL diffusivity.
+  real    :: Von_Karm        !< The von Karman constant as used in the BBL diffusivity calculation
+                             !! [nondim].  See (http://en.wikipedia.org/wiki/Von_Karman_constant)
   real    :: BBL_effic       !< efficiency with which the energy extracted
                              !! by bottom drag drives BBL diffusion [nondim]
   real    :: cdrag           !< quadratic drag coefficient [nondim]
@@ -1406,7 +1408,6 @@ subroutine add_LOTW_BBL_diffusivity(h, u, v, tv, fluxes, visc, j, N2_int, Kd_int
   logical :: Rayleigh_drag ! Set to true if there are Rayleigh drag velocities defined in visc, on
                            ! the assumption that this extracted energy also drives diapycnal mixing.
   integer :: i, k, km1
-  real, parameter :: von_karm = 0.41 ! Von Karman constant (http://en.wikipedia.org/wiki/Von_Karman_constant)
   logical :: do_diag_Kd_BBL
 
   if (.not.(CS%bottomdraglaw .and. (CS%BBL_effic > 0.0))) return
@@ -1483,7 +1484,7 @@ subroutine add_LOTW_BBL_diffusivity(h, u, v, tv, fluxes, visc, j, N2_int, Kd_int
       if ( ustar_D + absf * ( z_bot * D_minus_z ) == 0.) then
         Kd_wall = 0.
       else
-        Kd_wall = ((von_karm * ustar2) * (z_bot * D_minus_z)) &
+        Kd_wall = ((CS%von_karm * ustar2) * (z_bot * D_minus_z)) &
                   / (ustar_D + absf * (z_bot * D_minus_z))
       endif
 
@@ -1963,7 +1964,7 @@ subroutine set_density_ratios(h, tv, kb, G, GV, US, CS, j, ds_dsp1, rho_0)
 end subroutine set_density_ratios
 
 subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, int_tide_CSp, halo_TS, &
-                                double_diffuse)
+                                double_diffuse, physical_OBL_scheme)
   type(time_type),          intent(in)    :: Time !< The current model time
   type(ocean_grid_type),    intent(inout) :: G    !< The ocean's grid structure.
   type(verticalGrid_type),  intent(in)    :: GV   !< The ocean's vertical grid structure.
@@ -1974,10 +1975,15 @@ subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, int_tide_
   type(set_diffusivity_CS), pointer       :: CS   !< pointer set to point to the module control
                                                   !! structure.
   type(int_tide_CS),        intent(in), target :: int_tide_CSp !< Internal tide control struct
-  integer,        optional, intent(out)   :: halo_TS !< The halo size of tracer points that must be
+  integer,                  intent(out)   :: halo_TS !< The halo size of tracer points that must be
                                                   !! valid for the calculations in set_diffusivity.
   logical,                  intent(out)   :: double_diffuse !< This indicates whether some version
                                                   !! of double diffusion is being used.
+  logical,                  intent(in)    :: physical_OBL_scheme !< If true, a physically based
+                                                  !! parameterization (like KPP or ePBL or a bulk mixed
+                                                  !! layer) is used outside of set_diffusivity to
+                                                  !! specify the mixing that occurs in the ocean's
+                                                  !! surface boundary layer.
 
   ! Local variables
   real :: decay_length
@@ -1990,6 +1996,7 @@ subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, int_tide_
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
   character(len=40)  :: mdl = "MOM_set_diffusivity"  ! This module's name.
+  real    :: vonKar          ! The von Karman constant as used for mixed layer viscosity [nomdim]
   real    :: omega_frac_dflt ! The default value for the fraction of the absolute rotation rate
                              ! that is used in place of the absolute value of the local Coriolis
                              ! parameter in the denominator of some expressions [nondim]
@@ -2147,6 +2154,12 @@ subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, int_tide_
       call get_param(param_file, mdl, "LOTW_BBL_USE_OMEGA", CS%LOTW_BBL_use_omega, &
                  "If true, use the maximum of Omega and N for the TKE to diffusion "//&
                  "calculation. Otherwise, N is N.", default=.true.)
+      call get_param(param_file, mdl, 'VON_KARMAN_CONST', vonKar, &
+                 'The value the von Karman constant as used for mixed layer viscosity.', &
+                 units='nondim', default=0.41)
+      call get_param(param_file, mdl, 'VON_KARMAN_BBL', CS%von_Karm, &
+                 'The value the von Karman constant as used in calculating the BBL diffusivity.', &
+                 units='nondim', default=vonKar)
     endif
   else
     CS%use_LOTW_BBL_diffusivity = .false. ! This parameterization depends on a u* from viscous BBL
@@ -2164,7 +2177,7 @@ subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, int_tide_
                  default=.false., do_not_log=.not.TKE_to_Kd_used)
 
   ! set params related to the background mixing
-  call bkgnd_mixing_init(Time, G, GV, US, param_file, CS%diag, CS%bkgnd_mixing_csp)
+  call bkgnd_mixing_init(Time, G, GV, US, param_file, CS%diag, CS%bkgnd_mixing_csp, physical_OBL_scheme)
 
   call get_param(param_file, mdl, "KV", CS%Kv, &
                  "The background kinematic viscosity in the interior. "//&

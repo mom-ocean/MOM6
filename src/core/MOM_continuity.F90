@@ -13,7 +13,7 @@ use MOM_string_functions, only : uppercase
 use MOM_grid, only : ocean_grid_type
 use MOM_open_boundary, only : ocean_OBC_type
 use MOM_unit_scaling, only : unit_scale_type
-use MOM_variables, only : BT_cont_type, porous_barrier_ptrs
+use MOM_variables, only : BT_cont_type, porous_barrier_type
 use MOM_verticalGrid, only : verticalGrid_type
 
 implicit none ; private
@@ -61,7 +61,7 @@ subroutine continuity(u, v, hin, h, uh, vh, dt, G, GV, US, CS, OBC, pbv, uhbt, v
   type(unit_scale_type),   intent(in)    :: US  !< A dimensional unit scaling type
   type(continuity_CS),     intent(in)    :: CS  !< Control structure for mom_continuity.
   type(ocean_OBC_type),    pointer       :: OBC !< Open boundaries control structure.
-  type(porous_barrier_ptrs), intent(in)  :: pbv !< porous barrier fractional cell metrics
+  type(porous_barrier_type), intent(in)  :: pbv !< porous barrier fractional cell metrics
   real, dimension(SZIB_(G),SZJ_(G)), &
                  optional, intent(in)    :: uhbt !< The vertically summed volume
                                                 !! flux through zonal faces [H L2 T-1 ~> m3 s-1 or kg s-1].
@@ -71,12 +71,12 @@ subroutine continuity(u, v, hin, h, uh, vh, dt, G, GV, US, CS, OBC, pbv, uhbt, v
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
                  optional, intent(in)    :: visc_rem_u !< Both the fraction of
           !! zonal momentum that remains after a time-step of viscosity, and the fraction of a time-step's
-          !! worth of a barotropic acceleration that a layer experiences after viscosity is applied.
+          !! worth of a barotropic acceleration that a layer experiences after viscosity is applied [nondim].
           !! Non-dimensional between 0 (at the bottom) and 1 (far above the bottom).
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
                  optional, intent(in)    :: visc_rem_v !< Both the fraction of
           !! meridional momentum that remains after a time-step of viscosity, and the fraction of a time-step's
-          !! worth of a barotropic acceleration that a layer experiences after viscosity is applied.
+          !! worth of a barotropic acceleration that a layer experiences after viscosity is applied [nondim].
           !! Non-dimensional between 0 (at the bottom) and 1 (far above the bottom).
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
                  optional, intent(out)   :: u_cor !< The zonal velocities that

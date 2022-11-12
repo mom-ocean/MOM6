@@ -234,21 +234,28 @@ AC_SUBST([SRC_DIRS],
 AC_CONFIG_COMMANDS(Makefile.dep, [make depend])
 
 
-# setjmp verification
+# POSIX verification tests
 AC_LANG_PUSH([C])
 
-# Verify that either sigsetjmp (POSIX) or __sigsetjmp (glibc) are available.
-AC_CHECK_FUNC([sigsetjmp])
-AS_IF([test "$ac_cv_func_sigsetjmp" == "yes"], [
-  SIGSETJMP_NAME="sigsetjmp"
-], [
-  AC_CHECK_FUNC([__sigsetjmp], [
-    SIGSETJMP_NAME="__sigsetjmp"
-  ], [
-    AC_MSG_ERROR([Could not find a symbol for sigsetjmp.])
+# These symbols may be defined as macros, making them inaccessible by Fortran.
+# The following exist in BSD and Linux, so we just test for them.
+AC_CHECK_FUNC([setjmp], [], [AC_MSG_ERROR([Could not find setjmp.])])
+AC_CHECK_FUNC([longjmp], [], [AC_MSG_ERROR([Could not find longjmp.])])
+AC_CHECK_FUNC([siglongjmp], [], [AC_MSG_ERROR([Could not find siglongjmp.])])
+
+# Determine the sigsetjmp symbol.  If missing, then point to sigsetjmp_missing.
+#
+# Supported symbols:
+#   sigsetjmp       POSIX, BSD libc (MacOS)
+#   __sigsetjmp     glibc (Linux)
+SIGSETJMP="sigsetjmp_missing"
+for sigsetjmp_fn in sigsetjmp __sigsetjmp; do
+  AC_CHECK_FUNC([${sigsetjmp_fn}], [
+    SIGSETJMP=${sigsetjmp_fn}
+    break
   ])
-])
-AC_DEFINE_UNQUOTED([SIGSETJMP_NAME], ["$SIGSETJMP_NAME"])
+done
+AC_DEFINE_UNQUOTED([SIGSETJMP_NAME], ["${SIGSETJMP}"])
 
 # Determine the size of jmp_buf and sigjmp_buf
 AC_CHECK_SIZEOF([jmp_buf], [], [#include <setjmp.h>])

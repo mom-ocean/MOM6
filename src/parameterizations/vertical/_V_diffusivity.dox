@@ -253,26 +253,6 @@ in \cite harrison2008, but that isn't what is in the MOM6 code. Instead, the sur
 value is propagated down, with the assumption that the tidal mixing parameterization
 will provide the deep mixing: \ref section_Internal_Tidal_Mixing.
 
-There is also a "new" Henyey version, taking into account the effect of stratification on
-TKE dissipation,
-
-\todo Harrison (personal communication) recommends that this option be made obsolete and
-eventually removed.
-
-\f[
-   \epsilon = \epsilon_0 \frac{f}{f_0} \frac{\mbox{acosh} (N/f)}{\mbox{acosh} (N_0 / f_0)}
-\f]
-
-where \f$N_0\f$ and \f$f_0\f$ are the reference buoyancy frequency and inertial frequencies, respectively
-and \f$\epsilon_0\f$ is the reference dissipation at \f$(N_0, f_0)\f$. In the previous version, \f$N =
-N_0\f$. Additionally, the relationship between diapycnal diffusivities and stratification is included:
-
-\f[
-   \kappa = \frac{\epsilon}{N^2}
-\f]
-This approach assumes that work done against gravity is uniformly distributed throughout the water column.
-The original version concentrates buoyancy work in regions of strong stratification.
-
 \subsection subsection_danabasoglu_back Danabasoglu background mixing
 
 The shape of the \cite danabasoglu2012 background mixing has a uniform background value, with a dip
