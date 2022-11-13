@@ -50,7 +50,7 @@ module MOM_dynamics_unsplit
 !*                                                                     *
 !********+*********+*********+*********+*********+*********+*********+**
 
-use MOM_variables, only : vertvisc_type, thermo_var_ptrs, porous_barrier_ptrs
+use MOM_variables, only : vertvisc_type, thermo_var_ptrs, porous_barrier_type
 use MOM_variables, only : accel_diag_ptrs, ocean_internal_state, cont_diag_ptrs
 use MOM_forcing_type, only : mech_forcing
 use MOM_checksum_packages, only : MOM_thermo_chksum, MOM_state_chksum, MOM_accel_chksum
@@ -217,7 +217,7 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, forces, &
                                                    !! initialize_dyn_unsplit.
   type(VarMix_CS),         intent(inout) :: VarMix !< Variable mixing control structure
   type(MEKE_type),         intent(inout) :: MEKE   !< MEKE fields
-  type(porous_barrier_ptrs), intent(in) :: pbv     !< porous barrier fractional cell metrics
+  type(porous_barrier_type), intent(in) :: pbv     !< porous barrier fractional cell metrics
   type(wave_parameters_CS), optional, pointer :: Waves !< A pointer to a structure containing
                                  !! fields related to the surface wave conditions
 

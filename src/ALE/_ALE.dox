@@ -1,90 +1,184 @@
-/*! \page ALE ALE
+/*! \page ALE Vertical Lagrangian method: conceptual
 
-\section section_ALE Basics of the Vertical Lagrangian-Remap Method in MOM6
+\section section_ALE Lagrangian and ALE
 
-As discussed by \cite adcroft2006, there are two general classes
+As discussed by Adcroft and Hallberg (2008) \cite adcroft2006 and
+Griffies, Adcroft and Hallberg (2020) \cite Griffies_Adcroft_Hallberg2020,
+we can conceive of two general classes
 of algorithms that frame how hydrostatic ocean models are
 formulated. The two classes differ in how they treat the vertical
 direction. Quasi-Eulerian methods follow the approach traditionally
-used in geopotential coordinate models, whereby vertical motion
-is diagnosed via the continuity equation. Quasi-Lagrangian
-methods are traditionally used by layered isopycnal models, with
-the Lagrangian approach specifying motion that crosses coordinate
+used in geopotential coordinate models, whereby vertical motion is
+diagnosed via the continuity equation. Quasi-Lagrangian methods are
+traditionally used by layered isopycnal models, with the vertical
+Lagrangian approach specifying motion that crosses coordinate
 surfaces. Indeed, such dia-surface flow can be set to zero using
-Lagrangian methods for studies of adiabatic dynamics. MOM6 makes
-use of the vertical Lagrangian remap method, as pioneered for
-ocean modeling by \cite bleck2002, which is a limit case of the
-Arbitrary-Lagrangian-Eulerian method (\cite hirt1997). Dia-surface
+Lagrangian methods for studies of adiabatic dynamics. MOM6 makes use
+of the vertical Lagrangian remap method, as pioneered for ocean
+modeling by Bleck (2002) \cite bleck2002 and further documented by
+\cite Griffies_Adcroft_Hallberg2020, with this method a limit case of
+the Arbitrary-Lagrangian-Eulerian method (\cite hirt1997). Dia-surface
 transport is implemented via a remapping so that the method can be
-summarized as the Lagrangian plus remap approach and is essentially
-a one-dimensional version of the incremental remapping of
+summarized as the Lagrangian plus remap approach and so it is a
+one-dimensional version of the incremental remapping of Dukowicz (2000)
 \cite dukowicz2000.
 
-The MOM6 implementation of the vertical Lagrangian-remap method makes use
-of two general steps. The first evolves the ocean state forward in
-time according to a vertical Lagrangian limit with \f$\dot{r}=0\f$. Hence,
-the horizontal momentum, thickness, and tracers are time stepped
-with the red terms removed in equations \eqref{eq:h-horz-momentum,h-equations,momentum},
-\eqref{eq:h-thickness-equation,h-equations,thickness}, \eqref{eq:h-temperature-equation,h-equations,potential temperature},
-and \eqref{eq:h-salinity-equation,h-equations,salinity}. All advective transport thus
-occurs within a layer as defined by constant \f$r\f$-surfaces so that
-the volume within each layer is fixed. All other terms are retained in
-their full form, including subgrid scale terms that contribute to
-the transfer of tracer and momentum into distinct \f$r\f$ layers (e.g.,
-dia-surface diffusion of tracer and velocity). Maintaining constant
-volume within a layer yet allowing for tracers to move between layers
-engenders no inconsistency between tracer and thickness evolution. The
-reason is that tracer diffusion, even dia-surface diffusion, does
-not transfer volume.
+\image html  ALE_general_schematic.png "Schematic of the 3d Lagrangian regrid/remap method"  width=70%
+\image latex ALE_general_schematic.png "Schematic of the 3d Lagrangian regrid/remap method"  width=0.7\textwidth
 
-The second step in the algorithm comprises the generation of a new
-vertical grid following a prescription, such as whether the grid
-should align with isopcynals or constant \f$z^{*}\f$ or a combination. The
-ocean state is then vertically remapped to the newly generated vertical
-grid. The remapping step incorporates dia-surface transfer of properties,
-with such transfer depending on the prescription given for the vertical
-grid generation. To minimize discretization errors and the associated
-spurious mixing, the remapping step makes use of the high order accurate
-methods developed by \cite white2008 and \cite white2009.
+Refer to the above figure taken from Griffies, Adcroft, and Hallberg
+(2020) \cite Griffies_Adcroft_Hallberg2020.  It shows a schematic of
+the Lagrangian-remap method as well as the Arbitrary
+Lagrangian-Eulerian (ALE) method. The first panel shows a square fluid
+region and square grid used to represent the fluid, along with
+rectangular subregions partitioned by grid lines. The second panel
+shows the result of evolving the fluid region and evolving the
+grid. The grid can evolve according to the fluid flow, as per a
+Lagrangian method, or it can evolve according to some specified grid
+evolution, as per an ALE method. The right panel depicts the grid
+reinitialization onto a target grid (the regrid step). A regrid step
+necessitates a corresponding remap step to estimate the ocean state on
+the target grid, with conservative remapping required to preserve
+integrated scalar contents (e.g., potential enthalpy, salt mass, and
+seawater mass). The regrid/remap steps are needed for Lagrangian
+methods in order for the grid to retain an accurate representation of
+the ocean state.  Ideally, the remap step does not affect any changes
+to the fluid state; rather, it only modifies where in space the fluid
+state is represented. However, any numerical realization incurs
+interpolation inaccuracies that lead to unphysical (spurious) state
+changes.
 
-The underlying algorithm for treatment of the vertical can
-be related to operator-splitting of the red terms in equations
-\eqref{eq:h-thickness-equation,h-equations,thickness}--\eqref{eq:h-temperature-equation,h-equations,potential temperature}. If we
-consider, for simplicity, an Euler-forward update for a time-step \f$\Delta
-t\f$, the time-stepping for the continuity and temperature equation can
-be summarized as
+\section section_ALE_MOM Vertical Lagrangian regrid/remap method
 
-\f{eqnarray}
-\label{html:ale-equations}\notag \\
-h^\dagger &= h^{(n)} - \Delta t \left[ \nabla_r \cdot \left( h \, \mathbf{u} \right) \right]
-&\mbox{thickness} \label{eq:ale-thickness-equation} \\
-\theta^\dagger \, h^\dagger &= \theta^{(n)} \, h^{(n)} - \Delta t \left[ \nabla_r \cdot \left( \theta h \, \mathbf{u} \right) - h \boldsymbol{\mathcal{N}}_\theta^\gamma + \delta_r J_\theta^{(z)} \right]
-&\;\;\;\;\mbox{potential temp} \label{eq:ale-temperature-equation} \\
-h^{(n+1)} &= h^\dagger - \Delta t \, \delta_r \left( z_r \dot{r} \right)
-&\mbox{move grid} \label{eq:ale-new-grid} \\
-\theta^{(n+1)} h^{(n+1)} &= \theta^\dagger h^\dagger - \Delta t \, \delta_r \left( z_r \dot{r} \, \theta^\dagger  \right)
-&\mbox{remap temperature.} \label{eq:ale-remap-temperature}
+We now get a bit more specific to the vertical Lagrangian method.
+For this purpose, recall recall the basic dynamical equations (those
+equations with a time derivative) of MOM6 discussed in
+\ref General_Coordinate
+\f{align}
+\rho_0
+\left[ \frac{\partial \mathbf{u}}{\partial t} + \frac{( f + \zeta )}{h} \,
+\hat{\mathbf{z}} \times h \, \mathbf{u} + \underbrace{ \dot{r} \,
+\frac{\partial \mathbf{u}}{\partial r} }
+\right]
+&= -\nabla_r \, (p + \rho_{0} \, K) -
+\rho \nabla_r \, \Phi + \mathbf{\mathcal{F}}
+&\mbox{horizontal momentum}
+\label{eq:h-horz-momentum-vlm}
+\\
+\frac{\partial h}{\partial t} + \nabla_r \cdot \left( h \, \mathbf{u} \right) +
+\underbrace{ \delta_r ( z_r \dot{r} ) }
+ &= 0
+&\mbox{thickness}
+\label{eq:h-thickness-equation-vlm}
+\\
+\frac{\partial ( \theta \, h )}{\partial t} + \nabla_r \cdot \left( \theta h \,
+\mathbf{u} \right) + \underbrace{ \delta_r ( \theta \, z_r \dot{r} ) }
+&=
+h \mathbf{\mathcal{N}}_\theta^\gamma - \delta_r J_\theta^{(z)}
+&\mbox{potential/Conservative temp}
+\label{eq:h-temperature-equation-vlm}
+ \\
+\frac{\partial ( S \, h )}{\partial t} + \nabla_r \cdot \left( S \, h \,
+\mathbf{u} \right) + \underbrace{ \delta_r ( S \, z_r \dot{r} ) }
+ &=
+h \mathbf{\mathcal{N}}_S^\gamma - \delta_r J_S^{(z)}
+&\mbox{salinity}
+\label{eq:h-salinity-equation-vlm}
 \f}
+The MOM6 implementation of the vertical Lagrangian method makes
+use of two general steps. The first evolves the ocean state forward in
+time according to a vertical Lagrangian approach with with
+\f$\dot{r}=0\f$. Hence, the horizontal momentum, thickness, and
+tracers are time stepped with the underbraced terms removed in the
+above equations. All advective transport occurs within a layer as
+defined by constant \f$r\f$-surfaces so that the volume within each
+layer is fixed. All other terms are retained in their full form,
+including subgrid scale terms that contribute to the transfer of
+tracer and momentum into distinct \f$r\f$ layers (e.g., dia-surface
+diffusion of tracer and velocity). Maintaining constant volume within
+a layer yet allowing for tracers to move between layers engenders no
+inconsistency between tracer and thickness evolution. The reason is
+that tracer diffusion, even dia-surface diffusion, does not transfer
+volume.
 
-Substituting \eqref{eq:ale-thickness-equation,ale-equations,thickness} into \eqref{eq:ale-new-grid,ale-equations,move grid}
-recovers a time-discrete form of \eqref{eq:h-thickness-equation,h-equations,thickness}. The
-intermediate quantities indicated by \f$^\dagger\f$-symbols are the result of
-the vertical Lagrangian step of the algorithm. What were the red terms in
-the continuous-in-time equations are used to evolve the the intermediate
-quantities to the final updated quantities each step. In MOM6, equation
-\eqref{eq:ale-new-grid,ale-equations,move grid} is essentially used to define the dia-surface
-transport \f$z_r \dot{r}\f$ by prescribing \f$h^{(n+1)}\f$. For example, to
-recover a z-coordinate model, \f$h^{(n+1)}=\Delta z\f$, and \f$z_r \dot{r}\f$
-becomes the Eulerian vertical velocity, \f$w\f$.
+The second step in the method comprises the generation of a new
+vertical grid following a prescription, such as whether the grid
+should align with isopcynals or constant \f$z^{*}\f$ or a combination.
+This second step is known as the regrid step.  The ocean state is then
+vertically remapped to the newly generated vertical grid. This
+remapping step incorporates dia-surface transfer of properties, with
+such transfer depending on the prescription given for the vertical
+grid generation. To minimize discretization errors and the associated
+spurious mixing, the remapping step makes use of the high order
+accurate methods developed by \cite white2008 and \cite white2009.
+
+
+\section section_ALE_MOM_numerics Outlining the numerical algorithm
+
+The underlying algorithm for treatment of the vertical can be related
+to operator-splitting of the underbraced terms in the above equations.
+If we consider, for simplicity, an Euler-forward update for a
+time-step \f$\Delta t\f$, the time-stepping for the thickness and
+tracer equation (\f$C\f$ is an arbitrary tracer) can be summarized as
+(from Table 1 in Griffies, Adcroft and Hallberg (2020)
+\cite Griffies_Adcroft_Hallberg2020)
+\f{align}
+\label{html:ale-equations}\notag
+\\
+ \delta_{r} w^{\scriptstyle{\mathrm{grid}}}
+ &= -\nabla_{r} \cdot [h \, \mathbf{u}]^{(n)}
+ &\mbox{layer motion via horz conv}
+\\
+ h^{\dagger} &= h^{(n)} + \Delta t \, \delta_{r} w^{\scriptstyle{\mathrm{grid}}}
+= h^{(n)} - \Delta t \, \nabla_{r} \cdot [h \, \mathbf{u}]^{(n)}
+ &\mbox{update thickness via horz advect}
+\\
+ [h \, C]^{\dagger} &= [h \, C]^{(n)} -\Delta t \, \nabla_{r} \cdot [ h \, C \, \mathbf{u} ]^{(n)}
+ &\mbox{update tracer via horz advect}
+\\
+ h^{(n+1)} &=  h^{\scriptstyle{\mathrm{target}}}
+ &\mbox{regrid to the target grid}
+\\
+ \delta_{r} w^{(\dot{r})} &= -(h^{\scriptstyle{\mathrm{target}}}  -  h^{\dagger})/\Delta t
+ &\mbox{diagnose dia-surface transport}
+\\
+ [h \, C]^{(n+1)} &= [h \, C]^{\dagger}  - \Delta t  \, \delta_{r} ( w^{(\dot{r})} \, C^{\dagger})
+ &\mbox{remap tracer via dia-surface transport}
+\f}
+The first three equations constitute the Lagrangian portion of the
+algorithm.  In particular, the second equation provides an
+intermediate or predictor value for the updated thickness,
+\f$h^{\dagger}\f$, resulting from the vertical Lagrangian update.
+Similarly, the third equation performs a Lagrangian update of the
+thickness-weighted tracer to intermediate values, again operationally
+realized by dropping the \f$w^{(\dot{r})}\f$ contribution.
+The fourth equation is the regrid step, which is the key step in the
+algorithm with the new grid defined by the new thickness
+\f$h^{(n+1)}\f$.  The new thickness is prescribed by the target values
+for the vertical grid,
+\f{align}
+ h^{(n+1)} = h^{\scriptstyle{\mathrm{target}}}.
+\f}
+The prescribed target grid thicknesses are then used to diagnose the
+dia-surface velocity according to
+\f{align}
+ \delta_{r} w^{(\dot{r})} = -(h^{\scriptstyle{\mathrm{target}}} - h^{\dagger})/\Delta t.
+\f}
+This step, and the remaining step for tracers, constitute the
+remapping portion of the algorithm.  For example, if the prescribed
+coordinate surfaces are geopotentials, then \f$w^{(\dot{r})}\f$ and
+\f$h^{\scriptstyle{\mathrm{target}}} = h^{(n)}\f$, in which case the
+remap step reduces to Cartesian vertical advection.
 
 Within the above framework for evolving the ocean state, we make use
 of a standard split-explicit time stepping method by decomposing the
 horizontal momentum equation into its fast (depth integrated) and slow
-(deviation from depth integrated) components. Furthermore, we follow the
-methods of \cite hallberg2009 to ensure that the free surface resulting
-from time stepping the depth integrated thickness equation (i.e., the
-free surface equation) is consistent with the sum of the thicknesses
-that result from time stepping the layer thickness equations for each
-of the discretized layers; i.e., \f$\sum_{k} h = H + \eta\f$.
+(deviation from depth integrated) components. Furthermore, we follow
+the methods of Hallberg and Adcroft (2009) \cite hallberg2009 to
+ensure that the free surface resulting from time stepping the depth
+integrated thickness equation (i.e., the free surface equation) is
+consistent with the sum of the thicknesses that result from time
+stepping the layer thickness equations for each of the discretized
+layers; i.e., \f$\sum_{k} h = H + \eta\f$.
 
 */

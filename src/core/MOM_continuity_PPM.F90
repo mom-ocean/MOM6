@@ -11,7 +11,7 @@ use MOM_grid, only : ocean_grid_type
 use MOM_open_boundary, only : ocean_OBC_type, OBC_segment_type, OBC_NONE
 use MOM_open_boundary, only : OBC_DIRECTION_E, OBC_DIRECTION_W, OBC_DIRECTION_N, OBC_DIRECTION_S
 use MOM_unit_scaling, only : unit_scale_type
-use MOM_variables, only : BT_cont_type, porous_barrier_ptrs
+use MOM_variables, only : BT_cont_type, porous_barrier_type
 use MOM_verticalGrid, only : verticalGrid_type
 
 implicit none ; private
@@ -90,7 +90,7 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, US, CS, OBC, pbv, uhb
   type(unit_scale_type),   intent(in)    :: US  !< A dimensional unit scaling type
   type(continuity_PPM_CS), intent(in)    :: CS  !< Module's control structure.
   type(ocean_OBC_type),    pointer       :: OBC !< Open boundaries control structure.
-  type(porous_barrier_ptrs), intent(in)  :: pbv !< pointers to porous barrier fractional cell metrics
+  type(porous_barrier_type), intent(in)  :: pbv !< pointers to porous barrier fractional cell metrics
   real, dimension(SZIB_(G),SZJ_(G)), &
                  optional, intent(in)    :: uhbt !< The summed volume flux through zonal faces
                                                  !! [H L2 T-1 ~> m3 s-1 or kg s-1].
@@ -240,7 +240,7 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, GV, US, CS, LB, OBC, por_face_are
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
                  optional, intent(out)   :: u_cor
                      !< The zonal velocities (u with a barotropic correction)
-                     !! that give uhbt as the depth-integrated transport, m s-1.
+                     !! that give uhbt as the depth-integrated transport [L T-1 ~> m s-1]
   type(BT_cont_type), optional, pointer  :: BT_cont !< A structure with elements that describe the
                      !! effective open face areas as a function of barotropic flow.
 
@@ -249,8 +249,8 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, GV, US, CS, LB, OBC, por_face_are
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: h_L, h_R ! Left and right face thicknesses [H ~> m or kg m-2].
   real, dimension(SZIB_(G)) :: &
     du, &      ! Corrective barotropic change in the velocity [L T-1 ~> m s-1].
-    du_min_CFL, & ! Min/max limits on du correction
-    du_max_CFL, & ! to avoid CFL violations [L T-1 ~> m s-1]
+    du_min_CFL, & ! Lower limit on du correction to avoid CFL violations [L T-1 ~> m s-1]
+    du_max_CFL, & ! Upper limit on du correction to avoid CFL violations [L T-1 ~> m s-1]
     duhdu_tot_0, & ! Summed partial derivative of uh with u [H L ~> m2 or kg m-1].
     uh_tot_0, & ! Summed transport with no barotropic correction [H L2 T-1 ~> m3 s-1 or kg s-1].
     visc_rem_max  ! The column maximum of visc_rem [nondim].
@@ -259,7 +259,7 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, GV, US, CS, LB, OBC, por_face_are
     visc_rem      ! A 2-D copy of visc_rem_u or an array of 1's [nondim].
   real, dimension(SZIB_(G)) :: FAuI  ! A list of sums of zonal face areas [H L ~> m2 or kg m-1].
   real :: FA_u    ! A sum of zonal face areas [H L ~> m2 or kg m-1].
-  real :: I_vrm   ! 1.0 / visc_rem_max, nondim.
+  real :: I_vrm   ! 1.0 / visc_rem_max [nondim]
   real :: CFL_dt  ! The maximum CFL ratio of the adjusted velocities divided by
                   ! the time step [T-1 ~> s-1].
   real :: I_dt    ! 1.0 / dt [T-1 ~> s-1].
@@ -537,7 +537,7 @@ subroutine zonal_flux_layer(u, h, h_L, h_R, uh, duhdu, visc_rem, dt, G, US, j, &
                                                           !! transport [H L2 T-1 ~> m3 s-1 or kg s-1].
   real, dimension(SZIB_(G)),    intent(inout) :: duhdu    !< Partial derivative of uh
                                                           !! with u [H L ~> m2 or kg m-1].
-  real,                         intent(in)    :: dt  !< Time increment [T ~> s].
+  real,                         intent(in)    :: dt       !< Time increment [T ~> s]
   type(unit_scale_type),        intent(in)    :: US       !< A dimensional unit scaling type
   integer,                      intent(in)    :: j        !< Spatial index.
   integer,                      intent(in)    :: ish      !< Start of index range.
@@ -549,8 +549,7 @@ subroutine zonal_flux_layer(u, h, h_L, h_R, uh, duhdu, visc_rem, dt, G, US, j, &
   type(ocean_OBC_type), optional, pointer     :: OBC !< Open boundaries control structure.
   ! Local variables
   real :: CFL  ! The CFL number based on the local velocity and grid spacing [nondim]
-  real :: curv_3 ! A measure of the thickness curvature over a grid length,
-                 ! with the same units as h_in.
+  real :: curv_3 ! A measure of the thickness curvature over a grid length [H ~> m or kg m-2]
   real :: h_marg ! The marginal thickness of a flux [H ~> m or kg m-2].
   integer :: i
   integer :: l_seg
@@ -639,8 +638,7 @@ subroutine zonal_face_thickness(u, h, h_L, h_R, h_u, dt, G, GV, US, LB, vol_CFL,
 
   ! Local variables
   real :: CFL  ! The CFL number based on the local velocity and grid spacing [nondim]
-  real :: curv_3 ! A measure of the thickness curvature over a grid length,
-                 ! with the same units as h_in.
+  real :: curv_3 ! A measure of the thickness curvature over a grid length [H ~> m or kg m-2]
   real :: h_avg  ! The average thickness of a flux [H ~> m or kg m-2].
   real :: h_marg ! The marginal thickness of a flux [H ~> m or kg m-2].
   logical :: local_open_BC
@@ -772,10 +770,10 @@ subroutine zonal_flux_adjust(u, h_in, h_L, h_R, uhbt, uh_tot_0, duhdu_tot_0, &
     uh_err_best, & ! The smallest value of uh_err found so far [H L2 T-1 ~> m3 s-1 or kg s-1].
     u_new, &   ! The velocity with the correction added [L T-1 ~> m s-1].
     duhdu_tot,&! Summed partial derivative of uh with u [H L ~> m2 or kg m-1].
-    du_min, &  ! Min/max limits on du correction based on CFL limits
-    du_max     ! and previous iterations [L T-1 ~> m s-1].
+    du_min, &  ! Lower limit on du correction based on CFL limits and previous iterations [L T-1 ~> m s-1]
+    du_max     ! Upper limit on du correction based on CFL limits and previous iterations [L T-1 ~> m s-1]
   real :: du_prev ! The previous value of du [L T-1 ~> m s-1].
-  real :: ddu    ! The change in du from the previous iteration [L T-1 ~> m s-1].
+  real :: ddu     ! The change in du from the previous iteration [L T-1 ~> m s-1].
   real :: tol_eta ! The tolerance for the current iteration [H ~> m or kg m-2].
   real :: tol_vel ! The tolerance for velocity in the current iteration [L T-1 ~> m s-1].
   integer :: i, k, nz, itt, max_itts = 20
@@ -915,7 +913,7 @@ subroutine set_zonal_BT_cont(u, h_in, h_L, h_R, BT_cont, uh_tot_0, duhdu_tot_0, 
     du0, &        ! The barotropic velocity increment that gives 0 transport [L T-1 ~> m s-1].
     duL, duR, &   ! The barotropic velocity increments that give the westerly
                   ! (duL) and easterly (duR) test velocities [L T-1 ~> m s-1].
-    zeros, &      ! An array of full of 0's.
+    zeros, &      ! An array of full of 0 transports [H L2 T-1 ~> m3 s-1 or kg s-1]
     du_CFL, &     ! The velocity increment that corresponds to CFL_min [L T-1 ~> m s-1].
     u_L, u_R, &   ! The westerly (u_L), easterly (u_R), and zero-barotropic
     u_0, &        ! transport (u_0) layer test velocities [L T-1 ~> m s-1].
@@ -936,7 +934,7 @@ subroutine set_zonal_BT_cont(u, h_in, h_L, h_R, BT_cont, uh_tot_0, duhdu_tot_0, 
                        ! from leading to large CFL numbers.
   real :: min_visc_rem ! The smallest permitted value for visc_rem that is used
                        ! in finding the barotropic velocity that changes the
-                       ! flow direction.  This is necessary to keep the inverse
+                       ! flow direction [nondim].  This is necessary to keep the inverse
                        ! of visc_rem from leading to large CFL numbers.
   real :: CFL_min ! A minimal increment in the CFL to try to ensure that the
                   ! flow is truly upwind [nondim]
@@ -1076,17 +1074,17 @@ subroutine meridional_mass_flux(v, h_in, vh, dt, G, GV, US, CS, LB, OBC, por_fac
     h_L, h_R   ! Left and right face thicknesses [H ~> m or kg m-2].
   real, dimension(SZI_(G)) :: &
     dv, &      ! Corrective barotropic change in the velocity [L T-1 ~> m s-1].
-    dv_min_CFL, & ! Min/max limits on dv correction
-    dv_max_CFL, & ! to avoid CFL violations
+    dv_min_CFL, & ! Lower limit on dv correction to avoid CFL violations [L T-1 ~> m s-1]
+    dv_max_CFL, & ! Upper limit on dv correction to avoid CFL violations [L T-1 ~> m s-1]
     dvhdv_tot_0, & ! Summed partial derivative of vh with v [H L ~> m2 or kg m-1].
     vh_tot_0, &   ! Summed transport with no barotropic correction [H L2 T-1 ~> m3 s-1 or kg s-1].
-    visc_rem_max  ! The column maximum of visc_rem.
+    visc_rem_max  ! The column maximum of visc_rem [nondim]
   logical, dimension(SZI_(G)) :: do_I
   real, dimension(SZI_(G)) :: FAvi  ! A list of sums of meridional face areas [H L ~> m2 or kg m-1].
   real :: FA_v    ! A sum of meridional face areas [H L ~> m2 or kg m-1].
   real, dimension(SZI_(G),SZK_(GV)) :: &
-    visc_rem      ! A 2-D copy of visc_rem_v or an array of 1's.
-  real :: I_vrm   ! 1.0 / visc_rem_max, nondim.
+    visc_rem      ! A 2-D copy of visc_rem_v or an array of 1's [nondim]
+  real :: I_vrm   ! 1.0 / visc_rem_max [nondim]
   real :: CFL_dt  ! The maximum CFL ratio of the adjusted velocities divided by
                   ! the time step [T-1 ~> s-1].
   real :: I_dt    ! 1.0 / dt [T-1 ~> s-1].
@@ -1598,8 +1596,8 @@ subroutine meridional_flux_adjust(v, h_in, h_L, h_R, vhbt, vh_tot_0, dvhdv_tot_0
     vh_err_best, & ! The smallest value of vh_err found so far [H L2 T-1 ~> m3 s-1 or kg s-1].
     v_new, &   ! The velocity with the correction added [L T-1 ~> m s-1].
     dvhdv_tot,&! Summed partial derivative of vh with u [H L ~> m2 or kg m-1].
-    dv_min, &  ! Min/max limits on dv correction based on CFL limits
-    dv_max     ! and previous iterations [L T-1 ~> m s-1].
+    dv_min, &  ! Lower limit on dv correction based on CFL limits and previous iterations [L T-1 ~> m s-1]
+    dv_max     ! Upper limit on dv correction based on CFL limits and previous iterations [L T-1 ~> m s-1]
   real :: dv_prev ! The previous value of dv [L T-1 ~> m s-1].
   real :: ddv    ! The change in dv from the previous iteration [L T-1 ~> m s-1].
   real :: tol_eta ! The tolerance for the current iteration [H ~> m or kg m-2].
@@ -1741,7 +1739,7 @@ subroutine set_merid_BT_cont(v, h_in, h_L, h_R, BT_cont, vh_tot_0, dvhdv_tot_0, 
     dv0, &        ! The barotropic velocity increment that gives 0 transport [L T-1 ~> m s-1].
     dvL, dvR, &   ! The barotropic velocity increments that give the southerly
                   ! (dvL) and northerly (dvR) test velocities [L T-1 ~> m s-1].
-    zeros, &      ! An array of full of 0's.
+    zeros, &      ! An array of full of 0 transports [H L2 T-1 ~> m3 s-1 or kg s-1]
     dv_CFL, &     ! The velocity increment that corresponds to CFL_min [L T-1 ~> m s-1].
     v_L, v_R, &   ! The southerly (v_L), northerly (v_R), and zero-barotropic
     v_0, &        ! transport (v_0) layer test velocities [L T-1 ~> m s-1].
@@ -1871,7 +1869,7 @@ subroutine PPM_reconstruction_x(h_in, h_L, h_R, G, LB, h_min, monotonic, simple_
                                                          !! [H ~> m or kg m-2].
   type(loop_bounds_type),            intent(in)  :: LB   !< Active loop bounds structure.
   real,                              intent(in)  :: h_min !< The minimum thickness
-                    !! that can be obtained by a concave parabolic fit.
+                    !! that can be obtained by a concave parabolic fit [H ~> m or kg m-2]
   logical,                           intent(in)  :: monotonic !< If true, use the
                     !! Colella & Woodward monotonic limiter.
                     !! Otherwise use a simple positive-definite limiter.
@@ -1881,8 +1879,8 @@ subroutine PPM_reconstruction_x(h_in, h_L, h_R, G, LB, h_min, monotonic, simple_
   type(ocean_OBC_type),              pointer     :: OBC !< Open boundaries control structure.
 
   ! Local variables with useful mnemonic names.
-  real, dimension(SZI_(G),SZJ_(G))  :: slp ! The slopes.
-  real, parameter :: oneSixth = 1./6.
+  real, dimension(SZI_(G),SZJ_(G))  :: slp ! The slopes per grid point [H ~> m or kg m-2]
+  real, parameter :: oneSixth = 1./6.  ! [nondim]
   real :: h_ip1, h_im1 ! Neighboring thicknesses or sensibly extrapolated values [H ~> m or kg m-2]
   real :: dMx, dMn     ! The difference between the local thickness and the maximum (dMx) or
                        ! minimum (dMn) of the surrounding values [H ~> m or kg m-2]
@@ -2007,7 +2005,7 @@ subroutine PPM_reconstruction_y(h_in, h_L, h_R, G, LB, h_min, monotonic, simple_
                                                          !! [H ~> m or kg m-2].
   type(loop_bounds_type),            intent(in)  :: LB   !< Active loop bounds structure.
   real,                              intent(in)  :: h_min !< The minimum thickness
-                    !! that can be obtained by a concave parabolic fit.
+                    !! that can be obtained by a concave parabolic fit [H ~> m or kg m-2]
   logical,                           intent(in)  :: monotonic !< If true, use the
                     !! Colella & Woodward monotonic limiter.
                     !! Otherwise use a simple positive-definite limiter.
@@ -2017,8 +2015,8 @@ subroutine PPM_reconstruction_y(h_in, h_L, h_R, G, LB, h_min, monotonic, simple_
   type(ocean_OBC_type),              pointer     :: OBC !< Open boundaries control structure.
 
   ! Local variables with useful mnemonic names.
-  real, dimension(SZI_(G),SZJ_(G))  :: slp ! The slopes.
-  real, parameter :: oneSixth = 1./6.
+  real, dimension(SZI_(G),SZJ_(G))  :: slp ! The slopes per grid point [H ~> m or kg m-2]
+  real, parameter :: oneSixth = 1./6.      ! [nondim]
   real :: h_jp1, h_jm1 ! Neighboring thicknesses or sensibly extrapolated values [H ~> m or kg m-2]
   real :: dMx, dMn     ! The difference between the local thickness and the maximum (dMx) or
                        ! minimum (dMn) of the surrounding values [H ~> m or kg m-2]
@@ -2141,7 +2139,7 @@ subroutine PPM_limit_pos(h_in, h_L, h_R, h_min, G, iis, iie, jis, jie)
   real, dimension(SZI_(G),SZJ_(G)),  intent(inout) :: h_L !< Left thickness in the reconstruction [H ~> m or kg m-2].
   real, dimension(SZI_(G),SZJ_(G)),  intent(inout) :: h_R !< Right thickness in the reconstruction [H ~> m or kg m-2].
   real,                              intent(in)  :: h_min !< The minimum thickness
-                    !! that can be obtained by a concave parabolic fit.
+                    !! that can be obtained by a concave parabolic fit [H ~> m or kg m-2]
   integer,                           intent(in)  :: iis      !< Start of i index range.
   integer,                           intent(in)  :: iie      !< End of i index range.
   integer,                           intent(in)  :: jis      !< Start of j index range.
@@ -2218,10 +2216,10 @@ end subroutine PPM_limit_CW84
 
 !> Return the maximum ratio of a/b or maxrat.
 function ratio_max(a, b, maxrat) result(ratio)
-  real, intent(in) :: a       !< Numerator
-  real, intent(in) :: b       !< Denominator
-  real, intent(in) :: maxrat  !< Maximum value of ratio.
-  real :: ratio               !< Return value.
+  real, intent(in) :: a       !< Numerator, in arbitrary units [A]
+  real, intent(in) :: b       !< Denominator, in arbitrary units [B]
+  real, intent(in) :: maxrat  !< Maximum value of ratio [A B-1]
+  real :: ratio               !< Return value [A B-1]
 
   if (abs(a) > abs(maxrat*b)) then
     ratio = maxrat

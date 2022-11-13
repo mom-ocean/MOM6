@@ -48,7 +48,7 @@ module MOM_dynamics_unsplit_RK2
 !*                                                                     *
 !********+*********+*********+*********+*********+*********+*********+**
 
-use MOM_variables, only : vertvisc_type, thermo_var_ptrs, porous_barrier_ptrs
+use MOM_variables, only : vertvisc_type, thermo_var_ptrs, porous_barrier_type
 use MOM_variables, only : ocean_internal_state, accel_diag_ptrs, cont_diag_ptrs
 use MOM_forcing_type, only : mech_forcing
 use MOM_checksum_packages, only : MOM_thermo_chksum, MOM_state_chksum, MOM_accel_chksum
@@ -230,7 +230,7 @@ subroutine step_MOM_dyn_unsplit_RK2(u_in, v_in, h_in, tv, visc, Time_local, dt, 
   type(MEKE_type),                   intent(inout) :: MEKE    !< MEKE fields
                                                               !! fields related to the Mesoscale
                                                               !! Eddy Kinetic Energy.
-  type(porous_barrier_ptrs), intent(in) :: pbv                !< porous barrier fractional cell metrics
+  type(porous_barrier_type), intent(in) :: pbv                !< porous barrier fractional cell metrics
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV))  :: h_av ! Averaged layer thicknesses [H ~> m or kg m-2]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV))  :: hp ! Predicted layer thicknesses [H ~> m or kg m-2]

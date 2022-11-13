@@ -71,6 +71,7 @@ subroutine find_obsolete_params(param_file)
 
   call obsolete_real(param_file, "VSTAR_SCALE_COEF")
   call obsolete_real(param_file, "ZSTAR_RIGID_SURFACE_THRESHOLD")
+  call obsolete_logical(param_file, "HENYEY_IGW_BACKGROUND_NEW")
 
   ! Test for inconsistent parameter settings.
   split = .true. ; test_logic = .false.

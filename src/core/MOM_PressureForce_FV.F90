@@ -103,10 +103,10 @@ subroutine PressureForce_FV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_
     S_tmp       ! Temporary array of salinities where layers that are lighter
                 ! than the mixed layer have the mixed layer's properties [S ~> ppt].
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: &
-    S_t, &      ! Top and bottom edge values for linear reconstructions
-    S_b, &      ! of salinity within each layer [S ~> ppt].
-    T_t, &      ! Top and bottom edge values for linear reconstructions
-    T_b         ! of temperature within each layer [C ~> degC].
+    S_t, S_b, & ! Top and bottom edge values for linear reconstructions
+                ! of salinity within each layer [S ~> ppt].
+    T_t, T_b    ! Top and bottom edge values for linear reconstructions
+                ! of temperature within each layer [C ~> degC].
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: &
     dza, &      ! The change in geopotential anomaly between the top and bottom
                 ! of a layer [L2 T-2 ~> m2 s-2].
@@ -155,7 +155,7 @@ subroutine PressureForce_FV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_
   real :: H_to_RL2_T2   ! A factor to convert from thickness units (H) to pressure
                         ! units [R L2 T-2 H-1 ~> Pa m-1 or Pa m2 kg-1].
 !  real :: oneatm       ! 1 standard atmosphere of pressure in [R L2 T-2 ~> Pa]
-  real, parameter :: C1_6 = 1.0/6.0
+  real, parameter :: C1_6 = 1.0/6.0  ! [nondim]
   integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, nkmb
   integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state
   integer :: i, j, k
@@ -472,10 +472,10 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm
     S_tmp       ! Temporary array of salinities where layers that are lighter
                 ! than the mixed layer have the mixed layer's properties [S ~> ppt].
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: &
-    S_t, &      ! Top and bottom edge values for linear reconstructions
-    S_b, &      ! of salinity within each layer [S ~> ppt].
-    T_t, &      ! Top and bottom edge values for linear reconstructions
-    T_b         ! of temperature within each layer [C ~> degC].
+    S_t, S_b, & ! Top and bottom edge values for linear reconstructions
+                ! of salinity within each layer [S ~> ppt].
+    T_t, T_b    ! Top and bottom edge values for linear reconstructions
+                ! of temperature within each layer [C ~> degC].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
     rho_pgf, rho_stanley_pgf ! Density [kg m-3] from EOS with and without SGS T variance
                                         ! in Stanley parameterization.
@@ -497,7 +497,7 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm
   logical :: use_ALE         ! If true, use an ALE pressure reconstruction.
   logical :: use_EOS         ! If true, density is calculated from T & S using an equation of state.
   type(thermo_var_ptrs) :: tv_tmp! A structure of temporary T & S.
-  real, parameter :: C1_6 = 1.0/6.0
+  real, parameter :: C1_6 = 1.0/6.0 ! [nondim]
   integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state
   integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, nkmb
   integer :: i, j, k

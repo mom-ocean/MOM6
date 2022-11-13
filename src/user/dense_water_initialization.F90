@@ -279,8 +279,10 @@ subroutine dense_water_initialize_sponges(G, GV, US, tv, depth_tot, param_file, 
       enddo
     enddo
 
-    if (associated(tv%T)) call set_up_ALE_sponge_field(T, G, GV, tv%T, ACSp)
-    if (associated(tv%S)) call set_up_ALE_sponge_field(S, G, GV, tv%S, ACSp)
+    if ( associated(tv%T) ) call set_up_ALE_sponge_field(T, G, GV, tv%T, ACSp, 'temp', &
+        sp_long_name='temperature', sp_unit='degC s-1')
+    if ( associated(tv%S) ) call set_up_ALE_sponge_field(S, G, GV, tv%S, ACSp, 'salt', &
+        sp_long_name='salinity', sp_unit='g kg-1 s-1')
   else
     call MOM_error(FATAL, "dense_water_initialize_sponges: trying to use non ALE sponge")
   endif
