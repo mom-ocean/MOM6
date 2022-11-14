@@ -1963,7 +1963,7 @@ subroutine thickness_diffuse_init(Time, G, GV, US, param_file, diag, CDp, CS)
 
   ! Local variables
   character(len=40)  :: mdl = "MOM_thickness_diffuse" ! This module's name.
-  character(len=200) :: khth_file, inputdir
+  character(len=200) :: khth_file, inputdir, khth_varname
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
   real :: grid_sp      ! The local grid spacing [L ~> m]
@@ -2004,10 +2004,14 @@ subroutine thickness_diffuse_init(Time, G, GV, US, param_file, diag, CDp, CS)
     call get_param(param_file, mdl, "KHTH_FILE", khth_file, &
                  "The file containing the spatially varying horizontal "//&
                  "thickness diffusivity.", default="khth.nc")
+    call get_param(param_file, mdl, "KHTH_VARIABLE", khth_varname, &
+                 "The name of the interface height diffusivity variable to read "//&
+                 "from KHTH_FILE.", &
+                 default="khth")
     khth_file = trim(inputdir) // trim(khth_file)
 
     allocate(CS%khth2d(G%isd:G%ied, G%jsd:G%jed), source=0.0)
-    call MOM_read_data(khth_file, 'khth', CS%khth2d(:,:), G%domain, scale=US%m_to_L**2*US%T_to_s)
+    call MOM_read_data(khth_file, khth_varname, CS%khth2d(:,:), G%domain, scale=US%m_to_L**2*US%T_to_s)
     call pass_var(CS%khth2d, G%domain)
   endif
   call get_param(param_file, mdl, "KHTH_SLOPE_CFF", CS%KHTH_Slope_Cff, &
