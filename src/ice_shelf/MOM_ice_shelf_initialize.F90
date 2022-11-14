@@ -318,13 +318,10 @@ subroutine initialize_ice_shelf_boundary_channel(u_face_mask_bdry, v_face_mask_b
   real    :: input_vel  ! The input ice velocity per  [L Z T-1 ~> m s-1]
   real    :: lenlat, len_stress, westlon, lenlon, southlat ! The input positions of the channel boundarises
 
-  call get_param(PF, mdl, "LENLAT", lenlat, fail_if_missing=.true.)
-
-  call get_param(PF, mdl, "LENLON", lenlon, fail_if_missing=.true.)
-
-  call get_param(PF, mdl, "WESTLON", westlon, fail_if_missing=.true.)
-
-  call get_param(PF, mdl, "SOUTHLAT", southlat, fail_if_missing=.true.)
+  lenlat = G%len_lat
+  lenlon = G%len_lon
+  westlon = G%west_lon
+  southlat = G%south_lat
 
   call get_param(PF, mdl, "INPUT_VEL_ICE_SHELF", input_vel, &
                  "inflow ice velocity at upstream boundary", &
@@ -619,12 +616,11 @@ end subroutine
 subroutine initialize_ice_AGlen(AGlen, G, US, PF)
   type(ocean_grid_type), intent(in)    :: G    !< The ocean's grid structure
   real, dimension(SZDI_(G),SZDJ_(G)), &
-                         intent(inout) :: AGlen !< The ice-stiffness parameter A_Glen
+                         intent(inout) :: AGlen !< The ice-stiffness parameter A_Glen, often in [Pa-3 s-1]
   type(unit_scale_type), intent(in)    :: US !< A structure containing unit conversion factors
   type(param_file_type), intent(in)    :: PF !< A structure to parse for run-time parameters
 
-!  integer :: i, j
-  real :: A_Glen
+  real :: A_Glen  ! Ice-stiffness parameter, often in [Pa-3 s-1]
   character(len=40)  :: mdl = "initialize_ice_stiffness" ! This subroutine's name.
   character(len=200) :: config
   character(len=200) :: varname
@@ -657,7 +653,7 @@ subroutine initialize_ice_AGlen(AGlen, G, US, PF)
 
     if (.not.file_exists(filename, G%Domain)) call MOM_error(FATAL, &
        " initialize_ice_stiffness_from_file: Unable to open "//trim(filename))
-    call MOM_read_data(filename,trim(varname),AGlen,G%Domain)
+    call MOM_read_data(filename,trim(varname), AGlen, G%Domain)
 
   endif
 end subroutine

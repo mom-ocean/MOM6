@@ -48,7 +48,7 @@ type, public :: neutral_diffusion_CS ; private
   logical :: hard_fail_heff !< Bring down the model if a problem with heff is detected
   integer :: max_iter !< Maximum number of iterations if refine_position is defined
   real :: drho_tol    !< Convergence criterion representing density difference from true neutrality [R ~> kg m-3]
-  real :: x_tol       !< Convergence criterion for how small an update of the position can be
+  real :: x_tol       !< Convergence criterion for how small an update of the position can be [nondim]
   real :: ref_pres    !< Reference pressure, negative if using locally referenced neutral
                       !! density [R L2 T-2 ~> Pa]
   logical :: interior_only !< If true, only applies neutral diffusion in the ocean interior.
@@ -56,15 +56,15 @@ type, public :: neutral_diffusion_CS ; private
   logical :: use_unmasked_transport_bug !< If true, use an older form for the accumulation of
                       !! neutral-diffusion transports that were unmasked, as used prior to Jan 2018.
   ! Positions of neutral surfaces in both the u, v directions
-  real,    allocatable, dimension(:,:,:) :: uPoL  !< Non-dimensional position with left layer uKoL-1, u-point
-  real,    allocatable, dimension(:,:,:) :: uPoR  !< Non-dimensional position with right layer uKoR-1, u-point
+  real,    allocatable, dimension(:,:,:) :: uPoL  !< Non-dimensional position with left layer uKoL-1, u-point [nondim]
+  real,    allocatable, dimension(:,:,:) :: uPoR  !< Non-dimensional position with right layer uKoR-1, u-point [nondim]
   integer, allocatable, dimension(:,:,:) :: uKoL  !< Index of left interface corresponding to neutral surface,
                                                   !! at a u-point
   integer, allocatable, dimension(:,:,:) :: uKoR  !< Index of right interface corresponding to neutral surface,
                                                   !! at a u-point
   real,    allocatable, dimension(:,:,:) :: uHeff !< Effective thickness at u-point [H ~> m or kg m-2]
-  real,    allocatable, dimension(:,:,:) :: vPoL  !< Non-dimensional position with left layer uKoL-1, v-point
-  real,    allocatable, dimension(:,:,:) :: vPoR  !< Non-dimensional position with right layer uKoR-1, v-point
+  real,    allocatable, dimension(:,:,:) :: vPoL  !< Non-dimensional position with left layer uKoL-1, v-point [nondim]
+  real,    allocatable, dimension(:,:,:) :: vPoR  !< Non-dimensional position with right layer uKoR-1, v-point [nondim]
   integer, allocatable, dimension(:,:,:) :: vKoL  !< Index of left interface corresponding to neutral surface,
                                                   !! at a v-point
   integer, allocatable, dimension(:,:,:) :: vKoR  !< Index of right interface corresponding to neutral surface,
@@ -229,16 +229,16 @@ logical function neutral_diffusion_init(Time, G, GV, US, param_file, diag, EOS, 
                    "               pressure dependence",                           &
                    default="mid_pressure")
     if (CS%neutral_pos_method > 1) then
-      call get_param(param_file, mdl, "NDIFF_DRHO_TOL", CS%drho_tol,            &
-                     "Sets the convergence criterion for finding the neutral\n"// &
-                     "position within a layer in kg m-3.",                        &
-                     default=1.e-10, scale=US%kg_m3_to_R)
-      call get_param(param_file, mdl, "NDIFF_X_TOL", CS%x_tol,            &
-                     "Sets the convergence criterion for a change in nondim\n"// &
-                     "position within a layer.",                        &
-                     default=0.)
+      call get_param(param_file, mdl, "NDIFF_DRHO_TOL", CS%drho_tol, &
+                     "Sets the convergence criterion for finding the neutral "// &
+                     "position within a layer in kg m-3.", &
+                     units="kg m-3", default=1.e-10, scale=US%kg_m3_to_R)
+      call get_param(param_file, mdl, "NDIFF_X_TOL", CS%x_tol, &
+                     "Sets the convergence criterion for a change in nondimensional "// &
+                     "position within a layer.", &
+                     units="nondim", default=0.)
       call get_param(param_file, mdl, "NDIFF_MAX_ITER", CS%max_iter,              &
-                    "The maximum number of iterations to be done before \n"//     &
+                     "The maximum number of iterations to be done before "//     &
                      "exiting the iterative loop to find the neutral surface",    &
                      default=10)
     endif

@@ -496,7 +496,8 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
            "an initial grid that is consistent with the initial conditions.", &
            default=1, do_not_log=just_read)
 
-      call get_param(PF, mdl, "DT", dt, "Timestep", fail_if_missing=.true., scale=US%s_to_T)
+      call get_param(PF, mdl, "DT", dt, "Timestep", &
+                     units="s", scale=US%s_to_T, fail_if_missing=.true.)
 
       if (new_sim .and. debug) &
         call hchksum(h, "Pre-ALE_regrid: h ", G%HI, haloshift=1, scale=GV%H_to_m)
@@ -2678,7 +2679,8 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, depth_tot, G, GV, US, PF, just
                  "all layers are initialized based on the depths of their target densities.", &
                  default=.false., do_not_log=just_read.or.(GV%nkml==0))
     if (GV%nkml == 0) separate_mixed_layer = .false.
-    call get_param(PF, mdl, "MINIMUM_DEPTH", Hmix_default, default=0.0)
+    call get_param(PF, mdl, "MINIMUM_DEPTH", Hmix_default, &
+                units="m", default=0.0, scale=1.0)
     call get_param(PF, mdl, "Z_INIT_HMIX_DEPTH", Hmix_depth, &
                  "The mixed layer depth in the initial conditions when Z_INIT_SEPARATE_MIXED_LAYER "//&
                  "is set to true.", default=Hmix_default, units="m", scale=US%m_to_Z, &

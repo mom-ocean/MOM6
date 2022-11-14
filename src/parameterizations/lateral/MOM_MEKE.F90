@@ -1522,7 +1522,8 @@ subroutine ML_MEKE_init(diag, G, US, Time, param_file, dbcomms_CS, CS)
   call get_param(param_file, mdl, "EKE_MODEL", model_filename, &
                  "Filename of the a saved pyTorch model to use", fail_if_missing = .true.)
   call get_param(param_file, mdl, "EKE_MAX", CS%eke_max, &
-                 "Maximum value of EKE allowed when inferring EKE", default=2., scale=US%L_T_to_m_s**2)
+                 "Maximum value of EKE allowed when inferring EKE", &
+                 units="m2 s-2", default=2., scale=US%L_T_to_m_s**2)
 
   ! Set the machine learning model
   if (dbcomms_CS%colocated) then

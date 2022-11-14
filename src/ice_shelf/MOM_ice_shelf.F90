@@ -1694,7 +1694,7 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces_in,
   !GMM - I think we do not need to save ustar_shelf and iceshelf_melt in the restart file
   !if (.not. CS%solo_ice_sheet) then
   !  call register_restart_field(fluxes%ustar_shelf, "ustar_shelf", .false., CS%restart_CSp, &
-  !                              "Friction velocity under ice shelves", "m s-1", conversion=###)
+  !                              "Friction velocity under ice shelves", "m s-1", conversion=US%Z_to_m*US%s_to_T)
   !endif
 
   CS%restart_output_dir = dirs%restart_output_dir
@@ -1797,7 +1797,7 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces_in,
   endif
 
   CS%id_area_shelf_h = register_diag_field('ice_shelf_model', 'area_shelf_h', CS%diag%axesT1, CS%Time, &
-      'Ice Shelf Area in cell', 'meter-2', conversion=US%L_to_m**2)
+      'Ice Shelf Area in cell', 'meter2', conversion=US%L_to_m**2)
   CS%id_shelf_mass = register_diag_field('ice_shelf_model', 'shelf_mass', CS%diag%axesT1, CS%Time, &
       'mass of shelf', 'kg/m^2', conversion=US%RZ_to_kg_m2)
   CS%id_h_shelf = register_diag_field('ice_shelf_model', 'h_shelf', CS%diag%axesT1, CS%Time, &
@@ -1839,7 +1839,8 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces_in,
     CS%id_h_mask = register_diag_field('ice_shelf_model', 'h_mask', CS%diag%axesT1, CS%Time, &
        'ice shelf thickness mask', 'none')
     CS%id_shelf_sfc_mass_flux = register_diag_field('ice_shelf_model', 'sfc_mass_flux', CS%diag%axesT1, CS%Time, &
-       'ice shelf surface mass flux deposition from atmosphere', 'none', conversion=US%RZ_T_to_kg_m2s)
+       'ice shelf surface mass flux deposition from atmosphere', &
+       'kg m-2 s-1', conversion=US%RZ_T_to_kg_m2s)
   endif
   call MOM_IS_diag_mediator_close_registration(CS%diag)
 

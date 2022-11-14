@@ -220,7 +220,7 @@ subroutine MOM_initialize_topography(D, max_depth, G, PF, US)
                  " \t dense - Denmark Strait-like dense water formation and overflow.\n"//&
                  " \t USER - call a user modified routine.", &
                  fail_if_missing=.true.)
-  max_depth = -1.e9*US%m_to_Z ; call read_param(PF, "MAXIMUM_DEPTH", max_depth, scale=US%m_to_Z)
+  call get_param(PF, mdl, "MAXIMUM_DEPTH", max_depth, units="m", default=-1.e9, scale=US%m_to_Z, do_not_log=.true.)
   select case ( trim(config) )
     case ("file");      call initialize_topography_from_file(D, G, PF, US)
     case ("flat");      call initialize_topography_named(D, G, PF, config, max_depth, US)

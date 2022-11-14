@@ -1212,11 +1212,11 @@ subroutine CoriolisAdv_init(Time, G, GV, US, param_file, diag, AD, CS)
      'Zonal Acceleration from Relative Vorticity', 'm s-2', conversion=US%L_T2_to_m_s2)
 
   CS%id_CAuS = register_diag_field('ocean_model', 'CAu_Stokes', diag%axesCuL, Time, &
-     'Zonal Acceleration from Stokes Vorticity', 'm-1 s-2', conversion=US%L_T2_to_m_s2)
+     'Zonal Acceleration from Stokes Vorticity', 'm s-2', conversion=US%L_T2_to_m_s2)
   ! add to AD
 
   CS%id_CAvS = register_diag_field('ocean_model', 'CAv_Stokes', diag%axesCvL, Time, &
-     'Meridional Acceleration from Stokes Vorticity', 'm-1 s-2', conversion=US%L_T2_to_m_s2)
+     'Meridional Acceleration from Stokes Vorticity', 'm s-2', conversion=US%L_T2_to_m_s2)
   ! add to AD
 
   !CS%id_hf_gKEu = register_diag_field('ocean_model', 'hf_gKEu', diag%axesCuL, Time, &
@@ -1249,14 +1249,14 @@ subroutine CoriolisAdv_init(Time, G, GV, US, param_file, diag, AD, CS)
 
   !CS%id_hf_rvxu = register_diag_field('ocean_model', 'hf_rvxu', diag%axesCvL, Time, &
   !   'Fractional Thickness-weighted Meridional Acceleration from Relative Vorticity', &
-  !   'm-1 s-2', v_extensive=.true., conversion=US%L_T2_to_m_s2)
+  !   'm s-2', v_extensive=.true., conversion=US%L_T2_to_m_s2)
   CS%id_hf_rvxu_2d = register_diag_field('ocean_model', 'hf_rvxu_2d', diag%axesCv1, Time, &
      'Depth-sum Fractional Thickness-weighted Meridional Acceleration from Relative Vorticity', &
      'm s-2', conversion=US%L_T2_to_m_s2)
 
   !CS%id_hf_rvxv = register_diag_field('ocean_model', 'hf_rvxv', diag%axesCuL, Time, &
   !   'Fractional Thickness-weighted Zonal Acceleration from Relative Vorticity', &
-  !   'm-1 s-2', v_extensive=.true., conversion=US%L_T2_to_m_s2)
+  !   'm s-2', v_extensive=.true., conversion=US%L_T2_to_m_s2)
   CS%id_hf_rvxv_2d = register_diag_field('ocean_model', 'hf_rvxv_2d', diag%axesCu1, Time, &
      'Depth-sum Fractional Thickness-weighted Zonal Acceleration from Relative Vorticity', &
      'm s-2', conversion=US%L_T2_to_m_s2)
