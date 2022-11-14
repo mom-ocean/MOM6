@@ -1473,7 +1473,8 @@ subroutine initialize_velocity_from_file(u, v, G, GV, US, param_file, just_read)
                                                       !! parameters without changing u or v.
   ! Local variables
   character(len=40)  :: mdl = "initialize_velocity_from_file" ! This subroutine's name.
-  character(len=200) :: filename,velocity_file,inputdir ! Strings for file/path
+  character(len=200) :: filename, velocity_file, inputdir ! Strings for file/path
+  character(len=64)  :: u_IC_var, v_IC_var ! Velocity component names in files
 
   if (.not.just_read) call callTree_enter(trim(mdl)//"(), MOM_state_initialization.F90")
 
@@ -1483,16 +1484,23 @@ subroutine initialize_velocity_from_file(u, v, G, GV, US, param_file, just_read)
   call get_param(param_file, mdl, "INPUTDIR", inputdir, default=".")
   inputdir = slasher(inputdir)
 
-  if (just_read) return ! All run-time parameters have been read, so return.
-
   filename = trim(inputdir)//trim(velocity_file)
-  call log_param(param_file, mdl, "INPUTDIR/VELOCITY_FILE", filename)
+  if (.not.just_read) call log_param(param_file, mdl, "INPUTDIR/VELOCITY_FILE", filename)
+
+  call get_param(param_file, mdl, "U_IC_VAR", u_IC_var, &
+                 "The initial condition variable for zonal velocity in VELOCITY_FILE.", &
+                 default="u")
+  call get_param(param_file, mdl, "V_IC_VAR", v_IC_var, &
+                 "The initial condition variable for meridional velocity in VELOCITY_FILE.", &
+                 default="v")
+
+  if (just_read) return ! All run-time parameters have been read, so return.
 
   if (.not.file_exists(filename, G%Domain)) call MOM_error(FATAL, &
          " initialize_velocity_from_file: Unable to open "//trim(filename))
 
   !  Read the velocities from a netcdf file.
-  call MOM_read_vector(filename, "u", "v", u(:,:,:), v(:,:,:), G%Domain, scale=US%m_s_to_L_T)
+  call MOM_read_vector(filename, u_IC_var, v_IC_var, u(:,:,:), v(:,:,:), G%Domain, scale=US%m_s_to_L_T)
 
   call callTree_leave(trim(mdl)//'()')
 end subroutine initialize_velocity_from_file

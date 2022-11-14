@@ -96,7 +96,7 @@ subroutine MOM_calculate_grad_Coriolis(dF_dx, dF_dy, G, US)
   type(unit_scale_type),    optional, intent(in)    :: US !< A dimensional unit scaling type
   ! Local variables
   integer :: i,j
-  real :: f1, f2
+  real :: f1, f2 ! Average of adjacent Coriolis parameters [T-1 ~> s-1]
 
   if ((LBOUND(G%CoriolisBu,1) > G%isc-1) .or. &
       (LBOUND(G%CoriolisBu,2) > G%isc-1)) then
@@ -121,8 +121,8 @@ end subroutine MOM_calculate_grad_Coriolis
 function diagnoseMaximumDepth(D, G)
   type(dyn_horgrid_type),  intent(in) :: G !< The dynamic horizontal grid type
   real, dimension(G%isd:G%ied,G%jsd:G%jed), &
-                           intent(in) :: D !< Ocean bottom depth in m or Z
-  real :: diagnoseMaximumDepth             !< The global maximum ocean bottom depth in m or Z
+                           intent(in) :: D !< Ocean bottom depth in [m] or [Z ~> m]
+  real :: diagnoseMaximumDepth             !< The global maximum ocean bottom depth in [m] or [Z ~> m]
   ! Local variables
   integer :: i,j
   diagnoseMaximumDepth = D(G%isc,G%jsc)
@@ -292,7 +292,7 @@ subroutine initialize_topography_named(D, G, param_file, topog_config, max_depth
 
   ! Local variables
   real :: min_depth            ! The minimum depth [Z ~> m].
-  real :: PI                   ! 3.1415926... calculated as 4*atan(1)
+  real :: PI                   ! 3.1415926... calculated as 4*atan(1) [nondim]
   real :: D0                   ! A constant to make the maximum basin depth MAXIMUM_DEPTH [Z ~> m]
   real :: expdecay             ! A decay scale of associated with the sloping boundaries [L ~> m]
   real :: Dedge                ! The depth at the basin edge [Z ~> m]
@@ -449,7 +449,7 @@ subroutine set_rotation_planetary(f, G, param_file, US)
 ! This subroutine sets up the Coriolis parameter for a sphere
   character(len=30) :: mdl = "set_rotation_planetary" ! This subroutine's name.
   integer :: I, J
-  real    :: PI
+  real    :: PI     ! The ratio of the circumference of a circle to its diameter [nondim]
   real    :: omega  ! The planetary rotation rate [T-1 ~> s-1]
 
   call callTree_enter(trim(mdl)//"(), MOM_shared_initialization.F90")
@@ -480,10 +480,10 @@ subroutine set_rotation_beta_plane(f, G, param_file, US)
   integer :: I, J
   real    :: f_0    ! The reference value of the Coriolis parameter [T-1 ~> s-1]
   real    :: beta   ! The meridional gradient of the Coriolis parameter [T-1 L-1 ~> s-1 m-1]
-  real    :: beta_lat_ref ! The reference latitude for the beta plane [degrees/km/m/cm]
+  real    :: beta_lat_ref ! The reference latitude for the beta plane [degrees_N] or [km] or [m]
   real    :: Rad_Earth_L  ! The radius of the planet in rescaled units [L ~> m]
   real    :: y_scl  ! A scaling factor from the units of latitude [L lat-1 ~> m lat-1]
-  real    :: PI
+  real    :: PI     ! The ratio of the circumference of a circle to its diameter [nondim]
   character(len=40)  :: mdl = "set_rotation_beta_plane" ! This subroutine's name.
   character(len=200) :: axis_units
   character(len=40) :: beta_lat_ref_units
@@ -533,10 +533,12 @@ subroutine initialize_grid_rotation_angle(G, PF)
   type(param_file_type),  intent(in)    :: PF  !< A structure indicating the open file
                                                !! to parse for model parameter values.
 
-  real    :: angle, lon_scale
-  real    :: len_lon    ! The periodic range of longitudes, usually 360 degrees.
-  real    :: pi_720deg  ! One quarter the conversion factor from degrees to radians.
-  real    :: lonB(2,2)  ! The longitude of a point, shifted to have about the same value.
+  real    :: angle      ! The clockwise angle of the grid relative to true north [degrees]
+  real    :: lon_scale  ! The trigonometric scaling factor converting changes in longitude
+                        ! to equivalent distances in latitudes [nondim]
+  real    :: len_lon    ! The periodic range of longitudes, usually 360 degrees [degrees_E].
+  real    :: pi_720deg  ! One quarter the conversion factor from degrees to radians [radian degree-1]
+  real    :: lonB(2,2)  ! The longitude of a point, shifted to have about the same value [degrees_E].
   character(len=40)  :: mdl = "initialize_grid_rotation_angle" ! This subroutine's name.
   logical :: use_bugs
   integer :: i, j, m, n
@@ -587,10 +589,10 @@ end subroutine initialize_grid_rotation_angle
 !> Return the modulo value of x in an interval [xc-(Lx/2) xc+(Lx/2)]
 !! If Lx<=0, then it returns x without applying modulo arithmetic.
 function modulo_around_point(x, xc, Lx) result(x_mod)
-  real, intent(in) :: x  !< Value to which to apply modulo arithmetic
-  real, intent(in) :: xc !< Center of modulo range
-  real, intent(in) :: Lx !< Modulo range width
-  real :: x_mod          !< x shifted by an integer multiple of Lx to be close to xc.
+  real, intent(in) :: x  !< Value to which to apply modulo arithmetic [A]
+  real, intent(in) :: xc !< Center of modulo range [A]
+  real, intent(in) :: Lx !< Modulo range width [A]
+  real :: x_mod          !< x shifted by an integer multiple of Lx to be close to xc [A].
 
   if (Lx > 0.0) then
     x_mod = modulo(x - (xc - 0.5*Lx), Lx) + (xc - 0.5*Lx)
@@ -611,9 +613,9 @@ subroutine reset_face_lengths_named(G, param_file, name, US)
 
   ! Local variables
   character(len=256) :: mesg    ! Message for error messages.
-  real    :: dx_2     ! Half the local zonal grid spacing [degreesE]
-  real    :: dy_2     ! Half the local meridional grid spacing [degreesN]
-  real    :: pi_180
+  real    :: dx_2     ! Half the local zonal grid spacing [degrees_E]
+  real    :: dy_2     ! Half the local meridional grid spacing [degrees_N]
+  real    :: pi_180   ! Conversion factor from degrees to radians [nondim]
   integer :: option
   integer :: i, j, isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
@@ -738,7 +740,9 @@ subroutine reset_face_lengths_file(G, param_file, US)
   character(len=40)  :: mdl = "reset_face_lengths_file" ! This subroutine's name.
   character(len=256) :: mesg    ! Message for error messages.
   character(len=200) :: filename, chan_file, inputdir ! Strings for file/path
+  character(len=64)  :: dxCv_open_var, dyCu_open_var ! Open face length names in files
   integer :: i, j, isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
+
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
   ! These checks apply regardless of the chosen option.
@@ -758,7 +762,14 @@ subroutine reset_face_lengths_file(G, param_file, US)
                            trim(filename))
   endif
 
-  call MOM_read_vector(filename, "dyCuo", "dxCvo", G%dy_Cu, G%dx_Cv, G%Domain, scale=US%m_to_L)
+  call get_param(param_file, mdl, "OPEN_DY_CU_VAR", dyCu_open_var, &
+                 "The u-face open face length variable in CHANNEL_WIDTH_FILE.", &
+                 default="dyCuo")
+  call get_param(param_file, mdl, "OPEN_DX_CV_VAR", dxCv_open_var, &
+                 "The v-face open face length variable in CHANNEL_WIDTH_FILE.", &
+                 default="dxCvo")
+
+  call MOM_read_vector(filename, dyCu_open_var, dxCv_open_var, G%dy_Cu, G%dx_Cv, G%Domain, scale=US%m_to_L)
   call pass_vector(G%dy_Cu, G%dx_Cv, G%Domain, To_All+SCALAR_PAIR, CGRID_NE)
 
   do j=jsd,jed ; do I=IsdB,IedB
@@ -806,7 +817,7 @@ subroutine reset_face_lengths_list(G, param_file, US)
   character(len=200) :: filename, chan_file, inputdir   ! Strings for file/path
   character(len=40)  :: mdl = "reset_face_lengths_list" ! This subroutine's name.
   real, allocatable, dimension(:,:) :: &
-    u_lat, u_lon, v_lat, v_lon ! The latitude and longitude ranges of faces [degrees]
+    u_lat, u_lon, v_lat, v_lon ! The latitude and longitude ranges of faces [degrees_N] or [degrees_E]
   real, allocatable, dimension(:) :: &
     u_width, v_width      ! The open width of faces [m]
   integer, allocatable, dimension(:) :: &
@@ -816,10 +827,10 @@ subroutine reset_face_lengths_list(G, param_file, US)
     Dmin_u, Dmax_u, Davg_u   ! Porous barrier monomial fit params [m]
   real, allocatable, dimension(:) :: &
     Dmin_v, Dmax_v, Davg_v   ! Porous barrier monomial fit params [m]
-  real    :: lat, lon     ! The latitude and longitude of a point.
-  real    :: len_lon      ! The periodic range of longitudes, usually 360 degrees.
-  real    :: len_lat      ! The range of latitudes, usually 180 degrees.
-  real    :: lon_p, lon_m ! The longitude of a point shifted by 360 degrees.
+  real    :: lat, lon     ! The latitude and longitude of a point [degrees_N] and [degrees_E].
+  real    :: len_lon      ! The periodic range of longitudes, usually 360 degrees [degrees_E].
+  real    :: len_lat      ! The range of latitudes, usually 180 degrees [degrees_N].
+  real    :: lon_p, lon_m ! The longitude of a point shifted by 360 degrees [degrees_E].
   logical :: check_360    ! If true, check for longitudes that are shifted by
                           ! +/- 360 degrees from the specified range of values.
   logical :: found_u, found_v
