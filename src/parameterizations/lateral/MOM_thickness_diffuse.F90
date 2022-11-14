@@ -13,7 +13,7 @@ use MOM_EOS,                   only : calculate_density, calculate_density_deriv
 use MOM_EOS,                   only : calculate_density_second_derivs
 use MOM_file_parser,           only : get_param, log_version, param_file_type
 use MOM_grid,                  only : ocean_grid_type
-use MOM_io,                    only : MOM_read_data
+use MOM_io,                    only : MOM_read_data, slasher
 use MOM_interface_heights,     only : find_eta
 use MOM_isopycnal_slopes,      only : vert_fill_TS
 use MOM_lateral_mixing_coeffs, only : VarMix_CS
@@ -1963,7 +1963,7 @@ subroutine thickness_diffuse_init(Time, G, GV, US, param_file, diag, CDp, CS)
 
   ! Local variables
   character(len=40)  :: mdl = "MOM_thickness_diffuse" ! This module's name.
-  character(len=200) :: khth_file ! file containing 2d KHTH
+  character(len=200) :: khth_file, inputdir
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
   real :: grid_sp      ! The local grid spacing [L ~> m]
@@ -1997,9 +1997,14 @@ subroutine thickness_diffuse_init(Time, G, GV, US, param_file, diag, CDp, CS)
         call MOM_error(FATAL, "thickness_diffuse_init: KHTH > 0 is not "// &
               "compatible with READ_KHTH = TRUE. ")
     endif
+    call get_param(param_file, mdl, "INPUTDIR", inputdir, &
+                 "The directory in which all input files are found.", &
+                 default=".", do_not_log=.true.)
+    inputdir = slasher(inputdir)
     call get_param(param_file, mdl, "KHTH_FILE", khth_file, &
                  "The file containing the spatially varying horizontal "//&
-                 "thickness diffusivity.", default="INPUT/khth.nc")
+                 "thickness diffusivity.", default="khth.nc")
+    khth_file = trim(inputdir) // trim(khth_file)
 
     allocate(CS%khth2d(G%isd:G%ied, G%jsd:G%jed), source=0.0)
     call MOM_read_data(khth_file, 'khth', CS%khth2d(:,:), G%domain, scale=US%m_to_L**2*US%T_to_s)
