@@ -99,7 +99,7 @@ type, public :: thickness_diffuse_CS ; private
 
   real, allocatable :: KH_u_GME(:,:,:)         !< Isopycnal height diffusivities in u-columns [L2 T-1 ~> m2 s-1]
   real, allocatable :: KH_v_GME(:,:,:)         !< Isopycnal height diffusivities in v-columns [L2 T-1 ~> m2 s-1]
-  real, allocatable, dimension(:,:) :: khth2d  !< 2D thickness diffusivity at h-points [L2 T-1 ~> m2 s-1]
+  real, allocatable, dimension(:,:) :: khth2d  !< 2D isopycnal height diffusivity at h-points [L2 T-1 ~> m2 s-1]
 
   !>@{
   !! Diagnostic identifier
@@ -1991,7 +1991,8 @@ subroutine thickness_diffuse_init(Time, G, GV, US, param_file, diag, CDp, CS)
                  default=0.0, units="m2 s-1", scale=US%m_to_L**2*US%T_to_s)
   call get_param(param_file, mdl, "READ_KHTH", CS%read_khth, &
                  "If true, read a file (given by KHTH_FILE) containing the "//&
-                 "spatially varying horizontal thickness diffusivity.", default=.false.)
+                 "spatially varying horizontal isopycnal height diffusivity.", &
+                 default=.false.)
   if (CS%read_khth) then
     if (CS%Khth > 0) then
         call MOM_error(FATAL, "thickness_diffuse_init: KHTH > 0 is not "// &
@@ -2003,9 +2004,9 @@ subroutine thickness_diffuse_init(Time, G, GV, US, param_file, diag, CDp, CS)
     inputdir = slasher(inputdir)
     call get_param(param_file, mdl, "KHTH_FILE", khth_file, &
                  "The file containing the spatially varying horizontal "//&
-                 "thickness diffusivity.", default="khth.nc")
+                 "isopycnal height diffusivity.", default="khth.nc")
     call get_param(param_file, mdl, "KHTH_VARIABLE", khth_varname, &
-                 "The name of the interface height diffusivity variable to read "//&
+                 "The name of the isopycnal height diffusivity variable to read "//&
                  "from KHTH_FILE.", &
                  default="khth")
     khth_file = trim(inputdir) // trim(khth_file)
