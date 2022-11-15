@@ -1775,7 +1775,7 @@ function kappa_shear_init(Time, G, GV, US, param_file, diag, CS)
   call get_param(param_file, mdl, "MAX_RINO_IT", CS%max_RiNo_it, &
                  "The maximum number of iterations that may be used to "//&
                  "estimate the Richardson number driven mixing.", &
-                 units="nondim", default=50, do_not_log=just_read)
+                 default=50, do_not_log=just_read)
   call get_param(param_file, mdl, "KD", KD_normal, default=0.0, do_not_log=.true.)
   call get_param(param_file, mdl, "KD_KAPPA_SHEAR_0", CS%kappa_0, &
                  "The background diffusivity that is used to smooth the "//&
@@ -1831,7 +1831,7 @@ function kappa_shear_init(Time, G, GV, US, param_file, diag, CS)
                  default=.true., do_not_log=just_read)
   call get_param(param_file, mdl, "MAX_KAPPA_SHEAR_IT", CS%max_KS_it, &
                  "The maximum number of iterations that may be used to "//&
-                 "estimate the time-averaged diffusivity.", units="nondim", &
+                 "estimate the time-averaged diffusivity.", &
                  default=13, do_not_log=just_read)
   call get_param(param_file, mdl, "PRANDTL_TURB", CS%Prandtl_turb, &
                  "The turbulent Prandtl number applied to shear instability.", &

@@ -1267,7 +1267,7 @@ logical function MEKE_init(Time, G, US, param_file, diag, dbcomms_CS, CS, MEKE, 
   call get_param(param_file, mdl, "MEKE_RD_MAX_SCALE", CS%Rd_as_max_scale, &
                  "If true, the length scale used by MEKE is the minimum of "//&
                  "the deformation radius or grid-spacing. Only used if "//&
-                 "MEKE_OLD_LSCALE=True", units="nondim", default=.false.)
+                 "MEKE_OLD_LSCALE=True", default=.false.)
   call get_param(param_file, mdl, "MEKE_VISCOSITY_COEFF_KU", CS%viscosity_coeff_Ku, &
                  "If non-zero, is the scaling coefficient in the expression for"//&
                  "viscosity used to parameterize harmonic lateral momentum mixing by"//&

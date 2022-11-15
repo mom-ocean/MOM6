@@ -216,7 +216,7 @@ subroutine dumbbell_surface_forcing_init(Time, G, US, param_file, diag, CS)
                  units="days", default=1.0)
   call get_param(param_file, mdl, "DUMBBELL_ROTATION", dbrotate, &
                 'Logical for rotation of dumbbell domain.',&
-                 units='nondim', default=.false., do_not_log=.true.)
+                 default=.false., do_not_log=.true.)
   call get_param(param_file, mdl,"INITIAL_SSS", S_surf, &
                  "Initial surface salinity", &
                  units="1e-3", default=34.0, scale=US%ppt_to_S, do_not_log=.true.)

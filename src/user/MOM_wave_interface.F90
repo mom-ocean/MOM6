@@ -317,22 +317,22 @@ subroutine MOM_wave_interface_init(time, G, GV, US, param_file, CS, diag, restar
   endif
 
   call get_param(param_file, mdl, "STOKES_VF", CS%Stokes_VF, &
-       "Flag to use Stokes vortex force", units="", &
+       "Flag to use Stokes vortex force", &
        Default=.false.)
   call get_param(param_file, mdl, "PASSIVE_STOKES_VF", CS%Passive_Stokes_VF, &
-       "Flag to make Stokes vortex force diagnostic only.", units="", &
+       "Flag to make Stokes vortex force diagnostic only.", &
        Default=.false.)
   call get_param(param_file, mdl, "STOKES_PGF", CS%Stokes_PGF, &
-       "Flag to use Stokes-induced pressure gradient anomaly", units="", &
+       "Flag to use Stokes-induced pressure gradient anomaly", &
        Default=.false.)
   call get_param(param_file, mdl, "PASSIVE_STOKES_PGF", CS%Passive_Stokes_PGF, &
-       "Flag to make Stokes-induced pressure gradient anomaly diagnostic only.", units="", &
+       "Flag to make Stokes-induced pressure gradient anomaly diagnostic only.", &
        Default=.false.)
   call get_param(param_file, mdl, "STOKES_DDT", CS%Stokes_DDT, &
-       "Flag to use Stokes d/dt", units="", &
+       "Flag to use Stokes d/dt", &
        Default=.false.)
   call get_param(param_file, mdl, "PASSIVE_STOKES_DDT", CS%Passive_Stokes_DDT, &
-       "Flag to make Stokes d/dt diagnostic only", units="", &
+       "Flag to make Stokes d/dt diagnostic only", &
        Default=.false.)
 
   ! Get Wave Method and write to integer WaveMethod

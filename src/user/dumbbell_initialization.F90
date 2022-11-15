@@ -58,7 +58,7 @@ subroutine dumbbell_initialize_topography( D, G, param_file, max_depth )
                  units='nondim', default=0.5, do_not_log=.false.)
   call get_param(param_file, mdl, "DUMBBELL_ROTATION", dbrotate, &
                 'Logical for rotation of dumbbell domain.', &
-                 units='nondim', default=.false., do_not_log=.false.)
+                 default=.false., do_not_log=.false.)
 
   if (G%x_axis_units == 'm') then
     dblen=dblen*1.e3
@@ -150,7 +150,7 @@ subroutine dumbbell_initialize_thickness ( h, depth_tot, G, GV, US, param_file, 
   case ( REGRIDDING_LAYER) ! Initial thicknesses for isopycnal coordinates
     call get_param(param_file, mdl, "DUMBBELL_ROTATION", dbrotate, &
                 'Logical for rotation of dumbbell domain.', &
-                 units='nondim', default=.false., do_not_log=just_read)
+                 default=.false., do_not_log=just_read)
     do j=js,je
       do i=is,ie
        ! Compute normalized zonal coordinates (x,y=0 at center of domain)
@@ -293,7 +293,7 @@ subroutine dumbbell_initialize_temperature_salinity ( T, S, h, G, GV, US, param_
                  units='km', default=600., do_not_log=just_read)
   call get_param(param_file, mdl, "DUMBBELL_ROTATION", dbrotate, &
                 'Logical for rotation of dumbbell domain.', &
-                 units='nondim', default=.false., do_not_log=just_read)
+                 default=.false., do_not_log=just_read)
 
   if (G%x_axis_units == 'm') then
     dblen = dblen*1.e3
@@ -361,7 +361,7 @@ subroutine dumbbell_initialize_sponges(G, GV, US, tv, h_in, depth_tot, param_fil
                  units='km', default=600., do_not_log=.true.)
   call get_param(param_file, mdl, "DUMBBELL_ROTATION", dbrotate, &
                 'Logical for rotation of dumbbell domain.', &
-                 units='nondim', default=.false., do_not_log=.true.)
+                 default=.false., do_not_log=.true.)
 
   if (G%x_axis_units == 'm') then
     dblen=dblen*1.e3

@@ -1350,7 +1350,7 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
                  "positive integer may be used, although even integers "//&
                  "are more efficient to calculate.  Setting this greater "//&
                  "than 100 results in a step-function being used.", &
-                 units="nondim", default=2)
+                 default=2)
     call get_param(param_file, mdl, "VISC_RES_SCALE_COEF", CS%Res_coef_visc, &
                  "A coefficient that determines how Kh is scaled away if "//&
                  "RESOLN_SCALED_... is true, as "//&
@@ -1363,7 +1363,7 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
                  "are more efficient to calculate.  Setting this greater "//&
                  "than 100 results in a step-function being used. "//&
                  "This function affects lateral viscosity, Kh, and not KhTh.", &
-                 units="nondim", default=CS%Res_fn_power_khth)
+                 default=CS%Res_fn_power_khth)
     call get_param(param_file, mdl, "INTERPOLATE_RES_FN", CS%interpolate_Res_fn, &
                  "If true, interpolate the resolution function to the "//&
                  "velocity points from the thickness points; otherwise "//&

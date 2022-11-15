@@ -1728,7 +1728,7 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, tracer_flow_C
     call get_param(param_file, mdl, "USTAR_FORCING_VAR", CS%ustar_var, &
                  "The name of the friction velocity variable in WIND_FILE "//&
                  "or blank to get ustar from the wind stresses plus the "//&
-                 "gustiness.", default=" ", units="nondim")
+                 "gustiness.", default=" ")
     CS%wind_file = trim(CS%inputdir) // trim(CS%wind_file)
   endif
   if (trim(CS%wind_config) == "gyres") then

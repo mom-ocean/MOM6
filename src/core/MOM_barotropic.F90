@@ -4432,7 +4432,7 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, US, param_file, diag, CS, 
                  "If NONLINEAR_BT_CONTINUITY is true, this is the number "//&
                  "of barotropic time steps between updates to the face "//&
                  "areas, or 0 to update only before the barotropic stepping.", &
-                 units="nondim", default=1, do_not_log=.not.CS%Nonlinear_continuity)
+                 default=1, do_not_log=.not.CS%Nonlinear_continuity)
 
   call get_param(param_file, mdl, "BT_PROJECT_VELOCITY", CS%BT_project_velocity,&
                  "If true, step the barotropic velocity first and project "//&

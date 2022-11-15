@@ -2222,14 +2222,13 @@ subroutine energetic_PBL_init(Time, G, GV, US, param_file, diag, CS)
   !/ Options related to Langmuir turbulence
   call get_param(param_file, mdl, "USE_LA_LI2016", use_LA_Windsea, &
        "A logical to use the Li et al. 2016 (submitted) formula to "//&
-       "determine the Langmuir number.", units="nondim", default=.false.)
+       "determine the Langmuir number.", default=.false.)
   ! Note this can be activated in other ways, but this preserves the old method.
   if (use_LA_windsea) then
     CS%use_LT = .true.
   else
     call get_param(param_file, mdl, "EPBL_LT", CS%use_LT, &
-                 "A logical to use a LT parameterization.", &
-                 units="nondim", default=.false.)
+                 "A logical to use a LT parameterization.", default=.false.)
   endif
   if (CS%use_LT) then
     call get_param(param_file, mdl, "EPBL_LANGMUIR_SCHEME", tmpstr, &

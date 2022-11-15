@@ -388,10 +388,10 @@ logical function KPP_init(paramFile, G, GV, US, diag, Time, CS, passive)
 !/ 1. Options related to enhancing the mixing coefficient
   call get_param(paramFile, mdl, "USE_KPP_LT_K", CS%LT_K_Enhancement, &
        'Flag for Langmuir turbulence enhancement of turbulent'//&
-       'mixing coefficient.', units="", Default=.false.)
+       'mixing coefficient.', Default=.false.)
   call get_param(paramFile, mdl, "STOKES_MIXING", CS%Stokes_Mixing, &
        'Flag for Langmuir turbulence enhancement of turbulent'//&
-       'mixing coefficient.', units="", Default=.false.)
+       'mixing coefficient.', Default=.false.)
   if (CS%LT_K_Enhancement) then
     call get_param(paramFile, mdl, 'KPP_LT_K_SHAPE', string,                 &
                  'Vertical dependence of LT enhancement of mixing. '//     &
@@ -438,7 +438,7 @@ logical function KPP_init(paramFile, G, GV, US, diag, Time, CS, passive)
 !/ 2. Options related to enhancing the unresolved Vt2/entrainment in Rib
   call get_param(paramFile, mdl, "USE_KPP_LT_VT2", CS%LT_Vt2_Enhancement, &
        'Flag for Langmuir turbulence enhancement of Vt2'//&
-       'in Bulk Richardson Number.', units="", Default=.false.)
+       'in Bulk Richardson Number.', Default=.false.)
   if (CS%LT_Vt2_Enhancement) then
     call get_param(paramFile, mdl, "KPP_LT_VT2_METHOD",string ,                  &
                    'Method to enhance Vt2 in KPP. '//                            &
