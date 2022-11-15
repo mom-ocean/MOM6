@@ -478,22 +478,22 @@ subroutine ISOMIP_initialize_sponges(G, GV, US, tv, depth_tot, PF, use_ALE, CSp,
   call get_param(PF, mdl, "REGRIDDING_COORDINATE_MODE", verticalCoordinate, &
             default=DEFAULT_COORDINATE_MODE)
 
-  call get_param(PF, mdl, "ISOMIP_TNUDG", TNUDG, "Nudging time scale for sponge layers (days)", &
-                 default=0.0, scale=86400.0*US%s_to_T)
+  call get_param(PF, mdl, "ISOMIP_TNUDG", TNUDG, "Nudging time scale for sponge layers", &
+                 units="days", default=0.0, scale=86400.0*US%s_to_T)
 
-  call get_param(PF, mdl, "T_REF", t_ref, "Reference temperature", default=10.0, &
-                 do_not_log=.true.)
+  call get_param(PF, mdl, "T_REF", t_ref, "Reference temperature", &
+                 units="degC", default=10.0, scale=1.0, do_not_log=.true.)
 
-  call get_param(PF, mdl, "S_REF", s_ref, "Reference salinity", default=35.0, &
-                 do_not_log=.true.)
+  call get_param(PF, mdl, "S_REF", s_ref, "Reference salinity", &
+                 units="ppt", default=35.0, scale=1.0, do_not_log=.true.)
 
   call get_param(PF, mdl, "ISOMIP_S_SUR_SPONGE", s_sur, &
                  "Surface salinity in sponge layer.", &
-                 units="ppt", default=s_ref, scale=US%ppt_to_S) ! units="ppt")
+                 units="ppt", default=s_ref, scale=US%ppt_to_S)
 
   call get_param(PF, mdl, "ISOMIP_S_BOT_SPONGE", s_bot, &
                  "Bottom salinity in sponge layer.", &
-                 units="ppt", default=s_ref, scale=US%ppt_to_S) ! units="ppt")
+                 units="ppt", default=s_ref, scale=US%ppt_to_S)
 
   call get_param(PF, mdl, "ISOMIP_T_SUR_SPONGE", t_sur, &
                  "Surface temperature in sponge layer.", &

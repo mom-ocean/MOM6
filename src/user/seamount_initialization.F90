@@ -128,7 +128,8 @@ subroutine seamount_initialize_thickness (h, depth_tot, G, GV, US, param_file, j
                    units="ppt", default=34., scale=US%ppt_to_S, do_not_log=.true.)
     call get_param(param_file, mdl,"INITIAL_S_RANGE", S_range, &
                    units="ppt", default=2., scale=US%ppt_to_S, do_not_log=.true.)
-    call get_param(param_file, mdl, "S_REF", S_ref, default=35.0, do_not_log=.true.)
+    call get_param(param_file, mdl, "S_REF", S_ref, &
+                   units="ppt", default=35.0, scale=1.0, do_not_log=.true.)
     call get_param(param_file, mdl, "TS_RANGE_S_LIGHT", S_light, &
                    units="ppt", default=S_Ref, scale=US%ppt_to_S, do_not_log=.true.)
     call get_param(param_file, mdl, "TS_RANGE_S_DENSE", S_dense, &
@@ -205,9 +206,19 @@ subroutine seamount_initialize_temperature_salinity(T, S, h, G, GV, US, param_fi
                                                       !! only read parameters without changing T & S.
 
   ! Local variables
+  real :: xi0, xi1  ! Fractional positions within the depth range [nondim]
+  real :: r         ! A nondimensional sharpness parameter with an exponetial profile [nondim]
+  real :: S_Ref     ! Default salinity range parameters [ppt].
+  real :: T_Ref     ! Default temperature range parameters [degC].
+  real :: S_Light, S_Dense, S_surf, S_range ! Salinity range parameters [S ~> ppt].
+  real :: T_Light, T_Dense, T_surf, T_range ! Temperature range parameters [C ~> degC].
+  real :: res_rat   ! The ratio of density space resolution in the denser part
+                    ! of the range to that in the lighter part of the range.
+                    ! Setting this greater than 1 increases the resolution for
+                    ! the denser water [nondim].
+  real :: a1, frac_dense, k_frac  ! Nondimensional temporary variables [nondim]
   integer :: i, j, k, is, ie, js, je, nz, k_light
-  real    :: xi0, xi1, r, S_surf, T_surf, S_range, T_range
-  real    :: T_ref, T_Light, T_Dense, S_ref, S_Light, S_Dense, a1, frac_dense, k_frac, res_rat
+
   character(len=20) :: verticalCoordinate, density_profile
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
@@ -233,17 +244,20 @@ subroutine seamount_initialize_temperature_salinity(T, S, h, G, GV, US, param_fi
   select case ( coordinateMode(verticalCoordinate) )
     case ( REGRIDDING_LAYER ) ! Initial thicknesses for layer isopycnal coordinates
       ! These parameters are used in MOM_fixed_initialization.F90 when CONFIG_COORD="ts_range"
-      call get_param(param_file, mdl, "T_REF", T_ref, default=10.0, do_not_log=.true.)
+      call get_param(param_file, mdl, "T_REF", T_ref, &
+                 units="degC", default=10.0, do_not_log=.true.)
       call get_param(param_file, mdl, "TS_RANGE_T_LIGHT", T_light, &
-                 default=T_Ref, scale=US%degC_to_C, do_not_log=.true.)
+                 units="degC", default=T_Ref, scale=US%degC_to_C, do_not_log=.true.)
       call get_param(param_file, mdl, "TS_RANGE_T_DENSE", T_dense, &
-                 default=T_Ref, scale=US%degC_to_C, do_not_log=.true.)
-      call get_param(param_file, mdl, "S_REF", S_ref, default=35.0, do_not_log=.true.)
+                 units="degC", default=T_Ref, scale=US%degC_to_C, do_not_log=.true.)
+      call get_param(param_file, mdl, "S_REF", S_ref, &
+                 units="1e-3", default=35.0, scale=1.0, do_not_log=.true.)
       call get_param(param_file, mdl, "TS_RANGE_S_LIGHT", S_light, &
-                 default = S_Ref, scale=US%ppt_to_S, do_not_log=.true.)
+                 units="1e-3", default=S_Ref, scale=US%ppt_to_S, do_not_log=.true.)
       call get_param(param_file, mdl, "TS_RANGE_S_DENSE", S_dense, &
-                 default = S_Ref, scale=US%ppt_to_S, do_not_log=.true.)
-      call get_param(param_file, mdl, "TS_RANGE_RESOLN_RATIO", res_rat, default=1.0, do_not_log=.true.)
+                 units="1e-3", default=S_Ref, scale=US%ppt_to_S, do_not_log=.true.)
+      call get_param(param_file, mdl, "TS_RANGE_RESOLN_RATIO", res_rat, &
+                 units="nondim", default=1.0, do_not_log=.true.)
       if (just_read) return ! All run-time parameters have been read, so return.
 
       ! Emulate the T,S used in the "ts_range" coordinate configuration code

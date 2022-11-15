@@ -92,11 +92,11 @@ function register_Kelvin_OBC(param_file, CS, US, OBC_Reg)
   endif
   if (CS%mode /= 0) then
     call get_param(param_file, mdl, "DENSITY_RANGE", CS%rho_range, &
-                   default=2.0, do_not_log=.true., scale=US%kg_m3_to_R)
+                   units="kg m-3", default=2.0, scale=US%kg_m3_to_R, do_not_log=.true.)
     call get_param(param_file, mdl, "RHO_0", CS%rho_0, &
-                   default=1035.0, do_not_log=.true., scale=US%kg_m3_to_R)
+                   units="kg m-3", default=1035.0, scale=US%kg_m3_to_R, do_not_log=.true.)
     call get_param(param_file, mdl, "MAXIMUM_DEPTH", CS%H0, &
-                   default=1000.0, do_not_log=.true., scale=US%m_to_Z)
+                   units="m", default=1000.0, scale=US%m_to_Z, do_not_log=.true.)
   endif
 
   ! Register the Kelvin open boundary.
@@ -135,11 +135,11 @@ subroutine Kelvin_initialize_topography(D, G, param_file, max_depth, US)
   call get_param(param_file, mdl, "MINIMUM_DEPTH", min_depth, &
                  "The minimum depth of the ocean.", units="m", default=0.0, scale=US%m_to_Z)
   call get_param(param_file, mdl, "ROTATED_COAST_OFFSET_1", coast_offset1, &
-                 default=100.0, do_not_log=.true.)
+                 units="km", default=100.0, do_not_log=.true.)
   call get_param(param_file, mdl, "ROTATED_COAST_OFFSET_2", coast_offset2, &
-                 default=10.0, do_not_log=.true.)
+                 units="km", default=10.0, do_not_log=.true.)
   call get_param(param_file, mdl, "ROTATED_COAST_ANGLE", coast_angle, &
-                 default=11.3, do_not_log=.true.)
+                 units="degrees", default=11.3, do_not_log=.true.)
 
   coast_angle = coast_angle * (atan(1.0)/45.) ! Convert to radians
   right_angle = 2 * atan(1.0)
