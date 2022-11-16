@@ -512,7 +512,7 @@ contains
     !
     g_tracer=>CS%g_tracer_list
     do
-      if (_ALLOCATED(g_tracer%trunoff)) then
+      if (_ALLOCATED(g_tracer%trunoff) .and. (.NOT. g_tracer%runoff_added_to_stf)) then
         call g_tracer_get_alias(g_tracer,g_tracer_name)
         call g_tracer_get_pointer(g_tracer,g_tracer_name,'stf',   stf_array)
         call g_tracer_get_pointer(g_tracer,g_tracer_name,'trunoff',trunoff_array)
@@ -521,6 +521,7 @@ contains
         runoff_tracer_flux_array(:,:) = trunoff_array(:,:) * &
                  US%RZ_T_to_kg_m2s*fluxes%lrunoff(:,:)
         stf_array = stf_array + runoff_tracer_flux_array
+        g_tracer%runoff_added_to_stf = .true.
       endif
 
       !traverse the linked list till hit NULL

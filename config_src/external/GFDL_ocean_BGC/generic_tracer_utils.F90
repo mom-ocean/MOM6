@@ -28,6 +28,7 @@ implicit none ; private
     character(len=fm_string_len) :: obc_src_file_name !< Boundary condition tracer source filename
     character(len=fm_string_len) :: obc_src_field_name !< Boundary condition tracer source fieldname
     integer :: src_var_record !< Unknown
+    logical :: runoff_added_to_stf = .false. !< Has flux in from runoff been added to stf?
     logical :: requires_src_info = .false. !< Unknown
     real    :: src_var_unit_conversion = 1.0 !< This factor depends on the tracer. Ask Jasmin
     real    :: src_var_valid_min = 0.0 !< Unknown
