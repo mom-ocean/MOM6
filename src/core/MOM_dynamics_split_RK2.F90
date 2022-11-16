@@ -159,6 +159,7 @@ type, public :: MOM_dyn_split_RK2_CS ; private
                                   !! end of the timestep have been stored for use in the next
                                   !! predictor step.  This is used to accomodate various generations
                                   !! of restart files.
+  logical :: use_tides            !< If true, tidal forcing is enabled.
 
   real    :: be      !< A nondimensional number from 0.5 to 1 that controls
                      !! the backward weighting of the time stepping scheme [nondim]
@@ -1224,7 +1225,7 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, US, param
   real :: accel_rescale ! A rescaling factor for accelerations from the representation in a
                      ! restart file to the internal representation in this run  [various units ~> 1]
   type(group_pass_type) :: pass_av_h_uvh
-  logical :: use_tides, debug_truncations
+  logical :: debug_truncations
   logical :: read_uv, read_h2
 
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz
@@ -1245,7 +1246,7 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, US, param
   CS%diag => diag
 
   call log_version(param_file, mdl, version, "")
-  call get_param(param_file, mdl, "TIDES", use_tides, &
+  call get_param(param_file, mdl, "TIDES", CS%use_tides, &
                  "If true, apply tidal momentum forcing.", default=.false.)
   call get_param(param_file, mdl, "BE", CS%be, &
                  "If SPLIT is true, BE determines the relative weighting "//&
@@ -1340,7 +1341,7 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, US, param
   call continuity_init(Time, G, GV, US, param_file, diag, CS%continuity_CSp)
   cont_stencil = continuity_stencil(CS%continuity_CSp)
   call CoriolisAdv_init(Time, G, GV, US, param_file, diag, CS%ADp, CS%CoriolisAdv)
-  if (use_tides) call tidal_forcing_init(Time, G, US, param_file, CS%tides_CSp)
+  if (CS%use_tides) call tidal_forcing_init(Time, G, US, param_file, CS%tides_CSp)
   call PressureForce_init(Time, G, GV, US, param_file, diag, CS%PressureForce_CSp, &
                           CS%tides_CSp)
   call hor_visc_init(Time, G, GV, US, param_file, diag, CS%hor_visc, ADp=CS%ADp)
@@ -1702,7 +1703,7 @@ subroutine end_dyn_split_RK2(CS)
   deallocate(CS%vertvisc_CSp)
 
   call hor_visc_end(CS%hor_visc)
-  call tidal_forcing_end(CS%tides_CSp)
+  if (CS%use_tides) call tidal_forcing_end(CS%tides_CSp)
   call CoriolisAdv_end(CS%CoriolisAdv)
 
   DEALLOC_(CS%diffu) ; DEALLOC_(CS%diffv)
