@@ -120,7 +120,7 @@ type, public :: regridding_CS ; private
   !> The vintage of the order of arithmetic and expressions to use for remapping.
   !! Values below 20190101 recover the remapping answers from 2018.
   !! Higher values use more robust forms of the same remapping expressions.
-  integer :: remap_answer_date = 20181231  !### Change to 99991231?
+  integer :: remap_answer_date = 99991231
 
   logical :: use_hybgen_unmix = .false.  !< If true, use the hybgen unmixing code before remapping
 

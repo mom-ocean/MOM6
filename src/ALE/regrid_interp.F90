@@ -32,7 +32,8 @@ type, public :: interp_CS_type ; private
   logical :: boundary_extrapolation
 
   !> The vintage of the expressions to use for remapping
-  integer :: answer_date = 20181231  !### Change to 99991231?
+  integer :: answer_date = 20181231
+  !### Changing this to 99991231 changes answers in rho and Hycom1 configurations.
   !### There is no point where the value of answer_date is reset.
 end type interp_CS_type
 

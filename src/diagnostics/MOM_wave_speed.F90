@@ -46,11 +46,10 @@ type, public :: wave_speed_CS ; private
                                        !! speeds [nondim]
   type(remapping_CS) :: remapping_CS   !< Used for vertical remapping when calculating equivalent barotropic
                                        !! mode structure.
-  integer :: remap_answer_date = 20181231 !< The vintage of the order of arithmetic and expressions to use
+  integer :: remap_answer_date = 99991231 !< The vintage of the order of arithmetic and expressions to use
                                        !! for remapping.  Values below 20190101 recover the remapping
                                        !! answers from 2018, while higher values use more robust
                                        !! forms of the same remapping expressions.
-                      !### Change to 99991231?
   type(diag_ctrl), pointer :: diag     !< Diagnostics control structure
 end type wave_speed_CS
 
@@ -1204,10 +1203,10 @@ subroutine wave_speed_init(CS, use_ebt_mode, mono_N2_column_fraction, mono_N2_de
   call log_version(mdl, version)
 
   call wave_speed_set_param(CS, use_ebt_mode=use_ebt_mode, mono_N2_column_fraction=mono_N2_column_fraction, &
-                            better_speed_est=better_speed_est, min_speed=min_speed, wave_speed_tol=wave_speed_tol)
-  !### Uncomment this?      remap_answers_2018=remap_answers_2018, remap_answer_date=remap_answer_date)
+                            better_speed_est=better_speed_est, min_speed=min_speed, wave_speed_tol=wave_speed_tol, &
+                            remap_answers_2018=remap_answers_2018, remap_answer_date=remap_answer_date)
 
-  !### The remap_answers_2018 argument is irrelevant, because remapping is hard-coded to use PLM.
+  ! The remap_answers_2018 argument here is irrelevant, because remapping is hard-coded to use PLM.
   call initialize_remapping(CS%remapping_CS, 'PLM', boundary_extrapolation=.false., &
                             answer_date=CS%remap_answer_date)
 

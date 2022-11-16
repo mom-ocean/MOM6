@@ -35,7 +35,7 @@ type, public :: remapping_CS ; private
   logical :: force_bounds_in_subcell = .false.
   !> The vintage of the expressions to use for remapping. Values below 20190101 result
   !! in the use of older, less accurate expressions.
-  integer :: answer_date = 20181231  !### Change to 99991231?
+  integer :: answer_date = 99991231
 end type
 
 ! The following routines are visible to the outside world
