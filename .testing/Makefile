@@ -11,7 +11,7 @@
 #       Delete the MOM6 test executables and dependency builds (FMS)
 #
 #   make clean.build
-#   	Delete only the MOM6 test executables
+#       Delete only the MOM6 test executables
 #
 #
 # Configuration:
@@ -205,33 +205,10 @@ FMS_SOURCE = $(call SOURCE,deps/fms/src)
 
 
 #---
-# Python preprocessing environment configuration
-
-HAS_NUMPY = $(shell python -c "import numpy" 2> /dev/null && echo "yes")
-HAS_NETCDF4 = $(shell python -c "import netCDF4" 2> /dev/null && echo "yes")
-
-USE_VENV =
-ifneq ($(HAS_NUMPY), yes)
-  USE_VENV = yes
-endif
-ifneq ($(HAS_NETCDF4), yes)
-  USE_VENV = yes
-endif
-
-# When disabled, activation is a null operation (`true`)
-VENV_PATH =
-VENV_ACTIVATE = true
-ifeq ($(USE_VENV), yes)
-  VENV_PATH = work/local-env
-  VENV_ACTIVATE = . $(VENV_PATH)/bin/activate
-endif
-
-
-#---
 # Rules
 
 .PHONY: all build.regressions build.prof
-all: $(foreach b,$(BUILDS),build/$(b)) $(VENV_PATH)
+all: $(foreach b,$(BUILDS),build/$(b))
 build.regressions: $(foreach b,symmetric target,build/$(b)/MOM6)
 build.prof: $(foreach b,opt opt_target,build/$(b)/MOM6)
 
@@ -382,8 +359,8 @@ deps/Makefile: ../ac/deps/Makefile
 # broken the ability to compile.  This is not a means to build a complete
 # coupled executable.
 # TODO:
-# 	- Avoid re-building FMS and MOM6 src by re-using existing object/mod files
-# 	- Use autoconf rather than mkmf templates
+#   - Avoid re-building FMS and MOM6 src by re-using existing object/mod files
+#   - Use autoconf rather than mkmf templates
 MK_TEMPLATE ?= ../../deps/mkmf/templates/ncrc-gnu.mk
 
 # NUOPC driver
@@ -400,21 +377,6 @@ check_mom6_api_coupled: build/coupled/ocean_model_MOM.o
 build/mct/mom_ocean_model_mct.o: build/mct/Makefile
 	cd $(@D) && make $(@F)
 check_mom6_api_mct: build/mct/mom_ocean_model_mct.o
-
-
-#---
-# Python preprocessing
-
-# NOTE: Some less mature environments (e.g. Arm64 Ubuntu) require explicit
-#   installation of numpy before netCDF4, as well as wheel and cython support.
-work/local-env:
-	python3 -m venv $@
-	. $@/bin/activate \
-	  && python3 -m pip install --upgrade pip \
-	  && pip3 install wheel \
-	  && pip3 install cython \
-	  && pip3 install numpy \
-	  && pip3 install netCDF4
 
 
 #---
@@ -556,6 +518,20 @@ $(foreach c,$(CONFIGS),$(eval $(call CONFIG_DIM_RULE,$(c))))
 
 
 #---
+# Preprocessing
+# NOTE: This only support tc4, but can be generalized over all tests.
+.PHONY: preproc
+preproc: tc4/Makefile
+	cd tc4 && make
+
+tc4/Makefile: tc4/configure tc4/Makefile.in
+	cd $(@D) && ./configure || (cat config.log && false)
+
+tc4/configure: tc4/configure.ac
+	cd $(@D) && autoreconf -if
+
+
+#---
 # Test run output files
 
 # Rule to build work/<tc>/{ocean.stats,chksum_diag}.<tag>
@@ -567,17 +543,10 @@ $(foreach c,$(CONFIGS),$(eval $(call CONFIG_DIM_RULE,$(c))))
 # $(6): Number of MPI ranks
 
 define STAT_RULE
-work/%/$(1)/ocean.stats work/%/$(1)/chksum_diag: build/$(2)/MOM6 $(VENV_PATH)
+work/%/$(1)/ocean.stats work/%/$(1)/chksum_diag: build/$(2)/MOM6 | preproc
 	@echo "Running test $$*.$(1)..."
 	mkdir -p $$(@D)
 	cp -RL $$*/* $$(@D)
-	if [ -f $$(@D)/Makefile ]; then \
-	  $$(VENV_ACTIVATE) \
-	    && cd $$(@D) \
-	    && $(MAKE); \
-	else \
-	  cd $$(@D); \
-	fi
 	mkdir -p $$(@D)/RESTART
 	echo -e "$(4)" > $$(@D)/MOM_override
 	rm -f results/$$*/std.$(1).{out,err}
@@ -615,7 +584,7 @@ report.cov: run.cov codecov
 	  || { \
 	    cat build/cov/codecov.err ; \
 	    echo -e "${RED}Failed to upload report.${RESET}" ; \
-		if [ "$(REQUIRE_COVERAGE_UPLOAD)" = true ] ; then false ; fi ; \
+	    if [ "$(REQUIRE_COVERAGE_UPLOAD)" = true ] ; then false ; fi ; \
 	  }
 
 # Define $(,) as comma escape character
@@ -643,17 +612,10 @@ $(eval $(call STAT_RULE,cov,cov,true,,,1))
 #  2. Convert DAYMAX from TIMEUNIT to seconds
 #  3. Apply seconds to `ocean_solo_nml` inside input.nml.
 # NOTE: Assumes that runtime set by DAYMAX, will fail if set by input.nml
-work/%/restart/ocean.stats: build/symmetric/MOM6 $(VENV_PATH)
+work/%/restart/ocean.stats: build/symmetric/MOM6 | preproc
 	rm -rf $(@D)
 	mkdir -p $(@D)
 	cp -RL $*/* $(@D)
-	if [ -f $(@D)/Makefile ]; then \
-	  $(VENV_ACTIVATE) \
-	    && cd work/$*/restart \
-	    && $(MAKE); \
-	else \
-	  cd work/$*/restart; \
-	fi
 	mkdir -p $(@D)/RESTART
 	# Set the half-period
 	cd $(@D) \
@@ -754,7 +716,7 @@ report.cov.unit: build/unit/MOM_file_parser_tests.F90.gcov codecov
 	  || { \
 	    cat build/unit/codecov.err ; \
 	    echo -e "${RED}Failed to upload report.${RESET}" ; \
-		if [ "$(REQUIRE_COVERAGE_UPLOAD)" = true ] ; then false ; fi ; \
+	    if [ "$(REQUIRE_COVERAGE_UPLOAD)" = true ] ; then false ; fi ; \
 	  }
 
 
@@ -833,6 +795,13 @@ clean.build:
 
 
 .PHONY: clean.stats
-clean.stats:
+clean.stats: clean.preproc
 	@[ $$(basename $$(pwd)) = .testing ]
 	rm -rf work results
+
+
+.PHONY: clean.preproc
+clean.preproc:
+	@if [ -f tc4/Makefile ] ; then \
+	  cd tc4 && make clean ; \
+	fi
