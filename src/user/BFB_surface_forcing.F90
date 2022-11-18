@@ -212,10 +212,10 @@ subroutine BFB_surface_forcing_init(Time, G, US, param_file, diag, CS)
                  units="degrees", default=40.0)
   call get_param(param_file, mdl, "SST_S", CS%SST_s, &
                  "SST at the southern edge of the linear forcing ramp.", &
-                 units="C", default=20.0, scale=US%degC_to_C)
+                 units="degC", default=20.0, scale=US%degC_to_C)
   call get_param(param_file, mdl, "SST_N", CS%SST_n, &
                  "SST at the northern edge of the linear forcing ramp.", &
-                 units="C", default=10.0, scale=US%degC_to_C)
+                 units="degC", default=10.0, scale=US%degC_to_C)
   call get_param(param_file, mdl, "DRHO_DT", CS%drho_dt, &
                  "The rate of change of density with temperature.", &
                  units="kg m-3 K-1", default=-0.2, scale=US%kg_m3_to_R*US%C_to_degC)
