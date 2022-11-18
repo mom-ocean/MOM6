@@ -74,7 +74,7 @@ use MOM_dynamics_unsplit,      only : initialize_dyn_unsplit, end_dyn_unsplit
 use MOM_dynamics_unsplit,      only : MOM_dyn_unsplit_CS
 use MOM_dynamics_split_RK2,    only : step_MOM_dyn_split_RK2, register_restarts_dyn_split_RK2
 use MOM_dynamics_split_RK2,    only : initialize_dyn_split_RK2, end_dyn_split_RK2
-use MOM_dynamics_split_RK2,    only : MOM_dyn_split_RK2_CS
+use MOM_dynamics_split_RK2,    only : MOM_dyn_split_RK2_CS, remap_dyn_split_rk2_aux_vars
 use MOM_dynamics_unsplit_RK2,  only : step_MOM_dyn_unsplit_RK2, register_restarts_dyn_unsplit_RK2
 use MOM_dynamics_unsplit_RK2,  only : initialize_dyn_unsplit_RK2, end_dyn_unsplit_RK2
 use MOM_dynamics_unsplit_RK2,  only : MOM_dyn_unsplit_RK2_CS
@@ -103,14 +103,13 @@ use MOM_mixed_layer_restrat,   only : mixedlayer_restrat, mixedlayer_restrat_ini
 use MOM_mixed_layer_restrat,   only : mixedlayer_restrat_register_restarts
 use MOM_obsolete_diagnostics,  only : register_obsolete_diagnostics
 use MOM_open_boundary,         only : ocean_OBC_type, OBC_registry_type
-use MOM_open_boundary,         only : register_temp_salt_segments
-use MOM_open_boundary,         only : open_boundary_register_restarts
-use MOM_open_boundary,         only : update_segment_tracer_reservoirs
+use MOM_open_boundary,         only : register_temp_salt_segments, update_segment_tracer_reservoirs
+use MOM_open_boundary,         only : open_boundary_register_restarts, remap_OBC_fields
 use MOM_open_boundary,         only : rotate_OBC_config, rotate_OBC_init
 use MOM_porous_barriers,       only : porous_widths_layer, porous_widths_interface, porous_barriers_init
 use MOM_porous_barriers,       only : porous_barrier_CS
-use MOM_set_visc,              only : set_viscous_BBL, set_viscous_ML
-use MOM_set_visc,              only : set_visc_register_restarts, set_visc_CS
+use MOM_set_visc,              only : set_viscous_BBL, set_viscous_ML, set_visc_CS
+use MOM_set_visc,              only : set_visc_register_restarts, remap_vertvisc_aux_vars
 use MOM_set_visc,              only : set_visc_init, set_visc_end
 use MOM_shared_initialization, only : write_ocean_geometry_file
 use MOM_sponge,                only : init_sponge_diags, sponge_CS
@@ -250,6 +249,10 @@ type, public :: MOM_control_struct ; private
   logical :: use_ALE_algorithm  !< If true, use the ALE algorithm rather than layered
                     !! isopycnal/stacked shallow water mode. This logical is set by calling the
                     !! function useRegridding() from the MOM_regridding module.
+  logical :: remap_aux_vars     !< If true, apply ALE remapping to all of the auxiliary 3-D
+                    !! variables that are needed to reproduce across restarts,
+                    !! similarly to what is done with the primary state variables.
+
   type(MOM_stoch_eos_CS) :: stoch_eos_CS !< structure containing random pattern for stoch EOS
   logical :: alternate_first_direction !< If true, alternate whether the x- or y-direction
                     !! updates occur first in directionally split parts of the calculation.
@@ -1547,6 +1550,16 @@ subroutine step_MOM_thermo(CS, G, GV, US, u, v, h, tv, fluxes, dtdia, &
       call ALE_remap_tracers(CS%ALE_CSp, G, GV, h, h_new, CS%tracer_Reg, showCallTree, dtdia, PCM_cell)
       call ALE_remap_velocities(CS%ALE_CSp, G, GV, h, h_new, u, v, CS%OBC, dzRegrid, showCallTree, dtdia)
 
+      if (CS%remap_aux_vars) then
+        if (CS%split) &
+          call remap_dyn_split_RK2_aux_vars(G, GV, CS%dyn_split_RK2_CSp, h, h_new, CS%ALE_CSp, CS%OBC, dzRegrid)
+
+        if (associated(CS%OBC)) &
+          call remap_OBC_fields(G, GV, h, h_new, CS%OBC, PCM_cell=PCM_cell)
+
+        call remap_vertvisc_aux_vars(G, GV, CS%visc, h, h_new, CS%ALE_CSp, CS%OBC)
+      endif
+
       ! Replace the old grid with new one.  All remapping must be done by this point in the code.
       !$OMP parallel do default(shared)
       do k=1,nz ; do j=js-1,je+1 ; do i=is-1,ie+1
@@ -2072,6 +2085,12 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   call get_param(param_file, "MOM", "USE_REGRIDDING", CS%use_ALE_algorithm, &
                  "If True, use the ALE algorithm (regridding/remapping). "//&
                  "If False, use the layered isopycnal algorithm.", default=.false. )
+  call get_param(param_file, "MOM", "REMAP_AUXILIARY_VARS", CS%remap_aux_vars, &
+                 "If true, apply ALE remapping to all of the auxiliary 3-dimensional "//&
+                 "variables that are needed to reproduce across restarts, similarly to "//&
+                 "what is already being done with the primary state variables.  "//&
+                 "The default should be changed to true.", default=.false., &
+                 do_not_log=.not.CS%use_ALE_algorithm)
   call get_param(param_file, "MOM", "BULKMIXEDLAYER", bulkmixedlayer, &
                  "If true, use a Kraus-Turner-like bulk mixed layer "//&
                  "with transitional buffer layers.  Layers 1 through "//&

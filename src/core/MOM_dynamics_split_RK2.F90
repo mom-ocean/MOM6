@@ -36,7 +36,7 @@ use MOM_restart,           only : restart_init, is_new_run, MOM_restart_CS
 use MOM_time_manager,      only : time_type, time_type_to_real, operator(+)
 use MOM_time_manager,      only : operator(-), operator(>), operator(*), operator(/)
 
-use MOM_ALE,                   only : ALE_CS
+use MOM_ALE,                   only : ALE_CS, ALE_remap_velocities
 use MOM_barotropic,            only : barotropic_init, btstep, btcalc, bt_mass_source
 use MOM_barotropic,            only : register_barotropic_restarts, set_dtbt, barotropic_CS
 use MOM_barotropic,            only : barotropic_end
@@ -160,6 +160,9 @@ type, public :: MOM_dyn_split_RK2_CS ; private
                                   !! predictor step.  This is used to accomodate various generations
                                   !! of restart files.
   logical :: use_tides            !< If true, tidal forcing is enabled.
+  logical :: remap_aux            !< If true, apply ALE remapping to all of the auxiliary 3-D
+                                  !! variables that are needed to reproduce across restarts,
+                                  !! similarly to what is done with the primary state variables.
 
   real    :: be      !< A nondimensional number from 0.5 to 1 that controls
                      !! the backward weighting of the time stepping scheme [nondim]
@@ -256,6 +259,7 @@ end type MOM_dyn_split_RK2_CS
 public step_MOM_dyn_split_RK2
 public register_restarts_dyn_split_RK2
 public initialize_dyn_split_RK2
+public remap_dyn_split_RK2_aux_vars
 public end_dyn_split_RK2
 
 !>@{ CPU time clock IDs
@@ -1160,6 +1164,32 @@ subroutine register_restarts_dyn_split_RK2(HI, GV, US, param_file, CS, restart_C
 
 end subroutine register_restarts_dyn_split_RK2
 
+!> This subroutine does remapping for the auxiliary restart variables that are used
+!! with the split RK2 time stepping scheme.
+subroutine remap_dyn_split_RK2_aux_vars(G, GV, CS, h_old, h_new, ALE_CSp, OBC, dzRegrid)
+  type(ocean_grid_type),            intent(inout) :: G        !< ocean grid structure
+  type(verticalGrid_type),          intent(in)    :: GV       !< ocean vertical grid structure
+  type(MOM_dyn_split_RK2_CS),       pointer       :: CS       !< module control structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
+                                    intent(in)    :: h_old    !< Thickness of source grid  [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
+                                    intent(in)    :: h_new    !< Thickness of destination grid [H ~> m or kg m-2]
+  type(ALE_CS),                     pointer       :: ALE_CSp  !< ALE control structure to use when remapping
+  type(ocean_OBC_type),             pointer       :: OBC      !< OBC control structure to use when remapping
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), &
+                          optional, intent(in)    :: dzRegrid !< Change in interface position [H ~> m or kg m-2]
+
+  if (.not.CS%remap_aux) return
+
+  if (CS%store_CAu) then
+    call ALE_remap_velocities(ALE_CSp, G, GV, h_old, h_new, CS%u_av, CS%v_av, OBC, dzRegrid)
+    call ALE_remap_velocities(ALE_CSp, G, GV, h_old, h_new, CS%CAu_pred, CS%CAv_pred, OBC, dzRegrid)
+  endif
+
+  call ALE_remap_velocities(ALE_CSp, G, GV, h_old, h_new, CS%diffu, CS%diffv, OBC, dzRegrid)
+
+end subroutine remap_dyn_split_RK2_aux_vars
+
 !> This subroutine initializes all of the variables that are used by this
 !! dynamic core, including diagnostics and the cpu clocks.
 subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, US, param_file, &
@@ -1276,6 +1306,13 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, US, param
                  "If true, calculate the Coriolis accelerations at the end of each "//&
                  "timestep for use in the predictor step of the next split RK2 timestep.", &
                  default=.true.)
+  call get_param(param_file, mdl, "REMAP_AUXILIARY_VARS", CS%remap_aux, &
+                 "If true, apply ALE remapping to all of the auxiliary 3-dimensional "//&
+                 "variables that are needed to reproduce across restarts, similarly to "//&
+                 "what is already being done with the primary state variables.  "//&
+                 "The default should be changed to true.", default=.false., do_not_log=.true.)
+  if (CS%remap_aux .and. .not.CS%store_CAu) call MOM_error(FATAL, &
+      "REMAP_AUXILIARY_VARS requires that STORE_CORIOLIS_ACCEL = True.")
   call get_param(param_file, mdl, "DEBUG", CS%debug, &
                  "If true, write out verbose debugging data.", &
                  default=.false., debuggingParam=.true.)

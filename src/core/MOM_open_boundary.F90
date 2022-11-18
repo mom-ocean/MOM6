@@ -65,6 +65,7 @@ public setup_OBC_tracer_reservoirs
 public open_boundary_register_restarts
 public update_segment_tracer_reservoirs
 public update_OBC_ramp
+public remap_OBC_fields
 public rotate_OBC_config
 public rotate_OBC_init
 public initialize_segment_data
@@ -5407,6 +5408,184 @@ subroutine update_segment_tracer_reservoirs(G, GV, uhr, vhr, h, OBC, dt, Reg)
   enddo ; endif ; endif
 
 end subroutine update_segment_tracer_reservoirs
+
+!> Vertically remap the OBC tracer reservoirs and radiation rates that are filtered in time.
+subroutine remap_OBC_fields(G, GV, h_old, h_new, OBC, PCM_cell)
+  type(ocean_grid_type),                     intent(in) :: G     !< The ocean's grid structure
+  type(verticalGrid_type),                   intent(in) :: GV    !<  Ocean vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in) :: h_old !< Thickness of source grid [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in) :: h_new !< Thickness of destination grid [H ~> m or kg m-2]
+  type(ocean_OBC_type),                      pointer    :: OBC   !< Open boundary structure
+  logical, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
+                                   optional, intent(in) :: PCM_cell !< Use PCM remapping in cells where true
+
+  ! Local variables
+  type(OBC_segment_type), pointer :: segment => NULL() ! A pointer to the various segments, used just for shorthand.
+
+  real :: tr_column(GV%ke)  ! A column of updated tracer concentrations [CU ~> Conc]
+  real :: r_norm_col(GV%ke) ! A column of updated radiation rates, in grid points per timestep [nondim]
+  real :: rxy_col(GV%ke) ! A column of updated radiation rates for oblique OBCs [L2 T-2 ~> m2 s-2]
+  real :: h1(GV%ke)     ! A column of source grid layer thicknesses [H ~> m or kg m-2]
+  real :: h2(GV%ke)     ! A column of target grid layer thicknesses [H ~> m or kg m-2]
+  real :: I_scale       ! The inverse of the scaling factor for the tracers.
+                        ! For salinity the units would be [ppt S-1 ~> 1].
+  real :: h_neglect     ! Tiny thickness used in remapping [H ~> m or kg m-2]
+  logical :: PCM(GV%ke) ! If true, do PCM remapping from a cell.
+  integer :: i, j, k, m, n, ntr, nz
+
+  if (.not.associated(OBC)) return
+
+  nz = GV%ke
+  ntr = OBC%ntr
+  h_neglect = GV%H_subroundoff
+
+  if (.not.present(PCM_cell)) PCM(:) = .false.
+
+  if (associated(OBC)) then ; if (OBC%OBC_pe) then ; do n=1,OBC%number_of_segments
+    segment => OBC%segment(n)
+    if (.not.associated(segment%tr_Reg)) cycle
+
+    if (segment%is_E_or_W) then
+      I = segment%HI%IsdB
+      do j=segment%HI%jsd,segment%HI%jed
+
+        ! Store a column of the start and final grids
+        if (segment%direction == OBC_DIRECTION_W) then
+          if (G%mask2dT(i+1,j) == 0.0) cycle
+          h1(:) = h_old(i+1,j,:)
+          h2(:) = h_new(i+1,j,:)
+          if (present(PCM_cell)) then ; PCM(:) = PCM_cell(i+1,j,:) ; endif
+        else
+          if (G%mask2dT(i,j) == 0.0) cycle
+          h1(:) = h_old(i,j,:)
+          h2(:) = h_new(i,j,:)
+          if (present(PCM_cell)) then ; PCM(:) = PCM_cell(i,j,:) ; endif
+        endif
+
+        ! Vertically remap the reservoir tracer concentrations
+        do m=1,ntr ; if (allocated(segment%tr_Reg%Tr(m)%tres)) then
+          I_scale = 1.0 ; if (segment%tr_Reg%Tr(m)%scale /= 0.0) I_scale = 1.0 / segment%tr_Reg%Tr(m)%scale
+
+          if (present(PCM_cell)) then
+            call remapping_core_h(OBC%remap_CS, nz, h1, segment%tr_Reg%Tr(m)%tres(I,j,:), nz, h2, tr_column, &
+                                  h_neglect, h_neglect, PCM_cell=PCM)
+          else
+            call remapping_core_h(OBC%remap_CS, nz, h1, segment%tr_Reg%Tr(m)%tres(I,j,:), nz, h2, tr_column, &
+                                  h_neglect, h_neglect)
+          endif
+
+          ! Possibly underflow any very tiny tracer concentrations to 0?
+
+          ! Update tracer concentrations
+          segment%tr_Reg%Tr(m)%tres(I,j,:) = tr_column(:)
+          if (allocated(OBC%tres_x)) then ; do k=1,nz
+            OBC%tres_x(I,j,k,m) = I_scale * segment%tr_Reg%Tr(m)%tres(I,j,k)
+          enddo ; endif
+
+        endif ; enddo
+
+        if (segment%radiation .and. (OBC%gamma_uv < 1.0)) then
+          call remapping_core_h(OBC%remap_CS, nz, h1, segment%rx_norm_rad(I,j,:), nz, h2, r_norm_col, &
+                                h_neglect, h_neglect, PCM_cell=PCM)
+
+          do k=1,nz
+            segment%rx_norm_rad(I,j,k) = r_norm_col(k)
+            OBC%rx_normal(I,j,k) = segment%rx_norm_rad(I,j,k)
+          enddo
+        endif
+
+        if (segment%oblique .and. (OBC%gamma_uv < 1.0)) then
+          call remapping_core_h(OBC%remap_CS, nz, h1, segment%rx_norm_obl(I,j,:), nz, h2, rxy_col, &
+                                h_neglect, h_neglect, PCM_cell=PCM)
+          segment%rx_norm_obl(I,j,:) = rxy_col(:)
+          call remapping_core_h(OBC%remap_CS, nz, h1, segment%ry_norm_obl(I,j,:), nz, h2, rxy_col, &
+                                h_neglect, h_neglect, PCM_cell=PCM)
+          segment%ry_norm_obl(I,j,:) = rxy_col(:)
+          call remapping_core_h(OBC%remap_CS, nz, h1, segment%cff_normal(I,j,:), nz, h2, rxy_col, &
+                                h_neglect, h_neglect, PCM_cell=PCM)
+          segment%cff_normal(I,j,:) = rxy_col(:)
+
+          do k=1,nz
+            OBC%rx_oblique_u(I,j,k) = segment%rx_norm_obl(I,j,k)
+            OBC%ry_oblique_u(I,j,k) = segment%ry_norm_obl(I,j,k)
+            OBC%cff_normal_u(I,j,k) = segment%cff_normal(I,j,k)
+          enddo
+        endif
+
+      enddo
+    elseif (segment%is_N_or_S) then
+      J = segment%HI%JsdB
+      do i=segment%HI%isd,segment%HI%ied
+
+        ! Store a column of the start and final grids
+        if (segment%direction == OBC_DIRECTION_S) then
+          if (G%mask2dT(i,j+1) == 0.0) cycle
+          h1(:) = h_old(i,j+1,:)
+          h2(:) = h_new(i,j+1,:)
+          if (present(PCM_cell)) then ; PCM(:) = PCM_cell(i,j+1,:) ; endif
+        else
+          if (G%mask2dT(i,j) == 0.0) cycle
+          h1(:) = h_old(i,j,:)
+          h2(:) = h_new(i,j,:)
+          if (present(PCM_cell)) then ; PCM(:) = PCM_cell(i,j,:) ; endif
+        endif
+
+        ! Vertically remap the reservoir tracer concentrations
+        do m=1,ntr ; if (allocated(segment%tr_Reg%Tr(m)%tres)) then
+          I_scale = 1.0 ; if (segment%tr_Reg%Tr(m)%scale /= 0.0) I_scale = 1.0 / segment%tr_Reg%Tr(m)%scale
+
+          if (present(PCM_cell)) then
+            call remapping_core_h(OBC%remap_CS, nz, h1, segment%tr_Reg%Tr(m)%tres(i,J,:), nz, h2, tr_column, &
+                                  h_neglect, h_neglect, PCM_cell=PCM)
+          else
+            call remapping_core_h(OBC%remap_CS, nz, h1, segment%tr_Reg%Tr(m)%tres(i,J,:), nz, h2, tr_column, &
+                                  h_neglect, h_neglect)
+          endif
+
+          ! Possibly underflow any very tiny tracer concentrations to 0?
+
+          ! Update tracer concentrations
+          segment%tr_Reg%Tr(m)%tres(i,J,:) = tr_column(:)
+          if (allocated(OBC%tres_y)) then ; do k=1,nz
+            OBC%tres_y(i,J,k,m) = I_scale * segment%tr_Reg%Tr(m)%tres(i,J,k)
+          enddo ; endif
+
+        endif ; enddo
+
+        if (segment%radiation .and. (OBC%gamma_uv < 1.0)) then
+          call remapping_core_h(OBC%remap_CS, nz, h1, segment%ry_norm_rad(i,J,:), nz, h2, r_norm_col, &
+                                h_neglect, h_neglect, PCM_cell=PCM)
+
+          do k=1,nz
+            segment%ry_norm_rad(i,J,k) = r_norm_col(k)
+            OBC%ry_normal(i,J,k) = segment%ry_norm_rad(i,J,k)
+          enddo
+        endif
+
+        if (segment%oblique .and. (OBC%gamma_uv < 1.0)) then
+          call remapping_core_h(OBC%remap_CS, nz, h1, segment%rx_norm_obl(i,J,:), nz, h2, rxy_col, &
+                                h_neglect, h_neglect, PCM_cell=PCM)
+          segment%rx_norm_obl(i,J,:) = rxy_col(:)
+          call remapping_core_h(OBC%remap_CS, nz, h1, segment%ry_norm_obl(i,J,:), nz, h2, rxy_col, &
+                                h_neglect, h_neglect, PCM_cell=PCM)
+          segment%ry_norm_obl(i,J,:) = rxy_col(:)
+          call remapping_core_h(OBC%remap_CS, nz, h1, segment%cff_normal(i,J,:), nz, h2, rxy_col, &
+                                h_neglect, h_neglect, PCM_cell=PCM)
+          segment%cff_normal(i,J,:) = rxy_col(:)
+
+          do k=1,nz
+            OBC%rx_oblique_v(i,J,k) = segment%rx_norm_obl(i,J,k)
+            OBC%ry_oblique_v(i,J,k) = segment%ry_norm_obl(i,J,k)
+            OBC%cff_normal_v(i,J,k) = segment%cff_normal(i,J,k)
+          enddo
+        endif
+
+      enddo
+    endif
+  enddo ; endif ; endif
+
+end subroutine remap_OBC_fields
+
 
 !> Adjust interface heights to fit the bathymetry and diagnose layer thickness.
 !!
