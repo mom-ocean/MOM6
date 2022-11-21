@@ -233,7 +233,7 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
     if (CS%MEKE_GEOMETRIC) then
       !$OMP do
       do j=js,je ; do I=is-1,ie
-        Khth_loc_u(I,j) = Khth_loc_u(I,j) + G%mask2dCu(I,j) * CS%MEKE_GEOMETRIC_alpha * &
+        Khth_loc_u(I,j) = Khth_loc_u(I,j) + G%OBCmaskCu(I,j) * CS%MEKE_GEOMETRIC_alpha * &
                           0.5*(MEKE%MEKE(i,j)+MEKE%MEKE(i+1,j)) / &
                           (VarMix%SN_u(I,j) + CS%MEKE_GEOMETRIC_epsilon)
       enddo ; enddo
@@ -319,7 +319,7 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
     if (CS%MEKE_GEOMETRIC) then
       !$OMP do
       do J=js-1,je ; do i=is,ie
-        Khth_loc_v(i,J) = Khth_loc_v(i,J) + G%mask2dCv(i,J) * CS%MEKE_GEOMETRIC_alpha * &
+        Khth_loc_v(i,J) = Khth_loc_v(i,J) + G%OBCmaskCv(i,J) * CS%MEKE_GEOMETRIC_alpha * &
                         0.5*(MEKE%MEKE(i,j)+MEKE%MEKE(i,j+1)) / &
                         (VarMix%SN_v(i,J) + CS%MEKE_GEOMETRIC_epsilon)
       enddo ; enddo
@@ -956,7 +956,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
             if (present_slope_x) then
               Slope = slope_x(I,j,k)
             else
-              Slope = ((e(i,j,K)-e(i+1,j,K))*G%IdxCu(I,j)) * G%mask2dCu(I,j)
+              Slope = ((e(i,j,K)-e(i+1,j,K))*G%IdxCu(I,j)) * G%OBCmaskCu(I,j)
             endif
             if (CS%id_slope_x > 0) CS%diagSlopeX(I,j,k) = Slope
             Sfn_unlim_u(I,K) = ((KH_u(I,j,K)*G%dy_Cu(I,j))*Slope)
@@ -971,7 +971,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
     enddo ! k-loop
 
     if (CS%use_FGNV_streamfn) then
-      do k=1,nz ; do I=is-1,ie ; if (G%mask2dCu(I,j)>0.) then
+      do k=1,nz ; do I=is-1,ie ; if (G%OBCmaskCu(I,j)>0.) then
         h_harm = max( h_neglect, &
               2. * h(i,j,k) * h(i+1,j,k) / ( ( h(i,j,k) + h(i+1,j,k) ) + h_neglect ) )
         c2_h_u(I,k) = CS%FGNV_scale * &
@@ -980,7 +980,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
 
       ! Solve an elliptic equation for the streamfunction following Ferrari et al., 2010.
       do I=is-1,ie
-        if (G%mask2dCu(I,j)>0.) then
+        if (G%OBCmaskCu(I,j)>0.) then
           do K=2,nz
             Sfn_unlim_u(I,K) = (1. + CS%FGNV_scale) * Sfn_unlim_u(I,K)
           enddo
@@ -1238,7 +1238,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
             if (present_slope_y) then
               Slope = slope_y(i,J,k)
             else
-              Slope = ((e(i,j,K)-e(i,j+1,K))*G%IdyCv(i,J)) * G%mask2dCv(i,J)
+              Slope = ((e(i,j,K)-e(i,j+1,K))*G%IdyCv(i,J)) * G%OBCmaskCv(i,J)
             endif
             if (CS%id_slope_y > 0) CS%diagSlopeY(I,j,k) = Slope
             Sfn_unlim_v(i,K) = ((KH_v(i,J,K)*G%dx_Cv(i,J))*Slope)
@@ -1253,7 +1253,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
     enddo ! k-loop
 
     if (CS%use_FGNV_streamfn) then
-      do k=1,nz ; do i=is,ie ; if (G%mask2dCv(i,J)>0.) then
+      do k=1,nz ; do i=is,ie ; if (G%OBCmaskCv(i,J)>0.) then
         h_harm = max( h_neglect, &
               2. * h(i,j,k) * h(i,j+1,k) / ( ( h(i,j,k) + h(i,j+1,k) ) + h_neglect ) )
         c2_h_v(i,k) = CS%FGNV_scale * &
@@ -1262,7 +1262,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
 
       ! Solve an elliptic equation for the streamfunction following Ferrari et al., 2010.
       do i=is,ie
-        if (G%mask2dCv(i,J)>0.) then
+        if (G%OBCmaskCv(i,J)>0.) then
           do K=2,nz
             Sfn_unlim_v(i,K) = (1. + CS%FGNV_scale) * Sfn_unlim_v(i,K)
           enddo
@@ -1651,7 +1651,7 @@ subroutine add_detangling_Kh(h, e, Kh_u, Kh_v, KH_u_CFL, KH_v_CFL, tv, dt, G, GV
       de_bot(i,j) = de_bot(i,j) + h(i,j,k+1)
     enddo ; enddo
 
-    do j=js,je ; do I=is-1,ie ; if (G%mask2dCu(I,j) > 0.0) then
+    do j=js,je ; do I=is-1,ie ; if (G%OBCmaskCu(I,j) > 0.0) then
       if (h(i,j,k) > h(i+1,j,k)) then
         h2 = h(i,j,k)
         h1 = max( h(i+1,j,k), h2 - min(de_bot(i+1,j), de_top(i+1,j,k)) )
@@ -1663,7 +1663,7 @@ subroutine add_detangling_Kh(h, e, Kh_u, Kh_v, KH_u_CFL, KH_v_CFL, tv, dt, G, GV
       KH_lay_u(I,j,k) = (Kh_scale * KH_u_CFL(I,j)) * jag_Rat**2
     endif ; enddo ; enddo
 
-    do J=js-1,je ; do i=is,ie ; if (G%mask2dCv(i,J) > 0.0) then
+    do J=js-1,je ; do i=is,ie ; if (G%OBCmaskCv(i,J) > 0.0) then
       if (h(i,j,k) > h(i,j+1,k)) then
         h2 = h(i,j,k)
         h1 = max( h(i,j+1,k), h2 - min(de_bot(i,j+1), de_top(i,j+1,k)) )
@@ -1689,7 +1689,7 @@ subroutine add_detangling_Kh(h, e, Kh_u, Kh_v, KH_u_CFL, KH_v_CFL, tv, dt, G, GV
       ! First, populate the diffusivities
       if (n==1) then ! This is a u-column.
         do i=ish,ie
-          do_i(I) = (G%mask2dCu(I,j) > 0.0)
+          do_i(I) = (G%OBCmaskCu(I,j) > 0.0)
           Kh_Max_max(I) = KH_u_CFL(I,j)
         enddo
         do K=1,nz+1 ; do i=ish,ie
@@ -1699,7 +1699,7 @@ subroutine add_detangling_Kh(h, e, Kh_u, Kh_v, KH_u_CFL, KH_v_CFL, tv, dt, G, GV
         enddo ; enddo
       else ! This is a v-column.
         do i=ish,ie
-          do_i(i) = (G%mask2dCv(i,J) > 0.0) ; Kh_Max_max(I) = KH_v_CFL(i,J)
+          do_i(i) = (G%OBCmaskCv(i,J) > 0.0) ; Kh_Max_max(I) = KH_v_CFL(i,J)
         enddo
         do K=1,nz+1 ; do i=ish,ie
           Kh_bg(I,K) = KH_v(I,j,K) ; Kh(I,K) = Kh_bg(I,K)
@@ -2003,11 +2003,11 @@ subroutine thickness_diffuse_init(Time, G, GV, US, param_file, diag, CDp, CS)
     allocate(CS%Kh_eta_v(G%isd:G%ied, G%JsdB:G%JedB), source=0.)
     do j=G%jsc,G%jec ; do I=G%isc-1,G%iec
       grid_sp = sqrt((2.0*G%dxCu(I,j)**2 * G%dyCu(I,j)**2) / (G%dxCu(I,j)**2 + G%dyCu(I,j)**2))
-      CS%Kh_eta_u(I,j) = G%mask2dCu(I,j) * MAX(0.0, CS%Kh_eta_bg + CS%Kh_eta_vel * grid_sp)
+      CS%Kh_eta_u(I,j) = G%OBCmaskCu(I,j) * MAX(0.0, CS%Kh_eta_bg + CS%Kh_eta_vel * grid_sp)
     enddo ; enddo
     do J=G%jsc-1,G%jec ; do i=G%isc,G%iec
       grid_sp = sqrt((2.0*G%dxCv(i,J)**2 * G%dyCv(i,J)**2) / (G%dxCv(i,J)**2 + G%dyCv(i,J)**2))
-      CS%Kh_eta_v(i,J) = G%mask2dCv(i,J) * MAX(0.0, CS%Kh_eta_bg + CS%Kh_eta_vel * grid_sp)
+      CS%Kh_eta_v(i,J) = G%OBCmaskCv(i,J) * MAX(0.0, CS%Kh_eta_bg + CS%Kh_eta_vel * grid_sp)
     enddo ; enddo
   endif
 

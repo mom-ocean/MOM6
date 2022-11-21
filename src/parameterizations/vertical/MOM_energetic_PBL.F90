@@ -36,8 +36,7 @@ type, public :: energetic_PBL_CS ; private
   logical :: initialized = .false. !< True if this control structure has been initialized.
 
   !/ Constants
-  real    :: VonKar = 0.41   !< The von Karman coefficient.  This should be a runtime parameter,
-                             !! but because it is set to 0.4 at runtime in KPP it might change answers.
+  real    :: VonKar          !< The von Karman coefficient as used in the ePBL module [nondim]
   real    :: omega           !< The Earth's rotation rate [T-1 ~> s-1].
   real    :: omega_frac      !< When setting the decay scale for turbulence, use this fraction of
                              !! the absolute rotation rate blended with the local value of f, as
@@ -1982,6 +1981,9 @@ subroutine energetic_PBL_init(Time, G, GV, US, param_file, diag, CS)
                  "A nondimensional scaling factor controlling the inhibition "//&
                  "of the diffusive length scale by rotation. Making this larger "//&
                  "decreases the PBL diffusivity.", units="nondim", default=1.0)
+  call get_param(param_file, mdl, 'VON_KARMAN_CONST', CS%vonKar, &
+                 'The value the von Karman constant as used for mixed layer viscosity.', &
+                 units='nondim', default=0.41)
   call get_param(param_file, mdl, "DEFAULT_ANSWER_DATE", default_answer_date, &
                  "This sets the default value for the various _ANSWER_DATE parameters.", &
                  default=99991231)

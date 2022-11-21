@@ -2955,6 +2955,7 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
   character(len=48)  :: thickness_units
   character(len=40)  :: var_name
   character(len=160) :: var_descript
+  logical :: physical_OBL_scheme
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, nz, nbands, m
   isd  = G%isd  ; ied  = G%ied  ; jsd  = G%jsd  ; jed  = G%jed ; nz = GV%ke
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
@@ -3464,9 +3465,11 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
     call internal_tides_init(Time, G, GV, US, param_file, diag, CS%int_tide)
   endif
 
+  physical_OBL_scheme = (CS%use_bulkmixedlayer .or. CS%use_KPP .or. CS%use_energetic_PBL)
   ! initialize module for setting diffusivities
   call set_diffusivity_init(Time, G, GV, US, param_file, diag, CS%set_diff_CSp, CS%int_tide, &
-                            halo_TS=CS%halo_TS_diff, double_diffuse=CS%double_diffuse)
+                            halo_TS=CS%halo_TS_diff, double_diffuse=CS%double_diffuse, &
+                            physical_OBL_scheme=physical_OBL_scheme)
 
   if (CS%useKPP .and. (CS%double_diffuse .and. .not.CS%use_CVMix_ddiff)) &
     call MOM_error(FATAL, 'diabatic_driver_init: DOUBLE_DIFFUSION (old method) does not work '//&

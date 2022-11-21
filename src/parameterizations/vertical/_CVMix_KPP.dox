@@ -7,7 +7,7 @@
  The formulation and implementation of KPP is described in great detail in the
  [CVMix manual](https://github.com/CVMix/CVMix-description/raw/master/cvmix.pdf) (written by our own Steve Griffies).
 
- \section section_KPP_nutshell KPP in a nutshell
+   \section section_KPP_nutshell KPP in a nutshell
 
  Large et al., \cite large1994, decompose the parameterized boundary layer turbulent flux of a scalar, \f$ s \f$, as
  \f[ \overline{w^\prime s^\prime} = -K \partial_z s + K \gamma_s(\sigma), \f]

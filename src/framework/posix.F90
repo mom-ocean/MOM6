@@ -344,4 +344,22 @@ subroutine siglongjmp(env, val)
   call siglongjmp_posix(env, val_c)
 end subroutine siglongjmp
 
+!> Placeholder function for a missing or unconfigured sigsetjmp
+!!
+!! The symbol for sigsetjmp can be platform-dependent and may not exist if
+!! defined as a macro.  This function allows compilation, and reports a runtime
+!! error if used in the program.
+function sigsetjmp_missing(env, savesigs) result(rc) bind(c)
+  type(sigjmp_buf), intent(in) :: env
+    !< Current process state (unused)
+  integer(kind=c_int), value, intent(in) :: savesigs
+    !< Enable signal state flag (unused)
+  integer(kind=c_int) :: rc
+    !< Function return code (unused)
+
+  print '(a)', 'ERROR: sigsetjmp() is not implemented in this build.'
+  print '(a)', 'Recompile with autoconf or -DSIGSETJMP_NAME=\"<symbol name>\".'
+  error stop
+end function sigsetjmp_missing
+
 end module posix

@@ -1,71 +1,176 @@
 /*! \page Governing_Equations Governing Equations
 
-The Boussinesq hydrostatic equations of motion in height coordinates are
+MOM6 is a hydrostatic ocean circulation model that time steps either
+the non-Boussinesq ocean equations (where the flow velocity is
+divergent: \f$\nabla \cdot \mathbf{v} \ne 0\f$), or the Boussinesq
+ocean equations (where velocity is non-divergent: \f$\nabla \cdot
+\mathbf{v} = 0\f$).  We here display the Boussinesq version since
+it is most commonly used (as of 2022). We start by casting the
+equations in geopotentiial coordinates prior to transforming to the
+generalized vertical coordinates used by MOM6. A more thorough
+discussion of these equations, and their finite volume realization
+appropriate for MOM6, can be found in Griffies, Adcroft and Hallberg (2020)
+\cite Griffies_Adcroft_Hallberg2020.
 
-\f{eqnarray}  D_t \boldsymbol{u} + f \widehat{\boldsymbol{k}} \times \boldsymbol{u} + \frac{\rho}{\rho_o} \boldsymbol{\nabla}_z \Phi + \frac{1}{\rho_o} \boldsymbol{\nabla}_z p &= \boldsymbol{\mathcal{F}} &\mbox{ momentum} \\
-  \rho \, \frac{\partial \Phi}{\partial z} + \frac{\partial p}{\partial z} &= 0 &\mbox{ hydrostatic} \\
-  \boldsymbol{\nabla}_z \cdotp \boldsymbol{u} + \frac{\partial w}{\partial z} &= 0 &\mbox{ thickness} \\
-  D_t \theta &= \boldsymbol{\mathcal{N}}_\theta^\gamma - \frac{\partial J_\theta^{(z)}}{\partial z} &\mbox{ potential temp} \\
-  D_t S &= \boldsymbol{\mathcal{N}}_S^\gamma - \frac{\partial J_S^{(z)}}{\partial z} &\mbox{ salinity} \\
-  \rho &= \rho(S, \theta, z) &\mbox{ equation of state.}
-\f}
-
-where notation is described in \ref Notation, \f$\boldsymbol{\mathcal{F}}\f$ represents the accelerations due to
-the divergence of stresses including those provided through boundary interactions.
-
-The prognostic thermodynamic variables are potential temperature,
-\f$\theta\f$, and salinity \f$S\f$, which are related to <em>in situ</em> density
-\f$\rho\f$ through the \cite wright1997 equation of state. In the potential
-temperature and salinity equations, fluxes due to diabatic, vertically
-oriented processes are indicated by \f$J^{(z)}\f$. The tendency due to the
-convergence of fluxes oriented along neutral directions is indicated by
-\f$\boldsymbol{\mathcal{N}}^\gamma\f$. Our implementation of this <em>neutral
-diffusion</em> parameterization is detailed in Shao et al. (personal comm.)
-
-The total derivative is
-
-\f{eqnarray}  D_t & \equiv \frac{\partial}{\partial t} + \boldsymbol{v} \cdotp \boldsymbol{\nabla} \\
-      &= \frac{\partial}{\partial t} + \boldsymbol{u} \cdotp \boldsymbol{\nabla}_z + w \frac{\partial}{\partial z}.
-\f}
-
-The non-divergence of flow allows a total derivative to be re-written in flux form:
-
-\f{eqnarray}  D_t \theta &= \frac{\partial}{\partial t} + \boldsymbol{\nabla} \cdotp ( \boldsymbol{v} \theta ) \\
-             &= \frac{\partial}{\partial t} + \boldsymbol{\nabla}_z \cdotp ( \boldsymbol{u} \theta ) + \frac{\partial ( w \theta )}{\partial z}.
-\f}
-
-The above equations of motion can thus be written as:
-
-\f{eqnarray}  D_t \boldsymbol{u} + f \widehat{\boldsymbol{k}} \times \boldsymbol{u} + \frac{\rho}{\rho_o}\boldsymbol{\nabla}_z \Phi + \frac{1}{\rho_o} \boldsymbol{\nabla}_z p &= \boldsymbol{\mathcal{F}} &\mbox{ momentum}\\
-  \rho \, \frac{\partial \Phi}{\partial z} + \frac{\partial p}{\partial z} &= 0 &\mbox{ hydrostatic} \\
-  \boldsymbol{\nabla}_z \cdotp \boldsymbol{u} + \frac{\partial w}{\partial z} &= 0 &\mbox{ thickness} \\
-  \frac{\partial \theta}{\partial t} + \boldsymbol{\nabla}_z \cdotp ( \boldsymbol{u} \theta ) + \frac{\partial ( w \theta )}{\partial z} &= \boldsymbol{\mathcal{N}}_\theta^\gamma - \frac{\partial J_\theta^{(z)}}{\partial z} &\mbox{ potential temp} \\
-  \frac{\partial S}{\partial t} + \boldsymbol{\nabla}_z \cdotp ( \boldsymbol{u} S ) + \frac{\partial ( w S )}{\partial z} &= \boldsymbol{\mathcal{N}}_S^\gamma - \frac{\partial J_S^{(z)}}{\partial z} &\mbox{ salinity} \\
-  \rho &= \rho(S, \theta, z) &\mbox{ equation of state.}
-\f}
-
-\section vector_invariant_eqns Vector Invariant Equations
-
-MOM6 solves the momentum equations written in vector-invariant form.
-
-A vector identity allows the total derivative of velocity to be written in the vector-invariant form:
-
-\f{eqnarray}  D_t \boldsymbol{u} &= \partial_t \boldsymbol{u} + \boldsymbol{v} \cdotp \boldsymbol{\nabla} \boldsymbol{u} \\
-              &= \partial_t \boldsymbol{u} + \boldsymbol{u} \cdotp \boldsymbol{\nabla}_z \boldsymbol{u} + w \partial_z \boldsymbol{u} \\
-              &= \partial_t \boldsymbol{u} + \left( \boldsymbol{\nabla}
-	      \times \boldsymbol{u} \right) \times \boldsymbol{v} + \boldsymbol{\nabla} \underbrace{\frac{1}{2} \left|\boldsymbol{u}\right|^2}_{\equiv K} .
-\f}
-
-The flux-form equations of motion in height coordinates can thus be written succinctly as:
-
-\f{eqnarray} \partial_t \boldsymbol{u} + \left( f \widehat{\boldsymbol{k}} +
- \boldsymbol{\nabla} \times \boldsymbol{u} \right) \times \boldsymbol{v} + \boldsymbol{\nabla} K
-  + \frac{\rho}{\rho_o} \boldsymbol{\nabla} \Phi + \frac{1}{\rho_o} \boldsymbol{\nabla} p &= \boldsymbol{\mathcal{F}} &\mbox{ momentum} \\
-  \boldsymbol{\nabla}_z \cdotp \boldsymbol{u} + \partial_z w &= 0 &\mbox{ thickness} \\
-  \partial_t \theta + \boldsymbol{\nabla}_z \cdotp ( \boldsymbol{u} \theta ) + \partial_z ( w \theta ) &= \boldsymbol{\mathcal{N}}_\theta^\gamma - \frac{\partial J_\theta^{(z)}}{\partial z} &\mbox{ potential temp} \\
-  \partial_t S + \boldsymbol{\nabla}_z \cdotp ( \boldsymbol{u} S ) + \partial_z ( w S ) &= \boldsymbol{\mathcal{N}}_S^\gamma - \frac{\partial J_S^{(z)}}{\partial z} &\mbox{ salinity} \\
+The hydrostatic Boussinesq ocean equations, written using geopotential
+vertical coordinates, are given by
+\f{align}
+ \rho_o \left[
+  D_t \mathbf{u} + f \hat{\mathbf{z}} \times \mathbf{u}
+  \right]
+ &= -\rho \, \nabla_z \Phi - \nabla_z p
+ + \rho_o \, \mathbf{\mathcal{F}}
+  &\mbox{horizontal momentum}
+\\
+  \rho \, \partial_{z} \Phi + \partial_{z} p &= 0 &\mbox{hydrostatic}
+\\
+  \nabla_z \cdotp \mathbf{u} + \partial_{z} w
+ &= 0
+ &\mbox{continuity}
+\\
+  D_t \theta &= \mathbf{\mathcal{N}}_\theta^\gamma
+ - \partial_{z} J_\theta^{(z)}
+ &\mbox{potential or Conservative temp}
+ \\
+  D_t S &= \mathbf{\mathcal{N}}_S^\gamma
+- \partial_{z} J_S^{(z)}
+  &\mbox{salinity}
+\\
   \rho &= \rho(S, \theta, z) &\mbox{ equation of state}
+\\
+  \mathbf{v} &= \mathbf{u} + \hat{\mathbf{z}} \, w &\mbox{velocity field.}
 \f}
 
-where the horizontal momentum equations and vertical hydrostatic balance equation have been written as a single three-dimensional equation.
+The acceleration term, \f$\mathbf{\mathcal{F}}\f$, in the
+horizontal momentum equation includes the acceleration due to the
+divergence of internal frictional stresses as well as from bottom and
+surface boundary stresses. Other notation is described in \ref
+Notation.
+
+The prognostic temperature, \f$\theta\f$, is either potential
+temperature or Conservative Temperature, depending on the chosen
+equation of state, and \f$S\f$ is the salinity.  We generally follow
+the discussion of \cite McDougall_etal_2021 for how to interpret the
+prognostic temperature and salinity in ocean models.  MOM6 has
+historically used the Wright (1997) \cite wright1997 equation of state
+to compute the <em>in situ</em> density, \f$\rho\f$.  However, there
+are other options as documented in \ref Equation_of_State.  In the
+potential temperature and salinity equations, fluxes due to diabatic
+processes are indicated by \f$J^{(z)}\f$. Tendencies due to the
+convergence of fluxes oriented along neutral directions are indicated
+by \f$\mathbf{\mathcal{N}}^\gamma\f$, with our implementation of
+<em>neutral diffusion</em> detailed in Shao et al (2020)
+\cite Shao_etal_2020.
+
+The total or material time derivative operator is given by
+\f{align}
+   D_t &\equiv \partial_{t} + \mathbf{v} \cdotp \nabla
+  \\
+      &= \partial_{t} + \mathbf{u} \cdotp \nabla_z + w \, \partial_{z},
+\f}
+where the second equality explosed the horizontal and vertical terms. Using the non-divergence condition
+on the three-dimensional velocity allows us to write the material time derivative of an arbitrary scalar field,
+\f$\psi\f$, into a flux-form equation
+\f{align}  D_t \psi &= ( \partial_{t} +  \mathbf{u} \cdotp \nabla) \, \psi
+ \\
+             &= \partial_{t} \psi + \nabla \cdotp (\mathbf{v} \, \psi)
+\\
+            &=  \partial_{t} \psi + \nabla_z \cdotp ( \mathbf{u} \, \psi) + \partial_{z} ( w \, \psi).
+\f}
+Discretizing the flux-form scalar equations means that fluxes
+transferring scalars between grid cells act in a conservative manner.
+Consequently, the domain integrated scalar (e.g., total seawater volume, total
+salt content, total potential enthalpy) is affected only via surface and bottom
+boundary transport.  Such global conservation properties are
+maintained by MOM6 to within computational roundoff, with this level
+of precision found to be essential for using MOM6 to study
+climate. Making use of the flux-form scalar conservation equations
+brings the model equations to the form
+\f{align}
+ \rho_o \left[
+  D_t \mathbf{u} + f \hat{\mathbf{z}} \times \mathbf{u}
+  \right]
+ &= -\rho \, \nabla_z \Phi - \nabla_z p
+ + \rho_o \, \mathbf{\mathcal{F}}
+  &\mbox{horizontal momentum}
+\\
+  \rho \, \partial_{z} \Phi + \partial_{z} p &= 0 &\mbox{hydrostatic}
+\\
+  \nabla_z \cdotp \mathbf{u} + \partial_{z} w
+ &= 0
+ &\mbox{continuity}
+\\
+\partial_{t} \theta  + \nabla_z \cdotp (\mathbf{u} \, \theta) + \partial_{z} (w \, \theta)
+&= \mathbf{\mathcal{N}}_\theta^\gamma - \partial_{z} J_\theta^{(z)}
+&\mbox{potential or Conservative temp}
+\\
+\partial_{t} S + \nabla_z \cdotp (\mathbf{u} \, S) + \partial_{z}(w \, S)
+&= \mathbf{\mathcal{N}}_S^\gamma -\partial_{z} J_S^{(z)}
+ &\mbox{salinity}
+\\
+\rho &= \rho(S, \theta, z) &\mbox{equation of state.}
+\f}
+
+\section vector_invariant_eqns Vector invariant velocity equation
+
+MOM6 time steps the horizontal velocity equation in its
+vector-invariant form.  To derive this equation we make use of the
+following vector identity
+\f{align}
+ D_t \mathbf{u}
+   &=
+  \partial_t \mathbf{u} + \mathbf{v} \cdotp \nabla \mathbf{u}
+  \\
+  &=
+  \partial_t \mathbf{u} + \mathbf{u} \cdotp \nabla_z \mathbf{u} + w \partial_z \mathbf{u}
+   \\
+  &=
+ \partial_t \mathbf{u} + \left( \nabla \times \mathbf{u} \right) \times \mathbf{v}
+  + \nabla \left|\mathbf{u}\right|^2/2
+ \\
+  &=
+  \partial_t \mathbf{u} + w \, \partial_{z} \mathbf{u}
+  + \zeta \, \hat{\mathbf{z}} \times \mathbf{u} + \nabla_{z} K,
+\f}
+where we introduced the vertical component to the relative vorticity
+\f{align}
+ \zeta = \hat{\mathbf{z}} \cdot (\nabla \times \mathbf{u})
+       = \partial_{x}v - \partial_{y} u,
+\label{eq:relative-vorticity-z}
+\f}
+as well as the kinetic energy per mass contained in the horizontal flow
+\f{align}
+ K = (u^{2} + v^{2})/2.
+\label{eq:kinetic-energy-per-mass}
+\f}
+It is just the horizontal kinetic energy per mass that appears when
+making the hydrostatic approximation, whereas a non-hydrostatic fluid
+(such as the MITgcm) includes the contribution from vertical motion.  With
+these identities we are led to the MOM6 flux-form equations of motion in
+geopotential coordinates
+\f{align}
+  \rho_{o} \left[
+  \partial_t \mathbf{u} + w \, \partial_{z} \mathbf{u}
+   + (f + \zeta) \hat{\mathbf{z}} \times \mathbf{u}
+   \right]
+  &= -\nabla_{z} (p + K) - \rho \, \nabla_{z} \Phi +  \rho_{o} \, \mathbf{\mathcal{F}}
+ &\mbox{vector-inv horz velocity}
+\\
+  \rho \, \partial_{z} \Phi + \partial_{z} p &= 0 &\mbox{hydrostatic}
+\\
+  \nabla_z \cdotp \mathbf{u} + \partial_{z} w
+ &= 0
+ &\mbox{continuity}
+  \\
+  \partial_t \theta + \nabla_z \cdotp ( \mathbf{u} \, \theta ) + \partial_z ( w \, \theta )
+   &= \mathbf{\mathcal{N}}_\theta^\gamma - \partial_{z} J_\theta^{(z)}
+   &\mbox{potential/Cons temp}
+  \\
+  \partial_t S + \nabla_z \cdotp ( \mathbf{u} \, S ) + \partial_z (w \, S)
+   &= \mathbf{\mathcal{N}}_S^\gamma - \partial_{z} J_S^{(z)}
+  &\mbox{salinity}
+  \\
+  \rho &= \rho(S, \theta, z) &\mbox{equation of state.}
+\f}
+
 */

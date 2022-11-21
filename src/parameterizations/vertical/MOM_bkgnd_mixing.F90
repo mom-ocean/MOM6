@@ -9,7 +9,7 @@ use MOM_debugging,       only : hchksum
 use MOM_diag_mediator,   only : diag_ctrl, time_type, register_diag_field
 use MOM_diag_mediator,   only : post_data
 use MOM_error_handler,   only : MOM_error, FATAL, WARNING, NOTE
-use MOM_file_parser,     only : get_param, log_version, param_file_type
+use MOM_file_parser,     only : get_param, log_param, log_version, param_file_type
 use MOM_file_parser,     only : openParameterBlock, closeParameterBlock
 use MOM_forcing_type,    only : forcing
 use MOM_grid,            only : ocean_grid_type
@@ -63,9 +63,11 @@ type, public :: bkgnd_mixing_cs ; private
   real    :: Kd_tanh_lat_scale      !< A nondimensional scaling for the range of
                                     !! diffusivities with Kd_tanh_lat_fn. Valid values
                                     !! are in the range of -2 to 2; 0.4 reproduces CM2M.
-  real    :: Kdml                   !< mixed layer diapycnal diffusivity [Z2 T-1 ~> m2 s-1]
-                                    !! when bulkmixedlayer==.false.
-  real    :: Hmix                   !< mixed layer thickness [Z ~> m] when bulkmixedlayer==.false.
+  real    :: Kd_tot_ml              !< The mixed layer diapycnal diffusivity [Z2 T-1 ~> m2 s-1]
+                                    !! when no other physically based mixed layer turbulence
+                                    !! parameterization is being used.
+  real    :: Hmix                   !< mixed layer thickness [Z ~> m] when no physically based
+                                    !! ocean surface boundary layer parameterization is used.
   logical :: Kd_tanh_lat_fn         !< If true, use the tanh dependence of Kd_sfc on
                                     !! latitude, like GFDL CM2.1/CM2M.  There is no
                                     !! physical justification for this form, and it can
@@ -78,21 +80,8 @@ type, public :: bkgnd_mixing_cs ; private
              !! Henyey et al, JGR (1986) latitudinal scaling for the background diapycnal diffusivity,
              !! which gives a marked decrease in the diffusivity near the equator.  The simplification
              !! here is to assume that the in-situ stratification is the same as the reference stratificaiton.
-  logical :: Henyey_IGW_background_new !< same as Henyey_IGW_background
-             !! but incorporate the effect of stratification on TKE dissipation,
-             !! e = f/f_0 * acosh(N/f) / acosh(N_0/f_0) * e_0
-             !! where e is the TKE dissipation, and N_0 and f_0
-             !! are the reference buoyancy frequency and inertial frequencies respectively.
-             !! e_0 is the reference dissipation at (N_0,f_0). In the previous version, N=N_0.
-             !! Additionally, the squared inverse relationship between  diapycnal diffusivities
-             !! and stratification is included:
-             !!
-             !! kd = e/N^2
-             !!
-             !! where kd is the diapycnal diffusivity. This approach assumes that work done
-             !! against gravity is uniformly distributed throughout the column. Whereas, kd=kd_0*e,
-             !! as in the original version, concentrates buoyancy work in regions of strong stratification.
-  logical :: bulkmixedlayer !< If true, a refined bulk mixed layer scheme is used
+  logical :: physical_OBL_scheme !< If true, a physically-based scheme is used to determine mixing in the
+                   !! ocean's surface boundary layer, such as ePBL, KPP, or a refined bulk mixed layer scheme.
   logical :: Kd_via_Kdml_bug !< If true and KDML /= KD and a number of other higher precedence
                    !! options are not used, the background diffusivity is set incorrectly using a
                    !! bug that was introduced in March, 2018.
@@ -109,7 +98,7 @@ character(len=40)  :: mdl = "MOM_bkgnd_mixing" !< This module's name.
 contains
 
 !> Initialize the background mixing routine.
-subroutine bkgnd_mixing_init(Time, G, GV, US, param_file, diag, CS)
+subroutine bkgnd_mixing_init(Time, G, GV, US, param_file, diag, CS, physical_OBL_scheme)
 
   type(time_type),         intent(in)    :: Time       !< The current time.
   type(ocean_grid_type),   intent(in)    :: G          !< Grid structure.
@@ -117,15 +106,20 @@ subroutine bkgnd_mixing_init(Time, G, GV, US, param_file, diag, CS)
   type(unit_scale_type),   intent(in)    :: US         !< A dimensional unit scaling type
   type(param_file_type),   intent(in)    :: param_file !< Run-time parameter file handle
   type(diag_ctrl), target, intent(inout) :: diag       !< Diagnostics control structure.
-  type(bkgnd_mixing_cs),    pointer      :: CS         !< This module's control structure.
+  type(bkgnd_mixing_cs),   pointer       :: CS         !< This module's control structure.
+  logical,                 intent(in)    :: physical_OBL_scheme !< If true, a physically based
+                                                       !! parameterization (like KPP or ePBL or a bulk mixed
+                                                       !! layer) is used outside of set_diffusivity to
+                                                       !! specify the mixing that occurs in the ocean's
+                                                       !! surface boundary layer.
 
   ! Local variables
   real :: Kv                    ! The interior vertical viscosity [Z2 T-1 ~> m2 s-1] - read to set Prandtl
                                 ! number unless it is provided as a parameter
   real :: prandtl_bkgnd_comp    ! Kv/CS%Kd. Gets compared with user-specified prandtl_bkgnd.
 
-! This include declares and sets the variable "version".
-#include "version_variable.h"
+  ! This include declares and sets the variable "version".
+# include "version_variable.h"
 
   if (associated(CS)) then
     call MOM_error(WARNING, "bkgnd_mixing_init called with an associated "// &
@@ -154,21 +148,38 @@ subroutine bkgnd_mixing_init(Time, G, GV, US, param_file, diag, CS)
 
   ! The following is needed to set one of the choices of vertical background mixing
 
-  ! BULKMIXEDLAYER is not always defined (e.g., CM2G63L), so the following line by passes
-  ! the need to include BULKMIXEDLAYER in MOM_input
-  CS%bulkmixedlayer = (GV%nkml > 0)
-  if (CS%bulkmixedlayer) then
+  CS%physical_OBL_scheme = physical_OBL_scheme
+  if (CS%physical_OBL_scheme) then
     ! Check that Kdml is not set when using bulk mixed layer
-    call get_param(param_file, mdl, "KDML", CS%Kdml, default=-1.)
-    if (CS%Kdml>0.) call MOM_error(FATAL, &
-                 "bkgnd_mixing_init: KDML cannot be set when using bulk mixed layer.")
-    CS%Kdml = CS%Kd ! This is not used with a bulk mixed layer, but also cannot be a NaN.
+    call get_param(param_file, mdl, "KDML", CS%Kd_tot_ml, default=-1., do_not_log=.true.)
+    if (CS%Kd_tot_ml>0.) call MOM_error(FATAL, &
+                 "bkgnd_mixing_init: KDML is a depricated parameter that should not be used.")
+    call get_param(param_file, mdl, "KD_ML_TOT", CS%Kd_tot_ml, default=-1., do_not_log=.true.)
+    if (CS%Kd_tot_ml>0.) call MOM_error(FATAL, &
+                 "bkgnd_mixing_init: KD_ML_TOT cannot be set when using a physically based ocean "//&
+                 "boundary layer mixing parameterization.")
+    CS%Kd_tot_ml = CS%Kd ! This is not used with a bulk mixed layer, but also cannot be a NaN.
   else
-    call get_param(param_file, mdl, "KDML", CS%Kdml, &
+    call get_param(param_file, mdl, "KD_ML_TOT", CS%Kd_tot_ml, &
+                 "The total diapcynal diffusivity in the surface mixed layer when there is "//&
+                 "not a physically based parameterization of mixing in the mixed layer, such "//&
+                 "as bulk mixed layer or KPP or ePBL.", &
+                 units="m2 s-1", default=CS%Kd*US%Z2_T_to_m2_s, scale=US%m2_s_to_Z2_T, do_not_log=.true.)
+    if (abs(CS%Kd_tot_ml - CS%Kd) <= 1.0e-15*abs(CS%Kd)) then
+      call get_param(param_file, mdl, "KDML", CS%Kd_tot_ml, &
                  "If BULKMIXEDLAYER is false, KDML is the elevated "//&
                  "diapycnal diffusivity in the topmost HMIX of fluid. "//&
                  "KDML is only used if BULKMIXEDLAYER is false.", &
-                 units="m2 s-1", default=CS%Kd*US%Z2_T_to_m2_s, scale=US%m2_s_to_Z2_T)
+                 units="m2 s-1", default=CS%Kd*US%Z2_T_to_m2_s, scale=US%m2_s_to_Z2_T, do_not_log=.true.)
+      if (abs(CS%Kd_tot_ml - CS%Kd) > 1.0e-15*abs(CS%Kd)) &
+        call MOM_error(WARNING, "KDML is a depricated parameter. Use KD_ML_TOT instead.")
+    endif
+    call log_param(param_file, mdl, "KD_ML_TOT", CS%Kd_tot_ml*US%Z2_T_to_m2_s, &
+                 "The total diapcynal diffusivity in the surface mixed layer when there is "//&
+                 "not a physically based parameterization of mixing in the mixed layer, such "//&
+                 "as bulk mixed layer or KPP or ePBL.", &
+                 units="m2 s-1", default=CS%Kd*US%Z2_T_to_m2_s)
+
     call get_param(param_file, mdl, "HMIX_FIXED", CS%Hmix, &
                  "The prescribed depth over which the near-surface "//&
                  "viscosity and diffusivity are elevated when the bulk "//&
@@ -251,13 +262,6 @@ subroutine bkgnd_mixing_init(Time, G, GV, US, param_file, diag, CS)
                  "Harrison & Hallberg, JPO 2008.", default=.false.)
   if (CS%Henyey_IGW_background) call check_bkgnd_scheme(CS, "HENYEY_IGW_BACKGROUND")
 
-
-  call get_param(param_file, mdl, "HENYEY_IGW_BACKGROUND_NEW", CS%Henyey_IGW_background_new, &
-                 "If true, use a better latitude-dependent scaling for the "//&
-                 "background diffusivity, as described in "//&
-                 "Harrison & Hallberg, JPO 2008.", default=.false.)
-  if (CS%Henyey_IGW_background_new) call check_bkgnd_scheme(CS, "HENYEY_IGW_BACKGROUND_NEW")
-
   if (CS%Kd>0.0 .and. (trim(CS%bkgnd_scheme_str)=="BRYAN_LEWIS_DIFFUSIVITY" .or.&
                           trim(CS%bkgnd_scheme_str)=="HORIZ_VARYING_BACKGROUND" )) then
     call MOM_error(WARNING, "bkgnd_mixing_init: a nonzero constant background "//&
@@ -290,13 +294,13 @@ subroutine bkgnd_mixing_init(Time, G, GV, US, param_file, diag, CS)
     "MOM_bkgnd_mixing: KD_TANH_LAT_FN can not be used with HENYEY_IGW_BACKGROUND.")
 
   CS%Kd_via_Kdml_bug = .false.
-  if ((CS%Kd /= CS%Kdml) .and. .not.(CS%Kd_tanh_lat_fn .or. CS%bulkmixedlayer .or. &
-                                     CS%Henyey_IGW_background .or. CS%Henyey_IGW_background_new .or. &
+  if ((CS%Kd /= CS%Kd_tot_ml) .and. .not.(CS%Kd_tanh_lat_fn .or. CS%physical_OBL_scheme .or. &
+                                     CS%Henyey_IGW_background .or. &
                                      CS%horiz_varying_background .or. CS%Bryan_Lewis_diffusivity)) then
     call get_param(param_file, mdl, "KD_BACKGROUND_VIA_KDML_BUG", CS%Kd_via_Kdml_bug, &
                  "If true and KDML /= KD and several other conditions apply, the background "//&
                  "diffusivity is set incorrectly using a bug that was introduced in March, 2018.", &
-                 default=.true.)  ! The default should be changed to false and this parameter obsoleted.
+                 default=.false.)  ! This parameter should be obsoleted.
   endif
 
 !  call closeParameterBlock(param_file)
@@ -428,25 +432,6 @@ subroutine calculate_bkgnd_mixing(h, tv, N2_lay, Kd_lay, Kd_int, Kv_bkgnd, j, G,
       Kd_lay(i,k) = Kd_int(i,1)
     enddo ; enddo
 
-  elseif (CS%Henyey_IGW_background_new) then
-    I_x30 = 2.0 / invcosh(CS%N0_2Omega*2.0) ! This is evaluated at 30 deg.
-    I_2Omega = 0.5 / CS%omega
-    do k=1,nz ; do i=is,ie
-      abs_sinlat = max(min_sinlat, abs(sin(G%geoLatT(i,j)*deg_to_rad)))
-      N_2Omega = max(abs_sinlat, sqrt(N2_lay(i,k))*I_2Omega)
-      N02_N2 = (CS%N0_2Omega/N_2Omega)**2
-      Kd_lay(i,k) = max(CS%Kd_min, CS%Kd * &
-           ((abs_sinlat * invcosh(N_2Omega/abs_sinlat)) * I_x30)*N02_N2)
-    enddo ; enddo
-    ! Update Kd_int and Kv_bkgnd, based on Kd_lay.  These might be just used for diagnostic purposes.
-    do i=is,ie
-      Kd_int(i,1) = 0.0; Kv_bkgnd(i,1) = 0.0
-      Kd_int(i,nz+1) = 0.0; Kv_bkgnd(i,nz+1) = 0.0
-    enddo
-    do K=2,nz ; do i=is,ie
-      Kd_int(i,K) = 0.5*(Kd_lay(i,k-1) + Kd_lay(i,k))
-      Kv_bkgnd(i,K) = Kd_int(i,K) * CS%prandtl_bkgnd
-    enddo ; enddo
   else
     ! Set a potentially spatially varying surface value of diffusivity.
     if (CS%Henyey_IGW_background) then
@@ -471,7 +456,7 @@ subroutine calculate_bkgnd_mixing(h, tv, N2_lay, Kd_lay, Kd_int, Kv_bkgnd, j, G,
     endif
 
     ! Now set background diffusivies based on these surface values, possibly with vertical structure.
-    if ((.not.CS%bulkmixedlayer) .and. (CS%Kd /= CS%Kdml)) then
+    if ((.not.CS%physical_OBL_scheme) .and. (CS%Kd /= CS%Kd_tot_ml)) then
       ! This is a crude way to put in a diffusive boundary layer without an explicit boundary
       ! layer turbulence scheme.  It should not be used for any realistic ocean models.
       I_Hmix = 1.0 / (CS%Hmix + GV%H_subroundoff*GV%H_to_Z)
@@ -481,16 +466,16 @@ subroutine calculate_bkgnd_mixing(h, tv, N2_lay, Kd_lay, Kd_int, Kv_bkgnd, j, G,
         if (CS%Kd_via_Kdml_bug) then
           ! These two lines should update Kd_lay, not Kd_int.  They were correctly working on the
           ! same variables until MOM6 commit 7a818716 (PR#750), which was added on March 26, 2018.
-          if (depth_c <= CS%Hmix) then ; Kd_int(i,K) = CS%Kdml
+          if (depth_c <= CS%Hmix) then ; Kd_int(i,K) = CS%Kd_tot_ml
           elseif (depth_c >= 2.0*CS%Hmix) then ; Kd_int(i,K) = Kd_sfc(i)
           else
-            Kd_lay(i,k) = ((Kd_sfc(i) - CS%Kdml) * I_Hmix) * depth_c + (2.0*CS%Kdml - Kd_sfc(i))
+            Kd_lay(i,k) = ((Kd_sfc(i) - CS%Kd_tot_ml) * I_Hmix) * depth_c + (2.0*CS%Kd_tot_ml - Kd_sfc(i))
           endif
         else
-          if (depth_c <= CS%Hmix) then ; Kd_lay(i,k) = CS%Kdml
+          if (depth_c <= CS%Hmix) then ; Kd_lay(i,k) = CS%Kd_tot_ml
           elseif (depth_c >= 2.0*CS%Hmix) then ; Kd_lay(i,k) = Kd_sfc(i)
           else
-            Kd_lay(i,k) = ((Kd_sfc(i) - CS%Kdml) * I_Hmix) * depth_c + (2.0*CS%Kdml - Kd_sfc(i))
+            Kd_lay(i,k) = ((Kd_sfc(i) - CS%Kd_tot_ml) * I_Hmix) * depth_c + (2.0*CS%Kd_tot_ml - Kd_sfc(i))
           endif
         endif
 

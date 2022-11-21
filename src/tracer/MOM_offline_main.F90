@@ -4,7 +4,9 @@ module MOM_offline_main
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-use MOM_ALE,                  only : ALE_CS, ALE_main_offline, ALE_offline_inputs
+use MOM_ALE,                  only : ALE_CS, ALE_regrid, ALE_offline_inputs
+use MOM_ALE,                  only : pre_ALE_adjustments, ALE_update_regrid_weights
+use MOM_ALE,                  only : ALE_remap_tracers
 use MOM_checksums,            only : hchksum, uvchksum
 use MOM_coms,                 only : reproducing_sum
 use MOM_cpu_clock,            only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
@@ -118,7 +120,7 @@ type, public :: offline_transport_CS ; private
   real :: minimum_forcing_depth !< The smallest depth over which fluxes can be applied [H ~> m or kg m-2].
                             !! This is copied from diabatic_CS controlling how tracers follow freshwater fluxes
 
-  real :: Kd_max        !< Runtime parameter specifying the maximum value of vertical diffusivity
+  real :: Kd_max        !< Runtime parameter specifying the maximum value of vertical diffusivity [Z2 T-1 ~> m2 s-1]
   real :: min_residual  !< The minimum amount of total mass flux before exiting the main advection
                         !! routine [H L2 ~> m3 or kg]
   !>@{ Diagnostic manager IDs for some fields that may be of interest when doing offline transport
@@ -169,8 +171,6 @@ type, public :: offline_transport_CS ; private
   real, allocatable, dimension(:,:,:) :: Kd     !< Vertical diffusivity [Z2 T-1 ~> m2 s-1]
   real, allocatable, dimension(:,:,:) :: h_end  !< Thicknesses at the end of offline timestep [H ~> m or kg m-2]
 
-  real, allocatable, dimension(:,:) :: netMassIn  !< Freshwater fluxes into the ocean
-  real, allocatable, dimension(:,:) :: netMassOut !< Freshwater fluxes out of the ocean
   real, allocatable, dimension(:,:) :: mld        !< Mixed layer depths at thickness points [Z ~> m]
 
   ! Allocatable arrays to read in entire fields during initialization
@@ -229,7 +229,10 @@ subroutine offline_advection_ale(fluxes, Time_start, time_interval, G, GV, US, C
   ! Variables used to keep track of layer thicknesses at various points in the code
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: &
       h_new, &   ! Updated layer thicknesses [H ~> m or kg m-2]
+      h_post_remap, &   ! Layer thicknesses after remapping [H ~> m or kg m-2]
       h_vol      ! Layer volumes [H L2 ~> m3 or kg]
+  real :: dzRegrid(SZI_(G),SZJ_(G),SZK_(GV)+1) ! The change in grid interface positions due to regridding,
+                                               ! in the same units as thicknesses [H ~> m or kg m-2]
   integer :: niter, iter
   real    :: Inum_iter    ! The inverse of the number of iterations [nondim]
   character(len=256) :: mesg  ! The text of an error message
@@ -347,7 +350,23 @@ subroutine offline_advection_ale(fluxes, Time_start, time_interval, G, GV, US, C
         call MOM_tracer_chkinv(debug_msg, G, GV, h_new, CS%tracer_reg)
       endif
       call cpu_clock_begin(id_clock_ALE)
-      call ALE_main_offline(G, GV, h_new, CS%tv, CS%tracer_Reg, CS%ALE_CSp, CS%OBC, CS%dt_offline)
+
+      call ALE_update_regrid_weights(CS%dt_offline, CS%ALE_CSp)
+      call pre_ALE_adjustments(G, GV, US, h_new, CS%tv, CS%tracer_Reg, CS%ALE_CSp)
+      ! Uncomment this to adjust the target grids for diagnostics, if there have been thickness
+      ! adjustments, but the offline tracer code does not yet have the other corresponding calls
+      ! that would be needed to support remapping its output.
+      ! call diag_update_remap_grids(CS%diag, alt_h=h_new)
+
+      call ALE_regrid(G, GV, US, h_new, h_post_remap, dzRegrid, CS%tv, CS%ALE_CSp)
+
+      ! Remap all variables from the old grid h_new onto the new grid h_post_remap
+      call ALE_remap_tracers(CS%ALE_CSp, G, GV, h_new, h_post_remap, CS%tracer_Reg, &
+                             CS%debug, dt=CS%dt_offline)
+
+      do k=1,nz ; do j=js-1,je+1 ; do i=is-1,ie+1
+        h_new(i,j,k) = h_post_remap(i,j,k)
+      enddo ; enddo ; enddo
       call cpu_clock_end(id_clock_ALE)
 
       if (CS%debug) then
@@ -746,6 +765,7 @@ subroutine offline_fw_fluxes_into_ocean(G, GV, CS, fluxes, h, in_flux_optional)
   real, dimension(SZI_(G),SZJ_(G)), &
                     optional, intent(in)    :: in_flux_optional !< The total time-integrated amount
                                                   !! of tracer that leaves with freshwater
+                                                  !! [CU H ~> Conc m or Conc kg m-2]
 
   integer :: i, j, m
   real, dimension(SZI_(G),SZJ_(G)) :: negative_fw !< store all negative fluxes [H ~> m or kg m-2]
@@ -796,6 +816,7 @@ subroutine offline_fw_fluxes_out_ocean(G, GV, CS, fluxes, h, out_flux_optional)
   real, dimension(SZI_(G),SZJ_(G)), &
                     optional, intent(in)    :: out_flux_optional !< The total time-integrated amount
                                                   !! of tracer that leaves with freshwater
+                                                  !! [CU H ~> Conc m or Conc kg m-2]
 
   integer :: m
   logical :: update_h !< Flag for whether h should be updated
@@ -1444,8 +1465,6 @@ subroutine offline_transport_init(param_file, CS, diabatic_CSp, G, GV, US)
   allocate(CS%eatr(isd:ied,jsd:jed,nz), source=0.0)
   allocate(CS%ebtr(isd:ied,jsd:jed,nz), source=0.0)
   allocate(CS%h_end(isd:ied,jsd:jed,nz), source=0.0)
-  allocate(CS%netMassOut(G%isd:G%ied,G%jsd:G%jed), source=0.0)
-  allocate(CS%netMassIn(G%isd:G%ied,G%jsd:G%jed), source=0.0)
   allocate(CS%Kd(isd:ied,jsd:jed,nz+1), source=0.0)
   if (CS%read_mld) allocate(CS%mld(G%isd:G%ied,G%jsd:G%jed), source=0.0)
 
@@ -1518,8 +1537,6 @@ subroutine offline_transport_end(CS)
   deallocate(CS%eatr)
   deallocate(CS%ebtr)
   deallocate(CS%h_end)
-  deallocate(CS%netMassOut)
-  deallocate(CS%netMassIn)
   deallocate(CS%Kd)
   if (CS%read_mld) deallocate(CS%mld)
   if (CS%read_all_ts_uvh) then

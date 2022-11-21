@@ -1,50 +1,62 @@
-/*! \page ALE_Timestep ALE Timestep
+/*! \page ALE_Timestep Vertical Lagrangian method in pictures
 
-\section section_ALE_remap Explanation of ALE remapping
+\section section_ALE_remap Graphical explanation of vertical Lagrangian method
 
-The Arbitrary Lagrangian-Eulerian (ALE) remapping is not a timestep in the traditional
-sense, but rather an operation performed to bring the vertical coordinate back to the target
-specification. This remapping can be less frequent than the momentum or
-thermodynamic timesteps, but must be done before the layer interfaces become entangled
-with each other.
+Vertical Lagrangian regridding/remapping is not a timestep method in
+the traditional sense. Rather, it is a sequence of operations
+performed to bring the vertical grid back to a target specification
+(the regrid step), and then to remap the ocean state onto this new
+grid (the remap step). This regrid/remap process can be chosen to be
+less frequent than the momentum or thermodynamic timesteps.  We are
+motivated to choose less frequent regrid/remap steps to save
+computational time and to reduce spurious mixing that occurs due to
+truncation errors in the remap step. However, there is a downside to
+delaying the regrid/remap.  Namely, if delayed too long then the layer
+interfaces can become entangled (i.e., no longer monotonic in the
+vertical), which is a common problem with purely Lagrangian methods.
+On this page we illustrate the regrid/remap steps by making use of
+Figure 3 from Griffies, Adcroft, and Hallberg (2020)
+\cite Griffies_Adcroft_Hallberg2020.
 
-Assuming the target vertical grid is level \f$z\f$-surfaces, the initial state is
-shown on the left in the following figure:
+For purposes of this example, assume that the target vertical grid is
+comprised of geopotential \f$z\f$-surfaces, with the initial ocean
+state (e.g., the temperature field) shown on the left in the following
+figure.
 
-\image html remapping1.png "The initial state with level surface (left) and the perturbed state after a wave has come through (right)."
-\image latex remapping1.png "The initial state with level surface (left) and the perturbed state after a wave has come through (right)."
+\image html remapping1.png "Initial state with level surface (left) and perturbed state after a wave has come through (right)"  width=60%
+\image latex remapping1.png "Initial state with level surface (left) and perturbed state after a wave has come through (right)" width=0.6\textwidth
 
-Some time later, a wave has perturbed the surfaces which move with the
-fluid and it has been determined that a remapping operation is needed. The
-target vertical grid is still level \f$z\f$-surfaces, so this new target
-grid is shown overlaid on the left as regrid:
+Some time later, assume a wave has perturbed the ocean state. During
+the Lagrangian portion of the algorithm, the coordinate surfaces move
+vertically with the ocean fluid according to \f$\dot{r}=0\f$.  Assume
+now that the algorithm has determined that a regrid step is needed,
+with the target vertical grid still geopotential \f$z\f$-surfaces, so
+this new target grid is shown overlaid on the left as a regrid.
 
-\image html remapping2.png "The regrid operation (left) and the remap operation (right)."
-\image latex remapping2.png "The regrid operation (left) and the remap operation (right)."
+\image html remapping2.png "The regrid operation (left) and the remap operation (right)" width=60%
+\image latex remapping2.png "The regrid operation (left) and the remap operation (right)" width=0.6\textwidth
 
-The complex part of the operation is remapping the wavy field onto the new grid as
-shown on the right and again in the final frame after the old deformed coordinate
-system has been deleted:
+The most complex part of the method involves remapping the wavy ocean
+field onto the new grid.  This step also incurs truncation errors that
+are a function of the vertical grid spacing and the numerical method
+used to perform the remapping.  We illustrate this remap step in the
+figure above, as well as in the frame below shown after the old
+deformed coordinate grid has been deleted:
 
-\image html remapping3.png "The final state after remapping."
-\image latex remapping3.png "The final state after remapping."
+\image html remapping3.png "The final state after regriddinig and remapping" width=30%
+\image latex remapping3.png "The final state after regridding and remapping" width=0.3\textwidth
 
-Mathematically, the new layer thicknesses, \f$h_k\f$, are computed and then populated
-with the new velocities and tracers:
-
-\f[
-   h_k^{\mbox{new}} = \nabla_k z_{\mbox{coord}}
-\f]
-\f[
-  \sum h_k^{\mbox{new}} = \sum h_k^{\mbox{old}}
-\f]
-\f[
-  \vec{u}_k^{\mbox{new}} = \frac{1}{h_k} \int_{z_{k + \frac{1}{2}}}^{z_{k +
-  \frac{1}{2}} + h_k} \vec{u}^{\mbox{old}}(z')dz'
-\f]
-\f[
-  \theta^{\mbox{new}} = \frac{1}{h_k} \int_{z_{k + \frac{1}{2}}}^{z_{k +
-  \frac{1}{2}} + h_k} \theta^{\mbox{old}}(z')dz'
-\f]
+The new layer thicknesses, \f$h_k\f$, are computed and then the layers
+are populated with the new velocities and tracers
+\f{align}
+  \sum h_k^{\scriptstyle{\mathrm{new}}} &= \sum h_k^{\scriptstyle{\mathrm{old}}}
+\\
+  \mathbf{u}_k^{\scriptstyle{\mathrm{new}}}
+  &= \frac{1}{h_k}
+  \int_{z_{k + 1/2}}^{z_{k + 1/2} + h_k} \mathbf{u}^{\scriptstyle{\mathrm{old}}}(z') \, \mathrm{d}z'
+\\
+  \theta_k^{\scriptstyle{\mathrm{new}}}  &= \frac{1}{h_k}
+  \int_{z_{k + 1/2}}^{z_{k + 1/2} + h_k} \theta^{\scriptstyle{\mathrm{old}}}(z') \, \mathrm{d}z'
+\f}
 
 */

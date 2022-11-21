@@ -19,7 +19,7 @@ use fms2_io_mod,          only : is_dimension_unlimited, register_axis, unlimite
 use fms2_io_mod,          only : get_global_io_domain_indices
 use fms_io_utils_mod,     only : fms2_file_exist => file_exists
 
-use fms_mod,              only : write_version_number, open_namelist_file, check_nml_error
+use fms_mod,              only : write_version_number, check_nml_error
 use fms_io_mod,           only : file_exist, field_exist, field_size, read_data
 use fms_io_mod,           only : fms_io_exit, get_filename_appendix
 use mpp_domains_mod,      only : mpp_get_compute_domain, mpp_get_global_domain
@@ -31,6 +31,8 @@ use mpp_io_mod,           only : mpp_get_fields, mpp_fieldtype=>fieldtype
 use mpp_io_mod,           only : mpp_get_info, mpp_get_times
 use mpp_io_mod,           only : mpp_io_init
 use mpp_mod,              only : stdout_if_root=>stdout
+use mpp_mod,              only : mpp_pe, mpp_root_pe, mpp_npes
+use mpp_mod,              only : mpp_get_current_pelist_name
 ! These are encoding constants.
 use mpp_io_mod,           only : APPEND_FILE=>MPP_APPEND, WRITEONLY_FILE=>MPP_WRONLY
 use mpp_io_mod,           only : OVERWRITE_FILE=>MPP_OVERWR, READONLY_FILE=>MPP_RDONLY
@@ -205,10 +207,20 @@ end subroutine close_file_type
 
 !> closes a file.  If the unit does not point to an open file,
 !! close_file_unit simply returns without doing anything.
-subroutine close_file_unit(unit)
-  integer, intent(inout) :: unit   !< The I/O unit for the file to be closed
+subroutine close_file_unit(iounit)
+  integer, intent(inout) :: iounit   !< The I/O unit for the file to be closed
 
-  call mpp_close(unit)
+  logical :: unit_is_open
+
+  ! NOTE: Files opened by `mpp_open` must be closed by `mpp_close`.  Otherwise,
+  ! an error will occur during `fms_io_exit`.
+  !
+  ! Since there is no way to check if `fms_io_init` was called, we are forced
+  ! to visually confirm that the input unit was not created by `mpp_open`.
+  !
+  ! After `mpp_open` has been removed, this message can be deleted.
+  inquire(iounit, opened=unit_is_open)
+  if (unit_is_open) close(iounit)
 end subroutine close_file_unit
 
 !> Ensure that the output stream associated with a file handle is fully sent to disk.
@@ -242,10 +254,30 @@ subroutine io_infra_end()
 end subroutine io_infra_end
 
 !> Open a single namelist file that is potentially readable by all PEs.
-function MOM_namelist_file(file) result(unit)
-  character(len=*), optional, intent(in) :: file !< The file to open, by default "input.nml".
-  integer                                :: unit !< The opened unit number of the namelist file
-  unit = open_namelist_file(file)
+function MOM_namelist_file(filepath) result(iounit)
+  character(len=*), optional, intent(in) :: filepath
+    !< The file to open, by default "input.nml".
+  integer                                :: iounit
+    !< The opened unit number of the namelist file
+
+  character(len=:), allocatable :: nmlpath
+    ! Namelist path
+  character(len=:), allocatable :: nmlpath_pe
+    ! Hypothetical namelist path exclusive to the current PE list
+
+  if (present(filepath)) then
+    nmlpath = trim(filepath)
+  else
+    ! FMS1 first checks for a namelist unique to the PE list, `input_{}.nml`.
+    ! If not found, it defaults to `input.nml`.
+    nmlpath_pe = 'input_' // trim(mpp_get_current_pelist_name()) // '.nml'
+    if (file_exists(nmlpath_pe)) then
+      nmlpath = nmlpath_pe
+    else
+      nmlpath = 'input.nml'
+    endif
+  endif
+  call open_ASCII_file(iounit, nmlpath, action=READONLY_FILE)
 end function MOM_namelist_file
 
 !> Checks the iostat argument that is returned after reading a namelist variable and writes a
@@ -403,9 +435,87 @@ subroutine open_ASCII_file(unit, file, action, threading, fileset)
                                                   !! to threading=MULTIPLE write to the same file (SINGLE_FILE)
                                                   !! or to one file per PE (MULTIPLE, the default).
 
-  call mpp_open(unit, file, action=action, form=ASCII_FILE, threading=threading, fileset=fileset, &
-                  nohdrs=.true.)
+  integer :: action_flag
+  integer :: threading_flag
+  integer :: fileset_flag
+  logical :: exists
+  logical :: is_open
+  character(len=6) :: action_arg, position_arg
+  character(len=:), allocatable :: filename
 
+  ! NOTE: This function is written to emulate the original behavior of mpp_open
+  !   from the FMS1 library, on which the MOM API is still based.  Much of this
+  !   can be removed if we choose to drop this compatibility, but for now we
+  !   try to retain as much as possible.
+
+  ! NOTE: Default FMS1 I/O settings are summarized below.
+  !
+  !   access: Fortran and mpp_open default to SEQUENTIAL.
+  !   form:   The Fortran and mpp_open default (for MPP_ASCII) is FORMATTED.
+  !   recl:   mpp_open uses Fortran defaults when unset, so can be ignored.
+  !   ios:    FMS1 allowed this to be caught, but we do not support it.
+  !   action/position:  In mpp_open, these are inferred from `action`.
+  !
+  !     MOM flag        FMS1 flag     action    position
+  !     --------        --------      ------    --------
+  !     READONLY_FILE   MPP_RDONLY    READ      REWIND
+  !     WRITEONLY_FILE  MPP_WRONLY    WRITE     REWIND
+  !     OVERWRITE_FILE  MPP_OVERWR    WRITE     REWIND
+  !     APPEND_FILE     MPP_APPEND    WRITE     APPEND
+  !
+  ! From this, we can omit `access`, `form`, and `recl`, and can construct
+  !   `action` and `position` from the input arguments.
+
+  ! I/O configuration
+
+  action_flag = WRITEONLY_FILE
+  if (present(action)) action_flag = action
+
+  action_arg = 'write'
+  if (action_flag == READONLY_FILE) action_arg = 'read'
+
+  position_arg = 'rewind'
+  if (action_flag == APPEND_FILE) position_arg = 'append'
+
+  ! Threading configuration
+
+  threading_flag = SINGLE_FILE
+  if (present(threading)) threading_flag = threading
+
+  fileset_flag = MULTIPLE
+  if (present(fileset)) fileset_flag = fileset
+
+  ! Force fileset to be consistent with threading (as in FMS1)
+  if (threading_flag == SINGLE_FILE) fileset_flag = SINGLE_FILE
+
+  ! Construct the distributed filename, if needed
+  filename = file
+  if (fileset_flag == MULTIPLE) then
+    if (mpp_npes() > 10000) then
+      write(filename, '(a,".",i6.6)') trim(filename), mpp_pe() - mpp_root_pe()
+    else
+      write(filename, '(a,".",i4.4)') trim(filename), mpp_pe() - mpp_root_pe()
+    endif
+  endif
+
+  inquire(file=filename, exist=exists)
+  if (exists .and. action_flag == WRITEONLY_FILE) &
+    call MOM_error(WARNING, 'open_ASCII_file: File ' // trim(filename) // &
+                            ' opened WRITEONLY already exists!')
+
+  open(newunit=unit, file=filename, action=trim(action_arg), &
+       position=trim(position_arg))
+
+  ! This checks if open() failed but did not raise a runtime error.
+  inquire(unit, opened=is_open)
+  if (.not. is_open) &
+    call MOM_error(FATAL, 'open_ASCII_file: File ' // trim(filename) // &
+                          ' failed to open.')
+
+  ! NOTE: There are two possible mpp_write_meta functions in FMS1:
+  ! - call mpp_write_meta( unit, 'filename', cval=mpp_file(unit)%name)
+  ! - call mpp_write_meta( unit, 'NumFilesInSet', ival=nfiles)
+  ! I'm not convinced we actually want these, but note them here in case.
 end subroutine open_ASCII_file
 
 
