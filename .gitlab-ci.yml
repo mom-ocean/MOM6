@@ -26,7 +26,7 @@ p:merge:
 
 # Setup the persistent JOB_DIR for all subsequent stages
 #
-# This basically setups up a complete tree much as a user would in their workflow 
+# This basically setups up a complete tree much as a user would in their workflow
 p:clone:
   stage: setup
   tags:
@@ -181,11 +181,11 @@ actions:gnu:
     - echo -e "\e[0Ksection_start:`date +%s`:compile[collapsed=true]\r\e[0KCompiling executables"
     - cd .testing
     - module unload PrgEnv-pgi PrgEnv-intel PrgEnv-gnu darshan ; module load PrgEnv-gnu ; module unload netcdf gcc ; module load gcc/7.3.0 cray-hdf5 cray-netcdf
-    - make work/local-env
     - make -s -j
     - echo -e "\e[0Ksection_end:`date +%s`:compile\r\e[0K"
-    - (echo '#!/bin/bash';echo '. ./work/local-env/bin/activate';echo 'make MPIRUN="srun -mblock --exclusive" test -s -j') > job.sh
-    - sbatch --clusters=c3,c4 --nodes=5 --time=0:05:00 --account=gfdl_o --qos=debug --job-name=MOM6.gnu.testing --output=log.$CI_JOB_ID --wait job.sh && make test || ( cat log.$CI_JOB_ID ; exit 911 )
+    - (echo '#!/bin/bash';echo 'make MPIRUN="srun -mblock --exclusive" test -s -j') > job.sh
+    - sbatch --clusters=c3,c4 --nodes=5 --time=0:05:00 --account=gfdl_o --qos=debug --job-name=MOM6.gnu.testing --output=log.$CI_JOB_ID --wait job.sh || ( cat log.$CI_JOB_ID ; exit 911 )
+    - make test.summary
 
 actions:intel:
   stage: tests
@@ -200,11 +200,11 @@ actions:intel:
     - echo -e "\e[0Ksection_start:`date +%s`:compile[collapsed=true]\r\e[0KCompiling executables"
     - cd .testing
     - module unload PrgEnv-pgi PrgEnv-intel PrgEnv-gnu darshan; module load PrgEnv-intel; module unload netcdf intel; module load intel/18.0.6.288 cray-hdf5 cray-netcdf
-    - make work/local-env
     - make -s -j
     - echo -e "\e[0Ksection_end:`date +%s`:compile\r\e[0K"
-    - (echo '#!/bin/bash';echo '. ./work/local-env/bin/activate';echo 'make MPIRUN="srun -mblock --exclusive" test -s -j') > job.sh
-    - sbatch --clusters=c3,c4 --nodes=5 --time=0:05:00 --account=gfdl_o --qos=debug --job-name=MOM6.intel.testing --output=log.$CI_JOB_ID --wait job.sh && make test || ( cat log.$CI_JOB_ID ; exit 911 )
+    - (echo '#!/bin/bash';echo 'make MPIRUN="srun -mblock --exclusive" test -s -j') > job.sh
+    - sbatch --clusters=c3,c4 --nodes=5 --time=0:05:00 --account=gfdl_o --qos=debug --job-name=MOM6.intel.testing --output=log.$CI_JOB_ID --wait job.sh || ( cat log.$CI_JOB_ID ; exit 911 )
+    - make test.summary
 
 # Tests
 #
