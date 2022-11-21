@@ -61,6 +61,7 @@ type, public :: mixedlayer_restrat_CS ; private
   type(diag_ctrl), pointer :: diag !< A structure that is used to regulate the
                                    !! timing of diagnostic output.
   logical :: use_stanley_ml        !< If true, use the Stanley parameterization of SGS T variance
+  real    :: omega                 !< The Earth's rotation rate [T-1 ~> s-1].
 
   real, dimension(:,:), allocatable :: &
          MLD_filtered, &           !< Time-filtered MLD [H ~> m or kg m-2]
@@ -160,6 +161,7 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, forces, dt, MLD_in, Var
   real :: h_min           ! The minimum layer thickness [H ~> m or kg m-2].  h_min could be 0.
   real :: h_neglect       ! tiny thickness usually lost in roundoff so can be neglected [H ~> m or kg m-2]
   real :: dz_neglect      ! A tiny thickness that is usually lost in roundoff so can be neglected [Z ~> m]
+  real :: ustar_min       ! A minimum value of ustar to avoid numerical problems [Z T-1 ~> m s-1]
   real :: I4dt            ! 1/(4 dt) [T-1 ~> s-1]
   real :: Ihtot,Ihtot_slow! Inverses of the total mixed layer thickness [H-1 ~> m-1 or m2 kg-1]
   real :: a(SZK_(GV))     ! A non-dimensional value relating the overall flux
@@ -307,6 +309,7 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, forces, dt, MLD_in, Var
   g_Rho0 = GV%g_Earth / GV%Rho0
   h_neglect = GV%H_subroundoff
   dz_neglect = GV%H_subroundoff*GV%H_to_Z
+  ustar_min = 2e-4 * CS%omega * US%T_to_S * (GV%Angstrom_Z + dz_neglect)
   if (CS%front_length>0.) then
     res_upscale = .true.
     I_LFront = 1. / CS%front_length
@@ -378,7 +381,7 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, forces, dt, MLD_in, Var
 !   U - Component
   !$OMP do
   do j=js,je ; do I=is-1,ie
-    u_star = 0.5*(forces%ustar(i,j) + forces%ustar(i+1,j))
+    u_star = max(ustar_min, 0.5*(forces%ustar(i,j) + forces%ustar(i+1,j)))
     absf = 0.5*(abs(G%CoriolisBu(I,J-1)) + abs(G%CoriolisBu(I,J)))
     ! If needed, res_scaling_fac = min( ds, L_d ) / l_f
     if (res_upscale) res_scaling_fac = &
@@ -453,7 +456,7 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, forces, dt, MLD_in, Var
 !  V- component
   !$OMP do
   do J=js-1,je ; do i=is,ie
-    u_star = 0.5*(forces%ustar(i,j) + forces%ustar(i,j+1))
+    u_star = max(ustar_min, 0.5*(forces%ustar(i,j) + forces%ustar(i,j+1)))
     absf = 0.5*(abs(G%CoriolisBu(I-1,J)) + abs(G%CoriolisBu(I,J)))
     ! If needed, res_scaling_fac = min( ds, L_d ) / l_f
     if (res_upscale) res_scaling_fac = &
@@ -627,6 +630,7 @@ subroutine mixedlayer_restrat_BML(h, uhtr, vhtr, tv, forces, dt, G, GV, US, CS)
   real :: h_min           ! The minimum layer thickness [H ~> m or kg m-2].  h_min could be 0.
   real :: h_neglect       ! tiny thickness usually lost in roundoff and can be neglected [H ~> m or kg m-2]
   real :: dz_neglect      ! tiny thickness that usually lost in roundoff and can be neglected [Z ~> m]
+  real :: ustar_min       ! A minimum value of ustar to avoid numerical problems [Z T-1 ~> m s-1]
   real :: I4dt            ! 1/(4 dt) [T-1 ~> s-1]
   real :: I2htot          ! Twice the total mixed layer thickness at velocity points [H ~> m or kg m-2]
   real :: z_topx2         ! depth of the top of a layer at velocity points [H ~> m or kg m-2]
@@ -662,6 +666,7 @@ subroutine mixedlayer_restrat_BML(h, uhtr, vhtr, tv, forces, dt, G, GV, US, CS)
   use_EOS    = associated(tv%eqn_of_state)
   h_neglect  = GV%H_subroundoff
   dz_neglect = GV%H_subroundoff*GV%H_to_Z
+  ustar_min = 2e-4 * CS%omega * US%T_to_S * (GV%Angstrom_Z + dz_neglect)
 
   if (.not.use_EOS) call MOM_error(FATAL, "MOM_mixedlayer_restrat: "// &
          "An equation of state must be used with this module.")
@@ -705,7 +710,7 @@ subroutine mixedlayer_restrat_BML(h, uhtr, vhtr, tv, forces, dt, G, GV, US, CS)
   do j=js,je ; do I=is-1,ie
     h_vel = 0.5*(htot(i,j) + htot(i+1,j)) * GV%H_to_Z
 
-    u_star = 0.5*(forces%ustar(i,j) + forces%ustar(i+1,j))
+    u_star = max(ustar_min, 0.5*(forces%ustar(i,j) + forces%ustar(i+1,j)))
     absf = 0.5*(abs(G%CoriolisBu(I,J-1)) + abs(G%CoriolisBu(I,J)))
     ! peak ML visc: u_star * von_Karman * (h_ml*u_star)/(absf*h_ml + 4.0*u_star)
     ! momentum mixing rate: pi^2*visc/h_ml^2
@@ -751,7 +756,7 @@ subroutine mixedlayer_restrat_BML(h, uhtr, vhtr, tv, forces, dt, G, GV, US, CS)
   do J=js-1,je ; do i=is,ie
     h_vel = 0.5*(htot(i,j) + htot(i,j+1)) * GV%H_to_Z
 
-    u_star = 0.5*(forces%ustar(i,j) + forces%ustar(i,j+1))
+    u_star = max(ustar_min, 0.5*(forces%ustar(i,j) + forces%ustar(i,j+1)))
     absf = 0.5*(abs(G%CoriolisBu(I-1,J)) + abs(G%CoriolisBu(I,J)))
     ! peak ML visc: u_star * von_Karman * (h_ml*u_star)/(absf*h_ml + 4.0*u_star)
     ! momentum mixing rate: pi^2*visc/h_ml^2
@@ -926,6 +931,10 @@ logical function mixedlayer_restrat_init(Time, G, GV, US, param_file, diag, CS, 
              "used in the MLE scheme. This simply multiplies MLD wherever used.",&
              units="nondim", default=1.0)
   endif
+  call get_param(param_file, mdl, "OMEGA", CS%omega, &
+       "The rotation rate of the earth.", units="s-1", &
+       default=7.2921e-5, scale=US%T_to_s)
+
 
   CS%diag => diag
 
