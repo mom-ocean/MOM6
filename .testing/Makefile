@@ -522,7 +522,7 @@ $(foreach c,$(CONFIGS),$(eval $(call CONFIG_DIM_RULE,$(c))))
 # NOTE: This only support tc4, but can be generalized over all tests.
 .PHONY: preproc
 preproc: tc4/Makefile
-	cd tc4 && make
+	cd tc4 && $(MAKE) LAUNCHER="$(MPIRUN)"
 
 tc4/Makefile: tc4/configure tc4/Makefile.in
 	cd $(@D) && ./configure || (cat config.log && false)
