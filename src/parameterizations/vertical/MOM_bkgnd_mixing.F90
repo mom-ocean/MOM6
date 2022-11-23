@@ -57,11 +57,11 @@ type, public :: bkgnd_mixing_cs ; private
   real    :: omega                  !< The Earth's rotation rate [T-1 ~> s-1].
   real    :: N0_2Omega              !< ratio of the typical Buoyancy frequency to
                                     !! twice the Earth's rotation period, used with the
-                                    !! Henyey scaling from the mixing
+                                    !! Henyey scaling from the mixing [nondim]
   real    :: prandtl_bkgnd          !< Turbulent Prandtl number used to convert
-                                    !! vertical background diffusivity into viscosity
+                                    !! vertical background diffusivity into viscosity [nondim]
   real    :: Kd_tanh_lat_scale      !< A nondimensional scaling for the range of
-                                    !! diffusivities with Kd_tanh_lat_fn. Valid values
+                                    !! diffusivities with Kd_tanh_lat_fn [nondim]. Valid values
                                     !! are in the range of -2 to 2; 0.4 reproduces CM2M.
   real    :: Kd_tot_ml              !< The mixed layer diapycnal diffusivity [Z2 T-1 ~> m2 s-1]
                                     !! when no other physically based mixed layer turbulence
@@ -151,10 +151,12 @@ subroutine bkgnd_mixing_init(Time, G, GV, US, param_file, diag, CS, physical_OBL
   CS%physical_OBL_scheme = physical_OBL_scheme
   if (CS%physical_OBL_scheme) then
     ! Check that Kdml is not set when using bulk mixed layer
-    call get_param(param_file, mdl, "KDML", CS%Kd_tot_ml, default=-1., do_not_log=.true.)
+    call get_param(param_file, mdl, "KDML", CS%Kd_tot_ml, &
+                   units="m2 s-1", default=-1., scale=US%m2_s_to_Z2_T, do_not_log=.true.)
     if (CS%Kd_tot_ml>0.) call MOM_error(FATAL, &
                  "bkgnd_mixing_init: KDML is a depricated parameter that should not be used.")
-    call get_param(param_file, mdl, "KD_ML_TOT", CS%Kd_tot_ml, default=-1., do_not_log=.true.)
+    call get_param(param_file, mdl, "KD_ML_TOT", CS%Kd_tot_ml, &
+                   units="m2 s-1", default=-1., scale=US%m2_s_to_Z2_T, do_not_log=.true.)
     if (CS%Kd_tot_ml>0.) call MOM_error(FATAL, &
                  "bkgnd_mixing_init: KD_ML_TOT cannot be set when using a physically based ocean "//&
                  "boundary layer mixing parameterization.")
@@ -338,8 +340,8 @@ subroutine calculate_bkgnd_mixing(h, tv, N2_lay, Kd_lay, Kd_int, Kv_bkgnd, j, G,
   real :: I_2Omega   !< 1/(2 Omega) [T ~> s]
   real :: N_2Omega   !  The ratio of the stratification to the Earth's rotation rate [nondim]
   real :: N02_N2     !  The ratio a reference stratification to the actual stratification [nondim]
-  real :: I_x30      !< 2/acos(2) = 1/(sin(30 deg) * acosh(1/sin(30 deg)))
-  real :: deg_to_rad !< factor converting degrees to radians, pi/180.
+  real :: I_x30      !< 2/acos(2) = 1/(sin(30 deg) * acosh(1/sin(30 deg))) [nondim]
+  real :: deg_to_rad !< factor converting degrees to radians [radians degree-1], pi/180.
   real :: abs_sinlat !< absolute value of sine of latitude [nondim]
   real :: min_sinlat ! The minimum value of the sine of latitude [nondim]
   real :: bckgrnd_vdc_psin !< PSI diffusivity in northern hemisphere [Z2 T-1 ~> m2 s-1]
@@ -455,7 +457,7 @@ subroutine calculate_bkgnd_mixing(h, tv, N2_lay, Kd_lay, Kd_int, Kv_bkgnd, j, G,
       enddo
     endif
 
-    ! Now set background diffusivies based on these surface values, possibly with vertical structure.
+    ! Now set background diffusivities based on these surface values, possibly with vertical structure.
     if ((.not.CS%physical_OBL_scheme) .and. (CS%Kd /= CS%Kd_tot_ml)) then
       ! This is a crude way to put in a diffusive boundary layer without an explicit boundary
       ! layer turbulence scheme.  It should not be used for any realistic ocean models.
@@ -527,7 +529,7 @@ subroutine check_bkgnd_scheme(CS, str)
 
 end subroutine
 
-!> Clear pointers and dealocate memory
+!> Clear pointers and deallocate memory
 subroutine bkgnd_mixing_end(CS)
   type(bkgnd_mixing_cs), pointer :: CS !< Control structure for this module that
                                        !! will be deallocated in this subroutine

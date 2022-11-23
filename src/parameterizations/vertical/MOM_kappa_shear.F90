@@ -356,8 +356,8 @@ subroutine Calc_kappa_shear_vertex(u_in, v_in, h, T_in, S_in, tv, p_surf, kappa_
   real, dimension(SZIB_(G),SZJB_(G),SZK_(GV)+1), &
                            intent(inout) :: kv_io  !< The vertical viscosity at each interface [Z2 T-1 ~> m2 s-1].
                                                    !! The previous value is used to initialize kappa
-                                                   !! in the vertex columes as Kappa = Kv/Prandtl
-                                                   !! to accelerate the iteration toward covergence.
+                                                   !! in the vertex columns as Kappa = Kv/Prandtl
+                                                   !! to accelerate the iteration toward convergence.
   real,                    intent(in)    :: dt     !< Time increment [T ~> s].
   type(Kappa_shear_CS),    pointer       :: CS     !< The control structure returned by a previous
                                                    !! call to kappa_shear_init.
@@ -650,7 +650,7 @@ subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, dz, &
     S2, &       ! The squared shear at an interface [T-2 ~> s-2].
     a1, &       ! a1 is the coupling between adjacent interfaces in the TKE,
                 ! velocity, and density equations [Z s-1 ~> m s-1] or [Z ~> m]
-    c1, &       ! c1 is used in the tridiagonal (and similar) solvers.
+    c1, &       ! c1 is used in the tridiagonal (and similar) solvers [nondim].
     k_src, &    ! The shear-dependent source term in the kappa equation [T-1 ~> s-1].
     kappa_src, & ! The shear-dependent source term in the kappa equation [T-1 ~> s-1].
     kappa_out, & ! The kappa that results from the kappa equation [Z2 T-1 ~> m2 s-1].
@@ -675,9 +675,9 @@ subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, dz, &
                   ! sources from the elliptic term [T-1 ~> s-1].
 
   real :: dist_from_bot ! The distance from the bottom surface [Z ~> m].
-  real :: b1            ! The inverse of the pivot in the tridiagonal equations.
-  real :: bd1           ! A term in the denominator of b1.
-  real :: d1            ! 1 - c1 in the tridiagonal equations.
+  real :: b1            ! The inverse of the pivot in the tridiagonal equations [Z-1 ~> m-1].
+  real :: bd1           ! A term in the denominator of b1 [Z ~> m].
+  real :: d1            ! 1 - c1 in the tridiagonal equations [nondim]
   real :: gR0           ! A conversion factor from Z to pressure, given by Rho_0 times g
                         ! [R L2 T-2 Z-1 ~> kg m-2 s-2].
   real :: g_R0          ! g_R0 is a rescaled version of g/Rho [Z R-1 T-2 ~> m4 kg-1 s-2].
@@ -1060,10 +1060,13 @@ subroutine calculate_projected_state(kappa, u0, v0, T0, S0, dt, nz, dz, I_dz_int
                                               !! diffusivity.
 
   ! Local variables
-  real, dimension(nz+1) :: c1
-  real :: L2_to_Z2       ! A conversion factor from horizontal length units to vertical depth
-                         ! units squared [Z2 s2 T-2 m-2 ~> 1].
-  real :: a_a, a_b, b1, d1, bd1, b1nz_0
+  real, dimension(nz+1) :: c1 ! A tridiagonal variable [nondim]
+  real :: L2_to_Z2   ! A conversion factor from horizontal length units to vertical depth
+                     ! units squared [Z2 s2 T-2 m-2 ~> 1].
+  real :: a_a, a_b   ! Tridiagonal coupling coefficients [Z ~> m]
+  real :: b1, b1nz_0 ! Tridiagonal variables [Z-1 ~> m-1]
+  real :: bd1        ! A term in the denominator of b1 [Z ~> m]
+  real :: d1         ! A tridiagonal variable [nondim]
   integer :: k, ks, ke
 
   ks = 1 ; ke = nz
@@ -1166,7 +1169,7 @@ subroutine find_kappa_tke(N2, S2, kappa_in, Idz, dz_Int, I_L2_bdry, f2, &
   real, dimension(nz+1), intent(in)    :: kappa_in  !< The initial guess at the diffusivity
                                               !! [Z2 T-1 ~> m2 s-1].
   real, dimension(nz+1), intent(in)    :: dz_Int !< The thicknesses associated with interfaces
-                                              !! [Z-1 ~> m-1].
+                                              !! [Z ~> m].
   real, dimension(nz+1), intent(in)    :: I_L2_bdry !< The inverse of the squared distance to
                                               !! boundaries [Z-2 ~> m-2].
   real, dimension(nz),   intent(in)    :: Idz !< The inverse grid spacing of layers [Z-1 ~> m-1].
@@ -1203,7 +1206,7 @@ subroutine find_kappa_tke(N2, S2, kappa_in, Idz, dz_Int, I_L2_bdry, f2, &
     dQmdK, &      ! With Newton's method the change in dQ(k-1) due to dK(k) [T ~> s].
     dKdQ, &       ! With Newton's method the change in dK(k) due to dQ(k) [T-1 ~> s-1].
     e1            ! The fractional change in a layer TKE due to a change in the
-                  ! TKE of the layer above when all the kappas below are 0.
+                  ! TKE of the layer above when all the kappas below are 0 [nondim].
                   ! e1 is nondimensional, and 0 < e1 < 1.
   real :: tke_src       ! The net source of TKE due to mixing against the shear
                         ! and stratification [Z2 T-3 ~> m2 s-3].  (For convenience,
@@ -1213,13 +1216,13 @@ subroutine find_kappa_tke(N2, S2, kappa_in, Idz, dz_Int, I_L2_bdry, f2, &
   real :: bK            ! The inverse of the pivot in the tridiagonal equations [Z-1 ~> m-1].
   real :: bQd1          ! A term in the denominator of bQ [Z T-1 ~> m s-1].
   real :: bKd1          ! A term in the denominator of bK [Z ~> m].
-  real :: cQcomp, cKcomp ! 1 - cQ or 1 - cK in the tridiagonal equations.
+  real :: cQcomp, cKcomp ! 1 - cQ or 1 - cK in the tridiagonal equations [nondim].
   real :: c_s2          !   The coefficient for the decay of TKE due to
-                        ! shear (i.e. proportional to |S|*tke), nondimensional.
+                        ! shear (i.e. proportional to |S|*tke) [nondim].
   real :: c_n2          !   The coefficient for the decay of TKE due to
                         ! stratification (i.e. proportional to N*tke) [nondim].
   real :: Ri_crit       !   The critical shear Richardson number for shear-
-                        ! driven mixing. The theoretical value is 0.25.
+                        ! driven mixing [nondim]. The theoretical value is 0.25.
   real :: q0            !   The background level of TKE [Z2 T-2 ~> m2 s-2].
   real :: Ilambda2      ! 1.0 / CS%lambda**2 [nondim]
   real :: TKE_min       !   The minimum value of shear-driven TKE that can be
@@ -1227,31 +1230,33 @@ subroutine find_kappa_tke(N2, S2, kappa_in, Idz, dz_Int, I_L2_bdry, f2, &
   real :: kappa0        ! The background diapycnal diffusivity [Z2 T-1 ~> m2 s-1].
   real :: kappa_trunc   ! Diffusivities smaller than this are rounded to 0 [Z2 T-1 ~> m2 s-1].
 
-  real :: eden1, eden2, I_eden, ome  ! Variables used in calculating e1.
+  real :: eden1, eden2  ! Variables used in calculating e1 [Z-1 ~> m-1]
+  real :: I_eden        ! The inverse of the denominator in e1 [Z ~> m]
+  real :: ome           ! Variables used in calculating e1 [nondim]
   real :: diffusive_src ! The diffusive source in the kappa equation [Z T-1 ~> m s-1].
   real :: chg_by_k0     ! The value of k_src that leads to an increase of
                         ! kappa_0 if only the diffusive term is a sink [T-1 ~> s-1].
 
   real :: kappa_mean    ! A mean value of kappa [Z2 T-1 ~> m2 s-1].
   real :: Newton_test   ! The value of relative error that will cause the next
-                        ! iteration to use Newton's method.
+                        ! iteration to use Newton's method [nondim].
   ! Temporary variables used in the Newton's method iterations.
-  real :: decay_term_k  ! The decay term in the diffusivity equation
+  real :: decay_term_k  ! The decay term in the diffusivity equation [Z-1 ~> m-1]
   real :: decay_term_Q  ! The decay term in the TKE equation - proportional to [T-1 ~> s-1]
   real :: I_Q           ! The inverse of TKE [T2 Z-2 ~> s2 m-2]
-  real :: kap_src
+  real :: kap_src       ! A source term in the kappa equation [Z T-1 ~> m s-1]
   real :: v1            ! A temporary variable proportional to [T-1 ~> s-1]
-  real :: v2
-  real :: tol_err        ! The tolerance for max_err that determines when to
-                         ! stop iterating.
-  real :: Newton_err     ! The tolerance for max_err that determines when to
-                         ! start using Newton's method.  Empirically, an initial
-                         ! value of about 0.2 seems to be most efficient.
-  real, parameter :: roundoff = 1.0e-16 ! A negligible fractional change in TKE.
-                         ! This could be larger but performance gains are small.
+  real :: v2            ! A temporary variable in  [Z T-2 ~> m s-2]
+  real :: tol_err       ! The tolerance for max_err that determines when to
+                        ! stop iterating [nondim].
+  real :: Newton_err    ! The tolerance for max_err that determines when to
+                        ! start using Newton's method [nondim].  Empirically, an initial
+                        ! value of about 0.2 seems to be most efficient.
+  real, parameter :: roundoff = 1.0e-16 ! A negligible fractional change in TKE [nondim].
+                        ! This could be larger but performance gains are small.
 
   logical :: tke_noflux_bottom_BC = .false. ! Specify the boundary conditions
-  logical :: tke_noflux_top_BC = .false.    ! that are applied to the TKE eqns.
+  logical :: tke_noflux_top_BC = .false.    ! that are applied to the TKE equations.
   logical :: do_Newton    ! If .true., use Newton's method for the next iteration.
   logical :: abort_Newton ! If .true., an Newton's method has encountered a 0
                           ! pivot, and should not have been used.
@@ -1265,7 +1270,8 @@ subroutine find_kappa_tke(N2, S2, kappa_in, Idz, dz_Int, I_L2_bdry, f2, &
 
   ! These variables are used only for debugging.
   logical, parameter :: debug_soln = .false.
-  real :: K_err_lin, Q_err_lin
+  real :: K_err_lin ! The imbalance in the K equation [Z T-1 ~> m s-1]
+  real :: Q_err_lin ! The imbalance in the Q equation [Z2 T-3 ~> m2 s-3]
   real, dimension(nz+1) :: &
     I_Ld2_debug, & ! A separate version of I_Ld2 for debugging [Z-2 ~> m-2].
     kappa_prev, & ! The value of kappa at the start of the current iteration [Z2 T-1 ~> m2 s-1].
@@ -1726,15 +1732,15 @@ function kappa_shear_init(Time, G, GV, US, param_file, diag, CS)
   logical :: kappa_shear_init !< True if module is to be used, False otherwise
 
   ! Local variables
+  real :: KD_normal ! The KD of the main model, read here only as a parameter
+                    ! for setting the default of KD_SMOOTH [Z2 T-1 ~> m2 s-1]
+  real :: kappa_0_default ! The default value for KD_KAPPA_SHEAR_0 [Z2 T-1 ~> m2 s-1]
   logical :: merge_mixedlayer
   logical :: debug_shear
   logical :: just_read ! If true, this module is not used, so only read the parameters.
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
   character(len=40)  :: mdl = "MOM_kappa_shear"  ! This module's name.
-  real :: kappa_0_unscaled  ! The value of kappa_0 in MKS units [m2 s-1]
-  real :: KD_normal ! The KD of the main model, read here only as a parameter
-                    ! for setting the default of KD_SMOOTH in MKS units [m2 s-1]
 
   if (associated(CS)) then
     call MOM_error(WARNING, "kappa_shear_init called with an associated "// &
@@ -1775,18 +1781,21 @@ function kappa_shear_init(Time, G, GV, US, param_file, diag, CS)
   call get_param(param_file, mdl, "MAX_RINO_IT", CS%max_RiNo_it, &
                  "The maximum number of iterations that may be used to "//&
                  "estimate the Richardson number driven mixing.", &
-                 default=50, do_not_log=just_read)
-  call get_param(param_file, mdl, "KD", KD_normal, default=0.0, do_not_log=.true.)
+                 units="nondim", default=50, do_not_log=just_read)
+  call get_param(param_file, mdl, "KD", KD_normal, &
+                 units="m2 s-1", scale=US%m2_s_to_Z2_T, default=0.0, do_not_log=.true.)
+  kappa_0_default = max(Kd_normal, 1.0e-7*US%m2_s_to_Z2_T)
   call get_param(param_file, mdl, "KD_KAPPA_SHEAR_0", CS%kappa_0, &
                  "The background diffusivity that is used to smooth the "//&
                  "density and shear profiles before solving for the "//&
                  "diffusivities.  The default is the greater of KD and 1e-7 m2 s-1.", &
-                 units="m2 s-1", default=max(KD_normal, 1.0e-7), scale=US%m2_s_to_Z2_T, &
-                 unscaled=kappa_0_unscaled, do_not_log=just_read)
+                 units="m2 s-1", default=kappa_0_default*US%Z2_T_to_m2_s, scale=US%m2_s_to_Z2_T, &
+                 do_not_log=just_read)
   call get_param(param_file, mdl, "KD_TRUNC_KAPPA_SHEAR", CS%kappa_trunc, &
                  "The value of shear-driven diffusivity that is considered negligible "//&
                  "and is rounded down to 0. The default is 1% of KD_KAPPA_SHEAR_0.", &
-                 units="m2 s-1", default=0.01*kappa_0_unscaled, scale=US%m2_s_to_Z2_T, do_not_log=just_read)
+                 units="m2 s-1", default=0.01*CS%kappa_0*US%Z2_T_to_m2_s, scale=US%m2_s_to_Z2_T, &
+                 do_not_log=just_read)
   call get_param(param_file, mdl, "FRI_CURVATURE", CS%FRi_curvature, &
                  "The nondimensional curvature of the function of the "//&
                  "Richardson number in the kappa source term in the "//&
@@ -1950,7 +1959,7 @@ end function kappa_shear_at_vertex
 !! TKE with shear and stratification fixed, then marches the density
 !! and velocities forward with an adaptive (and aggressive) time step
 !! in a predictor-corrector-corrector emulation of a trapezoidal
-!! scheme.  Run-time-settable parameters determine the tolerence to
+!! scheme.  Run-time-settable parameters determine the tolerance to
 !! which the kappa and TKE equations are solved and the minimum time
 !! step that can be taken.
 

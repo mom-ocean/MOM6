@@ -48,10 +48,10 @@ type, public :: set_visc_CS ; private
   logical :: initialized = .false. !< True if this control structure has been initialized.
   real    :: Hbbl           !< The static bottom boundary layer thickness [H ~> m or kg m-2].
                             !! Runtime parameter `HBBL`.
-  real    :: cdrag          !< The quadratic drag coefficient.
+  real    :: cdrag          !< The quadratic drag coefficient [nondim].
                             !! Runtime parameter `CDRAG`.
   real    :: c_Smag         !< The Laplacian Smagorinsky coefficient for
-                            !! calculating the drag in channels.
+                            !! calculating the drag in channels [nondim].
   real    :: drag_bg_vel    !< An assumed unresolved background velocity for
                             !! calculating the bottom drag [L T-1 ~> m s-1].
                             !! Runtime parameter `DRAG_BG_VEL`.
@@ -233,7 +233,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, pbv)
   real :: C24_a            ! 24/a [H-1 ~> m-1 or m2 kg-1].
   real :: slope            ! The absolute value of the bottom depth slope across
                            ! a cell times the cell width [H ~> m or kg m-2].
-  real :: apb_4a, ax2_3apb ! Various nondimensional ratios of a and slope.
+  real :: apb_4a, ax2_3apb ! Various nondimensional ratios of a and slope [nondim].
   real :: a2x48_apb3, Iapb, Ibma_2 ! Combinations of a and slope [H-1 ~> m-1 or m2 kg-1].
   ! All of the following "volumes" have units of thickness because they are normalized
   ! by the full horizontal area of a velocity cell.
@@ -282,12 +282,12 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, pbv)
   real :: h_bbl_fr         ! The fraction of the bottom boundary layer in a layer [nondim].
   real :: h_sum            ! The sum of the thicknesses of the layers below the one being
                            ! worked on [H ~> m or kg m-2].
-  real, parameter :: C1_3 = 1.0/3.0, C1_6 = 1.0/6.0, C1_12 = 1.0/12.0
-  real :: C2pi_3           ! An irrational constant, 2/3 pi.
-  real :: tmp              ! A temporary variable.
-  real :: tmp_val_m1_to_p1
+  real, parameter :: C1_3 = 1.0/3.0, C1_6 = 1.0/6.0, C1_12 = 1.0/12.0 ! Rational constants [nondim]
+  real :: C2pi_3           ! An irrational constant, 2/3 pi. [nondim]
+  real :: tmp              ! A temporary variable, sometimes in [Z ~> m]
+  real :: tmp_val_m1_to_p1 ! A temporary variable [nondim]
   real :: curv_tol         ! Numerator of curvature cubed, used to estimate
-                           ! accuracy of a single L(:) Newton iteration
+                           ! accuracy of a single L(:) Newton iteration [H5 ~> m3 or kg5 m-10]
   logical :: use_L0, do_one_L_iter    ! Control flags for L(:) Newton iteration
   logical :: use_BBL_EOS, do_i(SZIB_(G))
   integer, dimension(2) :: EOSdom ! The computational domain for the equation of state
@@ -1099,7 +1099,7 @@ function set_v_at_u(v, h, G, GV, i, j, k, mask2dCv, OBC)
   integer,                 intent(in) :: j    !< The j-index of the u-location to work on.
   integer,                 intent(in) :: k    !< The k-index of the u-location to work on.
   real, dimension(SZI_(G),SZJB_(G)),&
-                           intent(in) :: mask2dCv !< A multiplicative mask of the v-points
+                           intent(in) :: mask2dCv !< A multiplicative mask of the v-points [nondim]
   type(ocean_OBC_type),    pointer    :: OBC  !< A pointer to an open boundary condition structure
   real                                :: set_v_at_u !< The return value of v at u points points in the
                                               !! same units as u, i.e. [L T-1 ~> m s-1] or other units.
@@ -1144,7 +1144,7 @@ function set_u_at_v(u, h, G, GV, i, j, k, mask2dCu, OBC)
   integer,                 intent(in) :: j    !< The j-index of the u-location to work on.
   integer,                 intent(in) :: k    !< The k-index of the u-location to work on.
   real, dimension(SZIB_(G),SZJ_(G)), &
-                           intent(in) :: mask2dCu !< A multiplicative mask of the u-points
+                           intent(in) :: mask2dCu !< A multiplicative mask of the u-points [nondim]
   type(ocean_OBC_type),    pointer    :: OBC  !< A pointer to an open boundary condition structure
   real                                :: set_u_at_v !< The return value of u at v points in the
                                               !! same units as u, i.e. [L T-1 ~> m s-1] or other units.
@@ -1213,8 +1213,10 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS)
     Rhtot, &    !   The integrated density of layers that are within the surface mixed layer
                 ! [H R ~> kg m-2 or kg2 m-5].  Rhtot is only used if no
                 ! equation of state is used.
-    uhtot, &    !   The depth integrated zonal and meridional velocities within
-    vhtot, &    ! the surface mixed layer [H L T-1 ~> m2 s-1 or kg m-1 s-1].
+    uhtot, &    !   The depth integrated zonal velocity within the surface
+                ! mixed layer [H L T-1 ~> m2 s-1 or kg m-1 s-1].
+    vhtot, &    !   The depth integrated meridional velocity within the surface
+                ! mixed layer [H L T-1 ~> m2 s-1 or kg m-1 s-1].
     Idecay_len_TKE, & ! The inverse of a turbulence decay length scale [H-1 ~> m-1 or m2 kg-1].
     dR_dT, &    !   Partial derivative of the density at the base of layer nkml
                 ! (roughly the base of the mixed layer) with temperature [R C-1 ~> kg m-3 degC-1].
@@ -1261,8 +1263,7 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS)
                     ! on the mixed layer thickness and density difference across
                     ! the base of the mixed layer [L2 T-2 ~> m2 s-2].
   real :: RiBulk    ! The bulk Richardson number below which water is in the
-                    ! viscous mixed layer, including reduction for turbulent
-                    ! decay. Nondimensional.
+                    ! viscous mixed layer, including reduction for turbulent decay [nondim]
   real :: dt_Rho0   ! The time step divided by the conversion from the layer
                     ! thickness to layer mass [T H Z-1 R-1 ~> s m3 kg-1 or s].
   real :: g_H_Rho0  !   The gravitational acceleration times the conversion from H to m divided
@@ -1871,7 +1872,7 @@ subroutine set_visc_register_restarts(HI, GV, US, param_file, visc, restart_CS)
   logical :: adiabatic, useKPP, useEPBL
   logical :: use_CVMix_shear, MLE_use_PBL_MLD, use_CVMix_conv
   integer :: isd, ied, jsd, jed, nz
-  real :: hfreeze !< If hfreeze > 0 [m], melt potential will be computed.
+  real :: hfreeze !< If hfreeze > 0 [Z ~> m], melt potential will be computed.
   character(len=40)  :: mdl = "MOM_set_visc"  ! This module's name.
   isd = HI%isd ; ied = HI%ied ; jsd = HI%jsd ; jed = HI%jed ; nz = GV%ke
 
@@ -1929,7 +1930,7 @@ subroutine set_visc_register_restarts(HI, GV, US, param_file, visc, restart_CS)
                  default=.false., do_not_log=.true.)
   ! visc%MLD needs to be allocated when melt potential is computed (HFREEZE>0)
   call get_param(param_file, mdl, "HFREEZE", hfreeze, &
-                 default=-1.0, do_not_log=.true.)
+                 units="m", default=-1.0, scale=US%m_to_Z, do_not_log=.true.)
 
   if (MLE_use_PBL_MLD) then
     call safe_alloc_ptr(visc%MLD, isd, ied, jsd, jed)
@@ -2001,11 +2002,11 @@ subroutine set_visc_init(Time, G, GV, US, param_file, diag, visc, CS, restart_CS
   real    :: Chan_max_thick_dflt ! The default value for CHANNEL_DRAG_MAX_THICK [m]
 
   real    :: Z_rescale     ! A rescaling factor for heights from the representation in
-                           ! a restart file to the internal representation in this run.
+                           ! a restart file to the internal representation in this run [nondim]?
   real    :: I_T_rescale   ! A rescaling factor for time from the internal representation in this run
-                           ! to the representation in a restart file.
+                           ! to the representation in a restart file [nondim]?
   real    :: Z2_T_rescale  ! A rescaling factor for vertical diffusivities and viscosities from the
-                           ! representation in a restart file to the internal representation in this run.
+                           ! representation in a restart file to the internal representation in this run [nondim]?
   integer :: i, j, k, is, ie, js, je
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, nz
   integer :: default_answer_date  ! The default setting for the various ANSWER_DATE flags.
@@ -2100,14 +2101,14 @@ subroutine set_visc_init(Time, G, GV, US, param_file, diag, visc, CS, restart_CS
                  "determine the mixed layer thickness for viscosity.", &
                  default=.false.)
   if (CS%dynamic_viscous_ML) then
-    call get_param(param_file, mdl, "BULK_RI_ML", bulk_Ri_ML_dflt, default=0.0)
+    call get_param(param_file, mdl, "BULK_RI_ML", bulk_Ri_ML_dflt, units="nondim", default=0.0)
     call get_param(param_file, mdl, "BULK_RI_ML_VISC", CS%bulk_Ri_ML, &
                  "The efficiency with which mean kinetic energy released "//&
                  "by mechanically forced entrainment of the mixed layer "//&
                  "is converted to turbulent kinetic energy.  By default, "//&
                  "BULK_RI_ML_VISC = BULK_RI_ML or 0.", units="nondim", &
                  default=bulk_Ri_ML_dflt)
-    call get_param(param_file, mdl, "TKE_DECAY", TKE_decay_dflt, default=0.0)
+    call get_param(param_file, mdl, "TKE_DECAY", TKE_decay_dflt, units="nondim", default=0.0)
     call get_param(param_file, mdl, "TKE_DECAY_VISC", CS%TKE_decay, &
                  "TKE_DECAY_VISC relates the vertical rate of decay of "//&
                  "the TKE available for mechanical entrainment to the "//&
@@ -2118,7 +2119,7 @@ subroutine set_visc_init(Time, G, GV, US, param_file, diag, visc, CS, restart_CS
     call get_param(param_file, mdl, "ML_USE_OMEGA", use_omega, &
                  "If true, use the absolute rotation rate instead of the "//&
                  "vertical component of rotation when setting the decay "//&
-                   "scale for turbulence.", default=.false., do_not_log=.true.)
+                 "scale for turbulence.", default=.false., do_not_log=.true.)
     omega_frac_dflt = 0.0
     if (use_omega) then
       call MOM_error(WARNING, "ML_USE_OMEGA is deprecated; use ML_OMEGA_FRAC=1.0 instead.")
@@ -2223,7 +2224,7 @@ subroutine set_visc_init(Time, G, GV, US, param_file, diag, visc, CS, restart_CS
                  default=.false.)
 
   if (CS%Channel_drag) then
-    call get_param(param_file, mdl, "SMAG_LAP_CONST", smag_const1, default=-1.0)
+    call get_param(param_file, mdl, "SMAG_LAP_CONST", smag_const1, units="nondim", default=-1.0)
 
     cSmag_chan_dflt = 0.15
     if (smag_const1 >= 0.0) cSmag_chan_dflt = smag_const1

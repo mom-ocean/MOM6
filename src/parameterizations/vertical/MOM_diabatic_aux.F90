@@ -242,20 +242,19 @@ subroutine differential_diffuse_T_S(h, T, S, Kd_T, Kd_S, dt, G, GV)
 
   ! local variables
   real, dimension(SZI_(G)) :: &
-    b1_T, b1_S, &  !  Variables used by the tridiagonal solvers of T & S [H ~> m or kg m-2].
-    d1_T, d1_S     !  Variables used by the tridiagonal solvers [nondim].
+    b1_T, b1_S, &   ! Variables used by the tridiagonal solvers of T & S [H ~> m or kg m-2].
+    d1_T, d1_S      ! Variables used by the tridiagonal solvers [nondim].
   real, dimension(SZI_(G),SZK_(GV)) :: &
-    c1_T, c1_S     !  Variables used by the tridiagonal solvers [H ~> m or kg m-2].
+    c1_T, c1_S      ! Variables used by the tridiagonal solvers [H ~> m or kg m-2].
   real, dimension(SZI_(G),SZK_(GV)+1) :: &
-    mix_T, mix_S   !  Mixing distances in both directions across each interface [H ~> m or kg m-2].
-  real :: h_tr         ! h_tr is h at tracer points with a tiny thickness
-                       ! added to ensure positive definiteness [H ~> m or kg m-2].
-  real :: h_neglect    ! A thickness that is so small it is usually lost
-                       ! in roundoff and can be neglected [H ~> m or kg m-2].
-  real :: I_h_int      ! The inverse of the thickness associated with an
-                       ! interface [H-1 ~> m-1 or m2 kg-1].
-  real :: b_denom_T    ! The first term in the denominators for the expressions
-  real :: b_denom_S    ! for b1_T and b1_S, both [H ~> m or kg m-2].
+    mix_T, mix_S    ! Mixing distances in both directions across each interface [H ~> m or kg m-2].
+  real :: h_tr      ! h_tr is h at tracer points with a tiny thickness
+                    ! added to ensure positive definiteness [H ~> m or kg m-2].
+  real :: h_neglect ! A thickness that is so small it is usually lost
+                    ! in roundoff and can be neglected [H ~> m or kg m-2].
+  real :: I_h_int   ! The inverse of the thickness associated with an interface [H-1 ~> m-1 or m2 kg-1].
+  real :: b_denom_T ! The first term in the denominator for the expression for b1_T [H ~> m or kg m-2].
+  real :: b_denom_S ! The first term in the denominator for the expression for b1_S [H ~> m or kg m-2].
   integer :: i, j, k, is, ie, js, je, nz
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
@@ -497,17 +496,18 @@ subroutine find_uv_at_h(u, v, h, u_h, v_h, G, GV, US, ea, eb, zero_mix)
                                                  !! v_h as though ea and eb were being supplied with
                                                  !! uniformly zero values.
 
-  ! local variables
+  ! Local variables
   real :: b_denom_1    ! The first term in the denominator of b1 [H ~> m or kg m-2].
   real :: h_neglect    ! A thickness that is so small it is usually lost
                        ! in roundoff and can be neglected [H ~> m or kg m-2].
   real :: b1(SZI_(G))  ! A thickness used in the tridiagonal solver  [H ~> m or kg m-2]
   real :: c1(SZI_(G),SZK_(GV)) ! A variable used in the tridiagonal solver [nondim]
   real :: d1(SZI_(G))  ! The complement of c1 [nondim]
-  real :: a_n(SZI_(G)), a_s(SZI_(G))  ! Fractional weights of the neighboring
-  real :: a_e(SZI_(G)), a_w(SZI_(G))  ! velocity points, ~1/2 in the open
-                                      ! ocean, nondimensional.
-  real :: sum_area, Idenom
+  ! Fractional weights of the neighboring velocity points, ~1/2 in the open ocean.
+  real :: a_n(SZI_(G)), a_s(SZI_(G))  ! Fractional weights of the neighboring velocity points [nondim]
+  real :: a_e(SZI_(G)), a_w(SZI_(G))  ! Fractional weights of the neighboring velocity points [nondim]
+  real :: sum_area     ! A sum of adjacent areas [L2 ~> m2]
+  real :: Idenom       ! The inverse of the denomninator in a weighted average [L-2 ~> m-2]
   logical :: mix_vertically, zero_mixing
   integer :: i, j, k, is, ie, js, je, nz
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
@@ -527,6 +527,12 @@ subroutine find_uv_at_h(u, v, h, u_h, v_h, G, GV, US, ea, eb, zero_mix)
     do i=is,ie
       sum_area = G%areaCu(I-1,j) + G%areaCu(I,j)
       if (sum_area > 0.0) then
+        ! If this were a simple area weighted average, this would just be I_denom = 1.0 / sum_area.
+        ! The other factor of sqrt(0.5*sum_area*G%IareaT(i,j)) is 1 for open ocean points on a
+        ! Cartesian grid.  This construct predates the initial commit of the MOM6 code, and was
+        ! present in the GOLD code before February, 2010.  I do not recall why this was added, and
+        ! the GOLD CVS server that contained the relevant history and logs appears to have been
+        ! decommissioned.
         Idenom = sqrt(0.5*G%IareaT(i,j) / sum_area)
         a_w(i) = G%areaCu(I-1,j) * Idenom
         a_e(i) = G%areaCu(I,j) * Idenom
@@ -803,7 +809,7 @@ subroutine diagnoseMLDbyEnergy(id_MLD, h, tv, G, GV, US, Mixing_Energy, diagPtr)
   ! converges extremely quickly (usually 1 guess) since this equation turns out to be rather
   ! linear for PE change with increasing X.
   ! Input parameters:
-  integer, dimension(3),   intent(in) :: id_MLD      !< Energy output diag IDs
+  integer, dimension(3),   intent(in) :: id_MLD      !< Energy output diagnostic IDs
   type(ocean_grid_type),   intent(in) :: G           !< Grid type
   type(verticalGrid_type), intent(in) :: GV          !< ocean vertical grid structure
   type(unit_scale_type),   intent(in) :: US          !< A dimensional unit scaling type
@@ -1045,13 +1051,19 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
   ! Local variables
   integer, parameter :: maxGroundings = 5
   integer :: numberOfGroundings, iGround(maxGroundings), jGround(maxGroundings)
-  real :: H_limit_fluxes
-  real :: IforcingDepthScale
+  real :: H_limit_fluxes ! Surface fluxes are scaled down fluxes when the total depth of the ocean
+                     ! drops below this value [H ~> m or kg m-2]
+  real :: IforcingDepthScale ! The inverse of the layer thickness below which mass losses are
+                     ! shifted to the next deeper layer [H ~> m or kg m-2]
   real :: Idt        ! The inverse of the timestep [T-1 ~> s-1]
-  real :: dThickness, dTemp, dSalt
-  real :: fractionOfForcing, hOld, Ithickness
+  real :: dThickness ! The change in layer thickness [H ~> m or kg m-2]
+  real :: dTemp      ! The integrated change in layer temperature [C H ~> degC m or degC kg m-2]
+  real :: dSalt      ! The integrated change in layer salinity [S H ~> ppt m or ppt kg m-2]
+  real :: fractionOfForcing ! THe fraction of the remaining forcing applied to a layer [nondim]
+  real :: hOld       ! The original thickness of a layer [H ~> m or kg m-2]
+  real :: Ithickness ! The inverse of the new layer thickness [H-1 ~> m-1 or m2 kg-1]
   real :: RivermixConst  ! A constant used in implementing river mixing [R Z2 T-1 ~> Pa s].
-  real :: EnthalpyConst  ! A constant used to control the enthalpy calculation
+  real :: EnthalpyConst  ! A constant used to control the enthalpy calculation [nondim]
                          ! By default EnthalpyConst = 1.0. If fluxes%heat_content_evap
                          ! is associated enthalpy is provided via coupler and EnthalpyConst = 0.0.
   real, dimension(SZI_(G)) :: &
@@ -1092,13 +1104,17 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
     opacityBand      ! The opacity (inverse of the exponential absorption length) of each frequency
                      ! band of shortwave radiation in each layer [H-1 ~> m-1 or m2 kg-1]
   real, dimension(maxGroundings) :: hGrounding ! Thickness added by each grounding event [H ~> m or kg m-2]
-  real    :: Temp_in, Salin_in
+  real    :: Temp_in  ! The initial temperature of a layer [C ~> degC]
+  real    :: Salin_in ! The initial salinity of a layer [S ~> ppt]
   real    :: g_Hconv2 ! A conversion factor for use in the TKE calculation
                       ! in units of [Z3 R2 T-2 H-2 ~> kg2 m-5 s-2 or m s-2].
   real    :: GoRho    ! g_Earth times a unit conversion factor divided by density
                       ! [Z T-2 R-1 ~> m4 s-2 kg-1]
-  logical :: calculate_energetics
-  logical :: calculate_buoyancy
+  logical :: calculate_energetics ! If true, calculate the energy required to mix the newly added
+                      ! water over the topmost grid cell, assuming that the fluxes of heat and salt
+                      ! and rejected brine are initially applied in vanishingly thin layers at the
+                      ! top of the layer before being mixed throughout the layer.
+  logical :: calculate_buoyancy ! If true, calculate the surface buoyancy flux.
   integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state
   integer :: i, j, is, ie, js, je, k, nz, nb
   character(len=45) :: mesg

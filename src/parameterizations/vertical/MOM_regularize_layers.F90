@@ -151,10 +151,11 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, GV, US, CS)
                 ! the coordinate variable, set to P_Ref [R L2 T-2 ~> Pa].
     Rcv_tol, &  !   A tolerence, relative to the target density differences
                 ! between layers, for detraining into the interior [nondim].
-    h_add_tgt, h_add_tot, &
-    h_tot1, Th_tot1, Sh_tot1, &
-    h_tot3, Th_tot3, Sh_tot3, &
-    h_tot2, Th_tot2, Sh_tot2
+    h_add_tgt, & ! The target for the thickness to add to the mixed layers [H ~> m or kg m-2]
+    h_add_tot, & ! The net thickness added to the mixed layers [H ~> m or kg m-2]
+    h_tot1, h_tot2, h_tot3, &    ! Debugging diagnostics of total thicknesses [H ~> m or kg m-2]
+    Th_tot1, Th_tot2, Th_tot3, & ! Debugging diagnostics of integrated temperatures [C H ~> degC m or degC kg m-2]
+    Sh_tot1, Sh_tot2, Sh_tot3    ! Debugging diagnostics of integrated salinities [S H ~> ppt m or ppt kg m-2]
   real, dimension(SZK_(GV)) :: &
     h_prev_1d     ! The previous thicknesses [H ~> m or kg m-2].
   real :: I_dtol  ! The inverse of the tolerance changes [nondim].
@@ -168,16 +169,17 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, GV, US, CS)
     int_flux, &     ! Mass flux across the interfaces [H ~> m or kg m-2]
     int_Tflux, &    ! Temperature flux across the interfaces [C H ~> degC m or degC kg m-2]
     int_Sflux       ! Salinity flux across the interfaces [S H ~> ppt m or ppt kg m-2]
-  real :: h_add
-  real :: h_det_tot
-  real :: max_def_rat
+  real :: h_add     ! The thickness to add to the layers above an interface [H ~> m or kg m-2]
+  real :: h_det_tot ! The total thickness detrained by the mixed layers [H ~> m or kg m-2]
+  real :: max_def_rat  ! The maximum value of the ratio of the thickness deficit to the minimum depth [nondim]
   real :: Rcv_min_det  ! The lightest (min) and densest (max) coordinate density
   real :: Rcv_max_det  ! that can detrain into a layer [R ~> kg m-3].
 
-  real :: int_top, int_bot
-  real :: h_predicted
-  real :: h_prev
-  real :: h_deficit
+  real :: int_top, int_bot ! The interface depths above and below a layer [H ~> m or kg m-2], positive upward.
+  real :: h_predicted  ! An updated thickness [H ~> m or kg m-2]
+  real :: h_prev       ! The previous thickness [H ~> m or kg m-2]
+  real :: h_deficit    ! The difference between the layer thickness and the value estimated from the
+                       ! filtered interface depths [H ~> m or kg m-2]
 
   logical :: cols_left, ent_any, more_ent_i(SZI_(G)), ent_i(SZI_(G))
   logical :: det_any, det_i(SZI_(G))
