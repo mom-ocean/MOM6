@@ -69,11 +69,13 @@ subroutine end_coord_hycom(CS)
 end subroutine end_coord_hycom
 
 !> This subroutine can be used to set the parameters for the coord_hycom module
-subroutine set_hycom_params(CS, max_interface_depths, max_layer_thickness, interp_CS)
+subroutine set_hycom_params(CS, max_interface_depths, max_layer_thickness, interp_CS, ref_pressure)
   type(hycom_CS),                 pointer    :: CS !< Coordinate control structure
   real, dimension(:),   optional, intent(in) :: max_interface_depths !< Maximum depths of interfaces [H ~> m or kg m-2]
   real, dimension(:),   optional, intent(in) :: max_layer_thickness  !< Maximum thicknesses of layers [H ~> m or kg m-2]
   type(interp_CS_type), optional, intent(in) :: interp_CS !< Controls for interpolation
+  real,                 optional, intent(in) :: ref_pressure     !< The reference pressure for density-dependent
+                                                                 !! coordinates [R L2 T-2 ~> Pa]
 
   if (.not. associated(CS)) call MOM_error(FATAL, "set_hycom_params: CS not associated")
 

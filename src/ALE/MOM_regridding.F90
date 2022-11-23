@@ -2437,13 +2437,14 @@ subroutine set_regrid_params( CS, boundary_extrapolation, min_thickness, old_gri
     if (present(min_thickness)) call set_sigma_params(CS%sigma_CS, min_thickness=min_thickness)
   case (REGRIDDING_RHO)
     if (present(min_thickness)) call set_rho_params(CS%rho_CS, min_thickness=min_thickness)
+    if (present(ref_pressure)) call set_rho_params(CS%rho_CS, ref_pressure=ref_pressure)
     if (present(integrate_downward_for_e)) &
       call set_rho_params(CS%rho_CS, integrate_downward_for_e=integrate_downward_for_e)
     if (associated(CS%rho_CS) .and. (present(interp_scheme) .or. present(boundary_extrapolation))) &
       call set_rho_params(CS%rho_CS, interp_CS=CS%interp_CS)
   case (REGRIDDING_HYCOM1)
     if (associated(CS%hycom_CS) .and. (present(interp_scheme) .or. present(boundary_extrapolation))) &
-      call set_hycom_params(CS%hycom_CS, interp_CS=CS%interp_CS)
+      call set_hycom_params(CS%hycom_CS, interp_CS=CS%interp_CS, ref_pressure=ref_pressure)
   case (REGRIDDING_HYBGEN)
     ! Do nothing for now.
   case (REGRIDDING_SLIGHT)
