@@ -120,12 +120,13 @@ type, public :: VarMix_CS
   ! Parameters
   logical :: use_Visbeck  !< Use Visbeck formulation for thickness diffusivity
   integer :: VarMix_Ktop  !< Top layer to start downward integrals
-  real :: Visbeck_L_scale !< Fixed length scale in Visbeck formula
+  real :: Visbeck_L_scale !< Fixed length scale in Visbeck formula [L ~> m], or if negative a scaling
+                          !! factor [nondim] relating this length scale squared to the cell area
   real :: Eady_GR_D_scale !< Depth over which to average SN [Z ~> m]
-  real :: Res_coef_khth   !< A non-dimensional number that determines the function
+  real :: Res_coef_khth   !< A coefficient [nondim] that determines the function
                           !! of resolution, used for thickness and tracer mixing, as:
                           !!  F = 1 / (1 + (Res_coef_khth*Ld/dx)^Res_fn_power)
-  real :: Res_coef_visc   !< A non-dimensional number that determines the function
+  real :: Res_coef_visc   !< A coefficient [nondim] that determines the function
                           !! of resolution, used for lateral viscosity, as:
                           !!  F = 1 / (1 + (Res_coef_visc*Ld/dx)^Res_fn_power)
   real :: depth_scaled_khth_h0 !< The depth above which KHTH is linearly scaled away [Z ~> m]
@@ -167,13 +168,13 @@ contains
 !> Calculates the non-dimensional depth functions.
 subroutine calc_depth_function(G, CS)
   type(ocean_grid_type),  intent(in)    :: G  !< Ocean grid structure
-  type(VarMix_CS),        intent(inout) :: CS !< Variable mixing control struct
+  type(VarMix_CS),        intent(inout) :: CS !< Variable mixing control structure
 
   ! Local variables
   integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq
   integer :: i, j
-  real    :: H0 ! local variable for reference depth
-  real    :: expo ! exponent used in the depth dependent scaling
+  real    :: H0   ! The depth above which KHTH is linearly scaled away [Z ~> m]
+  real    :: expo ! exponent used in the depth dependent scaling [nondim]
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
 
@@ -186,6 +187,7 @@ subroutine calc_depth_function(G, CS)
   if (.not. allocated(CS%Depth_fn_v)) call MOM_error(FATAL, &
     "calc_depth_function: %Depth_fn_v is not associated with Depth_scaled_KhTh.")
 
+  ! For efficiency, the reciprocal of H0 should be used instead.
   H0 = CS%depth_scaled_khth_h0
   expo = CS%depth_scaled_khth_exp
 !$OMP do
@@ -206,7 +208,7 @@ subroutine calc_resoln_function(h, tv, G, GV, US, CS)
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)    :: h  !< Layer thickness [H ~> m or kg m-2]
   type(thermo_var_ptrs),                     intent(in)    :: tv !< Thermodynamic variables
   type(unit_scale_type),                     intent(in)    :: US !< A dimensional unit scaling type
-  type(VarMix_CS),                           intent(inout) :: CS !< Variable mixing control struct
+  type(VarMix_CS),                           intent(inout) :: CS !< Variable mixing control structure
 
   ! Local variables
   ! Depending on the power-function being used, dimensional rescaling may be limited, so some
@@ -454,8 +456,8 @@ subroutine calc_slope_functions(h, tv, dt, G, GV, US, CS, OBC)
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(inout) :: h  !< Layer thickness [H ~> m or kg m-2]
   type(thermo_var_ptrs),                     intent(in)    :: tv !< Thermodynamic variables
   real,                                      intent(in)    :: dt !< Time increment [T ~> s]
-  type(VarMix_CS),                           intent(inout) :: CS !< Variable mixing control struct
-  type(ocean_OBC_type),                      pointer       :: OBC !< Open boundaries control structure.
+  type(VarMix_CS),                           intent(inout) :: CS !< Variable mixing control structure
+  type(ocean_OBC_type),                      pointer       :: OBC !< Open boundaries control structure
   ! Local variables
   real, dimension(SZI_(G), SZJ_(G),SZK_(GV)+1) :: &
     e             ! The interface heights relative to mean sea level [Z ~> m].
@@ -511,27 +513,30 @@ subroutine calc_Visbeck_coeffs_old(h, slope_x, slope_y, N2_u, N2_v, G, GV, US, C
   type(ocean_grid_type),                        intent(inout) :: G  !< Ocean grid structure
   type(verticalGrid_type),                      intent(in)    :: GV !< Vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),    intent(in)    :: h  !< Layer thickness [H ~> m or kg m-2]
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)+1), intent(in)    :: slope_x !< Zonal isoneutral slope
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)+1), intent(in)    :: slope_x !< Zonal isoneutral slope [nondim]
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)+1), intent(in)    :: N2_u    !< Buoyancy (Brunt-Vaisala) frequency
                                                                          !! at u-points [L2 Z-2 T-2 ~> s-2]
-  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)+1), intent(in)    :: slope_y !< Meridional isoneutral slope
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)+1), intent(in)    :: slope_y !< Meridional isoneutral slope [nondim]
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)+1), intent(in)    :: N2_v    !< Buoyancy (Brunt-Vaisala) frequency
                                                                          !! at v-points [L2 Z-2 T-2 ~> s-2]
   type(unit_scale_type),                        intent(in)    :: US !< A dimensional unit scaling type
-  type(VarMix_CS),                              intent(inout) :: CS !< Variable mixing control struct
+  type(VarMix_CS),                              intent(inout) :: CS !< Variable mixing control structure
 
   ! Local variables
   real :: S2            ! Interface slope squared [nondim]
   real :: N2            ! Positive buoyancy frequency or zero [T-2 ~> s-2]
   real :: Hup, Hdn      ! Thickness from above, below [H ~> m or kg m-2]
-  real :: H_geom        ! The geometric mean of Hup*Hdn [H ~> m or kg m-2].
-  integer :: is, ie, js, je, nz
-  integer :: i, j, k
-  integer :: l_seg
-  real :: S2max, wNE, wSE, wSW, wNW
-  real :: H_u(SZIB_(G)), H_v(SZI_(G))
-  real :: S2_u(SZIB_(G), SZJ_(G))
-  real :: S2_v(SZI_(G), SZJB_(G))
+  real :: H_geom        ! The geometric mean of Hup and Hdn [H ~> m or kg m-2].
+  real :: S2max         ! An upper bound on the squared slopes [nondim]
+  real :: wNE, wSE, wSW, wNW ! Weights of adjacent points [nondim]
+  real :: H_u(SZIB_(G)), H_v(SZI_(G)) ! Layer thicknesses at u- and v-points [H ~> m or kg m-2]
+
+  ! Note that at some points in the code S2_u and S2_v hold the running depth
+  ! integrals of the squared slope [H ~> m or kg m-2] before the average is taken.
+  real :: S2_u(SZIB_(G),SZJ_(G)) ! The thickness-weighted depth average of the squared slope at u points [nondim].
+  real :: S2_v(SZI_(G),SZJB_(G)) ! The thickness-weighted depth average of the squared slope at v points [nondim].
+
+  integer :: i, j, k, is, ie, js, je, nz, l_seg
 
   if (.not. CS%initialized) call MOM_error(FATAL, "calc_Visbeck_coeffs_old: "// &
          "Module must be initialized before it is used.")
@@ -628,7 +633,7 @@ subroutine calc_Visbeck_coeffs_old(h, slope_x, slope_y, N2_u, N2_v, G, GV, US, C
     enddo
   enddo
 
-! Offer diagnostic fields for averaging.
+  ! Offer diagnostic fields for averaging.
   if (query_averaging_enabled(CS%diag)) then
     if (CS%id_S2_u > 0) call post_data(CS%id_S2_u, S2_u, CS%diag)
     if (CS%id_S2_v > 0) call post_data(CS%id_S2_v, S2_v, CS%diag)
@@ -667,7 +672,7 @@ subroutine calc_Eady_growth_rate_2D(CS, G, GV, US, h, e, dzu, dzv, dzSxN, dzSyN,
   real :: sum_dz(SZI_(G)) ! Cumulative sum of z-thicknesses [Z ~> m]
   real :: vint_SN(SZIB_(G)) ! Cumulative integral of SN [Z T-1 ~> m s-1]
   real, dimension(SZIB_(G),SZJ_(G)) :: SN_cpy !< SN at u-points [T-1 ~> s-1]
-  real :: dz_neglect ! An incy wincy distance to avoid division by  zero [Z ~> m]
+  real :: dz_neglect ! A negligibly small distance to avoid division by zero [Z ~> m]
   real :: r_crp_dist ! The inverse of the distance over which to scale the cropping [Z-1 ~> m-1]
   real :: dB, dT ! Elevation variables used when cropping [Z ~> m]
   integer :: i, j, k, l_seg
@@ -805,13 +810,13 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, US, CS, e, calculate_slop
   type(verticalGrid_type),                     intent(in)    :: GV !< Vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),   intent(inout) :: h  !< Layer thickness [H ~> m or kg m-2]
   type(unit_scale_type),                       intent(in)    :: US !< A dimensional unit scaling type
-  type(VarMix_CS),                             intent(inout) :: CS !< Variable mixing control struct
+  type(VarMix_CS),                             intent(inout) :: CS !< Variable mixing control structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), intent(in)    :: e  !< Interface position [Z ~> m]
   logical,                                     intent(in)    :: calculate_slopes !< If true, calculate slopes
                                                                    !! internally otherwise use slopes stored in CS
   ! Local variables
-  real :: E_x(SZIB_(G), SZJ_(G))  ! X-slope of interface at u points [nondim] (for diagnostics)
-  real :: E_y(SZI_(G), SZJB_(G))  ! Y-slope of interface at v points [nondim] (for diagnostics)
+  real :: E_x(SZIB_(G),SZJ_(G))  ! X-slope of interface at u points [nondim] (for diagnostics)
+  real :: E_y(SZI_(G),SZJB_(G))  ! Y-slope of interface at v points [nondim] (for diagnostics)
   real :: H_cutoff      ! Local estimate of a minimum thickness for masking [H ~> m or kg m-2]
   real :: h_neglect     ! A thickness that is so small it is usually lost
                         ! in roundoff and can be neglected [H ~> m or kg m-2].
@@ -820,11 +825,13 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, US, CS, e, calculate_slop
   real :: Hup, Hdn      ! Thickness from above, below [H ~> m or kg m-2]
   real :: H_geom        ! The geometric mean of Hup*Hdn [H ~> m or kg m-2].
   real :: one_meter     ! One meter in thickness units [H ~> m or kg m-2].
+  real :: S2N2_u_local(SZIB_(G),SZJ_(G),SZK_(GV)) ! The depth integral of the slope times
+                        ! the buoyancy frequency squared at u-points [Z T-2 ~> m s-2]
+  real :: S2N2_v_local(SZI_(G),SZJB_(G),SZK_(GV)) ! The depth integral of the slope times
+                        ! the buoyancy frequency squared at v-points [Z T-2 ~> m s-2]
   integer :: is, ie, js, je, nz
   integer :: i, j, k
   integer :: l_seg
-  real    :: S2N2_u_local(SZIB_(G), SZJ_(G),SZK_(GV))
-  real    :: S2N2_v_local(SZI_(G), SZJB_(G),SZK_(GV))
 
   if (.not. CS%initialized) call MOM_error(FATAL, "calc_slope_functions_using_just_e: "// &
          "Module must be initialized before it is used.")
@@ -970,14 +977,14 @@ subroutine calc_QG_Leith_viscosity(CS, G, GV, US, h, k, div_xx_dx, div_xx_dy, vo
   real :: h_at_slope_below ! The thickness below [H ~> m or kg m-2]
   real :: Ih ! The inverse of a combination of thicknesses [H-1 ~> m-1 or m2 kg-1]
   real :: f  ! A copy of the Coriolis parameter [T-1 ~> s-1]
+  real :: inv_PI3 ! The inverse of pi cubed [nondim]
   integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq,nz
-  real :: inv_PI3
 
   is  = G%isc  ; ie  = G%iec  ; js  = G%jsc  ; je  = G%jec
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   nz = GV%ke
 
-  inv_PI3 = 1.0/((4.0*atan(1.0))**3)
+  inv_PI3 = 1.0 / ((4.0*atan(1.0))**3)
 
   if ((k > 1) .and. (k < nz)) then
 
@@ -1076,7 +1083,12 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
   type(VarMix_CS),         intent(inout) :: CS   !< Variable mixing coefficients
 
   ! Local variables
-  real :: KhTr_Slope_Cff, KhTh_Slope_Cff, oneOrTwo
+  real :: KhTr_Slope_Cff ! The nondimensional coefficient in the Visbeck formula
+                         ! for the epipycnal tracer diffusivity [nondim]
+  real :: KhTh_Slope_Cff ! The nondimensional coefficient in the Visbeck formula
+                         ! for the interface depth diffusivity [nondim]
+  real :: oneOrTwo ! A variable that may be 1 or 2, depending on which form
+                   ! of the equatorial deformation radius us used [nondim]
   real :: N2_filter_depth  ! A depth below which stratification is treated as monotonic when
                            ! calculating the first-mode wave speed [Z ~> m]
   real :: KhTr_passivity_coeff ! Coefficient setting the ratio between along-isopycnal tracer
@@ -1187,7 +1199,7 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
   ! Indicate whether to calculate the Eady growth rate
   CS%calculate_Eady_growth_rate = use_MEKE .or. (KhTr_Slope_Cff>0.) .or. (KhTh_Slope_Cff>0.)
   call get_param(param_file, mdl, "KHTR_PASSIVITY_COEFF", KhTr_passivity_coeff, &
-                 default=0., do_not_log=.true.)
+                 units="nondim", default=0., do_not_log=.true.)
   CS%calculate_Rd_dx = CS%calculate_Rd_dx .or. (KhTr_passivity_coeff>0.)
   call get_param(param_file, mdl, "MLE_FRONT_LENGTH", MLE_front_length, &
                  units="m", default=0.0, scale=US%m_to_L, do_not_log=.true.)

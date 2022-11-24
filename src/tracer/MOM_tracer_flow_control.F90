@@ -379,13 +379,14 @@ subroutine call_tracer_register_obc_segments(GV, param_file, CS, tr_Reg, OBC)
       call register_MOM_generic_tracer_segments(CS%MOM_generic_tracer_CSp, GV, OBC, tr_Reg, param_file)
 
 end subroutine call_tracer_register_obc_segments
+
 !> This subroutine extracts the chlorophyll concentrations from the model state, if possible
 subroutine get_chl_from_model(Chl_array, G, GV, CS)
   type(ocean_grid_type),        intent(in)  :: G         !< The ocean's grid structure.
   type(verticalGrid_type),      intent(in)  :: GV        !< The ocean's vertical grid structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                                 intent(out) :: Chl_array !< The array in which to store the model's
-                                                         !! Chlorophyll-A concentrations in mg m-3.
+                                                         !! Chlorophyll-A concentrations [mg m-3].
   type(tracer_flow_control_CS), pointer     :: CS        !< The control structure returned by a
                                                          !! previous call to call_tracer_register.
 
@@ -635,21 +636,28 @@ subroutine call_tracer_stocks(h, stock_values, G, GV, US, CS, stock_names, stock
   logical, dimension(:), &
                       optional, intent(inout) :: got_min_max !< Indicates whether the global min and
                                                              !! max are found for each tracer
-  real, dimension(:), optional, intent(out)   :: global_min  !< The global minimum of each tracer
-  real, dimension(:), optional, intent(out)   :: global_max  !< The global maximum of each tracer
-  real, dimension(:), optional, intent(out)   :: xgmin       !< The x-position of the global minimum
-  real, dimension(:), optional, intent(out)   :: ygmin       !< The y-position of the global minimum
-  real, dimension(:), optional, intent(out)   :: zgmin       !< The z-position of the global minimum
-  real, dimension(:), optional, intent(out)   :: xgmax       !< The x-position of the global maximum
-  real, dimension(:), optional, intent(out)   :: ygmax       !< The y-position of the global maximum
-  real, dimension(:), optional, intent(out)   :: zgmax       !< The z-position of the global maximum
+  real, dimension(:), optional, intent(out)   :: global_min  !< The global minimum of each tracer [conc]
+  real, dimension(:), optional, intent(out)   :: global_max  !< The global maximum of each tracer [conc]
+  real, dimension(:), optional, intent(out)   :: xgmin       !< The x-position of the global minimum in the
+                                                             !! units of G%geoLonT, often [degrees_E] or [km]
+  real, dimension(:), optional, intent(out)   :: ygmin       !< The y-position of the global minimum in the
+                                                             !! units of G%geoLatT, often [degrees_N] or [km]
+  real, dimension(:), optional, intent(out)   :: zgmin       !< The z-position of the global minimum [layer]
+  real, dimension(:), optional, intent(out)   :: xgmax       !< The x-position of the global maximum in the
+                                                             !! units of G%geoLonT, often [degrees_E] or [km]
+  real, dimension(:), optional, intent(out)   :: ygmax       !< The y-position of the global maximum in the
+                                                             !! units of G%geoLatT, often [degrees_N] or [km]
+  real, dimension(:), optional, intent(out)   :: zgmax       !< The z-position of the global maximum [layer]
 
   ! Local variables
   character(len=200), dimension(MAX_FIELDS_) :: names, units
   character(len=200) :: set_pkg_name
-  ! real, dimension(MAX_FIELDS_) :: values
-  type(EFP_type), dimension(MAX_FIELDS_) :: values_EFP
-  type(EFP_type), dimension(MAX_FIELDS_) :: stock_val_EFP
+  ! real, dimension(MAX_FIELDS_) :: values ! Globally integrated tracer amounts in a
+                                           ! new list for each tracer package [kg conc]
+  type(EFP_type), dimension(MAX_FIELDS_) :: values_EFP     ! Globally integrated tracer amounts in a
+                                                           ! new list for each tracer package [kg conc]
+  type(EFP_type), dimension(MAX_FIELDS_) :: stock_val_EFP  ! Globally integrated tracer amounts in a
+                                                           ! single master list for all tracers [kg conc]
   integer :: max_ns, ns_tot, ns, index, nn, n
 
   if (.not. associated(CS)) call MOM_error(FATAL, "call_tracer_stocks: "// &
@@ -758,12 +766,12 @@ subroutine store_stocks(pkg_name, ns, names, units, values, index, stock_values,
   character(len=*), dimension(:), &
                       intent(in)    :: units   !< Units to use in the metadata for each stock.
   type(EFP_type), dimension(:), &
-                      intent(in)    :: values  !< The values of the tracer stocks
+                      intent(in)    :: values  !< The values of the tracer stocks [conc kg]
   integer,            intent(in)    :: index   !< The integer stock index from
                              !! stocks_constants_mod of the stock to be returned.  If this is
                              !! present and greater than 0, only a single stock can be returned.
   type(EFP_type), dimension(:), &
-                      intent(inout) :: stock_values !< The master list of stock values
+                      intent(inout) :: stock_values !< The master list of stock values [conc kg]
   character(len=*),   intent(inout) :: set_pkg_name !< The name of the last tracer package whose
                                                !! stocks were stored for a specific index.  This is
                                                !! used to trigger an error if there are redundant stocks.

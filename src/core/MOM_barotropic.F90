@@ -4614,6 +4614,8 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, US, param_file, diag, CS, 
                  "gravity waves) to 1 (for a backward Euler treatment). "//&
                  "In practice, BEBT must be greater than about 0.05.", &
                  units="nondim", default=0.1)
+  ! Note that dtbt_input is not rescaled because it has different units for
+  ! positive [s] and negative [nondim] values.
   call get_param(param_file, mdl, "DTBT", dtbt_input, &
                  "The barotropic time step, in s. DTBT is only used with "//&
                  "the split explicit time stepping. To set the time step "//&
@@ -4621,8 +4623,8 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, US, param_file, diag, CS, 
                  "a negative value gives the fraction of the stable value. "//&
                  "Setting DTBT to 0 is the same as setting it to -0.98. "//&
                  "The value of DTBT that will actually be used is an "//&
-                 "integer fraction of DT, rounding down.", units="s or nondim",&
-                 default = -0.98)
+                 "integer fraction of DT, rounding down.", &
+                 units="s or nondim", default=-0.98)
   call get_param(param_file, mdl, "BT_USE_OLD_CORIOLIS_BRACKET_BUG", &
                  CS%use_old_coriolis_bracket_bug , &
                  "If True, use an order of operations that is not bitwise "//&
