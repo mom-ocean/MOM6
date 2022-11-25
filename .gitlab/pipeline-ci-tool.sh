@@ -151,8 +151,8 @@ nolibs-ocean-ice-compile () {
   section-start nolibs-ocean-ice-compile-$1 "Compiling ocean-ice $1 executable"
   if [ ! $DRYRUN ] ; then
     cd $JOB_DIR/$STATS_REPO_DIR/$CONFIGS_DIR
-    mkdir -p build-ocean-only-nolibs-$1
-    cd build-ocean-only-nolibs-$1
+    mkdir -p build-ocean-ice-nolibs-$1
+    cd build-ocean-ice-nolibs-$1
     make -f ../tools/MRS/Makefile.build ./$1/env BUILD=. -s
     ../src/mkmf/bin/list_paths -l ../src/MOM6/config_src/{drivers/FMS_cap,memory/dynamic_symmetric,infra/FMS1,ext*} ../src/MOM6/src ../src/SIS2/*src ../src/{FMS1,coupler,icebergs,ice_param,land_null,atmos_null}
     sed -i '/FMS1\/.*\/test_/d' path_names
