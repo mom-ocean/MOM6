@@ -4,21 +4,42 @@ FCFLAGS = @FCFLAGS@
 LDFLAGS = @LDFLAGS@
 LIBS = @LIBS@
 
-OUT = topog.nc ocean_hgrid.nc temp_salt_ic.nc sponge.nc
+LAUNCHER ?=
 
-all: $(OUT)
+OUT = ocean_hgrid.nc topog.nc temp_salt_ic.nc sponge.nc
 
-ocean_hgrid.nc topog.nc: gen_grid
-	./gen_grid
+# Since each program generates two outputs, we can only use one to track the
+# creation.  The second rule is used to indirectly re-invoke the first rule.
+#
+# Reference:
+# https://www.gnu.org/software/automake/manual/html_node/Multiple-Outputs.html
 
-temp_salt_ic.nc sponge.nc: gen_data
-	./gen_data
+# Program output
+all: ocean_hgrid.nc temp_salt_ic.nc
+
+ocean_hgrid.nc: gen_grid
+	$(LAUNCHER) ./gen_grid
+topog.nc: ocean_hgrid.nc
+	@test -f $@ || rm -f $^
+	@test -f $@ || $(MAKE) $^
+
+temp_salt_ic.nc: gen_data ocean_hgrid.nc
+	$(LAUNCHER) ./gen_data
+sponge.nc: temp_salt_ic.nc
+	@test -f $@ || rm -f $^
+	@test -f $@ || $(MAKE) $^
+
+
+# Programs
 
 gen_grid: gen_grid.F90
 	$(FC) $(FCFLAGS) $(LDFLAGS) -o $@ $^ $(LIBS)
 
 gen_data: gen_data.F90
 	$(FC) $(FCFLAGS) $(LDFLAGS) -o $@ $^ $(LIBS)
+
+
+# Support
 
 .PHONY: clean
 clean:
