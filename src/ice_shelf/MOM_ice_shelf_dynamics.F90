@@ -80,7 +80,7 @@ type, public :: ice_shelf_dyn_CS ; private
   real, pointer, dimension(:,:) :: ice_visc => NULL()   !< Glen's law ice viscosity (Pa s),
                                                        !!  in [R L2 T-1 ~> kg m-1 s-1].
   real, pointer, dimension(:,:) :: AGlen_visc => NULL() !< Ice-stiffness parameter in Glen's law ice viscosity,
-                                                      !! often in [kg-1/3 m-1/3 s-1].
+                                                      !! often in [Pa-3 s-1] if n_Glen is 3.
   real, pointer, dimension(:,:) :: thickness_bdry_val => NULL() !< The ice thickness at an inflowing boundary [Z ~> m].
   real, pointer, dimension(:,:) :: u_bdry_val => NULL() !< The zonal ice velocity at inflowing boundaries
                                        !! [L yr-1 ~> m yr-1]
@@ -149,9 +149,9 @@ type, public :: ice_shelf_dyn_CS ; private
   real :: min_thickness_simple_calve !< min. ice shelf thickness criteria for calving [Z ~> m].
 
   real :: cg_tolerance !< The tolerance in the CG solver, relative to initial residual, that
-                       !! determines when to stop the conjugate gradient iterations.
+                       !! determines when to stop the conjugate gradient iterations [nondim].
   real :: nonlinear_tolerance !< The fractional nonlinear tolerance, relative to the initial error,
-                              !! that sets when to stop the iterative velocity solver
+                              !! that sets when to stop the iterative velocity solver [nondim]
   integer :: cg_max_iterations !< The maximum number of iterations that can be used in the CG solver
   integer :: nonlin_solve_err_mode  !< 1: exit vel solve based on nonlin residual
                     !! 2: exit based on "fixed point" metric (|u - u_last| / |u| < tol) where | | is infty-norm
@@ -265,7 +265,7 @@ subroutine register_ice_shelf_dyn_restarts(G, US, param_file, CS, restart_CS)
     allocate( CS%t_shelf(isd:ied,jsd:jed), source=-10.0*US%degC_to_C ) ! [C ~> degC]
     allocate( CS%ice_visc(isd:ied,jsd:jed), source=0.0 )
     allocate( CS%AGlen_visc(isd:ied,jsd:jed), source=2.261e-25 ) ! [Pa-3 s-1]
-    allocate( CS%basal_traction(isd:ied,jsd:jed), source=0.0 )   ! [Pa]
+    allocate( CS%basal_traction(isd:ied,jsd:jed), source=0.0 )   ! [R L2 T-2 ~> Pa]
     allocate( CS%C_basal_friction(isd:ied,jsd:jed), source=5.0e10 ) ! [Pa (m-1 s)^n_sliding]
     allocate( CS%OD_av(isd:ied,jsd:jed), source=0.0 )
     allocate( CS%ground_frac(isd:ied,jsd:jed), source=0.0 )
@@ -389,7 +389,7 @@ subroutine initialize_ice_shelf_dyn(param_file, Time, ISS, CS, G, US, diag, new_
       "GROUNDING_LINE_INTERP_SUBGRID_N must be a positive integer if GL regularization is used")
     call get_param(param_file, mdl, "ICE_SHELF_CFL_FACTOR", CS%CFL_factor, &
                  "A factor used to limit timestep as CFL_FACTOR * min (\Delta x / u). "//&
-                 "This is only used with an ice-only model.", default=0.25)
+                 "This is only used with an ice-only model.", units="nondim", default=0.25)
   endif
   call get_param(param_file, mdl, "RHO_0", CS%density_ocean_avg, &
                  "avg ocean density used in floatation cond", &
@@ -414,9 +414,9 @@ subroutine initialize_ice_shelf_dyn(param_file, Time, ISS, CS, G, US, diag, new_
     call get_param(param_file, mdl, "DENSITY_ICE", CS%density_ice, &
                  "A typical density of ice.", units="kg m-3", default=917.0, scale=US%kg_m3_to_R)
     call get_param(param_file, mdl, "CONJUGATE_GRADIENT_TOLERANCE", CS%cg_tolerance, &
-                "tolerance in CG solver, relative to initial residual", default=1.e-6)
+                "tolerance in CG solver, relative to initial residual", units="nondim", default=1.e-6)
     call get_param(param_file, mdl, "ICE_NONLINEAR_TOLERANCE", CS%nonlinear_tolerance, &
-                "nonlin tolerance in iterative velocity solve",default=1.e-6)
+                "nonlin tolerance in iterative velocity solve", units="nondim", default=1.e-6)
     call get_param(param_file, mdl, "CONJUGATE_GRADIENT_MAXIT", CS%cg_max_iterations, &
                 "max iteratiions in CG solver", default=2000)
     call get_param(param_file, mdl, "THRESH_FLOAT_COL_DEPTH", CS%thresh_float_col_depth, &
@@ -1298,7 +1298,7 @@ subroutine ice_shelf_solve_inner(CS, ISS, G, US, u_shlf, v_shlf, taudx, taudy, H
 
     ! R,u,v,Z valid region moves in by 1
 
-    ! beta_k = (Z \dot R) / (Zold \dot Rold}
+    ! beta_k = (Z \dot R) / (Zold \dot Rold)
     sum_vec(:,:) = 0.0 ; sum_vec_2(:,:) = 0.0
 
     do j=jscq,jecq ; do i=iscq,iecq
@@ -2639,17 +2639,17 @@ subroutine calc_shelf_visc(CS, ISS, G, US, u_shlf, v_shlf)
               (v_shlf(I-1,J) * Phi(6,2*(jq-1)+iq,i,j) + &
               v_shlf(I,J-1) * Phi(4,2*(jq-1)+iq,i,j)) )
       enddo ; enddo
-       if (trim(CS%ice_viscosity_compute)=="CONSTANT") then
-          CS%ice_visc(i,j) =1e15 * US%kg_m3_to_R*US%m_to_L*US%m_s_to_L_T * (G%areaT(i,j) * ISS%h_shelf(i,j))
-           ! constant viscocity for debugging
-         elseif (trim(CS%ice_viscosity_compute)=="MODEL") then
-            CS%ice_visc(i,j) = 0.5 * Visc_coef * (G%areaT(i,j) * ISS%h_shelf(i,j)) * &
+      if (trim(CS%ice_viscosity_compute)=="CONSTANT") then
+        CS%ice_visc(i,j) = 1e15 * US%kg_m3_to_R*US%m_to_L*US%m_s_to_L_T * (G%areaT(i,j) * ISS%h_shelf(i,j))
+        ! constant viscocity for debugging
+      elseif (trim(CS%ice_viscosity_compute)=="MODEL") then
+        CS%ice_visc(i,j) = 0.5 * Visc_coef * (G%areaT(i,j) * ISS%h_shelf(i,j)) * &
               (US%s_to_T**2 * (ux**2 + vy**2 + ux*vy + 0.25*(uy+vx)**2 + eps_min**2))**((1.-n_g)/(2.*n_g))
-         elseif(trim(CS%ice_viscosity_compute)=="OBS") then
-           if (CS%AGlen_visc(i,j) >0) CS%ice_visc(i,j) =CS%AGlen_visc(i,j)*(G%areaT(i,j) * ISS%h_shelf(i,j))
-            ! Here CS%Aglen_visc(i,j) is the ice viscocity [Pa s-1] computed from obs and read from a file
-       endif
-     endif
+      elseif (trim(CS%ice_viscosity_compute)=="OBS") then
+        if (CS%AGlen_visc(i,j) >0) CS%ice_visc(i,j) = CS%AGlen_visc(i,j)*(G%areaT(i,j) * ISS%h_shelf(i,j))
+        ! Here CS%Aglen_visc(i,j) is the ice viscocity [Pa s-1] computed from obs and read from a file
+      endif
+    endif
   enddo ; enddo
   deallocate(Phi)
 end subroutine calc_shelf_visc

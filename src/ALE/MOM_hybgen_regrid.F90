@@ -172,11 +172,11 @@ subroutine init_hybgen_regrid(CS, GV, US, param_file)
   call get_param(param_file, mdl, "HYBGEN_REMAP_MIN_ZSTAR_DILATE", CS%min_dilate, &
                  "The maximum amount of dilation that is permitted when converting target "//&
                  "coordinates from z to z* [nondim].  This limit applies when drying occurs.", &
-                 default=0.5)
+                 units="nondim", default=0.5)
   call get_param(param_file, mdl, "HYBGEN_REMAP_MAX_ZSTAR_DILATE", CS%max_dilate, &
                  "The maximum amount of dilation that is permitted when converting target "//&
                  "coordinates from z to z* [nondim].  This limit applies when drying occurs.", &
-                 default=2.0)
+                 units="nondim", default=2.0)
 
   CS%onem = 1.0 * GV%m_to_H
 

@@ -219,7 +219,7 @@ subroutine init_oda(Time, G, GV, US, diag_CS, CS)
   if (CS%do_bias_adjustment) then
     call get_param(PF, mdl, "TRACER_ADJUSTMENT_FACTOR", CS%bias_adjustment_multiplier, &
        "A multiplicative scaling factor for the climatological tracer tendency adjustment ", &
-       default=1.0)
+       units="nondim", default=1.0)
   endif
   call get_param(PF, mdl, "USE_BASIN_MASK", CS%use_basin_mask, &
        "If true, add a basin mask to delineate weakly connected "//&
