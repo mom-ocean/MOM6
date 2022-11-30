@@ -133,6 +133,7 @@ subroutine copy_dyngrid_to_MOM_grid(dG, oG, US)
 
   ! Copy various scalar variables and strings.
   oG%x_axis_units = dG%x_axis_units ; oG%y_axis_units = dG%y_axis_units
+  oG%x_ax_unit_short = dG%x_ax_unit_short ; oG%y_ax_unit_short = dG%y_ax_unit_short
   oG%areaT_global = dG%areaT_global ; oG%IareaT_global = dG%IareaT_global
   oG%south_lat = dG%south_lat ; oG%west_lon  = dG%west_lon
   oG%len_lat = dG%len_lat ; oG%len_lon = dG%len_lon
@@ -291,6 +292,7 @@ subroutine copy_MOM_grid_to_dyngrid(oG, dG, US)
 
   ! Copy various scalar variables and strings.
   dG%x_axis_units = oG%x_axis_units ; dG%y_axis_units = oG%y_axis_units
+  dG%x_ax_unit_short = oG%x_ax_unit_short ; dG%y_ax_unit_short = oG%y_ax_unit_short
   dG%areaT_global = oG%areaT_global ; dG%IareaT_global = oG%IareaT_global
   dG%south_lat = oG%south_lat ; dG%west_lon  = oG%west_lon
   dG%len_lat = oG%len_lat ; dG%len_lon = oG%len_lon

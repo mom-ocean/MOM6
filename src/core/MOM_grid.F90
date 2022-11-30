@@ -146,8 +146,12 @@ type, public :: ocean_grid_type
     gridLonB => NULL()    !< The longitude of B points for the purpose of labeling the output axes.
                           !! On many grids this is the same as geoLonBu.
   character(len=40) :: &
+    ! Except on a Cartesian grid, these are usually some variant of "degrees".
     x_axis_units, &     !< The units that are used in labeling the x coordinate axes.
-    y_axis_units        !< The units that are used in labeling the y coordinate axes.
+    y_axis_units, &     !< The units that are used in labeling the y coordinate axes.
+    ! These are internally generated names, including "m", "km", "deg_E" and "deg_N".
+    x_ax_unit_short, &  !< A short description of the x-axis units for documenting parameter units
+    y_ax_unit_short     !< A short description of the y-axis units for documenting parameter units
 
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: &
     bathyT           !< Ocean bottom depth at tracer points, in depth units [Z ~> m].

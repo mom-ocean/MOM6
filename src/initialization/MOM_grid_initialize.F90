@@ -27,17 +27,17 @@ public set_grid_metrics, initialize_masks, Adcroft_reciprocal
 
 !> Global positioning system (aka container for information to describe the grid)
 type, private :: GPS ; private
-  real :: len_lon  !< The longitudinal or x-direction length of the domain.
-  real :: len_lat  !< The latitudinal or y-direction length of the domain.
+  real :: len_lon  !< The longitudinal or x-direction length of the domain [degrees_E] or [km] or [m].
+  real :: len_lat  !< The latitudinal or y-direction length of the domain [degrees_N] or [km] or [m].
   real :: west_lon !< The western longitude of the domain or the equivalent
-                   !! starting value for the x-axis.
+                   !! starting value for the x-axis [degrees_E] or [km] or [m].
   real :: south_lat  !< The southern latitude of the domain or the equivalent
-                   !! starting value for the y-axis.
+                   !! starting value for the y-axis [degrees_N] or [km] or [m].
   real :: Rad_Earth_L !< The radius of the Earth in rescaled units [L ~> m]
   real :: Lat_enhance_factor  !< The amount by which the meridional resolution
-                   !! is enhanced within LAT_EQ_ENHANCE of the equator.
+                   !! is enhanced within LAT_EQ_ENHANCE of the equator [nondim]
   real :: Lat_eq_enhance !< The latitude range to the north and south of the equator
-                   !! over which the resolution is enhanced, in degrees.
+                   !! over which the resolution is enhanced [degrees_N]
   logical :: isotropic !< If true, an isotropic grid on a sphere (also known as a Mercator grid)
                    !! is used. With an isotropic grid, the meridional extent of the domain
                    !! (LENLAT), the zonal extent (LENLON), and the number of grid points in each
@@ -83,6 +83,8 @@ subroutine set_grid_metrics(G, param_file, US)
 
   ! These are defaults that may be changed in the next select block.
   G%x_axis_units = "degrees_east" ; G%y_axis_units = "degrees_north"
+  G%x_ax_unit_short = "degrees_E" ; G%y_ax_unit_short = "degrees_N"
+
   G%Rad_Earth_L = -1.0*US%m_to_L ; G%len_lat = 0.0 ; G%len_lon = 0.0
   select case (trim(config))
     case ("mosaic");    call set_grid_metrics_from_mosaic(G, param_file, US)
@@ -379,7 +381,10 @@ subroutine set_grid_metrics_cartesian(G, param_file, US)
   call get_param(param_file, mdl, "AXIS_UNITS", units_temp, &
                  "The units for the Cartesian axes. Valid entries are: \n"//&
                  " \t degrees - degrees of latitude and longitude \n"//&
-                 " \t m - meters \n \t k - kilometers", default="degrees")
+                 " \t m or meter(s) - meters \n"//&
+                 " \t k or km or kilometer(s) - kilometers", default="degrees")
+  if (trim(units_temp) == "k") units_temp = "km"
+
   call get_param(param_file, mdl, "SOUTHLAT", G%south_lat, &
                  "The southern latitude of the domain or the equivalent "//&
                  "starting value for the y-axis.", units=units_temp, &
@@ -399,8 +404,10 @@ subroutine set_grid_metrics_cartesian(G, param_file, US)
 
   if (units_temp(1:1) == 'k') then
     G%x_axis_units = "kilometers" ; G%y_axis_units = "kilometers"
+    G%x_ax_unit_short = "km" ; G%y_ax_unit_short = "km"
   elseif (units_temp(1:1) == 'm') then
     G%x_axis_units = "meters" ; G%y_axis_units = "meters"
+    G%x_ax_unit_short = "m" ; G%y_ax_unit_short = "m"
   endif
   call log_param(param_file, mdl, "explicit AXIS_UNITS", G%x_axis_units)
 
@@ -513,16 +520,16 @@ subroutine set_grid_metrics_spherical(G, param_file, US)
   PI = 4.0*atan(1.0); PI_180 = atan(1.0)/45.
 
   call get_param(param_file, mdl, "SOUTHLAT", G%south_lat, &
-                 "The southern latitude of the domain.", units="degrees", &
+                 "The southern latitude of the domain.", units="degrees_N", &
                  fail_if_missing=.true.)
   call get_param(param_file, mdl, "LENLAT", G%len_lat, &
-                 "The latitudinal length of the domain.", units="degrees", &
+                 "The latitudinal length of the domain.", units="degrees_N", &
                  fail_if_missing=.true.)
   call get_param(param_file, mdl, "WESTLON", G%west_lon, &
-                 "The western longitude of the domain.", units="degrees", &
+                 "The western longitude of the domain.", units="degrees_E", &
                  default=0.0)
   call get_param(param_file, mdl, "LENLON", G%len_lon, &
-                 "The longitudinal length of the domain.", units="degrees", &
+                 "The longitudinal length of the domain.", units="degrees_E", &
                  fail_if_missing=.true.)
   call get_param(param_file, mdl, "RAD_EARTH", G%Rad_Earth_L, &
                  "The radius of the Earth.", units="m", default=6.378e6, scale=US%m_to_L)
@@ -668,16 +675,16 @@ subroutine set_grid_metrics_mercator(G, param_file, US)
   PI = 4.0*atan(1.0) ; PI_2 = 0.5*PI
 
   call get_param(param_file, mdl, "SOUTHLAT", GP%south_lat, &
-                 "The southern latitude of the domain.", units="degrees", &
+                 "The southern latitude of the domain.", units="degrees_N", &
                  fail_if_missing=.true.)
   call get_param(param_file, mdl, "LENLAT", GP%len_lat, &
-                 "The latitudinal length of the domain.", units="degrees", &
+                 "The latitudinal length of the domain.", units="degrees_N", &
                  fail_if_missing=.true.)
   call get_param(param_file, mdl, "WESTLON", GP%west_lon, &
-                 "The western longitude of the domain.", units="degrees", &
+                 "The western longitude of the domain.", units="degrees_E", &
                  default=0.0)
   call get_param(param_file, mdl, "LENLON", GP%len_lon, &
-                 "The longitudinal length of the domain.", units="degrees", &
+                 "The longitudinal length of the domain.", units="degrees_E", &
                  fail_if_missing=.true.)
   call get_param(param_file, mdl, "RAD_EARTH", GP%Rad_Earth_L, &
                  "The radius of the Earth.", units="m", default=6.378e6, scale=US%m_to_L)
@@ -704,7 +711,7 @@ subroutine set_grid_metrics_mercator(G, param_file, US)
                  units="nondim", default=1.0)
   call get_param(param_file, mdl, "LAT_EQ_ENHANCE", GP%Lat_eq_enhance, &
                  "The latitude range to the north and south of the equator "//&
-                 "over which the resolution is enhanced.", units="degrees", &
+                 "over which the resolution is enhanced.", units="degrees_N", &
                  default=0.0)
 
   !   With an isotropic grid, the north-south extent of the domain,
