@@ -548,17 +548,17 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
     ! Add ice shelf fluxes
     if (OS%use_ice_shelf) then
       if (do_thermo) &
-        call shelf_calc_flux(OS%sfc_state, OS%fluxes, OS%Time, OS%US%T_to_s*dt_coupling, OS%Ice_shelf_CSp)
+        call shelf_calc_flux(OS%sfc_state, OS%fluxes, OS%Time, dt_coupling, OS%Ice_shelf_CSp)
       if (do_dyn) &
         call add_shelf_forces(OS%grid, OS%US, OS%Ice_shelf_CSp, OS%forces)
     endif
     if (OS%icebergs_alter_ocean)  then
       if (do_dyn) &
         call iceberg_forces(OS%grid, OS%forces, OS%use_ice_shelf, &
-                            OS%sfc_state, OS%US%T_to_s*dt_coupling, OS%marine_ice_CSp)
+                            OS%sfc_state, dt_coupling, OS%marine_ice_CSp)
       if (do_thermo) &
         call iceberg_fluxes(OS%grid, OS%US, OS%fluxes, OS%use_ice_shelf, &
-                          OS%sfc_state, OS%US%T_to_s*dt_coupling, OS%marine_ice_CSp)
+                          OS%sfc_state, dt_coupling, OS%marine_ice_CSp)
     endif
 
     ! Fields that exist in both the forcing and mech_forcing types must be copied.
@@ -576,17 +576,17 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
 
     if (OS%use_ice_shelf) then
       if (do_thermo) &
-        call shelf_calc_flux(OS%sfc_state, OS%flux_tmp, OS%Time, OS%US%T_to_s*dt_coupling, OS%Ice_shelf_CSp)
+        call shelf_calc_flux(OS%sfc_state, OS%flux_tmp, OS%Time, dt_coupling, OS%Ice_shelf_CSp)
       if (do_dyn) &
         call add_shelf_forces(OS%grid, OS%US, OS%Ice_shelf_CSp, OS%forces)
     endif
     if (OS%icebergs_alter_ocean)  then
       if (do_dyn) &
         call iceberg_forces(OS%grid, OS%forces, OS%use_ice_shelf, &
-                            OS%sfc_state, OS%US%T_to_s*dt_coupling, OS%marine_ice_CSp)
+                            OS%sfc_state, dt_coupling, OS%marine_ice_CSp)
       if (do_thermo) &
         call iceberg_fluxes(OS%grid, OS%US, OS%flux_tmp, OS%use_ice_shelf, &
-                          OS%sfc_state, OS%US%T_to_s*dt_coupling, OS%marine_ice_CSp)
+                          OS%sfc_state, dt_coupling, OS%marine_ice_CSp)
     endif
 
     call forcing_accumulate(OS%flux_tmp, OS%forces, OS%fluxes, OS%grid, weight)
@@ -615,16 +615,16 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
   Master_time = OS%Time ; Time1 = OS%Time
 
   if (OS%offline_tracer_mode) then
-    call step_offline(OS%forces, OS%fluxes, OS%sfc_state, Time1, OS%US%T_to_s*dt_coupling, OS%MOM_CSp)
+    call step_offline(OS%forces, OS%fluxes, OS%sfc_state, Time1, dt_coupling, OS%MOM_CSp)
   elseif ((.not.do_thermo) .or. (.not.do_dyn)) then
     ! The call sequence is being orchestrated from outside of update_ocean_model.
-    call step_MOM(OS%forces, OS%fluxes, OS%sfc_state, Time1, OS%US%T_to_s*dt_coupling, OS%MOM_CSp, &
+    call step_MOM(OS%forces, OS%fluxes, OS%sfc_state, Time1, dt_coupling, OS%MOM_CSp, &
                   Waves=OS%Waves, do_dynamics=do_thermo, do_thermodynamics=do_dyn, &
                   reset_therm=Ocn_fluxes_used)
- !### What to do with these?   , start_cycle=(n==1), end_cycle=.false., cycle_length=OS%US%T_to_s*dt_coupling)
+ !### What to do with these?   , start_cycle=(n==1), end_cycle=.false., cycle_length=dt_coupling)
 
   elseif (OS%single_step_call) then
-    call step_MOM(OS%forces, OS%fluxes, OS%sfc_state, Time1, OS%US%T_to_s*dt_coupling, OS%MOM_CSp, Waves=OS%Waves)
+    call step_MOM(OS%forces, OS%fluxes, OS%sfc_state, Time1, dt_coupling, OS%MOM_CSp, Waves=OS%Waves)
   else
     n_max = 1 ; if (dt_coupling > OS%dt) n_max = ceiling(dt_coupling/OS%dt - 0.001)
     dt_dyn = dt_coupling / real(n_max)
@@ -647,18 +647,18 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
             "THERMO_SPANS_COUPLING and DIABATIC_FIRST.")
         if (modulo(n-1,nts)==0) then
           dtdia = dt_dyn*min(nts,n_max-(n-1))
-          call step_MOM(OS%forces, OS%fluxes, OS%sfc_state, Time2, OS%US%T_to_s*dtdia, OS%MOM_CSp, &
+          call step_MOM(OS%forces, OS%fluxes, OS%sfc_state, Time2, dtdia, OS%MOM_CSp, &
                         Waves=OS%Waves, do_dynamics=.false., do_thermodynamics=.true., &
-                        start_cycle=(n==1), end_cycle=.false., cycle_length=OS%US%T_to_s*dt_coupling)
+                        start_cycle=(n==1), end_cycle=.false., cycle_length=dt_coupling)
         endif
 
-        call step_MOM(OS%forces, OS%fluxes, OS%sfc_state, Time2, OS%US%T_to_s*dt_dyn, OS%MOM_CSp, &
+        call step_MOM(OS%forces, OS%fluxes, OS%sfc_state, Time2, dt_dyn, OS%MOM_CSp, &
                       Waves=OS%Waves, do_dynamics=.true., do_thermodynamics=.false., &
-                      start_cycle=.false., end_cycle=(n==n_max), cycle_length=OS%US%T_to_s*dt_coupling)
+                      start_cycle=.false., end_cycle=(n==n_max), cycle_length=dt_coupling)
       else
-        call step_MOM(OS%forces, OS%fluxes, OS%sfc_state, Time2, OS%US%T_to_s*dt_dyn, OS%MOM_CSp, &
+        call step_MOM(OS%forces, OS%fluxes, OS%sfc_state, Time2, dt_dyn, OS%MOM_CSp, &
                       Waves=OS%Waves, do_dynamics=.true., do_thermodynamics=.false., &
-                      start_cycle=(n==1), end_cycle=.false., cycle_length=OS%US%T_to_s*dt_coupling)
+                      start_cycle=(n==1), end_cycle=.false., cycle_length=dt_coupling)
 
         step_thermo = .false.
         if (thermo_does_span_coupling) then
@@ -673,9 +673,9 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
         if (step_thermo) then
           ! Back up Time2 to the start of the thermodynamic segment.
           Time2 = Time2 - set_time(int(floor(OS%US%T_to_s*(dtdia - dt_dyn) + 0.5)))
-          call step_MOM(OS%forces, OS%fluxes, OS%sfc_state, Time2, OS%US%T_to_s*dtdia, OS%MOM_CSp, &
+          call step_MOM(OS%forces, OS%fluxes, OS%sfc_state, Time2, dtdia, OS%MOM_CSp, &
                         Waves=OS%Waves, do_dynamics=.false., do_thermodynamics=.true., &
-                        start_cycle=.false., end_cycle=(n==n_max), cycle_length=OS%US%T_to_s*dt_coupling)
+                        start_cycle=.false., end_cycle=(n==n_max), cycle_length=dt_coupling)
         endif
       endif
 
@@ -687,7 +687,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
   OS%Time = Master_time + Ocean_coupling_time_step
   OS%nstep = OS%nstep + 1
 
-  call mech_forcing_diags(OS%forces, OS%US%T_to_s*dt_coupling, OS%grid, OS%Time, OS%diag, OS%forcing_CSp%handles)
+  call mech_forcing_diags(OS%forces, dt_coupling, OS%grid, OS%Time, OS%diag, OS%forcing_CSp%handles)
 
   if (OS%fluxes%fluxes_used) then
     if (cesm_coupled) then

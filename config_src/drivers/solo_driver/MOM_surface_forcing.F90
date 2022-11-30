@@ -1300,7 +1300,7 @@ subroutine buoyancy_forcing_from_data_override(sfc_state, fluxes, day, dt, G, US
 !#CTRL#     SSS_mean(i,j) = 0.5*(sfc_state%SSS(i,j) + CS%S_Restore(i,j))
 !#CTRL#   enddo ; enddo
 !#CTRL#   call apply_ctrl_forcing(SST_anom, SSS_anom, SSS_mean, fluxes%heat_added, &
-!#CTRL#                           fluxes%vprec, day, US%T_to_s*dt, G, US, CS%ctrl_forcing_CSp)
+!#CTRL#                           fluxes%vprec, day, dt, G, US, CS%ctrl_forcing_CSp)
 !#CTRL# endif
 
   call callTree_leave("buoyancy_forcing_from_data_override")

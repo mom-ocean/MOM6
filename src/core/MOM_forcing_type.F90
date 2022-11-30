@@ -10,7 +10,7 @@ use MOM_cpu_clock,     only : cpu_clock_id, cpu_clock_begin, cpu_clock_end, CLOC
 use MOM_debugging,     only : hchksum, uvchksum
 use MOM_diag_mediator, only : post_data, register_diag_field, register_scalar_field
 use MOM_diag_mediator, only : time_type, diag_ctrl, safe_alloc_alloc, query_averaging_enabled
-use MOM_diag_mediator, only : enable_averages, enable_averaging, disable_averaging
+use MOM_diag_mediator, only : enable_averages, disable_averaging
 use MOM_EOS,           only : calculate_density_derivs, EOS_domain
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser,   only : get_param, log_param, log_version, param_file_type
@@ -2310,7 +2310,7 @@ end subroutine copy_back_forcing_fields
 !! fields registered as part of register_forcing_type_diags.
 subroutine mech_forcing_diags(forces_in, dt, G, time_end, diag, handles)
   type(mech_forcing), target, intent(in) :: forces_in !< mechanical forcing input fields
-  real,                  intent(in)    :: dt       !< time step for the forcing [s]
+  real,                  intent(in)    :: dt       !< time step for the forcing [T ~> s]
   type(ocean_grid_type), intent(in)    :: G        !< grid type
   type(time_type),       intent(in)    :: time_end !< The end time of the diagnostic interval.
   type(diag_ctrl),       intent(inout) :: diag     !< diagnostic type
@@ -2335,7 +2335,7 @@ subroutine mech_forcing_diags(forces_in, dt, G, time_end, diag, handles)
   endif
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
-  call enable_averaging(dt, time_end, diag)
+  call enable_averages(dt, time_end, diag)
   ! if (query_averaging_enabled(diag)) then
 
     if ((handles%id_taux > 0) .and. associated(forces%taux)) &

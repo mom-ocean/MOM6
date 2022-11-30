@@ -205,7 +205,7 @@ subroutine offline_advection_ale(fluxes, Time_start, time_interval, G, GV, US, C
                                  h_pre, uhtr, vhtr, converged)
   type(forcing),           intent(inout) :: fluxes        !< pointers to forcing fields
   type(time_type),         intent(in)    :: Time_start    !< starting time of a segment, as a time type
-  real,                    intent(in)    :: time_interval !< time interval covered by this call [s]
+  real,                    intent(in)    :: time_interval !< time interval covered by this call [T ~> s]
   type(ocean_grid_type),   intent(inout) :: G             !< Ocean grid structure
   type(verticalGrid_type), intent(in)    :: GV            !< Vertical grid structure
   type(unit_scale_type),   intent(in)    :: US            !< A dimensional unit scaling type
@@ -846,7 +846,7 @@ end subroutine offline_fw_fluxes_out_ocean
 subroutine offline_advection_layer(fluxes, Time_start, time_interval, G, GV, US, CS, h_pre, eatr, ebtr, uhtr, vhtr)
   type(forcing),              intent(inout) :: fluxes        !< pointers to forcing fields
   type(time_type),            intent(in)    :: Time_start    !< starting time of a segment, as a time type
-  real,                       intent(in)    :: time_interval !< Offline transport time interval [s]
+  real,                       intent(in)    :: time_interval !< Offline transport time interval [T ~> s]
   type(ocean_grid_type),      intent(inout) :: G             !< Ocean grid structure
   type(verticalGrid_type),    intent(in)    :: GV            !< Vertical grid structure
   type(unit_scale_type),      intent(in)    :: US            !< A dimensional unit scaling type
@@ -894,7 +894,7 @@ subroutine offline_advection_layer(fluxes, Time_start, time_interval, G, GV, US,
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
-  dt_iter = US%s_to_T * time_interval / real(max(1, CS%num_off_iter))
+  dt_iter = time_interval / real(max(1, CS%num_off_iter))
   x_before_y = CS%x_before_y
 
   do iter=1,CS%num_off_iter
