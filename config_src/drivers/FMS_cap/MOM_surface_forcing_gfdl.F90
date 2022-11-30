@@ -221,7 +221,7 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
   type(time_type),         intent(in)    :: Time   !< The time of the fluxes, used for interpolating the
                                                    !! salinity to the right time, when it is being restored.
   real,                    intent(in)    :: valid_time !< The amount of time over which these fluxes
-                                                   !! should be applied [s].
+                                                   !! should be applied [T ~> s].
   type(ocean_grid_type),   intent(inout) :: G      !< The ocean's grid structure
   type(unit_scale_type),   intent(in)    :: US     !< A dimensional unit scaling type
   type(surface_forcing_CS),pointer       :: CS     !< A pointer to the control structure returned by a
@@ -333,7 +333,7 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
 
   ! Indicate that there are new unused fluxes.
   fluxes%fluxes_used = .false.
-  fluxes%dt_buoy_accum = US%s_to_T*valid_time
+  fluxes%dt_buoy_accum = valid_time
 
   fluxes%heat_added(:,:) = 0.0
   fluxes%salt_flux_added(:,:) = 0.0
@@ -581,7 +581,7 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
 !#CTRL#     SSS_mean(i,j) = 0.5*(sfc_state%SSS(i,j) + CS%S_Restore(i,j))
 !#CTRL#   enddo ; enddo
 !#CTRL#   call apply_ctrl_forcing(SST_anom, SSS_anom, SSS_mean, fluxes%heat_added, &
-!#CTRL#                           fluxes%vprec, day, US%s_to_T*valid_time, G, US, CS%ctrl_forcing_CSp)
+!#CTRL#                           fluxes%vprec, day, valid_time, G, US, CS%ctrl_forcing_CSp)
 !#CTRL# endif
 
   ! adjust the NET fresh-water flux to zero, if flagged
@@ -663,7 +663,7 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, US, CS, dt_
                                                    !! previous call to surface_forcing_init.
   real,          optional, intent(in)    :: dt_forcing !< A time interval over which to apply the
                                                    !! current value of ustar as a weighted running
-                                                   !! average [s], or if 0 do not average ustar.
+                                                   !! average [T ~> s], or if 0 do not average ustar.
                                                    !! Missing is equivalent to 0.
   logical,       optional, intent(in)    :: reset_avg !< If true, reset the time average.
 

@@ -233,7 +233,7 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
   type(time_type),         intent(in)    :: Time   !< The time of the fluxes, used for interpolating the
                                                    !! salinity to the right time, when it is being restored.
   real,                    intent(in)    :: valid_time !< The amount of time over which these fluxes
-                                                   !! should be applied [s].
+                                                   !! should be applied [T ~> s].
   type(ocean_grid_type),   intent(inout) :: G      !< The ocean's grid structure
   type(unit_scale_type),   intent(in)    :: US     !< A dimensional unit scaling type
   type(surface_forcing_CS),pointer       :: CS     !< A pointer to the control structure returned by a
@@ -363,7 +363,7 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
 
   ! Indicate that there are new unused fluxes.
   fluxes%fluxes_used = .false.
-  fluxes%dt_buoy_accum = US%s_to_T*valid_time
+  fluxes%dt_buoy_accum = valid_time
 
   if (CS%allow_flux_adjustments) then
     fluxes%heat_added(:,:)=0.0
