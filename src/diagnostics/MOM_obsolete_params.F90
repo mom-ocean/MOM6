@@ -83,7 +83,8 @@ subroutine find_obsolete_params(param_file)
 
   call obsolete_real(param_file, "ETA_TOLERANCE_AUX", only_warn=.true.)
   call obsolete_real(param_file, "BT_MASS_SOURCE_LIMIT", 0.0)
-
+  call obsolete_real(param_file, "FIRST_GUESS_SURFACE_LAYER_DEPTH")
+  call obsolete_logical(param_file, "CORRECT_SURFACE_LAYER_AVERAGE")
   call obsolete_int(param_file, "SEAMOUNT_LENGTH_SCALE", hint="Use SEAMOUNT_X_LENGTH_SCALE instead.")
 
   call obsolete_logical(param_file, "MSTAR_FIXED", hint="Instead use MSTAR_MODE.")

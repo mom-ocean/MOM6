@@ -28,19 +28,19 @@ public calculate_CVMix_shear, CVMix_shear_init, CVMix_shear_is_used, CVMix_shear
 ! vary with the Boussinesq approximation, the Boussinesq variant is given first.
 
 !> Control structure including parameters for CVMix interior shear schemes.
-type, public :: CVMix_shear_cs ! TODO: private
+type, public :: CVMix_shear_cs ; private
   logical :: use_LMD94                      !< Flags to use the LMD94 scheme
   logical :: use_PP81                       !< Flags to use Pacanowski and Philander (JPO 1981)
   logical :: smooth_ri                      !< If true, smooth Ri using a 1-2-1 filter
-  real    :: Ri_zero                        !< LMD94 critical Richardson number
-  real    :: Nu_zero                        !< LMD94 maximum interior diffusivity
-  real    :: KPP_exp                        !< Exponent of unitless factor of diff.
-                                            !! for KPP internal shear mixing scheme.
+  real    :: Ri_zero                        !< LMD94 critical Richardson number [nondim]
+  real    :: Nu_zero                        !< LMD94 maximum interior diffusivity [Z2 T-1 ~> m2 s-1]
+  real    :: KPP_exp                        !< Exponent of unitless factor of diffusivities
+                                            !! for KPP internal shear mixing scheme [nondim]
   real, allocatable, dimension(:,:,:) :: N2 !< Squared Brunt-Vaisala frequency [T-2 ~> s-2]
   real, allocatable, dimension(:,:,:) :: S2 !< Squared shear frequency [T-2 ~> s-2]
-  real, allocatable, dimension(:,:,:) :: ri_grad !< Gradient Richardson number
+  real, allocatable, dimension(:,:,:) :: ri_grad !< Gradient Richardson number [nondim]
   real, allocatable, dimension(:,:,:) :: ri_grad_smooth !< Gradient Richardson number
-                                                        !! after smoothing
+                                                        !! after smoothing [nondim]
   character(10) :: Mix_Scheme               !< Mixing scheme name (string)
 
   type(diag_ctrl), pointer :: diag => NULL() !< Pointer to the diagnostics control structure
@@ -137,7 +137,7 @@ subroutine calculate_CVMix_shear(u_H, v_H, h, tv, kd, kv, G, GV, US, CS )
         S2 = US%L_to_Z**2*(DU*DU+DV*DV)/(DZ*DZ)
         Ri_Grad(k) = max(0., N2) / max(S2, 1.e-10*US%T_to_s**2)
 
-        ! fill 3d arrays, if user asks for diagsnostics
+        ! fill 3d arrays, if user asks for diagnostics
         if (CS%id_N2 > 0) CS%N2(i,j,k) = N2
         if (CS%id_S2 > 0) CS%S2(i,j,k) = S2
 
@@ -264,22 +264,22 @@ logical function CVMix_shear_init(Time, G, GV, US, param_file, diag, CS)
 
   call get_param(param_file, mdl, "NU_ZERO", CS%Nu_Zero, &
                  "Leading coefficient in KPP shear mixing.", &
-                 units="nondim", default=5.e-3)
+                 units="m2 s-1", default=5.e-3, scale=US%m2_s_to_Z2_T)
   call get_param(param_file, mdl, "RI_ZERO", CS%Ri_Zero, &
                  "Critical Richardson for KPP shear mixing, "// &
                  "NOTE this the internal mixing and this is "// &
-                 "not for setting the boundary layer depth." &
-                 ,units="nondim", default=0.8)
+                 "not for setting the boundary layer depth.", &
+                 units="nondim", default=0.8)
   call get_param(param_file, mdl, "KPP_EXP", CS%KPP_exp, &
                  "Exponent of unitless factor of diffusivities, "// &
-                 "for KPP internal shear mixing scheme." &
-                 ,units="nondim", default=3.0)
+                 "for KPP internal shear mixing scheme.", &
+                 units="nondim", default=3.0)
   call get_param(param_file, mdl, "SMOOTH_RI", CS%smooth_ri, &
                  "If true, vertically smooth the Richardson "// &
                  "number by applying a 1-2-1 filter once.", &
                  default = .false.)
   call cvmix_init_shear(mix_scheme=CS%Mix_Scheme, &
-                        KPP_nu_zero=CS%Nu_Zero,   &
+                        KPP_nu_zero=US%Z2_T_to_m2_s*CS%Nu_Zero,   &
                         KPP_Ri_zero=CS%Ri_zero,   &
                         KPP_exp=CS%KPP_exp)
 
@@ -332,7 +332,7 @@ logical function CVMix_shear_is_used(param_file)
   CVMix_shear_is_used = (LMD94 .or. PP81)
 end function CVMix_shear_is_used
 
-!> Clear pointers and dealocate memory
+!> Clear pointers and deallocate memory
 subroutine CVMix_shear_end(CS)
   type(CVMix_shear_cs), intent(inout) :: CS !< Control structure for this module that
                                             !! will be deallocated in this subroutine
