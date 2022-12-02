@@ -1194,7 +1194,7 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
                  default=1.0e-17, units="s-1", scale=US%T_to_s)
   call get_param(param_file, mdl, "KHTH_USE_FGNV_STREAMFUNCTION", use_FGNV_streamfn, &
                  default=.false., do_not_log=.true.)
-  CS%calculate_cg1 = CS%calculate_cg1 .or. use_FGNV_streamfn
+  CS%calculate_cg1 = CS%calculate_cg1 .or. use_FGNV_streamfn .or. CS%khth_use_ebt_struct
   CS%calculate_Rd_dx = CS%calculate_Rd_dx .or. use_MEKE
   ! Indicate whether to calculate the Eady growth rate
   CS%calculate_Eady_growth_rate = use_MEKE .or. (KhTr_Slope_Cff>0.) .or. (KhTh_Slope_Cff>0.)
