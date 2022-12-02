@@ -48,13 +48,12 @@ type, public :: int_tide_input_CS ; private
   character(len=200) :: inputdir !< The directory for input files.
 
   logical :: int_tide_source_test    !< If true, apply an arbitrary generation site
-                                     !! for internal tide testing (BDM)
+                                     !! for internal tide testing
   type(time_type) :: time_max_source !< A time for use in testing internal tides
   real    :: int_tide_source_x       !< X Location of generation site
-                                     !! for internal tide for testing (BDM)
-                                     !! for internal tide for testing (BDM)
+                                     !! for internal tide for testing [degrees_E] or [km]
   real    :: int_tide_source_y       !< Y Location of generation site
-                                     !! for internal tide for testing (BDM)
+                                     !! for internal tide for testing [degrees_N] or [km]
   integer :: int_tide_source_i       !< I Location of generation site
   integer :: int_tide_source_j       !< J Location of generation site
   logical :: int_tide_use_glob_ij    !< Use global indices for generation site
@@ -417,11 +416,11 @@ subroutine int_tide_input_init(Time, G, GV, US, param_file, diag, CS, itide)
     call get_param(param_file, mdl, "INTERNAL_TIDE_USE_GLOB_IJ", CS%int_tide_use_glob_ij, &
                  "Use global IJ for internal tide generation source test", default=.false.)
     call get_param(param_file, mdl, "INTERNAL_TIDE_SOURCE_X", CS%int_tide_source_x, &
-                 "X Location of generation site for internal tide", default=1., &
-                 do_not_log=CS%int_tide_use_glob_ij)
+                 "X Location of generation site for internal tide", &
+                 units=G%x_ax_unit_short, default=1.0, do_not_log=CS%int_tide_use_glob_ij)
     call get_param(param_file, mdl, "INTERNAL_TIDE_SOURCE_Y", CS%int_tide_source_y, &
-                 "Y Location of generation site for internal tide", default=1., &
-                 do_not_log=CS%int_tide_use_glob_ij)
+                 "Y Location of generation site for internal tide", &
+                 units=G%y_ax_unit_short, default=1.0, do_not_log=CS%int_tide_use_glob_ij)
     call get_param(param_file, mdl, "INTERNAL_TIDE_SOURCE_I", CS%int_tide_source_i, &
                  "I Location of generation site for internal tide", default=0, &
                  do_not_log=.not.CS%int_tide_use_glob_ij)

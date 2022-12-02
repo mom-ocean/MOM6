@@ -57,10 +57,9 @@ type, public :: wave_structure_CS ; !private
                                    !< Squared buoyancy frequency at each interface [T-2 ~> s-2].
   integer, allocatable, dimension(:,:):: num_intfaces
                                    !< Number of layer interfaces (including surface and bottom) [nondim].
-  real    :: int_tide_source_x     !< X Location of generation site
-                                   !! for internal tide for testing (BDM)
-  real    :: int_tide_source_y     !< Y Location of generation site
-                                   !! for internal tide for testing (BDM)
+  ! logical :: int_tide_source_test  !< If true, apply an arbitrary generation site for internal tide testing
+  ! integer :: int_tide_source_i     !< I Location of generation site
+  ! integer :: int_tide_source_j     !< J Location of generation site
   logical :: debug                 !< debugging prints
 
 end type wave_structure_CS
@@ -143,7 +142,7 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
     HxR_here       !< A layer integrated density [R Z ~> kg m-2]
   real :: I_Hnew   !< The inverse of a new layer thickness [Z-1 ~> m-1]
   real :: drxh_sum !< The sum of density differences across interfaces times thicknesses [R Z ~> kg m-2]
-  real, parameter :: tol1  = 0.0001, tol2 = 0.001
+  real, parameter :: tol1  = 0.0001, tol2 = 0.001 ! Nondimensional tolerances [nondim]
   real :: g_Rho0  !< G_Earth/Rho0 in [L2 Z-1 T-2 R-1 ~> m4 s-2 kg-1].
   ! real :: rescale, I_rescale
   integer :: kf(SZI_(G))
@@ -281,7 +280,7 @@ subroutine wave_structure(h, tv, G, GV, US, cn, ModeNum, freq, CS, En, full_halo
     do i=is,ie ; if (cn(i,j) > 0.0) then
       !----for debugging, remove later----
       ig = i + G%idg_offset ; jg = j + G%jdg_offset
-      !if (ig == CS%int_tide_source_x .and. jg == CS%int_tide_source_y) then
+      !if (ig == CS%int_tide_source_i .and. jg == CS%int_tide_source_j) then
       !-----------------------------------
       if (G%mask2dT(i,j) > 0.0) then
 
@@ -762,10 +761,15 @@ subroutine wave_structure_init(Time, G, GV, param_file, diag, CS)
 
   CS%initialized = .true.
 
-  call get_param(param_file, mdl, "INTERNAL_TIDE_SOURCE_X", CS%int_tide_source_x, &
-                 "X Location of generation site for internal tide", default=1.)
-  call get_param(param_file, mdl, "INTERNAL_TIDE_SOURCE_Y", CS%int_tide_source_y, &
-                 "Y Location of generation site for internal tide", default=1.)
+  ! call get_param(param_file, mdl, "INTERNAL_TIDE_SOURCE_TEST", CS%int_tide_source_test, &
+  !                "If true, apply an arbitrary generation site for internal tide testing", &
+  !                default=.false.)
+  ! if (CS%int_tide_source_test) then
+  !   call get_param(param_file, mdl, "INTERNAL_TIDE_SOURCE_I", CS%int_tide_source_i, &
+  !                "I Location of generation site for internal tide", default=0)
+  !   call get_param(param_file, mdl, "INTERNAL_TIDE_SOURCE_J", CS%int_tide_source_j, &
+  !                "J Location of generation site for internal tide", default=0)
+  ! endif
   call get_param(param_file, mdl, "DEBUG", CS%debug, &
                  "debugging prints", default=.false.)
 
