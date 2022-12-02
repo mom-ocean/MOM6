@@ -874,7 +874,7 @@ subroutine PressureForce_Mont_init(Time, G, GV, US, param_file, diag, CS, tides_
   CS%GFS_scale = 1.0
   if (GV%g_prime(1) /= GV%g_Earth) CS%GFS_scale = GV%g_prime(1) / GV%g_Earth
 
-  call log_param(param_file, mdl, "GFS / G_EARTH", CS%GFS_scale)
+  call log_param(param_file, mdl, "GFS / G_EARTH", CS%GFS_scale, units="nondim")
 
 end subroutine PressureForce_Mont_init
 

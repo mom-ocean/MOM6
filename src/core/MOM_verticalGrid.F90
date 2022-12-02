@@ -176,9 +176,9 @@ subroutine verticalGridInit( param_file, GV, US )
   GV%RZ_to_H = GV%kg_m2_to_H * US%R_to_kg_m3 * US%Z_to_m
 
 ! Log derivative values.
-  call log_param(param_file, mdl, "M to THICKNESS", GV%m_to_H*H_rescale_factor)
-  call log_param(param_file, mdl, "M to THICKNESS rescaled by 2^-n", GV%m_to_H)
-  call log_param(param_file, mdl, "THICKNESS to M rescaled by 2^n", GV%H_to_m)
+  call log_param(param_file, mdl, "M to THICKNESS", GV%m_to_H*H_rescale_factor, units="H m-1")
+  call log_param(param_file, mdl, "M to THICKNESS rescaled by 2^-n", GV%m_to_H, units="2^n H m-1")
+  call log_param(param_file, mdl, "THICKNESS to M rescaled by 2^n", GV%H_to_m, units="2^-n m H-1")
 
   allocate( GV%sInterface(nk+1) )
   allocate( GV%sLayer(nk) )

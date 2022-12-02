@@ -1277,7 +1277,7 @@ subroutine test_log_param_real
   call create_test_file(param_filename)
 
   call open_param_file(param_filename, param)
-  call log_param(param, module_name, sample_param_name, sample, desc=desc)
+  call log_param(param, module_name, sample_param_name, sample, desc=desc, units="")
   call close_param_file(param)
 end subroutine test_log_param_real
 
@@ -1290,7 +1290,7 @@ subroutine test_log_param_real_array
   call create_test_file(param_filename)
 
   call open_param_file(param_filename, param)
-  call log_param(param, module_name, sample_param_name, sample, desc=desc)
+  call log_param(param, module_name, sample_param_name, sample, desc=desc, units="")
   call close_param_file(param)
 end subroutine test_log_param_real_array
 

@@ -165,7 +165,7 @@ function register_oil_tracer(HI, GV, US, param_file, CS, tr_Reg, restart_CS)
       endif
     endif
   enddo
-  call log_param(param_file, mdl, "OIL_DECAY_RATE", US%s_to_T*CS%oil_decay_rate(1:CS%ntr))
+  call log_param(param_file, mdl, "OIL_DECAY_RATE", US%s_to_T*CS%oil_decay_rate(1:CS%ntr), units="s-1")
 
   ! This needs to be changed if the units of tracer are changed above.
   if (GV%Boussinesq) then ; flux_units = "kg s-1"
