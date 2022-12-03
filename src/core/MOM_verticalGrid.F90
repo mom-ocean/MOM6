@@ -114,9 +114,9 @@ subroutine verticalGridInit( param_file, GV, US )
                  units="kg m-3", default=1035.0, scale=US%kg_m3_to_R)
   call get_param(param_file, mdl, "BOUSSINESQ", GV%Boussinesq, &
                  "If true, make the Boussinesq approximation.", default=.true.)
-  call get_param(param_file, mdl, "ANGSTROM", GV%Angstrom_m, &
+  call get_param(param_file, mdl, "ANGSTROM", GV%Angstrom_Z, &
                  "The minimum layer thickness, usually one-Angstrom.", &
-                 units="m", default=1.0e-10)
+                 units="m", default=1.0e-10, scale=US%m_to_Z)
   call get_param(param_file, mdl, "H_RESCALE_POWER", H_power, &
                  "An integer power of 2 that is used to rescale the model's "//&
                  "intenal units of thickness.  Valid values range from -300 to 300.", &
@@ -156,13 +156,13 @@ subroutine verticalGridInit( param_file, GV, US )
     GV%H_to_kg_m2 = US%R_to_kg_m3*GV%Rho0 * GV%H_to_m
     GV%kg_m2_to_H = 1.0 / GV%H_to_kg_m2
     GV%m_to_H = 1.0 / GV%H_to_m
-    GV%Angstrom_H = GV%m_to_H * GV%Angstrom_m
+    GV%Angstrom_H = GV%m_to_H * US%Z_to_m*GV%Angstrom_Z
     GV%H_to_MKS = GV%H_to_m
   else
     GV%kg_m2_to_H = 1.0 / GV%H_to_kg_m2
     GV%m_to_H = US%R_to_kg_m3*GV%Rho0 * GV%kg_m2_to_H
     GV%H_to_m = GV%H_to_kg_m2 / (US%R_to_kg_m3*GV%Rho0)
-    GV%Angstrom_H = GV%Angstrom_m*1000.0*GV%kg_m2_to_H
+    GV%Angstrom_H = US%Z_to_m*GV%Angstrom_Z * 1000.0*GV%kg_m2_to_H
     GV%H_to_MKS = GV%H_to_kg_m2
   endif
   GV%H_subroundoff = 1e-20 * max(GV%Angstrom_H,GV%m_to_H*1e-17)
@@ -170,7 +170,7 @@ subroutine verticalGridInit( param_file, GV, US )
 
   GV%H_to_Z = GV%H_to_m * US%m_to_Z
   GV%Z_to_H = US%Z_to_m * GV%m_to_H
-  GV%Angstrom_Z = US%m_to_Z * GV%Angstrom_m
+  GV%Angstrom_m = US%Z_to_m * GV%Angstrom_Z
 
   GV%H_to_RZ = GV%H_to_kg_m2 * US%kg_m3_to_R * US%m_to_Z
   GV%RZ_to_H = GV%kg_m2_to_H * US%R_to_kg_m3 * US%Z_to_m

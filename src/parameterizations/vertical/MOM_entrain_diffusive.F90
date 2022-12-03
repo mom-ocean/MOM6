@@ -2114,7 +2114,7 @@ subroutine entrain_diffusive_init(Time, G, GV, US, param_file, diag, CS, just_re
                  units="s", scale=US%s_to_T, fail_if_missing=.true., do_not_log=just_read_params)
   call get_param(param_file, mdl, "TOLERANCE_ENT", CS%Tolerance_Ent, &
                  "The tolerance with which to solve for entrainment values.", &
-                 units="m", default=MAX(100.0*GV%Angstrom_m,1.0e-4*sqrt(dt*Kd)*US%Z_to_m), scale=GV%m_to_H, &
+                 units="m", default=US%Z_to_m*MAX(100.0*GV%Angstrom_Z,1.0e-4*sqrt(dt*Kd)), scale=GV%m_to_H, &
                  do_not_log=just_read_params)
 
   CS%Rho_sig_off = 1000.0*US%kg_m3_to_R

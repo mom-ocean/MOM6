@@ -314,8 +314,8 @@ subroutine set_coord_from_TS_range(Rlay, g_prime, GV, US, param_file, eqn_of_sta
   real, dimension(GV%ke) :: T0   ! A profile of temperatures [C ~> degC]
   real, dimension(GV%ke) :: S0   ! A profile of salinities [S ~> ppt]
   real, dimension(GV%ke) :: Pref ! A array of reference pressures [R L2 T-2 ~> Pa]
-  real :: S_Ref   ! Default salinity range parameters [ppt].
-  real :: T_Ref   ! Default temperature range parameters [degC].
+  real :: S_Ref   ! Default salinity range parameters [S ~> ppt].
+  real :: T_Ref   ! Default temperature range parameters [C ~> degC].
   real :: S_Light, S_Dense ! Salinity range parameters [S ~> ppt].
   real :: T_Light, T_Dense ! Temperature range parameters [C ~> degC].
   real :: res_rat ! The ratio of density space resolution in the denser part
@@ -332,22 +332,26 @@ subroutine set_coord_from_TS_range(Rlay, g_prime, GV, US, param_file, eqn_of_sta
   call callTree_enter(trim(mdl)//"(), MOM_coord_initialization.F90")
 
   call get_param(param_file, mdl, "T_REF", T_Ref, &
-                 "The default initial temperatures.", units="degC", default=10.0)
+                 "The default initial temperatures.", &
+                 units="degC", default=10.0, scale=US%degC_to_C)
   call get_param(param_file, mdl, "TS_RANGE_T_LIGHT", T_Light, &
                  "The initial temperature of the lightest layer when "//&
-                 "COORD_CONFIG is set to ts_range.", units="degC", default=T_Ref, scale=US%degC_to_C)
+                 "COORD_CONFIG is set to ts_range.", &
+                 units="degC", default=US%C_to_degC*T_Ref, scale=US%degC_to_C)
   call get_param(param_file, mdl, "TS_RANGE_T_DENSE", T_Dense, &
                  "The initial temperature of the densest layer when "//&
-                 "COORD_CONFIG is set to ts_range.", units="degC", default=T_Ref, scale=US%degC_to_C)
+                 "COORD_CONFIG is set to ts_range.", &
+                 units="degC", default=US%C_to_degC*T_Ref, scale=US%degC_to_C)
 
   call get_param(param_file, mdl, "S_REF", S_Ref, &
-                 "The default initial salinities.", units="PSU", default=35.0)
+                 "The default initial salinities.", &
+                 units="PSU", default=35.0, scale=US%ppt_to_S)
   call get_param(param_file, mdl, "TS_RANGE_S_LIGHT", S_Light, &
-                 "The initial lightest salinities when COORD_CONFIG "//&
-                 "is set to ts_range.", default = S_Ref, units="PSU", scale=US%ppt_to_S)
+                 "The initial lightest salinities when COORD_CONFIG is set to ts_range.", &
+                 units="PSU", default=US%S_to_ppt*S_Ref, scale=US%ppt_to_S)
   call get_param(param_file, mdl, "TS_RANGE_S_DENSE", S_Dense, &
-                 "The initial densest salinities when COORD_CONFIG "//&
-                 "is set to ts_range.", default = S_Ref, units="PSU", scale=US%ppt_to_S)
+                 "The initial densest salinities when COORD_CONFIG is set to ts_range.", &
+                 units="PSU", default=US%S_to_ppt*S_Ref, scale=US%ppt_to_S)
 
   call get_param(param_file, mdl, "TS_RANGE_RESOLN_RATIO", res_rat, &
                  "The ratio of density space resolution in the densest "//&

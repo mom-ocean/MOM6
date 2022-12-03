@@ -1995,11 +1995,13 @@ subroutine set_visc_init(Time, G, GV, US, param_file, diag, visc, CS, restart_CS
   real    :: TKE_decay_dflt  ! The default value of a coefficient scaling the vertical decay
                              ! rate of TKE [nondim]
   real    :: bulk_Ri_ML_dflt ! The default bulk Richardson number for a bulk mixed layer [nondim]
-  real    :: Kv_background   ! The background kinematic viscosity in the interior [m2 s-1]
+  real    :: Kv_background   ! The background kinematic viscosity in the interior [Z2 T-1 ~> m2 s-1]
   real    :: omega_frac_dflt ! The default value for the fraction of the absolute rotation rate that
                              ! is used in place of the absolute value of the local Coriolis
                              ! parameter in the denominator of some expressions [nondim]
-  real    :: Chan_max_thick_dflt ! The default value for CHANNEL_DRAG_MAX_THICK [m]
+  real    :: Chan_max_thick_dflt ! The default value for CHANNEL_DRAG_MAX_THICK [Z ~> m]
+  real    :: Hbbl            ! The static bottom boundary layer thickness [Z ~> m].
+  real    :: BBL_thick_min   ! The minimum bottom boundary layer thickness [Z ~> m].
 
   real    :: Z_rescale     ! A rescaling factor for heights from the representation in
                            ! a restart file to the internal representation in this run [nondim]?
@@ -2103,19 +2105,17 @@ subroutine set_visc_init(Time, G, GV, US, param_file, diag, visc, CS, restart_CS
   if (CS%dynamic_viscous_ML) then
     call get_param(param_file, mdl, "BULK_RI_ML", bulk_Ri_ML_dflt, units="nondim", default=0.0)
     call get_param(param_file, mdl, "BULK_RI_ML_VISC", CS%bulk_Ri_ML, &
-                 "The efficiency with which mean kinetic energy released "//&
-                 "by mechanically forced entrainment of the mixed layer "//&
-                 "is converted to turbulent kinetic energy.  By default, "//&
-                 "BULK_RI_ML_VISC = BULK_RI_ML or 0.", units="nondim", &
-                 default=bulk_Ri_ML_dflt)
+                 "The efficiency with which mean kinetic energy released by mechanically "//&
+                 "forced entrainment of the mixed layer is converted to turbulent "//&
+                 "kinetic energy.  By default, BULK_RI_ML_VISC = BULK_RI_ML or 0.", &
+                 units="nondim", default=bulk_Ri_ML_dflt)
     call get_param(param_file, mdl, "TKE_DECAY", TKE_decay_dflt, units="nondim", default=0.0)
     call get_param(param_file, mdl, "TKE_DECAY_VISC", CS%TKE_decay, &
                  "TKE_DECAY_VISC relates the vertical rate of decay of "//&
                  "the TKE available for mechanical entrainment to the "//&
                  "natural Ekman depth for use in calculating the dynamic "//&
-                 "mixed layer viscosity.  By default, "//&
-                 "TKE_DECAY_VISC = TKE_DECAY or 0.", units="nondim", &
-                 default=TKE_decay_dflt)
+                 "mixed layer viscosity.  By default, TKE_DECAY_VISC = TKE_DECAY or 0.", &
+                 units="nondim", default=TKE_decay_dflt)
     call get_param(param_file, mdl, "ML_USE_OMEGA", use_omega, &
                  "If true, use the absolute rotation rate instead of the "//&
                  "vertical component of rotation when setting the decay "//&
@@ -2131,28 +2131,27 @@ subroutine set_visc_init(Time, G, GV, US, param_file, diag, visc, CS, restart_CS
                    "local value of f, as sqrt((1-of)*f^2 + of*4*omega^2).", &
                    units="nondim", default=omega_frac_dflt)
     call get_param(param_file, mdl, "OMEGA", CS%omega, &
-                 "The rotation rate of the earth.", units="s-1", &
-                 default=7.2921e-5, scale=US%T_to_s)
+                 "The rotation rate of the earth.", &
+                 units="s-1", default=7.2921e-5, scale=US%T_to_s)
     ! This give a minimum decay scale that is typically much less than Angstrom.
     CS%ustar_min = 2e-4*CS%omega*(GV%Angstrom_Z + GV%H_to_Z*GV%H_subroundoff)
   else
     call get_param(param_file, mdl, "OMEGA", CS%omega, &
-                 "The rotation rate of the earth.", units="s-1", &
-                 default=7.2921e-5, scale=US%T_to_s)
+                 "The rotation rate of the earth.", &
+                 units="s-1", default=7.2921e-5, scale=US%T_to_s)
   endif
 
-  call get_param(param_file, mdl, "HBBL", CS%Hbbl, &
+  call get_param(param_file, mdl, "HBBL", Hbbl, &
                  "The thickness of a bottom boundary layer with a viscosity increased by "//&
                  "KV_EXTRA_BBL if BOTTOMDRAGLAW is not defined, or the thickness over which "//&
                  "near-bottom velocities are averaged for the drag law if BOTTOMDRAGLAW is "//&
                  "defined but LINEAR_DRAG is not.", &
-                 units="m", fail_if_missing=.true.) ! Rescaled later
+                 units="m", scale=US%m_to_Z, fail_if_missing=.true.) ! Rescaled later
   if (CS%bottomdraglaw) then
     call get_param(param_file, mdl, "CDRAG", CS%cdrag, &
                  "CDRAG is the drag coefficient relating the magnitude of "//&
                  "the velocity field to the bottom stress. CDRAG is only "//&
-                 "used if BOTTOMDRAGLAW is defined.", units="nondim", &
-                 default=0.003)
+                 "used if BOTTOMDRAGLAW is defined.", units="nondim", default=0.003)
     call get_param(param_file, mdl, "BBL_USE_TIDAL_BG", CS%BBL_use_tidal_bg, &
                  "Flag to use the tidal RMS amplitude in place of constant "//&
                  "background velocity for computing u* in the BBL. "//&
@@ -2187,25 +2186,26 @@ subroutine set_visc_init(Time, G, GV, US, param_file, diag, visc, CS, restart_CS
     if (use_regridding .and. (.not. CS%BBL_use_EOS)) &
       call MOM_error(FATAL,"When using MOM6 in ALE mode it is required to set BBL_USE_EOS to True.")
   endif
-  call get_param(param_file, mdl, "BBL_THICK_MIN", CS%BBL_thick_min, &
+  call get_param(param_file, mdl, "BBL_THICK_MIN", BBL_thick_min, &
                  "The minimum bottom boundary layer thickness that can be "//&
                  "used with BOTTOMDRAGLAW. This might be "//&
                  "Kv/(cdrag*drag_bg_vel) to give Kv as the minimum "//&
-                 "near-bottom viscosity.", units="m", default=0.0)  ! Rescaled later
+                 "near-bottom viscosity.", units="m", default=0.0, scale=US%m_to_Z)
   call get_param(param_file, mdl, "HTBL_SHELF_MIN", CS%Htbl_shelf_min, &
                  "The minimum top boundary layer thickness that can be "//&
                  "used with BOTTOMDRAGLAW. This might be "//&
                  "Kv/(cdrag*drag_bg_vel) to give Kv as the minimum "//&
-                 "near-top viscosity.", units="m", default=CS%BBL_thick_min, scale=GV%m_to_H)
+                 "near-top viscosity.", units="m", default=US%Z_to_m*BBL_thick_min, scale=GV%m_to_H)
   call get_param(param_file, mdl, "HTBL_SHELF", CS%Htbl_shelf, &
                  "The thickness over which near-surface velocities are "//&
                  "averaged for the drag law under an ice shelf.  By "//&
-                 "default this is the same as HBBL", units="m", default=CS%Hbbl, scale=GV%m_to_H)
+                 "default this is the same as HBBL", &
+                 units="m", default=US%Z_to_m*Hbbl, scale=GV%m_to_H)
 
   call get_param(param_file, mdl, "KV", Kv_background, &
                  "The background kinematic viscosity in the interior. "//&
                  "The molecular value, ~1e-6 m2 s-1, may be used.", &
-                 units="m2 s-1", fail_if_missing=.true.)
+                 units="m2 s-1", scale=US%m2_s_to_Z2_T, fail_if_missing=.true.)
 
   call get_param(param_file, mdl, "USE_KPP", use_KPP, &
                  "If true, turns on the [CVMix] KPP scheme of Large et al., 1994, "//&
@@ -2214,10 +2214,10 @@ subroutine set_visc_init(Time, G, GV, US, param_file, diag, visc, CS, restart_CS
 
   call get_param(param_file, mdl, "KV_BBL_MIN", CS%KV_BBL_min, &
                  "The minimum viscosities in the bottom boundary layer.", &
-                 units="m2 s-1", default=Kv_background, scale=US%m2_s_to_Z2_T)
+                 units="m2 s-1", default=US%Z2_T_to_m2_s*Kv_background, scale=US%m2_s_to_Z2_T)
   call get_param(param_file, mdl, "KV_TBL_MIN", CS%KV_TBL_min, &
                  "The minimum viscosities in the top boundary layer.", &
-                 units="m2 s-1", default=Kv_background, scale=US%m2_s_to_Z2_T)
+                 units="m2 s-1", default=US%Z2_T_to_m2_s*Kv_background, scale=US%m2_s_to_Z2_T)
   call get_param(param_file, mdl, "CORRECT_BBL_BOUNDS", CS%correct_BBL_bounds, &
                  "If true, uses the correct bounds on the BBL thickness and "//&
                  "viscosity so that the bottom layer feels the intended drag.", &
@@ -2239,23 +2239,22 @@ subroutine set_visc_init(Time, G, GV, US, param_file, diag, visc, CS, restart_CS
     if (CS%c_Smag < 0.0) CS%c_Smag = 0.15
   endif
 
-  Chan_max_thick_dflt = -1.0
-  if (CS%RiNo_mix) Chan_max_thick_dflt = 0.5*CS%Hbbl
-  if (CS%body_force_drag) Chan_max_thick_dflt = CS%Hbbl
+  Chan_max_thick_dflt = -1.0*US%m_to_Z
+  if (CS%RiNo_mix) Chan_max_thick_dflt = 0.5*Hbbl
+  if (CS%body_force_drag) Chan_max_thick_dflt = Hbbl
   call get_param(param_file, mdl, "CHANNEL_DRAG_MAX_BBL_THICK", CS%Chan_drag_max_vol, &
                  "The maximum bottom boundary layer thickness over which the channel drag is "//&
                  "exerted, or a negative value for no fixed limit, instead basing the BBL "//&
                  "thickness on the bottom stress, rotation and stratification.  The default is "//&
                  "proportional to HBBL if USE_JACKSON_PARAM or DRAG_AS_BODY_FORCE is true.", &
-                 units="m", default=Chan_max_thick_dflt, scale=GV%m_to_H, &
+                 units="m", default=US%Z_to_m*Chan_max_thick_dflt, scale=GV%m_to_H, &
                  do_not_log=.not.CS%Channel_drag)
 
   call get_param(param_file, mdl, "MLE_USE_PBL_MLD", MLE_use_PBL_MLD, &
                  default=.false., do_not_log=.true.)
 
-  ! These unit conversions are out outside the get_param calls because they are also defaults.
-  CS%Hbbl = CS%Hbbl * GV%m_to_H                   ! Rescale
-  CS%BBL_thick_min = CS%BBL_thick_min * GV%m_to_H ! Rescale
+  CS%Hbbl = Hbbl * GV%Z_to_H  ! Rescaled for later use
+  CS%BBL_thick_min = BBL_thick_min * GV%Z_to_H ! Rescaled for later use
 
   if (CS%RiNo_mix .and. kappa_shear_at_vertex(param_file)) then
     ! This is necessary for reproducibility across restarts in non-symmetric mode.

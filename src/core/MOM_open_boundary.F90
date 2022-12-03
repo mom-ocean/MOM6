@@ -5590,7 +5590,7 @@ end subroutine remap_OBC_fields
 !> Adjust interface heights to fit the bathymetry and diagnose layer thickness.
 !!
 !! If the bottom most interface is below the topography then the bottom-most
-!! layers are contracted to GV%Angstrom_m.
+!! layers are contracted to GV%Angstrom_Z.
 !! If the bottom most interface is above the topography then the entire column
 !! is dilated (expanded) to fill the void.
 !!   @remark{There is a (hard-wired) "tolerance" parameter such that the

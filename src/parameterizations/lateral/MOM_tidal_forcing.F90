@@ -70,16 +70,16 @@ type, public :: tidal_forcing_CS ; private
     sin_struct(:,:,:), &    !< The sine and cosine based structures that can
     cos_struct(:,:,:), &    !< be associated with the astronomical forcing [nondim].
     cosphasesal(:,:,:), &   !< The cosine and sine of the phase of the
-    sinphasesal(:,:,:), &   !< self-attraction and loading amphidromes.
+    sinphasesal(:,:,:), &   !< self-attraction and loading amphidromes [nondim].
     ampsal(:,:,:), &        !< The amplitude of the SAL [Z ~> m].
     cosphase_prev(:,:,:), & !< The cosine and sine of the phase of the
-    sinphase_prev(:,:,:), & !< amphidromes in the previous tidal solutions.
+    sinphase_prev(:,:,:), & !< amphidromes in the previous tidal solutions [nondim].
     amp_prev(:,:,:)         !< The amplitude of the previous tidal solution [Z ~> m].
   type(sht_CS) :: sht       !< Spherical harmonic transforms (SHT) for SAL
-  integer :: sal_sht_Nd     !< Maximum degree for SHT [nodim]
-  real, allocatable :: Love_Scaling(:)      !< Love number for each SHT mode [nodim]
-  real, allocatable :: Snm_Re(:), & !< Real and imaginary SHT coefficient for SHT SAL
-                       Snm_Im(:)    !< [Z ~> m]
+  integer :: sal_sht_Nd     !< Maximum degree for SHT [nondim]
+  real, allocatable :: Love_Scaling(:)  !< Love number for each SHT mode [nondim]
+  real, allocatable :: Snm_Re(:), & !< Real SHT coefficient for SHT SAL [Z ~> m]
+                       Snm_Im(:)    !< Imaginary SHT coefficient for SHT SAL [Z ~> m]
 end type tidal_forcing_CS
 
 integer :: id_clock_tides !< CPU clock for tides
@@ -99,9 +99,12 @@ contains
 subroutine astro_longitudes_init(time_ref, longitudes)
   type(time_type), intent(in) :: time_ref            !> Time to calculate longitudes for.
   type(astro_longitudes), intent(out) :: longitudes  !> Lunar and solar longitudes at time_ref.
+
+  ! Local variables
   real :: D                                          !> Time since the reference date [days]
   real :: T                                          !> Time in Julian centuries [centuries]
   real, parameter :: PI = 4.0 * atan(1.0)            !> 3.14159... [nondim]
+
   ! Find date at time_ref in days since 1900-01-01
   D = time_type_to_real(time_ref - set_date(1900, 1, 1)) / (24.0 * 3600.0)
   ! Time since 1900-01-01 in Julian centuries
@@ -542,7 +545,7 @@ subroutine tidal_forcing_init(Time, G, US, param_file, CS)
     call get_param(param_file, mdl, "TIDAL_SAL_SHT_DEGREE", CS%sal_sht_Nd, &
                    "The maximum degree of the spherical harmonics transformation used for "// &
                    "calculating the self-attraction and loading term for tides.", &
-                   default=0, do_not_log=.not. CS%tidal_sal_sht)
+                   default=0, do_not_log=.not.CS%tidal_sal_sht)
     call get_param(param_file, mdl, "RHO_0", rhoW, &
                    "The mean ocean density used with BOUSSINESQ true to "//&
                    "calculate accelerations and the mass for conservation "//&
@@ -551,8 +554,9 @@ subroutine tidal_forcing_init(Time, G, US, param_file, CS)
                    units="kg m-3", default=1035.0, scale=US%kg_m3_to_R, do_not_log=.True.)
     call get_param(param_file, mdl, "RHO_E", rhoE, &
                    "The mean solid earth density.  This is used for calculating the "// &
-                   "self-attraction and loading term.", units="kg m-3", &
-                   default=5517.0, scale=US%kg_m3_to_R, do_not_log=.not. CS%tidal_sal_sht)
+                   "self-attraction and loading term.", &
+                   units="kg m-3", default=5517.0, scale=US%kg_m3_to_R, &
+                   do_not_log=.not.CS%tidal_sal_sht)
     lmax = calc_lmax(CS%sal_sht_Nd)
     allocate(CS%Snm_Re(lmax)); CS%Snm_Re(:) = 0.0
     allocate(CS%Snm_Im(lmax)); CS%Snm_Im(:) = 0.0

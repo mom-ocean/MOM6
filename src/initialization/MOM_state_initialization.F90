@@ -1782,8 +1782,8 @@ subroutine initialize_temp_salt_fit(T, S, G, GV, US, param_file, eqn_of_state, P
                  "A reference temperature used in initialization.", &
                  units="degC", scale=US%degC_to_C, fail_if_missing=.not.just_read, do_not_log=just_read)
   call get_param(param_file, mdl, "S_REF", S_Ref, &
-                 "A reference salinity used in initialization.", units="PSU", &
-                 default=35.0, scale=US%ppt_to_S, do_not_log=just_read)
+                 "A reference salinity used in initialization.", &
+                 units="PSU", default=35.0, scale=US%ppt_to_S, do_not_log=just_read)
   call get_param(param_file, mdl, "FIT_SALINITY", fit_salin, &
                  "If true, accept the prescribed temperature and fit the "//&
                  "salinity; otherwise take salinity and fit temperature.", &
@@ -2480,8 +2480,8 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, depth_tot, G, GV, US, PF, just
   integer :: nkd      ! number of levels to use for regridding input arrays
   real    :: eps_Z    ! A negligibly thin layer thickness [Z ~> m].
   real    :: eps_rho  ! A negligibly small density difference [R ~> kg m-3].
-  real    :: PI_180   ! for conversion from degrees to radians
-  real    :: Hmix_default ! The default initial mixed layer depth [m].
+  real    :: PI_180   ! for conversion from degrees to radians [radian degree-1]
+  real    :: Hmix_default ! The default initial mixed layer depth [Z ~> m].
   real    :: Hmix_depth   ! The mixed layer depth in the initial condition [Z ~> m].
   real    :: missing_value_temp  ! The missing value in the input temperature field
   real    :: missing_value_salt  ! The missing value in the input salinity field
@@ -2680,10 +2680,10 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, depth_tot, G, GV, US, PF, just
                  default=.false., do_not_log=just_read.or.(GV%nkml==0))
     if (GV%nkml == 0) separate_mixed_layer = .false.
     call get_param(PF, mdl, "MINIMUM_DEPTH", Hmix_default, &
-                units="m", default=0.0, scale=1.0)
+                 units="m", default=0.0, scale=US%m_to_Z)
     call get_param(PF, mdl, "Z_INIT_HMIX_DEPTH", Hmix_depth, &
                  "The mixed layer depth in the initial conditions when Z_INIT_SEPARATE_MIXED_LAYER "//&
-                 "is set to true.", default=Hmix_default, units="m", scale=US%m_to_Z, &
+                 "is set to true.", units="m", default=US%Z_to_m*Hmix_default, scale=US%m_to_Z, &
                  do_not_log=(just_read .or. .not.separate_mixed_layer))
     call get_param(PF, mdl, "LAYER_Z_INIT_IC_EXTRAP_BUG", density_extrap_bug, &
                  "If true use an expression with a vertical indexing bug for extrapolating the "//&

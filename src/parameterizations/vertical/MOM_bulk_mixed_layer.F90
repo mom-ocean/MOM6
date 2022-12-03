@@ -49,7 +49,7 @@ type, public :: bulkmixedlayer_CS ; private
                              !! the mixed layer is converted to TKE [nondim].
   real    :: bulk_Ri_convective !< The efficiency with which convectively
                              !! released mean kinetic energy becomes TKE [nondim].
-  real    :: vonKar          !< The von Karman constant as used for mixed layer viscosity [nomdim]
+  real    :: vonKar          !< The von Karman constant as used for mixed layer viscosity [nondim]
   real    :: Hmix_min        !< The minimum mixed layer thickness [H ~> m or kg m-2].
   real    :: H_limit_fluxes  !< When the total ocean depth is less than this
                              !! value [H ~> m or kg m-2], scale away all surface forcing to
@@ -3357,12 +3357,12 @@ subroutine bulkmixedlayer_init(Time, G, GV, US, param_file, diag, CS)
                                                  !! output.
   type(bulkmixedlayer_CS), intent(inout) :: CS   !< Bulk mixed layer control structure
 
-! This include declares and sets the variable "version".
-#include "version_variable.h"
+  ! This include declares and sets the variable "version".
+# include "version_variable.h"
   character(len=40)  :: mdl = "MOM_mixed_layer"  ! This module's name.
   real :: BL_detrain_time_dflt ! The default value for BUFFER_LAY_DETRAIN_TIME [s]
   real :: omega_frac_dflt  ! The default value for ML_OMEGA_FRAC [nondim]
-  real :: ustar_min_dflt   ! The default value for BML_USTAR_MIN [m s-1]
+  real :: ustar_min_dflt   ! The default value for BML_USTAR_MIN [Z T-1 ~> m s-1]
   real :: Hmix_min_m       ! The unscaled value of HMIX_MIN [m]
   integer :: isd, ied, jsd, jed
   logical :: use_temperature, use_omega
@@ -3396,8 +3396,8 @@ subroutine bulkmixedlayer_init(Time, G, GV, US, param_file, diag, CS)
   call get_param(param_file, mdl, "BULK_RI_ML", CS%bulk_Ri_ML, &
                  "The efficiency with which mean kinetic energy released "//&
                  "by mechanically forced entrainment of the mixed layer "//&
-                 "is converted to turbulent kinetic energy.", units="nondim",&
-                 fail_if_missing=.true.)
+                 "is converted to turbulent kinetic energy.", &
+                 units="nondim", fail_if_missing=.true.)
   call get_param(param_file, mdl, "ABSORB_ALL_SW", CS%absorb_all_sw, &
                  "If true,  all shortwave radiation is absorbed by the "//&
                  "ocean, instead of passing through to the bottom mud.", &
@@ -3409,8 +3409,8 @@ subroutine bulkmixedlayer_init(Time, G, GV, US, param_file, diag, CS)
   call get_param(param_file, mdl, "NSTAR2", CS%nstar2, &
                  "The portion of any potential energy released by "//&
                  "convective adjustment that is available to drive "//&
-                 "entrainment at the base of mixed layer. By default "//&
-                 "NSTAR2=NSTAR.", units="nondim", default=CS%nstar)
+                 "entrainment at the base of mixed layer. By default NSTAR2=NSTAR.", &
+                 units="nondim", default=CS%nstar)
   call get_param(param_file, mdl, "BULK_RI_CONVECTIVE", CS%bulk_Ri_convective, &
                  "The efficiency with which convectively released mean "//&
                  "kinetic energy is converted to turbulent kinetic "//&
@@ -3446,7 +3446,7 @@ subroutine bulkmixedlayer_init(Time, G, GV, US, param_file, diag, CS)
                  "relative to the density range within the mixed and "//&
                  "buffer layers, when the detrainment is going into the "//&
                  "lightest interior layer, nondimensional, or a negative "//&
-                 "value not to apply this limit.", units="nondim", default = -1.0)
+                 "value not to apply this limit.", units="nondim", default=-1.0)
   call get_param(param_file, mdl, "BUFFER_LAYER_HMIN_THICK", CS%Hbuffer_min, &
                  "The minimum buffer layer thickness when the mixed layer is very thick.", &
                  units="m", default=5.0, scale=GV%m_to_H)
@@ -3493,12 +3493,12 @@ subroutine bulkmixedlayer_init(Time, G, GV, US, param_file, diag, CS)
                  "layers before sorting when ML_RESORT is true.", &
                  units="nondim", default=0, fail_if_missing=.true.) ! Fail added by AJA.
   ! This gives a minimum decay scale that is typically much less than Angstrom.
-  ustar_min_dflt = 2e-4*US%s_to_T*CS%omega*(GV%Angstrom_m + GV%H_to_m*GV%H_subroundoff)
+  ustar_min_dflt = 2e-4*CS%omega*(GV%Angstrom_Z + GV%H_to_Z*GV%H_subroundoff)
   call get_param(param_file, mdl, "BML_USTAR_MIN", CS%ustar_min, &
                  "The minimum value of ustar that should be used by the "//&
                  "bulk mixed layer model in setting vertical TKE decay "//&
-                 "scales. This must be greater than 0.", units="m s-1", &
-                 default=ustar_min_dflt, scale=US%m_to_Z*US%T_to_s)
+                 "scales. This must be greater than 0.", &
+                 units="m s-1", default=US%Z_to_m*US%s_to_T*ustar_min_dflt, scale=US%m_to_Z*US%T_to_s)
   if (CS%ustar_min<=0.0) call MOM_error(FATAL, "BML_USTAR_MIN must be positive.")
 
   call get_param(param_file, mdl, "RESOLVE_EKMAN", CS%Resolve_Ekman, &

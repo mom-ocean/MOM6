@@ -1196,8 +1196,8 @@ logical function MEKE_init(Time, G, US, param_file, diag, dbcomms_CS, CS, MEKE, 
                    "each time step.", default=.false.)
     if (CS%MEKE_equilibrium_restoring) then
       call get_param(param_file, mdl, "MEKE_RESTORING_TIMESCALE", MEKE_restoring_timescale, &
-                     "The timescale used to nudge MEKE toward its equilibrium value.", units="s", &
-                     default=1e6, scale=US%s_to_T)
+                     "The timescale used to nudge MEKE toward its equilibrium value.", &
+                     units="s", default=1e6, scale=US%s_to_T)
       CS%MEKE_restoring_rate = 1.0 / MEKE_restoring_timescale
     endif
 
@@ -1210,8 +1210,8 @@ logical function MEKE_init(Time, G, US, param_file, diag, dbcomms_CS, CS, MEKE, 
                    "by GME.  If MEKE_GMECOEFF is negative, this conversion "//&
                    "is not used or calculated.", units="nondim", default=-1.0)
     call get_param(param_file, mdl, "MEKE_BGSRC", CS%MEKE_BGsrc, &
-                   "A background energy source for MEKE.", units="W kg-1", &
-                   default=0.0, scale=US%m_to_L**2*US%T_to_s**3)
+                   "A background energy source for MEKE.", &
+                   units="W kg-1", default=0.0, scale=US%m_to_L**2*US%T_to_s**3)
     call get_param(param_file, mdl, "MEKE_KH", CS%MEKE_Kh, &
                    "A background lateral diffusivity of MEKE. "//&
                    "Use a negative value to not apply lateral diffusion to MEKE.", &
@@ -1248,11 +1248,9 @@ logical function MEKE_init(Time, G, US, param_file, diag, dbcomms_CS, CS, MEKE, 
                  "If true, use the vertvisc_type to calculate the bottom "//&
                  "drag acting on MEKE.", default=.true.)
   call get_param(param_file, mdl, "MEKE_KHTH_FAC", MEKE%KhTh_fac, &
-                 "A factor that maps MEKE%Kh to KhTh.", units="nondim", &
-                 default=0.0)
+                 "A factor that maps MEKE%Kh to KhTh.", units="nondim", default=0.0)
   call get_param(param_file, mdl, "MEKE_KHTR_FAC", MEKE%KhTr_fac, &
-                 "A factor that maps MEKE%Kh to KhTr.", units="nondim", &
-                 default=0.0)
+                 "A factor that maps MEKE%Kh to KhTr.", units="nondim", default=0.0)
   call get_param(param_file, mdl, "MEKE_KHMEKE_FAC", CS%KhMEKE_Fac, &
                  "A factor that maps MEKE%Kh to Kh for MEKE itself.", &
                  units="nondim", default=0.0)
@@ -1336,13 +1334,11 @@ logical function MEKE_init(Time, G, US, param_file, diag, dbcomms_CS, CS, MEKE, 
 
   ! Nonlocal module parameters
   call get_param(param_file, mdl, "CDRAG", cdrag, &
-                 "CDRAG is the drag coefficient relating the magnitude of "//&
-                 "the velocity field to the bottom stress.", units="nondim", &
-                 default=0.003)
+                 "CDRAG is the drag coefficient relating the magnitude of the velocity "//&
+                 "field to the bottom stress.", units="nondim", default=0.003)
   call get_param(param_file, mdl, "MEKE_CDRAG", CS%cdrag, &
                  "Drag coefficient relating the magnitude of the velocity "//&
-                 "field to the bottom stress in MEKE.", units="nondim", &
-                 default=cdrag)
+                 "field to the bottom stress in MEKE.", units="nondim", default=cdrag)
   call get_param(param_file, mdl, "LAPLACIAN", laplacian, default=.false., do_not_log=.true.)
   call get_param(param_file, mdl, "BIHARMONIC", biharmonic, default=.false., do_not_log=.true.)
 

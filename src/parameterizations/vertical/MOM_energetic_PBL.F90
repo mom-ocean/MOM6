@@ -1961,8 +1961,8 @@ subroutine energetic_PBL_init(Time, G, GV, US, param_file, diag, CS)
 
 !/1. General ePBL settings
   call get_param(param_file, mdl, "OMEGA", CS%omega, &
-                 "The rotation rate of the earth.", units="s-1", &
-                 default=7.2921e-5, scale=US%T_to_S)
+                 "The rotation rate of the earth.", &
+                 units="s-1", default=7.2921e-5, scale=US%T_to_S)
   call get_param(param_file, mdl, "ML_USE_OMEGA", use_omega, &
                  "If true, use the absolute rotation rate instead of the "//&
                  "vertical component of rotation when setting the decay "//&
@@ -2014,8 +2014,8 @@ subroutine energetic_PBL_init(Time, G, GV, US, param_file, diag, CS)
   call get_param(param_file, mdl, "MKE_TO_TKE_EFFIC", CS%MKE_to_TKE_effic, &
                  "The efficiency with which mean kinetic energy released "//&
                  "by mechanically forced entrainment of the mixed layer "//&
-                 "is converted to turbulent kinetic energy.", units="nondim", &
-                 default=0.0)
+                 "is converted to turbulent kinetic energy.", &
+                 units="nondim", default=0.0)
   call get_param(param_file, mdl, "TKE_DECAY", CS%TKE_decay, &
                  "TKE_DECAY relates the vertical rate of decay of the "//&
                  "TKE available for mechanical entrainment to the natural "//&
