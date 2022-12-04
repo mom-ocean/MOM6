@@ -309,7 +309,7 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, forces, dt, MLD_in, Var
   g_Rho0 = GV%g_Earth / GV%Rho0
   h_neglect = GV%H_subroundoff
   dz_neglect = GV%H_subroundoff*GV%H_to_Z
-  ustar_min = 2e-4 * CS%omega * US%T_to_S * (GV%Angstrom_Z + dz_neglect)
+  ustar_min = 2e-4 * CS%omega * (GV%Angstrom_Z + dz_neglect)
   if (CS%front_length>0.) then
     res_upscale = .true.
     I_LFront = 1. / CS%front_length
@@ -666,7 +666,7 @@ subroutine mixedlayer_restrat_BML(h, uhtr, vhtr, tv, forces, dt, G, GV, US, CS)
   use_EOS    = associated(tv%eqn_of_state)
   h_neglect  = GV%H_subroundoff
   dz_neglect = GV%H_subroundoff*GV%H_to_Z
-  ustar_min = 2e-4 * CS%omega * US%T_to_S * (GV%Angstrom_Z + dz_neglect)
+  ustar_min = 2e-4 * CS%omega * (GV%Angstrom_Z + dz_neglect)
 
   if (.not.use_EOS) call MOM_error(FATAL, "MOM_mixedlayer_restrat: "// &
          "An equation of state must be used with this module.")
@@ -932,9 +932,8 @@ logical function mixedlayer_restrat_init(Time, G, GV, US, param_file, diag, CS, 
              units="nondim", default=1.0)
   endif
   call get_param(param_file, mdl, "OMEGA", CS%omega, &
-       "The rotation rate of the earth.", units="s-1", &
-       default=7.2921e-5, scale=US%T_to_s)
-
+             "The rotation rate of the earth.", &
+             units="s-1", default=7.2921e-5, scale=US%T_to_s)
 
   CS%diag => diag
 
