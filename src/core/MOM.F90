@@ -2219,11 +2219,10 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
                  "A tiny magnitude of temperatures below which they are set to 0.", &
                  units="degC", default=0.0, scale=US%degC_to_C)
     call get_param(param_file, "MOM", "C_P", CS%tv%C_p, &
-                 "The heat capacity of sea water, approximated as a "//&
-                 "constant. This is only used if ENABLE_THERMODYNAMICS is "//&
-                 "true. The default value is from the TEOS-10 definition "//&
-                 "of conservative temperature.", units="J kg-1 K-1", &
-                 default=3991.86795711963, scale=US%J_kg_to_Q*US%C_to_degC)
+                 "The heat capacity of sea water, approximated as a constant. "//&
+                 "This is only used if ENABLE_THERMODYNAMICS is true. The default "//&
+                 "value is from the TEOS-10 definition of conservative temperature.", &
+                 units="J kg-1 K-1", default=3991.86795711963, scale=US%J_kg_to_Q*US%C_to_degC)
     call get_param(param_file, "MOM", "USE_PSURF_IN_EOS", CS%use_p_surf_in_EOS, &
                  "If true, always include the surface pressure contributions "//&
                  "in equation of state calculations.", default=.true.)
@@ -2239,9 +2238,8 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
                  "The number of sublayers within the mixed layer if "//&
                  "BULKMIXEDLAYER is true.", units="nondim", default=2)
     call get_param(param_file, "MOM", "NKBL", nkbl, &
-                 "The number of layers that are used as variable density "//&
-                 "buffer layers if BULKMIXEDLAYER is true.", units="nondim", &
-                 default=2)
+                 "The number of layers that are used as variable density buffer "//&
+                 "layers if BULKMIXEDLAYER is true.", units="nondim", default=2)
   endif
 
   call get_param(param_file, "MOM", "GLOBAL_INDEXING", global_indexing, &
@@ -2642,7 +2640,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
 
   call MEKE_alloc_register_restart(HI, US, param_file, CS%MEKE, restart_CSp)
   call set_visc_register_restarts(HI, GV, US, param_file, CS%visc, restart_CSp)
-  call mixedlayer_restrat_register_restarts(HI, GV, param_file, &
+  call mixedlayer_restrat_register_restarts(HI, GV, US, param_file, &
            CS%mixedlayer_restrat_CSp, restart_CSp)
 
   if (CS%rotate_index .and. associated(OBC_in) .and. use_temperature) then
