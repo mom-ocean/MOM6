@@ -126,16 +126,18 @@ type, public :: EOS_type ; private
   real :: dTFr_dp   !< The derivative of freezing point with pressure [degC Pa-1]
 
 ! Unit conversion factors (normally used for dimensional testing but could also allow for
-! change of units of arguments to functions)
-  real :: m_to_Z = 1.      !< A constant that translates distances in meters to the units of depth.
-  real :: kg_m3_to_R = 1.  !< A constant that translates kilograms per meter cubed to the units of density.
-  real :: R_to_kg_m3 = 1.  !< A constant that translates the units of density to kilograms per meter cubed.
-  real :: RL2_T2_to_Pa = 1.!< Convert pressures from R L2 T-2 to Pa.
-  real :: L_T_to_m_s = 1.  !< Convert lateral velocities from L T-1 to m s-1.
-  real :: degC_to_C = 1.   !< A constant that translates degrees Celsius to the units of temperature.
-  real :: C_to_degC = 1.   !< A constant that translates the units of temperature to degrees Celsius.
-  real :: ppt_to_S = 1.    !< A constant that translates parts per thousand to the units of salinity.
-  real :: S_to_ppt = 1.    !< A constant that translates the units of salinity to parts per thousand.
+! change of units of arguments to functions
+  real :: m_to_Z = 1.      !< A constant that translates distances in meters to the units of depth [Z m-1 ~> 1]
+  real :: kg_m3_to_R = 1.  !< A constant that translates kilograms per meter cubed to the
+                           !! units of density [R m3 kg-1 ~> 1]
+  real :: R_to_kg_m3 = 1.  !< A constant that translates the units of density to
+                           !! kilograms per meter cubed [kg m-3 R-1 ~> 1]
+  real :: RL2_T2_to_Pa = 1.!< Convert pressures from R L2 T-2 to Pa [Pa T2 R-1 L-2 ~> 1]
+  real :: L_T_to_m_s = 1.  !< Convert lateral velocities from L T-1 to m s-1 [m T s-1 L-1 ~> 1]
+  real :: degC_to_C = 1.   !< A constant that translates degrees Celsius to the units of temperature [C degC-1 ~> 1]
+  real :: C_to_degC = 1.   !< A constant that translates the units of temperature to degrees Celsius [degC C-1 ~> 1]
+  real :: ppt_to_S = 1.    !< A constant that translates parts per thousand to the units of salinity [S ppt-1 ~> 1]
+  real :: S_to_ppt = 1.    !< A constant that translates the units of salinity to parts per thousand [ppt S-1 ~> 1]
 
 !  logical :: test_EOS = .true. ! If true, test the equation of state
 end type EOS_type
@@ -219,7 +221,11 @@ subroutine calculate_stanley_density_scalar(T, S, pressure, Tvar, TScov, Svar, r
   real, optional, intent(in)  :: scale    !< A multiplicative factor by which to scale output density in
                                           !! combination with scaling stored in EOS [various]
   ! Local variables
-  real :: d2RdTT, d2RdST, d2RdSS, d2RdSp, d2RdTp ! Second derivatives of density wrt T,S,p
+  real :: d2RdTT   ! Second derivative of density with temperature [kg m-3 degC-2]
+  real :: d2RdST   ! Second derivative of density with temperature and salinity [kg m-3 degC-1 ppt-1]
+  real :: d2RdSS   ! Second derivative of density with salinity [kg m-3 ppt-2]
+  real :: d2RdSp   ! Second derivative of density with salinity and pressure [kg m-3 ppt-1 Pa-1]
+  real :: d2RdTp   ! Second derivative of density with temperature and pressure [kg m-3 degC-1 Pa-1]
   real :: p_scale  ! A factor to convert pressure to units of Pa [Pa T2 R-1 L-2 ~> 1]
   real :: T_scale  ! A factor to convert temperature to units of degC [degC C-1 ~> 1]
   real :: S_scale  ! A factor to convert salinity to units of ppt [ppt S-1 ~> 1]
@@ -309,7 +315,12 @@ subroutine calculate_stanley_density_array(T, S, pressure, Tvar, TScov, Svar, rh
   real,     optional, intent(in)    :: scale    !< A multiplicative factor by which to scale the output
                                                 !! density, perhaps to other units than kg m-3 [various]
   ! Local variables
-  real, dimension(size(T)) :: d2RdTT, d2RdST, d2RdSS, d2RdSp, d2RdTp ! Second derivatives of density wrt T,S,p
+  real, dimension(size(T)) :: &
+    d2RdTT, &   ! Second derivative of density with temperature [kg m-3 degC-2]
+    d2RdST, &   ! Second derivative of density with temperature and salinity [kg m-3 degC-1 ppt-1]
+    d2RdSS, &   ! Second derivative of density with salinity [kg m-3 ppt-2]
+    d2RdSp, &   ! Second derivative of density with salinity and pressure [kg m-3 ppt-1 Pa-1]
+    d2RdTp      ! Second derivative of density with temperature and pressure [kg m-3 degC-1 Pa-1]
   integer :: j
 
   select case (EOS%form_of_EOS)
@@ -423,7 +434,12 @@ subroutine calculate_stanley_density_1d(T, S, pressure, Tvar, TScov, Svar, rho, 
   real, dimension(size(rho)) :: pres  ! Pressure converted to [Pa]
   real, dimension(size(rho)) :: Ta    ! Temperature converted to [degC]
   real, dimension(size(rho)) :: Sa    ! Salinity converted to [ppt]
-  real, dimension(size(T)) :: d2RdTT, d2RdST, d2RdSS, d2RdSp, d2RdTp ! Second derivatives of density wrt T,S,p
+  real, dimension(size(T)) :: &
+    d2RdTT, &   ! Second derivative of density with temperature [kg m-3 degC-2]
+    d2RdST, &   ! Second derivative of density with temperature and salinity [kg m-3 degC-1 ppt-1]
+    d2RdSS, &   ! Second derivative of density with salinity [kg m-3 ppt-2]
+    d2RdSp, &   ! Second derivative of density with salinity and pressure [kg m-3 ppt-1 Pa-1]
+    d2RdTp      ! Second derivative of density with temperature and pressure [kg m-3 degC-1 Pa-1]
   integer :: i, is, ie, npts
 
   if (present(dom)) then
@@ -670,7 +686,7 @@ subroutine calculate_TFreeze_array(S, pressure, T_fr, start, npts, EOS, pres_sca
 
   ! Local variables
   real, dimension(size(pressure)) :: pres  ! Pressure converted to [Pa]
-  real :: p_scale ! A factor to convert pressure to units of Pa.
+  real :: p_scale  ! A factor to convert pressure to units of Pa [Pa T2 R-1 L-2 ~> 1]
   integer :: j
 
   p_scale = 1.0 ; if (present(pres_scale)) p_scale = pres_scale
@@ -1028,7 +1044,6 @@ subroutine calculate_density_second_derivs_scalar(T, S, pressure, drho_dS_dS, dr
                                   !! in combination with scaling stored in EOS [various]
   ! Local variables
   real :: rho_scale ! A factor to convert density from kg m-3 to the desired units [R m3 kg-1 ~> 1]
-  real :: p_scale   ! A factor to convert pressure to units of Pa [Pa T2 R-1 L-2 ~> 1]
   real :: pres  ! Pressure converted to [Pa]
   real :: Ta    ! Temperature converted to [degC]
   real :: Sa    ! Salinity converted to [ppt]
@@ -1061,9 +1076,9 @@ subroutine calculate_density_second_derivs_scalar(T, S, pressure, drho_dS_dS, dr
     drho_dT_dP = rho_scale * drho_dT_dP
   endif
 
-  if (p_scale /= 1.0) then
-    drho_dS_dP = p_scale * drho_dS_dP
-    drho_dT_dP = p_scale * drho_dT_dP
+  if (EOS%RL2_T2_to_Pa /= 1.0) then
+    drho_dS_dP = EOS%RL2_T2_to_Pa * drho_dS_dP
+    drho_dT_dP = EOS%RL2_T2_to_Pa * drho_dT_dP
   endif
 
   if (EOS%C_to_degC /= 1.0) then
@@ -1173,7 +1188,7 @@ subroutine calc_spec_vol_derivs_1d(T, S, pressure, dSV_dT, dSV_dS, EOS, dom, sca
   if (present(scale)) spv_scale = spv_scale * scale
   dSVdT_scale = spv_scale * EOS%C_to_degC
   dSVdS_scale = spv_scale * EOS%S_to_ppt
-  if (spv_scale /= 1.0) then ; do i=is,ie
+  if ((dSVdT_scale /= 1.0) .or. (dSVdS_scale /= 1.0)) then ; do i=is,ie
     dSV_dT(i) = dSVdT_scale * dSV_dT(i)
     dSV_dS(i) = dSVdS_scale * dSV_dS(i)
   enddo ; endif
@@ -1252,7 +1267,12 @@ subroutine calculate_compress_scalar(T, S, pressure, rho, drho_dp, EOS)
 
   ! Local variables
   ! These arrays use the same units as their counterparts in calcluate_compress_1d.
-  real, dimension(1) :: Ta, Sa, pa, rhoa, drho_dpa
+  real, dimension(1) :: pa    ! Pressure in a size-1 1d array [R L2 T-2 ~> Pa]
+  real, dimension(1) :: Ta    ! Temperature in a size-1 1d array [C ~> degC]
+  real, dimension(1) :: Sa    ! Salinity in a size-1 1d array [S ~> ppt]
+  real, dimension(1) :: rhoa  ! In situ density in a size-1 1d array [R ~> kg m-3]
+  real, dimension(1) :: drho_dpa ! The partial derivative of density with pressure (also the
+                              ! inverse of the square of sound speed) in a 1d array [T2 L-2 ~> s2 m-2]
 
   Ta(1) = T ; Sa(1) = S ; pa(1) = pressure
 
@@ -1629,11 +1649,12 @@ subroutine convert_temp_salt_for_TEOS10(T, S, HI, kd, mask_z, EOS)
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed,kd), &
                          intent(inout) :: S   !< Salinity [S ~> ppt]
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed,kd), &
-                         intent(in)    :: mask_z !< 3d mask regulating which points to convert.
+                         intent(in)    :: mask_z !< 3d mask regulating which points to convert [nondim]
   type(EOS_type),        intent(in)    :: EOS !< Equation of state structure
 
+  real :: gsw_sr_from_sp ! Reference salinity after conversion from practical salinity [ppt]
+  real :: gsw_ct_from_pt ! Conservative temperature after conversion from potential temperature [degC]
   integer :: i, j, k
-  real :: gsw_sr_from_sp, gsw_ct_from_pt
 
   if ((EOS%form_of_EOS /= EOS_TEOS10) .and. (EOS%form_of_EOS /= EOS_NEMO)) return
 
