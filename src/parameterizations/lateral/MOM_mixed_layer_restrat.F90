@@ -847,8 +847,10 @@ logical function mixedlayer_restrat_init(Time, G, GV, US, param_file, diag, CS, 
 
   ! Local variables
   real :: H_rescale  ! A rescaling factor for thicknesses from the representation in
-                     ! a restart file to the internal representation in this run.
-  real :: flux_to_kg_per_s ! A unit conversion factor for fluxes.
+                     ! a restart file to the internal representation in this run, [nondim]?
+  real :: flux_to_kg_per_s ! A unit conversion factor for fluxes. [kg T s-1 H-1 L-2 ~> kg m-3 or 1]
+  real :: Stanley_coeff    ! Coefficient relating the temperature gradient and sub-gridscale
+                           ! temperature variance [nondim]
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
   integer :: i, j
@@ -886,6 +888,15 @@ logical function mixedlayer_restrat_init(Time, G, GV, US, param_file, diag, CS, 
   call get_param(param_file, mdl, "USE_STANLEY_ML", CS%use_stanley_ml, &
                  "If true, turn on Stanley SGS T variance parameterization "// &
                  "in ML restrat code.", default=.false.)
+  if (CS%use_stanley_ml) then
+    call get_param(param_file, mdl, "STANLEY_COEFF", Stanley_coeff, &
+                 "Coefficient correlating the temperature gradient and SGS T variance.", &
+                 units="nondim", default=-1.0, do_not_log=.true.)
+    if (Stanley_coeff < 0.0) then
+      call MOM_error(WARNING, "STANLEY_COEFF must be set >= 0 if USE_STANLEY_ML is true.")
+      CS%use_stanley_ml = .false.
+    endif
+  endif
   call get_param(param_file, mdl, 'VON_KARMAN_CONST', CS%vonKar, &
                  'The value the von Karman constant as used for mixed layer viscosity.', &
                  units='nondim', default=0.41)
