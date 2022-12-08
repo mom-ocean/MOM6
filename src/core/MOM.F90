@@ -3219,7 +3219,7 @@ subroutine finish_MOM_initialization(Time, dirs, CS, restart_CSp)
   type(unit_scale_type),   pointer :: US => NULL() ! Pointer to a structure containing
                                                    ! various unit conversion factors
   type(MOM_restart_CS),    pointer :: restart_CSp_tmp => NULL()
-  real, allocatable :: z_interface(:,:,:) ! Interface heights [m]
+  real, allocatable :: z_interface(:,:,:) ! Interface heights [Z ~> m]
 
   call cpu_clock_begin(id_clock_init)
   call callTree_enter("finish_MOM_initialization()")
@@ -3242,9 +3242,9 @@ subroutine finish_MOM_initialization(Time, dirs, CS, restart_CSp)
     restart_CSp_tmp = restart_CSp
     call restart_registry_lock(restart_CSp_tmp, unlocked=.true.)
     allocate(z_interface(SZI_(G),SZJ_(G),SZK_(GV)+1))
-    call find_eta(CS%h, CS%tv, G, GV, US, z_interface, eta_to_m=1.0, dZref=G%Z_ref)
+    call find_eta(CS%h, CS%tv, G, GV, US, z_interface, dZref=G%Z_ref)
     call register_restart_field(z_interface, "eta", .true., restart_CSp_tmp, &
-                                "Interface heights", "meter", z_grid='i')
+                                "Interface heights", "meter", z_grid='i', conversion=US%Z_to_m)
     ! NOTE: write_ic=.true. routes routine to fms2 IO write_initial_conditions interface
     call save_restart(dirs%output_directory, Time, CS%G_in, &
                       restart_CSp_tmp, filename=CS%IC_file, GV=GV, write_ic=.true.)
