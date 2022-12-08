@@ -637,7 +637,8 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
   real, dimension(SZIB_(G)) :: &
     drho_dT_u, &  ! The derivative of density with temperature at u points [R C-1 ~> kg m-3 degC-1]
     drho_dS_u     ! The derivative of density with salinity at u points [R S-1 ~> kg m-3 ppt-1].
-  real, dimension(SZIB_(G)) :: scrap ! An array to pass to calculate_density_second_derivs() that will be ignored.
+  real, dimension(SZIB_(G)) :: scrap ! An array to pass to calculate_density_second_derivs()
+                  ! with various units that will be ignored [various]
   real, dimension(SZI_(G)) :: &
     drho_dT_v, &  ! The derivative of density with temperature at v points [R C-1 ~> kg m-3 degC-1]
     drho_dS_v, &  ! The derivative of density with salinity at v points [R S-1 ~> kg m-3 ppt-1].
@@ -665,9 +666,10 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
   real :: PE_release_h  ! The amount of potential energy released by GM averaged over an h-cell [L4 Z-1 T-3 ~> m3 s-3]
                         ! The calculation is equal to h * S^2 * N^2 * kappa_GM.
   real :: I4dt          ! 1 / 4 dt [T-1 ~> s-1].
-  real :: drdiA, drdiB  ! Along layer zonal- and meridional- potential density
-  real :: drdjA, drdjB  ! gradients in the layers above (A) and below(B) the
-                        ! interface times the grid spacing [R ~> kg m-3].
+  real :: drdiA, drdiB  ! Along layer zonal potential density  gradients in the layers above (A)
+                        ! and below (B) the interface times the grid spacing [R ~> kg m-3].
+  real :: drdjA, drdjB  ! Along layer meridional potential density  gradients in the layers above (A)
+                        ! and below (B) the interface times the grid spacing [R ~> kg m-3].
   real :: drdkL, drdkR  ! Vertical density differences across an interface [R ~> kg m-3].
   real :: drdi_u(SZIB_(G),SZK_(GV)) ! Copy of drdi at u-points [R ~> kg m-3].
   real :: drdj_v(SZI_(G),SZK_(GV)) ! Copy of drdj at v-points [R ~> kg m-3].
@@ -729,10 +731,12 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
   real :: diag_sfn_unlim_y(SZI_(G),SZJB_(G),SZK_(GV)+1) ! Diagnostic of the y-face streamfunction before
                                                         ! applying limiters [H L2 T-1 ~> m3 s-1 or kg s-1]
   logical :: present_slope_x, present_slope_y, calc_derivatives
-  integer, dimension(2) ::  EOSdom_u ! The shifted i-computational domain to use for equation of
+  integer, dimension(2) :: EOSdom_u  ! The shifted I-computational domain to use for equation of
                                      ! state calculations at u-points.
-  integer, dimension(2) ::  EOSdom_v ! The shifted I-computational domain to use for equation of
+  integer, dimension(2) :: EOSdom_v  ! The shifted i-computational domain to use for equation of
                                      ! state calculations at v-points.
+  integer, dimension(2) :: EOSdom_h1 ! The shifted i-computational domain to use for equation of
+                                     ! state calculations at h points with 1 extra halo point
   logical :: use_stanley
   integer :: is, ie, js, je, nz, IsdB, halo
   integer :: i, j, k
@@ -809,12 +813,14 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
   if (CS%id_sfn_unlim_y > 0) then ; diag_sfn_unlim_y(:,:,1) = 0.0 ; diag_sfn_unlim_y(:,:,nz+1) = 0.0 ; endif
 
   EOSdom_u(1) = (is-1) - (G%IsdB-1) ; EOSdom_u(2) = ie - (G%IsdB-1)
+  EOSdom_v(:) = EOS_domain(G%HI)
+  EOSdom_h1(:) = EOS_domain(G%HI, halo=1)
 
   !$OMP parallel do default(none) shared(nz,is,ie,js,je,find_work,use_EOS,G,GV,US,pres,T,S, &
   !$OMP                                  nk_linear,IsdB,tv,h,h_neglect,e,dz_neglect,I_slope_max2, &
   !$OMP                                  h_neglect2,int_slope_u,KH_u,uhtot,h_frac,h_avail_rsum, &
   !$OMP                                  uhD,h_avail,G_scale,Work_u,CS,slope_x,cg1,diag_sfn_x, &
-  !$OMP                                  diag_sfn_unlim_x,N2_floor,EOSdom_u,use_stanley, Tsgs2, &
+  !$OMP                                  diag_sfn_unlim_x,N2_floor,EOSdom_u,EOSdom_h1,use_stanley,Tsgs2, &
   !$OMP                                  present_slope_x,G_rho0,Slope_x_PE,hN2_x_PE)  &
   !$OMP                          private(drdiA,drdiB,drdkL,drdkR,pres_u,T_u,S_u,      &
   !$OMP                                  drho_dT_u,drho_dS_u,hg2A,hg2B,hg2L,hg2R,haA, &
@@ -855,7 +861,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
         !            drho_dS_dS, drho_dS_dT, drho_dT_dT, drho_dS_dP, drho_dT_dP, &
         call calculate_density_second_derivs(T_h, S_h, pres_h, &
                      scrap, scrap, drho_dT_dT_h, scrap, scrap, &
-                     tv%eqn_of_state, dom=[is-1,ie-is+3])
+                     tv%eqn_of_state, EOSdom_h1)
       endif
 
       do I=is-1,ie
@@ -1085,7 +1091,6 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
   enddo ! end of j-loop
 
   ! Calculate the meridional fluxes and gradients.
-  EOSdom_v(:) = EOS_domain(G%HI)
 
   !$OMP parallel do default(none) shared(nz,is,ie,js,je,find_work,use_EOS,G,GV,US,pres,T,S, &
   !$OMP                                  nk_linear,IsdB,tv,h,h_neglect,e,dz_neglect,I_slope_max2, &
@@ -1134,10 +1139,10 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
         !            drho_dS_dS, drho_dS_dT, drho_dT_dT, drho_dS_dP, drho_dT_dP, &
         call calculate_density_second_derivs(T_h, S_h, pres_h, &
                      scrap, scrap, drho_dT_dT_h, scrap, scrap, &
-                     tv%eqn_of_state, dom=[is,ie-is+1])
+                     tv%eqn_of_state, EOSdom_v)
         call calculate_density_second_derivs(T_hr, S_hr, pres_hr, &
                      scrap, scrap, drho_dT_dT_hr, scrap, scrap, &
-                     tv%eqn_of_state, dom=[is,ie-is+1])
+                     tv%eqn_of_state, EOSdom_v)
       endif
       do i=is,ie
         if (calc_derivatives) then
@@ -1971,6 +1976,8 @@ subroutine thickness_diffuse_init(Time, G, GV, US, param_file, diag, CDp, CS)
   real :: strat_floor  ! A floor for buoyancy frequency in the Ferrari et al. 2010,
                        ! streamfunction formulation, expressed as a fraction of planetary
                        ! rotation [nondim].
+  real :: Stanley_coeff ! Coefficient relating the temperature gradient and sub-gridscale
+                        ! temperature variance [nondim]
   integer :: default_answer_date  ! The default setting for the various ANSWER_DATE flags.
   logical :: default_2018_answers ! The default setting for the various 2018_ANSWERS flags.
   logical :: MEKE_GEOM_answers_2018  ! If true, use expressions in the MEKE_GEOMETRIC calculation
@@ -2096,6 +2103,15 @@ subroutine thickness_diffuse_init(Time, G, GV, US, param_file, diag, CDp, CS)
   call get_param(param_file, mdl, "USE_STANLEY_GM", CS%use_stanley_gm, &
                  "If true, turn on Stanley SGS T variance parameterization "// &
                  "in GM code.", default=.false.)
+  if (CS%use_stanley_gm) then
+    call get_param(param_file, mdl, "STANLEY_COEFF", Stanley_coeff, &
+                 "Coefficient correlating the temperature gradient and SGS T variance.", &
+                 units="nondim", default=-1.0, do_not_log=.true.)
+    if (Stanley_coeff < 0.0) then
+      call MOM_error(WARNING, "STANLEY_COEFF must be set >= 0 if USE_STANLEY_GM is true.")
+      CS%use_stanley_gm = .false.
+    endif
+  endif
   call get_param(param_file, mdl, "OMEGA", omega, &
                  "The rotation rate of the earth.", &
                  default=7.2921e-5, units="s-1", scale=US%T_to_s, do_not_log=.not.CS%use_FGNV_streamfn)
