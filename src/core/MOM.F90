@@ -300,7 +300,10 @@ type, public :: MOM_control_struct ; private
                                      !! calculated, and if it is 0, dtbt is calculated every step.
   type(time_type) :: dtbt_reset_interval !< A time_time representation of dtbt_reset_period.
   type(time_type) :: dtbt_reset_time     !< The next time DTBT should be calculated.
-  real            :: dt_obc_seg_period   !< The time interval between OBC segment updates for OBGC tracers
+  real            :: dt_obc_seg_period   !< The time interval between OBC segment updates for OBGC
+                                         !! tracers [T ~> s], or a negative value if the segment
+                                         !! data are time-invarant, or zero to update the OBGC
+                                         !! segment data with every call to update_OBC_segment_data.
   type(time_type) :: dt_obc_seg_interval !< A time_time representation of dt_obc_seg_period.
   type(time_type) :: dt_obc_seg_time     !< The next time OBC segment update is applied to OBGC tracers.
 
@@ -2186,12 +2189,11 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
                  units="s", default=default_val, do_not_read=(dtbt > 0.0))
   endif
 
-  CS%dt_obc_seg_period = -1.0
   call get_param(param_file, "MOM", "DT_OBC_SEG_UPDATE_OBGC", CS%dt_obc_seg_period, &
                "The time between OBC segment data updates for OBGC tracers. "//&
                "This must be an integer multiple of DT and DT_THERM. "//&
                "The default is set to DT.", &
-               units="s", default=US%T_to_s*CS%dt, do_not_log=.not.associated(CS%OBC))
+               units="s", default=US%T_to_s*CS%dt, scale=US%s_to_T, do_not_log=.not.associated(CS%OBC))
 
   ! This is here in case these values are used inappropriately.
   use_frazil = .false. ; bound_salinity = .false.
