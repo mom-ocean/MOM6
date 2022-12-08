@@ -114,7 +114,8 @@ use MOM_set_visc,              only : set_visc_init, set_visc_end
 use MOM_shared_initialization, only : write_ocean_geometry_file
 use MOM_sponge,                only : init_sponge_diags, sponge_CS
 use MOM_state_initialization,  only : MOM_initialize_state
-use MOM_stoch_eos,             only : MOM_stoch_eos_init,MOM_stoch_eos_run,MOM_stoch_eos_CS,mom_calc_varT
+use MOM_stoch_eos,             only : MOM_stoch_eos_init, MOM_stoch_eos_run, MOM_stoch_eos_CS
+use MOM_stoch_eos,             only : stoch_EOS_register_restarts, post_stoch_EOS_diags, mom_calc_varT
 use MOM_sum_output,            only : write_energy, accumulate_net_input
 use MOM_sum_output,            only : MOM_sum_output_init, MOM_sum_output_end
 use MOM_sum_output,            only : sum_output_CS
@@ -288,6 +289,7 @@ type, public :: MOM_control_struct ; private
   logical :: thickness_diffuse_first !< If true, diffuse thickness before dynamics.
   logical :: mixedlayer_restrat      !< If true, use submesoscale mixed layer restratifying scheme.
   logical :: useMEKE                 !< If true, call the MEKE parameterization.
+  logical :: use_stochastic_EOS      !< If true, use the stochastic EOS parameterizations.
   logical :: useWaves                !< If true, update Stokes drift
   logical :: use_p_surf_in_EOS       !< If true, always include the surface pressure contributions
                                      !! in equation of state calculations.
@@ -1079,12 +1081,12 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_thermo, &
 
   call cpu_clock_begin(id_clock_dynamics)
   call cpu_clock_begin(id_clock_stoch)
-  if (CS%stoch_eos_CS%use_stoch_eos) call MOM_stoch_eos_run(G,u,v,dt,Time_local,CS%stoch_eos_CS,CS%diag)
+  if (CS%use_stochastic_EOS) call MOM_stoch_eos_run(G, u, v, dt, Time_local, CS%stoch_eos_CS)
   call cpu_clock_end(id_clock_stoch)
   call cpu_clock_begin(id_clock_varT)
-  if (CS%stoch_eos_CS%stanley_coeff >= 0.0) then
-    call MOM_calc_varT(G,GV,h,CS%tv,CS%stoch_eos_CS,dt)
-    call pass_var(CS%tv%varT, G%Domain,clock=id_clock_pass,halo=1)
+  if (CS%use_stochastic_EOS) then
+    call MOM_calc_varT(G, GV, h, CS%tv, CS%stoch_eos_CS, dt)
+    if (associated(CS%tv%varT)) call pass_var(CS%tv%varT, G%Domain, clock=id_clock_pass, halo=1)
   endif
   call cpu_clock_end(id_clock_varT)
 
@@ -1297,9 +1299,7 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_thermo, &
   if (IDs%id_u > 0) call post_data(IDs%id_u, u, CS%diag)
   if (IDs%id_v > 0) call post_data(IDs%id_v, v, CS%diag)
   if (IDs%id_h > 0) call post_data(IDs%id_h, h, CS%diag)
-  if (CS%stoch_eos_CS%id_stoch_eos > 0) call post_data(CS%stoch_eos_CS%id_stoch_eos, CS%stoch_eos_CS%pattern, CS%diag)
-  if (CS%stoch_eos_CS%id_stoch_phi > 0) call post_data(CS%stoch_eos_CS%id_stoch_phi, CS%stoch_eos_CS%phi, CS%diag)
-  if (CS%stoch_eos_CS%id_tvar_sgs > 0) call post_data(CS%stoch_eos_CS%id_tvar_sgs, CS%tv%varT, CS%diag)
+  if (CS%use_stochastic_EOS) call post_stoch_EOS_diags(CS%stoch_eos_CS, CS%tv, CS%diag)
   call disable_averaging(CS%diag)
   call cpu_clock_end(id_clock_diagnostics) ; call cpu_clock_end(id_clock_other)
 
@@ -2681,6 +2681,10 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
     call waves_register_restarts(waves_CSp, HI, GV, param_file, restart_CSp)
   endif
 
+  if (use_temperature) then
+    call stoch_EOS_register_restarts(HI, param_file, CS%stoch_eos_CS, restart_CSp)
+  endif
+
   call callTree_waypoint("restart registration complete (initialize_MOM)")
   call restart_registry_lock(restart_CSp)
 
@@ -2966,7 +2970,11 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
     call interface_filter_init(Time, G, GV, US, param_file, diag, CS%CDp, CS%interface_filter_CSp)
 
   new_sim = is_new_run(restart_CSp)
-  call MOM_stoch_eos_init(G,Time,param_file,CS%stoch_eos_CS,restart_CSp,diag)
+  if (use_temperature) then
+    CS%use_stochastic_EOS = MOM_stoch_eos_init(Time, G, US, param_file, diag, CS%stoch_eos_CS, restart_CSp)
+  else
+    CS%use_stochastic_EOS = .false.
+  endif
 
   if (CS%use_porbar) &
     call porous_barriers_init(Time, US, param_file, diag, CS%por_bar_CS)
