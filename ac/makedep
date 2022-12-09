@@ -92,6 +92,7 @@ def create_deps(src_dirs, makefile, debug, exec_target, fc_rule,
         _, _, cpp, inc, _ = scan_fortran_file(f)
         # maps object file to .h files included
         o2h[object_file(f)] = cpp
+        externals.append(object_file(f))
 
     # Are we building a library, single or multiple executables?
     targ_libs = []
