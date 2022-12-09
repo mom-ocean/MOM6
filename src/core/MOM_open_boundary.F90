@@ -5324,11 +5324,11 @@ subroutine update_segment_tracer_reservoirs(G, GV, uhr, vhr, h, OBC, dt, Reg)
   integer :: i, j, k, m, n, ntr, nz
   integer :: ishift, idir, jshift, jdir
   real :: b_in, b_out     ! The 0 and 1 switch for tracer reservoirs
-                          ! 1 if the length scale of reservoir is zero [nodim]
+                          ! 1 if the length scale of reservoir is zero [nondim]
   real :: a_in, a_out     ! The 0 and 1(-1) switch for reservoir source weights
                           ! e.g. a_in is -1 only if b_in ==1 and uhr or vhr is inward
                           ! e.g. a_out is 1 only if b_out==1 and uhr or vhr is outward
-                          ! It's clear that a_in and a_out cannot be both non-zero [nodim]
+                          ! It's clear that a_in and a_out cannot be both non-zero [nondim]
   nz = GV%ke
   ntr = Reg%ntr
 

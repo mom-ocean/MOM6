@@ -51,7 +51,7 @@ type, public :: vertvisc_CS ; private
   real    :: Hbbl            !< The static bottom boundary layer thickness [H ~> m or kg m-2].
   real    :: Kv_extra_bbl    !< An extra vertical viscosity in the bottom boundary layer of thickness
                              !! Hbbl when there is not a bottom drag law in use [Z2 T-1 ~> m2 s-1].
-  real    :: vonKar          !< The von Karman constant as used for mixed layer viscosity [nomdim]
+  real    :: vonKar          !< The von Karman constant as used for mixed layer viscosity [nondim]
 
   real    :: maxvel          !< Velocity components greater than maxvel are truncated [L T-1 ~> m s-1].
   real    :: vel_underflow   !< Velocity components smaller than vel_underflow

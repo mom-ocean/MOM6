@@ -257,7 +257,7 @@ real function dTdy( G, dT, lat, US )
   real :: PI   ! The ratio of the circumference of a circle to its diameter [nondim]
   real :: dHML ! The range of the mixed layer depths [Z ~> m]
   real :: dHdy ! The mixed layer depth gradient [Z L-1 ~> m m-1]
-  real :: km_to_L ! Horizontal axis unit conversion factor when AXIS_UNITS = 'k' (1000 m) [L km-1]
+  real :: km_to_L ! Horizontal axis unit conversion factor when AXIS_UNITS = 'k' (1000 m) [L km-1 ~> 1000]
 
   PI = 4.0 * atan(1.0)
   km_to_L = 1.0e3*US%m_to_L
