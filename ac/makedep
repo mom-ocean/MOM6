@@ -74,14 +74,14 @@ def create_deps(src_dirs, makefile, debug, exec_target, fc_rule,
         if prg:
             for p in prg:
                 if p in prg2o.keys():
-                    #raise ValueError("Files %s and %s both create the same program '%s'"%(
+                    # raise ValueError("Files %s and %s both create the same program '%s'"%(
                     #                 f,o2F90[prg2o[p]],p))
                     print("Warning: Files {} and {} both create the same "
                           "program '{}'".format(f, o2F90[prg2o[p]], p))
                     o = prg2o[p]
                     del prg2o[p]
-                    #del o2prg[o] - need to keep so modifying instead
-                    o2prg[o] = ['[ignored %s]'%(p)]
+                    # del o2prg[o] - need to keep so modifying instead
+                    o2prg[o] = ['[ignored %s]' % (p)]
                 else:
                     prg2o[p] = object_file(f)
         if not mods and not prg:
@@ -117,7 +117,7 @@ def create_deps(src_dirs, makefile, debug, exec_target, fc_rule,
 
     # Create new makefile
     with open(makefile, 'w') as file:
-        print("# %s created by makedep"%(makefile), file=file)
+        print("# %s created by makedep" % (makefile), file=file)
         print("", file=file)
         print("# Invoked as", file=file)
         print('#   '+' '.join(sys.argv), file=file)
@@ -125,13 +125,13 @@ def create_deps(src_dirs, makefile, debug, exec_target, fc_rule,
         print("all:", " ".join(targets), file=file)
         print("", file=file)
 
-        #print("# SRC_DIRS is usually set in the parent Makefile but in case is it not we", file=file)
-        #print("# record it here from when makedep was previously invoked.", file=file)
-        #print("SRC_DIRS ?= ${SRC_DIRS}", file=file)
-        #print("", file=file)
+        # print("# SRC_DIRS is usually set in the parent Makefile but in case is it not we", file=file)
+        # print("# record it here from when makedep was previously invoked.", file=file)
+        # print("SRC_DIRS ?= ${SRC_DIRS}", file=file)
+        # print("", file=file)
 
-        #print("# all_files:", ' '.join(all_files), file=file)
-        #print("", file=file)
+        # print("# all_files:", ' '.join(all_files), file=file)
+        # print("", file=file)
 
         # Write rule for each object from Fortran
         for o in sorted(o2F90.keys()):
@@ -152,7 +152,7 @@ def create_deps(src_dirs, makefile, debug, exec_target, fc_rule,
                 print("#   incargs:", ' '.join(incargs), file=file)
                 print("#   program:", ' '.join(o2prg[o]), file=file)
             if o2mods[o]:
-                print(' '.join(o2mods[o])+':',o, file=file)
+                print(' '.join(o2mods[o])+':', o, file=file)
             print(o + ':', o2F90[o], ' '.join(incdeps+found_mods), file=file)
             print('\t'+fc_rule, ' '.join(incargs), file=file)
 
@@ -161,7 +161,7 @@ def create_deps(src_dirs, makefile, debug, exec_target, fc_rule,
             incdeps = sorted(set([f2F[h] for h in o2h[o] if h in f2F]))
             incargs = sorted(set(['-I'+os.path.dirname(f) for f in incdeps]))
             if debug:
-                print("# Source file %s produces:"%(o2c[o]), file=file)
+                print("# Source file %s produces:" % (o2c[o]), file=file)
                 print("#   object:", o, file=file)
                 print("#   includes_all:", ' '.join(o2h[o]), file=file)
                 print("#   includes_pth:", ' '.join(incdeps), file=file)
@@ -183,13 +183,13 @@ def create_deps(src_dirs, makefile, debug, exec_target, fc_rule,
         for p in sorted(prg2o.keys()):
             o = prg2o[p]
             print("", file=file)
-            print(p+':',' '.join(link_obj(o, o2uses, mod2o, all_modules) + externals), file=file)
+            print(p+':', ' '.join(link_obj(o, o2uses, mod2o, all_modules) + externals), file=file)
             print('\t$(LD) $(LDFLAGS) -o $@ $^ $(LIBS)', file=file)
 
         # Write rules for building libraries
-        for l in sorted(targ_libs):
+        for lb in sorted(targ_libs):
             print("", file=file)
-            print(l+':',' '.join(list(o2F90.keys()) + list(o2c.keys())), file=file)
+            print(lb+':', ' '.join(list(o2F90.keys()) + list(o2c.keys())), file=file)
             print('\t$(AR) $(ARFLAGS) $@ $^', file=file)
 
         # Write cleanup rules
@@ -211,12 +211,12 @@ def link_obj(obj, o2uses, mod2o, all_modules):
         else:
             return
         uses = [m for m in o2uses[obj] if m in all_modules]
-        if len(uses)>0:
+        if len(uses) > 0:
             ouses = [mod2o[m] for m in uses]
             for m in uses:
                 o = mod2o[m]
                 recur(o, depth=depth+1)
-                #if o not in olst:
+                # if o not in olst:
                 #    recur(o, depth=depth+1)
                 #    olst.append(o)
             return
@@ -271,7 +271,7 @@ def scan_fortran_file(src_file):
                 programs.append(match.group(1))
     used_modules = [m for m in sorted(set(used_modules)) if m not in module_decl]
     return add_suff(module_decl, '.mod'), add_suff(used_modules, '.mod'), cpp_includes, f90_includes, programs
-    #return add_suff(module_decl, '.mod'), add_suff(sorted(set(used_modules)), '.mod'), cpp_includes, f90_includes, programs
+    # return add_suff(module_decl, '.mod'), add_suff(sorted(set(used_modules)), '.mod'), cpp_includes, f90_includes, programs
 
 
 def object_file(src_file):
