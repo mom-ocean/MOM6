@@ -20,7 +20,7 @@ use MOM_time_manager,  only : time_type, operator(+), operator(/)
 use MOM_unit_scaling,  only : unit_scale_type
 use MOM_variables,     only : thermo_var_ptrs, surface
 use MOM_verticalgrid,  only : verticalGrid_type
-use MOM_restart,       only : register_restart_field, MOM_restart_CS
+use MOM_restart,       only : register_restart_pair, MOM_restart_CS
 
 implicit none ; private
 
@@ -73,27 +73,27 @@ type, public :: wave_parameters_CS ; private
                        !! Horizontal -> V points
                        !! Vertical -> Mid-points
   real, allocatable, dimension(:,:,:), public :: &
-    ddt_Us_x           !< 3d time tendency of zonal Stokes drift profile [m s-1]
+    ddt_Us_x           !< 3d time tendency of zonal Stokes drift profile [L T-2 ~> m s-2]
                        !! Horizontal -> U points
                        !! Vertical -> Mid-points
   real, allocatable, dimension(:,:,:), public :: &
-    ddt_Us_y           !< 3d time tendency of meridional Stokes drift profile [m s-1]
+    ddt_Us_y           !< 3d time tendency of meridional Stokes drift profile [L T-2 ~> m s-2]
                        !! Horizontal -> V points
                        !! Vertical -> Mid-points
   real, allocatable, dimension(:,:,:), public :: &
-    Us_x_from_ddt      !< Check of 3d zonal Stokes drift profile [m s-1]
+    Us_x_from_ddt      !< Check of 3d zonal Stokes drift profile [L T-1 ~> m s-1]
                        !! Horizontal -> U points
                        !! Vertical -> Mid-points
   real, allocatable, dimension(:,:,:), public :: &
-    Us_y_from_ddt      !< Check of 3d meridional Stokes drift profile [m s-1]
+    Us_y_from_ddt      !< Check of 3d meridional Stokes drift profile [L T-1 ~> m s-1]
                        !! Horizontal -> V points
                        !! Vertical -> Mid-points
   real, allocatable, dimension(:,:,:), public :: &
-    Us_x_prev          !< 3d zonal Stokes drift profile, previous dynamics call [m s-1]
+    Us_x_prev          !< 3d zonal Stokes drift profile, previous dynamics call [L T-1 ~> m s-1]
                        !! Horizontal -> U points
                        !! Vertical -> Mid-points
   real, allocatable, dimension(:,:,:), public :: &
-    Us_y_prev          !< 3d meridional Stokes drift profile, previous dynamics call [m s-1]
+    Us_y_prev          !< 3d meridional Stokes drift profile, previous dynamics call [L T-1 ~> m s-1]
                        !! Horizontal -> V points
                        !! Vertical -> Mid-points
   real, allocatable, dimension(:,:,:), public :: &
@@ -450,8 +450,8 @@ subroutine MOM_wave_interface_init(time, G, GV, US, param_file, CS, diag, restar
   call get_param(param_file, mdl, "MIN_LANGMUIR", CS%La_min,    &
          "A minimum value for all Langmuir numbers that is not physical, "//&
          "but is likely only encountered when the wind is very small and "//&
-         "therefore its effects should be mostly benign.", units="nondim", &
-         default=0.05)
+         "therefore its effects should be mostly benign.", &
+         units="nondim", default=0.05)
 
   ! Allocate and initialize
   ! a. Stokes driftProfiles
@@ -487,9 +487,9 @@ subroutine MOM_wave_interface_init(time, G, GV, US, param_file, CS, diag, restar
        CS%diag%axesCuL,Time,'3d Stokes drift (x)', 'm s-1', conversion=US%L_T_to_m_s)
   if (CS%Stokes_DDT) then
     CS%id_ddt_3dstokes_y = register_diag_field('ocean_model','dvdt_Stokes', &
-         CS%diag%axesCvL,Time,'d/dt Stokes drift (meridional)','m s-2')
+         CS%diag%axesCvL,Time,'d/dt Stokes drift (meridional)', 'm s-2', conversion=US%L_T2_to_m_s2)
     CS%id_ddt_3dstokes_x = register_diag_field('ocean_model','dudt_Stokes', &
-         CS%diag%axesCuL,Time,'d/dt Stokes drift (zonal)','m s-2')
+         CS%diag%axesCuL,Time,'d/dt Stokes drift (zonal)', 'm s-2', conversion=US%L_T2_to_m_s2)
     CS%id_3dstokes_y_from_ddt = register_diag_field('ocean_model','3d_stokes_y_from_ddt', &
          CS%diag%axesCvL,Time,'3d Stokes drift from ddt (y)', 'm s-1', conversion=US%L_T_to_m_s)
     CS%id_3dstokes_x_from_ddt = register_diag_field('ocean_model','3d_stokes_x_from_ddt', &
@@ -614,7 +614,7 @@ subroutine Update_Stokes_Drift(G, GV, US, CS, h, ustar, dt, dynamics_step)
                             intent(in)    :: h     !< Thickness [H ~> m or kg m-2]
   real, dimension(SZI_(G),SZJ_(G)), &
                             intent(in)    :: ustar !< Wind friction velocity [Z T-1 ~> m s-1].
-  real, intent(in)                        :: dt    !< Time-step for computing Stokes-tendency
+  real, intent(in)                        :: dt    !< Time-step for computing Stokes-tendency [T ~> s]
   logical, intent(in)                     :: dynamics_step !< True if this call is on a dynamics step
 
   ! Local Variables
@@ -629,7 +629,7 @@ subroutine Update_Stokes_Drift(G, GV, US, CS, h, ustar, dt, dynamics_step)
   real    :: PI       ! 3.1415926535...
   real    :: La       ! The local Langmuir number [nondim]
   integer :: ii, jj, kk, b, iim1, jjm1
-  real    :: idt ! 1 divided by the time step
+  real    :: idt ! 1 divided by the time step [T-1 ~> s-1]
 
   if (CS%WaveMethod==EFACTOR) return
 
@@ -1564,13 +1564,13 @@ subroutine Stokes_PGF(G, GV, h, u, v, PFu_Stokes, PFv_Stokes, CS )
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),&
        intent(in)    :: h       !< Layer thicknesses [H ~> m or kg m-2]
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
-       intent(in) :: u          !< Lagrangian Velocity i-component [m s-1]
+       intent(in) :: u          !< Lagrangian Velocity i-component [L T-1 ~> m s-1]
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
-       intent(in) :: v          !< Lagrangian Velocity j-component [m s-1]
+       intent(in) :: v          !< Lagrangian Velocity j-component [L T-1 ~> m s-1]
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
-       intent(out) :: PFu_Stokes !< PGF Stokes-shear i-component [L T-2]
+       intent(out) :: PFu_Stokes !< PGF Stokes-shear i-component [L T-2 ~> m s-2]
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
-       intent(out) :: PFv_Stokes !< PGF Stokes-shear j-component [m s-1]
+       intent(out) :: PFv_Stokes !< PGF Stokes-shear j-component [L T-2 ~> m s-2]
   type(Wave_parameters_CS), &
        pointer       :: CS !< Surface wave related control structure.
 
@@ -1889,10 +1889,11 @@ subroutine Waves_end(CS)
 end subroutine Waves_end
 
 !> Register wave restart fields. To be called before MOM_wave_interface_init
-subroutine waves_register_restarts(CS, HI, GV, param_file, restart_CSp)
+subroutine waves_register_restarts(CS, HI, GV, US, param_file, restart_CSp)
   type(wave_parameters_CS), pointer       :: CS           !< Wave parameter Control structure
   type(hor_index_type),     intent(inout) :: HI           !< Grid structure
   type(verticalGrid_type),  intent(in)    :: GV           !< Vertical grid structure
+  type(unit_scale_type),    intent(in)    :: US           !< A dimensional unit scaling type
   type(param_file_type),    intent(in)    :: param_file   !< Input parameter structure
   type(MOM_restart_CS),     pointer       :: restart_CSp  !< Restart structure, data intent(inout)
   ! Local variables
@@ -1916,21 +1917,20 @@ subroutine waves_register_restarts(CS, HI, GV, param_file, restart_CSp)
 
   if (.not.(use_waves .or. StatisticalWaves)) return
 
-  call get_param(param_file,mdl,"STOKES_DDT",time_tendency_term, do_not_log=.true., default=.false.)
+  call get_param(param_file, mdl, "STOKES_DDT", time_tendency_term, do_not_log=.true., default=.false.)
 
   if (time_tendency_term) then
     ! Allocate wave fields needed for restart file
-    allocate(CS%Us_x_prev(HI%isdB:HI%IedB,HI%jsd:HI%jed,GV%ke))
-    CS%Us_x_prev(:,:,:) = 0.0
-    allocate(CS%Us_y_prev(HI%isd:HI%Ied,HI%jsdB:HI%jedB,GV%ke))
-    CS%Us_y_prev(:,:,:) = 0.0
-    ! Register to restart
+    allocate(CS%Us_x_prev(HI%isdB:HI%IedB,HI%jsd:HI%jed,GV%ke), source=0.0)
+    allocate(CS%Us_y_prev(HI%isd:HI%Ied,HI%jsdB:HI%jedB,GV%ke), source=0.0)
+
+    ! Register to restart files.  If these are not found in a restart file, they stay 0.
     vd(1) = var_desc("Us_x_prev", "m s-1", "3d zonal Stokes drift profile",&
-                     hor_grid='u',z_grid='L')
+                     hor_grid='u', z_grid='L')
     vd(2) = var_desc("Us_y_prev", "m s-1", "3d meridional Stokes drift profile",&
-                      hor_grid='v',z_grid='L')
-    call register_restart_field(CS%US_x_prev(:,:,:), vd(1), .false., restart_CSp)
-    call register_restart_field(CS%US_y_prev(:,:,:), vd(2), .false., restart_CSp)
+                      hor_grid='v', z_grid='L')
+    call register_restart_pair(CS%US_x_prev, CS%US_y_prev, vd(1), vd(2), .false., &
+                               restart_CSp, conversion=US%L_T_to_m_s)
   endif
 
 end subroutine waves_register_restarts

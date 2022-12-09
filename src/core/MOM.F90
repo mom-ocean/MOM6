@@ -2678,7 +2678,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   endif
 
   if (present(waves_CSp)) then
-    call waves_register_restarts(waves_CSp, HI, GV, param_file, restart_CSp)
+    call waves_register_restarts(waves_CSp, HI, GV, US, param_file, restart_CSp)
   endif
 
   if (use_temperature) then
