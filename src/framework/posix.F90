@@ -137,7 +137,7 @@ interface
   !! returns 0.  When `longjmp` is later called, the program is restored to the
   !! point where `setjmp` was called, except it now returns a value (rc) as
   !! specified by `longjmp`.
-  function setjmp(env) result(rc) bind(c, name="setjmp")
+  function setjmp(env) result(rc) bind(c, name=SETJMP_NAME)
     ! #include <setjmp.h>
     ! int setjmp(jmp_buf env);
     import :: jmp_buf, c_int
@@ -175,7 +175,7 @@ interface
 
   !> C interface to POSIX longjmp()
   !! Users should use the Fortran-defined longjmp() function.
-  subroutine longjmp_posix(env, val) bind(c, name="longjmp")
+  subroutine longjmp_posix(env, val) bind(c, name=LONGJMP_NAME)
     ! #include <setjmp.h>
     ! int longjmp(jmp_buf env, int val);
     import :: jmp_buf, c_int
@@ -188,7 +188,7 @@ interface
 
   !> C interface to POSIX siglongjmp()
   !! Users should use the Fortran-defined siglongjmp() function.
-  subroutine siglongjmp_posix(env, val) bind(c, name="siglongjmp")
+  subroutine siglongjmp_posix(env, val) bind(c, name=SIGLONGJMP_NAME)
     ! #include <setjmp.h>
     ! int siglongjmp(jmp_buf env, int val);
     import :: sigjmp_buf, c_int
@@ -344,11 +344,36 @@ subroutine siglongjmp(env, val)
   call siglongjmp_posix(env, val_c)
 end subroutine siglongjmp
 
+
+! Symbols in <setjmp.h> may be platform-dependent and may not exist if defined
+! as a macro.  The following functions permit compilation when they are
+! unavailable, and report a runtime error if used in the program.
+
+!> Placeholder function for a missing or unconfigured setjmp
+function setjmp_missing(env) result(rc) bind(c)
+  type(jmp_buf), intent(in) :: env
+    !< Current process state (unused)
+  integer(kind=c_int) :: rc
+    !< Function return code (unused)
+
+  print '(a)', 'ERROR: setjmp() is not implemented in this build.'
+  print '(a)', 'Recompile with autoconf or -DSETJMP_NAME=\"<symbol name>\".'
+  error stop
+end function setjmp_missing
+
+!> Placeholder function for a missing or unconfigured longjmp
+subroutine longjmp_missing(env, val) bind(c)
+  type(jmp_buf), intent(in) :: env
+    !< Current process state (unused)
+  integer(kind=c_int), value, intent(in) :: val
+    !< Enable signal state flag (unused)
+
+  print '(a)', 'ERROR: longjmp() is not implemented in this build.'
+  print '(a)', 'Recompile with autoconf or -DLONGJMP_NAME=\"<symbol name>\".'
+  error stop
+end subroutine longjmp_missing
+
 !> Placeholder function for a missing or unconfigured sigsetjmp
-!!
-!! The symbol for sigsetjmp can be platform-dependent and may not exist if
-!! defined as a macro.  This function allows compilation, and reports a runtime
-!! error if used in the program.
 function sigsetjmp_missing(env, savesigs) result(rc) bind(c)
   type(sigjmp_buf), intent(in) :: env
     !< Current process state (unused)
@@ -364,5 +389,17 @@ function sigsetjmp_missing(env, savesigs) result(rc) bind(c)
   ! NOTE: Compilers may expect a return value, even if it is unreachable
   rc = -1
 end function sigsetjmp_missing
+
+!> Placeholder function for a missing or unconfigured siglongjmp
+subroutine siglongjmp_missing(env, val) bind(c)
+  type(sigjmp_buf), intent(in) :: env
+    !< Current process state (unused)
+  integer(kind=c_int), value, intent(in) :: val
+    !< Enable signal state flag (unused)
+
+  print '(a)', 'ERROR: siglongjmp() is not implemented in this build.'
+  print '(a)', 'Recompile with autoconf or -DSIGLONGJMP_NAME=\"<symbol name>\".'
+  error stop
+end subroutine siglongjmp_missing
 
 end module posix

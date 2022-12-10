@@ -242,12 +242,24 @@ AC_CONFIG_COMMANDS(Makefile.dep, [make depend])
 
 # POSIX verification tests
 
-# These symbols may be defined as macros, making them inaccessible by Fortran.
-# These three exist in modern BSD and Linux libc, so we just confirm them.
-# But one day, we many need to handle them more carefully.
-AX_FC_CHECK_BIND_C([setjmp], [], [AC_MSG_ERROR([Could not find setjmp.])])
-AX_FC_CHECK_BIND_C([longjmp], [], [AC_MSG_ERROR([Could not find longjmp.])])
-AX_FC_CHECK_BIND_C([siglongjmp], [], [AC_MSG_ERROR([Could not find siglongjmp.])])
+# Symbols in <setjmp.h> may be defined as macros, making them inaccessible by
+# Fortran C bindings.  `sigsetjmp` is known to have an internal symbol in
+# glibc, so we check for this possibility.  For the others, we only check for
+# existence.
+
+# If the need arises, we may want to define these under a standalone macro.
+
+# Validate the setjmp symbol
+AX_FC_CHECK_BIND_C([setjmp],
+  [SETJMP="setjmp"], [SETJMP="setjmp_missing"]
+)
+AC_DEFINE_UNQUOTED([SETJMP_NAME], ["${SETJMP}"])
+
+# Validate the longjmp symbol
+AX_FC_CHECK_BIND_C([longjmp],
+  [LONGJMP="longjmp"], [LONGJMP="longjmp_missing"]
+)
+AC_DEFINE_UNQUOTED([LONGJMP_NAME], ["${LONGJMP}"])
 
 # Determine the sigsetjmp symbol.  If missing, then point to sigsetjmp_missing.
 #
@@ -262,6 +274,13 @@ for sigsetjmp_fn in sigsetjmp __sigsetjmp; do
   ])
 done
 AC_DEFINE_UNQUOTED([SIGSETJMP_NAME], ["${SIGSETJMP}"])
+
+# Validate the siglongjmp symbol
+AX_FC_CHECK_BIND_C([siglongjmp],
+  [SIGLONGJMP="siglongjmp"], [SETJMP="siglongjmp_missing"]
+)
+AC_DEFINE_UNQUOTED([SIGLONGJMP_NAME], ["${SIGLONGJMP}"])
+
 
 # Verify the size of nonlocal jump buffer structs
 # NOTE: This requires C compiler, but can it be done with a Fortran compiler?
