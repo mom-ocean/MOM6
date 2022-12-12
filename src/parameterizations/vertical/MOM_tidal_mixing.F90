@@ -49,10 +49,10 @@ type, public :: tidal_mixing_diags ; private
   real, allocatable :: Kd_Itidal_Work(:,:,:)  !< layer integrated work by int tide driven mixing [R Z3 T-3 ~> W m-2]
   real, allocatable :: Kd_Lowmode_Work(:,:,:) !< layer integrated work by low mode driven mixing [R Z3 T-3 ~> W m-2]
   real, allocatable :: N2_int(:,:,:)          !< Buoyancy frequency squared at interfaces [T-2 ~> s-2]
-  real, allocatable :: vert_dep_3d(:,:,:)     !< The 3-d mixing energy deposition [W m-3]
+  real, allocatable :: vert_dep_3d(:,:,:)     !< The 3-d mixing energy deposition vertical fraction [nondim]?
   real, allocatable :: Schmittner_coeff_3d(:,:,:) !< The coefficient in the Schmittner et al mixing scheme, in UNITS?
   real, allocatable :: tidal_qe_md(:,:,:)     !< Input tidal energy dissipated locally,
-                                              !! interpolated to model vertical coordinate [W m-3?]
+                                              !! interpolated to model vertical coordinate [R Z3 T-3 ~> W m-2]
   real, allocatable :: Kd_lowmode(:,:,:)      !< internal tide diffusivity at interfaces
                                               !! due to propagating low modes [Z2 T-1 ~> m2 s-1].
   real, allocatable :: Fl_lowmode(:,:,:)      !< vertical flux of tidal turbulent
@@ -163,9 +163,9 @@ type, public :: tidal_mixing_cs ; private
   real, allocatable :: h_src(:)         !< tidal constituent input layer thickness [m]
   real, allocatable :: tidal_qe_2d(:,:) !< Tidal energy input times the local dissipation
                                         !! fraction, q*E(x,y), with the CVMix implementation
-                                        !! of Jayne et al tidal mixing [W m-2].
+                                        !! of Jayne et al tidal mixing [R Z3 T-3 ~> W m-2].
                                         !! TODO: make this E(x,y) only
-  real, allocatable :: tidal_qe_3d_in(:,:,:)  !< q*E(x,y,z) with the Schmittner parameterization [W m-3?]
+  real, allocatable :: tidal_qe_3d_in(:,:,:) !< q*E(x,y,z) with the Schmittner parameterization [R Z3 T-3 ~> W m-2]
 
 
   ! Diagnostics
@@ -641,11 +641,11 @@ logical function tidal_mixing_init(Time, G, GV, US, param_file, int_tide_CSp, di
         CS%id_Schmittner_coeff = register_diag_field('ocean_model','Schmittner_coeff',diag%axesTL,Time, &
              'time-invariant portion of the tidal mixing coefficient using the Schmittner', '')
         CS%id_tidal_qe_md = register_diag_field('ocean_model','tidal_qe_md',diag%axesTL,Time, &
-             'input tidal energy dissipated locally interpolated to model vertical coordinates', '')
+             'input tidal energy dissipated locally interpolated to model vertical coordinates', &
+             'W m-2', conversion=US%RZ3_T3_to_W_m2)
       endif
       CS%id_vert_dep = register_diag_field('ocean_model','vert_dep',diag%axesTi,Time, &
            'vertical deposition function needed for Simmons et al tidal  mixing', '')
-
     else
       CS%id_TKE_itidal = register_diag_field('ocean_model','TKE_itidal',diag%axesT1,Time, &
           'Internal Tide Driven Turbulent Kinetic Energy', &
@@ -779,7 +779,7 @@ subroutine calculate_CVMix_tidal(h, j, N2_int, G, GV, US, CS, Kv, Kd_lay, Kd_int
   real, dimension(SZK_(GV)+1) :: SchmittnerSocn
   real, dimension(SZK_(GV))   :: cellHeight  ! Height of cell centers [m]
   real, dimension(SZK_(GV))   :: tidal_qe_md ! Tidal dissipation energy interpolated from 3d input
-                                             ! to model coordinates
+                                             ! to model coordinates [R Z3 T-3 ~> W m-2]
   real, dimension(SZK_(GV)+1) :: N2_int_i    ! De-scaled interface buoyancy frequency [s-2]
   real, dimension(SZK_(GV))   :: Schmittner_coeff  ! A coefficient in the Schmittner et al (2014) mixing
                                              ! parameterization [nondim]
@@ -813,7 +813,7 @@ subroutine calculate_CVMix_tidal(h, j, N2_int, G, GV, US, CS, Kv, Kd_lay, Kd_int
       enddo
 
       call CVMix_compute_Simmons_invariant( nlev                    = GV%ke,               &
-                                            energy_flux             = CS%tidal_qe_2d(i,j), &
+                                            energy_flux             = US%RZ3_T3_to_W_m2*CS%tidal_qe_2d(i,j), &
                                             rho                     = rho_fw,              &
                                             SimmonsCoeff            = Simmons_coeff,       &
                                             VertDep                 = vert_dep,            &
@@ -863,7 +863,7 @@ subroutine calculate_CVMix_tidal(h, j, N2_int, G, GV, US, CS, Kv, Kd_lay, Kd_int
 
       ! diagnostics
       if (allocated(CS%dd%Kd_itidal)) then
-        CS%dd%Kd_itidal(i,j,:) = US%m2_s_to_Z2_T*Kd_tidal(:)
+        CS%dd%Kd_itidal(i,j,:) = US%m2_s_to_Z2_T * Kd_tidal(:)
       endif
       if (allocated(CS%dd%N2_int)) then
         CS%dd%N2_int(i,j,:) = N2_int(i,:)
@@ -916,14 +916,14 @@ subroutine calculate_CVMix_tidal(h, j, N2_int, G, GV, US, CS, Kv, Kd_lay, Kd_int
                   ! CVMix API to prevent this redundancy.
 
       ! remap from input z coordinate to model coordinate:
-      tidal_qe_md = 0.0
+      tidal_qe_md(:) = 0.0
       call remapping_core_h(CS%remap_cs, size(CS%h_src), CS%h_src, CS%tidal_qe_3d_in(i,j,:), &
                             GV%ke, h_m, tidal_qe_md, GV%H_subroundoff, GV%H_subroundoff)
 
       ! form the Schmittner coefficient that is based on 3D q*E, which is formed from
       ! summing q_i*TidalConstituent_i over the number of constituents.
       call CVMix_compute_SchmittnerCoeff( nlev                    = GV%ke,              &
-                                          energy_flux             = tidal_qe_md(:),     &
+                                          energy_flux             = US%RZ3_T3_to_W_m2*tidal_qe_md(:), &
                                           SchmittnerCoeff         = Schmittner_coeff,   &
                                           exp_hab_zetar           = exp_hab_zetar,      &
                                           CVmix_tidal_params_user = CS%CVMix_tidal_params)
@@ -1589,7 +1589,8 @@ subroutine read_tidal_energy(G, US, tidal_energy_type, param_file, CS)
   character(len=200) :: tidal_input_var    ! Input file variable name
   character(len=40)  :: mdl = "MOM_tidal_mixing"     !< This module's name.
   integer :: i, j, isd, ied, jsd, jed
-  real, allocatable, dimension(:,:) :: tidal_energy_flux_2d ! input tidal energy flux at T-grid points [W m-2]
+  real, allocatable, dimension(:,:) :: &
+    tidal_energy_flux_2d  ! Input tidal energy flux at T-grid points [R Z3 T-3 ~> W m-2]
 
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
@@ -1605,7 +1606,7 @@ subroutine read_tidal_energy(G, US, tidal_energy_type, param_file, CS)
     call get_param(param_file, mdl, "TIDAL_DISSIPATION_VAR", tidal_input_var, &
                  "The name in the input file of the tidal energy source for mixing.", &
                  default="wave_dissipation")
-    call MOM_read_data(tidal_energy_file, tidal_input_var, tidal_energy_flux_2d, G%domain)
+    call MOM_read_data(tidal_energy_file, tidal_input_var, tidal_energy_flux_2d, G%domain, scale=US%W_m2_to_RZ3_T3)
     do j=G%jsc,G%jec ; do i=G%isc,G%iec
       CS%tidal_qe_2d(i,j) = CS%Gamma_itides * tidal_energy_flux_2d(i,j)
     enddo ; enddo
@@ -1629,16 +1630,16 @@ subroutine read_tidal_constituents(G, US, tidal_energy_file, param_file, CS)
   ! local variables
   real, parameter :: C1_3 = 1.0/3.0
   real, dimension(SZI_(G),SZJ_(G)) :: &
-    tidal_qk1, &  ! qk1 coefficient used in Schmittner & Egbert
-    tidal_qo1     ! qo1 coefficient used in Schmittner & Egbert
+    tidal_qk1, &  ! qk1 coefficient used in Schmittner & Egbert [nondim]
+    tidal_qo1     ! qo1 coefficient used in Schmittner & Egbert [nondim]
   real, allocatable, dimension(:) :: &
     z_t, &        ! depth from surface to midpoint of input layer [Z ~> m]
     z_w           ! depth from surface to top of input layer [Z ~> m]
   real, allocatable, dimension(:,:,:) :: &
-    tc_m2, &      ! input lunar semidiurnal tidal energy flux [W m-2]
-    tc_s2, &      ! input solar semidiurnal tidal energy flux [W m-2]
-    tc_k1, &      ! input lunar diurnal tidal energy flux [W m-2]
-    tc_o1         ! input lunar diurnal tidal energy flux [W m-2]
+    tc_m2, &      ! input lunar semidiurnal tidal energy flux [R Z3 T-3 ~> W m-2]
+    tc_s2, &      ! input solar semidiurnal tidal energy flux [R Z3 T-3 ~> W m-2]
+    tc_k1, &      ! input lunar diurnal tidal energy flux [R Z3 T-3 ~> W m-2]
+    tc_o1         ! input lunar diurnal tidal energy flux [R Z3 T-3 ~> W m-2]
   integer, dimension(4) :: nz_in
   integer               :: k, is, ie, js, je, isd, ied, jsd, jed, i, j
 
@@ -1660,10 +1661,10 @@ subroutine read_tidal_constituents(G, US, tidal_energy_file, param_file, CS)
   if (.not. allocated(CS%h_src))          allocate(CS%h_src(nz_in(1)))
 
   ! read in tidal constituents
-  call MOM_read_data(tidal_energy_file, 'M2', tc_m2, G%domain)
-  call MOM_read_data(tidal_energy_file, 'S2', tc_s2, G%domain)
-  call MOM_read_data(tidal_energy_file, 'K1', tc_k1, G%domain)
-  call MOM_read_data(tidal_energy_file, 'O1', tc_o1, G%domain)
+  call MOM_read_data(tidal_energy_file, 'M2', tc_m2, G%domain, scale=US%W_m2_to_RZ3_T3)
+  call MOM_read_data(tidal_energy_file, 'S2', tc_s2, G%domain, scale=US%W_m2_to_RZ3_T3)
+  call MOM_read_data(tidal_energy_file, 'K1', tc_k1, G%domain, scale=US%W_m2_to_RZ3_T3)
+  call MOM_read_data(tidal_energy_file, 'O1', tc_o1, G%domain, scale=US%W_m2_to_RZ3_T3)
   ! Note the hard-coded assumption that z_t and z_w in the file are in centimeters.
   call MOM_read_data(tidal_energy_file, 'z_t', z_t, scale=0.01*US%m_to_Z)
   call MOM_read_data(tidal_energy_file, 'z_w', z_w, scale=0.01*US%m_to_Z)
