@@ -901,20 +901,10 @@ subroutine InitializeRealize(gcomp, importState, exportState, clock, rc)
   real(ESMF_KIND_R8), allocatable            :: mesh_areas(:)
   real(ESMF_KIND_R8), allocatable            :: model_areas(:)
   real(ESMF_KIND_R8), pointer                :: dataPtr_mesh_areas(:)
-  real(ESMF_KIND_R8)                         :: max_mod2med_areacor
-  real(ESMF_KIND_R8)                         :: max_med2mod_areacor
-  real(ESMF_KIND_R8)                         :: min_mod2med_areacor
-  real(ESMF_KIND_R8)                         :: min_med2mod_areacor
-
   real(ESMF_KIND_R8)                         :: min_areacor(2)
   real(ESMF_KIND_R8)                         :: max_areacor(2)
   real(ESMF_KIND_R8)                         :: min_areacor_glob(2)
   real(ESMF_KIND_R8)                         :: max_areacor_glob(2)
-
-  real(ESMF_KIND_R8)                         :: max_mod2med_areacor_glob
-  real(ESMF_KIND_R8)                         :: max_med2mod_areacor_glob
-  real(ESMF_KIND_R8)                         :: min_mod2med_areacor_glob
-  real(ESMF_KIND_R8)                         :: min_med2mod_areacor_glob
   character(len=*), parameter                :: subname='(MOM_cap:InitializeRealize)'
   !--------------------------------
 
