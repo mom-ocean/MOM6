@@ -5,16 +5,14 @@ module MOM_cap_mod
 use constants_mod,            only: constants_init
 use diag_manager_mod,         only: diag_manager_init, diag_manager_end
 use field_manager_mod,        only: field_manager_init, field_manager_end
-use fms_mod,                  only: fms_init, fms_end, open_namelist_file, check_nml_error
-use fms_mod,                  only: close_file, file_exist, uppercase
-use fms_io_mod,               only: fms_io_exit
-use mpp_domains_mod,          only: domain2d, mpp_get_compute_domain, mpp_get_compute_domains
+use mom_coms_infra,           only: MOM_infra_init, MOM_infra_end
+use mom_io_infra,             only: io_infra_end
+use mom_domain_infra,         only: get_domain_extent
+use MOM_io,                   only: stdout
+use mpp_domains_mod,          only: mpp_get_compute_domains
 use mpp_domains_mod,          only: mpp_get_ntile_count, mpp_get_pelist, mpp_get_global_domain
 use mpp_domains_mod,          only: mpp_get_domain_npes
-use mpp_io_mod,               only: mpp_open, MPP_RDONLY, MPP_ASCII, MPP_OVERWR, MPP_APPEND, mpp_close, MPP_SINGLE
-use mpp_mod,                  only: stdlog, stdout, mpp_root_pe, mpp_clock_id
-use mpp_mod,                  only: mpp_clock_begin, mpp_clock_end, MPP_CLOCK_SYNC
-use mpp_mod,                  only: MPP_CLOCK_DETAILED, CLOCK_COMPONENT, MAXPES
+
 use time_manager_mod,         only: set_calendar_type, time_type, increment_date
 use time_manager_mod,         only: set_time, set_date, get_time, get_date, month_name
 use time_manager_mod,         only: GREGORIAN, JULIAN, NOLEAP, THIRTY_DAY_MONTHS, NO_CALENDAR
@@ -40,8 +38,7 @@ use MOM_cap_methods,          only: med2mod_areacor, state_diagnose
 use MOM_cap_methods,          only: ChkErr
 
 #ifdef CESMCOUPLED
-use shr_file_mod,             only: shr_file_setLogUnit, shr_file_getLogUnit
-use shr_mpi_mod,              only : shr_mpi_min, shr_mpi_max
+use shr_log_mod,             only: shr_log_setLogUnit, shr_log_getLogUnit
 #endif
 use time_utils_mod,           only: esmf2fms_time
 
@@ -80,6 +77,7 @@ use ESMF,  only: ESMF_AlarmCreate, ESMF_ClockGetAlarmList, ESMF_AlarmList_Flag
 use ESMF,  only: ESMF_AlarmGet, ESMF_AlarmIsCreated, ESMF_ALARMLIST_ALL, ESMF_AlarmIsEnabled
 use ESMF,  only: ESMF_STATEITEM_NOTFOUND, ESMF_FieldWrite
 use ESMF,  only: ESMF_END_ABORT, ESMF_Finalize
+use ESMF,  only: ESMF_REDUCE_MAX, ESMF_REDUCE_MIN, ESMF_VMAllReduce
 use ESMF,  only: operator(==), operator(/=), operator(+), operator(-)
 
 ! TODO ESMF_GridCompGetInternalState does not have an explicit Fortran interface.
@@ -140,7 +138,6 @@ character(len=256)   :: tmpstr
 logical              :: write_diagnostics = .false.
 logical              :: overwrite_timeslice = .false.
 character(len=32)    :: runtype  !< run type
-integer              :: logunit  !< stdout logging unit number
 logical              :: profile_memory = .true.
 logical              :: grid_attach_area = .false.
 logical              :: use_coldstart = .true.
@@ -489,7 +486,30 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
 
 !$  call omp_set_num_threads(nthrds)
 
-  call fms_init(mpi_comm_mom)
+  ! reset shr logging to my log file
+  if (localPet==0) then
+    call NUOPC_CompAttributeGet(gcomp, name="diro", &
+         isPresent=isPresentDiro, rc=rc)
+    if (ChkErr(rc,__LINE__,u_FILE_u)) return
+    call NUOPC_CompAttributeGet(gcomp, name="logfile", &
+         isPresent=isPresentLogfile, rc=rc)
+    if (ChkErr(rc,__LINE__,u_FILE_u)) return
+    if (isPresentDiro .and. isPresentLogfile) then
+         call NUOPC_CompAttributeGet(gcomp, name="diro", value=diro, rc=rc)
+         if (ChkErr(rc,__LINE__,u_FILE_u)) return
+         call NUOPC_CompAttributeGet(gcomp, name="logfile", value=logfile, rc=rc)
+         if (ChkErr(rc,__LINE__,u_FILE_u)) return
+         open(newunit=stdout,file=trim(diro)//"/"//trim(logfile))
+    else
+      stdout = output_unit
+    endif
+  else
+    stdout = output_unit
+  endif
+  call shr_log_setLogUnit(stdout)
+  
+  call MOM_infra_init(mpi_comm_mom)
+
   call constants_init
   call field_manager_init
 
@@ -526,7 +546,7 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
   time_start = set_date (YEAR,MONTH,DAY,HOUR,MINUTE,SECOND)
 
   if (is_root_pe()) then
-    write(logunit,*) subname//'current time: y,m,d-',year,month,day,'h,m,s=',hour,minute,second
+    write(stdout,*) subname//'current time: y,m,d-',year,month,day,'h,m,s=',hour,minute,second
   endif
 
   ! get start/reference time
@@ -538,33 +558,14 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
 
   time0 = set_date (YEAR,MONTH,DAY,HOUR,MINUTE,SECOND)
 
-  if (is_root_pe()) then
-    write(logunit,*) subname//'start time: y,m,d-',year,month,day,'h,m,s=',hour,minute,second
-  endif
 
   ! rsd need to figure out how to get this without share code
   !call shr_nuopc_get_component_instance(gcomp, inst_suffix, inst_index)
   !inst_name = "OCN"//trim(inst_suffix)
 
-  ! reset shr logging to my log file
+
   if (is_root_pe()) then
-    call NUOPC_CompAttributeGet(gcomp, name="diro", &
-         isPresent=isPresentDiro, rc=rc)
-    if (ChkErr(rc,__LINE__,u_FILE_u)) return
-    call NUOPC_CompAttributeGet(gcomp, name="logfile", &
-         isPresent=isPresentLogfile, rc=rc)
-    if (ChkErr(rc,__LINE__,u_FILE_u)) return
-    if (isPresentDiro .and. isPresentLogfile) then
-         call NUOPC_CompAttributeGet(gcomp, name="diro", value=diro, rc=rc)
-         if (ChkErr(rc,__LINE__,u_FILE_u)) return
-         call NUOPC_CompAttributeGet(gcomp, name="logfile", value=logfile, rc=rc)
-         if (ChkErr(rc,__LINE__,u_FILE_u)) return
-         open(newunit=logunit,file=trim(diro)//"/"//trim(logfile))
-    else
-      logunit = output_unit
-    endif
-  else
-    logunit = output_unit
+    write(stdout,*) subname//'start time: y,m,d-',year,month,day,'h,m,s=',hour,minute,second
   endif
 
   starttype = ""
@@ -659,7 +660,7 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
 
   call ocean_model_init_sfc(ocean_state, ocean_public)
 
-  call mpp_get_compute_domain(ocean_public%domain, isc, iec, jsc, jec)
+  call get_domain_extent(ocean_public%domain, isc, iec, jsc, jec)
 
   allocate ( Ice_ocean_boundary% u_flux (isc:iec,jsc:jec),          &
              Ice_ocean_boundary% v_flux (isc:iec,jsc:jec),          &
@@ -823,7 +824,7 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
     call NUOPC_Advertise(exportState, standardName=fldsFrOcn(n)%stdname, name=fldsFrOcn(n)%shortname, rc=rc)
     if (ChkErr(rc,__LINE__,u_FILE_u)) return
   enddo
-
+  if(is_root_pe()) write(stdout,*) 'InitializeAdvertise complete'
 end subroutine InitializeAdvertise
 
 !> Called by NUOPC to realize import and export fields.  "Realizing" a field
@@ -904,6 +905,12 @@ subroutine InitializeRealize(gcomp, importState, exportState, clock, rc)
   real(ESMF_KIND_R8)                         :: max_med2mod_areacor
   real(ESMF_KIND_R8)                         :: min_mod2med_areacor
   real(ESMF_KIND_R8)                         :: min_med2mod_areacor
+
+  real(ESMF_KIND_R8)                         :: min_areacor(2)
+  real(ESMF_KIND_R8)                         :: max_areacor(2)
+  real(ESMF_KIND_R8)                         :: min_areacor_glob(2)
+  real(ESMF_KIND_R8)                         :: max_areacor_glob(2)
+
   real(ESMF_KIND_R8)                         :: max_mod2med_areacor_glob
   real(ESMF_KIND_R8)                         :: max_med2mod_areacor_glob
   real(ESMF_KIND_R8)                         :: min_mod2med_areacor_glob
@@ -913,7 +920,7 @@ subroutine InitializeRealize(gcomp, importState, exportState, clock, rc)
 
   rc = ESMF_SUCCESS
 
-  call shr_file_setLogUnit (logunit)
+  call shr_log_setLogUnit (stdout)
 
   !----------------------------------------------------------------------------
   ! Get pointers to ocean internal state
@@ -1032,7 +1039,7 @@ subroutine InitializeRealize(gcomp, importState, exportState, clock, rc)
     if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
     if (localPet == 0) then
-      write(logunit,*)'mesh file for mom6 domain is ',trim(cvalue)
+      write(stdout,*)'mesh file for mom6 domain is ',trim(cvalue)
     endif
 
     ! recreate the mesh using the above distGrid
@@ -1060,7 +1067,7 @@ subroutine InitializeRealize(gcomp, importState, exportState, clock, rc)
     call ESMF_MeshGet(Emesh, elemMaskArray=elemMaskArray, rc=rc)
     if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
-    call mpp_get_compute_domain(ocean_public%domain, isc, iec, jsc, jec)
+    call get_domain_extent(ocean_public%domain, isc, iec, jsc, jec)
     n = 0
     do j = jsc, jec
       jg = j + ocean_grid%jsc - jsc
@@ -1148,19 +1155,20 @@ subroutine InitializeRealize(gcomp, importState, exportState, clock, rc)
     deallocate(model_areas)
 
     ! Write diagnostic output for correction factors
-    min_mod2med_areacor = minval(mod2med_areacor)
-    max_mod2med_areacor = maxval(mod2med_areacor)
-    min_med2mod_areacor = minval(med2mod_areacor)
-    max_med2mod_areacor = maxval(med2mod_areacor)
-    call shr_mpi_max(max_mod2med_areacor, max_mod2med_areacor_glob, mpicom)
-    call shr_mpi_min(min_mod2med_areacor, min_mod2med_areacor_glob, mpicom)
-    call shr_mpi_max(max_med2mod_areacor, max_med2mod_areacor_glob, mpicom)
-    call shr_mpi_min(min_med2mod_areacor, min_med2mod_areacor_glob, mpicom)
+    min_areacor(1) = minval(mod2med_areacor)
+    max_areacor(1) = maxval(mod2med_areacor)
+    min_areacor(2) = minval(med2mod_areacor)
+    max_areacor(2) = maxval(med2mod_areacor)
+    call ESMF_VMAllReduce(vm, min_areacor, min_areacor_glob, 2, ESMF_REDUCE_MIN, rc=rc)
+    if (ChkErr(rc,__LINE__,u_FILE_u)) return
+    call ESMF_VMAllReduce(vm, max_areacor, max_areacor_glob, 2, ESMF_REDUCE_MAX, rc=rc)
+    if (ChkErr(rc,__LINE__,u_FILE_u)) return
+
     if (localPet == 0) then
-      write(logunit,'(2A,2g23.15,A )') trim(subname),' :  min_mod2med_areacor, max_mod2med_areacor ',&
-            min_mod2med_areacor_glob, max_mod2med_areacor_glob, 'MOM6'
-      write(logunit,'(2A,2g23.15,A )') trim(subname),' :  min_med2mod_areacor, max_med2mod_areacor ',&
-            min_med2mod_areacor_glob, max_med2mod_areacor_glob, 'MOM6'
+      write(stdout,'(2A,2g23.15,A )') trim(subname),' :  min_mod2med_areacor, max_mod2med_areacor ',&
+            min_areacor_glob(1), max_areacor_glob(1), 'MOM6'
+      write(stdout,'(2A,2g23.15,A )') trim(subname),' :  min_med2mod_areacor, max_med2mod_areacor ',&
+            min_areacor_glob(2), max_areacor_glob(2), 'MOM6'
     end if
 #endif
 
@@ -1311,7 +1319,7 @@ subroutine InitializeRealize(gcomp, importState, exportState, clock, rc)
     ! values for j=0 and wrap-around in i. on tripole seam, decomposition
     ! domains are 1 larger in j; to load corner values need to loop one extra row
 
-    call mpp_get_compute_domain(ocean_public%domain, isc, iec, jsc, jec)
+    call get_domain_extent(ocean_public%domain, isc, iec, jsc, jec)
 
     lbnd1 = lbound(dataPtr_mask,1)
     ubnd1 = ubound(dataPtr_mask,1)
@@ -1568,7 +1576,7 @@ subroutine ModelAdvance(gcomp, rc)
   rc = ESMF_SUCCESS
   if(profile_memory) call ESMF_VMLogMemInfo("Entering MOM Model_ADVANCE: ")
 
-  call shr_file_setLogUnit (logunit)
+  call shr_log_setLogUnit (stdout)
 
 !$  call omp_set_num_threads(nthrds)
 
@@ -1782,7 +1790,7 @@ subroutine ModelAdvance(gcomp, rc)
       endif
 
       if (is_root_pe()) then
-        write(logunit,*) subname//' writing restart file ',trim(restartname)
+        write(stdout,*) subname//' writing restart file ',trim(restartname)
       endif
     endif
   endif ! restart_mode
@@ -2039,8 +2047,8 @@ subroutine ocean_model_finalize(gcomp, rc)
   call ocean_model_end(ocean_public, ocean_State, Time, write_restart=write_restart)
   call field_manager_end()
 
-  call fms_io_exit()
-  call fms_end()
+  call io_infra_end()
+  call MOM_infra_end()
 
   write(*,*) 'MOM: --- completed ---'
 
@@ -2253,17 +2261,17 @@ end subroutine fld_list_add
 
 
 #ifndef CESMCOUPLED
-subroutine shr_file_setLogUnit(nunit)
+subroutine shr_log_setLogUnit(nunit)
   integer, intent(in) :: nunit
   ! do nothing for this stub - its just here to replace
   ! having cppdefs in the main program
-end subroutine shr_file_setLogUnit
+end subroutine shr_log_setLogUnit
 
-subroutine shr_file_getLogUnit(nunit)
+subroutine shr_log_getLogUnit(nunit)
   integer, intent(in) :: nunit
   ! do nothing for this stub - its just here to replace
   ! having cppdefs in the main program
-end subroutine shr_file_getLogUnit
+end subroutine shr_log_getLogUnit
 #endif
 
 !>
@@ -2761,7 +2769,7 @@ end subroutine shr_file_getLogUnit
 !! with incoming coupling fields from other components. These three derived types are allocated during the
 !! [InitializeAdvertise] (@ref MOM_cap_mod::initializeadvertise) phase.  Also during that
 !! phase, the `ice_ocean_boundary` type members are all allocated using bounds retrieved
-!! from `mpp_get_compute_domain()`.
+!! from `get_domain_extent()`.
 !!
 !! During the [InitializeRealize] (@ref MOM_cap_mod::initializerealize) phase,
 !! `ESMF_Field`s are created for each of the coupling fields in the `ice_ocean_boundary`
