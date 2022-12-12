@@ -507,7 +507,7 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
     stdout = output_unit
   endif
   call shr_log_setLogUnit(stdout)
-  
+
   call MOM_infra_init(mpi_comm_mom)
 
   call constants_init
