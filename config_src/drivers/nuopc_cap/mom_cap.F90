@@ -509,7 +509,7 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
   call shr_log_setLogUnit(stdout)
   call NUOPC_CompAttributeAdd(gcomp, (/"logunit"/), rc=rc)
   if (chkerr(rc,__LINE__,u_FILE_u)) return
-  call NUOPC_CompAttributeSet(gcomp, "logunit", logunit, rc=rc)
+  call NUOPC_CompAttributeSet(gcomp, "logunit", stdout, rc=rc)
   if (chkerr(rc,__LINE__,u_FILE_u)) return
   call MOM_infra_init(mpi_comm_mom)
 
