@@ -38,7 +38,7 @@ use MOM_cap_methods,          only: med2mod_areacor, state_diagnose
 use MOM_cap_methods,          only: ChkErr
 
 #ifdef CESMCOUPLED
-use shr_log_mod,             only: shr_log_setLogUnit, shr_log_getLogUnit
+use shr_log_mod,             only: shr_log_setLogUnit
 #endif
 use time_utils_mod,           only: esmf2fms_time
 
@@ -507,7 +507,10 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
     stdout = output_unit
   endif
   call shr_log_setLogUnit(stdout)
-
+  call NUOPC_CompAttributeAdd(gcomp, (/"logunit"/), rc=rc)
+  if (chkerr(rc,__LINE__,u_FILE_u)) return
+  call NUOPC_CompAttributeSet(gcomp, "logunit", logunit, rc=rc)
+  if (chkerr(rc,__LINE__,u_FILE_u)) return
   call MOM_infra_init(mpi_comm_mom)
 
   call constants_init
@@ -2256,12 +2259,6 @@ subroutine shr_log_setLogUnit(nunit)
   ! do nothing for this stub - its just here to replace
   ! having cppdefs in the main program
 end subroutine shr_log_setLogUnit
-
-subroutine shr_log_getLogUnit(nunit)
-  integer, intent(in) :: nunit
-  ! do nothing for this stub - its just here to replace
-  ! having cppdefs in the main program
-end subroutine shr_log_getLogUnit
 #endif
 
 !>
