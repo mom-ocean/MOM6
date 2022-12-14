@@ -1858,7 +1858,7 @@ function kappa_shear_init(Time, G, GV, US, param_file, diag, CS)
   call get_param(param_file, mdl, "KAPPA_SHEAR_VERTEX_PSURF_BUG", CS%psurf_bug, &
                  "If true, do a simple average of the cell surface pressures to get a pressure "//&
                  "at the corner if VERTEX_SHEAR=True.  Otherwise mask out any land points in "//&
-                 "the average.", default=.true., do_not_log=(just_read .or. (.not.CS%KS_at_vertex)))
+                 "the average.", default=.false., do_not_log=(just_read .or. (.not.CS%KS_at_vertex)))
 
   call get_param(param_file, mdl, "KAPPA_SHEAR_ITER_BUG", CS%dKdQ_iteration_bug, &
                  "If true, use an older, dimensionally inconsistent estimate of the "//&

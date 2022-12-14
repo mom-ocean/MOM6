@@ -153,8 +153,7 @@ subroutine make_frazil(h, tv, G, GV, US, CS, p_surf, halo)
         pressure(i,1) = ps(i) + (0.5*H_to_RL2_T2)*h(i,j,1)
       enddo
       do k=2,nz ; do i=is,ie
-        pressure(i,k) = pressure(i,k-1) + &
-          (0.5*H_to_RL2_T2) * (h(i,j,k) + h(i,j,k-1))
+        pressure(i,k) = pressure(i,k-1) + (0.5*H_to_RL2_T2) * (h(i,j,k) + h(i,j,k-1))
       enddo ; enddo
     endif
 

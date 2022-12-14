@@ -168,8 +168,10 @@ subroutine RGC_initialize_sponges(G, GV, US, tv, u, v, depth_tot, PF, use_ALE, C
     call initialize_ALE_sponge(Idamp, G, GV, PF, ACSp, h, nz)
 
     !  The remaining calls to set_up_sponge_field can be in any order.
-    if ( associated(tv%T) ) call set_up_ALE_sponge_field(T, G, GV, tv%T, ACSp)
-    if ( associated(tv%S) ) call set_up_ALE_sponge_field(S, G, GV, tv%S, ACSp)
+    if ( associated(tv%T) ) call set_up_ALE_sponge_field(T, G, GV, tv%T, ACSp, 'temp', &
+        sp_long_name='temperature', sp_unit='degC s-1')
+    if ( associated(tv%S) ) call set_up_ALE_sponge_field(S, G, GV, tv%S, ACSp, 'salt', &
+        sp_long_name='salinity', sp_unit='g kg-1 s-1')
 
     if (sponge_uv) then
       U1(:,:,:) = 0.0 ; V1(:,:,:) = 0.0

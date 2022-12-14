@@ -27,6 +27,7 @@ public initialize_topography_named, limit_topography, diagnoseMaximumDepth
 public set_rotation_planetary, set_rotation_beta_plane, initialize_grid_rotation_angle
 public reset_face_lengths_named, reset_face_lengths_file, reset_face_lengths_list
 public read_face_length_list, set_velocity_depth_max, set_velocity_depth_min
+public set_subgrid_topo_at_vel_from_file
 public compute_global_grid_integrals, write_ocean_geometry_file
 
 ! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
@@ -1163,6 +1164,82 @@ subroutine read_face_length_list(iounit, filename, num_lines, lines)
                   "Error while reading file "//trim(filename))
 
 end subroutine read_face_length_list
+! -----------------------------------------------------------------------------
+
+! -----------------------------------------------------------------------------
+!> Read from a file the maximum, minimum and average bathymetry at velocity points,
+!! for the use of porous barrier.
+!! Note that we assume the depth values in the sub-grid bathymetry file of the same
+!! convention as in-cell bathymetry file, i.e. positive below the sea surface and
+!! increasing downward; while in subroutine reset_face_lengths_list, it is implied
+!! that read-in fields min_bathy, max_bathy and avg_bathy from the input file
+!! CHANNEL_LIST_FILE all have negative values below the surface. Therefore, to ensure
+!! backward compatibility, all signs of the variable are inverted here.
+!! And porous_Dmax[UV] = shallowest point, porous_Dmin[UV] = deepest point
+subroutine set_subgrid_topo_at_vel_from_file(G, param_file, US)
+  type(dyn_horgrid_type), intent(inout) :: G          !< The dynamic horizontal grid type
+  type(param_file_type),  intent(in)    :: param_file !< Parameter file structure
+  type(unit_scale_type),  intent(in)    :: US         !< A dimensional unit scaling type
+
+  ! Local variables
+  character(len=200) :: filename, topo_file, inputdir ! Strings for file/path
+  character(len=200) :: varname_uhi, varname_ulo, varname_uav, &
+                        varname_vhi, varname_vlo, varname_vav     ! Variable names in file
+  character(len=40)  :: mdl = "set_subgrid_topo_at_vel_from_file" ! This subroutine's name.
+  integer :: i, j
+
+  call callTree_enter(trim(mdl)//"(), MOM_shared_initialization.F90")
+
+  call get_param(param_file, mdl, "INPUTDIR", inputdir, default=".")
+  inputdir = slasher(inputdir)
+  call get_param(param_file, mdl, "TOPO_AT_VEL_FILE", topo_file, &
+                 "The file from which the bathymetry parameters at the velocity points are read.  "//&
+                 "While the names of the parameters reflect their physical locations, i.e. HIGH is above LOW, "//&
+                 "their signs follow the model's convention, which is positive below the sea surface", &
+                 default="topog_edge.nc")
+  call get_param(param_file, mdl, "TOPO_AT_VEL_VARNAME_U_HIGH", varname_uhi, &
+                 "The variable name of the highest bathymetry at the u-cells in TOPO_AT_VEL_FILE.", &
+                 default="depthu_hi")
+  call get_param(param_file, mdl, "TOPO_AT_VEL_VARNAME_U_LOW",  varname_ulo, &
+                 "The variable name of the lowest bathymetry at the u-cells in TOPO_AT_VEL_FILE.", &
+                 default="depthu_lo")
+  call get_param(param_file, mdl, "TOPO_AT_VEL_VARNAME_U_AVE",  varname_uav, &
+                 "The variable name of the average bathymetry at the u-cells in TOPO_AT_VEL_FILE.", &
+                 default="depthu_av")
+  call get_param(param_file, mdl, "TOPO_AT_VEL_VARNAME_V_HIGH", varname_vhi, &
+                 "The variable name of the highest bathymetry at the v-cells in TOPO_AT_VEL_FILE.", &
+                 default="depthv_hi")
+  call get_param(param_file, mdl, "TOPO_AT_VEL_VARNAME_V_LOW",  varname_vlo, &
+                 "The variable name of the lowest bathymetry at the v-cells in TOPO_AT_VEL_FILE.", &
+                 default="depthv_lo")
+  call get_param(param_file, mdl, "TOPO_AT_VEL_VARNAME_V_AVE",  varname_vav, &
+                 "The variable name of the average bathymetry at the v-cells in TOPO_AT_VEL_FILE.", &
+                 default="depthv_av")
+
+  filename = trim(inputdir)//trim(topo_file)
+  call log_param(param_file, mdl, "INPUTDIR/TOPO_AT_VEL_FILE", filename)
+
+  if (.not.file_exists(filename, G%Domain)) call MOM_error(FATAL, &
+       " set_subgrid_topo_at_vel_from_file: Unable to open "//trim(filename))
+
+  call MOM_read_vector(filename, trim(varname_uhi), trim(varname_vhi), &
+                       G%porous_DmaxU, G%porous_DmaxV, G%Domain, stagger=CGRID_NE, scale=US%m_to_Z)
+  call MOM_read_vector(filename, trim(varname_ulo), trim(varname_vlo), &
+                       G%porous_DminU, G%porous_DminV, G%Domain, stagger=CGRID_NE, scale=US%m_to_Z)
+  call MOM_read_vector(filename, trim(varname_uav), trim(varname_vav), &
+                       G%porous_DavgU, G%porous_DavgV, G%Domain, stagger=CGRID_NE, scale=US%m_to_Z)
+
+  ! The signs of the depth parameters need to be inverted to be backward compatible with input files
+  ! used by subroutine reset_face_lengths_list, which assumes depth is negative below the sea surface.
+  G%porous_DmaxU = -G%porous_DmaxU; G%porous_DminU = -G%porous_DminU; G%porous_DavgU = -G%porous_DavgU
+  G%porous_DmaxV = -G%porous_DmaxV; G%porous_DminV = -G%porous_DminV; G%porous_DavgV = -G%porous_DavgV
+
+  call pass_vector(G%porous_DmaxU, G%porous_DmaxV, G%Domain, To_All+SCALAR_PAIR, CGRID_NE)
+  call pass_vector(G%porous_DminU, G%porous_DminV, G%Domain, To_All+SCALAR_PAIR, CGRID_NE)
+  call pass_vector(G%porous_DavgU, G%porous_DavgV, G%Domain, To_All+SCALAR_PAIR, CGRID_NE)
+
+  call callTree_leave(trim(mdl)//'()')
+end subroutine set_subgrid_topo_at_vel_from_file
 ! -----------------------------------------------------------------------------
 
 ! -----------------------------------------------------------------------------
