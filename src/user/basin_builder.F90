@@ -34,7 +34,7 @@ subroutine basin_builder_topography(D, G, param_file, max_depth)
   character(len=17) :: pname1, pname2 ! For construction of parameter names
   character(len=20) :: funcs ! Basin build function
   real, dimension(20) :: pars ! Parameters for each function
-  real :: lon ! Longitude [degrees_E}
+  real :: lon ! Longitude [degrees_E]
   real :: lat ! Latitude [degrees_N]
   integer :: i, j, n, n_funcs
 

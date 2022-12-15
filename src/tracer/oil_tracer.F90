@@ -126,10 +126,10 @@ function register_oil_tracer(HI, GV, US, param_file, CS, tr_Reg, restart_CS)
                  "found in the restart files of a restarted run.", &
                  default=.false.)
   call get_param(param_file, mdl, "OIL_SOURCE_LONGITUDE", CS%oil_source_longitude, &
-                 "The geographic longitude of the oil source.", units="degrees E", &
+                 "The geographic longitude of the oil source.", units="degrees_E", &
                  fail_if_missing=.true.)
   call get_param(param_file, mdl, "OIL_SOURCE_LATITUDE", CS%oil_source_latitude, &
-                 "The geographic latitude of the oil source.", units="degrees N", &
+                 "The geographic latitude of the oil source.", units="degrees_N", &
                  fail_if_missing=.true.)
   call get_param(param_file, mdl, "OIL_SOURCE_LAYER", CS%oil_source_k, &
                  "The layer into which the oil is introduced, or a "//&

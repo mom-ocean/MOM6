@@ -31,8 +31,8 @@ type, public :: BFB_surface_forcing_CS ; private
   real :: Flux_const         !< The restoring rate at the surface [Z T-1 ~> m s-1].
   real :: SST_s              !< SST at the southern edge of the linear forcing ramp [C ~> degC]
   real :: SST_n              !< SST at the northern edge of the linear forcing ramp [C ~> degC]
-  real :: lfrslat            !< Southern latitude where the linear forcing ramp begins [degLat]
-  real :: lfrnlat            !< Northern latitude where the linear forcing ramp ends [degLat]
+  real :: lfrslat            !< Southern latitude where the linear forcing ramp begins [degrees_N] or [km]
+  real :: lfrnlat            !< Northern latitude where the linear forcing ramp ends [degrees_N] or [km]
   real :: drho_dt            !< Rate of change of density with temperature [R C-1 ~> kg m-3 degC-1].
                              !!   Note that temperature is being used as a dummy variable here.
                              !! All temperatures are converted into density.
@@ -206,10 +206,10 @@ subroutine BFB_surface_forcing_init(Time, G, US, param_file, diag, CS)
                  units="kg m-3", default=1035.0, scale=US%kg_m3_to_R)
   call get_param(param_file, mdl, "LFR_SLAT", CS%lfrslat, &
                  "Southern latitude where the linear forcing ramp begins.", &
-                 units="degrees", default=20.0)
+                 units=G%y_ax_unit_short, default=20.0)
   call get_param(param_file, mdl, "LFR_NLAT", CS%lfrnlat, &
                  "Northern latitude where the linear forcing ramp ends.", &
-                 units="degrees", default=40.0)
+                 units=G%y_ax_unit_short, default=40.0)
   call get_param(param_file, mdl, "SST_S", CS%SST_s, &
                  "SST at the southern edge of the linear forcing ramp.", &
                  units="degC", default=20.0, scale=US%degC_to_C)
