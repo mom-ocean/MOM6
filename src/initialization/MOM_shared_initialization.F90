@@ -819,14 +819,14 @@ subroutine reset_face_lengths_list(G, param_file, US)
   real, allocatable, dimension(:,:) :: &
     u_lat, u_lon, v_lat, v_lon ! The latitude and longitude ranges of faces [degrees_N] or [degrees_E]
   real, allocatable, dimension(:) :: &
-    u_width, v_width      ! The open width of faces [m]
+    u_width, v_width      ! The open width of faces [L ~> m]
   integer, allocatable, dimension(:) :: &
     u_line_no, v_line_no, &  ! The line numbers in lines of u- and v-face lines
     u_line_used, v_line_used ! The number of times each u- and v-line is used.
   real, allocatable, dimension(:) :: &
-    Dmin_u, Dmax_u, Davg_u   ! Porous barrier monomial fit params [m]
+    Dmin_u, Dmax_u, Davg_u   ! Porous barrier monomial fit params [Z ~> m]
   real, allocatable, dimension(:) :: &
-    Dmin_v, Dmax_v, Davg_v   ! Porous barrier monomial fit params [m]
+    Dmin_v, Dmax_v, Davg_v   ! Porous barrier monomial fit params [Z ~> m]
   real    :: lat, lon     ! The latitude and longitude of a point [degrees_N] and [degrees_E].
   real    :: len_lon      ! The periodic range of longitudes, usually 360 degrees [degrees_E].
   real    :: len_lat      ! The range of latitudes, usually 180 degrees [degrees_N].
@@ -945,6 +945,10 @@ subroutine reset_face_lengths_list(G, param_file, US)
           read(line(isu_por+12:),*) u_lon(1:2,u_pt), u_lat(1:2,u_pt), u_width(u_pt), &
                 Dmin_u(u_pt), Dmax_u(u_pt), Davg_u(u_pt)
         endif
+        u_width(u_pt) = US%m_to_L*u_width(u_pt) ! Rescale units equivalently to scale=US%m_to_L during read.
+        Dmin_u(u_pt) = US%m_to_Z*Dmin_u(u_pt)   ! Rescale units equivalently to scale=US%m_to_Z during read.
+        Dmax_u(u_pt) = US%m_to_Z*Dmax_u(u_pt)   ! Rescale units equivalently to scale=US%m_to_Z during read.
+        Davg_u(u_pt) = US%m_to_Z*Davg_u(u_pt)   ! Rescale units equivalently to scale=US%m_to_Z during read.
         u_line_no(u_pt) = ln
         if (is_root_PE()) then
           if (check_360) then
@@ -982,6 +986,10 @@ subroutine reset_face_lengths_list(G, param_file, US)
           read(line(isv+12:),*) v_lon(1:2,v_pt), v_lat(1:2,v_pt), v_width(v_pt), &
                 Dmin_v(v_pt), Dmax_v(v_pt), Davg_v(v_pt)
         endif
+        v_width(v_pt) = US%m_to_L*v_width(v_pt) ! Rescale units equivalently to scale=US%m_to_L during read.
+        Dmin_v(v_pt) = US%m_to_Z*Dmin_v(v_pt)   ! Rescale units equivalently to scale=US%m_to_Z during read.
+        Dmax_v(v_pt) = US%m_to_Z*Dmax_v(v_pt)   ! Rescale units equivalently to scale=US%m_to_Z during read.
+        Davg_v(v_pt) = US%m_to_Z*Davg_v(v_pt)   ! Rescale units equivalently to scale=US%m_to_Z during read.
         v_line_no(v_pt) = ln
         if (is_root_PE()) then
           if (check_360) then
@@ -1027,10 +1035,10 @@ subroutine reset_face_lengths_list(G, param_file, US)
            ((lon_p >= u_lon(1,npt)) .and. (lon_p <= u_lon(2,npt))) .or. &
            ((lon_m >= u_lon(1,npt)) .and. (lon_m <= u_lon(2,npt)))) ) then
 
-        G%dy_Cu(I,j) = G%mask2dCu(I,j) * min(G%dyCu(I,j), max(US%m_to_L*u_width(npt), 0.0))
-        G%porous_DminU(I,j) = US%m_to_Z*Dmin_u(npt)
-        G%porous_DmaxU(I,j) = US%m_to_Z*Dmax_u(npt)
-        G%porous_DavgU(I,j) = US%m_to_Z*Davg_u(npt)
+        G%dy_Cu(I,j) = G%mask2dCu(I,j) * min(G%dyCu(I,j), max(u_width(npt), 0.0))
+        G%porous_DminU(I,j) = Dmin_u(npt)
+        G%porous_DmaxU(I,j) = Dmax_u(npt)
+        G%porous_DavgU(I,j) = Davg_u(npt)
 
         if (j>=G%jsc .and. j<=G%jec .and. I>=G%isc .and. I<=G%iec) then ! Limit messages/checking to compute domain
           if ( G%mask2dCu(I,j) == 0.0 )  then
@@ -1064,10 +1072,10 @@ subroutine reset_face_lengths_list(G, param_file, US)
           (((lon >= v_lon(1,npt)) .and. (lon <= v_lon(2,npt))) .or. &
            ((lon_p >= v_lon(1,npt)) .and. (lon_p <= v_lon(2,npt))) .or. &
            ((lon_m >= v_lon(1,npt)) .and. (lon_m <= v_lon(2,npt)))) ) then
-        G%dx_Cv(i,J) = G%mask2dCv(i,J) * min(G%dxCv(i,J), max(US%m_to_L*v_width(npt), 0.0))
-        G%porous_DminV(i,J) = US%m_to_Z*Dmin_v(npt)
-        G%porous_DmaxV(i,J) = US%m_to_Z*Dmax_v(npt)
-        G%porous_DavgV(i,J) = US%m_to_Z*Davg_v(npt)
+        G%dx_Cv(i,J) = G%mask2dCv(i,J) * min(G%dxCv(i,J), max(v_width(npt), 0.0))
+        G%porous_DminV(i,J) = Dmin_v(npt)
+        G%porous_DmaxV(i,J) = Dmax_v(npt)
+        G%porous_DavgV(i,J) = Davg_v(npt)
 
         if (i>=G%isc .and. i<=G%iec .and. J>=G%jsc .and. J<=G%jec) then ! Limit messages/checking to compute domain
           if ( G%mask2dCv(i,J) == 0.0 )  then
