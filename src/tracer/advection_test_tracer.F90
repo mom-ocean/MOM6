@@ -3,25 +3,25 @@ module advection_test_tracer
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-use MOM_coms,          only : EFP_type
-use MOM_coupler_types, only : set_coupler_type_data, atmos_ocn_coupler_flux
-use MOM_diag_mediator, only : diag_ctrl
-use MOM_error_handler, only : MOM_error, FATAL, WARNING
-use MOM_file_parser,   only : get_param, log_param, log_version, param_file_type
-use MOM_forcing_type,  only : forcing
-use MOM_grid, only : ocean_grid_type
-use MOM_hor_index, only : hor_index_type
-use MOM_io, only : slasher, vardesc, var_desc, query_vardesc
-use MOM_open_boundary, only : ocean_OBC_type
-use MOM_restart, only : query_initialized, set_initialized, MOM_restart_CS
-use MOM_spatial_means, only : global_mass_int_EFP
-use MOM_sponge, only : set_up_sponge_field, sponge_CS
-use MOM_time_manager, only : time_type
+use MOM_coms,            only : EFP_type
+use MOM_coupler_types,   only : set_coupler_type_data, atmos_ocn_coupler_flux
+use MOM_diag_mediator,   only : diag_ctrl
+use MOM_error_handler,   only : MOM_error, FATAL, WARNING
+use MOM_file_parser,     only : get_param, log_param, log_version, param_file_type
+use MOM_forcing_type,    only : forcing
+use MOM_grid,            only : ocean_grid_type
+use MOM_hor_index,       only : hor_index_type
+use MOM_io,              only : slasher, vardesc, var_desc, query_vardesc
+use MOM_open_boundary,   only : ocean_OBC_type
+use MOM_restart,         only : query_initialized, set_initialized, MOM_restart_CS
+use MOM_spatial_means,   only : global_mass_int_EFP
+use MOM_sponge,          only : set_up_sponge_field, sponge_CS
+use MOM_time_manager,    only : time_type
 use MOM_tracer_registry, only : register_tracer, tracer_registry_type
 use MOM_tracer_diabatic, only : tracer_vertdiff, applyTracerBoundaryFluxesInOut
-use MOM_unit_scaling, only : unit_scale_type
-use MOM_variables, only : surface
-use MOM_verticalGrid, only : verticalGrid_type
+use MOM_unit_scaling,    only : unit_scale_type
+use MOM_variables,       only : surface
+use MOM_verticalGrid,    only : verticalGrid_type
 
 implicit none ; private
 
@@ -40,16 +40,16 @@ type, public :: advection_test_tracer_CS ; private
   character(len=200) :: tracer_IC_file !< The full path to the IC file, or " " to initialize internally.
   type(time_type), pointer :: Time => NULL() !< A pointer to the ocean model's clock.
   type(tracer_registry_type), pointer :: tr_Reg => NULL() !< A pointer to the MOM tracer registry
-  real, pointer :: tr(:,:,:,:) => NULL() !< The array of tracers used in this subroutine, in g m-3?
-  real :: land_val(NTR) = -1.0 !< The value of tr used where land is masked out.
+  real, pointer :: tr(:,:,:,:) => NULL() !< The array of tracers used in this subroutine [conc]
+  real :: land_val(NTR) = -1.0 !< The value of tr used where land is masked out [conc]
   logical :: use_sponge    !< If true, sponges may be applied somewhere in the domain.
   logical :: tracers_may_reinit !< If true, the tracers may be set up via the initialization code if
                            !! they are not found in the restart files.  Otherwise it is a fatal error
                            !! if the tracers are not found in the restart files of a restarted run.
-  real :: x_origin !< Parameters describing the test functions
-  real :: x_width  !< Parameters describing the test functions
-  real :: y_origin !< Parameters describing the test functions
-  real :: y_width  !< Parameters describing the test functions
+  real :: x_origin !< Starting x-position of the tracer [m] or [km] or [degrees_E]
+  real :: x_width  !< Initial size in the x-direction of the tracer patch [m] or [km] or [degrees_E]
+  real :: y_origin !< Starting y-position of the tracer [m] or [km] or [degrees_N]
+  real :: y_width  !< Initial size in the y-direction of the tracer patch [m] or [km] or [degrees_N]
 
   integer, dimension(NTR) :: ind_tr !< Indices returned by atmos_ocn_coupler_flux if it is used and
                    !! the surface tracer concentrations are to be provided to the coupler.
@@ -64,8 +64,8 @@ end type advection_test_tracer_CS
 contains
 
 !> Register tracer fields and subroutines to be used with MOM.
-function register_advection_test_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
-  type(hor_index_type),        intent(in) :: HI   !< A horizontal index type structure
+function register_advection_test_tracer(G, GV, param_file, CS, tr_Reg, restart_CS)
+  type(ocean_grid_type),       intent(in) :: G    !< The ocean's grid structure
   type(verticalGrid_type),     intent(in) :: GV   !< The ocean's vertical grid structure
   type(param_file_type),       intent(in) :: param_file !< A structure to parse for run-time parameters
   type(advection_test_tracer_CS), pointer :: CS !< The control structure returned by a previous
@@ -80,13 +80,13 @@ function register_advection_test_tracer(HI, GV, param_file, CS, tr_Reg, restart_
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
   character(len=40)  :: mdl = "advection_test_tracer" ! This module's name.
-  character(len=200) :: inputdir
+  character(len=200) :: inputdir   ! The directory where the input file can be found
   character(len=48)  :: flux_units ! The units for tracer fluxes, usually
                             ! kg(tracer) kg(water)-1 m3 s-1 or kg(tracer) s-1.
-  real, pointer :: tr_ptr(:,:,:) => NULL()
+  real, pointer :: tr_ptr(:,:,:) => NULL() ! A pointer to a tracer array [conc]
   logical :: register_advection_test_tracer
   integer :: isd, ied, jsd, jed, nz, m
-  isd = HI%isd ; ied = HI%ied ; jsd = HI%jsd ; jed = HI%jed ; nz = GV%ke
+  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nz = GV%ke
 
   if (associated(CS)) then
     call MOM_error(FATAL, "register_advection_test_tracer called with an "// &
@@ -98,13 +98,13 @@ function register_advection_test_tracer(HI, GV, param_file, CS, tr_Reg, restart_
   call log_version(param_file, mdl, version, "")
 
   call get_param(param_file, mdl, "ADVECTION_TEST_X_ORIGIN", CS%x_origin, &
-        "The x-coordinate of the center of the test-functions.", units="same as geoLon", default=0.)
+        "The x-coordinate of the center of the test-functions.", units=G%x_ax_unit_short, default=0.)
   call get_param(param_file, mdl, "ADVECTION_TEST_Y_ORIGIN", CS%y_origin, &
-        "The y-coordinate of the center of the test-functions.", units="same as geoLat", default=0.)
+        "The y-coordinate of the center of the test-functions.", units=G%y_ax_unit_short, default=0.)
   call get_param(param_file, mdl, "ADVECTION_TEST_X_WIDTH", CS%x_width, &
-        "The x-width of the test-functions.", units="same as geoLon", default=0.)
+        "The x-width of the test-functions.", units=G%x_ax_unit_short, default=0.)
   call get_param(param_file, mdl, "ADVECTION_TEST_Y_WIDTH", CS%y_width, &
-        "The y-width of the test-functions.", units="same as geoLat", default=0.)
+        "The y-width of the test-functions.", units=G%y_ax_unit_short, default=0.)
   call get_param(param_file, mdl, "ADVECTION_TEST_TRACER_IC_FILE", CS%tracer_IC_file, &
                  "The name of a file from which to read the initial "//&
                  "conditions for the tracers, or blank to initialize "//&
@@ -143,7 +143,7 @@ function register_advection_test_tracer(HI, GV, param_file, CS, tr_Reg, restart_
     ! calls.  Curses on the designers and implementers of Fortran90.
     tr_ptr => CS%tr(:,:,:,m)
     ! Register the tracer for horizontal advection, diffusion, and restarts.
-    call register_tracer(tr_ptr, tr_Reg, param_file, HI, GV, &
+    call register_tracer(tr_ptr, tr_Reg, param_file, G%HI, GV, &
                          name=name, longname=longname, units="kg kg-1", &
                          registry_diags=.true., flux_units=flux_units, &
                          restart_CS=restart_CS, mandatory=.not.CS%tracers_may_reinit)
@@ -181,12 +181,13 @@ subroutine initialize_advection_test_tracer(restart, day, G, GV, h,diag, OBC, CS
   type(sponge_CS),                    pointer    :: sponge_CSp !< Pointer to the control structure for the sponges.
 
   ! Local variables
-  character(len=16) :: name     ! A variable's name in a NetCDF file.
+  character(len=16) :: name ! A variable's name in a NetCDF file.
+  real :: locx, locy        ! x- and y- positions relative to the center of the tracer patch
+                            ! normalized by its size [nondim]
   real :: h_neglect         ! A thickness that is so small it is usually lost
                             ! in roundoff and can be neglected [H ~> m or kg m-2].
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz, m
   integer :: IsdB, IedB, JsdB, JedB
-  real :: locx, locy
 
   if (.not.associated(CS)) return
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
@@ -211,28 +212,28 @@ subroutine initialize_advection_test_tracer(restart, day, G, GV, h,diag, OBC, CS
       enddo ; enddo
       k=2 ! Triangle wave
       do j=js,je ; do i=is,ie
-        locx=abs(G%geoLonT(i,j)-CS%x_origin)/CS%x_width
-        locy=abs(G%geoLatT(i,j)-CS%y_origin)/CS%y_width
+        locx = abs(G%geoLonT(i,j)-CS%x_origin)/CS%x_width
+        locy = abs(G%geoLatT(i,j)-CS%y_origin)/CS%y_width
         CS%tr(i,j,k,m) = max(0.0, 1.0-locx)*max(0.0, 1.0-locy)
       enddo ; enddo
       k=3 ! Cosine bell
       do j=js,je ; do i=is,ie
-        locx=min(1.0, abs(G%geoLonT(i,j)-CS%x_origin)/CS%x_width)*(acos(0.0)*2.)
-        locy=min(1.0, abs(G%geoLatT(i,j)-CS%y_origin)/CS%y_width)*(acos(0.0)*2.)
+        locx = min(1.0, abs(G%geoLonT(i,j)-CS%x_origin)/CS%x_width) * (acos(0.0)*2.)
+        locy = min(1.0, abs(G%geoLatT(i,j)-CS%y_origin)/CS%y_width) * (acos(0.0)*2.)
         CS%tr(i,j,k,m) = (1.0+cos(locx))*(1.0+cos(locy))*0.25
       enddo ; enddo
       k=4 ! Cylinder
       do j=js,je ; do i=is,ie
-        locx=abs(G%geoLonT(i,j)-CS%x_origin)/CS%x_width
-        locy=abs(G%geoLatT(i,j)-CS%y_origin)/CS%y_width
+        locx = abs(G%geoLonT(i,j)-CS%x_origin)/CS%x_width
+        locy = abs(G%geoLatT(i,j)-CS%y_origin)/CS%y_width
         if (locx**2+locy**2<=1.0) CS%tr(i,j,k,m) = 1.0
       enddo ; enddo
       k=5 ! Cut cylinder
       do j=js,je ; do i=is,ie
-        locx=(G%geoLonT(i,j)-CS%x_origin)/CS%x_width
-        locy=(G%geoLatT(i,j)-CS%y_origin)/CS%y_width
+        locx = (G%geoLonT(i,j)-CS%x_origin)/CS%x_width
+        locy = (G%geoLatT(i,j)-CS%y_origin)/CS%y_width
         if (locx**2+locy**2<=1.0) CS%tr(i,j,k,m) = 1.0
-        if (locx>0.0.and.abs(locy)<0.2) CS%tr(i,j,k,m) = 0.0
+        if (locx>0.0 .and. abs(locy)<0.2) CS%tr(i,j,k,m) = 0.0
       enddo ; enddo
 
       call set_initialized(CS%tr(:,:,:,m), name, CS%restart_CSp)

@@ -2177,7 +2177,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
                  "at the end of the step.", default=.false.)
 
   if (CS%split) then
-    call get_param(param_file, "MOM", "DTBT", dtbt, default=-0.98)
+    call get_param(param_file, "MOM", "DTBT", dtbt, units="s or nondim", default=-0.98)
     default_val = US%T_to_s*CS%dt_therm ; if (dtbt > 0.0) default_val = -1.0
     CS%dtbt_reset_period = -1.0
     call get_param(param_file, "MOM", "DTBT_RESET_PERIOD", CS%dtbt_reset_period, &
@@ -2637,7 +2637,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
 
   ! This subroutine calls user-specified tracer registration routines.
   ! Additional calls can be added to MOM_tracer_flow_control.F90.
-  call call_tracer_register(HI, GV, US, param_file, CS%tracer_flow_CSp, &
+  call call_tracer_register(G, GV, US, param_file, CS%tracer_flow_CSp, &
                             CS%tracer_Reg, restart_CSp)
 
   call MEKE_alloc_register_restart(HI, US, param_file, CS%MEKE, restart_CSp)
@@ -2661,7 +2661,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
 
   if (associated(CS%OBC)) then
     ! Set up remaining information about open boundary conditions that is needed for OBCs.
-    call call_OBC_register(param_file, CS%update_OBC_CSp, US, CS%OBC, CS%tracer_Reg)
+    call call_OBC_register(G, GV, US, param_file, CS%update_OBC_CSp, CS%OBC, CS%tracer_Reg)
   !### Package specific changes to OBCs need to go here?
 
     ! This is the equivalent to 2 calls to register_segment_tracer (per segment), which

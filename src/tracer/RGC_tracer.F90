@@ -60,10 +60,9 @@ end type RGC_tracer_CS
 
 contains
 
-
 !> This subroutine is used to register tracer fields
-function register_RGC_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
-  type(hor_index_type),       intent(in) :: HI   !< A horizontal index type structure.
+function register_RGC_tracer(G, GV, param_file, CS, tr_Reg, restart_CS)
+  type(ocean_grid_type),      intent(in) :: G    !< The ocean's grid structure
   type(verticalGrid_type),    intent(in) :: GV   !< The ocean's vertical grid structure.
   type(param_file_type),      intent(in) :: param_file !<A structure indicating the open file to parse
                                                  !! for model parameter values.
@@ -80,7 +79,7 @@ function register_RGC_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
   real, pointer :: tr_ptr(:,:,:) => NULL() ! A pointer to one of the tracers in this module [kg kg-1]
   logical :: register_RGC_tracer
   integer :: isd, ied, jsd, jed, nz, m
-  isd = HI%isd ; ied = HI%ied ; jsd = HI%jsd ; jed = HI%jed ; nz = GV%ke
+  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nz = GV%ke
 
   if (associated(CS)) then
     call MOM_error(FATAL, "RGC_register_tracer called with an "// &
@@ -108,13 +107,11 @@ function register_RGC_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
 
   call get_param(param_file, mdl, "CONT_SHELF_LENGTH", CS%CSL, &
                  "The length of the continental shelf (x dir, km).", &
-                 units="km", default=15.0)
-               ! units=G%x_ax_unit_short, default=15.0)
+                 units=G%x_ax_unit_short, default=15.0)
 
   call get_param(param_file, mdl, "LENSPONGE", CS%lensponge, &
                  "The length of the sponge layer (km).", &
-                 units="km", default=10.0)
-               ! units=G%x_ax_unit_short, default=10.0)
+                 units=G%x_ax_unit_short, default=10.0)
 
   allocate(CS%tr(isd:ied,jsd:jed,nz,NTR), source=0.0)
   if (CS%mask_tracers) then
@@ -130,7 +127,7 @@ function register_RGC_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
     ! This is needed to force the compiler not to do a copy in the registration calls.
     tr_ptr => CS%tr(:,:,:,m)
     ! Register the tracer for horizontal advection & diffusion.
-    call register_tracer(tr_ptr, tr_Reg, param_file, HI, GV, &
+    call register_tracer(tr_ptr, tr_Reg, param_file, G%HI, GV, &
                          name=name, longname=longname, units="kg kg-1", &
                          registry_diags=.true., flux_units="kg/s", &
                          restart_CS=restart_CS)

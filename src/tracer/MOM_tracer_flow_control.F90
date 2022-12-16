@@ -152,8 +152,8 @@ end subroutine call_tracer_flux_init
 
 !> This subroutine determines which tracer packages are to be used and does the calls to
 !! register their tracers to be advected, diffused, and read from restarts.
-subroutine call_tracer_register(HI, GV, US, param_file, CS, tr_Reg, restart_CS)
-  type(hor_index_type),         intent(in) :: HI         !< A horizontal index type structure.
+subroutine call_tracer_register(G, GV, US, param_file, CS, tr_Reg, restart_CS)
+  type(ocean_grid_type),        intent(in) :: G          !< The ocean's grid structure.
   type(verticalGrid_type),      intent(in) :: GV         !< The ocean's vertical grid structure.
   type(unit_scale_type),        intent(in) :: US         !< A dimensional unit scaling type
   type(param_file_type),        intent(in) :: param_file !< A structure to parse for run-time
@@ -163,7 +163,7 @@ subroutine call_tracer_register(HI, GV, US, param_file, CS, tr_Reg, restart_CS)
   type(tracer_registry_type),   pointer    :: tr_Reg     !< A pointer that is set to point to the
                                                          !! control structure for the tracer
                                                          !! advection and diffusion module.
-  type(MOM_restart_CS), intent(inout) :: restart_CS !< A pointer to the restart control
+  type(MOM_restart_CS), intent(inout) :: restart_CS      !< A pointer to the restart control
                                                          !! structure.
 
   ! This include declares and sets the variable "version".
@@ -230,49 +230,49 @@ subroutine call_tracer_register(HI, GV, US, param_file, CS, tr_Reg, restart_CS)
 !  tracer package registration call returns a logical false if it cannot be run
 !  for some reason.  This then overrides the run-time selection from above.
   if (CS%use_USER_tracer_example) CS%use_USER_tracer_example = &
-    USER_register_tracer_example(HI, GV, param_file, CS%USER_tracer_example_CSp, &
+    USER_register_tracer_example(G%HI, GV, param_file, CS%USER_tracer_example_CSp, &
                                  tr_Reg, restart_CS)
   if (CS%use_DOME_tracer) CS%use_DOME_tracer = &
-    register_DOME_tracer(HI, GV, param_file, CS%DOME_tracer_CSp, &
+    register_DOME_tracer(G%HI, GV, param_file, CS%DOME_tracer_CSp, &
                          tr_Reg, restart_CS)
   if (CS%use_ISOMIP_tracer) CS%use_ISOMIP_tracer = &
-    register_ISOMIP_tracer(HI, GV, param_file, CS%ISOMIP_tracer_CSp, &
+    register_ISOMIP_tracer(G%HI, GV, param_file, CS%ISOMIP_tracer_CSp, &
                            tr_Reg, restart_CS)
   if (CS%use_RGC_tracer) CS%use_RGC_tracer = &
-    register_RGC_tracer(HI, GV, param_file, CS%RGC_tracer_CSp, &
+    register_RGC_tracer(G, GV, param_file, CS%RGC_tracer_CSp, &
                            tr_Reg, restart_CS)
   if (CS%use_ideal_age) CS%use_ideal_age = &
-    register_ideal_age_tracer(HI, GV, param_file,  CS%ideal_age_tracer_CSp, &
+    register_ideal_age_tracer(G%HI, GV, param_file, CS%ideal_age_tracer_CSp, &
                               tr_Reg, restart_CS)
   if (CS%use_regional_dyes) CS%use_regional_dyes = &
-    register_dye_tracer(HI, GV, US, param_file,  CS%dye_tracer_CSp, &
+    register_dye_tracer(G%HI, GV, US, param_file, CS%dye_tracer_CSp, &
                         tr_Reg, restart_CS)
   if (CS%use_oil) CS%use_oil = &
-    register_oil_tracer(HI, GV, US, param_file,  CS%oil_tracer_CSp, &
+    register_oil_tracer(G%HI, GV, US, param_file,  CS%oil_tracer_CSp, &
                         tr_Reg, restart_CS)
   if (CS%use_advection_test_tracer) CS%use_advection_test_tracer = &
-    register_advection_test_tracer(HI, GV, param_file, CS%advection_test_tracer_CSp, &
+    register_advection_test_tracer(G, GV, param_file, CS%advection_test_tracer_CSp, &
                                    tr_Reg, restart_CS)
   if (CS%use_OCMIP2_CFC) CS%use_OCMIP2_CFC = &
-    register_OCMIP2_CFC(HI, GV, param_file,  CS%OCMIP2_CFC_CSp, &
+    register_OCMIP2_CFC(G%HI, GV, param_file, CS%OCMIP2_CFC_CSp, &
                         tr_Reg, restart_CS)
   if (CS%use_CFC_cap) CS%use_CFC_cap = &
-    register_CFC_cap(HI, GV, param_file,  CS%CFC_cap_CSp, &
+    register_CFC_cap(G%HI, GV, param_file, CS%CFC_cap_CSp, &
                         tr_Reg, restart_CS)
   if (CS%use_MOM_generic_tracer) CS%use_MOM_generic_tracer = &
-    register_MOM_generic_tracer(HI, GV, param_file,  CS%MOM_generic_tracer_CSp, &
+    register_MOM_generic_tracer(G%HI, GV, param_file, CS%MOM_generic_tracer_CSp, &
                                 tr_Reg, restart_CS)
   if (CS%use_pseudo_salt_tracer) CS%use_pseudo_salt_tracer = &
-    register_pseudo_salt_tracer(HI, GV, param_file,  CS%pseudo_salt_tracer_CSp, &
+    register_pseudo_salt_tracer(G%HI, GV, param_file, CS%pseudo_salt_tracer_CSp, &
                                 tr_Reg, restart_CS)
   if (CS%use_boundary_impulse_tracer) CS%use_boundary_impulse_tracer = &
-    register_boundary_impulse_tracer(HI, GV, US, param_file,  CS%boundary_impulse_tracer_CSp, &
+    register_boundary_impulse_tracer(G%HI, GV, US, param_file, CS%boundary_impulse_tracer_CSp, &
                                      tr_Reg, restart_CS)
   if (CS%use_dyed_obc_tracer) CS%use_dyed_obc_tracer = &
-    register_dyed_obc_tracer(HI, GV, param_file, CS%dyed_obc_tracer_CSp, &
+    register_dyed_obc_tracer(G%HI, GV, param_file, CS%dyed_obc_tracer_CSp, &
                              tr_Reg, restart_CS)
   if (CS%use_nw2_tracers) CS%use_nw2_tracers = &
-    register_nw2_tracers(HI, GV, US, param_file,  CS%nw2_tracers_CSp, tr_Reg, restart_CS)
+    register_nw2_tracers(G%HI, GV, US, param_file, CS%nw2_tracers_CSp, tr_Reg, restart_CS)
 
 end subroutine call_tracer_register
 
