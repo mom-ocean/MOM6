@@ -2346,8 +2346,8 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
                  default=.false.)
   call get_param(param_file, mdl, "CDRAG", CS%cdrag, &
                  "CDRAG is the drag coefficient relating the magnitude of "//&
-                 "the velocity field to the bottom stress.", units="nondim", &
-                 default=0.003)
+                 "the velocity field to the bottom stress.", &
+                 units="nondim", default=0.003)
   call get_param(param_file, mdl, "INTERNAL_TIDE_ENERGIZED_ANGLE", CS%energized_angle, &
                  "If positive, only one angular band of the internal tides "//&
                  "gets all of the energy.  (This is for debugging.)", default=-1)
@@ -2518,7 +2518,7 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
   CS%id_dy_Cu = register_diag_field('ocean_model', 'dy_Cu', diag%axesT1, &
                  Time, 'East face unblocked width', 'm', conversion=US%L_to_m)
   CS%id_land_mask = register_diag_field('ocean_model', 'land_mask', diag%axesT1, &
-                 Time, 'Land mask', 'logical')            ! used if overriding (BDM)
+                 Time, 'Land mask', 'nondim')
   ! Output reflection parameters as diags here (not needed every timestep)
   if (CS%id_refl_ang > 0)   call post_data(CS%id_refl_ang, CS%refl_angle, CS%diag)
   if (CS%id_refl_pref > 0)  call post_data(CS%id_refl_pref, CS%refl_pref, CS%diag)

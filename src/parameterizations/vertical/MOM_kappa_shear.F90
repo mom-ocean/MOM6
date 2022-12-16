@@ -1061,8 +1061,6 @@ subroutine calculate_projected_state(kappa, u0, v0, T0, S0, dt, nz, dz, I_dz_int
 
   ! Local variables
   real, dimension(nz+1) :: c1 ! A tridiagonal variable [nondim]
-  real :: L2_to_Z2   ! A conversion factor from horizontal length units to vertical depth
-                     ! units squared [Z2 s2 T-2 m-2 ~> 1].
   real :: a_a, a_b   ! Tridiagonal coupling coefficients [Z ~> m]
   real :: b1, b1nz_0 ! Tridiagonal variables [Z-1 ~> m-1]
   real :: bd1        ! A term in the denominator of b1 [Z ~> m]
@@ -1134,16 +1132,14 @@ subroutine calculate_projected_state(kappa, u0, v0, T0, S0, dt, nz, dz, I_dz_int
   endif
 
   ! Store the squared shear at interfaces
-  ! L2_to_Z2 = US%m_to_Z**2 * US%T_to_s**2
-  L2_to_Z2 = US%L_to_Z**2
   S2(1) = 0.0 ; S2(nz+1) = 0.0
   if (ks > 1) &
-    S2(ks) = ((u(ks)-u0(ks-1))**2 + (v(ks)-v0(ks-1))**2) * (L2_to_Z2*I_dz_int(ks)**2)
+    S2(ks) = ((u(ks)-u0(ks-1))**2 + (v(ks)-v0(ks-1))**2) * (US%L_to_Z*I_dz_int(ks))**2
   do K=ks+1,ke
-    S2(K) = ((u(k)-u(k-1))**2 + (v(k)-v(k-1))**2) * (L2_to_Z2*I_dz_int(K)**2)
+    S2(K) = ((u(k)-u(k-1))**2 + (v(k)-v(k-1))**2) * (US%L_to_Z*I_dz_int(K))**2
   enddo
   if (ke<nz) &
-    S2(ke+1) = ((u0(ke+1)-u(ke))**2 + (v0(ke+1)-v(ke))**2) * (L2_to_Z2*I_dz_int(ke+1)**2)
+    S2(ke+1) = ((u0(ke+1)-u(ke))**2 + (v0(ke+1)-v(ke))**2) * (US%L_to_Z*I_dz_int(ke+1))**2
 
   ! Store the buoyancy frequency at interfaces
   N2(1) = 0.0 ; N2(nz+1) = 0.0

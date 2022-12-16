@@ -3360,7 +3360,6 @@ subroutine bulkmixedlayer_init(Time, G, GV, US, param_file, diag, CS)
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
   character(len=40)  :: mdl = "MOM_mixed_layer"  ! This module's name.
-  real :: BL_detrain_time_dflt ! The default value for BUFFER_LAY_DETRAIN_TIME [s]
   real :: omega_frac_dflt  ! The default value for ML_OMEGA_FRAC [nondim]
   real :: ustar_min_dflt   ! The default value for BML_USTAR_MIN [Z T-1 ~> m s-1]
   real :: Hmix_min_m       ! The unscaled value of HMIX_MIN [m]
@@ -3454,10 +3453,15 @@ subroutine bulkmixedlayer_init(Time, G, GV, US, param_file, diag, CS)
                  "The minimum buffer layer thickness relative to the combined mixed "//&
                  "land buffer ayer thicknesses when they are thin.", &
                  units="nondim", default=0.1/CS%nkbl)
-  BL_detrain_time_dflt = 4.0*3600.0 ; if (CS%nkbl==1) BL_detrain_time_dflt = 86400.0*30.0
-  call get_param(param_file, mdl, "BUFFER_LAY_DETRAIN_TIME", CS%BL_detrain_time, &
+  if (CS%nkbl==1) then
+    call get_param(param_file, mdl, "BUFFER_LAY_DETRAIN_TIME", CS%BL_detrain_time, &
                  "A timescale that characterizes buffer layer detrainment events.", &
-                 units="s", default=BL_detrain_time_dflt, scale=US%s_to_T)
+                 units="s", default=86400.0*30.0, scale=US%s_to_T)
+  else
+    call get_param(param_file, mdl, "BUFFER_LAY_DETRAIN_TIME", CS%BL_detrain_time, &
+                 "A timescale that characterizes buffer layer detrainment events.", &
+                 units="s", default=4.0*3600.0, scale=US%s_to_T)
+  endif
   call get_param(param_file, mdl, "BUFFER_SPLIT_RHO_TOL", CS%BL_split_rho_tol, &
                  "The fractional tolerance for matching layer target densities when splitting "//&
                  "layers to deal with massive interior layers that are lighter than one of the "//&
