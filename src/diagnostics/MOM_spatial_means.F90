@@ -367,7 +367,7 @@ subroutine global_i_mean(array, i_mean, G, mask, scale, tmp_scale)
       asum(j) = real_to_EFP(0.0) ; mask_sum(j) = real_to_EFP(0.0)
     enddo
 
-    do i=is,ie ; do j=js,je
+    do j=js,je ; do i=is,ie
       asum(j+jdg_off) = asum(j+jdg_off) + real_to_EFP(scalefac*array(i,j)*mask(i,j))
       mask_sum(j+jdg_off) = mask_sum(j+jdg_off) + real_to_EFP(mask(i,j))
     enddo ; enddo
@@ -392,7 +392,7 @@ subroutine global_i_mean(array, i_mean, G, mask, scale, tmp_scale)
   else
     do j=G%jsg,G%jeg ; asum(j) = real_to_EFP(0.0) ; enddo
 
-    do i=is,ie ; do j=js,je
+    do j=js,je ; do i=is,ie
       asum(j+jdg_off) = asum(j+jdg_off) + real_to_EFP(scalefac*array(i,j))
     enddo ; enddo
 

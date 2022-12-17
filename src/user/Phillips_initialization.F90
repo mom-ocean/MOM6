@@ -68,7 +68,7 @@ subroutine Phillips_initialize_thickness(h, depth_tot, G, GV, US, param_file, ju
   if (.not.just_read) call log_version(param_file, mdl, version)
   call get_param(param_file, mdl, "HALF_STRAT_DEPTH", half_strat, &
                  "The fractional depth where the stratification is centered.", &
-                 units="nondim", default = 0.5, do_not_log=just_read)
+                 units="nondim", default=0.5, do_not_log=just_read)
   call get_param(param_file, mdl, "JET_WIDTH", jet_width, &
                  "The width of the zonal-mean jet.", units="km", &
                  fail_if_missing=.not.just_read, do_not_log=just_read)
@@ -262,10 +262,10 @@ subroutine Phillips_initialize_sponges(G, GV, US, tv, param_file, CSp, h)
   first_call = .false.
   call get_param(param_file, mdl, "HALF_STRAT_DEPTH", half_strat, &
                  "The fractional depth where the stratificaiton is centered.", &
-                 units="nondim", default = 0.5)
+                 units="nondim", default=0.5)
   call get_param(param_file, mdl, "SPONGE_RATE", damp_rate, &
                  "The rate at which the zonal-mean sponges damp.", &
-                 units="s-1", default = 1.0/(10.0*86400.0), scale=US%T_to_s)
+                 units="s-1", default=1.0/(10.0*86400.0), scale=US%T_to_s)
 
   call get_param(param_file, mdl, "JET_WIDTH", jet_width, &
                  "The width of the zonal-mean jet.", units="km", &
@@ -352,7 +352,7 @@ subroutine Phillips_initialize_topography(D, G, param_file, max_depth, US)
   y1=G%south_lat+0.5*G%len_lat+offset-0.5*Wtop; y2=y1+Wtop
   x1=G%west_lon+0.1*G%len_lon; x2=x1+Ltop; x3=x1+dist; x4=x3+3.0/2.0*Ltop
 
-  do i=is,ie ; do j=js,je
+  do j=js,je ; do i=is,ie
     D(i,j)=0.0
     if (G%geoLonT(i,j)>x1 .and. G%geoLonT(i,j)<x2) then
       D(i,j) = Htop*sin(PI*(G%geoLonT(i,j)-x1)/(x2-x1))**2

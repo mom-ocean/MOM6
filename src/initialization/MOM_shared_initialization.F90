@@ -323,12 +323,12 @@ subroutine initialize_topography_named(D, G, param_file, topog_config, max_depth
   PI = 4.0*atan(1.0)
 
   if (trim(topog_config) == "flat") then
-    do i=is,ie ; do j=js,je ; D(i,j) = max_depth ; enddo ; enddo
+    do j=js,je ; do i=is,ie ; D(i,j) = max_depth ; enddo ; enddo
   elseif (trim(topog_config) == "spoon") then
     D0 = (max_depth - Dedge) / &
              ((1.0 - exp(-0.5*G%len_lat*G%Rad_Earth_L*PI/(180.0 *expdecay))) * &
               (1.0 - exp(-0.5*G%len_lat*G%Rad_Earth_L*PI/(180.0 *expdecay))))
-    do i=is,ie ; do j=js,je
+    do j=js,je ; do i=is,ie
   !  This sets a bowl shaped (sort of) bottom topography, with a       !
   !  maximum depth of max_depth.                                   !
       D(i,j) =  Dedge + D0 * &
@@ -343,7 +343,7 @@ subroutine initialize_topography_named(D, G, param_file, topog_config, max_depth
 
   !  This sets a bowl shaped (sort of) bottom topography, with a
   !  maximum depth of max_depth.
-    do i=is,ie ; do j=js,je
+    do j=js,je ; do i=is,ie
       D(i,j) =  Dedge + D0 * &
              (sin(PI * (G%geoLonT(i,j) - G%west_lon) / G%len_lon) * &
              ((1.0 - exp(-(G%geoLatT(i,j) - G%south_lat)*G%Rad_Earth_L*PI/ &
@@ -353,7 +353,7 @@ subroutine initialize_topography_named(D, G, param_file, topog_config, max_depth
     enddo ; enddo
   elseif (trim(topog_config) == "halfpipe") then
     D0 = max_depth - Dedge
-    do i=is,ie ; do j=js,je
+    do j=js,je ; do i=is,ie
       D(i,j) =  Dedge + D0 * ABS(sin(PI*(G%geoLatT(i,j) - G%south_lat)/G%len_lat))
     enddo ; enddo
   else
@@ -362,7 +362,7 @@ subroutine initialize_topography_named(D, G, param_file, topog_config, max_depth
   endif
 
   ! This is here just for safety.  Hopefully it doesn't do anything.
-  do i=is,ie ; do j=js,je
+  do j=js,je ; do i=is,ie
     if (D(i,j) > max_depth) D(i,j) = max_depth
     if (D(i,j) < min_depth) D(i,j) = 0.5*min_depth
   enddo ; enddo

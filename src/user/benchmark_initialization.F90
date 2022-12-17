@@ -268,12 +268,12 @@ subroutine benchmark_init_temperature_salinity(T, S, G, GV, US, param_file, &
     enddo
   enddo
 
-  do k=1,nz ; do i=is,ie ; do j=js,je
+  do k=1,nz ; do j=js,je ; do i=is,ie
     T(i,j,k) = T0(k)
     S(i,j,k) = S0(k)
   enddo ; enddo ; enddo
   PI = 4.0*atan(1.0)
-  do i=is,ie ; do j=js,je
+  do j=js,je ; do i=is,ie
     SST = 0.5*(T0(k1)+T0(nz)) - 0.9*0.5*(T0(k1)-T0(nz)) * &
                                cos(PI*(G%geoLatT(i,j)-G%south_lat)/(G%len_lat))
     do k=1,k1-1

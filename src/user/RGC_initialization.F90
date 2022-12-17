@@ -114,7 +114,7 @@ subroutine RGC_initialize_sponges(G, GV, US, tv, u, v, depth_tot, PF, use_ALE, C
   !  will automatically set up the sponges only where Idamp is positive
   !  and mask2dT is 1.
 
-  do i=is,ie ; do j=js,je
+  do j=js,je ; do i=is,ie
     if ((depth_tot(i,j) <= min_depth) .or. (G%geoLonT(i,j) <= lensponge)) then
       Idamp(i,j) = 0.0
     elseif (G%geoLonT(i,j) >= (G%len_lon - lensponge) .AND. G%geoLonT(i,j) <= G%len_lon) then
