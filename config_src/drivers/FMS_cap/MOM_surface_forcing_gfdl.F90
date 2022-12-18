@@ -110,7 +110,6 @@ type, public :: surface_forcing_CS ; private
                                 !! salinity to a specified value.
   logical :: restore_temp       !< If true, the coupled MOM driver adds a term to restore sea
                                 !! surface temperature to a specified value.
-  real    :: Flux_const                     !< Piston velocity for surface restoring [Z T-1 ~> m s-1]
   real    :: Flux_const_salt                !< Piston velocity for surface salt restoring [Z T-1 ~> m s-1]
   real    :: Flux_const_temp                !< Piston velocity for surface temp restoring [Z T-1 ~> m s-1]
   logical :: trestore_SPEAR_ECDA            !< If true, modify restoring data wrt local SSS
@@ -1244,19 +1243,22 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, wind_stagger)
                                                   !! diagnostic output
   type(surface_forcing_CS), pointer       :: CS   !< A pointer that is set to point to the control
                                                   !! structure for this module
-  integer, optional,        intent(in)   :: wind_stagger !< If present, the staggering of the winds that are
-                                                          !! being provided in calls to update_ocean_model
+  integer,        optional, intent(in)    :: wind_stagger !< If present, the staggering of the winds
+                                                  !! that are being provided in calls to update_ocean_model
 
   ! Local variables
-  real :: utide  ! The RMS tidal velocity [Z T-1 ~> m s-1].
-  type(directories)  :: dirs
-  logical            :: new_sim, iceberg_flux_diags
+  real :: utide             ! The RMS tidal velocity [Z T-1 ~> m s-1].
+  real :: Flux_const_dflt   ! A default piston velocity for restoring surface properties [m day-1]
+  logical :: new_sim              ! False if this simulation was started from a restart file
+                                  ! or other equivalent files.
+  logical :: iceberg_flux_diags   ! If true, diagnostics of fluxes from icebergs are available.
   integer :: default_answer_date  ! The default setting for the various ANSWER_DATE flags.
   logical :: default_2018_answers ! The default setting for the various 2018_ANSWERS flags.
   logical :: answers_2018         ! If true, use the order of arithmetic and expressions that recover
                                   ! the answers from the end of 2018.  Otherwise, use a simpler
                                   ! expression to calculate gustiness.
   type(time_type)    :: Time_frc
+  type(directories)  :: dirs      ! A structure containing relevant directory paths and input filenames.
   character(len=200) :: TideAmp_file, gust_file, salt_file, temp_file ! Input file names.
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
@@ -1265,7 +1267,6 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, wind_stagger)
   character(len=48)  :: flnam
   character(len=240) :: basin_file
   integer :: i, j, isd, ied, jsd, jed
-  real :: unscaled_fluxconst
 
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
@@ -1386,16 +1387,16 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, wind_stagger)
                  "production runs.", units="nondim", default=1.0)
 
   if (CS%restore_salt) then
-    call get_param(param_file, mdl, "FLUXCONST", CS%Flux_const, &
+    call get_param(param_file, mdl, "FLUXCONST", Flux_const_dflt, &
                  "The constant that relates the restoring surface fluxes to the relative "//&
                  "surface anomalies (akin to a piston velocity).  Note the non-MKS units.", &
-                 default=0.0, units="m day-1", scale=US%m_to_Z*US%T_to_s, unscaled=unscaled_fluxconst)
+                 units="m day-1", default=0.0)
     call get_param(param_file, mdl, "FLUXCONST_SALT", CS%Flux_const_salt, &
                  "The constant that relates the restoring surface salt fluxes to the relative "//&
                  "surface anomalies (akin to a piston velocity).  Note the non-MKS units.", &
-                 fail_if_missing=.false., default=unscaled_fluxconst, units="m day-1", scale=US%m_to_Z*US%T_to_s)
-    ! Finish converting CS%Flux_const from m day-1 to [Z T-1 ~> m s-1].
-    CS%Flux_const = CS%Flux_const / 86400.0
+                 units="m day-1", default=Flux_const_dflt, scale=US%m_to_Z*US%T_to_s)
+    ! Finish converting CS%Flux_const_salt from m day-1 to [Z T-1 ~> m s-1].  Ideally this would be
+    ! included in the scale factors above, but doing so would change answers because a/b /= a*(1/b).
     CS%Flux_const_salt = CS%Flux_const_salt / 86400.0
     call get_param(param_file, mdl, "SALT_RESTORE_FILE", CS%salt_restore_file, &
                  "A file in which to find the surface salinity to use for restoring.", &
@@ -1437,16 +1438,16 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, wind_stagger)
   endif
 
   if (CS%restore_temp) then
-    call get_param(param_file, mdl, "FLUXCONST", CS%Flux_const, &
+    call get_param(param_file, mdl, "FLUXCONST", Flux_const_dflt, &
                  "The constant that relates the restoring surface fluxes to the relative "//&
                  "surface anomalies (akin to a piston velocity).  Note the non-MKS units.", &
-                 default=0.0, units="m day-1", scale=US%m_to_Z*US%T_to_s, unscaled=unscaled_fluxconst)
+                 units="m day-1", default=0.0)
     call get_param(param_file, mdl, "FLUXCONST_TEMP", CS%Flux_const_temp, &
                  "The constant that relates the restoring surface temperature fluxes to the relative "//&
                  "surface anomalies (akin to a piston velocity).  Note the non-MKS units.", &
-                 fail_if_missing=.false., default=unscaled_fluxconst, units="m day-1", scale=US%m_to_Z*US%T_to_s)
-    ! Convert CS%Flux_const from m day-1 to m s-1.
-    CS%Flux_const = CS%Flux_const / 86400.0
+                 units="m day-1", default=Flux_const_dflt, scale=US%m_to_Z*US%T_to_s)
+    ! Finish converting CS%Flux_const_temp from [m day-1] to [Z T-1 ~> m s-1].  Ideally this would be
+    ! included in the scale factors above, but doing so would change answers because a/b /= a*(1/b).
     CS%Flux_const_temp = CS%Flux_const_temp / 86400.0
     call get_param(param_file, mdl, "SST_RESTORE_FILE", CS%temp_restore_file, &
                  "A file in which to find the surface temperature to use for restoring.", &

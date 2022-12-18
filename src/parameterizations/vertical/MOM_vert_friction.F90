@@ -1982,7 +1982,7 @@ subroutine vertvisc_init(MIS, Time, G, GV, US, param_file, diag, ADp, dirs, &
   ! Local variables
 
   real :: Kv_BBL  ! A viscosity in the bottom boundary layer with a simple scheme [Z2 T-1 ~> m2 s-1].
-  real :: Hmix_m  ! A boundary layer thickness [m].
+  real :: Hmix_z  ! A boundary layer thickness [Z ~> m].
   integer :: default_answer_date  ! The default setting for the various ANSWER_DATE flags.
   logical :: default_2018_answers ! The default setting for the various 2018_ANSWERS flags.
   logical :: answers_2018   !< If true, use the order of arithmetic and expressions that recover the
@@ -2087,17 +2087,18 @@ subroutine vertvisc_init(MIS, Time, G, GV, US, param_file, diag, ADp, dirs, &
                  default=0.0, units="nondim")
   call get_param(param_file, mdl, "DEBUG", CS%debug, default=.false.)
 
-  if (GV%nkml < 1) &
-    call get_param(param_file, mdl, "HMIX_FIXED", CS%Hmix, &
-                 "The prescribed depth over which the near-surface "//&
-                 "viscosity and diffusivity are elevated when the bulk "//&
-                 "mixed layer is not used.", units="m", scale=GV%m_to_H, &
-                 unscaled=Hmix_m, fail_if_missing=.true.)
+  if (GV%nkml < 1) then
+    call get_param(param_file, mdl, "HMIX_FIXED", Hmix_z, &
+                 "The prescribed depth over which the near-surface viscosity and "//&
+                 "diffusivity are elevated when the bulk mixed layer is not used.", &
+                 units="m", scale=US%m_to_Z, fail_if_missing=.true.)
+    CS%Hmix = GV%Z_to_H * Hmix_z
+  endif
   if (CS%direct_stress) then
     if (GV%nkml < 1) then
       call get_param(param_file, mdl, "HMIX_STRESS", CS%Hmix_stress, &
                  "The depth over which the wind stress is applied if DIRECT_STRESS is true.", &
-                 units="m", default=Hmix_m, scale=GV%m_to_H)
+                 units="m", default=US%Z_to_m*Hmix_z, scale=GV%m_to_H)
     else
       call get_param(param_file, mdl, "HMIX_STRESS", CS%Hmix_stress, &
                  "The depth over which the wind stress is applied if DIRECT_STRESS is true.", &
