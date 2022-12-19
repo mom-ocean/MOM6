@@ -2107,10 +2107,8 @@ subroutine thickness_diffuse_init(Time, G, GV, US, param_file, diag, CDp, CS)
     call get_param(param_file, mdl, "STANLEY_COEFF", Stanley_coeff, &
                  "Coefficient correlating the temperature gradient and SGS T variance.", &
                  units="nondim", default=-1.0, do_not_log=.true.)
-    if (Stanley_coeff < 0.0) then
-      call MOM_error(WARNING, "STANLEY_COEFF must be set >= 0 if USE_STANLEY_GM is true.")
-      CS%use_stanley_gm = .false.
-    endif
+    if (Stanley_coeff < 0.0) call MOM_error(FATAL, &
+                 "STANLEY_COEFF must be set >= 0 if USE_STANLEY_GM is true.")
   endif
   call get_param(param_file, mdl, "OMEGA", omega, &
                  "The rotation rate of the earth.", &
