@@ -2483,8 +2483,12 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, depth_tot, G, GV, US, PF, just
   real    :: PI_180   ! for conversion from degrees to radians [radian degree-1]
   real    :: Hmix_default ! The default initial mixed layer depth [Z ~> m].
   real    :: Hmix_depth   ! The mixed layer depth in the initial condition [Z ~> m].
-  real    :: missing_value_temp  ! The missing value in the input temperature field
-  real    :: missing_value_salt  ! The missing value in the input salinity field
+  real    :: missing_value_temp  ! The missing value in the input temperature field [C ~> degC]
+  real    :: missing_value_salt  ! The missing value in the input salinity field [S ~> ppt]
+  real    :: tol_temp ! The tolerance for changes in temperature during the horizontal
+                      ! interpolation from an input dataset [C ~> degC]
+  real    :: tol_sal  ! The tolerance for changes in salinity during the horizontal
+                      ! interpolation from an input dataset [S ~> ppt]
   logical :: correct_thickness
   real    :: h_tolerance ! A parameter that controls the tolerance when adjusting the
                          ! thickness to fit the bathymetry [Z ~> m].
@@ -2494,19 +2498,19 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, depth_tot, G, GV, US, PF, just
   logical            :: adjust_temperature = .true.  ! fit t/s to target densities
   real    :: temp_land_fill  ! A temperature value to use for land points [C ~> degC]
   real    :: salt_land_fill  ! A salinity value to use for land points [C ~> degC]
-  logical :: reentrant_x, tripolar_n
 
   ! data arrays
-  real, dimension(:), allocatable :: z_edges_in, z_in ! Interface heights [Z ~> m]
-  real, dimension(:), allocatable :: Rb  ! Interface densities [R ~> kg m-3]
+  real, dimension(:), allocatable :: z_edges_in ! Input data interface heights or depths [Z ~> m]
+  real, dimension(:), allocatable :: z_in       ! Input data cell heights or depths [Z ~> m]
+  real, dimension(:), allocatable :: Rb         ! Interface densities [R ~> kg m-3]
   real, dimension(:,:,:), allocatable, target :: temp_z ! Input temperatures [C ~> degC]
   real, dimension(:,:,:), allocatable, target :: salt_z ! Input salinities [S ~> ppt]
   real, dimension(:,:,:), allocatable, target :: mask_z ! 1 for valid data points [nondim]
-  real, dimension(:,:,:), allocatable :: rho_z ! Densities in Z-space [R ~> kg m-3]
+  real, dimension(:,:,:), allocatable :: rho_z  ! Densities in Z-space [R ~> kg m-3]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1) :: zi   ! Interface heights [Z ~> m].
-  real, dimension(SZI_(G),SZJ_(G)) :: Z_bottom   ! The (usually negative) height of the seafloor
-                                                 ! relative to the surface [Z ~> m].
-  integer, dimension(SZI_(G),SZJ_(G))  :: nlevs  ! The number of levels in each column with valid data
+  real, dimension(SZI_(G),SZJ_(G)) :: Z_bottom  ! The (usually negative) height of the seafloor
+                                                ! relative to the surface [Z ~> m].
+  integer, dimension(SZI_(G),SZJ_(G))  :: nlevs ! The number of levels in each column with valid data
   real, dimension(SZI_(G))   :: press  ! Pressures [R L2 T-2 ~> Pa].
 
   ! Local variables for ALE remapping
@@ -2568,9 +2572,6 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, depth_tot, G, GV, US, PF, just
   inputdir = slasher(inputdir)
 
   eos => tv%eqn_of_state
-
-  reentrant_x = .false. ; call get_param(PF, mdl, "REENTRANT_X", reentrant_x, default=.true.)
-  tripolar_n = .false. ;  call get_param(PF, mdl, "TRIPOLAR_N", tripolar_n, default=.false.)
 
   call get_param(PF, mdl, "TEMP_SALT_Z_INIT_FILE", filename, &
                  "The name of the z-space input file used to initialize "//&
@@ -2701,6 +2702,8 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, depth_tot, G, GV, US, PF, just
   !### These hard-coded constants should be made into runtime parameters
   temp_land_fill = 0.0*US%degC_to_C
   salt_land_fill = 35.0*US%ppt_to_S
+  tol_temp = 1.0e-3*US%degC_to_C
+  tol_sal = 1.0e-3*US%ppt_to_S
 
   eps_z = GV%Angstrom_Z
   eps_rho = 1.0e-10*US%kg_m3_to_R
@@ -2720,15 +2723,15 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, depth_tot, G, GV, US, PF, just
   ! to the North/South Pole past the limits of the input data, they are extrapolated using the average
   ! value at the northernmost/southernmost latitude.
 
-  call horiz_interp_and_extrap_tracer(tfilename, potemp_var, US%degC_to_C, 1, &
-       G, temp_z, mask_z, z_in, z_edges_in, missing_value_temp, reentrant_x, &
-       tripolar_n, homogenize, m_to_Z=US%m_to_Z, answer_date=hor_regrid_answer_date, &
-       ongrid=pre_gridded, tr_iter_tol=1.0e-3*US%degC_to_C)
+  call horiz_interp_and_extrap_tracer(tfilename, potemp_var, 1, &
+            G, temp_z, mask_z, z_in, z_edges_in, missing_value_temp, &
+            scale=US%degC_to_C, homogenize=homogenize, m_to_Z=US%m_to_Z, &
+            answer_date=hor_regrid_answer_date, ongrid=pre_gridded, tr_iter_tol=tol_temp)
 
-  call horiz_interp_and_extrap_tracer(sfilename, salin_var, US%ppt_to_S, 1, &
-       G, salt_z, mask_z, z_in, z_edges_in, missing_value_salt, reentrant_x, &
-       tripolar_n, homogenize, m_to_Z=US%m_to_Z, answer_date=hor_regrid_answer_date, &
-       ongrid=pre_gridded, tr_iter_tol=1.0e-3*US%ppt_to_S)
+  call horiz_interp_and_extrap_tracer(sfilename, salin_var, 1, &
+            G, salt_z, mask_z, z_in, z_edges_in, missing_value_salt, &
+            scale=US%ppt_to_S, homogenize=homogenize, m_to_Z=US%m_to_Z, &
+            answer_date=hor_regrid_answer_date, ongrid=pre_gridded, tr_iter_tol=tol_sal)
 
   kd = size(z_in,1)
 

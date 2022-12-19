@@ -559,19 +559,22 @@ subroutine get_bias_correction_tracer(Time, US, CS)
   type(unit_scale_type), intent(in) :: US !< A dimensional unit scaling type
   type(ODA_CS), pointer :: CS !< ocean DA control structure
 
-  integer :: i,j,k
+  ! Local variables
   real, allocatable, dimension(:,:,:) :: T_bias ! Temperature biases [C ~> degC]
   real, allocatable, dimension(:,:,:) :: S_bias ! Salinity biases [C ~> degC]
-  real, allocatable, dimension(:,:,:) :: mask_z
-  real, allocatable, dimension(:), target :: z_in, z_edges_in
-  real :: missing_value
-  integer,dimension(3) :: fld_sz
+  real, allocatable, dimension(:,:,:) :: mask_z ! Missing value mask on the horizontal model grid
+                                                ! and input-file vertical levels [nondim]
+  real, allocatable, dimension(:), target :: z_in       ! Cell center depths for input data [Z ~> m]
+  real, allocatable, dimension(:), target :: z_edges_in ! Cell edge depths for input data [Z ~> m]
+  real :: missing_value ! A value indicating that there is no valid input data at this point [CU ~> conc]
+  integer, dimension(3) :: fld_sz
+  integer :: i,j,k
 
   call cpu_clock_begin(id_clock_bias_adjustment)
-  call horiz_interp_and_extrap_tracer(CS%INC_CS%T_id, Time, US%degC_to_C, CS%G, T_bias, &
-          mask_z, z_in, z_edges_in, missing_value, .true., .false., .false., .true.)
-  call horiz_interp_and_extrap_tracer(CS%INC_CS%S_id, Time, US%ppt_to_S, CS%G, S_bias, &
-          mask_z, z_in, z_edges_in, missing_value, .true., .false., .false., .true.)
+  call horiz_interp_and_extrap_tracer(CS%INC_CS%T_id, Time, CS%G, T_bias, &
+            mask_z, z_in, z_edges_in, missing_value, scale=US%degC_to_C, spongeOngrid=.true.)
+  call horiz_interp_and_extrap_tracer(CS%INC_CS%S_id, Time, CS%G, S_bias, &
+            mask_z, z_in, z_edges_in, missing_value, scale=US%ppt_to_S, spongeOngrid=.true.)
 
   ! This should be replaced to use mask_z instead of the following lines
   ! which are intended to zero land values using an arbitrary limit.

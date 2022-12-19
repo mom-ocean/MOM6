@@ -133,9 +133,6 @@ type, public :: ALE_sponge_CS ; private
   logical :: time_varying_sponges  !< True if using newer sponge code
   logical :: spongeDataOngrid !< True if the sponge data are on the model horizontal grid
 
-  logical :: reentrant_x !< grid is reentrant in the x direction
-  logical :: tripolar_N !< grid is folded at its north edge
-
   !>@{ Diagnostic IDs
   integer, dimension(MAX_FIELDS_) :: id_sp_tendency      !< Diagnostic ids for tracers
                                                !! tendency due to sponges
@@ -257,11 +254,6 @@ subroutine initialize_ALE_sponge_fixed(Iresttime, G, GV, param_file, CS, data_h,
                  "while later versions add parentheses for rotational symmetry.  "//&
                  "If both HOR_REGRID_2018_ANSWERS and HOR_REGRID_ANSWER_DATE are specified, the "//&
                  "latter takes precedence.", default=default_hor_reg_ans_date)
-  call get_param(param_file, mdl, "REENTRANT_X", CS%reentrant_x, &
-                 "If true, the domain is zonally reentrant.", default=.true.)
-  call get_param(param_file, mdl, "TRIPOLAR_N", CS%tripolar_N, &
-                 "Use tripolar connectivity at the northern edge of the "//&
-                 "domain.  With TRIPOLAR_N, NIGLOBAL must be even.", default=.false.)
 
   CS%time_varying_sponges = .false.
   CS%nz = GV%ke
@@ -551,11 +543,6 @@ subroutine initialize_ALE_sponge_varying(Iresttime, G, GV, param_file, CS, Irest
                  "When defined, the incoming sponge data are "//&
                  "assumed to be on the model grid " , &
                  default=.false.)
-  call get_param(param_file, mdl, "REENTRANT_X", CS%reentrant_x, &
-                 "If true, the domain is zonally reentrant.", default=.true.)
-  call get_param(param_file, mdl, "TRIPOLAR_N", CS%tripolar_N, &
-                 "Use tripolar connectivity at the northern edge of the "//&
-                 "domain.  With TRIPOLAR_N, NIGLOBAL must be even.", default=.false.)
 
   CS%time_varying_sponges = .true.
   CS%nz = GV%ke
@@ -985,10 +972,10 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
   if (CS%time_varying_sponges) then
     do m=1,CS%fldno
       nz_data = CS%Ref_val(m)%nz_data
-      call horiz_interp_and_extrap_tracer(CS%Ref_val(m)%id, Time, CS%Ref_val(m)%scale, G, sp_val, &
-                     mask_z, z_in, z_edges_in,  missing_value, CS%reentrant_x, CS%tripolar_N, .false., &
-                     spongeOnGrid=CS%SpongeDataOngrid, m_to_Z=US%m_to_Z, &
-                     answer_date=CS%hor_regrid_answer_date)
+      call horiz_interp_and_extrap_tracer(CS%Ref_val(m)%id, Time, G, sp_val, &
+                mask_z, z_in, z_edges_in, missing_value, &
+                scale=CS%Ref_val(m)%scale, spongeOnGrid=CS%SpongeDataOngrid, m_to_Z=US%m_to_Z, &
+                answer_date=CS%hor_regrid_answer_date)
       allocate( hsrc(nz_data) )
       allocate( tmpT1d(nz_data) )
       do c=1,CS%num_col
@@ -1069,10 +1056,10 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
     if (CS%time_varying_sponges) then
       nz_data = CS%Ref_val_u%nz_data
       ! Interpolate from the external horizontal grid and in time
-      call horiz_interp_and_extrap_tracer(CS%Ref_val_u%id, Time, CS%Ref_val_u%scale, G, sp_val, &
-                          mask_z, z_in, z_edges_in, missing_value, CS%reentrant_x, CS%tripolar_N, .false., &
-                          spongeOnGrid=CS%SpongeDataOngrid, m_to_Z=US%m_to_Z,&
-                          answer_date=CS%hor_regrid_answer_date)
+      call horiz_interp_and_extrap_tracer(CS%Ref_val_u%id, Time, G, sp_val, &
+                mask_z, z_in, z_edges_in, missing_value, &
+                scale=CS%Ref_val_u%scale, spongeOnGrid=CS%SpongeDataOngrid, m_to_Z=US%m_to_Z, &
+                answer_date=CS%hor_regrid_answer_date)
 
       ! Initialize mask_z halos to zero before pass_var, in case of no update
       mask_z(G%isc-1, G%jsc:G%jec, :) = 0.
@@ -1118,10 +1105,10 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
       deallocate(sp_val, mask_u, mask_z, hsrc)
       nz_data = CS%Ref_val_v%nz_data
       ! Interpolate from the external horizontal grid and in time
-      call horiz_interp_and_extrap_tracer(CS%Ref_val_v%id, Time, CS%Ref_val_v%scale, G, sp_val, &
-                          mask_z, z_in, z_edges_in, missing_value, CS%reentrant_x, CS%tripolar_N, .false., &
-                          spongeOnGrid=CS%SpongeDataOngrid, m_to_Z=US%m_to_Z,&
-                          answer_date=CS%hor_regrid_answer_date)
+      call horiz_interp_and_extrap_tracer(CS%Ref_val_v%id, Time, G, sp_val, &
+                mask_z, z_in, z_edges_in, missing_value, &
+                scale=CS%Ref_val_v%scale, spongeOnGrid=CS%SpongeDataOngrid, m_to_Z=US%m_to_Z,&
+                answer_date=CS%hor_regrid_answer_date)
       ! Initialize mask_z halos to zero before pass_var, in case of no update
       mask_z(G%isc:G%iec, G%jsc-1, :) = 0.
       mask_z(G%isc:G%iec, G%jec+1, :) = 0.

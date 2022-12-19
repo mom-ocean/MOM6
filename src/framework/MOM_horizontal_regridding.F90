@@ -250,14 +250,13 @@ subroutine fill_miss_2d(aout, good, fill, prev, G, acrit, num_pass, relc, debug,
 end subroutine fill_miss_2d
 
 !> Extrapolate and interpolate from a file record
-subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, recnum, G, tr_z, mask_z, &
-                                                 z_in, z_edges_in, missing_value, reentrant_x, tripolar_n, &
+subroutine horiz_interp_and_extrap_tracer_record(filename, varnam, recnum, G, tr_z, mask_z, &
+                                                 z_in, z_edges_in, missing_value, scale, &
                                                  homogenize, m_to_Z, answers_2018, ongrid, tr_iter_tol, answer_date)
 
   character(len=*),      intent(in)    :: filename   !< Path to file containing tracer to be
                                                      !! interpolated.
   character(len=*),      intent(in)    :: varnam     !< Name of tracer in file.
-  real,                  intent(in)    :: conversion !< Conversion factor for tracer [CU conc-1 ~> 1]
   integer,               intent(in)    :: recnum     !< Record number of tracer to be read.
   type(ocean_grid_type), intent(inout) :: G          !< Grid object
   real, allocatable, dimension(:,:,:), intent(out) :: tr_z
@@ -271,10 +270,10 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
   real, allocatable, dimension(:), intent(out) :: z_edges_in
                                                      !< Cell grid edge values for input data [Z ~> m]
   real,                  intent(out)   :: missing_value !< The missing value in the returned array, scaled
-                                                     !! with conversion to avoid accidentally having valid
-                                                     !! values match missing values [CU ~> conc]
-  logical,               intent(in)    :: reentrant_x !< If true, this grid is reentrant in the x-direction
-  logical,               intent(in)    :: tripolar_n !< If true, this is a northern tripolar grid
+                                                     !! to avoid accidentally having valid values match
+                                                     !! missing values [CU ~> conc]
+  real,                  intent(in)    :: scale      !< Scaling factor for tracer into the internal
+                                                     !! units of the model [CU conc-1 ~> 1]
   logical,     optional, intent(in)    :: homogenize !< If present and true, horizontally homogenize data
                                                      !! to produce perfectly "flat" initial conditions
   real,        optional, intent(in)    :: m_to_Z     !< A conversion factor from meters to the units
@@ -311,7 +310,7 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
   real, dimension(:), allocatable :: lon_in ! The longitudes in the input file [degreesE] then [radians]
   real, dimension(:), allocatable :: lat_in ! The latitudes in the input file [degreesN] then [radians]
   real, dimension(:), allocatable :: lat_inp ! The input file latitudes expanded to the pole [degreesN] then [radians]
-  real :: max_lat   ! The maximum latitude on the input grid [degreeN]
+  real :: max_lat   ! The maximum latitude on the input grid [degreesN]
   real :: pole      ! The sum of tracer values at the pole [conc]
   real :: max_depth ! The maximum depth of the ocean [Z ~> m]
   real :: npole     ! The number of points contributing to the pole value [nondim]
@@ -330,7 +329,7 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
   integer :: isd, ied, jsd, jed ! data domain indices
   integer :: id_clock_read
   logical :: debug=.false.
-  real :: I_scale               ! The inverse of the conversion factor for diagnostic output [conc CU-1 ~> 1]
+  real :: I_scale               ! The inverse of the scale factor for diagnostic output [conc CU-1 ~> 1]
   real :: dtr_iter_stop         ! The tolerance for changes in tracer concentrations between smoothing
                                 ! iterations that determines when to stop iterating [CU ~> conc]
   real :: npoints   ! The number of points in an average [nondim]
@@ -355,10 +354,10 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
   is_ongrid = .false.
   if (present(ongrid)) is_ongrid = ongrid
 
-  dtr_iter_stop = 1.0e-3*conversion
+  dtr_iter_stop = 1.0e-3*scale
   if (present(tr_iter_tol)) dtr_iter_stop = tr_iter_tol
 
-  I_scale = 1.0 / conversion
+  I_scale = 1.0 / scale
 
   PI_180 = atan(1.0)/45.
 
@@ -370,6 +369,9 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
   ! The convention adopted here requires that the data be written in (i,j,k) ordering.
 
   call cpu_clock_begin(id_clock_read)
+
+  ! A note by MJH copied from elsewhere suggests that this code may be using the model connectivity
+  ! (e.g., reentrant or tripolar) but should use the dataset's connectivity instead.
 
   call get_var_axes_info(trim(filename), trim(varnam), axes_info)
 
@@ -418,7 +420,7 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
   if (.not. found_attr) call MOM_error(FATAL, &
     "error finding missing value for " // trim(varnam) // &
     " in file " // trim(filename) // " in hinterp_extrap")
-  missing_value = conversion * missing_val_in
+  missing_value = scale * missing_val_in
 
   call read_attribute(trim(filename), "scale_factor", scale_factor, &
                       varname=trim(varnam), found=found_attr)
@@ -471,7 +473,7 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
         do i=is,ie
           if (abs(tr_in(i,j)-missing_val_in) > abs(roundoff*missing_val_in)) then
             mask_in(i,j) = 1.0
-            tr_in(i,j) = (tr_in(i,j)*scale_factor+add_offset) * conversion
+            tr_in(i,j) = (tr_in(i,j)*scale_factor+add_offset) * scale
           else
             tr_in(i,j) = missing_value
           endif
@@ -511,7 +513,7 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
       do j=1,jdp ; do i=1,id
         if (abs(tr_inp(i,j)-missing_val_in) > abs(roundoff*missing_val_in)) then
           mask_in(i,j) = 1.0
-          tr_inp(i,j) = (tr_inp(i,j)*scale_factor+add_offset) * conversion
+          tr_inp(i,j) = (tr_inp(i,j)*scale_factor+add_offset) * scale
         else
           tr_inp(i,j) = missing_value
         endif
@@ -596,18 +598,17 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
 end subroutine horiz_interp_and_extrap_tracer_record
 
 !> Extrapolate and interpolate using a FMS time interpolation handle
-subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, tr_z, mask_z, &
-                                                 z_in, z_edges_in, missing_value, reentrant_x, tripolar_n, &
+subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id, Time, G, tr_z, mask_z, &
+                                                 z_in, z_edges_in, missing_value, scale, &
                                                  homogenize, spongeOngrid, m_to_Z, &
                                                  answers_2018, tr_iter_tol, answer_date)
 
   integer,               intent(in)    :: fms_id     !< A unique id used by the FMS time interpolator
   type(time_type),       intent(in)    :: Time       !< A FMS time type
-  real,                  intent(in)    :: conversion !< Conversion factor for tracer.
   type(ocean_grid_type), intent(inout) :: G          !< Grid object
   real, allocatable, dimension(:,:,:), intent(out) :: tr_z
                                                      !< Allocatable tracer array on the horizontal
-                                                     !! model grid and input-file vertical levels. [CU ~> conc]
+                                                     !! model grid and input-file vertical levels [CU ~> conc]
   real, allocatable, dimension(:,:,:), intent(out) :: mask_z
                                                      !< Allocatable tracer mask array on the horizontal
                                                      !! model grid and input-file vertical levels [nondim]
@@ -616,10 +617,10 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, t
   real, allocatable, dimension(:), intent(out) :: z_edges_in
                                                      !< Cell grid edge values for input data [Z ~> m]
   real,                  intent(out)   :: missing_value !< The missing value in the returned array, scaled
-                                                     !! with conversion to avoid accidentally having valid
-                                                     !! values match missing values [CU ~> conc]
-  logical,               intent(in)    :: reentrant_x !< If true, this grid is reentrant in the x-direction
-  logical,               intent(in)    :: tripolar_n !< If true, this is a northern tripolar grid
+                                                     !! to avoid accidentally having valid values match
+                                                     !! missing values [CU ~> conc]
+  real,                  intent(in)    :: scale      !< Scaling factor for tracer into the internal
+                                                     !! units of the model [CU conc-1 ~> 1]
   logical,     optional, intent(in)    :: homogenize !< If present and true, horizontally homogenize data
                                                      !! to produce perfectly "flat" initial conditions
   logical,     optional, intent(in)    :: spongeOngrid !< If present and true, the sponge data are on the model grid
@@ -655,7 +656,7 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, t
   real, dimension(:), allocatable :: lon_in ! The longitudes in the input file [degreesE] then [radians]
   real, dimension(:), allocatable :: lat_in ! The latitudes in the input file [degreesN] then [radians]
   real, dimension(:), allocatable :: lat_inp ! The input file latitudes expanded to the pole [degreesN] then [radians]
-  real :: max_lat   ! The maximum latitude on the input grid [degreeN]
+  real :: max_lat   ! The maximum latitude on the input grid [degreesN]
   real :: pole      ! The sum of tracer values at the pole [conc]
   real :: max_depth ! The maximum depth of the ocean [Z ~> m]
   real :: npole     ! The number of points contributing to the pole value [nondim]
@@ -673,7 +674,7 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, t
   logical :: debug=.false.
   logical :: is_ongrid
   integer :: ans_date           ! The vintage of the expressions and order of arithmetic to use
-  real :: I_scale               ! The inverse of the conversion factor for diagnostic output [conc CU-1 ~> 1]
+  real :: I_scale               ! The inverse of the scale factor for diagnostic output [conc CU-1 ~> 1]
   real :: dtr_iter_stop         ! The tolerance for changes in tracer concentrations between smoothing
                                 ! iterations that determines when to stop iterating [CU ~> conc]
   real :: npoints   ! The number of points in an average [nondim]
@@ -699,10 +700,10 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, t
 
   id_clock_read = cpu_clock_id('(Initialize tracer from Z) read', grain=CLOCK_LOOP)
 
-  dtr_iter_stop = 1.0e-3*conversion
+  dtr_iter_stop = 1.0e-3*scale
   if (present(tr_iter_tol)) dtr_iter_stop = tr_iter_tol
 
-  I_scale = 1.0 / conversion
+  I_scale = 1.0 / scale
 
   PI_180 = atan(1.0)/45.
 
@@ -716,7 +717,7 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, t
   call cpu_clock_begin(id_clock_read)
 
   call get_external_field_info(fms_id, size=fld_sz, axes=axes_data, missing=missing_val_in)
-  missing_value = conversion*missing_val_in
+  missing_value = scale*missing_val_in
 
   verbosity = MOM_get_verbosity()
 
@@ -823,7 +824,7 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, t
       do j=1,jdp ; do i=1,id
         if (abs(tr_inp(i,j)-missing_val_in) > abs(roundoff*missing_val_in)) then
           mask_in(i,j) = 1.0
-          tr_inp(i,j) = tr_inp(i,j) * conversion
+          tr_inp(i,j) = tr_inp(i,j) * scale
         else
           tr_inp(i,j) = missing_value
         endif
@@ -909,7 +910,7 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, t
     do k=1,kd
       do j=js,je
         do i=is,ie
-          tr_z(i,j,k) = data_in(i,j,k) * conversion
+          tr_z(i,j,k) = data_in(i,j,k) * scale
           if (ans_date >= 20190101) mask_z(i,j,k) = 1.
           if (abs(tr_z(i,j,k)-missing_value) < abs(roundoff*missing_value)) mask_z(i,j,k) = 0.
         enddo
