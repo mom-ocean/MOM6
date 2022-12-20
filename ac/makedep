@@ -136,6 +136,10 @@ def create_deps(src_dirs, makefile, debug, exec_target, fc_rule,
         # Write rule for each object from Fortran
         for o in sorted(o2F90.keys()):
             found_mods = [m for m in o2uses[o] if m in all_modules]
+            found_objs = [mod2o[m] for m in o2uses[o] if m in all_modules]
+            found_deps = [
+                dep for pair in zip(found_mods, found_objs) for dep in pair
+            ]
             missing_mods = [m for m in o2uses[o] if m not in all_modules]
             incs = nested_inc(o2h[o] + o2inc[o], f2F)
             incdeps = sorted(set([f2F[f] for f in incs if f in f2F]))
@@ -145,7 +149,8 @@ def create_deps(src_dirs, makefile, debug, exec_target, fc_rule,
                 print("#   object:", o, file=file)
                 print("#   modules:", ' '.join(o2mods[o]), file=file)
                 print("#   uses:", ' '.join(o2uses[o]), file=file)
-                print("#   found:", ' '.join(found_mods), file=file)
+                print("#   found mods:", ' '.join(found_mods), file=file)
+                print("#   found objs:", ' '.join(found_objs), file=file)
                 print("#   missing:", ' '.join(missing_mods), file=file)
                 print("#   includes_all:", ' '.join(incs), file=file)
                 print("#   includes_pth:", ' '.join(incdeps), file=file)
@@ -153,7 +158,7 @@ def create_deps(src_dirs, makefile, debug, exec_target, fc_rule,
                 print("#   program:", ' '.join(o2prg[o]), file=file)
             if o2mods[o]:
                 print(' '.join(o2mods[o])+':', o, file=file)
-            print(o + ':', o2F90[o], ' '.join(incdeps+found_mods), file=file)
+            print(o + ':', o2F90[o], ' '.join(incdeps+found_deps), file=file)
             print('\t'+fc_rule, ' '.join(incargs), file=file)
 
         # Write rule for each object from C
