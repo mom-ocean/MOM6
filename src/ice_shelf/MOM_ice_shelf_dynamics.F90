@@ -147,7 +147,7 @@ type, public :: ice_shelf_dyn_CS ; private
   logical :: moving_shelf_front  !< Specify whether to advance shelf front (and calve).
   logical :: calve_to_mask       !< If true, calve off the ice shelf when it passes the edge of a mask.
   real :: min_thickness_simple_calve !< min. ice shelf thickness criteria for calving [Z ~> m].
-
+  real :: T_shelf_missing   !< An ice shelf temperature to use where there is no ice shelf [degC ~> C]
   real :: cg_tolerance !< The tolerance in the CG solver, relative to initial residual, that
                        !! determines when to stop the conjugate gradient iterations [nondim].
   real :: nonlinear_tolerance !< The fractional nonlinear tolerance, relative to the initial error,
@@ -234,6 +234,8 @@ subroutine register_ice_shelf_dyn_restarts(G, US, param_file, CS, restart_CS)
   type(ice_shelf_dyn_CS), pointer       :: CS !< A pointer to the ice shelf dynamics control structure
   type(MOM_restart_CS),   intent(inout) :: restart_CS !< MOM restart control struct
 
+  ! Local variables
+  real :: T_shelf_missing ! An ice shelf temperature to use where there is no ice shelf [degC ~> C]
   logical :: shelf_mass_is_dynamic, override_shelf_movement, active_shelf_dynamics
   character(len=40)  :: mdl = "MOM_ice_shelf_dyn"  ! This module's name.
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
@@ -260,9 +262,12 @@ subroutine register_ice_shelf_dyn_restarts(G, US, param_file, CS, restart_CS)
   endif
 
   if (active_shelf_dynamics) then
+    call get_param(param_file, mdl, "MISSING_SHELF_TEMPERATURE", T_shelf_missing, &
+                 "An ice shelf temperature to use where there is no ice shelf.",&
+                 units="degC", default=-10.0, scale=US%degC_to_C, do_not_log=.true.)
     allocate( CS%u_shelf(IsdB:IedB,JsdB:JedB), source=0.0 )
     allocate( CS%v_shelf(IsdB:IedB,JsdB:JedB), source=0.0 )
-    allocate( CS%t_shelf(isd:ied,jsd:jed), source=-10.0*US%degC_to_C ) ! [C ~> degC]
+    allocate( CS%t_shelf(isd:ied,jsd:jed), source=T_shelf_missing ) ! [C ~> degC]
     allocate( CS%ice_visc(isd:ied,jsd:jed), source=0.0 )
     allocate( CS%AGlen_visc(isd:ied,jsd:jed), source=2.261e-25 ) ! [Pa-3 s-1]
     allocate( CS%basal_traction(isd:ied,jsd:jed), source=0.0 )   ! [R L2 T-2 ~> Pa]
@@ -329,6 +334,8 @@ subroutine initialize_ice_shelf_dyn(param_file, Time, ISS, CS, G, US, diag, new_
                         ! a restart file to the internal representation in this run.
   real    :: vel_rescale ! A rescaling factor for horizontal velocities from the representation
                         ! in a restart file to the internal representation in this run.
+  real    :: T_shelf_bdry ! A default ice shelf temperature to use for ice flowing
+                          ! in through open boundaries [C ~> degC]
   !This include declares and sets the variable "version".
 # include "version_variable.h"
   character(len=200) :: IC_file,filename,inputdir
@@ -438,7 +445,13 @@ subroutine initialize_ice_shelf_dyn(param_file, Time, ISS, CS, G, US, diag, new_
                  "if CONSTANT a constant value (for debugging).", &
                  default="MODEL")
 
+    call get_param(param_file, mdl, "INFLOW_SHELF_TEMPERATURE", T_shelf_bdry, &
+                 "A default ice shelf temperature to use for ice flowing in through "//&
+                 "open boundaries.", units="degC", default=-15.0, scale=US%degC_to_C)
   endif
+  call get_param(param_file, mdl, "MISSING_SHELF_TEMPERATURE", CS%T_shelf_missing, &
+                 "An ice shelf temperature to use where there is no ice shelf.",&
+                 units="degC", default=-10.0, scale=US%degC_to_C)
   call get_param(param_file, mdl, "MIN_THICKNESS_SIMPLE_CALVE", CS%min_thickness_simple_calve, &
                  "Min thickness rule for the VERY simple calving law",&
                  units="m", default=0.0, scale=US%m_to_Z)
@@ -447,7 +460,7 @@ subroutine initialize_ice_shelf_dyn(param_file, Time, ISS, CS, G, US, diag, new_
   ! previously allocated for registration for restarts.
 
   if (active_shelf_dynamics) then
-    allocate( CS%t_bdry_val(isd:ied,jsd:jed), source=-15.0*US%degC_to_C) ! [C ~> degC]
+    allocate( CS%t_bdry_val(isd:ied,jsd:jed), source=T_shelf_bdry) ! [C ~> degC]
     allocate( CS%thickness_bdry_val(isd:ied,jsd:jed), source=0.0)
     allocate( CS%u_face_mask(Isdq:Iedq,Jsdq:Jedq), source=0.0)
     allocate( CS%v_face_mask(Isdq:Iedq,Jsdq:Jedq), source=0.0)
@@ -1415,7 +1428,7 @@ subroutine ice_shelf_advect_thickness_x(CS, G, LB, time_step, hmask, h0, h_after
   do j=jsh,jeh ; do I=ish-1,ieh
     if (CS%u_face_mask(I,j) == 4.) then ! The flux itself is a specified boundary condition.
       uh_ice(I,j) = time_step * G%dyCu(I,j) * CS%u_flux_bdry_val(I,j)
-    elseif ((hmask(i,j)==1) .or. (hmask(i+1,j) == 1)) then
+    elseif ((hmask(i,j) == 1) .or. (hmask(i+1,j) == 1)) then
       u_face = 0.5 * (CS%u_shelf(I,J-1) + CS%u_shelf(I,J))
       h_face = 0.0 ! This will apply when the source cell is iceless or not fully ice covered.
 
@@ -1494,7 +1507,7 @@ subroutine ice_shelf_advect_thickness_y(CS, G, LB, time_step, hmask, h0, h_after
   do J=jsh-1,jeh ; do i=ish,ieh
     if (CS%v_face_mask(i,J) == 4.) then ! The flux itself is a specified boundary condition.
       vh_ice(i,J) = time_step * G%dxCv(i,J) * CS%v_flux_bdry_val(i,J)
-    elseif ((hmask(i,j)==1) .or. (hmask(i,j+1) == 1)) then
+    elseif ((hmask(i,j) == 1) .or. (hmask(i,j+1) == 1)) then
 
       v_face = 0.5 * (CS%v_shelf(I-1,J) + CS%v_shelf(I,J))
       h_face = 0.0 ! This will apply when the source cell is iceless or not fully ice covered.
@@ -1854,7 +1867,7 @@ subroutine calc_shelf_driving_stress(CS, ISS, G, US, taudx, taudy, OD)
       if (rhoi_rhow * ISS%h_shelf(i,j) - CS%bed_elev(i,j) <= 0) then
         S(i,j) = (1 - rhoi_rhow)*ISS%h_shelf(i,j)
       else
-        S(i,j)=ISS%h_shelf(i,j)-CS%bed_elev(i,j)
+        S(i,j) = ISS%h_shelf(i,j)-CS%bed_elev(i,j)
       endif
     enddo
   enddo
@@ -2219,12 +2232,12 @@ subroutine CG_action(uret, vret, u_shlf, v_shlf, Phi, Phisub, umask, vmask, hmas
         Hcell(:,:) = H_node(i-1:i,j-1:j)
         call CG_action_subgrid_basal(Phisub, Hcell, Ucell, Vcell, bathyT(i,j), dens_ratio, Usub, Vsub)
 
-        if (umask(I-1,J-1)==1) uret(I-1,J-1) = uret(I-1,J-1) + Usub(1,1) * basal_trac(i,j)
+        if (umask(I-1,J-1) == 1) uret(I-1,J-1) = uret(I-1,J-1) + Usub(1,1) * basal_trac(i,j)
         if (umask(I-1,J) == 1) uret(I-1,J) = uret(I-1,J) + Usub(1,2) * basal_trac(i,j)
         if (umask(I,J-1) == 1) uret(I,J-1) = uret(I,J-1) + Usub(2,1) * basal_trac(i,j)
         if (umask(I,J) == 1)   uret(I,J)   = uret(I,J) + Usub(2,2) * basal_trac(i,j)
 
-        if (vmask(I-1,J-1)==1) vret(I-1,J-1) = vret(I-1,J-1) + Vsub(1,1) * basal_trac(i,j)
+        if (vmask(I-1,J-1) == 1) vret(I-1,J-1) = vret(I-1,J-1) + Vsub(1,1) * basal_trac(i,j)
         if (vmask(I-1,J) == 1) vret(I-1,J) = vret(I-1,J) + Vsub(1,2) * basal_trac(i,j)
         if (vmask(I,J-1) == 1) vret(I,J-1) = vret(I,J-1) + Vsub(2,1) * basal_trac(i,j)
         if (vmask(I,J) == 1)   vret(I,J)   = vret(I,J) + Vsub(2,2) * basal_trac(i,j)
@@ -2550,12 +2563,12 @@ subroutine apply_boundary_values(CS, ISS, G, US, time, Phisub, H_node, ice_visc,
         call CG_action_subgrid_basal(Phisub, Hcell, Ucell, Vcell, CS%bed_elev(i,j), &
                                      dens_ratio, Usubcontr, Vsubcontr)
 
-        if (CS%umask(I-1,J-1)==1) u_bdry_contr(I-1,J-1) = u_bdry_contr(I-1,J-1) + Usubcontr(1,1) * basal_trac(i,j)
+        if (CS%umask(I-1,J-1) == 1) u_bdry_contr(I-1,J-1) = u_bdry_contr(I-1,J-1) + Usubcontr(1,1) * basal_trac(i,j)
         if (CS%umask(I-1,J) == 1) u_bdry_contr(I-1,J) = u_bdry_contr(I-1,J) + Usubcontr(1,2) * basal_trac(i,j)
         if (CS%umask(I,J-1) == 1) u_bdry_contr(I,J-1) = u_bdry_contr(I,J-1) + Usubcontr(2,1) * basal_trac(i,j)
         if (CS%umask(I,J) == 1)   u_bdry_contr(I,J)   = u_bdry_contr(I,J) + Usubcontr(2,2) * basal_trac(i,j)
 
-        if (CS%vmask(I-1,J-1)==1) v_bdry_contr(I-1,J-1) = v_bdry_contr(I-1,J-1) + Vsubcontr(1,1) * basal_trac(i,j)
+        if (CS%vmask(I-1,J-1) == 1) v_bdry_contr(I-1,J-1) = v_bdry_contr(I-1,J-1) + Vsubcontr(1,1) * basal_trac(i,j)
         if (CS%vmask(I-1,J) == 1) v_bdry_contr(I-1,J) = v_bdry_contr(I-1,J) + Vsubcontr(1,2) * basal_trac(i,j)
         if (CS%vmask(I,J-1) == 1) v_bdry_contr(I,J-1) = v_bdry_contr(I,J-1) + Vsubcontr(2,1) * basal_trac(i,j)
         if (CS%vmask(I,J) == 1)   v_bdry_contr(I,J)   = v_bdry_contr(I,J) + Vsubcontr(2,2) * basal_trac(i,j)
@@ -2610,7 +2623,7 @@ subroutine calc_shelf_visc(CS, ISS, G, US, u_shlf, v_shlf)
   enddo ; enddo
 
   n_g = CS%n_glen; eps_min = CS%eps_glen_min
-  CS%ice_visc(:,:)=1e22
+  CS%ice_visc(:,:) = 1.0e22
 !  Visc_coef = US%kg_m2s_to_RZ_T*US%m_to_L*US%Z_to_L*(CS%A_glen_isothermal)**(-1./CS%n_glen)
   do j=jsc,jec ; do i=isc,iec
 
@@ -2639,13 +2652,13 @@ subroutine calc_shelf_visc(CS, ISS, G, US, u_shlf, v_shlf)
               (v_shlf(I-1,J) * Phi(6,2*(jq-1)+iq,i,j) + &
               v_shlf(I,J-1) * Phi(4,2*(jq-1)+iq,i,j)) )
       enddo ; enddo
-      if (trim(CS%ice_viscosity_compute)=="CONSTANT") then
+      if (trim(CS%ice_viscosity_compute) == "CONSTANT") then
         CS%ice_visc(i,j) = 1e15 * US%kg_m3_to_R*US%m_to_L*US%m_s_to_L_T * (G%areaT(i,j) * ISS%h_shelf(i,j))
         ! constant viscocity for debugging
-      elseif (trim(CS%ice_viscosity_compute)=="MODEL") then
+      elseif (trim(CS%ice_viscosity_compute) == "MODEL") then
         CS%ice_visc(i,j) = 0.5 * Visc_coef * (G%areaT(i,j) * ISS%h_shelf(i,j)) * &
               (US%s_to_T**2 * (ux**2 + vy**2 + ux*vy + 0.25*(uy+vx)**2 + eps_min**2))**((1.-n_g)/(2.*n_g))
-      elseif (trim(CS%ice_viscosity_compute)=="OBS") then
+      elseif (trim(CS%ice_viscosity_compute) == "OBS") then
         if (CS%AGlen_visc(i,j) >0) CS%ice_visc(i,j) = CS%AGlen_visc(i,j)*(G%areaT(i,j) * ISS%h_shelf(i,j))
         ! Here CS%Aglen_visc(i,j) is the ice viscocity [Pa s-1] computed from obs and read from a file
       endif
@@ -3008,23 +3021,23 @@ real, dimension(SZDIB_(G),SZDJB_(G)), &
 
           select case (int(CS%u_face_mask_bdry(I-1+k,j)))
             case (3)
-              vmask(I-1+k,J-1)=3.
-              u_face_mask(I-1+k,j)=3.
-              umask(I-1+k,J)=3.
-              vmask(I-1+k,J)=3.
-              vmask(I-1+k,J)=3.
+              vmask(I-1+k,J-1) = 3.
+              u_face_mask(I-1+k,j) = 3.
+              umask(I-1+k,J) = 3.
+              vmask(I-1+k,J) = 3.
+              vmask(I-1+k,J) = 3.
             case (2)
-              u_face_mask(I-1+k,j)=2.
+              u_face_mask(I-1+k,j) = 2.
             case (4)
-              umask(I-1+k,J-1:J)=0.
-              vmask(I-1+k,J-1:J)=0.
-              u_face_mask(I-1+k,j)=4.
+              umask(I-1+k,J-1:J) = 0.
+              vmask(I-1+k,J-1:J) = 0.
+              u_face_mask(I-1+k,j) = 4.
             case (0)
-              umask(I-1+k,J-1:J)=0.
-              vmask(I-1+k,J-1:J)=0.
-              u_face_mask(I-1+k,j)=0.
+              umask(I-1+k,J-1:J) = 0.
+              vmask(I-1+k,J-1:J) = 0.
+              u_face_mask(I-1+k,j) = 0.
             case (1)  ! stress free x-boundary
-              umask(I-1+k,J-1:J)=0.
+              umask(I-1+k,J-1:J) = 0.
             case default
           end select
         enddo
@@ -3033,23 +3046,23 @@ real, dimension(SZDIB_(G),SZDJB_(G)), &
 
           select case (int(CS%v_face_mask_bdry(i,J-1+k)))
             case (3)
-              vmask(I-1,J-1+k)=3.
-              umask(I-1,J-1+k)=3.
-              vmask(I,J-1+k)=3.
-              umask(I,J-1+k)=3.
-              v_face_mask(i,J-1+k)=3.
+              vmask(I-1,J-1+k) = 3.
+              umask(I-1,J-1+k) = 3.
+              vmask(I,J-1+k) = 3.
+              umask(I,J-1+k) = 3.
+              v_face_mask(i,J-1+k) = 3.
             case (2)
-              v_face_mask(i,J-1+k)=2.
+              v_face_mask(i,J-1+k) = 2.
             case (4)
-              umask(I-1:I,J-1+k)=0.
-              vmask(I-1:I,J-1+k)=0.
-              v_face_mask(i,J-1+k)=4.
+              umask(I-1:I,J-1+k) = 0.
+              vmask(I-1:I,J-1+k) = 0.
+              v_face_mask(i,J-1+k) = 4.
             case (0)
-              umask(I-1:I,J-1+k)=0.
-              vmask(I-1:I,J-1+k)=0.
-              v_face_mask(i,J-1+k)=0.
+              umask(I-1:I,J-1+k) = 0.
+              vmask(I-1:I,J-1+k) = 0.
+              v_face_mask(i,J-1+k) = 0.
             case (1) ! stress free y-boundary
-              vmask(I-1:I,J-1+k)=0.
+              vmask(I-1:I,J-1+k) = 0.
             case default
           end select
         enddo
@@ -3223,7 +3236,7 @@ subroutine ice_shelf_temp(CS, ISS, G, US, time_step, melt_rate, Time)
     if (ISS%h_shelf(i,j) > 0.0) then
       CS%t_shelf(i,j) = th_after_vflux(i,j) / ISS%h_shelf(i,j)
     else
-      CS%t_shelf(i,j) = -10.0*US%degC_to_C
+      CS%t_shelf(i,j) = CS%T_shelf_missing
     endif
 !   endif
 
@@ -3234,11 +3247,11 @@ subroutine ice_shelf_temp(CS, ISS, G, US, time_step, melt_rate, Time)
       else
         ! the ice is about to melt away in this case set thickness, area, and mask to zero
         ! NOTE: not mass conservative, should maybe scale salt & heat flux for this cell
-        CS%t_shelf(i,j) = -10.0*US%degC_to_C
+        CS%t_shelf(i,j) = CS%T_shelf_missing
         CS%tmask(i,j) = 0.0
       endif
     elseif (ISS%hmask(i,j) == 0) then
-      CS%t_shelf(i,j) = -10.0*US%degC_to_C
+      CS%t_shelf(i,j) = CS%T_shelf_missing
     elseif ((ISS%hmask(i,j) == 3) .or. (ISS%hmask(i,j) == -2)) then
       CS%t_shelf(i,j) = CS%t_bdry_val(i,j)
     endif
