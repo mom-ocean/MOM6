@@ -2737,6 +2737,10 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, depth_tot, G, GV, US, PF, just
                  units="1e-3", default=1.0e-3, scale=US%ppt_to_S, do_not_log=just_read)
 
   if (just_read) then
+    if ((.not.useALEremapping) .and. adjust_temperature) &
+      ! This call is just here to read and log the determine_temperature parameters
+      call determine_temperature(tv%T, tv%S, GV%Rlay(1:nz), eos, tv%P_Ref, 0, &
+                                 h, 0, G, GV, US, PF, just_read=.true.)
     call cpu_clock_end(id_clock_routine)
     return ! All run-time parameters have been read, so return.
   endif
@@ -2957,8 +2961,8 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, depth_tot, G, GV, US, PF, just
     if (adjust_temperature) then
       ! Finally adjust to target density
       ks = 1 ; if (separate_mixed_layer) ks = GV%nk_rho_varies + 1
-      call determine_temperature(tv%T, tv%S, GV%Rlay(1:nz), tv%P_Ref, niter, &
-                                 h, ks, G, GV, US, eos)
+      call determine_temperature(tv%T, tv%S, GV%Rlay(1:nz), eos, tv%P_Ref, niter, &
+                                 h, ks, G, GV, US, PF, just_read)
     endif
 
   endif ! useALEremapping
