@@ -550,11 +550,19 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
   call initCoord(CS, GV, US, coord_mode, param_file)
 
   if (coord_is_state_dependent) then
-    call get_param(param_file, mdl, create_coord_param(param_prefix, "P_REF", param_suffix), P_Ref, &
-                 "The pressure that is used for calculating the coordinate "//&
-                 "density.  (1 Pa = 1e4 dbar, so 2e7 is commonly used.) "//&
-                 "This is only used if USE_EOS and ENABLE_THERMODYNAMICS are true.", &
-                 units="Pa", default=2.0e7, scale=US%kg_m3_to_R*US%m_s_to_L_T**2)
+    if (main_parameters) then
+      call get_param(param_file, mdl, create_coord_param(param_prefix, "P_REF", param_suffix), P_Ref, &
+                   "The pressure that is used for calculating the coordinate "//&
+                   "density.  (1 Pa = 1e4 dbar, so 2e7 is commonly used.) "//&
+                   "This is only used if USE_EOS and ENABLE_THERMODYNAMICS are true.", &
+                   units="Pa", default=2.0e7, scale=US%kg_m3_to_R*US%m_s_to_L_T**2)
+    else
+      call get_param(param_file, mdl, create_coord_param(param_prefix, "P_REF", param_suffix), P_Ref, &
+                   "The pressure that is used for calculating the diagnostic coordinate "//&
+                   "density.  (1 Pa = 1e4 dbar, so 2e7 is commonly used.) "//&
+                   "This is only used for the RHO coordinate.", &
+                   units="Pa", default=2.0e7, scale=US%kg_m3_to_R*US%m_s_to_L_T**2)
+    endif
     call get_param(param_file, mdl, create_coord_param(param_prefix, "REGRID_COMPRESSIBILITY_FRACTION", param_suffix), &
                  tmpReal, &
                  "When interpolating potential density profiles we can add "//&
@@ -2444,7 +2452,7 @@ subroutine set_regrid_params( CS, boundary_extrapolation, min_thickness, old_gri
       call set_rho_params(CS%rho_CS, interp_CS=CS%interp_CS)
   case (REGRIDDING_HYCOM1)
     if (associated(CS%hycom_CS) .and. (present(interp_scheme) .or. present(boundary_extrapolation))) &
-      call set_hycom_params(CS%hycom_CS, interp_CS=CS%interp_CS, ref_pressure=ref_pressure)
+      call set_hycom_params(CS%hycom_CS, interp_CS=CS%interp_CS)
   case (REGRIDDING_HYBGEN)
     ! Do nothing for now.
   case (REGRIDDING_SLIGHT)
