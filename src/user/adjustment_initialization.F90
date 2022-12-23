@@ -4,15 +4,15 @@ module adjustment_initialization
 ! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, is_root_pe
-use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
-use MOM_get_input, only : directories
-use MOM_grid, only : ocean_grid_type
-use MOM_unit_scaling, only : unit_scale_type
-use MOM_variables, only : thermo_var_ptrs
-use MOM_verticalGrid, only : verticalGrid_type
-use regrid_consts, only : coordinateMode, DEFAULT_COORDINATE_MODE
-use regrid_consts, only : REGRIDDING_LAYER, REGRIDDING_ZSTAR
-use regrid_consts, only : REGRIDDING_RHO, REGRIDDING_SIGMA
+use MOM_file_parser,   only : get_param, log_param, log_version, param_file_type
+use MOM_get_input,     only : directories
+use MOM_grid,          only : ocean_grid_type
+use MOM_unit_scaling,  only : unit_scale_type
+use MOM_variables,     only : thermo_var_ptrs
+use MOM_verticalGrid,  only : verticalGrid_type
+use regrid_consts,     only : coordinateMode, DEFAULT_COORDINATE_MODE
+use regrid_consts,     only : REGRIDDING_LAYER, REGRIDDING_ZSTAR
+use regrid_consts,     only : REGRIDDING_RHO, REGRIDDING_SIGMA
 
 implicit none ; private
 
@@ -79,6 +79,9 @@ subroutine adjustment_initialize_thickness ( h, G, GV, US, param_file, just_read
                  default=35.0, units='1e-3', scale=US%ppt_to_S, do_not_log=just_read)
   call get_param(param_file, mdl, "MIN_THICKNESS", min_thickness, 'Minimum layer thickness', &
                  default=1.0e-3, units='m', scale=US%m_to_Z, do_not_log=just_read)
+  call get_param(param_file, mdl, "DRHO_DS", dRho_dS, &
+                 "The partial derivative of density with salinity with a linear equation of state.", &
+                 units="kg m-3 PSU-1", default=0.8, scale=US%kg_m3_to_R*US%S_to_ppt)
 
   ! Parameters specific to this experiment configuration
   call get_param(param_file, mdl, "REGRIDDING_COORDINATE_MODE", verticalCoordinate, &
@@ -117,7 +120,6 @@ subroutine adjustment_initialize_thickness ( h, G, GV, US, param_file, just_read
   select case ( coordinateMode(verticalCoordinate) )
 
     case ( REGRIDDING_LAYER, REGRIDDING_RHO )
-      dRho_dS = 1.0*US%kg_m3_to_R*US%S_to_ppt
       if (delta_S_strat /= 0.) then
         ! This was previously coded ambiguously.
         adjustment_delta = (adjustment_deltaS / delta_S_strat) * G%max_depth
@@ -243,7 +245,7 @@ subroutine adjustment_initialize_temperature_salinity(T, S, h, depth_tot, G, GV,
   call get_param(param_file, mdl, "S_RANGE", S_range, 'Initial salinity range',  &
                  default=2.0, units='1e-3', scale=US%ppt_to_S, do_not_log=just_read)
   call get_param(param_file, mdl, "T_RANGE", T_range, 'Initial temperature range', &
-                 default=0.0, units='C', scale=US%degC_to_C, do_not_log=just_read)
+                 default=1.0, units='degC', scale=US%degC_to_C, do_not_log=just_read)
   ! Parameters specific to this experiment configuration BUT logged in previous s/r
   call get_param(param_file, mdl, "REGRIDDING_COORDINATE_MODE", verticalCoordinate, &
                  default=DEFAULT_COORDINATE_MODE, do_not_log=just_read)
@@ -292,7 +294,7 @@ subroutine adjustment_initialize_temperature_salinity(T, S, h, depth_tot, G, GV,
           S(i,j,k) = S_ref + delta_S + 0.5 * ( eta1D(k)+eta1D(k+1) ) * dSdz
           x = abs(S(i,j,k) - 0.5*real(nz-1)/real(nz)*S_range)/S_range*real(2*nz)
           x = 1. - min(1., x)
-          T(i,j,k) = US%degC_to_C * x
+          T(i,j,k) = T_range * x
         enddo
    !    x = GV%H_to_Z*sum(T(i,j,:)*h(i,j,:))
    !    T(i,j,:) = (T(i,j,:) / x) * (G%max_depth*1.5/real(nz))
@@ -303,7 +305,7 @@ subroutine adjustment_initialize_temperature_salinity(T, S, h, depth_tot, G, GV,
         S(:,:,k) = S_ref + S_range * ( (real(k)-0.5) / real( nz ) )
    !    x = abs(S(1,1,k) - 0.5*real(nz-1)/real(nz)*S_range)/S_range*real(2*nz)
    !    x = 1.-min(1., x)
-   !    T(:,:,k) = x
+   !    T(:,:,k) = T_range * x
       enddo
 
     case default
