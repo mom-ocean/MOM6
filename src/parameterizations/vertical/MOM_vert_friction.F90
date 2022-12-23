@@ -13,6 +13,7 @@ use MOM_file_parser,   only : get_param, log_param, log_version, param_file_type
 use MOM_forcing_type,  only : mech_forcing
 use MOM_get_input,     only : directories
 use MOM_grid,          only : ocean_grid_type
+use MOM_io,            only : MOM_read_data, slasher
 use MOM_open_boundary, only : ocean_OBC_type, OBC_NONE, OBC_DIRECTION_E
 use MOM_open_boundary, only : OBC_DIRECTION_W, OBC_DIRECTION_N, OBC_DIRECTION_S
 use MOM_PointAccel,    only : write_u_accel, write_v_accel, PointAccel_init
@@ -24,6 +25,7 @@ use MOM_variables,     only : cont_diag_ptrs, accel_diag_ptrs
 use MOM_variables,     only : ocean_internal_state
 use MOM_verticalGrid,  only : verticalGrid_type
 use MOM_wave_interface, only : wave_parameters_CS
+use MOM_lateral_mixing_coeffs, only : VarMix_CS
 implicit none ; private
 
 #include <MOM_memory.h>
@@ -49,10 +51,24 @@ type, public :: vertvisc_CS ; private
                              !! from the surface; this can get very large with thin layers.
   real    :: Kv              !< The interior vertical viscosity [Z2 T-1 ~> m2 s-1].
   real    :: Hbbl            !< The static bottom boundary layer thickness [H ~> m or kg m-2].
+  real    :: Hbbl_gl90       !< The static bottom boundary layer thickness used for GL90 [H ~> m or kg m-2].
   real    :: Kv_extra_bbl    !< An extra vertical viscosity in the bottom boundary layer of thickness
                              !! Hbbl when there is not a bottom drag law in use [Z2 T-1 ~> m2 s-1].
   real    :: vonKar          !< The von Karman constant as used for mixed layer viscosity [nondim]
 
+  logical :: use_GL90_in_SSW !< If true, use the GL90 parameterization in stacked shallow water mode (SSW).
+                             !! The calculation of the GL90 viscosity coefficient uses the fact that in SSW
+                             !! we simply have 1/N^2 = h/g^prime, where g^prime is the reduced gravity.
+                             !! This identity does not generalize to non-SSW setups.
+  logical :: use_GL90_N2     !< If true, use GL90 vertical viscosity coefficient that is depth-independent;
+                             !! this corresponds to a kappa_GM that scales as N^2 with depth.
+  real    :: kappa_gl90      !< The scalar diffusivity used in the GL90 vertical viscosity scheme
+                             !! [L2 T-1 ~> m2 s-1]
+  logical :: read_kappa_gl90 !< If true, read a file containing the spatially varying kappa_gl90
+  real    :: alpha_gl90      !< Coefficient used to compute a depth-independent GL90 vertical
+                             !! viscosity via Kv_gl90 = alpha_gl90 * f^2. Note that the implied
+                             !! Kv_gl90 corresponds to a kappa_gl90 that scales as N^2 with depth.
+                             !! [L2 T ~> m2 s]
   real    :: maxvel          !< Velocity components greater than maxvel are truncated [L T-1 ~> m s-1].
   real    :: vel_underflow   !< Velocity components smaller than vel_underflow
                              !! are set to 0 [L T-1 ~> m s-1].
@@ -73,10 +89,14 @@ type, public :: vertvisc_CS ; private
 
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_,NK_INTERFACE_) :: &
     a_u                !< The u-drag coefficient across an interface [Z T-1 ~> m s-1].
+  real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_,NK_INTERFACE_) :: &
+    a_u_gl90           !< The u-drag coefficient associated with GL90 across an interface [Z T-1 ~> m s-1].
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_,NKMEM_) :: &
     h_u                !< The effective layer thickness at u-points [H ~> m or kg m-2].
   real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_,NK_INTERFACE_) :: &
     a_v                !< The v-drag coefficient across an interface [Z T-1 ~> m s-1].
+  real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_,NK_INTERFACE_) :: &
+    a_v_gl90           !< The v-drag coefficient associated with GL90 across an interface [Z T-1 ~> m s-1].
   real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_,NKMEM_) :: &
     h_v                !< The effective layer thickness at v-points [H ~> m or kg m-2].
   real, pointer, dimension(:,:) :: a1_shelf_u => NULL() !< The u-momentum coupling coefficient under
@@ -133,6 +153,7 @@ type, public :: vertvisc_CS ; private
 
   type(diag_ctrl), pointer :: diag !< A structure that is used to regulate the
                                    !! timing of diagnostic output.
+  real, allocatable, dimension(:,:) :: kappa_gl90_2d !< 2D kappa_gl90 at h-points [L2 T-1 ~> m2 s-1]
 
   !>@{ Diagnostic identifiers
   integer :: id_du_dt_visc = -1, id_dv_dt_visc = -1, id_au_vv = -1, id_av_vv = -1
@@ -153,6 +174,119 @@ type, public :: vertvisc_CS ; private
 end type vertvisc_CS
 
 contains
+
+!> Compute coupling coefficient associated with vertical viscosity parameterization as in Greatbatch and Lamb
+!! (1990), hereafter referred to as the GL90 vertical viscosity parameterization. This vertical viscosity scheme
+!! redistributes momentum in the vertical, and is the equivalent of the Gent & McWilliams (1990) parameterization,
+!! but in a TWA (thickness-weighted averaged) set of equations. The vertical viscosity coefficient nu is computed
+!! from kappa_GM via thermal wind balance, and the following relation:
+!! nu = kappa_GM * f^2 / N^2.
+!! In the following subroutine kappa_GM is assumed either (a) constant or (b) horizontally varying. In both cases,
+!! (a) and  (b), one can additionally impose an EBT structure in the vertical for kappa_GM.
+!! A third possible formulation of nu is depth-independent:
+!! nu = f^2 * alpha
+!! The latter formulation would be equivalent to a kappa_GM that varies as N^2 with depth.
+!! The vertical viscosity del_z ( nu del_z u) is applied to the momentum equation with stress-free boundary
+!! conditions at the top and bottom.
+!!
+!! In SSW mode, we have 1/N^2 = h/g'. The coupling coefficient is therefore equal to
+!! a_cpl_gl90 = nu / h = kappa_GM * f^2 / g'
+!! or
+!! a_cpl_gl90 = nu / h = f^2 * alpha / h
+
+subroutine find_coupling_coef_gl90(a_cpl_gl90, hvel, do_i, z_i, j, G, GV, CS, VarMix, work_on_u)
+  type(ocean_grid_type),                        intent(in)    :: G   !< Grid structure.
+  type(verticalGrid_type),                      intent(in)    :: GV  !< Vertical grid structure.
+  real, dimension(SZIB_(G),SZK_(GV)),           intent(in)    :: hvel   !< Layer thickness used at a velocity
+                                                                     !! grid point [H ~> m or kg m-2].
+  logical, dimension(SZIB_(G)),                 intent(in)    :: do_i !< If true, determine coupling coefficient
+                                                                     !!  for a column
+  real, dimension(SZIB_(G),SZK_(GV)+1),         intent(in)    :: z_i  !< Estimate of interface heights above the
+                                                                     !! bottom, normalized by the GL90 bottom
+                                                                     !! boundary layer thickness
+  real, dimension(SZIB_(G),SZK_(GV)+1),         intent(inout) :: a_cpl_gl90 !< Coupling coefficient associated
+                                                                     !! with GL90 across interfaces; is not
+                                                                     !! included in a_cpl [Z T-1 ~> m s-1].
+  integer,                                      intent(in)    :: j    !< j-index to find coupling coefficient for
+  type(vertvisc_cs),                            pointer       :: CS  !< Vertical viscosity control structure
+  type(VarMix_CS),                              intent(in)    :: VarMix !< Variable mixing coefficients
+  logical,                                      intent(in)    :: work_on_u !< If true, u-points are being calculated,
+                                                                     !! otherwise they are v-points.
+
+  ! local variables
+  logical                                                     :: kdgl90_use_ebt_struct
+  integer                                                     :: i, k, is, ie, nz, Isq, Ieq
+  real                                                        :: f2   !< Squared Coriolis parameter at a
+                                                                     !! velocity grid point [T-2 ~> s-2].
+  real                                                        :: h_neglect   ! A thickness that is so small
+                                                                     !! it is usually lost in roundoff error
+                                                                     !! and can be neglected [H ~> m or kg m-2].
+  real                                                        :: botfn   ! A function that is 1 at the bottom
+                                                                     !! and small far from it [nondim]
+  real                                                        :: z2      ! The distance from the bottom,
+                                                                     !! normalized by Hbbl_gl90 [nondim]
+
+  is  = G%isc ; ie  = G%iec
+  Isq = G%IscB ; Ieq = G%IecB
+  nz = GV%ke
+
+  h_neglect = GV%H_subroundoff
+  kdgl90_use_ebt_struct = .false.
+  if (VarMix%use_variable_mixing) then
+    kdgl90_use_ebt_struct = VarMix%kdgl90_use_ebt_struct
+  endif
+
+  if (work_on_u) then
+    ! compute coupling coefficient at u-points
+    do I=Isq,Ieq; if (do_i(I)) then
+      f2 = 0.25 * (G%CoriolisBu(I,J-1) + G%CoriolisBu(I,J))**2
+      do K=2,nz
+        if (CS%use_GL90_N2) then
+          a_cpl_gl90(I,K) = 2.0 * f2 * CS%alpha_gl90 / (hvel(I,k) + hvel(I,k-1) + h_neglect)
+        else
+          if (CS%read_kappa_gl90) then
+            a_cpl_gl90(I,K) = f2 * 0.5 * (CS%kappa_gl90_2d(i,j) + CS%kappa_gl90_2d(i+1,j)) / GV%g_prime(K)
+          else
+            a_cpl_gl90(I,K) = f2 * CS%kappa_gl90 / GV%g_prime(K)
+          endif
+          if (kdgl90_use_ebt_struct) then
+            a_cpl_gl90(I,K) = a_cpl_gl90(I,K) * 0.5 * ( VarMix%ebt_struct(i,j,k-1) + VarMix%ebt_struct(i+1,j,k-1) )
+          endif
+        endif
+        ! botfn determines when a point is within the influence of the GL90 bottom boundary layer,
+        ! going from 1 at the bottom to 0 in the interior.
+        z2 = z_i(I,k)
+        botfn = 1.0 / (1.0 + 0.09*z2*z2*z2*z2*z2*z2)
+        a_cpl_gl90(I,K) = a_cpl_gl90(I,K) * (1 - botfn)
+      enddo
+    endif; enddo
+  else
+    ! compute viscosities at v-points
+    do i=is,ie; if (do_i(i)) then
+      f2 = 0.25 * (G%CoriolisBu(I-1,J) + G%CoriolisBu(I,J))**2
+      do K=2,nz
+        if (CS%use_GL90_N2) then
+          a_cpl_gl90(i,K) = 2.0 * f2 * CS%alpha_gl90 / (hvel(i,k) + hvel(i,k-1) + h_neglect)
+        else
+          if (CS%read_kappa_gl90) then
+            a_cpl_gl90(i,K) = f2 * 0.5 * (CS%kappa_gl90_2d(i,j) + CS%kappa_gl90_2d(i,j+1)) / GV%g_prime(K)
+          else
+            a_cpl_gl90(i,K) = f2 * CS%kappa_gl90 / GV%g_prime(K)
+          endif
+          if (kdgl90_use_ebt_struct) then
+            a_cpl_gl90(i,K) = a_cpl_gl90(i,K) * 0.5 * ( VarMix%ebt_struct(i,j,k-1) + VarMix%ebt_struct(i,j+1,k-1) )
+          endif
+        endif
+        ! botfn determines when a point is within the influence of the GL90 bottom boundary layer,
+        ! going from 1 at the bottom to 0 in the interior.
+        z2 = z_i(i,k)
+        botfn = 1.0 / (1.0 + 0.09*z2*z2*z2*z2*z2*z2)
+        a_cpl_gl90(i,K) = a_cpl_gl90(i,K) * (1 - botfn)
+      enddo
+    endif; enddo
+  endif
+
+end subroutine find_coupling_coef_gl90
 
 !> Perform a fully implicit vertical diffusion
 !! of momentum.  Stress top and bottom boundary conditions are used.
@@ -671,10 +805,10 @@ subroutine vertvisc_remnant(visc, visc_rem_u, visc_rem_v, dt, G, GV, US, CS)
 end subroutine vertvisc_remnant
 
 
-!> Calculate the coupling coefficients (CS%a_u and CS%a_v)
+!> Calculate the coupling coefficients (CS%a_u, CS%a_v, CS%a_u_gl90, CS%a_v_gl90)
 !! and effective layer thicknesses (CS%h_u and CS%h_v) for later use in the
 !! applying the implicit vertical viscosity via vertvisc().
-subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, US, CS, OBC)
+subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, US, CS, OBC, VarMix)
   type(ocean_grid_type),   intent(in)    :: G      !< Ocean grid structure
   type(verticalGrid_type), intent(in)    :: GV     !< Ocean vertical grid structure
   type(unit_scale_type),   intent(in)    :: US     !< A dimensional unit scaling type
@@ -689,7 +823,7 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, US, CS, OBC)
   real,                    intent(in)    :: dt     !< Time increment [T ~> s]
   type(vertvisc_CS),       pointer       :: CS     !< Vertical viscosity control structure
   type(ocean_OBC_type),    pointer       :: OBC    !< Open boundary condition structure
-
+  type(VarMix_CS),         intent(in) :: VarMix !< Variable mixing coefficients
   ! Field from forces used in this subroutine:
   !   ustar: the friction velocity [Z T-1 ~> m s-1], used here as the mixing
   !     velocity in the mixed layer if NKML > 1 in a bulk mixed layer.
@@ -706,14 +840,21 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, US, CS, OBC)
   real, dimension(SZIB_(G),SZK_(GV)+1) :: &
     a_cpl, &    ! The drag coefficients across interfaces [Z T-1 ~> m s-1].  a_cpl times
                 ! the velocity difference gives the stress across an interface.
+    a_cpl_gl90, &    ! The drag coefficients across interfaces associated with GL90 [Z T-1 ~> m s-1].
+                ! a_cpl_gl90 times the velocity difference gives the GL90 stress across an interface.
+                ! a_cpl_gl90 is part of a_cpl.
     a_shelf, &  ! The drag coefficients across interfaces in water columns under
                 ! ice shelves [Z T-1 ~> m s-1].
-    z_i         ! An estimate of each interface's height above the bottom,
+    z_i, &      ! An estimate of each interface's height above the bottom,
                 ! normalized by the bottom boundary layer thickness [nondim]
+    z_i_gl90    ! An estimate of each interface's height above the bottom,
+                ! normalized by the GL90 bottom boundary layer thickness [nondim]
   real, dimension(SZIB_(G)) :: &
     kv_bbl, &     ! The bottom boundary layer viscosity [Z2 T-1 ~> m2 s-1].
     bbl_thick, &  ! The bottom boundary layer thickness [H ~> m or kg m-2].
     I_Hbbl, &     ! The inverse of the bottom boundary layer thickness [H-1 ~> m-1 or m2 kg-1].
+    I_Hbbl_gl90, &! The inverse of the bottom boundary layer thickness used for the GL90 scheme
+                  ! [H-1 ~> m-1 or m2 kg-1].
     I_Htbl, &     ! The inverse of the top boundary layer thickness [H-1 ~> m-1 or m2 kg-1].
     zcol1, &      ! The height of the interfaces to the north and south of a
     zcol2, &      ! v-point [H ~> m or kg m-2].
@@ -761,6 +902,9 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, US, CS, OBC)
   h_neglect = GV%H_subroundoff
   a_cpl_max = 1.0e37 * US%m_to_Z * US%T_to_s
   I_Hbbl(:) = 1.0 / (CS%Hbbl + h_neglect)
+  if (CS%use_GL90_in_SSW) then
+    I_Hbbl_gl90 = 1.0 / (CS%Hbbl_gl90 + h_neglect)
+  endif
   I_valBL = 0.0 ; if (CS%harm_BL_val > 0.0) I_valBL = 1.0 / CS%harm_BL_val
 
   if (CS%id_Kv_u > 0) allocate(Kv_u(G%IsdB:G%IedB,G%jsd:G%jed,GV%ke), source=0.0)
@@ -864,6 +1008,23 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, US, CS, OBC)
 
     call find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i, h_ml, &
                             dt, j, G, GV, US, CS, visc, forces, work_on_u=.true., OBC=OBC)
+    a_cpl_gl90(:,:) = 0.0
+    if (CS%use_GL90_in_SSW) then
+    !  The following block calculates the normalized height above the GL90
+    !  BBL (z_i_gl90), using a harmonic mean between layer thicknesses. For the
+    !  GL90 BBL we use simply a constant (Hbbl_gl90). The purpose is that the GL90
+    !  coupling coefficient is zeroed out within Hbbl_gl90, to ensure that
+    !  no momentum gets fluxed into vanished layers. The scheme is not
+    !  sensitive to the exact value of Hbbl_gl90, as long as it is in a
+    !  reasonable range (~1-20 m): large enough to capture vanished layers
+    !  over topography, small enough to not contaminate the interior.
+      do I=Isq,Ieq ; z_i_gl90(I,nz+1) = 0.0 ; enddo
+      do k=nz,1,-1 ; do I=Isq,Ieq ; if (do_i(I)) then
+        z_i_gl90(I,k) =  z_i_gl90(I,k+1) + h_harm(I,k)*I_Hbbl_gl90(I)
+      endif ; enddo ; enddo ! i & k loops
+      call find_coupling_coef_gl90(a_cpl_gl90, hvel, do_i, z_i_gl90, j, G, GV, CS, VarMix, work_on_u=.true.)
+    endif
+
     if (allocated(hML_u)) then
       do i=isq,ieq ; if (do_i(i)) then ; hML_u(I,j) = h_ml(I) ; endif ; enddo
     endif
@@ -913,13 +1074,14 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, US, CS, OBC)
 
     if (do_any_shelf) then
       do K=1,nz+1 ; do I=Isq,Ieq ; if (do_i_shelf(I)) then
-        CS%a_u(I,j,K) = min(a_cpl_max, forces%frac_shelf_u(I,j)  * a_shelf(I,K) + &
-                                       (1.0-forces%frac_shelf_u(I,j)) * a_cpl(I,K))
+        CS%a_u(I,j,K) = min(a_cpl_max, (forces%frac_shelf_u(I,j)  * a_shelf(I,K) + &
+                                       (1.0-forces%frac_shelf_u(I,j)) * a_cpl(I,K)) + a_cpl_gl90(I,K))
 ! This is Alistair's suggestion, but it destabilizes the model. I do not know why. RWH
 !        CS%a_u(I,j,K) = min(a_cpl_max, forces%frac_shelf_u(I,j)  * max(a_shelf(I,K), a_cpl(I,K)) + &
 !                                       (1.0-forces%frac_shelf_u(I,j)) * a_cpl(I,K))
       elseif (do_i(I)) then
-        CS%a_u(I,j,K) = min(a_cpl_max, a_cpl(I,K))
+        CS%a_u(I,j,K) = min(a_cpl_max, a_cpl(I,K) + a_cpl_gl90(I,K))
+        CS%a_u_gl90(I,j,K) = min(a_cpl_max, a_cpl_gl90(I,K))
       endif ; enddo ; enddo
       do k=1,nz ; do I=Isq,Ieq ; if (do_i_shelf(I)) then
         ! Should we instead take the inverse of the average of the inverses?
@@ -929,7 +1091,12 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, US, CS, OBC)
         CS%h_u(I,j,k) = hvel(I,k) + h_neglect
       endif ; enddo ; enddo
     else
-      do K=1,nz+1 ; do I=Isq,Ieq ; if (do_i(I)) CS%a_u(I,j,K) = min(a_cpl_max, a_cpl(I,K)) ; enddo ; enddo
+      do K=1,nz+1 ; do I=Isq,Ieq ; if (do_i(I)) then
+         CS%a_u(I,j,K) = min(a_cpl_max, a_cpl(I,K) + a_cpl_gl90(I,K))
+      endif; enddo ; enddo
+      do K=1,nz+1 ; do I=Isq,Ieq ; if (do_i(I)) then
+         CS%a_u_gl90(I,j,K) = min(a_cpl_max, a_cpl_gl90(I,K))
+      endif; enddo ; enddo
       do k=1,nz ; do I=Isq,Ieq ; if (do_i(I)) CS%h_u(I,j,k) = hvel(I,k) + h_neglect ; enddo ; enddo
     endif
 
@@ -1031,6 +1198,25 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, US, CS, OBC)
 
     call find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i, h_ml, &
                             dt, j, G, GV, US, CS, visc, forces, work_on_u=.false., OBC=OBC)
+    a_cpl_gl90(:,:) = 0.0
+    if (CS%use_GL90_in_SSW) then
+    !  The following block calculates the normalized height above the GL90
+    !  BBL (z_i_gl90), using a harmonic mean between layer thicknesses. For the
+    !  GL90 BBL we use simply a constant (Hbbl_gl90). The purpose is that the GL90
+    !  coupling coefficient is zeroed out within Hbbl_gl90, to ensure that
+    !  no momentum gets fluxed into vanished layers. The scheme is not
+    !  sensitive to the exact value of Hbbl_gl90, as long as it is in a
+    !  reasonable range (~1-20 m): large enough to capture vanished layers
+    !  over topography, small enough to not contaminate the interior.
+      do i=is,ie ; z_i_gl90(i,nz+1) = 0.0 ; enddo
+
+      do k=nz,1,-1 ; do i=is,ie ; if (do_i(i)) then
+        z_i_gl90(i,k) = z_i_gl90(i,k+1)  + h_harm(i,k)*I_Hbbl_gl90(i)
+      endif ; enddo ; enddo ! i & k loops
+
+      call find_coupling_coef_gl90(a_cpl_gl90, hvel, do_i, z_i_gl90, j, G, GV, CS, VarMix, work_on_u=.false.)
+    endif
+
     if ( allocated(hML_v)) then
       do i=is,ie ; if (do_i(i)) then ; hML_v(i,J) = h_ml(i) ; endif ; enddo
     endif
@@ -1079,13 +1265,14 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, US, CS, OBC)
 
     if (do_any_shelf) then
       do K=1,nz+1 ; do i=is,ie ; if (do_i_shelf(i)) then
-        CS%a_v(i,J,K) = min(a_cpl_max, forces%frac_shelf_v(i,J)  * a_shelf(i,k) + &
-                                       (1.0-forces%frac_shelf_v(i,J)) * a_cpl(i,K))
+        CS%a_v(i,J,K) = min(a_cpl_max, (forces%frac_shelf_v(i,J)  * a_shelf(i,k) + &
+                                       (1.0-forces%frac_shelf_v(i,J)) * a_cpl(i,K)) + a_cpl_gl90(i,K))
 ! This is Alistair's suggestion, but it destabilizes the model. I do not know why. RWH
 !        CS%a_v(i,J,K) = min(a_cpl_max, forces%frac_shelf_v(i,J)  * max(a_shelf(i,K), a_cpl(i,K)) + &
                     !                   (1.0-forces%frac_shelf_v(i,J)) * a_cpl(i,K))
       elseif (do_i(i)) then
-        CS%a_v(i,J,K) = min(a_cpl_max, a_cpl(i,K))
+        CS%a_v(i,J,K) = min(a_cpl_max, a_cpl(i,K) + a_cpl_gl90(i,K))
+        CS%a_v_gl90(i,J,K) = min(a_cpl_max, a_cpl_gl90(i,K))
       endif ; enddo ; enddo
       do k=1,nz ; do i=is,ie ; if (do_i_shelf(i)) then
         ! Should we instead take the inverse of the average of the inverses?
@@ -1095,7 +1282,12 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, US, CS, OBC)
         CS%h_v(i,J,k) = hvel(i,k) + h_neglect
       endif ; enddo ; enddo
     else
-      do K=1,nz+1 ; do i=is,ie ; if (do_i(i)) CS%a_v(i,J,K) = min(a_cpl_max, a_cpl(i,K)) ; enddo ; enddo
+      do K=1,nz+1 ; do i=is,ie ; if (do_i(i)) then
+        CS%a_v(i,J,K) = min(a_cpl_max, a_cpl(i,K) + a_cpl_gl90(i,K))
+      endif ; enddo ; enddo
+      do K=1,nz+1 ; do i=is,ie ; if (do_i(i)) then
+        CS%a_v_gl90(i,J,K) = min(a_cpl_max, a_cpl_gl90(i,K))
+        endif ; enddo ; enddo
       do k=1,nz ; do i=is,ie ; if (do_i(i)) CS%h_v(i,J,k) = hvel(i,k) + h_neglect ; enddo ; enddo
     endif
 
@@ -1798,6 +1990,7 @@ subroutine vertvisc_init(MIS, Time, G, GV, US, param_file, diag, ADp, dirs, &
                             !! use an arbitrary and hard-coded maximum viscous coupling coefficient
                             !! between layers.
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, nz
+  character(len=200) :: kappa_gl90_file, inputdir, kdgl90_varname
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
   character(len=40)  :: mdl = "MOM_vert_friction" ! This module's name.
@@ -1917,6 +2110,68 @@ subroutine vertvisc_init(MIS, Time, G, GV, US, param_file, diag, ADp, dirs, &
                  "The background kinematic viscosity in the interior. "//&
                  "The molecular value, ~1e-6 m2 s-1, may be used.", &
                  units="m2 s-1", fail_if_missing=.true., scale=US%m2_s_to_Z2_T)
+  call get_param(param_file, mdl, "USE_GL90_IN_SSW", CS%use_GL90_in_SSW, &
+                 "If true, use simpler method to calculate 1/N^2 in GL90 vertical "// &
+                 "viscosity coefficient. This method is valid in stacked shallow water mode.", &
+                 default=.false.)
+  call get_param(param_file, mdl, "KD_GL90", CS%kappa_gl90, &
+                 "The scalar diffusivity used in GL90 vertical viscosity "//&
+                 "scheme.", units="m2 s-1", default=0.0, &
+                 scale=US%m_to_Z**2*US%T_to_s, do_not_log=.not.CS%use_GL90_in_SSW)
+  call get_param(param_file, mdl, "READ_KD_GL90", CS%read_kappa_gl90, &
+                 "If true, read a file (given by KD_GL90_FILE) containing the "//&
+                 "spatially varying diffusivity KD_GL90 used in the GL90 scheme.", default=.false., &
+                 do_not_log=.not.CS%use_GL90_in_SSW)
+  if (CS%read_kappa_gl90) then
+    if (CS%kappa_gl90 > 0) then
+        call MOM_error(FATAL, "MOM_vert_friction.F90, vertvisc_init: KD_GL90 > 0 "// &
+              "is not compatible with READ_KD_GL90 = .TRUE. ")
+    endif
+    call get_param(param_file, mdl, "INPUTDIR", inputdir, &
+                 "The directory in which all input files are found.", &
+                 default=".", do_not_log=.true.)
+    inputdir = slasher(inputdir)
+    call get_param(param_file, mdl, "KD_GL90_FILE", kappa_gl90_file, &
+                 "The file containing the spatially varying diffusivity used in the "// &
+                 "GL90 scheme.", default="kd_gl90.nc", do_not_log=.not.CS%use_GL90_in_SSW)
+    call get_param(param_file, mdl, "KD_GL90_VARIABLE", kdgl90_varname, &
+                 "The name of the GL90 diffusivity variable to read "//&
+                 "from KD_GL90_FILE.", default="kd_gl90", do_not_log=.not.CS%use_GL90_in_SSW)
+    kappa_gl90_file = trim(inputdir) // trim(kappa_gl90_file)
+
+    allocate(CS%kappa_gl90_2d(G%isd:G%ied, G%jsd:G%jed), source=0.0)
+    call MOM_read_data(kappa_gl90_file, kdgl90_varname, CS%kappa_gl90_2d(:,:), G%domain, scale=US%m_to_L**2*US%T_to_s)
+    call pass_var(CS%kappa_gl90_2d, G%domain)
+  endif
+  call get_param(param_file, mdl, "USE_GL90_N2", CS%use_GL90_N2, &
+                 "If true, use GL90 vertical viscosity coefficient that is depth-independent; "// &
+                 "this corresponds to a kappa_GM that scales as N^2 with depth.", &
+                 default=.false., do_not_log=.not.CS%use_GL90_in_SSW)
+  if (CS%use_GL90_N2) then
+    if (.not. CS%use_GL90_in_SSW) call MOM_error(FATAL, &
+           "MOM_vert_friction.F90, vertvisc_init: "//&
+           "When USE_GL90_N2=True, USE_GL90_in_SSW must also be True.")
+    if (CS%kappa_gl90 > 0) then
+        call MOM_error(FATAL, "MOM_vert_friction.F90, vertvisc_init: KD_GL90 > 0 "// &
+              "is not compatible with USE_GL90_N2 = .TRUE. ")
+    endif
+    if (CS%read_kappa_gl90) call MOM_error(FATAL, &
+           "MOM_vert_friction.F90, vertvisc_init: "//&
+           "READ_KD_GL90 = .TRUE. is not compatible with USE_GL90_N2 = .TRUE.")
+    call get_param(param_file, mdl, "alpha_GL90", CS%alpha_gl90, &
+                   "Coefficient used to compute a depth-independent GL90 vertical "//&
+                   "viscosity via Kv_GL90 = alpha_GL90 * f2. Is only used "// &
+                   "if USE_GL90_N2 is true. Note that the implied Kv_GL90 "// &
+                   "corresponds to a KD_GL90 that scales as N^2 with depth.", &
+                   units="m2 s", default=0.0, scale=US%m_to_Z**2*US%s_to_T, &
+                   do_not_log=.not.CS%use_GL90_in_SSW)
+  endif
+  call get_param(param_file, mdl, "HBBL_GL90", CS%Hbbl_gl90, &
+                 "The thickness of the GL90 bottom boundary layer, "//&
+                 "which defines the range over which the GL90 coupling "//&
+                 "coefficient is zeroed out, in order to avoid fluxing "//&
+                 "momentum into vanished layers over steep topography.", &
+                 units="m", default=5.0, scale=GV%m_to_H, do_not_log=.not.CS%use_GL90_in_SSW)
 
   CS%Kvml_invZ2 = 0.0
   if (GV%nkml < 1) then
@@ -2021,8 +2276,10 @@ subroutine vertvisc_init(MIS, Time, G, GV, US, param_file, diag, ADp, dirs, &
                  "the age of the universe.", units="m s-1", default=0.0, scale=US%m_s_to_L_T)
 
   ALLOC_(CS%a_u(IsdB:IedB,jsd:jed,nz+1)) ; CS%a_u(:,:,:) = 0.0
+  ALLOC_(CS%a_u_gl90(IsdB:IedB,jsd:jed,nz+1)) ; CS%a_u_gl90(:,:,:) = 0.0
   ALLOC_(CS%h_u(IsdB:IedB,jsd:jed,nz))   ; CS%h_u(:,:,:) = 0.0
   ALLOC_(CS%a_v(isd:ied,JsdB:JedB,nz+1)) ; CS%a_v(:,:,:) = 0.0
+  ALLOC_(CS%a_v_gl90(isd:ied,JsdB:JedB,nz+1)) ; CS%a_v_gl90(:,:,:) = 0.0
   ALLOC_(CS%h_v(isd:ied,JsdB:JedB,nz))   ; CS%h_v(:,:,:) = 0.0
 
   CS%id_Kv_slow = register_diag_field('ocean_model', 'Kv_slow', diag%axesTi, Time, &
@@ -2218,6 +2475,7 @@ subroutine vertvisc_end(CS)
   DEALLOC_(CS%a_v) ; DEALLOC_(CS%h_v)
   if (associated(CS%a1_shelf_u)) deallocate(CS%a1_shelf_u)
   if (associated(CS%a1_shelf_v)) deallocate(CS%a1_shelf_v)
+  if (allocated(CS%kappa_gl90_2d)) deallocate(CS%kappa_gl90_2d)
 end subroutine vertvisc_end
 
 !> \namespace mom_vert_friction
