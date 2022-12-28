@@ -52,11 +52,10 @@ subroutine dumbbell_initialize_topography( D, G, param_file, max_depth )
   logical :: dbrotate ! If true, rotate this configuration
   integer :: i, j
 
-  call get_param(param_file, mdl, "DUMBBELL_LEN",dblen, &
+  call get_param(param_file, mdl, "DUMBBELL_LEN", dblen, &
                 'Lateral Length scale for dumbbell.', &
-                 units='km', default=600., do_not_log=.false.)
-               ! units=G%x_ax_unit_short, default=600., do_not_log=.false.)
-  call get_param(param_file, mdl, "DUMBBELL_FRACTION",dbfrac, &
+                 units=G%x_ax_unit_short, default=600., do_not_log=.false.)
+  call get_param(param_file, mdl, "DUMBBELL_FRACTION", dbfrac, &
                 'Meridional fraction for narrow part of dumbbell.', &
                  units='nondim', default=0.5, do_not_log=.false.)
   call get_param(param_file, mdl, "DUMBBELL_ROTATION", dbrotate, &
@@ -275,8 +274,6 @@ subroutine dumbbell_initialize_temperature_salinity ( T, S, h, G, GV, US, param_
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
-  T_surf = 20.0*US%degC_to_C
-
   ! layer mode
   call get_param(param_file, mdl, "USE_REGRIDDING", use_ALE, default=.false., do_not_log=.true.)
   if (.not. use_ALE) call MOM_error(FATAL,  "dumbbell_initialize_temperature_salinity: "//&
@@ -287,6 +284,9 @@ subroutine dumbbell_initialize_temperature_salinity ( T, S, h, G, GV, US, param_
   call get_param(param_file, mdl, "INITIAL_DENSITY_PROFILE", density_profile, &
                  'Initial profile shape. Valid values are "linear", "parabolic" '// &
                  'and "exponential".', default='linear', do_not_log=just_read)
+  call get_param(param_file, mdl, "DUMBBELL_T_SURF", T_surf, &
+                 'Initial surface temperature in the DUMBBELL configuration', &
+                 units='degC', default=20., scale=US%degC_to_C, do_not_log=just_read)
   call get_param(param_file, mdl, "DUMBBELL_SREF", S_surf, &
                  'DUMBBELL REFERENCE SALINITY', &
                  units='1e-3', default=34., scale=US%ppt_to_S, do_not_log=just_read)
@@ -294,9 +294,8 @@ subroutine dumbbell_initialize_temperature_salinity ( T, S, h, G, GV, US, param_
                  'DUMBBELL salinity range (right-left)', &
                  units='1e-3', default=2., scale=US%ppt_to_S, do_not_log=just_read)
   call get_param(param_file, mdl, "DUMBBELL_LEN", dblen, &
-                'Lateral Length scale for dumbbell ', &
-                 units='km', default=600., do_not_log=just_read)
-               ! units=G%x_ax_unit_short, default=600., do_not_log=.false.)
+                 'Lateral Length scale for dumbbell ', &
+                 units=G%x_ax_unit_short, default=600., do_not_log=just_read)
   call get_param(param_file, mdl, "DUMBBELL_ROTATION", dbrotate, &
                 'Logical for rotation of dumbbell domain.', &
                  default=.false., do_not_log=just_read)
@@ -376,8 +375,8 @@ subroutine dumbbell_initialize_sponges(G, GV, US, tv, h_in, depth_tot, param_fil
   nz = GV%ke
 
   call get_param(param_file, mdl, "DUMBBELL_SPONGE_TIME_SCALE", sponge_time_scale, &
-       "The time scale in the reservoir for restoring. If zero, the sponge is disabled.", &
-       units="s", default=0., scale=US%s_to_T)
+                 "The time scale in the reservoir for restoring. If zero, the sponge is disabled.", &
+                 units="s", default=0., scale=US%s_to_T)
   call get_param(param_file, mdl, "DUMBBELL_SREF", S_ref, &
                  'DUMBBELL REFERENCE SALINITY', &
                  units='1e-3', default=34., scale=US%ppt_to_S, do_not_log=.true.)
