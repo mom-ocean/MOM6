@@ -54,6 +54,10 @@ type, public :: Kappa_shear_CS ; private
                              !! equation, 0 to eliminate the shear scale [nondim].
   real    :: TKE_bg          !<   The background level of TKE [Z2 T-2 ~> m2 s-2].
   real    :: kappa_0         !<   The background diapycnal diffusivity [Z2 T-1 ~> m2 s-1].
+  real    :: kappa_seed      !<   A moderately large seed value of diapycnal diffusivity that
+                             !! is used as a starting turbulent diffusivity in the iterations
+                             !! to findind an energetically constrained solution for the
+                             !! shear-driven diffusivity [Z2 T-1 ~> m2 s-1].
   real    :: kappa_trunc     !< Diffusivities smaller than this are rounded to 0 [Z2 T-1 ~> m2 s-1].
   real    :: kappa_tol_err   !<   The fractional error in kappa that is tolerated [nondim].
   real    :: Prandtl_turb    !< Prandtl number used to convert Kd_shear into viscosity [nondim].
@@ -270,7 +274,7 @@ subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
 
     ! Set the initial guess for kappa, here defined at interfaces.
     ! ----------------------------------------------------
-      do K=1,nzc+1 ; kappa(K) = 1.0*US%m2_s_to_Z2_T ; enddo
+      do K=1,nzc+1 ; kappa(K) = CS%kappa_seed ; enddo
 
       call kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
                               dz, u0xdz, v0xdz, T0xdz, S0xdz, kappa_avg, &
@@ -537,7 +541,7 @@ subroutine Calc_kappa_shear_vertex(u_in, v_in, h, T_in, S_in, tv, p_surf, kappa_
     ! ----------------------------------------------------
     ! Set the initial guess for kappa, here defined at interfaces.
     ! ----------------------------------------------------
-      do K=1,nzc+1 ; kappa(K) = 1.0*US%m2_s_to_Z2_T ; enddo
+      do K=1,nzc+1 ; kappa(K) = CS%kappa_seed ; enddo
 
       call kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
                               dz, u0xdz, v0xdz, T0xdz, S0xdz, kappa_avg, &
@@ -1787,6 +1791,11 @@ function kappa_shear_init(Time, G, GV, US, param_file, diag, CS)
                  "diffusivities.  The default is the greater of KD and 1e-7 m2 s-1.", &
                  units="m2 s-1", default=kappa_0_default*US%Z2_T_to_m2_s, scale=US%m2_s_to_Z2_T, &
                  do_not_log=just_read)
+  call get_param(param_file, mdl, "KD_SEED_KAPPA_SHEAR", CS%kappa_seed, &
+                 "A moderately large seed value of diapycnal diffusivity that is used as a "//&
+                 "starting turbulent diffusivity in the iterations to find an energetically "//&
+                 "constrained solution for the shear-driven diffusivity.", &
+                 units="m2 s-1", default=1.0, scale=US%m2_s_to_Z2_T)
   call get_param(param_file, mdl, "KD_TRUNC_KAPPA_SHEAR", CS%kappa_trunc, &
                  "The value of shear-driven diffusivity that is considered negligible "//&
                  "and is rounded down to 0. The default is 1% of KD_KAPPA_SHEAR_0.", &
