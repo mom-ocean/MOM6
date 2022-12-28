@@ -67,6 +67,8 @@ type, public :: VarMix_CS
                                   !! This parameter is set depending on other parameters.
   real :: cropping_distance       !< Distance from surface or bottom to filter out outcropped or
                                   !! incropped interfaces for the Eady growth rate calc [Z ~> m]
+  real :: h_min_N2                !< The minimum vertical distance to use in the denominator of the
+                                  !! bouyancy frequency used in the slope calculation [Z ~> m]
 
   real, allocatable :: SN_u(:,:)      !< S*N at u-points [T-1 ~> s-1]
   real, allocatable :: SN_v(:,:)      !< S*N at v-points [T-1 ~> s-1]
@@ -474,22 +476,19 @@ subroutine calc_slope_functions(h, tv, dt, G, GV, US, CS, OBC)
          "Module must be initialized before it is used.")
 
   if (CS%calculate_Eady_growth_rate) then
+    call find_eta(h, tv, G, GV, US, e, halo_size=2)
     if (CS%use_simpler_Eady_growth_rate) then
-      call find_eta(h, tv, G, GV, US, e, halo_size=2)
       call calc_isoneutral_slopes(G, GV, US, h, e, tv, dt*CS%kappa_smooth, CS%use_stanley_iso, &
                                   CS%slope_x, CS%slope_y, N2_u=N2_u, N2_v=N2_v, dzu=dzu, dzv=dzv, &
                                   dzSxN=dzSxN, dzSyN=dzSyN, halo=1, OBC=OBC)
       call calc_Eady_growth_rate_2D(CS, G, GV, US, h, e, dzu, dzv, dzSxN, dzSyN, CS%SN_u, CS%SN_v)
+    elseif (CS%use_stored_slopes) then
+      call calc_isoneutral_slopes(G, GV, US, h, e, tv, dt*CS%kappa_smooth, CS%use_stanley_iso, &
+                                  CS%slope_x, CS%slope_y, N2_u=N2_u, N2_v=N2_v, halo=1, OBC=OBC)
+      call calc_Visbeck_coeffs_old(h, CS%slope_x, CS%slope_y, N2_u, N2_v, G, GV, US, CS)
     else
-      call find_eta(h, tv, G, GV, US, e, halo_size=2)
-      if (CS%use_stored_slopes) then
-        call calc_isoneutral_slopes(G, GV, US, h, e, tv, dt*CS%kappa_smooth, CS%use_stanley_iso, &
-                                    CS%slope_x, CS%slope_y, N2_u=N2_u, N2_v=N2_v, halo=1, OBC=OBC)
-        call calc_Visbeck_coeffs_old(h, CS%slope_x, CS%slope_y, N2_u, N2_v, G, GV, US, CS)
-      else
-        !call calc_isoneutral_slopes(G, GV, h, e, tv, dt*CS%kappa_smooth, CS%slope_x, CS%slope_y)
-        call calc_slope_functions_using_just_e(h, G, GV, US, CS, e, .true.)
-      endif
+      !call calc_isoneutral_slopes(G, GV, h, e, tv, dt*CS%kappa_smooth, CS%slope_x, CS%slope_y)
+      call calc_slope_functions_using_just_e(h, G, GV, US, CS, e, .true.)
     endif
   endif
 
@@ -826,7 +825,6 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, US, CS, e, calculate_slop
   real :: N2            ! Brunt-Vaisala frequency squared [T-2 ~> s-2]
   real :: Hup, Hdn      ! Thickness from above, below [H ~> m or kg m-2]
   real :: H_geom        ! The geometric mean of Hup*Hdn [H ~> m or kg m-2].
-  real :: one_meter     ! One meter in thickness units [H ~> m or kg m-2].
   real :: S2N2_u_local(SZIB_(G),SZJ_(G),SZK_(GV)) ! The depth integral of the slope times
                         ! the buoyancy frequency squared at u-points [Z T-2 ~> m s-2]
   real :: S2N2_v_local(SZI_(G),SZJB_(G),SZK_(GV)) ! The depth integral of the slope times
@@ -846,7 +844,6 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, US, CS, e, calculate_slop
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
-  one_meter = 1.0 * GV%m_to_H
   h_neglect = GV%H_subroundoff
   H_cutoff = real(2*nz) * (GV%Angstrom_H + h_neglect)
 
@@ -887,7 +884,7 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, US, CS, e, calculate_slop
       Hdn = 2.*h(i,j,k)*h(i,j,k-1) / (h(i,j,k) + h(i,j,k-1) + h_neglect)
       Hup = 2.*h(i+1,j,k)*h(i+1,j,k-1) / (h(i+1,j,k) + h(i+1,j,k-1) + h_neglect)
       H_geom = sqrt(Hdn*Hup)
-      N2 = GV%g_prime(k)*US%L_to_Z**2 / (GV%H_to_Z * max(Hdn,Hup,one_meter))
+      N2 = GV%g_prime(k)*US%L_to_Z**2 / (GV%H_to_Z * max(Hdn, Hup, CS%h_min_N2))
       if (min(h(i,j,k-1), h(i+1,j,k-1), h(i,j,k), h(i+1,j,k)) < H_cutoff) &
         S2 = 0.0
       S2N2_u_local(I,j,k) = (H_geom * GV%H_to_Z) * S2 * N2
@@ -898,7 +895,7 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, US, CS, e, calculate_slop
       Hdn = 2.*h(i,j,k)*h(i,j,k-1) / (h(i,j,k) + h(i,j,k-1) + h_neglect)
       Hup = 2.*h(i,j+1,k)*h(i,j+1,k-1) / (h(i,j+1,k) + h(i,j+1,k-1) + h_neglect)
       H_geom = sqrt(Hdn*Hup)
-      N2 = GV%g_prime(k)*US%L_to_Z**2 / (GV%H_to_Z * max(Hdn,Hup,one_meter))
+      N2 = GV%g_prime(k)*US%L_to_Z**2 / (GV%H_to_Z * max(Hdn, Hup, CS%h_min_N2))
       if (min(h(i,j,k-1), h(i,j+1,k-1), h(i,j,k), h(i,j+1,k)) < H_cutoff) &
         S2 = 0.0
       S2N2_v_local(i,J,k) = (H_geom * GV%H_to_Z) * S2 * N2
@@ -1284,6 +1281,10 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
                      "The layer number at which to start vertical integration "//&
                      "of S*N for purposes of finding the Eady growth rate.", &
                      units="nondim", default=2)
+      call get_param(param_file, mdl, "MIN_DZ_FOR_SLOPE_N2", CS%h_min_N2, &
+                     "The minimum vertical distance to use in the denominator of the "//&
+                     "bouyancy frequency used in the slope calculation.", &
+                     units="m", default=1.0, scale=GV%m_to_H, do_not_log=CS%use_stored_slopes)
     endif
   endif
 
