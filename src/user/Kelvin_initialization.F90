@@ -16,7 +16,7 @@ use MOM_open_boundary,  only : OBC_segment_type, register_OBC
 use MOM_open_boundary,  only : OBC_DIRECTION_N, OBC_DIRECTION_E
 use MOM_open_boundary,  only : OBC_DIRECTION_S, OBC_DIRECTION_W
 use MOM_open_boundary,  only : OBC_registry_type
-use MOM_unit_scaling, only : unit_scale_type
+use MOM_unit_scaling,   only : unit_scale_type
 use MOM_verticalGrid,   only : verticalGrid_type
 use MOM_time_manager,   only : time_type, time_type_to_real
 
@@ -35,13 +35,16 @@ public register_Kelvin_OBC, Kelvin_OBC_end
 !> Control structure for Kelvin wave open boundaries.
 type, public :: Kelvin_OBC_CS ; private
   integer :: mode = 0          !< Vertical mode
-  real    :: coast_angle = 0   !< Angle of coastline [rad]
-  real    :: coast_offset1 = 0 !< Longshore distance to coastal angle [L ~> m]
-  real    :: coast_offset2 = 0 !< Longshore distance to coastal angle [L ~> m]
-  real    :: H0 = 0            !< Bottom depth [Z ~> m]
-  real    :: F_0               !< Coriolis parameter [T-1 ~> s-1]
-  real    :: rho_range         !< Density range [R ~> kg m-3]
-  real    :: rho_0             !< Mean density [R ~> kg m-3]
+  real :: coast_angle = 0   !< Angle of coastline [rad]
+  real :: coast_offset1 = 0 !< Longshore distance to coastal angle [L ~> m]
+  real :: coast_offset2 = 0 !< Offshore distance to coastal angle [L ~> m]
+  real :: H0 = 0            !< Bottom depth [Z ~> m]
+  real :: F_0               !< Coriolis parameter [T-1 ~> s-1]
+  real :: rho_range         !< Density range [R ~> kg m-3]
+  real :: rho_0             !< Mean density [R ~> kg m-3]
+  real :: wave_period       !< Period of the mode-0 waves [T ~> s]
+  real :: ssh_amp           !< Amplitude of the sea surface height forcing for mode-0 waves [Z ~> m]
+  real :: inflow_amp        !< Amplitude of the boundary velocity forcing for internal waves [L T-1 ~> m s-1]
 end type Kelvin_OBC_CS
 
 ! This include declares and sets the variable "version".
@@ -87,16 +90,28 @@ function register_Kelvin_OBC(param_file, CS, US, OBC_Reg)
                    units="km", default=10.0, scale=1.0e3*US%m_to_L)
     call get_param(param_file, mdl, "ROTATED_COAST_ANGLE", CS%coast_angle, &
                    "The angle of the southern bondary beyond X=ROTATED_COAST_OFFSET.", &
-                   units="degrees", default=11.3)
-    CS%coast_angle = CS%coast_angle * (atan(1.0)/45.) ! Convert to radians
+                   units="degrees", default=11.3, scale=atan(1.0)/45.) ! Convert to radians
+  else
+    CS%coast_offset1 = 0.0 ; CS%coast_offset2 = 0.0 ; CS%coast_angle = 0.0
   endif
-  if (CS%mode /= 0) then
+  if (CS%mode == 0) then
+    call get_param(param_file, mdl, "KELVIN_WAVE_PERIOD", CS%wave_period, &
+                   "The period of the Kelvin wave forcing at the open boundaries.  "//&
+                   "The default value is the M2 tide period.", &
+                   units="s", default=12.42*3600.0, scale=US%s_to_T)
+    call get_param(param_file, mdl, "KELVIN_WAVE_SSH_AMP", CS%ssh_amp, &
+                   "The amplitude of the Kelvin wave sea surface height anomaly forcing "//&
+                   "at the open boundaries.", units="m", default=1.0, scale=US%m_to_Z)
+  else
     call get_param(param_file, mdl, "DENSITY_RANGE", CS%rho_range, &
                    units="kg m-3", default=2.0, scale=US%kg_m3_to_R, do_not_log=.true.)
     call get_param(param_file, mdl, "RHO_0", CS%rho_0, &
                    units="kg m-3", default=1035.0, scale=US%kg_m3_to_R, do_not_log=.true.)
     call get_param(param_file, mdl, "MAXIMUM_DEPTH", CS%H0, &
                    units="m", default=1000.0, scale=US%m_to_Z, do_not_log=.true.)
+    call get_param(param_file, mdl, "KELVIN_WAVE_INFLOW_AMP", CS%inflow_amp, &
+                   "The amplitude of the Kelvin wave sea surface inflow velocity forcing "//&
+                   "at the open boundaries.", units="m s-1", default=1.0, scale=US%m_s_to_L_T)
   endif
 
   ! Register the Kelvin open boundary.
@@ -126,8 +141,10 @@ subroutine Kelvin_initialize_topography(D, G, param_file, max_depth, US)
 
   ! Local variables
   character(len=40)  :: mdl = "Kelvin_initialize_topography" ! This subroutine's name.
-  real :: min_depth ! The minimum and maximum depths [Z ~> m].
-  real :: coast_offset1, coast_offset2, coast_angle, right_angle
+  real :: min_depth     ! The minimum and maximum depths [Z ~> m].
+  real :: coast_angle   ! Angle of coastline [rad]
+  real :: coast_offset1 ! Longshore distance to coastal angle [L ~> m]
+  real :: coast_offset2 ! Offshore distance to coastal angle [L ~> m]
   integer :: i, j
 
   call MOM_mesg("  Kelvin_initialization.F90, Kelvin_initialize_topography: setting topography", 5)
@@ -139,22 +156,19 @@ subroutine Kelvin_initialize_topography(D, G, param_file, max_depth, US)
   call get_param(param_file, mdl, "ROTATED_COAST_OFFSET_2", coast_offset2, &
                  units="km", default=10.0, do_not_log=.true.)
   call get_param(param_file, mdl, "ROTATED_COAST_ANGLE", coast_angle, &
-                 units="degrees", default=11.3, do_not_log=.true.)
-
-  coast_angle = coast_angle * (atan(1.0)/45.) ! Convert to radians
-  right_angle = 2 * atan(1.0)
+                 units="degrees", default=11.3, scale=(atan(1.0)/45.), do_not_log=.true.) ! Convert to radians
 
   do j=G%jsc,G%jec ; do i=G%isc,G%iec
     D(i,j) = max_depth
     ! Southern side
     if ((G%geoLonT(i,j) - G%west_lon > coast_offset1) .AND. &
         (atan2(G%geoLatT(i,j) - G%south_lat + coast_offset2, &
-         G%geoLonT(i,j) - G%west_lon - coast_offset1) < coast_angle)) &
+               G%geoLonT(i,j) - G%west_lon - coast_offset1) < coast_angle)) &
       D(i,j) = 0.5*min_depth
     ! Northern side
     if ((G%geoLonT(i,j) - G%west_lon < G%len_lon - coast_offset1) .AND. &
         (atan2(G%len_lat + G%south_lat + coast_offset2 - G%geoLatT(i,j), &
-         G%len_lon + G%west_lon - coast_offset1 - G%geoLonT(i,j)) < coast_angle)) &
+               G%len_lon + G%west_lon - coast_offset1 - G%geoLonT(i,j)) < coast_angle)) &
       D(i,j) = 0.5*min_depth
 
     if (D(i,j) > max_depth) D(i,j) = max_depth
@@ -181,10 +195,8 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, GV, US, h, Time)
   real :: N0           ! Brunt-Vaisala frequency times a rescaling of slopes [L Z-1 T-1 ~> s-1]
   real :: lambda       ! Offshore decay scale [L-1 ~> m-1]
   real :: omega        ! Wave frequency [T-1 ~> s-1]
-  real :: PI
+  real :: PI           ! The ratio of the circumference of a circle to its diameter [nondim]
   real :: depth_tot(SZI_(G),SZJ_(G))  ! The total depth of the ocean [Z ~> m]
-  integer :: i, j, k, n, is, ie, js, je, isd, ied, jsd, jed, nz
-  integer :: IsdB, IedB, JsdB, JedB
   real    :: mag_SSH ! An overall magnitude of the external wave sea surface height at the coastline [Z ~> m]
   real    :: mag_int ! An overall magnitude of the internal wave at the coastline [L2 T-2 ~> m2 s-2]
   real    :: x1, y1  ! Various positions [L ~> m]
@@ -194,6 +206,8 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, GV, US, h, Time)
   real    :: km_to_L_scale  ! A scaling factor from longitudes in km to L [L km-1 ~> 1e3]
   real    :: sina, cosa  ! The sine and cosine of the coast angle [nondim]
   type(OBC_segment_type), pointer :: segment => NULL()
+  integer :: i, j, k, n, is, ie, js, je, isd, ied, jsd, jed, nz
+  integer :: IsdB, IedB, JsdB, JedB
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
@@ -214,11 +228,11 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, GV, US, h, Time)
   enddo ; enddo ; enddo
 
   if (CS%mode == 0) then
-    mag_SSH = 1.0*US%m_to_Z
-    omega = 2.0 * PI / (12.42 * 3600.0*US%s_to_T)      ! M2 Tide period
+    mag_SSH = CS%ssh_amp
+    omega = 2.0 * PI / CS%wave_period
     val1 = sin(omega * time_sec)
   else
-    mag_int = 1.0*US%m_s_to_L_T**2
+    mag_int = CS%inflow_amp**2
     N0 = sqrt((CS%rho_range / CS%rho_0) * (GV%g_Earth / CS%H0))
     lambda = PI * CS%mode * CS%F_0 / (CS%H0 * N0)
     ! Two wavelengths in domain
