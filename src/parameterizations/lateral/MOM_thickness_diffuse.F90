@@ -78,6 +78,9 @@ type, public :: thickness_diffuse_CS ; private
                                  !! original implementation, while higher values use expressions that
                                  !! satisfy rotational symmetry.
   logical :: Use_KH_in_MEKE      !< If true, uses the thickness diffusivity calculated here to diffuse MEKE.
+  real    :: MEKE_min_depth_diff !< The minimum total depth over which to average the diffusivity
+                                 !! used for MEKE [H ~> m or kg m-2].  When the total depth is less
+                                 !! than this, the diffusivity is scaled away.
   logical :: GM_src_alt          !< If true, use the GM energy conversion form S^2*N^2*kappa rather
                                  !! than the streamfunction for the GM source term.
   logical :: use_GM_work_bug     !< If true, use the incorrect sign for the
@@ -97,9 +100,9 @@ type, public :: thickness_diffuse_CS ; private
   real, allocatable :: Kh_eta_u(:,:)    !< Interface height diffusivities at u points [L2 T-1 ~> m2 s-1]
   real, allocatable :: Kh_eta_v(:,:)    !< Interface height diffusivities in v points [L2 T-1 ~> m2 s-1]
 
-  real, allocatable :: KH_u_GME(:,:,:)         !< Isopycnal height diffusivities in u-columns [L2 T-1 ~> m2 s-1]
-  real, allocatable :: KH_v_GME(:,:,:)         !< Isopycnal height diffusivities in v-columns [L2 T-1 ~> m2 s-1]
-  real, allocatable, dimension(:,:) :: khth2d  !< 2D isopycnal height diffusivity at h-points [L2 T-1 ~> m2 s-1]
+  real, allocatable :: KH_u_GME(:,:,:)  !< Isopycnal height diffusivities in u-columns [L2 T-1 ~> m2 s-1]
+  real, allocatable :: KH_v_GME(:,:,:)  !< Isopycnal height diffusivities in v-columns [L2 T-1 ~> m2 s-1]
+  real, allocatable :: khth2d(:,:)      !< 2D isopycnal height diffusivity at h-points [L2 T-1 ~> m2 s-1]
 
   !>@{
   !! Diagnostic identifier
@@ -537,7 +540,7 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
         enddo
 
         do j=js,je ; do i=is,ie
-          MEKE%Kh_diff(i,j) = MEKE%Kh_diff(i,j) / MAX(1.0*GV%m_to_H, htot(i,j))
+          MEKE%Kh_diff(i,j) = MEKE%Kh_diff(i,j) / MAX(CS%MEKE_min_depth_diff, htot(i,j))
         enddo ; enddo
       endif
 
@@ -2157,6 +2160,10 @@ subroutine thickness_diffuse_init(Time, G, GV, US, param_file, diag, CDp, CS)
   call get_param(param_file, mdl, "USE_KH_IN_MEKE", CS%Use_KH_in_MEKE, &
                  "If true, uses the thickness diffusivity calculated here to diffuse MEKE.", &
                  default=.false.)
+  call get_param(param_file, mdl, "MEKE_MIN_DEPTH_DIFF", CS%MEKE_min_depth_diff, &
+                 "The minimum total depth over which to average the diffusivity used for MEKE.  "//&
+                 "When the total depth is less than this, the diffusivity is scaled away.", &
+                 units="m", default=1.0, scale=GV%m_to_H, do_not_log=.not.CS%Use_KH_in_MEKE)
 
   call get_param(param_file, mdl, "USE_GME", CS%use_GME_thickness_diffuse, &
                  "If true, use the GM+E backscatter scheme in association "//&
