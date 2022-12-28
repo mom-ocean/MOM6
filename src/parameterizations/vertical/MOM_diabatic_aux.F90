@@ -694,12 +694,21 @@ subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, GV, US,
   integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state
   integer :: i, j, is, ie, js, je, k, nz, id_N2, id_SQ
 
-  id_N2 = -1 ; if (PRESENT(id_N2subML)) id_N2 = id_N2subML
-
   id_SQ = -1 ; if (PRESENT(id_MLDsq)) id_SQ = id_MLDsq
 
-  gE_rho0 = US%L_to_Z**2*GV%g_Earth / (GV%Rho0)
-  dH_subML = 50.*GV%m_to_H  ; if (present(dz_subML)) dH_subML = GV%Z_to_H*dz_subML
+  id_N2 = -1
+  if (present(id_N2subML)) then
+    if (present(dz_subML)) then
+      id_N2 = id_N2subML
+      dH_subML = GV%Z_to_H*dz_subML
+    else
+      call MOM_error(FATAL, "When the a diagnostic of the subML stratification is "//&
+                "requested by providing id_N2_subML to diagnoseMLDbyDensityDifference, "//&
+                "the distance over which to calculate that distance must also be provided.")
+    endif
+  endif
+
+  gE_rho0 = US%L_to_Z**2*GV%g_Earth / GV%Rho0
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
@@ -1146,7 +1155,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
   ! To accommodate vanishing upper layers, we need to allow for an instantaneous
   ! distribution of forcing over some finite vertical extent. The bulk mixed layer
   ! code handles this issue properly.
-  H_limit_fluxes = max(GV%Angstrom_H, 1.0e-30*GV%m_to_H)
+  H_limit_fluxes = max(GV%Angstrom_H, GV%H_subroundoff)
 
   ! diagnostic to see if need to create mass to avoid grounding
   if (CS%id_createdH>0) CS%createdH(:,:) = 0.
