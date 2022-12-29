@@ -113,6 +113,9 @@ type, public :: KPP_CS ; private
   logical :: LT_Vt2_Enhancement        !< Flags if enhancing Vt2 due to LT
   integer :: LT_VT2_METHOD             !< Integer for Vt2 LT method
   real    :: KPP_VT2_ENH_FAC           !< Factor to multiply by VT2 if Method is CONSTANT [nondim]
+  real    :: MLD_guess_min             !< The minimum estimate of the mixed layer depth used to
+                                       !! calculate the Langmuir number for Langmuir turbulence
+                                       !! enhancement with KPP [Z ~> m]
   logical :: STOKES_MIXING             !< Flag if model is mixing down Stokes gradient
                                        !! This is relevant for which current to use in RiB
 
@@ -460,6 +463,13 @@ logical function KPP_init(paramFile, G, GV, US, diag, Time, CS, passive)
     endif
   endif
 
+  if (CS%LT_K_ENHANCEMENT .or. CS%LT_VT2_ENHANCEMENT) then
+    call get_param(paramFile, mdl, "KPP_LT_MLD_GUESS_MIN", CS%MLD_guess_min,     &
+                   "The minimum estimate of the mixed layer depth used to calculate "//&
+                   "the Langmuir number for Langmuir turbulence enhancement with KPP.", &
+                   units="m", default=1.0, scale=US%m_to_Z)
+  endif
+
   call closeParameterBlock(paramFile)
 
   call get_param(paramFile, mdl, 'DEBUG', CS%debug, default=.False., do_not_log=.True.)
@@ -658,10 +668,7 @@ subroutine KPP_calculate(CS, G, GV, US, h, uStar, buoyFlux, Kt, Ks, Kv, &
   !$OMP                           Ks, Kv, nonLocalTransHeat, nonLocalTransScalar, Waves, lamult)
   ! loop over horizontal points on processor
   do j = G%jsc, G%jec
-    do i = G%isc, G%iec
-
-      ! skip calling KPP for land points
-      if (G%mask2dT(i,j)==0.) cycle
+    do i = G%isc, G%iec ; if (G%mask2dT(i,j) > 0.0) then
 
       ! things independent of position within the column
       surfFricVel = US%Z_to_m*US%s_to_T * uStar(i,j)
@@ -869,7 +876,7 @@ subroutine KPP_calculate(CS, G, GV, US, h, uStar, buoyFlux, Kt, Ks, Kv, &
 
 
     ! end of the horizontal do-loops over the vertical columns
-    enddo ! i
+    endif ; enddo ! i
   enddo ! j
 
   call cpu_clock_end(id_clock_KPP_calc)
@@ -1000,10 +1007,7 @@ subroutine KPP_compute_BLD(CS, G, GV, US, h, Temp, Salt, u, v, tv, uStar, buoyFl
   !$OMP                           shared(G, GV, CS, US, uStar, h, buoy_scale, buoyFlux,     &
   !$OMP                           Temp, Salt, waves, tv, GoRho, GoRho_Z_L2, u, v, lamult)
   do j = G%jsc, G%jec
-    do i = G%isc, G%iec
-
-      ! skip calling KPP for land points
-      if (G%mask2dT(i,j)==0.) cycle
+    do i = G%isc, G%iec ; if (G%mask2dT(i,j) > 0.0) then
 
       do k=1,GV%ke
         U_H(k) = 0.5 * (u(i,j,k)+u(i-1,j,k))
@@ -1120,10 +1124,10 @@ subroutine KPP_compute_BLD(CS, G, GV, US, h, Temp, Salt, u, v, tv, uStar, buoyFl
       enddo ! k-loop finishes
 
       if ( (CS%LT_K_ENHANCEMENT .or. CS%LT_VT2_ENHANCEMENT) .and. .not. present(lamult)) then
-        MLD_guess = max( 1.*US%m_to_Z, abs(CS%OBLdepthprev(i,j) ) )
+        MLD_guess = max( CS%MLD_guess_min, abs(CS%OBLdepthprev(i,j) ) )
         call get_Langmuir_Number(LA, G, GV, US, MLD_guess, uStar(i,j), i, j, &
                                  H=H(i,j,:), U_H=U_H, V_H=V_H, WAVES=WAVES)
-        CS%La_SL(i,j)=LA
+        CS%La_SL(i,j) = LA
       endif
 
 
@@ -1265,7 +1269,7 @@ subroutine KPP_compute_BLD(CS, G, GV, US, h, Temp, Salt, u, v, tv, uStar, buoyFl
       if (CS%id_Usurf  > 0)   CS%Usurf(i,j)    = surfU
       if (CS%id_Vsurf  > 0)   CS%Vsurf(i,j)    = surfV
 
-    enddo
+    endif ; enddo
   enddo
 
   call cpu_clock_end(id_clock_KPP_compute_BLD)
@@ -1326,10 +1330,7 @@ subroutine KPP_smooth_BLD(CS, G, GV, US, h)
     !$OMP parallel do default(none) shared(G, GV, US, CS, h, OBLdepth_prev) &
     !$OMP                           private(wc, ww, we, wn, ws, dh, hcorr, cellHeight, iFaceHeight)
     do j = G%jsc, G%jec
-      do i = G%isc, G%iec
-
-         ! skip land points
-        if (G%mask2dT(i,j)==0.) cycle
+      do i = G%isc, G%iec ; if (G%mask2dT(i,j) > 0.0) then
 
         iFaceHeight(1) = 0.0 ! BBL is all relative to the surface
         hcorr = 0.
@@ -1363,7 +1364,7 @@ subroutine KPP_smooth_BLD(CS, G, GV, US, h)
         ! prevent OBL depths deeper than the bathymetric depth
         CS%OBLdepth(i,j) = min( CS%OBLdepth(i,j), -iFaceHeight(GV%ke+1) ) ! no deeper than bottom
         CS%kOBL(i,j)     = CVMix_kpp_compute_kOBL_depth( iFaceHeight, cellHeight, CS%OBLdepth(i,j) )
-      enddo
+      endif ; enddo
     enddo
 
   enddo ! s-loop
