@@ -128,6 +128,11 @@ type, public :: wave_parameters_CS ; private
   real :: Stokes_min_thick_avg !< A layer thickness below which the cell-center Stokes drift is
                               !! used instead of the cell average [Z ~> m].  This is only used if
                               !! WAVE_INTERFACE_ANSWER_DATE < 20230101.
+  integer :: answer_date      !< The vintage of the order of arithmetic and expressions in the
+                              !! surface wave calculations.  Values below 20230101 recover the
+                              !! answers from the end of 2022, while higher values use updated
+                              !! and more robust forms of the same expressions.
+
   ! Options if WaveMethod is Surface Stokes Drift Bands (1)
   integer :: PartitionMode  !< Method for partition mode (meant to check input)
                             !! 0 - wavenumbers
@@ -156,6 +161,8 @@ type, public :: wave_parameters_CS ; private
   real :: g_Earth      !< The gravitational acceleration, equivalent to GV%g_Earth but with
                        !! different dimensional rescaling appropriate for deep-water gravity
                        !! waves [Z T-2 ~> m s-2]
+  real :: I_g_Earth    !< The inversse of the gravitational acceleration, with dimensional rescaling
+                       !! appropriate for deep-water gravity waves [T2 Z-1 ~> s2 m-1]
   ! Surface Wave Dependent 1d/2d/3d vars
   real, allocatable, dimension(:) :: &
     WaveNum_Cen        !< Wavenumber bands for read/coupled [Z-1 ~> m-1]
@@ -275,6 +282,7 @@ subroutine MOM_wave_interface_init(time, G, GV, US, param_file, CS, diag, restar
   character*(12), parameter :: DATAOVR_STRING   = "DATAOVERRIDE"
   character*(7), parameter  :: COUPLER_STRING   = "COUPLER"
   character*(5), parameter  :: INPUT_STRING     = "INPUT"
+  integer :: default_answer_date  ! The default setting for the various ANSWER_DATE flags
   logical :: use_waves
   logical :: StatisticalWaves
 
@@ -298,11 +306,22 @@ subroutine MOM_wave_interface_init(time, G, GV, US, param_file, CS, diag, restar
   CS%Time => Time
 
   CS%g_Earth = US%L_to_Z**2*GV%g_Earth
+  CS%I_g_Earth = 1.0 / CS%g_Earth
 
   ! Add any initializations needed here
   CS%DataOver_initialized = .false.
 
   call log_version(param_file, mdl, version)
+
+  call get_param(param_file, mdl, "DEFAULT_ANSWER_DATE", default_answer_date, &
+                 "This sets the default value for the various _ANSWER_DATE parameters.", &
+                 default=99991231)
+
+  call get_param(param_file, mdl, "WAVE_INTERFACE_ANSWER_DATE", CS%answer_date, &
+                 "The vintage of the order of arithmetic and expressions in the surface wave "//&
+                 "calculations.  Values below 20230101 recover the answers from the end of 2022, "//&
+                 "while higher values use updated and more robust forms of the same expressions.", &
+                 default=20221232) !### default=default_answer_date)
 
   ! Langmuir number Options
   call get_param(param_file, mdl, "LA_DEPTH_RATIO", CS%LA_FracHBL, &
@@ -1894,10 +1913,13 @@ subroutine ust_2_u10_coare3p5(USTair, U10, GV, US, CS)
   ! Local variables
   real :: z0sm, z0, z0rough  ! Roughness lengths [Z ~> m]
   real :: ten_m_scale ! The 10 m reference height, in rescaled units [Z ~> m]
+  real :: I_ten_m_scale ! The inverse of the 10 m reference height, in rescaled units [Z-1 ~> m-1]
   real :: u10a  ! The previous guess for u10 [L T-1 ~> m s-1]
   real :: alpha ! The Charnock coeffient relating the wind friction velocity squared to the
                 ! roughness length [nondim]
   real :: Cd2   ! The square of the drag coefficient [nondim]
+  real :: I_Cd  ! The inverse of the drag coefficient [nondim]
+  real :: I_vonKar  ! The inverse of the von Karman coefficient [nondim]
   integer :: CT
 
   ! Uses empirical formula for z0 to convert ustar_air to u10 based on the
@@ -1912,29 +1934,49 @@ subroutine ust_2_u10_coare3p5(USTair, U10, GV, US, CS)
   z0sm = 0.11 * CS%nu_air / USTair ! Compute z0smooth from ustar guess
   u10a = 1000.0*US%m_s_to_L_T ! An insanely large upper bound for u10.
 
-  u10 = US%Z_to_L*USTair / sqrt(0.001)  ! Guess for u10
-  !### For efficiency change the line above to USTair * sqrt(1000.0) or USTair * 31.6227766 .
+  if (CS%answer_date < 20230101) then
+    u10 = US%Z_to_L*USTair / sqrt(0.001)  ! Guess for u10
     ten_m_scale = 10.0*US%m_to_Z
-  CT=0
-  do while (abs(u10a/u10 - 1.) > 0.001)  !### Change this to (abs(u10a - u10) > 0.001*u10) for efficiency.
-    CT=CT+1
-    u10a = u10
-    alpha = min(CS%Charnock_min, CS%Charnock_slope_U10 * u10 + CS%Charnock_intercept)
-    z0rough = alpha * (US%Z_to_L*USTair)**2 / GV%g_Earth ! Compute z0rough from ustar guess
-    z0 = z0sm + z0rough
-    Cd2 = ( CS%vonKar / log(ten_m_scale / z0) )**2 ! Compute CD from derived roughness
-    u10 = US%Z_to_L*USTair/sqrt(Cd2)  ! Compute new u10 from derived CD, while loop
-                           ! ends and checks for convergence...CT counter
-                           ! makes sure loop doesn't run away if function
-                           ! doesn't converge.  This code was produced offline
-                           ! and converged rapidly (e.g. 2 cycles)
-                           ! for ustar=0.0001:0.0001:10.
-    if (CT>20) then
-      u10 = US%Z_to_L*USTair/sqrt(0.0015) ! I don't expect to get here, but just
-                              !  in case it will output a reasonable value.
-      exit
-    endif
-  enddo
+    CT=0
+    do while (abs(u10a/u10 - 1.) > 0.001)
+      CT=CT+1
+      u10a = u10
+      alpha = min(CS%Charnock_min, CS%Charnock_slope_U10 * u10 + CS%Charnock_intercept)
+      z0rough = alpha * (US%Z_to_L*USTair)**2 / GV%g_Earth ! Compute z0rough from ustar guess
+      z0 = z0sm + z0rough
+      Cd2 = ( CS%vonKar / log(ten_m_scale / z0) )**2 ! Compute CD from derived roughness
+      u10 = US%Z_to_L*USTair/sqrt(Cd2)  ! Compute new u10 from derived CD, while loop
+                             ! ends and checks for convergence...CT counter
+                             ! makes sure loop doesn't run away if function
+                             ! doesn't converge.  This code was produced offline
+                             ! and converged rapidly (e.g. 2 cycles)
+                             ! for ustar=0.0001:0.0001:10.
+      if (CT>20) then
+        u10 = US%Z_to_L*USTair/sqrt(0.0015) ! I don't expect to get here, but just
+                                !  in case it will output a reasonable value.
+        exit
+      endif
+    enddo
+
+  else ! Use more efficient expressions that are mathematically equivalent to those above.
+    u10 = US%Z_to_L*USTair * sqrt(1000.0)  ! Guess for u10.  Is 1000 here the ratio of the densities of water and air?
+    I_vonKar = 1.0 / CS%vonKar
+    I_ten_m_scale = 0.1*US%Z_to_m
+
+    do CT=1,20
+      if (abs(u10a - u10) <= 0.001*u10) exit   ! Check for convergence.
+      u10a = u10
+      alpha = min(CS%Charnock_min, CS%Charnock_slope_U10 * u10 + CS%Charnock_intercept)
+      z0rough = alpha * (CS%I_g_Earth * USTair**2) ! Compute z0rough from ustar guess
+      z0 = z0sm + z0rough
+      I_Cd = abs(log(z0 * I_ten_m_scale)) * I_vonKar ! Compute CD from derived roughness
+      u10 = US%Z_to_L*USTair * I_Cd  ! Compute new u10 from the derived CD.
+    enddo
+
+    ! Output a reasonable estimate of u10 if the iteration has not converged. The hard-coded
+    ! number 25.82 is 1/sqrt(0.0015) to 4 decimal places, but the exact value should not matter.
+    if (abs(u10a - u10) > 0.001*u10) u10 = US%Z_to_L*USTair * 25.82
+  endif
 
 end subroutine ust_2_u10_coare3p5
 
