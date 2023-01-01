@@ -125,6 +125,9 @@ type, public :: wave_parameters_CS ; private
                               !! 1 if average value of Stokes drift over level.
                               !! If advecting with Stokes transport, 1 is the correct
                               !! approach.
+  real :: Stokes_min_thick_avg !< A layer thickness below which the cell-center Stokes drift is
+                              !! used instead of the cell average [Z ~> m].  This is only used if
+                              !! WAVE_INTERFACE_ANSWER_DATE < 20230101.
   ! Options if WaveMethod is Surface Stokes Drift Bands (1)
   integer :: PartitionMode  !< Method for partition mode (meant to check input)
                             !! 0 - wavenumbers
@@ -137,6 +140,9 @@ type, public :: wave_parameters_CS ; private
 
   ! Options if using FMS DataOverride Routine
   character(len=40)  :: SurfBandFileName !< Filename if using DataOverride
+  real :: land_speed    !< A large Stokes velocity that can be used to indicate land values in
+                        !! a data override file [L T-1 ~> m s-1].  Stokes drift components larger
+                        !! than this are set to zero in data override calls for the Stokes drift.
   logical :: DataOver_initialized !< Flag for DataOverride Initialization
 
   ! Options for computing Langmuir number
@@ -177,11 +183,13 @@ type, public :: wave_parameters_CS ; private
                        !! Horizontal -> V points
                        !! 3rd dimension -> Freq/Wavenumber
 
-  real :: La_min = 0.05 !< An arbitrary lower-bound on the Langmuir number [nondim].
+  real :: La_min       !< An arbitrary lower-bound on the Langmuir number [nondim].
                        !! Langmuir number is sqrt(u_star/u_stokes).  When both are small
                        !! but u_star is orders of magnitude smaller, the Langmuir number could
                        !! have unintended consequences.  Since both are small it can be safely
                        !! capped to avoid such consequences.
+  real :: La_Stk_backgnd !< A small background Stokes velocity used in the denominator of
+                       !! some expressions for the Langmuir number [L T-1 ~> m s-1]
 
   ! Parameters used in estimating the wind speed or wave properties from the friction velocity
   real :: VonKar = -1.0 !< The von Karman coefficient as used in the MOM_wave_interface module [nondim]
@@ -390,6 +398,10 @@ subroutine MOM_wave_interface_init(time, G, GV, US, param_file, CS, diag, restar
          units='m', default=50.0, scale=US%m_to_Z)
   case (SURFBANDS_STRING)! Surface Stokes Drift Bands
     CS%WaveMethod = SURFBANDS
+    call get_param(param_file, mdl, "SURFBAND_MIN_THICK_AVG", CS%Stokes_min_thick_avg, &
+                 "A layer thickness below which the cell-center Stokes drift is used instead of "//&
+                 "the cell average.  This is only used if WAVE_INTERFACE_ANSWER_DATE < 20230101.", &
+                 units="m", default=0.1, scale=US%m_to_Z) !, do_not_log=(CS%answer_date>=20230101))
     call get_param(param_file, mdl, "SURFBAND_SOURCE", TMPSTRING2, &
                  "Choice of SURFACE_BANDS data mode, valid options include: \n"//&
                  " DATAOVERRIDE  - Read from NetCDF using FMS DataOverride. \n"//&
@@ -403,6 +415,11 @@ subroutine MOM_wave_interface_init(time, G, GV, US, param_file, CS, diag, restar
       CS%DataSource = DATAOVR
       call get_param(param_file, mdl, "SURFBAND_FILENAME", CS%SurfBandFileName, &
            "Filename of surface Stokes drift input band data.", default="StkSpec.nc")
+      call get_param(param_file, mdl, "SURFBAND_OVERRIDE_LAND_SPEED", CS%land_speed, &
+                 "A large Stokes velocity that can be used to indicate land values in "//&
+                 "a data override file.  Stokes drift components larger than this are "//&
+                 "set to zero in data override calls for the Stokes drift.", &
+                 units="m s-1", default=10.0, scale=US%m_s_to_L_T)
     case (COUPLER_STRING)! Reserved for coupling
       CS%DataSource = COUPLER
       ! This is just to make something work, but it needs to be read from the wavemodel.
@@ -480,6 +497,10 @@ subroutine MOM_wave_interface_init(time, G, GV, US, param_file, CS, diag, restar
          "but is likely only encountered when the wind is very small and "//&
          "therefore its effects should be mostly benign.", &
          units="nondim", default=0.05)
+  call get_param(param_file, mdl, "LANGMUIR_STOKES_BACKGROUND", CS%La_Stk_backgnd, &
+         "A small background Stokes velocity used in the denominator of some "//&
+         "expressions for the Langmuir number.", &
+         units="m s-1", default=1.0e-10, scale=US%m_s_to_L_T, do_not_log=(CS%WaveMethod==LF17))
 
   ! Allocate and initialize
   ! a. Stokes driftProfiles
@@ -688,7 +709,6 @@ subroutine Update_Stokes_Drift(G, GV, US, CS, h, ustar, dt, dynamics_step)
   ! Local Variables
   real    :: Top, MidPoint, Bottom ! Positions within the layer [Z ~> m]
   real    :: level_thick ! The thickness of each layer [Z ~> m]
-  real    :: min_level_thick_avg ! A minimum layer thickness for inclusion in the average [Z ~> m]
   real    :: DecayScale ! A vertical decay scale in the test profile [Z ~> m]
   real    :: CMN_FAC  ! A nondimensional factor [nondim]
   real    :: WN       ! Model wavenumber [Z-1 ~> m-1]
@@ -699,9 +719,6 @@ subroutine Update_Stokes_Drift(G, GV, US, CS, h, ustar, dt, dynamics_step)
   real    :: I_dt     ! The inverse of the time step [T-1 ~> s-1]
 
   if (CS%WaveMethod==EFACTOR) return
-
-  ! The following thickness cut-off would not be needed with the refactoring marked with '###' below.
-  min_level_thick_avg = 1.e-3*US%m_to_Z
 
   if (allocated(CS%US_x) .and. allocated(CS%US_y)) then
     call pass_vector(CS%US_x(:,:,:),CS%US_y(:,:,:), G%Domain)
@@ -764,7 +781,7 @@ subroutine Update_Stokes_Drift(G, GV, US, CS, h, ustar, dt, dynamics_step)
           MidPoint = Top - 0.5*level_thick
           Bottom = Top - level_thick
           ! -> Stokes drift in thin layers not averaged.
-          if (level_thick>min_level_thick_avg) then
+          if (level_thick > CS%Stokes_min_thick_avg) then
             do b = 1,CS%NumBands
               if (CS%PartitionMode == 0) then
                 ! In wavenumber we are averaging over level
@@ -816,7 +833,7 @@ subroutine Update_Stokes_Drift(G, GV, US, CS, h, ustar, dt, dynamics_step)
           MidPoint = Top - 0.5*level_thick
           Bottom = Top - level_thick
           ! -> Stokes drift in thin layers not averaged.
-          if (level_thick>min_level_thick_avg) then
+          if (level_thick > CS%Stokes_min_thick_avg) then
             do b = 1,CS%NumBands
               if (CS%PartitionMode == 0) then
               ! In wavenumber we are averaging over level
@@ -1060,7 +1077,7 @@ subroutine Surface_Bands_by_data_override(Time, G, GV, US, CS)
     ! Filter land values
     do j = G%jsd,G%jed
       do i = G%Isd,G%Ied
-        if ((abs(temp_x(i,j)) > 10.0*US%m_s_to_L_T) .or. (abs(temp_y(i,j)) > 10.0*US%m_s_to_L_T)) then
+        if ((abs(temp_x(i,j)) > CS%land_speed) .or. (abs(temp_y(i,j)) > CS%land_speed)) then
           ! Assume land-mask and zero out
           temp_x(i,j) = 0.0
           temp_y(i,j) = 0.0
@@ -1186,8 +1203,7 @@ subroutine get_Langmuir_Number( LA, G, GV, US, HBL, ustar, i, j, h, Waves, &
     ! This expression uses an arbitrary lower bound on Langmuir number.
     ! We shouldn't expect values lower than this, but there is also no good reason to cap it here
     ! other than to prevent large enhancements in unconstrained parts of the curve fit parameterizations.
-    ! Note the dimensional constant background Stokes velocity of 10^-10 m s-1.
-    LA = max(Waves%La_min, sqrt(US%Z_to_L*ustar / (LA_STK + 1.e-10*US%m_s_to_L_T)))
+    LA = max(Waves%La_min, sqrt(US%Z_to_L*ustar / (LA_STK + Waves%La_Stk_backgnd)))
   endif
 
   if (Use_MA) then
