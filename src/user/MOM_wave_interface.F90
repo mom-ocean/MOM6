@@ -420,7 +420,7 @@ subroutine MOM_wave_interface_init(time, G, GV, US, param_file, CS, diag, restar
     call get_param(param_file, mdl, "SURFBAND_MIN_THICK_AVG", CS%Stokes_min_thick_avg, &
                  "A layer thickness below which the cell-center Stokes drift is used instead of "//&
                  "the cell average.  This is only used if WAVE_INTERFACE_ANSWER_DATE < 20230101.", &
-                 units="m", default=0.1, scale=US%m_to_Z) !, do_not_log=(CS%answer_date>=20230101))
+                 units="m", default=0.1, scale=US%m_to_Z, do_not_log=(CS%answer_date>=20230101))
     call get_param(param_file, mdl, "SURFBAND_SOURCE", TMPSTRING2, &
                  "Choice of SURFACE_BANDS data mode, valid options include: \n"//&
                  " DATAOVERRIDE  - Read from NetCDF using FMS DataOverride. \n"//&
@@ -433,7 +433,7 @@ subroutine MOM_wave_interface_init(time, G, GV, US, param_file, CS, diag, restar
     case (DATAOVR_STRING)! Using Data Override
       CS%DataSource = DATAOVR
       call get_param(param_file, mdl, "SURFBAND_FILENAME", CS%SurfBandFileName, &
-           "Filename of surface Stokes drift input band data.", default="StkSpec.nc")
+                 "Filename of surface Stokes drift input band data.", default="StkSpec.nc")
       call get_param(param_file, mdl, "SURFBAND_OVERRIDE_LAND_SPEED", CS%land_speed, &
                  "A large Stokes velocity that can be used to indicate land values in "//&
                  "a data override file.  Stokes drift components larger than this are "//&
@@ -799,26 +799,38 @@ subroutine Update_Stokes_Drift(G, GV, US, CS, h, ustar, dt, dynamics_step)
           level_thick = 0.5*GV%H_to_Z*(h(II,jj,kk)+h(IIm1,jj,kk))
           MidPoint = Top - 0.5*level_thick
           Bottom = Top - level_thick
-          ! -> Stokes drift in thin layers not averaged.
-          if (level_thick > CS%Stokes_min_thick_avg) then
+
+          if (CS%answer_date >= 20230101) then
+            ! Use more accurate and numerically stable expressions that work even for vanished layers.
+            do b = 1,CS%NumBands
+              if (CS%PartitionMode == 0) then
+                ! Average over a layer using the bin's central wavenumber.
+                CMN_FAC = exp(2.*CS%WaveNum_Cen(b)*Top) * one_minus_exp_x(2.*CS%WaveNum_Cen(b)*level_thick)
+              elseif ((CS%PartitionMode == 1) .and. (CS%StkLevelMode==0)) then
+                ! Take the value at the midpoint
+                CMN_FAC = exp(MidPoint * 2. * (CS%Freq_Cen(b)**2 * CS%I_g_Earth))
+              elseif ((CS%PartitionMode == 1) .and. (CS%StkLevelMode==1)) then
+                ! Use an analytic expression for the average of an exponential over a layer
+                WN = CS%Freq_Cen(b)**2 * CS%I_g_Earth
+                CMN_FAC = exp(2.*WN*Top) * one_minus_exp_x(2.*WN*level_thick)
+              endif
+              CS%US_x(II,jj,kk) = CS%US_x(II,jj,kk) + CS%STKx0(II,jj,b)*CMN_FAC
+            enddo
+
+          elseif (level_thick > CS%Stokes_min_thick_avg) then
+            ! -> Stokes drift in thin layers not averaged.
             do b = 1,CS%NumBands
               if (CS%PartitionMode == 0) then
                 ! In wavenumber we are averaging over level
-                CMN_FAC = (exp(Top*2.*CS%WaveNum_Cen(b))-exp(Bottom*2.*CS%WaveNum_Cen(b)))&
+                CMN_FAC = (exp(Top*2.*CS%WaveNum_Cen(b))-exp(Bottom*2.*CS%WaveNum_Cen(b))) &
                           / ((Top-Bottom)*(2.*CS%WaveNum_Cen(b)))
-                !### For accuracy and numerical stability rewrite this as:
-                ! CMN_FAC = exp(2.*CS%WaveNum_Cen(b)*Top) * one_minus_exp_x(2.*CS%WaveNum_Cen(b)*level_thick)
-              elseif (CS%PartitionMode==1) then
-                if (CS%StkLevelMode==0) then
-                  ! Take the value at the midpoint
-                  CMN_FAC = exp(MidPoint * 2. * CS%Freq_Cen(b)**2 / CS%g_Earth)
-                elseif (CS%StkLevelMode==1) then
-                  ! Use a numerical integration and then divide by layer thickness
-                  WN = CS%Freq_Cen(b)**2 / CS%g_Earth !bgr bug-fix missing g
-                  CMN_FAC = (exp(2.*WN*Top)-exp(2.*WN*Bottom)) / (2.*WN*(Top-Bottom))
-                  !### For accuracy and numerical stability rewrite this as:
-                  ! CMN_FAC = exp(2.*WN*Top) * one_minus_exp_x(2.*WN*level_thick)
-                endif
+              elseif ((CS%PartitionMode == 1) .and. (CS%StkLevelMode == 0)) then
+                ! Take the value at the midpoint
+                CMN_FAC = exp(MidPoint * 2. * CS%Freq_Cen(b)**2 / CS%g_Earth)
+              elseif ((CS%PartitionMode == 1) .and. (CS%StkLevelMode==1)) then
+                ! Use a numerical integration and then divide by layer thickness
+                WN = CS%Freq_Cen(b)**2 / CS%g_Earth !bgr bug-fix missing g
+                CMN_FAC = (exp(2.*WN*Top)-exp(2.*WN*Bottom)) / (2.*WN*(Top-Bottom))
               endif
               CS%US_x(II,jj,kk) = CS%US_x(II,jj,kk) + CS%STKx0(II,jj,b)*CMN_FAC
             enddo
@@ -851,26 +863,37 @@ subroutine Update_Stokes_Drift(G, GV, US, CS, h, ustar, dt, dynamics_step)
           level_thick = 0.5*GV%H_to_Z*(h(ii,JJ,kk)+h(ii,JJm1,kk))
           MidPoint = Top - 0.5*level_thick
           Bottom = Top - level_thick
-          ! -> Stokes drift in thin layers not averaged.
-          if (level_thick > CS%Stokes_min_thick_avg) then
+
+          if (CS%answer_date >= 20230101) then
+            ! Use more accurate and numerically stable expressions that work even for vanished layers.
             do b = 1,CS%NumBands
               if (CS%PartitionMode == 0) then
-              ! In wavenumber we are averaging over level
-                CMN_FAC = (exp(Top*2.*CS%WaveNum_Cen(b))-exp(Bottom*2.*CS%WaveNum_Cen(b)))&
+                ! Average over a layer using the bin's central wavenumber.
+                CMN_FAC = exp(2.*CS%WaveNum_Cen(b)*Top) * one_minus_exp_x(2.*CS%WaveNum_Cen(b)*level_thick)
+              elseif ((CS%PartitionMode == 1) .and. (CS%StkLevelMode==0)) then
+                ! Take the value at the midpoint
+                CMN_FAC = exp(MidPoint * 2. * (CS%Freq_Cen(b)**2 * CS%I_g_Earth))
+              elseif ((CS%PartitionMode == 1) .and. (CS%StkLevelMode==1)) then
+                ! Use an analytic expression for the average of an exponential over a layer
+                WN = CS%Freq_Cen(b)**2 * CS%I_g_Earth
+                CMN_FAC = exp(2.*WN*Top) * one_minus_exp_x(2.*WN*level_thick)
+              endif
+              CS%US_y(ii,JJ,kk) = CS%US_y(ii,JJ,kk) + CS%STKy0(ii,JJ,b)*CMN_FAC
+            enddo
+          elseif (level_thick > CS%Stokes_min_thick_avg) then
+            ! -> Stokes drift in thin layers not averaged.
+            do b = 1,CS%NumBands
+              if (CS%PartitionMode == 0) then
+                ! In wavenumber we are averaging over level
+                CMN_FAC = (exp(Top*2.*CS%WaveNum_Cen(b))-exp(Bottom*2.*CS%WaveNum_Cen(b))) &
                           / ((Top-Bottom)*(2.*CS%WaveNum_Cen(b)))
-                !### For accuracy and numerical stability rewrite this as:
-                ! CMN_FAC = exp(2.*CS%WaveNum_Cen(b)*Top) * one_minus_exp_x(2.*CS%WaveNum_Cen(b)*level_thick)
-              elseif (CS%PartitionMode == 1) then
-                if (CS%StkLevelMode == 0) then
-                  ! Take the value at the midpoint
-                  CMN_FAC = exp(MidPoint * 2. * CS%Freq_Cen(b)**2 / CS%g_Earth)
-                elseif (CS%StkLevelMode == 1) then
-                  ! Use a numerical integration and then divide by layer thickness
-                  WN = CS%Freq_Cen(b)**2 / CS%g_Earth !bgr bug-fix missing g
-                  CMN_FAC = (exp(2.*WN*Top)-exp(2.*WN*Bottom)) / (2.*WN*(Top-Bottom))
-                  !### For accuracy and numerical stability rewrite this as:
-                  ! CMN_FAC = exp(2.*WN*Top) * one_minus_exp_x(2.*WN*level_thick)
-                endif
+              elseif ((CS%PartitionMode == 1) .and. (CS%StkLevelMode == 0)) then
+                ! Take the value at the midpoint
+                CMN_FAC = exp(MidPoint * 2. * CS%Freq_Cen(b)**2 / CS%g_Earth)
+              elseif ((CS%PartitionMode == 1) .and. (CS%StkLevelMode == 1)) then
+                ! Use a numerical integration and then divide by layer thickness
+                WN = CS%Freq_Cen(b)**2 / CS%g_Earth !bgr bug-fix missing g
+                CMN_FAC = (exp(2.*WN*Top)-exp(2.*WN*Bottom)) / (2.*WN*(Top-Bottom))
               endif
               CS%US_y(ii,JJ,kk) = CS%US_y(ii,JJ,kk) + CS%STKy0(ii,JJ,b)*CMN_FAC
             enddo
@@ -1369,9 +1392,6 @@ subroutine get_StokesSL_LiFoxKemper(ustar, hbl, GV, US, CS, UStokes_SL, LA)
       r3 = ( 0.1264 + 0.64*(kphil*z0) ) * one_minus_exp_x(5.12 * (kphil * z0))
 
       root_2kz = sqrt(2.0 * kphil * z0)
-      ! r2 = -( 0.84 + 0.0591 / (kphil * z0) ) * sqrt(PI) * root_2kz * erfc( root_2kz )
-      ! r4 = ( 0.2 + 0.059125 / (kphil * z0) ) * sqrt(PI) * root_2kz * erfc( 1.6 * root_2kz )
-
       ! r2 = -( 0.84 + 0.0591*2.0 / (root_2kz**2) ) * sqrt(PI) * root_2kz * erfc( root_2kz )
       ! r4 = ( 0.2 + 0.059125*2.0 / (root_2kz**2) ) * sqrt(PI) * root_2kz * erfc( 1.6 * root_2kz )
 
