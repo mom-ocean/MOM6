@@ -107,24 +107,24 @@ type, public :: wave_parameters_CS ; private
                               !!   2 - DHH85
                               !!   3 - LF17
                               !! -99 - No waves computed, but empirical Langmuir number used.
-  logical         :: LagrangianMixing !< This feature is in development and not ready
-                                      !! True if Stokes drift is present and mixing
-                                      !! should be applied to Lagrangian current
-                                      !! (mean current + Stokes drift).
-                                      !! See Reichl et al., 2016 KPP-LT approach
-  logical         :: StokesMixing     !< This feature is in development and not ready.
-                                      !! True if vertical mixing of momentum
-                                      !! should be applied directly to Stokes current
-                                      !! (with separate mixing parameter for Eulerian
-                                      !! mixing contribution).
-                                      !! See Harcourt 2013, 2015 Second-Moment approach
-  logical         :: CoriolisStokes   !< This feature is in development and not ready.
-                                      ! True if Coriolis-Stokes acceleration should be applied.
-  integer         :: StkLevelMode=1   !< Sets if Stokes drift is defined at mid-points
-                                      !! or layer averaged.  Set to 0 if mid-point and set to
-                                      !! 1 if average value of Stokes drift over level.
-                                      !! If advecting with Stokes transport, 1 is the correct
-                                      !! approach.
+  logical :: LagrangianMixing !< This feature is in development and not ready
+                              !! True if Stokes drift is present and mixing
+                              !! should be applied to Lagrangian current
+                              !! (mean current + Stokes drift).
+                              !! See Reichl et al., 2016 KPP-LT approach
+  logical :: StokesMixing     !< This feature is in development and not ready.
+                              !! True if vertical mixing of momentum
+                              !! should be applied directly to Stokes current
+                              !! (with separate mixing parameter for Eulerian
+                              !! mixing contribution).
+                              !! See Harcourt 2013, 2015 Second-Moment approach
+  logical :: CoriolisStokes   !< This feature is in development and not ready.
+                              ! True if Coriolis-Stokes acceleration should be applied.
+  integer :: StkLevelMode=1   !< Sets if Stokes drift is defined at mid-points
+                              !! or layer averaged.  Set to 0 if mid-point and set to
+                              !! 1 if average value of Stokes drift over level.
+                              !! If advecting with Stokes transport, 1 is the correct
+                              !! approach.
   ! Options if WaveMethod is Surface Stokes Drift Bands (1)
   integer :: PartitionMode  !< Method for partition mode (meant to check input)
                             !! 0 - wavenumbers
@@ -159,10 +159,7 @@ type, public :: wave_parameters_CS ; private
     PrescribedSurfStkX !< Surface Stokes drift if prescribed [L T-1 ~> m s-1]
   real, allocatable, dimension(:) :: &
     PrescribedSurfStkY !< Surface Stokes drift if prescribed [L T-1 ~> m s-1]
-  !### It appears that La_SL is never used.  Can it be removed?
   real, allocatable, dimension(:,:) :: &
-    La_SL, &           !< SL Langmuir number (directionality factored later) [nondim]
-                       !! Horizontal -> H points
     La_Turb            !< Aligned Turbulent Langmuir number [nondim]
                        !! Horizontal -> H points
   real, allocatable, dimension(:,:) :: &
@@ -180,12 +177,11 @@ type, public :: wave_parameters_CS ; private
                        !! Horizontal -> V points
                        !! 3rd dimension -> Freq/Wavenumber
 
-  !> An arbitrary lower-bound on the Langmuir number [nondim].  Run-time parameter.
-  !! Langmuir number is sqrt(u_star/u_stokes). When both are small
-  !! but u_star is orders of magnitude smaller the Langmuir number could
-  !! have unintended consequences.  Since both are small it can be safely capped
-  !! to avoid such consequences.
-  real :: La_min = 0.05
+  real :: La_min = 0.05 !< An arbitrary lower-bound on the Langmuir number [nondim].
+                       !! Langmuir number is sqrt(u_star/u_stokes).  When both are small
+                       !! but u_star is orders of magnitude smaller, the Langmuir number could
+                       !! have unintended consequences.  Since both are small it can be safely
+                       !! capped to avoid such consequences.
 
   ! Parameters used in estimating the wind speed or wave properties from the friction velocity
   real :: VonKar = -1.0 !< The von Karman coefficient as used in the MOM_wave_interface module [nondim]
@@ -274,7 +270,7 @@ subroutine MOM_wave_interface_init(time, G, GV, US, param_file, CS, diag, restar
        "If true, enables surface wave modules.", default=.false.)
 
   ! Check if using LA_LI2016
-  call get_param(param_file,mdl,"USE_LA_LI2016",StatisticalWaves,     &
+  call get_param(param_file, mdl, "USE_LA_LI2016", StatisticalWaves, &
                  do_not_log=.true.,default=.false.)
 
   if (.not.(use_waves .or. StatisticalWaves)) return
@@ -491,7 +487,6 @@ subroutine MOM_wave_interface_init(time, G, GV, US, param_file, CS, diag, restar
   allocate(CS%US0_x(G%isdB:G%iedB,G%jsd:G%jed), source=0.0)
   allocate(CS%US0_y(G%isd:G%ied,G%jsdB:G%jedB), source=0.0)
   ! c. Langmuir number
-  allocate(CS%La_SL(G%isc:G%iec,G%jsc:G%jec), source=0.0)
   allocate(CS%La_turb(G%isc:G%iec,G%jsc:G%jec), source=0.0)
   ! d. Viscosity for Stokes drift
   if (CS%StokesMixing) then
@@ -676,13 +671,12 @@ subroutine Update_Stokes_Drift(G, GV, US, CS, h, ustar, dt, dynamics_step)
   real    :: PI       ! 3.1415926535... [nondim]
   real    :: La       ! The local Langmuir number [nondim]
   integer :: ii, jj, kk, b, iim1, jjm1
-  real    :: idt ! 1 divided by the time step [T-1 ~> s-1]
+  real    :: I_dt     ! The inverse of the time step [T-1 ~> s-1]
 
   if (CS%WaveMethod==EFACTOR) return
 
   ! The following thickness cut-off would not be needed with the refactoring marked with '###' below.
   min_level_thick_avg = 1.e-3*US%m_to_Z
-  idt = 1.0/dt
 
   if (allocated(CS%US_x) .and. allocated(CS%US_y)) then
     call pass_vector(CS%US_x(:,:,:),CS%US_y(:,:,:), G%Domain)
@@ -747,7 +741,7 @@ subroutine Update_Stokes_Drift(G, GV, US, CS, h, ustar, dt, dynamics_step)
           ! -> Stokes drift in thin layers not averaged.
           if (level_thick>min_level_thick_avg) then
             do b = 1,CS%NumBands
-              if (CS%PartitionMode==0) then
+              if (CS%PartitionMode == 0) then
                 ! In wavenumber we are averaging over level
                 CMN_FAC = (exp(Top*2.*CS%WaveNum_Cen(b))-exp(Bottom*2.*CS%WaveNum_Cen(b)))&
                           / ((Top-Bottom)*(2.*CS%WaveNum_Cen(b)))
@@ -767,8 +761,7 @@ subroutine Update_Stokes_Drift(G, GV, US, CS, h, ustar, dt, dynamics_step)
               endif
               CS%US_x(II,jj,kk) = CS%US_x(II,jj,kk) + CS%STKx0(II,jj,b)*CMN_FAC
             enddo
-          else
-            ! Take the value at the midpoint
+          else ! Take the value at the midpoint
             do b = 1,CS%NumBands
               if (CS%PartitionMode==0) then
                 CMN_FAC = exp(MidPoint * 2. * CS%WaveNum_Cen(b))
@@ -781,6 +774,7 @@ subroutine Update_Stokes_Drift(G, GV, US, CS, h, ustar, dt, dynamics_step)
         enddo
       enddo
     enddo
+
     ! Computing Y direction Stokes drift
     do JJ = G%jscB,G%jecB
       do ii = G%isc,G%iec
@@ -799,17 +793,17 @@ subroutine Update_Stokes_Drift(G, GV, US, CS, h, ustar, dt, dynamics_step)
           ! -> Stokes drift in thin layers not averaged.
           if (level_thick>min_level_thick_avg) then
             do b = 1,CS%NumBands
-              if (CS%PartitionMode==0) then
+              if (CS%PartitionMode == 0) then
               ! In wavenumber we are averaging over level
                 CMN_FAC = (exp(Top*2.*CS%WaveNum_Cen(b))-exp(Bottom*2.*CS%WaveNum_Cen(b)))&
                           / ((Top-Bottom)*(2.*CS%WaveNum_Cen(b)))
                 !### For accuracy and numerical stability rewrite this as:
                 ! CMN_FAC = exp(2.*CS%WaveNum_Cen(b)*Top) * one_minus_exp_x(2.*CS%WaveNum_Cen(b)*level_thick)
-              elseif (CS%PartitionMode==1) then
-                if (CS%StkLevelMode==0) then
+              elseif (CS%PartitionMode == 1) then
+                if (CS%StkLevelMode == 0) then
                   ! Take the value at the midpoint
                   CMN_FAC = exp(MidPoint * 2. * CS%Freq_Cen(b)**2 / CS%g_Earth)
-                elseif (CS%StkLevelMode==1) then
+                elseif (CS%StkLevelMode == 1) then
                   ! Use a numerical integration and then divide by layer thickness
                   WN = CS%Freq_Cen(b)**2 / CS%g_Earth !bgr bug-fix missing g
                   CMN_FAC = (exp(2.*WN*Top)-exp(2.*WN*Bottom)) / (2.*WN*(Top-Bottom))
@@ -819,8 +813,7 @@ subroutine Update_Stokes_Drift(G, GV, US, CS, h, ustar, dt, dynamics_step)
               endif
               CS%US_y(ii,JJ,kk) = CS%US_y(ii,JJ,kk) + CS%STKy0(ii,JJ,b)*CMN_FAC
             enddo
-          else
-            ! Take the value at the midpoint
+          else ! Take the value at the midpoint
             do b = 1,CS%NumBands
               if (CS%PartitionMode==0) then
                 CMN_FAC = exp(MidPoint*2.*CS%WaveNum_Cen(b))
@@ -910,8 +903,9 @@ subroutine Update_Stokes_Drift(G, GV, US, CS, h, ustar, dt, dynamics_step)
   ! Finding tendency of Stokes drift over the time step to apply
   !  as an acceleration to the models current.
   if ( dynamics_step .and. CS%Stokes_DDT ) then
-    CS%ddt_us_x(:,:,:) = (CS%US_x(:,:,:) - CS%US_x_prev(:,:,:)) * idt
-    CS%ddt_us_y(:,:,:) = (CS%US_y(:,:,:) - CS%US_y_prev(:,:,:)) * idt
+    I_dt = 1.0 / dt
+    CS%ddt_us_x(:,:,:) = (CS%US_x(:,:,:) - CS%US_x_prev(:,:,:)) * I_dt
+    CS%ddt_us_y(:,:,:) = (CS%US_y(:,:,:) - CS%US_y_prev(:,:,:)) * I_dt
     CS%US_x_prev(:,:,:) = CS%US_x(:,:,:)
     CS%US_y_prev(:,:,:) = CS%US_y(:,:,:)
   endif
@@ -1159,17 +1153,14 @@ subroutine get_Langmuir_Number( LA, G, GV, US, HBL, ustar, i, j, h, Waves, &
     call get_StokesSL_LiFoxKemper(ustar, hbl*Waves%LA_FracHBL, GV, US, Waves, LA_STK, LA)
   elseif (Waves%WaveMethod==Null_WaveMethod) then
     call MOM_error(FATAL, "Get_Langmuir_number called without defining a WaveMethod. "//&
-                          "Suggest to make sure USE_LT is set/overridden to False or "//&
-                          "choose a wave method (or set USE_LA_LI2016 to use statistical "//&
-                          "waves.")
+                          "Suggest to make sure USE_LT is set/overridden to False or choose "//&
+                          "a wave method (or set USE_LA_LI2016 to use statistical waves).")
   endif
 
   if (.not.(Waves%WaveMethod==LF17)) then
-    ! This is an arbitrary lower bound on Langmuir number.
-    ! We shouldn't expect values lower than this, but
-    ! there is also no good reason to cap it here other then
-    ! to prevent large enhancements in unconstrained parts of
-    ! the curve fit parameterizations.
+    ! This expression uses an arbitrary lower bound on Langmuir number.
+    ! We shouldn't expect values lower than this, but there is also no good reason to cap it here
+    ! other than to prevent large enhancements in unconstrained parts of the curve fit parameterizations.
     ! Note the dimensional constant background Stokes velocity of 10^-10 m s-1.
     LA = max(Waves%La_min, sqrt(US%Z_to_L*ustar / (LA_STK + 1.e-10*US%m_s_to_L_T)))
   endif
@@ -1282,21 +1273,21 @@ subroutine get_StokesSL_LiFoxKemper(ustar, hbl, GV, US, CS, UStokes_SL, LA)
     ! the general peak wavenumber for Phillips' spectrum
     ! (Breivik et al., 2016) with correction of directional spreading
     kphil = 0.176 * UStokes / vstokes
-    !
-    ! surface layer averaged Stokes drift with Stokes drift profile
-    ! estimated from Phillips' spectrum (Breivik et al., 2016)
-    ! the directional spreading effect from Webb and Fox-Kemper, 2015
-    ! is also included
-    kstar = kphil * 2.56
+
+    ! Combining all of the expressions above gives kPhil as the following
+    ! where the first two lines are just a constant:
+    ! kphil = ((0.176 * us_to_u10 * u19p5_to_u10) / &
+    !          (0.5*0.125 * r_loss * fm_into_fp * 0.877 * CS%SWH_from_u10sq**2)) / &
+    !         (GV%g_Earth * u10**2)
+
     ! surface layer
     z0 = abs(hbl)
     z0i = 1.0 / z0
 
-    ! Combining all of the expressions above gives kPhil as the following
-    ! where the first two lines are just a constant:
-    ! kPhil =  ((0.176 * us_to_u10 * u19p5_to_u10) / &
-    !              (0.5*0.125 * r_loss * fm_into_fp * 0.877 * 0.0246**2)) * &
-    !              (US%T_to_s*US%m_s_to_L_T)**2 / (CS%g_Earth * u10**2)
+      ! Surface layer averaged Stokes drift with Stokes drift profile
+      ! estimated from Phillips' spectrum (Breivik et al., 2016)
+      ! The directional spreading effect from Webb and Fox-Kemper, 2015 is also included.
+      kstar = kphil * 2.56
 
     ! Terms 1 to 4, as written in the appendix of Li et al. (2017)
     r1 = ( 0.151 / kphil * z0i - 0.84 ) * &
@@ -1861,9 +1852,11 @@ subroutine ust_2_u10_coare3p5(USTair, U10, GV, US, CS)
 
   ! Local variables
   real :: z0sm, z0, z0rough  ! Roughness lengths [Z ~> m]
+  real :: ten_m_scale ! The 10 m reference height, in rescaled units [Z ~> m]
   real :: u10a  ! The previous guess for u10 [L T-1 ~> m s-1]
-  real :: alpha ! A nondimensional factor in a parameterization [nondim]
-  real :: CD    ! The drag coefficient [nondim]
+  real :: alpha ! The Charnock coeffient relating the wind friction velocity squared to the
+                ! roughness length [nondim]
+  real :: Cd2   ! The square of the drag coefficient [nondim]
   integer :: CT
 
   ! Uses empirical formula for z0 to convert ustar_air to u10 based on the
@@ -1876,10 +1869,11 @@ subroutine ust_2_u10_coare3p5(USTair, U10, GV, US, CS)
     "ust_2_u10_coare3p5 called with a negative value of Waves%vonKar")
 
   z0sm = 0.11 * CS%nu_air / USTair ! Compute z0smooth from ustar guess
-  u10 = US%Z_to_L*USTair / sqrt(0.001)  ! Guess for u10
-  !### For efficiency change the line above to USTair * sqrt(1000.0) or USTair * 31.6227766 .
   u10a = 1000.0*US%m_s_to_L_T ! An insanely large upper bound for u10.
 
+  u10 = US%Z_to_L*USTair / sqrt(0.001)  ! Guess for u10
+  !### For efficiency change the line above to USTair * sqrt(1000.0) or USTair * 31.6227766 .
+    ten_m_scale = 10.0*US%m_to_Z
   CT=0
   do while (abs(u10a/u10 - 1.) > 0.001)  !### Change this to (abs(u10a - u10) > 0.001*u10) for efficiency.
     CT=CT+1
@@ -1887,8 +1881,8 @@ subroutine ust_2_u10_coare3p5(USTair, U10, GV, US, CS)
     alpha = min(0.028, 0.0017*US%L_T_to_m_s * u10 - 0.005)
     z0rough = alpha * (US%Z_to_L*USTair)**2 / GV%g_Earth ! Compute z0rough from ustar guess
     z0 = z0sm + z0rough
-    CD = ( CS%vonKar / log(10.*US%m_to_Z / z0) )**2 ! Compute CD from derived roughness
-    u10 = US%Z_to_L*USTair/sqrt(CD)  ! Compute new u10 from derived CD, while loop
+    Cd2 = ( CS%vonKar / log(ten_m_scale / z0) )**2 ! Compute CD from derived roughness
+    u10 = US%Z_to_L*USTair/sqrt(Cd2)  ! Compute new u10 from derived CD, while loop
                            ! ends and checks for convergence...CT counter
                            ! makes sure loop doesn't run away if function
                            ! doesn't converge.  This code was produced offline
@@ -1911,7 +1905,6 @@ subroutine Waves_end(CS)
   if (allocated(CS%Freq_Cen))    deallocate( CS%Freq_Cen )
   if (allocated(CS%Us_x))        deallocate( CS%Us_x )
   if (allocated(CS%Us_y))        deallocate( CS%Us_y )
-  if (allocated(CS%La_SL))       deallocate( CS%La_SL )
   if (allocated(CS%La_turb))     deallocate( CS%La_turb )
   if (allocated(CS%STKx0))       deallocate( CS%STKx0 )
   if (allocated(CS%STKy0))       deallocate( CS%STKy0 )
