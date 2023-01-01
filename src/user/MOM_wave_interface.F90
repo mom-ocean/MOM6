@@ -321,7 +321,7 @@ subroutine MOM_wave_interface_init(time, G, GV, US, param_file, CS, diag, restar
                  "The vintage of the order of arithmetic and expressions in the surface wave "//&
                  "calculations.  Values below 20230101 recover the answers from the end of 2022, "//&
                  "while higher values use updated and more robust forms of the same expressions.", &
-                 default=20221232) !### default=default_answer_date)
+                 default=20221231) !### default=default_answer_date)
 
   ! Langmuir number Options
   call get_param(param_file, mdl, "LA_DEPTH_RATIO", CS%LA_FracHBL, &
@@ -1298,9 +1298,9 @@ subroutine get_StokesSL_LiFoxKemper(ustar, hbl, GV, US, CS, UStokes_SL, LA)
   real :: z0       ! The boundary layer depth [Z ~> m]
   real :: z0i      ! The inverse of theboundary layer depth [Z-1 ~> m-1]
   real :: r1, r2, r3, r4  ! Nondimensional ratios [nondim]
-  ! real :: r5       ! A single expression that combines r3 and r4 [nondim]
-  ! real :: root_2kz ! The square root of twice the peak wavenumber times the
-  !                  ! boundary layer depth [nondim]
+  real :: r5       ! A single expression that combines r2 and r4 [nondim]
+  real :: root_2kz ! The square root of twice the peak wavenumber times the
+                   ! boundary layer depth [nondim]
   real :: u10      ! The 10 m wind speed [L T-1 ~> m s-1]
   real :: PI       ! 3.1415926535... [nondim]
 
@@ -1342,48 +1342,55 @@ subroutine get_StokesSL_LiFoxKemper(ustar, hbl, GV, US, CS, UStokes_SL, LA)
 
     ! surface layer
     z0 = abs(hbl)
-    z0i = 1.0 / z0
+
+    if (CS%answer_date < 20230102) then
+      z0i = 1.0 / z0
 
       ! Surface layer averaged Stokes drift with Stokes drift profile
       ! estimated from Phillips' spectrum (Breivik et al., 2016)
       ! The directional spreading effect from Webb and Fox-Kemper, 2015 is also included.
       kstar = kphil * 2.56
 
-    ! Terms 1 to 4, as written in the appendix of Li et al. (2017)
-    r1 = ( 0.151 / kphil * z0i - 0.84 ) * &
-         ( 1.0 - exp(-2.0 * kphil * z0) )
-    r2 = -( 0.84 + 0.0591 / kphil * z0i ) * &
-         sqrt( 2.0 * PI * kphil * z0 ) * &
-         erfc( sqrt( 2.0 * kphil * z0 ) )
-    r3 = ( 0.0632 / kstar * z0i + 0.125 ) * &
-         (1.0 - exp(-2.0 * kstar * z0) )
-    r4 = ( 0.125 + 0.0946 / kstar * z0i ) * &
-         sqrt( 2.0 * PI * kstar * z0) * &
-         erfc( sqrt( 2.0 * kstar * z0 ) )
-    UStokes_sl = UStokes * (0.715 + r1 + r2 + r3 + r4)
+      ! Terms 1 to 4, as written in the appendix of Li et al. (2017)
+      r1 = ( 0.151 / kphil * z0i - 0.84 ) * &
+           ( 1.0 - exp(-2.0 * kphil * z0) )
+      r2 = -( 0.84 + 0.0591 / kphil * z0i ) * &
+           sqrt( 2.0 * PI * kphil * z0 ) * &
+           erfc( sqrt( 2.0 * kphil * z0 ) )
+      r3 = ( 0.0632 / kstar * z0i + 0.125 ) * &
+           (1.0 - exp(-2.0 * kstar * z0) )
+      r4 = ( 0.125 + 0.0946 / kstar * z0i ) * &
+           sqrt( 2.0 * PI * kstar * z0) * &
+           erfc( sqrt( 2.0 * kstar * z0 ) )
+      UStokes_sl = UStokes * (0.715 + r1 + r2 + r3 + r4)
+    else
+      ! The following is equivalent to the code above, but avoids singularities
+      r1 = ( 0.302 - 1.68*(kphil*z0) ) * one_minus_exp_x(2.0 * (kphil * z0))
+      r3 = ( 0.1264 + 0.64*(kphil*z0) ) * one_minus_exp_x(5.12 * (kphil * z0))
 
-    ! The following is equivalent to the code above, but avoids singularities
-!    r1 = ( 0.302 - 1.68*kphil*z0 ) * one_minus_exp_x(2.0*kphil * z0)
-!    r3 = ( 0.1264 + 0.64*kphil*z0 ) * one_minus_exp_x(5.12*kphil * z0)
-!    root_2kz = sqrt(2.0 * kphil * z0)
-!    ! r2 = -( 0.84 + 0.0591*2.0 / (root_2kz**2) ) * sqrt(PI) * root_2kz * erfc( root_2kz )
-!    ! r4 = ( 0.2 + 0.059125*2.0 / (root_2kz**2) ) * sqrt(PI)* root_2kz * erfc( 1.6 * root_2kz )
-!
-!    ! r5 = r2 + r4 (with a small correction to one coefficient to avoid a singularity when z0 = 0):
-!    ! The correction leads to <1% relative differences in (r2+r4) for root_2kz > 0.05, but without
-!    ! it the values of r2 + r4 are qualitatively wrong (>50% errors) for root_2kz < 0.0015 .
-!    !   It has been verified that these two expressions for r5 are the same to 6 decimal places for
-!    ! root_2kz  between 1e-10 and 1e-3, but that the first one degrades for smaller values.
-!    if (root_2kz > 1e-3) then
-!      r5 = sqrt(PI) * (root_2kz * (-0.84 * erfc(root_2kz) + 0.2 * erfc(1.6*root_2kz)) + &
-!                       0.1182 * (erfc(1.6*root_2kz) - erfc(root_2kz)) / root_2kz)
-!    else
-!      ! It is more accurate to replace erf with the first two terms of its Taylor series
-!      !  erf(z) = (2/sqrt(pi)) * z * (1. - (1/3)*z**2 + (1/10)*z**4 - (1/42)*z**6 + ...)
-!      ! and then cancel or combine common terms and drop negligibly small terms.
-!      r5 = -0.64*sqrt(PI)*root_2kz + (-0.14184 + 1.0839648 * root_2kz**2)
-!    endif
-!    UStokes_sl = UStokes * (0.715 + ((r1 + r2) + r5))
+      root_2kz = sqrt(2.0 * kphil * z0)
+      ! r2 = -( 0.84 + 0.0591 / (kphil * z0) ) * sqrt(PI) * root_2kz * erfc( root_2kz )
+      ! r4 = ( 0.2 + 0.059125 / (kphil * z0) ) * sqrt(PI) * root_2kz * erfc( 1.6 * root_2kz )
+
+      ! r2 = -( 0.84 + 0.0591*2.0 / (root_2kz**2) ) * sqrt(PI) * root_2kz * erfc( root_2kz )
+      ! r4 = ( 0.2 + 0.059125*2.0 / (root_2kz**2) ) * sqrt(PI) * root_2kz * erfc( 1.6 * root_2kz )
+
+      ! r5 = r2 + r4 (with a small correction to one coefficient to avoid a singularity when z0 = 0):
+      ! The correction leads to <1% relative differences in (r2+r4) for root_2kz > 0.05, but without
+      ! it the values of r2 + r4 are qualitatively wrong (>50% errors) for root_2kz < 0.0015 .
+      !   It has been verified that these two expressions for r5 are the same to 6 decimal places for
+      ! root_2kz  between 1e-10 and 1e-3, but that the first one degrades for smaller values.
+      if (root_2kz > 1e-3) then
+        r5 = sqrt(PI) * (root_2kz * (-0.84 * erfc(root_2kz) + 0.2 * erfc(1.6*root_2kz)) + &
+                         0.1182 * (erfc(1.6*root_2kz) - erfc(root_2kz)) / root_2kz)
+      else
+        ! It is more accurate to replace erf with the first two terms of its Taylor series
+        !  erf(z) = (2/sqrt(pi)) * z * (1. - (1/3)*z**2 + (1/10)*z**4 - (1/42)*z**6 + ...)
+        ! and then cancel or combine common terms and drop negligibly small terms.
+        r5 = -0.64*sqrt(PI)*root_2kz + (-0.14184 + 1.0839648 * root_2kz**2)
+      endif
+      UStokes_sl = UStokes * (0.715 + ((r1 + r3) + r5))
+    endif
 
     if (UStokes_sl /= 0.0) LA = sqrt(US%Z_to_L*ustar / UStokes_sl)
   endif
@@ -1934,7 +1941,7 @@ subroutine ust_2_u10_coare3p5(USTair, U10, GV, US, CS)
   z0sm = 0.11 * CS%nu_air / USTair ! Compute z0smooth from ustar guess
   u10a = 1000.0*US%m_s_to_L_T ! An insanely large upper bound for u10.
 
-  if (CS%answer_date < 20230101) then
+  if (CS%answer_date < 20230103) then
     u10 = US%Z_to_L*USTair / sqrt(0.001)  ! Guess for u10
     ten_m_scale = 10.0*US%m_to_Z
     CT=0
