@@ -189,6 +189,16 @@ type, public :: wave_parameters_CS ; private
   real :: nu_air   !< The viscosity of air, as used in wave calculations [Z2 T-1 ~> m2 s-1]
   real :: SWH_from_u10sq !< A factor for converting the square of the 10 m wind speed to the
                    !! significant wave height [Z T2 L-2 ~> s m-2]
+  real :: Charnock_min !< The minimum value of the Charnock coefficient, which relates the square of
+                   !! the air friction velocity divided by the gravitational acceleration to the
+                   !! wave roughness length [nondim]
+  real :: Charnock_slope_U10 !< The partial derivative of the Charnock coefficient with the 10 m wind
+                   !! speed [T L-1 ~> s m-1].   Note that in eq. 13 of the Edson et al. 2013 describing
+                   !! the COARE 3.5 bulk flux algorithm, this slope is given as 0.017.  However, 0.0017
+                   !! reproduces the curve in their figure 6, so that is the default value used in MOM6.
+  real :: Charnock_intercept !< The intercept of the fit for the Charnock coefficient in the limit of
+                   !! no wind [nondim].  Note that this can be negative because CHARNOCK_MIN will keep
+                   !! the final value for the Charnock coefficient from being from being negative.
 
   ! Options used with the test profile
   real    :: TP_STKX0     !< Test profile x-stokes drift amplitude [L T-1 ~> m s-1]
@@ -550,6 +560,21 @@ subroutine set_LF17_wave_params(param_file, mdl, US, CS)
                  "A factor relating the square of the 10 m wind speed to the significant "//&
                  "wave height, with a default value based on the Pierson-Moskowitz spectrum.", &
                  units="s m-2", default=0.0246, scale=US%m_to_Z*US%L_T_to_m_s**2)
+  call get_param(param_file, mdl, "CHARNOCK_MIN", CS%Charnock_min, &
+                 "The minimum value of the Charnock coefficient, which relates the square of "//&
+                 "the air friction velocity divided by the gravitational acceleration to the "//&
+                 "wave roughness length.", units="nondim", default=0.028)
+  call get_param(param_file, mdl, "CHARNOCK_SLOPE_U10", CS%Charnock_slope_U10, &
+                 "The partial derivative of the Charnock coefficient with the 10 m wind speed.  "//&
+                 "Note that in eq. 13 of the Edson et al. 2013 describing the COARE 3.5 bulk "//&
+                 "flux algorithm, this slope is given as 0.017.  However, 0.0017 reproduces "//&
+                 "the curve in their figure 6, so that is the default value used in MOM6.", &
+                 units="s m-1", default=0.0017, scale=US%L_T_to_m_s)
+  call get_param(param_file, mdl, "CHARNOCK_0_WIND_INTERCEPT", CS%Charnock_intercept, &
+                 "The intercept of the fit for the Charnock coefficient in the limit of no wind.  "//&
+                 "Note that this can be negative because CHARNOCK_MIN will keep the final "//&
+                 "value for the Charnock coefficient from being from being negative.", &
+                 units="nondim", default=-0.005)
 
 end subroutine set_LF17_wave_params
 
@@ -1878,7 +1903,7 @@ subroutine ust_2_u10_coare3p5(USTair, U10, GV, US, CS)
   do while (abs(u10a/u10 - 1.) > 0.001)  !### Change this to (abs(u10a - u10) > 0.001*u10) for efficiency.
     CT=CT+1
     u10a = u10
-    alpha = min(0.028, 0.0017*US%L_T_to_m_s * u10 - 0.005)
+    alpha = min(CS%Charnock_min, CS%Charnock_slope_U10 * u10 + CS%Charnock_intercept)
     z0rough = alpha * (US%Z_to_L*USTair)**2 / GV%g_Earth ! Compute z0rough from ustar guess
     z0 = z0sm + z0rough
     Cd2 = ( CS%vonKar / log(ten_m_scale / z0) )**2 ! Compute CD from derived roughness
