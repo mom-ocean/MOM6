@@ -120,11 +120,6 @@ type, public :: wave_parameters_CS ; private
                               !! See Harcourt 2013, 2015 Second-Moment approach
   logical :: CoriolisStokes   !< This feature is in development and not ready.
                               ! True if Coriolis-Stokes acceleration should be applied.
-  integer :: StkLevelMode=1   !< Sets if Stokes drift is defined at mid-points
-                              !! or layer averaged.  Set to 0 if mid-point and set to
-                              !! 1 if average value of Stokes drift over level.
-                              !! If advecting with Stokes transport, 1 is the correct
-                              !! approach.
   real :: Stokes_min_thick_avg !< A layer thickness below which the cell-center Stokes drift is
                               !! used instead of the cell average [Z ~> m].  This is only used if
                               !! WAVE_INTERFACE_ANSWER_DATE < 20230101.
@@ -161,7 +156,7 @@ type, public :: wave_parameters_CS ; private
   real :: g_Earth      !< The gravitational acceleration, equivalent to GV%g_Earth but with
                        !! different dimensional rescaling appropriate for deep-water gravity
                        !! waves [Z T-2 ~> m s-2]
-  real :: I_g_Earth    !< The inversse of the gravitational acceleration, with dimensional rescaling
+  real :: I_g_Earth    !< The inverse of the gravitational acceleration, with dimensional rescaling
                        !! appropriate for deep-water gravity waves [T2 Z-1 ~> s2 m-1]
   ! Surface Wave Dependent 1d/2d/3d vars
   real, allocatable, dimension(:) :: &
@@ -320,8 +315,12 @@ subroutine MOM_wave_interface_init(time, G, GV, US, param_file, CS, diag, restar
   call get_param(param_file, mdl, "WAVE_INTERFACE_ANSWER_DATE", CS%answer_date, &
                  "The vintage of the order of arithmetic and expressions in the surface wave "//&
                  "calculations.  Values below 20230101 recover the answers from the end of 2022, "//&
-                 "while higher values use updated and more robust forms of the same expressions.", &
-                 default=20221231) !### default=default_answer_date)
+                 "while higher values use updated and more robust forms of the same expressions:\n"//&
+                 "\t <  20230101 - Original answers for wave interface routines\n"//&
+                 "\t >= 20230101 - More robust expressions for Update_Stokes_Drift\n"//&
+                 "\t >= 20230102 - More robust expressions for get_StokesSL_LiFoxKemper\n"//&
+                 "\t >= 20230103 - More robust expressions for ust_2_u10_coare3p5", &
+                 default=20221231) ! In due course change the default to default=default_answer_date)
 
   ! Langmuir number Options
   call get_param(param_file, mdl, "LA_DEPTH_RATIO", CS%LA_FracHBL, &
@@ -509,7 +508,7 @@ subroutine MOM_wave_interface_init(time, G, GV, US, param_file, CS, diag, restar
 
   ! Langmuir number Options  (Note that CS%LA_FracHBL is set above.)
   call get_param(param_file, mdl, "LA_MISALIGNMENT", CS%LA_Misalignment, &
-         "Flag (logical) if using misalignment bt shear and waves in LA", &
+         "Flag (logical) if using misalignment between shear and waves in LA", &
          default=.false.)
   call get_param(param_file, mdl, "MIN_LANGMUIR", CS%La_min,    &
          "A minimum value for all Langmuir numbers that is not physical, "//&
@@ -806,10 +805,7 @@ subroutine Update_Stokes_Drift(G, GV, US, CS, h, ustar, dt, dynamics_step)
               if (CS%PartitionMode == 0) then
                 ! Average over a layer using the bin's central wavenumber.
                 CMN_FAC = exp(2.*CS%WaveNum_Cen(b)*Top) * one_minus_exp_x(2.*CS%WaveNum_Cen(b)*level_thick)
-              elseif ((CS%PartitionMode == 1) .and. (CS%StkLevelMode==0)) then
-                ! Take the value at the midpoint
-                CMN_FAC = exp(MidPoint * 2. * (CS%Freq_Cen(b)**2 * CS%I_g_Earth))
-              elseif ((CS%PartitionMode == 1) .and. (CS%StkLevelMode==1)) then
+              else
                 ! Use an analytic expression for the average of an exponential over a layer
                 WN = CS%Freq_Cen(b)**2 * CS%I_g_Earth
                 CMN_FAC = exp(2.*WN*Top) * one_minus_exp_x(2.*WN*level_thick)
@@ -824,10 +820,7 @@ subroutine Update_Stokes_Drift(G, GV, US, CS, h, ustar, dt, dynamics_step)
                 ! In wavenumber we are averaging over level
                 CMN_FAC = (exp(Top*2.*CS%WaveNum_Cen(b))-exp(Bottom*2.*CS%WaveNum_Cen(b))) &
                           / ((Top-Bottom)*(2.*CS%WaveNum_Cen(b)))
-              elseif ((CS%PartitionMode == 1) .and. (CS%StkLevelMode == 0)) then
-                ! Take the value at the midpoint
-                CMN_FAC = exp(MidPoint * 2. * CS%Freq_Cen(b)**2 / CS%g_Earth)
-              elseif ((CS%PartitionMode == 1) .and. (CS%StkLevelMode==1)) then
+              else
                 ! Use a numerical integration and then divide by layer thickness
                 WN = CS%Freq_Cen(b)**2 / CS%g_Earth !bgr bug-fix missing g
                 CMN_FAC = (exp(2.*WN*Top)-exp(2.*WN*Bottom)) / (2.*WN*(Top-Bottom))
@@ -836,9 +829,9 @@ subroutine Update_Stokes_Drift(G, GV, US, CS, h, ustar, dt, dynamics_step)
             enddo
           else ! Take the value at the midpoint
             do b = 1,CS%NumBands
-              if (CS%PartitionMode==0) then
+              if (CS%PartitionMode == 0) then
                 CMN_FAC = exp(MidPoint * 2. * CS%WaveNum_Cen(b))
-              elseif (CS%PartitionMode==1) then
+              else
                 CMN_FAC = exp(MidPoint * 2. * CS%Freq_Cen(b)**2 / CS%g_Earth)
               endif
               CS%US_x(II,jj,kk) = CS%US_x(II,jj,kk) + CS%STKx0(II,jj,b)*CMN_FAC
@@ -870,10 +863,7 @@ subroutine Update_Stokes_Drift(G, GV, US, CS, h, ustar, dt, dynamics_step)
               if (CS%PartitionMode == 0) then
                 ! Average over a layer using the bin's central wavenumber.
                 CMN_FAC = exp(2.*CS%WaveNum_Cen(b)*Top) * one_minus_exp_x(2.*CS%WaveNum_Cen(b)*level_thick)
-              elseif ((CS%PartitionMode == 1) .and. (CS%StkLevelMode==0)) then
-                ! Take the value at the midpoint
-                CMN_FAC = exp(MidPoint * 2. * (CS%Freq_Cen(b)**2 * CS%I_g_Earth))
-              elseif ((CS%PartitionMode == 1) .and. (CS%StkLevelMode==1)) then
+              else
                 ! Use an analytic expression for the average of an exponential over a layer
                 WN = CS%Freq_Cen(b)**2 * CS%I_g_Earth
                 CMN_FAC = exp(2.*WN*Top) * one_minus_exp_x(2.*WN*level_thick)
@@ -887,10 +877,7 @@ subroutine Update_Stokes_Drift(G, GV, US, CS, h, ustar, dt, dynamics_step)
                 ! In wavenumber we are averaging over level
                 CMN_FAC = (exp(Top*2.*CS%WaveNum_Cen(b))-exp(Bottom*2.*CS%WaveNum_Cen(b))) &
                           / ((Top-Bottom)*(2.*CS%WaveNum_Cen(b)))
-              elseif ((CS%PartitionMode == 1) .and. (CS%StkLevelMode == 0)) then
-                ! Take the value at the midpoint
-                CMN_FAC = exp(MidPoint * 2. * CS%Freq_Cen(b)**2 / CS%g_Earth)
-              elseif ((CS%PartitionMode == 1) .and. (CS%StkLevelMode == 1)) then
+              else
                 ! Use a numerical integration and then divide by layer thickness
                 WN = CS%Freq_Cen(b)**2 / CS%g_Earth !bgr bug-fix missing g
                 CMN_FAC = (exp(2.*WN*Top)-exp(2.*WN*Bottom)) / (2.*WN*(Top-Bottom))
@@ -899,9 +886,9 @@ subroutine Update_Stokes_Drift(G, GV, US, CS, h, ustar, dt, dynamics_step)
             enddo
           else ! Take the value at the midpoint
             do b = 1,CS%NumBands
-              if (CS%PartitionMode==0) then
+              if (CS%PartitionMode == 0) then
                 CMN_FAC = exp(MidPoint*2.*CS%WaveNum_Cen(b))
-              elseif (CS%PartitionMode==1) then
+              else
                 CMN_FAC = exp(MidPoint * 2. * CS%Freq_Cen(b)**2 / CS%g_Earth)
               endif
               CS%US_y(ii,JJ,kk) = CS%US_y(ii,JJ,kk) + CS%STKy0(ii,JJ,b)*CMN_FAC
@@ -1041,7 +1028,7 @@ subroutine Surface_Bands_by_data_override(Time, G, GV, US, CS)
 
   ! Local variables
   real    :: temp_x(SZI_(G),SZJ_(G)) ! Pseudo-zonal Stokes drift of band at h-points [L T-1 ~> m s-1]
-  real    :: temp_y(SZI_(G),SZJ_(G)) ! Psuedo-meridional Stokes drift of band at h-points [L T-1 ~> m s-1]
+  real    :: temp_y(SZI_(G),SZJ_(G)) ! Pseudo-meridional Stokes drift of band at h-points [L T-1 ~> m s-1]
   integer, dimension(4) :: sizes    ! The sizes of the various dimensions of the variable.
   character(len=48) :: dim_name(4)  ! The names of the dimensions of the variable.
   character(len=20) :: varname      ! The name of an input variable for data override.
@@ -1288,7 +1275,7 @@ end function get_wave_method
 !!
 !! Update (Jan/25):
 !! - Converted from function to subroutine, now returns Langmuir number.
-!! - Computs 10m wind internally, so only ustar and hbl need passed to
+!! - Compute 10m wind internally, so only ustar and hbl need passed to
 !!   subroutine.
 !!
 !! Qing Li, 160606
@@ -1319,7 +1306,7 @@ subroutine get_StokesSL_LiFoxKemper(ustar, hbl, GV, US, CS, UStokes_SL, LA)
   real :: kstar    ! A rescaled wavenumber? [Z-1 ~> m-1]
   real :: vstokes  ! The total Stokes transport [Z L T-1 ~> m2 s-1]
   real :: z0       ! The boundary layer depth [Z ~> m]
-  real :: z0i      ! The inverse of theboundary layer depth [Z-1 ~> m-1]
+  real :: z0i      ! The inverse of the boundary layer depth [Z-1 ~> m-1]
   real :: r1, r2, r3, r4  ! Nondimensional ratios [nondim]
   real :: r5       ! A single expression that combines r2 and r4 [nondim]
   real :: root_2kz ! The square root of twice the peak wavenumber times the
@@ -1730,7 +1717,7 @@ subroutine Stokes_PGF(G, GV, h, u, v, PFu_Stokes, PFv_Stokes, CS )
   if (CS%id_P_deltaStokes_L > 0) P_deltaStokes_L(:,:,:) = 0.0
 
   ! First compute PGFu.  The Stokes-induced pressure anomaly diagnostic is stored from this calculation.
-  ! > Seeking PGFx at (I,j), meanining we need to compute pressure at h-points (i,j) and (i+1,j).
+  ! > Seeking PGFx at (I,j), meaning we need to compute pressure at h-points (i,j) and (i+1,j).
   !   UL(i,j)   -> found as average of I-1 & I on j
   !   UR(i+1,j) -> found as average of I & I+1 on j
   !   VL(i,j)   -> found on i as average of J-1 & J
@@ -1826,7 +1813,7 @@ subroutine Stokes_PGF(G, GV, h, u, v, PFu_Stokes, PFv_Stokes, CS )
   enddo ;  enddo
 
   ! Next compute PGFv.  The Stokes-induced pressure anomaly diagnostic is stored from this calculation.
-  ! > Seeking PGFy at (i,J), meanining we need to compute pressure at h-points (i,j) and (i,j+1).
+  ! > Seeking PGFy at (i,J), meaning we need to compute pressure at h-points (i,j) and (i,j+1).
   !   UL(i,j)   -> found as average of I-1 & I on j
   !   UR(i,j+1) -> found as average of I-1 & I on j+1
   !   VL(i,j)   -> found on i as average of J-1 & J
@@ -2084,7 +2071,7 @@ end subroutine waves_register_restarts
 !! interpret surface wave data for MOM6. In its original form, the
 !! capabilities include setting the Stokes drift in the model (from a
 !! variety of sources including prescribed, empirical, and input
-!! files).  In short order, the plan is to also ammend the subroutine
+!! files).  In short order, the plan is to also amend the subroutine
 !! to accept Stokes drift information from an external coupler.
 !! Eventually, it will be necessary to break this file apart so that
 !! general wave information may be stored in the control structure
