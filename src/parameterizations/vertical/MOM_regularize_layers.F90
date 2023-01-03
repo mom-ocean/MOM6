@@ -34,6 +34,10 @@ type, public :: regularize_layers_CS ; private
   real    :: density_match_tol !< A relative tolerance for how well the densities must match
                              !! with the target densities during detrainment when regularizing
                              !! the near-surface layers [nondim]
+  real    :: sufficient_adjustment !< The fraction of the target entrainment of mass to the mixed
+                             !! and buffer layers that is enough for one timestep when regularizing
+                             !! the near-surface layers [nondim].  No more mass will be sought from
+                             !! deeper layers in the interior after this fraction is exceeded.
   real    :: h_def_tol1      !< The value of the relative thickness deficit at
                              !! which to start modifying the structure, 0.5 by
                              !! default (or a thickness ratio of 5.83) [nondim].
@@ -75,7 +79,7 @@ subroutine regularize_layers(h, tv, dt, ea, eb, G, GV, US, CS)
                               intent(inout) :: h  !< Layer thicknesses [H ~> m or kg m-2].
   type(thermo_var_ptrs),      intent(inout) :: tv !< A structure containing pointers to any
                                                   !! available thermodynamic fields. Absent fields
-                                                  !! have NULL ptrs.
+                                                  !! have NULL pointers.
   real,                       intent(in)    :: dt !< Time increment [T ~> s].
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                               intent(inout) :: ea !< The amount of fluid moved downward into a
@@ -86,7 +90,7 @@ subroutine regularize_layers(h, tv, dt, ea, eb, G, GV, US, CS)
                                                   !! this should be increased due to mixed layer
                                                   !! entrainment [H ~> m or kg m-2].
   type(unit_scale_type),      intent(in)    :: US !< A dimensional unit scaling type
-  type(regularize_layers_CS), intent(in)    :: CS !< Regularize layer control struct
+  type(regularize_layers_CS), intent(in)    :: CS !< Regularize layer control structure
 
   if (.not. CS%initialized) call MOM_error(FATAL, "MOM_regularize_layers: "//&
          "Module must be initialized before it is used.")
@@ -107,7 +111,7 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, GV, US, CS)
                               intent(inout) :: h  !< Layer thicknesses [H ~> m or kg m-2].
   type(thermo_var_ptrs),      intent(inout) :: tv !< A structure containing pointers to any
                                                   !! available thermodynamic fields. Absent fields
-                                                  !! have NULL ptrs.
+                                                  !! have NULL pointers.
   real,                       intent(in)    :: dt !< Time increment [T ~> s].
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                               intent(inout) :: ea !< The amount of fluid moved downward into a
@@ -118,7 +122,7 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, GV, US, CS)
                                                   !! this should be increased due to mixed layer
                                                   !! entrainment [H ~> m or kg m-2].
   type(unit_scale_type),      intent(in)    :: US !< A dimensional unit scaling type
-  type(regularize_layers_CS), intent(in)    :: CS !< Regularize layer control struct
+  type(regularize_layers_CS), intent(in)    :: CS !< Regularize layer control structure
 
   ! Local variables
   real, dimension(SZIB_(G),SZJ_(G)) :: &
@@ -149,7 +153,7 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, GV, US, CS)
   real, dimension(SZI_(G)) :: &
     p_ref_cv, & !   Reference pressure for the potential density which defines
                 ! the coordinate variable, set to P_Ref [R L2 T-2 ~> Pa].
-    Rcv_tol, &  !   A tolerence, relative to the target density differences
+    Rcv_tol, &  !   A tolerance, relative to the target density differences
                 ! between layers, for detraining into the interior [nondim].
     h_add_tgt, & ! The target for the thickness to add to the mixed layers [H ~> m or kg m-2]
     h_add_tot, & ! The net thickness added to the mixed layers [H ~> m or kg m-2]
@@ -161,7 +165,7 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, GV, US, CS)
   real :: I_dtol  ! The inverse of the tolerance changes [nondim].
   real :: I_dtol34 ! The inverse of the tolerance changes [nondim].
   real :: e_e, e_w, e_n, e_s  ! Temporary interface heights [H ~> m or kg m-2].
-  real :: wt    ! The weight of the filted interfaces in setting the targets [nondim].
+  real :: wt    ! The weight of the filtered interfaces in setting the targets [nondim].
   real :: scale ! A scaling factor [nondim].
   real :: h_neglect ! A thickness that is so small it is usually lost
                     ! in roundoff and can be neglected [H ~> m or kg m-2].
@@ -321,7 +325,7 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, GV, US, CS)
             S_2d(i,nkmb) = (h_prev*S_2d(i,nkmb) + h_add*S_2d(i,k)) / h_2d(i,nkmb)
 
             if ((e_2d(i,nkmb+1) <= e_filt(i,nkmb+1)) .or. &
-                (h_add_tot(i) > 0.6*h_add_tgt(i))) then  !### 0.6 is adjustable?.
+                (h_add_tot(i) > CS%sufficient_adjustment*h_add_tgt(i))) then
               more_ent_i(i) = .false.
             else
               cols_left = .true.
@@ -602,7 +606,7 @@ end subroutine regularize_surface
 
 !>  This subroutine determines the amount by which the harmonic mean
 !! thickness at velocity points differ from the arithmetic means, relative to
-!! the the arithmetic means, after eliminating thickness variations that are
+!! the arithmetic means, after eliminating thickness variations that are
 !! solely due to topography and aggregating all interior layers into one.
 subroutine find_deficit_ratios(e, def_rat_u, def_rat_v, G, GV, CS, h)
   type(ocean_grid_type),      intent(in)  :: G         !< The ocean's grid structure.
@@ -615,7 +619,7 @@ subroutine find_deficit_ratios(e, def_rat_u, def_rat_v, G, GV, CS, h)
   real, dimension(SZI_(G),SZJB_(G)),          &
                               intent(out) :: def_rat_v !< The thickness deficit ratio at v points,
                                                        !! [nondim].
-  type(regularize_layers_CS), intent(in)  :: CS        !< Regularize layer control struct
+  type(regularize_layers_CS), intent(in)  :: CS        !< Regularize layer control structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  &
                               intent(in)  :: h         !< Layer thicknesses [H ~> m or kg m-2].
 
@@ -710,7 +714,7 @@ subroutine regularize_layers_init(Time, G, GV, param_file, diag, CS)
                                                  !! run-time parameters.
   type(diag_ctrl), target, intent(inout) :: diag !< A structure that is used to regulate
                                                  !! diagnostic output.
-  type(regularize_layers_CS), intent(inout) :: CS !< Regularize layer control struct
+  type(regularize_layers_CS), intent(inout) :: CS !< Regularize layer control structure
 
 # include "version_variable.h"
   character(len=40)  :: mdl = "MOM_regularize_layers"  ! This module's name.
@@ -748,6 +752,11 @@ subroutine regularize_layers_init(Time, G, GV, param_file, diag, CS)
                  "densities during detrainment when regularizing the near-surface layers.  The "//&
                  "default of 0.6 gives 20% overlaps in density", &
                  units="nondim", default=0.6, do_not_log=just_read)
+    call get_param(param_file, mdl, "REG_SFC_SUFFICIENT_ADJ", CS%sufficient_adjustment, &
+                 "The fraction of the target entrainment of mass to the mixed and buffer layers "//&
+                 "that is enough for one timestep when regularizing the near-surface layers. "//&
+                 "No more mass will be sought from deeper layers in the interior after this "//&
+                 "fraction is exceeded.", units="nondim", default=0.6, do_not_log=just_read)
     call get_param(param_file, mdl, "DEFAULT_ANSWER_DATE", default_answer_date, &
                  "This sets the default value for the various _ANSWER_DATE parameters.", &
                  default=99991231, do_not_log=just_read)
