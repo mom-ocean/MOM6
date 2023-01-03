@@ -131,7 +131,10 @@ type, public :: ALE_sponge_CS ; private
                                    !! been rearranged for rotational invariance.
 
   logical :: time_varying_sponges  !< True if using newer sponge code
-  logical :: spongeDataOngrid !< True if the sponge data are on the model horizontal grid
+  logical :: spongeDataOngrid      !< True if the sponge data are on the model horizontal grid
+  real :: varying_input_h_mask     !< An input file thickness below which the target values with time-varying
+                                   !! sponges are replaced by the value above [H ~> m or kg m-2].
+                                   !! It is not clear why this needs to be greater than 0.
 
   !>@{ Diagnostic IDs
   integer, dimension(MAX_FIELDS_) :: id_sp_tendency      !< Diagnostic ids for tracers
@@ -444,7 +447,7 @@ end subroutine get_ALE_sponge_thicknesses
 subroutine initialize_ALE_sponge_varying(Iresttime, G, GV, param_file, CS, Iresttime_u_in, Iresttime_v_in)
 
   type(ocean_grid_type),            intent(in) :: G !< The ocean's grid structure.
-  type(verticalGrid_type), intent(in) :: GV !< ocean vertical grid structure
+  type(verticalGrid_type),          intent(in) :: GV !< ocean vertical grid structure
   real, dimension(SZI_(G),SZJ_(G)), intent(inout) :: Iresttime !< The inverse of the restoring time [T-1 ~> s-1].
   type(param_file_type),            intent(in) :: param_file !< A structure indicating the open file to parse
                                                              !! for model parameter values.
@@ -502,6 +505,11 @@ subroutine initialize_ALE_sponge_varying(Iresttime, G, GV, param_file, CS, Irest
                  "than PCM. E.g., if PPM is used for remapping, a "//&
                  "PPM reconstruction will also be used within boundary cells.", &
                  default=.false., do_not_log=.true.)
+  call get_param(param_file, mdl, "VARYING_SPONGE_MASK_THICKNESS", CS%varying_input_h_mask, &
+                 "An input file thickness below which the target values with "//&
+                 "time-varying sponges are replaced by the value above.", &
+                 units="m", default=0.001, scale=GV%m_to_H)
+
   call get_param(param_file, mdl, "DEFAULT_ANSWER_DATE", default_answer_date, &
                  "This sets the default value for the various _ANSWER_DATE parameters.", &
                  default=99991231)
@@ -893,7 +901,7 @@ subroutine set_up_ALE_sponge_vel_field_varying(filename_u, fieldname_u, filename
   else
     CS%Ref_val_u%id = init_external_field(filename_u, fieldname_u)
   endif
-  fld_sz(1:4)=-1
+  fld_sz(1:4) = -1
   call get_external_field_info(CS%Ref_val_u%id, size=fld_sz)
   CS%Ref_val_u%nz_data = fld_sz(3)
   CS%Ref_val_u%num_tlevs = fld_sz(4)
@@ -904,7 +912,7 @@ subroutine set_up_ALE_sponge_vel_field_varying(filename_u, fieldname_u, filename
   else
     CS%Ref_val_v%id = init_external_field(filename_v, fieldname_v)
   endif
-  fld_sz(1:4)=-1
+  fld_sz(1:4) = -1
   call get_external_field_info(CS%Ref_val_v%id, size=fld_sz)
   CS%Ref_val_v%nz_data = fld_sz(3)
   CS%Ref_val_v%num_tlevs = fld_sz(4)
@@ -943,20 +951,20 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
   real, allocatable, dimension(:,:,:) :: mask_u ! A temporary array for field mask at u pts [nondim]
   real, allocatable, dimension(:,:,:) :: mask_v ! A temporary array for field mask at v pts [nondim]
   real, allocatable, dimension(:,:,:) :: tmp    !< A temporary array for thermodynamic sponge tendency
-                                                !! diagnostics [various]
+                                                !! diagnostics [various] then in [various T-1 ~> various s-1]
   real, allocatable, dimension(:,:,:) :: tmp_u  !< A temporary array for u sponge acceleration diagnostics
                                                 !! first in [L T-1 ~> m s-1] then in [L T-2 ~> m s-2]
   real, allocatable, dimension(:,:,:) :: tmp_v  !< A temporary array for v sponge acceleration diagnostics
                                                 !! first in [L T-1 ~> m s-1] then in [L T-2 ~> m s-2]
   real, dimension(:), allocatable :: hsrc       ! Source thicknesses [Z ~> m].
   ! Local variables for ALE remapping
-  real, dimension(:), allocatable :: tmpT1d
+  real, dimension(:), allocatable :: tmpT1d     ! A temporary variable for ALE remapping [various]
   integer :: c, m, i, j, k, is, ie, js, je, nz, nz_data
   real, allocatable, dimension(:), target :: z_in  ! The depths (positive downward) in the input file [Z ~> m]
   real, allocatable, dimension(:), target :: z_edges_in ! The depths (positive downward) of the
                                                         ! edges in the input file [Z ~> m]
   real :: missing_value  ! The missing value in the input data field [various]
-  real :: Idt  ! The inverse of the timestep [T-1 ~> s-1]
+  real :: Idt      ! The inverse of the timestep [T-1 ~> s-1]
   real :: h_neglect, h_neglect_edge ! Negligible thicknesses [H ~> m or kg m-2]
   real :: zTopOfCell, zBottomOfCell ! Interface heights (positive upward) in the input dataset [Z ~> m].
   real :: sp_val_u ! Interpolation of sp_val to u-points, often a velocity in [L T-1 ~> m s-1]
@@ -986,6 +994,7 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
       allocate( hsrc(nz_data) )
       allocate( tmpT1d(nz_data) )
       do c=1,CS%num_col
+        ! Set i and j to the structured indices of column c.
         i = CS%col_i(c) ; j = CS%col_j(c)
         CS%Ref_val(m)%p(1:nz_data,c) = sp_val(i,j,1:nz_data)
         ! Build the source grid
@@ -1001,7 +1010,7 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
             tmpT1d(k) = -99.9
           endif
           hsrc(k) = zTopOfCell - zBottomOfCell
-          if (hsrc(k)>0.) nPoints = nPoints + 1
+          if (hsrc(k) > 0.) nPoints = nPoints + 1
           zTopOfCell = zBottomOfCell ! Bottom becomes top for next value of k
         enddo
         ! In case data is deeper than model
@@ -1009,7 +1018,7 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
         CS%Ref_val(m)%h(1:nz_data,c) = GV%Z_to_H*hsrc(1:nz_data)
         CS%Ref_val(m)%p(1:nz_data,c) = tmpT1d(1:nz_data)
         do k=2,nz_data
-          if (CS%Ref_val(m)%h(k,c) <= 0.001*GV%m_to_H) &
+          if (CS%Ref_val(m)%h(k,c) <= CS%varying_input_h_mask) &
             ! some confusion here about why the masks are not correct returning from horiz_interp
             ! reverting to using a minimum thickness criteria
             CS%Ref_val(m)%p(k,c) = CS%Ref_val(m)%p(k-1,c)
@@ -1027,14 +1036,13 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
       allocate(tmp(G%isd:G%ied,G%jsd:G%jed,nz), source=0.0)
     endif
     do c=1,CS%num_col
-      ! c is an index for the next 3 lines but a multiplier for the rest of the loop
-      ! Therefore we use c as per C code and increment the index where necessary.
+      ! Set i and j to the structured indices of column c.
       i = CS%col_i(c) ; j = CS%col_j(c)
       damp = dt * CS%Iresttime_col(c)
       I1pdamp = 1.0 / (1.0 + damp)
       tmp_val2(1:nz_data) = CS%Ref_val(m)%p(1:nz_data,c)
       do k=1,nz
-        h_col(k)=h(i,j,k)
+        h_col(k) = h(i,j,k)
       enddo
       if (CS%time_varying_sponges) then
 
@@ -1081,8 +1089,7 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
 
       allocate( hsrc(nz_data) )
       do c=1,CS%num_col_u
-        ! c is an index for the next 3 lines but a multiplier for the rest of the loop
-        ! Therefore we use c as per C code and increment the index where necessary.
+        ! Set i and j to the structured indices of column c.
         i = CS%col_i_u(c) ; j = CS%col_j_u(c)
         if (mask_u(i,j,1) == 1.0) then
           do k=1,nz_data
@@ -1102,7 +1109,7 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
           else ! This next block should only ever be reached over land
           endif
           hsrc(k) = zTopOfCell - zBottomOfCell
-          if (hsrc(k)>0.) nPoints = nPoints + 1
+          if (hsrc(k) > 0.) nPoints = nPoints + 1
           zTopOfCell = zBottomOfCell ! Bottom becomes top for next value of k
         enddo
         ! In case data is deeper than model
@@ -1129,8 +1136,7 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
       !call pass_var(mask_z,G%Domain)
       allocate( hsrc(nz_data) )
       do c=1,CS%num_col_v
-        ! c is an index for the next 3 lines but a multiplier for the rest of the loop
-        ! Therefore we use c as per C code and increment the index where necessary.
+        ! Set i and j to the structured indices of column c.
         i = CS%col_i_v(c) ; j = CS%col_j_v(c)
         if (mask_v(i,j,1) == 1.0) then
           do k=1,nz_data
@@ -1150,7 +1156,7 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
           else ! This next block should only ever be reached over land
           endif
           hsrc(k) = zTopOfCell - zBottomOfCell
-          if (hsrc(k)>0.) nPoints = nPoints + 1
+          if (hsrc(k) > 0.) nPoints = nPoints + 1
             zTopOfCell = zBottomOfCell ! Bottom becomes top for next value of k
         enddo
         ! In case data is deeper than model
