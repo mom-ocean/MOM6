@@ -43,6 +43,8 @@ type, public :: diabatic_aux_CS ; private
   logical :: do_rivermix = .false. !< Provide additional TKE to mix river runoff at the
                                    !! river mouths to a depth of "rivermix_depth"
   real    :: rivermix_depth = 0.0  !< The depth to which rivers are mixed if do_rivermix = T [Z ~> m].
+  real    :: dSalt_frac_max  !< An upper limit on the fraction of the salt in a layer that can be
+                             !! lost to the net surface salt fluxes within a timestep [nondim]
   logical :: reclaim_frazil  !<   If true, try to use any frazil heat deficit to
                              !! to cool the topmost layer down to the freezing
                              !! point.  The default is true.
@@ -220,7 +222,7 @@ subroutine make_frazil(h, tv, G, GV, US, CS, p_surf, halo)
 end subroutine make_frazil
 
 !> This subroutine applies double diffusion to T & S, assuming no diapycnal mass
-!! fluxes, using a simple triadiagonal solver.
+!! fluxes, using a simple tridiagonal solver.
 subroutine differential_diffuse_T_S(h, T, S, Kd_T, Kd_S, dt, G, GV)
   type(ocean_grid_type),   intent(in)    :: G    !< The ocean's grid structure
   type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure
@@ -507,7 +509,7 @@ subroutine find_uv_at_h(u, v, h, u_h, v_h, G, GV, US, ea, eb, zero_mix)
   real :: a_n(SZI_(G)), a_s(SZI_(G))  ! Fractional weights of the neighboring velocity points [nondim]
   real :: a_e(SZI_(G)), a_w(SZI_(G))  ! Fractional weights of the neighboring velocity points [nondim]
   real :: sum_area     ! A sum of adjacent areas [L2 ~> m2]
-  real :: Idenom       ! The inverse of the denomninator in a weighted average [L-2 ~> m-2]
+  real :: Idenom       ! The inverse of the denominator in a weighted average [L-2 ~> m-2]
   logical :: mix_vertically, zero_mixing
   integer :: i, j, k, is, ie, js, je, nz
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
@@ -594,12 +596,15 @@ subroutine find_uv_at_h(u, v, h, u_h, v_h, G, GV, US, ea, eb, zero_mix)
   call cpu_clock_end(id_clock_uv_at_h)
 end subroutine find_uv_at_h
 
-
+!> Estimate the optical properties of the water column and determine the penetrating shortwave
+!! radiation by band, extracting the relevant information from the fluxes type and storing it
+!! in the optics type for later application.  This routine is effectively a wrapper for
+!! set_opacity with added error handling and diagnostics.
 subroutine set_pen_shortwave(optics, fluxes, G, GV, US, CS, opacity, tracer_flow_CSp)
   type(optics_type),       pointer       :: optics !< An optics structure that has will contain
                                                    !! information about shortwave fluxes and absorption.
   type(forcing),           intent(inout) :: fluxes !< points to forcing fields
-                                                   !! unused fields have NULL ptrs
+                                                   !! unused fields have NULL pointers
   type(ocean_grid_type),   intent(in)    :: G      !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)    :: GV     !< The ocean's vertical grid structure.
   type(unit_scale_type),   intent(in)    :: US     !< A dimensional unit scaling type
@@ -702,7 +707,7 @@ subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, GV, US,
       id_N2 = id_N2subML
       dH_subML = GV%Z_to_H*dz_subML
     else
-      call MOM_error(FATAL, "When the a diagnostic of the subML stratification is "//&
+      call MOM_error(FATAL, "When the diagnostic of the subML stratification is "//&
                 "requested by providing id_N2_subML to diagnoseMLDbyDensityDifference, "//&
                 "the distance over which to calculate that distance must also be provided.")
     endif
@@ -737,10 +742,10 @@ subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, GV, US,
       ! the cells that extend over at least dz_subML.
       if (id_N2>0) then
          do i=is,ie
-          if (MLD(i,j)==0.0) then  ! Still in the mixed layer.
+          if (MLD(i,j) == 0.0) then  ! Still in the mixed layer.
             H_subML(i) = H_subML(i) + h(i,j,k)
           elseif (.not.N2_region_set(i)) then ! This block is below the mixed layer, but N2 has not been found yet.
-            if (dH_N2(i)==0.0) then ! Record the temperature, salinity, pressure, immediately below the ML
+            if (dH_N2(i) == 0.0) then ! Record the temperature, salinity, pressure, immediately below the ML
               T_subML(i) = tv%T(i,j,k) ; S_subML(i) = tv%S(i,j,k)
               H_subML(i) = H_subML(i) + 0.5 * h(i,j,k) ! Start midway through this layer.
               dH_N2(i) = 0.5 * h(i,j,k)
@@ -761,8 +766,8 @@ subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, GV, US,
       do i = is, ie
         deltaRhoAtK(i) = deltaRhoAtK(i) - rhoSurf(i) ! Density difference between layer K and surface
         ddRho = deltaRhoAtK(i) - deltaRhoAtKm1(i)
-        if ((MLD(i,j)==0.) .and. (ddRho>0.) .and. &
-            (deltaRhoAtKm1(i)<densityDiff) .and. (deltaRhoAtK(i)>=densityDiff)) then
+        if ((MLD(i,j) == 0.) .and. (ddRho > 0.) .and. &
+            (deltaRhoAtKm1(i) < densityDiff) .and. (deltaRhoAtK(i) >= densityDiff)) then
           aFac = ( densityDiff - deltaRhoAtKm1(i) ) / ddRho
           MLD(i,j) = dK(i) * aFac + dKm1(i) * (1. - aFac)
         endif
@@ -770,7 +775,7 @@ subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, GV, US,
       enddo ! i-loop
     enddo ! k-loop
     do i=is,ie
-      if ((MLD(i,j)==0.) .and. (deltaRhoAtK(i)<densityDiff)) MLD(i,j) = dK(i) ! Assume mixing to the bottom
+      if ((MLD(i,j) == 0.) .and. (deltaRhoAtK(i) < densityDiff)) MLD(i,j) = dK(i) ! Assume mixing to the bottom
     enddo
 
     if (id_N2>0) then  ! Now actually calculate stratification, N2, below the mixed layer.
@@ -1293,7 +1298,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
     ! B/ update mass, salt, temp from mass leaving ocean.
     ! C/ update temp due to penetrative SW
     do i=is,ie
-      if (G%mask2dT(i,j)>0.) then
+      if (G%mask2dT(i,j) > 0.) then
 
         ! A/ Update mass, temp, and salinity due to incoming mass flux.
         do k=1,1
@@ -1333,7 +1338,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
             ! where River is in units of [Z T-1 ~> m s-1].
             ! Samb = Ambient salinity at the mouth of the estuary
             ! rivermix_depth =  The prescribed depth over which to mix river inflow
-            ! drho_ds = The gradient of density wrt salt at the ambient surface salinity.
+            ! drho_ds = The derivative of density with salt at the ambient surface salinity.
             ! Sriver = 0 (i.e. rivers are assumed to be pure freshwater)
             if (GV%Boussinesq) then
               RivermixConst = -0.5*(CS%rivermix_depth*dt) * ( US%L_to_Z**2*GV%g_Earth ) * GV%Rho0
@@ -1384,8 +1389,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
 
           dThickness = max( fractionOfForcing*netMassOut(i), -h2d(i,k) )
           dTemp      = fractionOfForcing*netHeat(i)
-          !   ### The 0.9999 here should become a run-time parameter?
-          dSalt = max( fractionOfForcing*netSalt(i), -0.9999*h2d(i,k)*tv%S(i,j,k))
+          dSalt = max( fractionOfForcing*netSalt(i), -CS%dSalt_frac_max * h2d(i,k) * tv%S(i,j,k))
 
           ! Update the forcing by the part to be consumed within the present k-layer.
           ! If fractionOfForcing = 1, then new netMassOut vanishes.
@@ -1441,7 +1445,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
         enddo ! k
 
       ! Check if trying to apply fluxes over land points
-      elseif ((abs(netHeat(i))+abs(netSalt(i))+abs(netMassIn(i))+abs(netMassOut(i)))>0.) then
+      elseif ((abs(netHeat(i)) + abs(netSalt(i)) + abs(netMassIn(i)) + abs(netMassOut(i))) > 0.) then
 
         if (.not. CS%ignore_fluxes_over_land) then
            call forcing_SinglePointPrint(fluxes,G,i,j,'applyBoundaryFluxesInOut (land)')
@@ -1579,7 +1583,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
   if (CS%id_nonpenSW_diag  > 0) call post_data(CS%id_nonpenSW_diag , CS%nonpenSW_diag , CS%diag)
 
 ! The following check will be ignored if ignore_fluxes_over_land = true
-  if (numberOfGroundings>0 .and. .not. CS%ignore_fluxes_over_land) then
+  if ((numberOfGroundings > 0) .and. .not.CS%ignore_fluxes_over_land) then
     do i = 1, min(numberOfGroundings, maxGroundings)
       call forcing_SinglePointPrint(fluxes,G,iGround(i),jGround(i),'applyBoundaryFluxesInOut (grounding)')
       write(mesg(1:45),'(3es15.3)') G%geoLonT( iGround(i), jGround(i) ), &
@@ -1613,8 +1617,8 @@ subroutine diabatic_aux_init(Time, G, GV, US, param_file, diag, CS, useALEalgori
                                                  !! boundary layer scheme to determine the diffusivity
                                                  !! in the surface boundary layer.
 
-! This "include" declares and sets the variable "version".
-#include "version_variable.h"
+  ! This "include" declares and sets the variable "version".
+# include "version_variable.h"
   character(len=40)  :: mdl  = "MOM_diabatic_aux" ! This module's name.
   character(len=200) :: inputdir   ! The directory where NetCDF input files
   character(len=240) :: chl_filename ! A file from which chl_a concentrations are to be read.
@@ -1642,28 +1646,31 @@ subroutine diabatic_aux_init(Time, G, GV, US, param_file, diag, CS, useALEalgori
                    "The following parameters are used for auxiliary diabatic processes.")
 
   call get_param(param_file, mdl, "ENABLE_THERMODYNAMICS", use_temperature, &
-                 "If true, temperature and salinity are used as state "//&
-                 "variables.", default=.true.)
+                 "If true, temperature and salinity are used as state variables.", default=.true.)
 
   call get_param(param_file, mdl, "RECLAIM_FRAZIL", CS%reclaim_frazil, &
                  "If true, try to use any frazil heat deficit to cool any "//&
                  "overlying layers down to the freezing point, thereby "//&
                  "avoiding the creation of thin ice when the SST is above "//&
-                 "the freezing point.", default=.true.)
-  call get_param(param_file, mdl, "PRESSURE_DEPENDENT_FRAZIL", &
-                                CS%pressure_dependent_frazil, &
+                 "the freezing point.", default=.true., do_not_log=.not.use_temperature)
+  call get_param(param_file, mdl, "SALT_EXTRACTION_LIMIT", CS%dSalt_frac_max, &
+                 "An upper limit on the fraction of the salt in a layer that can be lost to the "//&
+                 "net surface salt fluxes within a timestep.", &
+                 units="nondim", default=0.9999, do_not_log=.not.use_temperature)
+  CS%dSalt_frac_max = max(min(CS%dSalt_frac_max, 1.0), 0.0)
+  call get_param(param_file, mdl, "PRESSURE_DEPENDENT_FRAZIL", CS%pressure_dependent_frazil, &
                  "If true, use a pressure dependent freezing temperature "//&
                  "when making frazil. The default is false, which will be "//&
                  "faster but is inappropriate with ice-shelf cavities.", &
-                 default=.false.)
+                 default=.false., do_not_log=.not.use_temperature)
 
   if (use_ePBL) then
     call get_param(param_file, mdl, "IGNORE_FLUXES_OVER_LAND", CS%ignore_fluxes_over_land,&
-         "If true, the model does not check if fluxes are being applied "//&
-         "over land points. This is needed when the ocean is coupled "//&
-         "with ice shelves and sea ice, since the sea ice mask needs to "//&
-         "be different than the ocean mask to avoid sea ice formation "//&
-         "under ice shelves. This flag only works when use_ePBL = True.", default=.false.)
+                 "If true, the model does not check if fluxes are being applied "//&
+                 "over land points. This is needed when the ocean is coupled "//&
+                 "with ice shelves and sea ice, since the sea ice mask needs to "//&
+                 "be different than the ocean mask to avoid sea ice formation "//&
+                 "under ice shelves. This flag only works when use_ePBL = True.", default=.false.)
     call get_param(param_file, mdl, "DO_RIVERMIX", CS%do_rivermix, &
                  "If true, apply additional mixing wherever there is "//&
                  "runoff, so that it is mixed down to RIVERMIX_DEPTH "//&
@@ -1680,11 +1687,11 @@ subroutine diabatic_aux_init(Time, G, GV, US, param_file, diag, CS, useALEalgori
     call get_param(param_file, mdl, "USE_RIVER_HEAT_CONTENT", CS%use_river_heat_content, &
                    "If true, use the fluxes%runoff_Hflx field to set the "//&
                    "heat carried by runoff, instead of using SST*CP*liq_runoff.", &
-                   default=.false.)
+                   default=.false., do_not_log=.not.use_temperature)
     call get_param(param_file, mdl, "USE_CALVING_HEAT_CONTENT", CS%use_calving_heat_content, &
                    "If true, use the fluxes%calving_Hflx field to set the "//&
                    "heat carried by runoff, instead of using SST*CP*froz_runoff.", &
-                   default=.false.)
+                   default=.false., do_not_log=.not.use_temperature)
   else
     CS%use_river_heat_content = .false.
     CS%use_calving_heat_content = .false.
@@ -1778,32 +1785,45 @@ end subroutine diabatic_aux_end
 
 !> \namespace mom_diabatic_aux
 !!
-!!    This module contains the subroutines that, along with the
-!!  subroutines that it calls, implements diapycnal mass and momentum
-!!  fluxes and a bulk mixed layer.  The diapycnal diffusion can be
-!!  used without the bulk mixed layer.
+!!    This module contains subroutines that apply various diabatic processes.  Usually these
+!!  subroutines are called from the MOM_diabatic module.  All of these routines use appropriate
+!!  limiters or logic to work properly with arbitrary layer thicknesses (including massless layers)
+!!  and an arbitrarily large timestep.
 !!
-!!    diabatic first determines the (diffusive) diapycnal mass fluxes
-!!  based on the convergence of the buoyancy fluxes within each layer.
-!!  The dual-stream entrainment scheme of MacDougall and Dewar (JPO,
-!!  1997) is used for combined diapycnal advection and diffusion,
-!!  calculated implicitly and potentially with the Richardson number
-!!  dependent mixing, as described by Hallberg (MWR, 2000). Diapycnal
-!!  advection is fundamentally the residual of diapycnal diffusion,
-!!  so the fully implicit upwind differencing scheme that is used is
-!!  entirely appropriate.  The downward buoyancy flux in each layer
-!!  is determined from an implicit calculation based on the previously
-!!  calculated flux of the layer above and an estimated flux in the
-!!  layer below.  This flux is subject to the following conditions:
-!!  (1) the flux in the top and bottom layers are set by the boundary
-!!  conditions, and (2) no layer may be driven below an Angstrom thick-
-!!  ness.  If there is a bulk mixed layer, the buffer layer is treat-
-!!  ed as a fixed density layer with vanishingly small diffusivity.
+!!    The subroutine make_frazil facilitates the formation of frazil ice when the ocean water
+!!  drops below the in situ freezing point by heating the water to the freezing point and
+!!  accumulating the required heat for exchange with the sea-ice module.
 !!
-!!    diabatic takes 5 arguments:  the two velocities (u and v), the
-!!  thicknesses (h), a structure containing the forcing fields, and
-!!  the length of time over which to act (dt).  The velocities and
-!!  thickness are taken as inputs and modified within the subroutine.
-!!  There is no limit on the time step.
+!!    The subroutine adjust_salt adds salt as necessary to keep the salinity above a
+!!  specified minimum value, and keeps track of the cumulative additions.  If the minimum
+!!  salinity is the natural value of 0, this routine should never do anything.
+!!
+!!    The subroutine differential_diffuse_T_S solves a pair of tridiagonal equations for
+!!  the diffusion of temperatures and salinities with differing diffusivities.
+!!
+!!    The subroutine triDiagTS solves a tridiagonal equations for the evolution of temperatures
+!!  and salinities due to net entrainment by layers and a diffusion with the same diffusivity.
+!!
+!!    The subroutine triDiagTS_Eulerian solves a tridiagonal equations for the evolution of
+!!  temperatures and salinities due to diffusion with the same diffusivity, but no net entrainment.
+!!
+!!    The subroutine find_uv_at_h interpolates velocities to thickness points, optionally also
+!!  using tridiagonal equations to solve for the impacts of net entrainment or mixing of
+!!  momentum between layers.
+!!
+!!    The subroutine set_pen_shortwave determines the optical properties of the water column and
+!!  the net shortwave fluxes, and stores them in the optics type, working via calls to set_opacity.
+!!
+!!    The subroutine diagnoseMLDbyDensityDifference diagnoses a mixed layer depth based on a
+!!  density difference criterion, and may also estimate the stratification of the water below
+!!  this diagnosed mixed layer.
+!!
+!!    The subroutine diagnoseMLDbyEnergy diagnoses a mixed layer depth based on a mixing-energy
+!!  criterion, as described by Reichl et al., 2022, JGR: Oceans, doi:10.1029/2021JC018140.
+!!
+!!    The subroutine applyBoundaryFluxesInOut updates the layer thicknesses, temperatures and
+!!  salinities due to the application of the surface forcing.  It may also calculate the implied
+!!  turbulent kinetic energy requirements for this forcing to be mixed over the model's finite
+!!  vertical resolution in the surface layers.
 
 end module MOM_diabatic_aux
