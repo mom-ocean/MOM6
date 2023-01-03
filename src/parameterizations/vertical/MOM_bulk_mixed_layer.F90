@@ -51,6 +51,10 @@ type, public :: bulkmixedlayer_CS ; private
                              !! released mean kinetic energy becomes TKE [nondim].
   real    :: vonKar          !< The von Karman constant as used for mixed layer viscosity [nondim]
   real    :: Hmix_min        !< The minimum mixed layer thickness [H ~> m or kg m-2].
+  real    :: mech_TKE_floor  !< A tiny floor on the amount of turbulent kinetic energy that is
+                             !! used when the mixed layer does not yet contain HMIX_MIN fluid
+                             !! [Z L2 T-2 ~> m3 s-2].  The default is so small that its actual
+                             !! value is irrelevant, but it is detectably greater than 0.
   real    :: H_limit_fluxes  !< When the total ocean depth is less than this
                              !! value [H ~> m or kg m-2], scale away all surface forcing to
                              !! avoid boiling the ocean.
@@ -1633,8 +1637,8 @@ subroutine mechanical_entrainment(h, d_eb, htot, Ttot, Stot, uhtot, vhtot, &
           endif
 
           TKE(i) = TKE_full_ent
-          !### The minimum TKE value in this line may be problematically small.
-          if (TKE(i) <= 0.0) TKE(i) = 1.0e-150*US%m_to_Z*US%m_s_to_L_T**2
+
+          if (TKE(i) <= 0.0) TKE(i) = CS%mech_TKE_floor
         else
 ! The layer is only partially entrained.  The amount that will be
 ! entrained is determined iteratively.  No further layers will be
@@ -2406,7 +2410,7 @@ subroutine mixedlayer_detrain_2(h, T, S, R0, Rcv, RcvTgt, dt, dt_diag, d_ea, j, 
 
       R0(i,kb2) = R0(i,kb1)
 
-      Rcv(i,kb2)=Rcv(i,kb1) ; T(i,kb2)=T(i,kb1) ; S(i,kb2)=S(i,kb1)
+      Rcv(i,kb2) = Rcv(i,kb1) ; T(i,kb2) = T(i,kb1) ; S(i,kb2) = S(i,kb1)
 
 
       if (k1 <= nz) then ; if (R0(i,k1) >= R0(i,kb1)) then
@@ -3175,9 +3179,8 @@ subroutine mixedlayer_detrain_1(h, T, S, R0, Rcv, RcvTgt, dt, dt_diag, d_ea, d_e
 ! the released buoyancy.  With multiple buffer layers, much more
 ! graceful options are available.
   do i=is,ie ; if (h(i,nkmb) > 0.0) then
-    if ((R0(i,0)<R0(i,nz)) .and. (R0(i,nz)<R0(i,nkmb))) then
-      if ((R0(i,nz)-R0(i,0))*h(i,0) > &
-          (R0(i,nkmb)-R0(i,nz))*h(i,nkmb)) then
+    if ((R0(i,0) < R0(i,nz)) .and. (R0(i,nz) < R0(i,nkmb))) then
+      if ((R0(i,nz)-R0(i,0))*h(i,0) > (R0(i,nkmb)-R0(i,nz))*h(i,nkmb)) then
         detrain(i) = (R0(i,nkmb)-R0(i,nz))*h(i,nkmb) / (R0(i,nkmb)-R0(i,0))
       else
         detrain(i) = (R0(i,nz)-R0(i,0))*h(i,0) / (R0(i,nkmb)-R0(i,0))
@@ -3220,7 +3223,7 @@ subroutine mixedlayer_detrain_1(h, T, S, R0, Rcv, RcvTgt, dt, dt_diag, d_ea, d_e
 
   do k=nz-1,nkmb+1,-1 ; do i=is,ie
     if (splittable_BL(i)) then
-      if (RcvTgt(k)<=Rcv(i,nkmb)) then
+      if (RcvTgt(k) <= Rcv(i,nkmb)) then
 ! Estimate dR/drho, dTheta/dR, and dS/dR, where R is the coordinate variable
 ! and rho is in-situ (or surface) potential density.
 ! There is no "right" way to do this, so this keeps things reasonable, if
@@ -3320,7 +3323,7 @@ subroutine mixedlayer_detrain_1(h, T, S, R0, Rcv, RcvTgt, dt, dt_diag, d_ea, d_e
             CS%diag_PE_detrain(i,j) - g_H2_2dt * detrain(i) * dR0_dRcv * &
                  (h(i,nkmb)-detrain(i)) * (RcvTgt(k+1) - Rcv(i,nkmb) + dRml)
         endif
-      endif ! RcvTgt(k)<=Rcv(i,nkmb)
+      endif ! (RcvTgt(k) <= Rcv(i,nkmb))
     endif ! splittable_BL
   enddo ; enddo ! i & k loops
 
@@ -3422,6 +3425,12 @@ subroutine bulkmixedlayer_init(Time, G, GV, US, param_file, diag, CS)
                  "The minimum mixed layer depth if the mixed layer depth "//&
                  "is determined dynamically.", units="m", default=0.0, scale=US%m_to_Z)
   CS%Hmix_min = GV%Z_to_H * Hmix_min_Z
+  call get_param(param_file, mdl, "MECH_TKE_FLOOR", CS%mech_TKE_floor, &
+                 "A tiny floor on the amount of turbulent kinetic energy that is used when "//&
+                 "the mixed layer does not yet contain HMIX_MIN fluid.  The default is so "//&
+                 "small that its actual value is irrelevant, so long as it is greater than 0.", &
+                 units="m3 s-2", default=1.0e-150, scale=US%m_to_Z*US%m_s_to_L_T**2, &
+                 do_not_log=(Hmix_min_Z<=0.0))
 
   call get_param(param_file, mdl, "LIMIT_BUFFER_DETRAIN", CS%limit_det, &
                  "If true, limit the detrainment from the buffer layers "//&
