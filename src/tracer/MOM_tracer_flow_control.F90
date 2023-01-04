@@ -178,8 +178,7 @@ subroutine call_tracer_register(G, GV, US, param_file, CS, tr_Reg, restart_CS)
 
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mdl, version, "")
-  call get_param(param_file, mdl, "USE_USER_TRACER_EXAMPLE", &
-                                CS%use_USER_tracer_example, &
+  call get_param(param_file, mdl, "USE_USER_TRACER_EXAMPLE", CS%use_USER_tracer_example, &
                  "If true, use the USER_tracer_example tracer package.", &
                  default=.false.)
   call get_param(param_file, mdl, "USE_DOME_TRACER", CS%use_DOME_tracer, &
@@ -230,10 +229,10 @@ subroutine call_tracer_register(G, GV, US, param_file, CS, tr_Reg, restart_CS)
 !  tracer package registration call returns a logical false if it cannot be run
 !  for some reason.  This then overrides the run-time selection from above.
   if (CS%use_USER_tracer_example) CS%use_USER_tracer_example = &
-    USER_register_tracer_example(G%HI, GV, param_file, CS%USER_tracer_example_CSp, &
+    USER_register_tracer_example(G, GV, US, param_file, CS%USER_tracer_example_CSp, &
                                  tr_Reg, restart_CS)
   if (CS%use_DOME_tracer) CS%use_DOME_tracer = &
-    register_DOME_tracer(G%HI, GV, param_file, CS%DOME_tracer_CSp, &
+    register_DOME_tracer(G, GV, US, param_file, CS%DOME_tracer_CSp, &
                          tr_Reg, restart_CS)
   if (CS%use_ISOMIP_tracer) CS%use_ISOMIP_tracer = &
     register_ISOMIP_tracer(G%HI, GV, param_file, CS%ISOMIP_tracer_CSp, &

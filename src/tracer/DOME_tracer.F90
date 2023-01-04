@@ -42,9 +42,17 @@ type, public :: DOME_tracer_CS ; private
   character(len=200) :: tracer_IC_file !< The full path to the IC file, or " " to initialize internally.
   type(time_type), pointer :: Time => NULL() !< A pointer to the ocean model's clock.
   type(tracer_registry_type), pointer :: tr_Reg => NULL() !< A pointer to the tracer registry
-  real, pointer :: tr(:,:,:,:) => NULL()   !< The array of tracers used in this package, in g m-3?
-  real :: land_val(NTR) = -1.0 !< The value of tr used where land is masked out.
+  real, pointer :: tr(:,:,:,:) => NULL()   !< The array of tracers used in this package, perhaps in [g kg-1]
+  real :: land_val(NTR) = -1.0 !< The value of tr used where land is masked out, perhaps in [g kg-1]
   logical :: use_sponge    !< If true, sponges may be applied somewhere in the domain.
+
+  real :: stripe_width  !< The meridional width of the vertical stripes in the initial condition
+                        !! for some of the DOME tracers, in [km] or [degrees_N] or [m].
+  real :: stripe_s_lat  !< The southern latitude of the first vertical stripe in the initial condition
+                        !! for some of the DOME tracers, in [km] or [degrees_N] or [m].
+  real :: sheet_spacing !< The vertical spacing between successive horizontal sheets of tracer in the initial
+                        !! conditions for some of the DOME tracers [Z ~> m], and twice the thickness of
+                        !! these horizontal tracer sheets
 
   integer, dimension(NTR) :: ind_tr !< Indices returned by atmos_ocn_coupler_flux if it is used and the
                                     !! surface tracer concentrations are to be provided to the coupler.
@@ -58,14 +66,15 @@ end type DOME_tracer_CS
 contains
 
 !> Register tracer fields and subroutines to be used with MOM.
-function register_DOME_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
-  type(hor_index_type),       intent(in) :: HI   !< A horizontal index type structure.
-  type(verticalGrid_type),    intent(in) :: GV   !< The ocean's vertical grid structure
-  type(param_file_type),      intent(in) :: param_file !< A structure to parse for run-time parameters
-  type(DOME_tracer_CS),       pointer    :: CS   !< A pointer that is set to point to the
+function register_DOME_tracer(G, GV, US, param_file, CS, tr_Reg, restart_CS)
+  type(ocean_grid_type),    intent(in)   :: G    !< The ocean's grid structure
+  type(verticalGrid_type),  intent(in)   :: GV   !< The ocean's vertical grid structure
+  type(unit_scale_type),    intent(in)   :: US   !< A dimensional unit scaling type
+  type(param_file_type),    intent(in)   :: param_file !< A structure to parse for run-time parameters
+  type(DOME_tracer_CS),     pointer      :: CS   !< A pointer that is set to point to the
                                                  !! control structure for this module
   type(tracer_registry_type), pointer    :: tr_Reg !< A pointer to the tracer registry.
-  type(MOM_restart_CS), intent(inout)    :: restart_CS !< MOM restart control struct
+  type(MOM_restart_CS),    intent(inout) :: restart_CS !< MOM restart control struct
 
   ! Local variables
   character(len=80)  :: name, longname
@@ -75,10 +84,10 @@ function register_DOME_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
   character(len=48) :: flux_units ! The units for tracer fluxes, usually
                             ! kg(tracer) kg(water)-1 m3 s-1 or kg(tracer) s-1.
   character(len=200) :: inputdir
-  real, pointer :: tr_ptr(:,:,:) => NULL()  ! A pointer to the tracer field
+  real, pointer :: tr_ptr(:,:,:) => NULL() ! A pointer to one of the tracers, perhaps in [g kg-1]
   logical :: register_DOME_tracer
   integer :: isd, ied, jsd, jed, nz, m
-  isd = HI%isd ; ied = HI%ied ; jsd = HI%jsd ; jed = HI%jed ; nz = GV%ke
+  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nz = GV%ke
 
   if (associated(CS)) then
     call MOM_error(FATAL, "DOME_register_tracer called with an "// &
@@ -99,6 +108,16 @@ function register_DOME_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
     call log_param(param_file, mdl, "INPUTDIR/DOME_TRACER_IC_FILE", &
                    CS%tracer_IC_file)
   endif
+  call get_param(param_file, mdl, "DOME_TRACER_STRIPE_WIDTH", CS%stripe_width, &
+                 "The meridional width of the vertical stripes in the initial condition "//&
+                 "for the DOME tracers.", units=G%y_ax_unit_short, default=50.0)
+  call get_param(param_file, mdl, "DOME_TRACER_STRIPE_LAT", CS%stripe_s_lat, &
+                 "The southern latitude of the first vertical stripe in the initial condition "//&
+                 "for the DOME tracers.", units=G%y_ax_unit_short, default=350.0)
+  call get_param(param_file, mdl, "DOME_TRACER_SHEET_SPACING", CS%sheet_spacing, &
+                 "The vertical spacing between successive horizontal sheets of tracer in the initial "//&
+                 "conditions for the DOME tracers, and twice the thickness of these tracer sheets.", &
+                 units="m", default=600.0, scale=US%m_to_Z)
   call get_param(param_file, mdl, "SPONGE", CS%use_sponge, &
                  "If true, sponges may be applied anywhere in the domain. "//&
                  "The exact location and properties of those sponges are "//&
@@ -118,7 +137,7 @@ function register_DOME_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
     ! calls.  Curses on the designers and implementers of Fortran90.
     tr_ptr => CS%tr(:,:,:,m)
     ! Register the tracer for horizontal advection, diffusion, and restarts.
-    call register_tracer(tr_ptr, tr_Reg, param_file, HI, GV, &
+    call register_tracer(tr_ptr, tr_Reg, param_file, G%HI, GV, &
                          name=name, longname=longname, units="kg kg-1", &
                          registry_diags=.true., restart_CS=restart_CS, &
                          flux_units=trim(flux_units), flux_scale=GV%H_to_MKS)
@@ -154,16 +173,16 @@ subroutine initialize_DOME_tracer(restart, day, G, GV, US, h, diag, OBC, CS, &
   type(param_file_type),                 intent(in) :: param_file !< A structure to parse for run-time parameters
 
 ! Local variables
-  real, allocatable :: temp(:,:,:)
+  real, allocatable :: temp(:,:,:) ! Target values for the tracers in the sponges, perhaps in [g kg-1]
   character(len=16) :: name     ! A variable's name in a NetCDF file.
-  real, pointer :: tr_ptr(:,:,:) => NULL()  ! A pointer to the tracer field
-  real :: tr_y   ! Initial zonally uniform tracer concentrations.
+  real, pointer :: tr_ptr(:,:,:) => NULL() ! A pointer to one of the tracers, perhaps in [g kg-1]
+  real :: tr_y   ! Initial zonally uniform tracer concentrations, perhaps in [g kg-1]
   real :: h_neglect         ! A thickness that is so small it is usually lost
                             ! in roundoff and can be neglected [H ~> m or kg m-2].
   real :: e(SZK_(GV)+1)     ! Interface heights relative to the sea surface (negative down) [Z ~> m]
   real :: e_top  ! Height of the top of the tracer band relative to the sea surface [Z ~> m]
   real :: e_bot  ! Height of the bottom of the tracer band relative to the sea surface [Z ~> m]
-  real :: d_tr   ! A change in tracer concentrations, in tracer units.
+  real :: d_tr   ! A change in tracer concentrations, in tracer units, perhaps [g kg-1]
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz, m
   integer :: IsdB, IedB, JsdB, JedB
 
@@ -194,24 +213,25 @@ subroutine initialize_DOME_tracer(restart, day, G, GV, US, h, diag, OBC, CS, &
       enddo
 
 !    This sets a stripe of tracer across the basin.
-      do m=2,NTR ; do j=js,je ; do i=is,ie
+      do m=2,min(6,NTR) ; do j=js,je ; do i=is,ie
         tr_y = 0.0
-        if ((m <= 6) .and. (G%geoLatT(i,j) > (300.0+50.0*real(m-1))) .and. &
-            (G%geoLatT(i,j) < (350.0+50.0*real(m-1)))) tr_y = 1.0
+        if ((G%geoLatT(i,j) > (CS%stripe_s_lat + CS%stripe_width*real(m-2))) .and. &
+            (G%geoLatT(i,j) < (CS%stripe_s_lat + CS%stripe_width*real(m-1)))) &
+          tr_y = 1.0
         do k=1,nz
 !      This adds the stripes of tracer to every layer.
             CS%tr(i,j,k,m) = CS%tr(i,j,k,m) + tr_y
         enddo
       enddo ; enddo ; enddo
 
-      if (NTR > 7) then
+      if (NTR >= 7) then
         do j=js,je ; do i=is,ie
           e(1) = 0.0
           do k=1,nz
             e(K+1) = e(K) - h(i,j,k)*GV%H_to_Z
             do m=7,NTR
-              e_top = (-600.0*real(m-1) + 3000.0) * US%m_to_Z
-              e_bot = (-600.0*real(m-1) + 2700.0) * US%m_to_Z
+              e_top = -CS%sheet_spacing * (real(m-6))
+              e_bot = -CS%sheet_spacing * (real(m-6) + 0.5)
               if (e_top < e(K)) then
                 if (e_top < e(K+1)) then ; d_tr = 0.0
                 elseif (e_bot < e(K+1)) then
@@ -255,8 +275,7 @@ subroutine initialize_DOME_tracer(restart, day, G, GV, US, h, diag, OBC, CS, &
 
 !   do m=1,NTR
     do m=1,1
-      ! This is needed to force the compiler not to do a copy in the sponge
-      ! calls.  Curses on the designers and implementers of Fortran90.
+      ! This pointer is needed to force the compiler not to do a copy in the sponge calls.
       tr_ptr => CS%tr(:,:,:,m)
       call set_up_sponge_field(temp, tr_ptr, G, GV, nz, sponge_CSp)
     enddo
