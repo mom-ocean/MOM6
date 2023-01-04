@@ -1550,10 +1550,10 @@ subroutine find_depth_of_pressure_in_cell(T_t, T_b, S_t, S_b, z_t, z_b, P_t, P_t
                                             !! are anomalous to [R ~> kg m-3]
   real,                  intent(in)  :: G_e !< Gravitational acceleration [L2 Z-1 T-2 ~> m s-2]
   type(EOS_type),        intent(in)  :: EOS !< Equation of state structure
-  type(unit_scale_type), intent(in)  :: US !< A dimensional unit scaling type
+  type(unit_scale_type), intent(in)  :: US  !< A dimensional unit scaling type
   real,                  intent(out) :: P_b !< Pressure at the bottom of the cell [R L2 T-2 ~> Pa]
   real,                  intent(out) :: z_out !< Absolute depth at which anomalous pressure = p_tgt [Z ~> m]
-  real, optional,        intent(in)  :: z_tol !< The tolerance in finding z_out [Z ~> m]
+  real,                  intent(in)  :: z_tol !< The tolerance in finding z_out [Z ~> m]
 
   ! Local variables
   real :: dp    ! Pressure thickness of the layer [R L2 T-2 ~> Pa]
@@ -1583,8 +1583,7 @@ subroutine find_depth_of_pressure_in_cell(T_t, T_b, S_t, S_b, z_t, z_b, P_t, P_t
   Pa_left = P_t - P_tgt ! Pa_left < 0
   F_r = 1.
   Pa_right = P_b - P_tgt ! Pa_right > 0
-  Pa_tol = GxRho * 1.0e-5*US%m_to_Z
-  if (present(z_tol)) Pa_tol = GxRho * z_tol
+  Pa_tol = GxRho * z_tol
 
   F_guess = F_l - Pa_left / (Pa_right - Pa_left) * (F_r - F_l)
   Pa = Pa_right - Pa_left ! To get into iterative loop

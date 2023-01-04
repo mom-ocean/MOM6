@@ -1393,7 +1393,7 @@ subroutine cut_off_column_top(nk, tv, GV, US, G_earth, depth, min_thickness, T, 
   real, dimension(nk),   intent(inout) :: h   !< Layer thickness [H ~> m or kg m-2]
   type(remapping_CS),    pointer       :: remap_CS !< Remapping structure for remapping T and S,
                                                    !! if associated
-  real,        optional, intent(in)    :: z_tol !< The tolerance with which to find the depth
+  real,                  intent(in)    :: z_tol !< The tolerance with which to find the depth
                                                 !! matching the specified pressure [Z ~> m].
   integer,     optional, intent(in)    :: remap_answer_date !< The vintage of the order of arithmetic and
                                                 !! expressions to use for remapping.  Values below 20190101
@@ -2809,8 +2809,8 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, depth_tot, G, GV, US, PF, just
             tmpT1dIn(i,j,k) = tmpT1dIn(i,j,k-1)
             tmpS1dIn(i,j,k) = tmpS1dIn(i,j,k-1)
           else ! This next block should only ever be reached over land
-            tmpT1dIn(i,j,k) = -99.9*US%degC_to_C ! Change to temp_land_fill
-            tmpS1dIn(i,j,k) = -99.9*US%ppt_to_S  ! Change to salt_land_fill
+            tmpT1dIn(i,j,k) = temp_land_fill
+            tmpS1dIn(i,j,k) = salt_land_fill
           endif
           h1(i,j,k) = GV%Z_to_H * (zTopOfCell - zBottomOfCell)
           zTopOfCell = zBottomOfCell ! Bottom becomes top for next value of k
@@ -3129,6 +3129,7 @@ subroutine MOM_state_init_tests(G, GV, US, tv)
   real :: P_tot, P_t, P_b    ! Pressures [R L2 T-2 ~> Pa]
   real :: z_out              ! Output height [Z ~> m]
   real :: I_z_scale          ! The inverse of the height scale for prescribed gradients [Z-1 ~> m-1]
+  real :: z_tol              ! The tolerance with which to find the depth matching a specified pressure [Z ~> m].
   integer :: k
   type(remapping_CS), pointer :: remap_CS => NULL()
 
@@ -3143,6 +3144,7 @@ subroutine MOM_state_init_tests(G, GV, US, tv)
   P_tot = 0.
   T_ref = 20.0*US%degC_to_C
   S_ref = 35.0*US%ppt_to_S
+  z_tol = 1.0e-5*US%m_to_Z
   do k = 1, nk
     z(k) = 0.5 * ( e(K) + e(K+1) )
     T_t(k) = T_ref + (0. * I_z_scale) * e(k)
@@ -3159,7 +3161,7 @@ subroutine MOM_state_init_tests(G, GV, US, tv)
   P_t = 0.
   do k = 1, nk
     call find_depth_of_pressure_in_cell(T_t(k), T_b(k), S_t(k), S_b(k), e(K), e(K+1), P_t, 0.5*P_tot, &
-                                        GV%Rho0, GV%g_Earth, tv%eqn_of_state, US, P_b, z_out)
+                                        GV%Rho0, GV%g_Earth, tv%eqn_of_state, US, P_b, z_out, z_tol=z_tol)
     write(0,*) k, US%RL2_T2_to_Pa*P_t, US%RL2_T2_to_Pa*P_b, 0.5*US%RL2_T2_to_Pa*P_tot, &
                US%Z_to_m*e(K), US%Z_to_m*e(K+1), US%Z_to_m*z_out
     P_t = P_b
@@ -3171,7 +3173,7 @@ subroutine MOM_state_init_tests(G, GV, US, tv)
   write(0,*) ''
   write(0,*) GV%H_to_m*h(:)
   call cut_off_column_top(nk, tv, GV, US, GV%g_Earth, -e(nk+1), GV%Angstrom_Z, &
-                          T, T_t, T_b, S, S_t, S_b, 0.5*P_tot, h, remap_CS)
+                          T, T_t, T_b, S, S_t, S_b, 0.5*P_tot, h, remap_CS, z_tol=z_tol)
   write(0,*) GV%H_to_m*h(:)
 
 end subroutine MOM_state_init_tests
