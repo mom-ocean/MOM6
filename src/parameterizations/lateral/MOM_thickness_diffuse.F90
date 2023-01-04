@@ -2040,7 +2040,7 @@ subroutine thickness_diffuse_init(Time, G, GV, US, param_file, diag, CDp, CS)
                  "is permitted for the thickness diffusivity. 1.0 is the "//&
                  "marginally unstable value in a pure layered model, but "//&
                  "much smaller numbers (e.g. 0.1) seem to work better for "//&
-                 "ALE-based models.", units = "nondimensional", default=0.8)
+                 "ALE-based models.", units="nondimensional", default=0.8)
 
   call get_param(param_file, mdl, "KH_ETA_CONST", CS%Kh_eta_bg, &
                  "The background horizontal diffusivity of the interface heights (without "//&

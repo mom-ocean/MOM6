@@ -105,7 +105,7 @@ subroutine verticalGridInit( param_file, GV, US )
                    log_to_all=.true., debugging=.true.)
   call get_param(param_file, mdl, "G_EARTH", GV%g_Earth, &
                  "The gravitational acceleration of the Earth.", &
-                 units="m s-2", default = 9.80, scale=US%Z_to_m*US%m_s_to_L_T**2)
+                 units="m s-2", default=9.80, scale=US%Z_to_m*US%m_s_to_L_T**2)
   call get_param(param_file, mdl, "RHO_0", GV%Rho0, &
                  "The mean ocean density used with BOUSSINESQ true to "//&
                  "calculate accelerations and the mass for conservation "//&

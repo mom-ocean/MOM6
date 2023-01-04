@@ -692,10 +692,10 @@ subroutine initialize_dyn_unsplit(u, v, h, Time, G, GV, US, param_file, diag, CS
   CS%id_PFv = register_diag_field('ocean_model', 'PFv', diag%axesCvL, Time, &
       'Meridional Pressure Force Acceleration', 'm s-2', conversion=US%L_T2_to_m_s2)
   CS%id_ueffA = register_diag_field('ocean_model', 'ueffA', diag%axesCuL, Time, &
-       'Effective U Face Area', 'm^2', conversion = GV%H_to_m*US%L_to_m, &
+       'Effective U Face Area', 'm^2', conversion=GV%H_to_m*US%L_to_m, &
        y_cell_method='sum', v_extensive=.true.)
   CS%id_veffA = register_diag_field('ocean_model', 'veffA', diag%axesCvL, Time, &
-       'Effective V Face Area', 'm^2', conversion = GV%H_to_m*US%L_to_m, &
+       'Effective V Face Area', 'm^2', conversion=GV%H_to_m*US%L_to_m, &
        x_cell_method='sum', v_extensive=.true.)
 
   id_clock_Cor = cpu_clock_id('(Ocean Coriolis & mom advection)', grain=CLOCK_MODULE)

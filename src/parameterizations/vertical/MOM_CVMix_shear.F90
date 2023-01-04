@@ -277,7 +277,7 @@ logical function CVMix_shear_init(Time, G, GV, US, param_file, diag, CS)
   call get_param(param_file, mdl, "SMOOTH_RI", CS%smooth_ri, &
                  "If true, vertically smooth the Richardson "// &
                  "number by applying a 1-2-1 filter once.", &
-                 default = .false.)
+                 default=.false.)
   call cvmix_init_shear(mix_scheme=CS%Mix_Scheme, &
                         KPP_nu_zero=US%Z2_T_to_m2_s*CS%Nu_Zero,   &
                         KPP_Ri_zero=CS%Ri_zero,   &

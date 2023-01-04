@@ -64,7 +64,7 @@ subroutine circle_obcs_initialize_thickness(h, depth_tot, G, GV, param_file, jus
   call get_param(param_file, mdl, "DISK_X_OFFSET", xOffset, &
                  "The x-offset of the initially elevated disk in the "//&
                  "circle_obcs test case.", units=G%x_ax_unit_short, &
-                 default = 0.0, do_not_log=just_read)
+                 default=0.0, do_not_log=just_read)
   call get_param(param_file, mdl, "DISK_IC_AMPLITUDE", IC_amp, &
                  "Initial amplitude of interface height displacements "//&
                  "in the circle_obcs test case.", &

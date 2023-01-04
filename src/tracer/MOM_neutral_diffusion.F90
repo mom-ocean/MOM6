@@ -167,7 +167,7 @@ logical function neutral_diffusion_init(Time, G, GV, US, param_file, diag, EOS, 
   call get_param(param_file, mdl, "NDIFF_REF_PRES", CS%ref_pres,                    &
                  "The reference pressure (Pa) used for the derivatives of "//&
                  "the equation of state. If negative (default), local pressure is used.", &
-                 units="Pa", default = -1., scale=US%kg_m3_to_R*US%m_s_to_L_T**2)
+                 units="Pa", default=-1., scale=US%kg_m3_to_R*US%m_s_to_L_T**2)
   call get_param(param_file, mdl, "NDIFF_INTERIOR_ONLY", CS%interior_only, &
                  "If true, only applies neutral diffusion in the ocean interior."//&
                  "That is, the algorithm will exclude the surface and bottom"//&
@@ -245,10 +245,10 @@ logical function neutral_diffusion_init(Time, G, GV, US, param_file, diag, EOS, 
     call get_param(param_file, mdl, "NDIFF_DEBUG", CS%debug,             &
                    "Turns on verbose output for discontinuous neutral "//&
                    "diffusion routines.", &
-                   default = .false.)
+                   default=.false.)
     call get_param(param_file, mdl, "HARD_FAIL_HEFF", CS%hard_fail_heff, &
                   "Bring down the model if a problem with heff is detected",&
-                   default = .true.)
+                   default=.true.)
   endif
 
   if (CS%interior_only) then

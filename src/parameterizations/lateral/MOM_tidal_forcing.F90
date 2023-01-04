@@ -393,7 +393,7 @@ subroutine tidal_forcing_init(Time, G, US, param_file, CS)
   if (CS%tidal_sal_from_file .or. CS%use_prev_tides) then
     call get_param(param_file, mdl, "TIDAL_INPUT_FILE", tidal_input_files, &
                    "A list of input files for tidal information.",         &
-                   default = "", fail_if_missing=.true.)
+                   default="", fail_if_missing=.true.)
   endif
 
   call get_param(param_file, mdl, "TIDE_REF_DATE", tide_ref_date, &
