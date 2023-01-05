@@ -95,8 +95,9 @@ subroutine find_obsolete_params(param_file)
   call obsolete_real(param_file, "MIN_Z_DIAG_INTERVAL")
   call obsolete_char(param_file, "Z_OUTPUT_GRID_FILE")
 
-  ! This parameter is on the to-do list to be obsoleted.
-  ! call obsolete_logical(param_file, "NEW_SPONGES", hint="Use INTERPOLATE_SPONGE_TIME_SPACE instead.")
+  call read_param(param_file, "INTERPOLATE_SPONGE_TIME_SPACE", test_logic)
+  call obsolete_logical(param_file, "NEW_SPONGES", warning_val=test_logic, &
+                        hint="Use INTERPOLATE_SPONGE_TIME_SPACE instead.")
 
   ! Write the file version number to the model log.
   call log_version(param_file, mdl, version)
