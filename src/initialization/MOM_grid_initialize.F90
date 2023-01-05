@@ -177,7 +177,7 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
   real, dimension(2*G%isd-3:2*G%ied+1,2*G%jsd-2:2*G%jed+1) :: tmpU ! East face supergrid spacing [L ~> m]
   real, dimension(2*G%isd-2:2*G%ied+1,2*G%jsd-3:2*G%jed+1) :: tmpV ! North face supergrid spacing [L ~> m]
   real, dimension(2*G%isd-3:2*G%ied+1,2*G%jsd-3:2*G%jed+1) :: tmpZ ! Corner latitudes or longitudes [degN] or [degE]
-  real, dimension(:,:), allocatable :: tmpGlbl ! A global array of axis labels
+  real, dimension(:,:), allocatable :: tmpGlbl ! A global array of axis labels [degrees_N] or [km] or [m]
   character(len=200) :: filename, grid_file, inputdir
   character(len=64)  :: mdl = "MOM_grid_init set_grid_metrics_from_mosaic"
   type(MOM_domain_type), pointer :: SGdom => NULL() ! Supergrid domain
@@ -361,8 +361,8 @@ subroutine set_grid_metrics_cartesian(G, param_file, US)
   ! Local variables
   integer :: i, j, isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, I1off, J1off
   integer :: niglobal, njglobal
-  real :: grid_latT(G%jsd:G%jed), grid_latB(G%JsdB:G%JedB)
-  real :: grid_lonT(G%isd:G%ied), grid_lonB(G%IsdB:G%IedB)
+  real :: grid_latT(G%jsd:G%jed), grid_latB(G%JsdB:G%JedB) ! Axis labels [degrees_N] or [km] or [m]
+  real :: grid_lonT(G%isd:G%ied), grid_lonB(G%IsdB:G%IedB) ! Axis labels [degrees_E] or [km] or [m]
   real :: dx_everywhere, dy_everywhere ! Grid spacings [L ~> m].
   real :: I_dx, I_dy                   ! Inverse grid spacings [L-1 ~> m-1].
   real :: PI
@@ -498,13 +498,17 @@ subroutine set_grid_metrics_spherical(G, param_file, US)
   type(param_file_type),  intent(in)    :: param_file  !< Parameter file structure
   type(unit_scale_type),  intent(in)    :: US    !< A dimensional unit scaling type
   ! Local variables
-  real :: PI, PI_180! PI = 3.1415926... as 4*atan(1)
+  real :: PI     ! PI = 3.1415926... as 4*atan(1) [nondim]
+  real :: PI_180 ! The conversion factor from degrees to radians [radians degree-1]
   integer :: i, j, isd, ied, jsd, jed
   integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, IsdB, IedB, JsdB, JedB
   integer :: i_offset, j_offset
-  real :: grid_latT(G%jsd:G%jed), grid_latB(G%JsdB:G%JedB)
-  real :: grid_lonT(G%isd:G%ied), grid_lonB(G%IsdB:G%IedB)
-  real :: dLon, dLat, latitude, dL_di
+  real :: grid_latT(G%jsd:G%jed), grid_latB(G%JsdB:G%JedB) ! Axis labels [degrees_N]
+  real :: grid_lonT(G%isd:G%ied), grid_lonB(G%IsdB:G%IedB) ! Axis labels [degrees_E]
+  real :: dLon      ! The change in longitude between successive grid points [degrees_E]
+  real :: dLat      ! The change in latitude between successive grid points [degrees_N]
+  real :: dL_di     ! dLon rescaled from degrees to radians [radians]
+  real :: latitude  ! The latitude of a grid point [degrees_N]
   character(len=48)  :: mdl  = "MOM_grid_init set_grid_metrics_spherical"
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
@@ -517,7 +521,7 @@ subroutine set_grid_metrics_spherical(G, param_file, US)
 
 !    Calculate the values of the metric terms that might be used
 !  and save them in arrays.
-  PI = 4.0*atan(1.0); PI_180 = atan(1.0)/45.
+  PI = 4.0*atan(1.0) ; PI_180 = atan(1.0)/45.
 
   call get_param(param_file, mdl, "SOUTHLAT", G%south_lat, &
                  "The southern latitude of the domain.", units="degrees_N", &
@@ -639,19 +643,23 @@ subroutine set_grid_metrics_mercator(G, param_file, US)
   integer :: I_off, J_off
   type(GPS) :: GP
   character(len=48)  :: mdl = "MOM_grid_init set_grid_metrics_mercator"
-  real :: PI, PI_2! PI = 3.1415926... as 4*atan(1), PI_2 = (PI) /2.0
-  real :: y_q, y_h, jd, x_q, x_h, id
+  real :: PI, PI_2  ! PI = 3.1415926... as 4*atan(1), PI_2 = (PI) /2.0 [nondim]
+  real :: y_q, y_h  ! Latitudes of a point [radians]
+  real :: id        ! The i-grid space positions whose longitude is being sought [gridpoints]
+  real :: jd        ! The j-grid space positions whose latitude is being sought [gridpoints]
+  real :: x_q, x_h  ! Longitudes of a point [radians]
   real, dimension(G%isd:G%ied,G%jsd:G%jed) :: &
-    xh, yh ! Latitude and longitude of h points in radians.
+    xh, yh ! Latitude and longitude of h points in radians [radians]
   real, dimension(G%IsdB:G%IedB,G%jsd:G%jed) :: &
-    xu, yu ! Latitude and longitude of u points in radians.
+    xu, yu ! Latitude and longitude of u points in radians [radians]
   real, dimension(G%isd:G%ied,G%JsdB:G%JedB) :: &
-    xv, yv ! Latitude and longitude of v points in radians.
+    xv, yv ! Latitude and longitude of v points in radians [radians]
   real, dimension(G%IsdB:G%IedB,G%JsdB:G%JedB) :: &
-    xq, yq ! Latitude and longitude of q points in radians.
+    xq, yq ! Latitude and longitude of q points in radians [radians]
   real :: fnRef           ! fnRef is the value of Int_dj_dy or
                           ! Int_dj_dy at a latitude or longitude that is
-  real :: jRef, iRef      ! being set to be at grid index jRef or iRef.
+                          ! being set to be at grid index jRef or iRef [gridpoints]
+  real :: jRef, iRef      ! The grid index at which fnRef is evaluated [gridpoints]
   integer :: itt1, itt2
   logical, parameter :: simple_area = .true.
   integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, IsdB, IedB, JsdB, JedB
@@ -860,8 +868,8 @@ end subroutine set_grid_metrics_mercator
 
 !> This function returns the grid spacing in the logical x direction in [L ~> m].
 function ds_di(x, y, GP)
-  real, intent(in) :: x  !< The longitude in question
-  real, intent(in) :: y  !< The latitude in question
+  real, intent(in) :: x  !< The longitude in question [radians]
+  real, intent(in) :: y  !< The latitude in question [radians]
   type(GPS), intent(in) :: GP  !< A structure of grid parameters
 
   real :: ds_di  ! The returned grid spacing [L ~> m]
@@ -874,8 +882,8 @@ end function ds_di
 
 !> This function returns the grid spacing in the logical y direction in [L ~> m].
 function ds_dj(x, y, GP)
-  real, intent(in) :: x  !< The longitude in question
-  real, intent(in) :: y  !< The latitude in question
+  real, intent(in) :: x  !< The longitude in question [radians]
+  real, intent(in) :: y  !< The latitude in question [radians]
   type(GPS), intent(in) :: GP  !< A structure of grid parameters
 
   real :: ds_dj  ! The returned grid spacing [L ~> m]
@@ -887,16 +895,17 @@ function ds_dj(x, y, GP)
 end function ds_dj
 
 !> This function returns the contribution from the line integral along one of the four sides of a
-!! cell face to the area of a cell, assuming that the sides follow a linear path in latitude and
-!! longitude (i.e., on a Mercator grid).
+!! cell face to the area of a cell, in [radians2], assuming that the sides follow a linear path in
+!! latitude and longitude (i.e., on a Mercator grid).
 function  dL(x1, x2, y1, y2)
-  real, intent(in) :: x1 !< Segment starting longitude, in degrees E.
-  real, intent(in) :: x2 !< Segment ending longitude, in degrees E.
-  real, intent(in) :: y1 !< Segment ending latitude, in degrees N.
-  real, intent(in) :: y2 !< Segment ending latitude, in degrees N.
+  real, intent(in) :: x1 !< Segment starting longitude [radians]
+  real, intent(in) :: x2 !< Segment ending longitude [radians]
+  real, intent(in) :: y1 !< Segment starting latitude [radians]
+  real, intent(in) :: y2 !< Segment ending latitude [radians]
   ! Local variables
-  real :: dL
-  real :: r, dy
+  real :: dL ! A contribution to the spanned area the surface of the sphere [radian2]
+  real :: r  ! A contribution from the range of latitudes, including trigonometric factors [radians]
+  real :: dy ! The spanned range of latitudes [radians]
 
   dy = y2 - y1
 
@@ -914,21 +923,23 @@ end function  dL
 !! Newton's method that were used to polish the root.
 function find_root( fn, dy_df, GP, fnval, y1, ymin, ymax, ittmax)
   real :: find_root !< The value of y where fn(y) = fnval that will be returned
-  real,      external    :: fn    !< The external function whose root is being sought
-  real,      external    :: dy_df !< The inverse of the derivative of that function
-  type(GPS), intent(in)  :: GP  !< A structure of grid parameters
-  real,      intent(in)  :: fnval !< The value of fn being sought
-  real,      intent(in)  :: y1    !< A first guess for y
-  real,      intent(in)  :: ymin  !< The minimum permitted value of y
-  real,      intent(in)  :: ymax  !< The maximum permitted value of y
+  real,      external    :: fn    !< The external function whose root is being sought [gridpoints]
+  real,      external    :: dy_df !< The inverse of the derivative of that function [radian gridpoint-1]
+  type(GPS), intent(in)  :: GP    !< A structure of grid parameters
+  real,      intent(in)  :: fnval !< The value of fn being sought [gridpoints]
+  real,      intent(in)  :: y1    !< A first guess for y [radians]
+  real,      intent(in)  :: ymin  !< The minimum permitted value of y [radians]
+  real,      intent(in)  :: ymax  !< The maximum permitted value of y [radians]
   integer,   intent(out) :: ittmax !< The number of iterations used to polish the root
   ! Local variables
-  real :: y, y_next
-  real :: ybot, ytop, fnbot, fntop
+  real :: y, y_next    ! Successive guesses at the root position [radians]
+  real :: ybot, ytop   ! Brackets bounding the root [radians]
+  real :: fnbot, fntop ! Values of fn at the bounding values of y [gridpoints]
+  real :: dy_dfn       ! The inverse of the local derivative of fn with y [radian gridpoint-1]
+  real :: dy           ! The jump to the next guess of y [radians]
+  real :: fny          ! The difference between fn(y) and the target value [gridpoints]
   integer :: itt
   character(len=256) :: warnmesg
-
-  real :: dy_dfn, dy, fny
 
 !  Bracket the root.  Do not use the bounding values because the value at the
 ! function at the bounds could be infinite, as is the case for the Mercator
@@ -1022,40 +1033,40 @@ function find_root( fn, dy_df, GP, fnval, y1, ymin, ymax, ittmax)
   find_root = y
 end function find_root
 
-!> This function calculates and returns the value of dx/di, where x is the
-!! longitude in Radians, and i is the integral north-south grid index.
+!> This function calculates and returns the value of dx/di in [radian gridpoint-1],
+!! where x is the longitude in Radians, and i is the integral east-west grid index.
 function dx_di(x, GP)
-  real, intent(in) :: x  !< The longitude in question
+  real, intent(in) :: x !< The longitude in question [radians]
   type(GPS), intent(in) :: GP  !< A structure of grid parameters
-  real :: dx_di
+  real :: dx_di         ! The derivative of zonal position with the grid index [radian gridpoint-1]
 
   dx_di = (GP%len_lon * 4.0*atan(1.0)) / (180.0 * GP%niglobal)
 
 end function dx_di
 
 !> This function calculates and returns the integral of the inverse
-!! of dx/di to the point x, in radians.
+!! of dx/di to the point x, in radians [gridpoints]
 function Int_di_dx(x, GP)
-  real, intent(in) :: x  !< The longitude in question
+  real, intent(in) :: x  !< The longitude in question [radians]
   type(GPS), intent(in) :: GP  !< A structure of grid parameters
-  real :: Int_di_dx
+  real :: Int_di_dx   ! A position in the global i-index space [gridpoints]
 
   Int_di_dx = x * ((180.0 * GP%niglobal) / (GP%len_lon * 4.0*atan(1.0)))
 
 end function Int_di_dx
 
-!> This subroutine calculates and returns the value of dy/dj, where y is the
-!! latitude in Radians, and j is the integral north-south grid index.
+!> This subroutine calculates and returns the value of dy/dj in [radian gridpoint-1],
+!! where y is the latitude in Radians, and j is the integral north-south grid index.
 function dy_dj(y, GP)
-  real, intent(in) :: y  !< The latitude in question
+  real, intent(in) :: y !< The latitude in question [radians]
   type(GPS), intent(in) :: GP  !< A structure of grid parameters
-  real :: dy_dj
+  real :: dy_dj         ! The derivative of meridional position with the grid index [radian gridpoint-1]
   ! Local variables
-  real :: PI            ! 3.1415926... calculated as 4*atan(1)
+  real :: PI            ! 3.1415926... calculated as 4*atan(1) [nondim]
   real :: C0            ! The constant that converts the nominal y-spacing in
-                        ! gridpoints to the nominal spacing in Radians.
+                        ! gridpoints to the nominal spacing in Radians [radian gridpoint-1]
   real :: y_eq_enhance  ! The latitude in radians within which the resolution
-                        ! is enhanced.
+                        ! is enhanced [radians]
   PI = 4.0*atan(1.0)
   if (GP%isotropic) then
     C0 = (GP%len_lon * PI) / (180.0 * GP%niglobal)
@@ -1074,21 +1085,19 @@ function dy_dj(y, GP)
 end function dy_dj
 
 !> This subroutine calculates and returns the integral of the inverse
-!! of dy/dj to the point y, in radians.
+!! of dy/dj to the point y in radians [gridpoints]
 function Int_dj_dy(y, GP)
-  real, intent(in) :: y  !< The latitude in question
+  real, intent(in) :: y  !< The latitude in question [radians]
   type(GPS), intent(in) :: GP  !< A structure of grid parameters
-  real :: Int_dj_dy
+  real :: Int_dj_dy        ! The grid position of latitude y [gridpoints]
   ! Local variables
-  real :: I_C0 = 0.0       !   The inverse of the constant that converts the
+  real :: I_C0             !   The inverse of the constant that converts the
                            ! nominal spacing in gridpoints to the nominal
-                           ! spacing in Radians.
-  real :: PI               ! 3.1415926... calculated as 4*atan(1)
-  real :: y_eq_enhance     ! The latitude in radians from
-                           ! from the equator within which the
-                           ! meridional grid spacing is enhanced by
-                           ! a factor of GP%lat_enhance_factor.
-  real :: r
+                           ! spacing in Radians [gridpoint radian-1]
+  real :: PI               ! 3.1415926... calculated as 4*atan(1) [nondim]
+  real :: y_eq_enhance     ! The latitude in radians from from the equator within which the meridional
+                           ! grid spacing is enhanced by a factor of GP%lat_enhance_factor [radians]
+  real :: r                ! The y grid position in the global index space [gridpoints]
 
   PI = 4.0*atan(1.0)
   if (GP%isotropic) then
@@ -1119,9 +1128,9 @@ end function Int_dj_dy
 
 !> Extrapolates missing metric data into all the halo regions.
 subroutine extrapolate_metric(var, jh, missing)
-  real, dimension(:,:), intent(inout) :: var     !< The array in which to fill in halos
+  real, dimension(:,:), intent(inout) :: var     !< The array in which to fill in halos [A]
   integer,              intent(in)    :: jh      !< The size of the halos to be filled
-  real,       optional, intent(in)    :: missing !< The missing data fill value, 0 by default.
+  real,       optional, intent(in)    :: missing !< The missing data fill value, 0 by default [A]
   ! Local variables
   real :: badval
   integer :: i,j

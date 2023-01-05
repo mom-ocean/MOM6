@@ -1309,7 +1309,7 @@ subroutine compute_global_grid_integrals(G, US)
   type(unit_scale_type),  intent(in)    :: US !< A dimensional unit scaling type
 
   ! Local variables
-  real, dimension(G%isc:G%iec, G%jsc:G%jec) :: tmpForSumming
+  real, dimension(G%isc:G%iec, G%jsc:G%jec) :: tmpForSumming ! Masked and unscaled cell areas [m2]
   real :: area_scale  ! A scaling factor for area into MKS units [m2 L-2 ~> 1]
   integer :: i,j
 
