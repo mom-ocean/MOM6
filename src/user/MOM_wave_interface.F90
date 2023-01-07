@@ -485,7 +485,7 @@ subroutine MOM_wave_interface_init(time, G, GV, US, param_file, CS, diag, restar
          "Choose true to use waveage in peak frequency.", default=.false.)
     call get_param(param_file, mdl, "DHH85_AGE", CS%WaveAge, &
          "Wave Age for DHH85 spectrum.", &
-         units='', default=1.2)
+         units='nondim', default=1.2)
     call get_param(param_file, mdl, "DHH85_WIND", CS%WaveWind, &
          "Wind speed for DHH85 spectrum.", &
          units='m s-1', default=10.0, scale=US%m_s_to_L_T)
@@ -1931,8 +1931,8 @@ subroutine ust_2_u10_coare3p5(USTair, U10, GV, US, CS)
   real :: u10a  ! The previous guess for u10 [L T-1 ~> m s-1]
   real :: alpha ! The Charnock coeffient relating the wind friction velocity squared to the
                 ! roughness length [nondim]
-  real :: Cd2   ! The square of the drag coefficient [nondim]
-  real :: I_Cd  ! The inverse of the drag coefficient [nondim]
+  real :: Cd    ! The drag coefficient [nondim]
+  real :: I_sqrtCd  ! The inverse of the square root of the drag coefficient [nondim]
   real :: I_vonKar  ! The inverse of the von Karman coefficient [nondim]
   integer :: CT
 
@@ -1958,8 +1958,8 @@ subroutine ust_2_u10_coare3p5(USTair, U10, GV, US, CS)
       alpha = min(CS%Charnock_min, CS%Charnock_slope_U10 * u10 + CS%Charnock_intercept)
       z0rough = alpha * (US%Z_to_L*USTair)**2 / GV%g_Earth ! Compute z0rough from ustar guess
       z0 = z0sm + z0rough
-      Cd2 = ( CS%vonKar / log(ten_m_scale / z0) )**2 ! Compute CD from derived roughness
-      u10 = US%Z_to_L*USTair/sqrt(Cd2)  ! Compute new u10 from derived CD, while loop
+      Cd = ( CS%vonKar / log(ten_m_scale / z0) )**2 ! Compute Cd from derived roughness
+      u10 = US%Z_to_L*USTair/sqrt(Cd)  ! Compute new u10 from derived Cd, while loop
                              ! ends and checks for convergence...CT counter
                              ! makes sure loop doesn't run away if function
                              ! doesn't converge.  This code was produced offline
@@ -1973,7 +1973,8 @@ subroutine ust_2_u10_coare3p5(USTair, U10, GV, US, CS)
     enddo
 
   else ! Use more efficient expressions that are mathematically equivalent to those above.
-    u10 = US%Z_to_L*USTair * sqrt(1000.0)  ! Guess for u10.  Is 1000 here the ratio of the densities of water and air?
+    u10 = US%Z_to_L*USTair * sqrt(1000.0) ! First guess for u10.
+    ! In the line above 1000 is the inverse of a plausible first guess of the drag coefficient.
     I_vonKar = 1.0 / CS%vonKar
     I_ten_m_scale = 0.1*US%Z_to_m
 
@@ -1983,8 +1984,8 @@ subroutine ust_2_u10_coare3p5(USTair, U10, GV, US, CS)
       alpha = min(CS%Charnock_min, CS%Charnock_slope_U10 * u10 + CS%Charnock_intercept)
       z0rough = alpha * (CS%I_g_Earth * USTair**2) ! Compute z0rough from ustar guess
       z0 = z0sm + z0rough
-      I_Cd = abs(log(z0 * I_ten_m_scale)) * I_vonKar ! Compute CD from derived roughness
-      u10 = US%Z_to_L*USTair * I_Cd  ! Compute new u10 from the derived CD.
+      I_sqrtCd = abs(log(z0 * I_ten_m_scale)) * I_vonKar ! Compute Cd from derived roughness
+      u10 = US%Z_to_L*USTair * I_sqrtCd  ! Compute new u10 from the derived Cd.
     enddo
 
     ! Output a reasonable estimate of u10 if the iteration has not converged. The hard-coded
