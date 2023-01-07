@@ -255,6 +255,7 @@ subroutine initialize_ALE_sponge_fixed(Iresttime, G, GV, param_file, CS, data_h,
                  "The vintage of the order of arithmetic for horizontal regridding.  "//&
                  "Dates before 20190101 give the same answers as the code did in late 2018, "//&
                  "while later versions add parentheses for rotational symmetry.  "//&
+                 "Dates after 20230101 use reproducing sums for global averages.  "//&
                  "If both HOR_REGRID_2018_ANSWERS and HOR_REGRID_ANSWER_DATE are specified, the "//&
                  "latter takes precedence.", default=default_hor_reg_ans_date)
 
@@ -545,6 +546,7 @@ subroutine initialize_ALE_sponge_varying(Iresttime, G, GV, param_file, CS, Irest
                  "The vintage of the order of arithmetic for horizontal regridding.  "//&
                  "Dates before 20190101 give the same answers as the code did in late 2018, "//&
                  "while later versions add parentheses for rotational symmetry.  "//&
+                 "Dates after 20230101 use reproducing sums for global averages.  "//&
                  "If both HOR_REGRID_2018_ANSWERS and HOR_REGRID_ANSWER_DATE are specified, the "//&
                  "latter takes precedence.", default=default_hor_reg_ans_date)
   call get_param(param_file, mdl, "SPONGE_DATA_ONGRID", CS%spongeDataOngrid, &

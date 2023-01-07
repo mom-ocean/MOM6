@@ -92,7 +92,7 @@ use MOM_ALE, only : ALE_remap_scalar, ALE_regrid_accelerated, TS_PLM_edge_values
 use MOM_regridding, only : regridding_CS, set_regrid_params, getCoordinateResolution
 use MOM_regridding, only : regridding_main, regridding_preadjust_reqs, convective_adjustment
 use MOM_remapping, only : remapping_CS, initialize_remapping, remapping_core_h
-use MOM_horizontal_regridding, only : horiz_interp_and_extrap_tracer
+use MOM_horizontal_regridding, only : horiz_interp_and_extrap_tracer, homogenize_field
 use MOM_oda_incupd, only: oda_incupd_CS, initialize_oda_incupd_fixed, initialize_oda_incupd
 use MOM_oda_incupd, only: set_up_oda_incupd_field, set_up_oda_incupd_vel_field
 use MOM_oda_incupd, only: calc_oda_increments, output_oda_incupd_inc
@@ -2651,6 +2651,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, depth_tot, G, GV, US, PF, just
                  "The vintage of the order of arithmetic for horizontal regridding.  "//&
                  "Dates before 20190101 give the same answers as the code did in late 2018, "//&
                  "while later versions add parentheses for rotational symmetry.  "//&
+                 "Dates after 20230101 use reproducing sums for global averages.  "//&
                  "If both HOR_REGRID_2018_ANSWERS and HOR_REGRID_ANSWER_DATE are specified, the "//&
                  "latter takes precedence.", default=default_hor_reg_ans_date, do_not_log=just_read)
 
@@ -2910,31 +2911,14 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, depth_tot, G, GV, US, PF, just
       endif
     endif
 
-    call tracer_z_init_array(temp_z, z_edges_in, kd, zi, temp_land_fill, G, nz, nlevs, eps_z, &
-                             tv%T)
-    call tracer_z_init_array(salt_z, z_edges_in, kd, zi, salt_land_fill, G, nz, nlevs, eps_z, &
-                             tv%S)
+    call tracer_z_init_array(temp_z, z_edges_in, kd, zi, temp_land_fill, G, nz, nlevs, eps_z, tv%T)
+    call tracer_z_init_array(salt_z, z_edges_in, kd, zi, salt_land_fill, G, nz, nlevs, eps_z, tv%S)
 
     if (homogenize) then
       ! Horizontally homogenize data to produce perfectly "flat" initial conditions
       do k=1,nz
-        nPoints = 0 ; tempAvg = 0. ; saltAvg = 0.
-        do j=js,je ; do i=is,ie ; if (G%mask2dT(i,j) > 0.0) then
-          nPoints = nPoints + 1
-          tempAvg = tempAvg + tv%T(i,j,k)
-          saltAvg = saltAvg + tv%S(i,j,k)
-        endif ; enddo ; enddo
-
-        !### These averages will not reproduce across PE layouts or grid rotation.
-        call sum_across_PEs(nPoints)
-        call sum_across_PEs(tempAvg)
-        call sum_across_PEs(saltAvg)
-        if (nPoints>0) then
-          tempAvg = tempAvg / real(nPoints)
-          saltAvg = saltAvg / real(nPoints)
-        endif
-        tv%T(:,:,k) = tempAvg
-        tv%S(:,:,k) = saltAvg
+        call homogenize_field(tv%T(:,:,k), G%mask2dT, G, scale=US%degC_to_C, answer_date=hor_regrid_answer_date)
+        call homogenize_field(tv%S(:,:,k), G%mask2dT, G, scale=US%ppt_to_S, answer_date=hor_regrid_answer_date)
       enddo
     endif
 
