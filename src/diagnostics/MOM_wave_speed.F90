@@ -44,6 +44,11 @@ type, public :: wave_speed_CS ; private
   real :: min_speed2 = 0.              !< The minimum mode 1 internal wave speed squared [L2 T-2 ~> m2 s-2]
   real :: wave_speed_tol = 0.001       !< The fractional tolerance with which to solve for the wave
                                        !! speeds [nondim]
+  real :: c1_thresh = -1.0             !< A minimal value of the first mode internal wave speed
+                                       !! below which all higher mode speeds are not calculated but
+                                       !! are simply reported as 0 [L T-1 ~> m s-1].  A non-negative
+                                       !! value must be specified via a call to wave_speed_init for
+                                       !! the subroutine wave_speeds to be used (but not wave_speed).
   type(remapping_CS) :: remapping_CS   !< Used for vertical remapping when calculating equivalent barotropic
                                        !! mode structure.
   integer :: remap_answer_date = 99991231 !< The vintage of the order of arithmetic and expressions to use
@@ -162,7 +167,7 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, mono_
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
-  if (.not. CS%initialized) call MOM_error(FATAL, "MOM_wave_speed: "// &
+  if (.not. CS%initialized) call MOM_error(FATAL, "MOM_wave_speed / wave_speed: "// &
            "Module must be initialized before it is used.")
 
   if (present(full_halos)) then ; if (full_halos) then
@@ -657,7 +662,7 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, full_halos)
   type(thermo_var_ptrs),                    intent(in)  :: tv !< Thermodynamic variables
   integer,                                  intent(in)  :: nmodes !< Number of modes
   real, dimension(G%isd:G%ied,G%jsd:G%jed,nmodes), intent(out) :: cn !< Waves speeds [L T-1 ~> m s-1]
-  type(wave_speed_CS), optional,            intent(in)  :: CS !< Wave speed control struct
+  type(wave_speed_CS),                      intent(in)  :: CS !< Wave speed control struct
   logical,             optional,            intent(in)  :: full_halos !< If true, do the calculation
                                                               !! over the entire data domain.
 
@@ -684,8 +689,6 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, full_halos)
     Sc, &         ! A column of layer salinities after convective instabilities are removed [S ~> ppt]
     Rc            ! A column of layer densities after convective instabilities are removed [R ~> kg m-3]
   real :: I_Htot  ! The inverse of the total filtered thicknesses [Z ~> m]
-  real :: c1_thresh  ! if c1 is below this value, don't bother calculating
-                     ! cn values for higher modes [L T-1 ~> m s-1]
   real :: c2_scale ! A scaling factor for wave speeds to help control the growth of the determinant and its
                    ! derivative with lam between rows of the Thomas algorithm solver [L2 s2 T-2 m-2 ~> nondim].
                    ! The exact value should not matter for the final result if it is an even power of 2.
@@ -752,10 +755,8 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, full_halos)
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
-  if (present(CS)) then
-    if (.not. CS%initialized) call MOM_error(FATAL, "MOM_wave_speed: "// &
-           "Module must be initialized before it is used.")
-  endif
+  if (.not. CS%initialized) call MOM_error(FATAL, "MOM_wave_speed / wave_speeds: "// &
+         "Module must be initialized before it is used.")
 
   if (present(full_halos)) then ; if (full_halos) then
     is = G%isd ; ie = G%ied ; js = G%jsd ; je = G%jed
@@ -765,26 +766,28 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, full_halos)
   ! Simplifying the following could change answers at roundoff.
   Z_to_pres = GV%Z_to_H * (GV%H_to_RZ * GV%g_Earth)
   use_EOS = associated(tv%eqn_of_state)
-  c1_thresh = 0.01*US%m_s_to_L_T
+  if (CS%c1_thresh < 0.0) &
+    call MOM_error(FATAL, "INTERNAL_WAVE_CG1_THRESH must be set to a non-negative "//&
+                          "value via wave_speed_init for wave_speeds to be used.")
   c2_scale = US%m_s_to_L_T**2 / 4096.0**2 ! Other powers of 2 give identical results.
 
-  better_est = .false. ; if (present(CS)) better_est = CS%better_cg1_est
+  better_est = CS%better_cg1_est
   if (better_est) then
-    tol_solve = 0.001 ; if (present(CS)) tol_solve = CS%wave_speed_tol
+    tol_solve = CS%wave_speed_tol
     tol_Hfrac  = 0.1*tol_solve ; tol_merge = tol_solve / real(nz)
   else
     tol_solve = 0.001 ; tol_Hfrac  = 0.0001 ; tol_merge = 0.001
   endif
-  cg1_min2 = 0.0 ; if (present(CS)) cg1_min2 = CS%min_speed2
+  cg1_min2 = CS%min_speed2
 
   ! Zero out all wave speeds.  Values over land or for columns that are too weakly stratified
   ! are not changed from this zero value.
   cn(:,:,:) = 0.0
 
   min_h_frac = tol_Hfrac / real(nz)
-  !$OMP parallel do default(private) shared(is,ie,js,je,nz,h,G,GV,US,min_h_frac,use_EOS, &
+  !$OMP parallel do default(private) shared(is,ie,js,je,nz,h,G,GV,US,CS,min_h_frac,use_EOS, &
   !$OMP                                     Z_to_pres,tv,cn,g_Rho0,nmodes,cg1_min2,better_est, &
-  !$OMP                                     c1_thresh,tol_solve,tol_merge,c2_scale)
+  !$OMP                                     tol_solve,tol_merge,c2_scale)
   do j=js,je
     !   First merge very thin layers with the one above (or below if they are
     ! at the top).  This also transposes the row order so that columns can
@@ -1046,7 +1049,7 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, full_halos)
 
             ! Find other eigen values if c1 is of significant magnitude, > cn_thresh
             nrootsfound = 0    ! number of extra roots found (not including 1st root)
-            if (nmodes>1 .and. kc>=nmodes+1 .and. cn(i,j,1)>c1_thresh) then
+            if ((nmodes > 1) .and. (kc >= nmodes+1) .and. (cn(i,j,1) > CS%c1_thresh)) then
               ! Set the the range to look for the other desired eigen values
               ! set min value just greater than the 1st root (found above)
               lamMin = lam_1*(1.0 + tol_solve)
@@ -1202,7 +1205,7 @@ end subroutine tridiag_det
 
 !> Initialize control structure for MOM_wave_speed
 subroutine wave_speed_init(CS, use_ebt_mode, mono_N2_column_fraction, mono_N2_depth, remap_answers_2018, &
-                           remap_answer_date, better_speed_est, min_speed, wave_speed_tol)
+                           remap_answer_date, better_speed_est, min_speed, wave_speed_tol, c1_thresh)
   type(wave_speed_CS), intent(inout) :: CS  !< Wave speed control struct
   logical, optional, intent(in) :: use_ebt_mode  !< If true, use the equivalent
                                      !! barotropic mode instead of the first baroclinic mode.
@@ -1225,6 +1228,10 @@ subroutine wave_speed_init(CS, use_ebt_mode, mono_N2_column_fraction, mono_N2_de
                                      !! below which 0 is returned [L T-1 ~> m s-1].
   real,    optional, intent(in) :: wave_speed_tol !< The fractional tolerance for finding the
                                      !! wave speeds [nondim]
+  real,    optional, intent(in) :: c1_thresh !< A minimal value of the first mode internal wave speed
+                                       !! below which all higher mode speeds are not calculated but are
+                                       !! simply reported as 0 [L T-1 ~> m s-1].  A non-negative value
+                                       !! must be specified for wave_speeds to be used (but not wave_speed).
 
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
@@ -1237,7 +1244,8 @@ subroutine wave_speed_init(CS, use_ebt_mode, mono_N2_column_fraction, mono_N2_de
 
   call wave_speed_set_param(CS, use_ebt_mode=use_ebt_mode, mono_N2_column_fraction=mono_N2_column_fraction, &
                             better_speed_est=better_speed_est, min_speed=min_speed, wave_speed_tol=wave_speed_tol, &
-                            remap_answers_2018=remap_answers_2018, remap_answer_date=remap_answer_date)
+                            remap_answers_2018=remap_answers_2018, remap_answer_date=remap_answer_date, &
+                            c1_thresh=c1_thresh)
 
   ! The remap_answers_2018 argument here is irrelevant, because remapping is hard-coded to use PLM.
   call initialize_remapping(CS%remapping_CS, 'PLM', boundary_extrapolation=.false., &
@@ -1247,7 +1255,7 @@ end subroutine wave_speed_init
 
 !> Sets internal parameters for MOM_wave_speed
 subroutine wave_speed_set_param(CS, use_ebt_mode, mono_N2_column_fraction, mono_N2_depth, remap_answers_2018, &
-                                remap_answer_date, better_speed_est, min_speed, wave_speed_tol)
+                                remap_answer_date, better_speed_est, min_speed, wave_speed_tol, c1_thresh)
   type(wave_speed_CS), intent(inout)  :: CS
                                       !< Control structure for MOM_wave_speed
   logical, optional, intent(in) :: use_ebt_mode  !< If true, use the equivalent
@@ -1271,6 +1279,10 @@ subroutine wave_speed_set_param(CS, use_ebt_mode, mono_N2_column_fraction, mono_
                                      !! below which 0 is returned [L T-1 ~> m s-1].
   real,    optional, intent(in) :: wave_speed_tol !< The fractional tolerance for finding the
                                      !! wave speeds [nondim]
+  real,    optional, intent(in) :: c1_thresh !< A minimal value of the first mode internal wave speed
+                                       !! below which all higher mode speeds are not calculated but are
+                                       !! simply reported as 0 [L T-1 ~> m s-1].  A non-negative value
+                                       !! must be specified for wave_speeds to be used (but not wave_speed).
 
   if (present(use_ebt_mode)) CS%use_ebt_mode = use_ebt_mode
   if (present(mono_N2_column_fraction)) CS%mono_N2_column_fraction = mono_N2_column_fraction
@@ -1286,6 +1298,7 @@ subroutine wave_speed_set_param(CS, use_ebt_mode, mono_N2_column_fraction, mono_
   if (present(better_speed_est)) CS%better_cg1_est = better_speed_est
   if (present(min_speed)) CS%min_speed2 = min_speed**2
   if (present(wave_speed_tol)) CS%wave_speed_tol = wave_speed_tol
+  if (present(c1_thresh)) CS%c1_thresh = c1_thresh
 
 end subroutine wave_speed_set_param
 
