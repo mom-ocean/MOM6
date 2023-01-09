@@ -168,6 +168,10 @@ type, public :: accel_diag_ptrs
     PFv => NULL(), &       !< Meridional acceleration due to pressure forces [L T-2 ~> m s-2]
     du_dt_visc => NULL(), &!< Zonal acceleration due to vertical viscosity [L T-2 ~> m s-2]
     dv_dt_visc => NULL(), &!< Meridional acceleration due to vertical viscosity [L T-2 ~> m s-2]
+    du_dt_visc_gl90 => NULL(), &!< Zonal acceleration due to GL90 vertical viscosity
+                           ! (is included in du_dt_visc) [L T-2 ~> m s-2]
+    dv_dt_visc_gl90 => NULL(), &!< Meridional acceleration due to GL90 vertical viscosity
+                           ! (is included in dv_dt_visc) [L T-2 ~> m s-2]
     du_dt_str => NULL(), & !< Zonal acceleration due to the surface stress (included
                            !! in du_dt_visc) [L T-2 ~> m s-2]
     dv_dt_str => NULL(), & !< Meridional acceleration due to the surface stress (included

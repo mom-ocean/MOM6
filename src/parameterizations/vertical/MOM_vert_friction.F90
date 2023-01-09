@@ -7,6 +7,8 @@ use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_ptr
 use MOM_diag_mediator, only : post_product_u, post_product_sum_u
 use MOM_diag_mediator, only : post_product_v, post_product_sum_v
 use MOM_diag_mediator, only : diag_ctrl, query_averaging_enabled
+use MOM_domains,       only : create_group_pass, do_group_pass, group_pass_type
+use MOM_domains,       only : To_North, To_East
 use MOM_debugging,     only : uvchksum, hchksum
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, NOTE
 use MOM_file_parser,   only : get_param, log_param, log_version, param_file_type
@@ -156,11 +158,14 @@ type, public :: vertvisc_CS ; private
   real, allocatable, dimension(:,:) :: kappa_gl90_2d !< 2D kappa_gl90 at h-points [L2 T-1 ~> m2 s-1]
 
   !>@{ Diagnostic identifiers
-  integer :: id_du_dt_visc = -1, id_dv_dt_visc = -1, id_au_vv = -1, id_av_vv = -1
+  integer :: id_du_dt_visc = -1, id_dv_dt_visc = -1, id_du_dt_visc_gl90 = -1, id_dv_dt_visc_gl90 = -1
+  integer :: id_GLwork = -1
+  integer :: id_au_vv = -1, id_av_vv = -1, id_au_gl90_vv = -1, id_av_gl90_vv = -1
   integer :: id_du_dt_str = -1, id_dv_dt_str = -1
   integer :: id_h_u = -1, id_h_v = -1, id_hML_u = -1 , id_hML_v = -1
   integer :: id_taux_bot = -1, id_tauy_bot = -1
   integer :: id_Kv_slow = -1, id_Kv_u = -1, id_Kv_v = -1
+  integer :: id_Kv_gl90_u = -1, id_Kv_gl90_v = -1
   ! integer :: id_hf_du_dt_visc    = -1, id_hf_dv_dt_visc    = -1
   integer :: id_h_du_dt_visc    = -1, id_h_dv_dt_visc    = -1
   integer :: id_hf_du_dt_visc_2d = -1, id_hf_dv_dt_visc_2d = -1
@@ -171,6 +176,7 @@ type, public :: vertvisc_CS ; private
   type(PointAccel_CS), pointer :: PointAccel_CSp => NULL() !< A pointer to the control structure
                               !! for recording accelerations leading to velocity truncations
 
+  type(group_pass_type) :: pass_KE_uv !< A handle used for group halo passes
 end type vertvisc_CS
 
 contains
@@ -359,6 +365,12 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
   real :: zDS, hfr, h_a    ! Temporary variables used with direct_stress.
   real :: surface_stress(SZIB_(G))! The same as stress, unless the wind stress
                            ! stress is applied as a body force [H L T-1 ~> m2 s-1 or kg m-1 s-1].
+  real, allocatable, dimension(:,:,:) :: KE_term ! A term in the kinetic energy budget
+                                                 ! [H L2 T-3 ~> m3 s-3 or W m-2]
+  real, allocatable, dimension(:,:,:) :: KE_u ! The area integral of a KE term in a layer at u-points
+                                              ! [H L4 T-3 ~> m5 s-3 or kg m2 s-3]
+  real, allocatable, dimension(:,:,:) :: KE_v ! The area integral of a KE term in a layer at v-points
+                                              ! [H L4 T-3 ~> m5 s-3 or kg m2 s-3]
 
   logical :: do_i(SZIB_(G))
   logical :: DoStokesMixing
@@ -372,6 +384,14 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
 
   if (.not.CS%initialized) call MOM_error(FATAL,"MOM_vert_friction(visc): "// &
          "Module must be initialized before it is used.")
+
+  if (CS%id_GLwork > 0) then
+    allocate(KE_u(G%IsdB:G%IedB,G%jsd:G%jed,GV%ke), source=0.0)
+    allocate(KE_v(G%isd:G%ied,G%JsdB:G%JedB,GV%ke), source=0.0)
+    allocate(KE_term(G%isd:G%ied,G%jsd:G%jed,GV%ke), source=0.0)
+    if (.not.G%symmetric) &
+      call create_group_pass(CS%pass_KE_uv, KE_u, KE_v, G%Domain, To_North+To_East)
+  endif
 
   if (CS%direct_stress) then
     Hmix = CS%Hmix_stress
@@ -412,7 +432,9 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
     if (associated(ADp%du_dt_visc)) then ; do k=1,nz ; do I=Isq,Ieq
       ADp%du_dt_visc(I,j,k) = u(I,j,k)
     enddo ; enddo ; endif
-
+    if (associated(ADp%du_dt_visc_gl90)) then ; do k=1,nz ; do I=Isq,Ieq
+      ADp%du_dt_visc_gl90(I,j,k) = u(I,j,k)
+    enddo ; enddo ; endif
     if (associated(ADp%du_dt_str)) then ; do k=1,nz ; do I=Isq,Ieq
       ADp%du_dt_str(I,j,k) = 0.0
     enddo ; enddo ; endif
@@ -501,6 +523,46 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
       endif ; enddo ; enddo
     endif
 
+    ! compute vertical velocity tendency that arises from GL90 viscosity;
+    ! follow tridiagonal solve method as above; to avoid corrupting u,
+    ! use ADp%du_dt_visc_gl90 as a placeholder for updated u (due to GL90) until last do loop
+    if ((CS%id_du_dt_visc_gl90 > 0) .or. (CS%id_GLwork > 0)) then
+      if (associated(ADp%du_dt_visc_gl90)) then
+        do I=Isq,Ieq ; if (do_i(I)) then
+          b_denom_1 = CS%h_u(I,j,1)  ! CS%a_u_gl90(I,j,1) is zero
+          b1(I) = 1.0 / (b_denom_1 + dt_Z_to_H*CS%a_u_gl90(I,j,2))
+          d1(I) = b_denom_1 * b1(I)
+          ADp%du_dt_visc_gl90(I,j,1) = b1(I) * (CS%h_u(I,j,1) * ADp%du_dt_visc_gl90(I,j,1))
+        endif ; enddo
+        do k=2,nz ; do I=Isq,Ieq ; if (do_i(I)) then
+          c1(I,k) = dt_Z_to_H * CS%a_u_gl90(I,j,K) * b1(I)
+          b_denom_1 = CS%h_u(I,j,k) + dt_Z_to_H * (CS%a_u_gl90(I,j,K)*d1(I))
+          b1(I) = 1.0 / (b_denom_1 + dt_Z_to_H * CS%a_u_gl90(I,j,K+1))
+          d1(I) = b_denom_1 * b1(I)
+          ADp%du_dt_visc_gl90(I,j,k) = (CS%h_u(I,j,k) * ADp%du_dt_visc_gl90(I,j,k) + &
+                      dt_Z_to_H * CS%a_u_gl90(I,j,K) * ADp%du_dt_visc_gl90(I,j,k-1)) * b1(I)
+        endif ; enddo ; enddo
+        ! back substitute to solve for new velocities, held by ADp%du_dt_visc_gl90
+        do k=nz-1,1,-1 ; do I=Isq,Ieq ; if (do_i(I)) then
+          ADp%du_dt_visc_gl90(I,j,k) = ADp%du_dt_visc_gl90(I,j,k) + c1(I,k+1) * ADp%du_dt_visc_gl90(I,j,k+1)
+        endif ; enddo ; enddo ! i and k loops
+        do k=1,nz ; do I=Isq,Ieq ; if (do_i(I)) then
+          ! now fill ADp%du_dt_visc_gl90(I,j,k) with actual velocity tendency due to GL90;
+          ! note that on RHS: ADp%du_dt_visc(I,j,k) holds the original velocity value u(I,j,k)
+          ! and ADp%du_dt_visc_gl90(I,j,k) the updated velocity due to GL90
+          ADp%du_dt_visc_gl90(I,j,k) = (ADp%du_dt_visc_gl90(I,j,k) - ADp%du_dt_visc(I,j,k))*Idt
+          if (abs(ADp%du_dt_visc_gl90(I,j,k)) < accel_underflow) ADp%du_dt_visc_gl90(I,j,k) = 0.0
+        endif ; enddo ; enddo ;
+        ! to compute energetics, we need to multiply by u*h, where u is original velocity before
+        ! velocity update; note that ADp%du_dt_visc(I,j,k) holds the original velocity value u(I,j,k)
+        if (CS%id_GLwork > 0) then
+          do k=1,nz; do I=Isq,Ieq ; if (do_i(I)) then
+              KE_u(I,j,k) = ADp%du_dt_visc(I,j,k) * CS%h_u(I,j,k) * G%areaCu(I,j) * ADp%du_dt_visc_gl90(I,j,k)
+          endif ; enddo ; enddo
+        endif
+      endif
+    endif
+
     if (associated(ADp%du_dt_visc)) then ; do k=1,nz ; do I=Isq,Ieq
       ADp%du_dt_visc(I,j,k) = (u(I,j,k) - ADp%du_dt_visc(I,j,k))*Idt
       if (abs(ADp%du_dt_visc(I,j,k)) < accel_underflow) ADp%du_dt_visc(I,j,k) = 0.0
@@ -542,7 +604,9 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
     if (associated(ADp%dv_dt_visc)) then ; do k=1,nz ; do i=is,ie
       ADp%dv_dt_visc(i,J,k) = v(i,J,k)
     enddo ; enddo ; endif
-
+    if (associated(ADp%dv_dt_visc_gl90)) then ; do k=1,nz ; do i=is,ie
+      ADp%dv_dt_visc_gl90(i,J,k) = v(i,J,k)
+    enddo ; enddo ; endif
     if (associated(ADp%dv_dt_str)) then ; do k=1,nz ; do i=is,ie
       ADp%dv_dt_str(i,J,k) = 0.0
     enddo ; enddo ; endif
@@ -601,6 +665,47 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
       endif ; enddo ; enddo
     endif
 
+    ! compute vertical velocity tendency that arises from GL90 viscosity;
+    ! follow tridiagonal solve method as above; to avoid corrupting v,
+    ! use ADp%dv_dt_visc_gl90 as a placeholder for updated u (due to GL90) until last do loop
+    if ((CS%id_dv_dt_visc_gl90 > 0) .or. (CS%id_GLwork > 0)) then
+      if (associated(ADp%dv_dt_visc_gl90)) then
+        do i=is,ie ; if (do_i(i)) then
+          b_denom_1 = CS%h_v(i,J,1)  ! CS%a_v_gl90(i,J,1) is zero
+          b1(i) = 1.0 / (b_denom_1 + dt_Z_to_H*CS%a_v_gl90(i,J,2))
+          d1(i) = b_denom_1 * b1(i)
+          ADp%dv_dt_visc_gl90(I,J,1) = b1(i) * (CS%h_v(i,J,1) * ADp%dv_dt_visc_gl90(i,J,1))
+        endif ; enddo
+        do k=2,nz ; do i=is,ie ; if (do_i(i)) then
+          c1(i,k) = dt_Z_to_H * CS%a_v_gl90(i,J,K) * b1(i)
+          b_denom_1 = CS%h_v(i,J,k) + dt_Z_to_H * (CS%a_v_gl90(i,J,K)*d1(i))
+          b1(i) = 1.0 / (b_denom_1 + dt_Z_to_H * CS%a_v_gl90(i,J,K+1))
+          d1(i) = b_denom_1 * b1(i)
+          ADp%dv_dt_visc_gl90(i,J,k) = (CS%h_v(i,J,k) * ADp%dv_dt_visc_gl90(i,J,k) + &
+                      dt_Z_to_H * CS%a_v_gl90(i,J,K) * ADp%dv_dt_visc_gl90(i,J,k-1)) * b1(i)
+        endif ; enddo ; enddo
+        ! back substitute to solve for new velocities, held by ADp%dv_dt_visc_gl90
+        do k=nz-1,1,-1 ; do i=is,ie ; if (do_i(i)) then
+          ADp%dv_dt_visc_gl90(i,J,k) = ADp%dv_dt_visc_gl90(i,J,k) + c1(i,k+1) * ADp%dv_dt_visc_gl90(i,J,k+1)
+        endif ; enddo ; enddo ! i and k loops
+        do k=1,nz ; do i=is,ie ; if (do_i(i)) then
+          ! now fill ADp%dv_dt_visc_gl90(i,J,k) with actual velocity tendency due to GL90;
+          ! note that on RHS: ADp%dv_dt_visc(i,J,k) holds the original velocity value v(i,J,k)
+          ! and ADp%dv_dt_visc_gl90(i,J,k) the updated velocity due to GL90
+          ADp%dv_dt_visc_gl90(i,J,k) = (ADp%dv_dt_visc_gl90(i,J,k) - ADp%dv_dt_visc(i,J,k))*Idt
+          if (abs(ADp%dv_dt_visc_gl90(i,J,k)) < accel_underflow) ADp%dv_dt_visc_gl90(i,J,k) = 0.0
+        endif ; enddo ; enddo ;
+        ! to compute energetics, we need to multiply by v*h, where u is original velocity before
+        ! velocity update; note that ADp%dv_dt_visc(I,j,k) holds the original velocity value v(i,J,k)
+        if (CS%id_GLwork > 0) then
+          do k=1,nz ; do i=is,ie ; if (do_i(i)) then
+              ! note that on RHS: ADp%dv_dt_visc(I,j,k) holds the original velocity value v(I,j,k)
+              KE_v(I,j,k) = ADp%dv_dt_visc(i,J,k) * CS%h_v(i,J,k) * G%areaCv(i,J) * ADp%dv_dt_visc_gl90(i,J,k)
+          endif ; enddo ; enddo
+        endif
+      endif
+    endif
+
     if (associated(ADp%dv_dt_visc)) then ; do k=1,nz ; do i=is,ie
       ADp%dv_dt_visc(i,J,k) = (v(i,J,k) - ADp%dv_dt_visc(i,J,k))*Idt
       if (abs(ADp%dv_dt_visc(i,J,k)) < accel_underflow) ADp%dv_dt_visc(i,J,k) = 0.0
@@ -625,6 +730,23 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
     enddo ; enddo ; endif
 
   enddo ! end of v-component J loop
+
+  ! Calculate the KE source from GL90 vertical viscosity [H L2 T-3 ~> m3 s-3].
+  ! We do the KE-rate calculation here (rather than in MOM_diagnostics) to ensure
+  ! a sign-definite term. MOM_diagnostics does not have access to the velocities
+  ! and thicknesses used in the vertical solver, but rather uses a time-mean
+  ! barotropic transport [uv]h.
+  if (CS%id_GLwork > 0) then
+    if (.not.G%symmetric) &
+      call do_group_pass(CS%pass_KE_uv, G%domain)
+    do k=1,nz
+      do j=js,je ; do i=is,ie
+        KE_term(i,j,k) = 0.5 * G%IareaT(i,j) &
+            * (KE_u(I,j,k) + KE_u(I-1,j,k) + KE_v(i,J,k) + KE_v(i,J-1,k))
+      enddo ; enddo
+    enddo
+    call post_data(CS%id_GLwork, KE_term, CS%diag)
+  endif
 
   call vertvisc_limit_vel(u, v, h, ADp, CDp, forces, visc, dt, G, GV, US, CS)
 
@@ -651,8 +773,12 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
   if (query_averaging_enabled(CS%diag)) then
     if (CS%id_du_dt_visc > 0) &
       call post_data(CS%id_du_dt_visc, ADp%du_dt_visc, CS%diag)
+    if (CS%id_du_dt_visc_gl90 > 0) &
+      call post_data(CS%id_du_dt_visc_gl90, ADp%du_dt_visc_gl90, CS%diag)
     if (CS%id_dv_dt_visc > 0) &
       call post_data(CS%id_dv_dt_visc, ADp%dv_dt_visc, CS%diag)
+    if (CS%id_dv_dt_visc_gl90 > 0) &
+      call post_data(CS%id_dv_dt_visc_gl90, ADp%dv_dt_visc_gl90, CS%diag)
     if (present(taux_bot) .and. (CS%id_taux_bot > 0)) &
       call post_data(CS%id_taux_bot, taux_bot, CS%diag)
     if (present(tauy_bot) .and. (CS%id_tauy_bot > 0)) &
@@ -868,6 +994,8 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, US, CS, OBC, VarMix)
   real, allocatable, dimension(:,:) :: hML_v ! Diagnostic of the mixed layer depth at v points [H ~> m or kg m-2].
   real, allocatable, dimension(:,:,:) :: Kv_u !< Total vertical viscosity at u-points [Z2 T-1 ~> m2 s-1].
   real, allocatable, dimension(:,:,:) :: Kv_v !< Total vertical viscosity at v-points [Z2 T-1 ~> m2 s-1].
+  real, allocatable, dimension(:,:,:) :: Kv_gl90_u !< GL90 vertical viscosity at u-points [Z2 T-1 ~> m2 s-1].
+  real, allocatable, dimension(:,:,:) :: Kv_gl90_v !< GL90 vertical viscosity at v-points [Z2 T-1 ~> m2 s-1].
   real :: zcol(SZI_(G)) ! The height of an interface at h-points [H ~> m or kg m-2].
   real :: botfn   ! A function which goes from 1 at the bottom to 0 much more
                   ! than Hbbl into the interior [nondim].
@@ -910,6 +1038,10 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, US, CS, OBC, VarMix)
   if (CS%id_Kv_u > 0) allocate(Kv_u(G%IsdB:G%IedB,G%jsd:G%jed,GV%ke), source=0.0)
 
   if (CS%id_Kv_v > 0) allocate(Kv_v(G%isd:G%ied,G%JsdB:G%JedB,GV%ke), source=0.0)
+
+  if (CS%id_Kv_gl90_u > 0) allocate(Kv_gl90_u(G%IsdB:G%IedB,G%jsd:G%jed,GV%ke), source=0.0)
+
+  if (CS%id_Kv_gl90_v > 0) allocate(Kv_gl90_v(G%isd:G%ied,G%JsdB:G%JedB,GV%ke), source=0.0)
 
   if (CS%debug .or. (CS%id_hML_u > 0)) allocate(hML_u(G%IsdB:G%IedB,G%jsd:G%jed), source=0.0)
   if (CS%debug .or. (CS%id_hML_v > 0)) allocate(hML_v(G%isd:G%ied,G%JsdB:G%JedB), source=0.0)
@@ -1106,7 +1238,12 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, US, CS, OBC, VarMix)
         if (do_i(I)) Kv_u(I,j,k) = 0.5 * GV%H_to_Z*(CS%a_u(I,j,K)+CS%a_u(I,j,K+1)) * CS%h_u(I,j,k)
       enddo ; enddo
     endif
-
+    ! Diagnose GL90 Kv at u-points
+    if (CS%id_Kv_gl90_u > 0) then
+      do k=1,nz ; do I=Isq,Ieq
+        if (do_i(I)) Kv_gl90_u(I,j,k) = 0.5 * GV%H_to_Z*(CS%a_u_gl90(I,j,K)+CS%a_u_gl90(I,j,K+1)) * CS%h_u(I,j,k)
+      enddo ; enddo
+    endif
   enddo
 
 
@@ -1297,7 +1434,12 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, US, CS, OBC, VarMix)
         if (do_i(I)) Kv_v(i,J,k) = 0.5 * GV%H_to_Z*(CS%a_v(i,J,K)+CS%a_v(i,J,K+1)) * CS%h_v(i,J,k)
       enddo ; enddo
     endif
-
+    ! Diagnose GL90 Kv at v-points
+    if (CS%id_Kv_gl90_v > 0) then
+      do k=1,nz ; do i=is,ie
+        if (do_i(I)) Kv_gl90_v(i,J,k) = 0.5 * GV%H_to_Z*(CS%a_v_gl90(i,J,K)+CS%a_v_gl90(i,J,K+1)) * CS%h_v(i,J,k)
+      enddo ; enddo
+    endif
   enddo ! end of v-point j loop
 
   if (CS%debug) then
@@ -1316,8 +1458,12 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, US, CS, OBC, VarMix)
         call post_data(CS%id_Kv_slow, visc%Kv_slow, CS%diag)
     if (CS%id_Kv_u > 0) call post_data(CS%id_Kv_u, Kv_u, CS%diag)
     if (CS%id_Kv_v > 0) call post_data(CS%id_Kv_v, Kv_v, CS%diag)
+    if (CS%id_Kv_gl90_u > 0) call post_data(CS%id_Kv_gl90_u, Kv_gl90_u, CS%diag)
+    if (CS%id_Kv_gl90_v > 0) call post_data(CS%id_Kv_gl90_v, Kv_gl90_v, CS%diag)
     if (CS%id_au_vv > 0) call post_data(CS%id_au_vv, CS%a_u, CS%diag)
     if (CS%id_av_vv > 0) call post_data(CS%id_av_vv, CS%a_v, CS%diag)
+    if (CS%id_au_gl90_vv > 0) call post_data(CS%id_au_gl90_vv, CS%a_u_gl90, CS%diag)
+    if (CS%id_av_gl90_vv > 0) call post_data(CS%id_av_gl90_vv, CS%a_v_gl90, CS%diag)
     if (CS%id_h_u > 0) call post_data(CS%id_h_u, CS%h_u, CS%diag)
     if (CS%id_h_v > 0) call post_data(CS%id_h_v, CS%h_v, CS%diag)
     if (CS%id_hML_u > 0) call post_data(CS%id_hML_u, hML_u, CS%diag)
@@ -2292,11 +2438,23 @@ subroutine vertvisc_init(MIS, Time, G, GV, US, param_file, diag, ADp, dirs, &
   CS%id_Kv_v = register_diag_field('ocean_model', 'Kv_v', diag%axesCvL, Time, &
       'Total vertical viscosity at v-points', 'm2 s-1', conversion=US%Z2_T_to_m2_s)
 
+  CS%id_Kv_gl90_u = register_diag_field('ocean_model', 'Kv_gl90_u', diag%axesCuL, Time, &
+      'GL90 vertical viscosity at u-points', 'm2 s-1', conversion=US%Z2_T_to_m2_s)
+
+  CS%id_Kv_gl90_v = register_diag_field('ocean_model', 'Kv_gl90_v', diag%axesCvL, Time, &
+      'GL90 vertical viscosity at v-points', 'm2 s-1', conversion=US%Z2_T_to_m2_s)
+
   CS%id_au_vv = register_diag_field('ocean_model', 'au_visc', diag%axesCui, Time, &
       'Zonal Viscous Vertical Coupling Coefficient', 'm s-1', conversion=US%Z_to_m*US%s_to_T)
 
   CS%id_av_vv = register_diag_field('ocean_model', 'av_visc', diag%axesCvi, Time, &
       'Meridional Viscous Vertical Coupling Coefficient', 'm s-1', conversion=US%Z_to_m*US%s_to_T)
+
+  CS%id_au_gl90_vv = register_diag_field('ocean_model', 'au_gl90_visc', diag%axesCui, Time, &
+      'Zonal Viscous Vertical GL90 Coupling Coefficient', 'm s-1', conversion=US%Z_to_m*US%s_to_T)
+
+  CS%id_av_gl90_vv = register_diag_field('ocean_model', 'av_gl90_visc', diag%axesCvi, Time, &
+      'Meridional Viscous Vertical GL90 Coupling Coefficient', 'm s-1', conversion=US%Z_to_m*US%s_to_T)
 
   CS%id_h_u = register_diag_field('ocean_model', 'Hu_visc', diag%axesCuL, Time, &
       'Thickness at Zonal Velocity Points for Viscosity', &
@@ -2322,7 +2480,21 @@ subroutine vertvisc_init(MIS, Time, G, GV, US, param_file, diag, ADp, dirs, &
   CS%id_dv_dt_visc = register_diag_field('ocean_model', 'dv_dt_visc', diag%axesCvL, Time, &
       'Meridional Acceleration from Vertical Viscosity', 'm s-2', conversion=US%L_T2_to_m_s2)
   if (CS%id_dv_dt_visc > 0) call safe_alloc_ptr(ADp%dv_dt_visc,isd,ied,JsdB,JedB,nz)
-
+  CS%id_GLwork = register_diag_field('ocean_model', 'GLwork', diag%axesTL, Time, &
+      'Kinetic Energy Source from GL90 Vertical Viscosity', &
+      'm3 s-3', conversion=GV%H_to_m*(US%L_T_to_m_s**2)*US%s_to_T)
+  CS%id_du_dt_visc_gl90 = register_diag_field('ocean_model', 'du_dt_visc_gl90', diag%axesCuL, Time, &
+      'Zonal Acceleration from GL90 Vertical Viscosity', 'm s-2', conversion=US%L_T2_to_m_s2)
+  if ((CS%id_du_dt_visc_gl90 > 0) .or. (CS%id_GLwork > 0)) then
+    call safe_alloc_ptr(ADp%du_dt_visc_gl90,IsdB,IedB,jsd,jed,nz)
+    call safe_alloc_ptr(ADp%du_dt_visc,IsdB,IedB,jsd,jed,nz)
+  endif
+  CS%id_dv_dt_visc_gl90 = register_diag_field('ocean_model', 'dv_dt_visc_gl90', diag%axesCvL, Time, &
+      'Meridional Acceleration from GL90 Vertical Viscosity', 'm s-2', conversion=US%L_T2_to_m_s2)
+  if ((CS%id_dv_dt_visc_gl90 > 0) .or. (CS%id_GLwork > 0)) then
+    call safe_alloc_ptr(ADp%dv_dt_visc_gl90,isd,ied,JsdB,JedB,nz)
+    call safe_alloc_ptr(ADp%dv_dt_visc,isd,ied,JsdB,JedB,nz)
+  endif
   CS%id_du_dt_str = register_diag_field('ocean_model', 'du_dt_str', diag%axesCuL, Time, &
       'Zonal Acceleration from Surface Wind Stresses', 'm s-2', conversion=US%L_T2_to_m_s2)
   if (CS%id_du_dt_str > 0) call safe_alloc_ptr(ADp%du_dt_str,IsdB,IedB,jsd,jed,nz)
