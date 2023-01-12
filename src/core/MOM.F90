@@ -1456,7 +1456,7 @@ subroutine step_MOM_thermo(CS, G, GV, US, u, v, h, tv, fluxes, dtdia, &
     if (CS%debug) then
       call MOM_thermo_chksum("Pre-oda ", tv, G, US, haloshift=0)
     endif
-    call apply_oda_tracer_increments(US%T_to_s*dtdia, Time_end_thermo, G, GV, tv, h, CS%odaCS)
+    call apply_oda_tracer_increments(dtdia, Time_end_thermo, G, GV, tv, h, CS%odaCS)
     if (CS%debug) then
       call MOM_thermo_chksum("Post-oda ", tv, G, US, haloshift=0)
     endif
