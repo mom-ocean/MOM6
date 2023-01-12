@@ -23,6 +23,7 @@ use MOM_shared_initialization, only : initialize_topography_named, limit_topogra
 use MOM_shared_initialization, only : set_rotation_planetary, set_rotation_beta_plane, initialize_grid_rotation_angle
 use MOM_shared_initialization, only : reset_face_lengths_named, reset_face_lengths_file, reset_face_lengths_list
 use MOM_shared_initialization, only : read_face_length_list, set_velocity_depth_max, set_velocity_depth_min
+use MOM_shared_initialization, only : set_subgrid_topo_at_vel_from_file
 use MOM_shared_initialization, only : compute_global_grid_integrals, write_ocean_geometry_file
 use MOM_unit_scaling, only : unit_scale_type
 
@@ -62,6 +63,7 @@ subroutine MOM_initialize_fixed(G, US, OBC, PF, write_geom, output_dir)
   ! Local
   character(len=200) :: inputdir   ! The directory where NetCDF input files are.
   character(len=200) :: config
+  logical            :: read_porous_file
   character(len=40)  :: mdl = "MOM_fixed_initialization" ! This module's name.
   logical :: debug
 ! This include declares and sets the variable "version".
@@ -141,6 +143,13 @@ subroutine MOM_initialize_fixed(G, US, OBC, PF, write_geom, output_dir)
         "Unrecognized velocity depth configuration "//trim(config))
     end select
   endif
+
+  ! Read sub-grid scale topography parameters at velocity points used for porous barrier calculation
+  call get_param(PF, mdl, "SUBGRID_TOPO_AT_VEL", read_porous_file, &
+                 "If true, use variables from TOPO_AT_VEL_FILE as parameters for porous barrier.", &
+                 default=.False.)
+  if (read_porous_file) &
+    call set_subgrid_topo_at_vel_from_file(G, PF, US)
 
 !    Calculate the value of the Coriolis parameter at the latitude   !
 !  of the q grid points [T-1 ~> s-1].

@@ -137,7 +137,7 @@ end type
 ! The following routines are visible to the outside world
 public initialize_regridding, end_regridding, regridding_main
 public regridding_preadjust_reqs, convective_adjustment
-public inflate_vanished_layers_old, check_remapping_grid, check_grid_column
+public inflate_vanished_layers_old, check_grid_column
 public set_regrid_params, get_regrid_size, write_regrid_file
 public uniformResolution, setCoordinateResolution
 public set_target_densities_from_GV, set_target_densities
@@ -794,7 +794,7 @@ end subroutine end_regridding
 
 !------------------------------------------------------------------------------
 !> Dispatching regridding routine for orchestrating regridding & remapping
-subroutine regridding_main( remapCS, CS, G, GV, h, tv, h_new, dzInterface, conv_adjust, &
+subroutine regridding_main( remapCS, CS, G, GV, h, tv, h_new, dzInterface, &
                             frac_shelf_h, PCM_cell)
 !------------------------------------------------------------------------------
 ! This routine takes care of (1) building a new grid and (2) remapping between
@@ -823,24 +823,14 @@ subroutine regridding_main( remapCS, CS, G, GV, h, tv, h_new, dzInterface, conv_
   type(thermo_var_ptrs),                      intent(in)    :: tv     !< Thermodynamical variables (T, S, ...)
   real, dimension(SZI_(G),SZJ_(G),CS%nk),     intent(inout) :: h_new  !< New 3D grid consistent with target coordinate
   real, dimension(SZI_(G),SZJ_(G),CS%nk+1),   intent(inout) :: dzInterface !< The change in position of each interface
-  logical,                                    intent(in   ) :: conv_adjust !< If true, regridding_main should do
-                                                                      !! convective adjustment, but because it no
-                                                                      !! longer does convective adjustment this must
-                                                                      !! be false.  This argument has been retained to
-                                                                      !! trap inconsistent code, but will eventually
-                                                                      !! be eliminated.
   real, dimension(SZI_(G),SZJ_(G)), optional, intent(in   ) :: frac_shelf_h !< Fractional ice shelf coverage
   logical, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                                     optional, intent(out  ) :: PCM_cell !< Use PCM remapping in cells where true
 
   ! Local variables
   real :: trickGnuCompiler
+  integer :: i, j
 
-  if (conv_adjust) call MOM_error(FATAL, &
-                        "regridding_main: convective adjustment no longer is done inside of regridding_main. "//&
-                        "The code needs to be modified to call regridding_main() with conv_adjust=.false, "//&
-                        "and a call to convective_adjustment added before calling regridding_main() "//&
-                        "if regridding_preadjust_reqs() indicates that this is necessary.")
   if (present(PCM_cell)) PCM_cell(:,:,:) = .false.
 
   select case ( CS%regridding_scheme )
@@ -879,8 +869,18 @@ subroutine regridding_main( remapCS, CS, G, GV, h, tv, h_new, dzInterface, conv_
   end select ! type of grid
 
 #ifdef __DO_SAFETY_CHECKS__
-  if (CS%nk == GV%ke) call check_remapping_grid(G, GV, h, dzInterface,'in regridding_main')
+  if (CS%nk == GV%ke) then
+    do j = G%jsc-1,G%jec+1 ; do i = G%isc-1,G%iec+1 ; if (G%mask2dT(i,j)>0.) then
+      call check_grid_column( GV%ke, h(i,j,:), dzInterface(i,j,:), 'in regridding_main')
+    endif ; enddo ; enddo
+  endif
 #endif
+  do j=G%jsc,G%jec ; do i=G%isc,G%iec ; if (G%mask2dT(i,j) > 0.) then
+    if (minval(h(i,j,:)) < 0.0) then
+      write(0,*) 'regridding_main check_grid: i,j=', i, j, 'h_new(i,j,:)=', h_new(i,j,:)
+      call MOM_error(FATAL, "regridding_main: negative thickness encountered.")
+    endif
+  endif ; enddo ; enddo
 
 end subroutine regridding_main
 
@@ -952,23 +952,6 @@ subroutine calc_h_new_by_dz(CS, G, GV, h, dzInterface, h_new)
 
 end subroutine calc_h_new_by_dz
 
-!> Check that the total thickness of two grids match
-subroutine check_remapping_grid( G, GV, h, dzInterface, msg )
-  type(ocean_grid_type),                       intent(in) :: G   !< Grid structure
-  type(verticalGrid_type),                     intent(in) :: GV  !< Ocean vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),   intent(in) :: h   !< Layer thicknesses [H ~> m or kg m-2]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), intent(in) :: dzInterface !< Change in interface positions
-                                                                 !! [H ~> m or kg m-2]
-  character(len=*),                            intent(in) :: msg !< Message to append to errors
-  ! Local variables
-  integer :: i, j
-
-  !$OMP parallel do default(shared)
-  do j = G%jsc-1,G%jec+1 ; do i = G%isc-1,G%iec+1
-    if (G%mask2dT(i,j)>0.) call check_grid_column( GV%ke, h(i,j,:), dzInterface(i,j,:), msg )
-  enddo ; enddo
-
-end subroutine check_remapping_grid
 
 !> Check that the total thickness of new and old grids are consistent
 subroutine check_grid_column( nk, h, dzInterface, msg )

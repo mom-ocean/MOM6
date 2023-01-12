@@ -96,8 +96,6 @@ use NUOPC_Model, only: model_label_SetRunClock    => label_SetRunClock
 use NUOPC_Model, only: model_label_Finalize       => label_Finalize
 use NUOPC_Model, only: SetVM
 
-!$use omp_lib             , only : omp_set_num_threads
-
 implicit none; private
 
 public SetServices
@@ -146,7 +144,6 @@ character(len=128)   :: scalar_field_name = ''
 integer              :: scalar_field_count = 0
 integer              :: scalar_field_idx_grid_nx = 0
 integer              :: scalar_field_idx_grid_ny = 0
-integer              :: nthrds  !< number of openmp threads per task
 character(len=*),parameter :: u_FILE_u = &
      __FILE__
 
@@ -462,30 +459,6 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
   CALL ESMF_TimeIntervalGet(TINT, S=DT_OCEAN, RC=rc)
   if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
-  !---------------------------------
-  ! openmp threads
-  !---------------------------------
-
-  call ESMF_VMGet(vm, pet=localPet, peCount=localPeCount, rc=rc)
-  if (ChkErr(rc,__LINE__,u_FILE_u)) return
-
-  if (localPeCount == 1) then
-    call NUOPC_CompAttributeGet(gcomp, name="nthreads", value=cvalue, &
-         isPresent=isPresent, isSet=isSet, rc=rc)
-    if (ChkErr(rc,__LINE__,u_FILE_u)) return
-    if (isPresent .and. isSet) then
-      read(cvalue,*) nthrds
-    else
-      nthrds = localPeCount
-    endif
-  else
-    nthrds = localPeCount
-  endif
-  write(logmsg,*) nthrds
-  call ESMF_LogWrite(trim(subname)//': nthreads = '//trim(logmsg), ESMF_LOGMSG_INFO)
-
-!$  call omp_set_num_threads(nthrds)
-
   ! reset shr logging to my log file
   if (localPet==0) then
     call NUOPC_CompAttributeGet(gcomp, name="diro", &
@@ -656,7 +629,7 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
   endif
 
   ocean_public%is_ocean_pe = .true.
-  call ocean_model_init(ocean_public, ocean_state, time0, time_start, input_restart_file=trim(restartfiles))
+  call ocean_model_init(ocean_public, ocean_state, time0, time_start, input_restart_file=trim(adjustl(restartfiles)))
 
   ! GMM, this call is not needed in CESM. Check with EMC if it can be deleted.
   call ocean_model_flux_init(ocean_state)
@@ -935,28 +908,6 @@ subroutine InitializeRealize(gcomp, importState, exportState, clock, rc)
 
   call ESMF_VMGet(vm, petCount=npet, mpiCommunicator=mpicom, localPet=localPet, rc=rc)
   if (ChkErr(rc,__LINE__,u_FILE_u)) return
-
-  !---------------------------------
-  ! openmp threads
-  !---------------------------------
-
-  call ESMF_VMGet(vm, pet=localPet, peCount=localPeCount, rc=rc)
-  if (ChkErr(rc,__LINE__,u_FILE_u)) return
-
-  if (localPeCount == 1) then
-    call NUOPC_CompAttributeGet(gcomp, name="nthreads", value=cvalue, &
-         isPresent=isPresent, isSet=isSet, rc=rc)
-    if (ChkErr(rc,__LINE__,u_FILE_u)) return
-    if (isPresent .and. isSet) then
-      read(cvalue,*) nthrds
-    else
-      nthrds = localPeCount
-    endif
-  else
-    nthrds = localPeCount
-  endif
-
-!$  call omp_set_num_threads(nthrds)
 
   !---------------------------------
   ! global mom grid size
@@ -1570,8 +1521,6 @@ subroutine ModelAdvance(gcomp, rc)
   if(profile_memory) call ESMF_VMLogMemInfo("Entering MOM Model_ADVANCE: ")
 
   call shr_log_setLogUnit (stdout)
-
-!$  call omp_set_num_threads(nthrds)
 
   ! query the Component for its clock, importState and exportState
   call ESMF_GridCompGet(gcomp, clock=clock, importState=importState, &

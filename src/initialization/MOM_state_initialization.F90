@@ -2135,9 +2135,11 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, u, v, depth_t
       if (use_temperature) then
         allocate(tmp_tr(isd:ied,jsd:jed,nz_data))
         call MOM_read_data(filename, potemp_var, tmp_tr(:,:,:), G%Domain, scale=US%degC_to_C)
-        call set_up_ALE_sponge_field(tmp_tr, G, GV, tv%T, ALE_CSp)
+        call set_up_ALE_sponge_field(tmp_tr, G, GV, tv%T, ALE_CSp, 'temp', &
+               sp_long_name='temperature', sp_unit='degC s-1')
         call MOM_read_data(filename, salin_var, tmp_tr(:,:,:), G%Domain, scale=US%ppt_to_S)
-        call set_up_ALE_sponge_field(tmp_tr, G, GV, tv%S, ALE_CSp)
+        call set_up_ALE_sponge_field(tmp_tr, G, GV, tv%S, ALE_CSp, 'salt', &
+               sp_long_name='salinity', sp_unit='g kg-1 s-1')
         deallocate(tmp_tr)
       endif
       if (sponge_uv) then
@@ -2160,8 +2162,10 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, u, v, depth_t
       endif
       ! The remaining calls to set_up_sponge_field can be in any order.
       if ( use_temperature) then
-        call set_up_ALE_sponge_field(filename, potemp_var, Time, G, GV, US, tv%T, ALE_CSp, scale=US%degC_to_C)
-        call set_up_ALE_sponge_field(filename, salin_var, Time, G, GV, US, tv%S, ALE_CSp, scale=US%ppt_to_S)
+        call set_up_ALE_sponge_field(filename, potemp_var, Time, G, GV, US, tv%T, ALE_CSp, &
+               'temp', sp_long_name='temperature', sp_unit='degC s-1', scale=US%degC_to_C)
+        call set_up_ALE_sponge_field(filename, salin_var, Time, G, GV, US, tv%S, ALE_CSp, &
+               'salt', sp_long_name='salinity', sp_unit='g kg-1 s-1', scale=US%ppt_to_S)
       endif
       if (sponge_uv) then
         filename = trim(inputdir)//trim(state_uv_file)
@@ -2647,7 +2651,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, depth_tot, G, GV, US, PF, just
                  "If true use an expression with a vertical indexing bug for extrapolating the "//&
                  "densities at the bottom of unstable profiles from data when finding the "//&
                  "initial interface locations in layered mode from a dataset of T and S.", &
-                 default=.true., do_not_log=just_read)
+                 default=.false., do_not_log=just_read)
     ! Reusing MINIMUM_DEPTH for the default mixed layer depth may be a strange choice, but
     ! it reproduces previous answers.
   endif
@@ -2775,7 +2779,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, depth_tot, G, GV, US, PF, just
 
       call regridding_preadjust_reqs(regridCS, do_conv_adj, ignore)
       if (do_conv_adj) call convective_adjustment(G, GV_loc, h1, tv_loc)
-      call regridding_main( remapCS, regridCS, G, GV_loc, h1, tv_loc, h, dz_interface, conv_adjust=.false., &
+      call regridding_main( remapCS, regridCS, G, GV_loc, h1, tv_loc, h, dz_interface, &
                             frac_shelf_h=frac_shelf_h )
 
       deallocate( dz_interface )
