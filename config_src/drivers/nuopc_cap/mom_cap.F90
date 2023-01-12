@@ -2,26 +2,18 @@
 
 module MOM_cap_mod
 
-use constants_mod,            only: constants_init
-use diag_manager_mod,         only: diag_manager_init, diag_manager_end
-use field_manager_mod,        only: field_manager_init, field_manager_end
-use mom_coms_infra,           only: MOM_infra_init, MOM_infra_end
-use mom_io_infra,             only: io_infra_end
-use mom_domain_infra,         only: get_domain_extent
-use MOM_io,                   only: stdout
+use MOM_domains,              only: get_domain_extent
+use MOM_io,                   only: stdout, io_infra_end
 use mpp_domains_mod,          only: mpp_get_compute_domains
 use mpp_domains_mod,          only: mpp_get_ntile_count, mpp_get_pelist, mpp_get_global_domain
 use mpp_domains_mod,          only: mpp_get_domain_npes
 
-use time_manager_mod,         only: set_calendar_type, time_type, increment_date
-use time_manager_mod,         only: set_time, set_date, get_time, get_date, month_name
-use time_manager_mod,         only: GREGORIAN, JULIAN, NOLEAP, THIRTY_DAY_MONTHS, NO_CALENDAR
-use time_manager_mod,         only: operator( <= ), operator( < ), operator( >= )
-use time_manager_mod,         only: operator( + ),  operator( - ), operator( / )
-use time_manager_mod,         only: operator( * ), operator( /= ), operator( > )
-use time_manager_mod,         only: date_to_string
-use time_manager_mod,         only: fms_get_calendar_type => get_calendar_type
-use MOM_domains,              only: MOM_infra_init, num_pes, root_pe, pe_here
+use MOM_time_manager,         only: set_calendar_type, time_type, set_time, set_date, month_name
+use MOM_time_manager,         only: GREGORIAN, JULIAN, NOLEAP
+use MOM_time_manager,         only: operator( <= ), operator( < ), operator( >= )
+use MOM_time_manager,         only: operator( + ),  operator( - ), operator( / )
+use MOM_time_manager,         only: operator( * ), operator( /= ), operator( > )
+use MOM_domains,              only: MOM_infra_init, MOM_infra_end, num_pes, root_pe, pe_here
 use MOM_file_parser,          only: get_param, log_version, param_file_type, close_param_file
 use MOM_get_input,            only: get_MOM_input, directories
 use MOM_domains,              only: pass_var
@@ -486,9 +478,6 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
   if (chkerr(rc,__LINE__,u_FILE_u)) return
   call MOM_infra_init(mpi_comm_mom)
 
-  call constants_init
-  call field_manager_init
-
   ! determine the calendar
   if (cesm_coupled) then
     call NUOPC_CompAttributeGet(gcomp, name="calendar", value=cvalue, &
@@ -513,8 +502,6 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
   else
     call set_calendar_type (JULIAN)
   endif
-
-  call diag_manager_init
 
   ! this ocean connector will be driven at set interval
   DT = set_time (DT_OCEAN, 0)
@@ -1987,7 +1974,6 @@ subroutine ocean_model_finalize(gcomp, rc)
                          ESMF_LOGMSG_INFO)
 
   call ocean_model_end(ocean_public, ocean_State, Time, write_restart=write_restart)
-  call field_manager_end()
 
   call io_infra_end()
   call MOM_infra_end()
@@ -2337,8 +2323,7 @@ end subroutine shr_log_setLogUnit
 !! @subsection Initialization Initialization
 !!
 !! During the [InitializeAdvertise] (@ref MOM_cap_mod::initializeadvertise) phase, calls are
-!! made to MOM's native initialization subroutines, including `fms_init()`, `constants_init()`,
-!! `field_manager_init()`, `diag_manager_init()`, and `set_calendar_type()`.  The MPI communicator
+!! made to MOM's native initialization subroutines. The MPI communicator
 !! is pulled in through the ESMF VM object for the MOM component. The dt and start time are set
 !! from parameters from the incoming ESMF clock with calls to `set_time()` and `set_date().`
 !!
@@ -2413,10 +2398,6 @@ end subroutine shr_log_setLogUnit
 !! procedures:
 !!
 !!     call ocean_model_end (ocean_public, ocean_State, Time)
-!!     call diag_manager_end(Time )
-!!     call field_manager_end
-!!     call fms_io_exit
-!!     call fms_end
 !!
 !! @section ModelFields Model Fields
 !!
