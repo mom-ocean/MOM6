@@ -523,6 +523,8 @@ $(foreach c,$(CONFIGS),$(eval $(call CONFIG_DIM_RULE,$(c))))
 .PHONY: preproc
 preproc: tc4/Makefile
 	cd tc4 && $(MAKE) LAUNCHER="$(MPIRUN)"
+preproc-compile: tc4/Makefile
+	cd tc4 && $(MAKE) executables
 
 tc4/Makefile: tc4/configure tc4/Makefile.in
 	cd $(@D) && ./configure || (cat config.log && false)
@@ -795,7 +797,7 @@ clean.build:
 
 
 .PHONY: clean.stats
-clean.stats: clean.preproc
+clean.stats:
 	@[ $$(basename $$(pwd)) = .testing ]
 	rm -rf work results
 

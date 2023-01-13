@@ -182,6 +182,7 @@ actions:gnu:
     - cd .testing
     - module unload PrgEnv-pgi PrgEnv-intel PrgEnv-gnu darshan ; module load PrgEnv-gnu ; module unload netcdf gcc ; module load gcc/7.3.0 cray-hdf5 cray-netcdf
     - make -s -j
+    - make preproc-compile -s -j
     - echo -e "\e[0Ksection_end:`date +%s`:compile\r\e[0K"
     - (echo '#!/bin/bash';echo 'make MPIRUN="srun -mblock --exclusive" test -s -j') > job.sh
     - sbatch --clusters=c3,c4 --nodes=5 --time=0:05:00 --account=gfdl_o --qos=debug --job-name=MOM6.gnu.testing --output=log.$CI_JOB_ID --wait job.sh || ( cat log.$CI_JOB_ID ; exit 911 )
@@ -201,6 +202,7 @@ actions:intel:
     - cd .testing
     - module unload PrgEnv-pgi PrgEnv-intel PrgEnv-gnu darshan; module load PrgEnv-intel; module unload netcdf intel; module load intel/18.0.6.288 cray-hdf5 cray-netcdf
     - make -s -j
+    - make preproc-compile -s -j
     - echo -e "\e[0Ksection_end:`date +%s`:compile\r\e[0K"
     - (echo '#!/bin/bash';echo 'make MPIRUN="srun -mblock --exclusive" test -s -j') > job.sh
     - sbatch --clusters=c3,c4 --nodes=5 --time=0:05:00 --account=gfdl_o --qos=debug --job-name=MOM6.intel.testing --output=log.$CI_JOB_ID --wait job.sh || ( cat log.$CI_JOB_ID ; exit 911 )

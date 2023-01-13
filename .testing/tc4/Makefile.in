@@ -16,6 +16,7 @@ OUT = ocean_hgrid.nc topog.nc temp_salt_ic.nc sponge.nc
 
 # Program output
 all: ocean_hgrid.nc temp_salt_ic.nc
+executables: gen_data gen_grid
 
 ocean_hgrid.nc: gen_grid
 	$(LAUNCHER) ./gen_grid
