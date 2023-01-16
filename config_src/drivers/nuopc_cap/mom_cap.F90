@@ -1948,7 +1948,9 @@ subroutine ocean_model_finalize(gcomp, rc)
   logical                                :: write_restart
   character(len=*),parameter  :: subname='(MOM_cap:ocean_model_finalize)'
 
-  write(*,*) 'MOM: --- finalize called ---'
+  if (is_root_pe()) then
+    write(stdout,*) 'MOM: --- finalize called ---'
+  endif
   rc = ESMF_SUCCESS
 
   call ESMF_GridCompGetInternalState(gcomp, ocean_internalstate, rc)
@@ -1978,7 +1980,9 @@ subroutine ocean_model_finalize(gcomp, rc)
   call io_infra_end()
   call MOM_infra_end()
 
-  write(*,*) 'MOM: --- completed ---'
+  if (is_root_pe()) then
+    write(stdout,*) 'MOM: --- completed ---'
+  endif
 
 end subroutine ocean_model_finalize
 
