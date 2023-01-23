@@ -1814,9 +1814,9 @@ subroutine find_maxF_kb(h_bl, Sref, Ent_bl, I_dSkbp1, min_ent_in, max_ent_in, &
                                                       !! limited value at ent=max_ent_in in this
                                                       !! array [H ~> m or kg m-2].
   real, dimension(SZI_(G)), &
-                    optional, intent(in)  :: F_thresh !< If F_thresh is present, return the first
-                                                      !! value found that has F > F_thresh, or
-                                                      !! the maximum.
+                    optional, intent(in)  :: F_thresh !< If F_thresh is present, return the first value
+                                                      !! found that has F > F_thresh [H ~> m or kg m-2], or
+                                                      !! the maximum root if it is absent.
 
 ! Maximize F = ent*ds_kb*I_dSkbp1 in the range min_ent < ent < max_ent.
 ! ds_kb may itself be limited to positive values in determine_dSkb, which gives
