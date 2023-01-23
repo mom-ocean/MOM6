@@ -664,8 +664,8 @@ subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, dz, &
     pressure, & ! The pressure at an interface [R L2 T-2 ~> Pa].
     T_int, &    ! The temperature interpolated to an interface [C ~> degC].
     Sal_int, &  ! The salinity interpolated to an interface [S ~> ppt].
-    dbuoy_dT, & ! The partial derivatives of buoyancy with changes in temperature
-    dbuoy_dS, & ! and salinity, [Z T-2 C-1 ~> m s-2 degC-1] and [Z T-2 S-1 ~> m s-2 ppt-1].
+    dbuoy_dT, & ! The partial derivative of buoyancy with changes in temperature [Z T-2 C-1 ~> m s-2 degC-1]
+    dbuoy_dS, & ! The partial derivative of buoyancy with changes in salinity [Z T-2 S-1 ~> m s-2 ppt-1]
     I_L2_bdry, &   ! The inverse of the square of twice the harmonic mean
                    ! distance to the top and bottom boundaries [Z-2 ~> m-2].
     K_Q, &         ! Diffusivity divided by TKE [T ~> s].
