@@ -619,7 +619,7 @@ subroutine KPP_calculate(CS, G, GV, US, h, uStar, buoyFlux, Kt, Ks, Kv, &
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), intent(inout) :: nonLocalTransHeat   !< Temp non-local transport [nondim]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), intent(inout) :: nonLocalTransScalar !< scalar non-local trans. [nondim]
   type(wave_parameters_CS),                    pointer       :: Waves   !< Wave CS for Langmuir turbulence
-  real, dimension(SZI_(G),SZJ_(G)),  optional, intent(in)    :: lamult  !< Langmuir enhancement multiplier
+  real, dimension(SZI_(G),SZJ_(G)),  optional, intent(in)    :: lamult  !< Langmuir enhancement multiplier [nondim]
 
   ! Local variables
   integer :: i, j, k                            ! Loop indices
@@ -920,7 +920,7 @@ subroutine KPP_compute_BLD(CS, G, GV, US, h, Temp, Salt, u, v, tv, uStar, buoyFl
   real, dimension(SZI_(G),SZJ_(G)),           intent(in)    :: uStar !< Surface friction velocity [Z T-1 ~> m s-1]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), intent(in)   :: buoyFlux !< Surface buoyancy flux [L2 T-3 ~> m2 s-3]
   type(wave_parameters_CS),                   pointer       :: Waves !< Wave CS for Langmuir turbulence
-  real, dimension(SZI_(G),SZJ_(G)), optional, intent(in)    :: lamult !< Langmuir enhancement factor
+  real, dimension(SZI_(G),SZJ_(G)), optional, intent(in)    :: lamult !< Langmuir enhancement factor [nondim]
 
   ! Local variables
   ! Variables for passing to CVMix routines, often in MKS units
