@@ -257,8 +257,8 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, pbv)
                            ! the depth of each interface [nondim].
   real :: L_direct         ! The value of L above volume Vol_direct [nondim].
   real :: L_max, L_min     ! Upper and lower bounds on the correct value for L  [nondim].
-  real :: Vol_err_max      ! The volume errors for the upper and lower bounds on
-  real :: Vol_err_min      ! the correct value for L [H ~> m or kg m-2].
+  real :: Vol_err_max      ! The volume error for the upper bound on the correct value for L [H ~> m or kg m-2]
+  real :: Vol_err_min      ! The volume error for the lower bound on the correct value for L [H ~> m or kg m-2]
   real :: Vol_0            ! A deeper volume with known width L0 [H ~> m or kg m-2].
   real :: L0               ! The value of L above volume Vol_0 [nondim].
   real :: dVol             ! vol - Vol_0 [H ~> m or kg m-2].
