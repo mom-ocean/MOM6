@@ -142,7 +142,7 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, GV, US, CS)
     S_2d, &     !   A 2-d version of tv%S [S ~> ppt].
     Rcv, &      !   A 2-d version of the coordinate density [R ~> kg m-3].
     h_2d_init, &  ! The initial value of h_2d [H ~> m or kg m-2].
-    T_2d_init, &  ! THe initial value of T_2d [C ~> degC].
+    T_2d_init, &  ! The initial value of T_2d [C ~> degC].
     S_2d_init, &  ! The initial value of S_2d [S ~> ppt].
     d_eb, &     !   The downward increase across a layer in the entrainment from
                 ! below [H ~> m or kg m-2].  The sign convention is that positive values of
@@ -176,8 +176,8 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, GV, US, CS)
   real :: h_add     ! The thickness to add to the layers above an interface [H ~> m or kg m-2]
   real :: h_det_tot ! The total thickness detrained by the mixed layers [H ~> m or kg m-2]
   real :: max_def_rat  ! The maximum value of the ratio of the thickness deficit to the minimum depth [nondim]
-  real :: Rcv_min_det  ! The lightest (min) and densest (max) coordinate density
-  real :: Rcv_max_det  ! that can detrain into a layer [R ~> kg m-3].
+  real :: Rcv_min_det  ! The lightest coordinate density that can detrain into a layer [R ~> kg m-3]
+  real :: Rcv_max_det  ! The densest coordinate density that can detrain into a layer [R ~> kg m-3]
 
   real :: int_top, int_bot ! The interface depths above and below a layer [H ~> m or kg m-2], positive upward.
   real :: h_predicted  ! An updated thickness [H ~> m or kg m-2]
