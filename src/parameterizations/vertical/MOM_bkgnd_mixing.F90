@@ -116,7 +116,7 @@ subroutine bkgnd_mixing_init(Time, G, GV, US, param_file, diag, CS, physical_OBL
   ! Local variables
   real :: Kv                    ! The interior vertical viscosity [Z2 T-1 ~> m2 s-1] - read to set Prandtl
                                 ! number unless it is provided as a parameter
-  real :: prandtl_bkgnd_comp    ! Kv/CS%Kd. Gets compared with user-specified prandtl_bkgnd.
+  real :: prandtl_bkgnd_comp    ! Kv/CS%Kd [nondim]. Gets compared with user-specified prandtl_bkgnd.
 
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
