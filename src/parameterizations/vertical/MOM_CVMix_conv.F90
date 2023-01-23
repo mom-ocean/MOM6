@@ -57,7 +57,7 @@ logical function CVMix_conv_init(Time, G, GV, US, param_file, diag, CS)
   type(diag_ctrl), target, intent(inout) :: diag       !< Diagnostics control structure.
   type(CVMix_conv_cs),     intent(inout) :: CS         !< CVMix convection control structure
 
-  real    :: prandtl_conv !< Turbulent Prandtl number used in convective instabilities.
+  real    :: prandtl_conv !< Turbulent Prandtl number used in convective instabilities [nondim]
   logical :: useEPBL      !< If True, use the ePBL boundary layer scheme.
 
   ! This include declares and sets the variable "version".
@@ -154,10 +154,10 @@ subroutine calculate_CVMix_conv(h, tv, G, GV, US, CS, hbl, Kd, Kv, Kd_aux)
                                                                  !! here [Z2 T-1 ~> m2 s-1].
 
   ! local variables
-  real, dimension(SZK_(GV)) :: rho_lwr !< Adiabatic Water Density, this is a dummy
+  real, dimension(SZK_(GV)) :: rho_lwr !< Adiabatic Water Density [kg m-3], this is a dummy
                                        !! variable since here convection is always
                                        !! computed based on Brunt Vaisala.
-  real, dimension(SZK_(GV)) :: rho_1d  !< water density in a column, this is also
+  real, dimension(SZK_(GV)) :: rho_1d  !< water density in a column [kg m-3], this is also
                                        !! a dummy variable, same reason as above.
   real, dimension(SZK_(GV)+1) :: N2    !< Squared buoyancy frequency [s-2]
   real, dimension(SZK_(GV)+1) :: kv_col !< Viscosities at interfaces in the column [m2 s-1]
