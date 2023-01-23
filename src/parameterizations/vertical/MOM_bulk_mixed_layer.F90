@@ -253,7 +253,7 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, GV, US, C
     uhtot, &    ! The depth integrated zonal velocity in the mixed layer [H L T-1 ~> m2 s-1 or kg m-1 s-1]
     vhtot, &    ! The depth integrated meridional velocity in the mixed layer [H L T-1 ~> m2 s-1 or kg m-1 s-1]
 
-    netMassInOut, &  ! The net mass flux (if non-Boussinsq) or volume flux (if
+    netMassInOut, &  ! The net mass flux (if non-Boussinesq) or volume flux (if
                      ! Boussinesq - i.e. the fresh water flux (P+R-E)) into the
                      ! ocean over a time step [H ~> m or kg m-2].
     NetMassOut,   &  ! The mass flux (if non-Boussinesq) or volume flux (if Boussinesq)
@@ -287,11 +287,11 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, GV, US, C
                           ! denominator of MKE_rate; the two elements have differing
                           ! units of [H-1 ~> m-1 or m2 kg-1] and [H-2 ~> m-2 or m4 kg-2].
   real :: Irho0         ! 1.0 / rho_0 [R-1 ~> m3 kg-1]
-  real :: Inkml, Inkmlm1!  1.0 / REAL(nkml) and  1.0 / REAL(nkml-1)
+  real :: Inkml, Inkmlm1!  1.0 / REAL(nkml) and  1.0 / REAL(nkml-1) [nondim]
   real :: Ih            !   The inverse of a thickness [H-1 ~> m-1 or m2 kg-1].
   real :: Idt_diag      !   The inverse of the timestep used for diagnostics [T-1 ~> s-1].
-  real :: RmixConst
-
+  real :: RmixConst     ! A combination of constants used in the river mixing energy
+                        ! calculation [L2 T-2 R-2 ~> m8 s-2 kg-2]
   real, dimension(SZI_(G)) :: &
     dKE_FC, &   !   The change in mean kinetic energy due to free convection
                 ! [Z L2 T-2 ~> m3 s-2].
@@ -316,7 +316,7 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, GV, US, C
                 ! layers before detrainment in to the interior [H ~> m or kg m-2].
     max_BL_det  !   If non-negative, the maximum amount of entrainment from
                 ! the buffer layers that will be allowed this time step [H ~> m or kg m-2].
-  real :: dHsfc, dHD ! Local copies of nondimensional parameters.
+  real :: dHsfc, dHD ! Local copies of nondimensional parameters [nondim]
   real :: H_nbr ! A minimum thickness based on neighboring thicknesses [H ~> m or kg m-2].
 
   real :: absf_x_H  ! The absolute value of f times the mixed layer thickness [Z T-1 ~> m s-1].
@@ -344,9 +344,9 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, GV, US, C
   Inkml = 1.0 / REAL(CS%nkml)
   if (CS%nkml > 1) Inkmlm1 = 1.0 / REAL(CS%nkml-1)
 
-  Irho0 = 1.0 / (GV%Rho0)
+  Irho0 = 1.0 / GV%Rho0
   dt__diag = dt ; if (present(dt_diag)) dt__diag = dt_diag
-  Idt_diag = 1.0 / (dt__diag)
+  Idt_diag = 1.0 / dt__diag
   write_diags = .true. ; if (present(last_call)) write_diags = last_call
 
   p_ref(:) = 0.0 ; p_ref_cv(:) = tv%P_Ref
@@ -795,8 +795,8 @@ subroutine convective_adjustment(h, u, v, R0, Rcv, T, S, eps, d_eb, &
                 ! entrained [C H ~> degC m or degC kg m-2].
     Stot, &     !   The integrated salt of layers which are fully entrained
                 ! [H S ~> m ppt or ppt kg m-2].
-    uhtot, &    !   The depth integrated zonal and meridional velocities in
-    vhtot, &    ! the mixed layer [H L T-1 ~> m2 s-1 or kg m-1 s-1].
+    uhtot, &    !   The depth integrated zonal velocities in the mixed layer [H L T-1 ~> m2 s-1 or kg m-1 s-1]
+    vhtot, &    !   The depth integrated meridional velocities in the mixed layer [H L T-1 ~> m2 s-1 or kg m-1 s-1]
     KE_orig, &  !   The total mean kinetic energy per unit area in the mixed layer before
                 ! convection, [H L2 T-2 ~> m3 s-2 or kg s-2].
     h_orig_k1   !   The depth of layer k1 before convective adjustment [H ~> m or kg m-2].
@@ -984,13 +984,13 @@ subroutine mixedlayer_convection(h, d_eb, htot, Ttot, Stot, uhtot, vhtot,      &
                        ! entrainment [H ~> m or kg m-2].
   real :: h_ent        !   The thickness from a layer that is entrained [H ~> m or kg m-2].
   real :: T_precip     !   The temperature of the precipitation [C ~> degC].
-  real :: C1_3, C1_6   !  1/3 and 1/6.
-  real :: En_fn, Frac, x1 !  Nondimensional temporary variables.
+  real :: C1_3, C1_6   !  1/3 and 1/6 [nondim]
+  real :: En_fn, Frac, x1 !  Nondimensional temporary variables [nondim].
   real :: dr, dr0      ! Temporary variables [R H ~> kg m-2 or kg2 m-5].
   real :: dr_ent, dr_comp ! Temporary variables [R H ~> kg m-2 or kg2 m-5].
   real :: dr_dh        ! The partial derivative of dr_ent with h_ent [R ~> kg m-3].
-  real :: h_min, h_max !   The minimum, maximum, and previous estimates for
-  real :: h_prev       ! h_ent [H ~> m or kg m-2].
+  real :: h_min, h_max !   The minimum and maximum estimates for h_ent [H ~> m or kg m-2]
+  real :: h_prev       !   The previous estimate for h_ent [H ~> m or kg m-2]
   real :: h_evap       !   The thickness that is evaporated [H ~> m or kg m-2].
   real :: dh_Newt      !   The Newton's method estimate of the change in
                        ! h_ent between iterations [H ~> m or kg m-2].
@@ -1005,7 +1005,7 @@ subroutine mixedlayer_convection(h, d_eb, htot, Ttot, Stot, uhtot, vhtot,      &
   real :: Idt          ! 1.0/dt [T-1 ~> s-1]
   integer :: is, ie, nz, i, k, ks, itt, n
   real, dimension(max(nsw,1)) :: &
-    C2, &              ! Temporary variable R H-1 ~> kg m-4 or m-1].
+    C2, &              ! Temporary variable [R H-1 ~> kg m-4 or m-1].
     r_SW_top           ! Temporary variables [H R ~> kg m-2 or kg2 m-5].
 
   Angstrom = GV%Angstrom_H
@@ -1451,7 +1451,7 @@ subroutine mechanical_entrainment(h, d_eb, htot, Ttot, Stot, uhtot, vhtot, &
                             intent(inout) :: d_eb  !< The downward increase across a layer in the
                                                    !! layer in the entrainment from below [H ~> m or kg m-2].
                                                    !! Positive values go with mass gain by a layer.
-  real, dimension(SZI_(G)), intent(inout) :: htot  !< The accumlated mixed layer thickness [H ~> m or kg m-2].
+  real, dimension(SZI_(G)), intent(inout) :: htot  !< The accumulated mixed layer thickness [H ~> m or kg m-2].
   real, dimension(SZI_(G)), intent(inout) :: Ttot  !< The depth integrated mixed layer temperature
                                                    !! [C H ~> degC m or degC kg m-2].
   real, dimension(SZI_(G)), intent(inout) :: Stot  !< The depth integrated mixed layer salinity
@@ -1892,7 +1892,7 @@ subroutine resort_ML(h, T, S, R0, Rcv, RcvTgt, eps, d_ea, d_eb, ksort, G, GV, CS
   real    :: h_tgt_old  ! The previous thickness of the recipient layer [H ~> m or kg m-2]
   real    :: I_hnew     ! The inverse of a new layer thickness [H-1 ~> m-1 or m3 kg-1]
   real    :: dT_dS_wt2  ! The square of the relative weighting of temperature and salinity changes
-                        ! when extraploating to match a target density [C2 S-2 ~> degC2 ppt-2]
+                        ! when extrapolating to match a target density [C2 S-2 ~> degC2 ppt-2]
   real    :: dT_dR      ! The ratio of temperature changes to density changes when
                         ! extrapolating [C R-1 ~> degC m3 kg-1]
   real    :: dS_dR      ! The ratio of salinity changes to density changes when
@@ -2262,13 +2262,16 @@ subroutine mixedlayer_detrain_2(h, T, S, R0, Rcv, RcvTgt, dt, dt_diag, d_ea, j, 
   real :: h_det_h2                ! The amount of detrained water and mixed layer
                                   ! water that will go directly into the lower
                                   ! buffer layer [H ~> m or kg m-2].
-  real :: h_det_to_h2, h_ml_to_h2 ! All of the variables hA_to_hB are the thickness fluxes
-  real :: h_det_to_h1, h_ml_to_h1 ! from one layer to another [H ~> m or kg m-2],
-  real :: h1_to_h2, h1_to_k0      ! with h_det the detrained water, h_ml
-  real :: h2_to_k1, h2_to_k1_rem  ! the actively mixed layer, h1 and h2 the upper
-                                  ! and lower buffer layers, and k0 and k1 the
-                                  ! interior layers that are just lighter and
-                                  ! just denser than the lower buffer layer.
+
+  real :: h_det_to_h2, h_ml_to_h2 ! The fluxes of detrained and mixed layer water to
+                                  ! the lower buffer layer [H ~> m or kg m-2].
+  real :: h_det_to_h1, h_ml_to_h1 ! The fluxes of detrained and mixed layer water to
+                                  ! the upper buffer layer [H ~> m or kg m-2].
+  real :: h1_to_h2, h1_to_k0      ! The fluxes of upper buffer layer water to the lower buffer layer
+                                  ! and to an interior layer that is just denser than the lower
+                                  ! buffer layer [H ~> m or kg m-2].
+  real :: h2_to_k1, h2_to_k1_rem  ! Fluxes of lower buffer layer water to the interior layer that
+                                  ! is just denser than the lower buffer layer [H ~> m or kg m-2].
 
   real :: R0_det, T_det, S_det    ! Detrained values of R0 [R ~> kg m-3], T [C ~> degC] and S [S ~> ppt]
   real :: Rcv_stays, R0_stays     ! Values of Rcv and R0 that stay in a layer [R ~> kg m-3]
