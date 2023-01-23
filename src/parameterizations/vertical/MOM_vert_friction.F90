@@ -84,8 +84,8 @@ type, public :: vertvisc_CS ; private
                              !! will often equal CFL_trunc.
   real    :: truncRampTime   !< The time-scale over which to ramp up the value of
                              !! CFL_trunc from CFL_truncS to CFL_truncE [T ~> s]
-  real    :: CFL_truncS      !< The start value of CFL_trunc
-  real    :: CFL_truncE      !< The end/target value of CFL_trunc
+  real    :: CFL_truncS      !< The start value of CFL_trunc [nondim]
+  real    :: CFL_truncE      !< The end/target value of CFL_trunc [nondim]
   logical :: CFLrampingIsActivated = .false. !< True if the ramping has been initialized
   type(time_type) :: rampStartTime !< The time at which the ramping of CFL_trunc starts
 
@@ -209,7 +209,7 @@ subroutine find_coupling_coef_gl90(a_cpl_gl90, hvel, do_i, z_i, j, G, GV, CS, Va
                                                                      !!  for a column
   real, dimension(SZIB_(G),SZK_(GV)+1),         intent(in)    :: z_i  !< Estimate of interface heights above the
                                                                      !! bottom, normalized by the GL90 bottom
-                                                                     !! boundary layer thickness
+                                                                     !! boundary layer thickness [nondim]
   real, dimension(SZIB_(G),SZK_(GV)+1),         intent(inout) :: a_cpl_gl90 !< Coupling coefficient associated
                                                                      !! with GL90 across interfaces; is not
                                                                      !! included in a_cpl [Z T-1 ~> m s-1].
@@ -362,7 +362,8 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
                            ! by the density [H L T-1 ~> m2 s-1 or kg m-1 s-1].
   real :: accel_underflow  ! An acceleration magnitude that is so small that values that are less
                            ! than this are diagnosed as 0 [L T-2 ~> m s-2].
-  real :: zDS, hfr, h_a    ! Temporary variables used with direct_stress.
+  real :: zDS, h_a         ! Temporary thickness variables used with direct_stress [H ~> m or kg m-2]
+  real :: hfr              ! Temporary ratio of thicknesses used with direct_stress [nondim]
   real :: surface_stress(SZIB_(G))! The same as stress, unless the wind stress
                            ! stress is applied as a body force [H L T-1 ~> m2 s-1 or kg m-1 s-1].
   real, allocatable, dimension(:,:,:) :: KE_term ! A term in the kinetic energy budget
@@ -982,8 +983,8 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, US, CS, OBC, VarMix)
     I_Hbbl_gl90, &! The inverse of the bottom boundary layer thickness used for the GL90 scheme
                   ! [H-1 ~> m-1 or m2 kg-1].
     I_Htbl, &     ! The inverse of the top boundary layer thickness [H-1 ~> m-1 or m2 kg-1].
-    zcol1, &      ! The height of the interfaces to the north and south of a
-    zcol2, &      ! v-point [H ~> m or kg m-2].
+    zcol1, &      ! The height of the interfaces to the south of a v-point [H ~> m or kg m-2].
+    zcol2, &      ! The height of the interfaces to the north of a v-point [H ~> m or kg m-2].
     Ztop_min, &   ! The deeper of the two adjacent surface heights [H ~> m or kg m-2].
     Dmin, &       ! The shallower of the two adjacent bottom depths converted to
                   ! thickness units [H ~> m or kg m-2].
@@ -1520,7 +1521,7 @@ subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i,
     z_t, &      ! The distance from the top, sometimes normalized
                 ! by Hmix, [H ~> m or kg m-2] or [nondim].
     kv_TBL, &   ! The viscosity in a top boundary layer under ice [Z2 T-1 ~> m2 s-1].
-    tbl_thick
+    tbl_thick   ! The thickness of the top boundary layer [H ~> m or kg m-2]
   real, dimension(SZIB_(G),SZK_(GV)+1) :: &
     Kv_tot, &   ! The total viscosity at an interface [Z2 T-1 ~> m2 s-1].
     Kv_add      ! A viscosity to add [Z2 T-1 ~> m2 s-1].
@@ -1921,8 +1922,8 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, forces, visc, dt, G, GV, US, CS
 
   ! Local variables
 
-  real :: maxvel           ! Velocities components greater than maxvel
-  real :: truncvel         ! are truncated to truncvel, both [L T-1 ~> m s-1].
+  real :: maxvel           ! Velocities components greater than maxvel are truncated [L T-1 ~> m s-1]
+  real :: truncvel         ! The speed to which velocity components greater than maxvel are set [L T-1 ~> m s-1]
   real :: CFL              ! The local CFL number [nondim]
   real :: H_report         ! A thickness below which not to report truncations [H ~> m or kg m-2]
   real :: vel_report(SZIB_(G),SZJB_(G))   ! The velocity to report [L T-1 ~> m s-1]
@@ -2262,9 +2263,9 @@ subroutine vertvisc_init(MIS, Time, G, GV, US, param_file, diag, ADp, dirs, &
                  "viscosity coefficient. This method is valid in stacked shallow water mode.", &
                  default=.false.)
   call get_param(param_file, mdl, "KD_GL90", CS%kappa_gl90, &
-                 "The scalar diffusivity used in GL90 vertical viscosity "//&
-                 "scheme.", units="m2 s-1", default=0.0, &
-                 scale=US%m_to_Z**2*US%T_to_s, do_not_log=.not.CS%use_GL90_in_SSW)
+                 "The scalar diffusivity used in GL90 vertical viscosity scheme.", &
+                 units="m2 s-1", default=0.0, scale=US%m2_s_to_Z2_T, &
+                 do_not_log=.not.CS%use_GL90_in_SSW)
   call get_param(param_file, mdl, "READ_KD_GL90", CS%read_kappa_gl90, &
                  "If true, read a file (given by KD_GL90_FILE) containing the "//&
                  "spatially varying diffusivity KD_GL90 used in the GL90 scheme.", default=.false., &
