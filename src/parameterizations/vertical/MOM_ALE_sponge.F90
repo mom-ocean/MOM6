@@ -78,7 +78,7 @@ type :: p2d
   integer :: id !< id for FMS external time interpolator
   integer :: nz_data !< The number of vertical levels in the input field
   integer :: num_tlevs !< The number of time records contained in the file
-  real :: scale = 1.0  !< A multiplicative factor by which to rescale input data
+  real :: scale = 1.0  !< A multiplicative factor by which to rescale input data [various]
   real, dimension(:,:), pointer :: p => NULL() !< pointer to the data [various]
   real, dimension(:,:), pointer :: h => NULL() !< pointer the data grid [H ~> m or kg m-2]
   character(len=:), allocatable  :: name  !< The name of the input field
