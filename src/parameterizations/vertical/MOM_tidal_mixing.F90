@@ -50,7 +50,7 @@ type, public :: tidal_mixing_diags ; private
   real, allocatable :: Kd_Lowmode_Work(:,:,:) !< layer integrated work by low mode driven mixing [R Z3 T-3 ~> W m-2]
   real, allocatable :: N2_int(:,:,:)          !< Buoyancy frequency squared at interfaces [T-2 ~> s-2]
   real, allocatable :: vert_dep_3d(:,:,:)     !< The 3-d mixing energy deposition vertical fraction [nondim]?
-  real, allocatable :: Schmittner_coeff_3d(:,:,:) !< The coefficient in the Schmittner et al mixing scheme, in UNITS?
+  real, allocatable :: Schmittner_coeff_3d(:,:,:) !< The coefficient in the Schmittner et al mixing scheme [nondim]
   real, allocatable :: tidal_qe_md(:,:,:)     !< Input tidal energy dissipated locally,
                                               !! interpolated to model vertical coordinate [R Z3 T-3 ~> W m-2]
   real, allocatable :: Kd_lowmode(:,:,:)      !< internal tide diffusivity at interfaces
@@ -123,7 +123,7 @@ type, public :: tidal_mixing_cs ; private
 
   real :: utide               !< constant tidal amplitude [Z T-1 ~> m s-1] if READ_TIDEAMP is false.
   real :: kappa_itides        !< topographic wavenumber and non-dimensional scaling [Z-1 ~> m-1].
-  real :: kappa_h2_factor     !< factor for the product of wavenumber * rms sgs height
+  real :: kappa_h2_factor     !< factor for the product of wavenumber * rms sgs height [nondim]
   character(len=200) :: inputdir !< The directory in which to find input files
 
   logical :: use_CVMix_tidal = .false. !< true if CVMix is to be used for determining
@@ -157,7 +157,7 @@ type, public :: tidal_mixing_cs ; private
   real, allocatable :: TKE_itidal(:,:)  !< The internal Turbulent Kinetic Energy input divided
                                         !! by the bottom stratification [R Z3 T-2 ~> J m-2].
   real, allocatable :: Nb(:,:)          !< The near bottom buoyancy frequency [T-1 ~> s-1].
-  real, allocatable :: mask_itidal(:,:) !< A mask of where internal tide energy is input
+  real, allocatable :: mask_itidal(:,:) !< A mask of where internal tide energy is input [nondim]
   real, allocatable :: h2(:,:)          !< Squared bottom depth variance [Z2 ~> m2].
   real, allocatable :: tideamp(:,:)     !< RMS tidal amplitude [Z T-1 ~> m s-1]
   real, allocatable :: h_src(:)         !< tidal constituent input layer thickness [m]
@@ -240,8 +240,12 @@ logical function tidal_mixing_init(Time, G, GV, US, param_file, int_tide_CSp, di
   character(len=200) :: filename, h2_file, Niku_TKE_input_file  ! Input file names
   character(len=200) :: tideamp_file  ! Input file names or paths
   character(len=80)  :: tideamp_var, rough_var, TKE_input_var ! Input file variable names
-  real :: utide, hamp, prandtl_tidal, max_frac_rough
-  real :: Niku_scale ! local variable for scaling the Nikurashin TKE flux data
+  real :: hamp          ! The magnitude of the sub-gridscale bottom depth variance [Z ~> m]
+  real :: utide         ! The RMS tidal amplitude [Z T-1 ~> m s-1]
+  real :: max_frac_rough  ! A limit on the depth variance as a fraction of the total depth [nondim]
+  real :: prandtl_tidal ! Prandtl number used by CVMix tidal mixing schemes to convert vertical
+                        ! diffusivities into viscosities [nondim]
+  real :: Niku_scale    ! local variable for scaling the Nikurashin TKE flux data [nondim]
   integer :: i, j, is, ie, js, je
   integer :: isd, ied, jsd, jed
 
@@ -543,11 +547,11 @@ logical function tidal_mixing_init(Time, G, GV, US, param_file, int_tide_CSp, di
 
   if (CS%Lee_wave_dissipation) then
 
-    call get_param(param_file, mdl, "NIKURASHIN_TKE_INPUT_FILE",Niku_TKE_input_file, &
+    call get_param(param_file, mdl, "NIKURASHIN_TKE_INPUT_FILE", Niku_TKE_input_file, &
                  "The path to the file containing the TKE input from lee "//&
                  "wave driven mixing. Used with LEE_WAVE_DISSIPATION.", &
                  fail_if_missing=.true.)
-    call get_param(param_file, mdl, "NIKURASHIN_SCALE",Niku_scale, &
+    call get_param(param_file, mdl, "NIKURASHIN_SCALE", Niku_scale, &
                  "A non-dimensional factor by which to scale the lee-wave "//&
                  "driven TKE input. Used with LEE_WAVE_DISSIPATION.", &
                  units="nondim", default=1.0)
@@ -590,7 +594,7 @@ logical function tidal_mixing_init(Time, G, GV, US, param_file, int_tide_CSp, di
                    "Prandtl number used by CVMix tidal mixing schemes "//&
                    "to convert vertical diffusivities into viscosities.", &
                     units="nondim", default=1.0, do_not_log=.true.)
-    call CVMix_put(CS%CVMix_glb_params,'Prandtl',prandtl_tidal)
+    call CVMix_put(CS%CVMix_glb_params, 'Prandtl', prandtl_tidal)
 
     call get_param(param_file, mdl, "TIDAL_ENERGY_TYPE",tidal_energy_type, &
                  "The type of input tidal energy flux dataset. Valid values are"//&
@@ -776,7 +780,9 @@ subroutine calculate_CVMix_tidal(h, j, N2_int, G, GV, US, CS, Kv, Kd_lay, Kd_int
   real, dimension(SZK_(GV)+1) :: Kv_tidal    ! tidal viscosity [m2 s-1]
   real, dimension(SZK_(GV)+1) :: vert_dep    ! vertical deposition [nondim]
   real, dimension(SZK_(GV)+1) :: iFaceHeight ! Height of interfaces [m]
-  real, dimension(SZK_(GV)+1) :: SchmittnerSocn
+  real, dimension(SZK_(GV)+1) :: SchmittnerSocn  ! A larger value of the Schmittner coefficint to
+                                             ! use in the Southern Ocean [nondim].  If this is smaller
+                                             ! than Schmittner_coeff, that standard value is used.
   real, dimension(SZK_(GV))   :: cellHeight  ! Height of cell centers [m]
   real, dimension(SZK_(GV))   :: tidal_qe_md ! Tidal dissipation energy interpolated from 3d input
                                              ! to model coordinates [R Z3 T-3 ~> W m-2]
@@ -784,7 +790,10 @@ subroutine calculate_CVMix_tidal(h, j, N2_int, G, GV, US, CS, Kv, Kd_lay, Kd_int
   real, dimension(SZK_(GV))   :: Schmittner_coeff  ! A coefficient in the Schmittner et al (2014) mixing
                                              ! parameterization [nondim]
   real, dimension(SZK_(GV))   :: h_m         ! Cell thickness [m]
-  real, allocatable, dimension(:,:) :: exp_hab_zetar
+  real, allocatable, dimension(:,:) :: exp_hab_zetar ! A badly documented array that appears to be
+                         ! related to the distribution of tidal mixing energy, with unusual array
+                         ! extents that are not explained, that is set and used by the CVMix
+                         ! tidal mixing schemes, perhaps in [m3 kg-1]?
   real :: dh, hcorr ! Limited thicknesses and a cumulative correction [Z ~> m]
   real :: Simmons_coeff  ! A coefficient in the Simmons et al (2004) mixing parameterization [nondim]
 
@@ -1628,7 +1637,7 @@ subroutine read_tidal_constituents(G, US, tidal_energy_file, param_file, CS)
   type(tidal_mixing_cs), intent(inout) :: CS   !< The control structure for this module
 
   ! local variables
-  real, parameter :: C1_3 = 1.0/3.0
+  real, parameter :: C1_3 = 1.0/3.0  ! A rational constant [nondim]
   real, dimension(SZI_(G),SZJ_(G)) :: &
     tidal_qk1, &  ! qk1 coefficient used in Schmittner & Egbert [nondim]
     tidal_qo1     ! qo1 coefficient used in Schmittner & Egbert [nondim]
