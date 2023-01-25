@@ -1936,8 +1936,14 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, ADp)
   call get_param(param_file, mdl, "USE_QG_LEITH_VISC", CS%use_QG_Leith_visc, &
                  "If true, use QG Leith nonlinear eddy viscosity.", &
                  default=.false., do_not_log=.not.(CS%Leith_Kh .or. CS%Leith_Ah) )
+  if (CS%use_QG_Leith_visc) then
+    call MOM_error(FATAL, "USE_QG_LEITH_VISC=True activates code that is a work-in-progress and "//&
+          "should not be used until a number of bugs are fixed.  Specifically it does not "//&
+          "reproduce across PE count or layout, and may use arrays that have not been properly "//&
+          "set or allocated.  See github.com/mom-ocean/MOM6/issues/1590 for a discussion.")
+  endif
   if (CS%use_QG_Leith_visc .and. .not. (CS%Leith_Kh .or. CS%Leith_Ah) ) then
-                 call MOM_error(FATAL, "MOM_hor_visc.F90, hor_visc_init:"//&
+    call MOM_error(FATAL, "MOM_hor_visc.F90, hor_visc_init:"//&
                  "LEITH_KH or LEITH_AH must be True when USE_QG_LEITH_VISC=True.")
   endif
 
