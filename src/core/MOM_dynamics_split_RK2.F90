@@ -647,7 +647,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
 !   call MOM_state_chksum("Predictor 1", up, vp, h, uh, vh, G, GV, US, haloshift=1)
     call MOM_accel_chksum("Predictor accel", CS%CAu_pred, CS%CAv_pred, CS%PFu, CS%PFv, &
              CS%diffu, CS%diffv, G, GV, US, CS%pbce, CS%u_accel_bt, CS%v_accel_bt, symmetric=sym)
-    call MOM_state_chksum("Predictor 1 init", u, v, h, uh, vh, G, GV, US, haloshift=2, &
+    call MOM_state_chksum("Predictor 1 init", u, v, h, uh, vh, G, GV, US, haloshift=1, &
                           symmetric=sym)
     call check_redundant("Predictor 1 up", up, vp, G, unscale=US%L_T_to_m_s)
     call check_redundant("Predictor 1 uh", uh, vh, G, unscale=GV%H_to_m*US%L_to_m**2*US%s_to_T)
@@ -867,8 +867,8 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
   call cpu_clock_end(id_clock_mom_update)
 
   if (CS%debug) then
-    call uvchksum("Corrector 1 [uv]", u, v, G%HI,haloshift=0, symmetric=sym, scale=US%L_T_to_m_s)
-    call hchksum(h, "Corrector 1 h", G%HI, haloshift=2, scale=GV%H_to_m)
+    call uvchksum("Corrector 1 [uv]", u, v, G%HI, haloshift=0, symmetric=sym, scale=US%L_T_to_m_s)
+    call hchksum(h, "Corrector 1 h", G%HI, haloshift=1, scale=GV%H_to_m)
     call uvchksum("Corrector 1 [uv]h", uh, vh, G%HI, haloshift=2, &
                   symmetric=sym, scale=GV%H_to_m*US%L_to_m**2*US%s_to_T)
   ! call MOM_state_chksum("Corrector 1", u, v, h, uh, vh, G, GV, US, haloshift=1)

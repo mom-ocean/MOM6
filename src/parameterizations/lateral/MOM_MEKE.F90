@@ -260,7 +260,7 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
         call hchksum(MEKE%MEKE, 'MEKE MEKE', G%HI, scale=US%L_T_to_m_s**2)
       call uvchksum("MEKE SN_[uv]", SN_u, SN_v, G%HI, scale=US%s_to_T, &
                     scalar_pair=.true.)
-      call uvchksum("MEKE h[uv]", hu, hv, G%HI, haloshift=1, &
+      call uvchksum("MEKE h[uv]", hu, hv, G%HI, haloshift=0, symmetric=.true., &
                     scale=GV%H_to_m*(US%L_to_m**2))
     endif
 
@@ -293,7 +293,7 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
         enddo ; enddo
       enddo
       if (CS%MEKE_advection_bug) then
-        ! This code obviously incorrect code reproduces a bug in the original implementation of
+        ! This obviously incorrect code reproduces a bug in the original implementation of
         ! the MEKE advection.
         do j=js,je ; do I=is-1,ie
           baroHu(I,j) = hu(I,j,nz) * GV%H_to_RZ
