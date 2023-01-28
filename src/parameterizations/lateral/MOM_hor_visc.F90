@@ -13,7 +13,8 @@ use MOM_domains,               only : To_All, Scalar_Pair
 use MOM_error_handler,         only : MOM_error, FATAL, WARNING, is_root_pe
 use MOM_file_parser,           only : get_param, log_version, param_file_type
 use MOM_grid,                  only : ocean_grid_type
-use MOM_lateral_mixing_coeffs, only : VarMix_CS, calc_QG_Leith_viscosity
+use MOM_interface_heights,     only : thickness_to_dz
+use MOM_lateral_mixing_coeffs, only : VarMix_CS, calc_QG_slopes, calc_QG_Leith_viscosity
 use MOM_barotropic,            only : barotropic_CS, barotropic_get_tav
 use MOM_thickness_diffuse,     only : thickness_diffuse_CS, thickness_diffuse_get_KH
 use MOM_io,                    only : MOM_read_data, slasher
@@ -22,9 +23,9 @@ use MOM_open_boundary,         only : ocean_OBC_type, OBC_DIRECTION_E, OBC_DIREC
 use MOM_open_boundary,         only : OBC_DIRECTION_N, OBC_DIRECTION_S, OBC_NONE
 use MOM_unit_scaling,          only : unit_scale_type
 use MOM_verticalGrid,          only : verticalGrid_type
-use MOM_variables,             only : accel_diag_ptrs
-use MOM_Zanna_Bolton,          only : ZB2020_lateral_stress, ZB2020_init, ZB2020_end, &
-                                      ZB2020_CS, ZB2020_copy_gradient_and_thickness
+use MOM_variables,             only : accel_diag_ptrs, thermo_var_ptrs
+use MOM_Zanna_Bolton,          only : ZB2020_lateral_stress, ZB2020_init, ZB2020_end
+use MOM_Zanna_Bolton,          only : ZB2020_CS, ZB2020_copy_gradient_and_thickness
 
 implicit none ; private
 
@@ -237,11 +238,11 @@ contains
 !!
 !! To work, the following fields must be set outside of the usual
 !! is:ie range before this subroutine is called:
-!!   u[is-2:ie+2,js-2:je+2]
-!!   v[is-2:ie+2,js-2:je+2]
-!!   h[is-1:ie+1,js-1:je+1]
+!!   u(is-2:ie+2,js-2:je+2)
+!!   v(is-2:ie+2,js-2:je+2)
+!!   h(is-1:ie+1,js-1:je+1) or up to h(is-2:ie+2,js-2:je+2) with some Leith options.
 subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, &
-                                CS, OBC, BT, TD, ADp, hu_cont, hv_cont)
+                                CS, tv, dt, OBC, BT, TD, ADp, hu_cont, hv_cont)
   type(ocean_grid_type),         intent(in)  :: G      !< The ocean's grid structure.
   type(verticalGrid_type),       intent(in)  :: GV     !< The ocean's vertical grid structure.
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
@@ -259,12 +260,15 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
   type(MEKE_type),               intent(inout) :: MEKE !< MEKE fields
                                                        !! related to Mesoscale Eddy Kinetic Energy.
   type(VarMix_CS),               intent(inout) :: VarMix !< Variable mixing control structure
-  type(unit_scale_type),         intent(in)  :: US     !< A dimensional unit scaling type
-  type(hor_visc_CS),             intent(inout)  :: CS  !< Horizontal viscosity control structure
-  type(ocean_OBC_type), optional, pointer    :: OBC    !< Pointer to an open boundary condition type
-  type(barotropic_CS), intent(in), optional  :: BT     !< Barotropic control structure
-  type(thickness_diffuse_CS), intent(in), optional :: TD  !< Thickness diffusion control structure
-  type(accel_diag_ptrs), intent(in), optional :: ADp   !< Acceleration diagnostics
+  type(unit_scale_type),         intent(in)    :: US   !< A dimensional unit scaling type
+  type(hor_visc_CS),             intent(inout) :: CS   !< Horizontal viscosity control structure
+  type(thermo_var_ptrs),         intent(in)    :: tv   !< A structure pointing to various
+                                                       !! thermodynamic variables
+  real,                          intent(in)    :: dt   !< Time increment [T ~> s]
+  type(ocean_OBC_type), optional, pointer      :: OBC  !< Pointer to an open boundary condition type
+  type(barotropic_CS), optional, intent(in)    :: BT   !< Barotropic control structure
+  type(thickness_diffuse_CS), optional, intent(in) :: TD !< Thickness diffusion control structure
+  type(accel_diag_ptrs), optional, intent(in)  :: ADp  !< Acceleration diagnostics
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
                         optional, intent(in) :: hu_cont !< Layer thickness at u-points [H ~> m or kg m-2].
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
@@ -341,12 +345,15 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
     GME_coeff_q, &  !< GME coeff. at q-points [L2 T-1 ~> m2 s-1]
     ShSt         ! A diagnostic array of shear stress [T-1 ~> s-1].
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)+1) :: &
-    KH_u_GME     !< Isopycnal height diffusivities in u-columns [L2 T-1 ~> m2 s-1]
+    KH_u_GME, &  !< Isopycnal height diffusivities in u-columns [L2 T-1 ~> m2 s-1]
+    slope_x      !< Isopycnal slope in i-direction [Z L-1 ~> nondim]
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)+1) :: &
-    KH_v_GME     !< Isopycnal height diffusivities in v-columns [L2 T-1 ~> m2 s-1]
+    KH_v_GME, &  !< Isopycnal height diffusivities in v-columns [L2 T-1 ~> m2 s-1]
+    slope_y      !< Isopycnal slope in j-direction [Z L-1 ~> nondim]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: &
     Ah_h, &          ! biharmonic viscosity at thickness points [L4 T-1 ~> m4 s-1]
     Kh_h, &          ! Laplacian viscosity at thickness points [L2 T-1 ~> m2 s-1]
+    dz, &            ! Height change across layers [Z ~> m]
     FrictWork, &     ! work done by MKE dissipation mechanisms [R L2 T-3 ~> W m-2]
     FrictWork_GME, & ! work done by GME [R L2 T-3 ~> W m-2]
     div_xx_h,      & ! horizontal divergence [T-1 ~> s-1]
@@ -590,6 +597,15 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
     call pass_vector(u_smooth, v_smooth, G%Domain)
   endif
 
+  if (CS%use_QG_Leith_visc .and. ((CS%Leith_Kh) .or. (CS%Leith_Ah))) then
+    call thickness_to_dz(h, tv, dz, G, GV, US, halo_size=2)
+    ! Calculate isopycnal slopes that will be used for some forms of viscosity.
+    call calc_QG_slopes(h, tv, dt, G, GV, US, slope_x, slope_y, VarMix, OBC)
+    ! If the following halo update is added, the calculations in calc_QG_slopes could work on just
+    ! the computational domains, and some halo updates outside of this routine could be smaller.
+    ! call pass_vector(slope_x, slope_y, G%Domain, halo=2)
+  endif
+
   !$OMP parallel do default(none) &
   !$OMP shared( &
   !$OMP   CS, G, GV, US, OBC, VarMix, MEKE, u, v, h, &
@@ -597,7 +613,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
   !$OMP   is_vort, ie_vort, js_vort, je_vort, &
   !$OMP   is_Kh, ie_Kh, js_Kh, je_Kh, &
   !$OMP   apply_OBC, rescale_Kh, legacy_bound, find_FrictWork, &
-  !$OMP   use_MEKE_Ku, use_MEKE_Au, u_smooth, v_smooth, use_cont_huv, &
+  !$OMP   use_MEKE_Ku, use_MEKE_Au, u_smooth, v_smooth, use_cont_huv, slope_x, slope_y, dz, &
   !$OMP   backscat_subround, GME_effic_h, GME_effic_q, &
   !$OMP   h_neglect, h_neglect3, inv_PI3, inv_PI6, &
   !$OMP   diffu, diffv, Kh_h, Kh_q, Ah_h, Ah_q, FrictWork, FrictWork_GME, &
@@ -1008,9 +1024,9 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
                                          (0.5*(vort_xy_dy(I,j) + vort_xy_dy(I,j+1)))**2 )
         enddo ; enddo
 
-        ! This accumulates terms, some of which are in VarMix, so rescaling can not be done here.
-        call calc_QG_Leith_viscosity(VarMix, G, GV, US, h, k, div_xx_dx, div_xx_dy, &
-                                     vort_xy_dx, vort_xy_dy)
+        ! This accumulates terms, some of which are in VarMix.
+        call calc_QG_Leith_viscosity(VarMix, G, GV, US, h, dz, k, div_xx_dx, div_xx_dy, &
+                                     slope_x, slope_y, vort_xy_dx, vort_xy_dy)
 
       endif
 
@@ -2207,12 +2223,12 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, ADp)
   call get_param(param_file, mdl, "USE_QG_LEITH_VISC", CS%use_QG_Leith_visc, &
                  "If true, use QG Leith nonlinear eddy viscosity.", &
                  default=.false., do_not_log=.not.(CS%Leith_Kh .or. CS%Leith_Ah) )
-  if (CS%use_QG_Leith_visc) then
-    call MOM_error(FATAL, "USE_QG_LEITH_VISC=True activates code that is a work-in-progress and "//&
-          "should not be used until a number of bugs are fixed.  Specifically it does not "//&
-          "reproduce across PE count or layout, and may use arrays that have not been properly "//&
-          "set or allocated.  See github.com/mom-ocean/MOM6/issues/1590 for a discussion.")
-  endif
+!  if (CS%use_QG_Leith_visc) then
+!    call MOM_error(FATAL, "USE_QG_LEITH_VISC=True activates code that is a work-in-progress and "//&
+!          "should not be used until a number of bugs are fixed.  Specifically it does not "//&
+!          "reproduce across PE count or layout, and may use arrays that have not been properly "//&
+!          "set or allocated.  See github.com/mom-ocean/MOM6/issues/1590 for a discussion.")
+!  endif
   if (CS%use_QG_Leith_visc .and. .not. (CS%Leith_Kh .or. CS%Leith_Ah) ) then
     call MOM_error(FATAL, "MOM_hor_visc.F90, hor_visc_init:"//&
                  "LEITH_KH or LEITH_AH must be True when USE_QG_LEITH_VISC=True.")
