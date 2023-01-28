@@ -28,7 +28,7 @@ public iceberg_forces, iceberg_fluxes, marine_ice_init
 type, public :: marine_ice_CS ; private
   real :: kv_iceberg          !< The viscosity of the icebergs [L4 Z-2 T-1 ~> m2 s-1] (for ice rigidity)
   real :: berg_area_threshold !< Fraction of grid cell which iceberg must occupy
-                              !! so that fluxes below are set to zero. (0.5 is a
+                              !! so that fluxes below are set to zero [nondim]. (0.5 is a
                               !! good value to use.) Not applied for negative values.
   real :: latent_heat_fusion  !< Latent heat of fusion [Q ~> J kg-1]
   real :: density_iceberg     !< A typical density of icebergs [R ~> kg m-3] (for ice rigidity)

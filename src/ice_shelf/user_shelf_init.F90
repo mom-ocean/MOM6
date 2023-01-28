@@ -131,7 +131,9 @@ subroutine USER_update_shelf_mass(mass_shelf, area_shelf_h, h_shelf, hmask, G, C
   logical,                 intent(in)    :: new_sim !< If true, this the start of a new run.
 
 
-  real :: c1, edge_pos, slope_pos
+  real :: c1        ! The inverse of the range over which the shelf slopes [km-1]
+  real :: edge_pos  ! The time-evolving position the ice shelf edge [km]
+  real :: slope_pos ! The time-evolving position of the start of the ice shelf slope [km]
   integer :: i, j
 
   edge_pos = CS%pos_shelf_edge_0 + CS%shelf_speed*(time_type_to_real(Time) / 86400.0)

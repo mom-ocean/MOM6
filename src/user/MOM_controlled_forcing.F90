@@ -397,7 +397,7 @@ end subroutine apply_ctrl_forcing
 
 !> This function maps rval into an integer in the range from 1 to num_period.
 function periodic_int(rval, num_period) result (m)
-  real,    intent(in) :: rval       !< Input for mapping.
+  real,    intent(in) :: rval       !< Input for mapping [nondim]
   integer, intent(in) :: num_period !< Maximum output.
   integer             :: m          !< Return value.
 
@@ -412,9 +412,9 @@ end function
 !> This function shifts rval by an integer multiple of num_period so that
 !! 0 <= val_out < num_period.
 function periodic_real(rval, num_period) result(val_out)
-  real,    intent(in) :: rval       !< Input to be shifted into valid range.
+  real,    intent(in) :: rval       !< Input to be shifted into valid range [nondim]
   integer, intent(in) :: num_period !< Maximum valid value.
-  real                :: val_out    !< Return value.
+  real                :: val_out    !< Return value [nondim]
   integer :: nshft
 
   if (rval < 0) then ; nshft = floor(abs(rval) / num_period) + 1

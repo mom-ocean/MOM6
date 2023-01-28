@@ -41,7 +41,7 @@ subroutine benchmark_initialize_topography(D, G, param_file, max_depth, US)
 
   ! Local variables
   real :: min_depth ! The minimum basin depth [Z ~> m]
-  real :: PI        ! 3.1415926... calculated as 4*atan(1)
+  real :: PI        ! 3.1415926... calculated as 4*atan(1) [nondim]
   real :: D0        ! A constant to make the maximum basin depth MAXIMUM_DEPTH [Z ~> m]
   real :: x         ! Longitude relative to the domain edge, normalized by its extent [nondim]
   real :: y         ! Latitude relative to the domain edge, normalized by its extent [nondim]
@@ -113,7 +113,7 @@ subroutine benchmark_initialize_thickness(h, depth_tot, G, GV, US, param_file, e
     drho_dT, &      ! Derivative of density with temperature [R C-1 ~> kg m-3 degC-1].
     drho_dS         ! Derivative of density with salinity [R S-1 ~> kg m-3 ppt-1].
   real :: pres(SZK_(GV))  ! Reference pressure [R L2 T-2 ~> Pa].
-  real :: a_exp     ! The fraction of the overall stratification that is exponential.
+  real :: a_exp     ! The fraction of the overall stratification that is exponential [nondim]
   real :: I_ts, I_md ! Inverse lengthscales [Z-1 ~> m-1].
   real :: T_frac    ! A ratio of the interface temperature to the range
                     ! between SST and the bottom temperature [nondim].
@@ -121,7 +121,7 @@ subroutine benchmark_initialize_thickness(h, depth_tot, G, GV, US, param_file, e
                     ! interface temperature for a given z [nondim]
   real :: derr_dz   ! The derivative of the normalized error between the profile's
                     ! temperature and the interface temperature with z [Z-1 ~> m-1]
-  real :: pi        ! 3.1415926... calculated as 4*atan(1)
+  real :: pi        ! 3.1415926... calculated as 4*atan(1) [nondim]
   real :: z         ! A work variable for the interface position [Z ~> m]
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
@@ -246,7 +246,7 @@ subroutine benchmark_init_temperature_salinity(T, S, G, GV, US, param_file, &
   real :: drho_dT(SZK_(GV))  ! Derivative of density with temperature [R C-1 ~> kg m-3 degC-1]
   real :: drho_dS(SZK_(GV))  ! Derivative of density with salinity [R S-1 ~> kg m-3 ppt-1]
   real :: rho_guess(SZK_(GV)) ! Potential density at T0 & S0 [R ~> kg m-3]
-  real :: PI                 ! 3.1415926... calculated as 4*atan(1)
+  real :: PI                 ! 3.1415926... calculated as 4*atan(1) [nondim]
   real :: SST                !  The initial sea surface temperature [C ~> degC]
   character(len=40)  :: mdl = "benchmark_init_temperature_salinity" ! This subroutine's name.
   integer :: i, j, k, k1, is, ie, js, je, nz, itt

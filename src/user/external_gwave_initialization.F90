@@ -44,7 +44,8 @@ subroutine external_gwave_initialize_thickness(h, G, GV, US, param_file, just_re
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
   integer :: i, j, k, is, ie, js, je, nz
-  real :: PI, Xnondim
+  real :: PI       ! The ratio of the circumference of a circle to its diameter [nondim]
+  real :: Xnondim  ! A normalized x position [nondim]
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 

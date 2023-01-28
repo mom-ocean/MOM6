@@ -35,9 +35,9 @@ contains
 subroutine dense_water_initialize_topography(D, G, param_file, max_depth)
   type(dyn_horgrid_type),  intent(in)  :: G !< The dynamic horizontal grid type
   real, dimension(G%isd:G%ied,G%jsd:G%jed), &
-                           intent(out) :: D !< Ocean bottom depth in the units of depth_max
+                           intent(out) :: D !< Ocean bottom depth [Z ~> m]
   type(param_file_type),   intent(in)  :: param_file !< Parameter file structure
-  real,                    intent(in)  :: max_depth !< Maximum ocean depth in arbitrary units
+  real,                    intent(in)  :: max_depth !< Maximum ocean depth [Z ~> m]
 
   ! Local variables
   real, dimension(5) :: domain_params ! nondimensional widths of all domain sections [nondim]

@@ -143,7 +143,7 @@ subroutine int_density_dz_generic_pcm(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
   real :: p5(5)      ! Pressures at five quadrature points [R L2 T-2 ~> Pa]
   real :: r5(5)      ! Densities at five quadrature points [R ~> kg m-3]
   real :: rho_anom   ! The depth averaged density anomaly [R ~> kg m-3]
-  real, parameter :: C1_90 = 1.0/90.0  ! Rational constants.
+  real, parameter :: C1_90 = 1.0/90.0  ! A rational constant [nondim]
   real :: GxRho      ! The product of the gravitational acceleration and reference density [R L2 Z-1 T-2 ~> Pa m-1]
   real :: I_Rho      ! The inverse of the Boussinesq density [R-1 ~> m3 kg-1]
   real :: dz         ! The layer thickness [Z ~> m]
@@ -784,7 +784,7 @@ subroutine int_density_dz_generic_ppm(k, tv, T_t, T_b, S_t, S_b, e, &
   real :: w_left, w_right  ! Left and right weights [nondim]
   real :: intz(5) ! The gravitational acceleration times the integrals of density
                   ! with height at the 5 sub-column locations [R L2 T-2 ~> Pa]
-  real, parameter :: C1_90 = 1.0/90.0  ! Rational constants.
+  real, parameter :: C1_90 = 1.0/90.0  ! A rational constant [nondim]
   real :: GxRho ! The gravitational acceleration times density [R L2 Z-1 T-2 ~> kg m-2 s-2]
   real :: I_Rho ! The inverse of the Boussinesq density [R-1 ~> m3 kg-1]
   real :: dz ! Layer thicknesses at tracer points [Z ~> m]
@@ -1175,7 +1175,7 @@ subroutine int_spec_vol_dp_generic_pcm(T, S, p_t, p_b, alpha_ref, HI, EOS, US, d
   real :: intp(5)    ! The integrals of specific volume with pressure at the
                      ! 5 sub-column locations [L2 T-2 ~> m2 s-2]
   logical :: do_massWeight ! Indicates whether to do mass weighting.
-  real, parameter :: C1_90 = 1.0/90.0  ! A rational constant.
+  real, parameter :: C1_90 = 1.0/90.0  ! A rational constant [nondim]
   integer :: Isq, Ieq, Jsq, Jeq, ish, ieh, jsh, jeh, i, j, m, n, halo
 
   Isq = HI%IscB ; Ieq = HI%IecB ; Jsq = HI%JscB ; Jeq = HI%JecB

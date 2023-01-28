@@ -29,7 +29,7 @@ type, public :: porous_barrier_CS; private
   type(diag_ctrl), pointer :: &
       diag => Null()                !< A structure to regulate diagnostic output timing
   logical :: debug                  !< If true, write verbose checksums for debugging purposes.
-  real    :: mask_depth             !< The depth shallower than which porous barrier is not applied.
+  real    :: mask_depth             !< The depth shallower than which porous barrier is not applied [Z ~> m]
   integer :: eta_interp             !< An integer indicating how the interface heights at the velocity
                                     !! points are calculated. Valid values are given by the parameters
                                     !! defined below: MAX, MIN, ARITHMETIC and HARMONIC.

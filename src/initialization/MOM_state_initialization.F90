@@ -885,10 +885,10 @@ subroutine initialize_thickness_uniform(h, depth_tot, G, GV, param_file, just_re
                                                       !! parameters without changing h.
   ! Local variables
   character(len=40)  :: mdl = "initialize_thickness_uniform" ! This subroutine's name.
-  real :: e0(SZK_(GV)+1)  ! The resting interface heights, in depth units, usually
+  real :: e0(SZK_(GV)+1)  ! The resting interface heights [Z ~> m], usually
                           ! negative because it is positive upward.
-  real :: eta1D(SZK_(GV)+1)! Interface height relative to the sea surface
-                          ! positive upward, in depth units.
+  real :: eta1D(SZK_(GV)+1)! Interface height relative to the sea surface,
+                          ! positive upward [Z ~> m].
   integer :: i, j, k, is, ie, js, je, nz
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke

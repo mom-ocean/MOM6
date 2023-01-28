@@ -34,7 +34,7 @@ type, public :: dumbbell_surface_forcing_CS ; private
                              !! to the reservoirs
   real :: slp_period         !< Period of sinusoidal pressure wave [days]
   real, dimension(:,:), allocatable :: &
-    forcing_mask             !< A mask regulating where forcing occurs
+    forcing_mask             !< A mask regulating where forcing occurs [nondim]
   real, dimension(:,:), allocatable :: &
     S_restore                !< The surface salinity field toward which to restore [S ~> ppt].
   type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to regulate the

@@ -44,7 +44,12 @@ subroutine circle_obcs_initialize_thickness(h, depth_tot, G, GV, param_file, jus
   real :: eta1D(SZK_(GV)+1)! Interface height relative to the sea surface
                            ! positive upward, in depth units [Z ~> m].
   real :: IC_amp           ! The amplitude of the initial height displacement [H ~> m or kg m-2].
-  real :: diskrad, rad, lonC, latC, xOffset
+  real :: diskrad          ! Radius of the elevated disk [km] or [degrees] or [m]
+  real :: rad              ! Distance from the center of the elevated disk [km] or [degrees] or [m]
+  real :: lonC             ! The x-position of a point [km] or [degrees] or [m]
+  real :: latC             ! The y-position of a point [km] or [degrees] or [m]
+  real :: xOffset          ! The x-offset of the elevated disc center relative to the domain
+                           ! center [km] or [degrees] or [m]
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
   character(len=40)  :: mdl = "circle_obcs_initialization"   ! This module's name.

@@ -1676,8 +1676,10 @@ subroutine Stokes_PGF(G, GV, h, u, v, PFu_Stokes, PFv_Stokes, CS )
        pointer       :: CS !< Surface wave related control structure.
 
   ! Local variables
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: P_deltaStokes_L ! The stokes induced Pressure anomaly, layer averaged
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1) :: P_deltaStokes_i ! The stokes induced Pressure anomaly at interfaces
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: P_deltaStokes_L ! The Stokes induced pressure anomaly,
+                                                              ! layer averaged [L2 T-2 ~> m2 s-2]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1) :: P_deltaStokes_i ! The Stokes induced pressure anomaly
+                                                              ! at interfaces [L2 T-2 ~> m2 s-2]
   real :: P_Stokes_l, P_Stokes_r ! Stokes-induced pressure anomaly over layer (left/right of point) [L2 T-2 ~> m2 s-2]
   real :: P_Stokes_l0, P_Stokes_r0 ! Stokes-induced pressure anomaly at interface
                                    ! (left/right of point) [L2 T-2 ~> m2 s-2]
@@ -1690,11 +1692,12 @@ subroutine Stokes_PGF(G, GV, h, u, v, PFu_Stokes, PFv_Stokes, CS )
   real :: zi_l(SZK_(G)+1), zi_r(SZK_(G)+1)   ! The height of the edges of the cells (left/right of point) [Z ~> m].
   real :: idz_l(SZK_(G)), idz_r(SZK_(G)) ! The inverse thickness of the cells (left/right of point) [Z-1 ~> m-1]
   real :: h_l, h_r   ! The thickness of the cell (left/right of point) [Z ~> m].
-  real :: dexp2kzL,dexp4kzL,dexp2kzR,dexp4kzR ! Analytical evaluation of multi-exponential decay contribution
-                                              ! to Stokes pressure anomalies.
-  real :: TwoK, FourK, iTwoK, iFourK ! Wavenumber multipliers/inverses
+  real :: dexp2kzL, dexp4kzL, dexp2kzR, dexp4kzR ! Analytical evaluation of multi-exponential decay
+                                              ! contribution to Stokes pressure anomalies [nondim].
+  real :: TwoK, FourK   ! Wavenumbers multiplied by a factor [Z-1 ~> m-1]
+  real :: iTwoK, iFourK ! Inverses of wavenumbers [Z ~> m]
 
-  integer :: i,j,k,l
+  integer :: i, j, k, l
 
   !---------------------------------------------------------------
   ! Compute the Stokes contribution to the pressure gradient force

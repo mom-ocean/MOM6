@@ -365,7 +365,7 @@ subroutine set_grid_metrics_cartesian(G, param_file, US)
   real :: grid_lonT(G%isd:G%ied), grid_lonB(G%IsdB:G%IedB) ! Axis labels [degrees_E] or [km] or [m]
   real :: dx_everywhere, dy_everywhere ! Grid spacings [L ~> m].
   real :: I_dx, I_dy                   ! Inverse grid spacings [L-1 ~> m-1].
-  real :: PI
+  real :: PI  ! The ratio of the circumference of a circle to its diameter [nondim]
   character(len=80) :: units_temp
   character(len=48) :: mdl  = "MOM_grid_init set_grid_metrics_cartesian"
 
@@ -922,7 +922,7 @@ end function  dL
 !! function fn takes the value fnval, also returning in ittmax the number of iterations of
 !! Newton's method that were used to polish the root.
 function find_root( fn, dy_df, GP, fnval, y1, ymin, ymax, ittmax)
-  real :: find_root !< The value of y where fn(y) = fnval that will be returned
+  real :: find_root !< The value of y where fn(y) = fnval that will be returned [radians]
   real,      external    :: fn    !< The external function whose root is being sought [gridpoints]
   real,      external    :: dy_df !< The inverse of the derivative of that function [radian gridpoint-1]
   type(GPS), intent(in)  :: GP    !< A structure of grid parameters
@@ -1128,12 +1128,12 @@ end function Int_dj_dy
 
 !> Extrapolates missing metric data into all the halo regions.
 subroutine extrapolate_metric(var, jh, missing)
-  real, dimension(:,:), intent(inout) :: var     !< The array in which to fill in halos [A]
+  real, dimension(:,:), intent(inout) :: var     !< The array in which to fill in halos [abitrary]
   integer,              intent(in)    :: jh      !< The size of the halos to be filled
-  real,       optional, intent(in)    :: missing !< The missing data fill value, 0 by default [A]
+  real,       optional, intent(in)    :: missing !< The missing data fill value, 0 by default [abitrary]
   ! Local variables
-  real :: badval
-  integer :: i,j
+  real :: badval ! A bad data value [abitrary]
+  integer :: i, j
 
   badval = 0.0 ; if (present(missing)) badval = missing
 
@@ -1162,8 +1162,8 @@ end subroutine extrapolate_metric
 !> This function implements Adcroft's rule for reciprocals, namely that
 !!   Adcroft_Inv(x) = 1/x for |x|>0 or 0 for x=0.
 function Adcroft_reciprocal(val) result(I_val)
-  real, intent(in) :: val  !< The value being inverted.
-  real :: I_val            !< The Adcroft reciprocal of val.
+  real, intent(in) :: val  !< The value being inverted [abitrary]
+  real :: I_val            !< The Adcroft reciprocal of val [abitrary-1]
 
   I_val = 0.0
   if (val /= 0.0) I_val = 1.0/val

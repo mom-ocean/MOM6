@@ -21,7 +21,7 @@ public user_alter_forcing, user_revise_forcing_init
 
 !> Control structure for user_revise_forcing
 type, public :: user_revise_forcing_CS ; private
-  real :: cdrag  !< The quadratic bottom drag coefficient.
+  real :: cdrag  !< The quadratic bottom drag coefficient [nondim]
 end type user_revise_forcing_CS
 
 contains

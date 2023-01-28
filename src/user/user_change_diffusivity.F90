@@ -151,7 +151,7 @@ end subroutine user_change_diff
 
 !> This subroutine checks whether the 4 values of range are in ascending order.
 function range_OK(range) result(OK)
-  real, dimension(4), intent(in) :: range  !< Four values to check.
+  real, dimension(4), intent(in) :: range  !< Four values to check [arbitrary]
   logical                        :: OK     !< Return value.
 
   OK = ((range(1) <= range(2)) .and. (range(2) <= range(3)) .and. &
@@ -169,7 +169,7 @@ function val_weights(val, range) result(ans)
   real, dimension(4), intent(in) :: range  !< Range over which the answer is non-zero [arbitrary units].
   real                           :: ans    !< Return value [nondim].
   ! Local variables
-  real :: x   ! A nondimensional number between 0 and 1.
+  real :: x   ! A nondimensional number between 0 and 1 [nondim].
 
   ans = 0.0
   if ((val > range(1)) .and. (val < range(4))) then

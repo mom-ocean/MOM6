@@ -29,9 +29,9 @@ end interface
 
 !> A type for storing statistica about a variable
 type :: stats ; private
-  real :: minimum = 1.E34  !< The minimum value
-  real :: maximum = -1.E34 !< The maximum value
-  real :: average = 0.     !< The average value
+  real :: minimum = 1.E34  !< The minimum value [degC] or [ppt] or other units
+  real :: maximum = -1.E34 !< The maximum value [degC] or [ppt] or other units
+  real :: average = 0.     !< The average value [degC] or [ppt] or other units
 end type stats
 
 contains

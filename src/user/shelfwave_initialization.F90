@@ -138,7 +138,7 @@ subroutine shelfwave_set_OBC_data(OBC, CS, G, GV, US, h, Time)
   type(ocean_grid_type),   intent(in) :: G    !< The ocean's grid structure.
   type(verticalGrid_type), intent(in) :: GV   !< The ocean's vertical grid structure
   type(unit_scale_type),   intent(in) :: US   !< A dimensional unit scaling type
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in) :: h !< layer thickness.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in) :: h !< layer thickness [H ~> m or kg m-2]
   type(time_type),         intent(in) :: Time !< model time.
 
   ! The following variables are used to set up the transport in the shelfwave example.
