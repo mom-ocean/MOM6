@@ -128,7 +128,6 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, mono_
   real :: cg1_min2 ! A floor in the squared first mode speed below which 0 is returned [L2 T-2 ~> m2 s-2]
   real :: I_Hnew   ! The inverse of a new layer thickness [Z-1 ~> m-1]
   real :: drxh_sum ! The sum of density differences across interfaces times thicknesses [R Z ~> kg m-2]
-  real :: L2_to_Z2 ! A scaling factor squared from units of lateral distances to depths [Z2 L-2 ~> 1].
   real :: g_Rho0   ! G_Earth/Rho0 [L2 T-2 Z-1 R-1 ~> m4 s-2 kg-1].
   real :: c2_scale ! A scaling factor for wave speeds to help control the growth of the determinant and
                    ! its derivative with lam between rows of the Thomas algorithm solver [L2 s2 T-2 m-2 ~> nondim].
@@ -156,7 +155,7 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, mono_
   real :: hw      ! The mean of the adjacent layer thicknesses [Z ~> m]
   real :: sum_hc  ! The sum of the layer thicknesses [Z ~> m]
   real :: gp      ! A limited local copy of gprime [L2 Z-1 T-2 ~> m s-2]
-  real :: N2min   ! A minimum buoyancy frequency [T-2 ~> s-2]
+  real :: N2min   ! A minimum buoyancy frequency, including a slope rescaling factor [L2 Z-2 T-2 ~> s-2]
   logical :: l_use_ebt_mode, calc_modal_structure
   real :: l_mono_N2_column_fraction ! A local value of mono_N2_column_fraction [nondim]
   real :: l_mono_N2_depth ! A local value of mono_N2_column_depth [Z ~> m]
@@ -173,8 +172,6 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, mono_
   if (present(full_halos)) then ; if (full_halos) then
     is = G%isd ; ie = G%ied ; js = G%jsd ; je = G%jed
   endif ; endif
-
-  L2_to_Z2 = US%L_to_Z**2
 
   l_use_ebt_mode = CS%use_ebt_mode
   if (present(use_ebt_mode)) l_use_ebt_mode = use_ebt_mode
@@ -219,7 +216,7 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, mono_
 !$OMP parallel do default(none) shared(is,ie,js,je,nz,h,G,GV,US,min_h_frac,use_EOS,tv,&
 !$OMP                                  calc_modal_structure,l_use_ebt_mode,modal_structure, &
 !$OMP                                  l_mono_N2_column_fraction,l_mono_N2_depth,CS,   &
-!$OMP                                  Z_to_pres,cg1,g_Rho0,rescale,I_rescale,L2_to_Z2, &
+!$OMP                                  Z_to_pres,cg1,g_Rho0,rescale,I_rescale, &
 !$OMP                                  better_est,cg1_min2,tol_merge,tol_solve,c2_scale) &
 !$OMP                          private(htot,hmin,kf,H_here,HxT_here,HxS_here,HxR_here, &
 !$OMP                                  Hf,Tf,Sf,Rf,pres,T_int,S_int,drho_dT,drho_dS,   &
@@ -453,7 +450,7 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, mono_
           if (l_use_ebt_mode) then
             Igu(1) = 0. ! Neumann condition for pressure modes
             sum_hc = Hc(1)
-            N2min = L2_to_Z2*gprime(2)/Hc(1)
+            N2min = gprime(2)/Hc(1)
             do k=2,kc
               hw = 0.5*(Hc(k-1)+Hc(k))
               gp = gprime(K)
@@ -461,12 +458,12 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, mono_
                 !### Change to: if ( ((htot(i) - sum_hc < l_mono_N2_column_fraction*htot(i)) .or. & ) )
                 if ( (((G%bathyT(i,j)+G%Z_ref) - sum_hc < l_mono_N2_column_fraction*(G%bathyT(i,j)+G%Z_ref)) .or. &
                       ((l_mono_N2_depth >= 0.) .and. (sum_hc > l_mono_N2_depth))) .and. &
-                     (L2_to_Z2*gp > N2min*hw) ) then
+                     (gp > N2min*hw) ) then
                   ! Filters out regions where N2 increases with depth but only in a lower fraction
                   ! of the water column or below a certain depth.
-                  gp = US%Z_to_L**2 * (N2min*hw)
+                  gp = N2min * hw
                 else
-                  N2min = L2_to_Z2 * gp/hw
+                  N2min = gp / hw
                 endif
               endif
               Igu(k) = 1.0/(gp*Hc(k))
