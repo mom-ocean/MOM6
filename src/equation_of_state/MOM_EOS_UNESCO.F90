@@ -17,45 +17,80 @@ public calculate_density_derivs_UNESCO
 public calculate_density_scalar_UNESCO, calculate_density_array_UNESCO
 
 !> Compute the in situ density of sea water (in [kg m-3]), or its anomaly with respect to
-!! a reference density, from salinity [PSU], potential temperature [degC], and pressure [Pa],
-!! using the UNESCO (1981) equation of state.
+!! a reference density, from salinity [PSU], potential temperature [degC] and pressure [Pa],
+!! using the UNESCO (1981) equation of state, as refit by Jackett and McDougall (1995).
 interface calculate_density_UNESCO
   module procedure calculate_density_scalar_UNESCO, calculate_density_array_UNESCO
 end interface calculate_density_UNESCO
 
 !> Compute the in situ specific volume of sea water (in [m3 kg-1]), or an anomaly with respect
 !! to a reference specific volume, from salinity [PSU], potential temperature [degC], and
-!! pressure [Pa], using the UNESCO (1981) equation of state.
+!! pressure [Pa], using the UNESCO (1981) equation of state, as refit by Jackett and McDougall (1995).
 interface calculate_spec_vol_UNESCO
   module procedure calculate_spec_vol_scalar_UNESCO, calculate_spec_vol_array_UNESCO
 end interface calculate_spec_vol_UNESCO
 
-!>@{ Parameters in the UNESCO equation of state
-! The following constants are used to calculate rho0.  The notation
-! is Rab for the contribution to rho0 from T^aS^b.
-real, parameter ::  R00 = 999.842594, R10 = 6.793952e-2, R20 = -9.095290e-3, &
-  R30 = 1.001685e-4, R40 = -1.120083e-6, R50 = 6.536332e-9, R01 = 0.824493, &
-  R11 = -4.0899e-3, R21 = 7.6438e-5, R31 = -8.2467e-7, R41 = 5.3875e-9, &
-  R032 = -5.72466e-3, R132 = 1.0227e-4, R232 = -1.6546e-6, R02 = 4.8314e-4
+!>@{ Parameters in the UNESCO equation of state, as published in appendix A3 of Gill, 1982.
+! The following constants are used to calculate rho0, the density of seawater at 1
+! atmosphere pressure.  The notation is Rab for the contribution to rho0 from T^a*S^b.
+real, parameter :: R00 = 999.842594   ! A coefficient in the fit for rho0 [kg m-3]
+real, parameter :: R10 = 6.793952e-2  ! A coefficient in the fit for rho0 [kg m-3 degC-1]
+real, parameter :: R20 = -9.095290e-3 ! A coefficient in the fit for rho0 [kg m-3 degC-2]
+real, parameter :: R30 = 1.001685e-4  ! A coefficient in the fit for rho0 [kg m-3 degC-3]
+real, parameter :: R40 = -1.120083e-6 ! A coefficient in the fit for rho0 [kg m-3 degC-4]
+real, parameter :: R50 = 6.536332e-9  ! A coefficient in the fit for rho0 [kg m-3 degC-5]
+real, parameter :: R01 = 0.824493     ! A coefficient in the fit for rho0 [kg m-3 PSU-1]
+real, parameter :: R11 = -4.0899e-3   ! A coefficient in the fit for rho0 [kg m-3 degC-1 PSU-1]
+real, parameter :: R21 = 7.6438e-5    ! A coefficient in the fit for rho0 [kg m-3 degC-2 PSU-1]
+real, parameter :: R31 = -8.2467e-7   ! A coefficient in the fit for rho0 [kg m-3 degC-3 PSU-1]
+real, parameter :: R41 = 5.3875e-9    ! A coefficient in the fit for rho0 [kg m-3 degC-4 PSU-1]
+real, parameter :: R032 = -5.72466e-3 ! A coefficient in the fit for rho0 [kg m-3 PSU-3/2]
+real, parameter :: R132 = 1.0227e-4   ! A coefficient in the fit for rho0 [kg m-3 PSU-3/2]
+real, parameter :: R232 = -1.6546e-6  ! A coefficient in the fit for rho0 [kg m-3 PSU-3/2]
+real, parameter :: R02 = 4.8314e-4    ! A coefficient in the fit for rho0 [kg m-3 PSU-2]
 
-! The following constants are used to calculate the secant bulk mod-
-! ulus. The notation here is Sab for terms proportional to T^a*S^b,
-! Spab for terms proportional to p*T^a*S^b, and SPab for terms
+! The following constants are used to calculate the secant bulk modulus.
+! The notation here is Sab for terms proportional to T^a*S^b,
+! Spab for terms proportional to p*T^a*S^b, and SP0ab for terms
 ! proportional to p^2*T^a*S^b.
-real, parameter ::  S00 = 1.965933e4, S10 = 1.444304e2, S20 = -1.706103, &
-  S30 = 9.648704e-3, S40 = -4.190253e-5, S01 = 52.84855, S11 = -3.101089e-1, &
-  S21 = 6.283263e-3, S31 = -5.084188e-5, S032 = 3.886640e-1, S132 = 9.085835e-3, &
-  S232 = -4.619924e-4, Sp00 = 3.186519, Sp10 = 2.212276e-2, Sp20 = -2.984642e-4, &
-  Sp30 = 1.956415e-6, Sp01 = 6.704388e-3, Sp11 = -1.847318e-4, Sp21 = 2.059331e-7, &
-  Sp032 = 1.480266e-4, SP000 = 2.102898e-4, SP010 = -1.202016e-5, SP020 = 1.394680e-7, &
-  SP001 = -2.040237e-6, SP011 = 6.128773e-8, SP021 = 6.207323e-10
+!   Note that these values differ from those in Appendix A of Gill (1982) because the expressions
+! from Jackett and MacDougall (1995) use potential temperature, rather than in situ temperature.
+real, parameter :: S00 = 1.965933e4   ! A coefficient in the secant bulk modulus fit [bar]
+real, parameter :: S10 = 1.444304e2   ! A coefficient in the secant bulk modulus fit [bar degC-1]
+real, parameter :: S20 = -1.706103    ! A coefficient in the secant bulk modulus fit [bar degC-2]
+real, parameter :: S30 = 9.648704e-3  ! A coefficient in the secant bulk modulus fit [bar degC-3]
+real, parameter :: S40 = -4.190253e-5 ! A coefficient in the secant bulk modulus fit [bar degC-4]
+real, parameter :: S01 = 52.84855     ! A coefficient in the secant bulk modulus fit [bar PSU-1]
+real, parameter :: S11 = -3.101089e-1 ! A coefficient in the secant bulk modulus fit [bar degC-1 PSU-1]
+real, parameter :: S21 = 6.283263e-3  ! A coefficient in the secant bulk modulus fit [bar degC-2 PSU-1]
+real, parameter :: S31 = -5.084188e-5 ! A coefficient in the secant bulk modulus fit [bar degC-3 PSU-1]
+real, parameter :: S032 = 3.886640e-1   ! A coefficient in the secant bulk modulus fit [bar PSU-3/2]
+real, parameter :: S132 = 9.085835e-3   ! A coefficient in the secant bulk modulus fit [bar degC-1 PSU-3/2]
+real, parameter :: S232 = -4.619924e-4  ! A coefficient in the secant bulk modulus fit [bar degC-2 PSU-3/2]
+
+real, parameter :: Sp00 = 3.186519      ! A coefficient in the secant bulk modulus fit [nondim]
+real, parameter :: Sp10 = 2.212276e-2   ! A coefficient in the secant bulk modulus fit [degC-1]
+real, parameter :: Sp20 = -2.984642e-4  ! A coefficient in the secant bulk modulus fit [degC-2]
+real, parameter :: Sp30 = 1.956415e-6   ! A coefficient in the secant bulk modulus fit [degC-3]
+real, parameter :: Sp01 = 6.704388e-3   ! A coefficient in the secant bulk modulus fit [PSU-1]
+real, parameter :: Sp11 = -1.847318e-4  ! A coefficient in the secant bulk modulus fit [degC-1 PSU-1]
+real, parameter :: Sp21 = 2.059331e-7   ! A coefficient in the secant bulk modulus fit [degC-2 PSU-1]
+real, parameter :: Sp032 = 1.480266e-4  ! A coefficient in the secant bulk modulus fit [PSU-3/2]
+
+real, parameter :: SP000 = 2.102898e-4  ! A coefficient in the secant bulk modulus fit [bar-1]
+real, parameter :: SP010 = -1.202016e-5 ! A coefficient in the secant bulk modulus fit [bar-1 degC-1]
+real, parameter :: SP020 = 1.394680e-7  ! A coefficient in the secant bulk modulus fit [bar-1 degC-2]
+real, parameter :: SP001 = -2.040237e-6 ! A coefficient in the secant bulk modulus fit [bar-1 PSU-1]
+real, parameter :: SP011 = 6.128773e-8  ! A coefficient in the secant bulk modulus fit [bar-1 degC-1 PSU-1]
+real, parameter :: SP021 = 6.207323e-10 ! A coefficient in the secant bulk modulus fit [bar-1 degC-1 PSU-2]
 !>@}
 
 contains
 
-!> This subroutine computes the in situ density of sea water (rho in
-!! [kg m-3]) from salinity (S [PSU]), potential temperature
-!! (T [degC]), and pressure [Pa], using the UNESCO (1981) equation of state.
+!> This subroutine computes the in situ density of sea water (rho in [kg m-3])
+!! from salinity (S [PSU]), potential temperature (T [degC]), and pressure [Pa],
+!! using the UNESCO (1981) equation of state, as refit by Jackett and McDougall (1995).
+!! If rho_ref is present, rho is an anomaly from rho_ref.
 subroutine calculate_density_scalar_UNESCO(T, S, pressure, rho, rho_ref)
   real,           intent(in)  :: T        !< Potential temperature relative to the surface [degC].
   real,           intent(in)  :: S        !< Salinity [PSU].
@@ -64,8 +99,10 @@ subroutine calculate_density_scalar_UNESCO(T, S, pressure, rho, rho_ref)
   real, optional, intent(in)  :: rho_ref  !< A reference density [kg m-3].
 
   ! Local variables
-  real, dimension(1) :: T0, S0, pressure0
-  real, dimension(1) :: rho0
+  real, dimension(1) :: T0    ! A 1-d array with a copy of the potential temperature [degC]
+  real, dimension(1) :: S0    ! A 1-d array with a copy of the salinity [PSU]
+  real, dimension(1) :: pressure0 ! A 1-d array with a copy of the pressure [Pa]
+  real, dimension(1) :: rho0  ! A 1-d array with a copy of the in situ density [kg m-3]
 
   T0(1) = T
   S0(1) = S
@@ -76,9 +113,10 @@ subroutine calculate_density_scalar_UNESCO(T, S, pressure, rho, rho_ref)
 
 end subroutine calculate_density_scalar_UNESCO
 
-!> This subroutine computes the in situ density of sea water (rho in
-!! [kg m-3]) from salinity (S [PSU]), potential temperature
-!! (T [degC]), and pressure [Pa], using the UNESCO (1981) equation of state.
+!> This subroutine computes the in situ density of sea water (rho in [kg m-3])
+!! from salinity (S [PSU]), potential temperature (T [degC]) and pressure [Pa],
+!! using the UNESCO (1981) equation of state, as refit by Jackett and McDougall (1995).
+!! If rho_ref is present, rho is an anomaly from rho_ref.
 subroutine calculate_density_array_UNESCO(T, S, pressure, rho, start, npts, rho_ref)
   real, dimension(:), intent(in)  :: T        !< potential temperature relative to the surface [degC].
   real, dimension(:), intent(in)  :: S        !< salinity [PSU].
@@ -89,8 +127,12 @@ subroutine calculate_density_array_UNESCO(T, S, pressure, rho, start, npts, rho_
   real,     optional, intent(in)  :: rho_ref  !< A reference density [kg m-3].
 
   ! Local variables
-  real :: t_local, t2, t3, t4, t5  ! Temperature to the 1st - 5th power [degC^n].
-  real :: s_local, s32, s2         ! Salinity to the 1st, 3/2, & 2nd power [PSU^n].
+  real :: t_local     ! A copy of the temperature at a point [degC]
+  real :: t2, t3      ! Temperature squared [degC2] and cubed [degC3]
+  real :: t4, t5      ! Temperature to the 4th power [degC4] and 5th power [degC5]
+  real :: s_local     ! A copy of the salinity at a point [PSU]
+  real :: s32         ! The square root of salinity cubed [PSU3/2]
+  real :: s2          ! Salinity squared [PSU2].
   real :: p1, p2      ! Pressure (in bars) to the 1st and 2nd power [bar] and [bar2].
   real :: rho0        ! Density at 1 bar pressure [kg m-3].
   real :: sig0        ! The anomaly of rho0 from R00 [kg m-3].
@@ -103,9 +145,9 @@ subroutine calculate_density_array_UNESCO(T, S, pressure, rho, start, npts, rho_
       cycle
     endif
 
-    p1 = pressure(j)*1.0e-5; p2 = p1*p1
-    t_local = T(j); t2 = t_local*t_local; t3 = t_local*t2; t4 = t2*t2; t5 = t3*t2
-    s_local = S(j); s2 = s_local*s_local; s32 = s_local*sqrt(s_local)
+    p1 = pressure(j)*1.0e-5 ; p2 = p1*p1
+    t_local = T(j) ; t2 = t_local*t_local ; t3 = t_local*t2 ; t4 = t2*t2 ; t5 = t3*t2
+    s_local = S(j) ; s2 = s_local*s_local ; s32 = s_local*sqrt(s_local)
 
 !  Compute rho(s,theta,p=0) - (same as rho(s,t_insitu,p=0) ).
 
@@ -130,9 +172,9 @@ subroutine calculate_density_array_UNESCO(T, S, pressure, rho, start, npts, rho_
   enddo
 end subroutine calculate_density_array_UNESCO
 
-!> This subroutine computes the in situ specific volume of sea water (specvol in
-!! [m3 kg-1]) from salinity (S [PSU]), potential temperature (T [degC])
-!! and pressure [Pa], using the UNESCO (1981) equation of state.
+!> This subroutine computes the in situ specific volume of sea water (specvol in [m3 kg-1])
+!! from salinity (S [PSU]), potential temperature (T [degC]) and pressure [Pa],
+!! using the UNESCO (1981) equation of state, as refit by Jackett and McDougall (1995).
 !! If spv_ref is present, specvol is an anomaly from spv_ref.
 subroutine calculate_spec_vol_scalar_UNESCO(T, S, pressure, specvol, spv_ref)
   real,           intent(in)  :: T        !< potential temperature relative to the surface
@@ -143,7 +185,10 @@ subroutine calculate_spec_vol_scalar_UNESCO(T, S, pressure, specvol, spv_ref)
   real, optional, intent(in)  :: spv_ref  !< A reference specific volume [m3 kg-1].
 
   ! Local variables
-  real, dimension(1) :: T0, S0, pressure0, spv0
+  real, dimension(1) :: T0    ! A 1-d array with a copy of the potential temperature [degC]
+  real, dimension(1) :: S0    ! A 1-d array with a copy of the salinity [PSU]
+  real, dimension(1) :: pressure0 ! A 1-d array with a copy of the pressure [Pa]
+  real, dimension(1) :: spv0  ! A 1-d array with a copy of the specific volume [m3 kg-1]
 
   T0(1) = T ; S0(1) = S ; pressure0(1) = pressure
 
@@ -151,9 +196,9 @@ subroutine calculate_spec_vol_scalar_UNESCO(T, S, pressure, specvol, spv_ref)
   specvol = spv0(1)
 end subroutine calculate_spec_vol_scalar_UNESCO
 
-!> This subroutine computes the in situ specific volume of sea water (specvol in
-!! [m3 kg-1]) from salinity (S [PSU]), potential temperature (T [degC])
-!! and pressure [Pa], using the UNESCO (1981) equation of state.
+!> This subroutine computes the in situ specific volume of sea water (specvol in [m3 kg-1])
+!! from salinity (S [PSU]), potential temperature (T [degC]) and pressure [Pa],
+!! using the UNESCO (1981) equation of state, as refit by Jackett and McDougall (1995).
 !! If spv_ref is present, specvol is an anomaly from spv_ref.
 subroutine calculate_spec_vol_array_UNESCO(T, S, pressure, specvol, start, npts, spv_ref)
   real, dimension(:), intent(in)  :: T        !< potential temperature relative to the surface
@@ -166,8 +211,12 @@ subroutine calculate_spec_vol_array_UNESCO(T, S, pressure, specvol, start, npts,
   real,     optional, intent(in)  :: spv_ref  !< A reference specific volume [m3 kg-1].
 
   ! Local variables
-  real :: t_local, t2, t3, t4, t5  ! Temperature to the 1st - 5th power [degC^n].
-  real :: s_local, s32, s2         ! Salinity to the 1st, 3/2, & 2nd power [PSU^n].
+  real :: t_local     ! A copy of the temperature at a point [degC]
+  real :: t2, t3      ! Temperature squared [degC2] and cubed [degC3]
+  real :: t4, t5      ! Temperature to the 4th power [degC4] and 5th power [degC5]
+  real :: s_local     ! A copy of the salinity at a point [PSU]
+  real :: s32         ! The square root of salinity cubed [PSU3/2]
+  real :: s2          ! Salinity squared [PSU2].
   real :: p1, p2       ! Pressure (in bars) to the 1st and 2nd power [bar] and [bar2].
   real :: rho0         ! Density at 1 bar pressure [kg m-3].
   real :: ks           ! The secant bulk modulus [bar].
@@ -180,9 +229,9 @@ subroutine calculate_spec_vol_array_UNESCO(T, S, pressure, specvol, start, npts,
       cycle
     endif
 
-    p1 = pressure(j)*1.0e-5; p2 = p1*p1
-    t_local = T(j); t2 = t_local*t_local; t3 = t_local*t2; t4 = t2*t2; t5 = t3*t2
-    s_local = S(j); s2 = s_local*s_local; s32 = s_local*sqrt(s_local)
+    p1 = pressure(j)*1.0e-5 ; p2 = p1*p1
+    t_local = T(j) ; t2 = t_local*t_local ; t3 = t_local*t2 ; t4 = t2*t2 ; t5 = t3*t2
+    s_local = S(j) ; s2 = s_local*s_local ; s32 = s_local*sqrt(s_local)
 
 !  Compute rho(s,theta,p=0) - (same as rho(s,t_insitu,p=0) ).
 
@@ -222,8 +271,13 @@ subroutine calculate_density_derivs_UNESCO(T, S, pressure, drho_dT, drho_dS, sta
   integer, intent(in)                :: npts     !< The number of values to calculate.
 
   ! Local variables
-  real :: t_local, t2, t3, t4, t5  ! Temperature to the 1st - 5th power [degC^n].
-  real :: s12, s_local, s32, s2    ! Salinity to the 1/2 - 2nd powers [PSU^n].
+  real :: t_local     ! A copy of the temperature at a point [degC]
+  real :: t2, t3      ! Temperature squared [degC2] and cubed [degC3]
+  real :: t4, t5      ! Temperature to the 4th power [degC4] and 5th power [degC5]
+  real :: s12         ! The square root of salinity [PSU1/2]
+  real :: s_local     ! A copy of the salinity at a point [PSU]
+  real :: s32         ! The square root of salinity cubed [PSU3/2]
+  real :: s2          ! Salinity squared [PSU2].
   real :: p1, p2          ! Pressure to the 1st & 2nd power [bar] and [bar2].
   real :: rho0            ! Density at 1 bar pressure [kg m-3].
   real :: ks              ! The secant bulk modulus [bar].
@@ -240,9 +294,9 @@ subroutine calculate_density_derivs_UNESCO(T, S, pressure, drho_dT, drho_dS, sta
       cycle
     endif
 
-    p1 = pressure(j)*1.0e-5; p2 = p1*p1
-    t_local = T(j); t2 = t_local*t_local; t3 = t_local*t2; t4 = t2*t2; t5 = t3*t2
-    s_local = S(j); s2 = s_local*s_local; s12 = sqrt(s_local); s32 = s_local*s12
+    p1 = pressure(j)*1.0e-5 ; p2 = p1*p1
+    t_local = T(j) ; t2 = t_local*t_local ; t3 = t_local*t2 ; t4 = t2*t2 ; t5 = t3*t2
+    s_local = S(j) ; s2 = s_local*s_local ; s12 = sqrt(s_local) ; s32 = s_local*s12
 
 !       compute rho(s,theta,p=0) - (same as rho(s,t_insitu,p=0) )
 
@@ -293,14 +347,20 @@ subroutine calculate_compress_UNESCO(T, S, pressure, rho, drho_dp, start, npts)
   integer, intent(in)                :: npts     !< The number of values to calculate.
 
   ! Local variables
-  real :: t_local, t2, t3, t4, t5  ! Temperature to the 1st - 5th power [degC^n].
-  real :: s_local, s32, s2         ! Salinity to the 1st, 3/2, & 2nd power [PSU^n].
-  real :: p1, p2          ! Pressure to the 1st & 2nd power [bar] and [bar2].
-  real :: rho0            ! Density at 1 bar pressure [kg m-3].
-  real :: ks              ! The secant bulk modulus [bar].
-  real :: ks_0, ks_1, ks_2
-  real :: dks_dp       ! The derivative of the secant bulk modulus
-                       ! with pressure, nondimensional.
+  real :: t_local     ! A copy of the temperature at a point [degC]
+  real :: t2, t3      ! Temperature squared [degC2] and cubed [degC3]
+  real :: t4, t5      ! Temperature to the 4th power [degC4] and 5th power [degC5]
+  real :: s_local     ! A copy of the salinity at a point [PSU]
+  real :: s32         ! The square root of salinity cubed [PSU3/2]
+  real :: s2          ! Salinity squared [PSU2].
+  real :: p1, p2  ! Pressure to the 1st & 2nd power [bar] and [bar2].
+  real :: rho0    ! Density at 1 bar pressure [kg m-3].
+  real :: ks      ! The secant bulk modulus [bar].
+  real :: ks_0    ! The secant bulk modulus at zero pressure [bar].
+  real :: ks_1    ! The derivative of the secant bulk modulus with pressure at zero pressure [nondim].
+  real :: ks_2    ! The second derivative of the secant bulk modulus with pressure at zero pressure [nondim].
+  real :: dks_dp  ! The derivative of the secant bulk modulus
+                  ! with pressure [nondim]
   integer :: j
 
   do j=start,start+npts-1
@@ -309,9 +369,9 @@ subroutine calculate_compress_UNESCO(T, S, pressure, rho, drho_dp, start, npts)
       cycle
     endif
 
-    p1 = pressure(j)*1.0e-5; p2 = p1*p1
-    t_local = T(j); t2 = t_local*t_local; t3 = t_local*t2; t4 = t2*t2; t5 = t3*t2
-    s_local = S(j); s2 = s_local*s_local; s32 = s_local*sqrt(s_local)
+    p1 = pressure(j)*1.0e-5 ; p2 = p1*p1
+    t_local = T(j) ; t2 = t_local*t_local ; t3 = t_local*t2 ; t4 = t2*t2 ; t5 = t3*t2
+    s_local = S(j) ; s2 = s_local*s_local ; s32 = s_local*sqrt(s_local)
 
 !  Compute rho(s,theta,p=0) - (same as rho(s,t_insitu,p=0) ).
 

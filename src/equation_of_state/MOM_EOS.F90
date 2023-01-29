@@ -428,7 +428,7 @@ subroutine calculate_stanley_density_1d(T, S, pressure, Tvar, TScov, Svar, rho, 
   real :: rho_scale ! A factor to convert density from kg m-3 to the desired units [R m3 kg-1 ~> 1]
   real :: T2_scale  ! A factor to convert temperature variance to units of degC2 [degC2 C-2 ~> 1]
   real :: S2_scale  ! A factor to convert salinity variance to units of ppt2 [ppt2 S-2 ~> 1]
-  real :: TS_scale  ! A factor to convert temperture-salinity covariance to units of
+  real :: TS_scale  ! A factor to convert temperature-salinity covariance to units of
                     ! degC ppt [degC ppt C-1 S-1 ~> 1]
   real :: rho_reference ! rho_ref converted to [kg m-3]
   real, dimension(size(rho)) :: pres  ! Pressure converted to [Pa]
@@ -1023,7 +1023,7 @@ subroutine calculate_density_second_derivs_1d(T, S, pressure, drho_dS_dS, drho_d
 
 end subroutine calculate_density_second_derivs_1d
 
-!> Calls the appropriate subroutine to calculate density second derivatives for scalar nputs.
+!> Calls the appropriate subroutine to calculate density second derivatives for scalar inputs.
 subroutine calculate_density_second_derivs_scalar(T, S, pressure, drho_dS_dS, drho_dS_dT, drho_dT_dT, &
                                                   drho_dS_dP, drho_dT_dP, EOS, scale)
   real, intent(in)  :: T !< Potential temperature referenced to the surface [C ~> degC]
@@ -1266,7 +1266,7 @@ subroutine calculate_compress_scalar(T, S, pressure, rho, drho_dp, EOS)
   type(EOS_type), intent(in) :: EOS   !< Equation of state structure
 
   ! Local variables
-  ! These arrays use the same units as their counterparts in calcluate_compress_1d.
+  ! These arrays use the same units as their counterparts in calculate_compress_1d.
   real, dimension(1) :: pa    ! Pressure in a size-1 1d array [R L2 T-2 ~> Pa]
   real, dimension(1) :: Ta    ! Temperature in a size-1 1d array [C ~> degC]
   real, dimension(1) :: Sa    ! Salinity in a size-1 1d array [S ~> ppt]
@@ -1734,7 +1734,7 @@ subroutine abs_saln_to_prac_saln(S, prSaln, EOS, dom, scale)
 
   ! Local variables
   real, dimension(size(S)) :: Sa    ! Salinity converted to [ppt]
-  real :: S_scale ! A factor to convert practical salnity from ppt to the desired units [S ppt-1 ~> 1]
+  real :: S_scale ! A factor to convert practical salinity from ppt to the desired units [S ppt-1 ~> 1]
   integer :: i, is, ie
 
   if (present(dom)) then

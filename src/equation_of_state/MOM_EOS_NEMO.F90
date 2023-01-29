@@ -35,7 +35,7 @@ interface calculate_density_derivs_nemo
   module procedure calculate_density_derivs_scalar_nemo, calculate_density_derivs_array_nemo
 end interface calculate_density_derivs_nemo
 
-real, parameter :: Pa2db  = 1.e-4 !< Conversion factor between Pa and dbar
+real, parameter :: Pa2db  = 1.e-4 !< Conversion factor between Pa and dbar [Pa dbar-1]
 !>@{ Parameters in the NEMO equation of state
 real, parameter :: rdeltaS = 32.
 real, parameter :: r1_S0  = 0.875/35.16504
@@ -184,8 +184,10 @@ subroutine calculate_density_scalar_nemo(T, S, pressure, rho, rho_ref)
   real,           intent(out) :: rho      !< In situ density [kg m-3].
   real, optional, intent(in)  :: rho_ref  !< A reference density [kg m-3].
 
-  real, dimension(1) :: T0, S0, pressure0
-  real, dimension(1) :: rho0
+  real, dimension(1) :: T0    ! A 1-d array with a copy of the conservative temperature [degC]
+  real, dimension(1) :: S0    ! A 1-d array with a copy of the absolute salinity [g kg-1]
+  real, dimension(1) :: pressure0 ! A 1-d array with a copy of the pressure [Pa]
+  real, dimension(1) :: rho0  ! A 1-d array with a copy of the density [kg m-3]
 
   T0(1) = T
   S0(1) = S
@@ -345,8 +347,13 @@ subroutine calculate_density_derivs_scalar_nemo(T, S, pressure, drho_dt, drho_ds
   real,    intent(out) :: drho_dS  !< The partial derivative of density with salinity,
                                    !! in [kg m-3 ppt-1].
   ! Local variables
-  real, dimension(1) :: T0, S0, pressure0
-  real, dimension(1) :: drdt0, drds0
+  real, dimension(1) :: T0    ! A 1-d array with a copy of the conservative temperature [degC]
+  real, dimension(1) :: S0    ! A 1-d array with a copy of the absolute salinity [g kg-1]
+  real, dimension(1) :: pressure0 ! A 1-d array with a copy of the pressure [Pa]
+  real, dimension(1) :: drdt0 ! A 1-d array with a copy of the derivative of density
+                              ! with potential temperature [kg m-3 degC-1]
+  real, dimension(1) :: drds0 ! A 1-d array with a copy of the derivative of density
+                              ! with salinity [kg m-3 ppt-1]
 
   T0(1) = T
   S0(1) = S
@@ -358,12 +365,12 @@ subroutine calculate_density_derivs_scalar_nemo(T, S, pressure, drho_dt, drho_ds
 end subroutine calculate_density_derivs_scalar_nemo
 
 !> Compute the in situ density of sea water (rho in [kg m-3]) and the compressibility
-!! (drho/dp = C_sound^-2, stored as drho_dp [s2 m-2]) from absolute salinity
-!! (sal in g/kg), conservative temperature (T [degC]), and pressure [Pa], using the expressions
+!! (drho/dp = C_sound^-2, stored as drho_dp [s2 m-2]) from absolute salinity (sal [g kg-1]),
+!! conservative temperature (T [degC]), and pressure [Pa], using the expressions
 !! derived for use with NEMO.
 subroutine calculate_compress_nemo(T, S, pressure, rho, drho_dp, start, npts)
   real,    intent(in),  dimension(:) :: T        !< Conservative temperature [degC].
-  real,    intent(in),  dimension(:) :: S        !< Absolute salinity [g/kg].
+  real,    intent(in),  dimension(:) :: S        !< Absolute salinity [g kg-1].
   real,    intent(in),  dimension(:) :: pressure !< pressure [Pa].
   real,    intent(out), dimension(:) :: rho      !< In situ density [kg m-3].
   real,    intent(out), dimension(:) :: drho_dp  !< The partial derivative of density with pressure
@@ -373,7 +380,9 @@ subroutine calculate_compress_nemo(T, S, pressure, rho, drho_dp, start, npts)
   integer, intent(in)                :: npts     !< The number of values to calculate.
 
   ! Local variables
-  real ::  zs,zt,zp
+  real :: zs  ! Absolute salinity [g kg-1]
+  real :: zt  ! Conservative temperature [degC]
+  real :: zp  ! Pressure converted to decibars [dbar]
   integer :: j
 
   call calculate_density_array_nemo(T, S, pressure, rho, start, npts)
@@ -384,7 +393,7 @@ subroutine calculate_compress_nemo(T, S, pressure, rho, drho_dp, start, npts)
   do j=start,start+npts-1
    !Conversions
     zs = S(j) !gsw_sr_from_sp(S(j))       !Convert practical salinity to absolute salinity
-    zt = T(j) !gsw_ct_from_pt(S(j),T(j))  !Convert potantial temp to conservative temp
+    zt = T(j) !gsw_ct_from_pt(S(j),T(j))  !Convert potential temp to conservative temp
     zp = pressure(j)* Pa2db         !Convert pressure from Pascal to decibar
     call gsw_rho_first_derivatives(zs,zt,zp, drho_dp=drho_dp(j))
   enddo
