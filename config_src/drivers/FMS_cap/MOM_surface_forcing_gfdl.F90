@@ -92,7 +92,7 @@ type, public :: surface_forcing_CS ; private
                                 !! contributes to ustar [R L Z T-1 ~> Pa].  gust is used when read_gust_2d is true.
   real, pointer, dimension(:,:) :: &
     ustar_tidal => NULL()       !< Tidal contribution to the bottom friction velocity [Z T-1 ~> m s-1]
-  real :: cd_tides              !< Drag coefficient that applies to the tides (nondimensional)
+  real :: cd_tides              !< Drag coefficient that applies to the tides [nondim]
   real :: utide                 !< Constant tidal velocity to use if read_tideamp is false [Z T-1 ~> m s-1].
   logical :: read_tideamp       !< If true, spatially varying tidal amplitude read from a file.
 
@@ -127,7 +127,7 @@ type, public :: surface_forcing_CS ; private
   logical :: mask_srestore_marginal_seas    !< If true, then mask SSS restoring in marginal seas
   real    :: max_delta_srestore             !< Maximum delta salinity used for restoring [S ~> ppt]
   real    :: max_delta_trestore             !< Maximum delta sst used for restoring [C ~> degC]
-  real, pointer, dimension(:,:) :: basin_mask => NULL() !< Mask for surface salinity restoring by basin
+  real, pointer, dimension(:,:) :: basin_mask => NULL() !< Mask for surface salinity restoring by basin [nondim]
   integer :: answer_date        !< The vintage of the order of arithmetic and expressions in the
                                 !! gustiness calculations.  Values below 20190101 recover the answers
                                 !! from the end of 2018, while higher values use a simpler expression
@@ -144,14 +144,14 @@ type, public :: surface_forcing_CS ; private
                                               !! salinity restoring fluxes. The masking file should be
                                               !! in inputdir/salt_restore_mask.nc and the field should
                                               !! be named 'mask'
-  real, pointer, dimension(:,:) :: srestore_mask => NULL() !< mask for SSS restoring
+  real, pointer, dimension(:,:) :: srestore_mask => NULL() !< mask for SSS restoring [nondim]
   character(len=200) :: temp_restore_file     !< Filename for sst restoring data
   character(len=30)  :: temp_restore_var_name !< Name of surface temperature in temp_restore_file
   logical            :: mask_trestore         !< If true, apply a 2-dimensional mask to the surface
                                               !! temperature restoring fluxes. The masking file should be
                                               !! in inputdir/temp_restore_mask.nc and the field should
                                               !! be named 'mask'
-  real, pointer, dimension(:,:) :: trestore_mask => NULL() !< Mask for SST restoring
+  real, pointer, dimension(:,:) :: trestore_mask => NULL() !< Mask for SST restoring [nondim]
   integer :: id_srestore = -1  !< An id number for time_interp_external.
   integer :: id_trestore = -1  !< An id number for time_interp_external.
 
@@ -250,7 +250,7 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
                               ! mass fluxes [R Z s m2 kg-1 T-1 ~> 1]
   real :: rhoXcp              ! Reference density times heat capacity times unit scaling
                               ! factors [Q R C-1 ~> J m-3 degC-1]
-  real :: sign_for_net_FW_bug ! Should be +1. but an old bug can be recovered by using -1.
+  real :: sign_for_net_FW_bug ! Should be +1. but an old bug can be recovered by using -1 [nondim]
 
   call cpu_clock_begin(id_clock_forcing)
 
@@ -1169,7 +1169,10 @@ subroutine apply_force_adjustments(G, US, CS, Time, forces)
   real, dimension(SZI_(G),SZJ_(G)) :: tempy_at_h ! Delta to meridional wind stress at h points [R Z L T-2 ~> Pa]
 
   integer :: isc, iec, jsc, jec, i, j
-  real :: dLonDx, dLonDy, rDlon, cosA, sinA, zonal_tau, merid_tau
+  real :: dLonDx, dLonDy ! The change in longitude across the cell in the x- and y-directions [degrees_E]
+  real :: rDlon ! The magnitude of the change in longitude [degrees_E] and then its inverse [degrees_E-1]
+  real :: cosA, sinA  ! The cosine and sine of the angle between the grid and true north [nondim]
+  real :: zonal_tau, merid_tau ! True zonal and meridional wind stresses [R Z L T-2 ~> Pa]
   real :: Pa_conversion ! A unit conversion factor from Pa to the internal units [R Z L T-2 Pa-1 ~> 1]
   logical :: overrode_x, overrode_y
 
@@ -1714,8 +1717,8 @@ end subroutine ice_ocn_bnd_type_chksum
 !> Check the values passed by IOB over land are zero
 subroutine check_mask_val_consistency(val, mask, i, j, varname, G)
 
-  real, intent(in) :: val  !< value of flux/variable passed by IOB
-  real, intent(in) :: mask !< value of ocean mask
+  real, intent(in) :: val  !< value of flux/variable passed by IOB [various]
+  real, intent(in) :: mask !< value of ocean mask [nondim]
   integer, intent(in) :: i !< model grid cell indices
   integer, intent(in) :: j !< model grid cell indices
   character(len=*), intent(in) :: varname !< variable name

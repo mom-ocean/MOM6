@@ -73,8 +73,8 @@ type, public :: surface_forcing_CS ; private
   logical :: adiabatic          !< if true, no diapycnal mass fluxes or surface buoyancy forcing
   logical :: variable_winds     !< if true, wind stresses vary with time
   logical :: variable_buoyforce !< if true, buoyancy forcing varies with time.
-  real    :: south_lat          !< southern latitude of the domain
-  real    :: len_lat            !< domain length in latitude
+  real    :: south_lat          !< southern latitude of the domain [degrees_N] or [km] or [m]
+  real    :: len_lat            !< domain length in latitude [degrees_N] or [km] or [m]
 
   real :: Rho0                  !< Boussinesq reference density [R ~> kg m-3]
   real :: G_Earth               !< gravitational acceleration [L2 Z-1 T-2 ~> m s-2]
@@ -104,7 +104,7 @@ type, public :: surface_forcing_CS ; private
   real :: gyres_taux_const   !< A constant wind stress [R L Z T-1 ~> Pa].
   real :: gyres_taux_sin_amp !< The amplitude of cosine wind stress gyres [R L Z T-1 ~> Pa], if WIND_CONFIG=='gyres'
   real :: gyres_taux_cos_amp !< The amplitude of cosine wind stress gyres [R L Z T-1 ~> Pa], if WIND_CONFIG=='gyres'
-  real :: gyres_taux_n_pis   !< The number of sine lobes in the basin if WIND_CONFIG=='gyres'
+  real :: gyres_taux_n_pis   !< The number of sine lobes in the basin if WIND_CONFIG=='gyres' [nondim]
   integer :: answer_date     !< This 8-digit integer gives the approximate date with which the order
                              !! of arithmetic and expressions were added to the code.
                              !! Dates before 20190101 use original answers.

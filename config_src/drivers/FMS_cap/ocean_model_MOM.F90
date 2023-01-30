@@ -462,7 +462,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, time_start_upda
                             ! internal modules.
   type(time_type) :: Time1  ! The value of the ocean model's time at the start of a call to step_MOM.
   integer :: index_bnds(4)  ! The computational domain index bounds in the ice-ocean boundary type.
-  real :: weight            ! Flux accumulation weight of the current fluxes.
+  real :: weight            ! Flux accumulation weight of the current fluxes [nondim].
   real :: dt_coupling       ! The coupling time step [T ~> s].
   real :: dt_therm          ! A limited and quantized version of OS%dt_therm [T ~> s].
   real :: dt_dyn            ! The dynamics time step [T ~> s].
@@ -834,7 +834,6 @@ subroutine convert_state_to_ocean_type(sfc_state, Ocean_sfc, G, US, patm, press_
   real,        optional, intent(in)    :: press_to_z !< A conversion factor between pressure and ocean
                                                !! depth, usually 1/(rho_0*g) [Z T2 R-1 L-2 ~> m Pa-1]
   ! Local variables
-  real :: IgR0
   character(len=48)  :: val_str
   integer :: isc_bnd, iec_bnd, jsc_bnd, jec_bnd
   integer :: i, j, i0, j0, is, ie, js, je
@@ -989,7 +988,7 @@ subroutine Ocean_stock_pe(OS, index, value, time_index)
   type(ocean_state_type), pointer     :: OS         !< A structure containing the internal ocean state.
                                                     !! The data in OS is intent in.
   integer,                intent(in)  :: index      !< The stock index for the quantity of interest.
-  real,                   intent(out) :: value      !< Sum returned for the conservation quantity of interest.
+  real,                   intent(out) :: value      !< Sum returned for the conservation quantity of interest [various]
   integer,      optional, intent(in)  :: time_index !< An unused optional argument, present only for
                                                     !! interfacial compatibility with other models.
 ! Arguments: OS - A structure containing the internal ocean state.
@@ -997,23 +996,23 @@ subroutine Ocean_stock_pe(OS, index, value, time_index)
 !  (in)      value -  Sum returned for the conservation quantity of interest.
 !  (in,opt)  time_index - Index for time level to use if this is necessary.
 
-  real :: salt
+  real :: salt ! The total salt in the ocean [kg]
 
   value = 0.0
   if (.not.associated(OS)) return
   if (.not.OS%is_ocean_pe) return
 
   select case (index)
-    case (ISTOCK_WATER)  ! Return the mass of fresh water in the ocean in kg.
+    case (ISTOCK_WATER)  ! Return the mass of fresh water in the ocean in [kg].
       if (OS%GV%Boussinesq) then
         call get_ocean_stocks(OS%MOM_CSp, mass=value, on_PE_only=.true.)
       else  ! In non-Boussinesq mode, the mass of salt needs to be subtracted.
         call get_ocean_stocks(OS%MOM_CSp, mass=value, salt=salt, on_PE_only=.true.)
         value = value - salt
       endif
-    case (ISTOCK_HEAT)  ! Return the heat content of the ocean in J.
+    case (ISTOCK_HEAT)  ! Return the heat content of the ocean in [J].
       call get_ocean_stocks(OS%MOM_CSp, heat=value, on_PE_only=.true.)
-    case (ISTOCK_SALT)  ! Return the mass of the salt in the ocean in kg.
+    case (ISTOCK_SALT)  ! Return the mass of the salt in the ocean in [kg].
       call get_ocean_stocks(OS%MOM_CSp, salt=value, on_PE_only=.true.)
     case default ; value = 0.0
   end select
@@ -1032,7 +1031,7 @@ subroutine ocean_model_data2D_get(OS, Ocean, name, array2D, isc, jsc)
                                                   !! visible ocean surface fields.
   character(len=*)          , intent(in) :: name  !< The name of the field to extract
   real, dimension(isc:,jsc:), intent(out):: array2D !< The values of the named field, it must
-                                                  !! cover only the computational domain
+                                                  !! cover only the computational domain [various]
   integer                   , intent(in) :: isc   !< The starting i-index of array2D
   integer                   , intent(in) :: jsc   !< The starting j-index of array2D
 
@@ -1092,8 +1091,8 @@ subroutine ocean_model_data1D_get(OS, Ocean, name, value)
                                                   !! internal ocean state (intent in).
   type(ocean_public_type),    intent(in) :: Ocean !< A structure containing various publicly
                                                   !! visible ocean surface fields.
-  character(len=*)          , intent(in) :: name  !< The name of the field to extract
-  real                      , intent(out):: value !< The value of the named field
+  character(len=*),           intent(in) :: name  !< The name of the field to extract
+  real,                       intent(out):: value !< The value of the named field [various]
 
   if (.not.associated(OS)) return
   if (.not.OS%is_ocean_pe) return
@@ -1155,7 +1154,7 @@ subroutine ocean_model_get_UV_surf(OS, Ocean, name, array2D, isc, jsc)
                                                   !! visible ocean surface fields.
   character(len=*)          , intent(in) :: name  !< The name of the current (ua or va) to extract
   real, dimension(isc:,jsc:), intent(out):: array2D !< The values of the named field, it must
-                                                  !! cover only the computational domain
+                                                  !! cover only the computational domain [L T-1 ~> m s-1]
   integer                   , intent(in) :: isc   !< The starting i-index of array2D
   integer                   , intent(in) :: jsc   !< The starting j-index of array2D
 
