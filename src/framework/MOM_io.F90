@@ -148,8 +148,9 @@ type, public :: vardesc
   character(len=64)  :: cmor_field_name    !< CMOR name
   character(len=64)  :: cmor_units         !< CMOR physical dimensions of the variable
   character(len=240) :: cmor_longname      !< CMOR long name of the variable
-  real               :: conversion         !< for unit conversions, such as needed to
-                                           !! convert from intensive to extensive
+  real               :: conversion         !< for unit conversions, such as needed to convert
+                                           !! from intensive to extensive [various] or [a A-1 ~> 1]
+                                           !! to undo internal dimensional rescaling
   character(len=32)  :: dim_names(5)       !< The names in the file of the axes for this variable
   integer            :: position = -1      !< An integer encoding the horizontal position, it may
                                            !! CENTER, CORNER, EAST_FACE, NORTH_FACE, or 0.
@@ -166,7 +167,7 @@ type :: axis_info ; private
   integer            :: sense = 0       !< This is 1 for axes whose values increase upward, or -1
                                         !! if they increase downward.  The default, 0, is ignored.
   integer            :: ax_size = 0     !< The number of elements in this axis
-  real, allocatable, dimension(:) :: ax_data !< The values of the data on the axis.
+  real, allocatable, dimension(:) :: ax_data !< The values of the data on the axis [arbitrary]
 end type axis_info
 
 !> Type that stores for a global file attribute
@@ -177,6 +178,13 @@ end type attribute_info
 
 integer, public :: stdout = stdout_iso  !< standard output unit
 integer, public :: stderr = stderr_iso  !< standard output unit
+
+! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
+! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
+! their mks counterparts with notation like "a velocity [Z T-1 ~> m s-1]".  If the units
+! vary with the Boussinesq approximation, the Boussinesq variant is given first.
+! The functions in this module work with variables with arbitrary units, in which case the
+! arbitrary rescaled units are indicated with [A ~> a], while the unscaled units are just [a].
 
 contains
 
@@ -271,11 +279,12 @@ subroutine create_MOM_file(IO_handle, filename, vars, novars, fields, &
   integer        :: num_extra_dims ! The number of extra possible dimensions from extra_axes
   integer        :: isg, ieg, jsg, jeg, IsgB, IegB, JsgB, JegB
   integer        :: var_periods, num_periods=0
-  real, dimension(:), allocatable :: axis_val
+  real, dimension(:), allocatable :: axis_val ! Axis label values [various]
   real, pointer, dimension(:) :: &
-    gridLatT => NULL(), & ! The latitude or longitude of T or B points for
-    gridLatB => NULL(), & ! the purpose of labeling the output axes.
-    gridLonT => NULL(), gridLonB => NULL()
+    gridLatT => NULL(), & ! The latitude of T or B points for the purpose of labeling
+    gridLatB => NULL(), & ! the output axes, often in units of [degrees_N] or [km] or [m].
+    gridLonT => NULL(), & ! The longitude of T or B points for the purpose of labeling
+    gridLonB => NULL()    ! the output axes, often in units of [degrees_E] or [km] or [m].
   character(len=40) :: time_units, x_axis_units, y_axis_units
   character(len=8)  :: t_grid, t_grid_read
   character(len=64) :: ax_name(5)  ! The axis names of a variable
@@ -870,11 +879,12 @@ end subroutine read_var_sizes
 subroutine read_variable_0d(filename, varname, var, ncid_in, scale)
   character(len=*),  intent(in)    :: filename !< The name of the file to read
   character(len=*),  intent(in)    :: varname  !< The variable name of the data in the file
-  real,              intent(inout) :: var      !< The scalar into which to read the data
+  real,              intent(inout) :: var      !< The scalar into which to read the data in arbitrary units [A ~> a]
   integer, optional, intent(in)    :: ncid_in  !< The netCDF ID of an open file.  If absent, the
                                                !! file is opened and closed within this routine
-  real,    optional, intent(in)    :: scale    !< A scaling factor that the variable is
-                                               !! multiplied by before it is returned
+  real,    optional, intent(in)    :: scale    !< A scaling factor that the variable is multiplied by
+                                               !! before it is returned to convert from the units in the file
+                                               !! to the internal units for this variable [A a-1 ~> 1]
 
   integer :: varid, ncid, rc
   character(len=256) :: hdr
@@ -907,11 +917,12 @@ end subroutine read_variable_0d
 subroutine read_variable_1d(filename, varname, var, ncid_in, scale)
   character(len=*),   intent(in)    :: filename !< The name of the file to read
   character(len=*),   intent(in)    :: varname  !< The variable name of the data in the file
-  real, dimension(:), intent(inout) :: var      !< The 1-d array into which to read the data
+  real, dimension(:), intent(inout) :: var      !< The 1-d array into which to read the data in arbitrary units [A ~> a]
   integer,  optional, intent(in)    :: ncid_in  !< The netCDF ID of an open file.  If absent, the
                                                 !! file is opened and closed within this routine
-  real,     optional, intent(in)    :: scale    !< A scaling factor that the variable is
-                                                !! multiplied by before it is returned
+  real,     optional, intent(in)    :: scale    !< A scaling factor that the variable is multiplied by
+                                                !! before it is returned to convert from the units in the file
+                                                !! to the internal units for this variable [A a-1 ~> 1]
 
   integer :: varid, ncid, rc
   character(len=256) :: hdr
@@ -1027,7 +1038,7 @@ end subroutine read_variable_1d_int
 subroutine read_variable_2d(filename, varname, var, start, nread, ncid_in)
   character(len=*), intent(in) :: filename  !< Name of file to be read
   character(len=*), intent(in) :: varname   !< Name of variable to be read
-  real, intent(out)            :: var(:,:)  !< Output array of variable
+  real, intent(out)            :: var(:,:)  !< Output array of variable [arbitrary]
   integer, optional, intent(in) :: start(:) !< Starting index on each axis.
   integer, optional, intent(in) :: nread(:) !< Number of values to be read along each axis
   integer, optional, intent(in) :: ncid_in  !< netCDF ID of an opened file.
@@ -1360,7 +1371,7 @@ end subroutine read_attribute_int64
 subroutine read_attribute_real(filename, attname, att_val, varname, found, all_read, ncid_in)
   character(len=*),           intent(in)  :: filename !< Name of the file to read
   character(len=*),           intent(in)  :: attname  !< Name of the attribute to read
-  real,                       intent(out) :: att_val  !< The value of the attribute
+  real,                       intent(out) :: att_val  !< The value of the attribute [arbitrary]
   character(len=*), optional, intent(in)  :: varname  !< The name of the variable whose attribute will
                                                       !! be read. If missing, read a global attribute.
   logical,          optional, intent(out) :: found    !< Returns true if the attribute is found
@@ -1604,6 +1615,7 @@ function var_desc(name, units, longname, hor_grid, z_grid, t_grid, cmor_field_na
   character(len=*), optional, intent(in) :: cmor_longname   !< CMOR long name
   real            , optional, intent(in) :: conversion      !< for unit conversions, such as needed to
                                                             !! convert from intensive to extensive
+                                                            !! [various] or [a A-1 ~> 1]
   character(len=*), optional, intent(in) :: caller          !< The calling routine for error messages
   integer,          optional, intent(in) :: position        !< A coded integer indicating the horizontal position
                                                             !! of this variable if it has such dimensions.
@@ -1656,6 +1668,7 @@ subroutine modify_vardesc(vd, name, units, longname, hor_grid, z_grid, t_grid, &
   real            , optional, intent(in)    :: conversion      !< A multiplicative factor for unit conversions,
                                                                !! such as needed to convert from intensive to
                                                                !! extensive or dimensional consistency testing
+                                                               !! [various] or [a A-1 ~> 1]
   character(len=*), optional, intent(in)    :: caller          !< The calling routine for error messages
   integer,          optional, intent(in)    :: position        !< A coded integer indicating the horizontal position
                                                                !! of this variable if it has such dimensions.
@@ -1741,7 +1754,7 @@ subroutine set_axis_info(axis, name, units, longname, ax_size, ax_data, cartesia
   character(len=*),   optional, intent(in)    :: units !< The units of the axis labels
   character(len=*),   optional, intent(in)    :: longname  !< Long name of the axis variable
   integer,            optional, intent(in)    :: ax_size !< The number of elements in this axis
-  real, dimension(:), optional, intent(in)    :: ax_data !< The values of the data on the axis
+  real, dimension(:), optional, intent(in)    :: ax_data !< The values of the data on the axis [arbitrary]
   character(len=*),   optional, intent(in)    :: cartesian !< A variable indicating which direction this axis
                                                        !! axis corresponds with. Valid values
                                                        !! include 'X', 'Y', 'Z', 'T', and 'N' (the default) for none.
@@ -1801,7 +1814,7 @@ subroutine get_axis_info(axis,name,longname,units,cartesian,ax_size,ax_data)
   character(len=*), intent(out), optional    :: cartesian           !< The cartesian attribute
                                                                     !! of the axis [X,Y,Z,T].
   integer,          intent(out), optional   :: ax_size              !< The size of the axis.
-  real, optional, allocatable, dimension(:), intent(out) :: ax_data !< The axis label data.
+  real, optional, allocatable, dimension(:), intent(out) :: ax_data !< The axis label data [arbitrary]
 
   if (present(ax_data)) then
     if (allocated(ax_data)) deallocate(ax_data)
@@ -1871,6 +1884,7 @@ subroutine query_vardesc(vd, name, units, longname, hor_grid, z_grid, t_grid, &
   character(len=*), optional, intent(out) :: cmor_longname      !< CMOR long name
   real            , optional, intent(out) :: conversion         !< for unit conversions, such as needed to
                                                                 !! convert from intensive to extensive
+                                                                !! [various] or [a A-1 ~> 1]
   character(len=*), optional, intent(in)  :: caller             !< calling routine?
   integer,          optional, intent(out) :: position        !< A coded integer indicating the horizontal position
                                                             !! of this variable if it has such dimensions.
@@ -1921,9 +1935,11 @@ subroutine MOM_read_data_0d(filename, fieldname, data, timelevel, scale, MOM_Dom
                             global_file, file_may_be_4d)
   character(len=*), intent(in)  :: filename     !< Input filename
   character(len=*), intent(in)  :: fieldname    !< Field variable name
-  real, intent(inout)           :: data         !< Field value
+  real, intent(inout)           :: data         !< Field value in arbitrary units [A ~> a]
   integer, optional, intent(in) :: timelevel    !< Time level to read in file
-  real, optional, intent(in)    :: scale        !< Rescale factor
+  real, optional, intent(in)    :: scale        !< A scaling factor that the variable is multiplied by
+                                                !! before it is returned to convert from the units in the file
+                                                !! to the internal units for this variable [A a-1 ~> 1]
   type(MOM_domain_type), optional, intent(in) :: MOM_Domain !< Model domain decomposition
   logical, optional, intent(in) :: global_file    !< If true, read from a single file
   logical, optional, intent(in) :: file_may_be_4d !< If true, fields may be stored
@@ -1952,9 +1968,11 @@ subroutine MOM_read_data_1d(filename, fieldname, data, timelevel, scale, MOM_Dom
                             global_file, file_may_be_4d)
   character(len=*), intent(in)  :: filename   !< Input filename
   character(len=*), intent(in)  :: fieldname  !< Field variable name
-  real, dimension(:), intent(inout) :: data   !< Field value
+  real, dimension(:), intent(inout) :: data   !< Field value in arbitrary units [A ~> a]
   integer, optional, intent(in) :: timelevel  !< Time level to read in file
-  real, optional, intent(in)    :: scale      !< Rescale factor
+  real, optional, intent(in)    :: scale      !< A scaling factor that the variable is multiplied by
+                                              !! before it is returned to convert from the units in the file
+                                              !! to the internal units for this variable [A a-1 ~> 1]
   type(MOM_domain_type), optional, intent(in) :: MOM_Domain !< Model domain decomposition
   logical, optional, intent(in) :: global_file    !< If true, read from a single file
   logical, optional, intent(in) :: file_may_be_4d !< If true, fields may be stored
@@ -1983,17 +2001,19 @@ subroutine MOM_read_data_2d(filename, fieldname, data, MOM_Domain, &
                             timelevel, position, scale, global_file, file_may_be_4d)
   character(len=*), intent(in)  :: filename  !< Input filename
   character(len=*), intent(in)  :: fieldname !< Field variable name
-  real, dimension(:,:), intent(inout) :: data   !< Field value
+  real, dimension(:,:), intent(inout) :: data   !< Field value in arbitrary units [A ~> a]
   type(MOM_domain_type), intent(in) :: MOM_Domain !< Model domain decomposition
   integer, optional, intent(in) :: timelevel !< Time level to read in file
   integer, optional, intent(in) :: position  !< Grid positioning flag
-  real, optional, intent(in)    :: scale     !< Rescale factor
+  real, optional, intent(in)    :: scale     !< A scaling factor that the variable is multiplied by
+                                             !! before it is returned to convert from the units in the file
+                                             !! to the internal units for this variable [A a-1 ~> 1]
   logical, optional, intent(in) :: global_file    !< If true, read from a single file
   logical, optional, intent(in) :: file_may_be_4d !< If true, fields may be stored
                                                   !! as 4d arrays in the file.
 
   integer :: turns    ! Number of quarter-turns from input to model grid
-  real, allocatable :: data_in(:,:)  ! Field array on the input grid
+  real, allocatable :: data_in(:,:)  ! Field array on the input grid in arbitrary units [A ~> a]
 
   turns = MOM_domain%turns
   if (turns == 0) then
@@ -2018,7 +2038,7 @@ subroutine MOM_read_data_2d_region(filename, fieldname, data, start, nread, MOM_
                                    no_domain, scale, turns)
   character(len=*), intent(in)  :: filename   !< Input filename
   character(len=*), intent(in)  :: fieldname  !< Field variable name
-  real, dimension(:,:), intent(inout) :: data !< Field value
+  real, dimension(:,:), intent(inout) :: data !< Field value in arbitrary units [A ~> a]
   integer, dimension(:), intent(in) :: start  !< Starting index for each axis.
                                               !! In 2d, start(3:4) must be 1.
   integer, dimension(:), intent(in) :: nread  !< Number of values to read along each axis.
@@ -2026,12 +2046,14 @@ subroutine MOM_read_data_2d_region(filename, fieldname, data, start, nread, MOM_
   type(MOM_domain_type), optional, intent(in) :: MOM_Domain !< Model domain decomposition
   logical, optional, intent(in) :: no_domain  !< If true, field does not use
                                               !! domain decomposion.
-  real, optional, intent(in)    :: scale      !< Rescale factor
+  real, optional, intent(in)    :: scale      !< A scaling factor that the variable is multiplied by
+                                              !! before it is returned to convert from the units in the file
+                                              !! to the internal units for this variable [A a-1 ~> 1]
   integer, optional, intent(in) :: turns      !< Number of quarter turns from
                                               !! input to model grid
 
   integer :: qturns                   ! Number of quarter turns
-  real, allocatable :: data_in(:,:)   ! Field array on the input grid
+  real, allocatable :: data_in(:,:)   ! Field array on the input grid in arbitrary units [A ~> a]
 
   qturns = 0
   if (present(turns)) qturns = modulo(turns, 4)
@@ -2056,17 +2078,19 @@ subroutine MOM_read_data_3d(filename, fieldname, data, MOM_Domain, &
                             timelevel, position, scale, global_file, file_may_be_4d)
   character(len=*), intent(in)  :: filename     !< Input filename
   character(len=*), intent(in)  :: fieldname    !< Field variable name
-  real, dimension(:,:,:), intent(inout) :: data !< Field value
+  real, dimension(:,:,:), intent(inout) :: data !< Field value in arbitrary units [A ~> a]
   type(MOM_domain_type), intent(in) :: MOM_Domain !< Model domain decomposition
   integer, optional, intent(in) :: timelevel    !< Time level to read in file
   integer, optional, intent(in) :: position     !< Grid positioning flag
-  real, optional, intent(in)    :: scale        !< Rescale factor
+  real, optional, intent(in)    :: scale        !< A scaling factor that the variable is multiplied by
+                                                !! before it is returned to convert from the units in the file
+                                                !! to the internal units for this variable [A a-1 ~> 1]
   logical, optional, intent(in) :: global_file  !< If true, read from a single file
   logical, optional, intent(in) :: file_may_be_4d !< If true, fields may be stored
                                                   !! as 4d arrays in the file.
 
   integer :: turns    ! Number of quarter-turns from input to model grid
-  real, allocatable :: data_in(:,:,:)  ! Field array on the input grid
+  real, allocatable :: data_in(:,:,:)  ! Field array on the input grid in arbitrary units [A ~> a]
 
   turns = MOM_domain%turns
   if (turns == 0) then
@@ -2091,15 +2115,17 @@ subroutine MOM_read_data_4d(filename, fieldname, data, MOM_Domain, &
                             timelevel, position, scale, global_file)
   character(len=*), intent(in) :: filename      !< Input filename
   character(len=*), intent(in) :: fieldname     !< Field variable name
-  real, dimension(:,:,:,:), intent(inout) :: data !< Field value
+  real, dimension(:,:,:,:), intent(inout) :: data !< Field value in arbitrary units [A ~> a]
   type(MOM_domain_type), intent(in) :: MOM_Domain !< Model domain decomposition
   integer, optional, intent(in) :: timelevel    !< Time level to read in file
   integer, optional, intent(in) :: position     !< Grid positioning flag
-  real, optional, intent(in)    :: scale        !< Rescale factor
+  real, optional, intent(in)    :: scale        !< A scaling factor that the variable is multiplied by
+                                                !! before it is returned to convert from the units in the file
+                                                !! to the internal units for this variable [A a-1 ~> 1]
   logical, optional, intent(in) :: global_file  !< If true, read from a single file
 
   integer :: turns    ! Number of quarter-turns from input to model grid
-  real, allocatable :: data_in(:,:,:,:)  ! Field array on the input grid
+  real, allocatable :: data_in(:,:,:,:)  ! Field array on the input grid in arbitrary units [A ~> a]
 
   turns = MOM_domain%turns
 
@@ -2127,16 +2153,18 @@ subroutine MOM_read_vector_2d(filename, u_fieldname, v_fieldname, u_data, v_data
   character(len=*), intent(in) :: filename      !< Input filename
   character(len=*), intent(in) :: u_fieldname   !< Field variable name in u
   character(len=*), intent(in) :: v_fieldname   !< Field variable name in v
-  real, dimension(:,:), intent(inout) :: u_data !< Field value in u
-  real, dimension(:,:), intent(inout) :: v_data !< Field value in v
+  real, dimension(:,:), intent(inout) :: u_data !< Field value at u points in arbitrary units [A ~> a]
+  real, dimension(:,:), intent(inout) :: v_data !< Field value at v points in arbitrary units  [A ~> a]
   type(MOM_domain_type), intent(in) :: MOM_Domain !< Model domain decomposition
   integer, optional, intent(in) :: timelevel    !< Time level to read in file
   integer, optional, intent(in) :: stagger      !< Grid staggering flag
   logical, optional, intent(in) :: scalar_pair  !< True if tuple is not a vector
-  real, optional, intent(in) :: scale           !< Rescale factor
+  real, optional, intent(in) :: scale           !< A scaling factor that the vector is multiplied by
+                                                !! before it is returned to convert from the units in the file
+                                                !! to the internal units for this variable [A a-1 ~> 1]
 
   integer :: turns  ! Number of quarter-turns from input to model grid
-  real, allocatable :: u_data_in(:,:), v_data_in(:,:)   ! [uv] on the input grid
+  real, allocatable :: u_data_in(:,:), v_data_in(:,:)   ! [uv] on the input grid in arbitrary units [A ~> a]
 
   turns = MOM_Domain%turns
   if (turns == 0) then
@@ -2168,16 +2196,18 @@ subroutine MOM_read_vector_3d(filename, u_fieldname, v_fieldname, u_data, v_data
   character(len=*), intent(in) :: filename      !< Input filename
   character(len=*), intent(in) :: u_fieldname   !< Field variable name in u
   character(len=*), intent(in) :: v_fieldname   !< Field variable name in v
-  real, dimension(:,:,:), intent(inout) :: u_data !< Field value in u
-  real, dimension(:,:,:), intent(inout) :: v_data !< Field value in v
+  real, dimension(:,:,:), intent(inout) :: u_data !< Field value in u in arbitrary units [A ~> a]
+  real, dimension(:,:,:), intent(inout) :: v_data !< Field value in v in arbitrary units [A ~> a]
   type(MOM_domain_type), intent(in) :: MOM_Domain !< Model domain decomposition
   integer, optional, intent(in) :: timelevel    !< Time level to read in file
   integer, optional, intent(in) :: stagger      !< Grid staggering flag
   logical, optional, intent(in) :: scalar_pair  !< True if tuple is not a vector
-  real, optional, intent(in) :: scale           !< Rescale factor
+  real, optional, intent(in) :: scale           !< A scaling factor that the vector is multiplied by
+                                                !! before it is returned to convert from the units in the file
+                                                !! to the internal units for this variable [A a-1 ~> 1]
 
   integer :: turns  ! Number of quarter-turns from input to model grid
-  real, allocatable :: u_data_in(:,:,:), v_data_in(:,:,:) ! [uv] on the input grid
+  real, allocatable :: u_data_in(:,:,:), v_data_in(:,:,:) ! [uv] on the input grid in arbitrary units [A ~> a]
 
   turns = MOM_Domain%turns
   if (turns == 0) then
@@ -2208,16 +2238,18 @@ subroutine MOM_write_field_legacy_4d(IO_handle, field_md, MOM_domain, field, tst
   type(file_type),          intent(inout) :: IO_handle  !< Handle for a file that is open for writing
   type(fieldtype),          intent(in)    :: field_md   !< Field type with metadata
   type(MOM_domain_type),    intent(in)    :: MOM_domain !< The MOM_Domain that describes the decomposition
-  real, dimension(:,:,:,:), intent(inout) :: field      !< Unrotated field to write
-  real,           optional, intent(in)    :: tstamp     !< Model timestamp
+  real, dimension(:,:,:,:), intent(inout) :: field      !< Unrotated field to write in arbitrary units [A ~> a]
+  real,           optional, intent(in)    :: tstamp     !< Model timestamp, often in [days]
   integer,        optional, intent(in)    :: tile_count !< PEs per tile (default: 1)
-  real,           optional, intent(in)    :: fill_value !< Missing data fill value
+  real,           optional, intent(in)    :: fill_value !< Missing data fill value in the units used in the file [a]
   integer,        optional, intent(in)    :: turns      !< Number of quarter-turns to rotate the data
-  real,           optional, intent(in)    :: scale      !< A scaling factor that the field is
-                                                        !! multiplied by before it is written
+  real,           optional, intent(in)    :: scale      !< A scaling factor that the field is multiplied by before
+                                                        !! it is written [a A-1 ~> 1], for example to convert it
+                                                        !! from its internal units to the desired units for output
 
-  real, allocatable :: field_rot(:,:,:,:)  ! A rotated version of field, with the same units or rescaled
-  real :: scale_fac ! A scaling factor to use before writing the array
+  real, allocatable :: field_rot(:,:,:,:)  ! A rotated version of field, with the same units [a] or
+                                           ! rescaled [A ~> a] then [a]
+  real :: scale_fac ! A scaling factor to use before writing the array [a A-1 ~> 1]
   integer :: qturns ! The number of quarter turns through which to rotate field
 
   qturns = 0 ; if (present(turns)) qturns = modulo(turns, 4)
@@ -2243,16 +2275,19 @@ subroutine MOM_write_field_legacy_3d(IO_handle, field_md, MOM_domain, field, tst
   type(file_type),        intent(inout) :: IO_handle  !< Handle for a file that is open for writing
   type(fieldtype),        intent(in)    :: field_md   !< Field type with metadata
   type(MOM_domain_type),  intent(in)    :: MOM_domain !< The MOM_Domain that describes the decomposition
-  real, dimension(:,:,:), intent(inout) :: field      !< Unrotated field to write
-  real,         optional, intent(in)    :: tstamp     !< Model timestamp
+  real, dimension(:,:,:), intent(inout) :: field      !< Unrotated field to write in arbitrary units [A ~> a]
+  real,         optional, intent(in)    :: tstamp     !< Model timestamp, often in [days]
   integer,      optional, intent(in)    :: tile_count !< PEs per tile (default: 1)
-  real,         optional, intent(in)    :: fill_value !< Missing data fill value
+  real,         optional, intent(in)    :: fill_value !< Missing data fill value in the units used in the file [a]
   integer,      optional, intent(in)    :: turns      !< Number of quarter-turns to rotate the data
-  real,         optional, intent(in)    :: scale      !< A scaling factor that the field is
-                                                      !! multiplied by before it is written
+  real,         optional, intent(in)    :: scale      !< A scaling factor that the field is multiplied by before
+                                                      !! it is written [a A-1 ~> 1], for example to convert it
+                                                      !! from its internal units to the desired units for output
 
-  real, allocatable :: field_rot(:,:,:)  ! A rotated version of field, with the same units or rescaled
-  real :: scale_fac ! A scaling factor to use before writing the array
+
+  real, allocatable :: field_rot(:,:,:)  ! A rotated version of field, with the same units [a] or
+                                         ! rescaled [A ~> a] then [a]
+  real :: scale_fac ! A scaling factor to use before writing the array [a A-1 ~> 1]
   integer :: qturns ! The number of quarter turns through which to rotate field
 
   qturns = 0 ; if (present(turns)) qturns = modulo(turns, 4)
@@ -2278,16 +2313,19 @@ subroutine MOM_write_field_legacy_2d(IO_handle, field_md, MOM_domain, field, tst
   type(file_type),        intent(inout) :: IO_handle  !< Handle for a file that is open for writing
   type(fieldtype),        intent(in)    :: field_md   !< Field type with metadata
   type(MOM_domain_type),  intent(in)    :: MOM_domain !< The MOM_Domain that describes the decomposition
-  real, dimension(:,:),   intent(inout) :: field      !< Unrotated field to write
-  real,         optional, intent(in)    :: tstamp     !< Model timestamp
+  real, dimension(:,:),   intent(inout) :: field      !< Unrotated field to write in arbitrary units [A ~> a]
+  real,         optional, intent(in)    :: tstamp     !< Model timestamp, often in [days]
   integer,      optional, intent(in)    :: tile_count !< PEs per tile (default: 1)
   real,         optional, intent(in)    :: fill_value !< Missing data fill value
   integer,      optional, intent(in)    :: turns      !< Number of quarter-turns to rotate the data
-  real,         optional, intent(in)    :: scale      !< A scaling factor that the field is
-                                                      !! multiplied by before it is written
+  real,         optional, intent(in)    :: scale      !< A scaling factor that the field is multiplied by before
+                                                      !! it is written [a A-1 ~> 1], for example to convert it
+                                                      !! from its internal units to the desired units for output
 
-  real, allocatable :: field_rot(:,:)  ! A rotated version of field, with the same units
-  real :: scale_fac ! A scaling factor to use before writing the array
+
+  real, allocatable :: field_rot(:,:)  ! A rotated version of field, with the same units [a] or
+                                       ! rescaled [A ~> a] then [a]
+  real :: scale_fac ! A scaling factor to use before writing the array [a A-1 ~> 1]
   integer :: qturns ! The number of quarter turns through which to rotate field
 
   qturns = 0 ; if (present(turns)) qturns = modulo(turns, 4)
@@ -2311,14 +2349,16 @@ end subroutine MOM_write_field_legacy_2d
 subroutine MOM_write_field_legacy_1d(IO_handle, field_md, field, tstamp, fill_value, scale)
   type(file_type),        intent(inout) :: IO_handle  !< Handle for a file that is open for writing
   type(fieldtype),        intent(in)    :: field_md   !< Field type with metadata
-  real, dimension(:),     intent(in)    :: field      !< Field to write
-  real,         optional, intent(in)    :: tstamp     !< Model timestamp
-  real,         optional, intent(in)    :: fill_value !< Missing data fill value
-  real,         optional, intent(in)    :: scale      !< A scaling factor that the field is
-                                                      !! multiplied by before it is written
+  real, dimension(:),     intent(in)    :: field      !< Field to write in arbitrary units [A ~> a]
+  real,         optional, intent(in)    :: tstamp     !< Model timestamp, often in [days]
+  real,         optional, intent(in)    :: fill_value !< Missing data fill value [a]
+  real,         optional, intent(in)    :: scale      !< A scaling factor that the field is multiplied by before
+                                                      !! it is written [a A-1 ~> 1], for example to convert it
+                                                      !! from its internal units to the desired units for output
 
-  real, dimension(:), allocatable :: array ! A rescaled copy of field
-  real :: scale_fac ! A scaling factor to use before writing the array
+
+  real, dimension(:), allocatable :: array ! A rescaled copy of field [a]
+  real :: scale_fac ! A scaling factor to use before writing the array [a A-1 ~> 1]
   integer :: i
 
   scale_fac = 1.0 ; if (present(scale)) scale_fac = scale
@@ -2341,12 +2381,14 @@ end subroutine MOM_write_field_legacy_1d
 subroutine MOM_write_field_legacy_0d(IO_handle, field_md, field, tstamp, fill_value, scale)
   type(file_type),        intent(inout) :: IO_handle  !< Handle for a file that is open for writing
   type(fieldtype),        intent(in)    :: field_md   !< Field type with metadata
-  real,                   intent(in)    :: field      !< Field to write
-  real,         optional, intent(in)    :: tstamp     !< Model timestamp
-  real,         optional, intent(in)    :: fill_value !< Missing data fill value
-  real,         optional, intent(in)    :: scale      !< A scaling factor that the field is
-                                                      !! multiplied by before it is written
-  real :: scaled_val ! A rescaled copy of field
+  real,                   intent(in)    :: field      !< Field to write in arbitrary units [A ~> a]
+  real,         optional, intent(in)    :: tstamp     !< Model timestamp, often in [days]
+  real,         optional, intent(in)    :: fill_value !< Missing data fill value [a]
+  real,         optional, intent(in)    :: scale      !< A scaling factor that the field is multiplied by before
+                                                      !! it is written [a A-1 ~> 1], for example to convert it
+                                                      !! from its internal units to the desired units for output
+
+  real :: scaled_val ! A rescaled copy of field [a]
 
   scaled_val = field
   if (present(scale)) scaled_val = scale*field
@@ -2673,9 +2715,9 @@ subroutine get_var_axes_info(filename, fieldname, axes_info)
   character(len=128)  :: dim_name(4)
   integer, dimension(1) :: start, count
   !! cartesian axis data
-  real, allocatable, dimension(:) :: x
-  real, allocatable, dimension(:) :: y
-  real, allocatable, dimension(:) :: z
+  real, allocatable, dimension(:) :: x ! x-axis labels, often [degrees_E] or [km] or [m]
+  real, allocatable, dimension(:) :: y ! y-axis labels, often [degrees_N] or [km] or [m]
+  real, allocatable, dimension(:) :: z ! vertical axis labels [various], often [m] or [kg m-3]
 
 
   call open_file_to_read(filename, ncid, success=success)
