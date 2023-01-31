@@ -33,22 +33,30 @@ interface horiz_interp_and_extrap_tracer
   module procedure horiz_interp_and_extrap_tracer_fms_id
 end interface
 
+! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
+! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
+! their mks counterparts with notation like "a velocity [Z T-1 ~> m s-1]".  If the units
+! vary with the Boussinesq approximation, the Boussinesq variant is given first.
+! The functions in this module work with variables with arbitrary units, in which case the
+! arbitrary rescaled units are indicated with [A ~> a], while the unscaled units are just [a].
+
 contains
 
 !> Write to the terminal some basic statistics about the k-th level of an array
 subroutine myStats(array, missing, is, ie, js, je, k, mesg, scale)
-  real, dimension(:,:), intent(in) :: array !< input array [A]
-  real,             intent(in) :: missing !< missing value [A]
+  real, dimension(:,:), intent(in) :: array !< input array in arbitrary units [A ~> a]
+  real,             intent(in) :: missing !< missing value in arbitrary units [A ~> a]
   integer,          intent(in) :: is   !< Start index in i
   integer,          intent(in) :: ie   !< End index in i
   integer,          intent(in) :: js   !< Start index in j
   integer,          intent(in) :: je   !< End index in j
   integer,          intent(in) :: k    !< Level to calculate statistics for
   character(len=*), intent(in) :: mesg !< Label to use in message
-  real,   optional, intent(in) :: scale !< A scaling factor for output.
+  real,   optional, intent(in) :: scale !< A scaling factor for output [a A-1 ~> 1]
   ! Local variables
-  real :: minA, maxA  ! Minimum and maximum vvalues in the array [A]
-  real :: scl  ! A factor for undoing any scaling of the array statistics for output.
+  real :: minA ! Minimum value in the array in the arbitrary units of the input array [A ~> a]
+  real :: maxA ! Maximum value in the array in the arbitrary units of the input array [A ~> a]
+  real :: scl  ! A factor for undoing any scaling of the array statistics for output [a A-1 ~> 1]
   integer :: i,j
   logical :: found
   character(len=120) :: lMesg
@@ -85,7 +93,7 @@ end subroutine myStats
 subroutine fill_miss_2d(aout, good, fill, prev, G, acrit, num_pass, relc, debug, answer_date)
   type(ocean_grid_type), intent(inout) :: G    !< The ocean's grid structure.
   real, dimension(SZI_(G),SZJ_(G)), &
-                         intent(inout) :: aout !< The array with missing values to fill [A]
+                         intent(inout) :: aout !< The array with missing values to fill [arbitrary]
   real, dimension(SZI_(G),SZJ_(G)), &
                          intent(in)    :: good !< Valid data mask for incoming array
                                                !! (1==good data; 0==missing data) [nondim].
@@ -93,9 +101,9 @@ subroutine fill_miss_2d(aout, good, fill, prev, G, acrit, num_pass, relc, debug,
                          intent(in)    :: fill !< Same shape array of points which need
                                                !! filling (1==fill;0==dont fill) [nondim]
   real, dimension(SZI_(G),SZJ_(G)), &
-                         intent(in)    :: prev !< First guess where isolated holes exist [A]
+                         intent(in)    :: prev !< First guess where isolated holes exist [arbitrary]
   real,                  intent(in)    :: acrit !< A minimal value for deltas between iterations that
-                                               !! determines when the smoothing has converged [A].
+                                               !! determines when the smoothing has converged [arbitrary].
   integer,     optional, intent(in)    :: num_pass !< The maximum number of iterations
   real,        optional, intent(in)    :: relc !< A relaxation coefficient for Laplacian [nondim]
   logical,     optional, intent(in)    :: debug !< If true, write verbose debugging messages.
@@ -104,13 +112,13 @@ subroutine fill_miss_2d(aout, good, fill, prev, G, acrit, num_pass, relc, debug,
                                                 !! as the code did in late 2018, while later versions
                                                 !! add parentheses for rotational symmetry.
 
-  real, dimension(SZI_(G),SZJ_(G)) :: a_filled ! The aout with missing values filled in [A]
-  real, dimension(SZI_(G),SZJ_(G)) :: a_chg    ! The change in aout due to an iteration of smoothing [A]
+  real, dimension(SZI_(G),SZJ_(G)) :: a_filled ! The aout with missing values filled in [arbitrary]
+  real, dimension(SZI_(G),SZJ_(G)) :: a_chg    ! The change in aout due to an iteration of smoothing [arbitrary]
   real, dimension(SZI_(G),SZJ_(G)) :: fill_pts ! 1 for points that still need to be filled [nondim]
   real, dimension(SZI_(G),SZJ_(G)) :: good_    ! The values that are valid for the current iteration [nondim]
   real, dimension(SZI_(G),SZJ_(G)) :: good_new ! The values of good_ to use for the next iteration [nondim]
 
-  real    :: east, west, north, south ! Valid neighboring values or 0 for invalid values [A]
+  real    :: east, west, north, south ! Valid neighboring values or 0 for invalid values [arbitrary]
   real    :: ge, gw, gn, gs  ! Flags indicating which neighbors have valid values [nondim]
   real    :: ngood     ! The number of valid values in neighboring points [nondim]
   real    :: nfill     ! The remaining number of points to fill [nondim]
@@ -262,7 +270,8 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam, recnum, G, tr
   type(ocean_grid_type), intent(inout) :: G          !< Grid object
   real, allocatable, dimension(:,:,:), intent(out) :: tr_z
                                                      !< Allocatable tracer array on the horizontal
-                                                     !! model grid and input-file vertical levels. [CU ~> conc]
+                                                     !! model grid and input-file vertical levels
+                                                     !! in arbitrary units [A ~> a]
   real, allocatable, dimension(:,:,:), intent(out) :: mask_z
                                                      !< Allocatable tracer mask array on the horizontal
                                                      !! model grid and input-file vertical levels [nondim]
@@ -272,9 +281,9 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam, recnum, G, tr
                                                      !< Cell grid edge values for input data [Z ~> m]
   real,                  intent(out)   :: missing_value !< The missing value in the returned array, scaled
                                                      !! to avoid accidentally having valid values match
-                                                     !! missing values [CU ~> conc]
+                                                     !! missing values in the same units as tr_z [A ~> a]
   real,                  intent(in)    :: scale      !< Scaling factor for tracer into the internal
-                                                     !! units of the model [CU conc-1 ~> 1]
+                                                     !! units of the model for the units in the file [A a-1 ~> 1]
   logical,     optional, intent(in)    :: homogenize !< If present and true, horizontally homogenize data
                                                      !! to produce perfectly "flat" initial conditions
   real,        optional, intent(in)    :: m_to_Z     !< A conversion factor from meters to the units
@@ -287,19 +296,21 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam, recnum, G, tr
                                                      !! extrapolation is performed by this routine
   real,        optional, intent(in)    :: tr_iter_tol !< The tolerance for changes in tracer concentrations
                                                      !! between smoothing iterations that determines when to
-                                                     !! stop iterating [CU ~> conc]
+                                                     !! stop iterating in the same units as tr_z [A ~> a]
   integer,     optional, intent(in)    :: answer_date !< The vintage of the expressions in the code.
                                                      !! Dates before 20190101 give the same  answers
                                                      !! as the code did in late 2018, while later versions
                                                      !! add parentheses for rotational symmetry.
 
   ! Local variables
+  ! In the following comments, [A] is used to indicate the arbitrary, possibly rescaled units of the
+  ! input array while [a] indicates the unscaled (e.g., mks) units that can be used with the reproducing sums
   real, dimension(:,:),  allocatable   :: tr_in      !< A 2-d array for holding input data on its
                                                      !! native horizontal grid, with units that change
-                                                     !! as the input data is interpreted [conc] then [CU ~> conc]
+                                                     !! as the input data is interpreted [a] then [A ~> a]
   real, dimension(:,:),  allocatable   :: tr_inp     !< Native horizontal grid data extended to the poles
                                                      !! with units that change as the input data is
-                                                     !! interpreted [conc] then [CU ~> conc]
+                                                     !! interpreted [a] then [A ~> a]
   real, dimension(:,:),  allocatable   :: mask_in    ! A 2-d mask for extended input grid [nondim]
 
   real :: PI_180  ! A conversion factor from degrees to radians
@@ -312,10 +323,10 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam, recnum, G, tr
   real, dimension(:), allocatable :: lat_in ! The latitudes in the input file [degreesN] then [radians]
   real, dimension(:), allocatable :: lat_inp ! The input file latitudes expanded to the pole [degreesN] then [radians]
   real :: max_lat   ! The maximum latitude on the input grid [degreesN]
-  real :: pole      ! The sum of tracer values at the pole [conc]
+  real :: pole      ! The sum of tracer values at the pole [a]
   real :: max_depth ! The maximum depth of the ocean [Z ~> m]
   real :: npole     ! The number of points contributing to the pole value [nondim]
-  real :: missing_val_in ! The missing value in the input field [conc]
+  real :: missing_val_in ! The missing value in the input field [a]
   real :: roundoff  ! The magnitude of roundoff, usually ~2e-16 [nondim]
   real :: add_offset, scale_factor  ! File-specific conversion factors.
   integer :: ans_date           ! The vintage of the expressions and order of arithmetic to use
@@ -329,17 +340,17 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam, recnum, G, tr
   integer :: isd, ied, jsd, jed ! data domain indices
   integer :: id_clock_read
   logical :: debug=.false.
-  real :: I_scale               ! The inverse of the scale factor for diagnostic output [conc CU-1 ~> 1]
+  real :: I_scale               ! The inverse of the scale factor for diagnostic output [a A-1 ~> 1]
   real :: dtr_iter_stop         ! The tolerance for changes in tracer concentrations between smoothing
-                                ! iterations that determines when to stop iterating [CU ~> conc]
+                                ! iterations that determines when to stop iterating [A ~> a]
   real, dimension(SZI_(G),SZJ_(G)) :: lon_out ! The longitude of points on the model grid [radians]
   real, dimension(SZI_(G),SZJ_(G)) :: lat_out ! The latitude of points on the model grid [radians]
-  real, dimension(SZI_(G),SZJ_(G)) :: tr_out  ! The tracer on the model grid [CU ~> conc]
+  real, dimension(SZI_(G),SZJ_(G)) :: tr_out  ! The tracer on the model grid [A ~> a]
   real, dimension(SZI_(G),SZJ_(G)) :: mask_out ! The mask on the model grid [nondim]
   real, dimension(SZI_(G),SZJ_(G)) :: good    ! Where the data is valid, this is 1 [nondim]
   real, dimension(SZI_(G),SZJ_(G)) :: fill    ! 1 where the data needs to be filled in [nondim]
-  real, dimension(SZI_(G),SZJ_(G)) :: tr_outf ! The tracer concentrations after Ice-9 [CU ~> conc]
-  real, dimension(SZI_(G),SZJ_(G)) :: tr_prev ! The tracer concentrations in the layer above [CU ~> conc]
+  real, dimension(SZI_(G),SZJ_(G)) :: tr_outf ! The tracer concentrations after Ice-9 [A ~> a]
+  real, dimension(SZI_(G),SZJ_(G)) :: tr_prev ! The tracer concentrations in the layer above [A ~> a]
   real, dimension(SZI_(G),SZJ_(G)) :: good2   ! 1 where the data is valid after Ice-9 [nondim]
   real, dimension(SZI_(G),SZJ_(G)) :: fill2   ! 1 for points that still need to be filled after Ice-9 [nondim]
 
@@ -597,7 +608,8 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id, Time, G, tr_z, mask_z, 
   type(ocean_grid_type), intent(inout) :: G          !< Grid object
   real, allocatable, dimension(:,:,:), intent(out) :: tr_z
                                                      !< Allocatable tracer array on the horizontal
-                                                     !! model grid and input-file vertical levels [CU ~> conc]
+                                                     !! model grid and input-file vertical levels
+                                                     !! in arbitrary units [A ~> a]
   real, allocatable, dimension(:,:,:), intent(out) :: mask_z
                                                      !< Allocatable tracer mask array on the horizontal
                                                      !! model grid and input-file vertical levels [nondim]
@@ -607,9 +619,9 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id, Time, G, tr_z, mask_z, 
                                                      !< Cell grid edge values for input data [Z ~> m]
   real,                  intent(out)   :: missing_value !< The missing value in the returned array, scaled
                                                      !! to avoid accidentally having valid values match
-                                                     !! missing values [CU ~> conc]
+                                                     !! missing values, in the same arbitrary units as tr_z [A ~> a]
   real,                  intent(in)    :: scale      !< Scaling factor for tracer into the internal
-                                                     !! units of the model [CU conc-1 ~> 1]
+                                                     !! units of the model [A a-1 ~> 1]
   logical,     optional, intent(in)    :: homogenize !< If present and true, horizontally homogenize data
                                                      !! to produce perfectly "flat" initial conditions
   logical,     optional, intent(in)    :: spongeOngrid !< If present and true, the sponge data are on the model grid
@@ -620,21 +632,23 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id, Time, G, tr_z, mask_z, 
                                                      !! add parentheses for rotational symmetry.
   real,        optional, intent(in)    :: tr_iter_tol !< The tolerance for changes in tracer concentrations
                                                      !! between smoothing iterations that determines when to
-                                                     !! stop iterating [CU ~> conc]
+                                                     !! stop iterating, in the same arbitrary units as tr_z [A ~> a]
   integer,     optional, intent(in)    :: answer_date !< The vintage of the expressions in the code.
                                                      !! Dates before 20190101 give the same  answers
                                                      !! as the code did in late 2018, while later versions
                                                      !! add parentheses for rotational symmetry.
 
   ! Local variables
+  ! In the following comments, [A] is used to indicate the arbitrary, possibly rescaled units of the
+  ! input array while [a] indicates the unscaled (e.g., mks) units that can be used with the reproducing sums
   real, dimension(:,:),  allocatable   :: tr_in      !< A 2-d array for holding input data on its
                                                      !! native horizontal grid, with units that change
-                                                     !! as the input data is interpreted [conc] then [CU ~> conc]
+                                                     !! as the input data is interpreted [a] then [A ~> a]
   real, dimension(:,:),  allocatable   :: tr_inp     !< Native horizontal grid data extended to the poles
                                                      !! with units that change as the input data is
-                                                     !! interpreted [conc] then [CU ~> conc]
+                                                     !! interpreted [a] then [A ~> a]
   real, dimension(:,:,:), allocatable  :: data_in    !< A buffer for storing the full 3-d time-interpolated array
-                                                     !! on the original grid [conc]
+                                                     !! on the original grid [a]
   real, dimension(:,:),  allocatable   :: mask_in    !< A 2-d mask for extended input grid [nondim]
 
   real :: PI_180  ! A conversion factor from degrees to radians
@@ -646,10 +660,10 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id, Time, G, tr_z, mask_z, 
   real, dimension(:), allocatable :: lat_in ! The latitudes in the input file [degreesN] then [radians]
   real, dimension(:), allocatable :: lat_inp ! The input file latitudes expanded to the pole [degreesN] then [radians]
   real :: max_lat   ! The maximum latitude on the input grid [degreesN]
-  real :: pole      ! The sum of tracer values at the pole [conc]
+  real :: pole      ! The sum of tracer values at the pole [a]
   real :: max_depth ! The maximum depth of the ocean [Z ~> m]
   real :: npole     ! The number of points contributing to the pole value [nondim]
-  real :: missing_val_in ! The missing value in the input field [conc]
+  real :: missing_val_in ! The missing value in the input field [a]
   real :: roundoff  ! The magnitude of roundoff, usually ~2e-16 [nondim]
   logical :: add_np
   type(horiz_interp_type) :: Interp
@@ -662,17 +676,17 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id, Time, G, tr_z, mask_z, 
   logical :: debug=.false.
   logical :: is_ongrid
   integer :: ans_date           ! The vintage of the expressions and order of arithmetic to use
-  real :: I_scale               ! The inverse of the scale factor for diagnostic output [conc CU-1 ~> 1]
+  real :: I_scale               ! The inverse of the scale factor for diagnostic output [a A-1 ~> 1]
   real :: dtr_iter_stop         ! The tolerance for changes in tracer concentrations between smoothing
-                                ! iterations that determines when to stop iterating [CU ~> conc]
+                                ! iterations that determines when to stop iterating [A ~> a]
   real, dimension(SZI_(G),SZJ_(G)) :: lon_out ! The longitude of points on the model grid [radians]
   real, dimension(SZI_(G),SZJ_(G)) :: lat_out ! The latitude of points on the model grid [radians]
-  real, dimension(SZI_(G),SZJ_(G)) :: tr_out  ! The tracer on the model grid [CU ~> conc]
+  real, dimension(SZI_(G),SZJ_(G)) :: tr_out  ! The tracer on the model grid [A ~> a]
   real, dimension(SZI_(G),SZJ_(G)) :: mask_out ! The mask on the model grid [nondim]
   real, dimension(SZI_(G),SZJ_(G)) :: good    ! Where the data is valid, this is 1 [nondim]
   real, dimension(SZI_(G),SZJ_(G)) :: fill    ! 1 where the data needs to be filled in [nondim]
-  real, dimension(SZI_(G),SZJ_(G)) :: tr_outf ! The tracer concentrations after Ice-9 [CU ~> conc]
-  real, dimension(SZI_(G),SZJ_(G)) :: tr_prev ! The tracer concentrations in the layer above [CU ~> conc]
+  real, dimension(SZI_(G),SZJ_(G)) :: tr_outf ! The tracer concentrations after Ice-9 [A ~> a]
+  real, dimension(SZI_(G),SZJ_(G)) :: tr_prev ! The tracer concentrations in the layer above [A ~> a]
   real, dimension(SZI_(G),SZJ_(G)) :: good2   ! 1 where the data is valid after Ice-9 [nondim]
   real, dimension(SZI_(G),SZJ_(G)) :: fill2   ! 1 for points that still need to be filled after Ice-9 [nondim]
   integer :: turns
@@ -900,8 +914,9 @@ end subroutine horiz_interp_and_extrap_tracer_fms_id
 !> Replace all values of a 2-d field with the weighted average over the valid points.
 subroutine homogenize_field(field, weight, G, scale, answer_date, wt_unscale)
   type(ocean_grid_type),            intent(inout) :: G      !< Ocean grid type
-  real, dimension(SZI_(G),SZJ_(G)), intent(inout) :: field  !< The tracer on the model grid [A ~> a]
-  real, dimension(SZI_(G),SZJ_(G)), intent(in)    :: weight !< The weights for the tracer [B ~> b]
+  real, dimension(SZI_(G),SZJ_(G)), intent(inout) :: field  !< The tracer on the model grid in arbitrary units [A ~> a]
+  real, dimension(SZI_(G),SZJ_(G)), intent(in)    :: weight !< The weights for the tracer in arbitrary units that
+                                                            !! typically differ from those used by field [B ~> b]
   real,                             intent(in)    :: scale  !< A rescaling factor that has been used for the
                                                             !! variable and has to be undone before the
                                                             !! reproducing sums [A a-1 ~> 1]
@@ -915,6 +930,9 @@ subroutine homogenize_field(field, weight, G, scale, answer_date, wt_unscale)
                                                             !! reproducing sums [b B-1 ~> 1]
 
   ! Local variables
+  ! In the following comments, [A] and [B] are used to indicate the arbitrary, possibly rescaled
+  ! units of the input field and the weighting array, while [a] and [b] indicate the corresponding
+  ! unscaled (e.g., mks) units that can be used with the reproducing sums
   real, dimension(SZI_(G),SZJ_(G)) :: field_for_Sums  ! The field times the weights with the scaling undone [a b]
   real, dimension(SZI_(G),SZJ_(G)) :: wts_for_Sums    ! A copy of the wieghts with the scaling undone [b]
   real :: var_unscale ! The reciprocal of the scaling factor for the field and weights [a b A-1 B-1 ~> 1]
@@ -974,10 +992,10 @@ end subroutine homogenize_field
 
 !> Create a 2d-mesh of grid coordinates from 1-d arrays.
 subroutine meshgrid(x, y, x_T, y_T)
-  real, dimension(:),                   intent(in)    :: x  !< input 1-dimensional vector
-  real, dimension(:),                   intent(in)    :: y  !< input 1-dimensional vector
-  real, dimension(size(x,1),size(y,1)), intent(inout) :: x_T !< output 2-dimensional array
-  real, dimension(size(x,1),size(y,1)), intent(inout) :: y_T !< output 2-dimensional array
+  real, dimension(:),                   intent(in)    :: x  !< input 1-dimensional vector [arbitrary]
+  real, dimension(:),                   intent(in)    :: y  !< input 1-dimensional vector [arbitrary]
+  real, dimension(size(x,1),size(y,1)), intent(inout) :: x_T !< output 2-dimensional array [arbitrary]
+  real, dimension(size(x,1),size(y,1)), intent(inout) :: y_T !< output 2-dimensional array [arbitrary]
 
   integer :: ni, nj, i, j
 
