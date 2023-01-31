@@ -406,8 +406,8 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
 
   if (CS%debug) then
     call MOM_state_chksum("Start predictor ", u, v, h, uh, vh, G, GV, US, symmetric=sym)
-    call check_redundant("Start predictor u ", u, v, G)
-    call check_redundant("Start predictor uh ", uh, vh, G)
+    call check_redundant("Start predictor u ", u, v, G, unscale=US%L_T_to_m_s)
+    call check_redundant("Start predictor uh ", uh, vh, G, unscale=GV%H_to_m*US%L_to_m**2*US%s_to_T)
   endif
 
   dyn_p_surf = associated(p_surf_begin) .and. associated(p_surf_end)
@@ -543,10 +543,10 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
     call MOM_accel_chksum("pre-btstep accel", CS%CAu_pred, CS%CAv_pred, CS%PFu, CS%PFv, &
                           CS%diffu, CS%diffv, G, GV, US, CS%pbce, u_bc_accel, v_bc_accel, &
                           symmetric=sym)
-    call check_redundant("pre-btstep CS%CA ", CS%CAu_pred, CS%CAv_pred, G)
-    call check_redundant("pre-btstep CS%PF ", CS%PFu, CS%PFv, G)
-    call check_redundant("pre-btstep CS%diff ", CS%diffu, CS%diffv, G)
-    call check_redundant("pre-btstep u_bc_accel ", u_bc_accel, v_bc_accel, G)
+    call check_redundant("pre-btstep CS%CA ", CS%CAu_pred, CS%CAv_pred, G, unscale=US%L_T2_to_m_s2)
+    call check_redundant("pre-btstep CS%PF ", CS%PFu, CS%PFv, G, unscale=US%L_T2_to_m_s2)
+    call check_redundant("pre-btstep CS%diff ", CS%diffu, CS%diffv, G, unscale=US%L_T2_to_m_s2)
+    call check_redundant("pre-btstep u_bc_accel ", u_bc_accel, v_bc_accel, G, unscale=US%L_T2_to_m_s2)
   endif
 
   call cpu_clock_begin(id_clock_vertvisc)
@@ -649,8 +649,8 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
              CS%diffu, CS%diffv, G, GV, US, CS%pbce, CS%u_accel_bt, CS%v_accel_bt, symmetric=sym)
     call MOM_state_chksum("Predictor 1 init", u, v, h, uh, vh, G, GV, US, haloshift=2, &
                           symmetric=sym)
-    call check_redundant("Predictor 1 up", up, vp, G)
-    call check_redundant("Predictor 1 uh", uh, vh, G)
+    call check_redundant("Predictor 1 up", up, vp, G, unscale=US%L_T_to_m_s)
+    call check_redundant("Predictor 1 uh", uh, vh, G, unscale=GV%H_to_m*US%L_to_m**2*US%s_to_T)
   endif
 
 ! up <- up + dt_pred d/dz visc d/dz up
@@ -778,8 +778,8 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
     call uvchksum("Predictor avg [uv]", u_av, v_av, G%HI, haloshift=1, symmetric=sym, scale=US%L_T_to_m_s)
     call hchksum(h_av, "Predictor avg h", G%HI, haloshift=0, scale=GV%H_to_m)
   ! call MOM_state_chksum("Predictor avg ", u_av, v_av, h_av, uh, vh, G, GV, US)
-    call check_redundant("Predictor up ", up, vp, G)
-    call check_redundant("Predictor uh ", uh, vh, G)
+    call check_redundant("Predictor up ", up, vp, G, unscale=US%L_T_to_m_s)
+    call check_redundant("Predictor uh ", uh, vh, G, unscale=GV%H_to_m*US%L_to_m**2*US%s_to_T)
   endif
 
 ! diffu = horizontal viscosity terms (u_av)
@@ -820,10 +820,10 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
     call MOM_accel_chksum("corr pre-btstep accel", CS%CAu, CS%CAv, CS%PFu, CS%PFv, &
                           CS%diffu, CS%diffv, G, GV, US, CS%pbce, u_bc_accel, v_bc_accel, &
                           symmetric=sym)
-    call check_redundant("corr pre-btstep CS%CA ", CS%CAu, CS%CAv, G)
-    call check_redundant("corr pre-btstep CS%PF ", CS%PFu, CS%PFv, G)
-    call check_redundant("corr pre-btstep CS%diff ", CS%diffu, CS%diffv, G)
-    call check_redundant("corr pre-btstep u_bc_accel ", u_bc_accel, v_bc_accel, G)
+    call check_redundant("corr pre-btstep CS%CA ", CS%CAu, CS%CAv, G, unscale=US%L_T2_to_m_s2)
+    call check_redundant("corr pre-btstep CS%PF ", CS%PFu, CS%PFv, G, unscale=US%L_T2_to_m_s2)
+    call check_redundant("corr pre-btstep CS%diff ", CS%diffu, CS%diffv, G, unscale=US%L_T2_to_m_s2)
+    call check_redundant("corr pre-btstep u_bc_accel ", u_bc_accel, v_bc_accel, G, unscale=US%L_T2_to_m_s2)
   endif
 
   ! u_accel_bt = layer accelerations due to barotropic solver
@@ -848,7 +848,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
   if (showCallTree) call callTree_leave("btstep()")
 
   if (CS%debug) then
-    call check_redundant("u_accel_bt ", CS%u_accel_bt, CS%v_accel_bt, G)
+    call check_redundant("u_accel_bt ", CS%u_accel_bt, CS%v_accel_bt, G, unscale=US%L_T2_to_m_s2)
   endif
 
   ! u = u + dt*( u_bc_accel + u_accel_bt )

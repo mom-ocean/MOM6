@@ -296,7 +296,7 @@ type, public :: MOM_control_struct ; private
   logical :: use_diabatic_time_bug   !< If true, uses the wrong calendar time for diabatic processes,
                                      !! as was done in MOM6 versions prior to February 2018.
   real :: dtbt_reset_period          !< The time interval between dynamic recalculation of the
-                                     !! barotropic time step [s]. If this is negative dtbt is never
+                                     !! barotropic time step [T ~> s]. If this is negative dtbt is never
                                      !! calculated, and if it is 0, dtbt is calculated every step.
   type(time_type) :: dtbt_reset_interval !< A time_time representation of dtbt_reset_period.
   type(time_type) :: dtbt_reset_time     !< The next time DTBT should be calculated.
@@ -730,9 +730,10 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
   if (CS%debug) then
     if (cycle_start) &
       call MOM_state_chksum("Before steps ", u, v, h, CS%uh, CS%vh, G, GV, US)
-    if (cycle_start) call check_redundant("Before steps ", u, v, G)
+    if (cycle_start) call check_redundant("Before steps ", u, v, G, unscale=US%L_T_to_m_s)
     if (do_dyn) call MOM_mech_forcing_chksum("Before steps", forces, G, US, haloshift=0)
-    if (do_dyn) call check_redundant("Before steps ", forces%taux, forces%tauy, G)
+    if (do_dyn) call check_redundant("Before steps ", forces%taux, forces%tauy, G, &
+                                     unscale=US%RZ_T_to_kg_m2s*US%L_T_to_m_s)
   endif
   call cpu_clock_end(id_clock_other)
 
@@ -1498,7 +1499,7 @@ subroutine step_MOM_thermo(CS, G, GV, US, u, v, h, tv, fluxes, dtdia, &
                     haloshift=0, scale=GV%H_to_m*US%L_to_m**2)
     ! call MOM_state_chksum("Pre-diabatic ", u, v, h, CS%uhtr, CS%vhtr, G, GV, vel_scale=1.0)
       call MOM_thermo_chksum("Pre-diabatic ", tv, G, US, haloshift=0)
-      call check_redundant("Pre-diabatic ", u, v, G)
+      call check_redundant("Pre-diabatic ", u, v, G, unscale=US%L_T_to_m_s)
       call MOM_forcing_chksum("Pre-diabatic", fluxes, G, US, haloshift=0)
     endif
 
@@ -1531,7 +1532,7 @@ subroutine step_MOM_thermo(CS, G, GV, US, u, v, h, tv, fluxes, dtdia, &
         call MOM_state_chksum("Pre-ALE ", u, v, h, CS%uh, CS%vh, G, GV, US)
         call hchksum(tv%T,"Pre-ALE T", G%HI, haloshift=1, scale=US%C_to_degC)
         call hchksum(tv%S,"Pre-ALE S", G%HI, haloshift=1, scale=US%S_to_ppt)
-        call check_redundant("Pre-ALE ", u, v, G)
+        call check_redundant("Pre-ALE ", u, v, G, unscale=US%L_T_to_m_s)
       endif
       call cpu_clock_begin(id_clock_ALE)
 
@@ -1586,7 +1587,7 @@ subroutine step_MOM_thermo(CS, G, GV, US, u, v, h, tv, fluxes, dtdia, &
       call MOM_state_chksum("Post-ALE ", u, v, h, CS%uh, CS%vh, G, GV, US)
       call hchksum(tv%T, "Post-ALE T", G%HI, haloshift=1, scale=US%C_to_degC)
       call hchksum(tv%S, "Post-ALE S", G%HI, haloshift=1, scale=US%S_to_ppt)
-      call check_redundant("Post-ALE ", u, v, G)
+      call check_redundant("Post-ALE ", u, v, G, unscale=US%L_T_to_m_s)
     endif
 
     ! Whenever thickness changes let the diag manager know, target grids
@@ -1611,7 +1612,7 @@ subroutine step_MOM_thermo(CS, G, GV, US, u, v, h, tv, fluxes, dtdia, &
       if (associated(tv%salt_deficit)) call hchksum(tv%salt_deficit, &
                                "Post-diabatic salt deficit", G%HI, haloshift=0, scale=US%RZ_to_kg_m2)
     ! call MOM_thermo_chksum("Post-diabatic ", tv, G, US)
-      call check_redundant("Post-diabatic ", u, v, G)
+      call check_redundant("Post-diabatic ", u, v, G, unscale=US%L_T_to_m_s)
     endif
     call disable_averaging(CS%diag)
 
@@ -2186,7 +2187,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
                  "only on information available at initialization.  If 0, "//&
                  "DTBT will be set every dynamics time step. The default "//&
                  "is set by DT_THERM.  This is only used if SPLIT is true.", &
-                 units="s", default=default_val, do_not_read=(dtbt > 0.0))
+                 units="s", default=default_val, scale=US%s_to_T, do_not_read=(dtbt > 0.0))
   endif
 
   call get_param(param_file, "MOM", "DT_OBC_SEG_UPDATE_OBGC", CS%dt_obc_seg_period, &
@@ -2988,7 +2989,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
               CS%OBC, CS%update_OBC_CSp, CS%ALE_CSp, CS%set_visc_CSp,        &
               CS%visc, dirs, CS%ntrunc, CS%pbv, calc_dtbt=calc_dtbt, cont_stencil=CS%cont_stencil)
     if (CS%dtbt_reset_period > 0.0) then
-      CS%dtbt_reset_interval = real_to_time(CS%dtbt_reset_period)
+      CS%dtbt_reset_interval = real_to_time(US%T_to_s*CS%dtbt_reset_period)
       ! Set dtbt_reset_time to be the next even multiple of dtbt_reset_interval.
       CS%dtbt_reset_time = Time_init + CS%dtbt_reset_interval * &
                                  ((Time - Time_init) / CS%dtbt_reset_interval)
