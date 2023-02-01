@@ -1101,10 +1101,6 @@ logical function MEKE_init(Time, G, US, param_file, diag, dbcomms_CS, CS, MEKE, 
                                                              !! otherwise in tracer dynamics
 
   ! Local variables
-  real    :: I_T_rescale   ! A rescaling factor for time from the internal representation in this
-                           ! run to the representation in a restart file, [nondim]?
-  real    :: L_rescale     ! A rescaling factor for length from the internal representation in this
-                           ! run to the representation in a restart file, [nondim]?
   real    :: MEKE_restoring_timescale ! The timescale used to nudge MEKE toward its equilibrium value [T ~> s]
   real :: cdrag            ! The default bottom drag coefficient [nondim].
   character(len=200) :: eke_filename, eke_varname, inputdir
@@ -1438,47 +1434,6 @@ logical function MEKE_init(Time, G, US, param_file, diag, dbcomms_CS, CS, MEKE, 
   if (coldStart) CS%initialize = .false.
   if (CS%initialize) call MOM_error(WARNING, &
                        "MEKE_init: Initializing MEKE with a local equilibrium balance.")
-
-  ! Account for possible changes in dimensional scaling for variables that have been
-  ! read from a restart file.
-  I_T_rescale = 1.0
-  if ((US%s_to_T_restart /= 0.0) .and. (US%s_to_T_restart /= 1.0)) &
-    I_T_rescale = US%s_to_T_restart
-  L_rescale = 1.0
-  if ((US%m_to_L_restart /= 0.0) .and. (US%m_to_L_restart /= 1.0)) &
-    L_rescale = 1.0 / US%m_to_L_restart
-
-  if (L_rescale*I_T_rescale /= 1.0) then
-    if (allocated(MEKE%MEKE)) then ; if (query_initialized(MEKE%MEKE, "MEKE_MEKE", restart_CS)) then
-      do j=js,je ; do i=is,ie
-        MEKE%MEKE(i,j) = (L_rescale*I_T_rescale)**2 * MEKE%MEKE(i,j)
-      enddo ; enddo
-    endif ; endif
-  endif
-  if (L_rescale**2*I_T_rescale /= 1.0) then
-    if (allocated(MEKE%Kh)) then ; if (query_initialized(MEKE%Kh, "MEKE_Kh", restart_CS)) then
-      do j=js,je ; do i=is,ie
-        MEKE%Kh(i,j) = L_rescale**2*I_T_rescale * MEKE%Kh(i,j)
-      enddo ; enddo
-    endif ; endif
-    if (allocated(MEKE%Ku)) then ; if (query_initialized(MEKE%Ku, "MEKE_Ku", restart_CS)) then
-      do j=js,je ; do i=is,ie
-        MEKE%Ku(i,j) = L_rescale**2*I_T_rescale * MEKE%Ku(i,j)
-      enddo ; enddo
-    endif ; endif
-    if (allocated(MEKE%Kh_diff)) then ; if (query_initialized(MEKE%Kh, "MEKE_Kh_diff", restart_CS)) then
-      do j=js,je ; do i=is,ie
-        MEKE%Kh_diff(i,j) = L_rescale**2*I_T_rescale * MEKE%Kh_diff(i,j)
-      enddo ; enddo
-    endif ; endif
-  endif
-  if (L_rescale**4*I_T_rescale /= 1.0) then
-    if (allocated(MEKE%Au)) then ; if (query_initialized(MEKE%Au, "MEKE_Au", restart_CS)) then
-      do j=js,je ; do i=is,ie
-        MEKE%Au(i,j) = L_rescale**4*I_T_rescale * MEKE%Au(i,j)
-      enddo ; enddo
-    endif ; endif
-  endif
 
   ! Set up group passes.  In the case of a restart, these fields need a halo update now.
   if (allocated(MEKE%MEKE)) then

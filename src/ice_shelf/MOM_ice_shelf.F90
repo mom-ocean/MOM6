@@ -1222,12 +1222,6 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces_in,
                                           !! the ice-shelf state
   type(directories)  :: dirs
   type(dyn_horgrid_type), pointer :: dG => NULL()
-  real    :: Z_rescale  ! A rescaling factor for heights from the representation in
-                        ! a restart file to the internal representation in this run.
-  real    :: RZ_rescale ! A rescaling factor for mass loads from the representation in
-                        ! a restart file to the internal representation in this run.
-  real    :: L_rescale  ! A rescaling factor for horizontal lengths from the representation in
-                        ! a restart file to the internal representation in this run.
   real :: meltrate_conversion ! The conversion factor to use for in the melt rate diagnostic.
   real :: dz_ocean_min_float ! The minimum ocean thickness above which the ice shelf is considered
                         ! to be floating when CONST_SEA_LEVEL = True [Z ~> m].
@@ -1675,12 +1669,6 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces_in,
     endif
   endif
 
-  call register_restart_field(US%m_to_Z_restart, "m_to_Z", .false., CS%restart_CSp, &
-                              "Height unit conversion factor", "Z meter-1")
-  call register_restart_field(US%m_to_L_restart, "m_to_L", .false., CS%restart_CSp, &
-                              "Length unit conversion factor", "L meter-1")
-  call register_restart_field(US%kg_m3_to_R_restart, "kg_m3_to_R", .false., CS%restart_CSp, &
-                              "Density unit conversion factor", "R m3 kg-1")
   if (CS%active_shelf_dynamics) then
     call register_restart_field(ISS%hmask, "h_mask", .true., CS%restart_CSp, &
                                 "ice sheet/shelf thickness mask" ,"none")
@@ -1722,28 +1710,6 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces_in,
     ! This line calls a subroutine that reads the initial conditions from a restart file.
     call MOM_mesg("MOM_ice_shelf.F90, initialize_ice_shelf: Restoring ice shelf from file.")
     call restore_state(dirs%input_filename, dirs%restart_input_dir, Time, G, CS%restart_CSp)
-
-    if ((US%m_to_Z_restart /= 0.0) .and. (US%m_to_Z_restart /= 1.0)) then
-      Z_rescale = 1.0 / US%m_to_Z_restart
-      do j=G%jsc,G%jec ; do i=G%isc,G%iec
-        ISS%h_shelf(i,j) = Z_rescale * ISS%h_shelf(i,j)
-      enddo ; enddo
-    endif
-
-    if ((US%m_to_Z_restart*US%kg_m3_to_R_restart /= 0.0) .and. &
-        (US%m_to_Z_restart*US%kg_m3_to_R_restart /= 1.0)) then
-      RZ_rescale = 1.0 / (US%m_to_Z_restart * US%kg_m3_to_R_restart)
-      do j=G%jsc,G%jec ; do i=G%isc,G%iec
-        ISS%mass_shelf(i,j) = RZ_rescale * ISS%mass_shelf(i,j)
-      enddo ; enddo
-    endif
-
-    if ((US%m_to_L_restart /= 0.0) .and. (US%m_to_L_restart /= 1.0)) then
-      L_rescale = 1.0 / US%m_to_L_restart
-      do j=G%jsc,G%jec ; do i=G%isc,G%iec
-        ISS%area_shelf_h(i,j) = L_rescale**2 * ISS%area_shelf_h(i,j)
-      enddo ; enddo
-    endif
 
   endif ! .not. new_sim
 

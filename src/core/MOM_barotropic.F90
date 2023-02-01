@@ -4318,8 +4318,6 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, US, param_file, diag, CS, 
                                        ! drag piston velocity.
   character(len=80)  :: wave_drag_var  ! The wave drag piston velocity variable
                                        ! name in wave_drag_file.
-  real :: vel_rescale ! A rescaling factor for horizontal velocity from the representation in
-                      ! a restart file to the internal representation in this run.
   real :: mean_SL     ! The mean sea level that is used along with the bathymetry to estimate the
                       ! geometry when LINEARIZED_BT_CORIOLIS is true or BT_NONLIN_STRESS is false [Z ~> m].
   real :: det_de      ! The partial derivative due to self-attraction and loading of the reference
@@ -4788,8 +4786,6 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, US, param_file, diag, CS, 
   dtbt_tmp = -1.0
   if (query_initialized(CS%dtbt, "DTBT", restart_CS)) then
     dtbt_tmp = CS%dtbt
-    if ((US%s_to_T_restart /= 0.0) .and. (US%s_to_T_restart /= 1.0)) &
-      dtbt_tmp = (1.0 / US%s_to_T_restart) * CS%dtbt
   endif
 
   ! Estimate the maximum stable barotropic time step.
@@ -4948,11 +4944,6 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, US, param_file, diag, CS, 
     do k=1,nz ; do J=js-1,je ; do i=is,ie
       CS%vbtav(i,J) = CS%vbtav(i,J) + CS%frhatv(i,J,k) * v(i,J,k)
     enddo ; enddo ; enddo
-  elseif ((US%s_to_T_restart*US%m_to_L_restart /= 0.0) .and. &
-          (US%s_to_T_restart /= US%m_to_L_restart)) then
-    vel_rescale = US%s_to_T_restart / US%m_to_L_restart
-    do j=js,je ; do I=is-1,ie ; CS%ubtav(I,j) = vel_rescale * CS%ubtav(I,j) ; enddo ; enddo
-    do J=js-1,je ; do i=is,ie ; CS%vbtav(i,J) = vel_rescale * CS%vbtav(i,J) ; enddo ; enddo
   endif
 
   if (CS%gradual_BT_ICs) then
@@ -4960,11 +4951,6 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, US, param_file, diag, CS, 
         .NOT.query_initialized(CS%vbt_IC,"vbt_IC",restart_CS)) then
       do j=js,je ; do I=is-1,ie ; CS%ubt_IC(I,j) = CS%ubtav(I,j) ; enddo ; enddo
       do J=js-1,je ; do i=is,ie ; CS%vbt_IC(i,J) = CS%vbtav(i,J) ; enddo ; enddo
-    elseif ((US%s_to_T_restart*US%m_to_L_restart /= 0.0) .and. &
-            (US%s_to_T_restart /= US%m_to_L_restart)) then
-      vel_rescale = US%s_to_T_restart / US%m_to_L_restart
-      do j=js,je ; do I=is-1,ie ; CS%ubt_IC(I,j) = vel_rescale * CS%ubt_IC(I,j) ; enddo ; enddo
-      do J=js-1,je ; do i=is,ie ; CS%vbt_IC(i,J) = vel_rescale * CS%vbt_IC(i,J) ; enddo ; enddo
     endif
   endif
 !   Calculate other constants which are used for btstep.

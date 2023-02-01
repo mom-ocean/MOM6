@@ -12,7 +12,7 @@ implicit none ; private
 #include <MOM_memory.h>
 
 public verticalGridInit, verticalGridEnd
-public setVerticalGridAxes, fix_restart_scaling
+public setVerticalGridAxes
 public get_flux_units, get_thickness_units, get_tr_flux_units
 
 ! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
@@ -75,7 +75,7 @@ type, public :: verticalGrid_type
   real :: H_to_MKS      !< A constant that translates thickness units to its MKS unit
                         !! (m or kg m-2) based on GV%Boussinesq [m H-1 ~> 1] or [kg m-2 H-1 ~> 1]
 
-  real :: m_to_H_restart = 0.0 !< A copy of the m_to_H that is used in restart files.
+  real :: m_to_H_restart = 1.0 !< A copy of the m_to_H that is used in restart files.
 end type verticalGrid_type
 
 contains
@@ -186,20 +186,6 @@ subroutine verticalGridInit( param_file, GV, US )
   allocate( GV%Rlay(nk), source=0.0 )
 
 end subroutine verticalGridInit
-
-!> Set the scaling factors for restart files to the scaling factors for this run.
-subroutine fix_restart_scaling(GV, unscaled)
-  type(verticalGrid_type), intent(inout) :: GV   !< The ocean's vertical grid structure
-  logical,       optional, intent(in)    :: unscaled !< If true, set the restart factors as though the
-                                             !! model would be unscaled, which is appropriate if the
-                                             !! scaling is undone when writing a restart file.
-
-  GV%m_to_H_restart = GV%m_to_H
-  if (present(unscaled)) then ; if (unscaled) then
-    GV%m_to_H_restart = 1.0
-  endif ; endif
-
-end subroutine fix_restart_scaling
 
 !> Returns the model's thickness units, usually m or kg/m^2.
 function get_thickness_units(GV)

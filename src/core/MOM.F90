@@ -135,14 +135,12 @@ use MOM_tracer_flow_control,   only : call_tracer_register, tracer_flow_control_
 use MOM_tracer_flow_control,   only : tracer_flow_control_init, call_tracer_surface_state
 use MOM_tracer_flow_control,   only : tracer_flow_control_end, call_tracer_register_obc_segments
 use MOM_transcribe_grid,       only : copy_dyngrid_to_MOM_grid, copy_MOM_grid_to_dyngrid
-use MOM_unit_scaling,          only : unit_scale_type, unit_scaling_init
-use MOM_unit_scaling,          only : unit_scaling_end, fix_restart_unit_scaling
+use MOM_unit_scaling,          only : unit_scale_type, unit_scaling_init, unit_scaling_end
 use MOM_variables,             only : surface, allocate_surface_state, deallocate_surface_state
 use MOM_variables,             only : thermo_var_ptrs, vertvisc_type, porous_barrier_type
 use MOM_variables,             only : accel_diag_ptrs, cont_diag_ptrs, ocean_internal_state
 use MOM_variables,             only : rotate_surface_state
 use MOM_verticalGrid,          only : verticalGrid_type, verticalGridInit, verticalGridEnd
-use MOM_verticalGrid,          only : fix_restart_scaling
 use MOM_verticalGrid,          only : get_thickness_units, get_flux_units, get_tr_flux_units
 use MOM_wave_interface,        only : wave_parameters_CS, waves_end, waves_register_restarts
 use MOM_wave_interface,        only : Update_Stokes_Drift
@@ -1978,7 +1976,6 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   real :: conv2watt            ! A conversion factor from temperature fluxes to heat
                                ! fluxes [J m-2 H-1 C-1 ~> J m-3 degC-1 or J kg-1 degC-1]
   real :: conv2salt            ! A conversion factor for salt fluxes [m H-1 ~> 1] or [kg m-2 H-1 ~> 1]
-  real :: RL2_T2_rescale, Z_rescale, QRZ_rescale ! Unit conversion factors
   character(len=48) :: S_flux_units
 
   type(vardesc) :: vd_T, vd_S  ! Structures describing temperature and salinity variables.
@@ -3117,16 +3114,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   call register_obsolete_diagnostics(param_file, CS%diag)
 
   if (use_frazil) then
-    if (query_initialized(CS%tv%frazil, "frazil", restart_CSp)) then
-      ! Test whether the dimensional rescaling has changed for heat content.
-      if ((US%J_kg_to_Q_restart*US%kg_m3_to_R_restart*US%m_to_Z_restart /= 0.0) .and. &
-          (US%J_kg_to_Q_restart*US%kg_m3_to_R_restart*US%m_to_Z_restart /= 1.0) ) then
-        QRZ_rescale = 1.0 / (US%J_kg_to_Q_restart*US%kg_m3_to_R_restart*US%m_to_Z_restart)
-        do j=js,je ; do i=is,ie
-          CS%tv%frazil(i,j) = QRZ_rescale * CS%tv%frazil(i,j)
-        enddo ; enddo
-      endif
-    else
+    if (.not.query_initialized(CS%tv%frazil, "frazil", restart_CSp)) then
       CS%tv%frazil(:,:) = 0.0
       call set_initialized(CS%tv%frazil, "frazil", restart_CSp)
     endif
@@ -3136,39 +3124,11 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
     CS%p_surf_prev_set = query_initialized(CS%p_surf_prev, "p_surf_prev", restart_CSp)
 
     if (CS%p_surf_prev_set) then
-      ! Test whether the dimensional rescaling has changed for pressure.
-      if ((US%kg_m3_to_R_restart*US%s_to_T_restart*US%m_to_L_restart /= 0.0) .and. &
-          (US%s_to_T_restart**2 /= US%kg_m3_to_R_restart * US%m_to_L_restart**2) ) then
-        RL2_T2_rescale = US%s_to_T_restart**2 / (US%kg_m3_to_R_restart*US%m_to_L_restart**2)
-        do j=js,je ; do i=is,ie
-          CS%p_surf_prev(i,j) = RL2_T2_rescale * CS%p_surf_prev(i,j)
-        enddo ; enddo
-      endif
-
       call pass_var(CS%p_surf_prev, G%domain)
     endif
   endif
 
-  if (use_ice_shelf .and. associated(CS%Hml)) then
-    if (query_initialized(CS%Hml, "hML", restart_CSp)) then
-      ! Test whether the dimensional rescaling has changed for depths.
-      if ((US%m_to_Z_restart /= 0.0) .and. (US%m_to_Z_restart /= 1.0) ) then
-        Z_rescale = 1.0 / US%m_to_Z_restart
-        do j=js,je ; do i=is,ie
-          CS%Hml(i,j) = Z_rescale * CS%Hml(i,j)
-        enddo ; enddo
-      endif
-    endif
-  endif
-
-  if (query_initialized(CS%ave_ssh_ibc, "ave_ssh", restart_CSp)) then
-    if ((US%m_to_Z_restart /= 0.0) .and. (US%m_to_Z_restart /= 1.0) ) then
-      Z_rescale = 1.0 / US%m_to_Z_restart
-      do j=js,je ; do i=is,ie
-        CS%ave_ssh_ibc(i,j) = Z_rescale * CS%ave_ssh_ibc(i,j)
-      enddo ; enddo
-    endif
-  else
+  if (.not.query_initialized(CS%ave_ssh_ibc, "ave_ssh", restart_CSp)) then
     if (CS%split) then
       call find_eta(CS%h, CS%tv, G, GV, US, CS%ave_ssh_ibc, eta, dZref=G%Z_ref)
     else
@@ -3194,10 +3154,6 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
 
   ! initialize stochastic physics
   call stochastics_init(CS%dt_therm, CS%G, CS%GV, CS%stoch_CS, param_file, diag, Time)
-
-  !### This could perhaps go here instead of in finish_MOM_initialization?
-  ! call fix_restart_scaling(GV)
-  ! call fix_restart_unit_scaling(US)
 
   call callTree_leave("initialize_MOM()")
   call cpu_clock_end(id_clock_init)
@@ -3225,11 +3181,6 @@ subroutine finish_MOM_initialization(Time, dirs, CS, restart_CSp)
 
   ! Pointers for convenience
   G => CS%G ; GV => CS%GV ; US => CS%US
-
-  !### Move to initialize_MOM?
-  call fix_restart_scaling(GV, unscaled=.true.)
-  call fix_restart_unit_scaling(US, unscaled=.true.)
-
 
   if (CS%use_particles) then
     call particles_init(CS%particles, G, CS%Time, CS%dt_therm, CS%u, CS%v)
@@ -3382,18 +3333,6 @@ subroutine set_restart_fields(GV, US, param_file, CS, restart_CSp)
   endif
 
   ! Register scalar unit conversion factors.
-  call register_restart_field(US%m_to_Z_restart, "m_to_Z", .false., restart_CSp, &
-                              "Height unit conversion factor", "Z meter-1")
-  call register_restart_field(GV%m_to_H_restart, "m_to_H", .false., restart_CSp, &
-                              "Thickness unit conversion factor", "H meter-1")
-  call register_restart_field(US%m_to_L_restart, "m_to_L", .false., restart_CSp, &
-                              "Length unit conversion factor", "L meter-1")
-  call register_restart_field(US%s_to_T_restart, "s_to_T", .false., restart_CSp, &
-                              "Time unit conversion factor", "T second-1")
-  call register_restart_field(US%kg_m3_to_R_restart, "kg_m3_to_R", .false., restart_CSp, &
-                              "Density unit conversion factor", "R m3 kg-1")
-  call register_restart_field(US%J_kg_to_Q_restart, "J_kg_to_Q", .false., restart_CSp, &
-                              "Heat content unit conversion factor.", units="Q kg J-1")
   call register_restart_field(CS%first_dir_restart, "First_direction", .false., restart_CSp, &
                               "Indicator of the first direction in split calculations.", "nondim")
 

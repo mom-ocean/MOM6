@@ -55,12 +55,12 @@ type, public :: unit_scale_type
   real :: Pa_to_RL2_T2    !< Convert pressures from Pa to R L2 T-2                                [R L2 T-2 Pa-1 ~> 1]
   real :: Pa_to_RLZ_T2    !< Convert wind stresses from Pa to R L Z T-2                          [R L Z T-2 Pa-1 ~> 1]
 
-  ! These are used for changing scaling across restarts.
-  real :: m_to_Z_restart = 0.0 !< A copy of the m_to_Z that is used in restart files.
-  real :: m_to_L_restart = 0.0 !< A copy of the m_to_L that is used in restart files.
-  real :: s_to_T_restart = 0.0 !< A copy of the s_to_T that is used in restart files.
-  real :: kg_m3_to_R_restart = 0.0 !< A copy of the kg_m3_to_R that is used in restart files.
-  real :: J_kg_to_Q_restart = 0.0 !< A copy of the J_kg_to_Q that is used in restart files.
+  ! These are no longer used for changing scaling across restarts.
+  real :: m_to_Z_restart = 1.0 !< A copy of the m_to_Z that is used in restart files.
+  real :: m_to_L_restart = 1.0 !< A copy of the m_to_L that is used in restart files.
+  real :: s_to_T_restart = 1.0 !< A copy of the s_to_T that is used in restart files.
+  real :: kg_m3_to_R_restart = 1.0 !< A copy of the kg_m3_to_R that is used in restart files.
+  real :: J_kg_to_Q_restart = 1.0 !< A copy of the J_kg_to_Q that is used in restart files.
 end type unit_scale_type
 
 contains
@@ -233,11 +233,11 @@ subroutine fix_restart_unit_scaling(US, unscaled)
                                              !! model would be unscaled, which is appropriate if the
                                              !! scaling is undone when writing a restart file.
 
-  US%m_to_Z_restart = US%m_to_Z
-  US%m_to_L_restart = US%m_to_L
-  US%s_to_T_restart = US%s_to_T
-  US%kg_m3_to_R_restart = US%kg_m3_to_R
-  US%J_kg_to_Q_restart = US%J_kg_to_Q
+  US%m_to_Z_restart = 1.0 ! US%m_to_Z
+  US%m_to_L_restart = 1.0 ! US%m_to_L
+  US%s_to_T_restart = 1.0 ! US%s_to_T
+  US%kg_m3_to_R_restart = 1.0 ! US%kg_m3_to_R
+  US%J_kg_to_Q_restart = 1.0 ! US%J_kg_to_Q
 
   if (present(unscaled)) then ; if (unscaled) then
     US%m_to_Z_restart = 1.0

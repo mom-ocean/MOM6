@@ -155,8 +155,6 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
   character(len=200) :: config
   real :: H_rescale   ! A rescaling factor for thicknesses from the representation in
                       ! a restart file to the internal representation in this run [various units ~> 1]
-  real :: vel_rescale ! A rescaling factor for velocities from the representation in
-                      ! a restart file to the internal representation in this run [various units ~> 1]
   real :: dt          ! The baroclinic dynamics timestep for this run [T ~> s].
 
   logical :: from_Z_file, useALE
@@ -528,16 +526,6 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
       if (verify_restart_time .and. (Time /= Time_in)) call MOM_error(FATAL, &
         "MOM6 attempted to restart from a file from a different time than given by Time_in.")
       Time = Time_in
-    endif
-    if ((GV%m_to_H_restart /= 0.0) .and. (GV%m_to_H_restart /= 1.0)) then
-      H_rescale = 1.0 / GV%m_to_H_restart
-      do k=1,nz ; do j=js,je ; do i=is,ie ; h(i,j,k) = H_rescale * h(i,j,k) ; enddo ; enddo ; enddo
-    endif
-    if ( (US%s_to_T_restart * US%m_to_L_restart /= 0.0) .and. &
-         (US%s_to_T_restart /= US%m_to_L_restart) ) then
-      vel_rescale = US%s_to_T_restart /  US%m_to_L_restart
-      do k=1,nz ; do j=jsd,jed ; do I=IsdB,IeDB ; u(I,j,k) = vel_rescale * u(I,j,k) ; enddo ; enddo ; enddo
-      do k=1,nz ; do J=JsdB,JedB ; do i=isd,ied ; v(i,J,k) = vel_rescale * v(i,J,k) ; enddo ; enddo ; enddo
     endif
   endif
 

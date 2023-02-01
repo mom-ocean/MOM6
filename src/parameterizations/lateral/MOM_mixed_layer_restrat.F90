@@ -849,8 +849,6 @@ logical function mixedlayer_restrat_init(Time, G, GV, US, param_file, diag, CS, 
   type(MOM_restart_CS),        intent(in)    :: restart_CS !< MOM restart control structure
 
   ! Local variables
-  real :: H_rescale  ! A rescaling factor for thicknesses from the representation in
-                     ! a restart file to the internal representation in this run [nondim]?
   real :: flux_to_kg_per_s ! A unit conversion factor for fluxes. [kg T s-1 H-1 L-2 ~> kg m-3 or 1]
   real :: omega            ! The Earth's rotation rate [T-1 ~> s-1].
   real :: ustar_min_dflt   ! The default value for RESTRAT_USTAR_MIN [Z T-1 ~> m s-1]
@@ -992,26 +990,6 @@ logical function mixedlayer_restrat_init(Time, G, GV, US, param_file, diag, CS, 
   CS%id_vml = register_diag_field('ocean_model', 'vml_restrat', diag%axesCv1, Time, &
       'Surface meridional velocity component of mixed layer restratification', &
       'm s-1', conversion=US%L_T_to_m_s)
-
-  ! Rescale variables from restart files if the internal dimensional scalings have changed.
-  if (CS%MLE_MLD_decay_time>0. .or. CS%MLE_MLD_decay_time2>0.) then
-    if (query_initialized(CS%MLD_filtered, "MLD_MLE_filtered", restart_CS) .and. &
-        (GV%m_to_H_restart /= 0.0) .and. (GV%m_to_H_restart /= 1.0)) then
-      H_rescale = 1.0 / GV%m_to_H_restart
-      do j=G%jsc,G%jec ; do i=G%isc,G%iec
-        CS%MLD_filtered(i,j) = H_rescale * CS%MLD_filtered(i,j)
-      enddo ; enddo
-    endif
-  endif
-  if (CS%MLE_MLD_decay_time2>0.) then
-    if (query_initialized(CS%MLD_filtered_slow, "MLD_MLE_filtered_slow", restart_CS) .and. &
-        (GV%m_to_H_restart /= 0.0) .and. (GV%m_to_H_restart /= 1.0)) then
-      H_rescale = 1.0 / GV%m_to_H_restart
-      do j=G%jsc,G%jec ; do i=G%isc,G%iec
-        CS%MLD_filtered_slow(i,j) = H_rescale * CS%MLD_filtered_slow(i,j)
-      enddo ; enddo
-    endif
-  endif
 
   ! If MLD_filtered is being used, we need to update halo regions after a restart
   if (allocated(CS%MLD_filtered)) call pass_var(CS%MLD_filtered, G%domain)

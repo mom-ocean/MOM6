@@ -1246,14 +1246,6 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, US, param
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
   character(len=48) :: thickness_units, flux_units, eta_rest_name
-  real :: H_rescale  ! A rescaling factor for thicknesses from the representation in a
-                     ! restart file to the internal representation in this run  [various units ~> 1]
-  real :: vel_rescale ! A rescaling factor for velocities from the representation in a
-                     ! restart file to the internal representation in this run  [various units ~> 1]
-  real :: uH_rescale ! A rescaling factor for thickness transports from the representation in a
-                     ! restart file to the internal representation in this run  [various units ~> 1]
-  real :: accel_rescale ! A rescaling factor for accelerations from the representation in a
-                     ! restart file to the internal representation in this run  [various units ~> 1]
   type(group_pass_type) :: pass_av_h_uvh
   logical :: debug_truncations
   logical :: read_uv, read_h2
@@ -1410,9 +1402,6 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, US, param
       CS%eta(i,j) = CS%eta(i,j) + h(i,j,k)
     enddo ; enddo ; enddo
     call set_initialized(CS%eta, trim(eta_rest_name), restart_CS)
-  elseif ((GV%m_to_H_restart /= 0.0) .and. (GV%m_to_H_restart /= 1.0)) then
-    H_rescale = 1.0 / GV%m_to_H_restart
-    do j=js,je ; do i=is,ie ; CS%eta(i,j) = H_rescale * CS%eta(i,j) ; enddo ; enddo
   endif
   ! Copy eta into an output array.
   do j=js,je ; do i=is,ie ; eta(i,j) = CS%eta(i,j) ; enddo ; enddo
@@ -1427,17 +1416,6 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, US, param
                               OBC=CS%OBC, BT=CS%barotropic_CSp, TD=thickness_diffuse_CSp)
     call set_initialized(CS%diffu, "diffu", restart_CS)
     call set_initialized(CS%diffv, "diffv", restart_CS)
-  else
-    if ( (US%s_to_T_restart * US%m_to_L_restart /= 0.0) .and. &
-         (US%s_to_T_restart**2 /= US%m_to_L_restart) ) then
-      accel_rescale = US%s_to_T_restart**2 / US%m_to_L_restart
-      do k=1,nz ; do j=js,je ; do I=G%IscB,G%IecB
-        CS%diffu(I,j,k) = accel_rescale * CS%diffu(I,j,k)
-      enddo ; enddo ; enddo
-      do k=1,nz ; do J=G%JscB,G%JecB ; do i=is,ie
-        CS%diffv(i,J,k) = accel_rescale * CS%diffv(i,J,k)
-      enddo ; enddo ; enddo
-    endif
   endif
 
   if (.not. query_initialized(CS%u_av, "u2", restart_CS) .or. &
@@ -1446,11 +1424,6 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, US, param
     do k=1,nz ; do J=JsdB,JedB ; do i=isd,ied ; CS%v_av(i,J,k) = v(i,J,k) ; enddo ; enddo ; enddo
     call set_initialized(CS%u_av, "u2", restart_CS)
     call set_initialized(CS%v_av, "v2", restart_CS)
-  elseif ( (US%s_to_T_restart * US%m_to_L_restart /= 0.0) .and. &
-           (US%s_to_T_restart /= US%m_to_L_restart) ) then
-    vel_rescale = US%s_to_T_restart / US%m_to_L_restart
-    do k=1,nz ; do j=jsd,jed ; do I=IsdB,IedB ; CS%u_av(I,j,k) = vel_rescale * CS%u_av(I,j,k) ; enddo ; enddo ; enddo
-    do k=1,nz ; do J=JsdB,JedB ; do i=isd,ied ; CS%v_av(i,J,k) = vel_rescale * CS%v_av(i,J,k) ; enddo ; enddo ; enddo
   endif
 
   if (CS%store_CAu) then
@@ -1504,15 +1477,6 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, US, param
       if (.not. query_initialized(CS%h_av, "h2", restart_CS)) then
         CS%h_av(:,:,:) = h(:,:,:)
         call set_initialized(CS%h_av, "h2", restart_CS)
-      elseif ((GV%m_to_H_restart /= 0.0) .and. (GV%m_to_H_restart /= 1.0)) then
-        H_rescale = 1.0 / GV%m_to_H_restart
-        do k=1,nz ; do j=js,je ; do i=is,ie ; CS%h_av(i,j,k) = H_rescale * CS%h_av(i,j,k) ; enddo ; enddo ; enddo
-      endif
-      if ( (GV%m_to_H_restart * US%s_to_T_restart * US%m_to_L_restart /= 0.0) .and. &
-           (US%s_to_T_restart /= (GV%m_to_H_restart * US%m_to_L_restart**2)) ) then
-        uH_rescale = US%s_to_T_restart / (GV%m_to_H_restart * US%m_to_L_restart**2)
-        do k=1,nz ; do j=js,je ; do I=G%IscB,G%IecB ; uh(I,j,k) = uH_rescale * uh(I,j,k) ; enddo ; enddo ; enddo
-        do k=1,nz ; do J=G%JscB,G%JecB ; do i=is,ie ; vh(i,J,k) = uH_rescale * vh(i,J,k) ; enddo ; enddo ; enddo
       endif
     endif
   endif
