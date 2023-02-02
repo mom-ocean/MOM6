@@ -61,6 +61,7 @@ public :: field_exists, get_filename_appendix
 public :: fieldtype, field_size, get_field_atts
 public :: axistype, get_axis_data
 public :: MOM_read_data, MOM_read_vector, read_field_chksum
+public :: read_netCDF_data
 public :: slasher, write_version_number
 public :: io_infra_init, io_infra_end
 public :: stdout_if_root
@@ -107,6 +108,15 @@ interface MOM_read_vector
   module procedure MOM_read_vector_2d
   module procedure MOM_read_vector_3d
 end interface MOM_read_vector
+
+!> Read a field using native netCDF I/O
+!!
+!! This function is primarily used for unstructured data which may contain
+!! content that cannot be parsed by infrastructure I/O.
+interface read_netCDF_data
+  ! NOTE: Only 2D I/O is currently used; this should be expanded as needed.
+  module procedure read_netCDF_data_2d
+end interface read_netCDF_data
 
 !> Write a registered field to an output file, potentially with rotation
 interface MOM_write_field
@@ -2031,6 +2041,59 @@ subroutine MOM_read_data_2d(filename, fieldname, data, MOM_Domain, &
     deallocate(data_in)
   endif
 end subroutine MOM_read_data_2d
+
+
+!> Read a 2d array from file using native netCDF I/O.
+subroutine read_netCDF_data_2d(filename, fieldname, values, MOM_Domain, &
+                            timelevel, position, rescale)
+  character(len=*), intent(in) :: filename
+    !< Input filename
+  character(len=*), intent(in)  :: fieldname
+    !< Field variable name
+  real, intent(out) :: values(:,:)
+    !< Field value
+  type(MOM_domain_type), intent(in) :: MOM_Domain
+    !< Model domain decomposition
+  integer, optional, intent(in) :: timelevel
+    !< Time level to read in file
+  integer, optional, intent(in) :: position
+    !< Grid positioning flag
+  real, optional, intent(in) :: rescale
+    !< Rescale factor
+
+  integer :: turns
+    ! Number of quarter-turns from input to model grid
+  real, allocatable :: values_in(:,:)
+    ! Field array on the unrotated input grid
+  type(MOM_netcdf_file) :: handle
+    ! netCDF file handle
+
+  ! General-purpose IO will require the following arguments, but they are not
+  ! yet implemented, so we raise an error if they are present.
+
+  ! Fields are currently assumed on cell centers, and position is unsupported
+  if (present(position)) &
+    call MOM_error(FATAL, 'read_netCDF_data: position is not yet supported.')
+
+  ! Timelevels are not yet supported
+  if (present(timelevel)) &
+    call MOM_error(FATAL, 'read_netCDF_data: timelevel is not yet supported.')
+
+  call handle%open(filename, action=READONLY_FILE, MOM_domain=MOM_domain)
+  call handle%update()
+
+  turns = MOM_domain%turns
+  if (turns == 0) then
+    call handle%read(fieldname, values, rescale=rescale)
+  else
+    call allocate_rotated_array(values, [1,1], -turns, values_in)
+    call handle%read(fieldname, values_in, rescale=rescale)
+    call rotate_array(values_in, turns, values)
+    deallocate(values_in)
+  endif
+
+  call handle%close()
+end subroutine read_netCDF_data_2d
 
 
 !> Read a 2d region array from file using infrastructure I/O.

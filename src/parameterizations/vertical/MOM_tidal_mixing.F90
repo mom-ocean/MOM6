@@ -11,6 +11,7 @@ use MOM_file_parser,        only : openParameterBlock, closeParameterBlock
 use MOM_file_parser,        only : get_param, log_param, log_version, param_file_type
 use MOM_grid,               only : ocean_grid_type
 use MOM_io,                 only : slasher, MOM_read_data, field_size
+use MOM_io,                 only : read_netCDF_data
 use MOM_internal_tides,     only : int_tide_CS, get_lowmode_loss
 use MOM_remapping,          only : remapping_CS, initialize_remapping, remapping_core_h
 use MOM_string_functions,   only : uppercase, lowercase
@@ -504,7 +505,10 @@ logical function tidal_mixing_init(Time, G, GV, US, param_file, int_tide_CSp, di
       call get_param(param_file, mdl, "TIDEAMP_VARNAME", tideamp_var, &
                  "The name of the tidal amplitude variable in the input file.", &
                  default="tideamp")
-      call MOM_read_data(filename, tideamp_var, CS%tideamp, G%domain, scale=US%m_to_Z*US%T_to_s)
+      ! NOTE: There are certain cases where FMS is unable to read this file, so
+      ! we use read_netCDF_data in place of MOM_read_data.
+      call read_netCDF_data(filename, tideamp_var, CS%tideamp, G%domain, &
+          rescale=US%m_to_Z*US%T_to_s)
     endif
 
     call get_param(param_file, mdl, "H2_FILE", h2_file, &
@@ -516,7 +520,10 @@ logical function tidal_mixing_init(Time, G, GV, US, param_file, int_tide_CSp, di
     call get_param(param_file, mdl, "ROUGHNESS_VARNAME", rough_var, &
                  "The name in the input file of the squared sub-grid-scale "//&
                  "topographic roughness amplitude variable.", default="h2")
-    call MOM_read_data(filename, rough_var, CS%h2, G%domain, scale=US%m_to_Z**2)
+    ! NOTE: There are certain cases where FMS is unable to read this file, so
+    ! we use read_netCDF_data in place of MOM_read_data.
+    call read_netCDF_data(filename, rough_var, CS%h2, G%domain, &
+        rescale=US%m_to_Z**2)
 
     call get_param(param_file, mdl, "FRACTIONAL_ROUGHNESS_MAX", max_frac_rough, &
                  "The maximum topographic roughness amplitude as a fraction of the mean depth, "//&

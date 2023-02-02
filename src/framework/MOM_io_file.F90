@@ -15,6 +15,9 @@ use MOM_io_infra, only : write_field, write_metadata
 use MOM_io_infra, only : get_field_atts
 use MOM_io_infra, only : read_field_chksum
 
+use MOM_hor_index, only : hor_index_type
+use MOM_hor_index, only : hor_index_init
+
 use MOM_netcdf, only : netcdf_file_type
 use MOM_netcdf, only : netcdf_axis
 use MOM_netcdf, only : netcdf_field
@@ -28,6 +31,7 @@ use MOM_netcdf, only : write_netcdf_axis
 use MOM_netcdf, only : write_netcdf_attribute
 use MOM_netcdf, only : get_netcdf_size
 use MOM_netcdf, only : get_netcdf_fields
+use MOM_netcdf, only : read_netcdf_field
 
 use MOM_error_handler, only : MOM_error, FATAL
 use MOM_error_handler, only : is_root_PE
@@ -43,9 +47,9 @@ public :: MOM_field
 
 ! Internal types
 
-! NOTE: MOM_axis and MOM_field do not represent the actual axes and
-! fields stored in the file.  They are only very thin wrappers to the keys (as
-! strings) used to reference the associated object inside the MOM_file.
+! NOTE: MOM_axis and MOM_field do not contain the actual axes and fields stored
+! in the file.  They are very thin wrappers to the keys (as strings) used to
+! reference the associated object inside of the MOM_file.
 
 !> Handle for axis in MOM file
 type :: MOM_axis
@@ -316,6 +320,10 @@ type, extends(MOM_file) :: MOM_netcdf_file
   type(field_list_nc) :: fields
   !> True if the file has been opened
   logical :: is_open = .false.
+  !> True if I/O content is domain-decomposed
+  logical :: domain_decomposed = .false.
+  !> True if I/O content is domain-decomposed
+  type(hor_index_type) :: HI
 
   contains
 
@@ -356,6 +364,12 @@ type, extends(MOM_file) :: MOM_netcdf_file
   procedure :: get_field_atts => get_field_atts_nc
   !> Get checksum from a netCDF field
   procedure :: read_field_chksum => read_field_chksum_nc
+
+  ! NOTE: These are currently exclusive to netCDF I/O but could be generalized
+  !> Read the values of a netCDF field
+  procedure :: read => get_field_nc
+  !> Update the axes and fields descriptors of a MOM netCDF file
+  procedure :: update => update_file_contents_nc
 end type MOM_netcdf_file
 
 
@@ -1281,11 +1295,16 @@ subroutine open_file_nc(handle, filename, action, MOM_domain, threading, fileset
   integer, intent(in), optional :: threading
   integer, intent(in), optional :: fileset
 
-  if (.not. is_root_PE()) return
+  if (.not. present(MOM_domain) .and. .not. is_root_PE()) return
 
   call open_netcdf_file(handle%handle_nc, filename, action)
-
   handle%is_open = .true.
+
+  if (present(MOM_domain)) then
+    handle%domain_decomposed = .true.
+    call hor_index_init(MOM_domain, handle%HI)
+  endif
+
   call handle%axes%init()
   call handle%fields%init()
 end subroutine open_file_nc
@@ -1295,7 +1314,7 @@ end subroutine open_file_nc
 subroutine close_file_nc(handle)
   class(MOM_netcdf_file), intent(inout) :: handle
 
-  if (.not. is_root_PE()) return
+  if (.not. handle%domain_decomposed .and. .not. is_root_PE()) return
 
   handle%is_open = .false.
   call close_netcdf_file(handle%handle_nc)
@@ -1575,30 +1594,55 @@ subroutine get_file_info_nc(handle, ndim, nvar, ntime)
 end subroutine get_file_info_nc
 
 
-!> Return the field metadata associated with a MOM netCDF file
+!> Update the axes and fields descriptors of a MOM netCDF file
+subroutine update_file_contents_nc(handle)
+  class(MOM_netcdf_file), intent(inout) :: handle
+    !< Handle for a file that is open for I/O
+
+  type(netcdf_axis), allocatable :: axes_nc(:)
+    ! netCDF axis descriptors
+  type(netcdf_field), allocatable :: fields_nc(:)
+    ! netCDF field descriptors
+  integer :: i
+    ! Index counter
+
+  if (.not. handle%domain_decomposed .and. .not. is_root_PE()) return
+
+  call get_netcdf_fields(handle%handle_nc, axes_nc, fields_nc)
+
+  do i = 1, size(axes_nc)
+    call handle%axes%append(axes_nc(i), axes_nc(i)%label)
+  enddo
+
+  do i = 1, size(fields_nc)
+    call handle%fields%append(fields_nc(i), fields_nc(i)%label)
+  enddo
+end subroutine update_file_contents_nc
+
+
+!> Return the field descriptors of a MOM netCDF file
 subroutine get_file_fields_nc(handle, fields)
   class(MOM_netcdf_file), intent(inout) :: handle
     !< Handle for a file that is open for I/O
   type(MOM_field), intent(inout) :: fields(:)
     !< Field-type descriptions of all of the variables in a file.
 
-  type(netcdf_axis), allocatable :: axes_nc(:)
-  type(netcdf_field), allocatable :: fields_nc(:)
-  integer :: i
+  type(field_node_nc), pointer :: node => null()
+    ! Current field list node
+  integer :: n
+    ! Field counter
 
   if (.not. is_root_PE()) return
 
-  call get_netcdf_fields(handle%handle_nc, axes_nc, fields_nc)
-  if (size(fields) /= size(fields_nc)) &
-    call MOM_error(FATAL, 'Number of fields in file does not match field(:).')
+  ! Generate the manifest of axes and fields
+  call handle%update()
 
-  do i = 1, size(axes_nc)
-    call handle%axes%append(axes_nc(i), axes_nc(i)%label)
-  enddo
-
-  do i = 1, size(fields)
-    fields(i)%label = trim(fields_nc(i)%label)
-    call handle%fields%append(fields_nc(i), fields_nc(i)%label)
+  n = 0
+  node => handle%fields%head
+  do while (associated(node%next))
+    n = n + 1
+    fields(n)%label = trim(node%label)
+    node => node%next
   enddo
 end subroutine get_file_fields_nc
 
@@ -1635,6 +1679,87 @@ subroutine read_field_chksum_nc(handle, field, chksum, valid_chksum)
 
   call MOM_error(FATAL, 'read_field_chksum over netCDF is not yet implemented.')
 end subroutine read_field_chksum_nc
+
+
+!> Read the values of a netCDF field
+subroutine get_field_nc(handle, label, values, rescale)
+  class(MOM_netcdf_file), intent(in) :: handle
+    ! Handle of netCDF file to be read
+  character(len=*), intent(in) :: label
+    ! Field variable name
+  real, intent(out) :: values(:,:)
+    ! Field values read from file
+  real, optional, intent(in) :: rescale
+
+  logical :: data_domain
+    ! True if values matches the data domain size
+  logical :: compute_domain
+    ! True if values matches the compute domain size
+  type(netcdf_field) :: field_nc
+    ! netCDF field associated with label
+  integer :: isc, iec, jsc, jec
+    ! Index bounds of compute domain
+  integer :: isd, ied, jsd, jed
+    ! Index bounds of data domain
+  integer :: bounds(2,2)
+    ! Index bounds of domain
+  real, allocatable :: values_nc(:,:)
+    ! Local copy of field, used for data-decomposed I/O
+
+  isc = handle%HI%isc
+  iec = handle%HI%iec
+  jsc = handle%HI%jsc
+  jec = handle%HI%jec
+
+  isd = handle%HI%isd
+  ied = handle%HI%ied
+  jsd = handle%HI%jsd
+  jed = handle%HI%jed
+
+  data_domain = all(shape(values) == [ied-isd+1, jed-jsd+1])
+  compute_domain = all(shape(values) == [iec-isc+1, jec-jsc+1])
+
+  ! NOTE: Data on face and vertex points is not yet supported.  This is a
+  ! temporary check to detect such cases, but may be removed in the future.
+  if (.not. (compute_domain .or. data_domain)) &
+    call MOM_error(FATAL, 'get_field_nc: Only compute and data domains ' // &
+        'are currently supported.')
+
+  field_nc = handle%fields%get(label)
+
+  if (data_domain) then
+    allocate(values_nc(isc:iec,jsc:jec))
+    values(:,:) = 0.
+  endif
+
+  if (handle%domain_decomposed) then
+    bounds(1,:) = [isc, jsc] + [handle%HI%idg_offset, handle%HI%jdg_offset]
+    bounds(2,:) = [iec, jec] + [handle%HI%idg_offset, handle%HI%jdg_offset]
+    if (data_domain) then
+      call read_netcdf_field(handle%handle_nc, field_nc, values_nc, bounds=bounds)
+    else
+      call read_netcdf_field(handle%handle_nc, field_nc, values, bounds=bounds)
+    endif
+  else
+    if (data_domain) then
+      call read_netcdf_field(handle%handle_nc, field_nc, values_nc)
+    else
+      call read_netcdf_field(handle%handle_nc, field_nc, values)
+    endif
+  endif
+
+  if (data_domain) &
+    values(isc:iec,jsc:jec) = values_nc(:,:)
+
+  ! NOTE: It is more efficient to do the rescale in-place while copying
+  ! values_nc(:,:) to values(:,:).  But since rescale is only present for
+  ! debugging, we can probably disregard this impact on performance.
+  if (present(rescale)) then
+    if (rescale /= 1.0) then
+      values(isc:iec,jsc:jec) = rescale * values(isc:iec,jsc:jec)
+    endif
+  endif
+end subroutine get_field_nc
 
 
 !> \namespace MOM_IO_file

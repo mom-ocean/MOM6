@@ -30,6 +30,7 @@ use MOM_forcing_type,        only : allocate_mech_forcing, deallocate_mech_forci
 use MOM_grid,                only : ocean_grid_type
 use MOM_get_input,           only : Get_MOM_Input, directories
 use MOM_io,                  only : file_exists, MOM_read_data, MOM_read_vector, slasher
+use MOM_io,                  only : read_netCDF_data
 use MOM_io,                  only : EAST_FACE, NORTH_FACE, num_timelevels
 use MOM_restart,             only : register_restart_field, restart_init, MOM_restart_CS
 use MOM_restart,             only : restart_init_end, save_restart, restore_state
@@ -1866,8 +1867,10 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, tracer_flow_C
                  "variable gustiness.", fail_if_missing=.true.)
     call safe_alloc_ptr(CS%gust,G%isd,G%ied,G%jsd,G%jed)
     filename = trim(CS%inputdir) // trim(gust_file)
-    call MOM_read_data(filename,'gustiness',CS%gust,G%domain, timelevel=1, &
-                   scale=Pa_to_RLZ_T2) ! units in file should be Pa
+    ! NOTE: There are certain cases where FMS is unable to read this file, so
+    ! we use read_netCDF_data in place of MOM_read_data.
+    call read_netCDF_data(filename, 'gustiness', CS%gust, G%Domain, &
+        rescale=Pa_to_RLZ_T2) ! units in file should be Pa
   endif
 
 !  All parameter settings are now known.

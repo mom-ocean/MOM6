@@ -39,6 +39,7 @@ public :: write_netcdf_axis
 public :: write_netcdf_attribute
 public :: get_netcdf_size
 public :: get_netcdf_fields
+public :: read_netcdf_field
 
 
 !> Internal time value used to indicate an uninitialized time
@@ -143,7 +144,8 @@ subroutine open_netcdf_file(handle, filename, mode)
   handle%filename = filename
 
   ! FMS writes the filename as an attribute
-  call write_netcdf_attribute(handle, 'filename', filename)
+  if (any(io_mode == [WRITEONLY_FILE, OVERWRITE_FILE])) &
+    call write_netcdf_attribute(handle, 'filename', filename)
 end subroutine open_netcdf_file
 
 
@@ -606,13 +608,18 @@ end subroutine get_netcdf_size
 !> Get the metadata of the registered fields in a netCDF file
 subroutine get_netcdf_fields(handle, axes, fields)
   type(netcdf_file_type), intent(inout) :: handle
+    !< netCDF file handle
   type(netcdf_axis), intent(inout), allocatable :: axes(:)
+    !< netCDF file axes
   type(netcdf_field), intent(inout), allocatable :: fields(:)
+    !< netCDF file fields
 
   integer :: ndims
     ! Number of netCDF dimensions
   integer :: nvars
     ! Number of netCDF dimensions
+  type(netcdf_field), allocatable :: vars(:)
+    ! netCDF variables in handle
   integer :: nfields
     ! Number of fields in the file (i.e. non-axis variables)
   integer, allocatable :: dimids(:)
@@ -656,13 +663,13 @@ subroutine get_netcdf_fields(handle, axes, fields)
   allocate(varids(nvars))
   rc = nf90_inq_varids(handle%ncid, grp_nvars, varids)
   call check_netcdf_call(rc, 'get_netcdf_fields', &
-      'File "' // handle%filename // '"')
+      'File "' // trim(handle%filename) // '"')
 
   allocate(axes(ndims))
   do i = 1, ndims
     rc = nf90_inquire_dimension(handle%ncid, dimids(i), name=label, len=len)
     call check_netcdf_call(rc, 'get_netcdf_fields', &
-        'File "' // handle%filename // '"')
+        'File "' // trim(handle%filename) // '"')
 
     ! Check for the unlimited axis
     if (dimids(i) == unlim_dimid) unlim_index = i
@@ -672,14 +679,15 @@ subroutine get_netcdf_fields(handle, axes, fields)
     allocate(axes(i)%points(len))
   enddo
 
-  nfields = nvars - ndims
-  allocate(fields(nfields))
+  ! We cannot know if every axis also has a variable representation, so we
+  ! over-allocate vars(:) and fill as fields are identified.
+  allocate(vars(nvars))
 
-  n = 0
+  nfields = 0
   do i = 1, nvars
     rc = nf90_inquire_variable(handle%ncid, varids(i), name=label)
     call check_netcdf_call(rc, 'get_netcdf_fields', &
-        'File "' // handle%filename // '"')
+        'File "' // trim(handle%filename) // '"')
 
     ! Check if variable is an axis
     is_axis = .false.
@@ -687,7 +695,7 @@ subroutine get_netcdf_fields(handle, axes, fields)
       if (label == axes(j)%label) then
         rc = nf90_get_var(handle%ncid, varids(i), axes(j)%points)
         call check_netcdf_call(rc, 'get_netcdf_fields', &
-            'File "' // handle%filename // '"')
+            'File "' // trim(handle%filename) // '"')
         axes(j)%varid = varids(i)
 
         if (j == unlim_index) then
@@ -702,13 +710,43 @@ subroutine get_netcdf_fields(handle, axes, fields)
     enddo
     if (is_axis) cycle
 
-    n = n + 1
-    fields(n)%label = trim(label)
-    fields(n)%varid = varids(i)
+    nfields = nfields + 1
+    vars(nfields)%label = trim(label)
+    vars(nfields)%varid = varids(i)
   enddo
+
+  allocate(fields(nfields))
+  fields(:) = vars(:nfields)
 end subroutine get_netcdf_fields
 
 
+!> Read the values of a field from a netCDF file
+subroutine read_netcdf_field(handle, field, values, bounds)
+  type(netcdf_file_type), intent(in) :: handle
+  type(netcdf_field), intent(in) :: field
+  real, intent(out) :: values(:,:)
+  integer, optional, intent(in) :: bounds(2,2)
+
+  integer :: rc
+    ! netCDF return code
+  integer :: istart(2)
+    ! Axis start index
+  integer :: icount(2)
+    ! Axis index count
+
+  if (present(bounds)) then
+    istart(:) = bounds(1,:)
+    icount(:) = bounds(2,:) - bounds(1,:) + 1
+    rc = nf90_get_var(handle%ncid, field%varid, values, start=istart, count=icount)
+  else
+    rc = nf90_get_var(handle%ncid, field%varid, values)
+  endif
+  call check_netcdf_call(rc, 'read_netcdf_field', &
+      'File "' // trim(handle%filename) // '", Field "' // trim(field%label) // '"')
+end subroutine read_netcdf_field
+
+
+!> Set the current timestep of an open netCDF file
 subroutine update_netcdf_timestep(handle, time)
   type(netcdf_file_type), intent(inout) :: handle
     !< netCDF file handle
