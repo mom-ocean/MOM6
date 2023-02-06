@@ -2339,14 +2339,14 @@ subroutine vertvisc_init(MIS, Time, G, GV, US, param_file, diag, ADp, dirs, &
         call MOM_error(WARNING, "KVML is a deprecated parameter. Use KV_ML_INVZ2 instead.")
     endif
     if (CS%Kvml_invZ2 < 0.0) CS%Kvml_invZ2 = 0.0
-    call log_param(param_file, mdl, "KV_ML_INVZ2", US%Z2_T_to_m2_s*CS%Kvml_invZ2, &
+    call log_param(param_file, mdl, "KV_ML_INVZ2", CS%Kvml_invZ2, &
                  "An extra kinematic viscosity in a mixed layer of thickness HMIX_FIXED, "//&
                  "with the actual viscosity scaling as 1/(z*HMIX_FIXED)^2, where z is the "//&
                  "distance from the surface, to allow for finite wind stresses to be "//&
                  "transmitted through infinitesimally thin surface layers.  This is an "//&
                  "older option for numerical convenience without a strong physical basis, "//&
                  "and its use is now discouraged.", &
-                 units="m2 s-1", default=0.0)
+                 units="m2 s-1", default=0.0, unscale=US%Z2_T_to_m2_s)
   endif
 
   if (.not.CS%bottomdraglaw) then
@@ -2364,10 +2364,10 @@ subroutine vertvisc_init(MIS, Time, G, GV, US, param_file, diag, ADp, dirs, &
         CS%Kv_extra_bbl = Kv_BBL - CS%Kv
       endif
     endif
-    call log_param(param_file, mdl, "KV_EXTRA_BBL", US%Z2_T_to_m2_s*CS%Kv_extra_bbl, &
+    call log_param(param_file, mdl, "KV_EXTRA_BBL", CS%Kv_extra_bbl, &
                  "An extra kinematic viscosity in the benthic boundary layer. "//&
                  "KV_EXTRA_BBL is not used if BOTTOMDRAGLAW is true.", &
-                 units="m2 s-1", default=0.0)
+                 units="m2 s-1", default=0.0, unscale=US%Z2_T_to_m2_s)
   endif
   call get_param(param_file, mdl, "HBBL", CS%Hbbl, &
                  "The thickness of a bottom boundary layer with a viscosity increased by "//&

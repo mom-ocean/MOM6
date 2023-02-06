@@ -244,12 +244,13 @@ subroutine MOM_initialize_topography(D, max_depth, G, PF, US)
       "Unrecognized topography setup '"//trim(config)//"'")
   end select
   if (max_depth>0.) then
-    call log_param(PF, mdl, "MAXIMUM_DEPTH", max_depth*US%Z_to_m, &
-                   "The maximum depth of the ocean.", units="m")
+    call log_param(PF, mdl, "MAXIMUM_DEPTH", max_depth, &
+                   "The maximum depth of the ocean.", units="m", unscale=US%Z_to_m)
   else
     max_depth = diagnoseMaximumDepth(D,G)
-    call log_param(PF, mdl, "!MAXIMUM_DEPTH", max_depth*US%Z_to_m, &
-                   "The (diagnosed) maximum depth of the ocean.", units="m", like_default=.true.)
+    call log_param(PF, mdl, "!MAXIMUM_DEPTH", max_depth, &
+                   "The (diagnosed) maximum depth of the ocean.", &
+                   units="m", unscale=US%Z_to_m, like_default=.true.)
   endif
   if (trim(config) /= "DOME") then
     call limit_topography(D, G, PF, max_depth, US)

@@ -4804,8 +4804,8 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, US, param_file, diag, CS, 
   endif
   if ((dtbt_tmp > 0.0) .and. (dtbt_input > 0.0)) calc_dtbt = .false.
 
-  call log_param(param_file, mdl, "DTBT as used", CS%dtbt*US%T_to_s, units="s")
-  call log_param(param_file, mdl, "estimated maximum DTBT", CS%dtbt_max*US%T_to_s, units="s")
+  call log_param(param_file, mdl, "DTBT as used", CS%dtbt, units="s", unscale=US%T_to_s)
+  call log_param(param_file, mdl, "estimated maximum DTBT", CS%dtbt_max, units="s", unscale=US%T_to_s)
 
   ! ubtav and vbtav, and perhaps ubt_IC and vbt_IC, are allocated and
   ! initialized in register_barotropic_restarts.

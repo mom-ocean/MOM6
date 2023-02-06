@@ -176,11 +176,11 @@ subroutine bkgnd_mixing_init(Time, G, GV, US, param_file, diag, CS, physical_OBL
       if (abs(CS%Kd_tot_ml - CS%Kd) > 1.0e-15*abs(CS%Kd)) &
         call MOM_error(WARNING, "KDML is a depricated parameter. Use KD_ML_TOT instead.")
     endif
-    call log_param(param_file, mdl, "KD_ML_TOT", CS%Kd_tot_ml*US%Z2_T_to_m2_s, &
+    call log_param(param_file, mdl, "KD_ML_TOT", CS%Kd_tot_ml, &
                  "The total diapcynal diffusivity in the surface mixed layer when there is "//&
                  "not a physically based parameterization of mixing in the mixed layer, such "//&
                  "as bulk mixed layer or KPP or ePBL.", &
-                 units="m2 s-1", default=CS%Kd*US%Z2_T_to_m2_s)
+                 units="m2 s-1", default=CS%Kd*US%Z2_T_to_m2_s, unscale=US%Z2_T_to_m2_s)
 
     call get_param(param_file, mdl, "HMIX_FIXED", CS%Hmix, &
                  "The prescribed depth over which the near-surface "//&
