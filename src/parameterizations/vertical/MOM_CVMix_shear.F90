@@ -318,7 +318,7 @@ logical function CVMix_shear_init(Time, G, GV, US, param_file, diag, CS)
 
 end function CVMix_shear_init
 
-!> Reads the parameters "LMD94" and "PP81" and returns state.
+!> Reads the parameters "USE_LMD94" and "USE_PP81" and returns true if either is true.
 !!   This function allows other modules to know whether this parameterization will
 !! be used without needing to duplicate the log entry.
 logical function CVMix_shear_is_used(param_file)
@@ -326,9 +326,9 @@ logical function CVMix_shear_is_used(param_file)
   ! Local variables
   logical :: LMD94, PP81
   call get_param(param_file, mdl, "USE_LMD94", LMD94, &
-       default=.false., do_not_log=.true.)
-  call get_param(param_file, mdl, "Use_PP81", PP81, &
-       default=.false., do_not_log=.true.)
+                 default=.false., do_not_log=.true.)
+  call get_param(param_file, mdl, "USE_PP81", PP81, &
+                 default=.false., do_not_log=.true.)
   CVMix_shear_is_used = (LMD94 .or. PP81)
 end function CVMix_shear_is_used
 

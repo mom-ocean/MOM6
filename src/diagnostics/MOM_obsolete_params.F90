@@ -89,6 +89,7 @@ subroutine find_obsolete_params(param_file)
 
   call obsolete_logical(param_file, "MSTAR_FIXED", hint="Instead use MSTAR_MODE.")
   call obsolete_logical(param_file, "USE_VISBECK_SLOPE_BUG", .false.)
+  call obsolete_logical(param_file, "Use_PP81", hint="get_param is case sensitive so use USE_PP81.")
 
   call obsolete_logical(param_file, "ALLOW_CLOCKS_IN_OMP_LOOPS", .true.)
   call obsolete_logical(param_file, "LARGE_FILE_SUPPORT", .true.)
@@ -114,7 +115,7 @@ subroutine obsolete_logical(param_file, varname, warning_val, hint)
   logical :: test_logic, fatal_err
   character(len=128) :: hint_msg
 
-  test_logic = .false. ; call read_param(param_file, varname,test_logic)
+  test_logic = .false. ; call read_param(param_file, varname, test_logic)
   fatal_err = .true.
   if (present(warning_val)) fatal_err = (warning_val .neqv. .true.)
   hint_msg = " " ; if (present(hint)) hint_msg = hint
