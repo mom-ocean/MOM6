@@ -13,6 +13,11 @@ use MOM_EOS_Wright, only : calculate_density_derivs_wright
 use MOM_EOS_Wright, only : calculate_specvol_derivs_wright, int_density_dz_wright
 use MOM_EOS_Wright, only : calculate_compress_wright, int_spec_vol_dp_wright
 use MOM_EOS_Wright, only : calculate_density_second_derivs_wright
+use MOM_EOS_Wright_full, only : calculate_density_wright_full, calculate_spec_vol_wright_full
+use MOM_EOS_Wright_full, only : calculate_density_derivs_wright_full
+use MOM_EOS_Wright_full, only : calculate_specvol_derivs_wright_full, int_density_dz_wright_full
+use MOM_EOS_Wright_full, only : calculate_compress_wright_full, int_spec_vol_dp_wright_full
+use MOM_EOS_Wright_full, only : calculate_density_second_derivs_wright_full
 use MOM_EOS_UNESCO, only : calculate_density_unesco, calculate_spec_vol_unesco
 use MOM_EOS_UNESCO, only : calculate_density_derivs_unesco, calculate_density_unesco
 use MOM_EOS_UNESCO, only : calculate_compress_unesco
@@ -146,15 +151,18 @@ end type EOS_type
 integer, parameter, public :: EOS_LINEAR = 1 !< A named integer specifying an equation of state
 integer, parameter, public :: EOS_UNESCO = 2 !< A named integer specifying an equation of state
 integer, parameter, public :: EOS_WRIGHT = 3 !< A named integer specifying an equation of state
-integer, parameter, public :: EOS_TEOS10 = 4 !< A named integer specifying an equation of state
-integer, parameter, public :: EOS_NEMO   = 5 !< A named integer specifying an equation of state
+integer, parameter, public :: EOS_WRIGHT_FULL = 4 !< A named integer specifying an equation of state
+integer, parameter, public :: EOS_TEOS10 = 5 !< A named integer specifying an equation of state
+integer, parameter, public :: EOS_NEMO   = 6 !< A named integer specifying an equation of state
 
 character*(10), parameter :: EOS_LINEAR_STRING = "LINEAR" !< A string for specifying the equation of state
 character*(10), parameter :: EOS_UNESCO_STRING = "UNESCO" !< A string for specifying the equation of state
 character*(10), parameter :: EOS_WRIGHT_STRING = "WRIGHT" !< A string for specifying the equation of state
+character*(12), parameter :: EOS_WRIGHT_RED_STRING = "WRIGHT_RED" !< A string for specifying the equation of state
+character*(12), parameter :: EOS_WRIGHT_FULL_STRING = "WRIGHT_FULL" !< A string for specifying the equation of state
 character*(10), parameter :: EOS_TEOS10_STRING = "TEOS10" !< A string for specifying the equation of state
 character*(10), parameter :: EOS_NEMO_STRING   = "NEMO"   !< A string for specifying the equation of state
-character*(10), parameter :: EOS_DEFAULT = EOS_WRIGHT_STRING !< The default equation of state
+character*(12), parameter :: EOS_DEFAULT = EOS_WRIGHT_STRING !< The default equation of state
 
 integer, parameter :: TFREEZE_LINEAR = 1  !< A named integer specifying a freezing point expression
 integer, parameter :: TFREEZE_MILLERO = 2 !< A named integer specifying a freezing point expression
@@ -163,7 +171,6 @@ character*(10), parameter :: TFREEZE_LINEAR_STRING = "LINEAR" !< A string for sp
 character*(10), parameter :: TFREEZE_MILLERO_STRING = "MILLERO_78" !< A string for specifying
                                                               !! freezing point expression
 character*(10), parameter :: TFREEZE_TEOS10_STRING = "TEOS10" !< A string for specifying the freezing point expression
-character*(10), parameter :: TFREEZE_DEFAULT = TFREEZE_LINEAR_STRING !< The default freezing point expression
 
 contains
 
@@ -242,6 +249,9 @@ subroutine calculate_stanley_density_scalar(T, S, pressure, Tvar, TScov, Svar, r
     case (EOS_WRIGHT)
       call calculate_density_second_derivs_wright(T_scale*T, S_scale*S, p_scale*pressure, &
                                                   d2RdSS, d2RdST, d2RdTT, d2RdSp, d2RdTP)
+    case (EOS_WRIGHT_FULL)
+      call calculate_density_second_derivs_wright_full(T_scale*T, S_scale*S, p_scale*pressure, &
+                                                  d2RdSS, d2RdST, d2RdTT, d2RdSp, d2RdTP)
     case (EOS_TEOS10)
       call calculate_density_second_derivs_teos10(T_scale*T, S_scale*S, p_scale*pressure, &
                                                   d2RdSS, d2RdST, d2RdTT, d2RdSp, d2RdTP)
@@ -281,6 +291,8 @@ subroutine calculate_density_array(T, S, pressure, rho, start, npts, EOS, rho_re
       call calculate_density_unesco(T, S, pressure, rho, start, npts, rho_ref)
     case (EOS_WRIGHT)
       call calculate_density_wright(T, S, pressure, rho, start, npts, rho_ref)
+    case (EOS_WRIGHT_FULL)
+      call calculate_density_wright_full(T, S, pressure, rho, start, npts, rho_ref)
     case (EOS_TEOS10)
       call calculate_density_teos10(T, S, pressure, rho, start, npts, rho_ref)
     case (EOS_NEMO)
@@ -332,6 +344,10 @@ subroutine calculate_stanley_density_array(T, S, pressure, Tvar, TScov, Svar, rh
     case (EOS_WRIGHT)
       call calculate_density_wright(T, S, pressure, rho, start, npts, rho_ref)
       call calculate_density_second_derivs_wright(T, S, pressure, d2RdSS, d2RdST, &
+                                                  d2RdTT, d2RdSp, d2RdTP, start, npts)
+    case (EOS_WRIGHT_FULL)
+      call calculate_density_wright_full(T, S, pressure, rho, start, npts, rho_ref)
+      call calculate_density_second_derivs_wright_full(T, S, pressure, d2RdSS, d2RdST, &
                                                   d2RdTT, d2RdSp, d2RdTP, start, npts)
     case (EOS_TEOS10)
       call calculate_density_teos10(T, S, pressure, rho, start, npts, rho_ref)
@@ -472,6 +488,10 @@ subroutine calculate_stanley_density_1d(T, S, pressure, Tvar, TScov, Svar, rho, 
       call calculate_density_wright(Ta, Sa, pres, rho, is, npts, rho_reference)
       call calculate_density_second_derivs_wright(Ta, Sa, pres, d2RdSS, d2RdST, &
                                                   d2RdTT, d2RdSp, d2RdTP, is, npts)
+    case (EOS_WRIGHT_FULL)
+      call calculate_density_wright_full(Ta, Sa, pres, rho, is, npts, rho_reference)
+      call calculate_density_second_derivs_wright_full(Ta, Sa, pres, d2RdSS, d2RdST, &
+                                                  d2RdTT, d2RdSp, d2RdTP, is, npts)
     case (EOS_TEOS10)
       call calculate_density_teos10(Ta, Sa, pres, rho, is, npts, rho_reference)
       call calculate_density_second_derivs_teos10(Ta, Sa, pres, d2RdSS, d2RdST, &
@@ -520,6 +540,8 @@ subroutine calculate_spec_vol_array(T, S, pressure, specvol, start, npts, EOS, s
       call calculate_spec_vol_unesco(T, S, pressure, specvol, start, npts, spv_ref)
     case (EOS_WRIGHT)
       call calculate_spec_vol_wright(T, S, pressure, specvol, start, npts, spv_ref)
+    case (EOS_WRIGHT_FULL)
+      call calculate_spec_vol_wright_full(T, S, pressure, specvol, start, npts, spv_ref)
     case (EOS_TEOS10)
       call calculate_spec_vol_teos10(T, S, pressure, specvol, start, npts, spv_ref)
     case (EOS_NEMO)
@@ -807,6 +829,8 @@ subroutine calculate_density_derivs_array(T, S, pressure, drho_dT, drho_dS, star
       call calculate_density_derivs_unesco(T, S, pressure, drho_dT, drho_dS, start, npts)
     case (EOS_WRIGHT)
       call calculate_density_derivs_wright(T, S, pressure, drho_dT, drho_dS, start, npts)
+    case (EOS_WRIGHT_FULL)
+      call calculate_density_derivs_wright_full(T, S, pressure, drho_dT, drho_dS, start, npts)
     case (EOS_TEOS10)
       call calculate_density_derivs_teos10(T, S, pressure, drho_dT, drho_dS, start, npts)
     case (EOS_NEMO)
@@ -908,6 +932,8 @@ subroutine calculate_density_derivs_scalar(T, S, pressure, drho_dT, drho_dS, EOS
                                            EOS%Rho_T0_S0, EOS%dRho_dT, EOS%dRho_dS)
     case (EOS_WRIGHT)
       call calculate_density_derivs_wright(Ta, Sa, pres, drho_dT, drho_dS)
+    case (EOS_WRIGHT_FULL)
+      call calculate_density_derivs_wright_full(Ta, Sa, pres, drho_dT, drho_dS)
     case (EOS_TEOS10)
       call calculate_density_derivs_teos10(Ta, Sa, pres, drho_dT, drho_dS)
     case default
@@ -967,6 +993,9 @@ subroutine calculate_density_second_derivs_1d(T, S, pressure, drho_dS_dS, drho_d
       case (EOS_WRIGHT)
         call calculate_density_second_derivs_wright(T, S, pressure, drho_dS_dS, drho_dS_dT, &
                                                     drho_dT_dT, drho_dS_dP, drho_dT_dP, is, npts)
+      case (EOS_WRIGHT_FULL)
+        call calculate_density_second_derivs_wright_full(T, S, pressure, drho_dS_dS, drho_dS_dT, &
+                                                    drho_dT_dT, drho_dS_dP, drho_dT_dP, is, npts)
       case (EOS_TEOS10)
         call calculate_density_second_derivs_teos10(T, S, pressure, drho_dS_dS, drho_dS_dT, &
                                                     drho_dT_dT, drho_dS_dP, drho_dT_dP, is, npts)
@@ -985,6 +1014,9 @@ subroutine calculate_density_second_derivs_1d(T, S, pressure, drho_dS_dS, drho_d
                                                     drho_dT_dT, drho_dS_dP, drho_dT_dP, is, npts)
       case (EOS_WRIGHT)
         call calculate_density_second_derivs_wright(Ta, Sa, pres, drho_dS_dS, drho_dS_dT, &
+                                                    drho_dT_dT, drho_dS_dP, drho_dT_dP, is, npts)
+      case (EOS_WRIGHT_FULL)
+        call calculate_density_second_derivs_wright_full(Ta, Sa, pres, drho_dS_dS, drho_dS_dT, &
                                                     drho_dT_dT, drho_dS_dP, drho_dT_dP, is, npts)
       case (EOS_TEOS10)
         call calculate_density_second_derivs_teos10(Ta, Sa, pres, drho_dS_dS, drho_dS_dT, &
@@ -1059,6 +1091,9 @@ subroutine calculate_density_second_derivs_scalar(T, S, pressure, drho_dS_dS, dr
     case (EOS_WRIGHT)
       call calculate_density_second_derivs_wright(Ta, Sa, pres, drho_dS_dS, drho_dS_dT, &
                                                   drho_dT_dT, drho_dS_dP, drho_dT_dP)
+    case (EOS_WRIGHT_FULL)
+      call calculate_density_second_derivs_wright_full(Ta, Sa, pres, drho_dS_dS, drho_dS_dT, &
+                                                  drho_dT_dT, drho_dS_dP, drho_dT_dP)
     case (EOS_TEOS10)
       call calculate_density_second_derivs_teos10(Ta, Sa, pres, drho_dS_dS, drho_dS_dT, &
                                                   drho_dT_dT, drho_dS_dP, drho_dT_dP)
@@ -1127,6 +1162,8 @@ subroutine calculate_spec_vol_derivs_array(T, S, pressure, dSV_dT, dSV_dS, start
       enddo
     case (EOS_WRIGHT)
       call calculate_specvol_derivs_wright(T, S, pressure, dSV_dT, dSV_dS, start, npts)
+    case (EOS_WRIGHT_FULL)
+      call calculate_specvol_derivs_wright_full(T, S, pressure, dSV_dT, dSV_dS, start, npts)
     case (EOS_TEOS10)
       call calculate_specvol_derivs_teos10(T, S, pressure, dSV_dT, dSV_dS, start, npts)
     case (EOS_NEMO)
@@ -1236,6 +1273,8 @@ subroutine calculate_compress_1d(T, S, pressure, rho, drho_dp, EOS, dom)
       call calculate_compress_unesco(Ta, Sa, pres, rho, drho_dp, is, npts)
     case (EOS_WRIGHT)
       call calculate_compress_wright(Ta, Sa, pres, rho, drho_dp, is, npts)
+    case (EOS_WRIGHT_FULL)
+      call calculate_compress_wright_full(Ta, Sa, pres, rho, drho_dp, is, npts)
     case (EOS_TEOS10)
       call calculate_compress_teos10(Ta, Sa, pres, rho, drho_dp, is, npts)
     case (EOS_NEMO)
@@ -1369,6 +1408,11 @@ subroutine analytic_int_specific_vol_dp(T, S, p_t, p_b, alpha_ref, HI, EOS, &
                                   inty_dza, halo_size, bathyP, dP_tiny, useMassWghtInterp, &
                                   SV_scale=EOS%R_to_kg_m3, pres_scale=EOS%RL2_T2_to_Pa, &
                                   temp_scale=EOS%C_to_degC, saln_scale=EOS%S_to_ppt)
+    case (EOS_WRIGHT_FULL)
+      call int_spec_vol_dp_wright_full(T, S, p_t, p_b, alpha_ref, HI, dza, intp_dza, intx_dza, &
+                                  inty_dza, halo_size, bathyP, dP_tiny, useMassWghtInterp, &
+                                  SV_scale=EOS%R_to_kg_m3, pres_scale=EOS%RL2_T2_to_Pa, &
+                                  temp_scale=EOS%C_to_degC, saln_scale=EOS%S_to_ppt)
     case default
       call MOM_error(FATAL, "No analytic integration option is available with this EOS!")
   end select
@@ -1458,6 +1502,19 @@ subroutine analytic_int_density_dz(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, EOS,
                                    dpa, intz_dpa, intx_dpa, inty_dpa, bathyT, &
                                    dz_neglect, useMassWghtInterp, Z_0p=Z_0p)
       endif
+    case (EOS_WRIGHT_FULL)
+      rho_scale = EOS%kg_m3_to_R
+      pres_scale = EOS%RL2_T2_to_Pa
+      if ((rho_scale /= 1.0) .or. (pres_scale /= 1.0) .or. (EOS%C_to_degC /= 1.0) .or. (EOS%S_to_ppt /= 1.0)) then
+        call int_density_dz_wright_full(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
+                                   dpa, intz_dpa, intx_dpa, inty_dpa, bathyT, &
+                                   dz_neglect, useMassWghtInterp, rho_scale, pres_scale, &
+                                   temp_scale=EOS%C_to_degC, saln_scale=EOS%S_to_ppt, Z_0p=Z_0p)
+      else
+        call int_density_dz_wright_full(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
+                                   dpa, intz_dpa, intx_dpa, inty_dpa, bathyT, &
+                                   dz_neglect, useMassWghtInterp, Z_0p=Z_0p)
+      endif
     case default
       call MOM_error(FATAL, "No analytic integration option is available with this EOS!")
   end select
@@ -1481,15 +1538,17 @@ subroutine EOS_init(param_file, EOS, US)
   ! Local variables
 # include "version_variable.h"
   character(len=40)  :: mdl = "MOM_EOS" ! This module's name.
+  character(len=12)  :: TFREEZE_DEFAULT ! The default freezing point expression
   character(len=40)  :: tmpstr
+  logical :: EOS_quad_default
 
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mdl, version, "")
 
   call get_param(param_file, mdl, "EQN_OF_STATE", tmpstr, &
-                 "EQN_OF_STATE determines which ocean equation of state "//&
-                 "should be used.  Currently, the valid choices are "//&
-                 '"LINEAR", "UNESCO", "WRIGHT", "NEMO" and "TEOS10". '//&
+                 "EQN_OF_STATE determines which ocean equation of state should be used.  "//&
+                 'Currently, the valid choices are "LINEAR", "UNESCO", '//&
+                 '"WRIGHT", "WRIGHT_RED", "WRIGHT_FULL", "NEMO" and "TEOS10". '//&
                  "This is only used if USE_EOS is true.", default=EOS_DEFAULT)
   select case (uppercase(tmpstr))
     case (EOS_LINEAR_STRING)
@@ -1498,13 +1557,17 @@ subroutine EOS_init(param_file, EOS, US)
       EOS%form_of_EOS = EOS_UNESCO
     case (EOS_WRIGHT_STRING)
       EOS%form_of_EOS = EOS_WRIGHT
+    case (EOS_WRIGHT_RED_STRING)
+      EOS%form_of_EOS = EOS_WRIGHT
+    case (EOS_WRIGHT_FULL_STRING)
+      EOS%form_of_EOS = EOS_WRIGHT_FULL
     case (EOS_TEOS10_STRING)
       EOS%form_of_EOS = EOS_TEOS10
     case (EOS_NEMO_STRING)
       EOS%form_of_EOS = EOS_NEMO
     case default
       call MOM_error(FATAL, "interpret_eos_selection: EQN_OF_STATE "//&
-                              trim(tmpstr) // "in input file is invalid.")
+                              trim(tmpstr) // " in input file is invalid.")
   end select
   call MOM_mesg('interpret_eos_selection: equation of state set to "' // &
                 trim(tmpstr)//'"', 5)
@@ -1525,10 +1588,16 @@ subroutine EOS_init(param_file, EOS, US)
                  "salinity.", units="kg m-3 PSU-1", default=0.8)
   endif
 
+  EOS_quad_default = .not.((EOS%form_of_EOS == EOS_LINEAR) .or. &
+                           (EOS%form_of_EOS == EOS_WRIGHT) .or. &
+                           (EOS%form_of_EOS == EOS_WRIGHT_FULL))
   call get_param(param_file, mdl, "EOS_QUADRATURE", EOS%EOS_quadrature, &
                  "If true, always use the generic (quadrature) code "//&
-                 "code for the integrals of density.", default=.false.)
+                 "code for the integrals of density.", default=EOS_quad_default)
 
+  TFREEZE_DEFAULT = TFREEZE_LINEAR_STRING
+  if ((EOS%form_of_EOS == EOS_TEOS10 .or. EOS%form_of_EOS == EOS_NEMO)) &
+    TFREEZE_DEFAULT = TFREEZE_TEOS10_STRING
   call get_param(param_file, mdl, "TFREEZE_FORM", tmpstr, &
                  "TFREEZE_FORM determines which expression should be "//&
                  "used for the freezing point.  Currently, the valid "//&
@@ -1563,10 +1632,10 @@ subroutine EOS_init(param_file, EOS, US)
                  units="deg C Pa-1", default=0.0)
   endif
 
-  if ((EOS%form_of_EOS == EOS_TEOS10 .OR. EOS%form_of_EOS == EOS_NEMO) .AND. &
-      EOS%form_of_TFreeze /= TFREEZE_TEOS10) then
-      call MOM_error(FATAL, "interpret_eos_selection:  EOS_TEOS10 or EOS_NEMO \n" //&
-      "should only be used along with TFREEZE_FORM = TFREEZE_TEOS10 .")
+  if ((EOS%form_of_EOS == EOS_TEOS10 .or. EOS%form_of_EOS == EOS_NEMO) .and. &
+      (EOS%form_of_TFreeze /= TFREEZE_TEOS10)) then
+    call MOM_error(FATAL, "interpret_eos_selection:  EOS_TEOS10 or EOS_NEMO "//&
+                   "should only be used along with TFREEZE_FORM = TFREEZE_TEOS10 .")
   endif
 
   ! Unit conversions
@@ -1806,5 +1875,5 @@ end module MOM_EOS
 !> \namespace mom_eos
 !!
 !! The MOM_EOS module is a wrapper for various equations of state (e.g. Linear,
-!! Wright, UNESCO) and provides a uniform interface to the rest of the model
+!! Wright, UNESCO, TEOS10 or NEMO) and provides a uniform interface to the rest of the model
 !! independent of which equation of state is being used.

@@ -1,5 +1,5 @@
 !> The equation of state using the Wright 1997 expressions
-module MOM_EOS_Wright
+module MOM_EOS_Wright_full
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
@@ -15,10 +15,10 @@ implicit none ; private
 
 #include <MOM_memory.h>
 
-public calculate_compress_wright, calculate_density_wright, calculate_spec_vol_wright
-public calculate_density_derivs_wright, calculate_specvol_derivs_wright
-public calculate_density_second_derivs_wright
-public int_density_dz_wright, int_spec_vol_dp_wright
+public calculate_compress_wright_full, calculate_density_wright_full, calculate_spec_vol_wright_full
+public calculate_density_derivs_wright_full, calculate_specvol_derivs_wright_full
+public calculate_density_second_derivs_wright_full
+public int_density_dz_wright_full, int_spec_vol_dp_wright_full
 
 ! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
 ! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
@@ -30,50 +30,50 @@ public int_density_dz_wright, int_spec_vol_dp_wright
 !! a reference density, from salinity in practical salinity units ([PSU]), potential
 !! temperature (in degrees Celsius [degC]), and pressure [Pa], using the expressions from
 !! Wright, 1997, J. Atmos. Ocean. Tech., 14, 735-740.
-interface calculate_density_wright
+interface calculate_density_wright_full
   module procedure calculate_density_scalar_wright, calculate_density_array_wright
-end interface calculate_density_wright
+end interface calculate_density_wright_full
 
 !> Compute the in situ specific volume of sea water (in [m3 kg-1]), or an anomaly with respect
 !! to a reference specific volume, from salinity in practical salinity units ([PSU]), potential
 !! temperature (in degrees Celsius [degC]), and pressure [Pa], using the expressions from
 !! Wright, 1997, J. Atmos. Ocean. Tech., 14, 735-740.
-interface calculate_spec_vol_wright
+interface calculate_spec_vol_wright_full
   module procedure calculate_spec_vol_scalar_wright, calculate_spec_vol_array_wright
-end interface calculate_spec_vol_wright
+end interface calculate_spec_vol_wright_full
 
 !> For a given thermodynamic state, return the derivatives of density with temperature and salinity
-interface calculate_density_derivs_wright
+interface calculate_density_derivs_wright_full
   module procedure calculate_density_derivs_scalar_wright, calculate_density_derivs_array_wright
-end interface calculate_density_derivs_wright
+end interface calculate_density_derivs_wright_full
 
 !> For a given thermodynamic state, return the second derivatives of density with various combinations
 !! of temperature, salinity, and pressure
-interface calculate_density_second_derivs_wright
+interface calculate_density_second_derivs_wright_full
   module procedure calculate_density_second_derivs_scalar_wright, calculate_density_second_derivs_array_wright
-end interface calculate_density_second_derivs_wright
+end interface calculate_density_second_derivs_wright_full
 
-!>@{ Parameters in the Wright equation of state using the  restricted range formula, which is a fit to the UNESCO
-!    equation of state for the restricted range: -2 < theta < 30 [degC], 28 < S < 38 [PSU], 0  < p < 5e7 [Pa].
+!>@{ Parameters in the Wright equation of state using the full range formula, which is a fit to the UNESCO
+!    equation of state for the full range: -2 < theta < 40 [degC], 0 < S < 40 [PSU], 0  < p < 1e8 [Pa].
 
-  ! Note that a0/a1 ~= 2028 [degC] ; a0/a2 ~= -6343 [PSU]
-  !           b0/b1 ~= 165 [degC]  ; b0/b4 ~= 974 [PSU]
-  !           c0/c1 ~= 216 [degC]  ; c0/c4 ~= -740 [PSU]
-real, parameter :: a0 = 7.057924e-4  ! A parameter in the Wright alpha_0 fit [m3 kg-1]
-real, parameter :: a1 = 3.480336e-7  ! A parameter in the Wright alpha_0 fit [m3 kg-1 degC-1]
-real, parameter :: a2 = -1.112733e-7 ! A parameter in the Wright alpha_0 fit [m3 kg-1 PSU-1]
-real, parameter :: b0 = 5.790749e8   ! A parameter in the Wright p_0 fit [Pa]
-real, parameter :: b1 = 3.516535e6   ! A parameter in the Wright p_0 fit [Pa degC-1]
-real, parameter :: b2 = -4.002714e4  ! A parameter in the Wright p_0 fit [Pa degC-2]
-real, parameter :: b3 = 2.084372e2   ! A parameter in the Wright p_0 fit [Pa degC-3]
-real, parameter :: b4 = 5.944068e5   ! A parameter in the Wright p_0 fit [Pa PSU-1]
-real, parameter :: b5 = -9.643486e3  ! A parameter in the Wright p_0 fit [Pa degC-1 PSU-1]
-real, parameter :: c0 = 1.704853e5   ! A parameter in the Wright lambda fit [m2 s-2]
-real, parameter :: c1 = 7.904722e2   ! A parameter in the Wright lambda fit [m2 s-2 degC-1]
-real, parameter :: c2 = -7.984422    ! A parameter in the Wright lambda fit [m2 s-2 degC-2]
-real, parameter :: c3 = 5.140652e-2  ! A parameter in the Wright lambda fit [m2 s-2 degC-3]
-real, parameter :: c4 = -2.302158e2  ! A parameter in the Wright lambda fit [m2 s-2 PSU-1]
-real, parameter :: c5 = -3.079464    ! A parameter in the Wright lambda fit [m2 s-2 degC-1 PSU-1]
+  ! Note that a0/a1 ~= 2618 [degC] ; a0/a2 ~= -4333 [PSU]
+  !           b0/b1 ~= 156 [degC]  ; b0/b4 ~= 974 [PSU]
+  !           c0/c1 ~= 216 [degC]  ; c0/c4 ~= -741 [PSU]
+real, parameter :: a0 = 7.133718e-4  ! A parameter in the Wright alpha_0 fit [m3 kg-1]
+real, parameter :: a1 = 2.724670e-7  ! A parameter in the Wright alpha_0 fit [m3 kg-1 degC-1]
+real, parameter :: a2 = -1.646582e-7 ! A parameter in the Wright alpha_0 fit [m3 kg-1 PSU-1]
+real, parameter :: b0 = 5.613770e8   ! A parameter in the Wright p_0 fit [Pa]
+real, parameter :: b1 = 3.600337e6   ! A parameter in the Wright p_0 fit [Pa degC-1]
+real, parameter :: b2 = -3.727194e4  ! A parameter in the Wright p_0 fit [Pa degC-2]
+real, parameter :: b3 = 1.660557e2   ! A parameter in the Wright p_0 fit [Pa degC-3]
+real, parameter :: b4 = 6.844158e5   ! A parameter in the Wright p_0 fit [Pa PSU-1]
+real, parameter :: b5 = -8.389457e3  ! A parameter in the Wright p_0 fit [Pa degC-1 PSU-1]
+real, parameter :: c0 = 1.609893e5   ! A parameter in the Wright lambda fit [m2 s-2]
+real, parameter :: c1 = 8.427815e2   ! A parameter in the Wright lambda fit [m2 s-2 degC-1]
+real, parameter :: c2 = -6.931554    ! A parameter in the Wright lambda fit [m2 s-2 degC-2]
+real, parameter :: c3 = 3.869318e-2  ! A parameter in the Wright lambda fit [m2 s-2 degC-3]
+real, parameter :: c4 = -1.664201e2  ! A parameter in the Wright lambda fit [m2 s-2 PSU-1]
+real, parameter :: c5 = -2.765195    ! A parameter in the Wright lambda fit [m2 s-2 degC-1 PSU-1]
 !>@}
 
 contains
@@ -381,7 +381,7 @@ end subroutine calculate_density_second_derivs_scalar_wright
 
 !> For a given thermodynamic state, return the partial derivatives of specific volume
 !! with temperature and salinity
-subroutine calculate_specvol_derivs_wright(T, S, pressure, dSV_dT, dSV_dS, start, npts)
+subroutine calculate_specvol_derivs_wright_full(T, S, pressure, dSV_dT, dSV_dS, start, npts)
   real,    intent(in),    dimension(:) :: T        !< Potential temperature relative to the surface [degC].
   real,    intent(in),    dimension(:) :: S        !< Salinity [PSU].
   real,    intent(in),    dimension(:) :: pressure !< pressure [Pa].
@@ -412,14 +412,14 @@ subroutine calculate_specvol_derivs_wright(T, S, pressure, dSV_dT, dSV_dS, start
                 (I_denom**2 * lambda) *  (b4 + b5*T(j))
   enddo
 
-end subroutine calculate_specvol_derivs_wright
+end subroutine calculate_specvol_derivs_wright_full
 
 !> This subroutine computes the in situ density of sea water (rho in [kg m-3])
 !! and the compressibility (drho/dp = C_sound^-2) (drho_dp [s2 m-2]) from
 !! salinity (sal [PSU]), potential temperature (T [degC]), and pressure [Pa].
 !! It uses the expressions from Wright, 1997, J. Atmos. Ocean. Tech., 14, 735-740.
 !! Coded by R. Hallberg, 1/01
-subroutine calculate_compress_wright(T, S, pressure, rho, drho_dp, start, npts)
+subroutine calculate_compress_wright_full(T, S, pressure, rho, drho_dp, start, npts)
   real,    intent(in),    dimension(:) :: T        !< Potential temperature relative to the surface [degC].
   real,    intent(in),    dimension(:) :: S        !< Salinity [PSU].
   real,    intent(in),    dimension(:) :: pressure !< pressure [Pa].
@@ -447,12 +447,12 @@ subroutine calculate_compress_wright(T, S, pressure, rho, drho_dp, start, npts)
     rho(j) = (pressure(j) + p0) * I_denom
     drho_dp(j) = lambda * I_denom * I_denom
   enddo
-end subroutine calculate_compress_wright
+end subroutine calculate_compress_wright_full
 
 !> This subroutine calculates analytical and nearly-analytical integrals of
 !! pressure anomalies across layers, which are required for calculating the
 !! finite-volume form pressure accelerations in a Boussinesq model.
-subroutine int_density_dz_wright(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
+subroutine int_density_dz_wright_full(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
                                  dpa, intz_dpa, intx_dpa, inty_dpa, bathyT, dz_neglect, &
                                  useMassWghtInterp, rho_scale, pres_scale, temp_scale, saln_scale, Z_0p)
   type(hor_index_type), intent(in)  :: HI       !< The horizontal index type for the arrays.
@@ -705,7 +705,7 @@ subroutine int_density_dz_wright(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
     inty_dpa(i,j) = C1_90*(7.0*(intz(1)+intz(5)) + 32.0*(intz(2)+intz(4)) + 12.0*intz(3))
   enddo ; enddo ; endif
 
-end subroutine int_density_dz_wright
+end subroutine int_density_dz_wright_full
 
 !>   This subroutine calculates analytical and nearly-analytical integrals in
 !! pressure across layers of geopotential anomalies, which are required for
@@ -713,7 +713,7 @@ end subroutine int_density_dz_wright
 !! model.  There are essentially no free assumptions, apart from the use of
 !! Boole's rule to do the horizontal integrals, and from a truncation in the
 !! series for log(1-eps/1+eps) that assumes that |eps| < 0.34.
-subroutine int_spec_vol_dp_wright(T, S, p_t, p_b, spv_ref, HI, dza, &
+subroutine int_spec_vol_dp_wright_full(T, S, p_t, p_b, spv_ref, HI, dza, &
                                   intp_dza, intx_dza, inty_dza, halo_size, bathyP, dP_neglect, &
                                   useMassWghtInterp, SV_scale, pres_scale, temp_scale, saln_scale)
   type(hor_index_type), intent(in)  :: HI        !< The ocean's horizontal index type.
@@ -945,6 +945,6 @@ subroutine int_spec_vol_dp_wright(T, S, p_t, p_b, spv_ref, HI, dza, &
     inty_dza(i,j) = C1_90*(7.0*(intp(1)+intp(5)) + 32.0*(intp(2)+intp(4)) + &
                            12.0*intp(3))
   enddo ; enddo ; endif
-end subroutine int_spec_vol_dp_wright
+end subroutine int_spec_vol_dp_wright_full
 
-end module MOM_EOS_Wright
+end module MOM_EOS_Wright_full
