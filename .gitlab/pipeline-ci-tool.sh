@@ -135,7 +135,7 @@ nolibs-ocean-only-compile () {
     cd $JOB_DIR/$STATS_REPO_DIR/$CONFIGS_DIR
     mkdir -p build-ocean-only-nolibs-$1
     cd build-ocean-only-nolibs-$1
-    make -f ../tools/MRS/Makefile.build ./$1/env BUILD=. -s
+    make -f ../tools/MRS/Makefile.build ./$1/env BUILD=. ENVIRON=../../environ -s
     ../src/mkmf/bin/list_paths -l ../src/MOM6/config_src/{drivers/solo_driver,memory/dynamic_symmetric,infra/FMS1,ext*} ../src/MOM6/src ../src/FMS1
     sed -i '/FMS1\/.*\/test_/d' path_names
     ../src/mkmf/bin/mkmf -t ../src/mkmf/templates/ncrc-$1.mk -p MOM6 -c"-Duse_libMPI -Duse_netCDF" path_names
@@ -153,7 +153,7 @@ nolibs-ocean-ice-compile () {
     cd $JOB_DIR/$STATS_REPO_DIR/$CONFIGS_DIR
     mkdir -p build-ocean-ice-nolibs-$1
     cd build-ocean-ice-nolibs-$1
-    make -f ../tools/MRS/Makefile.build ./$1/env BUILD=. -s
+    make -f ../tools/MRS/Makefile.build ./$1/env BUILD=. ENVIRON=../../environ -s
     ../src/mkmf/bin/list_paths -l ../src/MOM6/config_src/{drivers/FMS_cap,memory/dynamic_symmetric,infra/FMS1,ext*} ../src/MOM6/src ../src/SIS2/*src ../src/{FMS1,coupler,icebergs,ice_param,land_null,atmos_null}
     sed -i '/FMS1\/.*\/test_/d' path_names
     ../src/mkmf/bin/mkmf -t ../src/mkmf/templates/ncrc-$1.mk -p MOM6 -c"-Duse_libMPI -Duse_netCDF -D_USE_LEGACY_LAND_ -Duse_AM3_physics" path_names
