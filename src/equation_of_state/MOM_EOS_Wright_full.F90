@@ -30,12 +30,12 @@ interface calculate_spec_vol_wright_full
   module procedure calculate_spec_vol_scalar_wright, calculate_spec_vol_array_wright
 end interface calculate_spec_vol_wright_full
 
-!> For a given thermodynamic state, return the derivatives of density with temperature and salinity
+!> Compute the derivatives of density with temperature and salinity
 interface calculate_density_derivs_wright_full
   module procedure calculate_density_derivs_scalar_wright, calculate_density_derivs_array_wright
 end interface calculate_density_derivs_wright_full
 
-!> For a given thermodynamic state, return the second derivatives of density with various combinations
+!> Compute the second derivatives of density with various combinations
 !! of temperature, salinity, and pressure
 interface calculate_density_second_derivs_wright_full
   module procedure calculate_density_second_derivs_scalar_wright, calculate_density_second_derivs_array_wright
@@ -117,9 +117,9 @@ subroutine calculate_density_array_wright(T, S, pressure, rho, start, npts, rho_
   real :: pa_000  ! A corrected offset to the pressure, including contributions from rho_ref [Pa]
   integer :: j
 
-  if (present(rho_ref)) pa_000 = (b0*(1.0 - a0*rho_ref) - rho_ref*c0)
+  if (present(rho_ref)) pa_000 = b0*(1.0 - a0*rho_ref) - rho_ref*c0
   if (present(rho_ref)) then ; do j=start,start+npts-1
-    al_TS = a1*T(j) +a2*S(j)
+    al_TS = a1*T(j) + a2*S(j)
     al0 = a0 + al_TS
     p_TSp = pressure(j) + (b4*S(j) + T(j) * (b1 + (T(j)*(b2 + b3*T(j)) + b5*S(j))))
     lam_TS = c4*S(j) + T(j) * (c1 + (T(j)*(c2 + c3*T(j)) + c5*S(j)))
@@ -129,9 +129,9 @@ subroutine calculate_density_array_wright(T, S, pressure, rho, start, npts, rho_
     rho(j) = (pa_000 + (p_TSp - rho_ref*(p_TSp*al0 + (b0*al_TS + lam_TS)))) / &
              ( (c0 + lam_TS) + al0*(b0 + p_TSp) )
   enddo ; else ; do j=start,start+npts-1
-    al0 = (a0 + a1*T(j)) +a2*S(j)
-    p0 = (b0 + b4*S(j)) + T(j) * (b1 + T(j)*(b2 + b3*T(j)) + b5*S(j))
-    lambda = (c0 +c4*S(j)) + T(j) * (c1 + T(j)*(c2 + c3*T(j)) + c5*S(j))
+    al0 = a0 + (a1*T(j) + a2*S(j))
+    p0 = b0 + ( b4*S(j) + T(j) * (b1 + (T(j)*(b2 + b3*T(j)) + b5*S(j))) )
+    lambda = c0 + ( c4*S(j) + T(j) * (c1 + (T(j)*(c2 + c3*T(j)) + c5*S(j))) )
     rho(j) = (pressure(j) + p0) / (lambda + al0*(pressure(j) + p0))
   enddo ; endif
 
@@ -185,9 +185,9 @@ subroutine calculate_spec_vol_array_wright(T, S, pressure, specvol, start, npts,
   integer :: j
 
   do j=start,start+npts-1
-    al0 = (a0 + a1*T(j)) +a2*S(j)
-    p0 = (b0 + b4*S(j)) + T(j) * (b1 + T(j)*((b2 + b3*T(j))) + b5*S(j))
-    lambda = (c0 +c4*S(j)) + T(j) * (c1 + T(j)*((c2 + c3*T(j))) + c5*S(j))
+    al0 = a0 + (a1*T(j) + a2*S(j))
+    p0 = b0 + ( b4*S(j) + T(j) * (b1 + (T(j)*(b2 + b3*T(j)) + b5*S(j))) )
+    lambda = c0 + ( c4*S(j) + T(j) * (c1 + (T(j)*(c2 + c3*T(j)) + c5*S(j))) )
 
     if (present(spv_ref)) then
       specvol(j) = (lambda + (al0 - spv_ref)*(pressure(j) + p0)) / (pressure(j) + p0)
@@ -218,18 +218,15 @@ subroutine calculate_density_derivs_array_wright(T, S, pressure, drho_dT, drho_d
   integer :: j
 
   do j=start,start+npts-1
-    al0 = (a0 + a1*T(j)) + a2*S(j)
-    p0 = (b0 + b4*S(j)) + T(j) * (b1 + T(j)*((b2 + b3*T(j))) + b5*S(j))
-    lambda = (c0 +c4*S(j)) + T(j) * (c1 + T(j)*((c2 + c3*T(j))) + c5*S(j))
+    al0 = a0 + (a1*T(j) + a2*S(j))
+    p0 = b0 + ( b4*S(j) + T(j) * (b1 + (T(j)*(b2 + b3*T(j)) + b5*S(j))) )
+    lambda = c0 + ( c4*S(j) + T(j) * (c1 + (T(j)*(c2 + c3*T(j)) + c5*S(j))) )
 
-    I_denom2 = 1.0 / (lambda + al0*(pressure(j) + p0))
-    I_denom2 = I_denom2 *I_denom2
-    drho_dT(j) = I_denom2 * &
-      (lambda* (b1 + T(j)*(2.0*b2 + 3.0*b3*T(j)) + b5*S(j)) - &
-       (pressure(j)+p0) * ( (pressure(j)+p0)*a1 + &
-        (c1 + T(j)*(c2*2.0 + c3*3.0*T(j)) + c5*S(j)) ))
-    drho_dS(j) = I_denom2 * (lambda* (b4 + b5*T(j)) - &
-      (pressure(j)+p0) * ( (pressure(j)+p0)*a2 + (c4 + c5*T(j)) ))
+    I_denom2 = 1.0 / (lambda + al0*(pressure(j) + p0))**2
+    drho_dT(j) = I_denom2 * (lambda * (b1 + (T(j)*(2.0*b2 + 3.0*b3*T(j)) + b5*S(j))) - &
+       (pressure(j)+p0) * ( (pressure(j)+p0)*a1 + (c1 + (T(j)*(c2*2.0 + c3*3.0*T(j)) + c5*S(j))) ))
+    drho_dS(j) = I_denom2 * (lambda * (b4 + b5*T(j)) - &
+       (pressure(j)+p0) * ( (pressure(j)+p0)*a2 + (c4 + c5*T(j)) ))
   enddo
 
 end subroutine calculate_density_derivs_array_wright
@@ -283,42 +280,55 @@ subroutine calculate_density_second_derivs_array_wright(T, S, P, drho_ds_ds, drh
   integer,            intent(in   ) :: npts  !< Number of points to loop over
 
   ! Local variables
-  real :: z0, z1 ! Local work variables [Pa]
-  real :: z2, z4 ! Local work variables [m2 s-2]
-  real :: z3, z5 ! Local work variables [Pa degC-1]
-  real :: z6, z8 ! Local work variables [m2 s-2 degC-1]
-  real :: z7     ! A local work variable [m2 s-2 PSU-1]
-  real :: z9     ! A local work variable [m3 kg-1]
-  real :: z10    ! A local work variable [Pa PSU-1]
-  real :: z11    ! A local work variable [Pa m2 s-2 PSU-1] = [kg m s-4 PSU-1]
-  real :: z2_2   ! A local work variable [m4 s-4]
-  real :: z2_3   ! A local work variable [m6 s-6]
+  real :: al0     ! The specific volume at 0 lambda in the Wright EOS [m3 kg-1]
+  real :: lambda  ! The sound speed squared at 0 alpha in the Wright EOS [m2 s-2]
+  real :: p_p0    ! A local work variable combining the pressure and pressure
+                  ! offset (p0 elsewhere) in the Wright EOS [Pa]
+  real :: dp0_dT  ! The partial derivative of p0 with temperature [Pa degC-1]
+  real :: dp0_dS  ! The partial derivative of p0 with salinity [Pa PSU-1]
+  real :: dlam_dT ! The partial derivative of lambda with temperature [m2 s-2 degC-1]
+  real :: dlam_dS ! The partial derivative of lambda with salinity [m2 s-2 degC-1]
+  real :: dRdT_num  ! The numerator in the expression for drho_dT [Pa m2 s-2 degC-1] = [kg m s-4 degC-1]
+  real :: dRdS_num  ! The numerator in the expression for drho_ds [Pa m2 s-2 PSU-1] = [kg m s-4 PSU-1]
+  real :: ddenom_dT ! The derivative of the denominator of density in the Wright EOS with temperature [m2 s-2 deg-1]
+  real :: ddenom_dS ! The derivative of the denominator of density in the Wright EOS with salinity [m2 s-2 PSU-1]
+  real :: I_denom   ! The inverse of the denominator of density in the Wright EOS [s2 m-2]
+  real :: I_denom2  ! The inverse of the square of the denominator of density in the Wright EOS [s4 m-4]
+  real :: I_denom3  ! The inverse of the cube of the denominator of density in the Wright EOS [s6 m-6]
   integer :: j
-  ! Based on the above expression with common terms factored, there probably exists a more numerically stable
-  ! and/or efficient expression
 
   do j = start,start+npts-1
-    z0 = T(j)*(b1 + b5*S(j) + T(j)*(b2 + b3*T(j)))
-    z1 = (b0 + P(j) + b4*S(j) + z0)
-    z3 = (b1 + b5*S(j) + T(j)*(2.*b2 + 2.*b3*T(j)))
-    z4 = (c0 + c4*S(j) + T(j)*(c1 + c5*S(j) + T(j)*(c2 + c3*T(j))))
-    z5 = (b1 + b5*S(j) + T(j)*(b2 + b3*T(j)) + T(j)*(b2 + 2.*b3*T(j)))
-    z6 = c1 + c5*S(j) + T(j)*(c2 + c3*T(j)) + T(j)*(c2 + 2.*c3*T(j))
-    z7 = (c4 + c5*T(j) + a2*z1)
-    z8 = (c1 + c5*S(j) + T(j)*(2.*c2 + 3.*c3*T(j)) + a1*z1)
-    z9 = (a0 + a2*S(j) + a1*T(j))
-    z10 = (b4 + b5*T(j))
-    z11 = (z10*z4 - z1*z7)
-    z2 = (c0 + c4*S(j) + T(j)*(c1 + c5*S(j) + T(j)*(c2 + c3*T(j))) + z9*z1)
-    z2_2 = z2*z2
-    z2_3 = z2_2*z2
+    al0 = a0 + (a1*T(j) + a2*S(j))
+    p_p0 = P(j) + ( b0 + (b4*S(j) + T(j)*(b1 + (b5*S(j) + T(j)*(b2 + b3*T(j))))) ) ! P + p0
+    lambda = c0 + ( c4*S(j) + T(j) * (c1 + (T(j)*(c2 + c3*T(j)) + c5*S(j))) )
+    dp0_dT = b1 + (b5*S(j) + T(j)*(2.*b2 + 3.*b3*T(j)))
+    dp0_dS = b4 + b5*T(j)
+    dlam_dT = c1 + (c5*S(j) + T(j)*(2.*c2 + 3.*c3*T(j)))
+    dlam_dS = c4 + c5*T(j)
+    I_denom = 1.0 / (lambda + al0*p_p0)
+    I_denom2 = I_denom*I_denom
+    I_denom3 = I_denom*I_denom2
 
-    drho_ds_ds(j) = (z10*(c4 + c5*T(j)) - a2*z10*z1 - z10*z7)/z2_2 - (2.*(c4 + c5*T(j) + z9*z10 + a2*z1)*z11)/z2_3
-    drho_ds_dt(j) = (z10*z6 - z1*(c5 + a2*z5) + b5*z4 - z5*z7)/z2_2 - (2.*(z6 + z9*z5 + a1*z1)*z11)/z2_3
-    drho_dt_dt(j) = (z3*z6 - z1*(2.*c2 + 6.*c3*T(j) + a1*z5) + (2.*b2 + 4.*b3*T(j))*z4 - z5*z8)/z2_2 - &
-                    (2.*(z6 + z9*z5 + a1*z1)*(z3*z4 - z1*z8))/z2_3
-    drho_ds_dp(j) = (-c4 - c5*T(j) - 2.*a2*z1)/z2_2 - (2.*z9*z11)/z2_3
-    drho_dt_dp(j) = (-c1 - c5*S(j) - T(j)*(2.*c2 + 3.*c3*T(j)) - 2.*a1*z1)/z2_2 - (2.*z9*(z3*z4 - z1*z8))/z2_3
+    ddenom_dS = (dlam_dS + a2*p_p0) + al0*dp0_dS
+    ddenom_dT = (dlam_dT + a1*p_p0) + al0*dp0_dT
+    dRdS_num = dp0_dS*lambda - p_p0*(dlam_dS + a2*p_p0)
+    dRdT_num = dp0_dT*lambda - p_p0*(dlam_dT + a1*p_p0)
+
+    ! In deriving the following, it is useful to note that:
+    !   rho(j) = p_p0 / (lambda + al0*p_p0)
+    !   drho_dp(j) = lambda * I_denom2
+    !   drho_dT(j) = (dp0_dT*lambda - p_p0*(dlam_dT + a1*p_p0)) * I_denom2 = dRdT_num * I_denom2
+    !   drho_dS(j) = (dp0_dS*lambda - p_p0*(dlam_dS + a2*p_p0)) * I_denom2 = dRdS_num * I_denom2
+    drho_ds_ds(j) = -2.*(p_p0*(a2*dp0_dS)) * I_denom2 - 2.*(dRdS_num*ddenom_dS) * I_denom3
+    drho_ds_dt(j) = ((b5*lambda - p_p0*(c5 + 2.*a2*dp0_dT)) + (dp0_dS*dlam_dT - dp0_dT*dlam_dS))*I_denom2 - &
+                    2.*(ddenom_dT*dRdS_num) * I_denom3
+    drho_dt_dt(j) = 2.*((b2 + 3.*b3*T(j))*lambda - p_p0*((c2 + 3.*c3*T(j)) + a1*dp0_dT))*I_denom2 - &
+                    2.*(dRdT_num * ddenom_dT) * I_denom3
+
+    ! The following is a rearranged form that is equivalent to
+    ! drho_ds_dp(j) = dlam_dS * I_denom2 - 2.0 * lambda * (dlam_dS + a2*p_p0 + al0*dp0_ds) * Idenom3
+    drho_ds_dp(j) = (-dlam_dS - 2.*a2*p_p0) * I_denom2 - (2.*al0*dRdS_num) * I_denom3
+    drho_dt_dp(j) = (-dlam_dT - 2.*a1*p_p0) * I_denom2 - (2.*al0*dRdT_num) * I_denom3
   enddo
 
 end subroutine calculate_density_second_derivs_array_wright
@@ -387,17 +397,17 @@ subroutine calculate_specvol_derivs_wright_full(T, S, pressure, dSV_dT, dSV_dS, 
   integer :: j
 
   do j=start,start+npts-1
-!    al0 = (a0 + a1*T(j)) + a2*S(j)
-    p0 = (b0 + b4*S(j)) + T(j) * (b1 + T(j)*((b2 + b3*T(j))) + b5*S(j))
-    lambda = (c0 +c4*S(j)) + T(j) * (c1 + T(j)*((c2 + c3*T(j))) + c5*S(j))
+!    al0 = a0 + (a1*T(j) + a2*S(j))
+    p0 = b0 + ( b4*S(j) + T(j) * (b1 + (T(j)*(b2 + b3*T(j)) + b5*S(j))) )
+    lambda = c0 + ( c4*S(j) + T(j) * (c1 + (T(j)*(c2 + c3*T(j)) + c5*S(j))) )
 
     ! SV = al0 + lambda / (pressure(j) + p0)
 
     I_denom = 1.0 / (pressure(j) + p0)
-    dSV_dT(j) = (a1 + I_denom * (c1 + T(j)*((2.0*c2 + 3.0*c3*T(j))) + c5*S(j))) - &
-                (I_denom**2 * lambda) *  (b1 + T(j)*((2.0*b2 + 3.0*b3*T(j))) + b5*S(j))
-    dSV_dS(j) = (a2 + I_denom * (c4 + c5*T(j))) - &
-                (I_denom**2 * lambda) *  (b4 + b5*T(j))
+    dSV_dT(j) = a1 + I_denom * ((c1 + (T(j)*(2.0*c2 + 3.0*c3*T(j)) + c5*S(j))) - &
+                                (I_denom * lambda) * (b1 + (T(j)*(2.0*b2 + 3.0*b3*T(j)) + b5*S(j))))
+    dSV_dS(j) = a2 + I_denom * ((c4 + c5*T(j)) - &
+                                (I_denom * lambda) * (b4 + b5*T(j)))
   enddo
 
 end subroutine calculate_specvol_derivs_wright_full
@@ -422,13 +432,13 @@ subroutine calculate_compress_wright_full(T, S, pressure, rho, drho_dp, start, n
   integer :: j
 
   do j=start,start+npts-1
-    al0 = (a0 + a1*T(j)) +a2*S(j)
-    p0 = (b0 + b4*S(j)) + T(j) * (b1 + T(j)*((b2 + b3*T(j))) + b5*S(j))
-    lambda = (c0 +c4*S(j)) + T(j) * (c1 + T(j)*((c2 + c3*T(j))) + c5*S(j))
+    al0 = a0 + (a1*T(j) + a2*S(j))
+    p0 = b0 + ( b4*S(j) + T(j) * (b1 + (T(j)*(b2 + b3*T(j)) + b5*S(j))) )
+    lambda = c0 + ( c4*S(j) + T(j) * (c1 + (T(j)*(c2 + c3*T(j)) + c5*S(j))) )
 
     I_denom = 1.0 / (lambda + al0*(pressure(j) + p0))
     rho(j) = (pressure(j) + p0) * I_denom
-    drho_dp(j) = lambda * I_denom * I_denom
+    drho_dp(j) = lambda * I_denom**2
   enddo
 end subroutine calculate_compress_wright_full
 
@@ -585,9 +595,9 @@ subroutine int_density_dz_wright_full(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
   endif ; endif
 
   do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-    al0_2d(i,j) = (a0 + a1s*T(i,j)) + a2s*S(i,j)
-    p0_2d(i,j) = (b0 + b4s*S(i,j)) + T(i,j) * (b1s + T(i,j)*((b2s + b3s*T(i,j))) + b5s*S(i,j))
-    lambda_2d(i,j) = (c0 +c4s*S(i,j)) + T(i,j) * (c1s + T(i,j)*((c2s + c3s*T(i,j))) + c5s*S(i,j))
+    al0_2d(i,j) = a0 + (a1s*T(i,j) + a2s*S(i,j))
+    p0_2d(i,j) = b0 + ( b4s*S(i,j) + T(i,j) * (b1s + (T(i,j)*(b2s + b3s*T(i,j)) + b5s*S(i,j))) )
+    lambda_2d(i,j) = c0 + ( c4s*S(i,j) + T(i,j) * (c1s + (T(i,j)*(c2s + c3s*T(i,j)) + c5s*S(i,j))) )
 
     al0 = al0_2d(i,j) ; p0 = p0_2d(i,j) ; lambda = lambda_2d(i,j)
 
@@ -595,17 +605,16 @@ subroutine int_density_dz_wright_full(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
     p_ave = -GxRho*(0.5*(z_t(i,j)+z_b(i,j)) - z0pres)
 
     I_al0 = 1.0 / al0
-    I_Lzz = 1.0 / (p0 + (lambda * I_al0) + p_ave)
-    eps = 0.5*GxRho*dz*I_Lzz ; eps2 = eps*eps
+    I_Lzz = 1.0 / ((p0 + p_ave) + lambda * I_al0)
+    eps = 0.5*(GxRho*dz)*I_Lzz ; eps2 = eps*eps
 
 !     rho(j) = (pressure(j) + p0) / (lambda + al0*(pressure(j) + p0))
 
     rho_anom = (p0 + p_ave)*(I_Lzz*I_al0) - rho_ref_mks
-    rem = I_Rho * (lambda * I_al0**2) * eps2 * &
-          (C1_3 + eps2*(0.2 + eps2*(C1_7 + C1_9*eps2)))
-    dpa(i,j) = Pa_to_RL2_T2 * (g_Earth*rho_anom*dz - 2.0*eps*rem)
+    rem = (I_Rho * (lambda * I_al0**2)) * (eps2 * (C1_3 + eps2*(0.2 + eps2*(C1_7 + C1_9*eps2))))
+    dpa(i,j) = Pa_to_RL2_T2 * ((g_Earth*rho_anom)*dz - 2.0*eps*rem)
     if (present(intz_dpa)) &
-      intz_dpa(i,j) = Pa_to_RL2_T2 * (0.5*g_Earth*rho_anom*dz**2 - dz*(1.0+eps)*rem)
+      intz_dpa(i,j) = Pa_to_RL2_T2 * (0.5*(g_Earth*rho_anom)*dz**2 - dz*((1.0+eps)*rem))
   enddo ; enddo
 
   if (present(intx_dpa)) then ; do j=js,je ; do I=Isq,Ieq
@@ -639,11 +648,11 @@ subroutine int_density_dz_wright_full(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
       p_ave = -GxRho*(0.5*(wt_L*(z_t(i,j)+z_b(i,j)) + wt_R*(z_t(i+1,j)+z_b(i+1,j))) - z0pres)
 
       I_al0 = 1.0 / al0
-      I_Lzz = 1.0 / (p0 + (lambda * I_al0) + p_ave)
-      eps = 0.5*GxRho*dz*I_Lzz ; eps2 = eps*eps
+      I_Lzz = 1.0 / ((p0 + p_ave) + lambda * I_al0)
+      eps = 0.5*(GxRho*dz)*I_Lzz ; eps2 = eps*eps
 
-      intz(m) = Pa_to_RL2_T2 * ( g_Earth*dz*((p0 + p_ave)*(I_Lzz*I_al0) - rho_ref_mks) - 2.0*eps * &
-                I_Rho * (lambda * I_al0**2) * eps2 * (C1_3 + eps2*(0.2 + eps2*(C1_7 + C1_9*eps2))) )
+      intz(m) = Pa_to_RL2_T2 * ( (g_Earth*dz) * ((p0 + p_ave)*(I_Lzz*I_al0) - rho_ref_mks) - 2.0*eps * &
+                  (I_Rho * (lambda * I_al0**2)) * (eps2 * (C1_3 + eps2*(0.2 + eps2*(C1_7 + C1_9*eps2)))) )
     enddo
     ! Use Boole's rule to integrate the values.
     intx_dpa(i,j) = C1_90*(7.0*(intz(1)+intz(5)) + 32.0*(intz(2)+intz(4)) + 12.0*intz(3))
@@ -680,11 +689,11 @@ subroutine int_density_dz_wright_full(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
       p_ave = -GxRho*(0.5*(wt_L*(z_t(i,j)+z_b(i,j)) + wt_R*(z_t(i,j+1)+z_b(i,j+1))) - z0pres)
 
       I_al0 = 1.0 / al0
-      I_Lzz = 1.0 / (p0 + (lambda * I_al0) + p_ave)
-      eps = 0.5*GxRho*dz*I_Lzz ; eps2 = eps*eps
+      I_Lzz = 1.0 / ((p0 + p_ave) + lambda * I_al0)
+      eps = 0.5*(GxRho*dz)*I_Lzz ; eps2 = eps*eps
 
-      intz(m) = Pa_to_RL2_T2 * ( g_Earth*dz*((p0 + p_ave)*(I_Lzz*I_al0) - rho_ref_mks) - 2.0*eps * &
-                I_Rho * (lambda * I_al0**2) * eps2 * (C1_3 + eps2*(0.2 + eps2*(C1_7 + C1_9*eps2))) )
+      intz(m) = Pa_to_RL2_T2 * ( (g_Earth*dz) * ((p0 + p_ave)*(I_Lzz*I_al0) - rho_ref_mks) - 2.0*eps * &
+                  (I_Rho * (lambda * I_al0**2)) * (eps2 * (C1_3 + eps2*(0.2 + eps2*(C1_7 + C1_9*eps2)))) )
     enddo
     ! Use Boole's rule to integrate the values.
     inty_dpa(i,j) = C1_90*(7.0*(intz(1)+intz(5)) + 32.0*(intz(2)+intz(4)) + 12.0*intz(3))
@@ -832,20 +841,20 @@ subroutine int_spec_vol_dp_wright_full(T, S, p_t, p_b, spv_ref, HI, dza, &
 
   !  alpha(j) = (lambda + al0*(pressure(j) + p0)) / (pressure(j) + p0)
   do j=jsh,jeh ; do i=ish,ieh
-    al0_2d(i,j) = al0_scale * ( (a0 + a1s*T(i,j)) + a2s*S(i,j) )
-    p0_2d(i,j) = p0_scale * ( (b0 + b4s*S(i,j)) + T(i,j) * (b1s + T(i,j)*((b2s + b3s*T(i,j))) + b5s*S(i,j)) )
-    lambda_2d(i,j) = lam_scale * ( (c0 + c4s*S(i,j)) + T(i,j) * (c1s + T(i,j)*((c2s + c3s*T(i,j))) + c5s*S(i,j)) )
+    al0_2d(i,j) = al0_scale * ( a0 + (a1s*T(i,j) + a2s*S(i,j)) )
+    p0_2d(i,j) = p0_scale * ( b0 + ( b4s*S(i,j) + T(i,j) * (b1s + (T(i,j)*(b2s + b3s*T(i,j)) + b5s*S(i,j))) ) )
+    lambda_2d(i,j) = lam_scale * ( c0 + ( c4s*S(i,j) + T(i,j) * (c1s + (T(i,j)*(c2s + c3s*T(i,j)) + c5s*S(i,j))) ) )
 
     al0 = al0_2d(i,j) ; p0 = p0_2d(i,j) ; lambda = lambda_2d(i,j)
     dp = p_b(i,j) - p_t(i,j)
     p_ave = 0.5*(p_t(i,j)+p_b(i,j))
 
     eps = 0.5 * dp / (p0 + p_ave) ; eps2 = eps*eps
-    alpha_anom = al0 + lambda / (p0 + p_ave) - spv_ref
-    rem = lambda * eps2 * (C1_3 + eps2*(0.2 + eps2*(C1_7 + C1_9*eps2)))
+    alpha_anom = (al0 - spv_ref) + lambda / (p0 + p_ave)
+    rem = (lambda * eps2) * (C1_3 + eps2*(0.2 + eps2*(C1_7 + C1_9*eps2)))
     dza(i,j) = alpha_anom*dp + 2.0*eps*rem
     if (present(intp_dza)) &
-      intp_dza(i,j) = 0.5*alpha_anom*dp**2 - dp*(1.0-eps)*rem
+      intp_dza(i,j) = 0.5*alpha_anom*dp**2 - dp*((1.0-eps)*rem)
   enddo ; enddo
 
   if (present(intx_dza)) then ; do j=HI%jsc,HI%jec ; do I=Isq,Ieq
@@ -881,7 +890,7 @@ subroutine int_spec_vol_dp_wright_full(T, S, p_t, p_b, spv_ref, HI, dza, &
       p_ave = 0.5*(wt_L*(p_t(i,j)+p_b(i,j)) + wt_R*(p_t(i+1,j)+p_b(i+1,j)))
 
       eps = 0.5 * dp / (p0 + p_ave) ; eps2 = eps*eps
-      intp(m) = (al0 + lambda / (p0 + p_ave) - spv_ref)*dp + 2.0*eps* &
+      intp(m) = ((al0 - spv_ref) + lambda / (p0 + p_ave))*dp + 2.0*eps* &
                lambda * eps2 * (C1_3 + eps2*(0.2 + eps2*(C1_7 + C1_9*eps2)))
     enddo
     ! Use Boole's rule to integrate the values.
@@ -922,7 +931,7 @@ subroutine int_spec_vol_dp_wright_full(T, S, p_t, p_b, spv_ref, HI, dza, &
       p_ave = 0.5*(wt_L*(p_t(i,j)+p_b(i,j)) + wt_R*(p_t(i,j+1)+p_b(i,j+1)))
 
       eps = 0.5 * dp / (p0 + p_ave) ; eps2 = eps*eps
-      intp(m) = (al0 + lambda / (p0 + p_ave) - spv_ref)*dp + 2.0*eps* &
+      intp(m) = ((al0 - spv_ref) + lambda / (p0 + p_ave))*dp + 2.0*eps* &
                lambda * eps2 * (C1_3 + eps2*(0.2 + eps2*(C1_7 + C1_9*eps2)))
     enddo
     ! Use Boole's rule to integrate the values.

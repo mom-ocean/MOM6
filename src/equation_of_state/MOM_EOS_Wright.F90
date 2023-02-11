@@ -300,7 +300,7 @@ subroutine calculate_density_second_derivs_array_wright(T, S, P, drho_ds_ds, drh
   do j = start,start+npts-1
     z0 = T(j)*(b1 + b5*S(j) + T(j)*(b2 + b3*T(j)))
     z1 = (b0 + P(j) + b4*S(j) + z0)
-    z3 = (b1 + b5*S(j) + T(j)*(2.*b2 + 2.*b3*T(j)))
+    z3 = (b1 + b5*S(j) + T(j)*(2.*b2 + 2.*b3*T(j))) ! BUG: This should be z3 = b1 + b5*S(j) + T(j)*(2.*b2 + 3.*b3*T(j))
     z4 = (c0 + c4*S(j) + T(j)*(c1 + c5*S(j) + T(j)*(c2 + c3*T(j))))
     z5 = (b1 + b5*S(j) + T(j)*(b2 + b3*T(j)) + T(j)*(b2 + 2.*b3*T(j)))
     z6 = c1 + c5*S(j) + T(j)*(c2 + c3*T(j)) + T(j)*(c2 + 2.*c3*T(j))
@@ -315,6 +315,7 @@ subroutine calculate_density_second_derivs_array_wright(T, S, P, drho_ds_ds, drh
 
     drho_ds_ds(j) = (z10*(c4 + c5*T(j)) - a2*z10*z1 - z10*z7)/z2_2 - (2.*(c4 + c5*T(j) + z9*z10 + a2*z1)*z11)/z2_3
     drho_ds_dt(j) = (z10*z6 - z1*(c5 + a2*z5) + b5*z4 - z5*z7)/z2_2 - (2.*(z6 + z9*z5 + a1*z1)*z11)/z2_3
+    ! BUG: In the following line: (2.*b2 + 4.*b3*T(j)) should be (2.*b2 + 6.*b3*T(j))
     drho_dt_dt(j) = (z3*z6 - z1*(2.*c2 + 6.*c3*T(j) + a1*z5) + (2.*b2 + 4.*b3*T(j))*z4 - z5*z8)/z2_2 - &
                     (2.*(z6 + z9*z5 + a1*z1)*(z3*z4 - z1*z8))/z2_3
     drho_ds_dp(j) = (-c4 - c5*T(j) - 2.*a2*z1)/z2_2 - (2.*z9*z11)/z2_3
