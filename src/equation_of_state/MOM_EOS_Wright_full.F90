@@ -3,12 +3,6 @@ module MOM_EOS_Wright_full
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-!***********************************************************************
-!*  The subroutines in this file implement the equation of state for   *
-!*  sea water using the formulae given by  Wright, 1997, J. Atmos.     *
-!*  Ocean. Tech., 14, 735-740.  Coded by R. Hallberg, 7/00.            *
-!***********************************************************************
-
 use MOM_hor_index, only : hor_index_type
 
 implicit none ; private
@@ -20,16 +14,10 @@ public calculate_density_derivs_wright_full, calculate_specvol_derivs_wright_ful
 public calculate_density_second_derivs_wright_full
 public int_density_dz_wright_full, int_spec_vol_dp_wright_full
 
-! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
-! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
-! their mks counterparts with notation like "a velocity [Z T-1 ~> m s-1]".  If the units
-! vary with the Boussinesq approximation, the Boussinesq variant is given first.
-
-
 !> Compute the in situ density of sea water (in [kg m-3]), or its anomaly with respect to
 !! a reference density, from salinity in practical salinity units ([PSU]), potential
 !! temperature (in degrees Celsius [degC]), and pressure [Pa], using the expressions from
-!! Wright, 1997, J. Atmos. Ocean. Tech., 14, 735-740.
+!! Wright, 1997, J. Atmos. Ocean. Tech., 14, 735-740 with the full range fit coefficients.
 interface calculate_density_wright_full
   module procedure calculate_density_scalar_wright, calculate_density_array_wright
 end interface calculate_density_wright_full
@@ -37,7 +25,7 @@ end interface calculate_density_wright_full
 !> Compute the in situ specific volume of sea water (in [m3 kg-1]), or an anomaly with respect
 !! to a reference specific volume, from salinity in practical salinity units ([PSU]), potential
 !! temperature (in degrees Celsius [degC]), and pressure [Pa], using the expressions from
-!! Wright, 1997, J. Atmos. Ocean. Tech., 14, 735-740.
+!! Wright, 1997, J. Atmos. Ocean. Tech., 14, 735-740 with the full range fit coefficients.
 interface calculate_spec_vol_wright_full
   module procedure calculate_spec_vol_scalar_wright, calculate_spec_vol_array_wright
 end interface calculate_spec_vol_wright_full
@@ -78,10 +66,11 @@ real, parameter :: c5 = -2.765195    ! A parameter in the Wright lambda fit [m2 
 
 contains
 
-!> This subroutine computes the in situ density of sea water (rho in
-!! [kg m-3]) from salinity (S [PSU]), potential temperature
-!! (T [degC]), and pressure [Pa].  It uses the expression from
-!! Wright, 1997, J. Atmos. Ocean. Tech., 14, 735-740.
+!> Computes the in situ density of sea water for scalar inputs and outputs.
+!!
+!! Returns the in situ density of sea water (rho in [kg m-3]) from salinity (S [PSU]),
+!! potential temperature (T [degC]), and pressure [Pa].  It uses the expression from
+!! Wright, 1997, J. Atmos. Ocean. Tech., 14, 735-740 with the full range fit coefficients.
 subroutine calculate_density_scalar_wright(T, S, pressure, rho, rho_ref)
   real,           intent(in)  :: T        !< Potential temperature relative to the surface [degC].
   real,           intent(in)  :: S        !< Salinity [PSU].
@@ -89,14 +78,7 @@ subroutine calculate_density_scalar_wright(T, S, pressure, rho, rho_ref)
   real,           intent(out) :: rho      !< In situ density [kg m-3].
   real, optional, intent(in)  :: rho_ref  !< A reference density [kg m-3].
 
-! *====================================================================*
-! *  This subroutine computes the in situ density of sea water (rho in *
-! *  [kg m-3]) from salinity (S [PSU]), potential temperature          *
-! *  (T [degC]), and pressure [Pa].  It uses the expression from       *
-! *  Wright, 1997, J. Atmos. Ocean. Tech., 14, 735-740.                *
-! *  Coded by R. Hallberg, 7/00                                        *
-! *====================================================================*
-
+  ! Local variables
   real, dimension(1) :: T0    ! A 1-d array with a copy of the potential temperature [degC]
   real, dimension(1) :: S0    ! A 1-d array with a copy of the salinity [PSU]
   real, dimension(1) :: pressure0 ! A 1-d array with a copy of the pressure [Pa]
@@ -111,10 +93,11 @@ subroutine calculate_density_scalar_wright(T, S, pressure, rho, rho_ref)
 
 end subroutine calculate_density_scalar_wright
 
-!> This subroutine computes the in situ density of sea water (rho in
-!! [kg m-3]) from salinity (S [PSU]), potential temperature
-!! (T [degC]), and pressure [Pa].  It uses the expression from
-!! Wright, 1997, J. Atmos. Ocean. Tech., 14, 735-740.
+!> Computes the in situ density of sea water for 1-d array inputs and outputs.
+!!
+!! Returns the in situ density of sea water (rho in [kg m-3]) from salinity (S [PSU]),
+!! potential temperature (T [degC]), and pressure [Pa].  It uses the expression from
+!! Wright, 1997, J. Atmos. Ocean. Tech., 14, 735-740 with the full range fit coefficients.
 subroutine calculate_density_array_wright(T, S, pressure, rho, start, npts, rho_ref)
   real, dimension(:), intent(in)    :: T        !< potential temperature relative to the surface [degC].
   real, dimension(:), intent(in)    :: S        !< salinity [PSU].
@@ -124,7 +107,6 @@ subroutine calculate_density_array_wright(T, S, pressure, rho, start, npts, rho_
   integer,            intent(in)    :: npts     !< the number of values to calculate.
   real,     optional, intent(in)    :: rho_ref  !< A reference density [kg m-3].
 
-  ! Original coded by R. Hallberg, 7/00, anomaly coded in 3/18.
   ! Local variables
   real :: al0     ! The specific volume at 0 lambda in the Wright EOS [m3 kg-1]
   real :: p0      ! The pressure offset in the Wright EOS [Pa]
@@ -155,10 +137,11 @@ subroutine calculate_density_array_wright(T, S, pressure, rho, start, npts, rho_
 
 end subroutine calculate_density_array_wright
 
-!> This subroutine computes the in situ specific volume of sea water (specvol in
-!! [m3 kg-1]) from salinity (S [PSU]), potential temperature (T [degC])
-!! and pressure [Pa].  It uses the expression from
-!! Wright, 1997, J. Atmos. Ocean. Tech., 14, 735-740.
+!> Computes the Wright in situ specific volume of sea water for scalar inputs and outputs.
+!!
+!! Returns the in situ specific volume of sea water (specvol in [m3 kg-1]) from salinity (S [PSU]),
+!! potential temperature (T [degC]) and pressure [Pa].  It uses the expression from
+!! Wright, 1997, J. Atmos. Ocean. Tech., 14, 735-740 with the full range fit coefficients.
 !! If spv_ref is present, specvol is an anomaly from spv_ref.
 subroutine calculate_spec_vol_scalar_wright(T, S, pressure, specvol, spv_ref)
   real,           intent(in)  :: T        !< potential temperature relative to the surface [degC].
@@ -179,10 +162,11 @@ subroutine calculate_spec_vol_scalar_wright(T, S, pressure, specvol, spv_ref)
   specvol = spv0(1)
 end subroutine calculate_spec_vol_scalar_wright
 
-!> This subroutine computes the in situ specific volume of sea water (specvol in
-!! [m3 kg-1]) from salinity (S [PSU]), potential temperature (T [degC])
-!! and pressure [Pa].  It uses the expression from
-!! Wright, 1997, J. Atmos. Ocean. Tech., 14, 735-740.
+!> Computes the Wright in situ specific volume of sea water for 1-d array inputs and outputs.
+!!
+!! Returns the in situ specific volume of sea water (specvol in [m3 kg-1]) from salinity (S [PSU]),
+!! potential temperature (T [degC]) and pressure [Pa].  It uses the expression from
+!! Wright, 1997, J. Atmos. Ocean. Tech., 14, 735-740 with the full range fit coefficients.
 !! If spv_ref is present, specvol is an anomaly from spv_ref.
 subroutine calculate_spec_vol_array_wright(T, S, pressure, specvol, start, npts, spv_ref)
   real, dimension(:), intent(in)    :: T        !< potential temperature relative to the
@@ -213,7 +197,7 @@ subroutine calculate_spec_vol_array_wright(T, S, pressure, specvol, start, npts,
   enddo
 end subroutine calculate_spec_vol_array_wright
 
-!> For a given thermodynamic state, return the thermal/haline expansion coefficients
+!> Return the thermal/haline expansion coefficients for 1-d array inputs and outputs
 subroutine calculate_density_derivs_array_wright(T, S, pressure, drho_dT, drho_dS, start, npts)
   real,    intent(in),    dimension(:) :: T        !< Potential temperature relative to the
                                                    !! surface [degC].
@@ -250,8 +234,10 @@ subroutine calculate_density_derivs_array_wright(T, S, pressure, drho_dT, drho_d
 
 end subroutine calculate_density_derivs_array_wright
 
-!> The scalar version of calculate_density_derivs which promotes scalar inputs to a 1-element array and then
-!! demotes the output back to a scalar
+!> Return the thermal/haline expansion coefficients for scalar inputs and outputs
+!!
+!! The scalar version of calculate_density_derivs promotes scalar inputs to 1-element array
+!! and then demotes the output back to a scalar
 subroutine calculate_density_derivs_scalar_wright(T, S, pressure, drho_dT, drho_dS)
   real,    intent(in)  :: T        !< Potential temperature relative to the surface [degC].
   real,    intent(in)  :: S        !< Salinity [PSU].
@@ -277,7 +263,7 @@ subroutine calculate_density_derivs_scalar_wright(T, S, pressure, drho_dT, drho_
 
 end subroutine calculate_density_derivs_scalar_wright
 
-!> Second derivatives of density with respect to temperature, salinity, and pressure
+!> Second derivatives of density with respect to temperature, salinity, and pressure for 1-d array inputs and outputs.
 subroutine calculate_density_second_derivs_array_wright(T, S, P, drho_ds_ds, drho_ds_dt, drho_dt_dt, &
                                                          drho_ds_dp, drho_dt_dp, start, npts)
   real, dimension(:), intent(in   ) :: T !< Potential temperature referenced to 0 dbar [degC]
@@ -337,8 +323,10 @@ subroutine calculate_density_second_derivs_array_wright(T, S, P, drho_ds_ds, drh
 
 end subroutine calculate_density_second_derivs_array_wright
 
-!> Second derivatives of density with respect to temperature, salinity, and pressure for scalar inputs. Inputs
-!! promoted to 1-element array and output demoted to scalar
+!> Second derivatives of density with respect to temperature, salinity, and pressure for scalar inputs.
+!!
+!! The scalar version of calculate_density_second_derivs promotes scalar inputs to 1-element array
+!! and then demotes the output back to a scalar
 subroutine calculate_density_second_derivs_scalar_wright(T, S, P, drho_ds_ds, drho_ds_dt, drho_dt_dt, &
                                                          drho_ds_dp, drho_dt_dp)
   real, intent(in   ) :: T          !< Potential temperature referenced to 0 dbar
@@ -379,8 +367,8 @@ subroutine calculate_density_second_derivs_scalar_wright(T, S, P, drho_ds_ds, dr
 
 end subroutine calculate_density_second_derivs_scalar_wright
 
-!> For a given thermodynamic state, return the partial derivatives of specific volume
-!! with temperature and salinity
+!> Return the partial derivatives of specific volume with temperature and salinity
+!! for 1-d array inputs and outputs
 subroutine calculate_specvol_derivs_wright_full(T, S, pressure, dSV_dT, dSV_dS, start, npts)
   real,    intent(in),    dimension(:) :: T        !< Potential temperature relative to the surface [degC].
   real,    intent(in),    dimension(:) :: S        !< Salinity [PSU].
@@ -414,11 +402,7 @@ subroutine calculate_specvol_derivs_wright_full(T, S, pressure, dSV_dT, dSV_dS, 
 
 end subroutine calculate_specvol_derivs_wright_full
 
-!> This subroutine computes the in situ density of sea water (rho in [kg m-3])
-!! and the compressibility (drho/dp = C_sound^-2) (drho_dp [s2 m-2]) from
-!! salinity (sal [PSU]), potential temperature (T [degC]), and pressure [Pa].
-!! It uses the expressions from Wright, 1997, J. Atmos. Ocean. Tech., 14, 735-740.
-!! Coded by R. Hallberg, 1/01
+!> Computes the compressibility of seawater for 1-d array inputs and outputs
 subroutine calculate_compress_wright_full(T, S, pressure, rho, drho_dp, start, npts)
   real,    intent(in),    dimension(:) :: T        !< Potential temperature relative to the surface [degC].
   real,    intent(in),    dimension(:) :: S        !< Salinity [PSU].
@@ -430,7 +414,6 @@ subroutine calculate_compress_wright_full(T, S, pressure, rho, drho_dp, start, n
   integer, intent(in)                  :: start    !< The starting point in the arrays.
   integer, intent(in)                  :: npts     !< The number of values to calculate.
 
-  ! Coded by R. Hallberg, 1/01
   ! Local variables
   real :: al0     ! The specific volume at 0 lambda in the Wright EOS [m3 kg-1]
   real :: p0      ! The pressure offset in the Wright EOS [Pa]
@@ -449,9 +432,11 @@ subroutine calculate_compress_wright_full(T, S, pressure, rho, drho_dp, start, n
   enddo
 end subroutine calculate_compress_wright_full
 
-!> This subroutine calculates analytical and nearly-analytical integrals of
-!! pressure anomalies across layers, which are required for calculating the
-!! finite-volume form pressure accelerations in a Boussinesq model.
+!> Calculates analytical and nearly-analytical integrals, in geopotential across layers, of pressure
+!! anomalies, which are required for calculating the finite-volume form pressure accelerations in a
+!! Boussinesq model.  There are essentially no free assumptions, apart from the use of Boole's rule
+!! rule to do the horizontal integrals, and from a truncation in the series for log(1-eps/1+eps)
+!! that assumes that |eps| < 0.34.
 subroutine int_density_dz_wright_full(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
                                  dpa, intz_dpa, intx_dpa, inty_dpa, bathyT, dz_neglect, &
                                  useMassWghtInterp, rho_scale, pres_scale, temp_scale, saln_scale, Z_0p)
@@ -707,12 +692,11 @@ subroutine int_density_dz_wright_full(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
 
 end subroutine int_density_dz_wright_full
 
-!>   This subroutine calculates analytical and nearly-analytical integrals in
-!! pressure across layers of geopotential anomalies, which are required for
-!! calculating the finite-volume form pressure accelerations in a non-Boussinesq
-!! model.  There are essentially no free assumptions, apart from the use of
-!! Boole's rule to do the horizontal integrals, and from a truncation in the
-!! series for log(1-eps/1+eps) that assumes that |eps| < 0.34.
+!> Calculates analytical and nearly-analytical integrals, in pressure across layers, of geopotential
+!! anomalies, which are required for calculating the finite-volume form pressure accelerations in a
+!! non-Boussinesq model.  There are essentially no free assumptions, apart from the use of Boole's
+!! rule to do the horizontal integrals, and from a truncation in the series for log(1-eps/1+eps)
+!! that assumes that |eps| < 0.34.
 subroutine int_spec_vol_dp_wright_full(T, S, p_t, p_b, spv_ref, HI, dza, &
                                   intp_dza, intx_dza, inty_dza, halo_size, bathyP, dP_neglect, &
                                   useMassWghtInterp, SV_scale, pres_scale, temp_scale, saln_scale)
@@ -946,5 +930,25 @@ subroutine int_spec_vol_dp_wright_full(T, S, p_t, p_b, spv_ref, HI, dza, &
                            12.0*intp(3))
   enddo ; enddo ; endif
 end subroutine int_spec_vol_dp_wright_full
+
+!> \namespace mom_eos_wright_full
+!!
+!! \section section_EOS_Wright Wright equation of state
+!!
+!! Wright, 1997, provide an approximation for the in situ density as a function of
+!! potential temperature, salinity, and pressure. The formula follow the Tumlirz
+!! equation of state which are easier to evaluate and make efficient.
+!!
+!! Two ranges are provided by Wright: a "full" range and "reduced" range. The version in this
+!! module uses the full range.
+!!
+!! Originally coded in 2000 by R. Hallberg.
+!! Anomaly form coded in 3/18.
+!!
+!! \subsection section_EOS_Wright_references References
+!!
+!! Wright, D., 1997: An Equation of State for Use in Ocean Models: Eckart's Formula Revisited.
+!! J. Ocean. Atmosph. Tech., 14 (3), 735-740.
+!! https://journals.ametsoc.org/doi/abs/10.1175/1520-0426%281997%29014%3C0735%3AAEOSFU%3E2.0.CO%3B2
 
 end module MOM_EOS_Wright_full
