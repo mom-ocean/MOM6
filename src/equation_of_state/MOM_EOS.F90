@@ -18,6 +18,11 @@ use MOM_EOS_Wright_full, only : calculate_density_derivs_wright_full
 use MOM_EOS_Wright_full, only : calculate_specvol_derivs_wright_full, int_density_dz_wright_full
 use MOM_EOS_Wright_full, only : calculate_compress_wright_full, int_spec_vol_dp_wright_full
 use MOM_EOS_Wright_full, only : calculate_density_second_derivs_wright_full
+use MOM_EOS_Wright_red,  only : calculate_density_wright_red, calculate_spec_vol_wright_red
+use MOM_EOS_Wright_red,  only : calculate_density_derivs_wright_red
+use MOM_EOS_Wright_red,  only : calculate_specvol_derivs_wright_red, int_density_dz_wright_red
+use MOM_EOS_Wright_red,  only : calculate_compress_wright_red, int_spec_vol_dp_wright_red
+use MOM_EOS_Wright_red,  only : calculate_density_second_derivs_wright_red
 use MOM_EOS_UNESCO, only : calculate_density_unesco, calculate_spec_vol_unesco
 use MOM_EOS_UNESCO, only : calculate_density_derivs_unesco, calculate_density_unesco
 use MOM_EOS_UNESCO, only : calculate_compress_unesco
@@ -131,7 +136,7 @@ type, public :: EOS_type ; private
   real :: dTFr_dp   !< The derivative of freezing point with pressure [degC Pa-1]
 
 ! Unit conversion factors (normally used for dimensional testing but could also allow for
-! change of units of arguments to functions
+! change of units of arguments to functions)
   real :: m_to_Z = 1.      !< A constant that translates distances in meters to the units of depth [Z m-1 ~> 1]
   real :: kg_m3_to_R = 1.  !< A constant that translates kilograms per meter cubed to the
                            !! units of density [R m3 kg-1 ~> 1]
@@ -152,8 +157,9 @@ integer, parameter, public :: EOS_LINEAR = 1 !< A named integer specifying an eq
 integer, parameter, public :: EOS_UNESCO = 2 !< A named integer specifying an equation of state
 integer, parameter, public :: EOS_WRIGHT = 3 !< A named integer specifying an equation of state
 integer, parameter, public :: EOS_WRIGHT_FULL = 4 !< A named integer specifying an equation of state
-integer, parameter, public :: EOS_TEOS10 = 5 !< A named integer specifying an equation of state
-integer, parameter, public :: EOS_NEMO   = 6 !< A named integer specifying an equation of state
+integer, parameter, public :: EOS_WRIGHT_RED = 5 !< A named integer specifying an equation of state
+integer, parameter, public :: EOS_TEOS10 = 6 !< A named integer specifying an equation of state
+integer, parameter, public :: EOS_NEMO   = 7 !< A named integer specifying an equation of state
 
 character*(10), parameter :: EOS_LINEAR_STRING = "LINEAR" !< A string for specifying the equation of state
 character*(10), parameter :: EOS_UNESCO_STRING = "UNESCO" !< A string for specifying the equation of state
@@ -252,6 +258,15 @@ subroutine calculate_stanley_density_scalar(T, S, pressure, Tvar, TScov, Svar, r
     case (EOS_WRIGHT_FULL)
       call calculate_density_second_derivs_wright_full(T_scale*T, S_scale*S, p_scale*pressure, &
                                                   d2RdSS, d2RdST, d2RdTT, d2RdSp, d2RdTP)
+    case (EOS_WRIGHT_RED)
+      call calculate_density_second_derivs_wright_red(T_scale*T, S_scale*S, p_scale*pressure, &
+                                                  d2RdSS, d2RdST, d2RdTT, d2RdSp, d2RdTP)
+    case (EOS_UNESCO)
+      call MOM_error(FATAL, "calculate_stanley_density_scalar: "//&
+                     "EOS_UNESCO is not set up to calculate second derivatives yet.")
+    case (EOS_NEMO)
+      call MOM_error(FATAL, "calculate_stanley_density_scalar: "//&
+                     "EOS_NEMO is not set up to calculate second derivatives yet.")
     case (EOS_TEOS10)
       call calculate_density_second_derivs_teos10(T_scale*T, S_scale*S, p_scale*pressure, &
                                                   d2RdSS, d2RdST, d2RdTT, d2RdSp, d2RdTP)
@@ -293,6 +308,8 @@ subroutine calculate_density_array(T, S, pressure, rho, start, npts, EOS, rho_re
       call calculate_density_wright(T, S, pressure, rho, start, npts, rho_ref)
     case (EOS_WRIGHT_FULL)
       call calculate_density_wright_full(T, S, pressure, rho, start, npts, rho_ref)
+    case (EOS_WRIGHT_RED)
+      call calculate_density_wright_red(T, S, pressure, rho, start, npts, rho_ref)
     case (EOS_TEOS10)
       call calculate_density_teos10(T, S, pressure, rho, start, npts, rho_ref)
     case (EOS_NEMO)
@@ -349,6 +366,17 @@ subroutine calculate_stanley_density_array(T, S, pressure, Tvar, TScov, Svar, rh
       call calculate_density_wright_full(T, S, pressure, rho, start, npts, rho_ref)
       call calculate_density_second_derivs_wright_full(T, S, pressure, d2RdSS, d2RdST, &
                                                   d2RdTT, d2RdSp, d2RdTP, start, npts)
+    case (EOS_WRIGHT_RED)
+      call calculate_density_wright_red(T, S, pressure, rho, start, npts, rho_ref)
+      call calculate_density_second_derivs_wright_red(T, S, pressure, d2RdSS, d2RdST, &
+                                                  d2RdTT, d2RdSp, d2RdTP, start, npts)
+    case (EOS_UNESCO)
+      call MOM_error(FATAL, "calculate_stanley_density_array: "//&
+                     "EOS_UNESCO is not set up to calculate second derivatives yet.")
+    case (EOS_NEMO)
+      call calculate_density_NEMO(T, S, pressure, rho, start, npts, rho_ref)
+      call MOM_error(FATAL, "calculate_stanley_density_array: "//&
+                     "EOS_NEMO is not set up to calculate second derivatives yet.")
     case (EOS_TEOS10)
       call calculate_density_teos10(T, S, pressure, rho, start, npts, rho_ref)
       call calculate_density_second_derivs_teos10(T, S, pressure, d2RdSS, d2RdST, &
@@ -492,12 +520,23 @@ subroutine calculate_stanley_density_1d(T, S, pressure, Tvar, TScov, Svar, rho, 
       call calculate_density_wright_full(Ta, Sa, pres, rho, is, npts, rho_reference)
       call calculate_density_second_derivs_wright_full(Ta, Sa, pres, d2RdSS, d2RdST, &
                                                   d2RdTT, d2RdSp, d2RdTP, is, npts)
+    case (EOS_WRIGHT_RED)
+      call calculate_density_wright_red(Ta, Sa, pres, rho, is, npts, rho_reference)
+      call calculate_density_second_derivs_wright_red(Ta, Sa, pres, d2RdSS, d2RdST, &
+                                                  d2RdTT, d2RdSp, d2RdTP, is, npts)
+    case (EOS_UNESCO)
+      call MOM_error(FATAL, "calculate_stanley_density_1d: "//&
+                     "EOS_UNESCO is not set up to calculate second derivatives yet.")
+    case (EOS_NEMO)
+      call calculate_density_NEMO(Ta, Sa, pres, rho, is, npts, rho_reference)
+      call MOM_error(FATAL, "calculate_stanley_density_1d: "//&
+                     "EOS_NEMO is not set up to calculate second derivatives yet.")
     case (EOS_TEOS10)
       call calculate_density_teos10(Ta, Sa, pres, rho, is, npts, rho_reference)
       call calculate_density_second_derivs_teos10(Ta, Sa, pres, d2RdSS, d2RdST, &
                                                   d2RdTT, d2RdSp, d2RdTP, is, npts)
     case default
-      call MOM_error(FATAL, "calculate_stanley_density_scalar: EOS is not valid.")
+      call MOM_error(FATAL, "calculate_stanley_density_1d: EOS is not valid.")
   end select
 
   ! Equation 25 of Stanley et al., 2020.
@@ -542,6 +581,8 @@ subroutine calculate_spec_vol_array(T, S, pressure, specvol, start, npts, EOS, s
       call calculate_spec_vol_wright(T, S, pressure, specvol, start, npts, spv_ref)
     case (EOS_WRIGHT_FULL)
       call calculate_spec_vol_wright_full(T, S, pressure, specvol, start, npts, spv_ref)
+    case (EOS_WRIGHT_RED)
+      call calculate_spec_vol_wright_red(T, S, pressure, specvol, start, npts, spv_ref)
     case (EOS_TEOS10)
       call calculate_spec_vol_teos10(T, S, pressure, specvol, start, npts, spv_ref)
     case (EOS_NEMO)
@@ -831,6 +872,8 @@ subroutine calculate_density_derivs_array(T, S, pressure, drho_dT, drho_dS, star
       call calculate_density_derivs_wright(T, S, pressure, drho_dT, drho_dS, start, npts)
     case (EOS_WRIGHT_FULL)
       call calculate_density_derivs_wright_full(T, S, pressure, drho_dT, drho_dS, start, npts)
+    case (EOS_WRIGHT_RED)
+      call calculate_density_derivs_wright_red(T, S, pressure, drho_dT, drho_dS, start, npts)
     case (EOS_TEOS10)
       call calculate_density_derivs_teos10(T, S, pressure, drho_dT, drho_dS, start, npts)
     case (EOS_NEMO)
@@ -918,26 +961,32 @@ subroutine calculate_density_derivs_scalar(T, S, pressure, drho_dT, drho_dS, EOS
   real :: rho_scale ! A factor to convert density from kg m-3 to the desired units [R m3 kg-1 ~> 1]
   real :: dRdT_scale ! A factor to convert drho_dT to the desired units [R degC m3 C-1 kg-1 ~> 1]
   real :: dRdS_scale ! A factor to convert drho_dS to the desired units [R ppt m3 S-1 kg-1 ~> 1]
-  real :: pres  ! Pressure converted to [Pa]
-  real :: Ta    ! Temperature converted to [degC]
-  real :: Sa    ! Salinity converted to [ppt]
+  real :: pres(1)  ! Pressure converted to [Pa]
+  real :: Ta(1)    ! Temperature converted to [degC]
+  real :: Sa(1)    ! Salinity converted to [ppt]
+  real :: dR_dT(1) ! A copy of drho_dT in mks units [kg m-3 degC-1]
+  real :: dR_dS(1) ! A copy of drho_dS in mks units [kg m-3 ppt-1]
 
-  pres = EOS%RL2_T2_to_Pa*pressure
-  Ta = EOS%C_to_degC * T
-  Sa = EOS%S_to_ppt * S
+  pres(1) = EOS%RL2_T2_to_Pa*pressure
+  Ta(1) = EOS%C_to_degC * T
+  Sa(1) = EOS%S_to_ppt * S
 
   select case (EOS%form_of_EOS)
     case (EOS_LINEAR)
-      call calculate_density_derivs_linear(Ta, Sa, pres, drho_dT, drho_dS, &
+      call calculate_density_derivs_linear(Ta(1), Sa(1), pres(1),drho_dT, drho_dS, &
                                            EOS%Rho_T0_S0, EOS%dRho_dT, EOS%dRho_dS)
     case (EOS_WRIGHT)
-      call calculate_density_derivs_wright(Ta, Sa, pres, drho_dT, drho_dS)
+      call calculate_density_derivs_wright(Ta(1), Sa(1), pres(1),drho_dT, drho_dS)
     case (EOS_WRIGHT_FULL)
-      call calculate_density_derivs_wright_full(Ta, Sa, pres, drho_dT, drho_dS)
+      call calculate_density_derivs_wright_full(Ta(1), Sa(1), pres(1),drho_dT, drho_dS)
+    case (EOS_WRIGHT_RED)
+      call calculate_density_derivs_wright_red(Ta(1), Sa(1), pres(1),drho_dT, drho_dS)
     case (EOS_TEOS10)
-      call calculate_density_derivs_teos10(Ta, Sa, pres, drho_dT, drho_dS)
+      call calculate_density_derivs_teos10(Ta(1), Sa(1), pres(1), drho_dT, drho_dS)
     case default
-      call MOM_error(FATAL, "calculate_density_derivs_scalar: EOS%form_of_EOS is not valid.")
+      ! Some equations of state do not have a scalar form of calculate_density_derivs, so try the array form.
+      call calculate_density_derivs_array(Ta, Sa, pres, dR_dT, dR_dS, 1, 1, EOS)
+      drho_dT = dR_dT(1); drho_dS = dR_dS(1)
   end select
 
   rho_scale = EOS%kg_m3_to_R
@@ -996,11 +1045,20 @@ subroutine calculate_density_second_derivs_1d(T, S, pressure, drho_dS_dS, drho_d
       case (EOS_WRIGHT_FULL)
         call calculate_density_second_derivs_wright_full(T, S, pressure, drho_dS_dS, drho_dS_dT, &
                                                     drho_dT_dT, drho_dS_dP, drho_dT_dP, is, npts)
+      case (EOS_WRIGHT_RED)
+        call calculate_density_second_derivs_wright_red(T, S, pressure, drho_dS_dS, drho_dS_dT, &
+                                                    drho_dT_dT, drho_dS_dP, drho_dT_dP, is, npts)
+      case (EOS_UNESCO)
+        call MOM_error(FATAL, "calculate_density_second_derivs: "//&
+                       "EOS_UNESCO is not set up to calculate second derivatives yet.")
+      case (EOS_NEMO)
+        call MOM_error(FATAL, "calculate_density_second_derivs: "//&
+                       "EOS_NEMO is not set up to calculate second derivatives yet.")
       case (EOS_TEOS10)
         call calculate_density_second_derivs_teos10(T, S, pressure, drho_dS_dS, drho_dS_dT, &
                                                     drho_dT_dT, drho_dS_dP, drho_dT_dP, is, npts)
       case default
-        call MOM_error(FATAL, "calculate_density_derivs: EOS%form_of_EOS is not valid.")
+        call MOM_error(FATAL, "calculate_density_second_derivs: EOS%form_of_EOS is not valid.")
     end select
   else
     do i=is,ie
@@ -1018,11 +1076,20 @@ subroutine calculate_density_second_derivs_1d(T, S, pressure, drho_dS_dS, drho_d
       case (EOS_WRIGHT_FULL)
         call calculate_density_second_derivs_wright_full(Ta, Sa, pres, drho_dS_dS, drho_dS_dT, &
                                                     drho_dT_dT, drho_dS_dP, drho_dT_dP, is, npts)
+      case (EOS_WRIGHT_RED)
+        call calculate_density_second_derivs_wright_red(Ta, Sa, pres, drho_dS_dS, drho_dS_dT, &
+                                                    drho_dT_dT, drho_dS_dP, drho_dT_dP, is, npts)
+      case (EOS_UNESCO)
+        call MOM_error(FATAL, "calculate_density_second_derivs: "//&
+                       "EOS_UNESCO is not set up to calculate second derivatives yet.")
+      case (EOS_NEMO)
+        call MOM_error(FATAL, "calculate_density_second_derivs: "//&
+                       "EOS_NEMO is not set up to calculate second derivatives yet.")
       case (EOS_TEOS10)
         call calculate_density_second_derivs_teos10(Ta, Sa, pres, drho_dS_dS, drho_dS_dT, &
                                                     drho_dT_dT, drho_dS_dP, drho_dT_dP, is, npts)
       case default
-        call MOM_error(FATAL, "calculate_density_derivs: EOS%form_of_EOS is not valid.")
+        call MOM_error(FATAL, "calculate_density_second_derivs: EOS%form_of_EOS is not valid.")
     end select
   endif
 
@@ -1094,11 +1161,20 @@ subroutine calculate_density_second_derivs_scalar(T, S, pressure, drho_dS_dS, dr
     case (EOS_WRIGHT_FULL)
       call calculate_density_second_derivs_wright_full(Ta, Sa, pres, drho_dS_dS, drho_dS_dT, &
                                                   drho_dT_dT, drho_dS_dP, drho_dT_dP)
+    case (EOS_WRIGHT_RED)
+      call calculate_density_second_derivs_wright_red(Ta, Sa, pres, drho_dS_dS, drho_dS_dT, &
+                                                  drho_dT_dT, drho_dS_dP, drho_dT_dP)
+    case (EOS_UNESCO)
+      call MOM_error(FATAL, "calculate_density_second_derivs: "//&
+                     "EOS_UNESCO is not set up to calculate second derivatives yet.")
+    case (EOS_NEMO)
+      call MOM_error(FATAL, "calculate_density_second_derivs: "//&
+                     "EOS_NEMO is not set up to calculate second derivatives yet.")
     case (EOS_TEOS10)
       call calculate_density_second_derivs_teos10(Ta, Sa, pres, drho_dS_dS, drho_dS_dT, &
                                                   drho_dT_dT, drho_dS_dP, drho_dT_dP)
     case default
-      call MOM_error(FATAL, "calculate_density_derivs: EOS%form_of_EOS is not valid.")
+      call MOM_error(FATAL, "calculate_density_second_derivs: EOS%form_of_EOS is not valid.")
   end select
 
   rho_scale = EOS%kg_m3_to_R
@@ -1164,6 +1240,8 @@ subroutine calculate_spec_vol_derivs_array(T, S, pressure, dSV_dT, dSV_dS, start
       call calculate_specvol_derivs_wright(T, S, pressure, dSV_dT, dSV_dS, start, npts)
     case (EOS_WRIGHT_FULL)
       call calculate_specvol_derivs_wright_full(T, S, pressure, dSV_dT, dSV_dS, start, npts)
+    case (EOS_WRIGHT_RED)
+      call calculate_specvol_derivs_wright_red(T, S, pressure, dSV_dT, dSV_dS, start, npts)
     case (EOS_TEOS10)
       call calculate_specvol_derivs_teos10(T, S, pressure, dSV_dT, dSV_dS, start, npts)
     case (EOS_NEMO)
@@ -1275,6 +1353,8 @@ subroutine calculate_compress_1d(T, S, pressure, rho, drho_dp, EOS, dom)
       call calculate_compress_wright(Ta, Sa, pres, rho, drho_dp, is, npts)
     case (EOS_WRIGHT_FULL)
       call calculate_compress_wright_full(Ta, Sa, pres, rho, drho_dp, is, npts)
+    case (EOS_WRIGHT_RED)
+      call calculate_compress_wright_red(Ta, Sa, pres, rho, drho_dp, is, npts)
     case (EOS_TEOS10)
       call calculate_compress_teos10(Ta, Sa, pres, rho, drho_dp, is, npts)
     case (EOS_NEMO)
@@ -1413,6 +1493,11 @@ subroutine analytic_int_specific_vol_dp(T, S, p_t, p_b, alpha_ref, HI, EOS, &
                                   inty_dza, halo_size, bathyP, dP_tiny, useMassWghtInterp, &
                                   SV_scale=EOS%R_to_kg_m3, pres_scale=EOS%RL2_T2_to_Pa, &
                                   temp_scale=EOS%C_to_degC, saln_scale=EOS%S_to_ppt)
+    case (EOS_WRIGHT_RED)
+      call int_spec_vol_dp_wright_red(T, S, p_t, p_b, alpha_ref, HI, dza, intp_dza, intx_dza, &
+                                  inty_dza, halo_size, bathyP, dP_tiny, useMassWghtInterp, &
+                                  SV_scale=EOS%R_to_kg_m3, pres_scale=EOS%RL2_T2_to_Pa, &
+                                  temp_scale=EOS%C_to_degC, saln_scale=EOS%S_to_ppt)
     case default
       call MOM_error(FATAL, "No analytic integration option is available with this EOS!")
   end select
@@ -1515,6 +1600,19 @@ subroutine analytic_int_density_dz(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, EOS,
                                    dpa, intz_dpa, intx_dpa, inty_dpa, bathyT, &
                                    dz_neglect, useMassWghtInterp, Z_0p=Z_0p)
       endif
+    case (EOS_WRIGHT_RED)
+      rho_scale = EOS%kg_m3_to_R
+      pres_scale = EOS%RL2_T2_to_Pa
+      if ((rho_scale /= 1.0) .or. (pres_scale /= 1.0) .or. (EOS%C_to_degC /= 1.0) .or. (EOS%S_to_ppt /= 1.0)) then
+        call int_density_dz_wright_red(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
+                                   dpa, intz_dpa, intx_dpa, inty_dpa, bathyT, &
+                                   dz_neglect, useMassWghtInterp, rho_scale, pres_scale, &
+                                   temp_scale=EOS%C_to_degC, saln_scale=EOS%S_to_ppt, Z_0p=Z_0p)
+      else
+        call int_density_dz_wright_red(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
+                                   dpa, intz_dpa, intx_dpa, inty_dpa, bathyT, &
+                                   dz_neglect, useMassWghtInterp, Z_0p=Z_0p)
+      endif
     case default
       call MOM_error(FATAL, "No analytic integration option is available with this EOS!")
   end select
@@ -1558,7 +1656,7 @@ subroutine EOS_init(param_file, EOS, US)
     case (EOS_WRIGHT_STRING)
       EOS%form_of_EOS = EOS_WRIGHT
     case (EOS_WRIGHT_RED_STRING)
-      EOS%form_of_EOS = EOS_WRIGHT
+      EOS%form_of_EOS = EOS_WRIGHT_RED
     case (EOS_WRIGHT_FULL_STRING)
       EOS%form_of_EOS = EOS_WRIGHT_FULL
     case (EOS_TEOS10_STRING)
@@ -1590,6 +1688,7 @@ subroutine EOS_init(param_file, EOS, US)
 
   EOS_quad_default = .not.((EOS%form_of_EOS == EOS_LINEAR) .or. &
                            (EOS%form_of_EOS == EOS_WRIGHT) .or. &
+                           (EOS%form_of_EOS == EOS_WRIGHT_RED) .or. &
                            (EOS%form_of_EOS == EOS_WRIGHT_FULL))
   call get_param(param_file, mdl, "EOS_QUADRATURE", EOS%EOS_quadrature, &
                  "If true, always use the generic (quadrature) code "//&
