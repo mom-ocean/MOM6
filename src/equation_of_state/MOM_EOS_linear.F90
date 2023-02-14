@@ -119,7 +119,7 @@ subroutine calculate_spec_vol_scalar_linear(T, S, pressure, specvol, &
   real, optional, intent(in)  :: spv_ref  !< A reference specific volume [m3 kg-1].
 
   if (present(spv_ref)) then
-    specvol = ((1.0 - Rho_T0_S0*spv_ref) + spv_ref*(dRho_dT*T + dRho_dS*S)) / &
+    specvol = ((1.0 - Rho_T0_S0*spv_ref) - spv_ref*(dRho_dT*T + dRho_dS*S)) / &
              ( Rho_T0_S0 + (dRho_dT*T + dRho_dS*S))
   else
     specvol = 1.0 / ( Rho_T0_S0 + (dRho_dT*T + dRho_dS*S))
@@ -148,7 +148,7 @@ subroutine calculate_spec_vol_array_linear(T, S, pressure, specvol, start, npts,
   integer :: j
 
   if (present(spv_ref)) then ; do j=start,start+npts-1
-    specvol(j) = ((1.0 - Rho_T0_S0*spv_ref) + spv_ref*(dRho_dT*T(j) + dRho_dS*S(j))) / &
+    specvol(j) = ((1.0 - Rho_T0_S0*spv_ref) - spv_ref*(dRho_dT*T(j) + dRho_dS*S(j))) / &
                  ( Rho_T0_S0 + (dRho_dT*T(j) + dRho_dS*S(j)))
   enddo ; else ; do j=start,start+npts-1
     specvol(j) = 1.0 / ( Rho_T0_S0 + (dRho_dT*T(j) + dRho_dS*S(j)))
