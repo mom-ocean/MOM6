@@ -40,6 +40,7 @@ use MOM_TFreeze,    only : calculate_TFreeze_teos10
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, MOM_mesg
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_hor_index,   only : hor_index_type
+use MOM_io,          only : stdout
 use MOM_string_functions, only : uppercase
 use MOM_unit_scaling, only : unit_scale_type
 
@@ -52,6 +53,7 @@ public EOS_init
 public EOS_manual_init
 public EOS_quadrature
 public EOS_use_linear
+public EOS_unit_tests
 public analytic_int_density_dz
 public analytic_int_specific_vol_dp
 public calculate_compress
@@ -1938,12 +1940,12 @@ end function EOS_quadrature
 !> Extractor routine for the EOS type if the members need to be accessed outside this module
 subroutine extract_member_EOS(EOS, form_of_EOS, form_of_TFreeze, EOS_quadrature, Compressible, &
                               Rho_T0_S0, drho_dT, dRho_dS, TFr_S0_P0, dTFr_dS, dTFr_dp)
-  type(EOS_type),    intent(in)  :: EOS !< Equation of state structure
+  type(EOS_type),    intent(in)  :: EOS       !< Equation of state structure
   integer, optional, intent(out) :: form_of_EOS !< A coded integer indicating the equation of state to use.
   integer, optional, intent(out) :: form_of_TFreeze !< A coded integer indicating the expression for
-                                       !! the potential temperature of the freezing point.
+                                              !! the potential temperature of the freezing point.
   logical, optional, intent(out) :: EOS_quadrature !< If true, always use the generic (quadrature)
-                                       !! code for the integrals of density.
+                                              !! code for the integrals of density.
   logical, optional, intent(out) :: Compressible !< If true, in situ density is a function of pressure.
   real   , optional, intent(out) :: Rho_T0_S0 !< Density at T=0 degC and S=0 ppt [kg m-3]
   real   , optional, intent(out) :: drho_dT   !< Partial derivative of density with temperature
@@ -1968,6 +1970,345 @@ subroutine extract_member_EOS(EOS, form_of_EOS, form_of_TFreeze, EOS_quadrature,
   if (present(dTFr_dp        ))  dTFr_dp         = EOS%dTFr_dp
 
 end subroutine extract_member_EOS
+
+!> Runs unit tests for consistency on the equations of state.
+!! This should only be called from a single/root thread.
+!! It returns True if any test fails, otherwise it returns False.
+logical function EOS_unit_tests(verbose)
+  logical, intent(in) :: verbose !< If true, write results to stdout
+  ! Local variables
+  type(EOS_type) :: EOS_tmp
+  logical :: fail
+
+  if (verbose) write(stdout,*) '==== MOM_EOS: EOS_unit_tests ===='
+  EOS_unit_tests = .false. ! Normally return false
+
+  call EOS_manual_init(EOS_tmp, form_of_EOS=EOS_UNESCO)
+  fail = test_EOS_consistency(25.0, 35.0, 1.0e7, EOS_tmp, verbose, "UNESCO", skip_2nd=.true., &
+                              rho_check=1027.5434579611974*EOS_tmp%kg_m3_to_R)
+  if (verbose .and. fail) call MOM_error(WARNING, "UNESCO EOS has failed some self-consistency tests.")
+  EOS_unit_tests = EOS_unit_tests .or. fail
+
+  call EOS_manual_init(EOS_tmp, form_of_EOS=EOS_WRIGHT_FULL)
+  fail = test_EOS_consistency(25.0, 35.0, 1.0e7, EOS_tmp, verbose, "WRIGHT_FULL", &
+                              rho_check=1027.5517744761617*EOS_tmp%kg_m3_to_R)
+  if (verbose .and. fail) call MOM_error(WARNING, "WRIGHT_FULL EOS has failed some self-consistency tests.")
+  EOS_unit_tests = EOS_unit_tests .or. fail
+
+  call EOS_manual_init(EOS_tmp, form_of_EOS=EOS_WRIGHT_RED)
+  fail = test_EOS_consistency(25.0, 35.0, 1.0e7, EOS_tmp, verbose, "WRIGHT_RED", &
+                              rho_check=1027.5430359634624*EOS_tmp%kg_m3_to_R)
+  if (verbose .and. fail) call MOM_error(WARNING, "WRIGHT_RED EOS has failed some self-consistency tests.")
+  EOS_unit_tests = EOS_unit_tests .or. fail
+
+  call EOS_manual_init(EOS_tmp, form_of_EOS=EOS_WRIGHT)
+  ! There are known bugs in two of the second derivatives calculated with the WRIGHT EOS.
+  fail = test_EOS_consistency(25.0, 35.0, 1.0e7, EOS_tmp, verbose, "WRIGHT", skip_2nd=.true., &
+                              rho_check=1027.5430359634624*EOS_tmp%kg_m3_to_R)
+  if (verbose .and. fail) call MOM_error(WARNING, "WRIGHT EOS has failed some self-consistency tests.")
+  EOS_unit_tests = EOS_unit_tests .or. fail
+
+  ! The NEMO equation of state is not passing some self consistency tests yet.
+  ! call EOS_manual_init(EOS_tmp, form_of_EOS=EOS_NEMO)
+  ! fail = test_EOS_consistency(25.0, 35.0, 1.0e7, EOS_tmp, verbose, "NEMO", &
+  !                             rho_check=1027.4238566366823*EOS_tmp%kg_m3_to_R)
+  ! if (verbose .and. fail) call MOM_error(WARNING, "NEMO EOS has failed some self-consistency tests.")
+  ! EOS_unit_tests = EOS_unit_tests .or. fail
+
+  ! The TEOS10 equation of state is not passing some self consistency tests yet.
+  ! call EOS_manual_init(EOS_tmp, form_of_EOS=EOS_TEOS10)
+  ! fail = test_EOS_consistency(25.0, 35.0, 1.0e7, EOS_tmp, verbose, "TEOS10", &
+  !                             rho_check=1027.4235596149185*EOS_tmp%kg_m3_to_R)
+  ! if (verbose .and. fail) call MOM_error(WARNING, "TEOS10 EOS has failed some self-consistency tests.")
+  ! EOS_unit_tests = EOS_unit_tests .or. fail
+
+  call EOS_manual_init(EOS_tmp, form_of_EOS=EOS_LINEAR, Rho_T0_S0=1000.0, drho_dT=-0.2, dRho_dS=0.8)
+  fail = test_EOS_consistency(25.0, 35.0, 1.0e7, EOS_tmp, verbose, "LINEAR", &
+                              rho_check=1023.0*EOS_tmp%kg_m3_to_R)
+  if (verbose .and. fail) call MOM_error(WARNING, "LINEAR EOS has failed some self-consistency tests.")
+  EOS_unit_tests = EOS_unit_tests .or. fail
+
+  if (verbose .and. .not.EOS_unit_tests) call MOM_mesg("All EOS consistency tests have passed.")
+
+end function EOS_unit_tests
+
+!> Test an equation of state for self-consistency and consistency with check values, returning false
+!! if it is consistent by all tests, and true if it fails any test.
+logical function test_EOS_consistency(T_test, S_test, p_test, EOS, verbose, &
+                                      EOS_name, rho_check, spv_check, skip_2nd) result(inconsistent)
+  real,           intent(in) :: T_test   !< Potential temperature or conservative temperature [C ~> degC]
+  real,           intent(in) :: S_test   !< Salinity or absolute salinity [S ~> ppt]
+  real,           intent(in) :: p_test   !< Pressure [R L2 T-2 ~> Pa]
+  type(EOS_type), intent(in) :: EOS      !< Equation of state structure
+  logical,        intent(in) :: verbose  !< If true, write results to stdout
+  character(len=*), &
+        optional, intent(in) :: EOS_name !< A name used in error messages to describe the EoS
+  real, optional, intent(in) :: rho_check  !< A check value for the density [R ~> kg m-3]
+  real, optional, intent(in) :: spv_check  !< A check value for the specific volume [R-1 ~> m3 kg-1]
+  logical, optional, intent(in) :: skip_2nd !< If present and true, do not check the 2nd derivatives.
+
+  ! Local variables
+  real, dimension(-3:3,-3:3,-3:3) :: T ! Temperatures at the test value and perturbed points [C ~> degC]
+  real, dimension(-3:3,-3:3,-3:3) :: S ! Salinites at the test value and perturbed points [S ~> ppt]
+  real, dimension(-3:3,-3:3,-3:3) :: P ! Pressures at the test value and perturbed points [R L2 T-2 ~> Pa]
+  real, dimension(-3:3,-3:3,-3:3,2) :: rho ! Densities at the test value and perturbed points [R ~> kg m-3]
+  real, dimension(-3:3,-3:3,-3:3,2) :: spv ! Specific volumes at the test value and perturbed points [R-1 ~> m3 kg-1]
+  real :: dT        ! Magnitude of temperature perturbations [C ~> degC]
+  real :: dS        ! Magnitude of salinity perturbations [S ~> ppt]
+  real :: dp        ! Magnitude of pressure perturbations [R L2 T-2 ~> Pa]
+  real :: rho_ref   ! A reference density that is extracted for greater accuracy [R ~> kg m-3]
+  real :: spv_ref   ! A reference specific vlume that is extracted for greater accuracy [R-1 ~> m3 kg-1]
+  real :: drho_dT   ! The partial derivative of density with potential
+                    ! temperature [R C-1 ~> kg m-3 degC-1]
+  real :: drho_dS   ! The partial derivative of density with salinity
+                    ! in [R S-1 ~> kg m-3 ppt-1]
+  real :: drho_dp   ! The partial derivative of density with pressure (also the
+                    ! inverse of the square of sound speed) [T2 L-2 ~> s2 m-2]
+  real :: dSV_dT(1) ! The partial derivative of specific volume with potential
+                    ! temperature [R-1 C-1 ~> m3 kg-1 degC-1]
+  real :: dSV_dS(1) ! The partial derivative of specific volume with salinity
+                    ! [R-1 S-1 ~> m3 kg-1 ppt-1]
+  real :: drho_dS_dS ! Second derivative of density with respect to S  [R S-2 ~> kg m-3 ppt-2]
+  real :: drho_dS_dT ! Second derivative of density with respect to T and S [R S-1 C-1 ~> kg m-3 ppt-1 degC-1]
+  real :: drho_dT_dT ! Second derivative of density with respect to T [R C-2 ~> kg m-3 degC-2]
+  real :: drho_dS_dP ! Second derivative of density with respect to salinity and pressure
+                     ! [T2 S-1 L-2 ~> kg m-3 ppt-1 Pa-1]
+  real :: drho_dT_dP ! Second derivative of density with respect to temperature and pressure
+                     ! [T2 C-1 L-2 ~> kg m-3 degC-1 Pa-1]
+
+  real :: drho_dT_fd(2) ! Two 6th order finite difference estimates of the partial derivative of density
+                        ! with potential temperature [R C-1 ~> kg m-3 degC-1]
+  real :: drho_dS_fd(2) ! Two 6th order finite difference estimates of the partial derivative of density
+                        ! with salinity [R S-1 ~> kg m-3 ppt-1]
+  real :: drho_dp_fd(2) ! Two 6th order finite difference estimates of the partial derivative of density
+                        ! with pressure (also the inverse of the square of sound speed) [T2 L-2 ~> s2 m-2]
+  real :: dSV_dT_fd(2)  ! Two 6th order finite difference estimates of the partial derivative of
+                        ! specific volume with potential temperature [R-1 C-1 ~> m3 kg-1 degC-1]
+  real :: dSV_dS_fd(2)  ! Two 6th order finite difference estimates of the partial derivative of
+                        ! specific volume with salinity [R-1 S-1 ~> m3 kg-1 ppt-1]
+  real :: drho_dS_dS_fd(2)  ! Two 6th order finite difference estimates of the second derivative of
+                            ! density with respect to salinity [R S-2 ~> kg m-3 ppt-2]
+  real :: drho_dS_dT_fd(2)  ! Two 6th order finite difference estimates of the second derivative of density
+                            ! with respect to temperature and salinity [R S-1 C-1 ~> kg m-3 ppt-1 degC-1]
+  real :: drho_dT_dT_fd(2)  ! Two 6th order finite difference estimates of the second derivative of
+                            ! density with respect to temperature [R C-2 ~> kg m-3 degC-2]
+  real :: drho_dS_dP_fd(2)  ! Two 6th order finite difference estimates of the second derivative of density
+                            ! with respect to salinity and pressure [T2 S-1 L-2 ~> kg m-3 ppt-1 Pa-1]
+  real :: drho_dT_dP_fd(2)  ! Two 6th order finite difference estimates of the second derivative of density
+                            ! with respect to temperature and pressure [T2 C-1 L-2 ~> kg m-3 degC-1 Pa-1]
+  real :: rho_tmp    ! A temporary copy of the situ density [R ~> kg m-3]
+  real :: tol        ! The nondimensional tolerance from roundoff [nondim]
+  real :: r_tol      ! Roundoff error on a typical value of density anomaly [R ~> kg m-3]
+  real :: sv_tol     ! Roundoff error on a typical value of specific volume anomaly [R-1 ~> m3 kg-1]
+  real :: tol_here   ! The tolerance for each check, in various units [various]
+  real :: count_fac  ! A factor in the roundoff estimates based on the factors in the numerator and
+                     ! denominator in the finite difference derivative expression [nondim]
+  real :: count_fac2 ! A factor in the roundoff estimates based on the factors in the numerator and
+                     ! denominator in the finite difference second derivative expression [nondim]
+  character(len=200) :: mesg
+  logical :: OK      ! True if all checks so far are consistent.
+  logical :: test_2nd  ! If true, do tests on the 2nd derivative calculations
+  integer :: order   ! The order of accuracy of the centered finite difference estimates (2, 4 or 6).
+  integer :: i, j, k, n
+
+  test_2nd = .true. ; if (present(skip_2nd)) test_2nd = .not.skip_2nd
+
+  dT = 0.1*EOS%degC_to_C     ! Temperature perturbations [C ~> degC]
+  dS = 0.5*EOS%ppt_to_S      ! Salinity perturbations [S ~> ppt]
+  dp = 10.0e4 / EOS%RL2_T2_to_Pa ! Pressure perturbations [R L2 T-2 ~> Pa]
+
+  r_tol = 50.0*EOS%kg_m3_to_R * 10.*epsilon(r_tol)
+  sv_tol = 5.0e-5*EOS%R_to_kg_m3 * 10.*epsilon(sv_tol)
+  rho_ref = 1000.0*EOS%kg_m3_to_R
+  spv_ref = 1.0 / rho_ref
+
+  order = 4  ! This should be 2, 4 or 6.
+
+  do n=1,2
+    ! Calculate density values with a wide enough stencil to estimate first and second derivatives
+    ! with up to 6th order accuracy.  Doing this twice with different sizes of pertubations allows
+    ! the evaluation of whether the finite differences are converging to the calculated values at a
+    ! rate that is consistent with the order of accuracy of the finite difference forms, and hence
+    ! the consistency of the calculated values.
+    do k=-3,3 ; do j=-3,3 ; do i=-3,3
+      T(i,j,k) = T_test + n*dT*i
+      S(i,j,k) = S_test + n*dS*j
+      p(i,j,k) = p_test + n*dp*k
+    enddo ; enddo ; enddo
+    do k=-3,3 ; do j=-3,3
+      call calculate_density(T(:,j,k), S(:,j,k), p(:,j,k), rho(:,j,k,n), EOS, rho_ref=rho_ref)
+      call calculate_spec_vol(T(:,j,k), S(:,j,k), p(:,j,k), spv(:,j,k,n), EOS, spv_ref=spv_ref)
+    enddo ; enddo
+
+    drho_dT_fd(n) = first_deriv(rho(:,0,0,n), n*dT, order)
+    drho_dS_fd(n) = first_deriv(rho(0,:,0,n), n*dS, order)
+    drho_dp_fd(n) = first_deriv(rho(0,0,:,n), n*dp, order)
+    dSV_dT_fd(n) = first_deriv(spv(:,0,0,n), n*dT, order)
+    dSV_dS_fd(n) = first_deriv(spv(0,:,0,n), n*dS, order)
+    if (test_2nd) then
+      drho_dT_dT_fd(n) = second_deriv(rho(:,0,0,n), n*dT, order)
+      drho_dS_dS_fd(n) = second_deriv(rho(0,:,0,n), n*dS, order)
+      drho_dS_dT_fd(n) = derivs_2d(rho(:,:,0,n), n**2*dT*dS, order)
+      drho_dT_dP_fd(n) = derivs_2d(rho(:,0,:,n), n**2*dT*dP, order)
+      drho_dS_dP_fd(n) = derivs_2d(rho(0,:,:,n), n**2*dS*dP, order)
+    endif
+  enddo
+
+  call calculate_density_derivs(T(0,0,0), S(0,0,0), p(0,0,0), drho_dT, drho_dS, EOS)
+  ! The first indices here are "0:0" because there is no scalar form of calculate_specific_vol_derivs.
+  call calculate_specific_vol_derivs(T(0:0,0,0), S(0:0,0,0), p(0:0,0,0), dSV_dT, dSV_dS, EOS)
+  if (test_2nd) &
+    call calculate_density_second_derivs(T(0,0,0), S(0,0,0), p(0,0,0), &
+                                       drho_dS_dS, drho_dS_dT, drho_dT_dT, drho_dS_dP, drho_dT_dP, EOS)
+  call calculate_compress(T(0,0,0), S(0,0,0), p(0,0,0), rho_tmp, drho_dp, EOS)
+
+  tol = 1000.0*epsilon(tol)
+  if (present(spv_check)) then
+    OK = (abs(spv_check - (spv_ref + spv(0,0,0,1))) < tol*abs(spv_ref + spv(0,0,0,1)))
+    if (verbose .and. .not.OK) then
+      write(mesg, '(ES24.16," vs. ",ES24.16," with tolerance ",ES12.4)') &
+            spv_check, spv_ref+spv(0,0,0,1), tol*spv(0,0,0,1)
+      call MOM_error(WARNING, "The value of "//trim(EOS_name)//" spv disagrees with its check value :"//trim(mesg))
+    endif
+  else
+    OK = (abs((rho_ref+rho(0,0,0,1)) * (spv_ref + spv(0,0,0,1)) - 1.0) < tol)
+
+    if (verbose .and. .not.OK) then
+      write(mesg, '(ES16.8," and ",ES16.8,", ratio - 1 = ",ES16.8)') &
+          rho(0,0,0,1), 1.0/(spv_ref + spv(0,0,0,1)) - rho_ref, &
+          (rho_ref+rho(0,0,0,1)) * (spv_ref + spv(0,0,0,1)) - 1.0
+      call MOM_error(WARNING, "The values of "//trim(EOS_name)//" rho and 1/spv disagree.  "//trim(mesg))
+    endif
+  endif
+  if (present(rho_check)) then
+    OK = OK .and. (abs(rho_check - (rho_ref + rho(0,0,0,1))) < tol*(rho_ref + rho(0,0,0,1)))
+    if (verbose .and. .not.OK) then
+      write(mesg, '(ES24.16," vs. ",ES24.16," with tolerance ",ES12.4)') &
+            rho_check, rho_ref+rho(0,0,0,1), tol*rho(0,0,0,1)
+      call MOM_error(WARNING, "The value of "//trim(EOS_name)//" rho disagrees with its check value :"//trim(mesg))
+    endif
+  endif
+
+  ! Account for the factors of terms in the numerator and denominator when estimating roundoff
+  if (order == 6) then
+    count_fac = 110.0/60.0 ; count_fac2 = 1088.0/180.0
+  elseif (order == 4) then ! Use values appropriate for 4th order schemes.
+    count_fac = 18.0/12.0 ; count_fac2 = 64.0/12.0
+  else ! Use values appropriate for 2nd order schemes.
+    count_fac = 2.0/2.0 ; count_fac2 = 4.0
+  endif
+
+  ! Check for the rate of convergence expected with a 4th or 6th order accurate discretization
+  ! with a 20% margin of error and a tolerance for contributions from roundoff.
+  tol_here = tol*abs(drho_dT) + count_fac*r_tol/dT
+  OK = OK .and. check_FD(drho_dT, drho_dT_fd, tol_here, verbose, trim(EOS_name)//" drho_dT", order)
+  tol_here = tol*abs(drho_dS) + count_fac*r_tol/dS
+  OK = OK .and. check_FD(drho_dS, drho_dS_fd, tol_here, verbose, trim(EOS_name)//" drho_dS", order)
+  tol_here = tol*abs(drho_dp) + count_fac*r_tol/dp
+  OK = OK .and. check_FD(drho_dp, drho_dp_fd, tol_here, verbose, trim(EOS_name)//" drho_dp", order)
+  tol_here = tol*abs(dSV_dT(1)) + count_fac*sv_tol/dT
+  OK = OK .and. check_FD(dSV_dT(1), dSV_dT_fd, tol_here, verbose, trim(EOS_name)//" dSV_dT", order)
+  tol_here = tol*abs(dSV_dS(1)) + count_fac*sv_tol/dS
+  OK = OK .and. check_FD(dSV_dS(1), dSV_dS_fd, tol_here, verbose, trim(EOS_name)//" dSV_dS", order)
+  if (test_2nd) then
+    tol_here = tol*abs(drho_dT_dT) + count_fac2*r_tol/dT**2
+    OK = OK .and. check_FD(drho_dT_dT, drho_dT_dT_fd, tol_here, verbose, trim(EOS_name)//" drho_dT_dT", order)
+    ! The curvature in salinity is relatively weak, so looser tolerances are needed for some forms of EOS?
+    tol_here = 10.0*(tol*abs(drho_dS_dS) + count_fac2*r_tol/dS**2)
+    OK = OK .and. check_FD(drho_dS_dS, drho_dS_dS_fd, tol_here, verbose, trim(EOS_name)//" drho_dS_dS", order)
+    tol_here = tol*abs(drho_dS_dT) + count_fac**2*r_tol/(dS*dT)
+    OK = OK .and. check_FD(drho_dS_dT, drho_dS_dT_fd, tol_here, verbose, trim(EOS_name)//" drho_dS_dT", order)
+    tol_here = tol*abs(drho_dT_dP) + count_fac**2*r_tol/(dT*dp)
+    OK = OK .and. check_FD(drho_dT_dP, drho_dT_dP_fd, tol_here, verbose, trim(EOS_name)//" drho_dT_dP", order)
+    tol_here = tol*abs(drho_dS_dP) + count_fac**2*r_tol/(dS*dp)
+    OK = OK .and. check_FD(drho_dS_dP, drho_dS_dP_fd, tol_here, verbose, trim(EOS_name)//" drho_dS_dP", order)
+  endif
+
+  inconsistent = .not.OK
+
+  contains
+
+  !> Return a finite difference estimate of the first derivative of a field in arbitary units [A B-1]
+  real function first_deriv(R, dx, order)
+    real,    intent(in) :: R(-3:3) !< The field whose derivative is being taken, in abitrary units [A]
+    real,    intent(in) :: dx      !< The spacing in parameter space, in different arbitrary units [B]
+    integer, intent(in) :: order   !< The order of accuracy of the centered finite difference estimates (2, 4 or 6)
+
+    if (order == 6) then  ! Find a 6th order accurate first derivative on a regular grid.
+      first_deriv = (45.0*(R(1)-R(-1)) + (-9.0*(R(2)-R(-2)) + (R(3)-R(-3))) ) / (60.0 * dx)
+    elseif (order == 4) then  ! Find a 4th order accurate first derivative on a regular grid.
+      first_deriv = (8.0*(R(1)-R(-1)) - (R(2)-R(-2)) ) / (12.0 * dx)
+    else  ! Find a 2nd order accurate first derivative on a regular grid.
+      first_deriv = (R(1)-R(-1)) / (2.0 * dx)
+    endif
+  end function first_deriv
+
+  !> Return a finite difference estimate of the second derivative of a field in arbitary units [A B-2]
+  real function second_deriv(R, dx, order)
+    real,    intent(in) :: R(-3:3) !< The field whose derivative is being taken, in abitrary units [A]
+    real,    intent(in) :: dx      !< The spacing in parameter space, in different arbitrary units [B]
+    integer, intent(in) :: order   !< The order of accuracy of the centered finite difference estimates (2, 4 or 6)
+
+    if (order == 6) then  ! Find a 6th order accurate second derivative on a regular grid.
+      second_deriv = ( -490.0*R(0) + (270.0*(R(1)+R(-1)) + (-27.0*(R(2)+R(-2)) + 2.0*(R(3)+R(-3))) )) / (180.0 * dx**2)
+    elseif (order == 4) then   ! Find a 4th order accurate second derivative on a regular grid.
+      second_deriv = ( -30.0*R(0) + (16.0*(R(1)+R(-1)) - (R(2)+R(-2))) ) / (12.0 * dx**2)
+    else  ! Find a 2nd order accurate second derivative on a regular grid.
+      second_deriv = ( -2.0*R(0) + (R(1)+R(-1)) ) / dx**2
+    endif
+  end function second_deriv
+
+  !> Return a finite difference estimate of the second derivative with respect to two different
+  !! parameters of a field in arbitary units [A B-2]
+  real function derivs_2d(R, dxdy, order)
+    real,    intent(in) :: R(-3:3,-3:3) !< The field whose derivative is being taken in abitrary units [A]
+    real,    intent(in) :: dxdy   !< The spacing in two directions in parameter space in different arbitrary units [B C]
+    integer, intent(in) :: order  !< The order of accuracy of the centered finite difference estimates (2, 4 or 6)
+
+    real :: dRdx(-3:3)  ! The first derivative in one direction times the grid spacing in that direction [A]
+    integer :: i
+
+    do i=-3,3
+      dRdx(i) = first_deriv(R(:,i), 1.0, order)
+    enddo
+    derivs_2d = first_deriv(dRdx, dxdy, order)
+
+  end function derivs_2d
+
+  !> Check for the rate of convergence expected with a finite difference discretization
+  !! with a 20% margin of error and a tolerance for contributions from roundoff.
+  logical function check_FD(val, val_fd, tol, verbose, field_name, order)
+    real, intent(in) :: val       !< The derivative being checked, in arbitrary units [arbitrary]
+    real, intent(in) :: val_fd(2) !< Two finite difference estimates of val taken with a spacing
+                                  !! in parameter space and twice this spacing, in the same
+                                  !! arbitrary units as val [arbitrary]
+    real, intent(in) :: tol       !< An estimated fractional tolerance due to roundoff [arbitrary]
+    logical, intent(in) :: verbose !< If true, write results to stdout
+    character(len=*), intent(in) :: field_name !< A name used to describe the field in error messages
+    integer, intent(in) :: order  !< The order of accuracy of the centered finite difference estimates (2, 4 or 6)
+
+    character(len=200) :: mesg
+
+    check_FD = ( abs(val_fd(1) - val) < (1.2*abs(val_fd(2) - val)/2**order + abs(tol)) )
+
+    write(mesg, '(ES16.8," and ",ES16.8," differ by ",ES16.8," (",ES10.2"), tol=",ES16.8)') &
+          val, val_fd(1), val - val_fd(1), &
+          2.0*(val - val_fd(1)) / (abs(val) + abs(val_fd(1)) + tiny(val)), &
+          (1.2*abs(val_fd(2) - val)/2**order + abs(tol))
+    ! This message is useful for debugging the two estimates:
+    ! write(mesg, '(ES16.8," and ",ES16.8," or ",ES16.8," differ by ",2ES16.8," (",2ES10.2"), tol=",ES16.8)') &
+    !       val, val_fd(1), val_fd(2), val - val_fd(1), val - val_fd(2), &
+    !       2.0*(val - val_fd(1)) / (abs(val) + abs(val_fd(1)) + tiny(val)), &
+    !       2.0*(val - val_fd(2)) / (abs(val) + abs(val_fd(2)) + tiny(val)), &
+    !       (1.2*abs(val_fd(2) - val)/2**order + abs(tol))
+    if (verbose .and. .not.check_FD) then
+      call MOM_error(WARNING, "The values of "//trim(field_name)//" disagree. "//trim(mesg))
+    elseif (verbose) then
+      call MOM_mesg("The values of "//trim(field_name)//" agree: "//trim(mesg))
+    endif
+  end function check_FD
+
+end function test_EOS_consistency
 
 end module MOM_EOS
 
