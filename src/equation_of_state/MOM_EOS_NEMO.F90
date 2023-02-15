@@ -3,24 +3,14 @@ module MOM_EOS_NEMO
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-!***********************************************************************
-!*  The subroutines in this file implement the equation of state for   *
-!*  sea water using the formulae provided by NEMO developer Roquet     *
-!*  in a private communication , Roquet et al, Ocean Modelling (2015)  *
-!*  Roquet, F., Madec, G., McDougall, T. J., and Barker, P. M., 2015.  *
-!*  Accurate polynomial expressions for the density and specific volume*
-!*  of seawater using the TEOS-10 standard. Ocean Modelling, 90:29-43. *
-!*  These algorithms are NOT from the standard NEMO package!!          *
-!***********************************************************************
-
 !use gsw_mod_toolbox, only : gsw_sr_from_sp, gsw_ct_from_pt
-use gsw_mod_toolbox, only : gsw_rho_first_derivatives
 
 implicit none ; private
 
 public calculate_compress_nemo, calculate_density_nemo
 public calculate_density_derivs_nemo
 public calculate_density_scalar_nemo, calculate_density_array_nemo
+public calculate_density_second_derivs_nemo
 
 !> Compute the in situ density of sea water [kg m-3], or its anomaly with respect to
 !! a reference density, from absolute salinity [g kg-1], conservative temperature [degC],
@@ -34,6 +24,12 @@ end interface calculate_density_nemo
 interface calculate_density_derivs_nemo
   module procedure calculate_density_derivs_scalar_nemo, calculate_density_derivs_array_nemo
 end interface calculate_density_derivs_nemo
+
+!> Compute the second derivatives of density with various combinations
+!! of temperature, salinity, and pressure
+interface calculate_density_second_derivs_nemo
+  module procedure calculate_density_second_derivs_scalar_nemo, calculate_density_second_derivs_array_nemo
+end interface calculate_density_second_derivs_nemo
 
 real, parameter :: Pa2db  = 1.e-4 !< Conversion factor between Pa and dbar [Pa dbar-1]
 !>@{ Parameters in the NEMO equation of state
@@ -103,77 +99,77 @@ real, parameter :: EOS003 = -2.3342758797e-02 ! Coefficient of the EOS proportio
 real, parameter :: EOS103 = -1.8507636718e-02 ! Coefficient of the EOS proportional to zs * zp**3 [kg m-3]
 real, parameter :: EOS013 = 3.7969820455e-01  ! Coefficient of the EOS proportional to zt * zp**3 [kg m-3]
 
-real, parameter :: ALP000 = -6.5025362670e-01 ! Constant in the drho_dT fit [kg m-3 degC-1]
-real, parameter :: ALP100 = 1.6320471316      ! Coefficient of the drho_dT fit zs term [kg m-3 degC-1]
-real, parameter :: ALP200 = -2.0442606277     ! Coefficient of the drho_dT fit zs**2 term [kg m-3 degC-1]
-real, parameter :: ALP300 = 1.4222011580      ! Coefficient of the drho_dT fit zs**3 term [kg m-3 degC-1]
-real, parameter :: ALP400 = -4.4204535284e-01 ! Coefficient of the drho_dT fit zs**4 term [kg m-3 degC-1]
-real, parameter :: ALP500 = 4.7983755487e-02  ! Coefficient of the drho_dT fit zs**5 term [kg m-3 degC-1]
-real, parameter :: ALP010 = 1.8537085209      ! Coefficient of the drho_dT fit zt term [kg m-3 degC-1]
-real, parameter :: ALP110 = -3.0774129064     ! Coefficient of the drho_dT fit zs * zt term [kg m-3 degC-1]
-real, parameter :: ALP210 = 3.0181275751      ! Coefficient of the drho_dT fit zs**2 * zt term [kg m-3 degC-1]
-real, parameter :: ALP310 = -1.4565010626     ! Coefficient of the drho_dT fit zs**3 * zt term [kg m-3 degC-1]
-real, parameter :: ALP410 = 2.7361846370e-01  ! Coefficient of the drho_dT fit zs**4 * zt term [kg m-3 degC-1]
-real, parameter :: ALP020 = -1.6246342147     ! Coefficient of the drho_dT fit zt**2 term [kg m-3 degC-1]
-real, parameter :: ALP120 = 2.5086831352      ! Coefficient of the drho_dT fit zs * zt**2 term [kg m-3 degC-1]
-real, parameter :: ALP220 = -1.4787808849     ! Coefficient of the drho_dT fit zs**2 * zt**2 term [kg m-3 degC-1]
-real, parameter :: ALP320 = 2.3807209899e-01  ! Coefficient of the drho_dT fit zs**3 * zt**2 term [kg m-3 degC-1]
-real, parameter :: ALP030 = 8.3627885467e-01  ! Coefficient of the drho_dT fit zt**3 term [kg m-3 degC-1]
-real, parameter :: ALP130 = -1.1311538584     ! Coefficient of the drho_dT fit zs * zt**3 term [kg m-3 degC-1]
-real, parameter :: ALP230 = 5.3563304045e-01  ! Coefficient of the drho_dT fit zs**2 * zt**3 term [kg m-3 degC-1]
-real, parameter :: ALP040 = -6.7560904739e-02 ! Coefficient of the drho_dT fit zt**4 term [kg m-3 degC-1]
-real, parameter :: ALP140 = -6.0212475204e-02 ! Coefficient of the drho_dT fit zs* * zt**4 term [kg m-3 degC-1]
-real, parameter :: ALP050 = 2.8625353333e-02  ! Coefficient of the drho_dT fit zt**5 term [kg m-3 degC-1]
-real, parameter :: ALP001 = 3.3340752782e-01  ! Coefficient of the drho_dT fit zp term [kg m-3 degC-1]
-real, parameter :: ALP101 = 1.1217528644e-01  ! Coefficient of the drho_dT fit zs * zp term [kg m-3 degC-1]
-real, parameter :: ALP201 = -1.2510649515e-01 ! Coefficient of the drho_dT fit zs**2 * zp term [kg m-3 degC-1]
-real, parameter :: ALP301 = 1.6349760916e-02  ! Coefficient of the drho_dT fit zs**3 * zp term [kg m-3 degC-1]
-real, parameter :: ALP011 = -3.3540239802e-01 ! Coefficient of the drho_dT fit zt * zp term [kg m-3 degC-1]
-real, parameter :: ALP111 = -1.7531540640e-01 ! Coefficient of the drho_dT fit zs * zt * zp term [kg m-3 degC-1]
-real, parameter :: ALP211 = 9.3976864981e-02  ! Coefficient of the drho_dT fit zs**2 * zt * zp term [kg m-3 degC-1]
-real, parameter :: ALP021 = 1.8487252150e-01  ! Coefficient of the drho_dT fit zt**2 * zp term [kg m-3 degC-1]
-real, parameter :: ALP121 = 4.1307825959e-02  ! Coefficient of the drho_dT fit zs * zt**2 * zp term [kg m-3 degC-1]
-real, parameter :: ALP031 = -5.5927935970e-02 ! Coefficient of the drho_dT fit zt**3 * zp term [kg m-3 degC-1]
-real, parameter :: ALP002 = -5.1410778748e-02 ! Coefficient of the drho_dT fit zp**2 term [kg m-3 degC-1]
-real, parameter :: ALP102 = 5.3278413794e-03  ! Coefficient of the drho_dT fit zs * zp**2 term [kg m-3 degC-1]
-real, parameter :: ALP012 = 6.2099915132e-02  ! Coefficient of the drho_dT fit zt * zp**2 term [kg m-3 degC-1]
-real, parameter :: ALP003 = -9.4924551138e-03 ! Coefficient of the drho_dT fit zp**3 term [kg m-3 degC-1]
+real, parameter :: ALP000 =    EOS010*r1_T0   ! Constant in the drho_dT fit [kg m-3 degC-1]
+real, parameter :: ALP100 =    EOS110*r1_T0   ! Coefficient of the drho_dT fit zs term [kg m-3 degC-1]
+real, parameter :: ALP200 =    EOS210*r1_T0   ! Coefficient of the drho_dT fit zs**2 term [kg m-3 degC-1]
+real, parameter :: ALP300 =    EOS310*r1_T0   ! Coefficient of the drho_dT fit zs**3 term [kg m-3 degC-1]
+real, parameter :: ALP400 =    EOS410*r1_T0   ! Coefficient of the drho_dT fit zs**4 term [kg m-3 degC-1]
+real, parameter :: ALP500 =    EOS510*r1_T0   ! Coefficient of the drho_dT fit zs**5 term [kg m-3 degC-1]
+real, parameter :: ALP010 = 2.*EOS020*r1_T0   ! Coefficient of the drho_dT fit zt term [kg m-3 degC-1]
+real, parameter :: ALP110 = 2.*EOS120*r1_T0   ! Coefficient of the drho_dT fit zs * zt term [kg m-3 degC-1]
+real, parameter :: ALP210 = 2.*EOS220*r1_T0   ! Coefficient of the drho_dT fit zs**2 * zt term [kg m-3 degC-1]
+real, parameter :: ALP310 = 2.*EOS320*r1_T0   ! Coefficient of the drho_dT fit zs**3 * zt term [kg m-3 degC-1]
+real, parameter :: ALP410 = 2.*EOS420*r1_T0   ! Coefficient of the drho_dT fit zs**4 * zt term [kg m-3 degC-1]
+real, parameter :: ALP020 = 3.*EOS030*r1_T0   ! Coefficient of the drho_dT fit zt**2 term [kg m-3 degC-1]
+real, parameter :: ALP120 = 3.*EOS130*r1_T0   ! Coefficient of the drho_dT fit zs * zt**2 term [kg m-3 degC-1]
+real, parameter :: ALP220 = 3.*EOS230*r1_T0   ! Coefficient of the drho_dT fit zs**2 * zt**2 term [kg m-3 degC-1]
+real, parameter :: ALP320 = 3.*EOS330*r1_T0   ! Coefficient of the drho_dT fit zs**3 * zt**2 term [kg m-3 degC-1]
+real, parameter :: ALP030 = 4.*EOS040*r1_T0   ! Coefficient of the drho_dT fit zt**3 term [kg m-3 degC-1]
+real, parameter :: ALP130 = 4.*EOS140*r1_T0   ! Coefficient of the drho_dT fit zs * zt**3 term [kg m-3 degC-1]
+real, parameter :: ALP230 = 4.*EOS240*r1_T0   ! Coefficient of the drho_dT fit zs**2 * zt**3 term [kg m-3 degC-1]
+real, parameter :: ALP040 = 5.*EOS050*r1_T0   ! Coefficient of the drho_dT fit zt**4 term [kg m-3 degC-1]
+real, parameter :: ALP140 = 5.*EOS150*r1_T0   ! Coefficient of the drho_dT fit zs* * zt**4 term [kg m-3 degC-1]
+real, parameter :: ALP050 = 6.*EOS060*r1_T0   ! Coefficient of the drho_dT fit zt**5 term [kg m-3 degC-1]
+real, parameter :: ALP001 =    EOS011*r1_T0   ! Coefficient of the drho_dT fit zp term [kg m-3 degC-1]
+real, parameter :: ALP101 =    EOS111*r1_T0   ! Coefficient of the drho_dT fit zs * zp term [kg m-3 degC-1]
+real, parameter :: ALP201 =    EOS211*r1_T0   ! Coefficient of the drho_dT fit zs**2 * zp term [kg m-3 degC-1]
+real, parameter :: ALP301 =    EOS311*r1_T0   ! Coefficient of the drho_dT fit zs**3 * zp term [kg m-3 degC-1]
+real, parameter :: ALP011 = 2.*EOS021*r1_T0   ! Coefficient of the drho_dT fit zt * zp term [kg m-3 degC-1]
+real, parameter :: ALP111 = 2.*EOS121*r1_T0   ! Coefficient of the drho_dT fit zs * zt * zp term [kg m-3 degC-1]
+real, parameter :: ALP211 = 2.*EOS221*r1_T0   ! Coefficient of the drho_dT fit zs**2 * zt * zp term [kg m-3 degC-1]
+real, parameter :: ALP021 = 3.*EOS031*r1_T0   ! Coefficient of the drho_dT fit zt**2 * zp term [kg m-3 degC-1]
+real, parameter :: ALP121 = 3.*EOS131*r1_T0   ! Coefficient of the drho_dT fit zs * zt**2 * zp term [kg m-3 degC-1]
+real, parameter :: ALP031 = 4.*EOS041*r1_T0   ! Coefficient of the drho_dT fit zt**3 * zp term [kg m-3 degC-1]
+real, parameter :: ALP002 =    EOS012*r1_T0   ! Coefficient of the drho_dT fit zp**2 term [kg m-3 degC-1]
+real, parameter :: ALP102 =    EOS112*r1_T0   ! Coefficient of the drho_dT fit zs * zp**2 term [kg m-3 degC-1]
+real, parameter :: ALP012 = 2.*EOS022*r1_T0   ! Coefficient of the drho_dT fit zt * zp**2 term [kg m-3 degC-1]
+real, parameter :: ALP003 =    EOS013*r1_T0   ! Coefficient of the drho_dT fit zp**3 term [kg m-3 degC-1]
 
-real, parameter :: BET000 = 1.0783203594e+01  ! Constant in the drho_dS fit [kg m-3 ppt-1]
-real, parameter :: BET100 = -4.4452095908e+01 ! Coefficient of the drho_dS fit zs term [kg m-3 ppt-1]
-real, parameter :: BET200 = 7.6048755820e+01  ! Coefficient of the drho_dS fit zs**2 term [kg m-3 ppt-1]
-real, parameter :: BET300 = -6.3944280668e+01 ! Coefficient of the drho_dS fit zs**3 term [kg m-3 ppt-1]
-real, parameter :: BET400 = 2.6890441098e+01  ! Coefficient of the drho_dS fit zs**4 term [kg m-3 ppt-1]
-real, parameter :: BET500 = -4.5221697773     ! Coefficient of the drho_dS fit zs**5 term [kg m-3 ppt-1]
-real, parameter :: BET010 = -8.1219372432e-01 ! Coefficient of the drho_dS fit zt term [kg m-3 ppt-1]
-real, parameter :: BET110 = 2.0346663041      ! Coefficient of the drho_dS fit zs * zt term [kg m-3 ppt-1]
-real, parameter :: BET210 = -2.1232895170     ! Coefficient of the drho_dS fit zs**2 * zt term [kg m-3 ppt-1]
-real, parameter :: BET310 = 8.7994140485e-01  ! Coefficient of the drho_dS fit zs**3 * zt term [kg m-3 ppt-1]
-real, parameter :: BET410 = -1.1939638360e-01 ! Coefficient of the drho_dS fit zs**4 * zt term [kg m-3 ppt-1]
-real, parameter :: BET020 = 7.6574242289e-01  ! Coefficient of the drho_dS fit zt**2 term [kg m-3 ppt-1]
-real, parameter :: BET120 = -1.5019813020     ! Coefficient of the drho_dS fit zs * zt**2 term [kg m-3 ppt-1]
-real, parameter :: BET220 = 1.0872489522      ! Coefficient of the drho_dS fit zs**2 * zt**2 term [kg m-3 ppt-1]
-real, parameter :: BET320 = -2.7233429080e-01 ! Coefficient of the drho_dS fit zs**3 * zt**2 term [kg m-3 ppt-1]
-real, parameter :: BET030 = -4.1615152308e-01 ! Coefficient of the drho_dS fit zt**3 term [kg m-3 ppt-1]
-real, parameter :: BET130 = 4.9061350869e-01  ! Coefficient of the drho_dS fit zs * zt**3 term [kg m-3 ppt-1]
-real, parameter :: BET230 = -1.1847737788e-01 ! Coefficient of the drho_dS fit zs**2 * zt**3 term [kg m-3 ppt-1]
-real, parameter :: BET040 = 1.4073062708e-01  ! Coefficient of the drho_dS fit zt**4 term [kg m-3 ppt-1]
-real, parameter :: BET140 = -1.3327978879e-01 ! Coefficient of the drho_dS fit zs * zt**4 term [kg m-3 ppt-1]
-real, parameter :: BET050 = 5.9929880134e-03  ! Coefficient of the drho_dS fit zt**5 term [kg m-3 ppt-1]
-real, parameter :: BET001 = -5.2937873009e-01 ! Coefficient of the drho_dS fit zp term [kg m-3 ppt-1]
-real, parameter :: BET101 = 1.2634116779      ! Coefficient of the drho_dS fit zs * zp term [kg m-3 ppt-1]
-real, parameter :: BET201 = -1.1547328025     ! Coefficient of the drho_dS fit zs**2 * zp term [kg m-3 ppt-1]
-real, parameter :: BET301 = 3.2870876279e-01  ! Coefficient of the drho_dS fit zs**3 * zp term [kg m-3 ppt-1]
-real, parameter :: BET011 = -5.5824407214e-02 ! Coefficient of the drho_dS fit zt * zp term [kg m-3 ppt-1]
-real, parameter :: BET111 = 1.2451933313e-01  ! Coefficient of the drho_dS fit zs * zt * zp term [kg m-3 ppt-1]
-real, parameter :: BET211 = -2.4409539932e-02 ! Coefficient of the drho_dS fit zs**2 * zt * zp term [kg m-3 ppt-1]
-real, parameter :: BET021 = 4.3623149752e-02  ! Coefficient of the drho_dS fit zt**2 * zp term [kg m-3 ppt-1]
-real, parameter :: BET121 = -4.6767901790e-02 ! Coefficient of the drho_dS fit zs * zt**2 * zp term [kg m-3 ppt-1]
-real, parameter :: BET031 = -6.8523260060e-03 ! Coefficient of the drho_dS fit zt**3 * zp term [kg m-3 ppt-1]
-real, parameter :: BET002 = -6.1618945251e-02 ! Coefficient of the drho_dS fit zp**2 term [kg m-3 ppt-1]
-real, parameter :: BET102 = 6.2255521644e-02  ! Coefficient of the drho_dS fit zs * zp**2 term [kg m-3 ppt-1]
-real, parameter :: BET012 = -2.6514181169e-03 ! Coefficient of the drho_dS fit zt * zp**2 term [kg m-3 ppt-1]
-real, parameter :: BET003 = -2.3025968587e-04 ! Coefficient of the drho_dS fit zp**3 term [kg m-3 ppt-1]
+real, parameter :: BET000 = 0.5*EOS100*r1_S0  ! Constant in the drho_dS fit [kg m-3 ppt-1]
+real, parameter :: BET100 =     EOS200*r1_S0  ! Coefficient of the drho_dS fit zs term [kg m-3 ppt-1]
+real, parameter :: BET200 = 1.5*EOS300*r1_S0  ! Coefficient of the drho_dS fit zs**2 term [kg m-3 ppt-1]
+real, parameter :: BET300 = 2.0*EOS400*r1_S0  ! Coefficient of the drho_dS fit zs**3 term [kg m-3 ppt-1]
+real, parameter :: BET400 = 2.5*EOS500*r1_S0  ! Coefficient of the drho_dS fit zs**4 term [kg m-3 ppt-1]
+real, parameter :: BET500 = 3.0*EOS600*r1_S0  ! Coefficient of the drho_dS fit zs**5 term [kg m-3 ppt-1]
+real, parameter :: BET010 = 0.5*EOS110*r1_S0  ! Coefficient of the drho_dS fit zt term [kg m-3 ppt-1]
+real, parameter :: BET110 =     EOS210*r1_S0  ! Coefficient of the drho_dS fit zs * zt term [kg m-3 ppt-1]
+real, parameter :: BET210 = 1.5*EOS310*r1_S0  ! Coefficient of the drho_dS fit zs**2 * zt term [kg m-3 ppt-1]
+real, parameter :: BET310 = 2.0*EOS410*r1_S0  ! Coefficient of the drho_dS fit zs**3 * zt term [kg m-3 ppt-1]
+real, parameter :: BET410 = 2.5*EOS510*r1_S0  ! Coefficient of the drho_dS fit zs**4 * zt term [kg m-3 ppt-1]
+real, parameter :: BET020 = 0.5*EOS120*r1_S0  ! Coefficient of the drho_dS fit zt**2 term [kg m-3 ppt-1]
+real, parameter :: BET120 =     EOS220*r1_S0  ! Coefficient of the drho_dS fit zs * zt**2 term [kg m-3 ppt-1]
+real, parameter :: BET220 = 1.5*EOS320*r1_S0  ! Coefficient of the drho_dS fit zs**2 * zt**2 term [kg m-3 ppt-1]
+real, parameter :: BET320 = 2.0*EOS420*r1_S0  ! Coefficient of the drho_dS fit zs**3 * zt**2 term [kg m-3 ppt-1]
+real, parameter :: BET030 = 0.5*EOS130*r1_S0  ! Coefficient of the drho_dS fit zt**3 term [kg m-3 ppt-1]
+real, parameter :: BET130 =     EOS230*r1_S0  ! Coefficient of the drho_dS fit zs * zt**3 term [kg m-3 ppt-1]
+real, parameter :: BET230 = 1.5*EOS330*r1_S0  ! Coefficient of the drho_dS fit zs**2 * zt**3 term [kg m-3 ppt-1]
+real, parameter :: BET040 = 0.5*EOS140*r1_S0  ! Coefficient of the drho_dS fit zt**4 term [kg m-3 ppt-1]
+real, parameter :: BET140 =     EOS240*r1_S0  ! Coefficient of the drho_dS fit zs * zt**4 term [kg m-3 ppt-1]
+real, parameter :: BET050 = 0.5*EOS150*r1_S0  ! Coefficient of the drho_dS fit zt**5 term [kg m-3 ppt-1]
+real, parameter :: BET001 = 0.5*EOS101*r1_S0  ! Coefficient of the drho_dS fit zp term [kg m-3 ppt-1]
+real, parameter :: BET101 =     EOS201*r1_S0  ! Coefficient of the drho_dS fit zs * zp term [kg m-3 ppt-1]
+real, parameter :: BET201 = 1.5*EOS301*r1_S0  ! Coefficient of the drho_dS fit zs**2 * zp term [kg m-3 ppt-1]
+real, parameter :: BET301 = 2.0*EOS401*r1_S0  ! Coefficient of the drho_dS fit zs**3 * zp term [kg m-3 ppt-1]
+real, parameter :: BET011 = 0.5*EOS111*r1_S0  ! Coefficient of the drho_dS fit zt * zp term [kg m-3 ppt-1]
+real, parameter :: BET111 =     EOS211*r1_S0  ! Coefficient of the drho_dS fit zs * zt * zp term [kg m-3 ppt-1]
+real, parameter :: BET211 = 1.5*EOS311*r1_S0  ! Coefficient of the drho_dS fit zs**2 * zt * zp term [kg m-3 ppt-1]
+real, parameter :: BET021 = 0.5*EOS121*r1_S0  ! Coefficient of the drho_dS fit zt**2 * zp term [kg m-3 ppt-1]
+real, parameter :: BET121 =     EOS221*r1_S0  ! Coefficient of the drho_dS fit zs * zt**2 * zp term [kg m-3 ppt-1]
+real, parameter :: BET031 = 0.5*EOS131*r1_S0  ! Coefficient of the drho_dS fit zt**3 * zp term [kg m-3 ppt-1]
+real, parameter :: BET002 = 0.5*EOS102*r1_S0  ! Coefficient of the drho_dS fit zp**2 term [kg m-3 ppt-1]
+real, parameter :: BET102 =     EOS202*r1_S0  ! Coefficient of the drho_dS fit zs * zp**2 term [kg m-3 ppt-1]
+real, parameter :: BET012 = 0.5*EOS112*r1_S0  ! Coefficient of the drho_dS fit zt * zp**2 term [kg m-3 ppt-1]
+real, parameter :: BET003 = 0.5*EOS103*r1_S0  ! Coefficient of the drho_dS fit zp**3 term [kg m-3 ppt-1]
 !>@}
 
 contains
@@ -231,17 +227,18 @@ subroutine calculate_density_array_nemo(T, S, pressure, rho, start, npts, rho_re
   real :: zs0 ! Salinity dependent density at the surface pressure and temperature [kg m-3]
   integer :: j
 
+  ! The following algorithm was published by Roquet et al. (2015), intended for use
+  ! with NEMO, but it is not necessarily the algorithm used in NEMO ocean model.
   do j=start,start+npts-1
-    ! Conversions
-    zs = S(j) !gsw_sr_from_sp(S(j))      ! Convert practical salinity to absolute salinity [g kg--1]
-    zt = T(j) !gsw_ct_from_pt(S(j),T(j)) ! Convert potential temp to conservative temp [degC]
-    zp = pressure(j) * Pa2db             ! Convert pressure from Pascals to decibars [dbar]
+    ! Conversions to the units used here.
+    zt = T(j) * r1_T0  ! Conservative temperature normalized by a plausible oceanic range [nondim]
+    zs = SQRT( ABS( S(j) + rdeltaS ) * r1_S0 )  ! square root of normalized salinity plus an offset [nondim]
+    zp = pressure(j) * (Pa2db*r1_P0)    ! Convert pressure from Pascals to kilobars to normalize it [nondim]
 
-    !The following algorithm was provided by Roquet in a private communication.
-    !It is not necessarily the algorithm used in NEMO ocean!
-    zp  = zp * r1_P0  ! pressure normalized by a plausible range of pressure in the ocean [nondim]
-    zt  = zt * r1_T0  ! temperature normalized by a plausible oceanic range [nondim]
-    zs  = SQRT( ABS( zs + rdeltaS ) * r1_S0 )  ! square root of normalized salinity plus an offset [nondim]
+    ! The next two lines should be used if it is necessary to convert potential temperature and
+    ! pratical salinity to conservative temperature and absolute salinity.
+    ! zt = r1_T0 * gsw_ct_from_pt(S(j),T(j)) ! Convert potential temp to conservative temp [degC]
+    ! zs = SQRT( ABS( gsw_sr_from_sp(S(j)) + rdeltaS ) * r1_S0 ) ! Convert S from practical to absolute salinity.
 
     zn3 = EOS013*zt   &
        &   + EOS103*zs+EOS003
@@ -309,16 +306,16 @@ subroutine calculate_density_derivs_array_nemo(T, S, pressure, drho_dT, drho_dS,
   integer :: j
 
   do j=start,start+npts-1
-    ! Conversions
-    zs = S(j) !gsw_sr_from_sp(S(j))      ! Convert practical salinity to absolute salinity [g kg--1]
-    zt = T(j) !gsw_ct_from_pt(S(j),T(j)) ! Convert potential temp to conservative temp [degC]
-    zp = pressure(j) * Pa2db             ! Convert pressure from Pascals to decibars [dbar]
+    ! Conversions to the units used here.
+    zt = T(j) * r1_T0  ! Conservative temperature normalized by a plausible oceanic range [nondim]
+    zs = SQRT( ABS( S(j) + rdeltaS ) * r1_S0 )  ! square root of normalized salinity plus an offset [nondim]
+    zp = pressure(j) * (Pa2db*r1_P0)    ! Convert pressure from Pascals to kilobars to normalize it [nondim]
 
-    !The following algorithm was provided by Roquet in a private communication.
-    !It is not necessarily the algorithm used in NEMO ocean!
-    zp  = zp * r1_P0  ! pressure normalized by a plausible range of pressure in the ocean [nondim]
-    zt  = zt * r1_T0  ! temperature normalized by a plausible oceanic range [nondim]
-    zs  = SQRT( ABS( zs + rdeltaS ) * r1_S0 )  ! square root of normalized salinity plus an offset [nondim]
+    ! The next two lines should be used if it is necessary to convert potential temperature and
+    ! pratical salinity to conservative temperature and absolute salinity.
+    ! zt = r1_T0 * gsw_ct_from_pt(S(j),T(j)) ! Convert potential temp to conservative temp [degC]
+    ! zs = SQRT( ABS( gsw_sr_from_sp(S(j)) + rdeltaS ) * r1_S0 ) ! Convert S from practical to absolute salinity.
+
     !
     ! alpha
     zn3 = ALP003
@@ -339,7 +336,7 @@ subroutine calculate_density_derivs_array_nemo(T, S, pressure, drho_dT, drho_dS,
        !
     zn  = ( ( zn3 * zp + zn2 ) * zp + zn1 ) * zp + zn0
     !
-    drho_dT(j) = -zn
+    drho_dT(j) = zn
     !
     ! beta
     !
@@ -410,23 +407,237 @@ subroutine calculate_compress_nemo(T, S, pressure, rho, drho_dp, start, npts)
   integer, intent(in)                :: npts     !< The number of values to calculate.
 
   ! Local variables
-  real :: zs  ! Absolute salinity [g kg-1]
-  real :: zt  ! Conservative temperature [degC]
-  real :: zp  ! Pressure converted to decibars [dbar]
+  real :: zp  ! Pressure normalized by an assumed pressure range [nondim]
+  real :: zt  ! Conservative temperature normalized by an assumed temperature range [nondim]
+  real :: zs  ! The square root of absolute salinity with an offset normalized
+              ! by an assumed salnity range [nondim]
+  real :: dzr0_dp ! Derivative of the pressure-dependent reference density profile with normalized pressure [kg m-3]
+  real :: dzn_dp  ! Derivative of the density anomaly from the reference profile with normalized pressure [kg m-3]
+  real :: zr0 ! The pressure-dependent (but temperature and salinity independent) reference density profile [kg m-3]
+  real :: zn  ! Density anomaly from the reference profile [kg m-3]
+  real :: zn0 ! A contribution to density from temperature and salinity anomalies at the surface pressure [kg m-3]
+  real :: zn1 ! A temperature and salinity dependent density contribution proportional to pressure [kg m-3]
+  real :: zn2 ! A temperature and salinity dependent density contribution proportional to pressure^2 [kg m-3]
+  real :: zn3 ! A temperature and salinity dependent density contribution proportional to pressure^3 [kg m-3]
+  real :: zs0 ! Salinity dependent density at the surface pressure and temperature [kg m-3]
   integer :: j
 
-  call calculate_density_array_nemo(T, S, pressure, rho, start, npts)
-  !
-  !NOTE: The following calculates the TEOS10 approximation to compressibility
-  !      since the corresponding NEMO approximation is not available yet.
-  !
+  ! The following algorithm was published by Roquet et al. (2015), intended for use
+  ! with NEMO, but it is not necessarily the algorithm used in NEMO ocean model.
   do j=start,start+npts-1
-    ! Conversions
-    zs = S(j) !gsw_sr_from_sp(S(j))      ! Convert practical salinity to absolute salinity [g kg--1]
-    zt = T(j) !gsw_ct_from_pt(S(j),T(j)) ! Convert potential temp to conservative temp [degC]
-    zp = pressure(j) * Pa2db             ! Convert pressure from Pascals to decibars [dbar]
-    call gsw_rho_first_derivatives(zs,zt,zp, drho_dp=drho_dp(j))
+    ! Conversions to the units used here.
+    zt = T(j) * r1_T0  ! Conservative temperature normalized by a plausible oceanic range [nondim]
+    zs = SQRT( ABS( S(j) + rdeltaS ) * r1_S0 )  ! square root of normalized salinity plus an offset [nondim]
+    zp = pressure(j) * (Pa2db*r1_P0)    ! Convert pressure from Pascals to kilobars to normalize it [nondim]
+
+    ! The next two lines should be used if it is necessary to convert potential temperature and
+    ! pratical salinity to conservative temperature and absolute salinity.
+    ! zt = r1_T0 * gsw_ct_from_pt(S(j),T(j)) ! Convert potential temp to conservative temp [degC]
+    ! zs = SQRT( ABS( gsw_sr_from_sp(S(j)) + rdeltaS ) * r1_S0 ) ! Convert S from practical to absolute salinity.
+
+    zn3 = EOS013*zt + EOS103*zs + EOS003
+
+    zn2 = (EOS022*zt   &
+       &   + EOS112*zs + EOS012)*zt   &
+       &   + (EOS202*zs + EOS102)*zs + EOS002
+
+    zn1 = (((EOS041*zt   &
+       &   + EOS131*zs + EOS031)*zt   &
+       &   + (EOS221*zs + EOS121)*zs + EOS021)*zt   &
+       &   + ((EOS311*zs + EOS211)*zs + EOS111)*zs + EOS011)*zt   &
+       &   + (((EOS401*zs + EOS301)*zs + EOS201)*zs + EOS101)*zs + EOS001
+
+    zn0 = (((((EOS060*zt   &
+       &   + EOS150*zs + EOS050)*zt   &
+       &   + (EOS240*zs + EOS140)*zs + EOS040)*zt   &
+       &   + ((EOS330*zs + EOS230)*zs + EOS130)*zs + EOS030)*zt   &
+       &   + (((EOS420*zs + EOS320)*zs + EOS220)*zs + EOS120)*zs + EOS020)*zt   &
+       &   + ((((EOS510*zs + EOS410)*zs + EOS310)*zs + EOS210)*zs + EOS110)*zs + EOS010)*zt
+
+    zs0 = (((((EOS600*zs + EOS500)*zs + EOS400)*zs + EOS300)*zs + EOS200)*zs + EOS100)*zs + EOS000
+
+    zr0 = (((((R05*zp + R04)*zp + R03)*zp + R02)*zp + R01)*zp + R00)*zp
+
+    zn  = ( ( zn3*zp + zn2 )*zp + zn1 )*zp + (zn0 + zs0)
+    rho(j) =  ( zn + zr0 ) ! density
+
+    dzr0_dp = ((((6.*R05*zp + 5.*R04)*zp + 4.*R03)*zp + 3.*R02)*zp + 2.*R01)*zp + R00
+    dzn_dp  = ( 3.*zn3*zp + 2.*zn2 )*zp + zn1
+    drho_dp(j) =  ( dzn_dp + dzr0_dp ) * (Pa2db*r1_P0) ! density
+
   enddo
 end subroutine calculate_compress_nemo
+
+
+!> Second derivatives of density with respect to temperature, salinity, and pressure for 1-d array inputs and outputs.
+subroutine calculate_density_second_derivs_array_NEMO(T, S, P, drho_ds_ds, drho_ds_dt, drho_dt_dt, &
+                                                         drho_ds_dp, drho_dt_dp, start, npts)
+  real, dimension(:), intent(in   ) :: T !< Potential temperature referenced to 0 dbar [degC]
+  real, dimension(:), intent(in   ) :: S !< Salinity [PSU]
+  real, dimension(:), intent(in   ) :: P !< Pressure [Pa]
+  real, dimension(:), intent(inout) :: drho_ds_ds !< Partial derivative of beta with respect
+                                                  !! to S [kg m-3 PSU-2]
+  real, dimension(:), intent(inout) :: drho_ds_dt !< Partial derivative of beta with respect
+                                                  !! to T [kg m-3 PSU-1 degC-1]
+  real, dimension(:), intent(inout) :: drho_dt_dt !< Partial derivative of alpha with respect
+                                                  !! to T [kg m-3 degC-2]
+  real, dimension(:), intent(inout) :: drho_ds_dp !< Partial derivative of beta with respect
+                                                  !! to pressure [kg m-3 PSU-1 Pa-1] = [s2 m-2 PSU-1]
+  real, dimension(:), intent(inout) :: drho_dt_dp !< Partial derivative of alpha with respect
+                                                  !! to pressure [kg m-3 degC-1 Pa-1] = [s2 m-2 degC-1]
+  integer,            intent(in   ) :: start !< Starting index in T,S,P
+  integer,            intent(in   ) :: npts  !< Number of points to loop over
+
+  ! Local variables
+  real :: zp  ! Pressure normalized by an assumed pressure range [nondim]
+  real :: zt  ! Conservative temperature normalized by an assumed temperature range [nondim]
+  real :: zs  ! The square root of absolute salinity with an offset normalized
+              ! by an assumed salnity range [nondim]
+  real :: I_s ! The inverse of zs [nondim]
+  real :: dzr0_dp ! Derivative of the pressure-dependent reference density profile with normalized pressure [kg m-3]
+  real :: dzn_dp  ! Derivative of the density anomaly from the reference profile with normalized pressure [kg m-3]
+  real :: dzn_ds  ! Derivative of the density anomaly from the reference profile with zs [kg m-3]
+  real :: zr0 ! The pressure-dependent (but temperature and salinity independent) reference density profile [kg m-3]
+  real :: zn  ! Density anomaly from the reference profile [kg m-3]
+  real :: zn0 ! A contribution to one of the second derivatives that is independent of pressure [various]
+  real :: zn1 ! A contribution to one of the second derivatives that is proportional to pressure [various]
+  real :: zn2 ! A contribution to one of the second derivatives that is proportional to pressure^2 [various]
+  real :: zn3 ! A temperature and salinity dependent density contribution proportional to pressure^3 [various]
+  integer :: j
+
+  do j = start,start+npts-1
+    ! Conversions to the units used here.
+    zt = T(j) * r1_T0  ! Conservative temperature normalized by a plausible oceanic range [nondim]
+    zs = SQRT( ABS( S(j) + rdeltaS ) * r1_S0 )  ! square root of normalized salinity plus an offset [nondim]
+    zp = P(j) * (Pa2db*r1_P0)     ! Convert pressure from Pascals to kilobars to normalize it [nondim]
+
+    ! The next two lines should be used if it is necessary to convert potential temperature and
+    ! pratical salinity to conservative temperature and absolute salinity.
+    ! zt = r1_T0 * gsw_ct_from_pt(S(j),T(j)) ! Convert potential temp to conservative temp [degC]
+    ! zs = SQRT( ABS( gsw_sr_from_sp(S(j)) + rdeltaS ) * r1_S0 )  ! Convert S from practical to absolute salinity.
+
+    I_s = 1.0 / zs
+
+    ! Find drho_ds_ds
+    zn3 = -EOS103*I_s**2
+    zn2 = -(EOS112*zt + EOS102)*I_s**2
+    zn1 = (3.*EOS311*zt + (8.*EOS401*zs + 3.*EOS301) ) &
+         - ( ((EOS131*zt + EOS121)*zt + EOS111)*zt + EOS101 )*I_s**2
+    zn0 = ( (( 3.*EOS330*zt + (8.*EOS420*zs + 3.*EOS320))*zt + &
+             ((15.*EOS510*zs + 8.*EOS410)*zs + 3.*EOS310))*zt + &
+            (((24.*EOS600*zs + 15.*EOS500)*zs + 8.*EOS400)*zs + 3.*EOS300) ) &
+          - ( ((((EOS150*zt + EOS140)*zt + EOS130)*zt + EOS120)*zt + EOS110)*zt + EOS100 )*I_s**2
+    zn  = ( ( zn3 * zp + zn2) * zp + zn1 ) * zp + zn0
+    drho_dS_dS(j) = (0.5*r1_S0)**2 * (zn * I_s)
+
+    ! Find drho_ds_dt
+    zn2 = EOS112
+    zn1 = ((3.*EOS131)*zt  + (4.*EOS221*zs + 2.*EOS121))*zt + &
+          ((3.*EOS311*zs + 2.*EOS211)*zs + EOS111)
+    zn0 = (((5.*EOS150*zt + (8.*EOS240*zs + 4.*EOS140))*zt + &
+            ((9.*EOS330*zs + 6.*EOS230)*zs + 3.*EOS130))*zt + &
+           ((((8.*EOS420*zs + 6.*EOS320)*zs + 4.*EOS220)*zs + 2.*EOS120)))*zt +  &
+          ((((5.*EOS510*zs + 4.*EOS410)*zs + 3.*EOS310)*zs + 2.*EOS210)*zs + EOS110)
+    zn  = ( zn2 * zp + zn1 ) * zp + zn0
+    drho_ds_dt(j) = (0.5*r1_S0*r1_T0) * (zn * I_s)
+
+    ! Find drho_dt_dt
+    zn2 = 2.*EOS022
+    zn1 = (12.*EOS041*zt  + 6.*(EOS131*zs + EOS031))*zt +  &
+          2.*((EOS221*zs + EOS121)*zs + EOS021)
+    zn0 = (((30.*EOS060*zt + 20.*(EOS150*zs + EOS050))*zt + &
+            12.*((EOS240*zs + EOS140)*zs + EOS040))*zt  + &
+           6.*(((EOS330*zs + EOS230)*zs + EOS130)*zs + EOS030))*zt +  &
+          2.*((((EOS420*zs + EOS320)*zs + EOS220)*zs + EOS120)*zs + EOS020)
+    zn  = ( zn2 * zp + zn1 ) * zp + zn0
+    drho_dt_dt(j) = zn * r1_T0**2
+
+    ! Find drho_ds_dp
+    zn3 = EOS103
+    zn2 = EOS112*zt + (2.*EOS202*zs + EOS102)
+    zn1 = ((EOS131*zt + (2.*EOS221*zs + EOS121))*zt  + ((3.*EOS311*zs + 2.*EOS211)*zs + EOS111))*zt + &
+          (((4.*EOS401*zs + 3.*EOS301)*zs + 2.*EOS201)*zs + EOS101)
+    dzn_dp  = ( ( 3.*zn3 * zp + 2.*zn2 ) * zp + zn1 )
+    drho_ds_dp(j) =  ( dzn_dp * I_s ) * (0.5*r1_S0 * Pa2db*r1_P0) ! Second derivative of density
+
+
+    ! Find drho_dt_dp
+    zn3 = EOS013
+    zn2 = 2.*EOS022*zt + (EOS112*zs + EOS012)
+    zn1 = ((4.*EOS041*zt  + 3.*(EOS131*zs + EOS031))*zt + 2.*((EOS221*zs + EOS121)*zs + EOS021))*zt + &
+          (((EOS311*zs + EOS211)*zs + EOS111)*zs + EOS011)
+    dzn_dp  = ( ( 3.*zn3 * zp + 2.*zn2 ) * zp + zn1 )
+    drho_dt_dp(j) =  ( dzn_dp ) * (Pa2db*r1_P0* r1_T0) ! Second derivative of density
+  enddo
+
+end subroutine calculate_density_second_derivs_array_NEMO
+
+!> Second derivatives of density with respect to temperature, salinity, and pressure for scalar inputs.
+!!
+!! The scalar version of calculate_density_second_derivs promotes scalar inputs to 1-element array
+!! and then demotes the output back to a scalar
+subroutine calculate_density_second_derivs_scalar_NEMO(T, S, P, drho_ds_ds, drho_ds_dt, drho_dt_dt, &
+                                                         drho_ds_dp, drho_dt_dp)
+  real, intent(in   ) :: T          !< Potential temperature referenced to 0 dbar
+  real, intent(in   ) :: S          !< Salinity [PSU]
+  real, intent(in   ) :: P          !< pressure [Pa]
+  real, intent(  out) :: drho_ds_ds !< Partial derivative of beta with respect
+                                    !! to S [kg m-3 PSU-2]
+  real, intent(  out) :: drho_ds_dt !< Partial derivative of beta with respect
+                                    !! to T [kg m-3 PSU-1 degC-1]
+  real, intent(  out) :: drho_dt_dt !< Partial derivative of alpha with respect
+                                    !! to T [kg m-3 degC-2]
+  real, intent(  out) :: drho_ds_dp !< Partial derivative of beta with respect
+                                    !! to pressure [kg m-3 PSU-1 Pa-1] = [s2 m-2 PSU-1]
+  real, intent(  out) :: drho_dt_dp !< Partial derivative of alpha with respect
+                                    !! to pressure [kg m-3 degC-1 Pa-1] = [s2 m-2 degC-1]
+  ! Local variables
+  real, dimension(1) :: T0    ! A 1-d array with a copy of the temperature [degC]
+  real, dimension(1) :: S0    ! A 1-d array with a copy of the salinity [PSU]
+  real, dimension(1) :: p0    ! A 1-d array with a copy of the pressure [Pa]
+  real, dimension(1) :: drdsds ! The second derivative of density with salinity [kg m-3 PSU-2]
+  real, dimension(1) :: drdsdt ! The second derivative of density with salinity and
+                               ! temperature [kg m-3 PSU-1 degC-1]
+  real, dimension(1) :: drdtdt ! The second derivative of density with temperature [kg m-3 degC-2]
+  real, dimension(1) :: drdsdp ! The second derivative of density with salinity and
+                               ! pressure [kg m-3 PSU-1 Pa-1] = [s2 m-2 PSU-1]
+  real, dimension(1) :: drdtdp ! The second derivative of density with temperature and
+                               ! pressure [kg m-3 degC-1 Pa-1] = [s2 m-2 degC-1]
+
+  T0(1) = T
+  S0(1) = S
+  P0(1) = P
+  call calculate_density_second_derivs_array_NEMO(T0, S0, P0, drdsds, drdsdt, drdtdt, drdsdp, drdtdp, 1, 1)
+  drho_ds_ds = drdsds(1)
+  drho_ds_dt = drdsdt(1)
+  drho_dt_dt = drdtdt(1)
+  drho_ds_dp = drdsdp(1)
+  drho_dt_dp = drdtdp(1)
+
+end subroutine calculate_density_second_derivs_scalar_NEMO
+
+!> \namespace mom_eos_NEMO
+!!
+!! \section section_EOS_NEMO NEMO equation of state
+!!
+!!  Fabien Roquet and colleagues developed this equation of state using a simple polynomial fit
+!! to the TEOS-10 equation of state, for efficiency when used in the NEMO ocean model.  Fabien
+!! Roquet also graciously provided the MOM6 team with the original code implementing this
+!! equation of state, although it has since been modified and extended to have capabilities
+!! mirroring those available with other equations of state in MOM6.  This particular equation
+!! of state is a balance between an accuracy that matches the TEOS-10 density to better than
+!! observational uncertainty with a polynomial form that can be evaluated quickly despite having
+!! 52 terms.
+!!
+!! The NEMO label used to describe this equation of state reflects that it was used in the NEMO
+!! ocean model before it was used in MOM6, but it probably should be described as the Roquet
+!! equation of.   However, these algorithms, especially as modified here, are not from
+!! the standard NEMO codebase.
+!!
+!! \subsection section_EOS_NEMO_references References
+!!
+!! Roquet, F., Madec, G., McDougall, T. J., and Barker, P. M., 2015:
+!!  Accurate polynomial expressions for the density and specific volume
+!!  of seawater using the TEOS-10 standard. Ocean Modelling, 90:29-43.
 
 end module MOM_EOS_NEMO
