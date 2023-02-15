@@ -942,7 +942,7 @@ end subroutine int_spec_vol_dp_wright_full
 
 !> \namespace mom_eos_wright_full
 !!
-!! \section section_EOS_Wright Wright equation of state
+!! \section section_EOS_Wright_full Wright equation of state
 !!
 !! Wright, 1997, provide an approximation for the in situ density as a function of
 !! potential temperature, salinity, and pressure. The formula follow the Tumlirz
@@ -954,7 +954,7 @@ end subroutine int_spec_vol_dp_wright_full
 !! Originally coded in 2000 by R. Hallberg.
 !! Anomaly form coded in 3/18.
 !!
-!! \subsection section_EOS_Wright_references References
+!! \subsection section_EOS_Wright_full_references References
 !!
 !! Wright, D., 1997: An Equation of State for Use in Ocean Models: Eckart's Formula Revisited.
 !! J. Ocean. Atmosph. Tech., 14 (3), 735-740.
