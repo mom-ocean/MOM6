@@ -25,6 +25,7 @@ use MOM_EOS_Wright_red,  only : calculate_compress_wright_red, int_spec_vol_dp_w
 use MOM_EOS_Wright_red,  only : calculate_density_second_derivs_wright_red
 use MOM_EOS_UNESCO, only : calculate_density_unesco, calculate_spec_vol_unesco
 use MOM_EOS_UNESCO, only : calculate_density_derivs_unesco, calculate_density_unesco
+use MOM_EOS_UNESCO, only : calculate_density_second_derivs_UNESCO
 use MOM_EOS_UNESCO, only : calculate_compress_unesco
 use MOM_EOS_NEMO,   only : calculate_density_nemo
 use MOM_EOS_NEMO,   only : calculate_density_derivs_nemo, calculate_density_nemo
@@ -265,8 +266,8 @@ subroutine calculate_stanley_density_scalar(T, S, pressure, Tvar, TScov, Svar, r
       call calculate_density_second_derivs_wright_red(T_scale*T, S_scale*S, p_scale*pressure, &
                                                   d2RdSS, d2RdST, d2RdTT, d2RdSp, d2RdTP)
     case (EOS_UNESCO)
-      call MOM_error(FATAL, "calculate_stanley_density_scalar: "//&
-                     "EOS_UNESCO is not set up to calculate second derivatives yet.")
+      call calculate_density_second_derivs_UNESCO(T_scale*T, S_scale*S, p_scale*pressure, &
+                                                  d2RdSS, d2RdST, d2RdTT, d2RdSp, d2RdTP)
     case (EOS_NEMO)
       call calculate_density_second_derivs_NEMO(T_scale*T, S_scale*S, p_scale*pressure, &
                                                   d2RdSS, d2RdST, d2RdTT, d2RdSp, d2RdTP)
@@ -374,8 +375,9 @@ subroutine calculate_stanley_density_array(T, S, pressure, Tvar, TScov, Svar, rh
       call calculate_density_second_derivs_wright_red(T, S, pressure, d2RdSS, d2RdST, &
                                                   d2RdTT, d2RdSp, d2RdTP, start, npts)
     case (EOS_UNESCO)
-      call MOM_error(FATAL, "calculate_stanley_density_array: "//&
-                     "EOS_UNESCO is not set up to calculate second derivatives yet.")
+      call calculate_density_UNESCO(T, S, pressure, rho, start, npts, rho_ref)
+      call calculate_density_second_derivs_UNESCO(T, S, pressure, d2RdSS, d2RdST, &
+                                                  d2RdTT, d2RdSp, d2RdTP, start, npts)
     case (EOS_NEMO)
       call calculate_density_NEMO(T, S, pressure, rho, start, npts, rho_ref)
       call calculate_density_second_derivs_NEMO(T, S, pressure, d2RdSS, d2RdST, &
@@ -528,8 +530,9 @@ subroutine calculate_stanley_density_1d(T, S, pressure, Tvar, TScov, Svar, rho, 
       call calculate_density_second_derivs_wright_red(Ta, Sa, pres, d2RdSS, d2RdST, &
                                                   d2RdTT, d2RdSp, d2RdTP, is, npts)
     case (EOS_UNESCO)
-      call MOM_error(FATAL, "calculate_stanley_density_1d: "//&
-                     "EOS_UNESCO is not set up to calculate second derivatives yet.")
+      call calculate_density_UNESCO(Ta, Sa, pres, rho, is, npts, rho_reference)
+      call calculate_density_second_derivs_UNESCO(Ta, Sa, pres, d2RdSS, d2RdST, &
+                                                  d2RdTT, d2RdSp, d2RdTP, is, npts)
     case (EOS_NEMO)
       call calculate_density_NEMO(Ta, Sa, pres, rho, is, npts, rho_reference)
       call calculate_density_second_derivs_NEMO(Ta, Sa, pres, d2RdSS, d2RdST, &
@@ -1052,8 +1055,8 @@ subroutine calculate_density_second_derivs_1d(T, S, pressure, drho_dS_dS, drho_d
         call calculate_density_second_derivs_wright_red(T, S, pressure, drho_dS_dS, drho_dS_dT, &
                                                     drho_dT_dT, drho_dS_dP, drho_dT_dP, is, npts)
       case (EOS_UNESCO)
-        call MOM_error(FATAL, "calculate_density_second_derivs: "//&
-                       "EOS_UNESCO is not set up to calculate second derivatives yet.")
+        call calculate_density_second_derivs_UNESCO(T, S, pressure, drho_dS_dS, drho_dS_dT, &
+                                                    drho_dT_dT, drho_dS_dP, drho_dT_dP, is, npts)
       case (EOS_NEMO)
         call calculate_density_second_derivs_NEMO(T, S, pressure, drho_dS_dS, drho_dS_dT, &
                                                     drho_dT_dT, drho_dS_dP, drho_dT_dP, is, npts)
@@ -1083,8 +1086,8 @@ subroutine calculate_density_second_derivs_1d(T, S, pressure, drho_dS_dS, drho_d
         call calculate_density_second_derivs_wright_red(Ta, Sa, pres, drho_dS_dS, drho_dS_dT, &
                                                     drho_dT_dT, drho_dS_dP, drho_dT_dP, is, npts)
       case (EOS_UNESCO)
-        call MOM_error(FATAL, "calculate_density_second_derivs: "//&
-                       "EOS_UNESCO is not set up to calculate second derivatives yet.")
+        call calculate_density_second_derivs_UNESCO(Ta, Sa, pres, drho_dS_dS, drho_dS_dT, &
+                                                    drho_dT_dT, drho_dS_dP, drho_dT_dP, is, npts)
       case (EOS_NEMO)
         call calculate_density_second_derivs_NEMO(Ta, Sa, pres, drho_dS_dS, drho_dS_dT, &
                                                     drho_dT_dT, drho_dS_dP, drho_dT_dP, is, npts)
@@ -1168,8 +1171,8 @@ subroutine calculate_density_second_derivs_scalar(T, S, pressure, drho_dS_dS, dr
       call calculate_density_second_derivs_wright_red(Ta, Sa, pres, drho_dS_dS, drho_dS_dT, &
                                                   drho_dT_dT, drho_dS_dP, drho_dT_dP)
     case (EOS_UNESCO)
-      call MOM_error(FATAL, "calculate_density_second_derivs: "//&
-                     "EOS_UNESCO is not set up to calculate second derivatives yet.")
+      call calculate_density_second_derivs_UNESCO(Ta, Sa, pres, drho_dS_dS, drho_dS_dT, &
+                                                  drho_dT_dT, drho_dS_dP, drho_dT_dP)
     case (EOS_NEMO)
       call calculate_density_second_derivs_NEMO(Ta, Sa, pres, drho_dS_dS, drho_dS_dT, &
                                                   drho_dT_dT, drho_dS_dP, drho_dT_dP)
@@ -1985,7 +1988,7 @@ logical function EOS_unit_tests(verbose)
   EOS_unit_tests = .false. ! Normally return false
 
   call EOS_manual_init(EOS_tmp, form_of_EOS=EOS_UNESCO)
-  fail = test_EOS_consistency(25.0, 35.0, 1.0e7, EOS_tmp, verbose, "UNESCO", skip_2nd=.true., &
+  fail = test_EOS_consistency(25.0, 35.0, 1.0e7, EOS_tmp, verbose, "UNESCO", &
                               rho_check=1027.5434579611974*EOS_tmp%kg_m3_to_R)
   if (verbose .and. fail) call MOM_error(WARNING, "UNESCO EOS has failed some self-consistency tests.")
   EOS_unit_tests = EOS_unit_tests .or. fail

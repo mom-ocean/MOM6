@@ -3,18 +3,12 @@ module MOM_EOS_UNESCO
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-!***********************************************************************
-!*  The subroutines in this file implement the equation of state for   *
-!*  sea water using the fit to the UNESCO equation of state given by   *
-!*  the expressions from Jackett and McDougall, 1995, J. Atmos.        *
-!*  Ocean. Tech., 12, 381-389.  Coded by J. Stephens, 9/99.            *
-!***********************************************************************
-
 implicit none ; private
 
 public calculate_compress_UNESCO, calculate_density_UNESCO, calculate_spec_vol_UNESCO
 public calculate_density_derivs_UNESCO
 public calculate_density_scalar_UNESCO, calculate_density_array_UNESCO
+public calculate_density_second_derivs_UNESCO
 
 !> Compute the in situ density of sea water (in [kg m-3]), or its anomaly with respect to
 !! a reference density, from salinity [PSU], potential temperature [degC] and pressure [Pa],
@@ -29,6 +23,13 @@ end interface calculate_density_UNESCO
 interface calculate_spec_vol_UNESCO
   module procedure calculate_spec_vol_scalar_UNESCO, calculate_spec_vol_array_UNESCO
 end interface calculate_spec_vol_UNESCO
+
+!> Compute the second derivatives of density with various combinations of temperature, salinity and
+!! pressure, using the UNESCO (1981) equation of state, as refit by Jackett and McDougall (1995).
+interface calculate_density_second_derivs_UNESCO
+  module procedure calculate_density_second_derivs_scalar_UNESCO, calculate_density_second_derivs_array_UNESCO
+end interface calculate_density_second_derivs_UNESCO
+
 
 !>@{ Parameters in the UNESCO equation of state, as published in appendix A3 of Gill, 1982.
 ! The following constants are used to calculate rho0, the density of seawater at 1
@@ -45,15 +46,15 @@ real, parameter :: R21 = 7.6438e-5    ! A coefficient in the fit for rho0 [kg m-
 real, parameter :: R31 = -8.2467e-7   ! A coefficient in the fit for rho0 [kg m-3 degC-3 PSU-1]
 real, parameter :: R41 = 5.3875e-9    ! A coefficient in the fit for rho0 [kg m-3 degC-4 PSU-1]
 real, parameter :: R032 = -5.72466e-3 ! A coefficient in the fit for rho0 [kg m-3 PSU-3/2]
-real, parameter :: R132 = 1.0227e-4   ! A coefficient in the fit for rho0 [kg m-3 PSU-3/2]
-real, parameter :: R232 = -1.6546e-6  ! A coefficient in the fit for rho0 [kg m-3 PSU-3/2]
+real, parameter :: R132 = 1.0227e-4   ! A coefficient in the fit for rho0 [kg m-3 degC-1 PSU-3/2]
+real, parameter :: R232 = -1.6546e-6  ! A coefficient in the fit for rho0 [kg m-3 degC-2 PSU-3/2]
 real, parameter :: R02 = 4.8314e-4    ! A coefficient in the fit for rho0 [kg m-3 PSU-2]
 
 ! The following constants are used to calculate the secant bulk modulus.
 ! The notation here is Sab for terms proportional to T^a*S^b,
 ! Spab for terms proportional to p*T^a*S^b, and SP0ab for terms
 ! proportional to p^2*T^a*S^b.
-!   Note that these values differ from those in Appendix A of Gill (1982) because the expressions
+!   Note that these values differ from those in Appendix 3 of Gill (1982) because the expressions
 ! from Jackett and MacDougall (1995) use potential temperature, rather than in situ temperature.
 real, parameter :: S00 = 1.965933e4   ! A coefficient in the secant bulk modulus fit [bar]
 real, parameter :: S10 = 1.444304e2   ! A coefficient in the secant bulk modulus fit [bar degC-1]
@@ -357,10 +358,9 @@ subroutine calculate_compress_UNESCO(T, S, pressure, rho, drho_dp, start, npts)
   real :: rho0    ! Density at 1 bar pressure [kg m-3].
   real :: ks      ! The secant bulk modulus [bar].
   real :: ks_0    ! The secant bulk modulus at zero pressure [bar].
-  real :: ks_1    ! The derivative of the secant bulk modulus with pressure at zero pressure [nondim].
-  real :: ks_2    ! The second derivative of the secant bulk modulus with pressure at zero pressure [nondim].
-  real :: dks_dp  ! The derivative of the secant bulk modulus
-                  ! with pressure [nondim]
+  real :: ks_1    ! The linear pressure dependence of the secant bulk modulus at zero pressure [nondim]
+  real :: ks_2    ! The quadratic pressure dependence of the secant bulk modulus at zero pressure [bar-1]
+  real :: dks_dp  ! The derivative of the secant bulk modulus with pressure [nondim]
   integer :: j
 
   do j=start,start+npts-1
@@ -395,5 +395,201 @@ subroutine calculate_compress_UNESCO(T, S, pressure, rho, drho_dp, start, npts)
   enddo
 end subroutine calculate_compress_UNESCO
 
+!> Calculate second derivatives of density with respect to temperature, salinity, and pressure
+!! using the UNESCO (1981) equation of state, as refit by Jackett and McDougall (1995).
+subroutine calculate_density_second_derivs_array_UNESCO(T, S, P, drho_ds_ds, drho_ds_dt, drho_dt_dt, &
+                                                         drho_ds_dp, drho_dt_dp, start, npts)
+  real, dimension(:), intent(in   ) :: T !< Potential temperature referenced to 0 dbar [degC]
+  real, dimension(:), intent(in   ) :: S !< Salinity [PSU]
+  real, dimension(:), intent(in   ) :: P !< Pressure [Pa]
+  real, dimension(:), intent(inout) :: drho_ds_ds !< Partial derivative of beta with respect
+                                                  !! to S [kg m-3 PSU-2]
+  real, dimension(:), intent(inout) :: drho_ds_dt !< Partial derivative of beta with respect
+                                                  !! to T [kg m-3 PSU-1 degC-1]
+  real, dimension(:), intent(inout) :: drho_dt_dt !< Partial derivative of alpha with respect
+                                                  !! to T [kg m-3 degC-2]
+  real, dimension(:), intent(inout) :: drho_ds_dp !< Partial derivative of beta with respect
+                                                  !! to pressure [kg m-3 PSU-1 Pa-1] = [s2 m-2 PSU-1]
+  real, dimension(:), intent(inout) :: drho_dt_dp !< Partial derivative of alpha with respect
+                                                  !! to pressure [kg m-3 degC-1 Pa-1] = [s2 m-2 degC-1]
+  integer,            intent(in   ) :: start !< Starting index in T,S,P
+  integer,            intent(in   ) :: npts  !< Number of points to loop over
+
+  ! Local variables
+  real :: t1          ! A copy of the temperature at a point [degC]
+  real :: s1          ! A copy of the salinity at a point [PSU]
+  real :: p1          ! Pressure converted to bars [bar]
+  real :: s12         ! The square root of salinity [PSU1/2]
+  real :: I_s12       ! The inverse of the square root of salinity [PSU-1/2]
+  real :: rho0        ! Density at 1 bar pressure [kg m-3]
+  real :: drho0_dT    ! Derivative of rho0 with T [kg m-3 degC-1]
+  real :: drho0_dS    ! Derivative of rho0 with S [kg m-3 PSU-1]
+  real :: d2rho0_dS2  ! Second derivative of rho0 with salinity [kg m-3 PSU-1]
+  real :: d2rho0_dSdT ! Second derivative of rho0 with temperature and salinity [kg m-3 degC-1 PSU-1]
+  real :: d2rho0_dT2  ! Second derivative of rho0 with temperature [kg m-3 degC-2]
+  real :: ks          ! The secant bulk modulus [bar]
+  real :: ks_0        ! The secant bulk modulus at zero pressure [bar]
+  real :: ks_1        ! The linear pressure dependence of the secant bulk modulus at zero pressure [nondim]
+  real :: ks_2        ! The quadratic pressure dependence of the secant bulk modulus at zero pressure [bar-1]
+  real :: dks_dp      ! The derivative of the secant bulk modulus with pressure [nondim]
+  real :: dks_dT      ! Derivative of the secant bulk modulus with temperature [bar degC-1]
+  real :: dks_dS      ! Derivative of the secant bulk modulus with salinity [bar psu-1]
+  real :: d2ks_dT2    ! Second derivative of the secant bulk modulus with temperature [bar degC-2]
+  real :: d2ks_dSdT   ! Second derivative of the secant bulk modulus with salinity and temperature [bar psu-1 degC-1]
+  real :: d2ks_dS2    ! Second derivative of the secant bulk modulus with salinity [bar psu-2]
+  real :: d2ks_dSdp   ! Second derivative of the secant bulk modulus with salinity and pressure [psu-1]
+  real :: d2ks_dTdp   ! Second derivative of the secant bulk modulus with temperature and pressure [degC-1]
+  real :: I_denom     ! The inverse of the denominator of the expression for density [bar-1]
+  integer :: j
+
+  do j=start,start+npts-1
+
+    p1 = P(j)*1.0e-5 ; t1 = T(j)
+    s1 = max(S(j), 0.0) ; s12 = sqrt(s1)
+    ! The UNESCO equation of state is a fit to density, but it chooses a form that exhibits a
+    ! singularity in the second derivatives with salinity for fresh water.  To avoid this, the
+    ! square root of salinity can be treated with a floor such that the contribution from the
+    ! S**1.5 terms to both the surface density and the secant bulk modulus are lost to roundoff.
+    ! This salinity is given by (~1e-16*S00/S032)**(2/3) ~= 3e-8 PSU, or S12 ~= 1.7e-4
+    I_s12 = 1.0 / (max(s12, 1.0e-4))
+
+    ! Calculate the density at sea level pressure and its derivatives
+    rho0 = R00 + ( t1*(R10 + t1*(R20 + t1*(R30 + t1*(R40 + R50*t1)))) + &
+                   s1*((R01 + t1*(R11 + t1*(R21 + t1*(R31 + R41*t1)))) + &
+                       (s12*(R032 + t1*(R132 + R232*t1)) + R02*s1)) )
+    drho0_dT = R10 + ( t1*(2.0*R20 + t1*(3.0*R30 + t1*(4.0*R40 + 5.0*R50*t1))) + &
+                       s1*(R11 + ( t1*(2.0*R21 + t1*(3.0*R31 + 4.0*R41*t1)) + &
+                                   s12*(R132 + 2.0*R232*t1) ) ) )
+    drho0_dS = R01 + ( t1*(R11 + t1*(R21 + t1*(R31 + R41*t1))) + &
+                       (1.5*s12*(R032 + t1*(R132 + R232*t1)) + 2.0*R02*s1) )
+    d2rho0_dS2 = 0.75*(R032 + t1*(R132 + R232*t1))*I_s12 + 2.0*R02
+    d2rho0_dSdT = R11 + ( t1*(2.*R21 + t1*(3.*R31 + 4.*R41*t1)) + 1.5*s12*(R132 + 2.*R232*t1) )
+    d2rho0_dT2 = 2.0*R20 + ( t1*(6.0*R30 + t1*(12.0*R40 + 20.0*R50*t1)) + &
+                             s1*((2.0*R21 + t1*(6.0*R31 + 12.0*R41*t1)) + 2.0*R232*s12) )
+
+    !  Calculate the secant bulk modulus and its derivatives
+    ks_0 = S00 + ( t1*(S10 + t1*(S20 + t1*(S30 + S40*t1))) + &
+                   s1*((S01 + t1*(S11 + t1*(S21 + S31*t1))) + s12*(S032 + t1*(S132 + S232*t1))) )
+    ks_1 = Sp00 + ( t1*(Sp10 + t1*(Sp20 + Sp30*t1)) + &
+                    s1*((Sp01 + t1*(Sp11 + Sp21*t1)) + Sp032*s12) )
+    ks_2 = SP000 + ( t1*(SP010 + SP020*t1) + s1*(SP001 + t1*(SP011 + SP021*t1)) )
+
+    ks = ks_0 + p1*(ks_1 + p1*ks_2)
+    dks_dp = ks_1 + 2.0*p1*ks_2
+    dks_dT = (S10 + ( t1*(2.0*S20 + t1*(3.0*S30 + t1*4.0*S40)) + &
+                      s1*((S11 + t1*(2.0*S21 + 3.0*S31*t1)) + s12*(S132 + 2.0*S232*t1)) )) + &
+             p1*((Sp10 + t1*(2.0*Sp20 + 3.0*Sp30*t1) + s1*(Sp11 + 2.0*Sp21*t1)) + &
+                 p1*(SP010 + 2.0*SP020*t1 + s1*(SP011 + 2.0*SP021*t1)))
+    dks_dS = (S01 + ( t1*(S11 + t1*(S21 + S31*t1)) + 1.5*s12*(S032 + t1*(S132 + S232*t1)) )) + &
+             p1*((Sp01 + t1*(Sp11 + Sp21*t1) + 1.5*Sp032*s12) + &
+                 p1*(SP001 + t1*(SP011 + SP021*t1)))
+    d2ks_dS2 = 0.75*((S032 + t1*(S132 + S232*t1)) + p1*Sp032)*I_s12
+    d2ks_dSdT = (S11 + ( t1*(2.*S21 + 3.*S31*t1) + 1.5*s12*(S132 + 2.*S232*t1) )) + &
+                p1*((Sp11 + 2.*Sp21*t1) +  p1*(SP011 + 2.0*SP021*t1))
+    d2ks_dT2 = 2.0*(S20 + ( t1*(3.0*S30 + 6.0*S40*t1) + s1*((S21 + 3.0*S31*t1) + S232*s12) )) + &
+               2.0*p1*((Sp20 + (3.0*Sp30*t1 + Sp21*s1)) + p1*(SP020 + SP021*s1))
+
+    d2ks_dSdp = (Sp01 + (t1*(Sp11 + Sp21*t1) + 1.5*Sp032*s12)) + &
+                2.*p1*(SP001 + t1*(SP011 + SP021*t1))
+    d2ks_dTdp = (Sp10 + (t1*(2.0*Sp20 + 3.0*Sp30*t1) + s1*(Sp11 + 2.0*Sp21*t1))) + &
+                2.*p1*(SP010 + 2.0*SP020*t1 + s1*(SP011 + 2.0*SP021*t1))
+    I_denom = 1.0 / (ks - p1)
+
+    ! Expressions for density and its first derivatives are copied here for reference:
+    !   rho = rho0*ks * I_denom
+    !   drho_dT = I_denom*(ks*drho0_dT - p1*rho0*I_denom*dks_dT)
+    !   drho_dS = I_denom*(ks*drho0_dS - p1*rho0*I_denom*dks_dS)
+    !   drho_dp = 1.0e-5 * (rho0 * I_denom**2) * (ks - dks_dp*p1)
+
+    ! Finally calculate the second derivatives
+    drho_dS_dS(j) = I_denom * ( ks*d2rho0_dS2 - (p1*I_denom) * &
+                      (2.0*drho0_dS*dks_dS + rho0*(d2ks_dS2 - 2.0*dks_dS**2*I_denom)) )
+    drho_dS_dT(j) = I_denom * (ks * d2rho0_dSdT - (p1*I_denom) * &
+                        ((drho0_dT*dks_dS + drho0_dS*dks_dT) + &
+                          rho0*(d2ks_dSdT - 2.0*(dks_dS*dks_dT)*I_denom)) )
+    drho_dT_dT(j) = I_denom * ( ks*d2rho0_dT2 - (p1*I_denom) * &
+                      (2.0*drho0_dT*dks_dT + rho0*(d2ks_dT2 - 2.0*dks_dT**2*I_denom)) )
+
+    ! The factor of 1.0e-5 is because pressure here is in bars, not Pa.
+    drho_dS_dp(j) = (1.0e-5 * I_denom**2) * ( (ks*drho0_dS - rho0*dks_dS) - &
+                      p1*( (dks_dp*drho0_dS + rho0*d2ks_dSdp) - &
+                           2.0*(rho0*dks_dS) * ((dks_dp - 1.0)*I_denom) ) )
+    drho_dT_dp(j) = (1.0e-5 * I_denom**2) * ( (ks*drho0_dT - rho0*dks_dT) - &
+                      p1*( (dks_dp*drho0_dT + rho0*d2ks_dTdp) - &
+                           2.0*(rho0*dks_dT) * ((dks_dp - 1.0)*I_denom) ) )
+  enddo
+
+end subroutine calculate_density_second_derivs_array_UNESCO
+
+!> Second derivatives of density with respect to temperature, salinity and pressure for scalar inputs.
+!! Inputs are promoted to 1-element arrays and outputs are demoted to scalars.
+subroutine calculate_density_second_derivs_scalar_UNESCO(T, S, P, drho_ds_ds, drho_ds_dt, drho_dt_dt, &
+                                                         drho_ds_dp, drho_dt_dp)
+  real, intent(in   ) :: T          !< Potential temperature referenced to 0 dbar
+  real, intent(in   ) :: S          !< Salinity [PSU]
+  real, intent(in   ) :: P          !< pressure [Pa]
+  real, intent(  out) :: drho_ds_ds !< Partial derivative of beta with respect
+                                    !! to S [kg m-3 PSU-2]
+  real, intent(  out) :: drho_ds_dt !< Partial derivative of beta with respect
+                                    !! to T [kg m-3 PSU-1 degC-1]
+  real, intent(  out) :: drho_dt_dt !< Partial derivative of alpha with respect
+                                    !! to T [kg m-3 degC-2]
+  real, intent(  out) :: drho_ds_dp !< Partial derivative of beta with respect
+                                    !! to pressure [kg m-3 PSU-1 Pa-1] = [s2 m-2 PSU-1]
+  real, intent(  out) :: drho_dt_dp !< Partial derivative of alpha with respect
+                                    !! to pressure [kg m-3 degC-1 Pa-1] = [s2 m-2 degC-1]
+  ! Local variables
+  real, dimension(1) :: T0      ! A 1-d array with a copy of the temperature [degC]
+  real, dimension(1) :: S0      ! A 1-d array with a copy of the salinity [PSU]
+  real, dimension(1) :: p0      ! A 1-d array with a copy of the pressure [Pa]
+  real, dimension(1) :: drdsds  ! The second derivative of density with salinity [kg m-3 PSU-2]
+  real, dimension(1) :: drdsdt  ! The second derivative of density with salinity and
+                                ! temperature [kg m-3 PSU-1 degC-1]
+  real, dimension(1) :: drdtdt  ! The second derivative of density with temperature [kg m-3 degC-2]
+  real, dimension(1) :: drdsdp  ! The second derivative of density with salinity and
+                                ! pressure [kg m-3 PSU-1 Pa-1] = [s2 m-2 PSU-1]
+  real, dimension(1) :: drdtdp  ! The second derivative of density with temperature and
+                                ! pressure [kg m-3 degC-1 Pa-1] = [s2 m-2 degC-1]
+
+  T0(1) = T
+  S0(1) = S
+  P0(1) = P
+  call calculate_density_second_derivs_array_UNESCO(T0, S0, P0, drdsds, drdsdt, drdtdt, drdsdp, drdtdp, 1, 1)
+  drho_ds_ds = drdsds(1)
+  drho_ds_dt = drdsdt(1)
+  drho_dt_dt = drdtdt(1)
+  drho_ds_dp = drdsdp(1)
+  drho_dt_dp = drdtdp(1)
+
+end subroutine calculate_density_second_derivs_scalar_UNESCO
+
+!> \namespace mom_eos_UNESCO
+!!
+!! \section section_EOS_UNESCO UNESCO (Jackett & McDougall) equation of state
+!!
+!! The UNESCO (1981) equation of state is an interationally defined standard fit valid over the
+!! range of pressures up to 10000 dbar, tempertures between the freezing point and 40 degC, and
+!! salinities between 0 and 42 PSU.  Unfortunately, these expressions used in situ temperatures,
+!! whereas ocean models (including MOM6) effectively use potential temperatures as their state
+!! variables.  To avoid needing multiple conversions, Jackett and McDougall (1995) refit the
+!! UNESCO equation of state to take potential temperature as a state variable, over the same
+!! valid range and funtional form as the original UNESCO expressions.  It is this refit from
+!! Jackett and McDougall (1995) that is coded up in this module.
+!!
+!! The functional form of the equation of state includes terms proportional to salinity to the
+!! 3/2 power.  This introduces a singularity in the second derivative of density with salinity
+!! at a salinity of 0, but this has been addressed here by setting a floor of 1e-8 PSU on the
+!! salinity that is used in the denominator of these second derivative expressions.  This value
+!! was chosen to imply a contribution that is smaller than numerical roundoff in the expression
+!! for density, which is the field for which the UNESCO equation of state was originally derived.
+!!
+!! Originally coded in 1999 by J. Stephens.
+!!
+!! \subsection section_EOS_UNESCO_references References
+!!
+!! Jackett, D. and T. McDougall, 1995: J. Atmos. Ocean. Tech., 12, 381-389.
+!!
+!! UNESCO, 1981: Tenth report of the joint panel on oceanographic tables and standards.
+!!    UNESCO Technical Palers in Maricen Sci. No. 36, UNESCO, Paris.
 
 end module MOM_EOS_UNESCO
