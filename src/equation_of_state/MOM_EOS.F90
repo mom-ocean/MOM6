@@ -12,7 +12,7 @@ use MOM_EOS_Wright, only : calculate_density_wright, calculate_spec_vol_wright
 use MOM_EOS_Wright, only : calculate_density_derivs_wright
 use MOM_EOS_Wright, only : calculate_specvol_derivs_wright, int_density_dz_wright
 use MOM_EOS_Wright, only : calculate_compress_wright, int_spec_vol_dp_wright
-use MOM_EOS_Wright, only : calculate_density_second_derivs_wright
+use MOM_EOS_Wright, only : calculate_density_second_derivs_wright, calc_density_second_derivs_wright_buggy
 use MOM_EOS_Wright_full, only : calculate_density_wright_full, calculate_spec_vol_wright_full
 use MOM_EOS_Wright_full, only : calculate_density_derivs_wright_full
 use MOM_EOS_Wright_full, only : calculate_specvol_derivs_wright_full, int_density_dz_wright_full
@@ -139,6 +139,11 @@ type, public :: EOS_type ; private
   real :: dTFr_dS   !< The derivative of freezing point with salinity [degC ppt-1]
   real :: dTFr_dp   !< The derivative of freezing point with pressure [degC Pa-1]
 
+  logical :: use_Wright_2nd_deriv_bug = .false.  !< If true, use a separate subroutine that
+                           !! retains a buggy version of the calculations of the second
+                           !! derivative of density with temperature and with temperature and
+                           !! pressure.  This bug is corrected in the default version.
+
 ! Unit conversion factors (normally used for dimensional testing but could also allow for
 ! change of units of arguments to functions)
   real :: m_to_Z = 1.      !< A constant that translates distances in meters to the units of depth [Z m-1 ~> 1]
@@ -257,8 +262,13 @@ subroutine calculate_stanley_density_scalar(T, S, pressure, Tvar, TScov, Svar, r
       call calculate_density_second_derivs_linear(T_scale*T, S_scale*S, p_scale*pressure, &
                                                   d2RdSS, d2RdST, d2RdTT, d2RdSp, d2RdTP)
     case (EOS_WRIGHT)
-      call calculate_density_second_derivs_wright(T_scale*T, S_scale*S, p_scale*pressure, &
+      if (EOS%use_Wright_2nd_deriv_bug) then
+        call calc_density_second_derivs_wright_buggy(T_scale*T, S_scale*S, p_scale*pressure, &
                                                   d2RdSS, d2RdST, d2RdTT, d2RdSp, d2RdTP)
+      else
+        call calculate_density_second_derivs_wright(T_scale*T, S_scale*S, p_scale*pressure, &
+                                                  d2RdSS, d2RdST, d2RdTT, d2RdSp, d2RdTP)
+      endif
     case (EOS_WRIGHT_FULL)
       call calculate_density_second_derivs_wright_full(T_scale*T, S_scale*S, p_scale*pressure, &
                                                   d2RdSS, d2RdST, d2RdTT, d2RdSp, d2RdTP)
@@ -364,8 +374,13 @@ subroutine calculate_stanley_density_array(T, S, pressure, Tvar, TScov, Svar, rh
                                                   d2RdTT, d2RdSp, d2RdTP, start, npts)
     case (EOS_WRIGHT)
       call calculate_density_wright(T, S, pressure, rho, start, npts, rho_ref)
-      call calculate_density_second_derivs_wright(T, S, pressure, d2RdSS, d2RdST, &
+      if (EOS%use_Wright_2nd_deriv_bug) then
+        call calc_density_second_derivs_wright_buggy(T, S, pressure, d2RdSS, d2RdST, &
                                                   d2RdTT, d2RdSp, d2RdTP, start, npts)
+      else
+        call calculate_density_second_derivs_wright(T, S, pressure, d2RdSS, d2RdST, &
+                                                  d2RdTT, d2RdSp, d2RdTP, start, npts)
+      endif
     case (EOS_WRIGHT_FULL)
       call calculate_density_wright_full(T, S, pressure, rho, start, npts, rho_ref)
       call calculate_density_second_derivs_wright_full(T, S, pressure, d2RdSS, d2RdST, &
@@ -519,8 +534,13 @@ subroutine calculate_stanley_density_1d(T, S, pressure, Tvar, TScov, Svar, rho, 
                                                   d2RdTT, d2RdSp, d2RdTP, is, npts)
     case (EOS_WRIGHT)
       call calculate_density_wright(Ta, Sa, pres, rho, is, npts, rho_reference)
-      call calculate_density_second_derivs_wright(Ta, Sa, pres, d2RdSS, d2RdST, &
+      if (EOS%use_Wright_2nd_deriv_bug) then
+        call calc_density_second_derivs_wright_buggy(Ta, Sa, pres, d2RdSS, d2RdST, &
                                                   d2RdTT, d2RdSp, d2RdTP, is, npts)
+      else
+        call calculate_density_second_derivs_wright(Ta, Sa, pres, d2RdSS, d2RdST, &
+                                                  d2RdTT, d2RdSp, d2RdTP, is, npts)
+      endif
     case (EOS_WRIGHT_FULL)
       call calculate_density_wright_full(Ta, Sa, pres, rho, is, npts, rho_reference)
       call calculate_density_second_derivs_wright_full(Ta, Sa, pres, d2RdSS, d2RdST, &
@@ -1046,8 +1066,13 @@ subroutine calculate_density_second_derivs_1d(T, S, pressure, drho_dS_dS, drho_d
         call calculate_density_second_derivs_linear(T, S, pressure, drho_dS_dS, drho_dS_dT, &
                                                     drho_dT_dT, drho_dS_dP, drho_dT_dP, is, npts)
       case (EOS_WRIGHT)
-        call calculate_density_second_derivs_wright(T, S, pressure, drho_dS_dS, drho_dS_dT, &
+        if (EOS%use_Wright_2nd_deriv_bug) then
+          call calc_density_second_derivs_wright_buggy(T, S, pressure, drho_dS_dS, drho_dS_dT, &
                                                     drho_dT_dT, drho_dS_dP, drho_dT_dP, is, npts)
+        else
+          call calculate_density_second_derivs_wright(T, S, pressure, drho_dS_dS, drho_dS_dT, &
+                                                    drho_dT_dT, drho_dS_dP, drho_dT_dP, is, npts)
+        endif
       case (EOS_WRIGHT_FULL)
         call calculate_density_second_derivs_wright_full(T, S, pressure, drho_dS_dS, drho_dS_dT, &
                                                     drho_dT_dT, drho_dS_dP, drho_dT_dP, is, npts)
@@ -1077,8 +1102,13 @@ subroutine calculate_density_second_derivs_1d(T, S, pressure, drho_dS_dS, drho_d
         call calculate_density_second_derivs_linear(Ta, Sa, pres, drho_dS_dS, drho_dS_dT, &
                                                     drho_dT_dT, drho_dS_dP, drho_dT_dP, is, npts)
       case (EOS_WRIGHT)
-        call calculate_density_second_derivs_wright(Ta, Sa, pres, drho_dS_dS, drho_dS_dT, &
+        if (EOS%use_Wright_2nd_deriv_bug) then
+          call calc_density_second_derivs_wright_buggy(Ta, Sa, pres, drho_dS_dS, drho_dS_dT, &
                                                     drho_dT_dT, drho_dS_dP, drho_dT_dP, is, npts)
+        else
+          call calculate_density_second_derivs_wright(Ta, Sa, pres, drho_dS_dS, drho_dS_dT, &
+                                                    drho_dT_dT, drho_dS_dP, drho_dT_dP, is, npts)
+        endif
       case (EOS_WRIGHT_FULL)
         call calculate_density_second_derivs_wright_full(Ta, Sa, pres, drho_dS_dS, drho_dS_dT, &
                                                     drho_dT_dT, drho_dS_dP, drho_dT_dP, is, npts)
@@ -1162,8 +1192,13 @@ subroutine calculate_density_second_derivs_scalar(T, S, pressure, drho_dS_dS, dr
       call calculate_density_second_derivs_linear(Ta, Sa, pres, drho_dS_dS, drho_dS_dT, &
                                                   drho_dT_dT, drho_dS_dP, drho_dT_dP)
     case (EOS_WRIGHT)
-      call calculate_density_second_derivs_wright(Ta, Sa, pres, drho_dS_dS, drho_dS_dT, &
+      if (EOS%use_Wright_2nd_deriv_bug) then
+        call calc_density_second_derivs_wright_buggy(Ta, Sa, pres, drho_dS_dS, drho_dS_dT, &
                                                   drho_dT_dT, drho_dS_dP, drho_dT_dP)
+      else
+        call calculate_density_second_derivs_wright(Ta, Sa, pres, drho_dS_dS, drho_dS_dT, &
+                                                  drho_dT_dT, drho_dS_dP, drho_dT_dP)
+      endif
     case (EOS_WRIGHT_FULL)
       call calculate_density_second_derivs_wright_full(Ta, Sa, pres, drho_dS_dS, drho_dS_dT, &
                                                   drho_dT_dT, drho_dS_dP, drho_dT_dP)
@@ -1680,8 +1715,7 @@ subroutine EOS_init(param_file, EOS, US)
     EOS%Compressible = .false.
     call get_param(param_file, mdl, "RHO_T0_S0", EOS%Rho_T0_S0, &
                  "When EQN_OF_STATE="//trim(EOS_LINEAR_STRING)//", "//&
-                 "this is the density at T=0, S=0.", units="kg m-3", &
-                 default=1000.0)
+                 "this is the density at T=0, S=0.", units="kg m-3", default=1000.0)
     call get_param(param_file, mdl, "DRHO_DT", EOS%dRho_dT, &
                  "When EQN_OF_STATE="//trim(EOS_LINEAR_STRING)//", "//&
                  "this is the partial derivative of density with "//&
@@ -1690,6 +1724,12 @@ subroutine EOS_init(param_file, EOS, US)
                  "When EQN_OF_STATE="//trim(EOS_LINEAR_STRING)//", "//&
                  "this is the partial derivative of density with "//&
                  "salinity.", units="kg m-3 PSU-1", default=0.8)
+  endif
+  if (EOS%form_of_EOS == EOS_WRIGHT) then
+    call get_param(param_file, mdl, "USE_WRIGHT_2ND_DERIV_BUG", EOS%use_Wright_2nd_deriv_bug, &
+                 "If true, use a bug in the calculation of the second derivatives of density "//&
+                 "with temperature and with temperature and pressure that causes some terms "//&
+                 "to be only 2/3 of what they should be.", default=.false.)
   endif
 
   EOS_quad_default = .not.((EOS%form_of_EOS == EOS_LINEAR) .or. &
@@ -2006,8 +2046,7 @@ logical function EOS_unit_tests(verbose)
   EOS_unit_tests = EOS_unit_tests .or. fail
 
   call EOS_manual_init(EOS_tmp, form_of_EOS=EOS_WRIGHT)
-  ! There are known bugs in two of the second derivatives calculated with the WRIGHT EOS.
-  fail = test_EOS_consistency(25.0, 35.0, 1.0e7, EOS_tmp, verbose, "WRIGHT", skip_2nd=.true., &
+  fail = test_EOS_consistency(25.0, 35.0, 1.0e7, EOS_tmp, verbose, "WRIGHT", &
                               rho_check=1027.5430359634624*EOS_tmp%kg_m3_to_R)
   if (verbose .and. fail) call MOM_error(WARNING, "WRIGHT EOS has failed some self-consistency tests.")
   EOS_unit_tests = EOS_unit_tests .or. fail
@@ -2018,12 +2057,15 @@ logical function EOS_unit_tests(verbose)
   if (verbose .and. fail) call MOM_error(WARNING, "NEMO EOS has failed some self-consistency tests.")
   EOS_unit_tests = EOS_unit_tests .or. fail
 
-  ! The TEOS10 equation of state is not passing some self consistency tests yet.
-  ! call EOS_manual_init(EOS_tmp, form_of_EOS=EOS_TEOS10)
-  ! fail = test_EOS_consistency(25.0, 35.0, 1.0e7, EOS_tmp, verbose, "TEOS10", &
-  !                             rho_check=1027.4235596149185*EOS_tmp%kg_m3_to_R)
-  ! if (verbose .and. fail) call MOM_error(WARNING, "TEOS10 EOS has failed some self-consistency tests.")
-  ! EOS_unit_tests = EOS_unit_tests .or. fail
+  ! The TEOS10 equation of state is not passing the self consistency tests for dho_dS_dp due
+  ! to a bug (a missing division by the square root of salinity) on line 109 of
+  ! pkg/GSW-Fortan/toolbox/gsw_specvol_second_derivatives.f90.  This bug has been highlighted in an
+  ! issue posted to the TEOS-10/GSW-Fortran page at github.com/TEOS-10/GSW-Fortran/issues/26.
+  call EOS_manual_init(EOS_tmp, form_of_EOS=EOS_TEOS10)
+  fail = test_EOS_consistency(25.0, 35.0, 1.0e7, EOS_tmp, verbose, "TEOS10", skip_2nd=.true., &
+                              rho_check=1027.4235596149185*EOS_tmp%kg_m3_to_R)
+  if (verbose .and. fail) call MOM_error(WARNING, "TEOS10 EOS has failed some self-consistency tests.")
+  EOS_unit_tests = EOS_unit_tests .or. fail
 
   call EOS_manual_init(EOS_tmp, form_of_EOS=EOS_LINEAR, Rho_T0_S0=1000.0, drho_dT=-0.2, dRho_dS=0.8)
   fail = test_EOS_consistency(25.0, 35.0, 1.0e7, EOS_tmp, verbose, "LINEAR", &
@@ -2054,13 +2096,17 @@ logical function test_EOS_consistency(T_test, S_test, p_test, EOS, verbose, &
   real, dimension(-3:3,-3:3,-3:3) :: T ! Temperatures at the test value and perturbed points [C ~> degC]
   real, dimension(-3:3,-3:3,-3:3) :: S ! Salinites at the test value and perturbed points [S ~> ppt]
   real, dimension(-3:3,-3:3,-3:3) :: P ! Pressures at the test value and perturbed points [R L2 T-2 ~> Pa]
-  real, dimension(-3:3,-3:3,-3:3,2) :: rho ! Densities at the test value and perturbed points [R ~> kg m-3]
-  real, dimension(-3:3,-3:3,-3:3,2) :: spv ! Specific volumes at the test value and perturbed points [R-1 ~> m3 kg-1]
+  real, dimension(-3:3,-3:3,-3:3,2) :: rho ! Densities relative to rho_ref at the test value and
+                                       ! perturbed points [R ~> kg m-3]
+  real, dimension(-3:3,-3:3,-3:3,2) :: spv ! Specific volumes relative to spv_ref at the test value and
+                                       ! perturbed points [R-1 ~> m3 kg-1]
   real :: dT        ! Magnitude of temperature perturbations [C ~> degC]
   real :: dS        ! Magnitude of salinity perturbations [S ~> ppt]
   real :: dp        ! Magnitude of pressure perturbations [R L2 T-2 ~> Pa]
   real :: rho_ref   ! A reference density that is extracted for greater accuracy [R ~> kg m-3]
-  real :: spv_ref   ! A reference specific vlume that is extracted for greater accuracy [R-1 ~> m3 kg-1]
+  real :: spv_ref   ! A reference specific volume that is extracted for greater accuracy [R-1 ~> m3 kg-1]
+  real :: rho_nooff ! Density with no reference offset [R ~> kg m-3]
+  real :: spv_nooff ! Specific volume with no reference offset [R-1 ~> m3 kg-1]
   real :: drho_dT   ! The partial derivative of density with potential
                     ! temperature [R C-1 ~> kg m-3 degC-1]
   real :: drho_dS   ! The partial derivative of density with salinity
@@ -2109,6 +2155,7 @@ logical function test_EOS_consistency(T_test, S_test, p_test, EOS, verbose, &
   real :: count_fac2 ! A factor in the roundoff estimates based on the factors in the numerator and
                      ! denominator in the finite difference second derivative expression [nondim]
   character(len=200) :: mesg
+  logical :: test_OK ! True if a particular test is consistent.
   logical :: OK      ! True if all checks so far are consistent.
   logical :: test_2nd  ! If true, do tests on the 2nd derivative calculations
   integer :: order   ! The order of accuracy of the centered finite difference estimates (2, 4 or 6).
@@ -2175,7 +2222,6 @@ logical function test_EOS_consistency(T_test, S_test, p_test, EOS, verbose, &
     endif
   else
     OK = (abs((rho_ref+rho(0,0,0,1)) * (spv_ref + spv(0,0,0,1)) - 1.0) < tol)
-
     if (verbose .and. .not.OK) then
       write(mesg, '(ES16.8," and ",ES16.8,", ratio - 1 = ",ES16.8)') &
           rho(0,0,0,1), 1.0/(spv_ref + spv(0,0,0,1)) - rho_ref, &
@@ -2184,12 +2230,35 @@ logical function test_EOS_consistency(T_test, S_test, p_test, EOS, verbose, &
     endif
   endif
   if (present(rho_check)) then
-    OK = OK .and. (abs(rho_check - (rho_ref + rho(0,0,0,1))) < tol*(rho_ref + rho(0,0,0,1)))
-    if (verbose .and. .not.OK) then
+    test_OK = (abs(rho_check - (rho_ref + rho(0,0,0,1))) < tol*(rho_ref + rho(0,0,0,1)))
+    OK = OK .and. test_OK
+    if (verbose .and. .not.test_OK) then
       write(mesg, '(ES24.16," vs. ",ES24.16," with tolerance ",ES12.4)') &
             rho_check, rho_ref+rho(0,0,0,1), tol*rho(0,0,0,1)
       call MOM_error(WARNING, "The value of "//trim(EOS_name)//" rho disagrees with its check value :"//trim(mesg))
     endif
+  endif
+
+  ! Check that the densities are consistent when the reference value is extracted
+  call calculate_density(T(0,0,0), S(0,0,0), p(0,0,0), rho_nooff, EOS)
+  test_OK = (abs(rho_nooff - (rho_ref + rho(0,0,0,1))) < tol*rho_nooff)
+  OK = OK .and. test_OK
+  if (verbose .and. .not.test_OK) then
+    write(mesg, '(ES24.16," vs. ",ES24.16," with tolerance ",ES12.4)') &
+          rho_ref+rho(0,0,0,1), rho_nooff, tol*rho_nooff
+    call MOM_error(WARNING, "For "//trim(EOS_name)//&
+                   " rho with and without a reference value disagree: "//trim(mesg))
+  endif
+
+  ! Check that the specific volumes are consistent when the reference value is extracted
+  call calculate_spec_vol(T(0,0,0), S(0,0,0), p(0,0,0), spv_nooff, EOS)
+  test_OK = (abs(spv_nooff - (spv_ref + spv(0,0,0,1))) < tol*rho_nooff)
+  OK = OK .and. test_OK
+  if (verbose .and. .not.test_OK) then
+    write(mesg, '(ES24.16," vs. ",ES24.16," with tolerance ",ES12.4)') &
+          spv_ref + spv(0,0,0,1), spv_nooff, tol*spv_nooff
+    call MOM_error(WARNING, "For "//trim(EOS_name)//&
+                   " spv with and without a reference value disagree: "//trim(mesg))
   endif
 
   ! Account for the factors of terms in the numerator and denominator when estimating roundoff
