@@ -221,6 +221,13 @@ AC_COMPILE_IFELSE(
 )
 
 
+# Verify that Python is available
+AC_PATH_PROGS([PYTHON], [python python3 python2], [
+  AC_MSG_ERROR([Could not find python.])
+])
+AC_ARG_VAR([PYTHON], [Python interpreter command])
+
+
 # Verify that makedep is available
 AC_PATH_PROG([MAKEDEP], [makedep], [${srcdir}/ac/makedep])
 AC_SUBST([MAKEDEP])

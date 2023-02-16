@@ -158,7 +158,14 @@ AX_FC_ALLOW_ARG_MISMATCH
 FCFLAGS="$FCFLAGS $ALLOW_ARG_MISMATCH_FCFLAGS"
 
 
-# Verify makedep
+# Verify that Python is available
+AC_PATH_PROGS([PYTHON], [python python3 python2], [
+  AC_MSG_ERROR([Could not find python.])
+])
+AC_ARG_VAR([PYTHON], [Python interpreter command])
+
+
+# Verify that makedep is available
 AC_PATH_PROGS([MAKEDEP], [makedep], [], ["${PATH}:${srcdir}/../../.."])
 AS_IF([test -n "${MAKEDEP}"], [
   AC_SUBST([MAKEDEP])
