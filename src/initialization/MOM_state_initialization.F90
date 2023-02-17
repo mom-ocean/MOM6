@@ -1192,7 +1192,7 @@ subroutine trim_for_ice(PF, G, GV, US, ALE_CSp, tv, h, just_read)
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: S_t, S_b ! Top and bottom edge values for reconstructions
                                                         ! of salinity within each layer [S ~> ppt]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: T_t, T_b ! Top and bottom edge values for reconstructions
-                                                        ! of temperature within each layer [T ~> degC]
+                                                        ! of temperature within each layer [C ~> degC]
   character(len=200) :: inputdir, filename, p_surf_file, p_surf_var ! Strings for file/path
   real :: scale_factor   ! A file-dependent scaling factor for the input pressure [various].
   real :: min_thickness  ! The minimum layer thickness, recast into Z units [Z ~> m].

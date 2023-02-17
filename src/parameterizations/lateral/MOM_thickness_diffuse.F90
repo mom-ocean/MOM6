@@ -722,7 +722,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
   integer :: nk_linear  ! The number of layers over which the streamfunction goes to 0.
   real :: G_rho0        ! g/Rho0 [L2 R-1 Z-1 T-2 ~> m4 kg-1 s-2].
   real :: N2_floor      ! A floor for N2 to avoid degeneracy in the elliptic solver
-                        ! times unit conversion factors [T-2 L2 Z-2 ~> s-2]
+                        ! times unit conversion factors [L2 Z-2 T-2 ~> s-2]
   real :: Tl(5)         ! copy of T in local stencil [C ~> degC]
   real :: mn_T          ! mean of T in local stencil [C ~> degC]
   real :: mn_T2         ! mean of T**2 in local stencil [C2 ~> degC2]

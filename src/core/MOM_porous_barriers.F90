@@ -285,7 +285,7 @@ subroutine calc_eta_at_uv(eta_u, eta_v, interp, dmask, h, tv, G, GV, US, eta_bt)
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)+1), intent(out) :: eta_v !< Layer interface heights at v points [Z ~> m]
 
   ! local variables
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1) :: eta ! Layer interface heights [Z ~> m or 1/eta_to_m].
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1) :: eta ! Layer interface heights [Z ~> m].
   real :: h_neglect ! Negligible thicknesses [Z ~> m]
   integer :: i, j, k, nk, is, ie, js, je, Isq, Ieq, Jsq, Jeq
 

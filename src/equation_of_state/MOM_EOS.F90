@@ -632,11 +632,11 @@ end subroutine calc_spec_vol_1d
 
 !> Calls the appropriate subroutine to calculate the freezing point for scalar inputs.
 subroutine calculate_TFreeze_scalar(S, pressure, T_fr, EOS, pres_scale, scale_from_EOS)
-  real,           intent(in)  :: S    !< Salinity, [ppt] or [Z ~> ppt] depending on scale_from_EOS
+  real,           intent(in)  :: S    !< Salinity, [ppt] or [S ~> ppt] depending on scale_from_EOS
   real,           intent(in)  :: pressure !< Pressure, in [Pa] or [R L2 T-2 ~> Pa] depending on
                                       !! pres_scale or scale_from_EOS
   real,           intent(out) :: T_fr !< Freezing point potential temperature referenced to the
-                                      !! surface [degC] or [degC ~> C] depending on scale_from_EOS
+                                      !! surface [degC] or [C ~> degC] depending on scale_from_EOS
   type(EOS_type), intent(in)  :: EOS  !< Equation of state structure
   real, optional, intent(in)  :: pres_scale  !< A multiplicative factor to convert pressure
                                       !! into Pa [Pa T2 R-1 L-2 ~> 1].

@@ -287,7 +287,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, pbv)
   real :: tmp              ! A temporary variable, sometimes in [Z ~> m]
   real :: tmp_val_m1_to_p1 ! A temporary variable [nondim]
   real :: curv_tol         ! Numerator of curvature cubed, used to estimate
-                           ! accuracy of a single L(:) Newton iteration [H5 ~> m3 or kg5 m-10]
+                           ! accuracy of a single L(:) Newton iteration [H5 ~> m5 or kg5 m-10]
   logical :: use_L0, do_one_L_iter    ! Control flags for L(:) Newton iteration
   logical :: use_BBL_EOS, do_i(SZIB_(G))
   integer, dimension(2) :: EOSdom ! The computational domain for the equation of state

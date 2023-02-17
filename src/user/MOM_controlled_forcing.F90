@@ -270,8 +270,8 @@ subroutine apply_ctrl_forcing(SST_anom, SSS_anom, SSS_mean, virt_heat, virt_prec
     ! Accumulate the average anomalies for this period.
     dt_wt = wt_per1 * dt
     CS%avg_time(m_mid) = CS%avg_time(m_mid) + dt_wt
-    ! These loops temporarily change the units of the CS%avg_ variables to [degC T ~> degC s]
-    ! or [ppt T ~> ppt s].
+    ! These loops temporarily change the units of the CS%avg_ variables to [C T ~> degC s]
+    ! or [S T ~> ppt s].
     do j=js,je ; do i=is,ie
       CS%avg_SST_anom(i,j,m_mid) = CS%avg_SST_anom(i,j,m_mid) + &
                                    dt_wt * G%mask2dT(i,j) * SST_anom(i,j)

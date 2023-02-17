@@ -653,7 +653,7 @@ subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, dz, &
                 ! 1/dz_Int, as they have different uses.
     S2, &       ! The squared shear at an interface [T-2 ~> s-2].
     a1, &       ! a1 is the coupling between adjacent interfaces in the TKE,
-                ! velocity, and density equations [Z s-1 ~> m s-1] or [Z ~> m]
+                ! velocity, and density equations [Z ~> m]
     c1, &       ! c1 is used in the tridiagonal (and similar) solvers [nondim].
     k_src, &    ! The shear-dependent source term in the kappa equation [T-1 ~> s-1].
     kappa_src, & ! The shear-dependent source term in the kappa equation [T-1 ~> s-1].

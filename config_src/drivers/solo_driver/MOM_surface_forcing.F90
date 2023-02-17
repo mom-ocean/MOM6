@@ -85,13 +85,13 @@ type, public :: surface_forcing_CS ; private
   real :: latent_heat_fusion    !< latent heat of fusion times [Q ~> J kg-1]
   real :: latent_heat_vapor     !< latent heat of vaporization [Q ~> J kg-1]
   real :: tau_x0                !< Constant zonal wind stress used in the WIND_CONFIG="const"
-                                !! forcing [R L Z T-1 ~> Pa]
+                                !! forcing [R L Z T-2 ~> Pa]
   real :: tau_y0                !< Constant meridional wind stress used in the WIND_CONFIG="const"
-                                !! forcing [R L Z T-1 ~> Pa]
+                                !! forcing [R L Z T-2 ~> Pa]
 
-  real    :: gust_const                 !< constant unresolved background gustiness for ustar [R L Z T-1 ~> Pa]
+  real    :: gust_const                 !< constant unresolved background gustiness for ustar [R L Z T-2 ~> Pa]
   logical :: read_gust_2d               !< if true, use 2-dimensional gustiness supplied from a file
-  real, pointer :: gust(:,:) => NULL()  !< spatially varying unresolved background gustiness [R L Z T-1 ~> Pa]
+  real, pointer :: gust(:,:) => NULL()  !< spatially varying unresolved background gustiness [R L Z T-2 ~> Pa]
                                         !! gust is used when read_gust_2d is true.
 
   real, pointer :: T_Restore(:,:)    => NULL()  !< temperature to damp (restore) the SST to [C ~> degC]
@@ -102,9 +102,9 @@ type, public :: surface_forcing_CS ; private
 
   ! if WIND_CONFIG=='gyres' then use the following as  = A, B, C and n respectively for
   ! taux = A + B*sin(n*pi*y/L) + C*cos(n*pi*y/L)
-  real :: gyres_taux_const   !< A constant wind stress [R L Z T-1 ~> Pa].
-  real :: gyres_taux_sin_amp !< The amplitude of cosine wind stress gyres [R L Z T-1 ~> Pa], if WIND_CONFIG=='gyres'
-  real :: gyres_taux_cos_amp !< The amplitude of cosine wind stress gyres [R L Z T-1 ~> Pa], if WIND_CONFIG=='gyres'
+  real :: gyres_taux_const   !< A constant wind stress [R L Z T-2 ~> Pa].
+  real :: gyres_taux_sin_amp !< The amplitude of cosine wind stress gyres [R L Z T-2 ~> Pa], if WIND_CONFIG=='gyres'
+  real :: gyres_taux_cos_amp !< The amplitude of cosine wind stress gyres [R L Z T-2 ~> Pa], if WIND_CONFIG=='gyres'
   real :: gyres_taux_n_pis   !< The number of sine lobes in the basin if WIND_CONFIG=='gyres' [nondim]
   integer :: answer_date     !< This 8-digit integer gives the approximate date with which the order
                              !! of arithmetic and expressions were added to the code.
@@ -115,7 +115,7 @@ type, public :: surface_forcing_CS ; private
                                             !! gustless wind friction velocity.
   ! if WIND_CONFIG=='scurves' then use the following to define a piecewise scurve profile
   real :: scurves_ydata(20) = 90. !< Latitudes of scurve nodes [degreesN]
-  real :: scurves_taux(20) = 0.   !< Zonal wind stress values at scurve nodes [R L Z T-1 ~> Pa]
+  real :: scurves_taux(20) = 0.   !< Zonal wind stress values at scurve nodes [R L Z T-2 ~> Pa]
 
   real :: T_north   !< Target temperatures at north used in buoyancy_forcing_linear [C ~> degC]
   real :: T_south   !< Target temperatures at south used in buoyancy_forcing_linear [C ~> degC]
@@ -392,7 +392,7 @@ subroutine wind_forcing_const(sfc_state, forces, tau_x0, tau_y0, day, G, US, CS)
 
   mag_tau = sqrt( tau_x0**2 + tau_y0**2)
 
-  ! Set the steady surface wind stresses, in units of [R L Z T-1 ~> Pa].
+  ! Set the steady surface wind stresses, in units of [R L Z T-2 ~> Pa].
   do j=js,je ; do I=is-1,Ieq
     forces%taux(I,j) = tau_x0
   enddo ; enddo
@@ -438,7 +438,7 @@ subroutine wind_forcing_2gyre(sfc_state, forces, day, G, US, CS)
   Pa_to_RLZ_T2 = US%kg_m3_to_R*US%m_s_to_L_T**2*US%L_to_Z
   PI = 4.0*atan(1.0)
 
-  ! Set the steady surface wind stresses, in units of [R L Z T-1 ~> Pa].
+  ! Set the steady surface wind stresses, in units of [R L Z T-2 ~> Pa].
   do j=js,je ; do I=is-1,Ieq
     forces%taux(I,j) = 0.1 * Pa_to_RLZ_T2 * &
                       (1.0 - cos(2.0*PI*(G%geoLatCu(I,j)-CS%South_lat) / CS%len_lat))
@@ -513,7 +513,7 @@ subroutine wind_forcing_gyres(sfc_state, forces, day, G, US, CS)
 
   PI = 4.0*atan(1.0)
 
-  ! steady surface wind stresses [R L Z T-1 ~> Pa]
+  ! steady surface wind stresses [R L Z T-2 ~> Pa]
   do j=js-1,je+1 ; do I=is-1,Ieq
     y = (G%geoLatCu(I,j)-CS%South_lat) / CS%len_lat
     forces%taux(I,j) = CS%gyres_taux_const + &
@@ -670,8 +670,8 @@ subroutine wind_forcing_from_file(sfc_state, forces, day, G, US, CS)
                                                   !! a previous surface_forcing_init call
   ! Local variables
   character(len=200) :: filename  ! The name of the input file.
-  real    :: temp_x(SZI_(G),SZJ_(G)) ! Pseudo-zonal wind stresses at h-points [R L Z T-1 ~> Pa]
-  real    :: temp_y(SZI_(G),SZJ_(G)) ! Pseudo-meridional wind stresses at h-points [R L Z T-1 ~> Pa]
+  real    :: temp_x(SZI_(G),SZJ_(G)) ! Pseudo-zonal wind stresses at h-points [R L Z T-2 ~> Pa]
+  real    :: temp_y(SZI_(G),SZJ_(G)) ! Pseudo-meridional wind stresses at h-points [R L Z T-2 ~> Pa]
   real    :: Pa_to_RLZ_T2            ! A unit conversion factor from Pa to the internal units
                                      ! for wind stresses [R Z L T-2 Pa-1 ~> 1]
   integer :: time_lev_daily          ! The time levels to read for fields with

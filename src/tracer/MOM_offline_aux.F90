@@ -777,9 +777,9 @@ subroutine update_offline_from_arrays(G, GV, nk_input, ridx_sum, mean_file, sum_
   real, dimension(:,:,:,:), allocatable,     intent(inout) :: hend_all  !< End of timestep layer thickness
                                                                         !! [H ~> m or kg m-2]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(inout) :: temp      !< Temperature array [C ~> degC]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(inout) :: salt      !< Salinity array [ppt ~> S]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(inout) :: salt      !< Salinity array [S ~> ppt]
   real, dimension(:,:,:,:), allocatable,     intent(inout) :: temp_all  !< Temperature array [C ~> degC]
-  real, dimension(:,:,:,:), allocatable,     intent(inout) :: salt_all  !< Salinity array [ppt ~> S]
+  real, dimension(:,:,:,:), allocatable,     intent(inout) :: salt_all  !< Salinity array [S ~> ppt]
 
   integer :: i, j, k, is, ie, js, je, nz
   real, parameter :: fill_value = 0.

@@ -26,7 +26,7 @@ public register_tidal_bay_OBC
 !> Control structure for tidal bay open boundaries.
 type, public :: tidal_bay_OBC_CS ; private
   real :: tide_flow = 3.0e6  !< Maximum tidal flux with the tidal bay configuration [L2 Z T-1 ~> m3 s-1]
-  real :: tide_period        !< The period associated with the tidal bay configuration [T ~> s-1]
+  real :: tide_period        !< The period associated with the tidal bay configuration [T ~> s]
   real :: tide_ssh_amp       !< The magnitude of the sea surface height anomalies at the inflow
                              !! with the tidal bay configuration [Z ~> m]
 end type tidal_bay_OBC_CS

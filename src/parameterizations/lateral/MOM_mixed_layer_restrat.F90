@@ -813,7 +813,7 @@ real function growth_time(u_star, hBL, absf, h_neg, vonKar, Kv_rest, restrat_coe
 
   ! Local variables
   real :: mom_mixrate  ! rate at which momentum is homogenized within mixed layer [T-1 ~> s-1]
-  real :: Kv_eff       ! An effective overall viscosity [Z1 T-1 ~> m2 s-1]
+  real :: Kv_eff       ! An effective overall viscosity [Z2 T-1 ~> m2 s-1]
   real :: pi2          ! A scaling constant that is approximately pi^2 [nondim]
 
   ! peak ML visc: u_star * von_Karman * (h_ml*u_star)/(absf*h_ml + 4.0*u_star) + Kv_water

@@ -122,7 +122,7 @@ subroutine Rossby_front_initialize_temperature_salinity(T, S, h, G, GV, US, &
 
   integer   :: i, j, k, is, ie, js, je, nz
   real      :: T_ref        ! Reference temperature within the surface layer [C ~> degC]
-  real      :: S_ref        ! Reference salinity within the surface layer [S ~> [ppt]
+  real      :: S_ref        ! Reference salinity within the surface layer [S ~> ppt]
   real      :: T_range      ! Range of temperatures over the vertical [C ~> degC]
   real      :: zc           ! Position of the middle of the cell [Z ~> m]
   real      :: zi           ! Bottom interface position relative to the sea surface [H ~> m or kg m-2]

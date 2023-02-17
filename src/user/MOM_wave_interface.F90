@@ -198,7 +198,7 @@ type, public :: wave_parameters_CS ; private
   real :: rho_air  !< A typical density of air at sea level, as used in wave calculations [R ~> kg m-3]
   real :: nu_air   !< The viscosity of air, as used in wave calculations [Z2 T-1 ~> m2 s-1]
   real :: SWH_from_u10sq !< A factor for converting the square of the 10 m wind speed to the
-                   !! significant wave height [Z T2 L-2 ~> s m-2]
+                   !! significant wave height [Z T2 L-2 ~> s2 m-1]
   real :: Charnock_min !< The minimum value of the Charnock coefficient, which relates the square of
                    !! the air friction velocity divided by the gravitational acceleration to the
                    !! wave roughness length [nondim]
@@ -598,7 +598,7 @@ subroutine set_LF17_wave_params(param_file, mdl, US, CS)
   call get_param(param_file, mdl, "WAVE_HEIGHT_SCALE_FACTOR", CS%SWH_from_u10sq, &
                  "A factor relating the square of the 10 m wind speed to the significant "//&
                  "wave height, with a default value based on the Pierson-Moskowitz spectrum.", &
-                 units="s m-2", default=0.0246, scale=US%m_to_Z*US%L_T_to_m_s**2)
+                 units="s2 m-1", default=0.0246, scale=US%m_to_Z*US%L_T_to_m_s**2)
   call get_param(param_file, mdl, "CHARNOCK_MIN", CS%Charnock_min, &
                  "The minimum value of the Charnock coefficient, which relates the square of "//&
                  "the air friction velocity divided by the gravitational acceleration to the "//&

@@ -279,7 +279,7 @@ subroutine tracer_z_init_array(tr_in, z_edges, nk_data, e, land_fill, G, nlay, n
                               intent(in)  :: tr_in !< The z-space array of tracer concentrations
                                                    !! that is read in [A]
   real, dimension(nk_data+1), intent(in)  :: z_edges !< The depths of the cell edges in the input z* data
-                                                   !! [Z ~> m or m]
+                                                   !! [Z ~> m] or [m]
   integer,                    intent(in)  :: nlay  !< The number of vertical layers in the target grid
   real, dimension(SZI_(G),SZJ_(G),nlay+1), &
                               intent(in)  :: e     !< The depths of the target layer interfaces [Z ~> m] or [m]

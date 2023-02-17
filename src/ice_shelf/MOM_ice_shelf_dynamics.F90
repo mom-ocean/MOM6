@@ -46,9 +46,9 @@ type, public :: ice_shelf_dyn_CS ; private
   real, pointer, dimension(:,:) :: v_shelf => NULL() !< the meridional velocity of the ice shelf/sheet
                                        !! on q-points (B grid) [L T-1 ~> m s-1]
   real, pointer, dimension(:,:) :: taudx_shelf => NULL() !< the driving stress of the ice shelf/sheet
-                                       !! on q-points (C grid) [Pa ~> Pa]
+                                       !! on q-points (C grid) [R L2 T-2 ~> Pa]
   real, pointer, dimension(:,:) :: taudy_shelf => NULL() !< the meridional stress of the ice shelf/sheet
-                                       !! on q-points (C grid) [Pa ~> Pa]
+                                       !! on q-points (C grid) [R L2 T-2 ~> Pa]
   real, pointer, dimension(:,:) :: u_face_mask => NULL() !< mask for velocity boundary conditions on the C-grid
                                        !! u-face - this is because the FEM cares about FACES THAT GET INTEGRATED OVER,
                                        !! not vertices. Will represent boundary conditions on computational boundary
@@ -147,7 +147,7 @@ type, public :: ice_shelf_dyn_CS ; private
   logical :: moving_shelf_front  !< Specify whether to advance shelf front (and calve).
   logical :: calve_to_mask       !< If true, calve off the ice shelf when it passes the edge of a mask.
   real :: min_thickness_simple_calve !< min. ice shelf thickness criteria for calving [Z ~> m].
-  real :: T_shelf_missing   !< An ice shelf temperature to use where there is no ice shelf [degC ~> C]
+  real :: T_shelf_missing   !< An ice shelf temperature to use where there is no ice shelf [C ~> degC]
   real :: cg_tolerance !< The tolerance in the CG solver, relative to initial residual, that
                        !! determines when to stop the conjugate gradient iterations [nondim].
   real :: nonlinear_tolerance !< The fractional nonlinear tolerance, relative to the initial error,
@@ -235,7 +235,7 @@ subroutine register_ice_shelf_dyn_restarts(G, US, param_file, CS, restart_CS)
   type(MOM_restart_CS),   intent(inout) :: restart_CS !< MOM restart control struct
 
   ! Local variables
-  real :: T_shelf_missing ! An ice shelf temperature to use where there is no ice shelf [degC ~> C]
+  real :: T_shelf_missing ! An ice shelf temperature to use where there is no ice shelf [C ~> degC]
   logical :: shelf_mass_is_dynamic, override_shelf_movement, active_shelf_dynamics
   character(len=40)  :: mdl = "MOM_ice_shelf_dyn"  ! This module's name.
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
@@ -696,10 +696,10 @@ subroutine update_ice_shelf(CS, ISS, G, US, time_step, Time, ocean_mass, coupled
   logical,      optional, intent(in)    :: coupled_grounding !< If true, the grounding line is
                                               !! determined by coupled ice-ocean dynamics
   logical,      optional, intent(in)    :: must_update_vel !< Always update the ice velocities if true.
-  real, dimension(SZDIB_(G),SZDJB_(G))  ::taud_x,taud_y   !<area-averaged driving stress [R L2T-2 ~> Pa]
-  real, dimension(SZDI_(G),SZDJ_(G))  :: ice_visc ! <area-averaged vertically integrated ice viscosity
-                                              !![R2 L2T-3 ~> Pa s-1 m]
-  real, dimension(SZDI_(G),SZDJ_(G))  :: basal_tr ! <area-averaged basal traction [R L2T-2 ~> Pa]
+  real, dimension(SZDIB_(G),SZDJB_(G))  :: taud_x, taud_y  !<area-averaged driving stress [R L2 T-2 ~> Pa]
+  real, dimension(SZDI_(G),SZDJ_(G))  :: ice_visc !< area-averaged vertically integrated ice viscosity
+                                              !! [R L2 Z T-1 ~> Pa s m]
+  real, dimension(SZDI_(G),SZDJ_(G))  :: basal_tr !< area-averaged basal traction [R L2 T-2 ~> Pa]
   integer :: iters
   logical :: update_ice_vel, coupled_GL
 
@@ -1806,10 +1806,10 @@ subroutine calc_shelf_driving_stress(CS, ISS, G, US, taudx, taudy, OD)
   real, dimension(SZDI_(G),SZDJ_(G)), &
                          intent(in)    :: OD  !< ocean floor depth at tracer points [Z ~> m].
   real, dimension(SZDIB_(G),SZDJB_(G)), &
-                         intent(inout) :: taudx  !< X-direction driving stress at q-points [kg L s-2 ~> kg m s-2]
+                         intent(inout) :: taudx  !< X-direction driving stress at q-points [R L3 Z T-2 ~> kg m s-2]
   real, dimension(SZDIB_(G),SZDJB_(G)), &
-                         intent(inout) :: taudy  !< Y-direction driving stress at q-points [kg L s-2 ~> kg m s-2]
-                                                  ! This will become  [R L3 Z T-2 ~> kg m s-2]
+                         intent(inout) :: taudy  !< Y-direction driving stress at q-points [R L3 Z T-2 ~> kg m s-2]
+
 
 ! driving stress!
 
@@ -1826,7 +1826,6 @@ subroutine calc_shelf_driving_stress(CS, ISS, G, US, taudx, taudy, OD)
                             BASE     ! basal elevation of shelf/stream [Z ~> m].
   real, pointer, dimension(:,:,:,:) :: Phi => NULL() ! The gradients of bilinear basis elements at Gaussian
                                                 ! quadrature points surrounding the cell vertices [L-1 ~> m-1].
-
 
   real    :: rho, rhow, rhoi_rhow ! Ice and ocean densities [R ~> kg m-3]
   real    :: sx, sy    ! Ice shelf top slopes [Z L-1 ~> nondim]
@@ -3200,8 +3199,7 @@ subroutine ice_shelf_temp(CS, ISS, G, US, time_step, melt_rate, Time)
   real, dimension(SZDI_(G),SZDJ_(G))   :: th_after_uflux, th_after_vflux, TH ! Integrated temperatures [C Z ~> degC m]
   integer                           :: isd, ied, jsd, jed, i, j, isc, iec, jsc, jec
   real :: Tsurf ! Surface air temperature [C ~> degC].  This is hard coded but should be an input argument.
-  real :: adot  ! A surface heat exchange coefficient divided by the heat capacity of
-                ! ice [R Z T-1 degC-1 ~> kg m-2 s-1 degC-1].
+  real :: adot  ! A surface heat exchange coefficient [R Z T-1 ~> kg m-2 s-1].
 
 
   ! For now adot and Tsurf are defined here adot=surf acc 0.1m/yr, Tsurf=-20oC, vary them later

@@ -83,14 +83,14 @@ type, public :: surface_forcing_CS ; private
                                 !! type without any further adjustments to drive the ocean dynamics.
                                 !! The actual net mass source may differ due to corrections.
 
-  real :: gust_const            !< Constant unresolved background gustiness for ustar [R L Z T-1 ~> Pa]
+  real :: gust_const            !< Constant unresolved background gustiness for ustar [R L Z T-2 ~> Pa]
   logical :: read_gust_2d       !< If true, use a 2-dimensional gustiness supplied from an input file.
   real, pointer, dimension(:,:) :: &
     TKE_tidal => NULL()         !< Turbulent kinetic energy introduced to the bottom boundary layer
                                 !! by drag on the tidal flows [R Z3 T-3 ~> W m-2].
   real, pointer, dimension(:,:) :: &
     gust => NULL()              !< A spatially varying unresolved background gustiness that
-                                !! contributes to ustar [R L Z T-1 ~> Pa].  gust is used when read_gust_2d is true.
+                                !! contributes to ustar [R L Z T-2 ~> Pa].  gust is used when read_gust_2d is true.
   real, pointer, dimension(:,:) :: &
     ustar_tidal => NULL()       !< Tidal contribution to the bottom friction velocity [Z T-1 ~> m s-1]
   real :: cd_tides              !< Drag coefficient that applies to the tides [nondim]

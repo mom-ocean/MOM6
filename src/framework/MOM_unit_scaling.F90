@@ -41,7 +41,7 @@ type, public :: unit_scale_type
   real :: L_T_to_m_s      !< Convert lateral velocities from L T-1 to m s-1                         [T m L-1 s-1 ~> 1]
   real :: m_s_to_L_T      !< Convert lateral velocities from m s-1 to L T-1                         [L s T-1 m-1 ~> 1]
   real :: L_T2_to_m_s2    !< Convert lateral accelerations from L T-2 to m s-2                     [L s2 T-2 m-1 ~> 1]
-  real :: Z2_T_to_m2_s    !< Convert vertical diffusivities from Z2 T-1 to m2 s-1                 [T1 m2 Z-2 s-1 ~> 1]
+  real :: Z2_T_to_m2_s    !< Convert vertical diffusivities from Z2 T-1 to m2 s-1                  [T m2 Z-2 s-1 ~> 1]
   real :: m2_s_to_Z2_T    !< Convert vertical diffusivities from m2 s-1 to Z2 T-1                  [Z2 s T-1 m-2 ~> 1]
   real :: W_m2_to_QRZ_T   !< Convert heat fluxes from W m-2 to Q R Z T-1                       [Q R Z m2 T-1 W-1 ~> 1]
   real :: QRZ_T_to_W_m2   !< Convert heat fluxes from Q R Z T-1 to W m-2                    [W T Q-1 R-1 Z-1 m-2 ~> 1]

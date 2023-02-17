@@ -183,7 +183,7 @@ subroutine benchmark_init_topog_local(D, G, param_file, max_depth)
   real :: PI                   ! 3.1415926... calculated as 4*atan(1) [nondim]
   real :: D0                   ! A constant to make the maximum
                                ! basin depth MAXIMUM_DEPTH [m]
-  real :: m_to_Z  ! A dimensional rescaling factor [m ~> Z]
+  real :: m_to_Z  ! A dimensional rescaling factor [Z m-1 ~> 1]
   real :: x ! A fractional position in the x-direction [nondim]
   real :: y ! A fractional position in the y-direction [nondim]
   ! This include declares and sets the variable "version".

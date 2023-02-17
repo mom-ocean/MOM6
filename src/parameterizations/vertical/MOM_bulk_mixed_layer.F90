@@ -912,7 +912,7 @@ subroutine mixedlayer_convection(h, d_eb, htot, Ttot, Stot, uhtot, vhtot,      &
   real, dimension(SZI_(G),SZK0_(GV)), &
                             intent(in)    :: T     !< Layer temperatures [C ~> degC].
   real, dimension(SZI_(G),SZK0_(GV)), &
-                            intent(in)    :: S     !< Layer salinities [C ~> ppt].
+                            intent(in)    :: S     !< Layer salinities [S ~> ppt].
   real, dimension(SZI_(G),SZK0_(GV)), &
                             intent(in)    :: R0    !< Potential density referenced to
                                                    !! surface pressure [R ~> kg m-3].
@@ -1890,7 +1890,7 @@ subroutine resort_ML(h, T, S, R0, Rcv, RcvTgt, eps, d_ea, d_eb, ksort, G, GV, CS
   ! Local variables
   real    :: h_move     ! The thickness of water being moved between layers [H ~> m or kg m-2]
   real    :: h_tgt_old  ! The previous thickness of the recipient layer [H ~> m or kg m-2]
-  real    :: I_hnew     ! The inverse of a new layer thickness [H-1 ~> m-1 or m3 kg-1]
+  real    :: I_hnew     ! The inverse of a new layer thickness [H-1 ~> m-1 or m2 kg-1]
   real    :: dT_dS_wt2  ! The square of the relative weighting of temperature and salinity changes
                         ! when extrapolating to match a target density [C2 S-2 ~> degC2 ppt-2]
   real    :: dT_dR      ! The ratio of temperature changes to density changes when

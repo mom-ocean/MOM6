@@ -38,7 +38,7 @@ type, public :: optics_type
       !< The maximum wavelength in each band of penetrating shortwave radiation [nm]
 
   real :: PenSW_flux_absorb !< A heat flux that is small enough to be completely absorbed in the next
-                        !! sufficiently thick layer [H degC T-1 ~> degC m s-1 or degC kg m-2 s-1].
+                        !! sufficiently thick layer [C H T-1 ~> degC m s-1 or degC kg m-2 s-1].
   real :: PenSW_absorb_Invlen !< The inverse of the thickness that is used to absorb the remaining
                         !! shortwave heat flux when it drops below PEN_SW_FLUX_ABSORB [H ~> m or kg m-2].
   integer :: answer_date  !< The vintage of the order of arithmetic and expressions in the optics
