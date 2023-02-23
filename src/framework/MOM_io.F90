@@ -668,6 +668,20 @@ subroutine reopen_MOM_file(IO_handle, filename, vars, novars, fields, &
   thread = SINGLE_FILE
   if (PRESENT(threading)) thread = threading
 
+  ! For single-file IO, only the root PE is required to set up the fields.
+  ! This permits calls by either the root PE or all PEs
+  if (.not. is_root_PE() .and. thread == SINGLE_FILE) return
+
+  ! For multiple IO domains, we would need additional functionality:
+  ! * Identify ranks as IO PEs
+  ! * Determine the filename of
+  ! Neither of these tasks should be handed by MOM6, so we cannot safely use
+  ! this function.  A framework-specific `inquire()` function is needed.
+  ! Until it exists, we will disable this function.
+  if (thread == MULTIPLE) &
+    call MOM_error(FATAL, 'reopen_MOM_file does not yet support files with ' &
+      // 'multiple I/O domains.')
+
   check_name = filename
   length = len(trim(check_name))
   if (check_name(length-2:length) /= ".nc") check_name = trim(check_name)//".nc"
