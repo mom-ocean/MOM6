@@ -9,7 +9,7 @@ use MOM_error_handler,    only : MOM_mesg, MOM_error, FATAL, WARNING, is_root_pe
 use MOM_error_handler,    only : callTree_enter, callTree_leave, callTree_waypoint
 use MOM_file_parser,      only : get_param, read_param, log_param, param_file_type, log_version
 use MOM_io,               only : create_MOM_file, file_exists
-use MOM_io,               only : MOM_infra_file, MOM_field
+use MOM_io,               only : MOM_netCDF_file, MOM_field
 use MOM_io,               only : MOM_read_data, MOM_write_field, vardesc, var_desc, SINGLE_FILE
 use MOM_string_functions, only : slasher, uppercase
 use MOM_unit_scaling,     only : unit_scale_type
@@ -528,12 +528,12 @@ subroutine write_vertgrid_file(GV, US, param_file, directory)
   character(len=240) :: filepath
   type(vardesc) :: vars(2)
   type(MOM_field) :: fields(2)
-  type(MOM_infra_file) :: IO_handle ! The I/O handle of the fileset
+  type(MOM_netCDF_file) :: IO_handle ! The I/O handle of the fileset
 
-  filepath = trim(directory) // trim("Vertical_coordinate")
+  filepath = trim(directory) // trim("Vertical_coordinate.nc")
 
   vars(1) = var_desc("R","kilogram meter-3","Target Potential Density",'1','L','1')
-  vars(2) = var_desc("g","meter second-2","Reduced gravity",'1','L','1')
+  vars(2) = var_desc("g","meter second-2","Reduced gravity",'1','i','1')
 
   call create_MOM_file(IO_handle, trim(filepath), vars, 2, fields, &
       SINGLE_FILE, GV=GV)

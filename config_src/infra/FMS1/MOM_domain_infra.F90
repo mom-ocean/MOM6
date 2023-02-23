@@ -1489,7 +1489,7 @@ end subroutine get_domain_components_d2D
 !> clone_MD_to_MD copies one MOM_domain_type into another, while allowing
 !! some properties of the new type to differ from the original one.
 subroutine clone_MD_to_MD(MD_in, MOM_dom, min_halo, halo_size, symmetric, domain_name, &
-                          turns, refine, extra_halo)
+                          turns, refine, extra_halo, io_layout)
   type(MOM_domain_type), target, intent(in) :: MD_in  !< An existing MOM_domain
   type(MOM_domain_type), pointer :: MOM_dom
                                   !< A pointer to a MOM_domain that will be
@@ -1512,6 +1512,8 @@ subroutine clone_MD_to_MD(MD_in, MOM_dom, min_halo, halo_size, symmetric, domain
   integer, optional, intent(in) :: refine  !< A factor by which to enhance the grid resolution.
   integer, optional, intent(in) :: extra_halo !< An extra number of points in the halos
                                   !! compared with MD_in
+  integer, optional, intent(in) :: io_layout(2)
+    !< A user-defined IO layout to replace the domain's IO layout
 
   logical :: mask_table_exists
   integer, dimension(:), allocatable :: exni ! The extents of the grid for each i-row of the layout.
@@ -1520,9 +1522,16 @@ subroutine clone_MD_to_MD(MD_in, MOM_dom, min_halo, halo_size, symmetric, domain
                                              ! The sum of exni must equal MOM_dom%niglobal.
   integer :: qturns ! The number of quarter turns, restricted to the range of 0 to 3.
   integer :: i, j, nl1, nl2
+  integer :: io_layout_in(2)
 
   qturns = 0
   if (present(turns)) qturns = modulo(turns, 4)
+
+  if (present(io_layout)) then
+    io_layout_in(:) = io_layout(:)
+  else
+    io_layout_in(:) = MD_in%io_layout(:)
+  endif
 
   if (.not.associated(MOM_dom)) then
     allocate(MOM_dom)
@@ -1542,7 +1551,7 @@ subroutine clone_MD_to_MD(MD_in, MOM_dom, min_halo, halo_size, symmetric, domain
 
     MOM_dom%X_FLAGS = MD_in%Y_FLAGS ; MOM_dom%Y_FLAGS = MD_in%X_FLAGS
     MOM_dom%layout(:) = MD_in%layout(2:1:-1)
-    MOM_dom%io_layout(:) = MD_in%io_layout(2:1:-1)
+    MOM_dom%io_layout(:) = io_layout_in(2:1:-1)
   else
     MOM_dom%niglobal = MD_in%niglobal ; MOM_dom%njglobal = MD_in%njglobal
     MOM_dom%nihalo = MD_in%nihalo ; MOM_dom%njhalo = MD_in%njhalo
@@ -1550,7 +1559,7 @@ subroutine clone_MD_to_MD(MD_in, MOM_dom, min_halo, halo_size, symmetric, domain
 
     MOM_dom%X_FLAGS = MD_in%X_FLAGS ; MOM_dom%Y_FLAGS = MD_in%Y_FLAGS
     MOM_dom%layout(:) = MD_in%layout(:)
-    MOM_dom%io_layout(:) = MD_in%io_layout(:)
+    MOM_dom%io_layout(:) = io_layout_in(:)
   endif
 
   ! Ensure that the points per processor are the same on the source and densitation grids.

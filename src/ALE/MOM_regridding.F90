@@ -7,7 +7,7 @@ use MOM_error_handler, only : MOM_error, FATAL, WARNING, assert
 use MOM_file_parser,   only : param_file_type, get_param, log_param
 use MOM_io,            only : file_exists, field_exists, field_size, MOM_read_data
 use MOM_io,            only : vardesc, var_desc, SINGLE_FILE
-use MOM_io,            only : MOM_infra_file, MOM_field
+use MOM_io,            only : MOM_netCDF_file, MOM_field
 use MOM_io,            only : create_MOM_file, MOM_write_field
 use MOM_io,            only : verify_variable_units, slasher
 use MOM_unit_scaling,  only : unit_scale_type
@@ -2082,7 +2082,7 @@ subroutine write_regrid_file( CS, GV, filepath )
 
   type(vardesc)      :: vars(2)
   type(MOM_field)    :: fields(2)
-  type(MOM_infra_file) :: IO_handle ! The I/O handle of the fileset
+  type(MOM_netCDF_file) :: IO_handle ! The I/O handle of the fileset
   real               :: ds(GV%ke), dsi(GV%ke+1)
 
   if (CS%regridding_scheme == REGRIDDING_HYBGEN) then
