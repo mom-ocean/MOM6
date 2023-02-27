@@ -1699,16 +1699,10 @@ subroutine ModelAdvance(gcomp, rc)
           close(writeunit)
         endif
       else  ! not cesm_coupled
-        ! write the final restart without a timestamp
-        if (ESMF_AlarmIsRinging(stop_alarm, rc=rc)) then
-          write(restartname,'(A)')"MOM.res"
-          write(stoch_restartname,'(A)')"ocn_stoch.res.nc"
-        else
-          write(restartname,'(A,I4.4,"-",I2.2,"-",I2.2,"-",I2.2,"-",I2.2,"-",I2.2)') &
-                "MOM.res.", year, month, day, hour, minute, seconds
-          write(stoch_restartname,'(A,I4.4,"-",I2.2,"-",I2.2,"-",I2.2,"-",I2.2,"-",I2.2,A)') &
-                "ocn_stoch.res.", year, month, day, hour, minute, seconds,".nc"
-        endif
+         write(restartname,'(i4.4,2(i2.2),A,3(i2.2),A)') year, month, day,".", hour, minute, seconds, &
+              ".MOM.res"
+         write(stoch_restartname,'(i4.4,2(i2.2),A,3(i2.2),A)') year, month, day,".", hour, minute, seconds, &
+              ".ocn_stoch.res.nc"
         call ESMF_LogWrite("MOM_cap: Writing restart :  "//trim(restartname), ESMF_LOGMSG_INFO)
 
         ! write restart file(s)
@@ -1868,7 +1862,7 @@ subroutine ModelSetRunClock(gcomp, rc)
                  line=__LINE__, file=__FILE__, rcToReturn=rc)
             return
           endif
-          ! not used in nems
+          ! not used in ufs
           call NUOPC_CompAttributeGet(gcomp, name="restart_ymd", value=cvalue, &
                isPresent=isPresent, isSet=isSet, rc=rc)
           if (ChkErr(rc,__LINE__,u_FILE_u)) return
