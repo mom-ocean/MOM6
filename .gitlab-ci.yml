@@ -134,7 +134,7 @@ run:pgi:
   tags:
     - ncrc4
   script:
-    - sbatch --clusters=c3,c4 --nodes=30 --time=0:20:00 --account=gfdl_o --qos=debug --job-name=mom6_pgi_tests --output=log.$CI_JOB_ID --wait .gitlab/pipeline-ci-tool.sh run-suite pgi SNL && ( egrep -v 'pagefaults|HiWaterMark=' log.$CI_JOB_ID ; echo Job returned normally ) || ( cat log.$CI_JOB_ID ; echo Job failed ; exit 911 )
+    - sbatch --clusters=c3,c4 --nodes=30 --time=1:00:00 --account=gfdl_o --qos=debug --job-name=mom6_pgi_tests --output=log.$CI_JOB_ID --wait .gitlab/pipeline-ci-tool.sh run-suite pgi SNL && ( egrep -v 'pagefaults|HiWaterMark=' log.$CI_JOB_ID ; echo Job returned normally ) || ( cat log.$CI_JOB_ID ; echo Job failed ; exit 911 )
     - test -f $JOB_DIR/CI-BATCH-SUCCESS-pgi-SNL || ( echo Batch job did not complete ; exit 911 )
 
 run:intel:
@@ -143,7 +143,7 @@ run:intel:
   tags:
     - ncrc4
   script:
-    - sbatch --clusters=c3,c4 --nodes=30 --time=0:20:00 --account=gfdl_o --qos=debug --job-name=mom6_intel_tests --output=log.$CI_JOB_ID --wait .gitlab/pipeline-ci-tool.sh run-suite intel SNL && ( egrep -v 'pagefaults|HiWaterMark=' log.$CI_JOB_ID ; echo Job returned normally ) || ( cat log.$CI_JOB_ID ; echo Job failed ; exit 911 )
+    - sbatch --clusters=c3,c4 --nodes=30 --time=1:00:00 --account=gfdl_o --qos=debug --job-name=mom6_intel_tests --output=log.$CI_JOB_ID --wait .gitlab/pipeline-ci-tool.sh run-suite intel SNL && ( egrep -v 'pagefaults|HiWaterMark=' log.$CI_JOB_ID ; echo Job returned normally ) || ( cat log.$CI_JOB_ID ; echo Job failed ; exit 911 )
     - test -f $JOB_DIR/CI-BATCH-SUCCESS-intel-SNL || ( echo Batch job did not complete ; exit 911 )
 
 run:gnu:
@@ -152,7 +152,7 @@ run:gnu:
   tags:
     - ncrc4
   script:
-    - sbatch --clusters=c3,c4 --nodes=30 --time=0:20:00 --account=gfdl_o --qos=debug --job-name=mom6_gnu_tests --output=log.$CI_JOB_ID --wait .gitlab/pipeline-ci-tool.sh run-suite gnu SNLDT && ( egrep -v 'pagefaults|HiWaterMark=' log.$CI_JOB_ID ; echo Job returned normally ) || ( cat log.$CI_JOB_ID ; echo Job failed ; exit 911 )
+    - sbatch --clusters=c3,c4 --nodes=30 --time=1:00:00 --account=gfdl_o --qos=debug --job-name=mom6_gnu_tests --output=log.$CI_JOB_ID --wait .gitlab/pipeline-ci-tool.sh run-suite gnu SNLDT && ( egrep -v 'pagefaults|HiWaterMark=' log.$CI_JOB_ID ; echo Job returned normally ) || ( cat log.$CI_JOB_ID ; echo Job failed ; exit 911 )
     - test -f $JOB_DIR/CI-BATCH-SUCCESS-gnu-SNLDT || ( echo Batch job did not complete ; exit 911 )
 
 run:gnu-restarts:
@@ -161,7 +161,7 @@ run:gnu-restarts:
   tags:
     - ncrc4
   script:
-    - sbatch --clusters=c3,c4 --nodes=30 --time=0:20:00 --account=gfdl_o --qos=debug --job-name=mom6_gnu_restarts --output=log.$CI_JOB_ID --wait .gitlab/pipeline-ci-tool.sh run-suite gnu R && ( egrep -v 'pagefaults|HiWaterMark=' log.$CI_JOB_ID ; echo Job returned normally ) || ( cat log.$CI_JOB_ID ; echo Job failed ; exit 911 )
+    - sbatch --clusters=c3,c4 --nodes=30 --time=1:00:00 --account=gfdl_o --qos=debug --job-name=mom6_gnu_restarts --output=log.$CI_JOB_ID --wait .gitlab/pipeline-ci-tool.sh run-suite gnu R && ( egrep -v 'pagefaults|HiWaterMark=' log.$CI_JOB_ID ; echo Job returned normally ) || ( cat log.$CI_JOB_ID ; echo Job failed ; exit 911 )
     - test -f $JOB_DIR/CI-BATCH-SUCCESS-gnu-R || ( echo Batch job did not complete ; exit 911 )
 
 # GH/autoconf tests (duplicates the GH actions tests)
