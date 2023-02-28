@@ -601,15 +601,15 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, dt_forci
           endif
         endif
       endif
-    endif
 
-    energypath_nc = trim(CS%energyfile) // ".nc"
-    if (day > CS%Start_time) then
-      call reopen_MOM_file(CS%fileenergy_nc, trim(energypath_nc), vars, &
-          num_nc_fields, CS%fields, SINGLE_FILE, CS%timeunit, G=G, GV=GV)
-    else
-      call create_MOM_file(CS%fileenergy_nc, trim(energypath_nc), vars, &
-          num_nc_fields, CS%fields, SINGLE_FILE, CS%timeunit, G=G, GV=GV)
+      energypath_nc = trim(CS%energyfile) // ".nc"
+      if (day > CS%Start_time) then
+        call reopen_MOM_file(CS%fileenergy_nc, trim(energypath_nc), vars, &
+            num_nc_fields, CS%fields, SINGLE_FILE, CS%timeunit, G=G, GV=GV)
+      else
+        call create_MOM_file(CS%fileenergy_nc, trim(energypath_nc), vars, &
+            num_nc_fields, CS%fields, SINGLE_FILE, CS%timeunit, G=G, GV=GV)
+      endif
     endif
   endif
 
@@ -795,7 +795,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, dt_forci
     date_str = trim(mesg_intro)//trim(day_str)
   endif
 
-  if (is_root_pe()) then
+  if (is_root_pe()) then  ! Only the root PE actually writes anything.
     if (CS%use_temperature) then
         write(stdout,'(A," ",A,": En ",ES12.6, ", MaxCFL ", F8.5, ", Mass ", &
                 & ES18.12, ", Salt ", F15.11,", Temp ", F15.11)') &
@@ -861,37 +861,37 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, dt_forci
 
       enddo
     endif
-  endif
 
-  call CS%fileenergy_nc%write_field(CS%fields(1), real(CS%ntrunc), reday)
-  call CS%fileenergy_nc%write_field(CS%fields(2), toten, reday)
-  call CS%fileenergy_nc%write_field(CS%fields(3), PE, reday)
-  call CS%fileenergy_nc%write_field(CS%fields(4), KE, reday)
-  call CS%fileenergy_nc%write_field(CS%fields(5), H_0APE, reday)
-  call CS%fileenergy_nc%write_field(CS%fields(6), mass_lay, reday)
+    call CS%fileenergy_nc%write_field(CS%fields(1), real(CS%ntrunc), reday)
+    call CS%fileenergy_nc%write_field(CS%fields(2), toten, reday)
+    call CS%fileenergy_nc%write_field(CS%fields(3), PE, reday)
+    call CS%fileenergy_nc%write_field(CS%fields(4), KE, reday)
+    call CS%fileenergy_nc%write_field(CS%fields(5), H_0APE, reday)
+    call CS%fileenergy_nc%write_field(CS%fields(6), mass_lay, reday)
 
-  call CS%fileenergy_nc%write_field(CS%fields(7), mass_tot, reday)
-  call CS%fileenergy_nc%write_field(CS%fields(8), mass_chg, reday)
-  call CS%fileenergy_nc%write_field(CS%fields(9), mass_anom, reday)
-  call CS%fileenergy_nc%write_field(CS%fields(10), max_CFL(1), reday)
-  call CS%fileenergy_nc%write_field(CS%fields(11), max_CFL(2), reday)
-  if (CS%use_temperature) then
-    call CS%fileenergy_nc%write_field(CS%fields(12), 0.001*Salt, reday)
-    call CS%fileenergy_nc%write_field(CS%fields(13), 0.001*salt_chg, reday)
-    call CS%fileenergy_nc%write_field(CS%fields(14), 0.001*salt_anom, reday)
-    call CS%fileenergy_nc%write_field(CS%fields(15), Heat, reday)
-    call CS%fileenergy_nc%write_field(CS%fields(16), heat_chg, reday)
-    call CS%fileenergy_nc%write_field(CS%fields(17), heat_anom, reday)
-    do m=1,nTr_stocks
-      call CS%fileenergy_nc%write_field(CS%fields(17+m), Tr_stocks(m), reday)
-    enddo
-  else
-    do m=1,nTr_stocks
-      call CS%fileenergy_nc%write_field(CS%fields(11+m), Tr_stocks(m), reday)
-    enddo
-  endif
+    call CS%fileenergy_nc%write_field(CS%fields(7), mass_tot, reday)
+    call CS%fileenergy_nc%write_field(CS%fields(8), mass_chg, reday)
+    call CS%fileenergy_nc%write_field(CS%fields(9), mass_anom, reday)
+    call CS%fileenergy_nc%write_field(CS%fields(10), max_CFL(1), reday)
+    call CS%fileenergy_nc%write_field(CS%fields(11), max_CFL(2), reday)
+    if (CS%use_temperature) then
+      call CS%fileenergy_nc%write_field(CS%fields(12), 0.001*Salt, reday)
+      call CS%fileenergy_nc%write_field(CS%fields(13), 0.001*salt_chg, reday)
+      call CS%fileenergy_nc%write_field(CS%fields(14), 0.001*salt_anom, reday)
+      call CS%fileenergy_nc%write_field(CS%fields(15), Heat, reday)
+      call CS%fileenergy_nc%write_field(CS%fields(16), heat_chg, reday)
+      call CS%fileenergy_nc%write_field(CS%fields(17), heat_anom, reday)
+      do m=1,nTr_stocks
+        call CS%fileenergy_nc%write_field(CS%fields(17+m), Tr_stocks(m), reday)
+      enddo
+    else
+      do m=1,nTr_stocks
+        call CS%fileenergy_nc%write_field(CS%fields(11+m), Tr_stocks(m), reday)
+      enddo
+    endif
 
-  call CS%fileenergy_nc%flush()
+    call CS%fileenergy_nc%flush()
+  endif  ! Only the root PE actually writes anything.
 
   if (is_NaN(En_mass)) then
     call MOM_error(FATAL, "write_energy : NaNs in total model energy forced model termination.")
