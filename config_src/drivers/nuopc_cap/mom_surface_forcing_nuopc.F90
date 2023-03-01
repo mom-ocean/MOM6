@@ -146,10 +146,11 @@ type, public :: surface_forcing_CS ; private
   character(len=30)        :: cfc11_var_name        !< name of cfc11 in CFC_BC_file
   character(len=30)        :: cfc12_var_name        !< name of cfc11 in CFC_BC_file
   real, pointer, dimension(:,:) :: trestore_mask => NULL() !< mask for SST restoring
-  integer :: id_srestore = -1    !< id number for time_interp_external.
-  integer :: id_trestore = -1    !< id number for time_interp_external.
-  integer :: id_cfc11_atm = -1   !< id number for time_interp_external.
-  integer :: id_cfc12_atm = -1   !< id number for time_interp_external.
+  integer :: id_srestore = -1       !< id number for time_interp_external.
+  integer :: id_trestore = -1       !< id number for time_interp_external.
+  integer :: CFC_BC_year_offset = 0 !< offset to add to model time to get time value used in CFC_BC_file
+  integer :: id_cfc11_atm = -1      !< id number for time_interp_external.
+  integer :: id_cfc12_atm = -1      !< id number for time_interp_external.
 
   ! Diagnostics handles
   type(forcing_diags), public :: handles
@@ -596,7 +597,8 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
 
   ! CFCs
   if (CS%use_CFC) then
-    call CFC_cap_fluxes(fluxes, sfc_state, G, US, CS%Rho0, Time, CS%id_cfc11_atm, CS%id_cfc11_atm)
+    call CFC_cap_fluxes(fluxes, sfc_state, G, US, CS%Rho0, Time, CS%CFC_BC_year_offset, &
+                        CS%id_cfc11_atm, CS%id_cfc11_atm)
   endif
 
   if (associated(IOB%salt_flux)) then
@@ -1118,6 +1120,8 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, restore_salt,
   character(len=48)  :: flnam
   character(len=240) :: basin_file
   integer :: i, j, isd, ied, jsd, jed
+  integer :: CFC_BC_data_year   ! specific year in CFC BC data calendar
+  integer :: CFC_BC_model_year  ! model year corresponding to CFC_BC_data_year
 
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
@@ -1424,6 +1428,11 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, restore_salt,
       CS%CFC_BC_file = trim(CS%inputdir) // trim(CS%CFC_BC_file)
     endif
     if (len_trim(CS%CFC_BC_file) > 0) then
+      call get_param(param_file, mdl, "CFC_BC_DATA_YEAR", CFC_BC_data_year, &
+                   "Specific year in CFC_BC_FILE data calendar", default=2000, do_not_log=.true.)
+      call get_param(param_file, mdl, "CFC_BC_MODEL_YEAR", CFC_BC_model_year, &
+                   "Model year corresponding to CFC_BC_MODEL_YEAR", default=2000, do_not_log=.true.)
+      CS%CFC_BC_year_offset = CFC_BC_data_year - CFC_BC_model_year
       call get_param(param_file, mdl, "CFC11_VARIABLE", CS%cfc11_var_name, &
                    "The name of the variable representing CFC-11 in  "//&
                    "CFC_BC_FILE.", default="CFC_11", do_not_log=.true.)

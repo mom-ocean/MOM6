@@ -18,7 +18,7 @@ use MOM_tracer_registry, only : tracer_type
 use MOM_open_boundary,   only : ocean_OBC_type
 use MOM_restart,         only : query_initialized, set_initialized, MOM_restart_CS
 use MOM_spatial_means,   only : global_mass_int_EFP
-use MOM_time_manager,    only : time_type
+use MOM_time_manager,    only : time_type, increment_date
 use time_interp_external_mod, only : init_external_field, time_interp_external
 use MOM_tracer_registry, only : register_tracer
 use MOM_tracer_types,    only : tracer_registry_type
@@ -86,6 +86,7 @@ function register_CFC_cap(HI, GV, param_file, CS, tr_Reg, restart_CS)
 # include "version_variable.h"
   real, dimension(:,:,:), pointer :: tr_ptr => NULL()
   character(len=200) :: dummy      ! Dummy variable to store params that need to be logged here.
+  integer :: dummy_int             ! Dummy variable to store params that need to be logged here.
   character :: m2char
   logical :: register_CFC_cap
   integer :: isd, ied, jsd, jed, nz, m
@@ -108,7 +109,8 @@ function register_CFC_cap(HI, GV, param_file, CS, tr_Reg, restart_CS)
     ! Add the directory if CS%IC_file is not already a complete path.
     call get_param(param_file, mdl, "INPUTDIR", inputdir, default=".")
     CS%IC_file = trim(slasher(inputdir))//trim(CS%IC_file)
-    call log_param(param_file, mdl, "INPUTDIR/CFC_IC_FILE", CS%IC_file)
+    call log_param(param_file, mdl, "INPUTDIR/CFC_IC_FILE", CS%IC_file, &
+                   "full path of CFC_IC_FILE")
   endif
   call get_param(param_file, mdl, "CFC_IC_FILE_IS_Z", CS%Z_IC_file, &
                  "If true, CFC_IC_FILE is in depth space, not layer space", &
@@ -135,9 +137,14 @@ function register_CFC_cap(HI, GV, param_file, CS, tr_Reg, restart_CS)
     ! Add the directory if dummy is not already a complete path.
     call get_param(param_file, mdl, "INPUTDIR", inputdir, default=".")
     dummy = trim(slasher(inputdir))//trim(dummy)
-    call log_param(param_file, mdl, "INPUTDIR/CFC_IC_FILE", dummy)
+    call log_param(param_file, mdl, "INPUTDIR/CFC_BC_FILE", dummy, &
+                   "full path of CFC_BC_FILE")
   endif
   if (len_trim(dummy) > 0) then
+    call get_param(param_file, mdl, "CFC_BC_DATA_YEAR", dummy_int, &
+                 "Specific year in CFC_BC_FILE data calendar", default=2000)
+    call get_param(param_file, mdl, "CFC_BC_MODEL_YEAR", dummy_int, &
+                 "Model year corresponding to CFC_BC_MODEL_YEAR", default=2000)
     call get_param(param_file, mdl, "CFC11_VARIABLE", dummy, &
                  "The name of the variable representing CFC-11 in  "//&
                  "CFC_BC_FILE.", default="CFC_11")
@@ -428,7 +435,8 @@ end subroutine CFC_cap_surface_state
 
 !> Orchestrates the calculation of the CFC fluxes [mol m-2 s-1], including getting the ATM
 !! concentration, and calculating the solubility, Schmidt number, and gas exchange.
-subroutine CFC_cap_fluxes(fluxes, sfc_state, G, US, Rho0, Time, id_cfc11_atm, id_cfc12_atm)
+subroutine CFC_cap_fluxes(fluxes, sfc_state, G, US, Rho0, Time, CFC_BC_year_offset, &
+                          id_cfc11_atm, id_cfc12_atm)
   type(ocean_grid_type),        intent(in   ) :: G  !< The ocean's grid structure.
   type(unit_scale_type),        intent(in  )  :: US !< A dimensional unit scaling type
   type(surface),                intent(in   ) :: sfc_state !< A structure containing fields
@@ -439,10 +447,13 @@ subroutine CFC_cap_fluxes(fluxes, sfc_state, G, US, Rho0, Time, id_cfc11_atm, id
   real,                         intent(in   ) :: Rho0 !< The mean ocean density [R ~> kg m-3]
   type(time_type),              intent(in   ) :: Time !< The time of the fluxes, used for interpolating the
                                               !! CFC's concentration in the atmosphere.
+  integer,                      intent(in   ) :: CFC_BC_year_offset !< offset to add to model time to get
+                                              !! time value used in CFC_BC_file
   integer,           optional,  intent(inout):: id_cfc11_atm !< id number for time_interp_external.
   integer,           optional,  intent(inout):: id_cfc12_atm !< id number for time_interp_external.
 
   ! Local variables
+  type(time_type) :: Time_external ! time value used in CFC_BC_file
   real, dimension(SZI_(G),SZJ_(G)) :: &
     kw_wo_sc_no_term, &  ! gas transfer velocity, without the Schmidt number term [Z T-1 ~> m s-1].
     kw, &           ! gas transfer velocity [Z T-1 ~> m s-1].
@@ -462,9 +473,11 @@ subroutine CFC_cap_fluxes(fluxes, sfc_state, G, US, Rho0, Time, id_cfc11_atm, id
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
 
+  Time_external = increment_date(Time, years=CFC_BC_year_offset)
+
   ! CFC11 ATM concentration
   if (present(id_cfc11_atm) .and. (id_cfc11_atm /= -1)) then
-    call time_interp_external(id_cfc11_atm, Time, cfc11_atm)
+    call time_interp_external(id_cfc11_atm, Time_external, cfc11_atm)
     ! convert from ppt (pico mol/mol) to mol/mol
     cfc11_atm = cfc11_atm * 1.0e-12
   else
@@ -475,7 +488,7 @@ subroutine CFC_cap_fluxes(fluxes, sfc_state, G, US, Rho0, Time, id_cfc11_atm, id
 
   ! CFC12 ATM concentration
   if (present(id_cfc12_atm) .and. (id_cfc12_atm /= -1)) then
-    call time_interp_external(id_cfc12_atm, Time, cfc12_atm)
+    call time_interp_external(id_cfc12_atm, Time_external, cfc12_atm)
     ! convert from ppt (pico mol/mol) to mol/mol
     cfc12_atm = cfc12_atm * 1.0e-12
   else
