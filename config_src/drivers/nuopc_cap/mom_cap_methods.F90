@@ -1,4 +1,4 @@
-!> Contains import/export methods for both NEMS and CMEPS.
+!> Contains import/export methods for CMEPS.
 module MOM_cap_methods
 
 use ESMF,                      only: ESMF_Clock, ESMF_ClockGet, ESMF_time, ESMF_TimeGet
