@@ -52,8 +52,7 @@ real, parameter :: R02 = 4.8314e-4    ! A coefficient in the fit for rho0 [kg m-
 
 ! The following constants are used to calculate the secant bulk modulus.
 ! The notation here is Sab for terms proportional to T^a*S^b,
-! Spab for terms proportional to p*T^a*S^b, and SP0ab for terms
-! proportional to p^2*T^a*S^b.
+! SpABC for terms proportional to p^A*T^B*S^C.
 !   Note that these values differ from those in Appendix 3 of Gill (1982) because the expressions
 ! from Jackett and MacDougall (1995) use potential temperature, rather than in situ temperature.
 real, parameter :: S00 = 1.965933e4   ! A coefficient in the secant bulk modulus fit [bar]
@@ -69,21 +68,21 @@ real, parameter :: S032 = 3.886640e-1   ! A coefficient in the secant bulk modul
 real, parameter :: S132 = 9.085835e-3   ! A coefficient in the secant bulk modulus fit [bar degC-1 PSU-3/2]
 real, parameter :: S232 = -4.619924e-4  ! A coefficient in the secant bulk modulus fit [bar degC-2 PSU-3/2]
 
-real, parameter :: Sp00 = 3.186519      ! A coefficient in the secant bulk modulus fit [nondim]
-real, parameter :: Sp10 = 2.212276e-2   ! A coefficient in the secant bulk modulus fit [degC-1]
-real, parameter :: Sp20 = -2.984642e-4  ! A coefficient in the secant bulk modulus fit [degC-2]
-real, parameter :: Sp30 = 1.956415e-6   ! A coefficient in the secant bulk modulus fit [degC-3]
-real, parameter :: Sp01 = 6.704388e-3   ! A coefficient in the secant bulk modulus fit [PSU-1]
-real, parameter :: Sp11 = -1.847318e-4  ! A coefficient in the secant bulk modulus fit [degC-1 PSU-1]
-real, parameter :: Sp21 = 2.059331e-7   ! A coefficient in the secant bulk modulus fit [degC-2 PSU-1]
-real, parameter :: Sp032 = 1.480266e-4  ! A coefficient in the secant bulk modulus fit [PSU-3/2]
+real, parameter :: Sp100 = 3.186519      ! A coefficient in the secant bulk modulus fit [nondim]
+real, parameter :: Sp110 = 2.212276e-2   ! A coefficient in the secant bulk modulus fit [degC-1]
+real, parameter :: Sp120 = -2.984642e-4  ! A coefficient in the secant bulk modulus fit [degC-2]
+real, parameter :: Sp130 = 1.956415e-6   ! A coefficient in the secant bulk modulus fit [degC-3]
+real, parameter :: Sp101 = 6.704388e-3   ! A coefficient in the secant bulk modulus fit [PSU-1]
+real, parameter :: Sp111 = -1.847318e-4  ! A coefficient in the secant bulk modulus fit [degC-1 PSU-1]
+real, parameter :: Sp121 = 2.059331e-7   ! A coefficient in the secant bulk modulus fit [degC-2 PSU-1]
+real, parameter :: Sp1032 = 1.480266e-4  ! A coefficient in the secant bulk modulus fit [PSU-3/2]
 
-real, parameter :: SP000 = 2.102898e-4  ! A coefficient in the secant bulk modulus fit [bar-1]
-real, parameter :: SP010 = -1.202016e-5 ! A coefficient in the secant bulk modulus fit [bar-1 degC-1]
-real, parameter :: SP020 = 1.394680e-7  ! A coefficient in the secant bulk modulus fit [bar-1 degC-2]
-real, parameter :: SP001 = -2.040237e-6 ! A coefficient in the secant bulk modulus fit [bar-1 PSU-1]
-real, parameter :: SP011 = 6.128773e-8  ! A coefficient in the secant bulk modulus fit [bar-1 degC-1 PSU-1]
-real, parameter :: SP021 = 6.207323e-10 ! A coefficient in the secant bulk modulus fit [bar-1 degC-1 PSU-2]
+real, parameter :: Sp200 = 2.102898e-4  ! A coefficient in the secant bulk modulus fit [bar-1]
+real, parameter :: Sp210 = -1.202016e-5 ! A coefficient in the secant bulk modulus fit [bar-1 degC-1]
+real, parameter :: Sp220 = 1.394680e-7  ! A coefficient in the secant bulk modulus fit [bar-1 degC-2]
+real, parameter :: Sp201 = -2.040237e-6 ! A coefficient in the secant bulk modulus fit [bar-1 PSU-1]
+real, parameter :: Sp211 = 6.128773e-8  ! A coefficient in the secant bulk modulus fit [bar-1 degC-1 PSU-1]
+real, parameter :: Sp221 = 6.207323e-10 ! A coefficient in the secant bulk modulus fit [bar-1 degC-1 PSU-2]
 !>@}
 
 contains
@@ -93,11 +92,11 @@ contains
 !! using the UNESCO (1981) equation of state, as refit by Jackett and McDougall (1995).
 !! If rho_ref is present, rho is an anomaly from rho_ref.
 subroutine calculate_density_scalar_UNESCO(T, S, pressure, rho, rho_ref)
-  real,           intent(in)  :: T        !< Potential temperature relative to the surface [degC].
-  real,           intent(in)  :: S        !< Salinity [PSU].
-  real,           intent(in)  :: pressure !< pressure [Pa].
-  real,           intent(out) :: rho      !< In situ density [kg m-3].
-  real, optional, intent(in)  :: rho_ref  !< A reference density [kg m-3].
+  real,           intent(in)  :: T        !< Potential temperature relative to the surface [degC]
+  real,           intent(in)  :: S        !< Salinity [PSU]
+  real,           intent(in)  :: pressure !< Pressure [Pa]
+  real,           intent(out) :: rho      !< In situ density [kg m-3]
+  real, optional, intent(in)  :: rho_ref  !< A reference density [kg m-3]
 
   ! Local variables
   real, dimension(1) :: T0    ! A 1-d array with a copy of the potential temperature [degC]
@@ -119,51 +118,42 @@ end subroutine calculate_density_scalar_UNESCO
 !! using the UNESCO (1981) equation of state, as refit by Jackett and McDougall (1995).
 !! If rho_ref is present, rho is an anomaly from rho_ref.
 subroutine calculate_density_array_UNESCO(T, S, pressure, rho, start, npts, rho_ref)
-  real, dimension(:), intent(in)  :: T        !< potential temperature relative to the surface [degC].
-  real, dimension(:), intent(in)  :: S        !< salinity [PSU].
-  real, dimension(:), intent(in)  :: pressure !< pressure [Pa].
-  real, dimension(:), intent(out) :: rho      !< in situ density [kg m-3].
-  integer,            intent(in)  :: start    !< the starting point in the arrays.
-  integer,            intent(in)  :: npts     !< the number of values to calculate.
-  real,     optional, intent(in)  :: rho_ref  !< A reference density [kg m-3].
+  real, dimension(:), intent(in)  :: T        !< Potential temperature relative to the surface [degC]
+  real, dimension(:), intent(in)  :: S        !< Salinity [PSU]
+  real, dimension(:), intent(in)  :: pressure !< Pressure [Pa]
+  real, dimension(:), intent(out) :: rho      !< In situ density [kg m-3]
+  integer,            intent(in)  :: start    !< The starting index for calculations
+  integer,            intent(in)  :: npts     !< The number of values to calculate
+  real,     optional, intent(in)  :: rho_ref  !< A reference density [kg m-3]
 
   ! Local variables
-  real :: t_local     ! A copy of the temperature at a point [degC]
-  real :: t2, t3      ! Temperature squared [degC2] and cubed [degC3]
-  real :: t4, t5      ! Temperature to the 4th power [degC4] and 5th power [degC5]
-  real :: s_local     ! A copy of the salinity at a point [PSU]
-  real :: s32         ! The square root of salinity cubed [PSU3/2]
-  real :: s2          ! Salinity squared [PSU2].
-  real :: p1, p2      ! Pressure (in bars) to the 1st and 2nd power [bar] and [bar2].
-  real :: rho0        ! Density at 1 bar pressure [kg m-3].
-  real :: sig0        ! The anomaly of rho0 from R00 [kg m-3].
-  real :: ks          ! The secant bulk modulus [bar].
+  real :: t1   ! A copy of the temperature at a point [degC]
+  real :: s1   ! A copy of the salinity at a point [PSU]
+  real :: p1   ! Pressure converted to bars [bar]
+  real :: s12  ! The square root of salinity [PSU1/2]
+  real :: rho0 ! Density at 1 bar pressure [kg m-3]
+  real :: sig0 ! The anomaly of rho0 from R00 [kg m-3]
+  real :: ks   ! The secant bulk modulus [bar]
   integer :: j
 
   do j=start,start+npts-1
-    if (S(j) < -1.0e-10) then !Can we assume safely that this is a missing value?
-      rho(j) = 1000.0
-      cycle
-    endif
-
-    p1 = pressure(j)*1.0e-5 ; p2 = p1*p1
-    t_local = T(j) ; t2 = t_local*t_local ; t3 = t_local*t2 ; t4 = t2*t2 ; t5 = t3*t2
-    s_local = S(j) ; s2 = s_local*s_local ; s32 = s_local*sqrt(s_local)
+    p1 = pressure(j)*1.0e-5 ; t1 = T(j)
+    s1 = max(S(j), 0.0) ; s12 = sqrt(s1)
 
 !  Compute rho(s,theta,p=0) - (same as rho(s,t_insitu,p=0) ).
 
-    sig0 = R10*t_local + R20*t2 + R30*t3 + R40*t4 + R50*t5 + &
-           s_local*(R01 + R11*t_local + R21*t2 + R31*t3 + R41*t4) + &
-           s32*(R032 + R132*t_local + R232*t2) + R02*s2
+    sig0 = ( t1*(R10 + t1*(R20 + t1*(R30 + t1*(R40 + R50*t1)))) + &
+             s1*((R01 + t1*(R11 + t1*(R21 + t1*(R31 + R41*t1)))) + &
+                 (s12*(R032 + t1*(R132 + R232*t1)) + R02*s1)) )
     rho0 = R00 + sig0
 
 !  Compute rho(s,theta,p), first calculating the secant bulk modulus.
 
-    ks = S00 + S10*t_local + S20*t2 + S30*t3 + S40*t4 + s_local*(S01 + S11*t_local + S21*t2 + S31*t3) + &
-         s32*(S032 + S132*t_local + S232*t2) + &
-         p1*(Sp00 + Sp10*t_local + Sp20*t2 + Sp30*t3 + &
-             s_local*(Sp01 + Sp11*t_local + Sp21*t2) + Sp032*s32) + &
-         p2*(SP000 + SP010*t_local + SP020*t2 + s_local*(SP001 + SP011*t_local + SP021*t2))
+    ks = (S00 + ( t1*(S10 + t1*(S20 + t1*(S30 + S40*t1))) + &
+                  s1*((S01 + t1*(S11 + t1*(S21 + S31*t1))) + s12*(S032 + t1*(S132 + S232*t1))) )) + &
+         p1*( (Sp100 + ( t1*(Sp110 + t1*(Sp120 + Sp130*t1)) + &
+                         s1*((Sp101 + t1*(Sp111 + Sp121*t1)) + Sp1032*s12) )) + &
+              p1*(Sp200 + ( t1*(Sp210 + Sp220*t1) + s1*(Sp201 + t1*(Sp211 + Sp221*t1)) )) )
 
     if (present(rho_ref)) then
       rho(j) = ((R00 - rho_ref)*ks + (sig0*ks + p1*rho_ref)) / (ks - p1)
@@ -178,12 +168,11 @@ end subroutine calculate_density_array_UNESCO
 !! using the UNESCO (1981) equation of state, as refit by Jackett and McDougall (1995).
 !! If spv_ref is present, specvol is an anomaly from spv_ref.
 subroutine calculate_spec_vol_scalar_UNESCO(T, S, pressure, specvol, spv_ref)
-  real,           intent(in)  :: T        !< potential temperature relative to the surface
-                                          !! [degC].
-  real,           intent(in)  :: S        !< salinity [PSU].
-  real,           intent(in)  :: pressure !< pressure [Pa].
-  real,           intent(out) :: specvol  !< in situ specific volume [m3 kg-1].
-  real, optional, intent(in)  :: spv_ref  !< A reference specific volume [m3 kg-1].
+  real,           intent(in)  :: T        !< Potential temperature relative to the surface [degC]
+  real,           intent(in)  :: S        !< Salinity [PSU]
+  real,           intent(in)  :: pressure !< Pressure [Pa]
+  real,           intent(out) :: specvol  !< In situ specific volume [m3 kg-1]
+  real, optional, intent(in)  :: spv_ref  !< A reference specific volume [m3 kg-1]
 
   ! Local variables
   real, dimension(1) :: T0    ! A 1-d array with a copy of the potential temperature [degC]
@@ -202,51 +191,41 @@ end subroutine calculate_spec_vol_scalar_UNESCO
 !! using the UNESCO (1981) equation of state, as refit by Jackett and McDougall (1995).
 !! If spv_ref is present, specvol is an anomaly from spv_ref.
 subroutine calculate_spec_vol_array_UNESCO(T, S, pressure, specvol, start, npts, spv_ref)
-  real, dimension(:), intent(in)  :: T        !< potential temperature relative to the surface
-                                              !! [degC].
-  real, dimension(:), intent(in)  :: S        !< salinity [PSU].
-  real, dimension(:), intent(in)  :: pressure !< pressure [Pa].
-  real, dimension(:), intent(out) :: specvol  !< in situ specific volume [m3 kg-1].
-  integer,            intent(in)  :: start    !< the starting point in the arrays.
-  integer,            intent(in)  :: npts     !< the number of values to calculate.
-  real,     optional, intent(in)  :: spv_ref  !< A reference specific volume [m3 kg-1].
+  real, dimension(:), intent(in)  :: T        !< Potential temperature relative to the surface [degC]
+  real, dimension(:), intent(in)  :: S        !< Salinity [PSU]
+  real, dimension(:), intent(in)  :: pressure !< Pressure [Pa]
+  real, dimension(:), intent(out) :: specvol  !< In situ specific volume [m3 kg-1]
+  integer,            intent(in)  :: start    !< The starting index for calculations
+  integer,            intent(in)  :: npts     !< The number of values to calculate
+  real,     optional, intent(in)  :: spv_ref  !< A reference specific volume [m3 kg-1]
 
   ! Local variables
-  real :: t_local     ! A copy of the temperature at a point [degC]
-  real :: t2, t3      ! Temperature squared [degC2] and cubed [degC3]
-  real :: t4, t5      ! Temperature to the 4th power [degC4] and 5th power [degC5]
-  real :: s_local     ! A copy of the salinity at a point [PSU]
-  real :: s32         ! The square root of salinity cubed [PSU3/2]
-  real :: s2          ! Salinity squared [PSU2].
-  real :: p1, p2       ! Pressure (in bars) to the 1st and 2nd power [bar] and [bar2].
-  real :: rho0         ! Density at 1 bar pressure [kg m-3].
-  real :: ks           ! The secant bulk modulus [bar].
+  real :: t1   ! A copy of the temperature at a point [degC]
+  real :: s1   ! A copy of the salinity at a point [PSU]
+  real :: p1   ! Pressure converted to bars [bar]
+  real :: s12  ! The square root of salinity [PSU1/2]l553
+  real :: rho0 ! Density at 1 bar pressure [kg m-3]
+  real :: ks   ! The secant bulk modulus [bar]
   integer :: j
 
   do j=start,start+npts-1
-    if (S(j) < -1.0e-10) then !Can we assume safely that this is a missing value?
-      specvol(j) = 0.001
-      if (present(spv_ref)) specvol(j) = 0.001 - spv_ref
-      cycle
-    endif
 
-    p1 = pressure(j)*1.0e-5 ; p2 = p1*p1
-    t_local = T(j) ; t2 = t_local*t_local ; t3 = t_local*t2 ; t4 = t2*t2 ; t5 = t3*t2
-    s_local = S(j) ; s2 = s_local*s_local ; s32 = s_local*sqrt(s_local)
+    p1 = pressure(j)*1.0e-5 ; t1 = T(j)
+    s1 = max(S(j), 0.0) ; s12 = sqrt(s1)
 
-!  Compute rho(s,theta,p=0) - (same as rho(s,t_insitu,p=0) ).
+    ! Compute rho(s,theta,p=0), which is the same as rho(s,t_insitu,p=0).
 
-    rho0 = R00 + R10*t_local + R20*t2 + R30*t3 + R40*t4 + R50*t5 + &
-           s_local*(R01 + R11*t_local + R21*t2 + R31*t3 + R41*t4) + &
-           s32*(R032 + R132*t_local + R232*t2) + R02*s2
+    rho0 = R00 + ( t1*(R10 + t1*(R20 + t1*(R30 + t1*(R40 + R50*t1)))) + &
+                   s1*((R01 + t1*(R11 + t1*(R21 + t1*(R31 + R41*t1)))) + &
+                       (s12*(R032 + t1*(R132 + R232*t1)) + R02*s1)) )
 
-!  Compute rho(s,theta,p), first calculating the secant bulk modulus.
+    ! Compute rho(s,theta,p), first calculating the secant bulk modulus.
 
-    ks = S00 + S10*t_local + S20*t2 + S30*t3 + S40*t4 + s_local*(S01 + S11*t_local + S21*t2 + S31*t3) + &
-         s32*(S032 + S132*t_local + S232*t2) + &
-         p1*(Sp00 + Sp10*t_local + Sp20*t2 + Sp30*t3 + &
-             s_local*(Sp01 + Sp11*t_local + Sp21*t2) + Sp032*s32) + &
-         p2*(SP000 + SP010*t_local + SP020*t2 + s_local*(SP001 + SP011*t_local + SP021*t2))
+    ks = (S00 + ( t1*(S10 + t1*(S20 + t1*(S30 + S40*t1))) + &
+                  s1*((S01 + t1*(S11 + t1*(S21 + S31*t1))) + s12*(S032 + t1*(S132 + S232*t1))) )) + &
+         p1*( (Sp100 + ( t1*(Sp110 + t1*(Sp120 + Sp130*t1)) + &
+                         s1*((Sp101 + t1*(Sp111 + Sp121*t1)) + Sp1032*s12) )) + &
+              p1*(Sp200 + ( t1*(Sp210 + Sp220*t1) + s1*(Sp201 + t1*(Sp211 + Sp221*t1)) )) )
 
     if (present(spv_ref)) then
       specvol(j) = (ks*(1.0 - (rho0*spv_ref)) - p1) / (rho0*ks)
@@ -257,73 +236,63 @@ subroutine calculate_spec_vol_array_UNESCO(T, S, pressure, specvol, start, npts,
 end subroutine calculate_spec_vol_array_UNESCO
 
 
-!> This subroutine calculates the partial derivatives of density
-!! with potential temperature and salinity.
+!> Calculate the partial derivatives of density with potential temperature and salinity
+!! using the UNESCO (1981) equation of state, as refit by Jackett and McDougall (1995).
 subroutine calculate_density_derivs_UNESCO(T, S, pressure, drho_dT, drho_dS, start, npts)
-  real,    intent(in),  dimension(:) :: T        !< Potential temperature relative to the surface
-                                                 !! [degC].
-  real,    intent(in),  dimension(:) :: S        !< Salinity [PSU].
-  real,    intent(in),  dimension(:) :: pressure !< Pressure [Pa].
+  real,    intent(in),  dimension(:) :: T        !< Potential temperature relative to the surface [degC]
+  real,    intent(in),  dimension(:) :: S        !< Salinity [PSU]
+  real,    intent(in),  dimension(:) :: pressure !< Pressure [Pa]
   real,    intent(out), dimension(:) :: drho_dT  !< The partial derivative of density with potential
-                                                 !! temperature [kg m-3 degC-1].
+                                                 !! temperature [kg m-3 degC-1]
   real,    intent(out), dimension(:) :: drho_dS  !< The partial derivative of density with salinity,
-                                                 !! in [kg m-3 PSU-1].
-  integer, intent(in)                :: start    !< The starting point in the arrays.
-  integer, intent(in)                :: npts     !< The number of values to calculate.
+                                                 !! in [kg m-3 PSU-1]
+  integer, intent(in)                :: start    !< The starting index for calculations
+  integer, intent(in)                :: npts     !< The number of values to calculate
 
   ! Local variables
-  real :: t_local     ! A copy of the temperature at a point [degC]
-  real :: t2, t3      ! Temperature squared [degC2] and cubed [degC3]
-  real :: t4, t5      ! Temperature to the 4th power [degC4] and 5th power [degC5]
-  real :: s12         ! The square root of salinity [PSU1/2]
-  real :: s_local     ! A copy of the salinity at a point [PSU]
-  real :: s32         ! The square root of salinity cubed [PSU3/2]
-  real :: s2          ! Salinity squared [PSU2].
-  real :: p1, p2          ! Pressure to the 1st & 2nd power [bar] and [bar2].
-  real :: rho0            ! Density at 1 bar pressure [kg m-3].
-  real :: ks              ! The secant bulk modulus [bar].
-  real :: drho0_dT        ! Derivative of rho0 with T [kg m-3 degC-1].
-  real :: drho0_dS        ! Derivative of rho0 with S [kg m-3 PSU-1].
-  real :: dks_dT          ! Derivative of ks with T [bar degC-1].
-  real :: dks_dS          ! Derivative of ks with S [bar psu-1].
-  real :: denom           ! 1.0 / (ks - p1) [bar-1].
+  real :: t1       ! A copy of the temperature at a point [degC]
+  real :: s1       ! A copy of the salinity at a point [PSU]
+  real :: p1       ! Pressure converted to bars [bar]
+  real :: s12      ! The square root of salinity [PSU1/2]
+  real :: rho0     ! Density at 1 bar pressure [kg m-3]
+  real :: ks       ! The secant bulk modulus [bar]
+  real :: drho0_dT ! Derivative of rho0 with T [kg m-3 degC-1]
+  real :: drho0_dS ! Derivative of rho0 with S [kg m-3 PSU-1]
+  real :: dks_dT   ! Derivative of ks with T [bar degC-1]
+  real :: dks_dS   ! Derivative of ks with S [bar psu-1]
+  real :: denom    ! 1.0 / (ks - p1) [bar-1]
   integer :: j
 
   do j=start,start+npts-1
-    if (S(j) < -1.0e-10) then !Can we assume safely that this is a missing value?
-      drho_dT(j) = 0.0 ; drho_dS(j) = 0.0
-      cycle
-    endif
 
-    p1 = pressure(j)*1.0e-5 ; p2 = p1*p1
-    t_local = T(j) ; t2 = t_local*t_local ; t3 = t_local*t2 ; t4 = t2*t2 ; t5 = t3*t2
-    s_local = S(j) ; s2 = s_local*s_local ; s12 = sqrt(s_local) ; s32 = s_local*s12
+    p1 = pressure(j)*1.0e-5 ; t1 = T(j)
+    s1 = max(S(j), 0.0) ; s12 = sqrt(s1)
 
-!       compute rho(s,theta,p=0) - (same as rho(s,t_insitu,p=0) )
+    ! Compute rho(s,theta,p=0), which is the same as rho(s,t_insitu,p=0).
 
-    rho0 = R00 + R10*t_local + R20*t2 + R30*t3 + R40*t4 + R50*t5 + &
-           s_local*(R01 + R11*t_local + R21*t2 + R31*t3 + R41*t4) + &
-           s32*(R032 + R132*t_local + R232*t2) + R02*s2
-    drho0_dT = R10 + 2.0*R20*t_local + 3.0*R30*t2 + 4.0*R40*t3 + 5.0*R50*t4 + &
-               s_local*(R11 + 2.0*R21*t_local + 3.0*R31*t2 + 4.0*R41*t3) + &
-               s32*(R132 + 2.0*R232*t_local)
-    drho0_dS = (R01 + R11*t_local + R21*t2 + R31*t3 + R41*t4) + &
-               1.5*s12*(R032 + R132*t_local + R232*t2) + 2.0*R02*s_local
+    rho0 = R00 + ( t1*(R10 + t1*(R20 + t1*(R30 + t1*(R40 + R50*t1)))) + &
+                   s1*((R01 + t1*(R11 + t1*(R21 + t1*(R31 + R41*t1)))) + &
+                       (s12*(R032 + t1*(R132 + R232*t1)) + R02*s1)) )
+    drho0_dT = R10 + ( t1*(2.0*R20 + t1*(3.0*R30 + t1*(4.0*R40 + 5.0*R50*t1))) + &
+                       s1*(R11 + (t1*(2.0*R21 + t1*(3.0*R31 + 4.0*R41*t1)) + &
+                                  s12*(R132 + 2.0*R232*t1))) )
+    drho0_dS = R01 + ( t1*(R11 + t1*(R21 + t1*(R31 + R41*t1))) + &
+                       (1.5*s12*(R032 + t1*(R132 + R232*t1)) + 2.0*R02*s1) )
 
-!       compute rho(s,theta,p)
+    ! Compute rho(s,theta,p), first calculating the secant bulk modulus.
 
-    ks = S00 + S10*t_local + S20*t2 + S30*t3 + S40*t4 + s_local*(S01 + S11*t_local + S21*t2 + S31*t3) + &
-         s32*(S032 + S132*t_local + S232*t2) + &
-         p1*(Sp00 + Sp10*t_local + Sp20*t2 + Sp30*t3 + &
-             s_local*(Sp01 + Sp11*t_local + Sp21*t2) + Sp032*s32) + &
-         p2*(SP000 + SP010*t_local + SP020*t2 + s_local*(SP001 + SP011*t_local + SP021*t2))
-    dks_dT = S10 + 2.0*S20*t_local + 3.0*S30*t2 + 4.0*S40*t3 + &
-             s_local*(S11 + 2.0*S21*t_local + 3.0*S31*t2) + s32*(S132 + 2.0*S232*t_local) + &
-             p1*(Sp10 + 2.0*Sp20*t_local + 3.0*Sp30*t2 + s_local*(Sp11 + 2.0*Sp21*t_local)) + &
-             p2*(SP010 + 2.0*SP020*t_local + s_local*(SP011 + 2.0*SP021*t_local))
-    dks_dS = (S01 + S11*t_local + S21*t2 + S31*t3) + 1.5*s12*(S032 + S132*t_local + S232*t2) + &
-             p1*(Sp01 + Sp11*t_local + Sp21*t2 + 1.5*Sp032*s12) + &
-             p2*(SP001 + SP011*t_local + SP021*t2)
+    ks = ( S00 + (t1*(S10 + t1*(S20 + t1*(S30 + S40*t1))) + &
+                  s1*((S01 + t1*(S11 + t1*(S21 + S31*t1))) + s12*(S032 + t1*(S132 + S232*t1)))) ) + &
+         p1*( (Sp100 + ( t1*(Sp110 + t1*(Sp120 + Sp130*t1)) + &
+                         s1*((Sp101 + t1*(Sp111 + Sp121*t1)) + Sp1032*s12) )) + &
+              p1*(Sp200 + ( t1*(Sp210 + Sp220*t1) + s1*(Sp201 + t1*(Sp211 + Sp221*t1)) )) )
+    dks_dT = ( S10 + (t1*(2.0*S20 + t1*(3.0*S30 + t1*4.0*S40)) + &
+                      s1*((S11 + t1*(2.0*S21 + 3.0*S31*t1)) + s12*(S132 + 2.0*S232*t1))) ) + &
+             p1*((Sp110 + t1*(2.0*Sp120 + 3.0*Sp130*t1) + s1*(Sp111 + 2.0*Sp121*t1)) + &
+                 p1*(Sp210 + 2.0*Sp220*t1 + s1*(Sp211 + 2.0*Sp221*t1)))
+    dks_dS = ( S01 + (t1*(S11 + t1*(S21 + S31*t1)) + 1.5*s12*(S032 + t1*(S132 + S232*t1))) ) + &
+             p1*((Sp101 + t1*(Sp111 + Sp121*t1) + 1.5*Sp1032*s12) + &
+                 p1*(Sp201 + t1*(Sp211 + Sp221*t1)))
 
     denom = 1.0 / (ks - p1)
     drho_dT(j) = denom*(ks*drho0_dT - rho0*p1*denom*dks_dT)
@@ -332,65 +301,57 @@ subroutine calculate_density_derivs_UNESCO(T, S, pressure, drho_dT, drho_dS, sta
 
 end subroutine calculate_density_derivs_UNESCO
 
-!> This subroutine computes the in situ density of sea water (rho)
-!! and the compressibility (drho/dp == C_sound^-2) at the given
-!! salinity, potential temperature, and pressure.
+!> Compute the in situ density of sea water (rho) and the compressibility (drho/dp == C_sound^-2)
+!! at the given salinity, potential temperature and pressure using the UNESCO (1981)
+!! equation of state, as refit by Jackett and McDougall (1995).
 subroutine calculate_compress_UNESCO(T, S, pressure, rho, drho_dp, start, npts)
   real,    intent(in),  dimension(:) :: T        !< Potential temperature relative to the surface
-                                                 !! [degC].
-  real,    intent(in),  dimension(:) :: S        !< Salinity [PSU].
-  real,    intent(in),  dimension(:) :: pressure !< Pressure [Pa].
-  real,    intent(out), dimension(:) :: rho      !< In situ density [kg m-3].
+                                                 !! [degC]
+  real,    intent(in),  dimension(:) :: S        !< Salinity [PSU]
+  real,    intent(in),  dimension(:) :: pressure !< Pressure [Pa]
+  real,    intent(out), dimension(:) :: rho      !< In situ density [kg m-3]
   real,    intent(out), dimension(:) :: drho_dp  !< The partial derivative of density with pressure
                                                  !! (also the inverse of the square of sound speed)
-                                                 !! [s2 m-2].
-  integer, intent(in)                :: start    !< The starting point in the arrays.
-  integer, intent(in)                :: npts     !< The number of values to calculate.
+                                                 !! [s2 m-2]
+  integer, intent(in)                :: start    !< The starting index for calculations
+  integer, intent(in)                :: npts     !< The number of values to calculate
 
   ! Local variables
-  real :: t_local     ! A copy of the temperature at a point [degC]
-  real :: t2, t3      ! Temperature squared [degC2] and cubed [degC3]
-  real :: t4, t5      ! Temperature to the 4th power [degC4] and 5th power [degC5]
-  real :: s_local     ! A copy of the salinity at a point [PSU]
-  real :: s32         ! The square root of salinity cubed [PSU3/2]
-  real :: s2          ! Salinity squared [PSU2].
-  real :: p1, p2  ! Pressure to the 1st & 2nd power [bar] and [bar2].
-  real :: rho0    ! Density at 1 bar pressure [kg m-3].
-  real :: ks      ! The secant bulk modulus [bar].
-  real :: ks_0    ! The secant bulk modulus at zero pressure [bar].
+  real :: t1      ! A copy of the temperature at a point [degC]
+  real :: s1      ! A copy of the salinity at a point [PSU]
+  real :: p1      ! Pressure converted to bars [bar]
+  real :: s12     ! The square root of salinity [PSU1/2]
+  real :: rho0    ! Density at 1 bar pressure [kg m-3]
+  real :: ks      ! The secant bulk modulus [bar]
+  real :: ks_0    ! The secant bulk modulus at zero pressure [bar]
   real :: ks_1    ! The linear pressure dependence of the secant bulk modulus at zero pressure [nondim]
   real :: ks_2    ! The quadratic pressure dependence of the secant bulk modulus at zero pressure [bar-1]
   real :: dks_dp  ! The derivative of the secant bulk modulus with pressure [nondim]
   integer :: j
 
   do j=start,start+npts-1
-    if (S(j) < -1.0e-10) then !Can we assume safely that this is a missing value?
-      rho(j) = 1000.0 ; drho_dP(j) = 0.0
-      cycle
-    endif
+    p1 = pressure(j)*1.0e-5 ; t1 = T(j)
+    s1 = max(S(j), 0.0) ; s12 = sqrt(s1)
 
-    p1 = pressure(j)*1.0e-5 ; p2 = p1*p1
-    t_local = T(j) ; t2 = t_local*t_local ; t3 = t_local*t2 ; t4 = t2*t2 ; t5 = t3*t2
-    s_local = S(j) ; s2 = s_local*s_local ; s32 = s_local*sqrt(s_local)
+    ! Compute rho(s,theta,p=0), which is the same as rho(s,t_insitu,p=0).
 
-!  Compute rho(s,theta,p=0) - (same as rho(s,t_insitu,p=0) ).
+    rho0 = R00 + ( t1*(R10 + t1*(R20 + t1*(R30 + t1*(R40 + R50*t1)))) + &
+                   s1*((R01 + t1*(R11 + t1*(R21 + t1*(R31 + R41*t1)))) + &
+                       (s12*(R032 + t1*(R132 + R232*t1)) + R02*s1)) )
 
-    rho0 = R00 + R10*t_local + R20*t2 + R30*t3 + R40*t4 + R50*t5 + &
-           s_local*(R01 + R11*t_local + R21*t2 + R31*t3 + R41*t4) + &
-           s32*(R032 + R132*t_local + R232*t2) + R02*s2
+    ! Calculate the secant bulk modulus and its derivative with pressure.
+    ks_0 = S00 + ( t1*(S10 + t1*(S20 + t1*(S30 + S40*t1))) + &
+                   s1*((S01 + t1*(S11 + t1*(S21 + S31*t1))) + s12*(S032 + t1*(S132 + S232*t1))) )
+    ks_1 = Sp100 + ( t1*(Sp110 + t1*(Sp120 + Sp130*t1)) + &
+                     s1*((Sp101 + t1*(Sp111 + Sp121*t1)) + Sp1032*s12) )
+    ks_2 = Sp200 + ( t1*(Sp210 + Sp220*t1) + s1*(Sp201 + t1*(Sp211 + Sp221*t1)) )
 
-!  Compute rho(s,theta,p), first calculating the secant bulk modulus.
-    ks_0 = S00 + S10*t_local + S20*t2 + S30*t3 + S40*t4 + &
-           s_local*(S01 + S11*t_local + S21*t2 + S31*t3) + s32*(S032 + S132*t_local + S232*t2)
-    ks_1 = Sp00 + Sp10*t_local + Sp20*t2 + Sp30*t3 + &
-           s_local*(Sp01 + Sp11*t_local + Sp21*t2) + Sp032*s32
-    ks_2 = SP000 + SP010*t_local + SP020*t2 + s_local*(SP001 + SP011*t_local + SP021*t2)
-
-    ks = ks_0 + p1*ks_1 + p2*ks_2
+    ks = ks_0 + p1*(ks_1 + p1*ks_2)
     dks_dp = ks_1 + 2.0*p1*ks_2
 
+    ! Compute the in situ density, rho(s,theta,p), and its derivative with pressure.
     rho(j) = rho0*ks / (ks - p1)
-! The factor of 1.0e-5 is because pressure here is in bars, not Pa.
+    ! The factor of 1.0e-5 is because pressure here is in bars, not Pa.
     drho_dp(j) = 1.0e-5 * (rho(j) / (ks - p1)) * (1.0 - dks_dp*p1/ks)
   enddo
 end subroutine calculate_compress_UNESCO
@@ -463,36 +424,36 @@ subroutine calculate_density_second_derivs_array_UNESCO(T, S, P, drho_ds_ds, drh
     drho0_dS = R01 + ( t1*(R11 + t1*(R21 + t1*(R31 + R41*t1))) + &
                        (1.5*s12*(R032 + t1*(R132 + R232*t1)) + 2.0*R02*s1) )
     d2rho0_dS2 = 0.75*(R032 + t1*(R132 + R232*t1))*I_s12 + 2.0*R02
-    d2rho0_dSdT = R11 + ( t1*(2.*R21 + t1*(3.*R31 + 4.*R41*t1)) + 1.5*s12*(R132 + 2.*R232*t1) )
+    d2rho0_dSdT = R11 + ( t1*(2.0*R21 + t1*(3.0*R31 + 4.0*R41*t1)) + 1.5*s12*(R132 + 2.0*R232*t1) )
     d2rho0_dT2 = 2.0*R20 + ( t1*(6.0*R30 + t1*(12.0*R40 + 20.0*R50*t1)) + &
                              s1*((2.0*R21 + t1*(6.0*R31 + 12.0*R41*t1)) + 2.0*R232*s12) )
 
     !  Calculate the secant bulk modulus and its derivatives
     ks_0 = S00 + ( t1*(S10 + t1*(S20 + t1*(S30 + S40*t1))) + &
                    s1*((S01 + t1*(S11 + t1*(S21 + S31*t1))) + s12*(S032 + t1*(S132 + S232*t1))) )
-    ks_1 = Sp00 + ( t1*(Sp10 + t1*(Sp20 + Sp30*t1)) + &
-                    s1*((Sp01 + t1*(Sp11 + Sp21*t1)) + Sp032*s12) )
-    ks_2 = SP000 + ( t1*(SP010 + SP020*t1) + s1*(SP001 + t1*(SP011 + SP021*t1)) )
+    ks_1 = Sp100 + ( t1*(Sp110 + t1*(Sp120 + Sp130*t1)) + &
+                     s1*((Sp101 + t1*(Sp111 + Sp121*t1)) + Sp1032*s12) )
+    ks_2 = Sp200 + ( t1*(Sp210 + Sp220*t1) + s1*(Sp201 + t1*(Sp211 + Sp221*t1)) )
 
     ks = ks_0 + p1*(ks_1 + p1*ks_2)
     dks_dp = ks_1 + 2.0*p1*ks_2
     dks_dT = (S10 + ( t1*(2.0*S20 + t1*(3.0*S30 + t1*4.0*S40)) + &
                       s1*((S11 + t1*(2.0*S21 + 3.0*S31*t1)) + s12*(S132 + 2.0*S232*t1)) )) + &
-             p1*((Sp10 + t1*(2.0*Sp20 + 3.0*Sp30*t1) + s1*(Sp11 + 2.0*Sp21*t1)) + &
-                 p1*(SP010 + 2.0*SP020*t1 + s1*(SP011 + 2.0*SP021*t1)))
+             p1*((Sp110 + t1*(2.0*Sp120 + 3.0*Sp130*t1) + s1*(Sp111 + 2.0*Sp121*t1)) + &
+                 p1*(Sp210 + 2.0*Sp220*t1 + s1*(Sp211 + 2.0*Sp221*t1)))
     dks_dS = (S01 + ( t1*(S11 + t1*(S21 + S31*t1)) + 1.5*s12*(S032 + t1*(S132 + S232*t1)) )) + &
-             p1*((Sp01 + t1*(Sp11 + Sp21*t1) + 1.5*Sp032*s12) + &
-                 p1*(SP001 + t1*(SP011 + SP021*t1)))
-    d2ks_dS2 = 0.75*((S032 + t1*(S132 + S232*t1)) + p1*Sp032)*I_s12
-    d2ks_dSdT = (S11 + ( t1*(2.*S21 + 3.*S31*t1) + 1.5*s12*(S132 + 2.*S232*t1) )) + &
-                p1*((Sp11 + 2.*Sp21*t1) +  p1*(SP011 + 2.0*SP021*t1))
+             p1*((Sp101 + t1*(Sp111 + Sp121*t1) + 1.5*Sp1032*s12) + &
+                 p1*(Sp201 + t1*(Sp211 + Sp221*t1)))
+    d2ks_dS2 = 0.75*((S032 + t1*(S132 + S232*t1)) + p1*Sp1032)*I_s12
+    d2ks_dSdT = (S11 + ( t1*(2.0*S21 + 3.0*S31*t1) + 1.5*s12*(S132 + 2.0*S232*t1) )) + &
+                p1*((Sp111 + 2.0*Sp121*t1) +  p1*(Sp211 + 2.0*Sp221*t1))
     d2ks_dT2 = 2.0*(S20 + ( t1*(3.0*S30 + 6.0*S40*t1) + s1*((S21 + 3.0*S31*t1) + S232*s12) )) + &
-               2.0*p1*((Sp20 + (3.0*Sp30*t1 + Sp21*s1)) + p1*(SP020 + SP021*s1))
+               2.0*p1*((Sp120 + (3.0*Sp130*t1 + Sp121*s1)) + p1*(Sp220 + Sp221*s1))
 
-    d2ks_dSdp = (Sp01 + (t1*(Sp11 + Sp21*t1) + 1.5*Sp032*s12)) + &
-                2.*p1*(SP001 + t1*(SP011 + SP021*t1))
-    d2ks_dTdp = (Sp10 + (t1*(2.0*Sp20 + 3.0*Sp30*t1) + s1*(Sp11 + 2.0*Sp21*t1))) + &
-                2.*p1*(SP010 + 2.0*SP020*t1 + s1*(SP011 + 2.0*SP021*t1))
+    d2ks_dSdp = (Sp101 + (t1*(Sp111 + Sp121*t1) + 1.5*Sp1032*s12)) + &
+                2.0*p1*(Sp201 + t1*(Sp211 + Sp221*t1))
+    d2ks_dTdp = (Sp110 + (t1*(2.0*Sp120 + 3.0*Sp130*t1) + s1*(Sp111 + 2.0*Sp121*t1))) + &
+                2.0*p1*(Sp210 + 2.0*Sp220*t1 + s1*(Sp211 + 2.0*Sp221*t1))
     I_denom = 1.0 / (ks - p1)
 
     ! Expressions for density and its first derivatives are copied here for reference:
@@ -521,13 +482,14 @@ subroutine calculate_density_second_derivs_array_UNESCO(T, S, P, drho_ds_ds, drh
 
 end subroutine calculate_density_second_derivs_array_UNESCO
 
-!> Second derivatives of density with respect to temperature, salinity and pressure for scalar inputs.
+!> Second derivatives of density with respect to temperature, salinity and pressure for scalar inputs
+!! using the UNESCO (1981) equation of state, as refit by Jackett and McDougall (1995).
 !! Inputs are promoted to 1-element arrays and outputs are demoted to scalars.
 subroutine calculate_density_second_derivs_scalar_UNESCO(T, S, P, drho_ds_ds, drho_ds_dt, drho_dt_dt, &
                                                          drho_ds_dp, drho_dt_dp)
   real, intent(in   ) :: T          !< Potential temperature referenced to 0 dbar
   real, intent(in   ) :: S          !< Salinity [PSU]
-  real, intent(in   ) :: P          !< pressure [Pa]
+  real, intent(in   ) :: P          !< Pressure [Pa]
   real, intent(  out) :: drho_ds_ds !< Partial derivative of beta with respect
                                     !! to S [kg m-3 PSU-2]
   real, intent(  out) :: drho_ds_dt !< Partial derivative of beta with respect
@@ -567,13 +529,13 @@ end subroutine calculate_density_second_derivs_scalar_UNESCO
 !!
 !! \section section_EOS_UNESCO UNESCO (Jackett & McDougall) equation of state
 !!
-!! The UNESCO (1981) equation of state is an interationally defined standard fit valid over the
-!! range of pressures up to 10000 dbar, tempertures between the freezing point and 40 degC, and
+!! The UNESCO (1981) equation of state is an internationally defined standard fit valid over the
+!! range of pressures up to 10000 dbar, temperatures between the freezing point and 40 degC, and
 !! salinities between 0 and 42 PSU.  Unfortunately, these expressions used in situ temperatures,
 !! whereas ocean models (including MOM6) effectively use potential temperatures as their state
 !! variables.  To avoid needing multiple conversions, Jackett and McDougall (1995) refit the
 !! UNESCO equation of state to take potential temperature as a state variable, over the same
-!! valid range and funtional form as the original UNESCO expressions.  It is this refit from
+!! valid range and functional form as the original UNESCO expressions.  It is this refit from
 !! Jackett and McDougall (1995) that is coded up in this module.
 !!
 !! The functional form of the equation of state includes terms proportional to salinity to the
@@ -583,13 +545,17 @@ end subroutine calculate_density_second_derivs_scalar_UNESCO
 !! was chosen to imply a contribution that is smaller than numerical roundoff in the expression
 !! for density, which is the field for which the UNESCO equation of state was originally derived.
 !!
-!! Originally coded in 1999 by J. Stephens.
+!! Originally coded in 1999 by J. Stephens, revised in 2023 to unambiguously specify the order
+!! of arithmetic with parenthesis in every real sum of three or more terms.
 !!
 !! \subsection section_EOS_UNESCO_references References
 !!
-!! Jackett, D. and T. McDougall, 1995: J. Atmos. Ocean. Tech., 12, 381-389.
+!! Gill, A. E., 1982: Atmosphere-Ocean Dynamics. Academic Press, 662 pp.
+!!
+!! Jackett, D. and T. McDougall, 1995: Minimal adjustment of hydrographic profiles to
+!!     achieve static stability.  J. Atmos. Ocean. Tech., 12, 381-389.
 !!
 !! UNESCO, 1981: Tenth report of the joint panel on oceanographic tables and standards.
-!!    UNESCO Technical Palers in Maricen Sci. No. 36, UNESCO, Paris.
+!!    UNESCO Technical Papers in Marine Sci. No. 36, UNESCO, Paris.
 
 end module MOM_EOS_UNESCO
