@@ -14,38 +14,38 @@ public calculate_density_second_derivs_nemo
 
 !> Compute the in situ density of sea water [kg m-3], or its anomaly with respect to
 !! a reference density, from absolute salinity [g kg-1], conservative temperature [degC],
-!! and pressure [Pa], using the expressions derived for use with NEMO
+!! and pressure [Pa], using the expressions for density from Roquet et al. (2015)
 interface calculate_density_nemo
   module procedure calculate_density_scalar_nemo, calculate_density_array_nemo
 end interface calculate_density_nemo
 
 !> For a given thermodynamic state, return the derivatives of density with conservative temperature
-!! and absolute salinity, the expressions derived for use with NEMO
+!! and absolute salinity, using the expressions for density from Roquet et al. (2015)
 interface calculate_density_derivs_nemo
   module procedure calculate_density_derivs_scalar_nemo, calculate_density_derivs_array_nemo
 end interface calculate_density_derivs_nemo
 
-!> Compute the second derivatives of density with various combinations
-!! of temperature, salinity, and pressure
+!> Compute the second derivatives of density with various combinations of temperature,
+!! salinity, and pressure using the expressions for density from Roquet et al. (2015)
 interface calculate_density_second_derivs_nemo
   module procedure calculate_density_second_derivs_scalar_nemo, calculate_density_second_derivs_array_nemo
 end interface calculate_density_second_derivs_nemo
 
-real, parameter :: Pa2db  = 1.e-4 !< Conversion factor between Pa and dbar [Pa dbar-1]
-!>@{ Parameters in the NEMO equation of state
-real, parameter :: rdeltaS = 32.    ! An offset to salinity before taking its square root [g kg-1]
-real, parameter :: r1_S0  = 0.875/35.16504  ! The inverse of a plausible range of oceanic salinities [kg g-1]
-real, parameter :: r1_T0  = 1./40.  ! The inverse of a plausible range of oceanic temperatures [degC-1]
-real, parameter :: r1_P0  = 1.e-4   ! The inverse of a plausible range of oceanic pressures [dbar-1]
-real, parameter :: R00 = 4.6494977072e+01  ! Contribution to zr0 proportional to zp [kg m-3]
-real, parameter :: R01 = -5.2099962525     ! Contribution to zr0 proportional to zp**2 [kg m-3]
-real, parameter :: R02 = 2.2601900708e-01  ! Contribution to zr0 proportional to zp**3 [kg m-3]
-real, parameter :: R03 = 6.4326772569e-02  ! Contribution to zr0 proportional to zp**4 [kg m-3]
-real, parameter :: R04 = 1.5616995503e-02  ! Contribution to zr0 proportional to zp**5 [kg m-3]
-real, parameter :: R05 = -1.7243708991e-03 ! Contribution to zr0 proportional to zp**6 [kg m-3]
+real, parameter :: Pa2db  = 1.e-4 !< Conversion factor between Pa and dbar [dbar Pa-1]
+!>@{ Parameters in the NEMO (Roquet density) equation of state
+real, parameter :: rdeltaS = 32.           ! An offset to salinity before taking its square root [g kg-1]
+real, parameter :: r1_S0 = 0.875/35.16504  ! The inverse of a plausible range of oceanic salinities [kg g-1]
+real, parameter :: r1_T0 = 1./40.          ! The inverse of a plausible range of oceanic temperatures [degC-1]
+real, parameter :: r1_P0 = 1.e-4           ! The inverse of a plausible range of oceanic pressures [dbar-1]
+real, parameter :: R00 = 4.6494977072e+01  ! Contribution to rho00p proportional to zp [kg m-3]
+real, parameter :: R01 = -5.2099962525     ! Contribution to rho00p proportional to zp**2 [kg m-3]
+real, parameter :: R02 = 2.2601900708e-01  ! Contribution to rho00p proportional to zp**3 [kg m-3]
+real, parameter :: R03 = 6.4326772569e-02  ! Contribution to rho00p proportional to zp**4 [kg m-3]
+real, parameter :: R04 = 1.5616995503e-02  ! Contribution to rho00p proportional to zp**5 [kg m-3]
+real, parameter :: R05 = -1.7243708991e-03 ! Contribution to rho00p proportional to zp**6 [kg m-3]
 
 ! The following terms are contributions to density as a function of the normalized square root of salinity
-! with an offset (zs),  temperature (zt) and pressure, with a contribution EOSabc * zs**a * zt**b * zp**c
+! with an offset (zs), temperature (zt) and pressure (zp), with a contribution EOSabc * zs**a * zt**b * zp**c
 real, parameter :: EOS000 = 8.0189615746e+02  ! A constant density contribution [kg m-3]
 real, parameter :: EOS100 = 8.6672408165e+02  ! Coefficient of the EOS proportional to zs [kg m-3]
 real, parameter :: EOS200 = -1.7864682637e+03 ! Coefficient of the EOS proportional to zs**2 [kg m-3]
@@ -174,16 +174,15 @@ real, parameter :: BET003 = 0.5*EOS103*r1_S0  ! Coefficient of the drho_dS fit z
 
 contains
 
-!> This subroutine computes the in situ density of sea water (rho in
-!! [kg m-3]) from absolute salinity (S [g kg-1]), conservative temperature
-!! (T [degC]), and pressure [Pa].  It uses the expressions derived for use
-!! with NEMO.
+!> This subroutine computes the in situ density of sea water (rho in [kg m-3])
+!! from absolute salinity (S [g kg-1]), conservative temperature (T [degC])
+!! and pressure [Pa], using the density polynomial fit EOS from Roquet et al. (2015).
 subroutine calculate_density_scalar_nemo(T, S, pressure, rho, rho_ref)
-  real,           intent(in)  :: T        !< Conservative temperature [degC].
-  real,           intent(in)  :: S        !< Absolute salinity [g kg-1].
-  real,           intent(in)  :: pressure !< pressure [Pa].
-  real,           intent(out) :: rho      !< In situ density [kg m-3].
-  real, optional, intent(in)  :: rho_ref  !< A reference density [kg m-3].
+  real,           intent(in)  :: T        !< Conservative temperature [degC]
+  real,           intent(in)  :: S        !< Absolute salinity [g kg-1]
+  real,           intent(in)  :: pressure !< Pressure [Pa]
+  real,           intent(out) :: rho      !< In situ density [kg m-3]
+  real, optional, intent(in)  :: rho_ref  !< A reference density [kg m-3]
 
   real, dimension(1) :: T0    ! A 1-d array with a copy of the conservative temperature [degC]
   real, dimension(1) :: S0    ! A 1-d array with a copy of the absolute salinity [g kg-1]
@@ -199,32 +198,31 @@ subroutine calculate_density_scalar_nemo(T, S, pressure, rho, rho_ref)
 
 end subroutine calculate_density_scalar_nemo
 
-!> This subroutine computes the in situ density of sea water (rho in
-!! [kg m-3]) from absolute salinity (S [g kg-1]), conservative temperature
-!! (T [degC]), and pressure [Pa].  It uses the expressions derived for use
-!! with NEMO.
+!> This subroutine computes an array of in situ densities of sea water (rho in [kg m-3])
+!! from absolute salinity (S [g kg-1]), conservative temperature (T [degC]), and pressure
+!! [Pa], using the density polynomial fit EOS from Roquet et al. (2015).
 subroutine calculate_density_array_nemo(T, S, pressure, rho, start, npts, rho_ref)
-  real, dimension(:), intent(in)  :: T        !< Conservative temperature [degC].
-  real, dimension(:), intent(in)  :: S        !< Absolute salinity [g kg-1].
-  real, dimension(:), intent(in)  :: pressure !< pressure [Pa].
-  real, dimension(:), intent(out) :: rho      !< in situ density [kg m-3].
-  integer,            intent(in)  :: start    !< the starting point in the arrays.
-  integer,            intent(in)  :: npts     !< the number of values to calculate.
-  real,     optional, intent(in)  :: rho_ref  !< A reference density [kg m-3].
+  real, dimension(:), intent(in)  :: T        !< Conservative temperature [degC]
+  real, dimension(:), intent(in)  :: S        !< Absolute salinity [g kg-1]
+  real, dimension(:), intent(in)  :: pressure !< Pressure [Pa]
+  real, dimension(:), intent(out) :: rho      !< In situ density [kg m-3]
+  integer,            intent(in)  :: start    !< The starting index for calculations
+  integer,            intent(in)  :: npts     !< The number of values to calculate
+  real,     optional, intent(in)  :: rho_ref  !< A reference density [kg m-3]
 
   ! Local variables
   real :: zp  ! Pressure, first in [dbar], then normalized by an assumed pressure range [nondim]
   real :: zt  ! Conservative temperature, first in [degC], then normalized by an assumed temperature range [nondim]
   real :: zs  ! Absolute salinity, first in [g kg-1], then the square root of salinity with an offset normalized
-              ! by an assumed salnity range [nondim]
-  real :: zr0 ! A pressure-dependent but temperature and salinity independent contribution to
-              ! density at the reference temperature and salinity [kg m-3]
-  real :: zn  ! Density without a pressure-dependent contribution [kg m-3]
-  real :: zn0 ! A contribution to density from temperature and salinity anomalies at the surface pressure [kg m-3]
-  real :: zn1 ! A temperature and salinity dependent density contribution proportional to pressure [kg m-3]
-  real :: zn2 ! A temperature and salinity dependent density contribution proportional to pressure^2 [kg m-3]
-  real :: zn3 ! A temperature and salinity dependent density contribution proportional to pressure^3 [kg m-3]
-  real :: zs0 ! Salinity dependent density at the surface pressure and temperature [kg m-3]
+              ! by an assumed salinity range [nondim]
+  real :: rho00p ! A pressure-dependent but temperature and salinity independent contribution to
+                 ! density at the reference temperature and salinity [kg m-3]
+  real :: rhoTS  ! Density without a pressure-dependent contribution [kg m-3]
+  real :: rhoTS0 ! A contribution to density from temperature and salinity anomalies at the surface pressure [kg m-3]
+  real :: rhoTS1 ! A temperature and salinity dependent density contribution proportional to pressure [kg m-3]
+  real :: rhoTS2 ! A temperature and salinity dependent density contribution proportional to pressure**2 [kg m-3]
+  real :: rhoTS3 ! A temperature and salinity dependent density contribution proportional to pressure**3 [kg m-3]
+  real :: rho0S0 ! Salinity dependent density at the surface pressure and zero temperature [kg m-3]
   integer :: j
 
   ! The following algorithm was published by Roquet et al. (2015), intended for use
@@ -236,73 +234,70 @@ subroutine calculate_density_array_nemo(T, S, pressure, rho, start, npts, rho_re
     zp = pressure(j) * (Pa2db*r1_P0)    ! Convert pressure from Pascals to kilobars to normalize it [nondim]
 
     ! The next two lines should be used if it is necessary to convert potential temperature and
-    ! pratical salinity to conservative temperature and absolute salinity.
+    ! practical salinity to conservative temperature and absolute salinity.
     ! zt = r1_T0 * gsw_ct_from_pt(S(j),T(j)) ! Convert potential temp to conservative temp [degC]
     ! zs = SQRT( ABS( gsw_sr_from_sp(S(j)) + rdeltaS ) * r1_S0 ) ! Convert S from practical to absolute salinity.
 
-    zn3 = EOS013*zt   &
-       &   + EOS103*zs+EOS003
+    rhoTS3 = EOS003 + (zs*EOS103 + zt*EOS013)
+    rhoTS2 = EOS002 + (zs*(EOS102 +  zs*EOS202) &
+                     + zt*(EOS012 + (zs*EOS112 + zt*EOS022)) )
+    rhoTS1 = EOS001 + (zs*(EOS101 +  zs*(EOS201 +  zs*(EOS301 +  zs*EOS401))) &
+                     + zt*(EOS011 + (zs*(EOS111 +  zs*(EOS211 +  zs*EOS311)) &
+                                   + zt*(EOS021 + (zs*(EOS121 +  zs*EOS221) &
+                                                 + zt*(EOS031 + (zs*EOS131 + zt*EOS041))  )) )) )
+    rhoTS0 = zt*(EOS010 &
+               + (zs*(EOS110 +  zs*(EOS210 +  zs*(EOS310 +  zs*(EOS410 +  zs*EOS510)))) &
+                + zt*(EOS020 + (zs*(EOS120 +  zs*(EOS220 +  zs*(EOS320 +  zs*EOS420))) &
+                              + zt*(EOS030 + (zs*(EOS130 +  zs*(EOS230 +  zs*EOS330)) &
+                                            + zt*(EOS040 + (zs*(EOS140 +  zs*EOS240) &
+                                                          + zt*(EOS050 + (zs*EOS150 + zt*EOS060)) )) )) )) ) )
 
-    zn2 = (EOS022*zt   &
-       &   + EOS112*zs+EOS012)*zt   &
-       &   + (EOS202*zs+EOS102)*zs+EOS002
+    rho0S0 = EOS000 + zs*(EOS100 + zs*(EOS200 + zs*(EOS300 + zs*(EOS400 + zs*(EOS500 + zs*EOS600)))))
 
-    zn1 = (((EOS041*zt   &
-       &   + EOS131*zs+EOS031)*zt   &
-       &   + (EOS221*zs+EOS121)*zs+EOS021)*zt   &
-       &   + ((EOS311*zs+EOS211)*zs+EOS111)*zs+EOS011)*zt   &
-       &   + (((EOS401*zs+EOS301)*zs+EOS201)*zs+EOS101)*zs+EOS001
+    rho00p = zp*(R00 + zp*(R01 + zp*(R02 + zp*(R03 + zp*(R04 + zp*R05)))))
 
-    zn0 = (((((EOS060*zt   &
-       &   + EOS150*zs+EOS050)*zt   &
-       &   + (EOS240*zs+EOS140)*zs+EOS040)*zt   &
-       &   + ((EOS330*zs+EOS230)*zs+EOS130)*zs+EOS030)*zt   &
-       &   + (((EOS420*zs+EOS320)*zs+EOS220)*zs+EOS120)*zs+EOS020)*zt   &
-       &   + ((((EOS510*zs+EOS410)*zs+EOS310)*zs+EOS210)*zs+EOS110)*zs+EOS010)*zt
+    if (present(rho_ref)) rho0S0 = rho0S0 - rho_ref
 
-    zs0 = (((((EOS600*zs+EOS500)*zs+EOS400)*zs+EOS300)*zs+EOS200)*zs+EOS100)*zs + EOS000
-
-    zr0 = (((((R05 * zp+R04) * zp+R03 ) * zp+R02 ) * zp+R01) * zp+R00) * zp
-
-    if (present(rho_ref)) then
-      zn  = ( ( zn3 * zp + zn2 ) * zp + zn1 ) * zp + (zn0 + (zs0 - rho_ref))
-      rho(j) =  ( zn + zr0 ) ! density
-    else
-      zn  = ( ( zn3 * zp + zn2 ) * zp + zn1 ) * zp + (zn0 + zs0)
-      rho(j) =  ( zn + zr0 ) ! density
-    endif
+    rhoTS  = (rhoTS0 + rho0S0) + zp*(rhoTS1 + zp*(rhoTS2 +  zp*rhoTS3))
+    rho(j) = rhoTS + rho00p  ! In situ density [kg m-3]
 
   enddo
 end subroutine calculate_density_array_nemo
 
 !> For a given thermodynamic state, calculate the derivatives of density with conservative
-!! temperature and absolute salinity, using the expressions derived for use with NEMO.
+!! temperature and absolute salinity, using the density polynomial fit EOS from Roquet et al. (2015).
 subroutine calculate_density_derivs_array_nemo(T, S, pressure, drho_dT, drho_dS, start, npts)
-  real,    intent(in),  dimension(:) :: T        !< Conservative temperature [degC].
-  real,    intent(in),  dimension(:) :: S        !< Absolute salinity [g kg-1].
-  real,    intent(in),  dimension(:) :: pressure !< pressure [Pa].
-  real,    intent(out), dimension(:) :: drho_dT  !< The partial derivative of density with potential
-                                                 !! temperature [kg m-3 degC-1].
-  real,    intent(out), dimension(:) :: drho_dS  !< The partial derivative of density with salinity,
-                                                 !! in [kg m-3 ppt-1].
-  integer, intent(in)                :: start    !< The starting point in the arrays.
-  integer, intent(in)                :: npts     !< The number of values to calculate.
+  real,    intent(in),  dimension(:) :: T        !< Conservative temperature [degC]
+  real,    intent(in),  dimension(:) :: S        !< Absolute salinity [g kg-1]
+  real,    intent(in),  dimension(:) :: pressure !< Pressure [Pa]
+  real,    intent(out), dimension(:) :: drho_dT  !< The partial derivative of density with
+                                                 !! conservative temperature [kg m-3 degC-1]
+  real,    intent(out), dimension(:) :: drho_dS  !< The partial derivative of density with
+                                                 !! absolute salinity [kg m-3 ppt-1]
+  integer, intent(in)                :: start    !< The starting index for calculations
+  integer, intent(in)                :: npts     !< The number of values to calculate
 
   ! Local variables
   real :: zp  ! Pressure, first in [dbar], then normalized by an assumed pressure range [nondim]
   real :: zt  ! Conservative temperature, first in [degC], then normalized by an assumed temperature range [nondim]
   real :: zs  ! Absolute salinity, first in [g kg-1], then the square root of salinity with an offset normalized
-              ! by an assumed salnity range [nondim]
-  real :: zn  ! Partial derivative of density with temperature [kg m-3 degC-1] or salinity [kg m-3 ppt-1]
-              ! without a pressure-dependent contribution
-  real :: zn0 ! A contribution to the partial derivative of density with temperature [kg m-3 degC-1] or
-              ! salinity [kg m-3 ppt-1] from temperature anomalies at the surface pressure
-  real :: zn1 ! A contribution to the partial derivative of density with temperature [kg m-3 degC-1] or
-              ! salinity [kg m-3 ppt-1] proportional to pressure
-  real :: zn2 ! A contribution to the partial derivative of density with temperature [kg m-3 degC-1] or
-              ! salinity [kg m-3 ppt-1] proportional to pressure^2
-  real :: zn3 ! A contribution to the partial derivative of density with temperature [kg m-3 degC-1] or
-              ! salinity [kg m-3 ppt-1] proportional to pressure^3
+              ! by an assumed salinity range [nondim]
+  real :: dRdzt0  ! A contribution to the partial derivative of density with temperature [kg m-3 degC-1]
+                  ! from temperature anomalies at the surface pressure
+  real :: dRdzt1  ! A contribution to the partial derivative of density with temperature [kg m-3 degC-1]
+                  ! proportional to pressure
+  real :: dRdzt2  ! A contribution to the partial derivative of density with temperature [kg m-3 degC-1]
+                  ! proportional to pressure**2
+  real :: dRdzt3  ! A contribution to the partial derivative of density with temperature [kg m-3 degC-1]
+                  ! proportional to pressure**3
+  real :: dRdzs0  ! A contribution to the partial derivative of density with
+                  ! salinity [kg m-3 ppt-1] from temperature anomalies at the surface pressure
+  real :: dRdzs1  ! A contribution to the partial derivative of density with
+                  ! salinity [kg m-3 ppt-1] proportional to pressure
+  real :: dRdzs2  ! A contribution to the partial derivative of density with
+                  ! salinity [kg m-3 ppt-1] proportional to pressure**2
+  real :: dRdzs3  ! A contribution to the partial derivative of density with
+                  ! salinity [kg m-3 ppt-1] proportional to pressure**3
   integer :: j
 
   do j=start,start+npts-1
@@ -312,75 +307,59 @@ subroutine calculate_density_derivs_array_nemo(T, S, pressure, drho_dT, drho_dS,
     zp = pressure(j) * (Pa2db*r1_P0)    ! Convert pressure from Pascals to kilobars to normalize it [nondim]
 
     ! The next two lines should be used if it is necessary to convert potential temperature and
-    ! pratical salinity to conservative temperature and absolute salinity.
+    ! practical salinity to conservative temperature and absolute salinity.
     ! zt = r1_T0 * gsw_ct_from_pt(S(j),T(j)) ! Convert potential temp to conservative temp [degC]
     ! zs = SQRT( ABS( gsw_sr_from_sp(S(j)) + rdeltaS ) * r1_S0 ) ! Convert S from practical to absolute salinity.
 
-    !
-    ! alpha
-    zn3 = ALP003
-    !
-    zn2 = ALP012*zt + ALP102*zs+ALP002
-    !
-    zn1 = ((ALP031*zt   &
-       &   + ALP121*zs+ALP021)*zt   &
-       &   + (ALP211*zs+ALP111)*zs+ALP011)*zt   &
-       &   + ((ALP301*zs+ALP201)*zs+ALP101)*zs+ALP001
-       !
-    zn0 = ((((ALP050*zt   &
-       &   + ALP140*zs+ALP040)*zt   &
-       &   + (ALP230*zs+ALP130)*zs+ALP030)*zt   &
-       &   + ((ALP320*zs+ALP220)*zs+ALP120)*zs+ALP020)*zt   &
-       &   + (((ALP410*zs+ALP310)*zs+ALP210)*zs+ALP110)*zs+ALP010)*zt   &
-       &   + ((((ALP500*zs+ALP400)*zs+ALP300)*zs+ALP200)*zs+ALP100)*zs+ALP000
-       !
-    zn  = ( ( zn3 * zp + zn2 ) * zp + zn1 ) * zp + zn0
-    !
-    drho_dT(j) = zn
-    !
-    ! beta
-    !
-    zn3 = BET003
-    !
-    zn2 = BET012*zt + BET102*zs+BET002
-    !
-    zn1 = ((BET031*zt   &
-       &   + BET121*zs+BET021)*zt   &
-       &   + (BET211*zs+BET111)*zs+BET011)*zt   &
-       &   + ((BET301*zs+BET201)*zs+BET101)*zs+BET001
-       !
-    zn0 = ((((BET050*zt   &
-       &   + BET140*zs+BET040)*zt   &
-       &   + (BET230*zs+BET130)*zs+BET030)*zt   &
-       &   + ((BET320*zs+BET220)*zs+BET120)*zs+BET020)*zt   &
-       &   + (((BET410*zs+BET310)*zs+BET210)*zs+BET110)*zs+BET010)*zt   &
-       &   + ((((BET500*zs+BET400)*zs+BET300)*zs+BET200)*zs+BET100)*zs+BET000
-       !
-    zn  = ( ( zn3 * zp + zn2 ) * zp + zn1 ) * zp + zn0
+    ! Find the partial derivative of density with temperature
+    dRdzt3 = ALP003
+    dRdzt2 = ALP002 + (zs*ALP102 + zt*ALP012)
+    dRdzt1 = ALP001 + (zs*(ALP101 + zs*(ALP201 + zs*ALP301)) &
+                     + zt*(ALP011 + (zs*(ALP111 + zs*ALP211) &
+                                   + zt*(ALP021 + (zs*ALP121 + zt*ALP031)) )) )
+    dRdzt0 = ALP000 + (zs*(ALP100 +  zs*(ALP200 +  zs*(ALP300 + zs*(ALP400 + zs*ALP500)))) &
+                     + zt*(ALP010 + (zs*(ALP110 +  zs*(ALP210 + zs*(ALP310 + zs*ALP410))) &
+                                   + zt*(ALP020 + (zs*(ALP120 + zs*(ALP220 + zs*ALP320)) &
+                                                 + zt*(ALP030 + (zt*(ALP040 + (zs*ALP140 + zt*ALP050)) &
+                                                               + zs*(ALP130 + zs*ALP230) )) )) )) )
+
+    drho_dT(j) = dRdzt0 + zp*(dRdzt1 + zp*(dRdzt2 + zp*dRdzt3))
+
+    ! Find the partial derivative of density with salinity
+    dRdzs3 = BET003
+    dRdzs2 = BET002 + (zs*BET102 + zt*BET012)
+    dRdzs1 = BET001 + (zs*(BET101 + zs*(BET201 + zs*BET301)) &
+                     + zt*(BET011 + (zs*(BET111 + zs*BET211) &
+                                   + zt*(BET021 + (zs*BET121 + zt*BET031)) )) )
+    dRdzs0 = BET000 + (zs*(BET100 + zs*(BET200 + zs*(BET300 + zs*(BET400 + zs*BET500)))) &
+                     + zt*(BET010 + (zs*(BET110 + zs*(BET210 + zs*(BET310 + zs*BET410))) &
+                                   + zt*(BET020 + (zs*(BET120 + zs*(BET220 + zs*BET320)) &
+                                                 + zt*(BET030 + (zt*(BET040 + (zs*BET140 + zt*BET050)) &
+                                                               + zs*(BET130 + zs*BET230) )) )) )) )
 
     ! The division by zs here is because zs = sqrt(S + S0), so drho_dS = dzs_dS * drho_dzs = (0.5 / zs) * drho_dzs
-    drho_dS(j) = zn / zs
+    drho_dS(j) = (dRdzs0 + zp*(dRdzs1 + zp*(dRdzs2 + zp * dRdzs3))) / zs
   enddo
 
 end subroutine calculate_density_derivs_array_nemo
 
 !> Wrapper to calculate_density_derivs_array for scalar inputs
 subroutine calculate_density_derivs_scalar_nemo(T, S, pressure, drho_dt, drho_ds)
-  real,    intent(in)  :: T        !< Potential temperature relative to the surface [degC].
-  real,    intent(in)  :: S        !< Salinity [g kg-1].
-  real,    intent(in)  :: pressure !< Pressure [Pa].
-  real,    intent(out) :: drho_dT  !< The partial derivative of density with potential
-                                   !! temperature [kg m-3 degC-1].
-  real,    intent(out) :: drho_dS  !< The partial derivative of density with salinity,
-                                   !! in [kg m-3 ppt-1].
+  real,    intent(in)  :: T        !< Conservative temperature [degC]
+  real,    intent(in)  :: S        !< Absolute salinity [g kg-1]
+  real,    intent(in)  :: pressure !< Pressure [Pa]
+  real,    intent(out) :: drho_dT  !< The partial derivative of density with
+                                   !! conservative temperature [kg m-3 degC-1]
+  real,    intent(out) :: drho_dS  !< The partial derivative of density with
+                                   !! absolute salinity [kg m-3 ppt-1]
   ! Local variables
   real, dimension(1) :: T0    ! A 1-d array with a copy of the conservative temperature [degC]
   real, dimension(1) :: S0    ! A 1-d array with a copy of the absolute salinity [g kg-1]
   real, dimension(1) :: pressure0 ! A 1-d array with a copy of the pressure [Pa]
   real, dimension(1) :: drdt0 ! A 1-d array with a copy of the derivative of density
-                              ! with potential temperature [kg m-3 degC-1]
+                              ! with conservative temperature [kg m-3 degC-1]
   real, dimension(1) :: drds0 ! A 1-d array with a copy of the derivative of density
-                              ! with salinity [kg m-3 ppt-1]
+                              ! with absolute salinity [kg m-3 ppt-1]
 
   T0(1) = T
   S0(1) = S
@@ -393,33 +372,33 @@ end subroutine calculate_density_derivs_scalar_nemo
 
 !> Compute the in situ density of sea water (rho in [kg m-3]) and the compressibility
 !! (drho/dp = C_sound^-2, stored as drho_dp [s2 m-2]) from absolute salinity (sal [g kg-1]),
-!! conservative temperature (T [degC]), and pressure [Pa], using the expressions
-!! derived for use with NEMO.
+!! conservative temperature (T [degC]), and pressure [Pa], using the density polynomial
+!! fit EOS from Roquet et al. (2015).
 subroutine calculate_compress_nemo(T, S, pressure, rho, drho_dp, start, npts)
-  real,    intent(in),  dimension(:) :: T        !< Conservative temperature [degC].
-  real,    intent(in),  dimension(:) :: S        !< Absolute salinity [g kg-1].
-  real,    intent(in),  dimension(:) :: pressure !< pressure [Pa].
-  real,    intent(out), dimension(:) :: rho      !< In situ density [kg m-3].
+  real,    intent(in),  dimension(:) :: T        !< Conservative temperature [degC]
+  real,    intent(in),  dimension(:) :: S        !< Absolute salinity [g kg-1]
+  real,    intent(in),  dimension(:) :: pressure !< Pressure [Pa]
+  real,    intent(out), dimension(:) :: rho      !< In situ density [kg m-3]
   real,    intent(out), dimension(:) :: drho_dp  !< The partial derivative of density with pressure
                                                  !! (also the inverse of the square of sound speed)
-                                                 !! [s2 m-2].
-  integer, intent(in)                :: start    !< The starting point in the arrays.
-  integer, intent(in)                :: npts     !< The number of values to calculate.
+                                                 !! [s2 m-2]
+  integer, intent(in)                :: start    !< The starting index for calculations
+  integer, intent(in)                :: npts     !< The number of values to calculate
 
   ! Local variables
   real :: zp  ! Pressure normalized by an assumed pressure range [nondim]
   real :: zt  ! Conservative temperature normalized by an assumed temperature range [nondim]
   real :: zs  ! The square root of absolute salinity with an offset normalized
-              ! by an assumed salnity range [nondim]
-  real :: dzr0_dp ! Derivative of the pressure-dependent reference density profile with normalized pressure [kg m-3]
-  real :: dzn_dp  ! Derivative of the density anomaly from the reference profile with normalized pressure [kg m-3]
-  real :: zr0 ! The pressure-dependent (but temperature and salinity independent) reference density profile [kg m-3]
-  real :: zn  ! Density anomaly from the reference profile [kg m-3]
-  real :: zn0 ! A contribution to density from temperature and salinity anomalies at the surface pressure [kg m-3]
-  real :: zn1 ! A temperature and salinity dependent density contribution proportional to pressure [kg m-3]
-  real :: zn2 ! A temperature and salinity dependent density contribution proportional to pressure^2 [kg m-3]
-  real :: zn3 ! A temperature and salinity dependent density contribution proportional to pressure^3 [kg m-3]
-  real :: zs0 ! Salinity dependent density at the surface pressure and temperature [kg m-3]
+              ! by an assumed salinity range [nondim]
+  real :: drho00p_dp ! Derivative of the pressure-dependent reference density profile with normalized pressure [kg m-3]
+  real :: drhoTS_dp  ! Derivative of the density anomaly from the reference profile with normalized pressure [kg m-3]
+  real :: rho00p ! The pressure-dependent (but temperature and salinity independent) reference density profile [kg m-3]
+  real :: rhoTS  ! Density anomaly from the reference profile [kg m-3]
+  real :: rhoTS0 ! A contribution to density from temperature and salinity anomalies at the surface pressure [kg m-3]
+  real :: rhoTS1 ! A temperature and salinity dependent density contribution proportional to pressure [kg m-3]
+  real :: rhoTS2 ! A temperature and salinity dependent density contribution proportional to pressure**2 [kg m-3]
+  real :: rhoTS3 ! A temperature and salinity dependent density contribution proportional to pressure**3 [kg m-3]
+  real :: rho0S0 ! Salinity dependent density at the surface pressure and zero temperature [kg m-3]
   integer :: j
 
   ! The following algorithm was published by Roquet et al. (2015), intended for use
@@ -431,39 +410,35 @@ subroutine calculate_compress_nemo(T, S, pressure, rho, drho_dp, start, npts)
     zp = pressure(j) * (Pa2db*r1_P0)    ! Convert pressure from Pascals to kilobars to normalize it [nondim]
 
     ! The next two lines should be used if it is necessary to convert potential temperature and
-    ! pratical salinity to conservative temperature and absolute salinity.
+    ! practical salinity to conservative temperature and absolute salinity.
     ! zt = r1_T0 * gsw_ct_from_pt(S(j),T(j)) ! Convert potential temp to conservative temp [degC]
     ! zs = SQRT( ABS( gsw_sr_from_sp(S(j)) + rdeltaS ) * r1_S0 ) ! Convert S from practical to absolute salinity.
 
-    zn3 = EOS013*zt + EOS103*zs + EOS003
+    rhoTS3 = EOS003 + (zs*EOS103 + zt*EOS013)
+    rhoTS2 = EOS002 + (zs*(EOS102 +  zs*EOS202) &
+                     + zt*(EOS012 + (zs*EOS112 + zt*EOS022)) )
+    rhoTS1 = EOS001 + (zs*(EOS101 +  zs*(EOS201 +  zs*(EOS301 +  zs*EOS401))) &
+                     + zt*(EOS011 + (zs*(EOS111 +  zs*(EOS211 +  zs*EOS311)) &
+                                   + zt*(EOS021 + (zs*(EOS121 +  zs*EOS221) &
+                                                 + zt*(EOS031 + (zs*EOS131 + zt*EOS041))  )) )) )
 
-    zn2 = (EOS022*zt   &
-       &   + EOS112*zs + EOS012)*zt   &
-       &   + (EOS202*zs + EOS102)*zs + EOS002
+    rhoTS0 = zt*(EOS010 &
+               + (zs*(EOS110 +  zs*(EOS210 +  zs*(EOS310 +  zs*(EOS410 +  zs*EOS510)))) &
+                + zt*(EOS020 + (zs*(EOS120 +  zs*(EOS220 +  zs*(EOS320 +  zs*EOS420))) &
+                              + zt*(EOS030 + (zs*(EOS130 +  zs*(EOS230 +  zs*EOS330)) &
+                                            + zt*(EOS040 + (zs*(EOS140 +  zs*EOS240) &
+                                                          + zt*(EOS050 + (zs*EOS150 + zt*EOS060)) )) )) )) ) )
 
-    zn1 = (((EOS041*zt   &
-       &   + EOS131*zs + EOS031)*zt   &
-       &   + (EOS221*zs + EOS121)*zs + EOS021)*zt   &
-       &   + ((EOS311*zs + EOS211)*zs + EOS111)*zs + EOS011)*zt   &
-       &   + (((EOS401*zs + EOS301)*zs + EOS201)*zs + EOS101)*zs + EOS001
+    rho0S0 = EOS000 + zs*(EOS100 + zs*(EOS200 + zs*(EOS300 + zs*(EOS400 + zs*(EOS500 + zs*EOS600)))))
 
-    zn0 = (((((EOS060*zt   &
-       &   + EOS150*zs + EOS050)*zt   &
-       &   + (EOS240*zs + EOS140)*zs + EOS040)*zt   &
-       &   + ((EOS330*zs + EOS230)*zs + EOS130)*zs + EOS030)*zt   &
-       &   + (((EOS420*zs + EOS320)*zs + EOS220)*zs + EOS120)*zs + EOS020)*zt   &
-       &   + ((((EOS510*zs + EOS410)*zs + EOS310)*zs + EOS210)*zs + EOS110)*zs + EOS010)*zt
+    rho00p = zp*(R00 + zp*(R01 + zp*(R02 + zp*(R03 + zp*(R04 + zp*R05)))))
 
-    zs0 = (((((EOS600*zs + EOS500)*zs + EOS400)*zs + EOS300)*zs + EOS200)*zs + EOS100)*zs + EOS000
+    rhoTS  = (rhoTS0 + rho0S0) + zp*(rhoTS1 + zp*(rhoTS2 +  zp*rhoTS3))
+    rho(j) = rhoTS + rho00p ! In situ density [kg m-3]
 
-    zr0 = (((((R05*zp + R04)*zp + R03)*zp + R02)*zp + R01)*zp + R00)*zp
-
-    zn  = ( ( zn3*zp + zn2 )*zp + zn1 )*zp + (zn0 + zs0)
-    rho(j) =  ( zn + zr0 ) ! density
-
-    dzr0_dp = ((((6.*R05*zp + 5.*R04)*zp + 4.*R03)*zp + 3.*R02)*zp + 2.*R01)*zp + R00
-    dzn_dp  = ( 3.*zn3*zp + 2.*zn2 )*zp + zn1
-    drho_dp(j) =  ( dzn_dp + dzr0_dp ) * (Pa2db*r1_P0) ! density
+    drho00p_dp = R00 + zp*(2.*R01 + zp*(3.*R02 + zp*(4.*R03 + zp*(5.*R04 + zp*(6.*R05)))))
+    drhoTS_dp  = rhoTS1 + zp*(2.*rhoTS2 + zp*(3.*rhoTS3))
+    drho_dp(j) = (drhoTS_dp + drho00p_dp) * (Pa2db*r1_P0) ! Compressibility [s2 m-2]
 
   enddo
 end subroutine calculate_compress_nemo
@@ -471,20 +446,20 @@ end subroutine calculate_compress_nemo
 
 !> Second derivatives of density with respect to temperature, salinity, and pressure for 1-d array inputs and outputs.
 subroutine calculate_density_second_derivs_array_NEMO(T, S, P, drho_ds_ds, drho_ds_dt, drho_dt_dt, &
-                                                         drho_ds_dp, drho_dt_dp, start, npts)
-  real, dimension(:), intent(in   ) :: T !< Potential temperature referenced to 0 dbar [degC]
-  real, dimension(:), intent(in   ) :: S !< Salinity [PSU]
+                                                      drho_ds_dp, drho_dt_dp, start, npts)
+  real, dimension(:), intent(in   ) :: T !< Conservative temperature [degC]
+  real, dimension(:), intent(in   ) :: S !< Absolute salinity [PSU]
   real, dimension(:), intent(in   ) :: P !< Pressure [Pa]
-  real, dimension(:), intent(inout) :: drho_ds_ds !< Partial derivative of beta with respect
-                                                  !! to S [kg m-3 PSU-2]
-  real, dimension(:), intent(inout) :: drho_ds_dt !< Partial derivative of beta with respect
-                                                  !! to T [kg m-3 PSU-1 degC-1]
-  real, dimension(:), intent(inout) :: drho_dt_dt !< Partial derivative of alpha with respect
-                                                  !! to T [kg m-3 degC-2]
-  real, dimension(:), intent(inout) :: drho_ds_dp !< Partial derivative of beta with respect
-                                                  !! to pressure [kg m-3 PSU-1 Pa-1] = [s2 m-2 PSU-1]
-  real, dimension(:), intent(inout) :: drho_dt_dp !< Partial derivative of alpha with respect
-                                                  !! to pressure [kg m-3 degC-1 Pa-1] = [s2 m-2 degC-1]
+  real, dimension(:), intent(inout) :: drho_ds_ds !< Second derivative of density with respect
+                                                  !! to salinity [kg m-3 ppt-2]
+  real, dimension(:), intent(inout) :: drho_ds_dt !< Second derivative of density with respect
+                                                  !! to salinity and temperature [kg m-3 ppt-1 degC-1]
+  real, dimension(:), intent(inout) :: drho_dt_dt !< Second derivative of density with respect
+                                                  !! to temperature [kg m-3 degC-2]
+  real, dimension(:), intent(inout) :: drho_ds_dp !< Second derivative of density with respect to pressure
+                                                  !! and salinity [kg m-3 ppt-1 Pa-1] = [s2 m-2 ppt-1]
+  real, dimension(:), intent(inout) :: drho_dt_dp !< Second derivative of density with respect to pressure
+                                                  !! and temperature [kg m-3 degC-1 Pa-1] = [s2 m-2 degC-1]
   integer,            intent(in   ) :: start !< Starting index in T,S,P
   integer,            intent(in   ) :: npts  !< Number of points to loop over
 
@@ -492,17 +467,12 @@ subroutine calculate_density_second_derivs_array_NEMO(T, S, P, drho_ds_ds, drho_
   real :: zp  ! Pressure normalized by an assumed pressure range [nondim]
   real :: zt  ! Conservative temperature normalized by an assumed temperature range [nondim]
   real :: zs  ! The square root of absolute salinity with an offset normalized
-              ! by an assumed salnity range [nondim]
+              ! by an assumed salinity range [nondim]
   real :: I_s ! The inverse of zs [nondim]
-  real :: dzr0_dp ! Derivative of the pressure-dependent reference density profile with normalized pressure [kg m-3]
-  real :: dzn_dp  ! Derivative of the density anomaly from the reference profile with normalized pressure [kg m-3]
-  real :: dzn_ds  ! Derivative of the density anomaly from the reference profile with zs [kg m-3]
-  real :: zr0 ! The pressure-dependent (but temperature and salinity independent) reference density profile [kg m-3]
-  real :: zn  ! Density anomaly from the reference profile [kg m-3]
-  real :: zn0 ! A contribution to one of the second derivatives that is independent of pressure [various]
-  real :: zn1 ! A contribution to one of the second derivatives that is proportional to pressure [various]
-  real :: zn2 ! A contribution to one of the second derivatives that is proportional to pressure^2 [various]
-  real :: zn3 ! A temperature and salinity dependent density contribution proportional to pressure^3 [various]
+  real :: d2R_p0 ! A contribution to one of the second derivatives that is independent of pressure [various]
+  real :: d2R_p1 ! A contribution to one of the second derivatives that is proportional to pressure [various]
+  real :: d2R_p2 ! A contribution to one of the second derivatives that is proportional to pressure**2 [various]
+  real :: d2R_p3 ! A contribution to one of the second derivatives that is proportional to pressure**3 [various]
   integer :: j
 
   do j = start,start+npts-1
@@ -512,62 +482,60 @@ subroutine calculate_density_second_derivs_array_NEMO(T, S, P, drho_ds_ds, drho_
     zp = P(j) * (Pa2db*r1_P0)     ! Convert pressure from Pascals to kilobars to normalize it [nondim]
 
     ! The next two lines should be used if it is necessary to convert potential temperature and
-    ! pratical salinity to conservative temperature and absolute salinity.
+    ! practical salinity to conservative temperature and absolute salinity.
     ! zt = r1_T0 * gsw_ct_from_pt(S(j),T(j)) ! Convert potential temp to conservative temp [degC]
     ! zs = SQRT( ABS( gsw_sr_from_sp(S(j)) + rdeltaS ) * r1_S0 )  ! Convert S from practical to absolute salinity.
 
     I_s = 1.0 / zs
 
     ! Find drho_ds_ds
-    zn3 = -EOS103*I_s**2
-    zn2 = -(EOS112*zt + EOS102)*I_s**2
-    zn1 = (3.*EOS311*zt + (8.*EOS401*zs + 3.*EOS301) ) &
-         - ( ((EOS131*zt + EOS121)*zt + EOS111)*zt + EOS101 )*I_s**2
-    zn0 = ( (( 3.*EOS330*zt + (8.*EOS420*zs + 3.*EOS320))*zt + &
-             ((15.*EOS510*zs + 8.*EOS410)*zs + 3.*EOS310))*zt + &
-            (((24.*EOS600*zs + 15.*EOS500)*zs + 8.*EOS400)*zs + 3.*EOS300) ) &
-          - ( ((((EOS150*zt + EOS140)*zt + EOS130)*zt + EOS120)*zt + EOS110)*zt + EOS100 )*I_s**2
-    zn  = ( ( zn3 * zp + zn2) * zp + zn1 ) * zp + zn0
-    drho_dS_dS(j) = (0.5*r1_S0)**2 * (zn * I_s)
+    d2R_p3 = -EOS103*I_s**2
+    d2R_p2 = -(EOS102 + zt*EOS112)*I_s**2
+    d2R_p1 = (3.*EOS301 + (zt*(3.*EOS311) + zs*(8.*EOS401))) &
+             - ( EOS101 + zt*(EOS111 + zt*(EOS121 + zt*EOS131)) )*I_s**2
+    d2R_p0 = (3.*EOS300 + (zs*(8.*EOS400 + zs*(15.*EOS500 + zs*(24.*EOS600))) &
+                         + zt*(3.*EOS310 + (zs*(8.*EOS410 + zs*(15.*EOS510)) &
+                                          + zt*(3.*EOS320 + (zs*(8.*EOS420) + zt*(3.*EOS330))) )) )) &
+             - (EOS100 + zt*(EOS110 + zt*(EOS120 + zt*(EOS130 + zt*(EOS140 + zt*EOS150)))) )*I_s**2
+    drho_dS_dS(j) = (0.5*r1_S0)**2 * ((d2R_p0 + zp*(d2R_p1 + zp*(d2R_p2 + zp*d2R_p3))) * I_s)
 
     ! Find drho_ds_dt
-    zn2 = EOS112
-    zn1 = ((3.*EOS131)*zt  + (4.*EOS221*zs + 2.*EOS121))*zt + &
-          ((3.*EOS311*zs + 2.*EOS211)*zs + EOS111)
-    zn0 = (((5.*EOS150*zt + (8.*EOS240*zs + 4.*EOS140))*zt + &
-            ((9.*EOS330*zs + 6.*EOS230)*zs + 3.*EOS130))*zt + &
-           ((((8.*EOS420*zs + 6.*EOS320)*zs + 4.*EOS220)*zs + 2.*EOS120)))*zt +  &
-          ((((5.*EOS510*zs + 4.*EOS410)*zs + 3.*EOS310)*zs + 2.*EOS210)*zs + EOS110)
-    zn  = ( zn2 * zp + zn1 ) * zp + zn0
-    drho_ds_dt(j) = (0.5*r1_S0*r1_T0) * (zn * I_s)
+    d2R_p2 = EOS112
+    d2R_p1 = EOS111 + (zs*(2.*EOS211 +  zs*(3.*EOS311)) &
+                     + zt*(2.*EOS121 + (zs*(4.*EOS221) + zt*(3.*EOS131))) )
+    d2R_p0 = EOS110 + (zs*(2.*EOS210 +  zs*(3.*EOS310 +  zs*(4.*EOS410 +  zs*(5.*EOS510)))) &
+                     + zt*(2.*EOS120 + (zs*(4.*EOS220 +  zs*(6.*EOS320 +  zs*(8.*EOS420))) &
+                                      + zt*(3.*EOS130 + (zs*(6.*EOS230 +  zs*(9.*EOS330)) &
+                                                       + zt*(4.*EOS140 + (zs*(8.*EOS240) &
+                                                                        + zt*(5.*EOS150))) )) )) )
+    drho_ds_dt(j) = (0.5*r1_S0*r1_T0) * ((d2R_p0 + zp*(d2R_p1 + zp*d2R_p2)) * I_s)
 
     ! Find drho_dt_dt
-    zn2 = 2.*EOS022
-    zn1 = (12.*EOS041*zt  + 6.*(EOS131*zs + EOS031))*zt +  &
-          2.*((EOS221*zs + EOS121)*zs + EOS021)
-    zn0 = (((30.*EOS060*zt + 20.*(EOS150*zs + EOS050))*zt + &
-            12.*((EOS240*zs + EOS140)*zs + EOS040))*zt  + &
-           6.*(((EOS330*zs + EOS230)*zs + EOS130)*zs + EOS030))*zt +  &
-          2.*((((EOS420*zs + EOS320)*zs + EOS220)*zs + EOS120)*zs + EOS020)
-    zn  = ( zn2 * zp + zn1 ) * zp + zn0
-    drho_dt_dt(j) = zn * r1_T0**2
+    d2R_p2 = 2.*EOS022
+    d2R_p1 = 2.*EOS021 + (zs*(2.*EOS121 +  zs*(2.*EOS221)) &
+                        + zt*(6.*EOS031 + (zs*(6.*EOS131) + zt*(12.*EOS041))) )
+    d2R_p0 = 2.*EOS020 + (zs*(2.*EOS120 +  zs*( 2.*EOS220 +  zs*( 2.*EOS320 + zs * (2.*EOS420)))) &
+                        + zt*(6.*EOS030 + (zs*( 6.*EOS130 +  zs*( 6.*EOS230 + zs * (6.*EOS330))) &
+                                         + zt*(12.*EOS040 + (zs*(12.*EOS140 + zs *(12.*EOS240)) &
+                                                           + zt*(20.*EOS050 + (zs*(20.*EOS150) &
+                                                                             + zt*(30.*EOS060) )) )) )) )
+    drho_dt_dt(j) = (d2R_p0 + zp*(d2R_p1 + zp*d2R_p2)) * r1_T0**2
 
     ! Find drho_ds_dp
-    zn3 = EOS103
-    zn2 = EOS112*zt + (2.*EOS202*zs + EOS102)
-    zn1 = ((EOS131*zt + (2.*EOS221*zs + EOS121))*zt  + ((3.*EOS311*zs + 2.*EOS211)*zs + EOS111))*zt + &
-          (((4.*EOS401*zs + 3.*EOS301)*zs + 2.*EOS201)*zs + EOS101)
-    dzn_dp  = ( ( 3.*zn3 * zp + 2.*zn2 ) * zp + zn1 )
-    drho_ds_dp(j) =  ( dzn_dp * I_s ) * (0.5*r1_S0 * Pa2db*r1_P0) ! Second derivative of density
-
+    d2R_p2 = 3.*EOS103
+    d2R_p1 = 2.*EOS102 + (zs*(4.*EOS202) + zt*(2.*EOS112))
+    d2R_p0 = EOS101 + (zs*(2.*EOS201 + zs*(3.*EOS301 +  zs*(4.*EOS401))) &
+                     + zt*(EOS111 +   (zs*(2.*EOS211 +  zs*(3.*EOS311)) &
+                                     + zt*(   EOS121 + (zs*(2.*EOS221) + zt*EOS131)) )) )
+    drho_ds_dp(j) =  ((d2R_p0 + zp*(d2R_p1 + zp*d2R_p2)) * I_s) * (0.5*r1_S0 * Pa2db*r1_P0)
 
     ! Find drho_dt_dp
-    zn3 = EOS013
-    zn2 = 2.*EOS022*zt + (EOS112*zs + EOS012)
-    zn1 = ((4.*EOS041*zt  + 3.*(EOS131*zs + EOS031))*zt + 2.*((EOS221*zs + EOS121)*zs + EOS021))*zt + &
-          (((EOS311*zs + EOS211)*zs + EOS111)*zs + EOS011)
-    dzn_dp  = ( ( 3.*zn3 * zp + 2.*zn2 ) * zp + zn1 )
-    drho_dt_dp(j) =  ( dzn_dp ) * (Pa2db*r1_P0* r1_T0) ! Second derivative of density
+    d2R_p2 = 3.*EOS013
+    d2R_p1 = 2.*EOS012 + (zs*(2.*EOS112) + zt*(4.*EOS022))
+    d2R_p0 = EOS011 + (zs*(EOS111     + zs*(   EOS211 +  zs*    EOS311)) &
+                     + zt*(2.*EOS021 + (zs*(2.*EOS121 +  zs*(2.*EOS221)) &
+                                      + zt*(3.*EOS031 + (zs*(3.*EOS131) + zt*(4.*EOS041))) )) )
+    drho_dt_dp(j) =  (d2R_p0 + zp*(d2R_p1 + zp*d2R_p2)) * (Pa2db*r1_P0* r1_T0)
   enddo
 
 end subroutine calculate_density_second_derivs_array_NEMO
@@ -577,20 +545,20 @@ end subroutine calculate_density_second_derivs_array_NEMO
 !! The scalar version of calculate_density_second_derivs promotes scalar inputs to 1-element array
 !! and then demotes the output back to a scalar
 subroutine calculate_density_second_derivs_scalar_NEMO(T, S, P, drho_ds_ds, drho_ds_dt, drho_dt_dt, &
-                                                         drho_ds_dp, drho_dt_dp)
-  real, intent(in   ) :: T          !< Potential temperature referenced to 0 dbar
-  real, intent(in   ) :: S          !< Salinity [PSU]
+                                                       drho_ds_dp, drho_dt_dp)
+  real, intent(in   ) :: T          !< Conservative temperature [degC]
+  real, intent(in   ) :: S          !< Absolute salinity [PSU]
   real, intent(in   ) :: P          !< pressure [Pa]
-  real, intent(  out) :: drho_ds_ds !< Partial derivative of beta with respect
-                                    !! to S [kg m-3 PSU-2]
-  real, intent(  out) :: drho_ds_dt !< Partial derivative of beta with respect
-                                    !! to T [kg m-3 PSU-1 degC-1]
-  real, intent(  out) :: drho_dt_dt !< Partial derivative of alpha with respect
-                                    !! to T [kg m-3 degC-2]
-  real, intent(  out) :: drho_ds_dp !< Partial derivative of beta with respect
-                                    !! to pressure [kg m-3 PSU-1 Pa-1] = [s2 m-2 PSU-1]
-  real, intent(  out) :: drho_dt_dp !< Partial derivative of alpha with respect
-                                    !! to pressure [kg m-3 degC-1 Pa-1] = [s2 m-2 degC-1]
+  real, intent(  out) :: drho_ds_ds !< Second derivative of density with respect
+                                    !! to salinity [kg m-3 ppt-2]
+  real, intent(  out) :: drho_ds_dt !< Second derivative of density with respect
+                                    !! to salinity and temperature [kg m-3 ppt-1 degC-1]
+  real, intent(  out) :: drho_dt_dt !< Second derivative of density with respect
+                                    !! to temperature [kg m-3 degC-2]
+  real, intent(  out) :: drho_ds_dp !< Second derivative of density with respect to pressure
+                                    !! and salinity [kg m-3 ppt-1 Pa-1] = [s2 m-2 ppt-1]
+  real, intent(  out) :: drho_dt_dp !< Second derivative of density with respect to pressure
+                                    !! and temperature [kg m-3 degC-1 Pa-1] = [s2 m-2 degC-1]
   ! Local variables
   real, dimension(1) :: T0    ! A 1-d array with a copy of the temperature [degC]
   real, dimension(1) :: S0    ! A 1-d array with a copy of the salinity [PSU]
@@ -631,7 +599,7 @@ end subroutine calculate_density_second_derivs_scalar_NEMO
 !!
 !! The NEMO label used to describe this equation of state reflects that it was used in the NEMO
 !! ocean model before it was used in MOM6, but it probably should be described as the Roquet
-!! equation of.   However, these algorithms, especially as modified here, are not from
+!! equation of state.   However, these algorithms, especially as modified here, are not from
 !! the standard NEMO codebase.
 !!
 !! \subsection section_EOS_NEMO_references References
