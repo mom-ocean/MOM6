@@ -379,7 +379,7 @@ subroutine ideal_age_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, 
       young_val = CS%young_val(m)
     else
       young_val = CS%young_val(m) * &
-        exp((year-CS%tracer_start_year(m)) * CS%growth_rate(m))
+          exp((year-CS%tracer_start_year(m)) * CS%growth_rate(m))
     endif
 
     if (m == CS%BL_residence_num) then
@@ -409,11 +409,11 @@ subroutine ideal_age_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, 
 
 
           do k=nk+2,nz
-          if (G%mask2dT(i,j) > 0.0) then
-            CS%tr(i,j,k,m) = young_val
-          else
-            CS%tr(i,j,k,m) = CS%land_val(m)
-          endif
+            if (G%mask2dT(i,j) > 0.0) then
+              CS%tr(i,j,k,m) = young_val
+            else
+              CS%tr(i,j,k,m) = CS%land_val(m)
+            endif
           enddo
        enddo ; enddo
 
@@ -428,11 +428,11 @@ subroutine ideal_age_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, 
           enddo
 
           do k=CS%nkbl+1,nz
-          if (G%mask2dT(i,j) > 0.0) then
-            CS%tr(i,j,k,m) = young_val
-          else
-            CS%tr(i,j,k,m) = CS%land_val(m)
-          endif
+            if (G%mask2dT(i,j) > 0.0) then
+              CS%tr(i,j,k,m) = young_val
+            else
+              CS%tr(i,j,k,m) = CS%land_val(m)
+            endif
           enddo
         enddo ; enddo
 
@@ -479,10 +479,10 @@ subroutine ideal_age_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, 
         enddo ; enddo ; enddo
 
         if (CS%tracer_ages(m) .and. (year>=CS%tracer_start_year(m))) then
-        !$OMP parallel do default(none) shared(is,ie,js,je,CS,nz,G,dt,Isecs_per_year,m)
-        do k=CS%nkbl+1,nz ; do j=js,je ; do i=is,ie
-          CS%tr(i,j,k,m) = CS%tr(i,j,k,m) + G%mask2dT(i,j)*dt*Isecs_per_year
-        enddo ; enddo ; enddo
+          !$OMP parallel do default(none) shared(is,ie,js,je,CS,nz,G,dt,Isecs_per_year,m)
+          do k=CS%nkbl+1,nz ; do j=js,je ; do i=is,ie
+            CS%tr(i,j,k,m) = CS%tr(i,j,k,m) + G%mask2dT(i,j)*dt*Isecs_per_year
+          enddo ; enddo ; enddo
         endif
 
 
