@@ -6,7 +6,7 @@ module MOM_EOS_UNESCO
 implicit none ; private
 
 public calculate_compress_UNESCO, calculate_density_UNESCO, calculate_spec_vol_UNESCO
-public calculate_density_derivs_UNESCO
+public calculate_density_derivs_UNESCO, calculate_specvol_derivs_UNESCO
 public calculate_density_scalar_UNESCO, calculate_density_array_UNESCO
 public calculate_density_second_derivs_UNESCO
 
@@ -32,57 +32,56 @@ end interface calculate_density_second_derivs_UNESCO
 
 
 !>@{ Parameters in the UNESCO equation of state, as published in appendix A3 of Gill, 1982.
-! The following constants are used to calculate rho0, the density of seawater at 1
-! atmosphere pressure.  The notation is Rab for the contribution to rho0 from T^a*S^b.
+! The following constants are used to calculate rho0, the density of seawater at 1 atmosphere pressure.
+! The notation is Rab for the contribution to rho0 from S^a*T^b, with 6 used for the 1.5 power.
 real, parameter :: R00 = 999.842594   ! A coefficient in the fit for rho0 [kg m-3]
-real, parameter :: R10 = 6.793952e-2  ! A coefficient in the fit for rho0 [kg m-3 degC-1]
-real, parameter :: R20 = -9.095290e-3 ! A coefficient in the fit for rho0 [kg m-3 degC-2]
-real, parameter :: R30 = 1.001685e-4  ! A coefficient in the fit for rho0 [kg m-3 degC-3]
-real, parameter :: R40 = -1.120083e-6 ! A coefficient in the fit for rho0 [kg m-3 degC-4]
-real, parameter :: R50 = 6.536332e-9  ! A coefficient in the fit for rho0 [kg m-3 degC-5]
-real, parameter :: R01 = 0.824493     ! A coefficient in the fit for rho0 [kg m-3 PSU-1]
+real, parameter :: R01 = 6.793952e-2  ! A coefficient in the fit for rho0 [kg m-3 degC-1]
+real, parameter :: R02 = -9.095290e-3 ! A coefficient in the fit for rho0 [kg m-3 degC-2]
+real, parameter :: R03 = 1.001685e-4  ! A coefficient in the fit for rho0 [kg m-3 degC-3]
+real, parameter :: R04 = -1.120083e-6 ! A coefficient in the fit for rho0 [kg m-3 degC-4]
+real, parameter :: R05 = 6.536332e-9  ! A coefficient in the fit for rho0 [kg m-3 degC-5]
+real, parameter :: R10 = 0.824493     ! A coefficient in the fit for rho0 [kg m-3 PSU-1]
 real, parameter :: R11 = -4.0899e-3   ! A coefficient in the fit for rho0 [kg m-3 degC-1 PSU-1]
-real, parameter :: R21 = 7.6438e-5    ! A coefficient in the fit for rho0 [kg m-3 degC-2 PSU-1]
-real, parameter :: R31 = -8.2467e-7   ! A coefficient in the fit for rho0 [kg m-3 degC-3 PSU-1]
-real, parameter :: R41 = 5.3875e-9    ! A coefficient in the fit for rho0 [kg m-3 degC-4 PSU-1]
-real, parameter :: R032 = -5.72466e-3 ! A coefficient in the fit for rho0 [kg m-3 PSU-3/2]
-real, parameter :: R132 = 1.0227e-4   ! A coefficient in the fit for rho0 [kg m-3 degC-1 PSU-3/2]
-real, parameter :: R232 = -1.6546e-6  ! A coefficient in the fit for rho0 [kg m-3 degC-2 PSU-3/2]
-real, parameter :: R02 = 4.8314e-4    ! A coefficient in the fit for rho0 [kg m-3 PSU-2]
+real, parameter :: R12 = 7.6438e-5    ! A coefficient in the fit for rho0 [kg m-3 degC-2 PSU-1]
+real, parameter :: R13 = -8.2467e-7   ! A coefficient in the fit for rho0 [kg m-3 degC-3 PSU-1]
+real, parameter :: R14 = 5.3875e-9    ! A coefficient in the fit for rho0 [kg m-3 degC-4 PSU-1]
+real, parameter :: R60 = -5.72466e-3  ! A coefficient in the fit for rho0 [kg m-3 PSU-1.5]
+real, parameter :: R61 = 1.0227e-4    ! A coefficient in the fit for rho0 [kg m-3 degC-1 PSU-1.5]
+real, parameter :: R62 = -1.6546e-6   ! A coefficient in the fit for rho0 [kg m-3 degC-2 PSU-1.5]
+real, parameter :: R20 = 4.8314e-4    ! A coefficient in the fit for rho0 [kg m-3 PSU-2]
 
 ! The following constants are used to calculate the secant bulk modulus.
-! The notation here is Sab for terms proportional to T^a*S^b,
-! SpABC for terms proportional to p^A*T^B*S^C.
+! The notation here is Sabc for terms proportional to S^a*T^b*P^c, with 6 used for the 1.5 power.
 !   Note that these values differ from those in Appendix 3 of Gill (1982) because the expressions
 ! from Jackett and MacDougall (1995) use potential temperature, rather than in situ temperature.
-real, parameter :: S00 = 1.965933e4   ! A coefficient in the secant bulk modulus fit [bar]
-real, parameter :: S10 = 1.444304e2   ! A coefficient in the secant bulk modulus fit [bar degC-1]
-real, parameter :: S20 = -1.706103    ! A coefficient in the secant bulk modulus fit [bar degC-2]
-real, parameter :: S30 = 9.648704e-3  ! A coefficient in the secant bulk modulus fit [bar degC-3]
-real, parameter :: S40 = -4.190253e-5 ! A coefficient in the secant bulk modulus fit [bar degC-4]
-real, parameter :: S01 = 52.84855     ! A coefficient in the secant bulk modulus fit [bar PSU-1]
-real, parameter :: S11 = -3.101089e-1 ! A coefficient in the secant bulk modulus fit [bar degC-1 PSU-1]
-real, parameter :: S21 = 6.283263e-3  ! A coefficient in the secant bulk modulus fit [bar degC-2 PSU-1]
-real, parameter :: S31 = -5.084188e-5 ! A coefficient in the secant bulk modulus fit [bar degC-3 PSU-1]
-real, parameter :: S032 = 3.886640e-1   ! A coefficient in the secant bulk modulus fit [bar PSU-3/2]
-real, parameter :: S132 = 9.085835e-3   ! A coefficient in the secant bulk modulus fit [bar degC-1 PSU-3/2]
-real, parameter :: S232 = -4.619924e-4  ! A coefficient in the secant bulk modulus fit [bar degC-2 PSU-3/2]
+real, parameter :: S000 = 1.965933e4   ! A coefficient in the secant bulk modulus fit [bar]
+real, parameter :: S010 = 1.444304e2   ! A coefficient in the secant bulk modulus fit [bar degC-1]
+real, parameter :: S020 = -1.706103    ! A coefficient in the secant bulk modulus fit [bar degC-2]
+real, parameter :: S030 = 9.648704e-3  ! A coefficient in the secant bulk modulus fit [bar degC-3]
+real, parameter :: S040 = -4.190253e-5 ! A coefficient in the secant bulk modulus fit [bar degC-4]
+real, parameter :: S100 = 52.84855     ! A coefficient in the secant bulk modulus fit [bar PSU-1]
+real, parameter :: S110 = -3.101089e-1 ! A coefficient in the secant bulk modulus fit [bar degC-1 PSU-1]
+real, parameter :: S120 = 6.283263e-3  ! A coefficient in the secant bulk modulus fit [bar degC-2 PSU-1]
+real, parameter :: S130 = -5.084188e-5 ! A coefficient in the secant bulk modulus fit [bar degC-3 PSU-1]
+real, parameter :: S600 = 3.886640e-1  ! A coefficient in the secant bulk modulus fit [bar PSU-1.5]
+real, parameter :: S610 = 9.085835e-3  ! A coefficient in the secant bulk modulus fit [bar degC-1 PSU-1.5]
+real, parameter :: S620 = -4.619924e-4 ! A coefficient in the secant bulk modulus fit [bar degC-2 PSU-1.5]
 
-real, parameter :: Sp100 = 3.186519      ! A coefficient in the secant bulk modulus fit [nondim]
-real, parameter :: Sp110 = 2.212276e-2   ! A coefficient in the secant bulk modulus fit [degC-1]
-real, parameter :: Sp120 = -2.984642e-4  ! A coefficient in the secant bulk modulus fit [degC-2]
-real, parameter :: Sp130 = 1.956415e-6   ! A coefficient in the secant bulk modulus fit [degC-3]
-real, parameter :: Sp101 = 6.704388e-3   ! A coefficient in the secant bulk modulus fit [PSU-1]
-real, parameter :: Sp111 = -1.847318e-4  ! A coefficient in the secant bulk modulus fit [degC-1 PSU-1]
-real, parameter :: Sp121 = 2.059331e-7   ! A coefficient in the secant bulk modulus fit [degC-2 PSU-1]
-real, parameter :: Sp1032 = 1.480266e-4  ! A coefficient in the secant bulk modulus fit [PSU-3/2]
+real, parameter :: S001 = 3.186519     ! A coefficient in the secant bulk modulus fit [nondim]
+real, parameter :: S011 = 2.212276e-2  ! A coefficient in the secant bulk modulus fit [degC-1]
+real, parameter :: S021 = -2.984642e-4 ! A coefficient in the secant bulk modulus fit [degC-2]
+real, parameter :: S031 = 1.956415e-6  ! A coefficient in the secant bulk modulus fit [degC-3]
+real, parameter :: S101 = 6.704388e-3  ! A coefficient in the secant bulk modulus fit [PSU-1]
+real, parameter :: S111 = -1.847318e-4 ! A coefficient in the secant bulk modulus fit [degC-1 PSU-1]
+real, parameter :: S121 = 2.059331e-7  ! A coefficient in the secant bulk modulus fit [degC-2 PSU-1]
+real, parameter :: S601 = 1.480266e-4  ! A coefficient in the secant bulk modulus fit [PSU-1.5]
 
-real, parameter :: Sp200 = 2.102898e-4  ! A coefficient in the secant bulk modulus fit [bar-1]
-real, parameter :: Sp210 = -1.202016e-5 ! A coefficient in the secant bulk modulus fit [bar-1 degC-1]
-real, parameter :: Sp220 = 1.394680e-7  ! A coefficient in the secant bulk modulus fit [bar-1 degC-2]
-real, parameter :: Sp201 = -2.040237e-6 ! A coefficient in the secant bulk modulus fit [bar-1 PSU-1]
-real, parameter :: Sp211 = 6.128773e-8  ! A coefficient in the secant bulk modulus fit [bar-1 degC-1 PSU-1]
-real, parameter :: Sp221 = 6.207323e-10 ! A coefficient in the secant bulk modulus fit [bar-1 degC-1 PSU-2]
+real, parameter :: S002 = 2.102898e-4  ! A coefficient in the secant bulk modulus fit [bar-1]
+real, parameter :: S012 = -1.202016e-5 ! A coefficient in the secant bulk modulus fit [bar-1 degC-1]
+real, parameter :: S022 = 1.394680e-7  ! A coefficient in the secant bulk modulus fit [bar-1 degC-2]
+real, parameter :: S102 = -2.040237e-6 ! A coefficient in the secant bulk modulus fit [bar-1 PSU-1]
+real, parameter :: S112 = 6.128773e-8  ! A coefficient in the secant bulk modulus fit [bar-1 degC-1 PSU-1]
+real, parameter :: S122 = 6.207323e-10 ! A coefficient in the secant bulk modulus fit [bar-1 degC-2 PSU-1]
 !>@}
 
 contains
@@ -142,18 +141,18 @@ subroutine calculate_density_array_UNESCO(T, S, pressure, rho, start, npts, rho_
 
 !  Compute rho(s,theta,p=0) - (same as rho(s,t_insitu,p=0) ).
 
-    sig0 = ( t1*(R10 + t1*(R20 + t1*(R30 + t1*(R40 + R50*t1)))) + &
-             s1*((R01 + t1*(R11 + t1*(R21 + t1*(R31 + R41*t1)))) + &
-                 (s12*(R032 + t1*(R132 + R232*t1)) + R02*s1)) )
+    sig0 = ( t1*(R01 + t1*(R02 + t1*(R03 + t1*(R04 + t1*R05)))) + &
+             s1*((R10 + t1*(R11 + t1*(R12 + t1*(R13 + t1*R14)))) + &
+                 (s12*(R60 + t1*(R61 + t1*R62)) + s1*R20)) )
     rho0 = R00 + sig0
 
 !  Compute rho(s,theta,p), first calculating the secant bulk modulus.
 
-    ks = (S00 + ( t1*(S10 + t1*(S20 + t1*(S30 + S40*t1))) + &
-                  s1*((S01 + t1*(S11 + t1*(S21 + S31*t1))) + s12*(S032 + t1*(S132 + S232*t1))) )) + &
-         p1*( (Sp100 + ( t1*(Sp110 + t1*(Sp120 + Sp130*t1)) + &
-                         s1*((Sp101 + t1*(Sp111 + Sp121*t1)) + Sp1032*s12) )) + &
-              p1*(Sp200 + ( t1*(Sp210 + Sp220*t1) + s1*(Sp201 + t1*(Sp211 + Sp221*t1)) )) )
+    ks = (S000 + ( t1*(S010 + t1*(S020 + t1*(S030 + t1*S040))) + &
+                   s1*((S100 + t1*(S110 + t1*(S120 + t1*S130))) + s12*(S600 + t1*(S610 + t1*S620))) )) + &
+         p1*( (S001 + ( t1*(S011 + t1*(S021 + t1*S031)) + &
+                        s1*((S101 + t1*(S111 + t1*S121)) + s12*S601) )) + &
+              p1*(S002 + ( t1*(S012 + t1*S022) + s1*(S102 + t1*(S112 + t1*S122)) )) )
 
     if (present(rho_ref)) then
       rho(j) = ((R00 - rho_ref)*ks + (sig0*ks + p1*rho_ref)) / (ks - p1)
@@ -215,17 +214,17 @@ subroutine calculate_spec_vol_array_UNESCO(T, S, pressure, specvol, start, npts,
 
     ! Compute rho(s,theta,p=0), which is the same as rho(s,t_insitu,p=0).
 
-    rho0 = R00 + ( t1*(R10 + t1*(R20 + t1*(R30 + t1*(R40 + R50*t1)))) + &
-                   s1*((R01 + t1*(R11 + t1*(R21 + t1*(R31 + R41*t1)))) + &
-                       (s12*(R032 + t1*(R132 + R232*t1)) + R02*s1)) )
+    rho0 = R00 + ( t1*(R01 + t1*(R02 + t1*(R03 + t1*(R04 + t1*R05)))) + &
+                   s1*((R10 + t1*(R11 + t1*(R12 + t1*(R13 + t1*R14)))) + &
+                       (s12*(R60 + t1*(R61 + t1*R62)) + s1*R20)) )
 
     ! Compute rho(s,theta,p), first calculating the secant bulk modulus.
 
-    ks = (S00 + ( t1*(S10 + t1*(S20 + t1*(S30 + S40*t1))) + &
-                  s1*((S01 + t1*(S11 + t1*(S21 + S31*t1))) + s12*(S032 + t1*(S132 + S232*t1))) )) + &
-         p1*( (Sp100 + ( t1*(Sp110 + t1*(Sp120 + Sp130*t1)) + &
-                         s1*((Sp101 + t1*(Sp111 + Sp121*t1)) + Sp1032*s12) )) + &
-              p1*(Sp200 + ( t1*(Sp210 + Sp220*t1) + s1*(Sp201 + t1*(Sp211 + Sp221*t1)) )) )
+    ks = (S000 + ( t1*(S010 + t1*(S020 + t1*(S030 + t1*S040))) + &
+                   s1*((S100 + t1*(S110 + t1*(S120 + t1*S130))) + s12*(S600 + t1*(S610 + t1*S620))) )) + &
+         p1*( (S001 + ( t1*(S011 + t1*(S021 + t1*S031)) + &
+                        s1*((S101 + t1*(S111 + t1*S121)) + s12*S601) )) + &
+              p1*(S002 + ( t1*(S012 + t1*S022) + s1*(S102 + t1*(S112 + t1*S122)) )) )
 
     if (present(spv_ref)) then
       specvol(j) = (ks*(1.0 - (rho0*spv_ref)) - p1) / (rho0*ks)
@@ -260,46 +259,106 @@ subroutine calculate_density_derivs_UNESCO(T, S, pressure, drho_dT, drho_dS, sta
   real :: drho0_dS ! Derivative of rho0 with S [kg m-3 PSU-1]
   real :: dks_dT   ! Derivative of ks with T [bar degC-1]
   real :: dks_dS   ! Derivative of ks with S [bar psu-1]
-  real :: denom    ! 1.0 / (ks - p1) [bar-1]
+  real :: I_denom  ! 1.0 / (ks - p1) [bar-1]
   integer :: j
 
   do j=start,start+npts-1
-
     p1 = pressure(j)*1.0e-5 ; t1 = T(j)
     s1 = max(S(j), 0.0) ; s12 = sqrt(s1)
 
-    ! Compute rho(s,theta,p=0), which is the same as rho(s,t_insitu,p=0).
+    ! Compute rho(s,theta,p=0) and its derivatives with temperature and salinity
+    rho0 = R00 + ( t1*(R01 + t1*(R02 + t1*(R03 + t1*(R04 + t1*R05)))) + &
+                   s1*((R10 + t1*(R11 + t1*(R12 + t1*(R13 + t1*R14)))) + &
+                       (s12*(R60 + t1*(R61 + t1*R62)) + s1*R20)) )
+    drho0_dT = R01 + ( t1*(2.0*R02 + t1*(3.0*R03 + t1*(4.0*R04 + t1*(5.0*R05)))) + &
+                       s1*(R11 + (t1*(2.0*R12 + t1*(3.0*R13 + t1*(4.0*R14))) + &
+                                  s12*(R61 + t1*(2.0*R62)) )) )
+    drho0_dS = R10 + ( t1*(R11 + t1*(R12 + t1*(R13 + t1*R14))) + &
+                       (1.5*(s12*(R60 + t1*(R61 + t1*R62))) + s1*(2.0*R20)) )
 
-    rho0 = R00 + ( t1*(R10 + t1*(R20 + t1*(R30 + t1*(R40 + R50*t1)))) + &
-                   s1*((R01 + t1*(R11 + t1*(R21 + t1*(R31 + R41*t1)))) + &
-                       (s12*(R032 + t1*(R132 + R232*t1)) + R02*s1)) )
-    drho0_dT = R10 + ( t1*(2.0*R20 + t1*(3.0*R30 + t1*(4.0*R40 + 5.0*R50*t1))) + &
-                       s1*(R11 + (t1*(2.0*R21 + t1*(3.0*R31 + 4.0*R41*t1)) + &
-                                  s12*(R132 + 2.0*R232*t1))) )
-    drho0_dS = R01 + ( t1*(R11 + t1*(R21 + t1*(R31 + R41*t1))) + &
-                       (1.5*s12*(R032 + t1*(R132 + R232*t1)) + 2.0*R02*s1) )
+    ! Compute the secant bulk modulus and its derivatives with temperature and salinity
+    ks = ( S000 + (t1*(S010 + t1*(S020 + t1*(S030 + t1*S040))) + &
+                   s1*((S100 + t1*(S110 + t1*(S120 + t1*S130))) + s12*(S600 + t1*(S610 + t1*S620)))) ) + &
+         p1*( (S001 + ( t1*(S011 + t1*(S021 + t1*S031)) + &
+                        s1*((S101 + t1*(S111 + t1*S121)) + s12*S601) )) + &
+              p1*(S002 + ( t1*(S012 + t1*S022) + s1*(S102 + t1*(S112 + t1*S122)) )) )
+    dks_dT = ( S010 + (t1*(2.0*S020 + t1*(3.0*S030 + t1*(4.0*S040))) + &
+                       s1*((S110 + t1*(2.0*S120 + t1*(3.0*S130))) + s12*(S610 + t1*(2.0*S620)))) ) + &
+             p1*(((S011 + t1*(2.0*S021 + t1*(3.0*S031))) + s1*(S111 + t1*(2.0*S121)) ) + &
+                 p1*(S012 + t1*(2.0*S022) + s1*(S112 + t1*(2.0*S122))) )
+    dks_dS = ( S100 + (t1*(S110 + t1*(S120 + t1*S130)) + 1.5*(s12*(S600 + t1*(S610 + t1*S620)))) ) + &
+             p1*((S101 + t1*(S111 + t1*S121) + s12*(1.5*S601)) + &
+                 p1*(S102 + t1*(S112 + t1*S122)) )
 
-    ! Compute rho(s,theta,p), first calculating the secant bulk modulus.
-
-    ks = ( S00 + (t1*(S10 + t1*(S20 + t1*(S30 + S40*t1))) + &
-                  s1*((S01 + t1*(S11 + t1*(S21 + S31*t1))) + s12*(S032 + t1*(S132 + S232*t1)))) ) + &
-         p1*( (Sp100 + ( t1*(Sp110 + t1*(Sp120 + Sp130*t1)) + &
-                         s1*((Sp101 + t1*(Sp111 + Sp121*t1)) + Sp1032*s12) )) + &
-              p1*(Sp200 + ( t1*(Sp210 + Sp220*t1) + s1*(Sp201 + t1*(Sp211 + Sp221*t1)) )) )
-    dks_dT = ( S10 + (t1*(2.0*S20 + t1*(3.0*S30 + t1*4.0*S40)) + &
-                      s1*((S11 + t1*(2.0*S21 + 3.0*S31*t1)) + s12*(S132 + 2.0*S232*t1))) ) + &
-             p1*((Sp110 + t1*(2.0*Sp120 + 3.0*Sp130*t1) + s1*(Sp111 + 2.0*Sp121*t1)) + &
-                 p1*(Sp210 + 2.0*Sp220*t1 + s1*(Sp211 + 2.0*Sp221*t1)))
-    dks_dS = ( S01 + (t1*(S11 + t1*(S21 + S31*t1)) + 1.5*s12*(S032 + t1*(S132 + S232*t1))) ) + &
-             p1*((Sp101 + t1*(Sp111 + Sp121*t1) + 1.5*Sp1032*s12) + &
-                 p1*(Sp201 + t1*(Sp211 + Sp221*t1)))
-
-    denom = 1.0 / (ks - p1)
-    drho_dT(j) = denom*(ks*drho0_dT - rho0*p1*denom*dks_dT)
-    drho_dS(j) = denom*(ks*drho0_dS - rho0*p1*denom*dks_dS)
+    I_denom = 1.0 / (ks - p1)
+    drho_dT(j) = (ks*drho0_dT - dks_dT*((rho0*p1)*I_denom)) * I_denom
+    drho_dS(j) = (ks*drho0_dS - dks_dS*((rho0*p1)*I_denom)) * I_denom
   enddo
 
 end subroutine calculate_density_derivs_UNESCO
+
+!> Return the partial derivatives of specific volume with temperature and salinity
+!! using the UNESCO (1981) equation of state, as refit by Jackett and McDougall (1995).
+subroutine calculate_specvol_derivs_UNESCO(T, S, pressure, dSV_dT, dSV_dS, start, npts)
+  real,    intent(in),    dimension(:) :: T        !< Potential temperature relative to the surface [degC].
+  real,    intent(in),    dimension(:) :: S        !< Salinity [PSU].
+  real,    intent(in),    dimension(:) :: pressure !< Pressure [Pa].
+  real,    intent(inout), dimension(:) :: dSV_dT   !< The partial derivative of specific volume with
+                                                   !! potential temperature [m3 kg-1 degC-1].
+  real,    intent(inout), dimension(:) :: dSV_dS   !< The partial derivative of specific volume with
+                                                   !! salinity [m3 kg-1 PSU-1].
+  integer, intent(in)                  :: start    !< The starting point in the arrays.
+  integer, intent(in)                  :: npts     !< The number of values to calculate.
+
+  ! Local variables
+  real :: t1       ! A copy of the temperature at a point [degC]
+  real :: s1       ! A copy of the salinity at a point [PSU]
+  real :: p1       ! Pressure converted to bars [bar]
+  real :: s12      ! The square root of salinity [PSU1/2]
+  real :: rho0     ! Density at 1 bar pressure [kg m-3]
+  real :: ks       ! The secant bulk modulus [bar]
+  real :: drho0_dT ! Derivative of rho0 with T [kg m-3 degC-1]
+  real :: drho0_dS ! Derivative of rho0 with S [kg m-3 PSU-1]
+  real :: dks_dT   ! Derivative of ks with T [bar degC-1]
+  real :: dks_dS   ! Derivative of ks with S [bar psu-1]
+  real :: I_denom2 ! 1.0 / (rho0*ks)**2 [m6 kg-2 bar-2]
+  integer :: j
+
+  do j=start,start+npts-1
+    p1 = pressure(j)*1.0e-5 ; t1 = T(j)
+    s1 = max(S(j), 0.0) ; s12 = sqrt(s1)
+
+    ! Compute rho(s,theta,p=0) and its derivatives with temperature and salinity
+    rho0 = R00 + ( t1*(R01 + t1*(R02 + t1*(R03 + t1*(R04 + t1*R05)))) + &
+                   s1*((R10 + t1*(R11 + t1*(R12 + t1*(R13 + t1*R14)))) + &
+                       (s12*(R60 + t1*(R61 + t1*R62)) + s1*R20)) )
+    drho0_dT = R01 + ( t1*(2.0*R02 + t1*(3.0*R03 + t1*(4.0*R04 + t1*(5.0*R05)))) + &
+                       s1*(R11 + (t1*(2.0*R12 + t1*(3.0*R13 + t1*(4.0*R14))) + &
+                                  s12*(R61 + t1*(2.0*R62)) )) )
+    drho0_dS = R10 + ( t1*(R11 + t1*(R12 + t1*(R13 + t1*R14))) + &
+                       (1.5*(s12*(R60 + t1*(R61 + t1*R62))) + s1*(2.0*R20)) )
+
+    ! Compute the secant bulk modulus and its derivatives with temperature and salinity
+    ks = ( S000 + (t1*(S010 + t1*(S020 + t1*(S030 + t1*S040))) + &
+                   s1*((S100 + t1*(S110 + t1*(S120 + t1*S130))) + s12*(S600 + t1*(S610 + t1*S620)))) ) + &
+         p1*( (S001 + ( t1*(S011 + t1*(S021 + t1*S031)) + &
+                        s1*((S101 + t1*(S111 + t1*S121)) + s12*S601) )) + &
+              p1*(S002 + ( t1*(S012 + t1*S022) + s1*(S102 + t1*(S112 + t1*S122)) )) )
+    dks_dT = ( S010 + (t1*(2.0*S020 + t1*(3.0*S030 + t1*(4.0*S040))) + &
+                       s1*((S110 + t1*(2.0*S120 + t1*(3.0*S130))) + s12*(S610 + t1*(2.0*S620)))) ) + &
+             p1*(((S011 + t1*(2.0*S021 + t1*(3.0*S031))) + s1*(S111 + t1*(2.0*S121)) ) + &
+                 p1*(S012 + t1*(2.0*S022) + s1*(S112 + t1*(2.0*S122))) )
+    dks_dS = ( S100 + (t1*(S110 + t1*(S120 + t1*S130)) + 1.5*(s12*(S600 + t1*(S610 + t1*S620)))) ) + &
+             p1*((S101 + t1*(S111 + t1*S121) + s12*(1.5*S601)) + &
+                 p1*(S102 + t1*(S112 + t1*S122)) )
+
+    ! specvol(j) = (ks - p1) / (rho0*ks) = 1/rho0 - p1/(rho0*ks)
+    I_denom2 = 1.0 / (rho0*ks)**2
+    dSV_dT(j) = ((p1*rho0)*dks_dT + ((p1 - ks)*ks)*drho0_dT) * I_denom2
+    dSV_dS(j) = ((p1*rho0)*dks_dS + ((p1 - ks)*ks)*drho0_dS) * I_denom2
+  enddo
+
+end subroutine calculate_specvol_derivs_UNESCO
 
 !> Compute the in situ density of sea water (rho) and the compressibility (drho/dp == C_sound^-2)
 !! at the given salinity, potential temperature and pressure using the UNESCO (1981)
@@ -327,6 +386,7 @@ subroutine calculate_compress_UNESCO(T, S, pressure, rho, drho_dp, start, npts)
   real :: ks_1    ! The linear pressure dependence of the secant bulk modulus at zero pressure [nondim]
   real :: ks_2    ! The quadratic pressure dependence of the secant bulk modulus at zero pressure [bar-1]
   real :: dks_dp  ! The derivative of the secant bulk modulus with pressure [nondim]
+  real :: I_denom  ! 1.0 / (ks - p1) [bar-1]
   integer :: j
 
   do j=start,start+npts-1
@@ -335,24 +395,25 @@ subroutine calculate_compress_UNESCO(T, S, pressure, rho, drho_dp, start, npts)
 
     ! Compute rho(s,theta,p=0), which is the same as rho(s,t_insitu,p=0).
 
-    rho0 = R00 + ( t1*(R10 + t1*(R20 + t1*(R30 + t1*(R40 + R50*t1)))) + &
-                   s1*((R01 + t1*(R11 + t1*(R21 + t1*(R31 + R41*t1)))) + &
-                       (s12*(R032 + t1*(R132 + R232*t1)) + R02*s1)) )
+    rho0 = R00 + ( t1*(R01 + t1*(R02 + t1*(R03 + t1*(R04 + t1*R05)))) + &
+                   s1*((R10 + t1*(R11 + t1*(R12 + t1*(R13 + t1*R14)))) + &
+                       (s12*(R60 + t1*(R61 + t1*R62)) + s1*R20)) )
 
     ! Calculate the secant bulk modulus and its derivative with pressure.
-    ks_0 = S00 + ( t1*(S10 + t1*(S20 + t1*(S30 + S40*t1))) + &
-                   s1*((S01 + t1*(S11 + t1*(S21 + S31*t1))) + s12*(S032 + t1*(S132 + S232*t1))) )
-    ks_1 = Sp100 + ( t1*(Sp110 + t1*(Sp120 + Sp130*t1)) + &
-                     s1*((Sp101 + t1*(Sp111 + Sp121*t1)) + Sp1032*s12) )
-    ks_2 = Sp200 + ( t1*(Sp210 + Sp220*t1) + s1*(Sp201 + t1*(Sp211 + Sp221*t1)) )
+    ks_0 = S000 + ( t1*( S010 + t1*(S020 + t1*(S030 + t1*S040))) + &
+                    s1*((S100 + t1*(S110 + t1*(S120 + t1*S130))) + s12*(S600 + t1*(S610 + t1*S620))) )
+    ks_1 = S001 + ( t1*( S011 + t1*(S021 + t1*S031)) + &
+                    s1*((S101 + t1*(S111 + t1*S121)) + s12*S601) )
+    ks_2 = S002 + ( t1*( S012 + t1*S022) + s1*(S102 + t1*(S112 + t1*S122)) )
 
     ks = ks_0 + p1*(ks_1 + p1*ks_2)
     dks_dp = ks_1 + 2.0*p1*ks_2
+    I_denom = 1.0 / (ks - p1)
 
     ! Compute the in situ density, rho(s,theta,p), and its derivative with pressure.
-    rho(j) = rho0*ks / (ks - p1)
+    rho(j) = rho0*ks * I_denom
     ! The factor of 1.0e-5 is because pressure here is in bars, not Pa.
-    drho_dp(j) = 1.0e-5 * (rho(j) / (ks - p1)) * (1.0 - dks_dp*p1/ks)
+    drho_dp(j) = 1.0e-5 * ((rho0 * (ks - p1*dks_dp)) * I_denom**2)
   enddo
 end subroutine calculate_compress_UNESCO
 
@@ -411,49 +472,49 @@ subroutine calculate_density_second_derivs_array_UNESCO(T, S, P, drho_ds_ds, drh
     ! singularity in the second derivatives with salinity for fresh water.  To avoid this, the
     ! square root of salinity can be treated with a floor such that the contribution from the
     ! S**1.5 terms to both the surface density and the secant bulk modulus are lost to roundoff.
-    ! This salinity is given by (~1e-16*S00/S032)**(2/3) ~= 3e-8 PSU, or S12 ~= 1.7e-4
+    ! This salinity is given by (~1e-16*S000/S600)**(2/3) ~= 3e-8 PSU, or S12 ~= 1.7e-4
     I_s12 = 1.0 / (max(s12, 1.0e-4))
 
     ! Calculate the density at sea level pressure and its derivatives
-    rho0 = R00 + ( t1*(R10 + t1*(R20 + t1*(R30 + t1*(R40 + R50*t1)))) + &
-                   s1*((R01 + t1*(R11 + t1*(R21 + t1*(R31 + R41*t1)))) + &
-                       (s12*(R032 + t1*(R132 + R232*t1)) + R02*s1)) )
-    drho0_dT = R10 + ( t1*(2.0*R20 + t1*(3.0*R30 + t1*(4.0*R40 + 5.0*R50*t1))) + &
-                       s1*(R11 + ( t1*(2.0*R21 + t1*(3.0*R31 + 4.0*R41*t1)) + &
-                                   s12*(R132 + 2.0*R232*t1) ) ) )
-    drho0_dS = R01 + ( t1*(R11 + t1*(R21 + t1*(R31 + R41*t1))) + &
-                       (1.5*s12*(R032 + t1*(R132 + R232*t1)) + 2.0*R02*s1) )
-    d2rho0_dS2 = 0.75*(R032 + t1*(R132 + R232*t1))*I_s12 + 2.0*R02
-    d2rho0_dSdT = R11 + ( t1*(2.0*R21 + t1*(3.0*R31 + 4.0*R41*t1)) + 1.5*s12*(R132 + 2.0*R232*t1) )
-    d2rho0_dT2 = 2.0*R20 + ( t1*(6.0*R30 + t1*(12.0*R40 + 20.0*R50*t1)) + &
-                             s1*((2.0*R21 + t1*(6.0*R31 + 12.0*R41*t1)) + 2.0*R232*s12) )
+    rho0 = R00 + ( t1*(R01 + t1*(R02 + t1*(R03 + t1*(R04 + t1*R05)))) + &
+                   s1*((R10 + t1*(R11 + t1*(R12 + t1*(R13 + t1*R14)))) + &
+                       (s12*(R60 + t1*(R61 + t1*R62)) + s1*R20)) )
+    drho0_dT = R01 + ( t1*(2.0*R02 + t1*(3.0*R03 + t1*(4.0*R04 + t1*(5.0*R05)))) + &
+                       s1*(R11 + ( t1*(2.0*R12 + t1*(3.0*R13 + t1*(4.0*R14))) + &
+                                   s12*(R61 + t1*(2.0*R62)) ) ) )
+    drho0_dS = R10 + ( t1*(R11 + t1*(R12 + t1*(R13 + t1*R14))) + &
+                       (1.5*(s12*(R60 + t1*(R61 + t1*R62))) + s1*(2.0*R20)) )
+    d2rho0_dS2 = 0.75*(R60 + t1*(R61 + t1*R62))*I_s12 + 2.0*R20
+    d2rho0_dSdT = R11 + ( t1*(2.0*R12 + t1*(3.0*R13 + t1*(4.0*R14))) + s12*(1.5*R61 + t1*(3.0*R62)) )
+    d2rho0_dT2 = 2.0*R02 + ( t1*(6.0*R03 + t1*(12.0*R04 + t1*(20.0*R05))) + &
+                             s1*((2.0*R12 + t1*(6.0*R13 + t1*(12.0*R14))) + s12*(2.0*R62)) )
 
     !  Calculate the secant bulk modulus and its derivatives
-    ks_0 = S00 + ( t1*(S10 + t1*(S20 + t1*(S30 + S40*t1))) + &
-                   s1*((S01 + t1*(S11 + t1*(S21 + S31*t1))) + s12*(S032 + t1*(S132 + S232*t1))) )
-    ks_1 = Sp100 + ( t1*(Sp110 + t1*(Sp120 + Sp130*t1)) + &
-                     s1*((Sp101 + t1*(Sp111 + Sp121*t1)) + Sp1032*s12) )
-    ks_2 = Sp200 + ( t1*(Sp210 + Sp220*t1) + s1*(Sp201 + t1*(Sp211 + Sp221*t1)) )
+    ks_0 = S000 + ( t1*( S010 + t1*(S020 + t1*(S030 + t1*S040))) + &
+                    s1*((S100 + t1*(S110 + t1*(S120 + t1*S130))) + s12*(S600 + t1*(S610 + t1*S620))) )
+    ks_1 = S001 + ( t1*( S011 + t1*(S021 + t1*S031)) + &
+                    s1*((S101 + t1*(S111 + t1*S121)) + s12*S601) )
+    ks_2 = S002 + ( t1*( S012 + t1*S022) + s1*(S102 + t1*(S112 + t1*S122)) )
 
     ks = ks_0 + p1*(ks_1 + p1*ks_2)
     dks_dp = ks_1 + 2.0*p1*ks_2
-    dks_dT = (S10 + ( t1*(2.0*S20 + t1*(3.0*S30 + t1*4.0*S40)) + &
-                      s1*((S11 + t1*(2.0*S21 + 3.0*S31*t1)) + s12*(S132 + 2.0*S232*t1)) )) + &
-             p1*((Sp110 + t1*(2.0*Sp120 + 3.0*Sp130*t1) + s1*(Sp111 + 2.0*Sp121*t1)) + &
-                 p1*(Sp210 + 2.0*Sp220*t1 + s1*(Sp211 + 2.0*Sp221*t1)))
-    dks_dS = (S01 + ( t1*(S11 + t1*(S21 + S31*t1)) + 1.5*s12*(S032 + t1*(S132 + S232*t1)) )) + &
-             p1*((Sp101 + t1*(Sp111 + Sp121*t1) + 1.5*Sp1032*s12) + &
-                 p1*(Sp201 + t1*(Sp211 + Sp221*t1)))
-    d2ks_dS2 = 0.75*((S032 + t1*(S132 + S232*t1)) + p1*Sp1032)*I_s12
-    d2ks_dSdT = (S11 + ( t1*(2.0*S21 + 3.0*S31*t1) + 1.5*s12*(S132 + 2.0*S232*t1) )) + &
-                p1*((Sp111 + 2.0*Sp121*t1) +  p1*(Sp211 + 2.0*Sp221*t1))
-    d2ks_dT2 = 2.0*(S20 + ( t1*(3.0*S30 + 6.0*S40*t1) + s1*((S21 + 3.0*S31*t1) + S232*s12) )) + &
-               2.0*p1*((Sp120 + (3.0*Sp130*t1 + Sp121*s1)) + p1*(Sp220 + Sp221*s1))
+    dks_dT = (S010 + ( t1*(2.0*S020 + t1*(3.0*S030 + t1*(4.0*S040))) + &
+                       s1*((S110 + t1*(2.0*S120 + t1*(3.0*S130))) + s12*(S610 + t1*(2.0*S620))) )) + &
+             p1*((S011 + t1*(2.0*S021 + t1*(3.0*S031)) + s1*(S111 + t1*(2.0*S121))) + &
+                 p1*(S012 + t1*(2.0*S022) + s1*(S112 + t1*(2.0*S122))))
+    dks_dS = (S100 + ( t1*(S110 + t1*(S120 + t1*S130)) + 1.5*(s12*(S600 + t1*(S610 + t1*S620))) )) + &
+             p1*((S101 + t1*(S111 + t1*S121) + s12*(1.5*S601)) + &
+                 p1*(S102 + t1*(S112 + t1*S122)))
+    d2ks_dS2 = 0.75*((S600 + t1*(S610 + t1*S620)) + p1*S601)*I_s12
+    d2ks_dSdT = (S110 + ( t1*(2.0*S120 + t1*(3.0*S130)) + s12*(1.5*S610 + t1*(3.0*S620)) )) + &
+                p1*((S111 + t1*(2.0*S121)) +  p1*(S112 + t1*(2.0*S122)))
+    d2ks_dT2 = 2.0*(S020 + ( t1*(3.0*S030 + t1*(6.0*S040)) + s1*((S120 + t1*(3.0*S130)) + s12*S620) )) + &
+               2.0*p1*((S021 + (t1*(3.0*S031) + s1*S121)) + p1*(S022 + s1*S122))
 
-    d2ks_dSdp = (Sp101 + (t1*(Sp111 + Sp121*t1) + 1.5*Sp1032*s12)) + &
-                2.0*p1*(Sp201 + t1*(Sp211 + Sp221*t1))
-    d2ks_dTdp = (Sp110 + (t1*(2.0*Sp120 + 3.0*Sp130*t1) + s1*(Sp111 + 2.0*Sp121*t1))) + &
-                2.0*p1*(Sp210 + 2.0*Sp220*t1 + s1*(Sp211 + 2.0*Sp221*t1))
+    d2ks_dSdp = (S101 + (t1*(S111 + t1*S121) + s12*(1.5*S601))) + &
+                2.0*p1*(S102 + t1*(S112 + t1*S122))
+    d2ks_dTdp = (S011 + (t1*(2.0*S021 + t1*(3.0*S031)) + s1*(S111 + t1*(2.0*S121)))) + &
+                2.0*p1*(S012 + t1*(2.0*S022) + s1*(S112 + t1*(2.0*S122)))
     I_denom = 1.0 / (ks - p1)
 
     ! Expressions for density and its first derivatives are copied here for reference:
@@ -467,7 +528,7 @@ subroutine calculate_density_second_derivs_array_UNESCO(T, S, P, drho_ds_ds, drh
                       (2.0*drho0_dS*dks_dS + rho0*(d2ks_dS2 - 2.0*dks_dS**2*I_denom)) )
     drho_dS_dT(j) = I_denom * (ks * d2rho0_dSdT - (p1*I_denom) * &
                         ((drho0_dT*dks_dS + drho0_dS*dks_dT) + &
-                          rho0*(d2ks_dSdT - 2.0*(dks_dS*dks_dT)*I_denom)) )
+                         rho0*(d2ks_dSdT - 2.0*(dks_dS*dks_dT)*I_denom)) )
     drho_dT_dT(j) = I_denom * ( ks*d2rho0_dT2 - (p1*I_denom) * &
                       (2.0*drho0_dT*dks_dT + rho0*(d2ks_dT2 - 2.0*dks_dT**2*I_denom)) )
 

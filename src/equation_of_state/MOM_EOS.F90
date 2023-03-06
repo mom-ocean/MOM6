@@ -27,7 +27,7 @@ use MOM_EOS_Jackett06, only : calculate_density_Jackett06, calculate_spec_vol_Ja
 use MOM_EOS_Jackett06, only : calculate_density_derivs_Jackett06, calculate_specvol_derivs_Jackett06
 use MOM_EOS_Jackett06, only : calculate_compress_Jackett06, calculate_density_second_derivs_Jackett06
 use MOM_EOS_UNESCO, only : calculate_density_unesco, calculate_spec_vol_unesco
-use MOM_EOS_UNESCO, only : calculate_density_derivs_unesco, calculate_density_unesco
+use MOM_EOS_UNESCO, only : calculate_density_derivs_unesco, calculate_specvol_derivs_UNESCO
 use MOM_EOS_UNESCO, only : calculate_density_second_derivs_UNESCO, calculate_compress_unesco
 use MOM_EOS_NEMO,   only : calculate_density_nemo
 use MOM_EOS_NEMO,   only : calculate_density_derivs_nemo
@@ -331,7 +331,7 @@ subroutine calculate_density_array(T, S, pressure, rho, start, npts, EOS, rho_re
       call calculate_density_linear(T, S, pressure, rho, start, npts, &
                                     EOS%Rho_T0_S0, EOS%dRho_dT, EOS%dRho_dS, rho_ref)
     case (EOS_UNESCO)
-      call calculate_density_unesco(T, S, pressure, rho, start, npts, rho_ref)
+      call calculate_density_UNESCO(T, S, pressure, rho, start, npts, rho_ref)
     case (EOS_WRIGHT)
       call calculate_density_wright(T, S, pressure, rho, start, npts, rho_ref)
     case (EOS_WRIGHT_FULL)
@@ -636,7 +636,7 @@ subroutine calculate_spec_vol_array(T, S, pressure, specvol, start, npts, EOS, s
       call calculate_spec_vol_linear(T, S, pressure, specvol, start, npts, &
                EOS%rho_T0_S0, EOS%drho_dT, EOS%drho_dS, spv_ref)
     case (EOS_UNESCO)
-      call calculate_spec_vol_unesco(T, S, pressure, specvol, start, npts, spv_ref)
+      call calculate_spec_vol_UNESCO(T, S, pressure, specvol, start, npts, spv_ref)
     case (EOS_WRIGHT)
       call calculate_spec_vol_wright(T, S, pressure, specvol, start, npts, spv_ref)
     case (EOS_WRIGHT_FULL)
@@ -931,7 +931,7 @@ subroutine calculate_density_derivs_array(T, S, pressure, drho_dT, drho_dS, star
       call calculate_density_derivs_linear(T, S, pressure, drho_dT, drho_dS, EOS%Rho_T0_S0, &
                                            EOS%dRho_dT, EOS%dRho_dS, start, npts)
     case (EOS_UNESCO)
-      call calculate_density_derivs_unesco(T, S, pressure, drho_dT, drho_dS, start, npts)
+      call calculate_density_derivs_UNESCO(T, S, pressure, drho_dT, drho_dS, start, npts)
     case (EOS_WRIGHT)
       call calculate_density_derivs_wright(T, S, pressure, drho_dT, drho_dS, start, npts)
     case (EOS_WRIGHT_FULL)
@@ -1333,12 +1333,7 @@ subroutine calculate_spec_vol_derivs_array(T, S, pressure, dSV_dT, dSV_dS, start
       call calculate_specvol_derivs_linear(T, S, pressure, dSV_dT, dSV_dS, start, &
                                            npts, EOS%Rho_T0_S0, EOS%dRho_dT, EOS%dRho_dS)
     case (EOS_UNESCO)
-      call calculate_density_unesco(T, S, pressure, rho, start, npts)
-      call calculate_density_derivs_unesco(T, S, pressure, drho_dT, drho_dS, start, npts)
-      do j=start,start+npts-1
-        dSV_dT(j) = -dRho_DT(j)/(rho(j)**2)
-        dSV_dS(j) = -dRho_DS(j)/(rho(j)**2)
-      enddo
+      call calculate_specvol_derivs_UNESCO(T, S, pressure, dSV_dT, dSV_dS, start, npts)
     case (EOS_WRIGHT)
       call calculate_specvol_derivs_wright(T, S, pressure, dSV_dT, dSV_dS, start, npts)
     case (EOS_WRIGHT_FULL)
@@ -1455,7 +1450,7 @@ subroutine calculate_compress_1d(T, S, pressure, rho, drho_dp, EOS, dom)
       call calculate_compress_linear(Ta, Sa, pres, rho, drho_dp, is, npts, &
                                      EOS%Rho_T0_S0, EOS%dRho_dT, EOS%dRho_dS)
     case (EOS_UNESCO)
-      call calculate_compress_unesco(Ta, Sa, pres, rho, drho_dp, is, npts)
+      call calculate_compress_UNESCO(Ta, Sa, pres, rho, drho_dp, is, npts)
     case (EOS_WRIGHT)
       call calculate_compress_wright(Ta, Sa, pres, rho, drho_dp, is, npts)
     case (EOS_WRIGHT_FULL)
