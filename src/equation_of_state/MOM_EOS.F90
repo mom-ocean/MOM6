@@ -23,23 +23,21 @@ use MOM_EOS_Wright_red,  only : calculate_density_derivs_wright_red
 use MOM_EOS_Wright_red,  only : calculate_specvol_derivs_wright_red, int_density_dz_wright_red
 use MOM_EOS_Wright_red,  only : calculate_compress_wright_red, int_spec_vol_dp_wright_red
 use MOM_EOS_Wright_red,  only : calculate_density_second_derivs_wright_red
+use MOM_EOS_Jackett06, only : calculate_density_Jackett06, calculate_spec_vol_Jackett06
+use MOM_EOS_Jackett06, only : calculate_density_derivs_Jackett06, calculate_specvol_derivs_Jackett06
+use MOM_EOS_Jackett06, only : calculate_compress_Jackett06, calculate_density_second_derivs_Jackett06
 use MOM_EOS_UNESCO, only : calculate_density_unesco, calculate_spec_vol_unesco
 use MOM_EOS_UNESCO, only : calculate_density_derivs_unesco, calculate_density_unesco
-use MOM_EOS_UNESCO, only : calculate_density_second_derivs_UNESCO
-use MOM_EOS_UNESCO, only : calculate_compress_unesco
+use MOM_EOS_UNESCO, only : calculate_density_second_derivs_UNESCO, calculate_compress_unesco
 use MOM_EOS_NEMO,   only : calculate_density_nemo
 use MOM_EOS_NEMO,   only : calculate_density_derivs_nemo
-use MOM_EOS_NEMO,   only : calculate_density_second_derivs_NEMO
-use MOM_EOS_NEMO,   only : calculate_compress_nemo
+use MOM_EOS_NEMO,   only : calculate_density_second_derivs_NEMO, calculate_compress_nemo
 use MOM_EOS_Roquet_SpV, only : calculate_density_Roquet_SpV, calculate_spec_vol_Roquet_SpV
 use MOM_EOS_Roquet_SpV, only : calculate_density_derivs_Roquet_SpV, calculate_specvol_derivs_Roquet_SpV
-use MOM_EOS_Roquet_SpV, only : calculate_compress_Roquet_SpV
-use MOM_EOS_Roquet_SpV, only : calculate_density_second_derivs_Roquet_SpV
+use MOM_EOS_Roquet_SpV, only : calculate_compress_Roquet_SpV, calculate_density_second_derivs_Roquet_SpV
 use MOM_EOS_TEOS10, only : calculate_density_teos10, calculate_spec_vol_teos10
-use MOM_EOS_TEOS10, only : calculate_density_derivs_teos10
-use MOM_EOS_TEOS10, only : calculate_specvol_derivs_teos10
-use MOM_EOS_TEOS10, only : calculate_density_second_derivs_teos10
-use MOM_EOS_TEOS10, only : calculate_compress_teos10
+use MOM_EOS_TEOS10, only : calculate_density_derivs_teos10, calculate_specvol_derivs_teos10
+use MOM_EOS_TEOS10, only : calculate_density_second_derivs_teos10, calculate_compress_teos10
 use MOM_EOS_TEOS10, only : gsw_sp_from_sr, gsw_pt_from_ct
 use MOM_TFreeze,    only : calculate_TFreeze_linear, calculate_TFreeze_Millero
 use MOM_TFreeze,    only : calculate_TFreeze_teos10
@@ -174,6 +172,7 @@ integer, parameter, public :: EOS_WRIGHT_RED = 5 !< A named integer specifying a
 integer, parameter, public :: EOS_TEOS10 = 6 !< A named integer specifying an equation of state
 integer, parameter, public :: EOS_NEMO   = 7 !< A named integer specifying an equation of state
 integer, parameter, public :: EOS_ROQUET_SPV = 8 !< A named integer specifying an equation of state
+integer, parameter, public :: EOS_JACKETT06 = 9 !< A named integer specifying an equation of state
 
 character*(12), parameter :: EOS_LINEAR_STRING = "LINEAR" !< A string for specifying the equation of state
 character*(12), parameter :: EOS_UNESCO_STRING = "UNESCO" !< A string for specifying the equation of state
@@ -185,6 +184,7 @@ character*(12), parameter :: EOS_TEOS10_STRING = "TEOS10" !< A string for specif
 character*(12), parameter :: EOS_NEMO_STRING   = "NEMO"   !< A string for specifying the equation of state
 character*(12), parameter :: EOS_ROQUET_RHO_STRING = "ROQUET_RHO"   !< A string for specifying the equation of state
 character*(12), parameter :: EOS_ROQUET_SPV_STRING = "ROQUET_SPV"   !< A string for specifying the equation of state
+character*(12), parameter :: EOS_JACKETT06_STRING = "JACKETT_06" !< A string for specifying the equation of state
 character*(12), parameter :: EOS_DEFAULT = EOS_WRIGHT_STRING !< The default equation of state
 
 integer, parameter :: TFREEZE_LINEAR = 1  !< A named integer specifying a freezing point expression
@@ -295,6 +295,9 @@ subroutine calculate_stanley_density_scalar(T, S, pressure, Tvar, TScov, Svar, r
     case (EOS_TEOS10)
       call calculate_density_second_derivs_teos10(T_scale*T, S_scale*S, p_scale*pressure, &
                                                   d2RdSS, d2RdST, d2RdTT, d2RdSp, d2RdTP)
+    case (EOS_JACKETT06)
+      call calculate_density_second_derivs_Jackett06(T_scale*T, S_scale*S, p_scale*pressure, &
+                                                  d2RdSS, d2RdST, d2RdTT, d2RdSp, d2RdTP)
     case default
       call MOM_error(FATAL, "calculate_stanley_density_scalar: EOS is not valid.")
   end select
@@ -341,6 +344,8 @@ subroutine calculate_density_array(T, S, pressure, rho, start, npts, EOS, rho_re
       call calculate_density_nemo(T, S, pressure, rho, start, npts, rho_ref)
     case (EOS_ROQUET_SPV)
       call calculate_density_Roquet_SpV(T, S, pressure, rho, start, npts, rho_ref)
+    case (EOS_JACKETT06)
+      call calculate_density_Jackett06(T, S, pressure, rho, start, npts, rho_ref)
     case default
       call MOM_error(FATAL, "calculate_density_array: EOS%form_of_EOS is not valid.")
   end select
@@ -417,6 +422,10 @@ subroutine calculate_stanley_density_array(T, S, pressure, Tvar, TScov, Svar, rh
     case (EOS_TEOS10)
       call calculate_density_teos10(T, S, pressure, rho, start, npts, rho_ref)
       call calculate_density_second_derivs_teos10(T, S, pressure, d2RdSS, d2RdST, &
+                                                  d2RdTT, d2RdSp, d2RdTP, start, npts)
+    case (EOS_JACKETT06)
+      call calculate_density_Jackett06(T, S, pressure, rho, start, npts, rho_ref)
+      call calculate_density_second_derivs_Jackett06(T, S, pressure, d2RdSS, d2RdST, &
                                                   d2RdTT, d2RdSp, d2RdTP, start, npts)
     case default
       call MOM_error(FATAL, "calculate_stanley_density_array: EOS%form_of_EOS is not valid.")
@@ -582,6 +591,10 @@ subroutine calculate_stanley_density_1d(T, S, pressure, Tvar, TScov, Svar, rho, 
       call calculate_density_teos10(Ta, Sa, pres, rho, is, npts, rho_reference)
       call calculate_density_second_derivs_teos10(Ta, Sa, pres, d2RdSS, d2RdST, &
                                                   d2RdTT, d2RdSp, d2RdTP, is, npts)
+    case (EOS_JACKETT06)
+      call calculate_density_Jackett06(Ta, Sa, pres, rho, is, npts, rho_reference)
+      call calculate_density_second_derivs_Jackett06(Ta, Sa, pres, d2RdSS, d2RdST, &
+                                                  d2RdTT, d2RdSp, d2RdTP, is, npts)
     case default
       call MOM_error(FATAL, "calculate_stanley_density_1d: EOS is not valid.")
   end select
@@ -641,6 +654,8 @@ subroutine calculate_spec_vol_array(T, S, pressure, specvol, start, npts, EOS, s
       endif
     case (EOS_ROQUET_SpV)
       call calculate_spec_vol_Roquet_SpV(T, S, pressure, specvol, start, npts, spv_ref)
+    case (EOS_JACKETT06)
+      call calculate_spec_vol_Jackett06(T, S, pressure, specvol, start, npts, spv_ref)
     case default
       call MOM_error(FATAL, "calculate_spec_vol_array: EOS%form_of_EOS is not valid.")
   end select
@@ -929,6 +944,8 @@ subroutine calculate_density_derivs_array(T, S, pressure, drho_dT, drho_dS, star
       call calculate_density_derivs_nemo(T, S, pressure, drho_dT, drho_dS, start, npts)
     case (EOS_ROQUET_SPV)
       call calculate_density_derivs_Roquet_SpV(T, S, pressure, drho_dT, drho_dS, start, npts)
+    case (EOS_JACKETT06)
+      call calculate_density_derivs_Jackett06(T, S, pressure, drho_dT, drho_dS, start, npts)
     case default
       call MOM_error(FATAL, "calculate_density_derivs_array: EOS%form_of_EOS is not valid.")
   end select
@@ -1034,6 +1051,8 @@ subroutine calculate_density_derivs_scalar(T, S, pressure, drho_dT, drho_dS, EOS
       call calculate_density_derivs_wright_red(Ta(1), Sa(1), pres(1),drho_dT, drho_dS)
     case (EOS_TEOS10)
       call calculate_density_derivs_teos10(Ta(1), Sa(1), pres(1), drho_dT, drho_dS)
+    case (EOS_JACKETT06)
+      call calculate_density_derivs_Jackett06(Ta(1), Sa(1), pres(1),drho_dT, drho_dS)
     case default
       ! Some equations of state do not have a scalar form of calculate_density_derivs, so try the array form.
       call calculate_density_derivs_array(Ta, Sa, pres, dR_dT, dR_dS, 1, 1, EOS)
@@ -1116,6 +1135,9 @@ subroutine calculate_density_second_derivs_1d(T, S, pressure, drho_dS_dS, drho_d
       case (EOS_TEOS10)
         call calculate_density_second_derivs_teos10(T, S, pressure, drho_dS_dS, drho_dS_dT, &
                                                     drho_dT_dT, drho_dS_dP, drho_dT_dP, is, npts)
+      case (EOS_JACKETT06)
+        call calculate_density_second_derivs_Jackett06(T, S, pressure, drho_dS_dS, drho_dS_dT, &
+                                                    drho_dT_dT, drho_dS_dP, drho_dT_dP, is, npts)
       case default
         call MOM_error(FATAL, "calculate_density_second_derivs: EOS%form_of_EOS is not valid.")
     end select
@@ -1154,6 +1176,9 @@ subroutine calculate_density_second_derivs_1d(T, S, pressure, drho_dS_dS, drho_d
                                                     drho_dT_dT, drho_dS_dP, drho_dT_dP, is, npts)
       case (EOS_TEOS10)
         call calculate_density_second_derivs_teos10(Ta, Sa, pres, drho_dS_dS, drho_dS_dT, &
+                                                    drho_dT_dT, drho_dS_dP, drho_dT_dP, is, npts)
+      case (EOS_JACKETT06)
+        call calculate_density_second_derivs_Jackett06(Ta, Sa, pres, drho_dS_dS, drho_dS_dT, &
                                                     drho_dT_dT, drho_dS_dP, drho_dT_dP, is, npts)
       case default
         call MOM_error(FATAL, "calculate_density_second_derivs: EOS%form_of_EOS is not valid.")
@@ -1248,6 +1273,9 @@ subroutine calculate_density_second_derivs_scalar(T, S, pressure, drho_dS_dS, dr
     case (EOS_TEOS10)
       call calculate_density_second_derivs_teos10(Ta, Sa, pres, drho_dS_dS, drho_dS_dT, &
                                                   drho_dT_dT, drho_dS_dP, drho_dT_dP)
+    case (EOS_JACKETT06)
+      call calculate_density_second_derivs_Jackett06(Ta, Sa, pres, drho_dS_dS, drho_dS_dT, &
+                                                  drho_dT_dT, drho_dS_dP, drho_dT_dP)
     case default
       call MOM_error(FATAL, "calculate_density_second_derivs: EOS%form_of_EOS is not valid.")
   end select
@@ -1328,6 +1356,8 @@ subroutine calculate_spec_vol_derivs_array(T, S, pressure, dSV_dT, dSV_dS, start
       enddo
     case (EOS_ROQUET_SPV)
       call calculate_specvol_derivs_Roquet_SpV(T, S, pressure, dSV_dT, dSV_dS, start, npts)
+    case (EOS_JACKETT06)
+      call calculate_specvol_derivs_Jackett06(T, S, pressure, dSV_dT, dSV_dS, start, npts)
     case default
       call MOM_error(FATAL, "calculate_spec_vol_derivs_array: EOS%form_of_EOS is not valid.")
   end select
@@ -1438,6 +1468,8 @@ subroutine calculate_compress_1d(T, S, pressure, rho, drho_dp, EOS, dom)
       call calculate_compress_nemo(Ta, Sa, pres, rho, drho_dp, is, npts)
     case (EOS_ROQUET_SpV)
       call calculate_compress_Roquet_SpV(Ta, Sa, pres, rho, drho_dp, is, npts)
+    case (EOS_JACKETT06)
+      call calculate_compress_Jackett06(Ta, Sa, pres, rho, drho_dp, is, npts)
     case default
       call MOM_error(FATAL, "calculate_compress: EOS%form_of_EOS is not valid.")
   end select
@@ -1747,6 +1779,8 @@ subroutine EOS_init(param_file, EOS, US)
       EOS%form_of_EOS = EOS_NEMO
     case (EOS_ROQUET_SPV_STRING)
       EOS%form_of_EOS = EOS_ROQUET_SPV
+    case (EOS_JACKETT06_STRING)
+      EOS%form_of_EOS = EOS_JACKETT06
     case default
       call MOM_error(FATAL, "interpret_eos_selection: EQN_OF_STATE "//&
                               trim(tmpstr) // " in input file is invalid.")
@@ -2108,6 +2142,12 @@ logical function EOS_unit_tests(verbose)
   if (verbose .and. fail) call MOM_error(WARNING, "ROQUET_SPV EOS has failed some self-consistency tests.")
   EOS_unit_tests = EOS_unit_tests .or. fail
 
+  call EOS_manual_init(EOS_tmp, form_of_EOS=EOS_JACKETT06)
+  fail = test_EOS_consistency(25.0, 35.0, 1.0e7, EOS_tmp, verbose, "JACKETT06", &
+                              rho_check=1027.539690758425*EOS_tmp%kg_m3_to_R)
+  if (verbose .and. fail) call MOM_error(WARNING, "JACKETT06 EOS has failed some self-consistency tests.")
+  EOS_unit_tests = EOS_unit_tests .or. fail
+
   ! The TEOS10 equation of state is not passing the self consistency tests for dho_dS_dp due
   ! to a bug (a missing division by the square root of salinity) on line 109 of
   ! pkg/GSW-Fortan/toolbox/gsw_specvol_second_derivatives.f90.  This bug has been highlighted in an
@@ -2278,30 +2318,50 @@ logical function test_EOS_consistency(T_test, S_test, p_test, EOS, verbose, &
                                        drho_dS_dS, drho_dS_dT, drho_dT_dT, drho_dS_dP, drho_dT_dP, EOS)
   call calculate_compress(T(0,0,0), S(0,0,0), p(0,0,0), rho_tmp, drho_dp, EOS)
 
+  OK = .true.
+
   tol = 1000.0*epsilon(tol)
-  if (present(spv_check)) then
-    OK = (abs(spv_check - (spv_ref + spv(0,0,0,1))) < tol*abs(spv_ref + spv(0,0,0,1)))
-    if (verbose .and. .not.OK) then
-      write(mesg, '(ES24.16," vs. ",ES24.16," with tolerance ",ES12.4)') &
-            spv_check, spv_ref+spv(0,0,0,1), tol*spv(0,0,0,1)
-      call MOM_error(WARNING, "The value of "//trim(EOS_name)//" spv disagrees with its check value :"//trim(mesg))
-    endif
-  else
-    OK = (abs((rho_ref+rho(0,0,0,1)) * (spv_ref + spv(0,0,0,1)) - 1.0) < tol)
-    if (verbose .and. .not.OK) then
-      write(mesg, '(ES16.8," and ",ES16.8,", ratio - 1 = ",ES16.8)') &
-          rho(0,0,0,1), 1.0/(spv_ref + spv(0,0,0,1)) - rho_ref, &
-          (rho_ref+rho(0,0,0,1)) * (spv_ref + spv(0,0,0,1)) - 1.0
-      call MOM_error(WARNING, "The values of "//trim(EOS_name)//" rho and 1/spv disagree.  "//trim(mesg))
-    endif
-  endif
+
+  ! Check that the density agrees with the provided check value
   if (present(rho_check)) then
     test_OK = (abs(rho_check - (rho_ref + rho(0,0,0,1))) < tol*(rho_ref + rho(0,0,0,1)))
     OK = OK .and. test_OK
-    if (verbose .and. .not.test_OK) then
-      write(mesg, '(ES24.16," vs. ",ES24.16," with tolerance ",ES12.4)') &
-            rho_check, rho_ref+rho(0,0,0,1), tol*rho(0,0,0,1)
-      call MOM_error(WARNING, "The value of "//trim(EOS_name)//" rho disagrees with its check value :"//trim(mesg))
+    if (verbose) then
+      write(mesg, '(ES24.16," vs. ",ES24.16,", diff=",ES12.4,", tol=",ES12.4)') &
+            rho_ref+rho(0,0,0,1), rho_check, (rho_ref+rho(0,0,0,1))-rho_check, tol*rho(0,0,0,1)
+      if (test_OK) then
+        call MOM_mesg(trim(EOS_name)//" rho agrees with its check value :"//trim(mesg))
+      else
+        call MOM_error(WARNING, trim(EOS_name)//" rho disagrees with its check value :"//trim(mesg))
+      endif
+    endif
+  endif
+
+  ! Check that the specific volume agrees with the provided check value or the inverse of density
+  if (present(spv_check)) then
+    test_OK = (abs(spv_check - (spv_ref + spv(0,0,0,1))) < tol*abs(spv_ref + spv(0,0,0,1)))
+    OK = OK .and. test_OK
+    if (verbose) then
+      write(mesg, '(ES24.16," vs. ",ES24.16,", diff=",ES12.4,", tol=",ES12.4)') &
+            spv_ref+spv(0,0,0,1), spv_check, spv_ref+spv(0,0,0,1)-spv_check, tol*spv(0,0,0,1)
+      if (test_OK) then
+        call MOM_mesg(trim(EOS_name)//" spv agrees with its check value :"//trim(mesg))
+      else
+        call MOM_error(WARNING, trim(EOS_name)//" spv disagrees with its check value :"//trim(mesg))
+      endif
+    endif
+  else
+    test_OK = (abs((rho_ref+rho(0,0,0,1)) * (spv_ref + spv(0,0,0,1)) - 1.0) < tol)
+    OK = OK .and. test_OK
+    if (verbose) then
+      write(mesg, '(ES16.8," and ",ES16.8,", ratio - 1 = ",ES16.8)') &
+          rho_ref+rho(0,0,0,1), 1.0/(spv_ref + spv(0,0,0,1)), &
+          (rho_ref+rho(0,0,0,1)) * (spv_ref + spv(0,0,0,1)) - 1.0
+      if (test_OK) then
+        call MOM_mesg("The values of "//trim(EOS_name)//" rho and 1/spv agree.  "//trim(mesg))
+      else
+        call MOM_error(WARNING, "The values of "//trim(EOS_name)//" rho and 1/spv disagree.  "//trim(mesg))
+      endif
     endif
   endif
 
