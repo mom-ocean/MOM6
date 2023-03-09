@@ -330,7 +330,7 @@ end function order2index
 !! Currently, the transforms are for t-cell fields only.
 !!
 !! This module is stemmed from SAL calculation in Model for Prediction Across Scales (MPAS)-Ocean developed by Los
-!! Alamos National Laboratory and University of Michigan (Barton et al. (2022) and Brus et al. (2022)). The algorithm
+!! Alamos National Laboratory and University of Michigan [Barton et al. (2022) and Brus et al. (2023)]. The algorithm
 !! for forward and inverse transforms loosely follows Schaeffer (2013).
 !!
 !! In forward transform, a two-dimensional physical field can be projected into a series of spherical harmonics. The
@@ -368,13 +368,15 @@ end function order2index
 !!
 !! References:
 !!
-!! Barton, K.N., Nairita, P., Brus, S.R., Petersen, M.R., Arbic, B.K., Engwirda, D., Roberts, A.F., Westerink, J.,
-!! Wirasaet, D., and Schindelegger, M., 2022: Performance of Model for Prediction Across Scales (MPAS) Ocean as a
-!! Global Barotropic Tide Model. Journal of Advances in Modeling Earth Systems, in review.
+!! Barton, K.N., Pal, N., Brus, S.R., Petersen, M.R., Arbic, B.K., Engwirda, D., Roberts, A.F., Westerink, J.J.,
+!! Wirasaet, D. and Schindelegger, M., 2022. Global Barotropic Tide Modeling Using Inline Self‐Attraction and Loading in
+!! MPAS‐Ocean. Journal of Advances in Modeling Earth Systems, 14(11), p.e2022MS003207.
+!! https://doi.org/10.1029/2022MS003207
 !!
-!! Brus, S.R., Barton, K.N., Nairita, P., Roberts, A.F., Engwirda, D., Petersen, M.R., Arbic, B.K., Wirasaet, D.,
-!! Westerink, J., and Schindelegger, M., 2022: Scalable self attraction and loading calculations for unstructured ocean
-!! models. Ocean Modelling, in review.
+!! Brus, S.R., Barton, K.N., Pal, N., Roberts, A.F., Engwirda, D., Petersen, M.R., Arbic, B.K., Wirasaet, D.,
+!! Westerink, J.J. and Schindelegger, M., 2023. Scalable self attraction and loading calculations for unstructured ocean
+!! tide models. Ocean Modelling, p.102160.
+!! https://doi.org/10.1016/j.ocemod.2023.102160
 !!
 !! Schaeffer, N., 2013. Efficient spherical harmonic transforms aimed at pseudospectral numerical simulations.
 !! Geochemistry, Geophysics, Geosystems, 14(3), pp.751-758.

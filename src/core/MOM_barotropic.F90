@@ -23,7 +23,8 @@ use MOM_open_boundary, only : OBC_DIRECTION_E, OBC_DIRECTION_W
 use MOM_open_boundary, only : OBC_DIRECTION_N, OBC_DIRECTION_S, OBC_segment_type
 use MOM_restart, only : register_restart_field, register_restart_pair
 use MOM_restart, only : query_initialized, MOM_restart_CS
-use MOM_tidal_forcing, only : tidal_forcing_sensitivity, tidal_forcing_CS
+use MOM_self_attr_load, only : scalar_SAL_sensitivity
+use MOM_self_attr_load, only : SAL_CS
 use MOM_time_manager, only : time_type, real_to_time, operator(+), operator(-)
 use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : BT_cont_type, alloc_bt_cont_type
@@ -229,7 +230,7 @@ type, public :: barotropic_CS ; private
   real    :: const_dyn_psurf !< The constant that scales the dynamic surface
                              !! pressure [nondim].  Stable values are < ~1.0.
                              !! The default is 0.9.
-  logical :: tides           !< If true, apply tidal momentum forcing.
+  logical :: calculate_SAL   !< If true, calculate self-attration and loading.
   logical :: tidal_sal_bug   !< If true, the tidal self-attraction and loading anomaly in the
                              !! barotropic solver has the wrong sign, replicating a long-standing
                              !! bug.
@@ -283,7 +284,7 @@ type, public :: barotropic_CS ; private
                              !! the timing of diagnostic output.
   type(MOM_domain_type), pointer :: BT_Domain => NULL()  !< Barotropic MOM domain
   type(hor_index_type), pointer :: debug_BT_HI => NULL() !< debugging copy of horizontal index_type
-  type(tidal_forcing_CS), pointer :: tides_CSp => NULL() !< Control structure for tides
+  type(SAL_CS), pointer :: SAL_CSp => NULL() !< Control structure for SAL
   logical :: module_is_initialized = .false.  !< If true, module has been initialized
 
   integer :: isdw !< The lower i-memory limit for the wide halo arrays.
@@ -1088,8 +1089,8 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
     enddo
   endif
 
-  if (CS%tides) then
-    call tidal_forcing_sensitivity(G, CS%tides_CSp, det_de)
+  if (CS%calculate_SAL) then
+    call scalar_SAL_sensitivity(CS%SAL_CSp, det_de)
     if (CS%tidal_sal_bug) then
       dgeo_de = 1.0 + det_de + CS%G_extra
     else
@@ -2845,7 +2846,7 @@ subroutine set_dtbt(G, GV, US, CS, eta, pbce, BT_cont, gtot_est, SSH_add)
   endif
 
   det_de = 0.0
-  if (CS%tides) call tidal_forcing_sensitivity(G, CS%tides_CSp, det_de)
+  if (CS%calculate_SAL) call scalar_SAL_sensitivity(CS%SAL_CSp, det_de)
   if (CS%tidal_sal_bug) then
     dgeo_de = 1.0 + max(0.0, det_de + CS%G_extra)
   else
@@ -4297,7 +4298,7 @@ end subroutine bt_mass_source
 !! barotropic calculation and initializes any barotropic fields that have not
 !! already been initialized.
 subroutine barotropic_init(u, v, h, eta, Time, G, GV, US, param_file, diag, CS, &
-                           restart_CS, calc_dtbt, BT_cont, tides_CSp)
+                           restart_CS, calc_dtbt, BT_cont, SAL_CSp)
   type(ocean_grid_type),   intent(inout) :: G    !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure.
   type(unit_scale_type),   intent(in)    :: US   !< A dimensional unit scaling type
@@ -4321,8 +4322,8 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, US, param_file, diag, CS, 
   type(BT_cont_type),      pointer       :: BT_cont    !< A structure with elements that describe the
                                                  !! effective open face areas as a function of
                                                  !! barotropic flow.
-  type(tidal_forcing_CS), target, optional :: tides_CSp  !< A pointer to the control structure of the
-                                                 !! tide module.
+  type(SAL_CS), target, optional :: SAL_CSp      !< A pointer to the control structure of the
+                                                 !! SAL module.
 
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
@@ -4348,7 +4349,7 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, US, param_file, diag, CS, 
   real :: Z_to_H      ! A local unit conversion factor [H Z-1 ~> nondim or kg m-3]
   real :: H_to_Z      ! A local unit conversion factor [Z H-1 ~> nondim or m3 kg-1]
   real :: det_de      ! The partial derivative due to self-attraction and loading of the reference
-                      ! geopotential with the sea surface height when tides are enabled [nondim].
+                      ! geopotential with the sea surface height when scalar SAL are enabled [nondim].
                       ! This is typically ~0.09 or less.
   real, allocatable :: lin_drag_h(:,:)  ! A spatially varying linear drag coefficient at tracer points
                                         ! that acts on the barotropic flow [H T-1 ~> m s-1 or kg m-2 s-1].
@@ -4362,6 +4363,7 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, US, param_file, diag, CS, 
                              ! the answers from the end of 2018.  Otherwise, use more efficient
                              ! or general expressions.
   logical :: use_BT_cont_type
+  logical :: use_tides
   character(len=48) :: thickness_units, flux_units
   character*(40) :: hvel_str
   integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
@@ -4383,8 +4385,8 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, US, param_file, diag, CS, 
   CS%module_is_initialized = .true.
 
   CS%diag => diag ; CS%Time => Time
-  if (present(tides_CSp)) then
-    CS%tides_CSp => tides_CSp
+  if (present(SAL_CSp)) then
+    CS%SAL_CSp => SAL_CSp
   endif
 
   ! Read all relevant parameters and write them to the model log.
@@ -4523,11 +4525,13 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, US, param_file, diag, CS, 
                  "latter takes precedence.", default=default_answer_date, do_not_log=.not.GV%Boussinesq)
   if (.not.GV%Boussinesq) CS%answer_date = max(CS%answer_date, 20230701)
 
-  call get_param(param_file, mdl, "TIDES", CS%tides, &
+  call get_param(param_file, mdl, "TIDES", use_tides, &
                  "If true, apply tidal momentum forcing.", default=.false.)
+  call get_param(param_file, mdl, "CALCULATE_SAL", CS%calculate_SAL, &
+                 "If true, calculate self-attraction and loading.", default=use_tides)
   det_de = 0.0
-  if (CS%tides .and. associated(CS%tides_CSp)) &
-    call tidal_forcing_sensitivity(G, CS%tides_CSp, det_de)
+  if (CS%calculate_SAL .and. associated(CS%SAL_CSp)) &
+    call scalar_SAL_sensitivity(CS%SAL_CSp, det_de)
   call get_param(param_file, mdl, "BAROTROPIC_TIDAL_SAL_BUG", CS%tidal_sal_bug, &
                  "If true, the tidal self-attraction and loading anomaly in the barotropic "//&
                  "solver has the wrong sign, replicating a long-standing bug with a scalar "//&

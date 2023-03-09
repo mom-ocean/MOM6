@@ -9,6 +9,7 @@ use MOM_diag_mediator, only : safe_alloc_ptr, diag_ctrl, time_type
 use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, WARNING, is_root_pe
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_grid, only : ocean_grid_type
+use MOM_self_attr_load, only : calc_SAL, SAL_CS
 use MOM_tidal_forcing, only : calc_tidal_forcing, tidal_forcing_CS
 use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : thermo_var_ptrs
@@ -31,6 +32,7 @@ public Set_pbce_nonBouss, PressureForce_Mont_init
 !> Control structure for the Montgomery potential form of pressure gradient
 type, public :: PressureForce_Mont_CS ; private
   logical :: initialized = .false. !< True if this control structure has been initialized.
+  logical :: calculate_SAL  !< If true, calculate self-attraction and loading.
   logical :: tides          !< If true, apply tidal momentum forcing.
   real    :: Rho0           !< The density used in the Boussinesq
                             !! approximation [R ~> kg m-3].
@@ -45,8 +47,9 @@ type, public :: PressureForce_Mont_CS ; private
   real, allocatable :: PFv_bc(:,:,:) !< Meridional accelerations due to pressure gradients
                             !! deriving from density gradients within layers [L T-2 ~> m s-2].
   !>@{ Diagnostic IDs
-  integer :: id_PFu_bc = -1, id_PFv_bc = -1, id_e_tidal = -1
+  integer :: id_PFu_bc = -1, id_PFv_bc = -1, id_e_tidal = -1, id_e_sal = -1
   !>@}
+  type(SAL_CS), pointer :: SAL_CSp => NULL() !< SAL control structure
   type(tidal_forcing_CS), pointer :: tides_CSp => NULL() !< The tidal forcing control structure
 end type PressureForce_Mont_CS
 
@@ -103,8 +106,9 @@ subroutine PressureForce_Mont_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm, pb
                   ! of a reduced gravity form of the equations [L2 T-2 ~> m2 s-2].
     dp_star, &    ! Layer thickness after compensation for compressibility [R L2 T-2 ~> Pa].
     SSH, &        ! The sea surface height anomaly, in depth units [Z ~> m].
-    e_tidal, &    !   Bottom geopotential anomaly due to tidal forces from
-                  ! astronomical sources and self-attraction and loading [Z ~> m].
+    e_sal, &      ! Bottom geopotential anomaly due to self-attraction and loading [Z ~> m].
+    e_tidal, &    !   Bottom geopotential anomaly due to tidal forces from astronomical sources
+                  ! and harmonic self-attraction and loading specific to tides [Z ~> m].
     geopot_bot    !   Bottom geopotential relative to a temporally fixed reference value,
                   ! including any tidal contributions [L2 T-2 ~> m2 s-2].
   real :: p_ref(SZI_(G))     !   The pressure used to calculate the coordinate
@@ -180,7 +184,7 @@ subroutine PressureForce_Mont_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm, pb
     endif
   endif
 
-  if (CS%tides) then
+  if (CS%calculate_SAL) then
     !   Determine the sea surface height anomalies, to enable the calculation
     ! of self-attraction and loading.
     !$OMP parallel do default(shared)
@@ -203,16 +207,23 @@ subroutine PressureForce_Mont_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm, pb
         SSH(i,j) = SSH(i,j) + GV%H_to_RZ * h(i,j,k) * alpha_Lay(k)
       enddo ; enddo ; enddo
     endif
+    call calc_SAL(SSH, e_sal, G, CS%SAL_CSp)
+  else
+    do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+      e_sal(i,j) = 0.0
+    enddo ; enddo
+  endif
 
-    call calc_tidal_forcing(CS%Time, SSH, e_tidal, G, US, CS%tides_CSp)
+  if (CS%tides) then
+    call calc_tidal_forcing(CS%Time, e_tidal, G, US, CS%tides_CSp)
     !$OMP parallel do default(shared)
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-      geopot_bot(i,j) = -GV%g_Earth*(e_tidal(i,j) + G%bathyT(i,j))
+      geopot_bot(i,j) = -GV%g_Earth*(e_sal(i,j) + e_tidal(i,j) + G%bathyT(i,j))
     enddo ; enddo
   else
     !$OMP parallel do default(shared)
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-      geopot_bot(i,j) = -GV%g_Earth*G%bathyT(i,j)
+      geopot_bot(i,j) = -GV%g_Earth*(e_sal(i,j) + G%bathyT(i,j))
     enddo ; enddo
   endif
 
@@ -348,7 +359,9 @@ subroutine PressureForce_Mont_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm, pb
 
   if (CS%id_PFu_bc>0) call post_data(CS%id_PFu_bc, CS%PFu_bc, CS%diag)
   if (CS%id_PFv_bc>0) call post_data(CS%id_PFv_bc, CS%PFv_bc, CS%diag)
-  if (CS%id_e_tidal>0) call post_data(CS%id_e_tidal, e_tidal, CS%diag)
+  ! To be consistent with old runs, tidal forcing diagnostic also includes SAL.
+  if (CS%id_e_tidal>0) call post_data(CS%id_e_tidal, e_sal+e_tidal, CS%diag)
+  if (CS%id_e_sal>0) call post_data(CS%id_e_sal, e_sal, CS%diag)
 
 end subroutine PressureForce_Mont_nonBouss
 
@@ -396,9 +409,9 @@ subroutine PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm, pbce,
   real :: h_star(SZI_(G),SZJ_(G)) ! Layer thickness after compensation
                              ! for compressibility [Z ~> m].
   real :: SSH(SZI_(G),SZJ_(G)) ! The sea surface height anomaly, in depth units [Z ~> m].
-  real :: e_tidal(SZI_(G),SZJ_(G)) ! Bottom geopotential anomaly due to tidal
-                             ! forces from astronomical sources and self-
-                             ! attraction and loading, in depth units [Z ~> m].
+  real :: e_sal(SZI_(G),SZJ_(G)) ! The bottom geopotential anomaly due to self-attraction and loading [Z ~> m].
+  real :: e_tidal(SZI_(G),SZJ_(G)) ! Bottom geopotential anomaly due to tidal forces from astronomical sources
+                             ! and harmonic self-attraction and loading specific to tides, in depth units [Z ~> m].
   real :: p_ref(SZI_(G))     !   The pressure used to calculate the coordinate
                              ! density [R L2 T-2 ~> Pa] (usually 2e7 Pa = 2000 dbar).
   real :: I_Rho0             ! 1/Rho0 [R-1 ~> m3 kg-1].
@@ -440,7 +453,8 @@ subroutine PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm, pbce,
   I_Rho0 = 1.0/CS%Rho0
   G_Rho0 = GV%g_Earth / GV%Rho0
 
-  if (CS%tides) then
+
+  if (CS%calculate_SAL) then
     !   Determine the surface height anomaly for calculating self attraction
     ! and loading.  This should really be based on bottom pressure anomalies,
     ! but that is not yet implemented, and the current form is correct for
@@ -452,21 +466,26 @@ subroutine PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm, pbce,
         SSH(i,j) = SSH(i,j) + h(i,j,k)*GV%H_to_Z
       enddo ; enddo
     enddo
-    call calc_tidal_forcing(CS%Time, SSH, e_tidal, G, US, CS%tides_CSp)
+    call calc_SAL(SSH, e_sal, G, CS%SAL_CSp)
+  else
+    do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+      e_sal(i,j) = 0.0
+    enddo ; enddo
   endif
 
-!    Here layer interface heights, e, are calculated.
   if (CS%tides) then
+    call calc_tidal_forcing(CS%Time, e_tidal, G, US, CS%tides_CSp)
     !$OMP parallel do default(shared)
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-      e(i,j,nz+1) = -(G%bathyT(i,j) + e_tidal(i,j))
+      e(i,j,nz+1) = -(G%bathyT(i,j) + (e_sal(i,j) + e_tidal(i,j)))
     enddo ; enddo
   else
     !$OMP parallel do default(shared)
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-      e(i,j,nz+1) = -G%bathyT(i,j)
+      e(i,j,nz+1) = -(G%bathyT(i,j) + e_sal(i,j))
     enddo ; enddo
   endif
+
   !$OMP parallel do default(shared)
   do j=Jsq,Jeq+1 ; do k=nz,1,-1 ; do i=Isq,Ieq+1
     e(i,j,K) = e(i,j,K+1) + h(i,j,k)*GV%H_to_Z
@@ -588,19 +607,21 @@ subroutine PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm, pbce,
     ! about 200 lines above.
       !$OMP parallel do default(shared)
       do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-        eta(i,j) = e(i,j,1)*GV%Z_to_H + e_tidal(i,j)*GV%Z_to_H
+        eta(i,j) = e(i,j,1)*GV%Z_to_H + (e_sal(i,j)+e_tidal(i,j))*GV%Z_to_H
       enddo ; enddo
     else
       !$OMP parallel do default(shared)
       do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-        eta(i,j) = e(i,j,1)*GV%Z_to_H
+        eta(i,j) = e(i,j,1)*GV%Z_to_H + e_sal(i,j)*GV%Z_to_H
       enddo ; enddo
     endif
   endif
 
   if (CS%id_PFu_bc>0) call post_data(CS%id_PFu_bc, CS%PFu_bc, CS%diag)
   if (CS%id_PFv_bc>0) call post_data(CS%id_PFv_bc, CS%PFv_bc, CS%diag)
-  if (CS%id_e_tidal>0) call post_data(CS%id_e_tidal, e_tidal, CS%diag)
+  ! To be consistent with old runs, tidal forcing diagnostic also includes SAL.
+  if (CS%id_e_tidal>0) call post_data(CS%id_e_tidal, e_sal+e_tidal, CS%diag)
+  if (CS%id_e_sal>0) call post_data(CS%id_e_sal, e_sal, CS%diag)
 
 end subroutine PressureForce_Mont_Bouss
 
@@ -821,7 +842,7 @@ subroutine Set_pbce_nonBouss(p, tv, G, GV, US, GFS_scale, pbce, alpha_star)
 end subroutine Set_pbce_nonBouss
 
 !> Initialize the Montgomery-potential form of PGF control structure
-subroutine PressureForce_Mont_init(Time, G, GV, US, param_file, diag, CS, tides_CSp)
+subroutine PressureForce_Mont_init(Time, G, GV, US, param_file, diag, CS, SAL_CSp, tides_CSp)
   type(time_type), target, intent(in)    :: Time !< Current model time
   type(ocean_grid_type),   intent(in)    :: G  !< ocean grid structure
   type(verticalGrid_type), intent(in)    :: GV !< Vertical grid structure
@@ -829,6 +850,7 @@ subroutine PressureForce_Mont_init(Time, G, GV, US, param_file, diag, CS, tides_
   type(param_file_type),   intent(in)    :: param_file !< Parameter file handles
   type(diag_ctrl), target, intent(inout) :: diag !< Diagnostics control structure
   type(PressureForce_Mont_CS), intent(inout) :: CS !< Montgomery PGF control structure
+  type(SAL_CS), intent(in), target, optional :: SAL_CSp !< SAL control structure
   type(tidal_forcing_CS), intent(in), target, optional :: tides_CSp !< Tides control structure
 
   ! Local variables
@@ -841,6 +863,8 @@ subroutine PressureForce_Mont_init(Time, G, GV, US, param_file, diag, CS, tides_
   CS%diag => diag ; CS%Time => Time
   if (present(tides_CSp)) &
     CS%tides_CSp => tides_CSp
+  if (present(SAL_CSp)) &
+    CS%SAL_CSp => SAL_CSp
 
   mdl = "MOM_PressureForce_Mont"
   call log_version(param_file, mdl, version, "")
@@ -852,6 +876,8 @@ subroutine PressureForce_Mont_init(Time, G, GV, US, param_file, diag, CS, tides_
                  units="kg m-3", default=1035.0, scale=US%R_to_kg_m3)
   call get_param(param_file, mdl, "TIDES", CS%tides, &
                  "If true, apply tidal momentum forcing.", default=.false.)
+  call get_param(param_file, mdl, "CALCULATE_SAL", CS%calculate_SAL, &
+                 "If true, calculate self-attraction and loading.", default=CS%tides)
   call get_param(param_file, mdl, "USE_EOS", use_EOS, default=.true., &
                  do_not_log=.true.) ! Input for diagnostic use only.
 
@@ -866,6 +892,10 @@ subroutine PressureForce_Mont_init(Time, G, GV, US, param_file, diag, CS, tides_
       allocate(CS%PFv_bc(G%isd:G%ied,G%JsdB:G%JedB,GV%ke), source=0.)
   endif
 
+  if (CS%calculate_SAL) then
+    CS%id_e_sal = register_diag_field('ocean_model', 'e_SAL', diag%axesT1, &
+        Time, 'SAL Height Anomaly', 'meter', conversion=US%Z_to_m)
+  endif
   if (CS%tides) then
     CS%id_e_tidal = register_diag_field('ocean_model', 'e_tidal', diag%axesT1, &
         Time, 'Tidal Forcing Astronomical and SAL Height Anomaly', 'meter', conversion=US%Z_to_m)
