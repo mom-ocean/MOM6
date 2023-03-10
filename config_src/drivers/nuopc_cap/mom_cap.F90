@@ -745,23 +745,10 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
     if (wave_method == "EFACTOR") then
       call fld_list_add(fldsToOcn_num, fldsToOcn, "Sw_lamult"                 , "will provide")
     else if (wave_method == "SURFACE_BANDS") then
-      if (cesm_coupled) then
-        call fld_list_add(fldsToOcn_num, fldsToOcn, "Sw_pstokes_x", "will provide", &
-          ungridded_lbound=1, ungridded_ubound=Ice_ocean_boundary%num_stk_bands)
-        call fld_list_add(fldsToOcn_num, fldsToOcn, "Sw_pstokes_y", "will provide", &
-          ungridded_lbound=1, ungridded_ubound=Ice_ocean_boundary%num_stk_bands)
-      else ! below is the old approach of importing partitioned stokes drift components. after the planned ww3 nuopc
-           ! cap unification, this else block should be removed in favor of the more flexible import approach above.
-        if (Ice_ocean_boundary%num_stk_bands > 3) then
-          call MOM_error(FATAL, "Number of Stokes Bands > 3, NUOPC cap not set up for this")
-        endif
-        call fld_list_add(fldsToOcn_num, fldsToOcn, "eastward_partitioned_stokes_drift_1" , "will provide")
-        call fld_list_add(fldsToOcn_num, fldsToOcn, "northward_partitioned_stokes_drift_1", "will provide")
-        call fld_list_add(fldsToOcn_num, fldsToOcn, "eastward_partitioned_stokes_drift_2" , "will provide")
-        call fld_list_add(fldsToOcn_num, fldsToOcn, "northward_partitioned_stokes_drift_2", "will provide")
-        call fld_list_add(fldsToOcn_num, fldsToOcn, "eastward_partitioned_stokes_drift_3" , "will provide")
-        call fld_list_add(fldsToOcn_num, fldsToOcn, "northward_partitioned_stokes_drift_3", "will provide")
-      endif
+      call fld_list_add(fldsToOcn_num, fldsToOcn, "Sw_pstokes_x", "will provide", &
+        ungridded_lbound=1, ungridded_ubound=Ice_ocean_boundary%num_stk_bands)
+      call fld_list_add(fldsToOcn_num, fldsToOcn, "Sw_pstokes_y", "will provide", &
+        ungridded_lbound=1, ungridded_ubound=Ice_ocean_boundary%num_stk_bands)
     else
       call MOM_error(FATAL, "Unsupported WAVE_METHOD encountered in NUOPC cap.")
     endif
@@ -1700,16 +1687,10 @@ subroutine ModelAdvance(gcomp, rc)
           close(writeunit)
         endif
       else  ! not cesm_coupled
-        ! write the final restart without a timestamp
-        if (ESMF_AlarmIsRinging(stop_alarm, rc=rc)) then
-          write(restartname,'(A)')"MOM.res"
-          write(stoch_restartname,'(A)')"ocn_stoch.res.nc"
-        else
-          write(restartname,'(A,I4.4,"-",I2.2,"-",I2.2,"-",I2.2,"-",I2.2,"-",I2.2)') &
-                "MOM.res.", year, month, day, hour, minute, seconds
-          write(stoch_restartname,'(A,I4.4,"-",I2.2,"-",I2.2,"-",I2.2,"-",I2.2,"-",I2.2,A)') &
-                "ocn_stoch.res.", year, month, day, hour, minute, seconds,".nc"
-        endif
+         write(restartname,'(i4.4,2(i2.2),A,3(i2.2),A)') year, month, day,".", hour, minute, seconds, &
+              ".MOM.res"
+         write(stoch_restartname,'(i4.4,2(i2.2),A,3(i2.2),A)') year, month, day,".", hour, minute, seconds, &
+              ".ocn_stoch.res.nc"
         call ESMF_LogWrite("MOM_cap: Writing restart :  "//trim(restartname), ESMF_LOGMSG_INFO)
 
         ! write restart file(s)
@@ -1869,7 +1850,7 @@ subroutine ModelSetRunClock(gcomp, rc)
                  line=__LINE__, file=__FILE__, rcToReturn=rc)
             return
           endif
-          ! not used in nems
+          ! not used in ufs
           call NUOPC_CompAttributeGet(gcomp, name="restart_ymd", value=cvalue, &
                isPresent=isPresent, isSet=isSet, rc=rc)
           if (ChkErr(rc,__LINE__,u_FILE_u)) return
