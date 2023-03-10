@@ -12,6 +12,7 @@ implicit none ; private
 public calculate_compress_wright, calculate_density_wright, calculate_spec_vol_wright
 public calculate_density_derivs_wright, calculate_specvol_derivs_wright
 public calculate_density_second_derivs_wright, calc_density_second_derivs_wright_buggy
+public EoS_fit_range_Wright
 public int_density_dz_wright, int_spec_vol_dp_wright
 
 !> Compute the in situ density of sea water (in [kg m-3]), or its anomaly with respect to
@@ -547,6 +548,26 @@ subroutine calculate_compress_wright(T, S, pressure, rho, drho_dp, start, npts)
     drho_dp(j) = lambda * I_denom * I_denom
   enddo
 end subroutine calculate_compress_wright
+
+!> Return the range of temperatures, salinities and pressures for which the reduced-range equation
+!! of state from Wright (1997) has been fitted to observations.  Care should be taken when applying
+!! this equation of state outside of its fit range.
+subroutine EoS_fit_range_Wright(T_min, T_max, S_min, S_max, p_min, p_max)
+  real, optional, intent(out) :: T_min !< The minimum potential temperature over which this EoS is fitted [degC]
+  real, optional, intent(out) :: T_max !< The maximum potential temperature over which this EoS is fitted [degC]
+  real, optional, intent(out) :: S_min !< The minimum practical salinity over which this EoS is fitted [PSU]
+  real, optional, intent(out) :: S_max !< The maximum practical salinity over which this EoS is fitted [PSU]
+  real, optional, intent(out) :: p_min !< The minimum pressure over which this EoS is fitted [Pa]
+  real, optional, intent(out) :: p_max !< The maximum pressure over which this EoS is fitted [Pa]
+
+  if (present(T_min)) T_min = -2.0
+  if (present(T_max)) T_max = 30.0
+  if (present(S_min)) S_min = 28.0
+  if (present(S_max)) S_max = 38.0
+  if (present(p_min)) p_min = 0.0
+  if (present(p_max)) p_max = 5.0e7
+
+end subroutine EoS_fit_range_Wright
 
 !> Calculates analytical and nearly-analytical integrals, in geopotential across layers, of pressure
 !! anomalies, which are required for calculating the finite-volume form pressure accelerations in a

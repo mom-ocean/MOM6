@@ -6,38 +6,46 @@ module MOM_EOS
 use MOM_EOS_linear, only : calculate_density_linear, calculate_spec_vol_linear
 use MOM_EOS_linear, only : calculate_density_derivs_linear
 use MOM_EOS_linear, only : calculate_specvol_derivs_linear, int_density_dz_linear
-use MOM_EOS_linear, only : calculate_density_second_derivs_linear
+use MOM_EOS_linear, only : calculate_density_second_derivs_linear, EoS_fit_range_linear
 use MOM_EOS_linear, only : calculate_compress_linear, int_spec_vol_dp_linear
 use MOM_EOS_Wright, only : calculate_density_wright, calculate_spec_vol_wright
 use MOM_EOS_Wright, only : calculate_density_derivs_wright
 use MOM_EOS_Wright, only : calculate_specvol_derivs_wright, int_density_dz_wright
 use MOM_EOS_Wright, only : calculate_compress_wright, int_spec_vol_dp_wright
 use MOM_EOS_Wright, only : calculate_density_second_derivs_wright, calc_density_second_derivs_wright_buggy
+use MOM_EOS_Wright, only : EoS_fit_range_Wright
 use MOM_EOS_Wright_full, only : calculate_density_wright_full, calculate_spec_vol_wright_full
 use MOM_EOS_Wright_full, only : calculate_density_derivs_wright_full
 use MOM_EOS_Wright_full, only : calculate_specvol_derivs_wright_full, int_density_dz_wright_full
 use MOM_EOS_Wright_full, only : calculate_compress_wright_full, int_spec_vol_dp_wright_full
 use MOM_EOS_Wright_full, only : calculate_density_second_derivs_wright_full
+use MOM_EOS_Wright_full, only : EoS_fit_range_Wright_full
 use MOM_EOS_Wright_red,  only : calculate_density_wright_red, calculate_spec_vol_wright_red
 use MOM_EOS_Wright_red,  only : calculate_density_derivs_wright_red
 use MOM_EOS_Wright_red,  only : calculate_specvol_derivs_wright_red, int_density_dz_wright_red
 use MOM_EOS_Wright_red,  only : calculate_compress_wright_red, int_spec_vol_dp_wright_red
 use MOM_EOS_Wright_red,  only : calculate_density_second_derivs_wright_red
+use MOM_EOS_Wright_red,  only : EoS_fit_range_Wright_red
 use MOM_EOS_Jackett06, only : calculate_density_Jackett06, calculate_spec_vol_Jackett06
 use MOM_EOS_Jackett06, only : calculate_density_derivs_Jackett06, calculate_specvol_derivs_Jackett06
 use MOM_EOS_Jackett06, only : calculate_compress_Jackett06, calculate_density_second_derivs_Jackett06
+use MOM_EOS_Jackett06, only : EoS_fit_range_Jackett06
 use MOM_EOS_UNESCO, only : calculate_density_unesco, calculate_spec_vol_unesco
 use MOM_EOS_UNESCO, only : calculate_density_derivs_unesco, calculate_specvol_derivs_UNESCO
 use MOM_EOS_UNESCO, only : calculate_density_second_derivs_UNESCO, calculate_compress_unesco
+use MOM_EOS_UNESCO, only : EoS_fit_range_UNESCO
 use MOM_EOS_NEMO,   only : calculate_density_nemo
 use MOM_EOS_NEMO,   only : calculate_density_derivs_nemo
 use MOM_EOS_NEMO,   only : calculate_density_second_derivs_NEMO, calculate_compress_nemo
+use MOM_EOS_NEMO,   only : EoS_fit_range_NEMO
 use MOM_EOS_Roquet_SpV, only : calculate_density_Roquet_SpV, calculate_spec_vol_Roquet_SpV
 use MOM_EOS_Roquet_SpV, only : calculate_density_derivs_Roquet_SpV, calculate_specvol_derivs_Roquet_SpV
 use MOM_EOS_Roquet_SpV, only : calculate_compress_Roquet_SpV, calculate_density_second_derivs_Roquet_SpV
+use MOM_EOS_Roquet_SpV, only : EoS_fit_range_Roquet_SpV
 use MOM_EOS_TEOS10, only : calculate_density_teos10, calculate_spec_vol_teos10
 use MOM_EOS_TEOS10, only : calculate_density_derivs_teos10, calculate_specvol_derivs_teos10
 use MOM_EOS_TEOS10, only : calculate_density_second_derivs_teos10, calculate_compress_teos10
+use MOM_EOS_TEOS10, only : EoS_fit_range_TEOS10
 use MOM_EOS_TEOS10, only : gsw_sp_from_sr, gsw_pt_from_ct
 use MOM_TFreeze,    only : calculate_TFreeze_linear, calculate_TFreeze_Millero
 use MOM_TFreeze,    only : calculate_TFreeze_teos10
@@ -57,6 +65,7 @@ public EOS_init
 public EOS_manual_init
 public EOS_quadrature
 public EOS_use_linear
+public EOS_fit_range
 public EOS_unit_tests
 public analytic_int_density_dz
 public analytic_int_specific_vol_dp
@@ -1506,6 +1515,43 @@ subroutine calculate_compress_scalar(T, S, pressure, rho, drho_dp, EOS)
 
 end subroutine calculate_compress_scalar
 
+!> Return the range of temperatures, salinities and pressures for which the equation of state that
+!! is being used has been fitted to observations.  Care should be taken when applying
+!! this equation of state outside of its fit range.
+subroutine EoS_fit_range(EOS, T_min, T_max, S_min, S_max, p_min, p_max)
+  type(EOS_type), intent(in) :: EOS   !< Equation of state structure
+  real, optional, intent(out) :: T_min !< The minimum temperature over which this EoS is fitted [degC]
+  real, optional, intent(out) :: T_max !< The maximum temperature over which this EoS is fitted [degC]
+  real, optional, intent(out) :: S_min !< The minimum salinity over which this EoS is fitted [ppt]
+  real, optional, intent(out) :: S_max !< The maximum salinity over which this EoS is fitted [ppt]
+  real, optional, intent(out) :: p_min !< The minimum pressure over which this EoS is fitted [Pa]
+  real, optional, intent(out) :: p_max !< The maximum pressure over which this EoS is fitted [Pa]
+
+  select case (EOS%form_of_EOS)
+    case (EOS_LINEAR)
+      call EoS_fit_range_linear(T_min, T_max, S_min, S_max, p_min, p_max)
+    case (EOS_UNESCO)
+      call EoS_fit_range_UNESCO(T_min, T_max, S_min, S_max, p_min, p_max)
+    case (EOS_WRIGHT)
+      call EoS_fit_range_Wright(T_min, T_max, S_min, S_max, p_min, p_max)
+    case (EOS_WRIGHT_FULL)
+      call EoS_fit_range_Wright_full(T_min, T_max, S_min, S_max, p_min, p_max)
+    case (EOS_WRIGHT_RED)
+      call EoS_fit_range_Wright_red(T_min, T_max, S_min, S_max, p_min, p_max)
+    case (EOS_TEOS10)
+      call EoS_fit_range_TEOS10(T_min, T_max, S_min, S_max, p_min, p_max)
+    case (EOS_NEMO)
+      call EoS_fit_range_NEMO(T_min, T_max, S_min, S_max, p_min, p_max)
+    case (EOS_ROQUET_SpV)
+      call EoS_fit_range_Roquet_SpV(T_min, T_max, S_min, S_max, p_min, p_max)
+    case (EOS_JACKETT06)
+      call EoS_fit_range_Jackett06(T_min, T_max, S_min, S_max, p_min, p_max)
+    case default
+      call MOM_error(FATAL, "calculate_compress: EOS%form_of_EOS is not valid.")
+  end select
+
+end subroutine EoS_fit_range
+
 
 !> This subroutine returns a two point integer array indicating the domain of i-indices
 !! to work on in EOS calls based on information from a hor_index type
@@ -2119,6 +2165,13 @@ logical function EOS_unit_tests(verbose)
   if (verbose .and. fail) call MOM_error(WARNING, "WRIGHT_RED EOS has failed some self-consistency tests.")
   EOS_unit_tests = EOS_unit_tests .or. fail
 
+  ! This test is deliberately outside of the fit range for WRIGHT_RED, and it results in the expected warnings.
+  ! call EOS_manual_init(EOS_tmp, form_of_EOS=EOS_WRIGHT_RED)
+  ! fail = test_EOS_consistency(25.0, 15.0, 1.0e7, EOS_tmp, verbose, "WRIGHT_RED", &
+  !                             rho_check=1012.625699301455*EOS_tmp%kg_m3_to_R)
+  ! if (verbose .and. fail) call MOM_error(WARNING, "WRIGHT_RED EOS has failed some self-consistency tests.")
+  ! EOS_unit_tests = EOS_unit_tests .or. fail
+
   call EOS_manual_init(EOS_tmp, form_of_EOS=EOS_WRIGHT)
   fail = test_EOS_consistency(25.0, 35.0, 1.0e7, EOS_tmp, verbose, "WRIGHT", &
                               rho_check=1027.54303596346*EOS_tmp%kg_m3_to_R)
@@ -2144,9 +2197,10 @@ logical function EOS_unit_tests(verbose)
   EOS_unit_tests = EOS_unit_tests .or. fail
 
   ! The TEOS10 equation of state is not passing the self consistency tests for dho_dS_dp due
-  ! to a bug (a missing division by the square root of salinity) on line 109 of
+  ! to a bug (a missing division by the square root of offset-salinity) on line 111 of
   ! pkg/GSW-Fortan/toolbox/gsw_specvol_second_derivatives.f90.  This bug has been highlighted in an
-  ! issue posted to the TEOS-10/GSW-Fortran page at github.com/TEOS-10/GSW-Fortran/issues/26.
+  ! issue posted to the TEOS-10/GSW-Fortran page at github.com/TEOS-10/GSW-Fortran/issues/26, and
+  ! it will be corrected by github.com/mom-ocean/GSW-Fortran/pull/1 .
   call EOS_manual_init(EOS_tmp, form_of_EOS=EOS_TEOS10)
   fail = test_EOS_consistency(25.0, 35.0, 1.0e7, EOS_tmp, verbose, "TEOS10", skip_2nd=.true., &
                               rho_check=1027.42355961492*EOS_tmp%kg_m3_to_R)
@@ -2251,6 +2305,9 @@ logical function test_EOS_consistency(T_test, S_test, p_test, EOS, verbose, &
   real :: r_tol      ! Roundoff error on a typical value of density anomaly [R ~> kg m-3]
   real :: sv_tol     ! Roundoff error on a typical value of specific volume anomaly [R-1 ~> m3 kg-1]
   real :: tol_here   ! The tolerance for each check, in various units [various]
+  real :: T_min, T_max ! The minimum and maximum temperature over which this EoS is fitted [degC]
+  real :: S_min, S_max ! The minimum and maximum temperature over which this EoS is fitted [ppt]
+  real :: p_min, p_max ! The minimum and maximum temperature over which this EoS is fitted [Pa]
   real :: count_fac  ! A factor in the roundoff estimates based on the factors in the numerator and
                      ! denominator in the finite difference derivative expression [nondim]
   real :: count_fac2 ! A factor in the roundoff estimates based on the factors in the numerator and
@@ -2274,6 +2331,21 @@ logical function test_EOS_consistency(T_test, S_test, p_test, EOS, verbose, &
   spv_ref = 1.0 / rho_ref
 
   order = 4  ! This should be 2, 4 or 6.
+
+  ! Check whether the consistency test is being applied outside of the value range of this EoS.
+  call EoS_fit_range(EOS, T_min, T_max, S_min, S_max, p_min, p_max)
+  if ((T_test < T_min) .or. (T_test > T_max)) then
+    write(mesg, '(ES12.4," [degC] which is outside of the fit range of ",ES12.4," to ",ES12.4)') T_test, T_min, T_max
+    call MOM_error(WARNING, trim(EOS_name)//" is being evaluated at a temperature of "//trim(mesg))
+  endif
+  if ((S_test < S_min) .or. (S_test > S_max)) then
+    write(mesg, '(ES12.4," [ppt] which is outside of the fit range of ",ES12.4," to ",ES12.4)') S_test, S_min, S_max
+    call MOM_error(WARNING, trim(EOS_name)//" is being evaluated at a salinity of "//trim(mesg))
+  endif
+  if ((p_test < p_min) .or. (p_test > p_max)) then
+    write(mesg, '(ES12.4," [Pa] which is outside of the fit range of ",ES12.4," to ",ES12.4)') p_test, p_min, p_max
+    call MOM_error(WARNING, trim(EOS_name)//" is being evaluated at a pressure of "//trim(mesg))
+  endif
 
   do n=1,2
     ! Calculate density values with a wide enough stencil to estimate first and second derivatives

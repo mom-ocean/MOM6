@@ -11,7 +11,7 @@ implicit none ; private
 
 public calculate_compress_wright_full, calculate_density_wright_full, calculate_spec_vol_wright_full
 public calculate_density_derivs_wright_full, calculate_specvol_derivs_wright_full
-public calculate_density_second_derivs_wright_full
+public calculate_density_second_derivs_wright_full, EoS_fit_range_Wright_full
 public int_density_dz_wright_full, int_spec_vol_dp_wright_full
 
 !> Compute the in situ density of sea water (in [kg m-3]), or its anomaly with respect to
@@ -441,6 +441,26 @@ subroutine calculate_compress_wright_full(T, S, pressure, rho, drho_dp, start, n
     drho_dp(j) = lambda * I_denom**2
   enddo
 end subroutine calculate_compress_wright_full
+
+!> Return the range of temperatures, salinities and pressures for which full-range equation
+!! of state from Wright (1997) has been fitted to observations.  Care should be taken when applying
+!! this equation of state outside of its fit range.
+subroutine EoS_fit_range_Wright_full(T_min, T_max, S_min, S_max, p_min, p_max)
+  real, optional, intent(out) :: T_min !< The minimum potential temperature over which this EoS is fitted [degC]
+  real, optional, intent(out) :: T_max !< The maximum potential temperature over which this EoS is fitted [degC]
+  real, optional, intent(out) :: S_min !< The minimum practical salinity over which this EoS is fitted [PSU]
+  real, optional, intent(out) :: S_max !< The maximum practical salinity over which this EoS is fitted [PSU]
+  real, optional, intent(out) :: p_min !< The minimum pressure over which this EoS is fitted [Pa]
+  real, optional, intent(out) :: p_max !< The maximum pressure over which this EoS is fitted [Pa]
+
+  if (present(T_min)) T_min = -2.0
+  if (present(T_max)) T_max = 40.0
+  if (present(S_min)) S_min =  0.0
+  if (present(S_max)) S_max = 40.0
+  if (present(p_min)) p_min = 0.0
+  if (present(p_max)) p_max = 1.0e8
+
+end subroutine EoS_fit_range_Wright_full
 
 !> Calculates analytical and nearly-analytical integrals, in geopotential across layers, of pressure
 !! anomalies, which are required for calculating the finite-volume form pressure accelerations in a

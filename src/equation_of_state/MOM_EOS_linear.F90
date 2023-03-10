@@ -13,7 +13,7 @@ public calculate_compress_linear, calculate_density_linear, calculate_spec_vol_l
 public calculate_density_derivs_linear, calculate_density_derivs_scalar_linear
 public calculate_specvol_derivs_linear
 public calculate_density_scalar_linear, calculate_density_array_linear
-public calculate_density_second_derivs_linear
+public calculate_density_second_derivs_linear, EoS_fit_range_linear
 public int_density_dz_linear, int_spec_vol_dp_linear
 
 ! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
@@ -319,6 +319,26 @@ subroutine calculate_compress_linear(T, S, pressure, rho, drho_dp, start, npts,&
     drho_dp(j) = 0.0
   enddo
 end subroutine calculate_compress_linear
+
+!> Return the range of temperatures, salinities and pressures for which the reduced-range equation
+!! of state from Wright (1997) has been fitted to observations.  Care should be taken when applying
+!! this equation of state outside of its fit range.
+subroutine EoS_fit_range_linear(T_min, T_max, S_min, S_max, p_min, p_max)
+  real, optional, intent(out) :: T_min !< The minimum potential temperature over which this EoS is fitted [degC]
+  real, optional, intent(out) :: T_max !< The maximum potential temperature over which this EoS is fitted [degC]
+  real, optional, intent(out) :: S_min !< The minimum salinity over which this EoS is fitted [ppt]
+  real, optional, intent(out) :: S_max !< The maximum salinity over which this EoS is fitted [ppt]
+  real, optional, intent(out) :: p_min !< The minimum pressure over which this EoS is fitted [Pa]
+  real, optional, intent(out) :: p_max !< The maximum pressure over which this EoS is fitted [Pa]
+
+  if (present(T_min)) T_min = -273.0
+  if (present(T_max)) T_max = 100.0
+  if (present(S_min)) S_min = 0.0
+  if (present(S_max)) S_max = 1000.0
+  if (present(p_min)) p_min = 0.0
+  if (present(p_max)) p_max = 1.0e9
+
+end subroutine EoS_fit_range_linear
 
 !>   This subroutine calculates analytical and nearly-analytical integrals of
 !! pressure anomalies across layers, which are required for calculating the

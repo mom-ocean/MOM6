@@ -9,7 +9,7 @@ implicit none ; private
 
 public calculate_compress_Jackett06, calculate_density_Jackett06, calculate_spec_vol_Jackett06
 public calculate_density_derivs_Jackett06, calculate_specvol_derivs_Jackett06
-public calculate_density_second_derivs_Jackett06
+public calculate_density_second_derivs_Jackett06, EoS_fit_range_Jackett06
 
 !> Compute the in situ density of sea water (in [kg m-3]), or its anomaly with respect to
 !! a reference density, from salinity in practical salinity units ([PSU]), potential
@@ -541,6 +541,28 @@ subroutine calculate_density_second_derivs_scalar_Jackett(T, S, P, drho_ds_ds, d
 
 end subroutine calculate_density_second_derivs_scalar_Jackett
 
+!> Return the range of temperatures, salinities and pressures for which the Jackett et al. (2006)
+!! equation of state has been fitted to observations.  Care should be taken when applying this
+!! equation of state outside of its fit range.
+subroutine EoS_fit_range_Jackett06(T_min, T_max, S_min, S_max, p_min, p_max)
+  real, optional, intent(out) :: T_min !< The minimum potential temperature over which this EoS is fitted [degC]
+  real, optional, intent(out) :: T_max !< The maximum potential temperature over which this EoS is fitted [degC]
+  real, optional, intent(out) :: S_min !< The minimum practical salinity over which this EoS is fitted [PSU]
+  real, optional, intent(out) :: S_max !< The maximum practical salinity over which this EoS is fitted [PSU]
+  real, optional, intent(out) :: p_min !< The minimum pressure over which this EoS is fitted [Pa]
+  real, optional, intent(out) :: p_max !< The maximum pressure over which this EoS is fitted [Pa]
+
+  ! Note that the actual fit range is given for the surface range of temperatures and salinities,
+  ! but Jackett et al. use a more limited range of properties at higher pressures.
+  if (present(T_min)) T_min = -4.5
+  if (present(T_max)) T_max = 40.0
+  if (present(S_min)) S_min =  0.0
+  if (present(S_max)) S_max = 42.0
+  if (present(p_min)) p_min = 0.0
+  if (present(p_max)) p_max = 8.5e7
+
+end subroutine EoS_fit_range_Jackett06
+
 !> \namespace mom_eos_Jackett06
 !!
 !! \section section_EOS_Jackett06 Jackett et al. 2006 (Hycom-25-term) equation of state
@@ -550,6 +572,13 @@ end subroutine calculate_density_second_derivs_scalar_Jackett
 !! frequently used in Hycom for a potential density, at which point it only has 17 terms
 !! and so is commonly called the "17-term equation of state" there.  Here the full expressions
 !! for the in situ densities are used.
+!!
+!! The functional form of this equation of state includes terms proportional to salinity to the
+!! 3/2 power.  This introduces a singularity in the second derivative of density with salinity
+!! at a salinity of 0, but this has been addressed here by setting a floor of 1e-8 PSU on the
+!! salinity that is used in the denominator of these second derivative expressions.  This value
+!! was chosen to imply a contribution that is smaller than numerical roundoff in the expression for
+!! density, which is the field for which the Jackett et al. equation of state was originally derived.
 !!
 !! \subsection section_EOS_Jackett06_references References
 !!
