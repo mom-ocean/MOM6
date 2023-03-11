@@ -324,12 +324,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
 
   ! mass per area of grid cell (for Boussinesq, use Rho0)
   if (CS%id_masscello > 0) then
-    do k=1,nz ; do j=js,je ; do i=is,ie
-      work_3d(i,j,k) = GV%H_to_kg_m2*h(i,j,k)
-    enddo ; enddo ; enddo
-    call post_data(CS%id_masscello, work_3d, CS%diag)
-    !### If the registration call has conversion=GV%H_to_kg_m2, the mathematically equivalent form would be:
-    ! call post_data(CS%id_masscello, h, CS%diag)
+    call post_data(CS%id_masscello, h, CS%diag)
   endif
 
   ! mass of liquid ocean (for Bouss, use Rho0). The reproducing sum requires the use of MKS units.
@@ -1638,7 +1633,7 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, US, param_file, diag
   convert_H = GV%H_to_MKS
 
   CS%id_masscello = register_diag_field('ocean_model', 'masscello', diag%axesTL, &
-      Time, 'Mass per unit area of liquid ocean grid cell', 'kg m-2', & !### , conversion=GV%H_to_kg_m2, &
+      Time, 'Mass per unit area of liquid ocean grid cell', 'kg m-2', conversion=GV%H_to_kg_m2, &
       standard_name='sea_water_mass_per_unit_area', v_extensive=.true.)
 
   CS%id_masso = register_scalar_field('ocean_model', 'masso', Time, &
