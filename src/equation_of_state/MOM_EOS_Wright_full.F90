@@ -7,8 +7,6 @@ use MOM_hor_index, only : hor_index_type
 
 implicit none ; private
 
-#include <MOM_memory.h>
-
 public calculate_compress_wright_full, calculate_density_wright_full, calculate_spec_vol_wright_full
 public calculate_density_derivs_wright_full, calculate_specvol_derivs_wright_full
 public calculate_density_second_derivs_wright_full, EoS_fit_range_Wright_full

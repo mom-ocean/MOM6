@@ -58,8 +58,6 @@ use MOM_unit_scaling, only : unit_scale_type
 
 implicit none ; private
 
-#include <MOM_memory.h>
-
 public EOS_domain
 public EOS_init
 public EOS_manual_init
