@@ -179,20 +179,30 @@ subroutine calculate_spec_vol_array_wright(T, S, pressure, specvol, start, npts,
   ! Local variables
   real :: al0     ! The specific volume at 0 lambda in the Wright EOS [m3 kg-1]
   real :: p0      ! The pressure offset in the Wright EOS [Pa]
-  real :: lambda  ! The sound speed squared at 0 alpha in the Wright EOS [m2 s-2]
+  real :: lambda  ! The sound speed squared at 0 alpha in the Wright EOS [m2 s-2], perhaps with
+                  ! an offset to account for spv_ref
+  real :: al_TS   ! The contributions of temperature and salinity to al0 [m3 kg-1]
+  real :: p_TSp   ! A combination of the pressure and the temperature and salinity contributions to p0 [Pa]
+  real :: lam_000 ! A corrected offset to lambda, including contributions from spv_ref [m2 s-2]
   integer :: j
 
-  do j=start,start+npts-1
-    al0 = a0 + (a1*T(j) + a2*S(j))
-    p0 = b0 + ( b4*S(j) + T(j) * (b1 + (T(j)*(b2 + b3*T(j)) + b5*S(j))) )
-    lambda = c0 + ( c4*S(j) + T(j) * (c1 + (T(j)*(c2 + c3*T(j)) + c5*S(j))) )
-
-    if (present(spv_ref)) then
-      specvol(j) = (lambda + (al0 - spv_ref)*(pressure(j) + p0)) / (pressure(j) + p0)
-    else
-      specvol(j) = (lambda + al0*(pressure(j) + p0)) / (pressure(j) + p0)
-    endif
-  enddo
+  if (present(spv_ref)) then
+    lam_000 = c0 + (a0 - spv_ref)*b0
+    do j=start,start+npts-1
+      al_TS = a1*T(j) + a2*S(j)
+      p_TSp = pressure(j) + (b4*S(j) + T(j) * (b1 + (T(j)*(b2 + b3*T(j)) + b5*S(j))))
+      lambda = lam_000 + ( c4*S(j) + T(j) * (c1 + (T(j)*(c2 + c3*T(j)) + c5*S(j))) )
+      ! This is equivalent to the expression below minus spv_ref, but less sensitive to roundoff.
+      specvol(j) = al_TS + (lambda + (a0 - spv_ref)*p_TSp) / (b0 + p_TSp)
+    enddo
+  else
+    do j=start,start+npts-1
+      al0 = a0 + (a1*T(j) + a2*S(j))
+      p0 = b0 + ( b4*S(j) + T(j) * (b1 + (T(j)*(b2 + b3*T(j)) + b5*S(j))) )
+      lambda = c0 + ( c4*S(j) + T(j) * (c1 + (T(j)*(c2 + c3*T(j)) + c5*S(j))) )
+      specvol(j) = al0 + lambda / (pressure(j) + p0)
+    enddo
+  endif
 end subroutine calculate_spec_vol_array_wright
 
 !> Return the thermal/haline expansion coefficients for 1-d array inputs and outputs
@@ -793,6 +803,7 @@ subroutine int_spec_vol_dp_wright_full(T, S, p_t, p_b, spv_ref, HI, dza, &
   real :: hWght      ! A pressure-thickness below topography [R L2 T-2 ~> Pa].
   real :: hL, hR     ! Pressure-thicknesses of the columns to the left and right [R L2 T-2 ~> Pa].
   real :: iDenom     ! The inverse of the denominator in the weights [T4 R-2 L-4 ~> Pa-2].
+  real :: I_pterm    ! The inverse of p0 plus p_ave [T2 R-1 L-2 ~> Pa-1].
   real :: hWt_LL, hWt_LR ! hWt_LA is the weighted influence of A on the left column [nondim].
   real :: hWt_RL, hWt_RR ! hWt_RA is the weighted influence of A on the right column [nondim].
   real :: wt_L, wt_R ! The linear weights of the left and right columns [nondim].
@@ -866,9 +877,10 @@ subroutine int_spec_vol_dp_wright_full(T, S, p_t, p_b, spv_ref, HI, dza, &
     al0 = al0_2d(i,j) ; p0 = p0_2d(i,j) ; lambda = lambda_2d(i,j)
     dp = p_b(i,j) - p_t(i,j)
     p_ave = 0.5*(p_t(i,j)+p_b(i,j))
+    I_pterm = 1.0 / (p0 + p_ave)
 
-    eps = 0.5 * dp / (p0 + p_ave) ; eps2 = eps*eps
-    alpha_anom = (al0 - spv_ref) + lambda / (p0 + p_ave)
+    eps = 0.5 * dp * I_pterm ; eps2 = eps*eps
+    alpha_anom = (al0 - spv_ref) + lambda * I_pterm
     rem = (lambda * eps2) * (C1_3 + eps2*(0.2 + eps2*(C1_7 + C1_9*eps2)))
     dza(i,j) = alpha_anom*dp + 2.0*eps*rem
     if (present(intp_dza)) &
@@ -906,9 +918,10 @@ subroutine int_spec_vol_dp_wright_full(T, S, p_t, p_b, spv_ref, HI, dza, &
 
       dp = wt_L*(p_b(i,j) - p_t(i,j)) + wt_R*(p_b(i+1,j) - p_t(i+1,j))
       p_ave = 0.5*(wt_L*(p_t(i,j)+p_b(i,j)) + wt_R*(p_t(i+1,j)+p_b(i+1,j)))
+      I_pterm = 1.0 / (p0 + p_ave)
 
-      eps = 0.5 * dp / (p0 + p_ave) ; eps2 = eps*eps
-      intp(m) = ((al0 - spv_ref) + lambda / (p0 + p_ave))*dp + 2.0*eps* &
+      eps = 0.5 * dp * I_pterm ; eps2 = eps*eps
+      intp(m) = ((al0 - spv_ref) + lambda * I_pterm)*dp + 2.0*eps* &
                lambda * eps2 * (C1_3 + eps2*(0.2 + eps2*(C1_7 + C1_9*eps2)))
     enddo
     ! Use Boole's rule to integrate the values.
@@ -947,9 +960,10 @@ subroutine int_spec_vol_dp_wright_full(T, S, p_t, p_b, spv_ref, HI, dza, &
 
       dp = wt_L*(p_b(i,j) - p_t(i,j)) + wt_R*(p_b(i,j+1) - p_t(i,j+1))
       p_ave = 0.5*(wt_L*(p_t(i,j)+p_b(i,j)) + wt_R*(p_t(i,j+1)+p_b(i,j+1)))
+      I_pterm = 1.0 / (p0 + p_ave)
 
-      eps = 0.5 * dp / (p0 + p_ave) ; eps2 = eps*eps
-      intp(m) = ((al0 - spv_ref) + lambda / (p0 + p_ave))*dp + 2.0*eps* &
+      eps = 0.5 * dp * I_pterm ; eps2 = eps*eps
+      intp(m) = ((al0 - spv_ref) + lambda * I_pterm)*dp + 2.0*eps* &
                lambda * eps2 * (C1_3 + eps2*(0.2 + eps2*(C1_7 + C1_9*eps2)))
     enddo
     ! Use Boole's rule to integrate the values.
