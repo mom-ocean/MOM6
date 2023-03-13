@@ -96,11 +96,13 @@ subroutine MOM_calculate_grad_Coriolis(dF_dx, dF_dy, G, US)
                                       intent(out)   :: dF_dy !< y-component of grad f [T-1 L-1 ~> s-1 m-1]
   type(unit_scale_type),    optional, intent(in)    :: US !< A dimensional unit scaling type
   ! Local variables
+  character(len=40)  :: mdl = "MOM_calculate_grad_Coriolis" ! This subroutine's name.
   integer :: i,j
   real :: f1, f2 ! Average of adjacent Coriolis parameters [T-1 ~> s-1]
 
+  call callTree_enter(trim(mdl)//"(), MOM_shared_initialization.F90")
   if ((LBOUND(G%CoriolisBu,1) > G%isc-1) .or. &
-      (LBOUND(G%CoriolisBu,2) > G%isc-1)) then
+      (LBOUND(G%CoriolisBu,2) > G%jsc-1)) then
     ! The gradient of the Coriolis parameter can not be calculated with this grid.
     dF_dx(:,:) = 0.0 ; dF_dy(:,:) = 0.0
     return
@@ -115,6 +117,7 @@ subroutine MOM_calculate_grad_Coriolis(dF_dx, dF_dy, G, US)
     dF_dy(i,j) = G%IdyT(i,j) * ( f1 - f2 )
   enddo ; enddo
   call pass_vector(dF_dx, dF_dy, G%Domain, stagger=AGRID)
+  call callTree_leave(trim(mdl)//'()')
 
 end subroutine MOM_calculate_grad_Coriolis
 
