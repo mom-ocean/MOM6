@@ -73,6 +73,14 @@ subroutine find_obsolete_params(param_file)
   call obsolete_real(param_file, "ZSTAR_RIGID_SURFACE_THRESHOLD")
   call obsolete_logical(param_file, "HENYEY_IGW_BACKGROUND_NEW")
 
+  call obsolete_real(param_file, "SLIGHT_DZ_SURFACE")
+  call obsolete_int(param_file, "SLIGHT_NZ_SURFACE_FIXED")
+  call obsolete_real(param_file, "SLIGHT_SURFACE_AVG_DEPTH")
+  call obsolete_real(param_file, "SLIGHT_NLAY_TO_INTERIOR")
+  call obsolete_logical(param_file, "SLIGHT_FIX_HALOCLINES")
+  call obsolete_real(param_file, "HALOCLINE_FILTER_LENGTH")
+  call obsolete_real(param_file, "HALOCLINE_STRAT_TOL")
+
   ! Test for inconsistent parameter settings.
   split = .true. ; test_logic = .false.
   call read_param(param_file,"SPLIT",split)

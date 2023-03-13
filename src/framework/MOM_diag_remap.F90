@@ -327,10 +327,6 @@ subroutine diag_remap_update(remap_cs, G, GV, US, h, T, S, eqn_of_state, h_targe
       call build_rho_column(get_rho_CS(remap_cs%regrid_cs), GV%ke, &
                             GV%Z_to_H*(G%bathyT(i,j)+G%Z_ref), h(i,j,:), T(i,j,:), S(i,j,:), &
                             eqn_of_state, zInterfaces, h_neglect, h_neglect_edge)
-    elseif (remap_cs%vertical_coord == coordinateMode('SLIGHT')) then
-!     call build_slight_column(remap_cs%regrid_cs,remap_cs%remap_cs, nz, &
-!                           GV%Z_to_H*(G%bathyT(i,j)+G%Z_ref), sum(h(i,j,:)), zInterfaces)
-      call MOM_error(FATAL,"diag_remap_update: SLIGHT coordinate not coded for diagnostics yet!")
     elseif (remap_cs%vertical_coord == coordinateMode('HYCOM1')) then
 !     call build_hycom1_column(remap_cs%regrid_cs, nz, &
 !                           GV%Z_to_H*(G%bathyT(i,j)+G%Z_ref), sum(h(i,j,:)), zInterfaces)
