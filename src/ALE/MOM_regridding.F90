@@ -530,7 +530,7 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
   endif
 
   ! ensure CS%ref_pressure is rescaled properly
-  CS%ref_pressure = (US%kg_m3_to_R * US%m_s_to_L_T**2) * CS%ref_pressure
+  CS%ref_pressure = US%Pa_to_RL2_T2 * CS%ref_pressure
 
   if (allocated(rho_target)) then
     call set_target_densities(CS, US%kg_m3_to_R*rho_target)
@@ -552,13 +552,13 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
                    "The pressure that is used for calculating the coordinate "//&
                    "density.  (1 Pa = 1e4 dbar, so 2e7 is commonly used.) "//&
                    "This is only used if USE_EOS and ENABLE_THERMODYNAMICS are true.", &
-                   units="Pa", default=2.0e7, scale=US%kg_m3_to_R*US%m_s_to_L_T**2)
+                   units="Pa", default=2.0e7, scale=US%Pa_to_RL2_T2)
     else
       call get_param(param_file, mdl, create_coord_param(param_prefix, "P_REF", param_suffix), P_Ref, &
                    "The pressure that is used for calculating the diagnostic coordinate "//&
                    "density.  (1 Pa = 1e4 dbar, so 2e7 is commonly used.) "//&
                    "This is only used for the RHO coordinate.", &
-                   units="Pa", default=2.0e7, scale=US%kg_m3_to_R*US%m_s_to_L_T**2)
+                   units="Pa", default=2.0e7, scale=US%Pa_to_RL2_T2)
     endif
     call get_param(param_file, mdl, create_coord_param(param_prefix, "REGRID_COMPRESSIBILITY_FRACTION", param_suffix), &
                  tmpReal, &

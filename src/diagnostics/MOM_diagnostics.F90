@@ -635,7 +635,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
       if (CS%id_rhopot0 > 0) call post_data(CS%id_rhopot0, Rcv, CS%diag)
     endif
     if (CS%id_rhopot2 > 0) then
-      pressure_1d(:) = 2.0e7*US%kg_m3_to_R*US%m_s_to_L_T**2 ! 2000 dbars
+      pressure_1d(:) = 2.0e7*US%Pa_to_RL2_T2 ! 2000 dbars
       !$OMP parallel do default(shared)
       do k=1,nz ; do j=js,je
         call calculate_density(tv%T(:,j,k), tv%S(:,j,k),  pressure_1d, Rcv(:,j,k), &

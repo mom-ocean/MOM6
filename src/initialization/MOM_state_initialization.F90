@@ -1262,7 +1262,7 @@ subroutine trim_for_ice(PF, G, GV, US, ALE_CSp, tv, h, just_read)
   if (just_read) return ! All run-time parameters have been read, so return.
 
   call MOM_read_data(filename, p_surf_var, p_surf, G%Domain, &
-                     scale=scale_factor*US%kg_m3_to_R*US%m_s_to_L_T**2)
+                     scale=scale_factor*US%Pa_to_RL2_T2)
 
   if (use_remapping) then
     allocate(remap_CS)

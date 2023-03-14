@@ -78,7 +78,7 @@ subroutine USER_wind_forcing(sfc_state, forces, day, G, US, CS)
   ! calculation of ustar - otherwise the lower bound would be Isq.
   do j=js,je ; do I=is-1,Ieq
     ! Change this to the desired expression.
-    forces%taux(I,j) = G%mask2dCu(I,j) * 0.0*US%kg_m3_to_R*US%m_s_to_L_T**2*US%L_to_Z
+    forces%taux(I,j) = G%mask2dCu(I,j) * 0.0*US%Pa_to_RLZ_T2
   enddo ; enddo
   do J=js-1,Jeq ; do i=is,ie
     forces%tauy(i,J) = G%mask2dCv(i,J) * 0.0  ! Change this to the desired expression.
@@ -271,7 +271,7 @@ subroutine USER_surface_forcing_init(Time, G, US, param_file, diag, CS)
                  units="kg m-3", default=1035.0, scale=US%kg_m3_to_R)
   call get_param(param_file, mdl, "GUST_CONST", CS%gust_const, &
                  "The background gustiness in the winds.", &
-                 units="Pa", default=0.0, scale=US%kg_m3_to_R*US%m_s_to_L_T**2*US%L_to_Z)
+                 units="Pa", default=0.0, scale=US%Pa_to_RLZ_T2)
 
   call get_param(param_file, mdl, "RESTOREBUOY", CS%restorebuoy, &
                  "If true, the buoyancy fluxes drive the model back "//&
