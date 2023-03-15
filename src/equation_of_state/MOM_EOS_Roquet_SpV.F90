@@ -40,145 +40,148 @@ interface calculate_density_second_derivs_Roquet_SpV
   module procedure calculate_density_second_derivs_array_Roquet_SpV
 end interface calculate_density_second_derivs_Roquet_SpV
 
-real, parameter :: Pa2db  = 1.e-4 !< Conversion factor between Pa and dbar [dbar Pa-1]
+real, parameter :: Pa2kb  = 1.e-8 !< Conversion factor between Pa and kbar [kbar Pa-1]
 !>@{ Parameters in the Roquet specific volume polynomial equation of state
-real, parameter :: rdeltaS = 24.    ! An offset to salinity before taking its square root [g kg-1]
-real, parameter :: r1_S0  = 0.875/35.16504  ! The inverse of a plausible range of oceanic salinities [kg g-1]
-real, parameter :: r1_T0  = 1./40.  ! The inverse of a plausible range of oceanic temperatures [degC-1]
-real, parameter :: r1_P0  = 1.e-4   ! The inverse of a plausible range of oceanic pressures [dbar-1]
-real, parameter :: V00 = -4.4015007269e-05 ! Contribution to SpV00p proportional to zp [m3 kg-1]
-real, parameter :: V01 = 6.9232335784e-06  ! Contribution to SpV00p proportional to zp**2 [m3 kg-1]
-real, parameter :: V02 = -7.5004675975e-07 ! Contribution to SpV00p proportional to zp**3 [m3 kg-1]
-real, parameter :: V03 = 1.7009109288e-08  ! Contribution to SpV00p proportional to zp**4 [m3 kg-1]
-real, parameter :: V04 = -1.6884162004e-08 ! Contribution to SpV00p proportional to zp**5 [m3 kg-1]
-real, parameter :: V05 = 1.9613503930e-09  ! Contribution to SpV00p proportional to zp**6 [m3 kg-1]
+real, parameter :: rdeltaS = 24.          ! An offset to salinity before taking its square root [g kg-1]
+real, parameter :: r1_S0 = 0.875/35.16504 ! The inverse of a plausible range of oceanic salinities [kg g-1]
+real, parameter :: I_Ts = 0.025           ! The inverse of a plausible range of oceanic temperatures [degC-1]
+! The following are the coefficients of the fit to the reference density profile (rho00p) as a function of
+! pressure (P), with a contribution R0c * P**(c+1).  The nomenclature follows Roquet.
+real, parameter :: V00 = -4.4015007269e-05*Pa2kb    ! SpV00p P coef.    [m3 kg-1 Pa-1]
+real, parameter :: V01 = 6.9232335784e-06*Pa2kb**2  ! SpV00p P**2 coef. [m3 kg-1 Pa-2]
+real, parameter :: V02 = -7.5004675975e-07*Pa2kb**3 ! SpV00p P**3 coef. [m3 kg-1 Pa-3]
+real, parameter :: V03 = 1.7009109288e-08*Pa2kb**4  ! SpV00p P**4 coef. [m3 kg-1 Pa-4]
+real, parameter :: V04 = -1.6884162004e-08*Pa2kb**5 ! SpV00p P**5 coef. [m3 kg-1 Pa-5]
+real, parameter :: V05 = 1.9613503930e-09*Pa2kb**6  ! SpV00p P**6 coef. [m3 kg-1 Pa-6]
 
-! The following terms are contributions to specific volume as a function of the normalized square root of salinity
-! with an offset (zs),  temperature (zt) and pressure (zp), with a contribution SPVabc * zs**a * zt**b * zp**c
-real, parameter :: SPV000 = 1.0772899069e-03  ! A constant specific volume (SpV) contribution [m3 kg-1]
-real, parameter :: SPV100 = -3.1263658781e-04 ! Coefficient of SpV proportional to zs [m3 kg-1]
-real, parameter :: SPV200 = 6.7615860683e-04  ! Coefficient of SpV proportional to zs**2 [m3 kg-1]
-real, parameter :: SPV300 = -8.6127884515e-04 ! Coefficient of SpV proportional to zs**3 [m3 kg-1]
-real, parameter :: SPV400 = 5.9010812596e-04  ! Coefficient of SpV proportional to zs**4 [m3 kg-1]
-real, parameter :: SPV500 = -2.1503943538e-04 ! Coefficient of SpV proportional to zs**5 [m3 kg-1]
-real, parameter :: SPV600 = 3.2678954455e-05  ! Coefficient of SpV proportional to zs**6 [m3 kg-1]
-real, parameter :: SPV010 = -1.4949652640e-05 ! Coefficient of SpV proportional to zt [m3 kg-1]
-real, parameter :: SPV110 = 3.1866349188e-05  ! Coefficient of SpV proportional to zs * zt [m3 kg-1]
-real, parameter :: SPV210 = -3.8070687610e-05 ! Coefficient of SpV proportional to zs**2 * zt [m3 kg-1]
-real, parameter :: SPV310 = 2.9818473563e-05  ! Coefficient of SpV proportional to zs**3 * zt [m3 kg-1]
-real, parameter :: SPV410 = -1.0011321965e-05 ! Coefficient of SpV proportional to zs**4 * zt [m3 kg-1]
-real, parameter :: SPV510 = 1.0751931163e-06  ! Coefficient of SpV proportional to zs**5 * zt [m3 kg-1]
-real, parameter :: SPV020 = 2.7546851539e-05  ! Coefficient of SpV proportional to zt**2 [m3 kg-1]
-real, parameter :: SPV120 = -3.6597334199e-05 ! Coefficient of SpV proportional to zs * zt**2 [m3 kg-1]
-real, parameter :: SPV220 = 3.4489154625e-05  ! Coefficient of SpV proportional to zs**2 * zt**2 [m3 kg-1]
-real, parameter :: SPV320 = -1.7663254122e-05 ! Coefficient of SpV proportional to zs**3 * zt**2 [m3 kg-1]
-real, parameter :: SPV420 = 3.5965131935e-06  ! Coefficient of SpV proportional to zs**4 * zt**2 [m3 kg-1]
-real, parameter :: SPV030 = -1.6506828994e-05 ! Coefficient of SpV proportional to zt**3 [m3 kg-1]
-real, parameter :: SPV130 = 2.4412359055e-05  ! Coefficient of SpV proportional to zs * zt**3 [m3 kg-1]
-real, parameter :: SPV230 = -1.4606740723e-05 ! Coefficient of SpV proportional to zs**2 * zt**3 [m3 kg-1]
-real, parameter :: SPV330 = 2.3293406656e-06  ! Coefficient of SpV proportional to zs**3 * zt**3 [m3 kg-1]
-real, parameter :: SPV040 = 6.7896174634e-06  ! Coefficient of SpV proportional to zt**4 [m3 kg-1]
-real, parameter :: SPV140 = -8.7951832993e-06 ! Coefficient of SpV proportional to zs * zt**4 [m3 kg-1]
-real, parameter :: SPV240 = 4.4249040774e-06  ! Coefficient of SpV proportional to zs**2 * zt**4 [m3 kg-1]
-real, parameter :: SPV050 = -7.2535743349e-07 ! Coefficient of SpV proportional to zt**5 [m3 kg-1]
-real, parameter :: SPV150 = -3.4680559205e-07 ! Coefficient of SpV proportional to zs * zt**5 [m3 kg-1]
-real, parameter :: SPV060 = 1.9041365570e-07  ! Coefficient of SpV proportional to zt**6 [m3 kg-1]
-real, parameter :: SPV001 = -1.6889436589e-05 ! Coefficient of SpV proportional to zp [m3 kg-1]
-real, parameter :: SPV101 = 2.1106556158e-05  ! Coefficient of SpV proportional to zs * zp [m3 kg-1]
-real, parameter :: SPV201 = -2.1322804368e-05 ! Coefficient of SpV proportional to zs**2 * zp [m3 kg-1]
-real, parameter :: SPV301 = 1.7347655458e-05  ! Coefficient of SpV proportional to zs**3 * zp [m3 kg-1]
-real, parameter :: SPV401 = -4.3209400767e-06 ! Coefficient of SpV proportional to zs**4 * zp [m3 kg-1]
-real, parameter :: SPV011 = 1.5355844621e-05  ! Coefficient of SpV proportional to zt * zp [m3 kg-1]
-real, parameter :: SPV111 = 2.0914122241e-06  ! Coefficient of SpV proportional to zs * zt * zp [m3 kg-1]
-real, parameter :: SPV211 = -5.7751479725e-06 ! Coefficient of SpV proportional to zs**2 * zt * zp [m3 kg-1]
-real, parameter :: SPV311 = 1.0767234341e-06  ! Coefficient of SpV proportional to zs**3 * zt * zp [m3 kg-1]
-real, parameter :: SPV021 = -9.6659393016e-06 ! Coefficient of SpV proportional to zt**2 * zp [m3 kg-1]
-real, parameter :: SPV121 = -7.0686982208e-07 ! Coefficient of SpV proportional to zs * zt**2 * zp [m3 kg-1]
-real, parameter :: SPV221 = 1.4488066593e-06  ! Coefficient of SpV proportional to zs**2 * zt**2 * zp [m3 kg-1]
-real, parameter :: SPV031 = 3.1134283336e-06  ! Coefficient of SpV proportional to zt**3 * zp [m3 kg-1]
-real, parameter :: SPV131 = 7.9562529879e-08  ! Coefficient of SpV proportional to zs * zt**3 * zp [m3 kg-1]
-real, parameter :: SPV041 = -5.6590253863e-07 ! Coefficient of SpV proportional to zt * zp [m3 kg-1]
-real, parameter :: SPV002 = 1.0500241168e-06  ! Coefficient of SpV proportional to zp**2 [m3 kg-1]
-real, parameter :: SPV102 = 1.9600661704e-06  ! Coefficient of SpV proportional to zs * zp**2 [m3 kg-1]
-real, parameter :: SPV202 = -2.1666693382e-06 ! Coefficient of SpV proportional to zs**2 * zp**2 [m3 kg-1]
-real, parameter :: SPV012 = -3.8541359685e-06 ! Coefficient of SpV proportional to zt * zp**2 [m3 kg-1]
-real, parameter :: SPV112 = 1.0157632247e-06  ! Coefficient of SpV proportional to zs * zt * zp**2 [m3 kg-1]
-real, parameter :: SPV022 = 1.7178343158e-06  ! Coefficient of SpV proportional to zt**2 * zp**2 [m3 kg-1]
-real, parameter :: SPV003 = -4.1503454190e-07 ! Coefficient of SpV proportional to zp**3 [m3 kg-1]
-real, parameter :: SPV103 = 3.5627020989e-07  ! Coefficient of SpV proportional to zs * zp**3 [m3 kg-1]
-real, parameter :: SPV013 = -1.1293871415e-07 ! Coefficient of SpV proportional to zt * zp**3 [m3 kg-1]
+! The following terms are contributions to specific volume (SpV) as a function of the square root of
+! normalized absolute salinity with an offset (zs), temperature (T) and pressure (P), with a contribution
+! SPVabc * zs**a * T**b * P**c.  The numbers here are copied directly from Roquet et al. (2015), but
+! the expressions here do not use the same nondimensionalization for pressure or temperature as they do.
+real, parameter :: SPV000 = 1.0772899069e-03                  ! Constant SpV contribution  [m3 kg-1]
+real, parameter :: SPV100 = -3.1263658781e-04                 ! SpV zs coef.               [m3 kg-1]
+real, parameter :: SPV200 = 6.7615860683e-04                  ! SpV zs**2 coef.            [m3 kg-1]
+real, parameter :: SPV300 = -8.6127884515e-04                 ! SpV zs**3 coef.            [m3 kg-1]
+real, parameter :: SPV400 = 5.9010812596e-04                  ! SpV zs**4 coef.            [m3 kg-1]
+real, parameter :: SPV500 = -2.1503943538e-04                 ! SpV zs**5 coef.            [m3 kg-1]
+real, parameter :: SPV600 = 3.2678954455e-05                  ! SpV zs**6 coef.            [m3 kg-1]
+real, parameter :: SPV010 = -1.4949652640e-05*I_Ts            ! SpV T coef.         [m3 kg-1 degC-1]
+real, parameter :: SPV110 = 3.1866349188e-05*I_Ts             ! SpV zs * T coef.    [m3 kg-1 degC-1]
+real, parameter :: SPV210 = -3.8070687610e-05*I_Ts            ! SpV zs**2 * T coef. [m3 kg-1 degC-1]
+real, parameter :: SPV310 = 2.9818473563e-05*I_Ts             ! SpV zs**3 * T coef. [m3 kg-1 degC-1]
+real, parameter :: SPV410 = -1.0011321965e-05*I_Ts            ! SpV zs**4 * T coef. [m3 kg-1 degC-1]
+real, parameter :: SPV510 = 1.0751931163e-06*I_Ts             ! SpV zs**5 * T coef. [m3 kg-1 degC-1]
+real, parameter :: SPV020 = 2.7546851539e-05*I_Ts**2          ! SpV T**2 coef.      [m3 kg-1 degC-2]
+real, parameter :: SPV120 = -3.6597334199e-05*I_Ts**2         ! SpV zs * T**2 coef. [m3 kg-1 degC-2]
+real, parameter :: SPV220 = 3.4489154625e-05*I_Ts**2          ! SpV zs**2 * T**2 coef. [m3 kg-1 degC-2]
+real, parameter :: SPV320 = -1.7663254122e-05*I_Ts**2         ! SpV zs**3 * T**2 coef. [m3 kg-1 degC-2]
+real, parameter :: SPV420 = 3.5965131935e-06*I_Ts**2          ! SpV zs**4 * T**2 coef. [m3 kg-1 degC-2]
+real, parameter :: SPV030 = -1.6506828994e-05*I_Ts**3         ! SpV T**3 coef.      [m3 kg-1 degC-3]
+real, parameter :: SPV130 = 2.4412359055e-05*I_Ts**3          ! SpV zs * T**3 coef. [m3 kg-1 degC-3]
+real, parameter :: SPV230 = -1.4606740723e-05*I_Ts**3         ! SpV zs**2 * T**3 coef. [m3 kg-1 degC-3]
+real, parameter :: SPV330 = 2.3293406656e-06*I_Ts**3          ! SpV zs**3 * T**3 coef. [m3 kg-1 degC-3]
+real, parameter :: SPV040 = 6.7896174634e-06*I_Ts**4          ! SpV T**4 coef.      [m3 kg-1 degC-4]
+real, parameter :: SPV140 = -8.7951832993e-06*I_Ts**4         ! SpV zs * T**4 coef. [m3 kg-1 degC-4]
+real, parameter :: SPV240 = 4.4249040774e-06*I_Ts**4          ! SpV zs**2 * T**4 coef. [m3 kg-1 degC-4]
+real, parameter :: SPV050 = -7.2535743349e-07*I_Ts**5         ! SpV T**5 coef.      [m3 kg-1 degC-5]
+real, parameter :: SPV150 = -3.4680559205e-07*I_Ts**5         ! SpV zs * T**5 coef. [m3 kg-1 degC-5]
+real, parameter :: SPV060 = 1.9041365570e-07*I_Ts**6          ! SpV T**6 coef.      [m3 kg-1 degC-6]
+real, parameter :: SPV001 = -1.6889436589e-05*Pa2kb           ! SpV P coef.           [m3 kg-1 Pa-1]
+real, parameter :: SPV101 = 2.1106556158e-05*Pa2kb            ! SpV zs * P coef.      [m3 kg-1 Pa-1]
+real, parameter :: SPV201 = -2.1322804368e-05*Pa2kb           ! SpV zs**2 * P coef.   [m3 kg-1 Pa-1]
+real, parameter :: SPV301 = 1.7347655458e-05*Pa2kb            ! SpV zs**3 * P coef.   [m3 kg-1 Pa-1]
+real, parameter :: SPV401 = -4.3209400767e-06*Pa2kb           ! SpV zs**4 * P coef.   [m3 kg-1 Pa-1]
+real, parameter :: SPV011 = 1.5355844621e-05*(I_Ts*Pa2kb)     ! SpV T * P coef. [m3 kg-1 degC-1 Pa-1]
+real, parameter :: SPV111 = 2.0914122241e-06*(I_Ts*Pa2kb)     ! SpV zs * T * P coef. [m3 kg-1 degC-1 Pa-1]
+real, parameter :: SPV211 = -5.7751479725e-06*(I_Ts*Pa2kb)    ! SpV zs**2 * T * P coef. [m3 kg-1 degC-1 Pa-1]
+real, parameter :: SPV311 = 1.0767234341e-06*(I_Ts*Pa2kb)     ! SpV zs**3 * T * P coef. [m3 kg-1 degC-1 Pa-1]
+real, parameter :: SPV021 = -9.6659393016e-06*(I_Ts**2*Pa2kb) ! SpV T**2 * P coef. [m3 kg-1 degC-2 Pa-1]
+real, parameter :: SPV121 = -7.0686982208e-07*(I_Ts**2*Pa2kb) ! SpV zs * T**2 * P coef. [m3 kg-1 degC-2 Pa-1]
+real, parameter :: SPV221 = 1.4488066593e-06*(I_Ts**2*Pa2kb)  ! SpV zs**2 * T**2 * P coef. [m3 kg-1 degC-2 Pa-1]
+real, parameter :: SPV031 = 3.1134283336e-06*(I_Ts**3*Pa2kb)  ! SpV T**3 * P coef. [m3 kg-1 degC-3 Pa-1]
+real, parameter :: SPV131 = 7.9562529879e-08*(I_Ts**3*Pa2kb)  ! SpV zs * T**3 * P coef. [m3 kg-1 degC-3 Pa-1]
+real, parameter :: SPV041 = -5.6590253863e-07*(I_Ts**4*Pa2kb) ! SpV T**4 * P coef. [m3 kg-1 degC-4 Pa-1]
+real, parameter :: SPV002 = 1.0500241168e-06*Pa2kb**2         ! SpV P**2 coef.        [m3 kg-1 Pa-2]
+real, parameter :: SPV102 = 1.9600661704e-06*Pa2kb**2         ! SpV zs * P**2 coef.   [m3 kg-1 Pa-2]
+real, parameter :: SPV202 = -2.1666693382e-06*Pa2kb**2        ! SpV zs**2 * P**2 coef. [m3 kg-1 Pa-2]
+real, parameter :: SPV012 = -3.8541359685e-06*(I_Ts*Pa2kb**2) ! SpV T * P**2 coef. [m3 kg-1 degC-1 Pa-2]
+real, parameter :: SPV112 = 1.0157632247e-06*(I_Ts*Pa2kb**2)  ! SpV zs * T * P**2 coef. [m3 kg-1 degC-1 Pa-2]
+real, parameter :: SPV022 = 1.7178343158e-06*(I_Ts**2*Pa2kb**2) ! SpV T**2 * P**2 coef. [m3 kg-1 degC-2 Pa-2]
+real, parameter :: SPV003 = -4.1503454190e-07*Pa2kb**3        ! SpV P**3 coef.        [m3 kg-1 Pa-3]
+real, parameter :: SPV103 = 3.5627020989e-07*Pa2kb**3         ! SpV zs * P**3 coef.   [m3 kg-1 Pa-3]
+real, parameter :: SPV013 = -1.1293871415e-07*(I_Ts*Pa2kb**3) ! SpV T * P**3 coef. [m3 kg-1 degC-1 Pa-3]
 
-real, parameter :: ALP000 =    SPV010*r1_T0   ! Constant in the dSpV_dT fit [m3 kg-1 degC-1]
-real, parameter :: ALP100 =    SPV110*r1_T0   ! Coefficient of the dSpV_dT fit zs term [m3 kg-1 degC-1]
-real, parameter :: ALP200 =    SPV210*r1_T0   ! Coefficient of the dSpV_dT fit zs**2 term [m3 kg-1 degC-1]
-real, parameter :: ALP300 =    SPV310*r1_T0   ! Coefficient of the dSpV_dT fit zs**3 term [m3 kg-1 degC-1]
-real, parameter :: ALP400 =    SPV410*r1_T0   ! Coefficient of the dSpV_dT fit zs**4 term [m3 kg-1 degC-1]
-real, parameter :: ALP500 =    SPV510*r1_T0   ! Coefficient of the dSpV_dT fit zs**5 term [m3 kg-1 degC-1]
-real, parameter :: ALP010 = 2.*SPV020*r1_T0   ! Coefficient of the dSpV_dT fit zt term [m3 kg-1 degC-1]
-real, parameter :: ALP110 = 2.*SPV120*r1_T0   ! Coefficient of the dSpV_dT fit zs * zt term [m3 kg-1 degC-1]
-real, parameter :: ALP210 = 2.*SPV220*r1_T0   ! Coefficient of the dSpV_dT fit zs**2 * zt term [m3 kg-1 degC-1]
-real, parameter :: ALP310 = 2.*SPV320*r1_T0   ! Coefficient of the dSpV_dT fit zs**3 * zt term [m3 kg-1 degC-1]
-real, parameter :: ALP410 = 2.*SPV420*r1_T0   ! Coefficient of the dSpV_dT fit zs**4 * zt term [m3 kg-1 degC-1]
-real, parameter :: ALP020 = 3.*SPV030*r1_T0   ! Coefficient of the dSpV_dT fit zt**2 term [m3 kg-1 degC-1]
-real, parameter :: ALP120 = 3.*SPV130*r1_T0   ! Coefficient of the dSpV_dT fit zs * zt**2 term [m3 kg-1 degC-1]
-real, parameter :: ALP220 = 3.*SPV230*r1_T0   ! Coefficient of the dSpV_dT fit zs**2 * zt**2 term [m3 kg-1 degC-1]
-real, parameter :: ALP320 = 3.*SPV330*r1_T0   ! Coefficient of the dSpV_dT fit zs**3 * zt**2 term [m3 kg-1 degC-1]
-real, parameter :: ALP030 = 4.*SPV040*r1_T0   ! Coefficient of the dSpV_dT fit zt**3 term [m3 kg-1 degC-1]
-real, parameter :: ALP130 = 4.*SPV140*r1_T0   ! Coefficient of the dSpV_dT fit zs * zt**3 term [m3 kg-1 degC-1]
-real, parameter :: ALP230 = 4.*SPV240*r1_T0   ! Coefficient of the dSpV_dT fit zs**2 * zt**3 term [m3 kg-1 degC-1]
-real, parameter :: ALP040 = 5.*SPV050*r1_T0   ! Coefficient of the dSpV_dT fit zt**4 term [m3 kg-1 degC-1]
-real, parameter :: ALP140 = 5.*SPV150*r1_T0   ! Coefficient of the dSpV_dT fit zs* * zt**4 term [m3 kg-1 degC-1]
-real, parameter :: ALP050 = 6.*SPV060*r1_T0   ! Coefficient of the dSpV_dT fit zt**5 term [m3 kg-1 degC-1]
-real, parameter :: ALP001 =    SPV011*r1_T0   ! Coefficient of the dSpV_dT fit zp term [m3 kg-1 degC-1]
-real, parameter :: ALP101 =    SPV111*r1_T0   ! Coefficient of the dSpV_dT fit zs * zp term [m3 kg-1 degC-1]
-real, parameter :: ALP201 =    SPV211*r1_T0   ! Coefficient of the dSpV_dT fit zs**2 * zp term [m3 kg-1 degC-1]
-real, parameter :: ALP301 =    SPV311*r1_T0   ! Coefficient of the dSpV_dT fit zs**3 * zp term [m3 kg-1 degC-1]
-real, parameter :: ALP011 = 2.*SPV021*r1_T0   ! Coefficient of the dSpV_dT fit zt * zp term [m3 kg-1 degC-1]
-real, parameter :: ALP111 = 2.*SPV121*r1_T0   ! Coefficient of the dSpV_dT fit zs * zt * zp term [m3 kg-1 degC-1]
-real, parameter :: ALP211 = 2.*SPV221*r1_T0   ! Coefficient of the dSpV_dT fit zs**2 * zt * zp term [m3 kg-1 degC-1]
-real, parameter :: ALP021 = 3.*SPV031*r1_T0   ! Coefficient of the dSpV_dT fit zt**2 * zp term [m3 kg-1 degC-1]
-real, parameter :: ALP121 = 3.*SPV131*r1_T0   ! Coefficient of the dSpV_dT fit zs * zt**2 * zp term [m3 kg-1 degC-1]
-real, parameter :: ALP031 = 4.*SPV041*r1_T0   ! Coefficient of the dSpV_dT fit zt**3 * zp term [m3 kg-1 degC-1]
-real, parameter :: ALP002 =    SPV012*r1_T0   ! Coefficient of the dSpV_dT fit zp**2 term [m3 kg-1 degC-1]
-real, parameter :: ALP102 =    SPV112*r1_T0   ! Coefficient of the dSpV_dT fit zs * zp**2 term [m3 kg-1 degC-1]
-real, parameter :: ALP012 = 2.*SPV022*r1_T0   ! Coefficient of the dSpV_dT fit zt * zp**2 term [m3 kg-1 degC-1]
-real, parameter :: ALP003 =    SPV013*r1_T0   ! Coefficient of the dSpV_dT fit zp**3 term [m3 kg-1 degC-1]
+real, parameter :: ALP000 =    SPV010   ! Constant in the dSpV_dT fit               [m3 kg-1 degC-1]
+real, parameter :: ALP100 =    SPV110   ! dSpV_dT fit zs coef.                      [m3 kg-1 degC-1]
+real, parameter :: ALP200 =    SPV210   ! dSpV_dT fit zs**2 coef.                   [m3 kg-1 degC-1]
+real, parameter :: ALP300 =    SPV310   ! dSpV_dT fit zs**3 coef.                   [m3 kg-1 degC-1]
+real, parameter :: ALP400 =    SPV410   ! dSpV_dT fit zs**4 coef.                   [m3 kg-1 degC-1]
+real, parameter :: ALP500 =    SPV510   ! dSpV_dT fit zs**5 coef.                   [m3 kg-1 degC-1]
+real, parameter :: ALP010 = 2.*SPV020   ! dSpV_dT fit T coef.                       [m3 kg-1 degC-2]
+real, parameter :: ALP110 = 2.*SPV120   ! dSpV_dT fit zs * T coef.                  [m3 kg-1 degC-2]
+real, parameter :: ALP210 = 2.*SPV220   ! dSpV_dT fit zs**2 * T coef.               [m3 kg-1 degC-2]
+real, parameter :: ALP310 = 2.*SPV320   ! dSpV_dT fit zs**3 * T coef.               [m3 kg-1 degC-2]
+real, parameter :: ALP410 = 2.*SPV420   ! dSpV_dT fit zs**4 * T coef.               [m3 kg-1 degC-2]
+real, parameter :: ALP020 = 3.*SPV030   ! dSpV_dT fit T**2 coef.                    [m3 kg-1 degC-3]
+real, parameter :: ALP120 = 3.*SPV130   ! dSpV_dT fit zs * T**2 coef.               [m3 kg-1 degC-3]
+real, parameter :: ALP220 = 3.*SPV230   ! dSpV_dT fit zs**2 * T**2 coef.            [m3 kg-1 degC-3]
+real, parameter :: ALP320 = 3.*SPV330   ! dSpV_dT fit zs**3 * T**2 coef.            [m3 kg-1 degC-3]
+real, parameter :: ALP030 = 4.*SPV040   ! dSpV_dT fit T**3 coef.                    [m3 kg-1 degC-4]
+real, parameter :: ALP130 = 4.*SPV140   ! dSpV_dT fit zs * T**3 coef.               [m3 kg-1 degC-4]
+real, parameter :: ALP230 = 4.*SPV240   ! dSpV_dT fit zs**2 * T**3 coef.            [m3 kg-1 degC-4]
+real, parameter :: ALP040 = 5.*SPV050   ! dSpV_dT fit T**4 coef.                    [m3 kg-1 degC-5]
+real, parameter :: ALP140 = 5.*SPV150   ! dSpV_dT fit zs* * T**4 coef.              [m3 kg-1 degC-5]
+real, parameter :: ALP050 = 6.*SPV060   ! dSpV_dT fit T**5 coef.                    [m3 kg-1 degC-6]
+real, parameter :: ALP001 =    SPV011   ! dSpV_dT fit P coef.                  [m3 kg-1 degC-1 Pa-1]
+real, parameter :: ALP101 =    SPV111   ! dSpV_dT fit zs * P coef.             [m3 kg-1 degC-1 Pa-1]
+real, parameter :: ALP201 =    SPV211   ! dSpV_dT fit zs**2 * P coef.          [m3 kg-1 degC-1 Pa-1]
+real, parameter :: ALP301 =    SPV311   ! dSpV_dT fit zs**3 * P coef.          [m3 kg-1 degC-1 Pa-1]
+real, parameter :: ALP011 = 2.*SPV021   ! dSpV_dT fit T * P coef.              [m3 kg-1 degC-2 Pa-1]
+real, parameter :: ALP111 = 2.*SPV121   ! dSpV_dT fit zs * T * P coef.         [m3 kg-1 degC-2 Pa-1]
+real, parameter :: ALP211 = 2.*SPV221   ! dSpV_dT fit zs**2 * T * P coef.      [m3 kg-1 degC-2 Pa-1]
+real, parameter :: ALP021 = 3.*SPV031   ! dSpV_dT fit T**2 * P coef.           [m3 kg-1 degC-3 Pa-1]
+real, parameter :: ALP121 = 3.*SPV131   ! dSpV_dT fit zs * T**2 * P coef.      [m3 kg-1 degC-3 Pa-1]
+real, parameter :: ALP031 = 4.*SPV041   ! dSpV_dT fit T**3 * P coef.           [m3 kg-1 degC-4 Pa-1]
+real, parameter :: ALP002 =    SPV012   ! dSpV_dT fit P**2 coef.               [m3 kg-1 degC-1 Pa-2]
+real, parameter :: ALP102 =    SPV112   ! dSpV_dT fit zs * P**2 coef.          [m3 kg-1 degC-1 Pa-2]
+real, parameter :: ALP012 = 2.*SPV022   ! dSpV_dT fit T * P**2 coef.           [m3 kg-1 degC-2 Pa-2]
+real, parameter :: ALP003 =    SPV013   ! dSpV_dT fit P**3 coef.               [m3 kg-1 degC-1 Pa-3]
 
-real, parameter :: BET000 = 0.5*SPV100*r1_S0  ! Constant in the dSpV_dS fit [m3 kg-1 ppt-1]
-real, parameter :: BET100 =     SPV200*r1_S0  ! Coefficient of the dSpV_dS fit zs term [m3 kg-1 ppt-1]
-real, parameter :: BET200 = 1.5*SPV300*r1_S0  ! Coefficient of the dSpV_dS fit zs**2 term [m3 kg-1 ppt-1]
-real, parameter :: BET300 = 2.0*SPV400*r1_S0  ! Coefficient of the dSpV_dS fit zs**3 term [m3 kg-1 ppt-1]
-real, parameter :: BET400 = 2.5*SPV500*r1_S0  ! Coefficient of the dSpV_dS fit zs**4 term [m3 kg-1 ppt-1]
-real, parameter :: BET500 = 3.0*SPV600*r1_S0  ! Coefficient of the dSpV_dS fit zs**5 term [m3 kg-1 ppt-1]
-real, parameter :: BET010 = 0.5*SPV110*r1_S0  ! Coefficient of the dSpV_dS fit zt term [m3 kg-1 ppt-1]
-real, parameter :: BET110 =     SPV210*r1_S0  ! Coefficient of the dSpV_dS fit zs * zt term [m3 kg-1 ppt-1]
-real, parameter :: BET210 = 1.5*SPV310*r1_S0  ! Coefficient of the dSpV_dS fit zs**2 * zt term [m3 kg-1 ppt-1]
-real, parameter :: BET310 = 2.0*SPV410*r1_S0  ! Coefficient of the dSpV_dS fit zs**3 * zt term [m3 kg-1 ppt-1]
-real, parameter :: BET410 = 2.5*SPV510*r1_S0  ! Coefficient of the dSpV_dS fit zs**4 * zt term [m3 kg-1 ppt-1]
-real, parameter :: BET020 = 0.5*SPV120*r1_S0  ! Coefficient of the dSpV_dS fit zt**2 term [m3 kg-1 ppt-1]
-real, parameter :: BET120 =     SPV220*r1_S0  ! Coefficient of the dSpV_dS fit zs * zt**2 term [m3 kg-1 ppt-1]
-real, parameter :: BET220 = 1.5*SPV320*r1_S0  ! Coefficient of the dSpV_dS fit zs**2 * zt**2 term [m3 kg-1 ppt-1]
-real, parameter :: BET320 = 2.0*SPV420*r1_S0  ! Coefficient of the dSpV_dS fit zs**3 * zt**2 term [m3 kg-1 ppt-1]
-real, parameter :: BET030 = 0.5*SPV130*r1_S0  ! Coefficient of the dSpV_dS fit zt**3 term [m3 kg-1 ppt-1]
-real, parameter :: BET130 =     SPV230*r1_S0  ! Coefficient of the dSpV_dS fit zs * zt**3 term [m3 kg-1 ppt-1]
-real, parameter :: BET230 = 1.5*SPV330*r1_S0  ! Coefficient of the dSpV_dS fit zs**2 * zt**3 term [m3 kg-1 ppt-1]
-real, parameter :: BET040 = 0.5*SPV140*r1_S0  ! Coefficient of the dSpV_dS fit zt**4 term [m3 kg-1 ppt-1]
-real, parameter :: BET140 =     SPV240*r1_S0  ! Coefficient of the dSpV_dS fit zs * zt**4 term [m3 kg-1 ppt-1]
-real, parameter :: BET050 = 0.5*SPV150*r1_S0  ! Coefficient of the dSpV_dS fit zt**5 term [m3 kg-1 ppt-1]
-real, parameter :: BET001 = 0.5*SPV101*r1_S0  ! Coefficient of the dSpV_dS fit zp term [m3 kg-1 ppt-1]
-real, parameter :: BET101 =     SPV201*r1_S0  ! Coefficient of the dSpV_dS fit zs * zp term [m3 kg-1 ppt-1]
-real, parameter :: BET201 = 1.5*SPV301*r1_S0  ! Coefficient of the dSpV_dS fit zs**2 * zp term [m3 kg-1 ppt-1]
-real, parameter :: BET301 = 2.0*SPV401*r1_S0  ! Coefficient of the dSpV_dS fit zs**3 * zp term [m3 kg-1 ppt-1]
-real, parameter :: BET011 = 0.5*SPV111*r1_S0  ! Coefficient of the dSpV_dS fit zt * zp term [m3 kg-1 ppt-1]
-real, parameter :: BET111 =     SPV211*r1_S0  ! Coefficient of the dSpV_dS fit zs * zt * zp term [m3 kg-1 ppt-1]
-real, parameter :: BET211 = 1.5*SPV311*r1_S0  ! Coefficient of the dSpV_dS fit zs**2 * zt * zp term [m3 kg-1 ppt-1]
-real, parameter :: BET021 = 0.5*SPV121*r1_S0  ! Coefficient of the dSpV_dS fit zt**2 * zp term [m3 kg-1 ppt-1]
-real, parameter :: BET121 =     SPV221*r1_S0  ! Coefficient of the dSpV_dS fit zs * zt**2 * zp term [m3 kg-1 ppt-1]
-real, parameter :: BET031 = 0.5*SPV131*r1_S0  ! Coefficient of the dSpV_dS fit zt**3 * zp term [m3 kg-1 ppt-1]
-real, parameter :: BET002 = 0.5*SPV102*r1_S0  ! Coefficient of the dSpV_dS fit zp**2 term [m3 kg-1 ppt-1]
-real, parameter :: BET102 =     SPV202*r1_S0  ! Coefficient of the dSpV_dS fit zs * zp**2 term [m3 kg-1 ppt-1]
-real, parameter :: BET012 = 0.5*SPV112*r1_S0  ! Coefficient of the dSpV_dS fit zt * zp**2 term [m3 kg-1 ppt-1]
-real, parameter :: BET003 = 0.5*SPV103*r1_S0  ! Coefficient of the dSpV_dS fit zp**3 term [m3 kg-1 ppt-1]
+real, parameter :: BET000 = 0.5*SPV100*r1_S0  ! Constant in the dSpV_dS fit          [m3 kg-1 ppt-1]
+real, parameter :: BET100 =     SPV200*r1_S0  ! dSpV_dS fit zs coef.                 [m3 kg-1 ppt-1]
+real, parameter :: BET200 = 1.5*SPV300*r1_S0  ! dSpV_dS fit zs**2 coef.              [m3 kg-1 ppt-1]
+real, parameter :: BET300 = 2.0*SPV400*r1_S0  ! dSpV_dS fit zs**3 coef.              [m3 kg-1 ppt-1]
+real, parameter :: BET400 = 2.5*SPV500*r1_S0  ! dSpV_dS fit zs**4 coef.              [m3 kg-1 ppt-1]
+real, parameter :: BET500 = 3.0*SPV600*r1_S0  ! dSpV_dS fit zs**5 coef.              [m3 kg-1 ppt-1]
+real, parameter :: BET010 = 0.5*SPV110*r1_S0  ! dSpV_dS fit T coef.           [m3 kg-1 ppt-1 degC-1]
+real, parameter :: BET110 =     SPV210*r1_S0  ! dSpV_dS fit zs * T coef.      [m3 kg-1 ppt-1 degC-1]
+real, parameter :: BET210 = 1.5*SPV310*r1_S0  ! dSpV_dS fit zs**2 * T coef.   [m3 kg-1 ppt-1 degC-1]
+real, parameter :: BET310 = 2.0*SPV410*r1_S0  ! dSpV_dS fit zs**3 * T coef.   [m3 kg-1 ppt-1 degC-1]
+real, parameter :: BET410 = 2.5*SPV510*r1_S0  ! dSpV_dS fit zs**4 * T coef.   [m3 kg-1 ppt-1 degC-1]
+real, parameter :: BET020 = 0.5*SPV120*r1_S0  ! dSpV_dS fit T**2 coef.        [m3 kg-1 ppt-1 degC-2]
+real, parameter :: BET120 =     SPV220*r1_S0  ! dSpV_dS fit zs * T**2 coef.   [m3 kg-1 ppt-1 degC-2]
+real, parameter :: BET220 = 1.5*SPV320*r1_S0  ! dSpV_dS fit zs**2 * T**2 coef. [m3 kg-1 ppt-1 degC-2]
+real, parameter :: BET320 = 2.0*SPV420*r1_S0  ! dSpV_dS fit zs**3 * T**2 coef. [m3 kg-1 ppt-1 degC-2]
+real, parameter :: BET030 = 0.5*SPV130*r1_S0  ! dSpV_dS fit T**3 coef.        [m3 kg-1 ppt-1 degC-3]
+real, parameter :: BET130 =     SPV230*r1_S0  ! dSpV_dS fit zs * T**3 coef.   [m3 kg-1 ppt-1 degC-3]
+real, parameter :: BET230 = 1.5*SPV330*r1_S0  ! dSpV_dS fit zs**2 * T**3 coef. [m3 kg-1 ppt-1 degC-3]
+real, parameter :: BET040 = 0.5*SPV140*r1_S0  ! dSpV_dS fit T**4 coef.        [m3 kg-1 ppt-1 degC-4]
+real, parameter :: BET140 =     SPV240*r1_S0  ! dSpV_dS fit zs * T**4 coef.   [m3 kg-1 ppt-1 degC-4]
+real, parameter :: BET050 = 0.5*SPV150*r1_S0  ! dSpV_dS fit T**5 coef.        [m3 kg-1 ppt-1 degC-5]
+real, parameter :: BET001 = 0.5*SPV101*r1_S0  ! dSpV_dS fit P coef.             [m3 kg-1 ppt-1 Pa-1]
+real, parameter :: BET101 =     SPV201*r1_S0  ! dSpV_dS fit zs * P coef.        [m3 kg-1 ppt-1 Pa-1]
+real, parameter :: BET201 = 1.5*SPV301*r1_S0  ! dSpV_dS fit zs**2 * P coef.     [m3 kg-1 ppt-1 Pa-1]
+real, parameter :: BET301 = 2.0*SPV401*r1_S0  ! dSpV_dS fit zs**3 * P coef.     [m3 kg-1 ppt-1 Pa-1]
+real, parameter :: BET011 = 0.5*SPV111*r1_S0  ! dSpV_dS fit T * P coef.  [m3 kg-1 ppt-1 degC-1 Pa-1]
+real, parameter :: BET111 =     SPV211*r1_S0  ! dSpV_dS fit zs * T * P coef. [m3 kg-1 ppt-1 degC-1 Pa-1]
+real, parameter :: BET211 = 1.5*SPV311*r1_S0  ! dSpV_dS fit zs**2 * T * P coef. [m3 kg-1 ppt-1 degC-1 Pa-1]
+real, parameter :: BET021 = 0.5*SPV121*r1_S0  ! dSpV_dS fit T**2 * P coef. [m3 kg-1 ppt-1 degC-2 Pa-1]
+real, parameter :: BET121 =     SPV221*r1_S0  ! dSpV_dS fit zs * T**2 * P coef. [m3 kg-1 ppt-1 degC-2 Pa-1]
+real, parameter :: BET031 = 0.5*SPV131*r1_S0  ! dSpV_dS fit T**3 * P coef. [m3 kg-1 ppt-1 degC-3 Pa-1]
+real, parameter :: BET002 = 0.5*SPV102*r1_S0  ! dSpV_dS fit P**2 coef.          [m3 kg-1 ppt-1 Pa-2]
+real, parameter :: BET102 =     SPV202*r1_S0  ! dSpV_dS fit zs * P**2 coef.     [m3 kg-1 ppt-1 Pa-2]
+real, parameter :: BET012 = 0.5*SPV112*r1_S0  ! dSpV_dS fit T * P**2 coef. [m3 kg-1 ppt-1 degC-1 Pa-2]
+real, parameter :: BET003 = 0.5*SPV103*r1_S0  ! dSpV_dS fit P**3 coef.          [m3 kg-1 ppt-1 Pa-3]
 !>@}
 
 contains
@@ -186,7 +189,7 @@ contains
 !> Computes the Roquet et al. in situ specific volume of sea water for scalar inputs and outputs.
 !!
 !! Returns the in situ specific volume of sea water (specvol in [m3 kg-1]) from absolute salinity (S [g kg-1]),
-!! conservative  temperature (T [degC]) and pressure [Pa].  It uses the specific volume polynomial
+!! conservative temperature (T [degC]) and pressure [Pa].  It uses the specific volume polynomial
 !! fit from Roquet et al. (2015).
 !! If spv_ref is present, specvol is an anomaly from spv_ref.
 subroutine calculate_spec_vol_scalar_Roquet_SpV(T, S, pressure, specvol, spv_ref)
@@ -199,12 +202,12 @@ subroutine calculate_spec_vol_scalar_Roquet_SpV(T, S, pressure, specvol, spv_ref
   ! Local variables
   real, dimension(1) :: T0    ! A 1-d array with a copy of the conservative temperature [degC]
   real, dimension(1) :: S0    ! A 1-d array with a copy of the absolutes salinity [g kg-1]
-  real, dimension(1) :: pressure0 ! A 1-d array with a copy of the pressure [Pa]
+  real, dimension(1) :: pres0 ! A 1-d array with a copy of the pressure [Pa]
   real, dimension(1) :: spv0  ! A 1-d array with a copy of the specific volume [m3 kg-1]
 
-  T0(1) = T ; S0(1) = S ; pressure0(1) = pressure
+  T0(1) = T ; S0(1) = S ; pres0(1) = pressure
 
-  call calculate_spec_vol_array_Roquet_SpV(T0, S0, pressure0, spv0, 1, 1, spv_ref)
+  call calculate_spec_vol_array_Roquet_SpV(T0, S0, pres0, spv0, 1, 1, spv_ref)
   specvol = spv0(1)
 
 end subroutine calculate_spec_vol_scalar_Roquet_SpV
@@ -225,34 +228,34 @@ subroutine calculate_spec_vol_array_Roquet_SpV(T, S, pressure, specvol, start, n
   real,     optional, intent(in)    :: spv_ref  !< A reference specific volume [m3 kg-1]
 
   ! Local variables
-  real :: zp  ! Pressure, first in [dbar], then normalized by an assumed pressure range [nondim]
-  real :: zt  ! Conservative temperature, first in [degC], then normalized by an assumed temperature range [nondim]
-  real :: zs  ! Absolute salinity, first in [g kg-1], then the square root of salinity with an offset normalized
-              ! by an assumed salinity range [nondim]
+  real :: zp     ! Pressure [Pa]
+  real :: zt     ! Conservative temperature [degC]
+  real :: zs     ! The square root of absolute salinity with an offset normalized
+                 ! by an assumed salinity range [nondim]
   real :: SV_00p ! A pressure-dependent but temperature and salinity independent contribution to
                  ! specific volume at the reference temperature and salinity [m3 kg-1]
   real :: SV_TS  ! Specific volume without a pressure-dependent contribution [m3 kg-1]
   real :: SV_TS0 ! A contribution to specific volume from temperature and salinity anomalies at
                  ! the surface pressure [m3 kg-1]
   real :: SV_TS1 ! A temperature and salinity dependent specific volume contribution that is
-                 ! proportional to pressure [m3 kg-1]
+                 ! proportional to pressure [m3 kg-1 Pa-1]
   real :: SV_TS2 ! A temperature and salinity dependent specific volume contribution that is
-                 ! proportional to pressure**2 [m3 kg-1]
+                 ! proportional to pressure**2 [m3 kg-1 Pa-2]
   real :: SV_TS3 ! A temperature and salinity dependent specific volume contribution that is
-                 ! proportional to pressure**3 [m3 kg-1]
+                 ! proportional to pressure**3 [m3 kg-1 Pa-3]
   real :: SV_0S0 ! Salinity dependent specific volume at the surface pressure and zero temperature [m3 kg-1]
   integer :: j
 
   ! The following algorithm was published by Roquet et al. (2015), intended for use in non-Boussinesq ocean models.
   do j=start,start+npts-1
     ! Conversions to the units used here.
-    zt = T(j) * r1_T0  ! Conservative temperature normalized by a plausible oceanic range [nondim]
+    zt = T(j)
     zs = SQRT( ABS( S(j) + rdeltaS ) * r1_S0 )  ! square root of normalized salinity plus an offset [nondim]
-    zp = pressure(j) * (Pa2db*r1_P0)    ! Convert pressure from Pascals to kilobars to normalize it [nondim]
+    zp = pressure(j)
 
     ! The next two lines should be used if it is necessary to convert potential temperature and
     ! practical salinity to conservative temperature and absolute salinity.
-    ! zt = r1_T0 * gsw_ct_from_pt(S(j),T(j)) ! Convert potential temp to conservative temp [degC]
+    ! zt = gsw_ct_from_pt(S(j),T(j)) ! Convert potential temp to conservative temp [degC]
     ! zs = SQRT( ABS( gsw_sr_from_sp(S(j)) + rdeltaS ) * r1_S0 ) ! Convert S from practical to absolute salinity.
 
     SV_TS3 = SPV003 + (zs*SPV103 + zt*SPV013)
@@ -261,7 +264,7 @@ subroutine calculate_spec_vol_array_Roquet_SpV(T, S, pressure, specvol, start, n
     SV_TS1 = SPV001 + (zs*(SPV101 +  zs*(SPV201 +  zs*(SPV301 +  zs*SPV401))) &
                      + zt*(SPV011 + (zs*(SPV111 +  zs*(SPV211 +  zs*SPV311)) &
                                    + zt*(SPV021 + (zs*(SPV121 +  zs*SPV221) &
-                                                 + zt*(SPV031 + (zs*SPV131 + zt*SPV041))  )) )) )
+                                                 + zt*(SPV031 + (zs*SPV131 + zt*SPV041)) )) )) )
     SV_TS0 = zt*(SPV010 &
                + (zs*(SPV110 +  zs*(SPV210 +  zs*(SPV310 +  zs*(SPV410 +  zs*SPV510)))) &
                 + zt*(SPV020 + (zs*(SPV120 +  zs*(SPV220 +  zs*(SPV320 +  zs*SPV420))) &
@@ -294,18 +297,18 @@ subroutine calculate_density_scalar_Roquet_SpV(T, S, pressure, rho, rho_ref)
 
   real, dimension(1) :: T0    ! A 1-d array with a copy of the conservative temperature [degC]
   real, dimension(1) :: S0    ! A 1-d array with a copy of the absolute salinity [g kg-1]
-  real, dimension(1) :: pressure0 ! A 1-d array with a copy of the pressure [Pa]
+  real, dimension(1) :: pres0 ! A 1-d array with a copy of the pressure [Pa]
   real, dimension(1) :: spv   ! A 1-d array with the specific volume [m3 kg-1]
 
   T0(1) = T
   S0(1) = S
-  pressure0(1) = pressure
+  pres0(1) = pressure
 
   if (present(rho_ref)) then
-    call calculate_spec_vol_array_Roquet_SpV(T0, S0, pressure0, spv, 1, 1, spv_ref=1.0/rho_ref)
+    call calculate_spec_vol_array_Roquet_SpV(T0, S0, pres0, spv, 1, 1, spv_ref=1.0/rho_ref)
     rho = -rho_ref**2*spv(1) / (rho_ref*spv(1) + 1.0)  ! In situ density [kg m-3]
   else
-    call calculate_spec_vol_array_Roquet_SpV(T0, S0, pressure0, spv, 1, 1)
+    call calculate_spec_vol_array_Roquet_SpV(T0, S0, pres0, spv, 1, 1)
     rho = 1.0 / spv(1)
   endif
 
@@ -354,37 +357,37 @@ subroutine calculate_specvol_derivs_Roquet_SpV(T, S, pressure, dSV_dT, dSV_dS, s
   integer, intent(in)                  :: start    !< The starting index for calculations
   integer, intent(in)                  :: npts     !< The number of values to calculate
 
-  real :: zp  ! Pressure, first in [dbar], then normalized by an assumed pressure range [nondim]
-  real :: zt  ! Conservative temperature, first in [degC], then normalized by an assumed temperature range [nondim]
-  real :: zs  ! Absolute salinity, first in [g kg-1], then the square root of salinity with an offset normalized
-              ! by an assumed salinity range [nondim]
-  real :: dSVdzt0 ! A contribution to the partial derivative of specific volume with temperature [m3 kg-1 degC-1]
-                  ! from temperature anomalies at the surface pressure
-  real :: dSVdzt1 ! A contribution to the partial derivative of specific volume with temperature [m3 kg-1 degC-1]
-                  ! that is proportional to pressure
-  real :: dSVdzt2 ! A contribution to the partial derivative of specific volume with temperature [m3 kg-1 degC-1]
-                  ! that is proportional to pressure^2
-  real :: dSVdzt3 ! A contribution to the partial derivative of specific volume with temperature [m3 kg-1 degC-1]
-                  ! that is proportional to pressure^3
+  real :: zp      ! Pressure [Pa]
+  real :: zt      ! Conservative temperature [degC]
+  real :: zs      ! The square root of absolute salinity with an offset normalized
+                  ! by an assumed salinity range [nondim]
+  real :: dSVdzt0 ! A contribution to the partial derivative of specific volume with temperature
+                  ! from temperature anomalies at the surface pressure [m3 kg-1 degC-1]
+  real :: dSVdzt1 ! A contribution to the partial derivative of specific volume with temperature
+                  ! that is proportional to pressure [m3 kg-1 degC-1 Pa-1]
+  real :: dSVdzt2 ! A contribution to the partial derivative of specific volume with temperature
+                  ! that is proportional to pressure**2 [m3 kg-1 degC-1 Pa-2]
+  real :: dSVdzt3 ! A contribution to the partial derivative of specific volume with temperature
+                  ! that is proportional to pressure**3 [m3 kg-1 degC-1 Pa-3]
   real :: dSVdzs0 ! A contribution to the partial derivative of specific volume with
                   ! salinity [m3 kg-1 ppt-1] from temperature anomalies at the surface pressure
   real :: dSVdzs1 ! A contribution to the partial derivative of specific volume with
-                  ! salinity [m3 kg-1 ppt-1] proportional to pressure
+                  ! salinity [m3 kg-1 ppt-1 Pa-1] proportional to pressure
   real :: dSVdzs2 ! A contribution to the partial derivative of specific volume with
-                  ! salinity [m3 kg-1 ppt-1] proportional to pressure^2
+                  ! salinity [m3 kg-1 ppt-1 Pa-2] proportional to pressure**2
   real :: dSVdzs3 ! A contribution to the partial derivative of specific volume with
-                  ! salinity [m3 kg-1 ppt-1] proportional to pressure^3
+                  ! salinity [m3 kg-1 ppt-1 Pa-3] proportional to pressure**3
   integer :: j
 
   do j=start,start+npts-1
     ! Conversions to the units used here.
-    zt = T(j) * r1_T0  ! Conservative temperature normalized by a plausible oceanic range [nondim]
+    zt = T(j)
     zs = SQRT( ABS( S(j) + rdeltaS ) * r1_S0 )  ! square root of normalized salinity plus an offset [nondim]
-    zp = pressure(j) * (Pa2db*r1_P0)    ! Convert pressure from Pascals to kilobars to normalize it [nondim]
+    zp = pressure(j)
 
     ! The next two lines should be used if it is necessary to convert potential temperature and
     ! practical salinity to conservative temperature and absolute salinity.
-    ! zt = r1_T0 * gsw_ct_from_pt(S(j),T(j)) ! Convert potential temp to conservative temp [degC]
+    ! zt = gsw_ct_from_pt(S(j),T(j)) ! Convert potential temp to conservative temp [degC]
     ! zs = SQRT( ABS( gsw_sr_from_sp(S(j)) + rdeltaS ) * r1_S0 ) ! Convert S from practical to absolute salinity.
 
     ! Find the partial derivative of specific volume with temperature
@@ -466,7 +469,7 @@ subroutine calculate_density_derivs_scalar_Roquet_SpV(T, S, pressure, drho_dt, d
   ! Local variables
   real, dimension(1) :: T0    ! A 1-d array with a copy of the conservative temperature [degC]
   real, dimension(1) :: S0    ! A 1-d array with a copy of the absolute salinity [g kg-1]
-  real, dimension(1) :: pressure0 ! A 1-d array with a copy of the pressure [Pa]
+  real, dimension(1) :: pres0 ! A 1-d array with a copy of the pressure [Pa]
   real, dimension(1) :: drdt0 ! A 1-d array with a copy of the derivative of density
                               ! with conservative temperature [kg m-3 degC-1]
   real, dimension(1) :: drds0 ! A 1-d array with a copy of the derivative of density
@@ -474,9 +477,9 @@ subroutine calculate_density_derivs_scalar_Roquet_SpV(T, S, pressure, drho_dt, d
 
   T0(1) = T
   S0(1) = S
-  pressure0(1) = pressure
+  pres0(1) = pressure
 
-  call calculate_density_derivs_array_Roquet_SpV(T0, S0, pressure0, drdt0, drds0, 1, 1)
+  call calculate_density_derivs_array_Roquet_SpV(T0, S0, pres0, drdt0, drds0, 1, 1)
   drho_dt = drdt0(1)
   drho_ds = drds0(1)
 end subroutine calculate_density_derivs_scalar_Roquet_SpV
@@ -494,28 +497,28 @@ subroutine calculate_compress_Roquet_SpV(T, S, pressure, rho, drho_dp, start, np
                                                  !! (also the inverse of the square of sound speed)
                                                  !! [s2 m-2]
   integer, intent(in)                :: start    !< The starting index for calculations
-  integer, intent(in)                :: npts     !< The number of values to calculate.
+  integer, intent(in)                :: npts     !< The number of values to calculate
 
   ! Local variables
-  real :: zp  ! Pressure normalized by an assumed pressure range [nondim]
-  real :: zt  ! Conservative temperature normalized by an assumed temperature range [nondim]
-  real :: zs  ! The square root of absolute salinity with an offset normalized
-              ! by an assumed salinity range [nondim]
+  real :: zp     ! Pressure [Pa]
+  real :: zt     ! Conservative temperature [degC]
+  real :: zs     ! The square root of absolute salinity with an offset normalized
+                 ! by an assumed salinity range [nondim]
   real :: dSV_00p_dp ! Derivative of the pressure-dependent reference specific volume profile with
-                 ! normalized pressure [m3 kg-1]
+                 ! pressure [m3 kg-1 Pa-1]
   real :: dSV_TS_dp  ! Derivative of the specific volume anomaly from the reference profile with
-                 ! normalized pressure [m3 kg-1]
+                 ! pressure [m3 kg-1 Pa-1]
   real :: SV_00p ! A pressure-dependent but temperature and salinity independent contribution to
                  ! specific volume at the reference temperature and salinity [m3 kg-1]
   real :: SV_TS  ! specific volume without a pressure-dependent contribution [m3 kg-1]
   real :: SV_TS0 ! A contribution to specific volume from temperature and salinity anomalies at
                  ! the surface pressure [m3 kg-1]
   real :: SV_TS1 ! A temperature and salinity dependent specific volume contribution that is
-                 ! proportional to pressure [m3 kg-1]
+                 ! proportional to pressure [m3 kg-1 Pa-1]
   real :: SV_TS2 ! A temperature and salinity dependent specific volume contribution that is
-                 ! proportional to pressure**2 [m3 kg-1]
+                 ! proportional to pressure**2 [m3 kg-1 Pa-2]
   real :: SV_TS3 ! A temperature and salinity dependent specific volume contribution that is
-                 ! proportional to pressure**3 [m3 kg-1]
+                 ! proportional to pressure**3 [m3 kg-1 Pa-3]
   real :: SV_0S0 ! Salinity dependent specific volume at the surface pressure and zero temperature [m3 kg-1]
   real :: dSpecVol_dp ! The partial derivative of specific volume with pressure [m3 kg-1 Pa-1]
   integer :: j
@@ -524,13 +527,13 @@ subroutine calculate_compress_Roquet_SpV(T, S, pressure, rho, drho_dp, start, np
   ! with NEMO, but it is not necessarily the algorithm used in NEMO ocean model.
   do j=start,start+npts-1
     ! Conversions to the units used here.
-    zt = T(j) * r1_T0  ! Conservative temperature normalized by a plausible oceanic range [nondim]
+    zt = T(j)
     zs = SQRT( ABS( S(j) + rdeltaS ) * r1_S0 )  ! square root of normalized salinity plus an offset [nondim]
-    zp = pressure(j) * (Pa2db*r1_P0)    ! Convert pressure from Pascals to kilobars to normalize it [nondim]
+    zp = pressure(j)
 
     ! The next two lines should be used if it is necessary to convert potential temperature and
     ! practical salinity to conservative temperature and absolute salinity.
-    ! zt = r1_T0 * gsw_ct_from_pt(S(j),T(j)) ! Convert potential temp to conservative temp [degC]
+    ! zt = gsw_ct_from_pt(S(j),T(j)) ! Convert potential temp to conservative temp [degC]
     ! zs = SQRT( ABS( gsw_sr_from_sp(S(j)) + rdeltaS ) * r1_S0 ) ! Convert S from practical to absolute salinity.
 
     SV_TS3 = SPV003 + (zs*SPV103 + zt*SPV013)
@@ -539,7 +542,7 @@ subroutine calculate_compress_Roquet_SpV(T, S, pressure, rho, drho_dp, start, np
     SV_TS1 = SPV001 + (zs*(SPV101 +  zs*(SPV201 +  zs*(SPV301 +  zs*SPV401))) &
                      + zt*(SPV011 + (zs*(SPV111 +  zs*(SPV211 +  zs*SPV311)) &
                                    + zt*(SPV021 + (zs*(SPV121 +  zs*SPV221) &
-                                                 + zt*(SPV031 + (zs*SPV131 + zt*SPV041))  )) )) )
+                                                 + zt*(SPV031 + (zs*SPV131 + zt*SPV041)) )) )) )
 
     SV_TS0 = zt*(SPV010 &
                + (zs*(SPV110 +  zs*(SPV210 +  zs*(SPV310 +  zs*(SPV410 +  zs*SPV510)))) &
@@ -558,7 +561,7 @@ subroutine calculate_compress_Roquet_SpV(T, S, pressure, rho, drho_dp, start, np
 
     dSV_00p_dp = V00 + zp*(2.*V01 + zp*(3.*V02 + zp*(4.*V03 + zp*(5.*V04 + zp*(6.*V05)))))
     dSV_TS_dp  = SV_TS1 + zp*(2.*SV_TS2 + zp*(3.*SV_TS3))
-    dSpecVol_dp = (dSV_TS_dp + dSV_00p_dp) * (Pa2db*r1_P0)  !  [m3 kg-1 Pa-1]
+    dSpecVol_dp = dSV_TS_dp + dSV_00p_dp  !  [m3 kg-1 Pa-1]
     drho_dp(j) = -dSpecVol_dp * rho(j)**2 ! Compressibility [s2 m-2]
 
   enddo
@@ -582,30 +585,30 @@ subroutine calc_spec_vol_second_derivs_array_Roquet_SpV(T, S, P, dSV_ds_ds, dSV_
                                                   !! and salinity [m3 kg-1 ppt-1 Pa-1]
   real, dimension(:), intent(inout) :: dSV_dt_dp  !< Second derivative of specific volume with respect to pressure
                                                   !! and temperature [m3 kg-1 degC-1 Pa-1]
-  integer,            intent(in   ) :: start !< Starting index in T,S,P
-  integer,            intent(in   ) :: npts  !< Number of points to loop over
+  integer,            intent(in   ) :: start      !< The starting index for calculations
+  integer,            intent(in   ) :: npts       !< The number of values to calculate
 
   ! Local variables
-  real :: zp  ! Pressure normalized by an assumed pressure range [nondim]
-  real :: zt  ! Conservative temperature normalized by an assumed temperature range [nondim]
-  real :: zs  ! The square root of absolute salinity with an offset normalized
-              ! by an assumed salinity range [nondim]
-  real :: I_s ! The inverse of zs [nondim]
+  real :: zp      ! Pressure [Pa]
+  real :: zt      ! Conservative temperature [degC]
+  real :: zs      ! The square root of absolute salinity with an offset normalized
+                  ! by an assumed salinity range [nondim]
+  real :: I_s     ! The inverse of zs [nondim]
   real :: d2SV_p0 ! A contribution to one of the second derivatives that is independent of pressure [various]
   real :: d2SV_p1 ! A contribution to one of the second derivatives that is proportional to pressure [various]
-  real :: d2SV_p2 ! A contribution to one of the second derivatives that is proportional to pressure^2 [various]
-  real :: d2SV_p3 ! A contribution to one of the second derivatives that is proportional to pressure^3 [various]
+  real :: d2SV_p2 ! A contribution to one of the second derivatives that is proportional to pressure**2 [various]
+  real :: d2SV_p3 ! A contribution to one of the second derivatives that is proportional to pressure**3 [various]
   integer :: j
 
   do j = start,start+npts-1
     ! Conversions to the units used here.
-    zt = T(j) * r1_T0  ! Conservative temperature normalized by a plausible oceanic range [nondim]
+    zt = T(j)
     zs = SQRT( ABS( S(j) + rdeltaS ) * r1_S0 )  ! square root of normalized salinity plus an offset [nondim]
-    zp = P(j) * (Pa2db*r1_P0)     ! Convert pressure from Pascals to kilobars to normalize it [nondim]
+    zp = P(j)
 
     ! The next two lines should be used if it is necessary to convert potential temperature and
     ! practical salinity to conservative temperature and absolute salinity.
-    ! zt = r1_T0 * gsw_ct_from_pt(S(j),T(j)) ! Convert potential temp to conservative temp [degC]
+    ! zt = gsw_ct_from_pt(S(j),T(j)) ! Convert potential temp to conservative temp [degC]
     ! zs = SQRT( ABS( gsw_sr_from_sp(S(j)) + rdeltaS ) * r1_S0 )  ! Convert S from practical to absolute salinity.
 
     I_s = 1.0 / zs
@@ -630,7 +633,7 @@ subroutine calc_spec_vol_second_derivs_array_Roquet_SpV(T, S, P, dSV_ds_ds, dSV_
                                        + zt*(3.*SPV130 + (zs*(6.*SPV230 +  zs*(9.*SPV330)) &
                                                         + zt*(4.*SPV140 + (zs*(8.*SPV240) &
                                                                          + zt*(5.*SPV150))) )) )) )
-    dSV_ds_dt(j) = (0.5*r1_S0*r1_T0) * ((d2SV_p0 + zp*(d2SV_p1 + zp*d2SV_p2)) * I_s)
+    dSV_ds_dt(j) = (0.5*r1_S0) * ((d2SV_p0 + zp*(d2SV_p1 + zp*d2SV_p2)) * I_s)
 
     ! Find dSV_dt_dt
     d2SV_p2 = 2.*SPV022
@@ -641,7 +644,7 @@ subroutine calc_spec_vol_second_derivs_array_Roquet_SpV(T, S, P, dSV_ds_ds, dSV_
                                           + zt*(12.*SPV040 + (zs*(12.*SPV140 + zs *(12.*SPV240)) &
                                                             + zt*(20.*SPV050 + (zs*(20.*SPV150) &
                                                                               + zt*(30.*SPV060) )) )) )) )
-    dSV_dt_dt(j) = (d2SV_p0 + zp*(d2SV_p1 + zp*d2SV_p2)) * r1_T0**2
+    dSV_dt_dt(j) = d2SV_p0 + zp*(d2SV_p1 + zp*d2SV_p2)
 
     ! Find dSV_ds_dp
     d2SV_p2 = 3.*SPV103
@@ -649,7 +652,7 @@ subroutine calc_spec_vol_second_derivs_array_Roquet_SpV(T, S, P, dSV_ds_ds, dSV_
     d2SV_p0 = SPV101 + (zs*(2.*SPV201 + zs*(3.*SPV301 +  zs*(4.*SPV401))) &
                       + zt*(SPV111 +   (zs*(2.*SPV211 +  zs*(3.*SPV311)) &
                                       + zt*(   SPV121 + (zs*(2.*SPV221) + zt*SPV131)) )) )
-    dSV_ds_dp(j) =  ((d2SV_p0 + zp*(d2SV_p1 + zp*d2SV_p2)) * I_s) * (0.5*r1_S0 * Pa2db*r1_P0)
+    dSV_ds_dp(j) =  ((d2SV_p0 + zp*(d2SV_p1 + zp*d2SV_p2)) * I_s) * (0.5*r1_S0)
 
     ! Find dSV_dt_dp
     d2SV_p2 = 3.*SPV013
@@ -657,7 +660,7 @@ subroutine calc_spec_vol_second_derivs_array_Roquet_SpV(T, S, P, dSV_ds_ds, dSV_
     d2SV_p0 = SPV011 + (zs*(SPV111     + zs*(   SPV211 +  zs*    SPV311)) &
                       + zt*(2.*SPV021 + (zs*(2.*SPV121 +  zs*(2.*SPV221)) &
                                        + zt*(3.*SPV031 + (zs*(3.*SPV131) + zt*(4.*SPV041))) )) )
-    dSV_dt_dp(j) =  (d2SV_p0 + zp*(d2SV_p1 + zp*d2SV_p2)) * (Pa2db*r1_P0* r1_T0)
+    dSV_dt_dp(j) =  d2SV_p0 + zp*(d2SV_p1 + zp*d2SV_p2)
   enddo
 
 end subroutine calc_spec_vol_second_derivs_array_Roquet_SpV
@@ -680,8 +683,8 @@ subroutine calculate_density_second_derivs_array_Roquet_SpV(T, S, P, drho_ds_ds,
                                                   !! and salinity [kg m-3 ppt-1 Pa-1] = [s2 m-2 ppt-1]
   real, dimension(:), intent(inout) :: drho_dt_dp !< Second derivative of density with respect to pressure
                                                   !! and temperature [kg m-3 degC-1 Pa-1] = [s2 m-2 degC-1]
-  integer,            intent(in   ) :: start !< Starting index in T,S,P
-  integer,            intent(in   ) :: npts  !< Number of points to loop over
+  integer,            intent(in   ) :: start      !< The starting index for calculations
+  integer,            intent(in   ) :: npts       !< The number of values to calculate
 
   ! Local variables
   real, dimension(size(T)) :: rho       ! The in situ density [kg m-3]
@@ -747,9 +750,9 @@ subroutine calculate_density_second_derivs_scalar_Roquet_SpV(T, S, P, drho_ds_ds
   real, intent(  out) :: drho_dt_dp !< Second derivative of density with respect to pressure
                                     !! and temperature [kg m-3 degC-1 Pa-1] = [s2 m-2 degC-1]
   ! Local variables
-  real, dimension(1) :: T0    ! A 1-d array with a copy of the temperature [degC]
-  real, dimension(1) :: S0    ! A 1-d array with a copy of the salinity [g kg-1]
-  real, dimension(1) :: p0    ! A 1-d array with a copy of the pressure [Pa]
+  real, dimension(1) :: T0     ! A 1-d array with a copy of the temperature [degC]
+  real, dimension(1) :: S0     ! A 1-d array with a copy of the salinity [g kg-1]
+  real, dimension(1) :: p0     ! A 1-d array with a copy of the pressure [Pa]
   real, dimension(1) :: drdsds ! The second derivative of density with salinity [kg m-3 ppt-2]
   real, dimension(1) :: drdsdt ! The second derivative of density with salinity and
                                ! temperature [kg m-3 ppt-1 degC-1]
