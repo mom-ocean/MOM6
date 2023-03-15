@@ -1,5 +1,5 @@
-!> The equation of state using the expressions of Roquet et al. that are used in NEMO
-module MOM_EOS_NEMO
+!> The equation of state using the expressions of Roquet et al. (2015) that are used in NEMO
+module MOM_EOS_Roquet_rho
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
@@ -7,32 +7,32 @@ module MOM_EOS_NEMO
 
 implicit none ; private
 
-public calculate_compress_nemo, calculate_density_nemo
-public calculate_density_derivs_nemo
-public calculate_density_scalar_nemo, calculate_density_array_nemo
-public calculate_density_second_derivs_nemo, EoS_fit_range_NEMO
+public calculate_compress_Roquet_rho, calculate_density_Roquet_rho
+public calculate_density_derivs_Roquet_rho
+public calculate_density_scalar_Roquet_rho, calculate_density_array_Roquet_rho
+public calculate_density_second_derivs_Roquet_rho, EoS_fit_range_Roquet_rho
 
 !> Compute the in situ density of sea water [kg m-3], or its anomaly with respect to
 !! a reference density, from absolute salinity [g kg-1], conservative temperature [degC],
 !! and pressure [Pa], using the expressions for density from Roquet et al. (2015)
-interface calculate_density_nemo
-  module procedure calculate_density_scalar_nemo, calculate_density_array_nemo
-end interface calculate_density_nemo
+interface calculate_density_Roquet_rho
+  module procedure calculate_density_scalar_Roquet_rho, calculate_density_array_Roquet_rho
+end interface calculate_density_Roquet_rho
 
 !> For a given thermodynamic state, return the derivatives of density with conservative temperature
 !! and absolute salinity, using the expressions for density from Roquet et al. (2015)
-interface calculate_density_derivs_nemo
-  module procedure calculate_density_derivs_scalar_nemo, calculate_density_derivs_array_nemo
-end interface calculate_density_derivs_nemo
+interface calculate_density_derivs_Roquet_rho
+  module procedure calculate_density_derivs_scalar_Roquet_rho, calculate_density_derivs_array_Roquet_rho
+end interface calculate_density_derivs_Roquet_rho
 
 !> Compute the second derivatives of density with various combinations of temperature,
 !! salinity, and pressure using the expressions for density from Roquet et al. (2015)
-interface calculate_density_second_derivs_nemo
-  module procedure calculate_density_second_derivs_scalar_nemo, calculate_density_second_derivs_array_nemo
-end interface calculate_density_second_derivs_nemo
+interface calculate_density_second_derivs_Roquet_rho
+  module procedure calculate_density_second_derivs_scalar_Roquet_rho, calculate_density_second_derivs_array_Roquet_rho
+end interface calculate_density_second_derivs_Roquet_rho
 
 real, parameter :: Pa2db  = 1.e-4 !< Conversion factor between Pa and dbar [dbar Pa-1]
-!>@{ Parameters in the NEMO (Roquet density) equation of state
+!>@{ Parameters in the Roquet_rho (Roquet density) equation of state
 real, parameter :: rdeltaS = 32.           ! An offset to salinity before taking its square root [g kg-1]
 real, parameter :: r1_S0 = 0.875/35.16504  ! The inverse of a plausible range of oceanic salinities [kg g-1]
 real, parameter :: r1_T0 = 1./40.          ! The inverse of a plausible range of oceanic temperatures [degC-1]
@@ -177,7 +177,7 @@ contains
 !> This subroutine computes the in situ density of sea water (rho in [kg m-3])
 !! from absolute salinity (S [g kg-1]), conservative temperature (T [degC])
 !! and pressure [Pa], using the density polynomial fit EOS from Roquet et al. (2015).
-subroutine calculate_density_scalar_nemo(T, S, pressure, rho, rho_ref)
+subroutine calculate_density_scalar_Roquet_rho(T, S, pressure, rho, rho_ref)
   real,           intent(in)  :: T        !< Conservative temperature [degC]
   real,           intent(in)  :: S        !< Absolute salinity [g kg-1]
   real,           intent(in)  :: pressure !< Pressure [Pa]
@@ -193,15 +193,15 @@ subroutine calculate_density_scalar_nemo(T, S, pressure, rho, rho_ref)
   S0(1) = S
   pressure0(1) = pressure
 
-  call calculate_density_array_nemo(T0, S0, pressure0, rho0, 1, 1, rho_ref)
+  call calculate_density_array_Roquet_rho(T0, S0, pressure0, rho0, 1, 1, rho_ref)
   rho = rho0(1)
 
-end subroutine calculate_density_scalar_nemo
+end subroutine calculate_density_scalar_Roquet_rho
 
 !> This subroutine computes an array of in situ densities of sea water (rho in [kg m-3])
 !! from absolute salinity (S [g kg-1]), conservative temperature (T [degC]), and pressure
 !! [Pa], using the density polynomial fit EOS from Roquet et al. (2015).
-subroutine calculate_density_array_nemo(T, S, pressure, rho, start, npts, rho_ref)
+subroutine calculate_density_array_Roquet_rho(T, S, pressure, rho, start, npts, rho_ref)
   real, dimension(:), intent(in)  :: T        !< Conservative temperature [degC]
   real, dimension(:), intent(in)  :: S        !< Absolute salinity [g kg-1]
   real, dimension(:), intent(in)  :: pressure !< Pressure [Pa]
@@ -225,8 +225,7 @@ subroutine calculate_density_array_nemo(T, S, pressure, rho, start, npts, rho_re
   real :: rho0S0 ! Salinity dependent density at the surface pressure and zero temperature [kg m-3]
   integer :: j
 
-  ! The following algorithm was published by Roquet et al. (2015), intended for use
-  ! with NEMO, but it is not necessarily the algorithm used in NEMO ocean model.
+  ! The following algorithm was published by Roquet et al. (2015), intended for use with NEMO.
   do j=start,start+npts-1
     ! Conversions to the units used here.
     zt = T(j) * r1_T0  ! Conservative temperature normalized by a plausible oceanic range [nondim]
@@ -262,11 +261,11 @@ subroutine calculate_density_array_nemo(T, S, pressure, rho, start, npts, rho_re
     rho(j) = rhoTS + rho00p  ! In situ density [kg m-3]
 
   enddo
-end subroutine calculate_density_array_nemo
+end subroutine calculate_density_array_Roquet_rho
 
 !> For a given thermodynamic state, calculate the derivatives of density with conservative
 !! temperature and absolute salinity, using the density polynomial fit EOS from Roquet et al. (2015).
-subroutine calculate_density_derivs_array_nemo(T, S, pressure, drho_dT, drho_dS, start, npts)
+subroutine calculate_density_derivs_array_Roquet_rho(T, S, pressure, drho_dT, drho_dS, start, npts)
   real,    intent(in),  dimension(:) :: T        !< Conservative temperature [degC]
   real,    intent(in),  dimension(:) :: S        !< Absolute salinity [g kg-1]
   real,    intent(in),  dimension(:) :: pressure !< Pressure [Pa]
@@ -341,10 +340,10 @@ subroutine calculate_density_derivs_array_nemo(T, S, pressure, drho_dT, drho_dS,
     drho_dS(j) = (dRdzs0 + zp*(dRdzs1 + zp*(dRdzs2 + zp * dRdzs3))) / zs
   enddo
 
-end subroutine calculate_density_derivs_array_nemo
+end subroutine calculate_density_derivs_array_Roquet_rho
 
 !> Wrapper to calculate_density_derivs_array for scalar inputs
-subroutine calculate_density_derivs_scalar_nemo(T, S, pressure, drho_dt, drho_ds)
+subroutine calculate_density_derivs_scalar_Roquet_rho(T, S, pressure, drho_dt, drho_ds)
   real,    intent(in)  :: T        !< Conservative temperature [degC]
   real,    intent(in)  :: S        !< Absolute salinity [g kg-1]
   real,    intent(in)  :: pressure !< Pressure [Pa]
@@ -365,16 +364,16 @@ subroutine calculate_density_derivs_scalar_nemo(T, S, pressure, drho_dt, drho_ds
   S0(1) = S
   pressure0(1) = pressure
 
-  call calculate_density_derivs_array_nemo(T0, S0, pressure0, drdt0, drds0, 1, 1)
+  call calculate_density_derivs_array_Roquet_rho(T0, S0, pressure0, drdt0, drds0, 1, 1)
   drho_dt = drdt0(1)
   drho_ds = drds0(1)
-end subroutine calculate_density_derivs_scalar_nemo
+end subroutine calculate_density_derivs_scalar_Roquet_rho
 
 !> Compute the in situ density of sea water (rho in [kg m-3]) and the compressibility
 !! (drho/dp = C_sound^-2, stored as drho_dp [s2 m-2]) from absolute salinity (sal [g kg-1]),
 !! conservative temperature (T [degC]), and pressure [Pa], using the density polynomial
 !! fit EOS from Roquet et al. (2015).
-subroutine calculate_compress_nemo(T, S, pressure, rho, drho_dp, start, npts)
+subroutine calculate_compress_Roquet_rho(T, S, pressure, rho, drho_dp, start, npts)
   real,    intent(in),  dimension(:) :: T        !< Conservative temperature [degC]
   real,    intent(in),  dimension(:) :: S        !< Absolute salinity [g kg-1]
   real,    intent(in),  dimension(:) :: pressure !< Pressure [Pa]
@@ -401,8 +400,7 @@ subroutine calculate_compress_nemo(T, S, pressure, rho, drho_dp, start, npts)
   real :: rho0S0 ! Salinity dependent density at the surface pressure and zero temperature [kg m-3]
   integer :: j
 
-  ! The following algorithm was published by Roquet et al. (2015), intended for use
-  ! with NEMO, but it is not necessarily the algorithm used in NEMO ocean model.
+  ! The following algorithm was published by Roquet et al. (2015), intended for use with NEMO.
   do j=start,start+npts-1
     ! Conversions to the units used here.
     zt = T(j) * r1_T0  ! Conservative temperature normalized by a plausible oceanic range [nondim]
@@ -441,11 +439,11 @@ subroutine calculate_compress_nemo(T, S, pressure, rho, drho_dp, start, npts)
     drho_dp(j) = (drhoTS_dp + drho00p_dp) * (Pa2db*r1_P0) ! Compressibility [s2 m-2]
 
   enddo
-end subroutine calculate_compress_nemo
+end subroutine calculate_compress_Roquet_rho
 
 
 !> Second derivatives of density with respect to temperature, salinity, and pressure for 1-d array inputs and outputs.
-subroutine calculate_density_second_derivs_array_NEMO(T, S, P, drho_ds_ds, drho_ds_dt, drho_dt_dt, &
+subroutine calculate_density_second_derivs_array_Roquet_rho(T, S, P, drho_ds_ds, drho_ds_dt, drho_dt_dt, &
                                                       drho_ds_dp, drho_dt_dp, start, npts)
   real, dimension(:), intent(in   ) :: T !< Conservative temperature [degC]
   real, dimension(:), intent(in   ) :: S !< Absolute salinity [PSU]
@@ -538,13 +536,13 @@ subroutine calculate_density_second_derivs_array_NEMO(T, S, P, drho_ds_ds, drho_
     drho_dt_dp(j) =  (d2R_p0 + zp*(d2R_p1 + zp*d2R_p2)) * (Pa2db*r1_P0* r1_T0)
   enddo
 
-end subroutine calculate_density_second_derivs_array_NEMO
+end subroutine calculate_density_second_derivs_array_Roquet_rho
 
 !> Second derivatives of density with respect to temperature, salinity, and pressure for scalar inputs.
 !!
 !! The scalar version of calculate_density_second_derivs promotes scalar inputs to 1-element array
 !! and then demotes the output back to a scalar
-subroutine calculate_density_second_derivs_scalar_NEMO(T, S, P, drho_ds_ds, drho_ds_dt, drho_dt_dt, &
+subroutine calculate_density_second_derivs_scalar_Roquet_rho(T, S, P, drho_ds_ds, drho_ds_dt, drho_dt_dt, &
                                                        drho_ds_dp, drho_dt_dp)
   real, intent(in   ) :: T          !< Conservative temperature [degC]
   real, intent(in   ) :: S          !< Absolute salinity [PSU]
@@ -575,19 +573,19 @@ subroutine calculate_density_second_derivs_scalar_NEMO(T, S, P, drho_ds_ds, drho
   T0(1) = T
   S0(1) = S
   P0(1) = P
-  call calculate_density_second_derivs_array_NEMO(T0, S0, P0, drdsds, drdsdt, drdtdt, drdsdp, drdtdp, 1, 1)
+  call calculate_density_second_derivs_array_Roquet_rho(T0, S0, P0, drdsds, drdsdt, drdtdt, drdsdp, drdtdp, 1, 1)
   drho_ds_ds = drdsds(1)
   drho_ds_dt = drdsdt(1)
   drho_dt_dt = drdtdt(1)
   drho_ds_dp = drdsdp(1)
   drho_dt_dp = drdtdp(1)
 
-end subroutine calculate_density_second_derivs_scalar_NEMO
+end subroutine calculate_density_second_derivs_scalar_Roquet_rho
 
 !> Return the range of temperatures, salinities and pressures for which the Roquet et al. (2015)
 !! expression for in situ density has been fitted to observations.  Care should be taken when
 !! applying this equation of state outside of its fit range.
-subroutine EoS_fit_range_NEMO(T_min, T_max, S_min, S_max, p_min, p_max)
+subroutine EoS_fit_range_Roquet_rho(T_min, T_max, S_min, S_max, p_min, p_max)
   real, optional, intent(out) :: T_min !< The minimum conservative temperature over which this EoS is fitted [degC]
   real, optional, intent(out) :: T_max !< The maximum conservative temperature over which this EoS is fitted [degC]
   real, optional, intent(out) :: S_min !< The minimum absolute salinity over which this EoS is fitted [g kg-1]
@@ -602,11 +600,11 @@ subroutine EoS_fit_range_NEMO(T_min, T_max, S_min, S_max, p_min, p_max)
   if (present(p_min)) p_min = 0.0
   if (present(p_max)) p_max = 1.0e8
 
-end subroutine EoS_fit_range_NEMO
+end subroutine EoS_fit_range_Roquet_rho
 
-!> \namespace mom_eos_NEMO
+!> \namespace mom_eos_Roquet_rho
 !!
-!! \section section_EOS_NEMO NEMO equation of state
+!! \section section_EOS_Roquet_rho Roquet_rho equation of state
 !!
 !!  Fabien Roquet and colleagues developed this equation of state using a simple polynomial fit
 !! to the TEOS-10 equation of state, for efficiency when used in the NEMO ocean model.  Fabien
@@ -617,15 +615,10 @@ end subroutine EoS_fit_range_NEMO
 !! observational uncertainty with a polynomial form that can be evaluated quickly despite having
 !! 52 terms.
 !!
-!! The NEMO label used to describe this equation of state reflects that it was used in the NEMO
-!! ocean model before it was used in MOM6, but it probably should be described as the Roquet
-!! equation of state.   However, these algorithms, especially as modified here, are not from
-!! the standard NEMO codebase.
-!!
-!! \subsection section_EOS_NEMO_references References
+!! \subsection section_EOS_Roquet_rho_references References
 !!
 !! Roquet, F., Madec, G., McDougall, T. J., and Barker, P. M., 2015:
 !!  Accurate polynomial expressions for the density and specific volume
 !!  of seawater using the TEOS-10 standard. Ocean Modelling, 90:29-43.
 
-end module MOM_EOS_NEMO
+end module MOM_EOS_Roquet_rho
