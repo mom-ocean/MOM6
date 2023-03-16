@@ -48,7 +48,7 @@ use MOM_EOS_TEOS10, only : calculate_density_second_derivs_teos10, calculate_com
 use MOM_EOS_TEOS10, only : EoS_fit_range_TEOS10
 use MOM_EOS_TEOS10, only : gsw_sp_from_sr, gsw_pt_from_ct
 use MOM_TFreeze,    only : calculate_TFreeze_linear, calculate_TFreeze_Millero
-use MOM_TFreeze,    only : calculate_TFreeze_teos10
+use MOM_TFreeze,    only : calculate_TFreeze_teos10, calculate_TFreeze_TEOS_poly
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, MOM_mesg
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_hor_index,   only : hor_index_type
@@ -197,8 +197,11 @@ character*(12), parameter :: EOS_DEFAULT = EOS_WRIGHT_STRING !< The default equa
 integer, parameter :: TFREEZE_LINEAR = 1  !< A named integer specifying a freezing point expression
 integer, parameter :: TFREEZE_MILLERO = 2 !< A named integer specifying a freezing point expression
 integer, parameter :: TFREEZE_TEOS10 = 3  !< A named integer specifying a freezing point expression
+integer, parameter :: TFREEZE_TEOSPOLY = 4 !< A named integer specifying a freezing point expression
 character*(10), parameter :: TFREEZE_LINEAR_STRING = "LINEAR" !< A string for specifying the freezing point expression
-character*(10), parameter :: TFREEZE_MILLERO_STRING = "MILLERO_78" !< A string for specifying
+character*(10), parameter :: TFREEZE_MILLERO_STRING = "MILLERO_78" !< A string for specifying the
+                                                              !! freezing point expression
+character*(10), parameter :: TFREEZE_TEOSPOLY_STRING = "TEOS_POLY" !< A string for specifying the
                                                               !! freezing point expression
 character*(10), parameter :: TFREEZE_TEOS10_STRING = "TEOS10" !< A string for specifying the freezing point expression
 
@@ -794,6 +797,8 @@ subroutine calculate_TFreeze_scalar(S, pressure, T_fr, EOS, pres_scale, scale_fr
                                     EOS%dTFr_dS, EOS%dTFr_dp)
     case (TFREEZE_MILLERO)
       call calculate_TFreeze_Millero(S_scale*S, p_scale*pressure, T_fr)
+    case (TFREEZE_TEOSPOLY)
+      call calculate_TFreeze_TEOS_poly(S_scale*S, p_scale*pressure, T_fr)
     case (TFREEZE_TEOS10)
       call calculate_TFreeze_teos10(S_scale*S, p_scale*pressure, T_fr)
     case default
@@ -832,6 +837,8 @@ subroutine calculate_TFreeze_array(S, pressure, T_fr, start, npts, EOS, pres_sca
                                       EOS%TFr_S0_P0, EOS%dTFr_dS, EOS%dTFr_dp)
       case (TFREEZE_MILLERO)
         call calculate_TFreeze_Millero(S, pressure, T_fr, start, npts)
+      case (TFREEZE_TEOSPOLY)
+        call calculate_TFreeze_TEOS_poly(S, pressure, T_fr, start, npts)
       case (TFREEZE_TEOS10)
         call calculate_TFreeze_teos10(S, pressure, T_fr, start, npts)
       case default
@@ -847,6 +854,8 @@ subroutine calculate_TFreeze_array(S, pressure, T_fr, start, npts, EOS, pres_sca
         call calculate_TFreeze_Millero(S, pres, T_fr, start, npts)
       case (TFREEZE_TEOS10)
         call calculate_TFreeze_teos10(S, pres, T_fr, start, npts)
+      case (TFREEZE_TEOSPOLY)
+        call calculate_TFreeze_TEOS_poly(S, pres, T_fr, start, npts)
       case default
         call MOM_error(FATAL, "calculate_TFreeze_scalar: form_of_TFreeze is not valid.")
     end select
@@ -883,6 +892,8 @@ subroutine calculate_TFreeze_1d(S, pressure, T_fr, EOS, dom)
                                       EOS%TFr_S0_P0, EOS%dTFr_dS, EOS%dTFr_dp)
       case (TFREEZE_MILLERO)
         call calculate_TFreeze_Millero(S, pressure, T_fr, is, npts)
+      case (TFREEZE_TEOSPOLY)
+        call calculate_TFreeze_TEOS_poly(S, pressure, T_fr, is, npts)
       case (TFREEZE_TEOS10)
         call calculate_TFreeze_teos10(S, pressure, T_fr, is, npts)
       case default
@@ -899,6 +910,8 @@ subroutine calculate_TFreeze_1d(S, pressure, T_fr, EOS, dom)
                                       EOS%TFr_S0_P0, EOS%dTFr_dS, EOS%dTFr_dp)
       case (TFREEZE_MILLERO)
         call calculate_TFreeze_Millero(Sa, pres, T_fr, is, npts)
+      case (TFREEZE_TEOSPOLY)
+        call calculate_TFreeze_TEOS_poly(Sa, pres, T_fr, is, npts)
       case (TFREEZE_TEOS10)
         call calculate_TFreeze_teos10(Sa, pres, T_fr, is, npts)
       case default
@@ -1863,13 +1876,15 @@ subroutine EOS_init(param_file, EOS, US)
   call get_param(param_file, mdl, "TFREEZE_FORM", tmpstr, &
                  "TFREEZE_FORM determines which expression should be "//&
                  "used for the freezing point.  Currently, the valid "//&
-                 'choices are "LINEAR", "MILLERO_78", "TEOS10"', &
+                 'choices are "LINEAR", "MILLERO_78", "TEOS_POLY", "TEOS10"', &
                  default=TFREEZE_DEFAULT)
   select case (uppercase(tmpstr))
     case (TFREEZE_LINEAR_STRING)
       EOS%form_of_TFreeze = TFREEZE_LINEAR
     case (TFREEZE_MILLERO_STRING)
       EOS%form_of_TFreeze = TFREEZE_MILLERO
+    case (TFREEZE_TEOSPOLY_STRING)
+      EOS%form_of_TFreeze = TFREEZE_TEOSPOLY
     case (TFREEZE_TEOS10_STRING)
       EOS%form_of_TFreeze = TFREEZE_TEOS10
     case default
@@ -1896,9 +1911,9 @@ subroutine EOS_init(param_file, EOS, US)
 
   if ((EOS%form_of_EOS == EOS_TEOS10 .or. EOS%form_of_EOS == EOS_ROQUET_RHO .or. &
        EOS%form_of_EOS == EOS_ROQUET_SPV) .and. &
-      (EOS%form_of_TFreeze /= TFREEZE_TEOS10)) then
+      .not.((EOS%form_of_TFreeze == TFREEZE_TEOS10) .or. (EOS%form_of_TFreeze == TFREEZE_TEOSPOLY)) ) then
     call MOM_error(FATAL, "interpret_eos_selection:  EOS_TEOS10 or EOS_ROQUET_RHO or EOS_ROQUET_SPV "//&
-                   "should only be used along with TFREEZE_FORM = TFREEZE_TEOS10 .")
+                   "should only be used along with TFREEZE_FORM = TFREEZE_TEOS10 or TFREEZE_TEOSPOLY.")
   endif
 
   ! Unit conversions
@@ -2227,23 +2242,112 @@ logical function EOS_unit_tests(verbose)
   if (verbose .and. fail) call MOM_error(WARNING, "LINEAR EOS has failed some self-consistency tests.")
   EOS_unit_tests = EOS_unit_tests .or. fail
 
+  ! Test the freezing point calculations
+
+  call EOS_manual_init(EOS_tmp, form_of_TFreeze=TFREEZE_LINEAR, TFr_S0_P0=0.0, dTFr_dS=-0.054, &
+                       dTFr_dP=-7.6e-8)
+  fail = test_TFr_consistency(35.0, 1.0e7, EOS_tmp, verbose, "LINEAR", TFr_check=-2.65*EOS_tmp%degC_to_C)
+  if (verbose .and. fail) call MOM_error(WARNING, "LINEAR TFr has failed some self-consistency tests.")
+  EOS_unit_tests = EOS_unit_tests .or. fail
+
+  call EOS_manual_init(EOS_tmp, form_of_TFreeze=TFREEZE_MILLERO)
+  fail = test_TFr_consistency(35.0, 1.0e7, EOS_tmp, verbose, "MILLERO_78", &
+                              TFr_check=-2.69730134114106*EOS_tmp%degC_to_C)
+  if (verbose .and. fail) call MOM_error(WARNING, "MILLERO_78 TFr has failed some self-consistency tests.")
+  EOS_unit_tests = EOS_unit_tests .or. fail
+
+  call EOS_manual_init(EOS_tmp, form_of_TFreeze=TFREEZE_TEOS10)
+  fail = test_TFr_consistency(35.0, 1.0e7, EOS_tmp, verbose, "TEOS10", &
+                              TFr_check=-2.69099996992861*EOS_tmp%degC_to_C)
+  if (verbose .and. fail) call MOM_error(WARNING, "TEOS10 TFr has failed some self-consistency tests.")
+  EOS_unit_tests = EOS_unit_tests .or. fail
+
+  call EOS_manual_init(EOS_tmp, form_of_TFreeze=TFREEZE_TEOSPOLY)
+  fail = test_TFr_consistency(35.0, 1.0e7, EOS_tmp, verbose, "TEOS_POLY", &
+                              TFr_check=-2.691165259327735*EOS_tmp%degC_to_C)
+  if (verbose .and. fail) call MOM_error(WARNING, "TEOS_POLY TFr has failed some self-consistency tests.")
+  EOS_unit_tests = EOS_unit_tests .or. fail
+
   if (verbose .and. .not.EOS_unit_tests) call MOM_mesg("All EOS consistency tests have passed.")
 
 end function EOS_unit_tests
+
+logical function test_TFr_consistency(S_test, p_test, EOS, verbose, EOS_name, TFr_check) &
+                                      result(inconsistent)
+  real,              intent(in) :: S_test   !< Salinity or absolute salinity [S ~> ppt]
+  real,              intent(in) :: p_test   !< Pressure [R L2 T-2 ~> Pa]
+  type(EOS_type),    intent(in) :: EOS      !< Equation of state structure
+  logical,           intent(in) :: verbose  !< If true, write results to stdout
+  character(len=*),  intent(in) :: EOS_name !< A name used in error messages to describe the EoS
+  real,    optional, intent(in) :: TFr_check  !< A check value for the Freezing point [C ~> degC]
+
+  ! Local variables
+  real, dimension(-3:3,-3:3) :: S ! Salinities at the test value and perturbed points [S ~> ppt]
+  real, dimension(-3:3,-3:3) :: P ! Pressures at the test value and perturbed points [R L2 T-2 ~> Pa]
+  real, dimension(-3:3,-3:3,2) :: TFr ! Freezing point at the test value and perturbed points [C ~> degC]
+  character(len=200) :: mesg
+  real :: dS         ! Magnitude of salinity perturbations [S ~> ppt]
+  real :: dp         ! Magnitude of pressure perturbations [R L2 T-2 ~> Pa]
+  ! real :: tol        ! The nondimensional tolerance from roundoff [nondim]
+  real :: TFr_tol    ! Roundoff error on a typical value of TFreeze [C ~> degC]
+  logical :: test_OK ! True if a particular test is consistent.
+  logical :: OK      ! True if all checks so far are consistent.
+  integer :: i, j, n
+
+  OK = .true.
+
+  dS = 0.5*EOS%ppt_to_S      ! Salinity perturbations [S ~> ppt]
+  dp = 10.0e4 / EOS%RL2_T2_to_Pa ! Pressure perturbations [R L2 T-2 ~> Pa]
+
+  ! TEOS 10 requires a tolerance that is ~20 times larger than other freezing point
+  ! expressions because it lacks parentheses.
+  TFr_tol = 2.0*EOS%degC_to_C * 400.0*epsilon(TFr_tol)
+
+  do n=1,2
+    ! Calculate density values with a wide enough stencil to estimate first and second derivatives
+    ! with up to 6th order accuracy.  Doing this twice with different sizes of perturbations allows
+    ! the evaluation of whether the finite differences are converging to the calculated values at a
+    ! rate that is consistent with the order of accuracy of the finite difference forms, and hence
+    ! the consistency of the calculated values.
+    do j=-3,3 ; do i=-3,3
+      S(i,j) = max(S_test + n*dS*i, 0.0)
+      p(i,j) = max(p_test + n*dp*j, 0.0)
+    enddo ; enddo
+    do j=-3,3
+      call calculate_TFreeze(S(:,j), p(:,j), TFr(:,j,n), EOS)
+    enddo
+  enddo
+
+  ! Check that the freezing point agrees with the provided check value
+  if (present(TFr_check)) then
+    test_OK = (abs(TFr_check - TFr(0,0,1)) <= TFr_tol)
+    OK = OK .and. test_OK
+    if (verbose) then
+      write(mesg, '(ES24.16," vs. ",ES24.16,", diff=",ES12.4,", tol=",ES12.4)') &
+            TFr(0,0,1), TFr_check, TFr(0,0,1)-TFr_check, TFr_tol
+      if (test_OK) then
+        call MOM_mesg(trim(EOS_name)//" TFr agrees with its check value :"//trim(mesg))
+      else
+        call MOM_error(WARNING, trim(EOS_name)//" TFr disagrees with its check value :"//trim(mesg))
+      endif
+    endif
+  endif
+
+  inconsistent = .not.OK
+end function test_TFr_consistency
 
 !> Test an equation of state for self-consistency and consistency with check values, returning false
 !! if it is consistent by all tests, and true if it fails any test.
 logical function test_EOS_consistency(T_test, S_test, p_test, EOS, verbose, &
                                       EOS_name, rho_check, spv_check, skip_2nd) result(inconsistent)
-  real,           intent(in) :: T_test   !< Potential temperature or conservative temperature [C ~> degC]
-  real,           intent(in) :: S_test   !< Salinity or absolute salinity [S ~> ppt]
-  real,           intent(in) :: p_test   !< Pressure [R L2 T-2 ~> Pa]
-  type(EOS_type), intent(in) :: EOS      !< Equation of state structure
-  logical,        intent(in) :: verbose  !< If true, write results to stdout
-  character(len=*), &
-        optional, intent(in) :: EOS_name !< A name used in error messages to describe the EoS
-  real, optional, intent(in) :: rho_check  !< A check value for the density [R ~> kg m-3]
-  real, optional, intent(in) :: spv_check  !< A check value for the specific volume [R-1 ~> m3 kg-1]
+  real,             intent(in) :: T_test   !< Potential temperature or conservative temperature [C ~> degC]
+  real,             intent(in) :: S_test   !< Salinity or absolute salinity [S ~> ppt]
+  real,             intent(in) :: p_test   !< Pressure [R L2 T-2 ~> Pa]
+  type(EOS_type),   intent(in) :: EOS      !< Equation of state structure
+  logical,          intent(in) :: verbose  !< If true, write results to stdout
+  character(len=*), intent(in) :: EOS_name !< A name used in error messages to describe the EoS
+  real,   optional, intent(in) :: rho_check  !< A check value for the density [R ~> kg m-3]
+  real,   optional, intent(in) :: spv_check  !< A check value for the specific volume [R-1 ~> m3 kg-1]
   logical, optional, intent(in) :: skip_2nd !< If present and true, do not check the 2nd derivatives.
 
   ! Local variables
