@@ -206,12 +206,12 @@ subroutine ALE_init( param_file, GV, US, max_depth, CS)
   call get_param(param_file, mdl, "REMAPPING_SCHEME", string, &
                  "This sets the reconstruction scheme used "//&
                  "for vertical remapping for all variables. "//&
-                 "It can be one of the following schemes: "//&
+                 "It can be one of the following schemes: \n"//&
                  trim(remappingSchemesDoc), default=remappingDefaultScheme)
   call get_param(param_file, mdl, "VELOCITY_REMAPPING_SCHEME", vel_string, &
                  "This sets the reconstruction scheme used for vertical remapping "//&
                  "of velocities. By default it is the same as REMAPPING_SCHEME. "//&
-                 "It can be one of the following schemes: "//&
+                 "It can be one of the following schemes: \n"//&
                  trim(remappingSchemesDoc), default=trim(string))
   call get_param(param_file, mdl, "FATAL_CHECK_RECONSTRUCTIONS", check_reconstruction, &
                  "If true, cell-by-cell reconstructions are checked for "//&

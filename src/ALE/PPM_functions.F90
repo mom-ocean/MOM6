@@ -13,7 +13,7 @@ use regrid_edge_values, only : bound_edge_values, check_discontinuous_edge_value
 
 implicit none ; private
 
-public PPM_reconstruction, PPM_boundary_extrapolation
+public PPM_reconstruction, PPM_boundary_extrapolation, PPM_monotonicity
 
 !> A tiny width that is so small that adding it to cell widths does not
 !! change the value due to a computational representation. It is used
@@ -127,6 +127,35 @@ subroutine PPM_limiter_standard( N, h, u, edge_values, h_neglect, answer_date )
 
 end subroutine PPM_limiter_standard
 
+!> Adjusts edge values using the original monotonicity constraint (Colella & Woodward, JCP 1984)
+!! Based on hybgen_ppm_coefs
+subroutine PPM_monotonicity( N, u, edge_values )
+  integer,              intent(in)    :: N !< Number of cells
+  real, dimension(:),   intent(in)    :: u !< cell average properties (size N) [A]
+  real, dimension(:,:), intent(inout) :: edge_values !< Potentially modified edge values [A]
+
+  ! Local variables
+  integer   :: k     ! Loop index
+  real      :: a6,da ! scalar temporaries
+
+  ! Loop on interior cells to impose monotonicity
+  ! Eq. 1.10 of (Colella & Woodward, JCP 84)
+  do k = 2,N-1
+    if (((u(k+1)-u(k))*(u(k)-u(k-1)) <= 0.)) then !local extremum
+      edge_values(k,1) = u(k)
+      edge_values(k,2) = u(k)
+    else
+      da = edge_values(k,2)-edge_values(k,1)
+      a6 = 6.0*u(k) - 3.0*(edge_values(k,1)+edge_values(k,2))
+      if (da*a6 > da*da) then !peak in right half of zone
+        edge_values(k,1) = 3.0*u(k) - 2.0*edge_values(k,2)
+      elseif (da*a6 < -da*da) then !peak in left half of zone
+        edge_values(k,2) = 3.0*u(k) - 2.0*edge_values(k,1)
+      endif
+    endif
+  enddo ! end loop on interior cells
+
+end subroutine PPM_monotonicity
 
 !------------------------------------------------------------------------------
 !> Reconstruction by parabolas within boundary cells

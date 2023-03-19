@@ -8,12 +8,14 @@ use MOM_error_handler, only : MOM_error, FATAL
 use MOM_io,            only : stdout, stderr
 use MOM_string_functions, only : uppercase
 use regrid_edge_values, only : edge_values_explicit_h4, edge_values_implicit_h4
+use regrid_edge_values, only : edge_values_explicit_h4cw
 use regrid_edge_values, only : edge_values_implicit_h4, edge_values_implicit_h6
 use regrid_edge_values, only : edge_slopes_implicit_h3, edge_slopes_implicit_h5
 use remapping_attic,    only : remapping_attic_unit_tests
 use PCM_functions, only : PCM_reconstruction
 use PLM_functions, only : PLM_reconstruction, PLM_boundary_extrapolation
 use PPM_functions, only : PPM_reconstruction, PPM_boundary_extrapolation
+use PPM_functions, only : PPM_monotonicity
 use PQM_functions, only : PQM_reconstruction, PQM_boundary_extrapolation_v1
 use MOM_hybgen_remap, only : hybgen_plm_coefs, hybgen_ppm_coefs, hybgen_weno_coefs
 
@@ -48,6 +50,7 @@ public interpolate_column, reintegrate_column, dzFromH1H2
 integer, parameter  :: REMAPPING_PCM        = 0 !< O(h^1) remapping scheme
 integer, parameter  :: REMAPPING_PLM        = 2 !< O(h^2) remapping scheme
 integer, parameter  :: REMAPPING_PLM_HYBGEN = 3 !< O(h^2) remapping scheme
+integer, parameter  :: REMAPPING_PPM_CW     =10 !< O(h^3) remapping scheme
 integer, parameter  :: REMAPPING_PPM_H4     = 4 !< O(h^3) remapping scheme
 integer, parameter  :: REMAPPING_PPM_IH4    = 5 !< O(h^3) remapping scheme
 integer, parameter  :: REMAPPING_PPM_HYBGEN = 6 !< O(h^3) remapping scheme
@@ -287,7 +290,7 @@ subroutine build_reconstructions_1d( CS, n0, h0, u0, ppoly_r_coefs, &
     local_remapping_scheme = REMAPPING_PCM
   elseif (n0<=3) then
     local_remapping_scheme = min( local_remapping_scheme, REMAPPING_PLM )
-  elseif (n0<=4) then
+  elseif (n0<=4 .and. local_remapping_scheme /= REMAPPING_PPM_CW ) then
     local_remapping_scheme = min( local_remapping_scheme, REMAPPING_PPM_H4 )
   endif
   select case ( local_remapping_scheme )
@@ -310,6 +313,15 @@ subroutine build_reconstructions_1d( CS, n0, h0, u0, ppoly_r_coefs, &
       if ( CS%boundary_extrapolation ) &
         call PLM_boundary_extrapolation( n0, h0, u0, ppoly_r_E, ppoly_r_coefs, h_neglect )
       iMethod = INTEGRATION_PLM
+    case ( REMAPPING_PPM_CW )
+      ! identical to REMAPPING_PPM_HYBGEN
+      call edge_values_explicit_h4cw( n0, h0, u0, ppoly_r_E, h_neglect_edge )
+      call PPM_monotonicity(   n0,     u0, ppoly_r_E )
+      call PPM_reconstruction( n0, h0, u0, ppoly_r_E, ppoly_r_coefs, h_neglect, answer_date=CS%answer_date )
+      if ( CS%boundary_extrapolation ) then
+        call PPM_boundary_extrapolation( n0, h0, u0, ppoly_r_E, ppoly_r_coefs, h_neglect )
+      endif
+      iMethod = INTEGRATION_PPM
     case ( REMAPPING_PPM_H4 )
       call edge_values_explicit_h4( n0, h0, u0, ppoly_r_E, h_neglect_edge, answer_date=CS%answer_date )
       call PPM_reconstruction( n0, h0, u0, ppoly_r_E, ppoly_r_coefs, h_neglect, answer_date=CS%answer_date )
@@ -1283,6 +1295,9 @@ subroutine setReconstructionType(string,CS)
     case ("PLM_HYBGEN")
       CS%remapping_scheme = REMAPPING_PLM_HYBGEN
       degree = 1
+    case ("PPM_CW")
+      CS%remapping_scheme = REMAPPING_PPM_CW
+      degree = 2
     case ("PPM_H4")
       CS%remapping_scheme = REMAPPING_PPM_H4
       degree = 2

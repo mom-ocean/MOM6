@@ -166,6 +166,7 @@ character(len=*), parameter, public :: regriddingInterpSchemeDoc = &
                  " P1M_H4     (2nd-order accurate)\n"//&
                  " P1M_IH4    (2nd-order accurate)\n"//&
                  " PLM        (2nd-order accurate)\n"//&
+                 " PPM_CW     (3rd-order accurate)\n"//&
                  " PPM_H4     (3rd-order accurate)\n"//&
                  " PPM_IH4    (3rd-order accurate)\n"//&
                  " P3M_IH4IH3 (4th-order accurate)\n"//&
@@ -269,7 +270,7 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
                  "determine the new grid. These parameters are "//&
                  "only relevant when REGRIDDING_COORDINATE_MODE is "//&
                  "set to a function of state. Otherwise, it is not "//&
-                 "used. It can be one of the following schemes: "//&
+                 "used. It can be one of the following schemes: \n"//&
                  trim(regriddingInterpSchemeDoc), default=trim(string2))
     call set_regrid_params(CS, interp_scheme=string)
 
@@ -582,6 +583,13 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
     call set_regrid_params(CS, min_thickness=0.)
   endif
 
+  if (main_parameters .and. coordinateMode(coord_mode) == REGRIDDING_HYCOM1) then
+    call get_param(param_file, mdl, "HYCOM1_ONLY_IMPROVES", tmpLogical, &
+              "When regridding, an interface is only moved if this improves the fit to the target density.", &
+              default=.false.)
+    call set_hycom_params(CS%hycom_CS, only_improves=tmpLogical)
+  endif
+
   CS%use_hybgen_unmix = .false.
   if (coordinateMode(coord_mode) == REGRIDDING_HYBGEN) then
     call get_param(param_file, mdl, "USE_HYBGEN_UNMIX", CS%use_hybgen_unmix, &
@@ -865,7 +873,7 @@ subroutine regridding_main( remapCS, CS, G, GV, h, tv, h_new, dzInterface, &
       call build_grid_arbitrary( G, GV, h, dzInterface, trickGnuCompiler, CS )
       call calc_h_new_by_dz(CS, G, GV, h, dzInterface, h_new)
     case ( REGRIDDING_HYCOM1 )
-      call build_grid_HyCOM1( G, GV, G%US, h, tv, h_new, dzInterface, CS, frac_shelf_h )
+      call build_grid_HyCOM1( G, GV, G%US, h, tv, h_new, dzInterface, remapCS, CS, frac_shelf_h )
     case ( REGRIDDING_HYBGEN )
       call hybgen_regrid(G, GV, G%US, h, tv, CS%hybgen_CS, dzInterface, PCM_cell)
       call calc_h_new_by_dz(CS, G, GV, h, dzInterface, h_new)
@@ -1515,12 +1523,13 @@ end subroutine build_rho_grid
 !! \remark { Based on Bleck, 2002: An ocean-ice general circulation model framed in
 !! hybrid isopycnic-Cartesian coordinates, Ocean Modelling 37, 55-88.
 !! http://dx.doi.org/10.1016/S1463-5003(01)00012-9 }
-subroutine build_grid_HyCOM1( G, GV, US, h, tv, h_new, dzInterface, CS, frac_shelf_h )
+subroutine build_grid_HyCOM1( G, GV, US, h, tv, h_new, dzInterface, remapCS, CS, frac_shelf_h )
   type(ocean_grid_type),                     intent(in)    :: G  !< Grid structure
   type(verticalGrid_type),                   intent(in)    :: GV !< Ocean vertical grid structure
   type(unit_scale_type),                     intent(in)    :: US !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)    :: h  !< Existing model thickness [H ~> m or kg m-2]
   type(thermo_var_ptrs),                     intent(in)    :: tv !< Thermodynamics structure
+  type(remapping_CS),                        intent(in)    :: remapCS !< The remapping control structure
   type(regridding_CS),                       intent(in)    :: CS !< Regridding control structure
   real, dimension(SZI_(G),SZJ_(G),CS%nk),    intent(inout) :: h_new !< New layer thicknesses [H ~> m or kg m-2]
   real, dimension(SZI_(G),SZJ_(G),CS%nk+1),  intent(inout) :: dzInterface !< Changes in interface position
@@ -1575,7 +1584,7 @@ subroutine build_grid_HyCOM1( G, GV, US, h, tv, h_new, dzInterface, CS, frac_she
              ( 0.5 * ( z_col(K) + z_col(K+1) ) * (GV%H_to_RZ*GV%g_Earth) - tv%P_Ref )
       enddo
 
-      call build_hycom1_column(CS%hycom_CS, tv%eqn_of_state, GV%ke, nominalDepth, &
+      call build_hycom1_column(CS%hycom_CS, remapCS, tv%eqn_of_state, GV%ke, nominalDepth, &
            h(i,j,:), tv%T(i,j,:), tv%S(i,j,:), p_col, &
            z_col, z_col_new, zScale=GV%Z_to_H, &
            h_neglect=h_neglect, h_neglect_edge=h_neglect_edge)
