@@ -46,7 +46,7 @@ use MOM_EOS_TEOS10, only : calculate_density_teos10, calculate_spec_vol_teos10
 use MOM_EOS_TEOS10, only : calculate_density_derivs_teos10, calculate_specvol_derivs_teos10
 use MOM_EOS_TEOS10, only : calculate_density_second_derivs_teos10, calculate_compress_teos10
 use MOM_EOS_TEOS10, only : EoS_fit_range_TEOS10
-! use MOM_EOS_TEOS10, only : gsw_sp_from_sr, gsw_pt_from_ct
+use MOM_EOS_TEOS10, only : gsw_sp_from_sr, gsw_pt_from_ct
 use MOM_temperature_convert, only : poTemp_to_consTemp, consTemp_to_poTemp
 use MOM_TFreeze,    only : calculate_TFreeze_linear, calculate_TFreeze_Millero
 use MOM_TFreeze,    only : calculate_TFreeze_teos10, calculate_TFreeze_TEOS_poly
@@ -56,8 +56,6 @@ use MOM_hor_index,   only : hor_index_type
 use MOM_io,          only : stdout
 use MOM_string_functions, only : uppercase
 use MOM_unit_scaling, only : unit_scale_type
-use gsw_mod_toolbox, only : gsw_sp_from_sr, gsw_pt_from_ct
-use gsw_mod_toolbox, only : gsw_sr_from_sp, gsw_ct_from_pt
 
 implicit none ; private
 
@@ -1991,7 +1989,7 @@ end subroutine EOS_use_linear
 
 
 !> Convert T&S to Absolute Salinity and Conservative Temperature if using TEOS10
-subroutine convert_temp_salt_for_TEOS10(T, S, HI, kd, mask_z, EOS, use_TEOS)
+subroutine convert_temp_salt_for_TEOS10(T, S, HI, kd, mask_z, EOS)
   integer,               intent(in)    :: kd  !< The number of layers to work on
   type(hor_index_type),  intent(in)    :: HI       !< The horizontal index structure
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed,kd), &
@@ -2001,11 +1999,7 @@ subroutine convert_temp_salt_for_TEOS10(T, S, HI, kd, mask_z, EOS, use_TEOS)
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed,kd), &
                          intent(in)    :: mask_z !< 3d mask regulating which points to convert [nondim]
   type(EOS_type),        intent(in)    :: EOS !< Equation of state structure
-  logical,     optional, intent(in)    :: use_TEOS !< If present and true, call the TEOS code to do the conversion.
 
-  real :: gsw_sr_from_sp ! Reference salinity after conversion from practical salinity [ppt]
-  real :: gsw_ct_from_pt ! Conservative temperature after conversion from potential temperature [degC]
-  logical :: use_gsw  ! If true, call gsw functions to do this conversion.
   real, parameter :: Sref_Sprac = (35.16504/35.0) ! The TEOS 10 conversion factor to go from
                                     ! practical salinity to reference salinity [nondim]
   integer :: i, j, k
@@ -2013,30 +2007,19 @@ subroutine convert_temp_salt_for_TEOS10(T, S, HI, kd, mask_z, EOS, use_TEOS)
   if ((EOS%form_of_EOS /= EOS_TEOS10) .and. (EOS%form_of_EOS /= EOS_ROQUET_RHO) .and. &
       (EOS%form_of_EOS /= EOS_ROQUET_SPV)) return
 
-  use_gsw = .false. ; if (present(use_TEOS)) use_gsw = use_TEOS
-
-  if (use_gsw) then
-    do k=1,kd ; do j=HI%jsc,HI%jec ; do i=HI%isc,HI%iec
-      if (mask_z(i,j,k) >= 1.0) then
-        S(i,j,k) = EOS%ppt_to_S*gsw_sr_from_sp(EOS%S_to_ppt*S(i,j,k))
-        T(i,j,k) = EOS%degC_to_C*gsw_ct_from_pt(EOS%S_to_ppt*S(i,j,k), EOS%S_to_ppt*T(i,j,k))
-      endif
-    enddo ; enddo ; enddo
-  else
-    do k=1,kd ; do j=HI%jsc,HI%jec ; do i=HI%isc,HI%iec
-      if (mask_z(i,j,k) >= 1.0) then
-        S(i,j,k) = Sref_Sprac * S(i,j,k)
-        T(i,j,k) = EOS%degC_to_C*poTemp_to_consTemp(EOS%S_to_ppt*S(i,j,k), EOS%S_to_ppt*T(i,j,k))
-      endif
-    enddo ; enddo ; enddo
-  endif
+  do k=1,kd ; do j=HI%jsc,HI%jec ; do i=HI%isc,HI%iec
+    if (mask_z(i,j,k) >= 1.0) then
+      S(i,j,k) = Sref_Sprac * S(i,j,k)
+      T(i,j,k) = EOS%degC_to_C*poTemp_to_consTemp(EOS%S_to_ppt*S(i,j,k), EOS%S_to_ppt*T(i,j,k))
+    endif
+  enddo ; enddo ; enddo
 end subroutine convert_temp_salt_for_TEOS10
 
 
 !> Converts an array of conservative temperatures to potential temperatures.  The input arguments
 !! use the dimensionally rescaling as specified within the EOS type.  The output potential
 !! temperature uses this same scaling, but this can be replaced by the factor given by scale.
-subroutine cons_temp_to_pot_temp(T, S, poTemp, EOS, dom, scale, use_TEOS)
+subroutine cons_temp_to_pot_temp(T, S, poTemp, EOS, dom, scale)
   real, dimension(:), intent(in)    :: T        !< Conservative temperature [C ~> degC]
   real, dimension(:), intent(in)    :: S        !< Absolute salinity [S ~> ppt]
   real, dimension(:), intent(inout) :: poTemp   !< The potential temperature with a reference pressure
@@ -2048,13 +2031,11 @@ subroutine cons_temp_to_pot_temp(T, S, poTemp, EOS, dom, scale, use_TEOS)
                                                 !! potential temperature in place of with scaling stored
                                                 !! in EOS.  A value of 1.0 returns temperatures in [degC],
                                                 !! while the default is equivalent to EOS%degC_to_C.
-  logical,  optional, intent(in)    :: use_TEOS !< If present and true, call the TEOS code to do the conversion.
 
   ! Local variables
   real, dimension(size(T)) :: Ta    ! Temperature converted to [degC]
   real, dimension(size(S)) :: Sa    ! Salinity converted to [ppt]
   real :: T_scale ! A factor to convert potential temperature from degC to the desired units [C degC-1 ~> 1]
-  logical :: use_gsw  ! If true, call gsw functions to do this conversion.
   integer :: i, is, ie
 
   if (present(dom)) then
@@ -2063,24 +2044,14 @@ subroutine cons_temp_to_pot_temp(T, S, poTemp, EOS, dom, scale, use_TEOS)
     is = 1 ; ie = size(T)
   endif
 
-  use_gsw = .false. ; if (present(use_TEOS)) use_gsw = use_TEOS
-
   if ((EOS%C_to_degC == 1.0) .and. (EOS%S_to_ppt == 1.0)) then
-    if (use_gsw) then
-      poTemp(is:ie) = gsw_pt_from_ct(S(is:ie), T(is:ie))
-    else
-      poTemp(is:ie) = consTemp_to_poTemp(T(is:ie), S(is:ie))
-    endif
+    poTemp(is:ie) = consTemp_to_poTemp(T(is:ie), S(is:ie))
   else
     do i=is,ie
       Ta(i) = EOS%C_to_degC * T(i)
       Sa(i) = EOS%S_to_ppt * S(i)
     enddo
-    if (use_gsw) then
-      poTemp(is:ie) = gsw_pt_from_ct(Sa(is:ie), Ta(is:ie))
-    else
-      poTemp(is:ie) = consTemp_to_poTemp(Ta(is:ie), Sa(is:ie))
-    endif
+    poTemp(is:ie) = consTemp_to_poTemp(Ta(is:ie), Sa(is:ie))
   endif
 
   T_scale = EOS%degC_to_C
@@ -2095,7 +2066,7 @@ end subroutine cons_temp_to_pot_temp
 !> Converts an array of potential temperatures to conservative temperatures.  The input arguments
 !! use the dimensionally rescaling as specified within the EOS type.  The output potential
 !! temperature uses this same scaling, but this can be replaced by the factor given by scale.
-subroutine pot_temp_to_cons_temp(T, S, consTemp, EOS, dom, scale, use_TEOS)
+subroutine pot_temp_to_cons_temp(T, S, consTemp, EOS, dom, scale)
   real, dimension(:), intent(in)    :: T        !< Potential temperature [C ~> degC]
   real, dimension(:), intent(in)    :: S        !< Absolute salinity [S ~> ppt]
   real, dimension(:), intent(inout) :: consTemp !< The conservative temperature [C ~> degC]
@@ -2106,13 +2077,11 @@ subroutine pot_temp_to_cons_temp(T, S, consTemp, EOS, dom, scale, use_TEOS)
                                                 !! potential temperature in place of with scaling stored
                                                 !! in EOS.  A value of 1.0 returns temperatures in [degC],
                                                 !! while the default is equivalent to EOS%degC_to_C.
-  logical,  optional, intent(in)    :: use_TEOS !< If present and true, call the TEOS code to do the conversion.
 
   ! Local variables
   real, dimension(size(T)) :: Tp    ! Potential temperature converted to [degC]
   real, dimension(size(S)) :: Sa    ! Absolute salinity converted to [ppt]
   real :: T_scale ! A factor to convert potential temperature from degC to the desired units [C degC-1 ~> 1]
-  logical :: use_gsw  ! If true, call gsw functions to do this conversion.
   integer :: i, is, ie
 
   if (present(dom)) then
@@ -2121,24 +2090,15 @@ subroutine pot_temp_to_cons_temp(T, S, consTemp, EOS, dom, scale, use_TEOS)
     is = 1 ; ie = size(T)
   endif
 
-  use_gsw = .false. ; if (present(use_TEOS)) use_gsw = use_TEOS
 
   if ((EOS%C_to_degC == 1.0) .and. (EOS%S_to_ppt == 1.0)) then
-    if (use_gsw) then
-      consTemp(is:ie) = gsw_ct_from_pt(S(is:ie), T(is:ie))
-    else
-      consTemp(is:ie) = poTemp_to_consTemp(T(is:ie), S(is:ie))
-    endif
+    consTemp(is:ie) = poTemp_to_consTemp(T(is:ie), S(is:ie))
   else
     do i=is,ie
       Tp(i) = EOS%C_to_degC * T(i)
       Sa(i) = EOS%S_to_ppt * S(i)
     enddo
-    if (use_gsw) then
-      consTemp(is:ie) = gsw_ct_from_pt(Sa(is:ie), Tp(is:ie))
-    else
-      consTemp(is:ie) = poTemp_to_consTemp(Tp(is:ie), Sa(is:ie))
-    endif
+    consTemp(is:ie) = poTemp_to_consTemp(Tp(is:ie), Sa(is:ie))
   endif
 
   T_scale = EOS%degC_to_C
@@ -2153,7 +2113,7 @@ end subroutine pot_temp_to_cons_temp
 !> Converts an array of absolute salinity to practical salinity.  The input arguments
 !! use the dimensionally rescaling as specified within the EOS type.  The output potential
 !! temperature uses this same scaling, but this can be replaced by the factor given by scale.
-subroutine abs_saln_to_prac_saln(S, prSaln, EOS, dom, scale, use_TEOS)
+subroutine abs_saln_to_prac_saln(S, prSaln, EOS, dom, scale)
   real, dimension(:), intent(in)    :: S        !< Absolute salinity [S ~> ppt]
   real, dimension(:), intent(inout) :: prSaln   !< Practical salinity [S ~> ppt]
   type(EOS_type),     intent(in)    :: EOS      !< Equation of state structure
@@ -2163,14 +2123,12 @@ subroutine abs_saln_to_prac_saln(S, prSaln, EOS, dom, scale, use_TEOS)
                                                 !! practical in place of with scaling stored
                                                 !! in EOS.  A value of 1.0 returns salinities in [PSU],
                                                 !! while the default is equivalent to EOS%ppt_to_S.
-  logical,  optional, intent(in)    :: use_TEOS !< If present and true, call the TEOS code to do the conversion.
 
   ! Local variables
   real, dimension(size(S)) :: Sa    ! Salinity converted to [ppt]
   real :: S_scale ! A factor to convert practical salinity from ppt to the desired units [S ppt-1 ~> 1]
   real, parameter :: Sprac_Sref = (35.0/35.16504) ! The TEOS 10 conversion factor to go from
                                     ! reference salinity to practical salinity [nondim]
-  logical :: use_gsw  ! If true, call gsw functions to do this conversion.
   integer :: i, is, ie
 
   if (present(dom)) then
@@ -2179,22 +2137,7 @@ subroutine abs_saln_to_prac_saln(S, prSaln, EOS, dom, scale, use_TEOS)
     is = 1 ; ie = size(S)
   endif
 
-  use_gsw = .false. ; if (present(use_TEOS)) use_gsw = use_TEOS
-
-  if (use_gsw) then
-    if ((EOS%C_to_degC == 1.0) .and. (EOS%S_to_ppt == 1.0)) then
-      prSaln(is:ie) = gsw_sp_from_sr(S(is:ie))
-    else
-      do i=is,ie ; Sa(i) = EOS%S_to_ppt * S(i) ; enddo
-      prSaln(is:ie) = gsw_sp_from_sr(Sa(is:ie))
-    endif
-
-    S_scale = EOS%ppt_to_S
-    if (present(scale)) S_scale = scale
-    if (S_scale /= 1.0) then ; do i=is,ie
-      prSaln(i) = S_scale * prSaln(i)
-    enddo ; endif
-  elseif (present(scale)) then
+  if (present(scale)) then
     S_scale = Sprac_Sref * scale
     do i=is,ie
       prSaln(i) = S_scale * S(i)
@@ -2211,7 +2154,7 @@ end subroutine abs_saln_to_prac_saln
 !> Converts an array of absolute salinity to practical salinity.  The input arguments
 !! use the dimensionally rescaling as specified within the EOS type.  The output potential
 !! temperature uses this same scaling, but this can be replaced by the factor given by scale.
-subroutine prac_saln_to_abs_saln(S, absSaln, EOS, dom, scale, use_TEOS)
+subroutine prac_saln_to_abs_saln(S, absSaln, EOS, dom, scale)
   real, dimension(:), intent(in)    :: S        !< Practical salinity [S ~> ppt]
   real, dimension(:), intent(inout) :: absSaln  !< Absolute salinity [S ~> ppt]
   type(EOS_type),     intent(in)    :: EOS      !< Equation of state structure
@@ -2221,14 +2164,12 @@ subroutine prac_saln_to_abs_saln(S, absSaln, EOS, dom, scale, use_TEOS)
                                                 !! practical in place of with scaling stored
                                                 !! in EOS.  A value of 1.0 returns salinities in [PSU],
                                                 !! while the default is equivalent to EOS%ppt_to_S.
-  logical,  optional, intent(in)    :: use_TEOS !< If present and true, call the TEOS code to do the conversion.
 
   ! Local variables
   real, dimension(size(S)) :: Sp    ! Salinity converted to [ppt]
   real :: S_scale ! A factor to convert practical salinity from ppt to the desired units [S ppt-1 ~> 1]
   real, parameter :: Sref_Sprac = (35.16504/35.0) ! The TEOS 10 conversion factor to go from
                                     ! practical salinity to reference salinity [nondim]
-  logical :: use_gsw  ! If true, call gsw functions to do this conversion.
   integer :: i, is, ie
 
   if (present(dom)) then
@@ -2237,22 +2178,7 @@ subroutine prac_saln_to_abs_saln(S, absSaln, EOS, dom, scale, use_TEOS)
     is = 1 ; ie = size(S)
   endif
 
-  use_gsw = .false. ; if (present(use_TEOS)) use_gsw = use_TEOS
-
-  if (use_gsw) then
-    if ((EOS%C_to_degC == 1.0) .and. (EOS%S_to_ppt == 1.0)) then
-      absSaln(is:ie) = gsw_sr_from_sp(S(is:ie))
-    else
-      do i=is,ie ; Sp(i) = EOS%S_to_ppt * S(i) ; enddo
-      absSaln(is:ie) = gsw_sr_from_sp(Sp(is:ie))
-    endif
-
-    S_scale = EOS%ppt_to_S
-    if (present(scale)) S_scale = scale
-    if (S_scale /= 1.0) then ; do i=is,ie
-      absSaln(i) = S_scale * absSaln(i)
-    enddo ; endif
-  elseif (present(scale)) then
+  if (present(scale)) then
     S_scale = Sref_Sprac * scale
     do i=is,ie
       absSaln(i) = S_scale * S(i)
@@ -2469,42 +2395,22 @@ logical function test_TS_conversion_consistency(T_cons, S_abs, T_pot, S_prac, EO
   Stol = 35.0 * 400.0*epsilon(Stol)
 
   ! Check that the converted salinities agree
-  call abs_saln_to_prac_saln(Sabs, Stest, EOS, use_TEOS=.true.)
-  test_OK = (abs(Stest(1) - Sprac(1)) <= Stol)
-  if (verbose) call write_check_msg("TEOS Sprac", Stest(1), Sprac(1), Stol, test_OK)
-  OK = OK .and. test_OK
-
-  call abs_saln_to_prac_saln(Sabs, Stest, EOS, use_TEOS=.false.)
+  call abs_saln_to_prac_saln(Sabs, Stest, EOS)
   test_OK = (abs(Stest(1) - Sprac(1)) <= Stol)
   if (verbose) call write_check_msg("MOM6 Sprac", Stest(1), Sprac(1), Stol, test_OK)
   OK = OK .and. test_OK
 
-  call prac_saln_to_abs_saln(Sprac, Stest, EOS, use_TEOS=.true.)
-  test_OK = (abs(Stest(1) - Sabs(1)) <= Stol)
-  if (verbose) call write_check_msg("TEOS Sabs", Stest(1), Sabs(1), Stol, test_OK)
-  OK = OK .and. test_OK
-
-  call prac_saln_to_abs_saln(Sprac, Stest, EOS, use_TEOS=.false.)
+  call prac_saln_to_abs_saln(Sprac, Stest, EOS)
   test_OK = (abs(Stest(1) - Sabs(1)) <= Stol)
   if (verbose) call write_check_msg("MOM6 Sabs", Stest(1), Sabs(1), Stol, test_OK)
   OK = OK .and. test_OK
 
-  call cons_temp_to_pot_temp(Tcons, Sabs, Ttest, EOS, use_TEOS=.true.)
-  test_OK = (abs(Ttest(1) - Tpot(1)) <= Ttol)
-  if (verbose) call write_check_msg("TEOS Tpot", Ttest(1), Tpot(1), Ttol, test_OK)
-  OK = OK .and. test_OK
-
-  call cons_temp_to_pot_temp(Tcons, Sabs, Ttest, EOS, use_TEOS=.false.)
+  call cons_temp_to_pot_temp(Tcons, Sabs, Ttest, EOS)
   test_OK = (abs(Ttest(1) - Tpot(1)) <= Ttol)
   if (verbose) call write_check_msg("MOM6 Tpot", Ttest(1), Tpot(1), Ttol, test_OK)
   OK = OK .and. test_OK
 
-  call pot_temp_to_cons_temp(Tpot, Sabs, Ttest, EOS, use_TEOS=.true.)
-  test_OK = (abs(Ttest(1) - Tcons(1)) <= Ttol)
-  if (verbose) call write_check_msg("TEOS Tcons", Ttest(1), Tcons(1), Ttol, test_OK)
-  OK = OK .and. test_OK
-
-  call pot_temp_to_cons_temp(Tpot, Sabs, Ttest, EOS, use_TEOS=.false.)
+  call pot_temp_to_cons_temp(Tpot, Sabs, Ttest, EOS)
   test_OK = (abs(Ttest(1) - Tcons(1)) <= Ttol)
   if (verbose) call write_check_msg("MOM6 Tcons", Ttest(1), Tcons(1), Ttol, test_OK)
   OK = OK .and. test_OK
