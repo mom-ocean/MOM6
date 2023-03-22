@@ -122,7 +122,8 @@ subroutine PressureForce_Mont_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm, pb
 
   real :: I_gEarth           ! The inverse of g_Earth [T2 Z L-2 ~> s2 m-1]
 !  real :: dalpha
-  real :: Pa_to_H     ! A factor to convert from R L2 T-2 to the thickness units (H).
+  real :: Pa_to_H     ! A factor to convert from R L2 T-2 to the thickness units (H)
+                      ! [H T2 R-1 L-2 ~> m2 s2 kg-1 or s2 m-1].
   real :: alpha_Lay(SZK_(GV)) ! The specific volume of each layer [R-1 ~> m3 kg-1].
   real :: dalpha_int(SZK_(GV)+1) ! The change in specific volume across each
                              ! interface [R-1 ~> m3 kg-1].
@@ -380,7 +381,7 @@ subroutine PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm, pbce,
     M, &        ! The Montgomery potential, M = (p/rho + gz) [L2 T-2 ~> m2 s-2].
     rho_star    ! In-situ density divided by the derivative with depth of the
                 ! corrected e times (G_Earth/Rho0) [L2 Z-1 T-2 ~> m s-2].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1) :: e ! Interface height in m.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1) :: e ! Interface height [Z ~> m].
                 ! e may be adjusted (with a nonlinear equation of state) so that
                 ! its derivative compensates for the adiabatic compressibility
                 ! in seawater, but e will still be close to the interface depth.

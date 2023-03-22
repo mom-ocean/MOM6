@@ -17,7 +17,7 @@ use MOM_unit_scaling,      only : unit_scale_type
 use MOM_variables,         only : thermo_var_ptrs
 use MOM_verticalGrid,      only : verticalGrid_type
 use MOM_wave_speed,        only : wave_speed, wave_speed_CS, wave_speed_init
-use MOM_open_boundary,     only : ocean_OBC_type, OBC_NONE
+use MOM_open_boundary,     only : ocean_OBC_type
 
 implicit none ; private
 
@@ -475,16 +475,16 @@ subroutine calc_slope_functions(h, tv, dt, G, GV, US, CS, OBC)
       call calc_isoneutral_slopes(G, GV, US, h, e, tv, dt*CS%kappa_smooth, CS%use_stanley_iso, &
                                   CS%slope_x, CS%slope_y, N2_u=N2_u, N2_v=N2_v, dzu=dzu, dzv=dzv, &
                                   dzSxN=dzSxN, dzSyN=dzSyN, halo=1, OBC=OBC)
-      call calc_Eady_growth_rate_2D(CS, G, GV, US, OBC, h, e, dzu, dzv, dzSxN, dzSyN, CS%SN_u, CS%SN_v)
+      call calc_Eady_growth_rate_2D(CS, G, GV, US, h, e, dzu, dzv, dzSxN, dzSyN, CS%SN_u, CS%SN_v)
     else
       call find_eta(h, tv, G, GV, US, e, halo_size=2)
       if (CS%use_stored_slopes) then
         call calc_isoneutral_slopes(G, GV, US, h, e, tv, dt*CS%kappa_smooth, CS%use_stanley_iso, &
                                     CS%slope_x, CS%slope_y, N2_u=N2_u, N2_v=N2_v, halo=1, OBC=OBC)
-        call calc_Visbeck_coeffs_old(h, CS%slope_x, CS%slope_y, N2_u, N2_v, G, GV, US, CS, OBC)
+        call calc_Visbeck_coeffs_old(h, CS%slope_x, CS%slope_y, N2_u, N2_v, G, GV, US, CS)
       else
         !call calc_isoneutral_slopes(G, GV, h, e, tv, dt*CS%kappa_smooth, CS%slope_x, CS%slope_y)
-        call calc_slope_functions_using_just_e(h, G, GV, US, CS, e, .true., OBC)
+        call calc_slope_functions_using_just_e(h, G, GV, US, CS, e, .true.)
       endif
     endif
   endif
@@ -507,7 +507,7 @@ end subroutine calc_slope_functions
 !> Calculates factors used when setting diffusivity coefficients similar to Visbeck et al., 1997.
 !! This is on older implementation that is susceptible to large values of Eady growth rate
 !! for incropping layers.
-subroutine calc_Visbeck_coeffs_old(h, slope_x, slope_y, N2_u, N2_v, G, GV, US, CS, OBC)
+subroutine calc_Visbeck_coeffs_old(h, slope_x, slope_y, N2_u, N2_v, G, GV, US, CS)
   type(ocean_grid_type),                        intent(inout) :: G  !< Ocean grid structure
   type(verticalGrid_type),                      intent(in)    :: GV !< Vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),    intent(in)    :: h  !< Layer thickness [H ~> m or kg m-2]
@@ -519,7 +519,6 @@ subroutine calc_Visbeck_coeffs_old(h, slope_x, slope_y, N2_u, N2_v, G, GV, US, C
                                                                          !! at v-points [L2 Z-2 T-2 ~> s-2]
   type(unit_scale_type),                        intent(in)    :: US !< A dimensional unit scaling type
   type(VarMix_CS),                              intent(inout) :: CS !< Variable mixing control struct
-  type(ocean_OBC_type),                         pointer       :: OBC !< Open boundaries control structure.
 
   ! Local variables
   real :: S2            ! Interface slope squared [nondim]
@@ -533,7 +532,6 @@ subroutine calc_Visbeck_coeffs_old(h, slope_x, slope_y, N2_u, N2_v, G, GV, US, C
   real :: H_u(SZIB_(G)), H_v(SZI_(G))
   real :: S2_u(SZIB_(G), SZJ_(G))
   real :: S2_v(SZI_(G), SZJB_(G))
-  logical :: local_open_u_BC, local_open_v_BC
 
   if (.not. CS%initialized) call MOM_error(FATAL, "calc_Visbeck_coeffs_old: "// &
          "Module must be initialized before it is used.")
@@ -545,13 +543,6 @@ subroutine calc_Visbeck_coeffs_old(h, slope_x, slope_y, N2_u, N2_v, G, GV, US, C
          "%SN_v is not associated with use_variable_mixing.")
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
-
-  local_open_u_BC = .false.
-  local_open_v_BC = .false.
-  if (associated(OBC)) then
-    local_open_u_BC = OBC%open_u_BCs_exist_globally
-    local_open_v_BC = OBC%open_v_BCs_exist_globally
-  endif
 
   S2max = CS%Visbeck_S_max**2
 
@@ -593,19 +584,10 @@ subroutine calc_Visbeck_coeffs_old(h, slope_x, slope_y, N2_u, N2_v, G, GV, US, C
     enddo ; enddo
     do I=is-1,ie
       if (H_u(I)>0.) then
-        CS%SN_u(I,j) = G%mask2dCu(I,j) * CS%SN_u(I,j) / H_u(I)
-        S2_u(I,j) =  G%mask2dCu(I,j) * S2_u(I,j) / H_u(I)
+        CS%SN_u(I,j) = G%OBCmaskCu(I,j) * CS%SN_u(I,j) / H_u(I)
+        S2_u(I,j) =  G%OBCmaskCu(I,j) * S2_u(I,j) / H_u(I)
       else
         CS%SN_u(I,j) = 0.
-      endif
-      if (local_open_u_BC) then
-        l_seg = OBC%segnum_u(I,j)
-
-        if (l_seg /= OBC_NONE) then
-          if (OBC%segment(l_seg)%open) then
-            CS%SN_u(i,J) = 0.
-          endif
-        endif
       endif
     enddo
   enddo
@@ -638,19 +620,10 @@ subroutine calc_Visbeck_coeffs_old(h, slope_x, slope_y, N2_u, N2_v, G, GV, US, C
     enddo ; enddo
     do i=is,ie
       if (H_v(i)>0.) then
-        CS%SN_v(i,J) = G%mask2dCv(i,J) * CS%SN_v(i,J) / H_v(i)
-        S2_v(i,J) = G%mask2dCv(i,J) * S2_v(i,J) / H_v(i)
+        CS%SN_v(i,J) = G%OBCmaskCv(i,J) * CS%SN_v(i,J) / H_v(i)
+        S2_v(i,J) = G%OBCmaskCv(i,J) * S2_v(i,J) / H_v(i)
       else
         CS%SN_v(i,J) = 0.
-      endif
-      if (local_open_v_BC) then
-        l_seg = OBC%segnum_v(i,J)
-
-        if (l_seg /= OBC_NONE) then
-          if (OBC%segment(OBC%segnum_v(i,J))%open) then
-            CS%SN_v(i,J) = 0.
-          endif
-        endif
       endif
     enddo
   enddo
@@ -673,12 +646,11 @@ subroutine calc_Visbeck_coeffs_old(h, slope_x, slope_y, N2_u, N2_v, G, GV, US, C
 end subroutine calc_Visbeck_coeffs_old
 
 !> Calculates the Eady growth rate (2D fields) for use in MEKE and the Visbeck schemes
-subroutine calc_Eady_growth_rate_2D(CS, G, GV, US, OBC, h, e, dzu, dzv, dzSxN, dzSyN, SN_u, SN_v)
+subroutine calc_Eady_growth_rate_2D(CS, G, GV, US, h, e, dzu, dzv, dzSxN, dzSyN, SN_u, SN_v)
   type(VarMix_CS),                              intent(inout) :: CS !< Variable mixing coefficients
   type(ocean_grid_type),                        intent(in) :: G   !< Ocean grid structure
   type(verticalGrid_type),                      intent(in) :: GV  !< Vertical grid structure
   type(unit_scale_type),                        intent(in) :: US  !< A dimensional unit scaling type
-  type(ocean_OBC_type),                pointer, intent(in) :: OBC !< Open boundaries control structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),    intent(in) :: h   !< Interface height [Z ~> m]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1),  intent(in) :: e   !< Interface height [Z ~> m]
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)+1), intent(in) :: dzu !< dz at u-points [Z ~> m]
@@ -699,20 +671,13 @@ subroutine calc_Eady_growth_rate_2D(CS, G, GV, US, OBC, h, e, dzu, dzv, dzSxN, d
   real :: r_crp_dist ! The inverse of the distance over which to scale the cropping [Z-1 ~> m-1]
   real :: dB, dT ! Elevation variables used when cropping [Z ~> m]
   integer :: i, j, k, l_seg
-  logical :: local_open_u_BC, local_open_v_BC, crop
+  logical :: crop
 
   dz_neglect = GV%H_subroundoff * GV%H_to_Z
   D_scale = CS%Eady_GR_D_scale
   if (D_scale<=0.) D_scale = 64.*GV%max_depth ! 0 means use full depth so choose something big
   r_crp_dist = 1. / max( dz_neglect, CS%cropping_distance )
   crop = CS%cropping_distance>=0. ! Only filter out in-/out-cropped interface is parameter if non-negative
-
-  local_open_u_BC = .false.
-  local_open_v_BC = .false.
-  if (associated(OBC)) then
-    local_open_u_BC = OBC%open_u_BCs_exist_globally
-    local_open_v_BC = OBC%open_v_BCs_exist_globally
-  endif
 
   if (CS%debug) then
     call uvchksum("calc_Eady_growth_rate_2D dz[uv]", dzu, dzv, G%HI, scale=US%Z_to_m, scalar_pair=.true.)
@@ -764,19 +729,9 @@ subroutine calc_Eady_growth_rate_2D(CS, G, GV, US, OBC, h, e, dzu, dzv, dzSxN, d
       enddo ; enddo
     endif
     do I=G%isc-1,G%iec
-      CS%SN_u(I,j) = G%mask2dCu(I,j) * ( vint_SN(I) / sum_dz(I) )
-      SN_cpy(I,j) = G%mask2dCu(I,j) * ( vint_SN(I) / sum_dz(I) )
+      CS%SN_u(I,j) = G%OBCmaskCu(I,j) * ( vint_SN(I) / sum_dz(I) )
+      SN_cpy(I,j) = G%OBCmaskCu(I,j) * ( vint_SN(I) / sum_dz(I) )
     enddo
-    if (local_open_u_BC) then
-      do I=G%isc-1,G%iec
-        l_seg = OBC%segnum_u(I,j)
-        if (l_seg /= OBC_NONE) then
-          if (OBC%segment(l_seg)%open) then
-            CS%SN_u(i,J) = 0.
-          endif
-        endif
-      enddo
-    endif
   enddo
 
   !$OMP parallel do default(shared) private(dnew,dz,weight,l_seg)
@@ -817,18 +772,8 @@ subroutine calc_Eady_growth_rate_2D(CS, G, GV, US, OBC, h, e, dzu, dzv, dzSxN, d
       enddo ; enddo
     endif
     do i=G%isc-1,G%iec+1
-      CS%SN_v(i,J) = G%mask2dCv(i,J) * ( vint_SN(i) / sum_dz(i) )
+      CS%SN_v(i,J) = G%OBCmaskCv(i,J) * ( vint_SN(i) / sum_dz(i) )
     enddo
-    if (local_open_v_BC) then
-      do i=G%isc-1,G%iec+1
-        l_seg = OBC%segnum_v(i,J)
-        if (l_seg /= OBC_NONE) then
-          if (OBC%segment(l_seg)%open) then
-            CS%SN_v(i,J) = 0.
-          endif
-        endif
-      enddo
-    endif
   enddo
 
   do j = G%jsc,G%jec
@@ -855,7 +800,7 @@ end subroutine calc_Eady_growth_rate_2D
 
 !> The original calc_slope_function() that calculated slopes using
 !! interface positions only, not accounting for density variations.
-subroutine calc_slope_functions_using_just_e(h, G, GV, US, CS, e, calculate_slopes, OBC)
+subroutine calc_slope_functions_using_just_e(h, G, GV, US, CS, e, calculate_slopes)
   type(ocean_grid_type),                       intent(inout) :: G  !< Ocean grid structure
   type(verticalGrid_type),                     intent(in)    :: GV !< Vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),   intent(inout) :: h  !< Layer thickness [H ~> m or kg m-2]
@@ -864,7 +809,6 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, US, CS, e, calculate_slop
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), intent(in)    :: e  !< Interface position [Z ~> m]
   logical,                                     intent(in)    :: calculate_slopes !< If true, calculate slopes
                                                                    !! internally otherwise use slopes stored in CS
-  type(ocean_OBC_type),                        pointer       :: OBC !< Open boundaries control structure.
   ! Local variables
   real :: E_x(SZIB_(G), SZJ_(G))  ! X-slope of interface at u points [nondim] (for diagnostics)
   real :: E_y(SZI_(G), SZJB_(G))  ! Y-slope of interface at v points [nondim] (for diagnostics)
@@ -881,7 +825,6 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, US, CS, e, calculate_slop
   integer :: l_seg
   real    :: S2N2_u_local(SZIB_(G), SZJ_(G),SZK_(GV))
   real    :: S2N2_v_local(SZI_(G), SZJB_(G),SZK_(GV))
-  logical :: local_open_u_BC, local_open_v_BC
 
   if (.not. CS%initialized) call MOM_error(FATAL, "calc_slope_functions_using_just_e: "// &
          "Module must be initialized before it is used.")
@@ -893,13 +836,6 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, US, CS, e, calculate_slop
          "%SN_v is not associated with use_variable_mixing.")
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
-
-  local_open_u_BC = .false.
-  local_open_v_BC = .false.
-  if (associated(OBC)) then
-    local_open_u_BC = OBC%open_u_BCs_exist_globally
-    local_open_v_BC = OBC%open_v_BCs_exist_globally
-  endif
 
   one_meter = 1.0 * GV%m_to_H
   h_neglect = GV%H_subroundoff
@@ -972,19 +908,10 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, US, CS, e, calculate_slop
       !SN_u(I,j) = sqrt( SN_u(I,j) / ( max(G%bathyT(i,j), G%bathyT(i+1,j)) + (G%Z_ref + GV%Angstrom_Z) ) )
       !The code below behaves better than the line above. Not sure why? AJA
       if ( min(G%bathyT(i,j), G%bathyT(i+1,j)) + G%Z_ref > H_cutoff*GV%H_to_Z ) then
-        CS%SN_u(I,j) = G%mask2dCu(I,j) * sqrt( CS%SN_u(I,j) / &
+        CS%SN_u(I,j) = G%OBCmaskCu(I,j) * sqrt( CS%SN_u(I,j) / &
                                                (max(G%bathyT(i,j), G%bathyT(i+1,j)) + G%Z_ref) )
       else
         CS%SN_u(I,j) = 0.0
-      endif
-      if (local_open_u_BC) then
-        l_seg = OBC%segnum_u(I,j)
-
-        if (l_seg /= OBC_NONE) then
-          if (OBC%segment(l_seg)%open) then
-            CS%SN_u(I,j) = 0.
-          endif
-        endif
       endif
     enddo
   enddo
@@ -999,19 +926,10 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, US, CS, e, calculate_slop
       !SN_v(i,J) = sqrt( SN_v(i,J) / ( max(G%bathyT(i,J), G%bathyT(i,J+1)) + (G%Z_ref + GV%Angstrom_Z) ) )
       !The code below behaves better than the line above. Not sure why? AJA
       if ( min(G%bathyT(i,j), G%bathyT(i+1,j)) + G%Z_ref > H_cutoff*GV%H_to_Z ) then
-        CS%SN_v(i,J) = G%mask2dCv(i,J) * sqrt( CS%SN_v(i,J) / &
+        CS%SN_v(i,J) = G%OBCmaskCv(i,J) * sqrt( CS%SN_v(i,J) / &
                                                (max(G%bathyT(i,j), G%bathyT(i,j+1)) + G%Z_ref) )
       else
         CS%SN_v(i,J) = 0.0
-      endif
-      if (local_open_v_BC) then
-        l_seg = OBC%segnum_v(i,J)
-
-        if (l_seg /= OBC_NONE) then
-          if (OBC%segment(OBC%segnum_v(i,J))%open) then
-            CS%SN_v(i,J) = 0.
-          endif
-        endif
       endif
     enddo
   enddo

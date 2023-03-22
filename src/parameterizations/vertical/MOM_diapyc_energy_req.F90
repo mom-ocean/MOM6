@@ -27,8 +27,9 @@ public diapyc_energy_req_init, diapyc_energy_req_calc, diapyc_energy_req_test, d
 type, public :: diapyc_energy_req_CS ; private
   logical :: initialized = .false. !< A variable that is here because empty
                                !! structures are not permitted by some compilers.
-  real :: test_Kh_scaling      !< A scaling factor for the diapycnal diffusivity.
-  real :: ColHt_scaling        !< A scaling factor for the column height change correction term.
+  real :: test_Kh_scaling      !< A scaling factor for the diapycnal diffusivity [nondim]
+  real :: ColHt_scaling        !< A scaling factor for the column height change correction term [nondim]
+  real :: VonKar               !< The von Karman coefficient as used in this module [nondim]
   logical :: use_test_Kh_profile !< If true, use the internal test diffusivity profile in place of
                                !! any that might be passed in as an argument.
   type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to
@@ -104,7 +105,7 @@ subroutine diapyc_energy_req_test(h_3d, dt, tv, G, GV, US, CS, Kd_int)
       do K=2,nz
         tmp1 = h_top(K) * h_bot(K) * GV%H_to_Z
         Kd(K) = CS%test_Kh_scaling *  &
-                ustar * 0.41 * (tmp1*ustar) / (absf*tmp1 + htot*ustar)
+                ustar * CS%VonKar * (tmp1*ustar) / (absf*tmp1 + htot*ustar)
       enddo
     endif
     may_print = is_root_PE() .and. (i==ie) .and. (j==je)
@@ -1292,10 +1293,12 @@ subroutine diapyc_energy_req_init(Time, G, GV, US, param_file, diag, CS)
   call get_param(param_file, mdl, "ENERGY_REQ_COL_HT_SCALING", CS%ColHt_scaling, &
                  "A scaling factor for the column height change correction "//&
                  "used in testing the energy requirements.", default=1.0, units="nondim")
-  call get_param(param_file, mdl, "ENERGY_REQ_USE_TEST_PROFILE", &
-                 CS%use_test_Kh_profile, &
+  call get_param(param_file, mdl, "ENERGY_REQ_USE_TEST_PROFILE", CS%use_test_Kh_profile, &
                  "If true, use the internal test diffusivity profile in "//&
                  "place of any that might be passed in as an argument.", default=.false.)
+  call get_param(param_file, mdl, 'VON_KARMAN_CONST', CS%vonKar, &
+                 'The value the von Karman constant as used for mixed layer viscosity.', &
+                 units='nondim', default=0.41)
 
   CS%id_ERt = register_diag_field('ocean_model', 'EnReqTest_ERt', diag%axesZi, Time, &
                  "Diffusivity Energy Requirements, top-down", &

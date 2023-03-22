@@ -2,34 +2,62 @@
 
 \section Symbols Symbols for variables
 
-\f$z\f$ refers to elevation (or height), increasing upward so that for much of the ocean \f$z\f$ is negative.
+\f$z\f$ refers to geopotential elevation (or height), increasing
+upward and with \f$z=0\f$ defining the resting ocean surface.  Much of
+the ocean has \f$z < 0\f$.
 
-\f$x\f$ and \f$y\f$ are the Cartesian horizontal coordinates.
+\f$x\f$ and \f$y\f$ are the Cartesian horizontal coordinates.  MOM6
+ uses generalized orthogonal curvilinear horizontal
+ coordinates. However, the equations are simpler to write using
+ Cartesian coordinates, and it is very straightforward to generalize
+ the horizontal coordinates using the methods in Chapters 20 and 21 of
+ \cite SMGbook.
 
-\f$\lambda\f$ and \f$\phi\f$ are the geographic coordinates on a sphere (longitude and latitude respectively).
+\f$\lambda\f$ and \f$\phi\f$ are the geographic coordinates on a
+sphere (longitude and latitude, respectively).
 
-Horizontal components of velocity are indicated by \f$u\f$ and \f$v\f$ and vertical component by \f$w\f$.
+Horizontal components of velocity are indicated by \f$u\f$ and \f$v\f$
+and vertical component by \f$w\f$.
 
-\f$p\f$ is pressure and \f$\Phi\f$ is geo-potential:
+\f$p\f$ is the hydrostatic pressure.
 
- \f[ \Phi = g z .\f]
+\f$\Phi\f$ is the geopotential.  In the absence of tides, the
+geopotential is given by \f$\Phi = g z,\f$ whereas more general
+expressions hold when including astronomical tide forcing.
 
-The thermodynamic state variables are usually salinity, \f$S\f$, and potential temperature, \f$\theta\f$ or the absolute salinity and conservative temperature, depending on the equation of state. \f$\rho\f$ is in-situ density.
+The thermodynamic state variables can be salinity, \f$S\f$, and
+potential temperature, \f$\theta\f$.  Alternatively, one can choose
+the Conservative Temperature if using the TEOS10 equation of state
+from \cite TEOS2010.
+
+\f$\rho\f$ is the in-situ density computed as a function
+\f$\rho(S,\theta,p)\f$ for non-Boussinesq ocean or
+\f$\rho(S,\theta,p=-g \, \rho_o \, z)\f$ for Boussinesq ocean. See
+Young (2010) \cite Young2010 or Section 2.4 of Vallis (2017)
+\cite GVbook for reasoning behind the simplified pressure
+used in the Boussinesq equation of state.
+
+
 
 \section vector_notation Vector notation
 
-The three-dimensional velocity vector is denoted \f$\boldsymbol{v}\f$
+The three-dimensional velocity vector is denoted \f$\mathbf{v}\f$
+and it is decomposed into its horizontal and vertical components according to
+\f{align}
+\mathbf{v}
+  = \mathbf{u} + \hat{\mathbf{z}} \, w
+  = \hat{\mathbf{x}} \, u + \hat{\mathbf{y}} \, v + \hat{\mathbf{z}} \, w,
+ \f}
+where \f$\hat{\mathbf{z}}\f$ is the unit vector pointed in the
+upward vertical direction and \f$\mathbf{u} = (u, v, 0)\f$ is the
+horizontal component of velocity normal to the vertical.
 
-  \f[\boldsymbol{v} = \boldsymbol{u} + \widehat{\boldsymbol{k}} w ,\f]
+The three-dimensional gradient operator is denoted \f$\nabla\f$, and it is decomposed into
+its horizontal and vertical components according to
+\f{align}
+\nabla
+   = \nabla_z + \hat{\mathbf{z}} \, \partial_z
+   = \hat{\mathbf{x}} \, \partial_x + \hat{\mathbf{y}} \, \partial_y + \hat{\mathbf{z}} \, \partial_z.
+  \f}
 
-where \f$\widehat{\boldsymbol{k}}\f$ is the unit vector pointed in the upward vertical direction and \f$\boldsymbol{u} = (u, v, 0)\f$ is the horizontal
-component of velocity normal to the vertical.
-
-The gradient operator without a suffix is three dimensional:
-
-  \f[\boldsymbol{\nabla} = ( \boldsymbol{\nabla}_z, \partial_z  ) .\f]
-
-but a suffix indicates a lateral gradient along a surface of constant property indicated by the suffix:
-
-  \f[\boldsymbol{\nabla}_z = \left( \left. \partial_x \right|_z, \left. \partial_y \right|_z, 0 \right) .\f]
 */

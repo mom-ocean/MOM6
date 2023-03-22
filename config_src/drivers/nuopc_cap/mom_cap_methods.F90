@@ -1,4 +1,4 @@
-!> Contains import/export methods for both NEMS and CMEPS.
+!> Contains import/export methods for CMEPS.
 module MOM_cap_methods
 
 use ESMF,                      only: ESMF_Clock, ESMF_ClockGet, ESMF_time, ESMF_TimeGet
@@ -87,8 +87,6 @@ subroutine mom_import(ocean_public, ocean_grid, importState, ice_ocean_boundary,
   character(len=128)              :: fldname
   real(ESMF_KIND_R8), allocatable :: taux(:,:)
   real(ESMF_KIND_R8), allocatable :: tauy(:,:)
-  real(ESMF_KIND_R8), allocatable :: stkx1(:,:),stkx2(:,:),stkx3(:,:)
-  real(ESMF_KIND_R8), allocatable :: stky1(:,:),stky2(:,:),stky3(:,:)
   real(ESMF_KIND_R8), allocatable :: stkx(:,:,:)
   real(ESMF_KIND_R8), allocatable :: stky(:,:,:)
   character(len=*)  , parameter   :: subname = '(mom_import)'
@@ -329,8 +327,6 @@ subroutine mom_import(ocean_public, ocean_grid, importState, ice_ocean_boundary,
   ! Partitioned Stokes Drift Components
   !----
   if ( associated(ice_ocean_boundary%ustkb) ) then
-
-    if (cesm_coupled) then
       nsc = Ice_ocean_boundary%num_stk_bands
       allocate(stkx(isc:iec,jsc:jec,1:nsc))
       allocate(stky(isc:iec,jsc:jec,1:nsc))
@@ -358,52 +354,6 @@ subroutine mom_import(ocean_public, ocean_grid, importState, ice_ocean_boundary,
         enddo
       enddo
       deallocate(stkx,stky)
-
-    else ! below is the old approach of importing partitioned stokes drift components. after the planned ww3 nuopc
-         ! cap unification, this else block should be removed in favor of the more flexible import approach above.
-      allocate(stkx1(isc:iec,jsc:jec))
-      allocate(stky1(isc:iec,jsc:jec))
-      allocate(stkx2(isc:iec,jsc:jec))
-      allocate(stky2(isc:iec,jsc:jec))
-      allocate(stkx3(isc:iec,jsc:jec))
-      allocate(stky3(isc:iec,jsc:jec))
-
-      call state_getimport(importState,'eastward_partitioned_stokes_drift_1' , isc, iec, jsc, jec, stkx1,rc=rc)
-      if (ChkErr(rc,__LINE__,u_FILE_u)) return
-      call state_getimport(importState,'northward_partitioned_stokes_drift_1', isc, iec, jsc, jec, stky1,rc=rc)
-      if (ChkErr(rc,__LINE__,u_FILE_u)) return
-      call state_getimport(importState,'eastward_partitioned_stokes_drift_2' , isc, iec, jsc, jec, stkx2,rc=rc)
-      if (ChkErr(rc,__LINE__,u_FILE_u)) return
-      call state_getimport(importState,'northward_partitioned_stokes_drift_2', isc, iec, jsc, jec, stky2,rc=rc)
-      if (ChkErr(rc,__LINE__,u_FILE_u)) return
-      call state_getimport(importState,'eastward_partitioned_stokes_drift_3' , isc, iec, jsc, jec, stkx3,rc=rc)
-      if (ChkErr(rc,__LINE__,u_FILE_u)) return
-      call state_getimport(importState,'northward_partitioned_stokes_drift_3', isc, iec, jsc, jec, stky3,rc=rc)
-      if (ChkErr(rc,__LINE__,u_FILE_u)) return
-
-      ! rotate from true zonal/meridional to local coordinates
-      do j = jsc, jec
-        jg = j + ocean_grid%jsc - jsc
-        do i = isc, iec
-          ig = i + ocean_grid%isc - isc
-          ice_ocean_boundary%ustkb(i,j,1) = ocean_grid%cos_rot(ig,jg)*stkx1(i,j) &
-               - ocean_grid%sin_rot(ig,jg)*stky1(i,j)
-          ice_ocean_boundary%vstkb(i,j,1) = ocean_grid%cos_rot(ig,jg)*stky1(i,j) &
-               + ocean_grid%sin_rot(ig,jg)*stkx1(i,j)
-
-          ice_ocean_boundary%ustkb(i,j,2) = ocean_grid%cos_rot(ig,jg)*stkx2(i,j) &
-               - ocean_grid%sin_rot(ig,jg)*stky2(i,j)
-          ice_ocean_boundary%vstkb(i,j,2) = ocean_grid%cos_rot(ig,jg)*stky2(i,j) &
-               + ocean_grid%sin_rot(ig,jg)*stkx2(i,j)
-
-          ice_ocean_boundary%ustkb(i,j,3) = ocean_grid%cos_rot(ig,jg)*stkx3(i,j) &
-               - ocean_grid%sin_rot(ig,jg)*stky3(i,j)
-          ice_ocean_boundary%vstkb(i,j,3) = ocean_grid%cos_rot(ig,jg)*stky3(i,j) &
-               + ocean_grid%sin_rot(ig,jg)*stkx3(i,j)
-        enddo
-      enddo
-      deallocate(stkx1,stkx2,stkx3,stky1,stky2,stky3)
-    endif
   endif
 
 end subroutine mom_import

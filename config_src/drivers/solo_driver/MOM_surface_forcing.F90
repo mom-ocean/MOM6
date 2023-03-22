@@ -106,7 +106,7 @@ type, public :: surface_forcing_CS ; private
   real :: gyres_taux_cos_amp !< The amplitude of cosine wind stress gyres [R L Z T-1 ~> Pa], if WIND_CONFIG=='gyres'
   real :: gyres_taux_n_pis   !< The number of sine lobes in the basin if WIND_CONFIG=='gyres'
   integer :: answer_date     !< This 8-digit integer gives the approximate date with which the order
-                             !! of arithmetic and and expressions were added to the code.
+                             !! of arithmetic and expressions were added to the code.
                              !! Dates before 20190101 use original answers.
                              !! Dates after 20190101 use a form of the gyre wind stresses that are
                              !! rotationally invariant and more likely to be the same between compilers.
@@ -161,8 +161,8 @@ type, public :: surface_forcing_CS ; private
   character(len=200) :: salinityrestore_file = '' !< The file from which to read the sea surface
                                                   !! salinity to restore toward
 
-  character(len=80)  :: stress_x_var  = '' !< X-windstress variable name in the input file
-  character(len=80)  :: stress_y_var  = '' !< Y-windstress variable name in the input file
+  character(len=80)  :: stress_x_var  = '' !< X-wind stress variable name in the input file
+  character(len=80)  :: stress_y_var  = '' !< Y-wind stress variable name in the input file
   character(len=80)  :: ustar_var     = '' !< ustar variable name in the input file
   character(len=80)  :: LW_var        = '' !< longwave heat flux variable name in the input file
   character(len=80)  :: SW_var        = '' !< shortwave heat flux variable name in the input file
@@ -447,6 +447,8 @@ subroutine wind_forcing_2gyre(sfc_state, forces, day, G, US, CS)
     forces%tauy(i,J) = 0.0
   enddo ; enddo
 
+  if (associated(forces%ustar)) call stresses_to_ustar(forces, G, US, CS)
+
   call callTree_leave("wind_forcing_2gyre")
 end subroutine wind_forcing_2gyre
 
@@ -484,6 +486,8 @@ subroutine wind_forcing_1gyre(sfc_state, forces, day, G, US, CS)
     forces%tauy(i,J) = 0.0
   enddo ; enddo
 
+  if (associated(forces%ustar)) call stresses_to_ustar(forces, G, US, CS)
+
   call callTree_leave("wind_forcing_1gyre")
 end subroutine wind_forcing_1gyre
 
@@ -499,8 +503,6 @@ subroutine wind_forcing_gyres(sfc_state, forces, day, G, US, CS)
                                                   !! a previous surface_forcing_init call
   ! Local variables
   real :: PI            ! A common irrational number, 3.1415926535... [nondim]
-  real :: I_rho         ! The inverse of the reference density times a ratio of scaling
-                        ! factors [Z L-1 R-1 ~> m3 kg-1]
   real :: y             ! The latitude relative to the south normalized by the domain extent [nondim]
   integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq
 
@@ -530,12 +532,7 @@ subroutine wind_forcing_gyres(sfc_state, forces, day, G, US, CS)
                         forces%taux(i-1,j)*forces%taux(i-1,j) + forces%taux(i,j)*forces%taux(i,j)))/CS%Rho0) )
     enddo ; enddo
   else
-    I_rho = US%L_to_Z / CS%Rho0
-    do j=js,je ; do i=is,ie
-      forces%ustar(i,j) = sqrt( (CS%gust_const + &
-            sqrt(0.5*((forces%tauy(i,J-1)**2 + forces%tauy(i,J)**2) + &
-                      (forces%taux(I-1,j)**2 + forces%taux(I,j)**2))) ) * I_rho )
-    enddo ; enddo
+    call stresses_to_ustar(forces, G, US, CS)
   endif
 
   call callTree_leave("wind_forcing_gyres")
@@ -558,8 +555,6 @@ subroutine Neverworld_wind_forcing(sfc_state, forces, day, G, US, CS)
   real :: Pa_to_RLZ_T2  ! A unit conversion factor from Pa to the internal units
                         ! for wind stresses [R Z L T-2 Pa-1 ~> 1]
   real :: PI            ! A common irrational number, 3.1415926535... [nondim]
-  real :: I_rho         ! The inverse of the reference density times a ratio of scaling
-                        ! factors [Z L-1 R-1 ~> m3 kg-1]
   real :: y             ! The latitude relative to the south normalized by the domain extent [nondim]
   real :: tau_max       ! The magnitude of the wind stress [R Z L T-2 ~> Pa]
   real :: off           ! An offset in the relative latitude [nondim]
@@ -602,14 +597,7 @@ subroutine Neverworld_wind_forcing(sfc_state, forces, day, G, US, CS)
   enddo ; enddo
 
   ! Set the surface friction velocity, in units of [Z T-1 ~> m s-1].  ustar is always positive.
-  if (associated(forces%ustar)) then
-    I_rho = US%L_to_Z / CS%Rho0
-    do j=js,je ; do i=is,ie
-      forces%ustar(i,j) = sqrt( (CS%gust_const + &
-            sqrt(0.5*((forces%tauy(i,J-1)**2 + forces%tauy(i,J)**2) + &
-                      (forces%taux(I-1,j)**2 + forces%taux(I,j)**2))) ) * I_rho )
-    enddo ; enddo
-  endif
+  if (associated(forces%ustar)) call stresses_to_ustar(forces, G, US, CS)
 
 end subroutine Neverworld_wind_forcing
 
@@ -625,8 +613,6 @@ subroutine scurve_wind_forcing(sfc_state, forces, day, G, US, CS)
                                                     !! a previous surface_forcing_init call
   ! Local variables
   integer :: i, j, kseg
-  real :: I_rho         ! The inverse of the reference density times a ratio of scaling
-                        ! factors [Z L-1 R-1 ~> m3 kg-1]
   real :: y_curve       ! The latitude relative to the southern end of a curve segment [degreesN]
   real :: L_curve       ! The latitudinal extent of a curve segment [degreesN]
 ! real :: ydata(7) = (/ -70., -45., -15., 0., 15., 45., 70. /)
@@ -657,14 +643,7 @@ subroutine scurve_wind_forcing(sfc_state, forces, day, G, US, CS)
   enddo ; enddo
 
   ! Set the surface friction velocity, in units of [Z T-1 ~> m s-1].  ustar is always positive.
-  if (associated(forces%ustar)) then
-    I_rho = US%L_to_Z / CS%Rho0
-    do j=G%jsc,G%jec ; do i=G%isc,G%iec
-      forces%ustar(i,j) = sqrt( (CS%gust_const + &
-            sqrt(0.5*((forces%tauy(i,J-1)**2 + forces%tauy(i,J)**2) + &
-                      (forces%taux(I-1,j)**2 + forces%taux(I,j)**2))) ) * I_rho )
-    enddo ; enddo
-  endif
+  if (associated(forces%ustar)) call stresses_to_ustar(forces, G, US, CS)
 
 end subroutine scurve_wind_forcing
 
@@ -892,6 +871,37 @@ subroutine wind_forcing_by_data_override(sfc_state, forces, day, G, US, CS)
   call callTree_leave("wind_forcing_by_data_override")
 end subroutine wind_forcing_by_data_override
 
+!> Translate the wind stresses into the friction velocity, including effects of background gustiness.
+subroutine stresses_to_ustar(forces, G, US, CS)
+  type(mech_forcing),       intent(inout) :: forces !< A structure with the driving mechanical forces
+  type(ocean_grid_type),    intent(in)    :: G      !< Grid structure.
+  type(unit_scale_type),    intent(in)    :: US     !< A dimensional unit scaling type
+  type(surface_forcing_CS), pointer       :: CS     !< pointer to control structure returned by
+                                                    !! a previous surface_forcing_init call
+  ! Local variables
+  real :: I_rho         ! The inverse of the reference density times a ratio of scaling
+                        ! factors [Z L-1 R-1 ~> m3 kg-1]
+  integer :: i, j, is, ie, js, je
+
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
+
+  I_rho = US%L_to_Z / CS%Rho0
+
+  if (CS%read_gust_2d) then
+    do j=js,je ; do i=is,ie
+      forces%ustar(i,j) = sqrt( (CS%gust(i,j) + &
+              sqrt(0.5*((forces%tauy(i,j-1)**2 + forces%tauy(i,j)**2) + &
+                        (forces%taux(i-1,j)**2 + forces%taux(i,j)**2))) ) * I_rho )
+    enddo ; enddo
+  else
+    do j=js,je ; do i=is,ie
+      forces%ustar(i,j) = sqrt( (CS%gust_const + &
+            sqrt(0.5*((forces%tauy(i,J-1)**2 + forces%tauy(i,J)**2) + &
+                      (forces%taux(I-1,j)**2 + forces%taux(I,j)**2))) ) * I_rho )
+    enddo ; enddo
+  endif
+
+end subroutine stresses_to_ustar
 
 !> Specifies zero surface buoyancy fluxes from input files.
 subroutine buoyancy_forcing_from_files(sfc_state, fluxes, day, dt, G, US, CS)
