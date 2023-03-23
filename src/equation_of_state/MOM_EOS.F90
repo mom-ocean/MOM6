@@ -91,16 +91,14 @@ public query_compressible
 !> Calculates density of sea water from T, S and P
 interface calculate_density
   module procedure calculate_density_scalar
-  module procedure calculate_density_array
   module procedure calculate_density_1d
   module procedure calculate_stanley_density_scalar
-  module procedure calculate_stanley_density_array
   module procedure calculate_stanley_density_1d
 end interface calculate_density
 
 !> Calculates specific volume of sea water from T, S and P
 interface calculate_spec_vol
-  module procedure calc_spec_vol_scalar, calculate_spec_vol_array
+  module procedure calc_spec_vol_scalar
   module procedure calc_spec_vol_1d
 end interface calculate_spec_vol
 
@@ -112,7 +110,7 @@ end interface calculate_density_derivs
 
 !> Calculate the derivatives of specific volume with temperature and salinity from T, S, and P
 interface calculate_specific_vol_derivs
-  module procedure calc_spec_vol_derivs_1d, calculate_spec_vol_derivs_array
+  module procedure calc_spec_vol_derivs_1d
 end interface calculate_specific_vol_derivs
 
 !> Calculates the second derivatives of density with various combinations of temperature,
@@ -262,60 +260,17 @@ subroutine calculate_stanley_density_scalar(T, S, pressure, Tvar, TScov, Svar, r
   real, optional, intent(in)  :: scale    !< A multiplicative factor by which to scale output density in
                                           !! combination with scaling stored in EOS [various]
   ! Local variables
-  real :: d2RdTT   ! Second derivative of density with temperature [kg m-3 degC-2]
-  real :: d2RdST   ! Second derivative of density with temperature and salinity [kg m-3 degC-1 ppt-1]
-  real :: d2RdSS   ! Second derivative of density with salinity [kg m-3 ppt-2]
-  real :: d2RdSp   ! Second derivative of density with salinity and pressure [kg m-3 ppt-1 Pa-1]
-  real :: d2RdTp   ! Second derivative of density with temperature and pressure [kg m-3 degC-1 Pa-1]
-  real :: p_scale  ! A factor to convert pressure to units of Pa [Pa T2 R-1 L-2 ~> 1]
-  real :: T_scale  ! A factor to convert temperature to units of degC [degC C-1 ~> 1]
-  real :: S_scale  ! A factor to convert salinity to units of ppt [ppt S-1 ~> 1]
+  real :: d2RdTT   ! Second derivative of density with temperature [R C-2 ~> kg m-3 degC-2]
+  real :: d2RdST   ! Second derivative of density with temperature and salinity [R S-1 C-1 ~> kg m-3 degC-1 ppt-1]
+  real :: d2RdSS   ! Second derivative of density with salinity [R S-2 ~> kg m-3 ppt-2]
+  real :: d2RdSp   ! Second derivative of density with salinity and pressure [T2 S-1 L-2 ~> kg m-3 ppt-1 Pa-1]
+  real :: d2RdTp   ! Second derivative of density with temperature and pressure [T2 C-1 L-2 ~> kg m-3 degC-1 Pa-1]
 
   call calculate_density_scalar(T, S, pressure, rho, EOS, rho_ref)
-
-  p_scale = EOS%RL2_T2_to_Pa
-  T_scale = EOS%C_to_degC
-  S_scale = EOS%S_to_ppt
-  select case (EOS%form_of_EOS)
-    case (EOS_LINEAR)
-      call calculate_density_second_derivs_linear(T_scale*T, S_scale*S, p_scale*pressure, &
-                                                  d2RdSS, d2RdST, d2RdTT, d2RdSp, d2RdTP)
-    case (EOS_WRIGHT)
-      if (EOS%use_Wright_2nd_deriv_bug) then
-        call calc_density_second_derivs_wright_buggy(T_scale*T, S_scale*S, p_scale*pressure, &
-                                                  d2RdSS, d2RdST, d2RdTT, d2RdSp, d2RdTP)
-      else
-        call calculate_density_second_derivs_wright(T_scale*T, S_scale*S, p_scale*pressure, &
-                                                  d2RdSS, d2RdST, d2RdTT, d2RdSp, d2RdTP)
-      endif
-    case (EOS_WRIGHT_FULL)
-      call calculate_density_second_derivs_wright_full(T_scale*T, S_scale*S, p_scale*pressure, &
-                                                  d2RdSS, d2RdST, d2RdTT, d2RdSp, d2RdTP)
-    case (EOS_WRIGHT_RED)
-      call calculate_density_second_derivs_wright_red(T_scale*T, S_scale*S, p_scale*pressure, &
-                                                  d2RdSS, d2RdST, d2RdTT, d2RdSp, d2RdTP)
-    case (EOS_UNESCO)
-      call calculate_density_second_derivs_UNESCO(T_scale*T, S_scale*S, p_scale*pressure, &
-                                                  d2RdSS, d2RdST, d2RdTT, d2RdSp, d2RdTP)
-    case (EOS_ROQUET_RHO)
-      call calculate_density_second_derivs_Roquet_rho(T_scale*T, S_scale*S, p_scale*pressure, &
-                                                  d2RdSS, d2RdST, d2RdTT, d2RdSp, d2RdTP)
-    case (EOS_ROQUET_SPV)
-      call calculate_density_second_derivs_Roquet_SpV(T_scale*T, S_scale*S, p_scale*pressure, &
-                                                  d2RdSS, d2RdST, d2RdTT, d2RdSp, d2RdTP)
-    case (EOS_TEOS10)
-      call calculate_density_second_derivs_teos10(T_scale*T, S_scale*S, p_scale*pressure, &
-                                                  d2RdSS, d2RdST, d2RdTT, d2RdSp, d2RdTP)
-    case (EOS_JACKETT06)
-      call calculate_density_second_derivs_Jackett06(T_scale*T, S_scale*S, p_scale*pressure, &
-                                                  d2RdSS, d2RdST, d2RdTT, d2RdSp, d2RdTP)
-    case default
-      call MOM_error(FATAL, "calculate_stanley_density_scalar: EOS is not valid.")
-  end select
+  call calculate_density_second_derivs_scalar(T, S, pressure, d2RdSS, d2RdST, d2RdTT, d2RdSp, d2RdTP, EOS)
 
   ! Equation 25 of Stanley et al., 2020.
-  rho = rho + EOS%kg_m3_to_R * ( 0.5 * (T_scale**2 * d2RdTT) * Tvar + &
-                 ( (S_scale*T_scale * d2RdST) * TScov + 0.5 * (S_scale**2 * d2RdSS) * Svar ) )
+  rho = rho + ( 0.5 * d2RdTT * Tvar + ( d2RdST * TScov + 0.5 * d2RdSS * Svar ) )
 
   if (present(scale)) rho = rho * scale
 
@@ -366,93 +321,6 @@ subroutine calculate_density_array(T, S, pressure, rho, start, npts, EOS, rho_re
   enddo ; endif ; endif
 
 end subroutine calculate_density_array
-
-!> Calls the appropriate subroutine to calculate the density of sea water for 1-D array inputs
-!! including the variance of T, S and covariance of T-S.
-!! The calculation uses only the second order correction in a series as discussed
-!! in Stanley et al., 2020.
-!! If rho_ref is present, the anomaly with respect to rho_ref is returned.
-subroutine calculate_stanley_density_array(T, S, pressure, Tvar, TScov, Svar, rho, start, npts, EOS, rho_ref, scale)
-  real, dimension(:), intent(in)    :: T        !< Potential temperature referenced to the surface [degC]
-  real, dimension(:), intent(in)    :: S        !< Salinity [ppt]
-  real, dimension(:), intent(in)    :: pressure !< Pressure [Pa]
-  real, dimension(:), intent(in)    :: Tvar     !< Variance of potential temperature referenced to the surface [degC2]
-  real, dimension(:), intent(in)    :: TScov    !< Covariance of potential temperature and salinity [degC ppt]
-  real, dimension(:), intent(in)    :: Svar     !< Variance of salinity [ppt2]
-  real, dimension(:), intent(inout) :: rho      !< Density (in-situ if pressure is local) [kg m-3]
-  integer,            intent(in)    :: start    !< Start index for computation
-  integer,            intent(in)    :: npts     !< Number of point to compute
-  type(EOS_type),     intent(in)    :: EOS      !< Equation of state structure
-  real,     optional, intent(in)    :: rho_ref  !< A reference density [kg m-3].
-  real,     optional, intent(in)    :: scale    !< A multiplicative factor by which to scale the output
-                                                !! density, perhaps to other units than kg m-3 [various]
-  ! Local variables
-  real, dimension(size(T)) :: &
-    d2RdTT, &   ! Second derivative of density with temperature [kg m-3 degC-2]
-    d2RdST, &   ! Second derivative of density with temperature and salinity [kg m-3 degC-1 ppt-1]
-    d2RdSS, &   ! Second derivative of density with salinity [kg m-3 ppt-2]
-    d2RdSp, &   ! Second derivative of density with salinity and pressure [kg m-3 ppt-1 Pa-1]
-    d2RdTp      ! Second derivative of density with temperature and pressure [kg m-3 degC-1 Pa-1]
-  integer :: j
-
-  select case (EOS%form_of_EOS)
-    case (EOS_LINEAR)
-      call calculate_density_linear(T, S, pressure, rho, start, npts, &
-                                    EOS%Rho_T0_S0, EOS%dRho_dT, EOS%dRho_dS, rho_ref)
-      call calculate_density_second_derivs_linear(T, S, pressure, d2RdSS, d2RdST, &
-                                                  d2RdTT, d2RdSp, d2RdTP, start, npts)
-    case (EOS_WRIGHT)
-      call calculate_density_wright(T, S, pressure, rho, start, npts, rho_ref)
-      if (EOS%use_Wright_2nd_deriv_bug) then
-        call calc_density_second_derivs_wright_buggy(T, S, pressure, d2RdSS, d2RdST, &
-                                                  d2RdTT, d2RdSp, d2RdTP, start, npts)
-      else
-        call calculate_density_second_derivs_wright(T, S, pressure, d2RdSS, d2RdST, &
-                                                  d2RdTT, d2RdSp, d2RdTP, start, npts)
-      endif
-    case (EOS_WRIGHT_FULL)
-      call calculate_density_wright_full(T, S, pressure, rho, start, npts, rho_ref)
-      call calculate_density_second_derivs_wright_full(T, S, pressure, d2RdSS, d2RdST, &
-                                                  d2RdTT, d2RdSp, d2RdTP, start, npts)
-    case (EOS_WRIGHT_RED)
-      call calculate_density_wright_red(T, S, pressure, rho, start, npts, rho_ref)
-      call calculate_density_second_derivs_wright_red(T, S, pressure, d2RdSS, d2RdST, &
-                                                  d2RdTT, d2RdSp, d2RdTP, start, npts)
-    case (EOS_UNESCO)
-      call calculate_density_UNESCO(T, S, pressure, rho, start, npts, rho_ref)
-      call calculate_density_second_derivs_UNESCO(T, S, pressure, d2RdSS, d2RdST, &
-                                                  d2RdTT, d2RdSp, d2RdTP, start, npts)
-    case (EOS_ROQUET_RHO)
-      call calculate_density_Roquet_rho(T, S, pressure, rho, start, npts, rho_ref)
-      call calculate_density_second_derivs_Roquet_rho(T, S, pressure, d2RdSS, d2RdST, &
-                                                  d2RdTT, d2RdSp, d2RdTP, start, npts)
-    case (EOS_ROQUET_SPV)
-      call calculate_density_Roquet_SpV(T, S, pressure, rho, start, npts, rho_ref)
-      call calculate_density_second_derivs_Roquet_SpV(T, S, pressure, d2RdSS, d2RdST, &
-                                                  d2RdTT, d2RdSp, d2RdTP, start, npts)
-    case (EOS_TEOS10)
-      call calculate_density_teos10(T, S, pressure, rho, start, npts, rho_ref)
-      call calculate_density_second_derivs_teos10(T, S, pressure, d2RdSS, d2RdST, &
-                                                  d2RdTT, d2RdSp, d2RdTP, start, npts)
-    case (EOS_JACKETT06)
-      call calculate_density_Jackett06(T, S, pressure, rho, start, npts, rho_ref)
-      call calculate_density_second_derivs_Jackett06(T, S, pressure, d2RdSS, d2RdST, &
-                                                  d2RdTT, d2RdSp, d2RdTP, start, npts)
-    case default
-      call MOM_error(FATAL, "calculate_stanley_density_array: EOS%form_of_EOS is not valid.")
-  end select
-
-  ! Equation 25 of Stanley et al., 2020.
-  do j=start,start+npts-1
-    rho(j) = rho(j) &
-             + ( 0.5 * d2RdTT(j) * Tvar(j) + ( d2RdST(j) * TScov(j) + 0.5 * d2RdSS(j) * Svar(j) ) )
-  enddo
-
-  if (present(scale)) then ; if (scale /= 1.0) then ; do j=start,start+npts-1
-    rho(j) = scale * rho(j)
-  enddo ; endif ; endif
-
-end subroutine calculate_stanley_density_array
 
 !> Calls the appropriate subroutine to calculate the density of sea water for 1-D array inputs,
 !! potentially limiting the domain of indices that are worked on.
@@ -526,21 +394,12 @@ subroutine calculate_stanley_density_1d(T, S, pressure, Tvar, TScov, Svar, rho, 
   real,                  optional, intent(in) :: scale !< A multiplicative factor by which to scale density
                                                    !! in combination with scaling stored in EOS [various]
   ! Local variables
-  real :: rho_scale ! A factor to convert density from kg m-3 to the desired units [R m3 kg-1 ~> 1]
-  real :: T2_scale  ! A factor to convert temperature variance to units of degC2 [degC2 C-2 ~> 1]
-  real :: S2_scale  ! A factor to convert salinity variance to units of ppt2 [ppt2 S-2 ~> 1]
-  real :: TS_scale  ! A factor to convert temperature-salinity covariance to units of
-                    ! degC ppt [degC ppt C-1 S-1 ~> 1]
-  real :: rho_reference ! rho_ref converted to [kg m-3]
-  real, dimension(size(rho)) :: pres  ! Pressure converted to [Pa]
-  real, dimension(size(rho)) :: Ta    ! Temperature converted to [degC]
-  real, dimension(size(rho)) :: Sa    ! Salinity converted to [ppt]
   real, dimension(size(T)) :: &
-    d2RdTT, &   ! Second derivative of density with temperature [kg m-3 degC-2]
-    d2RdST, &   ! Second derivative of density with temperature and salinity [kg m-3 degC-1 ppt-1]
-    d2RdSS, &   ! Second derivative of density with salinity [kg m-3 ppt-2]
-    d2RdSp, &   ! Second derivative of density with salinity and pressure [kg m-3 ppt-1 Pa-1]
-    d2RdTp      ! Second derivative of density with temperature and pressure [kg m-3 degC-1 Pa-1]
+    d2RdTT, &   ! Second derivative of density with temperature [R C-2 ~> kg m-3 degC-2]
+    d2RdST, &   ! Second derivative of density with temperature and salinity [R S-1 C-1 ~> kg m-3 degC-1 ppt-1]
+    d2RdSS, &   ! Second derivative of density with salinity [R S-2 ~> kg m-3 ppt-2]
+    d2RdSp, &   ! Second derivative of density with salinity and pressure [T2 S-1 L-2 ~> kg m-3 ppt-1 Pa-1]
+    d2RdTp      ! Second derivative of density with temperature and pressure [T2 C-1 L-2 ~> kg m-3 degC-1 Pa-1]
   integer :: i, is, ie, npts
 
   if (present(dom)) then
@@ -549,79 +408,17 @@ subroutine calculate_stanley_density_1d(T, S, pressure, Tvar, TScov, Svar, rho, 
     is = 1 ; ie = size(rho) ; npts = 1 + ie - is
   endif
 
-  do i=is,ie
-    pres(i) = EOS%RL2_T2_to_Pa * pressure(i)
-    Ta(i) = EOS%C_to_degC * T(i)
-    Sa(i) = EOS%S_to_ppt * S(i)
-  enddo
-  T2_scale = EOS%C_to_degC**2
-  S2_scale = EOS%S_to_ppt**2
-  TS_scale = EOS%C_to_degC*EOS%S_to_ppt
-
-  ! Rho_ref is seems like it is always present when calculate_Stanley_density is called, so
-  ! always set rho_reference, even though a 0 value can change answers at roundoff with
-  ! some equations of state.
-  rho_reference = 0.0 ; if (present(rho_ref)) rho_reference = EOS%R_to_kg_m3*rho_ref
-
-  select case (EOS%form_of_EOS)
-    case (EOS_LINEAR)
-      call calculate_density_linear(Ta, Sa, pres, rho, is, npts, &
-                                    EOS%Rho_T0_S0, EOS%dRho_dT, EOS%dRho_dS, rho_reference)
-      call calculate_density_second_derivs_linear(Ta, Sa, pres, d2RdSS, d2RdST, &
-                                                  d2RdTT, d2RdSp, d2RdTP, is, npts)
-    case (EOS_WRIGHT)
-      call calculate_density_wright(Ta, Sa, pres, rho, is, npts, rho_reference)
-      if (EOS%use_Wright_2nd_deriv_bug) then
-        call calc_density_second_derivs_wright_buggy(Ta, Sa, pres, d2RdSS, d2RdST, &
-                                                  d2RdTT, d2RdSp, d2RdTP, is, npts)
-      else
-        call calculate_density_second_derivs_wright(Ta, Sa, pres, d2RdSS, d2RdST, &
-                                                  d2RdTT, d2RdSp, d2RdTP, is, npts)
-      endif
-    case (EOS_WRIGHT_FULL)
-      call calculate_density_wright_full(Ta, Sa, pres, rho, is, npts, rho_reference)
-      call calculate_density_second_derivs_wright_full(Ta, Sa, pres, d2RdSS, d2RdST, &
-                                                  d2RdTT, d2RdSp, d2RdTP, is, npts)
-    case (EOS_WRIGHT_RED)
-      call calculate_density_wright_red(Ta, Sa, pres, rho, is, npts, rho_reference)
-      call calculate_density_second_derivs_wright_red(Ta, Sa, pres, d2RdSS, d2RdST, &
-                                                  d2RdTT, d2RdSp, d2RdTP, is, npts)
-    case (EOS_UNESCO)
-      call calculate_density_UNESCO(Ta, Sa, pres, rho, is, npts, rho_reference)
-      call calculate_density_second_derivs_UNESCO(Ta, Sa, pres, d2RdSS, d2RdST, &
-                                                  d2RdTT, d2RdSp, d2RdTP, is, npts)
-    case (EOS_ROQUET_RHO)
-      call calculate_density_Roquet_rho(Ta, Sa, pres, rho, is, npts, rho_reference)
-      call calculate_density_second_derivs_Roquet_rho(Ta, Sa, pres, d2RdSS, d2RdST, &
-                                                  d2RdTT, d2RdSp, d2RdTP, is, npts)
-    case (EOS_ROQUET_SPV)
-      call calculate_density_Roquet_SpV(Ta, Sa, pres, rho, is, npts, rho_reference)
-      call calculate_density_second_derivs_Roquet_SpV(Ta, Sa, pres, d2RdSS, d2RdST, &
-                                                  d2RdTT, d2RdSp, d2RdTP, is, npts)
-    case (EOS_TEOS10)
-      call calculate_density_teos10(Ta, Sa, pres, rho, is, npts, rho_reference)
-      call calculate_density_second_derivs_teos10(Ta, Sa, pres, d2RdSS, d2RdST, &
-                                                  d2RdTT, d2RdSp, d2RdTP, is, npts)
-    case (EOS_JACKETT06)
-      call calculate_density_Jackett06(Ta, Sa, pres, rho, is, npts, rho_reference)
-      call calculate_density_second_derivs_Jackett06(Ta, Sa, pres, d2RdSS, d2RdST, &
-                                                  d2RdTT, d2RdSp, d2RdTP, is, npts)
-    case default
-      call MOM_error(FATAL, "calculate_stanley_density_1d: EOS is not valid.")
-  end select
+  call calculate_density_1d(T, S, pressure, rho, EOS, dom, rho_ref)
+  call calculate_density_second_derivs_1d(T, S, pressure, d2RdSS, d2RdST, d2RdTT, d2RdSp, d2RdTP, EOS, dom)
 
   ! Equation 25 of Stanley et al., 2020.
   do i=is,ie
-    rho(i) = rho(i) + ( 0.5 * (T2_scale * d2RdTT(i)) * Tvar(i) + &
-                        ( (TS_scale * d2RdST(i)) * TScov(i) + &
-                          0.5 * (S2_scale * d2RdSS(i)) * Svar(i) ) )
+    rho(i) = rho(i) + ( 0.5 * d2RdTT(i) * Tvar(i) + ( d2RdST(i) * TScov(i) + 0.5 * d2RdSS(i) * Svar(i) ) )
   enddo
 
-  rho_scale = EOS%kg_m3_to_R
-  if (present(scale)) rho_scale = rho_scale * scale
-  if (rho_scale /= 1.0) then ; do i=is,ie
-    rho(i) = rho_scale * rho(i)
-  enddo ; endif
+  if (present(scale)) then ; if (scale /= 1.0) then ; do i=is,ie
+    rho(i) = scale * rho(i)
+  enddo ; endif ; endif
 
 end subroutine calculate_stanley_density_1d
 
