@@ -171,7 +171,7 @@ type, public :: diabatic_CS ; private
   real    :: MLDdensityDifference    !< Density difference used to determine MLD_user [R ~> kg m-3]
   real    :: dz_subML_N2             !< The distance over which to calculate a diagnostic of the
                                      !! average stratification at the base of the mixed layer [Z ~> m].
-  real    :: MLD_EN_VALS(3)          !< Energy values for energy mixed layer diagnostics [R Z L2 T-2 ~> J m-2]
+  real    :: MLD_En_vals(3)          !< Energy values for energy mixed layer diagnostics [R Z3 T-2 ~> J m-2]
 
   !>@{ Diagnostic IDs
   integer :: id_cg1      = -1                 ! diagnostic handle for mode-1 speed
@@ -500,7 +500,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
   endif
   if ((CS%id_MLD_EN1 > 0) .or. (CS%id_MLD_EN2 > 0) .or. (CS%id_MLD_EN3 > 0)) then
     call diagnoseMLDbyEnergy((/CS%id_MLD_EN1, CS%id_MLD_EN2, CS%id_MLD_EN3/),&
-                             h, tv, G, GV, US, CS%MLD_EN_VALS, CS%diag)
+                             h, tv, G, GV, US, CS%MLD_En_vals, CS%diag)
   endif
   if (CS%use_int_tides) then
     if (CS%id_cg1 > 0) call post_data(CS%id_cg1, cn_IGW(:,:,1),CS%diag)
@@ -3184,22 +3184,22 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
   if (use_temperature) then
     CS%id_Tdif = register_diag_field('ocean_model',"Tflx_dia_diff", diag%axesTi, &
         Time, "Diffusive diapycnal temperature flux across interfaces", &
-        "degC m s-1", conversion=US%C_to_degC*GV%H_to_m*US%s_to_T)
+        units="degC m s-1", conversion=US%C_to_degC*GV%H_to_m*US%s_to_T)
     if (.not.CS%useALEalgorithm) then
       CS%id_Tadv = register_diag_field('ocean_model',"Tflx_dia_adv", diag%axesTi, &
           Time, "Advective diapycnal temperature flux across interfaces", &
-          "degC m s-1", conversion=US%C_to_degC*GV%H_to_m*US%s_to_T)
+          units="degC m s-1", conversion=US%C_to_degC*GV%H_to_m*US%s_to_T)
     endif
     CS%id_Sdif = register_diag_field('ocean_model',"Sflx_dia_diff", diag%axesTi, &
         Time, "Diffusive diapycnal salnity flux across interfaces", &
-        "psu m s-1", conversion=US%S_to_ppt*GV%H_to_m*US%s_to_T)
+        units="psu m s-1", conversion=US%S_to_ppt*GV%H_to_m*US%s_to_T)
     if (.not.CS%useALEalgorithm) then
       CS%id_Sadv = register_diag_field('ocean_model',"Sflx_dia_adv", diag%axesTi, &
           Time, "Advective diapycnal salnity flux across interfaces", &
-          "psu m s-1", conversion=US%S_to_ppt*GV%H_to_m*US%s_to_T)
+          units="psu m s-1", conversion=US%S_to_ppt*GV%H_to_m*US%s_to_T)
     endif
     CS%id_MLD_003 = register_diag_field('ocean_model', 'MLD_003', diag%axesT1, Time, &
-        'Mixed layer depth (delta rho = 0.03)', 'm', conversion=US%Z_to_m, &
+        'Mixed layer depth (delta rho = 0.03)', units='m', conversion=US%Z_to_m, &
         cmor_field_name='mlotst', cmor_long_name='Ocean Mixed Layer Thickness Defined by Sigma T', &
         cmor_standard_name='ocean_mixed_layer_thickness_defined_by_sigma_t')
     CS%id_mlotstsq = register_diag_field('ocean_model', 'mlotstsq', diag%axesT1, Time, &
@@ -3208,31 +3208,31 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
         units='m2', conversion=US%Z_to_m**2)
     CS%id_MLD_0125 = register_diag_field('ocean_model', 'MLD_0125', diag%axesT1, Time, &
         'Mixed layer depth (delta rho = 0.125)', 'm', conversion=US%Z_to_m)
-    call get_param(param_file, mdl, "MLD_EN_VALS", CS%MLD_EN_VALS, &
+    call get_param(param_file, mdl, "MLD_EN_VALS", CS%MLD_En_vals, &
          "The energy values used to compute MLDs.  If not set (or all set to 0.), the "//&
-         "default will overwrite to 25., 2500., 250000.",units='J/m2', default=0., &
-         scale=US%kg_m3_to_R*US%m_to_Z**3*US%T_to_s**2)
-    if ((CS%MLD_EN_VALS(1)==0.).and.(CS%MLD_EN_VALS(2)==0.).and.(CS%MLD_EN_VALS(3)==0.)) then
-      CS%MLD_EN_VALS = (/25.*US%kg_m3_to_R*US%m_to_Z*US%m_to_L**2*US%T_to_s**2,&
-           2500.*US%kg_m3_to_R*US%m_to_Z*US%m_to_L**2*US%T_to_s**2,&
-           250000.*US%kg_m3_to_R*US%m_to_Z*US%m_to_L**2*US%T_to_s**2/)
+         "default will overwrite to 25., 2500., 250000.", &
+         units='J/m2', default=0., scale=US%W_m2_to_RZ3_T3*US%s_to_T)
+    if ((CS%MLD_En_vals(1)==0.).and.(CS%MLD_En_vals(2)==0.).and.(CS%MLD_En_vals(3)==0.)) then
+      CS%MLD_En_vals = (/ 25.*US%W_m2_to_RZ3_T3*US%s_to_T, &
+                        2500.*US%W_m2_to_RZ3_T3*US%s_to_T, &
+                      250000.*US%W_m2_to_RZ3_T3*US%s_to_T /)
     endif
-    write(EN1,'(F10.2)') CS%MLD_EN_VALS(1)*US%R_to_kg_m3*US%Z_to_m*US%L_to_m**2*US%s_to_T**2
-    write(EN2,'(F10.2)') CS%MLD_EN_VALS(2)*US%R_to_kg_m3*US%Z_to_m*US%L_to_m**2*US%s_to_T**2
-    write(EN3,'(F10.2)') CS%MLD_EN_VALS(3)*US%R_to_kg_m3*US%Z_to_m*US%L_to_m**2*US%s_to_T**2
+    write(EN1,'(F10.2)') CS%MLD_En_vals(1)*US%RZ3_T3_to_W_m2*US%T_to_s
+    write(EN2,'(F10.2)') CS%MLD_En_vals(2)*US%RZ3_T3_to_W_m2*US%T_to_s
+    write(EN3,'(F10.2)') CS%MLD_En_vals(3)*US%RZ3_T3_to_W_m2*US%T_to_s
     CS%id_MLD_EN1 = register_diag_field('ocean_model', 'MLD_EN1', diag%axesT1, Time, &
          'Mixed layer depth for energy value set to '//trim(EN1)//' J/m2 (Energy set by 1st MLD_EN_VALS)', &
-         'm', conversion=US%Z_to_m)
+         units='m', conversion=US%Z_to_m)
     CS%id_MLD_EN2 = register_diag_field('ocean_model', 'MLD_EN2', diag%axesT1, Time, &
          'Mixed layer depth for energy value set to '//trim(EN2)//' J/m2 (Energy set by 2nd MLD_EN_VALS)', &
-         'm', conversion=US%Z_to_m)
+         units='m', conversion=US%Z_to_m)
     CS%id_MLD_EN3 = register_diag_field('ocean_model', 'MLD_EN3', diag%axesT1, Time, &
          'Mixed layer depth for energy value set to '//trim(EN3)//' J/m2 (Energy set by 3rd MLD_EN_VALS)', &
-         'm', conversion=US%Z_to_m)
+         units='m', conversion=US%Z_to_m)
     CS%id_subMLN2  = register_diag_field('ocean_model', 'subML_N2', diag%axesT1, Time, &
-        'Squared buoyancy frequency below mixed layer', 's-2', conversion=US%s_to_T**2)
+        'Squared buoyancy frequency below mixed layer', units='s-2', conversion=US%s_to_T**2)
     CS%id_MLD_user = register_diag_field('ocean_model', 'MLD_user', diag%axesT1, Time, &
-        'Mixed layer depth (used defined)', 'm', conversion=US%Z_to_m)
+        'Mixed layer depth (used defined)', units='m', conversion=US%Z_to_m)
   endif
   call get_param(param_file, mdl, "DIAG_MLD_DENSITY_DIFF", CS%MLDdensityDifference, &
                  "The density difference used to determine a diagnostic mixed "//&
