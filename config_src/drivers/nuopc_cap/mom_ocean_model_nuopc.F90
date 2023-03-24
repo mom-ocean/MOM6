@@ -41,7 +41,7 @@ use MOM_time_manager,        only : operator(+), operator(-), operator(*), opera
 use MOM_time_manager,        only : operator(/=), operator(<=), operator(>=)
 use MOM_time_manager,        only : operator(<), real_to_time_type, time_type_to_real
 use MOM_interpolate,         only : time_interp_external_init
-use MOM_tracer_flow_control, only : call_tracer_flux_init
+use MOM_tracer_flow_control, only : tracer_flow_control_CS, call_tracer_flux_init, call_tracer_set_forcing
 use MOM_unit_scaling,        only : unit_scale_type
 use MOM_variables,           only : surface
 use MOM_verticalGrid,        only : verticalGrid_type
@@ -210,6 +210,8 @@ type, public :: ocean_state_type ; private
   type(marine_ice_CS), pointer :: &
     marine_ice_CSp => NULL()  !< A pointer to the control structure for the
                               !! marine ice effects module.
+  type(tracer_flow_control_CS), pointer :: &
+    tracer_flow_CSp => NULL()  !< A pointer to the tracer flow control structure
   type(wave_parameters_CS), pointer, public :: &
     Waves => NULL()           !< A pointer to the surface wave control structure
   type(surface_forcing_CS), pointer :: &
@@ -255,7 +257,6 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn, i
                       !! min(HFrz, OBLD), where OBLD is the boundary layer depth.
                       !! If HFrz <= 0 (default), melt potential will not be computed.
   logical :: use_melt_pot !< If true, allocate melt_potential array
-  logical :: use_CFC  !< If true, allocated arrays for surface CFCs.
 
 
 ! This include declares and sets the variable "version".
@@ -283,7 +284,8 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn, i
   call initialize_MOM(OS%Time, Time_init, param_file, OS%dirs, OS%MOM_CSp, &
                       OS%restart_CSp, Time_in, offline_tracer_mode=OS%offline_tracer_mode, &
                       input_restart_file=input_restart_file, &
-                      diag_ptr=OS%diag, count_calls=.true., waves_CSp=OS%Waves)
+                      diag_ptr=OS%diag, count_calls=.true., tracer_flow_CSp=OS%tracer_flow_CSp, &
+                      waves_CSp=OS%Waves)
   call get_MOM_state_elements(OS%MOM_CSp, G=OS%grid, GV=OS%GV, US=OS%US, C_p=OS%C_p, &
                               C_p_scaled=OS%fluxes%C_p, use_temp=use_temperature)
 
@@ -375,8 +377,6 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn, i
     use_melt_pot=.false.
   endif
 
-  call get_param(param_file, mdl, "USE_CFC_CAP", use_CFC, &
-                 default=.false., do_not_log=.true.)
   call get_param(param_file, mdl, "USE_WAVES", OS%Use_Waves, &
        "If true, enables surface wave modules.", default=.false.)
 
@@ -384,7 +384,7 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn, i
   ! vertical integrals, since the related 3-d sums are not negligible in cost.
   call allocate_surface_state(OS%sfc_state, OS%grid, use_temperature, &
                               do_integrals=.true., gas_fields_ocn=gas_fields_ocn, &
-                              use_meltpot=use_melt_pot, use_cfcs=use_CFC)
+                              use_meltpot=use_melt_pot)
 
   call surface_forcing_init(Time_in, OS%grid, OS%US, param_file, OS%diag, &
                             OS%forcing_CSp, OS%restore_salinity, OS%restore_temp, OS%use_waves)
@@ -609,6 +609,11 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
   if (OS%nstep==0) then
     call finish_MOM_initialization(OS%Time, OS%dirs, OS%MOM_CSp, OS%restart_CSp)
   endif
+
+  if (do_thermo) &
+    call call_tracer_set_forcing(OS%sfc_state, OS%fluxes, OS%Time, &
+                                 real_to_time_type(dt_coupling), OS%grid, OS%US, OS%GV%Rho0, &
+                                 OS%tracer_flow_CSp)
 
   call disable_averaging(OS%diag)
   Master_time = OS%Time ; Time1 = OS%Time
