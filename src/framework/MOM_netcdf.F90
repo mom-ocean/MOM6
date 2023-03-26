@@ -665,6 +665,9 @@ subroutine get_netcdf_fields(handle, axes, fields)
   call check_netcdf_call(rc, 'get_netcdf_fields', &
       'File "' // trim(handle%filename) // '"')
 
+  ! Initialize unlim_index with an unreachable value (outside [1,ndims])
+  unlim_index = -1
+
   allocate(axes(ndims))
   do i = 1, ndims
     rc = nf90_inquire_dimension(handle%ncid, dimids(i), name=label, len=len)

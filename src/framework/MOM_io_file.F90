@@ -1681,15 +1681,18 @@ subroutine read_field_chksum_nc(handle, field, chksum, valid_chksum)
 end subroutine read_field_chksum_nc
 
 
-!> Read the values of a netCDF field
+!> Read the values of a netCDF field into an array that might have halos
 subroutine get_field_nc(handle, label, values, rescale)
   class(MOM_netcdf_file), intent(in) :: handle
-    ! Handle of netCDF file to be read
+    !< Handle of netCDF file to be read
   character(len=*), intent(in) :: label
-    ! Field variable name
-  real, intent(out) :: values(:,:)
-    ! Field values read from file
+    !< Field variable name
+  real, intent(inout) :: values(:,:)
+    !< Field values read from the file.  It would be intent(out) but for the
+    !! need to preserve any initialized values in the halo regions.
   real, optional, intent(in) :: rescale
+    !< A multiplicative rescaling factor for the values that are read.
+    !! Omitting this is the same as setting it to 1.
 
   logical :: data_domain
     ! True if values matches the data domain size
@@ -1701,10 +1704,12 @@ subroutine get_field_nc(handle, label, values, rescale)
     ! Index bounds of compute domain
   integer :: isd, ied, jsd, jed
     ! Index bounds of data domain
+  integer :: iscl, iecl, jscl, jecl
+    ! Local 1-based index bounds of compute domain
   integer :: bounds(2,2)
     ! Index bounds of domain
-  real, allocatable :: values_nc(:,:)
-    ! Local copy of field, used for data-decomposed I/O
+  real, allocatable :: values_c(:,:)
+    ! Field values on the compute domain, used for copying to a data domain
 
   isc = handle%HI%isc
   iec = handle%HI%iec
@@ -1727,36 +1732,45 @@ subroutine get_field_nc(handle, label, values, rescale)
 
   field_nc = handle%fields%get(label)
 
-  if (data_domain) then
-    allocate(values_nc(isc:iec,jsc:jec))
-    values(:,:) = 0.
-  endif
+  if (data_domain) &
+    allocate(values_c(1:iec-isc+1,1:jec-jsc+1))
 
   if (handle%domain_decomposed) then
     bounds(1,:) = [isc, jsc] + [handle%HI%idg_offset, handle%HI%jdg_offset]
     bounds(2,:) = [iec, jec] + [handle%HI%idg_offset, handle%HI%jdg_offset]
     if (data_domain) then
-      call read_netcdf_field(handle%handle_nc, field_nc, values_nc, bounds=bounds)
+      call read_netcdf_field(handle%handle_nc, field_nc, values_c, bounds=bounds)
     else
       call read_netcdf_field(handle%handle_nc, field_nc, values, bounds=bounds)
     endif
   else
     if (data_domain) then
-      call read_netcdf_field(handle%handle_nc, field_nc, values_nc)
+      call read_netcdf_field(handle%handle_nc, field_nc, values_c)
     else
       call read_netcdf_field(handle%handle_nc, field_nc, values)
     endif
   endif
 
-  if (data_domain) &
-    values(isc:iec,jsc:jec) = values_nc(:,:)
+  if (data_domain) then
+    iscl = isc - isd + 1
+    iecl = iec - isd + 1
+    jscl = jsc - jsd + 1
+    jecl = jec - jsd + 1
+
+    values(iscl:iecl,jscl:jecl) = values_c(:,:)
+  else
+    iscl = 1
+    iecl = iec - isc + 1
+    jscl = 1
+    jecl = jec - jsc + 1
+  endif
 
   ! NOTE: It is more efficient to do the rescale in-place while copying
-  ! values_nc(:,:) to values(:,:).  But since rescale is only present for
+  ! values_c(:,:) to values(:,:).  But since rescale is only present for
   ! debugging, we can probably disregard this impact on performance.
   if (present(rescale)) then
     if (rescale /= 1.0) then
-      values(isc:iec,jsc:jec) = rescale * values(isc:iec,jsc:jec)
+      values(iscl:iecl,jscl:jecl) = rescale * values(iscl:iecl,jscl:jecl)
     endif
   endif
 end subroutine get_field_nc
