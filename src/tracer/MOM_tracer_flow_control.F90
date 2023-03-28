@@ -45,7 +45,7 @@ use MOM_OCMIP2_CFC, only : register_OCMIP2_CFC, initialize_OCMIP2_CFC, flux_init
 use MOM_OCMIP2_CFC, only : OCMIP2_CFC_column_physics, OCMIP2_CFC_surface_state
 use MOM_OCMIP2_CFC, only : OCMIP2_CFC_stock, OCMIP2_CFC_end, OCMIP2_CFC_CS
 use MOM_CFC_cap, only : register_CFC_cap, initialize_CFC_cap
-use MOM_CFC_cap, only : CFC_cap_column_physics, CFC_cap_surface_state
+use MOM_CFC_cap, only : CFC_cap_column_physics, CFC_cap_set_forcing
 use MOM_CFC_cap, only : CFC_cap_stock, CFC_cap_end, CFC_cap_CS
 use oil_tracer, only : register_oil_tracer, initialize_oil_tracer
 use oil_tracer, only : oil_tracer_column_physics, oil_tracer_surface_state
@@ -379,7 +379,7 @@ end subroutine get_chl_from_model
 
 !> This subroutine calls the individual tracer modules' subroutines to
 !! specify or read quantities related to their surface forcing.
-subroutine call_tracer_set_forcing(sfc_state, fluxes, day_start, day_interval, G, CS)
+subroutine call_tracer_set_forcing(sfc_state, fluxes, day_start, day_interval, G, US, Rho0, CS)
 
   type(surface),                intent(inout) :: sfc_state !< A structure containing fields that
                                                            !! describe the surface state of the
@@ -391,6 +391,8 @@ subroutine call_tracer_set_forcing(sfc_state, fluxes, day_start, day_interval, G
   type(time_type),              intent(in)    :: day_interval !< Length of time over which these
                                                            !! fluxes will be applied.
   type(ocean_grid_type),        intent(in)    :: G         !< The ocean's grid structure.
+  type(unit_scale_type),        intent(in)    :: US        !< A dimensional unit scaling type
+  real,                         intent(in)    :: Rho0      !< The mean ocean density [R ~> kg m-3]
   type(tracer_flow_control_CS), pointer       :: CS        !< The control structure returned by a
                                                            !! previous call to call_tracer_register.
 
@@ -399,6 +401,9 @@ subroutine call_tracer_set_forcing(sfc_state, fluxes, day_start, day_interval, G
 !  if (CS%use_ideal_age) &
 !    call ideal_age_tracer_set_forcing(sfc_state, fluxes, day_start, day_interval, &
 !                                      G, CS%ideal_age_tracer_CSp)
+  if (CS%use_CFC_cap) &
+    call CFC_cap_set_forcing(sfc_state, fluxes, day_start, day_interval, G, US, Rho0, &
+                             CS%CFC_cap_CSp)
 
 end subroutine call_tracer_set_forcing
 
@@ -821,8 +826,6 @@ subroutine call_tracer_surface_state(sfc_state, h, G, GV, US, CS)
     call advection_test_tracer_surface_state(sfc_state, h, G, GV, CS%advection_test_tracer_CSp)
   if (CS%use_OCMIP2_CFC) &
     call OCMIP2_CFC_surface_state(sfc_state, h, G, GV, US, CS%OCMIP2_CFC_CSp)
-  if (CS%use_CFC_cap) &
-    call CFC_cap_surface_state(sfc_state, G, CS%CFC_cap_CSp)
   if (CS%use_MOM_generic_tracer) &
     call MOM_generic_tracer_surface_state(sfc_state, h, G, GV, CS%MOM_generic_tracer_CSp)
 
