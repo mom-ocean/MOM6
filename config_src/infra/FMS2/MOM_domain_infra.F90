@@ -23,7 +23,7 @@ use mpp_domains_mod, only : CYCLIC_GLOBAL_DOMAIN, FOLD_NORTH_EDGE
 use mpp_domains_mod, only : To_East => WUPDATE, To_West => EUPDATE, Omit_Corners => EDGEUPDATE
 use mpp_domains_mod, only : To_North => SUPDATE, To_South => NUPDATE
 use mpp_domains_mod, only : CENTER, CORNER, NORTH_FACE => NORTH, EAST_FACE => EAST
-use fms_io_mod,      only : file_exist, parse_mask_table
+use fms_io_utils_mod, only : file_exists, parse_mask_table
 use fms_affinity_mod, only : fms_affinity_init, fms_affinity_set, fms_affinity_get
 
 ! This subroutine is not in MOM6/src but may be required by legacy drivers
@@ -1390,7 +1390,7 @@ subroutine create_MOM_domain(MOM_dom, n_global, n_halo, reentrant, tripolar_N, l
   endif
 
   if (present(mask_table)) then
-    mask_table_exists = file_exist(mask_table)
+    mask_table_exists = file_exists(mask_table)
     if (mask_table_exists) then
       allocate(MOM_dom%maskmap(layout(1), layout(2)))
       call parse_mask_table(mask_table, MOM_dom%maskmap, MOM_dom%name)
