@@ -765,13 +765,13 @@ function num_timelevels(filename, varname, min_dims) result(n_time)
 
   call get_var_sizes(filename, varname, ndims, sizes, match_case=.false., caller="num_timelevels")
 
-  n_time = sizes(ndims)
+  if (ndims > 0) n_time = sizes(ndims)
 
   if (present(min_dims)) then
     if (ndims < min_dims-1) then
       write(msg, '(I3)') min_dims
       call MOM_error(WARNING, "num_timelevels: variable "//trim(varname)//" in file "//&
-        trim(filename)//" has fewer than min_dims = "//trim(msg)//" dimensions.")
+          trim(filename)//" has fewer than min_dims = "//trim(msg)//" dimensions.")
       n_time = -1
     elseif (ndims == min_dims - 1) then
       n_time = 0
@@ -861,12 +861,18 @@ subroutine read_var_sizes(filename, varname, ndims, sizes, match_case, caller, d
     ncid = ncid_in
   else
     call open_file_to_read(filename, ncid, success=success)
-    if (.not.success) return
+    if (.not.success) then
+      call MOM_error(WARNING, "Unsuccessfully attempted to open file "//trim(filename))
+      return
+    endif
   endif
 
   ! Get the dimension sizes of the variable varname.
   call get_varid(varname, ncid, filename, varid, match_case=match_case, found=found)
-  if (.not.found) return
+  if (.not.found) then
+    call MOM_error(WARNING, "Could not find variable "//trim(varname)//" in file "//trim(filename))
+    return
+  endif
 
   status = NF90_inquire_variable(ncid, varid, ndims=ndims)
   if (status /= NF90_NOERR) then
