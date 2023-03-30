@@ -102,7 +102,7 @@ subroutine get_MOM_input(param_file, dirs, check_params, default_input_filename,
       if (len_trim(trim(parameter_filename(io))) > 0) then
         if (present(ensemble_num)) then
           call open_param_file(ensembler(parameter_filename(io),ensemble_num), param_file, &
-               check_params, doc_file_dir=output_dir)
+               check_params, doc_file_dir=output_dir, ensemble_num=ensemble_num)
         else
           call open_param_file(ensembler(parameter_filename(io)), param_file, &
                check_params, doc_file_dir=output_dir)
