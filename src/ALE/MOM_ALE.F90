@@ -1456,7 +1456,7 @@ subroutine ALE_writeCoordinateFile( CS, GV, directory )
 
   character(len=240) :: filepath
 
-  filepath = trim(directory) // trim("Vertical_coordinate")
+  filepath = trim(directory) // trim("Vertical_coordinate.nc")
 
   call write_regrid_file(CS%regridCS, GV, filepath)
 
