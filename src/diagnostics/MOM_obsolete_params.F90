@@ -99,6 +99,8 @@ subroutine find_obsolete_params(param_file)
   ! This parameter is on the to-do list to be obsoleted.
   ! call obsolete_logical(param_file, "NEW_SPONGES", hint="Use INTERPOLATE_SPONGE_TIME_SPACE instead.")
 
+  call obsolete_logical(param_file, "SMOOTH_RI", hint="Instead use N_SMOOTH_RI.")
+
   ! Write the file version number to the model log.
   call log_version(param_file, mdl, version)
 

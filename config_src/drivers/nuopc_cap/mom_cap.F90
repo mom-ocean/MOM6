@@ -1713,10 +1713,10 @@ subroutine ModelAdvance(gcomp, rc)
           close(writeunit)
         endif
       else  ! not cesm_coupled
-         write(restartname,'(i4.4,2(i2.2),A,3(i2.2),A)') year, month, day,".", hour, minute, seconds, &
-              ".MOM.res"
-         write(stoch_restartname,'(i4.4,2(i2.2),A,3(i2.2),A)') year, month, day,".", hour, minute, seconds, &
-              ".ocn_stoch.res.nc"
+        write(restartname,'(i4.4,2(i2.2),A,3(i2.2),A)') year, month, day,".", hour, minute, seconds, &
+             ".MOM.res"
+        write(stoch_restartname,'(i4.4,2(i2.2),A,3(i2.2),A)') year, month, day,".", hour, minute, seconds, &
+             ".ocn_stoch.res.nc"
         call ESMF_LogWrite("MOM_cap: Writing restart :  "//trim(restartname), ESMF_LOGMSG_INFO)
 
         ! write restart file(s)
