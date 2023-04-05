@@ -188,7 +188,7 @@ interface
 
   !> C interface to POSIX siglongjmp()
   !! Users should use the Fortran-defined siglongjmp() function.
-  subroutine siglongjmp_posix(env, val) bind(c, name="longjmp")
+  subroutine siglongjmp_posix(env, val) bind(c, name="siglongjmp")
     ! #include <setjmp.h>
     ! int siglongjmp(jmp_buf env, int val);
     import :: sigjmp_buf, c_int
@@ -360,6 +360,9 @@ function sigsetjmp_missing(env, savesigs) result(rc) bind(c)
   print '(a)', 'ERROR: sigsetjmp() is not implemented in this build.'
   print '(a)', 'Recompile with autoconf or -DSIGSETJMP_NAME=\"<symbol name>\".'
   error stop
+
+  ! NOTE: Compilers may expect a return value, even if it is unreachable
+  rc = -1
 end function sigsetjmp_missing
 
 end module posix
