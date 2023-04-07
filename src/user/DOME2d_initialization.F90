@@ -98,7 +98,7 @@ subroutine DOME2d_initialize_thickness ( h, depth_tot, G, GV, US, param_file, ju
   type(verticalGrid_type), intent(in)  :: GV !< Vertical grid structure
   type(unit_scale_type),   intent(in)  :: US !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
-                           intent(out) :: h           !< The thickness that is being initialized [H ~> m or kg m-2].
+                           intent(out) :: h           !< The thickness that is being initialized [Z ~> m]
   real, dimension(SZI_(G),SZJ_(G)), &
                            intent(in)  :: depth_tot   !< The nominal total depth of the ocean [Z ~> m]
   type(param_file_type),   intent(in)  :: param_file  !< A structure indicating the open file
@@ -158,16 +158,16 @@ subroutine DOME2d_initialize_thickness ( h, depth_tot, G, GV, US, param_file, ju
           eta1D(k) = e0(k)
           if (eta1D(k) < (eta1D(k+1) + GV%Angstrom_Z)) then
             eta1D(k) = eta1D(k+1) + GV%Angstrom_Z
-            h(i,j,k) = GV%Angstrom_H
+            h(i,j,k) = GV%Angstrom_Z
           else
-            h(i,j,k) = GV%Z_to_H * (eta1D(k) - eta1D(k+1))
+            h(i,j,k) = eta1D(k) - eta1D(k+1)
           endif
         enddo
 
         x = ( G%geoLonT(i,j) - G%west_lon ) / G%len_lon
         if ( x <= dome2d_width_bay ) then
-          h(i,j,1:nz-1) = GV%Angstrom_H
-          h(i,j,nz) = GV%Z_to_H * dome2d_depth_bay * G%max_depth - (nz-1) * GV%Angstrom_H
+          h(i,j,1:nz-1) = GV%Angstrom_Z
+          h(i,j,nz) = dome2d_depth_bay * G%max_depth - (nz-1) * GV%Angstrom_Z
         endif
 
       enddo ; enddo
@@ -180,16 +180,16 @@ subroutine DOME2d_initialize_thickness ( h, depth_tot, G, GV, US, param_file, ju
  !         eta1D(k) = e0(k)
  !         if (eta1D(k) < (eta1D(k+1) + min_thickness)) then
  !           eta1D(k) = eta1D(k+1) + min_thickness
- !           h(i,j,k) = GV%Z_to_H * min_thickness
+ !           h(i,j,k) = min_thickness
  !         else
- !           h(i,j,k) = GV%Z_to_H * (eta1D(k) - eta1D(k+1))
+ !           h(i,j,k) = eta1D(k) - eta1D(k+1)
  !         endif
  !       enddo
  !
  !       x = G%geoLonT(i,j) / G%len_lon
  !       if ( x <= dome2d_width_bay ) then
- !         h(i,j,1:nz-1) = GV%Z_to_H * min_thickness
- !         h(i,j,nz) = GV%Z_to_H * (dome2d_depth_bay * G%max_depth - (nz-1) * min_thickness)
+ !         h(i,j,1:nz-1) = min_thickness
+ !         h(i,j,nz) = dome2d_depth_bay * G%max_depth - (nz-1) * min_thickness
  !       endif
  !
  !    enddo ; enddo
@@ -202,16 +202,16 @@ subroutine DOME2d_initialize_thickness ( h, depth_tot, G, GV, US, param_file, ju
           eta1D(k) = e0(k)
           if (eta1D(k) < (eta1D(k+1) + min_thickness)) then
             eta1D(k) = eta1D(k+1) + min_thickness
-            h(i,j,k) = GV%Z_to_H * min_thickness
+            h(i,j,k) = min_thickness
           else
-            h(i,j,k) = GV%Z_to_H * (eta1D(k) - eta1D(k+1))
+            h(i,j,k) = eta1D(k) - eta1D(k+1)
           endif
         enddo
       enddo ; enddo
 
     case ( REGRIDDING_SIGMA )
       do j=js,je ; do i=is,ie
-        h(i,j,:) = GV%Z_to_H*depth_tot(i,j) / nz
+        h(i,j,:) = depth_tot(i,j) / nz
       enddo ; enddo
 
     case default
@@ -225,11 +225,11 @@ end subroutine DOME2d_initialize_thickness
 
 !> Initialize temperature and salinity in the 2d DOME configuration
 subroutine DOME2d_initialize_temperature_salinity ( T, S, h, G, GV, US, param_file, just_read)
-  type(ocean_grid_type),                     intent(in)  :: G !< Ocean grid structure
+  type(ocean_grid_type),                     intent(in)  :: G  !< Ocean grid structure
   type(verticalGrid_type),                   intent(in)  :: GV !< The ocean's vertical grid structure.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: T !< Potential temperature [C ~> degC]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: S !< Salinity [S ~> ppt]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)  :: h !< Layer thickness [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: T  !< Potential temperature [C ~> degC]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: S  !< Salinity [S ~> ppt]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)  :: h  !< Layer thickness [Z ~> m]
   type(unit_scale_type),                     intent(in)  :: US !< A dimensional unit scaling type
   type(param_file_type),                     intent(in)  :: param_file !< Parameter file structure
   logical,                                   intent(in)  :: just_read !< If true, this call will
@@ -287,7 +287,7 @@ subroutine DOME2d_initialize_temperature_salinity ( T, S, h, G, GV, US, param_fi
       do j=js,je ; do i=is,ie
         xi0 = 0.0
         do k = 1,nz
-          xi1 = xi0 + (GV%H_to_Z * h(i,j,k)) / G%max_depth
+          xi1 = xi0 + h(i,j,k) / G%max_depth
           S(i,j,k) = S_surf + 0.5 * S_range * (xi0 + xi1)
           xi0 = xi1
         enddo
@@ -298,7 +298,7 @@ subroutine DOME2d_initialize_temperature_salinity ( T, S, h, G, GV, US, param_fi
       do j=js,je ; do i=is,ie
         xi0 = 0.0
         do k = 1,nz
-          xi1 = xi0 + (GV%H_to_Z * h(i,j,k)) / G%max_depth
+          xi1 = xi0 + h(i,j,k) / G%max_depth
           S(i,j,k) = S_surf + 0.5 * S_range * (xi0 + xi1)
           xi0 = xi1
         enddo

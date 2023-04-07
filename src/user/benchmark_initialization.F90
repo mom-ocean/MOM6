@@ -84,7 +84,7 @@ subroutine benchmark_initialize_thickness(h, depth_tot, G, GV, US, param_file, e
   type(verticalGrid_type), intent(in)  :: GV          !< The ocean's vertical grid structure.
   type(unit_scale_type),   intent(in)  :: US          !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
-                           intent(out) :: h           !< The thickness that is being initialized [H ~> m or kg m-2].
+                           intent(out) :: h           !< The thickness that is being initialized [Z ~> m]
   real, dimension(SZI_(G),SZJ_(G)), &
                            intent(in)  :: depth_tot   !< The nominal total depth of the ocean [Z ~> m]
   type(param_file_type),   intent(in)  :: param_file  !< A structure indicating the open file
@@ -184,9 +184,9 @@ subroutine benchmark_initialize_thickness(h, depth_tot, G, GV, US, param_file, e
 
     do k=1,nz ; e_pert(K) = 0.0 ; enddo
 
-    !   This sets the initial thickness (in [H ~> m or kg m-2]) of the layers.  The thicknesses
+    !   This sets the initial thickness (in [Z ~> m]) of the layers.  The thicknesses
     ! are set to insure that:
-    !   1. each layer is at least GV%Angstrom_H thick, and
+    !   1. each layer is at least GV%Angstrom_Z thick, and
     !   2. the interfaces are where they should be based on the resting depths and
     !      interface height perturbations, as long at this doesn't interfere with 1.
     eta1D(nz+1) = -depth_tot(i,j)
@@ -211,9 +211,9 @@ subroutine benchmark_initialize_thickness(h, depth_tot, G, GV, US, param_file, e
       if (eta1D(K) < eta1D(K+1) + GV%Angstrom_Z) &
         eta1D(K) = eta1D(K+1) + GV%Angstrom_Z
 
-      h(i,j,k) = max(GV%Z_to_H * (eta1D(K) - eta1D(K+1)), GV%Angstrom_H)
+      h(i,j,k) = max(eta1D(K) - eta1D(K+1), GV%Angstrom_Z)
     enddo
-    h(i,j,1) = max(GV%Z_to_H * (0.0 - eta1D(2)), GV%Angstrom_H)
+    h(i,j,1) = max(0.0 - eta1D(2), GV%Angstrom_Z)
 
   enddo ; enddo
 

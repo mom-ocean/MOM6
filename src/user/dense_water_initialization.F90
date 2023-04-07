@@ -105,7 +105,7 @@ subroutine dense_water_initialize_TS(G, GV, US, param_file, T, S, h, just_read)
   type(param_file_type),                     intent(in)  :: param_file !< Parameter file structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: T !< Output temperature [C ~> degC]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: S !< Output salinity [S ~> ppt]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)  :: h !< Layer thicknesses [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)  :: h !< Layer thicknesses [Z ~> m]
   logical,                                   intent(in)  :: just_read !< If true, this call will
                                                       !! only read parameters without changing T & S.
   ! Local variables
@@ -137,7 +137,7 @@ subroutine dense_water_initialize_TS(G, GV, US, param_file, T, S, h, just_read)
       zi = 0.
       do k = 1,nz
         ! nondimensional middle of layer
-        zmid = zi + 0.5 * h(i,j,k) / (GV%Z_to_H * G%max_depth)
+        zmid = zi + 0.5 * h(i,j,k) / G%max_depth
 
         if (zmid < mld) then
           ! use reference salinity in the mixed layer
@@ -147,7 +147,7 @@ subroutine dense_water_initialize_TS(G, GV, US, param_file, T, S, h, just_read)
           S(i,j,k) = S_ref + S_range * (zmid - mld) / (1.0 - mld)
         endif
 
-        zi = zi + h(i,j,k) / (GV%Z_to_H * G%max_depth)
+        zi = zi + h(i,j,k) / G%max_depth
       enddo
     enddo
   enddo
