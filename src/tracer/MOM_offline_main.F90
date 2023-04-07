@@ -304,7 +304,7 @@ subroutine offline_advection_ale(fluxes, Time_start, time_interval, G, GV, US, C
   enddo ; enddo ; enddo
 
   if (CS%debug) then
-    call hchksum(h_pre, "h_pre before transport", G%HI, scale=GV%H_to_m)
+    call hchksum(h_pre, "h_pre before transport", G%HI, scale=GV%H_to_MKS)
     call uvchksum("[uv]htr_sub before transport", uhtr_sub, vhtr_sub, G%HI, scale=HL2_to_kg_scale)
   endif
   tot_residual = remaining_transport_sum(G, GV, US, uhtr, vhtr, h_new)
@@ -345,7 +345,7 @@ subroutine offline_advection_ale(fluxes, Time_start, time_interval, G, GV, US, C
       ! Do ALE remapping/regridding to allow for more advection to occur in the next iteration
       call pass_var(h_new,G%Domain)
       if (CS%debug) then
-        call hchksum(h_new,"h_new before ALE", G%HI, scale=GV%H_to_m)
+        call hchksum(h_new,"h_new before ALE", G%HI, scale=GV%H_to_MKS)
         write(debug_msg, '(A,I4.4)') 'Before ALE ', iter
         call MOM_tracer_chkinv(debug_msg, G, GV, h_new, CS%tracer_reg)
       endif
@@ -370,7 +370,7 @@ subroutine offline_advection_ale(fluxes, Time_start, time_interval, G, GV, US, C
       call cpu_clock_end(id_clock_ALE)
 
       if (CS%debug) then
-        call hchksum(h_new, "h_new after ALE", G%HI, scale=GV%H_to_m)
+        call hchksum(h_new, "h_new after ALE", G%HI, scale=GV%H_to_MKS)
         write(debug_msg, '(A,I4.4)') 'After ALE ', iter
         call MOM_tracer_chkinv(debug_msg, G, GV, h_new, CS%tracer_reg)
       endif
@@ -412,7 +412,7 @@ subroutine offline_advection_ale(fluxes, Time_start, time_interval, G, GV, US, C
   call pass_vector(uhtr, vhtr, G%Domain)
 
   if (CS%debug) then
-    call hchksum(h_pre, "h after offline_advection_ale", G%HI, scale=GV%H_to_m)
+    call hchksum(h_pre, "h after offline_advection_ale", G%HI, scale=GV%H_to_MKS)
     call uvchksum("[uv]htr after offline_advection_ale", uhtr, vhtr, G%HI, scale=HL2_to_kg_scale)
     call MOM_tracer_chkinv("After offline_advection_ale", G, GV, h_pre, CS%tracer_reg)
   endif
@@ -599,7 +599,7 @@ subroutine offline_redistribute_residual(CS, G, GV, US, h_pre, uhtr, vhtr, conve
   if (CS%id_vhr>0) call post_data(CS%id_vhr, vhtr, CS%diag)
 
   if (CS%debug) then
-    call hchksum(h_pre, "h_pre after redistribute", G%HI, scale=GV%H_to_m)
+    call hchksum(h_pre, "h_pre after redistribute", G%HI, scale=GV%H_to_MKS)
     call uvchksum("uhtr after redistribute", uhtr, vhtr, G%HI, scale=HL2_to_kg_scale)
     call MOM_tracer_chkinv("after redistribute ", G, GV, h_new, CS%tracer_Reg)
   endif
@@ -679,9 +679,9 @@ subroutine offline_diabatic_ale(fluxes, Time_start, Time_end, G, GV, US, CS, h_p
   call MOM_mesg("Applying tracer source, sinks, and vertical mixing")
 
   if (CS%debug) then
-    call hchksum(h_pre, "h_pre before offline_diabatic_ale", G%HI, scale=GV%H_to_m)
-    call hchksum(eatr, "eatr before offline_diabatic_ale", G%HI, scale=GV%H_to_m)
-    call hchksum(ebtr, "ebtr before offline_diabatic_ale", G%HI, scale=GV%H_to_m)
+    call hchksum(h_pre, "h_pre before offline_diabatic_ale", G%HI, scale=GV%H_to_MKS)
+    call hchksum(eatr, "eatr before offline_diabatic_ale", G%HI, scale=GV%H_to_MKS)
+    call hchksum(ebtr, "ebtr before offline_diabatic_ale", G%HI, scale=GV%H_to_MKS)
     call MOM_tracer_chkinv("Before offline_diabatic_ale", G, GV, h_pre, CS%tracer_reg)
   endif
 
@@ -743,9 +743,9 @@ subroutine offline_diabatic_ale(fluxes, Time_start, Time_end, G, GV, US, CS, h_p
   endif
 
   if (CS%debug) then
-    call hchksum(h_pre, "h_pre after offline_diabatic_ale", G%HI, scale=GV%H_to_m)
-    call hchksum(eatr, "eatr after offline_diabatic_ale", G%HI, scale=GV%H_to_m)
-    call hchksum(ebtr, "ebtr after offline_diabatic_ale", G%HI, scale=GV%H_to_m)
+    call hchksum(h_pre, "h_pre after offline_diabatic_ale", G%HI, scale=GV%H_to_MKS)
+    call hchksum(eatr, "eatr after offline_diabatic_ale", G%HI, scale=GV%H_to_MKS)
+    call hchksum(ebtr, "ebtr after offline_diabatic_ale", G%HI, scale=GV%H_to_MKS)
     call MOM_tracer_chkinv("After offline_diabatic_ale", G, GV, h_pre, CS%tracer_reg)
   endif
 
@@ -786,7 +786,7 @@ subroutine offline_fw_fluxes_into_ocean(G, GV, CS, fluxes, h, in_flux_optional)
   enddo ; enddo
 
   if (CS%debug) then
-    call hchksum(h, "h before fluxes into ocean", G%HI, scale=GV%H_to_m)
+    call hchksum(h, "h before fluxes into ocean", G%HI, scale=GV%H_to_MKS)
     call MOM_tracer_chkinv("Before fluxes into ocean", G, GV, h, CS%tracer_reg)
   endif
   do m = 1,CS%tracer_reg%ntr
@@ -796,7 +796,7 @@ subroutine offline_fw_fluxes_into_ocean(G, GV, CS, fluxes, h, in_flux_optional)
                                         CS%evap_CFL_limit, CS%minimum_forcing_depth, update_h_opt=update_h)
   enddo
   if (CS%debug) then
-    call hchksum(h, "h after fluxes into ocean", G%HI, scale=GV%H_to_m)
+    call hchksum(h, "h after fluxes into ocean", G%HI, scale=GV%H_to_MKS)
     call MOM_tracer_chkinv("After fluxes into ocean", G, GV, h, CS%tracer_reg)
   endif
 
@@ -825,7 +825,7 @@ subroutine offline_fw_fluxes_out_ocean(G, GV, CS, fluxes, h, out_flux_optional)
     call MOM_error(WARNING, "Negative freshwater fluxes with non-zero tracer concentration not supported yet")
 
   if (CS%debug) then
-    call hchksum(h, "h before fluxes out of ocean", G%HI, scale=GV%H_to_m)
+    call hchksum(h, "h before fluxes out of ocean", G%HI, scale=GV%H_to_MKS)
     call MOM_tracer_chkinv("Before fluxes out of ocean", G, GV, h, CS%tracer_reg)
   endif
   do m = 1, CS%tracer_reg%ntr
@@ -835,7 +835,7 @@ subroutine offline_fw_fluxes_out_ocean(G, GV, CS, fluxes, h, out_flux_optional)
                                         CS%evap_CFL_limit, CS%minimum_forcing_depth, update_h_opt = update_h)
   enddo
   if (CS%debug) then
-    call hchksum(h, "h after fluxes out of ocean", G%HI, scale=GV%H_to_m)
+    call hchksum(h, "h after fluxes out of ocean", G%HI, scale=GV%H_to_MKS)
     call MOM_tracer_chkinv("Before fluxes out of ocean", G, GV, h, CS%tracer_reg)
   endif
 
@@ -1035,7 +1035,7 @@ subroutine update_offline_fields(CS, G, GV, US, h, fluxes, do_ale)
   if (CS%debug) then
     call uvchksum("[uv]htr before update_offline_fields", CS%uhtr, CS%vhtr, G%HI, &
                   scale=US%L_to_m**2*GV%H_to_kg_m2)
-    call hchksum(CS%h_end, "h_end before update_offline_fields", G%HI, scale=GV%H_to_m)
+    call hchksum(CS%h_end, "h_end before update_offline_fields", G%HI, scale=GV%H_to_MKS)
     call hchksum(CS%tv%T, "Temp before update_offline_fields", G%HI, scale=US%C_to_degC)
     call hchksum(CS%tv%S, "Salt before update_offline_fields", G%HI, scale=US%S_to_ppt)
   endif
@@ -1077,7 +1077,7 @@ subroutine update_offline_fields(CS, G, GV, US, h, fluxes, do_ale)
     if (CS%debug) then
       call uvchksum("[uv]htr after ALE regridding/remapping of inputs", CS%uhtr, CS%vhtr, G%HI, &
                     scale=US%L_to_m**2*GV%H_to_kg_m2)
-      call hchksum(h_start,"h_start after ALE regridding/remapping of inputs", G%HI, scale=GV%H_to_m)
+      call hchksum(h_start,"h_start after ALE regridding/remapping of inputs", G%HI, scale=GV%H_to_MKS)
     endif
   endif
 
@@ -1119,7 +1119,7 @@ subroutine update_offline_fields(CS, G, GV, US, h, fluxes, do_ale)
   if (CS%debug) then
     call uvchksum("[uv]htr after update_offline_fields", CS%uhtr, CS%vhtr, G%HI, &
                   scale=US%L_to_m**2*GV%H_to_kg_m2)
-    call hchksum(CS%h_end, "h_end after update_offline_fields", G%HI, scale=GV%H_to_m)
+    call hchksum(CS%h_end, "h_end after update_offline_fields", G%HI, scale=GV%H_to_MKS)
     call hchksum(CS%tv%T, "Temp after update_offline_fields", G%HI, scale=US%C_to_degC)
     call hchksum(CS%tv%S, "Salt after update_offline_fields", G%HI, scale=US%S_to_ppt)
   endif
