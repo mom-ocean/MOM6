@@ -17,7 +17,7 @@ use MOM_file_parser, only : get_param, read_param, log_param, param_file_type
 use MOM_file_parser, only : log_version
 use MOM_get_input, only : directories
 use MOM_grid, only : ocean_grid_type, isPointInCell
-use MOM_interface_heights, only : find_eta
+use MOM_interface_heights, only : find_eta, dz_to_thickness
 use MOM_io, only : file_exists, field_size, MOM_read_data, MOM_read_vector, slasher
 use MOM_open_boundary, only : ocean_OBC_type, open_boundary_init, set_tracer_data
 use MOM_open_boundary, only : OBC_NONE
@@ -418,7 +418,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
     call fill_temp_salt_segments(G, GV, US, OBC, tv)
 
   ! Convert thicknesses from geometric distances in depth units to thickness units or mass-per-unit-area.
-  if (new_sim .and. convert) call convert_thickness(dz, h, G, GV, US, tv)
+  if (new_sim .and. convert) call dz_to_thickness(dz, tv, h, G, GV, US)
 
   ! Handle the initial surface displacement under ice shelf
   call get_param(PF, mdl, "DEPRESS_INITIAL_SURFACE", depress_sfc, &
@@ -997,84 +997,6 @@ end subroutine initialize_thickness_list
 subroutine initialize_thickness_search
   call MOM_error(FATAL,"  MOM_state_initialization.F90, initialize_thickness_search: NOT IMPLEMENTED")
 end subroutine initialize_thickness_search
-
-!> Converts thickness from geometric height units to thickness units
-subroutine convert_thickness(dz, h, G, GV, US, tv)
-  type(ocean_grid_type),   intent(in)    :: G  !< The ocean's grid structure
-  type(verticalGrid_type), intent(in)    :: GV !< The ocean's vertical grid structure
-  type(unit_scale_type),   intent(in)    :: US !< A dimensional unit scaling type
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
-                           intent(in)    :: dz !< Input geometric layer thicknesses [Z ~> m].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
-                           intent(inout) :: h  !< Output thicknesses in thickness units [H ~> m or kg m-2].
-                                               !! This is essentially intent out, but declared as intent
-                                               !! inout to preserve any initalized values in halo points.
-  type(thermo_var_ptrs),   intent(in)    :: tv !< A structure pointing to various
-                                               !! thermodynamic variables
-  ! Local variables
-  real, dimension(SZI_(G),SZJ_(G)) :: &
-    p_top, p_bot                  ! Pressure at the interfaces above and below a layer [R L2 T-2 ~> Pa]
-  real :: dz_geo(SZI_(G),SZJ_(G)) ! The change in geopotential height across a layer [L2 T-2 ~> m2 s-2]
-  real :: rho(SZI_(G))            ! The in situ density [R ~> kg m-3]
-  real :: I_gEarth      ! Unit conversion factors divided by the gravitational acceleration
-                        ! [H T2 R-1 L-2 ~> s2 m2 kg-1 or s2 m-1]
-  integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state
-  integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
-  integer :: itt, max_itt
-
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
-  Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
-  max_itt = 10
-
-  if (GV%Boussinesq) then
-    do k=1,nz ; do j=js,je ; do i=is,ie
-      h(i,j,k) = GV%Z_to_H * dz(i,j,k)
-    enddo ; enddo ; enddo
-  else
-    I_gEarth = GV%RZ_to_H / GV%g_Earth
-
-    if (associated(tv%eqn_of_state)) then
-      do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-        p_bot(i,j) = 0.0 ; p_top(i,j) = 0.0
-      enddo ; enddo
-      EOSdom(:) = EOS_domain(G%HI)
-      do k=1,nz
-        do j=js,je
-          do i=is,ie ; p_top(i,j) = p_bot(i,j) ; enddo
-          call calculate_density(tv%T(:,j,k), tv%S(:,j,k), p_top(:,j), rho, &
-                                 tv%eqn_of_state, EOSdom)
-          do i=is,ie
-            ! This could be simplified, but it would change answers at roundoff.
-            p_bot(i,j) = p_top(i,j) + (GV%g_Earth*GV%H_to_Z) * ((GV%Z_to_H*dz(i,j,k)) * rho(i))
-          enddo
-        enddo
-
-        do itt=1,max_itt
-          call int_specific_vol_dp(tv%T(:,:,k), tv%S(:,:,k), p_top, p_bot, 0.0, G%HI, &
-                                   tv%eqn_of_state, US, dz_geo)
-          if (itt < max_itt) then ; do j=js,je
-            call calculate_density(tv%T(:,j,k), tv%S(:,j,k), p_bot(:,j), rho, &
-                                   tv%eqn_of_state, EOSdom)
-            ! Use Newton's method to correct the bottom value.
-            ! The hydrostatic equation is sufficiently linear that no bounds-checking is needed.
-            do i=is,ie
-              p_bot(i,j) = p_bot(i,j) + rho(i) * ((GV%g_Earth*GV%H_to_Z)*(GV%Z_to_H*dz(i,j,k)) - dz_geo(i,j))
-            enddo
-          enddo ; endif
-        enddo
-
-        do j=js,je ; do i=is,ie
-          h(i,j,k) = (p_bot(i,j) - p_top(i,j)) * I_gEarth
-        enddo ; enddo
-      enddo
-    else
-      do k=1,nz ; do j=js,je ; do i=is,ie
-        h(i,j,k) = (GV%Z_to_H*dz(i,j,k)) * (GV%Rlay(k) / GV%Rho0)
-      enddo ; enddo ; enddo
-    endif
-  endif
-
-end subroutine convert_thickness
 
 !> Depress the sea-surface based on an initial condition file
 subroutine depress_surface(h, G, GV, US, param_file, tv, just_read, z_top_shelf)
@@ -2844,8 +2766,9 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, depth_tot, G, GV, US, PF, just
       GV_loc%ke = nkd
       allocate( dz_interface(isd:ied,jsd:jed,nkd+1) ) ! Need for argument to regridding_main() but is not used
 
-      ! Convert thicknesses to units of H.
-      call convert_thickness(dz1, h1, G, GV_loc, US, tv_loc)
+      ! Convert thicknesses to units of H, in non-Boussinesq mode by inverting integrals of
+      ! specific volume in pressure
+      call dz_to_thickness(dz1, tv_loc, h1, G, GV_loc, US)
 
       call regridding_preadjust_reqs(regridCS, do_conv_adj, ignore)
       if (do_conv_adj) call convective_adjustment(G, GV_loc, h1, tv_loc)
@@ -2941,7 +2864,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, depth_tot, G, GV, US, PF, just
     endif
 
     ! Now convert thicknesses to units of H.
-    call convert_thickness(dz, h, G, GV, US, tv)
+    call dz_to_thickness(dz, tv, h, G, GV, US)
 
   endif ! useALEremapping
 
