@@ -9,6 +9,7 @@ use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, is_root_pe
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_get_input, only : directories
 use MOM_grid, only : ocean_grid_type
+use MOM_interface_heights, only : dz_to_thickness, dz_to_thickness_simple
 use MOM_sponge, only : set_up_sponge_field, initialize_sponge, sponge_CS
 use MOM_tracer_registry, only : tracer_registry_type
 use MOM_unit_scaling, only : unit_scale_type
@@ -349,8 +350,11 @@ subroutine dumbbell_initialize_sponges(G, GV, US, tv, h_in, depth_tot, param_fil
   real :: sponge_time_scale  ! The damping time scale [T ~> s]
 
   real, dimension(SZI_(G),SZJ_(G)) :: Idamp ! inverse damping timescale [T-1 ~> s-1]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: h ! sponge thicknesses [H ~> m or kg m-2]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: S ! sponge salinities [S ~> ppt]
+  real :: dz(SZI_(G),SZJ_(G),SZK_(GV)) ! Sponge thicknesses in height units [Z ~> m]
+  real :: h(SZI_(G),SZJ_(G),SZK_(GV))  ! Sponge thicknesses [H ~> m or kg m-2]
+  real :: S(SZI_(G),SZJ_(G),SZK_(GV))  ! Sponge salinities [S ~> ppt]
+  real :: T(SZI_(G),SZJ_(G),SZK_(GV))  ! Sponge tempertures [C ~> degC], used only to convert thicknesses
+                                       ! in non-Boussinesq mode
   real, dimension(SZK_(GV)+1) :: eta1D ! Interface positions for ALE sponge [Z ~> m]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1) :: eta ! A temporary array for interface heights [Z ~> m].
 
@@ -359,6 +363,7 @@ subroutine dumbbell_initialize_sponges(G, GV, US, tv, h_in, depth_tot, param_fil
   real :: dblen          ! The size of the dumbbell test case [km] or [m]
   real :: min_thickness  ! The minimum layer thickness [Z ~> m]
   real :: S_ref, S_range ! A reference salinity and the range of salinities in this test case [S ~> ppt]
+  real :: T_surf         ! The surface temperature [C ~> degC]
   logical :: dbrotate    ! If true, rotate the domain.
 
   call get_param(param_file, mdl,"DUMBBELL_LEN",dblen, &
@@ -377,6 +382,9 @@ subroutine dumbbell_initialize_sponges(G, GV, US, tv, h_in, depth_tot, param_fil
   call get_param(param_file, mdl, "DUMBBELL_SPONGE_TIME_SCALE", sponge_time_scale, &
                  "The time scale in the reservoir for restoring. If zero, the sponge is disabled.", &
                  units="s", default=0., scale=US%s_to_T)
+  call get_param(param_file, mdl, "DUMBBELL_T_SURF", T_surf, &
+                 'Initial surface temperature in the DUMBBELL configuration', &
+                 units='degC', default=20., scale=US%degC_to_C, do_not_log=.true.)
   call get_param(param_file, mdl, "DUMBBELL_SREF", S_ref, &
                  'DUMBBELL REFERENCE SALINITY', &
                  units='1e-3', default=34., scale=US%ppt_to_S, do_not_log=.true.)
@@ -419,18 +427,17 @@ subroutine dumbbell_initialize_sponges(G, GV, US, tv, h_in, depth_tot, param_fil
         eta1D(k) = -G%max_depth * real(k-1) / real(nz)
         if (eta1D(k) < (eta1D(k+1) + min_thickness)) then
           eta1D(k) = eta1D(k+1) + min_thickness
-          h(i,j,k) = GV%Z_to_H * min_thickness
+          dz(i,j,k) = min_thickness
         else
-          h(i,j,k) = GV%Z_to_H * (eta1D(k) - eta1D(k+1))
+          dz(i,j,k) = eta1D(k) - eta1D(k+1)
         endif
       enddo
     enddo ; enddo
 
-    call initialize_ALE_sponge(Idamp, G, GV, param_file, ACSp, h, nz)
-
     ! construct temperature and salinity for the sponge
     ! start with initial condition
     S(:,:,:) = 0.0
+    T(:,:,:) = T_surf
 
     do j=G%jsc,G%jec ; do i=G%isc,G%iec
       ! Compute normalized zonal coordinates (x,y=0 at center of domain)
@@ -451,7 +458,18 @@ subroutine dumbbell_initialize_sponges(G, GV, US, tv, h_in, depth_tot, param_fil
         enddo
       endif
     enddo ; enddo
-  if (associated(tv%S)) call set_up_ALE_sponge_field(S, G, GV, tv%S, ACSp, 'salt', &
+
+    ! Convert thicknesses from height units to thickness units
+    if (associated(tv%eqn_of_state)) then
+      call dz_to_thickness(dz, T, S, tv%eqn_of_state, h, G, GV, US)
+    else
+      call dz_to_thickness_simple(dz, h, G, GV, US, layer_mode=.true.)
+    endif
+
+    ! Store damping rates and the grid on which the T/S sponge data will reside
+    call initialize_ALE_sponge(Idamp, G, GV, param_file, ACSp, h, nz)
+
+    if (associated(tv%S)) call set_up_ALE_sponge_field(S, G, GV, tv%S, ACSp, 'salt', &
                           sp_long_name='salinity', sp_unit='g kg-1 s-1')
   else
     do j=G%jsc,G%jec ; do i=G%isc,G%iec
