@@ -632,15 +632,15 @@ subroutine smooth_Tq(G, mask_T, mask_q, T, q)
     qim(:,:) = q(:,:) * mask_q(:,:)
     do J = G%JscB, G%JecB
       do I = G%IscB, G%IecB
-        q(I,J) = wcenter * qim(I,J)     & 
-               + wcorner * qim(I-1,J-1) &
-               + wcorner * qim(I-1,J+1) &
-               + wcorner * qim(I+1,J-1) &
-               + wcorner * qim(I+1,J+1) &
-               + wside   * qim(I-1,J)   &
-               + wside   * qim(I+1,J)   &
-               + wside   * qim(I,J-1)   &
-               + wside   * qim(I,J+1)
+        q(I,J) = wcenter * qim(i,j)                &
+               + wcorner * (                       &
+                  (qim(I-1,J-1)+qim(I+1,J+1))      &
+                + (qim(I-1,J+1)+qim(I+1,J-1))      &
+               )                                   &
+               + wside * (                         &
+                  (qim(I-1,J)+qim(I+1,J))          &
+                + (qim(I,J-1)+qim(I,J+1))          &
+               )
         q(I,J) = q(I,J) * mask_q(I,J)
       enddo
     enddo
@@ -652,15 +652,15 @@ subroutine smooth_Tq(G, mask_T, mask_q, T, q)
     Tim(:,:) = T(:,:) * mask_T(:,:)
     do j = G%jsc, G%jec
       do i = G%isc, G%iec
-        T(i,j) = wcenter * Tim(i,j)     & 
-               + wcorner * Tim(i-1,j-1) &
-               + wcorner * Tim(i-1,j+1) &
-               + wcorner * Tim(i+1,j-1) &
-               + wcorner * Tim(i+1,j+1) &
-               + wside   * Tim(i-1,j)   &
-               + wside   * Tim(i+1,j)   &
-               + wside   * Tim(i,j-1)   &
-               + wside   * Tim(i,j+1)
+        T(i,j) = wcenter * Tim(i,j)                &
+               + wcorner * (                       &
+                  (Tim(i-1,j-1)+Tim(i+1,j+1))      &
+                + (Tim(i-1,j+1)+Tim(i+1,j-1))      &
+               )                                   &
+               + wside * (                         &
+                  (Tim(i-1,j)+Tim(i+1,j))          &
+                + (Tim(i,j-1)+Tim(i,j+1))          &
+               )
         T(i,j) = T(i,j) * mask_T(i,j)
       enddo
     enddo
