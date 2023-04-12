@@ -9,7 +9,8 @@ use MOM_unit_scaling,  only : unit_scale_type
 use MOM_diag_mediator, only : post_data, register_diag_field
 use MOM_domains,       only : create_group_pass, do_group_pass, group_pass_type
 use MOM_domains,       only : To_North, To_East
-use MOM_coms,          only : reproducing_sum
+use MOM_domains,       only : pass_var, CORNER
+use MOM_coms,          only : reproducing_sum, max_across_PEs, min_across_PEs
 
 implicit none ; private
 
@@ -20,17 +21,30 @@ public Zanna_Bolton_2020, ZB_2020_init
 !> Control structure that contains MEKE parameters and diagnostics handles
 type, public :: ZB2020_CS
   ! Parameters
-  logical   :: use_ZB2020 !< If true, parameterization works
-  real      :: FGR        !< Filter to grid width ratio, nondimensional, 
-                          ! k_bc = - FGR^2 * dx * dy / 24
-  integer   :: ZB_type    !< 0 = Zanna Bolton 2020, 1 = Anstey Zanna 2017
-  logical   :: ZB_sign    !< if true, sign corresponds to ZB2020
-  integer   :: ZB_cons    !< 0: nonconservative; 1: conservative without interface;
-                          !  2: conservative with height
+  logical   :: use_ZB2020     !< If true, parameterization works
+  real      :: amplitude      !< k_bc = - amplitude * cell_area
+  real      :: amp_bottom     !< amplitude in the bottom layer; -1 = use same
+  integer   :: ZB_type        !< 0 = Full model, 1 = trace-free part, 2 = only trace part
+  integer   :: ZB_cons        !< 0: nonconservative; 1: conservative without interface;
+  integer   :: LPF_iter       !< Low-pass filter for Velocity gradient; number of iterations
+  integer   :: LPF_order      !< Low-pass filter for Velocity gradient; 1: Laplacian, 2: Bilaplacian
+  integer   :: HPF_iter       !< High-pass filter for Velocity gradient; number of iterations
+  integer   :: HPF_order      !< High-pass filter for Velocity gradient; 1: Laplacian, 2: Bilaplacian
+  integer   :: Stress_iter    !< Low-pass filter for Stress (Momentum Flux); number of iterations
+  integer   :: Stress_order   !< Low-pass filter for Stress (Momentum Flux); 1: Laplacian, 2: Bilaplacian
+  integer   :: ssd_iter       !< Small-scale dissipation in RHS of momentum eq; -1: off, 0:Laplacian, 4:Laplacian^5
+  real      :: ssd_bound_coef !< the viscosity bounds to the theoretical maximum for stability
 
+  real      :: DT            !< The (baroclinic) dynamics time step.
+  
   type(diag_ctrl), pointer :: diag => NULL() !< A type that regulates diagnostics output
   !>@{ Diagnostic handles
-  integer :: id_ZB2020u = -1, id_ZB2020v = -1, id_KE_ZB2020 = -1
+  integer :: id_ZB2020u = -1, id_ZB2020v = -1, id_KE_ZB2020 = -1, id_kbc = -1
+  integer :: id_maskT = -1
+  integer :: id_maskq = -1
+  integer :: id_S_11f = -1
+  integer :: id_S_22f = -1
+  integer :: id_S_12f = -1
   !>@}
 
 end type ZB2020_CS
@@ -39,7 +53,7 @@ contains
 
 subroutine ZB_2020_init(Time, GV, US, param_file, diag, CS)
   type(time_type),         intent(in)    :: Time       !< The current model time.
-  type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure
+  type(verticalGrid_type), intent(in)    :: GV         !< The ocean's vertical grid structure
   type(unit_scale_type),   intent(in)    :: US         !< A dimensional unit scaling type
   type(param_file_type),   intent(in)    :: param_file !< Parameter file parser structure.
   type(diag_ctrl), target, intent(inout) :: diag       !< Diagnostics structure.
@@ -53,25 +67,62 @@ subroutine ZB_2020_init(Time, GV, US, param_file, diag, CS)
   
   call get_param(param_file, mdl, "USE_ZB2020", CS%use_ZB2020, &
                  "If true, turns on Zanna-Bolton 2020 parameterization", &
-                 default=.false.)
-
-  call get_param(param_file, mdl, "FGR", CS%FGR, &
-                 "The ratio of assumed filter width to grid step", &
-                 units="nondim", default=1.)
-  
-  call get_param(param_file, mdl, "ZB_type", CS%ZB_type, &
-                 "Type of parameterization: 0 = ZB2020, 1 = AZ2017", &
-                 default=0)
-
-  call get_param(param_file, mdl, "ZB_sign", CS%ZB_sign, &
-                 "If true, sign as in Zanna-Bolton2020, false - is negative", &
                  default=.true.)
 
-  call get_param(param_file, mdl, "ZB_cons", CS%ZB_cons, &
-                 "0: nonconservative; 1: conservative without interface; " //&
-                 "2: conservative with height", &
-                 default=0)
+  call get_param(param_file, mdl, "amplitude", CS%amplitude, &
+                 "k_bc=-amplitude*cell_area, amplitude=1/24..1", &
+                 units="nondim", default=1./24.)
   
+  call get_param(param_file, mdl, "amp_bottom", CS%amp_bottom, &
+                 "-1=use same amplitude, or specify", &
+                 units="nondim", default=-1.)
+
+  if (CS%amp_bottom < -0.5) CS%amp_bottom = CS%amplitude
+  
+  call get_param(param_file, mdl, "ZB_type", CS%ZB_type, &
+                 "Type of parameterization: 0 = full, 1 = trace-free, 2 = trace-only", &
+                 default=0)
+
+  call get_param(param_file, mdl, "ZB_cons", CS%ZB_cons, &
+                 "0: nonconservative; 1: conservative without interface", &
+                 default=1)
+
+  call get_param(param_file, mdl, "LPF_iter", CS%LPF_iter, &
+                 "Low-pass filter for Velocity gradient; number of iterations", &
+                 default=2)
+  
+  call get_param(param_file, mdl, "LPF_order", CS%LPF_order, &
+                 "Low-pass filter for Velocity gradient; 1: Laplacian, 2: Bilaplacian", &
+                 default=2)
+
+  call get_param(param_file, mdl, "HPF_iter", CS%HPF_iter, &
+                 "High-pass filter for Velocity gradient; number of iterations", &
+                 default=2)
+  
+  call get_param(param_file, mdl, "HPF_order", CS%HPF_order, &
+                 "High-pass filter for Velocity gradient; 1: Laplacian, 2: Bilaplacian", &
+                 default=2)
+
+  call get_param(param_file, mdl, "Stress_iter", CS%Stress_iter, &
+                 "Low-pass filter for Stress (Momentum Flux); number of iterations", &
+                 default=2)
+  
+  call get_param(param_file, mdl, "Stress_order", CS%Stress_order, &
+                 "Low-pass filter for Stress (Momentum Flux); 1: Laplacian, 2: Bilaplacian", &
+                 default=2)
+
+  call get_param(param_file, mdl, "ssd_iter", CS%ssd_iter, &
+                 "Small-scale dissipation in RHS of momentum eq; -1: off, 0:Laplacian, 4:Laplacian^5", &
+                 default=-1)
+
+  call get_param(param_file, mdl, "ssd_bound_coef", CS%ssd_bound_coef, &
+                 "The viscosity bounds to the theoretical maximum for stability", units="nondim", &
+                 default=0.8)
+  
+  call get_param(param_file, mdl, "DT", CS%dt, &
+                 "The (baroclinic) dynamics time step.", units="s", scale=US%s_to_T, &
+                 fail_if_missing=.true.)
+
   ! Register fields for output from this module.
   CS%diag => diag
 
@@ -82,6 +133,26 @@ subroutine ZB_2020_init(Time, GV, US, param_file, diag, CS)
   CS%id_KE_ZB2020 = register_diag_field('ocean_model', 'KE_ZB2020', diag%axesTL, Time, &
       'Kinetic Energy Source from Horizontal Viscosity', &
       'm3 s-3', conversion=GV%H_to_m*(US%L_T_to_m_s**2)*US%s_to_T)
+  CS%id_kbc = register_diag_field('ocean_model', 'kbc_ZB2020', diag%axesTL, Time, &
+      'Kinetic Energy Source from Horizontal Viscosity', &
+      'm2', conversion=US%L_to_m**2)
+
+  ! masks and action of filter on test fields
+  CS%id_maskT  = register_diag_field('ocean_model', 'maskT', diag%axesTL, Time, &
+      'mask of wet T points', '1', conversion=1.)
+  
+  CS%id_maskq  = register_diag_field('ocean_model', 'maskq', diag%axesBL, Time, &
+      'mask of wet q points', '1', conversion=1.)
+  
+  ! action of filter on momentum flux
+  CS%id_S_11f = register_diag_field('ocean_model', 'S_11f', diag%axesTL, Time, &
+      '11 momentum flux filtered', 'm2s-2', conversion=US%L_T_to_m_s**2)
+
+  CS%id_S_22f = register_diag_field('ocean_model', 'S_22f', diag%axesTL, Time, &
+      '22 momentum flux filtered', 'm2s-2', conversion=US%L_T_to_m_s**2)
+
+  CS%id_S_12f = register_diag_field('ocean_model', 'S_12f', diag%axesBL, Time, &
+      '12 momentum flux filtered', 'm2s-2', conversion=US%L_T_to_m_s**2)
   
 end subroutine ZB_2020_init
 
@@ -95,8 +166,8 @@ end subroutine ZB_2020_init
 !! S0 - 2x2 tensor:
 !! S0 = vort_xy * (-sh_xy, sh_xx; sh_xx, sh_xy)
 !! Relating k_BC to velocity gradient model,
-!! k_BC = - FGR^2 * cell_area / 24 = - FGR^2 * dx*dy / 24
-!! where FGR - filter to grid width ratio
+!! k_BC = - amplitude * cell_area
+!! where amplitude = 1/24..1 (approx)
 !! 
 !! S - is a tensor of full tendency
 !! S = (-vort_xy * sh_xy + 1/2 * (vort_xy^2 + sh_xy^2 + sh_xx^2), vort_xy * sh_xx;
@@ -149,7 +220,9 @@ subroutine Zanna_Bolton_2020(u, v, h, fx, fy, G, GV, CS)
     sh_xx, &           ! horizontal tension (du/dx - dv/dy) including metric terms [T-1 ~> s-1]
     vort_xy_center, &  ! vort_xy in the center
     sh_xy_center, &    ! sh_xy in the center
-    S_11, S_22         ! flux tensor in the cell center, multiplied with interface height [m^2/s^2 * h]
+    S_11, S_22, &      ! flux tensor in the cell center, multiplied with interface height [m^2/s^2 * h]
+    ssd_11, &          ! diagonal part of ssd in cell center
+    mask_T             ! mask of wet center points
 
   real, dimension(SZIB_(G),SZJB_(G)) :: &
     dx_dyBu, &         !< Pre-calculated dx/dy at q points [nondim]
@@ -161,7 +234,19 @@ subroutine Zanna_Bolton_2020(u, v, h, fx, fy, G, GV, CS)
     sh_xy, &           ! horizontal shearing strain (du/dy + dv/dx) including metric terms [T-1 ~> s-1]
     sh_xx_corner, &    ! sh_xx in the corner
     S_12, &            ! flux tensor in the corner, multiplied with interface height [m^2/s^2 * h]
-    hq                 ! harmonic mean of the harmonic means of the u- & v point thicknesses [H ~> m or kg m-2]
+    ssd_12, &          ! off-diagonal part of ssd in corner
+    hq, &              ! harmonic mean of the harmonic means of the u- & v point thicknesses [H ~> m or kg m-2]
+    mask_q             ! mask of wet corner points
+
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: &
+    kbc_3d,    &          ! k_bc parameter as 3d field [L2 ~> m2]
+    mask_T_3d, &          
+    S_11_3df,  &                    
+    S_22_3df
+
+    real, dimension(SZIB_(G),SZJB_(G),SZK_(GV)) :: &
+    mask_q_3d, &          
+    S_12_3df      
 
   real, dimension(SZIB_(G),SZJ_(G)) :: &
     h_u                ! Thickness interpolated to u points [H ~> m or kg m-2].
@@ -177,8 +262,9 @@ subroutine Zanna_Bolton_2020(u, v, h, fx, fy, G, GV, CS)
 
   real :: sum_sq     ! squared sum, i.e. 1/2*(vort_xy^2 + sh_xy^2 + sh_xx^2)
   real :: vort_sh    ! multiplication of vort_xt and sh_xy
+  real :: amplitude  ! amplitude of ZB parameterization
 
-  real :: k_bc ! free constant in parameterization, k_bc < 0, [k_bc] = m^2
+  real :: k_bc ! free constant in parameterization, k_bc < 0, [k_bc] = m^2  
 
   ! Line 407 of MOM_hor_visc.F90
   is  = G%isc  ; ie  = G%iec  ; js  = G%jsc  ; je  = G%jec ; nz = GV%ke
@@ -189,6 +275,7 @@ subroutine Zanna_Bolton_2020(u, v, h, fx, fy, G, GV, CS)
 
   fx(:,:,:) = 0.
   fy(:,:,:) = 0.
+  kbc_3d(:,:,:) = 0.
 
   ! Calculate metric terms (line 2119 of MOM_hor_visc.F90)
   do J=js-2,Jeq+1 ; do I=is-2,Ieq+1
@@ -204,9 +291,15 @@ subroutine Zanna_Bolton_2020(u, v, h, fx, fy, G, GV, CS)
 
   do k=1,nz
 
+    if (k==1) amplitude = CS%amplitude
+    if (k==2) amplitude = CS%amp_bottom
+
     sh_xx(:,:) = 0.
     sh_xy(:,:) = 0.
     vort_xy(:,:) = 0.
+    S_12(:,:) = 0.
+    S_11(:,:) = 0.
+    S_22(:,:) = 0.
 
     ! Calculate horizontal tension (line 590 of MOM_hor_visc.F90)
     do j=Jsq-1,Jeq+2 ; do i=Isq-1,Ieq+2
@@ -236,7 +329,45 @@ subroutine Zanna_Bolton_2020(u, v, h, fx, fy, G, GV, CS)
     do J=Jsq-2,Jeq+2 ; do I=Isq-2,Ieq+2
       vort_xy(I,J) = G%mask2dBu(I,J) * ( dvdx(I,J) - dudy(I,J) ) ! corner of the cell
     enddo ; enddo
+    
+    call compute_masks(G, GV, h, mask_T, mask_q, k)
+    mask_T_3d(:,:,k) = mask_T(:,:)
+    mask_q_3d(:,:,k) = mask_q(:,:)
 
+    ! Numerical scheme for ZB2020 requires 
+    ! interpolation center <-> corner
+    ! This interpolation requires B.C.,
+    ! and that is why B.C. for Velocity Gradients should be
+    ! well defined
+    ! The same B.C. will be used by all filtering operators,
+    ! So, it must be applied
+    sh_xx(:,:) = sh_xx(:,:) * mask_T(:,:)
+    sh_xy(:,:) = sh_xy(:,:) * mask_q(:,:)
+    vort_xy(:,:) = vort_xy(:,:) * mask_q(:,:)
+
+    if (CS%ssd_iter > -1) then
+      ssd_11(:,:) = sh_xx(:,:) * &
+                  CS%ssd_bound_coef * 0.25 / CS%DT * &
+                  dx2h(:,:) * dy2h(:,:) / (dx2h(:,:) + dy2h(:,:))
+      ssd_12(:,:) = sh_xy(:,:) * &
+                  CS%ssd_bound_coef * 0.25 / CS%DT * &
+                  dx2q(:,:) * dy2q(:,:) / (dx2q(:,:) + dy2q(:,:))
+     
+      if (CS%ssd_iter > 0) then
+        call filter(G, mask_T, mask_q, -1, CS%ssd_iter, T=ssd_11)
+        call filter(G, mask_T, mask_q, -1, CS%ssd_iter, q=ssd_12)
+      endif
+    endif
+
+    call filter(G, mask_T, mask_q, -CS%HPF_iter, CS%HPF_order, T=sh_xx)
+    call filter(G, mask_T, mask_q, +CS%LPF_iter, CS%LPF_order, T=sh_xx)
+
+    call filter(G, mask_T, mask_q, -CS%HPF_iter, CS%HPF_order, q=sh_xy)
+    call filter(G, mask_T, mask_q, +CS%LPF_iter, CS%LPF_order, q=sh_xy)
+
+    call filter(G, mask_T, mask_q, -CS%HPF_iter, CS%HPF_order, q=vort_xy)
+    call filter(G, mask_T, mask_q, +CS%LPF_iter, CS%LPF_order, q=vort_xy)
+    
     ! Corner to center interpolation (line 901 of MOM_hor_visc.F90)
     ! lower index as in loop for sh_xy, but minus 1
     ! upper index is identical 
@@ -276,45 +407,60 @@ subroutine Zanna_Bolton_2020(u, v, h, fx, fy, G, GV, CS)
     ! Form S_11 and S_22 tensors
     ! Indices - intersection of loops for
     ! sh_xy_center and sh_xx
-    do j=Jsq-1,Jeq+2 ; do i=Isq-1,Ieq+2
-      if (CS%ZB_type == 0) then
+    do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+      if (CS%ZB_type == 1) then 
+        sum_sq = 0.
+      else
         sum_sq = 0.5 * &
         (vort_xy_center(i,j)**2 + sh_xy_center(i,j)**2 + sh_xx(i,j)**2)
-      elseif (CS%ZB_type == 1) then
-        sum_sq = 0.
       endif
       
-      if (CS%ZB_cons == 1 .or. CS%ZB_cons == 2) then
-        vort_sh = 0.25 * (                                          &
-          (G%areaBu(I-1,J-1) * vort_xy(I-1,J-1) * sh_xy(I-1,J-1)  + &
-           G%areaBu(I  ,J  ) * vort_xy(I  ,J  ) * sh_xy(I  ,J  )) + &
-          (G%areaBu(I-1,J  ) * vort_xy(I-1,J  ) * sh_xy(I-1,J  )  + &
-           G%areaBu(I  ,J-1) * vort_xy(I  ,J-1) * sh_xy(I  ,J-1))   &
-          ) * G%IareaT(i,j)
-      else if (CS%ZB_cons == 0) then
-        vort_sh = vort_xy_center(i,j) * sh_xy_center(i,j)
+      if (CS%ZB_type == 2) then
+        vort_sh = 0.
+      else
+        if (CS%ZB_cons == 1) then
+          vort_sh = 0.25 * (                                          &
+            (G%areaBu(I-1,J-1) * vort_xy(I-1,J-1) * sh_xy(I-1,J-1)  + &
+            G%areaBu(I  ,J  ) * vort_xy(I  ,J  ) * sh_xy(I  ,J  )) + &
+            (G%areaBu(I-1,J  ) * vort_xy(I-1,J  ) * sh_xy(I-1,J  )  + &
+            G%areaBu(I  ,J-1) * vort_xy(I  ,J-1) * sh_xy(I  ,J-1))   &
+            ) * G%IareaT(i,j)
+        else if (CS%ZB_cons == 0) then
+          vort_sh = vort_xy_center(i,j) * sh_xy_center(i,j)
+        endif
       endif
-      k_bc = - CS%FGR**2 * G%areaT(i,j) / 24.
+      k_bc = - amplitude * G%areaT(i,j)
       S_11(i,j) = k_bc * (- vort_sh + sum_sq)
       S_22(i,j) = k_bc * (+ vort_sh + sum_sq)
+
+      kbc_3d(i,j,k) = k_bc
     enddo ; enddo
 
     ! Form S_12 tensor
     ! indices correspond to sh_xx_corner loop
     do J=Jsq-1,Jeq ; do I=Isq-1,Ieq
-      if (CS%ZB_cons == 2) then
-        vort_sh = vort_xy(I,J) * 0.25 * (   &
-          (h(i+1,j+1,k) * sh_xx(i+1,j+1)  + &
-           h(i  ,j  ,k) * sh_xx(i  ,j  )) + &
-          (h(i+1,j  ,k) * sh_xx(i+1,j  )  + &
-           h(i  ,j+1,k) * sh_xx(i  ,j+1))   &
-        ) / (hq(I,J) + h_neglect)
-      else if (CS%ZB_cons == 0 .or. CS%ZB_cons == 1) then
+      if (CS%ZB_type == 2) then
+        vort_sh = 0.
+      else 
         vort_sh = vort_xy(I,J) * sh_xx_corner(I,J)
       endif
-      k_bc = - CS%FGR**2 * G%areaBu(i,j) / 24.
+      k_bc = - amplitude * G%areaBu(i,j)
       S_12(I,J) = k_bc * vort_sh
     enddo ; enddo
+
+    call filter(G, mask_T, mask_q, CS%Stress_iter, CS%Stress_order, T=S_11)
+    call filter(G, mask_T, mask_q, CS%Stress_iter, CS%Stress_order, T=S_22)
+    call filter(G, mask_T, mask_q, CS%Stress_iter, CS%Stress_order, q=S_12)
+   
+    S_11_3df(:,:,k) = S_11(:,:)
+    S_22_3df(:,:,k) = S_22(:,:)
+    S_12_3df(:,:,k) = S_12(:,:)
+
+    if (CS%ssd_iter>-1) then
+      S_11(:,:) = S_11(:,:) + ssd_11(:,:)
+      S_12(:,:) = S_12(:,:) + ssd_12(:,:)
+      S_22(:,:) = S_22(:,:) - ssd_11(:,:)
+    endif
 
     ! Weight with interface height (Line 1478 of MOM_hor_visc.F90)
     ! Note that reduction is removed
@@ -350,17 +496,285 @@ subroutine Zanna_Bolton_2020(u, v, h, fx, fy, G, GV, CS)
 
   enddo ! end of k loop
 
-  if (not(CS%ZB_sign)) then
-    fx(:,:,:) = - fx(:,:,:)
-    fy(:,:,:) = - fy(:,:,:)
-  endif
-
   if (CS%id_ZB2020u>0)   call post_data(CS%id_ZB2020u, fx, CS%diag)
   if (CS%id_ZB2020v>0)   call post_data(CS%id_ZB2020v, fy, CS%diag)
+  if (CS%id_kbc>0)       call post_data(CS%id_kbc, kbc_3d, CS%diag)
+  
+  if (CS%id_maskT>0)     call post_data(CS%id_maskT, mask_T_3d, CS%diag)
+  if (CS%id_maskq>0)     call post_data(CS%id_maskq, mask_q_3d, CS%diag)
+  
+  if (CS%id_S_11f>0)     call post_data(CS%id_S_11f, S_11_3df, CS%diag)
+
+  if (CS%id_S_22f>0)     call post_data(CS%id_S_22f, S_22_3df, CS%diag)
+
+  if (CS%id_S_12f>0)     call post_data(CS%id_S_12f, S_12_3df, CS%diag)
 
   call compute_energy_source(u, v, h, fx, fy, G, GV, CS)
 
 end subroutine Zanna_Bolton_2020
+
+! if n_lowpass and n_highpass are positive,
+! performs n_lowpass iterations of 
+! filter of order 2*n_highpass
+! if n_lowpass is negative, returns residual instead
+! Input does not require halo
+! Output has full halo
+! filtering occurs in-place
+subroutine filter(G, mask_T, mask_q, n_lowpass, n_highpass, T, q)
+  type(ocean_grid_type),              intent(in)              :: G          !< Ocean grid
+  real, dimension(SZI_(G),SZJ_(G)),   intent(in)              :: mask_T     !< mask of wet points in T points
+  real, dimension(SZIB_(G),SZJB_(G)), intent(in)              :: mask_q     !< mask of wet points in q points
+  real, dimension(SZI_(G),SZJ_(G)),   optional, intent(inout) :: T          !< any field at T points
+  real, dimension(SZIB_(G),SZJB_(G)), optional, intent(inout) :: q          !< any field at q points
+  integer,                            intent(in)              :: n_lowpass  !< number of low-pass iterations 
+  integer,                            intent(in)              :: n_highpass !< number of high-pass iterations 
+
+  integer :: i, j
+  real, dimension(SZIB_(G),SZJB_(G)) :: q1, q2 ! additional q fields
+  real, dimension(SZI_(G),SZJ_(G))   :: T1, T2 ! additional T fields
+  real :: max_before, min_before, max_after, min_after    ! for testing
+  
+  if (n_lowpass==0) then
+    return
+  endif
+
+  ! Total operator is I - (I-G^n_lowpass)^n_highpass
+  if (present(q)) then
+    call pass_var(q, G%Domain, position=CORNER, complete=.true.)
+    q(:,:) = q(:,:) * mask_q(:,:)
+    call min_max(q, min_before, max_before)
+
+    q1(:,:) = q(:,:)
+    
+    do i=1,n_highpass
+      q2(:,:) = q1(:,:)
+      ! q2 -> (G^n_lowpass)*q2
+      do j=1,ABS(n_lowpass)
+        call smooth_Tq(G, mask_T, mask_q, q=q2)
+      enddo
+      ! q1 -> (I-G^n_lowpass)*q1
+      q1(:,:) = q1(:,:) - q2(:,:)
+    enddo
+
+    if (n_lowpass>0) then
+      ! q -> q - ((I-G^n_lowpass)^n_highpass)*q
+      q(:,:) = q(:,:) - q1(:,:)
+    else
+      ! q -> ((I-G^n_lowpass)^n_highpass)*q
+      q(:,:) = q1(:,:)
+    endif
+    
+    !call check_nan(q, 'applying filter at q points')
+
+    if (n_highpass==1 .AND. n_lowpass>0) then
+      call min_max(q, min_after, max_after)
+      if (max_after > max_before .OR. min_after < min_before) then
+        write(*,*) 'filter error: not monotone in q field:', min_before, min_after, max_before, max_after
+      endif
+    endif
+  endif
+
+  if (present(T)) then
+    call pass_var(T, G%Domain)
+    T(:,:) = T(:,:) * mask_T(:,:)
+    call min_max(T, min_before, max_before)
+
+    T1(:,:) = T(:,:)
+    
+    do i=1,n_highpass
+      T2(:,:) = T1(:,:)
+      do j=1,ABS(n_lowpass)
+        call smooth_Tq(G, mask_T, mask_q, T=T2)
+      enddo
+      T1(:,:) = T1(:,:) - T2(:,:)
+    enddo
+
+    if (n_lowpass>0) then
+      T(:,:) = T(:,:) - T1(:,:)
+    else
+      T(:,:) = T1(:,:)
+    endif
+    
+    !call check_nan(T, 'applying filter at T points')
+
+    if (n_highpass==1 .AND. n_lowpass>0) then
+      call min_max(T, min_after, max_after)
+      if (max_after > max_before .OR. min_after < min_before) then
+        write(*,*) 'filter error: not monotone in T field:', min_before, min_after, max_before, max_after
+      endif
+    endif
+  endif
+end subroutine filter
+
+! returns filtered fields in-place and 
+! residuals as optional argument
+subroutine smooth_Tq(G, mask_T, mask_q, T, q)
+  type(ocean_grid_type),              intent(in)              :: G      !< Ocean grid
+  real, dimension(SZI_(G),SZJ_(G)),   intent(in)              :: mask_T !< mask of wet points in T points
+  real, dimension(SZIB_(G),SZJB_(G)), intent(in)              :: mask_q !< mask of wet points in q points
+  real, dimension(SZI_(G),SZJ_(G)),   optional, intent(inout) :: T      !< any field at T points
+  real, dimension(SZIB_(G),SZJB_(G)), optional, intent(inout) :: q      !< any field at q points
+  
+  real, dimension(SZI_(G),SZJ_(G))   :: Tim ! intermediate value of T-field
+  real, dimension(SZIB_(G),SZJB_(G)) :: qim ! intermediate value of q-field
+
+  integer :: i, j
+  real :: wside   ! weights for side (i+1,j), (i-1,j), (i,j+1), (i,j-1)
+  real :: wcorner ! weights for corners (i+1,j+1), (i+1,j-1), (i-1,j-1), (i-1,j+1)
+  real :: wcenter ! weight for center point (i,j)
+  
+  wside = 1. / 8.
+  wcorner = 1. / 16.
+  wcenter = 1. - (wside*4. + wcorner*4.)
+
+  if (present(q)) then
+    call pass_var(q, G%Domain, position=CORNER, complete=.true.)
+    qim(:,:) = q(:,:) * mask_q(:,:)
+    do J = G%JscB, G%JecB
+      do I = G%IscB, G%IecB
+        q(I,J) = wcenter * qim(I,J)     & 
+               + wcorner * qim(I-1,J-1) &
+               + wcorner * qim(I-1,J+1) &
+               + wcorner * qim(I+1,J-1) &
+               + wcorner * qim(I+1,J+1) &
+               + wside   * qim(I-1,J)   &
+               + wside   * qim(I+1,J)   &
+               + wside   * qim(I,J-1)   &
+               + wside   * qim(I,J+1)
+        q(I,J) = q(I,J) * mask_q(I,J)
+      enddo
+    enddo
+    call pass_var(q, G%Domain, position=CORNER, complete=.true.)
+  endif
+
+  if (present(T)) then
+    call pass_var(T, G%Domain)
+    Tim(:,:) = T(:,:) * mask_T(:,:)
+    do j = G%jsc, G%jec
+      do i = G%isc, G%iec
+        T(i,j) = wcenter * Tim(i,j)     & 
+               + wcorner * Tim(i-1,j-1) &
+               + wcorner * Tim(i-1,j+1) &
+               + wcorner * Tim(i+1,j-1) &
+               + wcorner * Tim(i+1,j+1) &
+               + wside   * Tim(i-1,j)   &
+               + wside   * Tim(i+1,j)   &
+               + wside   * Tim(i,j-1)   &
+               + wside   * Tim(i,j+1)
+        T(i,j) = T(i,j) * mask_T(i,j)
+      enddo
+    enddo
+    call pass_var(T, G%Domain)
+  endif
+
+end subroutine smooth_Tq
+
+subroutine min_max(array, min_val, max_val)
+  real, dimension(:,:), intent(in) :: array
+  real, intent(out)                :: min_val, max_val
+  
+  min_val = minval(array)
+  max_val = maxval(array)
+  call min_across_PEs(min_val)
+  call max_across_PEs(max_val)
+end subroutine
+
+subroutine check_nan(array, str)
+  !use mpi
+  use MOM_coms_infra, only : PE_here
+  real, intent(in) :: array(:,:)
+  character(*), intent(in) :: str
+
+  integer :: i,j
+  integer :: nx, ny
+  logical :: flag = .False.
+  integer :: ierr
+  character(100) :: out
+
+  nx = size(array,1)
+  ny = size(array,2)
+
+  do i=1,nx
+    do j=1,ny
+      if (isnan(array(i,j))) then
+        write(*,'(A,I3,A,I3,A,I3,A,I3,A,I3,A,A)') 'NaN at(',i,',',j,') of (',nx,',',ny,') at PE', PE_here(), ', in ', str 
+        flag = .True.
+      endif
+    enddo
+  enddo
+
+end subroutine check_nan
+
+subroutine set_chessnoise(G, T, q)
+  type(ocean_grid_type),              intent(in)              :: G      !< Ocean grid
+  real, dimension(SZI_(G),SZJ_(G)),   intent(inout) :: T      !< any field at T points
+  real, dimension(SZIB_(G),SZJB_(G)), intent(inout) :: q      !< any field at q points
+
+  integer :: i, j, ig, jg
+
+  do j = G%jsd, G%jed
+    do i = G%isd, G%ied
+      ig = i + G%idg_offset
+      jg = j + G%jdg_offset
+      T(i,j) = (-1.) ** (ig+jg)
+    enddo
+  enddo
+
+  do J = G%JsdB, G%JedB
+    do I = G%IsdB, G%IedB
+      Ig = I + G%idg_offset
+      Jg = J + G%jdg_offset
+      q(I,J) = (-1.) ** (Ig+Jg)
+    enddo
+  enddo
+
+end subroutine set_chessnoise
+
+subroutine compute_masks(G, GV, h, mask_T, mask_q, k)
+  type(ocean_grid_type),              intent(in)    :: G      !< Ocean grid
+  type(verticalGrid_type),            intent(in)    :: GV     !< The ocean's vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
+                                      intent(in)    :: h      !< Layer thicknesses [H ~> m or kg m-2].
+  real, dimension(SZI_(G),SZJ_(G)),   intent(inout) :: mask_T !< mask of wet points in T points
+  real, dimension(SZIB_(G),SZJB_(G)), intent(inout) :: mask_q !< mask of wet points in q points
+  integer,                            intent(in)    :: k      !< index of vertical layer
+
+  real :: hmin
+  integer :: i, j
+
+  hmin = GV%Angstrom_H * 2. ! min thickness beyound which we have boundary
+
+  mask_q(:,:) = 0.
+  do J = G%JscB, G%JecB
+    do I = G%IscB, G%IecB
+      if (h(i+1,j+1,k) < hmin .or. &
+          h(i  ,j  ,k) < hmin .or. &
+          h(i+1,j  ,k) < hmin .or. &
+          h(i  ,j+1,k) < hmin      &
+        ) then
+          mask_q(I,J) = 0.
+        else
+          mask_q(I,J) = 1.
+        endif
+        mask_q(I,J) = mask_q(I,J) * G%mask2dBu(I,J)
+    enddo
+  enddo
+  call pass_var(mask_q, G%Domain, position=CORNER, complete=.true.)
+
+  mask_T(:,:) = 0.
+  do j = G%jsc, G%jec
+    do i = G%isc, G%iec
+      if (h(i,j,k) < hmin) then
+        mask_T(i,j) = 0.
+      else
+        mask_T(i,j) = 1.
+      endif
+        mask_T(i,j) = mask_T(i,j) * G%mask2dT(i,j)
+    enddo
+  enddo
+  call pass_var(mask_T, G%Domain)
+
+end subroutine compute_masks
 
 ! This is copy-paste from MOM_diagnostics.F90, specifically 1125 line
 subroutine compute_energy_source(u, v, h, fx, fy, G, GV, CS)
