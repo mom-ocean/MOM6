@@ -325,6 +325,7 @@ type, public :: barotropic_CS ; private
 
   !>@{ Diagnostic IDs
   integer :: id_PFu_bt = -1, id_PFv_bt = -1, id_Coru_bt = -1, id_Corv_bt = -1
+  integer :: id_LDu_bt = -1, id_LDv_bt = -1
   integer :: id_ubtforce = -1, id_vbtforce = -1, id_uaccel = -1, id_vaccel = -1
   integer :: id_visc_rem_u = -1, id_visc_rem_v = -1, id_eta_cor = -1
   integer :: id_ubt = -1, id_vbt = -1, id_eta_bt = -1, id_ubtav = -1, id_vbtav = -1
@@ -531,16 +532,16 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
     ubt_wtd, &    ! A weighted sum used to find the filtered final ubt [L T-1 ~> m s-1].
     PFu_avg, &    ! The average zonal barotropic pressure gradient force [L T-2 ~> m s-2].
     Coru_avg, &   ! The average zonal barotropic Coriolis acceleration [L T-2 ~> m s-2].
+    LDu_avg, &    ! The average zonal barotropic linear wave drag acceleration [L T-2 ~> m s-2].
     ubt_dt        ! The zonal barotropic velocity tendency [L T-2 ~> m s-2].
   real, dimension(SZI_(G),SZJB_(G)) :: &
     av_rem_v, &   ! The weighted average of visc_rem_v [nondim]
     tmp_v, &      ! A temporary array at v points [L T-2 ~> m s-2] or [nondim]
     vbt_st, &     ! The meridional barotropic velocity at the start of timestep [L T-1 ~> m s-1].
     vbt_wtd, &    ! A weighted sum used to find the filtered final vbt [L T-1 ~> m s-1].
-    PFv_avg, &    ! The average meridional barotropic pressure gradient force,
-                  ! [L T-2 ~> m s-2].
-    Corv_avg, &   ! The summed meridional barotropic Coriolis acceleration,
-                  ! [L T-2 ~> m s-2].
+    PFv_avg, &    ! The average meridional barotropic pressure gradient force [L T-2 ~> m s-2].
+    Corv_avg, &   ! The average meridional barotropic Coriolis acceleration [L T-2 ~> m s-2].
+    LDv_avg, &    ! The average meridional barotropic linear wave drag acceleration [L T-2 ~> m s-2].
     vbt_dt        ! The meridional barotropic velocity tendency [L T-2 ~> m s-2].
   real, dimension(SZI_(G),SZJ_(G)) :: &
     tmp_h, &      ! A temporary array at h points [nondim]
@@ -1763,9 +1764,9 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
                 f_4_u, f_4_v, bt_rem_u, bt_rem_v, &
                 BT_force_u, BT_force_v, Cor_ref_u, Cor_ref_v, Rayleigh_u, Rayleigh_v, &
                 eta_PF, gtot_E, gtot_W, gtot_N, gtot_S, SpV_col_avg, dgeo_de, &
-                eta_sum, eta_wtd, ubt_wtd, vbt_wtd, Coru_avg, PFu_avg, Corv_avg, PFv_avg, &
-                use_BT_cont, interp_eta_PF, find_etaav, dt, dtbt, nstep, nfilter, &
-                wt_vel, wt_eta, wt_accel, wt_trans, wt_accel2, OBC, CS%BT_OBC, CS, G, MS, GV, US)
+                eta_sum, eta_wtd, ubt_wtd, vbt_wtd, Coru_avg, PFu_avg, LDu_avg, Corv_avg, PFv_avg, &
+                LDv_avg, use_BT_cont, interp_eta_PF, find_etaav, dt, dtbt, nstep, nfilter, &
+                wt_vel, wt_eta, wt_accel, wt_trans, wt_accel2, ADp, OBC, CS%BT_OBC, CS, G, MS, GV, US)
 
 
   if (id_clock_calc > 0) call cpu_clock_end(id_clock_calc)
@@ -1863,8 +1864,14 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
     do J=js-1,je ; do i=is,ie
       v_accel_bt(i,J) = v_accel_bt(i,J) - Drag_v(i,J)
     enddo ; enddo
-  endif
 
+    if ((CS%id_LDu_bt > 0) .or. (associated(ADp%bt_lwd_u))) then ; do j=js,je ; do I=is-1,ie
+      LDu_avg(I,j) = LDu_avg(I,j) - Drag_u(I,j)
+    enddo ; enddo ; endif
+    if ((CS%id_LDv_bt > 0) .or. (associated(ADp%bt_lwd_v))) then ; do J=js-1,je ; do i=is,ie
+      LDv_avg(i,J) = LDv_avg(i,J) - Drag_v(i,J)
+    enddo ; enddo ; endif
+  endif
 
   if (id_clock_calc_post > 0) call cpu_clock_end(id_clock_calc_post)
   if (id_clock_pass_post > 0) call cpu_clock_begin(id_clock_pass_post)
@@ -1915,6 +1922,8 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
       if (CS%id_PFv_bt > 0) call post_data(CS%id_PFv_bt, PFv_avg, CS%diag)
       if (CS%id_Coru_bt > 0) call post_data(CS%id_Coru_bt, Coru_avg, CS%diag)
       if (CS%id_Corv_bt > 0) call post_data(CS%id_Corv_bt, Corv_avg, CS%diag)
+      if (CS%id_LDu_bt > 0) call post_data(CS%id_LDu_bt, LDu_avg, CS%diag)
+      if (CS%id_LDv_bt > 0) call post_data(CS%id_LDv_bt, LDv_avg, CS%diag)
     else ! if (CS%answer_date < 20190101) then
       if (CS%id_PFu_bt > 0) then
         do j=js,je ; do I=is-1,ie
@@ -1941,6 +1950,8 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
         call post_data(CS%id_Corv_bt, Corv_avg, CS%diag)
       endif
     endif
+
+    ! Diagnostics for time tendency
     if (CS%id_ubtdt > 0) then
       do j=js,je ; do I=is-1,ie
         ubt_dt(I,j) = (ubt_wtd(I,j) - ubt_st(I,j))*Idt
@@ -1953,6 +1964,32 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
       enddo ; enddo
       call post_data(CS%id_vbtdt, vbt_dt(isd:ied,JsdB:JedB), CS%diag)
     endif
+
+    ! Copy decomposed barotropic accelerations to ADp
+    if (associated(ADp%bt_pgf_u)) then ; do k=1,nz ; do j=js,je ; do I=is-1,ie
+      ADp%bt_pgf_u(I,j,k) = PFu_avg(I,j) - &
+        (((pbce(i+1,j,k) - gtot_W(i+1,j)) * e_anom(i+1,j)) - &
+         ((pbce(i,j,k) - gtot_E(i,j)) * e_anom(i,j))) * CS%IdxCu(I,j)
+    enddo ; enddo ; enddo ; endif
+    if (associated(ADp%bt_pgf_v)) then ; do k=1,nz ; do J=js-1,je ; do i=is,ie
+      ADp%bt_pgf_v(i,J,k) = PFv_avg(i,J) - &
+        (((pbce(i,j+1,k) - gtot_S(i,j+1)) * e_anom(i,j+1)) - &
+         ((pbce(i,j,k) - gtot_N(i,j)) * e_anom(i,j))) * CS%IdyCv(i,J)
+    enddo ; enddo ; enddo ; endif
+
+    if (associated(ADp%bt_cor_u)) then ; do j=js,je ; do I=is-1,ie
+      ADp%bt_cor_u(I,j) = Coru_avg(I,j)
+    enddo ; enddo ; endif
+    if (associated(ADp%bt_cor_v)) then ; do J=js-1,je ; do i=is,ie
+      ADp%bt_cor_v(i,J) = Corv_avg(i,J)
+    enddo ; enddo ; endif
+
+    if (associated(ADp%bt_lwd_u)) then ; do j=js,je ; do I=is-1,ie
+      ADp%bt_lwd_u(I,j) = LDu_avg(I,j)
+    enddo ; enddo ; endif
+    if (associated(ADp%bt_lwd_v)) then ; do J=js-1,je ; do i=is,ie
+      ADp%bt_lwd_v(i,J) = LDv_avg(i,J)
+    enddo ; enddo ; endif
 
     if (CS%id_ubtforce > 0) call post_data(CS%id_ubtforce, BT_force_u(IsdB:IedB,jsd:jed), CS%diag)
     if (CS%id_vbtforce > 0) call post_data(CS%id_vbtforce, BT_force_v(isd:ied,JsdB:JedB), CS%diag)
@@ -2103,9 +2140,9 @@ subroutine btstep_timeloop(eta, ubt, vbt, uhbt0, Datu, BTCL_u, vhbt0, Datv, BTCL
                 f_4_u, f_4_v, bt_rem_u, bt_rem_v, &
                 BT_force_u, BT_force_v, Cor_ref_u, Cor_ref_v, Rayleigh_u, Rayleigh_v, &
                 eta_PF, gtot_E, gtot_W, gtot_N, gtot_S, SpV_col_avg, dgeo_de, &
-                eta_sum, eta_wtd, ubt_wtd, vbt_wtd, Coru_avg, PFu_avg, Corv_avg, PFv_avg, &
-                use_BT_cont, interp_eta_PF, find_etaav, dt, dtbt, nstep, nfilter, &
-                wt_vel, wt_eta, wt_accel, wt_trans, wt_accel2, OBC, BT_OBC, CS, G, MS, GV, US)
+                eta_sum, eta_wtd, ubt_wtd, vbt_wtd, Coru_avg, PFu_avg, LDu_avg, Corv_avg, PFv_avg, &
+                LDv_avg, use_BT_cont, interp_eta_PF, find_etaav, dt, dtbt, nstep, nfilter, &
+                wt_vel, wt_eta, wt_accel, wt_trans, wt_accel2, ADp, OBC, BT_OBC, CS, G, MS, GV, US)
 
   type(barotropic_CS),    intent(inout) :: CS    !< Barotropic control structure
   type(ocean_grid_type),  intent(inout) :: G     !< The ocean's grid structure (inout to allow for halo updates)
@@ -2232,11 +2269,15 @@ subroutine btstep_timeloop(eta, ubt, vbt, uhbt0, Datu, BTCL_u, vhbt0, Datv, BTCL
   real, dimension(SZIB_(G),SZJ_(G)), intent(out) :: &
     Coru_avg      !< The average zonal barotropic Coriolis acceleration [L T-2 ~> m s-2]
   real, dimension(SZIB_(G),SZJ_(G)), intent(out) :: &
-    PFu_avg       !< The summed zonal barotropic pressure gradient force [L T-2 ~> m s-2]
+    PFu_avg       !< The average zonal barotropic pressure gradient force [L T-2 ~> m s-2]
+  real, dimension(SZIB_(G),SZJ_(G)), intent(out) :: &
+    LDu_avg       !< The average zonal barotropic linear wave drag acceleration [L T-2 ~> m s-2]
   real, dimension(SZI_(G),SZJB_(G)), intent(out) :: &
     Corv_avg      !< The average meridional barotropic Coriolis acceleration [L T-2 ~> m s-2]
   real, dimension(SZI_(G),SZJB_(G)), intent(out) :: &
     PFv_avg       !< The average meridional barotropic pressure gradient force [L T-2 ~> m s-2]
+  real, dimension(SZI_(G),SZJB_(G)), intent(out) :: &
+    LDv_avg       !< The average meridional barotropic linear wave drag acceleration [L T-2 ~> m s-2]
   logical, intent(in) :: use_BT_cont  !< If true, use the information in the bt_cont_types to
                   !! calculate the mass transports
   logical, intent(in) :: interp_eta_PF !< If true, interpolate the reference value of eta used
@@ -2261,6 +2302,7 @@ subroutine btstep_timeloop(eta, ubt, vbt, uhbt0, Datu, BTCL_u, vhbt0, Datv, BTCL
   real, dimension(nstep+nfilter+1), intent(in) :: &
     wt_accel2     !< Potentially un-normalized relative weights of each of the
                   !! barotropic timesteps in determining the average accelerations [nondim]
+  type(accel_diag_ptrs),    pointer       :: ADp     !< Acceleration diagnostic pointers
   type(ocean_OBC_type),     pointer       :: OBC     !< An associated pointer to an OBC type
   type(BT_OBC_type),        intent(in)    :: BT_OBC  !< A structure with the private barotropic arrays
                                                      !! related to the open boundary conditions,
@@ -2351,7 +2393,10 @@ subroutine btstep_timeloop(eta, ubt, vbt, uhbt0, Datu, BTCL_u, vhbt0, Datv, BTCL
 
   ! Manage diagnostics
   do_ave = query_averaging_enabled(CS%diag) .and. &
-      ((CS%id_PFu_bt > 0) .or. (CS%id_PFv_bt > 0) .or. (CS%id_Coru_bt > 0) .or. (CS%id_Corv_bt > 0))
+      ((CS%id_PFu_bt > 0) .or. (CS%id_Coru_bt > 0) .or. (CS%id_LDu_bt > 0) .or. &
+       (CS%id_PFv_bt > 0) .or. (CS%id_Corv_bt > 0) .or. (CS%id_LDv_bt > 0) .or. &
+       associated(ADp%bt_pgf_u) .or. associated(ADp%bt_cor_u) .or. associated(ADp%bt_lwd_u) .or. &
+       associated(ADp%bt_pgf_v) .or. associated(ADp%bt_cor_v) .or. associated(ADp%bt_lwd_v))
 
   do_hifreq_output = .false.
   if ((CS%id_ubt_hifreq > 0) .or. (CS%id_vbt_hifreq > 0) .or. &
@@ -2379,7 +2424,7 @@ subroutine btstep_timeloop(eta, ubt, vbt, uhbt0, Datu, BTCL_u, vhbt0, Datv, BTCL
   do j=js,je ; do I=is-1,ie
     CS%ubtav(I,j) = 0.0 ; uhbtav(I,j) = 0.0
     PFu_avg(I,j) = 0.0 ; Coru_avg(I,j) = 0.0
-    ubt_wtd(I,j) = 0.0
+    LDu_avg(I,j) = 0.0 ; ubt_wtd(I,j) = 0.0
   enddo ; enddo
   !$OMP do
   do j=jsvf-1,jevf+1 ; do I=isvf-1,ievf
@@ -2389,7 +2434,7 @@ subroutine btstep_timeloop(eta, ubt, vbt, uhbt0, Datu, BTCL_u, vhbt0, Datv, BTCL
   do J=js-1,je ; do i=is,ie
     CS%vbtav(i,J) = 0.0 ; vhbtav(i,J) = 0.0
     PFv_avg(i,J) = 0.0 ; Corv_avg(i,J) = 0.0
-    vbt_wtd(i,J) = 0.0
+    LDv_avg(i,J) = 0.0 ; vbt_wtd(i,J) = 0.0
   enddo ; enddo
   !$OMP do
   do J=jsvf-1,jevf ; do i=isvf-1,ievf+1
@@ -2644,33 +2689,50 @@ subroutine btstep_timeloop(eta, ubt, vbt, uhbt0, Datu, BTCL_u, vhbt0, Datv, BTCL
 
     ! Accumulate some diagnostics of time-averaged barotropic accelerations.
     if (do_ave) then
-      if (CS%id_PFu_bt > 0) then
+      if ((CS%id_PFu_bt > 0) .or. associated(ADp%bt_pgf_u)) then
         !$OMP do
         do j=js,je ; do I=is-1,ie
           PFu_avg(I,j)  = PFu_avg(I,j) + wt_accel2(n) * PFu(I,j)
         enddo ; enddo
         !$OMP end do nowait
       endif
-      if (CS%id_PFv_bt > 0) then
+      if ((CS%id_PFv_bt > 0) .or. associated(ADp%bt_pgf_v)) then
         !$OMP do
         do J=js-1,je ; do i=is,ie
           PFv_avg(i,J)  = PFv_avg(i,J) + wt_accel2(n) * PFv(i,J)
         enddo ; enddo
         !$OMP end do nowait
       endif
-      if (CS%id_Coru_bt > 0) then
+      if ((CS%id_Coru_bt > 0) .or. associated(ADp%bt_cor_u)) then
         !$OMP do
         do j=js,je ; do I=is-1,ie
           Coru_avg(I,j) = Coru_avg(I,j) + wt_accel2(n) * Cor_u(I,j)
         enddo ; enddo
         !$OMP end do nowait
       endif
-      if (CS%id_Corv_bt > 0) then
+      if ((CS%id_Corv_bt > 0) .or. associated(ADp%bt_cor_v)) then
         !$OMP do
         do J=js-1,je ; do i=is,ie
           Corv_avg(i,J) = Corv_avg(i,J) + wt_accel2(n) * Cor_v(i,J)
         enddo ; enddo
         !$OMP end do nowait
+      endif
+
+      if (CS%linear_wave_drag) then
+        if ((CS%id_LDu_bt > 0) .or. (associated(ADp%bt_lwd_u))) then
+          !$OMP do
+          do j=js,je ; do I=is-1,ie
+            LDu_avg(I,j) = LDu_avg(I,j) - wt_accel2(n) * (ubt(I,j) * Rayleigh_u(I,j))
+          enddo ; enddo
+          !$OMP end do nowait
+        endif
+        if ((CS%id_LDv_bt > 0) .or. (associated(ADp%bt_lwd_v))) then
+          !$OMP do
+          do J=js-1,je ; do i=is,ie
+            LDv_avg(i,J) = LDv_avg(i,J) - wt_accel2(n) * (vbt(i,J) * Rayleigh_v(i,J))
+          enddo ; enddo
+          !$OMP end do nowait
+        endif
       endif
     endif
 
@@ -5304,7 +5366,7 @@ subroutine barotropic_init(u, v, h, Time, G, GV, US, param_file, diag, CS, &
   call get_param(param_file, mdl, "BT_WAVE_DRAG_FILE", wave_drag_file, &
                  "The name of the file with the barotropic linear wave drag "//&
                  "piston velocities.", default="", &
-                 do_not_log=.not.CS%linear_wave_drag.and..not.CS%linear_freq_drag)
+                 do_not_log=(.not.CS%linear_wave_drag) .and. (.not.CS%linear_freq_drag))
   call get_param(param_file, mdl, "BT_WAVE_DRAG_VAR", wave_drag_var, &
                  "The name of the variable in BT_WAVE_DRAG_FILE with the "//&
                  "barotropic linear wave drag piston velocities at h points. "//&
@@ -5656,6 +5718,12 @@ subroutine barotropic_init(u, v, h, Time, G, GV, US, param_file, diag, CS, &
       'Zonal Anomalous Barotropic Pressure Force Acceleration', 'm s-2', conversion=US%L_T2_to_m_s2)
   CS%id_PFv_bt = register_diag_field('ocean_model', 'PFvBT', diag%axesCv1, Time, &
       'Meridional Anomalous Barotropic Pressure Force Acceleration', 'm s-2', conversion=US%L_T2_to_m_s2)
+  if (CS%linear_wave_drag .or. (CS%use_filter .and. CS%linear_freq_drag)) then
+    CS%id_LDu_bt = register_diag_field('ocean_model', 'WaveDraguBT', diag%axesCu1, Time, &
+      'Zonal Barotropic Linear Wave Drag Acceleration', 'm s-2', conversion=US%L_T2_to_m_s2)
+    CS%id_LDv_bt = register_diag_field('ocean_model', 'WaveDragvBT', diag%axesCv1, Time, &
+      'Meridional Barotropic Linear Wave Drag Acceleration', 'm s-2', conversion=US%L_T2_to_m_s2)
+  endif
   CS%id_Coru_bt = register_diag_field('ocean_model', 'CoruBT', diag%axesCu1, Time, &
       'Zonal Barotropic Coriolis Acceleration', 'm s-2', conversion=US%L_T2_to_m_s2)
   CS%id_Corv_bt = register_diag_field('ocean_model', 'CorvBT', diag%axesCv1, Time, &
@@ -5793,7 +5861,7 @@ subroutine barotropic_init(u, v, h, Time, G, GV, US, param_file, diag, CS, &
       do J=js-1,je ; do i=is,ie ; CS%vbt_IC(i,J) = CS%vbtav(i,J) ; enddo ; enddo
     endif
   endif
-!   Calculate other constants which are used for btstep.
+  ! Calculate other constants which are used for btstep.
 
   if (.not.CS%nonlin_stress) then
     Mean_SL = G%Z_ref
@@ -5829,7 +5897,7 @@ subroutine barotropic_init(u, v, h, Time, G, GV, US, param_file, diag, CS, &
   call create_group_pass(pass_bt_hbt_btav, CS%ubtav, CS%vbtav, G%Domain)
   call do_group_pass(pass_bt_hbt_btav, G%Domain)
 
-!  id_clock_pass = cpu_clock_id('(Ocean BT halo updates)', grain=CLOCK_ROUTINE)
+  ! id_clock_pass = cpu_clock_id('(Ocean BT halo updates)', grain=CLOCK_ROUTINE)
   id_clock_calc_pre  = cpu_clock_id('(Ocean BT pre-calcs only)', grain=CLOCK_ROUTINE)
   id_clock_pass_pre = cpu_clock_id('(Ocean BT pre-step halo updates)', grain=CLOCK_ROUTINE)
   id_clock_calc = cpu_clock_id('(Ocean BT stepping calcs only)', grain=CLOCK_ROUTINE)

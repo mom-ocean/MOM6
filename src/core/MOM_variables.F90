@@ -180,8 +180,8 @@ type, public :: accel_diag_ptrs
                            !! in du_dt_visc) [L T-2 ~> m s-2]
     dv_dt_str => NULL(), & !< Meridional acceleration due to the surface stress (included
                            !! in dv_dt_visc) [L T-2 ~> m s-2]
-    du_dt_dia => NULL(), & !< Zonal acceleration due to diapycnal  mixing [L T-2 ~> m s-2]
-    dv_dt_dia => NULL(), & !< Meridional acceleration due to diapycnal  mixing [L T-2 ~> m s-2]
+    du_dt_dia => NULL(), & !< Zonal acceleration due to diapycnal mixing [L T-2 ~> m s-2]
+    dv_dt_dia => NULL(), & !< Meridional acceleration due to diapycnal mixing [L T-2 ~> m s-2]
     u_accel_bt => NULL(), &!< Pointer to the zonal barotropic-solver acceleration [L T-2 ~> m s-2]
     v_accel_bt => NULL()   !< Pointer to the meridional barotropic-solver acceleration [L T-2 ~> m s-2]
   real, pointer, dimension(:,:,:) :: du_other => NULL()
@@ -190,6 +190,24 @@ type, public :: accel_diag_ptrs
   real, pointer, dimension(:,:,:) :: dv_other => NULL()
                            !< Meridional velocity changes due to any other processes that are
                            !! not due to any explicit accelerations [L T-1 ~> m s-1].
+
+  ! Sub-terms of [uv]_accel_bt
+  real, pointer :: bt_pgf_u(:,:,:) => NULL() !< Zonal acceleration due to anomalous pressure gradient from
+                                             !! barotropic solver, a 3D component of u_accel_bt that includes both
+                                             !! PFuBT and the offset term for central differencing timestepping
+                                             !! [L T-2 ~> m s-2]
+  real, pointer :: bt_pgf_v(:,:,:) => NULL() !< Meridional acceleration due to anomalous pressure gradient from
+                                             !! barotropic solver, a 3D component of v_accel_bt that includes both
+                                             !! PFvBT and the offset term for central differencing timestepping
+                                             !! [L T-2 ~> m s-2]
+  real, pointer :: bt_cor_u(:,:) => NULL()   !< Zonal acceleration due to anomalous Coriolis force from barotropic
+                                             !! solver, a 2D component of u_accel_bt [L T-2 ~> m s-2]
+  real, pointer :: bt_cor_v(:,:) => NULL()   !< Meridional acceleration due to anomalous Coriolis force from barotropic
+                                             !! solver, a 2D component of v_accel_bt [L T-2 ~> m s-2]
+  real, pointer :: bt_lwd_u(:,:) => NULL()   !< Zonal acceleration due to linear wave drag from barotropic solver,
+                                             !! a 2D component of u_accel_bt [L T-2 ~> m s-2]
+  real, pointer :: bt_lwd_v(:,:) => NULL()   !< Meridional acceleration due to linear wave drag from barotropic solver,
+                                             !! a 2D component of v_accel_bt [L T-2 ~> m s-2]
 
   ! These accelerations are sub-terms included in the accelerations above.
   real, pointer :: gradKEu(:,:,:) => NULL()  !< gradKEu = - d/dx(u2) [L T-2 ~> m s-2]

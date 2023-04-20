@@ -81,6 +81,9 @@ type, public :: diagnostics_CS ; private
   integer :: id_col_ht         = -1, id_dh_dt          = -1
   integer :: id_KE             = -1, id_dKEdt          = -1
   integer :: id_PE_to_KE       = -1, id_KE_BT          = -1
+  integer :: id_KE_BT_PF       = -1, id_KE_BT_CF       = -1
+  integer :: id_KE_BT_WD       = -1
+  integer :: id_PE_to_KE_btbc  = -1, id_KE_Coradv_btbc = -1
   integer :: id_KE_Coradv      = -1, id_KE_adv         = -1
   integer :: id_KE_visc        = -1, id_KE_stress      = -1
   integer :: id_KE_visc_gl90   = -1
@@ -1100,6 +1103,107 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, GV, US, CS
     call post_data(CS%id_KE_BT, KE_term, CS%diag)
   endif
 
+  if (CS%id_PE_to_KE_btbc > 0) then
+    ! Calculate the potential energy to KE term including barotropic solver contribution
+    ! [H L2 T-3 ~> m3 s-3 or W m-2].
+    do k=1,nz
+      do j=js,je ; do I=Isq,Ieq
+        KE_u(I,j) = uh(I,j,k) * G%dxCu(I,j) * (ADp%PFu(I,j,k) + ADp%bt_pgf_u(I,j,k))
+      enddo ; enddo
+      do J=Jsq,Jeq ; do i=is,ie
+        KE_v(i,J) = vh(i,J,k) * G%dyCv(i,J) * (ADp%PFv(i,J,k) + ADp%bt_pgf_v(i,J,k))
+      enddo ; enddo
+      if (.not.G%symmetric) &
+        call do_group_pass(CS%pass_KE_uv, G%domain)
+      do j=js,je ; do i=is,ie
+        KE_term(i,j,k) = 0.5 * G%IareaT(i,j) &
+            * ((KE_u(I,j) + KE_u(I-1,j)) + (KE_v(i,J) + KE_v(i,J-1)))
+      enddo ; enddo
+    enddo
+    call post_data(CS%id_PE_to_KE_btbc, KE_term, CS%diag)
+  endif
+
+  if (CS%id_KE_Coradv_btbc > 0) then
+    ! Calculate the KE source from Coriolis and advection terms including barotropic solver contribution
+    ! [H L2 T-3 ~> m3 s-3 or W m-2].
+    do k=1,nz
+      do j=js,je ; do I=Isq,Ieq
+        KE_u(I,j) = uh(I,j,k) * G%dxCu(I,j) * (ADp%CAu(I,j,k) + ADp%bt_cor_u(I,j))
+      enddo ; enddo
+      do J=Jsq,Jeq ; do i=is,ie
+        KE_v(i,J) = vh(i,J,k) * G%dyCv(i,J) * (ADp%CAv(i,J,k) + ADp%bt_cor_v(i,J))
+      enddo ; enddo
+      do j=js,je ; do i=is,ie
+        KE_h(i,j) = -KE(i,j,k) * G%IareaT(i,j) &
+            * ((uh(I,j,k) - uh(I-1,j,k)) + (vh(i,J,k) - vh(i,J-1,k)))
+      enddo ; enddo
+      if (.not.G%symmetric) &
+        call do_group_pass(CS%pass_KE_uv, G%domain)
+      do j=js,je ; do i=is,ie
+        KE_term(i,j,k) = KE_h(i,j) + 0.5 * G%IareaT(i,j) &
+            * ((KE_u(I,j) + KE_u(I-1,j)) + (KE_v(i,J) + KE_v(i,J-1)))
+      enddo ; enddo
+    enddo
+    call post_data(CS%id_KE_Coradv_btbc, KE_term, CS%diag)
+  endif
+
+  if (CS%id_KE_BT_PF > 0) then
+    ! Calculate the anomalous pressure gradient force contribution to KE term [H L2 T-3 ~> m3 s-3 or W m-2].
+    do k=1,nz
+      do j=js,je ; do I=Isq,Ieq
+        KE_u(I,j) = uh(I,j,k) * G%dxCu(I,j) * ADp%bt_pgf_u(I,j,k)
+      enddo ; enddo
+      do J=Jsq,Jeq ; do i=is,ie
+        KE_v(i,J) = vh(i,J,k) * G%dyCv(i,J) * ADp%bt_pgf_v(i,J,k)
+      enddo ; enddo
+      if (.not.G%symmetric) &
+        call do_group_pass(CS%pass_KE_uv, G%domain)
+      do j=js,je ; do i=is,ie
+        KE_term(i,j,k) = 0.5 * G%IareaT(i,j) &
+            * ((KE_u(I,j) + KE_u(I-1,j)) + (KE_v(i,J) + KE_v(i,J-1)))
+      enddo ; enddo
+    enddo
+    call post_data(CS%id_KE_BT_PF, KE_term, CS%diag)
+  endif
+
+  if (CS%id_KE_BT_CF > 0) then
+    ! Calculate the anomalous Coriolis force contribution to KE term [H L2 T-3 ~> m3 s-3 or W m-2].
+    do k=1,nz
+      do j=js,je ; do I=Isq,Ieq
+        KE_u(I,j) = uh(I,j,k) * G%dxCu(I,j) * ADp%bt_cor_u(I,j)
+      enddo ; enddo
+      do J=Jsq,Jeq ; do i=is,ie
+        KE_v(i,J) = vh(i,J,k) * G%dyCv(i,J) * ADp%bt_cor_v(i,J)
+      enddo ; enddo
+      if (.not.G%symmetric) &
+        call do_group_pass(CS%pass_KE_uv, G%domain)
+      do j=js,je ; do i=is,ie
+        KE_term(i,j,k) = 0.5 * G%IareaT(i,j) &
+            * ((KE_u(I,j) + KE_u(I-1,j)) + (KE_v(i,J) + KE_v(i,J-1)))
+      enddo ; enddo
+    enddo
+    call post_data(CS%id_KE_BT_CF, KE_term, CS%diag)
+  endif
+
+  if (CS%id_KE_BT_WD > 0) then
+    ! Calculate the barotropic linear wave drag contribution to KE term [H L2 T-3 ~> m3 s-3 or W m-2].
+    do k=1,nz
+      do j=js,je ; do I=Isq,Ieq
+        KE_u(I,j) = uh(I,j,k) * G%dxCu(I,j) * ADp%bt_lwd_u(I,j)
+      enddo ; enddo
+      do J=Jsq,Jeq ; do i=is,ie
+        KE_v(i,J) = vh(i,J,k) * G%dyCv(i,J) * ADp%bt_lwd_v(i,J)
+      enddo ; enddo
+      if (.not.G%symmetric) &
+        call do_group_pass(CS%pass_KE_uv, G%domain)
+      do j=js,je ; do i=is,ie
+        KE_term(i,j,k) = 0.5 * G%IareaT(i,j) &
+            * ((KE_u(I,j) + KE_u(I-1,j)) + (KE_v(i,J) + KE_v(i,J-1)))
+      enddo ; enddo
+    enddo
+    call post_data(CS%id_KE_BT_WD, KE_term, CS%diag)
+  endif
+
   if (CS%id_KE_Coradv > 0) then
     ! Calculate the KE source from the combined Coriolis and advection terms [H L2 T-3 ~> m3 s-3 or W m-2].
     ! The Coriolis source should be zero, but is not due to truncation errors.  There should be
@@ -1893,6 +1997,21 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, US, param_file, diag
     CS%id_KE_BT = register_diag_field('ocean_model', 'KE_BT', diag%axesTL, Time, &
         'Barotropic contribution to Kinetic Energy', &
         'm3 s-3', conversion=GV%H_to_m*(US%L_T_to_m_s**2)*US%s_to_T)
+    CS%id_PE_to_KE_btbc = register_diag_field('ocean_model', 'PE_to_KE_btbc', diag%axesTL, Time, &
+        'Potential to Kinetic Energy Conversion of Layer (including barotropic solver contribution)', &
+        'm3 s-3', conversion=GV%H_to_m*(US%L_T_to_m_s**2)*US%s_to_T)
+    CS%id_KE_Coradv_btbc = register_diag_field('ocean_model', 'KE_Coradv_btbc', diag%axesTL, Time, &
+        'Kinetic Energy Source from Coriolis and Advection (including barotropic solver contribution)', &
+        'm3 s-3', conversion=GV%H_to_m*(US%L_T_to_m_s**2)*US%s_to_T)
+    CS%id_KE_BT_PF = register_diag_field('ocean_model', 'KE_BTPF', diag%axesTL, Time, &
+        'Kinetic Energy Source from Barotropic Pressure Gradient Force.', &
+        'm3 s-3', conversion=GV%H_to_m*(US%L_T_to_m_s**2)*US%s_to_T)
+    CS%id_KE_BT_CF = register_diag_field('ocean_model', 'KE_BTCF', diag%axesTL, Time, &
+        'Kinetic Energy Source from Barotropic Coriolis Force.', &
+        'm3 s-3', conversion=GV%H_to_m*(US%L_T_to_m_s**2)*US%s_to_T)
+    CS%id_KE_BT_WD = register_diag_field('ocean_model', 'KE_BTWD', diag%axesTL, Time, &
+        'Kinetic Energy Source from Barotropic Linear Wave Drag.', &
+        'm3 s-3', conversion=GV%H_to_m*(US%L_T_to_m_s**2)*US%s_to_T)
   endif
   CS%id_KE_Coradv = register_diag_field('ocean_model', 'KE_Coradv', diag%axesTL, Time, &
       'Kinetic Energy Source from Coriolis and Advection', &
@@ -2351,10 +2470,26 @@ subroutine set_dependent_diagnostics(MIS, ADp, CDp, G, GV, CS)
     call safe_alloc_ptr(CDp%diapyc_vel,isd,ied,jsd,jed,nz+1)
   endif
 
+  if ((CS%id_PE_to_KE_btbc > 0) .or. (CS%id_KE_BT_PF > 0)) then
+    call safe_alloc_ptr(ADp%bt_pgf_u, IsdB, IedB, jsd, jed, nz)
+    call safe_alloc_ptr(ADp%bt_pgf_v, isd, ied, JsdB, JedB, nz)
+  endif
+
+  if ((CS%id_KE_Coradv_btbc > 0) .or. (CS%id_KE_BT_CF > 0)) then
+    call safe_alloc_ptr(ADp%bt_cor_u, IsdB, IedB, jsd, jed)
+    call safe_alloc_ptr(ADp%bt_cor_v, isd, ied, JsdB, JedB)
+  endif
+
+  if (CS%id_KE_BT_WD > 0) then
+    call safe_alloc_ptr(ADp%bt_lwd_u, IsdB, IedB, jsd, jed)
+    call safe_alloc_ptr(ADp%bt_lwd_v, isd, ied, JsdB, JedB)
+  endif
+
   CS%KE_term_on = ((CS%id_dKEdt > 0) .or. (CS%id_PE_to_KE > 0) .or. (CS%id_KE_BT > 0) .or. &
                    (CS%id_KE_Coradv > 0) .or. (CS%id_KE_adv > 0) .or. (CS%id_KE_visc > 0) .or. &
                    (CS%id_KE_visc_gl90 > 0) .or. (CS%id_KE_stress > 0) .or. (CS%id_KE_horvisc > 0) .or. &
-                   (CS%id_KE_dia > 0))
+                   (CS%id_KE_dia > 0) .or. (CS%id_PE_to_KE_btbc > 0) .or. (CS%id_KE_BT_PF > 0) .or. &
+                   (CS%id_KE_Coradv_btbc > 0) .or. (CS%id_KE_BT_CF > 0) .or. (CS%id_KE_BT_WD > 0))
 
   if (CS%id_h_du_dt > 0) call safe_alloc_ptr(ADp%diag_hu,IsdB,IedB,jsd,jed,nz)
   if (CS%id_h_dv_dt > 0) call safe_alloc_ptr(ADp%diag_hv,isd,ied,JsdB,JedB,nz)
@@ -2393,6 +2528,13 @@ subroutine MOM_diagnostics_end(CS, ADp, CDp)
   if (associated(ADp%dv_dt_dia))  deallocate(ADp%dv_dt_dia)
   if (associated(ADp%du_other))   deallocate(ADp%du_other)
   if (associated(ADp%dv_other))   deallocate(ADp%dv_other)
+
+  if (associated(ADp%bt_pgf_u)) deallocate(ADp%bt_pgf_u)
+  if (associated(ADp%bt_pgf_v)) deallocate(ADp%bt_pgf_v)
+  if (associated(ADp%bt_cor_u)) deallocate(ADp%bt_cor_u)
+  if (associated(ADp%bt_cor_v)) deallocate(ADp%bt_cor_v)
+  if (associated(ADp%bt_lwd_u)) deallocate(ADp%bt_lwd_u)
+  if (associated(ADp%bt_lwd_v)) deallocate(ADp%bt_lwd_v)
 
   if (associated(ADp%diag_hfrac_u)) deallocate(ADp%diag_hfrac_u)
   if (associated(ADp%diag_hfrac_v)) deallocate(ADp%diag_hfrac_v)
