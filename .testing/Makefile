@@ -733,7 +733,8 @@ prof.p0: $(WORKSPACE)/work/p0/opt/clocks.json $(WORKSPACE)/work/p0/opt_target/cl
 	python tools/compare_clocks.py $^
 
 $(WORKSPACE)/work/p0/%/clocks.json: $(WORKSPACE)/work/p0/%/std.out
-	python tools/parse_fms_clocks.py -d $(@D) $^ > $@
+	python tools/parse_fms_clocks.py -d $(@D) $^ > $@ \
+	  || !( rm $@ )
 
 $(WORKSPACE)/work/p0/opt/std.out: build/opt/MOM6
 $(WORKSPACE)/work/p0/opt_target/std.out: build/opt_target/MOM6
