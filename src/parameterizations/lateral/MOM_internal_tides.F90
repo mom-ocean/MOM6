@@ -34,7 +34,7 @@ public internal_tides_init, internal_tides_end
 public get_lowmode_loss
 
 !> This control structure has parameters for the MOM_internal_tides module
-type, public :: int_tide_CS ; private
+type, public :: int_tide_CS
   logical :: do_int_tides    !< If true, use the internal tide code.
   integer :: nFreq = 0       !< The number of internal tide frequency bands
   integer :: nMode = 1       !< The number of internal tide vertical modes
@@ -95,6 +95,20 @@ type, public :: int_tide_CS ; private
                         !! summed over angle, frequency and mode [R Z3 T-3 ~> W m-2]
   real, allocatable, dimension(:,:) :: tot_allprocesses_loss !< Energy loss rates due to all processes,
                         !! summed over angle, frequency and mode [R Z3 T-3 ~> W m-2]
+  real, allocatable, dimension(:,:,:,:) :: w_struct !< Vertical structure of vertical velocity (normalized)
+                        !! for each frequency and each mode [nondim]
+  real, allocatable, dimension(:,:,:,:) :: u_struct !< Vertical structure of horizontal velocity (normalized and
+                        !! divided by layer thicknesses) for each frequency and each mode [Z-1 ~> m-1]
+  real, allocatable, dimension(:,:,:) :: u_struct_max !< Maximum of u_struct,
+                        !! for each mode [Z-1 ~> m-1]
+  real, allocatable, dimension(:,:,:) :: u_struct_bot !< Bottom value of u_struct,
+                        !! for each mode [Z-1 ~> m-1]
+  real, allocatable, dimension(:,:,:) :: int_w2 !< Vertical integral of w_struct squared,
+                        !! for each mode [Z ~> m]
+  real, allocatable, dimension(:,:,:) :: int_U2 !< Vertical integral of u_struct squared,
+                        !! for each mode [Z-1 ~> m-1]
+  real, allocatable, dimension(:,:,:) :: int_N2w2 !< Depth-integrated Brunt Vaissalla freqency times
+                        !! vertical profile squared, for each mode [Z T-2 ~> m s-2]
   real :: q_itides      !< fraction of local dissipation [nondim]
   real :: En_sum        !< global sum of energy for use in debugging, in MKS units [J]
   type(time_type), pointer :: Time => NULL() !< A pointer to the model's clock.
@@ -126,7 +140,6 @@ type, public :: int_tide_CS ; private
 
   type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to regulate the
                         !! timing of diagnostic output.
-  type(wave_structure_CS) :: wave_struct    !< Wave structure control structure
 
   !>@{ Diag handles
   ! Diag handles relevant to all modes, frequencies, and angles
@@ -148,6 +161,12 @@ type, public :: int_tide_CS ; private
   integer, allocatable, dimension(:,:) :: &
              id_En_ang_mode, &
              id_itidal_loss_ang_mode
+  integer, allocatable, dimension(:) :: &
+             id_Ustruct_mode, &
+             id_Wstruct_mode, &
+             id_int_w2_mode, &
+             id_int_U2_mode, &
+             id_int_N2w2_mode
   !>@}
 
 end type int_tide_CS
@@ -205,6 +224,10 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
   real :: I_D_here ! The inverse of the local depth [Z-1 ~> m-1]
   real :: I_rho0   ! The inverse fo the Boussinesq density [R-1 ~> m3 kg-1]
   real :: freq2    ! The frequency squared [T-2 ~> s-2]
+  real :: PE_term  ! total potential energy of profile [R Z ~> kg m-2]
+  real :: KE_term  ! total kinetic energy of profile [R Z ~> kg m-2]
+  real :: U_mag    ! rescaled magnitude of horizontal profile [L Z T-1 ~> m2 s-1]
+  real :: W0       ! rescaled magnitude of vertical profile [Z T-1 ~> m s-1]
   real :: c_phase  ! The phase speed [L T-1 ~> m s-1]
   real :: loss_rate  ! An energy loss rate [T-1 ~> s-1]
   real :: Fr2_max    ! The column maximum internal wave Froude number squared [nondim]
@@ -222,6 +245,7 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nAngle = CS%NAngle
+  nzm = GV%ke
   I_rho0 = 1.0 / GV%Rho0
   cn_subRO = 1e-30*US%m_s_to_L_T
   en_subRO = 1e-30*US%W_m2_to_RZ3_T3*US%s_to_T
@@ -229,6 +253,7 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
   ! initialize local arrays
   drag_scale(:,:) = 0.
   Ub(:,:,:,:) = 0.
+  Umax(:,:,:,:) = 0.
 
   ! Set the wave speeds for the modes, using cg(n) ~ cg(1)/n.**********************
   ! This is wrong, of course, but it works reasonably in some cases.
@@ -417,15 +442,43 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
   ! First, find velocity profiles
   if (CS%apply_wave_drag .or. CS%apply_Froude_drag) then
     do m=1,CS%NMode ; do fr=1,CS%Nfreq
-      ! Calculate modal structure for given mode and frequency
-      call wave_structure(h, tv, G, GV, US, cn(:,:,m), m, CS%frequency(fr), &
-                          CS%wave_struct, tot_En_mode(:,:,fr,m), full_halos=.true.)
-      ! Pick out near-bottom and max horizontal baroclinic velocity values at each point
+
+      ! compute near-bottom and max horizontal baroclinic velocity values at each point
       do j=jsd,jed ; do i=isd,ied
         id_g = i + G%idg_offset ; jd_g = j + G%jdg_offset ! for debugging
-        nzm = CS%wave_struct%num_intfaces(i,j)
-        Ub(i,j,fr,m) = CS%wave_struct%Uavg_profile(i,j,nzm)
-        Umax(i,j,fr,m) = maxval(CS%wave_struct%Uavg_profile(i,j,1:nzm))
+
+        ! Calculate wavenumber magnitude
+        freq2 = CS%frequency(fr)**2
+
+        f2 = (0.25*(G%CoriolisBu(I,J) + G%CoriolisBu(max(I-1,1),max(J-1,1)) + &
+                    G%CoriolisBu(I,max(J-1,1)) + G%CoriolisBu(max(I-1,1),J)))**2
+        Kmag2 = (freq2 - f2) / (cn(i,j,m)**2 + cn_subRO**2)
+
+
+        ! Back-calculate amplitude from energy equation
+        if ( (G%mask2dT(i,j) > 0.5) .and. (freq2*Kmag2 > 0.0)) then
+          ! Units here are [R Z ~> kg m-2]
+          KE_term = 0.25*GV%Rho0*( ((freq2 + f2) / (freq2*Kmag2))*US%L_to_Z**2*CS%int_U2(i,j,m) + &
+                                   CS%int_w2(i,j,m) )
+          PE_term = 0.25*GV%Rho0*( CS%int_N2w2(i,j,m) / freq2 )
+
+          if (KE_term + PE_term > 0.0) then
+            W0 = sqrt( tot_En_mode(i,j,fr,m) / (KE_term + PE_term) )
+          else
+            !call MOM_error(WARNING, "MOM internal tides: KE + PE <= 0.0; setting to W0 to 0.0")
+            W0 = 0.0
+          endif
+
+          U_mag = W0 * sqrt((freq2 + f2) / (2.0*freq2*Kmag2))
+          ! scaled maximum tidal velocity
+          Umax(i,j,fr,m) = abs(U_mag * CS%u_struct_max(i,j,m))
+          ! scaled bottom tidal velocity
+          Ub(i,j,fr,m) = abs(U_mag * CS%u_struct_bot(i,j,m))
+        else
+          Umax(i,j,fr,m) = 0.
+          Ub(i,j,fr,m) = 0.
+        endif
+
       enddo ; enddo ! i-loop, j-loop
     enddo ; enddo ! fr-loop, m-loop
   endif ! apply_wave or _Froude_drag (Ub or Umax needed)
@@ -454,7 +507,7 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
     ! Pick out maximum baroclinic velocity values; calculate Fr=max(u)/cg
     do m=1,CS%NMode ; do fr=1,CS%Nfreq
       freq2 = CS%frequency(fr)**2
-      do j=jsd,jed ; do i=isd,ied
+      do j=js,je ; do i=is,ie
         id_g = i + G%idg_offset ; jd_g = j + G%jdg_offset ! for debugging
         ! Calculate horizontal phase velocity magnitudes
         f2 = 0.25*((G%CoriolisBu(I,J)**2 + G%CoriolisBu(I-1,J-1)**2) + &
@@ -463,7 +516,6 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
         c_phase = 0.0
         if (Kmag2 > 0.0) then
           c_phase = sqrt(freq2/Kmag2)
-          nzm = CS%wave_struct%num_intfaces(i,j)
           Fr2_max = (Umax(i,j,fr,m) / c_phase)**2
           ! Dissipate energy if Fr>1; done here with an arbitrary time scale
           if (Fr2_max > 1.0) then
@@ -634,6 +686,26 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
     do m=1,CS%NMode ; do fr=1,CS%Nfreq ; if (CS%id_Ub_mode(fr,m) > 0) then
       call post_data(CS%id_Ub_mode(fr,m), Ub(:,:,fr,m), CS%diag)
     endif ; enddo ; enddo
+
+    do m=1,CS%NMode ; if (CS%id_Ustruct_mode(m) > 0) then
+      call post_data(CS%id_Ustruct_mode(m), CS%u_struct(:,:,:,m), CS%diag)
+    endif ; enddo
+
+    do m=1,CS%NMode ; if (CS%id_Wstruct_mode(m) > 0) then
+      call post_data(CS%id_Wstruct_mode(m), CS%w_struct(:,:,:,m), CS%diag)
+    endif ; enddo
+
+    do m=1,CS%NMode ; if (CS%id_int_w2_mode(m) > 0) then
+      call post_data(CS%id_int_w2_mode(m), CS%int_w2(:,:,m), CS%diag)
+    endif ; enddo
+
+    do m=1,CS%NMode ; if (CS%id_int_U2_mode(m) > 0) then
+      call post_data(CS%id_int_U2_mode(m), CS%int_U2(:,:,m), CS%diag)
+    endif ; enddo
+
+    do m=1,CS%NMode ; if (CS%id_int_N2w2_mode(m) > 0) then
+      call post_data(CS%id_int_N2w2_mode(m), CS%int_N2w2(:,:,m), CS%diag)
+    endif ; enddo
 
     ! Output 2-D horizontal phase velocity for each frequency and mode
     do m=1,CS%NMode ; do fr=1,CS%Nfreq ; if (CS%id_cp_mode(fr,m) > 0) then
@@ -2226,7 +2298,7 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
                                 ! nominal ocean depth, or a negative value for no limit [nondim]
   real    :: period_1           ! The period of the gravest modeled mode [T ~> s]
   integer :: num_angle, num_freq, num_mode, m, fr
-  integer :: isd, ied, jsd, jed, a, id_ang, i, j
+  integer :: isd, ied, jsd, jed, a, id_ang, i, j, nz
   type(axes_grp) :: axes_ang
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
@@ -2241,6 +2313,7 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
   character(len=80)  :: rough_var ! Input file variable names
 
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
+  nz = GV%ke
 
   use_int_tides = .false.
   call read_param(param_file, "INTERNAL_TIDES", use_int_tides)
@@ -2407,6 +2480,13 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
   allocate(CS%tot_itidal_loss(isd:ied,jsd:jed), source=0.0)
   allocate(CS%tot_Froude_loss(isd:ied,jsd:jed), source=0.0)
   allocate(CS%tot_residual_loss(isd:ied,jsd:jed), source=0.0)
+  allocate(CS%u_struct_bot(isd:ied,jsd:jed,num_mode), source=0.0)
+  allocate(CS%u_struct_max(isd:ied,jsd:jed,num_mode), source=0.0)
+  allocate(CS%int_w2(isd:ied,jsd:jed,num_mode), source=0.0)
+  allocate(CS%int_U2(isd:ied,jsd:jed,num_mode), source=0.0)
+  allocate(CS%int_N2w2(isd:ied,jsd:jed,num_mode), source=0.0)
+  allocate(CS%w_struct(isd:ied,jsd:jed,1:nz+1,num_mode), source=0.0)
+  allocate(CS%u_struct(isd:ied,jsd:jed,1:nz,num_mode), source=0.0)
 
   ! Compute the fixed part of the bottom drag loss from baroclinic modes
   call get_param(param_file, mdl, "H2_FILE", h2_file, &
@@ -2593,6 +2673,11 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
   allocate(CS%id_allprocesses_loss_mode(CS%nFreq,CS%nMode), source=-1)
   allocate(CS%id_itidal_loss_ang_mode(CS%nFreq,CS%nMode), source=-1)
   allocate(CS%id_Ub_mode(CS%nFreq,CS%nMode), source=-1)
+  allocate(CS%id_Ustruct_mode(CS%nMode), source=-1)
+  allocate(CS%id_Wstruct_mode(CS%nMode), source=-1)
+  allocate(CS%id_int_w2_mode(CS%nMode), source=-1)
+  allocate(CS%id_int_U2_mode(CS%nMode), source=-1)
+  allocate(CS%id_int_N2w2_mode(CS%nMode), source=-1)
   allocate(CS%id_cp_mode(CS%nFreq,CS%nMode), source=-1)
 
   allocate(angles(CS%NAngle), source=0.0)
@@ -2656,8 +2741,42 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
 
   enddo ; enddo
 
-  ! Initialize wave_structure (not sure if this should be here - BDM)
-  call wave_structure_init(Time, G, GV, param_file, diag, CS%wave_struct)
+
+  do m=1,CS%nMode
+
+    ! Register 3-D internal tide horizonal velocity profile for each mode
+    write(var_name, '("Itide_Ustruct","_mode",i1)') m
+    write(var_descript, '("horizonal velocity profile for mode ",i1)') m
+    CS%id_Ustruct_mode(m) = register_diag_field('ocean_model', var_name, &
+                 diag%axesTl, Time, var_descript, 'm-1', conversion=US%m_to_L)
+    call MOM_mesg("Registering "//trim(var_name)//", Described as: "//var_descript, 5)
+
+    ! Register 3-D internal tide vertical velocity profile for each mode
+    write(var_name, '("Itide_Wstruct","_mode",i1)') m
+    write(var_descript, '("vertical velocity profile for mode ",i1)') m
+    CS%id_Wstruct_mode(m) = register_diag_field('ocean_model', var_name, &
+                 diag%axesTi, Time, var_descript, '[]')
+    call MOM_mesg("Registering "//trim(var_name)//", Described as: "//var_descript, 5)
+
+    write(var_name, '("Itide_int_w2","_mode",i1)') m
+    write(var_descript, '("integral of w2 for mode ",i1)') m
+    CS%id_int_w2_mode(m) = register_diag_field('ocean_model', var_name, &
+                 diag%axesT1, Time, var_descript, 'm', conversion=US%Z_to_m)
+    call MOM_mesg("Registering "//trim(var_name)//", Described as: "//var_descript, 5)
+
+    write(var_name, '("Itide_int_U2","_mode",i1)') m
+    write(var_descript, '("integral of U2 for mode ",i1)') m
+    CS%id_int_U2_mode(m) = register_diag_field('ocean_model', var_name, &
+                 diag%axesT1, Time, var_descript, 'm-1', conversion=US%m_to_L)
+    call MOM_mesg("Registering "//trim(var_name)//", Described as: "//var_descript, 5)
+
+    write(var_name, '("Itide_int_N2w2","_mode",i1)') m
+    write(var_descript, '("integral of N2w2 for mode ",i1)') m
+    CS%id_int_N2w2_mode(m) = register_diag_field('ocean_model', var_name, &
+                 diag%axesT1, Time, var_descript, 'm s-2', conversion=US%Z_to_m*US%s_to_T**2)
+    call MOM_mesg("Registering "//trim(var_name)//", Described as: "//var_descript, 5)
+
+  enddo
 
 end subroutine internal_tides_init
 
@@ -2670,6 +2789,12 @@ subroutine internal_tides_end(CS)
   if (allocated(CS%id_En_mode)) deallocate(CS%id_En_mode)
   if (allocated(CS%id_Ub_mode)) deallocate(CS%id_Ub_mode)
   if (allocated(CS%id_cp_mode)) deallocate(CS%id_cp_mode)
+  if (allocated(CS%id_Ustruct_mode)) deallocate(CS%id_Ustruct_mode)
+  if (allocated(CS%id_Wstruct_mode)) deallocate(CS%id_Wstruct_mode)
+  if (allocated(CS%id_int_w2_mode)) deallocate(CS%id_int_w2_mode)
+  if (allocated(CS%id_int_U2_mode)) deallocate(CS%id_int_U2_mode)
+  if (allocated(CS%id_int_N2w2_mode)) deallocate(CS%id_int_N2w2_mode)
+
 end subroutine internal_tides_end
 
 end module MOM_internal_tides
