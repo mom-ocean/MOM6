@@ -174,9 +174,9 @@ integer, parameter, public :: EOS_LINEAR = 1 !< A named integer specifying an eq
 integer, parameter, public :: EOS_UNESCO = 2 !< A named integer specifying an equation of state
 integer, parameter, public :: EOS_WRIGHT = 3 !< A named integer specifying an equation of state
 integer, parameter, public :: EOS_WRIGHT_FULL = 4 !< A named integer specifying an equation of state
-integer, parameter, public :: EOS_WRIGHT_RED = 5 !< A named integer specifying an equation of state
+integer, parameter, public :: EOS_WRIGHT_REDUCED = 5 !< A named integer specifying an equation of state
 integer, parameter, public :: EOS_TEOS10 = 6 !< A named integer specifying an equation of state
-integer, parameter, public :: EOS_ROQUET_RHO   = 7 !< A named integer specifying an equation of state
+integer, parameter, public :: EOS_ROQUET_RHO = 7 !< A named integer specifying an equation of state
 integer, parameter, public :: EOS_ROQUET_SPV = 8 !< A named integer specifying an equation of state
 integer, parameter, public :: EOS_JACKETT06 = 9 !< A named integer specifying an equation of state
 
@@ -184,7 +184,7 @@ character*(12), parameter :: EOS_LINEAR_STRING = "LINEAR" !< A string for specif
 character*(12), parameter :: EOS_UNESCO_STRING = "UNESCO" !< A string for specifying the equation of state
 character*(12), parameter :: EOS_JACKETT_STRING = "JACKETT_MCD" !< A string for specifying the equation of state
 character*(12), parameter :: EOS_WRIGHT_STRING = "WRIGHT" !< A string for specifying the equation of state
-character*(12), parameter :: EOS_WRIGHT_RED_STRING = "WRIGHT_RED" !< A string for specifying the equation of state
+character*(16), parameter :: EOS_WRIGHT_RED_STRING = "WRIGHT_REDUCED" !< A string for specifying the equation of state
 character*(12), parameter :: EOS_WRIGHT_FULL_STRING = "WRIGHT_FULL" !< A string for specifying the equation of state
 character*(12), parameter :: EOS_TEOS10_STRING = "TEOS10" !< A string for specifying the equation of state
 character*(12), parameter :: EOS_NEMO_STRING   = "NEMO"   !< A string for specifying the equation of state
@@ -302,7 +302,7 @@ subroutine calculate_density_array(T, S, pressure, rho, start, npts, EOS, rho_re
       call calculate_density_wright(T, S, pressure, rho, start, npts, rho_ref)
     case (EOS_WRIGHT_FULL)
       call calculate_density_wright_full(T, S, pressure, rho, start, npts, rho_ref)
-    case (EOS_WRIGHT_RED)
+    case (EOS_WRIGHT_REDUCED)
       call calculate_density_wright_red(T, S, pressure, rho, start, npts, rho_ref)
     case (EOS_TEOS10)
       call calculate_density_teos10(T, S, pressure, rho, start, npts, rho_ref)
@@ -449,7 +449,7 @@ subroutine calculate_spec_vol_array(T, S, pressure, specvol, start, npts, EOS, s
       call calculate_spec_vol_wright(T, S, pressure, specvol, start, npts, spv_ref)
     case (EOS_WRIGHT_FULL)
       call calculate_spec_vol_wright_full(T, S, pressure, specvol, start, npts, spv_ref)
-    case (EOS_WRIGHT_RED)
+    case (EOS_WRIGHT_REDUCED)
       call calculate_spec_vol_wright_red(T, S, pressure, specvol, start, npts, spv_ref)
     case (EOS_TEOS10)
       call calculate_spec_vol_teos10(T, S, pressure, specvol, start, npts, spv_ref)
@@ -754,7 +754,7 @@ subroutine calculate_density_derivs_array(T, S, pressure, drho_dT, drho_dS, star
       call calculate_density_derivs_wright(T, S, pressure, drho_dT, drho_dS, start, npts)
     case (EOS_WRIGHT_FULL)
       call calculate_density_derivs_wright_full(T, S, pressure, drho_dT, drho_dS, start, npts)
-    case (EOS_WRIGHT_RED)
+    case (EOS_WRIGHT_REDUCED)
       call calculate_density_derivs_wright_red(T, S, pressure, drho_dT, drho_dS, start, npts)
     case (EOS_TEOS10)
       call calculate_density_derivs_teos10(T, S, pressure, drho_dT, drho_dS, start, npts)
@@ -865,7 +865,7 @@ subroutine calculate_density_derivs_scalar(T, S, pressure, drho_dT, drho_dS, EOS
       call calculate_density_derivs_wright(Ta(1), Sa(1), pres(1),drho_dT, drho_dS)
     case (EOS_WRIGHT_FULL)
       call calculate_density_derivs_wright_full(Ta(1), Sa(1), pres(1),drho_dT, drho_dS)
-    case (EOS_WRIGHT_RED)
+    case (EOS_WRIGHT_REDUCED)
       call calculate_density_derivs_wright_red(Ta(1), Sa(1), pres(1),drho_dT, drho_dS)
     case (EOS_TEOS10)
       call calculate_density_derivs_teos10(Ta(1), Sa(1), pres(1), drho_dT, drho_dS)
@@ -938,7 +938,7 @@ subroutine calculate_density_second_derivs_1d(T, S, pressure, drho_dS_dS, drho_d
       case (EOS_WRIGHT_FULL)
         call calculate_density_second_derivs_wright_full(T, S, pressure, drho_dS_dS, drho_dS_dT, &
                                                     drho_dT_dT, drho_dS_dP, drho_dT_dP, is, npts)
-      case (EOS_WRIGHT_RED)
+      case (EOS_WRIGHT_REDUCED)
         call calculate_density_second_derivs_wright_red(T, S, pressure, drho_dS_dS, drho_dS_dT, &
                                                     drho_dT_dT, drho_dS_dP, drho_dT_dP, is, npts)
       case (EOS_UNESCO)
@@ -980,7 +980,7 @@ subroutine calculate_density_second_derivs_1d(T, S, pressure, drho_dS_dS, drho_d
       case (EOS_WRIGHT_FULL)
         call calculate_density_second_derivs_wright_full(Ta, Sa, pres, drho_dS_dS, drho_dS_dT, &
                                                     drho_dT_dT, drho_dS_dP, drho_dT_dP, is, npts)
-      case (EOS_WRIGHT_RED)
+      case (EOS_WRIGHT_REDUCED)
         call calculate_density_second_derivs_wright_red(Ta, Sa, pres, drho_dS_dS, drho_dS_dT, &
                                                     drho_dT_dT, drho_dS_dP, drho_dT_dP, is, npts)
       case (EOS_UNESCO)
@@ -1076,7 +1076,7 @@ subroutine calculate_density_second_derivs_scalar(T, S, pressure, drho_dS_dS, dr
     case (EOS_WRIGHT_FULL)
       call calculate_density_second_derivs_wright_full(Ta, Sa, pres, drho_dS_dS, drho_dS_dT, &
                                                   drho_dT_dT, drho_dS_dP, drho_dT_dP)
-    case (EOS_WRIGHT_RED)
+    case (EOS_WRIGHT_REDUCED)
       call calculate_density_second_derivs_wright_red(Ta, Sa, pres, drho_dS_dS, drho_dS_dT, &
                                                   drho_dT_dT, drho_dS_dP, drho_dT_dP)
     case (EOS_UNESCO)
@@ -1156,7 +1156,7 @@ subroutine calculate_spec_vol_derivs_array(T, S, pressure, dSV_dT, dSV_dS, start
       call calculate_specvol_derivs_wright(T, S, pressure, dSV_dT, dSV_dS, start, npts)
     case (EOS_WRIGHT_FULL)
       call calculate_specvol_derivs_wright_full(T, S, pressure, dSV_dT, dSV_dS, start, npts)
-    case (EOS_WRIGHT_RED)
+    case (EOS_WRIGHT_REDUCED)
       call calculate_specvol_derivs_wright_red(T, S, pressure, dSV_dT, dSV_dS, start, npts)
     case (EOS_TEOS10)
       call calculate_specvol_derivs_teos10(T, S, pressure, dSV_dT, dSV_dS, start, npts)
@@ -1273,7 +1273,7 @@ subroutine calculate_compress_1d(T, S, pressure, rho, drho_dp, EOS, dom)
       call calculate_compress_wright(Ta, Sa, pres, rho, drho_dp, is, npts)
     case (EOS_WRIGHT_FULL)
       call calculate_compress_wright_full(Ta, Sa, pres, rho, drho_dp, is, npts)
-    case (EOS_WRIGHT_RED)
+    case (EOS_WRIGHT_REDUCED)
       call calculate_compress_wright_red(Ta, Sa, pres, rho, drho_dp, is, npts)
     case (EOS_TEOS10)
       call calculate_compress_teos10(Ta, Sa, pres, rho, drho_dp, is, npts)
@@ -1345,7 +1345,7 @@ subroutine EoS_fit_range(EOS, T_min, T_max, S_min, S_max, p_min, p_max)
       call EoS_fit_range_Wright(T_min, T_max, S_min, S_max, p_min, p_max)
     case (EOS_WRIGHT_FULL)
       call EoS_fit_range_Wright_full(T_min, T_max, S_min, S_max, p_min, p_max)
-    case (EOS_WRIGHT_RED)
+    case (EOS_WRIGHT_REDUCED)
       call EoS_fit_range_Wright_red(T_min, T_max, S_min, S_max, p_min, p_max)
     case (EOS_TEOS10)
       call EoS_fit_range_TEOS10(T_min, T_max, S_min, S_max, p_min, p_max)
@@ -1453,7 +1453,7 @@ subroutine analytic_int_specific_vol_dp(T, S, p_t, p_b, alpha_ref, HI, EOS, &
                                   inty_dza, halo_size, bathyP, dP_tiny, useMassWghtInterp, &
                                   SV_scale=EOS%R_to_kg_m3, pres_scale=EOS%RL2_T2_to_Pa, &
                                   temp_scale=EOS%C_to_degC, saln_scale=EOS%S_to_ppt)
-    case (EOS_WRIGHT_RED)
+    case (EOS_WRIGHT_REDUCED)
       call int_spec_vol_dp_wright_red(T, S, p_t, p_b, alpha_ref, HI, dza, intp_dza, intx_dza, &
                                   inty_dza, halo_size, bathyP, dP_tiny, useMassWghtInterp, &
                                   SV_scale=EOS%R_to_kg_m3, pres_scale=EOS%RL2_T2_to_Pa, &
@@ -1560,7 +1560,7 @@ subroutine analytic_int_density_dz(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, EOS,
                                    dpa, intz_dpa, intx_dpa, inty_dpa, bathyT, &
                                    dz_neglect, useMassWghtInterp, Z_0p=Z_0p)
       endif
-    case (EOS_WRIGHT_RED)
+    case (EOS_WRIGHT_REDUCED)
       rho_scale = EOS%kg_m3_to_R
       pres_scale = EOS%RL2_T2_to_Pa
       if ((rho_scale /= 1.0) .or. (pres_scale /= 1.0) .or. (EOS%C_to_degC /= 1.0) .or. (EOS%S_to_ppt /= 1.0)) then
@@ -1606,7 +1606,7 @@ subroutine EOS_init(param_file, EOS, US)
   call get_param(param_file, mdl, "EQN_OF_STATE", tmpstr, &
                  "EQN_OF_STATE determines which ocean equation of state should be used.  "//&
                  'Currently, the valid choices are "LINEAR", "UNESCO", "JACKETT_MCD", '//&
-                 '"WRIGHT", "WRIGHT_RED", "WRIGHT_FULL", "NEMO", "ROQUET_RHO", "ROQUET_SPV" '//&
+                 '"WRIGHT", "WRIGHT_REDUCED", "WRIGHT_FULL", "NEMO", "ROQUET_RHO", "ROQUET_SPV" '//&
                  'and "TEOS10".  This is only used if USE_EOS is true.', default=EOS_DEFAULT)
   select case (uppercase(tmpstr))
     case (EOS_LINEAR_STRING)
@@ -1618,7 +1618,7 @@ subroutine EOS_init(param_file, EOS, US)
     case (EOS_WRIGHT_STRING)
       EOS%form_of_EOS = EOS_WRIGHT
     case (EOS_WRIGHT_RED_STRING)
-      EOS%form_of_EOS = EOS_WRIGHT_RED
+      EOS%form_of_EOS = EOS_WRIGHT_REDUCED
     case (EOS_WRIGHT_FULL_STRING)
       EOS%form_of_EOS = EOS_WRIGHT_FULL
     case (EOS_TEOS10_STRING)
@@ -1661,7 +1661,7 @@ subroutine EOS_init(param_file, EOS, US)
 
   EOS_quad_default = .not.((EOS%form_of_EOS == EOS_LINEAR) .or. &
                            (EOS%form_of_EOS == EOS_WRIGHT) .or. &
-                           (EOS%form_of_EOS == EOS_WRIGHT_RED) .or. &
+                           (EOS%form_of_EOS == EOS_WRIGHT_REDUCED) .or. &
                            (EOS%form_of_EOS == EOS_WRIGHT_FULL))
   call get_param(param_file, mdl, "EOS_QUADRATURE", EOS%EOS_quadrature, &
                  "If true, always use the generic (quadrature) code "//&
@@ -2061,17 +2061,17 @@ logical function EOS_unit_tests(verbose)
   if (verbose .and. fail) call MOM_error(WARNING, "WRIGHT_FULL EOS has failed some self-consistency tests.")
   EOS_unit_tests = EOS_unit_tests .or. fail
 
-  call EOS_manual_init(EOS_tmp, form_of_EOS=EOS_WRIGHT_RED)
-  fail = test_EOS_consistency(25.0, 35.0, 1.0e7, EOS_tmp, verbose, "WRIGHT_RED", &
+  call EOS_manual_init(EOS_tmp, form_of_EOS=EOS_WRIGHT_REDUCED)
+  fail = test_EOS_consistency(25.0, 35.0, 1.0e7, EOS_tmp, verbose, "WRIGHT_REDUCED", &
                               rho_check=1027.54303596346*EOS_tmp%kg_m3_to_R)
-  if (verbose .and. fail) call MOM_error(WARNING, "WRIGHT_RED EOS has failed some self-consistency tests.")
+  if (verbose .and. fail) call MOM_error(WARNING, "WRIGHT_REDUCED EOS has failed some self-consistency tests.")
   EOS_unit_tests = EOS_unit_tests .or. fail
 
-  ! This test is deliberately outside of the fit range for WRIGHT_RED, and it results in the expected warnings.
-  ! call EOS_manual_init(EOS_tmp, form_of_EOS=EOS_WRIGHT_RED)
-  ! fail = test_EOS_consistency(25.0, 15.0, 1.0e7, EOS_tmp, verbose, "WRIGHT_RED", &
+  ! This test is deliberately outside of the fit range for WRIGHT_REDUCED, and it results in the expected warnings.
+  ! call EOS_manual_init(EOS_tmp, form_of_EOS=EOS_WRIGHT_REDUCED)
+  ! fail = test_EOS_consistency(25.0, 15.0, 1.0e7, EOS_tmp, verbose, "WRIGHT_REDUCED", &
   !                             rho_check=1012.625699301455*EOS_tmp%kg_m3_to_R)
-  ! if (verbose .and. fail) call MOM_error(WARNING, "WRIGHT_RED EOS has failed some self-consistency tests.")
+  ! if (verbose .and. fail) call MOM_error(WARNING, "WRIGHT_REDUCED EOS has failed some self-consistency tests.")
   ! EOS_unit_tests = EOS_unit_tests .or. fail
 
   call EOS_manual_init(EOS_tmp, form_of_EOS=EOS_WRIGHT)
