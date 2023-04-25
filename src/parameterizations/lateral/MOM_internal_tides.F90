@@ -23,7 +23,6 @@ use MOM_time_manager, only  : time_type, time_type_to_real, operator(+), operato
 use MOM_unit_scaling, only  : unit_scale_type
 use MOM_variables, only     : surface, thermo_var_ptrs
 use MOM_verticalGrid, only  : verticalGrid_type
-use MOM_wave_structure, only: wave_structure_init, wave_structure, wave_structure_CS
 
 implicit none ; private
 
