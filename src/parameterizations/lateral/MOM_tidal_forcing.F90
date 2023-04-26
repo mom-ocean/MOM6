@@ -559,14 +559,16 @@ end subroutine find_in_files
 
 !>   This subroutine calculates the geopotential anomalies that drive the tides,
 !! including tidal self-attraction and loading from previous solutions.
-subroutine calc_tidal_forcing(Time, eta_tidal, G, US, CS)
-  type(ocean_grid_type),            intent(in)  :: G         !< The ocean's grid structure.
-  type(time_type),                  intent(in)  :: Time      !< The time for the caluculation.
-  real, dimension(SZI_(G),SZJ_(G)), intent(out) :: eta_tidal !< The tidal forcing geopotential height
-                                                             !! anomalies [Z ~> m].
-  type(unit_scale_type),            intent(in)  :: US        !< A dimensional unit scaling type
-  type(tidal_forcing_CS),           intent(in)  :: CS        !< The control structure returned by a
-                                                             !! previous call to tidal_forcing_init.
+subroutine calc_tidal_forcing(Time, e_tide_eq, e_tide_sal, G, US, CS)
+  type(ocean_grid_type),            intent(in)  :: G          !< The ocean's grid structure.
+  type(time_type),                  intent(in)  :: Time       !< The time for the caluculation.
+  real, dimension(SZI_(G),SZJ_(G)), intent(out) :: e_tide_eq  !< The geopotential height anomalies
+                                                              !! due to the equilibrium tides [Z ~> m].
+  real, dimension(SZI_(G),SZJ_(G)), intent(out) :: e_tide_sal !< The geopotential height anomalies
+                                                              !! due to the tidal SAL [Z ~> m].
+  type(unit_scale_type),            intent(in)  :: US         !< A dimensional unit scaling type
+  type(tidal_forcing_CS),           intent(in)  :: CS         !< The control structure returned by a
+                                                              !! previous call to tidal_forcing_init.
 
   ! Local variables
   real :: now       ! The relative time compared with the tidal reference [T ~> s]
@@ -578,23 +580,23 @@ subroutine calc_tidal_forcing(Time, eta_tidal, G, US, CS)
 
   call cpu_clock_begin(id_clock_tides)
 
+  do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+    e_tide_eq(i,j) = 0.0
+    e_tide_sal(i,j) = 0.0
+  enddo ; enddo
+
   if (CS%nc == 0) then
-    do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1 ; eta_tidal(i,j) = 0.0 ; enddo ; enddo
     return
   endif
 
   now = US%s_to_T * time_type_to_real(Time - cs%time_ref)
-
-  do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-    eta_tidal(i,j) = 0.0
-  enddo ; enddo
 
   do c=1,CS%nc
     m = CS%struct(c)
     amp_cosomegat = CS%amp(c)*CS%love_no(c) * cos(CS%freq(c)*now + CS%phase0(c))
     amp_sinomegat = CS%amp(c)*CS%love_no(c) * sin(CS%freq(c)*now + CS%phase0(c))
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-      eta_tidal(i,j) = eta_tidal(i,j) + (amp_cosomegat*CS%cos_struct(i,j,m) + &
+      e_tide_eq(i,j) = e_tide_eq(i,j) + (amp_cosomegat*CS%cos_struct(i,j,m) + &
                                          amp_sinomegat*CS%sin_struct(i,j,m))
     enddo ; enddo
   enddo
@@ -603,8 +605,8 @@ subroutine calc_tidal_forcing(Time, eta_tidal, G, US, CS)
     cosomegat = cos(CS%freq(c)*now)
     sinomegat = sin(CS%freq(c)*now)
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-      eta_tidal(i,j) = eta_tidal(i,j) + CS%ampsal(i,j,c) * &
-           (cosomegat*CS%cosphasesal(i,j,c) + sinomegat*CS%sinphasesal(i,j,c))
+      e_tide_sal(i,j) = e_tide_sal(i,j) + CS%ampsal(i,j,c) * &
+          (cosomegat*CS%cosphasesal(i,j,c) + sinomegat*CS%sinphasesal(i,j,c))
     enddo ; enddo
   enddo ; endif
 
@@ -612,7 +614,7 @@ subroutine calc_tidal_forcing(Time, eta_tidal, G, US, CS)
     cosomegat = cos(CS%freq(c)*now)
     sinomegat = sin(CS%freq(c)*now)
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-      eta_tidal(i,j) = eta_tidal(i,j) - CS%SAL_SCALAR*CS%amp_prev(i,j,c) * &
+      e_tide_sal(i,j) = e_tide_sal(i,j) - CS%sal_scalar * CS%amp_prev(i,j,c) * &
           (cosomegat*CS%cosphase_prev(i,j,c) + sinomegat*CS%sinphase_prev(i,j,c))
     enddo ; enddo
   enddo ; endif
