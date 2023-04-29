@@ -22,6 +22,7 @@ use MOM_error_handler,        only : callTree_enter, callTree_leave
 use MOM_file_parser,          only : read_param, get_param, log_version, param_file_type
 use MOM_forcing_type,         only : forcing
 use MOM_grid,                 only : ocean_grid_type
+use MOM_interface_heights,    only : calc_derived_thermo
 use MOM_io,                   only : MOM_read_data, MOM_read_vector, CENTER
 use MOM_offline_aux,          only : update_offline_from_arrays, update_offline_from_files
 use MOM_offline_aux,          only : next_modulo_time, offline_add_diurnal_sw
@@ -1025,6 +1026,7 @@ subroutine update_offline_fields(CS, G, GV, US, h, fluxes, do_ale)
   type(forcing),              intent(inout) :: fluxes !< Pointers to forcing fields
   logical,                    intent(in   ) :: do_ale !< True if using ALE
   ! Local variables
+  integer :: stencil
   integer :: i, j, k, is, ie, js, je, nz
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: h_start ! Initial thicknesses [H ~> m or kg m-2]
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
@@ -1085,6 +1087,12 @@ subroutine update_offline_fields(CS, G, GV, US, h, fluxes, do_ale)
   call pass_var(CS%h_end, G%Domain)
   call pass_var(CS%tv%T, G%Domain)
   call pass_var(CS%tv%S, G%Domain)
+
+  ! Update derived thermodynamic quantities.
+  if (allocated(CS%tv%SpV_avg)) then
+    stencil = min(3, G%Domain%nihalo, G%Domain%njhalo)
+    call calc_derived_thermo(CS%tv, CS%h_end, G, GV, US, halo=stencil)
+  endif
 
   ! Update the read indices
   CS%ridx_snap = next_modulo_time(CS%ridx_snap,CS%numtime)

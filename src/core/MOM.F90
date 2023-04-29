@@ -91,7 +91,7 @@ use MOM_grid,                  only : ocean_grid_type, MOM_grid_init, MOM_grid_e
 use MOM_grid,                  only : set_first_direction, rescale_grid_bathymetry
 use MOM_hor_index,             only : hor_index_type, hor_index_init
 use MOM_hor_index,             only : rotate_hor_index
-use MOM_interface_heights,     only : find_eta
+use MOM_interface_heights,     only : find_eta, calc_derived_thermo
 use MOM_interface_filter,      only : interface_filter, interface_filter_init, interface_filter_end
 use MOM_interface_filter,      only : interface_filter_CS
 use MOM_lateral_mixing_coeffs, only : calc_slope_functions, VarMix_init, VarMix_end
@@ -1400,6 +1400,12 @@ subroutine step_MOM_tracer_dyn(CS, G, GV, US, h, Time_local)
       call create_group_pass(pass_T_S, CS%tv%T, G%Domain, To_All+Omit_Corners, halo=1)
       call create_group_pass(pass_T_S, CS%tv%S, G%Domain, To_All+Omit_Corners, halo=1)
       call do_group_pass(pass_T_S, G%Domain, clock=id_clock_pass)
+      halo_sz = 1
+    endif
+
+    ! Update derived thermodynamic quantities.
+    if (allocated(CS%tv%SpV_avg)) then
+      call calc_derived_thermo(CS%tv, h, G, GV, US, halo=halo_sz)
     endif
   endif
 
@@ -1581,6 +1587,11 @@ subroutine step_MOM_thermo(CS, G, GV, US, u, v, h, tv, fluxes, dtdia, &
     call create_group_pass(pass_uv_T_S_h, h, G%Domain, halo=dynamics_stencil)
     call do_group_pass(pass_uv_T_S_h, G%Domain, clock=id_clock_pass)
 
+    ! Update derived thermodynamic quantities.
+    if (allocated(tv%SpV_avg)) then
+      call calc_derived_thermo(tv, h, G, GV, US, halo=dynamics_stencil)
+    endif
+
     if (CS%debug .and. CS%use_ALE_algorithm) then
       call MOM_state_chksum("Post-ALE ", u, v, h, CS%uh, CS%vh, G, GV, US)
       call hchksum(tv%T, "Post-ALE T", G%HI, haloshift=1, scale=US%C_to_degC)
@@ -1623,12 +1634,18 @@ subroutine step_MOM_thermo(CS, G, GV, US, u, v, h, tv, fluxes, dtdia, &
     call cpu_clock_end(id_clock_adiabatic)
 
     if (associated(tv%T)) then
-      call create_group_pass(pass_T_S, tv%T, G%Domain, To_All+Omit_Corners, halo=1)
-      call create_group_pass(pass_T_S, tv%S, G%Domain, To_All+Omit_Corners, halo=1)
+      dynamics_stencil = min(3, G%Domain%nihalo, G%Domain%njhalo)
+      call create_group_pass(pass_T_S, tv%T, G%Domain, To_All+Omit_Corners, halo=dynamics_stencil)
+      call create_group_pass(pass_T_S, tv%S, G%Domain, To_All+Omit_Corners, halo=dynamics_stencil)
       call do_group_pass(pass_T_S, G%Domain, clock=id_clock_pass)
       if (CS%debug) then
         if (associated(tv%T)) call hchksum(tv%T, "Post-diabatic T", G%HI, haloshift=1, scale=US%C_to_degC)
         if (associated(tv%S)) call hchksum(tv%S, "Post-diabatic S", G%HI, haloshift=1, scale=US%S_to_ppt)
+      endif
+
+      ! Update derived thermodynamic quantities.
+      if (allocated(tv%SpV_avg)) then
+        call calc_derived_thermo(tv, h, G, GV, US, halo=dynamics_stencil)
       endif
     endif
 
@@ -1676,6 +1693,8 @@ subroutine step_offline(forces, fluxes, sfc_state, Time_start, time_interval, CS
 
   type(time_type), pointer :: accumulated_time => NULL()
   type(time_type), pointer :: vertical_time => NULL()
+  integer :: dynamics_stencil  ! The computational stencil for the calculations
+                               ! in the dynamic core.
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz
 
   ! 3D pointers
@@ -1847,6 +1866,12 @@ subroutine step_offline(forces, fluxes, sfc_state, Time_start, time_interval, CS
   call pass_var(CS%h, G%Domain)
 
   fluxes%fluxes_used = .true.
+
+  ! Update derived thermodynamic quantities.
+  if (allocated(CS%tv%SpV_avg)) then
+    dynamics_stencil = min(3, G%Domain%nihalo, G%Domain%njhalo)
+    call calc_derived_thermo(CS%tv, CS%h, G, GV, US, halo=dynamics_stencil)
+  endif
 
   if (last_iter) then
     accumulated_time = real_to_time(0.0)
@@ -2817,6 +2842,11 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
     endif
   endif
 
+  ! Allocate any derived equation of state fields.
+  if (use_temperature .and. .not.(GV%Boussinesq .or. GV%semi_Boussinesq)) then
+    allocate(CS%tv%SpV_avg(isd:ied,jsd:jed,nz), source=0.0)
+  endif
+
   if (use_ice_shelf .and. CS%debug) then
     call hchksum(CS%frac_shelf_h, "MOM:frac_shelf_h", G%HI, haloshift=0)
     call hchksum(CS%mass_shelf, "MOM:mass_shelf", G%HI, haloshift=0,scale=US%RZ_to_kg_m2)
@@ -3102,6 +3132,11 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   call create_group_pass(pass_uv_T_S_h, CS%h, G%Domain, halo=dynamics_stencil)
 
   call do_group_pass(pass_uv_T_S_h, G%Domain)
+
+  ! Update derived thermodynamic quantities.
+  if (allocated(CS%tv%SpV_avg)) then
+    call calc_derived_thermo(CS%tv, CS%h, G, GV, US, halo=dynamics_stencil)
+  endif
 
   if (associated(CS%visc%Kv_shear)) &
     call pass_var(CS%visc%Kv_shear, G%Domain, To_All+Omit_Corners, halo=1)
@@ -3931,6 +3966,7 @@ subroutine MOM_end(CS)
   if (associated(CS%Hml)) deallocate(CS%Hml)
   if (associated(CS%tv%salt_deficit)) deallocate(CS%tv%salt_deficit)
   if (associated(CS%tv%frazil)) deallocate(CS%tv%frazil)
+  if (allocated(CS%tv%SpV_avg)) deallocate(CS%tv%SpV_avg)
 
   if (associated(CS%tv%T)) then
     DEALLOC_(CS%T) ; CS%tv%T => NULL() ; DEALLOC_(CS%S) ; CS%tv%S => NULL()

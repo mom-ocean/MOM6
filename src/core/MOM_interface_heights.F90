@@ -3,7 +3,7 @@ module MOM_interface_heights
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-use MOM_density_integrals, only : int_specific_vol_dp
+use MOM_density_integrals, only : int_specific_vol_dp, avg_specific_vol
 use MOM_error_handler, only : MOM_error, FATAL
 use MOM_EOS, only : calculate_density, EOS_type, EOS_domain
 use MOM_file_parser, only : log_version
@@ -16,17 +16,25 @@ implicit none ; private
 
 #include <MOM_memory.h>
 
-public find_eta, dz_to_thickness, dz_to_thickness_simple
+public find_eta, dz_to_thickness, thickness_to_dz, dz_to_thickness_simple
+public calc_derived_thermo
 
 !> Calculates the heights of the free surface or all interfaces from layer thicknesses.
 interface find_eta
   module procedure find_eta_2d, find_eta_3d
 end interface find_eta
 
-!> Calculates layer thickness in thickness units from geometric thicknesses in height units.
+!> Calculates layer thickness in thickness units from geometric distance between the
+!! interfaces around that layer in height units.
 interface dz_to_thickness
   module procedure dz_to_thickness_tv, dz_to_thickness_EoS
 end interface dz_to_thickness
+
+!> Converts layer thickness in thickness units into the vertical distance between the
+!! interfaces around a layer in height units.
+interface thickness_to_dz
+  module procedure thickness_to_dz_3d, thickness_to_dz_jslice
+end interface thickness_to_dz
 
 contains
 
@@ -253,6 +261,45 @@ subroutine find_eta_2d(h, tv, G, GV, US, eta, eta_bt, halo_size, dZref)
 end subroutine find_eta_2d
 
 
+!> Calculate derived thermodynamic quantities for re-use later.
+subroutine calc_derived_thermo(tv, h, G, GV, US, halo)
+  type(ocean_grid_type),   intent(in)    :: G  !< The ocean's grid structure
+  type(verticalGrid_type), intent(in)    :: GV !< The ocean's vertical grid structure
+  type(unit_scale_type),   intent(in)    :: US !< A dimensional unit scaling type
+  type(thermo_var_ptrs),   intent(inout) :: tv !< A structure pointing to various
+                                               !! thermodynamic variables, some of
+                                               !! which will be set here.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
+                           intent(in)    :: h  !< Layer thicknesses [H ~> m or kg m-2].
+  integer,         optional, intent(in)  :: halo !< Width of halo within which to
+                                               !! calculate thicknesses
+  ! Local variables
+  real, dimension(SZI_(G),SZJ_(G)) :: p_t  ! Hydrostatic pressure atop a layer [R L2 T-2 ~> Pa]
+  real, dimension(SZI_(G),SZJ_(G)) :: dp   ! Pressure change across a layer [R L2 T-2 ~> Pa]
+  integer :: i, j, k, is, ie, js, je, halos, nz
+
+  halos = 0 ; if (present(halo)) halos = max(0,halo)
+  is = G%isc-halos ; ie = G%iec+halos ; js = G%jsc-halos ; je = G%jec+halos ; nz = GV%ke
+
+  if (allocated(tv%Spv_avg) .and. associated(tv%eqn_of_state)) then
+    if (associated(tv%p_surf)) then
+      do j=js,je ; do i=is,ie ; p_t(i,j) = tv%p_surf(i,j) ; enddo ; enddo
+    else
+      do j=js,je ; do i=is,ie ; p_t(i,j) = 0.0 ; enddo ; enddo
+    endif
+    do k=1,nz
+      do j=js,je ; do i=is,ie
+        dp(i,j) = GV%g_Earth*GV%H_to_RZ*h(i,j,k)
+      enddo ; enddo
+      call avg_specific_vol(tv%T(:,:,k), tv%S(:,:,k), p_t, dp, G%HI, tv%eqn_of_state, tv%SpV_avg(:,:,k), halo)
+      if (k<nz) then ; do j=js,je ; do i=is,ie
+        p_t(i,j) = p_t(i,j) + dp(i,j)
+      enddo ; enddo ; endif
+    enddo
+  endif
+
+end subroutine calc_derived_thermo
+
 !> Converts thickness from geometric height units to thickness units, perhaps via an
 !! inversion of the integral of the density in pressure using variables stored in
 !! the thermo_var_ptrs type when in non-Boussinesq mode.
@@ -427,5 +474,76 @@ subroutine dz_to_thickness_simple(dz, h, G, GV, US, halo_size, layer_mode)
   endif
 
 end subroutine dz_to_thickness_simple
+
+!> Converts layer thicknesses in thickness units to the vertical distance between edges in height
+!! units, perhaps by multiplication by the precomputed layer-mean specific volume stored in an
+!! array in the thermo_var_ptrs type when in non-Boussinesq mode.
+subroutine thickness_to_dz_3d(h, tv, dz, G, GV, US, halo_size)
+  type(ocean_grid_type),   intent(in)    :: G  !< The ocean's grid structure
+  type(verticalGrid_type), intent(in)    :: GV !< The ocean's vertical grid structure
+  type(unit_scale_type),   intent(in)    :: US !< A dimensional unit scaling type
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
+                           intent(in)    :: h  !< Input thicknesses in thickness units [H ~> m or kg m-2].
+  type(thermo_var_ptrs),   intent(in)    :: tv !< A structure pointing to various
+                                               !! thermodynamic variables
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
+                           intent(inout) :: dz !< Geometric layer thicknesses in height units [Z ~> m]
+                                               !! This is essentially intent out, but declared as intent
+                                               !! inout to preserve any initialized values in halo points.
+  integer,       optional, intent(in)    :: halo_size !< Width of halo within which to
+                                               !! calculate thicknesses
+  ! Local variables
+  integer :: i, j, k, is, ie, js, je, halo, nz
+
+  halo = 0 ; if (present(halo_size)) halo = max(0,halo_size)
+  is = G%isc-halo ; ie = G%iec+halo ; js = G%jsc-halo ; je = G%jec+halo ; nz = GV%ke
+
+  if ((.not.GV%Boussinesq) .and. allocated(tv%SpV_avg))  then
+    do k=1,nz ; do j=js,je ; do i=is,ie
+      dz(i,j,k) = GV%H_to_RZ * h(i,j,k) * tv%SpV_avg(i,j,k)
+    enddo ; enddo ; enddo
+  else
+    do k=1,nz ; do j=js,je ; do i=is,ie
+      dz(i,j,k) = GV%H_to_Z * h(i,j,k)
+    enddo ; enddo ; enddo
+  endif
+
+end subroutine thickness_to_dz_3d
+
+
+!> Converts a vertical i- / k- slice of layer thicknesses in thickness units to the vertical
+!! distance between edges in height units, perhaps by multiplication by the precomputed layer-mean
+!! specific volume stored in an array in the thermo_var_ptrs type when in non-Boussinesq mode.
+subroutine thickness_to_dz_jslice(h, tv, dz, j, G, GV, halo_size)
+  type(ocean_grid_type),   intent(in)    :: G  !< The ocean's grid structure
+  type(verticalGrid_type), intent(in)    :: GV !< The ocean's vertical grid structure
+   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
+                           intent(in)    :: h  !< Input thicknesses in thickness units [H ~> m or kg m-2].
+  type(thermo_var_ptrs),   intent(in)    :: tv !< A structure pointing to various
+                                               !! thermodynamic variables
+  real, dimension(SZI_(G),SZK_(GV)), &
+                           intent(inout) :: dz !< Geometric layer thicknesses in height units [Z ~> m]
+                                               !! This is essentially intent out, but declared as intent
+                                               !! inout to preserve any initialized values in halo points.
+  integer,                 intent(in)    :: j  !< The second (j-) index of the input thicknesses to work with
+  integer,       optional, intent(in)    :: halo_size !< Width of halo within which to
+                                               !! calculate thicknesses
+  ! Local variables
+  integer :: i, k, is, ie, halo, nz
+
+  halo = 0 ; if (present(halo_size)) halo = max(0,halo_size)
+  is = G%isc-halo ; ie = G%iec+halo ; nz = GV%ke
+
+  if ((.not.GV%Boussinesq) .and. allocated(tv%SpV_avg))  then
+    do k=1,nz ; do i=is,ie
+      dz(i,k) = GV%H_to_RZ * h(i,j,k) * tv%SpV_avg(i,j,k)
+    enddo ; enddo
+  else
+    do k=1,nz ; do i=is,ie
+      dz(i,k) = GV%H_to_Z * h(i,j,k)
+    enddo ; enddo
+  endif
+
+end subroutine thickness_to_dz_jslice
 
 end module MOM_interface_heights

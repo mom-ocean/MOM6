@@ -93,6 +93,9 @@ type, public :: thermo_var_ptrs
   logical :: S_is_absS = .false. !< If true, the salinity variable tv%S is
                          !! actually the absolute salinity in units of [gSalt kg-1].
   real :: min_salinity   !< The minimum value of salinity when BOUND_SALINITY=True [S ~> ppt].
+  real, allocatable, dimension(:,:,:) :: SpV_avg
+                         !< The layer averaged in situ specific volume [R-1 ~> m3 kg-1].
+
   ! These arrays are accumulated fluxes for communication with other components.
   real, dimension(:,:), pointer :: frazil => NULL()
                          !< The energy needed to heat the ocean column to the
