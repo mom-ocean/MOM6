@@ -10,7 +10,7 @@ implicit none ; private
 public calculate_compress_wright, calculate_density_wright, calculate_spec_vol_wright
 public calculate_density_derivs_wright, calculate_specvol_derivs_wright
 public calculate_density_second_derivs_wright, calc_density_second_derivs_wright_buggy
-public EoS_fit_range_Wright
+public EoS_fit_range_Wright, avg_spec_vol_Wright
 public int_density_dz_wright, int_spec_vol_dp_wright
 
 !> Compute the in situ density of sea water (in [kg m-3]), or its anomaly with respect to
@@ -547,6 +547,42 @@ subroutine calculate_compress_wright(T, S, pressure, rho, drho_dp, start, npts)
   enddo
 end subroutine calculate_compress_wright
 
+!> Calculates analytical and nearly-analytical integrals, in pressure across layers, to determine
+!! the layer-average specific volumes.  There are essentially no free assumptions, apart from a
+!! truncation in the series for log(1-eps/1+eps) that assumes that |eps| < 0.34.
+subroutine avg_spec_vol_Wright(T, S, p_t, dp, SpV_avg, start, npts)
+  real, dimension(:), intent(in)    :: T         !< Potential temperature relative to the surface
+                                                 !! [degC].
+  real, dimension(:), intent(in)    :: S         !< Salinity [PSU].
+  real, dimension(:), intent(in)    :: p_t       !< Pressure at the top of the layer [Pa]
+  real, dimension(:), intent(in)    :: dp        !< Pressure change in the layer [Pa]
+  real, dimension(:), intent(inout) :: SpV_avg   !< The vertical average specific volume
+                                                 !! in the layer [m3 kg-1]
+  integer,            intent(in)    :: start     !< the starting point in the arrays.
+  integer,            intent(in)    :: npts      !< the number of values to calculate.
+
+  ! Local variables
+  real :: al0        ! A term in the Wright EOS [m3 kg-1]
+  real :: p0         ! A term in the Wright EOS [Pa]
+  real :: lambda     ! A term in the Wright EOS [m2 s-2]
+  real :: eps2       ! The square of a nondimensional ratio [nondim]
+  real :: I_pterm    ! The inverse of p0 plus p_ave [Pa-1].
+  real, parameter :: C1_3 = 1.0/3.0, C1_7 = 1.0/7.0, C1_9 = 1.0/9.0 ! Rational constants [nondim]
+  integer :: j
+
+  !  alpha(j) = al0 + lambda / (pressure(j) + p0)
+  do j=start,start+npts-1
+    al0 = a0 + (a1*T(j) + a2*S(j))
+    p0 = b0 + ( b4*S(j) + T(j) * (b1 + (T(j)*(b2 + b3*T(j)) + b5*S(j))) )
+    lambda = c0 + ( c4*S(j) + T(j) * (c1 + (T(j)*(c2 + c3*T(j)) + c5*S(j))) )
+
+    I_pterm = 1.0 / (p0 + (p_t(j) + 0.5*dp(j)))
+    eps2 = (0.5 * dp(j) * I_pterm)**2
+    SpV_avg(j) = al0 + (lambda * I_pterm) * &
+                         (1.0 + eps2*(C1_3 + eps2*(0.2 + eps2*(C1_7 + eps2*C1_9))))
+  enddo
+end subroutine avg_spec_vol_Wright
+
 !> Return the range of temperatures, salinities and pressures for which the reduced-range equation
 !! of state from Wright (1997) has been fitted to observations.  Care should be taken when applying
 !! this equation of state outside of its fit range.
@@ -1065,6 +1101,7 @@ subroutine int_spec_vol_dp_wright(T, S, p_t, p_b, spv_ref, HI, dza, &
                            12.0*intp(3))
   enddo ; enddo ; endif
 end subroutine int_spec_vol_dp_wright
+
 
 !> \namespace mom_eos_wright
 !!

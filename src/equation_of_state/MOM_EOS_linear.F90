@@ -13,6 +13,7 @@ public calculate_specvol_derivs_linear
 public calculate_density_scalar_linear, calculate_density_array_linear
 public calculate_density_second_derivs_linear, EoS_fit_range_linear
 public int_density_dz_linear, int_spec_vol_dp_linear
+public avg_spec_vol_linear
 
 ! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
 ! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
@@ -292,7 +293,7 @@ end subroutine calculate_specvol_derivs_linear
 !> This subroutine computes the in situ density of sea water (rho)
 !! and the compressibility (drho/dp == C_sound^-2) at the given
 !! salinity, potential temperature, and pressure.
-subroutine calculate_compress_linear(T, S, pressure, rho, drho_dp, start, npts,&
+subroutine calculate_compress_linear(T, S, pressure, rho, drho_dp, start, npts, &
                                      Rho_T0_S0, dRho_dT, dRho_dS)
   real,    intent(in),  dimension(:) :: T         !< Potential temperature relative to the surface
                                                   !! [degC].
@@ -317,6 +318,29 @@ subroutine calculate_compress_linear(T, S, pressure, rho, drho_dp, start, npts,&
     drho_dp(j) = 0.0
   enddo
 end subroutine calculate_compress_linear
+
+!> Calculates the layer average specific volumes.
+subroutine avg_spec_vol_linear(T, S, p_t, dp, SpV_avg, start, npts, Rho_T0_S0, dRho_dT, dRho_dS)
+  real, dimension(:), intent(in)    :: T         !< Potential temperature [degC]
+  real, dimension(:), intent(in)    :: S         !< Salinity [PSU]
+  real, dimension(:), intent(in)    :: p_t       !< Pressure at the top of the layer [Pa]
+  real, dimension(:), intent(in)    :: dp        !< Pressure change in the layer [Pa]
+  real, dimension(:), intent(inout) :: SpV_avg   !< The vertical average specific volume
+                                                 !! in the layer [m3 kg-1]
+  integer,            intent(in)    :: start     !< the starting point in the arrays.
+  integer,            intent(in)    :: npts      !< the number of values to calculate.
+  real,               intent(in)    :: Rho_T0_S0 !< The density at T=0, S=0 [kg m-3]
+  real,               intent(in)    :: dRho_dT   !< The derivative of density with temperature
+                                                 !! [kg m-3 degC-1]
+  real,               intent(in)    :: dRho_dS   !< The derivative of density with salinity
+                                                 !! [kg m-3 ppt-1]
+  ! Local variables
+  integer :: j
+
+  do j=start,start+npts-1
+    SpV_avg(j) = 1.0 / (Rho_T0_S0 + (dRho_dT*T(j) + dRho_dS*S(j)))
+  enddo
+end subroutine avg_spec_vol_linear
 
 !> Return the range of temperatures, salinities and pressures for which the reduced-range equation
 !! of state from Wright (1997) has been fitted to observations.  Care should be taken when applying
