@@ -27,8 +27,7 @@ program MOM6
   use MOM_cpu_clock,       only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
   use MOM_cpu_clock,       only : CLOCK_COMPONENT
   use MOM_data_override,   only : data_override_init
-  use MOM_diag_mediator,   only : enable_averaging, disable_averaging, diag_mediator_end
-  use MOM_diag_mediator,   only : diag_ctrl, diag_mediator_close_registration
+  use MOM_diag_mediator,   only : diag_mediator_end, diag_ctrl, diag_mediator_close_registration
   use MOM,                 only : initialize_MOM, step_MOM, MOM_control_struct, MOM_end
   use MOM,                 only : extract_surface_state, finish_MOM_initialization
   use MOM,                 only : get_MOM_state_elements, MOM_state_is_synchronized
@@ -122,20 +121,18 @@ program MOM6
   type(time_type) :: Time_step_ocean    ! A time_type version of dt_forcing.
   logical :: segment_start_time_set     ! True if segment_start_time has been set to a valid value.
 
-  real    :: elapsed_time = 0.0   ! Elapsed time in this run  [s].
-  logical :: elapsed_time_master  ! If true, elapsed time is used to set the
-                                  ! model's master clock (Time).  This is needed
-                                  ! if Time_step_ocean is not an exact
-                                  ! representation of dt_forcing.
-  real :: dt_forcing              ! The coupling time step [s].
-  real :: dt                      ! The nominal baroclinic dynamics time step [s].
-  integer :: ntstep               ! The number of baroclinic dynamics time steps
-                                  ! within dt_forcing.
-  real :: dt_therm                ! The thermodynamic timestep [s]
-  real :: dt_dyn                  ! The actual dynamic timestep used [s].  The value of dt_dyn is
-                                  ! chosen so that dt_forcing is an integer multiple of dt_dyn.
-  real :: dtdia                   ! The diabatic timestep [s]
-  real :: t_elapsed_seg           ! The elapsed time in this run segment [s]
+  real    :: elapsed_time = 0.0   ! Elapsed time in this run [T ~> s].
+  logical :: elapsed_time_master  ! If true, elapsed time is used to set the model's master
+                                  ! clock (Time).  This is needed if Time_step_ocean is not
+                                  ! an exact representation of dt_forcing.
+  real :: dt_forcing              ! The coupling time step [T ~> s].
+  real :: dt                      ! The nominal baroclinic dynamics time step [T ~> s].
+  integer :: ntstep               ! The number of baroclinic dynamics time steps within dt_forcing.
+  real :: dt_therm                ! The thermodynamic timestep [T ~> s]
+  real :: dt_dyn                  ! The actual dynamic timestep used [T ~> s].  The value of dt_dyn
+                                  ! is chosen so that dt_forcing is an integer multiple of dt_dyn.
+  real :: dtdia                   ! The diabatic timestep [T ~> s]
+  real :: t_elapsed_seg           ! The elapsed time in this run segment [T ~> s]
   integer :: n, ns, n_max, nts, n_last_thermo
   logical :: diabatic_first, single_step_call
   type(time_type) :: Time2, time_chg ! Temporary time variables
@@ -331,25 +328,28 @@ program MOM6
 
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mod_name, version, "")
-  call get_param(param_file, mod_name, "DT", dt, fail_if_missing=.true.)
+  call get_param(param_file, mod_name, "DT", dt, &
+                 units="s", scale=US%s_to_T, fail_if_missing=.true.)
   call get_param(param_file, mod_name, "DT_FORCING", dt_forcing, &
                  "The time step for changing forcing, coupling with other "//&
                  "components, or potentially writing certain diagnostics. "//&
-                 "The default value is given by DT.", units="s", default=dt)
+                 "The default value is given by DT.", &
+                 units="s", default=US%T_to_s*dt, scale=US%s_to_T)
   if (offline_tracer_mode) then
     call get_param(param_file, mod_name, "DT_OFFLINE", dt_forcing, &
                    "Length of time between reading in of input fields", &
-                   units='s', fail_if_missing=.true.)
+                   units="s", scale=US%s_to_T, fail_if_missing=.true.)
     dt = dt_forcing
   endif
   ntstep = MAX(1,ceiling(dt_forcing/dt - 0.001))
 
-  Time_step_ocean = real_to_time(dt_forcing)
-  elapsed_time_master = (abs(dt_forcing - time_type_to_real(Time_step_ocean)) > 1.0e-12*dt_forcing)
+  Time_step_ocean = real_to_time(US%T_to_s*dt_forcing)
+  elapsed_time_master = (abs(dt_forcing - US%s_to_T*time_type_to_real(Time_step_ocean)) > 1.0e-12*dt_forcing)
   if (elapsed_time_master) &
     call MOM_mesg("Using real elapsed time for the master clock.", 2)
 
   ! Determine the segment end time, either from the namelist file or parsed input file.
+  ! Note that Time_unit always is in [s].
   call get_param(param_file, mod_name, "TIMEUNIT", Time_unit, &
                  "The time unit for DAYMAX, ENERGYSAVEDAYS, and RESTINT.", &
                  units="s", default=86400.0)
@@ -384,7 +384,8 @@ program MOM6
                  "and less than the forcing or coupling time-step, unless "//&
                  "THERMO_SPANS_COUPLING is true, in which case DT_THERM "//&
                  "can be an integer multiple of the coupling timestep.  By "//&
-                 "default DT_THERM is set to DT.", units="s", default=dt)
+                 "default DT_THERM is set to DT.", &
+                 units="s", default=US%T_to_s*dt, scale=US%s_to_T)
   call get_param(param_file, mod_name, "DIABATIC_FIRST", diabatic_first, &
                  "If true, apply diabatic and thermodynamic processes, "//&
                  "including buoyancy forcing and mass gain or loss, "//&
@@ -465,7 +466,7 @@ program MOM6
       call add_shelf_forces(grid, US, Ice_shelf_CSp, forces, external_call=.true.)
     endif
     fluxes%fluxes_used = .false.
-    fluxes%dt_buoy_accum = US%s_to_T*dt_forcing
+    fluxes%dt_buoy_accum = dt_forcing
 
     if (use_waves) then
       call Update_Surface_Waves(grid, GV, US, time, time_step_ocean, waves_csp)
@@ -510,7 +511,7 @@ program MOM6
             dtdia = dt_dyn*(n - n_last_thermo)
             ! Back up Time2 to the start of the thermodynamic segment.
             if (n > n_last_thermo+1) &
-              Time2 = Time2 - real_to_time(dtdia - dt_dyn)
+              Time2 = Time2 - real_to_time(US%T_to_s*(dtdia - dt_dyn))
             call step_MOM(forces, fluxes, sfc_state, Time2, dtdia, MOM_CSp, &
                           do_dynamics=.false., do_thermodynamics=.true., &
                           start_cycle=.false., end_cycle=(n==n_max), cycle_length=dt_forcing)
@@ -519,25 +520,25 @@ program MOM6
         endif
 
         t_elapsed_seg = t_elapsed_seg + dt_dyn
-        Time2 = Time1 + real_to_time(t_elapsed_seg)
+        Time2 = Time1 + real_to_time(US%T_to_s*t_elapsed_seg)
       enddo
     endif
 
 !   Time = Time + Time_step_ocean
 !   This is here to enable fractional-second time steps.
     elapsed_time = elapsed_time + dt_forcing
-    if (elapsed_time > 2e9) then
+    if (elapsed_time > 2.0e9*US%s_to_T) then
       ! This is here to ensure that the conversion from a real to an integer can be accurately
       ! represented in long runs (longer than ~63 years). It will also ensure that elapsed time
       ! does not lose resolution of order the timetype's resolution, provided that the timestep and
       ! tick are larger than 10-5 seconds.  If a clock with a finer resolution is used, a smaller
       ! value would be required.
-      time_chg = real_to_time(elapsed_time)
+      time_chg = real_to_time(US%T_to_s*elapsed_time)
       segment_start_time = segment_start_time + time_chg
-      elapsed_time = elapsed_time - time_type_to_real(time_chg)
+      elapsed_time = elapsed_time - US%s_to_T*time_type_to_real(time_chg)
     endif
     if (elapsed_time_master) then
-      Master_Time = segment_start_time + real_to_time(elapsed_time)
+      Master_Time = segment_start_time + real_to_time(US%T_to_s*elapsed_time)
     else
       Master_Time = Master_Time + Time_step_ocean
     endif

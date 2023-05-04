@@ -341,7 +341,7 @@ subroutine step_MOM_dyn_unsplit_RK2(u_in, v_in, h_in, tv, visc, Time_local, dt, 
   call set_viscous_ML(u_in, v_in, h_av, tv, forces, visc, dt_visc, G, GV, US, CS%set_visc_CSp)
   call disable_averaging(CS%diag)
 
-  call vertvisc_coef(up, vp, h_av, forces, visc, dt_pred, G, GV, US, CS%vertvisc_CSp, CS%OBC)
+  call vertvisc_coef(up, vp, h_av, forces, visc, dt_pred, G, GV, US, CS%vertvisc_CSp, CS%OBC, VarMix)
   call vertvisc(up, vp, h_av, forces, visc, dt_pred, CS%OBC, CS%ADp, CS%CDp, &
                 G, GV, US, CS%vertvisc_CSp)
   call cpu_clock_end(id_clock_vertvisc)
@@ -392,10 +392,10 @@ subroutine step_MOM_dyn_unsplit_RK2(u_in, v_in, h_in, tv, visc, Time_local, dt, 
 ! up[n] <- up* + dt d/dz visc d/dz up
 ! u[n] <- u*[n] + dt d/dz visc d/dz u[n]
   call cpu_clock_begin(id_clock_vertvisc)
-  call vertvisc_coef(up, vp, h_av, forces, visc, dt, G, GV, US, CS%vertvisc_CSp, CS%OBC)
+  call vertvisc_coef(up, vp, h_av, forces, visc, dt, G, GV, US, CS%vertvisc_CSp, CS%OBC, VarMix)
   call vertvisc(up, vp, h_av, forces, visc, dt, CS%OBC, CS%ADp, CS%CDp, &
                 G, GV, US, CS%vertvisc_CSp, CS%taux_bot, CS%tauy_bot)
-  call vertvisc_coef(u_in, v_in, h_av, forces, visc, dt, G, GV, US, CS%vertvisc_CSp, CS%OBC)
+  call vertvisc_coef(u_in, v_in, h_av, forces, visc, dt, G, GV, US, CS%vertvisc_CSp, CS%OBC, VarMix)
   call vertvisc(u_in, v_in, h_av, forces, visc, dt, CS%OBC, CS%ADp, CS%CDp,&
                 G, GV, US, CS%vertvisc_CSp, CS%taux_bot, CS%tauy_bot)
   call cpu_clock_end(id_clock_vertvisc)
@@ -655,10 +655,10 @@ subroutine initialize_dyn_unsplit_RK2(u, v, h, Time, G, GV, US, param_file, diag
   CS%id_PFv = register_diag_field('ocean_model', 'PFv', diag%axesCvL, Time, &
       'Meridional Pressure Force Acceleration', 'meter second-2', conversion=US%L_T2_to_m_s2)
   CS%id_ueffA = register_diag_field('ocean_model', 'ueffA', diag%axesCuL, Time, &
-       'Effective U-Face Area', 'm^2', conversion = GV%H_to_m*US%L_to_m, &
+       'Effective U-Face Area', 'm^2', conversion=GV%H_to_m*US%L_to_m, &
        y_cell_method='sum', v_extensive=.true.)
   CS%id_veffA = register_diag_field('ocean_model', 'veffA', diag%axesCvL, Time, &
-       'Effective V-Face Area', 'm^2', conversion = GV%H_to_m*US%L_to_m, &
+       'Effective V-Face Area', 'm^2', conversion=GV%H_to_m*US%L_to_m, &
        x_cell_method='sum', v_extensive=.true.)
 
   id_clock_Cor = cpu_clock_id('(Ocean Coriolis & mom advection)', grain=CLOCK_MODULE)

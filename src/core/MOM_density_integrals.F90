@@ -143,7 +143,7 @@ subroutine int_density_dz_generic_pcm(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
   real :: p5(5)      ! Pressures at five quadrature points [R L2 T-2 ~> Pa]
   real :: r5(5)      ! Densities at five quadrature points [R ~> kg m-3]
   real :: rho_anom   ! The depth averaged density anomaly [R ~> kg m-3]
-  real, parameter :: C1_90 = 1.0/90.0  ! Rational constants.
+  real, parameter :: C1_90 = 1.0/90.0  ! A rational constant [nondim]
   real :: GxRho      ! The product of the gravitational acceleration and reference density [R L2 Z-1 T-2 ~> Pa m-1]
   real :: I_Rho      ! The inverse of the Boussinesq density [R-1 ~> m3 kg-1]
   real :: dz         ! The layer thickness [Z ~> m]
@@ -784,7 +784,7 @@ subroutine int_density_dz_generic_ppm(k, tv, T_t, T_b, S_t, S_b, e, &
   real :: w_left, w_right  ! Left and right weights [nondim]
   real :: intz(5) ! The gravitational acceleration times the integrals of density
                   ! with height at the 5 sub-column locations [R L2 T-2 ~> Pa]
-  real, parameter :: C1_90 = 1.0/90.0  ! Rational constants.
+  real, parameter :: C1_90 = 1.0/90.0  ! A rational constant [nondim]
   real :: GxRho ! The gravitational acceleration times density [R L2 Z-1 T-2 ~> kg m-2 s-2]
   real :: I_Rho ! The inverse of the Boussinesq density [R-1 ~> m3 kg-1]
   real :: dz ! Layer thicknesses at tracer points [Z ~> m]
@@ -1175,7 +1175,7 @@ subroutine int_spec_vol_dp_generic_pcm(T, S, p_t, p_b, alpha_ref, HI, EOS, US, d
   real :: intp(5)    ! The integrals of specific volume with pressure at the
                      ! 5 sub-column locations [L2 T-2 ~> m2 s-2]
   logical :: do_massWeight ! Indicates whether to do mass weighting.
-  real, parameter :: C1_90 = 1.0/90.0  ! A rational constant.
+  real, parameter :: C1_90 = 1.0/90.0  ! A rational constant [nondim]
   integer :: Isq, Ieq, Jsq, Jeq, ish, ieh, jsh, jeh, i, j, m, n, halo
 
   Isq = HI%IscB ; Ieq = HI%IecB ; Jsq = HI%JscB ; Jeq = HI%JecB
@@ -1550,10 +1550,10 @@ subroutine find_depth_of_pressure_in_cell(T_t, T_b, S_t, S_b, z_t, z_b, P_t, P_t
                                             !! are anomalous to [R ~> kg m-3]
   real,                  intent(in)  :: G_e !< Gravitational acceleration [L2 Z-1 T-2 ~> m s-2]
   type(EOS_type),        intent(in)  :: EOS !< Equation of state structure
-  type(unit_scale_type), intent(in)  :: US !< A dimensional unit scaling type
+  type(unit_scale_type), intent(in)  :: US  !< A dimensional unit scaling type
   real,                  intent(out) :: P_b !< Pressure at the bottom of the cell [R L2 T-2 ~> Pa]
   real,                  intent(out) :: z_out !< Absolute depth at which anomalous pressure = p_tgt [Z ~> m]
-  real, optional,        intent(in)  :: z_tol !< The tolerance in finding z_out [Z ~> m]
+  real,                  intent(in)  :: z_tol !< The tolerance in finding z_out [Z ~> m]
 
   ! Local variables
   real :: dp    ! Pressure thickness of the layer [R L2 T-2 ~> Pa]
@@ -1583,8 +1583,7 @@ subroutine find_depth_of_pressure_in_cell(T_t, T_b, S_t, S_b, z_t, z_b, P_t, P_t
   Pa_left = P_t - P_tgt ! Pa_left < 0
   F_r = 1.
   Pa_right = P_b - P_tgt ! Pa_right > 0
-  Pa_tol = GxRho * 1.0e-5*US%m_to_Z
-  if (present(z_tol)) Pa_tol = GxRho * z_tol
+  Pa_tol = GxRho * z_tol
 
   F_guess = F_l - Pa_left / (Pa_right - Pa_left) * (F_r - F_l)
   Pa = Pa_right - Pa_left ! To get into iterative loop

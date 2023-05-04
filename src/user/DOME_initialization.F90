@@ -306,6 +306,8 @@ subroutine DOME_set_OBC_data(OBC, tv, G, GV, US, PF, tr_Reg)
   real :: drho_dT(SZK_(GV))  ! Derivative of density with temperature [R C-1 ~> kg m-3 degC-1].
   real :: drho_dS(SZK_(GV))  ! Derivative of density with salinity [R S-1 ~> kg m-3 ppt-1].
   real :: rho_guess(SZK_(GV)) ! Potential density at T0 & S0 [R ~> kg m-3].
+  real :: S_ref             ! A default value for salinities [S ~> ppt]
+  real :: T_light           ! A first guess at the temperature of the lightest layer [C ~> degC]
   ! The following variables are used to set up the transport in the DOME example.
   real :: tr_0              ! The total integrated inflow transport [H L2 T-1 ~> m3 s-1 or kg s-1]
   real :: tr_k              ! The integrated inflow transport of a layer [H L2 T-1 ~> m3 s-1 or kg s-1]
@@ -357,6 +359,13 @@ subroutine DOME_set_OBC_data(OBC, tv, G, GV, US, PF, tr_Reg)
                  "inflow properties.", units="s-1", default=f_0*US%s_to_T, scale=US%T_to_s)
   call get_param(PF, mdl, "DOME_INFLOW_LON", inflow_lon, &
                  "The edge longitude of the DOME inflow.", units="km", default=1000.0)
+  if (associated(tv%S) .or. associated(tv%T)) then
+    call get_param(PF, mdl, "S_REF", S_ref, &
+                 units="ppt", default=35.0, scale=US%ppt_to_S, do_not_log=.true.)
+    call get_param(PF, mdl, "DOME_T_LIGHT", T_light, &
+                 "A first guess at the temperature of the lightest layer in the DOME test case.", &
+                 units="degC", default=25.0, scale=US%degC_to_C)
+  endif
 
   if (.not.associated(OBC)) return
 
@@ -413,16 +422,16 @@ subroutine DOME_set_OBC_data(OBC, tv, G, GV, US, PF, tr_Reg)
   !   The inflow values of temperature and salinity also need to be set here if
   ! these variables are used.  The following code is just a naive example.
   if (associated(tv%S)) then
-    ! In this example, all S inflows have values of 35 psu.
+    ! In this example, all S inflows have values given by S_ref.
     name = 'salt'
     call tracer_name_lookup(tr_Reg, tr_ptr, name)
-    call register_segment_tracer(tr_ptr, PF, GV, segment, OBC_scalar=35.0*US%ppt_to_S, scale=US%ppt_to_S)
+    call register_segment_tracer(tr_ptr, PF, GV, segment, OBC_scalar=S_ref, scale=US%ppt_to_S)
   endif
   if (associated(tv%T)) then
     ! In this example, the T values are set to be consistent with the layer
-    ! target density and a salinity of 35 psu.  This code is taken from
+    ! target density and a salinity of S_ref.  This code is taken from
     ! USER_initialize_temp_sal.
-    pres(:) = tv%P_Ref ; S0(:) = 35.0*US%ppt_to_S ; T0(1) = 25.0*US%degC_to_C
+    pres(:) = tv%P_Ref ; S0(:) = S_ref ; T0(1) = T_light
     call calculate_density(T0(1), S0(1), pres(1), rho_guess(1), tv%eqn_of_state)
     call calculate_density_derivs(T0, S0, pres, drho_dT, drho_dS, tv%eqn_of_state, (/1,1/) )
 

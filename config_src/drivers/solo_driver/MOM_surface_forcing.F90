@@ -30,6 +30,7 @@ use MOM_forcing_type,        only : allocate_mech_forcing, deallocate_mech_forci
 use MOM_grid,                only : ocean_grid_type
 use MOM_get_input,           only : Get_MOM_Input, directories
 use MOM_io,                  only : file_exists, MOM_read_data, MOM_read_vector, slasher
+use MOM_io,                  only : read_netCDF_data
 use MOM_io,                  only : EAST_FACE, NORTH_FACE, num_timelevels
 use MOM_restart,             only : register_restart_field, restart_init, MOM_restart_CS
 use MOM_restart,             only : restart_init_end, save_restart, restore_state
@@ -73,8 +74,8 @@ type, public :: surface_forcing_CS ; private
   logical :: adiabatic          !< if true, no diapycnal mass fluxes or surface buoyancy forcing
   logical :: variable_winds     !< if true, wind stresses vary with time
   logical :: variable_buoyforce !< if true, buoyancy forcing varies with time.
-  real    :: south_lat          !< southern latitude of the domain
-  real    :: len_lat            !< domain length in latitude
+  real    :: south_lat          !< southern latitude of the domain [degrees_N] or [km] or [m]
+  real    :: len_lat            !< domain length in latitude [degrees_N] or [km] or [m]
 
   real :: Rho0                  !< Boussinesq reference density [R ~> kg m-3]
   real :: G_Earth               !< gravitational acceleration [L2 Z-1 T-2 ~> m s-2]
@@ -84,13 +85,13 @@ type, public :: surface_forcing_CS ; private
   real :: latent_heat_fusion    !< latent heat of fusion times [Q ~> J kg-1]
   real :: latent_heat_vapor     !< latent heat of vaporization [Q ~> J kg-1]
   real :: tau_x0                !< Constant zonal wind stress used in the WIND_CONFIG="const"
-                                !! forcing [R L Z T-1 ~> Pa]
+                                !! forcing [R L Z T-2 ~> Pa]
   real :: tau_y0                !< Constant meridional wind stress used in the WIND_CONFIG="const"
-                                !! forcing [R L Z T-1 ~> Pa]
+                                !! forcing [R L Z T-2 ~> Pa]
 
-  real    :: gust_const                 !< constant unresolved background gustiness for ustar [R L Z T-1 ~> Pa]
+  real    :: gust_const                 !< constant unresolved background gustiness for ustar [R L Z T-2 ~> Pa]
   logical :: read_gust_2d               !< if true, use 2-dimensional gustiness supplied from a file
-  real, pointer :: gust(:,:) => NULL()  !< spatially varying unresolved background gustiness [R L Z T-1 ~> Pa]
+  real, pointer :: gust(:,:) => NULL()  !< spatially varying unresolved background gustiness [R L Z T-2 ~> Pa]
                                         !! gust is used when read_gust_2d is true.
 
   real, pointer :: T_Restore(:,:)    => NULL()  !< temperature to damp (restore) the SST to [C ~> degC]
@@ -101,10 +102,10 @@ type, public :: surface_forcing_CS ; private
 
   ! if WIND_CONFIG=='gyres' then use the following as  = A, B, C and n respectively for
   ! taux = A + B*sin(n*pi*y/L) + C*cos(n*pi*y/L)
-  real :: gyres_taux_const   !< A constant wind stress [R L Z T-1 ~> Pa].
-  real :: gyres_taux_sin_amp !< The amplitude of cosine wind stress gyres [R L Z T-1 ~> Pa], if WIND_CONFIG=='gyres'
-  real :: gyres_taux_cos_amp !< The amplitude of cosine wind stress gyres [R L Z T-1 ~> Pa], if WIND_CONFIG=='gyres'
-  real :: gyres_taux_n_pis   !< The number of sine lobes in the basin if WIND_CONFIG=='gyres'
+  real :: gyres_taux_const   !< A constant wind stress [R L Z T-2 ~> Pa].
+  real :: gyres_taux_sin_amp !< The amplitude of cosine wind stress gyres [R L Z T-2 ~> Pa], if WIND_CONFIG=='gyres'
+  real :: gyres_taux_cos_amp !< The amplitude of cosine wind stress gyres [R L Z T-2 ~> Pa], if WIND_CONFIG=='gyres'
+  real :: gyres_taux_n_pis   !< The number of sine lobes in the basin if WIND_CONFIG=='gyres' [nondim]
   integer :: answer_date     !< This 8-digit integer gives the approximate date with which the order
                              !! of arithmetic and expressions were added to the code.
                              !! Dates before 20190101 use original answers.
@@ -114,7 +115,7 @@ type, public :: surface_forcing_CS ; private
                                             !! gustless wind friction velocity.
   ! if WIND_CONFIG=='scurves' then use the following to define a piecewise scurve profile
   real :: scurves_ydata(20) = 90. !< Latitudes of scurve nodes [degreesN]
-  real :: scurves_taux(20) = 0.   !< Zonal wind stress values at scurve nodes [R L Z T-1 ~> Pa]
+  real :: scurves_taux(20) = 0.   !< Zonal wind stress values at scurve nodes [R L Z T-2 ~> Pa]
 
   real :: T_north   !< Target temperatures at north used in buoyancy_forcing_linear [C ~> degC]
   real :: T_south   !< Target temperatures at south used in buoyancy_forcing_linear [C ~> degC]
@@ -391,7 +392,7 @@ subroutine wind_forcing_const(sfc_state, forces, tau_x0, tau_y0, day, G, US, CS)
 
   mag_tau = sqrt( tau_x0**2 + tau_y0**2)
 
-  ! Set the steady surface wind stresses, in units of [R L Z T-1 ~> Pa].
+  ! Set the steady surface wind stresses, in units of [R L Z T-2 ~> Pa].
   do j=js,je ; do I=is-1,Ieq
     forces%taux(I,j) = tau_x0
   enddo ; enddo
@@ -437,7 +438,7 @@ subroutine wind_forcing_2gyre(sfc_state, forces, day, G, US, CS)
   Pa_to_RLZ_T2 = US%kg_m3_to_R*US%m_s_to_L_T**2*US%L_to_Z
   PI = 4.0*atan(1.0)
 
-  ! Set the steady surface wind stresses, in units of [R L Z T-1 ~> Pa].
+  ! Set the steady surface wind stresses, in units of [R L Z T-2 ~> Pa].
   do j=js,je ; do I=is-1,Ieq
     forces%taux(I,j) = 0.1 * Pa_to_RLZ_T2 * &
                       (1.0 - cos(2.0*PI*(G%geoLatCu(I,j)-CS%South_lat) / CS%len_lat))
@@ -512,7 +513,7 @@ subroutine wind_forcing_gyres(sfc_state, forces, day, G, US, CS)
 
   PI = 4.0*atan(1.0)
 
-  ! steady surface wind stresses [R L Z T-1 ~> Pa]
+  ! steady surface wind stresses [R L Z T-2 ~> Pa]
   do j=js-1,je+1 ; do I=is-1,Ieq
     y = (G%geoLatCu(I,j)-CS%South_lat) / CS%len_lat
     forces%taux(I,j) = CS%gyres_taux_const + &
@@ -669,8 +670,8 @@ subroutine wind_forcing_from_file(sfc_state, forces, day, G, US, CS)
                                                   !! a previous surface_forcing_init call
   ! Local variables
   character(len=200) :: filename  ! The name of the input file.
-  real    :: temp_x(SZI_(G),SZJ_(G)) ! Pseudo-zonal wind stresses at h-points [R L Z T-1 ~> Pa]
-  real    :: temp_y(SZI_(G),SZJ_(G)) ! Pseudo-meridional wind stresses at h-points [R L Z T-1 ~> Pa]
+  real    :: temp_x(SZI_(G),SZJ_(G)) ! Pseudo-zonal wind stresses at h-points [R L Z T-2 ~> Pa]
+  real    :: temp_y(SZI_(G),SZJ_(G)) ! Pseudo-meridional wind stresses at h-points [R L Z T-2 ~> Pa]
   real    :: Pa_to_RLZ_T2            ! A unit conversion factor from Pa to the internal units
                                      ! for wind stresses [R Z L T-2 Pa-1 ~> 1]
   integer :: time_lev_daily          ! The time levels to read for fields with
@@ -1300,7 +1301,7 @@ subroutine buoyancy_forcing_from_data_override(sfc_state, fluxes, day, dt, G, US
 !#CTRL#     SSS_mean(i,j) = 0.5*(sfc_state%SSS(i,j) + CS%S_Restore(i,j))
 !#CTRL#   enddo ; enddo
 !#CTRL#   call apply_ctrl_forcing(SST_anom, SSS_anom, SSS_mean, fluxes%heat_added, &
-!#CTRL#                           fluxes%vprec, day, US%T_to_s*dt, G, US, CS%ctrl_forcing_CSp)
+!#CTRL#                           fluxes%vprec, day, dt, G, US, CS%ctrl_forcing_CSp)
 !#CTRL# endif
 
   call callTree_leave("buoyancy_forcing_from_data_override")
@@ -1728,7 +1729,7 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, tracer_flow_C
     call get_param(param_file, mdl, "USTAR_FORCING_VAR", CS%ustar_var, &
                  "The name of the friction velocity variable in WIND_FILE "//&
                  "or blank to get ustar from the wind stresses plus the "//&
-                 "gustiness.", default=" ", units="nondim")
+                 "gustiness.", default=" ")
     CS%wind_file = trim(CS%inputdir) // trim(CS%wind_file)
   endif
   if (trim(CS%wind_config) == "gyres") then
@@ -1801,9 +1802,8 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, tracer_flow_C
                  "parameters from vertical units of m to kg m-2.", &
                  units="kg m-3", default=1035.0, scale=US%kg_m3_to_R)
   call get_param(param_file, mdl, "RESTOREBUOY", CS%restorebuoy, &
-                 "If true, the buoyancy fluxes drive the model back "//&
-                 "toward some specified surface state with a rate "//&
-                 "given by FLUXCONST.", default= .false.)
+                 "If true, the buoyancy fluxes drive the model back toward some "//&
+                 "specified surface state with a rate given by FLUXCONST.", default=.false.)
   call get_param(param_file, mdl, "LATENT_HEAT_FUSION", CS%latent_heat_fusion, &
                  "The latent heat of fusion.", default=hlf, &
                  units="J/kg", scale=US%J_kg_to_Q)
@@ -1814,22 +1814,19 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, tracer_flow_C
     call get_param(param_file, mdl, "FLUXCONST", CS%Flux_const, &
                  "The constant that relates the restoring surface fluxes to the relative "//&
                  "surface anomalies (akin to a piston velocity).  Note the non-MKS units.", &
-                 default=0.0, units="m day-1", scale=US%m_to_Z*US%T_to_s/86400.0, &
-                 unscaled=flux_const_default)
+                 default=0.0, units="m day-1", scale=US%m_to_Z*US%T_to_s/86400.0)
 
     if (CS%use_temperature) then
+      call get_param(param_file, mdl, "FLUXCONST", flux_const_default, &
+                 default=0.0, units="m day-1", do_not_log=.true.)
       call get_param(param_file, mdl, "FLUXCONST_T", CS%Flux_const_T, &
-           "The constant that relates the restoring surface temperature "//&
-           "flux to the relative surface anomaly (akin to a piston "//&
-           "velocity).  Note the non-MKS units.", &
-           units="m day-1", scale=US%m_to_Z*US%T_to_s/86400.0, &
-           default=flux_const_default)
+                 "The constant that relates the restoring surface temperature flux to the "//&
+                 "relative surface anomaly (akin to a piston velocity).  Note the non-MKS units.", &
+                 units="m day-1", scale=US%m_to_Z*US%T_to_s/86400.0, default=flux_const_default)
       call get_param(param_file, mdl, "FLUXCONST_S", CS%Flux_const_S, &
-           "The constant that relates the restoring surface salinity "//&
-           "flux to the relative surface anomaly (akin to a piston "//&
-           "velocity).  Note the non-MKS units.", &
-           units="m day-1", scale=US%m_to_Z*US%T_to_s/86400.0, &
-           default=flux_const_default)
+                 "The constant that relates the restoring surface salinity flux to the "//&
+                 "relative surface anomaly (akin to a piston velocity).  Note the non-MKS units.", &
+                 units="m day-1", scale=US%m_to_Z*US%T_to_s/86400.0, default=flux_const_default)
     endif
 
     if (trim(CS%buoy_config) == "linear") then
@@ -1853,7 +1850,7 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, tracer_flow_C
   endif
   call get_param(param_file, mdl, "G_EARTH", CS%G_Earth, &
                  "The gravitational acceleration of the Earth.", &
-                 units="m s-2", default = 9.80, scale=US%m_to_L**2*US%Z_to_m*US%T_to_s**2)
+                 units="m s-2", default=9.80, scale=US%m_to_L**2*US%Z_to_m*US%T_to_s**2)
 
   call get_param(param_file, mdl, "GUST_CONST", CS%gust_const, &
                  "The background gustiness in the winds.", &
@@ -1870,8 +1867,10 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, tracer_flow_C
                  "variable gustiness.", fail_if_missing=.true.)
     call safe_alloc_ptr(CS%gust,G%isd,G%ied,G%jsd,G%jed)
     filename = trim(CS%inputdir) // trim(gust_file)
-    call MOM_read_data(filename,'gustiness',CS%gust,G%domain, timelevel=1, &
-                   scale=Pa_to_RLZ_T2) ! units in file should be Pa
+    ! NOTE: There are certain cases where FMS is unable to read this file, so
+    ! we use read_netCDF_data in place of MOM_read_data.
+    call read_netCDF_data(filename, 'gustiness', CS%gust, G%Domain, &
+        rescale=Pa_to_RLZ_T2) ! units in file should be Pa
   endif
 
 !  All parameter settings are now known.

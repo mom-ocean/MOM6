@@ -10,7 +10,7 @@ use MOM_cpu_clock,     only : cpu_clock_id, cpu_clock_begin, cpu_clock_end, CLOC
 use MOM_debugging,     only : hchksum, uvchksum
 use MOM_diag_mediator, only : post_data, register_diag_field, register_scalar_field
 use MOM_diag_mediator, only : time_type, diag_ctrl, safe_alloc_alloc, query_averaging_enabled
-use MOM_diag_mediator, only : enable_averages, enable_averaging, disable_averaging
+use MOM_diag_mediator, only : enable_averages, disable_averaging
 use MOM_EOS,           only : calculate_density_derivs, EOS_domain
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser,   only : get_param, log_param, log_version, param_file_type
@@ -255,7 +255,7 @@ type, public :: mech_forcing
     rigidity_ice_v => NULL()    !< Depth-integrated lateral viscosity of ice shelves or sea ice at
                                 !! v-points [L4 Z-1 T-1 ~> m3 s-1]
   real :: dt_force_accum = -1.0 !< The amount of time over which the mechanical forcing fluxes
-                                !! have been averaged [s].
+                                !! have been averaged [T ~> s].
   logical :: net_mass_src_set = .false. !< If true, an estimate of net_mass_src has been provided.
   logical :: accumulate_p_surf = .false. !< If true, the surface pressure due to the atmosphere
                                 !! and various types of ice needs to be accumulated, and the
@@ -969,7 +969,7 @@ subroutine calculateBuoyancyFlux1d(G, GV, US, fluxes, optics, nsw, h, Temp, Salt
                                                       ! [H T-1 ~> m s-1 or kg m-2 s-1]
   real, dimension(SZI_(G))              :: netHeat    ! net temp flux [C H T-1 ~> degC m s-1 or degC kg m-2 s-1]
   real, dimension(max(nsw,1), SZI_(G))  :: penSWbnd   ! penetrating SW radiation by band
-                                                      ! [degC H T-1 ~> degC m s-1 or degC kg m-2 s-1]
+                                                      ! [C H T-1 ~> degC m s-1 or degC kg m-2 s-1]
   real, dimension(SZI_(G))              :: pressure   ! pressure at the surface [R L2 T-2 ~> Pa]
   real, dimension(SZI_(G))              :: dRhodT     ! density partial derivative wrt temp [R C-1 ~> kg m-3 degC-1]
   real, dimension(SZI_(G))              :: dRhodS     ! density partial derivative wrt saln [R S-1 ~> kg m-3 ppt-1]
@@ -996,7 +996,7 @@ subroutine calculateBuoyancyFlux1d(G, GV, US, fluxes, optics, nsw, h, Temp, Salt
   ! The surface forcing is contained in the fluxes type.
   ! We aggregate the thermodynamic forcing for a time step into the following:
   ! netH       = water added/removed via surface fluxes [H T-1 ~> m s-1 or kg m-2 s-1]
-  ! netHeat    = heat via surface fluxes [degC H T-1 ~> degC m s-1 or degC kg m-2 s-1]
+  ! netHeat    = heat via surface fluxes [C H T-1 ~> degC m s-1 or degC kg m-2 s-1]
   ! netSalt    = salt via surface fluxes [S H T-1 ~> ppt m s-1 or gSalt m-2 s-1]
   ! Note that unlike other calls to extractFLuxes1d() that return the time-integrated flux
   ! this call returns the rate because dt=1 (in arbitrary time units)
@@ -1015,12 +1015,12 @@ subroutine calculateBuoyancyFlux1d(G, GV, US, fluxes, optics, nsw, h, Temp, Salt
                                 tv%eqn_of_state, EOS_domain(G%HI))
 
   ! Adjust netSalt to reflect dilution effect of FW flux
-  ! [ppt H T-1 ~> ppt m s-1 or ppt kg m-2 s-1]
+  ! [S H T-1 ~> ppt m s-1 or ppt kg m-2 s-1]
   netSalt(G%isc:G%iec) = netSalt(G%isc:G%iec) - Salt(G%isc:G%iec,j,1) * netH(G%isc:G%iec)
 
   ! Add in the SW heating for purposes of calculating the net
   ! surface buoyancy flux affecting the top layer.
-  ! [degC H T-1 ~> degC m s-1 or degC kg m-2 s-1]
+  ! [C H T-1 ~> degC m s-1 or degC kg m-2 s-1]
   !netHeat(:) = netHeatMinusSW(:) + sum( penSWbnd, dim=1 )
   netHeat(G%isc:G%iec) = netHeatMinusSW(G%isc:G%iec) + netPen(G%isc:G%iec,1)
 
@@ -2310,7 +2310,7 @@ end subroutine copy_back_forcing_fields
 !! fields registered as part of register_forcing_type_diags.
 subroutine mech_forcing_diags(forces_in, dt, G, time_end, diag, handles)
   type(mech_forcing), target, intent(in) :: forces_in !< mechanical forcing input fields
-  real,                  intent(in)    :: dt       !< time step for the forcing [s]
+  real,                  intent(in)    :: dt       !< time step for the forcing [T ~> s]
   type(ocean_grid_type), intent(in)    :: G        !< grid type
   type(time_type),       intent(in)    :: time_end !< The end time of the diagnostic interval.
   type(diag_ctrl),       intent(inout) :: diag     !< diagnostic type
@@ -2335,7 +2335,7 @@ subroutine mech_forcing_diags(forces_in, dt, G, time_end, diag, handles)
   endif
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
-  call enable_averaging(dt, time_end, diag)
+  call enable_averages(dt, time_end, diag)
   ! if (query_averaging_enabled(diag)) then
 
     if ((handles%id_taux > 0) .and. associated(forces%taux)) &

@@ -67,12 +67,14 @@ subroutine end_coord_rho(CS)
 end subroutine end_coord_rho
 
 !> This subroutine can be used to set the parameters for the coord_rho module
-subroutine set_rho_params(CS, min_thickness, integrate_downward_for_e, interp_CS)
+subroutine set_rho_params(CS, min_thickness, integrate_downward_for_e, interp_CS, ref_pressure)
   type(rho_CS),      pointer    :: CS !< Coordinate control structure
   real,    optional, intent(in) :: min_thickness !< Minimum allowed thickness [H ~> m or kg m-2]
   logical, optional, intent(in) :: integrate_downward_for_e !< If true, integrate for interface
                                       !! positions from the top downward.  If false, integrate
                                       !! from the bottom upward, as does the rest of the model.
+  real,    optional, intent(in) :: ref_pressure     !< The reference pressure for density-dependent
+                                                    !! coordinates [R L2 T-2 ~> Pa]
 
   type(interp_CS_type), optional, intent(in) :: interp_CS !< Controls for interpolation
 
@@ -81,6 +83,7 @@ subroutine set_rho_params(CS, min_thickness, integrate_downward_for_e, interp_CS
   if (present(min_thickness)) CS%min_thickness = min_thickness
   if (present(integrate_downward_for_e)) CS%integrate_downward_for_e = integrate_downward_for_e
   if (present(interp_CS)) CS%interp_CS = interp_CS
+  if (present(ref_pressure)) CS%ref_pressure = ref_pressure
 end subroutine set_rho_params
 
 !> Build a rho coordinate column

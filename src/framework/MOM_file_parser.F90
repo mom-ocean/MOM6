@@ -1411,7 +1411,7 @@ end subroutine log_param_int_array
 
 !> Log the name and value of a real model parameter in documentation files.
 subroutine log_param_real(CS, modulename, varname, value, desc, units, &
-                          default, debuggingParam, like_default)
+                          default, debuggingParam, like_default, unscale)
   type(param_file_type),      intent(in) :: CS      !< The control structure for the file_parser module,
                                          !! it is also a structure to parse for run-time parameters
   character(len=*),           intent(in) :: modulename !< The name of the calling module
@@ -1425,26 +1425,31 @@ subroutine log_param_real(CS, modulename, varname, value, desc, units, &
                                          !! logged in the debugging parameter file
   logical,          optional, intent(in) :: like_default !< If present and true, log this parameter as
                                          !! though it has the default value, even if there is no default.
+  real,             optional, intent(in) :: unscale   !< A reciprocal scaling factor that the parameter is
+                                         !! multiplied by before it is logged
 
+  real :: log_val ! The parameter value that is written out
   character(len=240) :: mesg, myunits
 
+  log_val = value ; if (present(unscale)) log_val = unscale * value
+
   write(mesg, '("  ",a," ",a,": ",a)') &
-    trim(modulename), trim(varname), trim(left_real(value))
+    trim(modulename), trim(varname), trim(left_real(log_val))
   if (is_root_pe()) then
     if (CS%log_open) write(CS%stdlog,'(a)') trim(mesg)
     if (CS%log_to_stdout) write(CS%stdout,'(a)') trim(mesg)
   endif
 
-  myunits="not defined"; if (present(units)) write(myunits(1:240),'(A)') trim(units)
+  write(myunits(1:240),'(A)') trim(units)
   if (present(desc)) &
-    call doc_param(CS%doc, varname, desc, myunits, value, default, &
+    call doc_param(CS%doc, varname, desc, myunits, log_val, default, &
                    debuggingParam=debuggingParam, like_default=like_default)
 
 end subroutine log_param_real
 
 !> Log the name and values of an array of real model parameter in documentation files.
 subroutine log_param_real_array(CS, modulename, varname, value, desc, &
-                                units, default, debuggingParam, like_default)
+                                units, default, debuggingParam, like_default, unscale)
   type(param_file_type),      intent(in) :: CS      !< The control structure for the file_parser module,
                                          !! it is also a structure to parse for run-time parameters
   character(len=*),           intent(in) :: modulename !< The name of the calling module
@@ -1458,22 +1463,27 @@ subroutine log_param_real_array(CS, modulename, varname, value, desc, &
                                          !! logged in the debugging parameter file
   logical,          optional, intent(in) :: like_default !< If present and true, log this parameter as
                                          !! though it has the default value, even if there is no default.
+  real,             optional, intent(in) :: unscale   !< A reciprocal scaling factor that the parameter is
+                                         !! multiplied by before it is logged
 
+  real, dimension(size(value)) :: log_val ! The array of parameter values that is written out
   character(len=:), allocatable :: mesg
   character(len=240) :: myunits
+
+  log_val(:) = value(:) ; if (present(unscale)) log_val(:) = unscale * value(:)
 
  !write(mesg, '("  ",a," ",a,": ",ES19.12,99(",",ES19.12))') &
  !write(mesg, '("  ",a," ",a,": ",G,99(",",G))') &
  !  trim(modulename), trim(varname), value
-  mesg = "  " // trim(modulename) // " " // trim(varname) // ": " // trim(left_reals(value))
+  mesg = "  " // trim(modulename) // " " // trim(varname) // ": " // trim(left_reals(log_val))
   if (is_root_pe()) then
     if (CS%log_open) write(CS%stdlog,'(a)') trim(mesg)
     if (CS%log_to_stdout) write(CS%stdout,'(a)') trim(mesg)
   endif
 
-  myunits="not defined"; if (present(units)) write(myunits(1:240),'(A)') trim(units)
+  write(myunits(1:240),'(A)') trim(units)
   if (present(desc)) &
-    call doc_param(CS%doc, varname, desc, myunits, value, default, &
+    call doc_param(CS%doc, varname, desc, myunits, log_val, default, &
                    debuggingParam=debuggingParam, like_default=like_default)
 
 end subroutine log_param_real_array

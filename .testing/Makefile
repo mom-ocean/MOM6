@@ -11,7 +11,7 @@
 #       Delete the MOM6 test executables and dependency builds (FMS)
 #
 #   make clean.build
-#   	Delete only the MOM6 test executables
+#       Delete only the MOM6 test executables
 #
 #
 # Configuration:
@@ -56,6 +56,9 @@
 #   MOM_TARGET_URL              Full URL of the target repo
 #   MOM_TARGET_LOCAL_BRANCH     Target branch name
 # (NOTE: These would typically be configured by a CI.)
+#
+# Paths for stages:
+#   WORKSPACE   Location to place work/ and results/ directories (i.e. where to run the model)
 #
 #----
 
@@ -129,6 +132,8 @@ CONFIGS ?= $(wildcard tc*)
 TESTS ?= grid layout rotate restart openmp nan $(foreach d,$(DIMS),dim.$(d))
 DIMS ?= t l h z q r
 
+# Default is to place work/ and results/ in current directory
+WORKSPACE ?= .
 
 #---
 # Test configuration
@@ -205,33 +210,10 @@ FMS_SOURCE = $(call SOURCE,deps/fms/src)
 
 
 #---
-# Python preprocessing environment configuration
-
-HAS_NUMPY = $(shell python -c "import numpy" 2> /dev/null && echo "yes")
-HAS_NETCDF4 = $(shell python -c "import netCDF4" 2> /dev/null && echo "yes")
-
-USE_VENV =
-ifneq ($(HAS_NUMPY), yes)
-  USE_VENV = yes
-endif
-ifneq ($(HAS_NETCDF4), yes)
-  USE_VENV = yes
-endif
-
-# When disabled, activation is a null operation (`true`)
-VENV_PATH =
-VENV_ACTIVATE = true
-ifeq ($(USE_VENV), yes)
-  VENV_PATH = work/local-env
-  VENV_ACTIVATE = . $(VENV_PATH)/bin/activate
-endif
-
-
-#---
 # Rules
 
 .PHONY: all build.regressions build.prof
-all: $(foreach b,$(BUILDS),build/$(b)) $(VENV_PATH)
+all: $(foreach b,$(BUILDS),build/$(b))
 build.regressions: $(foreach b,symmetric target,build/$(b)/MOM6)
 build.prof: $(foreach b,opt opt_target,build/$(b)/MOM6)
 
@@ -382,8 +364,8 @@ deps/Makefile: ../ac/deps/Makefile
 # broken the ability to compile.  This is not a means to build a complete
 # coupled executable.
 # TODO:
-# 	- Avoid re-building FMS and MOM6 src by re-using existing object/mod files
-# 	- Use autoconf rather than mkmf templates
+#   - Avoid re-building FMS and MOM6 src by re-using existing object/mod files
+#   - Use autoconf rather than mkmf templates
 MK_TEMPLATE ?= ../../deps/mkmf/templates/ncrc-gnu.mk
 
 # NUOPC driver
@@ -400,21 +382,6 @@ check_mom6_api_coupled: build/coupled/ocean_model_MOM.o
 build/mct/mom_ocean_model_mct.o: build/mct/Makefile
 	cd $(@D) && make $(@F)
 check_mom6_api_mct: build/mct/mom_ocean_model_mct.o
-
-
-#---
-# Python preprocessing
-
-# NOTE: Some less mature environments (e.g. Arm64 Ubuntu) require explicit
-#   installation of numpy before netCDF4, as well as wheel and cython support.
-work/local-env:
-	python3 -m venv $@
-	. $@/bin/activate \
-	  && python3 -m pip install --upgrade pip \
-	  && pip3 install wheel \
-	  && pip3 install cython \
-	  && pip3 install numpy \
-	  && pip3 install netCDF4
 
 
 #---
@@ -446,11 +413,11 @@ endef
 $(foreach d,$(DIMS),$(eval $(call TEST_DIM_RULE,$(d))))
 
 .PHONY: run.symmetric run.asymmetric run.nans run.openmp run.cov
-run.symmetric: $(foreach c,$(CONFIGS),work/$(c)/symmetric/ocean.stats)
-run.asymmetric: $(foreach c,$(filter-out tc3,$(CONFIGS)),$(CONFIGS),work/$(c)/asymmetric/ocean.stats)
-run.nan: $(foreach c,$(CONFIGS),work/$(c)/nan/ocean.stats)
-run.openmp: $(foreach c,$(CONFIGS),work/$(c)/openmp/ocean.stats)
-run.cov: $(foreach c,$(CONFIGS),work/$(c)/cov/ocean.stats)
+run.symmetric: $(foreach c,$(CONFIGS),$(WORKSPACE)/work/$(c)/symmetric/ocean.stats)
+run.asymmetric: $(foreach c,$(filter-out tc3,$(CONFIGS)),$(CONFIGS),$(WORKSPACE)/work/$(c)/asymmetric/ocean.stats)
+run.nan: $(foreach c,$(CONFIGS),$(WORKSPACE)/work/$(c)/nan/ocean.stats)
+run.openmp: $(foreach c,$(CONFIGS),$(WORKSPACE)/work/$(c)/openmp/ocean.stats)
+run.cov: $(foreach c,$(CONFIGS),$(WORKSPACE)/work/$(c)/cov/ocean.stats)
 
 # Configuration test rules
 # $(1): Configuration name (tc1, tc2, &c.)
@@ -482,21 +449,21 @@ FAIL = ${RED}FAIL${RESET}
 # $(2): Test type (grid, layout, &c.)
 # $(3): Comparison targets (symmetric asymmetric, symmetric layout, &c.)
 define CMP_RULE
-.PRECIOUS: $(foreach b,$(3),work/$(1)/$(b)/ocean.stats)
-$(1).$(2): $(foreach b,$(3),work/$(1)/$(b)/ocean.stats)
-	@test "$$(shell ls -A results/$(1) 2>/dev/null)" || rm -rf results/$(1)
+.PRECIOUS: $(foreach b,$(3),$(WORKSPACE)/work/$(1)/$(b)/ocean.stats)
+$(1).$(2): $(foreach b,$(3),$(WORKSPACE)/work/$(1)/$(b)/ocean.stats)
+	@test "$$(shell ls -A $(WORKSPACE)/results/$(1) 2>/dev/null)" || rm -rf $(WORKSPACE)/results/$(1)
 	@cmp $$^ || !( \
-	  mkdir -p results/$(1); \
-	  (diff $$^ | tee results/$(1)/ocean.stats.$(2).diff | head -n 20) ; \
+	  mkdir -p $(WORKSPACE)/results/$(1); \
+	  (diff $$^ | tee $(WORKSPACE)/results/$(1)/ocean.stats.$(2).diff | head -n 20) ; \
 	  echo -e "$(FAIL): Solutions $(1).$(2) have changed." \
 	)
 	@echo -e "$(PASS): Solutions $(1).$(2) agree."
 
-.PRECIOUS: $(foreach b,$(3),work/$(1)/$(b)/chksum_diag)
-$(1).$(2).diag: $(foreach b,$(3),work/$(1)/$(b)/chksum_diag)
+.PRECIOUS: $(foreach b,$(3),$(WORKSPACE)/work/$(1)/$(b)/chksum_diag)
+$(1).$(2).diag: $(foreach b,$(3),$(WORKSPACE)/work/$(1)/$(b)/chksum_diag)
 	@cmp $$^ || !( \
-	  mkdir -p results/$(1); \
-	  (diff $$^ | tee results/$(1)/chksum_diag.$(2).diff | head -n 20) ; \
+	  mkdir -p $(WORKSPACE)/results/$(1); \
+	  (diff $$^ | tee $(WORKSPACE)/results/$(1)/chksum_diag.$(2).diff | head -n 20) ; \
 	  echo -e "$(FAIL): Diagnostics $(1).$(2).diag have changed." \
 	)
 	@echo -e "$(PASS): Diagnostics $(1).$(2).diag agree."
@@ -516,14 +483,15 @@ $(foreach c,$(CONFIGS),$(eval $(call CONFIG_DIM_RULE,$(c))))
 
 # Custom comparison rules
 
+
 # Restart tests only compare the final stat record
-.PRECIOUS: $(foreach b,symmetric restart target,work/%/$(b)/ocean.stats)
-%.restart: $(foreach b,symmetric restart,work/%/$(b)/ocean.stats)
-	@test "$(shell ls -A results/$* 2>/dev/null)" || rm -rf results/$*
+.PRECIOUS: $(foreach b,symmetric restart target,$(WORKSPACE)/work/%/$(b)/ocean.stats)
+%.restart: $(foreach b,symmetric restart,$(WORKSPACE)/work/%/$(b)/ocean.stats)
+	@test "$(shell ls -A $(WORKSPACE)/results/$* 2>/dev/null)" || rm -rf $(WORKSPACE)/results/$*
 	@cmp $(foreach f,$^,<(tr -s ' ' < $(f) | cut -d ' ' -f3- | tail -n 1)) \
 	  || !( \
-	    mkdir -p results/$*; \
-	    (diff $^ | tee results/$*/chksum_diag.restart.diff | head -n 20) ; \
+	    mkdir -p $(WORKSPACE)/results/$*; \
+	    (diff $^ | tee $(WORKSPACE)/results/$*/chksum_diag.restart.diff | head -n 20) ; \
 	    echo -e "$(FAIL): Solutions $*.restart have changed." \
 	  )
 	@echo -e "$(PASS): Solutions $*.restart agree."
@@ -531,21 +499,21 @@ $(foreach c,$(CONFIGS),$(eval $(call CONFIG_DIM_RULE,$(c))))
 # TODO: chksum_diag parsing of restart files
 
 # stats rule is unchanged, but we cannot use CMP_RULE to generate it.
-%.regression: $(foreach b,symmetric target,work/%/$(b)/ocean.stats)
-	@test "$(shell ls -A results/$* 2>/dev/null)" || rm -rf results/$*
+%.regression: $(foreach b,symmetric target,$(WORKSPACE)/work/%/$(b)/ocean.stats)
+	@test "$(shell ls -A $(WORKSPACE)/results/$* 2>/dev/null)" || rm -rf $(WORKSPACE)/results/$*
 	@cmp $^ || !( \
-	  mkdir -p results/$*; \
-	  (diff $^ | tee results/$*/ocean.stats.regression.diff | head -n 20) ; \
+	  mkdir -p $(WORKSPACE)/results/$*; \
+	  (diff $^ | tee $(WORKSPACE)/results/$*/ocean.stats.regression.diff | head -n 20) ; \
 	  echo -e "$(FAIL): Solutions $*.regression have changed." \
 	)
 	@echo -e "$(PASS): Solutions $*.regression agree."
 
 # Regression testing only checks for changes in existing diagnostics
-%.regression.diag: $(foreach b,symmetric target,work/%/$(b)/chksum_diag)
+%.regression.diag: $(foreach b,symmetric target,$(WORKSPACE)/work/%/$(b)/chksum_diag)
 	@! diff $^ | grep "^[<>]" | grep "^>" > /dev/null \
 	  || ! (\
-	    mkdir -p results/$*; \
-	    (diff $^ | tee results/$*/chksum_diag.regression.diff | head -n 20) ; \
+	    mkdir -p $(WORKSPACE)/results/$*; \
+	    (diff $^ | tee $(WORKSPACE)/results/$*/chksum_diag.regression.diff | head -n 20) ; \
 	    echo -e "$(FAIL): Diagnostics $*.regression.diag have changed." \
 	  )
 	@cmp $^ || ( \
@@ -556,9 +524,25 @@ $(foreach c,$(CONFIGS),$(eval $(call CONFIG_DIM_RULE,$(c))))
 
 
 #---
+# Preprocessing
+# NOTE: This only support tc4, but can be generalized over all tests.
+.PHONY: preproc
+preproc: tc4/Makefile
+	cd tc4 && $(MAKE) LAUNCHER="$(MPIRUN)"
+preproc-compile: tc4/Makefile
+	cd tc4 && $(MAKE) executables
+
+tc4/Makefile: tc4/configure tc4/Makefile.in
+	cd $(@D) && ./configure || (cat config.log && false)
+
+tc4/configure: tc4/configure.ac
+	cd $(@D) && autoreconf -if
+
+
+#---
 # Test run output files
 
-# Rule to build work/<tc>/{ocean.stats,chksum_diag}.<tag>
+# Rule to build $(WORKSPACE)/work/<tc>/{ocean.stats,chksum_diag}.<tag>
 # $(1): Test configuration name <tag>
 # $(2): Executable type
 # $(3): Enable coverage flag
@@ -567,22 +551,15 @@ $(foreach c,$(CONFIGS),$(eval $(call CONFIG_DIM_RULE,$(c))))
 # $(6): Number of MPI ranks
 
 define STAT_RULE
-work/%/$(1)/ocean.stats work/%/$(1)/chksum_diag: build/$(2)/MOM6 $(VENV_PATH)
+$(WORKSPACE)/work/%/$(1)/ocean.stats $(WORKSPACE)/work/%/$(1)/chksum_diag: build/$(2)/MOM6 | preproc
 	@echo "Running test $$*.$(1)..."
 	mkdir -p $$(@D)
 	cp -RL $$*/* $$(@D)
-	if [ -f $$(@D)/Makefile ]; then \
-	  $$(VENV_ACTIVATE) \
-	    && cd $$(@D) \
-	    && $(MAKE); \
-	else \
-	  cd $$(@D); \
-	fi
 	mkdir -p $$(@D)/RESTART
 	echo -e "$(4)" > $$(@D)/MOM_override
-	rm -f results/$$*/std.$(1).{out,err}
+	rm -f $(WORKSPACE)/results/$$*/std.$(1).{out,err}
 	cd $$(@D) \
-	  && $(TIME) $(5) $(MPIRUN) -n $(6) ../../../$$< 2> std.err > std.out \
+	  && $(TIME) $(5) $(MPIRUN) -n $(6) $(abspath $$<) 2> std.err > std.out \
 	  || !( \
 	    mkdir -p ../../../results/$$*/ ; \
 	    cat std.out | tee ../../../results/$$*/std.$(1).out | tail -n 20 ; \
@@ -592,7 +569,7 @@ work/%/$(1)/ocean.stats work/%/$(1)/chksum_diag: build/$(2)/MOM6 $(VENV_PATH)
 	  )
 	@echo -e "$(DONE): $$*.$(1); no runtime errors."
 	if [ $(3) ]; then \
-	  mkdir -p results/$$* ; \
+	  mkdir -p $(WORKSPACE)/results/$$* ; \
 	  cd build/$(2) ; \
 	  gcov -b *.gcda > gcov.$$*.$(1).out ; \
 	  find -name "*.gcov" -exec sed -i -r 's/^( *[0-9]*)\*:/ \1:/g' {} \; ; \
@@ -615,7 +592,7 @@ report.cov: run.cov codecov
 	  || { \
 	    cat build/cov/codecov.err ; \
 	    echo -e "${RED}Failed to upload report.${RESET}" ; \
-		if [ "$(REQUIRE_COVERAGE_UPLOAD)" = true ] ; then false ; fi ; \
+	    if [ "$(REQUIRE_COVERAGE_UPLOAD)" = true ] ; then false ; fi ; \
 	  }
 
 # Define $(,) as comma escape character
@@ -643,17 +620,10 @@ $(eval $(call STAT_RULE,cov,cov,true,,,1))
 #  2. Convert DAYMAX from TIMEUNIT to seconds
 #  3. Apply seconds to `ocean_solo_nml` inside input.nml.
 # NOTE: Assumes that runtime set by DAYMAX, will fail if set by input.nml
-work/%/restart/ocean.stats: build/symmetric/MOM6 $(VENV_PATH)
+$(WORKSPACE)/work/%/restart/ocean.stats: build/symmetric/MOM6 | preproc
 	rm -rf $(@D)
 	mkdir -p $(@D)
 	cp -RL $*/* $(@D)
-	if [ -f $(@D)/Makefile ]; then \
-	  $(VENV_ACTIVATE) \
-	    && cd work/$*/restart \
-	    && $(MAKE); \
-	else \
-	  cd work/$*/restart; \
-	fi
 	mkdir -p $(@D)/RESTART
 	# Set the half-period
 	cd $(@D) \
@@ -664,9 +634,9 @@ work/%/restart/ocean.stats: build/symmetric/MOM6 $(VENV_PATH)
 	  && halfperiod=$$(awk -v t=$${daymax} -v dt=$${timeunit} 'BEGIN {printf "%.f", 0.5*t*dt}') \
 	  && printf "\n&ocean_solo_nml\n    seconds = $${halfperiod}\n/\n" >> input.nml
 	# Remove any previous archived output
-	rm -f results/$*/std.restart{1,2}.{out,err}
+	rm -f $(WORKSPACE)/results/$*/std.restart{1,2}.{out,err}
 	# Run the first half-period
-	cd $(@D) && $(TIME) $(MPIRUN) -n 1 ../../../$< 2> std1.err > std1.out \
+	cd $(@D) && $(TIME) $(MPIRUN) -n 1 $(abspath $<) 2> std1.err > std1.out \
 	  || !( \
 	    cat std1.out | tee ../../../results/$*/std.restart1.out | tail -n 20 ; \
 	    cat std1.err | tee ../../../results/$*/std.restart1.err | tail -n 20 ; \
@@ -677,7 +647,7 @@ work/%/restart/ocean.stats: build/symmetric/MOM6 $(VENV_PATH)
 	mkdir $(@D)/RESTART
 	cd $(@D) && sed -i -e "s/input_filename *= *'n'/input_filename = 'r'/g" input.nml
 	# Run the second half-period
-	cd $(@D) && $(TIME) $(MPIRUN) -n 1 ../../../$< 2> std2.err > std2.out \
+	cd $(@D) && $(TIME) $(MPIRUN) -n 1 $(abspath $<) 2> std2.err > std2.out \
 	  || !( \
 	    cat std2.out | tee ../../../results/$*/std.restart2.out | tail -n 20 ; \
 	    cat std2.err | tee ../../../results/$*/std.restart2.err | tail -n 20 ; \
@@ -690,20 +660,20 @@ work/%/restart/ocean.stats: build/symmetric/MOM6 $(VENV_PATH)
 # Not a true rule; only call this after `make test` to summarize test results.
 .PHONY: test.summary
 test.summary:
-	@if ls results/*/* &> /dev/null; then \
-	  if ls results/*/std.*.err &> /dev/null; then \
+	@if ls $(WORKSPACE)/results/*/* &> /dev/null; then \
+	  if ls $(WORKSPACE)/results/*/std.*.err &> /dev/null; then \
 	    echo "The following tests failed to complete:" ; \
-	    ls results/*/std.*.out \
+	    ls $(WORKSPACE)/results/*/std.*.out \
 	      | awk '{split($$0,a,"/"); split(a[3],t,"."); v=t[2]; if(length(t)>3) v=v"."t[3]; print a[2],":",v}'; \
 	  fi; \
-	  if ls results/*/ocean.stats.*.diff &> /dev/null; then \
+	  if ls $(WORKSPACE)/results/*/ocean.stats.*.diff &> /dev/null; then \
 	    echo "The following tests report solution regressions:" ; \
-	    ls results/*/ocean.stats.*.diff \
+	    ls $(WORKSPACE)/results/*/ocean.stats.*.diff \
 	      | awk '{split($$0,a,"/"); split(a[3],t,"."); v=t[3]; if(length(t)>4) v=v"."t[4]; print a[2],":",v}'; \
 	  fi; \
-	  if ls results/*/chksum_diag.*.diff &> /dev/null; then \
+	  if ls $(WORKSPACE)/results/*/chksum_diag.*.diff &> /dev/null; then \
 	    echo "The following tests report diagnostic regressions:" ; \
-	    ls results/*/chksum_diag.*.diff \
+	    ls $(WORKSPACE)/results/*/chksum_diag.*.diff \
 	      | awk '{split($$0,a,"/"); split(a[3],t,"."); v=t[2]; if(length(t)>3) v=v"."t[3]; print a[2],":",v}'; \
 	  fi; \
 	  false ; \
@@ -719,28 +689,28 @@ test.summary:
 .PHONY: run.cov.unit
 run.cov.unit: build/unit/MOM_file_parser_tests.F90.gcov
 
-work/unit/std.out: build/unit/MOM_unit_tests
+$(WORKSPACE)/work/unit/std.out: build/unit/MOM_unit_tests
 	if [ $(REPORT_COVERAGE) ]; then \
 	  find build/unit -name *.gcda -exec rm -f '{}' \; ; \
 	fi
 	rm -rf $(@D)
 	mkdir -p $(@D)
 	cd $(@D) \
-	  && $(TIME) $(MPIRUN) -n 1 ../../$< 2> std.err > std.out \
+	  && $(TIME) $(MPIRUN) -n 1 $(abspath $<) 2> std.err > std.out \
 	  || !( \
 	    cat std.out | tail -n 100 ; \
 	    cat std.err | tail -n 100 ; \
 	  )
 	cd $(@D) \
-	  && $(TIME) $(MPIRUN) -n 2 ../../$< 2> p2.std.err > p2.std.out \
+	  && $(TIME) $(MPIRUN) -n 2 $(abspath $<) 2> p2.std.err > p2.std.out \
 	  || !( \
 	    cat p2.std.out | tail -n 100 ; \
 	    cat p2.std.err | tail -n 100 ; \
 	  )
 
 # NOTE: .gcov actually depends on .gcda, but .gcda is produced with std.out
-# TODO: Replace work/unit/std.out with *.gcda?
-build/unit/MOM_file_parser_tests.F90.gcov: work/unit/std.out
+# TODO: Replace $(WORKSPACE)/work/unit/std.out with *.gcda?
+build/unit/MOM_file_parser_tests.F90.gcov: $(WORKSPACE)/work/unit/std.out
 	cd $(@D) \
 	  && gcov -b *.gcda > gcov.unit.out
 	find $(@D) -name "*.gcov" -exec sed -i -r 's/^( *[0-9]*)\*:/ \1:/g' {} \;
@@ -754,7 +724,7 @@ report.cov.unit: build/unit/MOM_file_parser_tests.F90.gcov codecov
 	  || { \
 	    cat build/unit/codecov.err ; \
 	    echo -e "${RED}Failed to upload report.${RESET}" ; \
-		if [ "$(REQUIRE_COVERAGE_UPLOAD)" = true ] ; then false ; fi ; \
+	    if [ "$(REQUIRE_COVERAGE_UPLOAD)" = true ] ; then false ; fi ; \
 	  }
 
 
@@ -767,22 +737,22 @@ PCONFIGS = p0
 profile: $(foreach p,$(PCONFIGS), prof.$(p))
 
 .PHONY: prof.p0
-prof.p0: work/p0/opt/clocks.json work/p0/opt_target/clocks.json
+prof.p0: $(WORKSPACE)/work/p0/opt/clocks.json $(WORKSPACE)/work/p0/opt_target/clocks.json
 	python tools/compare_clocks.py $^
 
-work/p0/%/clocks.json: work/p0/%/std.out
+$(WORKSPACE)/work/p0/%/clocks.json: $(WORKSPACE)/work/p0/%/std.out
 	python tools/parse_fms_clocks.py -d $(@D) $^ > $@
 
-work/p0/opt/std.out: build/opt/MOM6
-work/p0/opt_target/std.out: build/opt_target/MOM6
+$(WORKSPACE)/work/p0/opt/std.out: build/opt/MOM6
+$(WORKSPACE)/work/p0/opt_target/std.out: build/opt_target/MOM6
 
-work/p0/%/std.out:
+$(WORKSPACE)/work/p0/%/std.out:
 	mkdir -p $(@D)
 	cp -RL p0/* $(@D)
 	mkdir -p $(@D)/RESTART
 	echo -e "" > $(@D)/MOM_override
 	cd $(@D) \
-	  && $(MPIRUN) -n 1 ../../../$< 2> std.err > std.out
+	  && $(MPIRUN) -n 1 $(abspath $<) 2> std.err > std.out
 
 
 #---
@@ -795,16 +765,16 @@ PERF_EVENTS ?=
 perf: $(foreach p,$(PCONFIGS), perf.$(p))
 
 .PHONY: prof.p0
-perf.p0: work/p0/opt/profile.json work/p0/opt_target/profile.json
+perf.p0: $(WORKSPACE)/work/p0/opt/profile.json $(WORKSPACE)/work/p0/opt_target/profile.json
 	python tools/compare_perf.py $^
 
-work/p0/%/profile.json: work/p0/%/perf.data
+$(WORKSPACE)/work/p0/%/profile.json: $(WORKSPACE)/work/p0/%/perf.data
 	python tools/parse_perf.py -f $< > $@
 
-work/p0/opt/perf.data: build/opt/MOM6
-work/p0/opt_target/perf.data: build/opt_target/MOM6
+$(WORKSPACE)/work/p0/opt/perf.data: build/opt/MOM6
+$(WORKSPACE)/work/p0/opt_target/perf.data: build/opt_target/MOM6
 
-work/p0/%/perf.data:
+$(WORKSPACE)/work/p0/%/perf.data:
 	mkdir -p $(@D)
 	cp -RL p0/* $(@D)
 	mkdir -p $(@D)/RESTART
@@ -835,4 +805,11 @@ clean.build:
 .PHONY: clean.stats
 clean.stats:
 	@[ $$(basename $$(pwd)) = .testing ]
-	rm -rf work results
+	rm -rf $(WORKSPACE)/work $(WORKSPACE)/results
+
+
+.PHONY: clean.preproc
+clean.preproc:
+	@if [ -f tc4/Makefile ] ; then \
+	  cd tc4 && make clean ; \
+	fi

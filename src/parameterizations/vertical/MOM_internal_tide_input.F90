@@ -48,13 +48,12 @@ type, public :: int_tide_input_CS ; private
   character(len=200) :: inputdir !< The directory for input files.
 
   logical :: int_tide_source_test    !< If true, apply an arbitrary generation site
-                                     !! for internal tide testing (BDM)
+                                     !! for internal tide testing
   type(time_type) :: time_max_source !< A time for use in testing internal tides
   real    :: int_tide_source_x       !< X Location of generation site
-                                     !! for internal tide for testing (BDM)
-                                     !! for internal tide for testing (BDM)
+                                     !! for internal tide for testing [degrees_E] or [km]
   real    :: int_tide_source_y       !< Y Location of generation site
-                                     !! for internal tide for testing (BDM)
+                                     !! for internal tide for testing [degrees_N] or [km]
   integer :: int_tide_source_i       !< I Location of generation site
   integer :: int_tide_source_j       !< J Location of generation site
   logical :: int_tide_use_glob_ij    !< Use global indices for generation site
@@ -185,7 +184,7 @@ subroutine find_N2_bottom(h, tv, T_f, S_f, h2, fluxes, G, GV, US, N2_bot)
                                                                  !! smooth out the values in thin layers [S ~> ppt].
   real, dimension(SZI_(G),SZJ_(G)),          intent(in)  :: h2   !< Bottom topographic roughness [Z2 ~> m2].
   type(forcing),                             intent(in)  :: fluxes !< A structure of thermodynamic surface fluxes
-  real, dimension(SZI_(G),SZJ_(G)),          intent(out) :: N2_bot !< The squared buoyancy freqency at the
+  real, dimension(SZI_(G),SZJ_(G)),          intent(out) :: N2_bot !< The squared buoyancy frequency at the
                                                                  !! ocean bottom [T-2 ~> s-2].
   ! Local variables
   real, dimension(SZI_(G),SZK_(GV)+1) :: &
@@ -304,7 +303,8 @@ subroutine int_tide_input_init(Time, G, GV, US, param_file, diag, CS, itide)
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
   character(len=40)  :: mdl = "MOM_int_tide_input"  ! This module's name.
-  character(len=200) :: filename, tideamp_file, h2_file
+  character(len=200) :: filename, tideamp_file, h2_file ! Input file names or paths
+  character(len=80)  :: tideamp_var, rough_var ! Input file variable names
 
   real :: mask_itidal        ! A multiplicative land mask, 0 or 1 [nondim]
   real :: max_frac_rough     ! The fraction relating the maximum topographic roughness
@@ -386,7 +386,10 @@ subroutine int_tide_input_init(Time, G, GV, US, param_file, diag, CS, itide)
                "tidal amplitudes with INT_TIDE_DISSIPATION.", default="tideamp.nc")
     filename = trim(CS%inputdir) // trim(tideamp_file)
     call log_param(param_file, mdl, "INPUTDIR/TIDEAMP_FILE", filename)
-    call MOM_read_data(filename, 'tideamp', itide%tideamp, G%domain, scale=US%m_s_to_L_T)
+    call get_param(param_file, mdl, "TIDEAMP_VARNAME", tideamp_var, &
+               "The name of the tidal amplitude variable in the input file.", &
+               default="tideamp")
+    call MOM_read_data(filename, tideamp_var, itide%tideamp, G%domain, scale=US%m_s_to_L_T)
   endif
 
   call get_param(param_file, mdl, "H2_FILE", h2_file, &
@@ -395,7 +398,10 @@ subroutine int_tide_input_init(Time, G, GV, US, param_file, diag, CS, itide)
                fail_if_missing=.true.)
   filename = trim(CS%inputdir) // trim(h2_file)
   call log_param(param_file, mdl, "INPUTDIR/H2_FILE", filename)
-  call MOM_read_data(filename, 'h2', itide%h2, G%domain, scale=US%m_to_Z**2)
+  call get_param(param_file, mdl, "ROUGHNESS_VARNAME", rough_var, &
+                 "The name in the input file of the squared sub-grid-scale "//&
+                 "topographic roughness amplitude variable.", default="h2")
+  call MOM_read_data(filename, rough_var, itide%h2, G%domain, scale=US%m_to_Z**2)
 
   call get_param(param_file, mdl, "FRACTIONAL_ROUGHNESS_MAX", max_frac_rough, &
                  "The maximum topographic roughness amplitude as a fraction of the mean depth, "//&
@@ -408,13 +414,13 @@ subroutine int_tide_input_init(Time, G, GV, US, param_file, diag, CS, itide)
                  default=.false.)
   if (CS%int_tide_source_test)then
     call get_param(param_file, mdl, "INTERNAL_TIDE_USE_GLOB_IJ", CS%int_tide_use_glob_ij, &
-                 "Use global IJ for interal tide generation source test", default=.false.)
+                 "Use global IJ for internal tide generation source test", default=.false.)
     call get_param(param_file, mdl, "INTERNAL_TIDE_SOURCE_X", CS%int_tide_source_x, &
-                 "X Location of generation site for internal tide", default=1., &
-                 do_not_log=CS%int_tide_use_glob_ij)
+                 "X Location of generation site for internal tide", &
+                 units=G%x_ax_unit_short, default=1.0, do_not_log=CS%int_tide_use_glob_ij)
     call get_param(param_file, mdl, "INTERNAL_TIDE_SOURCE_Y", CS%int_tide_source_y, &
-                 "Y Location of generation site for internal tide", default=1., &
-                 do_not_log=CS%int_tide_use_glob_ij)
+                 "Y Location of generation site for internal tide", &
+                 units=G%y_ax_unit_short, default=1.0, do_not_log=CS%int_tide_use_glob_ij)
     call get_param(param_file, mdl, "INTERNAL_TIDE_SOURCE_I", CS%int_tide_source_i, &
                  "I Location of generation site for internal tide", default=0, &
                  do_not_log=.not.CS%int_tide_use_glob_ij)

@@ -24,10 +24,6 @@ public BFB_initialize_sponges_southonly
 ! their mks counterparts with notation like "a velocity [Z T-1 ~> m s-1]".  If the units
 ! vary with the Boussinesq approximation, the Boussinesq variant is given first.
 
-!> Unsafe model variable
-!! \todo Remove this module variable
-logical :: first_call = .true.
-
 contains
 
 !> This subroutine specifies the vertical coordinate in terms of temperature at the surface and at the bottom.
@@ -42,17 +38,22 @@ subroutine BFB_set_coord(Rlay, g_prime, GV, US, param_file)
   type(unit_scale_type),    intent(in)  :: US      !< A dimensional unit scaling type
   type(param_file_type),    intent(in)  :: param_file !< A structure to parse for run-time parameters
 
-  real                                 :: drho_dt, SST_s, T_bot, rho_top, rho_bot
-  integer                              :: k, nz
-  character(len=40)  :: mdl = "BFB_set_coord" ! This subroutine's name.
+  real :: dRho_dT    ! The partial derivative of density with temperature [R C-1 ~> kg m-3 degC-1]
+  real :: SST_s, T_bot     ! Temperatures at the surface and seafloor [C ~> degC]
+  real :: rho_top, rho_bot ! Densities at the surface and seafloor [R ~> kg m-3]
+  integer :: k, nz
+  ! This include declares and sets the variable "version".
+# include "version_variable.h"
+  character(len=40)  :: mdl = "BFB_initialization" ! This module's name.
 
+  call log_version(param_file, mdl, version, "")
   call get_param(param_file, mdl, "DRHO_DT", drho_dt, &
           "Rate of change of density with temperature.", &
-           units="kg m-3 K-1", default=-0.2, scale=US%kg_m3_to_R)
+           units="kg m-3 K-1", default=-0.2, scale=US%kg_m3_to_R*US%C_to_degC)
   call get_param(param_file, mdl, "SST_S", SST_s, &
-          "SST at the suothern edge of the domain.", units="C", default=20.0)
+          "SST at the southern edge of the domain.", units="degC", default=20.0, scale=US%degC_to_C)
   call get_param(param_file, mdl, "T_BOT", T_bot, &
-                 "Bottom Temp", units="C", default=5.0)
+                 "Bottom temperature", units="degC", default=5.0, scale=US%degC_to_C)
   rho_top = GV%Rho0 + drho_dt*SST_s
   rho_bot = GV%Rho0 + drho_dt*T_bot
   nz = GV%ke
@@ -64,15 +65,11 @@ subroutine BFB_set_coord(Rlay, g_prime, GV, US, param_file)
     else
       g_prime(k) = GV%g_Earth
     endif
-    !Rlay(:) = 0.0
-    !g_prime(:) = 0.0
   enddo
-
-  if (first_call) call write_BFB_log(param_file)
 
 end subroutine BFB_set_coord
 
-!> This subroutine sets up the sponges for the southern bouundary of the domain. Maximum damping occurs
+!> This subroutine sets up the sponges for the southern boundary of the domain.  Maximum damping occurs
 !! within 2 degrees lat of the boundary. The damping linearly decreases northward over the next 2 degrees.
 subroutine BFB_initialize_sponges_southonly(G, GV, US, use_temperature, tv, depth_tot, param_file, CSp, h)
   type(ocean_grid_type),   intent(in) :: G  !< The ocean's grid structure
@@ -92,29 +89,27 @@ subroutine BFB_initialize_sponges_southonly(G, GV, US, use_temperature, tv, dept
   real :: eta(SZI_(G),SZJ_(G),SZK_(GV)+1) ! A temporary array for eta, in depth units [Z ~> m].
   real :: Idamp(SZI_(G),SZJ_(G))    ! The sponge damping rate [T-1 ~> s-1]
   real :: H0(SZK_(GV))              ! Resting layer thicknesses in depth units [Z ~> m].
-  real :: min_depth                 ! The minimum ocean depth in depth units [Z ~> m].
   real :: slat                      ! The southern latitude of the domain [degrees_N]
   real :: wlon                      ! The western longitude of the domain [degrees_E]
   real :: lenlat                    ! The latitudinal length of the domain [degrees_N]
   real :: lenlon                    ! The longitudinal length of the domain [degrees_E]
   real :: nlat                      ! The northern latitude of the domain [degrees_N]
   real :: max_damping               ! The maximum damping rate [T-1 ~> s-1]
+  ! This include declares and sets the variable "version".
+# include "version_variable.h"
   character(len=40)  :: mdl = "BFB_initialize_sponges_southonly" ! This subroutine's name.
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
-  eta(:,:,:) = 0.0 ; Idamp(:,:) = 0.0
-
 !  Here the inverse damping time [T-1 ~> s-1], is set. Set Idamp to 0
 !  wherever there is no sponge, and the subroutines that are called
 !  will automatically set up the sponges only where Idamp is positive
 !  and mask2dT is 1.
 
-!   Set up sponges for DOME configuration
-  call get_param(param_file, mdl, "MINIMUM_DEPTH", min_depth, &
-                 "The minimum depth of the ocean.", units="m", default=0.0, scale=US%m_to_Z)
+  !   Set up sponges for this configuration
+  ! call log_version(param_file, mdl, version)
 
   slat = G%south_lat
   lenlat = G%len_lat
@@ -124,12 +119,14 @@ subroutine BFB_initialize_sponges_southonly(G, GV, US, use_temperature, tv, dept
   do k=1,nz ; H0(k) = -G%max_depth * real(k-1) / real(nz) ; enddo
 
   ! Use for meridional thickness profile initialization
-!  do k=1,nz ; H0(k) = -G%max_depth * real(k-1) / real(nz-1) ; enddo
+  ! do k=1,nz ; H0(k) = -G%max_depth * real(k-1) / real(nz-1) ; enddo
 
   max_damping = 1.0  / (86400.0*US%s_to_T)
 
+  eta(:,:,:) = 0.0 ; Idamp(:,:) = 0.0
+
   do j=js,je ; do i=is,ie
-    if (depth_tot(i,j) <= min_depth) then ; Idamp(i,j) = 0.0
+    if (G%mask2dT(i,j) <= 0.0) then ; Idamp(i,j) = 0.0
     elseif (G%geoLatT(i,j) < slat+2.0) then ; Idamp(i,j) = max_damping
     elseif (G%geoLatT(i,j) < slat+4.0) then
       Idamp(i,j) = max_damping * (slat+4.0-G%geoLatT(i,j))/2.0
@@ -140,16 +137,16 @@ subroutine BFB_initialize_sponges_southonly(G, GV, US, use_temperature, tv, dept
     ! depth space for Boussinesq or non-Boussinesq models.
 
     ! This section is used for uniform thickness initialization
-    do k = 1,nz; eta(i,j,k) = H0(k); enddo
+    do k=1,nz ; eta(i,j,k) = H0(k) ; enddo
 
-    ! The below section is used for meridional temperature profile thickness initiation
-    ! do k = 1,nz; eta(i,j,k) = H0(k); enddo
+    ! The below section is used for meridional temperature profile thickness initialization
+    ! do k=1,nz ; eta(i,j,k) = H0(k) ; enddo
     ! if (G%geoLatT(i,j) > 40.0) then
     !   do k = 1,nz
     !     eta(i,j,k) = -G%Angstrom_Z*(k-1)
     !   enddo
     ! elseif (G%geoLatT(i,j) > 20.0) then
-    !   do k = 1,nz
+    !   do k=1,nz
     !     eta(i,j,k) = min(H0(k) + (G%geoLatT(i,j) - 20.0)*(G%max_depth - nz*G%Angstrom_Z)/20.0, &
     !                      -(k-1)*G%Angstrom_Z)
     !   enddo
@@ -166,23 +163,6 @@ subroutine BFB_initialize_sponges_southonly(G, GV, US, use_temperature, tv, dept
 ! By default, momentum is advected vertically within the sponge, but !
 ! momentum is typically not damped within the sponge.                !
 
-  if (first_call) call write_BFB_log(param_file)
-
 end subroutine BFB_initialize_sponges_southonly
-
-!> Write output about the parameter values being used.
-subroutine write_BFB_log(param_file)
-  type(param_file_type), intent(in) :: param_file !< A structure indicating the
-                                                  !! open file to parse for model
-                                                  !! parameter values.
-
-! This include declares and sets the variable "version".
-#include "version_variable.h"
-  character(len=40)  :: mdl = "BFB_initialization" ! This module's name.
-
-  call log_version(param_file, mdl, version)
-  first_call = .false.
-
-end subroutine write_BFB_log
 
 end module BFB_initialization
