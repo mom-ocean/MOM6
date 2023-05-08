@@ -331,32 +331,23 @@ FMS_ENV = \
   FCFLAGS="$(FCFLAGS_FMS)" \
   REPORT_ERROR_LOGS="$(REPORT_ERROR_LOGS)"
 
-deps/lib/libFMS.a: deps/fms/build/libFMS.a
-	$(MAKE) -C deps lib/libFMS.a
+deps/lib/libFMS.a: deps/Makefile deps/Makefile.fms.in deps/configure.fms.ac deps/m4
+	$(FMS_ENV) $(MAKE) -C deps lib/libFMS.a
 
-deps/fms/build/libFMS.a: deps/fms/build/Makefile
-	$(MAKE) -C deps fms/build/libFMS.a
+deps/Makefile: ../ac/deps/Makefile | deps
+	cp ../ac/deps/Makefile deps/Makefile
 
-deps/fms/build/Makefile: deps/fms/src/configure deps/Makefile.fms.in
-	$(FMS_ENV) $(MAKE) -C deps fms/build/Makefile
+deps/Makefile.fms.in: ../ac/deps/Makefile.fms.in | deps
+	cp ../ac/deps/Makefile.fms.in deps/Makefile.fms.in
 
-deps/Makefile.fms.in: ../ac/deps/Makefile.fms.in deps/Makefile
-	cp $< deps
+deps/configure.fms.ac: ../ac/deps/configure.fms.ac | deps
+	cp ../ac/deps/configure.fms.ac deps/configure.fms.ac
 
-# TODO: m4 dependencies?
-deps/fms/src/configure: ../ac/deps/configure.fms.ac deps/Makefile $(FMS_SOURCE) | deps/fms/src
-	cp ../ac/deps/configure.fms.ac deps
-	cp -r ../ac/deps/m4 deps
-	$(MAKE) -C deps fms/src/configure
+deps/m4: ../ac/deps/m4 | deps
+	cp -r ../ac/deps/m4 deps/
 
-deps/fms/src: deps/Makefile
-	make -C deps fms/src
-
-# Dependency init
-deps/Makefile: ../ac/deps/Makefile
-	mkdir -p $(@D)
-	cp $< $@
-
+deps:
+	mkdir -p deps
 
 #---
 # The following block does a non-library build of a coupled driver interface to
