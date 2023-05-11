@@ -39,14 +39,30 @@ AC_CONFIG_MACRO_DIR([m4])
 srcdir=$srcdir/..
 
 
-# Default to symmetric grid
-# NOTE: --enable is more properly used to add a feature, rather than to select
-#   a compile-time mode, so this is not exactly being used as intended.
-MEM_LAYOUT=${srcdir}/config_src/memory/dynamic_symmetric
-AC_ARG_ENABLE([asymmetric],
-  AS_HELP_STRING([--enable-asymmetric], [Use the asymmetric grid]))
-AS_IF([test "$enable_asymmetric" = yes],
-  [MEM_LAYOUT=${srcdir}/config_src/memory/dynamic_nonsymmetric])
+# Configure the memory layout header
+
+AC_ARG_VAR([MOM_MEMORY],
+  [Path to MOM_memory.h header, describing the field memory layout: dynamic
+   symmetric (default), dynamic asymmetric, or static.]
+)
+
+AS_VAR_IF([MOM_MEMORY], [],
+  [MOM_MEMORY=${srcdir}/config_src/memory/dynamic_symmetric/MOM_memory.h]
+)
+
+# Confirm that MOM_MEMORY is named 'MOM_memory.h'
+AS_IF([test $(basename "${MOM_MEMORY}") == "MOM_memory.h"], [],
+ [AC_MSG_ERROR([MOM_MEMORY header ${MOM_MEMORY} must be named 'MOM_memory.h'])]
+)
+
+# Confirm that the file exists
+AC_CHECK_FILE(["$MOM_MEMORY"], [],
+  [AC_MSG_ERROR([MOM_MEMORY header ${MOM_MEMORY} not found.])]
+)
+
+MOM_MEMORY_DIR=$(AS_DIRNAME(["${MOM_MEMORY}"]))
+AC_SUBST([MOM_MEMORY_DIR])
+
 
 # Default to solo_driver
 DRIVER_DIR=${srcdir}/config_src/drivers/solo_driver
@@ -234,8 +250,12 @@ AC_SUBST([MAKEDEP])
 
 
 # Generate source list and configure dependency command
-AC_SUBST([SRC_DIRS],
-    ["${srcdir}/src ${MODEL_FRAMEWORK} ${srcdir}/config_src/external ${DRIVER_DIR} ${MEM_LAYOUT}"]
+AC_SUBST([SRC_DIRS], ["\\
+  ${srcdir}/src \\
+  ${MODEL_FRAMEWORK} \\
+  ${srcdir}/config_src/external \\
+  ${DRIVER_DIR} \\
+  ${MOM_MEMORY_DIR}"]
 )
 AC_CONFIG_COMMANDS(Makefile.dep, [make depend])
 

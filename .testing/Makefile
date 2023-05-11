@@ -246,7 +246,8 @@ COV_LDFLAGS := LDFLAGS="$(LDFLAGS_COVERAGE) $(LDFLAGS_DEPS) $(LDFLAGS_USER)"
 
 # Environment variable configuration
 build/symmetric/Makefile: MOM_ENV=$(PATH_FMS) $(SYMMETRIC_FCFLAGS) $(MOM_LDFLAGS)
-build/asymmetric/Makefile: MOM_ENV=$(PATH_FMS) $(ASYMMETRIC_FCFLAGS) $(MOM_LDFLAGS)
+build/asymmetric/Makefile: MOM_ENV=$(PATH_FMS) $(ASYMMETRIC_FCFLAGS) $(MOM_LDFLAGS) \
+  MOM_MEMORY=../../../config_src/memory/dynamic_nonsymmetric/MOM_memory.h
 build/repro/Makefile: MOM_ENV=$(PATH_FMS) $(REPRO_FCFLAGS) $(MOM_LDFLAGS)
 build/openmp/Makefile: MOM_ENV=$(PATH_FMS) $(OPENMP_FCFLAGS) $(MOM_LDFLAGS)
 build/target/Makefile: MOM_ENV=$(PATH_FMS) $(TARGET_FCFLAGS) $(MOM_LDFLAGS)
@@ -260,7 +261,7 @@ build/unit/Makefile: MOM_ENV=$(PATH_FMS) $(COV_FCFLAGS) $(COV_LDFLAGS)
 
 # Configure script flags
 build/symmetric/Makefile: MOM_ACFLAGS=
-build/asymmetric/Makefile: MOM_ACFLAGS=--enable-asymmetric
+build/asymmetric/Makefile: MOM_ACFLAGS=
 build/repro/Makefile: MOM_ACFLAGS=
 build/openmp/Makefile: MOM_ACFLAGS=--enable-openmp
 build/target/Makefile: MOM_ACFLAGS=
