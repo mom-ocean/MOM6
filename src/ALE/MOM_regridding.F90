@@ -23,7 +23,7 @@ use regrid_consts, only : REGRIDDING_LAYER, REGRIDDING_ZSTAR
 use regrid_consts, only : REGRIDDING_RHO, REGRIDDING_SIGMA
 use regrid_consts, only : REGRIDDING_ARBITRARY, REGRIDDING_SIGMA_SHELF_ZSTAR
 use regrid_consts, only : REGRIDDING_HYCOM1, REGRIDDING_HYBGEN, REGRIDDING_ADAPTIVE
-use regrid_interp, only : interp_CS_type, set_interp_scheme, set_interp_extrap
+use regrid_interp, only : interp_CS_type, set_interp_scheme, set_interp_extrap, set_interp_answer_date
 
 use coord_zlike,  only : init_coord_zlike, zlike_CS, set_zlike_params, build_zstar_column, end_coord_zlike
 use coord_sigma,  only : init_coord_sigma, sigma_CS, set_sigma_params, build_sigma_column, end_coord_sigma
@@ -212,6 +212,7 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
   logical :: default_2018_answers ! The default setting for the various 2018_ANSWERS flags.
   logical :: remap_answers_2018
   integer :: remap_answer_date    ! The vintage of the remapping expressions to use.
+  integer :: regrid_answer_date   ! The vintage of the regridding expressions to use.
   real :: tmpReal, P_Ref
   real :: maximum_depth ! The maximum depth of the ocean [m] (not in Z).
   real :: adaptTimeRatio, adaptZoom, adaptZoomCoeff, adaptBuoyCoeff, adaptAlpha
@@ -291,6 +292,13 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
                  "If both REMAPPING_2018_ANSWERS and REMAPPING_ANSWER_DATE are specified, the "//&
                  "latter takes precedence.", default=default_answer_date)
     call set_regrid_params(CS, remap_answer_date=remap_answer_date)
+    call get_param(param_file, mdl, "REGRIDDING_ANSWER_DATE", regrid_answer_date, &
+                 "The vintage of the expressions and order of arithmetic to use for regridding.  "//&
+                 "Values below 20190101 result in the use of older, less accurate expressions "//&
+                 "that were in use at the end of 2018.  Higher values result in the use of more "//&
+                 "robust and accurate forms of mathematically equivalent expressions.", &
+                 default=20181231) ! ### change to default=default_answer_date)
+    call set_regrid_params(CS, regrid_answer_date=regrid_answer_date)
   endif
 
   if (main_parameters .and. coord_is_state_dependent) then
@@ -2233,7 +2241,7 @@ end function getCoordinateShortName
 subroutine set_regrid_params( CS, boundary_extrapolation, min_thickness, old_grid_weight, &
              interp_scheme, depth_of_time_filter_shallow, depth_of_time_filter_deep, &
              compress_fraction, ref_pressure, &
-             integrate_downward_for_e, remap_answers_2018, remap_answer_date, &
+             integrate_downward_for_e, remap_answers_2018, remap_answer_date, regrid_answer_date, &
              adaptTimeRatio, adaptZoom, adaptZoomCoeff, adaptBuoyCoeff, adaptAlpha, adaptDoMin, adaptDrho0)
   type(regridding_CS), intent(inout) :: CS !< Regridding control structure
   logical, optional, intent(in) :: boundary_extrapolation !< Extrapolate in boundary cells
@@ -2252,6 +2260,7 @@ subroutine set_regrid_params( CS, boundary_extrapolation, min_thickness, old_gri
                                                     !! that recover the remapping answers from 2018.  Otherwise
                                                     !! use more robust but mathematically equivalent expressions.
   integer, optional, intent(in) :: remap_answer_date !< The vintage of the expressions to use for remapping
+  integer, optional, intent(in) :: regrid_answer_date !< The vintage of the expressions to use for regridding
   real,    optional, intent(in) :: adaptTimeRatio   !< Ratio of the ALE timestep to the grid timescale [nondim].
   real,    optional, intent(in) :: adaptZoom        !< Depth of near-surface zooming region [H ~> m or kg m-2].
   real,    optional, intent(in) :: adaptZoomCoeff   !< Coefficient of near-surface zooming diffusivity [nondim].
@@ -2265,6 +2274,7 @@ subroutine set_regrid_params( CS, boundary_extrapolation, min_thickness, old_gri
 
   if (present(interp_scheme)) call set_interp_scheme(CS%interp_CS, interp_scheme)
   if (present(boundary_extrapolation)) call set_interp_extrap(CS%interp_CS, boundary_extrapolation)
+  if (present(regrid_answer_date)) call set_interp_answer_date(CS%interp_CS, regrid_answer_date)
 
   if (present(old_grid_weight)) then
     if (old_grid_weight<0. .or. old_grid_weight>1.) &
