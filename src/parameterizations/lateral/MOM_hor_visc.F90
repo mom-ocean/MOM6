@@ -52,7 +52,7 @@ type, public :: hor_visc_CS ; private
   logical :: better_bound_Ah !< If true, use a more careful bounding of the
                              !! biharmonic viscosity to guarantee stability.
   real    :: Re_Ah           !! If nonzero, the biharmonic coefficient is scaled
-                             !< so that the biharmonic Reynolds number is equal to this.
+                             !< so that the biharmonic Reynolds number is equal to this [nondim].
   real    :: bound_coef      !< The nondimensional coefficient of the ratio of
                              !! the viscosity bounds to the theoretical maximum
                              !! for stability without considering other terms [nondim].
@@ -123,8 +123,8 @@ type, public :: hor_visc_CS ; private
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: &
     Kh_Max_xx,      & !< The maximum permitted Laplacian viscosity [L2 T-1 ~> m2 s-1].
     Ah_Max_xx,      & !< The maximum permitted biharmonic viscosity [L4 T-1 ~> m4 s-1].
-    n1n2_h,         & !< Factor n1*n2 in the anisotropic direction tensor at h-points
-    n1n1_m_n2n2_h,  & !< Factor n1**2-n2**2 in the anisotropic direction tensor at h-points
+    n1n2_h,         & !< Factor n1*n2 in the anisotropic direction tensor at h-points [nondim]
+    n1n1_m_n2n2_h,  & !< Factor n1**2-n2**2 in the anisotropic direction tensor at h-points [nondim]
     grid_sp_h2,     & !< Harmonic mean of the squares of the grid [L2 ~> m2]
     grid_sp_h3        !< Harmonic mean of the squares of the grid^(3/2) [L3 ~> m3]
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEMB_PTR_) :: Kh_bg_xy
@@ -141,8 +141,8 @@ type, public :: hor_visc_CS ; private
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEMB_PTR_) :: &
     Kh_Max_xy,      & !< The maximum permitted Laplacian viscosity [L2 T-1 ~> m2 s-1].
     Ah_Max_xy,      & !< The maximum permitted biharmonic viscosity [L4 T-1 ~> m4 s-1].
-    n1n2_q,         & !< Factor n1*n2 in the anisotropic direction tensor at q-points
-    n1n1_m_n2n2_q     !< Factor n1**2-n2**2 in the anisotropic direction tensor at q-points
+    n1n2_q,         & !< Factor n1*n2 in the anisotropic direction tensor at q-points [nondim]
+    n1n1_m_n2n2_q     !< Factor n1**2-n2**2 in the anisotropic direction tensor at q-points [nondim]
 
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: &
     dx2h,   & !< Pre-calculated dx^2 at h points [L2 ~> m2]
@@ -181,10 +181,12 @@ type, public :: hor_visc_CS ; private
 
   type(diag_ctrl), pointer :: diag => NULL() !< structure to regulate diagnostics
 
-  ! real, allocatable :: hf_diffu(:,:,:)  ! Zonal hor. visc. accel. x fract. thickness [L T-2 ~> m s-2].
-  ! real, allocatable :: hf_diffv(:,:,:)  ! Merdional hor. visc. accel. x fract. thickness [L T-2 ~> m s-2].
+  ! real, allocatable :: hf_diffu(:,:,:)  ! Zonal horizontal viscous acceleleration times
+  !                                       ! fractional thickness [L T-2 ~> m s-2].
+  ! real, allocatable :: hf_diffv(:,:,:)  ! Meridional horizontal viscous acceleleration times
+  !                                       ! fractional thickness [L T-2 ~> m s-2].
   ! 3D diagnostics hf_diffu(diffv) are commented because there is no clarity on proper remapping grid option.
-  ! The code is retained for degugging purposes in the future.
+  ! The code is retained for debugging purposes in the future.
 
   integer :: num_smooth_gme !< number of smoothing passes for the GME fluxes.
   !>@{
@@ -242,34 +244,35 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
                                                        !! of along-coordinate stress tensor [L T-2 ~> m s-2].
   type(MEKE_type),               intent(inout) :: MEKE !< MEKE fields
                                                        !! related to Mesoscale Eddy Kinetic Energy.
-  type(VarMix_CS),               intent(inout) :: VarMix !< Variable mixing control struct
+  type(VarMix_CS),               intent(inout) :: VarMix !< Variable mixing control structure
   type(unit_scale_type),         intent(in)  :: US     !< A dimensional unit scaling type
-  type(hor_visc_CS),             intent(in)  :: CS     !< Horizontal viscosity control struct
+  type(hor_visc_CS),             intent(in)  :: CS     !< Horizontal viscosity control structure
   type(ocean_OBC_type), optional, pointer    :: OBC    !< Pointer to an open boundary condition type
-  type(barotropic_CS), intent(in), optional  :: BT     !< Barotropic control struct
-  type(thickness_diffuse_CS), intent(in), optional :: TD  !< Thickness diffusion control struct
+  type(barotropic_CS), intent(in), optional  :: BT     !< Barotropic control structure
+  type(thickness_diffuse_CS), intent(in), optional :: TD  !< Thickness diffusion control structure
   type(accel_diag_ptrs), intent(in), optional :: ADp   !< Acceleration diagnostics
 
   ! Local variables
   real, dimension(SZIB_(G),SZJ_(G)) :: &
-    Del2u, &      ! The u-compontent of the Laplacian of velocity [L-1 T-1 ~> m-1 s-1]
+    Del2u, &      ! The u-component of the Laplacian of velocity [L-1 T-1 ~> m-1 s-1]
     h_u, &        ! Thickness interpolated to u points [H ~> m or kg m-2].
     vort_xy_dy, & ! y-derivative of vertical vorticity (d/dy(dv/dx - du/dy)) [L-1 T-1 ~> m-1 s-1]
     div_xx_dx, &  ! x-derivative of horizontal divergence (d/dx(du/dx + dv/dy)) [L-1 T-1 ~> m-1 s-1]
-    ubtav         ! zonal barotropic vel. ave. over baroclinic time-step [L T-1 ~> m s-1]
+    ubtav         ! zonal barotropic velocity averaged over a baroclinic time-step [L T-1 ~> m s-1]
   real, dimension(SZI_(G),SZJB_(G)) :: &
-    Del2v, &      ! The v-compontent of the Laplacian of velocity [L-1 T-1 ~> m-1 s-1]
+    Del2v, &      ! The v-component of the Laplacian of velocity [L-1 T-1 ~> m-1 s-1]
     h_v, &        ! Thickness interpolated to v points [H ~> m or kg m-2].
     vort_xy_dx, & ! x-derivative of vertical vorticity (d/dx(dv/dx - du/dy)) [L-1 T-1 ~> m-1 s-1]
     div_xx_dy, &  ! y-derivative of horizontal divergence (d/dy(du/dx + dv/dy)) [L-1 T-1 ~> m-1 s-1]
-    vbtav         ! meridional barotropic vel. ave. over baroclinic time-step [L T-1 ~> m s-1]
+    vbtav         ! meridional barotropic velocity averaged over a baroclinic time-step [L T-1 ~> m s-1]
   real, dimension(SZI_(G),SZJ_(G)) :: &
     dudx_bt, dvdy_bt, & ! components in the barotropic horizontal tension [T-1 ~> s-1]
     div_xx, &     ! Estimate of horizontal divergence at h-points [T-1 ~> s-1]
     sh_xx, &      ! horizontal tension (du/dx - dv/dy) including metric terms [T-1 ~> s-1]
     sh_xx_bt, &   ! barotropic horizontal tension (du/dx - dv/dy) including metric terms [T-1 ~> s-1]
-    str_xx,&      ! str_xx is the diagonal term in the stress tensor [H L2 T-2 ~> m3 s-2 or kg s-2]
-    str_xx_GME,&  ! smoothed diagonal term in the stress tensor from GME [H L2 T-2 ~> m3 s-2 or kg s-2]
+    str_xx,&      ! str_xx is the diagonal term in the stress tensor [H L2 T-2 ~> m3 s-2 or kg s-2], but
+                  ! at some points in the code it is not yet layer integrated, so is in [L2 T-2 ~> m2 s-2].
+    str_xx_GME,&  ! smoothed diagonal term in the stress tensor from GME [L2 T-2 ~> m2 s-2]
     bhstr_xx, &   ! A copy of str_xx that only contains the biharmonic contribution [H L2 T-2 ~> m3 s-2 or kg s-2]
     FrictWorkIntz, & ! depth integrated energy dissipated by lateral friction [R L2 T-3 ~> W m-2]
     grad_vort_mag_h, & ! Magnitude of vorticity gradient at h-points [L-1 T-1 ~> m-1 s-1]
@@ -288,8 +291,9 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
     dvdx_bt, dudy_bt,   & ! components in the barotropic shearing strain [T-1 ~> s-1]
     sh_xy,  &     ! horizontal shearing strain (du/dy + dv/dx) including metric terms [T-1 ~> s-1]
     sh_xy_bt, &   ! barotropic horizontal shearing strain (du/dy + dv/dx) inc. metric terms [T-1 ~> s-1]
-    str_xy, &     ! str_xy is the cross term in the stress tensor [H L2 T-2 ~> m3 s-2 or kg s-2]
-    str_xy_GME, & ! smoothed cross term in the stress tensor from GME [H L2 T-2 ~> m3 s-2 or kg s-2]
+    str_xy, &     ! str_xy is the cross term in the stress tensor [H L2 T-2 ~> m3 s-2 or kg s-2], but
+                  ! at some points in the code it is not yet layer integrated, so is in [L2 T-2 ~> m2 s-2].
+    str_xy_GME, & ! smoothed cross term in the stress tensor from GME [L2 T-2 ~> m2 s-2]
     bhstr_xy, &   ! A copy of str_xy that only contains the biharmonic contribution [H L2 T-2 ~> m3 s-2 or kg s-2]
     vort_xy, &    ! Vertical vorticity (dv/dx - du/dy) including metric terms [T-1 ~> s-1]
     grad_vort_mag_q, & ! Magnitude of vorticity gradient at q-points [L-1 T-1 ~> m-1 s-1]
@@ -310,9 +314,9 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
     GME_coeff_q, &  !< GME coeff. at q-points [L2 T-1 ~> m2 s-1]
     ShSt         ! A diagnostic array of shear stress [T-1 ~> s-1].
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)+1) :: &
-    KH_u_GME  !< interface height diffusivities in u-columns [L2 T-1 ~> m2 s-1]
+    KH_u_GME     !< Isopycnal height diffusivities in u-columns [L2 T-1 ~> m2 s-1]
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)+1) :: &
-    KH_v_GME  !< interface height diffusivities in v-columns [L2 T-1 ~> m2 s-1]
+    KH_v_GME     !< Isopycnal height diffusivities in v-columns [L2 T-1 ~> m2 s-1]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: &
     Ah_h, &          ! biharmonic viscosity at thickness points [L4 T-1 ~> m4 s-1]
     Kh_h, &          ! Laplacian viscosity at thickness points [L2 T-1 ~> m2 s-1]
@@ -324,7 +328,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
     grid_Re_Kh, &    ! Grid Reynolds number for Laplacian horizontal viscosity at h points [nondim]
     grid_Re_Ah, &    ! Grid Reynolds number for Biharmonic horizontal viscosity at h points [nondim]
-    GME_coeff_h      ! GME coeff. at h-points [L2 T-1 ~> m2 s-1]
+    GME_coeff_h      ! GME coefficient at h-points [L2 T-1 ~> m2 s-1]
   real :: AhSm       ! Smagorinsky biharmonic viscosity [L4 T-1 ~> m4 s-1]
   real :: AhLth      ! 2D Leith biharmonic viscosity [L4 T-1 ~> m4 s-1]
   real :: Shear_mag_bc  ! Shear_mag value in backscatter [T-1 ~> s-1]
@@ -342,17 +346,17 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
   real :: RoScl     ! The scaling function for MEKE source term [nondim]
   real :: FatH      ! abs(f) at h-point for MEKE source term [T-1 ~> s-1]
   real :: local_strain ! Local variable for interpolating computed strain rates [T-1 ~> s-1].
-  real :: meke_res_fn ! A copy of the resolution scaling factor if being applied to MEKE. Otherwise =1.
+  real :: meke_res_fn ! A copy of the resolution scaling factor if being applied to MEKE [nondim]. Otherwise = 1.
   real :: GME_coeff ! The GME (negative) viscosity coefficient [L2 T-1 ~> m2 s-1]
   real :: DY_dxBu   ! Ratio of meridional over zonal grid spacing at vertices [nondim]
-  real :: DX_dyBu   ! Ratio of zonal over meridiononal grid spacing at vertices [nondim]
+  real :: DX_dyBu   ! Ratio of zonal over meridional grid spacing at vertices [nondim]
   real :: Sh_F_pow  ! The ratio of shear over the absolute value of f raised to some power and rescaled [nondim]
   real :: backscat_subround ! The ratio of f over Shear_mag that is so small that the backscatter
                     ! calculation gives the same value as if f were 0 [nondim].
   real :: KE        ! Local kinetic energy [L2 T-2 ~> m2 s-2]
   real :: d_del2u   ! dy-weighted Laplacian(u) diff in x [L-2 T-1 ~> m-2 s-1]
   real :: d_del2v   ! dx-weighted Laplacian(v) diff in y [L-2 T-1 ~> m-2 s-1]
-  real :: d_str     ! Stress tensor update [H L2 T-2 ~> m3 s-2 or kg s-2]
+  real :: d_str     ! Stress tensor update [L2 T-2 ~> m2 s-2]
   real :: grad_vort ! Vorticity gradient magnitude [L-1 T-1 ~> m-1 s-1]
   real :: grad_vort_qg ! QG-based vorticity gradient magnitude [L-1 T-1 ~> m-1 s-1]
   real :: grid_Kh   ! Laplacian viscosity bound by grid [L2 T-1 ~> m2 s-1]
@@ -365,7 +369,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
   logical :: use_MEKE_Au
   integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
   integer :: i, j, k, n
-  real :: inv_PI3, inv_PI2, inv_PI6
+  real :: inv_PI3, inv_PI2, inv_PI6 ! Powers of the inverse of pi [nondim]
 
   ! Fields evaluated on active layers, used for constructing 3D stress fields
   ! NOTE: The position of these declarations can impact performance, due to the
@@ -419,7 +423,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
     if ((rescale_Kh .or. CS%res_scale_MEKE) &
         .and. (.not. allocated(VarMix%Res_fn_h) .or. .not. allocated(VarMix%Res_fn_q))) &
       call MOM_error(FATAL, "MOM_hor_visc: VarMix%Res_fn_h and VarMix%Res_fn_q "//&
-        "both need to be associated with Resoln_scaled_Kh or RES_SCALE_MEKE_VISC.")
+                     "both need to be associated with Resoln_scaled_Kh or RES_SCALE_MEKE_VISC.")
   elseif (CS%res_scale_MEKE) then
     call MOM_error(FATAL, "MOM_hor_visc: VarMix needs to be associated if "//&
                           "RES_SCALE_MEKE_VISC is True.")
@@ -430,7 +434,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
 
   if (CS%use_GME) then
 
-    ! initialize diag. array with zeros
+    ! Initialize diagnostic arrays with zeros
     GME_coeff_h(:,:,:) = 0.0
     GME_coeff_q(:,:,:) = 0.0
     str_xx_GME(:,:) = 0.0
@@ -1418,11 +1422,12 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
       call smooth_GME(CS, G, GME_flux_h=str_xx_GME)
       call smooth_GME(CS, G, GME_flux_q=str_xy_GME)
 
+      ! This changes the units of str_xx from [L2 T-2 ~> m2 s-2] to [H L2 T-2 ~> m3 s-2 or kg s-2].
       do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
         str_xx(i,j) = (str_xx(i,j) + str_xx_GME(i,j)) * (h(i,j,k) * CS%reduction_xx(i,j))
       enddo ; enddo
 
-      ! GME is applied below
+      ! This adds in GME and changes the units of str_xx from [L2 T-2 ~> m2 s-2] to [H L2 T-2 ~> m3 s-2 or kg s-2].
       if (CS%no_slip) then
         do J=js-1,Jeq ; do I=is-1,Ieq
           str_xy(I,J) = (str_xy(I,J) + str_xy_GME(I,J)) * (hq(I,J) * CS%reduction_xy(I,J))
@@ -1434,10 +1439,12 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
       endif
 
     else ! .not. use_GME
+      ! This changes the units of str_xx from [L2 T-2 ~> m2 s-2] to [H L2 T-2 ~> m3 s-2 or kg s-2].
       do J=Jsq,Jeq+1 ; do i=Isq,Ieq+1
         str_xx(i,j) = str_xx(i,j) * (h(i,j,k) * CS%reduction_xx(i,j))
       enddo ; enddo
 
+      ! This changes the units of str_xy from [L2 T-2 ~> m2 s-2] to [H L2 T-2 ~> m3 s-2 or kg s-2].
       if (CS%no_slip) then
         do J=js-1,Jeq ; do I=is-1,Ieq
           str_xy(I,J) = str_xy(I,J) * (hq(I,J) * CS%reduction_xy(I,J))
@@ -1682,13 +1689,12 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, ADp)
   type(param_file_type),   intent(in)    :: param_file !< A structure to parse for run-time
                                                  !! parameters.
   type(diag_ctrl), target, intent(inout) :: diag !< Structure to regulate diagnostic output.
-  type(hor_visc_CS),       intent(inout) :: CS   !< Horizontal viscosity control struct
+  type(hor_visc_CS),       intent(inout) :: CS   !< Horizontal viscosity control structure
   type(accel_diag_ptrs), intent(in), optional :: ADp !< Acceleration diagnostics
 
-  real, dimension(SZIB_(G),SZJ_(G)) :: u0u, u0v
-  real, dimension(SZI_(G),SZJB_(G)) :: v0u, v0v
-                ! u0v is the Laplacian sensitivities to the v velocities
-                ! at u points [L-2 ~> m-2], with u0u, v0u, and v0v defined similarly.
+  ! u0v is the Laplacian sensitivities to the v velocities at u points, with u0u, v0u, and v0v defined analogously.
+  real, dimension(SZIB_(G),SZJ_(G)) :: u0u, u0v ! Laplacian sensitivities at u points [L-2 ~> m-2]
+  real, dimension(SZI_(G),SZJB_(G)) :: v0u, v0v ! Laplacian sensitivities at v points [L-2 ~> m-2]
   real :: grid_sp_h2       ! Harmonic mean of the squares of the grid [L2 ~> m2]
   real :: grid_sp_h3       ! Harmonic mean of the squares of the grid^(3/2) [L3 ~> m3]
   real :: grid_sp_q2       ! spacings at h and q points [L2 ~> m2]
@@ -1705,22 +1711,22 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, ADp)
                            ! grid spacing, to limit biharmonic viscosity
   real :: Kh               ! Lapacian horizontal viscosity [L2 T-1 ~> m2 s-1]
   real :: Ah               ! biharmonic horizontal viscosity [L4 T-1 ~> m4 s-1]
-  real :: Kh_vel_scale     ! this speed [L T-1 ~> m s-1] times grid spacing gives Lap visc
-  real :: Ah_vel_scale     ! this speed [L T-1 ~> m s-1] times grid spacing cubed gives bih visc
+  real :: Kh_vel_scale     ! this speed [L T-1 ~> m s-1] times grid spacing gives Laplacian viscosity
+  real :: Ah_vel_scale     ! this speed [L T-1 ~> m s-1] times grid spacing cubed gives biharmonic viscosity
   real :: Ah_time_scale    ! damping time-scale for biharmonic visc [T ~> s]
-  real :: Smag_Lap_const   ! nondimensional Laplacian Smagorinsky constant
-  real :: Smag_bi_const    ! nondimensional biharmonic Smagorinsky constant
-  real :: Leith_Lap_const  ! nondimensional Laplacian Leith constant
-  real :: Leith_bi_const   ! nondimensional biharmonic Leith constant
+  real :: Smag_Lap_const   ! nondimensional Laplacian Smagorinsky constant [nondim]
+  real :: Smag_bi_const    ! nondimensional biharmonic Smagorinsky constant [nondim]
+  real :: Leith_Lap_const  ! nondimensional Laplacian Leith constant [nondim]
+  real :: Leith_bi_const   ! nondimensional biharmonic Leith constant [nondim]
   real :: dt               ! The dynamics time step [T ~> s]
   real :: Idt              ! The inverse of dt [T-1 ~> s-1]
-  real :: denom            ! work variable; the denominator of a fraction
-  real :: maxvel           ! largest permitted velocity components [m s-1]
+  real :: denom            ! work variable; the denominator of a fraction [L-2 ~> m-2] or [L-4 ~> m-4]
+  real :: maxvel           ! largest permitted velocity components [L T-1 ~> m s-1]
   real :: bound_Cor_vel    ! grid-scale velocity variations at which value
                            ! the quadratically varying biharmonic viscosity
                            ! balances Coriolis acceleration [L T-1 ~> m s-1]
   real :: Kh_sin_lat       ! Amplitude of latitudinally dependent viscosity [L2 T-1 ~> m2 s-1]
-  real :: Kh_pwr_of_sine   ! Power used to raise sin(lat) when using Kh_sin_lat
+  real :: Kh_pwr_of_sine   ! Power used to raise sin(lat) when using Kh_sin_lat [nondim]
   logical :: bound_Cor_def ! parameter setting of BOUND_CORIOLIS
   logical :: split         ! If true, use the split time stepping scheme.
                            ! If false and USE_GME = True, issue a FATAL error.
@@ -1730,10 +1736,11 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, ADp)
                            ! forms of the same expressions.
   integer :: default_answer_date  ! The default setting for the various ANSWER_DATE flags
   logical :: default_2018_answers ! The default setting for the various 2018_ANSWERS flags
-  character(len=64) :: inputdir, filename
-  real    :: deg2rad       ! Converts degrees to radians
-  real    :: slat_fn       ! sin(lat)**Kh_pwr_of_sine
-  real    :: aniso_grid_dir(2) ! Vector (n1,n2) for anisotropic direction
+  character(len=200) :: inputdir, filename ! Input file names and paths
+  character(len=80) ::  Kh_var ! Input variable names
+  real    :: deg2rad       ! Converts degrees to radians [radians degree-1]
+  real    :: slat_fn       ! sin(lat)**Kh_pwr_of_sine [nondim]
+  real    :: aniso_grid_dir(2) ! Vector (n1,n2) for anisotropic direction [nondim]
   integer :: aniso_mode    ! Selects the mode for setting the anisotropic direction
   integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
@@ -1851,24 +1858,24 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, ADp)
                  units="m2 s-1", default=0.0, scale=US%m_to_L**2*US%T_to_s, &
                  do_not_log=.not.CS%anisotropic)
   call get_param(param_file, mdl, "ANISOTROPIC_MODE", aniso_mode, &
-                 "Selects the mode for setting the direction of anistropy.\n"//&
+                 "Selects the mode for setting the direction of anisotropy.\n"//&
                  "\t 0 - Points along the grid i-direction.\n"//&
                  "\t 1 - Points towards East.\n"//&
                  "\t 2 - Points along the flow direction, U/|U|.", &
                  default=0, do_not_log=.not.CS%anisotropic)
   if (aniso_mode == 0) then
     call get_param(param_file, mdl, "ANISO_GRID_DIR", aniso_grid_dir, &
-                 "The vector pointing in the direction of anistropy for horizontal viscosity. "//&
+                 "The vector pointing in the direction of anisotropy for horizontal viscosity. "//&
                  "n1,n2 are the i,j components relative to the grid.", &
                  units="nondim", fail_if_missing=CS%anisotropic, do_not_log=.not.CS%anisotropic)
   elseif (aniso_mode == 1) then
     call get_param(param_file, mdl, "ANISO_GRID_DIR", aniso_grid_dir, &
-                 "The vector pointing in the direction of anistropy for horizontal viscosity. "//&
+                 "The vector pointing in the direction of anisotropy for horizontal viscosity. "//&
                  "n1,n2 are the i,j components relative to the spherical coordinates.", &
                  units="nondim", fail_if_missing=CS%anisotropic, do_not_log=.not.CS%anisotropic)
   else
     call get_param(param_file, mdl, "ANISO_GRID_DIR", aniso_grid_dir, &
-                 "The vector pointing in the direction of anistropy for horizontal viscosity.", &
+                 "The vector pointing in the direction of anisotropy for horizontal viscosity.", &
                  units="nondim", fail_if_missing=.false., do_not_log=.true.)
   endif
 
@@ -1929,8 +1936,14 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, ADp)
   call get_param(param_file, mdl, "USE_QG_LEITH_VISC", CS%use_QG_Leith_visc, &
                  "If true, use QG Leith nonlinear eddy viscosity.", &
                  default=.false., do_not_log=.not.(CS%Leith_Kh .or. CS%Leith_Ah) )
+  if (CS%use_QG_Leith_visc) then
+    call MOM_error(FATAL, "USE_QG_LEITH_VISC=True activates code that is a work-in-progress and "//&
+          "should not be used until a number of bugs are fixed.  Specifically it does not "//&
+          "reproduce across PE count or layout, and may use arrays that have not been properly "//&
+          "set or allocated.  See github.com/mom-ocean/MOM6/issues/1590 for a discussion.")
+  endif
   if (CS%use_QG_Leith_visc .and. .not. (CS%Leith_Kh .or. CS%Leith_Ah) ) then
-                 call MOM_error(FATAL, "MOM_hor_visc.F90, hor_visc_init:"//&
+    call MOM_error(FATAL, "MOM_hor_visc.F90, hor_visc_init:"//&
                  "LEITH_KH or LEITH_AH must be True when USE_QG_LEITH_VISC=True.")
   endif
 
@@ -1944,12 +1957,13 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, ADp)
                  "value of BOUND_CORIOLIS (or false).", default=bound_Cor_def, &
                  do_not_log=.not.CS%Smagorinsky_Ah)
   if (.not.CS%Smagorinsky_Ah) CS%bound_Coriolis = .false.
-  call get_param(param_file, mdl, "MAXVEL", maxvel, default=3.0e8)
+  call get_param(param_file, mdl, "MAXVEL", maxvel, &
+                 units="m s-1", default=3.0e8, scale=US%m_s_to_L_T)
   call get_param(param_file, mdl, "BOUND_CORIOLIS_VEL", bound_Cor_vel, &
                  "The velocity scale at which BOUND_CORIOLIS_BIHARM causes "//&
                  "the biharmonic drag to have comparable magnitude to the "//&
                  "Coriolis acceleration.  The default is set by MAXVEL.", &
-                 units="m s-1", default=maxvel, scale=US%m_s_to_L_T, &
+                 units="m s-1", default=maxvel*US%L_T_to_m_s, scale=US%m_s_to_L_T, &
                  do_not_log=.not.(CS%Smagorinsky_Ah .and. CS%bound_Coriolis))
 
   call get_param(param_file, mdl, "LEITH_BI_CONST", Leith_bi_const, &
@@ -1994,7 +2008,7 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, ADp)
   if (CS%use_GME) then
     call get_param(param_file, mdl, "GME_NUM_SMOOTHINGS", CS%num_smooth_gme, &
                    "Number of smoothing passes for the GME fluxes.", &
-                   units="nondim", default=1)
+                   default=1)
     call get_param(param_file, mdl, "GME_H0", CS%GME_h0, &
                    "The strength of GME tapers quadratically to zero when the bathymetric "//&
                    "depth is shallower than GME_H0.", &
@@ -2074,11 +2088,15 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, ADp)
   call get_param(param_file, mdl, "KH_BG_2D_FILENAME", filename, &
                  'The filename containing a 2d map of "Kh".', &
                  default='KH_background_2d.nc', do_not_log=.not.CS%use_Kh_bg_2d)
+  call get_param(param_file, mdl, "KH_BG_2D_VARNAME", Kh_var, &
+                 'The name in the input file of the horizontal viscosity variable.', &
+                 default='Kh', do_not_log=.not.CS%use_Kh_bg_2d)
+
   if (CS%use_Kh_bg_2d) then
     call get_param(param_file, mdl, "INPUTDIR", inputdir, default=".")
     inputdir = slasher(inputdir)
     ALLOC_(CS%Kh_bg_2d(isd:ied,jsd:jed))     ; CS%Kh_bg_2d(:,:) = 0.0
-    call MOM_read_data(trim(inputdir)//trim(filename), 'Kh', CS%Kh_bg_2d, &
+    call MOM_read_data(trim(inputdir)//trim(filename), Kh_var, CS%Kh_bg_2d, &
                        G%domain, timelevel=1, scale=US%m_to_L**2*US%T_to_s)
     call pass_var(CS%Kh_bg_2d, G%domain)
   endif
@@ -2224,8 +2242,8 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, ADp)
       CS%Idxdy2v(i,J) = G%IdxCv(i,J) * (G%IdyCv(i,J)*G%IdyCv(i,J))
     enddo ; enddo
     CS%Ah_bg_xy(:,:) = 0.0
-   ! The 0.3 below was 0.4 in MOM1.10.  The change in hq requires
-   ! this to be less than 1/3, rather than 1/2 as before.
+    ! The 0.3 below was 0.4 in HIM 1.10.  The change in hq requires
+    ! this to be less than 1/3, rather than 1/2 as before.
     if (CS%better_bound_Ah .or. CS%bound_Ah) Ah_Limit = 0.3 / (dt*64.0)
     if (CS%Smagorinsky_Ah .and. CS%bound_Coriolis) &
       BoundCorConst = 1.0 / (5.0*(bound_Cor_vel*bound_Cor_vel))
@@ -2528,10 +2546,10 @@ subroutine align_aniso_tensor_to_grid(CS, n1, n2)
   real,              intent(in) :: n1 !< i-component of direction vector [nondim]
   real,              intent(in) :: n2 !< j-component of direction vector [nondim]
   ! Local variables
-  real :: recip_n2_norm
+  real :: recip_n2_norm ! The inverse of the squared magnitude of n1 and n2 [nondim]
   ! For normalizing n=(n1,n2) in case arguments are not a unit vector
   recip_n2_norm = n1**2 + n2**2
-  if (recip_n2_norm > 0.) recip_n2_norm = 1./recip_n2_norm
+  if (recip_n2_norm > 0.) recip_n2_norm = 1. / recip_n2_norm
   CS%n1n2_h(:,:) = 2. * ( n1 * n2 ) * recip_n2_norm
   CS%n1n2_q(:,:) = 2. * ( n1 * n2 ) * recip_n2_norm
   CS%n1n1_m_n2n2_h(:,:) = ( n1 * n1 - n2 * n2 ) * recip_n2_norm
@@ -2544,13 +2562,13 @@ subroutine smooth_GME(CS, G, GME_flux_h, GME_flux_q)
   type(hor_visc_CS),                            intent(in)    :: CS        !< Control structure
   type(ocean_grid_type),                        intent(in)    :: G         !< Ocean grid
   real, dimension(SZI_(G),SZJ_(G)),   optional, intent(inout) :: GME_flux_h!< GME diffusive flux
-                                                              !! at h points
+                                                              !! at h points [L2 T-2 ~> m2 s-2]
   real, dimension(SZIB_(G),SZJB_(G)), optional, intent(inout) :: GME_flux_q!< GME diffusive flux
-                                                              !! at q points
+                                                              !! at q points [L2 T-2 ~> m2 s-2]
   ! local variables
-  real, dimension(SZI_(G),SZJ_(G)) :: GME_flux_h_original
-  real, dimension(SZIB_(G),SZJB_(G)) :: GME_flux_q_original
-  real :: wc, ww, we, wn, ws ! averaging weights for smoothing
+  real, dimension(SZI_(G),SZJ_(G)) :: GME_flux_h_original ! The previous value of GME_flux_h [L2 T-2 ~> m2 s-2]
+  real, dimension(SZIB_(G),SZJB_(G)) :: GME_flux_q_original ! The previous value of GME_flux_q [L2 T-2 ~> m2 s-2]
+  real :: wc, ww, we, wn, ws ! averaging weights for smoothing [nondim]
   integer :: i, j, s, halosz
   integer :: xh, xq  ! The number of valid extra halo points for h and q points.
   integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq
@@ -2613,7 +2631,7 @@ end subroutine smooth_GME
 
 !> Deallocates any variables allocated in hor_visc_init.
 subroutine hor_visc_end(CS)
-  type(hor_visc_CS), intent(inout) :: CS !< Horizontal viscosity control struct
+  type(hor_visc_CS), intent(inout) :: CS !< Horizontal viscosity control structure
   if (CS%Laplacian .or. CS%biharmonic) then
     DEALLOC_(CS%dx2h) ; DEALLOC_(CS%dx2q) ; DEALLOC_(CS%dy2h) ; DEALLOC_(CS%dy2q)
     DEALLOC_(CS%dx_dyT) ; DEALLOC_(CS%dy_dxT) ; DEALLOC_(CS%dx_dyBu) ; DEALLOC_(CS%dy_dxBu)

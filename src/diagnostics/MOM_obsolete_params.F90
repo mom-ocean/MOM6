@@ -73,6 +73,14 @@ subroutine find_obsolete_params(param_file)
   call obsolete_real(param_file, "ZSTAR_RIGID_SURFACE_THRESHOLD")
   call obsolete_logical(param_file, "HENYEY_IGW_BACKGROUND_NEW")
 
+  call obsolete_real(param_file, "SLIGHT_DZ_SURFACE")
+  call obsolete_int(param_file, "SLIGHT_NZ_SURFACE_FIXED")
+  call obsolete_real(param_file, "SLIGHT_SURFACE_AVG_DEPTH")
+  call obsolete_real(param_file, "SLIGHT_NLAY_TO_INTERIOR")
+  call obsolete_logical(param_file, "SLIGHT_FIX_HALOCLINES")
+  call obsolete_real(param_file, "HALOCLINE_FILTER_LENGTH")
+  call obsolete_real(param_file, "HALOCLINE_STRAT_TOL")
+
   ! Test for inconsistent parameter settings.
   split = .true. ; test_logic = .false.
   call read_param(param_file,"SPLIT",split)
@@ -83,19 +91,24 @@ subroutine find_obsolete_params(param_file)
 
   call obsolete_real(param_file, "ETA_TOLERANCE_AUX", only_warn=.true.)
   call obsolete_real(param_file, "BT_MASS_SOURCE_LIMIT", 0.0)
-
+  call obsolete_real(param_file, "FIRST_GUESS_SURFACE_LAYER_DEPTH")
+  call obsolete_logical(param_file, "CORRECT_SURFACE_LAYER_AVERAGE")
   call obsolete_int(param_file, "SEAMOUNT_LENGTH_SCALE", hint="Use SEAMOUNT_X_LENGTH_SCALE instead.")
 
   call obsolete_logical(param_file, "MSTAR_FIXED", hint="Instead use MSTAR_MODE.")
   call obsolete_logical(param_file, "USE_VISBECK_SLOPE_BUG", .false.)
+  call obsolete_logical(param_file, "Use_PP81", hint="get_param is case sensitive so use USE_PP81.")
 
   call obsolete_logical(param_file, "ALLOW_CLOCKS_IN_OMP_LOOPS", .true.)
   call obsolete_logical(param_file, "LARGE_FILE_SUPPORT", .true.)
   call obsolete_real(param_file, "MIN_Z_DIAG_INTERVAL")
   call obsolete_char(param_file, "Z_OUTPUT_GRID_FILE")
 
-  ! This parameter is on the to-do list to be obsoleted.
-  ! call obsolete_logical(param_file, "NEW_SPONGES", hint="Use INTERPOLATE_SPONGE_TIME_SPACE instead.")
+  call read_param(param_file, "INTERPOLATE_SPONGE_TIME_SPACE", test_logic)
+  call obsolete_logical(param_file, "NEW_SPONGES", warning_val=test_logic, &
+                        hint="Use INTERPOLATE_SPONGE_TIME_SPACE instead.")
+
+  call obsolete_logical(param_file, "SMOOTH_RI", hint="Instead use N_SMOOTH_RI.")
 
   ! Write the file version number to the model log.
   call log_version(param_file, mdl, version)
@@ -112,7 +125,7 @@ subroutine obsolete_logical(param_file, varname, warning_val, hint)
   logical :: test_logic, fatal_err
   character(len=128) :: hint_msg
 
-  test_logic = .false. ; call read_param(param_file, varname,test_logic)
+  test_logic = .false. ; call read_param(param_file, varname, test_logic)
   fatal_err = .true.
   if (present(warning_val)) fatal_err = (warning_val .neqv. .true.)
   hint_msg = " " ; if (present(hint)) hint_msg = hint

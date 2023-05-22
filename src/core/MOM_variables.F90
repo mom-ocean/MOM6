@@ -101,7 +101,7 @@ type, public :: thermo_var_ptrs
   real, dimension(:,:), pointer :: salt_deficit => NULL()
                          !<   The salt needed to maintain the ocean column
                          !! at a minimum salinity of MIN_SALINITY since the last time
-                         !! that calculate_surface_state was called, [ppt R Z ~> gSalt m-2].
+                         !! that calculate_surface_state was called, [S R Z ~> gSalt m-2].
   real, dimension(:,:), pointer :: TempxPmE => NULL()
                          !<   The net inflow of water into the ocean times the
                          !! temperature at which this inflow occurs since the
@@ -168,6 +168,10 @@ type, public :: accel_diag_ptrs
     PFv => NULL(), &       !< Meridional acceleration due to pressure forces [L T-2 ~> m s-2]
     du_dt_visc => NULL(), &!< Zonal acceleration due to vertical viscosity [L T-2 ~> m s-2]
     dv_dt_visc => NULL(), &!< Meridional acceleration due to vertical viscosity [L T-2 ~> m s-2]
+    du_dt_visc_gl90 => NULL(), &!< Zonal acceleration due to GL90 vertical viscosity
+                           ! (is included in du_dt_visc) [L T-2 ~> m s-2]
+    dv_dt_visc_gl90 => NULL(), &!< Meridional acceleration due to GL90 vertical viscosity
+                           ! (is included in dv_dt_visc) [L T-2 ~> m s-2]
     du_dt_str => NULL(), & !< Zonal acceleration due to the surface stress (included
                            !! in du_dt_visc) [L T-2 ~> m s-2]
     dv_dt_str => NULL(), & !< Meridional acceleration due to the surface stress (included

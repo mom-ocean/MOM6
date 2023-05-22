@@ -145,9 +145,12 @@ type, public :: dyn_horgrid_type
         !< The longitude of B points for the purpose of labeling the output axes.
         !! On many grids this is the same as geoLonBu.
   character(len=40) :: &
+    ! Except on a Cartesian grid, these are usually some variant of "degrees".
     x_axis_units, &     !< The units that are used in labeling the x coordinate axes.
-    y_axis_units        !< The units that are used in labeling the y coordinate axes.
-    ! Except on a Cartesian grid, these are usually  some variant of "degrees".
+    y_axis_units, &     !< The units that are used in labeling the y coordinate axes.
+    ! These are internally generated names, including "m", "km", "deg_E" and "deg_N".
+    x_ax_unit_short, &  !< A short description of the x-axis units for documenting parameter units
+    y_ax_unit_short     !< A short description of the y-axis units for documenting parameter units
 
   real, allocatable, dimension(:,:) :: &
     bathyT        !< Ocean bottom depth at tracer points, in depth units [Z ~> m].
@@ -382,6 +385,8 @@ subroutine rotate_dyn_horgrid(G_in, G, US, turns)
 
   G%x_axis_units = G_in%y_axis_units
   G%y_axis_units = G_in%x_axis_units
+  G%x_ax_unit_short = G_in%y_ax_unit_short
+  G%y_ax_unit_short = G_in%x_ax_unit_short
   G%south_lat = G_in%south_lat
   G%west_lon = G_in%west_lon
   G%len_lat = G_in%len_lat

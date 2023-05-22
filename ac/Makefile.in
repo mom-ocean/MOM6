@@ -6,6 +6,7 @@
 
 FC = @FC@
 LD = @FC@
+PYTHON = @PYTHON@
 MAKEDEP = @MAKEDEP@
 
 DEFS = @DEFS@
@@ -32,7 +33,7 @@ rwildcard=$(foreach d,$(wildcard $(1:=/*)),$(call rwildcard,$d,$2) $(filter $(su
 .PHONY: depend
 depend: Makefile.dep
 Makefile.dep: $(MAKEDEP) $(call rwildcard,$(SRC_DIRS),*.h *.c *.inc *.F90)
-	$(MAKEDEP) -o Makefile.dep -e $(SRC_DIRS)
+	$(PYTHON) $(MAKEDEP) -o Makefile.dep -e $(SRC_DIRS)
 
 
 # Delete any files associated with configuration (including the Makefile).

@@ -29,7 +29,7 @@ type, public :: porous_barrier_CS; private
   type(diag_ctrl), pointer :: &
       diag => Null()                !< A structure to regulate diagnostic output timing
   logical :: debug                  !< If true, write verbose checksums for debugging purposes.
-  real    :: mask_depth             !< The depth shallower than which porous barrier is not applied.
+  real    :: mask_depth             !< The depth shallower than which porous barrier is not applied [Z ~> m]
   integer :: eta_interp             !< An integer indicating how the interface heights at the velocity
                                     !! points are calculated. Valid values are given by the parameters
                                     !! defined below: MAX, MIN, ARITHMETIC and HARMONIC.
@@ -69,8 +69,8 @@ subroutine porous_widths_layer(h, tv, G, GV, US, pbv, CS, eta_bt)
   real, dimension(SZI_(G),SZJ_(G)), optional, intent(in) :: eta_bt !< optional barotropic variable
                                                                    !! used to dilate the layer thicknesses
                                                                    !! [H ~> m or kg m-2].
-  type(porous_barrier_type),                  intent(inout) :: pbv  !< porous barrier fractional cell metrics
-  type(porous_barrier_CS),                    intent(in) :: CS      !< Control structure for porous barrier
+  type(porous_barrier_type),                  intent(inout) :: pbv !< porous barrier fractional cell metrics
+  type(porous_barrier_CS),                    intent(in) :: CS     !< Control structure for porous barrier
 
   !local variables
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)+1) :: eta_u ! Layer interface heights at u points [Z ~> m]
@@ -80,9 +80,7 @@ subroutine porous_widths_layer(h, tv, G, GV, US, pbv, CS, eta_bt)
   logical, dimension(SZIB_(G),SZJB_(G)) :: do_I ! Booleans for calculation at u or v points
                                                 ! updated while moving up layers
   real :: A_layer ! Integral of fractional open width from bottom to current layer [Z ~> m]
-  real :: Z_to_eta, H_to_eta ! Unit conversion factors for eta.
-  real :: h_neglect, & ! Negligible thicknesses, often [Z ~> m]
-          h_min ! ! The minimum layer thickness, often [Z ~> m]
+  real :: h_min ! ! The minimum layer thickness [Z ~> m]
   real :: dmask ! The depth below which porous barrier is not applied [Z ~> m]
   integer :: i, j, k, nk, is, ie, js, je, Isq, Ieq, Jsq, Jeq
 
@@ -102,9 +100,7 @@ subroutine porous_widths_layer(h, tv, G, GV, US, pbv, CS, eta_bt)
 
   call calc_eta_at_uv(eta_u, eta_v, CS%eta_interp, dmask, h, tv, G, GV, US)
 
-  Z_to_eta = 1.0
-  H_to_eta = GV%H_to_m * US%m_to_Z * Z_to_eta
-  h_min = GV%Angstrom_H * H_to_eta
+  h_min = GV%Angstrom_H * GV%H_to_Z
 
   ! u-points
   do j=js,je ; do I=Isq,Ieq ; do_I(I,j) = .False. ; enddo ; enddo
@@ -203,8 +199,6 @@ subroutine porous_widths_interface(h, tv, G, GV, US, pbv, CS, eta_bt)
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)+1) :: eta_v ! Layer interface height at v points [Z ~> m]
   logical, dimension(SZIB_(G),SZJB_(G)) :: do_I ! Booleans for calculation at u or v points
                                                 ! updated while moving up layers
-  real :: Z_to_eta, H_to_eta ! Unit conversion factors for eta.
-  real :: h_neglect ! Negligible thicknesses, often [Z ~> m]
   real :: dmask ! The depth below which porous barrier is not applied [Z ~> m]
   integer :: i, j, k, nk, is, ie, js, je, Isq, Ieq, Jsq, Jeq
 
@@ -291,9 +285,8 @@ subroutine calc_eta_at_uv(eta_u, eta_v, interp, dmask, h, tv, G, GV, US, eta_bt)
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)+1), intent(out) :: eta_v !< Layer interface heights at v points [Z ~> m]
 
   ! local variables
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1) :: eta ! Layer interface heights [Z ~> m or 1/eta_to_m].
-  real :: Z_to_eta, H_to_eta ! Unit conversion factors for eta.
-  real :: h_neglect ! Negligible thicknesses, often [Z ~> m]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1) :: eta ! Layer interface heights [Z ~> m].
+  real :: h_neglect ! Negligible thicknesses [Z ~> m]
   integer :: i, j, k, nk, is, ie, js, je, Isq, Ieq, Jsq, Jeq
 
   is = G%isc; ie = G%iec; js = G%jsc; je = G%jec; nk = GV%ke
@@ -302,9 +295,7 @@ subroutine calc_eta_at_uv(eta_u, eta_v, interp, dmask, h, tv, G, GV, US, eta_bt)
   ! currently no treatment for using optional find_eta arguments if present
   call find_eta(h, tv, G, GV, US, eta, halo_size=1)
 
-  Z_to_eta = 1.0
-  H_to_eta = GV%H_to_m * US%m_to_Z * Z_to_eta
-  h_neglect = GV%H_subroundoff * H_to_eta
+  h_neglect = GV%H_subroundoff * GV%H_to_Z
 
   do K=1,nk+1
     do j=js,je ; do I=Isq,Ieq ; eta_u(I,j,K) = dmask ; enddo ; enddo
@@ -365,8 +356,8 @@ subroutine calc_por_layer(D_min, D_max, D_avg, eta_layer, A_layer, do_next)
   logical, intent(out) :: do_next   !< False if eta_layer>D_max
 
   ! local variables
-  real :: m,  &  ! convenience constant for fit [nondim]
-          zeta   ! normalized vertical coordinate [nondim]
+  real :: m      ! convenience constant for fit [nondim]
+  real :: zeta   ! normalized vertical coordinate [nondim]
 
   do_next = .True.
   if (eta_layer <= D_min) then
@@ -398,8 +389,8 @@ subroutine calc_por_interface(D_min, D_max, D_avg, eta_layer, w_layer, do_next)
   logical, intent(out) :: do_next   !< False if eta_layer>D_max
 
   ! local variables
-  real :: m, a, &  ! convenience constant for fit [nondim]
-          zeta     ! normalized vertical coordinate [nondim]
+  real :: m, a     ! convenience constants for fit [nondim]
+  real :: zeta     ! normalized vertical coordinate [nondim]
 
   do_next = .True.
   if (eta_layer <= D_min) then
@@ -407,12 +398,14 @@ subroutine calc_por_interface(D_min, D_max, D_avg, eta_layer, w_layer, do_next)
   elseif (eta_layer > D_max) then
     w_layer = 1.0
     do_next = .False.
-  else
+  else  ! The following option could be refactored for stability and efficiency (with fewer divisions)
     m = (D_avg - D_min) / (D_max - D_min)
     a = (1.0 - m) / m
     zeta = (eta_layer - D_min) / (D_max - D_min)
     if (m < 0.5) then
       w_layer = zeta**(1.0 / a)
+      ! Note that this would be safer and more efficent if it were rewritten as:
+      ! w_layer = zeta**( (D_avg - D_min) / (D_max - D_avg) )
     elseif (m == 0.5) then
       w_layer = zeta
     else

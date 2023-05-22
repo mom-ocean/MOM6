@@ -509,8 +509,8 @@ subroutine open_ASCII_file(unit, file, action, threading, fileset)
   ! This checks if open() failed but did not raise a runtime error.
   inquire(unit, opened=is_open)
   if (.not. is_open) &
-    call MOM_error(FATAL, 'open_ASCII_file: File ' // trim(filename) // &
-                          ' failed to open.')
+    call MOM_error(FATAL, &
+        'open_ASCII_file: File "' // trim(filename) // '" failed to open.')
 
   ! NOTE: There are two possible mpp_write_meta functions in FMS1:
   ! - call mpp_write_meta( unit, 'filename', cval=mpp_file(unit)%name)
@@ -1680,13 +1680,16 @@ subroutine categorize_axes(fileObj, filename, ndims, dim_names, is_x, is_y, is_t
     ! First look for indicative variable attributes
     if (.not.is_t(i)) then
       if (variable_exists(fileobj, trim(dim_names(i)))) then
+        cartesian = ""
         if (variable_att_exists(fileobj, trim(dim_names(i)), "cartesian_axis")) then
           call get_variable_attribute(fileobj, trim(dim_names(i)), "cartesian_axis", cartesian)
-          cartesian = adjustl(cartesian)
-          if ((index(cartesian, "X") == 1) .or. (index(cartesian, "x") == 1)) is_x(i) = .true.
-          if ((index(cartesian, "Y") == 1) .or. (index(cartesian, "y") == 1)) is_y(i) = .true.
-          if ((index(cartesian, "T") == 1) .or. (index(cartesian, "t") == 1)) is_t(i) = .true.
+        elseif (variable_att_exists(fileobj, trim(dim_names(i)), "axis")) then
+          call get_variable_attribute(fileobj, trim(dim_names(i)), "axis", cartesian)
         endif
+        cartesian = adjustl(cartesian)
+        if ((index(cartesian, "X") == 1) .or. (index(cartesian, "x") == 1)) is_x(i) = .true.
+        if ((index(cartesian, "Y") == 1) .or. (index(cartesian, "y") == 1)) is_y(i) = .true.
+        if ((index(cartesian, "T") == 1) .or. (index(cartesian, "t") == 1)) is_t(i) = .true.
       endif
     endif
     if (is_x(i)) x_found = .true.

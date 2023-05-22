@@ -41,7 +41,7 @@ subroutine dyed_obcs_set_OBC_data(OBC, G, GV, param_file, tr_Reg)
   character(len=80)  :: name, longname
   integer :: is, ie, js, je, isd, ied, jsd, jed, m, n, nz
   integer :: IsdB, IedB, JsdB, JedB
-  real :: dye
+  real :: dye ! Inflow dye concentration [arbitrary]
   type(tracer_type), pointer      :: tr_ptr => NULL()
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke

@@ -126,10 +126,10 @@ function register_oil_tracer(HI, GV, US, param_file, CS, tr_Reg, restart_CS)
                  "found in the restart files of a restarted run.", &
                  default=.false.)
   call get_param(param_file, mdl, "OIL_SOURCE_LONGITUDE", CS%oil_source_longitude, &
-                 "The geographic longitude of the oil source.", units="degrees E", &
+                 "The geographic longitude of the oil source.", units="degrees_E", &
                  fail_if_missing=.true.)
   call get_param(param_file, mdl, "OIL_SOURCE_LATITUDE", CS%oil_source_latitude, &
-                 "The geographic latitude of the oil source.", units="degrees N", &
+                 "The geographic latitude of the oil source.", units="degrees_N", &
                  fail_if_missing=.true.)
   call get_param(param_file, mdl, "OIL_SOURCE_LAYER", CS%oil_source_k, &
                  "The layer into which the oil is introduced, or a "//&
@@ -165,7 +165,8 @@ function register_oil_tracer(HI, GV, US, param_file, CS, tr_Reg, restart_CS)
       endif
     endif
   enddo
-  call log_param(param_file, mdl, "OIL_DECAY_RATE", US%s_to_T*CS%oil_decay_rate(1:CS%ntr))
+  call log_param(param_file, mdl, "OIL_DECAY_RATE", CS%oil_decay_rate(1:CS%ntr), &
+                 units="s-1", unscale=US%s_to_T)
 
   ! This needs to be changed if the units of tracer are changed above.
   if (GV%Boussinesq) then ; flux_units = "kg s-1"
@@ -362,7 +363,7 @@ subroutine oil_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, US
         CS%tr(i,j,k,m) = G%mask2dT(i,j)*max(1. - dt*CS%oil_decay_rate(m),0.)*CS%tr(i,j,k,m) ! Safest
       elseif (CS%oil_decay_rate(m)<0.) then
         decay_timescale = (12.0 * (3.0**(-(tv%T(i,j,k)-20.0*US%degC_to_C)/10.0*US%degC_to_C))) * &
-                          (86400.0*US%s_to_T) ! Timescale [s ~> T]
+                          (86400.0*US%s_to_T) ! Timescale [T ~> s]
         ldecay = 1. / decay_timescale ! Rate [T-1 ~> s-1]
         CS%tr(i,j,k,m) = G%mask2dT(i,j)*max(1. - dt*ldecay,0.)*CS%tr(i,j,k,m)
       endif

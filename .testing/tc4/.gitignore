@@ -1,4 +1,15 @@
+# Autoconf
+aclocal.m4
+autom4te.cache/
+config.log
+config.status
+configure~
+
+# Output
+gen_grid
 ocean_hgrid.nc
+topog.nc
+
+gen_data
 sponge.nc
 temp_salt_ic.nc
-topog.nc

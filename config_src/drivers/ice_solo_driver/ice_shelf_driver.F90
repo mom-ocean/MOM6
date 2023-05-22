@@ -25,8 +25,7 @@ program Shelf_main
   use MOM_cpu_clock,       only : CLOCK_COMPONENT
   use MOM_debugging,       only : MOM_debugging_init
   use MOM_diag_mediator,   only : diag_mediator_init, diag_mediator_infrastructure_init
-  use MOM_diag_mediator,   only : enable_averaging, disable_averaging, diag_mediator_end
-  use MOM_diag_mediator,   only : diag_ctrl, diag_mediator_close_registration
+  use MOM_diag_mediator,   only : diag_mediator_end, diag_ctrl, diag_mediator_close_registration
   use MOM_domains,         only : MOM_infra_init, MOM_infra_end
   use MOM_domains,         only : MOM_domains_init, clone_MOM_domain, pass_var
   use MOM_dyn_horgrid,     only : dyn_horgrid_type, create_dyn_horgrid, destroy_dyn_horgrid
@@ -96,13 +95,13 @@ program Shelf_main
   type(time_type) :: time_chg           ! An amount of time to adjust the segment_start_time
                                         ! and elapsed time to avoid roundoff problems.
 
-  real    :: elapsed_time = 0.0   ! Elapsed time in this run  [s].
+  real    :: elapsed_time = 0.0   ! Elapsed time in this run [T ~> s].
 
   logical :: elapsed_time_master  ! If true, elapsed time is used to set the
                                   ! model's master clock (Time).  This is needed
                                   ! if Time_step_shelf is not an exact
                                   ! representation of time_step.
-  real :: time_step               ! The time step [s]
+  real :: time_step               ! The time step [T ~> s]
 
   ! A pointer to a structure containing metrics and related information.
   type(ocean_grid_type), pointer :: ocn_grid
@@ -232,7 +231,7 @@ program Shelf_main
   call get_param(param_file, mod_name, "ICE_VELOCITY_TIMESTEP", time_step, &
                  "The time step for changing forcing, coupling with other "//&
                  "components, or potentially writing certain diagnostics.", &
-                 units="s", fail_if_missing=.true.)
+                 units="s", scale=US%s_to_T, fail_if_missing=.true.)
 
   if (sum(date) >= 0) then
     ! In this case, the segment starts at a time fixed by ocean_solo.res
@@ -282,8 +281,8 @@ program Shelf_main
   segment_start_time = Time
   elapsed_time = 0.0
 
-  Time_step_shelf = real_to_time(time_step)
-  elapsed_time_master = (abs(time_step - time_type_to_real(Time_step_shelf)) > 1.0e-12*time_step)
+  Time_step_shelf = real_to_time(US%T_to_s*time_step)
+  elapsed_time_master = (abs(time_step - US%s_to_T*time_type_to_real(Time_step_shelf)) > 1.0e-12*time_step)
   if (elapsed_time_master) &
     call MOM_mesg("Using real elapsed time for the master clock.", 2)
 
@@ -384,18 +383,18 @@ program Shelf_main
 !   Time = Time + Time_step_shelf
 !   This is here to enable fractional-second time steps.
     elapsed_time = elapsed_time + time_step
-    if (elapsed_time > 2e9) then
+    if (elapsed_time > 2.0e9*US%s_to_T) then
       ! This is here to ensure that the conversion from a real to an integer can be accurately
       ! represented in long runs (longer than ~63 years). It will also ensure that elapsed time
       ! does not lose resolution of order the timetype's resolution, provided that the timestep and
       ! tick are larger than 10-5 seconds.  If a clock with a finer resolution is used, a smaller
       ! value would be required.
-      time_chg = real_to_time(elapsed_time)
+      time_chg = real_to_time(US%T_to_s*elapsed_time)
       segment_start_time = segment_start_time + time_chg
-      elapsed_time = elapsed_time - time_type_to_real(time_chg)
+      elapsed_time = elapsed_time - US%s_to_T*time_type_to_real(time_chg)
     endif
     if (elapsed_time_master) then
-      Master_Time = segment_start_time + real_to_time(elapsed_time)
+      Master_Time = segment_start_time + real_to_time(US%T_to_s*elapsed_time)
     else
       Master_Time = Master_Time + Time_step_shelf
     endif

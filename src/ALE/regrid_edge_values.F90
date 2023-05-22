@@ -14,7 +14,7 @@ implicit none ; private
 ! The following routines are visible to the outside world
 ! -----------------------------------------------------------------------------
 public bound_edge_values, average_discontinuous_edge_values, check_discontinuous_edge_values
-public edge_values_explicit_h2, edge_values_explicit_h4
+public edge_values_explicit_h2, edge_values_explicit_h4, edge_values_explicit_h4cw
 public edge_values_implicit_h4, edge_values_implicit_h6
 public edge_slopes_implicit_h3, edge_slopes_implicit_h5
 
@@ -356,6 +356,106 @@ subroutine edge_values_explicit_h4( N, h, u, edge_val, h_neglect, answer_date )
   edge_val(N-1,2) = edge_val(N,1)
 
 end subroutine edge_values_explicit_h4
+
+!> Compute h4 edge values (explicit fourth order accurate)
+!! in the same units as u.
+!!
+!! From (Colella & Woodward, JCP, 1984) and based on hybgen_ppm_coefs.
+!!
+!! Compute edge values based on fourth-order explicit estimates.
+!! These estimates are based on a cubic interpolant spanning four cells
+!! and evaluated at the location of the middle edge. An interpolant spanning
+!! cells i-2, i-1, i and i+1 is evaluated at edge i-1/2. The estimate for
+!! each edge is unique.
+!!
+!!       i-2    i-1     i     i+1
+!! ..--o------o------o------o------o--..
+!!                 i-1/2
+!!
+!! For this fourth-order scheme, at least four cells must exist.
+subroutine edge_values_explicit_h4cw( N, h, u, edge_val, h_neglect )
+  integer,              intent(in)    :: N !< Number of cells
+  real, dimension(N),   intent(in)    :: h !< cell widths [H]
+  real, dimension(N),   intent(in)    :: u !< cell average properties in arbitrary units [A]
+  real, dimension(N,2), intent(inout) :: edge_val  !< Returned edge values [A]; the second index
+                                                   !! is for the two edges of each cell.
+  real,       optional, intent(in)    :: h_neglect !< A negligibly small width [H]
+
+  ! Local variables
+  real :: dp(N) ! Input grid layer thicknesses, but with a minimum thickness [H ~> m or kg m-2]
+  real :: hNeglect  ! A negligible thickness in the same units as h
+  real :: da        ! Difference between the unlimited scalar edge value estimates [A]
+  real :: a6        ! Scalar field differences that are proportional to the curvature [A]
+  real :: slk, srk  ! Differences between adjacent cell averages of scalars [A]
+  real :: sck       ! Scalar differences across a cell.
+  real :: au(N)     ! Scalar field difference across each cell [A]
+  real :: al(N), ar(N) ! Scalar field at the left and right edges of a cell [A]
+  real :: h112(N+1), h122(N+1) ! Combinations of thicknesses [H ~> m or kg m-2]
+  real :: I_h12(N+1) ! Inverses of combinations of thickesses [H-1 ~> m-1 or m2 kg-1]
+  real :: h2_h123(N) ! A ratio of a layer thickness of the sum of 3 adjacent thicknesses [nondim]
+  real :: I_h0123(N)    ! Inverse of the sum of 4 adjacent thicknesses [H-1 ~> m-1 or m2 kg-1]
+  real :: h01_h112(N+1) ! A ratio of sums of adjacent thicknesses [nondim], 2/3 in the limit of uniform thicknesses.
+  real :: h23_h122(N+1) ! A ratio of sums of adjacent thicknesses [nondim], 2/3 in the limit of uniform thicknesses.
+  integer :: k
+
+  hNeglect = hNeglect_dflt ; if (present(h_neglect)) hNeglect = h_neglect
+
+  ! Set the thicknesses for very thin layers to some minimum value.
+  do k=1,N ; dp(k) = max(h(k), hNeglect) ; enddo
+
+  !compute grid metrics
+  do k=2,N
+    h112(K) = 2.*dp(k-1) + dp(k)
+    h122(K) = dp(k-1) + 2.*dp(k)
+    I_h12(K) = 1.0 / (dp(k-1) + dp(k))
+  enddo !k
+  do k=2,N-1
+    h2_h123(k) = dp(k) / (dp(k) + (dp(k-1)+dp(k+1)))
+  enddo
+  do K=3,N-1
+    I_h0123(K) = 1.0 / ((dp(k-2) + dp(k-1)) + (dp(k) + dp(k+1)))
+
+    h01_h112(K) = (dp(k-2) + dp(k-1)) / (2.0*dp(k-1) + dp(k))
+    h23_h122(K) = (dp(k) + dp(k+1))   / (dp(k-1) + 2.0*dp(k))
+  enddo
+
+  !Compute average slopes: Colella, Eq. (1.8)
+  au(1) = 0.
+  do k=2,N-1
+    slk = u(k  )-u(k-1)
+    srk = u(k+1)-u(k)
+    if (slk*srk > 0.) then
+      sck = h2_h123(k)*( h112(K)*srk*I_h12(K+1) + h122(K+1)*slk*I_h12(K) )
+      au(k) = sign(min(abs(2.0*slk), abs(sck), abs(2.0*srk)), sck)
+    else
+      au(k) = 0.
+    endif
+  enddo !k
+  au(N) = 0.
+
+  !Compute "first guess" edge values: Colella, Eq. (1.6)
+  al(1) = u(1)  ! 1st layer PCM
+  ar(1) = u(1)  ! 1st layer PCM
+  al(2) = u(1)  ! 1st layer PCM
+  do K=3,N-1
+    ! This is a 4th order explicit edge value estimate.
+    al(k) = (dp(k)*u(k-1) + dp(k-1)*u(k)) * I_h12(K) &
+          + I_h0123(K)*( 2.*dp(k)*dp(k-1)*I_h12(K)*(u(k)-u(k-1)) * &
+                         ( h01_h112(K) - h23_h122(K) ) &
+                  + (dp(k)*au(k-1)*h23_h122(K) - dp(k-1)*au(k)*h01_h112(K)) )
+    ar(k-1) = al(k)
+  enddo !k
+  ar(N-1) = u(N)  ! last layer PCM
+  al(N)   = u(N)  ! last layer PCM
+  ar(N)   = u(N)  ! last layer PCM
+
+  !Set coefficients
+  do k=1,N
+    edge_val(k,1) = al(k)
+    edge_val(k,2) = ar(k)
+  enddo !k
+
+end subroutine edge_values_explicit_h4cw
 
 !> Compute ih4 edge values (implicit fourth order accurate)
 !! in the same units as u.

@@ -28,7 +28,7 @@ interface calculate_TFreeze_Millero
   module procedure calculate_TFreeze_Millero_scalar, calculate_TFreeze_Millero_array
 end interface calculate_TFreeze_Millero
 
-!> Compute the freezing point conservative temperature [degC] from absolute salinity [g/kg]
+!> Compute the freezing point conservative temperature [degC] from absolute salinity [g kg-1]
 !! and pressure [Pa] using the TEOS10 package.
 interface calculate_TFreeze_teos10
   module procedure calculate_TFreeze_teos10_scalar, calculate_TFreeze_teos10_array
@@ -84,13 +84,15 @@ end subroutine calculate_TFreeze_linear_array
 !! expression for potential temperature (not in situ temperature), using a
 !! value that is correct at the freezing point at 35 PSU and 5e6 Pa (500 dbar).
 subroutine calculate_TFreeze_Millero_scalar(S, pres, T_Fr)
-  real,    intent(in)  :: S    !< Salinity in PSU.
-  real,    intent(in)  :: pres !< Pressure [Pa].
-  real,    intent(out) :: T_Fr !< Freezing point potential temperature [degC].
+  real,    intent(in)  :: S    !< Salinity [PSU]
+  real,    intent(in)  :: pres !< Pressure [Pa]
+  real,    intent(out) :: T_Fr !< Freezing point potential temperature [degC]
 
   ! Local variables
-  real, parameter :: cS1 = -0.0575, cS3_2 = 1.710523e-3, cS2 = -2.154996e-4
-  real, parameter :: dTFr_dp = -7.75e-8
+  real, parameter :: cS1 = -0.0575      ! A term in the freezing point fit [degC PSU-1]
+  real, parameter :: cS3_2 = 1.710523e-3 ! A term in the freezing point fit [degC PSU-3/2]
+  real, parameter :: cS2 = -2.154996e-4 ! A term in the freezing point fit [degC PSU-2]
+  real, parameter :: dTFr_dp = -7.75e-8 ! Derivative of freezing point with pressure [degC Pa-1]
 
   T_Fr = S*(cS1 + (cS3_2 * sqrt(max(S,0.0)) + cS2 * S)) + dTFr_dp*pres
 
@@ -110,8 +112,10 @@ subroutine calculate_TFreeze_Millero_array(S, pres, T_Fr, start, npts)
   integer,             intent(in)  :: npts  !< The number of values to calculate.
 
   ! Local variables
-  real, parameter :: cS1 = -0.0575, cS3_2 = 1.710523e-3, cS2 = -2.154996e-4
-  real, parameter :: dTFr_dp = -7.75e-8
+  real, parameter :: cS1 = -0.0575      ! A term in the freezing point fit [degC PSU-1]
+  real, parameter :: cS3_2 = 1.710523e-3 ! A term in the freezing point fit [degC PSU-3/2]
+  real, parameter :: cS2 = -2.154996e-4 ! A term in the freezing point fit [degC PSU-2]
+  real, parameter :: dTFr_dp = -7.75e-8 ! Derivative of freezing point with pressure [degC Pa-1]
   integer :: j
 
   do j=start,start+npts-1
@@ -121,17 +125,18 @@ subroutine calculate_TFreeze_Millero_array(S, pres, T_Fr, start, npts)
 
 end subroutine calculate_TFreeze_Millero_array
 
-!> This subroutine computes the freezing point conservative temperature
-!! [degC] from absolute salinity [g/kg], and pressure [Pa] using the
+!> This subroutine computes the freezing point conservative temperature [degC]
+!! from absolute salinity [g kg-1], and pressure [Pa] using the
 !! TEOS10 package.
 subroutine calculate_TFreeze_teos10_scalar(S, pres, T_Fr)
-  real,    intent(in)  :: S    !< Absolute salinity [g/kg].
+  real,    intent(in)  :: S    !< Absolute salinity [g kg-1].
   real,    intent(in)  :: pres !< Pressure [Pa].
   real,    intent(out) :: T_Fr !< Freezing point conservative temperature [degC].
 
   ! Local variables
-  real, dimension(1) :: S0, pres0
-  real, dimension(1) :: tfr0
+  real, dimension(1) :: S0    ! Salinity at a point [g kg-1]
+  real, dimension(1) :: pres0 ! Pressure at a point [Pa]
+  real, dimension(1) :: tfr0  ! The freezing temperature [degC]
 
   S0(1) = S
   pres0(1) = pres
@@ -141,22 +146,23 @@ subroutine calculate_TFreeze_teos10_scalar(S, pres, T_Fr)
 
 end subroutine calculate_TFreeze_teos10_scalar
 
-!> This subroutine computes the freezing point conservative temperature
-!! [degC] from absolute salinity [g/kg], and pressure [Pa] using the
+!> This subroutine computes the freezing point conservative temperature [degC]
+!! from absolute salinity [g kg-1], and pressure [Pa] using the
 !! TEOS10 package.
 subroutine calculate_TFreeze_teos10_array(S, pres, T_Fr, start, npts)
-  real, dimension(:), intent(in)  :: S     !< absolute salinity [g/kg].
+  real, dimension(:), intent(in)  :: S     !< absolute salinity [g kg-1].
   real, dimension(:), intent(in)  :: pres  !< pressure [Pa].
   real, dimension(:), intent(out) :: T_Fr  !< Freezing point conservative temperature [degC].
   integer,            intent(in)  :: start !< the starting point in the arrays.
   integer,            intent(in)  :: npts  !< the number of values to calculate.
 
   ! Local variables
-  real, parameter :: Pa2db  = 1.e-4  ! The conversion factor from Pa to dbar.
-  real :: zs,zp
+  real, parameter :: Pa2db  = 1.e-4  ! The conversion factor from Pa to dbar [dbar Pa-1]
+  real :: zs    ! Salinity at a point [g kg-1]
+  real :: zp    ! Pressures in [dbar]
   integer :: j
   ! Assume sea-water contains no dissolved air.
-  real, parameter :: saturation_fraction = 0.0
+  real, parameter :: saturation_fraction = 0.0 ! Air saturation fraction in seawater [nondim]
 
   do j=start,start+npts-1
     !Conversions

@@ -63,7 +63,7 @@ contains
 subroutine hor_index_init(Domain, HI, param_file, local_indexing, index_offset)
   type(MOM_domain_type),  intent(in)    :: Domain     !< The MOM domain from which to extract information.
   type(hor_index_type),   intent(inout) :: HI         !< A horizontal index type to populate with data
-  type(param_file_type),  intent(in)    :: param_file !< Parameter file handle
+  type(param_file_type), optional, intent(in) :: param_file !< Parameter file handle
   logical, optional,      intent(in)    :: local_indexing !< If true, all tracer data domains start at 1
   integer, optional,      intent(in)    :: index_offset   !< A fixed additional offset to all indices
 
@@ -80,8 +80,9 @@ subroutine hor_index_init(Domain, HI, param_file, local_indexing, index_offset)
   call get_global_shape(Domain, HI%niglobal, HI%njglobal)
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, "MOM_hor_index", version, &
-                   "Sets the horizontal array index types.", all_default=.true.)
+  if (present(param_file)) &
+    call log_version(param_file, "MOM_hor_index", version, &
+                     "Sets the horizontal array index types.", all_default=.true.)
 
   HI%IscB = HI%isc ; HI%JscB = HI%jsc
   HI%IsdB = HI%isd ; HI%JsdB = HI%jsd

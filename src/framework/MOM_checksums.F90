@@ -21,6 +21,13 @@ public :: hchksum, Bchksum, uchksum, vchksum, qchksum, is_NaN, chksum
 public :: hchksum_pair, uvchksum, Bchksum_pair
 public :: MOM_checksums_init
 
+! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
+! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
+! their mks counterparts with notation like "a velocity [Z T-1 ~> m s-1]".  If the units
+! vary with the Boussinesq approximation, the Boussinesq variant is given first.
+! The functions in this module work with variables with arbitrary units, in which case the
+! arbitrary rescaled units are indicated with [A ~> a], while the unscaled units are just [a].
+
 !> Checksums a pair of arrays (2d or 3d) staggered at tracer points
 interface hchksum_pair
   module procedure chksum_pair_h_2d, chksum_pair_h_3d
@@ -96,14 +103,20 @@ contains
 
 !> Checksum a scalar field (consistent with array checksums)
 subroutine chksum0(scalar, mesg, scale, logunit)
-  real, intent(in) :: scalar                !< The array to be checksummed
-  character(len=*), intent(in) :: mesg     !< An identifying message
-  real, optional, intent(in) :: scale      !< A scaling factor for this array.
+  real,              intent(in) :: scalar  !< The array to be checksummed in
+                                           !! arbitrary, possibly rescaled units [A ~> a]
+  character(len=*),  intent(in) :: mesg    !< An identifying message
+  real,    optional, intent(in) :: scale   !< A factor to convert this array back to unscaled units
+                                           !! for checksums and output [a A-1 ~> 1]
   integer, optional, intent(in) :: logunit !< IO unit for checksum logging
 
-  real :: scaling   !< Explicit rescaling factor
+  ! Local variables
+  ! In the following comments, [A] is used to indicate the arbitrary, possibly rescaled units
+  ! of the input array while [a] indicates the unscaled (e.g., mks) units that should be used
+  ! for checksums and output
+  real :: scaling   !< Explicit rescaling factor [a A-1 ~> 1]
   integer :: iounit !< Log IO unit
-  real :: rs        !< Rescaled scalar
+  real :: rs        !< Rescaled scalar [a]
   integer :: bc     !< Scalar bitcount
 
   if (checkForNaNs .and. is_NaN(scalar)) &
@@ -129,16 +142,22 @@ end subroutine chksum0
 
 !> Checksum a 1d array (typically a column).
 subroutine zchksum(array, mesg, scale, logunit)
-  real, dimension(:), intent(in) :: array  !< The array to be checksummed
-  character(len=*), intent(in) :: mesg     !< An identifying message
-  real, optional, intent(in) :: scale      !< A scaling factor for this array.
-  integer, optional, intent(in) :: logunit !< IO unit for checksum logging
+  real, dimension(:), intent(in) :: array   !< The array to be checksummed in
+                                            !! arbitrary, possibly rescaled units [A ~> a]
+  character(len=*),   intent(in) :: mesg    !< An identifying message
+  real,     optional, intent(in) :: scale   !< A factor to convert this array back to unscaled units
+                                            !! for checksums and output [a A-1 ~> 1]
+  integer,  optional, intent(in) :: logunit !< IO unit for checksum logging
 
-  real, allocatable, dimension(:) :: rescaled_array
-  real :: scaling
+  ! Local variables
+  ! In the following comments, [A] is used to indicate the arbitrary, possibly rescaled units
+  ! of the input array while [a] indicates the unscaled (e.g., mks) units that should be used
+  ! for checksums and output
+  real, allocatable, dimension(:) :: rescaled_array ! The array with scaling undone [a]
+  real :: scaling   ! Explicit rescaling factor [a A-1 ~> 1]
   integer :: iounit !< Log IO unit
   integer :: k
-  real :: aMean, aMin, aMax
+  real :: aMean, aMin, aMax  ! Array mean, global minimum and global maximum [a]
   integer :: bc0
 
   if (checkForNaNs) then
@@ -174,8 +193,10 @@ subroutine zchksum(array, mesg, scale, logunit)
   contains
 
   integer function subchk(array, scale)
-    real, dimension(:), intent(in) :: array !< The array to be checksummed
-    real, intent(in) :: scale !< A scaling factor for this array.
+    real, dimension(:), intent(in) :: array !< The array to be checksummed in
+                                            !! arbitrary, possibly rescaled units [A ~> a]
+    real, intent(in) :: scale !< A factor to convert this array back to unscaled units
+                              !! for checksums and output [a A-1 ~> 1]
     integer :: k, bc
     subchk = 0
     do k=LBOUND(array, 1), UBOUND(array, 1)
@@ -186,10 +207,10 @@ subroutine zchksum(array, mesg, scale, logunit)
   end function subchk
 
   subroutine subStats(array, aMean, aMin, aMax)
-    real, dimension(:), intent(in) :: array !< The array to be checksummed
-    real, intent(out) :: aMean !< Array mean
-    real, intent(out) :: aMin !< Array minimum
-    real, intent(out) :: aMax !< Array maximum
+    real, dimension(:), intent(in) :: array !< The array to be checksummed [a]
+    real, intent(out) :: aMean !< Array mean [a]
+    real, intent(out) :: aMin !< Array minimum [a]
+    real, intent(out) :: aMax !< Array maximum [a]
 
     integer :: k, n
 
@@ -210,18 +231,21 @@ subroutine chksum_pair_h_2d(mesg, arrayA, arrayB, HI, haloshift, omit_corners, &
                             scale, logunit, scalar_pair)
   character(len=*),                 intent(in) :: mesg !< Identifying messages
   type(hor_index_type),   target,   intent(in) :: HI     !< A horizontal index type
-  real, dimension(HI%isd:,HI%jsd:), target, intent(in) :: arrayA !< The first array to be checksummed
-  real, dimension(HI%isd:,HI%jsd:), target, intent(in) :: arrayB !< The second array to be checksummed
+  real, dimension(HI%isd:,HI%jsd:), target, intent(in) :: arrayA !< The first array to be checksummed in
+                                                            !! arbitrary, possibly rescaled units [A ~> a]
+  real, dimension(HI%isd:,HI%jsd:), target, intent(in) :: arrayB !< The second array to be checksummed in
+                                                            !! arbitrary, possibly rescaled units [A ~> a]
   integer,                optional, intent(in) :: haloshift !< The width of halos to check (default 0)
   logical,                optional, intent(in) :: omit_corners !< If true, avoid checking diagonal shifts
-  real,                   optional, intent(in) :: scale     !< A scaling factor for this array.
-  integer,                optional, intent(in) :: logunit !< IO unit for checksum logging
+  real,                   optional, intent(in) :: scale     !< A factor to convert these arrays back to unscaled
+                                                            !! units for checksums and output [a A-1 ~> 1]
+  integer,                optional, intent(in) :: logunit   !< IO unit for checksum logging
   logical,                optional, intent(in) :: scalar_pair !< If true, then the arrays describe
-                                                              !! a scalar, rather than vector
+                                                            !! a scalar, rather than vector
   logical :: vector_pair
   integer :: turns
   type(hor_index_type), pointer :: HI_in
-  real, dimension(:,:), pointer :: arrayA_in, arrayB_in
+  real, dimension(:,:), pointer :: arrayA_in, arrayB_in ! Rotated arrays [A ~> a]
 
   vector_pair = .true.
   if (present(scalar_pair)) vector_pair = .not. scalar_pair
@@ -261,19 +285,21 @@ subroutine chksum_pair_h_3d(mesg, arrayA, arrayB, HI, haloshift, omit_corners, &
                             scale, logunit, scalar_pair)
   character(len=*),                    intent(in) :: mesg !< Identifying messages
   type(hor_index_type),      target,   intent(in) :: HI   !< A horizontal index type
-  real, dimension(HI%isd:,HI%jsd:, :), target, intent(in) :: arrayA !< The first array to be checksummed
-  real, dimension(HI%isd:,HI%jsd:, :), target, intent(in) :: arrayB !< The second array to be checksummed
+  real, dimension(HI%isd:,HI%jsd:, :), target, intent(in) :: arrayA !< The first array to be checksummed in
+                                                             !! arbitrary, possibly rescaled units [A ~> a]
+  real, dimension(HI%isd:,HI%jsd:, :), target, intent(in) :: arrayB !< The second array to be checksummed in
+                                                             !! arbitrary, possibly rescaled units [A ~> a]
   integer,                   optional, intent(in) :: haloshift !< The width of halos to check (default 0)
   logical,                   optional, intent(in) :: omit_corners !< If true, avoid checking diagonal shifts
-  real,                      optional, intent(in) :: scale     !< A scaling factor for this array.
-  integer,                   optional, intent(in) :: logunit !< IO unit for checksum logging
-
-  logical,                optional, intent(in) :: scalar_pair !< If true, then the arrays describe
-                                                              !! a scalar, rather than vector
+  real,                      optional, intent(in) :: scale     !< A factor to convert this array back to unscaled units
+                                                               !! for checksums and output [a A-1 ~> 1]
+  integer,                   optional, intent(in) :: logunit   !< IO unit for checksum logging
+  logical,                   optional, intent(in) :: scalar_pair !< If true, then the arrays describe
+                                                               !! a scalar, rather than vector
   logical :: vector_pair
   integer :: turns
   type(hor_index_type), pointer :: HI_in
-  real, dimension(:,:,:), pointer :: arrayA_in, arrayB_in
+  real, dimension(:,:,:), pointer :: arrayA_in, arrayB_in ! Rotated arrays [A ~> a]
 
   vector_pair = .true.
   if (present(scalar_pair)) vector_pair = .not. scalar_pair
@@ -312,21 +338,27 @@ end subroutine chksum_pair_h_3d
 
 !> Checksums a 2d array staggered at tracer points.
 subroutine chksum_h_2d(array_m, mesg, HI_m, haloshift, omit_corners, scale, logunit)
-  type(hor_index_type), target, intent(in) :: HI_m    !< Horizontal index bounds of the model grid
-  real, dimension(HI_m%isd:,HI_m%jsd:), target, intent(in) :: array_m !< Field array on the model grid
-  character(len=*),                intent(in) :: mesg  !< An identifying message
+  type(hor_index_type), target, intent(in) :: HI_m         !< Horizontal index bounds of the model grid
+  real, dimension(HI_m%isd:,HI_m%jsd:), target, intent(in) :: array_m !< Field array on the model grid in
+                                                           !! arbitrary, possibly rescaled units [A ~> a]
+  character(len=*),                intent(in) :: mesg      !< An identifying message
   integer,               optional, intent(in) :: haloshift !< The width of halos to check (default 0)
   logical,               optional, intent(in) :: omit_corners !< If true, avoid checking diagonal shifts
-  real,                  optional, intent(in) :: scale     !< A scaling factor for this array.
-  integer, optional, intent(in) :: logunit !< IO unit for checksum logging
+  real,                  optional, intent(in) :: scale     !< A factor to convert this array back to unscaled units
+                                                           !! for checksums and output [a A-1 ~> 1]
+  integer,               optional, intent(in) :: logunit   !< IO unit for checksum logging
 
-  real, pointer :: array(:,:)           ! Field array on the input grid
-  real, allocatable, dimension(:,:) :: rescaled_array
+  ! Local variables
+  ! In the following comments, [A] is used to indicate the arbitrary, possibly rescaled units
+  ! of the input array while [a] indicates the unscaled (e.g., mks) units that should be used
+  ! for checksums and output
+  real, pointer :: array(:,:)           ! Field array on the input grid [A ~> a]
+  real, allocatable, dimension(:,:) :: rescaled_array ! The array with scaling undone [a]
   type(hor_index_type), pointer :: HI   ! Horizontal index bounds of the input grid
-  real :: scaling
+  real :: scaling   ! Explicit rescaling factor [a A-1 ~> 1]
   integer :: iounit !< Log IO unit
   integer :: i, j
-  real :: aMean, aMin, aMax
+  real :: aMean, aMin, aMax  ! Array mean, global minimum and global maximum [a]
   integer :: bc0, bcSW, bcSE, bcNW, bcNE, hshift
   integer :: bcN, bcS, bcE, bcW
   logical :: do_corners
@@ -415,10 +447,12 @@ subroutine chksum_h_2d(array_m, mesg, HI_m, haloshift, omit_corners, scale, logu
   contains
   integer function subchk(array, HI, di, dj, scale)
     type(hor_index_type), intent(in) ::  HI     !< A horizontal index type
-    real, dimension(HI%isd:,HI%jsd:), intent(in) :: array !< The array to be checksummed
+    real, dimension(HI%isd:,HI%jsd:), intent(in) :: array !< The array to be checksummed in
+                                 !! arbitrary, possibly rescaled units [A ~> a]
     integer, intent(in) :: di    !< i- direction array shift for this checksum
     integer, intent(in) :: dj    !< j- direction array shift for this checksum
-    real, intent(in)    :: scale !< A scaling factor for this array.
+    real, intent(in)    :: scale !< A factor to convert this array back to unscaled units
+                                 !! for checksums and output [a A-1 ~> 1]
     integer :: i, j, bc
     subchk = 0
     do j=HI%jsc+dj,HI%jec+dj ; do i=HI%isc+di,HI%iec+di
@@ -431,10 +465,10 @@ subroutine chksum_h_2d(array_m, mesg, HI_m, haloshift, omit_corners, scale, logu
 
   subroutine subStats(HI, array, aMean, aMin, aMax)
     type(hor_index_type), intent(in) ::  HI     !< A horizontal index type
-    real, dimension(HI%isd:,HI%jsd:), intent(in) :: array !< The array to be checksummed
-    real, intent(out) :: aMean !< Array mean
-    real, intent(out) :: aMin !< Array minimum
-    real, intent(out) :: aMax !< Array maximum
+    real, dimension(HI%isd:,HI%jsd:), intent(in) :: array !< The array to be checksummed [a]
+    real, intent(out) :: aMean !< Array mean [a]
+    real, intent(out) :: aMin !< Array minimum [a]
+    real, intent(out) :: aMax !< Array maximum [a]
 
     integer :: i, j, n
 
@@ -460,22 +494,25 @@ subroutine chksum_pair_B_2d(mesg, arrayA, arrayB, HI, haloshift, symmetric, &
                             omit_corners, scale, logunit, scalar_pair)
   character(len=*),                 intent(in) :: mesg   !< Identifying messages
   type(hor_index_type),   target,   intent(in) :: HI     !< A horizontal index type
-  real, dimension(HI%isd:,HI%jsd:), target, intent(in) :: arrayA !< The first array to be checksummed
-  real, dimension(HI%isd:,HI%jsd:), target, intent(in) :: arrayB !< The second array to be checksummed
+  real, dimension(HI%isd:,HI%jsd:), target, intent(in) :: arrayA !< The first array to be checksummed in
+                                                            !! arbitrary, possibly rescaled units [A ~> a]
+  real, dimension(HI%isd:,HI%jsd:), target, intent(in) :: arrayB !< The second array to be checksummed in
+                                                            !! arbitrary, possibly rescaled units [A ~> a]
   logical,                optional, intent(in) :: symmetric !< If true, do the checksums on the full
                                                             !! symmetric computational domain.
   integer,                optional, intent(in) :: haloshift !< The width of halos to check (default 0)
   logical,                optional, intent(in) :: omit_corners !< If true, avoid checking diagonal shifts
-  real,                   optional, intent(in) :: scale     !< A scaling factor for this array.
-  integer,                optional, intent(in) :: logunit !< IO unit for checksum logging
+  real,                   optional, intent(in) :: scale     !< A factor to convert this array back to unscaled units
+                                                            !! for checksums and output [a A-1 ~> 1]
+  integer,                optional, intent(in) :: logunit   !< IO unit for checksum logging
   logical,                optional, intent(in) :: scalar_pair !< If true, then the arrays describe
-                                                              !! a scalar, rather than vector
+                                                            !! a scalar, rather than vector
 
   logical :: sym
   logical :: vector_pair
   integer :: turns
   type(hor_index_type), pointer :: HI_in
-  real, dimension(:,:), pointer :: arrayA_in, arrayB_in
+  real, dimension(:,:), pointer :: arrayA_in, arrayB_in ! Rotated arrays [A ~> a]
 
   vector_pair = .true.
   if (present(scalar_pair)) vector_pair = .not. scalar_pair
@@ -520,21 +557,24 @@ subroutine chksum_pair_B_3d(mesg, arrayA, arrayB, HI, haloshift, symmetric, &
                             omit_corners, scale, logunit, scalar_pair)
   character(len=*),                    intent(in) :: mesg !< Identifying messages
   type(hor_index_type),      target,   intent(in) :: HI     !< A horizontal index type
-  real, dimension(HI%IsdB:,HI%JsdB:, :), target, intent(in) :: arrayA !< The first array to be checksummed
-  real, dimension(HI%IsdB:,HI%JsdB:, :), target, intent(in) :: arrayB !< The second array to be checksummed
+  real, dimension(HI%IsdB:,HI%JsdB:, :), target, intent(in) :: arrayA !< The first array to be checksummed in
+                                                               !! arbitrary, possibly rescaled units [A ~> a]
+  real, dimension(HI%IsdB:,HI%JsdB:, :), target, intent(in) :: arrayB !< The second array to be checksummed in
+                                                               !! arbitrary, possibly rescaled units [A ~> a]
   integer,                   optional, intent(in) :: haloshift !< The width of halos to check (default 0)
   logical,                   optional, intent(in) :: symmetric !< If true, do the checksums on the full
                                                                !! symmetric computational domain.
   logical,                   optional, intent(in) :: omit_corners !< If true, avoid checking diagonal shifts
-  real,                      optional, intent(in) :: scale     !< A scaling factor for this array.
-  integer,                   optional, intent(in) :: logunit !< IO unit for checksum logging
+  real,                      optional, intent(in) :: scale     !< A factor to convert this array back to unscaled units
+                                                               !! for checksums and output [a A-1 ~> 1]
+  integer,                   optional, intent(in) :: logunit   !< IO unit for checksum logging
   logical,                   optional, intent(in) :: scalar_pair !< If true, then the arrays describe
-                                                              !! a scalar, rather than vector
+                                                               !! a scalar, rather than vector
 
   logical :: vector_pair
   integer :: turns
   type(hor_index_type), pointer :: HI_in
-  real, dimension(:,:,:), pointer :: arrayA_in, arrayB_in
+  real, dimension(:,:,:), pointer :: arrayA_in, arrayB_in ! Rotated arrays [A ~> a]
 
   vector_pair = .true.
   if (present(scalar_pair)) vector_pair = .not. scalar_pair
@@ -576,22 +616,28 @@ subroutine chksum_B_2d(array_m, mesg, HI_m, haloshift, symmetric, omit_corners, 
                        scale, logunit)
   type(hor_index_type), target, intent(in) :: HI_m     !< A horizontal index type
   real, dimension(HI_m%IsdB:,HI_m%JsdB:), &
-                        target, intent(in) :: array_m !< The array to be checksummed
-  character(len=*),     intent(in) :: mesg  !< An identifying message
+                        target, intent(in) :: array_m !< The array to be checksummed in
+                                                !! arbitrary, possibly rescaled units [A ~> a]
+  character(len=*),     intent(in) :: mesg      !< An identifying message
   integer,    optional, intent(in) :: haloshift !< The width of halos to check (default 0)
   logical,    optional, intent(in) :: symmetric !< If true, do the checksums on the
                                                 !! full symmetric computational domain.
   logical,    optional, intent(in) :: omit_corners !< If true, avoid checking diagonal shifts
-  real,       optional, intent(in) :: scale     !< A scaling factor for this array.
-  integer, optional, intent(in) :: logunit !< IO unit for checksum logging
+  real,       optional, intent(in) :: scale     !< A factor to convert this array back to unscaled units
+                                                !! for checksums and output [a A-1 ~> 1]
+  integer,    optional, intent(in) :: logunit   !< IO unit for checksum logging
 
-  real, pointer :: array(:,:)           ! Field array on the input grid
-  real, allocatable, dimension(:,:) :: rescaled_array
+  ! Local variables
+  ! In the following comments, [A] is used to indicate the arbitrary, possibly rescaled units
+  ! of the input array while [a] indicates the unscaled (e.g., mks) units that should be used
+  ! for checksums and output
+  real, pointer :: array(:,:)           ! Field array on the input grid [A ~> a]
+  real, allocatable, dimension(:,:) :: rescaled_array ! The array with scaling undone [a]
   type(hor_index_type), pointer :: HI   ! Horizontal index bounds of the input grid
-  real :: scaling
+  real :: scaling   ! Explicit rescaling factor [a A-1 ~> 1]
   integer :: iounit !< Log IO unit
   integer :: i, j, Is, Js
-  real :: aMean, aMin, aMax
+  real :: aMean, aMin, aMax  ! Array mean, global minimum and global maximum [a]
   integer :: bc0, bcSW, bcSE, bcNW, bcNE, hshift
   integer :: bcN, bcS, bcE, bcW
   logical :: do_corners, sym, sym_stats
@@ -692,10 +738,12 @@ subroutine chksum_B_2d(array_m, mesg, HI_m, haloshift, symmetric, omit_corners, 
 
   integer function subchk(array, HI, di, dj, scale)
     type(hor_index_type), intent(in) ::  HI     !< A horizontal index type
-    real, dimension(HI%IsdB:,HI%JsdB:), intent(in) :: array !< The array to be checksummed
+    real, dimension(HI%IsdB:,HI%JsdB:), intent(in) :: array !< The array to be checksummed in
+                                 !! arbitrary, possibly rescaled units [A ~> a]
     integer, intent(in) :: di    !< i- direction array shift for this checksum
     integer, intent(in) :: dj    !< j- direction array shift for this checksum
-    real, intent(in)    :: scale !< A scaling factor for this array.
+    real, intent(in)    :: scale !< A factor to convert this array back to unscaled units
+                                 !! for checksums and output [a A-1 ~> 1]
     integer :: i, j, bc
     subchk = 0
     ! This line deliberately uses the h-point computational domain.
@@ -709,12 +757,12 @@ subroutine chksum_B_2d(array_m, mesg, HI_m, haloshift, symmetric, omit_corners, 
 
   subroutine subStats(HI, array, sym_stats, aMean, aMin, aMax)
     type(hor_index_type), intent(in) ::  HI     !< A horizontal index type
-    real, dimension(HI%IsdB:,HI%JsdB:), intent(in) :: array !< The array to be checksummed
+    real, dimension(HI%IsdB:,HI%JsdB:), intent(in) :: array !< The array to be checksummed [a]
     logical,          intent(in) :: sym_stats !< If true, evaluate the statistics on the
                                               !! full symmetric computational domain.
-    real, intent(out) :: aMean !< Array mean
-    real, intent(out) :: aMin !< Array minimum
-    real, intent(out) :: aMax !< Array maximum
+    real, intent(out) :: aMean !< Array mean [a]
+    real, intent(out) :: aMin !< Array minimum [a]
+    real, intent(out) :: aMax !< Array maximum [a]
 
     integer :: i, j, n, IsB, JsB
 
@@ -742,20 +790,23 @@ subroutine chksum_uv_2d(mesg, arrayU, arrayV, HI, haloshift, symmetric, &
                         omit_corners, scale, logunit, scalar_pair)
   character(len=*),                  intent(in) :: mesg   !< Identifying messages
   type(hor_index_type),    target,   intent(in) :: HI     !< A horizontal index type
-  real, dimension(HI%IsdB:,HI%jsd:), target, intent(in) :: arrayU !< The u-component array to be checksummed
-  real, dimension(HI%isd:,HI%JsdB:), target, intent(in) :: arrayV !< The v-component array to be checksummed
+  real, dimension(HI%IsdB:,HI%jsd:), target, intent(in) :: arrayU !< The u-component array to be checksummed in
+                                                             !! arbitrary, possibly rescaled units [A ~> a]
+  real, dimension(HI%isd:,HI%JsdB:), target, intent(in) :: arrayV !< The v-component array to be checksummed in
+                                                             !! arbitrary, possibly rescaled units [A ~> a]
   integer,                 optional, intent(in) :: haloshift !< The width of halos to check (default 0)
   logical,                 optional, intent(in) :: symmetric !< If true, do the checksums on the full
                                                              !! symmetric computational domain.
   logical,                 optional, intent(in) :: omit_corners !< If true, avoid checking diagonal shifts
-  real,                    optional, intent(in) :: scale     !< A scaling factor for these arrays.
-  integer,                 optional, intent(in) :: logunit !< IO unit for checksum logging
+  real,                    optional, intent(in) :: scale     !< A factor to convert these arrays back to unscaled
+                                                             !! units for checksums and output [a A-1 ~> 1]
+  integer,                 optional, intent(in) :: logunit   !< IO unit for checksum logging
   logical,                 optional, intent(in) :: scalar_pair !< If true, then the arrays describe a
-                                                               !! a scalar, rather than vector
+                                                             !! a scalar, rather than vector
   logical :: vector_pair
   integer :: turns
   type(hor_index_type), pointer :: HI_in
-  real, dimension(:,:), pointer :: arrayU_in, arrayV_in
+  real, dimension(:,:), pointer :: arrayU_in, arrayV_in ! Rotated arrays [A ~> a]
 
   vector_pair = .true.
   if (present(scalar_pair)) vector_pair = .not. scalar_pair
@@ -797,20 +848,23 @@ subroutine chksum_uv_3d(mesg, arrayU, arrayV, HI, haloshift, symmetric, &
                         omit_corners, scale, logunit, scalar_pair)
   character(len=*),                    intent(in) :: mesg   !< Identifying messages
   type(hor_index_type),      target,   intent(in) :: HI     !< A horizontal index type
-  real, dimension(HI%IsdB:,HI%jsd:,:), target, intent(in) :: arrayU !< The u-component array to be checksummed
-  real, dimension(HI%isd:,HI%JsdB:,:), target, intent(in) :: arrayV !< The v-component array to be checksummed
+  real, dimension(HI%IsdB:,HI%jsd:,:), target, intent(in) :: arrayU !< The u-component array to be checksummed in
+                                                               !! arbitrary, possibly rescaled units [A ~> a]
+  real, dimension(HI%isd:,HI%JsdB:,:), target, intent(in) :: arrayV !< The v-component array to be checksummed in
+                                                               !! arbitrary, possibly rescaled units [A ~> a]
   integer,                   optional, intent(in) :: haloshift !< The width of halos to check (default 0)
   logical,                   optional, intent(in) :: symmetric !< If true, do the checksums on the full
                                                                !! symmetric computational domain.
   logical,                   optional, intent(in) :: omit_corners !< If true, avoid checking diagonal shifts
-  real,                      optional, intent(in) :: scale     !< A scaling factor for these arrays.
-  integer,                   optional, intent(in) :: logunit !< IO unit for checksum logging
+  real,                      optional, intent(in) :: scale     !< A factor to convert these arrays back to unscaled
+                                                               !! units for checksums and output [a A-1 ~> 1]
+  integer,                   optional, intent(in) :: logunit   !< IO unit for checksum logging
   logical,                 optional, intent(in) :: scalar_pair !< If true, then the arrays describe a
                                                                !! a scalar, rather than vector
   logical :: vector_pair
   integer :: turns
   type(hor_index_type), pointer :: HI_in
-  real, dimension(:,:,:), pointer :: arrayU_in, arrayV_in
+  real, dimension(:,:,:), pointer :: arrayU_in, arrayV_in ! Rotated arrays [A ~> a]
 
   vector_pair = .true.
   if (present(scalar_pair)) vector_pair = .not. scalar_pair
@@ -850,23 +904,29 @@ end subroutine chksum_uv_3d
 !> Checksums a 2d array staggered at C-grid u points.
 subroutine chksum_u_2d(array_m, mesg, HI_m, haloshift, symmetric, omit_corners, &
                        scale, logunit)
-  type(hor_index_type),  target,   intent(in) :: HI_m     !< A horizontal index type
-  real, dimension(HI_m%IsdB:,HI_m%jsd:), target, intent(in) :: array_m !< The array to be checksummed
-  character(len=*),                intent(in) :: mesg  !< An identifying message
+  type(hor_index_type),  target,   intent(in) :: HI_m      !< A horizontal index type
+  real, dimension(HI_m%IsdB:,HI_m%jsd:), target, intent(in) :: array_m !< The array to be checksummed in
+                                                           !! arbitrary, possibly rescaled units [A ~> a]
+  character(len=*),                intent(in) :: mesg      !< An identifying message
   integer,               optional, intent(in) :: haloshift !< The width of halos to check (default 0)
   logical,               optional, intent(in) :: symmetric !< If true, do the checksums on the full
                                                            !! symmetric computational domain.
   logical,               optional, intent(in) :: omit_corners !< If true, avoid checking diagonal shifts
-  real,                    optional, intent(in) :: scale     !< A scaling factor for this array.
-  integer, optional, intent(in) :: logunit !< IO unit for checksum logging
+  real,                  optional, intent(in) :: scale     !< A factor to convert this array back to unscaled units
+                                                           !! for checksums and output [a A-1 ~> 1]
+  integer,               optional, intent(in) :: logunit   !< IO unit for checksum logging
 
-  real, pointer :: array(:,:)           ! Field array on the input grid
-  real, allocatable, dimension(:,:) :: rescaled_array
+  ! Local variables
+  ! In the following comments, [A] is used to indicate the arbitrary, possibly rescaled units
+  ! of the input array while [a] indicates the unscaled (e.g., mks) units that should be used
+  ! for checksums and output
+  real, pointer :: array(:,:)           ! Field array on the input grid [A ~> a]
+  real, allocatable, dimension(:,:) :: rescaled_array ! The array with scaling undone [a]
   type(hor_index_type), pointer :: HI   ! Horizontal index bounds of the input grid
-  real :: scaling
+  real :: scaling   ! Explicit rescaling factor [a A-1 ~> 1]
   integer :: iounit !< Log IO unit
   integer :: i, j, Is
-  real :: aMean, aMin, aMax
+  real :: aMean, aMin, aMax  ! Array mean, global minimum and global maximum [a]
   integer :: bc0, bcSW, bcSE, bcNW, bcNE, hshift
   integer :: bcN, bcS, bcE, bcW
   logical :: do_corners, sym, sym_stats
@@ -981,10 +1041,12 @@ subroutine chksum_u_2d(array_m, mesg, HI_m, haloshift, symmetric, omit_corners, 
 
   integer function subchk(array, HI, di, dj, scale)
     type(hor_index_type), intent(in) ::  HI     !< A horizontal index type
-    real, dimension(HI%IsdB:,HI%jsd:), intent(in) :: array !< The array to be checksummed
+    real, dimension(HI%IsdB:,HI%jsd:), intent(in) :: array !< The array to be checksummed in
+                                 !! arbitrary, possibly rescaled units [A ~> a]
     integer, intent(in) :: di    !< i- direction array shift for this checksum
     integer, intent(in) :: dj    !< j- direction array shift for this checksum
-    real, intent(in)    :: scale !< A scaling factor for this array.
+    real, intent(in)    :: scale !< A factor to convert this array back to unscaled units
+                                 !! for checksums and output [a A-1 ~> 1]
     integer :: i, j, bc
     subchk = 0
     ! This line deliberately uses the h-point computational domain.
@@ -998,12 +1060,12 @@ subroutine chksum_u_2d(array_m, mesg, HI_m, haloshift, symmetric, omit_corners, 
 
   subroutine subStats(HI, array, sym_stats, aMean, aMin, aMax)
     type(hor_index_type), intent(in) ::  HI     !< A horizontal index type
-    real, dimension(HI%IsdB:,HI%jsd:), intent(in) :: array !< The array to be checksummed
+    real, dimension(HI%IsdB:,HI%jsd:), intent(in) :: array !< The array to be checksummed [a]
     logical,          intent(in) :: sym_stats !< If true, evaluate the statistics on the
                                               !! full symmetric computational domain.
-    real, intent(out) :: aMean !< Array mean
-    real, intent(out) :: aMin !< Array minimum
-    real, intent(out) :: aMax !< Array maximum
+    real, intent(out) :: aMean !< Array mean [a]
+    real, intent(out) :: aMin !< Array minimum [a]
+    real, intent(out) :: aMax !< Array maximum [a]
 
     integer :: i, j, n, IsB
 
@@ -1029,22 +1091,28 @@ end subroutine chksum_u_2d
 subroutine chksum_v_2d(array_m, mesg, HI_m, haloshift, symmetric, omit_corners, &
                        scale, logunit)
   type(hor_index_type),  target,   intent(in) :: HI_m      !< A horizontal index type
-  real, dimension(HI_m%isd:,HI_m%JsdB:), target, intent(in) :: array_m !< The array to be checksummed
-  character(len=*),                intent(in) :: mesg  !< An identifying message
+  real, dimension(HI_m%isd:,HI_m%JsdB:), target, intent(in) :: array_m !< The array to be checksummed in
+                                                           !! arbitrary, possibly rescaled units [A ~> a]
+  character(len=*),                intent(in) :: mesg      !< An identifying message
   integer,               optional, intent(in) :: haloshift !< The width of halos to check (default 0)
   logical,               optional, intent(in) :: symmetric !< If true, do the checksums on the full
                                                            !! symmetric computational domain.
   logical,               optional, intent(in) :: omit_corners !< If true, avoid checking diagonal shifts
-  real,                  optional, intent(in) :: scale     !< A scaling factor for this array.
-  integer, optional, intent(in) :: logunit !< IO unit for checksum logging
+  real,                  optional, intent(in) :: scale     !< A factor to convert this array back to unscaled units
+                                                           !! for checksums and output [a A-1 ~> 1]
+  integer,               optional, intent(in) :: logunit   !< IO unit for checksum logging
 
-  real, pointer :: array(:,:)           ! Field array on the input grid
-  real, allocatable, dimension(:,:) :: rescaled_array
+  ! Local variables
+  ! In the following comments, [A] is used to indicate the arbitrary, possibly rescaled units
+  ! of the input array while [a] indicates the unscaled (e.g., mks) units that should be used
+  ! for checksums and output
+  real, pointer :: array(:,:)           ! Field array on the input grid [A ~> a]
+  real, allocatable, dimension(:,:) :: rescaled_array ! The array with scaling undone [a]
   type(hor_index_type), pointer :: HI   ! Horizontal index bounds of the input grid
-  real :: scaling
+  real :: scaling   ! Explicit rescaling factor [a A-1 ~> 1]
   integer :: iounit !< Log IO unit
   integer :: i, j, Js
-  real :: aMean, aMin, aMax
+  real :: aMean, aMin, aMax  ! Array mean, global minimum and global maximum [a]
   integer :: bc0, bcSW, bcSE, bcNW, bcNE, hshift
   integer :: bcN, bcS, bcE, bcW
   logical :: do_corners, sym, sym_stats
@@ -1159,10 +1227,12 @@ subroutine chksum_v_2d(array_m, mesg, HI_m, haloshift, symmetric, omit_corners, 
 
   integer function subchk(array, HI, di, dj, scale)
     type(hor_index_type), intent(in) ::  HI     !< A horizontal index type
-    real, dimension(HI%isd:,HI%JsdB:), intent(in) :: array !< The array to be checksummed
+    real, dimension(HI%isd:,HI%JsdB:), intent(in) :: array !< The array to be checksummed in
+                                 !! arbitrary, possibly rescaled units [A ~> a]
     integer, intent(in) :: di    !< i- direction array shift for this checksum
     integer, intent(in) :: dj    !< j- direction array shift for this checksum
-    real, intent(in)    :: scale !< A scaling factor for this array.
+    real, intent(in)    :: scale !< A factor to convert this array back to unscaled units
+                                 !! for checksums and output [a A-1 ~> 1]
     integer :: i, j, bc
     subchk = 0
     ! This line deliberately uses the h-point computational domain.
@@ -1176,12 +1246,12 @@ subroutine chksum_v_2d(array_m, mesg, HI_m, haloshift, symmetric, omit_corners, 
 
   subroutine subStats(HI, array, sym_stats, aMean, aMin, aMax)
     type(hor_index_type), intent(in) ::  HI     !< A horizontal index type
-    real, dimension(HI%isd:,HI%JsdB:), intent(in) :: array !< The array to be checksummed
+    real, dimension(HI%isd:,HI%JsdB:), intent(in) :: array !< The array to be checksummed [a]
     logical,          intent(in) :: sym_stats !< If true, evaluate the statistics on the
                                               !! full symmetric computational domain.
-    real, intent(out) :: aMean !< Array mean
-    real, intent(out) :: aMin !< Array minimum
-    real, intent(out) :: aMax !< Array maximum
+    real, intent(out) :: aMean !< Array mean [a]
+    real, intent(out) :: aMin !< Array minimum [a]
+    real, intent(out) :: aMax !< Array maximum [a]
 
     integer :: i, j, n, JsB
 
@@ -1206,20 +1276,26 @@ end subroutine chksum_v_2d
 !> Checksums a 3d array staggered at tracer points.
 subroutine chksum_h_3d(array_m, mesg, HI_m, haloshift, omit_corners, scale, logunit)
   type(hor_index_type),    target,   intent(in) :: HI_m !< A horizontal index type
-  real, dimension(HI_m%isd:,HI_m%jsd:,:), target, intent(in) :: array_m !< The array to be checksummed
-  character(len=*),                  intent(in) :: mesg  !< An identifying message
+  real, dimension(HI_m%isd:,HI_m%jsd:,:), target, intent(in) :: array_m !< The array to be checksummed in
+                                                             !! arbitrary, possibly rescaled units [A ~> a]
+  character(len=*),                  intent(in) :: mesg      !< An identifying message
   integer,                 optional, intent(in) :: haloshift !< The width of halos to check (default 0)
   logical,                 optional, intent(in) :: omit_corners !< If true, avoid checking diagonal shifts
-  real,                    optional, intent(in) :: scale     !< A scaling factor for this array.
-  integer, optional, intent(in) :: logunit !< IO unit for checksum logging
+  real,                    optional, intent(in) :: scale     !< A factor to convert this array back to unscaled units
+                                                             !! for checksums and output [a A-1 ~> 1]
+  integer,                 optional, intent(in) :: logunit   !< IO unit for checksum logging
 
-  real, pointer :: array(:,:,:)         ! Field array on the input grid
-  real, allocatable, dimension(:,:,:) :: rescaled_array
+  ! Local variables
+  ! In the following comments, [A] is used to indicate the arbitrary, possibly rescaled units
+  ! of the input array while [a] indicates the unscaled (e.g., mks) units that should be used
+  ! for checksums and output
+  real, pointer :: array(:,:,:)         ! Field array on the input grid [A ~> a]
+  real, allocatable, dimension(:,:,:) :: rescaled_array ! The array with scaling undone [a]
   type(hor_index_type), pointer :: HI   ! Horizontal index bounds of the input grid
-  real :: scaling
+  real :: scaling   ! Explicit rescaling factor [a A-1 ~> 1]
   integer :: iounit !< Log IO unit
   integer :: i, j, k
-  real :: aMean, aMin, aMax
+  real :: aMean, aMin, aMax  ! Array mean, global minimum and global maximum [a]
   integer :: bc0, bcSW, bcSE, bcNW, bcNE, hshift
   integer :: bcN, bcS, bcE, bcW
   logical :: do_corners
@@ -1311,10 +1387,12 @@ subroutine chksum_h_3d(array_m, mesg, HI_m, haloshift, omit_corners, scale, logu
 
   integer function subchk(array, HI, di, dj, scale)
     type(hor_index_type), intent(in) ::  HI     !< A horizontal index type
-    real, dimension(HI%isd:,HI%jsd:,:), intent(in) :: array !< The array to be checksummed
+    real, dimension(HI%isd:,HI%jsd:,:), intent(in) :: array !< The array to be checksummed in
+                                 !! arbitrary, possibly rescaled units [A ~> a]
     integer, intent(in) :: di    !< i- direction array shift for this checksum
     integer, intent(in) :: dj    !< j- direction array shift for this checksum
-    real, intent(in)    :: scale !< A scaling factor for this array.
+    real, intent(in)    :: scale !< A factor to convert this array back to unscaled units
+                                 !! for checksums and output [a A-1 ~> 1]
     integer :: i, j, k, bc
     subchk = 0
     do k=LBOUND(array,3),UBOUND(array,3) ; do j=HI%jsc+dj,HI%jec+dj ; do i=HI%isc+di,HI%iec+di
@@ -1327,10 +1405,10 @@ subroutine chksum_h_3d(array_m, mesg, HI_m, haloshift, omit_corners, scale, logu
 
   subroutine subStats(HI, array, aMean, aMin, aMax)
     type(hor_index_type), intent(in) ::  HI     !< A horizontal index type
-    real, dimension(HI%isd:,HI%jsd:,:), intent(in) :: array !< The array to be checksummed
-    real, intent(out) :: aMean !<  Array mean
-    real, intent(out) :: aMin !< Array minimum
-    real, intent(out) :: aMax !< Array maximum
+    real, dimension(HI%isd:,HI%jsd:,:), intent(in) :: array !< The array to be checksummed [a]
+    real, intent(out) :: aMean !<  Array mean [a]
+    real, intent(out) :: aMin !< Array minimum [a]
+    real, intent(out) :: aMax !< Array maximum [a]
 
     integer :: i, j, k, n
 
@@ -1355,22 +1433,28 @@ end subroutine chksum_h_3d
 subroutine chksum_B_3d(array_m, mesg, HI_m, haloshift, symmetric, omit_corners, &
                        scale, logunit)
   type(hor_index_type),     target,   intent(in) :: HI_m !< A horizontal index type
-  real, dimension(HI_m%IsdB:,HI_m%JsdB:,:), target, intent(in) :: array_m !< The array to be checksummed
-  character(len=*),                   intent(in) :: mesg  !< An identifying message
+  real, dimension(HI_m%IsdB:,HI_m%JsdB:,:), target, intent(in) :: array_m !< The array to be checksummed in
+                                                              !! arbitrary, possibly rescaled units [A ~> a]
+  character(len=*),                   intent(in) :: mesg      !< An identifying message
   integer,                  optional, intent(in) :: haloshift !< The width of halos to check (default 0)
   logical,                  optional, intent(in) :: symmetric !< If true, do the checksums on the full
                                                               !! symmetric computational domain.
   logical,                  optional, intent(in) :: omit_corners !< If true, avoid checking diagonal shifts
-  real,                     optional, intent(in) :: scale     !< A scaling factor for this array.
-  integer, optional, intent(in) :: logunit !< IO unit for checksum logging
+  real,                     optional, intent(in) :: scale     !< A factor to convert this array back to unscaled units
+                                                              !! for checksums and output [a A-1 ~> 1]
+  integer,                  optional, intent(in) :: logunit   !< IO unit for checksum logging
 
-  real, pointer :: array(:,:,:)         ! Field array on the input grid
-  real, allocatable, dimension(:,:,:) :: rescaled_array
+  ! Local variables
+  ! In the following comments, [A] is used to indicate the arbitrary, possibly rescaled units
+  ! of the input array while [a] indicates the unscaled (e.g., mks) units that should be used
+  ! for checksums and output
+  real, pointer :: array(:,:,:)         ! Field array on the input grid [A ~> a]
+  real, allocatable, dimension(:,:,:) :: rescaled_array ! The array with scaling undone [a]
   type(hor_index_type), pointer :: HI   ! Horizontal index bounds of the input grid
-  real :: scaling
+  real :: scaling   ! Explicit rescaling factor [a A-1 ~> 1]
   integer :: iounit !< Log IO unit
   integer :: i, j, k, Is, Js
-  real :: aMean, aMin, aMax
+  real :: aMean, aMin, aMax  ! Array mean, global minimum and global maximum [a]
   integer :: bc0, bcSW, bcSE, bcNW, bcNE, hshift
   integer :: bcN, bcS, bcE, bcW
   logical :: do_corners, sym, sym_stats
@@ -1478,10 +1562,12 @@ subroutine chksum_B_3d(array_m, mesg, HI_m, haloshift, symmetric, omit_corners, 
 
   integer function subchk(array, HI, di, dj, scale)
     type(hor_index_type), intent(in) ::  HI     !< A horizontal index type
-    real, dimension(HI%IsdB:,HI%JsdB:,:), intent(in) :: array !< The array to be checksummed
+    real, dimension(HI%IsdB:,HI%JsdB:,:), intent(in) :: array !< The array to be checksummed in
+                                 !! arbitrary, possibly rescaled units [A ~> a]
     integer, intent(in) :: di    !< i- direction array shift for this checksum
     integer, intent(in) :: dj    !< j- direction array shift for this checksum
-    real, intent(in)    :: scale !< A scaling factor for this array.
+    real, intent(in)    :: scale !< A factor to convert this array back to unscaled units
+                                 !! for checksums and output [a A-1 ~> 1]
     integer :: i, j, k, bc
     subchk = 0
     ! This line deliberately uses the h-point computational domain.
@@ -1495,12 +1581,12 @@ subroutine chksum_B_3d(array_m, mesg, HI_m, haloshift, symmetric, omit_corners, 
 
   subroutine subStats(HI, array, sym_stats, aMean, aMin, aMax)
     type(hor_index_type), intent(in) ::  HI     !< A horizontal index type
-    real, dimension(HI%IsdB:,HI%JsdB:,:), intent(in) :: array !< The array to be checksummed
+    real, dimension(HI%IsdB:,HI%JsdB:,:), intent(in) :: array !< The array to be checksummed [a]
     logical,          intent(in) :: sym_stats !< If true, evaluate the statistics on the
                                               !! full symmetric computational domain.
-    real, intent(out) :: aMean !< Array mean
-    real, intent(out) :: aMin !< Array minimum
-    real, intent(out) :: aMax !< Array maximum
+    real, intent(out) :: aMean !< Array mean [a]
+    real, intent(out) :: aMin !< Array minimum [a]
+    real, intent(out) :: aMax !< Array maximum [a]
 
     integer :: i, j, k, n, IsB, JsB
 
@@ -1526,22 +1612,28 @@ end subroutine chksum_B_3d
 subroutine chksum_u_3d(array_m, mesg, HI_m, haloshift, symmetric, omit_corners, &
                        scale, logunit)
   type(hor_index_type),    target,   intent(in) :: HI_m !< A horizontal index type
-  real, dimension(HI_m%isdB:,HI_m%Jsd:,:), target, intent(in) :: array_m !< The array to be checksummed
-  character(len=*),                  intent(in) :: mesg  !< An identifying message
+  real, dimension(HI_m%isdB:,HI_m%Jsd:,:), target, intent(in) :: array_m !< The array to be checksummed in
+                                                             !! arbitrary, possibly rescaled units [A ~> a]
+  character(len=*),                  intent(in) :: mesg      !< An identifying message
   integer,                 optional, intent(in) :: haloshift !< The width of halos to check (default 0)
   logical,                 optional, intent(in) :: symmetric !< If true, do the checksums on the full
                                                              !! symmetric computational domain.
   logical,                 optional, intent(in) :: omit_corners !< If true, avoid checking diagonal shifts
-  real,                    optional, intent(in) :: scale     !< A scaling factor for this array.
-  integer, optional, intent(in) :: logunit !< IO unit for checksum logging
+  real,                    optional, intent(in) :: scale     !< A factor to convert this array back to unscaled units
+                                                             !! for checksums and output [a A-1 ~> 1]
+  integer,                 optional, intent(in) :: logunit   !< IO unit for checksum logging
 
-  real, pointer :: array(:,:,:)         ! Field array on the input grid
-  real, allocatable, dimension(:,:,:) :: rescaled_array
+  ! Local variables
+  ! In the following comments, [A] is used to indicate the arbitrary, possibly rescaled units
+  ! of the input array while [a] indicates the unscaled (e.g., mks) units that should be used
+  ! for checksums and output
+  real, pointer :: array(:,:,:)         ! Field array on the input grid [A ~> a]
+  real, allocatable, dimension(:,:,:) :: rescaled_array ! The array with scaling undone [a]
   type(hor_index_type), pointer :: HI   ! Horizontal index bounds of the input grid
-  real :: scaling
+  real :: scaling   ! Explicit rescaling factor [a A-1 ~> 1]
   integer :: iounit !< Log IO unit
   integer :: i, j, k, Is
-  real :: aMean, aMin, aMax
+  real :: aMean, aMin, aMax  ! Array mean, global minimum and global maximum [a]
   integer :: bc0, bcSW, bcSE, bcNW, bcNE, hshift
   integer :: bcN, bcS, bcE, bcW
   logical :: do_corners, sym, sym_stats
@@ -1656,10 +1748,12 @@ subroutine chksum_u_3d(array_m, mesg, HI_m, haloshift, symmetric, omit_corners, 
 
   integer function subchk(array, HI, di, dj, scale)
     type(hor_index_type), intent(in) ::  HI     !< A horizontal index type
-    real, dimension(HI%IsdB:,HI%jsd:,:), intent(in) :: array !< The array to be checksummed
+    real, dimension(HI%IsdB:,HI%jsd:,:), intent(in) :: array !< The array to be checksummed in
+                                 !! arbitrary, possibly rescaled units [A ~> a]
     integer, intent(in) :: di    !< i- direction array shift for this checksum
     integer, intent(in) :: dj    !< j- direction array shift for this checksum
-    real, intent(in)    :: scale !< A scaling factor for this array.
+    real, intent(in)    :: scale !< A factor to convert this array back to unscaled units
+                                 !! for checksums and output [a A-1 ~> 1]
     integer :: i, j, k, bc
     subchk = 0
     ! This line deliberately uses the h-point computational domain.
@@ -1673,12 +1767,12 @@ subroutine chksum_u_3d(array_m, mesg, HI_m, haloshift, symmetric, omit_corners, 
 
   subroutine subStats(HI, array, sym_stats, aMean, aMin, aMax)
     type(hor_index_type), intent(in) ::  HI     !< A horizontal index type
-    real, dimension(HI%IsdB:,HI%jsd:,:), intent(in) :: array !< The array to be checksummed
+    real, dimension(HI%IsdB:,HI%jsd:,:), intent(in) :: array !< The array to be checksummed [a]
     logical,          intent(in) :: sym_stats !< If true, evaluate the statistics on the
                                               !! full symmetric computational domain.
-    real, intent(out) :: aMean !< Array mean
-    real, intent(out) :: aMin !< Array minimum
-    real, intent(out) :: aMax !< Array maximum
+    real, intent(out) :: aMean !< Array mean [a]
+    real, intent(out) :: aMin !< Array minimum [a]
+    real, intent(out) :: aMax !< Array maximum [a]
 
     integer :: i, j, k, n, IsB
 
@@ -1703,25 +1797,31 @@ end subroutine chksum_u_3d
 !> Checksums a 3d array staggered at C-grid v points.
 subroutine chksum_v_3d(array_m, mesg, HI_m, haloshift, symmetric, omit_corners, &
                        scale, logunit)
-  type(hor_index_type),    target,   intent(in) :: HI_m !< A horizontal index type
-  real, dimension(HI_m%isd:,HI_m%JsdB:,:), target, intent(in) :: array_m !< The array to be checksummed
-  character(len=*),                  intent(in) :: mesg  !< An identifying message
+  type(hor_index_type),    target,   intent(in) :: HI_m      !< A horizontal index type
+  real, dimension(HI_m%isd:,HI_m%JsdB:,:), target, intent(in) :: array_m !< The array to be checksummed in
+                                                             !! arbitrary, possibly rescaled units [A ~> a]
+  character(len=*),                  intent(in) :: mesg      !< An identifying message
   integer,                 optional, intent(in) :: haloshift !< The width of halos to check (default 0)
   logical,                 optional, intent(in) :: symmetric !< If true, do the checksums on the full
                                                              !! symmetric computational domain.
   logical,                 optional, intent(in) :: omit_corners !< If true, avoid checking diagonal shifts
-  real,                    optional, intent(in) :: scale     !< A scaling factor for this array.
-  integer, optional, intent(in) :: logunit !< IO unit for checksum logging
+  real,                    optional, intent(in) :: scale     !< A factor to convert this array back to unscaled units
+                                                             !! for checksums and output [a A-1 ~> 1]
+  integer,                 optional, intent(in) :: logunit   !< IO unit for checksum logging
 
-  real, pointer :: array(:,:,:)         ! Field array on the input grid
-  real, allocatable, dimension(:,:,:) :: rescaled_array
+  ! Local variables
+  ! In the following comments, [A] is used to indicate the arbitrary, possibly rescaled units
+  ! of the input array while [a] indicates the unscaled (e.g., mks) units that should be used
+  ! for checksums and output
+  real, pointer :: array(:,:,:)         ! Field array on the input grid [A ~> a]
+  real, allocatable, dimension(:,:,:) :: rescaled_array ! The array with scaling undone [a]
   type(hor_index_type), pointer :: HI   ! Horizontal index bounds of the input grid
-  real :: scaling
+  real :: scaling   ! Explicit rescaling factor [a A-1 ~> 1]
   integer :: iounit !< Log IO unit
   integer :: i, j, k, Js
   integer :: bc0, bcSW, bcSE, bcNW, bcNE, hshift
   integer :: bcN, bcS, bcE, bcW
-  real :: aMean, aMin, aMax
+  real :: aMean, aMin, aMax  ! Array mean, global minimum and global maximum [a]
   logical :: do_corners, sym, sym_stats
   integer :: turns                      ! Quarter turns from input to model grid
 
@@ -1834,10 +1934,12 @@ subroutine chksum_v_3d(array_m, mesg, HI_m, haloshift, symmetric, omit_corners, 
 
   integer function subchk(array, HI, di, dj, scale)
     type(hor_index_type), intent(in) ::  HI     !< A horizontal index type
-    real, dimension(HI%isd:,HI%JsdB:,:), intent(in) :: array !< The array to be checksummed
+    real, dimension(HI%isd:,HI%JsdB:,:), intent(in) :: array !< The array to be checksummed in
+                                 !! arbitrary, possibly rescaled units [A ~> a]
     integer, intent(in) :: di    !< i- direction array shift for this checksum
     integer, intent(in) :: dj    !< j- direction array shift for this checksum
-    real, intent(in)    :: scale !< A scaling factor for this array.
+    real, intent(in)    :: scale !< A factor to convert this array back to unscaled units
+                                 !! for checksums and output [a A-1 ~> 1]
     integer :: i, j, k, bc
     subchk = 0
     ! This line deliberately uses the h-point computational domain.
@@ -1852,12 +1954,12 @@ subroutine chksum_v_3d(array_m, mesg, HI_m, haloshift, symmetric, omit_corners, 
   !subroutine subStats(HI, array, mesg, sym_stats)
   subroutine subStats(HI, array, sym_stats, aMean, aMin, aMax)
     type(hor_index_type), intent(in) ::  HI     !< A horizontal index type
-    real, dimension(HI%isd:,HI%JsdB:,:), intent(in) :: array !< The array to be checksummed
+    real, dimension(HI%isd:,HI%JsdB:,:), intent(in) :: array !< The array to be checksummed [a]
     logical,          intent(in) :: sym_stats !< If true, evaluate the statistics on the
                                               !! full symmetric computational domain.
-    real, intent(out) :: aMean   !< Mean of array over domain
-    real, intent(out) :: aMin    !< Minimum of array over domain
-    real, intent(out) :: aMax    !< Maximum of array over domain
+    real, intent(out) :: aMean   !< Mean of array over domain [a]
+    real, intent(out) :: aMin    !< Minimum of array over domain [a]
+    real, intent(out) :: aMax    !< Maximum of array over domain [a]
 
     integer :: i, j, k, n, JsB
 
@@ -1884,7 +1986,7 @@ end subroutine chksum_v_3d
 
 !> chksum1d does a checksum of a 1-dimensional array.
 subroutine chksum1d(array, mesg, start_i, end_i, compare_PEs)
-  real, dimension(:), intent(in) :: array   !< The array to be summed (index starts at 1).
+  real, dimension(:), intent(in) :: array   !< The array to be summed (index starts at 1) [abitrary].
   character(len=*),   intent(in) :: mesg    !< An identifying message.
   integer, optional,  intent(in) :: start_i !< The starting index for the sum (default 1)
   integer, optional,  intent(in) :: end_i   !< The ending index for the sum (default all)
@@ -1892,8 +1994,8 @@ subroutine chksum1d(array, mesg, start_i, end_i, compare_PEs)
                                                 !! and list the root_PE value (default true)
 
   integer :: is, ie, i, bc, sum1, sum_bc
-  real :: sum
-  real, allocatable :: sum_here(:)
+  real :: sum  ! The global sum of the array [arbitrary]
+  real, allocatable :: sum_here(:) ! The sum on each PE [arbitrary]
   logical :: compare
   integer :: pe_num   ! pe number of the data
   integer :: nPEs     ! Total number of processsors
@@ -1943,11 +2045,11 @@ end subroutine chksum1d
 !> chksum2d does a checksum of all data in a 2-d array.
 subroutine chksum2d(array, mesg)
 
-  real, dimension(:,:), intent(in) :: array !< The array to be checksummed
+  real, dimension(:,:), intent(in) :: array !< The array to be checksummed [arbitrary]
   character(len=*),     intent(in) :: mesg  !< An identifying message
 
   integer :: xs,xe,ys,ye,i,j,sum1,bc
-  real :: sum
+  real :: sum  ! The global sum of the array [arbitrary]
 
   xs = LBOUND(array,1) ; xe = UBOUND(array,1)
   ys = LBOUND(array,2) ; ye = UBOUND(array,2)
@@ -1971,11 +2073,11 @@ end subroutine chksum2d
 !> chksum3d does a checksum of all data in a 2-d array.
 subroutine chksum3d(array, mesg)
 
-  real, dimension(:,:,:), intent(in) :: array !< The array to be checksummed
+  real, dimension(:,:,:), intent(in) :: array !< The array to be checksummed [arbitrary]
   character(len=*),       intent(in) :: mesg  !< An identifying message
 
   integer :: xs,xe,ys,ye,zs,ze,i,j,k, bc,sum1
-  real :: sum
+  real :: sum  ! The global sum of the array [arbitrary]
 
   xs = LBOUND(array,1) ; xe = UBOUND(array,1)
   ys = LBOUND(array,2) ; ye = UBOUND(array,2)
@@ -1999,7 +2101,7 @@ end subroutine chksum3d
 
 !> This function returns .true. if x is a NaN, and .false. otherwise.
 function is_NaN_0d(x)
-  real, intent(in) :: x !< The value to be checked for NaNs.
+  real, intent(in) :: x !< The value to be checked for NaNs [arbitrary]
   logical :: is_NaN_0d
 
  !is_NaN_0d = (((x < 0.0) .and. (x >= 0.0)) .or. &
@@ -2015,7 +2117,7 @@ end function is_NaN_0d
 
 !> Returns .true. if any element of x is a NaN, and .false. otherwise.
 function is_NaN_1d(x, skip_mpp)
-  real, dimension(:), intent(in) :: x !< The array to be checked for NaNs.
+  real, dimension(:), intent(in) :: x !< The array to be checked for NaNs [arbitrary]
   logical,  optional, intent(in) :: skip_mpp  !< If true, only check this array only
                                               !! on the local PE (default false).
   logical :: is_NaN_1d
@@ -2038,7 +2140,7 @@ end function is_NaN_1d
 
 !> Returns .true. if any element of x is a NaN, and .false. otherwise.
 function is_NaN_2d(x)
-  real, dimension(:,:), intent(in) :: x !< The array to be checked for NaNs.
+  real, dimension(:,:), intent(in) :: x !< The array to be checked for NaNs [arbitrary]
   logical :: is_NaN_2d
 
   integer :: i, j, n
@@ -2055,7 +2157,7 @@ end function is_NaN_2d
 
 !> Returns .true. if any element of x is a NaN, and .false. otherwise.
 function is_NaN_3d(x)
-  real, dimension(:,:,:), intent(in) :: x !< The array to be checked for NaNs.
+  real, dimension(:,:,:), intent(in) :: x !< The array to be checked for NaNs [arbitrary]
   logical :: is_NaN_3d
 
   integer :: i, j, k, n
@@ -2078,9 +2180,9 @@ end function is_NaN_3d
 !> Compute the field checksum of a scalar.
 function rotated_field_chksum_real_0d(field, pelist, mask_val, turns) &
     result(chksum)
-  real,              intent(in) :: field      !< Input scalar
+  real,              intent(in) :: field      !< Input scalar [arbitrary]
   integer, optional, intent(in) :: pelist(:)  !< PE list of ranks to checksum
-  real,    optional, intent(in) :: mask_val   !< FMS mask value
+  real,    optional, intent(in) :: mask_val   !< FMS mask value [nondim]
   integer, optional, intent(in) :: turns      !< Number of quarter turns
   integer(kind=int64) :: chksum               !< checksum of scalar
 
@@ -2093,9 +2195,9 @@ end function rotated_field_chksum_real_0d
 !> Compute the field checksum of a 1d field.
 function rotated_field_chksum_real_1d(field, pelist, mask_val, turns) &
     result(chksum)
-  real, dimension(:), intent(in) :: field     !< Input array
+  real, dimension(:), intent(in) :: field     !< Input array [arbitrary]
   integer,  optional, intent(in) :: pelist(:) !< PE list of ranks to checksum
-  real,     optional, intent(in) :: mask_val  !< FMS mask value
+  real,     optional, intent(in) :: mask_val  !< FMS mask value [nondim]
   integer,  optional, intent(in) :: turns     !< Number of quarter turns
   integer(kind=int64) :: chksum               !< checksum of array
 
@@ -2108,14 +2210,14 @@ end function rotated_field_chksum_real_1d
 !> Compute the field checksum of a rotated 2d field.
 function rotated_field_chksum_real_2d(field, pelist, mask_val, turns) &
     result(chksum)
-  real, dimension(:,:),     intent(in) :: field     !< Unrotated input field
+  real, dimension(:,:),     intent(in) :: field     !< Unrotated input field [arbitrary]
   integer,        optional, intent(in) :: pelist(:) !< PE list of ranks to checksum
-  real,           optional, intent(in) :: mask_val  !< FMS mask value
+  real,           optional, intent(in) :: mask_val  !< FMS mask value [nondim]
   integer,        optional, intent(in) :: turns     !< Number of quarter turns
   integer(kind=int64) :: chksum                     !< checksum of array
 
   ! Local variables
-  real, allocatable :: field_rot(:,:)  ! A rotated version of field, with the same units
+  real, allocatable :: field_rot(:,:)  ! A rotated version of field, with the same units [arbitrary]
   integer :: qturns ! The number of quarter turns through which to rotate field
 
   qturns = 0
@@ -2135,14 +2237,14 @@ end function rotated_field_chksum_real_2d
 !> Compute the field checksum of a rotated 3d field.
 function rotated_field_chksum_real_3d(field, pelist, mask_val, turns) &
     result(chksum)
-  real, dimension(:,:,:),   intent(in) :: field     !< Unrotated input field
+  real, dimension(:,:,:),   intent(in) :: field     !< Unrotated input field [arbitrary]
   integer,        optional, intent(in) :: pelist(:) !< PE list of ranks to checksum
-  real,           optional, intent(in) :: mask_val  !< FMS mask value
+  real,           optional, intent(in) :: mask_val  !< FMS mask value [nondim]
   integer,        optional, intent(in) :: turns     !< Number of quarter turns
   integer(kind=int64) :: chksum                     !< checksum of array
 
   ! Local variables
-  real, allocatable :: field_rot(:,:,:)  ! A rotated version of field, with the same units
+  real, allocatable :: field_rot(:,:,:)  ! A rotated version of field, with the same units [arbitrary]
   integer :: qturns ! The number of quarter turns through which to rotate field
 
   qturns = 0
@@ -2162,14 +2264,14 @@ end function rotated_field_chksum_real_3d
 !> Compute the field checksum of a rotated 4d field.
 function rotated_field_chksum_real_4d(field, pelist, mask_val, turns) &
     result(chksum)
-  real, dimension(:,:,:,:), intent(in) :: field     !< Unrotated input field
+  real, dimension(:,:,:,:), intent(in) :: field     !< Unrotated input field [arbitrary]
   integer,        optional, intent(in) :: pelist(:) !< PE list of ranks to checksum
-  real,           optional, intent(in) :: mask_val  !< FMS mask value
+  real,           optional, intent(in) :: mask_val  !< FMS mask value [nondim]
   integer,        optional, intent(in) :: turns     !< Number of quarter turns
   integer(kind=int64) :: chksum                     !< checksum of array
 
   ! Local variables
-  real, allocatable :: field_rot(:,:,:,:)  ! A rotated version of field, with the same units
+  real, allocatable :: field_rot(:,:,:,:)  ! A rotated version of field, with the same units [arbitrary]
   integer :: qturns ! The number of quarter turns through which to rotate field
 
   qturns = 0
@@ -2268,9 +2370,9 @@ end subroutine chk_sum_msg2
 subroutine chk_sum_msg3(fmsg, aMean, aMin, aMax, mesg, iounit)
   character(len=*), intent(in) :: fmsg !< A checksum code-location specific preamble
   character(len=*), intent(in) :: mesg !< An identifying message supplied by top-level caller
-  real,             intent(in) :: aMean !< The mean value of the array
-  real,             intent(in) :: aMin !< The minimum value of the array
-  real,             intent(in) :: aMax !< The maximum value of the array
+  real,             intent(in) :: aMean !< The mean value of the array [arbitrary]
+  real,             intent(in) :: aMin !< The minimum value of the array [arbitrary]
+  real,             intent(in) :: aMax !< The maximum value of the array [arbitrary]
   integer,          intent(in) :: iounit !< Checksum logger IO unit
 
   ! NOTE: We add zero to aMin and aMax to remove any negative zeros.
@@ -2284,8 +2386,8 @@ end subroutine chk_sum_msg3
 !! only thing that it does is to log the version of this module.
 subroutine MOM_checksums_init(param_file)
   type(param_file_type),   intent(in)    :: param_file !< A structure to parse for run-time parameters
-! This include declares and sets the variable "version".
-#include "version_variable.h"
+  ! This include declares and sets the variable "version".
+# include "version_variable.h"
   character(len=40)  :: mdl = "MOM_checksums" ! This module's name.
 
   call log_version(param_file, mdl, version)
@@ -2303,7 +2405,7 @@ end subroutine chksum_error
 !> Does a bitcount of a number by first casting to an integer and then using BTEST
 !! to check bit by bit
 integer function bitcount(x)
-  real, intent(in) :: x !< Number to be bitcount
+  real, intent(in) :: x !< Number to be bitcount [arbitrary]
 
   integer, parameter :: xk = kind(x)  !< Kind type of x
 

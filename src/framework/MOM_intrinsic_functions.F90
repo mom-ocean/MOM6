@@ -13,9 +13,9 @@ contains
 !> Evaluate the inverse cosh, either using a math library or an
 !! equivalent expression
 function invcosh(x)
-  real, intent(in) :: x !< The argument of the inverse of cosh.  NaNs will
+  real, intent(in) :: x !< The argument of the inverse of cosh [nondim].  NaNs will
                         !! occur if x<1, but there is no error checking
-  real :: invcosh
+  real :: invcosh  ! The inverse of cosh of x [nondim]
 
 #ifdef __INTEL_COMPILER
   invcosh = acosh(x)

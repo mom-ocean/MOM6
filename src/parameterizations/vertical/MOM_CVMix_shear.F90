@@ -28,25 +28,25 @@ public calculate_CVMix_shear, CVMix_shear_init, CVMix_shear_is_used, CVMix_shear
 ! vary with the Boussinesq approximation, the Boussinesq variant is given first.
 
 !> Control structure including parameters for CVMix interior shear schemes.
-type, public :: CVMix_shear_cs ! TODO: private
+type, public :: CVMix_shear_cs ; private
   logical :: use_LMD94                      !< Flags to use the LMD94 scheme
   logical :: use_PP81                       !< Flags to use Pacanowski and Philander (JPO 1981)
-  logical :: smooth_ri                      !< If true, smooth Ri using a 1-2-1 filter
-  real    :: Ri_zero                        !< LMD94 critical Richardson number
-  real    :: Nu_zero                        !< LMD94 maximum interior diffusivity
-  real    :: KPP_exp                        !< Exponent of unitless factor of diff.
-                                            !! for KPP internal shear mixing scheme.
+  integer :: n_smooth_ri                    !< Number of times to smooth Ri using a 1-2-1 filter
+  real    :: Ri_zero                        !< LMD94 critical Richardson number [nondim]
+  real    :: Nu_zero                        !< LMD94 maximum interior diffusivity [Z2 T-1 ~> m2 s-1]
+  real    :: KPP_exp                        !< Exponent of unitless factor of diffusivities
+                                            !! for KPP internal shear mixing scheme [nondim]
   real, allocatable, dimension(:,:,:) :: N2 !< Squared Brunt-Vaisala frequency [T-2 ~> s-2]
   real, allocatable, dimension(:,:,:) :: S2 !< Squared shear frequency [T-2 ~> s-2]
-  real, allocatable, dimension(:,:,:) :: ri_grad !< Gradient Richardson number
-  real, allocatable, dimension(:,:,:) :: ri_grad_smooth !< Gradient Richardson number
-                                                        !! after smoothing
+  real, allocatable, dimension(:,:,:) :: ri_grad !< Gradient Richardson number [nondim]
+  real, allocatable, dimension(:,:,:) :: ri_grad_orig !< Gradient Richardson number
+                                                      !! after smoothing [nondim]
   character(10) :: Mix_Scheme               !< Mixing scheme name (string)
 
   type(diag_ctrl), pointer :: diag => NULL() !< Pointer to the diagnostics control structure
   !>@{ Diagnostic handles
   integer :: id_N2 = -1, id_S2 = -1, id_ri_grad = -1, id_kv = -1, id_kd = -1
-  integer :: id_ri_grad_smooth = -1
+  integer :: id_ri_grad_orig = -1
   !>@}
 
 end type CVMix_shear_cs
@@ -72,7 +72,7 @@ subroutine calculate_CVMix_shear(u_H, v_H, h, tv, kd, kv, G, GV, US, CS )
   type(CVMix_shear_cs),                       pointer     :: CS  !< The control structure returned by a previous
                                                                  !! call to CVMix_shear_init.
   ! Local variables
-  integer :: i, j, k, kk, km1
+  integer :: i, j, k, kk, km1, s
   real :: GoRho  ! Gravitational acceleration divided by density [Z T-2 R-1 ~> m4 s-2 kg-1]
   real :: pref   ! Interface pressures [R L2 T-2 ~> Pa]
   real :: DU, DV ! Velocity differences [L T-1 ~> m s-1]
@@ -85,7 +85,8 @@ subroutine calculate_CVMix_shear(u_H, v_H, h, tv, kd, kv, G, GV, US, CS )
   real, dimension(2*(GV%ke)) :: temp_1d ! A column of temperatures [C ~> degC]
   real, dimension(2*(GV%ke)) :: salt_1d ! A column of salinities [S ~> ppt]
   real, dimension(2*(GV%ke)) :: rho_1d  ! A column of densities at interface pressures [R ~> kg m-3]
-  real, dimension(GV%ke+1) :: Ri_Grad !< Gradient Richardson number [nondim]
+  real, dimension(GV%ke+1) :: Ri_Grad   !< Gradient Richardson number [nondim]
+  real, dimension(GV%ke+1) :: Ri_Grad_prev !< Gradient Richardson number before s.th smoothing iteration [nondim]
   real, dimension(GV%ke+1) :: Kvisc   !< Vertical viscosity at interfaces [m2 s-1]
   real, dimension(GV%ke+1) :: Kdiff   !< Diapycnal diffusivity at interfaces [m2 s-1]
   real :: epsln  !< Threshold to identify vanished layers [H ~> m or kg m-2]
@@ -137,7 +138,7 @@ subroutine calculate_CVMix_shear(u_H, v_H, h, tv, kd, kv, G, GV, US, CS )
         S2 = US%L_to_Z**2*(DU*DU+DV*DV)/(DZ*DZ)
         Ri_Grad(k) = max(0., N2) / max(S2, 1.e-10*US%T_to_s**2)
 
-        ! fill 3d arrays, if user asks for diagsnostics
+        ! fill 3d arrays, if user asks for diagnostics
         if (CS%id_N2 > 0) CS%N2(i,j,k) = N2
         if (CS%id_S2 > 0) CS%S2(i,j,k) = S2
 
@@ -145,9 +146,10 @@ subroutine calculate_CVMix_shear(u_H, v_H, h, tv, kd, kv, G, GV, US, CS )
 
       Ri_grad(GV%ke+1) = Ri_grad(GV%ke)
 
-      if (CS%id_ri_grad > 0) CS%ri_grad(i,j,:) = Ri_Grad(:)
+      if (CS%n_smooth_ri > 0) then
 
-      if (CS%smooth_ri) then
+        if (CS%id_ri_grad_orig > 0) CS%ri_grad_orig(i,j,:) = Ri_Grad(:)
+
         ! 1) fill Ri_grad in vanished layers with adjacent value
         do k = 2, GV%ke
           if (h(i,j,k) <= epsln) Ri_grad(k) = Ri_grad(k-1)
@@ -155,16 +157,23 @@ subroutine calculate_CVMix_shear(u_H, v_H, h, tv, kd, kv, G, GV, US, CS )
 
         Ri_grad(GV%ke+1) = Ri_grad(GV%ke)
 
-        ! 2) vertically smooth Ri with 1-2-1 filter
-        dummy =  0.25 * Ri_grad(2)
-        Ri_grad(GV%ke+1) = Ri_grad(GV%ke)
-        do k = 3, GV%ke
-          Ri_Grad(k) = dummy + 0.5 * Ri_Grad(k) + 0.25 * Ri_grad(k+1)
-          dummy = 0.25 * Ri_grad(k)
+        do s=1,CS%n_smooth_ri
+
+          Ri_Grad_prev(:) = Ri_Grad(:)
+
+          ! 2) vertically smooth Ri with 1-2-1 filter
+          dummy =  0.25 * Ri_grad_prev(2)
+          do k = 3, GV%ke
+            Ri_Grad(k) = dummy + 0.5 * Ri_Grad_prev(k) + 0.25 * Ri_grad_prev(k+1)
+            dummy = 0.25 * Ri_grad(k)
+          enddo
         enddo
 
-        if (CS%id_ri_grad_smooth > 0) CS%ri_grad_smooth(i,j,:) = Ri_Grad(:)
+        Ri_grad(GV%ke+1) = Ri_grad(GV%ke)
+
       endif
+
+      if (CS%id_ri_grad > 0) CS%ri_grad(i,j,:) = Ri_Grad(:)
 
       do K=1,GV%ke+1
         Kvisc(K) = US%Z2_T_to_m2_s * kv(i,j,K)
@@ -190,7 +199,7 @@ subroutine calculate_CVMix_shear(u_H, v_H, h, tv, kd, kv, G, GV, US, CS )
   if (CS%id_N2 > 0) call post_data(CS%id_N2, CS%N2, CS%diag)
   if (CS%id_S2 > 0) call post_data(CS%id_S2, CS%S2, CS%diag)
   if (CS%id_ri_grad > 0) call post_data(CS%id_ri_grad, CS%ri_grad, CS%diag)
-  if (CS%id_ri_grad_smooth > 0) call post_data(CS%id_ri_grad_smooth ,CS%ri_grad_smooth, CS%diag)
+  if (CS%id_ri_grad_orig > 0) call post_data(CS%id_ri_grad_orig ,CS%ri_grad_orig, CS%diag)
 
 end subroutine calculate_CVMix_shear
 
@@ -264,22 +273,22 @@ logical function CVMix_shear_init(Time, G, GV, US, param_file, diag, CS)
 
   call get_param(param_file, mdl, "NU_ZERO", CS%Nu_Zero, &
                  "Leading coefficient in KPP shear mixing.", &
-                 units="nondim", default=5.e-3)
+                 units="m2 s-1", default=5.e-3, scale=US%m2_s_to_Z2_T)
   call get_param(param_file, mdl, "RI_ZERO", CS%Ri_Zero, &
                  "Critical Richardson for KPP shear mixing, "// &
                  "NOTE this the internal mixing and this is "// &
-                 "not for setting the boundary layer depth." &
-                 ,units="nondim", default=0.8)
+                 "not for setting the boundary layer depth.", &
+                 units="nondim", default=0.8)
   call get_param(param_file, mdl, "KPP_EXP", CS%KPP_exp, &
                  "Exponent of unitless factor of diffusivities, "// &
-                 "for KPP internal shear mixing scheme." &
-                 ,units="nondim", default=3.0)
-  call get_param(param_file, mdl, "SMOOTH_RI", CS%smooth_ri, &
-                 "If true, vertically smooth the Richardson "// &
-                 "number by applying a 1-2-1 filter once.", &
-                 default = .false.)
+                 "for KPP internal shear mixing scheme.", &
+                 units="nondim", default=3.0)
+  call get_param(param_file, mdl, "N_SMOOTH_RI", CS%n_smooth_ri, &
+                 "If > 0, vertically smooth the Richardson "// &
+                 "number by applying a 1-2-1 filter N_SMOOTH_RI times.", &
+                 default=0)
   call cvmix_init_shear(mix_scheme=CS%Mix_Scheme, &
-                        KPP_nu_zero=CS%Nu_Zero,   &
+                        KPP_nu_zero=US%Z2_T_to_m2_s*CS%Nu_Zero,   &
                         KPP_Ri_zero=CS%Ri_zero,   &
                         KPP_exp=CS%KPP_exp)
 
@@ -304,11 +313,14 @@ logical function CVMix_shear_init(Time, G, GV, US, param_file, diag, CS)
     allocate( CS%ri_grad( SZI_(G), SZJ_(G), SZK_(GV)+1 ), source=1.e8 )
   endif
 
-  CS%id_ri_grad_smooth = register_diag_field('ocean_model', 'ri_grad_shear_smooth', &
-       diag%axesTi, Time, &
-      'Smoothed gradient Richarson number used by MOM_CVMix_shear module','nondim')
-  if (CS%id_ri_grad_smooth > 0) then !Initialize w/ large Richardson value
-    allocate( CS%ri_grad_smooth( SZI_(G), SZJ_(G), SZK_(GV)+1 ), source=1.e8 )
+  if (CS%n_smooth_ri > 0) then
+    CS%id_ri_grad_orig = register_diag_field('ocean_model', 'ri_grad_shear_orig', &
+         diag%axesTi, Time, &
+        'Original gradient Richarson number, before smoothing was applied. This is '//&
+        'part of the MOM_CVMix_shear module and only available when N_SMOOTH_RI > 0','nondim')
+  endif
+  if (CS%id_ri_grad_orig > 0 .or. CS%n_smooth_ri > 0) then !Initialize w/ large Richardson value
+    allocate( CS%ri_grad_orig( SZI_(G), SZJ_(G), SZK_(GV)+1 ), source=1.e8 )
   endif
 
   CS%id_kd = register_diag_field('ocean_model', 'kd_shear_CVMix', diag%axesTi, Time, &
@@ -318,7 +330,7 @@ logical function CVMix_shear_init(Time, G, GV, US, param_file, diag, CS)
 
 end function CVMix_shear_init
 
-!> Reads the parameters "LMD94" and "PP81" and returns state.
+!> Reads the parameters "USE_LMD94" and "USE_PP81" and returns true if either is true.
 !!   This function allows other modules to know whether this parameterization will
 !! be used without needing to duplicate the log entry.
 logical function CVMix_shear_is_used(param_file)
@@ -326,13 +338,13 @@ logical function CVMix_shear_is_used(param_file)
   ! Local variables
   logical :: LMD94, PP81
   call get_param(param_file, mdl, "USE_LMD94", LMD94, &
-       default=.false., do_not_log=.true.)
-  call get_param(param_file, mdl, "Use_PP81", PP81, &
-       default=.false., do_not_log=.true.)
+                 default=.false., do_not_log=.true.)
+  call get_param(param_file, mdl, "USE_PP81", PP81, &
+                 default=.false., do_not_log=.true.)
   CVMix_shear_is_used = (LMD94 .or. PP81)
 end function CVMix_shear_is_used
 
-!> Clear pointers and dealocate memory
+!> Clear pointers and deallocate memory
 subroutine CVMix_shear_end(CS)
   type(CVMix_shear_cs), intent(inout) :: CS !< Control structure for this module that
                                             !! will be deallocated in this subroutine

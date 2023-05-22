@@ -270,8 +270,8 @@ subroutine apply_ctrl_forcing(SST_anom, SSS_anom, SSS_mean, virt_heat, virt_prec
     ! Accumulate the average anomalies for this period.
     dt_wt = wt_per1 * dt
     CS%avg_time(m_mid) = CS%avg_time(m_mid) + dt_wt
-    ! These loops temporarily change the units of the CS%avg_ variables to [degC T ~> degC s]
-    ! or [ppt T ~> ppt s].
+    ! These loops temporarily change the units of the CS%avg_ variables to [C T ~> degC s]
+    ! or [S T ~> ppt s].
     do j=js,je ; do i=is,ie
       CS%avg_SST_anom(i,j,m_mid) = CS%avg_SST_anom(i,j,m_mid) + &
                                    dt_wt * G%mask2dT(i,j) * SST_anom(i,j)
@@ -397,7 +397,7 @@ end subroutine apply_ctrl_forcing
 
 !> This function maps rval into an integer in the range from 1 to num_period.
 function periodic_int(rval, num_period) result (m)
-  real,    intent(in) :: rval       !< Input for mapping.
+  real,    intent(in) :: rval       !< Input for mapping [nondim]
   integer, intent(in) :: num_period !< Maximum output.
   integer             :: m          !< Return value.
 
@@ -412,9 +412,9 @@ end function
 !> This function shifts rval by an integer multiple of num_period so that
 !! 0 <= val_out < num_period.
 function periodic_real(rval, num_period) result(val_out)
-  real,    intent(in) :: rval       !< Input to be shifted into valid range.
+  real,    intent(in) :: rval       !< Input to be shifted into valid range [nondim]
   integer, intent(in) :: num_period !< Maximum valid value.
-  real                :: val_out    !< Return value.
+  real                :: val_out    !< Return value [nondim]
   integer :: nshft
 
   if (rval < 0) then ; nshft = floor(abs(rval) / num_period) + 1

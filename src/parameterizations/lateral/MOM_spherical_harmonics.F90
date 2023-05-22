@@ -18,9 +18,9 @@ public spherical_harmonics_forward, spherical_harmonics_inverse
 !> Control structure for spherical harmonic transforms
 type, public :: sht_CS ; private
   logical :: initialized = .False. !< True if this control structure has been initialized.
-  integer :: ndegree !< Maximum degree of the spherical harmonics [nodim].
+  integer :: ndegree !< Maximum degree of the spherical harmonics [nondim].
   integer :: lmax !< Number of associated Legendre polynomials of nonnegative m
-                  !! [lmax=(ndegree+1)*(ndegree+2)/2] [nodim].
+                  !! [lmax=(ndegree+1)*(ndegree+2)/2] [nondim].
   real, allocatable :: cos_clatT(:,:) !< Precomputed cosine of colatitude at the t-cells [nondim].
   real, allocatable :: Pmm(:,:,:) !< Precomputed associated Legendre polynomials (m=n) at the t-cells [nondim].
   real, allocatable :: cos_lonT(:,:,:), & !< Precomputed cosine factors at the t-cells [nondim].
@@ -46,18 +46,18 @@ subroutine spherical_harmonics_forward(G, CS, var, Snm_Re, Snm_Im, Nd)
   type(ocean_grid_type), intent(in)    :: G            !< The ocean's grid structure.
   type(sht_CS),          intent(inout) :: CS           !< Control structure for SHT
   real, dimension(SZI_(G),SZJ_(G)), &
-                         intent(in)    :: var          !< Input 2-D variable []
-  real,                  intent(out)   :: Snm_Re(:)    !< SHT coefficients for the real modes (cosine)
-  real,                  intent(out)   :: Snm_Im(:)    !< SHT coefficients for the imaginary modes (sine)
+                         intent(in)    :: var          !< Input 2-D variable [A]
+  real,                  intent(out)   :: Snm_Re(:)    !< SHT coefficients for the real modes (cosine) [A]
+  real,                  intent(out)   :: Snm_Im(:)    !< SHT coefficients for the imaginary modes (sine) [A]
   integer,     optional, intent(in)    :: Nd           !< Maximum degree of the spherical harmonics
                                                        !! overriding ndegree in the CS [nondim]
   ! local variables
-  integer :: Nmax ! Local copy of the maximum degree of the spherical harmonics [nodim]
-  integer :: Ltot ! Local copy of the number of spherical harmonics [nodim]
+  integer :: Nmax ! Local copy of the maximum degree of the spherical harmonics [nondim]
+  integer :: Ltot ! Local copy of the number of spherical harmonics [nondim]
   real, dimension(SZI_(G),SZJ_(G)) :: &
-    pmn,   & ! Current associated Legendre polynomials of degree n and order m [nodim]
-    pmnm1, & ! Associated Legendre polynomials of degree n-1 and order m [nodim]
-    pmnm2    ! Associated Legendre polynomials of degree n-2 and order m [nodim]
+    pmn,   & ! Current associated Legendre polynomials of degree n and order m [nondim]
+    pmnm1, & ! Associated Legendre polynomials of degree n-1 and order m [nondim]
+    pmnm2    ! Associated Legendre polynomials of degree n-2 and order m [nondim]
   integer :: i, j, k
   integer :: is, ie, js, je, isd, ied, jsd, jed
   integer :: m, n, l
@@ -143,19 +143,19 @@ end subroutine spherical_harmonics_forward
 subroutine spherical_harmonics_inverse(G, CS, Snm_Re, Snm_Im, var, Nd)
   type(ocean_grid_type), intent(in)  :: G            !< The ocean's grid structure.
   type(sht_CS),          intent(in)  :: CS           !< Control structure for SHT
-  real,                  intent(in)  :: Snm_Re(:)    !< SHT coefficients for the real modes (cosine)
-  real,                  intent(in)  :: Snm_Im(:)    !< SHT coefficients for the imaginary modes (sine)
+  real,                  intent(in)  :: Snm_Re(:)    !< SHT coefficients for the real modes (cosine) [A]
+  real,                  intent(in)  :: Snm_Im(:)    !< SHT coefficients for the imaginary modes (sine) [A]
   real, dimension(SZI_(G),SZJ_(G)), &
-                         intent(out) :: var          !< Output 2-D variable []
+                         intent(out) :: var          !< Output 2-D variable [A]
   integer,     optional, intent(in)  :: Nd           !< Maximum degree of the spherical harmonics
                                                      !! overriding ndegree in the CS [nondim]
   ! local variables
-  integer :: Nmax ! Local copy of the maximum degree of the spherical harmonics [nodim]
-  real    :: mFac ! A constant multiplier. mFac = 1 (if m==0) or 2 (if m>0) [nodim]
+  integer :: Nmax ! Local copy of the maximum degree of the spherical harmonics [nondim]
+  real    :: mFac ! A constant multiplier. mFac = 1 (if m==0) or 2 (if m>0) [nondim]
   real, dimension(SZI_(G),SZJ_(G)) :: &
-    pmn,   & ! Current associated Legendre polynomials of degree n and order m [nodim]
-    pmnm1, & ! Associated Legendre polynomials of degree n-1 and order m [nodim]
-    pmnm2    ! Associated Legendre polynomials of degree n-2 and order m [nodim]
+    pmn,   & ! Current associated Legendre polynomials of degree n and order m [nondim]
+    pmnm1, & ! Associated Legendre polynomials of degree n-1 and order m [nondim]
+    pmnm2    ! Associated Legendre polynomials of degree n-2 and order m [nondim]
   integer :: i, j, k
   integer :: is, ie, js, je, isd, ied, jsd, jed
   integer :: m, n, l
@@ -210,7 +210,7 @@ subroutine spherical_harmonics_init(G, param_file, CS)
   type(sht_CS), intent(inout)       :: CS !< Control structure for spherical harmonic transforms
 
   ! local variables
-  real, parameter :: PI = 4.0*atan(1.0) ! 3.1415926... calculated as 4*atan(1) [nodim]
+  real, parameter :: PI = 4.0*atan(1.0) ! 3.1415926... calculated as 4*atan(1) [nondim]
   real, parameter :: RADIAN = PI / 180.0 ! Degree to Radian constant [rad/degree]
   real, dimension(SZI_(G),SZJ_(G)) :: sin_clatT ! sine of colatitude at the t-cells [nondim].
   real :: Pmm_coef ! = sqrt{ 1.0/(4.0*PI) * prod[(2k+1)/2k)] } [nondim].
@@ -305,8 +305,8 @@ end subroutine spherical_harmonics_end
 
 !> Calculates the number of real elements (cosine) of spherical harmonics given maximum degree Nd.
 function calc_lmax(Nd) result(lmax)
-  integer :: lmax           !< Number of real spherical harmonic modes [nodim]
-  integer, intent(in) :: Nd !< Maximum degree [nodim]
+  integer :: lmax           !< Number of real spherical harmonic modes [nondim]
+  integer, intent(in) :: Nd !< Maximum degree [nondim]
 
   lmax = (Nd+2) * (Nd+1) / 2
 end function calc_lmax
@@ -314,9 +314,9 @@ end function calc_lmax
 !> Calculates the one-dimensional index number at (n=0, m=m), given order m and maximum degree Nd.
 !! It is sequenced with degree (n) changing first and order (m) changing second.
 function order2index(m, Nd) result(l)
-  integer :: l              !< One-dimensional index number [nodim]
-  integer, intent(in) :: m  !< Current order number [nodim]
-  integer, intent(in) :: Nd !< Maximum degree [nodim]
+  integer :: l              !< One-dimensional index number [nondim]
+  integer, intent(in) :: m  !< Current order number [nondim]
+  integer, intent(in) :: Nd !< Maximum degree [nondim]
 
   l = ((Nd+1) + (Nd+1-(m-1)))*m/2 + 1
 end function order2index

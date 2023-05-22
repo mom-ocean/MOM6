@@ -90,7 +90,7 @@ An arbitrary number of lines, one per diagnostic field:
   "average" or "mean" performs a time-average.
   "min" or "max" diagnose the minium or maxium over each time period.
 
-- `regional_section` : "none" means global output. A string of six space separated numbers, "lat_min, lat_max, lon_min, lon_max, vert_min, vert_max", limits the diagnostic to a region.
+- `regional_section` : "none" means global output. A string of six space separated numbers, "lon_min lon_max lat_min lat_max vert_min vert_max", limits the diagnostic to a region.
 
 - `packing` : Data representation in the file. 1 means "real*8", 2 means "real*4", 4 mean 16-bit integers, 8 means 1-byte.
 
