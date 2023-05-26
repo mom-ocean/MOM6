@@ -139,8 +139,11 @@ type, public :: vertvisc_CS ; private
   integer :: answer_date    !< The vintage of the order of arithmetic and expressions in the viscous
                             !! calculations.  Values below 20190101 recover the answers from the end
                             !! of 2018, while higher values use expressions that do not use an
-                            !! arbitrary and hard-coded maximum viscous coupling coefficient
-                            !! between layers.
+                            !! arbitrary and hard-coded maximum viscous coupling coefficient between
+                            !! layers.  In non-Boussinesq cases, values below 20230601 recover a
+                            !! form of the viscosity within  the mixed layer that breaks up the
+                            !! magnitude of the wind stress with BULKMIXEDLAYER, DYNAMIC_VISCOUS_ML
+                            !! or FIXED_DEPTH_LOTW_ML, but not LOTW_VISCOUS_ML_FLOOR.
   logical :: debug          !< If true, write verbose checksums for debugging purposes.
   integer :: nkml           !< The number of layers in the mixed layer.
   integer, pointer :: ntrunc !< The number of times the velocity has been
@@ -1516,6 +1519,8 @@ subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i,
 
   real, dimension(SZIB_(G)) :: &
     u_star, &   ! ustar at a velocity point [Z T-1 ~> m s-1].
+    tau_mag, &  ! The magnitude of the wind stress at a velocity point including gustiness,
+                ! divided by the Boussinesq refernce density [Z2 T-2 ~> m2 s-2]
     absf, &     ! The average of the neighboring absolute values of f [T-1 ~> s-1].
 !      h_ml, &  ! The mixed layer depth [H ~> m or kg m-2].
     z_t, &      ! The distance from the top, sometimes normalized
@@ -1888,7 +1893,12 @@ subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i,
         temp1 = (z_t(i)*h_ml(i) - z_t(i)*z_t(i))*GV%H_to_Z
         !   This viscosity is set to go to 0 at the mixed layer top and bottom (in a log-layer)
         ! and be further limited by rotation to give the natural Ekman length.
-        visc_ml = u_star(i) * CS%vonKar * (temp1*u_star(i)) / (absf(i)*temp1 + (h_ml(i)+h_neglect)*u_star(i))
+        if (GV%Boussinesq .or. (CS%answer_date < 20230601)) then
+          visc_ml = u_star(i) * CS%vonKar * (temp1*u_star(i)) / (absf(i)*temp1 + (h_ml(i)+h_neglect)*u_star(i))
+        else
+          tau_mag(i) = u_star(i)**2
+          visc_ml = CS%vonKar * (temp1*tau_mag(i)) / (absf(i)*temp1 + (h_ml(i)+h_neglect)*u_star(i))
+        endif
         a_ml = visc_ml / (0.25*(hvel(i,k)+hvel(i,k-1) + h_neglect) * GV%H_to_Z + 0.5*I_amax*visc_ml)
 
         ! Choose the largest estimate of a_cpl, but these could be changed to be additive.
@@ -2180,7 +2190,9 @@ subroutine vertvisc_init(MIS, Time, G, GV, US, param_file, diag, ADp, dirs, &
                  "The vintage of the order of arithmetic and expressions in the viscous "//&
                  "calculations.  Values below 20190101 recover the answers from the end of 2018, "//&
                  "while higher values use expressions that do not use an arbitrary hard-coded "//&
-                 "maximum viscous coupling coefficient  between layers.  "//&
+                 "maximum viscous coupling coefficient between layers.  Values below 20230601 "//&
+                 "recover a form of the viscosity within the mixed layer that breaks up the "//&
+                 "magnitude of the wind stress in some non-Boussinesq cases.  "//&
                  "If both VERT_FRICTION_2018_ANSWERS and VERT_FRICTION_ANSWER_DATE are "//&
                  "specified, the latter takes precedence.", default=default_answer_date)
 
