@@ -22,6 +22,7 @@ use MOM_file_parser,   only : get_param, log_param, log_version, param_file_type
 use MOM_grid,          only : ocean_grid_type
 use MOM_horizontal_regridding, only : horiz_interp_and_extrap_tracer
 use MOM_interpolate,   only : init_external_field, get_external_field_info, time_interp_external_init
+use MOM_interpolate,   only : external_field
 use MOM_remapping,     only : remapping_cs, remapping_core_h, initialize_remapping
 use MOM_spatial_means, only : global_i_mean
 use MOM_time_manager,  only : time_type
@@ -66,7 +67,7 @@ public rotate_ALE_sponge, update_ALE_sponge_field
 
 !> A structure for creating arrays of pointers to 3D arrays with extra gridding information
 type :: p3d
-  integer :: id !< id for FMS external time interpolator
+  !integer :: id !< id for FMS external time interpolator
   integer :: nz_data !< The number of vertical levels in the input field.
   integer :: num_tlevs !< The number of time records contained in the file
   real, dimension(:,:,:), pointer :: p => NULL() !< pointer to the data [various]
@@ -75,7 +76,7 @@ end type p3d
 
 !> A structure for creating arrays of pointers to 2D arrays with extra gridding information
 type :: p2d
-  integer :: id !< id for FMS external time interpolator
+  type(external_field) :: field !< Time interpolator field handle
   integer :: nz_data !< The number of vertical levels in the input field
   integer :: num_tlevs !< The number of time records contained in the file
   real :: scale = 1.0  !< A multiplicative factor by which to rescale input data [various]
@@ -771,7 +772,6 @@ subroutine set_up_ALE_sponge_field_varying(filename, fieldname, Time, G, GV, US,
                                                  !! if not given, use 'none'
   real,          optional, intent(in) :: scale !< A factor by which to rescale the input data, including any
                                                !! contributions due to dimensional rescaling [various ~> 1].
-                                               !! The default is 1.
 
   ! Local variables
   integer :: isd, ied, jsd, jed
@@ -798,15 +798,15 @@ subroutine set_up_ALE_sponge_field_varying(filename, fieldname, Time, G, GV, US,
   ! get a unique time interp id for this field. If sponge data is on-grid, then setup
   ! to only read on the computational domain
   if (CS%spongeDataOngrid) then
-    CS%Ref_val(CS%fldno)%id = init_external_field(filename, fieldname, MOM_domain=G%Domain)
+    CS%Ref_val(CS%fldno)%field = init_external_field(filename, fieldname, MOM_domain=G%Domain)
   else
-    CS%Ref_val(CS%fldno)%id = init_external_field(filename, fieldname)
+    CS%Ref_val(CS%fldno)%field = init_external_field(filename, fieldname)
   endif
   CS%Ref_val(CS%fldno)%name = sp_name
   CS%Ref_val(CS%fldno)%long_name = long_name
   CS%Ref_val(CS%fldno)%unit = unit
   fld_sz(1:4) = -1
-  call get_external_field_info(CS%Ref_val(CS%fldno)%id, size=fld_sz)
+  call get_external_field_info(CS%Ref_val(CS%fldno)%field, size=fld_sz)
   nz_data = fld_sz(3)
   CS%Ref_val(CS%fldno)%nz_data = nz_data !< individual sponge fields may reside on a different vertical grid
   CS%Ref_val(CS%fldno)%num_tlevs = fld_sz(4)
@@ -899,23 +899,23 @@ subroutine set_up_ALE_sponge_vel_field_varying(filename_u, fieldname_u, filename
   ! containing time-interpolated values from an external file corresponding
   ! to the current model date.
   if (CS%spongeDataOngrid) then
-    CS%Ref_val_u%id = init_external_field(filename_u, fieldname_u, domain=G%Domain%mpp_domain)
+    CS%Ref_val_u%field = init_external_field(filename_u, fieldname_u, domain=G%Domain%mpp_domain)
   else
-    CS%Ref_val_u%id = init_external_field(filename_u, fieldname_u)
+    CS%Ref_val_u%field = init_external_field(filename_u, fieldname_u)
   endif
   fld_sz(1:4) = -1
-  call get_external_field_info(CS%Ref_val_u%id, size=fld_sz)
+  call get_external_field_info(CS%Ref_val_u%field, size=fld_sz)
   CS%Ref_val_u%nz_data = fld_sz(3)
   CS%Ref_val_u%num_tlevs = fld_sz(4)
   CS%Ref_val_u%scale = US%m_s_to_L_T ; if (present(scale)) CS%Ref_val_u%scale = scale
 
   if (CS%spongeDataOngrid) then
-    CS%Ref_val_v%id = init_external_field(filename_v, fieldname_v, domain=G%Domain%mpp_domain)
+    CS%Ref_val_v%field = init_external_field(filename_v, fieldname_v, domain=G%Domain%mpp_domain)
   else
-    CS%Ref_val_v%id = init_external_field(filename_v, fieldname_v)
+    CS%Ref_val_v%field = init_external_field(filename_v, fieldname_v)
   endif
   fld_sz(1:4) = -1
-  call get_external_field_info(CS%Ref_val_v%id, size=fld_sz)
+  call get_external_field_info(CS%Ref_val_v%field, size=fld_sz)
   CS%Ref_val_v%nz_data = fld_sz(3)
   CS%Ref_val_v%num_tlevs = fld_sz(4)
   CS%Ref_val_v%scale = US%m_s_to_L_T ; if (present(scale)) CS%Ref_val_v%scale = scale
@@ -989,7 +989,7 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
   if (CS%time_varying_sponges) then
     do m=1,CS%fldno
       nz_data = CS%Ref_val(m)%nz_data
-      call horiz_interp_and_extrap_tracer(CS%Ref_val(m)%id, Time, G, sp_val, &
+      call horiz_interp_and_extrap_tracer(CS%Ref_val(m)%field, Time, G, sp_val, &
                 mask_z, z_in, z_edges_in, missing_value, &
                 scale=CS%Ref_val(m)%scale, spongeOnGrid=CS%SpongeDataOngrid, m_to_Z=US%m_to_Z, &
                 answer_date=CS%hor_regrid_answer_date)
@@ -1073,7 +1073,7 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
     if (CS%time_varying_sponges) then
       nz_data = CS%Ref_val_u%nz_data
       ! Interpolate from the external horizontal grid and in time
-      call horiz_interp_and_extrap_tracer(CS%Ref_val_u%id, Time, G, sp_val, &
+      call horiz_interp_and_extrap_tracer(CS%Ref_val_u%field, Time, G, sp_val, &
                 mask_z, z_in, z_edges_in, missing_value, &
                 scale=CS%Ref_val_u%scale, spongeOnGrid=CS%SpongeDataOngrid, m_to_Z=US%m_to_Z, &
                 answer_date=CS%hor_regrid_answer_date)
@@ -1121,7 +1121,7 @@ subroutine apply_ALE_sponge(h, dt, G, GV, US, CS, Time)
       deallocate(sp_val, mask_u, mask_z, hsrc)
       nz_data = CS%Ref_val_v%nz_data
       ! Interpolate from the external horizontal grid and in time
-      call horiz_interp_and_extrap_tracer(CS%Ref_val_v%id, Time, G, sp_val, &
+      call horiz_interp_and_extrap_tracer(CS%Ref_val_v%field, Time, G, sp_val, &
                 mask_z, z_in, z_edges_in, missing_value, &
                 scale=CS%Ref_val_v%scale, spongeOnGrid=CS%SpongeDataOngrid, m_to_Z=US%m_to_Z,&
                 answer_date=CS%hor_regrid_answer_date)
@@ -1341,7 +1341,7 @@ subroutine rotate_ALE_sponge(sponge_in, G_in, sponge, G, GV, turns, param_file)
       ! We don't want to repeat FMS init in set_up_ALE_sponge_field_varying()
       ! (time_interp_external_init, init_external_field, etc), so we manually
       ! do a portion of this function below.
-      sponge%Ref_val(n)%id = sponge_in%Ref_val(n)%id
+      sponge%Ref_val(n)%field = sponge_in%Ref_val(n)%field
       sponge%Ref_val(n)%num_tlevs = sponge_in%Ref_val(n)%num_tlevs
 
       nz_data = sponge_in%Ref_val(n)%nz_data

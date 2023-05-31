@@ -17,6 +17,7 @@ use MOM_interpolate,   only : time_interp_external
 use MOM_interp_infra,  only : run_horiz_interp, build_horiz_interp_weights
 use MOM_interp_infra,  only : horiz_interp_type, horizontal_interp_init
 use MOM_interp_infra,  only : axistype, get_external_field_info, get_axis_data
+use MOM_interp_infra,  only : external_field
 use MOM_time_manager,  only : time_type
 use MOM_io,            only : axis_info, get_axis_info, get_var_axes_info, MOM_read_data
 use MOM_io,            only : read_attribute, read_variable
@@ -598,12 +599,12 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam, recnum, G, tr
 end subroutine horiz_interp_and_extrap_tracer_record
 
 !> Extrapolate and interpolate using a FMS time interpolation handle
-subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id, Time, G, tr_z, mask_z, &
+subroutine horiz_interp_and_extrap_tracer_fms_id(field, Time, G, tr_z, mask_z, &
                                                  z_in, z_edges_in, missing_value, scale, &
                                                  homogenize, spongeOngrid, m_to_Z, &
                                                  answers_2018, tr_iter_tol, answer_date)
 
-  integer,               intent(in)    :: fms_id     !< A unique id used by the FMS time interpolator
+  type(external_field), intent(in)     :: field      !< Handle for the time interpolated field
   type(time_type),       intent(in)    :: Time       !< A FMS time type
   type(ocean_grid_type), intent(inout) :: G          !< Grid object
   real, allocatable, dimension(:,:,:), intent(out) :: tr_z
@@ -716,7 +717,7 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id, Time, G, tr_z, mask_z, 
 
   call cpu_clock_begin(id_clock_read)
 
-  call get_external_field_info(fms_id, size=fld_sz, axes=axes_data, missing=missing_val_in)
+  call get_external_field_info(field, size=fld_sz, axes=axes_data, missing=missing_val_in)
   missing_value = scale*missing_val_in
 
   verbosity = MOM_get_verbosity()
@@ -790,7 +791,7 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id, Time, G, tr_z, mask_z, 
 
   if (.not.is_ongrid) then
     if (is_root_pe()) &
-      call time_interp_external(fms_id, Time, data_in, verbose=(verbosity>5), turns=turns)
+      call time_interp_external(field, Time, data_in, verbose=(verbosity>5), turns=turns)
 
     ! Loop through each data level and interpolate to model grid.
     ! After interpolating, fill in points which will be needed to define the layers.
@@ -897,7 +898,7 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id, Time, G, tr_z, mask_z, 
 
     enddo ! kd
   else
-    call time_interp_external(fms_id, Time, data_in, verbose=(verbosity>5), turns=turns)
+    call time_interp_external(field, Time, data_in, verbose=(verbosity>5), turns=turns)
     do k=1,kd
       do j=js,je
         do i=is,ie
