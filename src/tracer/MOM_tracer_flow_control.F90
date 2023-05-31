@@ -317,34 +317,31 @@ subroutine tracer_flow_control_init(restart, day, G, GV, US, h, param_file, diag
                                 sponge_CSp)
   if (CS%use_DOME_tracer) &
     call initialize_DOME_tracer(restart, day, G, GV, US, h, diag, OBC, CS%DOME_tracer_CSp, &
-                                sponge_CSp, param_file)
+                                sponge_CSp, tv)
   if (CS%use_ISOMIP_tracer) &
     call initialize_ISOMIP_tracer(restart, day, G, GV, h, diag, OBC, CS%ISOMIP_tracer_CSp, &
                                 ALE_sponge_CSp)
   if (CS%use_RGC_tracer) &
-    call initialize_RGC_tracer(restart, day, G, GV, h, diag, OBC, &
-                  CS%RGC_tracer_CSp, sponge_CSp, ALE_sponge_CSp)
+    call initialize_RGC_tracer(restart, day, G, GV, h, diag, OBC, CS%RGC_tracer_CSp, &
+                                sponge_CSp, ALE_sponge_CSp)
   if (CS%use_ideal_age) &
     call initialize_ideal_age_tracer(restart, day, G, GV, US, h, diag, OBC, CS%ideal_age_tracer_CSp, &
-                                     sponge_CSp)
+                                sponge_CSp)
   if (CS%use_regional_dyes) &
-    call initialize_dye_tracer(restart, day, G, GV, h, diag, OBC, CS%dye_tracer_CSp, &
-                                     sponge_CSp)
+    call initialize_dye_tracer(restart, day, G, GV, h, diag, OBC, CS%dye_tracer_CSp, sponge_CSp, tv)
   if (CS%use_oil) &
-    call initialize_oil_tracer(restart, day, G, GV, US, h, diag, OBC, CS%oil_tracer_CSp, &
-                                     sponge_CSp)
+    call initialize_oil_tracer(restart, day, G, GV, US, h, diag, OBC, CS%oil_tracer_CSp, sponge_CSp)
   if (CS%use_advection_test_tracer) &
     call initialize_advection_test_tracer(restart, day, G, GV, h, diag, OBC, CS%advection_test_tracer_CSp, &
                                 sponge_CSp)
   if (CS%use_OCMIP2_CFC) &
-    call initialize_OCMIP2_CFC(restart, day, G, GV, US, h, diag, OBC, CS%OCMIP2_CFC_CSp, &
-                                sponge_CSp)
+    call initialize_OCMIP2_CFC(restart, day, G, GV, US, h, diag, OBC, CS%OCMIP2_CFC_CSp, sponge_CSp)
   if (CS%use_CFC_cap) &
     call initialize_CFC_cap(restart, day, G, GV, US, h, diag, OBC, CS%CFC_cap_CSp)
 
   if (CS%use_MOM_generic_tracer) &
     call initialize_MOM_generic_tracer(restart, day, G, GV, US, h, param_file, diag, OBC, &
-        CS%MOM_generic_tracer_CSp, sponge_CSp, ALE_sponge_CSp)
+                                CS%MOM_generic_tracer_CSp, sponge_CSp, ALE_sponge_CSp)
   if (CS%use_pseudo_salt_tracer) &
     call initialize_pseudo_salt_tracer(restart, day, G, GV, US, h, diag, OBC, CS%pseudo_salt_tracer_CSp, &
                                 sponge_CSp, tv)
@@ -488,13 +485,13 @@ subroutine call_tracer_column_fns(h_old, h_new, ea, eb, fluxes, Hml, dt, G, GV, 
                                         minimum_forcing_depth=minimum_forcing_depth)
     if (CS%use_ideal_age) &
       call ideal_age_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
-                                           G, GV, US, CS%ideal_age_tracer_CSp, &
+                                           G, GV, US, tv, CS%ideal_age_tracer_CSp, &
                                            evap_CFL_limit=evap_CFL_limit, &
                                            minimum_forcing_depth=minimum_forcing_depth, &
                                            Hbl=Hml)
     if (CS%use_regional_dyes) &
       call dye_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
-                                     G, GV, US, CS%dye_tracer_CSp, &
+                                     G, GV, US, tv, CS%dye_tracer_CSp, &
                                      evap_CFL_limit=evap_CFL_limit, &
                                      minimum_forcing_depth=minimum_forcing_depth)
     if (CS%use_oil) &
@@ -567,10 +564,10 @@ subroutine call_tracer_column_fns(h_old, h_new, ea, eb, fluxes, Hml, dt, G, GV, 
                                       G, GV, US, CS%RGC_tracer_CSp)
     if (CS%use_ideal_age) &
       call ideal_age_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
-                                           G, GV, US, CS%ideal_age_tracer_CSp, Hbl=Hml)
+                                           G, GV, US, tv, CS%ideal_age_tracer_CSp, Hbl=Hml)
     if (CS%use_regional_dyes) &
       call dye_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
-                                           G, GV, US, CS%dye_tracer_CSp)
+                                           G, GV, US, tv, CS%dye_tracer_CSp)
     if (CS%use_oil) &
       call oil_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
                                      G, GV, US, CS%oil_tracer_CSp, tv)
