@@ -190,7 +190,7 @@ subroutine initialize_CFC_cap(restart, day, G, GV, US, h, diag, OBC, CS)
   type(ocean_OBC_type),           pointer    :: OBC        !< This open boundary condition type
                                                            !! specifies whether, where, and what
                                                            !! open boundary conditions are used.
-  type(CFC_cap_CS),              pointer    :: CS          !< The control structure returned by a
+  type(CFC_cap_CS),               pointer    :: CS         !< The control structure returned by a
                                                            !! previous call to register_CFC_cap.
 
   ! local variables
@@ -215,7 +215,7 @@ subroutine initialize_CFC_cap(restart, day, G, GV, US, h, diag, OBC, CS)
     ! CFC12 cmor conventions: http://clipc-services.ceda.ac.uk/dreq/u/3ab8e10027d7014f18f9391890369235.html
     write(m2char, "(I1)") m
     CS%CFC_data(m)%id_cmor = register_diag_field('ocean_model', 'cfc1'//m2char, diag%axesTL, day,   &
-      'Mole Concentration of CFC1'//m2char//' in Sea Water', 'mol m-3')
+      'Mole Concentration of CFC1'//m2char//' in Sea Water', 'mol m-3', conversion=GV%Rho0*US%R_to_kg_m3)
   enddo
 
 
@@ -308,7 +308,6 @@ subroutine CFC_cap_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, US, C
 
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: h_work ! Used so that h can be modified [H ~> m or kg m-2]
-  real :: flux_scale
   integer :: i, j, k, is, ie, js, je, nz
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
@@ -318,14 +317,12 @@ subroutine CFC_cap_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, US, C
   ! Compute KPP nonlocal term if necessary
   if (present(KPP_CSp)) then
     if (associated(KPP_CSp) .and. present(nonLocalTrans)) then
-      flux_scale = GV%Z_to_H / GV%rho0
-
       call KPP_NonLocalTransport(KPP_CSp, G, GV, h_old, nonLocalTrans, fluxes%cfc11_flux(:,:), dt, CS%diag, &
                                 CS%CFC_data(1)%tr_ptr, CS%CFC_data(1)%conc(:,:,:), &
-                                flux_scale=flux_scale)
+                                flux_scale=GV%RZ_to_H)
       call KPP_NonLocalTransport(KPP_CSp, G, GV, h_old, nonLocalTrans, fluxes%cfc12_flux(:,:), dt, CS%diag, &
                                 CS%CFC_data(2)%tr_ptr, CS%CFC_data(2)%conc(:,:,:), &
-                                flux_scale=flux_scale)
+                                flux_scale=GV%RZ_to_H)
     endif
   endif
 
@@ -351,12 +348,8 @@ subroutine CFC_cap_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, US, C
   endif
 
   ! If needed, write out any desired diagnostics from tracer sources & sinks here.
-  if (CS%CFC_data(1)%id_cmor > 0) call post_data(CS%CFC_data(1)%id_cmor, &
-                                                 (GV%Rho0*US%R_to_kg_m3)*CS%CFC_data(1)%conc, &
-                                                 CS%diag)
-  if (CS%CFC_data(2)%id_cmor > 0) call post_data(CS%CFC_data(2)%id_cmor, &
-                                                 (GV%Rho0*US%R_to_kg_m3)*CS%CFC_data(2)%conc, &
-                                                 CS%diag)
+  if (CS%CFC_data(1)%id_cmor > 0) call post_data(CS%CFC_data(1)%id_cmor, CS%CFC_data(1)%conc, CS%diag)
+  if (CS%CFC_data(2)%id_cmor > 0) call post_data(CS%CFC_data(2)%id_cmor, CS%CFC_data(2)%conc, CS%diag)
 
 end subroutine CFC_cap_column_physics
 
