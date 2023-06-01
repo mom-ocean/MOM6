@@ -438,7 +438,7 @@ type, public :: MOM_control_struct ; private
 end type MOM_control_struct
 
 public initialize_MOM, finish_MOM_initialization, MOM_end
-public step_MOM, step_offline
+public step_MOM, step_offline, save_MOM6_internal_state
 public extract_surface_state, get_ocean_stocks
 public get_MOM_state_elements, MOM_state_is_synchronized
 public allocate_surface_state, deallocate_surface_state
@@ -3904,13 +3904,33 @@ subroutine get_ocean_stocks(CS, mass, heat, salt, on_PE_only)
 
 end subroutine get_ocean_stocks
 
+
+!> Trigger a writing of restarts for the MOM6 internal state
+!!
+!! Currently this applies to the state that does not take the form
+!! of simple arrays for which the generic save_restart() function
+!! can be used.
+!!
+!! Todo:
+!! [ ] update particles to use Time and directories
+!! [ ] move the call to generic save_restart() in here.
+subroutine save_MOM6_internal_state(CS, dirs, time, stamp_time)
+  type(MOM_control_struct), intent(inout) :: CS         !< MOM control structure
+  character(len=*),         intent(in)    :: dirs  !< The directory where the restart
+                                                        !! files are to be written
+  type(time_type),          intent(in)    :: time       !< The current model time
+  logical,       optional,  intent(in)    :: stamp_time !< If present and true, add time-stamp
+
+    ! Could call save_restart(CS%restart_CSp) here
+
+    if (CS%use_particles) call particles_save_restart(CS%particles)
+
+end subroutine save_MOM6_internal_state
+
+
 !> End of ocean model, including memory deallocation
 subroutine MOM_end(CS)
   type(MOM_control_struct), intent(inout) :: CS   !< MOM control structure
-
-  if (CS%use_particles) then
-    call particles_save_restart(CS%particles)
-  endif
 
   call MOM_sum_output_end(CS%sum_output_CSp)
 
