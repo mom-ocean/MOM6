@@ -191,7 +191,7 @@ subroutine PressureForce_Mont_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm, pb
     ! of self-attraction and loading.
     !$OMP parallel do default(shared)
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-      SSH(i,j) = -G%bathyT(i,j) - G%Z_ref
+      SSH(i,j) = min(-G%bathyT(i,j) - G%Z_ref, 0.0)
     enddo ; enddo
     if (use_EOS) then
       !$OMP parallel do default(shared)
@@ -468,7 +468,7 @@ subroutine PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm, pbce,
     ! barotropic tides.
     !$OMP parallel do default(shared)
     do j=Jsq,Jeq+1
-      do i=Isq,Ieq+1 ; SSH(i,j) = -G%bathyT(i,j) - G%Z_ref ; enddo
+      do i=Isq,Ieq+1 ; SSH(i,j) = min(-G%bathyT(i,j) - G%Z_ref, 0.0) ; enddo
       do k=1,nz ; do i=Isq,Ieq+1
         SSH(i,j) = SSH(i,j) + h(i,j,k)*GV%H_to_Z
       enddo ; enddo

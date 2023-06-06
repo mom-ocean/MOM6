@@ -315,7 +315,8 @@ subroutine PressureForce_FV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_
     ! Find and add the self-attraction and loading geopotential anomaly.
     !$OMP parallel do default(shared)
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-      SSH(i,j) = (za(i,j) - alpha_ref*p(i,j,1)) * I_gEarth - G%Z_ref
+      SSH(i,j) = (za(i,j) - alpha_ref*p(i,j,1)) * I_gEarth - G%Z_ref &
+                 - max(-G%bathyT(i,j)-G%Z_ref, 0.0)
     enddo ; enddo
     call calc_SAL(SSH, e_sal, G, CS%SAL_CSp)
   else
@@ -567,7 +568,7 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm
     !$OMP parallel do default(shared)
     do j=Jsq,Jeq+1
       do i=Isq,Ieq+1
-        SSH(i,j) = -G%bathyT(i,j) - G%Z_ref
+        SSH(i,j) = min(-G%bathyT(i,j) - G%Z_ref, 0.0)
       enddo
       do k=1,nz ; do i=Isq,Ieq+1
         SSH(i,j) = SSH(i,j) + h(i,j,k)*GV%H_to_Z
