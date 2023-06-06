@@ -1,15 +1,16 @@
 module MOM_self_attr_load
 
-use MOM_cpu_clock,     only : cpu_clock_id, cpu_clock_begin, cpu_clock_end, CLOCK_MODULE
-use MOM_domains,       only : pass_var
-use MOM_error_handler, only : MOM_error, FATAL, WARNING
-use MOM_file_parser,   only : get_param, log_version, param_file_type
-use MOM_grid,          only : ocean_grid_type
-use MOM_unit_scaling,  only : unit_scale_type
-use MOM_spherical_harmonics, only : spherical_harmonics_init, spherical_harmonics_end, order2index, calc_lmax
+use MOM_cpu_clock,       only : cpu_clock_id, cpu_clock_begin, cpu_clock_end, CLOCK_MODULE
+use MOM_domains,         only : pass_var
+use MOM_error_handler,   only : MOM_error, FATAL, WARNING
+use MOM_file_parser,     only : get_param, log_param, log_version, param_file_type
+use MOM_obsolete_params, only : obsolete_logical, obsolete_int
+use MOM_grid,            only : ocean_grid_type
+use MOM_unit_scaling,    only : unit_scale_type
+use MOM_spherical_harmonics, only : spherical_harmonics_init, spherical_harmonics_end
 use MOM_spherical_harmonics, only : spherical_harmonics_forward, spherical_harmonics_inverse
-use MOM_spherical_harmonics, only : sht_CS
-use MOM_load_love_numbers, only : Love_Data
+use MOM_spherical_harmonics, only : sht_CS, order2index, calc_lmax
+use MOM_load_love_numbers,   only : Love_Data
 
 implicit none ; private
 
@@ -19,19 +20,18 @@ public calc_SAL, scalar_SAL_sensitivity, SAL_init, SAL_end
 
 !> The control structure for the MOM_self_attr_load module
 type, public :: SAL_CS ; private
-  logical :: use_sal_scalar !< If true, use the scalar approximation when
-                      !! calculating self-attraction and loading.
-  real    :: sal_scalar !< The constant of proportionality between sea surface
-                      !! height (really it should be bottom pressure) anomalies
-                      !! and bottom geopotential anomalies [nondim].
-  logical :: use_prev_tides !< If true, use the SAL from the previous iteration of the tides
-                            !! to facilitate convergence.
-  logical :: use_sal_sht !< If true, use online spherical harmonics to calculate SAL
-  type(sht_CS) :: sht !< Spherical harmonic transforms (SHT) for SAL
-  integer :: sal_sht_Nd !< Maximum degree for SHT [nodim]
+  logical :: use_sal_scalar     !< If true, use the scalar approximation to calculate SAL.
+  logical :: use_sal_sht        !< If true, use online spherical harmonics to calculate SAL
+  logical :: use_tidal_sal_prev !< If true, read the tidal SAL from the previous iteration of
+                                !! the tides to facilitate convergence.
+  real    :: sal_scalar_value   !< The constant of proportionality between sea surface height
+                                !! (really it should be bottom pressure) anomalies and bottom
+                                !! geopotential anomalies [nondim].
+  type(sht_CS) :: sht           !< Spherical harmonic transforms (SHT) control structure
+  integer :: sal_sht_Nd         !< Maximum degree for SHT [nodim]
   real, allocatable :: Love_Scaling(:) !< Love number for each SHT mode [nodim]
-  real, allocatable :: Snm_Re(:), & !< Real and imaginary SHT coefficient for SHT SAL
-                       Snm_Im(:)    !< [Z ~> m]
+  real, allocatable :: Snm_Re(:), &    !< Real SHT coefficient for SHT SAL [Z ~> m]
+                       Snm_Im(:)       !< Imaginary SHT coefficient for SHT SAL [Z ~> m]
 end type SAL_CS
 
 integer :: id_clock_SAL   !< CPU clock for self-attraction and loading
@@ -60,13 +60,15 @@ subroutine calc_SAL(eta, eta_sal, G, CS)
 
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
 
-  ! use the scalar approximation, iterative tidal SAL or no SAL
-  call scalar_SAL_sensitivity(CS, eta_prop)
-  do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-    eta_sal(i,j) = eta_prop*eta(i,j)
-  enddo ; enddo
+  ! use the scalar approximation and/or iterative tidal SAL
+  if (CS%use_sal_scalar .or. CS%use_tidal_sal_prev) then
+    call scalar_SAL_sensitivity(CS, eta_prop)
+    do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+      eta_sal(i,j) = eta_prop*eta(i,j)
+    enddo ; enddo
 
-  if (CS%use_sal_sht) then ! use the spherical harmonics method
+  ! use the spherical harmonics method
+  elseif (CS%use_sal_sht) then
     call spherical_harmonics_forward(G, CS%sht, eta, CS%Snm_Re, CS%Snm_Im, CS%sal_sht_Nd)
 
     ! Multiply scaling factors to each mode
@@ -79,8 +81,13 @@ subroutine calc_SAL(eta, eta_sal, G, CS)
     enddo
 
     call spherical_harmonics_inverse(G, CS%sht, CS%Snm_Re, CS%Snm_Im, eta_sal, CS%sal_sht_Nd)
-
+    ! Halo was not calculated in spherical harmonic transforms.
     call pass_var(eta_sal, G%domain)
+
+  else
+    do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+      eta_sal(i,j) = 0.0
+    enddo ; enddo
   endif
 
   call cpu_clock_end(id_clock_SAL)
@@ -93,10 +100,10 @@ subroutine scalar_SAL_sensitivity(CS, deta_sal_deta)
   real,         intent(out) :: deta_sal_deta !< The partial derivative of eta_sal with
                                              !! the local value of eta [nondim].
 
-  if (CS%USE_SAL_SCALAR .and. CS%USE_PREV_TIDES) then
-    deta_sal_deta = 2.0*CS%SAL_SCALAR
-  elseif (CS%USE_SAL_SCALAR .or. CS%USE_PREV_TIDES) then
-    deta_sal_deta = CS%SAL_SCALAR
+  if (CS%use_sal_scalar .and. CS%use_tidal_sal_prev) then
+    deta_sal_deta = 2.0*CS%sal_scalar_value
+  elseif (CS%use_sal_scalar .or. CS%use_tidal_sal_prev) then
+    deta_sal_deta = CS%sal_scalar_value
   else
     deta_sal_deta = 0.0
   endif
@@ -140,13 +147,14 @@ subroutine calc_love_scaling(nlm, rhoW, rhoE, Love_Scaling)
   enddo ; enddo
 end subroutine calc_love_scaling
 
-!> This subroutine initializeds the self-attraction and loading control structure.
+!> This subroutine initializes the self-attraction and loading control structure.
 subroutine SAL_init(G, US, param_file, CS)
   type(ocean_grid_type),  intent(inout) :: G    !< The ocean's grid structure.
   type(unit_scale_type),  intent(in)    :: US   !< A dimensional unit scaling type
   type(param_file_type),  intent(in)    :: param_file !< A structure to parse for run-time parameters.
   type(SAL_CS), intent(inout) :: CS   !< Self-attraction and loading control structure
 
+  ! Local variables
 # include "version_variable.h"
   character(len=40)  :: mdl = "MOM_self_attr_load" ! This module's name.
   integer :: lmax ! Total modes of the real spherical harmonics [nondim]
@@ -154,58 +162,87 @@ subroutine SAL_init(G, US, param_file, CS)
   real :: rhoE    ! The average density of Earth [R ~> kg m-3].
 
   logical :: calculate_sal
-  logical :: tides, tidal_sal_from_file
+  logical :: tides, use_tidal_sal_file
+  real :: tide_sal_scalar_value
 
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mdl, version, "")
 
   call get_param(param_file, '', "TIDES", tides, default=.false., do_not_log=.True.)
-
-  CS%use_prev_tides = .false.
-  tidal_sal_from_file = .false.
   if (tides) then
-    call get_param(param_file, '', "USE_PREVIOUS_TIDES", CS%use_prev_tides,&
+    call get_param(param_file, '', "USE_PREVIOUS_TIDES", CS%use_tidal_sal_prev, &
                    default=.false., do_not_log=.True.)
-    call get_param(param_file, '', "TIDAL_SAL_FROM_FILE", tidal_sal_from_file,&
+    call get_param(param_file, '', "TIDAL_SAL_FROM_FILE", use_tidal_sal_file, &
                    default=.false., do_not_log=.True.)
   endif
 
-  call get_param(param_file, mdl, "TIDE_USE_SAL_SCALAR", CS%use_sal_scalar, &
-                "If true and TIDES is true, use the scalar approximation "//&
-                "when calculating self-attraction and loading.", &
-                default=.not.tidal_sal_from_file)
-  if (CS%use_sal_scalar .or. CS%use_prev_tides) &
-    call get_param(param_file, mdl, "TIDE_SAL_SCALAR_VALUE", CS%sal_scalar, &
-                  "The constant of proportionality between sea surface "//&
-                  "height (really it should be bottom pressure) anomalies "//&
-                  "and bottom geopotential anomalies. This is only used if "//&
-                  "TIDES and TIDE_USE_SAL_SCALAR are true.", units="m m-1", &
-                  fail_if_missing=.true.)
+  ! TIDE_USE_SAL_SCALAR is going to be replaced by USE_SAL_SCALAR. During the transition, the default of
+  ! USE_SAL_SCALAR is set to be consistent with TIDE_USE_SAL_SCALAR before the implementation of spherical
+  ! harmonics SAL.
+  ! A FATAL error is only issued when the user specified TIDE_USE_SAL_SCALAR contradicts USE_SAL_SCALAR.
+  call get_param(param_file, mdl, "USE_SAL_SCALAR", CS%use_sal_scalar, &
+                 "If true, use the scalar approximation to calculate self-attraction and"//&
+                 " loading.  This parameter is to replace TIDE_USE_SAL_SCALAR, as SAL applies"//&
+                 " to all motions.  When both USE_SAL_SCALAR and TIDE_USE_SAL_SCALAR are"//&
+                 " specified, USE_SAL_SCALAR overrides TIDE_USE_SAL_SCALAR.", &
+                 default=tides .and. (.not.use_tidal_sal_file))
+  if (tides) then
+    call obsolete_logical(param_file, "TIDE_USE_SAL_SCALAR", warning_val=CS%use_sal_scalar, &
+                          hint="Use USE_SAL_SCALAR instead.")
+  endif
 
-  call get_param(param_file, mdl, "TIDAL_SAL_SHT", CS%use_sal_sht, &
-                 "If true, use the online spherical harmonics method to calculate "//&
-                 "self-attraction and loading term in tides.", default=.false.)
+  call get_param(param_file, mdl, "USE_SAL_HARMONICS", CS%use_sal_sht, &
+                 "If true, use the online spherical harmonics method to calculate"//&
+                 " self-attraction and loading.", default=.false.)
+  ! This is a more of a hard obsolete but should only impact a handful of users.
+  call obsolete_logical(param_file, "TIDAL_SAL_SHT", warning_val=CS%use_sal_sht, &
+                        hint="Use USE_SAL_HARMONICS instead.")
 
   call get_param(param_file, mdl, "CALCULATE_SAL", calculate_sal, &
                  "If true, calculate self-attraction and loading.", default=tides)
+  if ((.not. calculate_sal) .and. (CS%use_tidal_sal_prev .or. CS%use_sal_scalar .or. CS%use_sal_sht)) &
+    call MOM_error(FATAL, trim(mdl)//": CALCULATE_SAL is False but one of the options is True.")
 
-  ! ! Default USE_SAL is TRUE for now to keep backward compatibility with old MOM_INPUT files. It should be changed to
-  ! ! FALSE in the future (mostly to avoid the SSH calculations in MOM_PressureForce). In that case, the following check
-  ! ! informs prior tidal experiments that use scalar or iterative SAL to include USE_SAL flag, as the USE_SAL flag
-  ! ! overrules the option flags.
-  ! if ((.not. calculate_sal) .and. (CS%use_prev_tides .or. CS%use_sal_scalar .or. CS%use_sal_sht)) &
-  !   call MOM_error(FATAL, trim(mdl)//": USE_SAL is False but one of the options is True. Nothing will happen.")
+  ! TIDE_SAL_SCALAR_VALUE is going to be replaced by SAL_SCALAR_VALUE. The following segment of codes
+  ! should eventually be replaced by the commented code below.
+  ! if (CS%use_sal_scalar .or. CS%use_tidal_sal_prev) &
+  !   call get_param(param_file, mdl, "SAL_SCALAR_VALUE", CS%sal_scalar_value, &
+  !                  "The constant of proportionality between sea surface "//&
+  !                  "height (really it should be bottom pressure) anomalies "//&
+  !                  "and bottom geopotential anomalies. This is only used if "//&
+  !                  "USE_SAL_SCALAR is true or USE_PREVIOUS_TIDES is true.", &
+  !                  fail_if_missing=.true., units="m m-1")
+  ! endif
+  if (CS%use_sal_scalar .or. CS%use_tidal_sal_prev) then
+    CS%sal_scalar_value = -9e35
+    call get_param(param_file, mdl, "SAL_SCALAR_VALUE", CS%sal_scalar_value, "", do_not_log=.True.)
+    if (CS%sal_scalar_value == -9e35) then
+      call get_param(param_file, '', "TIDE_SAL_SCALAR_VALUE", CS%sal_scalar_value, do_not_log=.True.)
+      if (CS%sal_scalar_value /= -9e35) &
+        call MOM_error(WARNING, "TIDE_SAL_SCALAR_VALUE is a deprecated parameter. "//&
+                      "Use SAL_SCALAR_VALUE instead.")
+    endif
+    if (CS%sal_scalar_value == -9e35) &
+      call MOM_error(FATAL, trim(mdl)//": USE_SAL_SCALAR is true but SAL_SCALAR_VALUE is not set.")
+    call log_param(param_file, mdl, "SAL_SCALAR_VALUE", CS%sal_scalar_value, &
+                   "The constant of proportionality between sea surface "//&
+                   "height (really it should be bottom pressure) anomalies "//&
+                   "and bottom geopotential anomalies. This is only used if "//&
+                   "USE_SAL_SCALAR is true or USE_PREVIOUS_TIDES is true.", units="m m-1")
+  endif
 
   if (CS%use_sal_sht) then
-    call get_param(param_file, mdl, "TIDAL_SAL_SHT_DEGREE", CS%sal_sht_Nd, &
+    call get_param(param_file, mdl, "SAL_HARMONICS_DEGREE", CS%sal_sht_Nd, &
                    "The maximum degree of the spherical harmonics transformation used for "// &
                    "calculating the self-attraction and loading term.", &
-                   default=0, do_not_log=.not. CS%use_sal_sht)
-    call get_param(param_file, mdl, "RHO_0", rhoW, default=1035.0, scale=US%kg_m3_to_R, do_not_log=.True.)
+                   default=0)
+    call obsolete_int(param_file, "TIDAL_SAL_SHT_DEGREE", warning_val=CS%sal_sht_Nd, &
+                      hint="Use SAL_HARMONICS_DEGREE instead.")
+    call get_param(param_file, '', "RHO_0", rhoW, default=1035.0, scale=US%kg_m3_to_R, do_not_log=.True.)
     call get_param(param_file, mdl, "RHO_E", rhoE, &
                    "The mean solid earth density.  This is used for calculating the "// &
                    "self-attraction and loading term.", units="kg m-3", &
-                   default=5517.0, scale=US%kg_m3_to_R, do_not_log=.not. CS%use_sal_sht)
+                   default=5517.0, scale=US%kg_m3_to_R)
     lmax = calc_lmax(CS%sal_sht_Nd)
     allocate(CS%Snm_Re(lmax)); CS%Snm_Re(:) = 0.0
     allocate(CS%Snm_Im(lmax)); CS%Snm_Im(:) = 0.0
@@ -235,10 +272,10 @@ end subroutine SAL_end
 !!
 !! This module contains methods to calculate self-attraction and loading (SAL) as a function of sea surface height (SSH)
 !! (rather, it should be bottom pressure anomaly). SAL is primarily used for fast evolving processes like tides or
-!! storm surges, but the effect applys to all motions.
+!! storm surges, but the effect applies to all motions.
 !!
-!!     If TIDE_USE_SAL_SCALAR is true, a scalar approximiation is applied (Accad and Pekeris 1978) and the SAL is simply
-!! a fraction (set by TIDE_SAL_SCALAR_VALUE, usualy around 10% for global tides) of local SSH . For the tides, the
+!!     If TIDE_USE_SAL_SCALAR is true, a scalar approximation is applied (Accad and Pekeris 1978) and the SAL is simply
+!! a fraction (set by TIDE_SAL_SCALAR_VALUE, usually around 10% for global tides) of local SSH . For the tides, the
 !! scalar approximation can also be used to iterate the SAL to convergence [see USE_PREVIOUS_TIDES in MOM_tidal_forcing,
 !! Arbic et al. (2004)].
 !!

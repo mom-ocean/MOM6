@@ -33,10 +33,10 @@ end type astro_longitudes
 
 !> The control structure for the MOM_tidal_forcing module
 type, public :: tidal_forcing_CS ; private
-  logical :: tidal_sal_from_file !< If true, Read the tidal self-attraction
+  logical :: use_tidal_sal_file !< If true, Read the tidal self-attraction
                       !! and loading from input files, specified
                       !! by TIDAL_INPUT_FILE.
-  logical :: use_prev_tides !< If true, use the SAL from the previous
+  logical :: use_tidal_sal_prev !< If true, use the SAL from the previous
                       !! iteration of the tides to facilitate convergence.
   logical :: use_eq_phase !< If true, tidal forcing is phase-shifted to match
                       !! equilibrium tide. Set to false if providing tidal phases
@@ -344,22 +344,18 @@ subroutine tidal_forcing_init(Time, G, US, param_file, CS)
     return
   endif
 
-  call get_param(param_file, mdl, "TIDAL_SAL_FROM_FILE", CS%tidal_sal_from_file, &
+  call get_param(param_file, mdl, "TIDAL_SAL_FROM_FILE", CS%use_tidal_sal_file, &
                  "If true, read the tidal self-attraction and loading "//&
                  "from input files, specified by TIDAL_INPUT_FILE. "//&
                  "This is only used if TIDES is true.", default=.false.)
-  call get_param(param_file, mdl, "USE_PREVIOUS_TIDES", CS%use_prev_tides, &
+  call get_param(param_file, mdl, "USE_PREVIOUS_TIDES", CS%use_tidal_sal_prev, &
                  "If true, use the SAL from the previous iteration of the "//&
                  "tides to facilitate convergent iteration. "//&
                  "This is only used if TIDES is true.", default=.false.)
   ! If it is being used, sal_scalar MUST be specified in param_file.
-  if (CS%use_prev_tides) &
-    call get_param(param_file, mdl, "TIDE_SAL_SCALAR_VALUE", CS%sal_scalar, &
-                 "The constant of proportionality between sea surface "//&
-                 "height (really it should be bottom pressure) anomalies "//&
-                 "and bottom geopotential anomalies. This is only used if "//&
-                 "TIDES and TIDE_USE_SAL_SCALAR are true.", units="m m-1", &
-                 fail_if_missing=.true.)
+  if (CS%use_tidal_sal_prev) &
+    call get_param(param_file, mdl, "SAL_SCALAR_VALUE", CS%sal_scalar, fail_if_missing=.true., &
+                   do_not_log=.True.)
 
   if (nc > MAX_CONSTITUENTS) then
     write(mesg,'("Increase MAX_CONSTITUENTS in MOM_tidal_forcing.F90 to at least",I3, &
@@ -369,7 +365,7 @@ subroutine tidal_forcing_init(Time, G, US, param_file, CS)
 
   do c=1,4*MAX_CONSTITUENTS ; tidal_input_files(c) = "" ; enddo
 
-  if (CS%tidal_sal_from_file .or. CS%use_prev_tides) then
+  if (CS%use_tidal_sal_file .or. CS%use_tidal_sal_prev) then
     call get_param(param_file, mdl, "TIDAL_INPUT_FILE", tidal_input_files, &
                    "A list of input files for tidal information.",         &
                    default="", fail_if_missing=.true.)
@@ -484,7 +480,7 @@ subroutine tidal_forcing_init(Time, G, US, param_file, CS)
                    " are true.", units="radians", default=phase0_def(c))
   enddo
 
-  if (CS%tidal_sal_from_file) then
+  if (CS%use_tidal_sal_file) then
     allocate(CS%cosphasesal(isd:ied,jsd:jed,nc))
     allocate(CS%sinphasesal(isd:ied,jsd:jed,nc))
     allocate(CS%ampsal(isd:ied,jsd:jed,nc))
@@ -502,7 +498,7 @@ subroutine tidal_forcing_init(Time, G, US, param_file, CS)
     enddo
   endif
 
-  if (CS%USE_PREV_TIDES) then
+  if (CS%use_tidal_sal_prev) then
     allocate(CS%cosphase_prev(isd:ied,jsd:jed,nc))
     allocate(CS%sinphase_prev(isd:ied,jsd:jed,nc))
     allocate(CS%amp_prev(isd:ied,jsd:jed,nc))
@@ -601,7 +597,7 @@ subroutine calc_tidal_forcing(Time, e_tide_eq, e_tide_sal, G, US, CS)
     enddo ; enddo
   enddo
 
-  if (CS%tidal_sal_from_file) then ; do c=1,CS%nc
+  if (CS%use_tidal_sal_file) then ; do c=1,CS%nc
     cosomegat = cos(CS%freq(c)*now)
     sinomegat = sin(CS%freq(c)*now)
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
@@ -610,7 +606,7 @@ subroutine calc_tidal_forcing(Time, e_tide_eq, e_tide_sal, G, US, CS)
     enddo ; enddo
   enddo ; endif
 
-  if (CS%USE_PREV_TIDES) then ; do c=1,CS%nc
+  if (CS%use_tidal_sal_prev) then ; do c=1,CS%nc
     cosomegat = cos(CS%freq(c)*now)
     sinomegat = sin(CS%freq(c)*now)
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
