@@ -8,10 +8,10 @@ use MOM_io,              only : axis_info
 use MOM_io,              only : get_var_axes_info
 use MOM_time_manager,    only : time_type
 use horiz_interp_mod,    only : horiz_interp_new, horiz_interp, horiz_interp_init, horiz_interp_type
-use time_interp_external_mod, only : time_interp_external
-use time_interp_external_mod, only : init_external_field, time_interp_external_init
-use time_interp_external_mod, only : get_external_field_size
-use time_interp_external_mod, only : get_external_field_axes, get_external_field_missing
+use time_interp_external2_mod, only : time_interp_external
+use time_interp_external2_mod, only : init_external_field, time_interp_external_init
+use time_interp_external2_mod, only : get_external_field_size
+use time_interp_external2_mod, only : get_external_field_missing
 
 implicit none ; private
 
@@ -267,12 +267,14 @@ function init_extern_field(file, fieldname, MOM_domain, domain, verbose, &
 
   if (present(MOM_Domain)) then
     field%id = init_external_field(file, fieldname, domain=MOM_domain%mpp_domain, &
-             verbose=verbose, threading=threading, ierr=ierr, ignore_axis_atts=ignore_axis_atts, &
-             correct_leap_year_inconsistency=correct_leap_year_inconsistency)
+             verbose=verbose, ierr=ierr, ignore_axis_atts=ignore_axis_atts, &
+             correct_leap_year_inconsistency=correct_leap_year_inconsistency, &
+             ongrid=.true.)
   else
     field%id = init_external_field(file, fieldname, domain=domain, &
-             verbose=verbose, threading=threading, ierr=ierr, ignore_axis_atts=ignore_axis_atts, &
-             correct_leap_year_inconsistency=correct_leap_year_inconsistency)
+             verbose=verbose, ierr=ierr, ignore_axis_atts=ignore_axis_atts, &
+             correct_leap_year_inconsistency=correct_leap_year_inconsistency, &
+             ongrid=.true.)
   endif
 end function init_extern_field
 
