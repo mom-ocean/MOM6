@@ -16,7 +16,7 @@ use MOM_grid,          only : ocean_grid_type
 use MOM_interpolate,   only : time_interp_external
 use MOM_interp_infra,  only : run_horiz_interp, build_horiz_interp_weights
 use MOM_interp_infra,  only : horiz_interp_type, horizontal_interp_init
-use MOM_interp_infra,  only : axistype, get_external_field_info, get_axis_data
+use MOM_interp_infra,  only : get_external_field_info
 use MOM_interp_infra,  only : external_field
 use MOM_time_manager,  only : time_type
 use MOM_io,            only : axis_info, get_axis_info, get_var_axes_info, MOM_read_data
@@ -668,7 +668,7 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(field, Time, G, tr_z, mask_z, &
   real :: roundoff  ! The magnitude of roundoff, usually ~2e-16 [nondim]
   logical :: add_np
   type(horiz_interp_type) :: Interp
-  type(axistype), dimension(4) :: axes_data
+  type(axis_info), dimension(4) :: axes_data
   integer :: is, ie, js, je     ! compute domain indices
   integer :: isg, ieg, jsg, jeg ! global extent
   integer :: isd, ied, jsd, jed ! data domain indices
@@ -728,8 +728,8 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(field, Time, G, tr_z, mask_z, &
   if (PRESENT(spongeOngrid)) is_ongrid = spongeOngrid
   if (.not. is_ongrid) then
     allocate(lon_in(id), lat_in(jd))
-    call get_axis_data(axes_data(1), lon_in)
-    call get_axis_data(axes_data(2), lat_in)
+    call get_axis_info(axes_data(1), ax_data=lon_in)
+    call get_axis_info(axes_data(2), ax_data=lat_in)
   endif
 
   allocate(z_in(kd), z_edges_in(kd+1))
@@ -737,7 +737,7 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(field, Time, G, tr_z, mask_z, &
   allocate(tr_z(isd:ied,jsd:jed,kd), source=0.0)
   allocate(mask_z(isd:ied,jsd:jed,kd), source=0.0)
 
-  call get_axis_data(axes_data(3), z_in)
+  call get_axis_info(axes_data(3), ax_data=z_in)
 
   if (present(m_to_Z)) then ; do k=1,kd ; z_in(k) = m_to_Z * z_in(k) ; enddo ; endif
 

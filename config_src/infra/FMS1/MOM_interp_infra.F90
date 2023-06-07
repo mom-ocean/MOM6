@@ -4,9 +4,11 @@ module MOM_interp_infra
 ! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_domain_infra,    only : MOM_domain_type, domain2d
+use MOM_io,              only : axis_info
+use MOM_io,              only : set_axis_info
 use MOM_time_manager,    only : time_type
 use horiz_interp_mod,    only : horiz_interp_new, horiz_interp, horiz_interp_init, horiz_interp_type
-use mpp_io_mod,          only : axistype, mpp_get_axis_data
+use mpp_io_mod,          only : axistype, mpp_get_axis_data, mpp_get_atts
 use time_interp_external_mod, only : time_interp_external
 use time_interp_external_mod, only : init_external_field, time_interp_external_init
 use time_interp_external_mod, only : get_external_field_size
@@ -157,13 +159,33 @@ end function get_extern_field_size
 
 
 !> get axes of an external field from field index
-function get_extern_field_axes(index)
+function get_extern_field_axes(index) result(axes)
 
-  integer, intent(in) :: index          !< field index
-  type(axistype), dimension(4) :: get_extern_field_axes !< field axes
+  integer, intent(in) :: index    !< FMS interpolation field index
+  type(axis_info) :: axes(4)      !< MOM IO field axes handle
 
-  get_extern_field_axes = get_external_field_axes(index)
+  type(axistype), dimension(4) :: fms_axes(4)
+    ! FMS axis handles
+  character(len=32) :: name
+    ! Axis name
+  real, allocatable :: points(:)
+    ! Axis line points
+  integer :: length
+    ! Axis line point length
+  integer :: i
+    ! Loop index
 
+  fms_axes = get_external_field_axes(index)
+
+  do i = 1, 4
+    call mpp_get_atts(fms_axes(i), name=name, len=length)
+
+    allocate(points(length))
+    call mpp_get_axis_data(fms_axes(i), points)
+    call set_axis_info(axes(i), name=name, ax_data=points)
+
+    deallocate(points)
+  enddo
 end function get_extern_field_axes
 
 
@@ -180,12 +202,12 @@ end function get_extern_field_missing
 
 !> Get information about the external fields.
 subroutine get_external_field_info(field, size, axes, missing)
-  type(external_field),                   intent(in)    :: field    !< Handle for time interpolated external
-                                                                    !! field returned from a previous
-                                                                    !! call to init_external_field()
-  integer,        dimension(4), optional, intent(inout) :: size    !< Dimension sizes for the input data
-  type(axistype), dimension(4), optional, intent(inout) :: axes    !< Axis types for the input data
-  real,                         optional, intent(inout) :: missing !< Missing value for the input data
+  type(external_field),      intent(in)    :: field     !< Handle for time interpolated external
+                                                        !! field returned from a previous
+                                                        !! call to init_external_field()
+  integer,         optional, intent(inout) :: size(4)   !< Dimension sizes for the input data
+  type(axis_info), optional, intent(inout) :: axes(4)   !< Axis types for the input data
+  real,            optional, intent(inout) :: missing   !< Missing value for the input data
 
   if (present(size)) then
     size(1:4) = get_extern_field_size(field%id)
