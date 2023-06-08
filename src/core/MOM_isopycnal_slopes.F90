@@ -4,6 +4,7 @@ module MOM_isopycnal_slopes
 ! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_debugging,     only : hchksum, uvchksum
+use MOM_error_handler, only : MOM_error, FATAL
 use MOM_grid,          only : ocean_grid_type
 use MOM_unit_scaling,  only : unit_scale_type
 use MOM_variables,     only : thermo_var_ptrs
@@ -81,10 +82,14 @@ subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, use_stan
   real, dimension(SZIB_(G)) :: &
     T_u, &        ! Temperature on the interface at the u-point [C ~> degC].
     S_u, &        ! Salinity on the interface at the u-point [S ~> ppt].
+    GxSpV_u, &    ! Gravitiational acceleration times the specific volume at an interface
+                  ! at the u-points [L2 Z-1 T-2 R-1 ~> m4 s-2 kg-1]
     pres_u        ! Pressure on the interface at the u-point [R L2 T-2 ~> Pa].
   real, dimension(SZI_(G)) :: &
     T_v, &        ! Temperature on the interface at the v-point [C ~> degC].
     S_v, &        ! Salinity on the interface at the v-point [S ~> ppt].
+    GxSpV_v, &    ! Gravitiational acceleration times the specific volume at an interface
+                  ! at the v-points [L2 Z-1 T-2 R-1 ~> m4 s-2 kg-1]
     pres_v        ! Pressure on the interface at the v-point [R L2 T-2 ~> Pa].
   real, dimension(SZI_(G)) :: &
     T_h, &        ! Temperature on the interface at the h-point [C ~> degC].
@@ -202,6 +207,17 @@ subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, use_stan
     endif
   endif
 
+  if ((use_EOS .and. allocated(tv%SpV_avg) .and. (tv%valid_SpV_halo < 1)) .and. &
+      (present_N2_u .or. present(dzSxN) .or. present_N2_v .or. present(dzSyN))) then
+    if (tv%valid_SpV_halo < 0) then
+      call MOM_error(FATAL, "calc_isoneutral_slopes called in fully non-Boussinesq mode "//&
+                            "with invalid values of SpV_avg.")
+    else
+      call MOM_error(FATAL, "calc_isoneutral_slopes called in fully non-Boussinesq mode "//&
+                            "with insufficiently large SpV_avg halos of width 0 but 1 is needed.")
+    endif
+  endif
+
   ! Find the maximum and minimum permitted streamfunction.
   if (associated(tv%p_surf)) then
     !$OMP parallel do default(shared)
@@ -227,7 +243,7 @@ subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, use_stan
   !$OMP                                  local_open_u_BC,dzu,OBC,use_stanley) &
   !$OMP                          private(drdiA,drdiB,drdkL,drdkR,pres_u,T_u,S_u,      &
   !$OMP                                  drho_dT_u,drho_dS_u,hg2A,hg2B,hg2L,hg2R,haA, &
-  !$OMP                                  drho_dT_dT_h,scrap,pres_h,T_h,S_h,           &
+  !$OMP                                  drho_dT_dT_h,scrap,pres_h,T_h,S_h,GxSpV_u, &
   !$OMP                                  haB,haL,haR,dzaL,dzaR,wtA,wtB,wtL,wtR,drdz,  &
   !$OMP                                  drdx,mag_grad2,slope,l_seg)
   do j=js,je ; do K=nz,2,-1
@@ -245,6 +261,18 @@ subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, use_stan
       enddo
       call calculate_density_derivs(T_u, S_u, pres_u, drho_dT_u, drho_dS_u, &
                                     tv%eqn_of_state, EOSdom_u)
+      if (present_N2_u .or. (present(dzSxN))) then
+        if (allocated(tv%SpV_avg)) then
+          do I=is-1,ie
+            GxSpV_u(I) = GV%g_Earth *  0.25* ((tv%SpV_avg(i,j,k) + tv%SpV_avg(i+1,j,k)) + &
+                                              (tv%SpV_avg(i,j,k-1) + tv%SpV_avg(i+1,j,k-1)))
+          enddo
+        else
+          do I=is-1,ie
+            GxSpV_u(I) = G_Rho0
+          enddo
+        endif
+      endif
     endif
 
     if (use_stanley) then
@@ -308,7 +336,9 @@ subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, use_stan
       !   drdz = ((hg2L/haL) * drdkL/dzaL + (hg2R/haR) * drdkR/dzaR) / &
       !          ((hg2L/haL) + (hg2R/haR))
       ! This is the gradient of density along geopotentials.
-      if (present_N2_u) N2_u(I,j,K) = G_Rho0 * drdz * G%mask2dCu(I,j) ! Square of buoyancy freq. [L2 Z-2 T-2 ~> s-2]
+      if (present_N2_u) then
+        N2_u(I,j,K) = GxSpV_u(I) * drdz * G%mask2dCu(I,j) ! Square of buoyancy freq. [L2 Z-2 T-2 ~> s-2]
+      endif
 
       if (use_EOS) then
         drdx = ((wtA * drdiA + wtB * drdiB) / (wtA + wtB) - &
@@ -343,8 +373,8 @@ subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, use_stan
       endif
       slope_x(I,j,K) = slope
       if (present(dzSxN)) &
-        dzSxN(I,j,K) = sqrt( G_Rho0 * max(0., wtL * ( dzaL * drdkL ) &
-                                            + wtR * ( dzaR * drdkR )) / (wtL + wtR) ) & ! dz * N
+        dzSxN(I,j,K) = sqrt( GxSpV_u(I) * max(0., wtL * ( dzaL * drdkL ) &
+                                                + wtR * ( dzaR * drdkR )) / (wtL + wtR) ) & ! dz * N
                        * abs(slope) * G%mask2dCu(I,j) ! x-direction contribution to S^2
 
     enddo ! I
@@ -357,7 +387,7 @@ subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, use_stan
   !$OMP                                  dzv,local_open_v_BC,OBC,use_stanley) &
   !$OMP                          private(drdjA,drdjB,drdkL,drdkR,pres_v,T_v,S_v,      &
   !$OMP                                  drho_dT_v,drho_dS_v,hg2A,hg2B,hg2L,hg2R,haA, &
-  !$OMP                                  drho_dT_dT_h,scrap,pres_h,T_h,S_h,           &
+  !$OMP                                  drho_dT_dT_h,scrap,pres_h,T_h,S_h,GxSpV_v, &
   !$OMP                                  drho_dT_dT_hr,pres_hr,T_hr,S_hr,             &
   !$OMP                                  haB,haL,haR,dzaL,dzaR,wtA,wtB,wtL,wtR,drdz,  &
   !$OMP                                  drdy,mag_grad2,slope,l_seg)
@@ -375,7 +405,21 @@ subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, use_stan
       enddo
       call calculate_density_derivs(T_v, S_v, pres_v, drho_dT_v, drho_dS_v, &
                                     tv%eqn_of_state, EOSdom_v)
+
+      if ((present_N2_v) .or. (present(dzSyN))) then
+        if (allocated(tv%SpV_avg)) then
+          do i=is,ie
+            GxSpV_v(i) = GV%g_Earth *  0.25* ((tv%SpV_avg(i,j,k) + tv%SpV_avg(i,j+1,k)) + &
+                                              (tv%SpV_avg(i,j,k-1) + tv%SpV_avg(i,j+1,k-1)))
+          enddo
+        else
+          do i=is,ie
+            GxSpV_v(i) = G_Rho0
+          enddo
+        endif
+      endif
     endif
+
     if (use_stanley) then
       do i=is,ie
         pres_h(i) = pres(i,j,K)
@@ -443,7 +487,7 @@ subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, use_stan
       !   drdz = ((hg2L/haL) * drdkL/dzaL + (hg2R/haR) * drdkR/dzaR) / &
       !          ((hg2L/haL) + (hg2R/haR))
       ! This is the gradient of density along geopotentials.
-      if (present_N2_v) N2_v(i,J,K) = G_Rho0 * drdz * G%mask2dCv(i,J) ! Square of buoyancy freq. [L2 Z-2 T-2 ~> s-2]
+      if (present_N2_v) N2_v(i,J,K) = GxSpV_v(i) * drdz * G%mask2dCv(i,J) ! Square of buoyancy freq. [L2 Z-2 T-2 ~> s-2]
 
       if (use_EOS) then
         drdy = ((wtA * drdjA + wtB * drdjB) / (wtA + wtB) - &
@@ -480,8 +524,8 @@ subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, use_stan
       endif
       slope_y(i,J,K) = slope
       if (present(dzSyN)) &
-        dzSyN(i,J,K) = sqrt( G_Rho0 * max(0., wtL * ( dzaL * drdkL ) &
-                                             + wtR * ( dzaR * drdkR )) / (wtL + wtR) ) & ! dz * N
+        dzSyN(i,J,K) = sqrt( GxSpV_v(i) * max(0., wtL * ( dzaL * drdkL ) &
+                                                + wtR * ( dzaR * drdkR )) / (wtL + wtR) ) & ! dz * N
                         * abs(slope) * G%mask2dCv(i,J) ! x-direction contribution to S^2
 
     enddo ! i
