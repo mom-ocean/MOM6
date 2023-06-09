@@ -929,8 +929,8 @@ subroutine open_file_infra(handle, filename, action, MOM_domain, threading, file
     ! True if the domain is replaced with a single-file IO layout.
 
   use_single_file_domain = .false.
-  if (present(MOM_domain) .and. present(threading)) then
-    if (threading == SINGLE_FILE) &
+  if (present(MOM_domain) .and. present(fileset)) then
+    if (fileset == SINGLE_FILE) &
       use_single_file_domain = .true.
   endif
 

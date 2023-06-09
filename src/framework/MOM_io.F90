@@ -338,12 +338,14 @@ subroutine create_MOM_file(IO_handle, filename, vars, novars, fields, &
   if (one_file) then
     if (domain_set) then
       call IO_handle%open(filename, action=OVERWRITE_FILE, &
-          MOM_domain=domain, threading=thread)
+          MOM_domain=domain, threading=thread, fileset=SINGLE_FILE)
     else
-      call IO_handle%open(filename, action=OVERWRITE_FILE, threading=thread)
+      call IO_handle%open(filename, action=OVERWRITE_FILE, threading=thread, &
+          fileset=SINGLE_FILE)
     endif
   else
-    call IO_handle%open(filename, action=OVERWRITE_FILE, MOM_domain=Domain)
+    call IO_handle%open(filename, action=OVERWRITE_FILE, MOM_domain=Domain, &
+        threading=thread, fileset=thread)
   endif
 
 ! Define the coordinates.
