@@ -6,13 +6,14 @@ module MOM_diapyc_energy_req
 !! \author By Robert Hallberg, May 2015
 
 use MOM_diag_mediator, only : diag_ctrl, Time_type, post_data, register_diag_field
+use MOM_EOS,           only : calculate_specific_vol_derivs, calculate_density
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, MOM_mesg, is_root_pe
-use MOM_file_parser, only : get_param, log_version, param_file_type
-use MOM_grid, only : ocean_grid_type
-use MOM_unit_scaling, only : unit_scale_type
-use MOM_variables, only : thermo_var_ptrs
-use MOM_verticalGrid, only : verticalGrid_type
-use MOM_EOS, only : calculate_specific_vol_derivs, calculate_density
+use MOM_file_parser,   only : get_param, log_version, param_file_type
+use MOM_grid,          only : ocean_grid_type
+use MOM_interface_heights, only : thickness_to_dz
+use MOM_unit_scaling,  only : unit_scale_type
+use MOM_variables,     only : thermo_var_ptrs
+use MOM_verticalGrid,  only : verticalGrid_type
 
 implicit none ; private
 
@@ -59,20 +60,25 @@ subroutine diapyc_energy_req_test(h_3d, dt, tv, G, GV, US, CS, Kd_int)
   real,                           intent(in)    :: dt   !< The amount of time covered by this call [T ~> s].
   type(diapyc_energy_req_CS),     pointer       :: CS   !< This module's control structure.
   real, dimension(G%isd:G%ied,G%jsd:G%jed,GV%ke+1), &
-                        optional, intent(in)    :: Kd_int !< Interface diffusivities [Z2 T-1 ~> m2 s-1].
+                        optional, intent(in)    :: Kd_int !< Interface diffusivities [H Z T-1 ~> m2 s-1 or kg m-1 s-1]
 
   ! Local variables
   real, dimension(GV%ke) :: &
     T0, S0, &   ! T0 & S0 are columns of initial temperatures and salinities [C ~> degC] and [S ~> ppt].
-    h_col       ! h_col is a column of thicknesses h at tracer points [H ~> m or kg m-2].
+    h_col, &    ! h_col is a column of thicknesses h at tracer points [H ~> m or kg m-2].
+    dz_col      ! dz_col is a column of vertical distances across layers at tracer points [Z ~> m]
+  real, dimension( G%isd:G%ied,GV%ke) :: &
+    dz_2d        ! A 2-d slice of the vertical distance across layers [Z ~> m]
   real, dimension(GV%ke+1) :: &
-    Kd, &       ! A column of diapycnal diffusivities at interfaces [Z2 T-1 ~> m2 s-1].
+    Kd, &        ! A column of diapycnal diffusivities at interfaces [H Z T-1 ~> m2 s-1 or kg m-1 s-1].
     h_top, h_bot ! Distances from the top or bottom [H ~> m or kg m-2].
+  real :: dz_h_int  ! The ratio of the vertical distances across the layers surrounding an interface
+                 ! over the layer thicknesses [H Z-1 ~> nonodim or kg m-3]
   real :: ustar  ! The local friction velocity [Z T-1 ~> m s-1]
   real :: absf   ! The absolute value of the Coriolis parameter [T-1 ~> s-1]
   real :: htot   ! The sum of the thicknesses [H ~> m or kg m-2].
   real :: energy_Kd ! The energy used by diapycnal mixing [R Z L2 T-3 ~> W m-2].
-  real :: tmp1  ! A temporary array [H Z ~> m2 or kg m-1]
+  real :: tmp1  ! A temporary array [H2 ~> m2 or kg2 m-6]
   integer :: i, j, k, is, ie, js, je, nz
   logical :: may_print
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
@@ -84,36 +90,56 @@ subroutine diapyc_energy_req_test(h_3d, dt, tv, G, GV, US, CS, Kd_int)
          "Module must be initialized before it is used.")
 
 !$OMP do
-  do j=js,je ; do i=is,ie ; if (G%mask2dT(i,j) > 0.0) then
-    if (present(Kd_int) .and. .not.CS%use_test_Kh_profile) then
-      do k=1,nz+1 ; Kd(K) = CS%test_Kh_scaling*Kd_int(i,j,K) ; enddo
-    else
-      htot = 0.0 ; h_top(1) = 0.0
+  do j=js,je
+    call thickness_to_dz(h_3d, tv, dz_2d, j, G, GV)
+
+    do i=is,ie ; if (G%mask2dT(i,j) > 0.0) then
+
       do k=1,nz
         T0(k) = tv%T(i,j,k) ; S0(k) = tv%S(i,j,k)
         h_col(k) = h_3d(i,j,k)
-        h_top(K+1) = h_top(K) + h_col(k)
-      enddo
-      htot = h_top(nz+1)
-      h_bot(nz+1) = 0.0
-      do k=nz,1,-1
-        h_bot(K) = h_bot(K+1) + h_col(k)
+        dz_col(k) = dz_2d(i,k)
       enddo
 
-      ustar = 0.01*US%m_to_Z*US%T_to_s ! Change this to being an input parameter?
-      absf = 0.25*((abs(G%CoriolisBu(I-1,J-1)) + abs(G%CoriolisBu(I,J))) + &
-                   (abs(G%CoriolisBu(I-1,J-1)) + abs(G%CoriolisBu(I,J))))
-      Kd(1) = 0.0 ; Kd(nz+1) = 0.0
-      do K=2,nz
-        tmp1 = h_top(K) * h_bot(K) * GV%H_to_Z
-        Kd(K) = CS%test_Kh_scaling *  &
-                ustar * CS%VonKar * (tmp1*ustar) / (absf*tmp1 + htot*ustar)
-      enddo
-    endif
-    may_print = is_root_PE() .and. (i==ie) .and. (j==je)
-    call diapyc_energy_req_calc(h_col, T0, S0, Kd, energy_Kd, dt, tv, G, GV, US, &
-                                may_print=may_print, CS=CS)
-  endif ; enddo ; enddo
+      if (present(Kd_int) .and. .not.CS%use_test_Kh_profile) then
+        do k=1,nz+1 ; Kd(K) = CS%test_Kh_scaling*Kd_int(i,j,K) ; enddo
+      else
+        htot = 0.0 ; h_top(1) = 0.0
+        do k=1,nz
+          h_top(K+1) = h_top(K) + h_col(k)
+        enddo
+        htot = h_top(nz+1)
+
+        h_bot(nz+1) = 0.0
+        do k=nz,1,-1
+          h_bot(K) = h_bot(K+1) + h_col(k)
+        enddo
+
+        ustar = 0.01*US%m_to_Z*US%T_to_s ! Change this to being an input parameter?
+        absf = 0.25*((abs(G%CoriolisBu(I-1,J-1)) + abs(G%CoriolisBu(I,J))) + &
+                     (abs(G%CoriolisBu(I-1,J-1)) + abs(G%CoriolisBu(I,J))))
+        Kd(1) = 0.0 ; Kd(nz+1) = 0.0
+        if (GV%Boussinesq) then
+          do K=2,nz
+            tmp1 = h_top(K) * h_bot(K)
+            Kd(K) = CS%test_Kh_scaling *  &
+                    ustar * CS%VonKar * (tmp1*ustar) / (absf*GV%H_to_Z*tmp1 + htot*ustar)
+          enddo
+        else
+          do K=2,nz
+            tmp1 = h_top(K) * h_bot(K)
+            dz_h_int = (dz_2d(j,k-1) + dz_2d(j,k) + GV%dz_subroundoff) / &
+                       (h_3d(i,j,k-1) + h_3d(i,j,k) + GV%H_subroundoff)
+            Kd(K) = CS%test_Kh_scaling *  &
+                    ustar * CS%VonKar * (tmp1*ustar) / (dz_h_int*absf*tmp1 + htot*ustar)
+          enddo
+        endif
+      endif
+      may_print = is_root_PE() .and. (i==ie) .and. (j==je)
+      call diapyc_energy_req_calc(h_col, dz_col, T0, S0, Kd, energy_Kd, dt, tv, G, GV, US, &
+                                  may_print=may_print, CS=CS)
+    endif ; enddo
+  enddo
 
 end subroutine diapyc_energy_req_test
 
@@ -123,17 +149,19 @@ end subroutine diapyc_energy_req_test
 !! 4 different ways, all of which should be equivalent, but reports only one.
 !! The various estimates are taken because they will later be used as templates
 !! for other bits of code
-subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, &
+subroutine diapyc_energy_req_calc(h_in, dz_in, T_in, S_in, Kd, energy_Kd, dt, tv, &
                                   G, GV, US, may_print, CS)
   type(ocean_grid_type),    intent(in)    :: G    !< The ocean's grid structure.
   type(verticalGrid_type),  intent(in)    :: GV   !< The ocean's vertical grid structure.
   type(unit_scale_type),    intent(in)    :: US   !< A dimensional unit scaling type
   real, dimension(GV%ke),   intent(in)    :: h_in !< Layer thickness before entrainment,
-                                                  !! [H ~> m or kg m-2].
+                                                  !! [H ~> m or kg m-2]
+  real, dimension(GV%ke),   intent(in)    :: dz_in !< Vertical distance across layers before
+                                                  !! entrainment [Z ~> m]
   real, dimension(GV%ke),   intent(in)    :: T_in !< The layer temperatures [C ~> degC].
   real, dimension(GV%ke),   intent(in)    :: S_in !< The layer salinities [S ~> ppt].
   real, dimension(GV%ke+1), intent(in)    :: Kd   !< The interfaces diapycnal diffusivities
-                                                  !! [Z2 T-1 ~> m2 s-1].
+                                                  !! [H Z T-1 ~> m2 s-1 or kg m-1 s-1].
   real,                     intent(in)    :: dt   !< The amount of time covered by this call [T ~> s].
   real,                     intent(out)   :: energy_Kd !< The column-integrated rate of energy
                                                   !! consumption by diapycnal diffusion [R Z L2 T-3 ~> W m-2].
@@ -210,8 +238,10 @@ subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, &
                 ! in the denominator of b1 in an upward-oriented tridiagonal solver.
     c1_a, &     ! c1_a is used by a downward-oriented tridiagonal solver [nondim].
     c1_b, &     ! c1_b is used by an upward-oriented tridiagonal solver [nondim].
-    h_tr        ! h_tr is h at tracer points with a h_neglect added to
+    h_tr, &     ! h_tr is h at tracer points with a h_neglect added to
                 ! ensure positive definiteness [H ~> m or kg m-2].
+    dz_tr       ! dz_tr is dz at tracer points with dz_neglect added to
+                ! ensure positive definiteness [Z ~> m]
   real, dimension(GV%ke+1) :: &
     pres, &     ! Interface pressures [R L2 T-2 ~> Pa].
     pres_Z, &   ! The hydrostatic interface pressure, which is used to relate
@@ -251,6 +281,7 @@ subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, &
   real :: ColHt_cor ! The correction to PE_chg that is made due to a net
                     ! change in the column height [R L2 Z T-2 ~> J m-2].
   real :: htot      ! A running sum of thicknesses [H ~> m or kg m-2].
+  real :: dztot     ! A running sum of vertical distances across layers [Z ~> m]
   real :: dTe_t2    ! Temporary arrays with integrated temperature changes [C H ~> degC m or degC kg m-2]
   real :: dSe_t2    ! Temporary arrays with integrated salinity changes [S H ~> ppt m or ppt kg m-2]
   real :: dT_km1_t2, dT_k_t2  ! Temporary arrays describing temperature changes [C ~> degC].
@@ -298,11 +329,13 @@ subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, &
   dPEb_dKd(:) = 0.0 ; dPEb_dKd_est(:) = 0.0 ; dPEb_dKd_err(:) = 0.0
   dPEb_dKd_err_norm(:) = 0.0 ; dPEb_dKd_trunc(:) = 0.0
 
-  htot = 0.0 ; pres(1) = 0.0 ; pres_Z(1) = 0.0 ; Z_int(1) = 0.0
+  htot = 0.0 ; dztot = 0.0 ; pres(1) = 0.0 ; pres_Z(1) = 0.0 ; Z_int(1) = 0.0
   do k=1,nz
     T0(k) = T_in(k) ; S0(k) = S_in(k)
     h_tr(k) = h_in(k)
+    dz_tr(k) = dz_in(k)
     htot = htot + h_tr(k)
+    dztot = dztot + dz_tr(k)
     pres(K+1) = pres(K) + (GV%g_Earth * GV%H_to_RZ) * h_tr(k)
     pres_Z(K+1) = pres(K+1)
     p_lay(k) = 0.5*(pres(K) + pres(K+1))
@@ -310,13 +343,14 @@ subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, &
   enddo
   do k=1,nz
     h_tr(k) = max(h_tr(k), 1e-15*htot)
+    dz_tr(k) = max(dz_tr(k), 1e-15*dztot)
   enddo
 
   ! Introduce a diffusive flux variable, Kddt_h(K) = ea(k) = eb(k-1)
 
   Kddt_h(1) = 0.0 ; Kddt_h(nz+1) = 0.0
   do K=2,nz
-    Kddt_h(K) = min((GV%Z_to_H**2*dt)*Kd(k) / (0.5*(h_tr(k-1) + h_tr(k))), 1e3*htot)
+    Kddt_h(K) = min(dt * Kd(k) / (0.5*(dz_tr(k-1) + dz_tr(k))), 1e3*dztot)
   enddo
 
   ! Solve the tridiagonal equations for new temperatures.
@@ -962,7 +996,7 @@ subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, &
       do K=2,nz
         call calculate_density(0.5*(T0(k-1) + T0(k)), 0.5*(S0(k-1) + S0(k)), &
                                pres(K), rho_here, tv%eqn_of_state)
-        N2(K) = ((US%L_to_Z**2*GV%g_Earth) * rho_here / (0.5*GV%H_to_Z*(h_tr(k-1) + h_tr(k)))) * &
+        N2(K) = ((US%L_to_Z**2*GV%g_Earth) * rho_here / (0.5*(dz_tr(k-1) + dz_tr(k)))) * &
                 ( 0.5*(dSV_dT(k-1) + dSV_dT(k)) * (T0(k-1) - T0(k)) + &
                   0.5*(dSV_dS(k-1) + dSV_dS(k)) * (S0(k-1) - S0(k)) )
       enddo
@@ -973,7 +1007,7 @@ subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, &
       do K=2,nz
         call calculate_density(0.5*(Tf(k-1) + Tf(k)), 0.5*(Sf(k-1) + Sf(k)), &
                                pres(K), rho_here, tv%eqn_of_state)
-        N2(K) = ((US%L_to_Z**2*GV%g_Earth) * rho_here / (0.5*GV%H_to_Z*(h_tr(k-1) + h_tr(k)))) * &
+        N2(K) = ((US%L_to_Z**2*GV%g_Earth) * rho_here / (0.5*(dz_tr(k-1) + dz_tr(k)))) * &
                 ( 0.5*(dSV_dT(k-1) + dSV_dT(k)) * (Tf(k-1) - Tf(k)) + &
                   0.5*(dSV_dS(k-1) + dSV_dS(k)) * (Sf(k-1) - Sf(k)) )
       enddo
