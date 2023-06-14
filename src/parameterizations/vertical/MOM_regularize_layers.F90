@@ -576,14 +576,14 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, GV, US, CS)
                           trim(mesg), .true.)
           fatal_error = .true.
         endif
-        if (abs(Th_tot1(i) - Th_tot2(i)) > 1e-12*(Th_tot1(i)+10.0*h_tot1(i))) then
+        if (abs(Th_tot1(i) - Th_tot2(i)) > 1e-12*abs(Th_tot1(i) + 10.0*US%degC_to_C*h_tot1(i))) then
           write(mesg,'(ES11.4," became ",ES11.4," diff ",ES11.4," int diff ",ES11.4)') &
                 Th_tot1(i), Th_tot2(i), (Th_tot1(i) - Th_tot2(i)), (Th_tot1(i) - Th_tot3(i))
           call MOM_error(WARNING, "regularize_surface: Heat non-conservation."//&
                           trim(mesg), .true.)
           fatal_error = .true.
         endif
-        if (abs(Sh_tot1(i) - Sh_tot2(i)) > 1e-12*(Sh_tot1(i)+10.0*h_tot1(i))) then
+        if (abs(Sh_tot1(i) - Sh_tot2(i)) > 1e-12*abs(Sh_tot1(i) + 10.0*US%ppt_to_S*h_tot1(i))) then
           write(mesg,'(ES11.4," became ",ES11.4," diff ",ES11.4," int diff ",ES11.4)') &
                 Sh_tot1(i), Sh_tot2(i), (Sh_tot1(i) - Sh_tot2(i)), (Sh_tot1(i) - Sh_tot3(i))
           call MOM_error(WARNING, "regularize_surface: Salinity non-conservation."//&
