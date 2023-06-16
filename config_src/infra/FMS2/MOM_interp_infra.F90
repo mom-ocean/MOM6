@@ -7,7 +7,11 @@ use MOM_domain_infra,    only : MOM_domain_type, domain2d
 use MOM_io,              only : axis_info
 use MOM_io,              only : get_var_axes_info
 use MOM_time_manager,    only : time_type
-use horiz_interp_mod,    only : horiz_interp_new, horiz_interp, horiz_interp_init, horiz_interp_type
+use MOM_error_handler, only : MOM_error, FATAL
+use MOM_string_functions, only : lowercase
+use horiz_interp_mod, only : horiz_interp_new, horiz_interp, horiz_interp_init, horiz_interp_type
+use netcdf_io_mod, only : FmsNetcdfFile_t, netcdf_file_open, netcdf_file_close
+use netcdf_io_mod, only : get_num_variables, get_variable_names
 use time_interp_external2_mod, only : time_interp_external
 use time_interp_external2_mod, only : init_external_field, time_interp_external_init
 use time_interp_external2_mod, only : get_external_field_size
@@ -262,16 +266,64 @@ function init_extern_field(file, fieldname, MOM_domain, domain, verbose, &
                                                  !! a model date of Feb 29. onto a common year on Feb. 28.
   type(external_field) :: field                  !< Handle to external field
 
+  type(FmsNetcdfFile_t) :: extern_file
+    ! Local instance of netCDF file used to locate case-insensitive field name
+  integer :: num_fields
+    ! Number of fields in external file
+  character(len=256), allocatable :: extern_fieldnames(:)
+    ! List of field names in file
+    ! NOTE: length should NF90_MAX_NAME, but I don't know how to read it
+  character(len=:), allocatable :: label
+    ! Case-insensitive match to fieldname in file
+  logical :: rc
+    ! Return status
+  integer :: i
+    ! Loop index
+
   field%filename = file
-  field%label = fieldname
+
+  ! FMS2's init_external_field is case sensitive, so we must replicate the
+  !   case-insensitivity of FMS1.  This requires opening the file twice.
+
+  rc = netcdf_file_open(extern_file, file, 'read')
+  if (.not. rc) then
+    call MOM_error(FATAL, 'init_extern_file: file ' // trim(file) &
+        // ' could not be opened.')
+  endif
+
+  ! TODO: broadcast = .false.?
+  num_fields = get_num_variables(extern_file)
+
+  allocate(extern_fieldnames(num_fields))
+  call get_variable_names(extern_file, extern_fieldnames)
+
+  do i = 1, num_fields
+    if (lowercase(extern_fieldnames(i)) == lowercase(fieldname)) then
+      field%label = extern_fieldnames(i)
+      exit
+    endif
+  enddo
+
+  call netcdf_file_close(extern_file)
+
+  if (.not. allocated(field%label)) then
+    call MOM_error(FATAL, 'init_extern_field: field ' // trim(fieldname) &
+        // ' not found in ' // trim(file) // '.')
+  endif
+
+  ! Pass to FMS2 implementation of init_external_field
+
+  ! NOTE: external fields are currently assumed to be on-grid, which holds
+  ! across the current codebase.  In the future, we may need to either enforce
+  ! this or somehow relax this requirement.
 
   if (present(MOM_Domain)) then
-    field%id = init_external_field(file, fieldname, domain=MOM_domain%mpp_domain, &
+    field%id = init_external_field(file, field%label, domain=MOM_domain%mpp_domain, &
              verbose=verbose, ierr=ierr, ignore_axis_atts=ignore_axis_atts, &
              correct_leap_year_inconsistency=correct_leap_year_inconsistency, &
              ongrid=.true.)
   else
-    field%id = init_external_field(file, fieldname, domain=domain, &
+    field%id = init_external_field(file, field%label, domain=domain, &
              verbose=verbose, ierr=ierr, ignore_axis_atts=ignore_axis_atts, &
              correct_leap_year_inconsistency=correct_leap_year_inconsistency, &
              ongrid=.true.)
