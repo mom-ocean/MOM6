@@ -186,6 +186,12 @@ subroutine PressureForce_Mont_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm, pb
     endif
   endif
 
+  !$OMP parallel do default(shared)
+  do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+    geopot_bot(i,j) = -GV%g_Earth * G%bathyT(i,j)
+  enddo ; enddo
+
+  ! Calculate and add the self-attraction and loading geopotential anomaly.
   if (CS%calculate_SAL) then
     !   Determine the sea surface height anomalies, to enable the calculation
     ! of self-attraction and loading.
@@ -209,23 +215,20 @@ subroutine PressureForce_Mont_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm, pb
         SSH(i,j) = SSH(i,j) + GV%H_to_RZ * h(i,j,k) * alpha_Lay(k)
       enddo ; enddo ; enddo
     endif
+
     call calc_SAL(SSH, e_sal, G, CS%SAL_CSp)
-  else
+    !$OMP parallel do default(shared)
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-      e_sal(i,j) = 0.0
+      geopot_bot(i,j) = geopot_bot(i,j) - GV%g_Earth*e_sal(i,j)
     enddo ; enddo
   endif
 
+  ! Calculate and add the tidal geopotential anomaly.
   if (CS%tides) then
     call calc_tidal_forcing(CS%Time, e_tide_eq, e_tide_sal, G, US, CS%tides_CSp)
     !$OMP parallel do default(shared)
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-      geopot_bot(i,j) = -GV%g_Earth*(e_sal(i,j) + e_tide_eq(i,j) + e_tide_sal(i,j) + G%bathyT(i,j))
-    enddo ; enddo
-  else
-    !$OMP parallel do default(shared)
-    do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-      geopot_bot(i,j) = -GV%g_Earth*(e_sal(i,j) + G%bathyT(i,j))
+      geopot_bot(i,j) = geopot_bot(i,j) - GV%g_Earth*(e_tide_eq(i,j) + e_tide_sal(i,j))
     enddo ; enddo
   endif
 
@@ -460,7 +463,12 @@ subroutine PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm, pbce,
   I_Rho0 = 1.0/CS%Rho0
   G_Rho0 = GV%g_Earth / GV%Rho0
 
+  !$OMP parallel do default(shared)
+  do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+    e(i,j,nz+1) = -G%bathyT(i,j)
+  enddo ; enddo
 
+  ! Calculate and add the self-attraction and loading geopotential anomaly.
   if (CS%calculate_SAL) then
     !   Determine the surface height anomaly for calculating self attraction
     ! and loading.  This should really be based on bottom pressure anomalies,
@@ -474,22 +482,18 @@ subroutine PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm, pbce,
       enddo ; enddo
     enddo
     call calc_SAL(SSH, e_sal, G, CS%SAL_CSp)
-  else
+    !$OMP parallel do default(shared)
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-      e_sal(i,j) = 0.0
+      e(i,j,nz+1) = e(i,j,nz+1) - e_sal(i,j)
     enddo ; enddo
   endif
 
+  ! Calculate and add the tidal geopotential anomaly.
   if (CS%tides) then
     call calc_tidal_forcing(CS%Time, e_tide_eq, e_tide_sal, G, US, CS%tides_CSp)
     !$OMP parallel do default(shared)
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-      e(i,j,nz+1) = -(G%bathyT(i,j) + (e_sal(i,j) + e_tide_eq(i,j) + e_tide_sal(i,j)))
-    enddo ; enddo
-  else
-    !$OMP parallel do default(shared)
-    do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-      e(i,j,nz+1) = -(G%bathyT(i,j) + e_sal(i,j))
+      e(i,j,nz+1) = e(i,j,nz+1) - (e_tide_eq(i,j) + e_tide_sal(i,j))
     enddo ; enddo
   endif
 
@@ -608,18 +612,23 @@ subroutine PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm, pbce,
   endif ! use_EOS
 
   if (present(eta)) then
-    if (CS%tides) then
     ! eta is the sea surface height relative to a time-invariant geoid, for
     ! comparison with what is used for eta in btstep.  See how e was calculated
     ! about 200 lines above.
+    !$OMP parallel do default(shared)
+    do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+      eta(i,j) = e(i,j,1)*GV%Z_to_H
+    enddo ; enddo
+    if (CS%tides) then
       !$OMP parallel do default(shared)
       do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-        eta(i,j) = e(i,j,1)*GV%Z_to_H + (e_sal(i,j)+e_tide_eq(i,j)+e_tide_sal(i,j))*GV%Z_to_H
+        eta(i,j) = eta(i,j) + (e_tide_eq(i,j)+e_tide_sal(i,j))*GV%Z_to_H
       enddo ; enddo
-    else
+    endif
+    if (CS%calculate_SAL) then
       !$OMP parallel do default(shared)
       do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-        eta(i,j) = e(i,j,1)*GV%Z_to_H + e_sal(i,j)*GV%Z_to_H
+        eta(i,j) = eta(i,j) + e_sal(i,j)*GV%Z_to_H
       enddo ; enddo
     endif
   endif

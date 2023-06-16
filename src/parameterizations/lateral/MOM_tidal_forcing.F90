@@ -16,6 +16,7 @@ use MOM_unit_scaling,  only : unit_scale_type
 implicit none ; private
 
 public calc_tidal_forcing, tidal_forcing_init, tidal_forcing_end
+public calc_tidal_forcing_legacy
 ! MOM_open_boundary uses the following to set tides on the boundary.
 public astro_longitudes_init, eq_phase, nodal_fu, tidal_frequency
 
@@ -618,6 +619,88 @@ subroutine calc_tidal_forcing(Time, e_tide_eq, e_tide_sal, G, US, CS)
   call cpu_clock_end(id_clock_tides)
 
 end subroutine calc_tidal_forcing
+
+!>   This subroutine functions the same as calc_tidal_forcing but outputs a field that combines
+!! previously calculated self-attraction and loading (SAL) and tidal forcings, so that old answers
+!! can be preserved bitwise before SAL is separated out as an individual module.
+subroutine calc_tidal_forcing_legacy(Time, e_sal, e_sal_tide, e_tide_eq, e_tide_sal, G, US, CS)
+  type(ocean_grid_type),            intent(in)  :: G          !< The ocean's grid structure.
+  type(time_type),                  intent(in)  :: Time       !< The time for the caluculation.
+  real, dimension(SZI_(G),SZJ_(G)), intent(in)  :: e_sal      !< The self-attraction and loading fields
+                                                              !! calculated previously used to
+                                                              !! initialized e_sal_tide [Z ~> m].
+  real, dimension(SZI_(G),SZJ_(G)), intent(out) :: e_sal_tide !< The total geopotential height anomalies
+                                                              !! due to both SAL and tidal forcings [Z ~> m].
+  real, dimension(SZI_(G),SZJ_(G)), intent(out) :: e_tide_eq  !< The geopotential height anomalies
+                                                              !! due to the equilibrium tides [Z ~> m].
+  real, dimension(SZI_(G),SZJ_(G)), intent(out) :: e_tide_sal !< The geopotential height anomalies
+                                                              !! due to the tidal SAL [Z ~> m].
+  type(unit_scale_type),            intent(in)  :: US         !< A dimensional unit scaling type
+  type(tidal_forcing_CS),           intent(in)  :: CS         !< The control structure returned by a
+                                                              !! previous call to tidal_forcing_init.
+
+  ! Local variables
+  real :: now       ! The relative time compared with the tidal reference [T ~> s]
+  real :: amp_cosomegat, amp_sinomegat ! The tidal amplitudes times the components of phase [Z ~> m]
+  real :: cosomegat, sinomegat ! The components of the phase [nondim]
+  real :: amp_cossin ! A temporary field that adds cosines and sines [nondim]
+  integer :: i, j, c, m, is, ie, js, je, Isq, Ieq, Jsq, Jeq
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
+  Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
+
+  call cpu_clock_begin(id_clock_tides)
+
+  do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+    e_sal_tide(i,j) = 0.0
+    e_tide_eq(i,j) = 0.0
+    e_tide_sal(i,j) = 0.0
+  enddo ; enddo
+
+  if (CS%nc == 0) then
+    return
+  endif
+
+  now = US%s_to_T * time_type_to_real(Time - cs%time_ref)
+
+  do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+    e_sal_tide(i,j) = e_sal(i,j)
+  enddo ; enddo
+
+  do c=1,CS%nc
+    m = CS%struct(c)
+    amp_cosomegat = CS%amp(c)*CS%love_no(c) * cos(CS%freq(c)*now + CS%phase0(c))
+    amp_sinomegat = CS%amp(c)*CS%love_no(c) * sin(CS%freq(c)*now + CS%phase0(c))
+    do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+      amp_cossin = (amp_cosomegat*CS%cos_struct(i,j,m) + amp_sinomegat*CS%sin_struct(i,j,m))
+      e_sal_tide(i,j) = e_sal_tide(i,j) + amp_cossin
+      e_tide_eq(i,j) = e_tide_eq(i,j) + amp_cossin
+    enddo ; enddo
+  enddo
+
+  if (CS%use_tidal_sal_file) then ; do c=1,CS%nc
+    cosomegat = cos(CS%freq(c)*now)
+    sinomegat = sin(CS%freq(c)*now)
+    do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+      amp_cossin = CS%ampsal(i,j,c) &
+        * (cosomegat*CS%cosphasesal(i,j,c) + sinomegat*CS%sinphasesal(i,j,c))
+      e_sal_tide(i,j) = e_sal_tide(i,j) + amp_cossin
+      e_tide_sal(i,j) = e_tide_sal(i,j) + amp_cossin
+    enddo ; enddo
+  enddo ; endif
+
+  if (CS%use_tidal_sal_prev) then ; do c=1,CS%nc
+    cosomegat = cos(CS%freq(c)*now)
+    sinomegat = sin(CS%freq(c)*now)
+    do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+      amp_cossin = -CS%sal_scalar * CS%amp_prev(i,j,c) &
+        * (cosomegat*CS%cosphase_prev(i,j,c) + sinomegat*CS%sinphase_prev(i,j,c))
+      e_sal_tide(i,j) = e_sal_tide(i,j) + amp_cossin
+      e_tide_sal(i,j) = e_tide_sal(i,j) + amp_cossin
+    enddo ; enddo
+  enddo ; endif
+  call cpu_clock_end(id_clock_tides)
+
+end subroutine calc_tidal_forcing_legacy
 
 !> This subroutine deallocates memory associated with the tidal forcing module.
 subroutine tidal_forcing_end(CS)
