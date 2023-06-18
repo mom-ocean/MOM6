@@ -1069,7 +1069,7 @@ subroutine update_offline_fields(CS, G, GV, US, h, fluxes, do_ale)
     call pass_var(h, G%Domain)
     call pass_var(CS%tv%T, G%Domain)
     call pass_var(CS%tv%S, G%Domain)
-    call ALE_offline_inputs(CS%ALE_CSp, G, GV, h, CS%tv, CS%tracer_Reg, CS%uhtr, CS%vhtr, CS%Kd, &
+    call ALE_offline_inputs(CS%ALE_CSp, G, GV, US, h, CS%tv, CS%tracer_Reg, CS%uhtr, CS%vhtr, CS%Kd, &
                             CS%debug, CS%OBC)
     if (CS%id_temp_regrid>0) call post_data(CS%id_temp_regrid, CS%tv%T, CS%diag)
     if (CS%id_salt_regrid>0) call post_data(CS%id_salt_regrid, CS%tv%S, CS%diag)
