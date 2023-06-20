@@ -23,6 +23,7 @@ use MOM_time_manager, only  : time_type, time_type_to_real, operator(+), operato
 use MOM_unit_scaling, only  : unit_scale_type
 use MOM_variables, only     : surface, thermo_var_ptrs
 use MOM_verticalGrid, only  : verticalGrid_type
+use MOM_wave_speed, only    : wave_speeds, wave_speed_CS, wave_speed_init
 
 implicit none ; private
 
@@ -33,12 +34,14 @@ public internal_tides_init, internal_tides_end
 public get_lowmode_loss
 
 !> This control structure has parameters for the MOM_internal_tides module
-type, public :: int_tide_CS
+type, public :: int_tide_CS ; private
   logical :: do_int_tides    !< If true, use the internal tide code.
   integer :: nFreq = 0       !< The number of internal tide frequency bands
   integer :: nMode = 1       !< The number of internal tide vertical modes
   integer :: nAngle = 24     !< The number of internal tide angular orientations
   integer :: energized_angle = -1 !< If positive, only this angular band is energized for debugging purposes
+  real    :: uniform_test_cg !< Uniform group velocity of internal tide
+                             !! for testing internal tides [L T-1 ~> m s-1]
   logical :: corner_adv      !< If true, use a corner advection rather than PPM.
   logical :: upwind_1st      !< If true, use a first-order upwind scheme.
   logical :: simple_2nd      !< If true, use a simple second order (arithmetic mean) interpolation
@@ -137,11 +140,14 @@ type, public :: int_tide_CS
                         !< The internal wave energy density as a function of (i,j,angle); temporary for restart
   real, allocatable, dimension(:) :: frequency  !< The frequency of each band [T-1 ~> s-1].
 
+  type(wave_speed_CS) :: wave_speed  !< Wave speed control structure
   type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to regulate the
                         !! timing of diagnostic output.
 
   !>@{ Diag handles
   ! Diag handles relevant to all modes, frequencies, and angles
+  integer :: id_cg1      = -1                 ! diagnostic handle for mode-1 speed
+  integer, allocatable, dimension(:) :: id_cn ! diagnostic handle for all mode speeds
   integer :: id_tot_En = -1, id_TKE_itidal_input = -1, id_itide_drag = -1
   integer :: id_refl_pref = -1, id_refl_ang = -1, id_land_mask = -1
   integer :: id_trans = -1, id_residual = -1
@@ -181,7 +187,7 @@ contains
 
 !> Calls subroutines in this file that are needed to refract, propagate,
 !! and dissipate energy density of the internal tide.
-subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
+subroutine propagate_int_tide(h, tv, TKE_itidal_input, vel_btTide, Nb, dt, &
                               G, GV, US, CS)
   type(ocean_grid_type),            intent(inout) :: G  !< The ocean's grid structure.
   type(verticalGrid_type),          intent(in)    :: GV !< The ocean's vertical grid structure.
@@ -194,16 +200,18 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
                                                         !! internal waves [R Z3 T-3 ~> W m-2].
   real, dimension(SZI_(G),SZJ_(G)), intent(in)    :: vel_btTide !< Barotropic velocity read
                                                         !! from file [L T-1 ~> m s-1].
-  real, dimension(SZI_(G),SZJ_(G)), intent(in)    :: Nb !< Near-bottom buoyancy frequency [T-1 ~> s-1].
+  real, dimension(SZI_(G),SZJ_(G)), intent(inout) :: Nb !< Near-bottom buoyancy frequency [T-1 ~> s-1].
+                                                        !! In some cases the input values are used, but in
+                                                        !! others this is set along with the wave speeds.
   real,                             intent(in)    :: dt !< Length of time over which to advance
                                                         !! the internal tides [T ~> s].
   type(int_tide_CS),                intent(inout) :: CS !< Internal tide control structure
-  real, dimension(SZI_(G),SZJ_(G),CS%nMode), &
-                                    intent(in)    :: cn !< The internal wave speeds of each
-                                                        !! mode [L T-1 ~> m s-1].
+
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G),2) :: &
     test           ! A test unit vector used to determine grid rotation in halos [nondim]
+  real, dimension(SZI_(G),SZJ_(G),CS%nMode) :: &
+    cn             ! baroclinic internal gravity wave speeds for each mode [L T-1 ~> m s-1]
   real, dimension(SZI_(G),SZJ_(G),CS%nFreq,CS%nMode) :: &
     tot_En_mode, & ! energy summed over angles only [R Z3 T-2 ~> J m-2]
     Ub, &          ! near-bottom horizontal velocity of wave (modal) [L T-1 ~> m s-1]
@@ -253,6 +261,18 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
   drag_scale(:,:) = 0.
   Ub(:,:,:,:) = 0.
   Umax(:,:,:,:) = 0.
+
+  cn(:,:,:) = 0.
+
+  ! Set properties related to the internal tides, such as the wave speeds, storing some
+  ! of them in the control structure for this module.
+  if (CS%uniform_test_cg > 0.0) then
+    do m=1,CS%nMode ; cn(:,:,m) = CS%uniform_test_cg ; enddo
+  else
+    call wave_speeds(h, tv, G, GV, US, CS%nMode, cn, CS%wave_speed, &
+                     CS%w_struct, CS%u_struct, CS%u_struct_max, CS%u_struct_bot, &
+                     Nb, CS%int_w2, CS%int_U2, CS%int_N2w2, full_halos=.true.)
+  endif
 
   ! Set the wave speeds for the modes, using cg(n) ~ cg(1)/n.**********************
   ! This is wrong, of course, but it works reasonably in some cases.
@@ -596,6 +616,10 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
   call enable_averages(dt, time_end, CS%diag)
 
   if (query_averaging_enabled(CS%diag)) then
+    ! Output internal wave modal wave speeds
+    if (CS%id_cg1 > 0) call post_data(CS%id_cg1, cn(:,:,1),CS%diag)
+    do m=1,CS%nMode ; if (CS%id_cn(m) > 0) call post_data(CS%id_cn(m), cn(:,:,m), CS%diag) ; enddo
+
     ! Output two-dimensional diagnostics
     if (CS%id_tot_En > 0)     call post_data(CS%id_tot_En, tot_En, CS%diag)
     if (CS%id_itide_drag > 0) call post_data(CS%id_itide_drag, drag_scale, CS%diag)
@@ -2292,6 +2316,8 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
   real, dimension(:,:), allocatable :: ridge_temp ! array for temporary storage of flags
                                                   ! of cells with double-reflecting ridges [nondim]
   logical :: use_int_tides, use_temperature
+  real    :: IGW_c1_thresh ! A threshold first mode internal wave speed below which all higher
+                 ! mode speeds are not calculated but simply assigned a speed of 0 [L T-1 ~> m s-1].
   real    :: kappa_h2_factor    ! A roughness scaling factor [nondim]
   real    :: RMS_roughness_frac ! The maximum RMS topographic roughness as a fraction of the
                                 ! nominal ocean depth, or a negative value for no limit [nondim]
@@ -2322,8 +2348,7 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
   use_temperature = .true.
   call read_param(param_file, "ENABLE_THERMODYNAMICS", use_temperature)
   if (.not.use_temperature) call MOM_error(FATAL, &
-    "register_int_tide_restarts: internal_tides only works with "//&
-    "ENABLE_THERMODYNAMICS defined.")
+      "internal_tides_init: internal_tides only works with ENABLE_THERMODYNAMICS defined.")
 
   ! Set number of frequencies, angles, and modes to consider
   num_freq = 1 ; num_angle = 24 ; num_mode = 1
@@ -2447,6 +2472,15 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
                  "CDRAG is the drag coefficient relating the magnitude of "//&
                  "the velocity field to the bottom stress.", &
                  units="nondim", default=0.003)
+  call get_param(param_file, mdl, "INTERNAL_WAVE_CG1_THRESH", IGW_c1_thresh, &
+                 "A minimal value of the first mode internal wave speed below which all higher "//&
+                 "mode speeds are not calculated but are simply reported as 0.  This must be "//&
+                 "non-negative for the wave_speeds routine to be used.", &
+                 units="m s-1", default=0.01, scale=US%m_s_to_L_T)
+
+  call get_param(param_file, mdl, "UNIFORM_TEST_CG", CS%uniform_test_cg, &
+                 "If positive, a uniform group velocity of internal tide for test case", &
+                 default=-1., units="m s-1", scale=US%m_s_to_L_T)
   call get_param(param_file, mdl, "INTERNAL_TIDE_ENERGIZED_ANGLE", CS%energized_angle, &
                  "If positive, only one angular band of the internal tides "//&
                  "gets all of the energy.  (This is for debugging.)", default=-1)
@@ -2609,6 +2643,18 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
     enddo
   enddo
   call pass_var(CS%residual,G%domain)
+
+    CS%id_cg1 = register_diag_field('ocean_model', 'cn1', diag%axesT1, &
+                 Time, 'First baroclinic mode (eigen) speed', 'm s-1', conversion=US%L_T_to_m_s)
+    allocate(CS%id_cn(CS%nMode), source=-1)
+    do m=1,CS%nMode
+      write(var_name, '("cn_mode",i1)') m
+      write(var_descript, '("Baroclinic (eigen) speed of mode ",i1)') m
+      CS%id_cn(m) = register_diag_field('ocean_model',var_name, diag%axesT1, &
+                   Time, var_descript, 'm s-1', conversion=US%L_T_to_m_s)
+      call MOM_mesg("Registering "//trim(var_name)//", Described as: "//var_descript, 5)
+    enddo
+
 
   ! Register maps of reflection parameters
   CS%id_refl_ang = register_diag_field('ocean_model', 'refl_angle', diag%axesT1, &
@@ -2776,6 +2822,9 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
     call MOM_mesg("Registering "//trim(var_name)//", Described as: "//var_descript, 5)
 
   enddo
+
+  ! Initialize the module that calculates the wave speeds.
+  call wave_speed_init(CS%wave_speed, c1_thresh=IGW_c1_thresh)
 
 end subroutine internal_tides_init
 
