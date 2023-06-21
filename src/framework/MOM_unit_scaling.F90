@@ -52,6 +52,7 @@ type, public :: unit_scale_type
   real :: RZ3_T3_to_W_m2  !< Convert turbulent kinetic energy fluxes from R Z3 T-3 to W m-2    [W T3 R-1 Z-3 m-2 ~> 1]
   real :: W_m2_to_RZ3_T3  !< Convert turbulent kinetic energy fluxes from W m-2 to R Z3 T-3     [R Z3 m2 T-3 W-1 ~> 1]
   real :: RL2_T2_to_Pa    !< Convert pressures from R L2 T-2 to Pa                                [Pa T2 R-1 L-2 ~> 1]
+  real :: RLZ_T2_to_Pa    !< Convert wind stresses from R L Z T-2 to Pa                       [Pa T2 R-1 L-1 Z-1 ~> 1]
   real :: Pa_to_RL2_T2    !< Convert pressures from Pa to R L2 T-2                                [R L2 T-2 Pa-1 ~> 1]
   real :: Pa_to_RLZ_T2    !< Convert wind stresses from Pa to R L Z T-2                          [R L Z T-2 Pa-1 ~> 1]
 
@@ -221,6 +222,7 @@ subroutine set_unit_scaling_combos(US)
   US%RL2_T2_to_Pa = US%R_to_kg_m3 * US%L_T_to_m_s**2
   US%Pa_to_RL2_T2 = US%kg_m3_to_R * US%m_s_to_L_T**2
   ! Wind stresses:
+  US%RLZ_T2_to_Pa = US%R_to_kg_m3 * US%L_T_to_m_s**2 * US%Z_to_L
   US%Pa_to_RLZ_T2 = US%kg_m3_to_R * US%m_s_to_L_T**2 * US%L_to_Z
 
 end subroutine set_unit_scaling_combos

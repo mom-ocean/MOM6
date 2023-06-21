@@ -651,6 +651,8 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
     call create_group_pass(pass_tau_ustar_psurf, forces%taux, forces%tauy, G%Domain)
     if (associated(forces%ustar)) &
       call create_group_pass(pass_tau_ustar_psurf, forces%ustar, G%Domain)
+    if (associated(forces%tau_mag)) &
+      call create_group_pass(pass_tau_ustar_psurf, forces%tau_mag, G%Domain)
     if (associated(forces%p_surf)) &
       call create_group_pass(pass_tau_ustar_psurf, forces%p_surf, G%Domain)
     if (G%nonblocking_updates) then
