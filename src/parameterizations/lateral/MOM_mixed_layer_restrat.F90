@@ -62,24 +62,25 @@ type, public :: mixedlayer_restrat_CS ; private
 
   ! The following parameters are used in the Bodner et al., 2023, parameterization
   logical :: use_Bodner = .false.  !< If true, use the Bodner et al., 2023, parameterization.
-  real    :: Cr                    !< Efficiency coefficient from Bodner et al., 2023
+  real    :: Cr                    !< Efficiency coefficient from Bodner et al., 2023 [nondim]
   real    :: mstar                 !< The m* value used to estimate the turbulent vertical momentum flux [nondim]
   real    :: nstar                 !< The n* value used to estimate the turbulent vertical momentum flux [nondim]
-  real    :: min_wstar2            !< The minimum lower bound to apply to the vertical momentum flux, w'u',
-                                   !! in the Bodner et al., restratification parameterization. This avoids
-                                   !! a division-by-zero in the limit when u* and the buoyancy flux are zero. [Z2 T-2]
+  real    :: min_wstar2            !< The minimum lower bound to apply to the vertical momentum flux,
+                                   !! w'u', in the Bodner et al., restratification parameterization
+                                   !! [m2 s-2].  This avoids a division-by-zero in the limit when u*
+                                   !! and the buoyancy flux are zero.
   real    :: BLD_growing_Tfilt     !< The time-scale for a running-mean filter applied to the boundary layer
-                                   !! depth (BLD) when the BLD is deeper than the running mean. A value of 0
-                                   !! instantaneously sets the running mean to the current value of BLD. [T ~> s]
+                                   !! depth (BLD) when the BLD is deeper than the running mean [T ~> s].
+                                   !! A value of 0 instantaneously sets the running mean to the current value of BLD.
   real    :: BLD_decaying_Tfilt    !< The time-scale for a running-mean filter applied to the boundary layer
-                                   !! depth (BLD) when the BLD is shallower than the running mean. A value of 0
-                                   !! instantaneously sets the running mean to the current value of BLD.
+                                   !! depth (BLD) when the BLD is shallower than the running mean [T ~> s].
+                                   !! A value of 0 instantaneously sets the running mean to the current value of BLD.
   real    :: MLD_decaying_Tfilt    !< The time-scale for a running-mean filter applied to the time-filtered
-                                   !! BLD, when the latter is deeper than the running mean. A value of 0
-                                   !! instantaneously sets the running mean to the current value filtered BLD. [T ~> s]
+                                   !! MLD, when the latter is shallower than the running mean [T ~> s].
+                                   !! A value of 0 instantaneously sets the running mean to the current value of MLD.
   real    :: MLD_growing_Tfilt     !< The time-scale for a running-mean filter applied to the time-filtered
-                                   !! BLD, when the latter is deeper than the running mean. A value of 0
-                                   !! instantaneously sets the running mean to the current value filtered BLD. [T ~> s]
+                                   !! MLD, when the latter is deeper than the running mean [T ~> s].
+                                   !! A value of 0 instantaneously sets the running mean to the current value of MLD.
 
   logical :: debug = .false.       !< If true, calculate checksums of fields for debugging.
 
@@ -153,7 +154,7 @@ subroutine mixedlayer_restrat(h, uhtr, vhtr, tv, forces, dt, MLD, bflux, VarMix,
   else
     ! Implementation of Fox-Kemper et al., 2008, to work in general coordinates
     call mixedlayer_restrat_OM4(h, uhtr, vhtr, tv, forces, dt, MLD, VarMix, G, GV, US, CS)
-endif
+  endif
 
 end subroutine mixedlayer_restrat
 
@@ -668,7 +669,7 @@ real function mu(sigma, dh)
   ! -0.5    < sigma           : dd(sigma)=1      (upper half of mixed layer)
   ! -1.0+dh < sigma < -0.5    : dd(sigma)=cubic  (lower half +dh of mixed layer)
   !           sigma < -1.0+dh : dd(sigma)=0      (below mixed layer + dh)
-  dd = (1. - 3.*(xp**2) + 2.*(xp**3))**(1. + 2.*dh)
+  dd = (max(1. - xp**2 * (3. - 2.*xp), 0.))**(1. + 2.*dh)
 
   ! -0.5    < sigma           : bottop(sigma)=0  (upper half of mixed layer)
   !           sigma < -0.5    : bottop(sigma)=1  (below upper half)
@@ -869,16 +870,18 @@ subroutine mixedlayer_restrat_Bodner(CS, G, GV, US, h, uhtr, vhtr, tv, forces, d
   ! U - Component
   !$OMP do
   do j=js,je ; do I=is-1,ie
-    grid_dsd = sqrt( 0.5 * ( G%dxCu(I,j)**2 + G%dyCu(I,j)**2 ) ) &  ! L2 ~> m2
-               * G%dyCu(I,j)
-    absf = 0.5*(abs(G%CoriolisBu(I,J-1)) + abs(G%CoriolisBu(I,J)))  ! T-1 ~> s-1
-    h_sml = 0.5*( little_h(i,j) + little_h(i+1,j) )                 ! Z ~> m
-    h_big = 0.5*( big_H(i,j) + big_H(i+1,j) )                       ! Z ~> m
-    grd_b = ( buoy_av(i+1,j) - buoy_av(i,j) ) * G%IdxCu(I,j)        ! L Z-1 T-2 ~> s-2
-    r_wpup = 2. / ( wpup(i,j) + wpup(i+1,j) )                       ! Z-2 T2 ~> m-2 s2
-    psi_mag = ( ( ( CS%Cr * grid_dsd ) * ( absf * h_sml ) ) &       ! L2 H T-1 ~> m3 s-1 or kg s-1
-                * ( ( h_big**2 ) * grd_b ) ) * r_wpup &
-              * G%mask2dCu(I,j) * GV%Z_to_H
+    if (G%OBCmaskCu(I,j) > 0.) then
+      grid_dsd = sqrt(0.5*( G%dxCu(I,j)**2 + G%dyCu(I,j)**2 )) * G%dyCu(I,j) ! L2 ~> m2
+      absf = 0.5*(abs(G%CoriolisBu(I,J-1)) + abs(G%CoriolisBu(I,J)))  ! T-1 ~> s-1
+      h_sml = 0.5*( little_h(i,j) + little_h(i+1,j) )                 ! Z ~> m
+      h_big = 0.5*( big_H(i,j) + big_H(i+1,j) )                       ! Z ~> m
+      grd_b = ( buoy_av(i+1,j) - buoy_av(i,j) ) * G%IdxCu(I,j)        ! L Z-1 T-2 ~> s-2
+      r_wpup = 2. / ( wpup(i,j) + wpup(i+1,j) )                       ! Z-2 T2 ~> m-2 s2
+      psi_mag = ( ( ( CS%Cr * grid_dsd ) * ( absf * h_sml ) ) &       ! L2 H T-1 ~> m3 s-1 or kg s-1
+                  * ( ( h_big**2 ) * grd_b ) ) * r_wpup * US%L_to_Z * GV%Z_to_H
+    else  ! There is no flux on land and no gradient at open boundary points.
+      psi_mag = 0.0
+    endif
 
     IhTot = 2.0 / ((htot(i,j) + htot(i+1,j)) + h_neglect) ! [H-1]
     sigint = 0.0
@@ -908,16 +911,18 @@ subroutine mixedlayer_restrat_Bodner(CS, G, GV, US, h, uhtr, vhtr, tv, forces, d
   ! V- component
   !$OMP do
   do J=js-1,je ; do i=is,ie
-    grid_dsd = sqrt( 0.5 * ( G%dxCv(i,J)**2 + G%dyCv(i,J)**2 ) ) &  ! L2 ~> m2
-               * G%dxCv(i,J)
-    absf = 0.5*(abs(G%CoriolisBu(I-1,J)) + abs(G%CoriolisBu(I,J)))  ! T-1 ~> s-1
-    h_sml = 0.5*( little_h(i,j) + little_h(i,j+1) )                 ! Z ~> m
-    h_big = 0.5*( big_H(i,j) + big_H(i,j+1) )                       ! Z ~> m
-    grd_b = ( buoy_av(i,j+1) - buoy_av(i,j) ) * G%IdyCv(I,j)        ! L Z-1 T-2 ~> s-2
-    r_wpup = 2. / ( wpup(i,j) + wpup(i,j+1) )                       ! Z-2 T2 ~> m-2 s2
-    psi_mag = ( ( ( CS%Cr * grid_dsd ) * ( absf * h_sml ) ) &       ! L2 H T-1 ~> m3 s-1 or kg s-1
-                * ( ( h_big**2 ) * grd_b ) ) * r_wpup &
-              * G%mask2dCv(i,J) * GV%Z_to_H
+    if (G%OBCmaskCv(i,J) > 0.) then
+      grid_dsd = sqrt(0.5*( G%dxCv(i,J)**2 + G%dyCv(i,J)**2 )) * G%dxCv(i,J) ! L2 ~> m2
+      absf = 0.5*(abs(G%CoriolisBu(I-1,J)) + abs(G%CoriolisBu(I,J)))  ! T-1 ~> s-1
+      h_sml = 0.5*( little_h(i,j) + little_h(i,j+1) )                 ! Z ~> m
+      h_big = 0.5*( big_H(i,j) + big_H(i,j+1) )                       ! Z ~> m
+      grd_b = ( buoy_av(i,j+1) - buoy_av(i,j) ) * G%IdyCv(I,j)        ! L Z-1 T-2 ~> s-2
+      r_wpup = 2. / ( wpup(i,j) + wpup(i,j+1) )                       ! Z-2 T2 ~> m-2 s2
+      psi_mag = ( ( ( CS%Cr * grid_dsd ) * ( absf * h_sml ) ) &       ! L2 H T-1 ~> m3 s-1 or kg s-1
+                  * ( ( h_big**2 ) * grd_b ) ) * r_wpup * US%L_to_Z * GV%Z_to_H
+    else  ! There is no flux on land and no gradient at open boundary points.
+      psi_mag = 0.0
+    endif
 
     IhTot = 2.0 / ((htot(i,j) + htot(i,j+1)) + h_neglect) ! [H-1]
     sigint = 0.0
@@ -1403,8 +1408,10 @@ logical function mixedlayer_restrat_init(Time, G, GV, US, param_file, diag, CS, 
     call get_param(param_file, mdl, "MIN_WSTAR2", CS%min_wstar2, &
              "The minimum lower bound to apply to the vertical momentum flux, w'u', "//&
              "in the Bodner et al., restratification parameterization. This avoids "//&
-             "a division-by-zero in the limit when u* and the buoyancy flux are zero.", &
-             units="m2 s-2", default=0.)
+             "a division-by-zero in the limit when u* and the buoyancy flux are zero.  "//&
+             "The default is less than the molecular viscosity of water times the Coriolis "//&
+             "parameter a micron away from the equator.", &
+             units="m2 s-2", default=1.0e-24)
     call get_param(param_file, mdl, "TAIL_DH", CS%MLE_tail_dh, &
              "Fraction by which to extend the mixed-layer restratification "//&
              "depth used for a smoother stream function at the base of "//&
