@@ -532,6 +532,7 @@ subroutine ALE_offline_inputs(CS, G, GV, US, h, tv, Reg, uhtr, vhtr, Kd, debug, 
 
   ! Remap all variables from old grid h onto new grid h_new
   call ALE_remap_tracers(CS, G, GV, h, h_new, Reg, debug=CS%show_call_tree)
+  if (allocated(tv%SpV_avg)) tv%valid_SpV_halo = -1   ! Record that SpV_avg is no longer valid.
   if (CS%show_call_tree) call callTree_waypoint("state remapped (ALE_inputs)")
 
   ! Reintegrate mass transports from Zstar to the offline vertical coordinate
@@ -570,6 +571,8 @@ subroutine ALE_offline_inputs(CS, G, GV, US, h, tv, Reg, uhtr, vhtr, Kd, debug, 
   do k = 1,nk  ; do j = jsc-1,jec+1 ; do i = isc-1,iec+1
     h(i,j,k) = h_new(i,j,k)
   enddo ; enddo ; enddo
+
+  if (allocated(tv%SpV_avg)) tv%valid_SpV_halo = -1   ! Record that SpV_avg is no longer valid.
 
   if (CS%show_call_tree) call callTree_leave("ALE_offline_inputs()")
 end subroutine ALE_offline_inputs
@@ -674,6 +677,9 @@ subroutine ALE_regrid_accelerated(CS, G, GV, US, h, tv, n_itt, u, v, OBC, Reg, d
 
   ! save total dzregrid for diags if needed?
   if (present(dzRegrid)) dzRegrid(:,:,:) = dzIntTotal(:,:,:)
+
+  if (allocated(tv%SpV_avg)) tv%valid_SpV_halo = -1   ! Record that SpV_avg is no longer valid.
+
 end subroutine ALE_regrid_accelerated
 
 !> This routine takes care of remapping all tracer variables between the old and the

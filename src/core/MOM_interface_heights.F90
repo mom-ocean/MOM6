@@ -4,13 +4,14 @@ module MOM_interface_heights
 ! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_density_integrals, only : int_specific_vol_dp, avg_specific_vol
+use MOM_debugging,     only : hchksum
 use MOM_error_handler, only : MOM_error, FATAL
-use MOM_EOS, only : calculate_density, EOS_type, EOS_domain
-use MOM_file_parser, only : log_version
-use MOM_grid, only : ocean_grid_type
-use MOM_unit_scaling, only : unit_scale_type
-use MOM_variables, only : thermo_var_ptrs
-use MOM_verticalGrid, only : verticalGrid_type
+use MOM_EOS,           only : calculate_density, average_specific_vol, EOS_type, EOS_domain
+use MOM_file_parser,   only : log_version
+use MOM_grid,          only : ocean_grid_type
+use MOM_unit_scaling,  only : unit_scale_type
+use MOM_variables,     only : thermo_var_ptrs
+use MOM_verticalGrid,  only : verticalGrid_type
 
 implicit none ; private
 
@@ -262,7 +263,7 @@ end subroutine find_eta_2d
 
 
 !> Calculate derived thermodynamic quantities for re-use later.
-subroutine calc_derived_thermo(tv, h, G, GV, US, halo)
+subroutine calc_derived_thermo(tv, h, G, GV, US, halo, debug)
   type(ocean_grid_type),   intent(in)    :: G  !< The ocean's grid structure
   type(verticalGrid_type), intent(in)    :: GV !< The ocean's vertical grid structure
   type(unit_scale_type),   intent(in)    :: US !< A dimensional unit scaling type
@@ -271,13 +272,16 @@ subroutine calc_derived_thermo(tv, h, G, GV, US, halo)
                                                !! which will be set here.
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(in)    :: h  !< Layer thicknesses [H ~> m or kg m-2].
-  integer,         optional, intent(in)  :: halo !< Width of halo within which to
+  integer,       optional, intent(in)    :: halo !< Width of halo within which to
                                                !! calculate thicknesses
+  logical,       optional, intent(in)    :: debug !< If present and true, write debugging checksums
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G)) :: p_t  ! Hydrostatic pressure atop a layer [R L2 T-2 ~> Pa]
   real, dimension(SZI_(G),SZJ_(G)) :: dp   ! Pressure change across a layer [R L2 T-2 ~> Pa]
+  logical :: do_debug  ! If true, write checksums for debugging.
   integer :: i, j, k, is, ie, js, je, halos, nz
 
+  do_debug = .false. ; if (present(debug)) do_debug = debug
   halos = 0 ; if (present(halo)) halos = max(0,halo)
   is = G%isc-halos ; ie = G%iec+halos ; js = G%jsc-halos ; je = G%jec+halos ; nz = GV%ke
 
@@ -296,6 +300,15 @@ subroutine calc_derived_thermo(tv, h, G, GV, US, halo)
         p_t(i,j) = p_t(i,j) + dp(i,j)
       enddo ; enddo ; endif
     enddo
+    tv%valid_SpV_halo = halos
+
+    if (do_debug) then
+      call hchksum(h, "derived_thermo h", G%HI, haloshift=halos, scale=GV%H_to_MKS)
+      if (associated(tv%p_surf)) call hchksum(tv%p_surf, "derived_thermo p_surf", G%HI, &
+                                              haloshift=halos, scale=US%RL2_T2_to_Pa)
+      call hchksum(tv%T, "derived_thermo T", G%HI, haloshift=halos, scale=US%C_to_degC)
+      call hchksum(tv%S, "derived_thermo S", G%HI, haloshift=halos, scale=US%S_to_ppt)
+    endif
   endif
 
 end subroutine calc_derived_thermo
@@ -493,12 +506,23 @@ subroutine thickness_to_dz_3d(h, tv, dz, G, GV, US, halo_size)
   integer,       optional, intent(in)    :: halo_size !< Width of halo within which to
                                                !! calculate thicknesses
   ! Local variables
+  character(len=128) :: mesg    ! A string for error messages
   integer :: i, j, k, is, ie, js, je, halo, nz
 
   halo = 0 ; if (present(halo_size)) halo = max(0,halo_size)
   is = G%isc-halo ; ie = G%iec+halo ; js = G%jsc-halo ; je = G%jec+halo ; nz = GV%ke
 
   if ((.not.GV%Boussinesq) .and. allocated(tv%SpV_avg))  then
+    if ((allocated(tv%SpV_avg)) .and. (tv%valid_SpV_halo < halo)) then
+      if (tv%valid_SpV_halo < 0) then
+        mesg = "invalid values of SpV_avg."
+      else
+        write(mesg, '("insufficiently large SpV_avg halos of width ", i2, " but ", i2," is needed.")') &
+                     tv%valid_SpV_halo, halo
+      endif
+      call MOM_error(FATAL, "thickness_to_dz called in fully non-Boussinesq mode with "//trim(mesg))
+    endif
+
     do k=1,nz ; do j=js,je ; do i=is,ie
       dz(i,j,k) = GV%H_to_RZ * h(i,j,k) * tv%SpV_avg(i,j,k)
     enddo ; enddo ; enddo
@@ -529,12 +553,23 @@ subroutine thickness_to_dz_jslice(h, tv, dz, j, G, GV, halo_size)
   integer,       optional, intent(in)    :: halo_size !< Width of halo within which to
                                                !! calculate thicknesses
   ! Local variables
+  character(len=128) :: mesg    ! A string for error messages
   integer :: i, k, is, ie, halo, nz
 
   halo = 0 ; if (present(halo_size)) halo = max(0,halo_size)
   is = G%isc-halo ; ie = G%iec+halo ; nz = GV%ke
 
   if ((.not.GV%Boussinesq) .and. allocated(tv%SpV_avg))  then
+    if ((allocated(tv%SpV_avg)) .and. (tv%valid_SpV_halo < halo)) then
+      if (tv%valid_SpV_halo < 0) then
+        mesg = "invalid values of SpV_avg."
+      else
+        write(mesg, '("insufficiently large SpV_avg halos of width ", i2, " but ", i2," is needed.")') &
+                     tv%valid_SpV_halo, halo
+      endif
+      call MOM_error(FATAL, "thickness_to_dz called in fully non-Boussinesq mode with "//trim(mesg))
+    endif
+
     do k=1,nz ; do i=is,ie
       dz(i,k) = GV%H_to_RZ * h(i,j,k) * tv%SpV_avg(i,j,k)
     enddo ; enddo
