@@ -14,7 +14,8 @@ module MOM_ocean_model_nuopc
 use MOM,                     only : initialize_MOM, step_MOM, MOM_control_struct, MOM_end
 use MOM,                     only : extract_surface_state, allocate_surface_state, finish_MOM_initialization
 use MOM,                     only : get_MOM_state_elements, MOM_state_is_synchronized
-use MOM,                     only : get_ocean_stocks, step_offline, save_MOM6_internal_state
+use MOM,                     only : get_ocean_stocks, step_offline
+use MOM,                     only : save_MOM_restart
 use MOM_coms,                only : field_chksum
 use MOM_constants,           only : CELSIUS_KELVIN_OFFSET, hlf
 use MOM_diag_mediator,       only : diag_ctrl, enable_averages, disable_averaging
@@ -34,7 +35,6 @@ use MOM_get_input,           only : Get_MOM_Input, directories
 use MOM_grid,                only : ocean_grid_type
 use MOM_io,                  only : close_file, file_exists, read_data, write_version_number
 use MOM_marine_ice,          only : iceberg_forces, iceberg_fluxes, marine_ice_init, marine_ice_CS
-use MOM_restart,             only : MOM_restart_CS, save_restart
 use MOM_string_functions,    only : uppercase
 use MOM_time_manager,        only : time_type, get_time, set_time, operator(>)
 use MOM_time_manager,        only : operator(+), operator(-), operator(*), operator(/)
@@ -214,9 +214,6 @@ type, public :: ocean_state_type ; private
     Waves => NULL()           !< A pointer to the surface wave control structure
   type(surface_forcing_CS), pointer :: &
     forcing_CSp => NULL()     !< A pointer to the MOM forcing control structure
-  type(MOM_restart_CS), pointer :: &
-    restart_CSp => NULL()     !< A pointer set to the restart control structure
-                              !! that will be used for MOM restart files.
   type(diag_ctrl), pointer :: &
     diag => NULL()            !< A pointer to the diagnostic regulatory structure
 end type ocean_state_type
@@ -281,7 +278,7 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn, i
 
   OS%Time = Time_in
   call initialize_MOM(OS%Time, Time_init, param_file, OS%dirs, OS%MOM_CSp, &
-                      OS%restart_CSp, Time_in, offline_tracer_mode=OS%offline_tracer_mode, &
+                      Time_in, offline_tracer_mode=OS%offline_tracer_mode, &
                       input_restart_file=input_restart_file, &
                       diag_ptr=OS%diag, count_calls=.true., waves_CSp=OS%Waves)
   call get_MOM_state_elements(OS%MOM_CSp, G=OS%grid, GV=OS%GV, US=OS%US, C_p=OS%C_p, &
@@ -407,7 +404,7 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn, i
 
   ! MOM_wave_interface_init is called regardless of the value of USE_WAVES because
   ! it also initializes statistical waves.
-  call MOM_wave_interface_init(OS%Time, OS%grid, OS%GV, OS%US, param_file, OS%Waves, OS%diag, OS%restart_CSp)
+  call MOM_wave_interface_init(OS%Time, OS%grid, OS%GV, OS%US, param_file, OS%Waves, OS%diag)
 
   if (associated(OS%grid%Domain%maskmap)) then
     call initialize_ocean_public_type(OS%grid%Domain%mpp_domain, Ocean_sfc, &
@@ -608,7 +605,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
   endif
 
   if (OS%nstep==0) then
-    call finish_MOM_initialization(OS%Time, OS%dirs, OS%MOM_CSp, OS%restart_CSp)
+    call finish_MOM_initialization(OS%Time, OS%dirs, OS%MOM_CSp)
   endif
 
   call disable_averaging(OS%diag)
@@ -730,36 +727,32 @@ subroutine ocean_model_restart(OS, timestamp, restartname, stoch_restartname, nu
       "restart files can only be created after the buoyancy forcing is applied.")
 
   if (present(restartname)) then
-    call save_restart(OS%dirs%restart_output_dir, OS%Time, OS%grid, &
-         OS%restart_CSp, GV=OS%GV, filename=restartname, num_rest_files=num_rest_files)
+    call save_MOM_restart(OS%MOM_CSp, OS%dirs%restart_output_dir, OS%Time, &
+        OS%grid, GV=OS%GV, filename=restartname, num_rest_files=num_rest_files)
     call forcing_save_restart(OS%forcing_CSp, OS%grid, OS%Time, &
          OS%dirs%restart_output_dir) ! Is this needed?
     if (OS%use_ice_shelf) then
       call ice_shelf_save_restart(OS%Ice_shelf_CSp, OS%Time, &
            OS%dirs%restart_output_dir)
     endif
-
-    call save_MOM6_internal_state(OS%MOM_CSp, OS%dirs%restart_output_dir, OS%Time)
   else
     if (BTEST(OS%Restart_control,1)) then
-      call save_restart(OS%dirs%restart_output_dir, OS%Time, OS%grid, &
-           OS%restart_CSp, .true., GV=OS%GV)
+      call save_MOM_restart(OS%MOM_CSp, OS%dirs%restart_output_dir, OS%Time, &
+          OS%grid, time_stamped=.true., GV=OS%GV)
       call forcing_save_restart(OS%forcing_CSp, OS%grid, OS%Time, &
-           OS%dirs%restart_output_dir, .true.)
+           OS%dirs%restart_output_dir, time_stamped=.true.)
       if (OS%use_ice_shelf) then
         call ice_shelf_save_restart(OS%Ice_shelf_CSp, OS%Time, OS%dirs%restart_output_dir, .true.)
       endif
-      call save_MOM6_internal_state(OS%MOM_CSp, OS%dirs%restart_output_dir, OS%Time, .true.)
     endif
     if (BTEST(OS%Restart_control,0)) then
-      call save_restart(OS%dirs%restart_output_dir, OS%Time, OS%grid, &
-           OS%restart_CSp, GV=OS%GV)
+      call save_MOM_restart(OS%MOM_CSp, OS%dirs%restart_output_dir, OS%Time, &
+          OS%grid, GV=OS%GV)
       call forcing_save_restart(OS%forcing_CSp, OS%grid, OS%Time, &
            OS%dirs%restart_output_dir)
       if (OS%use_ice_shelf) then
         call ice_shelf_save_restart(OS%Ice_shelf_CSp, OS%Time, OS%dirs%restart_output_dir)
       endif
-      call save_MOM6_internal_state(OS%MOM_CSp, OS%dirs%restart_output_dir, OS%Time)
     endif
   endif
   if (present(stoch_restartname)) then
@@ -814,16 +807,13 @@ subroutine ocean_model_save_restart(OS, Time, directory, filename_suffix)
   if (present(directory)) then ; restart_dir = directory
   else ; restart_dir = OS%dirs%restart_output_dir ; endif
 
-  call save_restart(restart_dir, Time, OS%grid, OS%restart_CSp, GV=OS%GV)
+  call save_MOM_restart(OS%MOM_CSp, restart_dir, Time, OS%grid, GV=OS%GV)
 
   call forcing_save_restart(OS%forcing_CSp, OS%grid, Time, restart_dir)
 
   if (OS%use_ice_shelf) then
     call ice_shelf_save_restart(OS%Ice_shelf_CSp, OS%Time, OS%dirs%restart_output_dir)
   endif
-
-  call save_MOM6_internal_start(OS%MOM_CSp, OS%dirs%restart_output_dir, OS%Time)
-
 end subroutine ocean_model_save_restart
 
 !> Initialize the public ocean type

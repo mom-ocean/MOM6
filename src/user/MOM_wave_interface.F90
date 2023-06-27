@@ -259,7 +259,7 @@ character*(7), parameter  :: EFACTOR_STRING   = "EFACTOR"       !< EFACTOR (base
 contains
 
 !> Initializes parameters related to MOM_wave_interface
-subroutine MOM_wave_interface_init(time, G, GV, US, param_file, CS, diag, restart_CSp)
+subroutine MOM_wave_interface_init(time, G, GV, US, param_file, CS, diag)
   type(time_type), target, intent(in)    :: Time       !< Model time
   type(ocean_grid_type),   intent(inout) :: G          !< Grid structure
   type(verticalGrid_type), intent(in)    :: GV         !< Vertical grid structure
@@ -267,7 +267,6 @@ subroutine MOM_wave_interface_init(time, G, GV, US, param_file, CS, diag, restar
   type(param_file_type),   intent(in)    :: param_file !< Input parameter structure
   type(wave_parameters_CS), pointer      :: CS         !< Wave parameter control structure
   type(diag_ctrl), target, intent(inout) :: diag       !< Diagnostic Pointer
-  type(MOM_restart_CS), optional, pointer:: restart_CSp!< Restart control structure
 
   ! Local variables
   character(len=40)  :: mdl = "MOM_wave_interface" !< This module's name.
