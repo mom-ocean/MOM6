@@ -24,6 +24,8 @@ use mpp_domains_mod, only : To_East => WUPDATE, To_West => EUPDATE, Omit_Corners
 use mpp_domains_mod, only : To_North => SUPDATE, To_South => NUPDATE
 use mpp_domains_mod, only : CENTER, CORNER, NORTH_FACE => NORTH, EAST_FACE => EAST
 use fms_io_mod,      only : file_exist, parse_mask_table
+use fms_io_mod,      only : fms_set_domain => set_domain
+use fms_io_mod,      only : fms_nullify_domain => nullify_domain
 use fms_affinity_mod, only : fms_affinity_init, fms_affinity_set, fms_affinity_get
 
 ! This subroutine is not in MOM6/src but may be required by legacy drivers
@@ -49,6 +51,7 @@ public :: MOM_thread_affinity_set, set_MOM_thread_affinity
 public :: To_East, To_West, To_North, To_South, To_All, Omit_Corners
 public :: AGRID, BGRID_NE, CGRID_NE, SCALAR_PAIR
 public :: CORNER, CENTER, NORTH_FACE, EAST_FACE
+public :: set_domain, nullify_domain
 ! These are no longer used by MOM6 because the reproducing sum works so well, but they are
 ! still referenced by some of the non-GFDL couplers.
 ! public :: global_field_sum, BITWISE_EXACT_SUM
@@ -1997,5 +2000,18 @@ subroutine get_layout_extents(Domain, extent_i, extent_j)
   allocate(extent_j(domain%layout(2))) ; extent_j(:) = 0
   call mpp_get_domain_extents(domain%mpp_domain, extent_i, extent_j)
 end subroutine get_layout_extents
+
+!> Set the associated domain for internal FMS I/O operations.
+subroutine set_domain(Domain)
+  type(MOM_domain_type), intent(in) :: Domain
+    !< MOM domain to be designated as the internal FMS I/O domain
+
+  call fms_set_domain(Domain%mpp_domain)
+end subroutine set_domain
+
+!> Free the associated domain for internal FMS I/O operations.
+subroutine nullify_domain
+  call fms_nullify_domain
+end subroutine nullify_domain
 
 end module MOM_domain_infra
