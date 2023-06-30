@@ -1869,10 +1869,11 @@ subroutine initialize_ice_shelf_fluxes(CS, ocn_grid, US, fluxes_in)
    ! when SHELF_THERMO = True. These fluxes are necessary if one wants to
    ! use either ENERGETICS_SFC_PBL (ALE mode) or BULKMIXEDLAYER (layer mode).
     call allocate_forcing_type(CS%Grid_in, fluxes_in, ustar=.true., shelf=.true., &
-         press=.true., water=CS%isthermo, heat=CS%isthermo, shelf_sfc_accumulation = CS%active_shelf_dynamics)
+         press=.true., water=CS%isthermo, heat=CS%isthermo, shelf_sfc_accumulation=CS%active_shelf_dynamics, &
+         tau_mag=.true.)
   else
     call MOM_mesg("MOM_ice_shelf.F90, initialize_ice_shelf: allocating fluxes in solo mode.")
-    call allocate_forcing_type(CS%Grid_in, fluxes_in, ustar=.true., shelf=.true., press=.true.)
+    call allocate_forcing_type(CS%Grid_in, fluxes_in, ustar=.true., shelf=.true., press=.true., tau_mag=.true.)
   endif
   if (CS%rotate_index) then
     allocate(fluxes)
@@ -1903,7 +1904,7 @@ subroutine initialize_ice_shelf_forces(CS, ocn_grid, US, forces_in)
   type(mech_forcing), pointer :: forces => NULL()
 
   call MOM_mesg("MOM_ice_shelf.F90, initialize_ice_shelf: allocating forces.")
-  call allocate_mech_forcing(CS%Grid_in, forces_in, ustar=.true., shelf=.true., press=.true.)
+  call allocate_mech_forcing(CS%Grid_in, forces_in, ustar=.true., shelf=.true., press=.true., tau_mag=.true.)
   if (CS%rotate_index) then
     allocate(forces)
     call allocate_mech_forcing(forces_in, CS%Grid, forces)
