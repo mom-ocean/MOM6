@@ -22,7 +22,7 @@ module Idealized_hurricane
 use MOM_error_handler, only : MOM_error, FATAL
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_forcing_type, only : forcing, mech_forcing
-use MOM_forcing_type, only : allocate_forcing_type, allocate_mech_forcing
+use MOM_forcing_type, only : allocate_mech_forcing
 use MOM_grid, only : ocean_grid_type
 use MOM_safe_alloc, only : safe_alloc_ptr
 use MOM_time_manager, only : time_type, operator(+), operator(/), time_type_to_real
@@ -251,7 +251,7 @@ subroutine idealized_hurricane_wind_forcing(sfc_state, forces, day, G, US, CS)
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
   ! Allocate the forcing arrays, if necessary.
-  call allocate_mech_forcing(G, forces, stress=.true., ustar=.true.)
+  call allocate_mech_forcing(G, forces, stress=.true., ustar=.true., tau_mag=.true.)
 
   if (CS%relative_tau) then
     REL_TAU_FAC = 1.
@@ -325,16 +325,20 @@ subroutine idealized_hurricane_wind_forcing(sfc_state, forces, day, G, US, CS)
   enddo
 
   !> Get Ustar
-  do j=js,je
-    do i=is,ie
-      !  This expression can be changed if desired, but need not be.
-      forces%ustar(i,j) = G%mask2dT(i,j) * sqrt(US%L_to_Z * (CS%gustiness/CS%Rho0 + &
-              sqrt(0.5*(forces%taux(I-1,j)**2 + forces%taux(I,j)**2) + &
-                   0.5*(forces%tauy(i,J-1)**2 + forces%tauy(i,J)**2))/CS%Rho0))
-    enddo
-  enddo
+  if (associated(forces%ustar)) then ; do j=js,je ; do i=is,ie
+    !  This expression can be changed if desired, but need not be.
+    forces%ustar(i,j) = G%mask2dT(i,j) * sqrt(US%L_to_Z * (CS%gustiness/CS%Rho0 + &
+            sqrt(0.5*(forces%taux(I-1,j)**2 + forces%taux(I,j)**2) + &
+                 0.5*(forces%tauy(i,J-1)**2 + forces%tauy(i,J)**2))/CS%Rho0))
+  enddo ; enddo ; endif
 
-  return
+  !> Get tau_mag [R L Z T-2 ~> Pa]
+  if (associated(forces%tau_mag)) then ; do j=js,je ; do i=is,ie
+    forces%tau_mag(i,j) = G%mask2dT(i,j) * (CS%gustiness + &
+            sqrt(0.5*(forces%taux(I-1,j)**2 + forces%taux(I,j)**2) + &
+                 0.5*(forces%tauy(i,J-1)**2 + forces%tauy(i,J)**2)))
+  enddo ; enddo ; endif
+
 end subroutine idealized_hurricane_wind_forcing
 
 !> Calculate the wind speed at a location as a function of time.
@@ -522,7 +526,7 @@ subroutine SCM_idealized_hurricane_wind_forcing(sfc_state, forces, day, G, US, C
 
   ! Allocate the forcing arrays, if necessary.
 
-  call allocate_mech_forcing(G, forces, stress=.true., ustar=.true.)
+  call allocate_mech_forcing(G, forces, stress=.true., ustar=.true., tau_mag=.true.)
   pie = 4.0*atan(1.0) ; Deg2Rad = pie/180.
   !/ BR
   ! Implementing Holland (1980) parameteric wind profile
@@ -667,13 +671,21 @@ subroutine SCM_idealized_hurricane_wind_forcing(sfc_state, forces, day, G, US, C
     endif
     forces%tauy(I,j) = CS%rho_a * US%L_to_Z * G%mask2dCv(I,j) * Cd*dU10*dV
   enddo ; enddo
+
   ! Set the surface friction velocity [Z T-1 ~> m s-1]. ustar is always positive.
-  do j=js,je ; do i=is,ie
+  if (associated(forces%ustar)) then ; do j=js,je ; do i=is,ie
     !  This expression can be changed if desired, but need not be.
     forces%ustar(i,j) = G%mask2dT(i,j) * sqrt(US%L_to_Z * (CS%gustiness/CS%Rho0 + &
             sqrt(0.5*(forces%taux(I-1,j)**2 + forces%taux(I,j)**2) + &
                  0.5*(forces%tauy(i,J-1)**2 + forces%tauy(i,J)**2))/CS%Rho0))
-  enddo ; enddo
+  enddo ; enddo ; endif
+
+  !> Set magnitude of the wind stress [R L Z T-2 ~> Pa]
+  if (associated(forces%tau_mag)) then ; do j=js,je ; do i=is,ie
+    forces%tau_mag(i,j) = G%mask2dT(i,j) * (CS%gustiness + &
+            sqrt(0.5*(forces%taux(I-1,j)**2 + forces%taux(I,j)**2) + &
+                 0.5*(forces%tauy(i,J-1)**2 + forces%tauy(i,J)**2)))
+  enddo ; enddo ; endif
 
 end subroutine SCM_idealized_hurricane_wind_forcing
 
