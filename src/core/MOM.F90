@@ -2103,7 +2103,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
   call get_param(param_file, "MOM", "CALC_RHO_FOR_SEA_LEVEL", CS%calc_rho_for_sea_lev, &
                  "If true, the in-situ density is used to calculate the "//&
                  "effective sea level that is returned to the coupler. If false, "//&
-                 "the Boussinesq parameter RHO_0 is used.", default=.false.)
+                 "the Boussinesq parameter RHO_0 is used.", default=non_Bous)
   call get_param(param_file, "MOM", "ENABLE_THERMODYNAMICS", use_temperature, &
                  "If true, Temperature and salinity are used as state "//&
                  "variables.", default=.true.)
@@ -2892,8 +2892,8 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
     endif
   endif
 
-  ! Allocate any derived equation of state fields.
-  if (use_temperature .and. .not.(GV%Boussinesq .or. GV%semi_Boussinesq)) then
+  ! Allocate any derived densities or other equation of state derived fields.
+  if (.not.(GV%Boussinesq .or. GV%semi_Boussinesq)) then
     allocate(CS%tv%SpV_avg(isd:ied,jsd:jed,nz), source=0.0)
     CS%tv%valid_SpV_halo = -1  ! This array does not yet have any valid data.
   endif
