@@ -11,7 +11,7 @@ use MOM_debugging,     only : hchksum, uvchksum
 use MOM_diag_mediator, only : post_data, register_diag_field, register_scalar_field
 use MOM_diag_mediator, only : time_type, diag_ctrl, safe_alloc_alloc, query_averaging_enabled
 use MOM_diag_mediator, only : enable_averages, disable_averaging
-use MOM_EOS,           only : calculate_density_derivs, EOS_domain
+use MOM_EOS,           only : calculate_density_derivs, calculate_specific_vol_derivs, EOS_domain
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser,   only : get_param, log_param, log_version, param_file_type
 use MOM_grid,          only : ocean_grid_type
@@ -78,8 +78,11 @@ type, public :: forcing
     tau_mag       => NULL(), & !< Magnitude of the wind stress averaged over tracer cells,
                                !! including any contributions from sub-gridscale variability
                                !! or gustiness [R L Z T-2 ~> Pa]
-    ustar_gustless => NULL()   !< surface friction velocity scale without any
+    ustar_gustless => NULL(), & !< surface friction velocity scale without any
                                !! any augmentation for gustiness [Z T-1 ~> m s-1].
+    tau_mag_gustless => NULL() !< Magnitude of the wind stress averaged over tracer cells,
+                               !! without any augmentation for sub-gridscale variability
+                               !! or gustiness [R L Z T-2 ~> Pa]
 
   ! surface buoyancy force, used when temperature is not a state variable
   real, pointer, dimension(:,:) :: &
@@ -989,13 +992,19 @@ subroutine calculateBuoyancyFlux1d(G, GV, US, fluxes, optics, nsw, h, Temp, Salt
   real, dimension(SZI_(G))              :: pressure   ! pressure at the surface [R L2 T-2 ~> Pa]
   real, dimension(SZI_(G))              :: dRhodT     ! density partial derivative wrt temp [R C-1 ~> kg m-3 degC-1]
   real, dimension(SZI_(G))              :: dRhodS     ! density partial derivative wrt saln [R S-1 ~> kg m-3 ppt-1]
+  real, dimension(SZI_(G))              :: dSpV_dT    ! Partial derivative of specific volume with respect
+                                                      ! to temperature [R-1 C-1 ~> m3 kg-1 degC-1]
+  real, dimension(SZI_(G))              :: dSpV_dS    ! Partial derivative of specific volume with respect
+                                                      ! to salinity [R-1 S-1 ~> m3 kg-1 ppt-1]
   real, dimension(SZI_(G),SZK_(GV)+1)   :: netPen     ! The net penetrating shortwave radiation at each level
                                                       ! [C H T-1 ~> degC m s-1 or degC kg m-2 s-1]
 
   logical :: useRiverHeatContent
   logical :: useCalvingHeatContent
-  real    :: GoRho ! The gravitational acceleration divided by mean density times a
-                   ! unit conversion factor [L2 H-1 R-1 T-2 ~> m4 kg-1 s-2 or m7 kg-2 s-2]
+  real    :: GoRho  ! The gravitational acceleration divided by mean density times a
+                    ! unit conversion factor [L2 H-1 R-1 T-2 ~> m4 kg-1 s-2 or m7 kg-2 s-2]
+  real    :: g_conv ! The gravitational acceleration times the conversion factors from non-Boussinesq
+                    ! thickness units to mass per units area [R L2 H-1 T-2 ~> kg m-2 s-2 or m s-2]
   real    :: H_limit_fluxes ! A depth scale that specifies when the ocean is shallow that
                             ! it is necessary to eliminate fluxes [H ~> m or kg m-2]
   integer :: i, k
@@ -1005,9 +1014,6 @@ subroutine calculateBuoyancyFlux1d(G, GV, US, fluxes, optics, nsw, h, Temp, Salt
   useCalvingHeatContent = .False.
 
   H_limit_fluxes = max( GV%Angstrom_H, 1.e-30*GV%m_to_H )
-  pressure(:) = 0.
-  if (associated(tv%p_surf)) then ; do i=G%isc,G%iec ; pressure(i) = tv%p_surf(i,j) ; enddo ; endif
-  GoRho       = (GV%g_Earth * GV%H_to_Z) / GV%Rho0
 
   ! The surface forcing is contained in the fluxes type.
   ! We aggregate the thermodynamic forcing for a time step into the following:
@@ -1027,10 +1033,6 @@ subroutine calculateBuoyancyFlux1d(G, GV, US, fluxes, optics, nsw, h, Temp, Salt
   call sumSWoverBands(G, GV, US, h(:,j,:), dz, optics_nbands(optics), optics, j, 1.0, &
                       H_limit_fluxes, .true., penSWbnd, netPen)
 
-  ! Density derivatives
-  call calculate_density_derivs(Temp(:,j,1), Salt(:,j,1), pressure, dRhodT, dRhodS, &
-                                tv%eqn_of_state, EOS_domain(G%HI))
-
   ! Adjust netSalt to reflect dilution effect of FW flux
   ! [S H T-1 ~> ppt m s-1 or ppt kg m-2 s-1]
   netSalt(G%isc:G%iec) = netSalt(G%isc:G%iec) - Salt(G%isc:G%iec,j,1) * netH(G%isc:G%iec)
@@ -1041,13 +1043,41 @@ subroutine calculateBuoyancyFlux1d(G, GV, US, fluxes, optics, nsw, h, Temp, Salt
   !netHeat(:) = netHeatMinusSW(:) + sum( penSWbnd, dim=1 )
   netHeat(G%isc:G%iec) = netHeatMinusSW(G%isc:G%iec) + netPen(G%isc:G%iec,1)
 
-  ! Convert to a buoyancy flux, excluding penetrating SW heating
-  buoyancyFlux(G%isc:G%iec,1) = - GoRho * ( dRhodS(G%isc:G%iec) * netSalt(G%isc:G%iec) + &
-                                             dRhodT(G%isc:G%iec) * netHeat(G%isc:G%iec) ) ! [L2 T-3 ~> m2 s-3]
-  ! We also have a penetrative buoyancy flux associated with penetrative SW
-  do k=2, GV%ke+1
-    buoyancyFlux(G%isc:G%iec,k) = - GoRho * ( dRhodT(G%isc:G%iec) * netPen(G%isc:G%iec,k) ) ! [L2 T-3 ~> m2 s-3]
-  enddo
+  ! Determine the buoyancy flux
+  pressure(:) = 0.
+  if (associated(tv%p_surf)) then ; do i=G%isc,G%iec ; pressure(i) = tv%p_surf(i,j) ; enddo ; endif
+
+  if ((.not.GV%Boussinesq) .and. (.not.GV%semi_Boussinesq)) then
+    g_conv = GV%g_Earth * GV%H_to_RZ
+
+    ! Specific volume derivatives
+    call calculate_specific_vol_derivs(Temp(:,j,1), Salt(:,j,1), pressure, dSpV_dT, dSpV_dS, &
+                                  tv%eqn_of_state, EOS_domain(G%HI))
+
+    ! Convert to a buoyancy flux [L2 T-3 ~> m2 s-3], first excluding penetrating SW heating
+    do i=G%isc,G%iec
+      buoyancyFlux(i,1) = g_conv * (dSpV_dS(i) * netSalt(i) + dSpV_dT(i) * netHeat(i))
+    enddo
+    ! We also have a penetrative buoyancy flux associated with penetrative SW
+    do k=2,GV%ke+1 ; do i=G%isc,G%iec
+      buoyancyFlux(i,k) = g_conv * ( dSpV_dT(i) * netPen(i,k) ) ! [L2 T-3 ~> m2 s-3]
+    enddo ; enddo
+  else
+    GoRho = (GV%g_Earth * GV%H_to_Z) / GV%Rho0
+
+    ! Density derivatives
+    call calculate_density_derivs(Temp(:,j,1), Salt(:,j,1), pressure, dRhodT, dRhodS, &
+                                  tv%eqn_of_state, EOS_domain(G%HI))
+
+    ! Convert to a buoyancy flux [L2 T-3 ~> m2 s-3], excluding penetrating SW heating
+    do i=G%isc,G%iec
+      buoyancyFlux(i,1) = - GoRho * ( dRhodS(i) * netSalt(i) + dRhodT(i) * netHeat(i) )
+    enddo
+    ! We also have a penetrative buoyancy flux associated with penetrative SW
+    do k=2,GV%ke+1 ; do i=G%isc,G%iec
+      buoyancyFlux(i,k) = - GoRho * ( dRhodT(i) * netPen(i,k) ) ! [L2 T-3 ~> m2 s-3]
+    enddo ; enddo
+  endif
 
 end subroutine calculateBuoyancyFlux1d
 
@@ -2201,34 +2231,55 @@ subroutine fluxes_accumulate(flux_tmp, fluxes, G, wt2, forces)
   wt2 = 1.0 - wt1 ! = flux_tmp%dt_buoy_accum / (fluxes%dt_buoy_accum + flux_tmp%dt_buoy_accum)
   fluxes%dt_buoy_accum = fluxes%dt_buoy_accum + flux_tmp%dt_buoy_accum
 
-  ! Copy over the pressure fields and accumulate averages of ustar, either from the forcing
+  ! Copy over the pressure fields and accumulate averages of ustar or tau_mag, either from the forcing
   ! type or from the temporary fluxes type.
   if (present(forces)) then
     do j=js,je ; do i=is,ie
       fluxes%p_surf(i,j) = forces%p_surf(i,j)
       fluxes%p_surf_full(i,j) = forces%p_surf_full(i,j)
-
-      fluxes%ustar(i,j) = wt1*fluxes%ustar(i,j) + wt2*forces%ustar(i,j)
-      fluxes%tau_mag(i,j) = wt1*fluxes%tau_mag(i,j) + wt2*forces%tau_mag(i,j)
     enddo ; enddo
+
+    if (associated(fluxes%ustar)) then ; do j=js,je ; do i=is,ie
+      fluxes%ustar(i,j) = wt1*fluxes%ustar(i,j) + wt2*forces%ustar(i,j)
+    enddo ; enddo ; endif
+    if (associated(fluxes%tau_mag)) then ; do j=js,je ; do i=is,ie
+      fluxes%tau_mag(i,j) = wt1*fluxes%tau_mag(i,j) + wt2*forces%tau_mag(i,j)
+    enddo ; enddo ; endif
   else
     do j=js,je ; do i=is,ie
       fluxes%p_surf(i,j) = flux_tmp%p_surf(i,j)
       fluxes%p_surf_full(i,j) = flux_tmp%p_surf_full(i,j)
+    enddo ; enddo
 
+    if (associated(fluxes%ustar)) then ; do j=js,je ; do i=is,ie
       fluxes%ustar(i,j) = wt1*fluxes%ustar(i,j) + wt2*flux_tmp%ustar(i,j)
+    enddo ; enddo ; endif
+    if (associated(fluxes%tau_mag)) then ; do j=js,je ; do i=is,ie
       fluxes%tau_mag(i,j) = wt1*fluxes%tau_mag(i,j) + wt2*flux_tmp%tau_mag(i,j)
+    enddo ; enddo ; endif
+  endif
+
+  ! Average ustar_gustless.
+  if (associated(fluxes%ustar_gustless)) then
+    if (fluxes%gustless_accum_bug) then
+      do j=js,je ; do i=is,ie
+        fluxes%ustar_gustless(i,j) = flux_tmp%ustar_gustless(i,j)
+      enddo ; enddo
+    else
+      do j=js,je ; do i=is,ie
+        fluxes%ustar_gustless(i,j) = wt1*fluxes%ustar_gustless(i,j) + wt2*flux_tmp%ustar_gustless(i,j)
+      enddo ; enddo
+    endif
+  endif
+
+  if (associated(fluxes%tau_mag_gustless)) then
+    do j=js,je ; do i=is,ie
+      fluxes%tau_mag_gustless(i,j) = wt1*fluxes%tau_mag_gustless(i,j) + wt2*flux_tmp%tau_mag_gustless(i,j)
     enddo ; enddo
   endif
 
-  ! Average the water, heat, and salt fluxes, and ustar.
+  ! Average the water, heat, and salt fluxes.
   do j=js,je ; do i=is,ie
-    if (fluxes%gustless_accum_bug) then
-      fluxes%ustar_gustless(i,j) = flux_tmp%ustar_gustless(i,j)
-    else
-      fluxes%ustar_gustless(i,j) = wt1*fluxes%ustar_gustless(i,j) + wt2*flux_tmp%ustar_gustless(i,j)
-    endif
-
     fluxes%evap(i,j) = wt1*fluxes%evap(i,j) + wt2*flux_tmp%evap(i,j)
     fluxes%lprec(i,j) = wt1*fluxes%lprec(i,j) + wt2*flux_tmp%lprec(i,j)
     fluxes%fprec(i,j) = wt1*fluxes%fprec(i,j) + wt2*flux_tmp%fprec(i,j)
@@ -2383,8 +2434,8 @@ subroutine set_derived_forcing_fields(forces, fluxes, G, US, Rho0)
 
   Irho0 = US%L_to_Z / Rho0
 
-  if (associated(forces%taux) .and. associated(forces%tauy) .and. &
-      associated(fluxes%ustar_gustless)) then
+  if ( associated(forces%taux) .and. associated(forces%tauy) .and. &
+       (associated(fluxes%ustar_gustless) .or. associated(fluxes%tau_mag_gustless)) ) then
     do j=js,je ; do i=is,ie
       taux2 = 0.0
       if ((G%mask2dCu(I-1,j) + G%mask2dCu(I,j)) > 0.0) &
@@ -2397,11 +2448,16 @@ subroutine set_derived_forcing_fields(forces, fluxes, G, US, Rho0)
                  G%mask2dCv(i,J) * forces%tauy(i,J)**2) / &
                 (G%mask2dCv(i,J-1) + G%mask2dCv(i,J))
 
-      if (fluxes%gustless_accum_bug) then
-        ! This change is just for computational efficiency, but it is wrapped with another change.
-        fluxes%ustar_gustless(i,j) = sqrt(US%L_to_Z * sqrt(taux2 + tauy2) / Rho0)
-      else
-        fluxes%ustar_gustless(i,j) = sqrt(sqrt(taux2 + tauy2) * Irho0)
+      if (associated(fluxes%ustar_gustless)) then
+        if (fluxes%gustless_accum_bug) then
+          ! This change is just for computational efficiency, but it is wrapped with another change.
+          fluxes%ustar_gustless(i,j) = sqrt(US%L_to_Z * sqrt(taux2 + tauy2) / Rho0)
+        else
+          fluxes%ustar_gustless(i,j) = sqrt(sqrt(taux2 + tauy2) * Irho0)
+        endif
+      endif
+      if (associated(fluxes%tau_mag_gustless)) then
+        fluxes%tau_mag_gustless(i,j) = sqrt(taux2 + tauy2)
       endif
     enddo ; enddo
   endif
@@ -3157,7 +3213,7 @@ end subroutine forcing_diagnostics
 !> Conditionally allocate fields within the forcing type
 subroutine allocate_forcing_by_group(G, fluxes, water, heat, ustar, press, &
                                   shelf, iceberg, salt, fix_accum_bug, cfc, waves, &
-                                  shelf_sfc_accumulation, lamult, hevap)
+                                  shelf_sfc_accumulation, lamult, hevap, tau_mag)
   type(ocean_grid_type), intent(in) :: G       !< Ocean grid structure
   type(forcing),      intent(inout) :: fluxes  !< A structure containing thermodynamic forcing fields
   logical, optional,     intent(in) :: water   !< If present and true, allocate water fluxes
@@ -3178,6 +3234,7 @@ subroutine allocate_forcing_by_group(G, fluxes, water, heat, ustar, press, &
   logical, optional,     intent(in) :: hevap   !< If present and true, allocate heat content evap.
                                                !! This field must be allocated when enthalpy is provided
                                                !! via coupler.
+  logical, optional,     intent(in) :: tau_mag !< If present and true, allocate tau_mag and related fields
 
   ! Local variables
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
@@ -3196,6 +3253,10 @@ subroutine allocate_forcing_by_group(G, fluxes, water, heat, ustar, press, &
   call myAlloc(fluxes%ustar,isd,ied,jsd,jed, ustar)
   call myAlloc(fluxes%ustar_gustless,isd,ied,jsd,jed, ustar)
   call myAlloc(fluxes%tau_mag,isd,ied,jsd,jed, ustar)
+
+  ! Note that myAlloc can be called safely multiple times for the same pointer.
+  call myAlloc(fluxes%tau_mag,isd,ied,jsd,jed, tau_mag)
+  call myAlloc(fluxes%tau_mag_gustless,isd,ied,jsd,jed, tau_mag)
 
   call myAlloc(fluxes%evap,isd,ied,jsd,jed, water)
   call myAlloc(fluxes%lprec,isd,ied,jsd,jed, water)
@@ -3257,20 +3318,20 @@ subroutine allocate_forcing_by_group(G, fluxes, water, heat, ustar, press, &
   if (present(fix_accum_bug)) fluxes%gustless_accum_bug = .not.fix_accum_bug
 end subroutine allocate_forcing_by_group
 
-
+!> Allocate elements of a new forcing type based on their status in an existing type.
 subroutine allocate_forcing_by_ref(fluxes_ref, G, fluxes)
-  type(forcing), intent(in) :: fluxes_ref  !< Reference fluxes
-  type(ocean_grid_type), intent(in) :: G        !< Grid metric of target fluxes
-  type(forcing), intent(out) :: fluxes     !< Target fluxes
+  type(forcing),         intent(in)  :: fluxes_ref !< Reference fluxes
+  type(ocean_grid_type), intent(in)  :: G          !< Grid metric of target fluxes
+  type(forcing),         intent(out) :: fluxes     !< Target fluxes
 
-  logical :: do_ustar, do_water, do_heat, do_salt, do_press, do_shelf, &
-      do_iceberg, do_heat_added, do_buoy
+  logical :: do_ustar, do_taumag, do_water, do_heat, do_salt, do_press, do_shelf
+  logical :: do_iceberg, do_heat_added, do_buoy
 
-  call get_forcing_groups(fluxes_ref, do_water, do_heat, do_ustar, do_press, &
+  call get_forcing_groups(fluxes_ref, do_water, do_heat, do_ustar, do_taumag, do_press, &
       do_shelf, do_iceberg, do_salt, do_heat_added, do_buoy)
 
   call allocate_forcing_type(G, fluxes, do_water, do_heat, do_ustar, &
-      do_press, do_shelf, do_iceberg, do_salt)
+      do_press, do_shelf, do_iceberg, do_salt, do_taumag)
 
   ! The following fluxes would typically be allocated by the driver
   call myAlloc(fluxes%sw_vis_dir, G%isd, G%ied, G%jsd, G%jed, &
@@ -3309,7 +3370,7 @@ end subroutine allocate_forcing_by_ref
 !> Conditionally allocate fields within the mechanical forcing type using
 !! control flags.
 subroutine allocate_mech_forcing_by_group(G, forces, stress, ustar, shelf, &
-                                          press, iceberg, waves, num_stk_bands)
+                                          press, iceberg, waves, num_stk_bands, tau_mag)
   type(ocean_grid_type), intent(in) :: G       !< Ocean grid structure
   type(mech_forcing), intent(inout) :: forces  !< Forcing fields structure
 
@@ -3320,6 +3381,7 @@ subroutine allocate_mech_forcing_by_group(G, forces, stress, ustar, shelf, &
   logical, optional,     intent(in) :: iceberg !< If present and true, allocate forces for icebergs
   logical, optional,     intent(in) :: waves   !< If present and true, allocate wave fields
   integer, optional,     intent(in) :: num_stk_bands !< Number of Stokes bands to allocate
+  logical, optional,     intent(in) :: tau_mag !< If present and true, allocate tau_mag
 
   ! Local variables
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
@@ -3332,6 +3394,8 @@ subroutine allocate_mech_forcing_by_group(G, forces, stress, ustar, shelf, &
 
   call myAlloc(forces%ustar,isd,ied,jsd,jed, ustar)
   call myAlloc(forces%tau_mag,isd,ied,jsd,jed, ustar)
+  ! Note that myAlloc can be called safely multiple times for the same pointer.
+  call myAlloc(forces%tau_mag,isd,ied,jsd,jed, tau_mag)
 
   call myAlloc(forces%p_surf,isd,ied,jsd,jed, press)
   call myAlloc(forces%p_surf_full,isd,ied,jsd,jed, press)
@@ -3371,24 +3435,25 @@ subroutine allocate_mech_forcing_from_ref(forces_ref, G, forces)
   type(ocean_grid_type), intent(in) :: G      !< Grid metric of target forcing
   type(mech_forcing), intent(out) :: forces   !< Mechanical forcing fields
 
-  logical :: do_stress, do_ustar, do_shelf, do_press, do_iceberg
+  logical :: do_stress, do_ustar, do_tau_mag, do_shelf, do_press, do_iceberg
 
   ! Identify the active fields in the reference forcing
-  call get_mech_forcing_groups(forces_ref, do_stress, do_ustar, do_shelf, &
-                              do_press, do_iceberg)
+  call get_mech_forcing_groups(forces_ref, do_stress, do_ustar, do_tau_mag, do_shelf, &
+                               do_press, do_iceberg)
 
   call allocate_mech_forcing(G, forces, do_stress, do_ustar, do_shelf, &
-                             do_press, do_iceberg)
+                             do_press, do_iceberg, tau_mag=do_tau_mag)
 end subroutine allocate_mech_forcing_from_ref
 
 
 !> Return flags indicating which groups of forcings are allocated
-subroutine get_forcing_groups(fluxes, water, heat, ustar, press, shelf, &
+subroutine get_forcing_groups(fluxes, water, heat, ustar, tau_mag, press, shelf, &
                              iceberg, salt, heat_added, buoy)
   type(forcing), intent(in) :: fluxes  !< Reference flux fields
   logical, intent(out) :: water   !< True if fluxes contains water-based fluxes
   logical, intent(out) :: heat    !< True if fluxes contains heat-based fluxes
-  logical, intent(out) :: ustar   !< True if fluxes contains ustar fluxes
+  logical, intent(out) :: ustar   !< True if fluxes contains ustar
+  logical, intent(out) :: tau_mag !< True if fluxes contains tau_mag
   logical, intent(out) :: press   !< True if fluxes contains surface pressure
   logical, intent(out) :: shelf   !< True if fluxes contains ice shelf fields
   logical, intent(out) :: iceberg !< True if fluxes contains iceberg fluxes
@@ -3401,6 +3466,7 @@ subroutine get_forcing_groups(fluxes, water, heat, ustar, press, shelf, &
   !   we handle them here as independent flags.
 
   ustar = associated(fluxes%ustar) .and. associated(fluxes%ustar_gustless)
+  tau_mag = associated(fluxes%tau_mag) .and. associated(fluxes%tau_mag_gustless)
   ! TODO: Check for all associated fields, but for now just check one as a marker
   water = associated(fluxes%evap)
   heat = associated(fluxes%seaice_melt_heat)
@@ -3414,10 +3480,11 @@ end subroutine get_forcing_groups
 
 
 !> Return flags indicating which groups of mechanical forcings are allocated
-subroutine get_mech_forcing_groups(forces, stress, ustar, shelf, press, iceberg)
+subroutine get_mech_forcing_groups(forces, stress, ustar, tau_mag, shelf, press, iceberg)
   type(mech_forcing), intent(in) :: forces  !< Reference forcing fields
   logical, intent(out) :: stress  !< True if forces contains wind stress fields
   logical, intent(out) :: ustar   !< True if forces contains ustar field
+  logical, intent(out) :: tau_mag !< True if forces contains tau_mag field
   logical, intent(out) :: shelf   !< True if forces contains ice shelf fields
   logical, intent(out) :: press   !< True if forces contains pressure fields
   logical, intent(out) :: iceberg !< True if forces contains iceberg fields
@@ -3425,6 +3492,7 @@ subroutine get_mech_forcing_groups(forces, stress, ustar, shelf, press, iceberg)
   stress = associated(forces%taux) &
       .and. associated(forces%tauy)
   ustar = associated(forces%ustar)
+  tau_mag = associated(forces%tau_mag)
   shelf = associated(forces%rigidity_ice_u) &
       .and. associated(forces%rigidity_ice_v) &
       .and. associated(forces%frac_shelf_u) &
@@ -3539,17 +3607,21 @@ subroutine rotate_forcing(fluxes_in, fluxes, turns)
   type(forcing), intent(inout) :: fluxes      !< Rotated forcing structure
   integer, intent(in) :: turns                !< Number of quarter turns
 
-  logical :: do_ustar, do_water, do_heat, do_salt, do_press, do_shelf, &
+  logical :: do_ustar, do_taumag, do_water, do_heat, do_salt, do_press, do_shelf, &
       do_iceberg, do_heat_added, do_buoy
 
-  call get_forcing_groups(fluxes_in, do_water, do_heat, do_ustar, do_press, &
+  call get_forcing_groups(fluxes_in, do_water, do_heat, do_ustar, do_taumag, do_press, &
       do_shelf, do_iceberg, do_salt, do_heat_added, do_buoy)
 
-  if (do_ustar) then
+  if (associated(fluxes_in%ustar)) &
     call rotate_array(fluxes_in%ustar, turns, fluxes%ustar)
+  if (associated(fluxes_in%ustar_gustless)) &
     call rotate_array(fluxes_in%ustar_gustless, turns, fluxes%ustar_gustless)
+
+  if (associated(fluxes_in%tau_mag)) &
     call rotate_array(fluxes_in%tau_mag, turns, fluxes%tau_mag)
-  endif
+  if (associated(fluxes_in%tau_mag_gustless)) &
+    call rotate_array(fluxes_in%tau_mag_gustless, turns, fluxes%tau_mag_gustless)
 
   if (do_water) then
     call rotate_array(fluxes_in%evap, turns, fluxes%evap)
@@ -3670,19 +3742,19 @@ subroutine rotate_mech_forcing(forces_in, turns, forces)
   integer, intent(in) :: turns                  !< Number of quarter-turns
   type(mech_forcing), intent(inout) :: forces   !< Forcing on the rotated domain
 
-  logical :: do_stress, do_ustar, do_shelf, do_press, do_iceberg
+  logical :: do_stress, do_ustar, do_tau_mag, do_shelf, do_press, do_iceberg
 
-  call get_mech_forcing_groups(forces_in, do_stress, do_ustar, do_shelf, &
+  call get_mech_forcing_groups(forces_in, do_stress, do_ustar, do_tau_mag, do_shelf, &
                               do_press, do_iceberg)
 
   if (do_stress) &
     call rotate_vector(forces_in%taux, forces_in%tauy, turns, &
         forces%taux, forces%tauy)
 
-  if (do_ustar) then
+  if (associated(forces_in%ustar)) &
     call rotate_array(forces_in%ustar, turns, forces%ustar)
+  if (associated(forces_in%tau_mag)) &
     call rotate_array(forces_in%tau_mag, turns, forces%tau_mag)
-  endif
 
   if (do_shelf) then
     call rotate_array_pair( &
@@ -3726,8 +3798,9 @@ subroutine homogenize_mech_forcing(forces, G, US, Rho0, UpdateUstar)
                                                  !! or updated from mean tau.
 
   real :: tx_mean, ty_mean ! Mean wind stresses [R L Z T-2 ~> Pa]
+  real :: tau_mag      ! The magnitude of the wind stresses [R L Z T-2 ~> Pa]
   real :: Irho0        ! Inverse of the mean density rescaled to [Z L-1 R-1 ~> m3 kg-1]
-  logical :: do_stress, do_ustar, do_shelf, do_press, do_iceberg, tau2ustar
+  logical :: do_stress, do_ustar, do_taumag, do_shelf, do_press, do_iceberg, tau2ustar
   integer :: i, j, is, ie, js, je, isB, ieB, jsB, jeB
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   isB = G%iscB ; ieB = G%iecB ; jsB = G%jscB ; jeB = G%jecB
@@ -3737,7 +3810,7 @@ subroutine homogenize_mech_forcing(forces, G, US, Rho0, UpdateUstar)
   tau2ustar = .false.
   if (present(UpdateUstar)) tau2ustar = UpdateUstar
 
-  call get_mech_forcing_groups(forces, do_stress, do_ustar, do_shelf, &
+  call get_mech_forcing_groups(forces, do_stress, do_ustar, do_taumag, do_shelf, &
                               do_press, do_iceberg)
 
   if (do_stress) then
@@ -3750,19 +3823,24 @@ subroutine homogenize_mech_forcing(forces, G, US, Rho0, UpdateUstar)
       if (G%mask2dCv(i,J) > 0.0) forces%tauy(i,J) = ty_mean
     enddo ; enddo
     if (tau2ustar) then
-      do j=js,je ; do i=is,ie ; if (G%mask2dT(i,j) > 0.0) then
-        forces%tau_mag(i,j) = sqrt(tx_mean**2 + ty_mean**2)
-        forces%ustar(i,j) = sqrt(forces%tau_mag(i,j) * Irho0)
-      endif ; enddo ; enddo
+      tau_mag = sqrt(tx_mean**2 + ty_mean**2)
+      if (associated(forces%tau_mag)) then ; do j=js,je ; do i=is,ie ; if (G%mask2dT(i,j) > 0.0) then
+        forces%tau_mag(i,j) = tau_mag
+      endif ; enddo ; enddo ; endif
+      if (associated(forces%ustar)) then ; do j=js,je ; do i=is,ie ; if (G%mask2dT(i,j) > 0.0) then
+        forces%ustar(i,j) = sqrt(tau_mag * Irho0)
+      endif ; enddo ; enddo ; endif
     else
-      call homogenize_field_t(forces%ustar, G, tmp_scale=US%Z_to_m*US%s_to_T)
-      call homogenize_field_t(forces%tau_mag, G, tmp_scale=US%RLZ_T2_to_Pa)
+      if (associated(forces%ustar)) &
+        call homogenize_field_t(forces%ustar, G, tmp_scale=US%Z_to_m*US%s_to_T)
+      if (associated(forces%tau_mag)) &
+        call homogenize_field_t(forces%tau_mag, G, tmp_scale=US%RLZ_T2_to_Pa)
     endif
   else
-    if (do_ustar) then
+    if (associated(forces%ustar)) &
       call homogenize_field_t(forces%ustar, G, tmp_scale=US%Z_to_m*US%s_to_T)
+    if (associated(forces%tau_mag)) &
       call homogenize_field_t(forces%tau_mag, G, tmp_scale=US%RLZ_T2_to_Pa)
-    endif
   endif
 
   if (do_shelf) then
@@ -3793,17 +3871,21 @@ subroutine homogenize_forcing(fluxes, G, GV, US)
   type(verticalGrid_type), intent(in)    :: GV     !< ocean vertical grid structure
   type(unit_scale_type),   intent(in)    :: US     !< A dimensional unit scaling type
 
-  logical :: do_ustar, do_water, do_heat, do_salt, do_press, do_shelf, &
-      do_iceberg, do_heat_added, do_buoy
+  logical :: do_ustar, do_taumag, do_water, do_heat, do_salt, do_press, do_shelf
+  logical :: do_iceberg, do_heat_added, do_buoy
 
-  call get_forcing_groups(fluxes, do_water, do_heat, do_ustar, do_press, &
+  call get_forcing_groups(fluxes, do_water, do_heat, do_ustar, do_taumag, do_press, &
       do_shelf, do_iceberg, do_salt, do_heat_added, do_buoy)
 
-  if (do_ustar) then
+  if (associated(fluxes%ustar)) &
     call homogenize_field_t(fluxes%ustar, G, tmp_scale=US%Z_to_m*US%s_to_T)
+  if (associated(fluxes%ustar_gustless)) &
     call homogenize_field_t(fluxes%ustar_gustless, G, tmp_scale=US%Z_to_m*US%s_to_T)
+
+  if (associated(fluxes%tau_mag)) &
     call homogenize_field_t(fluxes%tau_mag, G, tmp_scale=US%RLZ_T2_to_Pa)
-  endif
+  if (associated(fluxes%tau_mag_gustless)) &
+    call homogenize_field_t(fluxes%tau_mag_gustless, G, tmp_scale=US%RLZ_T2_to_Pa)
 
   if (do_water) then
     call homogenize_field_t(fluxes%evap, G, tmp_scale=US%RZ_T_to_kg_m2s)
