@@ -79,9 +79,11 @@ type, public :: surface_forcing_CS ; private
 
   real :: Rho0                  !< Boussinesq reference density [R ~> kg m-3]
   real :: G_Earth               !< gravitational acceleration [L2 Z-1 T-2 ~> m s-2]
-  real :: Flux_const            !< piston velocity for surface restoring [Z T-1 ~> m s-1]
-  real :: Flux_const_T          !< piston velocity for surface temperature restoring [Z T-1 ~> m s-1]
-  real :: Flux_const_S          !< piston velocity for surface salinity restoring [Z T-1 ~> m s-1]
+  real :: Flux_const = 0.0      !< piston velocity for surface restoring [Z T-1 ~> m s-1]
+  real :: Flux_const_T = 0.0    !< piston velocity for surface temperature restoring [Z T-1 ~> m s-1]
+  real :: Flux_const_S = 0.0    !< piston velocity for surface salinity restoring [Z T-1 ~> m s-1]
+  real :: rho_restore           !< The density that is used to convert piston velocities into salt
+                                !! or heat fluxes with salinity or temperature restoring [R ~> kg m-3]
   real :: latent_heat_fusion    !< latent heat of fusion times [Q ~> J kg-1]
   real :: latent_heat_vapor     !< latent heat of vaporization [Q ~> J kg-1]
   real :: tau_x0                !< Constant zonal wind stress used in the WIND_CONFIG="const"
@@ -250,9 +252,9 @@ subroutine set_forcing(sfc_state, forces, fluxes, day_start, day_interval, G, US
 
   if (CS%first_call_set_forcing) then
     ! Allocate memory for the mechanical and thermodynamic forcing fields.
-    call allocate_mech_forcing(G, forces, stress=.true., ustar=.true., press=.true.)
+    call allocate_mech_forcing(G, forces, stress=.true., ustar=.true., press=.true., tau_mag=.true.)
 
-    call allocate_forcing_type(G, fluxes, ustar=.true., fix_accum_bug=CS%fix_ustar_gustless_bug)
+    call allocate_forcing_type(G, fluxes, ustar=.true., fix_accum_bug=CS%fix_ustar_gustless_bug, tau_mag=.true.)
     if (trim(CS%buoy_config) /= "NONE") then
       if ( CS%use_temperature ) then
         call allocate_forcing_type(G, fluxes, water=.true., heat=.true., press=.true.)
@@ -837,7 +839,7 @@ subroutine wind_forcing_by_data_override(sfc_state, forces, day, G, US, CS)
   call callTree_enter("wind_forcing_by_data_override, MOM_surface_forcing.F90")
 
   if (.not.CS%dataOverrideIsInitialized) then
-    call allocate_mech_forcing(G, forces, stress=.true., ustar=.true., press=.true.)
+    call allocate_mech_forcing(G, forces, stress=.true., ustar=.true., press=.true., tau_mag=.true.)
     call data_override_init(G%Domain)
     CS%dataOverrideIsInitialized = .True.
   endif
@@ -953,7 +955,7 @@ subroutine buoyancy_forcing_from_files(sfc_state, fluxes, day, dt, G, US, CS)
 
   is  = G%isc ; ie  = G%iec ; js  = G%jsc ; je = G%jec
 
-  if (CS%use_temperature) rhoXcp = CS%Rho0 * fluxes%C_p
+  if (CS%use_temperature) rhoXcp = CS%rho_restore * fluxes%C_p
 
   ! Read the buoyancy forcing file
   call get_time(day, seconds, days)
@@ -1152,7 +1154,7 @@ subroutine buoyancy_forcing_from_files(sfc_state, fluxes, day, dt, G, US, CS)
         if (G%mask2dT(i,j) > 0.0) then
           fluxes%heat_added(i,j) = G%mask2dT(i,j) * &
               ((CS%T_Restore(i,j) - sfc_state%SST(i,j)) * rhoXcp * CS%Flux_const_T)
-          fluxes%vprec(i,j) = - (CS%Rho0*CS%Flux_const_S) * &
+          fluxes%vprec(i,j) = - (CS%rho_restore*CS%Flux_const_S) * &
               (CS%S_Restore(i,j) - sfc_state%SSS(i,j)) / &
               (0.5*(sfc_state%SSS(i,j) + CS%S_Restore(i,j)))
         else
@@ -1164,7 +1166,7 @@ subroutine buoyancy_forcing_from_files(sfc_state, fluxes, day, dt, G, US, CS)
       do j=js,je ; do i=is,ie
         if (G%mask2dT(i,j) > 0.0) then
           fluxes%buoy(i,j) = (CS%Dens_Restore(i,j) - sfc_state%sfc_density(i,j)) * &
-                             (CS%G_Earth * CS%Flux_const / CS%Rho0)
+                             (CS%G_Earth * CS%Flux_const / CS%rho_restore)
         else
           fluxes%buoy(i,j) = 0.0
         endif
@@ -1220,7 +1222,7 @@ subroutine buoyancy_forcing_from_data_override(sfc_state, fluxes, day, dt, G, US
   is  = G%isc ; ie  = G%iec ; js  = G%jsc ; je  = G%jec
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
-  if (CS%use_temperature) rhoXcp = CS%Rho0 * fluxes%C_p
+  if (CS%use_temperature) rhoXcp = CS%rho_restore * fluxes%C_p
 
   if (.not.CS%dataOverrideIsInitialized) then
     call data_override_init(G%Domain)
@@ -1258,7 +1260,7 @@ subroutine buoyancy_forcing_from_data_override(sfc_state, fluxes, day, dt, G, US
         if (G%mask2dT(i,j) > 0.0) then
           fluxes%heat_added(i,j) = G%mask2dT(i,j) * &
               ((CS%T_Restore(i,j) - sfc_state%SST(i,j)) * rhoXcp * CS%Flux_const_T)
-          fluxes%vprec(i,j) = - (CS%Rho0*CS%Flux_const_S) * &
+          fluxes%vprec(i,j) = - (CS%rho_restore*CS%Flux_const_S) * &
               (CS%S_Restore(i,j) - sfc_state%SSS(i,j)) / &
               (0.5*(sfc_state%SSS(i,j) + CS%S_Restore(i,j)))
         else
@@ -1270,7 +1272,7 @@ subroutine buoyancy_forcing_from_data_override(sfc_state, fluxes, day, dt, G, US
       do j=js,je ; do i=is,ie
         if (G%mask2dT(i,j) > 0.0) then
           fluxes%buoy(i,j) = (CS%Dens_Restore(i,j) - sfc_state%sfc_density(i,j)) * &
-                             (CS%G_Earth * CS%Flux_const / CS%Rho0)
+                             (CS%G_Earth * CS%Flux_const / CS%rho_restore)
         else
           fluxes%buoy(i,j) = 0.0
         endif
@@ -1457,8 +1459,8 @@ subroutine buoyancy_forcing_linear(sfc_state, fluxes, day, dt, G, US, CS)
         S_restore = CS%S_south + (CS%S_north-CS%S_south)*y
         if (G%mask2dT(i,j) > 0.0) then
           fluxes%heat_added(i,j) = G%mask2dT(i,j) * &
-              ((T_Restore - sfc_state%SST(i,j)) * ((CS%Rho0 * fluxes%C_p) * CS%Flux_const))
-          fluxes%vprec(i,j) = - (CS%Rho0*CS%Flux_const) * &
+              ((T_Restore - sfc_state%SST(i,j)) * ((CS%rho_restore * fluxes%C_p) * CS%Flux_const))
+          fluxes%vprec(i,j) = - (CS%rho_restore*CS%Flux_const) * &
               (S_Restore - sfc_state%SSS(i,j)) / &
               (0.5*(sfc_state%SSS(i,j) + S_Restore))
         else
@@ -1472,7 +1474,7 @@ subroutine buoyancy_forcing_linear(sfc_state, fluxes, day, dt, G, US, CS)
      !do j=js,je ; do i=is,ie
      !  if (G%mask2dT(i,j) > 0.0) then
      !    fluxes%buoy(i,j) = (CS%Dens_Restore(i,j) - sfc_state%sfc_density(i,j)) * &
-     !                       (CS%G_Earth * CS%Flux_const / CS%Rho0)
+     !                       (CS%G_Earth * CS%Flux_const / CS%rho_restore)
      !  else
      !    fluxes%buoy(i,j) = 0.0
      !  endif
@@ -1874,6 +1876,12 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, tracer_flow_C
                  "at the southern end of the domain toward which to "//&
                  "to restore.", units="PSU", default=35.0, scale=US%ppt_to_S)
     endif
+    call get_param(param_file, mdl, "RESTORE_FLUX_RHO", CS%rho_restore, &
+                 "The density that is used to convert piston velocities into salt or heat "//&
+                 "fluxes with RESTORE_SALINITY or RESTORE_TEMPERATURE.", &
+                 units="kg m-3", default=CS%Rho0*US%R_to_kg_m3, scale=US%kg_m3_to_R, &
+                 do_not_log=(((CS%Flux_const==0.0).and.(CS%Flux_const_T==0.0).and.(CS%Flux_const_S==0.0))&
+                            .or.(.not.CS%restorebuoy)))
   endif
   call get_param(param_file, mdl, "G_EARTH", CS%G_Earth, &
                  "The gravitational acceleration of the Earth.", &
