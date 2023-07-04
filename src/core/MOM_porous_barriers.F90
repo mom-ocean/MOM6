@@ -414,12 +414,13 @@ subroutine calc_por_interface(D_min, D_max, D_avg, eta_layer, w_layer, do_next)
   endif
 end subroutine calc_por_interface
 
-subroutine porous_barriers_init(Time, US, param_file, diag, CS)
-  type(porous_barrier_CS), intent(inout) :: CS         !< Module control structure
-  type(param_file_type),   intent(in)    :: param_file !< structure indicating parameter file to parse
+subroutine porous_barriers_init(Time, GV, US, param_file, diag, CS)
   type(time_type),         intent(in)    :: Time       !< Current model time
-  type(diag_ctrl), target, intent(inout) :: diag       !< Diagnostics control structure
+  type(verticalGrid_type), intent(in)    :: GV         !< The ocean's vertical grid structure.
   type(unit_scale_type),   intent(in)    :: US         !< A dimensional unit scaling type
+  type(param_file_type),   intent(in)    :: param_file !< structure indicating parameter file to parse
+  type(diag_ctrl), target, intent(inout) :: diag       !< Diagnostics control structure
+  type(porous_barrier_CS), intent(inout) :: CS         !< Module control structure
 
   ! local variables
   character(len=40) :: mdl = "MOM_porous_barriers"  ! This module's name.
@@ -439,7 +440,9 @@ subroutine porous_barriers_init(Time, US, param_file, diag, CS)
   call get_param(param_file, mdl, "PORBAR_ANSWER_DATE", CS%answer_date, &
                  "The vintage of the porous barrier weight function calculations.  Values below "//&
                  "20220806 recover the old answers in which the layer averaged weights are not "//&
-                 "strictly limited by an upper-bound of 1.0 .", default=default_answer_date)
+                 "strictly limited by an upper-bound of 1.0 .", &
+                 default=default_answer_date, do_not_log=.not.GV%Boussinesq)
+  if (.not.GV%Boussinesq) CS%answer_date = max(CS%answer_date, 20230701)
   call get_param(param_file, mdl, "DEBUG", CS%debug, default=.false.)
   call get_param(param_file, mdl, "PORBAR_MASKING_DEPTH", CS%mask_depth, &
                  "If the effective average depth at the velocity cell is shallower than this "//&

@@ -255,20 +255,24 @@ subroutine init_oda(Time, G, GV, US, diag_CS, CS)
                  default=99991231)
   call get_param(PF, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
                  "This sets the default value for the various _2018_ANSWERS parameters.", &
-                 default=(default_answer_date<20190101))
+                 default=(default_answer_date<20190101), do_not_log=.not.GV%Boussinesq)
   call get_param(PF, mdl, "ODA_2018_ANSWERS", answers_2018, &
                  "If true, use the order of arithmetic and expressions that recover the "//&
                  "answers from original version of the ODA driver.  Otherwise, use updated and "//&
-                 "more robust forms of the same expressions.", default=default_2018_answers)
+                 "more robust forms of the same expressions.", &
+                 default=default_2018_answers, do_not_log=.not.GV%Boussinesq)
   ! Revise inconsistent default answer dates.
-  if (answers_2018 .and. (default_answer_date >= 20190101)) default_answer_date = 20181231
-  if (.not.answers_2018 .and. (default_answer_date < 20190101)) default_answer_date = 20190101
+  if (GV%Boussinesq) then
+    if (answers_2018 .and. (default_answer_date >= 20190101)) default_answer_date = 20181231
+    if (.not.answers_2018 .and. (default_answer_date < 20190101)) default_answer_date = 20190101
+  endif
   call get_param(PF, mdl, "ODA_ANSWER_DATE", CS%answer_date, &
                "The vintage of the order of arithmetic and expressions used by the ODA driver "//&
                "Values below 20190101 recover the answers from the end of 2018, while higher "//&
                "values use updated and more robust forms of the same expressions.  "//&
                "If both ODA_2018_ANSWERS and ODA_ANSWER_DATE are specified, the "//&
-               "latter takes precedence.", default=default_answer_date)
+               "latter takes precedence.", default=default_answer_date, do_not_log=.not.GV%Boussinesq)
+  if (.not.GV%Boussinesq) CS%answer_date = max(CS%answer_date, 20230701)
   inputdir = slasher(inputdir)
 
   select case(lowercase(trim(assim_method)))

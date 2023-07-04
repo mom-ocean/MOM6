@@ -1069,22 +1069,25 @@ subroutine opacity_init(Time, G, GV, US, param_file, diag, CS, optics)
                  default=99991231)
   call get_param(param_file, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
                  "This sets the default value for the various _2018_ANSWERS parameters.", &
-                 default=(default_answer_date<20190101))
+                 default=(default_answer_date<20190101), do_not_log=.not.GV%Boussinesq)
   call get_param(param_file, mdl, "OPTICS_2018_ANSWERS", answers_2018, &
                  "If true, use the order of arithmetic and expressions that recover the "//&
                  "answers from the end of 2018.  Otherwise, use updated expressions for "//&
                  "handling the absorption of small remaining shortwave fluxes.", &
-                 default=default_2018_answers)
+                 default=default_2018_answers, do_not_log=.not.GV%Boussinesq)
   ! Revise inconsistent default answer dates for optics.
-  if (answers_2018 .and. (default_answer_date >= 20190101)) default_answer_date = 20181231
-  if (.not.answers_2018 .and. (default_answer_date < 20190101)) default_answer_date = 20190101
+  if (GV%Boussinesq) then
+    if (answers_2018 .and. (default_answer_date >= 20190101)) default_answer_date = 20181231
+    if (.not.answers_2018 .and. (default_answer_date < 20190101)) default_answer_date = 20190101
+  endif
   call get_param(param_file, mdl, "OPTICS_ANSWER_DATE", optics%answer_date, &
                  "The vintage of the order of arithmetic and expressions in the optics calculations.  "//&
                  "Values below 20190101 recover the answers from the end of 2018, while "//&
                  "higher values use updated and more robust forms of the same expressions.  "//&
                  "If both OPTICS_2018_ANSWERS and OPTICS_ANSWER_DATE are "//&
-                 "specified, the latter takes precedence.", default=default_answer_date)
-
+                 "specified, the latter takes precedence.", &
+                 default=default_answer_date, do_not_log=.not.GV%Boussinesq)
+  if (.not.GV%Boussinesq) optics%answer_date = max(optics%answer_date, 20230701)
 
   call get_param(param_file, mdl, "PEN_SW_FLUX_ABSORB", optics%PenSW_flux_absorb, &
                  "A minimum remaining shortwave heating rate that will be simply absorbed in "//&

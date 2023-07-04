@@ -319,7 +319,9 @@ subroutine MOM_wave_interface_init(time, G, GV, US, param_file, CS, diag)
                  "\t >= 20230101 - More robust expressions for Update_Stokes_Drift\n"//&
                  "\t >= 20230102 - More robust expressions for get_StokesSL_LiFoxKemper\n"//&
                  "\t >= 20230103 - More robust expressions for ust_2_u10_coare3p5", &
-                 default=20221231) ! In due course change the default to default=default_answer_date)
+                 default=20221231, do_not_log=.not.GV%Boussinesq)
+                 !### In due course change the default to default=default_answer_date)
+  if (.not.GV%Boussinesq) CS%answer_date = max(CS%answer_date, 20230701)
 
   ! Langmuir number Options
   call get_param(param_file, mdl, "LA_DEPTH_RATIO", CS%LA_FracHBL, &
