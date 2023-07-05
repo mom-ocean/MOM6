@@ -153,7 +153,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
   real :: depth_tot(SZI_(G),SZJ_(G))   ! The nominal total depth of the ocean [Z ~> m]
   real :: dz(SZI_(G),SZJ_(G),SZK_(GV)) ! The layer thicknesses in geopotential (z) units [Z ~> m]
   character(len=200) :: inputdir   ! The directory where NetCDF input files are.
-  character(len=200) :: config
+  character(len=200) :: config, h_config
   real :: H_rescale   ! A rescaling factor for thicknesses from the representation in
                       ! a restart file to the internal representation in this run [various units ~> 1]
   real :: dt          ! The baroclinic dynamics timestep for this run [T ~> s].
@@ -263,7 +263,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
     convert = .false.
   else
     ! Initialize thickness, h.
-    call get_param(PF, mdl, "THICKNESS_CONFIG", config, &
+    call get_param(PF, mdl, "THICKNESS_CONFIG", h_config, &
              "A string that determines how the initial layer "//&
              "thicknesses are specified for a new run: \n"//&
              " \t file - read interface heights from the file specified \n"//&
@@ -294,7 +294,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
              " \t rossby_front - a mixed layer front in thermal wind balance.\n"//&
              " \t USER - call a user modified routine.", &
              default="uniform", do_not_log=just_read)
-    select case (trim(config))
+    select case (trim(h_config))
       case ("file")
         call initialize_thickness_from_file(dz, depth_tot, G, GV, US, PF, file_has_thickness=.false., &
                                             mass_file=.false., just_read=just_read)
@@ -344,12 +344,13 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
       case ("soliton"); call soliton_initialize_thickness(dz, depth_tot, G, GV, US)
       case ("phillips"); call Phillips_initialize_thickness(dz, depth_tot, G, GV, US, PF, &
                                   just_read=just_read)
-      case ("rossby_front"); call Rossby_front_initialize_thickness(dz, G, GV, US, &
-                                      PF, just_read=just_read)
+      case ("rossby_front")
+        call Rossby_front_initialize_thickness(h, G, GV, US, PF, just_read=just_read)
+        convert = .false.  ! Rossby_front initialization works directly in thickness units.
       case ("USER"); call user_initialize_thickness(dz, G, GV, PF, &
                               just_read=just_read)
       case default ; call MOM_error(FATAL,  "MOM_initialize_state: "//&
-           "Unrecognized layer thickness configuration "//trim(config))
+           "Unrecognized layer thickness configuration "//trim(h_config))
     end select
 
     ! Initialize temperature and salinity (T and S).
@@ -376,6 +377,16 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
              " \t USER - call a user modified routine.", &
              fail_if_missing=new_sim, do_not_log=just_read)
 !            " \t baroclinic_zone - an analytic baroclinic zone. \n"//&
+
+      ! Check for incompatible THICKNESS_CONFIG and TS_CONFIG settings
+      if (.not.convert) then ; select case (trim(config))
+        case ("DOME2D", "ISOMIP", "adjustment2d", "baroclinic_zone", "sloshing", &
+              "seamount", "dumbbell", "SCM_CVMix_tests", "dense")
+          call MOM_error(FATAL, "TS_CONFIG = "//trim(config)//" does not work with thicknesses "//&
+              "that have already been converted to thickness units, as is the case with "//&
+              "THICKNESS_CONFIG = "//trim(h_config)//".")
+      end select ; endif
+
       select case (trim(config))
         case ("fit"); call initialize_temp_salt_fit(tv%T, tv%S, G, GV, US, PF, &
                                eos, tv%P_Ref, just_read=just_read)
@@ -401,8 +412,10 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
                                     tv%S, dz, G, GV, US, PF, just_read=just_read)
         case ("dumbbell"); call dumbbell_initialize_temperature_salinity(tv%T, &
                                     tv%S, dz, G, GV, US, PF, just_read=just_read)
-        case ("rossby_front"); call Rossby_front_initialize_temperature_salinity ( tv%T, &
-                                        tv%S, dz, G, GV, US, PF, just_read=just_read)
+        case ("rossby_front")
+          if (convert .and. .not.just_read) call dz_to_thickness(dz, tv, h, G, GV, US)
+          call Rossby_front_initialize_temperature_salinity ( tv%T, tv%S, h, &
+                                        G, GV, US, PF, just_read=just_read)
         case ("SCM_CVMix_tests"); call SCM_CVMix_tests_TS_init(tv%T, tv%S, dz, &
                                            G, GV, US, PF, just_read=just_read)
         case ("dense"); call dense_water_initialize_TS(G, GV, US, PF, tv%T, tv%S, &
