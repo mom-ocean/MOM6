@@ -52,6 +52,21 @@ interface
       !< Function return code
   end function chmod_posix
 
+  !> C interface to POSIX mkdir()
+  !! Users should use the Fortran-defined mkdir() function.
+  function mkdir_posix(path, mode) result(rc) bind(c, name="mkdir")
+    ! #include <sys/stat.h>
+    ! int mkdir(const char *path, mode_t mode);
+    import :: c_char, c_int
+
+    character(kind=c_char), dimension(*), intent(in) :: path
+      !< Zero-delimited file path
+    integer(kind=c_int), value, intent(in) :: mode
+      !< File permission to be assigned to file.
+    integer(kind=c_int) :: rc
+      !< Function return code
+  end function mkdir_posix
+
   !> C interface to POSIX signal()
   !! Users should use the Fortran-defined signal() function.
   function signal_posix(sig, func) result(handle) bind(c, name="signal")
@@ -239,6 +254,23 @@ function chmod(path, mode) result(rc)
   rc_c = chmod_posix(path//c_null_char, mode_c)
   rc = int(rc_c)
 end function chmod
+
+!> Create a file directory
+!!
+!! This creates a new directory named `path` with permissons set by `mode`.
+!! If successful, it returns zero.  Otherwise, it returns -1.
+function mkdir(path, mode) result(rc)
+  character(len=*), intent(in) :: path
+  integer, intent(in) :: mode
+  integer :: rc
+
+  integer(kind=c_int) :: mode_c
+  integer(kind=c_int) :: rc_c
+
+  mode_c = int(mode, kind=c_int)
+  rc_c = mkdir_posix(path//c_null_char, mode_c)
+  rc = int(rc_c)
+end function mkdir
 
 !> Create a signal handler `handle` to be called when `sig` is detected.
 !!
