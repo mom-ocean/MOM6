@@ -41,14 +41,18 @@ public dye_stock, regional_dyes_end
 type, public :: dye_tracer_CS ; private
   integer :: ntr    !< The number of tracers that are actually used.
   logical :: coupled_tracers = .false.  !< These tracers are not offered to the coupler.
-  real, allocatable, dimension(:) :: dye_source_minlon !< Minimum longitude of region dye will be injected.
-  real, allocatable, dimension(:) :: dye_source_maxlon !< Maximum longitude of region dye will be injected.
-  real, allocatable, dimension(:) :: dye_source_minlat !< Minimum latitude of region dye will be injected.
-  real, allocatable, dimension(:) :: dye_source_maxlat !< Maximum latitude of region dye will be injected.
+  real, allocatable, dimension(:) :: dye_source_minlon !< Minimum longitude of region dye will be
+                                                       !! injected, in [m] or [km] or [degrees_E]
+  real, allocatable, dimension(:) :: dye_source_maxlon !< Maximum longitude of region dye will be
+                                                       !! injected, in [m] or [km] or [degrees_E]
+  real, allocatable, dimension(:) :: dye_source_minlat !< Minimum latitude of region dye will be
+                                                       !! injected, in [m] or [km] or [degrees_N]
+  real, allocatable, dimension(:) :: dye_source_maxlat !< Maximum latitude of region dye will be
+                                                       !! injected, in [m] or [km] or [degrees_N]
   real, allocatable, dimension(:) :: dye_source_mindepth !< Minimum depth of region dye will be injected [Z ~> m].
   real, allocatable, dimension(:) :: dye_source_maxdepth !< Maximum depth of region dye will be injected [Z ~> m].
   type(tracer_registry_type), pointer :: tr_Reg => NULL() !< A pointer to the tracer registry
-  real, pointer :: tr(:,:,:,:) => NULL() !< The array of tracers used in this subroutine, in g m-3?
+  real, pointer :: tr(:,:,:,:) => NULL() !< The array of tracers used in this subroutine [CU ~> conc]
 
   integer, allocatable, dimension(:) :: ind_tr !< Indices returned by atmos_ocn_coupler_flux if it is used and the
                                                !! surface tracer concentrations are to be provided to the coupler.
@@ -74,7 +78,7 @@ function register_dye_tracer(HI, GV, US, param_file, CS, tr_Reg, restart_CS)
                                                  !! structure for this module
   type(tracer_registry_type), pointer    :: tr_Reg !< A pointer that is set to point to the control
                                                  !! structure for the tracer advection and diffusion module.
-  type(MOM_restart_CS), target, intent(inout) :: restart_CS !< MOM restart control struct
+  type(MOM_restart_CS), target, intent(inout) :: restart_CS !< MOM restart control structure
 
   ! Local variables
   character(len=40)  :: mdl = "regional_dyes" ! This module's name.
@@ -82,7 +86,7 @@ function register_dye_tracer(HI, GV, US, param_file, CS, tr_Reg, restart_CS)
   character(len=48)  :: desc_name ! The variable's descriptor.
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
-  real, pointer :: tr_ptr(:,:,:) => NULL()
+  real, pointer :: tr_ptr(:,:,:) => NULL() ! A pointer to one of the tracers [CU ~> conc]
   logical :: register_dye_tracer
   integer :: isd, ied, jsd, jed, nz, m
   isd = HI%isd ; ied = HI%ied ; jsd = HI%jsd ; jed = HI%jed ; nz = GV%ke
@@ -110,28 +114,32 @@ function register_dye_tracer(HI, GV, US, param_file, CS, tr_Reg, restart_CS)
   CS%dye_source_minlon(:) = -1.e30
   call get_param(param_file, mdl, "DYE_SOURCE_MINLON", CS%dye_source_minlon, &
                  "This is the starting longitude at which we start injecting dyes.", &
-                 fail_if_missing=.true.)
+                 units="degrees_E", fail_if_missing=.true.)
+               ! units=G%x_ax_unit_short, fail_if_missing=.true.)
   if (minval(CS%dye_source_minlon(:)) < -1.e29) &
     call MOM_error(FATAL, "register_dye_tracer: Not enough values provided for DYE_SOURCE_MINLON ")
 
   CS%dye_source_maxlon(:) = -1.e30
   call get_param(param_file, mdl, "DYE_SOURCE_MAXLON", CS%dye_source_maxlon, &
                  "This is the ending longitude at which we finish injecting dyes.", &
-                 fail_if_missing=.true.)
+                 units="degrees_E", fail_if_missing=.true.)
+               ! units=G%x_ax_unit_short, fail_if_missing=.true.)
   if (minval(CS%dye_source_maxlon(:)) < -1.e29) &
     call MOM_error(FATAL, "register_dye_tracer: Not enough values provided for DYE_SOURCE_MAXLON ")
 
   CS%dye_source_minlat(:) = -1.e30
   call get_param(param_file, mdl, "DYE_SOURCE_MINLAT", CS%dye_source_minlat, &
                  "This is the starting latitude at which we start injecting dyes.", &
-                 fail_if_missing=.true.)
+                 units="degrees_N", fail_if_missing=.true.)
+               ! units=G%y_ax_unit_short, fail_if_missing=.true.)
   if (minval(CS%dye_source_minlat(:)) < -1.e29) &
     call MOM_error(FATAL, "register_dye_tracer: Not enough values provided for DYE_SOURCE_MINLAT ")
 
   CS%dye_source_maxlat(:) = -1.e30
   call get_param(param_file, mdl, "DYE_SOURCE_MAXLAT", CS%dye_source_maxlat, &
                  "This is the ending latitude at which we finish injecting dyes.", &
-                 fail_if_missing=.true.)
+                 units="degrees_N", fail_if_missing=.true.)
+               ! units=G%y_ax_unit_short, fail_if_missing=.true.)
   if (minval(CS%dye_source_maxlat(:)) < -1.e29) &
     call MOM_error(FATAL, "register_dye_tracer: Not enough values provided for DYE_SOURCE_MAXLAT ")
 
@@ -211,10 +219,10 @@ subroutine initialize_dye_tracer(restart, day, G, GV, h, diag, OBC, CS, sponge_C
   do m= 1, CS%ntr
     do j=G%jsd,G%jed ; do i=G%isd,G%ied
       ! A dye is set dependent on the center of the cell being inside the rectangular box.
-      if (CS%dye_source_minlon(m)<G%geoLonT(i,j) .and. &
-          CS%dye_source_maxlon(m)>=G%geoLonT(i,j) .and. &
-          CS%dye_source_minlat(m)<G%geoLatT(i,j) .and. &
-          CS%dye_source_maxlat(m)>=G%geoLatT(i,j) .and. &
+      if (CS%dye_source_minlon(m) < G%geoLonT(i,j) .and. &
+          CS%dye_source_maxlon(m) >= G%geoLonT(i,j) .and. &
+          CS%dye_source_minlat(m) < G%geoLatT(i,j) .and. &
+          CS%dye_source_maxlat(m) >= G%geoLatT(i,j) .and. &
           G%mask2dT(i,j) > 0.0 ) then
         z_bot = 0.0
         do k = 1, GV%ke
@@ -264,7 +272,7 @@ subroutine dye_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, US
                                               !! fluxes can be applied [H ~> m or kg m-2]
 
 ! Local variables
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: h_work ! Used so that h can be modified
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: h_work ! Used so that h can be modified [H ~> m or kg m-2]
   real    :: z_bot    ! Height of the bottom of the layer relative to the sea surface [Z ~> m]
   real    :: z_center ! Height of the center of the layer relative to the sea surface [Z ~> m]
   integer :: i, j, k, is, ie, js, je, nz, m
@@ -292,10 +300,10 @@ subroutine dye_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, US
   do m=1,CS%ntr
     do j=G%jsd,G%jed ; do i=G%isd,G%ied
       ! A dye is set dependent on the center of the cell being inside the rectangular box.
-      if (CS%dye_source_minlon(m)<G%geoLonT(i,j) .and. &
-          CS%dye_source_maxlon(m)>=G%geoLonT(i,j) .and. &
-          CS%dye_source_minlat(m)<G%geoLatT(i,j) .and. &
-          CS%dye_source_maxlat(m)>=G%geoLatT(i,j) .and. &
+      if (CS%dye_source_minlon(m) < G%geoLonT(i,j) .and. &
+          CS%dye_source_maxlon(m) >= G%geoLonT(i,j) .and. &
+          CS%dye_source_minlat(m) < G%geoLatT(i,j) .and. &
+          CS%dye_source_maxlat(m) >= G%geoLatT(i,j) .and. &
           G%mask2dT(i,j) > 0.0 ) then
         z_bot = 0.0
         do k=1,nz

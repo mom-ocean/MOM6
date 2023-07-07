@@ -1277,7 +1277,7 @@ subroutine test_log_param_real
   call create_test_file(param_filename)
 
   call open_param_file(param_filename, param)
-  call log_param(param, module_name, sample_param_name, sample, desc=desc)
+  call log_param(param, module_name, sample_param_name, sample, desc=desc, units="")
   call close_param_file(param)
 end subroutine test_log_param_real
 
@@ -1290,7 +1290,7 @@ subroutine test_log_param_real_array
   call create_test_file(param_filename)
 
   call open_param_file(param_filename, param)
-  call log_param(param, module_name, sample_param_name, sample, desc=desc)
+  call log_param(param, module_name, sample_param_name, sample, desc=desc, units="")
   call close_param_file(param)
 end subroutine test_log_param_real_array
 
@@ -1468,7 +1468,7 @@ subroutine test_get_param_real
   call create_test_file(param_filename)
 
   call open_param_file(param_filename, param)
-  call get_param(param, module_name, sample_param_name, sample)
+  call get_param(param, module_name, sample_param_name, sample, units="")
   call close_param_file(param)
 end subroutine test_get_param_real
 
@@ -1480,7 +1480,7 @@ subroutine test_get_param_real_no_read_no_log
   call create_test_file(param_filename)
 
   call open_param_file(param_filename, param)
-  call get_param(param, module_name, sample_param_name, sample, &
+  call get_param(param, module_name, sample_param_name, sample, units="", &
       do_not_read=.true., do_not_log=.true.)
   call close_param_file(param)
 end subroutine test_get_param_real_no_read_no_log
@@ -1493,7 +1493,7 @@ subroutine test_get_param_real_array
   call create_test_file(param_filename)
 
   call open_param_file(param_filename, param)
-  call get_param(param, module_name, sample_param_name, sample)
+  call get_param(param, module_name, sample_param_name, sample, units="")
   call close_param_file(param)
 end subroutine test_get_param_real_array
 
@@ -1505,7 +1505,7 @@ subroutine test_get_param_real_array_no_read_no_log
   call create_test_file(param_filename)
 
   call open_param_file(param_filename, param)
-  call get_param(param, module_name, sample_param_name, sample, &
+  call get_param(param, module_name, sample_param_name, sample, units="", &
       do_not_read=.true., do_not_log=.true.)
   call close_param_file(param)
 end subroutine test_get_param_real_array_no_read_no_log

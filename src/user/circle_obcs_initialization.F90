@@ -44,7 +44,12 @@ subroutine circle_obcs_initialize_thickness(h, depth_tot, G, GV, param_file, jus
   real :: eta1D(SZK_(GV)+1)! Interface height relative to the sea surface
                            ! positive upward, in depth units [Z ~> m].
   real :: IC_amp           ! The amplitude of the initial height displacement [H ~> m or kg m-2].
-  real :: diskrad, rad, lonC, latC, xOffset
+  real :: diskrad          ! Radius of the elevated disk [km] or [degrees] or [m]
+  real :: rad              ! Distance from the center of the elevated disk [km] or [degrees] or [m]
+  real :: lonC             ! The x-position of a point [km] or [degrees] or [m]
+  real :: latC             ! The y-position of a point [km] or [degrees] or [m]
+  real :: xOffset          ! The x-offset of the elevated disc center relative to the domain
+                           ! center [km] or [degrees] or [m]
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
   character(len=40)  :: mdl = "circle_obcs_initialization"   ! This module's name.
@@ -59,12 +64,12 @@ subroutine circle_obcs_initialize_thickness(h, depth_tot, G, GV, param_file, jus
   ! Parameters read by cartesian grid initialization
   call get_param(param_file, mdl, "DISK_RADIUS", diskrad, &
                  "The radius of the initially elevated disk in the "//&
-                 "circle_obcs test case.", units=G%x_axis_units, &
+                 "circle_obcs test case.", units=G%x_ax_unit_short, &
                  fail_if_missing=.not.just_read, do_not_log=just_read)
   call get_param(param_file, mdl, "DISK_X_OFFSET", xOffset, &
                  "The x-offset of the initially elevated disk in the "//&
-                 "circle_obcs test case.", units=G%x_axis_units, &
-                 default = 0.0, do_not_log=just_read)
+                 "circle_obcs test case.", units=G%x_ax_unit_short, &
+                 default=0.0, do_not_log=just_read)
   call get_param(param_file, mdl, "DISK_IC_AMPLITUDE", IC_amp, &
                  "Initial amplitude of interface height displacements "//&
                  "in the circle_obcs test case.", &

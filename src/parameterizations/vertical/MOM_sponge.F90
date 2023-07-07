@@ -30,11 +30,11 @@ public initialize_sponge, apply_sponge, sponge_end, init_sponge_diags
 
 !> A structure for creating arrays of pointers to 3D arrays
 type, public :: p3d
-  real, dimension(:,:,:), pointer :: p => NULL() !< A pointer to a 3D array
+  real, dimension(:,:,:), pointer :: p => NULL() !< A pointer to a 3D array [various]
 end type p3d
 !> A structure for creating arrays of pointers to 2D arrays
 type, public :: p2d
-  real, dimension(:,:), pointer :: p => NULL() !< A pointer to a 2D array
+  real, dimension(:,:), pointer :: p => NULL() !< A pointer to a 2D array [various]
 end type p2d
 
 !> This control structure holds memory and parameters for the MOM_sponge module
@@ -203,15 +203,15 @@ subroutine set_up_sponge_field(sp_val, f_ptr, G, GV, nlay, CS, sp_val_i_mean)
   type(ocean_grid_type),   intent(in) :: G      !< The ocean's grid structure
   type(verticalGrid_type), intent(in) :: GV     !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
-                           intent(in) :: sp_val !< The reference profiles of the quantity being registered.
+                           intent(in) :: sp_val !< The reference profiles of the quantity being registered [various]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
-                   target, intent(in) :: f_ptr  !< a pointer to the field which will be damped
+                   target, intent(in) :: f_ptr  !< a pointer to the field which will be damped [various]
   integer,                 intent(in) :: nlay   !< the number of layers in this quantity
   type(sponge_CS),         pointer    :: CS     !< A pointer to the control structure for this module that
                                                 !! is set by a previous call to initialize_sponge.
   real, dimension(SZJ_(G),SZK_(GV)),&
                optional, intent(in) :: sp_val_i_mean !< The i-mean reference value for
-                                              !! this field with i-mean sponges.
+                                              !! this field with i-mean sponges [various]
 
   integer :: j, k, col
   character(len=256) :: mesg ! String for error messages
@@ -331,11 +331,11 @@ subroutine apply_sponge(h, dt, G, GV, US, ea, eb, CS, Rcv_ml)
     eta_anom, &    ! Anomalies in the interface height, relative to the i-mean
                    ! target value [Z ~> m].
     fld_anom       ! Anomalies in a tracer concentration, relative to the
-                   ! i-mean target value.
+                   ! i-mean target value [various]
   real, dimension(SZJ_(G), SZK_(GV)+1) :: &
     eta_mean_anom  ! The i-mean interface height anomalies [Z ~> m].
   real, allocatable, dimension(:,:,:) :: &
-    fld_mean_anom  ! THe i-mean tracer concentration anomalies.
+    fld_mean_anom  ! The i-mean tracer concentration anomalies [various]
   real, dimension(SZI_(G), SZK_(GV)+1) :: &
     h_above, &     ! The total thickness above an interface [H ~> m or kg m-2].
     h_below        ! The total thickness below an interface [H ~> m or kg m-2].

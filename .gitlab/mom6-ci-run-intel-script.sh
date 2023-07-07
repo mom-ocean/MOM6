@@ -34,7 +34,7 @@ set -v
 section_start intel_all_sym "Running symmetric intel"
 time make -f tools/MRS/Makefile.run intel_all -s -j
 tar cf - `find [oicl]* -name "*.stats.*[a-z][a-z][a-z]"` | tar --one-top-level=results/intel_all_sym -xf -
-tar cf - `find [oicl]* -name "*_parameter_doc.*"` | tar --one-top-level=results/intel_params -xf -
+tar cf - `find [oicl]* -name "*_parameter_doc.*" -o -name "*available_diags*"` | tar --one-top-level=results/intel_params -xf -
 check_for_core_files
 section_end
 

@@ -37,13 +37,13 @@ type, public :: bkgnd_mixing_cs ; private
 
   ! Parameters
   real    :: Bryan_Lewis_c1         !< The vertical diffusivity values for  Bryan-Lewis profile
-                                    !! at |z|=D [m2 s-1]
+                                    !! at |z|=D [Z2 T-1 ~> m2 s-1]
   real    :: Bryan_Lewis_c2         !< The amplitude of variation in diffusivity for the
-                                    !! Bryan-Lewis diffusivity profile [m2 s-1]
+                                    !! Bryan-Lewis diffusivity profile [Z2 T-1 ~> m2 s-1]
   real    :: Bryan_Lewis_c3         !< The inverse length scale for transition region in the
-                                    !! Bryan-Lewis diffusivity profile [m-1]
+                                    !! Bryan-Lewis diffusivity profile [Z-1 ~> m-1]
   real    :: Bryan_Lewis_c4         !< The depth where diffusivity is Bryan_Lewis_bl1 in the
-                                    !! Bryan-Lewis profile [m]
+                                    !! Bryan-Lewis profile [Z ~> m]
   real    :: bckgrnd_vdc1           !< Background diffusivity (Ledwell) when
                                     !! horiz_varying_background=.true. [Z2 T-1 ~> m2 s-1]
   real    :: bckgrnd_vdc_eq         !< Equatorial diffusivity (Gregg) when
@@ -57,11 +57,11 @@ type, public :: bkgnd_mixing_cs ; private
   real    :: omega                  !< The Earth's rotation rate [T-1 ~> s-1].
   real    :: N0_2Omega              !< ratio of the typical Buoyancy frequency to
                                     !! twice the Earth's rotation period, used with the
-                                    !! Henyey scaling from the mixing
+                                    !! Henyey scaling from the mixing [nondim]
   real    :: prandtl_bkgnd          !< Turbulent Prandtl number used to convert
-                                    !! vertical background diffusivity into viscosity
+                                    !! vertical background diffusivity into viscosity [nondim]
   real    :: Kd_tanh_lat_scale      !< A nondimensional scaling for the range of
-                                    !! diffusivities with Kd_tanh_lat_fn. Valid values
+                                    !! diffusivities with Kd_tanh_lat_fn [nondim]. Valid values
                                     !! are in the range of -2 to 2; 0.4 reproduces CM2M.
   real    :: Kd_tot_ml              !< The mixed layer diapycnal diffusivity [Z2 T-1 ~> m2 s-1]
                                     !! when no other physically based mixed layer turbulence
@@ -116,7 +116,7 @@ subroutine bkgnd_mixing_init(Time, G, GV, US, param_file, diag, CS, physical_OBL
   ! Local variables
   real :: Kv                    ! The interior vertical viscosity [Z2 T-1 ~> m2 s-1] - read to set Prandtl
                                 ! number unless it is provided as a parameter
-  real :: prandtl_bkgnd_comp    ! Kv/CS%Kd. Gets compared with user-specified prandtl_bkgnd.
+  real :: prandtl_bkgnd_comp    ! Kv/CS%Kd [nondim]. Gets compared with user-specified prandtl_bkgnd.
 
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
@@ -151,10 +151,12 @@ subroutine bkgnd_mixing_init(Time, G, GV, US, param_file, diag, CS, physical_OBL
   CS%physical_OBL_scheme = physical_OBL_scheme
   if (CS%physical_OBL_scheme) then
     ! Check that Kdml is not set when using bulk mixed layer
-    call get_param(param_file, mdl, "KDML", CS%Kd_tot_ml, default=-1., do_not_log=.true.)
+    call get_param(param_file, mdl, "KDML", CS%Kd_tot_ml, &
+                   units="m2 s-1", default=-1., scale=US%m2_s_to_Z2_T, do_not_log=.true.)
     if (CS%Kd_tot_ml>0.) call MOM_error(FATAL, &
                  "bkgnd_mixing_init: KDML is a depricated parameter that should not be used.")
-    call get_param(param_file, mdl, "KD_ML_TOT", CS%Kd_tot_ml, default=-1., do_not_log=.true.)
+    call get_param(param_file, mdl, "KD_ML_TOT", CS%Kd_tot_ml, &
+                 units="m2 s-1", default=-1.0, scale=US%m2_s_to_Z2_T, do_not_log=.true.)
     if (CS%Kd_tot_ml>0.) call MOM_error(FATAL, &
                  "bkgnd_mixing_init: KD_ML_TOT cannot be set when using a physically based ocean "//&
                  "boundary layer mixing parameterization.")
@@ -174,11 +176,11 @@ subroutine bkgnd_mixing_init(Time, G, GV, US, param_file, diag, CS, physical_OBL
       if (abs(CS%Kd_tot_ml - CS%Kd) > 1.0e-15*abs(CS%Kd)) &
         call MOM_error(WARNING, "KDML is a depricated parameter. Use KD_ML_TOT instead.")
     endif
-    call log_param(param_file, mdl, "KD_ML_TOT", CS%Kd_tot_ml*US%Z2_T_to_m2_s, &
+    call log_param(param_file, mdl, "KD_ML_TOT", CS%Kd_tot_ml, &
                  "The total diapcynal diffusivity in the surface mixed layer when there is "//&
                  "not a physically based parameterization of mixing in the mixed layer, such "//&
                  "as bulk mixed layer or KPP or ePBL.", &
-                 units="m2 s-1", default=CS%Kd*US%Z2_T_to_m2_s)
+                 units="m2 s-1", default=CS%Kd*US%Z2_T_to_m2_s, unscale=US%Z2_T_to_m2_s)
 
     call get_param(param_file, mdl, "HMIX_FIXED", CS%Hmix, &
                  "The prescribed depth over which the near-surface "//&
@@ -200,19 +202,19 @@ subroutine bkgnd_mixing_init(Time, G, GV, US, param_file, diag, CS, physical_OBL
 
     call get_param(param_file, mdl, "BRYAN_LEWIS_C1", CS%Bryan_Lewis_c1, &
                    "The vertical diffusivity values for Bryan-Lewis profile at |z|=D.", &
-                   units="m2 s-1", fail_if_missing=.true.)
+                   units="m2 s-1", scale=US%m2_s_to_Z2_T, fail_if_missing=.true.)
 
     call get_param(param_file, mdl, "BRYAN_LEWIS_C2", CS%Bryan_Lewis_c2, &
                    "The amplitude of variation in diffusivity for the Bryan-Lewis profile", &
-                   units="m2 s-1", fail_if_missing=.true.)
+                   units="m2 s-1", scale=US%m2_s_to_Z2_T, fail_if_missing=.true.)
 
     call get_param(param_file, mdl, "BRYAN_LEWIS_C3", CS%Bryan_Lewis_c3, &
                    "The inverse length scale for transition region in the Bryan-Lewis profile", &
-                   units="m-1", fail_if_missing=.true.)
+                   units="m-1", scale=US%Z_to_m, fail_if_missing=.true.)
 
     call get_param(param_file, mdl, "BRYAN_LEWIS_C4", CS%Bryan_Lewis_c4, &
                    "The depth where diffusivity is BRYAN_LEWIS_C1 in the Bryan-Lewis profile",&
-                   units="m", fail_if_missing=.true.)
+                   units="m", scale=US%m_to_Z, fail_if_missing=.true.)
 
   endif ! CS%Bryan_Lewis_diffusivity
 
@@ -274,8 +276,8 @@ subroutine bkgnd_mixing_init(Time, G, GV, US, param_file, diag, CS, physical_OBL
                   "the Earth's rotation period, used with the Henyey "//&
                   "scaling from the mixing.", units="nondim", default=20.0)
     call get_param(param_file, mdl, "OMEGA", CS%omega, &
-                 "The rotation rate of the earth.", units="s-1", &
-                 default=7.2921e-5, scale=US%T_to_s)
+                 "The rotation rate of the earth.", &
+                 units="s-1", default=7.2921e-5, scale=US%T_to_s)
   endif
 
   call get_param(param_file, mdl, "KD_TANH_LAT_FN", CS%Kd_tanh_lat_fn, &
@@ -338,8 +340,8 @@ subroutine calculate_bkgnd_mixing(h, tv, N2_lay, Kd_lay, Kd_int, Kv_bkgnd, j, G,
   real :: I_2Omega   !< 1/(2 Omega) [T ~> s]
   real :: N_2Omega   !  The ratio of the stratification to the Earth's rotation rate [nondim]
   real :: N02_N2     !  The ratio a reference stratification to the actual stratification [nondim]
-  real :: I_x30      !< 2/acos(2) = 1/(sin(30 deg) * acosh(1/sin(30 deg)))
-  real :: deg_to_rad !< factor converting degrees to radians, pi/180.
+  real :: I_x30      !< 2/acos(2) = 1/(sin(30 deg) * acosh(1/sin(30 deg))) [nondim]
+  real :: deg_to_rad !< factor converting degrees to radians [radians degree-1], pi/180.
   real :: abs_sinlat !< absolute value of sine of latitude [nondim]
   real :: min_sinlat ! The minimum value of the sine of latitude [nondim]
   real :: bckgrnd_vdc_psin !< PSI diffusivity in northern hemisphere [Z2 T-1 ~> m2 s-1]
@@ -367,10 +369,10 @@ subroutine calculate_bkgnd_mixing(h, tv, N2_lay, Kd_lay, Kd_int, Kv_bkgnd, j, G,
 
       call CVMix_init_bkgnd(max_nlev=nz, &
                             zw = depth_int(:), &  !< interface depths relative to the surface in m, must be positive.
-                            bl1 = CS%Bryan_Lewis_c1, &
-                            bl2 = CS%Bryan_Lewis_c2, &
-                            bl3 = CS%Bryan_Lewis_c3, &
-                            bl4 = CS%Bryan_Lewis_c4, &
+                            bl1 = US%Z2_T_to_m2_s*CS%Bryan_Lewis_c1, &
+                            bl2 = US%Z2_T_to_m2_s*CS%Bryan_Lewis_c2, &
+                            bl3 = US%m_to_Z*CS%Bryan_Lewis_c3, &
+                            bl4 = US%Z_to_m*CS%Bryan_Lewis_c4, &
                             prandtl = CS%prandtl_bkgnd)
 
       Kd_col(:) = 0.0 ; Kv_col(:) = 0.0  ! Is this line necessary?
@@ -455,7 +457,7 @@ subroutine calculate_bkgnd_mixing(h, tv, N2_lay, Kd_lay, Kd_int, Kv_bkgnd, j, G,
       enddo
     endif
 
-    ! Now set background diffusivies based on these surface values, possibly with vertical structure.
+    ! Now set background diffusivities based on these surface values, possibly with vertical structure.
     if ((.not.CS%physical_OBL_scheme) .and. (CS%Kd /= CS%Kd_tot_ml)) then
       ! This is a crude way to put in a diffusive boundary layer without an explicit boundary
       ! layer turbulence scheme.  It should not be used for any realistic ocean models.
@@ -527,7 +529,7 @@ subroutine check_bkgnd_scheme(CS, str)
 
 end subroutine
 
-!> Clear pointers and dealocate memory
+!> Clear pointers and deallocate memory
 subroutine bkgnd_mixing_end(CS)
   type(bkgnd_mixing_cs), pointer :: CS !< Control structure for this module that
                                        !! will be deallocated in this subroutine

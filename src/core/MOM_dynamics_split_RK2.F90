@@ -36,7 +36,7 @@ use MOM_restart,           only : restart_init, is_new_run, MOM_restart_CS
 use MOM_time_manager,      only : time_type, time_type_to_real, operator(+)
 use MOM_time_manager,      only : operator(-), operator(>), operator(*), operator(/)
 
-use MOM_ALE,                   only : ALE_CS
+use MOM_ALE,                   only : ALE_CS, ALE_remap_velocities
 use MOM_barotropic,            only : barotropic_init, btstep, btcalc, bt_mass_source
 use MOM_barotropic,            only : register_barotropic_restarts, set_dtbt, barotropic_CS
 use MOM_barotropic,            only : barotropic_end
@@ -160,6 +160,9 @@ type, public :: MOM_dyn_split_RK2_CS ; private
                                   !! predictor step.  This is used to accomodate various generations
                                   !! of restart files.
   logical :: use_tides            !< If true, tidal forcing is enabled.
+  logical :: remap_aux            !< If true, apply ALE remapping to all of the auxiliary 3-D
+                                  !! variables that are needed to reproduce across restarts,
+                                  !! similarly to what is done with the primary state variables.
 
   real    :: be      !< A nondimensional number from 0.5 to 1 that controls
                      !! the backward weighting of the time stepping scheme [nondim]
@@ -256,6 +259,7 @@ end type MOM_dyn_split_RK2_CS
 public step_MOM_dyn_split_RK2
 public register_restarts_dyn_split_RK2
 public initialize_dyn_split_RK2
+public remap_dyn_split_RK2_aux_vars
 public end_dyn_split_RK2
 
 !>@{ CPU time clock IDs
@@ -402,8 +406,8 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
 
   if (CS%debug) then
     call MOM_state_chksum("Start predictor ", u, v, h, uh, vh, G, GV, US, symmetric=sym)
-    call check_redundant("Start predictor u ", u, v, G)
-    call check_redundant("Start predictor uh ", uh, vh, G)
+    call check_redundant("Start predictor u ", u, v, G, unscale=US%L_T_to_m_s)
+    call check_redundant("Start predictor uh ", uh, vh, G, unscale=GV%H_to_m*US%L_to_m**2*US%s_to_T)
   endif
 
   dyn_p_surf = associated(p_surf_begin) .and. associated(p_surf_end)
@@ -539,10 +543,10 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
     call MOM_accel_chksum("pre-btstep accel", CS%CAu_pred, CS%CAv_pred, CS%PFu, CS%PFv, &
                           CS%diffu, CS%diffv, G, GV, US, CS%pbce, u_bc_accel, v_bc_accel, &
                           symmetric=sym)
-    call check_redundant("pre-btstep CS%CA ", CS%CAu_pred, CS%CAv_pred, G)
-    call check_redundant("pre-btstep CS%PF ", CS%PFu, CS%PFv, G)
-    call check_redundant("pre-btstep CS%diff ", CS%diffu, CS%diffv, G)
-    call check_redundant("pre-btstep u_bc_accel ", u_bc_accel, v_bc_accel, G)
+    call check_redundant("pre-btstep CS%CA ", CS%CAu_pred, CS%CAv_pred, G, unscale=US%L_T2_to_m_s2)
+    call check_redundant("pre-btstep CS%PF ", CS%PFu, CS%PFv, G, unscale=US%L_T2_to_m_s2)
+    call check_redundant("pre-btstep CS%diff ", CS%diffu, CS%diffv, G, unscale=US%L_T2_to_m_s2)
+    call check_redundant("pre-btstep u_bc_accel ", u_bc_accel, v_bc_accel, G, unscale=US%L_T2_to_m_s2)
   endif
 
   call cpu_clock_begin(id_clock_vertvisc)
@@ -563,7 +567,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
   if (CS%debug) then
     call uvchksum("before vertvisc: up", up, vp, G%HI, haloshift=0, symmetric=sym, scale=US%L_T_to_m_s)
   endif
-  call vertvisc_coef(up, vp, h, forces, visc, dt, G, GV, US, CS%vertvisc_CSp, CS%OBC)
+  call vertvisc_coef(up, vp, h, forces, visc, dt, G, GV, US, CS%vertvisc_CSp, CS%OBC, VarMix)
   call vertvisc_remnant(visc, CS%visc_rem_u, CS%visc_rem_v, dt, G, GV, US, CS%vertvisc_CSp)
   call cpu_clock_end(id_clock_vertvisc)
   if (showCallTree) call callTree_wayPoint("done with vertvisc_coef (step_MOM_dyn_split_RK2)")
@@ -643,10 +647,10 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
 !   call MOM_state_chksum("Predictor 1", up, vp, h, uh, vh, G, GV, US, haloshift=1)
     call MOM_accel_chksum("Predictor accel", CS%CAu_pred, CS%CAv_pred, CS%PFu, CS%PFv, &
              CS%diffu, CS%diffv, G, GV, US, CS%pbce, CS%u_accel_bt, CS%v_accel_bt, symmetric=sym)
-    call MOM_state_chksum("Predictor 1 init", u, v, h, uh, vh, G, GV, US, haloshift=2, &
+    call MOM_state_chksum("Predictor 1 init", u, v, h, uh, vh, G, GV, US, haloshift=1, &
                           symmetric=sym)
-    call check_redundant("Predictor 1 up", up, vp, G)
-    call check_redundant("Predictor 1 uh", uh, vh, G)
+    call check_redundant("Predictor 1 up", up, vp, G, unscale=US%L_T_to_m_s)
+    call check_redundant("Predictor 1 uh", uh, vh, G, unscale=GV%H_to_m*US%L_to_m**2*US%s_to_T)
   endif
 
 ! up <- up + dt_pred d/dz visc d/dz up
@@ -656,7 +660,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
     call uvchksum("0 before vertvisc: [uv]p", up, vp, G%HI,haloshift=0, symmetric=sym, scale=US%L_T_to_m_s)
   endif
   call vertvisc_coef(up, vp, h, forces, visc, dt_pred, G, GV, US, CS%vertvisc_CSp, &
-                     CS%OBC)
+                     CS%OBC, VarMix)
   call vertvisc(up, vp, h, forces, visc, dt_pred, CS%OBC, CS%AD_pred, CS%CDp, G, &
                 GV, US, CS%vertvisc_CSp, CS%taux_bot, CS%tauy_bot, waves=waves)
   if (showCallTree) call callTree_wayPoint("done with vertvisc (step_MOM_dyn_split_RK2)")
@@ -774,8 +778,8 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
     call uvchksum("Predictor avg [uv]", u_av, v_av, G%HI, haloshift=1, symmetric=sym, scale=US%L_T_to_m_s)
     call hchksum(h_av, "Predictor avg h", G%HI, haloshift=0, scale=GV%H_to_m)
   ! call MOM_state_chksum("Predictor avg ", u_av, v_av, h_av, uh, vh, G, GV, US)
-    call check_redundant("Predictor up ", up, vp, G)
-    call check_redundant("Predictor uh ", uh, vh, G)
+    call check_redundant("Predictor up ", up, vp, G, unscale=US%L_T_to_m_s)
+    call check_redundant("Predictor uh ", uh, vh, G, unscale=GV%H_to_m*US%L_to_m**2*US%s_to_T)
   endif
 
 ! diffu = horizontal viscosity terms (u_av)
@@ -816,10 +820,10 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
     call MOM_accel_chksum("corr pre-btstep accel", CS%CAu, CS%CAv, CS%PFu, CS%PFv, &
                           CS%diffu, CS%diffv, G, GV, US, CS%pbce, u_bc_accel, v_bc_accel, &
                           symmetric=sym)
-    call check_redundant("corr pre-btstep CS%CA ", CS%CAu, CS%CAv, G)
-    call check_redundant("corr pre-btstep CS%PF ", CS%PFu, CS%PFv, G)
-    call check_redundant("corr pre-btstep CS%diff ", CS%diffu, CS%diffv, G)
-    call check_redundant("corr pre-btstep u_bc_accel ", u_bc_accel, v_bc_accel, G)
+    call check_redundant("corr pre-btstep CS%CA ", CS%CAu, CS%CAv, G, unscale=US%L_T2_to_m_s2)
+    call check_redundant("corr pre-btstep CS%PF ", CS%PFu, CS%PFv, G, unscale=US%L_T2_to_m_s2)
+    call check_redundant("corr pre-btstep CS%diff ", CS%diffu, CS%diffv, G, unscale=US%L_T2_to_m_s2)
+    call check_redundant("corr pre-btstep u_bc_accel ", u_bc_accel, v_bc_accel, G, unscale=US%L_T2_to_m_s2)
   endif
 
   ! u_accel_bt = layer accelerations due to barotropic solver
@@ -844,7 +848,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
   if (showCallTree) call callTree_leave("btstep()")
 
   if (CS%debug) then
-    call check_redundant("u_accel_bt ", CS%u_accel_bt, CS%v_accel_bt, G)
+    call check_redundant("u_accel_bt ", CS%u_accel_bt, CS%v_accel_bt, G, unscale=US%L_T2_to_m_s2)
   endif
 
   ! u = u + dt*( u_bc_accel + u_accel_bt )
@@ -863,8 +867,8 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
   call cpu_clock_end(id_clock_mom_update)
 
   if (CS%debug) then
-    call uvchksum("Corrector 1 [uv]", u, v, G%HI,haloshift=0, symmetric=sym, scale=US%L_T_to_m_s)
-    call hchksum(h, "Corrector 1 h", G%HI, haloshift=2, scale=GV%H_to_m)
+    call uvchksum("Corrector 1 [uv]", u, v, G%HI, haloshift=0, symmetric=sym, scale=US%L_T_to_m_s)
+    call hchksum(h, "Corrector 1 h", G%HI, haloshift=1, scale=GV%H_to_m)
     call uvchksum("Corrector 1 [uv]h", uh, vh, G%HI, haloshift=2, &
                   symmetric=sym, scale=GV%H_to_m*US%L_to_m**2*US%s_to_T)
   ! call MOM_state_chksum("Corrector 1", u, v, h, uh, vh, G, GV, US, haloshift=1)
@@ -876,7 +880,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
   ! u <- u + dt d/dz visc d/dz u
   ! u_av <- u_av + dt d/dz visc d/dz u_av
   call cpu_clock_begin(id_clock_vertvisc)
-  call vertvisc_coef(u, v, h, forces, visc, dt, G, GV, US, CS%vertvisc_CSp, CS%OBC)
+  call vertvisc_coef(u, v, h, forces, visc, dt, G, GV, US, CS%vertvisc_CSp, CS%OBC, VarMix)
   call vertvisc(u, v, h, forces, visc, dt, CS%OBC, CS%ADp, CS%CDp, G, GV, US, &
                 CS%vertvisc_CSp, CS%taux_bot, CS%tauy_bot,waves=waves)
   if (G%nonblocking_updates) then
@@ -1160,6 +1164,32 @@ subroutine register_restarts_dyn_split_RK2(HI, GV, US, param_file, CS, restart_C
 
 end subroutine register_restarts_dyn_split_RK2
 
+!> This subroutine does remapping for the auxiliary restart variables that are used
+!! with the split RK2 time stepping scheme.
+subroutine remap_dyn_split_RK2_aux_vars(G, GV, CS, h_old, h_new, ALE_CSp, OBC, dzRegrid)
+  type(ocean_grid_type),            intent(inout) :: G        !< ocean grid structure
+  type(verticalGrid_type),          intent(in)    :: GV       !< ocean vertical grid structure
+  type(MOM_dyn_split_RK2_CS),       pointer       :: CS       !< module control structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
+                                    intent(in)    :: h_old    !< Thickness of source grid  [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
+                                    intent(in)    :: h_new    !< Thickness of destination grid [H ~> m or kg m-2]
+  type(ALE_CS),                     pointer       :: ALE_CSp  !< ALE control structure to use when remapping
+  type(ocean_OBC_type),             pointer       :: OBC      !< OBC control structure to use when remapping
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), &
+                          optional, intent(in)    :: dzRegrid !< Change in interface position [H ~> m or kg m-2]
+
+  if (.not.CS%remap_aux) return
+
+  if (CS%store_CAu) then
+    call ALE_remap_velocities(ALE_CSp, G, GV, h_old, h_new, CS%u_av, CS%v_av, OBC, dzRegrid)
+    call ALE_remap_velocities(ALE_CSp, G, GV, h_old, h_new, CS%CAu_pred, CS%CAv_pred, OBC, dzRegrid)
+  endif
+
+  call ALE_remap_velocities(ALE_CSp, G, GV, h_old, h_new, CS%diffu, CS%diffv, OBC, dzRegrid)
+
+end subroutine remap_dyn_split_RK2_aux_vars
+
 !> This subroutine initializes all of the variables that are used by this
 !! dynamic core, including diagnostics and the cpu clocks.
 subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, US, param_file, &
@@ -1276,6 +1306,13 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, US, param
                  "If true, calculate the Coriolis accelerations at the end of each "//&
                  "timestep for use in the predictor step of the next split RK2 timestep.", &
                  default=.true.)
+  call get_param(param_file, mdl, "REMAP_AUXILIARY_VARS", CS%remap_aux, &
+                 "If true, apply ALE remapping to all of the auxiliary 3-dimensional "//&
+                 "variables that are needed to reproduce across restarts, similarly to "//&
+                 "what is already being done with the primary state variables.  "//&
+                 "The default should be changed to true.", default=.false., do_not_log=.true.)
+  if (CS%remap_aux .and. .not.CS%store_CAu) call MOM_error(FATAL, &
+      "REMAP_AUXILIARY_VARS requires that STORE_CORIOLIS_ACCEL = True.")
   call get_param(param_file, mdl, "DEBUG", CS%debug, &
                  "If true, write out verbose debugging data.", &
                  default=.false., debuggingParam=.true.)
@@ -1508,10 +1545,10 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, US, param
   CS%id_PFv = register_diag_field('ocean_model', 'PFv', diag%axesCvL, Time, &
       'Meridional Pressure Force Acceleration', 'm s-2', conversion=US%L_T2_to_m_s2)
   CS%id_ueffA = register_diag_field('ocean_model', 'ueffA', diag%axesCuL, Time, &
-       'Effective U-Face Area', 'm^2', conversion = GV%H_to_m*US%L_to_m, &
+       'Effective U-Face Area', 'm^2', conversion=GV%H_to_m*US%L_to_m, &
        y_cell_method='sum', v_extensive=.true.)
   CS%id_veffA = register_diag_field('ocean_model', 'veffA', diag%axesCvL, Time, &
-       'Effective V-Face Area', 'm^2', conversion = GV%H_to_m*US%L_to_m, &
+       'Effective V-Face Area', 'm^2', conversion=GV%H_to_m*US%L_to_m, &
        x_cell_method='sum', v_extensive=.true.)
   if (GV%Boussinesq) then
     CS%id_deta_dt = register_diag_field('ocean_model', 'deta_dt', diag%axesT1, Time, &

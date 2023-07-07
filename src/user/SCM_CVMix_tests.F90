@@ -197,7 +197,7 @@ subroutine SCM_CVMix_tests_wind_forcing(sfc_state, forces, day, G, US, CS)
   ! Local variables
   integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
-  real    :: mag_tau
+  real    :: mag_tau  ! The magnitude of the wind stress [R L Z T-2 ~> Pa]
   ! Bounds for loops and memory allocation
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
@@ -231,7 +231,7 @@ subroutine SCM_CVMix_tests_buoyancy_forcing(sfc_state, fluxes, day, G, US, CS)
   ! Local variables
   integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
-  real :: PI
+  real :: PI  ! The ratio of the circumference of a circle to its diameter [nondim]
 
   PI = 4.0*atan(1.0)
 

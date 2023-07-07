@@ -10,7 +10,7 @@ runs:
       shell: bash
       run: |
         echo "::group::Install packages"
-        brew update
+        brew reinstall gcc
         brew install automake
         brew install netcdf
         brew install netcdf-fortran
