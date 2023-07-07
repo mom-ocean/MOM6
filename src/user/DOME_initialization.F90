@@ -322,6 +322,7 @@ subroutine DOME_set_OBC_data(OBC, tv, G, GV, US, PF, tr_Reg)
   real :: D_edge            ! The thickness [Z ~> m] of the dense fluid at the
                             ! inner edge of the inflow
   real :: RLay_range        ! The range of densities [R ~> kg m-3].
+  real :: Rlay_Ref          ! The surface layer's target density [R ~> kg m-3].
   real :: f_0               ! The reference value of the Coriolis parameter [T-1 ~> s-1]
   real :: f_inflow          ! The value of the Coriolis parameter used to determine DOME inflow
                             ! properties [T-1 ~> s-1]
@@ -351,6 +352,9 @@ subroutine DOME_set_OBC_data(OBC, tv, G, GV, US, PF, tr_Reg)
   call get_param(PF, mdl, "DENSITY_RANGE", Rlay_range, &
                  "The range of reference potential densities in the layers.", &
                  units="kg m-3", default=2.0, scale=US%kg_m3_to_R)
+  call get_param(PF, mdl, "LIGHTEST_DENSITY", Rlay_Ref, &
+                 "The reference potential density used for layer 1.", &
+                 units="kg m-3", default=US%R_to_kg_m3*GV%Rho0, scale=US%kg_m3_to_R)
   call get_param(PF, mdl, "F_0", f_0, &
                  "The reference value of the Coriolis parameter with the betaplane option.", &
                  units="s-1", default=0.0, scale=US%T_to_s)
@@ -369,9 +373,15 @@ subroutine DOME_set_OBC_data(OBC, tv, G, GV, US, PF, tr_Reg)
 
   if (.not.associated(OBC)) return
 
-  g_prime_tot = (GV%g_Earth / GV%Rho0) * Rlay_range
-  Def_Rad = sqrt(D_edge*g_prime_tot) / abs(f_inflow)
-  tr_0 = (-D_edge*sqrt(D_edge*g_prime_tot)*0.5*Def_Rad) * GV%Z_to_H
+  if (GV%Boussinesq) then
+    g_prime_tot = (GV%g_Earth / GV%Rho0) * Rlay_range
+    Def_Rad = sqrt(D_edge*g_prime_tot) / abs(f_inflow)
+    tr_0 = (-D_edge*sqrt(D_edge*g_prime_tot)*0.5*Def_Rad) * GV%Z_to_H
+  else
+    g_prime_tot = (GV%g_Earth / (Rlay_Ref + 0.5*Rlay_range)) * Rlay_range
+    Def_Rad = sqrt(D_edge*g_prime_tot) / abs(f_inflow)
+    tr_0 = (-D_edge*sqrt(D_edge*g_prime_tot)*0.5*Def_Rad) * (Rlay_Ref + 0.5*Rlay_range) * GV%RZ_to_H
+  endif
 
   I_Def_Rad = 1.0 / (1.0e-3*US%L_to_m*Def_Rad)
 
