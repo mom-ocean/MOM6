@@ -346,7 +346,8 @@ subroutine set_forcing(sfc_state, forces, fluxes, day_start, day_interval, G, US
   endif
 
   if (associated(CS%tracer_flow_CSp)) then
-    call call_tracer_set_forcing(sfc_state, fluxes, day_start, day_interval, G, CS%tracer_flow_CSp)
+    call call_tracer_set_forcing(sfc_state, fluxes, day_start, day_interval, G, US, CS%Rho0, &
+                                 CS%tracer_flow_CSp)
   endif
 
   ! Allow for user-written code to alter the fluxes after all the above

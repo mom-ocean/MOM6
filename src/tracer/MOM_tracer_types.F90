@@ -27,20 +27,16 @@ type, public :: tracer_type
   real, dimension(:,:,:), pointer :: df_x           => NULL() !< diagnostic array for x-diffusive tracer flux
                                                               !! [CU H L2 T-1 ~> conc m3 s-1 or conc kg s-1]
   real, dimension(:,:,:), pointer :: df_y           => NULL() !< diagnostic array for y-diffusive tracer flux
-                                                              !! [CU H L2 T-1 ~> conc m3 s-1 or conc kg s-1]
-  real, dimension(:,:,:), pointer :: lbd_dfx       => NULL()  !< diagnostic array for x-diffusive tracer flux
-                                                              !! [CU H L2 T-1 ~> conc m3 s-1 or conc kg s-1]
-  real, dimension(:,:,:), pointer :: lbd_dfy       => NULL()  !< diagnostic array for y-diffusive tracer flux
-                                                              !! [CU H L2 T-1 ~> conc m3 s-1 or conc kg s-1]
-  real, dimension(:,:), pointer :: lbd_dfx_2d       => NULL() !< diagnostic array for x-diffusive tracer flux
-                                                              !! [CU H L2 T-1 ~> conc m3 s-1 or conc kg s-1]
-  real, dimension(:,:), pointer :: lbd_dfy_2d       => NULL() !< diagnostic array for y-diffusive tracer flux
-                                                              !! [CU H L2 T-1 ~> conc m3 s-1 or conc kg s-1]
-  !### These two arrays may be allocated but are never used.
-  real, dimension(:,:), pointer :: lbd_bulk_df_x       => NULL() !< diagnostic array for x-diffusive tracer flux
-                                                              !! [CU H L2 T-1 ~> conc m3 s-1 or conc kg s-1]
-  real, dimension(:,:), pointer :: lbd_bulk_df_y       => NULL() !< diagnostic array for y-diffusive tracer flux
-                                                              !! [CU H L2 T-1 ~> conc m3 s-1 or conc kg s-1]
+                                                              !! [conc H L2 T-1 ~> conc m3 s-1 or conc kg s-1]
+  real, dimension(:,:,:), pointer :: hbd_dfx       => NULL()  !< diagnostic array for x-diffusive tracer flux
+                                                              !! [conc H L2 T-1 ~> conc m3 s-1 or conc kg s-1]
+  real, dimension(:,:,:), pointer :: hbd_dfy       => NULL()  !< diagnostic array for y-diffusive tracer flux
+                                                              !! [conc H L2 T-1 ~> conc m3 s-1 or conc kg s-1]
+  real, dimension(:,:),   pointer :: hbd_dfx_2d    => NULL()  !< diagnostic array for x-diffusive tracer flux
+                                                              !! [conc H L2 T-1 ~> conc m3 s-1 or conc kg s-1]
+  real, dimension(:,:),   pointer :: hbd_dfy_2d    => NULL()  !< diagnostic array for y-diffusive tracer flux
+                                                              !! [conc H L2 T-1 ~> conc m3 s-1 or conc kg s-1]
+                                                              !! [conc H L2 T-1 ~> conc m3 s-1 or conc kg s-1]
   real, dimension(:,:),   pointer :: df2d_x         => NULL() !< diagnostic vertical sum x-diffusive flux
                                                               !! [CU H L2 T-1 ~> conc m3 s-1 or conc kg s-1]
   real, dimension(:,:),   pointer :: df2d_y         => NULL() !< diagnostic vertical sum y-diffusive flux
@@ -106,12 +102,12 @@ type, public :: tracer_type
   !>@{ Diagnostic IDs
   integer :: id_tr = -1, id_tr_post_horzn = -1
   integer :: id_adx = -1, id_ady = -1, id_dfx = -1, id_dfy = -1
-  integer :: id_lbd_bulk_dfx = -1, id_lbd_bulk_dfy = -1, id_lbd_dfx = -1, id_lbd_dfy = -1
-  integer :: id_lbd_dfx_2d = -1  , id_lbd_dfy_2d = -1
+  integer :: id_hbd_dfx = -1, id_hbd_dfy = -1
+  integer :: id_hbd_dfx_2d = -1, id_hbd_dfy_2d = -1
   integer :: id_adx_2d = -1, id_ady_2d = -1, id_dfx_2d = -1, id_dfy_2d = -1
   integer :: id_adv_xy = -1, id_adv_xy_2d = -1
   integer :: id_dfxy_cont = -1, id_dfxy_cont_2d = -1, id_dfxy_conc = -1
-  integer :: id_lbdxy_cont = -1, id_lbdxy_cont_2d = -1, id_lbdxy_conc = -1
+  integer :: id_hbdxy_cont = -1, id_hbdxy_cont_2d = -1, id_hbdxy_conc = -1
   integer :: id_remap_conc = -1, id_remap_cont = -1, id_remap_cont_2d = -1
   integer :: id_tendency = -1, id_trxh_tendency = -1, id_trxh_tendency_2d = -1
   integer :: id_tr_vardec = -1

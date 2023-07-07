@@ -26,7 +26,6 @@ use MOM_get_input,        only : Get_MOM_Input, directories
 use MOM_grid,             only : ocean_grid_type
 use MOM_interpolate,      only : init_external_field, time_interp_external
 use MOM_interpolate,      only : time_interp_external_init
-use MOM_CFC_cap,          only : CFC_cap_fluxes
 use MOM_io,               only : slasher, write_version_number, MOM_read_data
 use MOM_io,               only : stdout
 use MOM_restart,          only : register_restart_field, restart_init, MOM_restart_CS
@@ -129,7 +128,6 @@ type, public :: surface_forcing_CS ; private
 
   type(diag_ctrl), pointer :: diag                  !< structure to regulate diagnostic output timing
   character(len=200)       :: inputdir              !< directory where NetCDF input files are
-  character(len=200)       :: CFC_BC_file           !< filename with cfc11 and cfc12 data
   character(len=200)       :: salt_restore_file     !< filename for salt restoring data
   character(len=30)        :: salt_restore_var_name !< name of surface salinity in salt_restore_file
   logical                  :: mask_srestore         !< if true, apply a 2-dimensional mask to the surface
@@ -143,13 +141,9 @@ type, public :: surface_forcing_CS ; private
                                                     !! temperature restoring fluxes. The masking file should be
                                                     !! in inputdir/temp_restore_mask.nc and the field should
                                                     !! be named 'mask'
-  character(len=30)        :: cfc11_var_name        !< name of cfc11 in CFC_BC_file
-  character(len=30)        :: cfc12_var_name        !< name of cfc11 in CFC_BC_file
   real, pointer, dimension(:,:) :: trestore_mask => NULL() !< mask for SST restoring
-  integer :: id_srestore = -1    !< id number for time_interp_external.
-  integer :: id_trestore = -1    !< id number for time_interp_external.
-  integer :: id_cfc11_atm = -1   !< id number for time_interp_external.
-  integer :: id_cfc12_atm = -1   !< id number for time_interp_external.
+  integer :: id_srestore = -1       !< id number for time_interp_external.
+  integer :: id_trestore = -1       !< id number for time_interp_external.
 
   ! Diagnostics handles
   type(forcing_diags), public :: handles
@@ -245,8 +239,6 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
 
   ! local variables
   real, dimension(SZI_(G),SZJ_(G)) :: &
-    cfc11_atm,     & !< CFC11 concentration in the atmopshere [???????]
-    cfc12_atm,     & !< CFC11 concentration in the atmopshere [???????]
     data_restore,  & !< The surface value toward which to restore [S ~> ppt] or [C ~> degC]
     PmE_adj,       & !< The adjustment to PminusE that will cause the salinity
                      !! to be restored toward its target value [kg/(m^2 * s)]
@@ -592,11 +584,6 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
       enddo ; enddo
     endif
     fluxes%accumulate_p_surf = .true. ! Multiple components may contribute to surface pressure.
-  endif
-
-  ! CFCs
-  if (CS%use_CFC) then
-    call CFC_cap_fluxes(fluxes, sfc_state, G, US, CS%Rho0, Time, CS%id_cfc11_atm, CS%id_cfc11_atm)
   endif
 
   if (associated(IOB%salt_flux)) then
@@ -1411,29 +1398,6 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, restore_salt,
       call MOM_read_data(flnam, 'mask', CS%trestore_mask, G%domain, timelevel=1)
     endif
   endif ; endif
-
-  ! Do not log these params here since they are logged in the CFC cap module
-  if (CS%use_CFC) then
-    call get_param(param_file, mdl, "CFC_BC_FILE", CS%CFC_BC_file, &
-                   "The file in which the CFC-11 and CFC-12 atm concentrations can be "//&
-                   "found (units must be parts per trillion), or an empty string for "//&
-                   "internal BC generation (TODO).", default=" ", do_not_log=.true.)
-    if ((len_trim(CS%CFC_BC_file) > 0) .and. (scan(CS%CFC_BC_file,'/') == 0)) then
-      ! Add the directory if CFC_BC_file is not already a complete path.
-      CS%CFC_BC_file = trim(CS%inputdir) // trim(CS%CFC_BC_file)
-    endif
-    if (len_trim(CS%CFC_BC_file) > 0) then
-      call get_param(param_file, mdl, "CFC11_VARIABLE", CS%cfc11_var_name, &
-                   "The name of the variable representing CFC-11 in  "//&
-                   "CFC_BC_FILE.", default="CFC_11", do_not_log=.true.)
-      call get_param(param_file, mdl, "CFC12_VARIABLE", CS%cfc12_var_name, &
-                   "The name of the variable representing CFC-12 in  "//&
-                   "CFC_BC_FILE.", default="CFC_12", do_not_log=.true.)
-
-      CS%id_cfc11_atm = init_external_field(CS%CFC_BC_file, CS%cfc11_var_name, domain=G%Domain%mpp_domain)
-      CS%id_cfc12_atm = init_external_field(CS%CFC_BC_file, CS%cfc12_var_name, domain=G%Domain%mpp_domain)
-    endif
-  endif
 
   ! Set up any restart fields associated with the forcing.
   call restart_init(param_file, CS%restart_CSp, "MOM_forcing.res")

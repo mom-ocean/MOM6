@@ -3,32 +3,32 @@ module MOM_tracer_hor_diff
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-use MOM_cpu_clock,             only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
-use MOM_cpu_clock,             only : CLOCK_MODULE, CLOCK_ROUTINE
-use MOM_diag_mediator,         only : post_data, diag_ctrl
-use MOM_diag_mediator,         only : register_diag_field, safe_alloc_ptr, time_type
-use MOM_domains,               only : sum_across_PEs, max_across_PEs
-use MOM_domains,               only : create_group_pass, do_group_pass, group_pass_type
-use MOM_domains,               only : pass_vector
-use MOM_debugging,             only : hchksum, uvchksum
-use MOM_diabatic_driver,       only : diabatic_CS
-use MOM_EOS,                   only : calculate_density, EOS_type, EOS_domain
-use MOM_error_handler,         only : MOM_error, FATAL, WARNING, MOM_mesg, is_root_pe
-use MOM_error_handler,         only : MOM_set_verbosity, callTree_showQuery
-use MOM_error_handler,         only : callTree_enter, callTree_leave, callTree_waypoint
-use MOM_file_parser,           only : get_param, log_version, param_file_type
-use MOM_grid,                  only : ocean_grid_type
-use MOM_lateral_mixing_coeffs, only : VarMix_CS
-use MOM_MEKE_types,            only : MEKE_type
-use MOM_neutral_diffusion,     only : neutral_diffusion_init, neutral_diffusion_end
-use MOM_neutral_diffusion,     only : neutral_diffusion_CS
-use MOM_neutral_diffusion,     only : neutral_diffusion_calc_coeffs, neutral_diffusion
-use MOM_lateral_boundary_diffusion, only : lbd_CS, lateral_boundary_diffusion_init
-use MOM_lateral_boundary_diffusion, only : lateral_boundary_diffusion
-use MOM_tracer_registry,       only : tracer_registry_type, tracer_type, MOM_tracer_chksum
-use MOM_unit_scaling,          only : unit_scale_type
-use MOM_variables,             only : thermo_var_ptrs
-use MOM_verticalGrid,          only : verticalGrid_type
+use MOM_cpu_clock,                only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
+use MOM_cpu_clock,                only : CLOCK_MODULE, CLOCK_ROUTINE
+use MOM_diag_mediator,            only : post_data, diag_ctrl
+use MOM_diag_mediator,            only : register_diag_field, safe_alloc_ptr, time_type
+use MOM_domains,                  only : sum_across_PEs, max_across_PEs
+use MOM_domains,                  only : create_group_pass, do_group_pass, group_pass_type
+use MOM_domains,                  only : pass_vector
+use MOM_debugging,                only : hchksum, uvchksum
+use MOM_diabatic_driver,          only : diabatic_CS
+use MOM_EOS,                      only : calculate_density, EOS_type, EOS_domain
+use MOM_error_handler,            only : MOM_error, FATAL, WARNING, MOM_mesg, is_root_pe
+use MOM_error_handler,            only : MOM_set_verbosity, callTree_showQuery
+use MOM_error_handler,            only : callTree_enter, callTree_leave, callTree_waypoint
+use MOM_file_parser,              only : get_param, log_version, param_file_type
+use MOM_grid,                     only : ocean_grid_type
+use MOM_lateral_mixing_coeffs,    only : VarMix_CS
+use MOM_MEKE_types,               only : MEKE_type
+use MOM_neutral_diffusion,        only : neutral_diffusion_init, neutral_diffusion_end
+use MOM_neutral_diffusion,        only : neutral_diffusion_CS
+use MOM_neutral_diffusion,        only : neutral_diffusion_calc_coeffs, neutral_diffusion
+use MOM_hor_bnd_diffusion,        only : hbd_CS, hor_bnd_diffusion_init
+use MOM_hor_bnd_diffusion,        only : hor_bnd_diffusion, hor_bnd_diffusion_end
+use MOM_tracer_registry,          only : tracer_registry_type, tracer_type, MOM_tracer_chksum
+use MOM_unit_scaling,             only : unit_scale_type
+use MOM_variables,                only : thermo_var_ptrs
+use MOM_verticalGrid,             only : verticalGrid_type
 
 implicit none ; private
 
@@ -59,13 +59,13 @@ type, public :: tracer_hor_diff_CS ; private
                                   !! the CFL limit is not violated.
   logical :: use_neutral_diffusion !< If true, use the neutral_diffusion module from within
                                    !! tracer_hor_diff.
-  logical :: use_lateral_boundary_diffusion !< If true, use the lateral_boundary_diffusion module from within
+  logical :: use_hor_bnd_diffusion !< If true, use the hor_bnd_diffusion module from within
                                    !! tracer_hor_diff.
   logical :: recalc_neutral_surf   !< If true, recalculate the neutral surfaces if CFL has been
                                    !! exceeded
   type(neutral_diffusion_CS), pointer :: neutral_diffusion_CSp => NULL() !< Control structure for neutral diffusion.
-  type(lbd_CS), pointer :: lateral_boundary_diffusion_CSp => NULL() !< Control structure for
-                                                                                     !! lateral boundary mixing.
+  type(hbd_CS), pointer    :: hor_bnd_diffusion_CSp => NULL() !< Control structure for
+                                                              !! horizontal boundary diffusion.
   type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to
                                    !! regulate the timing of diagnostic output.
   logical :: debug                 !< If true, write verbose checksums for debugging purposes.
@@ -387,9 +387,9 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, GV, US, CS, Reg, tv, do_online
     endif
   enddo
 
-  if (CS%use_lateral_boundary_diffusion) then
+  if (CS%use_hor_bnd_diffusion) then
 
-    if (CS%show_call_tree) call callTree_waypoint("Calling lateral boundary mixing (tracer_hordiff)")
+    if (CS%show_call_tree) call callTree_waypoint("Calling horizontal boundary diffusion (tracer_hordiff)")
 
     call do_group_pass(CS%pass_t, G%Domain, clock=id_clock_pass)
 
@@ -403,12 +403,12 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, GV, US, CS, Reg, tv, do_online
     enddo
 
     do itt=1,num_itts
-      if (CS%show_call_tree) call callTree_waypoint("Calling lateral boundary diffusion (tracer_hordiff)",itt)
+      if (CS%show_call_tree) call callTree_waypoint("Calling horizontal boundary diffusion (tracer_hordiff)",itt)
       if (itt>1) then ! Update halos for subsequent iterations
         call do_group_pass(CS%pass_t, G%Domain, clock=id_clock_pass)
       endif
-      call lateral_boundary_diffusion(G, GV, US, h, Coef_x, Coef_y, I_numitts*dt, Reg, &
-                                     CS%lateral_boundary_diffusion_CSp)
+      call hor_bnd_diffusion(G, GV, US, h, Coef_x, Coef_y, I_numitts*dt, Reg, &
+                             CS%hor_bnd_diffusion_CSp)
     enddo ! itt
   endif
 
@@ -418,7 +418,7 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, GV, US, CS, Reg, tv, do_online
 
     call do_group_pass(CS%pass_t, G%Domain, clock=id_clock_pass)
     ! We are assuming that neutral surfaces do not evolve (much) as a result of multiple
-    ! lateral diffusion iterations. Otherwise the call to neutral_diffusion_calc_coeffs()
+    !horizontal diffusion iterations. Otherwise the call to neutral_diffusion_calc_coeffs()
     ! would be inside the itt-loop. -AJA
 
     if (associated(tv%p_surf)) then
@@ -1541,10 +1541,10 @@ subroutine tracer_hor_diff_init(Time, G, GV, US, param_file, diag, EOS, diabatic
                                                     diabatic_CSp, CS%neutral_diffusion_CSp )
   if (CS%use_neutral_diffusion .and. CS%Diffuse_ML_interior) call MOM_error(FATAL, "MOM_tracer_hor_diff: "// &
        "USE_NEUTRAL_DIFFUSION and DIFFUSE_ML_TO_INTERIOR are mutually exclusive!")
-  CS%use_lateral_boundary_diffusion = lateral_boundary_diffusion_init(Time, G, GV, param_file, diag, diabatic_CSp, &
-                                                                CS%lateral_boundary_diffusion_CSp)
-  if (CS%use_lateral_boundary_diffusion .and. CS%Diffuse_ML_interior) call MOM_error(FATAL, "MOM_tracer_hor_diff: "// &
-       "USE_LATERAL_BOUNDARY_DIFFUSION and DIFFUSE_ML_TO_INTERIOR are mutually exclusive!")
+  CS%use_hor_bnd_diffusion = hor_bnd_diffusion_init(Time, G, GV, US, param_file, diag, diabatic_CSp, &
+                                                    CS%hor_bnd_diffusion_CSp)
+  if (CS%use_hor_bnd_diffusion .and. CS%Diffuse_ML_interior) call MOM_error(FATAL, "MOM_tracer_hor_diff: "// &
+       "USE_HORIZONTAL_BOUNDARY_DIFFUSION and DIFFUSE_ML_TO_INTERIOR are mutually exclusive!")
 
   call get_param(param_file, mdl, "DEBUG", CS%debug, default=.false.)
 
@@ -1584,6 +1584,7 @@ subroutine tracer_hor_diff_end(CS)
   type(tracer_hor_diff_CS), pointer :: CS !< module control structure
 
   call neutral_diffusion_end(CS%neutral_diffusion_CSp)
+  call hor_bnd_diffusion_end(CS%hor_bnd_diffusion_CSp)
   if (associated(CS)) deallocate(CS)
 
 end subroutine tracer_hor_diff_end

@@ -9,7 +9,7 @@ use MOM_string_functions,           only : string_functions_unit_tests
 use MOM_remapping,                  only : remapping_unit_tests
 use MOM_neutral_diffusion,          only : neutral_diffusion_unit_tests
 use MOM_random,                     only : random_unit_tests
-use MOM_lateral_boundary_diffusion, only : near_boundary_unit_tests
+use MOM_hor_bnd_diffusion,          only : near_boundary_unit_tests
 use MOM_CFC_cap,                    only : CFC_cap_unit_tests
 implicit none ; private
 

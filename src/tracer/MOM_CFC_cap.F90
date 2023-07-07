@@ -5,6 +5,7 @@ module MOM_CFC_cap
 ! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_coms,            only : EFP_type
+use MOM_debugging,       only : hchksum
 use MOM_diag_mediator,   only : diag_ctrl, register_diag_field, post_data
 use MOM_error_handler,   only : MOM_error, FATAL, WARNING
 use MOM_file_parser,     only : get_param, log_param, log_version, param_file_type
@@ -18,14 +19,14 @@ use MOM_tracer_registry, only : tracer_type
 use MOM_open_boundary,   only : ocean_OBC_type
 use MOM_restart,         only : query_initialized, set_initialized, MOM_restart_CS
 use MOM_spatial_means,   only : global_mass_int_EFP
-use MOM_time_manager,    only : time_type
+use MOM_time_manager,    only : time_type, increment_date
 use time_interp_external_mod, only : init_external_field, time_interp_external
 use MOM_tracer_registry, only : register_tracer
 use MOM_tracer_types,    only : tracer_registry_type
 use MOM_tracer_diabatic, only : tracer_vertdiff, applyTracerBoundaryFluxesInOut
 use MOM_tracer_Z_init,   only : tracer_Z_init
 use MOM_unit_scaling,    only : unit_scale_type
-use MOM_variables,       only : surface
+use MOM_variables,       only : surface, thermo_var_ptrs
 use MOM_verticalGrid,    only : verticalGrid_type
 
 implicit none ; private
@@ -33,24 +34,29 @@ implicit none ; private
 #include <MOM_memory.h>
 
 public register_CFC_cap, initialize_CFC_cap, CFC_cap_unit_tests
-public CFC_cap_column_physics, CFC_cap_surface_state, CFC_cap_fluxes
+public CFC_cap_column_physics, CFC_cap_set_forcing
 public CFC_cap_stock, CFC_cap_end
 
 integer, parameter :: NTR = 2 !< the number of tracers in this module.
 
-!> Contains the concentration array, a pointer to Tr in Tr_reg, and some metadata for a single CFC tracer
+!> Contains the concentration array, surface flux, a pointer to Tr in Tr_reg,
+!! and some metadata for a single CFC tracer
 type, private :: CFC_tracer_data
-  type(vardesc) :: desc !< A set of metadata for the tracer
-  real :: IC_val = 0.0    !< The initial value assigned to the tracer [mol kg-1].
-  real :: land_val = -1.0 !< The value of the tracer used where land is masked out [mol kg-1].
-  character(len=32) :: name !< Tracer variable name
-  integer :: id_cmor  !< Diagnostic ID
-  real, pointer, dimension(:,:,:) :: conc  !< The tracer concentration [mol kg-1].
-  type(tracer_type), pointer :: tr_ptr !< pointer to tracer inside Tr_reg
-  end type CFC_tracer_data
+  type(vardesc) :: desc                     !< A set of metadata for the tracer
+  real :: IC_val = 0.0                      !< The initial value assigned to the tracer [mol kg-1].
+  real :: land_val = -1.0                   !< The value of the tracer used where land is
+                                            !! masked out [mol kg-1].
+  character(len=32) :: name                 !< Tracer variable name
+  integer :: id_cmor = -1                   !< Diagnostic id
+  integer :: id_sfc_flux = -1               !< Surface flux id
+  real, pointer, dimension(:,:,:) :: conc   !< The tracer concentration [mol kg-1].
+  real, pointer, dimension(:,:) :: sfc_flux !< Surface flux [CU R Z T-1 ~> mol m-2 s-1]
+  type(tracer_type), pointer :: tr_ptr      !< pointer to tracer inside Tr_reg
+end type CFC_tracer_data
 
 !> The control structure for the CFC_cap tracer package
 type, public :: CFC_cap_CS ; private
+  logical :: debug              !< If true, write verbose checksums for debugging purposes.
   character(len=200) :: IC_file !< The file in which the CFC initial values can
                                 !! be found, or an empty string for internal initilaization.
   logical :: Z_IC_file !< If true, the IC_file is in Z-space.  The default is false.
@@ -62,7 +68,12 @@ type, public :: CFC_cap_CS ; private
                                              !! the timing of diagnostic output.
   type(MOM_restart_CS), pointer :: restart_CSp => NULL() !< Model restart control structure
 
-  type(CFC_tracer_data), dimension(2) :: CFC_data        !< per-tracer parameters / metadata
+  type(CFC_tracer_data), dimension(NTR) :: CFC_data      !< per-tracer parameters / metadata
+  integer :: CFC_BC_year_offset = 0 !< offset to add to model time to get time value used in CFC_BC_file
+  integer :: id_cfc11_atm_nh = -1   !< id number for time_interp_external.
+  integer :: id_cfc11_atm_sh = -1   !< id number for time_interp_external.
+  integer :: id_cfc12_atm_nh = -1   !< id number for time_interp_external.
+  integer :: id_cfc12_atm_sh = -1   !< id number for time_interp_external.
 end type CFC_cap_CS
 
 contains
@@ -81,14 +92,17 @@ function register_CFC_cap(HI, GV, param_file, CS, tr_Reg, restart_CS)
 
   ! Local variables
   character(len=40)  :: mdl = "MOM_CFC_cap" ! This module's name.
-  character(len=200) :: inputdir ! The directory where NetCDF input files are.
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
+  character(len=200) :: inputdir ! The directory where NetCDF input files are.
   real, dimension(:,:,:), pointer :: tr_ptr => NULL()
-  character(len=200) :: dummy      ! Dummy variable to store params that need to be logged here.
+  character(len=200) :: CFC_BC_file           ! filename with cfc11 and cfc12 data
+  character(len=30)  :: CFC_BC_var_name       ! varname of field in CFC_BC_file
   character :: m2char
   logical :: register_CFC_cap
   integer :: isd, ied, jsd, jed, nz, m
+  integer :: CFC_BC_data_year   ! specific year in CFC BC data calendar
+  integer :: CFC_BC_model_year  ! model year corresponding to CFC_BC_data_year
 
   isd = HI%isd ; ied = HI%ied ; jsd = HI%jsd ; jed = HI%jed ; nz = GV%ke
 
@@ -100,15 +114,19 @@ function register_CFC_cap(HI, GV, param_file, CS, tr_Reg, restart_CS)
 
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mdl, version, "")
+  call get_param(param_file, mdl, "DEBUG", CS%debug, &
+                 "If true, write out verbose debugging data.", &
+                 default=.false., debuggingParam=.true.)
   call get_param(param_file, mdl, "CFC_IC_FILE", CS%IC_file, &
                  "The file in which the CFC initial values can be "//&
                  "found, or an empty string for internal initialization.", &
                  default=" ")
-  if ((len_trim(CS%IC_file) > 0) .and. (scan(CS%IC_file,'/') == 0)) then
+  if ((len_trim(CS%IC_file) > 0) .and. (scan(CS%IC_file, '/') == 0)) then
     ! Add the directory if CS%IC_file is not already a complete path.
     call get_param(param_file, mdl, "INPUTDIR", inputdir, default=".")
     CS%IC_file = trim(slasher(inputdir))//trim(CS%IC_file)
-    call log_param(param_file, mdl, "INPUTDIR/CFC_IC_FILE", CS%IC_file)
+    call log_param(param_file, mdl, "INPUTDIR/CFC_IC_FILE", CS%IC_file, &
+                   "full path of CFC_IC_FILE")
   endif
   call get_param(param_file, mdl, "CFC_IC_FILE_IS_Z", CS%Z_IC_file, &
                  "If true, CFC_IC_FILE is in depth space, not layer space", &
@@ -118,7 +136,7 @@ function register_CFC_cap(HI, GV, param_file, CS, tr_Reg, restart_CS)
                  "if they are not found in the restart files.  Otherwise "//&
                  "it is a fatal error if tracers are not found in the "//&
                  "restart files of a restarted run.", default=.false.)
-  do m=1,2
+  do m=1,NTR
     write(m2char, "(I1)") m
     call get_param(param_file, mdl, "CFC1"//m2char//"_IC_VAL", CS%CFC_data(m)%IC_val, &
                    "Value that CFC_1"//m2char//" is set to when it is not read from a file.", &
@@ -127,28 +145,49 @@ function register_CFC_cap(HI, GV, param_file, CS, tr_Reg, restart_CS)
 
   ! the following params are not used in this module. Instead, they are used in
   ! the cap but are logged here to keep all the CFC cap params together.
-  call get_param(param_file, mdl, "CFC_BC_FILE", dummy, &
-                "The file in which the CFC-11 and CFC-12 atm concentrations can be "//&
-                "found (units must be parts per trillion), or an empty string for "//&
-                "internal BC generation (TODO).", default=" ")
-  if ((len_trim(dummy) > 0) .and. (scan(dummy,'/') == 0)) then
-    ! Add the directory if dummy is not already a complete path.
+  call get_param(param_file, mdl, "CFC_BC_FILE", CFC_BC_file, &
+                 "The file in which the CFC-11 and CFC-12 atm concentrations can be "//&
+                 "found (units must be parts per trillion).", default=" ")
+  if (len_trim(CFC_BC_file) == 0) then
+    call MOM_error(FATAL, "CFC_BC_FILE must be specified if USE_CFC_CAP=.true.")
+  endif
+  if (scan(CFC_BC_file, '/') == 0) then
+    ! Add the directory if CFC_BC_file is not already a complete path.
     call get_param(param_file, mdl, "INPUTDIR", inputdir, default=".")
-    dummy = trim(slasher(inputdir))//trim(dummy)
-    call log_param(param_file, mdl, "INPUTDIR/CFC_IC_FILE", dummy)
+    CFC_BC_file = trim(slasher(inputdir))//trim(CFC_BC_file)
+    call log_param(param_file, mdl, "INPUTDIR/CFC_BC_FILE", CFC_BC_file, &
+                   "full path of CFC_BC_FILE")
   endif
-  if (len_trim(dummy) > 0) then
-    call get_param(param_file, mdl, "CFC11_VARIABLE", dummy, &
-                 "The name of the variable representing CFC-11 in  "//&
-                 "CFC_BC_FILE.", default="CFC_11")
-    call get_param(param_file, mdl, "CFC12_VARIABLE", dummy, &
-                 "The name of the variable representing CFC-12 in  "//&
-                 "CFC_BC_FILE.", default="CFC_12")
-  endif
+
+  call get_param(param_file, mdl, "CFC_BC_DATA_YEAR", CFC_BC_data_year, &
+                 "Specific year in CFC_BC_FILE data calendar", default=2000)
+  call get_param(param_file, mdl, "CFC_BC_MODEL_YEAR", CFC_BC_model_year, &
+                 "Model year corresponding to CFC_BC_MODEL_YEAR", default=2000)
+  CS%CFC_BC_year_offset = CFC_BC_data_year - CFC_BC_model_year
+
+  call get_param(param_file, mdl, "CFC11_NH_VARIABLE", CFC_BC_var_name, &
+                 "Variable name of NH CFC-11 atm mole fraction in CFC_BC_FILE.", &
+                 default="cfc11_nh")
+  CS%id_cfc11_atm_nh = init_external_field(CFC_BC_file, CFC_BC_var_name)
+
+  call get_param(param_file, mdl, "CFC11_SH_VARIABLE", CFC_BC_var_name, &
+                 "Variable name of SH CFC-11 atm mole fraction in CFC_BC_FILE.", &
+                 default="cfc11_sh")
+  CS%id_cfc11_atm_sh = init_external_field(CFC_BC_file, CFC_BC_var_name)
+
+  call get_param(param_file, mdl, "CFC12_NH_VARIABLE", CFC_BC_var_name, &
+                 "Variable name of NH CFC-12 atm mole fraction in CFC_BC_FILE.", &
+                 default="cfc12_nh")
+  CS%id_cfc12_atm_nh = init_external_field(CFC_BC_file, CFC_BC_var_name)
+
+  call get_param(param_file, mdl, "CFC12_SH_VARIABLE", CFC_BC_var_name, &
+                 "Variable name of SH CFC-12 atm mole fraction in CFC_BC_FILE.", &
+                 default="cfc12_sh")
+  CS%id_cfc12_atm_sh = init_external_field(CFC_BC_file, CFC_BC_var_name)
 
   ! The following vardesc types contain a package of metadata about each tracer,
   ! including, the name; units; longname; and grid information.
-  do m=1,2
+  do m=1,NTR
     write(m2char, "(I1)") m
     write(CS%CFC_data(m)%name, "(2A)") "CFC_1", m2char
     CS%CFC_data(m)%desc = var_desc(CS%CFC_data(m)%name, &
@@ -157,6 +196,7 @@ function register_CFC_cap(HI, GV, param_file, CS, tr_Reg, restart_CS)
                                    caller=mdl)
 
     allocate(CS%CFC_data(m)%conc(isd:ied,jsd:jed,nz), source=0.0)
+    allocate(CS%CFC_data(m)%sfc_flux(isd:ied,jsd:jed), source=0.0)
 
     ! This pointer assignment is needed to force the compiler not to do a copy in
     ! the registration calls.  Curses on the designers and implementers of F90.
@@ -201,7 +241,7 @@ subroutine initialize_CFC_cap(restart, day, G, GV, US, h, diag, OBC, CS)
   CS%Time => day
   CS%diag => diag
 
-  do m=1,2
+  do m=1,NTR
     if (.not.restart .or. (CS%tracers_may_reinit .and. &
         .not.query_initialized(CS%CFC_data(m)%conc, CS%CFC_data(m)%name, CS%restart_CSp))) then
       call init_tracer_CFC(h, CS%CFC_data(m)%conc, CS%CFC_data(m)%name, CS%CFC_data(m)%land_val, &
@@ -210,11 +250,23 @@ subroutine initialize_CFC_cap(restart, day, G, GV, US, h, diag, OBC, CS)
     endif
 
     ! cmor diagnostics
+    ! units for cfc11_flux and cfc12_flux are [Conc R Z T-1 ~> mol m-2 s-1]
     ! CFC11 cmor conventions: http://clipc-services.ceda.ac.uk/dreq/u/42625c97b8fe75124a345962c4430982.html
+    ! http://clipc-services.ceda.ac.uk/dreq/u/0940cbee6105037e4b7aa5579004f124.html
     ! CFC12 cmor conventions: http://clipc-services.ceda.ac.uk/dreq/u/3ab8e10027d7014f18f9391890369235.html
+    ! http://clipc-services.ceda.ac.uk/dreq/u/e9e21426e4810d0bb2d3dddb24dbf4dc.html
     write(m2char, "(I1)") m
-    CS%CFC_data(m)%id_cmor = register_diag_field('ocean_model', 'cfc1'//m2char, diag%axesTL, day,   &
-      'Mole Concentration of CFC1'//m2char//' in Sea Water', 'mol m-3')
+    CS%CFC_data(m)%id_cmor = register_diag_field('ocean_model', &
+        'cfc1'//m2char, diag%axesTL, day, &
+        'Mole Concentration of CFC1'//m2char//' in Sea Water', 'mol m-3')
+
+    CS%CFC_data(m)%id_sfc_flux = register_diag_field('ocean_model', &
+        'cfc1'//m2char//'_flux', diag%axesT1, day, &
+        'Gas exchange flux of CFC1'//m2char//' into the ocean ', &
+        'mol m-2 s-1', conversion=US%RZ_T_to_kg_m2s, &
+        cmor_field_name='fgcfc1'//m2char, &
+        cmor_long_name='Surface Downward CFC1'//m2char//' Flux', &
+        cmor_standard_name='surface_downward_cfc1'//m2char//'_flux')
   enddo
 
 
@@ -308,7 +360,7 @@ subroutine CFC_cap_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, US, C
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: h_work ! Used so that h can be modified [H ~> m or kg m-2]
   real :: flux_scale
-  integer :: i, j, k, is, ie, js, je, nz
+  integer :: i, j, k, is, ie, js, je, nz, m
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
@@ -319,43 +371,43 @@ subroutine CFC_cap_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, US, C
     if (associated(KPP_CSp) .and. present(nonLocalTrans)) then
       flux_scale = GV%Z_to_H / GV%rho0
 
-      call KPP_NonLocalTransport(KPP_CSp, G, GV, h_old, nonLocalTrans, fluxes%cfc11_flux(:,:), dt, CS%diag, &
-                                CS%CFC_data(1)%tr_ptr, CS%CFC_data(1)%conc(:,:,:), &
-                                flux_scale=flux_scale)
-      call KPP_NonLocalTransport(KPP_CSp, G, GV, h_old, nonLocalTrans, fluxes%cfc12_flux(:,:), dt, CS%diag, &
-                                CS%CFC_data(2)%tr_ptr, CS%CFC_data(2)%conc(:,:,:), &
-                                flux_scale=flux_scale)
+      do m=1,NTR
+        call KPP_NonLocalTransport(KPP_CSp, G, GV, h_old, nonLocalTrans, &
+                                   CS%CFC_data(m)%sfc_flux(:,:), dt, CS%diag, &
+                                   CS%CFC_data(m)%tr_ptr, CS%CFC_data(m)%conc(:,:,:), &
+                                   flux_scale=flux_scale)
+      enddo
     endif
   endif
 
   ! Use a tridiagonal solver to determine the concentrations after the
   ! surface source is applied and diapycnal advection and diffusion occurs.
   if (present(evap_CFL_limit) .and. present(minimum_forcing_depth)) then
-    do k=1,nz ;do j=js,je ; do i=is,ie
-      h_work(i,j,k) = h_old(i,j,k)
-    enddo ; enddo ; enddo
-    call applyTracerBoundaryFluxesInOut(G, GV, CS%CFC_data(1)%conc, dt, fluxes, h_work, &
-                                        evap_CFL_limit, minimum_forcing_depth)
-    call tracer_vertdiff(h_work, ea, eb, dt, CS%CFC_data(1)%conc, G, GV, sfc_flux=fluxes%cfc11_flux)
-
-    do k=1,nz ;do j=js,je ; do i=is,ie
-      h_work(i,j,k) = h_old(i,j,k)
-    enddo ; enddo ; enddo
-    call applyTracerBoundaryFluxesInOut(G, GV, CS%CFC_data(2)%conc, dt, fluxes, h_work, &
-                                        evap_CFL_limit, minimum_forcing_depth)
-    call tracer_vertdiff(h_work, ea, eb, dt, CS%CFC_data(2)%conc, G, GV, sfc_flux=fluxes%cfc12_flux)
+    do m=1,NTR
+      do k=1,nz ;do j=js,je ; do i=is,ie
+        h_work(i,j,k) = h_old(i,j,k)
+      enddo ; enddo ; enddo
+      call applyTracerBoundaryFluxesInOut(G, GV, CS%CFC_data(m)%conc, dt, fluxes, h_work, &
+                                          evap_CFL_limit, minimum_forcing_depth)
+      call tracer_vertdiff(h_work, ea, eb, dt, CS%CFC_data(m)%conc, G, GV, &
+                           sfc_flux=CS%CFC_data(m)%sfc_flux)
+    enddo
   else
-    call tracer_vertdiff(h_old, ea, eb, dt, CS%CFC_data(1)%conc, G, GV, sfc_flux=fluxes%cfc11_flux)
-    call tracer_vertdiff(h_old, ea, eb, dt, CS%CFC_data(2)%conc, G, GV, sfc_flux=fluxes%cfc12_flux)
+    do m=1,NTR
+      call tracer_vertdiff(h_old, ea, eb, dt, CS%CFC_data(m)%conc, G, GV, &
+                           sfc_flux=CS%CFC_data(m)%sfc_flux)
+    enddo
   endif
 
   ! If needed, write out any desired diagnostics from tracer sources & sinks here.
-  if (CS%CFC_data(1)%id_cmor > 0) call post_data(CS%CFC_data(1)%id_cmor, &
-                                                 (GV%Rho0*US%R_to_kg_m3)*CS%CFC_data(1)%conc, &
-                                                 CS%diag)
-  if (CS%CFC_data(2)%id_cmor > 0) call post_data(CS%CFC_data(2)%id_cmor, &
-                                                 (GV%Rho0*US%R_to_kg_m3)*CS%CFC_data(2)%conc, &
-                                                 CS%diag)
+  do m=1,NTR
+    if (CS%CFC_data(m)%id_cmor > 0) &
+      call post_data(CS%CFC_data(m)%id_cmor, &
+                     (GV%Rho0*US%R_to_kg_m3)*CS%CFC_data(m)%conc, CS%diag)
+
+    if (CS%CFC_data(m)%id_sfc_flux > 0) &
+      call post_data(CS%CFC_data(m)%id_sfc_flux, CS%CFC_data(m)%sfc_flux, CS%diag)
+  enddo
 
 end subroutine CFC_cap_column_physics
 
@@ -394,95 +446,72 @@ function CFC_cap_stock(h, stocks, G, GV, CS, names, units, stock_index)
     return
   endif ; endif
 
-  do m=1,2
+  do m=1,NTR
     call query_vardesc(CS%CFC_data(m)%desc, name=names(m), units=units(m), caller="CFC_cap_stock")
     units(m) = trim(units(m))//" kg"
     stocks(m) = global_mass_int_EFP(h, G, GV, CS%CFC_data(m)%conc, on_PE_only=.true.)
   enddo
 
-  CFC_cap_stock = 2
+  CFC_cap_stock = NTR
 
 end function CFC_cap_stock
 
-!> Extracts the ocean surface CFC concentrations and copies them to sfc_state.
-subroutine CFC_cap_surface_state(sfc_state, G, CS)
-  type(ocean_grid_type),   intent(in)    :: G !< The ocean's grid structure.
-  type(surface),           intent(inout) :: sfc_state !< A structure containing fields that
-                                              !! describe the surface state of the ocean.
-  type(CFC_cap_CS),        pointer       :: CS!< The control structure returned by a previous
-                                              !! call to register_CFC_cap.
-
-  ! Local variables
-  integer :: i, j, is, ie, js, je
-
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
-
-  if (.not.associated(CS)) return
-
-  do j=js,je ; do i=is,ie
-    sfc_state%sfc_cfc11(i,j) = CS%CFC_data(1)%conc(i,j,1)
-    sfc_state%sfc_cfc12(i,j) = CS%CFC_data(2)%conc(i,j,1)
-  enddo ; enddo
-
-end subroutine CFC_cap_surface_state
-
 !> Orchestrates the calculation of the CFC fluxes [mol m-2 s-1], including getting the ATM
 !! concentration, and calculating the solubility, Schmidt number, and gas exchange.
-subroutine CFC_cap_fluxes(fluxes, sfc_state, G, US, Rho0, Time, id_cfc11_atm, id_cfc12_atm)
-  type(ocean_grid_type),        intent(in   ) :: G  !< The ocean's grid structure.
-  type(unit_scale_type),        intent(in  )  :: US !< A dimensional unit scaling type
-  type(surface),                intent(in   ) :: sfc_state !< A structure containing fields
-                                              !! that describe the surface state of the ocean.
-  type(forcing),                intent(inout) :: fluxes !< A structure containing pointers
-                                              !! to thermodynamic and tracer forcing fields. Unused fields
-                                              !! have NULL ptrs.
-  real,                         intent(in   ) :: Rho0 !< The mean ocean density [R ~> kg m-3]
-  type(time_type),              intent(in   ) :: Time !< The time of the fluxes, used for interpolating the
-                                              !! CFC's concentration in the atmosphere.
-  integer,           optional,  intent(inout):: id_cfc11_atm !< id number for time_interp_external.
-  integer,           optional,  intent(inout):: id_cfc12_atm !< id number for time_interp_external.
+subroutine CFC_cap_set_forcing(sfc_state, fluxes, day_start, day_interval, G, US, Rho0, CS)
+  type(surface),         intent(in   ) :: sfc_state !< A structure containing fields
+                                       !! that describe the surface state of the ocean.
+  type(forcing),         intent(inout) :: fluxes !< A structure containing pointers
+                                       !! to thermodynamic and tracer forcing fields. Unused fields
+                                       !! have NULL ptrs.
+  type(time_type),       intent(in)    :: day_start !< Start time of the fluxes.
+  type(time_type),       intent(in)    :: day_interval !< Length of time over which these
+                                       !! fluxes will be applied.
+  type(ocean_grid_type), intent(in)    :: G  !< The ocean's grid structure.
+  type(unit_scale_type), intent(in)    :: US !< A dimensional unit scaling type
+  real,                  intent(in)    :: Rho0 !< The mean ocean density [R ~> kg m-3]
+  type(CFC_cap_CS),      pointer       :: CS !< The control structure returned by a
+                                       !! previous call to register_CFC_cap.
 
   ! Local variables
+  type(time_type) :: Time_external ! time value used in CFC_BC_file
   real, dimension(SZI_(G),SZJ_(G)) :: &
     kw_wo_sc_no_term, &  ! gas transfer velocity, without the Schmidt number term [Z T-1 ~> m s-1].
-    kw, &           ! gas transfer velocity [Z T-1 ~> m s-1].
-    cair, &         ! The surface gas concentration in equilibrium with the atmosphere (saturation concentration)
-                    ! [mol kg-1].
-    cfc11_atm,     & !< CFC11 concentration in the atmopshere [pico mol/mol]
-    cfc12_atm        !< CFC11 concentration in the atmopshere [pico mol/mol]
-  real :: ta        ! Absolute sea surface temperature [hectoKelvin]
-  real :: sal       ! Surface salinity [PSU].
-  real :: alpha_11  ! The solubility of CFC 11 [mol kg-1 atm-1].
-  real :: alpha_12  ! The solubility of CFC 12 [mol kg-1 atm-1].
-  real :: sc_11, sc_12 ! The Schmidt numbers of CFC 11 and CFC 12 [nondim].
-  real :: kw_coeff     ! A coefficient used to compute the piston velocity [Z T-1 T2 L-2 = Z T L-2 ~> s / m]
+    kw, &                ! gas transfer velocity [Z T-1 ~> m s-1].
+    cair, &              ! The surface gas concentration in equilibrium with the atmosphere
+                         ! (saturation concentration) [mol kg-1].
+    cfc11_atm, &         ! CFC11 atm mole fraction [pico mol/mol]
+    cfc12_atm            ! CFC12 atm mole fraction [pico mol/mol]
+  real :: cfc11_atm_nh   ! NH value for cfc11_atm
+  real :: cfc11_atm_sh   ! SH value for cfc11_atm
+  real :: cfc12_atm_nh   ! NH value for cfc12_atm
+  real :: cfc12_atm_sh   ! SH value for cfc12_atm
+  real :: ta             ! Absolute sea surface temperature [hectoKelvin]
+  real :: sal            ! Surface salinity [PSU].
+  real :: alpha_11       ! The solubility of CFC 11 [mol kg-1 atm-1].
+  real :: alpha_12       ! The solubility of CFC 12 [mol kg-1 atm-1].
+  real :: sc_11, sc_12   ! The Schmidt numbers of CFC 11 and CFC 12 [nondim].
+  real :: kw_coeff       ! A coefficient used to compute the piston velocity [Z T-1 T2 L-2 = Z T L-2 ~> s / m]
   real, parameter :: pa_to_atm = 9.8692316931427e-6 ! factor for converting from Pa to atm [atm Pa-1].
-  real :: press_to_atm ! converts from model pressure units to atm [atm T2 R-1 L-2 ~> atm Pa-1]
-  integer :: i, j, is, ie, js, je
+  real :: press_to_atm   ! converts from model pressure units to atm [atm T2 R-1 L-2 ~> atm Pa-1]
+  integer :: i, j, is, ie, js, je, m
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
 
-  ! CFC11 ATM concentration
-  if (present(id_cfc11_atm) .and. (id_cfc11_atm /= -1)) then
-    call time_interp_external(id_cfc11_atm, Time, cfc11_atm)
-    ! convert from ppt (pico mol/mol) to mol/mol
-    cfc11_atm = cfc11_atm * 1.0e-12
-  else
-    ! TODO: create cfc11_atm internally
-    call MOM_error(FATAL, "CFC_cap_fluxes: option to create cfc11_atm internally" //&
-                          "has not been implemented yet.")
-  endif
+  ! Time_external = increment_date(day_start + day_interval/2, years=CS%CFC_BC_year_offset)
+  Time_external = increment_date(day_start, years=CS%CFC_BC_year_offset)
 
-  ! CFC12 ATM concentration
-  if (present(id_cfc12_atm) .and. (id_cfc12_atm /= -1)) then
-    call time_interp_external(id_cfc12_atm, Time, cfc12_atm)
-    ! convert from ppt (pico mol/mol) to mol/mol
-    cfc12_atm = cfc12_atm * 1.0e-12
-  else
-    ! TODO: create cfc11_atm internally
-    call MOM_error(FATAL, "CFC_cap_fluxes: option to create cfc12_atm internally" //&
-                          "has not been implemented yet.")
-  endif
+  ! CFC11 atm mole fraction, convert from ppt (pico mol/mol) to mol/mol
+  call time_interp_external(CS%id_cfc11_atm_nh, Time_external, cfc11_atm_nh)
+  cfc11_atm_nh = cfc11_atm_nh * 1.0e-12
+  call time_interp_external(CS%id_cfc11_atm_sh, Time_external, cfc11_atm_sh)
+  cfc11_atm_sh = cfc11_atm_sh * 1.0e-12
+
+  ! CFC12 atm mole fraction, convert from ppt (pico mol/mol) to mol/mol
+  call time_interp_external(CS%id_cfc12_atm_nh, Time_external, cfc12_atm_nh)
+  cfc12_atm_nh = cfc12_atm_nh * 1.0e-12
+  call time_interp_external(CS%id_cfc12_atm_sh, Time_external, cfc12_atm_sh)
+  cfc12_atm_sh = cfc12_atm_sh * 1.0e-12
 
   !---------------------------------------------------------------------
   !     Gas exchange/piston velocity parameter
@@ -493,6 +522,21 @@ subroutine CFC_cap_fluxes(fluxes, sfc_state, G, US, Rho0, Time, id_cfc11_atm, id
 
   ! set unit conversion factors
   press_to_atm = US%R_to_kg_m3*US%L_T_to_m_s**2 * pa_to_atm
+
+  do j=js,je ; do i=is,ie
+    if (G%geoLatT(i,j) < -10.0) then
+      cfc11_atm(i,j) = cfc11_atm_sh
+      cfc12_atm(i,j) = cfc12_atm_sh
+    elseif (G%geoLatT(i,j) <= 10.0) then
+      cfc11_atm(i,j) = cfc11_atm_sh + &
+          (0.05 * G%geoLatT(i,j) + 0.5) * (cfc11_atm_nh - cfc11_atm_sh)
+      cfc12_atm(i,j) = cfc12_atm_sh + &
+          (0.05 * G%geoLatT(i,j) + 0.5) * (cfc12_atm_nh - cfc12_atm_sh)
+    else
+      cfc11_atm(i,j) = cfc11_atm_nh
+      cfc12_atm(i,j) = cfc12_atm_nh
+    endif
+  enddo ; enddo
 
   do j=js,je ; do i=is,ie
     ! ta in hectoKelvin
@@ -512,14 +556,21 @@ subroutine CFC_cap_fluxes(fluxes, sfc_state, G, US, Rho0, Time, id_cfc11_atm, id
     ! CFC flux units: CU R Z T-1 = mol kg-1 R Z T-1 ~> mol m-2 s-1
     kw(i,j) = kw_wo_sc_no_term(i,j) * sqrt(660.0 / sc_11)
     cair(i,j) = press_to_atm * alpha_11 * cfc11_atm(i,j) * fluxes%p_surf_full(i,j)
-    fluxes%cfc11_flux(i,j) = kw(i,j) * (cair(i,j) - sfc_state%sfc_CFC11(i,j)) * Rho0
+    CS%CFC_data(1)%sfc_flux(i,j) = kw(i,j) * (cair(i,j) - CS%CFC_data(1)%conc(i,j,1)) * Rho0
 
     kw(i,j) = kw_wo_sc_no_term(i,j) * sqrt(660.0 / sc_12)
     cair(i,j) = press_to_atm * alpha_12 * cfc12_atm(i,j) * fluxes%p_surf_full(i,j)
-    fluxes%cfc12_flux(i,j) = kw(i,j) * (cair(i,j) - sfc_state%sfc_CFC12(i,j)) * Rho0
+    CS%CFC_data(2)%sfc_flux(i,j) = kw(i,j) * (cair(i,j) - CS%CFC_data(2)%conc(i,j,1)) * Rho0
   enddo ; enddo
 
-end subroutine CFC_cap_fluxes
+  if (CS%debug) then
+    do m=1,NTR
+      call hchksum(CS%CFC_data(m)%sfc_flux, trim(CS%CFC_data(m)%name)//" sfc_flux", G%HI, &
+                   scale=US%RZ_T_to_kg_m2s)
+    enddo
+  endif
+
+end subroutine CFC_cap_set_forcing
 
 !> Calculates the CFC's solubility function following Warner and Weiss (1985) DSR, vol 32.
 subroutine get_solubility(alpha_11, alpha_12, ta, sal , mask)
@@ -606,8 +657,9 @@ subroutine CFC_cap_end(CS)
   integer :: m
 
   if (associated(CS)) then
-    do m=1,2
+    do m=1,NTR
       if (associated(CS%CFC_data(m)%conc)) deallocate(CS%CFC_data(m)%conc)
+      if (associated(CS%CFC_data(m)%sfc_flux)) deallocate(CS%CFC_data(m)%sfc_flux)
     enddo
 
     deallocate(CS)
@@ -684,7 +736,7 @@ logical function compare_values(verbose, test_name, calc, ans, limit)
     write(stdout,10) calc, ans
   endif
 
-10 format("calc=",f20.16," ans",f20.16)
+10 format("calc=",f22.16," ans",f22.16)
 end function compare_values
 
 !> \namespace mom_CFC_cap
