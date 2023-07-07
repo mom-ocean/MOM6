@@ -38,8 +38,11 @@ subroutine BFB_set_coord(Rlay, g_prime, GV, US, param_file)
   type(unit_scale_type),    intent(in)  :: US      !< A dimensional unit scaling type
   type(param_file_type),    intent(in)  :: param_file !< A structure to parse for run-time parameters
 
+  real :: Rho_T0_S0  ! The density at T=0, S=0 [R ~> kg m-3]
   real :: dRho_dT    ! The partial derivative of density with temperature [R C-1 ~> kg m-3 degC-1]
+  real :: dRho_dS    ! The partial derivative of density with salinity [R S-1 ~> kg m-3 ppt-1]
   real :: SST_s, T_bot     ! Temperatures at the surface and seafloor [C ~> degC]
+  real :: S_ref      ! Reference salinity [S ~> ppt]
   real :: rho_top, rho_bot ! Densities at the surface and seafloor [R ~> kg m-3]
   integer :: k, nz
   ! This include declares and sets the variable "version".
@@ -47,23 +50,33 @@ subroutine BFB_set_coord(Rlay, g_prime, GV, US, param_file)
   character(len=40)  :: mdl = "BFB_initialization" ! This module's name.
 
   call log_version(param_file, mdl, version, "")
-  call get_param(param_file, mdl, "DRHO_DT", drho_dt, &
-          "Rate of change of density with temperature.", &
-           units="kg m-3 K-1", default=-0.2, scale=US%kg_m3_to_R*US%C_to_degC)
+  call get_param(param_file, mdl, "DRHO_DT", dRho_dT, &
+                 "The partial derivative of density with temperature.", &
+                 units="kg m-3 K-1", default=-0.2, scale=US%kg_m3_to_R*US%C_to_degC)
+  call get_param(param_file, mdl, "DRHO_DS", dRho_dS, &
+                 "The partial derivative of density with salinity.", &
+                 units="kg m-3 PSU-1", default=0.8, scale=US%kg_m3_to_R*US%S_to_ppt)
+  call get_param(param_file, mdl, "RHO_T0_S0", Rho_T0_S0, &
+                 "The density at T=0, S=0.", units="kg m-3", default=1000.0, scale=US%kg_m3_to_R)
   call get_param(param_file, mdl, "SST_S", SST_s, &
-          "SST at the southern edge of the domain.", units="degC", default=20.0, scale=US%degC_to_C)
+                 "SST at the southern edge of the domain.", &
+                 units="degC", default=20.0, scale=US%degC_to_C)
   call get_param(param_file, mdl, "T_BOT", T_bot, &
                  "Bottom temperature", units="degC", default=5.0, scale=US%degC_to_C)
-  rho_top = GV%Rho0 + drho_dt*SST_s
-  rho_bot = GV%Rho0 + drho_dt*T_bot
+  call get_param(param_file, mdl, "S_REF", S_ref, &
+                 "The initial salinities.", units="PSU", default=35.0, scale=US%ppt_to_S)
+  rho_top = (Rho_T0_S0 + dRho_dS*S_ref) + dRho_dT*SST_s
+  rho_bot = (Rho_T0_S0 + dRho_dS*S_ref) + dRho_dT*T_bot
   nz = GV%ke
 
   do k = 1,nz
     Rlay(k) = (rho_bot - rho_top)/(nz-1)*real(k-1) + rho_top
-    if (k >1) then
-      g_prime(k) = (Rlay(k) - Rlay(k-1)) * GV%g_Earth / (GV%Rho0)
-    else
+    if (k==1) then
       g_prime(k) = GV%g_Earth
+    elseif (GV%Boussinesq) then
+      g_prime(k) = (Rlay(k) - Rlay(k-1)) * GV%g_Earth / GV%Rho0
+    else
+      g_prime(k) = (Rlay(k) - Rlay(k-1)) * GV%g_Earth / (0.5*(Rlay(k) + Rlay(k-1)))
     endif
   enddo
 

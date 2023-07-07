@@ -29,12 +29,17 @@ type, public :: BFB_surface_forcing_CS ; private
   real :: Rho0               !< The density used in the Boussinesq approximation [R ~> kg m-3].
   real :: G_Earth            !< The gravitational acceleration [L2 Z-1 T-2 ~> m s-2]
   real :: Flux_const         !< The restoring rate at the surface [Z T-1 ~> m s-1].
+  real :: rho_restore        !< The density that is used to convert piston velocities into salt
+                             !! or heat fluxes with salinity or temperature restoring [R ~> kg m-3]
   real :: SST_s              !< SST at the southern edge of the linear forcing ramp [C ~> degC]
   real :: SST_n              !< SST at the northern edge of the linear forcing ramp [C ~> degC]
+  real :: S_ref              !< Reference salinity used throughout the domain [S ~> ppt]
   real :: lfrslat            !< Southern latitude where the linear forcing ramp begins [degrees_N] or [km]
   real :: lfrnlat            !< Northern latitude where the linear forcing ramp ends [degrees_N] or [km]
-  real :: drho_dt            !< Rate of change of density with temperature [R C-1 ~> kg m-3 degC-1].
-                             !!   Note that temperature is being used as a dummy variable here.
+  real :: Rho_T0_S0          !< The density at T=0, S=0 [R ~> kg m-3]
+  real :: dRho_dT            !< The partial derivative of density with temperature [R C-1 ~> kg m-3 degC-1]
+  real :: dRho_dS            !< The partial derivative of density with salinity [R S-1 ~> kg m-3 ppt-1]
+                             !!   Note that temperature and salinity are being used as dummy variables here.
                              !! All temperatures are converted into density.
 
   type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to
@@ -125,7 +130,7 @@ subroutine BFB_buoyancy_forcing(sfc_state, fluxes, day, dt, G, US, CS)
       call MOM_error(FATAL, "User_buoyancy_surface_forcing: " // &
         "Temperature and salinity restoring used without modification." )
 
-      rhoXcp = CS%Rho0 * fluxes%C_p
+      rhoXcp = CS%rho_restore * fluxes%C_p
       do j=js,je ; do i=is,ie
         !   Set Temp_restore and Salin_restore to the temperature (in [C ~> degC]) and
         ! salinity (in [S ~> ppt]) that are being restored toward.
@@ -134,7 +139,7 @@ subroutine BFB_buoyancy_forcing(sfc_state, fluxes, day, dt, G, US, CS)
 
         fluxes%heat_added(i,j) = (G%mask2dT(i,j) * (rhoXcp * CS%Flux_const)) * &
             (Temp_restore - sfc_state%SST(i,j))
-        fluxes%vprec(i,j) = - (G%mask2dT(i,j) * (CS%Rho0*CS%Flux_const)) * &
+        fluxes%vprec(i,j) = - (G%mask2dT(i,j) * (CS%rho_restore*CS%Flux_const)) * &
             ((Salin_restore - sfc_state%SSS(i,j)) / (0.5 * (Salin_restore + sfc_state%SSS(i,j))))
       enddo ; enddo
     else
@@ -144,7 +149,7 @@ subroutine BFB_buoyancy_forcing(sfc_state, fluxes, day, dt, G, US, CS)
       !   "Buoyancy restoring used without modification." )
 
       ! The -1 is because density has the opposite sign to buoyancy.
-      buoy_rest_const = -1.0 * (CS%G_Earth * CS%Flux_const) / CS%Rho0
+      buoy_rest_const = -1.0 * (CS%G_Earth * CS%Flux_const) / CS%rho_restore
       Temp_restore = 0.0
       do j=js,je ; do i=is,ie
        !   Set density_restore to an expression for the surface potential
@@ -158,8 +163,7 @@ subroutine BFB_buoyancy_forcing(sfc_state, fluxes, day, dt, G, US, CS)
                   (G%geoLatT(i,j) - CS%lfrslat) + CS%SST_s
         endif
 
-        density_restore = Temp_restore*CS%drho_dt + CS%Rho0
-
+        density_restore = (CS%Rho_T0_S0 + CS%dRho_dS*CS%S_ref) + CS%dRho_dT*Temp_restore
         fluxes%buoy(i,j) = G%mask2dT(i,j) * buoy_rest_const * &
                           (density_restore - sfc_state%sfc_density(i,j))
       enddo ; enddo
@@ -216,9 +220,17 @@ subroutine BFB_surface_forcing_init(Time, G, US, param_file, diag, CS)
   call get_param(param_file, mdl, "SST_N", CS%SST_n, &
                  "SST at the northern edge of the linear forcing ramp.", &
                  units="degC", default=10.0, scale=US%degC_to_C)
-  call get_param(param_file, mdl, "DRHO_DT", CS%drho_dt, &
-                 "The rate of change of density with temperature.", &
+  call get_param(param_file, mdl, "DRHO_DT", CS%dRho_dT, &
+                 "The partial derivative of density with temperature.", &
                  units="kg m-3 K-1", default=-0.2, scale=US%kg_m3_to_R*US%C_to_degC)
+  call get_param(param_file, mdl, "DRHO_DS", CS%dRho_dS, &
+                 "The partial derivative of density with salinity.", &
+                 units="kg m-3 PSU-1", default=0.8, scale=US%kg_m3_to_R*US%S_to_ppt)
+  call get_param(param_file, mdl, "RHO_T0_S0", CS%Rho_T0_S0, &
+                 "The density at T=0, S=0.", units="kg m-3", default=1000.0, scale=US%kg_m3_to_R)
+  call get_param(param_file, mdl, "S_REF", CS%S_ref, &
+                 "The reference salinity used here throughout the domain.", &
+                 units="PSU", default=35.0, scale=US%ppt_to_S)
 
   call get_param(param_file, mdl, "RESTOREBUOY", CS%restorebuoy, &
                  "If true, the buoyancy fluxes drive the model back "//&
@@ -231,6 +243,11 @@ subroutine BFB_surface_forcing_init(Time, G, US, param_file, diag, CS)
                  default=0.0, units="m day-1", scale=US%m_to_Z*US%T_to_s)
     ! Convert CS%Flux_const from m day-1 to m s-1.
     CS%Flux_const = CS%Flux_const / 86400.0
+    call get_param(param_file, mdl, "RESTORE_FLUX_RHO", CS%rho_restore, &
+                 "The density that is used to convert piston velocities into salt or heat "//&
+                 "fluxes with RESTORE_SALINITY or RESTORE_TEMPERATURE.", &
+                 units="kg m-3", default=CS%Rho0*US%R_to_kg_m3, scale=US%kg_m3_to_R, &
+                 do_not_log=(CS%Flux_const==0.0))
   endif
 
 end subroutine BFB_surface_forcing_init
