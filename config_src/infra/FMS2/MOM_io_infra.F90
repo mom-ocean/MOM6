@@ -71,7 +71,7 @@ end interface open_file
 !> Read a data field from a file
 interface read_field
   module procedure read_field_4d
-  module procedure read_field_3d
+  module procedure read_field_3d, read_field_3d_region
   module procedure read_field_2d, read_field_2d_region
   module procedure read_field_1d, read_field_1d_int
   module procedure read_field_0d, read_field_0d_int
@@ -142,7 +142,7 @@ type :: axistype ; private
 end type axistype
 
 !> For now, these module-variables are hard-coded to exercise the new FMS2 interfaces.
-logical :: FMS2_reads  = .true.
+logical :: FMS2_reads  = .false.
 logical :: FMS2_writes = .true.
 
 contains
@@ -1158,6 +1158,79 @@ subroutine read_field_3d(filename, fieldname, data, MOM_Domain, &
   endif ; endif
 
 end subroutine read_field_3d
+
+!> This routine uses the fms_io subroutine read_data to read a region from a distributed or
+!! global 3-D data field named "fieldname" from file "filename".
+subroutine read_field_3d_region(filename, fieldname, data, start, nread, MOM_domain, &
+                                no_domain, scale)
+  character(len=*),       intent(in)    :: filename  !< The name of the file to read
+  character(len=*),       intent(in)    :: fieldname !< The variable name of the data in the file
+  real, dimension(:,:,:),   intent(inout) :: data      !< The 3-dimensional array into which the data
+                                                     !! should be read
+  integer, dimension(:),  intent(in)    :: start     !< The starting index to read in each of 3
+                                                     !! dimensions.  For this 3-d read, the
+                                                     !! 4th value is always 1.
+  integer, dimension(:),  intent(in)    :: nread     !< The number of points to read in each of 4
+                                                     !! dimensions.  For this 3-d read, the
+                                                     !! 4th values are always 1.
+  type(MOM_domain_type), &
+                optional, intent(in)    :: MOM_Domain !< The MOM_Domain that describes the decomposition
+  logical,      optional, intent(in)    :: no_domain !< If present and true, this variable does not
+                                                     !! use domain decomposion.
+  real,         optional, intent(in)    :: scale     !< A scaling factor that the field is multiplied
+                                                     !! by before it is returned.
+
+  ! Local variables
+  type(FmsNetcdfFile_t)       :: fileObj ! A handle to a non-domain-decomposed file
+  type(FmsNetcdfDomainFile_t) :: fileobj_DD ! A handle to a domain-decomposed file object
+  character(len=96) :: var_to_read ! Name of variable to read from the netcdf file
+  logical :: success               ! True if the file was successfully opened
+
+  if (present(MOM_Domain) .and. FMS2_reads) then
+    ! Open the FMS2 file-set.
+    success = fms2_open_file(fileobj_DD, filename, "read", MOM_domain%mpp_domain)
+    if (.not.success) call MOM_error(FATAL, "Failed to open "//trim(filename))
+
+    ! Find the matching case-insensitive variable name in the file and prepare to read it.
+    call prepare_to_read_var(fileobj_DD, fieldname, "read_field_2d_region: ", &
+                             filename, var_to_read)
+
+    ! Read the data.
+    call fms2_read_data(fileobj_DD, var_to_read, data, corner=start(1:3), edge_lengths=nread(1:3))
+
+    ! Close the file-set.
+    if (check_if_open(fileobj_DD)) call fms2_close_file(fileobj_DD)
+  elseif (FMS2_reads) then
+    ! Open the FMS2 file-set.
+    success = fms2_open_file(fileObj, trim(filename), "read")
+    if (.not.success) call MOM_error(FATAL, "Failed to open "//trim(filename))
+
+    ! Find the matching case-insensitive variable name in the file, and determine whether it
+    ! has a time dimension.
+    call find_varname_in_file(fileObj, fieldname, "read_field_2d_region: ", filename, var_to_read)
+
+    ! Read the data.
+    call fms2_read_data(fileobj, var_to_read, data, corner=start(1:3), edge_lengths=nread(1:3))
+
+    ! Close the file-set.
+    if (check_if_open(fileobj)) call fms2_close_file(fileobj)
+  elseif (present(MOM_Domain)) then ! Read the variable using the FMS-1 interface.
+    call read_data(filename, fieldname, data, start, nread, domain=MOM_Domain%mpp_domain, &
+                   no_domain=no_domain)
+  else
+    call read_data(filename, fieldname, data, start, nread, no_domain=no_domain)
+  endif
+
+  if (present(scale)) then ; if (scale /= 1.0) then
+    if (present(MOM_Domain)) then
+      call rescale_comp_data(MOM_Domain, data, scale)
+    else
+      ! Dangerously rescale the whole array
+      data(:,:,:) = scale*data(:,:,:)
+    endif
+  endif ; endif
+
+end subroutine read_field_3d_region
 
 !> This routine uses the fms_io subroutine read_data to read a distributed
 !! 4-D data field named "fieldname" from file "filename".  Valid values for

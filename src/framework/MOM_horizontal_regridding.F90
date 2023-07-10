@@ -305,7 +305,7 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam, recnum, G, tr
   ! Local variables
   ! In the following comments, [A] is used to indicate the arbitrary, possibly rescaled units of the
   ! input array while [a] indicates the unscaled (e.g., mks) units that can be used with the reproducing sums
-  real, dimension(:,:),  allocatable   :: tr_in      !< A 2-d array for holding input data on its
+  real, dimension(:,:,:),  allocatable   :: tr_in      !< A 2-d array for holding input data on its
                                                      !! native horizontal grid, with units that change
                                                      !! as the input data is interpreted [a] then [A ~> a]
   real, dimension(:,:),  allocatable   :: tr_inp     !< Native horizontal grid data extended to the poles
@@ -446,7 +446,7 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam, recnum, G, tr
   z_edges_in(kd+1) = 2.0*z_in(kd) - z_in(kd-1)
 
   if (is_ongrid) then
-    allocate(tr_in(is:ie,js:je), source=0.0)
+    allocate(tr_in(is:ie,js:je,1), source=0.0)
     allocate(mask_in(is:ie,js:je), source=0.0)
   else
     call horizontal_interp_init()
@@ -456,7 +456,7 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam, recnum, G, tr
     call meshgrid(lon_in, lat_in, x_in, y_in)
     lon_out(:,:) = G%geoLonT(:,:)*PI_180
     lat_out(:,:) = G%geoLatT(:,:)*PI_180
-    allocate(tr_in(id,jd), source=0.0)
+    allocate(tr_in(id,jd,1), source=0.0)
     allocate(tr_inp(id,jdp), source=0.0)
     allocate(mask_in(id,jdp), source=0.0)
   endif
@@ -479,16 +479,16 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam, recnum, G, tr
       call MOM_read_data(trim(filename), trim(varnam), tr_in, start, count, G%Domain)
       do j=js,je
         do i=is,ie
-          if (abs(tr_in(i,j)-missing_val_in) > abs(roundoff*missing_val_in)) then
+          if (abs(tr_in(i,j,1)-missing_val_in) > abs(roundoff*missing_val_in)) then
             mask_in(i,j) = 1.0
-            tr_in(i,j) = (tr_in(i,j)*scale_factor+add_offset) * scale
+            tr_in(i,j,1) = (tr_in(i,j,1)*scale_factor+add_offset) * scale
           else
-            tr_in(i,j) = missing_value
+            tr_in(i,j,1) = missing_value
           endif
         enddo
       enddo
 
-      tr_out(is:ie,js:je) = tr_in(is:ie,js:je)
+      tr_out(is:ie,js:je) = tr_in(is:ie,js:je,1)
 
     else  ! .not.is_ongrid
 
@@ -500,8 +500,8 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam, recnum, G, tr
         if (add_np) then
           pole = 0.0 ; npole = 0.0
           do i=1,id
-            if (abs(tr_in(i,jd)-missing_val_in) > abs(roundoff*missing_val_in)) then
-              pole = pole + tr_in(i,jd)
+            if (abs(tr_in(i,jd,1)-missing_val_in) > abs(roundoff*missing_val_in)) then
+              pole = pole + tr_in(i,jd,1)
               npole = npole + 1.0
             endif
           enddo
@@ -510,10 +510,10 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam, recnum, G, tr
           else
             pole = missing_val_in
           endif
-          tr_inp(:,1:jd) = tr_in(:,:)
+          tr_inp(:,1:jd) = tr_in(:,:,1)
           tr_inp(:,jdp) = pole
         else
-          tr_inp(:,:) = tr_in(:,:)
+          tr_inp(:,:) = tr_in(:,:,1)
         endif
       endif
 
