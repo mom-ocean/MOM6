@@ -40,25 +40,28 @@ contains
 subroutine seamount_initialize_topography( D, G, param_file, max_depth )
   type(dyn_horgrid_type),  intent(in)  :: G !< The dynamic horizontal grid type
   real, dimension(G%isd:G%ied,G%jsd:G%jed), &
-                           intent(out) :: D !< Ocean bottom depth in the units of depth_max
+                           intent(out) :: D !< Ocean bottom depth [Z ~> m]
   type(param_file_type),   intent(in)  :: param_file !< Parameter file structure
-  real,                    intent(in)  :: max_depth !< Maximum ocean depth in arbitrary units
+  real,                    intent(in)  :: max_depth !< Maximum ocean depth [Z ~> m]
 
   ! Local variables
+  real :: delta     ! Height of the seamount as a fraction of the maximum ocean depth [nondim]
+  real :: x, y      ! Normalized positions relative to the domain center [nondim]
+  real :: Lx, Ly    ! Seamount length scales normalized by the relevant domain sizes [nondim]
+  real :: rLx, rLy  ! The Adcroft reciprocals of Lx and Ly [nondim]
   integer   :: i, j
-  real      :: x, y, delta, Lx, rLx, Ly, rLy
 
-  call get_param(param_file, mdl,"SEAMOUNT_DELTA",delta, &
+  call get_param(param_file, mdl,"SEAMOUNT_DELTA", delta, &
                  "Non-dimensional height of seamount.", &
-                 units="non-dim", default=0.5)
-  call get_param(param_file, mdl,"SEAMOUNT_X_LENGTH_SCALE",Lx, &
+                 units="nondim", default=0.5)
+  call get_param(param_file, mdl,"SEAMOUNT_X_LENGTH_SCALE", Lx, &
                  "Length scale of seamount in x-direction. "//&
                  "Set to zero make topography uniform in the x-direction.", &
-                 units="Same as x,y", default=20.)
-  call get_param(param_file, mdl,"SEAMOUNT_Y_LENGTH_SCALE",Ly, &
+                 units=G%x_ax_unit_short, default=20.)
+  call get_param(param_file, mdl,"SEAMOUNT_Y_LENGTH_SCALE", Ly, &
                  "Length scale of seamount in y-direction. "//&
                  "Set to zero make topography uniform in the y-direction.", &
-                 units="Same as x,y", default=0.)
+                 units=G%y_ax_unit_short, default=0.)
 
   Lx = Lx / G%len_lon
   Ly = Ly / G%len_lat
@@ -93,7 +96,7 @@ subroutine seamount_initialize_thickness (h, depth_tot, G, GV, US, param_file, j
                           ! negative because it is positive upward.
   real :: eta1D(SZK_(GV)+1) ! Interface height relative to the sea surface, positive upward [Z ~> m]
   real :: min_thickness   ! The minimum layer thicknesses [Z ~> m].
-  real :: S_ref           ! A default value for salinities [ppt].
+  real :: S_ref           ! A default value for salinities [S ~> ppt].
   real :: S_surf, S_range, S_light, S_dense ! Various salinities [S ~> ppt].
   real :: eta_IC_quanta   ! The granularity of quantization of intial interface heights [Z-1 ~> m-1].
   character(len=20) :: verticalCoordinate
@@ -128,11 +131,12 @@ subroutine seamount_initialize_thickness (h, depth_tot, G, GV, US, param_file, j
                    units="ppt", default=34., scale=US%ppt_to_S, do_not_log=.true.)
     call get_param(param_file, mdl,"INITIAL_S_RANGE", S_range, &
                    units="ppt", default=2., scale=US%ppt_to_S, do_not_log=.true.)
-    call get_param(param_file, mdl, "S_REF", S_ref, default=35.0, do_not_log=.true.)
+    call get_param(param_file, mdl, "S_REF", S_ref, &
+                   units="ppt", default=35.0, scale=US%ppt_to_S, do_not_log=.true.)
     call get_param(param_file, mdl, "TS_RANGE_S_LIGHT", S_light, &
-                   units="ppt", default=S_Ref, scale=US%ppt_to_S, do_not_log=.true.)
+                   units="ppt", default=US%S_to_ppt*S_Ref, scale=US%ppt_to_S, do_not_log=.true.)
     call get_param(param_file, mdl, "TS_RANGE_S_DENSE", S_dense, &
-                   units="ppt", default=S_Ref, scale=US%ppt_to_S, do_not_log=.true.)
+                   units="ppt", default=US%S_to_ppt*S_Ref, scale=US%ppt_to_S, do_not_log=.true.)
     call get_param(param_file, mdl, "INTERFACE_IC_QUANTA", eta_IC_quanta, &
                    "The granularity of initial interface height values "//&
                    "per meter, to avoid sensivity to order-of-arithmetic changes.", &
@@ -205,9 +209,19 @@ subroutine seamount_initialize_temperature_salinity(T, S, h, G, GV, US, param_fi
                                                       !! only read parameters without changing T & S.
 
   ! Local variables
+  real :: xi0, xi1  ! Fractional positions within the depth range [nondim]
+  real :: r         ! A nondimensional sharpness parameter with an exponetial profile [nondim]
+  real :: S_Ref     ! Default salinity range parameters [S ~> ppt].
+  real :: T_Ref     ! Default temperature range parameters [C ~> degC].
+  real :: S_Light, S_Dense, S_surf, S_range ! Salinity range parameters [S ~> ppt].
+  real :: T_Light, T_Dense, T_surf, T_range ! Temperature range parameters [C ~> degC].
+  real :: res_rat   ! The ratio of density space resolution in the denser part
+                    ! of the range to that in the lighter part of the range.
+                    ! Setting this greater than 1 increases the resolution for
+                    ! the denser water [nondim].
+  real :: a1, frac_dense, k_frac  ! Nondimensional temporary variables [nondim]
   integer :: i, j, k, is, ie, js, je, nz, k_light
-  real    :: xi0, xi1, r, S_surf, T_surf, S_range, T_range
-  real    :: T_ref, T_Light, T_Dense, S_ref, S_Light, S_Dense, a1, frac_dense, k_frac, res_rat
+
   character(len=20) :: verticalCoordinate, density_profile
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
@@ -233,17 +247,20 @@ subroutine seamount_initialize_temperature_salinity(T, S, h, G, GV, US, param_fi
   select case ( coordinateMode(verticalCoordinate) )
     case ( REGRIDDING_LAYER ) ! Initial thicknesses for layer isopycnal coordinates
       ! These parameters are used in MOM_fixed_initialization.F90 when CONFIG_COORD="ts_range"
-      call get_param(param_file, mdl, "T_REF", T_ref, default=10.0, do_not_log=.true.)
+      call get_param(param_file, mdl, "T_REF", T_ref, &
+                 units="degC", default=10.0, scale=US%degC_to_C, do_not_log=.true.)
       call get_param(param_file, mdl, "TS_RANGE_T_LIGHT", T_light, &
-                 default=T_Ref, scale=US%degC_to_C, do_not_log=.true.)
+                 units="degC", default=US%C_to_degC*T_Ref, scale=US%degC_to_C, do_not_log=.true.)
       call get_param(param_file, mdl, "TS_RANGE_T_DENSE", T_dense, &
-                 default=T_Ref, scale=US%degC_to_C, do_not_log=.true.)
-      call get_param(param_file, mdl, "S_REF", S_ref, default=35.0, do_not_log=.true.)
+                 units="degC", default=US%C_to_degC*T_Ref, scale=US%degC_to_C, do_not_log=.true.)
+      call get_param(param_file, mdl, "S_REF", S_ref, &
+                 units="1e-3", default=35.0, scale=US%ppt_to_S, do_not_log=.true.)
       call get_param(param_file, mdl, "TS_RANGE_S_LIGHT", S_light, &
-                 default = S_Ref, scale=US%ppt_to_S, do_not_log=.true.)
+                 units="1e-3", default=US%S_to_ppt*S_Ref, scale=US%ppt_to_S, do_not_log=.true.)
       call get_param(param_file, mdl, "TS_RANGE_S_DENSE", S_dense, &
-                 default = S_Ref, scale=US%ppt_to_S, do_not_log=.true.)
-      call get_param(param_file, mdl, "TS_RANGE_RESOLN_RATIO", res_rat, default=1.0, do_not_log=.true.)
+                 units="1e-3", default=US%S_to_ppt*S_Ref, scale=US%ppt_to_S, do_not_log=.true.)
+      call get_param(param_file, mdl, "TS_RANGE_RESOLN_RATIO", res_rat, &
+                 units="nondim", default=1.0, do_not_log=.true.)
       if (just_read) return ! All run-time parameters have been read, so return.
 
       ! Emulate the T,S used in the "ts_range" coordinate configuration code

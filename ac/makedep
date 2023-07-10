@@ -6,7 +6,8 @@ import argparse
 import glob
 import os
 import re
-import sys # used only to get path to current script
+import sys  # used only to get path to current script
+
 
 # Pre-compile re searches
 re_module = re.compile(r"^ *module +([a-z_0-9]+)")
@@ -15,7 +16,9 @@ re_cpp_include = re.compile(r"^ *# *include *[<\"']([a-zA-Z_0-9\.]+)[>\"']")
 re_f90_include = re.compile(r"^ *include +[\"']([a-zA-Z_0-9\.]+)[\"']")
 re_program = re.compile(r"^ *[pP][rR][oO][gG][rR][aA][mM] +([a-zA-Z_0-9]+)")
 
-def create_deps(src_dirs, makefile, debug, exec_target, fc_rule, link_externals, script_path):
+
+def create_deps(src_dirs, makefile, debug, exec_target, fc_rule,
+                link_externals, script_path):
     """Create "makefile" after scanning "src_dis"."""
 
     # Scan everything Fortran related
@@ -23,134 +26,147 @@ def create_deps(src_dirs, makefile, debug, exec_target, fc_rule, link_externals,
 
     # Lists of things
     #  ... all F90 source
-    F90_files = [f for f in all_files if f.endswith('.f90') or f.endswith('.F90')]
+    F90_files = [
+        f for f in all_files
+        if f.endswith('.f90') or f.endswith('.F90')
+    ]
     #  ... all C source
     c_files = [f for f in all_files if f.endswith('.c')]
 
     # Dictionaries for associating files to files
     # maps basename of file to full path to file
-    f2F = dict( zip( [os.path.basename(f) for f in all_files], all_files ) )
+    f2F = dict(zip([os.path.basename(f) for f in all_files], all_files))
     # maps basename of file to directory
-    f2dir = dict( zip( [os.path.basename(f) for f in all_files], [os.path.dirname(f) for f in all_files] ) )
+    f2dir = dict(zip([os.path.basename(f) for f in all_files],
+                     [os.path.dirname(f) for f in all_files]))
 
     # Check for duplicate files in search path
     if not len(f2F) == len(all_files):
         a = []
         for f in all_files:
             if os.path.basename(f) in a:
-                print('Warning: File %s was found twice! One is being ignored but which is undefined.'%(os.path.basename(f)))
-            a.append( os.path.basename(f) )
+                print('Warning: File {} was found twice! One is being ignored '
+                      'but which is undefined.'.format(os.path.basename(f)))
+            a.append(os.path.basename(f))
 
     # maps object file to F90 source
-    o2F90 = dict( zip( [ object_file(f) for f in F90_files ], F90_files ) )
+    o2F90 = dict(zip([object_file(f) for f in F90_files], F90_files))
     # maps object file to C source
-    o2c = dict( zip( [ object_file(f) for f in c_files ], c_files ) )
+    o2c = dict(zip([object_file(f) for f in c_files], c_files))
 
     o2mods, o2uses, o2h, o2inc, o2prg, prg2o, mod2o = {}, {}, {}, {}, {}, {}, {}
     externals, all_modules = [], []
     for f in F90_files:
-        mods, used, cpp, inc, prg = scan_fortran_file( f )
+        mods, used, cpp, inc, prg = scan_fortran_file(f)
         # maps object file to modules produced
-        o2mods[ object_file(f) ] = mods
+        o2mods[object_file(f)] = mods
         # maps module produced to object file
         for m in mods:
-            mod2o[ m ] = object_file(f)
+            mod2o[m] = object_file(f)
         # maps object file to modules used
-        o2uses[ object_file(f) ] = used
+        o2uses[object_file(f)] = used
         # maps object file to .h files included
-        o2h[ object_file(f) ] = cpp
+        o2h[object_file(f)] = cpp
         # maps object file to .inc files included
-        o2inc[ object_file(f) ] = inc
+        o2inc[object_file(f)] = inc
         # maps object file to executables produced
-        o2prg[ object_file(f) ] = prg
+        o2prg[object_file(f)] = prg
         if prg:
             for p in prg:
                 if p in prg2o.keys():
-                    #raise ValueError("Files %s and %s both create the same program '%s'"%(
+                    # raise ValueError("Files %s and %s both create the same program '%s'"%(
                     #                 f,o2F90[prg2o[p]],p))
-                    print("Warning: Files %s and %s both create the same program '%s'"%(
-                                     f,o2F90[prg2o[p]],p))
-                    o = prg2o[ p ]
-                    del prg2o[ p ]
-                    #del o2prg[ o ] - need to keep so modifying instead
-                    o2prg[ o ] = [ '[ignored %s]'%(p) ]
+                    print("Warning: Files {} and {} both create the same "
+                          "program '{}'".format(f, o2F90[prg2o[p]], p))
+                    o = prg2o[p]
+                    del prg2o[p]
+                    # del o2prg[o] - need to keep so modifying instead
+                    o2prg[o] = ['[ignored %s]' % (p)]
                 else:
-                    prg2o[ p ] = object_file(f)
+                    prg2o[p] = object_file(f)
         if not mods and not prg:
-            externals.append( object_file(f) ) 
+            externals.append(object_file(f))
         all_modules += mods
 
     for f in c_files:
-        _, _, cpp, inc, _ = scan_fortran_file( f )
+        _, _, cpp, inc, _ = scan_fortran_file(f)
         # maps object file to .h files included
-        o2h[ object_file(f) ] = cpp
+        o2h[object_file(f)] = cpp
+        externals.append(object_file(f))
 
     # Are we building a library, single or multiple executables?
     targ_libs = []
     if exec_target:
         if exec_target.endswith('.a'):
-            targ_libs.append( exec_target )
+            targ_libs.append(exec_target)
         else:
             if len(prg2o.keys()) == 1:
                 o = prg2o.values()[0]
-                del prg2o[ o2prg[o][0] ]
-                prg2o[ exec_target ] = o
-                o2prg[ o ] = exec_target
+                del prg2o[o2prg[o][0]]
+                prg2o[exec_target] = o
+                o2prg[o] = exec_target
             else:
-                raise ValueError("Option -x specified an executable name but none or multiple programs were found")
-        targets = [ exec_target ]
+                raise ValueError("Option -x specified an executable name but "
+                                 "none or multiple programs were found")
+        targets = [exec_target]
     else:
         if len(prg2o.keys()) == 0:
-            print("Warning: No programs were found and -x did not specify a library to build")
+            print("Warning: No programs were found and -x did not specify a "
+                  "library to build")
         targets = prg2o.keys()
 
     # Create new makefile
     with open(makefile, 'w') as file:
-        print("# %s created by makedep"%(makefile), file=file)
+        print("# %s created by makedep" % (makefile), file=file)
         print("", file=file)
         print("# Invoked as", file=file)
         print('#   '+' '.join(sys.argv), file=file)
         print("", file=file)
-        print("all:", " ".join( targets ), file=file)
+        print("all:", " ".join(targets), file=file)
         print("", file=file)
 
-        #print("# SRC_DIRS is usually set in the parent Makefile but in case is it not we", file=file)
-        #print("# record it here from when makedep was previously invoked.", file=file)
-        #print("SRC_DIRS ?= ${SRC_DIRS}", file=file)
-        #print("", file=file)
+        # print("# SRC_DIRS is usually set in the parent Makefile but in case is it not we", file=file)
+        # print("# record it here from when makedep was previously invoked.", file=file)
+        # print("SRC_DIRS ?= ${SRC_DIRS}", file=file)
+        # print("", file=file)
 
-        #print("# all_files:", ' '.join(all_files), file=file)
-        #print("", file=file)
+        # print("# all_files:", ' '.join(all_files), file=file)
+        # print("", file=file)
 
         # Write rule for each object from Fortran
-        for o in sorted( o2F90.keys() ):
+        for o in sorted(o2F90.keys()):
             found_mods = [m for m in o2uses[o] if m in all_modules]
+            found_objs = [mod2o[m] for m in o2uses[o] if m in all_modules]
+            found_deps = [
+                dep for pair in zip(found_mods, found_objs) for dep in pair
+            ]
             missing_mods = [m for m in o2uses[o] if m not in all_modules]
-            incs = nested_inc( o2h[o] + o2inc[o], f2F )
-            incdeps = sorted( set( [ f2F[f] for f in incs if f in f2F ] ) )
-            incargs = sorted( set( [ '-I'+os.path.dirname(f) for f in incdeps ] ) )
+            incs = nested_inc(o2h[o] + o2inc[o], f2F)
+            incdeps = sorted(set([f2F[f] for f in incs if f in f2F]))
+            incargs = sorted(set(['-I'+os.path.dirname(f) for f in incdeps]))
             if debug:
-                print("# Source file %s produces:"%(o2F90[o]), file=file)
+                print("# Source file {} produces:".format(o2F90[o]), file=file)
                 print("#   object:", o, file=file)
                 print("#   modules:", ' '.join(o2mods[o]), file=file)
                 print("#   uses:", ' '.join(o2uses[o]), file=file)
-                print("#   found:", ' '.join(found_mods), file=file)
+                print("#   found mods:", ' '.join(found_mods), file=file)
+                print("#   found objs:", ' '.join(found_objs), file=file)
                 print("#   missing:", ' '.join(missing_mods), file=file)
                 print("#   includes_all:", ' '.join(incs), file=file)
                 print("#   includes_pth:", ' '.join(incdeps), file=file)
                 print("#   incargs:", ' '.join(incargs), file=file)
                 print("#   program:", ' '.join(o2prg[o]), file=file)
             if o2mods[o]:
-                print(' '.join(o2mods[o])+':',o, file=file)
-            print(o+':', o2F90[o], ' '.join(incdeps+found_mods), file=file)
+                print(' '.join(o2mods[o])+':', o, file=file)
+            print(o + ':', o2F90[o], ' '.join(incdeps+found_deps), file=file)
             print('\t'+fc_rule, ' '.join(incargs), file=file)
 
         # Write rule for each object from C
-        for o in sorted( o2c.keys() ):
-            incdeps = sorted( set( [ f2F[h] for h in o2h[o] if h in f2F ] ) )
-            incargs = sorted( set( [ '-I'+os.path.dirname(f) for f in incdeps ] ) )
+        for o in sorted(o2c.keys()):
+            incdeps = sorted(set([f2F[h] for h in o2h[o] if h in f2F]))
+            incargs = sorted(set(['-I'+os.path.dirname(f) for f in incdeps]))
             if debug:
-                print("# Source file %s produces:"%(o2c[o]), file=file)
+                print("# Source file %s produces:" % (o2c[o]), file=file)
                 print("#   object:", o, file=file)
                 print("#   includes_all:", ' '.join(o2h[o]), file=file)
                 print("#   includes_pth:", ' '.join(incdeps), file=file)
@@ -161,23 +177,24 @@ def create_deps(src_dirs, makefile, debug, exec_target, fc_rule, link_externals,
         # Externals (so called)
         if link_externals:
             print("", file=file)
-            print("# Note: The following object files are not associated with modules so we assume we should link with them:", file=file)
+            print("# Note: The following object files are not associated with "
+                  "modules so we assume we should link with them:", file=file)
             print("# ", ' '.join(externals), file=file)
             o2x = None
         else:
             externals = []
 
         # Write rules for linking executables
-        for p in sorted( prg2o.keys() ):
+        for p in sorted(prg2o.keys()):
             o = prg2o[p]
             print("", file=file)
-            print(p+':',' '.join( link_obj(o, o2uses, mod2o, all_modules) + externals ), file=file )
+            print(p+':', ' '.join(link_obj(o, o2uses, mod2o, all_modules) + externals), file=file)
             print('\t$(LD) $(LDFLAGS) -o $@ $^ $(LIBS)', file=file)
 
         # Write rules for building libraries
-        for l in sorted( targ_libs ):
+        for lb in sorted(targ_libs):
             print("", file=file)
-            print(l+':',' '.join( list(o2F90.keys()) + list(o2c.keys()) ), file=file )
+            print(lb+':', ' '.join(list(o2F90.keys()) + list(o2c.keys())), file=file)
             print('\t$(AR) $(ARFLAGS) $@ $^', file=file)
 
         # Write cleanup rules
@@ -190,112 +207,144 @@ def create_deps(src_dirs, makefile, debug, exec_target, fc_rule, link_externals,
         print("remakedep:", file=file)
         print('\t'+' '.join(sys.argv), file=file)
 
+
 def link_obj(obj, o2uses, mod2o, all_modules):
     """List of all objects needed to link "obj","""
     def recur(obj, depth=0):
         if obj not in olst:
-            olst.append( obj)
+            olst.append(obj)
         else:
             return
         uses = [m for m in o2uses[obj] if m in all_modules]
-        if len(uses)>0:
+        if len(uses) > 0:
             ouses = [mod2o[m] for m in uses]
             for m in uses:
                 o = mod2o[m]
                 recur(o, depth=depth+1)
-                #if o not in olst:
+                # if o not in olst:
                 #    recur(o, depth=depth+1)
-                #    olst.append( o )
+                #    olst.append(o)
             return
         return
     olst = []
     recur(obj)
-    return sorted( set( olst) )
+    return sorted(set(olst))
+
 
 def nested_inc(inc_files, f2F):
-    """List of all files included by "inc_files", either by #include or F90 include."""
+    """List of all files included by "inc_files", either by #include or F90
+    include."""
     def recur(hfile):
         if hfile not in f2F.keys():
             return
-        _, _, cpp, inc, _ = scan_fortran_file( f2F[hfile] )
-        if len(cpp)+len(inc)>0:
+        _, _, cpp, inc, _ = scan_fortran_file(f2F[hfile])
+        if len(cpp) + len(inc) > 0:
             for h in cpp+inc:
                 if h not in hlst and h in f2F.keys():
                     recur(h)
-                    hlst.append( h )
+                    hlst.append(h)
             return
         return
     hlst = []
     for h in inc_files:
         recur(h)
-    return inc_files + sorted( set( hlst ) )
+    return inc_files + sorted(set(hlst))
+
 
 def scan_fortran_file(src_file):
-    """Scan the Fortran file "src_file" and return lists of module defined, module used, and files included."""
+    """Scan the Fortran file "src_file" and return lists of module defined,
+    module used, and files included."""
     module_decl, used_modules, cpp_includes, f90_includes, programs = [], [], [], [], []
     with open(src_file, 'r') as file:
         lines = file.readlines()
         for line in lines:
-            match = re_module.match( line.lower() )
+            match = re_module.match(line.lower())
             if match:
-                if match.group(1) not in 'procedure': # avoid "module procedure" statements
-                    module_decl.append( match.group(1) )
-            match = re_use.match( line.lower() )
+                if match.group(1) not in 'procedure':   # avoid "module procedure" statements
+                    module_decl.append(match.group(1))
+            match = re_use.match(line.lower())
             if match:
-                used_modules.append( match.group(1) )
-            match = re_cpp_include.match( line )
+                used_modules.append(match.group(1))
+            match = re_cpp_include.match(line)
             if match:
-                cpp_includes.append( match.group(1) )
-            match = re_f90_include.match( line )
+                cpp_includes.append(match.group(1))
+            match = re_f90_include.match(line)
             if match:
-                f90_includes.append( match.group(1) )
-            match = re_program.match( line )
+                f90_includes.append(match.group(1))
+            match = re_program.match(line)
             if match:
-                programs.append( match.group(1) )
+                programs.append(match.group(1))
     used_modules = [m for m in sorted(set(used_modules)) if m not in module_decl]
-    return add_suff(module_decl, '.mod'), add_suff( used_modules, '.mod'), cpp_includes, f90_includes, programs
-    #return add_suff(module_decl, '.mod'), add_suff( sorted(set(used_modules)), '.mod'), cpp_includes, f90_includes, programs
+    return add_suff(module_decl, '.mod'), add_suff(used_modules, '.mod'), cpp_includes, f90_includes, programs
+    # return add_suff(module_decl, '.mod'), add_suff(sorted(set(used_modules)), '.mod'), cpp_includes, f90_includes, programs
+
 
 def object_file(src_file):
-    """Return the name of an object file that results from compiling src_file."""
-    return os.path.splitext( os.path.basename( src_file ) )[0] + '.o'
+    """Return the name of an object file that results from compiling
+    src_file."""
+    return os.path.splitext(os.path.basename(src_file))[0] + '.o'
 
 
 def find_files(src_dirs):
-    """Return sorted list of all source files starting from each directory in the list "src_dirs"."""
+    """Return sorted list of all source files starting from each directory in
+    the list "src_dirs"."""
     files = []
     for path in src_dirs:
         if not os.path.isdir(path):
-            raise ValueError("Directory '%s' was not found"%(path))
-        for p, d, f in os.walk( os.path.normpath(path), followlinks=True):
+            raise ValueError("Directory '{}' was not found".format(path))
+        for p, d, f in os.walk(os.path.normpath(path), followlinks=True):
             for file in f:
-                if file.endswith('.F90') or file.endswith('.f90') or file.endswith('.h') or file.endswith('.inc') or file.endswith('.c'):
+                # TODO: use any()
+                if (file.endswith('.F90') or file.endswith('.f90')
+                        or file.endswith('.h') or file.endswith('.inc')
+                        or file.endswith('.c')):
                     files.append(p+'/'+file)
-    return sorted( set( files ) )
+    return sorted(set(files))
+
 
 def add_suff(lst, suff):
     """Add "suff" to each item in the list"""
-    return [ f+suff for f in lst ]
+    return [f + suff for f in lst]
+
 
 # Parse arguments
 parser = argparse.ArgumentParser(
-    description="Generate make dependencies for F90 source code.")
-parser.add_argument('path', nargs='+',
-    help="Directories to search for source code.")
-parser.add_argument('-o', '--makefile', default='Makefile.dep',
-    help="Name of Makefile to put dependencies in to. Default is Makefile.dep.")
-parser.add_argument('-f', '--fc_rule', default="$(FC) $(DEFS) $(FCFLAGS) $(CPPFLAGS) -c $<",
-    help="""String to use in the compilation rule. Default is:
-         '$(FC) $(DEFS) $(FCFLAGS) $(CPPFLAGS) -c $<'""")
-parser.add_argument('-x', '--exec_target',
-    help="""Name of executable to build.
-         Fails if more than one program is found.
-         If EXEC ends in .a then a library is built.""")
-parser.add_argument('-e', '--link_externals', action='store_true',
-    help="Always compile and link any files that do not produce modules (externals).")
-parser.add_argument('-d', '--debug', action='store_true',
-    help="Annotate the makefile with extra information.")
+    description="Generate make dependencies for F90 source code."
+)
+parser.add_argument(
+    'path',
+    nargs='+',
+    help="Directories to search for source code."
+)
+parser.add_argument(
+    '-o', '--makefile',
+    default='Makefile.dep',
+    help="Name of Makefile to put dependencies in to. Default is Makefile.dep."
+)
+parser.add_argument(
+    '-f', '--fc_rule',
+    default="$(FC) $(DEFS) $(FCFLAGS) $(CPPFLAGS) -c $<",
+    help="String to use in the compilation rule. Default is: "
+         "'$(FC) $(DEFS) $(FCFLAGS) $(CPPFLAGS) -c $<'"
+)
+parser.add_argument(
+    '-x', '--exec_target',
+    help="Name of executable to build. Fails if more than one program is "
+         "found. If EXEC ends in .a then a library is built."
+)
+parser.add_argument(
+    '-e', '--link_externals',
+    action='store_true',
+    help="Always compile and link any files that do not produce modules "
+         "(externals)."
+)
+parser.add_argument(
+    '-d', '--debug',
+    action='store_true',
+    help="Annotate the makefile with extra information."
+)
 args = parser.parse_args()
 
 # Do the thing
-create_deps(args.path, args.makefile, args.debug, args.exec_target, args.fc_rule, args.link_externals, sys.argv[0])
+create_deps(args.path, args.makefile, args.debug, args.exec_target,
+            args.fc_rule, args.link_externals, sys.argv[0])

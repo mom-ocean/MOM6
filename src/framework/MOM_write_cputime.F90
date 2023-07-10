@@ -21,17 +21,17 @@ integer :: MAX_TICKS      = 1000 !< The number of ticks per second, used by the 
 !> A control structure that regulates the writing of CPU time
 type, public :: write_cputime_CS ; private
   logical :: initialized = .false. !< True if this control structure has been initialized.
-  real :: maxcpu                !<   The maximum amount of cpu time per processor
+  real :: maxcpu                !<   The maximum amount of CPU time per processor
                                 !! for which MOM should run before saving a restart
-                                !! file and quiting with a return value that
+                                !! file and quitting with a return value that
                                 !! indicates that further execution is required to
-                                !! complete the simulation, in wall-clock seconds.
+                                !! complete the simulation [wall-clock seconds].
   type(time_type) :: Start_time !< The start time of the simulation.
                                 !! Start_time is set in MOM_initialization.F90
-  real :: startup_cputime       !< The CPU time used in the startup phase of the model.
-  real :: prev_cputime = 0.0    !< The last measured CPU time.
-  real :: dn_dcpu_min = -1.0    !< The minimum derivative of timestep with CPU time.
-  real :: cputime2 = 0.0        !< The accumulated cpu time.
+  real :: startup_cputime       !< The CPU time used in the startup phase of the model [clock_cycles].
+  real :: prev_cputime = 0.0    !< The last measured CPU time [clock_cycles].
+  real :: dn_dcpu_min = -1.0    !< The minimum derivative of timestep with CPU time [steps clock_cycles-1].
+  real :: cputime2 = 0.0        !< The accumulated CPU time [clock_cycles].
   integer :: previous_calls = 0 !< The number of times write_CPUtime has been called.
   integer :: prev_n = 0         !< The value of n from the last call.
   integer :: fileCPU_ascii= -1  !< The unit number of the CPU time file.
@@ -76,8 +76,8 @@ subroutine MOM_write_cputime_init(param_file, directory, Input_start_time, CS)
 
   ! Read all relevant parameters and write them to the model log.
 
-  ! Determine whether all paramters are set to their default values.
-  call get_param(param_file, mdl, "MAXCPU", CS%maxcpu, default=-1.0, do_not_log=.true.)
+  ! Determine whether all parameters are set to their default values.
+  call get_param(param_file, mdl, "MAXCPU", CS%maxcpu, units="wall-clock seconds", default=-1.0, do_not_log=.true.)
   call get_param(param_file, mdl, "CPU_TIME_FILE", CS%CPUfile, default="CPU_stats", do_not_log=.true.)
   all_default = (CS%maxcpu == -1.0) .and. (trim(CS%CPUfile) == trim("CPU_stats"))
 
@@ -135,10 +135,11 @@ subroutine write_cputime(day, n, CS, nmax, call_end)
 
   ! Local variables
   real    :: d_cputime     ! The change in CPU time since the last call
-                           ! this subroutine.
-  integer :: new_cputime   ! The CPU time returned by SYSTEM_CLOCK
-  real    :: reday         ! A real version of day.
-  integer :: start_of_day, num_days
+                           ! this subroutine [clock_cycles]
+  integer :: new_cputime   ! The CPU time returned by SYSTEM_CLOCK [clock_cycles]
+  real    :: reday         ! The time in days, including fractional days [days]
+  integer :: start_of_day  ! The number of seconds since the start of the day
+  integer :: num_days      ! The number of days in the time
 
   if (.not.associated(CS)) call MOM_error(FATAL, &
          "write_energy: Module must be initialized before it is used.")

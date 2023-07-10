@@ -62,15 +62,14 @@ use MOM_coms,             only : EFP_type, assignment(=), EFP_sum_across_PEs
 use MOM_error_handler,    only : MOM_error, FATAL, assert, WARNING
 use MOM_debugging,        only : check_column_integrals
 use MOM_diag_manager_infra,only : MOM_diag_axis_init
-use MOM_diag_vkernels,    only : interpolate_column, reintegrate_column
 use MOM_file_parser,      only : get_param, log_param, param_file_type
 use MOM_string_functions, only : lowercase, extractWord
 use MOM_grid,             only : ocean_grid_type
 use MOM_unit_scaling,     only : unit_scale_type
 use MOM_verticalGrid,     only : verticalGrid_type
 use MOM_EOS,              only : EOS_type
-use MOM_remapping,        only : remapping_CS, initialize_remapping
-use MOM_remapping,        only : remapping_core_h
+use MOM_remapping,        only : remapping_CS, initialize_remapping, remapping_core_h
+use MOM_remapping,        only : interpolate_column, reintegrate_column
 use MOM_regridding,       only : regridding_CS, initialize_regridding
 use MOM_regridding,       only : end_regridding
 use MOM_regridding,       only : set_regrid_params, get_regrid_size
@@ -328,10 +327,6 @@ subroutine diag_remap_update(remap_cs, G, GV, US, h, T, S, eqn_of_state, h_targe
       call build_rho_column(get_rho_CS(remap_cs%regrid_cs), GV%ke, &
                             GV%Z_to_H*(G%bathyT(i,j)+G%Z_ref), h(i,j,:), T(i,j,:), S(i,j,:), &
                             eqn_of_state, zInterfaces, h_neglect, h_neglect_edge)
-    elseif (remap_cs%vertical_coord == coordinateMode('SLIGHT')) then
-!     call build_slight_column(remap_cs%regrid_cs,remap_cs%remap_cs, nz, &
-!                           GV%Z_to_H*(G%bathyT(i,j)+G%Z_ref), sum(h(i,j,:)), zInterfaces)
-      call MOM_error(FATAL,"diag_remap_update: SLIGHT coordinate not coded for diagnostics yet!")
     elseif (remap_cs%vertical_coord == coordinateMode('HYCOM1')) then
 !     call build_hycom1_column(remap_cs%regrid_cs, nz, &
 !                           GV%Z_to_H*(G%bathyT(i,j)+G%Z_ref), sum(h(i,j,:)), zInterfaces)
@@ -528,7 +523,7 @@ subroutine vertically_reintegrate_diag_field(remap_cs, G, h, h_target, staggered
         h_src(:) = 0.5 * (h(i_lo,j,:) + h(i_hi,j,:))
         h_dest(:) = 0.5 * (h_target(i_lo,j,:) + h_target(i_hi,j,:))
         call reintegrate_column(nz_src, h_src, field(I1,j,:), &
-                                nz_dest, h_dest, 0., reintegrated_field(I1,j,:))
+                                nz_dest, h_dest, reintegrated_field(I1,j,:))
       enddo
     enddo
   elseif (staggered_in_y .and. .not. staggered_in_x) then
@@ -543,7 +538,7 @@ subroutine vertically_reintegrate_diag_field(remap_cs, G, h, h_target, staggered
         h_src(:) = 0.5 * (h(i,j_lo,:) + h(i,j_hi,:))
         h_dest(:) = 0.5 * (h_target(i,j_lo,:) + h_target(i,j_hi,:))
         call reintegrate_column(nz_src, h_src, field(i,J1,:), &
-                                nz_dest, h_dest, 0., reintegrated_field(i,J1,:))
+                                nz_dest, h_dest, reintegrated_field(i,J1,:))
       enddo
     enddo
   elseif ((.not. staggered_in_x) .and. (.not. staggered_in_y)) then
@@ -556,7 +551,7 @@ subroutine vertically_reintegrate_diag_field(remap_cs, G, h, h_target, staggered
         h_src(:) = h(i,j,:)
         h_dest(:) = h_target(i,j,:)
         call reintegrate_column(nz_src, h_src, field(i,j,:), &
-                                nz_dest, h_dest, 0., reintegrated_field(i,j,:))
+                                nz_dest, h_dest, reintegrated_field(i,j,:))
       enddo
     enddo
   else
@@ -609,7 +604,7 @@ subroutine vertically_interpolate_diag_field(remap_cs, G, h, staggered_in_x, sta
         h_src(:) = 0.5 * (h(i_lo,j,:) + h(i_hi,j,:))
         h_dest(:) = 0.5 * (remap_cs%h(i_lo,j,:) + remap_cs%h(i_hi,j,:))
         call interpolate_column(nz_src, h_src, field(I1,j,:), &
-                                nz_dest, h_dest, 0., interpolated_field(I1,j,:))
+                                nz_dest, h_dest, interpolated_field(I1,j,:), .true.)
       enddo
     enddo
   elseif (staggered_in_y .and. .not. staggered_in_x) then
@@ -624,7 +619,7 @@ subroutine vertically_interpolate_diag_field(remap_cs, G, h, staggered_in_x, sta
         h_src(:) = 0.5 * (h(i,j_lo,:) + h(i,j_hi,:))
         h_dest(:) = 0.5 * (remap_cs%h(i,j_lo,:) + remap_cs%h(i,j_hi,:))
         call interpolate_column(nz_src, h_src, field(i,J1,:), &
-                                nz_dest, h_dest, 0., interpolated_field(i,J1,:))
+                                nz_dest, h_dest, interpolated_field(i,J1,:), .true.)
       enddo
     enddo
   elseif ((.not. staggered_in_x) .and. (.not. staggered_in_y)) then
@@ -637,7 +632,7 @@ subroutine vertically_interpolate_diag_field(remap_cs, G, h, staggered_in_x, sta
         h_src(:) = h(i,j,:)
         h_dest(:) = remap_cs%h(i,j,:)
         call interpolate_column(nz_src, h_src, field(i,j,:), &
-                                nz_dest, h_dest, 0., interpolated_field(i,j,:))
+                                nz_dest, h_dest, interpolated_field(i,j,:), .true.)
       enddo
     enddo
   else

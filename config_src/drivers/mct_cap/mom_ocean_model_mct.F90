@@ -17,7 +17,7 @@ use MOM,                      only : get_MOM_state_elements, MOM_state_is_synchr
 use MOM,                      only : get_ocean_stocks, step_offline
 use MOM_coms,                 only : field_chksum
 use MOM_constants,            only : CELSIUS_KELVIN_OFFSET, hlf
-use MOM_diag_mediator,        only : diag_ctrl, enable_averaging, disable_averaging
+use MOM_diag_mediator,        only : diag_ctrl, enable_averages, disable_averaging
 use MOM_diag_mediator,        only : diag_mediator_close_registration, diag_mediator_end
 use MOM_domains,              only : pass_var, pass_vector, AGRID, BGRID_NE, CGRID_NE
 use MOM_domains,              only : TO_ALL, Omit_Corners
@@ -170,8 +170,8 @@ type, public :: ocean_state_type ;
                               !! If false, the two phases are advanced with
                               !! separate calls. The default is true.
   ! The following 3 variables are only used here if single_step_call is false.
-  real    :: dt               !< (baroclinic) dynamics time step (seconds)
-  real    :: dt_therm         !< thermodynamics time step (seconds)
+  real    :: dt               !< (baroclinic) dynamics time step [T ~> s]
+  real    :: dt_therm         !< thermodynamics time step [T ~> s]
   logical :: thermo_spans_coupling !< If true, thermodynamic and tracer time
                               !! steps can span multiple coupled time steps.
   logical :: diabatic_first   !< If true, apply diabatic and thermodynamic
@@ -285,16 +285,17 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn, i
                  "including both dynamics and thermodynamics.  If false, "//&
                  "the two phases are advanced with separate calls.", default=.true.)
   call get_param(param_file, mdl, "DT", OS%dt, &
-                 "The (baroclinic) dynamics time step.  The time-step that "//&
-                 "is actually used will be an integer fraction of the "//&
-                 "forcing time-step.", units="s", fail_if_missing=.true.)
+                 "The (baroclinic) dynamics time step.  The time-step that is actually "//&
+                 "used will be an integer fraction of the forcing time-step.", &
+                 units="s", scale=OS%US%s_to_T, fail_if_missing=.true.)
   call get_param(param_file, mdl, "DT_THERM", OS%dt_therm, &
                  "The thermodynamic and tracer advection time step. "//&
                  "Ideally DT_THERM should be an integer multiple of DT "//&
                  "and less than the forcing or coupling time-step, unless "//&
                  "THERMO_SPANS_COUPLING is true, in which case DT_THERM "//&
                  "can be an integer multiple of the coupling timestep.  By "//&
-                 "default DT_THERM is set to DT.", units="s", default=OS%dt)
+                 "default DT_THERM is set to DT.", &
+                 units="s", scale=OS%US%s_to_T, default=OS%US%T_to_s*OS%dt)
   call get_param(param_file, "MOM", "THERMO_SPANS_COUPLING", OS%thermo_spans_coupling, &
                  "If true, the MOM will take thermodynamic and tracer "//&
                  "timesteps that can be longer than the coupling timestep. "//&
@@ -448,13 +449,13 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
   integer :: index_bnds(4)       ! The computational domain index bounds in the
                                  ! ice-ocean boundary type.
   real :: weight          ! Flux accumulation weight
-  real :: dt_coupling     ! The coupling time step in seconds.
+  real :: dt_coupling     ! The coupling time step [T ~> s]
   integer :: nts          ! The number of baroclinic dynamics time steps
                           ! within dt_coupling.
-  real :: dt_therm        ! A limited and quantized version of OS%dt_therm (sec)
-  real :: dt_dyn          ! The dynamics time step in sec.
-  real :: dtdia           ! The diabatic time step in sec.
-  real :: t_elapsed_seg   ! The elapsed time in this update segment, in s.
+  real :: dt_therm        ! A limited and quantized version of OS%dt_therm [T ~> s]
+  real :: dt_dyn          ! The dynamics time step [T ~> s]
+  real :: dtdia           ! The diabatic time step [T ~> s]
+  real :: t_elapsed_seg   ! The elapsed time in this update segment [T ~> s]
   integer :: n, n_max, n_last_thermo
   type(time_type) :: Time2  ! A temporary time.
   logical :: thermo_does_span_coupling ! If true, thermodynamic forcing spans
@@ -467,7 +468,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
 
   call callTree_enter("update_ocean_model(), MOM_ocean_model_mct.F90")
   call get_time(Ocean_coupling_time_step, secs, days)
-  dt_coupling = 86400.0*real(days) + real(secs)
+  dt_coupling = OS%US%s_to_T*(86400.0*real(days) + real(secs))
 
   if (time_start_update /= OS%Time) then
     call MOM_error(WARNING, "update_ocean_model: internal clock does not "//&
@@ -501,7 +502,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
   if (OS%fluxes%fluxes_used) then
 
     ! GMM, is enable_averaging needed now?
-    call enable_averaging(dt_coupling, OS%Time + Ocean_coupling_time_step, OS%diag)
+    call enable_averages(dt_coupling, OS%Time + Ocean_coupling_time_step, OS%diag)
 
     if (do_thermo) &
       call convert_IOB_to_fluxes(Ice_ocean_boundary, OS%fluxes, index_bnds, OS%Time, dt_coupling, &
@@ -528,7 +529,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
     call copy_common_forcing_fields(OS%forces, OS%fluxes, OS%grid)
 
 #ifdef _USE_GENERIC_TRACER
-    call enable_averaging(dt_coupling, OS%Time + Ocean_coupling_time_step, OS%diag) !Is this needed?
+    call enable_averages(dt_coupling, OS%Time + Ocean_coupling_time_step, OS%diag) !Is this needed?
     call MOM_generic_tracer_fluxes_accumulate(OS%fluxes, weight) !here weight=1, just saving the current fluxes
 #endif
 
@@ -639,7 +640,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
 
         if (step_thermo) then
           ! Back up Time2 to the start of the thermodynamic segment.
-          Time2 = Time2 - set_time(int(floor((dtdia - dt_dyn) + 0.5)))
+          Time2 = Time2 - set_time(int(floor(OS%US%T_to_s*(dtdia - dt_dyn) + 0.5)))
           call step_MOM(OS%forces, OS%fluxes, OS%sfc_state, Time2, dtdia, OS%MOM_CSp, &
                         Waves=OS%Waves, do_dynamics=.false., do_thermodynamics=.true., &
                         start_cycle=.false., end_cycle=(n==n_max), cycle_length=dt_coupling)
@@ -647,7 +648,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
       endif
 
       t_elapsed_seg = t_elapsed_seg + dt_dyn
-      Time2 = Time1 + set_time(int(floor(t_elapsed_seg + 0.5)))
+      Time2 = Time1 + set_time(int(floor(OS%US%T_to_s*t_elapsed_seg + 0.5)))
     enddo
   endif
 

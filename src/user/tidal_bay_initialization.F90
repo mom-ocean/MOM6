@@ -25,7 +25,10 @@ public register_tidal_bay_OBC
 
 !> Control structure for tidal bay open boundaries.
 type, public :: tidal_bay_OBC_CS ; private
-  real :: tide_flow = 3.0e6         !< Maximum tidal flux [L2 Z T-1 ~> m3 s-1]
+  real :: tide_flow = 3.0e6  !< Maximum tidal flux with the tidal bay configuration [L2 Z T-1 ~> m3 s-1]
+  real :: tide_period        !< The period associated with the tidal bay configuration [T ~> s]
+  real :: tide_ssh_amp       !< The magnitude of the sea surface height anomalies at the inflow
+                             !! with the tidal bay configuration [Z ~> m]
 end type tidal_bay_OBC_CS
 
 contains
@@ -43,6 +46,13 @@ function register_tidal_bay_OBC(param_file, CS, US, OBC_Reg)
   call get_param(param_file, mdl, "TIDAL_BAY_FLOW", CS%tide_flow, &
                  "Maximum total tidal volume flux.", &
                  units="m3 s-1", default=3.0e6, scale=US%m_s_to_L_T*US%m_to_L*US%m_to_Z)
+  call get_param(param_file, mdl, "TIDAL_BAY_PERIOD", CS%tide_period, &
+                 "Period of the inflow in the tidal bay configuration.", &
+                 units="s", default=12.0*3600.0, scale=US%s_to_T)
+  call get_param(param_file, mdl, "TIDAL_BAY_SSH_ANOM", CS%tide_ssh_amp, &
+                 "Magnitude of the sea surface height anomalies at the inflow with the "//&
+                 "tidal bay configuration.", &
+                 units="m", default=0.1, scale=US%m_to_Z)
 
   ! Register the open boundaries.
   call register_OBC(casename, param_file, OBC_Reg)
@@ -63,11 +73,11 @@ subroutine tidal_bay_set_OBC_data(OBC, CS, G, GV, US, h, Time)
   type(time_type),         intent(in) :: Time !< model time.
 
   ! The following variables are used to set up the transport in the tidal_bay example.
-  real :: time_sec
+  real :: time_sec    ! Elapsed model time [T ~> s]
   real :: cff_eta     ! The total column thickness anomalies associated with the inflow [H ~> m or kg m-2]
   real :: my_flux     ! The vlume flux through the face [L2 Z T-1 ~> m3 s-1]
   real :: total_area  ! The total face area of the OBCs [L Z ~> m2]
-  real :: PI
+  real :: PI          ! The ratio of the circumference of a circle to its diameter [nondim]
   real :: flux_scale  ! A scaling factor for the areas [m2 H-1 L-1 ~> nondim or m3 kg-1]
   real, allocatable :: my_area(:,:) ! The total OBC inflow area [m2]
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz, n
@@ -86,10 +96,10 @@ subroutine tidal_bay_set_OBC_data(OBC, CS, G, GV, US, h, Time)
 
   flux_scale = GV%H_to_m*US%L_to_m
 
-  time_sec = time_type_to_real(Time)
-  cff_eta = 0.1*GV%m_to_H * sin(2.0*PI*time_sec/(12.0*3600.0))
-  my_area=0.0
-  my_flux=0.0
+  time_sec = US%s_to_T*time_type_to_real(Time)
+  cff_eta = CS%tide_ssh_amp*GV%Z_to_H * sin(2.0*PI*time_sec / CS%tide_period)
+  my_area = 0.0
+  my_flux = 0.0
   segment => OBC%segment(1)
 
   do j=segment%HI%jsc,segment%HI%jec ; do I=segment%HI%IscB,segment%HI%IecB
@@ -101,7 +111,7 @@ subroutine tidal_bay_set_OBC_data(OBC, CS, G, GV, US, h, Time)
     endif
   enddo ; enddo
   total_area = reproducing_sum(my_area)
-  my_flux = - CS%tide_flow*SIN(2.0*PI*time_sec/(12.0*3600.0))
+  my_flux = - CS%tide_flow * SIN(2.0*PI*time_sec / CS%tide_period)
 
   do n = 1, OBC%number_of_segments
     segment => OBC%segment(n)

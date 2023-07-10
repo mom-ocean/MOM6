@@ -35,7 +35,7 @@ type, public :: wave_speed_CS ; private
                                        !! internal wave speed.
   real :: mono_N2_column_fraction = 0. !< The lower fraction of water column over which N2 is limited as
                                        !! monotonic for the purposes of calculating the equivalent barotropic
-                                       !! wave speed. This parameter controls the default behavior of
+                                       !! wave speed [nondim]. This parameter controls the default behavior of
                                        !! wave_speed() which can be overridden by optional arguments.
   real :: mono_N2_depth = -1.          !< The depth below which N2 is limited as monotonic for the purposes of
                                        !! calculating the equivalent barotropic wave speed [Z ~> m].
@@ -44,13 +44,17 @@ type, public :: wave_speed_CS ; private
   real :: min_speed2 = 0.              !< The minimum mode 1 internal wave speed squared [L2 T-2 ~> m2 s-2]
   real :: wave_speed_tol = 0.001       !< The fractional tolerance with which to solve for the wave
                                        !! speeds [nondim]
+  real :: c1_thresh = -1.0             !< A minimal value of the first mode internal wave speed
+                                       !! below which all higher mode speeds are not calculated but
+                                       !! are simply reported as 0 [L T-1 ~> m s-1].  A non-negative
+                                       !! value must be specified via a call to wave_speed_init for
+                                       !! the subroutine wave_speeds to be used (but not wave_speed).
   type(remapping_CS) :: remapping_CS   !< Used for vertical remapping when calculating equivalent barotropic
                                        !! mode structure.
-  integer :: remap_answer_date = 20181231 !< The vintage of the order of arithmetic and expressions to use
+  integer :: remap_answer_date = 99991231 !< The vintage of the order of arithmetic and expressions to use
                                        !! for remapping.  Values below 20190101 recover the remapping
                                        !! answers from 2018, while higher values use more robust
                                        !! forms of the same remapping expressions.
-                      !### Change to 99991231?
   type(diag_ctrl), pointer :: diag     !< Diagnostics control structure
 end type wave_speed_CS
 
@@ -73,7 +77,7 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, mono_
                                           !! barotropic mode instead of the first baroclinic mode.
   real,                   optional, intent(in)  :: mono_N2_column_fraction !< The lower fraction
                                           !! of water column over which N2 is limited as monotonic
-                                          !! for the purposes of calculating vertical modal structure.
+                                          !! for the purposes of calculating vertical modal structure [nondim].
   real,                   optional, intent(in)  :: mono_N2_depth !< A depth below which N2 is limited as
                                           !! monotonic for the purposes of calculating vertical
                                           !! modal structure [Z ~> m].
@@ -105,11 +109,14 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, mono_
     Rc, &         ! A column of layer densities after convective instabilities are removed [R ~> kg m-3]
     Hc_H          ! Hc(:) rescaled from Z to thickness units [H ~> m or kg m-2]
   real :: I_Htot  ! The inverse of the total filtered thicknesses [Z ~> m]
-  real :: det, ddet
+  real :: det, ddet ! Determinant of the eigen system and its derivative with lam.  Because the
+                  ! units of the eigenvalue change with the number of layers and because of the
+                  ! dynamic rescaling that is used to keep det in a numerically representable range,
+                  ! the units of of det are hard to interpret, but det/ddet is always in units
+                  ! of [T2 L-2 ~> s2 m-2]
   real :: lam     ! The eigenvalue [T2 L-2 ~> s2 m-2]
   real :: dlam    ! The change in estimates of the eigenvalue [T2 L-2 ~> s2 m-2]
   real :: lam0    ! The first guess of the eigenvalue [T2 L-2 ~> s2 m-2]
-  real :: min_h_frac ! [nondim]
   real :: Z_to_pres  ! A conversion factor from thicknesses to pressure [R L2 T-2 Z-1 ~> Pa m-1]
   real, dimension(SZI_(G)) :: &
     htot, hmin, &  ! Thicknesses [Z ~> m]
@@ -121,42 +128,50 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, mono_
   real :: cg1_min2 ! A floor in the squared first mode speed below which 0 is returned [L2 T-2 ~> m2 s-2]
   real :: I_Hnew   ! The inverse of a new layer thickness [Z-1 ~> m-1]
   real :: drxh_sum ! The sum of density differences across interfaces times thicknesses [R Z ~> kg m-2]
-  real :: L2_to_Z2 ! A scaling factor squared from units of lateral distances to depths [Z2 L-2 ~> 1].
   real :: g_Rho0   ! G_Earth/Rho0 [L2 T-2 Z-1 R-1 ~> m4 s-2 kg-1].
-  real :: c2_scale ! A scaling factor for wave speeds to help control the growth of the determinant
-                   ! and its derivative with lam between rows of the Thomas algorithm solver.  The
-                   ! exact value should not matter for the final result if it is an even power of 2.
+  real :: c2_scale ! A scaling factor for wave speeds to help control the growth of the determinant and
+                   ! its derivative with lam between rows of the Thomas algorithm solver [L2 s2 T-2 m-2 ~> nondim].
+                   ! The exact value should not matter for the final result if it is an even power of 2.
   real :: tol_Hfrac ! Layers that together are smaller than this fraction of
-                    ! the total water column can be merged for efficiency.
+                    ! the total water column can be merged for efficiency [nondim].
+  real :: min_h_frac ! tol_Hfrac divided by the total number of layers [nondim].
   real :: tol_solve ! The fractional tolerance with which to solve for the wave speeds [nondim]
   real :: tol_merge ! The fractional change in estimated wave speed that is allowed
                     ! when deciding to merge layers in the calculation [nondim]
-  real :: rescale, I_rescale
+  real :: rescale   ! A rescaling factor to control the magnitude of the determinant [nondim]
+  real :: I_rescale ! The reciprocal of the rescaling factor to control the magnitude of the determinant [nondim]
   integer :: kf(SZI_(G)) ! The number of active layers after filtering.
   integer, parameter :: max_itt = 10
-  real :: lam_it(max_itt), det_it(max_itt), ddet_it(max_itt)
+  real :: lam_it(max_itt)  ! The guess at the eignevalue with each iteration [T2 L-2 ~> s2 m-2]
+  real :: det_it(max_itt), ddet_it(max_itt)  ! The determinant of the matrix and its derivative with lam
+                    ! with each iteration.  Because of all of the dynamic rescaling of the determinant
+                    ! between rows, its units are not easily interpretable, but the ratio of det/ddet
+                    ! always has units of [T2 L-2 ~> s2 m-2]
   logical :: use_EOS    ! If true, density is calculated from T & S using an equation of state.
   logical :: better_est ! If true, use an improved estimate of the first mode internal wave speed.
   logical :: merge      ! If true, merge the current layer with the one above.
   integer :: kc         ! The number of layers in the column after merging
   integer :: i, j, k, k2, itt, is, ie, js, je, nz
-  real :: hw, sum_hc
+  real :: hw      ! The mean of the adjacent layer thicknesses [Z ~> m]
+  real :: sum_hc  ! The sum of the layer thicknesses [Z ~> m]
   real :: gp      ! A limited local copy of gprime [L2 Z-1 T-2 ~> m s-2]
-  real :: N2min   ! A minimum buoyancy frequency [T-2 ~> s-2]
+  real :: N2min   ! A minimum buoyancy frequency, including a slope rescaling factor [L2 Z-2 T-2 ~> s-2]
   logical :: l_use_ebt_mode, calc_modal_structure
-  real :: l_mono_N2_column_fraction, l_mono_N2_depth
-  real :: mode_struct(SZK_(GV)), ms_min, ms_max, ms_sq
+  real :: l_mono_N2_column_fraction ! A local value of mono_N2_column_fraction [nondim]
+  real :: l_mono_N2_depth ! A local value of mono_N2_column_depth [Z ~> m]
+  real :: mode_struct(SZK_(GV)) ! The mode structure [nondim], but it is also temporarily
+                         ! in units of [L2 T-2 ~> m2 s-2] after it is modified inside of tdma6.
+  real :: ms_min, ms_max ! The minimum and maximum mode structure values returned from tdma6 [L2 T-2 ~> m2 s-2]
+  real :: ms_sq          ! The sum of the square of the values returned from tdma6 [L4 T-4 ~> m4 s-4]
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
-  if (.not. CS%initialized) call MOM_error(FATAL, "MOM_wave_speed: "// &
+  if (.not. CS%initialized) call MOM_error(FATAL, "MOM_wave_speed / wave_speed: "// &
            "Module must be initialized before it is used.")
 
   if (present(full_halos)) then ; if (full_halos) then
     is = G%isd ; ie = G%ied ; js = G%jsd ; je = G%jed
   endif ; endif
-
-  L2_to_Z2 = US%L_to_Z**2
 
   l_use_ebt_mode = CS%use_ebt_mode
   if (present(use_ebt_mode)) l_use_ebt_mode = use_ebt_mode
@@ -201,7 +216,7 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, mono_
 !$OMP parallel do default(none) shared(is,ie,js,je,nz,h,G,GV,US,min_h_frac,use_EOS,tv,&
 !$OMP                                  calc_modal_structure,l_use_ebt_mode,modal_structure, &
 !$OMP                                  l_mono_N2_column_fraction,l_mono_N2_depth,CS,   &
-!$OMP                                  Z_to_pres,cg1,g_Rho0,rescale,I_rescale,L2_to_Z2, &
+!$OMP                                  Z_to_pres,cg1,g_Rho0,rescale,I_rescale, &
 !$OMP                                  better_est,cg1_min2,tol_merge,tol_solve,c2_scale) &
 !$OMP                          private(htot,hmin,kf,H_here,HxT_here,HxS_here,HxR_here, &
 !$OMP                                  Hf,Tf,Sf,Rf,pres,T_int,S_int,drho_dT,drho_dS,   &
@@ -435,7 +450,7 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, mono_
           if (l_use_ebt_mode) then
             Igu(1) = 0. ! Neumann condition for pressure modes
             sum_hc = Hc(1)
-            N2min = L2_to_Z2*gprime(2)/Hc(1)
+            N2min = gprime(2)/Hc(1)
             do k=2,kc
               hw = 0.5*(Hc(k-1)+Hc(k))
               gp = gprime(K)
@@ -443,12 +458,12 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, mono_
                 !### Change to: if ( ((htot(i) - sum_hc < l_mono_N2_column_fraction*htot(i)) .or. & ) )
                 if ( (((G%bathyT(i,j)+G%Z_ref) - sum_hc < l_mono_N2_column_fraction*(G%bathyT(i,j)+G%Z_ref)) .or. &
                       ((l_mono_N2_depth >= 0.) .and. (sum_hc > l_mono_N2_depth))) .and. &
-                     (L2_to_Z2*gp > N2min*hw) ) then
+                     (gp > N2min*hw) ) then
                   ! Filters out regions where N2 increases with depth but only in a lower fraction
                   ! of the water column or below a certain depth.
-                  gp = US%Z_to_L**2 * (N2min*hw)
+                  gp = N2min * hw
                 else
-                  N2min = L2_to_Z2 * gp/hw
+                  N2min = gp / hw
                 endif
               endif
               Igu(k) = 1.0/(gp*Hc(k))
@@ -526,6 +541,7 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, mono_
 
             if (calc_modal_structure) then
               call tdma6(kc, Igu, Igl, lam, mode_struct)
+              ! Note that tdma6 changes the units of mode_struct to [L2 T-2 ~> m2 s-2]
               ms_min = mode_struct(1)
               ms_max = mode_struct(1)
               ms_sq = mode_struct(1)**2
@@ -541,6 +557,7 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, mono_
               else
                 mode_struct(1:kc) = mode_struct(1:kc) / sqrt( ms_sq )
               endif
+              ! After the nondimensionalization above, mode_struct is once again [nondim]
             endif
 
             if (abs(dlam) < tol_solve*lam) exit
@@ -591,13 +608,13 @@ subroutine tdma6(n, a, c, lam, y)
   real, dimension(:), intent(in)    :: a !< Lower diagonal   [T2 L-2 ~> s2 m-2]
   real, dimension(:), intent(in)    :: c !< Upper diagonal   [T2 L-2 ~> s2 m-2]
   real,               intent(in)    :: lam !< Scalar subtracted from leading diagonal [T2 L-2 ~> s2 m-2]
-  real, dimension(:), intent(inout) :: y !< RHS on entry, result on exit
+  real, dimension(:), intent(inout) :: y !< RHS on entry [A ~> a], result on exit [A L2 T-2 ~> a m2 s-2]
 
   ! Local variables
   real :: lambda     ! A temporary variable in [T2 L-2 ~> s2 m-2]
   real :: beta(n)    ! A temporary variable in [T2 L-2 ~> s2 m-2]
   real :: I_beta(n)  ! A temporary variable in [L2 T-2 ~> m2 s-2]
-  real :: yy(n)      ! A temporary variable with the same units as y on entry.
+  real :: yy(n)      ! A temporary variable with the same units as y on entry [A ~> a]
   integer :: k, m
 
   lambda = lam
@@ -635,16 +652,16 @@ end subroutine tdma6
 
 !> Calculates the wave speeds for the first few barolinic modes.
 subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, full_halos)
-  type(ocean_grid_type),                    intent(in)  :: G !< Ocean grid structure
+  type(ocean_grid_type),                    intent(in)  :: G  !< Ocean grid structure
   type(verticalGrid_type),                  intent(in)  :: GV !< Vertical grid structure
   type(unit_scale_type),                    intent(in)  :: US !< A dimensional unit scaling type
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)  :: h !< Layer thickness [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in) :: h  !< Layer thickness [H ~> m or kg m-2]
   type(thermo_var_ptrs),                    intent(in)  :: tv !< Thermodynamic variables
   integer,                                  intent(in)  :: nmodes !< Number of modes
   real, dimension(G%isd:G%ied,G%jsd:G%jed,nmodes), intent(out) :: cn !< Waves speeds [L T-1 ~> m s-1]
-  type(wave_speed_CS), optional,            intent(in)  :: CS !< Wave speed control struct
+  type(wave_speed_CS),                      intent(in)  :: CS !< Wave speed control struct
   logical,             optional,            intent(in)  :: full_halos !< If true, do the calculation
-                                                                      !! over the entire computational domain.
+                                                              !! over the entire data domain.
 
   ! Local variables
   real, dimension(SZK_(GV)+1) :: &
@@ -669,25 +686,34 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, full_halos)
     Sc, &         ! A column of layer salinities after convective instabilities are removed [S ~> ppt]
     Rc            ! A column of layer densities after convective instabilities are removed [R ~> kg m-3]
   real :: I_Htot  ! The inverse of the total filtered thicknesses [Z ~> m]
-  real :: c1_thresh  ! if c1 is below this value, don't bother calculating
-                     ! cn values for higher modes [L T-1 ~> m s-1]
-  real :: c2_scale ! A scaling factor for wave speeds to help control the growth of the determinant
-                   ! and its derivative with lam between rows of the Thomas algorithm solver.  The
-                   ! exact value should not matter for the final result if it is an even power of 2.
-  real :: det, ddet       ! determinant & its derivative of eigen system
+  real :: c2_scale ! A scaling factor for wave speeds to help control the growth of the determinant and its
+                   ! derivative with lam between rows of the Thomas algorithm solver [L2 s2 T-2 m-2 ~> nondim].
+                   ! The exact value should not matter for the final result if it is an even power of 2.
+  real :: det, ddet       ! Determinant of the eigen system and its derivative with lam.  Because the
+                          ! units of the eigenvalue change with the number of layers and because of the
+                          ! dynamic rescaling that is used to keep det in a numerically representable range,
+                          ! the units of of det are hard to interpret, but det/ddet is always in units
+                          ! of [T2 L-2 ~> s2 m-2]
   real :: lam_1           ! approximate mode-1 eigenvalue [T2 L-2 ~> s2 m-2]
   real :: lam_n           ! approximate mode-n eigenvalue [T2 L-2 ~> s2 m-2]
   real :: dlam            ! The change in estimates of the eigenvalue [T2 L-2 ~> s2 m-2]
   real :: lamMin          ! minimum lam value for root searching range [T2 L-2 ~> s2 m-2]
   real :: lamMax          ! maximum lam value for root searching range [T2 L-2 ~> s2 m-2]
   real :: lamInc          ! width of moving window for root searching [T2 L-2 ~> s2 m-2]
-  real :: det_l,det_r     ! determinant value at left and right of window
-  real :: ddet_l,ddet_r   ! derivative of determinant at left and right of window
-  real :: det_sub,ddet_sub! derivative of determinant at subinterval endpoint
-  real :: xl,xr           ! lam guesses at left and right of window [T2 L-2 ~> s2 m-2]
+  real :: det_l, ddet_l   ! determinant of the eigensystem and its derivative with lam at the lower
+                          ! end of the range of values bracketing a particular root, in dynamically
+                          ! rescaled units that may differ from the other det variables, but such
+                          ! that the units of det_l/ddet_l are [T2 L-2 ~> s2 m-2]
+  real :: det_r, ddet_r   ! determinant and its derivative with lam at the lower end of the
+                          ! bracket in arbitrarily rescaled units, but such that the units of
+                          ! det_r/ddet_r are [T2 L-2 ~> s2 m-2]
+  real :: det_sub, ddet_sub ! determinant and its derivative with lam at a subinterval endpoint that
+                          ! is a candidate for a new bracket endpoint in arbitrarily rescaled units,
+                          ! but such that the units of det_sub/ddet_sub are [T2 L-2 ~> s2 m-2]
+  real :: xl, xr          ! lam guesses at left and right of window [T2 L-2 ~> s2 m-2]
   real :: xl_sub          ! lam guess at left of subinterval window [T2 L-2 ~> s2 m-2]
-  real,dimension(nmodes) :: &
-          xbl,xbr         ! lam guesses bracketing a zero-crossing (root) [T2 L-2 ~> s2 m-2]
+  real, dimension(nmodes) :: &
+          xbl, xbr        ! lam guesses bracketing a zero-crossing (root) [T2 L-2 ~> s2 m-2]
   integer :: numint       ! number of widows (intervals) in root searching range
   integer :: nrootsfound  ! number of extra roots found (not including 1st root)
   real :: Z_to_pres ! A conversion factor from thicknesses to pressure [R L2 T-2 Z-1 ~> Pa m-1]
@@ -699,14 +725,13 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, full_halos)
     HxR_here       ! A layer integrated density [R Z ~> kg m-2]
   real :: speed2_tot ! overestimate of the mode-1 speed squared [L2 T-2 ~> m2 s-2]
   real :: speed2_min ! minimum mode speed (squared) to consider in root searching [L2 T-2 ~> m2 s-2]
-  real :: cg1_min2 ! A floor in the squared first mode speed below which 0 is returned [L2 T-2 ~> m2 s-2]
-  real, parameter :: reduct_factor = 0.5
-                     ! A factor used in setting speed2_min [nondim]
-  real :: I_Hnew   ! The inverse of a new layer thickness [Z-1 ~> m-1]
-  real :: drxh_sum ! The sum of density differences across interfaces times thicknesses [R Z ~> kg m-2]
-  real :: g_Rho0   ! G_Earth/Rho0 [L2 T-2 Z-1 R-1 ~> m4 s-2 kg-1].
+  real :: cg1_min2   ! A floor in the squared first mode speed below which 0 is returned [L2 T-2 ~> m2 s-2]
+  real, parameter :: reduct_factor = 0.5  ! A factor used in setting speed2_min [nondim]
+  real :: I_Hnew     ! The inverse of a new layer thickness [Z-1 ~> m-1]
+  real :: drxh_sum   ! The sum of density differences across interfaces times thicknesses [R Z ~> kg m-2]
+  real :: g_Rho0     ! G_Earth/Rho0 [L2 T-2 Z-1 R-1 ~> m4 s-2 kg-1].
   real :: tol_Hfrac  ! Layers that together are smaller than this fraction of
-                     ! the total water column can be merged for efficiency.
+                     ! the total water column can be merged for efficiency [nondim].
   real :: min_h_frac ! tol_Hfrac divided by the total number of layers [nondim].
   real :: tol_solve  ! The fractional tolerance with which to solve for the wave speeds [nondim].
   real :: tol_merge  ! The fractional change in estimated wave speed that is allowed
@@ -727,10 +752,8 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, full_halos)
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
-  if (present(CS)) then
-    if (.not. CS%initialized) call MOM_error(FATAL, "MOM_wave_speed: "// &
-           "Module must be initialized before it is used.")
-  endif
+  if (.not. CS%initialized) call MOM_error(FATAL, "MOM_wave_speed / wave_speeds: "// &
+         "Module must be initialized before it is used.")
 
   if (present(full_halos)) then ; if (full_halos) then
     is = G%isd ; ie = G%ied ; js = G%jsd ; je = G%jed
@@ -740,26 +763,28 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, full_halos)
   ! Simplifying the following could change answers at roundoff.
   Z_to_pres = GV%Z_to_H * (GV%H_to_RZ * GV%g_Earth)
   use_EOS = associated(tv%eqn_of_state)
-  c1_thresh = 0.01*US%m_s_to_L_T
+  if (CS%c1_thresh < 0.0) &
+    call MOM_error(FATAL, "INTERNAL_WAVE_CG1_THRESH must be set to a non-negative "//&
+                          "value via wave_speed_init for wave_speeds to be used.")
   c2_scale = US%m_s_to_L_T**2 / 4096.0**2 ! Other powers of 2 give identical results.
 
-  better_est = .false. ; if (present(CS)) better_est = CS%better_cg1_est
+  better_est = CS%better_cg1_est
   if (better_est) then
-    tol_solve = 0.001 ; if (present(CS)) tol_solve = CS%wave_speed_tol
+    tol_solve = CS%wave_speed_tol
     tol_Hfrac  = 0.1*tol_solve ; tol_merge = tol_solve / real(nz)
   else
     tol_solve = 0.001 ; tol_Hfrac  = 0.0001 ; tol_merge = 0.001
   endif
-  cg1_min2 = 0.0 ; if (present(CS)) cg1_min2 = CS%min_speed2
+  cg1_min2 = CS%min_speed2
 
   ! Zero out all wave speeds.  Values over land or for columns that are too weakly stratified
   ! are not changed from this zero value.
   cn(:,:,:) = 0.0
 
   min_h_frac = tol_Hfrac / real(nz)
-  !$OMP parallel do default(private) shared(is,ie,js,je,nz,h,G,GV,US,min_h_frac,use_EOS, &
+  !$OMP parallel do default(private) shared(is,ie,js,je,nz,h,G,GV,US,CS,min_h_frac,use_EOS, &
   !$OMP                                     Z_to_pres,tv,cn,g_Rho0,nmodes,cg1_min2,better_est, &
-  !$OMP                                     c1_thresh,tol_solve,tol_merge,c2_scale)
+  !$OMP                                     tol_solve,tol_merge,c2_scale)
   do j=js,je
     !   First merge very thin layers with the one above (or below if they are
     ! at the top).  This also transposes the row order so that columns can
@@ -1021,7 +1046,7 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, full_halos)
 
             ! Find other eigen values if c1 is of significant magnitude, > cn_thresh
             nrootsfound = 0    ! number of extra roots found (not including 1st root)
-            if (nmodes>1 .and. kc>=nmodes+1 .and. cn(i,j,1)>c1_thresh) then
+            if ((nmodes > 1) .and. (kc >= nmodes+1) .and. (cn(i,j,1) > CS%c1_thresh)) then
               ! Set the the range to look for the other desired eigen values
               ! set min value just greater than the 1st root (found above)
               lamMin = lam_1*(1.0 + tol_solve)
@@ -1128,20 +1153,27 @@ end subroutine wave_speeds
 !! signs are typically used, so internal rescaling by consistent factors are used to avoid
 !! over- or underflow.
 subroutine tridiag_det(a, c, ks, ke, lam, det, ddet, row_scale)
-  real, dimension(:), intent(in) :: a     !< Lower diagonal of matrix (first entry unused)
-  real, dimension(:), intent(in) :: c     !< Upper diagonal of matrix (last entry unused)
+  real, dimension(:), intent(in) :: a     !< Lower diagonal of matrix (first entry unused) [T2 L-2 ~> s2 m-2]
+  real, dimension(:), intent(in) :: c     !< Upper diagonal of matrix (last entry unused) [T2 L-2 ~> s2 m-2]
   integer,            intent(in) :: ks    !< Starting index to use in determinant
   integer,            intent(in) :: ke    !< Ending index to use in determinant
-  real,               intent(in) :: lam   !< Value subtracted from b
-  real,               intent(out):: det   !< Determinant
-  real,               intent(out):: ddet  !< Derivative of determinant with lam
-  real,               intent(in) :: row_scale !< A scaling factor of the rows of the
-                                      !! matrix to limit the growth of the determinant
+  real,               intent(in) :: lam   !< Value subtracted from b [T2 L-2 ~> s2 m-2]
+  real,               intent(out):: det   !< Determinant of the matrix in dynamically rescaled units that
+                                          !! depend on the number of rows and the cumulative magnitude of
+                                          !! det and are therefore difficult to interpret, but the units
+                                          !! of det/ddet are always in [T2 L-2 ~> s2 m-2]
+  real,               intent(out):: ddet  !< Derivative of determinant with lam in units that are dynamically
+                                          !! rescaled along with those of det, such that the units of
+                                          !! det/ddet are always in [T2 L-2 ~> s2 m-2]
+  real,               intent(in) :: row_scale !< A scaling factor of the rows of the matrix to
+                                          !! limit the growth of the determinant [L2 s2 T-2 m-2 ~> 1]
   ! Local variables
-  real :: detKm1, detKm2   ! Cumulative value of the determinant for the previous two layers.
-  real :: ddetKm1, ddetKm2 ! Derivative of the cumulative determinant with lam for the previous two layers.
-  real, parameter :: rescale = 1024.0**4 ! max value of determinant allowed before rescaling
-  real :: I_rescale ! inverse of rescale
+  real :: detKm1, detKm2   ! Cumulative value of the determinant for the previous two layers in units
+                           ! that vary with the number of layers that have been worked on [various]
+  real :: ddetKm1, ddetKm2 ! Derivative of the cumulative determinant with lam for the previous two
+                           ! layers [various], but the units of detKm1/ddetKm1 are [T2 L-2 ~> s2 m-2]
+  real, parameter :: rescale = 1024.0**4 ! max value of determinant allowed before rescaling [nondim]
+  real :: I_rescale ! inverse of rescale [nondim]
   integer :: k      ! row (layer interface) index
 
   I_rescale = 1.0 / rescale
@@ -1170,13 +1202,13 @@ end subroutine tridiag_det
 
 !> Initialize control structure for MOM_wave_speed
 subroutine wave_speed_init(CS, use_ebt_mode, mono_N2_column_fraction, mono_N2_depth, remap_answers_2018, &
-                           remap_answer_date, better_speed_est, min_speed, wave_speed_tol)
+                           remap_answer_date, better_speed_est, min_speed, wave_speed_tol, c1_thresh)
   type(wave_speed_CS), intent(inout) :: CS  !< Wave speed control struct
   logical, optional, intent(in) :: use_ebt_mode  !< If true, use the equivalent
                                      !! barotropic mode instead of the first baroclinic mode.
   real,    optional, intent(in) :: mono_N2_column_fraction !< The lower fraction of water column over
                                      !! which N2 is limited as monotonic for the purposes of
-                                     !! calculating the vertical modal structure.
+                                     !! calculating the vertical modal structure [nondim].
   real,    optional, intent(in) :: mono_N2_depth !< The depth below which N2 is limited
                                      !! as monotonic for the purposes of calculating the
                                      !! vertical modal structure [Z ~> m].
@@ -1193,6 +1225,10 @@ subroutine wave_speed_init(CS, use_ebt_mode, mono_N2_column_fraction, mono_N2_de
                                      !! below which 0 is returned [L T-1 ~> m s-1].
   real,    optional, intent(in) :: wave_speed_tol !< The fractional tolerance for finding the
                                      !! wave speeds [nondim]
+  real,    optional, intent(in) :: c1_thresh !< A minimal value of the first mode internal wave speed
+                                       !! below which all higher mode speeds are not calculated but are
+                                       !! simply reported as 0 [L T-1 ~> m s-1].  A non-negative value
+                                       !! must be specified for wave_speeds to be used (but not wave_speed).
 
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
@@ -1204,10 +1240,11 @@ subroutine wave_speed_init(CS, use_ebt_mode, mono_N2_column_fraction, mono_N2_de
   call log_version(mdl, version)
 
   call wave_speed_set_param(CS, use_ebt_mode=use_ebt_mode, mono_N2_column_fraction=mono_N2_column_fraction, &
-                            better_speed_est=better_speed_est, min_speed=min_speed, wave_speed_tol=wave_speed_tol)
-  !### Uncomment this?      remap_answers_2018=remap_answers_2018, remap_answer_date=remap_answer_date)
+                            better_speed_est=better_speed_est, min_speed=min_speed, wave_speed_tol=wave_speed_tol, &
+                            remap_answers_2018=remap_answers_2018, remap_answer_date=remap_answer_date, &
+                            c1_thresh=c1_thresh)
 
-  !### The remap_answers_2018 argument is irrelevant, because remapping is hard-coded to use PLM.
+  ! The remap_answers_2018 argument here is irrelevant, because remapping is hard-coded to use PLM.
   call initialize_remapping(CS%remapping_CS, 'PLM', boundary_extrapolation=.false., &
                             answer_date=CS%remap_answer_date)
 
@@ -1215,14 +1252,14 @@ end subroutine wave_speed_init
 
 !> Sets internal parameters for MOM_wave_speed
 subroutine wave_speed_set_param(CS, use_ebt_mode, mono_N2_column_fraction, mono_N2_depth, remap_answers_2018, &
-                                remap_answer_date, better_speed_est, min_speed, wave_speed_tol)
+                                remap_answer_date, better_speed_est, min_speed, wave_speed_tol, c1_thresh)
   type(wave_speed_CS), intent(inout)  :: CS
                                       !< Control structure for MOM_wave_speed
   logical, optional, intent(in) :: use_ebt_mode  !< If true, use the equivalent
                                       !! barotropic mode instead of the first baroclinic mode.
   real,    optional, intent(in) :: mono_N2_column_fraction !< The lower fraction of water column over
                                       !! which N2 is limited as monotonic for the purposes of
-                                      !! calculating the vertical modal structure.
+                                      !! calculating the vertical modal structure [nondim].
   real,    optional, intent(in) :: mono_N2_depth !< The depth below which N2 is limited
                                       !! as monotonic for the purposes of calculating the
                                       !! vertical modal structure [Z ~> m].
@@ -1239,6 +1276,10 @@ subroutine wave_speed_set_param(CS, use_ebt_mode, mono_N2_column_fraction, mono_
                                      !! below which 0 is returned [L T-1 ~> m s-1].
   real,    optional, intent(in) :: wave_speed_tol !< The fractional tolerance for finding the
                                      !! wave speeds [nondim]
+  real,    optional, intent(in) :: c1_thresh !< A minimal value of the first mode internal wave speed
+                                       !! below which all higher mode speeds are not calculated but are
+                                       !! simply reported as 0 [L T-1 ~> m s-1].  A non-negative value
+                                       !! must be specified for wave_speeds to be used (but not wave_speed).
 
   if (present(use_ebt_mode)) CS%use_ebt_mode = use_ebt_mode
   if (present(mono_N2_column_fraction)) CS%mono_N2_column_fraction = mono_N2_column_fraction
@@ -1254,6 +1295,7 @@ subroutine wave_speed_set_param(CS, use_ebt_mode, mono_N2_column_fraction, mono_
   if (present(better_speed_est)) CS%better_cg1_est = better_speed_est
   if (present(min_speed)) CS%min_speed2 = min_speed**2
   if (present(wave_speed_tol)) CS%wave_speed_tol = wave_speed_tol
+  if (present(c1_thresh)) CS%c1_thresh = c1_thresh
 
 end subroutine wave_speed_set_param
 

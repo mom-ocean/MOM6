@@ -94,7 +94,7 @@ subroutine dyed_channel_set_OBC_tracer_data(OBC, G, GV, param_file, tr_Reg)
   character(len=40)  :: mdl = "dyed_channel_set_OBC_tracer_data" ! This subroutine's name.
   character(len=80)  :: name, longname
   integer :: m, n
-  real :: dye
+  real :: dye  ! Inflow dye concentrations [arbitrary]
   type(tracer_type), pointer      :: tr_ptr => NULL()
 
   if (.not.associated(OBC)) call MOM_error(FATAL, 'dyed_channel_initialization.F90: '// &
@@ -142,7 +142,7 @@ subroutine dyed_channel_update_flow(OBC, CS, G, GV, US, Time)
   type(time_type),            intent(in) :: Time !< model time.
   ! Local variables
   real :: flow      ! The OBC velocity [L T-1 ~> m s-1]
-  real :: PI        ! 3.1415926535...
+  real :: PI        ! 3.1415926535... [nondim]
   real :: time_sec  ! The elapsed time since the start of the calendar [T ~> s]
   integer :: i, j, k, l, isd, ied, jsd, jed
   integer :: IsdB, IedB, JsdB, JedB

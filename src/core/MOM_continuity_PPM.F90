@@ -1044,7 +1044,7 @@ subroutine meridional_mass_flux(v, h_in, vh, dt, G, GV, US, CS, LB, OBC, por_fac
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(in)    :: h_in !< Layer thickness used to
                                                                     !! calculate fluxes [H ~> m or kg m-2]
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), intent(out)   :: vh   !< Volume flux through meridional
-                                                                    !! faces = v*h*dx [H L2 s-1 ~> m3 s-1 or kg s-1]
+                                                                    !! faces = v*h*dx [H L2 T-1 ~> m3 s-1 or kg s-1]
   real,                                       intent(in)    :: dt   !< Time increment [T ~> s].
   type(unit_scale_type),                      intent(in)    :: US   !< A dimensional unit scaling type
   type(continuity_PPM_CS),                    intent(in)    :: CS   !< This module's control structure.G

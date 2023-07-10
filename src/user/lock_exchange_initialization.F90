@@ -36,8 +36,8 @@ subroutine lock_exchange_initialize_thickness(h, G, GV, US, param_file, just_rea
 
   real :: eta1D(SZK_(GV)+1)! Interface height relative to the sea surface
                            ! positive upward [Z ~> m].
-  real :: front_displacement ! Vertical displacement acrodd front
-  real :: thermocline_thickness ! Thickness of stratified region
+  real :: front_displacement ! Vertical displacement across front [Z ~> m]
+  real :: thermocline_thickness ! Thickness of stratified region [Z ~> m]
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
   character(len=40)  :: mdl = "lock_exchange_initialize_thickness" ! This subroutine's name.

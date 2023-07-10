@@ -4432,7 +4432,7 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, US, param_file, diag, CS, 
                  "If NONLINEAR_BT_CONTINUITY is true, this is the number "//&
                  "of barotropic time steps between updates to the face "//&
                  "areas, or 0 to update only before the barotropic stepping.", &
-                 units="nondim", default=1, do_not_log=.not.CS%Nonlinear_continuity)
+                 default=1, do_not_log=.not.CS%Nonlinear_continuity)
 
   call get_param(param_file, mdl, "BT_PROJECT_VELOCITY", CS%BT_project_velocity,&
                  "If true, step the barotropic velocity first and project "//&
@@ -4614,6 +4614,8 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, US, param_file, diag, CS, 
                  "gravity waves) to 1 (for a backward Euler treatment). "//&
                  "In practice, BEBT must be greater than about 0.05.", &
                  units="nondim", default=0.1)
+  ! Note that dtbt_input is not rescaled because it has different units for
+  ! positive [s] and negative [nondim] values.
   call get_param(param_file, mdl, "DTBT", dtbt_input, &
                  "The barotropic time step, in s. DTBT is only used with "//&
                  "the split explicit time stepping. To set the time step "//&
@@ -4621,8 +4623,8 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, US, param_file, diag, CS, 
                  "a negative value gives the fraction of the stable value. "//&
                  "Setting DTBT to 0 is the same as setting it to -0.98. "//&
                  "The value of DTBT that will actually be used is an "//&
-                 "integer fraction of DT, rounding down.", units="s or nondim",&
-                 default = -0.98)
+                 "integer fraction of DT, rounding down.", &
+                 units="s or nondim", default=-0.98)
   call get_param(param_file, mdl, "BT_USE_OLD_CORIOLIS_BRACKET_BUG", &
                  CS%use_old_coriolis_bracket_bug , &
                  "If True, use an order of operations that is not bitwise "//&
@@ -4802,8 +4804,8 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, US, param_file, diag, CS, 
   endif
   if ((dtbt_tmp > 0.0) .and. (dtbt_input > 0.0)) calc_dtbt = .false.
 
-  call log_param(param_file, mdl, "DTBT as used", CS%dtbt*US%T_to_s)
-  call log_param(param_file, mdl, "estimated maximum DTBT", CS%dtbt_max*US%T_to_s)
+  call log_param(param_file, mdl, "DTBT as used", CS%dtbt, units="s", unscale=US%T_to_s)
+  call log_param(param_file, mdl, "estimated maximum DTBT", CS%dtbt_max, units="s", unscale=US%T_to_s)
 
   ! ubtav and vbtav, and perhaps ubt_IC and vbt_IC, are allocated and
   ! initialized in register_barotropic_restarts.

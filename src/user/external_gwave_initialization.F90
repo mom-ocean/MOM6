@@ -39,12 +39,13 @@ subroutine external_gwave_initialize_thickness(h, G, GV, US, param_file, just_re
   real :: eta1D(SZK_(GV)+1)  ! Interface height relative to the sea surface
                              ! positive upward [Z ~> m].
   real :: ssh_anomaly_height ! Vertical height of ssh anomaly [Z ~> m]
-  real :: ssh_anomaly_width ! Lateral width of anomaly [degrees]
+  real :: ssh_anomaly_width  ! Lateral width of anomaly, often in [km] or [degrees_E]
   character(len=40)  :: mdl = "external_gwave_initialize_thickness" ! This subroutine's name.
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
   integer :: i, j, k, is, ie, js, je, nz
-  real :: PI, Xnondim
+  real :: PI       ! The ratio of the circumference of a circle to its diameter [nondim]
+  real :: Xnondim  ! A normalized x position [nondim]
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
@@ -53,11 +54,11 @@ subroutine external_gwave_initialize_thickness(h, G, GV, US, param_file, just_re
 
   if (.not.just_read) call log_version(param_file, mdl, version, "")
   call get_param(param_file, mdl, "SSH_ANOMALY_HEIGHT", ssh_anomaly_height, &
-                 "The vertical displacement of the SSH anomaly. ", units="m", scale=US%m_to_Z, &
-                 fail_if_missing=.not.just_read, do_not_log=just_read)
+                 "The vertical displacement of the SSH anomaly. ", &
+                 units="m", scale=US%m_to_Z, fail_if_missing=.not.just_read, do_not_log=just_read)
   call get_param(param_file, mdl, "SSH_ANOMALY_WIDTH", ssh_anomaly_width, &
-                 "The lateral width of the SSH anomaly. ", units="coordinate", &
-                 fail_if_missing=.not.just_read, do_not_log=just_read)
+                 "The lateral width of the SSH anomaly. ", &
+                 units=G%x_ax_unit_short, fail_if_missing=.not.just_read, do_not_log=just_read)
 
   if (just_read) return ! All run-time parameters have been read, so return.
 

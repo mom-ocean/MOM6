@@ -68,7 +68,7 @@ subroutine Phillips_initialize_thickness(h, depth_tot, G, GV, US, param_file, ju
   if (.not.just_read) call log_version(param_file, mdl, version)
   call get_param(param_file, mdl, "HALF_STRAT_DEPTH", half_strat, &
                  "The fractional depth where the stratification is centered.", &
-                 units="nondim", default = 0.5, do_not_log=just_read)
+                 units="nondim", default=0.5, do_not_log=just_read)
   call get_param(param_file, mdl, "JET_WIDTH", jet_width, &
                  "The width of the zonal-mean jet.", units="km", &
                  fail_if_missing=.not.just_read, do_not_log=just_read)
@@ -233,16 +233,16 @@ subroutine Phillips_initialize_sponges(G, GV, US, tv, param_file, CSp, h)
   real, intent(in), dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: h !< Thickness field [H ~> m or kg m-2].
 
   ! Local variables
-  real :: eta0(SZK_(GV)+1)  ! The 1-d nominal positions of the interfaces.
+  real :: eta0(SZK_(GV)+1)  ! The 1-d nominal positions of the interfaces [Z ~> m]
   real :: eta(SZI_(G),SZJ_(G),SZK_(GV)+1) ! A temporary array for interface heights [Z ~> m].
-  real :: temp(SZI_(G),SZJ_(G),SZK_(GV)) ! A temporary array for other variables.
+  real :: temp(SZI_(G),SZJ_(G),SZK_(GV)) ! A temporary array for other variables [various]
   real :: Idamp(SZI_(G),SZJ_(G))    ! The sponge damping rate [T-1 ~> s-1]
   real :: eta_im(SZJ_(G),SZK_(GV)+1) ! A temporary array for zonal-mean eta [Z ~> m].
   real :: Idamp_im(SZJ_(G))         ! The inverse zonal-mean damping rate [T-1 ~> s-1].
   real :: damp_rate    ! The inverse zonal-mean damping rate [T-1 ~> s-1].
-  real :: jet_width    ! The width of the zonal mean jet, in km.
+  real :: jet_width    ! The width of the zonal mean jet [km].
   real :: jet_height   ! The interface height scale associated with the zonal-mean jet [Z ~> m].
-  real :: y_2          ! The y-position relative to the channel center, in km.
+  real :: y_2          ! The y-position relative to the channel center [km].
   real :: half_strat   ! The fractional depth where the straficiation is centered [nondim].
   real :: half_depth   ! The depth where the stratification is centered [Z ~> m].
   real :: pi              ! The ratio of the circumference of a circle to its diameter [nondim]
@@ -262,10 +262,10 @@ subroutine Phillips_initialize_sponges(G, GV, US, tv, param_file, CSp, h)
   first_call = .false.
   call get_param(param_file, mdl, "HALF_STRAT_DEPTH", half_strat, &
                  "The fractional depth where the stratificaiton is centered.", &
-                 units="nondim", default = 0.5)
+                 units="nondim", default=0.5)
   call get_param(param_file, mdl, "SPONGE_RATE", damp_rate, &
                  "The rate at which the zonal-mean sponges damp.", &
-                 units="s-1", default = 1.0/(10.0*86400.0), scale=US%T_to_s)
+                 units="s-1", default=1.0/(10.0*86400.0), scale=US%T_to_s)
 
   call get_param(param_file, mdl, "JET_WIDTH", jet_width, &
                  "The width of the zonal-mean jet.", units="km", &
@@ -309,8 +309,8 @@ end subroutine Phillips_initialize_sponges
 
 !> sech calculates the hyperbolic secant.
 function sech(x)
-  real, intent(in) :: x    !< Input value.
-  real             :: sech !< Result.
+  real, intent(in) :: x    !< Input value [nondim].
+  real             :: sech !< Result [nondim].
 
   ! This is here to prevent overflows or underflows.
   if (abs(x) > 228.) then
@@ -330,9 +330,14 @@ subroutine Phillips_initialize_topography(D, G, param_file, max_depth, US)
   type(unit_scale_type),           intent(in)  :: US !< A dimensional unit scaling type
 
   ! Local variables
-  real :: PI, Htop, Wtop, Ltop, offset, dist
-  real :: x1, x2, x3, x4, y1, y2
-  integer :: i,j,is,ie,js,je
+  real :: PI       ! The ratio of the circumference of a circle to its diameter [nondim]
+  real :: Htop     ! The maximum height of the topography above max_depth [Z ~> m]
+  real :: Wtop     ! meridional width of topographic features [km]
+  real :: Ltop     ! zonal width of topographic features [km]
+  real :: offset   ! meridional offset from the center of topographic features [km]
+  real :: dist     ! zonal width of topographic features [km]
+  real :: x1, x2, x3, x4, y1, y2 ! Various positions in the domain [km]
+  integer :: i, j, is, ie, js, je
   character(len=40)  :: mdl = "Phillips_initialize_topography" ! This subroutine's name.
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
@@ -349,10 +354,10 @@ subroutine Phillips_initialize_topography(D, G, param_file, max_depth, US)
   dist = 0.333*G%len_lon   ! distance between drake and mount
                            ! should be longer than Ltop/2
 
-  y1=G%south_lat+0.5*G%len_lat+offset-0.5*Wtop; y2=y1+Wtop
-  x1=G%west_lon+0.1*G%len_lon; x2=x1+Ltop; x3=x1+dist; x4=x3+3.0/2.0*Ltop
+  y1 = G%south_lat+0.5*G%len_lat+offset-0.5*Wtop ; y2 = y1+Wtop
+  x1 = G%west_lon+0.1*G%len_lon ; x2 = x1+Ltop ; x3 = x1+dist ; x4 = x3+3.0/2.0*Ltop
 
-  do i=is,ie ; do j=js,je
+  do j=js,je ; do i=is,ie
     D(i,j)=0.0
     if (G%geoLonT(i,j)>x1 .and. G%geoLonT(i,j)<x2) then
       D(i,j) = Htop*sin(PI*(G%geoLonT(i,j)-x1)/(x2-x1))**2

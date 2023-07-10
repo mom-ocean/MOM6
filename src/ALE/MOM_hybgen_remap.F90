@@ -263,7 +263,7 @@ subroutine hybgen_weno_coefs(s, h_src, edges, nk, ns, thin, PCM_lay)
 !  real, parameter :: dsmll=1.0e-8  ! This has units of [A2], and hence can not be a parameter.
 !
   real :: curv_cell   ! An estimate of the tracer curvature centered on a cell times the grid
-                      ! spacing [A H-1 ~> A m-1 or A kg m-2]
+                      ! spacing [A H-1 ~> A m-1 or A m2 kg-1]
   real :: seh1, seh2  ! Tracer slopes at the cell edges times the cell grid spacing [A]
   real :: q01, q02    ! Various tracer differences between a cell average and the edge values [A]
   real :: q001, q002  ! Tracer slopes at the cell edges times the cell grid spacing [A]
@@ -277,7 +277,7 @@ subroutine hybgen_weno_coefs(s, h_src, edges, nk, ns, thin, PCM_lay)
                       ! concentrations and the left and right edges [A2]
   real :: min_ratio   ! The minimum ratio of the values of zw used to interpolate the edge values [nondim]
   real :: wt1         ! The weight of the upper layer in the interpolated shared edge value [nondim]
-  real :: slope_edge(nk+1)  ! Tracer slopes at the edges [A H-1 ~> A m-1 or A kg m-2]
+  real :: slope_edge(nk+1)  ! Tracer slopes at the edges [A H-1 ~> A m-1 or A m2 kg-1]
   real :: val_edge(nk+1)    ! A weighted average edge concentration [A]
   integer :: i, k
 

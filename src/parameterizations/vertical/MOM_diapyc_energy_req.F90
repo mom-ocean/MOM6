@@ -68,9 +68,11 @@ subroutine diapyc_energy_req_test(h_3d, dt, tv, G, GV, US, CS, Kd_int)
   real, dimension(GV%ke+1) :: &
     Kd, &       ! A column of diapycnal diffusivities at interfaces [Z2 T-1 ~> m2 s-1].
     h_top, h_bot ! Distances from the top or bottom [H ~> m or kg m-2].
-  real :: ustar, absf, htot
+  real :: ustar  ! The local friction velocity [Z T-1 ~> m s-1]
+  real :: absf   ! The absolute value of the Coriolis parameter [T-1 ~> s-1]
+  real :: htot   ! The sum of the thicknesses [H ~> m or kg m-2].
   real :: energy_Kd ! The energy used by diapycnal mixing [R Z L2 T-3 ~> W m-2].
-  real :: tmp1  ! A temporary array.
+  real :: tmp1  ! A temporary array [H Z ~> m2 or kg m-1]
   integer :: i, j, k, is, ie, js, je, nz
   logical :: may_print
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
@@ -100,7 +102,7 @@ subroutine diapyc_energy_req_test(h_3d, dt, tv, G, GV, US, CS, Kd_int)
 
       ustar = 0.01*US%m_to_Z*US%T_to_s ! Change this to being an input parameter?
       absf = 0.25*((abs(G%CoriolisBu(I-1,J-1)) + abs(G%CoriolisBu(I,J))) + &
-                             (abs(G%CoriolisBu(I-1,J-1)) + abs(G%CoriolisBu(I,J))))
+                   (abs(G%CoriolisBu(I-1,J-1)) + abs(G%CoriolisBu(I,J))))
       Kd(1) = 0.0 ; Kd(nz+1) = 0.0
       do K=2,nz
         tmp1 = h_top(K) * h_bot(K) * GV%H_to_Z
@@ -168,24 +170,38 @@ subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, &
                 ! mixing effects with other yet lower layers [C H ~> degC m or degC kg m-2].
     Sh_b, &     ! An effective salinity times a thickness in the layer below, including implicit
                 ! mixing effects with other yet lower layers [S H ~> ppt m or ppt kg m-2].
-    dT_to_dPE, & ! Partial derivative of column potential energy with the temperature and salinity
-    dS_to_dPE, & ! changes within a layer [R Z L2 T-2 C-1 ~> J m-2 degC-1] and [R Z L2 T-2 S-1 ~> J m-2 ppt-1]
-    dT_to_dColHt, & ! Partial derivatives of the total column height with the temperature
-    dS_to_dColHt, & ! and salinity changes within a layer [Z C-1 ~> m degC-1] and [Z S-1 ~> m ppt-1].
-    dT_to_dColHt_a, & ! Partial derivatives of the total column height with the temperature
-    dS_to_dColHt_a, & ! and salinity changes within a layer, including the implicit effects
-                    ! of mixing with layers higher in the water column [Z C-1 ~> m degC-1] and [Z S-1 ~> m ppt-1].
-    dT_to_dColHt_b, & ! Partial derivatives of the total column height with the temperature
-    dS_to_dColHt_b, & ! and salinity changes within a layer, including the implicit effects
-                    ! of mixing with layers lower in the water column [Z C-1 ~> m degC-1] and [Z S-1 ~> m ppt-1].
-    dT_to_dPE_a, &  ! Partial derivatives of column potential energy with the temperature
-    dS_to_dPE_a, &  ! and salinity changes within a layer, including the implicit effects
-                    ! of mixing with layers higher in the water column, in
-                    ! units of [R Z L2 T-2 C-1 ~> J m-2 degC-1] and [R Z L2 T-2 S-1 ~> J m-2 ppt-1].
-    dT_to_dPE_b, &  ! Partial derivatives of column potential energy with the temperature
-    dS_to_dPE_b, &  ! and salinity changes within a layer, including the implicit effects
-                    ! of mixing with layers lower in the water column, in
-                    ! units of [R Z L2 T-2 C-1 ~> J m-2 degC-1] and [R Z L2 T-2 S-1 ~> J m-2 ppt-1].
+    dT_to_dPE, & ! Partial derivative of column potential energy with the temperature changes within
+                 ! a layer [R Z L2 T-2 C-1 ~> J m-2 degC-1]
+    dS_to_dPE, & ! Partial derivative of column potential energy with the salinity changes within
+                 ! a layer [R Z L2 T-2 S-1 ~> J m-2 ppt-1]
+    dT_to_dColHt, & ! Partial derivative of the total column height with the temperature
+                    ! changes within a layer [Z C-1 ~> m degC-1]
+    dS_to_dColHt, & ! Partial derivative of the total column height with the
+                    ! salinity changes within a layer [Z S-1 ~> m ppt-1].
+    dT_to_dColHt_a, & ! Partial derivative of the total column height with the temperature changes
+                    ! within a layer, including the implicit effects of mixing with layers higher
+                    ! in the water column [Z C-1 ~> m degC-1].
+    dS_to_dColHt_a, & ! Partial derivative of the total column height with the salinity changes
+                    ! within a layer, including the implicit effects of mixing with layers higher
+                    ! of mixing with layers higher in the water column [Z S-1 ~> m ppt-1].
+    dT_to_dColHt_b, & ! Partial derivative of the total column height with the temperature changes
+                    ! within a layer, including the implicit effects of mixing with layers lower
+                    ! in the water column [Z C-1 ~> m degC-1].
+    dS_to_dColHt_b, & ! Partial derivative of the total column height with the salinity changes
+                    ! within a layer, including the implicit effects of mixing with layers lower
+                    ! in the water column [Z S-1 ~> m ppt-1].
+    dT_to_dPE_a, &  ! Partial derivative of column potential energy with the temperature changes
+                    ! within a layer, including the implicit effects of mixing with layers higher
+                    ! in the water column, in units of [R Z L2 T-2 C-1 ~> J m-2 degC-1].
+    dS_to_dPE_a, &  ! Partial derivative of column potential energy with the salinity changes
+                    ! within a layer, including the implicit effects of mixing with layers higher
+                    ! in the water column, in units of [R Z L2 T-2 S-1 ~> J m-2 ppt-1].
+    dT_to_dPE_b, &  ! Partial derivative of column potential energy with the temperature changes
+                    ! within a layer, including the implicit effects  of mixing with layers lower
+                    ! in the water column, in units of [R Z L2 T-2 C-1 ~> J m-2 degC-1].
+    dS_to_dPE_b, &  ! Partial derivative of column potential energy with the salinity changes
+                    ! within a layer, including the implicit effects  of mixing with layers lower
+                    ! in the water column, in units of [R Z L2 T-2 S-1 ~> J m-2 ppt-1].
     hp_a, &     ! An effective pivot thickness of the layer including the effects
                 ! of coupling with layers above [H ~> m or kg m-2].  This is the first term
                 ! in the denominator of b1 in a downward-oriented tridiagonal solver.
@@ -243,16 +259,26 @@ subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, &
 
   ! The following are a bunch of diagnostic arrays for debugging purposes.
   real, dimension(GV%ke) :: &
-    Ta, Sa, Tb, Sb
+    Ta, Tb, &   ! Copies of temperature profiles for debugging [C ~> degC]
+    Sa, Sb      ! Copies of salinity profiles for debugging [S ~> ppt]
   real, dimension(GV%ke+1) :: &
-    dPEa_dKd, dPEa_dKd_est, dPEa_dKd_err, dPEa_dKd_trunc, dPEa_dKd_err_norm, &
-    dPEb_dKd, dPEb_dKd_est, dPEb_dKd_err, dPEb_dKd_trunc, dPEb_dKd_err_norm
-  real :: PE_chg_tot1A, PE_chg_tot2A, T_chg_totA
-  real :: PE_chg_tot1B, PE_chg_tot2B, T_chg_totB
-  real :: PE_chg_tot1C, PE_chg_tot2C, T_chg_totC
-  real :: PE_chg_tot1D, PE_chg_tot2D, T_chg_totD
-  real, dimension(GV%ke+1)  :: dPEchg_dKd
-  real :: PE_chg(6)
+    dPEa_dKd, dPEa_dKd_est, &   ! Estimates of the partial derivative of the column potential energy
+                                ! change with Kddt_h  [R Z L2 T-2 H-1 ~> J m-3 or J kg-1].
+    dPEb_dKd, dPEb_dKd_est, &   ! Estimates of the partial derivative of the column potential energy
+                                ! change with Kddt_h  [R Z L2 T-2 H-1 ~> J m-3 or J kg-1].
+    dPEa_dKd_err, dPEb_dKd_err, & ! Differences in estimates of the partial derivative of the column
+                                ! potential energy change with Kddt_h  [R Z L2 T-2 H-1 ~> J m-3 or J kg-1].
+    dPEa_dKd_err_norm, dPEb_dKd_err_norm, & ! Normalized changes in sensitivities [nondim]
+    dPEa_dKd_trunc, dPEb_dKd_trunc ! Estimates of the truncation error in estimates of the partial
+                                ! derivative of the column potential energy change with
+                                ! Kddt_h  [R Z L2 T-2 H-1 ~> J m-3 or J kg-1].
+  real :: PE_chg_tot1A, PE_chg_tot2A ! Changes in column potential energy [R Z L2 T-2 ~> J m-2]
+  real :: PE_chg_tot1B, PE_chg_tot2B ! Changes in column potential energy [R Z L2 T-2 ~> J m-2]
+  real :: PE_chg_tot1C, PE_chg_tot2C ! Changes in column potential energy [R Z L2 T-2 ~> J m-2]
+  real :: PE_chg_tot1D, PE_chg_tot2D ! Changes in column potential energy [R Z L2 T-2 ~> J m-2]
+  real :: T_chg_totA, T_chg_totB ! Vertically integrated temperature changes [C H ~> degC m or degC kg m-2]
+  real :: T_chg_totC, T_chg_totD ! Vertically integrated temperature changes [C H ~> degC m or degC kg m-2]
+  real :: PE_chg(6) ! The potential energy change within the first few iterations [R Z L2 T-2 ~> J m-2]
 
   integer :: k, nz, itt, k_cent
   logical :: surface_BL, bottom_BL, central, halves, debug
@@ -309,7 +335,6 @@ subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, &
 !  PE_chg_k(1) = 0.0 ; PE_chg_k(nz+1) = 0.0
   ! PEchg(:) = 0.0
   PE_chg_k(:,:) = 0.0 ; ColHt_cor_k(:,:) = 0.0
-  dPEchg_dKd(:) = 0.0
 
   if (surface_BL) then  ! This version is appropriate for a surface boundary layer.
     old_PE_calc = .false.
@@ -1031,7 +1056,7 @@ subroutine find_PE_chg(Kddt_h0, dKddt_h, hp_a, hp_b, Th_a, Sh_a, Th_b, Sh_b, &
   real, optional, intent(out) :: dPEc_dKd !< The partial derivative of PE_chg with Kddt_h,
                                           !! [R Z L2 T-2 H-1 ~> J m-3 or J kg-1].
   real, optional, intent(out) :: dPE_max  !< The maximum change in column potential energy that could
-                                          !! be realizedd by applying a huge value of Kddt_h at the
+                                          !! be realized by applying a huge value of Kddt_h at the
                                           !! present interface [R Z L2 T-2 ~> J m-2].
   real, optional, intent(out) :: dPEc_dKd_0 !< The partial derivative of PE_chg with Kddt_h in the
                                             !! limit where Kddt_h = 0 [R Z L2 T-2 H-1 ~> J m-3 or J kg-1].

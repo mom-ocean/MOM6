@@ -86,7 +86,7 @@ end type tracer_hor_diff_CS
 
 !> A type that can be used to create arrays of pointers to 2D arrays
 type p2d
-  real, dimension(:,:), pointer :: p => NULL() !< A pointer to a 2D array of reals
+  real, dimension(:,:), pointer :: p => NULL() !< A pointer to a 2D array of reals [various]
 end type p2d
 !> A type that can be used to create arrays of pointers to 2D integer arrays
 type p2di
@@ -123,12 +123,13 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, GV, US, CS, Reg, tv, do_online
   ! Optional inputs for offline tracer transport
   logical,          optional, intent(in)    :: do_online_flag !< If present and true, do online
                                                        !! tracer transport with stored velocities.
+  ! The next two arguments do not appear to be used anywhere.
   real, dimension(SZIB_(G),SZJ_(G)), &
-                    optional, intent(in)    :: read_khdt_x !< If present, these are the zonal
-                                                       !! diffusivities from previous run.
+                    optional, intent(in)    :: read_khdt_x !< If present, these are the zonal diffusivities
+                                                       !! times a timestep from a previous run [L2 ~> m2]
   real, dimension(SZI_(G),SZJB_(G)), &
-                    optional, intent(in)    :: read_khdt_y !< If present, these are the meridional
-                                                       !! diffusivities from previous run.
+                    optional, intent(in)    :: read_khdt_y !< If present, these are the meridional diffusivities
+                                                       !! times a timestep from a previous run [L2 ~> m2]
 
 
   real, dimension(SZI_(G),SZJ_(G)) :: &
@@ -152,10 +153,10 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, GV, US, CS, Reg, tv, do_online
     Kh_v          ! Tracer mixing coefficient at u-points [L2 T-1 ~> m2 s-1].
 
   real :: khdt_max ! The local limiting value of khdt_x or khdt_y [L2 ~> m2].
-  real :: max_CFL ! The global maximum of the diffusive CFL number.
+  real :: max_CFL ! The global maximum of the diffusive CFL number [nondim]
   logical :: use_VarMix, Resoln_scaled, do_online, use_Eady
   integer :: i, j, k, m, is, ie, js, je, nz, ntr, itt, num_itts
-  real :: I_numitts  ! The inverse of the number of iterations, num_itts.
+  real :: I_numitts  ! The inverse of the number of iterations, num_itts [nondim]
   real :: scale      ! The fraction of khdt_x or khdt_y that is applied in this
                      ! layer for this iteration [nondim].
   real :: Idt        ! The inverse of the time step [T-1 ~> s-1].
@@ -164,7 +165,7 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, GV, US, CS, Reg, tv, do_online
   real :: Kh_loc     ! The local value of Kh [L2 T-1 ~> m2 s-1].
   real :: Res_Fn     ! The local value of the resolution function [nondim].
   real :: Rd_dx      ! The local value of deformation radius over grid-spacing [nondim].
-  real :: normalize  ! normalization used for diagnostic Kh_h; diffusivity averaged to h-points.
+  real :: normalize  ! normalization used for diagnostic Kh_h [nondim]; diffusivity averaged to h-points.
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
@@ -337,11 +338,11 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, GV, US, CS, Reg, tv, do_online
   else ! .not. do_online
     !$OMP parallel do default(shared)
     do j=js,je ; do I=is-1,ie
-      khdt_x(I,j) = US%m_to_L**2*read_khdt_x(I,j)
+      khdt_x(I,j) = read_khdt_x(I,j)
     enddo ; enddo
     !$OMP parallel do default(shared)
     do J=js-1,je ;  do i=is,ie
-      khdt_y(i,J) = US%m_to_L**2*read_khdt_y(i,J)
+      khdt_y(i,J) = read_khdt_y(i,J)
     enddo ; enddo
     call pass_vector(khdt_x, khdt_y, G%Domain)
   endif ! do_online
@@ -561,7 +562,7 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, GV, US, CS, Reg, tv, do_online
     enddo ; enddo
     do j=js,je ; do i=is,ie
       normalize = 1.0 / ((G%mask2dCu(I-1,j)+G%mask2dCu(I,j)) + &
-                  (G%mask2dCv(i,J-1)+G%mask2dCv(i,J)) + GV%H_subroundoff)
+                         (G%mask2dCv(i,J-1)+G%mask2dCv(i,J)) + 1.0e-37)
       Kh_h(i,j) = normalize*G%mask2dT(i,j)*((Kh_u(I-1,j)+Kh_u(I,j)) + &
                                             (Kh_v(i,J-1)+Kh_v(i,J)))
     enddo ; enddo
@@ -633,24 +634,36 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
     k0b_Lv, k0a_Lv, &  ! The original k-indices of the layers that participate
     k0b_Rv, k0a_Rv     ! in each pair of mixing at v-faces.
 
+  !### Accumulating the converge into this array one face at a time may lead to a lack of rotational symmetry.
   real, dimension(SZI_(G), SZJ_(G), SZK_(GV)) :: &
     tr_flux_conv  ! The flux convergence of tracers [conc H L2 ~> conc m3 or conc kg]
-  real, dimension(SZI_(G), SZJ_(G),SZK_(GV)) :: Tr_flux_3d, Tr_adj_vert_L, Tr_adj_vert_R
+
+  ! The following 3-d arrays were created in 2014 in MOM6 PR#12 to facilitate openMP threading
+  ! on an i-loop, which might have been ill advised.  The k-size extents here might also be problematic.
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)) :: &
+    Tr_flux_3d, &     ! The tracer flux through pairings at meridional faces [conc H L2 ~> conc m3 or conc kg]
+    Tr_adj_vert_L, &  ! Vertical adjustments to which layer the fluxes go into in the southern
+                      ! columns at meridional face [conc H L2 ~> conc m3 or conc kg]
+    Tr_adj_vert_R     ! Vertical adjustments to which layer the fluxes go into in the northern
+                      ! columns at meridional face [conc H L2 ~> conc m3 or conc kg]
 
   real, dimension(SZI_(G),SZK_(GV), SZJ_(G)) :: &
     rho_srt, & ! The density of each layer of the sorted columns [R ~> kg m-3].
     h_srt      ! The thickness of each layer of the sorted columns [H ~> m or kg m-2].
   integer, dimension(SZI_(G),SZK_(GV), SZJ_(G)) :: &
-    k0_srt     ! The original k-index that each layer of the sorted column
-               ! corresponds to.
+    k0_srt     ! The original k-index that each layer of the sorted column corresponds to.
 
   real, dimension(SZK_(GV)) :: &
-    h_demand_L, & ! The thickness in the left (_L) or right (_R) column that
-    h_demand_R, & ! is demanded to match the thickness in the counterpart [H ~> m or kg m-2].
-    h_used_L, &   ! The summed thickness from the left or right columns that
-    h_used_R, &   ! have actually been used [H ~> m or kg m-2].
-    h_supply_frac_L, &  ! The fraction of the demanded thickness that can
-    h_supply_frac_R     ! actually be supplied from a layer.
+    h_demand_L, & ! The thickness in the left column that is demanded to match the thickness
+                  ! in the counterpart [H ~> m or kg m-2].
+    h_demand_R, & ! The thickness in the right column that is demanded to match the thickness
+                  ! in the counterpart [H ~> m or kg m-2].
+    h_used_L, &   ! The summed thickness from the left column that has actually been used [H ~> m or kg m-2]
+    h_used_R, &   ! The summed thickness from the right columns that has actually been used [H ~> m or kg m-2]
+    h_supply_frac_L, & ! The fraction of the demanded thickness that can actually be supplied
+                       ! from a layer on the left [nondim].
+    h_supply_frac_R    ! The fraction of the demanded thickness that can actually be supplied
+                       ! from a layer on the right [nondim].
   integer, dimension(SZI_(G), SZJ_(G))  :: &
     num_srt, &   ! The number of layers that are sorted in each column.
     k_end_srt, & ! The maximum index in each column that might need to be
@@ -666,17 +679,17 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
   real :: h_exclude    ! A thickness that layers must attain to be considered
                        ! for inclusion in mixing [H ~> m or kg m-2].
   real :: Idt        ! The inverse of the time step [T-1 ~> s-1].
-  real :: I_maxitt   ! The inverse of the maximum number of iterations.
+  real :: I_maxitt   ! The inverse of the maximum number of iterations [nondim]
   real :: rho_pair, rho_a, rho_b  ! Temporary densities [R ~> kg m-3].
-  real :: Tr_min_face  ! The minimum and maximum tracer concentrations
-  real :: Tr_max_face  ! associated with a pairing [Conc]
-  real :: Tr_La, Tr_Lb ! The 4 tracer concentrations that might be
-  real :: Tr_Ra, Tr_Rb ! associated with a pairing [Conc]
-  real :: Tr_av_L    ! The average tracer concentrations on the left and right
-  real :: Tr_av_R    ! sides of a pairing [Conc].
+  real :: Tr_min_face  ! The minimum tracer concentration associated with a pairing [Conc]
+  real :: Tr_max_face  ! The maximum tracer concentration associated with a pairing [Conc]
+  real :: Tr_La, Tr_Lb ! The 2 left-side tracer concentrations that might be associated with a pairing [Conc]
+  real :: Tr_Ra, Tr_Rb ! The 2 right-side tracer concentrations that might be associated with a pairing [Conc]
+  real :: Tr_av_L    ! The average tracer concentrations on the left side of a pairing [Conc].
+  real :: Tr_av_R    ! The average tracer concentrations on the right side of a pairing [Conc].
   real :: Tr_flux    ! The tracer flux from left to right in a pair [conc H L2 ~> conc m3 or conc kg].
-  real :: Tr_adj_vert  ! A downward vertical adjustment to Tr_flux between the
-                     ! two cells that make up one side of the pairing [conc H L2 ~> conc m3 or conc kg].
+  real :: Tr_adj_vert  ! A downward vertical adjustment to Tr_flux between the two cells that
+                     ! make up one side of the pairing [conc H L2 ~> conc m3 or conc kg].
   real :: h_L, h_R   ! Thicknesses to the left and right [H ~> m or kg m-2].
   real :: wt_a, wt_b ! Fractional weights of layers above and below [nondim].
   real :: vol        ! A cell volume or mass [H L2 ~> m3 or kg].
@@ -690,7 +703,7 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
     left_set, &  ! If true, the left or right point determines the density of
     right_set    ! of the trio.  If densities are exactly equal, both are true.
 
-  real :: tmp
+  real :: tmp    ! A temporary variable used in swaps [various]
   real :: p_ref_cv(SZI_(G)) ! The reference pressure for the coordinate density [R L2 T-2 ~> Pa]
 
   integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state
@@ -1320,7 +1333,7 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
           h_L = hP_Lv(J)%p(i,k) ; h_R = hP_Rv(J)%p(i,k)
           Tr_flux = I_maxitt * ((2.0 * h_L * h_R) / (h_L + h_R)) * &
                     khdt_epi_y(i,J) * (Tr_av_L - Tr_av_R)
-          Tr_flux_3d(i,j,k) = Tr_flux
+          Tr_flux_3d(i,J,k) = Tr_flux
 
           if (deep_wt_Lv(J)%p(i,k) < 1.0) then
             Tr_adj_vert = 0.0
@@ -1346,7 +1359,7 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
                                           (vol*wt_a)*(Tr_Lb - Tr_La))
               endif
             endif
-            Tr_adj_vert_L(i,j,k) = Tr_adj_vert
+            Tr_adj_vert_L(i,J,k) = Tr_adj_vert
           endif
 
           if (deep_wt_Rv(J)%p(i,k) < 1.0) then
@@ -1373,7 +1386,7 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
                                           (vol*wt_a)*(Tr_Rb - Tr_Ra))
               endif
             endif
-            Tr_adj_vert_R(i,j,k) = Tr_adj_vert
+            Tr_adj_vert_R(i,J,k) = Tr_adj_vert
           endif
           if (associated(Tr(m)%df2d_y)) &
             Tr(m)%df2d_y(i,J) = Tr(m)%df2d_y(i,J) + Tr_flux * Idt
@@ -1384,25 +1397,28 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
 !$OMP                                  deep_wt_Rv,k0a_Rv,Tr_adj_vert_R) &
 !$OMP                          private(kLa,kLb,kRa,kRb,wt_b,wt_a)
       do i=is,ie ; do J=js-1,je ; if (G%mask2dCv(i,J) > 0.0) then
+        ! The non-stride-1 loop order here is to facilitate openMP threading. However, it might be
+        ! suboptimal when openMP threading is not used, at which point it might be better to fuse
+        ! these loope with those that precede it and thereby eliminate the need for three 3-d arrays.
         do k=1,nPv(i,J)
           kLb = k0b_Lv(J)%p(i,k); kRb = k0b_Rv(J)%p(i,k)
           if (deep_wt_Lv(J)%p(i,k) >= 1.0) then
-            tr_flux_conv(i,j,kLb) = tr_flux_conv(i,j,kLb) - Tr_flux_3d(i,j,k)
+            tr_flux_conv(i,j,kLb) = tr_flux_conv(i,j,kLb) - Tr_flux_3d(i,J,k)
           else
             kLa = k0a_Lv(J)%p(i,k)
             wt_b = deep_wt_Lv(J)%p(i,k) ; wt_a = 1.0 - wt_b
-            tr_flux_conv(i,j,kLa) = tr_flux_conv(i,j,kLa) - (wt_a*Tr_flux_3d(i,j,k) + Tr_adj_vert_L(i,j,k))
-            tr_flux_conv(i,j,kLb) = tr_flux_conv(i,j,kLb) - (wt_b*Tr_flux_3d(i,j,k) - Tr_adj_vert_L(i,j,k))
+            tr_flux_conv(i,j,kLa) = tr_flux_conv(i,j,kLa) - (wt_a*Tr_flux_3d(i,J,k) + Tr_adj_vert_L(i,J,k))
+            tr_flux_conv(i,j,kLb) = tr_flux_conv(i,j,kLb) - (wt_b*Tr_flux_3d(i,J,k) - Tr_adj_vert_L(i,J,k))
           endif
           if (deep_wt_Rv(J)%p(i,k) >= 1.0) then
-            tr_flux_conv(i,j+1,kRb) = tr_flux_conv(i,j+1,kRb) + Tr_flux_3d(i,j,k)
+            tr_flux_conv(i,j+1,kRb) = tr_flux_conv(i,j+1,kRb) + Tr_flux_3d(i,J,k)
           else
             kRa = k0a_Rv(J)%p(i,k)
             wt_b = deep_wt_Rv(J)%p(i,k) ; wt_a = 1.0 - wt_b
             tr_flux_conv(i,j+1,kRa) = tr_flux_conv(i,j+1,kRa) + &
-                                            (wt_a*Tr_flux_3d(i,j,k) - Tr_adj_vert_R(i,j,k))
+                                            (wt_a*Tr_flux_3d(i,J,k) - Tr_adj_vert_R(i,J,k))
             tr_flux_conv(i,j+1,kRb) = tr_flux_conv(i,j+1,kRb) + &
-                                            (wt_b*Tr_flux_3d(i,j,k) + Tr_adj_vert_R(i,j,k))
+                                            (wt_b*Tr_flux_3d(i,J,k) + Tr_adj_vert_R(i,J,k))
           endif
         enddo
       endif ; enddo ; enddo
@@ -1455,8 +1471,8 @@ subroutine tracer_hor_diff_init(Time, G, GV, US, param_file, diag, EOS, diabatic
   type(param_file_type),      intent(in)    :: param_file !< parameter file
   type(tracer_hor_diff_CS),   pointer       :: CS         !< horz diffusion control structure
 
-! This include declares and sets the variable "version".
-#include "version_variable.h"
+  ! This include declares and sets the variable "version".
+# include "version_variable.h"
   character(len=40)  :: mdl = "MOM_tracer_hor_diff" ! This module's name.
 
   if (associated(CS)) then

@@ -105,7 +105,7 @@ subroutine verticalGridInit( param_file, GV, US )
                    log_to_all=.true., debugging=.true.)
   call get_param(param_file, mdl, "G_EARTH", GV%g_Earth, &
                  "The gravitational acceleration of the Earth.", &
-                 units="m s-2", default = 9.80, scale=US%Z_to_m*US%m_s_to_L_T**2)
+                 units="m s-2", default=9.80, scale=US%Z_to_m*US%m_s_to_L_T**2)
   call get_param(param_file, mdl, "RHO_0", GV%Rho0, &
                  "The mean ocean density used with BOUSSINESQ true to "//&
                  "calculate accelerations and the mass for conservation "//&
@@ -114,9 +114,9 @@ subroutine verticalGridInit( param_file, GV, US )
                  units="kg m-3", default=1035.0, scale=US%kg_m3_to_R)
   call get_param(param_file, mdl, "BOUSSINESQ", GV%Boussinesq, &
                  "If true, make the Boussinesq approximation.", default=.true.)
-  call get_param(param_file, mdl, "ANGSTROM", GV%Angstrom_m, &
+  call get_param(param_file, mdl, "ANGSTROM", GV%Angstrom_Z, &
                  "The minimum layer thickness, usually one-Angstrom.", &
-                 units="m", default=1.0e-10)
+                 units="m", default=1.0e-10, scale=US%m_to_Z)
   call get_param(param_file, mdl, "H_RESCALE_POWER", H_power, &
                  "An integer power of 2 that is used to rescale the model's "//&
                  "intenal units of thickness.  Valid values range from -300 to 300.", &
@@ -156,13 +156,13 @@ subroutine verticalGridInit( param_file, GV, US )
     GV%H_to_kg_m2 = US%R_to_kg_m3*GV%Rho0 * GV%H_to_m
     GV%kg_m2_to_H = 1.0 / GV%H_to_kg_m2
     GV%m_to_H = 1.0 / GV%H_to_m
-    GV%Angstrom_H = GV%m_to_H * GV%Angstrom_m
+    GV%Angstrom_H = GV%m_to_H * US%Z_to_m*GV%Angstrom_Z
     GV%H_to_MKS = GV%H_to_m
   else
     GV%kg_m2_to_H = 1.0 / GV%H_to_kg_m2
     GV%m_to_H = US%R_to_kg_m3*GV%Rho0 * GV%kg_m2_to_H
     GV%H_to_m = GV%H_to_kg_m2 / (US%R_to_kg_m3*GV%Rho0)
-    GV%Angstrom_H = GV%Angstrom_m*1000.0*GV%kg_m2_to_H
+    GV%Angstrom_H = US%Z_to_m*GV%Angstrom_Z * 1000.0*GV%kg_m2_to_H
     GV%H_to_MKS = GV%H_to_kg_m2
   endif
   GV%H_subroundoff = 1e-20 * max(GV%Angstrom_H,GV%m_to_H*1e-17)
@@ -170,15 +170,15 @@ subroutine verticalGridInit( param_file, GV, US )
 
   GV%H_to_Z = GV%H_to_m * US%m_to_Z
   GV%Z_to_H = US%Z_to_m * GV%m_to_H
-  GV%Angstrom_Z = US%m_to_Z * GV%Angstrom_m
+  GV%Angstrom_m = US%Z_to_m * GV%Angstrom_Z
 
   GV%H_to_RZ = GV%H_to_kg_m2 * US%kg_m3_to_R * US%m_to_Z
   GV%RZ_to_H = GV%kg_m2_to_H * US%R_to_kg_m3 * US%Z_to_m
 
 ! Log derivative values.
-  call log_param(param_file, mdl, "M to THICKNESS", GV%m_to_H*H_rescale_factor)
-  call log_param(param_file, mdl, "M to THICKNESS rescaled by 2^-n", GV%m_to_H)
-  call log_param(param_file, mdl, "THICKNESS to M rescaled by 2^n", GV%H_to_m)
+  call log_param(param_file, mdl, "M to THICKNESS", GV%m_to_H*H_rescale_factor, units="H m-1")
+  call log_param(param_file, mdl, "M to THICKNESS rescaled by 2^-n", GV%m_to_H, units="2^n H m-1")
+  call log_param(param_file, mdl, "THICKNESS to M rescaled by 2^n", GV%H_to_m, units="2^-n m H-1")
 
   allocate( GV%sInterface(nk+1) )
   allocate( GV%sLayer(nk) )

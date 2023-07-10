@@ -107,7 +107,7 @@ subroutine geothermal_entraining(h, tv, dt, ea, eb, G, GV, US, CS, halo)
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: &
     T_old, & ! Temperature of each layer before any heat is added, for diagnostics [C ~> degC]
     h_old, & ! Thickness of each layer before any heat is added, for diagnostics [H ~> m or kg m-2]
-    work_3d ! Scratch variable used to calculate changes due to geothermal
+    work_3d ! Scratch variable used to calculate changes due to geothermal [various]
   real :: Idt           ! inverse of the timestep [T-1 ~> s-1]
 
   logical :: do_i(SZI_(G))
@@ -407,7 +407,7 @@ subroutine geothermal_in_place(h, tv, dt, G, GV, US, CS, halo)
   if (.not.associated(tv%T)) call MOM_error(FATAL, "MOM geothermal_in_place: "//&
       "Geothermal heating can only be applied if T & S are state variables.")
 
-!  do i=is,ie ; do j=js,je
+!  do j=js,je ; do i=is,ie
 !    resid(i,j) = tv%internal_heat(i,j)
 !  enddo ; enddo
 
@@ -573,17 +573,17 @@ subroutine geothermal_init(Time, G, GV, US, param_file, diag, CS, useALEalgorith
   if (id > 0) call post_data(id, CS%geo_heat, diag, .true.)
 
   ! Diagnostic for tendencies due to internal heat (in 3d)
-  CS%id_internal_heat_heat_tendency=register_diag_field('ocean_model', &
+  CS%id_internal_heat_heat_tendency = register_diag_field('ocean_model', &
         'internal_heat_heat_tendency', diag%axesTL, Time,              &
         'Heat tendency (in 3D) due to internal (geothermal) sources',  &
         'W m-2', conversion=US%QRZ_T_to_W_m2, v_extensive=.true.)
-  CS%id_internal_heat_temp_tendency=register_diag_field('ocean_model', &
+  CS%id_internal_heat_temp_tendency = register_diag_field('ocean_model', &
         'internal_heat_temp_tendency', diag%axesTL, Time,              &
         'Temperature tendency (in 3D) due to internal (geothermal) sources', &
         'degC s-1', conversion=US%C_to_degC*US%s_to_T, v_extensive=.true.)
   if (.not.useALEalgorithm) then
     ! Do not offer this diagnostic if heating will be in place.
-    CS%id_internal_heat_h_tendency=register_diag_field('ocean_model',    &
+    CS%id_internal_heat_h_tendency = register_diag_field('ocean_model',    &
         'internal_heat_h_tendency', diag%axesTL, Time,                &
         'Thickness tendency (in 3D) due to internal (geothermal) sources', &
         trim(thickness_units)//' s-1', conversion=GV%H_to_MKS*US%s_to_T, v_extensive=.true.)

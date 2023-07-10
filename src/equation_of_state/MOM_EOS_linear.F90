@@ -21,16 +21,16 @@ public int_density_dz_linear, int_spec_vol_dp_linear
 ! their mks counterparts with notation like "a velocity [Z T-1 ~> m s-1]".  If the units
 ! vary with the Boussinesq approximation, the Boussinesq variant is given first.
 
-!> Compute the density of sea water (in kg/m^3), or its anomaly from a reference density,
-!! using a simple linear equation of state from salinity (in psu), potential temperature (in deg C)
-!! and pressure [Pa].
+!> Compute the density of sea water (in [kg m-3]), or its anomaly from a reference density,
+!! using a simple linear equation of state from salinity in practical salinity units ([PSU]),
+!! potential temperature in degrees Celsius ([degC]) and pressure [Pa].
 interface calculate_density_linear
   module procedure calculate_density_scalar_linear, calculate_density_array_linear
 end interface calculate_density_linear
 
-!> Compute the specific volume of sea water (in m^3/kg), or its anomaly from a reference value,
-!! using a simple linear equation of state from salinity (in psu), potential temperature (in deg C)
-!! and pressure [Pa].
+!> Compute the specific volume of sea water (in [m3 kg-1]), or its anomaly from a reference value,
+!! using a simple linear equation of state from salinity in practical salinity units ([PSU]),
+!! potential temperature in degrees Celsius ([degC]) and pressure [Pa].
 interface calculate_spec_vol_linear
   module procedure calculate_spec_vol_scalar_linear, calculate_spec_vol_array_linear
 end interface calculate_spec_vol_linear
@@ -75,7 +75,7 @@ subroutine calculate_density_scalar_linear(T, S, pressure, rho, &
 end subroutine calculate_density_scalar_linear
 
 !> This subroutine computes the density of sea water with a trivial
-!! linear equation of state (in kg/m^3) from salinity (sal in psu),
+!! linear equation of state (in [kg m-3]) from salinity (sal [PSU]),
 !! potential temperature (T [degC]), and pressure [Pa].
 subroutine calculate_density_array_linear(T, S, pressure, rho, start, npts, &
                                           Rho_T0_S0, dRho_dT, dRho_dS, rho_ref)
@@ -331,7 +331,7 @@ subroutine int_density_dz_linear(T, S, z_t, z_b, rho_ref, rho_0_pres, G_e, HI, &
                         intent(in)  :: T         !< Potential temperature relative to the surface
                                                  !! [C ~> degC].
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
-                        intent(in)  :: S         !< Salinity [S ?~> PSU].
+                        intent(in)  :: S         !< Salinity [S ~> PSU].
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
                         intent(in)  :: z_t       !< Height at the top of the layer in depth units [Z ~> m].
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
@@ -561,8 +561,8 @@ subroutine int_spec_vol_dp_linear(T, S, p_t, p_b, alpha_ref, HI, Rho_T0_S0, &
   Isq = HI%IscB ; Ieq = HI%IecB ; Jsq = HI%JscB ; Jeq = HI%JecB
   halo = 0 ; if (present(halo_size)) halo = MAX(halo_size,0)
   ish = HI%isc-halo ; ieh = HI%iec+halo ; jsh = HI%jsc-halo ; jeh = HI%jec+halo
-  if (present(intx_dza)) then ; ish = MIN(Isq,ish) ; ieh = MAX(Ieq+1,ieh); endif
-  if (present(inty_dza)) then ; jsh = MIN(Jsq,jsh) ; jeh = MAX(Jeq+1,jeh); endif
+  if (present(intx_dza)) then ; ish = MIN(Isq,ish) ; ieh = MAX(Ieq+1,ieh) ; endif
+  if (present(inty_dza)) then ; jsh = MIN(Jsq,jsh) ; jeh = MAX(Jeq+1,jeh) ; endif
 
   do_massWeight = .false.
   if (present(useMassWghtInterp)) then ; if (useMassWghtInterp) then
@@ -612,7 +612,7 @@ subroutine int_spec_vol_dp_linear(T, S, p_t, p_b, alpha_ref, HI, Rho_T0_S0, &
         wtT_L = wt_L*hWt_LL + wt_R*hWt_RL ; wtT_R = wt_L*hWt_LR + wt_R*hWt_RR
 
         ! T, S, and p are interpolated in the horizontal.  The p interpolation
-        ! is linear, but for T and S it may be thickness wekghted.
+        ! is linear, but for T and S it may be thickness weighted.
         dp = wt_L*(p_b(i,j) - p_t(i,j)) + wt_R*(p_b(i+1,j) - p_t(i+1,j))
 
         dRho_TS = dRho_dT*(wtT_L*T(i,j) + wtT_R*T(i+1,j)) + &
@@ -657,7 +657,7 @@ subroutine int_spec_vol_dp_linear(T, S, p_t, p_b, alpha_ref, HI, Rho_T0_S0, &
         wtT_L = wt_L*hWt_LL + wt_R*hWt_RL ; wtT_R = wt_L*hWt_LR + wt_R*hWt_RR
 
         ! T, S, and p are interpolated in the horizontal.  The p interpolation
-        ! is linear, but for T and S it may be thickness wekghted.
+        ! is linear, but for T and S it may be thickness weighted.
         dp = wt_L*(p_b(i,j) - p_t(i,j)) + wt_R*(p_b(i,j+1) - p_t(i,j+1))
 
         dRho_TS = dRho_dT*(wtT_L*T(i,j) + wtT_R*T(i,j+1)) + &

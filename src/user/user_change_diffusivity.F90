@@ -7,7 +7,7 @@ use MOM_diag_mediator, only : diag_ctrl, time_type
 use MOM_error_handler, only : MOM_error, is_root_pe, FATAL, WARNING, NOTE
 use MOM_file_parser,   only : get_param, log_version, param_file_type
 use MOM_grid,          only : ocean_grid_type
-use MOM_unit_scaling, only : unit_scale_type
+use MOM_unit_scaling,  only : unit_scale_type
 use MOM_variables,     only : thermo_var_ptrs, vertvisc_type, p3d
 use MOM_verticalGrid,  only : verticalGrid_type
 use MOM_EOS,           only : calculate_density, EOS_domain
@@ -29,7 +29,7 @@ type, public :: user_change_diff_CS ; private
   real :: Kd_add        !< The scale of a diffusivity that is added everywhere
                         !! without any filtering or scaling [Z2 T-1 ~> m2 s-1].
   real :: lat_range(4)  !< 4 values that define the latitude range over which
-                        !! a diffusivity scaled by Kd_add is added [degLat].
+                        !! a diffusivity scaled by Kd_add is added [degrees_N].
   real :: rho_range(4)  !< 4 values that define the coordinate potential
                         !! density range over which a diffusivity scaled by
                         !! Kd_add is added [R ~> kg m-3].
@@ -151,7 +151,7 @@ end subroutine user_change_diff
 
 !> This subroutine checks whether the 4 values of range are in ascending order.
 function range_OK(range) result(OK)
-  real, dimension(4), intent(in) :: range  !< Four values to check.
+  real, dimension(4), intent(in) :: range  !< Four values to check [arbitrary]
   logical                        :: OK     !< Return value.
 
   OK = ((range(1) <= range(2)) .and. (range(2) <= range(3)) .and. &
@@ -169,7 +169,7 @@ function val_weights(val, range) result(ans)
   real, dimension(4), intent(in) :: range  !< Range over which the answer is non-zero [arbitrary units].
   real                           :: ans    !< Return value [nondim].
   ! Local variables
-  real :: x   ! A nondimensional number between 0 and 1.
+  real :: x   ! A nondimensional number between 0 and 1 [nondim].
 
   ans = 0.0
   if ((val > range(1)) .and. (val < range(4))) then
@@ -230,7 +230,7 @@ subroutine user_change_diff_init(Time, G, GV, US, param_file, diag, CS)
                  "applied.  The four values specify the latitudes at "//&
                  "which the extra diffusivity starts to increase from 0, "//&
                  "hits its full value, starts to decrease again, and is "//&
-                 "back to 0.", units="degree", default=-1.0e9)
+                 "back to 0.", units="degrees_N", default=-1.0e9)
     call get_param(param_file, mdl, "USER_KD_ADD_RHO_RANGE", CS%rho_range(:), &
                  "Four successive values that define a range of potential "//&
                  "densities over which the user-given extra diffusivity "//&
