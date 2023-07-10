@@ -1860,7 +1860,7 @@ function open_restart_units(filename, directory, G, CS, IO_handles, file_paths, 
           nf = nf + 1
           if (present(IO_handles)) &
             call IO_handles(nf)%open(trim(filepath), READONLY_FILE, &
-                           threading=MULTIPLE, fileset=SINGLE_FILE)
+                MOM_domain=G%Domain, threading=MULTIPLE, fileset=SINGLE_FILE)
           if (present(global_files)) global_files(nf) = .true.
           if (present(file_paths)) file_paths(nf) = filepath
         elseif (CS%parallel_restartfiles) then
@@ -1892,7 +1892,7 @@ function open_restart_units(filename, directory, G, CS, IO_handles, file_paths, 
         nf = nf + 1
         if (present(IO_handles)) &
           call IO_handles(nf)%open(trim(filepath), READONLY_FILE, &
-                       threading=MULTIPLE, fileset=SINGLE_FILE)
+              MOM_Domain=G%Domain, threading=MULTIPLE, fileset=SINGLE_FILE)
         if (present(global_files)) global_files(nf) = .true.
         if (present(file_paths)) file_paths(nf) = filepath
         if (is_root_pe() .and. (present(IO_handles))) &

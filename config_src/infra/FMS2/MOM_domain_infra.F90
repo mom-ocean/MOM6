@@ -23,7 +23,7 @@ use mpp_domains_mod, only : CYCLIC_GLOBAL_DOMAIN, FOLD_NORTH_EDGE
 use mpp_domains_mod, only : To_East => WUPDATE, To_West => EUPDATE, Omit_Corners => EDGEUPDATE
 use mpp_domains_mod, only : To_North => SUPDATE, To_South => NUPDATE
 use mpp_domains_mod, only : CENTER, CORNER, NORTH_FACE => NORTH, EAST_FACE => EAST
-use fms_io_mod,      only : file_exist, parse_mask_table
+use fms_io_utils_mod, only : file_exists, parse_mask_table
 use fms_affinity_mod, only : fms_affinity_init, fms_affinity_set, fms_affinity_get
 
 ! This subroutine is not in MOM6/src but may be required by legacy drivers
@@ -49,6 +49,7 @@ public :: MOM_thread_affinity_set, set_MOM_thread_affinity
 public :: To_East, To_West, To_North, To_South, To_All, Omit_Corners
 public :: AGRID, BGRID_NE, CGRID_NE, SCALAR_PAIR
 public :: CORNER, CENTER, NORTH_FACE, EAST_FACE
+public :: set_domain, nullify_domain
 ! These are no longer used by MOM6 because the reproducing sum works so well, but they are
 ! still referenced by some of the non-GFDL couplers.
 ! public :: global_field_sum, BITWISE_EXACT_SUM
@@ -1390,7 +1391,7 @@ subroutine create_MOM_domain(MOM_dom, n_global, n_halo, reentrant, tripolar_N, l
   endif
 
   if (present(mask_table)) then
-    mask_table_exists = file_exist(mask_table)
+    mask_table_exists = file_exists(mask_table)
     if (mask_table_exists) then
       allocate(MOM_dom%maskmap(layout(1), layout(2)))
       call parse_mask_table(mask_table, MOM_dom%maskmap, MOM_dom%name)
@@ -1491,7 +1492,7 @@ end subroutine get_domain_components_d2D
 !> clone_MD_to_MD copies one MOM_domain_type into another, while allowing
 !! some properties of the new type to differ from the original one.
 subroutine clone_MD_to_MD(MD_in, MOM_dom, min_halo, halo_size, symmetric, domain_name, &
-                          turns, refine, extra_halo)
+                          turns, refine, extra_halo, io_layout)
   type(MOM_domain_type), target, intent(in) :: MD_in  !< An existing MOM_domain
   type(MOM_domain_type), pointer :: MOM_dom
                                   !< A pointer to a MOM_domain that will be
@@ -1514,6 +1515,9 @@ subroutine clone_MD_to_MD(MD_in, MOM_dom, min_halo, halo_size, symmetric, domain
   integer, optional, intent(in) :: refine  !< A factor by which to enhance the grid resolution.
   integer, optional, intent(in) :: extra_halo !< An extra number of points in the halos
                                   !! compared with MD_in
+  integer, optional, intent(in) :: io_layout(2)
+    !< A user-defined IO layout to replace the domain's IO layout
+
 
   integer :: global_indices(4)
   logical :: mask_table_exists
@@ -1523,9 +1527,16 @@ subroutine clone_MD_to_MD(MD_in, MOM_dom, min_halo, halo_size, symmetric, domain
                                              ! The sum of exni must equal MOM_dom%niglobal.
   integer :: qturns ! The number of quarter turns, restricted to the range of 0 to 3.
   integer :: i, j, nl1, nl2
+  integer :: io_layout_in(2)
 
   qturns = 0
   if (present(turns)) qturns = modulo(turns, 4)
+
+  if (present(io_layout)) then
+    io_layout_in(:) = io_layout(:)
+  else
+    io_layout_in(:) = MD_in%io_layout(:)
+  endif
 
   if (.not.associated(MOM_dom)) then
     allocate(MOM_dom)
@@ -1545,7 +1556,7 @@ subroutine clone_MD_to_MD(MD_in, MOM_dom, min_halo, halo_size, symmetric, domain
 
     MOM_dom%X_FLAGS = MD_in%Y_FLAGS ; MOM_dom%Y_FLAGS = MD_in%X_FLAGS
     MOM_dom%layout(:) = MD_in%layout(2:1:-1)
-    MOM_dom%io_layout(:) = MD_in%io_layout(2:1:-1)
+    MOM_dom%io_layout(:) = io_layout_in(2:1:-1)
   else
     MOM_dom%niglobal = MD_in%niglobal ; MOM_dom%njglobal = MD_in%njglobal
     MOM_dom%nihalo = MD_in%nihalo ; MOM_dom%njhalo = MD_in%njhalo
@@ -1553,7 +1564,7 @@ subroutine clone_MD_to_MD(MD_in, MOM_dom, min_halo, halo_size, symmetric, domain
 
     MOM_dom%X_FLAGS = MD_in%X_FLAGS ; MOM_dom%Y_FLAGS = MD_in%Y_FLAGS
     MOM_dom%layout(:) = MD_in%layout(:)
-    MOM_dom%io_layout(:) = MD_in%io_layout(:)
+    MOM_dom%io_layout(:) = io_layout_in(:)
   endif
 
   ! Ensure that the points per processor are the same on the source and densitation grids.
@@ -1991,5 +2002,18 @@ subroutine get_layout_extents(Domain, extent_i, extent_j)
   allocate(extent_j(domain%layout(2))) ; extent_j(:) = 0
   call mpp_get_domain_extents(domain%mpp_domain, extent_i, extent_j)
 end subroutine get_layout_extents
+
+!> Set the associated domain for internal FMS I/O operations.
+subroutine set_domain(Domain)
+  type(MOM_domain_type), intent(in) :: Domain
+    !< MOM domain to be designated as the internal FMS I/O domain
+
+  ! FMS2 does not have domain-based internal FMS I/O operations, so this
+  ! function does nothing.
+end subroutine set_domain
+
+subroutine nullify_domain
+  ! No internal FMS I/O domain can be assigned, so this function does nothing.
+end subroutine nullify_domain
 
 end module MOM_domain_infra

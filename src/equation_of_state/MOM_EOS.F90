@@ -8,24 +8,25 @@ use MOM_EOS_linear, only : calculate_density_derivs_linear
 use MOM_EOS_linear, only : calculate_specvol_derivs_linear, int_density_dz_linear
 use MOM_EOS_linear, only : calculate_density_second_derivs_linear, EoS_fit_range_linear
 use MOM_EOS_linear, only : calculate_compress_linear, int_spec_vol_dp_linear
+use MOM_EOS_linear, only : avg_spec_vol_linear
 use MOM_EOS_Wright, only : calculate_density_wright, calculate_spec_vol_wright
 use MOM_EOS_Wright, only : calculate_density_derivs_wright
 use MOM_EOS_Wright, only : calculate_specvol_derivs_wright, int_density_dz_wright
 use MOM_EOS_Wright, only : calculate_compress_wright, int_spec_vol_dp_wright
 use MOM_EOS_Wright, only : calculate_density_second_derivs_wright, calc_density_second_derivs_wright_buggy
-use MOM_EOS_Wright, only : EoS_fit_range_Wright
+use MOM_EOS_Wright, only : EoS_fit_range_Wright, avg_spec_vol_Wright
 use MOM_EOS_Wright_full, only : calculate_density_wright_full, calculate_spec_vol_wright_full
 use MOM_EOS_Wright_full, only : calculate_density_derivs_wright_full
 use MOM_EOS_Wright_full, only : calculate_specvol_derivs_wright_full, int_density_dz_wright_full
 use MOM_EOS_Wright_full, only : calculate_compress_wright_full, int_spec_vol_dp_wright_full
 use MOM_EOS_Wright_full, only : calculate_density_second_derivs_wright_full
-use MOM_EOS_Wright_full, only : EoS_fit_range_Wright_full
+use MOM_EOS_Wright_full, only : EoS_fit_range_Wright_full, avg_spec_vol_Wright_full
 use MOM_EOS_Wright_red,  only : calculate_density_wright_red, calculate_spec_vol_wright_red
 use MOM_EOS_Wright_red,  only : calculate_density_derivs_wright_red
 use MOM_EOS_Wright_red,  only : calculate_specvol_derivs_wright_red, int_density_dz_wright_red
 use MOM_EOS_Wright_red,  only : calculate_compress_wright_red, int_spec_vol_dp_wright_red
 use MOM_EOS_Wright_red,  only : calculate_density_second_derivs_wright_red
-use MOM_EOS_Wright_red,  only : EoS_fit_range_Wright_red
+use MOM_EOS_Wright_red,  only : EoS_fit_range_Wright_red, avg_spec_vol_Wright_red
 use MOM_EOS_Jackett06, only : calculate_density_Jackett06, calculate_spec_vol_Jackett06
 use MOM_EOS_Jackett06, only : calculate_density_derivs_Jackett06, calculate_specvol_derivs_Jackett06
 use MOM_EOS_Jackett06, only : calculate_compress_Jackett06, calculate_density_second_derivs_Jackett06
@@ -68,6 +69,7 @@ public EOS_fit_range
 public EOS_unit_tests
 public analytic_int_density_dz
 public analytic_int_specific_vol_dp
+public average_specific_vol
 public calculate_compress
 public calculate_density
 public calculate_density_derivs
@@ -1324,6 +1326,97 @@ subroutine calculate_compress_scalar(T, S, pressure, rho, drho_dp, EOS)
 
 end subroutine calculate_compress_scalar
 
+!> Calls the appropriate subroutine to calculate the layer averaged specific volume either using
+!! Boole's rule quadrature or analytical and nearly-analytical averages in pressure.
+subroutine average_specific_vol(T, S, p_t, dp, SpV_avg, EOS, dom, scale)
+  real, dimension(:),    intent(in)    :: T   !< Potential temperature referenced to the surface [C ~> degC]
+  real, dimension(:),    intent(in)    :: S   !< Salinity [S ~> ppt]
+  real, dimension(:),    intent(in)    :: p_t !< Pressure at the top of the layer [R L2 T-2 ~> Pa]
+  real, dimension(:),    intent(in)    :: dp  !< Pressure change in the layer [R L2 T-2 ~> Pa]
+  real, dimension(:),    intent(inout) :: SpV_avg !< The vertical average specific volume
+                                              !! in the layer [R-1 ~> m3 kg-1]
+  type(EOS_type),        intent(in)    :: EOS !< Equation of state structure
+  integer, dimension(2), optional, intent(in) :: dom   !< The domain of indices to work on, taking
+                                                       !! into account that arrays start at 1.
+  real,                  optional, intent(in) :: scale !< A multiplicative factor by which to scale
+                                                       !! output specific volume in combination with
+                                                       !! scaling stored in EOS [various]
+
+  ! Local variables
+  real, dimension(size(T)) :: pres  ! Layer-top pressure converted to [Pa]
+  real, dimension(size(T)) :: dpres ! Pressure change converted to [Pa]
+  real, dimension(size(T)) :: Ta    ! Temperature converted to [degC]
+  real, dimension(size(T)) :: Sa    ! Salinity converted to [ppt]
+  real :: T5(5)      ! Temperatures at five quadrature points [C ~> degC]
+  real :: S5(5)      ! Salinities at five quadrature points [S ~> ppt]
+  real :: p5(5)      ! Pressures at five quadrature points [R L2 T-2 ~> Pa]
+  real :: a5(5)      ! Specific volumes at five quadrature points [R-1 ~> m3 kg-1]
+  real, parameter :: C1_90 = 1.0/90.0  ! A rational constant [nondim]
+  real :: spv_scale ! A factor to convert specific volume from m3 kg-1 to the desired units [kg m-3 R-1 ~> 1]
+  integer :: i, n, is, ie, npts
+
+  if (present(dom)) then
+    is = dom(1) ; ie = dom(2) ; npts = 1 + ie - is
+  else
+    is = 1 ; ie = size(T) ; npts = 1 + ie - is
+  endif
+
+  if (EOS%EOS_quadrature) then
+    do i=is,ie
+      do n=1,5
+        T5(n) = T(i) ; S5(n) = S(i)
+        p5(n) = p_t(i) + 0.25*real(5-n)*dp(i)
+      enddo
+      call calculate_spec_vol(T5, S5, p5, a5, EOS)
+
+      ! Use Boole's rule to estimate the average specific volume.
+      SpV_avg(i) = C1_90*(7.0*(a5(1)+a5(5)) + 32.0*(a5(2)+a5(4)) + 12.0*a5(3))
+    enddo
+  elseif ((EOS%RL2_T2_to_Pa == 1.0) .and. (EOS%C_to_degC == 1.0) .and. (EOS%S_to_ppt == 1.0)) then
+    select case (EOS%form_of_EOS)
+      case (EOS_LINEAR)
+        call avg_spec_vol_linear(T, S, p_t, dp, SpV_avg, is, npts, EOS%Rho_T0_S0, &
+                                 EOS%dRho_dT, EOS%dRho_dS)
+      case (EOS_WRIGHT)
+        call avg_spec_vol_wright(T, S, p_t, dp, SpV_avg, is, npts)
+      case (EOS_WRIGHT_FULL)
+        call avg_spec_vol_wright_full(T, S, p_t, dp, SpV_avg, is, npts)
+      case (EOS_WRIGHT_REDUCED)
+        call avg_spec_vol_wright_red(T, S, p_t, dp, SpV_avg, is, npts)
+      case default
+        call MOM_error(FATAL, "No analytic average specific volume option is available with this EOS!")
+    end select
+  else
+    do i=is,ie
+      pres(i) = EOS%RL2_T2_to_Pa * p_t(i)
+      dpres(i) = EOS%RL2_T2_to_Pa * dp(i)
+      Ta(i) = EOS%C_to_degC * T(i)
+      Sa(i) = EOS%S_to_ppt * S(i)
+    enddo
+    select case (EOS%form_of_EOS)
+      case (EOS_LINEAR)
+        call avg_spec_vol_linear(Ta, Sa, pres, dpres, SpV_avg, is, npts, EOS%Rho_T0_S0, &
+                                 EOS%dRho_dT, EOS%dRho_dS)
+      case (EOS_WRIGHT)
+        call avg_spec_vol_wright(Ta, Sa, pres, dpres, SpV_avg, is, npts)
+      case (EOS_WRIGHT_FULL)
+        call avg_spec_vol_wright_full(Ta, Sa, pres, dpres, SpV_avg, is, npts)
+      case (EOS_WRIGHT_REDUCED)
+        call avg_spec_vol_wright_red(Ta, Sa, pres, dpres, SpV_avg, is, npts)
+      case default
+        call MOM_error(FATAL, "No analytic average specific volume option is available with this EOS!")
+    end select
+  endif
+
+  spv_scale = EOS%R_to_kg_m3
+  if (EOS%EOS_quadrature) spv_scale = 1.0
+  if (present(scale)) spv_scale = spv_scale * scale
+  if (spv_scale /= 1.0) then ; do i=is,ie
+    SpV_avg(i) = spv_scale * SpV_avg(i)
+  enddo ; endif
+
+end subroutine average_specific_vol
+
 !> Return the range of temperatures, salinities and pressures for which the equation of state that
 !! is being used has been fitted to observations.  Care should be taken when applying
 !! this equation of state outside of its fit range.
@@ -2057,13 +2150,13 @@ logical function EOS_unit_tests(verbose)
 
   call EOS_manual_init(EOS_tmp, form_of_EOS=EOS_WRIGHT_FULL)
   fail = test_EOS_consistency(25.0, 35.0, 1.0e7, EOS_tmp, verbose, "WRIGHT_FULL", &
-                              rho_check=1027.55177447616*EOS_tmp%kg_m3_to_R)
+                              rho_check=1027.55177447616*EOS_tmp%kg_m3_to_R, avg_Sv_check=.true.)
   if (verbose .and. fail) call MOM_error(WARNING, "WRIGHT_FULL EOS has failed some self-consistency tests.")
   EOS_unit_tests = EOS_unit_tests .or. fail
 
   call EOS_manual_init(EOS_tmp, form_of_EOS=EOS_WRIGHT_REDUCED)
   fail = test_EOS_consistency(25.0, 35.0, 1.0e7, EOS_tmp, verbose, "WRIGHT_REDUCED", &
-                              rho_check=1027.54303596346*EOS_tmp%kg_m3_to_R)
+                              rho_check=1027.54303596346*EOS_tmp%kg_m3_to_R, avg_Sv_check=.true.)
   if (verbose .and. fail) call MOM_error(WARNING, "WRIGHT_REDUCED EOS has failed some self-consistency tests.")
   EOS_unit_tests = EOS_unit_tests .or. fail
 
@@ -2076,7 +2169,7 @@ logical function EOS_unit_tests(verbose)
 
   call EOS_manual_init(EOS_tmp, form_of_EOS=EOS_WRIGHT)
   fail = test_EOS_consistency(25.0, 35.0, 1.0e7, EOS_tmp, verbose, "WRIGHT", &
-                              rho_check=1027.54303596346*EOS_tmp%kg_m3_to_R)
+                              rho_check=1027.54303596346*EOS_tmp%kg_m3_to_R, avg_Sv_check=.true.)
   if (verbose .and. fail) call MOM_error(WARNING, "WRIGHT EOS has failed some self-consistency tests.")
   EOS_unit_tests = EOS_unit_tests .or. fail
 
@@ -2126,7 +2219,7 @@ logical function EOS_unit_tests(verbose)
 
   call EOS_manual_init(EOS_tmp, form_of_EOS=EOS_LINEAR, Rho_T0_S0=1000.0, drho_dT=-0.2, dRho_dS=0.8)
   fail = test_EOS_consistency(25.0, 35.0, 1.0e7, EOS_tmp, verbose, "LINEAR", &
-                              rho_check=1023.0*EOS_tmp%kg_m3_to_R)
+                              rho_check=1023.0*EOS_tmp%kg_m3_to_R, avg_Sv_check=.true.)
   if (verbose .and. fail) call MOM_error(WARNING, "LINEAR EOS has failed some self-consistency tests.")
   EOS_unit_tests = EOS_unit_tests .or. fail
 
@@ -2293,7 +2386,7 @@ end subroutine write_check_msg
 !> Test an equation of state for self-consistency and consistency with check values, returning false
 !! if it is consistent by all tests, and true if it fails any test.
 logical function test_EOS_consistency(T_test, S_test, p_test, EOS, verbose, &
-                                      EOS_name, rho_check, spv_check, skip_2nd) result(inconsistent)
+                                      EOS_name, rho_check, spv_check, skip_2nd, avg_Sv_check) result(inconsistent)
   real,             intent(in) :: T_test   !< Potential temperature or conservative temperature [C ~> degC]
   real,             intent(in) :: S_test   !< Salinity or absolute salinity [S ~> ppt]
   real,             intent(in) :: p_test   !< Pressure [R L2 T-2 ~> Pa]
@@ -2302,7 +2395,9 @@ logical function test_EOS_consistency(T_test, S_test, p_test, EOS, verbose, &
   character(len=*), intent(in) :: EOS_name !< A name used in error messages to describe the EoS
   real,   optional, intent(in) :: rho_check  !< A check value for the density [R ~> kg m-3]
   real,   optional, intent(in) :: spv_check  !< A check value for the specific volume [R-1 ~> m3 kg-1]
-  logical, optional, intent(in) :: skip_2nd !< If present and true, do not check the 2nd derivatives.
+  logical, optional, intent(in) :: skip_2nd  !< If present and true, do not check the 2nd derivatives.
+  logical, optional, intent(in) :: avg_Sv_check !< If present and true, compare analytical and numerical
+                                             !! quadrature estimates of the layer-averaged specific volume.
 
   ! Local variables
   real, dimension(-3:3,-3:3,-3:3) :: T ! Temperatures at the test value and perturbed points [C ~> degC]
@@ -2329,6 +2424,8 @@ logical function test_EOS_consistency(T_test, S_test, p_test, EOS, verbose, &
                     ! temperature [R-1 C-1 ~> m3 kg-1 degC-1]
   real :: dSV_dS(1) ! The partial derivative of specific volume with salinity
                     ! [R-1 S-1 ~> m3 kg-1 ppt-1]
+  real :: SpV_avg_a(1) ! The pressure-averaged specific volume determined analytically [R-1 ~> m3 kg-1]
+  real :: SpV_avg_q(1) ! The pressure-averaged specific volume determined via quadrature [R-1 ~> m3 kg-1]
   real :: drho_dS_dS ! Second derivative of density with respect to S  [R S-2 ~> kg m-3 ppt-2]
   real :: drho_dS_dT ! Second derivative of density with respect to T and S [R S-1 C-1 ~> kg m-3 ppt-1 degC-1]
   real :: drho_dT_dT ! Second derivative of density with respect to T [R C-2 ~> kg m-3 degC-2]
@@ -2370,13 +2467,17 @@ logical function test_EOS_consistency(T_test, S_test, p_test, EOS, verbose, &
   real :: count_fac2 ! A factor in the roundoff estimates based on the factors in the numerator and
                      ! denominator in the finite difference second derivative expression [nondim]
   character(len=200) :: mesg
+  type(EOS_type) :: EOS_tmp
   logical :: test_OK ! True if a particular test is consistent.
   logical :: OK      ! True if all checks so far are consistent.
   logical :: test_2nd  ! If true, do tests on the 2nd derivative calculations
+  logical :: test_avg_Sv ! If true, compare numerical and analytical estimates of the vertically
+                     ! averaged specific volume
   integer :: order   ! The order of accuracy of the centered finite difference estimates (2, 4 or 6).
   integer :: i, j, k, n
 
   test_2nd = .true. ; if (present(skip_2nd)) test_2nd = .not.skip_2nd
+  test_avg_Sv = .false. ; if (present(avg_Sv_check)) test_avg_Sv = avg_Sv_check
 
   dT = 0.1*EOS%degC_to_C     ! Temperature perturbations [C ~> degC]
   dS = 0.5*EOS%ppt_to_S      ! Salinity perturbations [S ~> ppt]
@@ -2441,6 +2542,14 @@ logical function test_EOS_consistency(T_test, S_test, p_test, EOS, verbose, &
     call calculate_density_second_derivs(T(0,0,0), S(0,0,0), p(0,0,0), &
                                        drho_dS_dS, drho_dS_dT, drho_dT_dT, drho_dS_dP, drho_dT_dP, EOS)
   call calculate_compress(T(0,0,0), S(0,0,0), p(0,0,0), rho_tmp, drho_dp, EOS)
+
+  if (test_avg_Sv) then
+    EOS_tmp = EOS
+    call EOS_manual_init(EOS_tmp, EOS_quadrature=.false.)
+    call average_specific_vol(T(0:0,0,0), S(0:0,0,0), p(0:0,0,0), p(0:0,0,0), SpV_avg_a, EOS_tmp)
+    call EOS_manual_init(EOS_tmp, EOS_quadrature=.true.)
+    call average_specific_vol(T(0:0,0,0), S(0:0,0,0), p(0:0,0,0), p(0:0,0,0), SpV_avg_q, EOS_tmp)
+  endif
 
   OK = .true.
 
@@ -2530,6 +2639,23 @@ logical function test_EOS_consistency(T_test, S_test, p_test, EOS, verbose, &
     OK = OK .and. check_FD(drho_dT_dP, drho_dT_dP_fd, tol_here, verbose, trim(EOS_name)//" drho_dT_dP", order)
     tol_here = tol*abs(drho_dS_dP) + count_fac**2*r_tol/(dS*dp)
     OK = OK .and. check_FD(drho_dS_dP, drho_dS_dP_fd, tol_here, verbose, trim(EOS_name)//" drho_dS_dP", order)
+  endif
+
+  if (test_avg_Sv) then
+    tol_here = 0.5*tol*(abs(SpV_avg_a(1)) + abs(SpV_avg_q(1)))
+    test_OK = (abs(SpV_avg_a(1) - SpV_avg_q(1)) < tol_here)
+    if (verbose) then
+      write(mesg, '(ES24.16," and ",ES24.16," differ by ",ES16.8," (",ES10.2"), tol=",ES16.8)') &
+        SpV_avg_a(1), SpV_avg_q(1), SpV_avg_a(1) - SpV_avg_q(1), &
+        2.0*(SpV_avg_a(1) - SpV_avg_q(1)) / (abs(SpV_avg_a(1)) + abs(SpV_avg_q(1)) + tiny(SpV_avg_a(1))), &
+        tol_here
+      if (verbose .and. .not.test_OK) then
+        call MOM_error(WARNING, "The values of "//trim(EOS_name)//" SpV_avg disagree. "//trim(mesg))
+      elseif (verbose) then
+        call MOM_mesg("The values of "//trim(EOS_name)//" SpV_avg agree: "//trim(mesg))
+      endif
+    endif
+    OK = OK .and. test_OK
   endif
 
   inconsistent = .not.OK

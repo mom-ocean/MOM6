@@ -40,7 +40,7 @@ subroutine Rossby_front_initialize_thickness(h, G, GV, US, param_file, just_read
   type(verticalGrid_type), intent(in)  :: GV          !< Vertical grid structure
   type(unit_scale_type),   intent(in)  :: US          !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
-                           intent(out) :: h           !< The thickness that is being initialized [H ~> m or kg m-2]
+                           intent(out) :: h           !< The thickness that is being initialized [Z ~> m]
   type(param_file_type),   intent(in)  :: param_file  !< A structure indicating the open file
                                                       !! to parse for model parameter values.
   logical,                 intent(in)  :: just_read   !< If true, this call will only read
@@ -83,7 +83,7 @@ subroutine Rossby_front_initialize_thickness(h, G, GV, US, param_file, just_read
         stretch = ( ( G%max_depth + eta ) / G%max_depth )
         h0 = ( G%max_depth / real(nz) ) * stretch
         do k = 1, nz
-          h(i,j,k) = h0 * GV%Z_to_H
+          h(i,j,k) = h0
         enddo
       enddo ; enddo
 
@@ -94,7 +94,7 @@ subroutine Rossby_front_initialize_thickness(h, G, GV, US, param_file, just_read
         stretch = ( ( G%max_depth + eta ) / G%max_depth )
         h0 = ( G%max_depth / real(nz) ) * stretch
         do k = 1, nz
-          h(i,j,k) = h0 * GV%Z_to_H
+          h(i,j,k) = h0
         enddo
       enddo ; enddo
 
@@ -114,7 +114,7 @@ subroutine Rossby_front_initialize_temperature_salinity(T, S, h, G, GV, US, &
   type(verticalGrid_type),                   intent(in)  :: GV !< The ocean's vertical grid structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: T  !< Potential temperature [C ~> degC]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: S  !< Salinity [S ~> ppt]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)  :: h  !< Thickness [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)  :: h  !< Thickness [Z ~> m]
   type(unit_scale_type),                     intent(in)  :: US !< A dimensional unit scaling type
   type(param_file_type),                     intent(in)  :: param_file   !< Parameter file handle
   logical,                                   intent(in)  :: just_read !< If true, this call will
@@ -125,7 +125,7 @@ subroutine Rossby_front_initialize_temperature_salinity(T, S, h, G, GV, US, &
   real      :: S_ref        ! Reference salinity within the surface layer [S ~> ppt]
   real      :: T_range      ! Range of temperatures over the vertical [C ~> degC]
   real      :: zc           ! Position of the middle of the cell [Z ~> m]
-  real      :: zi           ! Bottom interface position relative to the sea surface [H ~> m or kg m-2]
+  real      :: zi           ! Bottom interface position relative to the sea surface [Z ~> m]
   real      :: dTdz         ! Vertical temperature gradient [C Z-1 ~> degC m-1]
   character(len=40) :: verticalCoordinate
 
@@ -149,8 +149,8 @@ subroutine Rossby_front_initialize_temperature_salinity(T, S, h, G, GV, US, &
   do j = G%jsc,G%jec ; do i = G%isc,G%iec
     zi = 0.
     do k = 1, nz
-      zi = zi - h(i,j,k)              ! Bottom interface position
-      zc = GV%H_to_Z * (zi - 0.5*h(i,j,k))    ! Position of middle of cell
+      zi = zi - h(i,j,k)           ! Bottom interface position
+      zc = zi - 0.5*h(i,j,k)       ! Position of middle of cell
       zc = min( zc, -Hml(G, G%geoLatT(i,j)) ) ! Bound by depth of mixed layer
       T(i,j,k) = T_ref + dTdz * zc ! Linear temperature profile
     enddo

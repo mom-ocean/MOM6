@@ -60,23 +60,61 @@ def main():
         print(json.dumps(config))
 
 
-def parse_mom6_param(param_file):
+def parse_mom6_param(param_file, header=None):
+    """Parse a MOM6 input file and return its contents.
+
+    param_file: Path to MOM input file.
+    header: Optional argument indicating current subparameter block.
+    """
     params = {}
     for line in param_file:
+        # Remove any trailing comments from the line.
+        # NOTE: Exotic values containing `!` will behave unexpectedly.
         param_stmt = line.split('!')[0].strip()
-        if param_stmt:
-            key, val = [s.strip() for s in param_stmt.split('=')]
 
-            # TODO: Convert to equivalent Python types
-            if val in ('True', 'False'):
-                params[key] = bool(val)
-            else:
-                params[key] = val
+        # Skip blank lines
+        if not param_stmt:
+            continue
+
+        if param_stmt[-1] == '%':
+            # Set up a subparameter block which returns its own dict.
+
+            # Extract the (potentially nested) subparameter: [...%]param%
+            key = param_stmt.split('%')[-2]
+
+            # Construct subparameter endline: %param[%...]
+            subheader = key
+            if header:
+                subheader = header + '%' + subheader
+
+            # Parse the subparameter contents and return as a dict.
+            value = parse_mom6_param(param_file, header=subheader)
+
+        elif header and param_stmt == '%' + header:
+            # Finalize the current subparameter block.
+            break
+
+        else:
+            # Extract record from `key = value` entry
+            # NOTE: Exotic values containing `=` will behave unexpectedly.
+            key, value = [s.strip() for s in param_stmt.split('=')]
+
+        if value in ('True', 'False'):
+            # Boolean values are converted into Python logicals.
+            params[key] = bool(value)
+        else:
+            # All other values are currently stored as strings.
+            params[key] = value
 
     return params
 
 
 def parse_clocks(log):
+    """Parse the FMS time stats from MOM6 output log and return as a dict.
+
+    log: Path to file containing MOM6 stdout.
+    """
+
     clock_start_msg = 'Tabulating mpp_clock statistics across'
     clock_end_msg = 'MPP_STACK high water mark='
 

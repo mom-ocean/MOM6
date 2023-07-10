@@ -17,6 +17,7 @@ use MOM_error_handler, only : stdout, stdlog, MOM_error
 use MOM_io, only : SINGLE_FILE
 use MOM_interp_infra, only : init_extern_field, get_external_field_info
 use MOM_interp_infra, only : time_interp_extern
+use MOM_interpolate, only : external_field
 use MOM_remapping,    only : remappingSchemesDoc
 use MOM_time_manager, only : time_type, real_to_time, get_date
 use MOM_time_manager, only : operator(+), operator(>=), operator(/=)
@@ -80,8 +81,8 @@ end type ptr_mpp_domain
 !> A structure containing integer handles for bias adjustment of tracers
 type :: INC_CS
   integer :: fldno = 0 !< The number of tracers
-  integer :: T_id !< The integer handle for the temperature file
-  integer :: S_id !< The integer handle for the salinity file
+  type(external_field) :: T  !< The handle for the temperature file
+  type(external_field) :: S  !< The handle for the salinity file
 end type INC_CS
 
 !> Control structure that contains a transpose of the ocean state across ensemble members.
@@ -391,11 +392,11 @@ subroutine init_oda(Time, G, GV, US, diag_CS, CS)
                 "tendency adjustments", default='temp_salt_adjustment.nc')
 
     inc_file = trim(inputdir) // trim(bias_correction_file)
-    CS%INC_CS%T_id = init_extern_field(inc_file, "temp_increment", &
+    CS%INC_CS%T = init_extern_field(inc_file, "temp_increment", &
           correct_leap_year_inconsistency=.true.,verbose=.true.,domain=G%Domain%mpp_domain)
-    CS%INC_CS%S_id = init_extern_field(inc_file, "salt_increment", &
+    CS%INC_CS%S = init_extern_field(inc_file, "salt_increment", &
           correct_leap_year_inconsistency=.true.,verbose=.true.,domain=G%Domain%mpp_domain)
-    call get_external_field_info(CS%INC_CS%T_id,size=fld_sz)
+    call get_external_field_info(CS%INC_CS%T, size=fld_sz)
     CS%INC_CS%fldno = 2
     if (CS%nk /= fld_sz(3)) call MOM_error(FATAL,'Increment levels /= ODA levels')
 
@@ -578,9 +579,9 @@ subroutine get_bias_correction_tracer(Time, US, CS)
 
 
   call cpu_clock_begin(id_clock_bias_adjustment)
-  call horiz_interp_and_extrap_tracer(CS%INC_CS%T_id, Time, CS%G, T_bias, &
+  call horiz_interp_and_extrap_tracer(CS%INC_CS%T, Time, CS%G, T_bias, &
             valid_flag, z_in, z_edges_in, missing_value, scale=US%degC_to_C*US%s_to_T, spongeOngrid=.true.)
-  call horiz_interp_and_extrap_tracer(CS%INC_CS%S_id, Time, CS%G, S_bias, &
+  call horiz_interp_and_extrap_tracer(CS%INC_CS%S, Time, CS%G, S_bias, &
             valid_flag, z_in, z_edges_in, missing_value, scale=US%ppt_to_S*US%s_to_T, spongeOngrid=.true.)
 
   ! This should be replaced to use mask_z instead of the following lines

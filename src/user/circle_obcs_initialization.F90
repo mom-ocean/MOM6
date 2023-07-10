@@ -10,6 +10,7 @@ use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_get_input, only : directories
 use MOM_grid, only : ocean_grid_type
 use MOM_tracer_registry, only : tracer_registry_type
+use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
 
@@ -27,11 +28,12 @@ public circle_obcs_initialize_thickness
 contains
 
 !> This subroutine initializes layer thicknesses for the circle_obcs experiment.
-subroutine circle_obcs_initialize_thickness(h, depth_tot, G, GV, param_file, just_read)
-  type(ocean_grid_type),   intent(in)  :: G   !< The ocean's grid structure.
-  type(verticalGrid_type), intent(in)  :: GV  !< The ocean's vertical grid structure.
+subroutine circle_obcs_initialize_thickness(h, depth_tot, G, GV, US, param_file, just_read)
+  type(ocean_grid_type),   intent(in)  :: G           !< The ocean's grid structure.
+  type(verticalGrid_type), intent(in)  :: GV          !< The ocean's vertical grid structure.
+  type(unit_scale_type),   intent(in)  :: US          !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
-                           intent(out) :: h           !< The thickness that is being initialized [H ~> m or kg m-2].
+                           intent(out) :: h           !< The thickness that is being initialized [Z ~> m]
   real, dimension(SZI_(G),SZJ_(G)), &
                            intent(in)  :: depth_tot   !< The nominal total depth of the ocean [Z ~> m]
   type(param_file_type),   intent(in)  :: param_file  !< A structure indicating the open file
@@ -43,7 +45,7 @@ subroutine circle_obcs_initialize_thickness(h, depth_tot, G, GV, param_file, jus
                            ! negative because it is positive upward.
   real :: eta1D(SZK_(GV)+1)! Interface height relative to the sea surface
                            ! positive upward, in depth units [Z ~> m].
-  real :: IC_amp           ! The amplitude of the initial height displacement [H ~> m or kg m-2].
+  real :: IC_amp           ! The amplitude of the initial height displacement [Z ~> m].
   real :: diskrad          ! Radius of the elevated disk [km] or [degrees] or [m]
   real :: rad              ! Distance from the center of the elevated disk [km] or [degrees] or [m]
   real :: lonC             ! The x-position of a point [km] or [degrees] or [m]
@@ -73,7 +75,7 @@ subroutine circle_obcs_initialize_thickness(h, depth_tot, G, GV, param_file, jus
   call get_param(param_file, mdl, "DISK_IC_AMPLITUDE", IC_amp, &
                  "Initial amplitude of interface height displacements "//&
                  "in the circle_obcs test case.", &
-                 units='m', default=5.0, scale=GV%m_to_H, do_not_log=just_read)
+                 units='m', default=5.0, scale=US%m_to_Z, do_not_log=just_read)
 
   if (just_read) return ! All run-time parameters have been read, so return.
 
@@ -88,9 +90,9 @@ subroutine circle_obcs_initialize_thickness(h, depth_tot, G, GV, param_file, jus
       eta1D(K) = e0(K)
       if (eta1D(K) < (eta1D(K+1) + GV%Angstrom_Z)) then
         eta1D(K) = eta1D(K+1) + GV%Angstrom_Z
-        h(i,j,k) = GV%Angstrom_H
+        h(i,j,k) = GV%Angstrom_Z
       else
-        h(i,j,k) = GV%Z_to_H * (eta1D(K) - eta1D(K+1))
+        h(i,j,k) = eta1D(K) - eta1D(K+1)
       endif
     enddo
   enddo ; enddo

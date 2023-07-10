@@ -556,8 +556,8 @@ end function find_limited_slope
 
 !> This subroutine determines the potential temperature and salinity that
 !! is consistent with the target density using provided initial guess
-subroutine determine_temperature(temp, salt, R_tgt, EOS, p_ref, niter, h, k_start, G, GV, US, &
-                                 PF, just_read, h_massless)
+subroutine determine_temperature(temp, salt, R_tgt, EOS, p_ref, niter, k_start, G, GV, US, PF, &
+                                 just_read)
   type(ocean_grid_type),         intent(in)    :: G    !< The ocean's grid structure
   type(verticalGrid_type),       intent(in)    :: GV   !< The ocean's vertical grid structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
@@ -565,20 +565,15 @@ subroutine determine_temperature(temp, salt, R_tgt, EOS, p_ref, niter, h, k_star
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                                  intent(inout) :: salt !< salinity [S ~> ppt]
   real, dimension(SZK_(GV)),     intent(in)    :: R_tgt !< desired potential density [R ~> kg m-3].
-  type(EOS_type),                intent(in)    :: EOS !< seawater equation of state control structure
+  type(EOS_type),                intent(in)    :: EOS   !< seawater equation of state control structure
   real,                          intent(in)    :: p_ref !< reference pressure [R L2 T-2 ~> Pa].
   integer,                       intent(in)    :: niter !< maximum number of iterations
   integer,                       intent(in)    :: k_start !< starting index (i.e. below the buffer layer)
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
-                                 intent(in)    :: h   !< layer thickness, used only to avoid working on
-                                                      !! massless layers [H ~> m or kg m-2]
   type(unit_scale_type),         intent(in)    :: US  !< A dimensional unit scaling type
   type(param_file_type),         intent(in)    :: PF  !< A structure indicating the open file
                                                       !! to parse for model parameter values.
   logical,                       intent(in)    :: just_read !< If true, this call will only read
                                                       !! parameters without changing T or S.
-  real,                optional, intent(in)    :: h_massless !< A threshold below which a layer is
-                                                      !! determined to be massless [H ~> m or kg m-2]
 
   ! Local variables (All of which need documentation!)
   real, dimension(SZI_(G),SZK_(GV)) :: &
@@ -587,7 +582,6 @@ subroutine determine_temperature(temp, salt, R_tgt, EOS, p_ref, niter, h, k_star
     dT, &  ! An estimated change in temperature before bounding [C ~> degC]
     dS, &  ! An estimated change in salinity before bounding [S ~> ppt]
     rho, & ! Layer densities with the current estimate of temperature and salinity [R ~> kg m-3]
-    hin, & ! A 2D copy of the layer thicknesses [H ~> m or kg m-2]
     drho_dT, & ! Partial derivative of density with temperature [R C-1 ~> kg m-3 degC-1]
     drho_dS    ! Partial derivative of density with salinity [R S-1 ~> kg m-3 ppt-1]
   real, dimension(SZI_(G)) :: press ! Reference pressures [R L2 T-2 ~> Pa]
@@ -675,7 +669,6 @@ subroutine determine_temperature(temp, salt, R_tgt, EOS, p_ref, niter, h, k_star
     dS(:,:) = 0. ! Needs to be zero everywhere since there is a maxval(abs(dS)) later...
     T(:,:) = temp(:,j,:)
     S(:,:) = salt(:,j,:)
-    hin(:,:) = h(:,j,:)
     dT(:,:) = 0.0
     adjust_salt = .true.
     iter_loop: do itt = 1,niter
@@ -685,7 +678,7 @@ subroutine determine_temperature(temp, salt, R_tgt, EOS, p_ref, niter, h, k_star
                                       EOS, EOSdom )
       enddo
       do k=k_start,nz ; do i=is,ie
-!       if (abs(rho(i,k)-R_tgt(k))>tol_rho .and. hin(i,k)>h_massless .and. abs(T(i,k)-land_fill) < epsln) then
+!       if (abs(rho(i,k)-R_tgt(k))>tol_rho .and. abs(T(i,k)-land_fill) < epsln) then
         if (abs(rho(i,k)-R_tgt(k))>tol_rho) then
           if (.not.fit_together) then
             dT(i,k) = max(min((R_tgt(k)-rho(i,k)) / drho_dT(i,k), max_t_adj), -max_t_adj)
@@ -713,7 +706,7 @@ subroutine determine_temperature(temp, salt, R_tgt, EOS, p_ref, niter, h, k_star
                                       EOS, EOSdom )
       enddo
       do k=k_start,nz ; do i=is,ie
-!       if (abs(rho(i,k)-R_tgt(k))>tol_rho .and. hin(i,k)>h_massless .and. abs(T(i,k)-land_fill) < epsln ) then
+!       if (abs(rho(i,k)-R_tgt(k))>tol_rho .and. abs(T(i,k)-land_fill) < epsln ) then
         if (abs(rho(i,k)-R_tgt(k)) > tol_rho) then
           dS(i,k) = max(min((R_tgt(k)-rho(i,k)) / drho_dS(i,k), max_s_adj), -max_s_adj)
           S(i,k) = max(min(S(i,k)+dS(i,k), S_max), S_min)
