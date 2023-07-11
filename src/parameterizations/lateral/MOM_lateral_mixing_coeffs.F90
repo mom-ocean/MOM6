@@ -135,7 +135,7 @@ type, public :: VarMix_CS
                           !!  F = 1 / (1 + (Res_coef_visc*Ld/dx)^Res_fn_power)
   real :: depth_scaled_khth_h0 !< The depth above which KHTH is linearly scaled away [Z ~> m]
   real :: depth_scaled_khth_exp !< The exponent used in the depth dependent scaling function for KHTH [nondim]
-  real :: kappa_smooth    !< A diffusivity for smoothing T/S in vanished layers [Z2 T-1 ~> m2 s-1]
+  real :: kappa_smooth    !< A diffusivity for smoothing T/S in vanished layers [H Z T-1 ~> m2 s-1 or kg m-1 s-1]
   integer :: Res_fn_power_khth !< The power of dx/Ld in the KhTh resolution function.  Any
                                !! positive integer power may be used, but even powers
                                !! and especially 2 are coded to be more efficient.
@@ -1265,7 +1265,7 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
     call get_param(param_file, mdl, "KD_SMOOTH", CS%kappa_smooth, &
                  "A diapycnal diffusivity that is used to interpolate "//&
                  "more sensible values of T & S into thin layers.", &
-                 units="m2 s-1", default=1.0e-6, scale=US%m_to_Z**2*US%T_to_s)
+                 units="m2 s-1", default=1.0e-6, scale=GV%m2_s_to_HZ_T)
   endif
 
   if (CS%calculate_Eady_growth_rate) then
