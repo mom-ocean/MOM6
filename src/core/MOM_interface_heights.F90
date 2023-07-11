@@ -519,10 +519,15 @@ subroutine dz_to_thickness_EOS(dz, Temp, Saln, EoS, h, G, GV, US, halo_size, p_s
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G)) :: &
     p_top, p_bot                  ! Pressure at the interfaces above and below a layer [R L2 T-2 ~> Pa]
+  real :: dp(SZI_(G),SZJ_(G))     ! Pressure change across a layer [R L2 T-2 ~> Pa]
   real :: dz_geo(SZI_(G),SZJ_(G)) ! The change in geopotential height across a layer [L2 T-2 ~> m2 s-2]
   real :: rho(SZI_(G))            ! The in situ density [R ~> kg m-3]
+  real :: dp_adj                  ! The amount by which to change the bottom pressure in an
+                                  ! iteration [R L2 T-2 ~> Pa]
   real :: I_gEarth                ! Unit conversion factors divided by the gravitational
                                   ! acceleration [H T2 R-1 L-2 ~> s2 m2 kg-1 or s2 m-1]
+  logical :: do_more(SZI_(G),SZJ_(G)) ! If true, additional iterations would be beneficial.
+  logical :: do_any               ! True if there are points in this layer that need more itertions.
   integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state
   integer :: i, j, k, is, ie, js, je, halo, nz
   integer :: itt, max_itt
@@ -561,38 +566,54 @@ subroutine dz_to_thickness_EOS(dz, Temp, Saln, EoS, h, G, GV, US, halo_size, p_s
         if (GV%semi_Boussinesq) then
           do i=is,ie
             p_bot(i,j) = p_top(i,j) + (GV%g_Earth*GV%H_to_Z) * ((GV%Z_to_H*dz(i,j,k)) * rho(i))
+            dp(i,j) = (GV%g_Earth*GV%H_to_Z) * ((GV%Z_to_H*dz(i,j,k)) * rho(i))
           enddo
         else
           do i=is,ie
             p_bot(i,j) = p_top(i,j) + rho(i) * (GV%g_Earth * dz(i,j,k))
+            dp(i,j) = rho(i) * (GV%g_Earth * dz(i,j,k))
           enddo
         endif
       enddo
 
+      do_more(:,:) = .true.
       do itt=1,max_itt
-        call int_specific_vol_dp(Temp(:,:,k), Saln(:,:,k), p_top, p_bot, 0.0, G%HI, &
-                                 EoS, US, dz_geo)
+        do_any = .false.
+        call int_specific_vol_dp(Temp(:,:,k), Saln(:,:,k), p_top, p_bot, 0.0, G%HI, EoS, US, dz_geo)
         if (itt < max_itt) then ; do j=js,je
-          call calculate_density(Temp(:,j,k), Saln(:,j,k), p_bot(:,j), rho, &
-                                 EoS, EOSdom)
+          call calculate_density(Temp(:,j,k), Saln(:,j,k), p_bot(:,j), rho, EoS, EOSdom)
           ! Use Newton's method to correct the bottom value.
           ! The hydrostatic equation is sufficiently linear that no bounds-checking is needed.
           if (GV%semi_Boussinesq) then
             do i=is,ie
-              p_bot(i,j) = p_bot(i,j) + rho(i) * ((GV%g_Earth*GV%H_to_Z)*(GV%Z_to_H*dz(i,j,k)) - dz_geo(i,j))
+              dp_adj = rho(i) * ((GV%g_Earth*GV%H_to_Z)*(GV%Z_to_H*dz(i,j,k)) - dz_geo(i,j))
+              p_bot(i,j) = p_bot(i,j) + dp_adj
+              dp(i,j) = dp(i,j) + dp_adj
             enddo
+            do_any = .true. ! To avoid changing answers, always use the maximum number of itertions.
           else
-            do i=is,ie
-              p_bot(i,j) = p_bot(i,j) + rho(i) * (GV%g_Earth*dz(i,j,k) - dz_geo(i,j))
-            enddo
+            do i=is,ie ; if (do_more(i,j)) then
+              dp_adj = rho(i) * (GV%g_Earth*dz(i,j,k) - dz_geo(i,j))
+              p_bot(i,j) = p_bot(i,j) + dp_adj
+              dp(i,j) = dp(i,j) + dp_adj
+              ! Check for convergence to roundoff.
+              do_more(i,j) = (abs(dp_adj) > 1.0e-15*dp(i,j))
+              if (do_more(i,j)) do_any = .true.
+            endif ; enddo
           endif
         enddo ; endif
+        if (.not.do_any) exit
       enddo
 
-      do j=js,je ; do i=is,ie
-        !### This code should be revised to use a dp variable for accuracy.
-        h(i,j,k) = (p_bot(i,j) - p_top(i,j)) * I_gEarth
-      enddo ; enddo
+      if (GV%semi_Boussinesq) then
+        do j=js,je ; do i=is,ie
+          h(i,j,k) = (p_bot(i,j) - p_top(i,j)) * I_gEarth
+        enddo ; enddo
+      else
+        do j=js,je ; do i=is,ie
+          h(i,j,k) = dp(i,j) * I_gEarth
+        enddo ; enddo
+      endif
     enddo
   endif
 
