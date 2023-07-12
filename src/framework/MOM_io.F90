@@ -1162,7 +1162,7 @@ subroutine read_variable_2d(filename, varname, var, start, nread, ncid_in)
       allocate(field_nread(field_ndims))
       field_nread(:2) = field_shape(:2)
       field_nread(3:) = 1
-      if (present(nread)) field_shape(:2) = nread(:2)
+      if (present(nread)) field_nread(:2) = nread(:2)
 
       rc = nf90_get_var(ncid, varid, var, field_start, field_nread)
 
@@ -1198,7 +1198,7 @@ subroutine read_variable_3d(filename, varname, var, start, nread, ncid_in)
   integer, allocatable :: field_dimids(:), field_shape(:)
   integer, allocatable :: field_start(:), field_nread(:)
   integer :: i, rc
-  character(len=*), parameter :: hdr = "read_variable_2d: "
+  character(len=*), parameter :: hdr = "read_variable_3d: "
 
   ! Validate shape of start and nread
   if (present(start)) then
@@ -1275,7 +1275,7 @@ subroutine read_variable_3d(filename, varname, var, start, nread, ncid_in)
       allocate(field_nread(field_ndims))
       field_nread(:3) = field_shape(:3)
       !field_nread(3:) = 1
-      if (present(nread)) field_shape(:3) = nread(:3)
+      if (present(nread)) field_nread(:3) = nread(:3)
 
       rc = nf90_get_var(ncid, varid, var, field_start, field_nread)
 
