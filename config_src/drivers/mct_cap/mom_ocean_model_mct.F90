@@ -14,7 +14,7 @@ module MOM_ocean_model_mct
 use MOM,                      only : initialize_MOM, step_MOM, MOM_control_struct, MOM_end
 use MOM,                      only : extract_surface_state, allocate_surface_state, finish_MOM_initialization
 use MOM,                      only : get_MOM_state_elements, MOM_state_is_synchronized
-use MOM,                      only : get_ocean_stocks, step_offline
+use MOM,                      only : get_ocean_stocks, step_offline, save_MOM6_internal_state
 use MOM_coms,                 only : field_chksum
 use MOM_constants,            only : CELSIUS_KELVIN_OFFSET, hlf
 use MOM_diag_mediator,        only : diag_ctrl, enable_averages, disable_averaging
@@ -697,6 +697,7 @@ subroutine ocean_model_restart(OS, timestamp, restartname)
       call ice_shelf_save_restart(OS%Ice_shelf_CSp, OS%Time, &
              OS%dirs%restart_output_dir)
     endif
+    call save_MOM6_internal_state(OS%MOM_CSp, OS%dirs%restart_output_dir, OS%Time)
   else
     if (BTEST(OS%Restart_control,1)) then
       call save_restart(OS%dirs%restart_output_dir, OS%Time, OS%grid, &
@@ -706,6 +707,7 @@ subroutine ocean_model_restart(OS, timestamp, restartname)
       if (OS%use_ice_shelf) then
         call ice_shelf_save_restart(OS%Ice_shelf_CSp, OS%Time, OS%dirs%restart_output_dir, .true.)
       endif
+      call save_MOM6_internal_state(OS%MOM_CSp, OS%dirs%restart_output_dir, OS%Time, .true.)
     endif
     if (BTEST(OS%Restart_control,0)) then
       call save_restart(OS%dirs%restart_output_dir, OS%Time, OS%grid, &
@@ -715,6 +717,7 @@ subroutine ocean_model_restart(OS, timestamp, restartname)
       if (OS%use_ice_shelf) then
         call ice_shelf_save_restart(OS%Ice_shelf_CSp, OS%Time, OS%dirs%restart_output_dir)
       endif
+      call save_MOM6_internal_state(OS%MOM_CSp, OS%dirs%restart_output_dir, OS%Time)
     endif
   endif
 

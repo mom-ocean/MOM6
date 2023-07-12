@@ -31,7 +31,7 @@ program MOM6
   use MOM,                 only : initialize_MOM, step_MOM, MOM_control_struct, MOM_end
   use MOM,                 only : extract_surface_state, finish_MOM_initialization
   use MOM,                 only : get_MOM_state_elements, MOM_state_is_synchronized
-  use MOM,                 only : step_offline
+  use MOM,                 only : step_offline, save_MOM6_internal_state
   use MOM_coms,            only : Set_PElist
   use MOM_domains,         only : MOM_infra_init, MOM_infra_end, set_MOM_thread_affinity
   use MOM_ensemble_manager, only : ensemble_manager_init, get_ensemble_size
@@ -570,6 +570,7 @@ program MOM6
                             dirs%restart_output_dir, .true.)
         if (use_ice_shelf) call ice_shelf_save_restart(ice_shelf_CSp, Time, &
                                     dirs%restart_output_dir, .true.)
+        call save_MOM6_internal_state(MOM_CSp, dirs%restart_output_dir, Time, .true.)
       endif
       if (BTEST(Restart_control,0)) then
         call save_restart(dirs%restart_output_dir, Time, grid, &
@@ -578,6 +579,7 @@ program MOM6
                             dirs%restart_output_dir)
         if (use_ice_shelf) call ice_shelf_save_restart(ice_shelf_CSp, Time, &
                                     dirs%restart_output_dir)
+        call save_MOM6_internal_state(MOM_CSp, dirs%restart_output_dir, Time)
       endif
       restart_time = restart_time + restint
     endif
@@ -601,6 +603,8 @@ program MOM6
     call save_restart(dirs%restart_output_dir, Time, grid, restart_CSp, GV=GV)
     if (use_ice_shelf) call ice_shelf_save_restart(ice_shelf_CSp, Time, &
                                 dirs%restart_output_dir)
+    call save_MOM6_internal_state(MOM_CSp, dirs%restart_output_dir, Time)
+
     ! Write the ocean solo restart file.
     call write_ocean_solo_res(Time, Start_time, calendar_type, &
                               trim(dirs%restart_output_dir)//'ocean_solo.res')
