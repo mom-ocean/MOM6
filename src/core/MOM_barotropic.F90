@@ -279,6 +279,9 @@ type, public :: barotropic_CS ; private
   logical :: use_old_coriolis_bracket_bug !< If True, use an order of operations
                              !! that is not bitwise rotationally symmetric in the
                              !! meridional Coriolis term of the barotropic solver.
+  logical :: tidal_sal_flather !< Apply adjustment to external gravity wave speed
+                             !! consistent with tidal self-attraction and loading
+                             !! used within the barotropic solver
   type(time_type), pointer :: Time  => NULL() !< A pointer to the ocean models clock.
   type(diag_ctrl), pointer :: diag => NULL()  !< A structure that is used to regulate
                              !! the timing of diagnostic output.
@@ -1122,8 +1125,13 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
 
   ! Set up fields related to the open boundary conditions.
   if (apply_OBCs) then
-    call set_up_BT_OBC(OBC, eta, CS%BT_OBC, CS%BT_Domain, G, GV, US, MS, ievf-ie, use_BT_cont, &
-                       integral_BT_cont, dt, Datu, Datv, BTCL_u, BTCL_v)
+    if (CS%TIDAL_SAL_FLATHER) then
+       call set_up_BT_OBC(OBC, eta, CS%BT_OBC, CS%BT_Domain, G, GV, US, MS, ievf-ie, use_BT_cont, &
+            integral_BT_cont, dt, Datu, Datv, BTCL_u, BTCL_v, dgeo_de)
+    else
+       call set_up_BT_OBC(OBC, eta, CS%BT_OBC, CS%BT_Domain, G, GV, US, MS, ievf-ie, use_BT_cont, &
+            integral_BT_cont, dt, Datu, Datv, BTCL_u, BTCL_v)
+    endif
   endif
 
   ! Determine the difference between the sum of the layer fluxes and the
@@ -3101,7 +3109,7 @@ end subroutine apply_velocity_OBCs
 !> This subroutine sets up the private structure used to apply the open
 !! boundary conditions, as developed by Mehmet Ilicak.
 subroutine set_up_BT_OBC(OBC, eta, BT_OBC, BT_Domain, G, GV, US, MS, halo, use_BT_cont, &
-                         integral_BT_cont, dt_baroclinic, Datu, Datv, BTCL_u, BTCL_v)
+                         integral_BT_cont, dt_baroclinic, Datu, Datv, BTCL_u, BTCL_v, dgeo_de)
   type(ocean_OBC_type), target,          intent(inout) :: OBC    !< An associated pointer to an OBC type.
   type(memory_size_type),                intent(in)    :: MS     !< A type that describes the memory sizes of the
                                                                  !! argument arrays.
@@ -3132,9 +3140,11 @@ subroutine set_up_BT_OBC(OBC, eta, BT_OBC, BT_Domain, G, GV, US, MS, halo, use_B
   type(local_BT_cont_v_type), dimension(SZIW_(MS),SZJBW_(MS)), intent(in) :: BTCL_v !< Structure of information used
                                                                  !! for a dynamic estimate of the face areas at
                                                                  !! v-points.
-
+  real,                                  intent(in), optional  :: dgeo_de  !< The constant of proportionality between
+                                                                 !! geopotential and sea surface height [nondim].
   ! Local variables
   real :: I_dt      ! The inverse of the time interval of this call [T-1 ~> s-1].
+  real :: dgeo_de_in !< The constant of proportionality between geopotential and sea surface height [nondim].
   integer :: i, j, k, is, ie, js, je, n, nz
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
   integer :: isdw, iedw, jsdw, jedw
@@ -3151,6 +3161,9 @@ subroutine set_up_BT_OBC(OBC, eta, BT_OBC, BT_Domain, G, GV, US, MS, halo, use_B
     call MOM_error(FATAL, "set_up_BT_OBC: Open boundary conditions are not "//&
                            "yet fully implemented with wide barotropic halos.")
   endif
+
+  dgeo_de_in = 1.0
+  if (PRESENT(dgeo_de)) dgeo_de_in = dgeo_de
 
   if (.not. BT_OBC%is_alloced) then
     allocate(BT_OBC%Cg_u(isdw-1:iedw,jsdw:jedw), source=0.0)
@@ -3210,7 +3223,7 @@ subroutine set_up_BT_OBC(OBC, eta, BT_OBC, BT_Domain, G, GV, US, MS, halo, use_B
             BT_OBC%H_u(I,j) = eta(i+1,j)
           endif
         endif
-        BT_OBC%Cg_u(I,j) = SQRT(GV%g_prime(1) * GV%H_to_Z*BT_OBC%H_u(i,j))
+        BT_OBC%Cg_u(I,j) = SQRT(dgeo_de_in *  GV%g_prime(1) * GV%H_to_Z*BT_OBC%H_u(i,j))
       endif
     endif ; enddo ; enddo
     if (OBC%Flather_u_BCs_exist_globally) then
@@ -3264,7 +3277,7 @@ subroutine set_up_BT_OBC(OBC, eta, BT_OBC, BT_Domain, G, GV, US, MS, halo, use_B
             BT_OBC%H_v(i,J) = eta(i,j+1)
           endif
         endif
-        BT_OBC%Cg_v(i,J) = SQRT(GV%g_prime(1) * GV%H_to_Z*BT_OBC%H_v(i,J))
+        BT_OBC%Cg_v(i,J) = SQRT(dgeo_de_in * GV%g_prime(1) * GV%H_to_Z*BT_OBC%H_v(i,J))
       endif
     endif ; enddo ; enddo
     if (OBC%Flather_v_BCs_exist_globally) then
@@ -4520,6 +4533,14 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, US, param_file, diag, CS, 
                  "solver has the wrong sign, replicating a long-standing bug with a scalar "//&
                  "self-attraction and loading term or the SAL term from a previous simulation.", &
                  default=.false., do_not_log=(det_de==0.0))
+  call get_param(param_file, mdl, "TIDAL_SAL_FLATHER", CS%tidal_sal_flather, &
+                 "If true, then apply adjustments to the external gravity "//&
+                 "wave speed used with the Flather OBC routine consistent "//&
+                 "with the barotropic solver. This applies to cases with  "//&
+                 "tidal forcing using the scalar self-attraction approximation. "//&
+                 "The default is currently False in order to retain previous answers "//&
+                 "but should be set to True for new experiments", default=.false.)
+
   call get_param(param_file, mdl, "SADOURNY", CS%Sadourny, &
                  "If true, the Coriolis terms are discretized with the "//&
                  "Sadourny (1975) energy conserving scheme, otherwise "//&
