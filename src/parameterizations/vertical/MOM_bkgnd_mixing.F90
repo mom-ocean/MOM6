@@ -59,6 +59,8 @@ type, public :: bkgnd_mixing_cs ; private
   real    :: N0_2Omega              !< ratio of the typical Buoyancy frequency to
                                     !! twice the Earth's rotation period, used with the
                                     !! Henyey scaling from the mixing [nondim]
+  real    :: Henyey_max_lat         !< A latitude poleward of which the Henyey profile
+                                    !! is returned to the minimum diffusivity [degN]
   real    :: prandtl_bkgnd          !< Turbulent Prandtl number used to convert
                                     !! vertical background diffusivity into viscosity [nondim]
   real    :: Kd_tanh_lat_scale      !< A nondimensional scaling for the range of
@@ -282,6 +284,10 @@ subroutine bkgnd_mixing_init(Time, G, GV, US, param_file, diag, CS, physical_OBL
     call get_param(param_file, mdl, "OMEGA", CS%omega, &
                  "The rotation rate of the earth.", &
                  units="s-1", default=7.2921e-5, scale=US%T_to_s)
+    call get_param(param_file, mdl, "HENYEY_MAX_LAT", CS%Henyey_max_lat, &
+                  "A latitude poleward of which the Henyey profile "//&
+                  "is returned to the minimum diffusivity", &
+                  units="degN", default=95.0)
   endif
 
   call get_param(param_file, mdl, "KD_TANH_LAT_FN", CS%Kd_tanh_lat_fn, &
@@ -447,6 +453,7 @@ subroutine calculate_bkgnd_mixing(h, tv, N2_lay, Kd_lay, Kd_int, Kv_bkgnd, j, G,
       I_x30 = 2.0 / invcosh(CS%N0_2Omega*2.0) ! This is evaluated at 30 deg.
       do i=is,ie
         abs_sinlat = abs(sin(G%geoLatT(i,j)*deg_to_rad))
+        if (abs(G%geoLatT(i,j))>CS%Henyey_max_lat) abs_sinlat = min_sinlat
         Kd_sfc(i) = max(CS%Kd_min, CS%Kd * &
              ((abs_sinlat * invcosh(CS%N0_2Omega / max(min_sinlat, abs_sinlat))) * I_x30) )
       enddo
