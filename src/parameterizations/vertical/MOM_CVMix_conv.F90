@@ -147,7 +147,7 @@ subroutine calculate_CVMix_conv(h, tv, G, GV, US, CS, hbl, Kd, Kv, Kd_aux)
                                                                  !! will be incremented here [Z2 T-1 ~> m2 s-1].
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), &
                                              intent(inout) :: KV !< Viscosity at each interface that will be
-                                                                 !! incremented here [Z2 T-1 ~> m2 s-1].
+                                                                 !! incremented here [H Z T-1 ~> m2 s-1 or Pa s]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), &
                                    optional, intent(inout) :: Kd_aux !< A second diapycnal diffusivity at each
                                                                  !! interface that will also be incremented
@@ -249,7 +249,7 @@ subroutine calculate_CVMix_conv(h, tv, G, GV, US, CS, hbl, Kd, Kv, Kd_aux)
 
       ! Increment the viscosity outside of the boundary layer.
       do K=max(1,kOBL+1),GV%ke+1
-        Kv(i,j,K) = Kv(i,j,K) + US%m2_s_to_Z2_T * kv_col(K)
+        Kv(i,j,K) = Kv(i,j,K) + GV%m2_s_to_HZ_T * kv_col(K)
       enddo
 
       ! Store 3-d arrays for diagnostics.
@@ -278,7 +278,7 @@ subroutine calculate_CVMix_conv(h, tv, G, GV, US, CS, hbl, Kd, Kv, Kd_aux)
     ! if (CS%id_kv_conv > 0) &
     !   call hchksum(Kv_conv, "MOM_CVMix_conv: Kv_conv", G%HI, haloshift=0, scale=US%Z2_T_to_m2_s)
     call hchksum(Kd, "MOM_CVMix_conv: Kd", G%HI, haloshift=0, scale=US%Z2_T_to_m2_s)
-    call hchksum(Kv, "MOM_CVMix_conv: Kv", G%HI, haloshift=0, scale=US%Z2_T_to_m2_s)
+    call hchksum(Kv, "MOM_CVMix_conv: Kv", G%HI, haloshift=0, scale=GV%HZ_T_to_m2_s)
   endif
 
   ! send diagnostics to post_data

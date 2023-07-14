@@ -746,7 +746,7 @@ subroutine calculate_tidal_mixing(h, j, N2_bot, N2_lay, N2_int, TKE_to_Kd, max_T
                                                             !! [Z2 T-1 ~> m2 s-1].
                                                             !! Set this to a negative value to have no limit.
   real, dimension(:,:,:),           pointer       :: Kv     !< The "slow" vertical viscosity at each interface
-                                                            !! (not layer!) [Z2 T-1 ~> m2 s-1].
+                                                            !! (not layer!) [H Z T-1 ~> m2 s-1 or Pa s]
   real, dimension(SZI_(G),SZK_(GV)), &
                           optional, intent(inout) :: Kd_lay !< The diapycnal diffusivity in layers [Z2 T-1 ~> m2 s-1].
   real, dimension(SZI_(G),SZK_(GV)+1), &
@@ -777,7 +777,7 @@ subroutine calculate_CVMix_tidal(h, j, N2_int, G, GV, US, CS, Kv, Kd_lay, Kd_int
   real, dimension(SZI_(G),SZK_(GV)+1), intent(in) :: N2_int !< The squared buoyancy
                                                   !! frequency at the interfaces [T-2 ~> s-2].
   real, dimension(:,:,:),  pointer       :: Kv    !< The "slow" vertical viscosity at each interface
-                                                  !! (not layer!) [Z2 T-1 ~> m2 s-1].
+                                                  !! (not layer!) [H Z T-1 ~> m2 s-1 or Pa s]
   real, dimension(SZI_(G),SZK_(GV)), &
                  optional, intent(inout) :: Kd_lay!< The diapycnal diffusivity in the layers [Z2 T-1 ~> m2 s-1].
   real, dimension(SZI_(G),SZK_(GV)+1), &
@@ -873,7 +873,7 @@ subroutine calculate_CVMix_tidal(h, j, N2_int, G, GV, US, CS, Kv, Kd_lay, Kd_int
       ! Update viscosity with the proper unit conversion.
       if (associated(Kv)) then
         do K=1,GV%ke+1
-          Kv(i,j,K) = Kv(i,j,K) + US%m2_s_to_Z2_T * Kv_tidal(K)  ! Rescale from m2 s-1 to Z2 T-1.
+          Kv(i,j,K) = Kv(i,j,K) + GV%m2_s_to_HZ_T * Kv_tidal(K)  ! Rescale from m2 s-1 to H Z T-1.
         enddo
       endif
 
@@ -975,7 +975,7 @@ subroutine calculate_CVMix_tidal(h, j, N2_int, G, GV, US, CS, Kv, Kd_lay, Kd_int
       ! Update viscosity
       if (associated(Kv)) then
         do K=1,GV%ke+1
-          Kv(i,j,K) = Kv(i,j,K) + US%m2_s_to_Z2_T * Kv_tidal(K)   ! Rescale from m2 s-1 to Z2 T-1.
+          Kv(i,j,K) = Kv(i,j,K) + GV%m2_s_to_HZ_T * Kv_tidal(K)   ! Rescale from m2 s-1 to H Z T-1.
         enddo
       endif
 

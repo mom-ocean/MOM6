@@ -964,12 +964,12 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, pbv)
           if (m==1) then
             if (Rayleigh > 0.0) then
               v_at_u = set_v_at_u(v, h, G, GV, i, j, k, mask_v, OBC)
-              visc%Ray_u(I,j,k) = Rayleigh * sqrt(u(I,j,k)*u(I,j,k) + v_at_u*v_at_u + U_bg_sq)
+              visc%Ray_u(I,j,k) = GV%Z_to_H*Rayleigh * sqrt(u(I,j,k)*u(I,j,k) + v_at_u*v_at_u + U_bg_sq)
             else ; visc%Ray_u(I,j,k) = 0.0 ; endif
           else
             if (Rayleigh > 0.0) then
               u_at_v = set_u_at_v(u, h, G, GV, i, j, k, mask_u, OBC)
-              visc%Ray_v(i,J,k) = Rayleigh * sqrt(v(i,J,k)*v(i,J,k) + u_at_v*u_at_v + U_bg_sq)
+              visc%Ray_v(i,J,k) = GV%Z_to_H*Rayleigh * sqrt(v(i,J,k)*v(i,J,k) + u_at_v*u_at_v + U_bg_sq)
             else ; visc%Ray_v(i,J,k) = 0.0 ; endif
           endif
 
@@ -1027,33 +1027,31 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, pbv)
         endif
       endif
 
-      if (CS%body_force_drag) then
-        if (h_bbl_drag(i) > 0.0) then
-          ! Increment the Rayleigh drag as a way introduce the bottom drag as a body force.
-          h_sum = 0.0
-          I_hwtot = 1.0 / h_bbl_drag(i)
-          do k=nz,1,-1
-            h_bbl_fr = min(h_bbl_drag(i) - h_sum, h_at_vel(i,k)) * I_hwtot
-            if (m==1) then
-              visc%Ray_u(I,j,k) = visc%Ray_u(I,j,k) + (CS%cdrag*US%L_to_Z*umag_avg(I)) * h_bbl_fr
-            else
-              visc%Ray_v(i,J,k) = visc%Ray_v(i,J,k) + (CS%cdrag*US%L_to_Z*umag_avg(i)) * h_bbl_fr
-            endif
-            h_sum = h_sum + h_at_vel(i,k)
-            if (h_sum >= h_bbl_drag(i)) exit ! The top of this layer is above the drag zone.
-          enddo
-          ! Do not enhance the near-bottom viscosity in this case.
-          Kv_bbl = CS%Kv_BBL_min
-        endif
-      endif
+      if (CS%body_force_drag) then ; if (h_bbl_drag(i) > 0.0) then
+        ! Increment the Rayleigh drag as a way introduce the bottom drag as a body force.
+        h_sum = 0.0
+        I_hwtot = 1.0 / h_bbl_drag(i)
+        do k=nz,1,-1
+          h_bbl_fr = min(h_bbl_drag(i) - h_sum, h_at_vel(i,k)) * I_hwtot
+          if (m==1) then
+            visc%Ray_u(I,j,k) = visc%Ray_u(I,j,k) + GV%Z_to_H*(CS%cdrag*US%L_to_Z*umag_avg(I)) * h_bbl_fr
+          else
+            visc%Ray_v(i,J,k) = visc%Ray_v(i,J,k) + GV%Z_to_H*(CS%cdrag*US%L_to_Z*umag_avg(i)) * h_bbl_fr
+          endif
+          h_sum = h_sum + h_at_vel(i,k)
+          if (h_sum >= h_bbl_drag(i)) exit ! The top of this layer is above the drag zone.
+        enddo
+        ! Do not enhance the near-bottom viscosity in this case.
+        Kv_bbl = CS%Kv_BBL_min
+      endif ; endif
 
       kv_bbl = max(CS%Kv_BBL_min, kv_bbl)
       if (m==1) then
         visc%bbl_thick_u(I,j) = bbl_thick_Z
-        if (allocated(visc%Kv_bbl_u)) visc%Kv_bbl_u(I,j) = kv_bbl
+        if (allocated(visc%Kv_bbl_u)) visc%Kv_bbl_u(I,j) = GV%Z_to_H*kv_bbl
       else
         visc%bbl_thick_v(i,J) = bbl_thick_Z
-        if (allocated(visc%Kv_bbl_v)) visc%Kv_bbl_v(i,J) = kv_bbl
+        if (allocated(visc%Kv_bbl_v)) visc%Kv_bbl_v(i,J) = GV%Z_to_H*kv_bbl
       endif
     endif ; enddo ! end of i loop
   enddo ; enddo ! end of m & j loops
@@ -1078,10 +1076,10 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, pbv)
 
   if (CS%debug) then
     if (allocated(visc%Ray_u) .and. allocated(visc%Ray_v)) &
-        call uvchksum("Ray [uv]", visc%Ray_u, visc%Ray_v, G%HI, haloshift=0, scale=US%Z_to_m*US%s_to_T)
+        call uvchksum("Ray [uv]", visc%Ray_u, visc%Ray_v, G%HI, haloshift=0, scale=GV%H_to_m*US%s_to_T)
     if (allocated(visc%kv_bbl_u) .and. allocated(visc%kv_bbl_v)) &
         call uvchksum("kv_bbl_[uv]", visc%kv_bbl_u, visc%kv_bbl_v, G%HI, &
-                      haloshift=0, scale=US%Z2_T_to_m2_s, scalar_pair=.true.)
+                      haloshift=0, scale=GV%HZ_T_to_m2_s, scalar_pair=.true.)
     if (allocated(visc%bbl_thick_u) .and. allocated(visc%bbl_thick_v)) &
         call uvchksum("bbl_thick_[uv]", visc%bbl_thick_u, visc%bbl_thick_v, &
                       G%HI, haloshift=0, scale=US%Z_to_m, scalar_pair=.true.)
@@ -1604,7 +1602,7 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS)
         tbl_thick_Z = GV%H_to_Z * max(CS%Htbl_shelf_min, &
             ( htot(I)*ustar1 ) / ( 0.5*ustar1 + sqrt((0.5*ustar1)**2 + h2f2 ) ) )
         visc%tbl_thick_shelf_u(I,j) = tbl_thick_Z
-        visc%Kv_tbl_shelf_u(I,j) = max(CS%Kv_TBL_min, cdrag_sqrt*ustar(i)*tbl_thick_Z)
+        visc%Kv_tbl_shelf_u(I,j) = GV%Z_to_H*max(CS%Kv_TBL_min, cdrag_sqrt*ustar(i)*tbl_thick_Z)
       endif ; enddo ! I-loop
     endif ! do_any_shelf
 
@@ -1841,7 +1839,7 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS)
         tbl_thick_Z = GV%H_to_Z * max(CS%Htbl_shelf_min, &
             ( htot(i)*ustar1 ) / ( 0.5*ustar1 + sqrt((0.5*ustar1)**2 + h2f2 ) ) )
         visc%tbl_thick_shelf_v(i,J) = tbl_thick_Z
-        visc%Kv_tbl_shelf_v(i,J) = max(CS%Kv_TBL_min, cdrag_sqrt*ustar(i)*tbl_thick_Z)
+        visc%Kv_tbl_shelf_v(i,J) = GV%Z_to_H*max(CS%Kv_TBL_min, cdrag_sqrt*ustar(i)*tbl_thick_Z)
 
       endif ; enddo ! i-loop
     endif ! do_any_shelf
@@ -1903,21 +1901,21 @@ subroutine set_visc_register_restarts(HI, GV, US, param_file, visc, restart_CS)
     call safe_alloc_ptr(visc%Kd_shear, isd, ied, jsd, jed, nz+1)
     call register_restart_field(visc%Kd_shear, "Kd_shear", .false., restart_CS, &
                   "Shear-driven turbulent diffusivity at interfaces", &
-                  units="m2 s-1", conversion=US%Z2_T_to_m2_s, z_grid='i')
+                  units="m2 s-1", conversion=GV%HZ_T_to_m2_s, z_grid='i')
   endif
   if (useKPP .or. useEPBL .or. use_CVMix_shear .or. use_CVMix_conv .or. &
       (use_kappa_shear .and. .not.KS_at_vertex )) then
     call safe_alloc_ptr(visc%Kv_shear, isd, ied, jsd, jed, nz+1)
     call register_restart_field(visc%Kv_shear, "Kv_shear", .false., restart_CS, &
                   "Shear-driven turbulent viscosity at interfaces", &
-                  units="m2 s-1", conversion=US%Z2_T_to_m2_s, z_grid='i')
+                  units="m2 s-1", conversion=GV%HZ_T_to_m2_s, z_grid='i')
   endif
   if (use_kappa_shear .and. KS_at_vertex) then
     call safe_alloc_ptr(visc%TKE_turb, HI%IsdB, HI%IedB, HI%JsdB, HI%JedB, nz+1)
     call safe_alloc_ptr(visc%Kv_shear_Bu, HI%IsdB, HI%IedB, HI%JsdB, HI%JedB, nz+1)
     call register_restart_field(visc%Kv_shear_Bu, "Kv_shear_Bu", .false., restart_CS, &
                   "Shear-driven turbulent viscosity at vertex interfaces", &
-                  units="m2 s-1", conversion=US%Z2_T_to_m2_s, hor_grid="Bu", z_grid='i')
+                  units="m2 s-1", conversion=GV%HZ_T_to_m2_s, hor_grid="Bu", z_grid='i')
   elseif (use_kappa_shear) then
     call safe_alloc_ptr(visc%TKE_turb, isd, ied, jsd, jed, nz+1)
   endif
@@ -2277,7 +2275,7 @@ subroutine set_visc_init(Time, G, GV, US, param_file, diag, visc, CS, restart_CS
     CS%id_bbl_thick_u = register_diag_field('ocean_model', 'bbl_thick_u', &
        diag%axesCu1, Time, 'BBL thickness at u points', 'm', conversion=US%Z_to_m)
     CS%id_kv_bbl_u = register_diag_field('ocean_model', 'kv_bbl_u', diag%axesCu1, &
-       Time, 'BBL viscosity at u points', 'm2 s-1', conversion=US%Z2_T_to_m2_s)
+       Time, 'BBL viscosity at u points', 'm2 s-1', conversion=GV%HZ_T_to_m2_s)
     CS%id_bbl_u = register_diag_field('ocean_model', 'bbl_u', diag%axesCu1, &
        Time, 'BBL mean u current', 'm s-1', conversion=US%L_T_to_m_s)
     if (CS%id_bbl_u>0) then
@@ -2286,7 +2284,7 @@ subroutine set_visc_init(Time, G, GV, US, param_file, diag, visc, CS, restart_CS
     CS%id_bbl_thick_v = register_diag_field('ocean_model', 'bbl_thick_v', &
        diag%axesCv1, Time, 'BBL thickness at v points', 'm', conversion=US%Z_to_m)
     CS%id_kv_bbl_v = register_diag_field('ocean_model', 'kv_bbl_v', diag%axesCv1, &
-       Time, 'BBL viscosity at v points', 'm2 s-1', conversion=US%Z2_T_to_m2_s)
+       Time, 'BBL viscosity at v points', 'm2 s-1', conversion=GV%HZ_T_to_m2_s)
     CS%id_bbl_v = register_diag_field('ocean_model', 'bbl_v', diag%axesCv1, &
        Time, 'BBL mean v current', 'm s-1', conversion=US%L_T_to_m_s)
     if (CS%id_bbl_v>0) then
@@ -2304,9 +2302,9 @@ subroutine set_visc_init(Time, G, GV, US, param_file, diag, visc, CS, restart_CS
     allocate(visc%Ray_u(IsdB:IedB,jsd:jed,nz), source=0.0)
     allocate(visc%Ray_v(isd:ied,JsdB:JedB,nz), source=0.0)
     CS%id_Ray_u = register_diag_field('ocean_model', 'Rayleigh_u', diag%axesCuL, &
-       Time, 'Rayleigh drag velocity at u points', 'm s-1', conversion=US%Z_to_m*US%s_to_T)
+       Time, 'Rayleigh drag velocity at u points', 'm s-1', conversion=GV%H_to_m*US%s_to_T)
     CS%id_Ray_v = register_diag_field('ocean_model', 'Rayleigh_v', diag%axesCvL, &
-       Time, 'Rayleigh drag velocity at v points', 'm s-1', conversion=US%Z_to_m*US%s_to_T)
+       Time, 'Rayleigh drag velocity at v points', 'm s-1', conversion=GV%H_to_m*US%s_to_T)
   endif
 
 

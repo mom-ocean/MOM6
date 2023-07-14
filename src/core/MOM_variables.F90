@@ -234,12 +234,12 @@ type, public :: vertvisc_type
   real, allocatable, dimension(:,:) :: &
     bbl_thick_u, & !< The bottom boundary layer thickness at the u-points [Z ~> m].
     bbl_thick_v, & !< The bottom boundary layer thickness at the v-points [Z ~> m].
-    kv_bbl_u, &    !< The bottom boundary layer viscosity at the u-points [Z2 T-1 ~> m2 s-1].
-    kv_bbl_v, &    !< The bottom boundary layer viscosity at the v-points [Z2 T-1 ~> m2 s-1].
-    ustar_BBL, &   !< The turbulence velocity in the bottom boundary layer at h points [Z T-1 ~> m s-1].
+    kv_bbl_u, &    !< The bottom boundary layer viscosity at the u-points [H Z T-1 ~> m2 s-1 or Pa s]
+    kv_bbl_v, &    !< The bottom boundary layer viscosity at the v-points [H Z T-1 ~> m2 s-1 or Pa s]
+    ustar_BBL, &   !< The turbulence velocity in the bottom boundary layer at
+                   !! h points [H T-1 ~> m s-1 or kg m-2 s-1].
     TKE_BBL, &     !< A term related to the bottom boundary layer source of turbulent kinetic
-                   !! energy, currently in [Z3 T-3 ~> m3 s-3], but may at some time be changed
-                   !! to [R Z3 T-3 ~> W m-2].
+                   !! energy, currently in [H Z2 T-3 ~> m3 s-3 or W m-2].
     taux_shelf, &  !< The zonal stresses on the ocean under shelves [R Z L T-2 ~> Pa].
     tauy_shelf     !< The meridional stresses on the ocean under shelves [R Z L T-2 ~> Pa].
   real, allocatable, dimension(:,:) :: tbl_thick_shelf_u
@@ -247,9 +247,11 @@ type, public :: vertvisc_type
   real, allocatable, dimension(:,:) :: tbl_thick_shelf_v
                 !< Thickness of the viscous top boundary layer under ice shelves at v-points [Z ~> m].
   real, allocatable, dimension(:,:) :: kv_tbl_shelf_u
-                !< Viscosity in the viscous top boundary layer under ice shelves at u-points [Z2 T-1 ~> m2 s-1].
+                !< Viscosity in the viscous top boundary layer under ice shelves at
+                !! u-points [H Z T-1 ~> m2 s-1 or Pa s]
   real, allocatable, dimension(:,:) :: kv_tbl_shelf_v
-                !< Viscosity in the viscous top boundary layer under ice shelves at v-points [Z2 T-1 ~> m2 s-1].
+                !< Viscosity in the viscous top boundary layer under ice shelves at
+                !! v-points [H Z T-1 ~> m2 s-1 or Pa s]
   real, allocatable, dimension(:,:) :: nkml_visc_u
                 !< The number of layers in the viscous surface mixed layer at u-points [nondim].
                 !! This is not an integer because there may be fractional layers, and it is stored in
@@ -258,24 +260,24 @@ type, public :: vertvisc_type
   real, allocatable, dimension(:,:) :: nkml_visc_v
                 !< The number of layers in the viscous surface mixed layer at v-points [nondim].
   real, allocatable, dimension(:,:,:) :: &
-    Ray_u, &    !< The Rayleigh drag velocity to be applied to each layer at u-points [Z T-1 ~> m s-1].
-    Ray_v       !< The Rayleigh drag velocity to be applied to each layer at v-points [Z T-1 ~> m s-1].
+    Ray_u, &    !< The Rayleigh drag velocity to be applied to each layer at u-points [H T-1 ~> m s-1 or Pa s m-1].
+    Ray_v       !< The Rayleigh drag velocity to be applied to each layer at v-points [H T-1 ~> m s-1 or Pa s m-1].
 
   ! The following elements are pointers so they can be used as targets for pointers in the restart registry.
   real, pointer, dimension(:,:) :: MLD => NULL() !< Instantaneous active mixing layer depth [Z ~> m].
   real, pointer, dimension(:,:) :: sfc_buoy_flx !< Surface buoyancy flux (derived) [Z2 T-3 ~> m2 s-3].
   real, pointer, dimension(:,:,:) :: Kd_shear => NULL()
                 !< The shear-driven turbulent diapycnal diffusivity at the interfaces between layers
-                !! in tracer columns [Z2 T-1 ~> m2 s-1].
+                !! in tracer columns [H Z T-1 ~> m2 s-1 or kg m-1 s-1]
   real, pointer, dimension(:,:,:) :: Kv_shear => NULL()
                 !< The shear-driven turbulent vertical viscosity at the interfaces between layers
-                !! in tracer columns [Z2 T-1 ~> m2 s-1].
+                !! in tracer columns [H Z T-1 ~> m2 s-1 or Pa s]
   real, pointer, dimension(:,:,:) :: Kv_shear_Bu => NULL()
                 !< The shear-driven turbulent vertical viscosity at the interfaces between layers in
-                !! corner columns [Z2 T-1 ~> m2 s-1].
+                !! corner columns [H Z T-1 ~> m2 s-1 or Pa s]
   real, pointer, dimension(:,:,:) :: Kv_slow  => NULL()
                 !< The turbulent vertical viscosity component due to "slow" processes (e.g., tidal,
-                !! background, convection etc) [Z2 T-1 ~> m2 s-1].
+                !! background, convection etc) [H Z T-1 ~> m2 s-1 or Pa s]
   real, pointer, dimension(:,:,:) :: TKE_turb => NULL()
                 !< The turbulent kinetic energy per unit mass at the interfaces [Z2 T-2 ~> m2 s-2].
                 !! This may be at the tracer or corner points

@@ -66,9 +66,9 @@ subroutine calculate_CVMix_shear(u_H, v_H, h, tv, kd, kv, G, GV, US, CS )
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(in)  :: h   !< Layer thickness [H ~> m or kg m-2].
   type(thermo_var_ptrs),                      intent(in)  :: tv  !< Thermodynamics structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), intent(out) :: kd !< The vertical diffusivity at each interface
-                                                                 !! (not layer!) [Z2 T-1 ~> m2 s-1].
+                                                                 !! (not layer!) [H Z T-1 ~> m2 s-1 or kg m-1 s-1]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), intent(out) :: kv !< The vertical viscosity at each interface
-                                                                 !! (not layer!) [Z2 T-1 ~> m2 s-1].
+                                                                 !! (not layer!) [H Z T-1 ~> m2 s-1 or Pa s]
   type(CVMix_shear_cs),                       pointer     :: CS  !< The control structure returned by a previous
                                                                  !! call to CVMix_shear_init.
   ! Local variables
@@ -176,8 +176,8 @@ subroutine calculate_CVMix_shear(u_H, v_H, h, tv, kd, kv, G, GV, US, CS )
       if (CS%id_ri_grad > 0) CS%ri_grad(i,j,:) = Ri_Grad(:)
 
       do K=1,GV%ke+1
-        Kvisc(K) = US%Z2_T_to_m2_s * kv(i,j,K)
-        Kdiff(K) = US%Z2_T_to_m2_s * kd(i,j,K)
+        Kvisc(K) = GV%HZ_T_to_m2_s * kv(i,j,K)
+        Kdiff(K) = GV%HZ_T_to_m2_s * kd(i,j,K)
       enddo
 
       ! Call to CVMix wrapper for computing interior mixing coefficients.
@@ -187,8 +187,8 @@ subroutine calculate_CVMix_shear(u_H, v_H, h, tv, kd, kv, G, GV, US, CS )
                                    nlev=GV%ke,    &
                                    max_nlev=GV%ke)
       do K=1,GV%ke+1
-        kv(i,j,K) = US%m2_s_to_Z2_T * Kvisc(K)
-        kd(i,j,K) = US%m2_s_to_Z2_T * Kdiff(K)
+        kv(i,j,K) = GV%m2_s_to_HZ_T * Kvisc(K)
+        kd(i,j,K) = GV%m2_s_to_HZ_T * Kdiff(K)
       enddo
     enddo
   enddo
@@ -324,9 +324,9 @@ logical function CVMix_shear_init(Time, G, GV, US, param_file, diag, CS)
   endif
 
   CS%id_kd = register_diag_field('ocean_model', 'kd_shear_CVMix', diag%axesTi, Time, &
-      'Vertical diffusivity added by MOM_CVMix_shear module', 'm2/s', conversion=US%Z2_T_to_m2_s)
+      'Vertical diffusivity added by MOM_CVMix_shear module', 'm2/s', conversion=GV%HZ_T_to_m2_s)
   CS%id_kv = register_diag_field('ocean_model', 'kv_shear_CVMix', diag%axesTi, Time, &
-      'Vertical viscosity added by MOM_CVMix_shear module', 'm2/s', conversion=US%Z2_T_to_m2_s)
+      'Vertical viscosity added by MOM_CVMix_shear module', 'm2/s', conversion=GV%HZ_T_to_m2_s)
 
 end function CVMix_shear_init
 
